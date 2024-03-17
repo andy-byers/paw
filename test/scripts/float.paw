@@ -1,0 +1,50 @@
+-- float.paw
+
+-- Test float parsing:
+{
+    assert(float('-1e-10') < 0)
+    assert(float('1e-10') > 0)
+
+    fn ok_float(str, f) {
+        assert(float(str) == f)
+    }
+
+    ok_float('0.0', 0.0)
+    ok_float('1.0', 1.0)
+    ok_float('10.0', 10.0)
+    ok_float('1e10', 1e10)
+    ok_float('1E10', 1e10)
+    ok_float('1e+10', 1e+10)
+    ok_float('  1.0', 1.0)
+    ok_float('1.0  ', 1.0)
+    ok_float(' 1.0 ', 1.0)
+    ok_float('  -1.0', -1.0)
+    ok_float('-1.0  ', -1.0)
+    ok_float(' -1.0 ', -1.0)
+    ok_float('.0', 0.0)
+    ok_float('0.', 0.0)
+    ok_float('0', 0.0)
+    ok_float('1', 1.0)
+    ok_float('100', 100.0)
+
+    fn bad_float(str) {
+        assert(0 != try(float, str))
+    }
+
+    bad_float('--1.0')
+    bad_float(' --1.0')
+    bad_float('---1.0')
+    bad_float('- -1.0')
+    bad_float('1e--1')
+    bad_float('1e++1')
+    bad_float('1e-1.0')
+    bad_float('1e+1.0')
+    bad_float('1e-1-1')
+    bad_float('1e+1+1')
+    bad_float('1e-1e1')
+    bad_float('1e+1e1')
+    bad_float('1.0.0')
+    bad_float('abc')
+    bad_float(' ')
+    bad_float('0x1')
+}

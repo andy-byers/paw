@@ -1,0 +1,59 @@
+
+{
+    let time = require('time')
+    let t = time.time()
+    let t2 = time.time()
+    assert(t <= t2) 
+
+    let t = time.time()
+    -- Busy work
+    for i = 0,1000 {
+        assert(i == i)
+    }
+    let t2 = time.time()
+    assert(t < t2) 
+}
+
+{
+    let io = require('io')
+    let file = io.open('/tmp/paw-test-misc', 'w+')
+    let input = 'Hello, world'
+    io.write(file, 'Hello')
+    io.write(file, ', ')
+    io.write(file, 'world!')
+    io.seek(file, 0, io.begin)
+    assert(io.tell(file) == 0)
+    let msg = io.read(file, #input)
+
+    assert(msg == input)
+    io.close(file)
+}
+
+{
+    fn test(i) {
+        -- Return is value ignored
+        return 1 / i 
+    }
+    assert(try(test, 0) != 0)
+    assert(try(test, 1) == 0)
+}
+
+{
+    fn test(code) {
+        -- Use 'load' so the script itself parses. Otherwise, if the
+        -- source code containing syntax error does not exist as a string,
+        -- the whole compilation will be aborted.
+        load(code)
+    }
+    assert(0 != try(test, 'l'))
+    assert(0 != try(test, 'let'))
+    assert(0 == try(test, 'let x'))
+    assert(0 != try(test, 'let x ='))
+    assert(0 != try(test, 'let x = "abc'))
+    assert(0 == try(test, 'let x = "abc"'))
+
+    assert(0 != try(test, 'let x = 01'))
+    assert(0 != try(test, 'let x = 1a'))
+    assert(0 != try(test, 'let x = 1 a'))
+    assert(0 == try(test, 'let x = 0x1'))
+}

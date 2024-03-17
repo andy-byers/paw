@@ -1,0 +1,31 @@
+-- string.paw
+
+{
+    assert(!'')
+    assert('s')
+    assert(!!'s')
+
+    assert('str'.clone() == 'str')
+}
+
+{
+    let str = 'abcdef'
+    assert(str.starts_with('abcdef'))
+    assert(str.starts_with('abcde'))
+    assert(str.starts_with('abc'))
+    assert(str.starts_with('a'))
+    assert(str.starts_with(''))
+    assert(str.ends_with('abcdef'))
+    assert(str.ends_with('bcdef'))
+    assert(str.ends_with('def'))
+    assert(str.ends_with('f'))
+    assert(str.ends_with(''))
+    assert(!str.starts_with('bcdef'))
+    assert(!str.starts_with('abcdf'))
+    assert(!str.starts_with('abd'))
+    assert(!str.starts_with('ac'))
+    assert(!str.ends_with('abcde'))
+    assert(!str.ends_with('acdef'))
+    assert(!str.ends_with('cef'))
+    assert(!str.ends_with('df'))
+}

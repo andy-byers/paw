@@ -1,0 +1,76 @@
+-- driver.paw
+
+fn filter_tests(tests, yes, no) {
+    -- null means ignore the filter: '' is a prefix of all strings, and
+    -- '_' is never a prefix of a test case name.
+    yes = yes ?: ''
+    no = no ?: '_'
+
+    let out = []
+    for t in tests {
+        if t.starts_with(yes) && !t.starts_with(no) {
+            out.push(t)
+        }
+    }
+    return out
+}
+
+-- Helper class for registering and running tests
+class Driver {
+    __init() {
+        self.order = []
+        self.registry = {}
+    }
+
+    -- Add a test case with the given 'name'
+    -- Test case names must be unique.
+    __setitem(name, test) {
+        self.registry[name] = test
+        self.order.push(name)
+    }
+
+    -- Run the registered test cases
+    -- 'n' is an integer passed to the tests, 'run' is an array containing
+    -- names of specific test cases to run. If 'run' is empty, all tests are
+    -- run. 'ignore' is an array containing names of test cases to ignore.
+    dispatch(n, run, ignore) {
+        fn pad(n, c) {
+            let s = ''
+            for i = 0,n {
+                s = s ++ c 
+            }
+            return s
+        }
+        -- Filter test cases based on prefixes 'run' and 'ignore'
+        let tests = filter_tests(self.order, run, ignore)
+
+        let time = require('time')
+        -- Find the longest test case name, for padding the others
+        let width = 0
+        for name in tests {
+            let len = #name
+            if len > width {
+                width = len
+            }
+        }
+        -- Add a space after each field
+        width = width + 1
+        let name_lb = 'name'
+        let nano_lb = 'ns/loop'
+        print('| ' ++ name_lb ++ pad(width - #name_lb, ' ') ++ 
+              '| ' ++ nano_lb ++ pad(width - #nano_lb, ' ') ++ '|')
+        print('|:' ++ pad(width, '-') ++
+              '|:' ++ pad(width, '-') ++ '|')
+        for name in tests {
+            let test = self.registry[name]
+            let t1 = time.time()
+            test(n) -- Run the test
+            let t2 = time.time()
+            
+            let nano = (t2 - t1) * 1e9 / n 
+            let nano = str(int(nano))
+            print('| ' ++ name ++ pad(width - #name, ' ') ++ 
+                  '| ' ++ nano ++ pad(width - #nano, ' ') ++ '|')
+        }
+    }
+}

@@ -1,0 +1,31 @@
+-- array.paw
+
+{
+    let a = [1, 2, 3]
+    a.push(4)
+    a.push(5)
+    a.push(6)
+    assert(#a == 6)
+    assert(a[0] == 1)
+    assert(a[5] == 6)
+    assert(a[-6] == 1)
+    assert(a[-1] == 6)
+}
+
+{
+    let a = []
+    a.push(a) -- Cycle
+
+    assert(#a == 1)
+    assert(#a[0] == 1)
+    assert(#a[0][0] == 1)
+    assert(#a[0][0][0] == 1)
+}
+
+{
+    assert(![])
+    assert(!![0])
+    assert([0])
+
+    assert([1, 2, 3].clone() == [1, 2, 3])
+}

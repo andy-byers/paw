@@ -1,0 +1,49 @@
+-- map.paw
+
+{
+    let m = {}
+    assert(#m == 0)
+}
+
+{
+    assert(!{})
+    assert({0: 0})
+    assert(!!{0: 0})
+    
+    assert({0: 0, 1: 1, 2: 2}.clone() == {0: 0, 1: 1, 2: 2})
+}
+
+{
+    let m = {}
+
+    m['a'] = 1
+    assert(m['a'] == 1)
+}
+
+{
+    let key = 'key'
+    let m = {key: 'value'}
+    assert(m[key] == 'value')
+    assert(#m == 1)
+    assert(m)
+}
+
+{
+    let m = {'k' ++ 'e' ++ 'y': 'v' ++ 'a' ++ 'l' ++ 'u' ++ 'e'}
+    assert(m['key'] == 'value')
+}
+
+{
+    let m = {
+        true: 'true',
+        false: 'false',
+        0: '0',
+        1: '1',
+        2: '2',
+    }
+    assert(m[true] == 'true')
+    assert(m[false] == 'false')
+    assert(m[0] == '0')
+    assert(m[1] == '1')
+    assert(m[2] == '2')
+}

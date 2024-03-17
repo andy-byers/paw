@@ -1,0 +1,182 @@
+-- closure.paw
+
+{
+    let f
+    let g
+
+    {
+        let s = 'abc'
+        let i = 123
+        let a = []
+        
+        fn closure() {
+            a.push(s)
+            a.push(i)
+            return a
+        }
+        f = closure
+    }
+    assert(f()[0] == 'abc')
+    assert(f()[1] == 123)
+    assert(#f() == 6) -- 3 calls == 6 pushes
+}
+
+{
+    let f
+    {
+        let b = 1
+        let closure = fn(a) {
+            return a + b
+        }
+        f = closure
+    }
+    assert(f(2) == 3)
+}
+
+{
+    let f
+    let g
+
+    {
+        {
+            let a = []
+            fn closure() {
+                a.push(#a)
+                return a
+            }
+            f = closure
+        } -- Close a
+        {
+            let a = []
+            fn closure() {
+                a.push(#a)
+                return a
+            }
+            g = closure
+        } -- Close a
+    }
+    assert(#f() == 1)
+    assert(#g() == 1)
+    assert(#f() == 2)
+    assert(#g() == 2)
+}
+
+{
+    let f
+    let g
+
+    fn test() {
+        assert(f(1) == 1)
+        assert(f(2) == 3)
+        assert(g(1) == 4)
+        assert(g(2) == 6)
+    }
+
+    {
+        let x = 0
+
+        fn _1(n) {
+            fn _2() {
+                fn _3() {
+                    x = x + n
+                    return x
+                }
+                return _3()
+            }
+            return _2()
+        }
+        f = _1
+        g = _1
+    }
+    test()
+
+    {
+        let x = 0
+
+        fn _1a(n) {
+            fn _2() {
+                x = x + n
+                return x
+            }
+            return _2()
+        }
+        fn _1b(n) {
+            fn _2() {
+                x = x + n
+                return x
+            }
+            return _2()
+        }
+        f = _1a
+        g = _1b
+    }
+    test()
+}
+
+{
+    let f
+    {
+        let a = [0, 1]
+        fn fib(n) {
+            assert(n >= 0)
+            if n < #a {
+                return a[n]
+            }
+            a.push(fib(n - 2) + fib(n - 1))
+            return a[-1]
+        }
+        f = fib        
+    }
+    assert(f(10) == 55)
+    assert(f(20) == 6765)
+    assert(f(30) == 832040)
+}
+
+-- Test vararg functions:
+{
+    fn test(n) {
+        return fn(...) {
+            assert(#argv == n)
+        }
+    }
+    test(0)()
+    test(1)(1)
+    test(2)(1, 2)
+    test(3)(1, 2, 3)
+
+    fn test(n, ...) {
+        assert(#argv == n)
+    }
+    test(0)
+    test(1, '1')
+    test(2, '1', '2')
+    test(3, '1', '2', '3')
+
+    fn test(...) {
+        let temp = argv[0];
+        return temp + argv[-1]
+    }
+    assert(0 == test(0))
+    assert(20 == test(10))
+    assert(100 == test(1, 99))
+    assert(500 == test(200, 100, 300))
+
+    fn test(a, ...) {
+        let temp = argv[0];
+        return a + temp + argv[-1]
+    }
+    assert(2 == test(0, 1)) -- 0 + 1 + 1
+    assert(21 == test(1, 10))
+    assert(102 == test(2, 1, 99))
+    assert(503 == test(3, 200, 100, 300))
+
+    fn test(a, b, ...) {
+        let temp = argv[0];
+        return a + b + temp + argv[-1]
+    }
+    assert(3 == test(0, 1, 1)) -- 0 + 1 + 1
+    assert(23 == test(1, 2, 10))
+    assert(105 == test(2, 3, 1, 99))
+    assert(507 == test(3, 4, 200, 100, 300))
+}
+

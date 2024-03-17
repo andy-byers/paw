@@ -1,0 +1,391 @@
+-- basic.paw
+
+{
+    let a = []
+    for i = 0,100 {
+        a.push(i)
+    }
+    assert(#a == 100)
+    for i = 0,100 {
+        assert(i in a)
+    }
+    let clone = a.clone()
+    for i = 0,50 {
+        a.pop(i)
+    }
+    for i = 0,100,2 {
+        a.insert(i, i)
+    }
+    assert(a == clone)
+}
+
+{
+    -- Semicolons are not necessary in most cases.
+    let x x = 1 + 2 + 3 assert(x == 6)
+    x = 1 - 2 - 3 x = 4 + 5 + 6 assert(x == 15)    
+}
+
+{
+    -- Parenthesis are required to call an anonymous function immediately. This
+    -- is also a situation where semicolons are needed to separate statements.
+    -- (it looks like a chain of 'suffixed' expressions, i.e. 'x[10](1, 2, 3)')
+    (fn() {})();
+    (fn(a) {})(1);
+    (fn(a, b) {})(1, 2);
+    (fn(a, b, c) {})(1, 2, 3);
+
+    (fn(a, 
+        b, 
+        c) {}) (1, 
+                2, 
+                3)
+
+   fn wrapper(f, n) {
+       return f(n)
+   }
+   assert(wrapper(fn(n) {return n}, 1) == 1)
+   assert(wrapper(fn(n) {return fn() {return n}}, 2)() == 2)
+   assert(wrapper(fn(n) {return fn() {return fn() {return n}}}, 3)()() == 3)
+
+    -- Semicolons are not needed if we are assigning to or initializing a variable.
+    let x = (fn() {})()
+    let x = (fn(a) {})(1)
+    x = (fn(a, b) {})(1, 2)
+    x = (fn(a, b, c) {})(1, 2, 3)
+    assert(x == null)
+}
+
+{
+    let x
+    {;;;};;;{};;;
+    {; x = 1; assert(x == 1)}
+}
+
+{
+    fn f() {}
+    assert(f() == null)
+    fn f() {return}
+    assert(f() == null)
+
+    fn f() {let x; return x}
+    assert(f() == null)
+
+    fn f(x) {return x}
+    assert(f(0) == 0)
+
+    fn f(x, y) {return x}
+    assert(f(0, 1) == 0)
+    fn f(x, y) {return y}
+    assert(f(0, 1) == 1)
+
+    fn f(x, y, z) {return x}
+    assert(f(0, 1, 2) == 0)
+    fn f(x, y, z) {return y}
+    assert(f(0, 1, 2) == 1)
+    fn f(x, y, z) {return z}
+    assert(f(0, 1, 2) == 2)
+}
+
+-- __*attr, and __*item
+{
+    class C {f() {return 42}}
+    fn get() {return fn() {return C()}}
+    let c = C()
+    c.ins = C()
+    c.ins.get = get
+    c.ins.a = [0]
+    let a = [c]
+    -- a = [
+    --     C { <--------------------------------------- a[0]
+    --         f() {return 42}, <---------------------- a[0].f
+    --         ins = C { <----------------------------- a[0].ins
+    --             f() {return 42}, <------------------ a[0].ins.f
+    --             get = fn() { <---------------------- a[0].ins.get
+    --                 return fn() { <----------------- a[0].ins.get()
+    --                     return C { <---------------- a[0].ins.get()()
+    --                         f = fn() {return 42} <-- a[0].ins.get()().f
+    --                     }
+    --                 }
+    --             }
+    --         }
+    --     }
+    -- ]
+    --
+
+    -- __set*
+    a[0].x = 1
+    a[0].ins.x = 2
+    a[0].ins.a[0] = 3
+
+    -- __get*
+    assert(a[0].f() == 42)
+    assert(a[0].ins.f() == 42)
+    assert(a[0].ins.get()().f() == 42)
+    assert(a[0].x == 1)
+    assert(a[0].ins.x == 2)
+    assert(a[0].ins.a[0] == 3)
+}
+
+{
+    fn f() {
+        {
+            -- Return statement must be the last statement in the block.
+            return 42
+        }
+        return 24 -- Unreachable
+    }
+    assert(f() == 42)
+}
+
+-- String literals: both types of quotes work, and strings can span 
+-- multiple lines.
+{
+    assert('abc' == "abc");
+    assert('abc\n def\n ghi\n\n' == 'abc
+ def
+ ghi
+
+')
+
+}
+
+-- Short-circuiting behavior:
+{
+    let state = [0, 0, 0]
+    fn setup(i) {
+        return fn(n) {
+            assert(state[i] == 0)
+            state[i] = 1
+            return n
+        }
+    }
+    fn check(a, b, c) {
+        assert(state[0] == a)
+        assert(state[1] == b)
+        assert(state[2] == c)
+        state = [0, 0, 0]
+    }
+    let f = setup(0)
+    let g = setup(1)
+    let h = setup(2)
+
+    fn test(a, b, c) {
+        return f(a) && g(b) && h(c)
+    }
+
+    assert(test(1, 1, 1));  check(1, 1, 1)
+    assert(!test(0, 1, 1)); check(1, 0, 0)
+    assert(!test(1, 0, 1)); check(1, 1, 0)
+    assert(!test(1, 1, 0)); check(1, 1, 1)
+    assert(!test(1, 0, 0)); check(1, 1, 0)
+    assert(!test(0, 1, 0)); check(1, 0, 0)
+    assert(!test(0, 0, 1)); check(1, 0, 0)
+    assert(!test(0, 0, 0)); check(1, 0, 0)
+
+    fn test(a, b, c) {
+        return f(a) || g(b) && h(c)
+    }
+
+    assert(test(1, 1, 1));  check(1, 0, 0)
+    assert(test(0, 1, 1));  check(1, 1, 1)
+    assert(test(1, 0, 1));  check(1, 0, 0)
+    assert(test(1, 1, 0));  check(1, 0, 0)
+    assert(test(1, 0, 0));  check(1, 0, 0)
+    assert(!test(0, 1, 0)); check(1, 1, 1)
+    assert(!test(0, 0, 1)); check(1, 1, 0)
+    assert(!test(0, 0, 0)); check(1, 1, 0)
+
+    fn test(a, b, c) {
+        return f(a) && g(b) || h(c)
+    }
+
+    assert(test(1, 1, 1)); check(1, 1, 0) 
+    assert(test(0, 1, 1)); check(1, 0, 1)
+    assert(test(1, 0, 1)); check(1, 1, 1)
+    assert(test(1, 1, 0)); check(1, 1, 0)
+    assert(!test(1, 0, 0)); check(1, 1, 1)
+    assert(!test(0, 1, 0)); check(1, 0, 1)
+    assert(test(0, 0, 1)); check(1, 0, 1)
+    assert(!test(0, 0, 0)); check(1, 0, 1)
+
+    fn test(a, b, c) {
+        return f(a) || g(b) || h(c)
+    }
+
+    assert(test(1, 1, 1)); check(1, 0, 0)
+    assert(test(0, 1, 1)); check(1, 1, 0)
+    assert(test(1, 0, 1)); check(1, 0, 0)
+    assert(test(1, 1, 0)); check(1, 0, 0)
+    assert(test(1, 0, 0)); check(1, 0, 0)
+    assert(test(0, 1, 0)); check(1, 1, 0)
+    assert(test(0, 0, 1)); check(1, 1, 1)
+    assert(!test(0, 0, 0)); check(1, 1, 1)
+}
+
+{
+    assert(42 == load('return 42')())
+    assert(42 == load('return fn() {return 42}')()())
+    let test = load('let v = 42; return fn() {return v;}')
+    assert(test()() == 42)
+}
+
+-- Array and map are both 'prefixexpr' constructs, meaning they can appear to the
+-- left of '[]' (__*item) or '.' (__*attr). See grammer.md for details.
+{
+    let a = [0, 1, 2][1]
+    assert(a == 1)
+    let m = {0: 0, 1: 1, 2: 2}[1]
+    assert(m == 1)
+}
+
+{
+    let s = ''
+    for a = 0,10 {
+        s = s ++ 'a'
+        for b = 0,10 {
+            s = s ++ 'b'
+            for c = 0,10 {
+                s = s ++ 'c'
+            }
+        }
+    }
+}
+
+-- Test null chaining operator:
+{
+    fn test(arg) {
+        let v = arg?
+        return 'nonnull'
+    }
+    assert(test(null) == null)
+    assert(test('nonnull') == 'nonnull')
+
+    class Class {
+        __init() {
+            self.isnull = null
+            self.nonnull = self
+        }
+        __neg() {
+            return null
+        }
+    }
+    fn test() {
+        let c = Class()
+        let x = c.nonnull?
+        return 'nonnull'
+    }
+    assert(test() == 'nonnull')
+
+    fn test() {
+        let c = Class()
+        return c.nonnull?.isnull?.nonnull?
+    }
+    assert(test() == null)
+
+    fn test() {
+        -- '?' is evaluated before any unary prefix operators.
+        -- Note that 'c.__neg()' returns null here, but the '?' is
+        -- applied to 'c' before '__neg' gets called.
+        let c = Class()
+        let x = -c? 
+        return 'nonnull'
+    }
+    assert(test() == 'nonnull')
+
+    fn test(a, b) {
+        return a? + b?
+    }
+    assert(null == test(null, null))
+    assert(null == test(1, null))
+    assert(null == test(null, 2))
+    assert(3 == test(1, 2))
+    
+    fn test(obj) {
+        for o in obj? {
+            return 42
+        }
+    }
+    assert(42 == test([1, 2, 3]))
+    assert(null == test(null))
+
+    fn test(first, second, third) {
+        let v = first?[second?]?[third?]?
+        return 123
+    }
+    assert(123 == test([[0]], 0, 0))
+    assert(null == test(null, 0, 0))     -- first == null
+    assert(null == test([null], 0, 0))   -- first[0] == null
+    assert(null == test([[null]], 0, 0)) -- first[0][0] == null
+    assert(null == test([[0]], null, 0)) -- second == null
+    assert(null == test([[0]], 0, null)) -- third == null
+
+    class Class {
+        __init() {
+            -- Note that 'self' is not an actual keyword: it only has special meaning
+            -- in a member function. It is a local variable in this context.
+            self.self = self
+            self.null_ = null
+        }
+    }
+    fn test() {
+        let c = Class()
+        let x = c.self?.self?.null_?
+        return 'nonnull'
+    }
+    assert(test() == null)
+}
+
+{
+    fn test(a, b) {
+        return a || b
+    }
+    assert(1 == test(0, 1))
+    assert(2 == test(2, 3))
+
+    fn test(a, b) {
+        return a && b
+    }
+    assert(0 == test(0, 1))
+    assert(3 == test(2, 3))
+
+    fn test(a, b, c) {
+        return a && b && c
+    }
+    assert(0 == test(0, 0, 0))
+    assert(0 == test(1, 0, 0))
+    assert(0 == test(1, 2, 0))
+    assert(3 == test(1, 2, 3))
+
+    fn test(a, b, c) {
+        return a || b || c
+    }
+    assert(0 == test(0, 0, 0))
+    assert(1 == test(0, 1, 2))
+    assert(2 == test(0, 0, 2))
+
+    assert(true || false && false)
+    assert(!(true && (false || false)))
+    assert(!((2 == 3) || (4 < 0) && (1 == 1)))
+}
+
+{
+    let f = fn() {
+        return 0
+    }
+    assert(f() == 0)
+
+    let f = fn(a) {
+        return a
+    }
+    assert(f(1) == 1)
+
+    let f = fn(a, b) {
+        return a + b
+    }
+    assert(f(1, 2) == 3)
+
+    let f = fn(a, b, c) {
+        return a + b + c
+    }
+    assert(f(1, 2, 3) == 6)
+}
