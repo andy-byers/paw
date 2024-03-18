@@ -1,15 +1,6 @@
 
-#include "env.h"
-#include "io.h"
 #include "paw.h"
-#include "rt.h"
 #include "test.h"
-#include "util.h"
-#include "value.h"
-#include <assert.h>
-#include <errno.h>
-#include <float.h>
-#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -85,7 +76,7 @@ static int fib(paw_Env *P)
         paw_push_int(P, n - 1);
         paw_call(P, 1);
         // Compute fib(n)
-        pawR_add(P);
+        paw_arith(P, PAW_OPADD);
     }
     // Cache the result
     paw_get_upvalue(P, 0, 0);
@@ -156,9 +147,9 @@ int main(void)
     // Roundtrip an integer string (through bigint). Make it very long, so the
     // buffer needs to be boxed.
     {
-        char str[BUFFER_LIMIT + 10];
-        const size_t len = paw_countof(str) - 1;
-        for (size_t i = 0; i < len; ++i) {
+        char str[1024] = {'9'}; // don't start with '0'
+        const size_t len = sizeof(str) - 1;
+        for (size_t i = 1; i < len; ++i) {
             str[i] = test_randint('0', '9');
         }
         str[len] = '\0';

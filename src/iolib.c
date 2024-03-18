@@ -90,7 +90,7 @@ static int io_read(paw_Env *P)
     const paw_Int n = paw_int(P, 2);
 
     Buffer buf;
-    pawL_init_buffer(&buf);
+    pawL_init_buffer(P, &buf);
     pawL_buffer_resize(P, &buf, cast_size(n));
     pawO_read_exact(P, file, buf.data, buf.size);
     pawL_push_result(P, &buf);

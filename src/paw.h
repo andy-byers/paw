@@ -109,6 +109,32 @@ static inline void paw_push_null(paw_Env *P)
     paw_push_nnull(P, 1);
 }
 
+#define PAW_OPNEG 0
+#define PAW_OPNOT 1
+#define PAW_OPBNOT 2
+#define PAW_OPADD 3
+#define PAW_OPSUB 4
+#define PAW_OPMUL 5
+#define PAW_OPDIV 6
+#define PAW_OPIDIV 7  
+#define PAW_OPMOD 8 
+#define PAW_OPPOW 9
+#define PAW_OPCONCAT 10
+#define PAW_OPBXOR 11
+#define PAW_OPBAND 12
+#define PAW_OPBOR 13
+#define PAW_OPSHL 14
+#define PAW_OPSHR 15
+
+void paw_arith(paw_Env *P, int op);
+
+#define PAW_OPEQ 0
+#define PAW_OPLT 1
+#define PAW_OPLE 2
+
+void paw_compare(paw_Env *P, int op);
+void paw_raw_equals(paw_Env *P);
+
 //
 // Getters (stack -> C):
 //
@@ -118,6 +144,7 @@ static inline void paw_push_null(paw_Env *P)
 // too large to fit in the return type, and 1 otherwise. Truncation affects the
 // high bits.
 paw_Int paw_intx(paw_Env *P, int index, paw_Bool *plossless);
+
 int paw_boolean(paw_Env *P, int index);
 paw_Float paw_float(paw_Env *P, int index);
 const char *paw_string(paw_Env *P, int index);

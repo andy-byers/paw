@@ -166,7 +166,7 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
 void paw_dump_source(paw_Env *P, Proto *proto)
 {
     Buffer print;
-    pawL_init_buffer(&print);
+    pawL_init_buffer(P, &print);
     dump_aux(P, proto, &print);
     pawL_add_char(P, &print, '\0');
     puts(print.data);
@@ -217,8 +217,9 @@ void paw_dump_stack(paw_Env *P)
             case VBIGINT: {
                 const ptrdiff_t save = pawC_stksave(P, p);
                 Buffer print;
-                pawL_init_buffer(&print);
-                pawL_add_value(P, &print, *p);
+                pawL_init_buffer(P, &print);
+                pawC_stkpush(P, *p);
+                pawL_add_value(P, &print);
                 pawL_add_char(P, &print, '\0');
                 printf("bigint %s\n", print.data);
                 pawL_discard_result(P, &print);
@@ -262,7 +263,7 @@ static int current_line(CallFrame *cf)
 void paw_stacktrace(paw_Env *P)
 {
     Buffer buf;
-    pawL_init_buffer(&buf);
+    pawL_init_buffer(P, &buf);
 
     const String *modname = P->main.fn->p->name;
 
@@ -288,8 +289,9 @@ void paw_stacktrace(paw_Env *P)
 void paw_dump_value(paw_Env *P, Value v)
 {
     Buffer buf;
-    pawL_init_buffer(&buf);
-    pawL_add_value(P, &buf, v);
+    pawL_init_buffer(P, &buf);
+    pawC_stkpush(P, v);
+    pawL_add_value(P, &buf);
     pawL_add_char(P, &buf, '\0');
     printf("%s\n", buf.data);
     pawL_discard_result(P, &buf);

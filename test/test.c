@@ -14,7 +14,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define TEST_FIND_LEAK
+// Define TEST_FIND_LEAK to have the program print out the addresses and
+// sizes of leaked blocks. Watchpoints can be used to figure out exactly
+// where the block was allocated. Note that the tests are very slow with
+// this option enabled.
 #ifdef TEST_FIND_LEAK
 struct Chunk {
     void *data;
@@ -76,7 +79,7 @@ static void report_nonzero_blocks(struct TestAlloc *a)
 {
     size_t nonzero = 0;
 #ifdef TEST_FIND_LEAK
-    // Print the exact pointers that were leaked
+    // Print the exact pointers that were leaked.
     for (size_t i = 0; i < s_chunks.size; ++i) {
         struct Chunk c = s_chunks.blocks[i];
         if (c.size) {
@@ -84,7 +87,7 @@ static void report_nonzero_blocks(struct TestAlloc *a)
         }
     }
 #else
-    // Just give a rough indication of what size block was leaked
+    // Just give a rough indication of what size blocks were leaked.
     unsigned *block = a->blocks;
     for (size_t i = 0; i < BLOCK_LIMIT; ++i, ++block) {
         if (*block) {

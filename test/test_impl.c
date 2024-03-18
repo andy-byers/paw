@@ -108,7 +108,7 @@ static void test_map(paw_Env *P)
     Map *m = pawH_new(P);
     pawV_set_map(sp++, m); // Anchor
 
-    // Add known integers for validation
+    // Add known integers for validation.
     const paw_Int known[] = {-1, -2, -10, -20, -100, -200};
     for (size_t i = 0; i < paw_countof(known); ++i) {
         paw_push_value(P, -1);
@@ -119,7 +119,7 @@ static void test_map(paw_Env *P)
 
     CHECK(cast_size(paw_length(P, -1)) == paw_countof(known));
 
-    // Fill the map with nonnegative integers (may have repeats)
+    // Fill the map with nonnegative integers (may have repeats).
     paw_Int integers[N];
     for (int i = 0; i < N; ++i) {
         const paw_Int ival = test_randint(0, VINT_MAX);
@@ -132,7 +132,7 @@ static void test_map(paw_Env *P)
 
     CHECK(cast_size(paw_length(P, -1)) <= N + paw_countof(known));
 
-    // Add some strings (should not affect the integers)
+    // Add some strings (should not affect the integers).
     char strings[N][64];
     static const size_t ns = sizeof(strings[0]);
     for (int i = 0; i < N; ++i) {
@@ -145,7 +145,7 @@ static void test_map(paw_Env *P)
 
     CHECK(cast_size(paw_length(P, -1)) <= 2 * N + paw_countof(known));
 
-    // Find all items
+    // Find all items.
     for (int i = 0; i < N; ++i) {
         paw_push_value(P, -1);
         paw_push_nstring(P, strings[i], ns);
@@ -161,21 +161,18 @@ static void test_map(paw_Env *P)
         paw_pop(P, 1);
     }
 
-    // Erase all nonnegative integers
+    // Erase all nonnegative integers.
     paw_Int itr = PAW_ITER_INIT;
     while (pawH_iter(m, &itr)) {
         const Value key = m->keys[itr];
         if (pawV_is_int(key) && pawV_get_int(key) >= 0) {
             pawH_action(P, m, key, MAP_ACTION_REMOVE);
-            printf("hoo\n");
-        } else if (pawV_is_int(key)) {
-            printf("neg = %lld\n", (long long)pawV_get_int(key));
         }
     }
 
     CHECK(cast_size(pawH_length(m)) <= N + paw_countof(known));
 
-    // Erase the strings
+    // Erase the strings.
     itr = PAW_ITER_INIT;
     while (pawH_iter(m, &itr)) {
         const Value key = m->keys[itr];
@@ -186,7 +183,7 @@ static void test_map(paw_Env *P)
 
     CHECK(cast_size(pawH_length(m)) == paw_countof(known));
 
-    // Validate known items
+    // Check known items.
     for (size_t i = 0; i < paw_countof(known); ++i) {
         Value key;
         pawV_set_int(&key, known[i]);

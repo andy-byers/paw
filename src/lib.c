@@ -9,7 +9,7 @@
 #include "rt.h"
 #include <errno.h>
 #include <time.h>
-// TODO: Guard, and Windows impl.
+// TODO: Header needs include guard, and Windows impl.
 #include <sys/time.h>
 
 #define cf_base(i) P->cf->base[i]
@@ -149,11 +149,12 @@ static int base_assert(paw_Env *P)
 static int base_print(paw_Env *P)
 {
     Buffer print;
-    pawL_init_buffer(&print);
+    pawL_init_buffer(P, &print);
 
     const int argc = get_argc(P);
     for (int i = 1; i <= argc; ++i) {
-        pawL_add_value(P, &print, cf_base(i));
+        pawC_stkpush(P, cf_base(i));
+        pawL_add_value(P, &print);
         if (i < argc) {
             pawL_add_char(P, &print, ' ');
         }
@@ -258,7 +259,7 @@ static int array_pop(paw_Env *P)
     StackPtr sp = pawC_stkinc(P, 1);
     *sp = *pawA_get(P, a, i); // Checks bounds
     pawA_pop(P, a, i);
-    return 0;
+    return 1;
 }
 
 static int map_erase(paw_Env *P)
@@ -370,18 +371,17 @@ void pawL_register_lib(paw_Env *P, const char *name, int nup, const pawL_Attr *a
         if (attr->func) {
             paw_push_native(P, attr->func, nup);
         } else {
-            paw_push_null(P); // Placeholder
+            paw_push_null(P); // placeholder
         }
-        // m[name] = func?
         paw_set_item(P, -3);
     }
-    paw_pop(P, 1); // Pop 'm'
+    paw_pop(P, 1); // pop 'm'
 
     if (name) {
         paw_push_value(P, -1);
 
         // Push the map containing loaded libraries.
-        StackPtr sp = pawC_stkinc(P, 1);
+        sp = pawC_stkinc(P, 1);
         pawV_set_map(sp, P->libs);
 
         // Set up the stack to look like '..., P->libs, name, lib'.
@@ -428,7 +428,7 @@ static String *fix_name(paw_Env *P, const char *name)
 
 static void add_base_method(paw_Env *P, ValueKind type, String *name, paw_Function base)
 {
-    Map *attr = P->attr[VOBJINDEX(type)];
+    Map *attr = P->attr[obj_index(type)];
     Value *value = pawH_action(P, attr, obj2v(name), MAP_ACTION_CREATE);
     pawV_set_native(value, pawV_new_native(P, base, 0));
     pawG_fix_object(P, pawV_get_object(*value));
@@ -482,15 +482,13 @@ static paw_Bool load_cached(paw_Env *P, const char *name)
     paw_push_string(P, name);
     const Value key = P->top[-1];
 
-    Value *value = pawH_get(P, P->libs, key);
-    if (!value) {
+    Value *pvalue = pawH_get(P, P->libs, key);
+    if (!pvalue) {
         return PAW_BFALSE;
     }
-    // Replace library name
-    StackPtr sp = pawC_stkinc(P, 1);
-    *sp = *value;
-    paw_rotate(P, -2, 1);
-    paw_pop(P, 1);
+    // replace library name
+    pawC_pushv(P, *pvalue);
+    paw_shift(P, 1);
     // P->top[-1] = *value;
     return PAW_BTRUE;
 }
@@ -499,7 +497,7 @@ void pawL_require_lib(paw_Env *P, const char *name)
 {
     paw_assert(name);
     if (load_cached(P, name)) {
-        return; // Already loaded
+        return; // already loaded
     }
     // Automatically register base libraries. This will prevent libraries with any of
     // the base library names from being registered.

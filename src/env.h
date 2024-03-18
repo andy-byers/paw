@@ -5,6 +5,7 @@
 #define PAW_CONTEXT_H
 
 #include "meta.h"
+#include "opcode.h"
 #include "paw.h"
 #include "str.h"
 #include "value.h"

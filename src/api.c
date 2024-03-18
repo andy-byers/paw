@@ -267,7 +267,7 @@ const char *paw_push_nstring(paw_Env *P, const char *s, size_t n)
 const char *paw_push_vfstring(paw_Env *P, const char *fmt, va_list arg)
 {
     Buffer buf;
-    pawL_init_buffer(&buf);
+    pawL_init_buffer(P, &buf);
     pawL_add_vfstring(P, &buf, fmt, arg);
     pawL_push_result(P, &buf);
     return paw_string(P, -1);
@@ -369,7 +369,7 @@ void paw_to_string(paw_Env *P, int index)
 size_t paw_length(paw_Env *P, int index)
 {
     paw_push_value(P, index);
-    pawR_len(P); // Replace value with its length
+    pawR_length(P); // replace value with its length
 
     const paw_Int n = paw_int(P, -1);
     paw_pop(P, 1);
@@ -708,4 +708,25 @@ void paw_call_attr(paw_Env *P, int index, const char *name, int argc)
     paw_push_string(P, name);
     paw_insert(P, -argc - 3);
     paw_call(P, argc);
+}
+
+void paw_arith(paw_Env *P, int op)
+{
+    paw_assert(0 <= op && op <= PAW_OPSHR);
+    op += OP_NEG; // add opcode offset
+    pawR_arith(P, (Op)op);
+}
+
+void paw_compare(paw_Env *P, int op)
+{
+    op += OP_EQ;
+    pawR_compare(P, (Op)op);
+}
+
+void paw_raw_equals(paw_Env *P)
+{
+    const Value x = P->top[-2];
+    const Value y = P->top[-1];
+    paw_push_boolean(P, pawV_equal(x, y));
+    paw_shift(P, 2);
 }

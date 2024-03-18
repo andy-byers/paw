@@ -172,11 +172,11 @@ assert(f(4) == 3)
 |11        |`<< >>`       |Shift left, shift right                   |Left         |
 |10        |`&`           |Bitwise and                               |Left         |
 |9         |`^`           |Bitwise xor                               |Left         |
-|8         |`|`           |Bitwise or                                |Left         |
+|8         |`&#124;`      |Bitwise or                                |Left         |
 |7         |`in < <= > >=`|Inclusion, relational comparisons         |Left         |
 |6         |`== !=`       |Equality comparisons                      |Left         |
 |5         |`&&`          |And                                       |Left         |
-|4         |`||`          |Or                                        |Left         |
+|4         |`&#124;&#124;`|Or                                        |Left         |
 |3         |`?:`          |Null coalesce                             |Left         |
 |2         |`??::`        |Conditional                               |Right        |
 |1         |`=`           |Assignment                                |Right        |
@@ -185,9 +185,9 @@ assert(f(4) == 3)
 + Add a few things to the C API:
     + Better way to call builtin functions and methods on builtin types
     + Better API for arrays: `paw_*_item` will throw an error if the index is out of bounds
-    + Put a few functions in paw.h that perform operations on paw values (`paw_arith`, `paw_bitwise`, `paw_compare`, which can just call the runtime routines)
 + Need some sort of restriction on when methods can be added to a class
 The compiler will get confused if 'self' or 'super' is used outside of a class body.
+
 + 'for i = x,y,z' loops: should we prevent 'x,y,z' from being floats?
 For loops using floats often produce unexpected results: it's probably better to use an int loop counter and just multiply by a float constant as needed
 Also, for loops won't work with bigint right now.

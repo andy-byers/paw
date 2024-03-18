@@ -5,22 +5,13 @@
 #include "aux.h"
 #include "gc.h"
 #include "mem.h"
-#include <assert.h>
 
-static String **find_string(StringTable *st, const char *text, size_t length, uint32_t hash)
-{
-    String **s = &st->strings[hash & (st->capacity - 1)];
-    while (*s && (hash != (*s)->hash || length != (*s)->length ||
-                  0 != memcmp((*s)->text, text, cast_size(length)))) {
-        s = &(*s)->next;
-    }
-    return s;
-}
+#define st_index(st, h) ((h) & (st->capacity - 1))
 
 static String *new_string(paw_Env *P, size_t length)
 {
     if (length > PAW_SIZE_MAX - sizeof(String) - 1 /* '\0' */) {
-        pawM_error(P); // Size too big for paw_Int
+        pawM_error(P); // size too big for paw_Int
     }
     String *str = pawM_new_fa(P, String, length + 1);
     pawG_add_object(P, cast_object(str), VSTRING);
@@ -35,7 +26,7 @@ static void grow_table(paw_Env *P, StringTable *st)
 {
     const StringTable old = *st;
 
-    // Double the capacity
+    // double the capacity
 #define DEFAULT_CAP 32
     size_t capacity = DEFAULT_CAP;
     while (capacity <= old.capacity) {
@@ -44,19 +35,16 @@ static void grow_table(paw_Env *P, StringTable *st)
     st->strings = pawM_new_vec(P, capacity, String *);
     st->capacity = capacity;
 
-    // Copy entries
+    // copy entries
     for (size_t i = 0; i < old.capacity; ++i) {
         for (String *src = old.strings[i]; src;) {
-            String *next = src->next;
-            src->next = NULL;
-
-            String **dst = find_string(st, src->text, src->length, src->hash);
-            assert(!*dst); // Keys are unique
-            *dst = src;    // Write to new buffer
+            String *next = src->next; // save next string
+            String **pdst = &st->strings[st_index(st, src->hash)];
+            src->next = *pdst;
+            *pdst = src;
             src = next;
         }
     }
-    // Cleanup
     pawM_free_vec(P, old.strings, old.capacity);
     CHECK_GC(P);
 }
@@ -85,16 +73,22 @@ String *pawS_new_nstr(paw_Env *P, const char *s, size_t n)
 {
     StringTable *st = &P->strings;
     grow_table_if_necessary(P, st);
+
     const uint32_t hash = pawS_hash(s, n, 0);
-    String **p = find_string(st, s, n, hash);
-    if (!*p) {
-        String *str = new_string(P, n);
-        memcpy(str->text, s, n);
-        str->hash = hash;
-        ++st->count;
-        *p = str;
+    String **plist = &st->strings[st_index(st, hash)];
+    for (String *p = *plist; p; p = p->next) {
+        if (n == p->length && 0 == memcmp(p->text, s, n)) {
+            return p; // already exists
+        }
     }
-    return *p;
+
+    String *str = new_string(P, n);
+    memcpy(str->text, s, n);
+    str->hash = hash;
+    ++st->count;
+    str->next = *plist;
+    *plist = str;
+    return str;
 }
 
 String *pawS_new_str(paw_Env *P, const char *text)
@@ -105,9 +99,12 @@ String *pawS_new_str(paw_Env *P, const char *text)
 void pawS_free_str(paw_Env *P, String *s)
 {
     StringTable *st = &P->strings;
-    String **p = find_string(st, s->text, s->length, s->hash);
-    paw_assert(*p == s);
-    *p = s->next; // Remove
+    String **p = &st->strings[st_index(st, s->hash)];
+    while (*p != s) {
+        p = &(*p)->next;
+    }
+    *p = s->next; // remove
+    --st->count;
 
     pawM_free_fa(P, s, s->length + 1);
 }

@@ -44,17 +44,15 @@
 #define vm_const() (fn->p->k[Iw()])
 #define vm_jmp() decode_jump(Iw())
 
-#define vm_push0() pawC_stkinc(P, 1)
-#define vm_pushi(i) vm_seti(pawC_stkinc(P, 1), i)
-#define vm_pushf(f) vm_setf(pawC_stkinc(P, 1), f)
-#define vm_pushb(b) vm_setb(pawC_stkinc(P, 1), b)
-#define vm_set0(sp) pawV_set_null(sp)
-#define vm_seti(sp, i) pawV_set_int(sp, i)
-#define vm_setf(sp, f) pawV_set_float(sp, f)
-#define vm_setb(sp, b) pawV_set_bool(sp, b)
+#define vm_push0() pawC_push0(P)
+#define vm_pushi(i) pawC_pushi(P, i)
+#define vm_pushf(f) pawC_pushf(P, f)
+#define vm_pushb(b) pawC_pushb(P, b)
 
 // Slot 0 (the callable or 'self') is an implicit parameter
 #define vm_argc() (paw_get_count(P) - 1)
+
+static void vm_unop(paw_Env *P, Op op);
 
 static Value vnull(void)
 {
@@ -350,44 +348,38 @@ void pawR_to_integer(paw_Env *P)
 {
     StackPtr sp = vm_peek(0);
     if (pawV_is_int(*sp) || pawV_is_bigint(*sp)) {
-        // NOOP
+        return; // already an integer
     } else if (pawV_is_float(*sp)) {
         const paw_Float f = pawV_get_float(*sp);
         float2integer(P, f);
-        vm_shift(1);
     } else if (pawV_is_bool(*sp)) {
         pawV_set_int(sp, pawV_get_bool(*sp));
+        return;
     } else if (pawV_is_string(*sp)) {
-        // Copy into null-terminated buffer.
-        Buffer buf;
-        pawL_init_buffer(&buf);
-        pawL_add_value(P, &buf, *sp);
-        pawL_add_char(P, &buf, '\0');
-
-        const char *str = buf.data;
-        paw_Bool neg = consume_prefix(&str);
-        // Use the stack slot containing the string. If the buffer needed a box,
-        // it will be above this slot.
-        if (pawV_parse_integer(P, str, sp)) {
-            pawE_error(P, PAW_ESYNTAX, "invalid integer '%s'", buf.data);
+        const char *begin = pawV_get_text(*sp);
+        const char *str = begin;
+        const paw_Bool neg = consume_prefix(&str);
+        if (pawV_parse_integer(P, str)) {
+            pawE_error(P, PAW_ESYNTAX, "invalid integer '%s'", str);
         }
-        pawL_discard_result(P, &buf);
         if (neg) {
             // Call the main negation routine, since the parsed integer may be
             // a bigint.
-            pawR_neg(P);
+            vm_unop(P, OP_NEG);
         }
     } else if (meta_unop(P, OP_INT, *sp)) {
-        vm_shift(1);
+        // called sp->__int()
     } else {
         pawV_type_error(P, *sp);
     }
+    vm_shift(1);
 }
 
 void pawR_to_float(paw_Env *P)
 {
     StackPtr sp = vm_peek(0);
     if (pawV_is_float(*sp)) {
+        // already a float
     } else if (pawV_is_int(*sp)) {
         pawV_set_float(sp, (paw_Float)pawV_get_int(*sp));
     } else if (pawV_is_bigint(*sp)) {
@@ -395,22 +387,18 @@ void pawR_to_float(paw_Env *P)
     } else if (pawV_is_bool(*sp)) {
         pawV_set_float(sp, pawV_get_bool(*sp));
     } else if (pawV_is_string(*sp)) {
-        // Copy into null-terminated buffer.
-        Buffer buf;
-        pawL_init_buffer(&buf);
-        pawL_add_value(P, &buf, *sp);
-        pawL_add_char(P, &buf, '\0');
-
-        const char *str = buf.data;
+        const char *begin = pawV_get_text(*sp);
+        const char *str = begin;
         paw_Bool neg = consume_prefix(&str);
-        if (pawV_parse_float(str, sp)) {
-            pawE_error(P, PAW_ESYNTAX, "invalid float '%s'", buf.data);
+        if (pawV_parse_float(P, str)) {
+            pawE_error(P, PAW_ESYNTAX, "invalid float '%s'", begin);
         }
-        pawL_discard_result(P, &buf);
         if (neg) {
+            sp = vm_peek(0); // new top
             const paw_Float f = pawV_get_float(*sp);
             pawV_set_float(sp, -f);
         }
+        vm_shift(1);
     } else if (meta_unop(P, OP_FLOAT, *sp)) {
         vm_shift(1);
     } else {
@@ -420,14 +408,13 @@ void pawR_to_float(paw_Env *P)
 
 void pawR_to_string(paw_Env *P)
 {
-    const Value v = *vm_peek(0);
-    if (!meta_unop(P, OP_STR, v)) {
-        Buffer buf;
-        pawL_init_buffer(&buf);
-        pawL_add_value(P, &buf, *vm_peek(0));
-        pawL_push_result(P, &buf);
+    Value *pv = vm_peek(0);
+    if (meta_unop(P, OP_STR, *pv)) {
+        vm_shift(1);
+    } else {
+        size_t len; // unused
+        pawV_to_string(P, pv, &len);
     }
-    vm_shift(1);
 }
 
 static void try_int(paw_Env *P, Value *pv)
@@ -452,7 +439,7 @@ static Map *attributes(paw_Env *P, const Value v)
     } else if (pawV_is_userdata(v)) {
         attr = pawV_get_userdata(v)->attr;
     } else if (pawV_is_object(v)) {
-        attr = P->attr[VOBJINDEX(pawV_get_type(v))];
+        attr = P->attr[obj_index(pawV_get_type(v))];
     } else {
         pawV_type_error(P, v);
     }
@@ -792,7 +779,7 @@ static paw_Bool forin_init(paw_Env *P)
 
 static paw_Bool meta_forin(paw_Env *P, Value v, paw_Int itr)
 {
-    // Push the length
+    // push the length
     meta_unop(P, OP_LEN, v);
 
     ++itr;
@@ -808,7 +795,7 @@ static paw_Bool meta_forin(paw_Env *P, Value v, paw_Int itr)
         meta_getter(P, OP_GETITEM, v, vint(itr));
         return PAW_BTRUE;
     }
-    return PAW_BFALSE; // Finish the loop
+    return PAW_BFALSE; // finish the loop
 }
 
 static paw_Bool forin(paw_Env *P)
@@ -836,7 +823,7 @@ static paw_Bool forin(paw_Env *P)
     } else {
         pawV_type_error(P, obj);
     }
-    return PAW_BFALSE; // Stop the loop
+    return PAW_BFALSE; // stop the loop
 }
 
 static void int_arith(paw_Env *P, Op op, Value lhs, Value rhs);
@@ -845,7 +832,7 @@ static void float_arith(paw_Env *P, Op op, Value lhs, Value rhs)
 {
     const paw_Float x = pawV_get_float(lhs);
     const paw_Float y = pawV_get_float(rhs);
-    paw_Float z = 0.0; // Result
+    paw_Float z = 0.0; // result
     switch (op) {
         case OP_ADD:
             z = x + y;
@@ -897,7 +884,7 @@ static void int_arith(paw_Env *P, Op op, Value lhs, Value rhs)
 {
     paw_Int x = pawV_get_int(lhs);
     paw_Int y = pawV_get_int(rhs);
-    paw_Int z = 0; // Result
+    paw_Int z = 0; // result
     switch (op) {
         // Addition and subtraction will never overflow the native type used
         // for a paw_Int, but may result in a value smaller than VINT_MIN
@@ -928,8 +915,8 @@ static void int_arith(paw_Env *P, Op op, Value lhs, Value rhs)
             break;
         default:
             paw_assert(op == OP_DIV);
-            vm_setf(&lhs, (paw_Float)x);
-            vm_setf(&rhs, (paw_Float)y);
+            pawV_set_float(&lhs, (paw_Float)x);
+            pawV_set_float(&rhs, (paw_Float)y);
             float_arith(P, op, lhs, rhs);
             return;
     }
@@ -946,7 +933,7 @@ static void string_arith(paw_Env *P, Op op, Value lhs, Value rhs)
     if (op == OP_ADD) {
         if (pawV_is_string(lhs) && pawV_is_string(rhs)) {
             Buffer print;
-            pawL_init_buffer(&print);
+            pawL_init_buffer(P, &print);
             String *x = pawV_get_string(lhs);
             String *y = pawV_get_string(rhs);
             pawL_add_nstring(P, &print, x->text, x->length);
@@ -965,7 +952,7 @@ static void string_arith(paw_Env *P, Op op, Value lhs, Value rhs)
             s = pawV_get_string(rhs);
         }
         Buffer print;
-        pawL_init_buffer(&print);
+        pawL_init_buffer(P, &print);
         for (paw_Int i = 0; i < n; ++i) {
             pawL_add_nstring(P, &print, s->text, s->length);
         }
@@ -1011,7 +998,7 @@ static Value fetch(paw_Env *P, int i)
     return *pv;
 }
 
-static void rel_aux(paw_Env *P, Op op)
+static void vm_compare(paw_Env *P, Op op)
 {
     Value y = fetch(P, 0);
     Value x = fetch(P, 1);
@@ -1072,7 +1059,7 @@ static void float_unop(paw_Env *P, Op op, paw_Float f)
     }
 }
 
-static void unop_aux(paw_Env *P, Op op)
+static void vm_unop(paw_Env *P, Op op)
 {
     Value x = fetch(P, 0);
     if (pawV_is_int(x)) {
@@ -1094,7 +1081,7 @@ static void unop_aux(paw_Env *P, Op op)
     vm_shift(1);
 }
 
-static void arith_aux(paw_Env *P, Op op)
+static void vm_arith(paw_Env *P, Op op)
 {
     Value y = fetch(P, 0);
     Value x = fetch(P, 1);
@@ -1167,7 +1154,7 @@ static void int_bitwise(paw_Env *P, Op op, Value lhs, Value rhs)
     vm_pushi(z);
 }
 
-static void bitwise_aux(paw_Env *P, Op op)
+static void vm_bitwise(paw_Env *P, Op op)
 {
     Value y = fetch(P, 0);
     Value x = fetch(P, 1);
@@ -1184,7 +1171,55 @@ static void bitwise_aux(paw_Env *P, Op op)
     vm_shift(2);
 }
 
-void pawR_len(paw_Env *P)
+static int ensure_str(paw_Env *P, Value *pv)
+{
+    if (!pawV_is_string(*pv)) {
+        vm_push(*pv);
+        pawR_to_string(P);
+        *pv = *vm_peek(0);
+        vm_pop(1);
+    }
+    return 0;
+}
+
+static void vm_concat(paw_Env *P)
+{
+    Value y = *vm_peek(0);
+    Value x = *vm_peek(1);
+    if (!meta_binop(P, OP_CONCAT, x, y)) {
+        if (ensure_str(P, &x) || ensure_str(P, &y)) {
+            // Either 'x' or 'y' is not a string and has no '__str' metamethod.
+            pawV_type_error2(P, x, y);
+        }
+        String *s = pawV_get_string(x);
+        String *t = pawV_get_string(y);
+
+        Buffer print;
+        pawL_init_buffer(P, &print);
+        pawL_add_nstring(P, &print, s->text, s->length);
+        pawL_add_nstring(P, &print, t->text, t->length);
+        pawL_push_result(P, &print); // push
+    }
+    vm_shift(2);
+}
+
+static void vm_in(paw_Env *P)
+{
+    const Value cnt = *vm_peek(0);
+    const Value key = *vm_peek(1);
+    if (pawV_is_map(cnt)) {
+        vm_pushb(pawH_contains(P, pawV_get_map(cnt), key));
+    } else if (pawV_is_array(cnt)) {
+        vm_pushb(pawA_contains(P, pawV_get_array(cnt), key));
+    } else if (meta_contains(P, OP_IN, cnt, key)) {
+        // called 'cnt.__contains(key)'
+    } else {
+        pawV_type_error(P, cnt);
+    }
+    vm_shift(2);
+}
+
+void pawR_length(paw_Env *P)
 {
     size_t len = 0;
     Value *pv = vm_peek(0);
@@ -1208,95 +1243,48 @@ void pawR_len(paw_Env *P)
     pawV_set_int(pv, (paw_Int)len);
 }
 
-#define GEN_UNOP(a, b)        \
-    void pawR_##a(paw_Env *P) \
-    {                         \
-        unop_aux(P, OP_##b);  \
-    }
-GEN_UNOP(neg, NEG)
-GEN_UNOP(not, NOT)
-GEN_UNOP(bnot, BNOT)
-
-#define GEN_ARITH(a, b)       \
-    void pawR_##a(paw_Env *P) \
-    {                         \
-        arith_aux(P, OP_##b); \
-    }
-GEN_ARITH(add, ADD)
-GEN_ARITH(sub, SUB)
-GEN_ARITH(mul, MUL)
-GEN_ARITH(div, DIV)
-GEN_ARITH(idiv, IDIV)
-GEN_ARITH(mod, MOD)
-
-#define GEN_BITWISE(a, b)       \
-    void pawR_##a(paw_Env *P)   \
-    {                           \
-        bitwise_aux(P, OP_##b); \
-    }
-GEN_BITWISE(shl, SHL)
-GEN_BITWISE(shr, SHR)
-GEN_BITWISE(band, BAND)
-GEN_BITWISE(bor, BOR)
-GEN_BITWISE(bxor, BXOR)
-
-#define GEN_REL(a, b)         \
-    void pawR_##a(paw_Env *P) \
-    {                         \
-        rel_aux(P, OP_##b);   \
-    }
-GEN_REL(lt, LT)
-GEN_REL(le, LE)
-
-static int ensure_str(paw_Env *P, Value *pv)
+void pawR_arith(paw_Env *P, Op op)
 {
-    if (!pawV_is_string(*pv)) {
-        vm_push(*pv);
-        pawR_to_string(P);
-        *pv = *vm_peek(0);
-        vm_pop(1);
+    switch (op) {
+        case OP_NEG:
+        case OP_NOT:
+        case OP_BNOT:
+            vm_unop(P, op);
+            break;
+        case OP_ADD:
+        case OP_SUB:
+        case OP_MUL:
+        case OP_DIV:
+        case OP_IDIV:
+        case OP_MOD:
+        case OP_POW:
+            vm_arith(P, op);
+            break;
+        case OP_CONCAT:
+            vm_concat(P);
+            break;
+        case OP_BXOR:
+        case OP_BAND:
+        case OP_BOR:
+        case OP_SHL:
+        case OP_SHR:
+            vm_bitwise(P, op);
+            break;
+        default:
+            pawE_error(P, PAW_ERUNTIME, "unsupported operator %u", op);
     }
-    return 0;
 }
 
-void pawR_concat(paw_Env *P)
+void pawR_compare(paw_Env *P, Op op)
 {
-    Value y = *vm_peek(0);
-    Value x = *vm_peek(1);
-    if (!meta_binop(P, OP_CONCAT, x, y)) {
-        if (ensure_str(P, &x) || ensure_str(P, &y)) {
-            // Either 'x' or 'y' is not a string and has no '__str' metamethod.
-            pawV_type_error2(P, x, y);
-        }
-        String *s = pawV_get_string(x);
-        String *t = pawV_get_string(y);
-
-        Buffer print;
-        pawL_init_buffer(&print);
-        pawL_add_nstring(P, &print, s->text, s->length);
-        pawL_add_nstring(P, &print, t->text, t->length);
-        pawL_push_result(P, &print); // Push
-    }
-    vm_shift(2);
-}
-
-void pawR_in(paw_Env *P)
-{
-    const Value cnt = *vm_peek(0);
-    const Value key = *vm_peek(1);
-    if (pawV_is_map(cnt)) {
-        vm_pushb(pawH_contains(P, pawV_get_map(cnt), key));
-    } else if (pawV_is_array(cnt)) {
-        vm_pushb(pawA_contains(P, pawV_get_array(cnt), key));
-    } else if (meta_contains(P, OP_IN, cnt, key)) {
-        // called 'cnt.__contains(key)'
+    if (op == OP_EQ) {
+        pawR_equals(P);
     } else {
-        pawV_type_error(P, cnt);
+        vm_compare(P, op);
     }
-    vm_shift(2);
 }
 
-void pawR_eq(paw_Env *P)
+void pawR_equals(paw_Env *P)
 {
     const Value y = *vm_peek(0);
     const Value x = *vm_peek(1);
@@ -1312,24 +1300,6 @@ void pawR_eq(paw_Env *P)
         vm_pushb(eq);
     }
     vm_shift(2);
-}
-
-void pawR_ne(paw_Env *P)
-{
-    pawR_eq(P);
-    pawR_not(P);
-}
-
-void pawR_gt(paw_Env *P)
-{
-    pawR_le(P);
-    pawR_not(P);
-}
-
-void pawR_ge(paw_Env *P)
-{
-    pawR_lt(P);
-    pawR_not(P);
 }
 
 static int getattr_aux(paw_Env *P)
@@ -1439,102 +1409,102 @@ top:
 
             vm_case(LEN) :
             {
-                pawR_len(P);
+                pawR_length(P);
             }
 
             vm_case(NEG) :
             {
-                pawR_neg(P);
+                vm_unop(P, OP_NEG);
             }
 
             vm_case(NOT) :
             {
-                pawR_not(P);
+                vm_unop(P, OP_NOT);
             }
 
             vm_case(BNOT) :
             {
-                pawR_bnot(P);
+                vm_unop(P, OP_BNOT);
             }
 
             vm_case(SHL) :
             {
-                pawR_shl(P);
+                vm_bitwise(P, OP_SHL);
             }
 
             vm_case(SHR) :
             {
-                pawR_shr(P);
+                vm_bitwise(P, OP_SHR);
             }
 
             vm_case(BAND) :
             {
-                pawR_band(P);
+                vm_bitwise(P, OP_BAND);
             }
 
             vm_case(BOR) :
             {
-                pawR_bor(P);
+                vm_bitwise(P, OP_BOR);
             }
 
             vm_case(BXOR) :
             {
-                pawR_bxor(P);
+                vm_bitwise(P, OP_BXOR);
             }
 
             vm_case(ADD) :
             {
-                pawR_add(P);
+                vm_arith(P, OP_ADD);
             }
 
             vm_case(SUB) :
             {
-                pawR_sub(P);
+                vm_arith(P, OP_SUB);
             }
 
             vm_case(MUL) :
             {
-                pawR_mul(P);
+                vm_arith(P, OP_MUL);
             }
 
             vm_case(DIV) :
             {
-                pawR_div(P);
+                vm_arith(P, OP_DIV);
             }
 
             vm_case(IDIV) :
             {
-                pawR_idiv(P);
+                vm_arith(P, OP_IDIV);
             }
 
             vm_case(MOD) :
             {
-                pawR_mod(P);
+                vm_arith(P, OP_MOD);
             }
 
             vm_case(CONCAT) :
             {
-                pawR_concat(P);
+                vm_concat(P);
             }
 
             vm_case(EQ) :
             {
-                pawR_eq(P);
+                pawR_equals(P);
             }
 
             vm_case(LT) :
             {
-                pawR_lt(P);
+                vm_compare(P, OP_LT);
             }
 
             vm_case(LE) :
             {
-                pawR_le(P);
+                vm_compare(P, OP_LE);
             }
 
             vm_case(IN) :
             {
-                pawR_in(P);
+                vm_in(P);
             }
 
             vm_case(NEWARRAY) :
@@ -1731,7 +1701,7 @@ top:
                 const uint8_t argc = Ib();
                 StackPtr ptr = vm_peek(argc);
                 if (pawV_is_class(*ptr)) {
-                    // No metamethods on Class
+                    // no metamethods on class
                 } else if (meta_call(P, OP_CALL, *ptr, argc)) {
                     vm_continue; // Called __call metamethod
                 }
@@ -1840,14 +1810,12 @@ top:
             {
                 const int offset = vm_jmp();
                 if (forin(P)) {
-                    // Jump to start
-                    pc += offset;
+                    pc += offset; // continue
                 }
             }
 
-        vm_default : {
+        vm_default :
             paw_assert(PAW_BFALSE);
-        }
         }
     }
 }

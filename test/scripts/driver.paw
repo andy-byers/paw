@@ -1,4 +1,20 @@
 -- driver.paw
+{
+    fn ok_integer(str, f) {
+        assert(int(str) == f)
+    }
+
+    ok_integer(str(1 << 80), 1 << 80)
+
+    --fn bad_integer(str) {
+    --    assert(0 != try(int, str))
+    --}
+
+    --bad_integer('abc')
+    --bad_integer(' ')
+    --bad_integer('0.9')
+    --bad_integer('1.1')
+}
 
 fn filter_tests(tests, yes, no) {
     -- null means ignore the filter: '' is a prefix of all strings, and

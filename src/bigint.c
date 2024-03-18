@@ -645,7 +645,7 @@ void pawB_str(paw_Env *P, const BigInt *bi, paw_Bool caps, const char *prefix, i
         return;
     }
     Buffer print;
-    pawL_init_buffer(&print);
+    pawL_init_buffer(P, &print);
     const int n = bi->size;
     // We cannot return or call any routine that throws until 'digits'
     // is freed.

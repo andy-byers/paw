@@ -19,6 +19,9 @@
 
 static void gc_trace_object(const char *msg, void *ptr)
 {
+    if(ptr==(void*)0x104406dc0){
+    
+    }
 #ifdef PAW_TRACE_GC
     fprintf(stdout, "(gc) %s: %p\n", msg, ptr);
 #else

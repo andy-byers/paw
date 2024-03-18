@@ -7,16 +7,11 @@
 #include "env.h"
 #include "map.h"
 
-#define MM_OP2MM(op) ((op)-MM_FIRST)
-
 const char *pawT_name(Op op)
 {
+    // NOTE: This array must be kept in the same order as the opcodes enum
+    //       in opcode.h.
     static const char *kMetaNames[] = {
-        "__len",
-        "__neg",
-        "__not",
-        "__bnot",
-
         "__null",
         "__str",
         "__int",
@@ -38,6 +33,11 @@ const char *pawT_name(Op op)
         "__lt",
         "__le",
         "__contains",
+
+        "__len",
+        "__neg",
+        "__not",
+        "__bnot",
 
         "__add",
         "__sub",
@@ -67,7 +67,7 @@ const char *pawT_name(Op op)
         "__rshl",
         "__rshr",
     };
-    return kMetaNames[MM_OP2MM(op)];
+    return kMetaNames[op2meta(op)];
 }
 
 Value *pawT_get_meta_(paw_Env *P, Op op, Value obj)
@@ -81,6 +81,6 @@ Value *pawT_get_meta_(paw_Env *P, Op op, Value obj)
     } else {
         return NULL;
     }
-    const Value key = P->meta_keys[op - MM_FIRST];
+    const Value key = P->meta_keys[op2meta(op)];
     return pawH_action(P, meta, key, MAP_ACTION_NONE);
 }

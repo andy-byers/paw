@@ -14,11 +14,10 @@ static void error_test_case(int expect, const char *name, const char *text)
     int status = test_open_string(P, text);
     if (expect == PAW_ESYNTAX) {
         CHECK(status == PAW_ESYNTAX);
-        return;
+    } else {
+        CHECK(status == PAW_OK);
+        status = paw_call(P, 0);
     }
-    CHECK(status == PAW_OK);
-    status = paw_call(P, 0);
-
     test_close(P, &s_alloc);
 }
 
@@ -134,7 +133,7 @@ static void too_many_constants(void)
     paw_Env *P = test_open(test_alloc, &a);
 
     Buffer buf;
-    pawL_init_buffer(&buf);
+    pawL_init_buffer(P, &buf);
     pawL_add_string(P, &buf, "{ let x = [");
     for (int i = 0; i < (1 << 16) + 1; ++i) {
         pawL_add_fstring(P, &buf, "%d, ", i);
@@ -154,7 +153,7 @@ static void too_many_instructions(void)
     paw_Env *P = test_open(test_alloc, &a);
 
     Buffer buf;
-    pawL_init_buffer(&buf);
+    pawL_init_buffer(P, &buf);
     pawL_add_string(P, &buf, "{ let x = ");
     for (int i = 0; i < (1 << 16); ++i) {
         pawL_add_fstring(P, &buf, "%d + ", i);
@@ -174,7 +173,7 @@ static void too_many_locals(void)
     paw_Env *P = test_open(test_alloc, &a);
 
     Buffer buf;
-    pawL_init_buffer(&buf);
+    pawL_init_buffer(P, &buf);
     pawL_add_string(P, &buf, "{\n");
     for (int i = 0; i < (1 << 16) + 1; ++i) {
         pawL_add_string(P, &buf, "let x\n");
@@ -192,7 +191,7 @@ static void too_far_to_jump(void)
     paw_Env *P = test_open(test_alloc, &a);
 
     Buffer buf;
-    pawL_init_buffer(&buf);
+    pawL_init_buffer(P, &buf);
     pawL_add_string(P, &buf, "if false { let x = 1 ");
     // Perform a series of OP_PUSHCONST (1 byte op, 2 byte constant index) and
     // OP_ADD (1 byte op). This should be enough to cause a syntax error.
@@ -212,7 +211,7 @@ static void too_far_to_loop(void)
     paw_Env *P = test_open(test_alloc, &a);
 
     Buffer buf;
-    pawL_init_buffer(&buf);
+    pawL_init_buffer(P, &buf);
     pawL_add_string(P, &buf, "for i = 0,1 { let x = 1 ");
     for (int i = 0; i < JUMP_MAX / 4 + 1; ++i) {
         pawL_add_string(P, &buf, "+ 1 ");

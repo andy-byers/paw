@@ -1,5 +1,6 @@
 
 cmake_minimum_required(VERSION 3.14)
+set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 project(paw
     LANGUAGES C
     VERSION 0.0.1)

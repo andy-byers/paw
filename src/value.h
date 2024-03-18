@@ -139,8 +139,8 @@ typedef unsigned ValueKind;
 
 #define VOBJECT0 VUSERDATA
 #define NOBJECTS 12
-#define VOBJINDEX(t) (~(t) - ~VOBJECT0)
 #define VDATAMASK ((UINT64_C(1) << VINT_WIDTH) - 1)
+#define obj_index(t) (~(t) - ~VOBJECT0)
 
 int paw_value_promote(Value *v, int want);
 paw_Bool pawV_truthy(const Value v);
@@ -154,11 +154,11 @@ uint32_t pawV_hash(const Value v);
 // base prefixes '0b', '0o', '0x', and their uppercase counterparts. Returns a
 // nonzero integer if the integer is malformed, 0 otherwise. Throws a memory error
 // if an allocation failed (bigint only). Returns 0 on success, -1 otherwise.
-int pawV_parse_integer(paw_Env *P, const char *text, Value *pv);
+int pawV_parse_integer(paw_Env *P, const char *text);
 
 // Convert a null-terminated string into a float
 // Returns 0 on success, -1 otherwise.
-int pawV_parse_float(const char *text, Value *pv);
+int pawV_parse_float(paw_Env *P, const char *text);
 
 typedef struct Object {
     GC_HEADER;
@@ -185,7 +185,7 @@ typedef struct String {
     char text[];
 } String;
 
-String *pawV_to_string(paw_Env *P, Value v);
+const char *pawV_to_string(paw_Env *P, Value *pv, size_t *nout);
 
 typedef struct Proto {
     GC_HEADER;

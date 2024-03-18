@@ -62,8 +62,8 @@
 //      x != y     | !x.__eq(y)
 //      y != x     | !x.__eq(y)
 
-#define mm_has_r(op) ((op) >= MM_HASR)
-#define mm_get_r(op) ((op) + MM_FIRSTR - MM_HASR)
+#define mm_has_r(op) ((op) >= META2)
+#define mm_get_r(op) ((op) + METAR - META2)
 
 const char *pawT_name(Op op);
 Value *pawT_get_meta_(paw_Env *P, Op op, Value obj);

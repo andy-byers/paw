@@ -16,12 +16,81 @@
 #include <stdlib.h>
 #include <string.h>
 
+static void int_to_string(paw_Env *P, Value *pv, paw_Int i)
+{
+    char temp[32];
+    const paw_Bool negative = i < 0;
+    char *end = temp + paw_countof(temp);
+    char *ptr = end - 1;
+
+    // Don't call llabs(INT64_MIN). The result is undefined on 2s complement systems.
+    uint64_t u = i == INT64_MIN ? (1ULL << 63) : (uint64_t)llabs(i);
+    do {
+        *ptr-- = (char)(u % 10 + '0');
+        u /= 10;
+    } while (u);
+    if (negative) {
+        *ptr = '-';
+    } else {
+        ++ptr;
+    }
+
+    String *s = pawS_new_nstr(P, ptr, cast_size(end - ptr));
+    pawV_set_string(pv, s);
+}
+
+static void float_to_string(paw_Env *P, Value *pv, paw_Float f)
+{
+    char temp[32];
+    const int n = snprintf(temp, paw_countof(temp), "%.*g", 17, f);
+    String *s = pawS_new_nstr(P, temp, cast_size(n));
+    pawV_set_string(pv, s);
+}
+
+const char *pawV_to_string(paw_Env *P, Value *pv, size_t *nout)
+{
+    switch (pawV_get_type(*pv)) {
+        case VSTRING:
+            break;
+        case VNULL:
+            *pv = pawE_cstr(P, CSTR_NULL);
+            break;
+        case VTRUE:
+            *pv = pawE_cstr(P, CSTR_TRUE);
+            break;
+        case VFALSE:
+            *pv = pawE_cstr(P, CSTR_FALSE);
+            break;
+        case VBIGINT: {
+            const BigInt *bi = pawV_get_bigint(*pv);
+            pawB_str(P, bi, PAW_BFALSE, "", 10); // push string
+            *pv = P->top[-1];
+            pawC_stkpop(P);
+            break;
+        }
+        case VNUMBER: // int
+            int_to_string(P, pv, pawV_get_int(*pv));
+            break;
+        default:
+            if (pawV_is_float(*pv)) {
+                float_to_string(P, pv, pawV_get_float(*pv));
+            } else {
+                pawV_type_error(P, *pv); // no return
+            }
+    }
+    const String *s = pawV_get_string(*pv);
+    *nout = s->length;
+    return s->text;
+}
+
 void pawV_int_error(paw_Env *P, Value x)
 {
+    pawC_stkpush(P, x);
+
     Buffer buf;
-    pawL_init_buffer(&buf);
+    pawL_init_buffer(P, &buf);
     pawL_add_string(P, &buf, "integer ");
-    pawL_add_value(P, &buf, x);
+    pawL_add_value(P, &buf);
     pawL_add_string(P, &buf, " is too large");
     pawL_push_result(P, &buf);
     pawC_throw(P, PAW_ERANGE);
@@ -168,7 +237,7 @@ Instance *pawV_new_instance(paw_Env *P, StackPtr sp, Class *cls)
 {
     Instance *ins = pawM_new(P, Instance);
     pawG_add_object(P, cast_object(ins), VINSTANCE);
-    pawV_set_instance(sp, ins); // Anchor
+    pawV_set_instance(sp, ins); // anchor
     ins->self = cls;
     ins->attr = pawH_new(P);
     pawH_extend(P, ins->attr, cls->attr);
@@ -186,7 +255,7 @@ Class *pawV_push_class(paw_Env *P)
     StackPtr sp = pawC_stkinc(P, 1);
     Class *cls = pawM_new(P, Class);
     pawG_add_object(P, cast_object(cls), VCLASS);
-    pawV_set_class(sp, cls); // Anchor
+    pawV_set_class(sp, cls); // anchor
     cls->attr = pawH_new(P);
     return cls;
 }
@@ -219,7 +288,7 @@ UserData *pawV_push_userdata(paw_Env *P, size_t size)
     StackPtr sp = pawC_stkinc(P, 1);
     UserData *o = pawM_new(P, UserData);
     pawG_add_object(P, cast_object(o), VUSERDATA);
-    pawV_set_userdata(sp, o); // Anchor
+    pawV_set_userdata(sp, o); // anchor
     o->attr = pawH_new(P);
     o->size = size;
     if (size) {
@@ -237,32 +306,31 @@ void pawV_free_userdata(paw_Env *P, UserData *ud)
 int pawV_num2int(Value *pv)
 {
     if (pawV_is_int(*pv)) {
-        return 0; // Already an integer
+        // already an integer
     } else if (pawV_is_float(*pv)) {
         pawV_set_int(pv, paw_cast_int(pawV_get_float(*pv)));
-        return 0;
     } else if (pawV_is_bool(*pv)) {
         pawV_set_int(pv, pawV_get_bool(*pv));
-        return 0;
+    } else {
+        return -1;
     }
-    return -1;
+    return 0;
 }
 
 int pawV_num2float(Value *pv)
 {
     if (pawV_is_float(*pv)) {
-        return 0; // Already a float
+        // already a float
     } else if (pawV_is_int(*pv)) {
         pawV_set_float(pv, (paw_Float)pawV_get_int(*pv));
-        return 0;
     } else if (pawV_is_bigint(*pv)) {
         pawV_set_float(pv, pawB_get_float(pawV_get_bigint(*pv)));
-        return 0;
     } else if (pawV_is_bool(*pv)) {
         pawV_set_float(pv, pawV_get_bool(*pv));
-        return 0;
+    } else {
+        return -1;
     }
-    return -1;
+    return 0;
 }
 
 paw_Bool pawV_truthy(const Value v)
@@ -282,7 +350,7 @@ paw_Bool pawV_truthy(const Value v)
     } else if (pawV_is_map(v)) {
         return pawH_length(pawV_get_map(v));
     }
-    return 0;
+    return PAW_BFALSE;
 }
 
 uint32_t pawV_hash(const Value v)
@@ -290,7 +358,7 @@ uint32_t pawV_hash(const Value v)
     if (pawV_is_string(v)) {
         return pawV_get_string(v)->hash;
     }
-    // From https://gist.github.com/badboy/6267743
+    // from https://gist.github.com/badboy/6267743
     uint64_t u = v.u;
     u = ~u + (u << 18);
     u = u ^ (u >> 31);
@@ -320,7 +388,7 @@ paw_Bool pawV_equal(Value x, Value y)
     } else if ((pawV_is_int(x) && pawV_is_float(y))) {
         return pawV_get_int(x) == pawV_get_float(y);
     }
-    // Fall back to value (type + pointer) comparison
+    // Fall back to value (type + pointer) comparison.
     return x.u == y.u;
 }
 
@@ -353,18 +421,18 @@ static int check_suffix(const char *p, const char *text)
 
 #define is_fp(c) (c == 'e' || c == 'E' || c == '.')
 
-int pawV_parse_integer(paw_Env *P, const char *text, Value *pv)
+int pawV_parse_integer(paw_Env *P, const char *text)
 {
     int base = 10;
     if (text[0] == '0') {
         if (is_fp(text[1])) {
-            return -1; // Maybe float
+            return -1; // maybe float
         } else if ((base = char2base(text[1])) > 0) {
-            text += 2; // Non-decimal integer
+            text += 2; // non-decimal integer
         } else if (text[1]) {
-            return -1; // Junk after '0'
+            return -1; // junk after '0'
         } else {
-            pawV_set_int(pv, 0); // Exactly 0
+            pawC_pushi(P, 0); // exactly 0
             return 0;
         }
     }
@@ -379,8 +447,6 @@ int pawV_parse_integer(paw_Env *P, const char *text, Value *pv)
             // Integer is too large: parse it as a BigInt. Throws an error on
             // allocation failure.
             pawB_parse(P, text, base);
-            *pv = P->top[-1];
-            pawC_stkpop(P);
             return 0;
         }
         value = value * base + v;
@@ -388,7 +454,7 @@ int pawV_parse_integer(paw_Env *P, const char *text, Value *pv)
     if (check_suffix(p, text)) {
         return -1;
     }
-    pawV_set_int(pv, value);
+    pawC_pushi(P, value);
     return 0;
 }
 
@@ -397,7 +463,7 @@ int pawV_parse_integer(paw_Env *P, const char *text, Value *pv)
         ++(p);              \
     }
 
-int pawV_parse_float(const char *text, Value *pv)
+int pawV_parse_float(paw_Env *P, const char *text)
 {
     // First, validate the number format.
     const char *p = text;
@@ -420,7 +486,7 @@ int pawV_parse_float(const char *text, Value *pv)
     if (check_suffix(p, text)) {
         return -1;
     }
-    pawV_set_float(pv, strtod(text, NULL));
+    pawC_pushf(P, strtod(text, NULL));
     return 0;
 }
 

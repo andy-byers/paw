@@ -28,7 +28,7 @@ void pawX_error(Lex *lex, const char *fmt, ...)
 {
     Buffer print;
     paw_Env *P = lex->P;
-    pawL_init_buffer(&print);
+    pawL_init_buffer(P, &print);
     add_location(P, &print, lex->modname, lex->line);
 
     va_list arg;
@@ -351,9 +351,9 @@ Token consume_number(struct Lex *x)
     }
     save(x, '\0');
 
-    StackPtr sp = pawC_stkinc(x->P, 1);
-    if (pawV_parse_integer(x->P, pm->temp, sp)) {
-        if (pawV_parse_float(pm->temp, sp)) {
+    // on success, pushes a number onto the stack
+    if (pawV_parse_integer(x->P, pm->temp)) {
+        if (pawV_parse_float(x->P, pm->temp)) {
             pawX_error(x, "invalid number '%s'", pm->temp);
         }
     }

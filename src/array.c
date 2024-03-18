@@ -169,9 +169,9 @@ static paw_Bool elems_equal(paw_Env *P, const Value x, const Value y)
     p[0] = y;
     p[1] = x;
 
-    // Arrays can contain any type of value. Call pawR_eq() to check metamethods
-    // on objects.
-    pawR_eq(P);
+    // Arrays can contain any type of value. Call pawR_equals() to check 
+    // metamethods on objects.
+    pawR_equals(P);
 
     const paw_Bool b = paw_boolean(P, -1);
     paw_pop(P, 1);

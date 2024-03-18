@@ -43,7 +43,7 @@ static void add_location(paw_Env *P, Buffer *buf)
 void pawE_error(paw_Env *P, int error, const char *fmt, ...)
 {
     Buffer buf;
-    pawL_init_buffer(&buf);
+    pawL_init_buffer(P, &buf);
     add_location(P, &buf);
 
     va_list arg;
@@ -85,7 +85,7 @@ void pawE_system(paw_Env *P, int error)
 static void add_3_parts(paw_Env *P, const char *before, const char *value, const char *after)
 {
     Buffer buf;
-    pawL_init_buffer(&buf);
+    pawL_init_buffer(P, &buf);
     add_location(P, &buf);
     pawL_add_fstring(P, &buf, "%s%s%s", before, value, after);
     pawL_push_result(P, &buf);

@@ -13,20 +13,23 @@ void *oom_alloc(void *ud, void *ptr, size_t size0, size_t size)
 
 static int script_aux(const char *name, struct TestAlloc *a)
 {
-    paw_Env *P = test_open(NULL, a);
+    paw_Env *P = paw_open(oom_alloc, a);
+    if (!P) {
+        return PAW_EMEMORY;
+    }
     int status = test_open_file(P, name);
     if (status == PAW_OK) {
-        // Run the module
+        // run the module
         status = paw_call(P, 0);
-        test_close(P, a);
     }
+    test_close(P, a);
     return status;
 }
 
 static void script(const char *name)
 {
     struct TestAlloc a = {0};
-    size_t nextra = 1;
+    size_t nextra = 10;
     int rc;
     do {
         // Run the script, allowing twice the number of bytes to be allocated

@@ -161,10 +161,11 @@ static int add_constant(Lex *lex, Value v)
     if (fn->nk == UINT16_MAX) {
         limit_error(lex, "constants", UINT16_MAX);
     } else if (fn->nk == p->nk) {
-        // 'fn->nk' only ever increases by 1, so this will always give us enough memory.
+        // 'fn->nk' only ever increases by 1, so this will always give us 
+        // enough memory.
         pawM_grow(ctx(lex), p->k, fn->nk, p->nk);
         for (int i = fn->nk + 1; i < p->nk; ++i) {
-            pawV_set_null(&p->k[i]); // Clear for GC
+            pawV_set_null(&p->k[i]); // clear for GC
         }
     }
     p->k[fn->nk] = v;
@@ -273,7 +274,7 @@ static void emit_closure(Lex *lex, Proto *p, int id)
     pawV_set_proto(&v, p);
     emit_arg2(lex, OP_CLOSURE, id);
     for (int i = 0; i < p->nup; ++i) {
-        struct UpValueInfo u = p->u[i]; // Encode upvalue info
+        struct UpValueInfo u = p->u[i]; // encode upvalue info
         push16(lex, u.index | (u.is_local ? UPVALUE_LOCAL : 0));
     }
 }
@@ -346,8 +347,8 @@ static void adjust_to(FnState *fn, LabelKind kind, int to)
     }
 }
 
-#define DISCHARGE(e) discharge_var(lex->fn, e)
-#define DISCARD(e) (e->kind = EXPR_STACK)
+#define discharge(e) discharge_var(lex->fn, e)
+#define discard(e) (e->kind = EXPR_STACK)
 
 static void discharge_var(FnState *fn, ExprState *e)
 {
@@ -395,7 +396,7 @@ static void discharge_var(FnState *fn, ExprState *e)
         default:
             break;
     }
-    DISCARD(e);
+    discard(e);
 }
 
 static void assign_var(FnState *fn, ExprState *e)
@@ -420,7 +421,7 @@ static void assign_var(FnState *fn, ExprState *e)
         default:
             pawX_error(lex, "assignment to call expression");
     }
-    DISCARD(e);
+    discard(e);
 }
 
 // Find an active local variable with the given 'name'
@@ -907,7 +908,7 @@ static BinOp expr(Lex *lex)
 {
     ExprState e;
     const BinOp op = expression(lex, &e);
-    DISCHARGE(&e);
+    discharge(&e);
     return op;
 }
 
@@ -981,7 +982,7 @@ static int const_name(Lex *lex, ExprState *e)
 static void code_invoke(Lex *lex, Op op, ExprState *e)
 {
     const int name = add_name(lex, e->s);
-    DISCARD(e);
+    discard(e);
 
     const int argc = call_parameters(lex);
     emit_arg2(lex, op, name);
@@ -993,14 +994,14 @@ static void push_special(Lex *lex, unsigned ctag)
     ExprState e;
     const Value v = pawE_cstr(lex->P, ctag);
     find_var(lex, &e, pawV_get_string(v));
-    DISCHARGE(&e);
+    discharge(&e);
 }
 
 static void push_named(Lex *lex, String *name)
 {
     ExprState e;
     find_var(lex, &e, name);
-    DISCHARGE(&e);
+    discharge(&e);
 }
 
 // Parse a variable expression that isn't a declaration
@@ -1064,7 +1065,7 @@ static void unop_expr(Lex *lex, UnOp op, ExprState *e)
     subexpression(lex, e, kUnOpPrecedence);
 
     // Emit code for the unary operator.
-    DISCHARGE(e);
+    discharge(e);
     emit_unop(lex, op);
 }
 
@@ -1146,7 +1147,7 @@ static void map_expr(Lex *lex, ExprState *e)
 
 static void index_expr(Lex *lex, ExprState *e)
 {
-    DISCHARGE(e);
+    discharge(e);
 
     const int line = lex->line;
     skip(lex); // '[' token
@@ -1158,7 +1159,7 @@ static void index_expr(Lex *lex, ExprState *e)
 
 static void member_expr(Lex *lex, ExprState *e)
 {
-    DISCHARGE(e);
+    discharge(e);
     skip(lex); // '.' token
 
     ExprState e2;
@@ -1168,14 +1169,14 @@ static void member_expr(Lex *lex, ExprState *e)
         code_invoke(lex, OP_INVOKE, &e2);
         e->kind = EXPR_CALL;
     } else {
-        DISCHARGE(&e2);
+        discharge(&e2);
         e->kind = EXPR_ATTR;
     }
 }
 
 static void call_expr(Lex *lex, ExprState *e)
 {
-    DISCHARGE(e);
+    discharge(e);
     const int argc = call_parameters(lex);
     emit_arg(lex, OP_CALL, argc);
     init_expr(e, EXPR_CALL, -1);
@@ -1183,7 +1184,7 @@ static void call_expr(Lex *lex, ExprState *e)
 
 static void chain_expr(Lex *lex, ExprState *e)
 {
-    DISCHARGE(e);
+    discharge(e);
     skip(lex); // '?' token
     const int else_jump = emit_jump(lex, OP_JUMPNULL);
     const int then_jump = emit_jump(lex, OP_JUMP);
@@ -1337,7 +1338,7 @@ static void simple_expr(Lex *lex, ExprState *e)
             break;
         case TK_FN:
             fn_expr(lex);
-            DISCARD(e);
+            discard(e);
             return;
         default:
             suffixed_expr(lex, e);
@@ -1348,21 +1349,21 @@ static void simple_expr(Lex *lex, ExprState *e)
 
 static BinOp binop_expr(Lex *lex, BinOp op, ExprState *e)
 {
-    DISCHARGE(e);
+    discharge(e);
     ExprState e2;
 
     skip(lex); // binary operator token
     const BinOp op2 = subexpression(lex, &e2, right_prec(op));
 
     // Emit code for the operator.
-    DISCHARGE(&e2);
+    discharge(&e2);
     emit_binop(lex, op);
     return op2;
 }
 
 static BinOp and_expr(Lex *lex, ExprState *e)
 {
-    DISCHARGE(e);
+    discharge(e);
     skip(lex); // '&&' token
 
     const int jump = emit_jump(lex, OP_JUMPFALSE);
@@ -1370,7 +1371,7 @@ static BinOp and_expr(Lex *lex, ExprState *e)
 
     ExprState e2;
     const BinOp op2 = subexpression(lex, &e2, right_prec(BIN_AND));
-    DISCHARGE(&e2);
+    discharge(&e2);
 
     patch_here(lex, jump);
     return op2;
@@ -1378,7 +1379,7 @@ static BinOp and_expr(Lex *lex, ExprState *e)
 
 static BinOp or_expr(Lex *lex, ExprState *e)
 {
-    DISCHARGE(e);
+    discharge(e);
     skip(lex); // '||' token
 
     const int else_jump = emit_jump(lex, OP_JUMPFALSE);
@@ -1389,7 +1390,7 @@ static BinOp or_expr(Lex *lex, ExprState *e)
 
     ExprState e2;
     const BinOp op2 = subexpression(lex, &e2, right_prec(BIN_OR));
-    DISCHARGE(&e2);
+    discharge(&e2);
 
     patch_here(lex, end_jump);
     return op2;
@@ -1397,7 +1398,7 @@ static BinOp or_expr(Lex *lex, ExprState *e)
 
 static BinOp coalesce_expr(Lex *lex, ExprState *e)
 {
-    DISCHARGE(e);
+    discharge(e);
     skip(lex); // '?:' token
 
     const int else_jump = emit_jump(lex, OP_JUMPNULL);
@@ -1412,7 +1413,7 @@ static BinOp coalesce_expr(Lex *lex, ExprState *e)
 
 static BinOp cond_expr(Lex *lex, ExprState *e)
 {
-    DISCHARGE(e);
+    discharge(e);
     skip(lex); // '??' token
 
     const int else_jump = emit_jump(lex, OP_JUMPFALSE);
@@ -1420,7 +1421,7 @@ static BinOp cond_expr(Lex *lex, ExprState *e)
 
     ExprState left;
     subexpression(lex, &left, right_prec(BIN_COND));
-    DISCHARGE(&left);
+    discharge(&left);
 
     const int then_jump = emit_jump(lex, OP_JUMP);
     check_next(lex, TK_COLON2);
@@ -1479,7 +1480,7 @@ static void block(Lex *lex)
 static void if_stmt(Lex *lex)
 {
     skip(lex); // 'if' token
-    expr(lex); // Conditional
+    expr(lex); // conditional
 
     const int then_jump = emit_jump(lex, OP_JUMPFALSE);
     emit(lex, OP_POP);
@@ -1523,7 +1524,7 @@ static void expression_stmt(Lex *lex)
     suffixed_expr(lex, &e);
 
     if (test_next(lex, '=')) {
-        expr(lex); // Right-hand side
+        expr(lex); // right-hand side
         assign_var(lex->fn, &e);
     } else if (e.kind != EXPR_CALL) {
         pawX_error(lex, "invalid statement");
@@ -1610,7 +1611,7 @@ static void for_stmt(Lex *lex)
     } else if (test_next(lex, TK_IN)) {
         forin(lex, ivar);
     } else {
-        expected_symbol(lex, "'=' or 'in'"); // No return
+        expected_symbol(lex, "'=' or 'in'"); // no return
     }
     leave_block(fn);
 }
@@ -1747,7 +1748,7 @@ static void method_def(Lex *lex)
     ExprState e;
     e.index = add_constant(lex, lex->t.value);
     e.name = pawV_get_string(lex->t.value);
-    skip(lex); // Name token
+    skip(lex); // name token
 
     function(lex, e.name, kind);
     emit_arg2(lex, OP_NEWMETHOD, e.index);
@@ -1788,10 +1789,14 @@ static void class_stmt(Lex *lex)
     ClsState cls = {.outer = lex->cls};
     if (test_next(lex, ':')) {
         ExprState super;
-        // Push the superclass object onto the stack.
+        // push superclass
         varexpr(lex, &super);
-        DISCHARGE(&super);
+        discharge(&super);
 
+        // Introduce the class name after parsing the superclass, which ends
+        // up making inheritance from self impossible. In the statement 
+        // 'class A: A {}', the second 'A' either refers to a previously-
+        // declared 'A', or it does not yet exist (name error).
         define_var(lex, &e);
         // handle inheritance
         push_named(lex, class_name);
@@ -1814,7 +1819,7 @@ static void class_stmt(Lex *lex)
     lex->cls = &cls;
 
     // push class
-    DISCHARGE(&e);
+    discharge(&e);
 
     class_body(lex);
     leave_block(fn);   // pop or close 'super'
@@ -1828,7 +1833,7 @@ static void statement(Lex *lex)
 {
     switch (lex->t.kind) {
         case ';':
-            // Empty statement
+            // empty statement
             skip(lex);
             break;
         case '{':
@@ -1910,10 +1915,10 @@ void pawP_init(paw_Env *P)
         String *str = new_fixed_string(P, kw);
         str->flag = i + FIRST_KEYWORD;
     }
-    for (unsigned i = MM_FIRST; i < NOPCODES; ++i) {
-        const char *name = pawT_name(i);
+    for (Op op = META1; op < NOPCODES; ++op) {
+        const char *name = pawT_name(op);
         String *str = new_fixed_string(P, name);
-        pawV_set_string(&P->meta_keys[i - MM_FIRST], str);
+        pawV_set_string(&P->meta_keys[op2meta(op)], str);
     }
     pawV_set_string(&P->str_cache[CSTR_SELF], new_fixed_string(P, "self"));
     pawV_set_string(&P->str_cache[CSTR_INIT], new_fixed_string(P, "__init"));

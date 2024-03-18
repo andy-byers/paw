@@ -185,6 +185,14 @@
     assert('not found' == getattr(c, '__init', 'not found'))
 }
 
+-- Inheritance from self is not possible
+{
+    class A {f() {}}
+    class A: A {} -- superclass is 'A' from the previous line
+    let a = A()
+    a.f()
+}
+
 -- Test 'super':
 {
 

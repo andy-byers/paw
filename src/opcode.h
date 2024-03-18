@@ -16,7 +16,11 @@ typedef uint8_t OpCode;
 #define encode_jump_over(x) ((x) + JUMP_MAX)
 #define encode_jump_back(x) (JUMP_MAX - (x))
 
-#define NMETA (NOPCODES - MM_FIRST)
+#define META1 OP_NULL
+#define META2 OP_ADD
+#define METAR OP_RADD
+#define NMETA (NOPCODES - META1)
+#define op2meta(op) (op - META1)
 
 // clang-format off
 //
@@ -32,14 +36,14 @@ typedef uint8_t OpCode;
 //   P = function prototypes (indexed by uint16_t)
 //
 typedef enum Op { // operands    stack in    stack out    side effects
-OP_PUSHNULL, //      -           -           null         -
-OP_PUSHTRUE, //      -           -           true         -
-OP_PUSHFALSE, //     -           -           false        -
-OP_PUSHCONST, //     k           -           K[k]         -
+OP_PUSHNULL,//       -           -           null         -
+OP_PUSHTRUE,//       -           -           true         -
+OP_PUSHFALSE,//      -           -           false        -
+OP_PUSHCONST,//      k           -           K[k]         -
 
-OP_POP, //           -           v           -            -
-OP_CLOSE, //         -           v           -            v closed over if captured, else popped
-OP_RETURN, //        
+OP_POP,//            -           v           -            -
+OP_CLOSE,//          -           v           -            v closed over if captured, else popped
+OP_RETURN,//        
 
 OP_CLOSURE, //       
 OP_INVOKE,
@@ -51,14 +55,14 @@ OP_JUMP,
 OP_JUMPFALSE,
 OP_JUMPNULL,
 
-OP_GLOBAL, // A
-OP_GETGLOBAL, // Iw
-OP_SETGLOBAL, // Iw A
-OP_GETLOCAL, // Iw
-OP_SETLOCAL, // Iw A
-OP_UPVALUE, // Iw A
-OP_GETUPVALUE, // Iw
-OP_SETUPVALUE, // Iw A
+OP_GLOBAL,// A
+OP_GETGLOBAL,// Iw
+OP_SETGLOBAL,// Iw A
+OP_GETLOCAL,// Iw
+OP_SETLOCAL,// Iw A
+OP_UPVALUE,// Iw A
+OP_GETUPVALUE,// Iw
+OP_SETUPVALUE,// Iw A
 
 OP_NEWCLASS,
 OP_NEWMETHOD,
@@ -74,13 +78,6 @@ OP_FORNUM0,
 OP_FORNUM,      
 OP_FORIN0,  
 OP_FORIN,       
-
-MM_FIRST, 
-         
-OP_LEN = MM_FIRST,
-OP_NEG,
-OP_NOT,
-OP_BNOT,
 
 OP_NULL,
 OP_STR,
@@ -104,24 +101,26 @@ OP_LT,
 OP_LE,
 OP_IN,          
 
-MM_HASR,          //     Marks first op with a '__r*' metamethod (must be OP_ADD)
-OP_ADD = MM_HASR, // A B
-OP_SUB,           // A B
-OP_MUL,           // A B 
-OP_DIV,           // A B 
-OP_IDIV,          // A B 
-OP_MOD,           // A B 
-OP_POW,           // A B 
-OP_CONCAT,        // A B 
-OP_BXOR,          // A B 
-OP_BAND,          // A B 
-OP_BOR,           // A B 
-OP_SHL,           // A B 
-OP_SHR,           // A B    
+OP_LEN,
+OP_NEG,
+OP_NOT,
+OP_BNOT,
 
-MM_FIRSTR, 
+OP_ADD,// A B
+OP_SUB,// A B
+OP_MUL,// A B 
+OP_DIV,// A B 
+OP_IDIV,// A B 
+OP_MOD,// A B 
+OP_POW,// A B 
+OP_CONCAT,// A B 
+OP_BXOR,// A B 
+OP_BAND,// A B 
+OP_BOR,// A B 
+OP_SHL,// A B 
+OP_SHR,// A B    
 
-OP_RADD = MM_FIRSTR,
+OP_RADD,
 OP_RSUB,
 OP_RMUL,
 OP_RDIV,
