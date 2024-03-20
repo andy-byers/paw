@@ -5,7 +5,6 @@
 
 #include "call.h"
 #include "env.h"
-#include "error.h"
 #include "gc.h"
 #include "map.h"
 #include "mem.h"
@@ -45,7 +44,7 @@ static StackPtr moveptr(paw_Env *P, StackPtr sp, StackPtr stack)
 
 void pawC_stkerror(paw_Env *P, const char *what)
 {
-    pawE_error(P, PAW_ERUNTIME, what);
+    pawR_error(P, PAW_ERUNTIME, what);
 }
 
 void pawC_stkgrow(paw_Env *P, int n)
@@ -75,6 +74,19 @@ void pawC_stkgrow(paw_Env *P, int n)
     P->stack = newstack;
 
     pawM_free_vec(P, oldstack, nold);
+}
+
+Value *pawC_pushns(paw_Env *P, const char *s, size_t n)
+{
+    StackPtr sp = pawC_stkinc(P, 1);
+    String *str = pawS_new_nstr(P, s, n);
+    pawV_set_string(sp, str);
+    return sp;
+}
+
+Value *pawC_pushs(paw_Env *P, const char *s)
+{
+    return pawC_pushns(P, s, strlen(s));
 }
 
 static CallFrame *next_call_frame(paw_Env *P, StackPtr top)
@@ -127,10 +139,10 @@ static void handle_ccall(paw_Env *P, StackPtr base, Native *ccall)
 static void check_fixed_args(paw_Env *P, Proto *f, int argc)
 {
     if (argc < f->argc) {
-        pawE_error(P, PAW_ERUNTIME, "not enough arguments (expected %s%d)",
+        pawR_error(P, PAW_ERUNTIME, "not enough arguments (expected %s%d)",
                    f->is_va ? "at least " : "", f->argc);
     } else if (!f->is_va && argc > f->argc) {
-        pawE_error(P, PAW_ERUNTIME, "too many arguments (expected %d)", f->argc);
+        pawR_error(P, PAW_ERUNTIME, "too many arguments (expected %d)", f->argc);
     }
 }
 
@@ -172,7 +184,7 @@ CallFrame *pawC_precall(paw_Env *P, StackPtr base, Value callable, int argc)
             break;
         }
         default:
-            pawE_error(P, PAW_ETYPE, "type is not callable");
+            pawR_error(P, PAW_ETYPE, "type is not callable");
     }
     CallFrame *cf = next_call_frame(P, P->top);
     Proto *p = fn->p;

@@ -100,6 +100,26 @@ static void test_primitives(void)
     CHECK(!pawV_is_object(v));
 }
 
+static void test_objects(void)
+{
+    Value v;
+
+    // Make sure the value representation can store 48 bits of pointer info.
+    // We actually have to shift pointers to the right by 1 bit for this to
+    // work, so the fake pointer must be aligned to at least 2.
+    // 0b101010101010101010101010101010101010101010101010
+    void *fake_ptr = (void *)187649984473770;
+    Map *fake_obj = fake_ptr;
+
+    pawV_set_map(&v, fake_obj);
+    CHECK(pawV_get_type(v) == VMAP);
+    CHECK(pawV_is_map(v));
+    CHECK(pawV_is_object(v));
+
+    Map *m = pawV_get_map(v);
+    CHECK(m == fake_ptr);
+}
+
 #define N 500
 
 static void test_map(paw_Env *P)
@@ -214,6 +234,7 @@ static void driver(void (*callback)(paw_Env *))
 int main(void)
 {
     test_primitives();
+    test_objects();
 
     driver(test_stack);
     driver(test_map);

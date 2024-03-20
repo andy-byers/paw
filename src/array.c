@@ -2,7 +2,6 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "array.h"
-#include "error.h"
 #include "gc.h"
 #include "mem.h"
 #include "rt.h"
@@ -17,7 +16,8 @@ static paw_Int correct_index(const Array *a, paw_Int index)
 static size_t check_bounds(paw_Env *P, paw_Int i, size_t n)
 {
     if (i < 0 || cast_size(i) >= n) {
-        pawE_index(P);
+        pawR_error(P, PAW_EINDEX, "index %I is out of bounds for array of length %I",
+                   i, paw_cast_int(n) /* fits in paw_Int */);
     }
     return cast_size(i);
 }
@@ -169,7 +169,7 @@ static paw_Bool elems_equal(paw_Env *P, const Value x, const Value y)
     p[0] = y;
     p[1] = x;
 
-    // Arrays can contain any type of value. Call pawR_equals() to check 
+    // Arrays can contain any type of value. Call pawR_equals() to check
     // metamethods on objects.
     pawR_equals(P);
 

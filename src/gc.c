@@ -19,8 +19,7 @@
 
 static void gc_trace_object(const char *msg, void *ptr)
 {
-    if(ptr==(void*)0x104406dc0){
-    
+    if (ptr == (void *)0x104406dc0) {
     }
 #ifdef PAW_TRACE_GC
     fprintf(stdout, "(gc) %s: %p\n", msg, ptr);
@@ -36,13 +35,13 @@ enum {
     GC_BLACK,
 };
 
-#define SET_MARK(x, m) ((x)->gc_mark = (m))
-#define SET_WHITE(x) SET_MARK(x, GC_WHITE)
-#define SET_GRAY(x) SET_MARK(x, GC_GRAY)
-#define SET_BLACK(x) SET_MARK(x, GC_BLACK)
-#define IS_WHITE(x) ((x)->gc_mark == GC_WHITE)
-#define IS_GRAY(x) ((x)->gc_mark == GC_GRAY)
-#define IS_BLACK(x) ((x)->gc_mark == GC_BLACK)
+#define set_mark(x, m) ((x)->gc_mark = (m))
+#define set_white(x) set_mark(x, GC_WHITE)
+#define set_gray(x) set_mark(x, GC_GRAY)
+#define set_black(x) set_mark(x, GC_BLACK)
+#define is_white(x) ((x)->gc_mark == GC_WHITE)
+#define is_gray(x) ((x)->gc_mark == GC_GRAY)
+#define is_black(x) ((x)->gc_mark == GC_BLACK)
 
 static Object **get_gc_list(Object *o)
 {
@@ -73,8 +72,8 @@ static Object **get_gc_list(Object *o)
 
 static void link_gray_(Object *o, Object **pnext, Object **list)
 {
-    if (!IS_GRAY(o)) {
-        SET_GRAY(o);
+    if (!is_gray(o)) {
+        set_gray(o);
         *pnext = *list;
         *list = o;
     }
@@ -131,7 +130,7 @@ static void mark_value(paw_Env *P, Value v);
 
 static void mark_object(paw_Env *P, Object *o)
 {
-    if (!o || !IS_WHITE(o)) {
+    if (!o || !is_white(o)) {
         return;
     }
     gc_trace_object("mark", o);
@@ -139,12 +138,12 @@ static void mark_object(paw_Env *P, Object *o)
         case ~VUPVALUE: {
             UpValue *u = (UpValue *)o;
             mark_value(P, *u->p);
-            SET_BLACK(u);
+            set_black(u);
             break;
         }
         case ~VBIGINT:
         case ~VSTRING:
-            SET_BLACK(o);
+            set_black(o);
             break;
         case ~VMETHOD:
         case ~VCLOSURE:
@@ -266,7 +265,7 @@ static void traverse_objects(paw_Env *P)
         Object **list = get_gc_list(o);
         *po = *list;
         *list = NULL;
-        SET_BLACK(o);
+        set_black(o);
 
         gc_trace_object("traverse", o);
         switch ((ValueKind)o->gc_kind) {
@@ -313,13 +312,13 @@ static void sweep_phase(paw_Env *P)
 {
     for (Object **p = &P->gc_all; *p;) {
         Object *o = *p;
-        if (IS_WHITE(o)) {
+        if (is_white(o)) {
             *p = o->gc_next;
             free_object(P, o);
         } else {
             p = &o->gc_next;
-            paw_assert(IS_BLACK(o));
-            SET_WHITE(o);
+            paw_assert(is_black(o));
+            set_white(o);
         }
     }
 }
@@ -399,9 +398,9 @@ void pawG_fix_object(paw_Env *P, Object *o)
 {
     // Must be the most-recently-created GC object.
     paw_assert(P->gc_all == o);
-    paw_assert(IS_WHITE(o));
+    paw_assert(is_white(o));
 
-    SET_GRAY(o);
+    set_gray(o);
     P->gc_all = o->gc_next;
     o->gc_next = P->gc_fixed;
     P->gc_fixed = o;

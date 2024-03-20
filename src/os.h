@@ -6,10 +6,10 @@
 
 #include "prefix.h"
 
-#include "error.h"
 #include "paw.h"
 #include <stdio.h>
 
+void pawO_system_error(paw_Env *P, int error);
 FILE *pawO_open(const char *pathname, const char *mode);
 void pawO_close(FILE *file);
 size_t pawO_read(FILE *file, void *data, size_t size);

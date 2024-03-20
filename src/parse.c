@@ -5,7 +5,6 @@
 #include "aux.h"
 #include "call.h"
 #include "env.h"
-#include "error.h"
 #include "gc.h"
 #include "lex.h"
 #include "map.h"
@@ -161,7 +160,7 @@ static int add_constant(Lex *lex, Value v)
     if (fn->nk == UINT16_MAX) {
         limit_error(lex, "constants", UINT16_MAX);
     } else if (fn->nk == p->nk) {
-        // 'fn->nk' only ever increases by 1, so this will always give us 
+        // 'fn->nk' only ever increases by 1, so this will always give us
         // enough memory.
         pawM_grow(ctx(lex), p->k, fn->nk, p->nk);
         for (int i = fn->nk + 1; i < p->nk; ++i) {
@@ -306,7 +305,7 @@ static void adjust_labels(FnState *fn, BlkState *blk)
 static void remove_label(LabelList *ll, int index)
 {
     paw_assert(ll->length > 0);
-    for (int i = index; i < ll->length; ++i) {
+    for (int i = index; i < ll->length - 1; ++i) {
         ll->values[i] = ll->values[i + 1];
     }
     --ll->length;
@@ -914,7 +913,7 @@ static BinOp expr(Lex *lex)
 
 static void check_not_kw(Lex *lex, const String *str)
 {
-    if (STR_IS_KEYWORD(str)) {
+    if (str_is_keyword(str)) {
         char buffer[32] = {0}; // long enough for any keyword
         memcpy(buffer, str->text, str->length);
         pawX_error(lex, "name '%s' is reserved", buffer);
@@ -992,8 +991,14 @@ static void code_invoke(Lex *lex, Op op, ExprState *e)
 static void push_special(Lex *lex, unsigned ctag)
 {
     ExprState e;
-    const Value v = pawE_cstr(lex->P, ctag);
-    find_var(lex, &e, pawV_get_string(v));
+    if (ctag == CSTR_SELF) {
+        // 'self' is always in slot 0
+        init_expr(&e, EXPR_LOCAL, 0);
+    } else {
+        // 'super' is an upvalue
+        const Value v = pawE_cstr(lex->P, ctag);
+        find_var(lex, &e, pawV_get_string(v));
+    }
     discharge(&e);
 }
 
@@ -1015,7 +1020,7 @@ static void superexpr(Lex *lex, ExprState *e)
     if (!lex->cls) {
         pawX_error(lex, "'super' used outside class body");
     } else if (!lex->cls->has_super) {
-        pawX_error(lex, "'super' used outside class body");
+        pawX_error(lex, "class has no superclass");
     }
 
     skip(lex); // 'super' token
@@ -1794,7 +1799,7 @@ static void class_stmt(Lex *lex)
         discharge(&super);
 
         // Introduce the class name after parsing the superclass, which ends
-        // up making inheritance from self impossible. In the statement 
+        // up making inheritance from self impossible. In the statement
         // 'class A: A {}', the second 'A' either refers to a previously-
         // declared 'A', or it does not yet exist (name error).
         define_var(lex, &e);

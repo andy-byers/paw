@@ -163,6 +163,38 @@ int main(void)
         paw_pop(P, 1);
     }
 
+    // Perform some VM operations.
+    {
+        // 1 + 1 == 2
+        paw_push_int(P, 1);
+        paw_push_int(P, 1);
+        paw_arith(P, PAW_OPADD); 
+        paw_push_int(P, 2);
+        paw_raw_equals(P);
+        CHECK(paw_boolean(P, -1));
+        paw_pop(P, 1);
+
+        // 1 << 1 <= 2
+        paw_push_int(P, 1);
+        paw_push_int(P, 1);
+        paw_arith(P, PAW_OPSHL); 
+        paw_push_int(P, 2);
+        paw_compare(P, PAW_OPLE);
+        CHECK(paw_boolean(P, -1));
+        paw_pop(P, 1);
+
+        // "ab" ++ "c" ++ 123 == "abc123"
+        paw_push_string(P, "ab");
+        paw_push_string(P, "c");
+        paw_arith(P, PAW_OPCONCAT);
+        paw_push_int(P, 123);
+        paw_arith(P, PAW_OPCONCAT);
+        paw_push_string(P, "abc123");
+        paw_compare(P, PAW_OPEQ);
+        CHECK(paw_boolean(P, -1));
+        paw_pop(P, 1);
+    }
+
     finish_test(P);
     return 0;
 }

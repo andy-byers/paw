@@ -4,6 +4,7 @@
 #include "paw.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define fuzz_unused(x) (void)x
 #define fuzz_check(x, s) \
@@ -48,12 +49,38 @@ static const char *fuzz_reader(paw_Env *P, void *ud, size_t *size)
     return (char *)fr->data;
 }
 
+static paw_Bool is_unsafe(const uint8_t *data, size_t size)
+{
+    // Prevent fuzzer inputs from gaining access to outside resources. At
+    // present, the only way this would be possible is by requiring a library,
+    // like 'io'. Code can also load other code, perhaps created by
+    // concatenating strings, that calls 'require' but is missed by this check,
+    // so we have to deny inputs containing 'load' as well.
+    const char *l = "load";
+    const char *p = "print";
+    const char *r = "require";
+    const size_t nl = strlen(l);
+    const size_t np = strlen(p);
+    const size_t nr = strlen(r);
+    for (size_t i = 0; i + nr < size; ++i) {
+        if ((data[i] == l[0] && 0 == memcmp(&data[i], l, nl)) ||
+            (data[i] == p[0] && 0 == memcmp(&data[i], p, np)) ||
+            (data[i] == r[0] && 0 == memcmp(&data[i], r, nr))) {
+            return PAW_BTRUE; // unsafe!
+        }
+    }
+    return PAW_BFALSE;
+}
+
 extern int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
+    if (is_unsafe(data, size)) {
+        return -1; // reject unsafe inputs
+    }
     struct FuzzAlloc fa = {
         .nbytes = 0,
     };
-    // Open a new evaluation context
+    // Open a new evaluation context.
     paw_Env *P = paw_open(fuzz_alloc, &fa);
 
     struct FuzzReader fr = {
@@ -74,7 +101,7 @@ extern int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
         // included in the seed inputs for better coverage.
         if (paw_check_global(P, "f") && paw_is_function(P, -1)) {
             status = paw_call(P, 0);
-            fuzz_unused(status); // Any status is OK
+            fuzz_unused(status); // any status is OK
         }
     }
     paw_close(P);

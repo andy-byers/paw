@@ -3,7 +3,6 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "bigint.h"
 #include "aux.h"
-#include "error.h"
 #include "gc.h"
 #include "mem.h"
 #include "rt.h"
@@ -25,13 +24,13 @@ static void bi_ensure(paw_Env *P, BigInt *bi, int size)
 {
     paw_assert(size > 0);
     if (size >= bi->alloc) {
-        // First power-of-2 greater than 'size'
+        // first power-of-2 greater than 'size'
         int alloc = 1;
         while (alloc <= size) {
             alloc *= 2;
         }
         pawM_resize(P, bi->buf, cast_size(bi->alloc), cast_size(alloc));
-        memset(bi->buf + bi->size, 0, cast_size(size - bi->size) * sizeof(BiDigit));
+        memset(bi->buf + bi->size, 0, cast_size(size - bi->size) * sizeof(bi->buf[0]));
         bi->alloc = alloc;
     }
 }
@@ -43,9 +42,14 @@ static void copy_digits(BiDigit *dst, const BiDigit *src, int n)
 
 static BigInt *bi_alloc(paw_Env *P, StackPtr sp, int n)
 {
+    if (n > PAW_MAX_DIGITS) {
+        pawM_error(P);
+    }
     BigInt *bi = pawB_new(P);
-    pawV_set_bigint(sp, bi); // Anchor
-    bi_ensure(P, bi, n);
+    pawV_set_bigint(sp, bi); // anchor
+    pawM_resize(P, bi->buf, 0, cast_size(n));
+    memset(bi->buf, 0, cast_size(n) * sizeof(bi->buf[0]));
+    bi->alloc = n;
     bi->size = n;
     return bi;
 }
@@ -69,7 +73,7 @@ static void bi_trim(BigInt *bi)
     }
 }
 
-static int cmp_raw_digits(const BiDigit *x, int nx, const BiDigit *y, int ny)
+static int cmp_digits(const BiDigit *x, int nx, const BiDigit *y, int ny)
 {
     if (nx < ny) {
         return -1;
@@ -92,7 +96,8 @@ static int unpack_int(paw_Int i, BiDigit *digits)
     if (i == 0) {
         return 0;
     } else if (i < 0) {
-        paw_assert(i != PAW_INT_MIN); // TODO
+        // 'i' should be between VINT_MIN and VINT_MAX, inclusive.
+        paw_assert(i != PAW_INT_MIN);
         i = -i;
     }
     BiDigit *p = digits;
@@ -104,17 +109,16 @@ static int unpack_int(paw_Int i, BiDigit *digits)
 }
 
 // Unpack an integral value into a BigInt
-// 'buf' is assumed to be large enough to fit a paw_Int. If 'v' is a BigInt already,
-// its fields are just copied.
-static int unpack_aux(const Value v, BiDigit *buf, BigInt *out)
+// 'out->buf' is assumed to be large enough to fit a paw_Int. If 'v' is a BigInt
+// already, its fields are just copied.
+static int unpack_value(Value v, BigInt *out)
 {
     paw_assert(!pawV_is_float(v));
     paw_assert(!pawV_is_bool(v));
 
     if (pawV_is_int(v)) {
         paw_Int i = pawV_get_int(v);
-        out->buf = buf;
-        out->size = unpack_int(i, buf);
+        out->size = unpack_int(i, out->buf);
         out->neg = i < 0;
     } else if (pawV_is_bigint(v)) {
         BigInt *src = pawV_get_bigint(v);
@@ -127,15 +131,20 @@ static int unpack_aux(const Value v, BiDigit *buf, BigInt *out)
     return 0;
 }
 
-// Convenience function for preparing to run a binary operator
-static void unpack2(paw_Env *P, Op op, //
-                    const Value x, BiDigit *xbuf, BigInt *xout,
-                    const Value y, BiDigit *ybuf, BigInt *yout)
+static void unpack2_aux(paw_Env *P, const char *what, //
+                        Value x, BigInt *xout,
+                        Value y, BigInt *yout)
 {
-    if (unpack_aux(x, xbuf, xout) || unpack_aux(y, ybuf, yout)) {
-        pawE_type2(P, pawR_opcode_name(op));
+    if (unpack_value(x, xout) || unpack_value(y, yout)) {
+        pawR_type_error2(P, what);
     }
 }
+
+// Unpack operands for a binary operator
+#define unpack2(P, xname, yname, x, y, what)                 \
+    BigInt xname = {.buf = (BiDigit[UNPACKED_INT_SIZE]){0}}; \
+    BigInt yname = {.buf = (BiDigit[UNPACKED_INT_SIZE]){0}}; \
+    unpack2_aux(P, what, x, &xname, y, &yname);
 
 static int cmp_bi_bi(const BigInt *x, const BigInt *y)
 {
@@ -144,8 +153,8 @@ static int cmp_bi_bi(const BigInt *x, const BigInt *y)
     } else if (x->neg != y->neg) {
         return x->neg ? -1 : 1;
     }
-    // Compare magnitudes
-    const int cmp = cmp_raw_digits(x->buf, x->size, y->buf, y->size);
+    // compare magnitudes
+    const int cmp = cmp_digits(x->buf, x->size, y->buf, y->size);
     return x->neg ? -cmp : cmp;
 }
 
@@ -158,27 +167,11 @@ static int cmp_bi_i(const BigInt *x, paw_Int y)
     }
     BiDigit buf[UNPACKED_INT_SIZE];
     const int ysize = unpack_int(y, buf);
-    const int cmp = cmp_raw_digits(x->buf, x->size, buf, ysize);
+    const int cmp = cmp_digits(x->buf, x->size, buf, ysize);
     return x->neg ? -cmp : cmp;
 }
 
-#define gen_cmp(name, op)                                 \
-    static paw_Bool bi_##name(BigInt *lhs, const Value v) \
-    {                                                     \
-        if (pawV_is_int(v)) {                             \
-            const paw_Int rhs = pawV_get_int(v);          \
-            return cmp_bi_i(lhs, rhs) op 0;               \
-        } else {                                          \
-            paw_assert(pawV_is_bigint(v));                \
-            const BigInt *rhs = pawV_get_bigint(v);       \
-            return cmp_bi_bi(lhs, rhs) op 0;              \
-        }                                                 \
-    }
-gen_cmp(lt, <)
-    gen_cmp(le, <=)
-        gen_cmp(eq, ==)
-
-            static BigInt *addm(paw_Env *P, StackPtr sp, const BigInt *x, const BigInt *y)
+static BigInt *addm(paw_Env *P, StackPtr sp, const BigInt *x, const BigInt *y)
 {
     const int min = paw_min(x->size, y->size);
     const int max = paw_max(x->size, y->size);
@@ -201,7 +194,7 @@ gen_cmp(lt, <)
         c = digit >> BI_BITS;
     }
     if (c) {
-        // Add the carry
+        // add the carry
         z->buf[i++] = c;
     }
     z->size = i;
@@ -215,7 +208,7 @@ static BigInt *subm(paw_Env *P, StackPtr sp, const BigInt *x, const BigInt *y)
     BigInt *z = bi_alloc(P, sp, max + 1);
 
     paw_Bool swap = PAW_BFALSE;
-    if (cmp_raw_digits(x->buf, x->size, y->buf, y->size) < 0) {
+    if (cmp_digits(x->buf, x->size, y->buf, y->size) < 0) {
         swap(const BigInt *, x, y); // |x| >= |y| must be true
         swap = PAW_BTRUE;
     }
@@ -234,7 +227,7 @@ static BigInt *subm(paw_Env *P, StackPtr sp, const BigInt *x, const BigInt *y)
         c = digit < 0 ? -1 : 0;
     }
     if (c) {
-        // Add the carry
+        // add the carry
         z->buf[i++] = c;
     }
     z->size = i;
@@ -277,7 +270,7 @@ static void divmod_aux(BiDigit *quo_dig, int *quo_len, BiDigit *num_dig, int *nu
     int lead_den_digit;
 
     {
-        int cmp = cmp_raw_digits(num_dig, *num_len, den_dig, den_len);
+        int cmp = cmp_digits(num_dig, *num_len, den_dig, den_len);
         if (cmp == 0) {
             *num_len = 0;
             quo_dig[0] = 1;
@@ -366,15 +359,15 @@ static void divmod_aux(BiDigit *quo_dig, int *quo_len, BiDigit *num_dig, int *nu
 static void bi_divmod(paw_Env *P, StackPtr sp, const BigInt *x, const BigInt *y)
 {
     if (bi_zero(y)) {
-        pawE_error(P, PAW_ERUNTIME, "divide by 0");
+        pawR_error(P, PAW_ERUNTIME, "divide by 0");
     }
     StackPtr rp = pawC_stkinc(P, 1);
-    sp = rp - 1; // Instead of saving/loading position
+    sp = rp - 1; // instead of saving/loading position
     BigInt *r = pawB_copy(P, rp, x, 1);
     r->neg = x->neg != y->neg;
     BigInt *q = bi_alloc(P, sp, x->size + 1);
     q->neg = r->neg;
-    int cmp = cmp_raw_digits(x->buf, x->size, y->buf, y->size);
+    int cmp = cmp_digits(x->buf, x->size, y->buf, y->size);
     if (cmp == 0) {
         // If x == y, then q == 1 and r == 0.
         r->size = 0;
@@ -399,13 +392,13 @@ static void bi_div(StackPtr sp, BigInt *x, BigInt *y)
 static void bi_idiv(paw_Env *P, StackPtr sp, BigInt *x, BigInt *y)
 {
     bi_divmod(P, sp, x, y);
-    paw_pop(P, 1); // Pop 'r'
+    paw_pop(P, 1); // pop 'r'
 }
 
 static void bi_mod(paw_Env *P, StackPtr sp, BigInt *x, BigInt *y)
 {
     bi_divmod(P, sp, x, y);
-    paw_replace(P, -2); // Replace 'q' with 'r'
+    paw_replace(P, -2); // replace 'q' with 'r'
 }
 
 // Compute 'x + y', where both 'x' and 'y' are big integers
@@ -468,9 +461,9 @@ static void bi_band(paw_Env *P, StackPtr sp, BigInt *x, BigInt *y)
     int xcarry = x->neg;
     int ycarry = y->neg;
     int zcarry = xcarry == ycarry ? x->neg : 0;
-    int zmask = zcarry ? BI_MASK : 0;
-    int xmask = xcarry ? BI_MASK : 0;
-    int ymask = ycarry ? BI_MASK : 0;
+    const int zmask = zcarry ? BI_MASK : 0;
+    const int xmask = xcarry ? BI_MASK : 0;
+    const int ymask = ycarry ? BI_MASK : 0;
     BigInt *z = bi_alloc(P, sp, x->size + 1);
     for (int i = 0; i < x->size; ++i) {
         xcarry += x->buf[i] ^ xmask;
@@ -496,9 +489,9 @@ static void bi_bor(paw_Env *P, StackPtr sp, BigInt *x, BigInt *y)
     int xcarry = x->neg;
     int ycarry = y->neg;
     int zcarry = xcarry || ycarry;
-    int zmask = zcarry ? BI_MASK : 0;
-    int xmask = xcarry ? BI_MASK : 0;
-    int ymask = ycarry ? BI_MASK : 0;
+    const int zmask = zcarry ? BI_MASK : 0;
+    const int xmask = xcarry ? BI_MASK : 0;
+    const int ymask = ycarry ? BI_MASK : 0;
     BigInt *z = bi_alloc(P, sp, x->size);
     for (int i = 0; i < x->size; ++i) {
         xcarry += x->buf[i] ^ xmask;
@@ -541,14 +534,20 @@ static void bi_bxor(paw_Env *P, StackPtr sp, BigInt *x, BigInt *y)
 
 static void bi_shl(paw_Env *P, StackPtr sp, BigInt *bi, paw_Int n)
 {
-    const int nwhole = (n + BI_BITS - 1) / BI_BITS;
+    const paw_Int nwhole = (n + BI_BITS - 1) / BI_BITS;
+    if (nwhole > PAW_MAX_DIGITS) {
+        pawM_error(P); // result too large
+    }
     int nfract = n % BI_BITS;
     if (nfract == 0) {
         nfract = BI_BITS;
     }
+    BigInt *out = pawB_copy(P, sp, bi, nwhole + 1);
+    if (bi_zero(bi) || n == 0) {
+        return; // NOOP
+    }
 
     int nz = bi->size;
-    BigInt *out = pawB_copy(P, sp, bi, nwhole);
     BiDigit *z = out->buf + nwhole + nz - 1;
     BiDigit *x = bi->buf + nz - 1;
 
@@ -558,7 +557,7 @@ static void bi_shl(paw_Env *P, StackPtr sp, BigInt *bi, paw_Int n)
         *z = (d >> (BI_BITS - nfract)) & BI_MASK;
         d <<= BI_BITS;
     }
-
+    paw_assert(nwhole > 0); // otherwise z out of bounds
     *z = (d >> (BI_BITS - nfract)) & BI_MASK;
     z -= nwhole - 1;
     memset(z, 0, cast_size(nwhole - 1) * sizeof(z[0]));
@@ -572,7 +571,7 @@ static void bi_shl(paw_Env *P, StackPtr sp, BigInt *bi, paw_Int n)
 
 static void bi_shr(paw_Env *P, StackPtr sp, BigInt *bi, paw_Int n)
 {
-    const int nwhole = n / BI_BITS;
+    const paw_Int nwhole = n / BI_BITS;
     const int nfract = n % BI_BITS;
 
     if (nwhole >= bi->size) {
@@ -580,7 +579,7 @@ static void bi_shr(paw_Env *P, StackPtr sp, BigInt *bi, paw_Int n)
         return;
     }
     BigInt *out = bi_alloc(P, sp, bi->size);
-    out->neg = bi->neg; // Propagate sign
+    out->neg = bi->neg; // propagate sign
     const BiDigit *x = bi->buf + nwhole;
     int nz = bi->size - nwhole;
     BiDigit *z = out->buf;
@@ -628,7 +627,7 @@ static size_t finish_string(char *str, int len, const char *prefix, paw_Bool neg
     return cast_size(len);
 }
 
-void pawB_str(paw_Env *P, const BigInt *bi, paw_Bool caps, const char *prefix, int base)
+void pawB_to_string(paw_Env *P, const BigInt *bi, paw_Bool caps, const char *prefix, int base)
 {
     paw_assert(2 <= base && base <= 32);
     const int char_offset = caps ? 'A' : 'a';
@@ -638,10 +637,7 @@ void pawB_str(paw_Env *P, const BigInt *bi, paw_Bool caps, const char *prefix, i
         // representing the base.
         char zero[3] = {'0'};
         const size_t n = finish_string(zero, 1, prefix, PAW_BFALSE);
-        // Push the string.
-        StackPtr sp = pawC_stkinc(P, 1);
-        String *s = pawS_new_nstr(P, zero, n);
-        pawV_set_string(sp, s);
+        pawC_pushns(P, zero, n); // push string
         return;
     }
     Buffer print;
@@ -665,7 +661,7 @@ void pawB_str(paw_Env *P, const BigInt *bi, paw_Bool caps, const char *prefix, i
             *p = c / base;
             c %= base;
         }
-        // Convert to character
+        // convert to character
         c += c > 9 ? char_offset : '0';
         pawL_add_char(P, &print, c);
 
@@ -679,15 +675,18 @@ void pawB_str(paw_Env *P, const BigInt *bi, paw_Bool caps, const char *prefix, i
     } while (!zero);
     pawM_free_vec(P, digits, n);
 
-    print.size = finish_string(print.data, print.size,
-                               prefix, bi->neg);
+    print.size = finish_string(print.data, print.size, prefix, bi->neg);
     pawL_push_result(P, &print);
 }
 
 void pawB_from_float(paw_Env *P, paw_Float f)
 {
-    // TODO: Check for inf, NaN
+    // TODO: Check for inf, NaN, use a special routine to convert, dont' cast
+    //       to paw_Int, as that will not work
     StackPtr sp = pawC_stkinc(P, 1);
+    if (!pawV_float_fits_int(f)) {
+        pawR_error(P, PAW_ERUNTIME, "TODO: need special float -> bigint conversion");
+    }
     pawB_from_int(P, sp, (paw_Int)f);
 }
 
@@ -698,7 +697,7 @@ paw_Int pawB_get_int64(const BigInt *bi, paw_Bool *lossless)
     for (int i = bi->size - 1; i >= 0; --i) {
         const int v = bi->buf[i];
         if (value > (PAW_INT_MAX - v) / BI_BASE) {
-#define LOW_MASK ((paw_int_c(1) << (PAW_INT_WIDTH - BI_BITS)) - 1)
+#define LOW_MASK ((paw_int_c(1) << (PAW_INT_WIDTH - BI_BITS - 1)) - 1)
             // Clear the high bits so 'value' doesn't overflow.
             value &= LOW_MASK;
             *lossless = PAW_BFALSE;
@@ -791,11 +790,11 @@ void pawB_unop(paw_Env *P, Op op, Value x)
             bi_bnot(P, sp, bi);
             break;
         default:
-            pawE_type(P, pawR_opcode_name(op));
+            pawR_type_error(P, "unary operator");
     }
 }
 
-static paw_Bool is_negative(const Value v)
+static paw_Bool is_negative(Value v)
 {
     if (pawV_is_int(v)) {
         return pawV_get_int(v) < 0;
@@ -818,7 +817,7 @@ static paw_Bool fits_in_smallint(Value v)
     }
 }
 
-// Convert the results of a bigint operation back to VINT, if possible
+// Convert the results of a bigint operation back to a small integer, if possible
 static void bi_finish(Value *pv)
 {
     if (pawV_is_bigint(*pv) && fits_in_smallint(*pv)) {
@@ -833,17 +832,7 @@ static void bi_finish(Value *pv)
 // beforehand.
 void pawB_arith(paw_Env *P, Op op, Value lhs, Value rhs)
 {
-    paw_assert(!pawV_is_float(lhs) && !pawV_is_float(rhs));
-    paw_assert(!pawV_is_bool(lhs) && !pawV_is_bool(rhs));
-
-    BigInt x = {0};
-    BigInt y = {0};
-    BiDigit xbuf[UNPACKED_INT_SIZE];
-    BiDigit ybuf[UNPACKED_INT_SIZE];
-    unpack2(P, op, // unpack into BigInt
-            lhs, xbuf, &x,
-            rhs, ybuf, &y);
-
+    unpack2(P, x, y, lhs, rhs, "arithmetic operator");
     StackPtr sp = pawC_stkinc(P, 1);
     switch (op) {
         case OP_ADD:
@@ -861,28 +850,19 @@ void pawB_arith(paw_Env *P, Op op, Value lhs, Value rhs)
         case OP_IDIV:
             bi_idiv(P, sp, &x, &y);
             break;
-        case OP_MOD:
+        default:
+            paw_assert(op == OP_MOD);
             bi_mod(P, sp, &x, &y);
             break;
-        default:
-            pawE_type2(P, pawR_opcode_name(op));
     }
-    bi_finish(sp);
+    // NOTE: Go through the 'top' pointer, as 'sp' may be junk due to a stack
+    //       reallocation (the divmod routine pushes an additional value).
+    bi_finish(&P->top[-1]);
 }
 
 void pawB_bitwise(paw_Env *P, Op op, Value lhs, Value rhs)
 {
-    paw_assert(!pawV_is_float(lhs) && !pawV_is_float(rhs));
-    paw_assert(!pawV_is_bool(lhs) && !pawV_is_bool(rhs));
-
-    BigInt x = {0};
-    BigInt y = {0};
-    BiDigit xbuf[UNPACKED_INT_SIZE];
-    BiDigit ybuf[UNPACKED_INT_SIZE];
-    unpack2(P, op, // unpack into BigInt
-            lhs, xbuf, &x,
-            rhs, ybuf, &y);
-
+    unpack2(P, x, y, lhs, rhs, "bitwise operator");
     StackPtr sp = pawC_stkinc(P, 1);
     switch (op) {
         case OP_BAND:
@@ -896,18 +876,19 @@ void pawB_bitwise(paw_Env *P, Op op, Value lhs, Value rhs)
             break;
         case OP_SHL: {
             if (is_negative(rhs)) {
-                pawE_error(P, PAW_ERANGE, "negative shift count");
+                pawR_error(P, PAW_ERANGE, "negative shift count");
             } else if (pawV_is_bigint(rhs)) {
                 // Definitely OOM: this would require an enormous amount of memory.
-                pawE_error(P, PAW_ERANGE, "shift count too large");
+                pawR_error(P, PAW_ERANGE, "shift count too large");
             }
             const paw_Int n = pawV_get_int(rhs);
             bi_shl(P, sp, &x, n);
             break;
         }
-        case OP_SHR: {
+        default: {
+            paw_assert(op == OP_SHR);
             if (is_negative(rhs)) {
-                pawE_error(P, PAW_ERANGE, "negative shift count");
+                pawR_error(P, PAW_ERANGE, "negative shift count");
             } else if (pawV_is_bigint(rhs)) {
                 // just propagate the sign
                 pawV_set_int(sp, is_negative(lhs) ? -1 : 0);
@@ -917,51 +898,35 @@ void pawB_bitwise(paw_Env *P, Op op, Value lhs, Value rhs)
             bi_shr(P, sp, &x, n);
             break;
         }
-        default:
-            pawE_type2(P, pawR_opcode_name(op));
     }
     bi_finish(sp);
 }
 
-paw_Bool pawB_cmp(Op op, Value lhs, Value rhs)
-{
-    paw_assert(pawV_is_bigint(lhs) || pawV_is_bigint(rhs));
-    paw_assert(!pawV_is_float(lhs) && !pawV_is_float(rhs));
-    paw_assert(!pawV_is_bool(lhs) && !pawV_is_bool(rhs));
+#define bi_lt(x, y) (cmp_bi_bi(x, y) < 0)
+#define bi_le(x, y) (cmp_bi_bi(x, y) <= 0)
+#define bi_eq(x, y) (cmp_bi_bi(x, y) == 0)
 
+paw_Bool pawB_compare(paw_Env *P, Op op, Value lhs, Value rhs)
+{
+    unpack2(P, x, y, lhs, rhs, "relational comparison");
     switch (op) {
         case OP_LT:
-            if (pawV_is_bigint(lhs)) {
-                return bi_lt(pawV_get_bigint(lhs), rhs);
-            } else {
-                swap(Value, lhs, rhs);
-                return !bi_le(pawV_get_bigint(lhs), rhs);
-            }
-            break;
+            return cmp_bi_bi(&x, &y) < 0;
         case OP_LE:
-            if (pawV_is_bigint(lhs)) {
-                return bi_le(pawV_get_bigint(lhs), rhs);
-            } else {
-                swap(Value, lhs, rhs);
-                return !bi_lt(pawV_get_bigint(lhs), rhs);
-            }
-            break;
+            return cmp_bi_bi(&x, &y) <= 0;
         default:
             paw_assert(op == OP_EQ);
-            if (!pawV_is_bigint(lhs)) {
-                swap(Value, lhs, rhs);
-            }
-            return bi_eq(pawV_get_bigint(lhs), rhs);
+            return cmp_bi_bi(&x, &y) == 0;
     }
 }
 
-void pawB_rel(paw_Env *P, Op op, Value lhs, Value rhs)
+paw_Bool pawB_equals(Value lhs, Value rhs)
 {
-    paw_assert(pawV_is_bigint(lhs) || pawV_is_bigint(rhs));
-    paw_assert(!pawV_is_float(lhs) && !pawV_is_float(rhs));
-    paw_assert(!pawV_is_bool(lhs) && !pawV_is_bool(rhs));
-    StackPtr sp = pawC_stkinc(P, 1);
-    pawV_set_bool(sp, pawB_cmp(op, lhs, rhs));
+    BigInt x = {.buf = (BiDigit[UNPACKED_INT_SIZE]){0}};
+    BigInt y = {.buf = (BiDigit[UNPACKED_INT_SIZE]){0}};
+    return 0 == unpack_value(lhs, &x) &&
+           0 == unpack_value(rhs, &y) &&
+           0 == cmp_bi_bi(&x, &y);
 }
 
 // Evaluate the statement 'bi = bi * factor + offset'
@@ -990,14 +955,17 @@ void pawB_parse(paw_Env *P, const char *s, int base)
     BigInt *bi = pawB_new(P);
     pawV_set_bigint(sp, bi);
 
-    while (ISHEX(*s)) {
-        const int offset = HEXVAL(*s++);
+    for (; ISHEX(*s); ++s) {
+        const int offset = HEXVAL(*s);
         if (offset >= base) {
-            pawE_error(P, PAW_ESYNTAX, "invalid integer");
+            break;
         }
         // bi = bi * base + offset
         bi_ensure(P, bi, bi->size + 1);
         mul_add_digit(bi, base, offset);
+    }
+    if (*s && !ISSPACE(*s)) {
+        pawR_error(P, PAW_ESYNTAX, "invalid integer");
     }
     bi_trim(bi);
 }

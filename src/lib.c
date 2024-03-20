@@ -1,11 +1,11 @@
 #include "lib.h"
+#include "api.h"
 #include "array.h"
 #include "aux.h"
 #include "call.h"
-#include "error.h"
 #include "gc.h"
-#include "io.h"
 #include "map.h"
+#include "os.h"
 #include "rt.h"
 #include <errno.h>
 #include <time.h>
@@ -17,13 +17,17 @@
 void pawL_check_type(paw_Env *P, int index, int type)
 {
     const int i = paw_abs_index(P, index);
-    pawE_check_type(P, cf_base(i), type);
+    const Value v = cf_base(i);
+    if (api_type(v) != type) {
+        pawR_error(P, PAW_ETYPE, "expected '%s' but found '%s'",
+                   api_typename(type), api_typename(api_type(v)));
+    }
 }
 
 paw_Int pawL_check_int(paw_Env *P, int index)
 {
     const int i = paw_abs_index(P, index);
-    return pawE_check_int(P, cf_base(i));
+    return pawR_check_int(P, cf_base(i));
 }
 
 static int get_argc(paw_Env *P)
@@ -35,7 +39,7 @@ void pawL_check_argc(paw_Env *P, int argc)
 {
     const int narg = get_argc(P);
     if (narg != argc) {
-        pawE_error(P, PAW_ERUNTIME, "expected %d arguments but found %d", argc, narg);
+        pawR_error(P, PAW_ERUNTIME, "expected %d arguments but found %d", argc, narg);
     }
 }
 
@@ -52,7 +56,7 @@ int pawL_check_varargc(paw_Env *P, int min, int max)
             n = min;
             s = "least;";
         }
-        pawE_error(P, PAW_ERUNTIME, "expected at %s %d argument(s) but found %d",
+        pawR_error(P, PAW_ERUNTIME, "expected at %s %d argument(s) but found %d",
                    s, n, narg);
     }
     return narg;
@@ -105,8 +109,9 @@ static int base_float(paw_Env *P)
 
 static int base_str(paw_Env *P)
 {
+    size_t len;
     pawL_check_argc(P, 1);
-    pawR_to_string(P);
+    pawR_to_string(P, &len);
     return 1;
 }
 
@@ -119,7 +124,7 @@ static int base_chr(paw_Env *P)
         paw_push_nstring(P, (const char *)chr, 1);
     } else {
         // TODO: Encode UTF-8 codepoint
-        pawE_range(P, "FIXME: Support UTF-8!");
+        pawR_error(P, PAW_ERANGE, "FIXME: Support UTF-8!");
     }
     return 1;
 }
@@ -130,7 +135,7 @@ static int base_ord(paw_Env *P)
     const char *str = pawL_check_string(P, 1);
     const size_t len = paw_length(P, 1);
     if (!len || len > 4) {
-        pawE_error(P, PAW_EVALUE, "invalid UTF-8");
+        pawR_error(P, PAW_EVALUE, "invalid UTF-8");
     }
     // TODO: Decode UTF-8 codepoint
     paw_push_int(P, str[0]);
@@ -141,7 +146,7 @@ static int base_assert(paw_Env *P)
 {
     pawL_check_argc(P, 1);
     if (!paw_boolean(P, 1)) {
-        pawE_error(P, PAW_ERUNTIME, "assertion failed");
+        pawR_error(P, PAW_ERUNTIME, "assertion failed");
     }
     return 0;
 }
@@ -153,7 +158,7 @@ static int base_print(paw_Env *P)
 
     const int argc = get_argc(P);
     for (int i = 1; i <= argc; ++i) {
-        pawC_stkpush(P, cf_base(i));
+        pawC_pushv(P, cf_base(i));
         pawL_add_value(P, &print);
         if (i < argc) {
             pawL_add_char(P, &print, ' ');
@@ -294,7 +299,7 @@ static int base_getitem(paw_Env *P)
         paw_rotate(P, -3, 1);
     }
     if (pawR_getitem_raw(P, fallback)) {
-        pawE_key(P, paw_string(P, -1));
+        pawH_key_error(P, P->top[-1]);
     }
     return 1;
 }
@@ -314,7 +319,7 @@ static int base_getattr(paw_Env *P)
         paw_rotate(P, -3, 1);
     }
     if (pawR_getattr_raw(P, fallback)) {
-        pawE_attr(P, paw_string(P, -1));
+        pawR_attr_error(P, P->top[-1]);
     }
     return 1;
 }
@@ -333,7 +338,7 @@ static int time_time(paw_Env *P)
 
     struct timeval tv;
     if (gettimeofday(&tv, NULL)) {
-        pawE_system(P, errno);
+        pawO_system_error(P, errno);
     }
     const paw_Float sec = tv.tv_sec + tv.tv_usec / 1000000.0;
     paw_push_float(P, sec);
@@ -360,7 +365,7 @@ void pawL_register_lib(paw_Env *P, const char *name, int nup, const pawL_Attr *a
     } else if (pawV_is_map(v)) {
         m = pawV_get_map(v);
     } else {
-        pawE_error(P, PAW_ETYPE, "expected 'class', 'instance' or 'userdata'");
+        pawR_error(P, PAW_ETYPE, "expected 'class', 'instance' or 'userdata'");
     }
     StackPtr sp = pawC_stkinc(P, 1);
     pawV_set_map(sp, m);
@@ -508,6 +513,6 @@ void pawL_require_lib(paw_Env *P, const char *name)
     } else if (0 == strcmp(name, TIMELIB_NAME)) {
         pawL_register_lib(P, TIMELIB_NAME, TIMELIB_NUP, kTimeLib);
     } else {
-        pawE_error(P, PAW_ENAME, "library '%s' has not been registered", name);
+        pawR_error(P, PAW_ENAME, "library '%s' has not been registered", name);
     }
 }

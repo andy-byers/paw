@@ -45,15 +45,39 @@ typedef enum MapAction {
 
 Map *pawH_new(paw_Env *P);
 void pawH_free(paw_Env *P, Map *m);
-Value *pawH_action(paw_Env *P, Map *map, Value key, MapAction kind);
 paw_Bool pawH_equals(paw_Env *P, Map *lhs, Map *rhs);
 void pawH_extend(paw_Env *P, Map *dst, Map *src);
 void pawH_clone(paw_Env *P, StackPtr sp, Map *m);
 void pawH_key_error(paw_Env *P, Value key);
+size_t pawH_create_aux_(paw_Env *P, Map *m, Value key);
 
 static inline size_t pawH_length(const Map *m)
 {
     return m->length;
+}
+
+static inline Value *pawH_action(paw_Env *P, Map *m, Value key, MapAction action)
+{
+    if (action == MAP_ACTION_CREATE) {
+        const size_t i = pawH_create_aux_(P, m, key);
+        return &m->values[i];
+    } else if (m->length == 0) {
+        return NULL;
+    }
+    size_t itr = pawH_index(m, key);
+    pawH_locate(m, key, pawH_is_vacant);
+    if (!pawH_is_occupied(m->keys[itr])) {
+        return NULL;
+    }
+    if (action == MAP_ACTION_REMOVE) {
+        pawV_set_null(&m->keys[itr]);
+        pawV_set_null(&m->values[itr]);
+        --m->length;
+        // Return the address of the slot to indicate success.
+        return &m->keys[itr];
+    }
+    paw_assert(action == MAP_ACTION_NONE);
+    return &m->values[itr];
 }
 
 static inline paw_Bool pawH_contains(paw_Env *P, Map *m, Value key)

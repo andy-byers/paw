@@ -1,6 +1,6 @@
 #include "test.h"
 #include "env.h"
-#include "io.h"
+#include "os.h"
 #include "lib.h"
 #include "paw.h"
 #include "rt.h"
