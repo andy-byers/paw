@@ -2,8 +2,8 @@
 
 #include "aux.h"
 #include "call.h"
-#include "io.h"
 #include "lib.h"
+#include "os.h"
 #include <errno.h>
 #include <stdio.h>
 
@@ -59,7 +59,7 @@ static int io_open(paw_Env *P)
     } else {
         // FIXME: Not exception-worthy: return an error indicator of some sort (Lua returns
         //        2 things, nil and an error message.)
-        pawE_system(P, errno);
+        pawO_system_error(P, errno);
     }
     return 1;
 }
@@ -77,7 +77,7 @@ static int io_flush(paw_Env *P)
     pawL_check_argc(P, 1);
     FILE *file = get_handle(P, 1);
     if (fflush(file)) {
-        pawE_system(P, errno);
+        pawO_system_error(P, errno);
     }
     return 0;
 }
@@ -113,7 +113,7 @@ static int io_seek(paw_Env *P)
     const paw_Int origin = pawL_check_int(P, 3);
     FILE *file = get_handle(P, 1);
     if (p_fseek(file, offset, origin)) {
-        pawE_system(P, errno);
+        pawO_system_error(P, errno);
     }
     return 0;
 }

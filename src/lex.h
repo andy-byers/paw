@@ -13,10 +13,12 @@ void pawX_read_integer(paw_Env *P, const char *data, int base);
 void pawX_read_float(paw_Env *P, const char *data);
 
 enum MultiChar {
+    // Control tokens:
     TK_NONE = 0,
     TK_END = 255,
 
-    TK_DOT3 = 128,
+    // Multi-byte tokens:
+    TK_DOT3,
     TK_PLUS2,
     TK_QUESTION2,
     TK_COLON2,
@@ -32,13 +34,13 @@ enum MultiChar {
     TK_GREATER_EQ,
     TK_BANG_EQ,
 
-    // Variables and literals
+    // Variables and literals:
     TK_NAME,
     TK_STRING,
     TK_INTEGER,
     TK_FLOAT,
 
-    // Keywords (must be in this order)
+    // Keywords (must be in this order):
     TK_FN,
     TK_CLASS,
     TK_SUPER,
@@ -58,7 +60,7 @@ enum MultiChar {
     TK_NULL,
 };
 
-typedef uint8_t TokenKind;
+typedef unsigned TokenKind;
 
 typedef struct Token {
     TokenKind kind;

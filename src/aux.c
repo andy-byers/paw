@@ -4,9 +4,9 @@
 #include "aux.h"
 #include "array.h"
 #include "bigint.h"
-#include "error.h"
 #include "map.h"
 #include "mem.h"
+#include "rt.h"
 #include "util.h"
 #include <stdlib.h>
 
@@ -77,24 +77,12 @@ static void add_nstring(paw_Env *P, Buffer *buf, const char *str, size_t len, in
 void pawL_add_value(paw_Env *P, Buffer *buf)
 {
     size_t len; // value must be on top of the stack
-    const char *str = pawV_to_string(P, P->top - 1, &len);
-    reserve_memory(P, buf, len, -2);
+    const char *str = pawV_to_string(P, P->top[-1], &len);
+    reserve_memory(P, buf, len, -3);
     memcpy(buf->data + buf->size, str, len);
     buf->size += len;
 
-    pawC_stkpop(P); // pop value
-}
-
-void pawL_reverse_buf(paw_Env *P, Buffer *buf)
-{
-    paw_unused(P);
-    char *x = buf->data;
-    char *y = buf->data + buf->size - 1;
-    for (; x < y; ++x, --y) {
-        char t = *x; // Reverse chars inplace
-        *x = *y;
-        *y = t;
-    }
+    pawC_stkdec(P, 2); // pop value and string
 }
 
 // Table and stringify algorithm modified from micropython
@@ -130,19 +118,19 @@ void pawL_add_nstring(paw_Env *P, Buffer *buf, const char *s, size_t n)
 void pawL_add_integer(paw_Env *P, Buffer *buf, paw_Int i)
 {
     size_t len;
-    Value *pv = pawC_pushi(P, i);
-    const char *str = pawV_to_string(P, pv, &len);
-    add_nstring(P, buf, str, len, -2); // int above box
-    pawC_stkpop(P);
+    const Value *pv = pawC_pushi(P, i);
+    const char *str = pawV_to_string(P, *pv, &len);
+    add_nstring(P, buf, str, len, -3); // int and string above box
+    pawC_stkdec(P, 2);
 }
 
 void pawL_add_float(paw_Env *P, Buffer *buf, paw_Float f)
 {
     size_t len;
-    Value *pv = pawC_pushf(P, f);
-    const char *str = pawV_to_string(P, pv, &len);
-    add_nstring(P, buf, str, len, -2); // float above box
-    pawC_stkpop(P);
+    const Value *pv = pawC_pushf(P, f);
+    const char *str = pawV_to_string(P, *pv, &len);
+    add_nstring(P, buf, str, len, -3); // float and string above box
+    pawC_stkdec(P, 2);
 }
 
 void pawL_add_pointer(paw_Env *P, Buffer *buf, void *p)
@@ -203,7 +191,7 @@ void pawL_add_vfstring(paw_Env *P, Buffer *buf, const char *fmt, va_list arg)
                 pawL_add_pointer(P, buf, va_arg(arg, void *));
                 break;
             default:
-                pawE_error(P, PAW_EVALUE, "invalid format option '%%%c'", *fmt);
+                pawR_error(P, PAW_EVALUE, "invalid format option '%%%c'", *fmt);
         }
     }
 }

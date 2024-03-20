@@ -1,10 +1,12 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
+#include "prefix.h"
+
+#include "api.h"
 #include "aux.h"
 #include "bigint.h"
 #include "call.h"
-#include "error.h"
 #include "gc.h"
 #include "lib.h"
 #include "map.h"
@@ -210,7 +212,9 @@ void paw_push_value(paw_Env *P, int index)
 
 void paw_push_nnull(paw_Env *P, int n)
 {
-    pawC_stkinc(P, n);
+    for (int i = 0; i < n; ++i) {
+        pawC_push0(P);
+    }
 }
 
 void paw_push_boolean(paw_Env *P, paw_Bool b)
@@ -258,10 +262,8 @@ const char *paw_push_string(paw_Env *P, const char *s)
 
 const char *paw_push_nstring(paw_Env *P, const char *s, size_t n)
 {
-    StackPtr sp = pawC_stkinc(P, 1);
-    String *o = pawS_new_nstr(P, s, n);
-    pawV_set_string(sp, o);
-    return o->text;
+    const Value *pv = pawC_pushns(P, s, n);
+    return pawV_get_text(*pv);
 }
 
 const char *paw_push_vfstring(paw_Env *P, const char *fmt, va_list arg)
@@ -293,7 +295,7 @@ void paw_push_bigint(paw_Env *P, paw_Digit *d, int n, int neg)
     pawB_copy(P, sp, &bi, 0);
 }
 
-int paw_boolean(paw_Env *P, int index)
+paw_Bool paw_boolean(paw_Env *P, int index)
 {
     const Value v = *access(P, index);
     return pawV_truthy(v);
@@ -303,7 +305,7 @@ paw_Int paw_intx(paw_Env *P, int index, paw_Bool *plossless)
 {
     paw_Bool lossless;
     const Value v = *access(P, index);
-    const paw_Int i = pawV_to_int64(P, v, &lossless);
+    const paw_Int i = pawV_to_int64(v, &lossless);
     if (plossless) {
         *plossless = lossless;
     }
@@ -313,7 +315,7 @@ paw_Int paw_intx(paw_Env *P, int index, paw_Bool *plossless)
 paw_Float paw_float(paw_Env *P, int index)
 {
     Value v = *access(P, index);
-    return pawV_to_float(P, v);
+    return pawV_get_float(v);
 }
 
 const char *paw_string(paw_Env *P, int index)
@@ -360,9 +362,10 @@ void paw_to_integer(paw_Env *P, int index)
 
 void paw_to_string(paw_Env *P, int index)
 {
+    size_t len;
     const int i = paw_abs_index(P, index);
     paw_push_value(P, i);
-    pawR_to_string(P);
+    pawR_to_string(P, &len);
     paw_replace(P, i);
 }
 
@@ -382,7 +385,7 @@ void paw_pop(paw_Env *P, int n)
     pawC_stkdec(P, n);
 }
 
-struct Parser {
+struct ParseState {
     paw_Reader input;
     ParseMemory mem;
     const char *name;
@@ -391,13 +394,13 @@ struct Parser {
 
 static void parse_aux(paw_Env *P, void *arg)
 {
-    struct Parser *p = arg;
+    struct ParseState *p = arg;
     pawP_parse(P, p->input, &p->mem, p->name, p->ud);
 }
 
 int paw_load(paw_Env *P, paw_Reader input, const char *name, void *ud)
 {
-    struct Parser p = {
+    struct ParseState p = {
         .input = input,
         .name = name,
         .ud = ud,
@@ -433,22 +436,6 @@ int paw_get_count(paw_Env *P)
     return P->top - P->cf->base;
 }
 
-void paw_set_top(paw_Env *P, int index)
-{
-    CallFrame *cf = P->cf;
-    StackPtr bp = cf->base;
-    const StackPtr end = bp + index + 1;
-    if (index >= 0) {
-        while (P->top != end) {
-            pawV_set_null(P->top);
-            ++P->top;
-        }
-    } else {
-        pawR_close_upvalues(P, end);
-        P->top = end;
-    }
-}
-
 static int upvalue_index(int nup, int index)
 {
     if (index < 0) {
@@ -476,14 +463,15 @@ void paw_get_upvalue(paw_Env *P, int ifn, int index)
             break;
         }
         default:
-            pawV_type_error(P, fn);
+            pawR_error(P, PAW_ETYPE, "'%s' has no upvalues",
+                       api_typename(api_type(fn)));
     }
 }
 
 void paw_get_global(paw_Env *P, const char *name)
 {
     if (!paw_check_global(P, name)) {
-        pawE_name(P, name);
+        pawR_error(P, PAW_ENAME, "global '%s' does not exist", name);
     }
 }
 
@@ -519,7 +507,11 @@ paw_Bool paw_check_itemi(paw_Env *P, int index, paw_Int i)
 void paw_get_item(paw_Env *P, int index)
 {
     if (!paw_check_item(P, index)) {
-        pawE_key(P, paw_string(P, -1));
+        // If the target container is a sequence, and the integer key is
+        // out of bounds, then the runtime will throw a PAW_EINDEX before
+        // this code is reached. The key must be a string if control has
+        // made it here.
+        pawR_error(P, PAW_ENAME, "key '%s' does not exist", paw_string(P, -1));
     }
 }
 
@@ -538,7 +530,7 @@ paw_Bool paw_check_item(paw_Env *P, int index)
 void paw_get_attr(paw_Env *P, int index, const char *attr)
 {
     if (!paw_check_attr(P, index, attr)) {
-        pawE_attr(P, paw_string(P, -1));
+        pawR_error(P, PAW_EATTR, "attribute '%s' does not exist", attr);
     }
 }
 

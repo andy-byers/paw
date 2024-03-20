@@ -20,8 +20,8 @@
 
 #define bi_zero(bi) ((bi)->size == 0)
 
-// Number of bytes needed to unpack a paw_Int into base-BI_BASE
-#define UNPACKED_INT_SIZE (sizeof(paw_Int) * 8 / BI_BITS + 1)
+// Number of bytes needed to unpack a paw_Int into base BI_BASE
+#define UNPACKED_INT_SIZE ((PAW_INT_WIDTH + BI_BITS - 1) / BI_BITS)
 
 BigInt *pawB_new(paw_Env *P);
 BigInt *pawB_copy(paw_Env *P, StackPtr sp, const BigInt *bi, int extra);
@@ -29,10 +29,10 @@ void pawB_free(paw_Env *P, BigInt *bi);
 void pawB_unop(paw_Env *P, Op op, Value x);
 void pawB_arith(paw_Env *P, Op op, Value x, Value y);
 void pawB_bitwise(paw_Env *P, Op op, Value x, Value y);
-void pawB_rel(paw_Env *P, Op op, Value x, Value y);
 void pawB_parse(paw_Env *X, const char *p, int base);
-void pawB_str(paw_Env *P, const BigInt *bi, paw_Bool caps, const char *prefix, int base);
-paw_Bool pawB_cmp(Op op, Value x, Value y);
+void pawB_to_string(paw_Env *P, const BigInt *bi, paw_Bool caps, const char *prefix, int base);
+paw_Bool pawB_compare(paw_Env *P, Op op, Value lhs, Value rhs);
+paw_Bool pawB_equals(Value lhs, Value rhs);
 
 BigInt *pawB_from_int(paw_Env *P, StackPtr sp, paw_Int i);
 void pawB_from_float(paw_Env *P, paw_Float f);

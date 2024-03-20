@@ -6,7 +6,7 @@
     assert(t <= t2) 
 
     let t = time.time()
-    -- Busy work
+    -- busy work
     for i = 0,1000 {
         assert(i == i)
     }

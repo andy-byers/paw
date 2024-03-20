@@ -25,7 +25,6 @@ static inline paw_Bool pawL_boxed(const Buffer *buf)
 }
 
 void pawL_init_buffer(paw_Env *P, Buffer *buf);
-void pawL_reverse_buffer(paw_Env *P, Buffer *buf);
 void pawL_discard_result(paw_Env *P, Buffer *buf);
 void pawL_push_result(paw_Env *P, Buffer *buf);
 void pawL_buffer_resize(paw_Env *P, Buffer *buf, size_t n);

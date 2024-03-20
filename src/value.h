@@ -26,7 +26,7 @@
 #define pawV_get_instance(v) check_exp(pawV_is_instance(v), (Instance *)pawV_get_object(v))
 #define pawV_get_method(v) check_exp(pawV_is_method(v), (Method *)pawV_get_object(v))
 #define pawV_get_userdata(v) check_exp(pawV_is_userdata(v), (UserData *)pawV_get_object(v))
-#define pawV_get_object(v) check_exp(pawV_is_object(v), cast_object((v).u &VDATAMASK))
+#define pawV_get_object(v) check_exp(pawV_is_object(v), cast_object(((v).u << 1) & VPTR_MASK))
 #define pawV_get_type(v) ((uint32_t)((v).i >> 47))
 
 #define pawV_is_null(v) ((v).i == -1)
@@ -51,13 +51,12 @@
 #define pawV_is_object(v) (pawV_get_type(v) - VOBJECT0 - 1 > VNUMBER - VOBJECT0 - 1)
 
 #define obj2v_aux(o, t) \
-    (Value) { .u = (uint64_t)(o) | ((uint64_t)(t) << 47) }
+    (Value) { .u = ((uint64_t)(o) >> 1) | ((uint64_t)(t) << 47) }
 #define obj2v(o) obj2v_aux(o, ~(uint32_t)(o)->gc_kind)
-#define pawV_set_type(p, t) ((p)->u = ((p)->u & VDATAMASK) | (uint64_t)(t) << 47)
 #define pawV_set_object(p, o, t) (*(p) = obj2v_aux(o, t))
 #define pawV_set_null(p) ((p)->i = -1)
 #define pawV_set_bool(p, b) ((p)->u = ~((uint64_t)((b) + 1) << 47))
-#define pawV_set_int(p, i) ((p)->u = (uint64_t)VNUMBER << VINT_WIDTH | ((uint64_t)(i)&VDATAMASK))
+#define pawV_set_int(p, i) ((p)->u = (uint64_t)VNUMBER << VINT_WIDTH | ((uint64_t)(i) & VINT_MASK))
 
 #define pawV_set_float(p, F) ((p)->f = F)
 #define pawV_set_userdata(p, o) pawV_set_object(p, o, VUSERDATA)
@@ -111,10 +110,8 @@ typedef unsigned ValueKind;
 // Int         |1...1|Type|---------int47_t----------|
 // Float       |---------------double----------------|
 //
-// The sign bit, 11 exponent bits, plus the signalling/quiet NaN bit that follows, must
-// be set to 1 for all value types except for Float. Note that Object *'s all point to
-// the start of heap allocations, which are always aligned. That means we actually have
-// a few extra bits for pointers, in case we need them later on some platforms.
+// Object pointers are shifted right by 1, in order to preserve the 48th
+// bit. Some environments seem to use pointers with this bit set to 1.
 
 #define VNULL (~0U)
 #define VFALSE (~1U)
@@ -133,13 +130,15 @@ typedef unsigned ValueKind;
 #define VMETHOD (~14U)
 #define VNUMBER (~15U)
 
+#define VPTR_WIDTH UINT64_C(48)
 #define VINT_WIDTH UINT64_C(47)
 #define VINT_MAX ((paw_int_c(1) << (VINT_WIDTH - 1)) - 1)
 #define VINT_MIN (-VINT_MAX - 1)
 
 #define VOBJECT0 VUSERDATA
-#define NOBJECTS 12
-#define VDATAMASK ((UINT64_C(1) << VINT_WIDTH) - 1)
+#define NOBJECTS (int)(~VNUMBER - ~VOBJECT0)
+#define VPTR_MASK ((UINT64_C(1) << VPTR_WIDTH) - 1)
+#define VINT_MASK ((UINT64_C(1) << VINT_WIDTH) - 1)
 #define obj_index(t) (~(t) - ~VOBJECT0)
 
 int paw_value_promote(Value *v, int want);
@@ -174,7 +173,7 @@ typedef struct BigInt {
     int neg;
 } BigInt;
 
-#define STR_IS_KEYWORD(s) ((s)->flag > 0)
+#define str_is_keyword(s) ((s)->flag > 0)
 
 typedef struct String {
     GC_HEADER;
@@ -185,7 +184,7 @@ typedef struct String {
     char text[];
 } String;
 
-const char *pawV_to_string(paw_Env *P, Value *pv, size_t *nout);
+const char *pawV_to_string(paw_Env *P, Value v, size_t *nout);
 
 typedef struct Proto {
     GC_HEADER;
@@ -200,31 +199,31 @@ typedef struct Proto {
         int pc0;
         int pc1;
         paw_Bool captured;
-    } * v;
+    } *v;
 
     struct UpValueInfo {
         String *name;
         uint16_t index;
         paw_Bool is_local;
-    } * u;
+    } *u;
 
     struct LineInfo {
         int pc;
         int line;
-    } * lines;
+    } *lines;
 
-    // Constants
+    // constants
     Value *k;
 
-    // Nested functions
+    // nested functions
     struct Proto **p;
 
-    int nup;    // Number of upvalues
-    int nlines; // Number of lines
-    int ndebug; // Number of locals
-    int nk;     // Number of constants
-    int argc;   // Number of fixed parameters
-    int nproto; // Number of nested functions
+    int nup;    // number of upvalues
+    int nlines; // number of lines
+    int ndebug; // number of locals
+    int nk;     // number of constants
+    int argc;   // number of fixed parameters
+    int nproto; // number of nested functions
 
     Object *gc_list;
 } Proto;
@@ -239,7 +238,7 @@ typedef struct UpValue {
     Value *p;
     union {
         struct {
-            // Linked list of open upvalues
+            // linked list of open upvalues
             struct UpValue *prev;
             struct UpValue *next;
         } open;
@@ -252,8 +251,8 @@ void pawV_free_upvalue(paw_Env *P, UpValue *u);
 void pawV_link_upvalue(paw_Env *P, UpValue *u, UpValue *prev, UpValue *next);
 void pawV_unlink_upvalue(UpValue *u);
 
-#define UPV_IS_OPEN(up) ((up)->p != &(up)->closed)
-#define UPV_LEVEL(up) check_exp(UPV_IS_OPEN(up), (StackPtr)((up)->p))
+#define upv_is_open(up) ((up)->p != &(up)->closed)
+#define upv_level(up) check_exp(upv_is_open(up), (StackPtr)((up)->p))
 
 typedef struct Closure {
     GC_HEADER;
@@ -341,10 +340,10 @@ void pawV_free_userdata(paw_Env *P, UserData *ud);
 
 static inline paw_Int get_vint_aux_(const Value v)
 {
-    Value x = {.u = v.u & VDATAMASK};
+    Value x = {.u = v.u & VINT_MASK};
     if (x.u & ISIGNBIT) {
-        // Manual sign extension
-        x.u |= ~VDATAMASK;
+        // manual sign extension
+        x.u |= ~VINT_MASK;
     }
     return x.i;
 }
@@ -360,11 +359,8 @@ static inline paw_Bool pawV_float_fits_int(paw_Float f)
     return VINT_MIN < f && f < VINT_MAX;
 }
 
-void pawV_int_error(paw_Env *P, Value x);
-void pawV_type_error(paw_Env *P, Value x);
-void pawV_type_error2(paw_Env *P, Value x, Value y);
 const char *pawV_name(ValueKind kind);
-paw_Int pawV_to_int64(paw_Env *P, Value v, paw_Bool *plossless);
-paw_Float pawV_to_float(paw_Env *P, Value v);
+paw_Int pawV_to_int64(Value v, paw_Bool *plossless);
+paw_Float pawV_to_float(Value v);
 
 #endif // PAW_VALUE_H

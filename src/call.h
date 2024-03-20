@@ -8,7 +8,7 @@
 #include "paw.h"
 #include "value.h"
 
-#define S2V(s) (*(s))
+#define s2v(s) (*(s))
 
 typedef void (*Call)(paw_Env *P, void *arg);
 
@@ -32,31 +32,22 @@ static inline int pawC_stklen(paw_Env *P)
     return P->top - P->stack;
 }
 
+// Increase the stack size
+// New slots are considered uninitialized.
 static inline StackPtr pawC_stkinc(paw_Env *P, int n)
 {
     if (P->bound - P->top < n) {
         pawC_stkgrow(P, n);
     }
     StackPtr sp = P->top;
-    for (int i = 0; i < n; ++i) { // TODO: Don't set values to null here, likely to be overwritten immediately
-        pawV_set_null(P->top++);
-    }
+    P->top += n;
     return sp;
 }
 
+// Decrease the stack size
 static inline void pawC_stkdec(paw_Env *P, int n)
 {
     P->top -= n;
-}
-
-static inline void pawC_stkpush(paw_Env *P, Value v)
-{
-    *pawC_stkinc(P, 1) = v;
-}
-
-static inline void pawC_stkpop(paw_Env *P)
-{
-    pawC_stkdec(P, 1);
 }
 
 static inline ptrdiff_t pawC_stksave(paw_Env *P, StackPtr sp)
@@ -76,21 +67,21 @@ static inline void pawC_stkcheck(paw_Env *P, int n)
     }
 }
 
-static inline Value *pawC_pushv(paw_Env *P, Value v) 
+static inline Value *pawC_pushv(paw_Env *P, Value v)
 {
     StackPtr sp = pawC_stkinc(P, 1);
     *sp = v;
     return sp;
 }
 
-static inline Value *pawC_push0(paw_Env *P) 
+static inline Value *pawC_push0(paw_Env *P)
 {
     StackPtr sp = pawC_stkinc(P, 1);
     pawV_set_null(sp);
     return sp;
 }
 
-static inline Value *pawC_pushi(paw_Env *P, paw_Int i) 
+static inline Value *pawC_pushi(paw_Env *P, paw_Int i)
 {
     StackPtr sp = pawC_stkinc(P, 1);
     pawV_set_int(sp, i);
@@ -104,12 +95,15 @@ static inline Value *pawC_pushf(paw_Env *P, paw_Float f)
     return sp;
 }
 
-static inline Value *pawC_pushb(paw_Env *P, paw_Bool b) 
+static inline Value *pawC_pushb(paw_Env *P, paw_Bool b)
 {
     StackPtr sp = pawC_stkinc(P, 1);
     pawV_set_bool(sp, b);
     return sp;
 }
+
+Value *pawC_pushns(paw_Env *P, const char *s, size_t n);
+Value *pawC_pushs(paw_Env *P, const char *s);
 
 static inline void pawC_pop(paw_Env *P)
 {

@@ -4,7 +4,6 @@
 #include "lex.h"
 #include "aux.h"
 #include "bigint.h"
-#include "error.h"
 #include "gc.h"
 #include "map.h"
 #include "mem.h"
@@ -24,20 +23,20 @@ static void add_location(paw_Env *P, Buffer *print, const String *s, int line)
     pawL_add_fstring(P, print, ":%d: ", line);
 }
 
-void pawX_error(Lex *lex, const char *fmt, ...)
+void pawX_error(Lex *x, const char *fmt, ...)
 {
     Buffer print;
-    paw_Env *P = lex->P;
+    paw_Env *P = x->P;
     pawL_init_buffer(P, &print);
-    add_location(P, &print, lex->modname, lex->line);
+    add_location(P, &print, x->modname, x->line);
 
     va_list arg;
     va_start(arg, fmt);
-    pawL_add_vfstring(lex->P, &print, fmt, arg);
+    pawL_add_vfstring(x->P, &print, fmt, arg);
     va_end(arg);
 
     pawL_push_result(P, &print);
-    pawC_throw(lex->P, PAW_ESYNTAX);
+    pawC_throw(x->P, PAW_ESYNTAX);
 }
 
 static struct Token make_token(TokenKind kind)
@@ -66,36 +65,36 @@ static struct Token make_number(struct Lex *x)
     return t;
 }
 
-static struct Token make_string(struct Lex *lex, TokenKind kind)
+static struct Token make_string(struct Lex *x, TokenKind kind)
 {
-    ParseMemory *pm = lex->pm;
+    ParseMemory *pm = x->pm;
     struct Token t = make_token(kind);
-    String *s = pawX_scan_string(lex, pm->temp, cast_size(pm->tsize));
+    String *s = pawX_scan_string(x, pm->temp, cast_size(pm->tsize));
     pawV_set_string(&t.value, s);
     pm->tsize = 0;
     return t;
 }
 
-static char next(struct Lex *lex)
+static char next(struct Lex *x)
 {
-    paw_Env *P = lex->P;
-    if (lex->nchunk == 0) {
-        lex->chunk = lex->input(P, lex->ud, &lex->nchunk);
+    paw_Env *P = x->P;
+    if (x->nchunk == 0) {
+        x->chunk = x->input(P, x->ud, &x->nchunk);
     }
-    if (lex->nchunk > 0) {
-        lex->c = lex->chunk[0];
-        --lex->nchunk;
-        ++lex->chunk;
+    if (x->nchunk > 0) {
+        x->c = x->chunk[0];
+        --x->nchunk;
+        ++x->chunk;
     } else {
-        lex->c = (char)TK_END;
+        x->c = (char)TK_END;
     }
-    return lex->c;
+    return x->c;
 }
 
-static void save(struct Lex *lex, char c)
+static void save(struct Lex *x, char c)
 {
-    ParseMemory *pm = lex->pm;
-    pawM_grow(lex->P, pm->temp, pm->tsize, pm->talloc);
+    ParseMemory *pm = x->pm;
+    pawM_grow(x->P, pm->temp, pm->tsize, pm->talloc);
     pm->temp[pm->tsize++] = c;
 }
 
@@ -119,8 +118,6 @@ static paw_Bool test_next2(struct Lex *x, const char *c2)
     return PAW_BFALSE;
 }
 
-#define ISFPCHAR(c) (c == 'e' || c == 'E' || c == '.')
-
 static struct Token consume_name(struct Lex *x)
 {
     save_and_next(x);
@@ -131,11 +128,11 @@ static struct Token consume_name(struct Lex *x)
     const String *s = pawV_get_string(t.value);
     if (s->flag > 0) {
         // Set the keyword type.
-        t.kind = s->flag;
+        t.kind = (TokenKind)s->flag;
     }
     if (s->length > PAW_NAME_MAX) {
-        pawE_error(x->P, PAW_ERANGE, "name (%I chars) is too long",
-                   (paw_Int)s->length);
+        pawX_error(x, "name (%I chars) is too long",
+                   paw_cast_int(s->length));
     }
     return t;
 }
@@ -311,7 +308,7 @@ static struct Token consume_string(struct Lex *x)
     } else if (test_next(x, quote)) {
         return make_string(x, TK_STRING);
     } else if (ISNEWLINE(x->c)) {
-        save(x, x->c); // Newlines allowed in string literals
+        save(x, x->c); // newlines allowed in string literals
         increment_line(x);
     } else if (consume_utf8(x)) {
         lex_error(x);
@@ -346,7 +343,7 @@ Token consume_number(struct Lex *x)
         }
     }
     if (ISNAME(x->c)) {
-        // Cause pawV_to_number() to fail
+        // cause pawV_to_number() to fail
         save_and_next(x);
     }
     save(x, '\0');
@@ -362,7 +359,7 @@ Token consume_number(struct Lex *x)
 
 static void skip_comment(struct Lex *x)
 {
-    while (x->c && !ISNEWLINE(x->c)) {
+    while ((uint8_t)x->c != TK_END && !ISNEWLINE(x->c)) {
         next(x);
     }
 }
@@ -372,7 +369,22 @@ static Token advance(struct Lex *x)
 #define T(kind) make_token(kind)
     for (;;) {
         x->pm->tsize = 0;
+        if (ISDIGIT(x->c)) {
+            return consume_number(x);
+        } else if (ISNAME(x->c)) {
+            return consume_name(x);
+        }
         switch (x->c) {
+            case '\n':
+            case '\r':
+                increment_line(x);
+                break;
+            case ' ':
+            case '\f':
+            case '\t':
+            case '\v':
+                next(x);
+                break;
             case '\'':
             case '"':
                 return consume_string(x);
@@ -456,7 +468,7 @@ static Token advance(struct Lex *x)
                 }
                 return T('/');
             case '.':
-                save_and_next(x); // May be float
+                save_and_next(x); // may be float
                 if (test_next(x, '.')) {
                     if (test_next(x, '.')) {
                         return T(TK_DOT3);
@@ -466,22 +478,12 @@ static Token advance(struct Lex *x)
                     return consume_number(x);
                 }
                 return T('.');
-            case '\n':
-            case '\r':
-                increment_line(x);
-                break;
             default: {
-                if (ISDIGIT(x->c)) {
-                    return consume_number(x);
-                } else if (ISNAME(x->c)) {
-                    return consume_name(x);
-                } else if (ISSPACE(x->c)) {
-                    next(x); // keep going
-                } else {
-                    const char c = x->c;
-                    next(x);
-                    return T((TokenKind)c);
-                }
+                // Cast to uint8_t first, so we don't get sign extension when converting
+                // to TokenKind. Otherwise, TK_END ends up with the wrong value.
+                const uint8_t c = (uint8_t)x->c;
+                next(x);
+                return T(c);
             }
         }
     }
@@ -505,21 +507,27 @@ TokenKind pawX_peek(struct Lex *x)
     return x->t2.kind;
 }
 
-void pawX_set_source(Lex *lex, paw_Reader input)
+#define INITIAL_SCRATCH 128
+
+void pawX_set_source(Lex *x, paw_Reader input)
 {
-    lex->input = input;
-    lex->line = 1;
-    next(lex); // Load first char
+    paw_Env *P = x->P;
+    ParseMemory *pm = x->pm;
+    pawM_resize(P, pm->temp, 0, INITIAL_SCRATCH);
+    pm->talloc = INITIAL_SCRATCH;
+
+    x->input = input;
+    x->line = 1;
+    next(x); // load first char
 }
 
-String *pawX_scan_string(Lex *lex, const char *s, size_t n)
+String *pawX_scan_string(Lex *x, const char *s, size_t n)
 {
-    paw_Env *P = lex->P;
-    StackPtr sp = pawC_stkinc(P, 1);
-    String *str = pawS_new_nstr(P, s, n);
-    pawV_set_string(sp, str); // Anchor for Map update
-    Value *value = pawH_action(P, lex->strings, *sp, MAP_ACTION_CREATE);
-    pawV_set_string(value, str); // Anchor in Map
+    paw_Env *P = x->P;
+    const Value *pv = pawC_pushns(P, s, n); // anchor
+    Value *value = pawH_action(P, x->strings, *pv, MAP_ACTION_CREATE);
+    *value = *pv; // anchor in map
     paw_pop(P, 1);
-    return str;
+
+    return pawV_get_string(*value);
 }

@@ -23,6 +23,10 @@
 #define PAW_STACK_MAX 1000000
 #endif
 
+#ifndef PAW_MAX_DIGITS
+#define PAW_MAX_DIGITS 10000
+#endif
+
 #if defined(__APPLE__)
 #define PAW_OS_MACOS
 #define PAW_OS_POSIX

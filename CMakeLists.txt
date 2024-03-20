@@ -19,10 +19,10 @@ option(PAW_BuildTests "Build the tests" ${MAIN_PROJECT})
 add_library(paw_context INTERFACE)
 if(${CMAKE_C_COMPILER_ID} STREQUAL MSVC)
     target_compile_options(paw_context
-            INTERFACE /WX /W2)
+            INTERFACE /W2)
 else()
     target_compile_options(paw_context
-        INTERFACE -Werror -Wall -Wextra -Wpedantic
+        INTERFACE -Wall -Wextra -Wpedantic
                   -Wsign-conversion)
     target_link_libraries(paw_context
             INTERFACE m)
@@ -39,15 +39,14 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/call.h
             ${PAW_SOURCE_DIR}/debug.h
             ${PAW_SOURCE_DIR}/env.h
-            ${PAW_SOURCE_DIR}/error.h
             ${PAW_SOURCE_DIR}/gc.h
-            ${PAW_SOURCE_DIR}/io.h
             ${PAW_SOURCE_DIR}/lex.h
             ${PAW_SOURCE_DIR}/lib.h
             ${PAW_SOURCE_DIR}/map.h
             ${PAW_SOURCE_DIR}/mem.h
             ${PAW_SOURCE_DIR}/meta.h
             ${PAW_SOURCE_DIR}/opcode.h
+            ${PAW_SOURCE_DIR}/os.h
             ${PAW_SOURCE_DIR}/parse.h
             ${PAW_SOURCE_DIR}/prefix.h
             ${PAW_SOURCE_DIR}/rt.h
@@ -61,9 +60,7 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/call.c
             ${PAW_SOURCE_DIR}/debug.c
             ${PAW_SOURCE_DIR}/env.c
-            ${PAW_SOURCE_DIR}/error.c
             ${PAW_SOURCE_DIR}/gc.c
-            ${PAW_SOURCE_DIR}/io.c
             ${PAW_SOURCE_DIR}/iolib.c
             ${PAW_SOURCE_DIR}/lex.c
             ${PAW_SOURCE_DIR}/lib.c
@@ -72,6 +69,7 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/mem.c
             ${PAW_SOURCE_DIR}/meta.c
             ${PAW_SOURCE_DIR}/opcode.c
+            ${PAW_SOURCE_DIR}/os.c
             ${PAW_SOURCE_DIR}/parse.c
             ${PAW_SOURCE_DIR}/rt.c
             ${PAW_SOURCE_DIR}/str.c

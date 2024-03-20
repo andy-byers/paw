@@ -5,6 +5,172 @@
 #include "map.h"
 #include "rt.h"
 
+static const char *opcode_name(Op op)
+{
+    switch (op) {
+        case OP_PUSHNULL:
+            return "PUSHNULL";
+        case OP_PUSHTRUE:
+            return "PUSHTRUE";
+        case OP_PUSHFALSE:
+            return "PUSHFALSE";
+        case OP_PUSHCONST:
+            return "PUSHCONST";
+        case OP_POP:
+            return "POP";
+        case OP_CLOSE:
+            return "CLOSE";
+        case OP_RETURN:
+            return "RETURN";
+        case OP_CLOSURE:
+            return "CLOSURE";
+        case OP_GETSUPER:
+            return "GETSUPER";
+        case OP_INVOKESUPER:
+            return "INVOKESUPER";
+        case OP_CALL:
+            return "CALL";
+        case OP_INHERIT:
+            return "INHERIT";
+        case OP_INVOKE:
+            return "INVOKE";
+        case OP_JUMP:
+            return "JUMP";
+        case OP_JUMPFALSE:
+            return "JUMPFALSE";
+        case OP_JUMPNULL:
+            return "JUMPNULL";
+        case OP_GLOBAL:
+            return "GLOBAL";
+        case OP_GETGLOBAL:
+            return "GETGLOBAL";
+        case OP_SETGLOBAL:
+            return "SETGLOBAL";
+        case OP_GETLOCAL:
+            return "GETLOCAL";
+        case OP_SETLOCAL:
+            return "SETLOCAL";
+        case OP_UPVALUE:
+            return "UPVALUE";
+        case OP_GETUPVALUE:
+            return "GETUPVALUE";
+        case OP_SETUPVALUE:
+            return "SETUPVALUE";
+        case OP_NEWCLASS:
+            return "NEWCLASS";
+        case OP_NEWMETHOD:
+            return "NEWMETHOD";
+        case OP_NEWARRAY:
+            return "NEWARRAY";
+        case OP_NEWMAP:
+            return "NEWMAP";
+        case OP_VARARG:
+            return "VARARG";
+        case OP_UNPACK:
+            return "UNPACK";
+        case OP_UNPACKEX:
+            return "UNPACKEX";
+        case OP_FORNUM0:
+            return "FORNUM0";
+        case OP_FORNUM:
+            return "FORNUM";
+        case OP_FORIN0:
+            return "FORIN0";
+        case OP_FORIN:
+            return "FORIN";
+        case OP_LEN:
+            return "LEN";
+        case OP_NEG:
+            return "NEG";
+        case OP_NOT:
+            return "NOT";
+        case OP_BNOT:
+            return "BNOT";
+        case OP_ADD:
+            return "ADD";
+        case OP_SUB:
+            return "SUB";
+        case OP_MUL:
+            return "MUL";
+        case OP_DIV:
+            return "DIV";
+        case OP_IDIV:
+            return "IDIV";
+        case OP_MOD:
+            return "MOD";
+        case OP_POW:
+            return "POW";
+        case OP_CONCAT:
+            return "CONCAT";
+        case OP_BXOR:
+            return "BXOR";
+        case OP_BAND:
+            return "BAND";
+        case OP_BOR:
+            return "BOR";
+        case OP_SHL:
+            return "SHL";
+        case OP_SHR:
+            return "SHR";
+        case OP_EQ:
+            return "EQ";
+        case OP_LT:
+            return "LT";
+        case OP_LE:
+            return "LE";
+        case OP_IN:
+            return "IN";
+        case OP_GETATTR:
+            return "GETATTR";
+        case OP_SETATTR:
+            return "SETATTR";
+        case OP_GETITEM:
+            return "GETITEM";
+        case OP_SETITEM:
+            return "SETITEM";
+        case OP_RADD:
+            return "RADD";
+        case OP_RSUB:
+            return "RSUB";
+        case OP_RMUL:
+            return "RMUL";
+        case OP_RDIV:
+            return "RDIV";
+        case OP_RIDIV:
+            return "RIDIV";
+        case OP_RMOD:
+            return "RMOD";
+        case OP_RPOW:
+            return "RPOW";
+        case OP_RCONCAT:
+            return "RCONCAT";
+        case OP_RBXOR:
+            return "RBXOR";
+        case OP_RBAND:
+            return "RBAND";
+        case OP_RBOR:
+            return "RBOR";
+        case OP_RSHL:
+            return "RSHL";
+        case OP_RSHR:
+            return "RSHR";
+        case OP_STR:
+            return "STR";
+        case OP_INT:
+            return "INT";
+        case OP_FLOAT:
+            return "FLOAT";
+        case OP_BOOL:
+            return "BOOL";
+        case OP_ARRAY:
+            return "ARRAY";
+        case OP_MAP:
+            return "MAP";
+        default:
+            return "???";
+    }
+}
+
 void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
 {
     const OpCode *pc = proto->source;
@@ -15,7 +181,7 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
     pawL_add_fstring(P, print, "' (%I bytes)\n", (paw_Int)proto->length);
     pawL_add_fstring(P, print, "constant(s) = %I, upvalue(s) = %I\n", (paw_Int)proto->nk, (paw_Int)proto->nup);
     for (int i = 0; pc != end; ++i) {
-        pawL_add_fstring(P, print, "%d  %I  %s", i, (paw_Int)(pc - proto->source), pawR_opcode_name(pc[0]));
+        pawL_add_fstring(P, print, "%d  %I  %s", i, (paw_Int)(pc - proto->source), opcode_name(pc[0]));
         switch (*pc++) {
             case OP_PUSHCONST: {
                 pawL_add_fstring(P, print, " ; id = %d", Iw());
@@ -218,7 +384,7 @@ void paw_dump_stack(paw_Env *P)
                 const ptrdiff_t save = pawC_stksave(P, p);
                 Buffer print;
                 pawL_init_buffer(P, &print);
-                pawC_stkpush(P, *p);
+                pawC_pushv(P, *p);
                 pawL_add_value(P, &print);
                 pawL_add_char(P, &print, '\0');
                 printf("bigint %s\n", print.data);
@@ -290,7 +456,7 @@ void paw_dump_value(paw_Env *P, Value v)
 {
     Buffer buf;
     pawL_init_buffer(P, &buf);
-    pawC_stkpush(P, v);
+    pawC_pushv(P, v);
     pawL_add_value(P, &buf);
     pawL_add_char(P, &buf, '\0');
     printf("%s\n", buf.data);

@@ -93,6 +93,9 @@ paw_Bool paw_is_userdata(paw_Env *P, int index);
 int paw_type(paw_Env *P, int index);
 const char *paw_typename(paw_Env *P, int index);
 
+// Throw an error if the value at 'index' is not of type 'type'
+void paw_check_type(paw_Env *P, int index, int type);
+
 void paw_push_value(paw_Env *P, int index);
 void paw_push_nnull(paw_Env *P, int n);
 void paw_push_boolean(paw_Env *P, paw_Bool b);
@@ -116,8 +119,8 @@ static inline void paw_push_null(paw_Env *P)
 #define PAW_OPSUB 4
 #define PAW_OPMUL 5
 #define PAW_OPDIV 6
-#define PAW_OPIDIV 7  
-#define PAW_OPMOD 8 
+#define PAW_OPIDIV 7
+#define PAW_OPMOD 8
 #define PAW_OPPOW 9
 #define PAW_OPCONCAT 10
 #define PAW_OPBXOR 11
@@ -145,7 +148,7 @@ void paw_raw_equals(paw_Env *P);
 // high bits.
 paw_Int paw_intx(paw_Env *P, int index, paw_Bool *plossless);
 
-int paw_boolean(paw_Env *P, int index);
+paw_Bool paw_boolean(paw_Env *P, int index);
 paw_Float paw_float(paw_Env *P, int index);
 const char *paw_string(paw_Env *P, int index);
 paw_Function paw_native(paw_Env *P, int index);
@@ -171,9 +174,6 @@ void paw_pop(paw_Env *P, int n);
 
 // Return the number of values in the current stack frame
 int paw_get_count(paw_Env *P);
-
-// Set the top of the stack to the given index
-void paw_set_top(paw_Env *P, int index);
 
 void paw_get_upvalue(paw_Env *P, int ifn, int index);
 void paw_get_global(paw_Env *P, const char *name);

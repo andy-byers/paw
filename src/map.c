@@ -2,7 +2,6 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "map.h"
-#include "error.h"
 #include "gc.h"
 #include "mem.h"
 #include "rt.h"
@@ -10,16 +9,7 @@
 #include <assert.h>
 #include <string.h>
 
-#define set_erased(p) pawV_set_null(p)
-#define hash_key(m, k) (pawV_hash(k) & ((m)->capacity - 1))
 #define next_idx(m, i) ((i + 1) & ((m)->capacity - 1))
-
-static void check_key(paw_Env *P, Value key)
-{
-    if (!pawV_is_string(key) && !pawV_is_int(key) && !pawV_is_bigint(key) && !pawV_is_bool(key)) {
-        pawE_type(P, "map access");
-    }
-}
 
 static paw_Bool is_unoccupied(Value v)
 {
@@ -100,35 +90,16 @@ void pawH_free(paw_Env *P, Map *m)
     pawM_free(P, m);
 }
 
-Value *pawH_action(paw_Env *P, Map *m, Value key, MapAction action)
+size_t pawH_create_aux_(paw_Env *P, Map *m, Value key)
 {
-    check_key(P, key);
-    if (action == MAP_ACTION_CREATE) {
-        grow_map_if_necessary(P, m);
-        const size_t i = prepare_insert(m, key);
-        if (!pawH_is_occupied(m->keys[i])) {
-            m->keys[i] = key;
-            pawV_set_null(&m->values[i]);
-            ++m->length;
-        }
-        return &m->values[i];
-    } else if (m->length == 0) {
-        return NULL;
+    grow_map_if_necessary(P, m);
+    const size_t i = prepare_insert(m, key);
+    if (!pawH_is_occupied(m->keys[i])) {
+        m->keys[i] = key;
+        pawV_set_null(&m->values[i]);
+        ++m->length;
     }
-    size_t itr = pawH_index(m, key);
-    pawH_locate(m, key, pawH_is_vacant);
-    if (!pawH_is_occupied(m->keys[itr])) {
-        return NULL;
-    }
-    if (action == MAP_ACTION_REMOVE) {
-        set_erased(&m->keys[itr]);
-        pawV_set_null(&m->values[itr]);
-        --m->length;
-        // Return the address of the slot to indicate success.
-        return &m->keys[itr];
-    }
-    paw_assert(action == MAP_ACTION_NONE);
-    return &m->values[itr];
+    return i;
 }
 
 void pawH_clone(paw_Env *P, StackPtr sp, Map *m)
@@ -179,6 +150,13 @@ void pawH_extend(paw_Env *P, Map *dst, Map *src)
 
 void pawH_key_error(paw_Env *P, Value key)
 {
-    pawC_stkpush(P, key);
-    pawE_error(P, PAW_EKEY, pawV_get_string(key)->text);
+    Buffer buf;
+    pawL_init_buffer(P, &buf);
+    pawL_add_string(P, &buf, "key '");
+    pawC_pushv(P, key);
+    pawL_add_value(P, &buf);
+    pawL_add_string(P, &buf, "' does not exist");
+    pawL_add_char(P, &buf, '\0');
+    pawL_push_result(P, &buf);
+    pawC_throw(P, PAW_EKEY);
 }
