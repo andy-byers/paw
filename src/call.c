@@ -104,7 +104,7 @@ void pawC_stack_overflow(paw_Env *P)
 #if PAW_STRESS > 1
 #define next_alloc(n0, dn) ((n0) + (dn))
 #else
-#define next_alloc(n0, dn) paw_max((n0) + (dn), (n0) * 2)
+#define next_alloc(n0, dn) paw_max((n0) + (dn), (n0)*2)
 #endif
 
 void pawC_stack_grow(paw_Env *P, int n)
@@ -115,10 +115,10 @@ void pawC_stack_grow(paw_Env *P, int n)
 
 Value *pawC_pushns(paw_Env *P, const char *s, size_t n)
 {
-    StackPtr sp = pawC_stkinc(P, 1);
+    Value *pv = pawC_push0(P);
     String *str = pawS_new_nstr(P, s, n);
-    pawV_set_string(sp, str);
-    return sp;
+    pawV_set_string(pv, str);
+    return pv;
 }
 
 Value *pawC_pushs(paw_Env *P, const char *s)

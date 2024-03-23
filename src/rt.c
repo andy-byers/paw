@@ -35,7 +35,7 @@
 #define vm_continue continue
 #define vm_shift(n) paw_shift(P, n)
 #define vm_pop(n) pawC_stkdec(P, n)
-#define vm_peek(n) (&P->top.p[-(n) - 1])
+#define vm_peek(n) (&P->top.p[-(n)-1])
 #define vm_save() (cf->pc = pc, cf->top = P->top)
 #define vm_local() (&cf->base.p[Iw()])
 #define vm_upvalue() (fn->up[Iw()]->p.p)
@@ -49,6 +49,21 @@
 
 // Slot 0 (the callable or 'self') is an implicit parameter
 #define vm_argc() (paw_get_count(P) - 1)
+
+// Generate code for creating common builtin objects
+// Requires a placeholder slot (the vm_push0() pushes null) so the GC
+// doesn't get confused. Both the vm_push0(), and the pawA_new calls
+// might fail and cause an error to be thrown, so we have to be careful
+// not to leave a junk value on top of the stack.
+#define vm_array_init(pa, pv) \
+    pv = vm_push0();          \
+    pa = pawA_new(P);         \
+    pawV_set_array(pv, pa);
+
+#define vm_map_init(pm, pv) \
+    pv = vm_push0();        \
+    pm = pawH_new(P);       \
+    pawV_set_map(pv, pm);
 
 static void vm_unop(paw_Env *P, Op op);
 
@@ -798,7 +813,7 @@ static paw_Bool mul_overflow(paw_Env *P, paw_Int x, paw_Int y)
     if (check_mul_overflow(x, y)) {
         // Add a copy of 'y' as a BigInt above 'x' on the stack. OP_MUL is
         // commutative, so just do 'y * x' and fix the stack after.
-        StackPtr sp = pawC_stkinc(P, 1);
+        StackPtr sp = vm_push0(); // placeholder
         pawB_from_int(P, sp, y);
         pawB_arith(P, OP_MUL, *sp, vint(x));
         vm_shift(1);
@@ -847,11 +862,11 @@ static void int_arith(paw_Env *P, Op op, Value lhs, Value rhs)
             float_arith(P, op, lhs, rhs);
             return;
     }
-    StackPtr sp = pawC_stkinc(P, 1);
     if (pawV_int_fits_int(z)) {
-        pawV_set_int(sp, z);
+        vm_pushi(z);
     } else {
-        pawB_from_int(P, sp, z);
+        Value *pv = vm_push0();
+        pawB_from_int(P, pv, z);
     }
 }
 
@@ -897,8 +912,8 @@ Array *concat_arrays(paw_Env *P, const Array *x, const Array *y)
     if (nx > PAW_SIZE_MAX - ny) {
         pawM_error(P);
     }
-    StackPtr sp = pawC_stkinc(P, 1);
-    Array *cat = pawA_clone(P, sp, x);
+    Value *pv = vm_push0();
+    Array *cat = pawA_clone(P, pv, x);
     pawA_reserve(P, cat, nx + ny);
     for (size_t i = 0; i < ny; ++i) {
         pawA_push(P, cat, y->begin[i]);
@@ -925,9 +940,9 @@ static void array_arith(paw_Env *P, Op op, Value lhs, Value rhs)
             n = pawR_check_int(P, lhs);
             a = pawV_get_array(rhs);
         }
-        StackPtr sp = pawC_stkinc(P, 1);
-        Array *cat = pawA_new(P);
-        pawV_set_array(sp, cat);
+        Value *pv;
+        Array *cat;
+        vm_array_init(cat, pv);
         for (paw_Int i = 0; i < n; ++i) {
             cat = concat_arrays(P, cat, a);
             vm_shift(1); // copy over old 'cat'
@@ -967,9 +982,9 @@ static void string_rel(paw_Env *P, Op op, String *x, String *y)
 static Value fetch(paw_Env *P, int i)
 {
     Value *pv = vm_peek(i);
-    if (pawV_is_bool(*pv)) {
-        pawV_set_int(pv, pawV_get_bool(*pv));
-    }
+    // if (pawV_is_bool(*pv)) {
+    //     pawV_set_int(pv, pawV_get_bool(*pv));
+    // }
     return *pv;
 }
 
@@ -1002,8 +1017,8 @@ static void int_unop(paw_Env *P, Op op, paw_Int i)
         case OP_NEG:
             if (i == VINT_MIN) {
                 // The expression '-VINT_MIN' will overflow. Convert to VBIGINT.
-                StackPtr sp = pawC_stkinc(P, 1);
-                BigInt *bi = pawB_from_int(P, sp, i);
+                Value *pv = vm_push0();
+                BigInt *bi = pawB_from_int(P, pv, i);
                 pawB_unop(P, OP_NEG, obj2v(bi));
                 vm_shift(1);
                 break;
@@ -1319,9 +1334,9 @@ void pawR_getitem(paw_Env *P)
 
 void pawR_literal_array(paw_Env *P, int n)
 {
-    StackPtr sp = pawC_stkinc(P, 1);
-    Array *a = pawA_new(P);
-    pawV_set_array(sp, a);
+    Array *a;
+    StackPtr sp;
+    vm_array_init(a, sp);
     if (n > 0) {
         pawA_resize(P, a, cast_size(n));
         for (int i = 1; i <= n; ++i) {
@@ -1334,9 +1349,9 @@ void pawR_literal_array(paw_Env *P, int n)
 
 void pawR_literal_map(paw_Env *P, int n)
 {
-    StackPtr sp = pawC_stkinc(P, 1);
-    Map *m = pawH_new(P);
-    pawV_set_map(sp, m);
+    Map *m;
+    StackPtr sp;
+    vm_map_init(m, sp);
     if (n > 0) {
         for (int i = 0; i < n; ++i) {
             const Value value = *--sp;
@@ -1549,9 +1564,9 @@ top:
                     pawR_attr_error(P, name);
                 }
 
-                StackPtr sp = pawC_stkinc(P, 1);
+                Value *pv = vm_push0();
                 Method *mtd = pawV_new_method(P, self, *value);
-                pawV_set_method(sp, mtd);
+                pawV_set_method(pv, mtd);
             }
 
             vm_case(INVOKESUPER) :
@@ -1645,10 +1660,10 @@ top:
 
             vm_case(CLOSURE) :
             {
-                StackPtr sp = pawC_stkinc(P, 1);
+                Value *pv = vm_push0();
                 Proto *proto = fn->p->p[Iw()];
                 Closure *closure = pawV_new_closure(P, proto->nup);
-                pawV_set_closure(sp, closure);
+                pawV_set_closure(pv, closure);
                 closure->p = proto;
 
                 // open upvalues
@@ -1716,9 +1731,9 @@ top:
                 const int nexpect = Ib();
                 const int nactual = vm_argc();
                 const int nextra = nactual - nexpect;
-                StackPtr sp = pawC_stkinc(P, 1);
-                Array *argv = pawA_new(P);
-                pawV_set_array(sp, argv);
+                Value *pv;
+                Array *argv;
+                vm_array_init(argv, pv);
                 if (nextra) {
                     pawA_resize(P, argv, cast_size(nextra));
                     StackPtr argv0 = cf->base.p + 1 + nexpect;

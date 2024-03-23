@@ -30,17 +30,23 @@ static inline int pawC_stklen(paw_Env *P)
     return P->top.p - P->stack.p;
 }
 
+static inline void pawC_stkcheck(paw_Env *P, int n)
+{
+    if (P->bound.p - P->top.p < n) {
+        pawC_stack_overflow(P);
+    }
+}
+
 // Increase the stack size
-// New slots are set to null (necessary for GC).
+// New slots have unspecified values and must be set before the next
+// collection runs.
 static inline StackPtr pawC_stkinc(paw_Env *P, int n)
 {
     if (P->bound.p - P->top.p < n) {
         pawC_stack_grow(P, n);
     }
     StackPtr sp = P->top.p;
-    for (int i = 0; i < n; ++i) {
-        pawV_set_null(P->top.p++);
-    }
+    P->top.p += n;
     return sp;
 }
 
@@ -55,13 +61,6 @@ static inline void pawC_stkdec(paw_Env *P, int n)
 #endif
 }
 
-static inline void pawC_stkcheck(paw_Env *P, int n)
-{
-    if (P->bound.p - P->top.p < n) {
-        pawC_stack_overflow(P);
-    }
-}
-
 static inline Value *pawC_pushv(paw_Env *P, Value v)
 {
     StackPtr sp = pawC_stkinc(P, 1);
@@ -71,7 +70,9 @@ static inline Value *pawC_pushv(paw_Env *P, Value v)
 
 static inline Value *pawC_push0(paw_Env *P)
 {
-    return pawC_stkinc(P, 1);
+    StackPtr sp = pawC_stkinc(P, 1);
+    pawV_set_null(sp);
+    return sp;
 }
 
 static inline Value *pawC_pushi(paw_Env *P, paw_Int i)

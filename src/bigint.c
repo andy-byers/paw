@@ -361,7 +361,7 @@ static void bi_divmod(paw_Env *P, StackPtr sp, const BigInt *x, const BigInt *y)
     if (bi_zero(y)) {
         pawR_error(P, PAW_ERUNTIME, "divide by 0");
     }
-    StackPtr rp = pawC_stkinc(P, 1);
+    StackPtr rp = pawC_push0(P);
     sp = rp - 1; // instead of saving/loading position
     BigInt *r = pawB_copy(P, rp, x, 1);
     r->neg = x->neg != y->neg;
@@ -683,7 +683,7 @@ void pawB_from_float(paw_Env *P, paw_Float f)
 {
     // TODO: Check for inf, NaN, use a special routine to convert, dont' cast
     //       to paw_Int, as that will not work
-    StackPtr sp = pawC_stkinc(P, 1);
+    StackPtr sp = pawC_push0(P);
     if (!pawV_float_fits_int(f)) {
         pawR_error(P, PAW_ERUNTIME, "TODO: need special float -> bigint conversion");
     }
@@ -778,7 +778,7 @@ void pawB_unop(paw_Env *P, Op op, Value x)
 {
     paw_assert(pawV_is_bigint(x));
     BigInt *bi = pawV_get_bigint(x);
-    StackPtr sp = pawC_stkinc(P, 1);
+    StackPtr sp = pawC_push0(P);
     switch (op) {
         case OP_NEG:
             negate(pawB_copy(P, sp, bi, 0));
@@ -833,7 +833,7 @@ static void bi_finish(Value *pv)
 void pawB_arith(paw_Env *P, Op op, Value lhs, Value rhs)
 {
     unpack2(P, x, y, lhs, rhs, "arithmetic operator");
-    StackPtr sp = pawC_stkinc(P, 1);
+    StackPtr sp = pawC_push0(P);
     switch (op) {
         case OP_ADD:
             bi_add(P, sp, &x, &y);
@@ -863,7 +863,7 @@ void pawB_arith(paw_Env *P, Op op, Value lhs, Value rhs)
 void pawB_bitwise(paw_Env *P, Op op, Value lhs, Value rhs)
 {
     unpack2(P, x, y, lhs, rhs, "bitwise operator");
-    StackPtr sp = pawC_stkinc(P, 1);
+    StackPtr sp = pawC_push0(P);
     switch (op) {
         case OP_BAND:
             bi_band(P, sp, &x, &y);
@@ -951,7 +951,7 @@ static void mul_add_digit(BigInt *bi, BiDigit factor, BiDigit offset)
 
 int pawB_parse(paw_Env *P, const char *s, int base)
 {
-    StackPtr sp = pawC_stkinc(P, 1);
+    StackPtr sp = pawC_push0(P);
     BigInt *bi = pawB_new(P);
     pawV_set_bigint(sp, bi);
 

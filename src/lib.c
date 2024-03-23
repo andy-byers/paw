@@ -88,8 +88,8 @@ static int base_require(paw_Env *P)
 static int base_bool(paw_Env *P)
 {
     pawL_check_argc(P, 1);
-    StackPtr sp = &P->cf->top.p[-1];
-    pawV_set_bool(sp, pawV_truthy(*sp));
+    Value *pv = &P->top.p[-1];
+    pawV_set_bool(pv, pawV_truthy(*pv));
     return 1;
 }
 
@@ -260,8 +260,8 @@ static int array_pop(paw_Env *P)
     // element. Default to -1: the last element.
     const paw_Int i = argc ? pawV_get_int(cf_base(1)) : -1;
 
-    StackPtr sp = pawC_stkinc(P, 1);
-    *sp = *pawA_get(P, a, i); // Checks bounds
+    Value *pv = pawC_stkinc(P, 1);
+    *pv = *pawA_get(P, a, i); // checks bounds
     pawA_pop(P, a, i);
     return 1;
 }
@@ -277,15 +277,15 @@ static int map_erase(paw_Env *P)
 static int object_clone(paw_Env *P)
 {
     pawL_check_argc(P, 0);
-    StackPtr sp = pawC_stkinc(P, 1);
+    Value *pv = pawC_push0(P);
     Value v = cf_base(0);
     if (pawV_is_map(v)) {
-        pawH_clone(P, sp, pawV_get_map(v));
+        pawH_clone(P, pv, pawV_get_map(v));
     } else if (pawV_is_array(v)) {
-        pawA_clone(P, sp, pawV_get_array(v));
+        pawA_clone(P, pv, pawV_get_array(v));
     } else {
         paw_assert(pawV_is_string(v));
-        *sp = v; // strings are internalized
+        *pv = v; // strings are internalized
     }
     return 1;
 }

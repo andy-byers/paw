@@ -56,7 +56,7 @@
 #define pawV_set_object(p, o, t) (*(p) = obj2v_aux(o, t))
 #define pawV_set_null(p) ((p)->i = -1)
 #define pawV_set_bool(p, b) ((p)->u = ~((uint64_t)((b) + 1) << 47))
-#define pawV_set_int(p, i) ((p)->u = (uint64_t)VNUMBER << VINT_WIDTH | ((uint64_t)(i) & VINT_MASK))
+#define pawV_set_int(p, i) ((p)->u = (uint64_t)VNUMBER << VINT_WIDTH | ((uint64_t)(i)&VINT_MASK))
 
 #define pawV_set_float(p, F) ((p)->f = F)
 #define pawV_set_userdata(p, o) pawV_set_object(p, o, VUSERDATA)
@@ -208,18 +208,18 @@ typedef struct Proto {
         int pc0;
         int pc1;
         paw_Bool captured;
-    } *v;
+    } * v;
 
     struct UpValueInfo {
         String *name;
         uint16_t index;
         paw_Bool is_local;
-    } *u;
+    } * u;
 
     struct LineInfo {
         int pc;
         int line;
-    } *lines;
+    } * lines;
 
     // constants
     Value *k;

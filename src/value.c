@@ -224,10 +224,10 @@ void pawV_free_instance(paw_Env *P, Instance *i)
 
 Class *pawV_push_class(paw_Env *P)
 {
-    StackPtr sp = pawC_stkinc(P, 1);
+    Value *pv = pawC_push0(P);
     Class *cls = pawM_new(P, Class);
     pawG_add_object(P, cast_object(cls), VCLASS);
-    pawV_set_class(sp, cls); // anchor
+    pawV_set_class(pv, cls); // anchor
     cls->attr = pawH_new(P);
     return cls;
 }
@@ -256,10 +256,10 @@ UserData *pawV_push_userdata(paw_Env *P, size_t size)
     if (size > PAW_SIZE_MAX) {
         pawM_error(P);
     }
-    StackPtr sp = pawC_stkinc(P, 1);
+    Value *pv = pawC_push0(P);
     UserData *o = pawM_new(P, UserData);
     pawG_add_object(P, cast_object(o), VUSERDATA);
-    pawV_set_userdata(sp, o); // anchor
+    pawV_set_userdata(pv, o); // anchor
     o->attr = pawH_new(P);
     o->size = size;
     if (size) {

@@ -207,8 +207,7 @@ const char *paw_typename(paw_Env *P, int index)
 void paw_push_value(paw_Env *P, int index)
 {
     const Value v = *access(P, index);
-    StackPtr sp = pawC_stkinc(P, 1);
-    *sp = v;
+    pawC_pushv(P, v);
 }
 
 void paw_push_nnull(paw_Env *P, int n)
@@ -220,32 +219,30 @@ void paw_push_nnull(paw_Env *P, int n)
 
 void paw_push_boolean(paw_Env *P, paw_Bool b)
 {
-    StackPtr sp = pawC_stkinc(P, 1);
-    pawV_set_bool(sp, b);
+    pawC_pushb(P, b);
 }
 
 void paw_push_float(paw_Env *P, paw_Float f)
 {
-    StackPtr sp = pawC_stkinc(P, 1);
-    pawV_set_float(sp, f);
+    pawC_pushf(P, f);
 }
 
 void paw_push_int(paw_Env *P, paw_Int i)
 {
-    StackPtr sp = pawC_stkinc(P, 1);
     if (i < PAW_INT_MIN || i > PAW_INT_MAX) {
         // 'i' is wider than 47 bits and must go in a bigint.
-        pawB_from_int(P, sp, i);
+        Value *pv = pawC_push0(P);
+        pawB_from_int(P, pv, i);
     } else {
-        pawV_set_int(sp, i);
+        pawC_pushi(P, i);
     }
 }
 
 void paw_push_native(paw_Env *P, paw_Function fn, int n)
 {
-    StackPtr sp = pawC_stkinc(P, 1);
+    Value *pv = pawC_push0(P);
     Native *o = pawV_new_native(P, fn, n);
-    pawV_set_native(sp, o);
+    pawV_set_native(pv, o);
 
     StackPtr top = P->top.p;
     const StackPtr base = top - n - 1;
@@ -293,8 +290,8 @@ void paw_push_bigint(paw_Env *P, paw_Digit *d, int n, int neg)
         .size = n,
         .buf = d,
     };
-    StackPtr sp = pawC_stkinc(P, 1);
-    pawB_copy(P, sp, &bi, 0);
+    Value *pv = pawC_push0(P);
+    pawB_copy(P, pv, &bi, 0);
 }
 
 paw_Bool paw_boolean(paw_Env *P, int index)
@@ -322,8 +319,8 @@ paw_Float paw_float(paw_Env *P, int index)
 
 const char *paw_string(paw_Env *P, int index)
 {
-    StackPtr sp = access(P, index);
-    const String *s = pawV_get_string(*sp);
+    Value *pv = access(P, index);
+    const String *s = pawV_get_string(*pv);
     return s->text;
 }
 
@@ -451,18 +448,18 @@ static int upvalue_index(int nup, int index)
 
 void paw_get_upvalue(paw_Env *P, int ifn, int index)
 {
-    StackPtr sp = pawC_stkinc(P, 1);
+    Value *pv = pawC_push0(P);
     const Value fn = *access(P, ifn);
     switch (pawV_get_type(fn)) {
         case VNATIVE: {
             Native *f = pawV_get_native(fn);
-            *sp = f->up[upvalue_index(f->nup, index)];
+            *pv = f->up[upvalue_index(f->nup, index)];
             break;
         }
         case VCLOSURE: {
             Closure *f = pawV_get_closure(fn);
             UpValue *u = f->up[upvalue_index(f->nup, index)];
-            *sp = *u->p.p;
+            *pv = *u->p.p;
             break;
         }
         default:
@@ -624,8 +621,8 @@ void paw_create_instance(paw_Env *P, int index)
 {
     const Value cls = *access(P, index);
     if (pawV_is_class(cls)) {
-        StackPtr sp = pawC_stkinc(P, 1);
-        pawV_new_instance(P, sp, pawV_get_class(cls));
+        Value *pv = pawC_push0(P);
+        pawV_new_instance(P, pv, pawV_get_class(cls));
     }
 }
 
@@ -633,9 +630,9 @@ void paw_create_native(paw_Env *P, paw_Function f, int nup)
 {
     // Save the index of the first upvalue.
     const int base = paw_get_count(P) - nup;
-    StackPtr sp = pawC_stkinc(P, 1);
+    Value *pv = pawC_push0(P);
     Native *nt = pawV_new_native(P, f, nup);
-    pawV_set_native(sp, nt);
+    pawV_set_native(pv, nt);
 
     for (int i = 0; i < nup; ++i) {
         paw_push_value(P, base + i);

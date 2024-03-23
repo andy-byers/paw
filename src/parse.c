@@ -1955,20 +1955,21 @@ Closure *pawP_parse(paw_Env *P, paw_Reader input, ParseMemory *pm, const char *n
         .P = P,
     };
     pawX_set_source(&lex, input);
-    StackPtr sp = pawC_stkinc(P, 2);
 
     // Create the main closure and push it onto the stack so that the garbage
     // collector can find it.
+    Value *pv = pawC_push0(P);
     Closure *main = pawV_new_closure(P, 1);
-    pawV_set_closure(&sp[0], main);
+    pawV_set_closure(pv, main);
     Proto *f = pawV_new_proto(P);
     main->p = f;
 
     // Do the same for the lexer string map. Strings are reachable from this map
     // during the parse. Once the parse is finished, all strings should be
     // anchored somewhere.
+    pv = pawC_push0(P);
     lex.strings = pawH_new(P);
-    pawV_set_map(&sp[1], lex.strings);
+    pawV_set_map(pv, lex.strings);
 
     // Store the module name.
     String *modname = pawS_new_str(P, name);
