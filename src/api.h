@@ -45,6 +45,7 @@ static inline int api_type(Value v)
         case VFALSE:
             return PAW_TBOOLEAN;
         case VBIGINT:
+        case VNUMBER:
             return PAW_TINTEGER;
         case VCLOSURE:
         case VMETHOD:
@@ -60,8 +61,6 @@ static inline int api_type(Value v)
             return PAW_TCLASS;
         case VINSTANCE:
             return PAW_TINSTANCE;
-        case VNUMBER:
-            return PAW_TINTEGER;
         case VUSERDATA:
             return PAW_TUSERDATA;
         default:

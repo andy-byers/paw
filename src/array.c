@@ -8,18 +8,10 @@
 #include "util.h"
 #include <string.h>
 
-static paw_Int correct_index(const Array *a, paw_Int index)
+void pawA_index_error(paw_Env *P, paw_Int index, size_t length)
 {
-    return index + (index < 0 ? (a->end - a->begin) : 0);
-}
-
-static size_t check_bounds(paw_Env *P, paw_Int i, size_t n)
-{
-    if (i < 0 || cast_size(i) >= n) {
-        pawR_error(P, PAW_EINDEX, "index %I is out of bounds for array of length %I",
-                   i, paw_cast_int(n) /* fits in paw_Int */);
-    }
-    return cast_size(i);
+    pawR_error(P, PAW_EINDEX, "index %I is out of bounds for array of length %I",
+               index, paw_cast_int(length) /* fits in paw_Int */);
 }
 
 static size_t array_capacity(const Array *a)
@@ -27,13 +19,13 @@ static size_t array_capacity(const Array *a)
     return cast_size(a->upper - a->begin);
 }
 
-static void realloc_array(paw_Env *P, Array *a, size_t old_size, size_t new_size)
+static void realloc_array(paw_Env *P, Array *a, size_t alloc0, size_t alloc)
 {
     const size_t end = pawA_length(a);
-    pawM_resize(P, a->begin, old_size, new_size);
+    pawM_resize(P, a->begin, alloc0, alloc);
     a->end = a->begin + end;
-    a->upper = a->begin + new_size;
-    CHECK_GC(P);
+    a->upper = a->begin + alloc;
+    check_gc(P);
 }
 
 static void ensure_space(paw_Env *P, Array *a, size_t have, size_t want)
@@ -96,13 +88,13 @@ void pawA_resize(paw_Env *P, Array *a, size_t length)
 void pawA_insert(paw_Env *P, Array *a, paw_Int index, Value v)
 {
     // Clamp to the array bounds.
-    const paw_Int fixed = correct_index(a, index);
     const size_t len = pawA_length(a);
-    const size_t abs = paw_clamp(cast_size(fixed), 0, len);
+    const paw_Int abs = pawA_abs_index(index, len);
+    const size_t i = paw_clamp(cast_size(abs), 0, len);
 
     reserve_extra(P, a, 1);
-    if (abs != len) {
-        move_items(a->begin + abs, 1, len - abs);
+    if (i != len) {
+        move_items(a->begin + abs, 1, len - i);
     }
     a->begin[abs] = v;
     ++a->end;
@@ -110,9 +102,9 @@ void pawA_insert(paw_Env *P, Array *a, paw_Int index, Value v)
 
 void pawA_pop(paw_Env *P, Array *a, paw_Int index)
 {
-    const paw_Int fixed = correct_index(a, index);
     const size_t len = pawA_length(a);
-    const size_t abs = check_bounds(P, fixed, len);
+    const paw_Int fixed = pawA_abs_index(index, len);
+    const size_t abs = pawA_check_abs(P, fixed, len);
     if (abs != len - 1) {
         // Shift values into place
         move_items(a->begin + abs + 1, -1, len - abs - 1);
@@ -133,34 +125,15 @@ void pawA_free(paw_Env *P, Array *a)
     pawM_free(P, a);
 }
 
-void pawA_clone(paw_Env *P, StackPtr sp, const Array *a)
+Array *pawA_clone(paw_Env *P, StackPtr sp, const Array *a)
 {
-    Array *arr2 = pawA_new(P);
-    pawV_set_array(sp, arr2); // Anchor
+    Array *a2 = pawA_new(P);
+    pawV_set_array(sp, a2); // anchor
     if (pawA_length(a)) {
-        pawA_resize(P, arr2, pawA_length(a));
-        memcpy(arr2->begin, a->begin, sizeof(a->begin[0]) * pawA_length(a));
+        pawA_resize(P, a2, pawA_length(a));
+        memcpy(a2->begin, a->begin, sizeof(a->begin[0]) * pawA_length(a));
     }
-}
-
-Array *pawA_concat(paw_Env *P, const Array *a, const Array *arr2)
-{
-    Array *cat = pawA_new(P);
-    reserve_extra(P, cat, pawA_length(arr2));
-    for (size_t i = 0; i < pawA_length(a); ++i) {
-        pawA_push(P, cat, a->begin[i]);
-    }
-    for (size_t i = 0; i < pawA_length(arr2); ++i) {
-        pawA_push(P, cat, arr2->begin[i]);
-    }
-    return cat;
-}
-
-Value *pawA_get(paw_Env *P, Array *a, paw_Int index)
-{
-    const paw_Int fixed = correct_index(a, index);
-    const size_t abs = check_bounds(P, fixed, pawA_length(a));
-    return &a->begin[abs];
+    return a2;
 }
 
 static paw_Bool elems_equal(paw_Env *P, const Value x, const Value y)
@@ -182,22 +155,22 @@ paw_Bool pawA_equals(paw_Env *P, Array *lhs, Array *rhs)
 {
     const size_t len = pawA_length(lhs);
     if (len != pawA_length(rhs)) {
-        return PAW_BFALSE;
+        return PAW_FALSE;
     }
     for (size_t i = 0; i < len; ++i) {
         if (!elems_equal(P, lhs->begin[i], rhs->begin[i])) {
-            return PAW_BFALSE;
+            return PAW_FALSE;
         }
     }
-    return PAW_BTRUE;
+    return PAW_TRUE;
 }
 
 paw_Bool pawA_contains(paw_Env *P, Array *a, const Value v)
 {
     for (size_t i = 0; i < pawA_length(a); ++i) {
         if (elems_equal(P, v, a->begin[i])) {
-            return PAW_BTRUE;
+            return PAW_TRUE;
         }
     }
-    return PAW_BFALSE;
+    return PAW_FALSE;
 }

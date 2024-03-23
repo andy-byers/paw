@@ -10,12 +10,13 @@
 
 static void *first_try(paw_Env *P, void *ptr, size_t size0, size_t size)
 {
-#ifdef PAW_STRESS_GC
-    paw_unused(P);
-    paw_unused(ptr);
-    paw_unused(size0);
-    if (size) {
-        // Fail on the first attempt to get more memory.
+#if PAW_STRESS > 0
+    if (size && !P->gc_noem) {
+        // Fail on the first attempt to get more memory, but only if the
+        // runtime is allowed to perform emergency collections. Otherwise,
+        // PAW_STRESS > 0 would not be compatible with certain operations,
+        // like reallocating the stack, where emergency collections are
+        // not allowed.
         return NULL;
     }
 #endif
@@ -24,58 +25,59 @@ static void *first_try(paw_Env *P, void *ptr, size_t size0, size_t size)
 
 static void *try_again(paw_Env *P, void *ptr, size_t size0, size_t size)
 {
-    pawG_collect(P); // Emergency collection
+    pawG_collect(P); // emergency collection
     return P->alloc(P->ud, ptr, size0, size);
 }
 
-static void *alloc(paw_Env *P, void *ptr, size_t size0, size_t size)
+static void *m_alloc(paw_Env *P, void *ptr, size_t size0, size_t size)
 {
+    if (size == 0) {
+        P->gc_bytes -= size0; // 'free' never fails
+        return P->alloc(P->ud, ptr, size0, 0);
+    }
+    // (re)allocate memory
     void *ptr2 = first_try(P, ptr, size0, size);
-    if (size && !ptr2) {
+    if (!ptr2 && !P->gc_noem) {
         // Run an emergency collection and try again.
         ptr2 = try_again(P, ptr, size0, size);
     }
-    return ptr2;
-}
-
-void *pawM_malloc_(paw_Env *P, size_t size)
-{
-    return pawM_realloc_(P, NULL, 0, size);
-}
-
-void *pawM_calloc_(paw_Env *P, size_t count, size_t elem_sz)
-{
-    pawM_check_size(P, count, elem_sz);
-    void *ptr = pawM_malloc_(P, count * elem_sz);
-    if (ptr) {
-        memset(ptr, 0, count * elem_sz);
-    }
-    return ptr;
-}
-
-void *pawM_realloc_(paw_Env *P, void *ptr, size_t size0, size_t size)
-{
-    void *ptr2 = alloc(P, ptr, size0, size);
-    if (!size || ptr2) {
-        P->gc_bytes -= size0;
-        P->gc_bytes += size;
+    if (ptr2) {
+        P->gc_bytes += size - size0;
     }
     return ptr2;
+}
+
+void *pawM_alloc(paw_Env *P, void *ptr, size_t size0, size_t size)
+{
+    return m_alloc(P, ptr, size0, size);
 }
 
 void pawM_free_(paw_Env *P, void *ptr, size_t size)
 {
-    alloc(P, ptr, size, 0);
-    P->gc_bytes -= size;
+    m_alloc(P, ptr, size, 0);
 }
 
-void *pawM_new_(paw_Env *P, size_t n, size_t elem_sz)
+void *pawM_new_vec_(paw_Env *P, size_t n, size_t elem_sz)
 {
-    assert(n > 0);
-    void *ptr = pawM_calloc_(P, n, elem_sz);
+    assert(n > 0); // possible memset(NULL, ...) below
+    pawM_check_size(P, 0, n, elem_sz);
+    void *ptr = pawM_alloc(P, NULL, 0, n * elem_sz);
     if (!ptr) {
         pawM_error(P);
     }
+    memset(ptr, 0, n * elem_sz);
+    return ptr;
+}
+
+void *pawM_new_flex_(paw_Env *P, size_t obj_sz, size_t n, size_t elem_sz)
+{
+    pawM_check_size(P, obj_sz, n, elem_sz);
+    void *ptr = pawM_alloc(P, NULL, 0, obj_sz + n * elem_sz);
+    if (!ptr) {
+        pawM_error(P);
+    }
+    // clear non-flex part
+    memset(ptr, 0, obj_sz);
     return ptr;
 }
 
@@ -90,7 +92,7 @@ void *pawM_grow_(paw_Env *P, void *ptr, int n, int *p_alloc, size_t elem_sz)
     if (cap < ARRAY_MIN) {
         cap = ARRAY_MIN;
     } else if (cap > INT_MAX / 2) {
-        pawM_error(P); // Overflow
+        pawM_error(P); // overflow
     } else {
         cap *= 2;
     }
@@ -99,20 +101,20 @@ void *pawM_grow_(paw_Env *P, void *ptr, int n, int *p_alloc, size_t elem_sz)
     return ptr;
 }
 
-void *pawM_shrink_(paw_Env *P, void *ptr, int *p_alloc, int alloc, size_t elem_sz)
+void *pawM_shrink_(paw_Env *P, void *ptr, int *palloc0, int alloc, size_t elem_sz)
 {
-    paw_assert(*p_alloc >= alloc);
-    if (*p_alloc == alloc) {
+    paw_assert(*palloc0 >= alloc);
+    if (*palloc0 == alloc) {
         return ptr;
     }
-    ptr = pawM_resize_(P, ptr, cast_size(*p_alloc), cast_size(alloc), elem_sz);
-    *p_alloc = alloc;
+    ptr = pawM_resize_(P, ptr, cast_size(*palloc0), cast_size(alloc), elem_sz);
+    *palloc0 = alloc;
     return ptr;
 }
 
 void *pawM_resize_(paw_Env *P, void *ptr, size_t alloc0, size_t alloc, size_t elem_sz)
 {
-    void *ptr2 = pawM_realloc_(P, ptr, alloc0 * elem_sz, alloc * elem_sz);
+    void *ptr2 = pawM_alloc(P, ptr, alloc0 * elem_sz, alloc * elem_sz);
     if (alloc && !ptr2) {
         pawM_error(P);
     }

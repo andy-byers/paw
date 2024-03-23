@@ -34,4 +34,9 @@ typedef struct pawL_Attr {
 void pawL_require_lib(paw_Env *P, const char *name);
 void pawL_register_lib(paw_Env *P, const char *name, int nup, const pawL_Attr *attr);
 
+// Functions for loading and compiling source code
+int pawL_load_file(paw_Env *P, const char *pathname);
+int pawL_load_nchunk(paw_Env *P, const char *name, const char *source, size_t length);
+int pawL_load_chunk(paw_Env *P, const char *name, const char *source);
+
 #endif // PAW_LIB_H

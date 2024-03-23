@@ -8,62 +8,57 @@
 #include "paw.h"
 #include "value.h"
 
-#define s2v(s) (*(s))
+#define save_offset(P, ptr) ((ptr) - (P)->stack.p)
+#define restore_pointer(P, ofs) ((P)->stack.p + (ofs))
 
 typedef void (*Call)(paw_Env *P, void *arg);
 
 CallFrame *pawC_precall(paw_Env *P, StackPtr base, Value callable, int argc);
+StackPtr pawC_return(paw_Env *P, int nret);
 int pawC_try(paw_Env *P, Call call, void *arg);
 void pawC_throw(paw_Env *P, int error);
 void pawC_call(paw_Env *P, Value f, int argc);
-
-StackPtr pawC_return(paw_Env *P, int nret);
-
-// Stack setup/cleanup:
 void pawC_init(paw_Env *P);
 void pawC_uninit(paw_Env *P);
 
-// Stack access/manipulation routines:
-void pawC_stkgrow(paw_Env *P, int count);
-void pawC_stkerror(paw_Env *P, const char *what);
+void pawC_stack_grow(paw_Env *P, int count);
+void pawC_stack_realloc(paw_Env *P, int n);
+void pawC_stack_overflow(paw_Env *P);
 
 static inline int pawC_stklen(paw_Env *P)
 {
-    return P->top - P->stack;
+    return P->top.p - P->stack.p;
 }
 
 // Increase the stack size
-// New slots are considered uninitialized.
+// New slots are set to null (necessary for GC).
 static inline StackPtr pawC_stkinc(paw_Env *P, int n)
 {
-    if (P->bound - P->top < n) {
-        pawC_stkgrow(P, n);
+    if (P->bound.p - P->top.p < n) {
+        pawC_stack_grow(P, n);
     }
-    StackPtr sp = P->top;
-    P->top += n;
+    StackPtr sp = P->top.p;
+    for (int i = 0; i < n; ++i) {
+        pawV_set_null(P->top.p++);
+    }
     return sp;
 }
 
 // Decrease the stack size
 static inline void pawC_stkdec(paw_Env *P, int n)
 {
-    P->top -= n;
-}
+    P->top.p -= n;
 
-static inline ptrdiff_t pawC_stksave(paw_Env *P, StackPtr sp)
-{
-    return sp - P->stack;
-}
-
-static inline StackPtr pawC_stkload(paw_Env *P, ptrdiff_t diff)
-{
-    return P->stack + diff;
+#if PAW_STRESS > 1
+    // trim excess slots
+    pawC_stack_realloc(P, pawC_stklen(P));
+#endif
 }
 
 static inline void pawC_stkcheck(paw_Env *P, int n)
 {
-    if (P->bound - P->top < n) {
-        pawC_stkerror(P, "stack overflow");
+    if (P->bound.p - P->top.p < n) {
+        pawC_stack_overflow(P);
     }
 }
 
@@ -76,9 +71,7 @@ static inline Value *pawC_pushv(paw_Env *P, Value v)
 
 static inline Value *pawC_push0(paw_Env *P)
 {
-    StackPtr sp = pawC_stkinc(P, 1);
-    pawV_set_null(sp);
-    return sp;
+    return pawC_stkinc(P, 1);
 }
 
 static inline Value *pawC_pushi(paw_Env *P, paw_Int i)

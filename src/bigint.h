@@ -29,8 +29,8 @@ void pawB_free(paw_Env *P, BigInt *bi);
 void pawB_unop(paw_Env *P, Op op, Value x);
 void pawB_arith(paw_Env *P, Op op, Value x, Value y);
 void pawB_bitwise(paw_Env *P, Op op, Value x, Value y);
-void pawB_parse(paw_Env *X, const char *p, int base);
 void pawB_to_string(paw_Env *P, const BigInt *bi, paw_Bool caps, const char *prefix, int base);
+int pawB_parse(paw_Env *X, const char *p, int base);
 paw_Bool pawB_compare(paw_Env *P, Op op, Value lhs, Value rhs);
 paw_Bool pawB_equals(Value lhs, Value rhs);
 

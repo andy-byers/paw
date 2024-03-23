@@ -33,8 +33,8 @@ typedef int64_t paw_Int;
 typedef double paw_Float;
 typedef _Bool paw_Bool;
 
-#define PAW_BFALSE 0
-#define PAW_BTRUE 1
+#define PAW_FALSE 0
+#define PAW_TRUE 1
 
 typedef struct paw_Env paw_Env;
 
@@ -57,13 +57,18 @@ size_t paw_bytes_used(const paw_Env *P);
 #define PAW_EATTR 5
 #define PAW_EKEY 6
 #define PAW_EINDEX 7
-#define PAW_ERANGE 8
+#define PAW_EOVERFLOW 8
 #define PAW_ESYSTEM 9
 #define PAW_ESYNTAX 10
 #define PAW_ERUNTIME 11
 
+// Load paw source code from the given 'input' source
+// Creates a function object containing the code and pushes it onto the stack.
 int paw_load(paw_Env *P, paw_Reader input, const char *name, void *ud);
 
+// Invoke the paw runtime on a function with 'argc' parameters
+// The function object should be on the stack followed the the parameters, with
+// the last parameter on top.
 int paw_call(paw_Env *P, int argc);
 
 #define PAW_TNULL 0
@@ -188,7 +193,7 @@ paw_Bool paw_check_itemi(paw_Env *P, int index, paw_Int i);
 
 // Push a global variable onto the stack, or null if the variable does
 // not exist
-// Returns PAW_BTRUE if the variable exists, PAW_BFALSE otherwise.
+// Returns PAW_TRUE if the variable exists, PAW_FALSE otherwise.
 paw_Bool paw_check_global(paw_Env *P, const char *name);
 
 void paw_set_upvalue(paw_Env *P, int ifn, int index);

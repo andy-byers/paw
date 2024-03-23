@@ -17,26 +17,19 @@ struct Jump; // call.c
 #define CFF_C 1
 #define CFF_ENTRY 2
 
-#define IS_PAW(cf) (!((cf)->flags & CFF_C))
-#define IS_ENTRY(cf) ((cf)->flags & CFF_ENTRY)
+#define cf_is_paw(cf) (!((cf)->flags & CFF_C))
+#define cf_is_entry(cf) ((cf)->flags & CFF_ENTRY)
+#define cf_stack_return(cf) ((cf)->base.p)
 
 typedef struct CallFrame {
     struct CallFrame *prev;
     struct CallFrame *next;
     const OpCode *pc;
-    StackPtr base;
-    StackPtr top;
+    StackRel base;
+    StackRel top;
     Closure *fn;
     int flags;
 } CallFrame;
-
-#define CF_IS_BASE(cf) (!(cf)->prev)
-#define CF_SOURCE_BEGIN(cf) ((cf)->fn->p->source)
-#define CF_SOURCE_LENGTH(cf) ((cf)->fn->p->length)
-#define CF_SOURCE_END(cf) (CF_SOURCE_BEGIN(cf) + CF_SOURCE_LENGTH(cf))
-#define CF_STACK_RETURN(cf) ((cf)->base)
-// TODO: CF_STACK_BASE() should skip any variadic parameters (argc is fixed param count)
-#define CF_STACK_BASE(cf) (CF_STACK_RETURN(cf) + 1 + (cf)->fn->p->argc)
 
 enum {
     CSTR_SELF,
@@ -60,9 +53,9 @@ typedef struct paw_Env {
 
     Map *globals;
 
-    StackPtr stack;
-    StackPtr bound;
-    StackPtr top;
+    StackRel stack;
+    StackRel bound;
+    StackRel top;
 
     Map *libs;
     Map *attr[NOBJECTS];
@@ -77,6 +70,8 @@ typedef struct paw_Env {
     Object *gc_fixed;
     size_t gc_bytes;
     size_t gc_limit;
+    size_t mem_limit;
+    paw_Bool gc_noem;
 } paw_Env;
 
 CallFrame *pawE_extend_cf(paw_Env *X, StackPtr top);

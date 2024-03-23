@@ -118,24 +118,25 @@ static void trash_memory(void *ptr, size_t n)
 {
     volatile uint8_t *p = ptr;
     for (size_t i = 0; i < n; ++i) {
-        *p++ = (uint8_t)rand();
+        *p++ = 0xAA; // 0b10101010
     }
 }
 
 static void *safe_realloc(struct TestAlloc *a, void *ptr, size_t size0, size_t size)
 {
     CHECK(a->nbytes >= size0);
-    if (size < size0) {
-        trash_memory((char *)ptr + size, size0 - size);
-        a->nbytes -= size0 - size;
-    }
     register_block(a, size0, size);
-    void *ptr2 = realloc(ptr, size);
-    CHECK(!size || ptr2);
-
-    if (size0 < size) {
-        trash_memory((char *)ptr2 + size0, size - size0);
-        a->nbytes += size - size0;
+    void *ptr2 = size ? malloc(size) : NULL;
+    CHECK(!size || ptr2); // assume success
+    if (ptr2) {
+        if (ptr) {
+            // resize: copy old contents
+            memcpy(ptr2, ptr, paw_min(size0, size));
+        }
+        if (size0 < size) {
+            // grow: fill uninitialized memory
+            trash_memory((char *)ptr2 + size0, size - size0);
+        }
     }
 #ifdef TEST_FIND_LEAK
     if (ptr) {
@@ -149,6 +150,13 @@ static void *safe_realloc(struct TestAlloc *a, void *ptr, size_t size0, size_t s
         c->size = size;
     }
 #endif
+    if (ptr) {
+        // Trash the old allocation in an attempt to mess up any code
+        // that still depends on it.
+        trash_memory(ptr, size0);
+    }
+    a->nbytes += size - size0;
+    free(ptr);
     return ptr2;
 }
 

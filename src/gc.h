@@ -7,16 +7,12 @@
 #include "paw.h"
 #include "value.h"
 
-#define COND_GC(P, pre, post)                \
-    {                                        \
+#define check_gc(P)                          \
+    do {                                     \
         if ((P)->gc_bytes > (P)->gc_limit) { \
-            pre;                             \
             pawG_collect(P);                 \
-            post;                            \
         }                                    \
-    }
-
-#define CHECK_GC(P) COND_GC(P, (void)0, (void)0)
+    } while (0)
 
 void pawG_init(paw_Env *P);
 void pawG_uninit(paw_Env *P);

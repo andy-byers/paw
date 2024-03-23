@@ -12,7 +12,7 @@
 // TODO: Header needs include guard, and Windows impl.
 #include <sys/time.h>
 
-#define cf_base(i) P->cf->base[i]
+#define cf_base(i) P->cf->base.p[i]
 
 void pawL_check_type(paw_Env *P, int index, int type)
 {
@@ -88,7 +88,7 @@ static int base_require(paw_Env *P)
 static int base_bool(paw_Env *P)
 {
     pawL_check_argc(P, 1);
-    StackPtr sp = &P->cf->top[-1];
+    StackPtr sp = &P->cf->top.p[-1];
     pawV_set_bool(sp, pawV_truthy(*sp));
     return 1;
 }
@@ -124,7 +124,7 @@ static int base_chr(paw_Env *P)
         paw_push_nstring(P, (const char *)chr, 1);
     } else {
         // TODO: Encode UTF-8 codepoint
-        pawR_error(P, PAW_ERANGE, "FIXME: Support UTF-8!");
+        pawR_error(P, PAW_EOVERFLOW, "FIXME: Support UTF-8!");
     }
     return 1;
 }
@@ -153,10 +153,10 @@ static int base_assert(paw_Env *P)
 
 static int base_print(paw_Env *P)
 {
+    const int argc = get_argc(P);
+
     Buffer print;
     pawL_init_buffer(P, &print);
-
-    const int argc = get_argc(P);
     for (int i = 1; i <= argc; ++i) {
         pawC_pushv(P, cf_base(i));
         pawL_add_value(P, &print);
@@ -224,7 +224,7 @@ static int string_ends_with(paw_Env *P)
     const char *prefix = pawL_check_string(P, 1);
     const size_t length = paw_length(P, 1);
     const String *str = pawV_get_string(cf_base(0));
-    paw_Bool result = PAW_BFALSE;
+    paw_Bool result = PAW_FALSE;
     if (str->length >= length) {
         const char *ptr = str->text + str->length - length;
         result = 0 == memcmp(prefix, ptr, length);
@@ -244,8 +244,7 @@ static int array_insert(paw_Env *P)
 
 static int array_push(paw_Env *P)
 {
-    const int argc = get_argc(P);
-    pawL_check_varargc(P, 1, UINT8_MAX);
+    const int argc = pawL_check_varargc(P, 1, UINT8_MAX);
     Array *a = pawV_get_array(cf_base(0));
     for (int i = 1; i <= argc; ++i) {
         pawA_push(P, a, cf_base(i));
@@ -299,7 +298,7 @@ static int base_getitem(paw_Env *P)
         paw_rotate(P, -3, 1);
     }
     if (pawR_getitem_raw(P, fallback)) {
-        pawH_key_error(P, P->top[-1]);
+        pawH_key_error(P, P->top.p[-1]);
     }
     return 1;
 }
@@ -319,7 +318,7 @@ static int base_getattr(paw_Env *P)
         paw_rotate(P, -3, 1);
     }
     if (pawR_getattr_raw(P, fallback)) {
-        pawR_attr_error(P, P->top[-1]);
+        pawR_attr_error(P, P->top.p[-1]);
     }
     return 1;
 }
@@ -355,7 +354,7 @@ void pawL_register_lib(paw_Env *P, const char *name, int nup, const pawL_Attr *a
 
     // Push the map contained in the object that will represent the library.
     Map *m = NULL;
-    const Value v = P->top[-1];
+    const Value v = P->top.p[-1];
     if (pawV_is_userdata(v)) {
         m = pawV_get_userdata(v)->attr;
     } else if (pawV_is_instance(v)) {
@@ -443,7 +442,7 @@ void pawL_init(paw_Env *P)
 {
     // Add the base library functions to the globals map.
     pawC_stkinc(P, 1);
-    pawV_set_map(&P->top[-1], P->globals);
+    pawV_set_map(&P->top.p[-1], P->globals);
     pawL_register_lib(P, NULL, 0, kBaseLib);
     pawC_stkdec(P, 1);
 
@@ -485,17 +484,16 @@ extern void pawL_require_mathlib(paw_Env *P);
 static paw_Bool load_cached(paw_Env *P, const char *name)
 {
     paw_push_string(P, name);
-    const Value key = P->top[-1];
+    const Value key = P->top.p[-1];
 
     Value *pvalue = pawH_get(P, P->libs, key);
     if (!pvalue) {
-        return PAW_BFALSE;
+        return PAW_FALSE;
     }
     // replace library name
     pawC_pushv(P, *pvalue);
     paw_shift(P, 1);
-    // P->top[-1] = *value;
-    return PAW_BTRUE;
+    return PAW_TRUE;
 }
 
 void pawL_require_lib(paw_Env *P, const char *name)
@@ -515,4 +513,52 @@ void pawL_require_lib(paw_Env *P, const char *name)
     } else {
         pawR_error(P, PAW_ENAME, "library '%s' has not been registered", name);
     }
+}
+
+struct FileReader {
+    char data[512];
+    FILE *file;
+};
+
+static const char *file_reader(paw_Env *P, void *ud, size_t *psize)
+{
+    paw_unused(P);
+    struct FileReader *fr = ud;
+    *psize = pawO_read(fr->file, fr->data, sizeof(fr->data));
+    return fr->data;
+}
+
+int pawL_load_file(paw_Env *P, const char *pathname)
+{
+    struct FileReader fr;
+    fr.file = pawO_open(pathname, "r");
+    if (!fr.file) {
+        return PAW_ESYSTEM;
+    }
+    return paw_load(P, file_reader, pathname, &fr);
+}
+
+struct ChunkReader {
+    const char *data;
+    size_t size;
+};
+
+static const char *chunk_reader(paw_Env *P, void *ud, size_t *psize)
+{
+    paw_unused(P);
+    struct ChunkReader *cr = ud;
+    *psize = cr->size;
+    cr->size = 0;
+    return cr->data;
+}
+
+int pawL_load_nchunk(paw_Env *P, const char *name, const char *source, size_t length)
+{
+    struct ChunkReader cr = {.data = source, .size = length};
+    return paw_load(P, chunk_reader, name, &cr);
+}
+
+int pawL_load_chunk(paw_Env *P, const char *name, const char *source)
+{
+    return pawL_load_nchunk(P, name, source, strlen(source));
 }

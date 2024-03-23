@@ -48,7 +48,7 @@ static struct Token make_token(TokenKind kind)
 
 static struct Token make_number(struct Lex *x)
 {
-    const Value v = x->P->top[-1];
+    const Value v = x->P->top.p[-1];
     Token t = {.value = v, .kind = TK_INTEGER};
     if (pawV_is_float(v)) {
         t.kind = TK_FLOAT;
@@ -104,18 +104,18 @@ static paw_Bool test_next(struct Lex *x, char c)
 {
     if (x->c == c) {
         next(x);
-        return PAW_BTRUE;
+        return PAW_TRUE;
     }
-    return PAW_BFALSE;
+    return PAW_FALSE;
 }
 
 static paw_Bool test_next2(struct Lex *x, const char *c2)
 {
     if (x->c == c2[0] || x->c == c2[1]) {
         save_and_next(x);
-        return PAW_BTRUE;
+        return PAW_TRUE;
     }
-    return PAW_BFALSE;
+    return PAW_FALSE;
 }
 
 static struct Token consume_name(struct Lex *x)
@@ -528,6 +528,7 @@ String *pawX_scan_string(Lex *x, const char *s, size_t n)
     Value *value = pawH_action(P, x->strings, *pv, MAP_ACTION_CREATE);
     *value = *pv; // anchor in map
     paw_pop(P, 1);
+    check_gc(P);
 
     return pawV_get_string(*value);
 }

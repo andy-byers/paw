@@ -36,7 +36,7 @@ static StackPtr access(paw_Env *P, int index)
 {
     const int i = paw_abs_index(P, index);
     paw_assert(i < paw_get_count(P));
-    return &P->cf->base[i];
+    return &P->cf->base.p[i];
 }
 
 paw_Alloc paw_get_allocator(paw_Env *P)
@@ -66,7 +66,7 @@ static void open_aux(paw_Env *P, void *arg)
     pawS_init(P);
     pawP_init(P);
     pawL_init(P);
-    CHECK_GC(P);
+    check_gc(P);
 }
 
 paw_Env *paw_open(paw_Alloc alloc, void *ud)
@@ -77,6 +77,7 @@ paw_Env *paw_open(paw_Alloc alloc, void *ud)
         return NULL;
     }
     *P = (paw_Env){
+        .mem_limit = SIZE_MAX,
         .alloc = alloc,
         .ud = ud,
     };
@@ -246,13 +247,14 @@ void paw_push_native(paw_Env *P, paw_Function fn, int n)
     Native *o = pawV_new_native(P, fn, n);
     pawV_set_native(sp, o);
 
-    const StackPtr base = P->top - n - 1;
+    StackPtr top = P->top.p;
+    const StackPtr base = top - n - 1;
     for (int i = 0; i < n; ++i) {
         o->up[i] = base[i];
     }
     // Replace upvalues with closure object
-    base[0] = P->top[-1];
-    P->top = base + 1;
+    base[0] = top[-1];
+    P->top.p = base + 1;
 }
 
 const char *paw_push_string(paw_Env *P, const char *s)
@@ -425,7 +427,8 @@ void eval_aux(paw_Env *P, void *arg)
 
 int paw_call(paw_Env *P, int argc)
 {
-    StackPtr fn = &P->top[-argc - 1];
+    StackPtr top = P->top.p;
+    StackPtr fn = &top[-argc - 1];
     struct EvalCtx ctx = {.fn = fn, .argc = argc};
     const int status = pawC_try(P, eval_aux, &ctx);
     return status;
@@ -433,7 +436,7 @@ int paw_call(paw_Env *P, int argc)
 
 int paw_get_count(paw_Env *P)
 {
-    return P->top - P->cf->base;
+    return P->top.p - P->cf->base.p;
 }
 
 static int upvalue_index(int nup, int index)
@@ -459,7 +462,7 @@ void paw_get_upvalue(paw_Env *P, int ifn, int index)
         case VCLOSURE: {
             Closure *f = pawV_get_closure(fn);
             UpValue *u = f->up[upvalue_index(f->nup, index)];
-            *sp = *u->p;
+            *sp = *u->p.p;
             break;
         }
         default:
@@ -480,11 +483,11 @@ paw_Bool paw_check_global(paw_Env *P, const char *name)
     paw_push_string(P, name);
     const Value key = *access(P, -1);
 
-    paw_Bool found = PAW_BFALSE;
+    paw_Bool found = PAW_FALSE;
     if (pawR_read_global(P, key)) {
         paw_push_null(P);
     } else {
-        found = PAW_BTRUE;
+        found = PAW_TRUE;
     }
     paw_shift(P, 1); // replace 'key'
     return found;
@@ -519,12 +522,12 @@ paw_Bool paw_check_item(paw_Env *P, int index)
 {
     paw_push_value(P, index); // push container
     paw_rotate(P, -2, 1);     // place container below key
-    if (pawR_getitem_raw(P, PAW_BFALSE)) {
+    if (pawR_getitem_raw(P, PAW_FALSE)) {
         paw_push_null(P);
         paw_shift(P, 2);
-        return PAW_BFALSE;
+        return PAW_FALSE;
     }
-    return PAW_BTRUE;
+    return PAW_TRUE;
 }
 
 void paw_get_attr(paw_Env *P, int index, const char *attr)
@@ -538,29 +541,30 @@ paw_Bool paw_check_attr(paw_Env *P, int index, const char *attr)
 {
     paw_push_value(P, index); // push instance
     paw_push_string(P, attr); // push attribute name
-    if (pawR_getattr_raw(P, PAW_BFALSE)) {
+    if (pawR_getattr_raw(P, PAW_FALSE)) {
         paw_push_null(P);
         paw_shift(P, 2);
-        return PAW_BFALSE;
+        return PAW_FALSE;
     }
-    return PAW_BTRUE;
+    return PAW_TRUE;
 }
 
 void paw_set_upvalue(paw_Env *P, int ifn, int index)
 {
+    StackPtr top = P->top.p;
     const Value fn = *access(P, ifn);
     switch (pawV_get_type(fn)) {
         case VNATIVE: {
             Native *f = pawV_get_native(fn);
             Value *v = &f->up[upvalue_index(f->nup, index)];
-            *v = P->top[-1];
+            *v = top[-1];
             paw_pop(P, 1);
             break;
         }
         case VCLOSURE: {
             Closure *f = pawV_get_closure(fn);
             UpValue *u = f->up[upvalue_index(f->nup, index)];
-            *u->p = P->top[-1];
+            *u->p.p = top[-1];
             paw_pop(P, 1);
             break;
         }
@@ -574,8 +578,8 @@ void paw_set_global(paw_Env *P, const char *name)
     paw_push_string(P, name);
     paw_rotate(P, -2, 1); // Swap
 
-    const Value key = P->top[-2];
-    pawR_write_global(P, key, PAW_BTRUE);
+    const Value key = P->top.p[-2];
+    pawR_write_global(P, key, PAW_TRUE);
     paw_pop(P, 1); // Pop 'key'
 }
 
@@ -665,7 +669,7 @@ static void reverse(StackPtr from, StackPtr to)
 //   rotate x n == BA. But BA == (A^r . B^r)^r.
 void paw_rotate(paw_Env *P, int index, int n)
 {
-    StackPtr t = P->top - 1;
+    StackPtr t = P->top.p - 1;
     StackPtr p = access(P, index);
     paw_assert((n >= 0 ? n : -n) <= t - p + 1);
     StackPtr m = n >= 0 ? t - n : p - n - 1;
@@ -676,7 +680,7 @@ void paw_rotate(paw_Env *P, int index, int n)
 
 void paw_shift(paw_Env *P, int n)
 {
-    P->top[-n - 1] = P->top[-1];
+    P->top.p[-n - 1] = P->top.p[-1];
     paw_pop(P, n);
 }
 
@@ -717,8 +721,8 @@ void paw_compare(paw_Env *P, int op)
 
 void paw_raw_equals(paw_Env *P)
 {
-    const Value x = P->top[-2];
-    const Value y = P->top[-1];
+    const Value x = P->top.p[-2];
+    const Value y = P->top.p[-1];
     paw_push_boolean(P, pawV_equal(x, y));
     paw_shift(P, 2);
 }

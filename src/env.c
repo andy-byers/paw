@@ -15,7 +15,7 @@ CallFrame *pawE_extend_cf(paw_Env *P, StackPtr top)
     P->cf->next = cf;
     cf->prev = P->cf;
     cf->next = NULL;
-    cf->top = top;
+    cf->top.p = top;
     ++P->ncf;
     return cf;
 }

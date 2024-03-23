@@ -5,7 +5,7 @@
 #include "map.h"
 #include "rt.h"
 
-static const char *opcode_name(Op op)
+const char *paw_opcode_name(Op op)
 {
     switch (op) {
         case OP_PUSHNULL:
@@ -181,7 +181,7 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
     pawL_add_fstring(P, print, "' (%I bytes)\n", (paw_Int)proto->length);
     pawL_add_fstring(P, print, "constant(s) = %I, upvalue(s) = %I\n", (paw_Int)proto->nk, (paw_Int)proto->nup);
     for (int i = 0; pc != end; ++i) {
-        pawL_add_fstring(P, print, "%d  %I  %s", i, (paw_Int)(pc - proto->source), opcode_name(pc[0]));
+        pawL_add_fstring(P, print, "%d  %I  %s", i, (paw_Int)(pc - proto->source), paw_opcode_name(pc[0]));
         switch (*pc++) {
             case OP_PUSHCONST: {
                 pawL_add_fstring(P, print, " ; id = %d", Iw());
@@ -342,7 +342,7 @@ void paw_dump_source(paw_Env *P, Proto *proto)
 void paw_dump_stack(paw_Env *P)
 {
     int i = 0;
-    for (StackPtr p = P->stack; p != P->top; ++p) {
+    for (StackPtr p = P->stack.p; p != P->top.p; ++p) {
         printf("%d: ", i);
         switch (pawV_get_type(*p)) {
             case VNATIVE:
@@ -381,7 +381,7 @@ void paw_dump_stack(paw_Env *P)
                 puts("false");
                 break;
             case VBIGINT: {
-                const ptrdiff_t save = pawC_stksave(P, p);
+                const ptrdiff_t save = save_offset(P, p);
                 Buffer print;
                 pawL_init_buffer(P, &print);
                 pawC_pushv(P, *p);
@@ -389,7 +389,7 @@ void paw_dump_stack(paw_Env *P)
                 pawL_add_char(P, &print, '\0');
                 printf("bigint %s\n", print.data);
                 pawL_discard_result(P, &print);
-                p = pawC_stkload(P, save);
+                p = restore_pointer(P, save);
                 break;
             }
             case VNUMBER:
@@ -435,11 +435,11 @@ void paw_stacktrace(paw_Env *P)
 
     int i = 0;
     CallFrame *cf = P->cf;
-    while (!CF_IS_BASE(cf)) {
+    while (cf->prev) {
         pawL_add_fstring(P, &buf, "%d: File ", i);
         pawL_add_nstring(P, &buf, modname->text, modname->length);
         pawL_add_fstring(P, &buf, ", line %d, in ", current_line(cf));
-        if (IS_PAW(cf)) {
+        if (cf_is_paw(cf)) {
             Proto *p = cf->fn->p;
             const String *name = p->name;
             pawL_add_nstring(P, &buf, name->text, name->length);

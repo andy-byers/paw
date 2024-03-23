@@ -9,6 +9,25 @@
 }
 
 {
+    assert('abc' * -1 == '')
+    assert('abc' * 0 == '')
+    assert('abc' * 1 == 'abc')
+    assert('abc' * 2 == 'abcabc')
+    assert('abc' * 3 == 'abcabcabc')
+    assert(-1 * 'abc' == '')
+    assert(0 * 'abc' == '')
+    assert(1 * 'abc' == 'abc')
+    assert(2 * 'abc' == 'abcabc')
+    assert(3 * 'abc' == 'abcabcabc')
+
+    assert('' + '' == '')
+    assert('' + 'abc' == 'abc')
+    assert('a' + 'bc' == 'abc')
+    assert('ab' + 'c' == 'abc')
+    assert('abc' + '' == 'abc')
+}
+
+{
     let str = 'abcdef'
     assert(str.starts_with('abcdef'))
     assert(str.starts_with('abcde'))

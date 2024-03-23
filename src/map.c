@@ -67,7 +67,7 @@ static void grow_map(paw_Env *P, Map *m)
         }
     }
     pawM_free_vec(P, keys, old_n * 2);
-    CHECK_GC(P);
+    check_gc(P);
 }
 
 static void grow_map_if_necessary(paw_Env *P, Map *m)
@@ -125,16 +125,16 @@ static paw_Bool items_equal(paw_Env *P, const Value x, const Value y)
 paw_Bool pawH_equals(paw_Env *P, Map *lhs, Map *rhs)
 {
     if (lhs->length != rhs->length) {
-        return PAW_BFALSE;
+        return PAW_FALSE;
     }
     paw_Int i = PAW_ITER_INIT;
     while (pawH_iter(lhs, &i)) {
         Value *v = pawH_action(P, rhs, lhs->keys[i], MAP_ACTION_NONE);
         if (!v || !items_equal(P, lhs->values[i], *v)) {
-            return PAW_BFALSE;
+            return PAW_FALSE;
         }
     }
-    return PAW_BTRUE;
+    return PAW_TRUE;
 }
 
 void pawH_extend(paw_Env *P, Map *dst, Map *src)

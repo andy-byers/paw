@@ -73,7 +73,7 @@ static inline Value *pawT_get_meta(paw_Env *P, Op op, Value obj)
     if (has_meta(obj)) {
         return pawT_get_meta_(P, op, obj);
     }
-    return PAW_BFALSE;
+    return PAW_FALSE;
 }
 
 #endif // PAW_META_H

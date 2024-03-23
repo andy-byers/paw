@@ -1,4 +1,5 @@
 
+#include "lib.h"
 #include "paw.h"
 #include "test.h"
 #include <stdio.h>
@@ -10,7 +11,7 @@ static struct TestAlloc s_alloc;
 static void check_error(paw_Env *P, int status)
 {
     if (status != PAW_OK) {
-        test_recover(P, PAW_BTRUE /* print error and abort */);
+        test_recover(P, PAW_TRUE /* print error and abort */);
     }
 }
 
@@ -36,7 +37,7 @@ static paw_Env *start_test(void)
         "    }                       \n"
         "}                           \n";
     paw_Env *P = test_open(NULL, &s_alloc);
-    int status = test_open_string(P, source);
+    int status = pawL_load_chunk(P, "test", source);
     check_error(P, status);
     return P;
 }

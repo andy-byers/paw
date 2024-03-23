@@ -11,8 +11,6 @@
 #define Ib() (pc += 1, (int)pc[-1])
 #define Iw() (pc += 2, (int)(pc[-2] | pc[-1] << 8))
 
-const char *pawR_op_typename(Op op);
-
 void pawR_to_integer(paw_Env *P);
 void pawR_to_float(paw_Env *P);
 const char *pawR_to_string(paw_Env *P, size_t *plen);
@@ -55,7 +53,7 @@ static inline paw_Int pawR_check_int(paw_Env *P, Value v)
     paw_Bool lossless;
     const paw_Int ival = pawV_to_int64(v, &lossless);
     if (!lossless) {
-        pawR_error(P, PAW_ERANGE, "integer is too large");
+        pawR_error(P, PAW_EOVERFLOW, "integer is too large");
     }
     return ival;
 }

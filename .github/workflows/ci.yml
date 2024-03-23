@@ -13,7 +13,7 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
         build_type: [Debug, Release]
         cc: [gcc, clang, cl]
-        stress: [Off, On]
+        stress: [0, 2]
         exclude:
           - os: windows-latest
             cc: gcc
@@ -35,7 +35,7 @@ jobs:
         cmake -B ${{ env.build_dir }}
         -DCMAKE_C_COMPILER=${{ matrix.cc }}
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-        -DPAW_StressGC=${{ matrix.stress }}
+        -DPAW_STRESS=${{ matrix.stress }}
         -S ${{ github.workspace }}
 
     - name: Build

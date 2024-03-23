@@ -1,6 +1,6 @@
 
 let driver = Driver()
-let N = 5000
+let N = 500
 
 driver['perf-fornum'] = fn(n) {
     for i = 0,n {}
