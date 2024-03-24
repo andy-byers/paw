@@ -226,6 +226,13 @@ void test_close(paw_Env *P, struct TestAlloc *a)
     }
 }
 
+static void check_ok(paw_Env *P, int status)
+{
+    if (status != PAW_OK) {
+        test_recover(P, PAW_TRUE); // no return
+    }
+}
+
 int test_open_file(paw_Env *P, const char *name)
 {
     const char *pathname = test_pathname(name);
@@ -265,8 +272,8 @@ void test_recover(paw_Env *P, paw_Bool fatal)
 void test_script(const char *name, struct TestAlloc *a)
 {
     paw_Env *P = test_open(test_alloc, a);
-    CHECK(PAW_OK == test_open_file(P, name));
-    CHECK(PAW_OK == paw_call(P, 0));
+    check_ok(P, test_open_file(P, name));
+    check_ok(P, paw_call(P, 0));
     test_close(P, a);
 }
 

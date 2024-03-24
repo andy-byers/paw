@@ -43,6 +43,6 @@ jobs:
 
     - name: Test
       working-directory: ${{ env.build_dir }}
-      run: ctest --build-config ${{ matrix.build_type }}
+      run: ctest -V --build-config ${{ matrix.build_type }}
 
 
