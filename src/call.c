@@ -104,7 +104,7 @@ void pawC_stack_overflow(paw_Env *P)
 #if PAW_STRESS > 1
 #define next_alloc(n0, dn) ((n0) + (dn))
 #else
-#define next_alloc(n0, dn) paw_max((n0) + (dn), (n0)*2)
+#define next_alloc(n0, dn) paw_max((n0) + (dn), (n0) * 2)
 #endif
 
 void pawC_stack_grow(paw_Env *P, int n)

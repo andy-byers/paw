@@ -173,6 +173,7 @@ static void mark_value(paw_Env *P, Value v)
 static void traverse_proto(paw_Env *P, Proto *p)
 {
     mark_object(P, cast_object(p->name));
+    mark_object(P, cast_object(p->modname));
     for (int i = 0; i < p->nproto; ++i) {
         mark_object(P, cast_object(p->p[i]));
     }

@@ -52,10 +52,10 @@ static void finish_test(paw_Env *P)
 static int fib(paw_Env *P)
 {
     // 'fib' closure + 1 argument
-    CHECK(paw_get_count(P) == 1 + 1);
+    check(paw_get_count(P) == 1 + 1);
     const paw_Int n = paw_int(P, -1);
     paw_get_upvalue(P, 0, 0);
-    CHECK(n >= 0);
+    check(n >= 0);
 
     if (n < (int)paw_length(P, -1)) {
         // fib(n) has already been computed
@@ -93,7 +93,7 @@ static paw_Int call_fib(paw_Env *P, int n)
     paw_push_value(P, -1); // Copy closure
     paw_push_int(P, n);    // Push parameter
     const int status = paw_call(P, 1);
-    CHECK(status == PAW_OK);
+    check(status == PAW_OK);
 
     const paw_Int fibn = paw_int(P, -1);
     paw_pop(P, 1);
@@ -102,10 +102,10 @@ static paw_Int call_fib(paw_Env *P, int n)
 
 static void str_equals(paw_Env *P, int index, const char *s)
 {
-    CHECK(paw_is_string(P, index));
+    check(paw_is_string(P, index));
     const size_t n = strlen(s);
-    CHECK(n == paw_length(P, index));
-    CHECK(0 == memcmp(s, paw_string(P, index), n));
+    check(n == paw_length(P, index));
+    check(0 == memcmp(s, paw_string(P, index), n));
 }
 
 int main(void)
@@ -130,19 +130,19 @@ int main(void)
     paw_push_int(P, 123);
     paw_set_global(P, "var");
     paw_get_global(P, "var");
-    CHECK(paw_is_integer(P, -1));
-    CHECK(paw_int(P, -1) == 123);
+    check(paw_is_integer(P, -1));
+    check(paw_int(P, -1) == 123);
     paw_pop(P, 1);
 
     // Test native closures by generating Fibonacci numbers. Use an array upvalue
     // to cache intermediate results.
     paw_create_array(P, 0);
     paw_push_native(P, fib, 1);
-    CHECK(0 == call_fib(P, 0));
-    CHECK(1 == call_fib(P, 1));
-    CHECK(1 == call_fib(P, 2));
-    CHECK(55 == call_fib(P, 10));
-    CHECK(12586269025 == call_fib(P, 50));
+    check(0 == call_fib(P, 0));
+    check(1 == call_fib(P, 1));
+    check(1 == call_fib(P, 2));
+    check(55 == call_fib(P, 10));
+    check(12586269025 == call_fib(P, 50));
     paw_pop(P, 1);
 
     // Roundtrip an integer string (through bigint). Make it very long, so the
@@ -157,10 +157,10 @@ int main(void)
         paw_push_string(P, str);
         // Convert to bigint
         paw_to_integer(P, -1);
-        CHECK(paw_is_bigint(P, -1));
+        check(paw_is_bigint(P, -1));
         paw_to_string(P, -1);
-        CHECK(paw_length(P, -1) == len);
-        CHECK(0 == memcmp(str, paw_string(P, -1), len));
+        check(paw_length(P, -1) == len);
+        check(0 == memcmp(str, paw_string(P, -1), len));
         paw_pop(P, 1);
     }
 
@@ -172,7 +172,7 @@ int main(void)
         paw_arith(P, PAW_OPADD); 
         paw_push_int(P, 2);
         paw_raw_equals(P);
-        CHECK(paw_boolean(P, -1));
+        check(paw_boolean(P, -1));
         paw_pop(P, 1);
 
         // 1 << 1 <= 2
@@ -181,7 +181,7 @@ int main(void)
         paw_arith(P, PAW_OPSHL); 
         paw_push_int(P, 2);
         paw_compare(P, PAW_OPLE);
-        CHECK(paw_boolean(P, -1));
+        check(paw_boolean(P, -1));
         paw_pop(P, 1);
 
         // "ab" ++ "c" ++ 123 == "abc123"
@@ -192,7 +192,7 @@ int main(void)
         paw_arith(P, PAW_OPCONCAT);
         paw_push_string(P, "abc123");
         paw_compare(P, PAW_OPEQ);
-        CHECK(paw_boolean(P, -1));
+        check(paw_boolean(P, -1));
         paw_pop(P, 1);
     }
 

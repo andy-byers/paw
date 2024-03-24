@@ -99,7 +99,7 @@ if i == 0 {
 }
 
 -- Conditional (ternary) expressions:
-let v = cond ?? 'then' : 'else'
+let v = cond ?? 'then' :: 'else'
 
 -- Null chaining operator: return immediately (with null) if the operand itself 
 -- is null. A paw module is actually considered a function, so '?' can exist at
@@ -169,17 +169,17 @@ assert(f(4) == 3)
 |:---------|:-------------|:-----------------------------------------|:------------|
 |16        |`() [] . ?`   |Call, Subscript, Member access, Null chain|Left         |
 |15        |`! - ~`       |Not, Negate, Bitwise not                  |Right        |
-|14        |`* / // %`    |Multiply, divide, integer divide, modulus |Left         |
+|14        |`* / // %`    |Multiply, Divide, Integer divide, Modulus |Left         |
 |13        |`+ -`         |Add, Subtract                             |Left         |
 |12        |`++`          |Concatenate                               |Left         | 
-|11        |`<< >>`       |Shift left, shift right                   |Left         |
+|11        |`<< >>`       |Shift left, Shift right                   |Left         |
 |10        |`&`           |Bitwise and                               |Left         |
 |9         |`^`           |Bitwise xor                               |Left         |
-|8         |`&#124;`      |Bitwise or                                |Left         |
-|7         |`in < <= > >=`|Inclusion, relational comparisons         |Left         |
+|8         |<code>&#124;</code>|Bitwise or                           |Left         |
+|7         |`in < <= > >=`|Inclusion, Relational comparisons         |Left         |
 |6         |`== !=`       |Equality comparisons                      |Left         |
 |5         |`&&`          |And                                       |Left         |
-|4         |`&#124;&#124;`|Or                                        |Left         |
+|4         |<code>&#124;&#124;</code>|Or                             |Left         |
 |3         |`?:`          |Null coalesce                             |Left         |
 |2         |`??::`        |Conditional                               |Right        |
 |1         |`=`           |Assignment                                |Right        |
@@ -190,10 +190,7 @@ assert(f(4) == 3)
     + Better API for arrays: `paw_*_item` will throw an error if the index is out of bounds
 + Need some sort of restriction on when methods can be added to a class
 The compiler will get confused if 'self' or 'super' is used outside of a class body.
-
-+ 'for i = x,y,z' loops: should we prevent 'x,y,z' from being floats?
-For loops using floats often produce unexpected results: it's probably better to use an int loop counter and just multiply by a float constant as needed
-Also, for loops won't work with bigint right now.
++ For loops won't work with bigint right now.
 + Finish designing things first...
     + Language features:
         + `**` (pow) operator
@@ -201,7 +198,6 @@ Also, for loops won't work with bigint right now.
         + Spread operator, used in call expressions, assignments/let statements, and array literals
         + Multi-return/let/assign with Lua semantics?
         + Concurrency: fibers, coroutines?
-+ Get the fuzzer (which fuzzes source files) to work
 + Documentation
-+ Big integer math needs work (need to convert back to `paw_Int` when possible)
++ Big integer math needs work
 + Make it fast!

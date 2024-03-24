@@ -30,8 +30,6 @@ const char *paw_opcode_name(Op op)
             return "INVOKESUPER";
         case OP_CALL:
             return "CALL";
-        case OP_INHERIT:
-            return "INHERIT";
         case OP_INVOKE:
             return "INVOKE";
         case OP_JUMP:

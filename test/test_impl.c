@@ -19,85 +19,85 @@ static void test_primitives(void)
 
     // VNULL
     pawV_set_null(&v);
-    CHECK(pawV_get_type(v) == VNULL);
-    CHECK(pawV_is_null(v));
-    CHECK(!pawV_is_object(v));
+    check(pawV_get_type(v) == VNULL);
+    check(pawV_is_null(v));
+    check(!pawV_is_object(v));
 
     // VTRUE/FALSE
     pawV_set_bool(&v, PAW_TRUE);
-    CHECK(pawV_get_type(v) == VTRUE);
-    CHECK(pawV_get_bool(v));
-    CHECK(pawV_is_true(v));
-    CHECK(!pawV_is_false(v));
+    check(pawV_get_type(v) == VTRUE);
+    check(pawV_get_bool(v));
+    check(pawV_is_true(v));
+    check(!pawV_is_false(v));
     pawV_set_bool(&v, PAW_FALSE);
-    CHECK(pawV_get_type(v) == VFALSE);
-    CHECK(!pawV_get_bool(v));
-    CHECK(!pawV_is_true(v));
-    CHECK(pawV_is_false(v));
-    CHECK(!pawV_is_object(v));
+    check(pawV_get_type(v) == VFALSE);
+    check(!pawV_get_bool(v));
+    check(!pawV_is_true(v));
+    check(pawV_is_false(v));
+    check(!pawV_is_object(v));
 
     // pawV_is_float(v)
     pawV_set_float(&v, 0.0);
-    CHECK(pawV_get_type(v) <= VNUMBER);
-    CHECK(pawV_get_float(v) == 0.0);
-    CHECK(pawV_is_float(v));
+    check(pawV_get_type(v) <= VNUMBER);
+    check(pawV_get_float(v) == 0.0);
+    check(pawV_is_float(v));
     pawV_set_float(&v, 12.3);
-    CHECK(pawV_get_type(v) <= VNUMBER);
-    CHECK(pawV_get_float(v) == 12.3);
-    CHECK(pawV_is_float(v));
+    check(pawV_get_type(v) <= VNUMBER);
+    check(pawV_get_float(v) == 12.3);
+    check(pawV_is_float(v));
     pawV_set_float(&v, 12.3e123);
-    CHECK(pawV_get_type(v) <= VNUMBER);
-    CHECK(pawV_get_float(v) == 12.3e123);
-    CHECK(pawV_is_float(v));
-    CHECK(!pawV_is_object(v));
+    check(pawV_get_type(v) <= VNUMBER);
+    check(pawV_get_float(v) == 12.3e123);
+    check(pawV_is_float(v));
+    check(!pawV_is_object(v));
     pawV_set_float(&v, INFINITY);
-    CHECK(pawV_get_type(v) <= VNUMBER);
-    CHECK(!isfinite(pawV_get_float(v)));
-    CHECK(pawV_is_float(v));
-    CHECK(!pawV_is_object(v));
+    check(pawV_get_type(v) <= VNUMBER);
+    check(!isfinite(pawV_get_float(v)));
+    check(pawV_is_float(v));
+    check(!pawV_is_object(v));
     pawV_set_float(&v, -INFINITY);
-    CHECK(pawV_get_type(v) <= VNUMBER);
-    CHECK(!isfinite(pawV_get_float(v)));
-    CHECK(pawV_is_float(v));
-    CHECK(!pawV_is_object(v));
+    check(pawV_get_type(v) <= VNUMBER);
+    check(!isfinite(pawV_get_float(v)));
+    check(pawV_is_float(v));
+    check(!pawV_is_object(v));
     pawV_set_float(&v, nan(""));
-    CHECK(pawV_get_type(v) <= VNUMBER);
-    CHECK(isnan(pawV_get_float(v)));
-    CHECK(pawV_is_float(v));
-    CHECK(!pawV_is_object(v));
+    check(pawV_get_type(v) <= VNUMBER);
+    check(isnan(pawV_get_float(v)));
+    check(pawV_is_float(v));
+    check(!pawV_is_object(v));
     pawV_set_float(&v, DBL_MAX);
-    CHECK(pawV_get_type(v) <= VNUMBER);
-    CHECK(isfinite(pawV_get_float(v)));
-    CHECK(pawV_is_float(v));
-    CHECK(!pawV_is_object(v));
+    check(pawV_get_type(v) <= VNUMBER);
+    check(isfinite(pawV_get_float(v)));
+    check(pawV_is_float(v));
+    check(!pawV_is_object(v));
     pawV_set_float(&v, DBL_MIN);
-    CHECK(pawV_get_type(v) <= VNUMBER);
-    CHECK(isfinite(pawV_get_float(v)));
-    CHECK(pawV_is_float(v));
-    CHECK(!pawV_is_object(v));
+    check(pawV_get_type(v) <= VNUMBER);
+    check(isfinite(pawV_get_float(v)));
+    check(pawV_is_float(v));
+    check(!pawV_is_object(v));
 
     // pawV_is_int(v)
     pawV_set_int(&v, 0);
-    CHECK(pawV_get_type(v) == VNUMBER);
-    CHECK(pawV_get_int(v) == 0);
-    CHECK(pawV_is_int(v));
+    check(pawV_get_type(v) == VNUMBER);
+    check(pawV_get_int(v) == 0);
+    check(pawV_is_int(v));
     pawV_set_int(&v, 123);
-    CHECK(pawV_get_type(v) == VNUMBER);
-    CHECK(pawV_get_int(v) == 123);
-    CHECK(pawV_is_int(v));
+    check(pawV_get_type(v) == VNUMBER);
+    check(pawV_get_int(v) == 123);
+    check(pawV_is_int(v));
     pawV_set_int(&v, -123);
-    CHECK(pawV_get_type(v) == VNUMBER);
-    CHECK(pawV_get_int(v) == -123);
-    CHECK(pawV_is_int(v));
+    check(pawV_get_type(v) == VNUMBER);
+    check(pawV_get_int(v) == -123);
+    check(pawV_is_int(v));
     pawV_set_int(&v, VINT_MAX);
-    CHECK(pawV_get_type(v) == VNUMBER);
-    CHECK(pawV_get_int(v) == VINT_MAX);
-    CHECK(pawV_is_int(v));
+    check(pawV_get_type(v) == VNUMBER);
+    check(pawV_get_int(v) == VINT_MAX);
+    check(pawV_is_int(v));
     pawV_set_int(&v, VINT_MIN);
-    CHECK(pawV_get_type(v) == VNUMBER);
-    CHECK(pawV_get_int(v) == VINT_MIN);
-    CHECK(pawV_is_int(v));
-    CHECK(!pawV_is_object(v));
+    check(pawV_get_type(v) == VNUMBER);
+    check(pawV_get_int(v) == VINT_MIN);
+    check(pawV_is_int(v));
+    check(!pawV_is_object(v));
 }
 
 static void test_objects(void)
@@ -112,12 +112,12 @@ static void test_objects(void)
     Map *fake_obj = fake_ptr;
 
     pawV_set_map(&v, fake_obj);
-    CHECK(pawV_get_type(v) == VMAP);
-    CHECK(pawV_is_map(v));
-    CHECK(pawV_is_object(v));
+    check(pawV_get_type(v) == VMAP);
+    check(pawV_is_map(v));
+    check(pawV_is_object(v));
 
     Map *m = pawV_get_map(v);
-    CHECK(m == fake_ptr);
+    check(m == fake_ptr);
 }
 
 #define N 500
@@ -137,7 +137,7 @@ static void test_map(paw_Env *P)
         pawR_setitem(P);
     }
 
-    CHECK(cast_size(paw_length(P, -1)) == paw_countof(known));
+    check(cast_size(paw_length(P, -1)) == paw_countof(known));
 
     // Fill the map with nonnegative integers (may have repeats).
     paw_Int integers[N];
@@ -150,7 +150,7 @@ static void test_map(paw_Env *P)
         integers[i] = ival;
     }
 
-    CHECK(cast_size(paw_length(P, -1)) <= N + paw_countof(known));
+    check(cast_size(paw_length(P, -1)) <= N + paw_countof(known));
 
     // Add some strings (should not affect the integers).
     char strings[N][64];
@@ -163,21 +163,21 @@ static void test_map(paw_Env *P)
         pawR_setitem(P);
     }
 
-    CHECK(cast_size(paw_length(P, -1)) <= 2 * N + paw_countof(known));
+    check(cast_size(paw_length(P, -1)) <= 2 * N + paw_countof(known));
 
     // Find all items.
     for (int i = 0; i < N; ++i) {
         paw_push_value(P, -1);
         paw_push_nstring(P, strings[i], ns);
         pawR_getitem(P);
-        CHECK(paw_length(P, -1) == ns);
-        CHECK(0 == memcmp(strings[i], paw_string(P, -1), ns));
+        check(paw_length(P, -1) == ns);
+        check(0 == memcmp(strings[i], paw_string(P, -1), ns));
         paw_pop(P, 1);
 
         paw_push_value(P, -1);
         paw_push_int(P, integers[i]);
         pawR_getitem(P);
-        CHECK(paw_int(P, -1) == integers[i]);
+        check(paw_int(P, -1) == integers[i]);
         paw_pop(P, 1);
     }
 
@@ -190,7 +190,7 @@ static void test_map(paw_Env *P)
         }
     }
 
-    CHECK(cast_size(pawH_length(m)) <= N + paw_countof(known));
+    check(cast_size(pawH_length(m)) <= N + paw_countof(known));
 
     // Erase the strings.
     itr = PAW_ITER_INIT;
@@ -201,15 +201,15 @@ static void test_map(paw_Env *P)
         }
     }
 
-    CHECK(cast_size(pawH_length(m)) == paw_countof(known));
+    check(cast_size(pawH_length(m)) == paw_countof(known));
 
     // Check known items.
     for (size_t i = 0; i < paw_countof(known); ++i) {
         Value key;
         pawV_set_int(&key, known[i]);
         const Value *value = pawH_action(P, m, key, MAP_ACTION_NONE);
-        CHECK(value);
-        CHECK(pawV_get_int(*value) == known[i]);
+        check(value);
+        check(pawV_get_int(*value) == known[i]);
     }
 
     pawC_pop(P); // pop map
@@ -218,9 +218,9 @@ static void test_map(paw_Env *P)
 static void test_stack(paw_Env *P)
 {
     paw_push_nnull(P, 2);
-    CHECK(paw_get_count(P) == 2);
-    CHECK(paw_is_null(P, 0));
-    CHECK(paw_is_null(P, 1));
+    check(paw_get_count(P) == 2);
+    check(paw_is_null(P, 0));
+    check(paw_is_null(P, 1));
 }
 
 static void driver(void (*callback)(paw_Env *))
