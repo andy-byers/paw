@@ -35,7 +35,7 @@
 #define vm_continue continue
 #define vm_shift(n) paw_shift(P, n)
 #define vm_pop(n) pawC_stkdec(P, n)
-#define vm_peek(n) (&P->top.p[-(n)-1])
+#define vm_peek(n) (&P->top.p[-(n) - 1])
 #define vm_save() (cf->pc = pc, cf->top = P->top)
 #define vm_local() (&cf->base.p[Iw()])
 #define vm_upvalue() (fn->up[Iw()]->p.p)
@@ -81,13 +81,13 @@ static Value vint(paw_Int i)
     return v;
 }
 
-static int current_line(CallFrame *cf)
+static int current_line(const CallFrame *cf)
 {
     Proto *p = cf->fn->p;
     const int pc = cf->pc - p->source;
 
     int i = 0;
-    for (; i + 1 < p->nlines; ++i) {
+    for (; i < p->nlines - 1; ++i) {
         if (p->lines[i].pc >= pc) {
             break;
         }
@@ -97,22 +97,18 @@ static int current_line(CallFrame *cf)
 
 static void add_location(paw_Env *P, Buffer *buf)
 {
-    CallFrame *cf = P->cf;
-    for (;;) {
-        // Find the paw function caller.
+    const CallFrame *cf = P->cf;
+    for (;; cf = cf->prev) {
         if (cf_is_paw(cf)) {
-            Closure *fn = cf->fn;
-            if (fn) {
-                const String *name = fn->p->name;
-                pawL_add_fstring(P, buf, "%s:%I: ", name->text, current_line(cf));
-            } else {
-                pawL_add_char(P, buf, '?');
-            }
+            const Proto *p = cf->fn->p;
+            const int line = current_line(cf);
+            const char *name = p->modname->text;
+            pawL_add_fstring(P, buf, "%s:%d: ", name, line);
             break;
         } else if (cf_is_entry(cf)) {
+            pawL_add_literal(P, buf, "[C]: ");
             break;
         }
-        cf = cf->prev;
     }
 }
 
@@ -1514,8 +1510,28 @@ top:
             vm_case(NEWCLASS) :
             {
                 const Value name = vm_const();
+                const paw_Bool has_super = Ib();
                 Class *cls = pawV_push_class(P);
                 cls->name = pawV_get_string(name);
+                if (has_super) {
+                    const Value parent = *vm_peek(1);
+                    if (!pawV_is_class(parent)) {
+                        pawR_error(P, PAW_ETYPE, "superclass is not of 'class' type");
+                    }
+                    const Class *super = pawV_get_class(parent);
+                    pawH_extend(P, cls->attr, super->attr);
+                    // Ensure that __init is not inherited. Note that 'sub' has not had any
+                    // of its own attributes added to it yet, so this will not remove the
+                    // actual __init attribute belonging to 'sub'.
+                    const Value key = pawE_cstr(P, CSTR_INIT);
+                    pawH_action(P, cls->attr, key, MAP_ACTION_REMOVE);
+                    // Swap the superclass and subclass. Leave the superclass on the stack.
+                    // The compiler assigns it a local slot, named 'super'. It can be
+                    // captured as an upvalue in methods as needed.
+                    const Value tmp = P->top.p[-1];
+                    P->top.p[-1] = P->top.p[-2];
+                    P->top.p[-2] = tmp;
+                }
             }
 
             vm_case(NEWMETHOD) :
@@ -1527,27 +1543,6 @@ top:
                 paw_assert(pawV_is_string(name));
                 pawH_insert(P, cls->attr, name, method);
                 vm_pop(1); // pop closure, leave class
-            }
-
-            vm_case(INHERIT) :
-            {
-                const Value parent = *vm_peek(1);
-                if (!pawV_is_class(parent)) {
-                    pawR_error(P, PAW_ETYPE, "superclass is not of 'class' type");
-                }
-                const Class *super = pawV_get_class(parent);
-                Class *sub = pawV_get_class(*vm_peek(0));
-                if (sub == super) {
-                    pawR_error(P, PAW_EVALUE, "inherit from self");
-                }
-                pawH_extend(P, sub->attr, super->attr);
-
-                // Ensure that __init is not inherited. Note that 'sub' has not had any
-                // of its own attributes added to it yet, so this will not remove the
-                // actual __init attribute belonging to 'sub'.
-                const Value key = pawE_cstr(P, CSTR_INIT);
-                pawH_action(P, sub->attr, key, MAP_ACTION_REMOVE);
-                vm_pop(1); // pop 'sub'
             }
 
             vm_case(GETSUPER) :

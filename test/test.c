@@ -65,7 +65,7 @@ static void register_block(struct TestAlloc *a, size_t size0, size_t size)
 {
     if (size0) {
         unsigned *block0 = get_block(a, size0);
-        CHECK(*block0 > 0);
+        check(*block0 > 0);
         --*block0;
     }
     if (size) {
@@ -124,10 +124,10 @@ static void trash_memory(void *ptr, size_t n)
 
 static void *safe_realloc(struct TestAlloc *a, void *ptr, size_t size0, size_t size)
 {
-    CHECK(a->nbytes >= size0);
+    check(a->nbytes >= size0);
     register_block(a, size0, size);
     void *ptr2 = size ? malloc(size) : NULL;
-    CHECK(!size || ptr2); // assume success
+    check(!size || ptr2); // assume success
     if (ptr2) {
         if (ptr) {
             // resize: copy old contents
@@ -141,12 +141,12 @@ static void *safe_realloc(struct TestAlloc *a, void *ptr, size_t size0, size_t s
 #ifdef TEST_FIND_LEAK
     if (ptr) {
         struct Chunk *c = get_chunk(ptr);
-        CHECK(c->size == size0);
+        check(c->size == size0);
         c->size = 0;
     }
     if (ptr2) {
         struct Chunk *c = get_chunk(ptr2);
-        CHECK(c->size == 0);
+        check(c->size == 0);
         c->size = size;
     }
 #endif
@@ -242,7 +242,7 @@ int test_open_file(paw_Env *P, const char *name)
     FILE *file = pawO_open(pathname, "r");
     struct TestReader rd = {.file = file};
     rd.data = rd.buf;
-    CHECK(file);
+    check(file);
 
     const int status = paw_load(P, test_reader, pathname, &rd);
     pawO_close(rd.file);
@@ -258,7 +258,7 @@ int test_open_string(paw_Env *P, const char *source)
 void test_recover(paw_Env *P, paw_Bool fatal)
 {
     // Expect an error message on top of the stack.
-    CHECK(paw_get_count(P) >= 1);
+    check(paw_get_count(P) >= 1);
 
     if (fatal) {
         const char *s = paw_string(P, -1);
@@ -279,7 +279,7 @@ void test_script(const char *name, struct TestAlloc *a)
 
 paw_Int test_randint(paw_Int min, paw_Int max)
 {
-    CHECK(min <= max);
+    check(min <= max);
     return rand() % (max - min) + min;
 }
 

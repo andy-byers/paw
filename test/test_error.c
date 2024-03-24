@@ -6,6 +6,7 @@
 #include <limits.h>
 
 static struct TestAlloc s_alloc;
+static char s_error_msg[1024];
 
 typedef uint64_t TypeSet;
 
@@ -15,10 +16,20 @@ static void test_case(int expect, const char *name, const char *text)
     paw_Env *P = test_open(NULL, &s_alloc);
     int status = pawL_load_chunk(P, name, text);
     if (expect == PAW_ESYNTAX) {
-        CHECK(status == PAW_ESYNTAX);
+        check(status == PAW_ESYNTAX);
     } else {
-        CHECK(status == PAW_OK);
+        check(status == PAW_OK);
         status = paw_call(P, 0);
+    }
+    if (status != PAW_OK) {
+        // Copy the error message to a static buffer so that the paw_Env
+        // can be closed.
+        check(paw_get_count(P) > 0);
+        const char *msg = paw_string(P, -1);
+        const size_t len = paw_length(P, -1);
+        check(len < paw_lengthof(s_error_msg));
+        memcpy(s_error_msg, msg, len);
+        s_error_msg[len] = '\0';
     }
     test_close(P, &s_alloc);
 }
@@ -56,7 +67,7 @@ static const char *get_literal(int kind)
         case PAW_TMAP:
             return "{}";
         default:
-            CHECK(0);
+            check(0);
             return NULL;
     }
 }

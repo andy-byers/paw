@@ -184,6 +184,7 @@ static int add_proto(Lex *lex, String *name, Proto **pp)
         }
     }
     Proto *callee = pawV_new_proto(ctx(lex));
+    callee->modname = lex->modname;
     callee->name = name;
 
     const int id = fn->nproto++;
@@ -1002,13 +1003,6 @@ static void push_special(Lex *lex, unsigned ctag)
     discharge(&e);
 }
 
-static void push_named(Lex *lex, String *name)
-{
-    ExprState e;
-    find_var(lex, &e, name);
-    discharge(&e);
-}
-
 // Parse a variable expression that isn't a declaration
 static void varexpr(Lex *lex, ExprState *e)
 {
@@ -1783,12 +1777,6 @@ static void class_stmt(Lex *lex)
     String *class_name = usable_name(lex);
     const int tag = add_name(lex, class_name);
     e.name = class_name;
-
-    // Create the class and put it in a variable. Make it visible right now
-    // so that it can be referenced by the methods. Note that OP_NEWCLASS
-    // also pushes the class, so we will end up with it on top of the stack
-    // for OP_INHERIT and OP_METHOD to use.
-    emit_arg2(lex, OP_NEWCLASS, tag);
     init_var(lex, &e);
 
     ClsState cls = {.outer = lex->cls};
@@ -1797,19 +1785,11 @@ static void class_stmt(Lex *lex)
         // push superclass
         varexpr(lex, &super);
         discharge(&super);
-
-        // Introduce the class name after parsing the superclass, which ends
-        // up making inheritance from self impossible. In the statement
-        // 'class A: A {}', the second 'A' either refers to a previously-
-        // declared 'A', or it does not yet exist (name error).
-        define_var(lex, &e);
-        // handle inheritance
-        push_named(lex, class_name);
-        emit(lex, OP_INHERIT);
         cls.has_super = PAW_TRUE;
-    } else {
-        define_var(lex, &e);
     }
+    emit_arg2(lex, OP_NEWCLASS, tag);
+    push8(lex, cls.has_super);
+    define_var(lex, &e);
 
     BlkState blk;
     // scope for potential 'super' variable
@@ -1974,6 +1954,7 @@ Closure *pawP_parse(paw_Env *P, paw_Reader input, ParseMemory *pm, const char *n
     // Store the module name.
     String *modname = pawS_new_str(P, name);
     lex.modname = modname;
+    f->modname = modname;
     f->name = modname;
 
     // Load the first token.

@@ -39,7 +39,7 @@ static void script(const char *name)
         a.extra = nextra;
         nextra *= 2;
     } while (rc == PAW_EMEMORY);
-    CHECK(rc == PAW_OK);
+    check(rc == PAW_OK);
 }
 
 int main(void)

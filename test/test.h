@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define CHECK(x)                                       \
+#define check(x)                                       \
     do {                                               \
         if (!(x)) {                                    \
             fprintf(stderr, "check failed: %s\n", #x); \

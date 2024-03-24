@@ -26,7 +26,7 @@ int main(void)
     paw_get_global(P, "f");
     paw_push_int(P, PAW_STACK_MAX);
     status = paw_call(P, 1);
-    CHECK(status == PAW_EMEMORY);
+    check(status == PAW_EMEMORY);
     handle_error(P, status, 0);
     test_close(P, &a);
 }
