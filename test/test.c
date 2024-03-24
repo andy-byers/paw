@@ -118,24 +118,25 @@ static void trash_memory(void *ptr, size_t n)
 {
     volatile uint8_t *p = ptr;
     for (size_t i = 0; i < n; ++i) {
-        *p++ = (uint8_t)rand();
+        *p++ = 0xAA; // 0b10101010
     }
 }
 
 static void *safe_realloc(struct TestAlloc *a, void *ptr, size_t size0, size_t size)
 {
     CHECK(a->nbytes >= size0);
-    if (size < size0) {
-        trash_memory((char *)ptr + size, size0 - size);
-        a->nbytes -= size0 - size;
-    }
     register_block(a, size0, size);
-    void *ptr2 = realloc(ptr, size);
-    CHECK(!size || ptr2);
-
-    if (size0 < size) {
-        trash_memory((char *)ptr2 + size0, size - size0);
-        a->nbytes += size - size0;
+    void *ptr2 = size ? malloc(size) : NULL;
+    CHECK(!size || ptr2); // assume success
+    if (ptr2) {
+        if (ptr) {
+            // resize: copy old contents
+            memcpy(ptr2, ptr, paw_min(size0, size));
+        }
+        if (size0 < size) {
+            // grow: fill uninitialized memory
+            trash_memory((char *)ptr2 + size0, size - size0);
+        }
     }
 #ifdef TEST_FIND_LEAK
     if (ptr) {
@@ -149,6 +150,13 @@ static void *safe_realloc(struct TestAlloc *a, void *ptr, size_t size0, size_t s
         c->size = size;
     }
 #endif
+    if (ptr) {
+        // Trash the old allocation in an attempt to mess up any code
+        // that still depends on it.
+        trash_memory(ptr, size0);
+    }
+    a->nbytes += size - size0;
+    free(ptr);
     return ptr2;
 }
 
@@ -204,12 +212,7 @@ static const char *test_pathname(const char *name)
 
 paw_Env *test_open(paw_Alloc alloc, struct TestAlloc *state)
 {
-    paw_Env *P = paw_open(alloc ? alloc : test_alloc, state);
-    CHECK(P); // Load the test driver TODO: driver thing not used in most tests
-    CHECK(PAW_OK == test_open_file(P, "driver"));
-    CHECK(PAW_OK == paw_call(P, 0));
-    paw_pop(P, 1);
-    return P;
+    return paw_open(alloc ? alloc : test_alloc, state);
 }
 
 void test_close(paw_Env *P, struct TestAlloc *a)
@@ -220,6 +223,13 @@ void test_close(paw_Env *P, struct TestAlloc *a)
         fprintf(stderr, "error: leaked %zu bytes\n", a->nbytes);
         report_nonzero_blocks(a);
         abort();
+    }
+}
+
+static void check_ok(paw_Env *P, int status)
+{
+    if (status != PAW_OK) {
+        test_recover(P, PAW_TRUE); // no return
     }
 }
 
@@ -262,8 +272,8 @@ void test_recover(paw_Env *P, paw_Bool fatal)
 void test_script(const char *name, struct TestAlloc *a)
 {
     paw_Env *P = test_open(test_alloc, a);
-    CHECK(PAW_OK == test_open_file(P, name));
-    CHECK(PAW_OK == paw_call(P, 0));
+    check_ok(P, test_open_file(P, name));
+    check_ok(P, paw_call(P, 0));
     test_close(P, a);
 }
 

@@ -13,7 +13,7 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
         build_type: [Debug, Release]
         cc: [gcc, clang, cl]
-        stress: [Off, On]
+        stress: [0, 2]
         exclude:
           - os: windows-latest
             cc: gcc
@@ -32,17 +32,17 @@ jobs:
 
     - name: Configure
       run: >
-        cmake -B ${{ env.build_dir }}
+        cmake -S "${{ github.workspace }}" -B "${{ env.build_dir }}"
         -DCMAKE_C_COMPILER=${{ matrix.cc }}
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-        -DPAW_StressGC=${{ matrix.stress }}
-        -S ${{ github.workspace }}
-
+        -DPAW_STRESS=${{ matrix.stress }}
+        
     - name: Build
-      run: cmake --build ${{ env.build_dir }} --config ${{ matrix.build_type }}
+      working-directory: ${{ env.build_dir }}
+      run: cmake --build . --config ${{ matrix.build_type }}
 
     - name: Test
       working-directory: ${{ env.build_dir }}
-      run: ctest --build-config ${{ matrix.build_type }}
+      run: ctest -V --build-config ${{ matrix.build_type }}
 
 

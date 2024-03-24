@@ -4,7 +4,7 @@
 #include "prefix.h"
 
 #include "array.h"
-#include "aux.h"
+#include "auxlib.h"
 #include "bigint.h"
 #include "call.h"
 #include "env.h"
@@ -34,15 +34,14 @@
     default
 #define vm_continue continue
 #define vm_shift(n) paw_shift(P, n)
-#define vm_push(v) (*pawC_stkinc(P, 1) = (v))
 #define vm_pop(n) pawC_stkdec(P, n)
-#define vm_peek(n) (&P->top[-(n) - 1])
+#define vm_peek(n) (&P->top.p[-(n)-1])
 #define vm_save() (cf->pc = pc, cf->top = P->top)
-#define vm_local() (&cf->base[Iw()])
-#define vm_upvalue() (fn->up[Iw()]->p)
+#define vm_local() (&cf->base.p[Iw()])
+#define vm_upvalue() (fn->up[Iw()]->p.p)
 #define vm_const() (fn->p->k[Iw()])
 #define vm_jmp() decode_jump(Iw())
-
+#define vm_pushv(v) pawC_pushv(P, v)
 #define vm_push0() pawC_push0(P)
 #define vm_pushi(i) pawC_pushi(P, i)
 #define vm_pushf(f) pawC_pushf(P, f)
@@ -50,6 +49,21 @@
 
 // Slot 0 (the callable or 'self') is an implicit parameter
 #define vm_argc() (paw_get_count(P) - 1)
+
+// Generate code for creating common builtin objects
+// Requires a placeholder slot (the vm_push0() pushes null) so the GC
+// doesn't get confused. Both the vm_push0(), and the pawA_new calls
+// might fail and cause an error to be thrown, so we have to be careful
+// not to leave a junk value on top of the stack.
+#define vm_array_init(pa, pv) \
+    pv = vm_push0();          \
+    pa = pawA_new(P);         \
+    pawV_set_array(pv, pa);
+
+#define vm_map_init(pm, pv) \
+    pv = vm_push0();        \
+    pm = pawH_new(P);       \
+    pawV_set_map(pv, pm);
 
 static void vm_unop(paw_Env *P, Op op);
 
@@ -65,51 +79,6 @@ static Value vint(paw_Int i)
     Value v;
     pawV_set_int(&v, i);
     return v;
-}
-
-const char *pawR_op_typename(Op op)
-{
-    switch (op) {
-        case OP_CALL:
-        case OP_INVOKE:
-            return "call";
-        case OP_NEG:
-        case OP_NOT:
-        case OP_ADD:
-        case OP_SUB:
-        case OP_MUL:
-        case OP_DIV:
-        case OP_IDIV:
-        case OP_MOD:
-        case OP_POW:
-            return "arithmetic";
-        case OP_BNOT:
-        case OP_BXOR:
-        case OP_BAND:
-        case OP_BOR:
-        case OP_SHL:
-        case OP_SHR:
-            return "bitwise";
-        case OP_EQ:
-            return "equality";
-        case OP_LT:
-        case OP_LE:
-            return "relational";
-        case OP_INT:
-        case OP_FLOAT:
-        case OP_BOOL:
-        case OP_ARRAY:
-        case OP_MAP:
-            return "conversion";
-        case OP_LEN:
-            return "length";
-        case OP_CONCAT:
-            return "concatenate";
-        case OP_IN:
-            return "contains";
-        default:
-            return "<unrecognized>";
-    }
 }
 
 static int current_line(CallFrame *cf)
@@ -129,17 +98,18 @@ static int current_line(CallFrame *cf)
 static void add_location(paw_Env *P, Buffer *buf)
 {
     CallFrame *cf = P->cf;
-    while (!CF_IS_BASE(cf)) {
+    for (;;) {
         // Find the paw function caller.
-        if (IS_PAW(cf)) {
-            Closure *main = cf->fn;
-            if (main) {
-                const String *s = main->p->name;
-                pawL_add_nstring(P, buf, s->text, s->length);
+        if (cf_is_paw(cf)) {
+            Closure *fn = cf->fn;
+            if (fn) {
+                const String *name = fn->p->name;
+                pawL_add_fstring(P, buf, "%s:%I: ", name->text, current_line(cf));
             } else {
                 pawL_add_char(P, buf, '?');
             }
-            pawL_add_fstring(P, buf, ":%I: ", current_line(cf));
+            break;
+        } else if (cf_is_entry(cf)) {
             break;
         }
         cf = cf->prev;
@@ -174,10 +144,10 @@ void pawR_int_error(paw_Env *P)
     Buffer buf;
     pawL_init_buffer(P, &buf);
     pawL_add_string(P, &buf, "integer ");
-    pawL_add_value(P, &buf); // value on top of stack
+    pawL_add_value(P, &buf); // value on stack
     pawL_add_string(P, &buf, " is too large");
     pawL_push_result(P, &buf);
-    pawC_throw(P, PAW_ERANGE);
+    pawC_throw(P, PAW_EOVERFLOW);
 }
 
 void pawR_type_error(paw_Env *P, const char *what)
@@ -207,9 +177,9 @@ void pawR_error(paw_Env *P, int error, const char *fmt, ...)
     pawC_throw(P, error);
 }
 
-static void out_of_range(paw_Env *P, const char *what)
+static void integer_overflow(paw_Env *P, const char *what)
 {
-    pawR_error(P, PAW_ERANGE, "integer is out of range for '%s'", what);
+    pawR_error(P, PAW_EOVERFLOW, "integer is out of range for '%s'", what);
 }
 
 static paw_Bool meta_call(paw_Env *P, Op op, Value x, int argc)
@@ -218,20 +188,20 @@ static paw_Bool meta_call(paw_Env *P, Op op, Value x, int argc)
     if (meta) {
         // Expect 'x', followed by 'argc' args, on top of the stack.
         pawC_call(P, *meta, argc);
-        return PAW_BTRUE;
+        return PAW_TRUE;
     }
-    return PAW_BFALSE;
+    return PAW_FALSE;
 }
 
 static paw_Bool meta_unop(paw_Env *P, Op op, Value x)
 {
     const Value *meta = pawT_get_meta(P, op, x);
     if (meta) {
-        vm_push(x);
+        vm_pushv(x);
         pawC_call(P, *meta, 0);
-        return PAW_BTRUE;
+        return PAW_TRUE;
     }
-    return PAW_BFALSE;
+    return PAW_FALSE;
 }
 
 static void maybe_meta_unop(paw_Env *P, Op op, Value x)
@@ -243,21 +213,21 @@ static void maybe_meta_unop(paw_Env *P, Op op, Value x)
 
 static paw_Bool meta_binop_aux(paw_Env *P, Op op, Value x, Value y)
 {
-    paw_Bool swap = PAW_BFALSE;
+    paw_Bool swap = PAW_FALSE;
     const Value *meta = pawT_get_meta(P, op, x);
     if (!meta && mm_has_r(op)) {
         // Check the reverse metamethod (i.e. y.__<binop>r(x)).
         meta = pawT_get_meta(P, mm_get_r(op), y);
-        swap = PAW_BTRUE;
+        swap = PAW_TRUE;
     }
     if (meta) {
         StackPtr sp = pawC_stkinc(P, 2);
         sp[0] = swap ? y : x;
         sp[1] = swap ? x : y;
         pawC_call(P, *meta, 1);
-        return PAW_BTRUE;
+        return PAW_TRUE;
     }
-    return PAW_BFALSE;
+    return PAW_FALSE;
 }
 
 static paw_Bool meta_binop(paw_Env *P, Op op, Value x, Value y)
@@ -280,9 +250,9 @@ static inline paw_Bool meta_getter(paw_Env *P, Op op, Value obj, Value key)
         sp[0] = obj;
         sp[1] = key;
         pawC_call(P, *meta, 1);
-        return PAW_BTRUE;
+        return PAW_TRUE;
     }
-    return PAW_BFALSE;
+    return PAW_FALSE;
 }
 
 static inline paw_Bool meta_setter(paw_Env *P, Op op, Value obj, Value key, Value val)
@@ -295,15 +265,15 @@ static inline paw_Bool meta_setter(paw_Env *P, Op op, Value obj, Value key, Valu
         sp[2] = val;
         pawC_call(P, *meta, 2);
         vm_pop(1); // unused return value
-        return PAW_BTRUE;
+        return PAW_TRUE;
     }
-    return PAW_BFALSE;
+    return PAW_FALSE;
 }
 
 static void float2integer(paw_Env *P, paw_Float f)
 {
     if (pawV_float_fits_int(f)) {
-        vm_pushi(f);
+        vm_pushi(paw_cast_int(f));
     } else {
         pawB_from_float(P, f);
     }
@@ -317,9 +287,9 @@ static paw_Bool consume_prefix(const char **str)
     }
     if (**str == '-') {
         ++*str;
-        return PAW_BTRUE;
+        return PAW_TRUE;
     }
-    return PAW_BFALSE;
+    return PAW_FALSE;
 }
 
 void pawR_to_integer(paw_Env *P)
@@ -399,13 +369,6 @@ const char *pawR_to_string(paw_Env *P, size_t *plen)
     return out;
 }
 
-static void try_int(paw_Env *P, Value *pv, const char *what)
-{
-    if (pawV_num2int(pv)) {
-        pawR_type_error(P, what);
-    }
-}
-
 static void try_float2(paw_Env *P, Value *pv, Value *pv2, const char *what)
 {
     if (pawV_num2float(pv) || pawV_num2float(pv2)) {
@@ -445,7 +408,7 @@ static paw_Bool check_mul_overflow(paw_Int x, paw_Int y)
             return y < VINT_MAX / x;
         }
     }
-    return PAW_BFALSE;
+    return PAW_FALSE;
 }
 
 int pawR_read_global(paw_Env *P, Value name)
@@ -453,7 +416,7 @@ int pawR_read_global(paw_Env *P, Value name)
     assert(pawV_get_type(name) == VSTRING);
     Value *global = pawH_get(P, P->globals, name);
     if (global) {
-        vm_push(*global);
+        vm_pushv(*global);
         return 0;
     }
     return -1;
@@ -488,7 +451,7 @@ static UpValue *capture_upvalue(paw_Env *P, StackPtr local)
 
     UpValue *new_up = pawV_new_upvalue(P);
     pawV_link_upvalue(P, new_up, prev, next);
-    new_up->p = local;
+    new_up->p.p = local;
     return new_up;
 }
 
@@ -499,8 +462,8 @@ void pawR_close_upvalues(paw_Env *P, const StackPtr top)
         assert(upv_is_open(up));
         // Save before switching active union member (open -> closed).
         UpValue *next = up->open.next;
-        up->closed = *up->p;
-        up->p = &up->closed;
+        up->closed = *up->p.p;
+        up->p.p = &up->closed;
         P->up_list = next;
     }
 }
@@ -529,7 +492,7 @@ int pawR_getitem_raw(paw_Env *P, paw_Bool has_fallback)
             idx += paw_cast_int(str->length);
         }
         if (idx >= paw_cast_int(str->length)) {
-            out_of_range(P, "string index");
+            integer_overflow(P, "string index");
         }
         const char c = str->text[idx];
         String *res = pawS_new_nstr(P, &c, 1);
@@ -537,7 +500,7 @@ int pawR_getitem_raw(paw_Env *P, paw_Bool has_fallback)
     } else {
         pawR_type_error(P, "getter");
     }
-    vm_push(val);
+    vm_pushv(val);
     vm_shift(2 + has_fallback);
     return 0;
 }
@@ -557,11 +520,11 @@ int pawR_getattr_raw(paw_Env *P, paw_Bool has_fallback)
     } else {
         return -1;
     }
-    vm_push(*pval); // anchor
+    vm_pushv(*pval); // anchor
     if (paw_is_function(P, -1)) {
         // bind method to context ('self') variable
         Method *mtd = pawV_new_method(P, obj, *pval);
-        pawV_set_method(&P->top[-1], mtd); // replace
+        pawV_set_method(&P->top.p[-1], mtd); // replace
     }
     vm_shift(2 + has_fallback);
     return 0;
@@ -660,7 +623,7 @@ static CallFrame *invoke(paw_Env *P, Value name, int argc)
     if (method) {
         return pawC_precall(P, base, *method, argc);
     } else if (!pawV_is_instance(*base)) {
-        vm_push(*base);
+        vm_pushv(*base);
         pawR_type_error(P, ".()");
     }
     Instance *obj = pawV_get_instance(*base);
@@ -678,9 +641,9 @@ static paw_Bool fornum_init(paw_Env *P)
     // FIXME: Only small integers are supported right now, but we should also support
     //        big integers. Floats are not really necessary, as float loop bounds are
     //        seldom a good idea IMO.
-    try_int(P, &a, "for loop begin");
-    try_int(P, &b, "for loop end");
-    try_int(P, &c, "for loop step");
+    if (!pawV_is_int(a) || !pawV_is_int(b) || !pawV_is_int(c)) {
+        pawR_error(P, PAW_ETYPE, "for loop bounds must be integer");
+    }
     const paw_Int begin = pawV_get_int(a);
     const paw_Int end = pawV_get_int(b);
     const paw_Int step = pawV_get_int(c);
@@ -704,16 +667,16 @@ static paw_Bool fornum(paw_Env *P)
     const paw_Int itr = pawV_get_int(*vm_peek(2));
     const paw_Int next = itr + step;
     if (stop_loop(next, end, step)) {
-        return PAW_BFALSE;
+        return PAW_FALSE;
     }
     *vm_peek(2) = vint(next);
     vm_pushi(next);
-    return PAW_BTRUE;
+    return PAW_TRUE;
 }
 
 static paw_Bool meta_forin_init(paw_Env *P, Value v)
 {
-    ptrdiff_t save = pawC_stksave(P, P->top);
+    ptrdiff_t save = save_offset(P, P->top.p);
     if (meta_unop(P, OP_LEN, v)) {
         if (paw_int(P, -1) > 0) {
             vm_pop(1); // pop length
@@ -723,12 +686,12 @@ static paw_Bool meta_forin_init(paw_Env *P, Value v)
                 // Set up the stack to look like '..., 0, item'.
                 vm_pushi(0);
                 paw_rotate(P, -2, 1);
-                return PAW_BFALSE;
+                return PAW_FALSE;
             }
         }
     }
-    P->top = pawC_stkload(P, save);
-    return PAW_BTRUE; // skip the loop
+    P->top.p = restore_pointer(P, save);
+    return PAW_TRUE; // skip the loop
 }
 
 static paw_Bool forin_init(paw_Env *P)
@@ -739,22 +702,22 @@ static paw_Bool forin_init(paw_Env *P)
         Array *arr = pawV_get_array(v);
         if (pawA_iter(arr, &itr)) {
             vm_pushi(itr);
-            vm_push(arr->begin[itr]);
-            return PAW_BFALSE;
+            vm_pushv(arr->begin[itr]);
+            return PAW_FALSE;
         }
     } else if (pawV_is_map(v)) {
         Map *map = pawV_get_map(v);
         if (pawH_iter(map, &itr)) {
             vm_pushi(itr);
-            vm_push(map->keys[itr]);
-            return PAW_BFALSE;
+            vm_pushv(map->keys[itr]);
+            return PAW_FALSE;
         }
     } else if (has_meta(v)) {
         return meta_forin_init(P, v);
     } else {
         pawR_type_error(P, "iterator for loop");
     }
-    return PAW_BTRUE;
+    return PAW_TRUE;
 }
 
 static paw_Bool meta_forin(paw_Env *P, Value v, paw_Int itr)
@@ -773,9 +736,9 @@ static paw_Bool meta_forin(paw_Env *P, Value v, paw_Int itr)
         pawV_set_int(pitr, itr);
 
         meta_getter(P, OP_GETITEM, v, vint(itr));
-        return PAW_BTRUE;
+        return PAW_TRUE;
     }
-    return PAW_BFALSE; // finish the loop
+    return PAW_FALSE; // finish the loop
 }
 
 static paw_Bool forin(paw_Env *P)
@@ -787,22 +750,22 @@ static paw_Bool forin(paw_Env *P)
         paw_Int i = pawV_get_int(itr);
         if (pawA_iter(arr, &i)) {
             *vm_peek(0) = vint(i);
-            vm_push(arr->begin[i]);
-            return PAW_BTRUE;
+            vm_pushv(arr->begin[i]);
+            return PAW_TRUE;
         }
     } else if (pawV_is_map(obj)) {
         Map *map = pawV_get_map(obj);
         paw_Int i = pawV_get_int(itr);
         if (pawH_iter(map, &i)) {
             *vm_peek(0) = vint(i);
-            vm_push(map->keys[i]);
-            return PAW_BTRUE;
+            vm_pushv(map->keys[i]);
+            return PAW_TRUE;
         }
     } else {
         paw_assert(has_meta(obj)); // checked by forin_init()
         return meta_forin(P, obj, pawV_get_int(itr));
     }
-    return PAW_BFALSE; // stop the loop
+    return PAW_FALSE; // stop the loop
 }
 
 static void int_arith(paw_Env *P, Op op, Value lhs, Value rhs);
@@ -850,13 +813,13 @@ static paw_Bool mul_overflow(paw_Env *P, paw_Int x, paw_Int y)
     if (check_mul_overflow(x, y)) {
         // Add a copy of 'y' as a BigInt above 'x' on the stack. OP_MUL is
         // commutative, so just do 'y * x' and fix the stack after.
-        StackPtr sp = pawC_stkinc(P, 1);
+        StackPtr sp = vm_push0(); // placeholder
         pawB_from_int(P, sp, y);
         pawB_arith(P, OP_MUL, *sp, vint(x));
         vm_shift(1);
-        return PAW_BTRUE;
+        return PAW_TRUE;
     }
-    return PAW_BFALSE;
+    return PAW_FALSE;
 }
 
 static void int_arith(paw_Env *P, Op op, Value lhs, Value rhs)
@@ -899,11 +862,11 @@ static void int_arith(paw_Env *P, Op op, Value lhs, Value rhs)
             float_arith(P, op, lhs, rhs);
             return;
     }
-    StackPtr sp = pawC_stkinc(P, 1);
     if (pawV_int_fits_int(z)) {
-        pawV_set_int(sp, z);
+        vm_pushi(z);
     } else {
-        pawB_from_int(P, sp, z);
+        Value *pv = vm_push0();
+        pawB_from_int(P, pv, z);
     }
 }
 
@@ -936,6 +899,54 @@ static void string_arith(paw_Env *P, Op op, Value lhs, Value rhs)
             pawL_add_nstring(P, &print, s->text, s->length);
         }
         pawL_push_result(P, &print); // push
+        return;
+    }
+    pawR_type_error2(P, "arithmetic operator");
+}
+
+Array *concat_arrays(paw_Env *P, const Array *x, const Array *y)
+{
+    // Both 'nx' and 'ny' are in [0,PAW_SIZE_MAX].
+    const size_t nx = pawA_length(x);
+    const size_t ny = pawA_length(y);
+    if (nx > PAW_SIZE_MAX - ny) {
+        pawM_error(P);
+    }
+    Value *pv = vm_push0();
+    Array *cat = pawA_clone(P, pv, x);
+    pawA_reserve(P, cat, nx + ny);
+    for (size_t i = 0; i < ny; ++i) {
+        pawA_push(P, cat, y->begin[i]);
+    }
+    return cat;
+}
+
+static void array_arith(paw_Env *P, Op op, Value lhs, Value rhs)
+{
+    if (op == OP_ADD) {
+        if (pawV_is_array(lhs) && pawV_is_array(rhs)) {
+            Array *x = pawV_get_array(lhs);
+            Array *y = pawV_get_array(rhs);
+            concat_arrays(P, x, y);
+            return;
+        }
+    } else if (op == OP_MUL) {
+        Array *a;
+        paw_Int n;
+        if (pawV_is_array(lhs)) {
+            a = pawV_get_array(lhs);
+            n = pawR_check_int(P, rhs);
+        } else {
+            n = pawR_check_int(P, lhs);
+            a = pawV_get_array(rhs);
+        }
+        Value *pv;
+        Array *cat;
+        vm_array_init(cat, pv);
+        for (paw_Int i = 0; i < n; ++i) {
+            cat = concat_arrays(P, cat, a);
+            vm_shift(1); // copy over old 'cat'
+        }
         return;
     }
     pawR_type_error2(P, "arithmetic operator");
@@ -1006,8 +1017,8 @@ static void int_unop(paw_Env *P, Op op, paw_Int i)
         case OP_NEG:
             if (i == VINT_MIN) {
                 // The expression '-VINT_MIN' will overflow. Convert to VBIGINT.
-                StackPtr sp = pawC_stkinc(P, 1);
-                BigInt *bi = pawB_from_int(P, sp, i);
+                Value *pv = vm_push0();
+                BigInt *bi = pawB_from_int(P, pv, i);
                 pawB_unop(P, OP_NEG, obj2v(bi));
                 vm_shift(1);
                 break;
@@ -1072,6 +1083,8 @@ static void vm_arith(paw_Env *P, Op op)
         // called metamethod on either 'x' or 'y'
     } else if (pawV_is_string(x) || pawV_is_string(y)) {
         string_arith(P, op, x, y);
+    } else if (pawV_is_array(x) || pawV_is_array(y)) {
+        array_arith(P, op, x, y);
     } else if (pawV_is_float(x) || pawV_is_float(y)) {
         try_float2(P, &x, &y, "arithmetic operator");
         float_arith(P, op, x, y);
@@ -1101,7 +1114,7 @@ static void int_bitwise(paw_Env *P, Op op, Value lhs, Value rhs)
             break;
         case OP_SHL:
             if (y < 0) {
-                out_of_range(P, "shift count");
+                pawR_error(P, PAW_ERUNTIME, "negative shift count");
             } else if (y == 0) {
                 z = x; // NOOP
             } else if (cast_size(y) >= VINT_WIDTH ||
@@ -1117,7 +1130,7 @@ static void int_bitwise(paw_Env *P, Op op, Value lhs, Value rhs)
         default:
             paw_assert(op == OP_SHR);
             if (y < 0) {
-                out_of_range(P, "shift count");
+                pawR_error(P, PAW_ERUNTIME, "negative shift count");
             } else if (y == 0) {
                 z = x; // NOOP
             } else {
@@ -1157,7 +1170,7 @@ static const char *ensure_str(paw_Env *P, Value v, int offset, size_t *plen)
         *plen = str->length;
         return str->text;
     }
-    vm_push(v); // convert to string
+    vm_pushv(v); // convert to string
     const char *str = pawR_to_string(P, plen);
     *vm_peek(offset + 1) = *vm_peek(0);
     vm_pop(1);
@@ -1287,7 +1300,7 @@ static int getattr_aux(paw_Env *P)
     const Value key = *vm_peek(0);
     if (meta_getter(P, OP_GETATTR, obj, key)) {
         vm_shift(2);
-    } else if (pawR_getattr_raw(P, PAW_BFALSE)) {
+    } else if (pawR_getattr_raw(P, PAW_FALSE)) {
         return -1;
     }
     return 0;
@@ -1299,7 +1312,7 @@ static int getitem_aux(paw_Env *P)
     const Value key = *vm_peek(0);
     if (meta_getter(P, OP_GETITEM, obj, key)) {
         vm_shift(2);
-    } else if (pawR_getitem_raw(P, PAW_BFALSE)) {
+    } else if (pawR_getitem_raw(P, PAW_FALSE)) {
         return -1;
     }
     return 0;
@@ -1321,9 +1334,9 @@ void pawR_getitem(paw_Env *P)
 
 void pawR_literal_array(paw_Env *P, int n)
 {
-    StackPtr sp = pawC_stkinc(P, 1);
-    Array *a = pawA_new(P);
-    pawV_set_array(sp, a);
+    Array *a;
+    StackPtr sp;
+    vm_array_init(a, sp);
     if (n > 0) {
         pawA_resize(P, a, cast_size(n));
         for (int i = 1; i <= n; ++i) {
@@ -1336,9 +1349,9 @@ void pawR_literal_array(paw_Env *P, int n)
 
 void pawR_literal_map(paw_Env *P, int n)
 {
-    StackPtr sp = pawC_stkinc(P, 1);
-    Map *m = pawH_new(P);
-    pawV_set_map(sp, m);
+    Map *m;
+    StackPtr sp;
+    vm_map_init(m, sp);
     if (n > 0) {
         for (int i = 0; i < n; ++i) {
             const Value value = *--sp;
@@ -1373,17 +1386,17 @@ top:
 
             vm_case(PUSHTRUE) :
             {
-                vm_pushb(PAW_BTRUE);
+                vm_pushb(PAW_TRUE);
             }
 
             vm_case(PUSHFALSE) :
             {
-                vm_pushb(PAW_BFALSE);
+                vm_pushb(PAW_FALSE);
             }
 
             vm_case(PUSHCONST) :
             {
-                vm_push(vm_const());
+                vm_pushv(vm_const());
             }
 
             vm_case(LEN) :
@@ -1530,7 +1543,8 @@ top:
                 pawH_extend(P, sub->attr, super->attr);
 
                 // Ensure that __init is not inherited. Note that 'sub' has not had any
-                // of its own attributes added to it yet.
+                // of its own attributes added to it yet, so this will not remove the
+                // actual __init attribute belonging to 'sub'.
                 const Value key = pawE_cstr(P, CSTR_INIT);
                 pawH_action(P, sub->attr, key, MAP_ACTION_REMOVE);
                 vm_pop(1); // pop 'sub'
@@ -1550,9 +1564,9 @@ top:
                     pawR_attr_error(P, name);
                 }
 
-                StackPtr sp = pawC_stkinc(P, 1);
+                Value *pv = vm_push0();
                 Method *mtd = pawV_new_method(P, self, *value);
-                pawV_set_method(sp, mtd);
+                pawV_set_method(pv, mtd);
             }
 
             vm_case(INVOKESUPER) :
@@ -1574,7 +1588,7 @@ top:
             vm_case(GETLOCAL) :
             {
                 const Value local = *vm_local();
-                vm_push(local);
+                vm_pushv(local);
             }
 
             vm_case(SETLOCAL) :
@@ -1587,7 +1601,7 @@ top:
             vm_case(GETUPVALUE) :
             {
                 const Value upval = *vm_upvalue();
-                vm_push(upval);
+                vm_pushv(upval);
             }
 
             vm_case(SETUPVALUE) :
@@ -1609,13 +1623,13 @@ top:
             {
                 const Value name = vm_const();
                 // Error if 'name' does not exist
-                pawR_write_global(P, name, PAW_BFALSE);
+                pawR_write_global(P, name, PAW_FALSE);
             }
 
             vm_case(GLOBAL) :
             {
                 const Value name = vm_const();
-                pawR_write_global(P, name, PAW_BTRUE);
+                pawR_write_global(P, name, PAW_TRUE);
             }
 
             vm_case(GETATTR) :
@@ -1646,10 +1660,10 @@ top:
 
             vm_case(CLOSURE) :
             {
-                StackPtr sp = pawC_stkinc(P, 1);
+                Value *pv = vm_push0();
                 Proto *proto = fn->p->p[Iw()];
                 Closure *closure = pawV_new_closure(P, proto->nup);
-                pawV_set_closure(sp, closure);
+                pawV_set_closure(pv, closure);
                 closure->p = proto;
 
                 // open upvalues
@@ -1657,7 +1671,7 @@ top:
                     const int tag = Iw();
                     const int index = tag & UPVALUE_MAX;
                     closure->up[i] = tag & UPVALUE_LOCAL
-                                         ? capture_upvalue(P, cf->base + index)
+                                         ? capture_upvalue(P, cf->base.p + index)
                                          : fn->up[index];
                 }
             }
@@ -1698,13 +1712,13 @@ top:
                 const Value result = *vm_peek(0);
                 vm_pop(1);
 
-                P->top = CF_STACK_RETURN(cf);
+                P->top.p = cf_stack_return(cf);
                 vm_save();
 
                 pawR_close_upvalues(P, vm_peek(0));
-                vm_push(result);
+                vm_pushv(result);
                 P->cf = cf->prev;
-                if (IS_ENTRY(cf)) {
+                if (cf_is_entry(cf)) {
                     return;
                 }
                 cf = P->cf;
@@ -1717,12 +1731,12 @@ top:
                 const int nexpect = Ib();
                 const int nactual = vm_argc();
                 const int nextra = nactual - nexpect;
-                StackPtr sp = pawC_stkinc(P, 1);
-                Array *argv = pawA_new(P);
-                pawV_set_array(sp, argv);
+                Value *pv;
+                Array *argv;
+                vm_array_init(argv, pv);
                 if (nextra) {
                     pawA_resize(P, argv, cast_size(nextra));
-                    StackPtr argv0 = cf->base + 1 + nexpect;
+                    StackPtr argv0 = cf->base.p + 1 + nexpect;
                     for (int i = 0; i < nextra; ++i) {
                         argv->begin[i] = argv0[i];
                     }
@@ -1740,9 +1754,8 @@ top:
             vm_case(JUMPNULL) :
             {
                 const int offset = vm_jmp();
-                const StackPtr sp = vm_peek(0);
-                maybe_meta_unop(P, OP_NULL, *sp); // result in 'sp'
-                if (pawV_is_null(*sp)) {
+                maybe_meta_unop(P, OP_NULL, *vm_peek(0));
+                if (pawV_is_null(*vm_peek(0))) {
                     pc += offset;
                 }
             }
@@ -1750,9 +1763,8 @@ top:
             vm_case(JUMPFALSE) :
             {
                 const int offset = vm_jmp();
-                const StackPtr sp = vm_peek(0);
-                maybe_meta_unop(P, OP_BOOL, *sp); // result in 'sp'
-                if (!pawV_truthy(*sp)) {
+                maybe_meta_unop(P, OP_BOOL, *vm_peek(0));
+                if (!pawV_truthy(*vm_peek(0))) {
                     pc += offset;
                 }
             }
@@ -1794,7 +1806,7 @@ top:
             }
 
         vm_default:
-            paw_assert(PAW_BFALSE);
+            paw_assert(PAW_FALSE);
         }
     }
 }

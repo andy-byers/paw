@@ -1,4 +1,9 @@
+// Copyright (c) 2024, The paw Authors. All rights reserved.
+// This source code is licensed under the MIT License, which can be found in
+// LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "lib.h"
+
+#define _USE_MATH_DEFINES
 #include <math.h>
 
 static const pawL_Attr kMathLib[] = {

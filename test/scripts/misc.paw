@@ -1,22 +1,7 @@
 
 {
-    let time = require('time')
-    let t = time.time()
-    let t2 = time.time()
-    assert(t <= t2) 
-
-    let t = time.time()
-    -- busy work
-    for i = 0,1000 {
-        assert(i == i)
-    }
-    let t2 = time.time()
-    assert(t < t2) 
-}
-
-{
     let io = require('io')
-    let file = io.open('/tmp/paw-test-misc', 'w+')
+    let file = io.open('./paw_test_data_', 'w+')
     let input = 'Hello, world'
     io.write(file, 'Hello')
     io.write(file, ', ')

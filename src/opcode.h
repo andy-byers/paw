@@ -12,7 +12,7 @@ typedef uint8_t OpCode;
 #define UPVALUE_LOCAL ((int)~(UINT16_MAX >> 1))
 
 #define JUMP_MAX (int)INT16_MAX
-#define decode_jump(x) ((int)(x) - JUMP_MAX)
+#define decode_jump(x) ((int)(x)-JUMP_MAX)
 #define encode_jump_over(x) ((x) + JUMP_MAX)
 #define encode_jump_back(x) (JUMP_MAX - (x))
 

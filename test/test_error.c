@@ -1,17 +1,19 @@
-#include "aux.h"
+#include "auxlib.h"
+#include "lib.h"
 #include "os.h"
 #include "opcode.h"
 #include "test.h"
+#include <limits.h>
 
 static struct TestAlloc s_alloc;
 
 typedef uint64_t TypeSet;
 
-static void error_test_case(int expect, const char *name, const char *text)
+static void test_case(int expect, const char *name, const char *text)
 {
     (void)name;
     paw_Env *P = test_open(NULL, &s_alloc);
-    int status = test_open_string(P, text);
+    int status = pawL_load_chunk(P, name, text);
     if (expect == PAW_ESYNTAX) {
         CHECK(status == PAW_ESYNTAX);
     } else {
@@ -23,12 +25,12 @@ static void error_test_case(int expect, const char *name, const char *text)
 
 static void test_name_error(void)
 {
-    error_test_case(PAW_ENAME, "use_before_def_global", "let x = x");
-    error_test_case(PAW_ENAME, "use_before_def_local", "{let x = x}");
+    test_case(PAW_ENAME, "use_before_def_global", "let x = x");
+    test_case(PAW_ENAME, "use_before_def_local", "{let x = x}");
 
-    error_test_case(PAW_ENAME, "undef_global", "x = 1");
-    error_test_case(PAW_ENAME, "undef_local", "{x = 1}");
-    error_test_case(PAW_ENAME, "undef_upvalue", "(fn() {x = 1})()");
+    test_case(PAW_ENAME, "undef_global", "x = 1");
+    test_case(PAW_ENAME, "undef_local", "{x = 1}");
+    test_case(PAW_ENAME, "undef_upvalue", "(fn() {x = 1})()");
 }
 
 static _Bool has_type(TypeSet ts, int kind)
@@ -71,7 +73,7 @@ static void check_unop_type_error(const char *op, TypeSet ts)
             snprintf(text_buf, sizeof(text_buf), "let x = %s%s",
                      op, get_literal(k));
 
-            error_test_case(PAW_ETYPE, name_buf, text_buf);
+            test_case(PAW_ETYPE, name_buf, text_buf);
         }
     }
 }
@@ -89,7 +91,7 @@ static void check_binop_type_error_(const char *op, TypeSet ts, TypeSet ts2)
                 snprintf(text_buf, sizeof(text_buf), "let x = %s %s %s",
                          get_literal(k), op, get_literal(k2));
 
-                error_test_case(PAW_ETYPE, name_buf, text_buf);
+                test_case(PAW_ETYPE, name_buf, text_buf);
             }
         }
     }
@@ -144,7 +146,7 @@ static void too_many_constants(void)
     pawL_push_result(P, &buf);
 
     const char *source = paw_string(P, -1);
-    error_test_case(PAW_ESYNTAX, "too_many_constants", source);
+    test_case(PAW_ESYNTAX, "too_many_constants", source);
 }
 
 static void too_many_instructions(void)
@@ -164,7 +166,7 @@ static void too_many_instructions(void)
     pawL_push_result(P, &buf);
 
     const char *source = paw_string(P, -1);
-    error_test_case(PAW_ESYNTAX, "too_many_instructions", source);
+    test_case(PAW_ESYNTAX, "too_many_instructions", source);
 }
 
 static void too_many_locals(void)
@@ -182,7 +184,7 @@ static void too_many_locals(void)
     pawL_push_result(P, &buf);
 
     const char *source = paw_string(P, -1);
-    error_test_case(PAW_ESYNTAX, "too_many_locals", source);
+    test_case(PAW_ESYNTAX, "too_many_locals", source);
 }
 
 static void too_far_to_jump(void)
@@ -202,7 +204,7 @@ static void too_far_to_jump(void)
     pawL_push_result(P, &buf);
 
     const char *source = paw_string(P, -1);
-    error_test_case(PAW_ESYNTAX, "too_far_to_jump", source);
+    test_case(PAW_ESYNTAX, "too_far_to_jump", source);
 }
 
 static void too_far_to_loop(void)
@@ -220,19 +222,19 @@ static void too_far_to_loop(void)
     pawL_push_result(P, &buf);
 
     const char *source = paw_string(P, -1);
-    error_test_case(PAW_ESYNTAX, "too_far_to_loop", source);
+    test_case(PAW_ESYNTAX, "too_far_to_loop", source);
 }
 
 static void test_syntax_error(void)
 {
-    error_test_case(PAW_ESYNTAX, "overflow_integer", "-9223372036854775808");
-    error_test_case(PAW_ESYNTAX, "stmt_after_return", "fn f() {return; f()}");
-    error_test_case(PAW_ESYNTAX, "missing_right_paren", "fn f(a, b, c {return [a + b + c]}");
-    error_test_case(PAW_ESYNTAX, "missing_left_paren", "fn fa, b, c) {return [a + b + c]}");
-    error_test_case(PAW_ESYNTAX, "missing_right_curly", "fn f(a, b, c) {return [a + b + c]");
-    error_test_case(PAW_ESYNTAX, "missing_left_curly", "fn f(a, b, c) return [a + b + c]}");
-    error_test_case(PAW_ESYNTAX, "missing_right_bracket", "fn f(a, b, c) {return [a + b + c}");
-    error_test_case(PAW_ESYNTAX, "missing_left_bracket", "fn f(a, b, c) {return a + b + c]}");
+    test_case(PAW_ESYNTAX, "overflow_integer", "-9223372036854775808");
+    test_case(PAW_ESYNTAX, "stmt_after_return", "fn f() {return; f()}");
+    test_case(PAW_ESYNTAX, "missing_right_paren", "fn f(a, b, c {return [a + b + c]}");
+    test_case(PAW_ESYNTAX, "missing_left_paren", "fn fa, b, c) {return [a + b + c]}");
+    test_case(PAW_ESYNTAX, "missing_right_curly", "fn f(a, b, c) {return [a + b + c]");
+    test_case(PAW_ESYNTAX, "missing_left_curly", "fn f(a, b, c) return [a + b + c]}");
+    test_case(PAW_ESYNTAX, "missing_right_bracket", "fn f(a, b, c) {return [a + b + c}");
+    test_case(PAW_ESYNTAX, "missing_left_bracket", "fn f(a, b, c) {return a + b + c]}");
 
     // The following tests are generated, since they require a lot of text.
     too_many_locals();
@@ -248,10 +250,10 @@ int main(void)
     test_syntax_error();
     test_type_error();
 
-    error_test_case(PAW_ESYNTAX, "missing_left_paren", "fn fa, b, c) {return [a + b + c]}");
-    error_test_case(PAW_ESYNTAX, "missing_right_paren", "fn f(a, b, c {return [a + b + c]}");
-    error_test_case(PAW_ESYNTAX, "missing_right_curly", "fn f(a, b, c) {return [a + b + c]");
-    error_test_case(PAW_ESYNTAX, "missing_left_curly", "fn f(a, b, c) return [a + b + c]}");
-    error_test_case(PAW_ESYNTAX, "missing_right_bracket", "fn f(a, b, c) {return [a + b + c}");
-    error_test_case(PAW_ESYNTAX, "missing_left_bracket", "fn f(a, b, c) {return a + b + c]}");
+    test_case(PAW_ESYNTAX, "missing_left_paren", "fn fa, b, c) {return [a + b + c]}");
+    test_case(PAW_ESYNTAX, "missing_right_paren", "fn f(a, b, c {return [a + b + c]}");
+    test_case(PAW_ESYNTAX, "missing_right_curly", "fn f(a, b, c) {return [a + b + c]");
+    test_case(PAW_ESYNTAX, "missing_left_curly", "fn f(a, b, c) return [a + b + c]}");
+    test_case(PAW_ESYNTAX, "missing_right_bracket", "fn f(a, b, c) {return [a + b + c}");
+    test_case(PAW_ESYNTAX, "missing_left_bracket", "fn f(a, b, c) {return a + b + c]}");
 }

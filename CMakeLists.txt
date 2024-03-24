@@ -15,6 +15,9 @@ endif()
 
 option(PAW_BuildFuzzers "Build the fuzz targets" Off)
 option(PAW_BuildTests "Build the tests" ${MAIN_PROJECT})
+
+set(PAW_STRESS 0 CACHE STRING 
+    "Enable expensive checks (up to level 2)")
  
 add_library(paw_context INTERFACE)
 if(${CMAKE_C_COMPILER_ID} STREQUAL MSVC)
@@ -33,7 +36,7 @@ set(PAW_SOURCE_DIR ${PROJECT_SOURCE_DIR}/src)
 add_library(paw STATIC)
 target_sources(paw
     PUBLIC  ${PAW_SOURCE_DIR}/api.h
-            ${PAW_SOURCE_DIR}/aux.h
+            ${PAW_SOURCE_DIR}/auxlib.h
             ${PAW_SOURCE_DIR}/array.h
             ${PAW_SOURCE_DIR}/bigint.h
             ${PAW_SOURCE_DIR}/call.h
@@ -54,7 +57,7 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/util.h
             ${PAW_SOURCE_DIR}/value.h
     PRIVATE ${PAW_SOURCE_DIR}/api.c
-            ${PAW_SOURCE_DIR}/aux.c
+            ${PAW_SOURCE_DIR}/auxlib.c
             ${PAW_SOURCE_DIR}/array.c
             ${PAW_SOURCE_DIR}/bigint.c 
             ${PAW_SOURCE_DIR}/call.c
@@ -79,6 +82,15 @@ target_link_libraries(paw
     PRIVATE paw_context)
 target_include_directories(paw
     PUBLIC ${PAW_SOURCE_DIR})
+target_compile_definitions(paw
+    PUBLIC PAW_STRESS=${PAW_STRESS})
+
+add_executable(pawc
+    ${PAW_SOURCE_DIR}/paw.c)
+target_link_libraries(pawc
+    PRIVATE paw_context paw)
+set_property(TARGET pawc 
+    PROPERTY OUTPUT_NAME paw)
 
 if(PAW_BuildTests)
     # Speed up stack overflow test

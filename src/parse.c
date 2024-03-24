@@ -2,7 +2,7 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "parse.h"
-#include "aux.h"
+#include "auxlib.h"
 #include "call.h"
 #include "env.h"
 #include "gc.h"
@@ -472,13 +472,13 @@ static int resolve_upvalue(FnState *fn, String *name)
     // Check the caller's local variables.
     const int local = resolve_local(caller, name);
     if (local >= 0) {
-        caller->proto->v[local].captured = PAW_BTRUE;
-        return add_upvalue(fn, name, local, PAW_BTRUE);
+        caller->proto->v[local].captured = PAW_TRUE;
+        return add_upvalue(fn, name, local, PAW_TRUE);
     }
 
     const int upvalue = resolve_upvalue(caller, name);
     if (upvalue >= 0) {
-        return add_upvalue(fn, name, upvalue, PAW_BFALSE);
+        return add_upvalue(fn, name, upvalue, PAW_FALSE);
     }
     return -1;
 }
@@ -798,9 +798,9 @@ static paw_Bool test_next(Lex *lex, TokenKind kind)
 {
     if (test(lex, kind)) {
         skip(lex);
-        return PAW_BTRUE;
+        return PAW_TRUE;
     }
-    return PAW_BFALSE;
+    return PAW_FALSE;
 }
 
 // Eat a semicolon, if one exists
@@ -870,7 +870,7 @@ static void leave_function(Lex *lex)
 
     pm->vsize = fn->base;
     lex->fn = fn->caller;
-    CHECK_GC(ctx(lex));
+    check_gc(ctx(lex));
 }
 
 static String *context_name(const FnState *fn, FnKind kind)
@@ -894,7 +894,7 @@ static void enter_function(Lex *lex, FnState *fn, BlkState *blk, FnKind kind)
     lex->fn = fn;
 
     // Enter the function body.
-    enter_block(fn, blk, PAW_BFALSE);
+    enter_block(fn, blk, PAW_FALSE);
 
     // Create the context variable in slot 0. For VCLOSURE, this slot holds the closure
     // object being called. For VMETHOD, it holds the class instance that the method is
@@ -1234,7 +1234,7 @@ static void fn_parameters(Lex *lex)
             emit_arg(lex, OP_VARARG, argc);
             new_local_literal(lex, "argv");
             begin_local_scope(lex, 1);
-            p->is_va = PAW_BTRUE;
+            p->is_va = PAW_TRUE;
         }
     }
     p->argc = argc;
@@ -1477,7 +1477,7 @@ static BinOp expression(Lex *lex, ExprState *e)
 static void block(Lex *lex)
 {
     BlkState blk;
-    enter_block(lex->fn, &blk, PAW_BFALSE);
+    enter_block(lex->fn, &blk, PAW_FALSE);
     body(lex);
     leave_block(lex->fn);
 }
@@ -1552,7 +1552,7 @@ static void forbody(Lex *lex, int init, int loop)
 
     // Enter a block for the last control variable, i.e. the counter. This
     // variable can be captured.
-    enter_block(fn, &blk, PAW_BFALSE);
+    enter_block(fn, &blk, PAW_FALSE);
     begin_local_scope(lex, 1);
 
     block(lex);
@@ -1607,7 +1607,7 @@ static void for_stmt(Lex *lex)
     BlkState blk;
     FnState *fn = lex->fn;
     // Enter scope for the loop variables.
-    enter_block(fn, &blk, PAW_BTRUE);
+    enter_block(fn, &blk, PAW_TRUE);
 
     // Parse the loop variable name.
     String *ivar = usable_name(lex);
@@ -1625,7 +1625,7 @@ static void while_stmt(Lex *lex)
 {
     BlkState blk;
     FnState *fn = lex->fn;
-    enter_block(fn, &blk, PAW_BTRUE);
+    enter_block(fn, &blk, PAW_TRUE);
     const int loop = fn->pc;
 
     skip(lex); // 'while' token
@@ -1649,7 +1649,7 @@ static void dowhile_stmt(Lex *lex)
 {
     BlkState blk;
     FnState *fn = lex->fn;
-    enter_block(fn, &blk, PAW_BTRUE);
+    enter_block(fn, &blk, PAW_TRUE);
     const int top = fn->pc;
 
     skip(lex); // 'do' token
@@ -1806,14 +1806,14 @@ static void class_stmt(Lex *lex)
         // handle inheritance
         push_named(lex, class_name);
         emit(lex, OP_INHERIT);
-        cls.has_super = PAW_BTRUE;
+        cls.has_super = PAW_TRUE;
     } else {
         define_var(lex, &e);
     }
 
     BlkState blk;
     // scope for potential 'super' variable
-    enter_block(fn, &blk, PAW_BFALSE);
+    enter_block(fn, &blk, PAW_FALSE);
 
     if (cls.has_super) {
         // Create a local variable, 'super', to reference the superclass. If
@@ -1955,20 +1955,21 @@ Closure *pawP_parse(paw_Env *P, paw_Reader input, ParseMemory *pm, const char *n
         .P = P,
     };
     pawX_set_source(&lex, input);
-    StackPtr sp = pawC_stkinc(P, 2);
 
     // Create the main closure and push it onto the stack so that the garbage
     // collector can find it.
+    Value *pv = pawC_push0(P);
     Closure *main = pawV_new_closure(P, 1);
-    pawV_set_closure(&sp[0], main);
+    pawV_set_closure(pv, main);
     Proto *f = pawV_new_proto(P);
     main->p = f;
 
     // Do the same for the lexer string map. Strings are reachable from this map
     // during the parse. Once the parse is finished, all strings should be
     // anchored somewhere.
+    pv = pawC_push0(P);
     lex.strings = pawH_new(P);
-    pawV_set_map(&sp[1], lex.strings);
+    pawV_set_map(pv, lex.strings);
 
     // Store the module name.
     String *modname = pawS_new_str(P, name);

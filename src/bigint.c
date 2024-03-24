@@ -2,7 +2,7 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "bigint.h"
-#include "aux.h"
+#include "auxlib.h"
 #include "gc.h"
 #include "mem.h"
 #include "rt.h"
@@ -207,10 +207,10 @@ static BigInt *subm(paw_Env *P, StackPtr sp, const BigInt *x, const BigInt *y)
     const int max = paw_max(x->size, y->size);
     BigInt *z = bi_alloc(P, sp, max + 1);
 
-    paw_Bool swap = PAW_BFALSE;
+    paw_Bool swap = PAW_FALSE;
     if (cmp_digits(x->buf, x->size, y->buf, y->size) < 0) {
         swap(const BigInt *, x, y); // |x| >= |y| must be true
-        swap = PAW_BTRUE;
+        swap = PAW_TRUE;
     }
 
     int i = 0;
@@ -361,7 +361,7 @@ static void bi_divmod(paw_Env *P, StackPtr sp, const BigInt *x, const BigInt *y)
     if (bi_zero(y)) {
         pawR_error(P, PAW_ERUNTIME, "divide by 0");
     }
-    StackPtr rp = pawC_stkinc(P, 1);
+    StackPtr rp = pawC_push0(P);
     sp = rp - 1; // instead of saving/loading position
     BigInt *r = pawB_copy(P, rp, x, 1);
     r->neg = x->neg != y->neg;
@@ -636,7 +636,7 @@ void pawB_to_string(paw_Env *P, const BigInt *bi, paw_Bool caps, const char *pre
         // 'zero' needs space for '0*0', where '*' is a single char
         // representing the base.
         char zero[3] = {'0'};
-        const size_t n = finish_string(zero, 1, prefix, PAW_BFALSE);
+        const size_t n = finish_string(zero, 1, prefix, PAW_FALSE);
         pawC_pushns(P, zero, n); // push string
         return;
     }
@@ -665,10 +665,10 @@ void pawB_to_string(paw_Env *P, const BigInt *bi, paw_Bool caps, const char *pre
         c += c > 9 ? char_offset : '0';
         pawL_add_char(P, &print, c);
 
-        zero = PAW_BTRUE;
+        zero = PAW_TRUE;
         for (int i = 0; i < n; ++i) {
             if (digits[i]) {
-                zero = PAW_BFALSE;
+                zero = PAW_FALSE;
                 break;
             }
         }
@@ -683,7 +683,7 @@ void pawB_from_float(paw_Env *P, paw_Float f)
 {
     // TODO: Check for inf, NaN, use a special routine to convert, dont' cast
     //       to paw_Int, as that will not work
-    StackPtr sp = pawC_stkinc(P, 1);
+    StackPtr sp = pawC_push0(P);
     if (!pawV_float_fits_int(f)) {
         pawR_error(P, PAW_ERUNTIME, "TODO: need special float -> bigint conversion");
     }
@@ -693,14 +693,14 @@ void pawB_from_float(paw_Env *P, paw_Float f)
 paw_Int pawB_get_int64(const BigInt *bi, paw_Bool *lossless)
 {
     paw_Int value = 0;
-    *lossless = PAW_BTRUE;
+    *lossless = PAW_TRUE;
     for (int i = bi->size - 1; i >= 0; --i) {
         const int v = bi->buf[i];
         if (value > (PAW_INT_MAX - v) / BI_BASE) {
 #define LOW_MASK ((paw_int_c(1) << (PAW_INT_WIDTH - BI_BITS - 1)) - 1)
             // Clear the high bits so 'value' doesn't overflow.
             value &= LOW_MASK;
-            *lossless = PAW_BFALSE;
+            *lossless = PAW_FALSE;
         }
         value = value * BI_BASE + v;
     }
@@ -778,7 +778,7 @@ void pawB_unop(paw_Env *P, Op op, Value x)
 {
     paw_assert(pawV_is_bigint(x));
     BigInt *bi = pawV_get_bigint(x);
-    StackPtr sp = pawC_stkinc(P, 1);
+    StackPtr sp = pawC_push0(P);
     switch (op) {
         case OP_NEG:
             negate(pawB_copy(P, sp, bi, 0));
@@ -803,7 +803,7 @@ static paw_Bool is_negative(Value v)
     } else if (pawV_is_float(v)) {
         return pawV_get_float(v) < 0;
     } else {
-        return PAW_BFALSE;
+        return PAW_FALSE;
     }
 }
 
@@ -833,7 +833,7 @@ static void bi_finish(Value *pv)
 void pawB_arith(paw_Env *P, Op op, Value lhs, Value rhs)
 {
     unpack2(P, x, y, lhs, rhs, "arithmetic operator");
-    StackPtr sp = pawC_stkinc(P, 1);
+    StackPtr sp = pawC_push0(P);
     switch (op) {
         case OP_ADD:
             bi_add(P, sp, &x, &y);
@@ -857,13 +857,13 @@ void pawB_arith(paw_Env *P, Op op, Value lhs, Value rhs)
     }
     // NOTE: Go through the 'top' pointer, as 'sp' may be junk due to a stack
     //       reallocation (the divmod routine pushes an additional value).
-    bi_finish(&P->top[-1]);
+    bi_finish(&P->top.p[-1]);
 }
 
 void pawB_bitwise(paw_Env *P, Op op, Value lhs, Value rhs)
 {
     unpack2(P, x, y, lhs, rhs, "bitwise operator");
-    StackPtr sp = pawC_stkinc(P, 1);
+    StackPtr sp = pawC_push0(P);
     switch (op) {
         case OP_BAND:
             bi_band(P, sp, &x, &y);
@@ -876,10 +876,10 @@ void pawB_bitwise(paw_Env *P, Op op, Value lhs, Value rhs)
             break;
         case OP_SHL: {
             if (is_negative(rhs)) {
-                pawR_error(P, PAW_ERANGE, "negative shift count");
+                pawR_error(P, PAW_EOVERFLOW, "negative shift count");
             } else if (pawV_is_bigint(rhs)) {
                 // Definitely OOM: this would require an enormous amount of memory.
-                pawR_error(P, PAW_ERANGE, "shift count too large");
+                pawR_error(P, PAW_EOVERFLOW, "shift count too large");
             }
             const paw_Int n = pawV_get_int(rhs);
             bi_shl(P, sp, &x, n);
@@ -888,7 +888,7 @@ void pawB_bitwise(paw_Env *P, Op op, Value lhs, Value rhs)
         default: {
             paw_assert(op == OP_SHR);
             if (is_negative(rhs)) {
-                pawR_error(P, PAW_ERANGE, "negative shift count");
+                pawR_error(P, PAW_EOVERFLOW, "negative shift count");
             } else if (pawV_is_bigint(rhs)) {
                 // just propagate the sign
                 pawV_set_int(sp, is_negative(lhs) ? -1 : 0);
@@ -949,9 +949,9 @@ static void mul_add_digit(BigInt *bi, BiDigit factor, BiDigit offset)
     bi->size = z - out;
 }
 
-void pawB_parse(paw_Env *P, const char *s, int base)
+int pawB_parse(paw_Env *P, const char *s, int base)
 {
-    StackPtr sp = pawC_stkinc(P, 1);
+    StackPtr sp = pawC_push0(P);
     BigInt *bi = pawB_new(P);
     pawV_set_bigint(sp, bi);
 
@@ -965,7 +965,8 @@ void pawB_parse(paw_Env *P, const char *s, int base)
         mul_add_digit(bi, base, offset);
     }
     if (*s && !ISSPACE(*s)) {
-        pawR_error(P, PAW_ESYNTAX, "invalid integer");
+        return -1;
     }
     bi_trim(bi);
+    return 0;
 }

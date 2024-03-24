@@ -1,6 +1,6 @@
 #include "prefix.h"
 
-#include "aux.h"
+#include "auxlib.h"
 #include "call.h"
 #include "lib.h"
 #include "os.h"

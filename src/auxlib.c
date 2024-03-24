@@ -1,7 +1,7 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
-#include "aux.h"
+#include "auxlib.h"
 #include "array.h"
 #include "bigint.h"
 #include "map.h"
@@ -15,7 +15,7 @@ static void grow_buffer(paw_Env *P, Buffer *buf, int boxloc)
     paw_assert(buf->alloc <= SIZE_MAX / 2);
     const size_t alloc = buf->alloc * 2;
     if (pawL_boxed(buf)) {
-        UserData *ud = pawV_get_userdata(P->top[boxloc]);
+        UserData *ud = pawV_get_userdata(P->top.p[boxloc]);
         pawM_resize(P, buf->data, buf->alloc, alloc);
         ud->data = buf->data;
         ud->size = alloc;
@@ -25,7 +25,7 @@ static void grow_buffer(paw_Env *P, Buffer *buf, int boxloc)
         UserData *ud = pawV_push_userdata(P, alloc);
         memcpy(ud->data, buf->stack, buf->size);
         buf->data = ud->data;
-        Value *pbox = &P->top[boxloc - 1];
+        Value *pbox = &P->top.p[boxloc - 1];
         pawV_set_userdata(pbox, ud);
         paw_pop(P, 1);
     }
@@ -77,11 +77,8 @@ static void add_nstring(paw_Env *P, Buffer *buf, const char *str, size_t len, in
 void pawL_add_value(paw_Env *P, Buffer *buf)
 {
     size_t len; // value must be on top of the stack
-    const char *str = pawV_to_string(P, P->top[-1], &len);
-    reserve_memory(P, buf, len, -3);
-    memcpy(buf->data + buf->size, str, len);
-    buf->size += len;
-
+    const char *str = pawV_to_string(P, P->top.p[-1], &len);
+    add_nstring(P, buf, str, len, -3);
     pawC_stkdec(P, 2); // pop value and string
 }
 

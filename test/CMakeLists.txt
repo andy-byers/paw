@@ -1,6 +1,4 @@
 
-option(PAW_StressGC "Run a collection before each allocation" Off)
-
 function(build_test NAME) 
     set(TESTNAME "paw_${NAME}")
     add_executable(${TESTNAME} 

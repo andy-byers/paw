@@ -3,12 +3,14 @@
 
 #include "paw.h"
 #include <stdio.h>
+#include <stdlib.h>
 
-#define CHECK(x)              \
-    do {                      \
-        if (!(x)) {           \
-            __builtin_trap(); \
-        }                     \
+#define CHECK(x)                                       \
+    do {                                               \
+        if (!(x)) {                                    \
+            fprintf(stderr, "check failed: %s\n", #x); \
+            abort();                                   \
+        }                                              \
     } while (0)
 
 struct TestAlloc {

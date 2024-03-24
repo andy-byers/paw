@@ -4,7 +4,7 @@
 #ifndef PAW_STR_H
 #define PAW_STR_H
 
-#include "aux.h"
+#include "auxlib.h"
 #include "util.h"
 #include "value.h"
 #include <stdint.h>

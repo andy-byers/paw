@@ -22,7 +22,7 @@
     assert(!(4 & (5 == 4)))
 }
 
--- Comparisons
+-- Comparisons:
 {
     fn test_cmp(a, b) {
         assert(a == a)
@@ -44,6 +44,16 @@
     test_cmp(false, true)
     test_cmp(false, 1)
     test_cmp(0, true)
+}
+
+-- Conversions:
+{
+    assert(int(true)) 
+    assert(float(true)) 
+    assert(int(1))      
+    assert(float(1))      
+    assert(int(1 << 50))
+    assert(float(1 << 50))
 }
 
 {

@@ -2,17 +2,20 @@
 
 An embeddable scripting language
 
+## Goals
++ **Correctness**: paw should be correct.
+This is the most-important goal, by far.
+A language that returns incorrect results can't be very useful, so of course, paw should be implemented correctly.
+The language should be designed for human readability, and eliminate syntax foot-guns where possible (for example, an `if` statement without '{}' followed by 2 indented lines will not guard the second line).
+paw code should never invoke undefined behavior (UB), and the C interface should be carefully documented (since, of course, it is possible to have UB there).
++ **Performance**: paw should be (relatively) fast, possibly to the detriment of portability, but never at the expense of correctness.
++ **Ergonomics**: paw should be easy to use, and easy to learn.
+
 paw is heavily inspired by the Lua project.
 This can be seen in the scripting language syntax, as well as the design of the virtual machine (VM).
 Like the Lua VM, paw's VM is reentrant, meaning a C function called from paw can call other paw functions.
 paw also restricts the language grammer to eliminate the need for semicolons (most-notably: assignments are **not** expressions).
 Additionally, paw uses a quick single-pass compiler.
-
-## Goals
-+ No undefined behavior in paw:
-    + Overflowing signed integers become multi-precision integers
-    + Container bounds are always checked
-    + Limit implementation defined behavior wherever possible
 
 The goal of the paw project is to create a nice, modern scripting language that can be easily embedded into C or C++ projects.
 While there are many such languages already, I thought it would be fun to create my own.

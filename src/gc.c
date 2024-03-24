@@ -122,7 +122,7 @@ static void free_object(paw_Env *P, Object *o)
             pawV_free_method(P, (Method *)o);
             break;
         default:
-            paw_assert(PAW_BFALSE);
+            paw_assert(PAW_FALSE);
     }
 }
 
@@ -137,7 +137,7 @@ static void mark_object(paw_Env *P, Object *o)
     switch ((ValueKind)o->gc_kind) {
         case ~VUPVALUE: {
             UpValue *u = (UpValue *)o;
-            mark_value(P, *u->p);
+            mark_value(P, *u->p.p);
             set_black(u);
             break;
         }
@@ -159,7 +159,7 @@ static void mark_object(paw_Env *P, Object *o)
             break;
 
         default:
-            paw_assert(PAW_BFALSE);
+            paw_assert(PAW_FALSE);
     }
 }
 
@@ -244,7 +244,7 @@ static void traverse_userdata(paw_Env *P, UserData *u)
 
 static void mark_roots(paw_Env *P)
 {
-    for (StackPtr p = P->stack; p != P->top; ++p) {
+    for (StackPtr p = P->stack.p; p != P->top.p; ++p) {
         mark_value(P, *p);
     }
     for (CallFrame *cf = P->cf; cf; cf = cf->prev) {

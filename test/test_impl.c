@@ -24,12 +24,12 @@ static void test_primitives(void)
     CHECK(!pawV_is_object(v));
 
     // VTRUE/FALSE
-    pawV_set_bool(&v, PAW_BTRUE);
+    pawV_set_bool(&v, PAW_TRUE);
     CHECK(pawV_get_type(v) == VTRUE);
     CHECK(pawV_get_bool(v));
     CHECK(pawV_is_true(v));
     CHECK(!pawV_is_false(v));
-    pawV_set_bool(&v, PAW_BFALSE);
+    pawV_set_bool(&v, PAW_FALSE);
     CHECK(pawV_get_type(v) == VFALSE);
     CHECK(!pawV_get_bool(v));
     CHECK(!pawV_is_true(v));
@@ -212,7 +212,7 @@ static void test_map(paw_Env *P)
         CHECK(pawV_get_int(*value) == known[i]);
     }
 
-    pawC_stkdec(P, 2);
+    pawC_pop(P); // pop map
 }
 
 static void test_stack(paw_Env *P)

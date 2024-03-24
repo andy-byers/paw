@@ -56,7 +56,7 @@
 #define pawV_set_object(p, o, t) (*(p) = obj2v_aux(o, t))
 #define pawV_set_null(p) ((p)->i = -1)
 #define pawV_set_bool(p, b) ((p)->u = ~((uint64_t)((b) + 1) << 47))
-#define pawV_set_int(p, i) ((p)->u = (uint64_t)VNUMBER << VINT_WIDTH | ((uint64_t)(i) & VINT_MASK))
+#define pawV_set_int(p, i) ((p)->u = (uint64_t)VNUMBER << VINT_WIDTH | ((uint64_t)(i)&VINT_MASK))
 
 #define pawV_set_float(p, F) ((p)->f = F)
 #define pawV_set_userdata(p, o) pawV_set_object(p, o, VUSERDATA)
@@ -101,6 +101,15 @@ typedef union Value {
 
 // Type representing the kind of paw Value
 typedef unsigned ValueKind;
+
+typedef Value *StackPtr;
+
+typedef union StackRel {
+    ptrdiff_t d;
+    StackPtr p;
+} StackRel;
+
+#define s2v(s) (&(s).v)
 
 // Internal value representation:
 //
@@ -199,18 +208,18 @@ typedef struct Proto {
         int pc0;
         int pc1;
         paw_Bool captured;
-    } *v;
+    } * v;
 
     struct UpValueInfo {
         String *name;
         uint16_t index;
         paw_Bool is_local;
-    } *u;
+    } * u;
 
     struct LineInfo {
         int pc;
         int line;
-    } *lines;
+    } * lines;
 
     // constants
     Value *k;
@@ -231,11 +240,9 @@ typedef struct Proto {
 Proto *pawV_new_proto(paw_Env *P);
 void pawV_free_proto(paw_Env *P, Proto *p);
 
-typedef Value *StackPtr;
-
 typedef struct UpValue {
     GC_HEADER;
-    Value *p;
+    StackRel p;
     union {
         struct {
             // linked list of open upvalues
@@ -251,8 +258,8 @@ void pawV_free_upvalue(paw_Env *P, UpValue *u);
 void pawV_link_upvalue(paw_Env *P, UpValue *u, UpValue *prev, UpValue *next);
 void pawV_unlink_upvalue(UpValue *u);
 
-#define upv_is_open(up) ((up)->p != &(up)->closed)
-#define upv_level(up) check_exp(upv_is_open(up), (StackPtr)((up)->p))
+#define upv_is_open(up) ((up)->p.p != &(up)->closed)
+#define upv_level(up) check_exp(upv_is_open(up), (StackPtr)((up)->p.p))
 
 typedef struct Closure {
     GC_HEADER;

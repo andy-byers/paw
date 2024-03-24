@@ -47,6 +47,7 @@ const char *pawV_to_string(paw_Env *P, Value v, size_t *nout)
 {
     switch (pawV_get_type(v)) {
         case VSTRING:
+            pawC_pushv(P, v); // copy
             break;
         case VNULL:
             pawC_pushv(P, pawE_cstr(P, CSTR_NULL));
@@ -59,7 +60,7 @@ const char *pawV_to_string(paw_Env *P, Value v, size_t *nout)
             break;
         case VBIGINT: {
             const BigInt *bi = pawV_get_bigint(v);
-            pawB_to_string(P, bi, PAW_BFALSE, "", 10);
+            pawB_to_string(P, bi, PAW_FALSE, "", 10);
             break; // string on top of stack
         }
         case VNUMBER: // int
@@ -72,7 +73,7 @@ const char *pawV_to_string(paw_Env *P, Value v, size_t *nout)
                 return NULL;
             }
     }
-    const String *s = pawV_get_string(P->top[-1]);
+    const String *s = pawV_get_string(P->top.p[-1]);
     *nout = s->length;
     return s->text;
 }
@@ -177,21 +178,23 @@ void pawV_unlink_upvalue(UpValue *u)
 Closure *pawV_new_closure(paw_Env *P, int nup)
 {
     // Tack on enough space to store 'nup' pointers to UpValue.
-    Closure *f = pawM_new_fa(P, Closure, cast_size(nup) * sizeof(f->up[0]));
+    Closure *f = pawM_new_flex(P, Closure, nup, sizeof(f->up[0]));
     pawG_add_object(P, cast_object(f), VCLOSURE);
+    memset(f->up, 0, cast_size(nup) * sizeof(f->up[0]));
     f->nup = nup;
     return f;
 }
 
 void pawV_free_closure(paw_Env *P, Closure *f)
 {
-    pawM_free_fa(P, f, f->nup * sizeof(f->up[0]));
+    pawM_free_flex(P, f, f->nup, sizeof(f->up[0]));
 }
 
 Native *pawV_new_native(paw_Env *P, paw_Function f, int nup)
 {
-    Native *nt = pawM_new_fa(P, Native, cast_size(nup) * sizeof(nt->up[0]));
+    Native *nt = pawM_new_flex(P, Native, nup, sizeof(nt->up[0]));
     pawG_add_object(P, cast_object(nt), VNATIVE);
+    memset(nt->up, 0, cast_size(nup) * sizeof(nt->up[0]));
     nt->nup = nup;
     nt->f = f;
     return nt;
@@ -199,7 +202,7 @@ Native *pawV_new_native(paw_Env *P, paw_Function f, int nup)
 
 void pawV_free_native(paw_Env *P, Native *nt)
 {
-    pawM_free_fa(P, nt, nt->nup * sizeof(nt->up[0]));
+    pawM_free_flex(P, nt, nt->nup, sizeof(nt->up[0]));
 }
 
 Instance *pawV_new_instance(paw_Env *P, StackPtr sp, Class *cls)
@@ -221,10 +224,10 @@ void pawV_free_instance(paw_Env *P, Instance *i)
 
 Class *pawV_push_class(paw_Env *P)
 {
-    StackPtr sp = pawC_stkinc(P, 1);
+    Value *pv = pawC_push0(P);
     Class *cls = pawM_new(P, Class);
     pawG_add_object(P, cast_object(cls), VCLASS);
-    pawV_set_class(sp, cls); // anchor
+    pawV_set_class(pv, cls); // anchor
     cls->attr = pawH_new(P);
     return cls;
 }
@@ -253,10 +256,10 @@ UserData *pawV_push_userdata(paw_Env *P, size_t size)
     if (size > PAW_SIZE_MAX) {
         pawM_error(P);
     }
-    StackPtr sp = pawC_stkinc(P, 1);
+    Value *pv = pawC_push0(P);
     UserData *o = pawM_new(P, UserData);
     pawG_add_object(P, cast_object(o), VUSERDATA);
-    pawV_set_userdata(sp, o); // anchor
+    pawV_set_userdata(pv, o); // anchor
     o->attr = pawH_new(P);
     o->size = size;
     if (size) {
@@ -318,7 +321,7 @@ paw_Bool pawV_truthy(const Value v)
     } else if (pawV_is_map(v)) {
         return pawH_length(pawV_get_map(v));
     }
-    return PAW_BFALSE;
+    return PAW_FALSE;
 }
 
 uint32_t pawV_hash(const Value v)
@@ -414,8 +417,7 @@ int pawV_parse_integer(paw_Env *P, const char *text)
         if (value > (VINT_MAX - v) / base) {
             // Integer is too large: parse it as a BigInt. Throws an error on
             // allocation failure.
-            pawB_parse(P, text, base);
-            return 0;
+            return pawB_parse(P, text, base);
         }
         value = value * base + v;
     }
@@ -463,16 +465,16 @@ paw_Int pawV_to_int64(Value v, paw_Bool *plossless)
     if (pawV_is_bigint(v)) {
         return pawB_get_int64(pawV_get_bigint(v), plossless);
     } else if (pawV_is_float(v)) {
-        *plossless = PAW_BFALSE;
+        *plossless = PAW_FALSE;
         return paw_cast_int(pawV_get_float(v));
     } else if (pawV_is_int(v)) {
-        *plossless = PAW_BTRUE;
+        *plossless = PAW_TRUE;
         return pawV_get_int(v);
     } else if (!pawV_is_bool(v)) {
-        *plossless = PAW_BFALSE;
+        *plossless = PAW_FALSE;
         return 0;
     }
-    *plossless = PAW_BTRUE;
+    *plossless = PAW_TRUE;
     return pawV_get_bool(v);
 }
 
