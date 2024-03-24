@@ -1,7 +1,7 @@
 
 {
     let io = require('io')
-    let file = io.open('/tmp/paw-test-misc', 'w+')
+    let file = io.open('./paw_test_data_', 'w+')
     let input = 'Hello, world'
     io.write(file, 'Hello')
     io.write(file, ', ')
