@@ -273,7 +273,7 @@ static inline paw_Bool meta_setter(paw_Env *P, Op op, Value obj, Value key, Valu
 static void float2integer(paw_Env *P, paw_Float f)
 {
     if (pawV_float_fits_int(f)) {
-        vm_pushi(f);
+        vm_pushi(paw_cast_int(f));
     } else {
         pawB_from_float(P, f);
     }
