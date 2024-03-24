@@ -28,18 +28,21 @@ jobs:
       build_dir: "${{ github.workspace }}/build"
       
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608
 
     - name: Configure
+      shell: bash
+      working-directory: ${{runner.workspace}}/build
       run: >
         cmake -B ${{ env.build_dir }}
         -DCMAKE_C_COMPILER=${{ matrix.cc }}
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
         -DPAW_STRESS=${{ matrix.stress }}
-        -S ${{ github.workspace }}
+        $GITHUB_WORKSPACE
 
     - name: Build
-      run: cmake --build ${{ env.build_dir }} --config ${{ matrix.build_type }}
+      working-directory: ${{ env.build_dir }}
+      run: cmake --build . --config ${{ matrix.build_type }}
 
     - name: Test
       working-directory: ${{ env.build_dir }}
