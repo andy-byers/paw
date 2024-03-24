@@ -9,8 +9,6 @@
 #include "rt.h"
 #include <errno.h>
 #include <time.h>
-// TODO: Header needs include guard, and Windows impl.
-#include <sys/time.h>
 
 #define cf_base(i) P->cf->base.p[i]
 
@@ -330,20 +328,6 @@ static int base_setattr(paw_Env *P)
     return 0;
 }
 
-static int time_time(paw_Env *P)
-{
-    time_t t;
-    time(&t);
-
-    struct timeval tv;
-    if (gettimeofday(&tv, NULL)) {
-        pawO_system_error(P, errno);
-    }
-    const paw_Float sec = tv.tv_sec + tv.tv_usec / 1000000.0;
-    paw_push_float(P, sec);
-    return 1;
-}
-
 void pawL_register_lib(paw_Env *P, const char *name, int nup, const pawL_Attr *attr)
 {
     if (name) {
@@ -415,12 +399,6 @@ static const pawL_Attr kBaseLib[] = {
     {"setattr", base_setattr},
     {"getitem", base_getitem},
     {"setitem", base_setitem},
-    {0}};
-
-#define TIMELIB_NAME "time"
-#define TIMELIB_NUP 0
-static const pawL_Attr kTimeLib[] = {
-    {"time", time_time},
     {0}};
 
 static String *fix_name(paw_Env *P, const char *name)
@@ -508,8 +486,6 @@ void pawL_require_lib(paw_Env *P, const char *name)
         pawL_require_iolib(P);
     } else if (0 == strcmp(name, MATHLIB_NAME)) {
         pawL_require_mathlib(P);
-    } else if (0 == strcmp(name, TIMELIB_NAME)) {
-        pawL_register_lib(P, TIMELIB_NAME, TIMELIB_NUP, kTimeLib);
     } else {
         pawR_error(P, PAW_ENAME, "library '%s' has not been registered", name);
     }

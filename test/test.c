@@ -212,12 +212,7 @@ static const char *test_pathname(const char *name)
 
 paw_Env *test_open(paw_Alloc alloc, struct TestAlloc *state)
 {
-    paw_Env *P = paw_open(alloc ? alloc : test_alloc, state);
-    CHECK(P); // Load the test driver TODO: driver thing not used in most tests
-    CHECK(PAW_OK == test_open_file(P, "driver"));
-    CHECK(PAW_OK == paw_call(P, 0));
-    paw_pop(P, 1);
-    return P;
+    return paw_open(alloc ? alloc : test_alloc, state);
 }
 
 void test_close(paw_Env *P, struct TestAlloc *a)

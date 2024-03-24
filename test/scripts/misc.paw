@@ -1,20 +1,5 @@
 
 {
-    let time = require('time')
-    let t = time.time()
-    let t2 = time.time()
-    assert(t <= t2) 
-
-    let t = time.time()
-    -- busy work
-    for i = 0,1000 {
-        assert(i == i)
-    }
-    let t2 = time.time()
-    assert(t < t2) 
-}
-
-{
     let io = require('io')
     let file = io.open('/tmp/paw-test-misc', 'w+')
     let input = 'Hello, world'
