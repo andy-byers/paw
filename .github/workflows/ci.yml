@@ -31,13 +31,12 @@ jobs:
     - uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608
 
     - name: Configure
-      working-directory: ${{ env.build_dir }}
       run: >
-        cmake -B ${{ env.build_dir }}
+        cmake -S "${{ github.workspace }}" -B "${{ env.build_dir }}"
         -DCMAKE_C_COMPILER=${{ matrix.cc }}
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
         -DPAW_STRESS=${{ matrix.stress }}
-        $GITHUB_WORKSPACE
+        
 
     - name: Build
       working-directory: ${{ env.build_dir }}
