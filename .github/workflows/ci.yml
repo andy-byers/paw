@@ -31,7 +31,7 @@ jobs:
     - uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608
 
     - name: Configure
-      working-directory: ${{runner.workspace}}/build
+      working-directory: ${{ env.build_dir }}
       run: >
         cmake -B ${{ env.build_dir }}
         -DCMAKE_C_COMPILER=${{ matrix.cc }}
