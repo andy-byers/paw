@@ -116,10 +116,10 @@ static inline paw_Bool pawH_iter(const Map *m, paw_Int *itr)
     for (++*itr; *itr < paw_cast_int(m->capacity); ++*itr) {
         Value *k = &m->keys[*itr];
         if (pawH_is_occupied(*k)) {
-            return k;
+            return PAW_TRUE;
         }
     }
-    return NULL;
+    return PAW_FALSE;
 }
 
 #endif // PAW_MAP_H

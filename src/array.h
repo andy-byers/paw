@@ -47,11 +47,7 @@ static inline Value *pawA_get(paw_Env *P, Array *a, paw_Int index)
 
 static inline paw_Bool pawA_iter(const Array *a, paw_Int *itr)
 {
-    ++*itr;
-    if (*itr < paw_cast_int(pawA_length(a))) {
-        return &a->begin[*itr];
-    }
-    return NULL;
+    return ++*itr < paw_cast_int(pawA_length(a));
 }
 
 #endif // PAW_ARRAY_H
