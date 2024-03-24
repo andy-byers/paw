@@ -2,7 +2,7 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "bigint.h"
-#include "aux.h"
+#include "auxlib.h"
 #include "gc.h"
 #include "mem.h"
 #include "rt.h"

@@ -1,4 +1,4 @@
-#include "aux.h"
+#include "auxlib.h"
 #include "lib.h"
 #include "os.h"
 #include "opcode.h"

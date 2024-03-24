@@ -1,7 +1,7 @@
 #include "lib.h"
 #include "api.h"
 #include "array.h"
-#include "aux.h"
+#include "auxlib.h"
 #include "call.h"
 #include "gc.h"
 #include "map.h"

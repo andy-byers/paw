@@ -8,7 +8,7 @@
 #ifndef PAW_BIGINT_H
 #define PAW_BIGINT_H
 
-#include "aux.h"
+#include "auxlib.h"
 #include "opcode.h"
 #include "paw.h"
 #include "value.h"

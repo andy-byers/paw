@@ -2,7 +2,7 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "lex.h"
-#include "aux.h"
+#include "auxlib.h"
 #include "bigint.h"
 #include "gc.h"
 #include "map.h"

@@ -4,7 +4,7 @@
 #include "prefix.h"
 
 #include "api.h"
-#include "aux.h"
+#include "auxlib.h"
 #include "bigint.h"
 #include "call.h"
 #include "gc.h"

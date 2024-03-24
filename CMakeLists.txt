@@ -36,7 +36,7 @@ set(PAW_SOURCE_DIR ${PROJECT_SOURCE_DIR}/src)
 add_library(paw STATIC)
 target_sources(paw
     PUBLIC  ${PAW_SOURCE_DIR}/api.h
-            ${PAW_SOURCE_DIR}/aux.h
+            ${PAW_SOURCE_DIR}/auxlib.h
             ${PAW_SOURCE_DIR}/array.h
             ${PAW_SOURCE_DIR}/bigint.h
             ${PAW_SOURCE_DIR}/call.h
@@ -57,7 +57,7 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/util.h
             ${PAW_SOURCE_DIR}/value.h
     PRIVATE ${PAW_SOURCE_DIR}/api.c
-            ${PAW_SOURCE_DIR}/aux.c
+            ${PAW_SOURCE_DIR}/auxlib.c
             ${PAW_SOURCE_DIR}/array.c
             ${PAW_SOURCE_DIR}/bigint.c 
             ${PAW_SOURCE_DIR}/call.c

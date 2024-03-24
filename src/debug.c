@@ -1,6 +1,6 @@
 #include "debug.h"
 #include "array.h"
-#include "aux.h"
+#include "auxlib.h"
 #include "call.h"
 #include "map.h"
 #include "rt.h"

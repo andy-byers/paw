@@ -4,7 +4,7 @@
 #include "prefix.h"
 
 #include "array.h"
-#include "aux.h"
+#include "auxlib.h"
 #include "bigint.h"
 #include "call.h"
 #include "env.h"
@@ -982,9 +982,9 @@ static void string_rel(paw_Env *P, Op op, String *x, String *y)
 static Value fetch(paw_Env *P, int i)
 {
     Value *pv = vm_peek(i);
-    // if (pawV_is_bool(*pv)) {
-    //     pawV_set_int(pv, pawV_get_bool(*pv));
-    // }
+    if (pawV_is_bool(*pv)) {
+        pawV_set_int(pv, pawV_get_bool(*pv));
+    }
     return *pv;
 }
 
