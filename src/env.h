@@ -58,7 +58,8 @@ typedef struct paw_Env {
     StackRel top;
 
     Map *libs;
-    Map *attr[NOBJECTS];
+    Value object;
+    Foreign *builtin[NOBJECTS];
     Value meta_keys[NMETA];
     Value str_cache[NCSTR];
 

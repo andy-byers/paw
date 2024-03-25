@@ -15,18 +15,18 @@ static void grow_buffer(paw_Env *P, Buffer *buf, int boxloc)
     paw_assert(buf->alloc <= SIZE_MAX / 2);
     const size_t alloc = buf->alloc * 2;
     if (pawL_boxed(buf)) {
-        UserData *ud = pawV_get_userdata(P->top.p[boxloc]);
+        Foreign *ud = pawV_get_foreign(P->top.p[boxloc]);
         pawM_resize(P, buf->data, buf->alloc, alloc);
         ud->data = buf->data;
         ud->size = alloc;
     } else {
-        // Add a new UserData 'box' to contain the buffer. Prevents a memory leak
+        // Add a new Foreign 'box' to contain the buffer. Prevents a memory leak
         // if an error is thrown before the buffer is freed.
-        UserData *ud = pawV_push_userdata(P, alloc);
+        Foreign *ud = pawV_push_foreign(P, alloc, 0);
         memcpy(ud->data, buf->stack, buf->size);
         buf->data = ud->data;
         Value *pbox = &P->top.p[boxloc - 1];
-        pawV_set_userdata(pbox, ud);
+        pawV_set_foreign(pbox, ud);
         paw_pop(P, 1);
     }
     buf->alloc = alloc;

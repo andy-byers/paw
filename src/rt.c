@@ -98,7 +98,7 @@ static int current_line(const CallFrame *cf)
 static void add_location(paw_Env *P, Buffer *buf)
 {
     const CallFrame *cf = P->cf;
-    for (;; cf = cf->prev) {
+    for (; cf != &P->main; cf = cf->prev) {
         if (cf_is_paw(cf)) {
             const Proto *p = cf->fn->p;
             const int line = current_line(cf);
@@ -372,19 +372,17 @@ static void try_float2(paw_Env *P, Value *pv, Value *pv2, const char *what)
     }
 }
 
-static Map *attributes(paw_Env *P, const Value v, const char *what)
+static Value *find_attr(paw_Env *P, Value obj, Value name)
 {
     Map *attr = NULL;
-    if (pawV_is_instance(v)) {
-        attr = pawV_get_instance(v)->attr;
-    } else if (pawV_is_userdata(v)) {
-        attr = pawV_get_userdata(v)->attr;
-    } else if (pawV_is_object(v)) {
-        attr = P->attr[obj_index(pawV_get_type(v))];
+    if (pawV_is_instance(obj)) {
+        attr = pawV_get_instance(obj)->attr;
+    } else if (pawV_is_foreign(obj)) {
+        attr = pawV_get_foreign(obj)->attr;
     } else {
-        pawR_type_error(P, what);
+        return NULL;
     }
-    return attr;
+    return pawH_get(P, attr, name);
 }
 
 // Return true if the multiplication will overflow, false otherwise
@@ -507,22 +505,21 @@ int pawR_getattr_raw(paw_Env *P, paw_Bool has_fallback)
     const Value key = *vm_peek(0);
     paw_assert(pawV_is_string(key));
 
-    Map *attr = attributes(P, obj, "getattr");
-    const Value *pval = pawH_get(P, attr, key);
+    // Look for data attribute or non-binding function first. These attributes
+    // (added after instantiation) can shadow bound functions.
+    const Value *pval = find_attr(P, obj, key);
     if (pval) {
-        // found attribute in map
+        *vm_peek(0) = *pval;
+    } else if ((pval = pawV_find_binding(P, obj, key))) {
+        // found a binding: bind to context ('self') variable
+        Method *mtd = pawV_new_method(P, obj, *pval);
+        pawV_set_method(vm_peek(0), mtd);
     } else if (has_fallback) {
-        pval = vm_peek(2);
+        *vm_peek(0) = *vm_peek(2);
     } else {
         return -1;
     }
-    vm_pushv(*pval); // anchor
-    if (paw_is_function(P, -1)) {
-        // bind method to context ('self') variable
-        Method *mtd = pawV_new_method(P, obj, *pval);
-        pawV_set_method(&P->top.p[-1], mtd); // replace
-    }
-    vm_shift(2 + has_fallback);
+    vm_shift(1 + has_fallback);
     return 0;
 }
 
@@ -536,8 +533,8 @@ void pawR_setattr_raw(paw_Env *P)
     Map *attr = NULL;
     if (pawV_is_instance(obj)) {
         attr = pawV_get_instance(obj)->attr;
-    } else if (pawV_is_userdata(obj)) {
-        attr = pawV_get_userdata(obj)->attr;
+    } else if (pawV_is_foreign(obj)) {
+        attr = pawV_get_foreign(obj)->attr;
     } else {
         vm_pop(1); // pop 'val'
         pawR_type_error2(P, "setattr");
@@ -555,7 +552,7 @@ void pawR_setattr(paw_Env *P)
 
     if (!meta_setter(P, OP_SETATTR, obj, key, val)) {
         // Don't call pawR_setattr_raw(), since that function is allowed to set
-        // attributes on values of type 'userdata': something that should only
+        // attributes on values of type 'foreign': something that should only
         // happen from C, not paw. pawR_setattr_raw is called by C API functions
         // and the 'setattr' builtin function, while this function is called by
         // the paw runtime.
@@ -582,8 +579,8 @@ void pawR_setitem_raw(paw_Env *P)
     } else if (pawV_is_map(obj)) {
         pawH_insert(P, pawV_get_map(obj), key, val);
     } else {
-        vm_pop(1);
-        pawR_type_error(P, "setitem");
+        vm_pop(1); // pop 'val'
+        pawR_type_error2(P, "setitem");
     }
     vm_pop(3);
 }
@@ -600,30 +597,53 @@ void pawR_setitem(paw_Env *P)
     }
 }
 
-static CallFrame *invoke_from_class(paw_Env *P, Class *cls, Value name, int argc)
+static CallFrame *super_invoke(paw_Env *P, Class *super, Value name, int argc)
 {
     Value *base = vm_peek(argc);
-    const Value *method = pawH_get(P, cls->attr, name);
+    const Value *method = pawH_get(P, super->attr, name);
     if (!method) {
         pawR_attr_error(P, name);
     }
-    // The receiver instance + parameters are on top of the stack.
+    // The receiver (subclass) instance + parameters are on top of the stack.
     return pawC_precall(P, base, *method, argc);
+}
+
+static paw_Bool bound_call(paw_Env *P, CallFrame **pcf, Value obj, StackPtr base, Value name, int argc)
+{
+    Value *bound = pawV_find_binding(P, obj, name);
+    if (bound) {
+        *pcf = pawC_precall(P, base, *bound, argc);
+        return PAW_TRUE;
+    }
+    return PAW_FALSE;
 }
 
 static CallFrame *invoke(paw_Env *P, Value name, int argc)
 {
+    CallFrame *cf;
     Value *base = vm_peek(argc);
-    Map *attr = attributes(P, *base, "call");
-    const Value *method = pawH_get(P, attr, name);
-    if (method) {
-        return pawC_precall(P, base, *method, argc);
-    } else if (!pawV_is_instance(*base)) {
-        vm_pushv(*base);
-        pawR_type_error(P, ".()");
+    if (bound_call(P, &cf, *base, base, name, argc)) {
+        // found a bound function with the given 'name'
+        return cf;
     }
-    Instance *obj = pawV_get_instance(*base);
-    return invoke_from_class(P, obj->self, name, argc);
+    // attempt to call a non-bound function
+    const Value *method = find_attr(P, *base, name);
+    if (!method) {
+        pawR_attr_error(P, name);
+    }
+    *base = *method; // replace object with callable
+    return pawC_precall(P, base, *method, argc);
+}
+
+static void inherit(paw_Env *P, Class *cls, const Class *super)
+{
+    // 'copy-down' inheritance
+    pawH_extend(P, cls->attr, super->attr);
+    // Ensure that __init is not inherited. Note that 'sub' has not had any
+    // of its own attributes added to it yet, so this will not remove the
+    // actual __init attribute belonging to 'sub'.
+    const Value key = pawE_cstr(P, CSTR_INIT);
+    pawH_action(P, cls->attr, key, MAP_ACTION_REMOVE);
 }
 
 #define stop_loop(i, i2, d) (((d) < 0 && (i) <= (i2)) || \
@@ -1221,8 +1241,8 @@ void pawR_length(paw_Env *P)
         // Special case: __len may not return an integer.
         vm_shift(1);
         return;
-    } else if (pawV_is_userdata(*pv)) {
-        len = pawV_get_userdata(*pv)->size;
+    } else if (pawV_is_foreign(*pv)) {
+        len = pawV_get_foreign(*pv)->size;
     } else {
         pawR_type_error2(P, "length");
     }
@@ -1519,12 +1539,7 @@ top:
                         pawR_error(P, PAW_ETYPE, "superclass is not of 'class' type");
                     }
                     const Class *super = pawV_get_class(parent);
-                    pawH_extend(P, cls->attr, super->attr);
-                    // Ensure that __init is not inherited. Note that 'sub' has not had any
-                    // of its own attributes added to it yet, so this will not remove the
-                    // actual __init attribute belonging to 'sub'.
-                    const Value key = pawE_cstr(P, CSTR_INIT);
-                    pawH_action(P, cls->attr, key, MAP_ACTION_REMOVE);
+                    inherit(P, cls, super);
                     // Swap the superclass and subclass. Leave the superclass on the stack.
                     // The compiler assigns it a local slot, named 'super'. It can be
                     // captured as an upvalue in methods as needed.
@@ -1573,7 +1588,7 @@ top:
                 vm_save();
 
                 Class *super = pawV_get_class(parent);
-                CallFrame *callee = invoke_from_class(P, super, name, argc);
+                CallFrame *callee = super_invoke(P, super, name, argc);
                 if (callee) {
                     cf = callee;
                     goto top;

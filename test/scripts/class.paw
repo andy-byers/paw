@@ -1,6 +1,41 @@
 -- class.paw
 
 {
+    class A {}
+    let a = A()
+
+    -- Functions added after __init are not bound to the instance. They
+    -- can be called and assigned to variables, but they will not receive
+    -- the hidden 'self' parameter, nor will they have access to 'super'.
+    a.a = fn() {}
+    a.b = fn(a) {return a}
+    assert(a.a() == null)
+    assert(a.b(42) == 42)
+
+    let aa = a.a
+    let ab = a.b
+    assert(aa() == null)
+    assert(ab(42) == 42)
+}
+
+{
+    fn test(code) {
+        fn test() {
+            load(code)() 
+        }
+        assert(0 != try(test))
+    }
+    -- Classes are closed after creation (after closing '}' is encountered
+    -- in class the definition).
+    test('class A {}; A.a = 123')
+    test('class A {}; A.a = fn() {}')
+
+    -- Non-bound functions cannot access 'self' or 'super'.
+    test('class A {}; let a = A(); a.a = fn() {self.value = 123}; a.a()')
+    test('class A {}; let a = A(); a.a = fn() {super.value = 123}; a.a()')
+}
+
+{
     fn test(ins) {
         -- 'c' and 'd' do not exist. Attempting to access either is an error.
         assert(ins.a == 1)
@@ -257,7 +292,7 @@
     fn test(code) {
         load(code)()
     }
-    assert(0 != try(test, 'class A: A {}')) -- 'A' does not yet exist
+    assert(0 != try(test, 'class _ABC: _ABC {}')) -- '_ABC' not declared (declared/defined at '}')
     assert(0 != try(test, 'class A: 1 {}')) -- inherit from primitive
     assert(0 != try(test, 'class A: [] {}')) -- inherit from builtin type
 
