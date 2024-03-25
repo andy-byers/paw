@@ -81,7 +81,7 @@ typedef enum FnKind {
     FN_INIT,
 } FnKind;
 
-#define FN_HAS_SELF(kind) (kind >= FN_METHOD)
+#define fn_has_self(kind) (kind >= FN_METHOD)
 
 typedef struct VarState {
     String *name;

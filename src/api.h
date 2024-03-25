@@ -30,7 +30,7 @@ static inline const char *api_typename(int type)
         case PAW_TINSTANCE:
             return "instance";
         case PAW_TUSERDATA:
-            return "userdata";
+            return "foreign";
         default:
             return "?";
     }
@@ -61,7 +61,7 @@ static inline int api_type(Value v)
             return PAW_TCLASS;
         case VINSTANCE:
             return PAW_TINSTANCE;
-        case VUSERDATA:
+        case VFOREIGN:
             return PAW_TUSERDATA;
         default:
             return PAW_TFLOAT;

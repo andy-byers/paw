@@ -41,7 +41,7 @@ static FILE *get_handle(paw_Env *P, int index)
 
 static FILE **create_handle(paw_Env *P)
 {
-    return paw_create_userdata(P, sizeof(FILE *));
+    return paw_create_foreign(P, sizeof(FILE *), 0);
 }
 
 static int io_open(paw_Env *P)

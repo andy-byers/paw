@@ -8,6 +8,7 @@
 #include "os.h"
 #include "rt.h"
 #include <errno.h>
+#include <limits.h>
 #include <time.h>
 
 #define cf_base(i) P->cf->base.p[i]
@@ -328,61 +329,80 @@ static int base_setattr(paw_Env *P)
     return 0;
 }
 
+static int count_bindings(paw_Env *P, const pawL_Attr *attr)
+{
+    int nbound = 0;
+    for (; attr->name; ++attr, ++nbound) {
+        if (nbound == INT_MAX) {
+            pawR_error(P, PAW_EOVERFLOW, "too many bindings"); 
+        }
+    }
+    return nbound;
+}
+
+static void load_bindings(paw_Env *P, Foreign *ud, int nup, const pawL_Attr *a, int na, paw_Bool fix)
+{
+    Value *pv = ud->bound;
+    for (; na > 0; --na, ++a) {
+        String *name = pawS_new_str(P, a->name);
+        pawV_set_string(pv++, name);
+        Native *nt = pawV_new_native(P, a->func, nup);
+        pawV_set_native(pv++, nt);
+        if (fix) { // fix builtin methods
+            pawG_fix_object(P, cast_object(nt));
+        }
+
+        for (int u = 0; u < nup; ++u) {
+            // '-1' accounts for library container on top 
+            nt->up[u] = P->top.p[nup - u - 1];
+        }
+    }
+}
+
 void pawL_register_lib(paw_Env *P, const char *name, int nup, const pawL_Attr *attr)
 {
+    const int nbound = count_bindings(P, attr);
+
+    Foreign *ud;
     if (name) {
-        // Create a userdata to hold the library attributes. If name is NULL,
-        // use the object on top of the stack.
-        paw_create_userdata(P, 0);
-    }
-
-    // Push the map contained in the object that will represent the library.
-    Map *m = NULL;
-    const Value v = P->top.p[-1];
-    if (pawV_is_userdata(v)) {
-        m = pawV_get_userdata(v)->attr;
-    } else if (pawV_is_instance(v)) {
-        m = pawV_get_instance(v)->attr;
-    } else if (pawV_is_class(v)) {
-        m = pawV_get_class(v)->attr;
-    } else if (pawV_is_map(v)) {
-        m = pawV_get_map(v);
+        // Create a foreign to hold the library attributes,
+        ud = pawV_push_foreign(P, 0, nbound);
     } else {
-        pawR_error(P, PAW_ETYPE, "expected 'class', 'instance' or 'userdata'");
-    }
-    StackPtr sp = pawC_stkinc(P, 1);
-    pawV_set_map(sp, m);
-
-    // Load the library functions.
-    for (; attr->name; ++attr) {
-        paw_push_string(P, attr->name);
-        if (attr->func) {
-            paw_push_native(P, attr->func, nup);
-        } else {
-            paw_push_null(P); // placeholder
+        // Use the foreign object on top of the stack.
+        pawL_check_type(P, -1, PAW_TUSERDATA);
+        ud = pawV_get_foreign(P->top.p[-1]);
+        if (ud->nbound < nbound) {
+            pawR_error(P, PAW_ERUNTIME, "not enough bindings");
         }
-        paw_set_item(P, -3);
     }
-    paw_pop(P, 1); // pop 'm'
+    // Load the library functions.
+    load_bindings(P, ud, nup, attr, nbound, PAW_FALSE);
 
+    // Add the library to the map of registered libraries.
     if (name) {
         paw_push_value(P, -1);
-
-        // Push the map containing loaded libraries.
-        sp = pawC_stkinc(P, 1);
+        StackPtr sp = pawC_stkinc(P, 1);
         pawV_set_map(sp, P->libs);
-
-        // Set up the stack to look like '..., P->libs, name, lib'.
         paw_push_string(P, name);
         paw_rotate(P, -3, -1);
-
-        // Register the new library.
         paw_set_item(P, -3);
         paw_pop(P, 1);
     }
-    // Leave the library on top of the stack
+    // Remove the upvalues, leaving the library on top.
+    paw_shift(P, nup);
 }
 
+static String *fix_name(paw_Env *P, const char *name)
+{
+    String *s = pawS_new_nstr(P, name, strlen(name));
+    if (cast_object(s) == P->gc_all) {
+        // fix if just allocated
+        pawG_fix_object(P, cast_object(s));
+    }
+    return s;
+}
+
+// clang-format off
 static const pawL_Attr kBaseLib[] = {
     {"try", base_try},
     {"require", base_require},
@@ -399,60 +419,86 @@ static const pawL_Attr kBaseLib[] = {
     {"setattr", base_setattr},
     {"getitem", base_getitem},
     {"setitem", base_setitem},
-    {0}};
+    {0}
+};
 
-static String *fix_name(paw_Env *P, const char *name)
-{
-    String *s = pawS_new_nstr(P, name, strlen(name));
-    pawG_fix_object(P, cast_object(s));
-    return s;
-}
+static const pawL_Attr kArrayMethods[] = {
+    {"insert", array_insert},
+    {"push", array_push},
+    {"pop", array_pop},
+    {0}
+};
 
-static void add_base_method(paw_Env *P, ValueKind type, String *name, paw_Function base)
+static const pawL_Attr kMapMethods[] = {
+    {"erase", map_erase},
+    {0}
+};
+
+static const pawL_Attr kStringMethods[] = {
+    {"starts_with", string_starts_with},
+    {"ends_with", string_ends_with},
+    {0}
+};
+
+static const pawL_Attr kObjectMethods[] = {
+    {"clone", object_clone},
+    {0} // end
+};
+
+static struct Builtin {
+    const pawL_Attr *attr;
+    int nattr;
+} kBuiltin[NOBJECTS + 1] = {
+#define X(i, a) [i] = {a, paw_countof(a) - 1},
+    X(obj_index(VSTRING), kStringMethods)
+    X(obj_index(VARRAY), kArrayMethods)
+    X(obj_index(VMAP), kMapMethods)
+    X(NOBJECTS, kObjectMethods)
+#undef X
+};
+// clang-format on
+
+static void init_object(paw_Env *P, Foreign **pfr, int i)
 {
-    Map *attr = P->attr[obj_index(type)];
-    Value *value = pawH_action(P, attr, obj2v(name), MAP_ACTION_CREATE);
-    pawV_set_native(value, pawV_new_native(P, base, 0));
-    pawG_fix_object(P, pawV_get_object(*value));
+     const struct Builtin b = kBuiltin[i];
+     *pfr = pawV_new_builtin(P, b.nattr);
+     pawG_fix_object(P, cast_object(*pfr));
+     load_bindings(P, *pfr, 0, b.attr, b.nattr, PAW_TRUE);
 }
 
 void pawL_init(paw_Env *P)
 {
-    // Add the base library functions to the globals map.
+    // Add the base library functions as global variables.
     pawC_stkinc(P, 1);
     pawV_set_map(&P->top.p[-1], P->globals);
-    pawL_register_lib(P, NULL, 0, kBaseLib);
-    pawC_stkdec(P, 1);
-
-    // Create maps to hold methods on builtin types.
-    for (int i = 0; i < NOBJECTS; ++i) {
-        P->attr[i] = pawH_new(P);
-        // Fix the whole map. This is only possible because all objects contained
-        // within are also fixed.
-        pawG_fix_object(P, cast_object(P->attr[i]));
+    for (const pawL_Attr *a = kBaseLib; a->name; ++a) {
+        paw_push_string(P, a->name);
+        paw_push_native(P, a->func, 0);
+        paw_set_item(P, -3);
     }
+    pawC_pop(P);
+
     // Create a map for caching loaded libraries.
     P->libs = pawH_new(P);
 
-    // Fix the method names. The maps containing builtin object attrs are not
-    // traversed by the GC, since they are effectively immutable.
-    String *starts_with = fix_name(P, "starts_with");
-    String *ends_with = fix_name(P, "ends_with");
-    String *push = fix_name(P, "push");
-    String *pop = fix_name(P, "pop");
-    String *insert = fix_name(P, "insert");
-    String *erase = fix_name(P, "erase");
-    String *clone = fix_name(P, "clone");
+    // Fix builtin method names. The foreign objects containing builtin methods 
+    // are not traversed by the GC, since they are effectively immutable.
+    for (size_t i = 0; i < paw_countof(kBuiltin); ++i) {
+         const struct Builtin b = kBuiltin[i];
+         for (int j = 0; j < b.nattr; ++j) {
+             fix_name(P, b.attr[j].name);
+         }
+    }
 
-    add_base_method(P, VSTRING, starts_with, string_starts_with);
-    add_base_method(P, VSTRING, ends_with, string_ends_with);
-    add_base_method(P, VSTRING, clone, object_clone);
-    add_base_method(P, VARRAY, insert, array_insert);
-    add_base_method(P, VARRAY, push, array_push);
-    add_base_method(P, VARRAY, pop, array_pop);
-    add_base_method(P, VARRAY, clone, object_clone);
-    add_base_method(P, VMAP, erase, map_erase);
-    add_base_method(P, VMAP, clone, object_clone);
+    Foreign **pfr = P->builtin;
+    for (size_t i = 0; i < NOBJECTS; ++i, ++pfr) {
+        init_object(P, pfr, i);
+    }
+
+    Foreign *obj;
+    // Create an object to hold common functions on builtin types.
+    init_object(P, &obj, NOBJECTS);
+    pawV_set_foreign(&P->object, obj);
 }
 
 // 'pawL_register_*lib' functions defined in corresponding '*lib.c' source files
@@ -508,7 +554,8 @@ int pawL_load_file(paw_Env *P, const char *pathname)
 {
     struct FileReader fr;
     fr.file = pawO_open(pathname, "r");
-    if (!fr.file) {
+    if (fr.file == NULL) {
+        paw_push_string(P, strerror(errno));
         return PAW_ESYSTEM;
     }
     return paw_load(P, file_reader, pathname, &fr);

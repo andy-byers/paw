@@ -155,7 +155,7 @@ paw_Bool paw_is_instance(paw_Env *P, int index)
     return paw_type(P, index) == PAW_TINSTANCE;
 }
 
-paw_Bool paw_is_userdata(paw_Env *P, int index)
+paw_Bool paw_is_foreign(paw_Env *P, int index)
 {
     return paw_type(P, index) == PAW_TUSERDATA;
 }
@@ -192,7 +192,7 @@ int paw_type(paw_Env *P, int index)
             return PAW_TINSTANCE;
         case VNUMBER:
             return PAW_TINTEGER;
-        case VUSERDATA:
+        case VFOREIGN:
             return PAW_TUSERDATA;
         default:
             return PAW_TFLOAT;
@@ -337,8 +337,8 @@ paw_Digit *paw_bigint(paw_Env *P, int index)
 void *paw_pointer(paw_Env *P, int index)
 {
     Value *pv = access(P, index);
-    if (pawV_is_userdata(*pv)) {
-        return pawV_get_userdata(*pv)->data;
+    if (pawV_is_foreign(*pv)) {
+        return pawV_get_foreign(*pv)->data;
     }
     return pv;
 }
@@ -641,9 +641,9 @@ void paw_create_native(paw_Env *P, paw_Function f, int nup)
     paw_shift(P, nup);
 }
 
-void *paw_create_userdata(paw_Env *P, size_t size)
+void *paw_create_foreign(paw_Env *P, size_t size, int nbound)
 {
-    UserData *ud = pawV_push_userdata(P, size);
+    Foreign *ud = pawV_push_foreign(P, size, nbound);
     return ud->data;
 }
 

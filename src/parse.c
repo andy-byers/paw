@@ -876,7 +876,7 @@ static void leave_function(Lex *lex)
 
 static String *context_name(const FnState *fn, FnKind kind)
 {
-    if (FN_HAS_SELF(kind)) {
+    if (fn_has_self(kind)) {
         return pawV_get_string(pawE_cstr(ctx(fn->lex), CSTR_SELF));
     }
     return fn->proto->name;
