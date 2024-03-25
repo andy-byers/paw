@@ -21,6 +21,8 @@ void pawC_call(paw_Env *P, Value f, int argc);
 void pawC_init(paw_Env *P);
 void pawC_uninit(paw_Env *P);
 
+StackPtr pawC_init_receiver(paw_Env *P, StackPtr base, Value func);
+
 void pawC_stack_grow(paw_Env *P, int count);
 void pawC_stack_realloc(paw_Env *P, int n);
 void pawC_stack_overflow(paw_Env *P);

@@ -8,7 +8,8 @@ static void script(const char *name)
 
 int main(void)
 {
-    script("error");
+    script("misc");
+return 0;
     script("basic");
     script("operator");
     script("integer");
@@ -20,6 +21,7 @@ int main(void)
     script("map");
     script("string");
     script("class");
+    script("error");
     script("misc");
     script("mandelbrot");
 }

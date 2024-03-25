@@ -850,12 +850,13 @@ static void leave_function(Lex *lex)
     paw_assert(blk->outer == NULL);
 
     if (fn->kind == FN_INIT) {
-        emit_arg2(lex, OP_GETLOCAL, 0);
-        emit(lex, OP_RETURN);
+        // push the receiver
+        emit_arg2(lex, OP_GETLOCAL, 1); 
     } else {
         emit(lex, OP_PUSHNULL);
-        emit(lex, OP_RETURN);
     }
+    emit(lex, OP_RETURN);
+
     pawM_shrink(ctx(lex), p->source, p->length, fn->pc);
     p->length = fn->pc;
     pawM_shrink(ctx(lex), p->lines, p->nlines, fn->nlines);
@@ -876,8 +877,8 @@ static void leave_function(Lex *lex)
 
 static String *context_name(const FnState *fn, FnKind kind)
 {
-    if (FN_HAS_SELF(kind)) {
-        return pawV_get_string(pawE_cstr(ctx(fn->lex), CSTR_SELF));
+    if (fn_has_self(kind)) {
+        return pawV_get_string(pawE_cstr(ctx(fn->lex), CSTR_EMPTY));
     }
     return fn->proto->name;
 }
@@ -897,9 +898,8 @@ static void enter_function(Lex *lex, FnState *fn, BlkState *blk, FnKind kind)
     // Enter the function body.
     enter_block(fn, blk, PAW_FALSE);
 
-    // Create the context variable in slot 0. For VCLOSURE, this slot holds the closure
-    // object being called. For VMETHOD, it holds the class instance that the method is
-    // being called on, i.e. the implicit 'self' parameter.
+    // If there is a receiver, it will be in the first function parameter 
+    // (slot 1), this slot (slot 0) is used to store the function being called.
     add_local(lex, context_name(fn, kind));
     begin_local_scope(lex, 1);
 }
@@ -993,8 +993,8 @@ static void push_special(Lex *lex, unsigned ctag)
 {
     ExprState e;
     if (ctag == CSTR_SELF) {
-        // 'self' is always in slot 0
-        init_expr(&e, EXPR_LOCAL, 0);
+        // 'self' is always in slot 1
+        init_expr(&e, EXPR_LOCAL, 1);
     } else {
         // 'super' is an upvalue
         const Value v = pawE_cstr(lex->P, ctag);
@@ -1907,6 +1907,7 @@ void pawP_init(paw_Env *P)
     }
     pawV_set_string(&P->str_cache[CSTR_SELF], new_fixed_string(P, "self"));
     pawV_set_string(&P->str_cache[CSTR_INIT], new_fixed_string(P, "__init"));
+    pawV_set_string(&P->str_cache[CSTR_EMPTY], new_fixed_string(P, ""));
 
     pawV_set_string(&P->str_cache[CSTR_SUPER], pawS_new_str(P, "super"));
     pawV_set_string(&P->str_cache[CSTR_TRUE], pawS_new_str(P, "true"));

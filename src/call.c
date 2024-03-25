@@ -196,13 +196,15 @@ CallFrame *pawC_precall(paw_Env *P, StackPtr base, Value callable, int argc)
             break;
         case VMETHOD: {
             Method *mtd = pawV_get_method(callable);
-            *base = mtd->self; // replace with self
+            *base = mtd->self; // replace with receiver
+            base = pawC_init_receiver(P, base, mtd->f);
             if (pawV_is_native(mtd->f)) {
                 ccall = pawV_get_native(mtd->f);
                 goto call_native;
             } else {
                 assert(pawV_is_closure(mtd->f));
                 fn = pawV_get_closure(mtd->f);
+                ++argc; // account for receiver
             }
             break;
         }
@@ -218,6 +220,8 @@ CallFrame *pawC_precall(paw_Env *P, StackPtr base, Value callable, int argc)
                 return P->cf;
             }
             fn = pawV_get_closure(*init);
+            base = pawC_init_receiver(P, base, *init);
+            ++argc; // account for receiver
             break;
         }
         default:
@@ -308,5 +312,16 @@ StackPtr pawC_return(paw_Env *P, int nret)
     for (int i = 0; i < nret; ++i) {
         base[i] = *--top;
     }
+    return base;
+}
+
+StackPtr pawC_init_receiver(paw_Env *P, StackPtr base, Value func)
+{
+    const ptrdiff_t pos = save_offset(P, base);
+    const ptrdiff_t len = P->top.p - base;
+    pawC_stkinc(P, 1); // make room for 'func'
+    base = restore_pointer(P, pos);
+    memmove(base + 1, base, cast_size(len) * sizeof(*base)); 
+    base[0] = func;
     return base;
 }

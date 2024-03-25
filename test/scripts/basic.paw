@@ -88,7 +88,7 @@
 
 -- __*attr, and __*item
 {
-    class C {f() {return 42}}
+    class C {f(self) {return 42}}
     fn get() {return fn() {return C()}}
     let c = C()
     c.ins = C()
@@ -261,11 +261,11 @@
     assert(test('nonnull') == 'nonnull')
 
     class Class {
-        __init() {
+        __init(self) {
             self.isnull = null
             self.nonnull = self
         }
-        __neg() {
+        __neg(self) {
             return null
         }
     }
@@ -320,7 +320,7 @@
     assert(null == test([[0]], 0, null)) -- third == null
 
     class Class {
-        __init() {
+        __init(self) {
             -- Note that 'self' is not an actual keyword: it only has special meaning
             -- in a member function. It is a local variable in this context.
             self.self = self

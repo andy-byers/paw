@@ -46,8 +46,8 @@ enum {
 static Object **get_gc_list(Object *o)
 {
     switch ((ValueKind)o->gc_kind) {
-        case ~VUSERDATA:
-            return &((UserData *)o)->gc_list;
+        case ~VFOREIGN:
+            return &((Foreign *)o)->gc_list;
         case ~VARRAY:
             return &((Array *)o)->gc_list;
         case ~VMAP:
@@ -94,8 +94,8 @@ static void free_object(paw_Env *P, Object *o)
         case ~VNATIVE:
             pawV_free_native(P, (Native *)o);
             break;
-        case ~VUSERDATA:
-            pawV_free_userdata(P, (UserData *)o);
+        case ~VFOREIGN:
+            pawV_free_foreign(P, (Foreign *)o);
             break;
         case ~VBIGINT:
             pawB_free(P, (BigInt *)o);
@@ -153,7 +153,7 @@ static void mark_object(paw_Env *P, Object *o)
         case ~VPROTO:
         case ~VARRAY:
         case ~VMAP:
-        case ~VUSERDATA:
+        case ~VFOREIGN:
             // Put in the gray list to be traversed later.
             LINK_GRAY(o, P->gc_gray);
             break;
@@ -209,10 +209,19 @@ static void traverse_class(paw_Env *P, Class *c)
     mark_object(P, cast_object(c->attr));
 }
 
+static void traverse_bindings(paw_Env *P, Value *pv, int n)
+{
+    for (int i = 0; i < n; ++i, pv += 2) {
+        mark_value(P, pv[0]); // name
+        mark_value(P, pv[1]); // function
+    }
+}
+
 static void traverse_instance(paw_Env *P, Instance *i)
 {
     mark_object(P, cast_object(i->self));
     mark_object(P, cast_object(i->attr));
+    traverse_bindings(P, i->bound, i->nbound);
 }
 
 static void traverse_method(paw_Env *P, Method *m)
@@ -238,9 +247,10 @@ static void traverse_map(paw_Env *P, Map *m)
     }
 }
 
-static void traverse_userdata(paw_Env *P, UserData *u)
+static void traverse_foreign(paw_Env *P, Foreign *u)
 {
     mark_object(P, cast_object(u->attr));
+    traverse_bindings(P, u->bound, u->nbound);
 }
 
 static void mark_roots(paw_Env *P)
@@ -294,8 +304,8 @@ static void traverse_objects(paw_Env *P)
             case ~VMAP:
                 traverse_map(P, (Map *)o);
                 break;
-            case ~VUSERDATA:
-                traverse_userdata(P, (UserData *)o);
+            case ~VFOREIGN:
+                traverse_foreign(P, (Foreign *)o);
                 break;
             default:
                 paw_assert(0);
@@ -324,18 +334,13 @@ static void sweep_phase(paw_Env *P)
     }
 }
 
-static size_t next_gc_limit(paw_Env *P)
-{
-    const size_t gc_next = P->gc_bytes * 2;
-    return paw_max(gc_next, PAW_GC_LIMIT);
-}
-
 void pawG_collect(paw_Env *P)
 {
     mark_phase(P);
     sweep_phase(P);
 
-    P->gc_limit = next_gc_limit(P);
+    // increase the limit
+    P->gc_limit = P->gc_bytes * 2;
 }
 
 static void sanity_check(paw_Env *P, Object *o)
@@ -363,7 +368,7 @@ void pawG_add_object(paw_Env *P, Object *o, ValueKind kind)
 
 void pawG_init(paw_Env *P)
 {
-    P->gc_limit = next_gc_limit(P);
+    P->gc_limit = PAW_GC_LIMIT;
 }
 
 void pawG_uninit(paw_Env *P)

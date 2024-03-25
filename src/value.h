@@ -25,7 +25,7 @@
 #define pawV_get_class(v) check_exp(pawV_is_class(v), (Class *)pawV_get_object(v))
 #define pawV_get_instance(v) check_exp(pawV_is_instance(v), (Instance *)pawV_get_object(v))
 #define pawV_get_method(v) check_exp(pawV_is_method(v), (Method *)pawV_get_object(v))
-#define pawV_get_userdata(v) check_exp(pawV_is_userdata(v), (UserData *)pawV_get_object(v))
+#define pawV_get_foreign(v) check_exp(pawV_is_foreign(v), (Foreign *)pawV_get_object(v))
 #define pawV_get_object(v) check_exp(pawV_is_object(v), cast_object(((v).u << 1) & VPTR_MASK))
 #define pawV_get_type(v) ((uint32_t)((v).i >> 47))
 
@@ -36,7 +36,7 @@
 #define pawV_is_number(v) (pawV_get_type(v) <= VNUMBER)
 #define pawV_is_int(v) (pawV_get_type(v) == VNUMBER)
 #define pawV_is_float(v) (pawV_get_type(v) < VNUMBER)
-#define pawV_is_userdata(v) (pawV_get_type(v) == VUSERDATA)
+#define pawV_is_foreign(v) (pawV_get_type(v) == VFOREIGN)
 #define pawV_is_native(v) (pawV_get_type(v) == VNATIVE)
 #define pawV_is_proto(v) (pawV_get_type(v) == VPROTO)
 #define pawV_is_closure(v) (pawV_get_type(v) == VCLOSURE)
@@ -59,7 +59,7 @@
 #define pawV_set_int(p, i) ((p)->u = (uint64_t)VNUMBER << VINT_WIDTH | ((uint64_t)(i) & VINT_MASK))
 
 #define pawV_set_float(p, F) ((p)->f = F)
-#define pawV_set_userdata(p, o) pawV_set_object(p, o, VUSERDATA)
+#define pawV_set_foreign(p, o) pawV_set_object(p, o, VFOREIGN)
 #define pawV_set_native(p, o) pawV_set_object(p, o, VNATIVE)
 #define pawV_set_proto(p, o) pawV_set_object(p, o, VPROTO)
 #define pawV_set_closure(p, o) pawV_set_object(p, o, VCLOSURE)
@@ -83,7 +83,7 @@
 #define obj2class(o) check_exp((o)->gc_kind == VCLASS, (Class *)(o))
 #define obj2instance(o) check_exp((o)->gc_kind == VINSTANCE, (Instance *)(o))
 #define obj2method(o) check_exp((o)->gc_kind == VMETHOD, (Method *)(o))
-#define obj2userdata(o) check_exp((o)->gc_kind == VUSERDATA, (UserData *)(o))
+#define obj2foreign(o) check_exp((o)->gc_kind == VFOREIGN, (Foreign *)(o))
 
 #define GC_HEADER           \
     struct Object *gc_next; \
@@ -91,7 +91,7 @@
     uint8_t gc_mark
 #define cast_uintptr(x) ((uintptr_t)(x))
 #define cast_object(x) ((Object *)(void *)(x))
-#define has_meta(x) (pawV_is_instance(x) || pawV_is_userdata(x))
+#define has_meta(x) (pawV_is_instance(x) || pawV_is_foreign(x))
 
 typedef union Value {
     uint64_t u;
@@ -125,7 +125,7 @@ typedef union StackRel {
 #define VNULL (~0U)
 #define VFALSE (~1U)
 #define VTRUE (~2U)
-#define VUSERDATA (~3U)
+#define VFOREIGN (~3U)
 #define VBIGINT (~4U)
 #define VSTRING (~5U)
 #define VNATIVE (~6U)
@@ -144,7 +144,7 @@ typedef union StackRel {
 #define VINT_MAX ((paw_int_c(1) << (VINT_WIDTH - 1)) - 1)
 #define VINT_MIN (-VINT_MAX - 1)
 
-#define VOBJECT0 VUSERDATA
+#define VOBJECT0 VFOREIGN
 #define NOBJECTS (int)(~VNUMBER - ~VOBJECT0)
 #define VPTR_MASK ((UINT64_C(1) << VPTR_WIDTH) - 1)
 #define VINT_MASK ((UINT64_C(1) << VINT_WIDTH) - 1)
@@ -301,6 +301,10 @@ typedef struct Map {
     Object *gc_list;
 } Map;
 
+// Class prototype object
+// Created using the 'class' keyword in paw. Classes are closed at
+// creation time, and can only contain methods. Methods go in the
+// 'bound' variable of a class instance.
 typedef struct Class {
     GC_HEADER;
     String *name;
@@ -314,13 +318,16 @@ void pawV_free_class(paw_Env *P, Class *c);
 // Instance of a class
 typedef struct Instance {
     GC_HEADER;
+    int nbound;
     Class *self;
     Map *attr;
     Object *gc_list;
+    Value bound[];
 } Instance;
 
 Instance *pawV_new_instance(paw_Env *P, StackPtr sp, Class *cls);
 void pawV_free_instance(paw_Env *P, Instance *);
+Value *pawV_find_binding(paw_Env *P, Value obj, Value name);
 
 // Method bound to a class or builtin object
 typedef struct Method {
@@ -333,16 +340,19 @@ typedef struct Method {
 Method *pawV_new_method(paw_Env *P, Value self, Value call);
 void pawV_free_method(paw_Env *P, Method *);
 
-typedef struct UserData {
+typedef struct Foreign {
     GC_HEADER;
+    int nbound;
     void *data;
     size_t size;
     Map *attr;
     Object *gc_list;
-} UserData;
+    Value bound[];
+} Foreign;
 
-UserData *pawV_push_userdata(paw_Env *P, size_t size);
-void pawV_free_userdata(paw_Env *P, UserData *ud);
+Foreign *pawV_push_foreign(paw_Env *P, size_t size, int nbound);
+void pawV_free_foreign(paw_Env *P, Foreign *ud);
+Foreign *pawV_new_builtin(paw_Env *P, int nbound);
 
 #define ISIGNBIT (UINT64_C(1) << (VINT_WIDTH - 1))
 

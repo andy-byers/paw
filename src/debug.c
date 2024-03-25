@@ -396,8 +396,8 @@ void paw_dump_stack(paw_Env *P)
             case VNULL:
                 puts("null");
                 break;
-            case VUSERDATA:
-                printf("userdata %p (%zu attrs)\n", pawV_get_userdata(*p)->data, pawH_length(pawV_get_userdata(*p)->attr));
+            case VFOREIGN:
+                printf("foreign %p (%zu attrs)\n", pawV_get_foreign(*p)->data, pawH_length(pawV_get_foreign(*p)->attr));
                 break;
             case VPROTO:
                 printf("proto k=%d\n", pawV_get_proto(*p)->nk);
