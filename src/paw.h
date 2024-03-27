@@ -94,12 +94,9 @@ paw_Bool paw_is_map(paw_Env *P, int index);
 paw_Bool paw_is_function(paw_Env *P, int index);
 paw_Bool paw_is_class(paw_Env *P, int index);
 paw_Bool paw_is_instance(paw_Env *P, int index);
-paw_Bool paw_is_userdata(paw_Env *P, int index);
+paw_Bool paw_is_foreign(paw_Env *P, int index);
 int paw_type(paw_Env *P, int index);
 const char *paw_typename(paw_Env *P, int index);
-
-// Throw an error if the value at 'index' is not of type 'type'
-void paw_check_type(paw_Env *P, int index, int type);
 
 void paw_push_value(paw_Env *P, int index);
 void paw_push_nnull(paw_Env *P, int n);
@@ -205,7 +202,7 @@ void paw_set_itemi(paw_Env *P, int index, paw_Int i);
 void paw_call_global(paw_Env *P, const char *name, int argc);
 void paw_call_attr(paw_Env *P, int index, const char *name, int argc);
 
-void *paw_create_userdata(paw_Env *P, size_t size);
+void *paw_create_foreign(paw_Env *P, size_t size, int nbound);
 void paw_create_native(paw_Env *P, paw_Function f, int nup);
 void paw_create_class(paw_Env *P);
 void paw_create_instance(paw_Env *P, int index);

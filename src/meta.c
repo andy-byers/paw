@@ -72,15 +72,19 @@ const char *pawT_name(Op op)
 
 Value *pawT_get_meta_(paw_Env *P, Op op, Value obj)
 {
+    const Value key = P->meta_keys[op2meta(op)];
+    Value *bound = pawV_find_binding(P, obj, key);
+    if (bound) {
+        return bound;
+    }
     Map *meta;
     if (pawV_is_instance(obj)) {
         meta = pawV_get_instance(obj)->attr;
-    } else if (pawV_is_userdata(obj)) {
-        paw_assert(pawV_is_userdata(obj));
-        meta = pawV_get_userdata(obj)->attr;
+    } else if (pawV_is_foreign(obj)) {
+        paw_assert(pawV_is_foreign(obj));
+        meta = pawV_get_foreign(obj)->attr;
     } else {
         return NULL;
     }
-    const Value key = P->meta_keys[op2meta(op)];
     return pawH_action(P, meta, key, MAP_ACTION_NONE);
 }

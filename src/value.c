@@ -11,7 +11,7 @@
 #include "str.h"
 #include "util.h"
 #include "value.h"
-#include <assert.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -109,8 +109,8 @@ const char *pawV_name(ValueKind kind)
             return "instance";
         case VMETHOD:
             return "method";
-        case VUSERDATA:
-            return "userdata";
+        case VFOREIGN:
+            return "foreign";
         default:
             return "float";
     }
@@ -205,21 +205,75 @@ void pawV_free_native(paw_Env *P, Native *nt)
     pawM_free_flex(P, nt, nt->nup, sizeof(nt->up[0]));
 }
 
+static int bindings_len(int nbound)
+{
+    paw_assert(nbound <= INT_MAX / 2);
+    return (int)nbound * 2; // TODO: May keep some extra slots at the beginning for "fast" metamethods
+}
+
+static void unpack_bindings(Value *pbound, const Map *attr)
+{
+    // Unpack class attributes, which can only consist of callable objects (paw or
+    // native closures).
+    paw_Int itr = PAW_ITER_INIT;
+    while (pawH_iter(attr, &itr)) {
+        *pbound++ = attr->keys[itr];    
+        *pbound++ = attr->values[itr];    
+    }
+}
+
 Instance *pawV_new_instance(paw_Env *P, StackPtr sp, Class *cls)
 {
-    Instance *ins = pawM_new(P, Instance);
+    const size_t nbound = pawH_length(cls->attr);
+    Instance *ins = pawM_new_flex(P, Instance, bindings_len(nbound),
+                                  sizeof(ins->bound[0]));
     pawG_add_object(P, cast_object(ins), VINSTANCE);
     pawV_set_instance(sp, ins); // anchor
-    ins->self = cls;
     ins->attr = pawH_new(P);
-    pawH_extend(P, ins->attr, cls->attr);
+    ins->self = cls;
+    ins->nbound = nbound;
+
+    unpack_bindings(ins->bound, cls->attr);
     return ins;
 }
 
-void pawV_free_instance(paw_Env *P, Instance *i)
+void pawV_free_instance(paw_Env *P, Instance *ins)
 {
-    // Members are managed separately.
-    pawM_free(P, i);
+    pawM_free_flex(P, ins, bindings_len(ins->nbound), sizeof(ins->bound[0]));
+}
+
+Value *pawV_find_binding(paw_Env *P, Value obj, Value name)
+{
+    int n = 0;
+    Value *pv = NULL;
+    if (pawV_is_instance(obj)) {
+        Instance *ins = pawV_get_instance(obj);
+        pv = ins->bound; 
+        n = ins->nbound; 
+    } else if (pawV_is_foreign(obj)) {
+        Foreign *ud = pawV_get_foreign(obj);
+        pv = ud->bound; 
+        n = ud->nbound; 
+    } else if (pawV_is_object(obj)) {
+        const ValueKind kind = pawV_get_type(obj);
+        Foreign *ud = P->builtin[obj_index(kind)];
+        pv = ud->bound;
+        n = ud->nbound;
+    } 
+    if (!pv) {
+        // no bindings array on 'obj'
+        return NULL;
+    }
+    for (; n > 0; --n, pv += 2) {
+        const Value key = *pv;
+        if (key.u == name.u) {
+            return pv + 1;
+        }
+    } 
+    if (obj.u != P->object.u) {
+        return pawV_find_binding(P, P->object, name); 
+    }
+    return NULL; 
 }
 
 Class *pawV_push_class(paw_Env *P)
@@ -251,27 +305,49 @@ void pawV_free_method(paw_Env *P, Method *m)
     pawM_free(P, m);
 }
 
-UserData *pawV_push_userdata(paw_Env *P, size_t size)
+Foreign *pawV_push_foreign(paw_Env *P, size_t size, int nbound)
 {
     if (size > PAW_SIZE_MAX) {
         pawM_error(P);
     }
     Value *pv = pawC_push0(P);
-    UserData *o = pawM_new(P, UserData);
-    pawG_add_object(P, cast_object(o), VUSERDATA);
-    pawV_set_userdata(pv, o); // anchor
-    o->attr = pawH_new(P);
-    o->size = size;
+    Foreign *ud = pawM_new_flex(P, Foreign, bindings_len(nbound), 
+                                 sizeof(ud->bound[0]));
+    pawG_add_object(P, cast_object(ud), VFOREIGN);
+    pawV_set_foreign(pv, ud); // anchor
+    ud->nbound = nbound;
+    ud->attr = pawH_new(P);
+    ud->size = size;
     if (size) {
-        o->data = pawM_new_vec(P, size, char);
+        // Allocate space to hold 'size' bytes of foreign data.
+        ud->data = pawM_new_vec(P, size, char);
     }
-    return o;
+    pv = ud->bound; // clear for GC
+    for (int i = 0; i < nbound; ++i) {
+        pawV_set_null(pv++);
+        pawV_set_null(pv++);
+    }
+    return ud;
 }
 
-void pawV_free_userdata(paw_Env *P, UserData *ud)
+void pawV_free_foreign(paw_Env *P, Foreign *ud)
 {
     pawM_free_vec(P, (char *)ud->data, ud->size);
-    pawM_free(P, ud);
+    pawM_free_flex(P, ud, bindings_len(ud->nbound), sizeof(ud->bound[0]));
+}
+
+Foreign *pawV_new_builtin(paw_Env *P, int nbound)
+{
+    Foreign *ud = pawM_new_flex(P, Foreign, bindings_len(nbound), 
+                                 sizeof(ud->bound[0]));
+    pawG_add_object(P, cast_object(ud), VFOREIGN);
+    ud->nbound = nbound;
+    Value *pv = ud->bound; // clear for GC
+    for (int i = 0; i < nbound; ++i) {
+        pawV_set_null(pv++);
+        pawV_set_null(pv++);
+    }
+    return ud;
 }
 
 int pawV_num2int(Value *pv)

@@ -41,14 +41,14 @@ static FILE *get_handle(paw_Env *P, int index)
 
 static FILE **create_handle(paw_Env *P)
 {
-    return paw_create_userdata(P, sizeof(FILE *));
+    return paw_create_foreign(P, sizeof(FILE *), 0);
 }
 
 static int io_open(paw_Env *P)
 {
-    pawL_check_argc(P, 2);
-    const char *path = pawL_check_string(P, 1);
-    const char *mode = pawL_check_string(P, 2);
+    pawL_check_argc(P, 3);
+    const char *path = pawL_check_string(P, 2);
+    const char *mode = pawL_check_string(P, 3);
 
     // Allocate space for the file handle
     FILE **pfile = create_handle(P);
@@ -66,16 +66,16 @@ static int io_open(paw_Env *P)
 
 static int io_close(paw_Env *P)
 {
-    pawL_check_argc(P, 1);
-    FILE *file = get_handle(P, 1);
+    pawL_check_argc(P, 2);
+    FILE *file = get_handle(P, 2);
     pawO_close(file);
     return 0;
 }
 
 static int io_flush(paw_Env *P)
 {
-    pawL_check_argc(P, 1);
-    FILE *file = get_handle(P, 1);
+    pawL_check_argc(P, 2);
+    FILE *file = get_handle(P, 2);
     if (fflush(file)) {
         pawO_system_error(P, errno);
     }
@@ -84,10 +84,10 @@ static int io_flush(paw_Env *P)
 
 static int io_read(paw_Env *P)
 {
-    pawL_check_argc(P, 2);
-    pawL_check_type(P, 2, PAW_TINTEGER);
-    FILE *file = get_handle(P, 1);
-    const paw_Int n = paw_int(P, 2);
+    pawL_check_argc(P, 3); // ..., io, file, integer
+    pawL_check_type(P, 3, PAW_TINTEGER);
+    FILE *file = get_handle(P, 2);
+    const paw_Int n = paw_int(P, 3);
 
     Buffer buf;
     pawL_init_buffer(P, &buf);
@@ -99,19 +99,19 @@ static int io_read(paw_Env *P)
 
 static int io_write(paw_Env *P)
 {
-    pawL_check_argc(P, 2);
-    const char *data = pawL_check_string(P, 2);
-    FILE *file = get_handle(P, 1);
-    pawO_write_all(P, file, data, paw_length(P, 2));
+    pawL_check_argc(P, 3); // ..., io, file, string
+    FILE *file = get_handle(P, 2);
+    const char *data = pawL_check_string(P, 3);
+    pawO_write_all(P, file, data, paw_length(P, 3));
     return 0;
 }
 
 static int io_seek(paw_Env *P)
 {
-    pawL_check_argc(P, 3);
-    const paw_Int offset = pawL_check_int(P, 2);
-    const paw_Int origin = pawL_check_int(P, 3);
-    FILE *file = get_handle(P, 1);
+    pawL_check_argc(P, 4);
+    FILE *file = get_handle(P, 2);
+    const paw_Int offset = pawL_check_int(P, 3);
+    const paw_Int origin = pawL_check_int(P, 4);
     if (p_fseek(file, offset, origin)) {
         pawO_system_error(P, errno);
     }
@@ -120,8 +120,8 @@ static int io_seek(paw_Env *P)
 
 static int io_tell(paw_Env *P)
 {
-    pawL_check_argc(P, 1);
-    FILE *file = get_handle(P, 1);
+    pawL_check_argc(P, 2);
+    FILE *file = get_handle(P, 2);
     paw_push_int(P, p_ftell(file));
     return 1;
 }

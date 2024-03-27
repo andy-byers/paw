@@ -9,7 +9,6 @@
     io.seek(file, 0, io.begin)
     assert(io.tell(file) == 0)
     let msg = io.read(file, #input)
-
     assert(msg == input)
     io.close(file)
 }

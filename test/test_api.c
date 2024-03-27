@@ -90,8 +90,8 @@ static int fib(paw_Env *P)
 
 static paw_Int call_fib(paw_Env *P, int n)
 {
-    paw_push_value(P, -1); // Copy closure
-    paw_push_int(P, n);    // Push parameter
+    paw_push_value(P, -1); // copy closure
+    paw_push_int(P, n);    // push parameter
     const int status = paw_call(P, 1);
     check(status == PAW_OK);
 

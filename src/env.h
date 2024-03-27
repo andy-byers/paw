@@ -32,6 +32,7 @@ typedef struct CallFrame {
 } CallFrame;
 
 enum {
+    CSTR_EMPTY,
     CSTR_SELF,
     CSTR_SUPER,
     CSTR_INIT,
@@ -58,7 +59,8 @@ typedef struct paw_Env {
     StackRel top;
 
     Map *libs;
-    Map *attr[NOBJECTS];
+    Value object;
+    Foreign *builtin[NOBJECTS];
     Value meta_keys[NMETA];
     Value str_cache[NCSTR];
 

@@ -199,45 +199,45 @@
 {
     let alt = '' -- For metamethods with no return
     class MM {
-        __init() {self.x = ''}
-        __len() {return '__len'}
-        __neg() {return '__neg'}
-        __not() {return '__not'}
-        __bnot() {return '__bnot'}
-        __add(y) {return '__add'}
-        __sub(y) {return '__sub'}
-        __mul(y) {return '__mul'}
-        __div(y) {return '__div'}
-        __idiv(y) {return '__idiv'}
-        __mod(y) {return '__mod'}
-        __pow(y) {return '__pow'}
-        __concat(y) {return '__concat'}
-        __bxor(y) {return '__bxor'}
-        __band(y) {return '__band'}
-        __bor(y) {return '__bor'}
-        __shl(y) {return '__shl'}
-        __shr(y) {return '__shr'}
-        __eq(y) {return '__eq'}
-        __lt(y) {return '__lt'}
-        __le(y) {return '__le'}
-        __contains(x) {return '__contains'}
-        __getattr(x) {return '__getattr'}
-        __setattr(x, y) {alt = '__setattr'}
-        __getitem(x) {return '__getitem'}
-        __setitem(x, y) {alt = '__setitem'}
-        __radd(x) {return '__radd'}
-        __rsub(x) {return '__rsub'}
-        __rmul(x) {return '__rmul'}
-        __rdiv(x) {return '__rdiv'}
-        __ridiv(x) {return '__ridiv'}
-        __rmod(x) {return '__rmod'}
-        __rpow(x) {return '__rpow'}
-        __rconcat(x) {return '__rconcat'}
-        __rbxor(x) {return '__rbxor'}
-        __rband(x) {return '__rband'}
-        __rbor(x) {return '__rbor'}
-        __rshl(x) {return '__rshl'}
-        __rshr(x) {return '__rshr'}
+        __init(self) {self.x = ''}
+        __len(self) {return '__len'}
+        __neg(self) {return '__neg'}
+        __not(self) {return '__not'}
+        __bnot(self) {return '__bnot'}
+        __add(self, y) {return '__add'}
+        __sub(self, y) {return '__sub'}
+        __mul(self, y) {return '__mul'}
+        __div(self, y) {return '__div'}
+        __idiv(self, y) {return '__idiv'}
+        __mod(self, y) {return '__mod'}
+        __pow(self, y) {return '__pow'}
+        __concat(self, y) {return '__concat'}
+        __bxor(self, y) {return '__bxor'}
+        __band(self, y) {return '__band'}
+        __bor(self, y) {return '__bor'}
+        __shl(self, y) {return '__shl'}
+        __shr(self, y) {return '__shr'}
+        __eq(self, y) {return '__eq'}
+        __lt(self, y) {return '__lt'}
+        __le(self, y) {return '__le'}
+        __contains(self, x) {return '__contains'}
+        __getattr(self, x) {return '__getattr'}
+        __setattr(self, x, y) {alt = '__setattr'}
+        __getitem(self, x) {return '__getitem'}
+        __setitem(self, x, y) {alt = '__setitem'}
+        __radd(self, x) {return '__radd'}
+        __rsub(self, x) {return '__rsub'}
+        __rmul(self, x) {return '__rmul'}
+        __rdiv(self, x) {return '__rdiv'}
+        __ridiv(self, x) {return '__ridiv'}
+        __rmod(self, x) {return '__rmod'}
+        __rpow(self, x) {return '__rpow'}
+        __rconcat(self, x) {return '__rconcat'}
+        __rbxor(self, x) {return '__rbxor'}
+        __rband(self, x) {return '__rband'}
+        __rbor(self, x) {return '__rbor'}
+        __rshl(self, x) {return '__rshl'}
+        __rshr(self, x) {return '__rshr'}
     }
 
     -- Precedence helper
@@ -316,7 +316,7 @@
         }
     }
     class Meta {
-        __len() {
+        __len(self) {
             test(100)
             return 0
         }
@@ -329,7 +329,7 @@
 
 {
     class Set {
-        __init(set) {
+        __init(self, set) {
             let s = {}
             for v in set {
                 s[v] = null
@@ -337,22 +337,22 @@
             self.set = s
         }
 
-        __add(y) {
+        __add(self, y) {
             let s = self.set.clone()
             s[y] = null
             return Set(s)
         }
-        __radd(x) {
+        __radd(self, x) {
             return self.__add(x)
         }
 
-        __sub(y) {
+        __sub(self, y) {
             let s = self.set.clone()
             s.erase(y)
             return Set(s)
         }
 
-        __contains(v) {
+        __contains(self, v) {
             return v in self.set
         }
     }
@@ -382,39 +382,39 @@
 {
     -- Simulates an integer
     class Int {
-        __init(v) {self.v = v}
-        __neg() {return Int(-self.v)}
-        __not() {return Int(~self.v)}
-        __bnot() {return Int(~self.v)}
-        __add(y) {return Int(self.v + y.v)}
-        __sub(y) {return Int(self.v - y.v)}
-        __mul(y) {return Int(self.v * y.v)}
-        __div(y) {return Int(self.v / y.v)}
-        __idiv(y) {return Int(self.v // y.v)}
-        __mod(y) {return Int(self.v % y.v)}
---        __pow(y) {return Int(self.v**y.v)}
-        __concat(y) {return Int(self.v ++ y.v)}
-        __bxor(y) {return Int(self.v ^ y.v)}
-        __band(y) {return Int(self.v & y.v)}
-        __bor(y) {return Int(self.v | y.v)}
-        __shl(y) {return Int(self.v << y.v)}
-        __shr(y) {return Int(self.v >> y.v)}
-        __eq(y) {return self.v == y.v}
-        __lt(y) {return self.v < y.v}
-        __le(y) {return self.v <= y.v}
-        __radd(x) {return Int(x.v + self.v)}
-        __rsub(x) {return Int(x.v - self.v)}
-        __rmul(x) {return Int(x.v * self.v)}
-        __rdiv(x) {return Int(x.v / self.v)}
-        __ridiv(x) {return Int(x.v // self.v)}
-        __rmod(x) {return Int(x.v % self.v)}
---        __rpow(x) {return Int(x.v**self.v)}
-        __rconcat(x) {return Int(x.v ++ self.v)}
-        __rbxor(x) {return Int(x.v ^ self.v)}
-        __rband(x) {return Int(x.v & self.v)}
-        __rbor(x) {return Int(x.v | self.v)}
-        __rshl(x) {return Int(x.v << self.v)}
-        __rshr(x) {return Int(x.v >> self.v)}
+        __init(self, v) {self.v = v}
+        __neg(self) {return Int(-self.v)}
+        __not(self) {return Int(~self.v)}
+        __bnot(self) {return Int(~self.v)}
+        __add(self, y) {return Int(self.v + y.v)}
+        __sub(self, y) {return Int(self.v - y.v)}
+        __mul(self, y) {return Int(self.v * y.v)}
+        __div(self, y) {return Int(self.v / y.v)}
+        __idiv(self, y) {return Int(self.v // y.v)}
+        __mod(self, y) {return Int(self.v % y.v)}
+--        __pow(self, y) {return Int(self.v**y.v)}
+        __concat(self, y) {return Int(self.v ++ y.v)}
+        __bxor(self, y) {return Int(self.v ^ y.v)}
+        __band(self, y) {return Int(self.v & y.v)}
+        __bor(self, y) {return Int(self.v | y.v)}
+        __shl(self, y) {return Int(self.v << y.v)}
+        __shr(self, y) {return Int(self.v >> y.v)}
+        __eq(self, y) {return self.v == y.v}
+        __lt(self, y) {return self.v < y.v}
+        __le(self, y) {return self.v <= y.v}
+        __radd(self, x) {return Int(x.v + self.v)}
+        __rsub(self, x) {return Int(x.v - self.v)}
+        __rmul(self, x) {return Int(x.v * self.v)}
+        __rdiv(self, x) {return Int(x.v / self.v)}
+        __ridiv(self, x) {return Int(x.v // self.v)}
+        __rmod(self, x) {return Int(x.v % self.v)}
+--        __rpow(self, x) {return Int(x.v**self.v)}
+        __rconcat(self, x) {return Int(x.v ++ self.v)}
+        __rbxor(self, x) {return Int(x.v ^ self.v)}
+        __rband(self, x) {return Int(x.v & self.v)}
+        __rbor(self, x) {return Int(x.v | self.v)}
+        __rshl(self, x) {return Int(x.v << self.v)}
+        __rshr(self, x) {return Int(x.v >> self.v)}
     }
     fn check(lhs, rhs) {
         assert(lhs.v == rhs)
@@ -428,41 +428,41 @@
 }
 
 {
-    class MM {__call() {return 0}}
+    class MM {__call(self) {return 0}}
     let mm = MM()
     assert(mm() == 0)
 
-    class MM {__call(x) {return x}}
+    class MM {__call(self, x) {return x}}
     let mm = MM()
     assert(mm(1) == 1)
 
-    class MM {__call(x, y) {return y}}
+    class MM {__call(self, x, y) {return y}}
     let mm = MM()
     assert(mm(1, 2) == 2)
 
-    class MM {__call(x, y, z) {return z}}
+    class MM {__call(self, x, y, z) {return z}}
     let mm = MM()
     assert(mm(1, 2, 3) == 3)
 
-    class MM {__call(...) {return argv[-1]}}
+    class MM {__call(self, ...) {return argv[-1]}}
     let mm = MM()
     assert(mm(1) == 1)
     assert(mm(2) == 2)
     assert(mm(3) == 3)
 
-    class MM {__call(x, ...) {return x + argv[-1]}}
+    class MM {__call(self, x, ...) {return x + argv[-1]}}
     let mm = MM()
     assert(mm(1, 2) == 3)
     assert(mm(1, 2, 3) == 4)
     assert(mm(1, 2, 3, 4) == 5)
 
-    class MM {__call(x, y, ...) {return y + argv[-1]}}
+    class MM {__call(self, x, y, ...) {return y + argv[-1]}}
     let mm = MM()
     assert(mm(1, 2, 3) == 5)
     assert(mm(1, 2, 3, 4) == 6)
     assert(mm(1, 2, 3, 4, 5) == 7)
 
-    class MM {__call(x, y, z, ...) {return z + argv[-1]}}
+    class MM {__call(self, x, y, z, ...) {return z + argv[-1]}}
     let mm = MM()
     assert(mm(1, 2, 3, 4) == 7)
     assert(mm(1, 2, 3, 4, 5) == 8)
@@ -471,11 +471,11 @@
 
 {
     class Test {
-        __init(v) {
+        __init(self, v) {
             self.value = v
         }
 
-        __null() {
+        __null(self) {
             return self.value
                 ?? self 
                 :: null
@@ -500,15 +500,15 @@
 -- it can be used in for...in loops.
 {
     class Iterable {
-        __init(n) {
+        __init(self, n) {
             self.n = n
         }
         
-        __len() {
+        __len(self) {
             return self.n
         }
         
-        __getitem(index) {
+        __getitem(self, index) {
             return index
         }
     }

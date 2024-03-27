@@ -1,6 +1,41 @@
 -- class.paw
 
 {
+    class A {}
+    let a = A()
+
+    -- Functions added after __init are not bound to the instance. They
+    -- can be called and assigned to variables, but they will not receive
+    -- the hidden 'self' parameter, nor will they have access to 'super'.
+    a.a = fn() {}
+    a.b = fn(a) {return a}
+    assert(a.a() == null)
+    assert(a.b(42) == 42)
+
+    let aa = a.a
+    let ab = a.b
+    assert(aa() == null)
+    assert(ab(42) == 42)
+}
+
+{
+    fn test(code) {
+        fn test() {
+            load(code)() 
+        }
+        assert(0 != try(test))
+    }
+    -- Classes are closed after creation (after closing '}' is encountered
+    -- in class the definition).
+    test('class A {}; A.a = 123')
+    test('class A {}; A.a = fn() {}')
+
+    -- Non-bound functions cannot access 'self' or 'super'.
+    test('class A {}; let a = A(); a.a = fn() {self.value = 123}; a.a()')
+    test('class A {}; let a = A(); a.a = fn() {super.value = 123}; a.a()')
+}
+
+{
     fn test(ins) {
         -- 'c' and 'd' do not exist. Attempting to access either is an error.
         assert(ins.a == 1)
@@ -13,12 +48,12 @@
     }
 
     class Class {
-        __init() {
+        __init(self) {
             self.a = 1
             self.b = null
         }
 
-        method() {
+        method(self) {
             self.b = 2
             self.c = 3
         }
@@ -39,7 +74,7 @@
             let c = [0]
 
             class Capture {
-                __init() {
+                __init(self) {
                     self.a = a
                     self.b = b
                     self.c = c
@@ -84,10 +119,10 @@
     {
         {
             class Class {
-                setter(x) {
+                setter(self, x) {
                     self.x = x
                 }
-                getter() {
+                getter(self) {
                     return self.x
                 }
             }
@@ -102,10 +137,10 @@
         {
             let x = 0
             class Class {
-                setter(y) {
+                setter(self, y) {
                     x = y
                 }
-                getter() {
+                getter(self) {
                     return x
                 }
             }
@@ -118,11 +153,11 @@
 
 {
     class Class {
-        __init() {
+        __init(self) {
             self.cls = Class
             self.num = 42
         }
-        test() {
+        test(self) {
             self.ins = self.cls()
         }
     }
@@ -135,7 +170,7 @@
 
 {
     class Class {
-        count(n) {
+        count(self, n) {
             assert(n >= 0)
             return n == 0 ?? 0 :: 1 + self.count(n - 1)
         }
@@ -153,7 +188,7 @@
     let c = Child()
 
     let n = 0
-    class Parent {method() {n = n + 1}}
+    class Parent {method(self) {n = n + 1}}
     class Child: Parent {}
     let c = Child()
     let m = c.method
@@ -162,8 +197,8 @@
     assert(n == 2)
 
     let n = 0
-    class Grandparent {method() {n = -1}}
-    class Parent {method() {n = n + 1}}
+    class Grandparent {method(self) {n = -1}}
+    class Parent {method(self) {n = n + 1}}
     class Child: Parent {}
     let c = Child()
     let m = c.method
@@ -175,7 +210,7 @@
 
 {
     class Parent {
-        __init() {
+        __init(self) {
             self.name = 'Parent'
         }
     }
@@ -187,7 +222,7 @@
 
 -- Inheritance from self is not possible
 {
-    class A {f() {}}
+    class A {f(self) {}}
     class A: A {} -- superclass is 'A' from the previous line
     let a = A()
     a.f()
@@ -197,12 +232,12 @@
 {
 
     class Parent {
-        __init() {
+        __init(self) {
             self.name = 'Parent'
         }
     }
     class Child: Parent {
-        __init() {
+        __init(self) {
             super.__init()            
         }
     }
@@ -212,17 +247,17 @@
 
 {
     class A {
-        method() {
+        method(self) {
             return 'A'
         }
     }
 
     class B: A {
-        method() {
+        method(self) {
             return 'B'
         }
 
-        test() {
+        test(self) {
             return super.method()
         }
     }
@@ -234,18 +269,18 @@
 
 {
     class A {
-        __init() {
+        __init(self) {
             self.v = 'A'
         }
     }
     class B: A {
-        __init() {}
+        __init(self) {}
     }
     let b = B()
     assert(null == getattr(b, 'v', null))
 
     class B: A {
-        __init(x) {
+        __init(self, x) {
             super.__init()
         }
     }
@@ -257,7 +292,7 @@
     fn test(code) {
         load(code)()
     }
-    assert(0 != try(test, 'class A: A {}')) -- 'A' does not yet exist
+    assert(0 != try(test, 'class _ABC: _ABC {}')) -- '_ABC' not declared (declared/defined at '}')
     assert(0 != try(test, 'class A: 1 {}')) -- inherit from primitive
     assert(0 != try(test, 'class A: [] {}')) -- inherit from builtin type
 
