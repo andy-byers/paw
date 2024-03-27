@@ -232,39 +232,6 @@ static int string_ends_with(paw_Env *P)
     return 1;
 }
 
-static int array_insert(paw_Env *P)
-{
-    pawL_check_varargc(P, 2, 2);
-    const paw_Int i = pawL_check_int(P, 1);
-    Array *a = pawV_get_array(cf_base(0));
-    pawA_insert(P, a, i, cf_base(2));
-    return 0;
-}
-
-static int array_push(paw_Env *P)
-{
-    const int argc = pawL_check_varargc(P, 1, UINT8_MAX);
-    Array *a = pawV_get_array(cf_base(0));
-    for (int i = 1; i <= argc; ++i) {
-        pawA_push(P, a, cf_base(i));
-    }
-    return 0;
-}
-
-static int array_pop(paw_Env *P)
-{
-    const int argc = pawL_check_varargc(P, 0, 1);
-    Array *a = pawV_get_array(cf_base(0));
-    // Argument, if present, indicates the index at which to remove an
-    // element. Default to -1: the last element.
-    const paw_Int i = argc ? pawV_get_int(cf_base(1)) : -1;
-
-    Value *pv = pawC_stkinc(P, 1);
-    *pv = *pawA_get(P, a, i); // checks bounds
-    pawA_pop(P, a, i);
-    return 1;
-}
-
 static int map_erase(paw_Env *P)
 {
     pawL_check_argc(P, 1);
@@ -287,26 +254,6 @@ static int object_clone(paw_Env *P)
         *pv = v; // strings are internalized
     }
     return 1;
-}
-
-static int base_getitem(paw_Env *P)
-{
-    const int argc = pawL_check_varargc(P, 2, 3);
-    const paw_Bool fallback = argc == 3;
-    if (fallback) {
-        paw_rotate(P, -3, 1);
-    }
-    if (pawR_getitem_raw(P, fallback)) {
-        pawH_key_error(P, P->top.p[-1]);
-    }
-    return 1;
-}
-
-static int base_setitem(paw_Env *P)
-{
-    pawL_check_argc(P, 3);
-    pawR_setattr(P);
-    return 0;
 }
 
 static int base_getattr(paw_Env *P)
@@ -334,7 +281,7 @@ static int count_bindings(paw_Env *P, const pawL_Attr *attr)
     int nbound = 0;
     for (; attr->name; ++attr, ++nbound) {
         if (nbound == INT_MAX) {
-            pawR_error(P, PAW_EOVERFLOW, "too many bindings"); 
+            pawR_error(P, PAW_EOVERFLOW, "too many bindings");
         }
     }
     return nbound;
@@ -353,7 +300,7 @@ static void load_bindings(paw_Env *P, Foreign *ud, int nup, const pawL_Attr *a, 
         }
 
         for (int u = 0; u < nup; ++u) {
-            // '-1' accounts for library container on top 
+            // '-1' accounts for library container on top
             nt->up[u] = P->top.p[nup - u - 1];
         }
     }
@@ -417,15 +364,10 @@ static const pawL_Attr kBaseLib[] = {
     {"chr", base_chr},
     {"getattr", base_getattr},
     {"setattr", base_setattr},
-    {"getitem", base_getitem},
-    {"setitem", base_setitem},
     {0}
 };
 
 static const pawL_Attr kArrayMethods[] = {
-    {"insert", array_insert},
-    {"push", array_push},
-    {"pop", array_pop},
     {0}
 };
 
@@ -460,10 +402,10 @@ static struct Builtin {
 
 static void init_object(paw_Env *P, Foreign **pfr, int i)
 {
-     const struct Builtin b = kBuiltin[i];
-     *pfr = pawV_new_builtin(P, b.nattr);
-     pawG_fix_object(P, cast_object(*pfr));
-     load_bindings(P, *pfr, 0, b.attr, b.nattr, PAW_TRUE);
+    const struct Builtin b = kBuiltin[i];
+    *pfr = pawV_new_builtin(P, b.nattr);
+    pawG_fix_object(P, cast_object(*pfr));
+    load_bindings(P, *pfr, 0, b.attr, b.nattr, PAW_TRUE);
 }
 
 void pawL_init(paw_Env *P)
@@ -481,13 +423,13 @@ void pawL_init(paw_Env *P)
     // Create a map for caching loaded libraries.
     P->libs = pawH_new(P);
 
-    // Fix builtin method names. The foreign objects containing builtin methods 
+    // Fix builtin method names. The foreign objects containing builtin methods
     // are not traversed by the GC, since they are effectively immutable.
     for (size_t i = 0; i < paw_countof(kBuiltin); ++i) {
-         const struct Builtin b = kBuiltin[i];
-         for (int j = 0; j < b.nattr; ++j) {
-             fix_name(P, b.attr[j].name);
-         }
+        const struct Builtin b = kBuiltin[i];
+        for (int j = 0; j < b.nattr; ++j) {
+            fix_name(P, b.attr[j].name);
+        }
     }
 
     Foreign **pfr = P->builtin;

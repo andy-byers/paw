@@ -2,6 +2,26 @@
 
 {
     let a = []
+    a.push(1)
+    print('done', #a)
+}
+{
+    -- line comment
+    -* block comment *-
+    -* multi-line
+       block
+       comment *-
+    -* -* *-
+    -* * - *-
+
+    -- 2 block comments, side-by-side
+    -**--**-
+    -* *--* *-
+    -**- -**-
+}
+
+{
+    let a = []
     for i = 0,100 {
         a.push(i)
     }

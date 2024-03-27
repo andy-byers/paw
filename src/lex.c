@@ -99,6 +99,7 @@ static void save(struct Lex *x, char c)
 }
 
 #define save_and_next(x) (save(x, (x)->c), next(x))
+#define is_eof(x) ((uint8_t)(x)->c == TK_END)
 
 static paw_Bool test_next(struct Lex *x, char c)
 {
@@ -357,9 +358,24 @@ Token consume_number(struct Lex *x)
     return make_number(x);
 }
 
-static void skip_comment(struct Lex *x)
+static void skip_block_comment(struct Lex *x)
 {
-    while ((uint8_t)x->c != TK_END && !ISNEWLINE(x->c)) {
+    for (;;) {
+        if (test_next(x, '*') && test_next(x, '-')) {
+            break;
+        } else if (ISNEWLINE(x->c)) {
+            increment_line(x);
+        } else if (is_eof(x)) {
+            pawX_error(x, "missing end of block comment ('*-')");
+        } else {
+            next(x);
+        }
+    }
+}
+
+static void skip_line_comment(struct Lex *x)
+{
+    while (!is_eof(x) && !ISNEWLINE(x->c)) {
         next(x);
     }
 }
@@ -429,7 +445,10 @@ static Token advance(struct Lex *x)
             case '-':
                 next(x);
                 if (test_next(x, '-')) {
-                    skip_comment(x);
+                    skip_line_comment(x);
+                    break;
+                } else if (test_next(x, '*')) {
+                    skip_block_comment(x);
                     break;
                 }
                 return T('-');

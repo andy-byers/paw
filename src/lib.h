@@ -18,7 +18,7 @@ int pawL_check_varargc(paw_Env *P, int min, int max);
 
 static inline const char *pawL_check_string(paw_Env *P, int index)
 {
-    // NOTE: Value at 'index' must exist
+    // NOTE: value at 'index' must exist
     pawL_check_type(P, index, PAW_TSTRING);
     return paw_string(P, index);
 }

@@ -28,6 +28,8 @@ const char *pawT_name(Op op)
         "__setattr",
         "__getitem",
         "__setitem",
+        "__getslice",
+        "__setslice",
 
         "__eq",
         "__lt",

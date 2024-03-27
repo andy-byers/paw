@@ -217,8 +217,8 @@ static void unpack_bindings(Value *pbound, const Map *attr)
     // native closures).
     paw_Int itr = PAW_ITER_INIT;
     while (pawH_iter(attr, &itr)) {
-        *pbound++ = attr->keys[itr];    
-        *pbound++ = attr->values[itr];    
+        *pbound++ = attr->keys[itr];
+        *pbound++ = attr->values[itr];
     }
 }
 
@@ -248,18 +248,18 @@ Value *pawV_find_binding(paw_Env *P, Value obj, Value name)
     Value *pv = NULL;
     if (pawV_is_instance(obj)) {
         Instance *ins = pawV_get_instance(obj);
-        pv = ins->bound; 
-        n = ins->nbound; 
+        pv = ins->bound;
+        n = ins->nbound;
     } else if (pawV_is_foreign(obj)) {
         Foreign *ud = pawV_get_foreign(obj);
-        pv = ud->bound; 
-        n = ud->nbound; 
+        pv = ud->bound;
+        n = ud->nbound;
     } else if (pawV_is_object(obj)) {
         const ValueKind kind = pawV_get_type(obj);
         Foreign *ud = P->builtin[obj_index(kind)];
         pv = ud->bound;
         n = ud->nbound;
-    } 
+    }
     if (!pv) {
         // no bindings array on 'obj'
         return NULL;
@@ -269,11 +269,11 @@ Value *pawV_find_binding(paw_Env *P, Value obj, Value name)
         if (key.u == name.u) {
             return pv + 1;
         }
-    } 
-    if (obj.u != P->object.u) {
-        return pawV_find_binding(P, P->object, name); 
     }
-    return NULL; 
+    if (obj.u != P->object.u) {
+        return pawV_find_binding(P, P->object, name);
+    }
+    return NULL;
 }
 
 Class *pawV_push_class(paw_Env *P)
@@ -311,8 +311,8 @@ Foreign *pawV_push_foreign(paw_Env *P, size_t size, int nbound)
         pawM_error(P);
     }
     Value *pv = pawC_push0(P);
-    Foreign *ud = pawM_new_flex(P, Foreign, bindings_len(nbound), 
-                                 sizeof(ud->bound[0]));
+    Foreign *ud = pawM_new_flex(P, Foreign, bindings_len(nbound),
+                                sizeof(ud->bound[0]));
     pawG_add_object(P, cast_object(ud), VFOREIGN);
     pawV_set_foreign(pv, ud); // anchor
     ud->nbound = nbound;
@@ -338,8 +338,8 @@ void pawV_free_foreign(paw_Env *P, Foreign *ud)
 
 Foreign *pawV_new_builtin(paw_Env *P, int nbound)
 {
-    Foreign *ud = pawM_new_flex(P, Foreign, bindings_len(nbound), 
-                                 sizeof(ud->bound[0]));
+    Foreign *ud = pawM_new_flex(P, Foreign, bindings_len(nbound),
+                                sizeof(ud->bound[0]));
     pawG_add_object(P, cast_object(ud), VFOREIGN);
     ud->nbound = nbound;
     Value *pv = ud->bound; // clear for GC

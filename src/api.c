@@ -66,6 +66,7 @@ static void open_aux(paw_Env *P, void *arg)
     pawS_init(P);
     pawP_init(P);
     pawL_init(P);
+    pawR_init(P);
     check_gc(P);
 }
 
@@ -519,7 +520,7 @@ paw_Bool paw_check_item(paw_Env *P, int index)
 {
     paw_push_value(P, index); // push container
     paw_rotate(P, -2, 1);     // place container below key
-    if (pawR_getitem_raw(P, PAW_FALSE)) {
+    if (pawR_getitem(P)) {
         paw_push_null(P);
         paw_shift(P, 2);
         return PAW_FALSE;

@@ -42,7 +42,6 @@ typedef enum ExprKind {
     EXPR_UPVALUE,
     EXPR_ITEM,
     EXPR_SLICE,
-    EXPR_XSLICE,
     EXPR_ATTR,
     EXPR_STACK,
     EXPR_CALL,

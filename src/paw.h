@@ -188,6 +188,13 @@ paw_Bool paw_check_attr(paw_Env *P, int index, const char *s);
 paw_Bool paw_check_item(paw_Env *P, int index);
 paw_Bool paw_check_itemi(paw_Env *P, int index, paw_Int i);
 
+void paw_list_slice(paw_Env *P, int index, paw_Int begin, paw_Int end);
+void paw_list_push(paw_Env *P, int index, paw_Int i);
+void paw_list_pop(paw_Env *P, int index, paw_Int i);
+
+void paw_map_erase(paw_Env *P, int index);
+void paw_map_erasei(paw_Env *P, int index, paw_Int i);
+
 // Push a global variable onto the stack, or null if the variable does
 // not exist
 // Returns PAW_TRUE if the variable exists, PAW_FALSE otherwise.

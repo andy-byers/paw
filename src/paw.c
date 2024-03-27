@@ -90,7 +90,7 @@ static void parse_options(int *pargc, const char ***pargv)
         if (a[0] != '-') {
             // Found a script pathname (the only non-option argument).
             s_pathname = option;
-            continue;
+            break;
         } else if (a[1] == '-' && !a[2]) {
             // Found '--': the rest of the arguments go to the script.
             break;
@@ -182,8 +182,13 @@ int main(int argc, const char **argv)
         // run the script
         status = paw_call(P, 0);
     }
-    if (status) {
+    if (status == PAW_OK) {
+        paw_close(P);
+    } else if (paw_get_count(P) && paw_is_string(P, -1)) {
+        // error() doesn't return
         error(status, "%s\n", paw_string(P, -1));
+    } else {
+        error(status, "paw returned status code %d\n", status);
     }
     return status;
 }
