@@ -20,6 +20,11 @@ static BigInt *negate(BigInt *bi)
     return bi;
 }
 
+static void bi_overflow(paw_Env *P)
+{
+    pawR_error(P, PAW_EOVERFLOW, "too many digits");
+}
+
 static void bi_ensure(paw_Env *P, BigInt *bi, int size)
 {
     paw_assert(size > 0);
@@ -43,7 +48,7 @@ static void copy_digits(BiDigit *dst, const BiDigit *src, int n)
 static BigInt *bi_alloc(paw_Env *P, StackPtr sp, int n)
 {
     if (n > PAW_MAX_DIGITS) {
-        pawM_error(P);
+        bi_overflow(P);
     }
     BigInt *bi = pawB_new(P);
     pawV_set_bigint(sp, bi); // anchor
@@ -536,7 +541,7 @@ static void bi_shl(paw_Env *P, StackPtr sp, BigInt *bi, paw_Int n)
 {
     const paw_Int nwhole = (n + BI_BITS - 1) / BI_BITS;
     if (nwhole > PAW_MAX_DIGITS) {
-        pawM_error(P); // result too large
+        bi_overflow(P); // result too large
     }
     int nfract = n % BI_BITS;
     if (nfract == 0) {

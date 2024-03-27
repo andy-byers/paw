@@ -48,3 +48,31 @@
     assert(!str.ends_with('cef'))
     assert(!str.ends_with('df'))
 }
+
+{
+    let s = 'abc'
+    assert(s[:] == 'abc')    
+    assert(s[:null] == 'abc')    
+    assert(s[null:] == 'abc')    
+    assert(s[null:null] == 'abc')    
+    assert(s[0:#s] == 'abc')    
+
+    assert(s[:-1] == 'ab')
+    assert(s[:#s-1] == 'ab')
+    assert(s[:-2] == 'a')
+    assert(s[:#s-2] == 'a')
+    assert(s[:-3] == '')
+    assert(s[:#s-3] == '')
+
+    assert(s[1:] == 'bc')
+    assert(s[-2:] == 'bc')
+    assert(s[2:] == 'c')
+    assert(s[-1:] == 'c')
+    assert(s[3:] == '')
+    assert(s[0:0] == '') 
+
+    -- clamped
+    assert(s[4:] == '')
+    assert(s[:-4] == '')
+}
+

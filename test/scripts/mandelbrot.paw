@@ -1,7 +1,7 @@
 -- mandelbrot.paw
--- Translated from Lua code at https://rosettacode.org/wiki/Mandelbrot_set#ASCII_2.
--- Note that loop bounds are inclusive in Lua, and half-open in paw, so the Lua 
--- version will print an extra line compared to this version.
+-- usage: paw mandelbrot.paw -- x0 x1 nx y0 y1 ny
+-- translated from https://rosettacode.org/wiki/Mandelbrot_set#ASCII_2 (Lua).
+
 let io = require('io')
 let file = io.stdout
 
@@ -9,15 +9,21 @@ let charmap = [
     ' ', '.', ':', '-', '=', 
     '+', '*', '#', '%', '@',
 ]
-let y0 = -1.3
-let dy = 0.1
-let ny = 26
-let x0 = -2.1
-let dx = 0.04
-let nx = 80
-for i = 0,ny {
+
+let x0 = float(argv[0]) 
+let x1 = float(argv[1]) 
+let nx = int(argv[2]) 
+let y0 = float(argv[3]) 
+let y1 = float(argv[4]) 
+let ny = int(argv[5]) 
+
+assert(nx > 0 && ny > 0)
+let dy = (y1 - y0) / (ny - 1) 
+let dx = (x1 - x0) / (nx - 1) 
+
+for i = 0, ny {
     let y = y0 + i * dy
-    for j = 0,nx {
+    for j = 0, nx {
         let x = x0 + j * dx
         let zi = 0
         let zr = 0

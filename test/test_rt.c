@@ -21,5 +21,4 @@ int main(void)
     script("class");
     script("error");
     script("misc");
-    script("mandelbrot");
 }

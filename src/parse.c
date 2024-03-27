@@ -390,6 +390,9 @@ static void discharge_var(FnState *fn, ExprState *e)
         case EXPR_ITEM:
             emit(lex, OP_GETITEM);
             break;
+        case EXPR_SLICE:
+            emit(lex, OP_GETSLICE);
+            break;
         case EXPR_ATTR:
             emit(lex, OP_GETATTR);
             break;
@@ -414,6 +417,9 @@ static void assign_var(FnState *fn, ExprState *e)
             break;
         case EXPR_ITEM:
             emit(lex, OP_SETITEM);
+            break;
+        case EXPR_SLICE:
+            emit(lex, OP_SETSLICE);
             break;
         case EXPR_ATTR:
             emit(lex, OP_SETATTR);
@@ -1151,9 +1157,22 @@ static void index_expr(Lex *lex, ExprState *e)
     const int line = lex->line;
     skip(lex); // '[' token
 
-    expr(lex);
+    if (test(lex, ':')) {
+        e->kind = EXPR_SLICE;
+        emit(lex, OP_PUSHNULL);
+    } else {
+        e->kind = EXPR_ITEM;
+        expr(lex);
+    }
+    if (test_next(lex, ':')) {
+        e->kind = EXPR_SLICE;
+        if (test(lex, ']')) {
+            emit(lex, OP_PUSHNULL);
+        } else {
+            expr(lex);
+        }
+    }
     delim_next(lex, ']', '[', line);
-    e->kind = EXPR_ITEM;
 }
 
 static void member_expr(Lex *lex, ExprState *e)

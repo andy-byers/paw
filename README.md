@@ -1,94 +1,151 @@
 # paw
 
-An embeddable scripting language
+An unobtrusive scripting language
+
+paw is a high-level, imperative, dynamically-typed programming language intended for embedding into larger projects.
+
+paw is heavily inspired by the Lua project.
+This can be seen in the language syntax, as well as the design of the VM.
+Like the Lua VM, paw's VM is reentrant, meaning a C function called from paw can call other paw functions.
+paw also restricts the language grammer to eliminate the need for semicolons (most-notably: assignments are **not** expressions).
+Additionally, paw uses a quick single-pass compiler and is easy to embed.
 
 ## Goals
-+ **Correctness**: paw should be correct.
-This is the most-important goal, by far.
++ **Correctness**: This is the most-important goal, by far.
 A language that returns incorrect results can't be very useful, so of course, paw should be implemented correctly.
 The language should be designed for human readability, and eliminate syntax foot-guns where possible (for example, an `if` statement without '{}' followed by 2 indented lines will not guard the second line).
 paw code should never invoke undefined behavior (UB), and the C interface should be carefully documented (since, of course, it is possible to have UB there).
 + **Performance**: paw should be (relatively) fast, possibly to the detriment of portability, but never at the expense of correctness.
+Being dynamically-typed and hosted, paw will never achieve the same performance as C, the statically-typed host language.
+This makes interoperating with C particularly important, since it is likely users will want to call C functions to perform computationally-intensive work.
 + **Ergonomics**: paw should be easy to use, and easy to learn.
 
-paw is heavily inspired by the Lua project.
-This can be seen in the scripting language syntax, as well as the design of the virtual machine (VM).
-Like the Lua VM, paw's VM is reentrant, meaning a C function called from paw can call other paw functions.
-paw also restricts the language grammer to eliminate the need for semicolons (most-notably: assignments are **not** expressions).
-Additionally, paw uses a quick single-pass compiler.
-
-The goal of the paw project is to create a nice, modern scripting language that can be easily embedded into C or C++ projects.
-While there are many such languages already, I thought it would be fun to create my own.
-The project was bootstrapped by following [Crafting Interpreters](https://craftinginterpreters.com/), and looking at Lua source code.
-So far we have mostly everything implemented from part 2 of the book (the stack-based VM part), as well as an array type, a map type (unordered), bigints, simple operator overloading (metamethods, with reverse versions), `break`, `continue`, `for i = start,end,step` loops, `for x in container` loops, builtin functions, and more!
-Currently, the code is pretty messy and unstable: it has been changing quite a bit during prototyping.
-Right now, I'm working on stabilizing the design, and ironing out a few more language features (slice syntax, variable unpacking, spread operator, etc.).
-Once that happens, this readme will get some attention.
-See the [TODO](#todo) section for a list of things that need to be worked on.
-
-The syntax is inspired by the Lua language: semicolons are optional and whitespace is not significant.
-
-The 2 most important rules to keep in mind are:
-1. paw statements are not arbitrary expressions, like they are in many languages. 
-In paw, an 'expression statement' must be either a function call or an assignment.
-This rule forbids a lot of ambiguous syntax, but is a bit restrictive for metamethods ('~x' may have side-effects, but cannot appear by itself on a line).
-2. If a `return` statement is present in a given function, then it must be the last statement in its containing block. 
-Lua enforces this rule for `break` statements as well, but paw does not (Lua doesn't have `continue`). 
-Any code after such statements is by-definition dead code anyway, but it can be useful to insert `break` and `continue` statements in various places during debugging.
-
 ## Syntax Overview
+
+### Comments
+paw supports both line- and block-style comments.
+Block comments do not support nesting.
 ```
--- Comments start with '--'. Only line comments are supported.
+-- line comment
 
--- Variable declaration/definition. It is an error to reference a variable that
--- hasn't been declared using a 'let' statement. Variables declared at the module
--- level are considered global variables, otherwise they are locals. 
-let x       -- Short for 'let x = null'
-let x = 123 -- Rebind 'x' to 123
+-* block
+   comment *-
+```
 
--- Scoping block. paw has lexical scoping, meaning variables declared in a given
--- block can only be referenced from within that block, or one of its subblocks. 
-{
-    let x = 42 -- Shadows 'x' from earlier
-} -- 'x' goes out of scope here
+### Variables
+Any variable referenced in the runtime must first be declared: either by a `let` statement, or with the C API.
+Otherwise, a "name error" is raised (see the section on [error handling](#error-handling) below).
+Variables declared at the module level are considered global variables, otherwise, they are locals.
+Global variables can be referenced from anywhere in the program, while locals can only be referenced where they are visible (see [scope](#scope)).
+Locals can be captured in a function or class definition (see [functions](#functions)).
+```
+let x       -- short for 'let x = null'
+let x = 123 -- rebind 'x' to 123
+```
 
+### Types
+paw is dynamically-typed, meaning that variable types are determined at runtime.
+A variable initialized with a value of one type may have a value of any other type assigned to it, at any point during execution.
+paw tries to make reasoning about programs a bit easier by throwing errors when incompatible types are used in an operation, rather than performing implicit conversions.
+For example, attempting a bitwise operation on a float will always result in a type error.
+Binary arithmetic operators, other than `/` and `//`, can be used on mixed numeric types (e.g. float and integer), and will result in a float if one of the operands is a float, and an integer otherwise.
 
--- Functions:
-fn example(a, b, c) {
-    -- 'return' must be the last statement in the block
-    return a + b + c
+Every paw value contains 2 fields: a type tag and a value (essentially a tagged union).
+NaN boxing is used to pack both of these fields into 8 bytes of memory.
+The following example demonstrates creation of the basic value types.
+```
+let null_ = null
+let boolean = true
+let integer = 0x123
+let float_ = 10.0e-1
+let array = [1, 2, 3]
+let map = {'a': 1, 2: 'b'}
+let function = fn() {return 42}
+
+class Class {
+    method(self) {}
 }
+let instance = Class()
+let method = instance.method
+```
+
+### Scope
+paw implements lexical scoping, meaning variables declared in a given block can only be referenced from within that block, or one of its subblocks.
+A block begins when a '{' token is encountered that is not the start of a map literal, and ends when a matching '}' is found.
+Many language constructs use blocks to create their own scope, like functions, classes, for loops, etc. 
+paw also provides raw blocks for exerting finer control over variable lifetimes.
+```
+{
+    let x = 42
+} -- 'x' goes out of scope here
+```
+
+### Functions
+Functions are first-class in paw, which means they are treated like any other paw value.
+Functions can be stored in variables, or passed as parameters to compose higher-order functions.
+```
+fn fib(n) {
+    if n < 2 {
+        return n
+    }
+    return fib(n - 2) + fib(n - 1)
+}
+fib(10)
 
 -- Anonymous functions:
-let example = fn(a) {
-    return a
+let add = fn(a, b) {
+    return a + b
+}
+```
+
+### Classes
+```
+class Superclass {
+    __init(value) {
+        -- 'self' is an implicit parameter
+        self.value = value
+    }
 }
 
--- Classes:
-class Example: Superclass {
-    -- Metamethod for initialization: called when 'Example(x)' is encountered
-    __init(v) {
-        self.v = v
+class Class: Superclass {
+    -- metamethod for initialization: called when 'Class(x)' is encountered
+    __init(value) {
+        -- call Superclass.__init(self)
+        super.__init(value) 
     }
 
-    -- Normal class method
+    -- normal class method
     method() {
-        return self.v
+        return self.value
     }
 
-    -- Metamethod for '+': called when 'Example(x) + y' is encountered
-    __add(y) {
-        let v = self.v ++ y
-        return Example(v)
+    -- metamethod for '+': called when 'Class(lhs) + rhs' is encountered
+    __add(rhs) {
+        let value = self.value ++ rhs
+        return Class(value)
     }
 
-    -- Reverse metamethod for '+': called when 'x + Example(y)' is encountered
-    __radd(x) {
-        let v = x ++ self.v
-        return Example(v)
+    -- reverse metamethod for '+': called when 'lhs + Class(rhs)' is encountered
+    __radd(lhs) {
+        let value = lhs ++ self.value
+        return Class(value)
+    }
+
+    -- metamethod for '=='
+    __eq(rhs) {
+        return self.value == rhs
     }
 }
 
+-- Instances of 'Class' can be equality-compared with, and added to, numeric
+-- values.
+assert(3 == Class(1) + 2)
+assert(3 == 1 + Class(2))
+```
+
+### Control flow
+paw supports many common types of control flow.
+```
 -- 'if-else' statement:
 if i == 0 {
 
@@ -101,13 +158,14 @@ if i == 0 {
 -- Conditional (ternary) expressions:
 let v = cond ?? 'then' :: 'else'
 
--- Null chaining operator: return immediately (with null) if the operand itself 
--- is null. A paw module is actually considered a function, so '?' can exist at
--- the top level.
+-- Null chaining operator: return immediately (with null) if the operand is null 
+-- A paw module is actually considered a function, so '?' can exist at the top
+-- level.
 let v = maybe_null()?.field?
 
--- Null coalescing operator: evaluates to 'a' if the 'a' is nonnull, 'b' otherwise.
--- 'b' is not evaluated if 'a' is nonnull.
+-- Null coalescing operator: evaluates to the first operand if it is nonnull, the
+-- second operand otherwise. The second expression is not evaluated if the first
+-- operand is null.
 let v = a ?: b
 
 -- 'break'/'continue' (must appear in a loop):
@@ -119,7 +177,9 @@ for i in 0,10,2 { -- start,end,step
     
 }
 
--- Iterator 'for' loop:
+-- Iterator 'for' loop: allows iterating over arrays and maps. If a class implements
+-- both '__getattr' and '__len', then instances of that class can be used in an
+-- iterator 'for' loop.
 for v in iterable {
 
 }
@@ -127,40 +187,45 @@ for v in iterable {
 -- 'while' loop:
 let i = 0
 while i < 10 {
-
+    i = i + 1
 }
 
 -- 'do...while' loop:
-let i = 0
+let i = 10
 do {
+    i = i - 1
+} while i > 0
+```
 
-} while i
+### Strings
+```
+let s = 'Hello, world!'
+assert(s.starts_with('Hello'))
+assert(s.ends_with('world!'))
+assert(s[:5].ends_with('Hello'))
+assert(s[-6:].starts_with('world!'))
+```
 
--- Example:
+### Arrays
+```
+let a = [1, 2, 3]
+assert(a[:1] == [1])
+assert(a[1:-1] == [2])
+assert(a[-1:] == [3])
+```
 
--- Variables declared at module scope are registered as globals.
-let genfib = fn() {
-    -- 'memo' is a local in this anonymous function. It is captured
-    -- in the 'fib' closure. Note that anonymous functions can also
-    -- capture variables.
-    let memo = [0, 1]
-    fn fib(n) {
-        if n < #memo { -- '#' is the 'length' operator
-            return memo[n]
-        }
-        let f = fib(n - 2) + fib(n - 1)
-        memo.push(f)
-        return f
-    }
-    return fib
+### Maps
+```
+
+```
+
+### Error handling
+```
+fn divide_by_0(n) {
+    return n / 0
 }
-
-let f = genfib()
-assert(f(0) == 0)
-assert(f(1) == 1)
-assert(f(2) == 1)
-assert(f(3) == 2)
-assert(f(4) == 3)
+let status = try(divide_by_0, 42)
+assert(status != 0)
 ```
 
 ## Operators
@@ -188,8 +253,6 @@ assert(f(4) == 3)
 + Add a few things to the C API:
     + Better way to call builtin functions and methods on builtin types
     + Better API for arrays: `paw_*_item` will throw an error if the index is out of bounds
-+ Need some sort of restriction on when methods can be added to a class
-The compiler will get confused if 'self' or 'super' is used outside of a class body.
 + For loops won't work with bigint right now.
 + Finish designing things first...
     + Language features:
@@ -199,5 +262,10 @@ The compiler will get confused if 'self' or 'super' is used outside of a class b
         + Multi-return/let/assign with Lua semantics?
         + Concurrency: fibers, coroutines?
 + Documentation
-+ Big integer math needs work
 + Make it fast!
+
+## References
++ [Lua](https://www.lua.org/)
++ [MicroPython](https://micropython.org/)
++ [Crafting Interpreters](https://craftinginterpreters.com/)
+
