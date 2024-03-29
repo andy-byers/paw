@@ -23,6 +23,25 @@
 }
 
 {
+    let a = []
+    for i = 0,100 {
+        a.push(i)
+    }
+    assert(#a == 100)
+    for i = 0,100 {
+        assert(i in a)
+    }
+    let clone = a.clone()
+    for i = 0,50 {
+        a.pop(i)
+    }
+    for i = 0,100,2 {
+        a.insert(i, i)
+    }
+    assert(a == clone)
+}
+
+{
     assert(![])
     assert(!![0])
     assert([0])

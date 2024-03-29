@@ -47,6 +47,16 @@ void pawR_literal_map(paw_Env *P, int n);
 
 void pawR_close_upvalues(paw_Env *P, const StackPtr top);
 
+int pawR_array_insert(paw_Env *P);
+int pawR_array_push(paw_Env *P);
+int pawR_array_pop(paw_Env *P);
+int pawR_array_clone(paw_Env *P);
+int pawR_map_erase(paw_Env *P);
+int pawR_map_clone(paw_Env *P);
+int pawR_string_starts_with(paw_Env *P);
+int pawR_string_ends_with(paw_Env *P);
+int pawR_string_clone(paw_Env *P);
+
 static inline paw_Int pawR_check_int(paw_Env *P, Value v)
 {
     if (!pawV_is_int(v) && !pawV_is_bigint(v)) {
@@ -58,6 +68,22 @@ static inline paw_Int pawR_check_int(paw_Env *P, Value v)
         pawR_error(P, PAW_EOVERFLOW, "integer is too large");
     }
     return ival;
+}
+
+static inline void pawR_check_argc(paw_Env *P, int argc, int expect)
+{
+    if (argc != expect) {
+        pawR_error(P, PAW_ERUNTIME, "expected %d arguments but found %d", expect, argc);
+    }
+}
+
+static inline void pawR_check_varargc(paw_Env *P, int argc, int least, int most)
+{
+    if (argc < least) {
+        pawR_error(P, PAW_ERUNTIME, "expected at least %d arguments but found %d", least, argc);
+    } else if (argc > most) {
+        pawR_error(P, PAW_ERUNTIME, "expected at most %d arguments but found %d", most, argc);
+    }
 }
 
 #endif // PAW_VM_H

@@ -65,8 +65,8 @@ static void open_aux(paw_Env *P, void *arg)
 
     pawS_init(P);
     pawP_init(P);
-    pawL_init(P);
     pawR_init(P);
+    pawL_init(P);
     check_gc(P);
 }
 
