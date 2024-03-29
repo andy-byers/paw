@@ -56,7 +56,7 @@
 #define pawV_set_object(p, o, t) (*(p) = obj2v_aux(o, t))
 #define pawV_set_null(p) ((p)->i = -1)
 #define pawV_set_bool(p, b) ((p)->u = ~((uint64_t)((b) + 1) << 47))
-#define pawV_set_int(p, i) ((p)->u = (uint64_t)VNUMBER << VINT_WIDTH | ((uint64_t)(i) & VINT_MASK))
+#define pawV_set_int(p, i) ((p)->u = (uint64_t)VNUMBER << VINT_WIDTH | ((uint64_t)(i)&VINT_MASK))
 
 #define pawV_set_float(p, F) ((p)->f = F)
 #define pawV_set_foreign(p, o) pawV_set_object(p, o, VFOREIGN)
@@ -151,11 +151,12 @@ typedef union StackRel {
 #define obj_index(t) (~(t) - ~VOBJECT0)
 
 int paw_value_promote(Value *v, int want);
-paw_Bool pawV_truthy(const Value v);
+paw_Int pawV_length(Value v);
+paw_Bool pawV_truthy(Value v);
 int pawV_num2int(Value *pv);
 int pawV_num2float(Value *pv);
 paw_Bool pawV_equal(Value x, Value y);
-uint32_t pawV_hash(const Value v);
+uint32_t pawV_hash(Value v);
 
 // Convert a null-terminated string into an integer
 // May result in either a small integer or a big integer. Understands non-decimal
@@ -209,18 +210,18 @@ typedef struct Proto {
         int pc0;
         int pc1;
         paw_Bool captured;
-    } *v;
+    } * v;
 
     struct UpValueInfo {
         String *name;
         uint16_t index;
         paw_Bool is_local;
-    } *u;
+    } * u;
 
     struct LineInfo {
         int pc;
         int line;
-    } *lines;
+    } * lines;
 
     // constants
     Value *k;

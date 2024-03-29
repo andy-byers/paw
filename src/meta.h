@@ -66,14 +66,5 @@
 #define mm_get_r(op) ((op) + METAR - META2)
 
 const char *pawT_name(Op op);
-Value *pawT_get_meta_(paw_Env *P, Op op, Value obj);
-
-static inline Value *pawT_get_meta(paw_Env *P, Op op, Value obj)
-{
-    if (has_meta(obj)) {
-        return pawT_get_meta_(P, op, obj);
-    }
-    return PAW_FALSE;
-}
 
 #endif // PAW_META_H

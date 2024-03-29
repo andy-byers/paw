@@ -247,7 +247,7 @@ void pawL_register_lib(paw_Env *P, const char *name, int nup, const pawL_Attr *a
 
     Foreign *ud;
     if (name) {
-        // Create a foreign to hold the library attributes,
+        // Create a foreign object to hold the library attributes,
         ud = pawV_push_foreign(P, 0, nbound);
     } else {
         // Use the foreign object on top of the stack.
@@ -272,16 +272,6 @@ void pawL_register_lib(paw_Env *P, const char *name, int nup, const pawL_Attr *a
     }
     // Remove the upvalues, leaving the library on top.
     paw_shift(P, nup);
-}
-
-static String *fix_name(paw_Env *P, const char *name)
-{
-    String *s = pawS_new_nstr(P, name, strlen(name));
-    if (cast_object(s) == P->gc_all) {
-        // fix if just allocated
-        pawG_fix_object(P, cast_object(s));
-    }
-    return s;
 }
 
 // clang-format off

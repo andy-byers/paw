@@ -1,7 +1,7 @@
 #include "test.h"
 #include "env.h"
-#include "os.h"
 #include "lib.h"
+#include "os.h"
 #include "paw.h"
 #include "rt.h"
 #include "util.h"

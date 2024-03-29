@@ -1,7 +1,7 @@
 #include "auxlib.h"
 #include "lib.h"
-#include "os.h"
 #include "opcode.h"
+#include "os.h"
 #include "test.h"
 #include <limits.h>
 

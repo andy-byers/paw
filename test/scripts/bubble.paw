@@ -29,5 +29,4 @@ fn bubble(n) {
     return a
 }
 
-let n = 500000
-bubble(n)
+bubble(int(argv[0]))

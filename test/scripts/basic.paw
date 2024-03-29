@@ -1,4 +1,48 @@
 -- basic.paw
+{
+    let a = []
+    assert(null == a.push(1))
+    assert(null == a.insert(0, 0))
+    let m = {'a': 1}
+    assert(null == m.erase('a'))
+}
+{
+    class Comparable {
+        __init(a) {
+            self.a = a
+        }
+        __eq(b) {
+            return self.a == int(b)
+        }
+        __lt(b) {
+            return self.a < int(b)
+        }
+        __le(b) {
+            return self.a <= int(b)
+        }
+        __gt(b) {
+            return self.a > int(b)
+        }
+        __ge(b) {
+            return self.a >= int(b)
+        }
+        __int() {
+            return self.a
+        }
+    }
+    let c1 = Comparable(1)
+    assert(0 < c1 && c1 < 2)
+    assert(0 <= c1 && c1 <= 2)
+    assert(1 <= c1 && c1 <= 1)
+    assert(c1 > 0 && 2 > c1)
+    assert(c1 >= 0 && 2 >= c1)
+    assert(c1 >= 1 && 1 >= c1)
+
+    let c2 = Comparable(2)
+    assert(c1 < c2 && c2 > c1)
+    assert(c1 <= c2 && c2 >= c1)
+    assert(c1 <= c1 && c2 >= c2)
+}
 
 {
     -- line comment
@@ -36,12 +80,12 @@
                 2, 
                 3)
 
-   fn wrapper(f, n) {
+   fn wrapper(n, f) {
        return f(n)
    }
-   assert(wrapper(fn(n) {return n}, 1) == 1)
-   assert(wrapper(fn(n) {return fn() {return n}}, 2)() == 2)
-   assert(wrapper(fn(n) {return fn() {return fn() {return n}}}, 3)()() == 3)
+   assert(1 == wrapper(1, fn(n) {return n}))
+   assert(2 == wrapper(2, fn(n) {return fn() {return n}})())
+   assert(3 == wrapper(3, fn(n) {return fn() {return fn() {return n}}})()())
 
     -- Semicolons are not needed if we are assigning to or initializing a variable.
     let x = (fn() {})()
@@ -143,79 +187,6 @@
 
 ')
 
-}
-
--- Short-circuiting behavior:
-{
-    let state = [0, 0, 0]
-    fn setup(i) {
-        return fn(n) {
-            assert(state[i] == 0)
-            state[i] = 1
-            return n
-        }
-    }
-    fn check(a, b, c) {
-        assert(state[0] == a)
-        assert(state[1] == b)
-        assert(state[2] == c)
-        state = [0, 0, 0]
-    }
-    let f = setup(0)
-    let g = setup(1)
-    let h = setup(2)
-
-    fn test(a, b, c) {
-        return f(a) && g(b) && h(c)
-    }
-
-    assert(test(1, 1, 1));  check(1, 1, 1)
-    assert(!test(0, 1, 1)); check(1, 0, 0)
-    assert(!test(1, 0, 1)); check(1, 1, 0)
-    assert(!test(1, 1, 0)); check(1, 1, 1)
-    assert(!test(1, 0, 0)); check(1, 1, 0)
-    assert(!test(0, 1, 0)); check(1, 0, 0)
-    assert(!test(0, 0, 1)); check(1, 0, 0)
-    assert(!test(0, 0, 0)); check(1, 0, 0)
-
-    fn test(a, b, c) {
-        return f(a) || g(b) && h(c)
-    }
-
-    assert(test(1, 1, 1));  check(1, 0, 0)
-    assert(test(0, 1, 1));  check(1, 1, 1)
-    assert(test(1, 0, 1));  check(1, 0, 0)
-    assert(test(1, 1, 0));  check(1, 0, 0)
-    assert(test(1, 0, 0));  check(1, 0, 0)
-    assert(!test(0, 1, 0)); check(1, 1, 1)
-    assert(!test(0, 0, 1)); check(1, 1, 0)
-    assert(!test(0, 0, 0)); check(1, 1, 0)
-
-    fn test(a, b, c) {
-        return f(a) && g(b) || h(c)
-    }
-
-    assert(test(1, 1, 1)); check(1, 1, 0) 
-    assert(test(0, 1, 1)); check(1, 0, 1)
-    assert(test(1, 0, 1)); check(1, 1, 1)
-    assert(test(1, 1, 0)); check(1, 1, 0)
-    assert(!test(1, 0, 0)); check(1, 1, 1)
-    assert(!test(0, 1, 0)); check(1, 0, 1)
-    assert(test(0, 0, 1)); check(1, 0, 1)
-    assert(!test(0, 0, 0)); check(1, 0, 1)
-
-    fn test(a, b, c) {
-        return f(a) || g(b) || h(c)
-    }
-
-    assert(test(1, 1, 1)); check(1, 0, 0)
-    assert(test(0, 1, 1)); check(1, 1, 0)
-    assert(test(1, 0, 1)); check(1, 0, 0)
-    assert(test(1, 1, 0)); check(1, 0, 0)
-    assert(test(1, 0, 0)); check(1, 0, 0)
-    assert(test(0, 1, 0)); check(1, 1, 0)
-    assert(test(0, 0, 1)); check(1, 1, 1)
-    assert(!test(0, 0, 0)); check(1, 1, 1)
 }
 
 {

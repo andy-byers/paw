@@ -76,3 +76,34 @@
     assert(s[:-4] == '')
 }
 
+-- String find:
+{
+    fn check(s, sub, n) {
+        assert(n == s.find(sub))
+    }
+    check('abc', 'a', 0)
+    check('abc', 'b', 1)
+    check('abc', 'c', 2)
+    check('abc', 'd', -1)
+}
+
+-- String split/join:
+{
+    fn check(s, sep, parts) {
+        let a = s.split(sep)
+        for i = 0, #a {
+            assert(a[i] == parts[i])
+        }
+        assert(#a == #parts)
+        let result = sep.join(a)
+        assert(result == s);
+    }
+    check('abc', 'a', ['', 'bc'])
+    check('abc', 'b', ['a', 'c'])
+    check('abc', 'c', ['ab', ''])
+    check('abc', 'd', ['abc'])
+
+    let a = ',a,,b,,,c,,,,d,,,,,e,,,,,,'.split(',')
+    assert(''.join(a) == 'abcde')
+}
+

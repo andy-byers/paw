@@ -529,3 +529,87 @@
         assert(count == total)
     }
 }
+
+-- Short-circuiting behavior:
+{
+    let state = [0, 0, 0]
+    fn setup(i) {
+        return fn(n) {
+            assert(state[i] == 0)
+            state[i] = 1
+            return n
+        }
+    }
+    fn check(a, b, c) {
+        assert(state[0] == a)
+        assert(state[1] == b)
+        assert(state[2] == c)
+        state = [0, 0, 0]
+    }
+    let f = setup(0)
+    let g = setup(1)
+    let h = setup(2)
+
+    fn test(a, b, c) {
+        return f(a) && g(b) && h(c)
+    }
+
+    assert(test(1, 1, 1));  check(1, 1, 1)
+    assert(!test(0, 1, 1)); check(1, 0, 0)
+    assert(!test(1, 0, 1)); check(1, 1, 0)
+    assert(!test(1, 1, 0)); check(1, 1, 1)
+    assert(!test(1, 0, 0)); check(1, 1, 0)
+    assert(!test(0, 1, 0)); check(1, 0, 0)
+    assert(!test(0, 0, 1)); check(1, 0, 0)
+    assert(!test(0, 0, 0)); check(1, 0, 0)
+
+    fn test(a, b, c) {
+        return f(a) || g(b) && h(c)
+    }
+
+    assert(test(1, 1, 1));  check(1, 0, 0)
+    assert(test(0, 1, 1));  check(1, 1, 1)
+    assert(test(1, 0, 1));  check(1, 0, 0)
+    assert(test(1, 1, 0));  check(1, 0, 0)
+    assert(test(1, 0, 0));  check(1, 0, 0)
+    assert(!test(0, 1, 0)); check(1, 1, 1)
+    assert(!test(0, 0, 1)); check(1, 1, 0)
+    assert(!test(0, 0, 0)); check(1, 1, 0)
+
+    fn test(a, b, c) {
+        return f(a) && g(b) || h(c)
+    }
+
+    assert(test(1, 1, 1)); check(1, 1, 0) 
+    assert(test(0, 1, 1)); check(1, 0, 1)
+    assert(test(1, 0, 1)); check(1, 1, 1)
+    assert(test(1, 1, 0)); check(1, 1, 0)
+    assert(!test(1, 0, 0)); check(1, 1, 1)
+    assert(!test(0, 1, 0)); check(1, 0, 1)
+    assert(test(0, 0, 1)); check(1, 0, 1)
+    assert(!test(0, 0, 0)); check(1, 0, 1)
+
+    fn test(a, b, c) {
+        return f(a) || g(b) || h(c)
+    }
+
+    assert(test(1, 1, 1)); check(1, 0, 0)
+    assert(test(0, 1, 1)); check(1, 1, 0)
+    assert(test(1, 0, 1)); check(1, 0, 0)
+    assert(test(1, 1, 0)); check(1, 0, 0)
+    assert(test(1, 0, 0)); check(1, 0, 0)
+    assert(test(0, 1, 0)); check(1, 1, 0)
+    assert(test(0, 0, 1)); check(1, 1, 1)
+    assert(!test(0, 0, 0)); check(1, 1, 1)
+
+    fn check(expr, answer) {
+        assert(expr == answer)
+    }
+    check(0 || 1, 1)
+    check(1 || 2, 1)
+    check(true && true, true)
+    check(true && false, false)
+    check('' && false, '')
+    check(false && '', false)
+    check(false && true, false)
+}

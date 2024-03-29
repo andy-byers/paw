@@ -33,9 +33,9 @@
     break;         \
     default
 #define vm_continue continue
-#define vm_shift(n) paw_shift(P, n)
+#define vm_shift(n) (*vm_peek(n) = *vm_peek(0), vm_pop(n))
 #define vm_pop(n) pawC_stkdec(P, n)
-#define vm_peek(n) (&P->top.p[-(n) - 1])
+#define vm_peek(n) (&P->top.p[-(n)-1])
 #define vm_save() (cf->pc = pc, cf->top = P->top)
 #define vm_local() (&cf->base.p[Iw()])
 #define vm_upvalue() (fn->up[Iw()]->p.p)
@@ -47,7 +47,8 @@
 #define vm_pushf(f) pawC_pushf(P, f)
 #define vm_pushb(b) pawC_pushb(P, b)
 
-// Slot 0 (the callable or 'self') is an implicit parameter
+// Slot 0 (the callable or 'self') is an implicit parameter that doesn't
+// contribute to argc.
 #define vm_argc() (paw_get_count(P) - 1)
 
 // Generate code for creating common builtin objects
@@ -166,9 +167,18 @@ void pawR_error(paw_Env *P, int error, const char *fmt, ...)
     pawC_throw(P, error);
 }
 
+Value *get_meta(paw_Env *P, Op op, Value obj)
+{
+    if (has_meta(obj)) {
+        const Value key = P->meta_keys[op2meta(op)];
+        return pawV_find_binding(P, obj, key);
+    }
+    return NULL;
+}
+
 static paw_Bool meta_call(paw_Env *P, Op op, Value x, int argc)
 {
-    const Value *meta = pawT_get_meta(P, op, x);
+    const Value *meta = get_meta(P, op, x);
     if (meta) {
         // Expect 'x', followed by 'argc' args, on top of the stack.
         pawC_call(P, *meta, argc);
@@ -179,7 +189,7 @@ static paw_Bool meta_call(paw_Env *P, Op op, Value x, int argc)
 
 static paw_Bool meta_unop(paw_Env *P, Op op, Value x)
 {
-    const Value *meta = pawT_get_meta(P, op, x);
+    const Value *meta = get_meta(P, op, x);
     if (meta) {
         vm_pushv(x);
         pawC_call(P, *meta, 0);
@@ -195,13 +205,13 @@ static void maybe_meta_unop(paw_Env *P, Op op, Value x)
     }
 }
 
-static paw_Bool meta_binop_aux(paw_Env *P, Op op, Value x, Value y)
+static paw_Bool meta_binop_r(paw_Env *P, Op op, Value x, Value y)
 {
     paw_Bool swap = PAW_FALSE;
-    const Value *meta = pawT_get_meta(P, op, x);
+    const Value *meta = get_meta(P, op, x);
     if (!meta && mm_has_r(op)) {
         // Check the reverse metamethod (i.e. y.__<binop>r(x)).
-        meta = pawT_get_meta(P, mm_get_r(op), y);
+        meta = get_meta(P, mm_get_r(op), y);
         swap = PAW_TRUE;
     }
     if (meta) {
@@ -216,19 +226,42 @@ static paw_Bool meta_binop_aux(paw_Env *P, Op op, Value x, Value y)
 
 static paw_Bool meta_binop(paw_Env *P, Op op, Value x, Value y)
 {
-    return meta_binop_aux(P, op, x, y);
+    const Value *meta = get_meta(P, op, x);
+    if (meta) {
+        StackPtr sp = pawC_stkinc(P, 2);
+        sp[0] = x;
+        sp[1] = y;
+        pawC_call(P, *meta, 1);
+        return PAW_TRUE;
+    }
+    return PAW_FALSE;
 }
 
-static paw_Bool meta_contains(paw_Env *P, Op op, Value obj, Value key)
+static paw_Bool meta_contains(paw_Env *P, Value obj, Value key)
 {
-    // Operands will be swapped in meta_binop_aux. OP_IN does not have a
-    // reverse metamethod, so only obj.__contains(key) is attempted.
-    return meta_binop_aux(P, op, obj, key);
+    return meta_binop(P, OP_IN, obj, key);
+}
+
+static paw_Bool meta_equals(paw_Env *P, Value x, Value y)
+{
+    return meta_binop(P, OP_EQ, x, y) ||
+           meta_binop(P, OP_EQ, y, x);
+}
+
+static paw_Bool meta_compare(paw_Env *P, Op op, Value x, Value y)
+{
+    if (meta_binop(P, op, x, y)) {
+        return PAW_TRUE;
+    } else if ((op == OP_LT && meta_binop(P, OP_GT, y, x)) ||
+               (op == OP_LE && meta_binop(P, OP_GE, y, x))) {
+        return PAW_TRUE; // called 'opposite' metamethod
+    }
+    return PAW_FALSE;
 }
 
 static inline paw_Bool meta_getter(paw_Env *P, Op op, Value obj, Value key)
 {
-    const Value *meta = pawT_get_meta(P, op, obj);
+    const Value *meta = get_meta(P, op, obj);
     if (meta) {
         StackPtr sp = pawC_stkinc(P, 2);
         sp[0] = obj;
@@ -241,14 +274,13 @@ static inline paw_Bool meta_getter(paw_Env *P, Op op, Value obj, Value key)
 
 static inline paw_Bool meta_getslice(paw_Env *P, Value obj, Value begin, Value end)
 {
-    const Value *meta = pawT_get_meta(P, OP_GETSLICE, obj);
+    const Value *meta = get_meta(P, OP_GETSLICE, obj);
     if (meta) {
-        StackPtr sp = pawC_stkinc(P, 4);
-        sp[0] = *meta;
-        sp[1] = obj;
-        sp[2] = begin;
-        sp[3] = end;
-        pawC_call(P, *meta, 3);
+        StackPtr sp = pawC_stkinc(P, 3);
+        sp[0] = obj;
+        sp[1] = begin;
+        sp[2] = end;
+        pawC_call(P, *meta, 2);
         return PAW_TRUE;
     }
     return PAW_FALSE;
@@ -256,15 +288,15 @@ static inline paw_Bool meta_getslice(paw_Env *P, Value obj, Value begin, Value e
 
 static inline paw_Bool meta_setslice(paw_Env *P, Value obj, Value begin, Value end, Value val)
 {
-    const Value *meta = pawT_get_meta(P, OP_GETSLICE, obj);
+    const Value *meta = get_meta(P, OP_SETSLICE, obj);
     if (meta) {
-        StackPtr sp = pawC_stkinc(P, 5);
-        sp[0] = *meta;
-        sp[1] = obj;
-        sp[2] = begin;
-        sp[3] = end;
-        sp[4] = val;
-        pawC_call(P, *meta, 4);
+        StackPtr sp = pawC_stkinc(P, 4);
+        sp[0] = obj;
+        sp[1] = begin;
+        sp[2] = end;
+        sp[3] = val;
+        pawC_call(P, *meta, 3);
+        vm_pop(1); // unused return value
         return PAW_TRUE;
     }
     return PAW_FALSE;
@@ -272,7 +304,7 @@ static inline paw_Bool meta_setslice(paw_Env *P, Value obj, Value begin, Value e
 
 static inline paw_Bool meta_setter(paw_Env *P, Op op, Value obj, Value key, Value val)
 {
-    const Value *meta = pawT_get_meta(P, op, obj);
+    const Value *meta = get_meta(P, op, obj);
     if (meta) {
         StackPtr sp = pawC_stkinc(P, 3);
         sp[0] = obj;
@@ -579,14 +611,42 @@ void pawR_setitem(paw_Env *P)
     }
 }
 
-#define BASE_INSERT 0
-#define BASE_PUSH 1
-#define BASE_POP 2
-#define BASE_ERASE 3
-#define BASE_STARTS_WITH 4
-#define BASE_ENDS_WITH 5
-#define BASE_CLONE 6
-#define iflag(i) (-(int)(i) - 1)
+enum {
+    BASE_INSERT,
+    BASE_PUSH,
+    BASE_POP,
+    BASE_GET,
+    BASE_ERASE,
+    BASE_FIND,
+    BASE_SPLIT,
+    BASE_JOIN,
+    BASE_STARTS_WITH,
+    BASE_ENDS_WITH,
+    BASE_CLONE,
+};
+#define iflag(i) (-(int)(i)-1)
+
+void pawR_init(paw_Env *P)
+{
+    static const char *kBaseMethods[] = {
+        "insert",
+        "push",
+        "pop",
+        "get",
+        "erase",
+        "find",
+        "split",
+        "join",
+        "starts_with",
+        "ends_with",
+        "clone",
+    };
+    for (size_t i = 0; i < paw_countof(kBaseMethods); ++i) {
+        String *s = pawS_new_str(P, kBaseMethods[i]);
+        pawG_fix_object(P, cast_object(s));
+        s->flag = iflag(i);
+    }
+}
 
 static void array_insert(paw_Env *P, Array *a, int argc)
 {
@@ -594,6 +654,8 @@ static void array_insert(paw_Env *P, Array *a, int argc)
     const paw_Int i = pawR_check_int(P, *vm_peek(1));
     pawA_insert(P, a, i, *vm_peek(0));
     vm_pop(2);
+
+    pawV_set_null(vm_peek(0)); // return null
 }
 
 static void array_push(paw_Env *P, Array *a, int argc)
@@ -603,6 +665,8 @@ static void array_push(paw_Env *P, Array *a, int argc)
         pawA_push(P, a, *vm_peek(i - 1));
     }
     vm_pop(argc);
+
+    pawV_set_null(vm_peek(0)); // return null
 }
 
 static void array_pop(paw_Env *P, Array *a, int argc)
@@ -629,16 +693,16 @@ static void array_invoke(paw_Env *P, Array *a, Value name, int argc)
 {
     const String *key = pawV_get_string(name);
     switch (iflag(key->flag)) {
-        case BASE_PUSH: 
+        case BASE_PUSH:
             array_push(P, a, argc);
             break;
-        case BASE_POP: 
+        case BASE_POP:
             array_pop(P, a, argc);
             break;
-        case BASE_INSERT: 
+        case BASE_INSERT:
             array_insert(P, a, argc);
             break;
-        case BASE_CLONE: 
+        case BASE_CLONE:
             array_clone(P, a, argc);
             break;
         default:
@@ -653,6 +717,93 @@ static String *check_string(paw_Env *P, int top)
         pawR_error(P, PAW_ETYPE, "expected string");
     }
     return pawV_get_string(v);
+}
+
+static const char *find_substr(const char *str, size_t nstr, const char *sub, size_t nsub)
+{
+    if (nsub == 0) {
+        return str;
+    }
+    const char *ptr = str;
+    const char *end = str + nstr;
+    while ((ptr = strchr(ptr, sub[0]))) {
+        if (nsub <= cast_size(end - ptr) &&
+            0 == memcmp(ptr, sub, nsub)) {
+            return ptr;
+        }
+        str = ptr + nsub;
+    }
+    return NULL;
+}
+
+static void string_find(paw_Env *P, const String *s, int argc)
+{
+    pawR_check_argc(P, argc, 1);
+    const String *find = check_string(P, 0);
+    const char *result = find_substr(s->text, s->length, find->text, find->length);
+    if (result) {
+        pawV_set_int(vm_peek(1), result - s->text); // index of substring
+    } else {
+        pawV_set_int(vm_peek(1), -1); // not found
+    }
+    vm_pop(1);
+}
+
+static void string_split(paw_Env *P, const String *s, int argc)
+{
+    pawR_check_argc(P, argc, 1);
+    const String *sep = check_string(P, 0);
+    if (sep->length == 0) {
+        pawR_error(P, PAW_EVALUE, "empty separator");
+    }
+
+    paw_Int npart = 0;
+    const char *part;
+    size_t nstr = s->length;
+    const char *pstr = s->text;
+    while ((part = find_substr(pstr, nstr, sep->text, sep->length))) {
+        const size_t n = cast_size(part - pstr);
+        pawC_pushns(P, pstr, n);
+        part += sep->length; // skip separator
+        pstr = part;
+        nstr -= n;
+        ++npart;
+    }
+    const char *end = s->text + s->length; // add the rest
+    pawC_pushns(P, pstr, cast_size(end - pstr));
+    ++npart;
+
+    pawR_literal_array(P, npart);
+    vm_shift(2);
+}
+
+static void string_join(paw_Env *P, const String *s, int argc)
+{
+    pawR_check_argc(P, argc, 1);
+    const Value seq = *vm_peek(0);
+
+    Buffer buf;
+    pawL_init_buffer(P, &buf);
+    paw_Int itr = PAW_ITER_INIT;
+    if (pawV_is_array(seq)) {
+        Array *a = pawV_get_array(seq);
+        while (pawA_iter(a, &itr)) {
+            const Value v = a->begin[itr];
+            if (!pawV_is_string(v)) {
+                pawR_type_error(P, "join");
+            }
+            // Add a chunk, followed by the separator if necessary.
+            const String *chunk = pawV_get_string(v);
+            pawL_add_nstring(P, &buf, chunk->text, chunk->length);
+            if (cast_size(itr + 1) < pawA_length(a)) {
+                pawL_add_nstring(P, &buf, s->text, s->length);
+            }
+        }
+    } else {
+        pawR_type_error(P, "join");
+    }
+    pawL_push_result(P, &buf);
+    vm_shift(2);
 }
 
 static void string_starts_with(paw_Env *P, const String *s, int argc)
@@ -682,6 +833,10 @@ static void string_ends_with(paw_Env *P, const String *s, int argc)
 
 static void string_clone(paw_Env *P, const String *s, int argc)
 {
+    paw_unused(s);
+    // Leave the string 's' on top of the stack. The copy of the 's' pointer into
+    // this function's parameter list serves as the clone. Strings are immutable:
+    // and have copy-on-write sematics.
     pawR_check_argc(P, argc, 0);
 }
 
@@ -689,11 +844,20 @@ static void string_invoke(paw_Env *P, const String *s, Value name, int argc)
 {
     const String *key = pawV_get_string(name);
     switch (iflag(key->flag)) {
-        case BASE_STARTS_WITH: 
+        case BASE_STARTS_WITH:
             string_starts_with(P, s, argc);
             break;
-        case BASE_ENDS_WITH: 
+        case BASE_ENDS_WITH:
             string_ends_with(P, s, argc);
+            break;
+        case BASE_FIND:
+            string_find(P, s, argc);
+            break;
+        case BASE_SPLIT:
+            string_split(P, s, argc);
+            break;
+        case BASE_JOIN:
+            string_join(P, s, argc);
             break;
         case BASE_CLONE:
             string_clone(P, s, argc);
@@ -703,11 +867,29 @@ static void string_invoke(paw_Env *P, const String *s, Value name, int argc)
     }
 }
 
+static void map_get(paw_Env *P, Map *m, int argc)
+{
+    pawR_check_varargc(P, argc, 1, 2);
+    const Value key = *vm_peek(argc - 1);
+    const Value *pv = pawH_get(P, m, key);
+    if (pv) {
+        *vm_peek(argc) = *pv;
+        vm_pop(argc);
+    } else if (argc == 2) {
+        // return default value
+        vm_shift(2);
+    } else {
+        pawH_key_error(P, key);
+    }
+}
+
 static void map_erase(paw_Env *P, Map *m, int argc)
 {
     pawR_check_argc(P, argc, 1);
     pawH_remove(P, m, *vm_peek(0));
     vm_pop(1);
+
+    pawV_set_null(vm_peek(0)); // return null
 }
 
 static void map_clone(paw_Env *P, Map *m, int argc)
@@ -722,7 +904,10 @@ static void map_invoke(paw_Env *P, Map *m, Value name, int argc)
 {
     const String *key = pawV_get_string(name);
     switch (iflag(key->flag)) {
-        case BASE_ERASE: 
+        case BASE_GET:
+            map_get(P, m, argc);
+            break;
+        case BASE_ERASE:
             map_erase(P, m, argc);
             break;
         case BASE_CLONE:
@@ -732,44 +917,6 @@ static void map_invoke(paw_Env *P, Map *m, Value name, int argc)
             pawR_attr_error(P, name);
     }
 }
-
-#define wrap_base(func, Type, type, nret) \
-int pawR_ ## func(paw_Env *P) \
-{ \
-    const int argc = paw_get_count(P) - 1; \
-    Type *obj = pawV_get_ ## type(P->cf->base.p[0]); \
-    func(P, obj, argc); \
-    return (nret); \
-}
-wrap_base(array_insert, Array, array, 0)
-wrap_base(array_push, Array, array, 0)
-wrap_base(array_pop, Array, array, 1)
-wrap_base(array_clone, Array, array, 1)
-wrap_base(string_starts_with, String, string, 1)
-wrap_base(string_ends_with, String, string, 1)
-wrap_base(string_clone, String, string, 1)
-wrap_base(map_erase, Map, map, 0)
-wrap_base(map_clone, Map, map, 1)
-#undef wrap_base
-
-void pawR_init(paw_Env *P)
-{
-    static const char *kBaseMethods[] = {
-        "insert",
-        "push",
-        "pop",
-        "erase",
-        "starts_with",
-        "ends_with",
-        "clone",
-    };
-    for (size_t i = 0; i < paw_countof(kBaseMethods); ++i) {
-        String *s = pawS_new_str(P, kBaseMethods[i]);
-        pawG_fix_object(P, cast_object(s));
-        s->flag = iflag(i);
-    }
-}
-
 
 static CallFrame *super_invoke(paw_Env *P, Class *super, Value name, int argc)
 {
@@ -788,7 +935,7 @@ static paw_Bool bound_call(paw_Env *P, CallFrame **pcf, Value obj, StackPtr base
         String *s = pawV_get_string(obj);
         string_invoke(P, s, name, argc);
         return PAW_TRUE;
-    }else if (pawV_is_array(obj)) {
+    } else if (pawV_is_array(obj)) {
         Array *a = pawV_get_array(obj);
         array_invoke(P, a, name, argc);
         return PAW_TRUE;
@@ -796,7 +943,7 @@ static paw_Bool bound_call(paw_Env *P, CallFrame **pcf, Value obj, StackPtr base
         Map *m = pawV_get_map(obj);
         map_invoke(P, m, name, argc);
         return PAW_TRUE;
-    } 
+    }
     Value *bound = pawV_find_binding(P, obj, name);
     if (bound) {
         *pcf = pawC_precall(P, base, *bound, argc);
@@ -804,6 +951,27 @@ static paw_Bool bound_call(paw_Env *P, CallFrame **pcf, Value obj, StackPtr base
     }
     return PAW_FALSE;
 }
+
+// clang-format off
+#define base_method(func, Type, type, nret)            \
+    int pawR_##func(paw_Env *P)                        \
+    {                                                  \
+        const int argc = paw_get_count(P) - 1;         \
+        Type *obj = pawV_get_##type(P->cf->base.p[0]); \
+        func(P, obj, argc);                            \
+        return (nret);                                 \
+    }
+base_method(array_insert, Array, array, 0)
+base_method(array_push, Array, array, 0)
+base_method(array_pop, Array, array, 1)
+base_method(array_clone, Array, array, 1)
+base_method(string_starts_with, String, string, 1)
+base_method(string_ends_with, String, string, 1)
+base_method(string_clone, String, string, 1)
+base_method(map_erase, Map, map, 0)
+base_method(map_clone, Map, map, 1)
+#undef base_method
+// clang-format on
 
 static CallFrame *invoke(paw_Env *P, Value name, int argc)
 {
@@ -1201,8 +1369,8 @@ static void vm_compare(paw_Env *P, Op op)
         float_rel(P, op, pawV_get_float(x), pawV_get_float(y));
     } else if (pawV_is_string(x) && pawV_is_string(y)) {
         string_rel(P, op, pawV_get_string(x), pawV_get_string(y));
-    } else if (meta_binop(P, op, x, y)) {
-        // called metamethod on either 'x' or 'y'
+    } else if (meta_compare(P, op, x, y)) {
+        // called 'x.__*(y)' or 'y.__*(x)'
     } else if (pawV_is_float(x) || pawV_is_float(y)) {
         try_float2(P, &x, &y, "relational comparison");
         float_rel(P, op, pawV_get_float(x), pawV_get_float(y));
@@ -1229,7 +1397,7 @@ static void int_unop(paw_Env *P, Op op, paw_Int i)
             vm_pushi(-i);
             break;
         case OP_NOT:
-            vm_pushi(!i);
+            vm_pushb(!i);
             break;
         default:
             paw_assert(op == OP_BNOT);
@@ -1244,7 +1412,7 @@ static void float_unop(paw_Env *P, Op op, paw_Float f)
             vm_pushf(-f);
             break;
         case OP_NOT:
-            vm_pushf(!f);
+            vm_pushb(!f);
             break;
         default:
             paw_assert(op == OP_BNOT);
@@ -1282,7 +1450,7 @@ static void vm_arith(paw_Env *P, Op op)
         int_arith(P, op, x, y);
     } else if (pawV_is_float(x) && pawV_is_float(y)) {
         float_arith(P, op, x, y);
-    } else if (meta_binop(P, op, x, y)) {
+    } else if (meta_binop_r(P, op, x, y)) {
         // called metamethod on either 'x' or 'y'
     } else if (pawV_is_string(x) || pawV_is_string(y)) {
         string_arith(P, op, x, y);
@@ -1358,7 +1526,7 @@ static void vm_bitwise(paw_Env *P, Op op)
     } else if ((pawV_is_bigint(x) || pawV_is_int(x)) &&
                (pawV_is_bigint(y) || pawV_is_int(y))) {
         pawB_bitwise(P, op, x, y);
-    } else if (meta_binop(P, op, x, y)) {
+    } else if (meta_binop_r(P, op, x, y)) {
         // called metamethod on either 'x' or 'y'
     } else {
         pawR_type_error2(P, "bitwise operator");
@@ -1384,7 +1552,7 @@ static void vm_concat(paw_Env *P)
 {
     Value y = *vm_peek(0);
     Value x = *vm_peek(1);
-    if (!meta_binop(P, OP_CONCAT, x, y)) {
+    if (!meta_binop_r(P, OP_CONCAT, x, y)) {
         size_t ns, nt;
         const char *s = ensure_str(P, x, 1, &ns);
         const char *t = ensure_str(P, y, 0, &nt);
@@ -1406,7 +1574,7 @@ static void vm_in(paw_Env *P)
         vm_pushb(pawH_contains(P, pawV_get_map(cnt), key));
     } else if (pawV_is_array(cnt)) {
         vm_pushb(pawA_contains(P, pawV_get_array(cnt), key));
-    } else if (meta_contains(P, OP_IN, cnt, key)) {
+    } else if (meta_contains(P, cnt, key)) {
         // called 'cnt.__contains(key)'
     } else {
         pawR_type_error2(P, "in");
@@ -1416,26 +1584,19 @@ static void vm_in(paw_Env *P)
 
 void pawR_length(paw_Env *P)
 {
-    size_t len = 0;
+    paw_Int len = -1;
     Value *pv = vm_peek(0);
-    if (pawV_is_string(*pv)) {
-        len = pawS_length(pawV_get_string(*pv));
-    } else if (pawV_is_array(*pv)) {
-        len = pawA_length(pawV_get_array(*pv));
-    } else if (pawV_is_map(*pv)) {
-        len = pawH_length(pawV_get_map(*pv));
-    } else if (meta_unop(P, OP_LEN, *pv)) {
-        // Special case: __len may not return an integer.
+    if (meta_unop(P, OP_LEN, *pv)) {
+        // Called pv->__len(). Shift the result into the slot previously
+        // held by the container.
         vm_shift(1);
-        return;
-    } else if (pawV_is_foreign(*pv)) {
-        len = pawV_get_foreign(*pv)->size;
+    } else if (0 <= (len = pawV_length(*pv))) {
+        // Replace the container with its length.
+        paw_assert(len <= VINT_MAX);
+        pawV_set_int(pv, (paw_Int)len);
     } else {
         pawR_type_error(P, "length operator ('#')");
     }
-    // Replace the container with its length.
-    paw_assert(len <= VINT_MAX);
-    pawV_set_int(pv, (paw_Int)len);
 }
 
 void pawR_arith(paw_Env *P, Op op)
@@ -1483,7 +1644,7 @@ void pawR_equals(paw_Env *P)
 {
     const Value y = *vm_peek(0);
     const Value x = *vm_peek(1);
-    if (!meta_binop(P, OP_EQ, x, y)) {
+    if (!meta_equals(P, x, y)) {
         paw_Bool eq;
         if (pawV_is_array(x) && pawV_is_array(y)) {
             eq = pawA_equals(P, pawV_get_array(x), pawV_get_array(y));
@@ -1615,27 +1776,27 @@ void pawR_setslice(paw_Env *P)
     const Value val = *vm_peek(0);
 
     if (pawV_is_array(obj) && pawV_is_array(val)) {
-        paw_Int i1, i2, n;
+        paw_Int i1, i2, replace;
         Array *a = pawV_get_array(obj);
         const Array *b = pawV_get_array(val);
         if (a == b) {
-            //Value *pv = vm_push0();
-            //b = pawA_clone(P, pv, a);
-            //vm_shift(1);
+            // Value *pv = vm_push0();
+            // b = pawA_clone(P, pv, a);
+            // vm_shift(1);
         }
         const size_t alen = pawA_length(a);
         const size_t blen = pawA_length(b);
-        cannonicalize_slice(P, alen, begin, end, &i1, &i2, &n);
+        cannonicalize_slice(P, alen, begin, end, &i1, &i2, &replace);
 
         // Resize 'a' to the final length, preserving items after the region
         // of items being replaced.
-        if (cast_size(n) > blen) {
-            memmove(a->begin + i1 + blen, a->begin + i1 + n,
-                    (alen - cast_size(i1 + n)) * sizeof(a->begin[0]));
+        if (cast_size(replace) > blen) {
+            memmove(a->begin + i1 + blen, a->begin + i1 + replace,
+                    (alen - cast_size(i1 + replace)) * sizeof(a->begin[0]));
         }
         const paw_Int length = i1 + paw_cast_int(alen + blen) - i2;
         pawA_resize(P, a, cast_size(length)); // a[:i1] + b + a[i2:]
-        if (cast_size(n) < blen) {
+        if (cast_size(replace) < blen) {
             memmove(a->begin + i1 + blen, a->begin + i2,
                     (alen - cast_size(i2)) * sizeof(a->begin[0]));
         }
@@ -1655,9 +1816,10 @@ void pawR_literal_array(paw_Env *P, int n)
     vm_array_init(a, sp);
     if (n > 0) {
         pawA_resize(P, a, cast_size(n));
-        for (int i = 1; i <= n; ++i) {
-            *pawA_get(P, a, -i) = *--sp;
-        }
+        Value *pv = a->end;
+        do {
+            *--pv = *--sp;
+        } while (pv != a->begin);
         // Replace contents with array itself.
         vm_shift(n);
     }
@@ -2015,10 +2177,8 @@ top:
             {
                 const uint8_t argc = Ib();
                 StackPtr ptr = vm_peek(argc);
-                if (pawV_is_class(*ptr)) {
-                    // no metamethods on class
-                } else if (meta_call(P, OP_CALL, *ptr, argc)) {
-                    vm_continue; // Called __call metamethod
+                if (meta_call(P, OP_CALL, *ptr, argc)) {
+                    vm_continue; // called ptr->__call(...)
                 }
                 vm_save();
 

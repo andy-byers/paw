@@ -24,7 +24,7 @@ This makes interoperating with C particularly important, since it is likely user
 
 ### Comments
 paw supports both line- and block-style comments.
-Block comments do not support nesting.
+Nesting is not allowed in block-style comments.
 ```
 -- line comment
 
@@ -45,11 +45,6 @@ let x = 123 -- rebind 'x' to 123
 
 ### Types
 paw is dynamically-typed, meaning that variable types are determined at runtime.
-A variable initialized with a value of one type may have a value of any other type assigned to it, at any point during execution.
-paw tries to make reasoning about programs a bit easier by throwing errors when incompatible types are used in an operation, rather than performing implicit conversions.
-For example, attempting a bitwise operation on a float will always result in a type error.
-Binary arithmetic operators, other than `/` and `//`, can be used on mixed numeric types (e.g. float and integer), and will result in a float if one of the operands is a float, and an integer otherwise.
-
 Every paw value contains 2 fields: a type tag and a value (essentially a tagged union).
 NaN boxing is used to pack both of these fields into 8 bytes of memory.
 The following example demonstrates creation of the basic value types.
@@ -117,6 +112,66 @@ class Class: Superclass {
     -- normal class method
     method() {
         return self.value
+    }
+}
+
+-- create an instance
+let c = Class()
+```
+
+### Metamethods
+Metamethods are how paw implements operator overloading.
+A metamethod is a function bound to an instance object that is called when the object is used in a specific operation.
+Metamethod names are always prefixed with 2 underscores, i.e. `__add`.
+
+Many binary operators have a 'reverse' metamethod that is called when the receiver is not the first operand.
+For example, `__radd`, the reverse metamethod for `__add` is called to evaluate the expression `1 + x`, where `x` is an instance.
+It is an error is `x` does not have the `__radd` metamethod.
+
+Relational comparisons are handled similarly to binary operators.
+In the expression `1 < x`, we cannot call `__lt`, since `x` is not on the left-hand side.
+Instead we attempt `x.__ge(1)` and negate the result.
+
+|Operation|Metamethod|Reverse metamethod|
+|-|`__null`|-|
+|`str`|`__str`|-|
+|`int`|`__int`|-|
+|`float`|`__float`|-|
+|`bool`|`__bool`|-|
+|`array`|`__array`|-|
+|`map`|`__map`|-|
+|`f()`|`__call`|-|
+|`o.a`|`__getattr`|-|
+|`o.a = v`|`__setattr`|-|
+|`o[i]`|`__getitem`|-|
+|`o[i] = v`|`__setitem`|-|
+|`o[i:j]`|`__getslice`|-|
+|`o[i:j] = v`|`__setslice`|-|
+|`==`|`__eq`|-|
+|`<`|`__lt`|-|
+|`<=`|`__le`|-|
+|`in`|`__contains`|-|
+|`#`|`__len`|-|
+|`-`|`__neg`|-|
+|`!`|`__not`|-|
+|`~`|`__bnot`|-|
+|`+`|`__add`|`__radd`|
+|`-`|`__sub`|`__rsub`|
+|`*`|`__mul`|`__rmul`|
+|`/`|`__div`|`__rdiv`|
+|`//`|`__idiv`|`__ridiv`|
+|`%`|`__mod`|`__rmod`|
+|`++`|`__concat`|`__rconcat`|
+|`^`|`__bxor`|`__rbxor`|
+|`&`|`__band`|`__rband`|
+|`|`|`__bor`|`__rbor`|
+|`<<`|`__shl`|`__rshl`|
+|`>>`|`__shr`|`__rshr`|
+
+```
+class Class {
+    __init(value) {
+        self.value = value
     }
 
     -- metamethod for '+': called when 'Class(lhs) + rhs' is encountered

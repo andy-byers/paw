@@ -75,9 +75,8 @@ void pawA_resize(paw_Env *P, Array *a, size_t length)
 {
     const size_t n = pawA_length(a);
     if (length > n) {
+        // new items are uninitialized
         pawA_reserve(P, a, length);
-        // Set new objects to 'null'.
-        memset(a->end, (int)VNULL, sizeof(a->end[0]) * (length - n));
     } else if (length == 0) {
         a->end = a->begin;
         return;

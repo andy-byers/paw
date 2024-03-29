@@ -301,3 +301,23 @@
     class A {} 
     class A: A {}
 }
+
+{
+    class Slice {
+        __init() {
+            self.value = [1, 2, 3]
+        }
+        __getslice(begin, end) {
+            return self.value[begin:end]
+        }
+        __setslice(begin, end, seq) {
+            self.value[begin:end] = seq
+        }
+    }
+    let slice = Slice()
+    assert(slice[:] == [1, 2, 3])
+    assert(slice[1:-1] == [2])
+    slice[3:] = [4, 5, 6]
+    assert(slice.value == [1, 2, 3, 4, 5, 6])
+}
+

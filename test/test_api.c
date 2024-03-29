@@ -169,7 +169,7 @@ int main(void)
         // 1 + 1 == 2
         paw_push_int(P, 1);
         paw_push_int(P, 1);
-        paw_arith(P, PAW_OPADD); 
+        paw_arith(P, PAW_OPADD);
         paw_push_int(P, 2);
         paw_raw_equals(P);
         check(paw_boolean(P, -1));
@@ -178,7 +178,7 @@ int main(void)
         // 1 << 1 <= 2
         paw_push_int(P, 1);
         paw_push_int(P, 1);
-        paw_arith(P, PAW_OPSHL); 
+        paw_arith(P, PAW_OPSHL);
         paw_push_int(P, 2);
         paw_compare(P, PAW_OPLE);
         check(paw_boolean(P, -1));

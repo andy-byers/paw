@@ -166,6 +166,11 @@ paw_Bool paw_is_bigint(paw_Env *P, int index)
     return pawV_is_bigint(*access(P, index));
 }
 
+paw_Bool paw_is_number(paw_Env *P, int index)
+{
+    return pawV_is_number(*access(P, index));
+}
+
 int paw_type(paw_Env *P, int index)
 {
     const Value v = *access(P, index);
@@ -676,17 +681,17 @@ void paw_rotate(paw_Env *P, int index, int n)
     reverse(p, t);     // Reverse A'B' to get BA
 }
 
-void paw_shift(paw_Env *P, int n)
-{
-    P->top.p[-n - 1] = P->top.p[-1];
-    paw_pop(P, n);
-}
-
 void paw_copy(paw_Env *P, int from, int to)
 {
     StackPtr src = access(P, from);
     StackPtr dst = access(P, to);
     *dst = *src;
+}
+
+void paw_shift(paw_Env *P, int n)
+{
+    paw_copy(P, -1, -n - 1);
+    paw_pop(P, n);
 }
 
 void paw_call_global(paw_Env *P, const char *name, int argc)
