@@ -390,7 +390,7 @@ paw_Bool pawV_truthy(const Value v)
     } else if (pawV_is_map(v)) {
         return pawH_length(pawV_get_map(v));
     }
-    return PAW_FALSE;
+    return !pawV_is_null(v);
 }
 
 uint32_t pawV_hash(const Value v)
@@ -430,6 +430,25 @@ paw_Bool pawV_equal(Value x, Value y)
     }
     // Fall back to value (type + pointer) comparison.
     return x.u == y.u;
+}
+
+paw_Int pawV_length(Value v)
+{
+    size_t len = 0;
+    if (pawV_is_string(v)) {
+        len = pawS_length(pawV_get_string(v));
+    } else if (pawV_is_array(v)) {
+        len = pawA_length(pawV_get_array(v));
+    } else if (pawV_is_map(v)) {
+        len = pawH_length(pawV_get_map(v));
+    } else if (pawV_is_foreign(v)) {
+        len = pawV_get_foreign(v)->size;
+    } else {
+        return -1;
+    }
+    // Replace the container with its length.
+    paw_assert(len <= VINT_MAX);
+    return paw_cast_int(len);
 }
 
 static int char2base(char c)

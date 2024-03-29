@@ -95,6 +95,7 @@ paw_Bool paw_is_function(paw_Env *P, int index);
 paw_Bool paw_is_class(paw_Env *P, int index);
 paw_Bool paw_is_instance(paw_Env *P, int index);
 paw_Bool paw_is_foreign(paw_Env *P, int index);
+paw_Bool paw_is_number(paw_Env *P, int index);
 int paw_type(paw_Env *P, int index);
 const char *paw_typename(paw_Env *P, int index);
 

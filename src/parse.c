@@ -1989,7 +1989,7 @@ Closure *pawP_parse(paw_Env *P, paw_Reader input, ParseMemory *pm, const char *n
     parse_module(&fn, &blk);
 
     // Pop the lexer map. The strings it contains should be anchored elsewhere.
-    // Leave the main closure at the top of the stack.
+    // Leave the main closure on top of the stack.
     pawC_stkdec(P, 1);
     return main;
 }
