@@ -583,46 +583,14 @@ void pawR_setitem(paw_Env *P)
 #define BASE_PUSH 1
 #define BASE_POP 2
 #define BASE_ERASE 3
-#define BASE_CLONE 4
-#define BASE_STARTS_WITH 5
-#define BASE_ENDS_WITH 6
+#define BASE_STARTS_WITH 4
+#define BASE_ENDS_WITH 5
+#define BASE_CLONE 6
 #define iflag(i) (-(int)(i) - 1)
-
-void pawR_init(paw_Env *P)
-{
-    static const char *kBaseMethods[] = {
-        "insert",
-        "push",
-        "pop",
-        //"erase",
-        //"clone",
-    };
-    for (size_t i = 0; i < paw_countof(kBaseMethods); ++i) {
-        String *s = pawS_new_str(P, kBaseMethods[i]);
-        pawG_fix_object(P, cast_object(s));
-        s->flag = iflag(i);
-    }
-}
-
-static void check_argc(paw_Env *P, int argc, int expect)
-{
-    if (argc != expect) {
-        pawR_error(P, PAW_ERUNTIME, "expected %d arguments but found %d", expect, argc);
-    }
-}
-
-static void check_varargc(paw_Env *P, int argc, int least, int most)
-{
-    if (argc < least) {
-        pawR_error(P, PAW_ERUNTIME, "expected at least %d arguments but found %d", least, argc);
-    } else if (argc > most) {
-        pawR_error(P, PAW_ERUNTIME, "expected at most %d arguments but found %d", most, argc);
-    }
-}
 
 static void array_insert(paw_Env *P, Array *a, int argc)
 {
-    check_argc(P, argc, 2);
+    pawR_check_argc(P, argc, 2);
     const paw_Int i = pawR_check_int(P, *vm_peek(1));
     pawA_insert(P, a, i, *vm_peek(0));
     vm_pop(2);
@@ -630,7 +598,7 @@ static void array_insert(paw_Env *P, Array *a, int argc)
 
 static void array_push(paw_Env *P, Array *a, int argc)
 {
-    check_varargc(P, argc, 1, UINT8_MAX);
+    pawR_check_varargc(P, argc, 1, UINT8_MAX);
     for (int i = argc; i > 0; --i) {
         pawA_push(P, a, *vm_peek(i - 1));
     }
@@ -639,7 +607,7 @@ static void array_push(paw_Env *P, Array *a, int argc)
 
 static void array_pop(paw_Env *P, Array *a, int argc)
 {
-    check_varargc(P, argc, 0, 1);
+    pawR_check_varargc(P, argc, 0, 1);
     // Argument, if present, indicates the index at which to remove an
     // element. Default to -1: the last element.
     const paw_Int i = argc ? pawV_get_int(*vm_peek(0)) : -1;
@@ -647,6 +615,14 @@ static void array_pop(paw_Env *P, Array *a, int argc)
     *vm_peek(argc) = *pawA_get(P, a, i); // checks bounds
     pawA_pop(P, a, i);
     vm_pop(argc);
+}
+
+static void array_clone(paw_Env *P, const Array *a, int argc)
+{
+    pawR_check_argc(P, argc, 0);
+    Value *pv = vm_push0();
+    pawA_clone(P, pv, a);
+    vm_shift(1);
 }
 
 static void array_invoke(paw_Env *P, Array *a, Value name, int argc)
@@ -662,10 +638,138 @@ static void array_invoke(paw_Env *P, Array *a, Value name, int argc)
         case BASE_INSERT: 
             array_insert(P, a, argc);
             break;
+        case BASE_CLONE: 
+            array_clone(P, a, argc);
+            break;
         default:
             pawR_attr_error(P, name);
     }
 }
+
+static String *check_string(paw_Env *P, int top)
+{
+    const Value v = *vm_peek(top);
+    if (pawV_get_type(v) != VSTRING) {
+        pawR_error(P, PAW_ETYPE, "expected string");
+    }
+    return pawV_get_string(v);
+}
+
+static void string_starts_with(paw_Env *P, const String *s, int argc)
+{
+    pawR_check_argc(P, argc, 1);
+    const String *prefix = check_string(P, 0);
+    const size_t prelen = prefix->length;
+    const paw_Bool b = s->length >= prelen &&
+                       0 == memcmp(prefix->text, s->text, prelen);
+    pawV_set_bool(vm_peek(1), b);
+    vm_pop(1);
+}
+
+static void string_ends_with(paw_Env *P, const String *s, int argc)
+{
+    pawR_check_argc(P, argc, 1);
+    const String *suffix = check_string(P, 0);
+    const size_t suflen = suffix->length;
+    paw_Bool b = PAW_FALSE;
+    if (s->length >= suflen) {
+        const char *ptr = s->text + s->length - suflen;
+        b = 0 == memcmp(suffix->text, ptr, suflen);
+    }
+    pawV_set_bool(vm_peek(1), b);
+    vm_pop(1);
+}
+
+static void string_clone(paw_Env *P, const String *s, int argc)
+{
+    pawR_check_argc(P, argc, 0);
+}
+
+static void string_invoke(paw_Env *P, const String *s, Value name, int argc)
+{
+    const String *key = pawV_get_string(name);
+    switch (iflag(key->flag)) {
+        case BASE_STARTS_WITH: 
+            string_starts_with(P, s, argc);
+            break;
+        case BASE_ENDS_WITH: 
+            string_ends_with(P, s, argc);
+            break;
+        case BASE_CLONE:
+            string_clone(P, s, argc);
+            break;
+        default:
+            pawR_attr_error(P, name);
+    }
+}
+
+static void map_erase(paw_Env *P, Map *m, int argc)
+{
+    pawR_check_argc(P, argc, 1);
+    pawH_remove(P, m, *vm_peek(0));
+    vm_pop(1);
+}
+
+static void map_clone(paw_Env *P, Map *m, int argc)
+{
+    pawR_check_argc(P, argc, 0);
+    Value *pv = vm_push0();
+    pawH_clone(P, pv, m);
+    vm_shift(1);
+}
+
+static void map_invoke(paw_Env *P, Map *m, Value name, int argc)
+{
+    const String *key = pawV_get_string(name);
+    switch (iflag(key->flag)) {
+        case BASE_ERASE: 
+            map_erase(P, m, argc);
+            break;
+        case BASE_CLONE:
+            map_clone(P, m, argc);
+            break;
+        default:
+            pawR_attr_error(P, name);
+    }
+}
+
+#define wrap_base(func, Type, type, nret) \
+int pawR_ ## func(paw_Env *P) \
+{ \
+    const int argc = paw_get_count(P) - 1; \
+    Type *obj = pawV_get_ ## type(P->cf->base.p[0]); \
+    func(P, obj, argc); \
+    return (nret); \
+}
+wrap_base(array_insert, Array, array, 0)
+wrap_base(array_push, Array, array, 0)
+wrap_base(array_pop, Array, array, 1)
+wrap_base(array_clone, Array, array, 1)
+wrap_base(string_starts_with, String, string, 1)
+wrap_base(string_ends_with, String, string, 1)
+wrap_base(string_clone, String, string, 1)
+wrap_base(map_erase, Map, map, 0)
+wrap_base(map_clone, Map, map, 1)
+#undef wrap_base
+
+void pawR_init(paw_Env *P)
+{
+    static const char *kBaseMethods[] = {
+        "insert",
+        "push",
+        "pop",
+        "erase",
+        "starts_with",
+        "ends_with",
+        "clone",
+    };
+    for (size_t i = 0; i < paw_countof(kBaseMethods); ++i) {
+        String *s = pawS_new_str(P, kBaseMethods[i]);
+        pawG_fix_object(P, cast_object(s));
+        s->flag = iflag(i);
+    }
+}
+
 
 static CallFrame *super_invoke(paw_Env *P, Class *super, Value name, int argc)
 {
@@ -680,11 +784,19 @@ static CallFrame *super_invoke(paw_Env *P, Class *super, Value name, int argc)
 
 static paw_Bool bound_call(paw_Env *P, CallFrame **pcf, Value obj, StackPtr base, Value name, int argc)
 {
-    if (pawV_is_array(obj)) {
+    if (pawV_is_string(obj)) {
+        String *s = pawV_get_string(obj);
+        string_invoke(P, s, name, argc);
+        return PAW_TRUE;
+    }else if (pawV_is_array(obj)) {
         Array *a = pawV_get_array(obj);
         array_invoke(P, a, name, argc);
         return PAW_TRUE;
-    }
+    } else if (pawV_is_map(obj)) {
+        Map *m = pawV_get_map(obj);
+        map_invoke(P, m, name, argc);
+        return PAW_TRUE;
+    } 
     Value *bound = pawV_find_binding(P, obj, name);
     if (bound) {
         *pcf = pawC_precall(P, base, *bound, argc);

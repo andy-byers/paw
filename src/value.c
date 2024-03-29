@@ -245,7 +245,7 @@ void pawV_free_instance(paw_Env *P, Instance *ins)
 Value *pawV_find_binding(paw_Env *P, Value obj, Value name)
 {
     int n = 0;
-    Value *pv = NULL;
+    Value *pv;
     if (pawV_is_instance(obj)) {
         Instance *ins = pawV_get_instance(obj);
         pv = ins->bound;
@@ -260,18 +260,11 @@ Value *pawV_find_binding(paw_Env *P, Value obj, Value name)
         pv = ud->bound;
         n = ud->nbound;
     }
-    if (!pv) {
-        // no bindings array on 'obj'
-        return NULL;
-    }
     for (; n > 0; --n, pv += 2) {
         const Value key = *pv;
         if (key.u == name.u) {
             return pv + 1;
         }
-    }
-    if (obj.u != P->object.u) {
-        return pawV_find_binding(P, P->object, name);
     }
     return NULL;
 }

@@ -36,28 +36,13 @@ static int get_argc(paw_Env *P)
 
 void pawL_check_argc(paw_Env *P, int argc)
 {
-    const int narg = get_argc(P);
-    if (narg != argc) {
-        pawR_error(P, PAW_ERUNTIME, "expected %d arguments but found %d", argc, narg);
-    }
+    pawR_check_argc(P, get_argc(P), argc);
 }
 
 int pawL_check_varargc(paw_Env *P, int min, int max)
 {
     const int narg = get_argc(P);
-    if (narg < min || narg > max) {
-        int n;
-        const char *s;
-        if (narg > max) {
-            n = max;
-            s = "most";
-        } else {
-            n = min;
-            s = "least;";
-        }
-        pawR_error(P, PAW_ERUNTIME, "expected at %s %d argument(s) but found %d",
-                   s, n, narg);
-    }
+    pawR_check_varargc(P, narg, min, max);
     return narg;
 }
 
@@ -206,56 +191,6 @@ static int base_load(paw_Env *P)
     return 1;
 }
 
-static int string_starts_with(paw_Env *P)
-{
-    pawL_check_argc(P, 1);
-    const char *prefix = pawL_check_string(P, 1);
-    const size_t length = paw_length(P, 1);
-    const String *str = pawV_get_string(cf_base(0));
-    paw_push_boolean(P, str->length >= length &&
-                            0 == memcmp(prefix, str->text, length));
-    return 1;
-}
-
-static int string_ends_with(paw_Env *P)
-{
-    pawL_check_argc(P, 1);
-    const char *prefix = pawL_check_string(P, 1);
-    const size_t length = paw_length(P, 1);
-    const String *str = pawV_get_string(cf_base(0));
-    paw_Bool result = PAW_FALSE;
-    if (str->length >= length) {
-        const char *ptr = str->text + str->length - length;
-        result = 0 == memcmp(prefix, ptr, length);
-    }
-    paw_push_boolean(P, result);
-    return 1;
-}
-
-static int map_erase(paw_Env *P)
-{
-    pawL_check_argc(P, 1);
-    Map *m = pawV_get_map(cf_base(0));
-    pawH_remove(P, m, cf_base(1));
-    return 0;
-}
-
-static int object_clone(paw_Env *P)
-{
-    pawL_check_argc(P, 0);
-    Value *pv = pawC_push0(P);
-    Value v = cf_base(0);
-    if (pawV_is_map(v)) {
-        pawH_clone(P, pv, pawV_get_map(v));
-    } else if (pawV_is_array(v)) {
-        pawA_clone(P, pv, pawV_get_array(v));
-    } else {
-        paw_assert(pawV_is_string(v));
-        *pv = v; // strings are internalized
-    }
-    return 1;
-}
-
 static int base_getattr(paw_Env *P)
 {
     const int argc = pawL_check_varargc(P, 2, 3);
@@ -368,23 +303,24 @@ static const pawL_Attr kBaseLib[] = {
 };
 
 static const pawL_Attr kArrayMethods[] = {
+    {"insert", pawR_array_insert},
+    {"push", pawR_array_push},
+    {"pop", pawR_array_pop},
+    {"clone", pawR_array_clone},
     {0}
 };
 
 static const pawL_Attr kMapMethods[] = {
-    {"erase", map_erase},
+    {"erase", pawR_map_erase},
+    {"clone", pawR_map_clone},
     {0}
 };
 
 static const pawL_Attr kStringMethods[] = {
-    {"starts_with", string_starts_with},
-    {"ends_with", string_ends_with},
+    {"starts_with", pawR_string_starts_with},
+    {"ends_with", pawR_string_ends_with},
+    {"clone", pawR_string_clone},
     {0}
-};
-
-static const pawL_Attr kObjectMethods[] = {
-    {"clone", object_clone},
-    {0} // end
 };
 
 static struct Builtin {
@@ -395,7 +331,6 @@ static struct Builtin {
     X(obj_index(VSTRING), kStringMethods)
     X(obj_index(VARRAY), kArrayMethods)
     X(obj_index(VMAP), kMapMethods)
-    X(NOBJECTS, kObjectMethods)
 #undef X
 };
 // clang-format on
@@ -422,15 +357,6 @@ void pawL_init(paw_Env *P)
 
     // Create a map for caching loaded libraries.
     P->libs = pawH_new(P);
-
-    // Fix builtin method names. The foreign objects containing builtin methods
-    // are not traversed by the GC, since they are effectively immutable.
-    for (size_t i = 0; i < paw_countof(kBuiltin); ++i) {
-        const struct Builtin b = kBuiltin[i];
-        for (int j = 0; j < b.nattr; ++j) {
-            fix_name(P, b.attr[j].name);
-        }
-    }
 
     Foreign **pfr = P->builtin;
     for (size_t i = 0; i < NOBJECTS; ++i, ++pfr) {
