@@ -133,6 +133,7 @@ In the expression `1 < x`, we cannot call `__lt`, since `x` is not on the left-h
 Instead we attempt `x.__ge(1)` and negate the result.
 
 |Operation|Metamethod|Reverse metamethod|
+|:-------:|:--------:|:----------------:|
 |-|`__null`|-|
 |`str`|`__str`|-|
 |`int`|`__int`|-|
@@ -164,7 +165,7 @@ Instead we attempt `x.__ge(1)` and negate the result.
 |`++`|`__concat`|`__rconcat`|
 |`^`|`__bxor`|`__rbxor`|
 |`&`|`__band`|`__rband`|
-|`|`|`__bor`|`__rbor`|
+|<code>&#124;</code>|`__bor`|`__rbor`|
 |`<<`|`__shl`|`__rshl`|
 |`>>`|`__shr`|`__rshr`|
 
@@ -259,6 +260,11 @@ assert(s.starts_with('Hello'))
 assert(s.ends_with('world!'))
 assert(s[:5].ends_with('Hello'))
 assert(s[-6:].starts_with('world!'))
+assert(1 == s.find('ello'))
+assert(-1 == s.find('Cello'))
+
+let a = s.split(',')
+assert(s == ','.join(a))
 ```
 
 ### Arrays
@@ -271,7 +277,12 @@ assert(a[-1:] == [3])
 
 ### Maps
 ```
+let m = {1: 'a', 'b': true}
+m[3] = 42
+m.erase(1)
 
+-- prints 'default'
+print(m.get(1, 'default'))
 ```
 
 ### Error handling
