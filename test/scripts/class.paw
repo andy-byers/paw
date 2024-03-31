@@ -321,3 +321,103 @@
     assert(slice.value == [1, 2, 3, 4, 5, 6])
 }
 
+{
+    class A {
+        __init(n) {
+            self.n = n
+        }
+        __null() {
+            return self.n < 0 ?? null :: self
+        }
+    }
+
+    {
+        fn test(n) {
+            let r = A(n)?
+            return r.n
+        }
+        assert(test(-2).n == -2)
+        assert(test(-1).n == -1)
+        assert(test(0) == 0)
+        assert(test(1) == 1)
+    }
+
+    {
+        fn test(n) {
+            return A(n) ?: n
+        }
+        assert(test(-2) == -2)
+        assert(test(-1) == -1)
+        assert(test(0).n == 0)
+        assert(test(1).n == 1)
+    }
+}
+
+{
+    class A {
+        __init(n) {
+            self.n = n
+        }
+        __null() {
+            -- Return an integer, rather than 'self'. When a given instance 
+            -- of A 'x' is not semantically null, the expression 'x?' evaluates
+            -- to 'x.n', with no return. The expression 'x :? 123' also evaluates 
+            -- to 'x.n'.
+            return self.n < 0 ?? null :: self.n
+        }
+    }
+
+    fn test(n) {
+        let r = A(n)?
+        -- r == A(n).n
+        return r 
+    }
+    assert(test(-1).n == -1)
+    assert(test(0) == 0)
+
+    fn test(n) {
+        return A(n) ?: 'rhs'
+    }
+    assert(test(-1) == 'rhs')
+    assert(test(0) == 0)
+    assert(test(1) == 1)
+}
+
+{
+    class Comparable {
+        __init(a) {
+            self.a = a
+        }
+        __eq(b) {
+            return self.a == int(b)
+        }
+        __lt(b) {
+            return self.a < int(b)
+        }
+        __le(b) {
+            return self.a <= int(b)
+        }
+        __gt(b) {
+            return self.a > int(b)
+        }
+        __ge(b) {
+            return self.a >= int(b)
+        }
+        __int() {
+            return self.a
+        }
+    }
+    let c1 = Comparable(1)
+    assert(0 < c1 && c1 < 2)
+    assert(0 <= c1 && c1 <= 2)
+    assert(1 <= c1 && c1 <= 1)
+    assert(c1 > 0 && 2 > c1)
+    assert(c1 >= 0 && 2 >= c1)
+    assert(c1 >= 1 && 1 >= c1)
+
+    let c2 = Comparable(2)
+    assert(c1 < c2 && c2 > c1)
+    assert(c1 <= c2 && c2 >= c1)
+    assert(c1 <= c1 && c2 >= c2)
+}
+

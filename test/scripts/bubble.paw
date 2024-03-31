@@ -29,4 +29,4 @@ fn bubble(n) {
     return a
 }
 
-bubble(int(argv[0]))
+bubble(#argv > 1 ?? int(argv[1]) :: 500)

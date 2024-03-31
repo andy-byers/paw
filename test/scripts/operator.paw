@@ -487,13 +487,11 @@
         let val = obj?.value
         return 42
     }
-    assert(null == test(0))
+    assert(0 == test(0).value)
     assert(42 == test(1))
 
-    let obj = Test(0)
-    assert(1 == (obj ?: 1))
-    let obj = Test(1)
-    assert(1 == (obj ?: 2).value)
+    assert(1 == (Test(0) ?: 1))
+    assert(1 == (Test(1) ?: 2).value)
 }
 
 -- Test iterable instance: when a class has both __len and __getitem,
@@ -530,7 +528,7 @@
     }
 }
 
--- Short-circuiting behavior:
+-- Short-circuit evaluation:
 {
     let state = [0, 0, 0]
     fn setup(i) {
@@ -612,4 +610,45 @@
     check('' && false, '')
     check(false && '', false)
     check(false && true, false)
+}
+
+{
+    fn test(_) {
+        fn check(answer, result) {
+            assert(answer == str(result))
+        }
+        check('b', _('a') && _('b'))
+        check('', _('a') && _(''))
+        check('',  _('')  && _('b'))
+        check('',  _('')  && _('b'))
+        check('a', _('a') || _('b'))
+        check('a', _('a') || _(''))
+        check('b', _('')  || _('b'))
+        check('', _('')   || _(''))
+
+        check('b', _('a') && _('b') || _('c'))
+        check('b', _('a') && _('b') || _(''))
+        check('c', _('a') && _('')  || _('c'))
+        check('',  _('a') && _('')  || _(''))
+        check('c', _('')  && _('b') || _('c'))
+        check('',  _('')  && _('b') || _(''))
+        check('c', _('')  && _('')  || _('c'))
+        check('',  _('')  && _('')  || _(''))
+    }
+
+    test(fn(v) {return v})
+
+    class A {
+        __init(v) {
+            self.v = v
+        }
+        __bool() {
+            -- NOTE: must return a boolean, 
+            return self.v
+        }
+        __str() {
+            return self.v
+        }
+    }
+    test(A)
 }

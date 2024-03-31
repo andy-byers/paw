@@ -59,8 +59,10 @@ int pawR_string_clone(paw_Env *P);
 
 static inline paw_Int pawR_check_int(paw_Env *P, Value v)
 {
-    if (!pawV_is_int(v) && !pawV_is_bigint(v)) {
-        pawR_error(P, PAW_ETYPE, "expected small (47-bit) integer");
+    if (pawV_is_int(v)) {
+        return pawV_get_int(v);
+    } else if (!pawV_is_bigint(v)) {
+        pawR_error(P, PAW_ETYPE, "expected integer");
     }
     paw_Bool lossless;
     const paw_Int ival = pawV_to_int64(v, &lossless);
@@ -73,16 +75,16 @@ static inline paw_Int pawR_check_int(paw_Env *P, Value v)
 static inline void pawR_check_argc(paw_Env *P, int argc, int expect)
 {
     if (argc != expect) {
-        pawR_error(P, PAW_ERUNTIME, "expected %d arguments but found %d", expect, argc);
+        pawR_error(P, PAW_ERUNTIME, "expected %d argument(s) but found %d", expect, argc);
     }
 }
 
 static inline void pawR_check_varargc(paw_Env *P, int argc, int least, int most)
 {
     if (argc < least) {
-        pawR_error(P, PAW_ERUNTIME, "expected at least %d arguments but found %d", least, argc);
+        pawR_error(P, PAW_ERUNTIME, "expected at least %d argument(s) but found %d", least, argc);
     } else if (argc > most) {
-        pawR_error(P, PAW_ERUNTIME, "expected at most %d arguments but found %d", most, argc);
+        pawR_error(P, PAW_ERUNTIME, "expected at most %d argument(s) but found %d", most, argc);
     }
 }
 

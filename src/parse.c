@@ -1211,9 +1211,11 @@ static void chain_expr(Lex *lex, ExprState *e)
     skip(lex); // '?' token
     const int else_jump = emit_jump(lex, OP_JUMPNULL);
     const int then_jump = emit_jump(lex, OP_JUMP);
+
     patch_here(lex, else_jump);
-    emit(lex, OP_PUSHNULL);
-    emit(lex, OP_RETURN);
+    // Return the value on top, which is either 'null', or an instance that
+    // returned 'null' from its '__null' metamethod.
+    emit(lex, OP_RETURN); 
     patch_here(lex, then_jump);
 }
 

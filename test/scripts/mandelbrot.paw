@@ -16,8 +16,8 @@ fn map(f, seq) {
     }
     return seq
 }
-
-let argv = map(float, argv[0].split(',')) 
+print(argv[0])
+let argv = map(float, argv[1].split(',')) 
 
 let x0 = float(argv[0]) 
 let x1 = float(argv[1]) 
