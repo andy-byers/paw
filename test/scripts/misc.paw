@@ -1,4 +1,12 @@
 
+{
+    let a = []
+    assert(null == a.push(1))
+    assert(null == a.insert(0, 0))
+    let m = {'a': 1}
+    assert(null == m.erase('a'))
+}
+
 -- Test lots of local variables: OP_CLOSE can only remove 127 variables 
 -- at a time.
 {

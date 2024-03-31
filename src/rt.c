@@ -198,13 +198,6 @@ static paw_Bool meta_unop(paw_Env *P, Op op, Value x)
     return PAW_FALSE;
 }
 
-static void maybe_meta_unop(paw_Env *P, Op op, Value x)
-{
-    if (meta_unop(P, op, x)) {
-        vm_shift(1);
-    }
-}
-
 static paw_Bool meta_binop_r(paw_Env *P, Op op, Value x, Value y)
 {
     paw_Bool swap = PAW_FALSE;
@@ -1723,11 +1716,11 @@ int pawR_getitem(paw_Env *P)
 
 static void cannonicalize_slice(paw_Env *P, size_t len, Value begin, Value end, paw_Int *bout, paw_Int *eout, paw_Int *nout)
 {
-    const paw_Int ibegin = pawV_is_null(begin) // null acts like 0
-                               ? 0
+    const paw_Int ibegin = pawV_is_null(begin)
+                               ? 0 // null acts like 0
                                : pawA_abs_index(pawR_check_int(P, begin), len);
-    const paw_Int iend = pawV_is_null(end) // null acts like #a
-                             ? paw_cast_int(len)
+    const paw_Int iend = pawV_is_null(end) 
+                             ? paw_cast_int(len) // null acts like #a
                              : pawA_abs_index(pawR_check_int(P, end), len);
     // clamp to sequence bounds
     *bout = paw_min(paw_max(ibegin, 0), paw_cast_int(len));
@@ -1843,14 +1836,27 @@ void pawR_literal_map(paw_Env *P, int n)
 
 static paw_Bool should_jump_null(paw_Env *P)
 {
-    maybe_meta_unop(P, OP_NULL, *vm_peek(0));
-    return pawV_is_null(*vm_peek(0));
+    const Value *pv = vm_peek(0);
+    if (meta_unop(P, OP_NULL, *pv)) {
+        if (pawV_is_null(*vm_peek(0))) {
+            vm_pop(1);
+            return PAW_TRUE;
+        }
+        vm_shift(1);
+        return PAW_FALSE;
+    }
+    return pawV_is_null(*pv);
 }
 
 static paw_Bool should_jump_false(paw_Env *P)
 {
-    maybe_meta_unop(P, OP_BOOL, *vm_peek(0));
-    return !pawV_truthy(*vm_peek(0));
+    const Value *pv = vm_peek(0);
+    if (meta_unop(P, OP_BOOL, *pv)) {
+        const paw_Bool jump = !pawV_truthy(*vm_peek(0));
+        vm_pop(1);
+        return jump;
+    }
+    return !pawV_truthy(*pv);
 }
 
 void pawR_execute(paw_Env *P, CallFrame *cf)
@@ -2157,9 +2163,6 @@ top:
                     pawR_close_upvalues(P, vm_peek(n)); 
                 }
                 vm_pop(n);
-
-//                pawR_close_upvalues(P, vm_peek(1));
-//                vm_pop(1);
             }
 
             vm_case(CLOSURE) :

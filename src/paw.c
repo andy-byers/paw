@@ -155,17 +155,17 @@ int main(int argc, const char **argv)
         show_help();
         return 0;
     }
-
     paw_Env *P = paw_open(NULL, NULL);
     if (!P) {
         error(PAW_EMEMORY, "not enough memory");
     }
 
     // Put arguments to the script in a global array named 'argv'.
+    paw_push_string(P, s_opt.e ? "<chunk>" : s_pathname);
     for (int i = 0; i < argc; ++i) {
         paw_push_string(P, argv[i]);
     }
-    paw_create_array(P, argc);
+    paw_create_array(P, 1 + argc);
     paw_set_global(P, "argv");
 
     int status;

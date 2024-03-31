@@ -191,6 +191,16 @@ class Class {
     __eq(rhs) {
         return self.value == rhs
     }
+
+    -- metamethod for controlling null chaining and null coalescing operators
+    __null() {
+        -- Return null if this object is semantically null, nonnull otherwise.
+        -- If null is returned, then the expression 'x?' will return 'x' from
+        -- the enclosing function (not null), and 'x ?: 123' will evaluate to
+        -- '123'. If nonnull is returned, then both 'x?' and 'x ?: 123' will 
+        -- evaluate to this function's return value (not 'x').
+        return self.value < 0 ?? null :: self
+    }
 }
 
 -- Instances of 'Class' can be equality-compared with, and added to, numeric
@@ -216,7 +226,7 @@ let v = cond ?? 'then' :: 'else'
 
 -- Null chaining operator: return immediately (with null) if the operand is null 
 -- A paw module is actually considered a function, so '?' can exist at the top
--- level.
+-- level. 
 let v = maybe_null()?.field?
 
 -- Null coalescing operator: evaluates to the first operand if it is nonnull, the
@@ -229,7 +239,7 @@ break
 continue
 
 -- Numeric 'for' loop:
-for i in 0,10,2 { -- start,end,step
+for i in 0, 10, 2 { -- start, end, step
     
 }
 

@@ -52,4 +52,4 @@ fn Main(N) {
           '\t check: ', ItemCheck(longlivedtree))
 }
 
-Main(#argv ?? int(argv[0]) :: 0)
+Main(#argv > 1 ?? int(argv[1]) :: 0)
