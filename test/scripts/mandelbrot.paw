@@ -1,5 +1,5 @@
 -- mandelbrot.paw
--- usage: paw mandelbrot.paw -- x0 x1 nx y0 y1 ny
+-- usage: paw mandelbrot.paw x0,x1,nx,y0,y1,ny
 -- translated from https://rosettacode.org/wiki/Mandelbrot_set#ASCII_2 (Lua).
 
 let io = require('io')
@@ -9,6 +9,15 @@ let charmap = [
     ' ', '.', ':', '-', '=', 
     '+', '*', '#', '%', '@',
 ]
+
+fn map(f, seq) {
+    for i = 0, #seq {
+        seq[i] = f(seq[i])
+    }
+    return seq
+}
+
+let argv = map(float, argv[0].split(',')) 
 
 let x0 = float(argv[0]) 
 let x1 = float(argv[1]) 

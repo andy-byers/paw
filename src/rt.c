@@ -1715,6 +1715,7 @@ int pawR_getitem(paw_Env *P)
         // called obj.__getitem(key)
         vm_shift(2);
     } else {
+        vm_pop(1); // pop 'key'
         pawR_type_error(P, "getitem");
     }
     return 0;
@@ -1838,6 +1839,18 @@ void pawR_literal_map(paw_Env *P, int n)
         // Replace contents with map itself.
         vm_shift(2 * n);
     }
+}
+
+static paw_Bool should_jump_null(paw_Env *P)
+{
+    maybe_meta_unop(P, OP_NULL, *vm_peek(0));
+    return pawV_is_null(*vm_peek(0));
+}
+
+static paw_Bool should_jump_false(paw_Env *P)
+{
+    maybe_meta_unop(P, OP_BOOL, *vm_peek(0));
+    return !pawV_truthy(*vm_peek(0));
 }
 
 void pawR_execute(paw_Env *P, CallFrame *cf)
@@ -2138,8 +2151,15 @@ top:
 
             vm_case(CLOSE) :
             {
-                pawR_close_upvalues(P, vm_peek(1));
-                vm_pop(1);
+                const int arg = Ib();
+                const int n = arg >> 1;
+                if (arg & 1) {
+                    pawR_close_upvalues(P, vm_peek(n)); 
+                }
+                vm_pop(n);
+
+//                pawR_close_upvalues(P, vm_peek(1));
+//                vm_pop(1);
             }
 
             vm_case(CLOSURE) :
@@ -2236,8 +2256,7 @@ top:
             vm_case(JUMPNULL) :
             {
                 const int offset = vm_jmp();
-                maybe_meta_unop(P, OP_NULL, *vm_peek(0));
-                if (pawV_is_null(*vm_peek(0))) {
+                if (should_jump_null(P)) {
                     pc += offset;
                 }
             }
@@ -2245,10 +2264,18 @@ top:
             vm_case(JUMPFALSE) :
             {
                 const int offset = vm_jmp();
-                maybe_meta_unop(P, OP_BOOL, *vm_peek(0));
-                if (!pawV_truthy(*vm_peek(0))) {
+                if (should_jump_false(P)) {
                     pc += offset;
                 }
+            }
+
+            vm_case(JUMPFALSEPOP) :
+            {
+                const int offset = vm_jmp();
+                if (should_jump_false(P)) {
+                    pc += offset;
+                }
+                vm_pop(1);
             }
 
             vm_case(FORNUM0) :

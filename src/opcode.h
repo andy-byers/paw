@@ -35,14 +35,14 @@ typedef uint8_t OpCode;
 //   K = constants (indexed by uint16_t)
 //   P = function prototypes (indexed by uint16_t)
 //
-typedef enum Op { // operands    stack in    stack out    side effects
-OP_PUSHNULL,//       -           -           null         -
-OP_PUSHTRUE,//       -           -           true         -
-OP_PUSHFALSE,//      -           -           false        -
-OP_PUSHCONST,//      k           -           K[k]         -
+typedef enum Op { // operands    stack in     stack out    side effects
+OP_PUSHNULL,//       -           -            null         -
+OP_PUSHTRUE,//       -           -            true         -
+OP_PUSHFALSE,//      -           -            false        -
+OP_PUSHCONST,//      k           -            K[k]         -
 
-OP_POP,//            -           v           -            -
-OP_CLOSE,//          -           v           -            v closed over if captured, else popped
+OP_POP,//            -           v            -            -
+OP_CLOSE,//          i,c         v_i...v_1    -            if c {-* close stack until v_i *-}
 OP_RETURN,//        
 
 OP_CLOSURE, //       
@@ -51,6 +51,7 @@ OP_INVOKESUPER,
 OP_GETSUPER,
 
 OP_JUMP,
+OP_JUMPFALSEPOP,
 OP_JUMPFALSE,
 OP_JUMPNULL,
 
