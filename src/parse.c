@@ -538,15 +538,20 @@ static struct LocalInfo *local_info(FnState *fn, int level)
     return &fn->proto->v[level - fn->base];
 }
 
-static void close_vars(FnState *fn, int level)
+static void close_vars(FnState *fn, int target)
 {
-    for (int i = fn->level - 1; i >= level; --i) {
-        struct LocalInfo *local = local_info(fn, i);
-        if (local->captured) {
-            emit(fn->lex, OP_CLOSE);
-        } else {
-            emit(fn->lex, OP_POP);
+    Lex *lex = fn->lex;
+    for (int level = fn->level - 1; level >= target;) {
+        paw_Bool close = PAW_FALSE;
+        const int upper = level; // first popped slot
+        const int lower = paw_max(upper - INT8_MAX, target - 1);
+        for (int i = level; !close && i > lower; --i) {
+            struct LocalInfo *local = local_info(fn, i);
+            close = close ? close : local->captured;
         }
+        const int npop = upper - lower; // 'lower' is 1 past end
+        emit_arg(lex, OP_CLOSE, (npop << 1) | close);
+        level = lower;
     }
 }
 
@@ -1434,9 +1439,7 @@ static BinOp cond_expr(Lex *lex, ExprState *e)
     discharge(e);
     skip(lex); // '??' token
 
-    const int else_jump = emit_jump(lex, OP_JUMPFALSE);
-    emit(lex, OP_POP);
-
+    const int else_jump = emit_jump(lex, OP_JUMPFALSEPOP);
     ExprState left;
     subexpression(lex, &left, right_prec(BIN_COND));
     discharge(&left);
@@ -1444,7 +1447,6 @@ static BinOp cond_expr(Lex *lex, ExprState *e)
     const int then_jump = emit_jump(lex, OP_JUMP);
     check_next(lex, TK_COLON2);
     patch_here(lex, else_jump);
-    emit(lex, OP_POP);
 
     const BinOp op = expr(lex);
     patch_here(lex, then_jump);
@@ -1500,14 +1502,11 @@ static void if_stmt(Lex *lex)
     skip(lex); // 'if' token
     expr(lex); // conditional
 
-    const int then_jump = emit_jump(lex, OP_JUMPFALSE);
-    emit(lex, OP_POP);
-
+    const int then_jump = emit_jump(lex, OP_JUMPFALSEPOP);
     block(lex); // 'then' block
 
     const int else_jump = emit_jump(lex, OP_JUMP);
     patch_here(lex, then_jump);
-    emit(lex, OP_POP);
 
     if (test_next(lex, TK_ELSE)) {
         if (test(lex, TK_IF)) {
@@ -1644,9 +1643,7 @@ static void while_stmt(Lex *lex)
     skip(lex); // 'while' token
     expr(lex); // conditional
 
-    const int jump = emit_jump(lex, OP_JUMPFALSE);
-    emit(lex, OP_POP);
-
+    const int jump = emit_jump(lex, OP_JUMPFALSEPOP);
     block(lex);
 
     // Finish the loop. 'break' labels jump here, 'continue' labels back to right
@@ -1654,7 +1651,6 @@ static void while_stmt(Lex *lex)
     emit_loop(lex, OP_JUMP, loop);
     adjust_to(fn, LCONTINUE, loop);
     patch_here(lex, jump);
-    emit(lex, OP_POP);
     leave_block(fn);
 }
 
@@ -1674,12 +1670,9 @@ static void dowhile_stmt(Lex *lex)
 
     // If the condition is false, jump over the instruction that moves control back
     // to the top of the loop.
-    const int jump = emit_jump(lex, OP_JUMPFALSE);
-    emit(lex, OP_POP);
-
+    const int jump = emit_jump(lex, OP_JUMPFALSEPOP);
     emit_loop(lex, OP_JUMP, top);
     patch_here(lex, jump);
-    emit(lex, OP_POP);
     leave_block(fn);
 }
 

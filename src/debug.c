@@ -36,6 +36,8 @@ const char *paw_opcode_name(Op op)
             return "JUMP";
         case OP_JUMPFALSE:
             return "JUMPFALSE";
+        case OP_JUMPFALSEPOP:
+            return "JUMPFALSEPOP";
         case OP_JUMPNULL:
             return "JUMPNULL";
         case OP_GLOBAL:

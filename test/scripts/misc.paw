@@ -1,4 +1,37 @@
 
+-- Test lots of local variables: OP_CLOSE can only remove 127 variables 
+-- at a time.
+{
+    fn make_local(id) {
+        return '_' ++ id
+    }
+    let N = 300
+    let chunk = 'let f; {'
+    for i = 0, N {
+        chunk = chunk ++ 'let ' ++ make_local(i) ++ ' '
+    }
+    chunk = chunk ++ 'f = fn() {'
+    fn call_chunk(code) {
+        let chunk = chunk ++ code ++ '}}'
+        load(chunk)() -- load and call
+    }
+
+    -- capture the last local
+    let code = 'let a = ' ++ make_local(N - 1)
+    call_chunk(code)
+
+    -- capture the first local
+    let code = 'let a = ' ++ make_local(0)
+    call_chunk(code)
+
+    -- capture multiple locals
+    let code = 'let a = ' ++ make_local(100) ++ ' ' ++
+               'let b = ' ++ make_local(101) ++ ' ' ++ 
+               'let c = ' ++ make_local(200) ++ ' ' ++
+               'let d = ' ++ make_local(202)
+    call_chunk(code)
+}
+
 {
     let io = require('io')
     let file = io.open('./paw_test_data_', 'w+')
@@ -77,3 +110,4 @@
     assert(s.starts_with('20035299304068464649790723515602'))
     assert(s.ends_with('7777506072339445587895905719156733'))
 }
+
