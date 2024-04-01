@@ -149,8 +149,10 @@ Instead we attempt `x.__ge(1)` and negate the result.
 |`o[i:j]`|`__getslice`|-|
 |`o[i:j] = v`|`__setslice`|-|
 |`==`|`__eq`|-|
-|`<`|`__lt`|-|
-|`<=`|`__le`|-|
+|`<`|`__lt`|`__gt`|
+|`<=`|`__le`|`__ge`|
+|`>`|`__gt`|`__lt`|
+|`>=`|`__ge`|`__le`|
 |`in`|`__contains`|-|
 |`#`|`__len`|-|
 |`-`|`__neg`|-|
@@ -168,8 +170,8 @@ Instead we attempt `x.__ge(1)` and negate the result.
 |<code>&#124;</code>|`__bor`|`__rbor`|
 |`<<`|`__shl`|`__rshl`|
 |`>>`|`__shr`|`__rshr`|
-
 ```
+
 class Class {
     __init(value) {
         self.value = value
@@ -244,7 +246,7 @@ for i in 0, 10, 2 { -- start, end, step
 }
 
 -- Iterator 'for' loop: allows iterating over arrays and maps. If a class implements
--- both '__getattr' and '__len', then instances of that class can be used in an
+-- both '__getitem' and '__len', then instances of that class can be used in an
 -- iterator 'for' loop.
 for v in iterable {
 
