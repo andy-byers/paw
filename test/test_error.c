@@ -255,11 +255,79 @@ static void test_syntax_error(void)
     too_far_to_loop();
 }
 
+#define codeline(s) s "\n"
+
+static void test_line_numbers(void)
+{
+    // cause errors by dividing by 0
+    const char *code = 
+        /*  1 */ codeline("return fn(a, b, c, d, e, f, g, h, i, j, k, l) {")
+        /*  2 */ codeline("    let x = 1/a")
+        /*  3 */ codeline("    let func")
+        /*  4 */ codeline("    {")
+        /*  5 */ codeline("        -- line comment")
+        /*  6 */ codeline("        let x = 1 + 1/b + 1")
+        /*  7 */ codeline("        -* block")
+        /*  8 */ codeline("           comment *-")
+        /*  9 */ codeline("        func = fn() { let x = 1/c")
+        /* 10 */ codeline("            -- another line comment")
+        /* 11 */ codeline("            let x = (1+1) / d * 1")
+        /* 12 */ codeline("            let x = 1 + 1 + 1 +")
+        /* 13 */ codeline("                    1 + 1 + 1 +")
+        /* 14 */ codeline("                    1 + 1 + 1/e")
+        /* 15 */ codeline("            let x = [1/f,")
+        /* 16 */ codeline("                1 +")
+        /* 17 */ codeline("                1 +")
+        /* 18 */ codeline("                1/g,")
+        /* 19 */ codeline("            ]")
+        /* 20 */ codeline("            let x = {'a': 1/h,")
+        /* 21 */ codeline("                1/i: 1,")
+        /* 22 */ codeline("                'b': 1 +")
+        /* 23 */ codeline("                     1 +")
+        /* 24 */ codeline("                     1/j,")
+        /* 25 */ codeline("            }")
+        /* 26 */ codeline("        }")
+        /* 27 */ codeline("    }")
+        /* 28 */ codeline("    let x = 1/k")
+        /* 29 */ codeline("    func()")
+        /* 30 */ codeline("return 1/l}");
+    const int answers[] = {2, 6, 9, 11, 14, 15, 18, 20, 21, 24, 28, 30};
+    const size_t n = paw_countof(answers);
+    paw_Env *P = test_open(NULL, &s_alloc);
+    check(PAW_OK == pawL_load_chunk(P, "faulty", code));
+    check(PAW_OK == paw_call(P, 0));
+    pawL_check_type(P, -1, PAW_TFUNCTION);
+    paw_push_value(P, -1); // copy function
+    for (size_t i = 0; i < n; ++i) {
+        // push arguments and call the function. Exactly 1 argument is 0
+        // on each iteration, the other arguments are 1.
+        for (size_t j = 0; j < n; ++j) {
+            paw_push_int(P, i != j);
+        }
+        check(PAW_OK != paw_call(P, n));
+
+        // Extract the line number from the error message.
+        const char *message = pawL_check_string(P, -1);
+        const char *a, *b;
+        check((a = strchr(message, ':')) &&
+              (b = strchr(a + 1, ':')));
+        char buffer[32];
+        memcpy(buffer, a + 1, cast_size(b - a - 1));
+        buffer[b - a - 1] = '\0';
+        const int line = strtol(buffer, NULL, 10);
+        printf("%zu: line %d\n", i, line);
+        check(line == answers[i]);
+        paw_pop(P, n + 1);
+    }
+    test_close(P, &s_alloc);
+}
+
 int main(void)
 {
     test_name_error();
     test_syntax_error();
     test_type_error();
+    test_line_numbers();
 
     test_case(PAW_ESYNTAX, "missing_left_paren", "fn fa, b, c) {return [a + b + c]}");
     test_case(PAW_ESYNTAX, "missing_right_paren", "fn f(a, b, c {return [a + b + c]}");

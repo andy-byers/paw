@@ -62,6 +62,7 @@ typedef struct paw_Env {
     Foreign *builtin[NOBJECTS];
     Value meta_keys[NMETA];
     Value str_cache[NCSTR];
+    Value mem_errmsg;
 
     paw_Alloc alloc;
     void *ud;

@@ -8,8 +8,12 @@
 #include "paw.h"
 #include "value.h"
 
+#define STACK_EXTRA 1 /* number of slots reserved for errors */
 #define save_offset(P, ptr) ((ptr) - (P)->stack.p)
 #define restore_pointer(P, ofs) ((P)->stack.p + (ofs))
+#define ensure_stack(P, n) ((P)->bound.p - (P)->top.p < (n) + STACK_EXTRA \
+                                ? pawC_stack_grow(P, n + STACK_EXTRA)     \
+                                : (void)0)
 
 typedef void (*Call)(paw_Env *P, void *arg);
 
@@ -30,21 +34,12 @@ static inline int pawC_stklen(paw_Env *P)
     return P->top.p - P->stack.p;
 }
 
-static inline void pawC_stkcheck(paw_Env *P, int n)
-{
-    if (P->bound.p - P->top.p < n) {
-        pawC_stack_overflow(P);
-    }
-}
-
 // Increase the stack size
 // New slots have unspecified values and must be set before the next
 // collection runs.
 static inline StackPtr pawC_stkinc(paw_Env *P, int n)
 {
-    if (P->bound.p - P->top.p < n) {
-        pawC_stack_grow(P, n);
-    }
+    ensure_stack(P, n);
     StackPtr sp = P->top.p;
     P->top.p += n;
     return sp;
@@ -56,8 +51,8 @@ static inline void pawC_stkdec(paw_Env *P, int n)
     P->top.p -= n;
 
 #if PAW_STRESS > 1
-    // trim excess slots
-    pawC_stack_realloc(P, pawC_stklen(P));
+    // trim excess slots, respecting the slots reserved for error messages
+    pawC_stack_realloc(P, pawC_stklen(P) + STACK_EXTRA);
 #endif
 }
 

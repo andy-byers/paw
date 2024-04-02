@@ -109,9 +109,16 @@ static void add_line(Lex *lex)
     }
     pawM_grow(ctx(lex), p->lines, fn->nlines, p->nlines);
     p->lines[fn->nlines++] = (struct LineInfo){
-        .line = lex->lastline,
+        .line = fn->lastline,
         .pc = fn->pc,
     };
+    fn->lastline = lex->lastline;
+}
+
+static void fix_line(FnState *fn, int line)
+{
+    paw_assert(fn->nlines > 0);
+    fn->proto->lines[fn->nlines - 1].line = line;
 }
 
 static void push8(Lex *lex, int code)
@@ -899,6 +906,7 @@ static void enter_function(Lex *lex, FnState *fn, BlkState *blk, FnKind kind)
         .proto = fn->proto, // Keep value
         .base = lex->pm->vsize,
         .level = lex->pm->vsize,
+        .lastline = lex->lastline,
         .caller = lex->fn,
         .kind = kind,
         .lex = lex,
@@ -1215,7 +1223,7 @@ static void chain_expr(Lex *lex, ExprState *e)
     patch_here(lex, else_jump);
     // Return the value on top, which is either 'null', or an instance that
     // returned 'null' from its '__null' metamethod.
-    emit(lex, OP_RETURN); 
+    emit(lex, OP_RETURN);
     patch_here(lex, then_jump);
 }
 
@@ -1273,6 +1281,7 @@ static void function(Lex *lex, String *name, FnKind kind)
     BlkState blk;
     FnState fn = {.name = name};
     const int id = add_proto(lex, name, &fn.proto);
+    const int line = lex->lastline;
 
     enter_function(lex, &fn, &blk, kind);
     fn_parameters(lex);
@@ -1280,6 +1289,7 @@ static void function(Lex *lex, String *name, FnKind kind)
     leave_function(lex);
 
     emit_closure(lex, fn.proto, id);
+    fix_line(&fn, line); // defined on line 'line'
 }
 
 static void fn_expr(Lex *lex)

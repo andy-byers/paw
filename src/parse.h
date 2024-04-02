@@ -113,6 +113,7 @@ typedef struct FnState {
     int nk;
     int nproto;
     int nlines;
+    int lastline;
     int pc;
     enum FnKind kind;
 } FnState;

@@ -9,7 +9,7 @@
 CallFrame *pawE_extend_cf(paw_Env *P, StackPtr top)
 {
     if (P->ncf == INT_MAX) {
-        pawR_error(P, PAW_EMEMORY, "too many nested function calls");
+        pawR_error(P, PAW_EOVERFLOW, "too many nested function calls");
     }
     CallFrame *cf = pawM_new(P, CallFrame);
     P->cf->next = cf;

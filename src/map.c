@@ -92,6 +92,9 @@ void pawH_free(paw_Env *P, Map *m)
 
 size_t pawH_create_aux_(paw_Env *P, Map *m, Value key)
 {
+    if (pawV_is_null(key) || (pawV_is_float(key) && v_isnan(key))) {
+        pawR_error(P, PAW_EVALUE, "invalid map key");
+    }
     grow_map_if_necessary(P, m);
     const size_t i = prepare_insert(m, key);
     if (!pawH_is_occupied(m->keys[i])) {
