@@ -78,13 +78,11 @@ paw_Env *paw_open(paw_Alloc alloc, void *ud)
         return NULL;
     }
     *P = (paw_Env){
-        .mem_limit = SIZE_MAX,
         .alloc = alloc,
         .ud = ud,
     };
 
     if (pawC_try(P, open_aux, NULL)) {
-        // Not enough memory
         paw_close(P);
         return NULL;
     }

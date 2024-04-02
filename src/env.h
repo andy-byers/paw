@@ -72,7 +72,6 @@ typedef struct paw_Env {
     Object *gc_fixed;
     size_t gc_bytes;
     size_t gc_limit;
-    size_t mem_limit;
     paw_Bool gc_noem;
 } paw_Env;
 
