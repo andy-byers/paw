@@ -104,7 +104,7 @@ void pawC_stack_overflow(paw_Env *P)
 #if PAW_STRESS > 1
 #define next_alloc(n0, dn) ((n0) + (dn))
 #else
-#define next_alloc(n0, dn) paw_max((n0) + (dn), (n0)*2)
+#define next_alloc(n0, dn) paw_max((n0) + (dn), (n0) * 2)
 #endif
 
 void pawC_stack_grow(paw_Env *P, int n)
@@ -141,7 +141,7 @@ static CallFrame *next_call_frame(paw_Env *P, StackPtr top)
     return callee;
 }
 
-static void ccall_return(paw_Env *P, StackPtr base, paw_Bool has_return)
+static void call_return(paw_Env *P, StackPtr base, paw_Bool has_return)
 {
     if (has_return) {
         Value ret = P->top.p[-1];
@@ -170,7 +170,8 @@ static void handle_ccall(paw_Env *P, StackPtr base, Native *ccall)
     // call the C function
     const int nret = ccall->f(P); // TODO: Multi-return
     base = restore_pointer(P, pos);
-    ccall_return(P, base, nret);
+    call_return(P, base, nret);
+    pawR_close_upvalues(P, base);
 }
 
 static void check_fixed_args(paw_Env *P, Proto *f, int argc)
@@ -183,8 +184,16 @@ static void check_fixed_args(paw_Env *P, Proto *f, int argc)
     }
 }
 
+// Make sure there is at least this number of stack slots available for
+// the callee.
+#define FRAME_EXTRA 0 /*64*/
+
 CallFrame *pawC_precall(paw_Env *P, StackPtr base, Value callable, int argc)
 {
+    const ptrdiff_t offset = save_offset(P, base);
+    ensure_stack(P, FRAME_EXTRA);
+    base = restore_pointer(P, offset);
+
     Native *ccall;
     Closure *fn = NULL;
     switch (pawV_get_type(callable)) {
@@ -265,11 +274,23 @@ static int exceptional_call(paw_Env *P, Call call, void *arg)
 
 int pawC_try(paw_Env *P, Call call, void *arg)
 {
-    CallFrame *save_cf = P->cf;
+    CallFrame *cf = P->cf;
+    const ptrdiff_t top = save_offset(P, P->top.p);
     const int status = exceptional_call(P, call, arg);
     if (status != PAW_OK) {
-        // Jump back to the saved call frame.
-        P->cf = save_cf;
+        paw_assert(top <= save_offset(P, P->top.p));
+        StackPtr ptr = restore_pointer(P, top);
+        pawR_close_upvalues(P, ptr);
+        if (cf == &P->main) {
+            // relocate the error message
+            call_return(P, ptr, PAW_TRUE);
+        } else {
+            // TODO: The error message gets ignored so that the error status
+            //       can be returned in paw (no multi-return). Once that gets
+            //       implemented, the error message can be the second return value.
+            P->top.p = ptr;
+        }
+        P->cf = cf;
     }
     return status;
 }

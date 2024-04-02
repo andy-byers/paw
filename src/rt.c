@@ -35,8 +35,9 @@
 #define vm_continue continue
 #define vm_shift(n) (*vm_peek(n) = *vm_peek(0), vm_pop(n))
 #define vm_pop(n) pawC_stkdec(P, n)
-#define vm_peek(n) (&P->top.p[-(n)-1])
-#define vm_save() (cf->pc = pc, cf->top = P->top)
+#define vm_peek(n) (&P->top.p[-(n) - 1])
+#define vm_save() (vm_protect(), cf->top = P->top)
+#define vm_protect() (cf->pc = pc)
 #define vm_local() (&cf->base.p[Iw()])
 #define vm_upvalue() (fn->up[Iw()]->p.p)
 #define vm_const() (fn->p->k[Iw()])
@@ -617,7 +618,7 @@ enum {
     BASE_ENDS_WITH,
     BASE_CLONE,
 };
-#define iflag(i) (-(int)(i)-1)
+#define iflag(i) (-(int)(i) - 1)
 
 void pawR_init(paw_Env *P)
 {
@@ -639,6 +640,9 @@ void pawR_init(paw_Env *P)
         pawG_fix_object(P, cast_object(s));
         s->flag = iflag(i);
     }
+    String *errmsg = pawS_new_str(P, "not enough memory");
+    pawG_fix_object(P, cast_object(errmsg));
+    pawV_set_string(&P->mem_errmsg, errmsg);
 }
 
 static void array_insert(paw_Env *P, Array *a, int argc)
@@ -964,9 +968,9 @@ base_method(string_clone, String, string, 1)
 base_method(map_erase, Map, map, 0)
 base_method(map_clone, Map, map, 1)
 #undef base_method
-// clang-format on
+    // clang-format on
 
-static CallFrame *invoke(paw_Env *P, Value name, int argc)
+    static CallFrame *invoke(paw_Env *P, Value name, int argc)
 {
     CallFrame *cf = NULL;
     Value *base = vm_peek(argc);
@@ -1719,7 +1723,7 @@ static void cannonicalize_slice(paw_Env *P, size_t len, Value begin, Value end, 
     const paw_Int ibegin = pawV_is_null(begin)
                                ? 0 // null acts like 0
                                : pawA_abs_index(pawR_check_int(P, begin), len);
-    const paw_Int iend = pawV_is_null(end) 
+    const paw_Int iend = pawV_is_null(end)
                              ? paw_cast_int(len) // null acts like #a
                              : pawA_abs_index(pawR_check_int(P, end), len);
     // clamp to sequence bounds
@@ -1903,76 +1907,91 @@ top:
 
             vm_case(NEG) :
             {
+                vm_protect();
                 vm_unop(P, OP_NEG);
             }
 
             vm_case(NOT) :
             {
+                vm_protect();
                 vm_unop(P, OP_NOT);
             }
 
             vm_case(BNOT) :
             {
+                vm_protect();
                 vm_unop(P, OP_BNOT);
             }
 
             vm_case(SHL) :
             {
+                vm_protect();
                 vm_bitwise(P, OP_SHL);
             }
 
             vm_case(SHR) :
             {
+                vm_protect();
                 vm_bitwise(P, OP_SHR);
             }
 
             vm_case(BAND) :
             {
+                vm_protect();
                 vm_bitwise(P, OP_BAND);
             }
 
             vm_case(BOR) :
             {
+                vm_protect();
                 vm_bitwise(P, OP_BOR);
             }
 
             vm_case(BXOR) :
             {
+                vm_protect();
                 vm_bitwise(P, OP_BXOR);
             }
 
             vm_case(ADD) :
             {
+                vm_protect();
                 vm_arith(P, OP_ADD);
             }
 
             vm_case(SUB) :
             {
+                vm_protect();
                 vm_arith(P, OP_SUB);
             }
 
             vm_case(MUL) :
             {
+                vm_protect();
                 vm_arith(P, OP_MUL);
             }
 
             vm_case(DIV) :
             {
+                vm_protect();
                 vm_arith(P, OP_DIV);
             }
 
             vm_case(IDIV) :
             {
+                vm_protect();
                 vm_arith(P, OP_IDIV);
             }
 
             vm_case(MOD) :
             {
+                vm_protect();
                 vm_arith(P, OP_MOD);
             }
 
             vm_case(CONCAT) :
             {
+                vm_protect();
                 vm_concat(P);
             }
 
@@ -1983,33 +2002,41 @@ top:
 
             vm_case(LT) :
             {
+                vm_protect();
                 vm_compare(P, OP_LT);
             }
 
             vm_case(LE) :
             {
+                vm_protect();
                 vm_compare(P, OP_LE);
             }
 
             vm_case(IN) :
             {
+                vm_protect();
                 vm_in(P);
             }
 
             vm_case(NEWARRAY) :
             {
+                vm_protect();
                 const int n = Iw();
                 pawR_literal_array(P, n);
+                check_gc(P);
             }
 
             vm_case(NEWMAP) :
             {
+                vm_protect();
                 const int n = Iw();
                 pawR_literal_map(P, n);
+                check_gc(P);
             }
 
             vm_case(NEWCLASS) :
             {
+                vm_protect();
                 const Value name = vm_const();
                 const paw_Bool has_super = Ib();
                 Class *cls = pawV_push_class(P);
@@ -2028,10 +2055,12 @@ top:
                     P->top.p[-1] = P->top.p[-2];
                     P->top.p[-2] = tmp;
                 }
+                check_gc(P);
             }
 
             vm_case(NEWMETHOD) :
             {
+                vm_protect();
                 const Value name = vm_const();
                 const Value method = *vm_peek(0);
                 const Value object = *vm_peek(1);
@@ -2039,10 +2068,12 @@ top:
                 paw_assert(pawV_is_string(name));
                 pawH_insert(P, cls->attr, name, method);
                 vm_pop(1); // pop closure, leave class
+                check_gc(P);
             }
 
             vm_case(GETSUPER) :
             {
+                vm_protect();
                 // Attributes on 'super' can only refer to methods, not data fields.
                 const Value parent = *vm_peek(0);
                 const Value self = *vm_peek(1);
@@ -2062,6 +2093,7 @@ top:
 
             vm_case(INVOKESUPER) :
             {
+                vm_protect();
                 const Value parent = *vm_peek(0);
                 const Value name = vm_const();
                 const int argc = Ib();
@@ -2104,6 +2136,7 @@ top:
 
             vm_case(GETGLOBAL) :
             {
+                vm_protect();
                 const Value name = vm_const();
                 if (pawR_read_global(P, name)) {
                     pawR_name_error(P, name);
@@ -2112,6 +2145,7 @@ top:
 
             vm_case(SETGLOBAL) :
             {
+                vm_protect();
                 const Value name = vm_const();
                 // Error if 'name' does not exist
                 pawR_write_global(P, name, PAW_FALSE);
@@ -2125,16 +2159,19 @@ top:
 
             vm_case(GETATTR) :
             {
+                vm_protect();
                 pawR_getattr(P);
             }
 
             vm_case(SETATTR) :
             {
+                vm_protect();
                 pawR_setattr(P);
             }
 
             vm_case(GETITEM) :
             {
+                vm_protect();
                 if (pawR_getitem(P)) {
                     pawH_key_error(P, *vm_peek(0));
                 }
@@ -2142,16 +2179,19 @@ top:
 
             vm_case(SETITEM) :
             {
+                vm_protect();
                 pawR_setitem(P);
             }
 
             vm_case(GETSLICE) :
             {
+                vm_protect();
                 pawR_getslice(P);
             }
 
             vm_case(SETSLICE) :
             {
+                vm_protect();
                 pawR_setslice(P);
             }
 
@@ -2160,13 +2200,14 @@ top:
                 const int arg = Ib();
                 const int n = arg >> 1;
                 if (arg & 1) {
-                    pawR_close_upvalues(P, vm_peek(n)); 
+                    pawR_close_upvalues(P, vm_peek(n));
                 }
                 vm_pop(n);
             }
 
             vm_case(CLOSURE) :
             {
+                vm_protect();
                 Value *pv = vm_push0();
                 Proto *proto = fn->p->p[Iw()];
                 Closure *closure = pawV_new_closure(P, proto->nup);
@@ -2181,6 +2222,7 @@ top:
                                          ? capture_upvalue(P, cf->base.p + index)
                                          : fn->up[index];
                 }
+                check_gc(P);
             }
 
             vm_case(INVOKE) :
@@ -2232,6 +2274,7 @@ top:
 
             vm_case(VARARG) :
             {
+                vm_protect();
                 // must be run immediately after OP_CALL
                 const int nexpect = Ib();
                 const int nactual = vm_argc();
@@ -2248,6 +2291,7 @@ top:
                     // replace first variadic parameter with 'argv' array
                     vm_shift(nextra);
                 }
+                check_gc(P);
             }
 
             vm_case(JUMP) :
@@ -2283,6 +2327,7 @@ top:
 
             vm_case(FORNUM0) :
             {
+                vm_protect();
                 const int offset = vm_jmp();
                 if (fornum_init(P)) {
                     pc += offset; // skip
@@ -2299,6 +2344,7 @@ top:
 
             vm_case(FORIN0) :
             {
+                vm_protect();
                 const int offset = vm_jmp();
                 if (forin_init(P)) {
                     // Skip the loop. We need to add a dummy value to the stack,
@@ -2311,6 +2357,7 @@ top:
 
             vm_case(FORIN) :
             {
+                vm_protect(); // metamethod may throw an error
                 const int offset = vm_jmp();
                 if (forin(P)) {
                     pc += offset; // continue

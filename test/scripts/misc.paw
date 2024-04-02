@@ -1,3 +1,38 @@
+-- misc.paw
+
+{
+    fn test(a, b, c, d, e) {
+        fn fa() {
+            let _1
+            fn fb() {
+                let _1
+                let _2
+                fn fc() {
+                    let _1
+                    let _2
+                    let _3
+                    fn fd() {
+                        let _1
+                        let _2
+                        let _3
+                        let _4
+                        return 1 / e
+                    }
+                    return fd() / d
+                }
+                return fc() / c
+            }
+            return fb() / b
+        }
+        return fa() / a
+    }
+    assert(0 == try(test, 1, 1, 1, 1, 1))
+    assert(0 != try(test, 0, 1, 1, 1, 1))
+    assert(0 != try(test, 1, 0, 1, 1, 1))
+    assert(0 != try(test, 1, 1, 0, 1, 1))
+    assert(0 != try(test, 1, 1, 1, 0, 1))
+    assert(0 != try(test, 1, 1, 1, 1, 0))
+}
 
 {
     let a = []

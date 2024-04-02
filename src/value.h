@@ -49,6 +49,7 @@
 #define pawV_is_instance(v) (pawV_get_type(v) == VINSTANCE)
 #define pawV_is_method(v) (pawV_get_type(v) == VMETHOD)
 #define pawV_is_object(v) (pawV_get_type(v) - VOBJECT0 - 1 > VNUMBER - VOBJECT0 - 1)
+#define v_isnan(v) ((v).f != (v).f)
 
 #define obj2v_aux(o, t) \
     (Value) { .u = ((uint64_t)(o) >> 1) | ((uint64_t)(t) << 47) }
@@ -56,7 +57,7 @@
 #define pawV_set_object(p, o, t) (*(p) = obj2v_aux(o, t))
 #define pawV_set_null(p) ((p)->i = -1)
 #define pawV_set_bool(p, b) ((p)->u = ~((uint64_t)((b) + 1) << 47))
-#define pawV_set_int(p, i) ((p)->u = (uint64_t)VNUMBER << VINT_WIDTH | ((uint64_t)(i)&VINT_MASK))
+#define pawV_set_int(p, i) ((p)->u = (uint64_t)VNUMBER << VINT_WIDTH | ((uint64_t)(i) & VINT_MASK))
 
 #define pawV_set_float(p, F) ((p)->f = F)
 #define pawV_set_foreign(p, o) pawV_set_object(p, o, VFOREIGN)
@@ -210,18 +211,18 @@ typedef struct Proto {
         int pc0;
         int pc1;
         paw_Bool captured;
-    } * v;
+    } *v;
 
     struct UpValueInfo {
         String *name;
         uint16_t index;
         paw_Bool is_local;
-    } * u;
+    } *u;
 
     struct LineInfo {
         int pc;
         int line;
-    } * lines;
+    } *lines;
 
     // constants
     Value *k;
