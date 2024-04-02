@@ -121,7 +121,7 @@ static void fix_line(FnState *fn, int line)
     fn->proto->lines[fn->nlines - 1].line = line;
 }
 
-static void push8(Lex *lex, int code)
+static void add_opcode(Lex *lex, OpCode code)
 {
     FnState *fn = lex->fn;
     Proto *p = fn->proto;
@@ -129,34 +129,32 @@ static void push8(Lex *lex, int code)
     // While code is being generated, the pc is used to track the number of instructions, and
     // the length field the capacity. The length is set to the final pc value before execution.
     pawM_grow(ctx(fn->lex), p->source, fn->pc, p->length);
-    p->source[fn->pc] = code & 0xFF;
+    p->source[fn->pc] = code;
     ++fn->pc;
 }
 
-static void push16(Lex *lex, int code)
-{
-    push8(lex, code & 0xFF);
-    push8(lex, code >> 8);
-}
-
-static void emit(Lex *lex, int code)
+static void emit(Lex *lex, Op op)
 {
     add_line(lex);
-    push8(lex, code);
+    add_opcode(lex, create_OP(op));
 }
 
-static void emit_arg(Lex *lex, OpCode code, int tag)
+static void emit_S(Lex *lex, Op op, int s)
 {
     add_line(lex);
-    push8(lex, code);
-    push8(lex, tag);
+    add_opcode(lex, create_S(op, s));
 }
 
-static void emit_arg2(Lex *lex, OpCode code, int tag)
+static void emit_U(Lex *lex, Op op, int u)
 {
     add_line(lex);
-    push8(lex, code);
-    push16(lex, tag);
+    add_opcode(lex, create_U(op, u));
+}
+
+static void emit_AB(Lex *lex, Op op, int a, int b)
+{
+    add_line(lex);
+    add_opcode(lex, create_AB(op, a, b));
 }
 
 static int add_constant(Lex *lex, Value v)
@@ -209,7 +207,7 @@ static int emit_int(Lex *lex, Value v)
 {
     paw_assert(pawV_is_int(v) || pawV_is_bigint(v));
     const int location = add_constant(lex, v);
-    emit_arg2(lex, OP_PUSHCONST, location);
+    emit_U(lex, OP_PUSHCONST, location);
     return location;
 }
 
@@ -218,7 +216,7 @@ static int emit_float(Lex *lex, paw_Float f)
     Value v;
     pawV_set_float(&v, f);
     const int location = add_constant(lex, v);
-    emit_arg2(lex, OP_PUSHCONST, location);
+    emit_U(lex, OP_PUSHCONST, location);
     return location;
 }
 
@@ -226,32 +224,27 @@ static int emit_string(Lex *lex, String *s)
 {
     const Value v = obj2v(s);
     const int location = add_constant(lex, v);
-    emit_arg2(lex, OP_PUSHCONST, location);
+    emit_U(lex, OP_PUSHCONST, location);
     return location;
 }
 
-#define JUMP_PLACEHOLDER 0xFFFF
+#define JUMP_PLACEHOLDER (-1)
 
 static int emit_jump(Lex *lex, OpCode op)
 {
-    emit_arg2(lex, op, JUMP_PLACEHOLDER);
-    return lex->fn->pc - 2;
+    emit_S(lex, op, JUMP_PLACEHOLDER);
+    return lex->fn->pc - 1;
 }
 
 static void patch_jump(Lex *lex, int from, int to)
 {
     FnState *fn = lex->fn;
-    // NOTE: '- 2' is to account for the 16-bit opcode argument. When a jump forward
-    //       is executed, the PC is already past these 2 bytes.
-    int jump = to - from - 2;
+    const int jump = to - (from + 1);
     if (jump > JUMP_MAX) {
         limit_error(lex, "instructions to jump", JUMP_MAX);
     }
-    jump = encode_jump_over(jump);
-
     Proto *p = fn->proto;
-    p->source[from] = jump & 0xFF;
-    p->source[from + 1] = jump >> 8;
+    set_S(&p->source[from], jump);
 }
 
 static void patch_here(Lex *lex, int from)
@@ -259,31 +252,21 @@ static void patch_here(Lex *lex, int from)
     patch_jump(lex, from, lex->fn->pc);
 }
 
-static void emit_loop(Lex *lex, int op, int to)
+static void emit_loop(Lex *lex, Op op, int to)
 {
-    emit(lex, op);
-
     FnState *fn = lex->fn;
-    // NOTE: '+ 2' to jump over the 2 opcode argument bytes. See patch_jump().
-    int jump = fn->pc - to + 2;
+    const int jump = to - (fn->pc + 1);
     if (jump > JUMP_MAX) {
         limit_error(lex, "instructions in loop", JUMP_MAX);
     }
-    jump = encode_jump_back(jump);
-
-    push8(lex, jump & 0xFF);
-    push8(lex, jump >> 8);
+    emit_S(lex, op, jump);
 }
 
 static void emit_closure(Lex *lex, Proto *p, int id)
 {
     Value v;
     pawV_set_proto(&v, p);
-    emit_arg2(lex, OP_CLOSURE, id);
-    for (int i = 0; i < p->nup; ++i) {
-        struct UpValueInfo u = p->u[i]; // encode upvalue info
-        push16(lex, u.index | (u.is_local ? UPVALUE_LOCAL : 0));
-    }
+    emit_U(lex, OP_CLOSURE, id);
 }
 
 static void add_label(Lex *lex, LabelKind kind)
@@ -344,9 +327,8 @@ static void adjust_to(FnState *fn, LabelKind kind, int to)
     for (int i = blk->label0; i < ll->length;) {
         Label *lb = &ll->values[i];
         if (lb->kind == kind) {
-            const int jump = encode_jump_back(lb->pc - to + 2);
-            p->source[lb->pc + 1] = jump & 0xFF;
-            p->source[lb->pc + 2] = jump >> 8;
+            const int jump = to - (lb->pc + 1);
+            set_S(&p->source[lb->pc], jump);
             remove_label(ll, i);
         } else {
             ++i;
@@ -380,19 +362,19 @@ static void discharge_var(FnState *fn, ExprState *e)
             emit_string(lex, e->s);
             break;
         case EXPR_ARRAY:
-            emit_arg2(lex, OP_NEWARRAY, e->index /* a.length() */);
+            emit_U(lex, OP_NEWARRAY, e->index /* a.length() */);
             break;
         case EXPR_MAP:
-            emit_arg2(lex, OP_NEWMAP, e->index /* m.length() */);
+            emit_U(lex, OP_NEWMAP, e->index /* m.length() */);
             break;
         case EXPR_GLOBAL:
-            emit_arg2(lex, OP_GETGLOBAL, e->index);
+            emit_U(lex, OP_GETGLOBAL, e->index);
             break;
         case EXPR_LOCAL:
-            emit_arg2(lex, OP_GETLOCAL, e->index);
+            emit_U(lex, OP_GETLOCAL, e->index);
             break;
         case EXPR_UPVALUE:
-            emit_arg2(lex, OP_GETUPVALUE, e->index);
+            emit_U(lex, OP_GETUPVALUE, e->index);
             break;
         case EXPR_ITEM:
             emit(lex, OP_GETITEM);
@@ -414,13 +396,13 @@ static void assign_var(FnState *fn, ExprState *e)
     Lex *lex = fn->lex;
     switch (e->kind) {
         case EXPR_GLOBAL:
-            emit_arg2(lex, OP_SETGLOBAL, e->index);
+            emit_U(lex, OP_SETGLOBAL, e->index);
             break;
         case EXPR_LOCAL:
-            emit_arg2(lex, OP_SETLOCAL, e->index);
+            emit_U(lex, OP_SETLOCAL, e->index);
             break;
         case EXPR_UPVALUE:
-            emit_arg2(lex, OP_SETUPVALUE, e->index);
+            emit_U(lex, OP_SETUPVALUE, e->index);
             break;
         case EXPR_ITEM:
             emit(lex, OP_SETITEM);
@@ -515,8 +497,8 @@ static void add_debug_info(Lex *lex, String *name)
 {
     FnState *fn = lex->fn;
     Proto *p = fn->proto;
-    if (fn->ndebug == UINT16_MAX) {
-        limit_error(lex, "locals", UINT16_MAX);
+    if (fn->ndebug == LOCAL_MAX) {
+        limit_error(lex, "locals", LOCAL_MAX);
     } else if (fn->ndebug == p->ndebug) {
         pawM_grow(ctx(lex), p->v, fn->ndebug, p->ndebug);
         for (int i = fn->ndebug + 1; i < p->ndebug; ++i) {
@@ -557,7 +539,7 @@ static void close_vars(FnState *fn, int target)
             close = close ? close : local->captured;
         }
         const int npop = upper - lower; // 'lower' is 1 past end
-        emit_arg(lex, OP_CLOSE, (npop << 1) | close);
+        emit_AB(lex, OP_CLOSE, npop, close);
         level = lower;
     }
 }
@@ -587,7 +569,7 @@ static void init_var(Lex *lex, ExprState *e)
 static void define_var(Lex *lex, ExprState *e)
 {
     if (is_global(lex)) {
-        emit_arg2(lex, OP_GLOBAL, e->index);
+        emit_U(lex, OP_GLOBAL, e->index);
     } else {
         begin_local_scope(lex, 1);
     }
@@ -868,7 +850,7 @@ static void leave_function(Lex *lex)
     paw_assert(blk->outer == NULL);
 
     if (fn->kind == FN_INIT) {
-        emit_arg2(lex, OP_GETLOCAL, 0);
+        emit_U(lex, OP_GETLOCAL, 0);
         emit(lex, OP_RETURN);
     } else {
         emit(lex, OP_PUSHNULL);
@@ -975,8 +957,8 @@ static int call_parameters(Lex *lex)
         argc = 1;
         expr(lex);
         while (test_next(lex, ',')) {
-            if (argc == UINT8_MAX) {
-                limit_error(lex, "function parameters", UINT8_MAX);
+            if (argc == ARGC_MAX) {
+                limit_error(lex, "function parameters", ARGC_MAX);
             }
             expr(lex);
             ++argc;
@@ -1004,8 +986,7 @@ static void code_invoke(Lex *lex, Op op, ExprState *e)
     discard(e);
 
     const int argc = call_parameters(lex);
-    emit_arg2(lex, op, name);
-    emit(lex, argc);
+    emit_AB(lex, op, name, argc);
 }
 
 static void push_special(Lex *lex, unsigned ctag)
@@ -1044,13 +1025,12 @@ static void superexpr(Lex *lex, ExprState *e)
         const int argc = call_parameters(lex);
         push_special(lex, CSTR_SELF);
         push_special(lex, CSTR_SUPER);
-        emit_arg2(lex, OP_INVOKESUPER, name);
-        emit(lex, argc);
+        emit_AB(lex, OP_INVOKESUPER, name, argc);
         e->kind = EXPR_CALL;
     } else {
         push_special(lex, CSTR_SELF);
         push_special(lex, CSTR_SUPER);
-        emit_arg2(lex, OP_GETSUPER, name);
+        emit_U(lex, OP_GETSUPER, name);
         e->kind = EXPR_ATTR;
     }
 }
@@ -1126,8 +1106,8 @@ static void array_expr(Lex *lex, ExprState *e)
     do {
         if (test(lex, ']')) {
             break;
-        } else if (n == UINT16_MAX) {
-            limit_error(lex, "array elements", UINT16_MAX);
+        } else if (n == LOCAL_MAX) {
+            limit_error(lex, "array elements", LOCAL_MAX);
         }
         expr(lex);
         ++n;
@@ -1145,8 +1125,8 @@ static int itemlist(Lex *lex)
     do {
         if (test(lex, '}')) {
             break;
-        } else if (n == UINT16_MAX) {
-            limit_error(lex, "map items", UINT16_MAX);
+        } else if (n == LOCAL_MAX) {
+            limit_error(lex, "map items", LOCAL_MAX);
         }
         expr(lex);
         check_next(lex, ':');
@@ -1209,7 +1189,7 @@ static void call_expr(Lex *lex, ExprState *e)
 {
     discharge(e);
     const int argc = call_parameters(lex);
-    emit_arg(lex, OP_CALL, argc);
+    emit_U(lex, OP_CALL, argc);
     init_expr(e, EXPR_CALL, -1);
 }
 
@@ -1238,8 +1218,8 @@ static void fn_parameters(Lex *lex)
     if (!test_next(lex, ')')) {
         int vararg = 0;
         do {
-            if (argc == UINT8_MAX) {
-                limit_error(lex, "function parameters", UINT8_MAX);
+            if (argc == ARGC_MAX) {
+                limit_error(lex, "function parameters", ARGC_MAX);
             }
             switch (lex->t.kind) {
                 case TK_NAME:
@@ -1259,7 +1239,7 @@ static void fn_parameters(Lex *lex)
         if (vararg) {
             // All parameters passed to this function that occur at or beyond the
             // '...' will be stored in an array called 'argv'.
-            emit_arg(lex, OP_VARARG, argc);
+            emit_U(lex, OP_VARARG, argc);
             new_local_literal(lex, "argv");
             begin_local_scope(lex, 1);
             p->is_va = PAW_TRUE;
@@ -1564,7 +1544,7 @@ static void expression_stmt(Lex *lex)
     semicolon(lex);
 }
 
-static void forbody(Lex *lex, int init, int loop)
+static void forbody(Lex *lex, Op init, Op loop)
 {
     BlkState blk;
     FnState *fn = lex->fn;
@@ -1774,7 +1754,7 @@ static void method_def(Lex *lex)
     skip(lex); // name token
 
     function(lex, e.name, kind);
-    emit_arg2(lex, OP_NEWMETHOD, e.index);
+    emit_U(lex, OP_NEWMETHOD, e.index);
 }
 
 static void class_body(Lex *lex)
@@ -1811,8 +1791,7 @@ static void class_stmt(Lex *lex)
         discharge(&super);
         cls.has_super = PAW_TRUE;
     }
-    emit_arg2(lex, OP_NEWCLASS, tag);
-    push8(lex, cls.has_super);
+    emit_AB(lex, OP_NEWCLASS, tag, cls.has_super);
     define_var(lex, &e);
 
     BlkState blk;
@@ -1924,7 +1903,8 @@ void pawP_init(paw_Env *P)
         String *str = new_fixed_string(P, kw);
         str->flag = i + FIRST_KEYWORD;
     }
-    for (Op op = META1; op < NOPCODES; ++op) {
+    for (unsigned i = 0; i < NMETA; ++i) {
+        const unsigned op = i + META1;
         const char *name = pawT_name(op);
         String *str = new_fixed_string(P, name);
         pawV_set_string(&P->meta_keys[op2meta(op)], str);

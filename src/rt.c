@@ -38,10 +38,7 @@
 #define vm_peek(n) (&P->top.p[-(n) - 1])
 #define vm_save() (vm_protect(), cf->top = P->top)
 #define vm_protect() (cf->pc = pc)
-#define vm_local() (&cf->base.p[Iw()])
-#define vm_upvalue() (fn->up[Iw()]->p.p)
-#define vm_const() (fn->p->k[Iw()])
-#define vm_jmp() decode_jump(Iw())
+#define vm_upvalue(o) (fn->up[get_U(o)]->p.p)
 #define vm_pushv(v) pawC_pushv(P, v)
 #define vm_push0() pawC_push0(P)
 #define vm_pushi(i) pawC_pushi(P, i)
@@ -168,7 +165,7 @@ void pawR_error(paw_Env *P, int error, const char *fmt, ...)
     pawC_throw(P, error);
 }
 
-Value *get_meta(paw_Env *P, Op op, Value obj)
+Value *get_meta(paw_Env *P, unsigned op, Value obj)
 {
     if (has_meta(obj)) {
         const Value key = P->meta_keys[op2meta(op)];
@@ -356,7 +353,7 @@ void pawR_to_integer(paw_Env *P)
             // a bigint.
             vm_unop(P, OP_NEG);
         }
-    } else if (meta_unop(P, OP_INT, *sp)) {
+    } else if (meta_unop(P, MM_INT, *sp)) {
         // called sp->__int()
     } else {
         pawR_type_error(P, "int");
@@ -388,7 +385,7 @@ void pawR_to_float(paw_Env *P)
             pawV_set_float(sp, -f);
         }
         vm_shift(1);
-    } else if (meta_unop(P, OP_FLOAT, *sp)) {
+    } else if (meta_unop(P, MM_FLOAT, *sp)) {
         vm_shift(1);
     } else {
         pawR_type_error(P, "float");
@@ -399,7 +396,7 @@ const char *pawR_to_string(paw_Env *P, size_t *plen)
 {
     const char *out;
     Value v = *vm_peek(0);
-    if (meta_unop(P, OP_STR, v)) {
+    if (meta_unop(P, MM_STR, v)) {
         const String *str = pawV_get_string(*vm_peek(0));
         *plen = str->length;
         out = str->text;
@@ -605,314 +602,11 @@ void pawR_setitem(paw_Env *P)
     }
 }
 
-enum {
-    BASE_INSERT,
-    BASE_PUSH,
-    BASE_POP,
-    BASE_GET,
-    BASE_ERASE,
-    BASE_FIND,
-    BASE_SPLIT,
-    BASE_JOIN,
-    BASE_STARTS_WITH,
-    BASE_ENDS_WITH,
-    BASE_CLONE,
-};
-#define iflag(i) (-(int)(i) - 1)
-
 void pawR_init(paw_Env *P)
 {
-    static const char *kBaseMethods[] = {
-        "insert",
-        "push",
-        "pop",
-        "get",
-        "erase",
-        "find",
-        "split",
-        "join",
-        "starts_with",
-        "ends_with",
-        "clone",
-    };
-    for (size_t i = 0; i < paw_countof(kBaseMethods); ++i) {
-        String *s = pawS_new_str(P, kBaseMethods[i]);
-        pawG_fix_object(P, cast_object(s));
-        s->flag = iflag(i);
-    }
     String *errmsg = pawS_new_str(P, "not enough memory");
     pawG_fix_object(P, cast_object(errmsg));
     pawV_set_string(&P->mem_errmsg, errmsg);
-}
-
-static void array_insert(paw_Env *P, Array *a, int argc)
-{
-    pawR_check_argc(P, argc, 2);
-    const paw_Int i = pawR_check_int(P, *vm_peek(1));
-    pawA_insert(P, a, i, *vm_peek(0));
-    vm_pop(2);
-
-    pawV_set_null(vm_peek(0)); // return null
-}
-
-static void array_push(paw_Env *P, Array *a, int argc)
-{
-    pawR_check_varargc(P, argc, 1, UINT8_MAX);
-    for (int i = argc; i > 0; --i) {
-        pawA_push(P, a, *vm_peek(i - 1));
-    }
-    vm_pop(argc);
-
-    pawV_set_null(vm_peek(0)); // return null
-}
-
-static void array_pop(paw_Env *P, Array *a, int argc)
-{
-    pawR_check_varargc(P, argc, 0, 1);
-    // Argument, if present, indicates the index at which to remove an
-    // element. Default to -1: the last element.
-    const paw_Int i = argc ? pawV_get_int(*vm_peek(0)) : -1;
-
-    *vm_peek(argc) = *pawA_get(P, a, i); // checks bounds
-    pawA_pop(P, a, i);
-    vm_pop(argc);
-}
-
-static void array_clone(paw_Env *P, const Array *a, int argc)
-{
-    pawR_check_argc(P, argc, 0);
-    Value *pv = vm_push0();
-    pawA_clone(P, pv, a);
-    vm_shift(1);
-}
-
-static void array_invoke(paw_Env *P, Array *a, Value name, int argc)
-{
-    const String *key = pawV_get_string(name);
-    switch (iflag(key->flag)) {
-        case BASE_PUSH:
-            array_push(P, a, argc);
-            break;
-        case BASE_POP:
-            array_pop(P, a, argc);
-            break;
-        case BASE_INSERT:
-            array_insert(P, a, argc);
-            break;
-        case BASE_CLONE:
-            array_clone(P, a, argc);
-            break;
-        default:
-            pawR_attr_error(P, name);
-    }
-}
-
-static String *check_string(paw_Env *P, int top)
-{
-    const Value v = *vm_peek(top);
-    if (pawV_get_type(v) != VSTRING) {
-        pawR_error(P, PAW_ETYPE, "expected string");
-    }
-    return pawV_get_string(v);
-}
-
-static const char *find_substr(const char *str, size_t nstr, const char *sub, size_t nsub)
-{
-    if (nsub == 0) {
-        return str;
-    }
-    const char *ptr = str;
-    const char *end = str + nstr;
-    while ((ptr = strchr(ptr, sub[0]))) {
-        if (nsub <= cast_size(end - ptr) &&
-            0 == memcmp(ptr, sub, nsub)) {
-            return ptr;
-        }
-        str = ptr + nsub;
-    }
-    return NULL;
-}
-
-static void string_find(paw_Env *P, const String *s, int argc)
-{
-    pawR_check_argc(P, argc, 1);
-    const String *find = check_string(P, 0);
-    const char *result = find_substr(s->text, s->length, find->text, find->length);
-    if (result) {
-        pawV_set_int(vm_peek(1), result - s->text); // index of substring
-    } else {
-        pawV_set_int(vm_peek(1), -1); // not found
-    }
-    vm_pop(1);
-}
-
-static void string_split(paw_Env *P, const String *s, int argc)
-{
-    pawR_check_argc(P, argc, 1);
-    const String *sep = check_string(P, 0);
-    if (sep->length == 0) {
-        pawR_error(P, PAW_EVALUE, "empty separator");
-    }
-
-    paw_Int npart = 0;
-    const char *part;
-    size_t nstr = s->length;
-    const char *pstr = s->text;
-    while ((part = find_substr(pstr, nstr, sep->text, sep->length))) {
-        const size_t n = cast_size(part - pstr);
-        pawC_pushns(P, pstr, n);
-        part += sep->length; // skip separator
-        pstr = part;
-        nstr -= n;
-        ++npart;
-    }
-    const char *end = s->text + s->length; // add the rest
-    pawC_pushns(P, pstr, cast_size(end - pstr));
-    ++npart;
-
-    pawR_literal_array(P, npart);
-    vm_shift(2);
-}
-
-static void string_join(paw_Env *P, const String *s, int argc)
-{
-    pawR_check_argc(P, argc, 1);
-    const Value seq = *vm_peek(0);
-
-    Buffer buf;
-    pawL_init_buffer(P, &buf);
-    paw_Int itr = PAW_ITER_INIT;
-    if (pawV_is_array(seq)) {
-        Array *a = pawV_get_array(seq);
-        while (pawA_iter(a, &itr)) {
-            const Value v = a->begin[itr];
-            if (!pawV_is_string(v)) {
-                pawR_type_error(P, "join");
-            }
-            // Add a chunk, followed by the separator if necessary.
-            const String *chunk = pawV_get_string(v);
-            pawL_add_nstring(P, &buf, chunk->text, chunk->length);
-            if (cast_size(itr + 1) < pawA_length(a)) {
-                pawL_add_nstring(P, &buf, s->text, s->length);
-            }
-        }
-    } else {
-        pawR_type_error(P, "join");
-    }
-    pawL_push_result(P, &buf);
-    vm_shift(2);
-}
-
-static void string_starts_with(paw_Env *P, const String *s, int argc)
-{
-    pawR_check_argc(P, argc, 1);
-    const String *prefix = check_string(P, 0);
-    const size_t prelen = prefix->length;
-    const paw_Bool b = s->length >= prelen &&
-                       0 == memcmp(prefix->text, s->text, prelen);
-    pawV_set_bool(vm_peek(1), b);
-    vm_pop(1);
-}
-
-static void string_ends_with(paw_Env *P, const String *s, int argc)
-{
-    pawR_check_argc(P, argc, 1);
-    const String *suffix = check_string(P, 0);
-    const size_t suflen = suffix->length;
-    paw_Bool b = PAW_FALSE;
-    if (s->length >= suflen) {
-        const char *ptr = s->text + s->length - suflen;
-        b = 0 == memcmp(suffix->text, ptr, suflen);
-    }
-    pawV_set_bool(vm_peek(1), b);
-    vm_pop(1);
-}
-
-static void string_clone(paw_Env *P, const String *s, int argc)
-{
-    paw_unused(s);
-    // Leave the string 's' on top of the stack. The copy of the 's' pointer into
-    // this function's parameter list serves as the clone. Strings are immutable:
-    // and have copy-on-write sematics.
-    pawR_check_argc(P, argc, 0);
-}
-
-static void string_invoke(paw_Env *P, const String *s, Value name, int argc)
-{
-    const String *key = pawV_get_string(name);
-    switch (iflag(key->flag)) {
-        case BASE_STARTS_WITH:
-            string_starts_with(P, s, argc);
-            break;
-        case BASE_ENDS_WITH:
-            string_ends_with(P, s, argc);
-            break;
-        case BASE_FIND:
-            string_find(P, s, argc);
-            break;
-        case BASE_SPLIT:
-            string_split(P, s, argc);
-            break;
-        case BASE_JOIN:
-            string_join(P, s, argc);
-            break;
-        case BASE_CLONE:
-            string_clone(P, s, argc);
-            break;
-        default:
-            pawR_attr_error(P, name);
-    }
-}
-
-static void map_get(paw_Env *P, Map *m, int argc)
-{
-    pawR_check_varargc(P, argc, 1, 2);
-    const Value key = *vm_peek(argc - 1);
-    const Value *pv = pawH_get(P, m, key);
-    if (pv) {
-        *vm_peek(argc) = *pv;
-        vm_pop(argc);
-    } else if (argc == 2) {
-        // return default value
-        vm_shift(2);
-    } else {
-        pawH_key_error(P, key);
-    }
-}
-
-static void map_erase(paw_Env *P, Map *m, int argc)
-{
-    pawR_check_argc(P, argc, 1);
-    pawH_remove(P, m, *vm_peek(0));
-    vm_pop(1);
-
-    pawV_set_null(vm_peek(0)); // return null
-}
-
-static void map_clone(paw_Env *P, Map *m, int argc)
-{
-    pawR_check_argc(P, argc, 0);
-    Value *pv = vm_push0();
-    pawH_clone(P, pv, m);
-    vm_shift(1);
-}
-
-static void map_invoke(paw_Env *P, Map *m, Value name, int argc)
-{
-    const String *key = pawV_get_string(name);
-    switch (iflag(key->flag)) {
-        case BASE_GET:
-            map_get(P, m, argc);
-            break;
-        case BASE_ERASE:
-            map_erase(P, m, argc);
-            break;
-        case BASE_CLONE:
-            map_clone(P, m, argc);
-            break;
-        default:
-            pawR_attr_error(P, name);
-    }
 }
 
 static CallFrame *super_invoke(paw_Env *P, Class *super, Value name, int argc)
@@ -928,19 +622,6 @@ static CallFrame *super_invoke(paw_Env *P, Class *super, Value name, int argc)
 
 static paw_Bool bound_call(paw_Env *P, CallFrame **pcf, Value obj, StackPtr base, Value name, int argc)
 {
-    if (pawV_is_string(obj)) {
-        String *s = pawV_get_string(obj);
-        string_invoke(P, s, name, argc);
-        return PAW_TRUE;
-    } else if (pawV_is_array(obj)) {
-        Array *a = pawV_get_array(obj);
-        array_invoke(P, a, name, argc);
-        return PAW_TRUE;
-    } else if (pawV_is_map(obj)) {
-        Map *m = pawV_get_map(obj);
-        map_invoke(P, m, name, argc);
-        return PAW_TRUE;
-    }
     Value *bound = pawV_find_binding(P, obj, name);
     if (bound) {
         *pcf = pawC_precall(P, base, *bound, argc);
@@ -949,28 +630,7 @@ static paw_Bool bound_call(paw_Env *P, CallFrame **pcf, Value obj, StackPtr base
     return PAW_FALSE;
 }
 
-// clang-format off
-#define base_method(func, Type, type, nret)            \
-    int pawR_##func(paw_Env *P)                        \
-    {                                                  \
-        const int argc = paw_get_count(P) - 1;         \
-        Type *obj = pawV_get_##type(P->cf->base.p[0]); \
-        func(P, obj, argc);                            \
-        return (nret);                                 \
-    }
-base_method(array_insert, Array, array, 0)
-base_method(array_push, Array, array, 0)
-base_method(array_pop, Array, array, 1)
-base_method(array_clone, Array, array, 1)
-base_method(string_starts_with, String, string, 1)
-base_method(string_ends_with, String, string, 1)
-base_method(string_clone, String, string, 1)
-base_method(map_erase, Map, map, 0)
-base_method(map_clone, Map, map, 1)
-#undef base_method
-    // clang-format on
-
-    static CallFrame *invoke(paw_Env *P, Value name, int argc)
+static CallFrame *invoke(paw_Env *P, Value name, int argc)
 {
     CallFrame *cf = NULL;
     Value *base = vm_peek(argc);
@@ -1003,9 +663,9 @@ static void inherit(paw_Env *P, Class *cls, const Class *super)
 
 static paw_Bool fornum_init(paw_Env *P)
 {
-    Value c = *vm_peek(0);
-    Value b = *vm_peek(1);
-    Value a = *vm_peek(2);
+    const Value c = *vm_peek(0);
+    const Value b = *vm_peek(1);
+    const Value a = *vm_peek(2);
     // FIXME: Only small integers are supported right now, but we should also support
     //        big integers. Floats are not really necessary, as float loop bounds are
     //        seldom a good idea IMO.
@@ -1841,7 +1501,7 @@ void pawR_literal_map(paw_Env *P, int n)
 static paw_Bool should_jump_null(paw_Env *P)
 {
     const Value *pv = vm_peek(0);
-    if (meta_unop(P, OP_NULL, *pv)) {
+    if (meta_unop(P, MM_NULL, *pv)) {
         if (pawV_is_null(*vm_peek(0))) {
             vm_pop(1);
             return PAW_TRUE;
@@ -1855,7 +1515,7 @@ static paw_Bool should_jump_null(paw_Env *P)
 static paw_Bool should_jump_false(paw_Env *P)
 {
     const Value *pv = vm_peek(0);
-    if (meta_unop(P, OP_BOOL, *pv)) {
+    if (meta_unop(P, MM_BOOL, *pv)) {
         const paw_Bool jump = !pawV_truthy(*vm_peek(0));
         vm_pop(1);
         return jump;
@@ -1866,14 +1526,17 @@ static paw_Bool should_jump_false(paw_Env *P)
 void pawR_execute(paw_Env *P, CallFrame *cf)
 {
     const OpCode *pc;
+    const Value *K;
     Closure *fn;
 
 top:
     pc = cf->pc;
     fn = cf->fn;
+    K = fn->p->k;
 
     for (;;) {
-        vm_switch(*pc++)
+        const OpCode opcode = *pc++;
+        vm_switch(get_OP(opcode))
         {
             vm_case(POP) :
             {
@@ -1897,7 +1560,7 @@ top:
 
             vm_case(PUSHCONST) :
             {
-                vm_pushv(vm_const());
+                vm_pushv(K[get_U(opcode)]);
             }
 
             vm_case(LEN) :
@@ -2021,27 +1684,24 @@ top:
             vm_case(NEWARRAY) :
             {
                 vm_protect();
-                const int n = Iw();
-                pawR_literal_array(P, n);
+                pawR_literal_array(P, get_U(opcode));
                 check_gc(P);
             }
 
             vm_case(NEWMAP) :
             {
                 vm_protect();
-                const int n = Iw();
-                pawR_literal_map(P, n);
+                pawR_literal_map(P, get_U(opcode));
                 check_gc(P);
             }
 
             vm_case(NEWCLASS) :
             {
                 vm_protect();
-                const Value name = vm_const();
-                const paw_Bool has_super = Ib();
+                const Value name = K[get_A(opcode)];
                 Class *cls = pawV_push_class(P);
                 cls->name = pawV_get_string(name);
-                if (has_super) {
+                if (get_B(opcode)) {
                     const Value parent = *vm_peek(1);
                     if (!pawV_is_class(parent)) {
                         pawR_error(P, PAW_ETYPE, "superclass is not of 'class' type");
@@ -2061,7 +1721,7 @@ top:
             vm_case(NEWMETHOD) :
             {
                 vm_protect();
-                const Value name = vm_const();
+                const Value name = K[get_U(opcode)];
                 const Value method = *vm_peek(0);
                 const Value object = *vm_peek(1);
                 Class *cls = pawV_get_class(object);
@@ -2077,7 +1737,7 @@ top:
                 // Attributes on 'super' can only refer to methods, not data fields.
                 const Value parent = *vm_peek(0);
                 const Value self = *vm_peek(1);
-                const Value name = vm_const();
+                const Value name = K[get_U(opcode)];
                 vm_pop(1); // pop 'parent'
 
                 Class *super = pawV_get_class(parent);
@@ -2095,8 +1755,8 @@ top:
             {
                 vm_protect();
                 const Value parent = *vm_peek(0);
-                const Value name = vm_const();
-                const int argc = Ib();
+                const Value name = K[get_A(opcode)];
+                const int argc = get_B(opcode);
                 vm_pop(1); // pop 'parent'
                 vm_save();
 
@@ -2110,26 +1770,26 @@ top:
 
             vm_case(GETLOCAL) :
             {
-                const Value local = *vm_local();
+                const Value local = cf->base.p[get_U(opcode)];
                 vm_pushv(local);
             }
 
             vm_case(SETLOCAL) :
             {
-                Value *plocal = vm_local();
+                Value *plocal = &cf->base.p[get_U(opcode)];
                 *plocal = *vm_peek(0);
                 vm_pop(1);
             }
 
             vm_case(GETUPVALUE) :
             {
-                const Value upval = *vm_upvalue();
+                const Value upval = *vm_upvalue(opcode);
                 vm_pushv(upval);
             }
 
             vm_case(SETUPVALUE) :
             {
-                Value *pupval = vm_upvalue();
+                Value *pupval = vm_upvalue(opcode);
                 *pupval = *vm_peek(0);
                 vm_pop(1);
             }
@@ -2137,7 +1797,7 @@ top:
             vm_case(GETGLOBAL) :
             {
                 vm_protect();
-                const Value name = vm_const();
+                const Value name = K[get_U(opcode)];
                 if (pawR_read_global(P, name)) {
                     pawR_name_error(P, name);
                 }
@@ -2146,14 +1806,14 @@ top:
             vm_case(SETGLOBAL) :
             {
                 vm_protect();
-                const Value name = vm_const();
+                const Value name = K[get_U(opcode)];
                 // Error if 'name' does not exist
                 pawR_write_global(P, name, PAW_FALSE);
             }
 
             vm_case(GLOBAL) :
             {
-                const Value name = vm_const();
+                const Value name = K[get_U(opcode)];
                 pawR_write_global(P, name, PAW_TRUE);
             }
 
@@ -2197,9 +1857,8 @@ top:
 
             vm_case(CLOSE) :
             {
-                const int arg = Ib();
-                const int n = arg >> 1;
-                if (arg & 1) {
+                const int n = get_A(opcode);
+                if (get_B(opcode)) {
                     pawR_close_upvalues(P, vm_peek(n));
                 }
                 vm_pop(n);
@@ -2209,26 +1868,26 @@ top:
             {
                 vm_protect();
                 Value *pv = vm_push0();
-                Proto *proto = fn->p->p[Iw()];
+                Proto *proto = fn->p->p[get_U(opcode)];
                 Closure *closure = pawV_new_closure(P, proto->nup);
                 pawV_set_closure(pv, closure);
                 closure->p = proto;
 
                 // open upvalues
+                StackPtr base = cf->base.p;
                 for (int i = 0; i < closure->nup; ++i) {
-                    const int tag = Iw();
-                    const int index = tag & UPVALUE_MAX;
-                    closure->up[i] = tag & UPVALUE_LOCAL
-                                         ? capture_upvalue(P, cf->base.p + index)
-                                         : fn->up[index];
+                    const struct UpValueInfo u = proto->u[i];
+                    closure->up[i] = u.is_local
+                                         ? capture_upvalue(P, base + u.index)
+                                         : fn->up[u.index];
                 }
                 check_gc(P);
             }
 
             vm_case(INVOKE) :
             {
-                const Value name = vm_const();
-                const uint8_t argc = Ib();
+                const Value name = K[get_A(opcode)];
+                const uint8_t argc = get_B(opcode);
                 vm_save();
 
                 CallFrame *callee = invoke(P, name, argc);
@@ -2240,7 +1899,7 @@ top:
 
             vm_case(CALL) :
             {
-                const uint8_t argc = Ib();
+                const uint8_t argc = get_U(opcode);
                 StackPtr ptr = vm_peek(argc);
                 if (meta_call(P, OP_CALL, *ptr, argc)) {
                     vm_continue; // called ptr->__call(...)
@@ -2276,7 +1935,7 @@ top:
             {
                 vm_protect();
                 // must be run immediately after OP_CALL
-                const int nexpect = Ib();
+                const int nexpect = get_U(opcode);
                 const int nactual = vm_argc();
                 const int nextra = nactual - nexpect;
                 Value *pv;
@@ -2296,31 +1955,27 @@ top:
 
             vm_case(JUMP) :
             {
-                const int offset = vm_jmp();
-                pc += offset;
+                pc += get_S(opcode);
             }
 
             vm_case(JUMPNULL) :
             {
-                const int offset = vm_jmp();
                 if (should_jump_null(P)) {
-                    pc += offset;
+                    pc += get_S(opcode);
                 }
             }
 
             vm_case(JUMPFALSE) :
             {
-                const int offset = vm_jmp();
                 if (should_jump_false(P)) {
-                    pc += offset;
+                    pc += get_S(opcode);
                 }
             }
 
             vm_case(JUMPFALSEPOP) :
             {
-                const int offset = vm_jmp();
                 if (should_jump_false(P)) {
-                    pc += offset;
+                    pc += get_S(opcode);
                 }
                 vm_pop(1);
             }
@@ -2328,39 +1983,35 @@ top:
             vm_case(FORNUM0) :
             {
                 vm_protect();
-                const int offset = vm_jmp();
                 if (fornum_init(P)) {
-                    pc += offset; // skip
+                    pc += get_S(opcode); // skip
                 }
             }
 
             vm_case(FORNUM) :
             {
-                const int offset = vm_jmp();
                 if (fornum(P)) {
-                    pc += offset; // continue
+                    pc += get_S(opcode); // continue
                 }
             }
 
             vm_case(FORIN0) :
             {
                 vm_protect();
-                const int offset = vm_jmp();
                 if (forin_init(P)) {
                     // Skip the loop. We need to add a dummy value to the stack,
                     // since there was an 'OP_POP' generated to pop it. See
                     // forin() in parse.c for details.
                     vm_push0();
-                    pc += offset;
+                    pc += get_S(opcode);
                 }
             }
 
             vm_case(FORIN) :
             {
                 vm_protect(); // metamethod may throw an error
-                const int offset = vm_jmp();
                 if (forin(P)) {
-                    pc += offset; // continue
+                    pc += get_S(opcode); // continue
                 }
             }
 

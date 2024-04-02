@@ -7,10 +7,6 @@
 #include "env.h"
 #include "paw.h"
 
-// Immediate operands:
-#define Ib() (pc += 1, (int)pc[-1])
-#define Iw() (pc += 2, (int)(pc[-2] | pc[-1] << 8))
-
 void pawR_init(paw_Env *P);
 
 void pawR_to_integer(paw_Env *P);

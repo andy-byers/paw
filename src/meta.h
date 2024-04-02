@@ -65,6 +65,6 @@
 #define mm_has_r(op) ((op) >= META2)
 #define mm_get_r(op) ((op) + METAR - META2)
 
-const char *pawT_name(Op op);
+const char *pawT_name(unsigned op);
 
 #endif // PAW_META_H

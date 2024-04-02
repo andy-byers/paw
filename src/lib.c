@@ -211,6 +211,213 @@ static int base_setattr(paw_Env *P)
     return 0;
 }
 
+static int array_insert(paw_Env *P)
+{
+    pawL_check_argc(P, 2);
+    Array *a = pawV_get_array(cf_base(0));
+    const paw_Int i = pawL_check_int(P, 1);
+    pawA_insert(P, a, i, cf_base(2));
+    return 0;
+}
+
+static int array_push(paw_Env *P)
+{
+    const int argc = pawL_check_varargc(P, 1, UINT8_MAX);
+    Array *a = pawV_get_array(cf_base(0));
+    for (int i = 0; i < argc; ++i) {
+        pawA_push(P, a, cf_base(i + 1));
+    }
+    return 0;
+}
+
+static int array_pop(paw_Env *P)
+{
+    const int argc = pawL_check_varargc(P, 0, 1);
+    // Argument, if present, indicates the index at which to remove an
+    // element. Default to -1: the last element.
+    const paw_Int i = argc ? pawV_get_int(cf_base(1)) : -1;
+    Array *a = pawV_get_array(cf_base(0));
+
+    P->top.p[-1] = *pawA_get(P, a, i); // may replace 'a'
+    pawA_pop(P, a, i);                 // never allocates, last line OK
+    return 1;
+}
+
+static int array_clone(paw_Env *P)
+{
+    pawL_check_argc(P, 0);
+    Array *a = pawV_get_array(cf_base(0));
+    Value *pv = pawC_push0(P);
+    pawA_clone(P, pv, a);
+    return 1;
+}
+
+static String *check_string(paw_Env *P, int i)
+{
+    const Value v = cf_base(i);
+    if (pawV_get_type(v) != VSTRING) {
+        pawR_error(P, PAW_ETYPE, "expected string");
+    }
+    return pawV_get_string(v);
+}
+
+static const char *find_substr(const char *str, size_t nstr, const char *sub, size_t nsub)
+{
+    if (nsub == 0) {
+        return str;
+    }
+    const char *ptr = str;
+    const char *end = str + nstr;
+    while ((ptr = strchr(ptr, sub[0]))) {
+        if (nsub <= cast_size(end - ptr) &&
+            0 == memcmp(ptr, sub, nsub)) {
+            return ptr;
+        }
+        str = ptr + nsub;
+    }
+    return NULL;
+}
+
+static int string_find(paw_Env *P)
+{
+    pawL_check_argc(P, 1);
+    const String *find = check_string(P, 1);
+    String *s = pawV_get_string(cf_base(0));
+    const char *result = find_substr(s->text, s->length, find->text, find->length);
+    if (result) {
+        pawV_set_int(P->top.p - 1, result - s->text); // index of substring
+    } else {
+        pawV_set_int(P->top.p - 1, -1); // not found
+    }
+    return 1;
+}
+
+static int string_split(paw_Env *P)
+{
+    pawL_check_argc(P, 1);
+    const String *sep = check_string(P, 1);
+    String *s = pawV_get_string(cf_base(0));
+    if (sep->length == 0) {
+        pawR_error(P, PAW_EVALUE, "empty separator");
+    }
+
+    paw_Int npart = 0;
+    const char *part;
+    size_t nstr = s->length;
+    const char *pstr = s->text;
+    while ((part = find_substr(pstr, nstr, sep->text, sep->length))) {
+        const size_t n = cast_size(part - pstr);
+        pawC_pushns(P, pstr, n);
+        part += sep->length; // skip separator
+        pstr = part;
+        nstr -= n;
+        ++npart;
+    }
+    const char *end = s->text + s->length; // add the rest
+    pawC_pushns(P, pstr, cast_size(end - pstr));
+    ++npart;
+
+    pawR_literal_array(P, npart);
+    return 1;
+}
+
+static int string_join(paw_Env *P)
+{
+    pawL_check_argc(P, 1);
+    const Value seq = cf_base(1);
+    String *s = pawV_get_string(cf_base(0));
+
+    Buffer buf;
+    pawL_init_buffer(P, &buf);
+    paw_Int itr = PAW_ITER_INIT;
+    if (pawV_is_array(seq)) {
+        Array *a = pawV_get_array(seq);
+        while (pawA_iter(a, &itr)) {
+            const Value v = a->begin[itr];
+            if (!pawV_is_string(v)) {
+                pawR_type_error(P, "join");
+            }
+            // Add a chunk, followed by the separator if necessary.
+            const String *chunk = pawV_get_string(v);
+            pawL_add_nstring(P, &buf, chunk->text, chunk->length);
+            if (cast_size(itr + 1) < pawA_length(a)) {
+                pawL_add_nstring(P, &buf, s->text, s->length);
+            }
+        }
+    } else {
+        pawR_type_error(P, "join");
+    }
+    pawL_push_result(P, &buf);
+    return 1;
+}
+
+static int string_starts_with(paw_Env *P)
+{
+    pawL_check_argc(P, 1);
+    const String *prefix = check_string(P, 1);
+    const size_t prelen = prefix->length;
+    String *s = pawV_get_string(cf_base(0));
+    const paw_Bool b = s->length >= prelen &&
+                       0 == memcmp(prefix->text, s->text, prelen);
+    pawV_set_bool(P->top.p - 1, b);
+    return 1;
+}
+
+static int string_ends_with(paw_Env *P)
+{
+    pawL_check_argc(P, 1);
+    const String *suffix = check_string(P, 1);
+    const size_t suflen = suffix->length;
+    paw_Bool b = PAW_FALSE;
+    String *s = pawV_get_string(cf_base(0));
+    if (s->length >= suflen) {
+        const char *ptr = s->text + s->length - suflen;
+        b = 0 == memcmp(suffix->text, ptr, suflen);
+    }
+    pawV_set_bool(P->top.p - 1, b);
+    return 1;
+}
+
+static int string_clone(paw_Env *P)
+{
+    // Leave the string receiver on top of the stack. The copy of the string into
+    // this function's receiver slot serves as the clone. Strings are immutable:
+    // and have copy-on-write sematics.
+    pawL_check_argc(P, 0);
+    return 1;
+}
+
+static int map_get(paw_Env *P)
+{
+    const int argc = pawL_check_varargc(P, 1, 2);
+    const Value key = cf_base(1);
+    Map *m = pawV_get_map(cf_base(0));
+    const Value *pv = pawH_get(P, m, key);
+    if (pv) {
+        P->top.p[-1] = *pv;
+    } else if (argc != 2) {
+        pawH_key_error(P, key);
+    }
+    return 1;
+}
+
+static int map_erase(paw_Env *P)
+{
+    pawL_check_argc(P, 1);
+    Map *m = pawV_get_map(cf_base(0));
+    pawH_remove(P, m, cf_base(1));
+    return 0;
+}
+
+static int map_clone(paw_Env *P)
+{
+    pawL_check_argc(P, 0);
+    Map *m = pawV_get_map(cf_base(0));
+    Value *pv = pawC_push0(P);
+    pawH_clone(P, pv, m);
+    return 1;
+}
+
 static int count_bindings(paw_Env *P, const pawL_Attr *attr)
 {
     int nbound = 0;
@@ -293,23 +500,27 @@ static const pawL_Attr kBaseLib[] = {
 };
 
 static const pawL_Attr kArrayMethods[] = {
-    {"insert", pawR_array_insert},
-    {"push", pawR_array_push},
-    {"pop", pawR_array_pop},
-    {"clone", pawR_array_clone},
+    {"insert", array_insert},
+    {"push", array_push},
+    {"pop", array_pop},
+    {"clone", array_clone},
     {0}
 };
 
 static const pawL_Attr kMapMethods[] = {
-    {"erase", pawR_map_erase},
-    {"clone", pawR_map_clone},
+    {"get", map_get},
+    {"erase", map_erase},
+    {"clone", map_clone},
     {0}
 };
 
 static const pawL_Attr kStringMethods[] = {
-    {"starts_with", pawR_string_starts_with},
-    {"ends_with", pawR_string_ends_with},
-    {"clone", pawR_string_clone},
+    {"find", string_find},
+    {"join", string_join},
+    {"split", string_split},
+    {"starts_with", string_starts_with},
+    {"ends_with", string_ends_with},
+    {"clone", string_clone},
     {0}
 };
 
@@ -330,6 +541,12 @@ static void init_object(paw_Env *P, Foreign **pfr, int i)
     const struct Builtin b = kBuiltin[i];
     *pfr = pawV_new_builtin(P, b.nattr);
     pawG_fix_object(P, cast_object(*pfr));
+    for (int i = 0; i < b.nattr; ++i) {
+        String *name = pawS_new_str(P, b.attr[i].name);
+        if (cast_object(name) == P->gc_all) {
+            pawG_fix_object(P, cast_object(name));
+        }
+    }
     load_bindings(P, *pfr, 0, b.attr, b.nattr, PAW_TRUE);
 }
 
@@ -352,11 +569,6 @@ void pawL_init(paw_Env *P)
     for (size_t i = 0; i < NOBJECTS; ++i, ++pfr) {
         init_object(P, pfr, i);
     }
-
-    Foreign *obj;
-    // Create an object to hold common functions on builtin types.
-    init_object(P, &obj, NOBJECTS);
-    pawV_set_foreign(&P->object, obj);
 }
 
 // 'pawL_register_*lib' functions defined in corresponding '*lib.c' source files

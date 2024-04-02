@@ -203,7 +203,7 @@ typedef struct Proto {
 
     String *modname;
     String *name;
-    uint8_t *source;
+    uint32_t *source;
     int length;
 
     struct LocalInfo {

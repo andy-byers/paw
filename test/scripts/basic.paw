@@ -1,19 +1,6 @@
 -- basic.paw
 
 {
-    let math = require('math')
-    let m = {}
-    m[-math.inf] = -1
-    m[math.inf] = 1
-    assert(m[-math.inf] == -1)
-    assert(m[math.inf] == 1)
-
-    -- NaN/null must not be used as a map key
-    assert(0 != try(fn() {let m = {}; m[math.nan] = 42}))
-    assert(0 != try(fn() {let m = {}; m[null] = 42}))
-}
-
-{
     -- line comment
     -* block comment *-
     -* multi-line

@@ -66,10 +66,6 @@ const char *paw_opcode_name(Op op)
             return "NEWMAP";
         case OP_VARARG:
             return "VARARG";
-        case OP_UNPACK:
-            return "UNPACK";
-        case OP_UNPACKEX:
-            return "UNPACKEX";
         case OP_FORNUM0:
             return "FORNUM0";
         case OP_FORNUM:
@@ -128,44 +124,6 @@ const char *paw_opcode_name(Op op)
             return "GETITEM";
         case OP_SETITEM:
             return "SETITEM";
-        case OP_RADD:
-            return "RADD";
-        case OP_RSUB:
-            return "RSUB";
-        case OP_RMUL:
-            return "RMUL";
-        case OP_RDIV:
-            return "RDIV";
-        case OP_RIDIV:
-            return "RIDIV";
-        case OP_RMOD:
-            return "RMOD";
-        case OP_RPOW:
-            return "RPOW";
-        case OP_RCONCAT:
-            return "RCONCAT";
-        case OP_RBXOR:
-            return "RBXOR";
-        case OP_RBAND:
-            return "RBAND";
-        case OP_RBOR:
-            return "RBOR";
-        case OP_RSHL:
-            return "RSHL";
-        case OP_RSHR:
-            return "RSHR";
-        case OP_STR:
-            return "STR";
-        case OP_INT:
-            return "INT";
-        case OP_FLOAT:
-            return "FLOAT";
-        case OP_BOOL:
-            return "BOOL";
-        case OP_ARRAY:
-            return "ARRAY";
-        case OP_MAP:
-            return "MAP";
         default:
             return "???";
     }
@@ -181,65 +139,66 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
     pawL_add_fstring(P, print, "' (%I bytes)\n", (paw_Int)proto->length);
     pawL_add_fstring(P, print, "constant(s) = %I, upvalue(s) = %I\n", (paw_Int)proto->nk, (paw_Int)proto->nup);
     for (int i = 0; pc != end; ++i) {
-        pawL_add_fstring(P, print, "%d  %I  %s", i, (paw_Int)(pc - proto->source), paw_opcode_name(pc[0]));
-        switch (*pc++) {
+        pawL_add_fstring(P, print, "%d  %I  %s", i, (paw_Int)(pc - proto->source), paw_opcode_name(get_OP(pc[0])));
+        const OpCode opcode = *pc++;
+        switch (get_OP(opcode)) {
             case OP_PUSHCONST: {
-                pawL_add_fstring(P, print, " ; id = %d", Iw());
+                pawL_add_fstring(P, print, " ; id = %d", get_U(opcode));
                 break;
             }
 
             case OP_NEWARRAY: {
-                pawL_add_fstring(P, print, " ; %d elements", Iw());
+                pawL_add_fstring(P, print, " ; %d elements", get_U(opcode));
                 break;
             }
 
             case OP_NEWMAP: {
-                pawL_add_fstring(P, print, " ; %d items", Iw());
+                pawL_add_fstring(P, print, " ; %d items", get_U(opcode));
                 break;
             }
 
             case OP_FORNUM0: {
-                pawL_add_fstring(P, print, " ; offset = %d", decode_jump(Iw()));
+                pawL_add_fstring(P, print, " ; offset = %d", get_S(opcode));
                 break;
             }
 
             case OP_FORIN0: {
-                pawL_add_fstring(P, print, " ; offset = %d", decode_jump(Iw()));
+                pawL_add_fstring(P, print, " ; offset = %d", get_S(opcode));
                 break;
             }
 
             case OP_FORNUM: {
-                pawL_add_fstring(P, print, " ; offset = %d", decode_jump(Iw()));
+                pawL_add_fstring(P, print, " ; offset = %d", get_S(opcode));
                 break;
             }
 
             case OP_FORIN: {
-                pawL_add_fstring(P, print, " ; offset = %d", decode_jump(Iw()));
+                pawL_add_fstring(P, print, " ; offset = %d", get_S(opcode));
                 break;
             }
 
             case OP_GETLOCAL: {
-                pawL_add_fstring(P, print, " ; id = %d", Iw());
+                pawL_add_fstring(P, print, " ; id = %d", get_U(opcode));
                 break;
             }
 
             case OP_SETLOCAL: {
-                pawL_add_fstring(P, print, " ; id = %d", Iw());
+                pawL_add_fstring(P, print, " ; id = %d", get_U(opcode));
                 break;
             }
 
             case OP_GETUPVALUE: {
-                pawL_add_fstring(P, print, "%d", Iw());
+                pawL_add_fstring(P, print, "%d", get_U(opcode));
                 break;
             }
 
             case OP_SETUPVALUE: {
-                pawL_add_fstring(P, print, "%d", Iw());
+                pawL_add_fstring(P, print, "%d", get_U(opcode));
                 break;
             }
 
             case OP_GETGLOBAL: {
-                const int iw = Iw();
+                const int iw = get_U(opcode);
                 const Value v = proto->k[iw];
                 const String *s = pawV_get_string(v);
                 pawL_add_string(P, print, " ; id = ");
@@ -248,27 +207,27 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
             }
 
             case OP_SETGLOBAL: {
-                pawL_add_fstring(P, print, " ; id = %d", Iw());
+                pawL_add_fstring(P, print, " ; id = %d", get_U(opcode));
                 break;
             }
 
             case OP_GLOBAL: {
-                pawL_add_fstring(P, print, " ; k = %d", Iw());
+                pawL_add_fstring(P, print, " ; k = %d", get_U(opcode));
                 break;
             }
 
             case OP_NEWCLASS: {
-                pawL_add_fstring(P, print, " ; k = %d", Iw());
+                pawL_add_fstring(P, print, " ; k = %d, superclass? %d", get_A(opcode), get_B(opcode));
                 break;
             }
 
             case OP_NEWMETHOD: {
-                pawL_add_fstring(P, print, " ; k = %d", Iw());
+                pawL_add_fstring(P, print, " ; k = %d", get_U(opcode));
                 break;
             }
 
             case OP_CLOSURE: {
-                const int idx = Iw();
+                const int idx = get_U(opcode);
                 Proto *p = proto->p[idx];
                 String *s = p->name;
                 pawL_add_string(P, print, " ; '");
@@ -278,42 +237,39 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
                     pawL_add_string(P, print, "<anonymous fn>");
                 }
                 pawL_add_fstring(P, print, "', nup = %I", (paw_Int)p->nup);
-                for (int i = 0; i < p->nup; ++i) {
-                    paw_unused(Iw());
-                }
                 break;
             }
 
             case OP_INVOKE: {
-                const int id = Iw();
-                pawL_add_fstring(P, print, " ; id = %d, # params = %d", id, Ib());
+                const int id = get_A(opcode);
+                pawL_add_fstring(P, print, " ; id = %d, # params = %d", id, get_B(opcode));
                 break;
             }
 
             case OP_CALL: {
-                pawL_add_fstring(P, print, " ; # params = %d", Ib());
+                pawL_add_fstring(P, print, " ; # params = %d", get_U(opcode));
                 break;
             }
 
             case OP_VARARG: {
-                const int nfixed = Ib();
+                const int nfixed = get_U(opcode);
                 const int npassed = paw_get_count(P) - 1;
                 pawL_add_fstring(P, print, " ; # argv = %d", npassed - nfixed);
                 break;
             }
 
             case OP_JUMP: {
-                pawL_add_fstring(P, print, " ; offset = %d", decode_jump(Iw()));
+                pawL_add_fstring(P, print, " ; offset = %d", get_S(opcode));
                 break;
             }
 
             case OP_JUMPFALSE: {
-                pawL_add_fstring(P, print, " ; offset = %d", decode_jump(Iw()));
+                pawL_add_fstring(P, print, " ; offset = %d", get_S(opcode));
                 break;
             }
 
             case OP_JUMPNULL: {
-                pawL_add_fstring(P, print, " ; offset = %d", decode_jump(Iw()));
+                pawL_add_fstring(P, print, " ; offset = %d", get_S(opcode));
                 break;
             }
 
