@@ -64,8 +64,6 @@
     pm = pawH_new(P);       \
     pawV_set_map(pv, pm);
 
-static void vm_unop(paw_Env *P, Op op);
-
 static Value vint(paw_Int i)
 {
     Value v;
@@ -165,18 +163,18 @@ void pawR_error(paw_Env *P, int error, const char *fmt, ...)
     pawC_throw(P, error);
 }
 
-Value *get_meta(paw_Env *P, unsigned op, Value obj)
+Value *get_meta(paw_Env *P, Metamethod mm, Value obj)
 {
     if (has_meta(obj)) {
-        const Value key = P->meta_keys[op2meta(op)];
+        const Value key = P->meta_keys[mm];
         return pawV_find_binding(P, obj, key);
     }
     return NULL;
 }
 
-static paw_Bool meta_call(paw_Env *P, Op op, Value x, int argc)
+static paw_Bool meta_call(paw_Env *P, Value x, int argc)
 {
-    const Value *meta = get_meta(P, op, x);
+    const Value *meta = get_meta(P, MM_CALL, x);
     if (meta) {
         // Expect 'x', followed by 'argc' args, on top of the stack.
         pawC_call(P, *meta, argc);
@@ -185,9 +183,9 @@ static paw_Bool meta_call(paw_Env *P, Op op, Value x, int argc)
     return PAW_FALSE;
 }
 
-static paw_Bool meta_unop(paw_Env *P, Op op, Value x)
+static paw_Bool meta_single(paw_Env *P, Metamethod mm, Value x)
 {
-    const Value *meta = get_meta(P, op, x);
+    const Value *meta = get_meta(P, mm, x);
     if (meta) {
         vm_pushv(x);
         pawC_call(P, *meta, 0);
@@ -196,13 +194,57 @@ static paw_Bool meta_unop(paw_Env *P, Op op, Value x)
     return PAW_FALSE;
 }
 
-static paw_Bool meta_binop_r(paw_Env *P, Op op, Value x, Value y)
+static paw_Bool meta_unop(paw_Env *P, UnaryOp op, Value x)
 {
+    return meta_single(P, unop2meta(op), x);
+}
+
+static paw_Bool meta_binop_aux(paw_Env *P, BinaryOp binop, Value x, Value y)
+{
+    const Value *meta = get_meta(P, binop2meta(binop), x);
+    if (meta) {
+        StackPtr sp = pawC_stkinc(P, 2);
+        sp[0] = x;
+        sp[1] = y;
+        pawC_call(P, *meta, 1);
+        return PAW_TRUE;
+    }
+    return PAW_FALSE;
+}
+
+static paw_Bool meta_eq_ne(paw_Env *P, BinaryOp binop, Value x, Value y)
+{
+    paw_assert(binop == BINARY_EQ || binop == BINARY_NE);
+    return meta_binop_aux(P, binop, x, y) ||
+           meta_binop_aux(P, binop, y, x);
+}
+
+static paw_Bool meta_binop(paw_Env *P, BinaryOp binop, Value x, Value y)
+{
+    switch (binop) {
+        case BINARY_LT:
+            return meta_binop_aux(P, BINARY_LT, x, y) ||
+                   meta_binop_aux(P, BINARY_GT, y, x);
+        case BINARY_LE:
+            return meta_binop_aux(P, BINARY_LE, x, y) ||
+                   meta_binop_aux(P, BINARY_GE, y, x);
+        case BINARY_GT:
+            return meta_binop_aux(P, BINARY_GT, x, y) ||
+                   meta_binop_aux(P, BINARY_LT, y, x);
+        case BINARY_GE:
+            return meta_binop_aux(P, BINARY_GE, x, y) ||
+                   meta_binop_aux(P, BINARY_LE, y, x);
+        case BINARY_IN:
+            return meta_binop_aux(P, BINARY_IN, y, x);
+        default:
+            break;
+    }
+
     paw_Bool swap = PAW_FALSE;
-    const Value *meta = get_meta(P, op, x);
-    if (!meta && mm_has_r(op)) {
+    const Value *meta = get_meta(P, binop2meta(binop), x);
+    if (!meta && binop_has_r(binop)) {
         // Check the reverse metamethod (i.e. y.__<binop>r(x)).
-        meta = get_meta(P, mm_get_r(op), y);
+        meta = get_meta(P, binop_r(binop), y);
         swap = PAW_TRUE;
     }
     if (meta) {
@@ -215,44 +257,9 @@ static paw_Bool meta_binop_r(paw_Env *P, Op op, Value x, Value y)
     return PAW_FALSE;
 }
 
-static paw_Bool meta_binop(paw_Env *P, Op op, Value x, Value y)
-{
-    const Value *meta = get_meta(P, op, x);
-    if (meta) {
-        StackPtr sp = pawC_stkinc(P, 2);
-        sp[0] = x;
-        sp[1] = y;
-        pawC_call(P, *meta, 1);
-        return PAW_TRUE;
-    }
-    return PAW_FALSE;
-}
-
-static paw_Bool meta_contains(paw_Env *P, Value obj, Value key)
-{
-    return meta_binop(P, OP_IN, obj, key);
-}
-
-static paw_Bool meta_equals(paw_Env *P, Value x, Value y)
-{
-    return meta_binop(P, OP_EQ, x, y) ||
-           meta_binop(P, OP_EQ, y, x);
-}
-
-static paw_Bool meta_compare(paw_Env *P, Op op, Value x, Value y)
-{
-    if (meta_binop(P, op, x, y)) {
-        return PAW_TRUE;
-    } else if ((op == OP_LT && meta_binop(P, OP_GT, y, x)) ||
-               (op == OP_LE && meta_binop(P, OP_GE, y, x))) {
-        return PAW_TRUE; // called 'opposite' metamethod
-    }
-    return PAW_FALSE;
-}
-
 static inline paw_Bool meta_getter(paw_Env *P, Op op, Value obj, Value key)
 {
-    const Value *meta = get_meta(P, op, obj);
+    const Value *meta = get_meta(P, op - METAMETHOD0, obj);
     if (meta) {
         StackPtr sp = pawC_stkinc(P, 2);
         sp[0] = obj;
@@ -265,7 +272,7 @@ static inline paw_Bool meta_getter(paw_Env *P, Op op, Value obj, Value key)
 
 static inline paw_Bool meta_getslice(paw_Env *P, Value obj, Value begin, Value end)
 {
-    const Value *meta = get_meta(P, OP_GETSLICE, obj);
+    const Value *meta = get_meta(P, MM_GETSLICE, obj);
     if (meta) {
         StackPtr sp = pawC_stkinc(P, 3);
         sp[0] = obj;
@@ -279,7 +286,7 @@ static inline paw_Bool meta_getslice(paw_Env *P, Value obj, Value begin, Value e
 
 static inline paw_Bool meta_setslice(paw_Env *P, Value obj, Value begin, Value end, Value val)
 {
-    const Value *meta = get_meta(P, OP_SETSLICE, obj);
+    const Value *meta = get_meta(P, MM_SETSLICE, obj);
     if (meta) {
         StackPtr sp = pawC_stkinc(P, 4);
         sp[0] = obj;
@@ -295,7 +302,7 @@ static inline paw_Bool meta_setslice(paw_Env *P, Value obj, Value begin, Value e
 
 static inline paw_Bool meta_setter(paw_Env *P, Op op, Value obj, Value key, Value val)
 {
-    const Value *meta = get_meta(P, op, obj);
+    const Value *meta = get_meta(P, op - METAMETHOD0, obj);
     if (meta) {
         StackPtr sp = pawC_stkinc(P, 3);
         sp[0] = obj;
@@ -351,9 +358,9 @@ void pawR_to_integer(paw_Env *P)
         if (neg) {
             // Call the main negation routine, since the parsed integer may be
             // a bigint.
-            vm_unop(P, OP_NEG);
+            pawR_unop(P, UNARY_NEG);
         }
-    } else if (meta_unop(P, MM_INT, *sp)) {
+    } else if (meta_single(P, MM_INT, *sp)) {
         // called sp->__int()
     } else {
         pawR_type_error(P, "int");
@@ -385,7 +392,7 @@ void pawR_to_float(paw_Env *P)
             pawV_set_float(sp, -f);
         }
         vm_shift(1);
-    } else if (meta_unop(P, MM_FLOAT, *sp)) {
+    } else if (meta_single(P, MM_FLOAT, *sp)) {
         vm_shift(1);
     } else {
         pawR_type_error(P, "float");
@@ -396,7 +403,7 @@ const char *pawR_to_string(paw_Env *P, size_t *plen)
 {
     const char *out;
     Value v = *vm_peek(0);
-    if (meta_unop(P, MM_STR, v)) {
+    if (meta_single(P, MM_STR, v)) {
         const String *str = pawV_get_string(*vm_peek(0));
         *plen = str->length;
         out = str->text;
@@ -405,13 +412,6 @@ const char *pawR_to_string(paw_Env *P, size_t *plen)
     }
     vm_shift(1);
     return out;
-}
-
-static void try_float2(paw_Env *P, Value *pv, Value *pv2, const char *what)
-{
-    if (pawV_num2float(pv) || pawV_num2float(pv2)) {
-        pawR_type_error2(P, what);
-    }
 }
 
 static Value *find_attr(paw_Env *P, Value obj, Value name)
@@ -705,7 +705,7 @@ static paw_Bool fornum(paw_Env *P)
 static paw_Bool meta_forin_init(paw_Env *P, Value v)
 {
     ptrdiff_t save = save_offset(P, P->top.p);
-    if (meta_unop(P, OP_LEN, v)) {
+    if (meta_unop(P, UNARY_LEN, v)) {
         if (paw_int(P, -1) > 0) {
             vm_pop(1); // pop length
             // Attempt to get the first item. If 'v' has __getitem, then
@@ -751,7 +751,7 @@ static paw_Bool forin_init(paw_Env *P)
 static paw_Bool meta_forin(paw_Env *P, Value v, paw_Int itr)
 {
     // push the length
-    meta_unop(P, OP_LEN, v);
+    meta_unop(P, UNARY_LEN, v);
 
     ++itr;
     const paw_Int len = paw_int(P, -1);
@@ -796,46 +796,6 @@ static paw_Bool forin(paw_Env *P)
     return PAW_FALSE; // stop the loop
 }
 
-static void int_arith(paw_Env *P, Op op, Value lhs, Value rhs);
-
-static void float_arith(paw_Env *P, Op op, Value lhs, Value rhs)
-{
-    const paw_Float x = pawV_get_float(lhs);
-    const paw_Float y = pawV_get_float(rhs);
-    paw_Float z = 0.0; // result
-    switch (op) {
-        case OP_ADD:
-            z = x + y;
-            break;
-        case OP_SUB:
-            z = x - y;
-            break;
-        case OP_MUL:
-            z = x * y;
-            break;
-        case OP_DIV:
-        case OP_MOD:
-            if (y == 0) {
-                pawR_error(P, PAW_ERUNTIME, "divide by 0");
-            } else if (op == OP_DIV) {
-                z = x / y;
-            } else {
-                z = fmod(x, y);
-            }
-            break;
-        default: {
-            paw_assert(op == OP_IDIV);
-            if (y == 0) {
-                pawR_error(P, PAW_ERUNTIME, "divide by 0");
-            }
-            const paw_Float f = x / y;
-            float2integer(P, f);
-            return;
-        }
-    }
-    vm_pushf(z);
-}
-
 static paw_Bool mul_overflow(paw_Env *P, paw_Int x, paw_Int y)
 {
     if (check_mul_overflow(x, y)) {
@@ -843,75 +803,19 @@ static paw_Bool mul_overflow(paw_Env *P, paw_Int x, paw_Int y)
         // commutative, so just do 'y * x' and fix the stack after.
         StackPtr sp = vm_push0(); // placeholder
         pawB_from_int(P, sp, y);
-        pawB_arith(P, OP_MUL, *sp, vint(x));
+        pawB_binop(P, BINARY_MUL, *sp, vint(x));
         vm_shift(1);
         return PAW_TRUE;
     }
     return PAW_FALSE;
 }
 
-static void int_arith(paw_Env *P, Op op, Value lhs, Value rhs)
-{
-    paw_Int x = pawV_get_int(lhs);
-    paw_Int y = pawV_get_int(rhs);
-    paw_Int z = 0; // result
-    switch (op) {
-        // Addition and subtraction will never overflow the native type used
-        // for a paw_Int, but may result in a value smaller than VINT_MIN
-        // or larger than VINT_MAX. Out-of-range values are converted to
-        // BigInt below.
-        case OP_ADD:
-            z = x + y;
-            break;
-        case OP_SUB:
-            z = x - y;
-            break;
-        case OP_MUL:
-            if (mul_overflow(P, x, y)) {
-                return;
-            } else {
-                z = x * y;
-            }
-            break;
-        case OP_IDIV:
-        case OP_MOD:
-            if (y == 0) {
-                pawR_error(P, PAW_ERUNTIME, "divide by 0");
-            } else if (op == OP_IDIV) {
-                z = x / y;
-            } else {
-                z = x % y;
-            }
-            break;
-        default:
-            paw_assert(op == OP_DIV);
-            pawV_set_float(&lhs, (paw_Float)x);
-            pawV_set_float(&rhs, (paw_Float)y);
-            float_arith(P, op, lhs, rhs);
-            return;
-    }
-    if (pawV_int_fits_int(z)) {
-        vm_pushi(z);
-    } else {
-        Value *pv = vm_push0();
-        pawB_from_int(P, pv, z);
-    }
-}
+#define finish_strcmp(x, y, op) (pawS_cmp(x, y) op 0)
 
-static void string_arith(paw_Env *P, Op op, Value lhs, Value rhs)
+static int string_binop(paw_Env *P, BinaryOp binop, Value lhs, Value rhs)
 {
-    if (op == OP_ADD) {
-        if (pawV_is_string(lhs) && pawV_is_string(rhs)) {
-            Buffer print;
-            pawL_init_buffer(P, &print);
-            String *x = pawV_get_string(lhs);
-            String *y = pawV_get_string(rhs);
-            pawL_add_nstring(P, &print, x->text, x->length);
-            pawL_add_nstring(P, &print, y->text, y->length);
-            pawL_push_result(P, &print); // Push
-            return;
-        }
-    } else if (op == OP_MUL) {
+    if (binop == BINARY_MUL) {
+        // 's * n' and 'n * s' repeat string 's' 'n' times
         String *s;
         paw_Int n;
         if (pawV_is_string(lhs)) {
@@ -927,9 +831,41 @@ static void string_arith(paw_Env *P, Op op, Value lhs, Value rhs)
             pawL_add_nstring(P, &print, s->text, s->length);
         }
         pawL_push_result(P, &print); // push
-        return;
+        vm_shift(2);
+        return 0;
+    } else if (!pawV_is_string(lhs) || !pawV_is_string(rhs)) {
+        return -1; // all other operators require 2 string operands
     }
-    pawR_type_error2(P, "arithmetic operator");
+
+    const String *x = pawV_get_string(lhs);
+    const String *y = pawV_get_string(rhs);
+    switch (binop) {
+        case BINARY_ADD: {
+            // 's + t' concatenates strings 's' and 't'
+            Buffer print;
+            pawL_init_buffer(P, &print);
+            pawL_add_nstring(P, &print, x->text, x->length);
+            pawL_add_nstring(P, &print, y->text, y->length);
+            pawL_push_result(P, &print);
+            break;
+        }
+        case BINARY_LT:
+            vm_pushb(finish_strcmp(x, y, <));
+            break;
+        case BINARY_LE:
+            vm_pushb(finish_strcmp(x, y, <=));
+            break;
+        case BINARY_GT:
+            vm_pushb(finish_strcmp(x, y, >));
+            break;
+        case BINARY_GE:
+            vm_pushb(finish_strcmp(x, y, >=));
+            break;
+        default:
+            return -1;
+    }
+    vm_shift(2);
+    return 0;
 }
 
 Array *concat_arrays(paw_Env *P, const Array *x, const Array *y)
@@ -949,16 +885,17 @@ Array *concat_arrays(paw_Env *P, const Array *x, const Array *y)
     return cat;
 }
 
-static void array_arith(paw_Env *P, Op op, Value lhs, Value rhs)
+static int array_binop(paw_Env *P, BinaryOp binop, Value lhs, Value rhs)
 {
-    if (op == OP_ADD) {
+    if (binop == BINARY_ADD) {
         if (pawV_is_array(lhs) && pawV_is_array(rhs)) {
             Array *x = pawV_get_array(lhs);
             Array *y = pawV_get_array(rhs);
             concat_arrays(P, x, y);
-            return;
+            vm_shift(2);
+            return 0;
         }
-    } else if (op == OP_MUL) {
+    } else if (binop == BINARY_MUL) {
         Array *a;
         paw_Int n;
         if (pawV_is_array(lhs)) {
@@ -975,172 +912,131 @@ static void array_arith(paw_Env *P, Op op, Value lhs, Value rhs)
             cat = concat_arrays(P, cat, a);
             vm_shift(1); // copy over old 'cat'
         }
+        vm_shift(2);
+        return 0;
+    }
+    return -1;
+}
+
+static paw_Bool eq_different(Value x, Value y)
+{
+    if (pawV_is_float(x) || pawV_is_float(y)) {
+        const paw_Float fx = pawV_to_float(x);
+        const paw_Float fy = pawV_to_float(y);
+        return fx == fy;
+    } else if (pawV_is_bool(x) || pawV_is_bool(y)) {
+        return pawV_truthy(x) == pawV_truthy(y);
+    } else if (pawV_is_bigint(x) || pawV_is_bigint(y)) {
+        return pawB_equals(x, y);
+    }
+    return PAW_FALSE;
+}
+
+static void eq_ne(paw_Env *P, BinaryOp binop, Value x, Value y)
+{
+    paw_Bool result;
+    const paw_Bool bt = binop == BINARY_EQ;
+    const paw_Bool bf = binop != BINARY_EQ;
+    if (pawV_get_type(x) != pawV_get_type(y)) {
+        if (!has_meta(x) && !has_meta(y)) {
+            result = eq_different(x, y);
+            pawV_set_bool(vm_peek(1), result ? bt : bf);
+            vm_pop(1);
+            return;
+        }
+    } else if (pawV_is_object(x)) {
+        if (pawV_is_bigint(x)) {
+            result = pawB_equals(x, y);
+        } else if (pawV_is_array(x)) {
+            const Array *lhs = pawV_get_array(x);
+            const Array *rhs = pawV_get_array(y);
+            result = pawA_equals(P, lhs, rhs);
+        } else if (pawV_is_map(x)) {
+            Map *lhs = pawV_get_map(x);
+            Map *rhs = pawV_get_map(y);
+            result = pawH_equals(P, lhs, rhs);
+        } else {
+            goto compare_values;
+        }
+        pawV_set_bool(vm_peek(1), result ? bt : bf);
+        vm_pop(1);
+        return;
+    } else {
+        goto compare_values;
+    }
+    if (meta_eq_ne(P, binop, x, y)) {
+        vm_shift(2);
         return;
     }
-    pawR_type_error2(P, "arithmetic operator");
+compare_values:
+    // Fall back to comparing the value representation.
+    result = x.u == y.u ? bt : bf;
+    pawV_set_bool(vm_peek(1), result);
+    vm_pop(1);
 }
 
-static void int_rel(paw_Env *P, Op op, paw_Int x, paw_Int y)
-{
-    if (op == OP_LT) {
-        vm_pushb(x < y);
-    } else { // op == OP_LE
-        vm_pushb(x <= y);
-    }
-}
+#define finish_cmp(x, y, op) (pawV_set_bool(vm_peek(1), (x)op(y)), vm_pop(1))
 
-static void float_rel(paw_Env *P, Op op, paw_Float x, paw_Float y)
-{
-    if (op == OP_LT) {
-        vm_pushb(x < y);
-    } else { // op == OP_LE
-        vm_pushb(x <= y);
-    }
-}
+static int float_binop(paw_Env *P, BinaryOp binop, paw_Float x, paw_Float y);
 
-static void string_rel(paw_Env *P, Op op, String *x, String *y)
+static int int_binop(paw_Env *P, BinaryOp binop, paw_Int x, paw_Int y)
 {
-    if (op == OP_LT) {
-        vm_pushb(pawS_cmp(x, y) < 0);
-    } else { // op == OP_LE
-        vm_pushb(pawS_cmp(x, y) <= 0);
-    }
-}
-
-static Value fetch(paw_Env *P, int i)
-{
-    Value *pv = vm_peek(i);
-    if (pawV_is_bool(*pv)) {
-        pawV_set_int(pv, pawV_get_bool(*pv));
-    }
-    return *pv;
-}
-
-static void vm_compare(paw_Env *P, Op op)
-{
-    Value y = fetch(P, 0);
-    Value x = fetch(P, 1);
-    if (pawV_is_int(x) && pawV_is_int(y)) {
-        int_rel(P, op, pawV_get_int(x), pawV_get_int(y));
-    } else if (pawV_is_float(x) && pawV_is_float(y)) {
-        float_rel(P, op, pawV_get_float(x), pawV_get_float(y));
-    } else if (pawV_is_string(x) && pawV_is_string(y)) {
-        string_rel(P, op, pawV_get_string(x), pawV_get_string(y));
-    } else if (meta_compare(P, op, x, y)) {
-        // called 'x.__*(y)' or 'y.__*(x)'
-    } else if (pawV_is_float(x) || pawV_is_float(y)) {
-        try_float2(P, &x, &y, "relational comparison");
-        float_rel(P, op, pawV_get_float(x), pawV_get_float(y));
-    } else if (pawV_is_bigint(x) || pawV_is_bigint(y)) {
-        vm_pushb(pawB_compare(P, op, x, y));
-    } else {
-        pawR_type_error2(P, "relational comparison");
-    }
-    vm_shift(2);
-}
-
-static void int_unop(paw_Env *P, Op op, paw_Int i)
-{
-    switch (op) {
-        case OP_NEG:
-            if (i == VINT_MIN) {
-                // The expression '-VINT_MIN' will overflow. Convert to VBIGINT.
-                Value *pv = vm_push0();
-                BigInt *bi = pawB_from_int(P, pv, i);
-                pawB_unop(P, OP_NEG, obj2v(bi));
-                vm_shift(1);
-                break;
-            }
-            vm_pushi(-i);
-            break;
-        case OP_NOT:
-            vm_pushb(!i);
-            break;
-        default:
-            paw_assert(op == OP_BNOT);
-            vm_pushi(~i);
-    }
-}
-
-static void float_unop(paw_Env *P, Op op, paw_Float f)
-{
-    switch (op) {
-        case OP_NEG:
-            vm_pushf(-f);
-            break;
-        case OP_NOT:
-            vm_pushb(!f);
-            break;
-        default:
-            paw_assert(op == OP_BNOT);
-            pawR_type_error(P, "bitwise operator");
-    }
-}
-
-static void vm_unop(paw_Env *P, Op op)
-{
-    Value x = fetch(P, 0);
-    if (pawV_is_int(x)) {
-        const paw_Int i = pawV_get_int(x);
-        int_unop(P, op, i);
-    } else if (pawV_is_float(x)) {
-        const paw_Float f = pawV_get_float(x);
-        float_unop(P, op, f);
-    } else if (pawV_is_bigint(x)) {
-        pawB_unop(P, op, x);
-    } else if (meta_unop(P, op, x)) {
-        // called metamethod on 'x'
-    } else if (op == OP_NOT) {
-        // allows expressions like '!str'
-        vm_pushb(!pawV_truthy(x));
-    } else {
-        pawR_type_error(P, "unary operator");
-    }
-    vm_shift(1);
-}
-
-static void vm_arith(paw_Env *P, Op op)
-{
-    Value y = fetch(P, 0);
-    Value x = fetch(P, 1);
-    if (pawV_is_int(x) && pawV_is_int(y)) {
-        int_arith(P, op, x, y);
-    } else if (pawV_is_float(x) && pawV_is_float(y)) {
-        float_arith(P, op, x, y);
-    } else if (meta_binop_r(P, op, x, y)) {
-        // called metamethod on either 'x' or 'y'
-    } else if (pawV_is_string(x) || pawV_is_string(y)) {
-        string_arith(P, op, x, y);
-    } else if (pawV_is_array(x) || pawV_is_array(y)) {
-        array_arith(P, op, x, y);
-    } else if (pawV_is_float(x) || pawV_is_float(y)) {
-        try_float2(P, &x, &y, "arithmetic operator");
-        float_arith(P, op, x, y);
-    } else if (pawV_is_bigint(x) || pawV_is_bigint(y)) {
-        pawB_arith(P, op, x, y);
-    } else {
-        pawR_type_error2(P, "arithmetic operator");
-    }
-    vm_shift(2);
-}
-
-static void int_bitwise(paw_Env *P, Op op, Value lhs, Value rhs)
-{
-    paw_Int x = pawV_get_int(lhs);
-    paw_Int y = pawV_get_int(rhs);
     paw_Int z = 0;
-
-    switch (op) {
-        case OP_BAND:
+    switch (binop) {
+        case BINARY_LT:
+            finish_cmp(x, y, <);
+            return 0;
+        case BINARY_LE:
+            finish_cmp(x, y, <=);
+            return 0;
+        case BINARY_GT:
+            finish_cmp(x, y, >);
+            return 0;
+        case BINARY_GE:
+            finish_cmp(x, y, >=);
+            return 0;
+        // Addition and subtraction will never overflow the native type used
+        // for a paw_Int, but may result in a value smaller than VINT_MIN
+        // or larger than VINT_MAX. Out-of-range values are converted to
+        // BigInt below.
+        case BINARY_ADD:
+            z = x + y;
+            break;
+        case BINARY_SUB:
+            z = x - y;
+            break;
+        case BINARY_MUL:
+            if (mul_overflow(P, x, y)) {
+                vm_shift(2);
+                return 0;
+            } else {
+                z = x * y;
+            }
+            break;
+        case BINARY_IDIV:
+        case BINARY_MOD:
+            if (y == 0) {
+                pawR_error(P, PAW_ERUNTIME, "divide by 0");
+            } else if (binop == BINARY_IDIV) {
+                z = x / y;
+            } else {
+                z = x % y;
+            }
+            break;
+        case BINARY_DIV:
+            paw_assert(binop == BINARY_DIV);
+            float_binop(P, binop, (paw_Float)x, (paw_Float)y);
+            return 0;
+        case BINARY_BAND:
             z = x & y;
             break;
-        case OP_BOR:
+        case BINARY_BOR:
             z = x | y;
             break;
-        case OP_BXOR:
+        case BINARY_BXOR:
             z = x ^ y;
             break;
-        case OP_SHL:
+        case BINARY_SHL:
             if (y < 0) {
                 pawR_error(P, PAW_ERUNTIME, "negative shift count");
             } else if (y == 0) {
@@ -1149,14 +1045,14 @@ static void int_bitwise(paw_Env *P, Op op, Value lhs, Value rhs)
                        x > (VINT_MAX >> y) ||
                        x < (VINT_MIN >> y)) {
                 // Shift left will overflow. Use a BigInt.
-                pawB_bitwise(P, OP_SHL, lhs, rhs);
-                return;
+                pawB_binop(P, BINARY_SHL, *vm_peek(1), *vm_peek(0));
+                vm_shift(2);
+                return 0;
             } else {
                 z = paw_cast_int((uint64_t)x << y);
             }
             break;
-        default:
-            paw_assert(op == OP_SHR);
+        case BINARY_SHR:
             if (y < 0) {
                 pawR_error(P, PAW_ERUNTIME, "negative shift count");
             } else if (y == 0) {
@@ -1170,25 +1066,66 @@ static void int_bitwise(paw_Env *P, Op op, Value lhs, Value rhs)
                 z = x >> y;
             }
             break;
+        default:
+            return -1;
     }
-    vm_pushi(z);
-}
-
-static void vm_bitwise(paw_Env *P, Op op)
-{
-    Value y = fetch(P, 0);
-    Value x = fetch(P, 1);
-    if (pawV_is_int(x) && pawV_is_int(y)) {
-        int_bitwise(P, op, x, y);
-    } else if ((pawV_is_bigint(x) || pawV_is_int(x)) &&
-               (pawV_is_bigint(y) || pawV_is_int(y))) {
-        pawB_bitwise(P, op, x, y);
-    } else if (meta_binop_r(P, op, x, y)) {
-        // called metamethod on either 'x' or 'y'
+    if (pawV_int_fits_int(z)) {
+        vm_pushi(z);
     } else {
-        pawR_type_error2(P, "bitwise operator");
+        Value *pv = vm_push0();
+        pawB_from_int(P, pv, z);
     }
     vm_shift(2);
+    return 0;
+}
+
+static int float_binop(paw_Env *P, BinaryOp binop, paw_Float x, paw_Float y)
+{
+    Value *pv = vm_peek(1);
+    switch (binop) {
+        case BINARY_LT:
+            finish_cmp(x, y, <);
+            return 0;
+        case BINARY_LE:
+            finish_cmp(x, y, <=);
+            return 0;
+        case BINARY_GT:
+            finish_cmp(x, y, >);
+            return 0;
+        case BINARY_GE:
+            finish_cmp(x, y, >=);
+            return 0;
+        case BINARY_ADD:
+            pawV_set_float(pv, x + y);
+            break;
+        case BINARY_SUB:
+            pawV_set_float(pv, x - y);
+            break;
+        case BINARY_MUL:
+            pawV_set_float(pv, x * y);
+            break;
+        case BINARY_IDIV:
+        case BINARY_DIV:
+        case BINARY_MOD:
+            if (y == 0) {
+                pawR_error(P, PAW_ERUNTIME, "divide by 0");
+            } else if (binop == BINARY_DIV) {
+                pawV_set_float(pv, x / y);
+            } else if (binop == BINARY_MOD) {
+                pawV_set_float(pv, fmod(x, y));
+            } else { // BINARY_IDIV
+                const paw_Float f = x / y;
+                float2integer(P, f);
+                vm_shift(2);
+                return 0;
+            }
+            break;
+        default: {
+            return -1;
+        }
+    }
+    vm_pop(1);
+    return 0;
 }
 
 static const char *ensure_str(paw_Env *P, Value v, int offset, size_t *plen)
@@ -1205,11 +1142,22 @@ static const char *ensure_str(paw_Env *P, Value v, int offset, size_t *plen)
     return str;
 }
 
-static void vm_concat(paw_Env *P)
+static int other_binop(paw_Env *P, BinaryOp binop, Value x, Value y)
 {
-    Value y = *vm_peek(0);
-    Value x = *vm_peek(1);
-    if (!meta_binop_r(P, OP_CONCAT, x, y)) {
+    if (meta_binop(P, binop, x, y)) {
+        vm_shift(2);
+        return 0;
+    } else if (binop == BINARY_IN) {
+        if (pawV_is_map(y)) {
+            pawV_set_bool(vm_peek(1), pawH_contains(P, pawV_get_map(y), x));
+        } else if (pawV_is_array(y)) {
+            pawV_set_bool(vm_peek(1), pawA_contains(P, pawV_get_array(y), x));
+        } else {
+            return -1;
+        }
+        vm_pop(1);
+        return 0;
+    } else if (binop == BINARY_CONCAT) {
         size_t ns, nt;
         const char *s = ensure_str(P, x, 1, &ns);
         const char *t = ensure_str(P, y, 0, &nt);
@@ -1219,100 +1167,139 @@ static void vm_concat(paw_Env *P)
         pawL_add_nstring(P, &print, s, ns);
         pawL_add_nstring(P, &print, t, nt);
         pawL_push_result(P, &print);
+        vm_shift(2);
+        return 0;
+    } else if (pawV_is_bigint(x) || pawV_is_bigint(y)) {
+        pawB_binop(P, binop, x, y);
+        vm_shift(2);
+        return 0;
+    } else if (pawV_is_string(x) || pawV_is_string(y)) {
+        return string_binop(P, binop, x, y);
+    } else if (pawV_is_array(x) || pawV_is_array(y)) {
+        return array_binop(P, binop, x, y);
     }
-    vm_shift(2);
+    return -1;
 }
 
-static void vm_in(paw_Env *P)
+static int binop_aux(paw_Env *P, BinaryOp binop, Value x, Value y)
 {
-    const Value cnt = *vm_peek(0);
-    const Value key = *vm_peek(1);
-    if (pawV_is_map(cnt)) {
-        vm_pushb(pawH_contains(P, pawV_get_map(cnt), key));
-    } else if (pawV_is_array(cnt)) {
-        vm_pushb(pawA_contains(P, pawV_get_array(cnt), key));
-    } else if (meta_contains(P, cnt, key)) {
-        // called 'cnt.__contains(key)'
-    } else {
-        pawR_type_error2(P, "in");
+    if (binop == BINARY_EQ || binop == BINARY_NE) {
+        eq_ne(P, binop, x, y);
+        return 0;
     }
-    vm_shift(2);
+
+    // Handle `int <binop> float` and `float <binop> int`.
+    if (pawV_is_int(x)) {
+        const paw_Int ix = pawV_get_int(x);
+        if (pawV_is_int(y)) {
+            const paw_Int iy = pawV_get_int(y);
+            return int_binop(P, binop, ix, iy);
+        } else if (pawV_is_float(y)) {
+            const paw_Float fy = pawV_get_float(y);
+            return float_binop(P, binop, (paw_Float)ix, fy);
+        }
+    } else if (pawV_is_float(x)) {
+        const paw_Float fx = pawV_get_float(x);
+        if (pawV_is_int(y)) {
+            const paw_Int iy = pawV_get_int(y);
+            return float_binop(P, binop, fx, (paw_Float)iy);
+        } else if (pawV_is_float(y)) {
+            const paw_Float fy = pawV_get_float(y);
+            return float_binop(P, binop, fx, fy);
+        }
+    }
+    return other_binop(P, binop, x, y);
 }
 
-void pawR_length(paw_Env *P)
-{
-    paw_Int len = -1;
-    Value *pv = vm_peek(0);
-    if (meta_unop(P, OP_LEN, *pv)) {
-        // Called pv->__len(). Shift the result into the slot previously
-        // held by the container.
-        vm_shift(1);
-    } else if (0 <= (len = pawV_length(*pv))) {
-        // Replace the container with its length.
-        paw_assert(len <= VINT_MAX);
-        pawV_set_int(pv, (paw_Int)len);
-    } else {
-        pawR_type_error(P, "length operator ('#')");
-    }
-}
-
-void pawR_arith(paw_Env *P, Op op)
-{
-    switch (op) {
-        case OP_NEG:
-        case OP_NOT:
-        case OP_BNOT:
-            vm_unop(P, op);
-            break;
-        case OP_ADD:
-        case OP_SUB:
-        case OP_MUL:
-        case OP_DIV:
-        case OP_IDIV:
-        case OP_MOD:
-        case OP_POW:
-            vm_arith(P, op);
-            break;
-        case OP_CONCAT:
-            vm_concat(P);
-            break;
-        case OP_BXOR:
-        case OP_BAND:
-        case OP_BOR:
-        case OP_SHL:
-        case OP_SHR:
-            vm_bitwise(P, op);
-            break;
-        default:
-            pawR_error(P, PAW_ERUNTIME, "unsupported operator %u", op);
-    }
-}
-
-void pawR_compare(paw_Env *P, Op op)
-{
-    if (op == OP_EQ) {
-        pawR_equals(P);
-    } else {
-        vm_compare(P, op);
-    }
-}
-
-void pawR_equals(paw_Env *P)
+void pawR_binop(paw_Env *P, BinaryOp binop)
 {
     const Value y = *vm_peek(0);
     const Value x = *vm_peek(1);
-    if (!meta_equals(P, x, y)) {
-        paw_Bool eq;
-        if (pawV_is_array(x) && pawV_is_array(y)) {
-            eq = pawA_equals(P, pawV_get_array(x), pawV_get_array(y));
-        } else if (pawV_is_map(x) && pawV_is_map(y)) {
-            eq = pawH_equals(P, pawV_get_map(x), pawV_get_map(y));
-        } else {
-            eq = pawV_equal(x, y);
-        }
-        vm_pushb(eq);
+    if (binop_aux(P, binop, x, y)) {
+        pawR_type_error2(P, "binary operator");
     }
-    vm_shift(2);
+}
+
+static int int_unop(paw_Env *P, UnaryOp unop, paw_Int i)
+{
+    Value *pv = vm_peek(0);
+    switch (unop) {
+        case UNARY_NEG:
+            if (i == VINT_MIN) {
+                // The expression '-VINT_MIN' will overflow. Convert to VBIGINT.
+                pv = vm_push0();
+                BigInt *bi = pawB_from_int(P, pv, i);
+                pawB_unop(P, UNARY_NEG, obj2v(bi));
+                vm_shift(1);
+                return 0;
+            }
+            pawV_set_int(pv, -i);
+            break;
+        case UNARY_NOT:
+            pawV_set_int(pv, !i);
+            break;
+        case UNARY_BNOT:
+            pawV_set_int(pv, ~i);
+            break;
+        default:
+            return -1;
+    }
+    return 0;
+}
+
+static int float_unop(paw_Env *P, UnaryOp unop, paw_Float f)
+{
+    Value *pv = vm_peek(0);
+    switch (unop) {
+        case UNARY_NEG:
+            pawV_set_float(pv, -f);
+            break;
+        case UNARY_NOT:
+            pawV_set_bool(pv, !f);
+            break;
+        default:
+            return -1;
+    }
+    return 0;
+}
+
+static int unop_aux(paw_Env *P, UnaryOp unop, Value x)
+{
+    if (pawV_is_int(x)) {
+        const paw_Int i = pawV_get_int(x);
+        return int_unop(P, unop, i);
+    } else if (pawV_is_float(x)) {
+        const paw_Float f = pawV_get_float(x);
+        return float_unop(P, unop, f);
+    } else if (pawV_is_bigint(x)) {
+        pawB_unop(P, unop, x);
+    } else if (meta_unop(P, unop, x)) {
+        // called metamethod on 'x'
+    } else if (unop == UNARY_LEN) {
+        const paw_Int len = pawV_length(x);
+        if (len >= 0) {
+            // Replace the container with its length.
+            paw_assert(len <= VINT_MAX);
+            pawV_set_int(vm_peek(0), len);
+            return 0;
+        }
+        return -1;
+    } else if (unop == UNARY_NOT) {
+        // allows expressions like '!str'
+        vm_pushb(!pawV_truthy(x));
+    } else {
+        return -1;
+    }
+    vm_shift(1);
+    return 0;
+}
+
+void pawR_unop(paw_Env *P, UnaryOp unop)
+{
+    const Value x = *vm_peek(0);
+    if (unop_aux(P, unop, x)) {
+        pawR_type_error(P, "unary operator");
+    }
 }
 
 void pawR_getattr(paw_Env *P)
@@ -1435,13 +1422,11 @@ void pawR_setslice(paw_Env *P)
 
     if (pawV_is_array(obj) && pawV_is_array(val)) {
         paw_Int i1, i2, replace;
+        // If 'a == b', then we must be executing something like 'a[i:j] = a'.
+        // This will work, as long as memmove is used (making room for '#a' items,
+        // so the first memmove will never overwrite items we still need).
         Array *a = pawV_get_array(obj);
         const Array *b = pawV_get_array(val);
-        if (a == b) {
-            // Value *pv = vm_push0();
-            // b = pawA_clone(P, pv, a);
-            // vm_shift(1);
-        }
         const size_t alen = pawA_length(a);
         const size_t blen = pawA_length(b);
         cannonicalize_slice(P, alen, begin, end, &i1, &i2, &replace);
@@ -1501,7 +1486,7 @@ void pawR_literal_map(paw_Env *P, int n)
 static paw_Bool should_jump_null(paw_Env *P)
 {
     const Value *pv = vm_peek(0);
-    if (meta_unop(P, MM_NULL, *pv)) {
+    if (meta_single(P, MM_NULL, *pv)) {
         if (pawV_is_null(*vm_peek(0))) {
             vm_pop(1);
             return PAW_TRUE;
@@ -1515,7 +1500,7 @@ static paw_Bool should_jump_null(paw_Env *P)
 static paw_Bool should_jump_false(paw_Env *P)
 {
     const Value *pv = vm_peek(0);
-    if (meta_unop(P, MM_BOOL, *pv)) {
+    if (meta_single(P, MM_BOOL, *pv)) {
         const paw_Bool jump = !pawV_truthy(*vm_peek(0));
         vm_pop(1);
         return jump;
@@ -1563,122 +1548,16 @@ top:
                 vm_pushv(K[get_U(opcode)]);
             }
 
-            vm_case(LEN) :
-            {
-                pawR_length(P);
-            }
-
-            vm_case(NEG) :
+            vm_case(UNOP) :
             {
                 vm_protect();
-                vm_unop(P, OP_NEG);
+                pawR_unop(P, get_U(opcode));
             }
 
-            vm_case(NOT) :
+            vm_case(BINOP) :
             {
                 vm_protect();
-                vm_unop(P, OP_NOT);
-            }
-
-            vm_case(BNOT) :
-            {
-                vm_protect();
-                vm_unop(P, OP_BNOT);
-            }
-
-            vm_case(SHL) :
-            {
-                vm_protect();
-                vm_bitwise(P, OP_SHL);
-            }
-
-            vm_case(SHR) :
-            {
-                vm_protect();
-                vm_bitwise(P, OP_SHR);
-            }
-
-            vm_case(BAND) :
-            {
-                vm_protect();
-                vm_bitwise(P, OP_BAND);
-            }
-
-            vm_case(BOR) :
-            {
-                vm_protect();
-                vm_bitwise(P, OP_BOR);
-            }
-
-            vm_case(BXOR) :
-            {
-                vm_protect();
-                vm_bitwise(P, OP_BXOR);
-            }
-
-            vm_case(ADD) :
-            {
-                vm_protect();
-                vm_arith(P, OP_ADD);
-            }
-
-            vm_case(SUB) :
-            {
-                vm_protect();
-                vm_arith(P, OP_SUB);
-            }
-
-            vm_case(MUL) :
-            {
-                vm_protect();
-                vm_arith(P, OP_MUL);
-            }
-
-            vm_case(DIV) :
-            {
-                vm_protect();
-                vm_arith(P, OP_DIV);
-            }
-
-            vm_case(IDIV) :
-            {
-                vm_protect();
-                vm_arith(P, OP_IDIV);
-            }
-
-            vm_case(MOD) :
-            {
-                vm_protect();
-                vm_arith(P, OP_MOD);
-            }
-
-            vm_case(CONCAT) :
-            {
-                vm_protect();
-                vm_concat(P);
-            }
-
-            vm_case(EQ) :
-            {
-                pawR_equals(P);
-            }
-
-            vm_case(LT) :
-            {
-                vm_protect();
-                vm_compare(P, OP_LT);
-            }
-
-            vm_case(LE) :
-            {
-                vm_protect();
-                vm_compare(P, OP_LE);
-            }
-
-            vm_case(IN) :
-            {
-                vm_protect();
-                vm_in(P);
+                pawR_binop(P, get_U(opcode));
             }
 
             vm_case(NEWARRAY) :
@@ -1698,10 +1577,11 @@ top:
             vm_case(NEWCLASS) :
             {
                 vm_protect();
-                const Value name = K[get_A(opcode)];
                 Class *cls = pawV_push_class(P);
-                cls->name = pawV_get_string(name);
-                if (get_B(opcode)) {
+                cls->name = pawV_get_string(*vm_peek(1));
+                vm_shift(1);
+
+                if (get_U(opcode)) {
                     const Value parent = *vm_peek(1);
                     if (!pawV_is_class(parent)) {
                         pawR_error(P, PAW_ETYPE, "superclass is not of 'class' type");
@@ -1901,7 +1781,7 @@ top:
             {
                 const uint8_t argc = get_U(opcode);
                 StackPtr ptr = vm_peek(argc);
-                if (meta_call(P, OP_CALL, *ptr, argc)) {
+                if (meta_call(P, *ptr, argc)) {
                     vm_continue; // called ptr->__call(...)
                 }
                 vm_save();

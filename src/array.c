@@ -141,16 +141,16 @@ static paw_Bool elems_equal(paw_Env *P, const Value x, const Value y)
     p[0] = y;
     p[1] = x;
 
-    // Arrays can contain any type of value. Call pawR_equals() to check
+    // Arrays can contain any type of value. Call pawR_binop() to check
     // metamethods on objects.
-    pawR_equals(P);
+    pawR_binop(P, BINARY_EQ);
 
     const paw_Bool b = paw_boolean(P, -1);
     paw_pop(P, 1);
     return b;
 }
 
-paw_Bool pawA_equals(paw_Env *P, Array *lhs, Array *rhs)
+paw_Bool pawA_equals(paw_Env *P, const Array *lhs, const Array *rhs)
 {
     const size_t len = pawA_length(lhs);
     if (len != pawA_length(rhs)) {
@@ -164,7 +164,7 @@ paw_Bool pawA_equals(paw_Env *P, Array *lhs, Array *rhs)
     return PAW_TRUE;
 }
 
-paw_Bool pawA_contains(paw_Env *P, Array *a, const Value v)
+paw_Bool pawA_contains(paw_Env *P, const Array *a, const Value v)
 {
     for (size_t i = 0; i < pawA_length(a); ++i) {
         if (elems_equal(P, v, a->begin[i])) {

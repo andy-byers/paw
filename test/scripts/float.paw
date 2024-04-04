@@ -2,6 +2,20 @@
 
 -- Test float parsing:
 {
+    assert(0.0 == 0)
+    assert(0.00 == 0)
+    assert(.0 == 0)
+    assert(.00 == 0)
+    assert(0. == 0)
+    assert(0.0e0 == 0)
+    assert(0.0e1 == 0)
+
+    assert(1e1 == 10.0)
+    assert(10e-1 == 1.0)
+    assert(10e+1 == 100.0)
+    assert(10e-001 == 1.0)
+    assert(10e+001 == 100.0)
+
     assert(float('-1e-10') < 0)
     assert(float('1e-10') > 0)
 

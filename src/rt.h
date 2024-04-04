@@ -13,10 +13,8 @@ void pawR_to_integer(paw_Env *P);
 void pawR_to_float(paw_Env *P);
 const char *pawR_to_string(paw_Env *P, size_t *plen);
 
-void pawR_length(paw_Env *P);
-void pawR_equals(paw_Env *P);
-void pawR_arith(paw_Env *P, Op op);
-void pawR_compare(paw_Env *P, Op op);
+void pawR_unop(paw_Env *P, UnaryOp unop);
+void pawR_binop(paw_Env *P, BinaryOp binop);
 
 void pawR_error(paw_Env *P, int status, const char *fmt, ...);
 void pawR_type_error(paw_Env *P, const char *what);

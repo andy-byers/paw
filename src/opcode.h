@@ -44,17 +44,6 @@ typedef uint32_t OpCode;
 #define A_MAX ((1 << A_WIDTH) - 1)
 #define B_MAX ((1 << B_WIDTH) - 1)
 
-//_Static_assert(
-//        OP_WIDTH + A_WIDTH + B_WIDTH == sizeof(OpCode) * 8 &&
-//        OP_WIDTH + U_WIDTH == sizeof(OpCode) * 8 &&
-//        OP_WIDTH + S_WIDTH == sizeof(OpCode) * 8 &&
-//        0 /* OP_OFFSET */ + OP_WIDTH == U_OFFSET &&
-//        0 /* OP_OFFSET */ + OP_WIDTH == S_OFFSET &&
-//        0 /* OP_OFFSET */ + OP_WIDTH == B_OFFSET &&
-//        B_OFFSET + B_WIDTH == A_OFFSET &&
-//        A_OFFSET + A_WIDTH == sizeof(OpCode) * 8,
-//        "invalid opcode format (see opcode.h)");
-
 #define mask1(n, p) ((~((~(OpCode)0) << n)) << p)
 #define mask0(n, p) (~mask1(n, p))
 
@@ -88,7 +77,7 @@ typedef uint32_t OpCode;
 //   Up = upvalues (requires 16-bit index)
 //   P = function prototypes (requires 16-bit index)
 //
-typedef enum Op { // operands    stack in     stack out    side effects
+typedef enum { // operands    stack in     stack out    side effects
 OP_PUSHNULL,//       -           -            null         -
 OP_PUSHTRUE,//       -           -            true         -
 OP_PUSHFALSE,//      -           -            false        -
@@ -128,6 +117,9 @@ OP_FORNUM,//         S           *~*~*~*~*~*~*~*~* see notes *~*~*~*~*~*~*~*~*
 OP_FORIN0,//         S           *~*~*~*~*~*~*~*~* see notes *~*~*~*~*~*~*~*~*
 OP_FORIN,//          S           *~*~*~*~*~*~*~*~* see notes *~*~*~*~*~*~*~*~*
 
+OP_UNOP,//           U           x            op(u, x)     -
+OP_BINOP,//          U           x y          op(u, x, y)  -
+         
 OP_VARARG,//         U           v_u..v_1     [v_u..v_1]   -
 OP_CALL,//           U           f v_u..v_1   v            v = f(v_u..v_1)
 
@@ -138,56 +130,102 @@ OP_SETITEM,//        -           x y z        -            x[y]=z
 OP_GETSLICE,//       -           x y z        v            -  
 OP_SETSLICE,//       -           x y z w      -            x[y:z]=w
 
-OP_EQ,//             -           x y          x==y         -
-OP_LT,//             -           x y          x<y          -
-OP_LE,//             -           x y          x<=y         -
-OP_GT,//             -           x y          x>y          -
-OP_GE,//             -           x y          x>=y         - 
-OP_IN,//             -           x y          x in y       -
-
-OP_LEN,//            -           x            #x           -
-OP_NEG,//            -           x            -x           -
-OP_NOT,//            -           x            !x           -
-OP_BNOT,//           -           x            ~x           - 
-
-OP_ADD,//            -           x y          x+y          -
-OP_SUB,//            -           x y          x-y          - 
-OP_MUL,//            -           x y          x*y          - 
-OP_DIV,//            -           x y          x/y          - 
-OP_IDIV,//           -           x y          x//y         - 
-OP_MOD,//            -           x y          x%y          - 
-OP_POW,//            -           x y          x**y         - 
-OP_CONCAT,//         -           x y          x++y         - 
-OP_BXOR,//           -           x y          x^y          - 
-OP_BAND,//           -           x y          x&y          - 
-OP_BOR,//            -           x y          x|y          - 
-OP_SHL,//            -           x y          x<<y         - 
-OP_SHR,//            -           x y          x>>y         - 
-
 NOPCODES
 } Op;
+
+typedef enum {
+    UNARY_LEN, 
+    UNARY_NEG, 
+    UNARY_NOT, 
+    UNARY_BNOT,
+
+    NUNARYOPS
+} UnaryOp;
+
+typedef enum {
+    BINARY_EQ,   
+    BINARY_NE,   
+    BINARY_LT,   
+    BINARY_LE,   
+    BINARY_GT,   
+    BINARY_GE,   
+    BINARY_IN,   
+    BINARY_ADD,  
+    BINARY_SUB,  
+    BINARY_MUL,  
+    BINARY_DIV,  
+    BINARY_IDIV, 
+    BINARY_MOD,  
+    BINARY_POW,  
+    BINARY_CONCAT,
+    BINARY_BXOR,
+    BINARY_BAND,
+    BINARY_BOR,
+    BINARY_SHL,
+    BINARY_SHR,
+
+    NBINARYOPS
+} BinaryOp;
+
 // clang-format on
 //
 // Notes:
 // * OP_RETURN replaces the current call frame with the value on top of the stack.
 //   The current call frame consists of the function object or reciever 'f', its
 //   parameters, and all locals declared between the start of the call and the 'return'.
-// * OP_FOR*0 prepare a for loop. The loop body is skipped if the condition is false
+// * OP_FOR*0 prepare a for loop. The loop body is skipped if the condition is false.
 //   For OP_FORNUM0, the loop 'begin' is compared against the loop 'end' using the
 //   sign of the loop 'step'. For OP_FORIN0, the loop is skipped if the container is
 //   empty. Both instructions will push the loop control variable.
 // * OP_FOR* run a single for-loop step.
 
-#define META1 OP_CALL
-#define META2 OP_ADD
-#define METAR MM_RADD
-#define NMETA (METATOP - META1)
-#define op2meta(op) ((op) - META1)
+#define METAMETHOD0 OP_CALL
+#define unop2meta(o) ((Metamethod)((o) + MM_LEN))
+#define binop2meta(o) ((Metamethod)((o) + MM_EQ))
+#define binop_has_r(o) ((o) >= BINARY_ADD)
+#define binop_r(o) ((o) + MM_EQ + MM_RADD - MM_ADD)
 
-// Extra symbols for 'reverse' metamethods, and metamethods that don't correspond
-// to an opcode.
-enum {
-    MM_RADD = NOPCODES,
+typedef enum {
+    MM_CALL,
+    MM_GETATTR,
+    MM_SETATTR,
+    MM_GETITEM,
+    MM_SETITEM,
+    MM_GETSLICE,
+    MM_SETSLICE,
+
+    // unary operators
+    MM_LEN,
+    MM_NEG,
+    MM_NOT,
+    MM_BNOT,
+
+    // binary comparisons
+    MM_EQ,
+    MM_NE,
+    MM_LT,
+    MM_LE,
+    MM_GT,
+    MM_GE,
+    MM_CONTAINS,
+
+    // binary arithmetic
+    MM_ADD,
+    MM_SUB,
+    MM_MUL,
+    MM_DIV,
+    MM_IDIV,
+    MM_MOD,
+    MM_POW,
+    MM_CONCAT,
+    MM_BXOR,
+    MM_BAND,
+    MM_BOR,
+    MM_SHL,
+    MM_SHR,
+
+    // reverse binary arithmetic
+    MM_RADD,
     MM_RSUB,
     MM_RMUL,
     MM_RDIV,
@@ -201,6 +239,8 @@ enum {
     MM_RSHL,
     MM_RSHR,
 
+    // misc. metamethods
+    MM_INIT,
     MM_NULL,
     MM_STR,
     MM_INT,
@@ -209,7 +249,31 @@ enum {
     MM_ARRAY,
     MM_MAP,
 
-    METATOP
-};
+    NMETAMETHODS
+} Metamethod;
+
+// sanity check opcode format
+_Static_assert(
+    OP_WIDTH + A_WIDTH + B_WIDTH == sizeof(OpCode) * 8 &&
+        OP_WIDTH + U_WIDTH == sizeof(OpCode) * 8 &&
+        OP_WIDTH + S_WIDTH == sizeof(OpCode) * 8 &&
+        0 /* OP_OFFSET */ + OP_WIDTH == U_OFFSET &&
+        0 /* OP_OFFSET */ + OP_WIDTH == S_OFFSET &&
+        0 /* OP_OFFSET */ + OP_WIDTH == B_OFFSET &&
+        B_OFFSET + B_WIDTH == A_OFFSET &&
+        A_OFFSET + A_WIDTH == sizeof(OpCode) * 8,
+    "invalid opcode format (see opcode.h)");
+
+// sanity check metamethod ordering
+_Static_assert(
+    unop2meta(UNARY_LEN) == MM_LEN &&
+        binop2meta(BINARY_EQ) == MM_EQ &&
+        binop2meta(BINARY_NE) == MM_NE &&
+        binop2meta(BINARY_ADD) == MM_ADD &&
+        !binop_has_r(BINARY_IN) &&
+        binop_has_r(BINARY_SHR) &&
+        binop_r(BINARY_ADD) == MM_RADD &&
+        binop_r(BINARY_SHR) == MM_RSHR,
+    "invalid metamethod format (see opcode.h)");
 
 #endif // PAW_OPCODE_H

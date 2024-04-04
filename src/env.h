@@ -60,7 +60,7 @@ typedef struct paw_Env {
     Map *libs;
     Value object;
     Foreign *builtin[NOBJECTS];
-    Value meta_keys[NMETA];
+    Value meta_keys[NMETAMETHODS];
     Value str_cache[NCSTR];
     Value mem_errmsg;
 

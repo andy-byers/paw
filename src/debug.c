@@ -5,6 +5,64 @@
 #include "map.h"
 #include "rt.h"
 
+const char *paw_unop_name(UnaryOp unop)
+{
+    switch (unop) {
+        case UNARY_LEN:
+            return "LEN";
+        case UNARY_NEG:
+            return "NEG";
+        case UNARY_NOT:
+            return "NOT";
+        case UNARY_BNOT:
+            return "BNOT";
+        default:
+            return "?";
+    }
+}
+
+const char *paw_binop_name(BinaryOp binop)
+{
+    switch (binop) {
+        case BINARY_ADD:
+            return "ADD";
+        case BINARY_SUB:
+            return "SUB";
+        case BINARY_MUL:
+            return "MUL";
+        case BINARY_DIV:
+            return "DIV";
+        case BINARY_IDIV:
+            return "IDIV";
+        case BINARY_MOD:
+            return "MOD";
+        case BINARY_POW:
+            return "POW";
+        case BINARY_CONCAT:
+            return "CONCAT";
+        case BINARY_BXOR:
+            return "BXOR";
+        case BINARY_BAND:
+            return "BAND";
+        case BINARY_BOR:
+            return "BOR";
+        case BINARY_SHL:
+            return "SHL";
+        case BINARY_SHR:
+            return "SHR";
+        case BINARY_EQ:
+            return "EQ";
+        case BINARY_LT:
+            return "LT";
+        case BINARY_LE:
+            return "LE";
+        case BINARY_IN:
+            return "IN";
+        default:
+            return "?";
+    }
+}
+
 const char *paw_opcode_name(Op op)
 {
     switch (op) {
@@ -74,48 +132,10 @@ const char *paw_opcode_name(Op op)
             return "FORIN0";
         case OP_FORIN:
             return "FORIN";
-        case OP_LEN:
-            return "LEN";
-        case OP_NEG:
-            return "NEG";
-        case OP_NOT:
-            return "NOT";
-        case OP_BNOT:
-            return "BNOT";
-        case OP_ADD:
-            return "ADD";
-        case OP_SUB:
-            return "SUB";
-        case OP_MUL:
-            return "MUL";
-        case OP_DIV:
-            return "DIV";
-        case OP_IDIV:
-            return "IDIV";
-        case OP_MOD:
-            return "MOD";
-        case OP_POW:
-            return "POW";
-        case OP_CONCAT:
-            return "CONCAT";
-        case OP_BXOR:
-            return "BXOR";
-        case OP_BAND:
-            return "BAND";
-        case OP_BOR:
-            return "BOR";
-        case OP_SHL:
-            return "SHL";
-        case OP_SHR:
-            return "SHR";
-        case OP_EQ:
-            return "EQ";
-        case OP_LT:
-            return "LT";
-        case OP_LE:
-            return "LE";
-        case OP_IN:
-            return "IN";
+        case OP_UNOP:
+            return "UNOP";
+        case OP_BINOP:
+            return "BINOP";
         case OP_GETATTR:
             return "GETATTR";
         case OP_SETATTR:
@@ -142,6 +162,16 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
         pawL_add_fstring(P, print, "%d  %I  %s", i, (paw_Int)(pc - proto->source), paw_opcode_name(get_OP(pc[0])));
         const OpCode opcode = *pc++;
         switch (get_OP(opcode)) {
+            case OP_UNOP: {
+                pawL_add_fstring(P, print, " ; type = %d", paw_unop_name(get_U(opcode)));
+                break;
+            }
+
+            case OP_BINOP: {
+                pawL_add_fstring(P, print, " ; type = %d", paw_binop_name(get_U(opcode)));
+                break;
+            }
+
             case OP_PUSHCONST: {
                 pawL_add_fstring(P, print, " ; id = %d", get_U(opcode));
                 break;

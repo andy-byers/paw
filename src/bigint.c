@@ -779,19 +779,19 @@ static void bi_bnot(paw_Env *P, StackPtr sp, BigInt *x)
     bi->neg = !x->neg;
 }
 
-void pawB_unop(paw_Env *P, Op op, Value x)
+void pawB_unop(paw_Env *P, UnaryOp unop, Value x)
 {
     paw_assert(pawV_is_bigint(x));
     BigInt *bi = pawV_get_bigint(x);
     StackPtr sp = pawC_push0(P);
-    switch (op) {
-        case OP_NEG:
+    switch (unop) {
+        case UNARY_NEG:
             negate(pawB_copy(P, sp, bi, 0));
             break;
-        case OP_NOT:
+        case UNARY_NOT:
             pawV_set_bool(sp, bi_zero(bi));
             break;
-        case OP_BNOT:
+        case UNARY_BNOT:
             bi_bnot(P, sp, bi);
             break;
         default:
@@ -835,51 +835,39 @@ static void bi_finish(Value *pv)
 // or they are both paw_Int and the operation would overflow. If either is a paw_Float,
 // then float operations should be used. Caller must convert paw_Bool to paw_Int
 // beforehand.
-void pawB_arith(paw_Env *P, Op op, Value lhs, Value rhs)
+void pawB_binop(paw_Env *P, BinaryOp binop, Value lhs, Value rhs)
 {
-    unpack2(P, x, y, lhs, rhs, "arithmetic operator");
+    unpack2(P, x, y, lhs, rhs, "binary operator");
     StackPtr sp = pawC_push0(P);
-    switch (op) {
-        case OP_ADD:
+    switch (binop) {
+        case BINARY_ADD:
             bi_add(P, sp, &x, &y);
             break;
-        case OP_SUB:
+        case BINARY_SUB:
             bi_sub(P, sp, &x, &y);
             break;
-        case OP_MUL:
+        case BINARY_MUL:
             bi_mul(P, sp, &x, &y);
             break;
-        case OP_DIV:
+        case BINARY_DIV:
             bi_div(sp, &x, &y);
             return; // result is VFLOAT
-        case OP_IDIV:
+        case BINARY_IDIV:
             bi_idiv(P, sp, &x, &y);
             break;
-        default:
-            paw_assert(op == OP_MOD);
+        case BINARY_MOD:
             bi_mod(P, sp, &x, &y);
             break;
-    }
-    // NOTE: Go through the 'top' pointer, as 'sp' may be junk due to a stack
-    //       reallocation (the divmod routine pushes an additional value).
-    bi_finish(&P->top.p[-1]);
-}
-
-void pawB_bitwise(paw_Env *P, Op op, Value lhs, Value rhs)
-{
-    unpack2(P, x, y, lhs, rhs, "bitwise operator");
-    StackPtr sp = pawC_push0(P);
-    switch (op) {
-        case OP_BAND:
+        case BINARY_BAND:
             bi_band(P, sp, &x, &y);
             break;
-        case OP_BOR:
+        case BINARY_BOR:
             bi_bor(P, sp, &x, &y);
             break;
-        case OP_BXOR:
+        case BINARY_BXOR:
             bi_bxor(P, sp, &x, &y);
             break;
-        case OP_SHL: {
+        case BINARY_SHL: {
             if (is_negative(rhs)) {
                 pawR_error(P, PAW_EOVERFLOW, "negative shift count");
             } else if (pawV_is_bigint(rhs)) {
@@ -890,8 +878,7 @@ void pawB_bitwise(paw_Env *P, Op op, Value lhs, Value rhs)
             bi_shl(P, sp, &x, n);
             break;
         }
-        default: {
-            paw_assert(op == OP_SHR);
+        case BINARY_SHR: {
             if (is_negative(rhs)) {
                 pawR_error(P, PAW_EOVERFLOW, "negative shift count");
             } else if (pawV_is_bigint(rhs)) {
@@ -903,26 +890,26 @@ void pawB_bitwise(paw_Env *P, Op op, Value lhs, Value rhs)
             bi_shr(P, sp, &x, n);
             break;
         }
-    }
-    bi_finish(sp);
-}
-
-#define bi_lt(x, y) (cmp_bi_bi(x, y) < 0)
-#define bi_le(x, y) (cmp_bi_bi(x, y) <= 0)
-#define bi_eq(x, y) (cmp_bi_bi(x, y) == 0)
-
-paw_Bool pawB_compare(paw_Env *P, Op op, Value lhs, Value rhs)
-{
-    unpack2(P, x, y, lhs, rhs, "relational comparison");
-    switch (op) {
-        case OP_LT:
-            return cmp_bi_bi(&x, &y) < 0;
-        case OP_LE:
-            return cmp_bi_bi(&x, &y) <= 0;
+        case BINARY_LT:
+            pawV_set_bool(sp, cmp_bi_bi(&x, &y) < 0);
+            return;
+        case BINARY_LE:
+            pawV_set_bool(sp, cmp_bi_bi(&x, &y) <= 0);
+            return;
+        case BINARY_GT:
+            pawV_set_bool(sp, cmp_bi_bi(&x, &y) > 0);
+            return;
+        case BINARY_GE:
+            pawV_set_bool(sp, cmp_bi_bi(&x, &y) >= 0);
+            return;
         default:
-            paw_assert(op == OP_EQ);
-            return cmp_bi_bi(&x, &y) == 0;
+            paw_assert(binop == BINARY_EQ);
+            pawV_set_bool(sp, cmp_bi_bi(&x, &y) == 0);
+            return;
     }
+    // NOTE: Go through the 'top' pointer, as 'sp' may be junk due to a stack
+    //       reallocation (the divmod routine pushes an additional value).
+    bi_finish(&P->top.p[-1]);
 }
 
 paw_Bool pawB_equals(Value lhs, Value rhs)

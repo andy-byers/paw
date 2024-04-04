@@ -315,20 +315,20 @@ typedef struct Class {
 } Class;
 
 Class *pawV_push_class(paw_Env *P);
-void pawV_free_class(paw_Env *P, Class *c);
+void pawV_free_class(paw_Env *P, Class *cls);
 
 // Instance of a class
 typedef struct Instance {
-    GC_HEADER;
-    int nbound;
-    Class *self;
-    Map *attr;
-    Object *gc_list;
-    Value bound[];
+    GC_HEADER;       // common fields for GC
+    int nbound;      // number of bound functions
+    Class *self;     // class type
+    Map *attr;       // runtime attributes
+    Object *gc_list; // grey object list
+    Value bound[];   // array of bound functions
 } Instance;
 
 Instance *pawV_new_instance(paw_Env *P, StackPtr sp, Class *cls);
-void pawV_free_instance(paw_Env *P, Instance *);
+void pawV_free_instance(paw_Env *P, Instance *ins);
 Value *pawV_find_binding(paw_Env *P, Value obj, Value name);
 
 // Method bound to a class or builtin object
