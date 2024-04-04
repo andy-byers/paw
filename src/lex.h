@@ -71,6 +71,7 @@ typedef struct Lex {
     paw_Env *P;
     struct FnState *fn;
     struct ClsState *cls;
+    String *last_string;
 
     Map *strings;
     String *modname;

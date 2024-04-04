@@ -448,7 +448,7 @@ static int add_upvalue(FnState *fn, String *name, int index, paw_Bool is_local)
     } else if (fn->nup == p->nup) {
         pawM_grow(ctx(fn->lex), p->u, fn->nup, p->nup);
         for (int i = fn->nup + 1; i < p->nup; ++i) {
-            p->u[i].name = NULL; // Clear for GC
+            p->u[i].name = NULL; // clear for GC
         }
     }
     p->u[fn->nup] = (struct UpValueInfo){
@@ -502,7 +502,7 @@ static void add_debug_info(Lex *lex, String *name)
     } else if (fn->ndebug == p->ndebug) {
         pawM_grow(ctx(lex), p->v, fn->ndebug, p->ndebug);
         for (int i = fn->ndebug + 1; i < p->ndebug; ++i) {
-            p->v[i].name = NULL; // Clear for GC
+            p->v[i].name = NULL; // clear for GC
         }
     }
     p->v[fn->ndebug] = (struct LocalInfo){
@@ -601,7 +601,7 @@ static const struct {
     [BIN_AND] = {4, 4},
     [BIN_OR] = {3, 3},
     [BIN_COALESCE] = {2, 2},
-    [BIN_COND] = {1, 0}, // Right-associative
+    [BIN_COND] = {1, 0}, // right-associative
 };
 
 static const uint8_t kUnOpPrecedence = 14;
@@ -686,86 +686,87 @@ static BinOp get_binop(TokenKind kind)
     }
 }
 
+#define emit_unop_aux(x, unop) emit_U(x, OP_UNOP, unop)
+
 static void emit_unop(Lex *lex, UnOp unop)
 {
     switch (unop) {
         case UN_LEN:
-            emit(lex, OP_LEN);
+            emit_unop_aux(lex, UNARY_LEN);
             break;
         case UN_NEG:
-            emit(lex, OP_NEG);
+            emit_unop_aux(lex, UNARY_NEG);
             break;
         case UN_NOT:
-            emit(lex, OP_NOT);
+            emit_unop_aux(lex, UNARY_NOT);
             break;
         default: // UN_BNOT
-            emit(lex, OP_BNOT);
+            emit_unop_aux(lex, UNARY_BNOT);
             break;
     }
 }
+
+#define emit_binop_aux(x, binop) emit_U(x, OP_BINOP, binop)
 
 static void emit_binop(Lex *lex, BinOp binop)
 {
     switch (binop) {
         case BIN_ADD:
-            emit(lex, OP_ADD);
+            emit_binop_aux(lex, BINARY_ADD);
             break;
         case BIN_SUB:
-            emit(lex, OP_SUB);
+            emit_binop_aux(lex, BINARY_SUB);
             break;
         case BIN_MUL:
-            emit(lex, OP_MUL);
+            emit_binop_aux(lex, BINARY_MUL);
             break;
         case BIN_DIV:
-            emit(lex, OP_DIV);
+            emit_binop_aux(lex, BINARY_DIV);
             break;
         case BIN_IDIV:
-            emit(lex, OP_IDIV);
+            emit_binop_aux(lex, BINARY_IDIV);
             break;
         case BIN_MOD:
-            emit(lex, OP_MOD);
+            emit_binop_aux(lex, BINARY_MOD);
             break;
         case BIN_CONCAT:
-            emit(lex, OP_CONCAT);
+            emit_binop_aux(lex, BINARY_CONCAT);
             break;
         case BIN_EQ:
-            emit(lex, OP_EQ);
+            emit_binop_aux(lex, BINARY_EQ);
             break;
         case BIN_NE:
-            emit(lex, OP_EQ);
-            emit(lex, OP_NOT);
+            emit_binop_aux(lex, BINARY_NE);
             break;
         case BIN_LE:
-            emit(lex, OP_LE);
+            emit_binop_aux(lex, BINARY_LE);
             break;
         case BIN_GE:
-            emit(lex, OP_LT);
-            emit(lex, OP_NOT);
+            emit_binop_aux(lex, BINARY_GE);
             break;
         case BIN_LT:
-            emit(lex, OP_LT);
+            emit_binop_aux(lex, BINARY_LT);
             break;
         case BIN_GT:
-            emit(lex, OP_LE);
-            emit(lex, OP_NOT);
+            emit_binop_aux(lex, BINARY_GT);
             break;
         case BIN_SHL:
-            emit(lex, OP_SHL);
+            emit_binop_aux(lex, BINARY_SHL);
             break;
         case BIN_SHR:
-            emit(lex, OP_SHR);
+            emit_binop_aux(lex, BINARY_SHR);
             break;
         case BIN_BXOR:
-            emit(lex, OP_BXOR);
+            emit_binop_aux(lex, BINARY_BXOR);
             break;
         case BIN_BAND:
-            emit(lex, OP_BAND);
+            emit_binop_aux(lex, BINARY_BAND);
             break;
         case BIN_BOR:
-            emit(lex, OP_BOR);
+            emit_binop_aux(lex, BINARY_BOR);
             break;
         case BIN_IN:
-            emit(lex, OP_IN);
+            emit_binop_aux(lex, BINARY_IN);
             break;
         default:
             break;
@@ -968,12 +969,9 @@ static int call_parameters(Lex *lex)
     return argc;
 }
 
-static int const_name(Lex *lex, ExprState *e)
+static int parse_name(Lex *lex, ExprState *e)
 {
-    check(lex, TK_NAME);
-    String *s = pawV_get_string(lex->t.value);
-    skip(lex); // skip name
-
+    String *s = usable_name(lex);
     const int tag = add_name(lex, s);
     init_expr(e, EXPR_STRING, tag);
     e->s = s;
@@ -1020,7 +1018,7 @@ static void superexpr(Lex *lex, ExprState *e)
     skip(lex); // 'super' token
     check_next(lex, '.');
 
-    const int name = const_name(lex, e);
+    const int name = parse_name(lex, e);
     if (test(lex, '(')) {
         const int argc = call_parameters(lex);
         push_special(lex, CSTR_SELF);
@@ -1043,7 +1041,6 @@ static void parse_variable(Lex *lex, ExprState *e)
 
 static void new_variable(Lex *lex, String *name, ExprKind kind)
 {
-    // TODO: Ignores .kind
     init_var(lex, &(ExprState){.name = name, .kind = kind});
 }
 
@@ -1052,7 +1049,7 @@ static void new_local_var(Lex *lex, String *name)
     new_variable(lex, name, EXPR_LOCAL);
 }
 
-static void new_local_literal(Lex *lex, const char *name)
+static void add_local_literal(Lex *lex, const char *name)
 {
     add_local(lex, scan_string(lex, name));
 }
@@ -1174,7 +1171,7 @@ static void member_expr(Lex *lex, ExprState *e)
     skip(lex); // '.' token
 
     ExprState e2;
-    const_name(lex, &e2);
+    parse_name(lex, &e2);
 
     if (test(lex, '(')) {
         code_invoke(lex, OP_INVOKE, &e2);
@@ -1240,7 +1237,7 @@ static void fn_parameters(Lex *lex)
             // All parameters passed to this function that occur at or beyond the
             // '...' will be stored in an array called 'argv'.
             emit_U(lex, OP_VARARG, argc);
-            new_local_literal(lex, "argv");
+            add_local_literal(lex, "argv");
             begin_local_scope(lex, 1);
             p->is_va = PAW_TRUE;
         }
@@ -1571,9 +1568,9 @@ static void forbody(Lex *lex, Op init, Op loop)
 static void fornum(Lex *lex, String *ivar)
 {
     // Create the control variables.
-    new_local_literal(lex, "(for begin)");
-    new_local_literal(lex, "(for end)");
-    new_local_literal(lex, "(for step)");
+    add_local_literal(lex, "(for begin)");
+    add_local_literal(lex, "(for end)");
+    add_local_literal(lex, "(for step)");
     new_variable(lex, ivar, EXPR_CONST);
 
     // Parse the loop bounds ('begin', 'end', and 'step' expressions).
@@ -1595,8 +1592,8 @@ static void fornum(Lex *lex, String *ivar)
 
 static void forin(Lex *lex, String *ivar)
 {
-    new_local_literal(lex, "(for object)");
-    new_local_literal(lex, "(for iterator)");
+    add_local_literal(lex, "(for object)");
+    add_local_literal(lex, "(for iterator)");
     new_variable(lex, ivar, EXPR_CONST);
     expr(lex); // loop target
 
@@ -1771,16 +1768,10 @@ static void class_body(Lex *lex)
 static void class_stmt(Lex *lex)
 {
     FnState *fn = lex->fn;
-
     skip(lex); // 'class' token
-    check(lex, TK_NAME);
 
-    // Parse the name manually so we can get at the constant tag. The class
-    // needs to know its own name when it is created.
     ExprState e;
-    String *class_name = usable_name(lex);
-    const int tag = add_name(lex, class_name);
-    e.name = class_name;
+    e.name = usable_name(lex);
     init_var(lex, &e);
 
     ClsState cls = {.outer = lex->cls};
@@ -1791,7 +1782,8 @@ static void class_stmt(Lex *lex)
         discharge(&super);
         cls.has_super = PAW_TRUE;
     }
-    emit_AB(lex, OP_NEWCLASS, tag, cls.has_super);
+    emit_string(lex, e.name);
+    emit_U(lex, OP_NEWCLASS, cls.has_super);
     define_var(lex, &e);
 
     BlkState blk;
@@ -1801,7 +1793,7 @@ static void class_stmt(Lex *lex)
     if (cls.has_super) {
         // Create a local variable, 'super', to reference the superclass. If
         // referenced in a method, 'super' will be captured as an upvalue.
-        new_local_literal(lex, "super");
+        add_local_literal(lex, "super");
         begin_local_scope(lex, 1);
     }
     lex->cls = &cls;
@@ -1903,15 +1895,13 @@ void pawP_init(paw_Env *P)
         String *str = new_fixed_string(P, kw);
         str->flag = i + FIRST_KEYWORD;
     }
-    for (unsigned i = 0; i < NMETA; ++i) {
-        const unsigned op = i + META1;
-        const char *name = pawT_name(op);
+    for (Metamethod mm = 0; mm < NMETAMETHODS; ++mm) {
+        const char *name = pawT_name(mm);
         String *str = new_fixed_string(P, name);
-        pawV_set_string(&P->meta_keys[op2meta(op)], str);
+        pawV_set_string(&P->meta_keys[mm], str);
     }
     pawV_set_string(&P->str_cache[CSTR_SELF], new_fixed_string(P, "self"));
-    pawV_set_string(&P->str_cache[CSTR_INIT], new_fixed_string(P, "__init"));
-
+    pawV_set_string(&P->str_cache[CSTR_INIT], pawS_new_str(P, "__init"));
     pawV_set_string(&P->str_cache[CSTR_SUPER], pawS_new_str(P, "super"));
     pawV_set_string(&P->str_cache[CSTR_TRUE], pawS_new_str(P, "true"));
     pawV_set_string(&P->str_cache[CSTR_FALSE], pawS_new_str(P, "false"));

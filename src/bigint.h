@@ -26,12 +26,10 @@
 BigInt *pawB_new(paw_Env *P);
 BigInt *pawB_copy(paw_Env *P, StackPtr sp, const BigInt *bi, int extra);
 void pawB_free(paw_Env *P, BigInt *bi);
-void pawB_unop(paw_Env *P, Op op, Value x);
-void pawB_arith(paw_Env *P, Op op, Value x, Value y);
-void pawB_bitwise(paw_Env *P, Op op, Value x, Value y);
+void pawB_unop(paw_Env *P, UnaryOp unop, Value x);
+void pawB_binop(paw_Env *P, BinaryOp binop, Value x, Value y);
 void pawB_to_string(paw_Env *P, const BigInt *bi, paw_Bool caps, const char *prefix, int base);
 int pawB_parse(paw_Env *X, const char *p, int base);
-paw_Bool pawB_compare(paw_Env *P, Op op, Value lhs, Value rhs);
 paw_Bool pawB_equals(Value lhs, Value rhs);
 
 BigInt *pawB_from_int(paw_Env *P, StackPtr sp, paw_Int i);

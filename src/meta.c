@@ -7,7 +7,7 @@
 #include "env.h"
 #include "map.h"
 
-const char *pawT_name(unsigned op)
+const char *pawT_name(Metamethod mm)
 {
     // NOTE: This array must be kept in the same order as the opcodes enum
     //       in opcode.h.
@@ -21,17 +21,18 @@ const char *pawT_name(unsigned op)
         "__getslice",
         "__setslice",
 
+        "__len",
+        "__neg",
+        "__not",
+        "__bnot",
+
         "__eq",
+        "__ne",
         "__lt",
         "__le",
         "__gt",
         "__ge",
         "__contains",
-
-        "__len",
-        "__neg",
-        "__not",
-        "__bnot",
 
         "__add",
         "__sub",
@@ -61,6 +62,7 @@ const char *pawT_name(unsigned op)
         "__rshl",
         "__rshr",
 
+        "__init",
         "__null",
         "__str",
         "__int",
@@ -69,8 +71,8 @@ const char *pawT_name(unsigned op)
         "__array",
         "__map",
     };
-    _Static_assert(paw_countof(kMetaNames) == NMETA,
+    _Static_assert(paw_countof(kMetaNames) == NMETAMETHODS,
                    "metamethod names re inconsistent");
-    paw_assert(op2meta(op) < NMETA);
-    return kMetaNames[op2meta(op)];
+    paw_assert(mm < NMETAMETHODS);
+    return kMetaNames[mm];
 }

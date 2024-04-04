@@ -118,7 +118,7 @@ static paw_Bool items_equal(paw_Env *P, const Value x, const Value y)
     sp[0] = y;
     sp[1] = x;
 
-    pawR_equals(P);
+    pawR_binop(P, BINARY_EQ);
 
     const paw_Bool b = paw_boolean(P, -1);
     paw_pop(P, 1);

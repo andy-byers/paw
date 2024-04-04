@@ -77,7 +77,7 @@ static int fib(paw_Env *P)
         paw_push_int(P, n - 1);
         paw_call(P, 1);
         // Compute fib(n)
-        paw_arith(P, PAW_OPADD);
+        paw_binop(P, PAW_OPADD);
     }
     // Cache the result
     paw_get_upvalue(P, 0, 0);
@@ -169,7 +169,7 @@ int main(void)
         // 1 + 1 == 2
         paw_push_int(P, 1);
         paw_push_int(P, 1);
-        paw_arith(P, PAW_OPADD);
+        paw_binop(P, PAW_OPADD);
         paw_push_int(P, 2);
         paw_raw_equals(P);
         check(paw_boolean(P, -1));
@@ -178,20 +178,20 @@ int main(void)
         // 1 << 1 <= 2
         paw_push_int(P, 1);
         paw_push_int(P, 1);
-        paw_arith(P, PAW_OPSHL);
+        paw_binop(P, PAW_OPSHL);
         paw_push_int(P, 2);
-        paw_compare(P, PAW_OPLE);
+        paw_binop(P, PAW_OPLE);
         check(paw_boolean(P, -1));
         paw_pop(P, 1);
 
         // "ab" ++ "c" ++ 123 == "abc123"
         paw_push_string(P, "ab");
         paw_push_string(P, "c");
-        paw_arith(P, PAW_OPCONCAT);
+        paw_binop(P, PAW_OPCONCAT);
         paw_push_int(P, 123);
-        paw_arith(P, PAW_OPCONCAT);
+        paw_binop(P, PAW_OPCONCAT);
         paw_push_string(P, "abc123");
-        paw_compare(P, PAW_OPEQ);
+        paw_binop(P, PAW_OPEQ);
         check(paw_boolean(P, -1));
         paw_pop(P, 1);
     }

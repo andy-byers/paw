@@ -19,7 +19,7 @@
 
     -- Bitwise operators bind tighter than comparisons
     assert(4 & 5 == 4)
-    assert(!(4 & (5 == 4)))
+    assert(!(4 & int(5 == 4)))
 }
 
 -- Comparisons:
@@ -41,9 +41,6 @@
     test_cmp('a', 'b')
     test_cmp('ab', 'abc')
     test_cmp('abc', 'abd')
-    test_cmp(false, true)
-    test_cmp(false, 1)
-    test_cmp(0, true)
 }
 
 -- Conversions:
@@ -66,62 +63,30 @@
     assert(add(123, 321.0) == 444.0)
     assert(add(123.0, 321) == 444.0)
     assert(add(123.0, 321.0) == 444.0)
-    assert(add(443, true) == 444)
-    assert(add(true, 443) == 444)
-    assert(add(444, false) == 444)
-    assert(add(false, 444) == 444)
-    assert(add(443.0, true) == 444)
-    assert(add(true, 443.0) == 444.0)
-    assert(add(444.0, false) == 444.0)
-    assert(add(false, 444.0) == 444.0)
 
     let sub = gencheck('-')
     assert(sub(123, 321) == -198)
     assert(sub(123, 321.0) == -198.0)
     assert(sub(123.0, 321) == -198.0)
     assert(sub(123.0, 321.0) == -198.0)
-    assert(sub(443, true) == 442)
-    assert(sub(true, 443) == -442)
-    assert(sub(444, false) == 444)
-    assert(sub(false, 444) == -444)
-    assert(sub(443.0, true) == 442)
-    assert(sub(true, 443.0) == -442.0)
-    assert(sub(444.0, false) == 444.0)
-    assert(sub(false, 444.0) == -444.0)
 
     let div = gencheck('/')
     assert(div(100, 10) == 10.0)
     assert(div(100, 10.0) == 10.0)
     assert(div(100.0, 10) == 10.0)
     assert(div(100.0, 10.0) == 10.0)
-    assert(div(100, true) == 100.0)
-    assert(div(false, 10) == 0.0)
-    assert(div(100.0, true) == 100.0)
-    assert(div(false, 10.0) == 0.0)
 
     let idiv = gencheck('//')
     assert(idiv(100, 10) == 10)
     assert(idiv(100, 10.0) == 10)
     assert(idiv(100.0, 10) == 10)
     assert(idiv(100.0, 10.0) == 10)
-    assert(idiv(100, true) == 100)
-    assert(idiv(true, 10) == 0)
-    assert(idiv(false, 10) == 0)
-    assert(idiv(100.0, true) == 100)
-    assert(idiv(true, 10.0) == 0)
-    assert(idiv(false, 10.0) == 0)
 
     let mod = gencheck('%')
     assert(mod(100, 3) == 1)
     assert(mod(100, 3.0) == 1.0)
     assert(mod(100.0, 3) == 1.0)
     assert(mod(100.0, 3.0) == 1.0)
-    assert(mod(100, true) == 0)
-    assert(mod(true, 10) == 1)
-    assert(mod(false, 10) == 0)
-    assert(mod(100.0, true) == 0.0)
-    assert(mod(true, 10.0) == 1.0)
-    assert(mod(false, 10.0) == 0.0)
 }
 
 {

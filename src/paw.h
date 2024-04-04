@@ -115,30 +115,36 @@ static inline void paw_push_null(paw_Env *P)
     paw_push_nnull(P, 1);
 }
 
-#define PAW_OPNEG 0
-#define PAW_OPNOT 1
-#define PAW_OPBNOT 2
-#define PAW_OPADD 3
-#define PAW_OPSUB 4
-#define PAW_OPMUL 5
-#define PAW_OPDIV 6
-#define PAW_OPIDIV 7
-#define PAW_OPMOD 8
-#define PAW_OPPOW 9
-#define PAW_OPCONCAT 10
-#define PAW_OPBXOR 11
-#define PAW_OPBAND 12
-#define PAW_OPBOR 13
-#define PAW_OPSHL 14
-#define PAW_OPSHR 15
+#define PAW_OPLEN 0
+#define PAW_OPNEG 1
+#define PAW_OPNOT 2
+#define PAW_OPBNOT 3
 
-void paw_arith(paw_Env *P, int op);
+void paw_unop(paw_Env *P, int op);
 
 #define PAW_OPEQ 0
-#define PAW_OPLT 1
-#define PAW_OPLE 2
+#define PAW_OPNE 1
+#define PAW_OPLT 2
+#define PAW_OPLE 3
+#define PAW_OPGT 4
+#define PAW_OPGE 5
+#define PAW_OPIN 6
+#define PAW_OPADD 7
+#define PAW_OPSUB 8
+#define PAW_OPMUL 9
+#define PAW_OPDIV 10
+#define PAW_OPIDIV 11
+#define PAW_OPMOD 12
+#define PAW_OPPOW 13
+#define PAW_OPCONCAT 14
+#define PAW_OPBXOR 15
+#define PAW_OPBAND 16
+#define PAW_OPBOR 17
+#define PAW_OPSHL 18
+#define PAW_OPSHR 19
 
-void paw_compare(paw_Env *P, int op);
+void paw_binop(paw_Env *P, int op);
+
 void paw_raw_equals(paw_Env *P);
 
 //

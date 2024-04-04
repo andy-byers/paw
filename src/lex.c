@@ -549,5 +549,6 @@ String *pawX_scan_string(Lex *x, const char *s, size_t n)
     paw_pop(P, 1);
     check_gc(P);
 
-    return pawV_get_string(*value);
+    x->last_string = pawV_get_string(*value);
+    return x->last_string;
 }
