@@ -415,14 +415,35 @@ int paw_load(paw_Env *P, paw_Reader input, const char *name, void *ud)
     return status;
 }
 
-struct EvalCtx {
+struct DumpState {
+    paw_Writer output;
+    void *ud;
+};
+
+static void dump_aux(paw_Env *P, void *arg)
+{
+    struct DumpState *d = arg;
+    const Value v = P->top.p[-1];
+    if (!pawV_is_closure(v)) {
+        pawR_error(P, PAW_ETYPE, "expected paw function");
+    }
+    const Closure *f = pawV_get_closure(v);
+    d->output(P, "", 1, d->ud);
+}
+
+int paw_dump(paw_Env *P, paw_Writer output, void *ud)
+{
+    return pawC_try(P, dump_aux, &(struct DumpState){output, ud});
+}
+
+struct CallState {
     StackPtr fn;
     int argc;
 };
 
 void eval_aux(paw_Env *P, void *arg)
 {
-    const struct EvalCtx *ctx = arg;
+    const struct CallState *ctx = arg;
     pawC_call(P, *ctx->fn, ctx->argc);
 }
 
@@ -430,8 +451,8 @@ int paw_call(paw_Env *P, int argc)
 {
     StackPtr top = P->top.p;
     StackPtr fn = &top[-argc - 1];
-    struct EvalCtx ctx = {.fn = fn, .argc = argc};
-    const int status = pawC_try(P, eval_aux, &ctx);
+    struct CallState c = {.fn = fn, .argc = argc};
+    const int status = pawC_try(P, eval_aux, &c);
     return status;
 }
 

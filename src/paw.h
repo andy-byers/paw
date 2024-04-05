@@ -40,6 +40,8 @@ typedef struct paw_Env paw_Env;
 
 typedef void *(*paw_Alloc)(void *ud, void *ptr, size_t size0, size_t size);
 typedef const char *(*paw_Reader)(paw_Env *P, void *ud, size_t *size);
+typedef size_t (*paw_Writer)(paw_Env *P, const void *data, size_t size, void *ud);
+typedef const char *(paw_Lookup)(paw_Env *P, const char *name);
 typedef int (*paw_Function)(paw_Env *P);
 
 paw_Env *paw_open(paw_Alloc alloc, void *ud);
@@ -65,6 +67,8 @@ size_t paw_bytes_used(const paw_Env *P);
 // Load paw source code from the given 'input' source
 // Creates a function object containing the code and pushes it onto the stack.
 int paw_load(paw_Env *P, paw_Reader input, const char *name, void *ud);
+
+int paw_dump(paw_Env *P, paw_Writer output, void *ud);
 
 // Invoke the paw runtime on a function with 'argc' parameters
 // The function object should be on the stack followed the the parameters, with
