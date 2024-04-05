@@ -14,12 +14,13 @@
 #include "str.h"
 #include "util.h"
 #include "value.h"
+#include <math.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
-#define ctx(lex) (lex)->P
+#define env(lex) (lex)->P
 #define is_toplevel(lex) (!(lex)->fn->caller)
 #define is_global(lex) (is_toplevel(lex) && (lex)->fn->blk->outer == NULL)
 #define scan_string(lex, s) pawX_scan_string(lex, s, strlen(s))
@@ -107,7 +108,7 @@ static void add_line(Lex *lex)
     if (fn->nlines == UINT16_MAX) {
         limit_error(lex, "instructions", UINT16_MAX);
     }
-    pawM_grow(ctx(lex), p->lines, fn->nlines, p->nlines);
+    pawM_grow(env(lex), p->lines, fn->nlines, p->nlines);
     p->lines[fn->nlines++] = (struct LineInfo){
         .line = fn->lastline,
         .pc = fn->pc,
@@ -128,7 +129,7 @@ static void add_opcode(Lex *lex, OpCode code)
 
     // While code is being generated, the pc is used to track the number of instructions, and
     // the length field the capacity. The length is set to the final pc value before execution.
-    pawM_grow(ctx(fn->lex), p->source, fn->pc, p->length);
+    pawM_grow(env(fn->lex), p->source, fn->pc, p->length);
     p->source[fn->pc] = code;
     ++fn->pc;
 }
@@ -167,7 +168,7 @@ static int add_constant(Lex *lex, Value v)
     } else if (fn->nk == p->nk) {
         // 'fn->nk' only ever increases by 1, so this will always give us
         // enough memory.
-        pawM_grow(ctx(lex), p->k, fn->nk, p->nk);
+        pawM_grow(env(lex), p->k, fn->nk, p->nk);
         for (int i = fn->nk + 1; i < p->nk; ++i) {
             pawV_set_null(&p->k[i]); // clear for GC
         }
@@ -183,12 +184,12 @@ static int add_proto(Lex *lex, String *name, Proto **pp)
     if (fn->nproto == UINT16_MAX) {
         limit_error(lex, "functions", UINT16_MAX);
     } else if (fn->nproto == p->nproto) {
-        pawM_grow(ctx(lex), p->p, fn->nproto, p->nproto);
+        pawM_grow(env(lex), p->p, fn->nproto, p->nproto);
         for (int i = fn->nproto; i < p->nproto; ++i) {
             p->p[i] = NULL; // clear for GC (including current)
         }
     }
-    Proto *callee = pawV_new_proto(ctx(lex));
+    Proto *callee = pawV_new_proto(env(lex));
     callee->modname = lex->modname;
     callee->name = name;
 
@@ -273,7 +274,7 @@ static void add_label(Lex *lex, LabelKind kind)
 {
     FnState *fn = lex->fn;
     LabelList *ll = &lex->pm->ll;
-    pawM_grow(ctx(lex), ll->values, ll->length, ll->capacity);
+    pawM_grow(env(lex), ll->values, ll->length, ll->capacity);
     ll->values[ll->length] = (Label){
         .kind = kind,
         .line = lex->line,
@@ -446,7 +447,7 @@ static int add_upvalue(FnState *fn, String *name, int index, paw_Bool is_local)
     if (fn->nup == UPVALUE_MAX) {
         limit_error(fn->lex, "upvalues", UPVALUE_MAX);
     } else if (fn->nup == p->nup) {
-        pawM_grow(ctx(fn->lex), p->u, fn->nup, p->nup);
+        pawM_grow(env(fn->lex), p->u, fn->nup, p->nup);
         for (int i = fn->nup + 1; i < p->nup; ++i) {
             p->u[i].name = NULL; // clear for GC
         }
@@ -482,7 +483,7 @@ static int resolve_upvalue(FnState *fn, String *name)
 static int add_local(Lex *lex, String *name)
 {
     ParseMemory *pm = lex->pm;
-    pawM_grow(ctx(lex), pm->vars, pm->vsize, pm->valloc);
+    pawM_grow(env(lex), pm->vars, pm->vsize, pm->valloc);
     pm->vars[pm->vsize] = (VarState){
         .name = name,
     };
@@ -500,7 +501,7 @@ static void add_debug_info(Lex *lex, String *name)
     if (fn->ndebug == LOCAL_MAX) {
         limit_error(lex, "locals", LOCAL_MAX);
     } else if (fn->ndebug == p->ndebug) {
-        pawM_grow(ctx(lex), p->v, fn->ndebug, p->ndebug);
+        pawM_grow(env(lex), p->v, fn->ndebug, p->ndebug);
         for (int i = fn->ndebug + 1; i < p->ndebug; ++i) {
             p->v[i].name = NULL; // clear for GC
         }
@@ -857,28 +858,28 @@ static void leave_function(Lex *lex)
         emit(lex, OP_PUSHNULL);
         emit(lex, OP_RETURN);
     }
-    pawM_shrink(ctx(lex), p->source, p->length, fn->pc);
+    pawM_shrink(env(lex), p->source, p->length, fn->pc);
     p->length = fn->pc;
-    pawM_shrink(ctx(lex), p->lines, p->nlines, fn->nlines);
+    pawM_shrink(env(lex), p->lines, p->nlines, fn->nlines);
     p->nlines = fn->nlines;
-    pawM_shrink(ctx(lex), p->p, p->nproto, fn->nproto);
+    pawM_shrink(env(lex), p->p, p->nproto, fn->nproto);
     p->nproto = fn->nproto;
-    pawM_shrink(ctx(lex), p->v, p->ndebug, fn->ndebug);
+    pawM_shrink(env(lex), p->v, p->ndebug, fn->ndebug);
     p->ndebug = fn->ndebug;
-    pawM_shrink(ctx(lex), p->u, p->nup, fn->nup);
+    pawM_shrink(env(lex), p->u, p->nup, fn->nup);
     p->nup = fn->nup;
-    pawM_shrink(ctx(lex), p->k, p->nk, fn->nk);
+    pawM_shrink(env(lex), p->k, p->nk, fn->nk);
     p->nk = fn->nk;
 
     pm->vsize = fn->base;
     lex->fn = fn->caller;
-    check_gc(ctx(lex));
+    check_gc(env(lex));
 }
 
 static String *context_name(const FnState *fn, FnKind kind)
 {
     if (fn_has_self(kind)) {
-        return pawV_get_string(pawE_cstr(ctx(fn->lex), CSTR_SELF));
+        return pawV_get_string(pawE_cstr(env(fn->lex), CSTR_SELF));
     }
     return fn->proto->name;
 }
@@ -1737,7 +1738,7 @@ static void fn_stmt(Lex *lex)
 
 static void method_def(Lex *lex)
 {
-    const String *init = pawV_get_string(pawE_cstr(ctx(lex), CSTR_INIT));
+    const String *init = pawV_get_string(pawE_cstr(env(lex), CSTR_INIT));
     const String *name = pawV_get_string(lex->t.value);
     FnKind kind = FN_METHOD;
     if (pawS_eq(name, init)) {
@@ -1908,9 +1909,21 @@ void pawP_init(paw_Env *P)
     pawV_set_string(&P->str_cache[CSTR_NULL], pawS_new_str(P, "null"));
 }
 
+static void skip_hashbang(Lex *lex)
+{
+    if (test_next(lex, '#') && test_next(lex, '!')) {
+        char c;
+        do {
+            c = lex->c;
+            skip(lex); 
+        } while (!ISNEWLINE(c));
+    }
+}
+
 static void parse_module(FnState *fn, BlkState *blk)
 {
     Lex *lex = fn->lex;
+    skip_hashbang(lex);
     enter_function(lex, fn, blk, FN_MODULE);
     stmtlist(lex);
     check(lex, TK_END);

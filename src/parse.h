@@ -8,6 +8,9 @@
 #include "util.h"
 #include "value.h"
 
+// arbitrary magic number for identifying bytecode files
+#define BYTECODE_MAGIC ((uint8_t[]){0, 1, 2, 3})
+
 typedef enum LabeKind {
     LBREAK,
     LCONTINUE,
