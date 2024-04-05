@@ -7,10 +7,9 @@
 #include "env.h"
 #include "map.h"
 
+// ORDER Metamethod
 const char *pawT_name(Metamethod mm)
 {
-    // NOTE: This array must be kept in the same order as the opcodes enum
-    //       in opcode.h.
     static const char *kMetaNames[] = {
         "__call",
 

@@ -19,7 +19,7 @@ static int math_sqrt(paw_Env *P)
     if (paw_is_float(P, 1)) {
         const paw_Float f = paw_float(P, 1);
         paw_push_float(P, sqrt(f));
-    } else if (paw_is_integer(P, 1)) {
+    } else if (paw_is_int(P, 1)) {
         isqrt(P);
     }
     return 1;

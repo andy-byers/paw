@@ -13,7 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
+#define TEST_FIND_LEAK
 // Define TEST_FIND_LEAK to have the program print out the addresses and
 // sizes of leaked blocks. Watchpoints can be used to figure out exactly
 // where the block was allocated. Note that the tests are very slow with
@@ -233,6 +233,7 @@ static void check_ok(paw_Env *P, int status)
     }
 }
 
+#include "debug.h"
 int test_open_file(paw_Env *P, const char *name)
 {
     const char *pathname = test_pathname(name);
@@ -246,6 +247,8 @@ int test_open_file(paw_Env *P, const char *name)
 
     const int status = paw_load(P, test_reader, pathname, &rd);
     pawO_close(rd.file);
+puts("TODO: remove");
+paw_dump_source(P, pawV_get_closure(P->top.p[-1])->p);
     return status;
 }
 

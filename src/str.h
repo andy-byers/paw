@@ -45,13 +45,14 @@ typedef struct StringTable {
 // Both x and y must be pointers to struct String from the string table.
 #define pawS_eq(x, y) (x == y)
 
-void pawS_init(paw_Env *X);
-void pawS_uninit(paw_Env *X);
+void pawS_init(paw_Env *P);
+void pawS_uninit(paw_Env *P);
 
-void pawS_remove_str(paw_Env *X, String *s);
-String *pawS_alloc_str(paw_Env *X, size_t length);
-String *pawS_new_str(paw_Env *X, const char *text);
-String *pawS_new_nstr(paw_Env *X, const char *text, size_t length);
-void pawS_free_str(paw_Env *X, String *s);
+void pawS_remove_str(paw_Env *P, String *s);
+String *pawS_alloc_str(paw_Env *P, size_t length);
+String *pawS_new_str(paw_Env *P, const char *text);
+String *pawS_new_nstr(paw_Env *P, const char *text, size_t length);
+String *pawS_new_fixed(paw_Env *P, const char *text);
+void pawS_free_str(paw_Env *P, String *s);
 
 #endif // PAW_STR_H

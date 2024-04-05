@@ -84,7 +84,7 @@ void pawC_stack_realloc(paw_Env *P, int n)
     P->gc_noem = PAW_FALSE; // allow emergency GC
     if (!stack) {
         finish_resize(P); // fix pointers
-        pawM_error(P);    // out of memory
+        pawM_error(P); // out of memory
     }
     // Cause the 'bound' pointer to be placed at the new end of the stack.
     P->bound.d = (ptrdiff_t)alloc;

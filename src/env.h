@@ -64,6 +64,12 @@ typedef struct paw_Env {
     Value str_cache[NCSTR];
     Value mem_errmsg;
 
+    struct TypeVec {
+        Type *data; 
+        int size;
+        int alloc;
+    } tv;
+
     paw_Alloc alloc;
     void *ud;
 

@@ -159,7 +159,7 @@ static void mark_object(paw_Env *P, Object *o)
             break;
 
         default:
-            paw_assert(PAW_FALSE);
+            paw_assert(PAW_FALSE); // TODO: cases above can be the default
     }
 }
 
@@ -178,10 +178,10 @@ static void traverse_proto(paw_Env *P, Proto *p)
         mark_object(P, cast_object(p->p[i]));
     }
     for (int i = 0; i < p->ndebug; ++i) {
-        mark_object(P, cast_object(p->v[i].name));
+        mark_object(P, cast_object(p->v[i].var.name));
     }
     for (int i = 0; i < p->nup; ++i) {
-        mark_object(P, cast_object(p->u[i].name));
+        mark_object(P, cast_object(p->u[i].var.name));
     }
     for (int i = 0; i < p->nk; ++i) {
         mark_value(P, p->k[i]);

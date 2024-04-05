@@ -1,5 +1,76 @@
 # paw
 
+> **NOTE:** This branch is being used add static typing to paw.
+> The idea is to require type annotations on function parameters, and allow type inference on variables and return types.
+> All types must be known at compile time, and the type system must be sound.
+> All types are nullable, so the statement `let a: String` will compile, and `a` will be set to `null`. 
+> That allows the `?` and `?:` operators to continue being used.
+> Furthermore, `null` is not a real type anymore, so neither `let x: null`, nor `let x = null`, will compile.
+> Unfortunately, static typing will make certain features unfeasible, like `load()`, and other features will need extra consideration, like variadic function parameters.
+> It would also require implementing generics, since we would need them for containers.
+> Eiter that, or we could have 'pseudo generics' (not sure what it's actually called) that only work for builtin containers, like `let array: [Integer] = []`, or `let map: String[UserDefinedType] = {}`.
+> The new syntax will look like
+```
+let i: int = 1
+let i = 1 -- inferred
+
+fn f(a: int, b: int): int {
+    return a + b
+}
+
+-- Field types are fixed at compile time, and fields cannot be added or removed 
+class A {
+    field: int
+    another_field: str
+    method(a: int, b: float): float {
+        -- Compiler should generate a float addition, or just validate?
+        return self.field + a + b
+    }
+
+    __add(y: int) {
+        return A(self.field + y)
+    }
+
+    -- Overloading on parameter type would be nice for metamethods. 
+    __add(y: A) {
+        return A(self.field + y.field)
+    }
+}
+
+-- New global variable syntax, 'let' always defines a local
+-- All globals must be declared by the script. May set values from the C
+-- API (only after load, and value types are fixed/values cannot be added or removed). 
+global a = A() + 123
+
+-- Fancy sum types and pattern matching would also be cool
+-- Just match on type, arity (tuples), maybe keys, and unpack variables.
+enum E {
+    Variant,
+    AnotherVariant,
+    VariantWithData(String),
+}
+
+let e = E.VariantWithData('hello')
+return match e {
+    Variant => 'a'
+    AnotherVariant => 'b'
+    VariantWithData(x) => x
+}
+```
+> Plan: first, write code that builds an AST and uses it to generate the code.
+> Add support for type annotations, but don't have them do anything yet.
+> Make sure we are generating the same code as before.
+> Implement the type checking pass.
+> Work on the VM: we should not have to deal with type errors anymore, so many things can be simplified/optimized
+> Fix the API: it will have to change a decent amount to accomodate types
+> Notes:
+> Don't actually need to use NaN boxing anymore.
+> We may be able to encode the value type in the opcode instead, being careful with the C API boundary.
+> This would be great, because then paw could be somewhat more conforming to standard C (pointer stuff for NaN boxing is not portable)!
+> Would need to keep type info for anything accessible from C.
+> User-defined structs need to be registered before a module using one is compiled.
+> We can check to make sure a struct instance has the right metamethods for the operations it is used in.
+
 An unobtrusive scripting language
 
 paw is a high-level, imperative, dynamically-typed programming language intended for embedding into larger projects.
@@ -33,14 +104,17 @@ Nesting is not allowed in block-style comments.
 ```
 
 ### Variables
-Any variable referenced in the runtime must first be declared: either by a `let` statement, or with the C API.
+Any variable referenced in the runtime must first be declared.
 Otherwise, a "name error" is raised (see the section on [error handling](#error-handling) below).
-Variables declared at the module level are considered global variables, otherwise, they are locals.
+Global variables are intoduced with the `global` keyword, and locals with `let`,
 Global variables can be referenced from anywhere in the program, while locals can only be referenced where they are visible (see [scope](#scope)).
 Locals can be captured in a function or class definition (see [functions](#functions)).
 ```
-let x       -- short for 'let x = null'
-let x = 123 -- rebind 'x' to 123
+-- short for 'let x: int = null'
+let x: int
+
+-- rebind 'x' to a float (type is inferred)
+let x = 6.63e-34 
 ```
 
 ### Types
@@ -49,16 +123,18 @@ Every paw value contains 2 fields: a type tag and a value (essentially a tagged 
 NaN boxing is used to pack both of these fields into 8 bytes of memory.
 The following example demonstrates creation of the basic value types.
 ```
-let null_ = null
-let boolean = true
-let integer = 0x123
-let float_ = 10.0e-1
-let array = [1, 2, 3]
-let map = {'a': 1, 2: 'b'}
-let function = fn() {return 42}
+let _0 = null
+let b = true
+let i = 0x123
+let f = 10.0e-1
+let a = [1, 2, 3]
+let m = {'a': 1, 2: 'b'}
+let f = fn() {return 42}
 
 class Class {
-    method(self) {}
+    times2(a: int): int {
+        return a * 2
+    }
 }
 let instance = Class()
 let method = instance.method
@@ -79,7 +155,7 @@ paw also provides raw blocks for exerting finer control over variable lifetimes.
 Functions are first-class in paw, which means they are treated like any other paw value.
 Functions can be stored in variables, or passed as parameters to compose higher-order functions.
 ```
-fn fib(n) {
+fn fib(n: int) {
     if n < 2 {
         return n
     }
@@ -88,7 +164,7 @@ fn fib(n) {
 fib(10)
 
 -- Anonymous functions:
-let add = fn(a, b) {
+let add = fn(a: str, b: str) {
     return a + b
 }
 ```
@@ -96,7 +172,8 @@ let add = fn(a, b) {
 ### Classes
 ```
 class Superclass {
-    __init(value) {
+    value: int
+    __init(value: int) {
         -- 'self' is an implicit parameter
         self.value = value
     }
@@ -104,7 +181,7 @@ class Superclass {
 
 class Class: Superclass {
     -- metamethod for initialization: called when 'Class(x)' is encountered
-    __init(value) {
+    __init(value: int) {
         -- call Superclass.__init(self)
         super.__init(value) 
     }
@@ -173,24 +250,24 @@ Instead we attempt `x.__ge(1)` and negate the result.
 ```
 
 class Class {
-    __init(value) {
+    __init(value: int) {
         self.value = value
     }
 
     -- metamethod for '+': called when 'Class(lhs) + rhs' is encountered
-    __add(rhs) {
+    __add(rhs: int) {
         let value = self.value ++ rhs
         return Class(value)
     }
 
     -- reverse metamethod for '+': called when 'lhs + Class(rhs)' is encountered
-    __radd(lhs) {
+    __radd(lhs: int) {
         let value = lhs ++ self.value
         return Class(value)
     }
 
     -- metamethod for '=='
-    __eq(rhs) {
+    __eq(rhs: int) {
         return self.value == rhs
     }
 
@@ -205,8 +282,7 @@ class Class {
     }
 }
 
--- Instances of 'Class' can be equality-compared with, and added to, numeric
--- values.
+-- Instances of 'Class' can be equality-compared with, and added to, integers.
 assert(3 == Class(1) + 2)
 assert(3 == 1 + Class(2))
 ```
@@ -281,6 +357,7 @@ assert(s == ','.join(a))
 
 ### Arrays
 ```
+-- inferred as array<int>
 let a = [1, 2, 3]
 assert(a[:1] == [1])
 assert(a[1:-1] == [2])
@@ -289,7 +366,8 @@ assert(a[-1:] == [3])
 
 ### Maps
 ```
-let m = {1: 'a', 'b': true}
+-- inferred as map<int, string>
+let m = {1: 'a', 2: 'b'}
 m[3] = 42
 m.erase(1)
 
@@ -299,7 +377,7 @@ print(m.get(1, 'default'))
 
 ### Error handling
 ```
-fn divide_by_0(n) {
+fn divide_by_0(n: int) {
     return n / 0
 }
 let status = try(divide_by_0, 42)

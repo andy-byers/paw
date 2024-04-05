@@ -91,6 +91,16 @@ String *pawS_new_str(paw_Env *P, const char *text)
     return pawS_new_nstr(P, text, strlen(text));
 }
 
+String *pawS_new_fixed(paw_Env *P, const char *text)
+{
+    String *s = pawS_new_str(P, text);
+    Object *o = cast_object(s);
+    if (o == P->gc_all) {
+        pawG_fix_object(P, o);
+    }
+    return s;
+}
+
 void pawS_free_str(paw_Env *P, String *s)
 {
     StringTable *st = &P->strings;

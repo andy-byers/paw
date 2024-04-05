@@ -464,7 +464,7 @@ void pawR_write_global(paw_Env *P, Value name, paw_Bool create)
     const MapAction action = create ? MAP_ACTION_CREATE : MAP_ACTION_NONE;
     Value *global = pawH_action(P, P->globals, name, action);
     if (!global) {
-        paw_assert(!create);      // MAP_ACTION_CREATE never returns NULL
+        paw_assert(!create); // MAP_ACTION_CREATE never returns NULL
         pawR_name_error(P, name); // no return
     }
     *global = *vm_peek(0);
@@ -1508,6 +1508,7 @@ static paw_Bool should_jump_false(paw_Env *P)
     return !pawV_truthy(*pv);
 }
 
+#include "debug.h"
 void pawR_execute(paw_Env *P, CallFrame *cf)
 {
     const OpCode *pc;
@@ -1521,6 +1522,10 @@ top:
 
     for (;;) {
         const OpCode opcode = *pc++;
+
+        // puts(paw_opcode_name(get_OP(opcode)));
+        // paw_dump_stack(P);
+
         vm_switch(get_OP(opcode))
         {
             vm_case(POP) :

@@ -1,0 +1,108 @@
+-- types.paw
+
+    let i0: int
+--***********************************************
+--    variables
+--***********************************************
+{
+    -- test type annotations
+    let i: int = 123
+    let s: string = 'abc'
+    let b: bool = true
+    let f: float = 1.0
+
+    let i0: int
+    let s0: string
+    let b0: bool
+    let f0: float
+
+    -- test inferred types
+    let I = 123
+    let S = 'abc'
+    let B = true
+    let F = 1.0
+}
+
+--***********************************************
+--    functions
+--***********************************************
+{
+    -- test 'null' return type annotation: Function must contain only 'return null' 
+    -- or 'return', otherwise, it must not contain a return statement
+    fn f(): null {
+        -- implicit 'return null'
+    }
+    fn fi(a: int): null {
+        return -- implicit 'null'
+    }
+    fn fii(a: int, b: int): null {
+        return null
+    }
+    f()
+    fi(1)
+    fii(1, 2)
+
+    -- test inferred 'null' return type
+    fn F() {
+        -- implicit 'return null'
+    }
+    fn Fi(a: int) {
+        return -- implicit 'null'
+    }
+    fn Fii(a: int, b: int) {
+        return null
+    }
+    F()
+    Fi(1)
+    Fii(1, 2)
+
+    -- test 'int' annotation
+    fn f_i(): int {
+        return 1
+    }
+    fn fi_i(a: int): int {
+        return a + 2
+    }
+    fn fii_i(a: int, b: int): int {
+        return a + b + 3
+    }
+    f_i()
+    fi_i(1)
+    fii_i(1, 2)
+
+    -- test inferred 'int' annotation
+    fn F_i() {
+        return 1
+    }
+    fn Fi_i(a: int) {
+        return a + 2
+    }
+    fn Fii_i(a: int, b: int) {
+        return a + b + 3
+    }
+    F_i()
+    Fi_i(1)
+    Fii_i(1, 2)
+}
+
+--***********************************************
+--    inference
+--***********************************************
+{
+    fn f2f(a: float) {
+        let x = a * 2 + 1
+        let y = x / 2 - 1
+        return y
+    }
+    let a = f2f(1.0)
+
+    fn f2i(a: float) {
+        let x = a * 2.0
+        return x // 2
+    }
+    let b = f2i(2.0)
+}
+
+{
+    let x: string = null
+}

@@ -5,6 +5,7 @@
 #define PAW_VALUE_H
 
 #include "paw.h"
+#include "type.h"
 #include "util.h"
 
 // Initializer for iterator state variables
@@ -93,6 +94,8 @@
 #define cast_uintptr(x) ((uintptr_t)(x))
 #define cast_object(x) ((Object *)(void *)(x))
 #define has_meta(x) (pawV_is_instance(x) || pawV_is_foreign(x))
+
+struct String;
 
 typedef union Value {
     uint64_t u;
@@ -197,24 +200,30 @@ typedef struct String {
 
 const char *pawV_to_string(paw_Env *P, Value v, size_t *nout);
 
+typedef struct VarDesc {
+    const Type *type;
+    String *name;
+} VarDesc;
+
 typedef struct Proto {
     GC_HEADER;
     uint8_t is_va;
 
-    String *modname;
+    FnType *type;
     String *name;
+    String *modname;
     uint32_t *source;
     int length;
 
     struct LocalInfo {
-        String *name;
+        VarDesc var;
         int pc0;
         int pc1;
         paw_Bool captured;
     } *v;
 
     struct UpValueInfo {
-        String *name;
+        VarDesc var;
         uint16_t index;
         paw_Bool is_local;
     } *u;
@@ -230,11 +239,11 @@ typedef struct Proto {
     // nested functions
     struct Proto **p;
 
-    int nup;    // number of upvalues
+    int nup; // number of upvalues
     int nlines; // number of lines
     int ndebug; // number of locals
-    int nk;     // number of constants
-    int argc;   // number of fixed parameters
+    int nk; // number of constants
+    int argc; // number of fixed parameters
     int nproto; // number of nested functions
 
     Object *gc_list;
@@ -319,12 +328,12 @@ void pawV_free_class(paw_Env *P, Class *cls);
 
 // Instance of a class
 typedef struct Instance {
-    GC_HEADER;       // common fields for GC
-    int nbound;      // number of bound functions
-    Class *self;     // class type
-    Map *attr;       // runtime attributes
+    GC_HEADER; // common fields for GC
+    int nbound; // number of bound functions
+    Class *self; // class type
+    Map *attr; // runtime attributes
     Object *gc_list; // grey object list
-    Value bound[];   // array of bound functions
+    Value bound[]; // array of bound functions
 } Instance;
 
 Instance *pawV_new_instance(paw_Env *P, StackPtr sp, Class *cls);
@@ -355,6 +364,16 @@ typedef struct Foreign {
 Foreign *pawV_push_foreign(paw_Env *P, size_t size, int nbound);
 void pawV_free_foreign(paw_Env *P, Foreign *ud);
 Foreign *pawV_new_builtin(paw_Env *P, int nbound);
+
+typedef struct Module {
+    struct GlobalVec {
+        VarDesc *data; 
+        int size;
+        int alloc;
+    } globals;
+
+    Closure *entry;
+} Module;
 
 #define ISIGNBIT (UINT64_C(1) << (VINT_WIDTH - 1))
 

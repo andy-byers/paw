@@ -77,7 +77,11 @@ typedef uint32_t OpCode;
 //   Up = upvalues (requires 16-bit index)
 //   P = function prototypes (requires 16-bit index)
 //
-typedef enum { // operands    stack in     stack out    side effects
+// NOTE: Opcode order is only important starting from OP_CALL (opcodes that have
+//       corresponding metamethods).
+//
+// ORDER Op
+typedef enum Op { // operands    stack in     stack out    side effects
 OP_PUSHNULL,//       -           -            null         -
 OP_PUSHTRUE,//       -           -            true         -
 OP_PUSHFALSE,//      -           -            false        -
@@ -102,7 +106,6 @@ OP_GETGLOBAL,//      U           -            G[K[U]]      -
 OP_SETGLOBAL,//      U           v            -            G[K[u]] = v
 OP_GETLOCAL,//       U           -            L[U]         -
 OP_SETLOCAL,//       U           v            -            L[u] = v
-OP_UPVALUE,//        U           v            -            define Up[u] = v
 OP_GETUPVALUE,//     U           -            Up[U]        -
 OP_SETUPVALUE,//     U           v            -            Up[u] = v
 
@@ -117,10 +120,10 @@ OP_FORNUM,//         S           *~*~*~*~*~*~*~*~* see notes *~*~*~*~*~*~*~*~*
 OP_FORIN0,//         S           *~*~*~*~*~*~*~*~* see notes *~*~*~*~*~*~*~*~*
 OP_FORIN,//          S           *~*~*~*~*~*~*~*~* see notes *~*~*~*~*~*~*~*~*
 
-OP_UNOP,//           U           x            op(u, x)     -
-OP_BINOP,//          U           x y          op(u, x, y)  -
+OP_UNOP,//           A B         x            op(a, x)     -
+OP_BINOP,//          A B         x y          op(a, x, y)  -
          
-OP_VARARG,//         U           v_u..v_1     [v_u..v_1]   -
+OP_VARARG,//         A B         v_u..v_1     [v_u..v_1]   -
 OP_CALL,//           U           f v_u..v_1   v            v = f(v_u..v_1)
 
 OP_GETATTR,//        -           x y          x.y          -
@@ -133,6 +136,7 @@ OP_SETSLICE,//       -           x y z w      -            x[y:z]=w
 NOPCODES
 } Op;
 
+// ORDER UnaryOp
 typedef enum {
     UNARY_LEN, 
     UNARY_NEG, 
@@ -142,6 +146,7 @@ typedef enum {
     NUNARYOPS
 } UnaryOp;
 
+// ORDER BinaryOp
 typedef enum {
     BINARY_EQ,   
     BINARY_NE,   
@@ -170,6 +175,7 @@ typedef enum {
 // clang-format on
 //
 // Notes:
+// * OP_*OP uses argument 'B' to indicate the types of 'x' and 'y'
 // * OP_RETURN replaces the current call frame with the value on top of the stack.
 //   The current call frame consists of the function object or reciever 'f', its
 //   parameters, and all locals declared between the start of the call and the 'return'.
@@ -185,6 +191,7 @@ typedef enum {
 #define binop_has_r(o) ((o) >= BINARY_ADD)
 #define binop_r(o) ((o) + MM_EQ + MM_RADD - MM_ADD)
 
+// ORDER Metamethod
 typedef enum {
     MM_CALL,
     MM_GETATTR,

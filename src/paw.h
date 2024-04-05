@@ -40,8 +40,6 @@ typedef struct paw_Env paw_Env;
 
 typedef void *(*paw_Alloc)(void *ud, void *ptr, size_t size0, size_t size);
 typedef const char *(*paw_Reader)(paw_Env *P, void *ud, size_t *size);
-typedef size_t (*paw_Writer)(paw_Env *P, const void *data, size_t size, void *ud);
-typedef const char *(paw_Lookup)(paw_Env *P, const char *name);
 typedef int (*paw_Function)(paw_Env *P);
 
 paw_Env *paw_open(paw_Alloc alloc, void *ud);
@@ -68,36 +66,35 @@ size_t paw_bytes_used(const paw_Env *P);
 // Creates a function object containing the code and pushes it onto the stack.
 int paw_load(paw_Env *P, paw_Reader input, const char *name, void *ud);
 
-int paw_dump(paw_Env *P, paw_Writer output, void *ud);
-
 // Invoke the paw runtime on a function with 'argc' parameters
 // The function object should be on the stack followed the the parameters, with
 // the last parameter on top.
 int paw_call(paw_Env *P, int argc);
 
-#define PAW_TNULL 0
-#define PAW_TBOOLEAN 1
-#define PAW_TINTEGER 2
-#define PAW_TFLOAT 3
-#define PAW_TSTRING 4
-#define PAW_TARRAY 5
-#define PAW_TMAP 6
-#define PAW_TFUNCTION 7
-#define PAW_TCLASS 8
-#define PAW_TINSTANCE 9
-#define PAW_TUSERDATA 10
+// C API representation of 'null'
+#define PAW_NULL -1
+
+#define PAW_TBOOL 0
+#define PAW_TINT 1
+#define PAW_TFLOAT 2
+#define PAW_TSTRING 3
+#define PAW_TARRAY 4
+#define PAW_TMAP 5
+#define PAW_TFUNCTION 6
+#define PAW_TCLASS 7
+#define PAW_TFOREIGN 8
+#define PAW_NTYPES 9
 
 paw_Bool paw_is_truthy(paw_Env *P, int index);
 paw_Bool paw_is_null(paw_Env *P, int index);
-paw_Bool paw_is_boolean(paw_Env *P, int index);
+paw_Bool paw_is_bool(paw_Env *P, int index);
 paw_Bool paw_is_float(paw_Env *P, int index);
-paw_Bool paw_is_integer(paw_Env *P, int index);
+paw_Bool paw_is_int(paw_Env *P, int index);
 paw_Bool paw_is_string(paw_Env *P, int index);
 paw_Bool paw_is_array(paw_Env *P, int index);
 paw_Bool paw_is_map(paw_Env *P, int index);
 paw_Bool paw_is_function(paw_Env *P, int index);
 paw_Bool paw_is_class(paw_Env *P, int index);
-paw_Bool paw_is_instance(paw_Env *P, int index);
 paw_Bool paw_is_foreign(paw_Env *P, int index);
 paw_Bool paw_is_number(paw_Env *P, int index);
 int paw_type(paw_Env *P, int index);

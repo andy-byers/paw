@@ -52,10 +52,16 @@ const char *paw_binop_name(BinaryOp binop)
             return "SHR";
         case BINARY_EQ:
             return "EQ";
+        case BINARY_NE:
+            return "NE";
         case BINARY_LT:
             return "LT";
         case BINARY_LE:
             return "LE";
+        case BINARY_GT:
+            return "GT";
+        case BINARY_GE:
+            return "GE";
         case BINARY_IN:
             return "IN";
         default:
@@ -108,8 +114,6 @@ const char *paw_opcode_name(Op op)
             return "GETLOCAL";
         case OP_SETLOCAL:
             return "SETLOCAL";
-        case OP_UPVALUE:
-            return "UPVALUE";
         case OP_GETUPVALUE:
             return "GETUPVALUE";
         case OP_SETUPVALUE:
@@ -163,12 +167,12 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
         const OpCode opcode = *pc++;
         switch (get_OP(opcode)) {
             case OP_UNOP: {
-                pawL_add_fstring(P, print, " ; type = %d", paw_unop_name(get_U(opcode)));
+                pawL_add_fstring(P, print, " ; type = %s", paw_unop_name(get_U(opcode)));
                 break;
             }
 
             case OP_BINOP: {
-                pawL_add_fstring(P, print, " ; type = %d", paw_binop_name(get_U(opcode)));
+                pawL_add_fstring(P, print, " ; type = %s", paw_binop_name(get_U(opcode)));
                 break;
             }
 
