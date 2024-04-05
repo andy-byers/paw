@@ -9,11 +9,11 @@
 static inline const char *api_typename(int type)
 {
     switch (type) {
-        case PAW_TNULL:
+        case PAW_NULL:
             return "null";
-        case PAW_TBOOLEAN:
+        case PAW_TBOOL:
             return "boolean";
-        case PAW_TINTEGER:
+        case PAW_TINT:
             return "integer";
         case PAW_TFLOAT:
             return "float";
@@ -27,9 +27,7 @@ static inline const char *api_typename(int type)
             return "function";
         case PAW_TCLASS:
             return "class";
-        case PAW_TINSTANCE:
-            return "instance";
-        case PAW_TUSERDATA:
+        case PAW_TFOREIGN:
             return "foreign";
         default:
             return "?";
@@ -40,13 +38,13 @@ static inline int api_type(Value v)
 {
     switch (pawV_get_type(v)) {
         case VNULL:
-            return PAW_TNULL;
+            return PAW_NULL;
         case VTRUE:
         case VFALSE:
-            return PAW_TBOOLEAN;
+            return PAW_TBOOL;
         case VBIGINT:
         case VNUMBER:
-            return PAW_TINTEGER;
+            return PAW_TINT;
         case VCLOSURE:
         case VMETHOD:
         case VNATIVE:
@@ -59,10 +57,8 @@ static inline int api_type(Value v)
             return PAW_TMAP;
         case VCLASS:
             return PAW_TCLASS;
-        case VINSTANCE:
-            return PAW_TINSTANCE;
         case VFOREIGN:
-            return PAW_TUSERDATA;
+            return PAW_TFOREIGN;
         default:
             return PAW_TFLOAT;
     }

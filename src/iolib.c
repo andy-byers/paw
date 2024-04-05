@@ -85,7 +85,7 @@ static int io_flush(paw_Env *P)
 static int io_read(paw_Env *P)
 {
     pawL_check_argc(P, 2);
-    pawL_check_type(P, 2, PAW_TINTEGER);
+    pawL_check_type(P, 2, PAW_TINT);
     FILE *file = get_handle(P, 1);
     const paw_Int n = paw_int(P, 2);
 

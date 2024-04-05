@@ -102,7 +102,7 @@ static void parse_options(int *pargc, const char ***pargv)
                 if (shr == state->name[0]) {
                     if (state->flag) {
                         *state->flag = PAW_TRUE;
-                        break;         // no argument
+                        break; // no argument
                     } else if (a[1]) { // in '-abc', only 'c' can take an argument
                         error(PAW_ERUNTIME, "option with argument ('%c') must be last\n", shr);
                     } else if (*pargc == 0) {

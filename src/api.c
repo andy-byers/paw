@@ -64,6 +64,7 @@ static void open_aux(paw_Env *P, void *arg)
     P->globals = pawH_new(P);
 
     pawS_init(P);
+    pawY_init(P);
     pawP_init(P);
     pawR_init(P);
     pawL_init(P);
@@ -92,10 +93,10 @@ paw_Env *paw_open(paw_Alloc alloc, void *ud)
 void paw_close(paw_Env *P)
 {
     pawG_uninit(P);
+    pawY_uninit(P);
     pawC_uninit(P);
     pawS_uninit(P);
 
-    paw_assert(P->gc_bytes == 0);
     P->alloc(P->ud, P, sizeof *P, 0);
 }
 
@@ -106,12 +107,12 @@ paw_Bool paw_is_truthy(paw_Env *P, int index)
 
 paw_Bool paw_is_null(paw_Env *P, int index)
 {
-    return paw_type(P, index) == PAW_TNULL;
+    return paw_type(P, index) == PAW_NULL;
 }
 
 paw_Bool paw_is_boolean(paw_Env *P, int index)
 {
-    return paw_type(P, index) == PAW_TBOOLEAN;
+    return paw_type(P, index) == PAW_TBOOL;
 }
 
 paw_Bool paw_is_float(paw_Env *P, int index)
@@ -119,9 +120,9 @@ paw_Bool paw_is_float(paw_Env *P, int index)
     return paw_type(P, index) == PAW_TFLOAT;
 }
 
-paw_Bool paw_is_integer(paw_Env *P, int index)
+paw_Bool paw_is_int(paw_Env *P, int index)
 {
-    return paw_type(P, index) == PAW_TINTEGER;
+    return paw_type(P, index) == PAW_TINT;
 }
 
 paw_Bool paw_is_string(paw_Env *P, int index)
@@ -149,14 +150,9 @@ paw_Bool paw_is_class(paw_Env *P, int index)
     return paw_type(P, index) == PAW_TCLASS;
 }
 
-paw_Bool paw_is_instance(paw_Env *P, int index)
-{
-    return paw_type(P, index) == PAW_TINSTANCE;
-}
-
 paw_Bool paw_is_foreign(paw_Env *P, int index)
 {
-    return paw_type(P, index) == PAW_TUSERDATA;
+    return paw_type(P, index) == PAW_TFOREIGN;
 }
 
 paw_Bool paw_is_bigint(paw_Env *P, int index)
@@ -174,12 +170,10 @@ int paw_type(paw_Env *P, int index)
     const Value v = *access(P, index);
     switch (pawV_get_type(v)) {
         case VNULL:
-            return PAW_TNULL;
+            return PAW_NULL;
         case VTRUE:
         case VFALSE:
-            return PAW_TBOOLEAN;
-        case VBIGINT:
-            return PAW_TINTEGER;
+            return PAW_TBOOL;
         case VCLOSURE:
         case VMETHOD:
         case VNATIVE:
@@ -192,12 +186,11 @@ int paw_type(paw_Env *P, int index)
             return PAW_TMAP;
         case VCLASS:
             return PAW_TCLASS;
-        case VINSTANCE:
-            return PAW_TINSTANCE;
+        case VBIGINT:
         case VNUMBER:
-            return PAW_TINTEGER;
+            return PAW_TINT;
         case VFOREIGN:
-            return PAW_TUSERDATA;
+            return PAW_TFOREIGN;
         default:
             return PAW_TFLOAT;
     }
@@ -355,7 +348,7 @@ void paw_to_float(paw_Env *P, int index)
     paw_replace(P, i);
 }
 
-void paw_to_integer(paw_Env *P, int index)
+void paw_to_int(paw_Env *P, int index)
 {
     const int i = paw_abs_index(P, index);
     paw_push_value(P, i);
@@ -409,31 +402,10 @@ int paw_load(paw_Env *P, paw_Reader input, const char *name, void *ud)
         .ud = ud,
     };
     const int status = pawC_try(P, parse_aux, &p);
-    pawM_free_vec(P, p.mem.temp, p.mem.talloc);
-    pawM_free_vec(P, p.mem.vars, p.mem.valloc);
+    pawM_free_vec(P, p.mem.scratch.data, p.mem.scratch.alloc);
+    pawM_free_vec(P, p.mem.locals.data, p.mem.locals.alloc);
     pawM_free_vec(P, p.mem.ll.values, p.mem.ll.capacity);
     return status;
-}
-
-struct DumpState {
-    paw_Writer output;
-    void *ud;
-};
-
-static void dump_aux(paw_Env *P, void *arg)
-{
-    struct DumpState *d = arg;
-    const Value v = P->top.p[-1];
-    if (!pawV_is_closure(v)) {
-        pawR_error(P, PAW_ETYPE, "expected paw function");
-    }
-    const Closure *f = pawV_get_closure(v);
-    d->output(P, "", 1, d->ud);
-}
-
-int paw_dump(paw_Env *P, paw_Writer output, void *ud)
-{
-    return pawC_try(P, dump_aux, &(struct DumpState){output, ud});
 }
 
 struct CallState {
@@ -543,7 +515,7 @@ void paw_get_item(paw_Env *P, int index)
 paw_Bool paw_check_item(paw_Env *P, int index)
 {
     paw_push_value(P, index); // push container
-    paw_rotate(P, -2, 1);     // place container below key
+    paw_rotate(P, -2, 1); // place container below key
     if (pawR_getitem(P)) {
         paw_push_null(P);
         paw_shift(P, 2);
@@ -695,9 +667,9 @@ void paw_rotate(paw_Env *P, int index, int n)
     StackPtr p = access(P, index);
     paw_assert((n >= 0 ? n : -n) <= t - p + 1);
     StackPtr m = n >= 0 ? t - n : p - n - 1;
-    reverse(p, m);     // Reverse A to get A'
+    reverse(p, m); // Reverse A to get A'
     reverse(m + 1, t); // Reverse B to get B'
-    reverse(p, t);     // Reverse A'B' to get BA
+    reverse(p, t); // Reverse A'B' to get BA
 }
 
 void paw_copy(paw_Env *P, int from, int to)

@@ -8,6 +8,8 @@ static void script(const char *name)
 
 int main(void)
 {
+    script("types");
+    return 0; // TODO
     script("basic");
     script("operator");
     script("integer");

@@ -40,6 +40,7 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/array.h
             ${PAW_SOURCE_DIR}/bigint.h
             ${PAW_SOURCE_DIR}/call.h
+            ${PAW_SOURCE_DIR}/code.h
             ${PAW_SOURCE_DIR}/debug.h
             ${PAW_SOURCE_DIR}/env.h
             ${PAW_SOURCE_DIR}/gc.h
@@ -54,6 +55,7 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/prefix.h
             ${PAW_SOURCE_DIR}/rt.h
             ${PAW_SOURCE_DIR}/str.h
+            ${PAW_SOURCE_DIR}/type.h
             ${PAW_SOURCE_DIR}/util.h
             ${PAW_SOURCE_DIR}/value.h
     PRIVATE ${PAW_SOURCE_DIR}/api.c
@@ -61,6 +63,7 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/array.c
             ${PAW_SOURCE_DIR}/bigint.c 
             ${PAW_SOURCE_DIR}/call.c
+            ${PAW_SOURCE_DIR}/code.c
             ${PAW_SOURCE_DIR}/debug.c
             ${PAW_SOURCE_DIR}/env.c
             ${PAW_SOURCE_DIR}/gc.c
@@ -76,6 +79,7 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/parse.c
             ${PAW_SOURCE_DIR}/rt.c
             ${PAW_SOURCE_DIR}/str.c
+            ${PAW_SOURCE_DIR}/type.c
             ${PAW_SOURCE_DIR}/util.c
             ${PAW_SOURCE_DIR}/value.c)
 target_link_libraries(paw

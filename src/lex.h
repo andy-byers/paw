@@ -7,7 +7,8 @@
 #include "value.h"
 
 #define FIRST_KEYWORD TK_FN
-#define IS_KEYWORD(k) (k >= FIRST_KEYWORD)
+#define is_keyword(s) ((s)->flag > 0)
+#define is_builtin(s) ((s)->flag < 0)
 
 void pawX_read_integer(paw_Env *P, const char *data, int base);
 void pawX_read_float(paw_Env *P, const char *data);
@@ -45,6 +46,7 @@ enum MultiChar {
     TK_CLASS,
     TK_SUPER,
     TK_INCLUDE,
+    TK_GLOBAL,
     TK_LET,
     TK_IF,
     TK_ELSE,
@@ -75,6 +77,8 @@ typedef struct Lex {
 
     Map *strings;
     String *modname;
+    Closure *main;
+    struct Tree *ast;
 
     paw_Reader input;
     const char *chunk;
@@ -82,6 +86,7 @@ typedef struct Lex {
     char c;
 
     struct ParseMemory *pm;
+    int talloc;
 
     // Current token and 1 lookahead
     Token t;

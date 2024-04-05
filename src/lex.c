@@ -69,9 +69,9 @@ static struct Token make_string(struct Lex *x, TokenKind kind)
 {
     ParseMemory *pm = x->pm;
     struct Token t = make_token(kind);
-    String *s = pawX_scan_string(x, pm->temp, cast_size(pm->tsize));
+    String *s = pawX_scan_string(x, pm->scratch.data, cast_size(pm->scratch.size));
     pawV_set_string(&t.value, s);
-    pm->tsize = 0;
+    pm->scratch.size = 0;
     return t;
 }
 
@@ -94,8 +94,8 @@ static char next(struct Lex *x)
 static void save(struct Lex *x, char c)
 {
     ParseMemory *pm = x->pm;
-    pawM_grow(x->P, pm->temp, pm->tsize, pm->talloc);
-    pm->temp[pm->tsize++] = c;
+    pawM_grow(x->P, pm->scratch.data, pm->scratch.size, pm->scratch.alloc);
+    pm->scratch.data[pm->scratch.size++] = c;
 }
 
 #define save_and_next(x) (save(x, (x)->c), next(x))
@@ -127,10 +127,7 @@ static struct Token consume_name(struct Lex *x)
     }
     struct Token t = make_string(x, TK_NAME);
     const String *s = pawV_get_string(t.value);
-    if (s->flag > 0) {
-        // Set the keyword type.
-        t.kind = (TokenKind)s->flag;
-    }
+    t.kind = s->flag > 0 ? (TokenKind)s->flag : t.kind;
     if (s->length > PAW_NAME_MAX) {
         pawX_error(x, "name (%I chars) is too long",
                    paw_cast_int(s->length));
@@ -198,9 +195,9 @@ static int get_codepoint(struct Lex *x)
         return -1;
     }
     return HEXVAL(c[0]) << 12 | //
-           HEXVAL(c[1]) << 8 |  //
-           HEXVAL(c[2]) << 4 |  //
-           HEXVAL(c[3]);        //
+           HEXVAL(c[1]) << 8 | //
+           HEXVAL(c[2]) << 4 | //
+           HEXVAL(c[3]); //
 }
 
 static void increment_line(struct Lex *x)
@@ -350,9 +347,9 @@ Token consume_number(struct Lex *x)
     save(x, '\0');
 
     // on success, pushes a number onto the stack
-    if (pawV_parse_integer(x->P, pm->temp)) {
-        if (pawV_parse_float(x->P, pm->temp)) {
-            pawX_error(x, "invalid number '%s'", pm->temp);
+    if (pawV_parse_integer(x->P, pm->scratch.data)) {
+        if (pawV_parse_float(x->P, pm->scratch.data)) {
+            pawX_error(x, "invalid number '%s'", pm->scratch.data);
         }
     }
     return make_number(x);
@@ -384,7 +381,7 @@ static Token advance(struct Lex *x)
 {
 #define T(kind) make_token(kind)
     for (;;) {
-        x->pm->tsize = 0;
+        x->pm->scratch.size = 0;
         if (ISDIGIT(x->c)) {
             return consume_number(x);
         } else if (ISNAME(x->c)) {
@@ -532,8 +529,8 @@ void pawX_set_source(Lex *x, paw_Reader input)
 {
     paw_Env *P = x->P;
     ParseMemory *pm = x->pm;
-    pawM_resize(P, pm->temp, 0, INITIAL_SCRATCH);
-    pm->talloc = INITIAL_SCRATCH;
+    pawM_resize(P, pm->scratch.data, 0, INITIAL_SCRATCH);
+    pm->scratch.alloc = INITIAL_SCRATCH;
 
     x->input = input;
     x->line = 1;

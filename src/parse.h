@@ -1,15 +1,21 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
+//
+// Compilation phases:
+//
+//  Pass | Target | Purpose
+// ------|--------|-----------------------------
+//  1    | code   | build ast, register symbols
+//  2    | tree   | check types
+//  3    | tree   | generate code
+//
 #ifndef PAW_PARSE_H
 #define PAW_PARSE_H
 
 #include "lex.h"
 #include "util.h"
 #include "value.h"
-
-// arbitrary magic number for identifying bytecode files
-#define BYTECODE_MAGIC ((uint8_t[]){0, 1, 2, 3})
 
 typedef enum LabeKind {
     LBREAK,
@@ -30,43 +36,10 @@ typedef struct LabelList {
     int capacity;
 } LabelList;
 
-typedef enum ExprKind {
-    EXPR_CONST,
-    EXPR_NULL,
-    EXPR_TRUE,
-    EXPR_FALSE,
-    EXPR_FLOAT,
-    EXPR_INTEGER,
-    EXPR_STRING,
-    EXPR_ARRAY,
-    EXPR_MAP,
-    EXPR_GLOBAL,
-    EXPR_LOCAL,
-    EXPR_UPVALUE,
-    EXPR_ITEM,
-    EXPR_SLICE,
-    EXPR_ATTR,
-    EXPR_STACK,
-    EXPR_CALL,
-    EXPR_COUNT //
-} ExprKind;
-
-typedef struct ExprState {
-    ExprKind kind;
-    int index;
-    String *name;
-    union {
-        paw_Int i;
-        paw_Float f;
-        String *s;
-        Value v;
-    };
-} ExprState;
-
-typedef struct ClsState {
-    struct ClsState *outer;
-    paw_Bool has_super;
-} ClsState;
+// typedef struct ClsState {
+//     struct ClsState *outer;
+//     paw_Bool has_super;
+// } ClsState;
 
 // Node in a list of active code blocks
 typedef struct BlkState {
@@ -85,40 +58,44 @@ typedef enum FnKind {
 
 #define fn_has_self(kind) (kind >= FN_METHOD)
 
-typedef struct VarState {
-    String *name;
-} VarState;
+typedef struct VarList {
+    VarDesc *data;
+    int size;
+    int alloc;
+} VarList;
 
 typedef struct ParseMemory {
     // Buffer for accumulating strings
-    char *temp;
-    int tsize;
-    int talloc;
+    struct Scratch {
+        char *data;
+        int size;
+        int alloc;
+    } scratch;
 
-    // Buffer for holding local variables
-    VarState *vars;
-    int vsize;
-    int valloc;
+    // Buffers for holding variables
+    VarList locals;
+    VarList globals;
 
     LabelList ll;
 } ParseMemory;
 
 typedef struct FnState {
-    struct FnState *caller;
-    BlkState *blk;
-    Lex *lex;
-    Proto *proto;
-    String *name;
-    int base;
-    int level;
-    int ndebug;
-    int nup;
-    int nk;
-    int nproto;
-    int nlines;
-    int lastline;
-    int pc;
-    enum FnKind kind;
+    struct FnState *caller; // FnState of the caller
+    BlkState *blk; // current lexical block
+    Lex *lex; // pointer back to the lexical state
+    String *name; // name of the function
+    struct NodeVec *param; // AST nodes for parameters
+    TypeTag ret; // return type annotation
+    Proto *proto; // prototype being built
+    int base; // base stack index
+    int level; // current stack index
+    int ndebug; // number of debug entries
+    int nup; // number of upvalues
+    int nk; // number of constants
+    int nproto; // number of nested functions
+    int nlines; // number of source lines
+    int pc; // number of instructions
+    enum FnKind kind; // type of function
 } FnState;
 
 void pawP_init(paw_Env *P);
