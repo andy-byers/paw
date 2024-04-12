@@ -63,14 +63,16 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/array.c
             ${PAW_SOURCE_DIR}/bigint.c 
             ${PAW_SOURCE_DIR}/call.c
+            ${PAW_SOURCE_DIR}/check.c
             ${PAW_SOURCE_DIR}/code.c
+            ${PAW_SOURCE_DIR}/codegen.c
             ${PAW_SOURCE_DIR}/debug.c
             ${PAW_SOURCE_DIR}/env.c
             ${PAW_SOURCE_DIR}/gc.c
-            ${PAW_SOURCE_DIR}/iolib.c
+            #${PAW_SOURCE_DIR}/iolib.c
             ${PAW_SOURCE_DIR}/lex.c
             ${PAW_SOURCE_DIR}/lib.c
-            ${PAW_SOURCE_DIR}/mathlib.c
+            #${PAW_SOURCE_DIR}/mathlib.c
             ${PAW_SOURCE_DIR}/map.c
             ${PAW_SOURCE_DIR}/mem.c
             ${PAW_SOURCE_DIR}/meta.c

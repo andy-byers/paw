@@ -1,6 +1,9 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
+#if 0
+TODO: Make BigInt a separate type from int, needs special GC instructions that we don't want to
+      emit for every single int.
 #include "bigint.h"
 #include "auxlib.h"
 #include "gc.h"
@@ -51,7 +54,7 @@ static BigInt *bi_alloc(paw_Env *P, StackPtr sp, int n)
         bi_overflow(P);
     }
     BigInt *bi = pawB_new(P);
-    pawV_set_bigint(sp, bi); // anchor
+    v_set_object(sp, bi); // anchor
     pawM_resize(P, bi->buf, 0, cast_size(n));
     memset(bi->buf, 0, cast_size(n) * sizeof(bi->buf[0]));
     bi->alloc = n;
@@ -116,40 +119,24 @@ static int unpack_int(paw_Int i, BiDigit *digits)
 // Unpack an integral value into a BigInt
 // 'out->buf' is assumed to be large enough to fit a paw_Int. If 'v' is a BigInt
 // already, its fields are just copied.
-static int unpack_value(Value v, BigInt *out)
+static void unpack_value(Value v, BigInt *out)
 {
-    paw_assert(!pawV_is_float(v));
-    paw_assert(!pawV_is_bool(v));
-
-    if (pawV_is_int(v)) {
-        paw_Int i = pawV_get_int(v);
+    if (i_is_small(v)) {
+        paw_Int i = v_int(v);
         out->size = unpack_int(i, out->buf);
         out->neg = i < 0;
-    } else if (pawV_is_bigint(v)) {
-        BigInt *src = pawV_get_bigint(v);
+    } else {
+        BigInt *src = v_bigint(v);
         out->buf = src->buf;
         out->size = src->size;
         out->neg = src->neg;
-    } else {
-        return -1;
-    }
-    return 0;
-}
-
-static void unpack2_aux(paw_Env *P, const char *what, //
-                        Value x, BigInt *xout,
-                        Value y, BigInt *yout)
-{
-    if (unpack_value(x, xout) || unpack_value(y, yout)) {
-        pawR_type_error2(P, what);
     }
 }
 
 // Unpack operands for a binary operator
-#define unpack2(P, xname, yname, x, y, what)                 \
-    BigInt xname = {.buf = (BiDigit[UNPACKED_INT_SIZE]){0}}; \
-    BigInt yname = {.buf = (BiDigit[UNPACKED_INT_SIZE]){0}}; \
-    unpack2_aux(P, what, x, &xname, y, &yname);
+#define unpack(name, v)                                     \
+    BigInt name = {.buf = (BiDigit[UNPACKED_INT_SIZE]){0}}; \
+    unpack_value(v, &name);
 
 static int cmp_bi_bi(const BigInt *x, const BigInt *y)
 {
@@ -387,14 +374,7 @@ static void bi_divmod(paw_Env *P, StackPtr sp, const BigInt *x, const BigInt *y)
     divmod_aux(q->buf, &q->size, r->buf, &r->size, y->buf, y->size);
 }
 
-static void bi_div(StackPtr sp, BigInt *x, BigInt *y)
-{
-    const paw_Float f = pawB_get_float(x);
-    const paw_Float g = pawB_get_float(y);
-    pawV_set_float(sp, f / g);
-}
-
-static void bi_idiv(paw_Env *P, StackPtr sp, BigInt *x, BigInt *y)
+static void bi_div(paw_Env *P, StackPtr sp, BigInt *x, BigInt *y)
 {
     bi_divmod(P, sp, x, y);
     paw_pop(P, 1); // pop 'r'
@@ -451,7 +431,7 @@ static void bi_sub(paw_Env *P, StackPtr sp, BigInt *x, BigInt *y)
 static void bi_mul(paw_Env *P, StackPtr sp, BigInt *x, BigInt *y)
 {
     if (bi_zero(x) || bi_zero(y)) {
-        pawV_set_int(sp, 0);
+        v_set_int(sp, 0);
         return;
     }
     BigInt *bi = mulm(P, sp, x->buf, x->size, y->buf, y->size);
@@ -580,7 +560,7 @@ static void bi_shr(paw_Env *P, StackPtr sp, BigInt *bi, paw_Int n)
     const int nfract = n % BI_BITS;
 
     if (nwhole >= bi->size) {
-        pawV_set_int(sp, bi->neg ? -1 : 0);
+        v_set_int(sp, bi->neg ? -1 : 0);
         return;
     }
     BigInt *out = bi_alloc(P, sp, bi->size);
@@ -764,7 +744,7 @@ void pawB_free(paw_Env *P, BigInt *bi)
 static void bi_bnot(paw_Env *P, StackPtr sp, BigInt *x)
 {
     if (bi_zero(x)) {
-        pawV_set_int(sp, -1);
+        v_set_int(sp, -1);
         return;
     }
 
@@ -775,46 +755,40 @@ static void bi_bnot(paw_Env *P, StackPtr sp, BigInt *x)
     } else {
         addm(P, sp, x, &one);
     }
-    BigInt *bi = pawV_get_bigint(*sp);
+    BigInt *bi = v_bigint(*sp);
     bi->neg = !x->neg;
 }
 
 void pawB_unop(paw_Env *P, UnaryOp unop, Value x)
 {
-    paw_assert(pawV_is_bigint(x));
-    BigInt *bi = pawV_get_bigint(x);
+    paw_assert(!i_is_small(x));
+    BigInt *bi = v_bigint(x);
     StackPtr sp = pawC_push0(P);
     switch (unop) {
         case UNARY_NEG:
             negate(pawB_copy(P, sp, bi, 0));
             break;
         case UNARY_NOT:
-            pawV_set_bool(sp, bi_zero(bi));
-            break;
-        case UNARY_BNOT:
-            bi_bnot(P, sp, bi);
+            v_set_bool(sp, bi_zero(bi));
             break;
         default:
-            pawR_type_error(P, "unary operator");
+            paw_assert(unop == UNARY_BNOT);
+            bi_bnot(P, sp, bi);
     }
 }
 
 static paw_Bool is_negative(Value v)
 {
-    if (pawV_is_int(v)) {
-        return pawV_get_int(v) < 0;
-    } else if (pawV_is_bigint(v)) {
-        return pawV_get_bigint(v)->neg;
-    } else if (pawV_is_float(v)) {
-        return pawV_get_float(v) < 0;
+    if (i_is_small(v)) {
+        return v_int(v) < 0;
     } else {
-        return PAW_FALSE;
+        return v_bigint(v)->neg;
     }
 }
 
 static paw_Bool fits_in_smallint(Value v)
 {
-    const BigInt *bi = pawV_get_bigint(v);
+    const BigInt *bi = v_bigint(v);
     if (bi->neg) {
         return cmp_bi_i(bi, VINT_MIN) >= 0;
     } else {
@@ -825,9 +799,9 @@ static paw_Bool fits_in_smallint(Value v)
 // Convert the results of a bigint operation back to a small integer, if possible
 static void bi_finish(Value *pv)
 {
-    if (pawV_is_bigint(*pv) && fits_in_smallint(*pv)) {
-        BigInt *bi = pawV_get_bigint(*pv);
-        pawV_set_int(pv, pawB_get_int(bi));
+    if (!i_is_small(*pv) && fits_in_smallint(*pv)) {
+        BigInt *bi = v_bigint(*pv);
+        v_set_int(pv, pawB_get_int(bi));
     }
 }
 
@@ -837,7 +811,8 @@ static void bi_finish(Value *pv)
 // beforehand.
 void pawB_binop(paw_Env *P, BinaryOp binop, Value lhs, Value rhs)
 {
-    unpack2(P, x, y, lhs, rhs, "binary operator");
+    unpack(x, lhs);
+    unpack(y, rhs);
     StackPtr sp = pawC_push0(P);
     switch (binop) {
         case BINARY_ADD:
@@ -850,10 +825,7 @@ void pawB_binop(paw_Env *P, BinaryOp binop, Value lhs, Value rhs)
             bi_mul(P, sp, &x, &y);
             break;
         case BINARY_DIV:
-            bi_div(sp, &x, &y);
-            return; // result is VFLOAT
-        case BINARY_IDIV:
-            bi_idiv(P, sp, &x, &y);
+            bi_div(P, sp, &x, &y);
             break;
         case BINARY_MOD:
             bi_mod(P, sp, &x, &y);
@@ -870,41 +842,41 @@ void pawB_binop(paw_Env *P, BinaryOp binop, Value lhs, Value rhs)
         case BINARY_SHL: {
             if (is_negative(rhs)) {
                 pawR_error(P, PAW_EOVERFLOW, "negative shift count");
-            } else if (pawV_is_bigint(rhs)) {
+            } else if (!i_is_small(rhs)) {
                 // Definitely OOM: this would require an enormous amount of memory.
                 pawR_error(P, PAW_EOVERFLOW, "shift count too large");
             }
-            const paw_Int n = pawV_get_int(rhs);
+            const paw_Int n = v_int(rhs);
             bi_shl(P, sp, &x, n);
             break;
         }
         case BINARY_SHR: {
             if (is_negative(rhs)) {
                 pawR_error(P, PAW_EOVERFLOW, "negative shift count");
-            } else if (pawV_is_bigint(rhs)) {
+            } else if (!i_is_small(rhs)) {
                 // just propagate the sign
-                pawV_set_int(sp, is_negative(lhs) ? -1 : 0);
+                v_set_int(sp, is_negative(lhs) ? -1 : 0);
                 break;
             }
-            const paw_Int n = pawV_get_int(rhs);
+            const paw_Int n = v_int(rhs);
             bi_shr(P, sp, &x, n);
             break;
         }
         case BINARY_LT:
-            pawV_set_bool(sp, cmp_bi_bi(&x, &y) < 0);
+            v_set_bool(sp, cmp_bi_bi(&x, &y) < 0);
             return;
         case BINARY_LE:
-            pawV_set_bool(sp, cmp_bi_bi(&x, &y) <= 0);
+            v_set_bool(sp, cmp_bi_bi(&x, &y) <= 0);
             return;
         case BINARY_GT:
-            pawV_set_bool(sp, cmp_bi_bi(&x, &y) > 0);
+            v_set_bool(sp, cmp_bi_bi(&x, &y) > 0);
             return;
         case BINARY_GE:
-            pawV_set_bool(sp, cmp_bi_bi(&x, &y) >= 0);
+            v_set_bool(sp, cmp_bi_bi(&x, &y) >= 0);
             return;
         default:
             paw_assert(binop == BINARY_EQ);
-            pawV_set_bool(sp, cmp_bi_bi(&x, &y) == 0);
+            v_set_bool(sp, cmp_bi_bi(&x, &y) == 0);
             return;
     }
     // NOTE: Go through the 'top' pointer, as 'sp' may be junk due to a stack
@@ -914,11 +886,9 @@ void pawB_binop(paw_Env *P, BinaryOp binop, Value lhs, Value rhs)
 
 paw_Bool pawB_equals(Value lhs, Value rhs)
 {
-    BigInt x = {.buf = (BiDigit[UNPACKED_INT_SIZE]){0}};
-    BigInt y = {.buf = (BiDigit[UNPACKED_INT_SIZE]){0}};
-    return 0 == unpack_value(lhs, &x) &&
-           0 == unpack_value(rhs, &y) &&
-           0 == cmp_bi_bi(&x, &y);
+    unpack(x, lhs);
+    unpack(y, rhs);
+    return 0 == cmp_bi_bi(&x, &y);
 }
 
 // Evaluate the statement 'bi = bi * factor + offset'
@@ -945,7 +915,7 @@ int pawB_parse(paw_Env *P, const char *s, int base)
 {
     StackPtr sp = pawC_push0(P);
     BigInt *bi = pawB_new(P);
-    pawV_set_bigint(sp, bi);
+    v_set_object(sp, bi);
 
     for (; ISHEX(*s); ++s) {
         const int offset = HEXVAL(*s);
@@ -962,3 +932,4 @@ int pawB_parse(paw_Env *P, const char *s, int base)
     bi_trim(bi);
     return 0;
 }
+#endif

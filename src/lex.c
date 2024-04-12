@@ -3,7 +3,7 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "lex.h"
 #include "auxlib.h"
-#include "bigint.h"
+//#include "bigint.h"
 #include "gc.h"
 #include "map.h"
 #include "mem.h"
@@ -46,23 +46,28 @@ static struct Token make_token(TokenKind kind)
     };
 }
 
-static struct Token make_number(struct Lex *x)
+static struct Token make_int(struct Lex *x)
 {
     const Value v = x->P->top.p[-1];
     Token t = {.value = v, .kind = TK_INTEGER};
-    if (pawV_is_float(v)) {
-        t.kind = TK_FLOAT;
-    } else if (pawV_is_bigint(t.value)) {
-        // Anchor big integers in the strings table so they don't get collected. They
-        // will eventually end up anchored in the constants table. Use the value
-        // representation as an integer key (contains pointer info, so it is unique).
-        Value key;
-        pawV_set_int(&key, v.i);
-        Value *slot = pawH_action(x->P, x->strings, key, MAP_ACTION_CREATE);
-        *slot = t.value;
-    }
+    //if (!i_is_small(t.value)) {
+    //    // Anchor big integers in the strings table so they don't get collected. They
+    //    // will eventually end up anchored in the constants table. Use the value
+    //    // representation as an integer key (contains pointer info, so it is unique). TODO: Won't work: GC needs the type
+    //    Value key;
+    //    v_set_int(&key, v.i);
+    //    Value *slot = pawH_action(x->P, x->strings, key, MAP_ACTION_CREATE);
+    //    *slot = t.value;
+    //}
     pawC_stkdec(x->P, 1);
     return t;
+}
+
+static struct Token make_float(struct Lex *x)
+{
+    const Value v = x->P->top.p[-1];
+    pawC_stkdec(x->P, 1);
+    return (Token){.value = v, .kind = TK_FLOAT};
 }
 
 static struct Token make_string(struct Lex *x, TokenKind kind)
@@ -70,7 +75,7 @@ static struct Token make_string(struct Lex *x, TokenKind kind)
     ParseMemory *pm = x->pm;
     struct Token t = make_token(kind);
     String *s = pawX_scan_string(x, pm->scratch.data, cast_size(pm->scratch.size));
-    pawV_set_string(&t.value, s);
+    v_set_object(&t.value, s);
     pm->scratch.size = 0;
     return t;
 }
@@ -126,7 +131,7 @@ static struct Token consume_name(struct Lex *x)
         save_and_next(x);
     }
     struct Token t = make_string(x, TK_NAME);
-    const String *s = pawV_get_string(t.value);
+    const String *s = v_string(t.value);
     t.kind = s->flag > 0 ? (TokenKind)s->flag : t.kind;
     if (s->length > PAW_NAME_MAX) {
         pawX_error(x, "name (%I chars) is too long",
@@ -351,19 +356,20 @@ Token consume_number(struct Lex *x)
         if (pawV_parse_float(x->P, pm->scratch.data)) {
             pawX_error(x, "invalid number '%s'", pm->scratch.data);
         }
+        return make_float(x);
     }
-    return make_number(x);
+    return make_int(x);
 }
 
 static void skip_block_comment(struct Lex *x)
 {
     for (;;) {
-        if (test_next(x, '*') && test_next(x, '-')) {
+        if (test_next(x, '*') && test_next(x, '/')) {
             break;
         } else if (ISNEWLINE(x->c)) {
             increment_line(x);
         } else if (is_eof(x)) {
-            pawX_error(x, "missing end of block comment ('*-')");
+            pawX_error(x, "missing end of block comment");
         } else {
             next(x);
         }
@@ -439,22 +445,6 @@ static Token advance(struct Lex *x)
                     return T(TK_BANG_EQ);
                 }
                 return T('!');
-            case '-':
-                next(x);
-                if (test_next(x, '-')) {
-                    skip_line_comment(x);
-                    break;
-                } else if (test_next(x, '*')) {
-                    skip_block_comment(x);
-                    break;
-                }
-                return T('-');
-            case '*':
-                next(x);
-                if (test_next(x, '*')) {
-                    return T(TK_STAR2);
-                }
-                return T('*');
             case '<':
                 next(x);
                 if (test_next(x, '<')) {
@@ -471,18 +461,6 @@ static Token advance(struct Lex *x)
                     return T(TK_GREATER_EQ);
                 }
                 return T('>');
-            case '+':
-                next(x);
-                if (test_next(x, '+')) {
-                    return T(TK_PLUS2);
-                }
-                return T('+');
-            case '/':
-                next(x);
-                if (test_next(x, '/')) {
-                    return T(TK_SLASH2);
-                }
-                return T('/');
             case '.':
                 save_and_next(x); // may be float
                 if (test_next(x, '.')) {
@@ -494,6 +472,16 @@ static Token advance(struct Lex *x)
                     return consume_number(x);
                 }
                 return T('.');
+            case '/':
+                next(x);
+                if (test_next(x, '/')) {
+                    skip_line_comment(x);
+                    break;
+                } else if (test_next(x, '*')) {
+                    skip_block_comment(x);
+                    break;
+                }
+                return T('/');
             default: {
                 // Cast to uint8_t first, so we don't get sign extension when converting
                 // to TokenKind. Otherwise, TK_END ends up with the wrong value.
@@ -546,6 +534,5 @@ String *pawX_scan_string(Lex *x, const char *s, size_t n)
     paw_pop(P, 1);
     check_gc(P);
 
-    x->last_string = pawV_get_string(*value);
-    return x->last_string;
+    return v_string(*value);
 }

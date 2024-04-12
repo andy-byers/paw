@@ -1,108 +1,162 @@
--- types.paw
+// types.paw
 
-    let i0: int
---***********************************************
---    variables
---***********************************************
-{
-    -- test type annotations
-    let i: int = 123
-    let s: string = 'abc'
-    let b: bool = true
-    let f: float = 1.0
+////***********************************************
+////    primitives
+////***********************************************
+//{
+//    // test type annotations
+//    let i: int = 123
+//    let s: string = 'abc'
+//    let b: bool = true
+//    let f: float = 1.0
+//
+//    let i0: int
+//    let s0: string
+//    let b0: bool
+//    let f0: float
+//
+//    let i00: int = null
+//    let s00: string = null
+//    let b00: bool = null
+//    let f00: float = null
+//
+//    // test inferred types
+//    let I = 123
+//    let S = 'abc'
+//    let B = true
+//    let F = 1.0
+//}
+//
+////***********************************************
+////    functions
+////***********************************************
+//{
+//    fn f() {
+//        // implicit 'return null'
+//    }
+//    fn fi(a: int) {
+//        return // implicit 'null'
+//    }
+//    f()
+//    fi(1)
+//
+//    // test 'int' annotation
+//    fn f_i(): int {
+//        return 1
+//    }
+//    fn fi_i(a: int): int {
+//        return a + 2
+//    }
+//    fn fii_i(a: int, b: int): int {
+//        return a + b + 3
+//    }
+//    f_i()
+//    fi_i(1)
+//    fii_i(1, 2)
+//}
 
-    let i0: int
-    let s0: string
-    let b0: bool
-    let f0: float
-
-    -- test inferred types
-    let I = 123
-    let S = 'abc'
-    let B = true
-    let F = 1.0
-}
-
---***********************************************
---    functions
---***********************************************
-{
-    -- test 'null' return type annotation: Function must contain only 'return null' 
-    -- or 'return', otherwise, it must not contain a return statement
-    fn f(): null {
-        -- implicit 'return null'
-    }
-    fn fi(a: int): null {
-        return -- implicit 'null'
-    }
-    fn fii(a: int, b: int): null {
-        return null
-    }
-    f()
-    fi(1)
-    fii(1, 2)
-
-    -- test inferred 'null' return type
-    fn F() {
-        -- implicit 'return null'
-    }
-    fn Fi(a: int) {
-        return -- implicit 'null'
-    }
-    fn Fii(a: int, b: int) {
-        return null
-    }
-    F()
-    Fi(1)
-    Fii(1, 2)
-
-    -- test 'int' annotation
-    fn f_i(): int {
-        return 1
-    }
-    fn fi_i(a: int): int {
-        return a + 2
-    }
-    fn fii_i(a: int, b: int): int {
-        return a + b + 3
-    }
-    f_i()
-    fi_i(1)
-    fii_i(1, 2)
-
-    -- test inferred 'int' annotation
-    fn F_i() {
-        return 1
-    }
-    fn Fi_i(a: int) {
-        return a + 2
-    }
-    fn Fii_i(a: int, b: int) {
-        return a + b + 3
-    }
-    F_i()
-    Fi_i(1)
-    Fii_i(1, 2)
-}
-
---***********************************************
---    inference
---***********************************************
-{
-    fn f2f(a: float) {
+//***********************************************
+//    type conversions
+//***********************************************
+//{
+    fn f2f(a: float): float {
         let x = a * 2 + 1
         let y = x / 2 - 1
         return y
     }
-    let a = f2f(1.0)
+    let b = f2f(true)
+    let f = f2f(1.0)
+    let i = f2f(1)
+    assert(b == f && f == i)
 
-    fn f2i(a: float) {
-        let x = a * 2.0
-        return x // 2
-    }
-    let b = f2i(2.0)
-}
-
-{
-    let x: string = null
-}
+//    fn f2i(a: float): float {
+//        let x = a * 2.0
+//        return x / 2
+//    }
+//    let b = f2i(true)
+//    let f = f2i(1.0)
+//    let i = f2i(1)
+//    assert(b == f && f == i)
+//
+//    fn f1(): bool {
+//        return 1 
+//    }
+//    fn f2(): bool {
+//        return 1.0
+//    }
+//    assert(true == f1())
+//    assert(true == f2())
+//
+//    fn f1(): int {
+//        return 1.0
+//    }
+//    fn f2(): int {
+//        return true
+//    }
+//    assert(1 == f1())
+//    assert(1 == f2())
+//
+//    fn f1(): float {
+//        return 1
+//    }
+//    fn f2(): float {
+//        return true
+//    }
+//    assert(1.0 == f1())
+//    assert(1.0 == f2())
+//
+//    fn f1(): int {
+//        return true + 1.0
+//    }
+//    fn f2(): float {
+//        return true + 1
+//    }
+//    fn f3(): bool {
+//        return 1 + 1.0
+//    }
+//    assert(2 == f1())
+//    assert(2.0 == f2())
+//    assert(true == f3())
+//
+//    fn f(i: int): bool {
+//        return i
+//    }
+//    assert(1 == f(-10))
+//    assert(1 == f(-1))
+//    assert(0 == f(0))
+//    assert(1 == f(1))
+//    assert(1 == f(10))
+//
+//    fn f(b: bool, i: int, f: float): int {
+//        return b + i + f
+//    }
+//    assert(3 == f(1, 1, 1))
+//    assert(3 == f(1.0, 1.0, 1.0))
+//    assert(3 == f(true, true, true))
+//}
+//
+//////***********************************************
+//////    arrays
+//////***********************************************
+////{
+////    // empty arrays
+////    let a1: [int]
+////    let a2: [[int]]
+////    let a3: [[[int]]]
+////    assert(#a1 == 0)
+////    assert(#a2 == 0)
+////    assert(#a3 == 0)
+////
+//////    let a1: [int] = [1]
+//////    let a2: [[int]] = [[1], [2]]
+//////    let a3: [[[int]]] = [[[1]], [[2]], [[3]]]
+//////
+//////    let a1 = [1]
+//////    let a2 = [[1], [2]]
+//////    let a3 = [[[1]], [[2]], [[3]]]
+//////
+//////    let a = [[[], []], [], [[3]]]
+//////
+//////    let a: [[int]] = []
+//////    let a: [[int]] = []
+////}

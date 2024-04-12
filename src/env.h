@@ -41,6 +41,11 @@ enum {
     NCSTR,
 };
 
+typedef struct GlobalVar {
+    VarDesc desc;
+    Value value;
+} GlobalVar;
+
 typedef struct paw_Env {
     StringTable strings;
 
@@ -51,21 +56,27 @@ typedef struct paw_Env {
     struct Jump *jmp;
     UpValue *up_list;
 
-    Map *globals;
-
     StackRel stack;
     StackRel bound;
     StackRel top;
 
     Map *libs;
     Value object;
-    Foreign *builtin[NOBJECTS];
+    Class *builtin[NOBJECTS];
     Value meta_keys[NMETAMETHODS];
     Value str_cache[NCSTR];
     Value mem_errmsg;
 
+    // TODO: At some point, the globals should go into a struct called Module. Make 
+    //       Module a paw object. 
+    struct GlobalVec {
+        GlobalVar *data; 
+        int size;
+        int alloc;
+    } gv;
+
     struct TypeVec {
-        Type *data; 
+        Type **data; 
         int size;
         int alloc;
     } tv;
@@ -81,7 +92,16 @@ typedef struct paw_Env {
     paw_Bool gc_noem;
 } paw_Env;
 
-CallFrame *pawE_extend_cf(paw_Env *X, StackPtr top);
+#define e_tag(P, n) check_exp((int)(n) < (P)->tv.size, (n) < 0 ? NULL : (P)->tv.data[n])
+#define e_bool(P) e_tag(P, PAW_TBOOL)
+#define e_int(P) e_tag(P, PAW_TINT)
+#define e_float(P) e_tag(P, PAW_TFLOAT)
+#define e_string(P) e_tag(P, PAW_TSTRING)
+
+CallFrame *pawE_extend_cf(paw_Env *P, StackPtr top);
+int pawE_new_global(paw_Env *P, String *name, TypeTag tag);
+GlobalVar *pawE_find_global(paw_Env *P, String *name);
+#define pawE_get_global(P, i) (&(P)->gv.data[i])
 
 static inline Value pawE_cstr(paw_Env *P, unsigned type)
 {

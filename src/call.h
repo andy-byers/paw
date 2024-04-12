@@ -17,11 +17,11 @@
 
 typedef void (*Call)(paw_Env *P, void *arg);
 
-CallFrame *pawC_precall(paw_Env *P, StackPtr base, Value callable, int argc);
+CallFrame *pawC_precall(paw_Env *P, StackPtr base, Object *callable, int argc);
 StackPtr pawC_return(paw_Env *P, int nret);
 int pawC_try(paw_Env *P, Call call, void *arg);
 void pawC_throw(paw_Env *P, int error);
-void pawC_call(paw_Env *P, Value f, int argc);
+void pawC_call(paw_Env *P, Object *f, int argc);
 void pawC_init(paw_Env *P);
 void pawC_uninit(paw_Env *P);
 
@@ -66,28 +66,28 @@ static inline Value *pawC_pushv(paw_Env *P, Value v)
 static inline Value *pawC_push0(paw_Env *P)
 {
     StackPtr sp = pawC_stkinc(P, 1);
-    pawV_set_null(sp);
+    v_set_null(sp);
     return sp;
 }
 
 static inline Value *pawC_pushi(paw_Env *P, paw_Int i)
 {
     StackPtr sp = pawC_stkinc(P, 1);
-    pawV_set_int(sp, i);
+    v_set_int(sp, i);
     return sp;
 }
 
 static inline Value *pawC_pushf(paw_Env *P, paw_Float f)
 {
     StackPtr sp = pawC_stkinc(P, 1);
-    pawV_set_float(sp, f);
+    v_set_float(sp, f);
     return sp;
 }
 
 static inline Value *pawC_pushb(paw_Env *P, paw_Bool b)
 {
     StackPtr sp = pawC_stkinc(P, 1);
-    pawV_set_bool(sp, b);
+    v_set_bool(sp, b);
     return sp;
 }
 

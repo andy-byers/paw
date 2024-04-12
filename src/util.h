@@ -21,7 +21,8 @@
 #define paw_clamp(v, x, y) paw_min(paw_max(v, x), y)
 
 #define check_exp(c, e) (paw_assert(c), e)
-#define cast_size(x) ((size_t)(x))
+#define cast(x, t) ((t)(x))
+#define cast_size(x) cast(x, size_t)
 
 // Check for inclusion in one of the character classes
 #define ISDIGIT(c) (kCharClassTable[(uint8_t)(c)] & 1)

@@ -3,7 +3,7 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "gc.h"
 #include "array.h"
-#include "bigint.h"
+//#include "bigint.h"
 #include "env.h"
 #include "map.h"
 #include "mem.h"
@@ -45,38 +45,36 @@ enum {
 
 static Object **get_gc_list(Object *o)
 {
-    switch ((ValueKind)o->gc_kind) {
-        case ~VFOREIGN:
-            return &((Foreign *)o)->gc_list;
-        case ~VARRAY:
-            return &((Array *)o)->gc_list;
-        case ~VMAP:
-            return &((Map *)o)->gc_list;
-        case ~VCLOSURE:
-            return &((Closure *)o)->gc_list;
-        case ~VNATIVE:
-            return &((Native *)o)->gc_list;
-        case ~VPROTO:
-            return &((Proto *)o)->gc_list;
-        case ~VCLASS:
-            return &((Class *)o)->gc_list;
-        case ~VINSTANCE:
-            return &((Instance *)o)->gc_list;
-        case ~VMETHOD:
-            return &((Method *)o)->gc_list;
-        default:
-            paw_assert(0);
-            return NULL;
-    }
+//    switch (o->gc_kind) {
+//        case VFOREIGN:
+//            return &o_foreign(o)->gc_list;
+//        case VARRAY:
+//            return &o_array(o)->gc_list;
+//        case VMAP:
+//            return &o_map(o)->gc_list;
+//        case VCLOSURE:
+//            return &o_closure(o)->gc_list;
+//        case VPROTO:
+//            return &o_proto(o)->gc_list;
+//        case VCLASS:
+//            return &o_class(o)->gc_list;
+//        case VINSTANCE:
+//            return &o_instance(o)->gc_list;
+//        case VMETHOD:
+//            return &(o_method(o))->gc_list;
+//        default:
+//            paw_assert(0);
+//            return NULL;
+//    }
 }
 
 static void link_gray_(Object *o, Object **pnext, Object **list)
 {
-    if (!is_gray(o)) {
-        set_gray(o);
-        *pnext = *list;
-        *list = o;
-    }
+  //  if (!is_gray(o)) {
+  //      set_gray(o);
+  //      *pnext = *list;
+  //      *list = o;
+  //  }
 }
 
 #define LINK_GRAY(o, L) link_gray_(o, get_gc_list(o), &(L))
@@ -84,43 +82,40 @@ static void link_gray_(Object *o, Object **pnext, Object **list)
 static void free_object(paw_Env *P, Object *o)
 {
     gc_trace_object("free", o);
-    switch ((ValueKind)o->gc_kind) {
-        case ~VUPVALUE:
-            pawV_free_upvalue(P, (UpValue *)o);
+    switch (o->gc_kind) {
+//        case VUPVALUE:
+//            pawV_free_upvalue(P, o_upvalue(o));
+//            break;
+//        case VCLOSURE:
+//            pawV_free_closure(P, o_closure(o));
+//            break;
+//        case VFOREIGN:
+//            pawV_free_foreign(P, o_foreign(o));
+//            break;
+//        case VBIGINT:
+//            pawB_free(P, o_bigint(o));
+//            break;
+        case VSTRING:
+            pawS_free_str(P, o_string(o));
             break;
-        case ~VCLOSURE:
-            pawV_free_closure(P, (Closure *)o);
-            break;
-        case ~VNATIVE:
-            pawV_free_native(P, (Native *)o);
-            break;
-        case ~VFOREIGN:
-            pawV_free_foreign(P, (Foreign *)o);
-            break;
-        case ~VBIGINT:
-            pawB_free(P, (BigInt *)o);
-            break;
-        case ~VSTRING:
-            pawS_free_str(P, (String *)o);
-            break;
-        case ~VARRAY:
-            pawA_free(P, (Array *)o);
-            break;
-        case ~VMAP:
-            pawH_free(P, (Map *)o);
-            break;
-        case ~VPROTO:
-            pawV_free_proto(P, (Proto *)o);
-            break;
-        case ~VCLASS:
-            pawV_free_class(P, (Class *)o);
-            break;
-        case ~VINSTANCE:
-            pawV_free_instance(P, (Instance *)o);
-            break;
-        case ~VMETHOD:
-            pawV_free_method(P, (Method *)o);
-            break;
+//        case VARRAY:
+//            pawA_free(P, o_array(o));
+//            break;
+//        case VMAP:
+//            pawH_free(P, o_map(o));
+//            break;
+//        case VPROTO:
+//            pawV_free_proto(P, o_proto(o));
+//            break;
+//        case VCLASS:
+//            pawV_free_class(P, o_class(o));
+//            break;
+//        case VINSTANCE:
+//            pawV_free_instance(P, o_instance(o));
+//            break;
+//        case VMETHOD:
+//            pawV_free_method(P, o_method(o));
+//            break;
         default:
             paw_assert(PAW_FALSE);
     }
@@ -130,44 +125,43 @@ static void mark_value(paw_Env *P, Value v);
 
 static void mark_object(paw_Env *P, Object *o)
 {
-    if (!o || !is_white(o)) {
-        return;
-    }
-    gc_trace_object("mark", o);
-    switch ((ValueKind)o->gc_kind) {
-        case ~VUPVALUE: {
-            UpValue *u = (UpValue *)o;
-            mark_value(P, *u->p.p);
-            set_black(u);
-            break;
-        }
-        case ~VBIGINT:
-        case ~VSTRING:
-            set_black(o);
-            break;
-        case ~VMETHOD:
-        case ~VCLOSURE:
-        case ~VNATIVE:
-        case ~VCLASS:
-        case ~VINSTANCE:
-        case ~VPROTO:
-        case ~VARRAY:
-        case ~VMAP:
-        case ~VFOREIGN:
-            // Put in the gray list to be traversed later.
-            LINK_GRAY(o, P->gc_gray);
-            break;
+  //  if (!o || !is_white(o)) {
+  //      return;
+  //  }
+  //  gc_trace_object("mark", o);
+  //  switch (o->gc_kind) {
+  //      case VUPVALUE: {
+  //          UpValue *u = o_upvalue(o);
+  //          mark_value(P, *u->p.p);
+  //          set_black(u);
+  //          break;
+  //      }
+////        case VBIGINT:
+  //      case VSTRING:
+  //          set_black(o);
+  //          break;
+  //      case VMETHOD:
+  //      case VCLOSURE:
+  //      case VCLASS:
+  //      case VINSTANCE:
+  //      case VPROTO:
+  //      case VARRAY:
+  //      case VMAP:
+  //      case VFOREIGN:
+  //          // Put in the gray list to be traversed later.
+  //          LINK_GRAY(o, P->gc_gray);
+  //          break;
 
-        default:
-            paw_assert(PAW_FALSE); // TODO: cases above can be the default
-    }
+  //      default:
+  //          paw_assert(PAW_FALSE); // TODO: cases above can be the default
+  //  }
 }
 
 static void mark_value(paw_Env *P, Value v)
 {
-    if (pawV_is_object(v)) {
-        mark_object(P, pawV_get_object(v));
-    }
+//    if (pawV_is_object(v)) {
+//        mark_object(P, v_object(v));
+//    }
 }
 
 static void traverse_proto(paw_Env *P, Proto *p)
@@ -196,61 +190,51 @@ static void traverse_closure(paw_Env *P, Closure *c)
     }
 }
 
-static void traverse_native(paw_Env *P, Native *c)
+// TODO: Need the exact class type for this: get it from the instruction
+//       that modifies the refcount
+static void traverse_attrs(paw_Env *P, Value *pv, int n)
 {
-    for (int i = 0; i < c->nup; ++i) {
-        mark_object(P, pawV_get_object(c->up[i]));
+    for (int i = 0; i < n; ++i) {
+        mark_value(P, pv[i]);
     }
 }
 
 static void traverse_class(paw_Env *P, Class *c)
 {
-    mark_object(P, cast_object(c->name));
-    mark_object(P, cast_object(c->attr));
-}
-
-static void traverse_bindings(paw_Env *P, Value *pv, int n)
-{
-    for (int i = 0; i < n; ++i, pv += 2) {
-        mark_value(P, pv[0]); // name
-        mark_value(P, pv[1]); // function
-    }
+//    traverse_attrs(P, &c->attrs, )
 }
 
 static void traverse_instance(paw_Env *P, Instance *i)
 {
-    mark_object(P, cast_object(i->self));
-    mark_object(P, cast_object(i->attr));
-    traverse_bindings(P, i->bound, i->nbound);
+//    traverse_attrs(P, i->attrs, i->nattrs);
 }
 
 static void traverse_method(paw_Env *P, Method *m)
 {
-    mark_object(P, pawV_get_object(m->self));
-    mark_object(P, pawV_get_object(m->f));
+    mark_object(P, v_object(m->self));
+    mark_object(P, v_object(m->f));
 }
 
-static void traverse_array(paw_Env *P, Array *a)
-{
-    paw_Int itr = PAW_ITER_INIT;
-    while (pawA_iter(a, &itr)) {
-        mark_value(P, *pawA_get(P, a, itr));
-    }
-}
-
-static void traverse_map(paw_Env *P, Map *m)
-{
-    paw_Int itr = PAW_ITER_INIT;
-    while (pawH_iter(m, &itr)) {
-        mark_value(P, m->keys[itr]);
-        mark_value(P, m->values[itr]);
-    }
-}
+//static void traverse_array(paw_Env *P, Array *a)
+//{
+//    paw_Int itr = PAW_ITER_INIT;
+//    while (pawA_iter(a, &itr)) {
+//        mark_value(P, *pawA_get(P, a, itr));
+//    }
+//}
+//
+//static void traverse_map(paw_Env *P, Map *m)
+//{
+//    paw_Int itr = PAW_ITER_INIT;
+//    while (pawH_iter(m, &itr)) {
+//        mark_value(P, m->keys[itr]);
+//        mark_value(P, m->values[itr]);
+//    }
+//}
 
 static void traverse_foreign(paw_Env *P, Foreign *u)
 {
-    mark_object(P, cast_object(u->attr));
-    traverse_bindings(P, u->bound, u->nbound);
+//    traverse_attrs(P, u->attrs, u->nattrs);
 }
 
 static void mark_roots(paw_Env *P)
@@ -264,7 +248,6 @@ static void mark_roots(paw_Env *P)
     for (UpValue *u = P->up_list; u; u = u->open.next) {
         mark_object(P, cast_object(u));
     }
-    mark_object(P, cast_object(P->globals));
     mark_object(P, cast_object(P->libs));
 }
 
@@ -276,36 +259,33 @@ static void traverse_objects(paw_Env *P)
         Object **list = get_gc_list(o);
         *po = *list;
         *list = NULL;
-        set_black(o);
+ //       set_black(o);
 
         gc_trace_object("traverse", o);
-        switch ((ValueKind)o->gc_kind) {
-            case ~VCLOSURE:
-                traverse_closure(P, (Closure *)o);
+        switch (o->gc_kind) {
+            case VCLOSURE:
+                traverse_closure(P, o_closure(o));
                 break;
-            case ~VPROTO:
-                traverse_proto(P, (Proto *)o);
+            case VPROTO:
+                traverse_proto(P, o_proto(o));
                 break;
-            case ~VNATIVE:
-                traverse_native(P, (Native *)o);
+            case VCLASS:
+                traverse_class(P, o_class(o));
                 break;
-            case ~VCLASS:
-                traverse_class(P, (Class *)o);
+            case VINSTANCE:
+                traverse_instance(P, o_instance(o));
                 break;
-            case ~VINSTANCE:
-                traverse_instance(P, (Instance *)o);
+            case VMETHOD:
+                traverse_method(P, o_method(o));
                 break;
-            case ~VMETHOD:
-                traverse_method(P, (Method *)o);
-                break;
-            case ~VARRAY:
-                traverse_array(P, (Array *)o);
-                break;
-            case ~VMAP:
-                traverse_map(P, (Map *)o);
-                break;
-            case ~VFOREIGN:
-                traverse_foreign(P, (Foreign *)o);
+//            case VARRAY:
+//                traverse_array(P, o_array(o));
+//                break;
+//            case VMAP:
+//                traverse_map(P, o_map(o));
+//                break;
+            case VFOREIGN:
+                traverse_foreign(P, o_foreign(o));
                 break;
             default:
                 paw_assert(0);
@@ -321,21 +301,22 @@ static void mark_phase(paw_Env *P)
 
 static void sweep_phase(paw_Env *P)
 {
-    for (Object **p = &P->gc_all; *p;) {
-        Object *o = *p;
-        if (is_white(o)) {
-            *p = o->gc_next;
-            free_object(P, o);
-        } else {
-            p = &o->gc_next;
-            paw_assert(is_black(o));
-            set_white(o);
-        }
-    }
+ //   for (Object **p = &P->gc_all; *p;) {
+ //       Object *o = *p;
+ //       if (is_white(o)) {
+ //           *p = o->gc_next;
+ //           free_object(P, o);
+ //       } else {
+ //           p = &o->gc_next;
+ //           paw_assert(is_black(o));
+ //           set_white(o);
+ //       }
+ //   }
 }
 
 void pawG_collect(paw_Env *P)
 {
+    return; // FIXME
     mark_phase(P);
     sweep_phase(P);
 
@@ -357,11 +338,11 @@ static void sanity_check(paw_Env *P, Object *o)
 
 void pawG_add_object(paw_Env *P, Object *o, ValueKind kind)
 {
-    sanity_check(P, o);
+    //TODO sanity_check(P, o);
 
     gc_trace_object("register", o);
-    o->gc_kind = ~kind;
-    o->gc_mark = GC_WHITE;
+    o->gc_kind = kind;
+//    o->gc_mark = GC_WHITE;
     o->gc_next = P->gc_all;
     P->gc_all = o;
 }
@@ -375,7 +356,6 @@ void pawG_uninit(paw_Env *P)
 {
     // Dispose of roots.
     P->libs = NULL;
-    P->globals = NULL;
     P->up_list = NULL;
     P->top = P->stack;
 
@@ -402,12 +382,51 @@ void pawG_uninit(paw_Env *P)
 
 void pawG_fix_object(paw_Env *P, Object *o)
 {
-    // Must be the most-recently-created GC object.
-    paw_assert(P->gc_all == o);
-    paw_assert(is_white(o));
+    return; // TODO
+//    // Must be the most-recently-created GC object.
+//    paw_assert(P->gc_all == o);
+//    paw_assert(is_white(o));
+//
+//    set_gray(o);
+//    P->gc_all = o->gc_next;
+//    o->gc_next = P->gc_fixed;
+//    P->gc_fixed = o;
+}
 
-    set_gray(o);
-    P->gc_all = o->gc_next;
-    o->gc_next = P->gc_fixed;
-    P->gc_fixed = o;
+void pawG_free_object(paw_Env *P, Object *o)
+{
+    switch (o->gc_kind) {
+        case VUPVALUE:
+            pawV_free_upvalue(P, o_upvalue(o));
+            break;
+        case VCLOSURE:
+            pawV_free_closure(P, o_closure(o));
+            break;
+//        case VFOREIGN:
+//            pawV_free_foreign(P, o_foreign(o));
+//            break;
+        case VSTRING:
+            pawS_free_str(P, o_string(o));
+            break;
+        case VARRAY:
+            pawA_free(P, o_array(o));
+            break;
+        case VMAP:
+            pawH_free(P, o_map(o));
+            break;
+        case VPROTO:
+            pawV_free_proto(P, o_proto(o));
+            break;
+        case VCLASS:
+            pawV_free_class(P, o_class(o));
+            break;
+//        case VINSTANCE:
+//            pawV_free_instance(P, o_instance(o));
+//            break;
+        case VMETHOD:
+            pawV_free_method(P, o_method(o));
+            break;
+        default:
+            paw_assert(PAW_FALSE);
+    }
 }

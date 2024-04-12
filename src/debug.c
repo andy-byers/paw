@@ -32,14 +32,8 @@ const char *paw_binop_name(BinaryOp binop)
             return "MUL";
         case BINARY_DIV:
             return "DIV";
-        case BINARY_IDIV:
-            return "IDIV";
         case BINARY_MOD:
             return "MOD";
-        case BINARY_POW:
-            return "POW";
-        case BINARY_CONCAT:
-            return "CONCAT";
         case BINARY_BXOR:
             return "BXOR";
         case BINARY_BAND:
@@ -72,6 +66,16 @@ const char *paw_binop_name(BinaryOp binop)
 const char *paw_opcode_name(Op op)
 {
     switch (op) {
+        case OP_CASTBOOL:
+            return "CASTBOOL";
+        case OP_CASTINT:
+            return "CASTINT";
+        case OP_CASTFLOAT:
+            return "CASTFLOAT";
+        case OP_INCREF:
+            return "INCREF";
+        case OP_DECREF:
+            return "DECREF";
         case OP_PUSHNULL:
             return "PUSHNULL";
         case OP_PUSHTRUE:
@@ -167,12 +171,17 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
         const OpCode opcode = *pc++;
         switch (get_OP(opcode)) {
             case OP_UNOP: {
-                pawL_add_fstring(P, print, " ; type = %s", paw_unop_name(get_U(opcode)));
+                pawL_add_fstring(P, print, " ; type = %s", paw_unop_name(get_A(opcode)));
                 break;
             }
 
             case OP_BINOP: {
-                pawL_add_fstring(P, print, " ; type = %s", paw_binop_name(get_U(opcode)));
+                pawL_add_fstring(P, print, " ; type = %s", paw_binop_name(get_A(opcode)));
+                break;
+            }
+
+            case OP_CLOSE: {
+                pawL_add_fstring(P, print, " ; npop = %d, close = %d", get_A(opcode), get_B(opcode));
                 break;
             }
 
@@ -233,10 +242,8 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
 
             case OP_GETGLOBAL: {
                 const int iw = get_U(opcode);
-                const Value v = proto->k[iw];
-                const String *s = pawV_get_string(v);
                 pawL_add_string(P, print, " ; id = ");
-                pawL_add_nstring(P, print, s->text, s->length);
+                pawL_add_integer(P, print, iw);
                 break;
             }
 
@@ -329,78 +336,6 @@ void paw_dump_source(paw_Env *P, Proto *proto)
     pawL_discard_result(P, &print);
 }
 
-void paw_dump_stack(paw_Env *P)
-{
-    int i = 0;
-    for (StackPtr p = P->stack.p; p != P->top.p; ++p) {
-        printf("%d: ", i);
-        switch (pawV_get_type(*p)) {
-            case VNATIVE:
-                puts("native");
-                break;
-            case VCLASS:
-                printf("class %p (%zu attrs)\n", (void *)pawV_get_class(*p), pawH_length(pawV_get_class(*p)->attr));
-                break;
-            case VINSTANCE:
-                printf("instance %p (%zu attrs)\n", (void *)pawV_get_instance(*p), pawH_length(pawV_get_instance(*p)->attr));
-                break;
-            case VMETHOD:
-                puts("method");
-                break;
-            case VCLOSURE:
-                puts("closure");
-                break;
-            case VARRAY:
-                printf("array (%zu elems)\n", pawA_length(pawV_get_array(*p)));
-                break;
-            case VMAP:
-                printf("map (%zu items)\n", pawV_get_map(*p)->length);
-                break;
-            case VSTRING:
-                putchar('"');
-                for (size_t i = 0; i < pawV_get_string(*p)->length; ++i) {
-                    putchar(pawV_get_string(*p)->text[i]);
-                }
-                putchar('"');
-                putchar('\n');
-                break;
-            case VTRUE:
-                puts("true");
-                break;
-            case VFALSE:
-                puts("false");
-                break;
-            case VBIGINT: {
-                const ptrdiff_t save = save_offset(P, p);
-                Buffer print;
-                pawL_init_buffer(P, &print);
-                pawC_pushv(P, *p);
-                pawL_add_value(P, &print);
-                pawL_add_char(P, &print, '\0');
-                printf("bigint %s\n", print.data);
-                pawL_discard_result(P, &print);
-                p = restore_pointer(P, save);
-                break;
-            }
-            case VNUMBER:
-                printf("%lld\n", (long long)pawV_get_int(*p));
-                break;
-            case VNULL:
-                puts("null");
-                break;
-            case VFOREIGN:
-                printf("foreign %p (%zu attrs)\n", pawV_get_foreign(*p)->data, pawH_length(pawV_get_foreign(*p)->attr));
-                break;
-            case VPROTO:
-                printf("proto k=%d\n", pawV_get_proto(*p)->nk);
-                break;
-            default:
-                printf("%lf\n", pawV_get_float(*p));
-        }
-        ++i;
-    }
-}
-
 // TODO: Copy of code in error.c. Maybe merge error.c into this TU
 static int current_line(CallFrame *cf)
 {
@@ -442,12 +377,12 @@ void paw_stacktrace(paw_Env *P)
     pawL_push_result(P, &buf);
 }
 
-void paw_dump_value(paw_Env *P, Value v)
+void paw_dump_value(paw_Env *P, Value v, int type)
 {
     Buffer buf;
     pawL_init_buffer(P, &buf);
     pawC_pushv(P, v);
-    pawL_add_value(P, &buf);
+    pawL_add_value(P, &buf, e_tag(P, type));
     pawL_add_char(P, &buf, '\0');
     printf("%s\n", buf.data);
     pawL_discard_result(P, &buf);
@@ -456,6 +391,6 @@ void paw_dump_value(paw_Env *P, Value v)
 void paw_dump_map(paw_Env *P, Map *m)
 {
     Value v;
-    pawV_set_map(&v, m);
-    paw_dump_value(P, v);
+    v_set_object(&v, m);
+    paw_dump_value(P, v, PAW_TMAP);
 }
