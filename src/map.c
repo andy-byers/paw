@@ -4,7 +4,7 @@
 #include "map.h"
 #include "gc.h"
 #include "mem.h"
-#include "rt.h"
+//#include "rt.h"
 #include "util.h"
 #include <assert.h>
 #include <string.h>
@@ -18,13 +18,13 @@ static paw_Bool is_unoccupied(Value v)
 
 static size_t prepare_insert(Map *m, Value key)
 {
-    paw_assert(!pawV_is_null(key));
+    paw_assert(!v_is_null(key));
     size_t itr = pawH_index(m, key);
     pawH_locate(m, key, is_unoccupied);
     // Search for the first vacant slot
     for (; !pawH_is_vacant(m->keys[itr]); itr = next_idx(m, itr)) {
         const Value k = m->keys[itr];
-        if (pawH_is_occupied(k) && pawV_equal(k, key)) {
+        if (pawH_is_occupied(k) && k.u == key.u) {
             break;
         }
     }
@@ -92,14 +92,15 @@ void pawH_free(paw_Env *P, Map *m)
 
 size_t pawH_create_aux_(paw_Env *P, Map *m, Value key)
 {
-    if (pawV_is_null(key) || (pawV_is_float(key) && v_isnan(key))) {
-        pawR_error(P, PAW_EVALUE, "invalid map key");
+    if (v_is_null(key) || (/*pawV_is_float(key)*/ 0 && f_is_nan(key))) {
+        paw_assert(0);
+    //    pawR_error(P, PAW_EVALUE, "invalid map key");
     }
     grow_map_if_necessary(P, m);
     const size_t i = prepare_insert(m, key);
     if (!pawH_is_occupied(m->keys[i])) {
         m->keys[i] = key;
-        pawV_set_null(&m->values[i]);
+        v_set_null(&m->values[i]);
         ++m->length;
     }
     return i;
@@ -108,7 +109,7 @@ size_t pawH_create_aux_(paw_Env *P, Map *m, Value key)
 void pawH_clone(paw_Env *P, StackPtr sp, Map *m)
 {
     Map *m2 = pawH_new(P);
-    pawV_set_map(sp, m2);
+    v_set_object(sp, m2);
     pawH_extend(P, m2, m);
 }
 
@@ -118,7 +119,8 @@ static paw_Bool items_equal(paw_Env *P, const Value x, const Value y)
     sp[0] = y;
     sp[1] = x;
 
-    pawR_binop(P, BINARY_EQ);
+    paw_assert(0);
+//    pawR_binop(P, BINARY_EQ);
 
     const paw_Bool b = paw_boolean(P, -1);
     paw_pop(P, 1);
@@ -153,13 +155,13 @@ void pawH_extend(paw_Env *P, Map *dst, Map *src)
 
 void pawH_key_error(paw_Env *P, Value key)
 {
-    Buffer buf;
-    pawL_init_buffer(P, &buf);
-    pawL_add_string(P, &buf, "key '");
-    pawC_pushv(P, key);
-    pawL_add_value(P, &buf);
-    pawL_add_string(P, &buf, "' does not exist");
-    pawL_add_char(P, &buf, '\0');
-    pawL_push_result(P, &buf);
-    pawC_throw(P, PAW_EKEY);
+   // Buffer buf;
+   // pawL_init_buffer(P, &buf);
+   // pawL_add_string(P, &buf, "key '");
+   // pawC_pushv(P, key);
+   // pawL_add_value(P, &buf);
+   // pawL_add_string(P, &buf, "' does not exist");
+   // pawL_add_char(P, &buf, '\0');
+   // pawL_push_result(P, &buf);
+   pawC_throw(P, PAW_EKEY);
 }

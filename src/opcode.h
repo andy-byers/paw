@@ -48,27 +48,27 @@ typedef uint32_t OpCode;
 #define mask0(n, p) (~mask1(n, p))
 
 #define create_OP(o) ((OpCode)(o))
-#define get_OP(x) ((x) & mask1(OP_WIDTH, 0))
-#define set_OP(x, o) (*(x) = (*(x) & mask0(OP_WIDTH, 0)) | (OpCode)(o))
+#define get_OP(v) ((v) & mask1(OP_WIDTH, 0))
+#define set_OP(v, o) (*(v) = (*(v) & mask0(OP_WIDTH, 0)) | (OpCode)(o))
 
 #define create_U(o, u) ((OpCode)(o) | ((OpCode)(u) << U_OFFSET))
-#define get_U(x) (((x) >> U_OFFSET) & mask1(U_WIDTH, 0))
-#define set_U(x, u) (*(x) = (*(x) & mask0(U_WIDTH, U_OFFSET)) | ((OpCode)(u) << U_OFFSET))
+#define get_U(v) (((v) >> U_OFFSET) & mask1(U_WIDTH, 0))
+#define set_U(v, u) (*(v) = (*(v) & mask0(U_WIDTH, U_OFFSET)) | ((OpCode)(u) << U_OFFSET))
 
 #define create_S(o, s) create_U(o, (int)(s) + S_MAX)
-#define get_S(x) ((int)get_U(x) - S_MAX)
-#define set_S(x, s) set_U(x, (int)(s) + S_MAX)
+#define get_S(v) ((int)get_U(v) - S_MAX)
+#define set_S(v, s) set_U(v, (int)(s) + S_MAX)
 
 #define create_AB(o, a, b) ((OpCode)(op) | ((OpCode)(a) << A_OFFSET) | \
                             ((OpCode)(b) << B_OFFSET))
-#define get_A(x) ((x) >> A_OFFSET)
-#define set_A(x, a) (*(x) = (*(x) & mask0(A_WIDTH, A_OFFSET)) | ((OpCode)(a) << A_OFFSET))
-#define get_B(x) (((x) >> B_OFFSET) & mask1(B_WIDTH, 0))
-#define set_B(x, b) (*(x) = (*(x) & mask0(B_WIDTH, B_OFFSET)) | ((OpCode)(b) << B_OFFSET))
+#define get_A(v) ((v) >> A_OFFSET)
+#define set_A(v, a) (*(v) = (*(v) & mask0(A_WIDTH, A_OFFSET)) | ((OpCode)(a) << A_OFFSET))
+#define get_B(v) (((v) >> B_OFFSET) & mask1(B_WIDTH, 0))
+#define set_B(v, b) (*(v) = (*(v) & mask0(B_WIDTH, B_OFFSET)) | ((OpCode)(b) << B_OFFSET))
 
 // clang-format off
 //
-// Opcode format: Instructions are represented by 32-bit unsigned integers
+// Opcode format: Each instruction is packed into a 32-bit unsigned integer
 //
 // legend:
 //   G = global variable (requires constant string index)
@@ -81,57 +81,67 @@ typedef uint32_t OpCode;
 //       corresponding metamethods).
 //
 // ORDER Op
-typedef enum Op { // operands    stack in     stack out    side effects
-OP_PUSHNULL,//       -           -            null         -
-OP_PUSHTRUE,//       -           -            true         -
-OP_PUSHFALSE,//      -           -            false        -
-OP_PUSHCONST,//      U           -            K[u]         -
+typedef enum Op { // operands    stack in     stack out     side effects
+OP_PUSHNULL,//       -           -            null          -
+OP_PUSHTRUE,//       -           -            true          -
+OP_PUSHFALSE,//      -           -            false         -
+OP_PUSHCONST,//      U           -            K[u]          -
 
-OP_POP,//            -           v            -            -
-OP_CLOSE,//          A B         v_a..v_1     -            if b, close stack to v_a
-OP_RETURN,//         -           f..v         v            closes stack to f
+OP_INCREF,//         -           o            o             ++o.refcount
+OP_DECREF,//         -           o            o             --o.refcount
 
-OP_CLOSURE,//        A B         v_b..v_1     f            captures v_u..v_1 in f = P[a]
-OP_INVOKE,//         A B         o v_b..v_1   f(v_b..v_1)  calls f = o.K[a], with receiver o
-OP_INVOKESUPER,//    A B         o v_b..v_1   f(v_b..v_1)  calls f = o.K[a], with receiver o 
+OP_POP,//            -           v            -             -
+OP_CLOSE,//          A B         v_a..v_1     -             if b, close stack to v_a
+OP_RETURN,//         -           f..v         v             closes stack to f
+OP_RETURN0,//        -           f..v         -             closes stack to f
+
+OP_CLOSURE,//        A B         v_b..v_1     f             captures v_u..v_1 in f = P[a]
+OP_INVOKE,//         A B         o v_b..v_1   f(v_b..v_1)   calls f = o.K[a], with receiver o
+OP_INVOKESUPER,//    A B         o v_b..v_1   f(v_b..v_1)   calls f = o.K[a], with receiver o 
 OP_GETSUPER,//       U
 
-OP_JUMP,//           S           -            -            pc += S
-OP_JUMPFALSEPOP,//   S           v            -            pc += S
-OP_JUMPFALSE,//      S           v            v            if !v, then pc += S
-OP_JUMPNULL,//       S           v            v            if v == null, then pc += S
+OP_JUMP,//           S           -            -             pc += S
+OP_JUMPFALSEPOP,//   S           v            -             pc += S
+OP_JUMPFALSE,//      S           v            v             if !v, then pc += S
+OP_JUMPNULL,//       S           v            v             if v == null, then pc += S
 
-OP_GLOBAL,//         U           v            -            define G[K[u]] = v
-OP_GETGLOBAL,//      U           -            G[K[U]]      -
-OP_SETGLOBAL,//      U           v            -            G[K[u]] = v
-OP_GETLOCAL,//       U           -            L[U]         -
-OP_SETLOCAL,//       U           v            -            L[u] = v
-OP_GETUPVALUE,//     U           -            Up[U]        -
-OP_SETUPVALUE,//     U           v            -            Up[u] = v
+OP_GLOBAL,//         U           v            -             define G[K[u]] = v
+OP_GETGLOBAL,//      U           -            G[K[u]]       -
+OP_SETGLOBAL,//      U           v            -             G[K[u]] = v
+OP_GETLOCAL,//       U           -            L[u]          -
+OP_SETLOCAL,//       U           v            -             L[u] = v
+OP_GETUPVALUE,//     U           -            Up[u]         -
+OP_SETUPVALUE,//     U           v            -             Up[u] = v
 
-OP_NEWCLASS,//       A B         -            v            v = new class named K[a]
-OP_INHERIT,//        -           x y          x            x subclass of y
-OP_NEWMETHOD,//      U           v f          v            v.K[u] = f
-OP_NEWARRAY,//       U           v_u..v_1     [v_u..v_1]   -
-OP_NEWMAP,//         U           v_2n..v_1    {v_2n..v_1}  -
+OP_NEWCLASS,//       A B         -            v             v = new class named K[a]
+OP_INHERIT,//        -           x y          x             x subclass of y
+OP_NEWMETHOD,//      U           v f          v             v.K[u] = f
+OP_NEWARRAY,//       U           v_u..v_1     [v_u..v_1]    -
+OP_NEWMAP,//         U           v_2n..v_1    {v_2n..v_1}   -
 
-OP_FORNUM0,//        S           *~*~*~*~*~*~*~*~* see notes *~*~*~*~*~*~*~*~*
-OP_FORNUM,//         S           *~*~*~*~*~*~*~*~* see notes *~*~*~*~*~*~*~*~*
-OP_FORIN0,//         S           *~*~*~*~*~*~*~*~* see notes *~*~*~*~*~*~*~*~*
-OP_FORIN,//          S           *~*~*~*~*~*~*~*~* see notes *~*~*~*~*~*~*~*~*
+OP_FORNUM0,//        S           *-*-*-*-*-*-*-*-* see notes *-*-*-*-*-*-*-*-*
+OP_FORNUM,//         S           *-*-*-*-*-*-*-*-* see notes *-*-*-*-*-*-*-*-*
+OP_FORIN0,//         S           *-*-*-*-*-*-*-*-* see notes *-*-*-*-*-*-*-*-*
+OP_FORIN,//          S           *-*-*-*-*-*-*-*-* see notes *-*-*-*-*-*-*-*-*
 
-OP_UNOP,//           A B         x            op(a, x)     -
-OP_BINOP,//          A B         x y          op(a, x, y)  -
+OP_UNOP,//           A B         v            ops[a](v)     -
+OP_BINOP,//          A B         l r          ops[x](l, r)  -
+OP_UNMM,//           A B         v            v.attr[a]()   -
+OP_BINMM,//          A B         l r          l.attr[a](r)  -
          
-OP_VARARG,//         A B         v_u..v_1     [v_u..v_1]   -
-OP_CALL,//           U           f v_u..v_1   v            v = f(v_u..v_1)
+OP_CASTBOOL,//       U           v            bool(v)       -  
+OP_CASTINT,//        U           v            int(v)        - 
+OP_CASTFLOAT,//      U           v            float(v)      - 
+         
+OP_VARARG,//         A B         v_u..v_1     [v_u..v_1]    -
+OP_CALL,//           U           f v_u..v_1   v             v = f(v_u..v_1)
 
-OP_GETATTR,//        -           x y          x.y          -
-OP_SETATTR,//        -           x y z        -            x.y=z
-OP_GETITEM,//        -           x y          x[y]         -
-OP_SETITEM,//        -           x y z        -            x[y]=z
-OP_GETSLICE,//       -           x y z        v            -  
-OP_SETSLICE,//       -           x y z w      -            x[y:z]=w
+OP_GETATTR,//        -           v i          v.i           -
+OP_SETATTR,//        -           v i j        -             v.i=j
+OP_GETITEM,//        -           v i          v[i]          -
+OP_SETITEM,//        -           v i j        -             v[i]=j
+OP_GETSLICE,//       -           v i j        v[i:j]        -  
+OP_SETSLICE,//       -           v i j k      -             v[i:j]=k
 
 NOPCODES
 } Op;
@@ -159,10 +169,7 @@ typedef enum {
     BINARY_SUB,  
     BINARY_MUL,  
     BINARY_DIV,  
-    BINARY_IDIV, 
     BINARY_MOD,  
-    BINARY_POW,  
-    BINARY_CONCAT,
     BINARY_BXOR,
     BINARY_BAND,
     BINARY_BOR,
@@ -175,7 +182,10 @@ typedef enum {
 // clang-format on
 //
 // Notes:
-// * OP_*OP uses argument 'B' to indicate the types of 'x' and 'y'
+// * OP_*OP uses argument 'B' to indicate the type of the operands. The operands are
+//   always the same type.
+// * The conversion operators (OP_BOOL, OP_INT, etc.) use argument 'U' to indicate
+//   the type of 'v'.
 // * OP_RETURN replaces the current call frame with the value on top of the stack.
 //   The current call frame consists of the function object or reciever 'f', its
 //   parameters, and all locals declared between the start of the call and the 'return'.
@@ -194,12 +204,22 @@ typedef enum {
 // ORDER Metamethod
 typedef enum {
     MM_CALL,
+
+    // getters and setters
     MM_GETATTR,
     MM_SETATTR,
     MM_GETITEM,
     MM_SETITEM,
     MM_GETSLICE,
     MM_SETSLICE,
+
+    // type conversions
+    MM_BOOL,
+    MM_INT,
+    MM_FLOAT,
+    MM_STRING,
+    MM_ARRAY,
+    MM_MAP,
 
     // unary operators
     MM_LEN,
@@ -221,10 +241,7 @@ typedef enum {
     MM_SUB,
     MM_MUL,
     MM_DIV,
-    MM_IDIV,
     MM_MOD,
-    MM_POW,
-    MM_CONCAT,
     MM_BXOR,
     MM_BAND,
     MM_BOR,
@@ -236,10 +253,7 @@ typedef enum {
     MM_RSUB,
     MM_RMUL,
     MM_RDIV,
-    MM_RIDIV,
     MM_RMOD,
-    MM_RPOW,
-    MM_RCONCAT,
     MM_RBXOR,
     MM_RBAND,
     MM_RBOR,
@@ -249,12 +263,6 @@ typedef enum {
     // misc. metamethods
     MM_INIT,
     MM_NULL,
-    MM_STR,
-    MM_INT,
-    MM_FLOAT,
-    MM_BOOL,
-    MM_ARRAY,
-    MM_MAP,
 
     NMETAMETHODS
 } Metamethod;

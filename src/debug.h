@@ -11,7 +11,7 @@ const char *paw_opcode_name(Op op);
 void paw_dump_source(paw_Env *P, Proto *proto);
 void paw_dump_stack(paw_Env *P);
 void paw_stacktrace(paw_Env *P);
-void paw_dump_value(paw_Env *P, Value v);
+void paw_dump_value(paw_Env *P, Value v, int type);
 void paw_dump_map(paw_Env *P, Map *m);
 
 #endif // PAW_DEBUG_H

@@ -4,14 +4,15 @@
 #include "array.h"
 #include "gc.h"
 #include "mem.h"
-#include "rt.h"
+//#include "rt.h"
 #include "util.h"
 #include <string.h>
 
 void pawA_index_error(paw_Env *P, paw_Int index, size_t length)
 {
-    pawR_error(P, PAW_EINDEX, "index %I is out of bounds for array of length %I",
-               index, paw_cast_int(length) /* fits in paw_Int */);
+    paw_assert(0);
+   // pawR_error(P, PAW_EINDEX, "index %I is out of bounds for array of length %I",
+   //            index, paw_cast_int(length) /* fits in paw_Int */);
 }
 
 static size_t array_capacity(const Array *a)
@@ -127,7 +128,7 @@ void pawA_free(paw_Env *P, Array *a)
 Array *pawA_clone(paw_Env *P, StackPtr sp, const Array *a)
 {
     Array *a2 = pawA_new(P);
-    pawV_set_array(sp, a2); // anchor
+    v_set_object(sp, a2); // anchor
     if (pawA_length(a)) {
         pawA_resize(P, a2, pawA_length(a));
         memcpy(a2->begin, a->begin, sizeof(a->begin[0]) * pawA_length(a));
@@ -135,7 +136,7 @@ Array *pawA_clone(paw_Env *P, StackPtr sp, const Array *a)
     return a2;
 }
 
-static paw_Bool elems_equal(paw_Env *P, const Value x, const Value y)
+static paw_Bool elems_equal(paw_Env *P, Value x, Value y)
 {
     StackPtr p = pawC_stkinc(P, 2);
     p[0] = y;
@@ -143,7 +144,8 @@ static paw_Bool elems_equal(paw_Env *P, const Value x, const Value y)
 
     // Arrays can contain any type of value. Call pawR_binop() to check
     // metamethods on objects.
-    pawR_binop(P, BINARY_EQ);
+//    pawR_binop(P, BINARY_EQ);
+    paw_assert(0); // FIXME
 
     const paw_Bool b = paw_boolean(P, -1);
     paw_pop(P, 1);

@@ -9,8 +9,8 @@ static void script(const char *name)
 int main(void)
 {
     script("types");
-    return 0; // TODO
     script("basic");
+    return 0; // TODO
     script("operator");
     script("integer");
     script("float");

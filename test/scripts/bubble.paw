@@ -1,8 +1,8 @@
 -- bubble.paw
 
-fn random(n) {
-    let a = []
-    let x = 0
+fn random(n): [int] {
+    let a: [int]
+    let x: int
     for _ = 0, n {
         x = (140671485 * x + 12820163) % 16777216
         a.push(x)
@@ -10,7 +10,7 @@ fn random(n) {
     return a
 }
 
-fn bubble(n) {
+fn bubble(n: int): [int] {
     let a = random(n)
     while true {
         let swapped = false

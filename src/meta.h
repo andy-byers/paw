@@ -62,8 +62,8 @@
 //      x != y     | !x.__eq(y)
 //      y != x     | !x.__eq(y)
 
-#define mm_has_r(op) ((op) >= META2)
-#define mm_get_r(op) ((op) + METAR - META2)
+#define mm_has_r(op) ((op) >= MM_ADD)
+#define mm_get_r(op) ((op) + (MM_RADD - MM_ADD))
 
 const char *pawT_name(unsigned op);
 

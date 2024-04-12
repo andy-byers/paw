@@ -12,27 +12,19 @@
 // Load the base library
 void pawL_init(paw_Env *P);
 
-void pawL_check_type(paw_Env *P, int index, int type);
 void pawL_check_argc(paw_Env *P, int argc);
 int pawL_check_varargc(paw_Env *P, int min, int max);
 
-static inline const char *pawL_check_string(paw_Env *P, int index)
-{
-    // NOTE: value at 'index' must exist
-    pawL_check_type(P, index, PAW_TSTRING);
-    return paw_string(P, index);
-}
-
-paw_Int pawL_check_int(paw_Env *P, int index);
-
-typedef struct pawL_Attr {
-    const char *name;
-    paw_Function func;
-} pawL_Attr;
-
 // TODO: Look on disk for .paw files to load
 void pawL_require_lib(paw_Env *P, const char *name);
-void pawL_register_lib(paw_Env *P, const char *name, int nup, const pawL_Attr *attr);
+
+void pawL_register_function(paw_Env *P, const char *name, paw_Function func, paw_Type *argt, paw_Type ret);
+void pawL_bind_method(paw_Env *P, int index, const char *name, paw_Function func, paw_Type *argt, paw_Type ret);
+
+#define t_list_0() (paw_Type[]){PAW_NULL}
+#define t_list_1(a) (paw_Type[]){a, PAW_NULL}
+#define t_list_2(a, b) (paw_Type[]){a, b, PAW_NULL}
+#define t_list_3(a, b, c) (paw_Type[]){a, b, c, PAW_NULL}
 
 // Functions for loading and compiling source code
 int pawL_load_file(paw_Env *P, const char *pathname);

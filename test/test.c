@@ -1,9 +1,9 @@
 #include "test.h"
 #include "env.h"
-#include "lib.h"
+//#include "lib.h"
 #include "os.h"
 #include "paw.h"
-#include "rt.h"
+//#include "rt.h"
 #include "util.h"
 #include "value.h"
 #include <assert.h>
@@ -248,7 +248,7 @@ int test_open_file(paw_Env *P, const char *name)
     const int status = paw_load(P, test_reader, pathname, &rd);
     pawO_close(rd.file);
 puts("TODO: remove");
-paw_dump_source(P, pawV_get_closure(P->top.p[-1])->p);
+paw_dump_source(P, v_closure(P->top.p[-1])->p);
     return status;
 }
 

@@ -34,34 +34,4 @@ static inline const char *api_typename(int type)
     }
 }
 
-static inline int api_type(Value v)
-{
-    switch (pawV_get_type(v)) {
-        case VNULL:
-            return PAW_NULL;
-        case VTRUE:
-        case VFALSE:
-            return PAW_TBOOL;
-        case VBIGINT:
-        case VNUMBER:
-            return PAW_TINT;
-        case VCLOSURE:
-        case VMETHOD:
-        case VNATIVE:
-            return PAW_TFUNCTION;
-        case VSTRING:
-            return PAW_TSTRING;
-        case VARRAY:
-            return PAW_TARRAY;
-        case VMAP:
-            return PAW_TMAP;
-        case VCLASS:
-            return PAW_TCLASS;
-        case VFOREIGN:
-            return PAW_TFOREIGN;
-        default:
-            return PAW_TFLOAT;
-    }
-}
-
 #endif // PAW_API_H

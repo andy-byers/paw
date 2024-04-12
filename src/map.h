@@ -15,7 +15,7 @@ static inline paw_Bool pawH_is_vacant(Value v)
 
 static inline paw_Bool pawH_is_erased(Value v)
 {
-    return pawV_is_null(v);
+    return v_is_null(v);
 }
 
 static inline paw_Bool pawH_is_occupied(Value v)
@@ -23,7 +23,7 @@ static inline paw_Bool pawH_is_occupied(Value v)
     return !pawH_is_vacant(v) && !pawH_is_erased(v);
 }
 
-#define pawH_index(m, k) check_exp(!pawV_is_null(k), pawV_hash(k) & ((m)->capacity - 1))
+#define pawH_index(m, k) check_exp(!v_is_null(k), pawV_hash_key(k) & ((m)->capacity - 1))
 
 // Set 'itr' to the index at which the key 'k' is located, or the first index for
 // which the function-like macro  'cc' evaluates to true (if 'k' is not found).
@@ -31,7 +31,7 @@ static inline paw_Bool pawH_is_occupied(Value v)
 #define pawH_locate(m, k, cc)                 \
     for (size_t mask = (m)->capacity - 1;;) { \
         Value ki = (m)->keys[itr];            \
-        if ((cc)(ki) || pawV_equal(ki, k)) {  \
+        if ((cc)(ki) || (ki).u == (k).u) {    \
             break;                            \
         }                                     \
         itr = (itr + 1) & mask;               \
@@ -70,8 +70,8 @@ static inline Value *pawH_action(paw_Env *P, Map *m, Value key, MapAction action
         return NULL;
     }
     if (action == MAP_ACTION_REMOVE) {
-        pawV_set_null(&m->keys[itr]);
-        pawV_set_null(&m->values[itr]);
+        v_set_null(&m->keys[itr]);
+        v_set_null(&m->values[itr]);
         --m->length;
         // Return the address of the slot to indicate success.
         return &m->keys[itr];

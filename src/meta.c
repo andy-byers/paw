@@ -20,6 +20,13 @@ const char *pawT_name(Metamethod mm)
         "__getslice",
         "__setslice",
 
+        "__bool",
+        "__int",
+        "__float",
+        "__string",
+        "__array",
+        "__map",
+
         "__len",
         "__neg",
         "__not",
@@ -37,10 +44,7 @@ const char *pawT_name(Metamethod mm)
         "__sub",
         "__mul",
         "__div",
-        "__idiv",
         "__mod",
-        "__pow",
-        "__concat",
         "__bxor",
         "__band",
         "__bor",
@@ -51,10 +55,7 @@ const char *pawT_name(Metamethod mm)
         "__rsub",
         "__rmul",
         "__rdiv",
-        "__ridiv",
         "__rmod",
-        "__rpow",
-        "__rconcat",
         "__rbxor",
         "__rband",
         "__rbor",
@@ -63,12 +64,6 @@ const char *pawT_name(Metamethod mm)
 
         "__init",
         "__null",
-        "__str",
-        "__int",
-        "__float",
-        "__bool",
-        "__array",
-        "__map",
     };
     _Static_assert(paw_countof(kMetaNames) == NMETAMETHODS,
                    "metamethod names re inconsistent");

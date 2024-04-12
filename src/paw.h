@@ -29,6 +29,7 @@
 #include <stdarg.h>
 #include <stddef.h>
 
+typedef int paw_Type;
 typedef int64_t paw_Int;
 typedef double paw_Float;
 typedef _Bool paw_Bool;
@@ -71,19 +72,20 @@ int paw_load(paw_Env *P, paw_Reader input, const char *name, void *ud);
 // the last parameter on top.
 int paw_call(paw_Env *P, int argc);
 
-// C API representation of 'null'
 #define PAW_NULL -1
 
+// ORDER ValueType
 #define PAW_TBOOL 0
 #define PAW_TINT 1
 #define PAW_TFLOAT 2
 #define PAW_TSTRING 3
 #define PAW_TARRAY 4
 #define PAW_TMAP 5
-#define PAW_TFUNCTION 6
+#define PAW_TTYPE 6
 #define PAW_TCLASS 7
 #define PAW_TFOREIGN 8
-#define PAW_NTYPES 9
+#define PAW_TFUNCTION 9
+#define PAW_NTYPES 10
 
 paw_Bool paw_is_truthy(paw_Env *P, int index);
 paw_Bool paw_is_null(paw_Env *P, int index);

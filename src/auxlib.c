@@ -15,7 +15,7 @@ static void grow_buffer(paw_Env *P, Buffer *buf, int boxloc)
     paw_assert(buf->alloc <= SIZE_MAX / 2);
     const size_t alloc = buf->alloc * 2;
     if (pawL_boxed(buf)) {
-        Foreign *ud = pawV_get_foreign(P->top.p[boxloc]);
+        Foreign *ud = v_foreign(P->top.p[boxloc]);
         pawM_resize(P, buf->data, buf->alloc, alloc);
         ud->data = buf->data;
         ud->size = alloc;
@@ -26,7 +26,7 @@ static void grow_buffer(paw_Env *P, Buffer *buf, int boxloc)
         memcpy(ud->data, buf->stack, buf->size);
         buf->data = ud->data;
         Value *pbox = &P->top.p[boxloc - 1];
-        pawV_set_foreign(pbox, ud);
+        v_set_object(pbox, ud);
         paw_pop(P, 1);
     }
     buf->alloc = alloc;
@@ -74,10 +74,10 @@ static void add_nstring(paw_Env *P, Buffer *buf, const char *str, size_t len, in
     memcpy(ptr, str, len);
 }
 
-void pawL_add_value(paw_Env *P, Buffer *buf)
+void pawL_add_value(paw_Env *P, Buffer *buf, TypeTag tag)
 {
     size_t len; // value must be on top of the stack
-    const char *str = pawV_to_string(P, P->top.p[-1], &len);
+    const char *str = pawV_to_string(P, P->top.p[-1], t_type(tag), &len);
     if (str == NULL) {
         // add the type name and address
         str = paw_push_fstring(P, "%s (%p)", paw_typename(P, -1), paw_pointer(P, -1));
@@ -119,20 +119,24 @@ void pawL_add_nstring(paw_Env *P, Buffer *buf, const char *s, size_t n)
 
 void pawL_add_integer(paw_Env *P, Buffer *buf, paw_Int i)
 {
+    Value v;
+    v_set_int(&v, i);
+
     size_t len;
-    const Value *pv = pawC_pushi(P, i);
-    const char *str = pawV_to_string(P, *pv, &len);
-    add_nstring(P, buf, str, len, -3); // int and string above box
-    pawC_stkdec(P, 2);
+    const char *str = pawV_to_string(P, v, PAW_TINT, &len);
+    add_nstring(P, buf, str, len, -2); // string above box
+    pawC_stkdec(P, 1);
 }
 
 void pawL_add_float(paw_Env *P, Buffer *buf, paw_Float f)
 {
+    Value v;
+    v_set_float(&v, f);
+
     size_t len;
-    const Value *pv = pawC_pushf(P, f);
-    const char *str = pawV_to_string(P, *pv, &len);
-    add_nstring(P, buf, str, len, -3); // float and string above box
-    pawC_stkdec(P, 2);
+    const char *str = pawV_to_string(P, v, PAW_TFLOAT, &len);
+    add_nstring(P, buf, str, len, -2); // string above box
+    pawC_stkdec(P, 1);
 }
 
 void pawL_add_pointer(paw_Env *P, Buffer *buf, void *p)

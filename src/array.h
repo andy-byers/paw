@@ -10,7 +10,7 @@
 Array *pawA_new(paw_Env *P);
 void pawA_free(paw_Env *P, Array *a);
 paw_Bool pawA_equals(paw_Env *P, const Array *lhs, const Array *rhs);
-paw_Bool pawA_contains(paw_Env *P, const Array *a, const Value v);
+paw_Bool pawA_contains(paw_Env *P, const Array *a, Value v);
 void pawA_reserve(paw_Env *P, Array *a, size_t capacity);
 void pawA_resize(paw_Env *P, Array *a, size_t length);
 void pawA_insert(paw_Env *P, Array *a, paw_Int index, Value v);

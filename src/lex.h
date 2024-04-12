@@ -20,12 +20,9 @@ enum MultiChar {
 
     // Multi-byte tokens:
     TK_DOT3,
-    TK_PLUS2,
     TK_QUESTION2,
     TK_COLON2,
     TK_ELVIS,
-    TK_SLASH2,
-    TK_STAR2,
     TK_LESS2,
     TK_GREATER2,
     TK_AMPER2,
@@ -45,7 +42,6 @@ enum MultiChar {
     TK_FN,
     TK_CLASS,
     TK_SUPER,
-    TK_INCLUDE,
     TK_GLOBAL,
     TK_LET,
     TK_IF,
@@ -71,9 +67,10 @@ typedef struct Token {
 
 typedef struct Lex {
     paw_Env *P;
-    struct FnState *fn;
-    struct ClsState *cls;
-    String *last_string;
+    struct FnState *fs;
+    struct ClsState *cs;
+    struct SymbolTable *toplevel;
+    struct SymbolTable *globals;
 
     Map *strings;
     String *modname;
@@ -94,6 +91,7 @@ typedef struct Lex {
 
     int line;
     int lastline;
+    int fn_depth;
 
     void *ud;
 } Lex;
