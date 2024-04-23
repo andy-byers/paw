@@ -14,6 +14,7 @@
 #define PAW_PARSE_H
 
 #include "lex.h"
+#include "type.h"
 #include "util.h"
 #include "value.h"
 
@@ -42,50 +43,32 @@ typedef struct LabelList {
     int capacity;
 } LabelList;
 
-typedef enum SymbolKind {
-    SYM_VARIABLE,
-    SYM_PROTOTYPE,
-} SymbolKind;
-
-typedef struct Symbol {
-    String *name;
-    TypeTag type;
-    SymbolKind kind;
-
-    union {
-        struct {
-            paw_Bool init: 1;
-            paw_Bool captured: 1;
-        } flags;
-        Class *cls; 
-    };
-} Symbol;
-
-typedef struct SymbolTable {
-    Symbol *data;
-    int size;
-    int alloc;
+// Represents a single lexical scope
+typedef struct Scope {
+    struct Symbol **symbols;
+    int nsymbols;
+    int capacity;
     int bk_depth;
     int fn_depth;
+} Scope;
+
+typedef struct SymbolTable {
+    Scope *toplevel;
+    Scope *globals;
+    Scope **scopes;
+    int nscopes;
+    int capacity;
+
+    Type base_types[PAW_NTYPES];
 } SymbolTable;
 
-typedef struct ScopeTable {
-    SymbolTable **data;
-    int size;
-    int alloc;
-} ScopeTable;
-
 #define last_scope(t) check_exp((t)->size > 0, (t)->data[(t)->size - 1])
-SymbolTable *pawP_add_scope(Lex *lex, ScopeTable *table);
-Symbol *pawP_add_symbol(Lex *lex, SymbolTable *table);
-int pawP_find_symbol(SymbolTable *table, String *name);
-#define pawP_get_symbol(table, i) (&(table)->data[i])
+Scope *pawP_add_scope(Lex *lex, SymbolTable *table);
+struct Symbol *pawP_add_symbol(Lex *lex, Scope *table);
+int pawP_find_symbol(Scope *scope, const String *name);
 
 typedef struct ClsState {
     struct ClsState *outer;
-    TypeTag *tags;
-    Class *cls;
-    int index;
 } ClsState;
 
 typedef struct BlkState {
@@ -104,10 +87,10 @@ typedef enum FnKind {
 } FnKind;
 
 typedef struct FnState {
-    ScopeTable scopes; // local scopes
-    SymbolTable locals; // local variables
     struct FnState *outer; // enclosing function
-    TypeTag type; // function signature
+    SymbolTable scopes; // local scopes
+    Scope locals; // local variables
+    FunctionType *sig; // function signature
     BlkState *bs; // current block
     Lex *lex; // lexical state
     Proto *proto; // prototype being built
@@ -118,7 +101,7 @@ typedef struct FnState {
     int nup; // number of upvalues
     int nk; // number of constants
     int nproto; // number of nested functions
-    int nclass; // number of nested classes
+    int nclasses; // number of nested classes
     int nlines; // number of source lines
     int pc; // number of instructions
     FnKind kind; // type of function
@@ -134,12 +117,12 @@ typedef struct ParseMemory {
         int alloc;
     } scratch;
 
-    ScopeTable scopes;
+    SymbolTable st;
     LabelList ll;
-    int nglobal;
 } ParseMemory;
 
 void pawP_init(paw_Env *P);
+
 Closure *pawP_parse(paw_Env *P, paw_Reader input, ParseMemory *mem, const char *name, void *ud);
 
 #endif // PAW_PARSE_H

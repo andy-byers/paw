@@ -28,6 +28,7 @@ enum MultiChar {
     TK_AMPER2,
     TK_EQUALS2,
     TK_PIPE2,
+    TK_ARROW,
     TK_LESS_EQ,
     TK_GREATER_EQ,
     TK_BANG_EQ,
@@ -55,7 +56,6 @@ enum MultiChar {
     TK_IN,
     TK_TRUE,
     TK_FALSE,
-    TK_NULL,
 };
 
 typedef unsigned TokenKind;
@@ -67,15 +67,14 @@ typedef struct Token {
 
 typedef struct Lex {
     paw_Env *P;
-    struct FnState *fs;
     struct ClsState *cs;
-    struct SymbolTable *toplevel;
-    struct SymbolTable *globals;
+    struct FnState *fs;
 
     Map *strings;
     String *modname;
     Closure *main;
     struct Tree *ast;
+    struct ModuleType *mod;
 
     paw_Reader input;
     const char *chunk;
@@ -95,6 +94,8 @@ typedef struct Lex {
 
     void *ud;
 } Lex;
+
+#define x_base_type(x, t) ((x)->mod->types[t])
 
 String *pawX_scan_string(Lex *lex, const char *s, size_t n);
 void pawX_set_source(Lex *lex, paw_Reader input);

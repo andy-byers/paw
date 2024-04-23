@@ -1,4 +1,4 @@
--- block.paw
+// block.paw
 
 {
     let _0 = 0
@@ -11,18 +11,18 @@
             let _5 = 5
             assert(_0 + _1 + _2 + _3 + _4 + _5 == 15)
 
-            let _1 = 123 -- Shadow
-            let _1 = 123 -- Rebind
+            let _1 = 123 // Shadow
+            let _1 = 123 // Rebind
         }
         assert(_0 + _1 + _2 == 3)
 
-        _0 = 123 -- Assign
+        _0 = 123 // Assign
     }
     assert(_0 == 123)
 }
 
 {
-    fn test(n) {
+    fn test(n: int): string {
         if n == 0 {
             return 'zero'
         } else if n == 1 {
@@ -39,4 +39,3 @@
     assert(test(3) == 'other')
     assert(test(-1) == 'other')
 }
-

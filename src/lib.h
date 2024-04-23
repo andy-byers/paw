@@ -21,10 +21,10 @@ void pawL_require_lib(paw_Env *P, const char *name);
 void pawL_register_function(paw_Env *P, const char *name, paw_Function func, paw_Type *argt, paw_Type ret);
 void pawL_bind_method(paw_Env *P, int index, const char *name, paw_Function func, paw_Type *argt, paw_Type ret);
 
-#define t_list_0() (paw_Type[]){PAW_NULL}
-#define t_list_1(a) (paw_Type[]){a, PAW_NULL}
-#define t_list_2(a, b) (paw_Type[]){a, b, PAW_NULL}
-#define t_list_3(a, b, c) (paw_Type[]){a, b, c, PAW_NULL}
+#define t_list_0() (paw_Type[]){-1}
+#define t_list_1(a) (paw_Type[]){a, -1}
+#define t_list_2(a, b) (paw_Type[]){a, b, -1}
+#define t_list_3(a, b, c) (paw_Type[]){a, b, c, -1}
 
 // Functions for loading and compiling source code
 int pawL_load_file(paw_Env *P, const char *pathname);

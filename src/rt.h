@@ -9,6 +9,7 @@
 
 void pawR_init(paw_Env *P);
 
+void pawR_to_bool(paw_Env *P, paw_Type type);
 void pawR_to_int(paw_Env *P, paw_Type type);
 void pawR_to_float(paw_Env *P, paw_Type type);
 const char *pawR_to_string(paw_Env *P, paw_Type type, size_t *plen);
@@ -20,9 +21,9 @@ void pawR_error(paw_Env *P, int status, const char *fmt, ...);
 void pawR_attr_error(paw_Env *P, Value attr);
 void pawR_name_error(paw_Env *P, Value name);
 
-void pawR_getattr(paw_Env *P);
+void pawR_getattr(paw_Env *P, int index);
 int pawR_getitem(paw_Env *P, int ttarget, int tindex);
-void pawR_setattr(paw_Env *P);
+void pawR_setattr(paw_Env *P, int index);
 void pawR_setitem(paw_Env *P, int ttarget, int tslice);
 
 int pawR_getattr_raw(paw_Env *P, paw_Bool fallback);

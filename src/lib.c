@@ -55,35 +55,38 @@ int pawL_check_varargc(paw_Env *P, int min, int max)
 //    return 1;
 //}
 //
-//static int base_bool(paw_Env *P)
-//{
-//    pawL_check_argc(P, 1);
-//    Value *pv = &P->top.p[-1];
-//    v_set_bool(pv, pawV_truthy(*pv));
-//    return 1;
-//}
+//#define make_to_bool(suffix, T) \
+//    static int base_to_bool_ ## suffix(paw_Env *P) \
+//    { \
+//        pawL_check_argc(P, 1); \
+//        pawR_to_bool(P, T); \
+//        return 1; \
+//    }
+//make_to_bool(s, PAW_TSTRING)
+//make_to_bool(i, PAW_TINT)
+//make_to_bool(f, PAW_TFLOAT)
 //
-//static int base_int(paw_Env *P)
-//{
-//    pawL_check_argc(P, 1);
-//    pawR_to_integer(P);
-//    return 1;
-//}
+//#define make_to_int(suffix, T) \
+//    static int base_to_int_ ## suffix(paw_Env *P) \
+//    { \
+//        pawL_check_argc(P, 1); \
+//        pawR_to_int(P, T); \
+//        return 1; \
+//    }
+//make_to_int(s, PAW_TSTRING)
+//make_to_int(i, PAW_TINT)
+//make_to_int(f, PAW_TFLOAT)
 //
-//static int base_float(paw_Env *P)
-//{
-//    pawL_check_argc(P, 1);
-//    pawR_to_float(P);
-//    return 1;
-//}
-//
-//static int base_str(paw_Env *P)
-//{
-//    size_t len;
-//    pawL_check_argc(P, 1);
-//    pawR_to_string(P, &len);
-//    return 1;
-//}
+//#define make_to_float(suffix, T) \
+//    static int base_to_float_ ## suffix(paw_Env *P) \
+//    { \
+//        pawL_check_argc(P, 1); \
+//        pawR_to_float(P, T); \
+//        return 1; \
+//    }
+//make_to_float(s, PAW_TSTRING)
+//make_to_float(i, PAW_TINT)
+//make_to_float(f, PAW_TFLOAT)
 //
 //static int base_chr(paw_Env *P)
 //{
@@ -265,57 +268,57 @@ static int string_find(paw_Env *P)
     return 1;
 }
 
-static int string_split(paw_Env *P)
-{
-    pawL_check_argc(P, 1);
-    const String *sep = v_string(cf_base(1));
-    String *s = v_string(cf_base(0));
-    if (sep->length == 0) {
-        pawR_error(P, PAW_EVALUE, "empty separator");
-    }
-
-    paw_Int npart = 0;
-    const char *part;
-    size_t nstr = s->length;
-    const char *pstr = s->text;
-    while ((part = find_substr(pstr, nstr, sep->text, sep->length))) {
-        const size_t n = cast_size(part - pstr);
-        pawC_pushns(P, pstr, n);
-        part += sep->length; // skip separator
-        pstr = part;
-        nstr -= n;
-        ++npart;
-    }
-    const char *end = s->text + s->length; // add the rest
-    pawC_pushns(P, pstr, cast_size(end - pstr));
-    ++npart;
-
-    pawR_literal_array(P, npart);
-    return 1;
-}
-
-static int string_join(paw_Env *P)
-{
-    pawL_check_argc(P, 1);
-    const Value seq = cf_base(1);
-    String *s = v_string(cf_base(0));
-
-    Buffer buf;
-    pawL_init_buffer(P, &buf);
-    paw_Int itr = PAW_ITER_INIT;
-    Array *a = v_array(seq);
-    while (pawA_iter(a, &itr)) {
-        const Value v = a->begin[itr];
-        // Add a chunk, followed by the separator if necessary.
-        const String *chunk = v_string(v);
-        pawL_add_nstring(P, &buf, chunk->text, chunk->length);
-        if (cast_size(itr + 1) < pawA_length(a)) {
-            pawL_add_nstring(P, &buf, s->text, s->length);
-        }
-    }
-    pawL_push_result(P, &buf);
-    return 1;
-}
+//static int string_split(paw_Env *P)
+//{
+//    pawL_check_argc(P, 1);
+//    const String *sep = v_string(cf_base(1));
+//    String *s = v_string(cf_base(0));
+//    if (sep->length == 0) {
+//        pawR_error(P, PAW_EVALUE, "empty separator");
+//    }
+//
+//    paw_Int npart = 0;
+//    const char *part;
+//    size_t nstr = s->length;
+//    const char *pstr = s->text;
+//    while ((part = find_substr(pstr, nstr, sep->text, sep->length))) {
+//        const size_t n = cast_size(part - pstr);
+//        pawC_pushns(P, pstr, n);
+//        part += sep->length; // skip separator
+//        pstr = part;
+//        nstr -= n;
+//        ++npart;
+//    }
+//    const char *end = s->text + s->length; // add the rest
+//    pawC_pushns(P, pstr, cast_size(end - pstr));
+//    ++npart;
+//
+//    pawR_literal_array(P, npart);
+//    return 1;
+//}
+//
+//static int string_join(paw_Env *P)
+//{
+//    pawL_check_argc(P, 1);
+//    const Value seq = cf_base(1);
+//    String *s = v_string(cf_base(0));
+//
+//    Buffer buf;
+//    pawL_init_buffer(P, &buf);
+//    paw_Int itr = PAW_ITER_INIT;
+//    Array *a = v_array(seq);
+//    while (pawA_iter(a, &itr)) {
+//        const Value v = a->begin[itr];
+//        // Add a chunk, followed by the separator if necessary.
+//        const String *chunk = v_string(v);
+//        pawL_add_nstring(P, &buf, chunk->text, chunk->length);
+//        if (cast_size(itr + 1) < pawA_length(a)) {
+//            pawL_add_nstring(P, &buf, s->text, s->length);
+//        }
+//    }
+//    pawL_push_result(P, &buf);
+//    return 1;
+//}
 
 static int string_starts_with(paw_Env *P)
 {
@@ -387,7 +390,7 @@ static int string_clone(paw_Env *P)
 static int count_types(paw_Env *P, paw_Type *ts)
 {
     int nts = 0;
-    for (paw_Type *t = ts; *t != PAW_NULL; ++t) {
+    for (paw_Type *t = ts; *t >= 0; ++t) {
         if (nts == ARGC_MAX) {
             pawC_throw(P, 123); // TODO
         }
@@ -396,16 +399,24 @@ static int count_types(paw_Env *P, paw_Type *ts)
     return nts;
 }
 
-static TypeTag register_native(paw_Env *P, paw_Type *argt, paw_Type ret)
+static Type *register_native(paw_Env *P, paw_Type *argt, paw_Type ret)
 {
-    const int narg = count_types(P, argt);
-    TypeTag *tags = pawM_new_vec(P, narg, Type *);
-    for (int i = 0; i < narg; ++i) {
-        tags[i] = e_tag(P, argt[i]);
-    }
+    const int nargs = count_types(P, argt);
+    Type **args = NULL;
+    if (nargs > 0) {
+        args = pawM_new_vec(P, nargs, Type *);
+        for (int i = 0; i < nargs; ++i) {
+            args[i] = P->mod->types[argt[i]];
+        }
+    } 
+    Type type = {0};
+    type.sig.kind = TYPE_SIGNATURE;
+    type.sig.ret = P->mod->types[ret];
+    type.sig.args = args;
+    type.sig.nargs = nargs;
 
     // register function signature
-    return pawY_register_function(P, tags, narg, e_tag(P, ret));
+    return pawY_add_type(P, P->mod, &type);
 }
 
 struct MethodDesc {
@@ -420,51 +431,39 @@ struct MethodDesc {
 #define push_builtin_class(a, b, c, d) push_builtin_class_aux(a, b, c, d, paw_countof(d))
 static void push_builtin_class_aux(paw_Env *P, paw_Type base, const char *name, struct MethodDesc *mds, int nattrs)
 {
-    // allocate class object
-    Value *pv = pawC_push0(P);
-    Class *cls = pawV_new_class(P);
-    v_set_object(pv, cls);
+    Type t = {0};
 
     // register method types and attach to class object
-    Attribute *attrs = pawM_new_vec(P, nattrs, Attribute);
+    t.cls.attrs = pawM_new_vec(P, nattrs, NamedField);
     for (int i = 0; i < nattrs; ++i) {
         struct MethodDesc *md = &mds[i];
-        TypeTag tag = register_native(P, md->args, md->ret);
+        Type *tag = register_native(P, md->args, md->ret);
         String *str = pawS_new_str(P, md->name);
         Native *nat = pawV_new_native(P, str, md->func);
-        attrs[i].name = str;
-        attrs[i].attr = tag;
-
-        Value key, value;
-        v_set_object(&key, str);
-        v_set_object(&value, nat);
-        pawH_insert(P, cls->methods, key, value);
+        t.cls.attrs[i].name = str;
+        t.cls.attrs[i].type = tag;
     }
 
     // register class type
     String *str = pawS_new_str(P, name);
-    TypeTag tag = pawY_register_class(P, str, attrs, nattrs);
+    Type *tag = pawY_add_type(P, P->mod, &t);
 
     // set global variable
     const int g = pawE_new_global(P, str, tag);
     GlobalVar *var = pawE_get_global(P, g);
-    v_set_object(&var->value, cls);
-    var->desc.type = tag;
+//    v_set_object(&var->value, t.cls);
+//    var->desc.type = tag;
 
-    P->builtin[base] = v_class(P->top.p[-1]);
-    pawC_pop(P);
+//    P->builtin[base] = v_class(P->top.p[-1]);
+//    pawC_pop(P);
 }
 
-Attribute attach_method(paw_Env *P, Value *pv, struct MethodDesc *m)
+static void attach_method(paw_Env *P, Value *pv, struct MethodDesc *m)
 {
-    TypeTag tag = register_native(P, m->args, m->ret);
+    Type *tag = register_native(P, m->args, m->ret);
     String *str = pawS_new_str(P, m->name);
     Native *nat = pawV_new_native(P, str, m->func);
     v_set_object(pv, nat);
-    return (Attribute){
-        .name = str,
-        .attr = tag,
-    };
 }
 
 void pawL_bind_method(paw_Env *P, int index, const char *name, paw_Function func, paw_Type *argt, paw_Type ret)
@@ -480,7 +479,7 @@ void pawL_bind_method(paw_Env *P, int index, const char *name, paw_Function func
 
 void pawL_register_function(paw_Env *P, const char *name, paw_Function func, paw_Type *argt, paw_Type ret)
 {
-    TypeTag tag = register_native(P, argt, ret);
+    Type *tag = register_native(P, argt, ret);
     String *str = pawS_new_str(P, name);
     Native *nat = pawV_new_native(P, str, func);
     const int g = pawE_new_global(P, str, tag);
@@ -491,8 +490,18 @@ void pawL_register_function(paw_Env *P, const char *name, paw_Function func, paw
 
 void pawL_init(paw_Env *P)
 {
-    pawL_register_function(P, "assert", base_assert, t_list_1(PAW_TBOOL), PAW_NULL);
-    pawL_register_function(P, "print", base_print, t_list_1(PAW_TSTRING), PAW_NULL);
+    pawL_register_function(P, "assert", base_assert, t_list_1(PAW_TBOOL), PAW_TUNIT);
+    pawL_register_function(P, "print", base_print, t_list_1(PAW_TSTRING), PAW_TUNIT);
+//    pawL_register_function(P, "to_float", base_to_float_s, t_list_1(PAW_TSTRING), PAW_TFLOAT);
+//    pawL_register_function(P, "to_float", base_to_float_i, t_list_1(PAW_TINT), PAW_TFLOAT);
+//    pawL_register_function(P, "to_float", base_to_float_f, t_list_1(PAW_TFLOAT), PAW_TFLOAT);
+//    pawL_register_function(P, "to_bool", base_to_bool_s, t_list_1(PAW_TSTRING), PAW_TBOOL);
+//    pawL_register_function(P, "to_bool", base_to_bool_i, t_list_1(PAW_TINT), PAW_TBOOL);
+//    pawL_register_function(P, "to_bool", base_to_bool_f, t_list_1(PAW_TFLOAT), PAW_TBOOL);
+//    pawL_register_function(P, "to_int", base_to_int_s, t_list_1(PAW_TSTRING), PAW_TINT);
+//    pawL_register_function(P, "to_int", base_to_int_i, t_list_1(PAW_TINT), PAW_TINT);
+//    pawL_register_function(P, "to_int", base_to_int_f, t_list_1(PAW_TFLOAT), PAW_TINT);
+
 //    pawL_register_function(P, "try", base_try, t_list_1(PAW_TFUNCTION), PAW_TINT);
 //    pawL_register_function(P, "require", base_require, t_list_1(PAW_TSTRING), PAW_TMODULE);
 //    pawL_register_function(P, "load", base_load, t_list_1(PAW_TSTRING), PAW_TFUNCTION);
@@ -572,14 +581,14 @@ void pawL_init(paw_Env *P)
 //    };
 //    push_builtin_class(P, "string", kStringDesc);
 
-    TypeTag string_array_tag = pawY_register_array(P, e_tag(P, PAW_TSTRING));
-    paw_Type string_array = t_type(string_array_tag);
+//    Type *string_array_tag = pawY_register_array(P, e_tag(P, PAW_TSTRING));
+//    paw_Type string_array = t_type(string_array_tag);
 
     struct MethodDesc kStringDesc[] = {
         {"starts_with", string_starts_with, t_list_1(PAW_TSTRING), PAW_TBOOL},
         {"ends_with", string_ends_with, t_list_1(PAW_TSTRING), PAW_TBOOL},
-        {"split", string_split, t_list_1(PAW_TSTRING), string_array},
-        {"join", string_join, t_list_1(string_array), PAW_TSTRING},
+//        {"split", string_split, t_list_1(PAW_TSTRING), string_array},
+//        {"join", string_join, t_list_1(string_array), PAW_TSTRING},
     };
     push_builtin_class(P, PAW_TSTRING, "string", kStringDesc);
 

@@ -77,6 +77,42 @@ static void grow_map_if_necessary(paw_Env *P, Map *m)
     }
 }
 
+#define MAP_FACTOR 4
+
+void pawH_reserve(paw_Env *P, Map *m, size_t length)
+{
+    if (length < m->capacity / MAP_FACTOR) {
+        return;
+    }
+    size_t n = 4;
+    while (n <= length) {
+        n *= 2;
+    }
+
+    // NOTE: pawM_new*() might cause an emergency collection. m->keys and m->values
+    //       are still reachable until pawM_new() returns, so they won't be freed. The
+    //       calls to add_item() below will never cause an allocation.
+    Value *buffer = pawM_new_vec(P, n * 2, Value);
+    const size_t old_n = m->capacity;
+
+    Value *keys = m->keys;
+    Value *values = m->values;
+    m->keys = buffer;
+    m->values = m->keys + n;
+    m->capacity = n;
+
+    const size_t count = m->length;
+    m->length = 0;
+
+    for (size_t i = 0; m->length < count; ++i) {
+        if (pawH_is_occupied(keys[i])) {
+            add_item(m, keys[i], values[i]);
+        }
+    }
+    pawM_free_vec(P, keys, old_n * 2);
+    check_gc(P);
+}
+
 Map *pawH_new(paw_Env *P)
 {
     Map *m = pawM_new(P, Map);
@@ -92,15 +128,11 @@ void pawH_free(paw_Env *P, Map *m)
 
 size_t pawH_create_aux_(paw_Env *P, Map *m, Value key)
 {
-    if (v_is_null(key) || (/*pawV_is_float(key)*/ 0 && f_is_nan(key))) {
-        paw_assert(0);
-    //    pawR_error(P, PAW_EVALUE, "invalid map key");
-    }
     grow_map_if_necessary(P, m);
     const size_t i = prepare_insert(m, key);
     if (!pawH_is_occupied(m->keys[i])) {
         m->keys[i] = key;
-        v_set_null(&m->values[i]);
+        v_set_0(&m->values[i]);
         ++m->length;
     }
     return i;

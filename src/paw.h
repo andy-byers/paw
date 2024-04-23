@@ -72,20 +72,20 @@ int paw_load(paw_Env *P, paw_Reader input, const char *name, void *ud);
 // the last parameter on top.
 int paw_call(paw_Env *P, int argc);
 
-#define PAW_NULL -1
-
 // ORDER ValueType
-#define PAW_TBOOL 0
-#define PAW_TINT 1
-#define PAW_TFLOAT 2
-#define PAW_TSTRING 3
-#define PAW_TARRAY 4
-#define PAW_TMAP 5
-#define PAW_TTYPE 6
-#define PAW_TCLASS 7
-#define PAW_TFOREIGN 8
-#define PAW_TFUNCTION 9
-#define PAW_NTYPES 10
+#define PAW_TUNIT 0
+#define PAW_TBOOL 1
+#define PAW_TINT 2
+#define PAW_TFLOAT 3
+#define PAW_TSTRING 4
+#define PAW_TTUPLE 5
+#define PAW_TARRAY 6
+#define PAW_TENUM 7
+#define PAW_TFUNCTION 8
+#define PAW_TCLASS 9
+#define PAW_TFOREIGN 10
+#define PAW_TMODULE 11
+#define PAW_NTYPES 12
 
 paw_Bool paw_is_truthy(paw_Env *P, int index);
 paw_Bool paw_is_null(paw_Env *P, int index);

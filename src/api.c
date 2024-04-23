@@ -108,24 +108,19 @@ paw_Bool paw_is_truthy(paw_Env *P, int index)
 //    return pawV_truthy(*access(P, index));
 }
 
-paw_Bool paw_is_null(paw_Env *P, int index)
-{
-    return paw_type(P, index) == PAW_NULL;
-}
-
-paw_Bool paw_is_boolean(paw_Env *P, int index)
+paw_Bool paw_is_bool(paw_Env *P, int index)
 {
     return paw_type(P, index) == PAW_TBOOL;
-}
-
-paw_Bool paw_is_float(paw_Env *P, int index)
-{
-    return paw_type(P, index) == PAW_TFLOAT;
 }
 
 paw_Bool paw_is_int(paw_Env *P, int index)
 {
     return paw_type(P, index) == PAW_TINT;
+}
+
+paw_Bool paw_is_float(paw_Env *P, int index)
+{
+    return paw_type(P, index) == PAW_TFLOAT;
 }
 
 paw_Bool paw_is_string(paw_Env *P, int index)
@@ -143,9 +138,9 @@ paw_Bool paw_is_array(paw_Env *P, int index)
     return paw_type(P, index) == PAW_TARRAY;
 }
 
-paw_Bool paw_is_map(paw_Env *P, int index)
+paw_Bool paw_is_tuple(paw_Env *P, int index)
 {
-    return paw_type(P, index) == PAW_TMAP;
+    return paw_type(P, index) == PAW_TTUPLE;
 }
 
 paw_Bool paw_is_class(paw_Env *P, int index)
@@ -156,19 +151,6 @@ paw_Bool paw_is_class(paw_Env *P, int index)
 paw_Bool paw_is_foreign(paw_Env *P, int index)
 {
     return paw_type(P, index) == PAW_TFOREIGN;
-}
-
-paw_Bool paw_is_bigint(paw_Env *P, int index)
-{
-    paw_assert(0); // TODO
-//    return !i_is_small(*access(P, index));
-}
-
-paw_Bool paw_is_number(paw_Env *P, int index)
-{
-    paw_assert(0);
-    return 0;
-//    return pawV_is_number(*access(P, index));
 }
 
 int paw_type(paw_Env *P, int index)
@@ -407,8 +389,10 @@ int paw_load(paw_Env *P, paw_Reader input, const char *name, void *ud)
     };
     const int status = pawC_try(P, parse_aux, &p);
     pawM_free_vec(P, p.mem.scratch.data, p.mem.scratch.alloc);
-    pawM_free_vec(P, p.mem.scopes.data, p.mem.scopes.alloc);
+    pawM_free_vec(P, p.mem.st.scopes, p.mem.st.capacity); // TODO: free nested scope tables, symbols
     pawM_free_vec(P, p.mem.ll.values, p.mem.ll.capacity);
+    pawM_free(P, p.mem.st.globals);
+    pawM_free(P, p.mem.st.toplevel);
     return status;
 }
 
