@@ -23,7 +23,7 @@ static inline paw_Bool pawH_is_occupied(Value v)
     return !pawH_is_vacant(v) && !pawH_is_erased(v);
 }
 
-#define pawH_index(m, k) check_exp(!v_is_null(k), pawV_hash_key(k) & ((m)->capacity - 1))
+#define pawH_index(m, k) check_exp(!v_is_null(k), pawV_hash(k) & ((m)->capacity - 1))
 
 // Set 'itr' to the index at which the key 'k' is located, or the first index for
 // which the function-like macro  'cc' evaluates to true (if 'k' is not found).
@@ -56,6 +56,16 @@ static inline size_t pawH_length(const Map *m)
     return m->length;
 }
 
+//void pawH_reserve(paw_Env *P, Map *m, size_t length);
+//
+//static size_t pawH_search(paw_Env *P, Map *m, Value key)
+//{
+//    pawH_reserve(P, m, pawH_length(m) + 1);
+//    size_t itr = pawH_index(m, key);
+//    pawH_locate(m, key, pawH_is_vacant);
+//    return itr;
+//}
+
 static inline Value *pawH_action(paw_Env *P, Map *m, Value key, MapAction action)
 {
     if (action == MAP_ACTION_CREATE) {
@@ -70,8 +80,8 @@ static inline Value *pawH_action(paw_Env *P, Map *m, Value key, MapAction action
         return NULL;
     }
     if (action == MAP_ACTION_REMOVE) {
-        v_set_null(&m->keys[itr]);
-        v_set_null(&m->values[itr]);
+        v_set_0(&m->keys[itr]);
+        v_set_0(&m->values[itr]);
         --m->length;
         // Return the address of the slot to indicate success.
         return &m->keys[itr];
@@ -82,7 +92,7 @@ static inline Value *pawH_action(paw_Env *P, Map *m, Value key, MapAction action
 
 static inline paw_Bool pawH_contains(paw_Env *P, Map *m, Value key)
 {
-    return pawH_action(P, m, key, MAP_ACTION_NONE);
+    return pawH_action(P, m, key, MAP_ACTION_NONE) != NULL;
 }
 
 static inline void pawH_insert(paw_Env *P, Map *m, Value key, Value value)

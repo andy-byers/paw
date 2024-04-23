@@ -72,12 +72,8 @@ const char *paw_opcode_name(Op op)
             return "CASTINT";
         case OP_CASTFLOAT:
             return "CASTFLOAT";
-        case OP_INCREF:
-            return "INCREF";
-        case OP_DECREF:
-            return "DECREF";
-        case OP_PUSHNULL:
-            return "PUSHNULL";
+        case OP_PUSHUNIT:
+            return "PUSHUNIT";
         case OP_PUSHTRUE:
             return "PUSHTRUE";
         case OP_PUSHFALSE:
@@ -88,6 +84,8 @@ const char *paw_opcode_name(Op op)
             return "POP";
         case OP_CLOSE:
             return "CLOSE";
+        case OP_INIT:
+            return "INIT";
         case OP_RETURN:
             return "RETURN";
         case OP_CLOSURE:
@@ -377,20 +375,13 @@ void paw_stacktrace(paw_Env *P)
     pawL_push_result(P, &buf);
 }
 
-void paw_dump_value(paw_Env *P, Value v, int type)
+void paw_dump_value(paw_Env *P, Value v, paw_Type type)
 {
     Buffer buf;
     pawL_init_buffer(P, &buf);
     pawC_pushv(P, v);
-    pawL_add_value(P, &buf, e_tag(P, type));
+    pawL_add_value(P, &buf, type);
     pawL_add_char(P, &buf, '\0');
     printf("%s\n", buf.data);
     pawL_discard_result(P, &buf);
-}
-
-void paw_dump_map(paw_Env *P, Map *m)
-{
-    Value v;
-    v_set_object(&v, m);
-    paw_dump_value(P, v, PAW_TMAP);
 }

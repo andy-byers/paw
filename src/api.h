@@ -9,8 +9,8 @@
 static inline const char *api_typename(int type)
 {
     switch (type) {
-        case PAW_NULL:
-            return "null";
+        case PAW_TUNIT:
+            return "unit";
         case PAW_TBOOL:
             return "boolean";
         case PAW_TINT:
@@ -21,8 +21,6 @@ static inline const char *api_typename(int type)
             return "string";
         case PAW_TARRAY:
             return "array";
-        case PAW_TMAP:
-            return "map";
         case PAW_TFUNCTION:
             return "function";
         case PAW_TCLASS:

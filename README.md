@@ -4,16 +4,6 @@ An unobtrusive scripting language
 
 paw is a high-level, imperative, statically-typed programming language intended for embedding into larger projects.
 
-## Goals
-+ **Correctness**: This is the most-important goal, by far.
-A language that returns incorrect results can't be very useful, so of course, paw should be implemented correctly.
-The language should be designed for human readability, and eliminate syntax foot-guns where possible (for example, an `if` statement without '{}' followed by 2 indented lines will not guard the second line).
-paw code should never invoke undefined behavior (UB), and the C interface should be carefully documented (since, of course, it is possible to have UB there).
-+ **Performance**: paw should be (relatively) fast, possibly to the detriment of portability, but never at the expense of correctness.
-Being dynamically-typed and hosted, paw will never achieve the same performance as C, the statically-typed host language.
-This makes interoperating with C particularly important, since it is likely users will want to call C functions to perform computationally-intensive work.
-+ **Ergonomics**: paw should be easy to use, and easy to learn.
-
 ## Syntax Overview
 
 ### Comments
@@ -46,11 +36,14 @@ global g: string = "hello, world!"
 ```
 
 ### Types
-paw is statically-typed, meaning that all types must be known at compile time.
+paw is statically-typed, meaning that types are bound to variables, not values.
+The type of each variable must be known at compile time.
+paw supports type inference on variable definitions.
 The following example demonstrates creation of the basic value types.
 
 ```
-// variables without an initializer (right-hand side) are set to `null`
+// variables without an initializer (right-hand side) are set to the default
+// value for the type given in the annotation
 let b: bool
 let i: int
 
@@ -58,9 +51,9 @@ let i: int
 let f: float = 10.0e-1 
 let a: [int] = [1, 2, 3]
 let m: string[int] = {'a': 1, 'b': 2}
-let f: fn(): int = fn(): int {return 42}
+let f: (): int = fn(): int {return 42}
 
-// supports type inference on variable definitions
+// supports type inference
 let b = false
 let i = 40 + 2
 let f = 1.0 * 2

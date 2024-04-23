@@ -82,18 +82,14 @@ typedef uint32_t OpCode;
 //
 // ORDER Op
 typedef enum Op { // operands    stack in     stack out     side effects
-OP_PUSHNULL,//       -           -            null          -
+OP_PUSHUNIT,//       -           -            ()            -
 OP_PUSHTRUE,//       -           -            true          -
 OP_PUSHFALSE,//      -           -            false         -
 OP_PUSHCONST,//      U           -            K[u]          -
 
-OP_INCREF,//         -           o            o             ++o.refcount
-OP_DECREF,//         -           o            o             --o.refcount
-
 OP_POP,//            -           v            -             -
 OP_CLOSE,//          A B         v_a..v_1     -             if b, close stack to v_a
 OP_RETURN,//         -           f..v         v             closes stack to f
-OP_RETURN0,//        -           f..v         -             closes stack to f
 
 OP_CLOSURE,//        A B         v_b..v_1     f             captures v_u..v_1 in f = P[a]
 OP_INVOKE,//         A B         o v_b..v_1   f(v_b..v_1)   calls f = o.K[a], with receiver o
@@ -134,6 +130,7 @@ OP_CASTINT,//        U           v            int(v)        -
 OP_CASTFLOAT,//      U           v            float(v)      - 
          
 OP_VARARG,//         A B         v_u..v_1     [v_u..v_1]    -
+OP_INIT,
 OP_CALL,//           U           f v_u..v_1   v             v = f(v_u..v_1)
 
 OP_GETATTR,//        -           v i          v.i           -
@@ -164,7 +161,7 @@ typedef enum {
     BINARY_LE,   
     BINARY_GT,   
     BINARY_GE,   
-    BINARY_IN,   
+    BINARY_IN, // TODO: Shouldn't be a binary op, needs 2 type tags  
     BINARY_ADD,  
     BINARY_SUB,  
     BINARY_MUL,  
@@ -200,6 +197,8 @@ typedef enum {
 #define binop2meta(o) ((Metamethod)((o) + MM_EQ))
 #define binop_has_r(o) ((o) >= BINARY_ADD)
 #define binop_r(o) ((o) + MM_EQ + MM_RADD - MM_ADD)
+#define binop_is_bool(o) ((o) <= BINARY_GE)
+#define unop_is_bool(o) ((o) == UNARY_NOT)
 
 // ORDER Metamethod
 typedef enum {

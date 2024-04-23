@@ -35,7 +35,6 @@ enum {
     CSTR_SELF,
     CSTR_SUPER,
     CSTR_INIT,
-    CSTR_NULL,
     CSTR_TRUE,
     CSTR_FALSE,
     NCSTR,
@@ -62,7 +61,8 @@ typedef struct paw_Env {
 
     Map *libs;
     Value object;
-    Class *builtin[NOBJECTS];
+    struct ModuleType *mod;
+    struct Instance *builtin[NOBJECTS];
     Value meta_keys[NMETAMETHODS];
     Value str_cache[NCSTR];
     Value mem_errmsg;
@@ -75,12 +75,6 @@ typedef struct paw_Env {
         int alloc;
     } gv;
 
-    struct TypeVec {
-        Type **data; 
-        int size;
-        int alloc;
-    } tv;
-
     paw_Alloc alloc;
     void *ud;
 
@@ -92,14 +86,8 @@ typedef struct paw_Env {
     paw_Bool gc_noem;
 } paw_Env;
 
-#define e_tag(P, n) check_exp((int)(n) < (P)->tv.size, (n) < 0 ? NULL : (P)->tv.data[n])
-#define e_bool(P) e_tag(P, PAW_TBOOL)
-#define e_int(P) e_tag(P, PAW_TINT)
-#define e_float(P) e_tag(P, PAW_TFLOAT)
-#define e_string(P) e_tag(P, PAW_TSTRING)
-
 CallFrame *pawE_extend_cf(paw_Env *P, StackPtr top);
-int pawE_new_global(paw_Env *P, String *name, TypeTag tag);
+int pawE_new_global(paw_Env *P, String *name, Type *tag);
 GlobalVar *pawE_find_global(paw_Env *P, String *name);
 #define pawE_get_global(P, i) (&(P)->gv.data[i])
 

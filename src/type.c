@@ -6,256 +6,257 @@
 #include "mem.h"
 #include "util.h"
 
-paw_Bool pawY_is_similar(TypeTag type, TypeTag tag)
-{
-    paw_assert(type && tag);
-    switch (t_type(tag)) {
-        case PAW_TBOOL:
-        case PAW_TINT:
-        case PAW_TFLOAT:
-            return type->code == PAW_TBOOL ||
-                   type->code == PAW_TINT ||
-                   type->code == PAW_TFLOAT;
-        default:
-            // types are internalized
-            return type == tag;
-    }
-}
+// Helpers for cannonicalizing types. 
+// Subtypes of arguments to match_types() must be cannonicalized via prior
+// invocations of pawY_add_type(). The helpers will not recur into subtypes,
+// since there are likely cycles in the type graph.
 
-int pawY_common(TypeTag a, TypeTag b, TypeTag *out)
-{
-    if (!pawY_is_similar(a, b)) {
-        return -1;
-    }
-    switch (a->code) {
-        case PAW_TBOOL:
-            *out = b;
-            break;
-        case PAW_TINT:
-            // float takes precedence over int
-            *out = b->code == PAW_TFLOAT ? b : a;
-            break;
-        default:
-            // 'a' is float or other (a == b for other types)
-            *out = a;
-    }
-    return 0;
-}
+static paw_Bool match_types(const Type *a, const Type *b);
 
-TypeTag pawY_unwrap(paw_Env *P, TypeTag t)
+static paw_Bool match_args(Type *const *a, Type *const *b, int nargs)
 {
-    TypeTag inner = NULL;
-    switch (t_base(t)) {
-        case PAW_TSTRING:
-            inner = e_string(P);
-            break;
-        case PAW_TARRAY:
-            inner = t->a.elem;
-            break;
-        case PAW_TMAP:
-            inner = t->m.value;
-            break;
-        case PAW_TCLASS:
-            // TODO: Lookup return value of __getitem attr, if it exists. need type info for 'first' and 'second' to determine overload
-            paw_assert(0);
-            break;
-        default:
-            paw_assert(0);
-//            pawY_error(P, "expected container or instance type");
-    }
-    return inner;
-}
-
-static paw_Bool same_vecs(TypeTag *va, int na, TypeTag *vb, int nb)
-{
-    if (na != nb) {
-        return PAW_FALSE;
-    }
-    for (int i = 0; i < na; ++i) {
-        if (!pawY_is_same(va[i], vb[i])) {
+    for (int i = 0; i < nargs; ++i) {
+        if (!pawY_is_same(a[i], b[i])) {
             return PAW_FALSE;
         }
     }
     return PAW_TRUE;
 }
 
-static paw_Bool same_attrs(Attribute *va, int na, Attribute *vb, int nb)
+static paw_Bool match_fields(const NamedField *a, const NamedField *b, int nattrs)
 {
-    if (na != nb) {
-        return PAW_FALSE;
-    }
-    for (int i = 0; i < na; ++i) {
-        if (!pawS_eq(va[i].name, vb[i].name) ||
-            !pawY_is_same(va[i].attr, vb[i].attr)) {
+    for (int i = 0; i < nattrs; ++i) {
+        if (a[i].flags != b[i].flags ||
+            !pawS_eq(a[i].name, b[i].name) ||
+            !pawY_is_same(a[i].type, b[i].type)) {
             return PAW_FALSE;
         }
     }
     return PAW_TRUE;
 }
 
-// Return PAW_TRUE if type tags 'a' and 'b' are the same, PAW_FALSE
-// otherwise
-// Helper for internalizing compound types: either 'a' or 'b' is a 
-// copy of the Type struct in automatic memory, and the other is
-// internalized. Sub types (parameters, attributes, etc.) are already 
-// internalized.
-static paw_Bool same_tags(TypeTag a, TypeTag b)
+static paw_Bool match_signature(const FunctionType *a, const FunctionType *b)
 {
-    if (t_base(a) != t_base(b)) {
+    return a->flags == b->flags &&
+           pawY_is_same(a->ret, b->ret) &&
+           a->nargs == b->nargs &&
+           match_args(a->args, b->args, a->nargs);
+}
+
+static paw_Bool match_class(const ClassType *a, const ClassType *b)
+{
+    return a->flags == b->flags &&
+           pawS_eq(a->name, b->name) &&
+           pawY_is_same(a->super, b->super) &&
+           a->nattrs == b->nattrs &&
+           match_fields(a->attrs, b->attrs, a->nattrs);
+}
+
+static paw_Bool match_types(const Type *a, const Type *b)
+{
+    if (a == NULL) {
+        return b == NULL;
+    } else if (b == NULL) {
+        return a == NULL;
+    } else if (y_kind(a) != y_kind(b)) {
         return PAW_FALSE;
-    } 
-    
-    switch (t_base(a)) {
-        case PAW_TARRAY:
-            if (a->a.level == b->a.level &&
-                pawY_is_same(a->a.elem, b->a.elem)) {
-                return a;
-            }
-            break;
-        case PAW_TMAP:
-            if (pawY_is_same(a->m.key, b->m.key) && 
-                pawY_is_same(a->m.value, b->m.value)) {
-                return a;
-            }
-            break;
-        case PAW_TFUNCTION:
-            if (pawY_is_same(a->f.ret, b->f.ret) &&
-                same_vecs(a->f.param, a->f.nparam, b->f.param, b->f.nparam)) {
-                return PAW_TRUE;
-            }
-            break;
-        case PAW_TCLASS:
-            if (pawS_eq(a->c.name, b->c.name) &&
-                same_attrs(a->c.attrs, a->c.nattrs, b->c.attrs, b->c.nattrs)) {
-                return PAW_TRUE;
-            }
-            break;
+    }
+    switch (y_kind(a)) {
+        case TYPE_SIGNATURE:
+            return match_signature(&a->sig, &b->sig);
+        case TYPE_CLASS:
+            return match_class(&a->cls, &b->cls);
         default:
-            break;
+            return y_id(a) == y_id(b);
     }
-    return PAW_FALSE;
 }
 
-static Type *find_compound_type(paw_Env *P, TypeTag type)
-{
-    struct TypeVec *tv = &P->tv;
-    for (int i = 0; i < tv->size; ++i) {
-        Type *t = tv->data[i];
-        if (same_tags(t, type)) {
-            return t;
-        }
-    }
-    return NULL;
-}
+//paw_Bool pawY_is_similar(Type *type, Type *tag)
+//{
+//    paw_assert(type && tag);
+//    switch (t_type(tag)) {
+//        case PAW_TBOOL:
+//        case PAW_TINT:
+//        case PAW_TFLOAT:
+//            return type->code == PAW_TBOOL ||
+//                   type->code == PAW_TINT ||
+//                   type->code == PAW_TFLOAT;
+//        default:
+//            // types are internalized
+//            return type == tag;
+//    }
+//}
+//
+//int pawY_common(Type *a, Type *b, Type **out)
+//{
+//    if (!pawY_is_similar(a, b)) {
+//        return -1;
+//    }
+//    switch (a->code) {
+//        case PAW_TBOOL:
+//            *out = b;
+//            break;
+//        case PAW_TINT:
+//            // float takes precedence over int
+//            *out = b->code == PAW_TFLOAT ? b : a;
+//            break;
+//        default:
+//            // 'a' is float or other (a == b for other types)
+//            *out = a;
+//    }
+//    return 0;
+//}
+//
+//Type *pawY_unwrap(paw_Env *P, Type *t)
+//{
+//    Type *inner = NULL;
+//    switch (t_base(t)) {
+//        case PAW_TSTRING:
+//            inner = e_string(P);
+//            break;
+//        case PAW_TARRAY:
+//            inner = t->a.elem;
+//            break;
+//        case PAW_TMAP:
+//            inner = t->m.value;
+//            break;
+//        case PAW_TCLASS:
+//            // TODO: Lookup return value of __getitem attr, if it exists. need type info for 'first' and 'second' to determine overload
+//            paw_assert(0);
+//            break;
+//        default:
+//            paw_assert(0);
+////            pawY_error(P, "expected container or instance type");
+//    }
+//    return inner;
+//}
+//
+//static paw_Bool same_vecs(Type **va, int na, Type **vb, int nb)
+//{
+//    if (na != nb) {
+//        return PAW_FALSE;
+//    }
+//    for (int i = 0; i < na; ++i) {
+//        if (!pawY_is_same(va[i], vb[i])) {
+//            return PAW_FALSE;
+//        }
+//    }
+//    return PAW_TRUE;
+//}
+//
+//static paw_Bool same_attrs(Attribute *va, int na, Attribute *vb, int nb)
+//{
+//    if (na != nb) {
+//        return PAW_FALSE;
+//    }
+//    for (int i = 0; i < na; ++i) {
+//        if (!pawS_eq(va[i].name, vb[i].name) ||
+//            !pawY_is_same(va[i].attr, vb[i].attr)) {
+//            return PAW_FALSE;
+//        }
+//    }
+//    return PAW_TRUE;
+//}
+//
+//// Return PAW_TRUE if type tags 'a' and 'b' are the same, PAW_FALSE
+//// otherwise
+//// Helper for internalizing compound types: either 'a' or 'b' is a 
+//// copy of the Type struct in automatic memory, and the other is
+//// internalized. Sub types (parameters, attributes, etc.) are already 
+//// internalized.
+//static paw_Bool same_tags(Type *a, Type *b)
+//{
+//    if (t_base(a) != t_base(b)) {
+//        return PAW_FALSE;
+//    } 
+//    
+//    switch (t_kind(a)) {
+//        case PAW_TFUNCTION:
+//            if (pawY_is_same(a->f.ret, b->f.ret) &&
+//                same_vecs(a->f.param, a->f.nparam, b->f.param, b->f.nparam)) {
+//                return PAW_TRUE;
+//            }
+//            break;
+//        case PAW_TCLASS:
+//            if (pawS_eq(a->c.name, b->c.name) &&
+//                same_attrs(a->c.attrs, a->c.nattrs, b->c.attrs, b->c.nattrs)) {
+//                return PAW_TRUE;
+//            }
+//            break;
+//        default:
+//            break;
+//    }
+//    return PAW_FALSE;
+//}
+//
+//static Type *find_compound_type(paw_Env *P, Type *type)
+//{
+//    struct TypeVec *tv = &P->tv;
+//    for (int i = 0; i < tv->size; ++i) {
+//        Type *t = tv->data[i];
+//        if (same_tags(t, type)) {
+//            return t;
+//        }
+//    }
+//    return NULL;
+//}
 
-static void set_base_type(paw_Env *P, const char *name, int code)
+static void set_base_type(paw_Env *P, const char *name, int id, TypeKind kind)
 {
     String *str = pawS_new_fixed(P, name);
-    str->flag = -code - 1; // encode type index
-    Type *t = pawV_new_type(P);
-    P->tv.data[code] = t;
-    t->code = code;
-    t->base = code;
-    ++P->tv.size;
+    str->flag = -id - 1; // encode type index
+    Type *t = pawY_new_type(P);
+    P->mod->types[id] = t;
+    t->hdr.kind = kind;
+    t->hdr.id = id;
+    ++P->mod->ntypes;
 }
 
 void pawY_init(paw_Env *P)
 {
-    P->tv.data = pawM_new_vec(P, PAW_NTYPES, Type *);
-    P->tv.alloc = PAW_NTYPES;
+    P->mod = pawM_new(P, ModuleType);
+    P->mod->types = pawM_new_vec(P, PAW_NTYPES, Type *);
+    P->mod->capacity = PAW_NTYPES;
 
-    set_base_type(P, "bool", PAW_TBOOL);
-    set_base_type(P, "int", PAW_TINT);
-    set_base_type(P, "float", PAW_TFLOAT);
-    set_base_type(P, "string", PAW_TSTRING);
-    set_base_type(P, "array", PAW_TARRAY);
-    set_base_type(P, "map", PAW_TMAP);
-    set_base_type(P, "class", PAW_TCLASS);
-    set_base_type(P, "foreign", PAW_TFOREIGN);
-    set_base_type(P, "type", PAW_TTYPE);
-    set_base_type(P, "function", PAW_TFUNCTION);
+    set_base_type(P, "unit", PAW_TUNIT, TYPE_PRIMITIVE);
+    set_base_type(P, "bool", PAW_TBOOL, TYPE_PRIMITIVE);
+    set_base_type(P, "int", PAW_TINT, TYPE_PRIMITIVE);
+    set_base_type(P, "float", PAW_TFLOAT, TYPE_PRIMITIVE);
+    set_base_type(P, "string", PAW_TSTRING, TYPE_PRIMITIVE);
+    set_base_type(P, "array", PAW_TARRAY, 0);
+    set_base_type(P, "enum", PAW_TENUM, 0);
+    set_base_type(P, "tuple", PAW_TTUPLE, 0);
+    set_base_type(P, "function", PAW_TFUNCTION, TYPE_SIGNATURE);
+    set_base_type(P, "class", PAW_TCLASS, TYPE_CLASS);
+    set_base_type(P, "foreign", PAW_TFOREIGN, TYPE_CLASS);
+    set_base_type(P, "module", PAW_TMODULE, 0);
 
-    paw_assert(P->tv.size == PAW_NTYPES);
+    paw_assert(P->mod->ntypes == PAW_NTYPES);
 }
 
 void pawY_uninit(paw_Env *P)
 {
-    pawM_free_vec(P, P->tv.data, P->tv.alloc);
+//    pawM_free_vec(P, P->tv.data, P->tv.alloc);
 }
 
-static Type *register_type(paw_Env *P, TypeTag tt)
+Type *pawY_new_type(paw_Env *P)
 {
-    Type *t = find_compound_type(P, tt);
-    if (t == NULL) {
-        struct TypeVec *tv = &P->tv;
-        pawM_grow(P, tv->data, tv->size, tv->alloc);
-        t = pawV_new_type(P);
-        const int code = tv->size++;
-        tv->data[code] = t;
-        *t = *tt; // set 'base' and payload
-        t->code = code; // set unique 'code'
+    return pawM_new(P, Type);
+}
+
+Type *pawY_add_type(paw_Env *P, ModuleType *mod, const Type *type)
+{
+    for (int i = 0; i < mod->ntypes; ++i) {
+        if (match_types(type, mod->types[i])) {
+            return mod->types[i];
+        }
     }
-    return t;
+    pawM_grow(P, mod->types, mod->ntypes, mod->capacity);
+    const int index = mod->ntypes++;
+    Type **ptarget = &mod->types[index];
+    *ptarget = pawM_new(P, Type); // cannonical version
+    **ptarget = *type; // copy dummy data
+    (*ptarget)->hdr.id = index;
+    return *ptarget;
 }
 
-Type *pawY_register_function(paw_Env *P, TypeTag *param, int nparam, TypeTag ret)
-{
-    return register_type(P, &(Type){
-        .base = PAW_TFUNCTION,
-        .f = {
-            .param = param,
-            .nparam = nparam,
-            .ret = ret,
-        }, 
-    });
-}
-
-Type *pawY_register_class(paw_Env *P, String *name, Attribute *attrs, int nattrs)
-{
-    return register_type(P, &(Type){
-        .base = PAW_TCLASS,
-        .c = {
-            .name = name,
-            .attrs = attrs,
-            .nattrs = nattrs,
-        }, 
-    });
-}
-
-Type *pawY_register_array(paw_Env *P, TypeTag elem)
-{
-    ArrayType at = {.elem = elem};
-    if (t_is_array(elem)) {
-        at.level = elem->a.level + 1;
-        at.elem = elem->a.elem;
-    }
-    return register_type(P, &(Type){
-        .base = PAW_TARRAY,
-        .a = at, 
-    });
-}
-
-Type *pawY_register_map(paw_Env *P, TypeTag key, TypeTag value)
-{
-    return register_type(P, &(Type){
-        .base = PAW_TMAP,
-        .m = {
-            .key = key,
-            .value = value,
-        }, 
-    });
-}
-
-TypeTag *pawY_new_taglist(paw_Env *P, paw_Type *types, int ntypes)
-{
-    TypeTag *tags = pawM_new_vec(P, ntypes, TypeTag);
-    for (int i = 0; i < ntypes; ++i) {
-        tags[i] = e_tag(P, types[i]);
-    }
-    return tags;
-}
-
-void pawY_free_taglist(paw_Env *P, TypeTag *tags, int ntags)
-{
-    pawM_free_vec(P, tags, ntags);
-}

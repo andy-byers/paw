@@ -32,6 +32,9 @@ static void *try_again(paw_Env *P, void *ptr, size_t size0, size_t size)
 static void *m_alloc(paw_Env *P, void *ptr, size_t size0, size_t size)
 {
     if (size == 0) {
+        if (ptr == NULL) {
+            return NULL;
+        }
         P->gc_bytes -= size0; // 'free' never fails
         return P->alloc(P->ud, ptr, size0, 0);
     }
@@ -59,7 +62,9 @@ void pawM_free_(paw_Env *P, void *ptr, size_t size)
 
 void *pawM_new_vec_(paw_Env *P, size_t n, size_t elem_sz)
 {
-    assert(n > 0); // don't memset(NULL, ...) below
+    if (n == 0) {
+        return NULL;
+    }
     pawM_check_size(P, 0, n, elem_sz);
     void *ptr = pawM_alloc(P, NULL, 0, n * elem_sz);
     if (!ptr) {

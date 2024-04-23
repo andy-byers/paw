@@ -182,37 +182,32 @@ void pawV_free_closure(paw_Env *P, Closure *f)
     pawM_free_flex(P, f, f->nup, sizeof(f->up[0]));
 }
 
-Instance *pawV_new_instance(paw_Env *P, Class *cls, TypeTag type)
+Class *pawV_new_class(paw_Env *P, Type *type)
 {
-    const int nattrs = type->c.nattrs;
+    Class *cls = pawM_new_flex(P, Class, cast_size(type->cls.nattrs),
+                                  sizeof(cls->attrs[0]));
+    pawG_add_object(P, cast_object(cls), VCLASS);
+    return cls;
+}
+
+Instance *pawV_new_instance(paw_Env *P, int nattrs)
+{
     Instance *ins = pawM_new_flex(P, Instance, cast_size(nattrs),
                                   sizeof(ins->attrs[0]));
     pawG_add_object(P, cast_object(ins), VINSTANCE);
-    for (int i = 0; i < nattrs; ++i) {
-        Attribute a = type->c.attrs[i];
-
-        Value key;
-        v_set_object(&key, a.name);
-        Value *pv = pawH_get(P, cls->fields, key);
-        if (pv == NULL) {
-            pv = pawH_get(P, cls->methods, key);
-            paw_assert(pv != NULL);
-        }
-        ins->attrs[i] = *pv;
-    }
     return ins;
 }
 
-void pawV_free_instance(paw_Env *P, Instance *ins, TypeTag type)
+void pawV_free_instance(paw_Env *P, Instance *ins, Type *type)
 {
-    pawM_free_flex(P, ins, cast_size(type->c.nattrs), sizeof(ins->attrs[0]));
+    pawM_free_flex(P, ins, cast_size(type->cls.nattrs), sizeof(ins->attrs[0]));
 }
 
-Value *pawV_find_attr(paw_Env *P, TypeTag type, Value *attrs, String *name)
+Value *pawV_find_attr(Value *attrs, String *name, Type *type)
 {
-    ClassType t = type->c;
-    for (int i = t.nattrs - 1; i >= 0; --i) {
-        Attribute *a = &t.attrs[i];
+    const ClassType *cls = &type->cls;
+    for (int i = 0; i < cls->nattrs; ++i) {
+        NamedField *a = &cls->attrs[i];
         if (pawS_eq(a->name, name)) {
             return &attrs[i];
         }
@@ -225,21 +220,21 @@ static void clear_attrs(Value *pv, int nattrs)
     memset(pv, 0, cast_size(nattrs) * sizeof(*pv));
 }
 
-Class *pawV_new_class(paw_Env *P)
-{
-    Class *c = pawM_new(P, Class);
-    pawG_add_object(P, cast_object(c), VCLASS);
-    c->fields = pawM_new(P, Map);
-    c->methods = pawM_new(P, Map);
-    return c;
-}
-
-void pawV_free_class(paw_Env *P, Class *c)
-{
-    pawH_free(P, c->fields);
-    pawH_free(P, c->methods);
-    pawM_free(P, c);
-}
+//ClassType *pawV_new_class(paw_Env *P)
+//{
+//    Class *c = pawM_new(P, Class);
+//    pawG_add_object(P, cast_object(c), VCLASS);
+//    c->fields = pawM_new(P, Map);
+//    c->methods = pawM_new(P, Map);
+//    return c;
+//}
+//
+//void pawV_free_class(paw_Env *P, Class *c)
+//{
+//    pawH_free(P, c->fields);
+//    pawH_free(P, c->methods);
+//    pawM_free(P, c);
+//}
 
 Method *pawV_new_method(paw_Env *P, Value self, Value call)
 {
@@ -279,7 +274,7 @@ Foreign *pawV_push_foreign(paw_Env *P, size_t size, int nattrs)
     pawG_add_object(P, cast_object(ud), VFOREIGN);
     v_set_object(pv, ud); // anchor
     ud->size = size;
-    if (size) {
+    if (size > 0) {
         // Allocate space to hold 'size' bytes of foreign data.
         ud->data = pawM_new_vec(P, size, char);
     }
@@ -287,38 +282,10 @@ Foreign *pawV_push_foreign(paw_Env *P, size_t size, int nattrs)
     return ud;
 }
 
-void pawV_free_foreign(paw_Env *P, Foreign *ud, TypeTag type)
+void pawV_free_foreign(paw_Env *P, Foreign *ud, Type *type)
 {
     pawM_free_vec(P, (char *)ud->data, ud->size);
-    pawM_free_flex(P, ud, cast_size(type->c.nattrs), sizeof(ud->attrs[0]));
-}
-
-int pawV_num2int(Var *pv)
-{
-    if (t_is_int(pv->t)) {
-        // already an int
-    } else if (t_is_float(pv->t)) {
-        v_set_int(&pv->v, paw_cast_int(v_float(pv->v)));
-    } else if (t_is_bool(pv->t)) {
-        v_set_int(&pv->v, v_true(pv->v));
-    } else {
-        return -1;
-    }
-    return 0;
-}
-
-int pawV_num2float(Var *pv)
-{
-    if (t_is_float(pv->t)) {
-        // already a float
-    } else if (t_is_int(pv->t)) {
-        v_set_float(&pv->v, (paw_Float)v_int(pv->v));
-    } else if (t_is_bool(pv->t)) {
-        v_set_float(&pv->v, v_true(pv->v));
-    } else {
-        return -1;
-    }
-    return 0;
+    pawM_free_flex(P, ud, cast_size(type->cls.nattrs), sizeof(ud->attrs[0]));
 }
 
 paw_Bool pawV_truthy(Value v, paw_Type type)
@@ -331,10 +298,10 @@ paw_Bool pawV_truthy(Value v, paw_Type type)
             return v_float(v) != 0.0;
         case PAW_TSTRING:
             return pawS_length(v_string(v)) > 0;
-        case PAW_TARRAY:
-            return pawA_length(v_array(v)) > 0;
-        case PAW_TMAP:
-            return pawH_length(v_map(v)) > 0;
+//        case PAW_TARRAY:
+//            return pawA_length(v_array(v)) > 0;
+//        case PAW_TMAP:
+//            return pawH_length(v_map(v)) > 0;
         default:
             return !v_is_null(v);
     }
@@ -352,12 +319,7 @@ static uint32_t hash_u64(uint64_t u)
     return (uint32_t)u;
 }
 
-uint32_t pawV_hash(Var v)
-{
-    return pawV_hash_key(v.v);
-}
-
-uint32_t pawV_hash_key(Value v)
+uint32_t pawV_hash(Value v)
 {
     return hash_u64(v.u);
 }
@@ -377,45 +339,15 @@ void pawV_set_default(paw_Env *P, Value *pv, paw_Type type)
         case PAW_TSTRING:
             v_set_object(pv, pawS_new_str(P, ""));
             break;
-        case PAW_TARRAY:
-            v_set_object(pv, pawA_new(P));
-            break;
-        case PAW_TMAP:
-            v_set_object(pv, pawH_new(P));
-            break;
+//        case PAW_TARRAY:
+//            v_set_object(pv, pawA_new(P));
+//            break;
+//        case PAW_TMAP:
+//            v_set_object(pv, pawH_new(P));
+//            break;
         default:
             v_set_object(pv, NULL);
     }
-}
-
-// TODO: We always emit conversion operators when 'lhs' and 'rhs' types are not the same
-//       for any binary operator. This only needs to take 1 TypeTag parameter.
-paw_Bool pawV_equal(Var x, Var y)
-{
-    if (v_is_null(x.v) || v_is_null(y.v)) {
-        return pawY_is_same(x.t, y.t);
-    } else if (t_type(x.t) != t_type(y.t)) {
-        if ((t_is_float(x.t) && 0 == pawV_num2float(&y)) ||
-            (t_is_float(y.t) && 0 == pawV_num2float(&x))) {
-            // catches 'float == int' and 'int == float'
-            return v_float(x.v) == v_float(y.v);
-//        } else if (t_is_bigint(x.t) || t_is_bigint(y.t)) {
-//            paw_assert(0);
-//            return pawB_equals(x, y);
-        }
-        // TODO: Some special cases
-        return PAW_FALSE;
-    } else if (t_is_string(x.t)) {
-        return pawS_eq(v_string(x.v), v_string(y.v));
-    } else if (t_is_float(x.t)) {
-        return v_float(x.v) == v_float(y.v);
-    } else if (t_is_int(x.t)) {
-        return v_int(x.v) == v_int(y.v);
-    } else if (t_is_bool(x.t)) {
-        return v_true(x.v) == v_true(y.v);
-    }
-    // Fall back to pointer comparison.
-    return x.v.u == y.v.u;
 }
 
 paw_Int pawV_length(Value v, paw_Type type)
@@ -425,12 +357,12 @@ paw_Int pawV_length(Value v, paw_Type type)
         case PAW_TSTRING:
             len = pawS_length(v_string(v));
             break;
-        case PAW_TARRAY:
-            len = pawA_length(v_array(v));
-            break;
-        case PAW_TMAP:
-            len = pawH_length(v_map(v));
-            break;
+//        case PAW_TARRAY:
+//            len = pawA_length(v_array(v));
+//            break;
+//        case PAW_TMAP:
+//            len = pawH_length(v_map(v));
+//            break;
         default:
             len = 0;
     }

@@ -425,6 +425,12 @@ static Token advance(struct Lex *x)
                     return T(TK_PIPE2);
                 }
                 return T('|');
+            case '-':
+                next(x);
+                if (test_next(x, '>')) {
+                    return T(TK_ARROW);
+                }
+                return T('-');
             case '?':
                 next(x);
                 if (test_next(x, '?')) {

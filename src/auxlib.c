@@ -74,10 +74,10 @@ static void add_nstring(paw_Env *P, Buffer *buf, const char *str, size_t len, in
     memcpy(ptr, str, len);
 }
 
-void pawL_add_value(paw_Env *P, Buffer *buf, TypeTag tag)
+void pawL_add_value(paw_Env *P, Buffer *buf, paw_Type type)
 {
     size_t len; // value must be on top of the stack
-    const char *str = pawV_to_string(P, P->top.p[-1], t_type(tag), &len);
+    const char *str = pawV_to_string(P, P->top.p[-1], type, &len);
     if (str == NULL) {
         // add the type name and address
         str = paw_push_fstring(P, "%s (%p)", paw_typename(P, -1), paw_pointer(P, -1));

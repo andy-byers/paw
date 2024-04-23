@@ -9,12 +9,12 @@ static void script(const char *name)
 int main(void)
 {
     script("types");
-    script("basic");
+    script("block");
     return 0; // TODO
+    script("basic");
     script("operator");
     script("integer");
     script("float");
-    script("block");
     script("loop");
     script("closure");
     script("array");

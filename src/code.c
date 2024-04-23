@@ -92,12 +92,6 @@ Node *pawK_add_node_aux(Lex *lex, unsigned kind, size_t size, size_t align)
     return node;
 }
 
-Node **pawK_nvec_add(paw_Env *P, NodeVec *nvec)
-{
-    pawM_grow(P, nvec->nodes, nvec->size, nvec->alloc);
-    return &nvec->nodes[nvec->size++];
-}
-
 #define FIRST_ARENA_SIZE 512
 
 Tree *pawK_new_ast(paw_Env *P)
@@ -109,13 +103,6 @@ Tree *pawK_new_ast(paw_Env *P)
 
 void pawK_free_ast(paw_Env *P, Tree *ast)
 {
-    // Free the NodeVec::nodes allocations.
-    for (VecList *v = ast->vecs; v;) {
-        VecList *prev = v->prev;
-        NodeVec *nv = v->nvec;
-        pawM_free_vec(P, nv->nodes, nv->alloc);
-        v = prev;
-    }
     // Free the list of arenas backing the AST.
     for (Arena *a = ast->arena; a;) {
         Arena *prev = a->prev;
@@ -129,10 +116,10 @@ void pawK_free_ast(paw_Env *P, Tree *ast)
 //     AST visitors
 // ********************
 
-static void visit_expr_vec(Visitor *V, NodeVec nvec)
+static void visit_expr_list(Visitor *V, Expr *head)
 {
-    for (int i = 0; i < nvec.size; ++i) {
-        V->expr(V, cast_expr(nvec.nodes[i]));
+    for (; head != NULL; head = head->next) {
+        V->expr(V, head);
     }
 }
 
@@ -143,6 +130,12 @@ static void visit_logical_expr(Visitor *V, LogicalExpr *e)
 }
 
 static void visit_primitive_expr(Visitor *V, PrimitiveExpr *e)
+{
+    paw_unused(V);
+    paw_unused(e);
+}
+
+static void visit_literal_expr(Visitor *V, LiteralExpr *e)
 {
     paw_unused(V);
     paw_unused(e);
@@ -200,19 +193,19 @@ static void visit_attr_stmt(Visitor *V, AttrStmt *s)
 
 static void visit_class_stmt(Visitor *V, ClassStmt *s)
 {
-    V->stmt_vec(V, s->attrs);
+    V->stmt_list(V, s->attrs);
 }
 
-static void visit_stmt_vec(Visitor *V, NodeVec param)
+static void visit_stmt_list(Visitor *V, Stmt *head)
 {
-    for (int i = 0; i < param.size; ++i) {
-        V->stmt(V, cast_stmt(param.nodes[i]));
+    for (; head != NULL; head = head->next) {
+        V->stmt(V, head);
     }
 }
 
 static void visit_block_stmt(Visitor *V, Block *b)
 {
-    V->stmt_vec(V, b->stmts);
+    V->stmt_list(V, b->stmts);
 }
 
 static void visit_def_stmt(Visitor *V, DefStmt *s)
@@ -234,13 +227,7 @@ static void visit_return_stmt(Visitor *V, ReturnStmt *s)
 static void visit_call_expr(Visitor *V, CallExpr *e)
 {
     V->expr(V, e->target);
-    V->expr_vec(V, e->param);
-}
-
-static void visit_fn_expr(Visitor *V, FnExpr *e)
-{
-    V->stmt_vec(V, e->fn.param); // parameters
-    V->block_stmt(V, e->fn.body); // function body
+    V->expr_list(V, e->args);
 }
 
 static void visit_var_expr(Visitor *V, VarExpr *e)
@@ -251,7 +238,7 @@ static void visit_var_expr(Visitor *V, VarExpr *e)
 
 static void visit_fn_stmt(Visitor *V, FnStmt *s)
 {
-    V->stmt_vec(V, s->fn.param); // parameters
+    V->stmt_list(V, s->fn.args); // parameters
     V->block_stmt(V, s->fn.body); // function body
 }
 
@@ -294,12 +281,26 @@ static void visit_for_stmt(Visitor *V, ForStmt *s)
 
 static void visit_array_expr(Visitor *V, ArrayExpr *e)
 {
-    V->expr_vec(V, e->items);
+    V->expr_list(V, e->items);
 }
 
-static void visit_map_expr(Visitor *V, MapExpr *e)
+//static void visit_map_expr(Visitor *V, MapExpr *e)
+//{
+//    V->expr_list(V, e->items);
+//}
+
+static void visit_init_expr(Visitor *V, InitExpr *e)
 {
-    V->expr_vec(V, e->items);
+    Stmt *attr = e->attrs;
+    while (attr != NULL) {
+        V->stmt(V, attr);
+        attr = attr->next;
+    }
+}
+
+static void visit_item_stmt(Visitor *V, ItemStmt *s)
+{
+    V->expr(V, s->value);
 }
 
 static void visit_index_expr(Visitor *V, IndexExpr *e)
@@ -314,6 +315,16 @@ static void visit_access_expr(Visitor *V, AccessExpr *e)
     V->expr(V, e->target);
 }
 
+static void visit_invoke_expr(Visitor *V, InvokeExpr *e)
+{
+    V->expr(V, e->target);
+    Expr *arg = e->args;
+    while (arg != NULL) {
+        V->expr(V, arg);
+        arg = arg->next;
+    }
+}
+
 void pawK_visit_expr(Visitor *V, Expr *expr)
 {
     if (expr == NULL) {
@@ -322,6 +333,9 @@ void pawK_visit_expr(Visitor *V, Expr *expr)
     switch (expr->kind) {
         case EXPR_PRIMITIVE:
             V->primitive_expr(V, cast_to(expr, PrimitiveExpr));
+            break;
+        case EXPR_LITERAL:
+            V->literal_expr(V, cast_to(expr, LiteralExpr));
             break;
         case EXPR_CHAIN:
             V->chain_expr(V, cast_to(expr, ChainExpr));
@@ -344,20 +358,23 @@ void pawK_visit_expr(Visitor *V, Expr *expr)
         case EXPR_COND:
             V->cond_expr(V, cast_to(expr, CondExpr));
             break;
-        case EXPR_FN:
-            V->fn_expr(V, cast_to(expr, FnExpr));
-            break;
         case EXPR_VAR:
             V->var_expr(V, cast_to(expr, VarExpr));
+            break;
+        case EXPR_INIT:
+            V->init_expr(V, cast_to(expr, InitExpr));
             break;
         case EXPR_ARRAY:
             V->array_expr(V, cast_to(expr, ArrayExpr));
             break;
-        case EXPR_MAP:
-            V->map_expr(V, cast_to(expr, MapExpr));
-            break;
+       // case EXPR_MAP:
+       //     V->map_expr(V, cast_to(expr, MapExpr));
+       //     break;
         case EXPR_INDEX:
             V->index_expr(V, cast_to(expr, IndexExpr));
+            break;
+        case EXPR_INVOKE:
+            V->invoke_expr(V, cast_to(expr, InvokeExpr));
             break;
         default:
             paw_assert(expr->kind == EXPR_ACCESS);
@@ -405,6 +422,9 @@ void pawK_visit_stmt(Visitor *V, Stmt *stmt)
         case STMT_CLASS:
             V->class_stmt(V, cast_to(stmt, ClassStmt));
             break;
+        case STMT_ITEM:
+            V->item_stmt(V, cast_to(stmt, ItemStmt));
+            break;
         case STMT_ATTR:
             V->attr_stmt(V, cast_to(stmt, AttrStmt));
             break;
@@ -423,7 +443,7 @@ void pawK_init_visitor(Visitor *V, Lex *lex)
         .stmt = pawK_visit_stmt,
         .assign = visit_assignment,
 
-        .expr_vec = visit_expr_vec,
+        .expr_list = visit_expr_list,
         .primitive_expr = visit_primitive_expr,
         .chain_expr = visit_chain_expr,
         .coalesce_expr = visit_coalesce_expr,
@@ -432,15 +452,17 @@ void pawK_init_visitor(Visitor *V, Lex *lex)
         .binop_expr = visit_binop_expr,
         .call_expr = visit_call_expr,
         .cond_expr = visit_cond_expr,
-        .fn_expr = visit_fn_expr,
         .var_expr = visit_var_expr,
         .array_expr = visit_array_expr,
-        .map_expr = visit_map_expr,
+        //.map_expr = visit_map_expr,
+        .init_expr = visit_init_expr,
         .index_expr = visit_index_expr,
         .access_expr = visit_access_expr,
+        .invoke_expr = visit_invoke_expr,
 
-        .stmt_vec = visit_stmt_vec,
+        .stmt_list = visit_stmt_list,
         .expr_stmt = visit_expr_stmt,
+        .item_stmt = visit_item_stmt,
         .return_stmt = visit_return_stmt,
         .ifelse_stmt = visit_ifelse_stmt,
         .for_stmt = visit_for_stmt,
@@ -458,5 +480,5 @@ void pawK_init_visitor(Visitor *V, Lex *lex)
 
 void pawK_visit(Visitor *V, Tree *tree)
 {
-    V->stmt_vec(V, tree->root);
+    V->stmt_list(V, tree->stmts);
 }

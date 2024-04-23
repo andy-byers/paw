@@ -79,48 +79,6 @@ static void link_gray_(Object *o, Object **pnext, Object **list)
 
 #define LINK_GRAY(o, L) link_gray_(o, get_gc_list(o), &(L))
 
-static void free_object(paw_Env *P, Object *o)
-{
-    gc_trace_object("free", o);
-    switch (o->gc_kind) {
-//        case VUPVALUE:
-//            pawV_free_upvalue(P, o_upvalue(o));
-//            break;
-//        case VCLOSURE:
-//            pawV_free_closure(P, o_closure(o));
-//            break;
-//        case VFOREIGN:
-//            pawV_free_foreign(P, o_foreign(o));
-//            break;
-//        case VBIGINT:
-//            pawB_free(P, o_bigint(o));
-//            break;
-        case VSTRING:
-            pawS_free_str(P, o_string(o));
-            break;
-//        case VARRAY:
-//            pawA_free(P, o_array(o));
-//            break;
-//        case VMAP:
-//            pawH_free(P, o_map(o));
-//            break;
-//        case VPROTO:
-//            pawV_free_proto(P, o_proto(o));
-//            break;
-//        case VCLASS:
-//            pawV_free_class(P, o_class(o));
-//            break;
-//        case VINSTANCE:
-//            pawV_free_instance(P, o_instance(o));
-//            break;
-//        case VMETHOD:
-//            pawV_free_method(P, o_method(o));
-//            break;
-        default:
-            paw_assert(PAW_FALSE);
-    }
-}
-
 static void mark_value(paw_Env *P, Value v);
 
 static void mark_object(paw_Env *P, Object *o)
@@ -199,10 +157,10 @@ static void traverse_attrs(paw_Env *P, Value *pv, int n)
     }
 }
 
-static void traverse_class(paw_Env *P, Class *c)
-{
-//    traverse_attrs(P, &c->attrs, )
-}
+//static void traverse_class(paw_Env *P, Class *c)
+//{
+////    traverse_attrs(P, &c->attrs, )
+//}
 
 static void traverse_instance(paw_Env *P, Instance *i)
 {
@@ -269,9 +227,9 @@ static void traverse_objects(paw_Env *P)
             case VPROTO:
                 traverse_proto(P, o_proto(o));
                 break;
-            case VCLASS:
-                traverse_class(P, o_class(o));
-                break;
+//            case VCLASS:
+//                traverse_class(P, o_class(o));
+//                break;
             case VINSTANCE:
                 traverse_instance(P, o_instance(o));
                 break;
@@ -305,7 +263,7 @@ static void sweep_phase(paw_Env *P)
  //       Object *o = *p;
  //       if (is_white(o)) {
  //           *p = o->gc_next;
- //           free_object(P, o);
+ //           pawG_free_object(P, o);
  //       } else {
  //           p = &o->gc_next;
  //           paw_assert(is_black(o));
@@ -314,35 +272,38 @@ static void sweep_phase(paw_Env *P)
  //   }
 }
 
+static void free_all_objects(paw_Env *P, Object *o)
+{
+    for (; o; o = o->gc_next) {
+        pawG_free_object(P, o);
+    }
+}
+
+static void clean_dead_objects(paw_Env *P)
+{
+//    for (Object **p = &P->gc_all; *p;) {
+//        Object *o = *p;
+//        if (g_hasref(o)) {
+//            p = &o->gc_next;
+//        } else {
+//            *p = o->gc_next;
+//            pawG_free_object(P, o);
+//        }
+//    }
+}
+
 void pawG_collect(paw_Env *P)
 {
-    return; // FIXME
-    mark_phase(P);
-    sweep_phase(P);
+    clean_dead_objects(P);
 
     // increase the limit
     P->gc_limit = P->gc_bytes * 2;
 }
 
-static void sanity_check(paw_Env *P, Object *o)
-{
-#ifndef NDEBUG
-    for (Object *p = P->gc_all; p; p = p->gc_next) {
-        paw_assert(p != o);
-    }
-#else
-    paw_unused(P);
-    paw_unused(o);
-#endif
-}
-
 void pawG_add_object(paw_Env *P, Object *o, ValueKind kind)
 {
-    //TODO sanity_check(P, o);
-
     gc_trace_object("register", o);
     o->gc_kind = kind;
-//    o->gc_mark = GC_WHITE;
     o->gc_next = P->gc_all;
     P->gc_all = o;
 }
@@ -354,14 +315,6 @@ void pawG_init(paw_Env *P)
 
 void pawG_uninit(paw_Env *P)
 {
-    // Dispose of roots.
-    P->libs = NULL;
-    P->up_list = NULL;
-    P->top = P->stack;
-
-    // All objects should be collected here.
-    pawG_collect(P);
-
     // Free the call frames.
     for (CallFrame *cf = P->main.next; cf;) {
         CallFrame *next = cf->next;
@@ -371,23 +324,20 @@ void pawG_uninit(paw_Env *P)
     P->cf = NULL;
     P->ncf = 0;
 
-    // Free the fixed objects.
-    for (Object *o = P->gc_fixed; o;) {
-        Object *next = o->gc_next;
-        free_object(P, o);
-        o = next;
-    }
-    P->gc_fixed = NULL;
+//    // Free the managed objects.
+//    free_all_objects(P, P->gc_fixed);
+//    free_all_objects(P, P->gc_all);
+//    P->gc_fixed = NULL;
+//    P->gc_all = NULL;
 }
 
 void pawG_fix_object(paw_Env *P, Object *o)
 {
-    return; // TODO
-//    // Must be the most-recently-created GC object.
+    // Must be the most-recently-created GC object.
 //    paw_assert(P->gc_all == o);
-//    paw_assert(is_white(o));
+//    paw_assert(!g_hasref(o));
 //
-//    set_gray(o);
+//    g_incref(o);
 //    P->gc_all = o->gc_next;
 //    o->gc_next = P->gc_fixed;
 //    P->gc_fixed = o;
@@ -408,18 +358,15 @@ void pawG_free_object(paw_Env *P, Object *o)
         case VSTRING:
             pawS_free_str(P, o_string(o));
             break;
-        case VARRAY:
-            pawA_free(P, o_array(o));
-            break;
-        case VMAP:
-            pawH_free(P, o_map(o));
-            break;
+//        case VARRAY:
+//            pawA_free(P, o_array(o));
+//            break;
         case VPROTO:
             pawV_free_proto(P, o_proto(o));
             break;
-        case VCLASS:
-            pawV_free_class(P, o_class(o));
-            break;
+//        case VCLASS:
+//            pawV_free_class(P, o_class(o));
+//            break;
 //        case VINSTANCE:
 //            pawV_free_instance(P, o_instance(o));
 //            break;

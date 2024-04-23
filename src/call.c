@@ -147,8 +147,10 @@ static void call_return(paw_Env *P, StackPtr base, paw_Bool has_return)
         Value ret = P->top.p[-1];
         P->top.p = base + 1;
         P->top.p[-1] = ret;
-    } else {
-        P->top.p = base;
+    } else { 
+        // implicit 'return ()'
+        P->top.p = base + 1;
+        P->top.p->u = 0; // clear value
     }
     P->cf = P->cf->prev;
 }
@@ -175,12 +177,10 @@ static void handle_ccall(paw_Env *P, StackPtr base, Native *ccall)
 static void check_fixed_args(paw_Env *P, Proto *f, int argc)
 {
     if (argc < f->argc) {
-        paw_assert(0);
-    //    pawR_error(P, PAW_ERUNTIME, "not enough arguments (expected %s%d)",
-    //               f->is_va ? "at least " : "", f->argc);
+        pawR_error(P, PAW_ERUNTIME, "not enough arguments (expected %s%d)",
+                   f->is_va ? "at least " : "", f->argc);
     } else if (!f->is_va && argc > f->argc) {
-        paw_assert(0);
-    //    pawR_error(P, PAW_ERUNTIME, "too many arguments (expected %d)", f->argc);
+        pawR_error(P, PAW_ERUNTIME, "too many arguments (expected %d)", f->argc);
     }
 }
 

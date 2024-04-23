@@ -66,7 +66,7 @@ static inline Value *pawC_pushv(paw_Env *P, Value v)
 static inline Value *pawC_push0(paw_Env *P)
 {
     StackPtr sp = pawC_stkinc(P, 1);
-    v_set_null(sp);
+    v_set_0(sp);
     return sp;
 }
 
@@ -88,6 +88,13 @@ static inline Value *pawC_pushb(paw_Env *P, paw_Bool b)
 {
     StackPtr sp = pawC_stkinc(P, 1);
     v_set_bool(sp, b);
+    return sp;
+}
+
+static inline Value *pawC_pusho(paw_Env *P, Object *o)
+{
+    StackPtr sp = pawC_stkinc(P, 1);
+    v_set_object(sp, o);
     return sp;
 }
 

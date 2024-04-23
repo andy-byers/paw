@@ -5,16 +5,14 @@
 #define PAW_VALUE_H
 
 #include "paw.h"
+#include "type.h"
 #include "util.h"
 
 // Initializer for iterator state variables
 #define PAW_ITER_INIT -1
 
-#define U64C(a, b) UINT64_C(0x ## a ## b)
-#define VNULL U64C(FFFFFFFF, FFFFFFFF)
-
 #define f_is_nan(v) ((v).f != (v).f)
-#define v_is_null(v) ((v).u == VNULL)
+#define v_is_null(v) ((v).u == 0)
 
 #define v_true(v) ((v).u != 0)
 #define v_false(v) (!v_true(v))
@@ -27,17 +25,14 @@
 #define v_proto(v) (o_proto(v_object(v))) 
 #define v_closure(v) (o_closure(v_object(v))) 
 #define v_upvalue(v) (o_upvalue(v_object(v))) 
-#define v_bigint(v) (o_bigint(v_object(v))) 
 #define v_string(v) (o_string(v_object(v))) 
 #define v_text(v) (v_string(v)->text)
-#define v_array(v) (o_array(v_object(v))) 
-#define v_map(v) (o_map(v_object(v))) 
-#define v_class(v) (o_class(v_object(v))) 
 #define v_instance(v) (o_instance(v_object(v))) 
+#define v_class(v) (o_class(v_object(v))) 
 #define v_method(v) (o_method(v_object(v))) 
 #define v_foreign(v) (o_foreign(v_object(v))) 
 
-#define v_set_null(v) ((v)->u = VNULL)
+#define v_set_0(v) ((v)->u = 0)
 #define v_set_bool(p, b) ((p)->u = (b) ? PAW_TRUE : PAW_FALSE)
 #define v_set_int(p, I) ((p)->i = (I))
 #define v_set_float(p, F) ((p)->f = F)
@@ -49,23 +44,18 @@
 #define o_is_proto(o) (o_kind(o) == VPROTO)
 #define o_is_closure(o) (o_kind(o) == VCLOSURE)
 #define o_is_upvalue(o) (o_kind(o) == VUPVALUE)
-#define o_is_array(o) (o_kind(o) == VARRAY)
-#define o_is_map(o) (o_kind(o) == VMAP)
-#define o_is_class(o) (o_kind(o) == VCLASS)
 #define o_is_instance(o) (o_kind(o) == VINSTANCE)
+#define o_is_class(o) (o_kind(o) == VCLASS)
 #define o_is_method(o) (o_kind(o) == VMETHOD)
 #define o_is_foreign(o) (o_kind(o) == VFOREIGN)
 
 #define o_string(o) check_exp(o_is_string(o), (String *)(o))
-#define o_bigint(o) check_exp(o_is_bigint(o), (BigInt *)(o))
 #define o_native(o) check_exp(o_is_native(o), (Native *)(o))
 #define o_proto(o) check_exp(o_is_proto(o), (Proto *)(o))
 #define o_closure(o) check_exp(o_is_closure(o), (Closure *)(o))
 #define o_upvalue(o) check_exp(o_is_upvalue(o), (UpValue *)(o))
-#define o_array(o) check_exp(o_is_array(o), (Array *)(o))
-#define o_map(o) check_exp(o_is_map(o), (Map *)(o))
-#define o_class(o) check_exp(o_is_class(o), (Class *)(o))
 #define o_instance(o) check_exp(o_is_instance(o), (Instance *)(o))
+#define o_class(o) check_exp(o_is_class(o), (Class *)(o))
 #define o_method(o) check_exp(o_is_method(o), (Method *)(o))
 #define o_foreign(o) check_exp(o_is_foreign(o), (Foreign *)(o))
 
@@ -75,9 +65,6 @@
     uint8_t gc_kind
 #define cast_uintptr(x) ((uintptr_t)(x))
 #define cast_object(x) ((Object *)(void *)(x))
-
-// address of unique Type
-typedef struct Type *TypeTag;
 
 typedef struct Object {
     GC_HEADER;
@@ -89,13 +76,6 @@ typedef union Value {
     paw_Float f;
     Object *o;
 } Value;
-
-typedef struct Var {
-    TypeTag t;
-    Value v;
-} Var;
-
-#define mkvar(a, b) (Var){.t = (a), .v = (b)}
 
 typedef Value *StackPtr;
 
@@ -148,19 +128,13 @@ static inline int pawV_type(ValueKind vt)
         case VCLOSURE:
         case VMETHOD:
             return PAW_TFUNCTION;
-        case VARRAY:
-            return PAW_TARRAY;
-        case VMAP:
-            return PAW_TMAP;
         case VINSTANCE:
             return PAW_TCLASS;
         case VFOREIGN:
             return PAW_TFOREIGN;
-        case VTYPE:
-            return PAW_TTYPE;
         default:
             // other types are never exposed
-            return PAW_NULL;
+            return PAW_TUNIT;
     }
 }
 
@@ -170,14 +144,9 @@ static inline int pawV_type(ValueKind vt)
 
 paw_Int pawV_length(Value v, paw_Type type);
 paw_Bool pawV_truthy(Value v, paw_Type type);
-int pawV_num2int(Var *pv);
-int pawV_num2float(Var *pv);
-paw_Bool pawV_equal(Var x, Var y);
-uint32_t pawV_hash(Var v);
-
-// Hash a Map key
-// 'v' must be a scalar or a string.
-uint32_t pawV_hash_key(Value v);
+int pawV_num2int(Value *pv, paw_Type type);
+int pawV_num2float(Value *pv, paw_Type type);
+uint32_t pawV_hash(Value v);
 
 // Convert a null-terminated string into an integer
 // May result in either a small integer or a big integer. Understands non-decimal
@@ -216,65 +185,8 @@ typedef struct String {
 
 const char *pawV_to_string(paw_Env *P, Value v, paw_Type type, size_t *nout);
 
-typedef struct Attribute {
-    String *name;
-    TypeTag attr;
-} Attribute;
-
-typedef struct ArrayType {
-    TypeTag elem; // innermost element type
-    int level; // dimension minus 1
-} ArrayType;
-
-typedef struct MapType {
-    TypeTag key;
-    TypeTag value;
-} MapType;
-
-typedef struct ClassType {
-    String *name; // class name
-    Attribute *attrs; // attributes
-    int nattrs; // number of attributes
-} ClassType;
-
-typedef struct FnType {
-    TypeTag ret; // return type
-    TypeTag *param; // parameter types
-    int nparam; // number of parameters
-} FnType;
-
-typedef struct Type {
-    int code;
-    int base;
-    union {
-        FnType f;
-        ArrayType a;
-        MapType m;
-        ClassType c;
-    };
-} Type;
-
-#define t_type(t) ((t)->code)
-#define t_base(t) ((t)->base)
-#define t_is_bool(t) (t_type(t) == PAW_TBOOL)
-#define t_is_int(t) (t_type(t) == PAW_TINT)
-#define t_is_float(t) (t_type(t) == PAW_TFLOAT)
-#define t_is_string(t) (t_type(t) == PAW_TSTRING)
-
-#define t_is_array(t) (t_base(t) == PAW_TARRAY)
-#define t_is_map(t) (t_base(t) == PAW_TMAP)
-#define t_is_class(t) (t_base(t) == PAW_TCLASS)
-#define t_is_foreign(t) (t_base(t) == PAW_TFOREIGN)
-#define t_is_function(t) (t_base(t) == PAW_TFUNCTION)
-#define t_is_scalar(t) (t_type(t) < PAW_TSTRING)
-#define t_is_primitive(t) (t_type(t) <= PAW_TSTRING)
-#define t_is_object(t) (t_type(t) >= PAW_TSTRING)
-#define t_has_meta(t) t_is_instance(t)
-
-Type *pawV_new_type(paw_Env *P);
-
 typedef struct VarDesc {
-    TypeTag type;
+    Type *type;
     String *name;
 } VarDesc;
 
@@ -282,7 +194,6 @@ typedef struct Proto {
     GC_HEADER;
     uint8_t is_va;
 
-    FnType *type;
     String *name;
     String *modname;
     uint32_t *source;
@@ -306,16 +217,17 @@ typedef struct Proto {
         int line;
     } *lines;
 
+    struct Class *classes;
+
     Value *k; // constants
     struct Proto **p; // nested functions
-    struct Class **c; // nested classes
     int nup; // number of upvalues
     int nlines; // number of lines
     int ndebug; // number of locals
     int nk; // number of constants
     int argc; // number of fixed parameters
     int nproto; // number of nested functions
-    int nclass; // number of nested classes
+    int nclasses;
 } Proto;
 
 Proto *pawV_new_proto(paw_Env *P);
@@ -375,19 +287,12 @@ typedef struct Map {
     size_t capacity;
 } Map;
 
-// Class prototype object
-// Created using the 'class' keyword in paw. Classes are closed at
-// compile time.
 typedef struct Class {
-    GC_HEADER;
-    String *name;
-    struct Class *super;
-    Map *fields;
-    Map *methods;
+    GC_HEADER; // common members for GC
+    Value attrs[]; // fixed array of attributes
 } Class;
 
-Class *pawV_new_class(paw_Env *P);
-void pawV_free_class(paw_Env *P, Class *cls);
+Class *pawV_new_class(paw_Env *P, Type *type);
 
 // Instance of a class
 typedef struct Instance {
@@ -395,9 +300,9 @@ typedef struct Instance {
     Value attrs[]; // fixed array of attributes
 } Instance;
 
-Instance *pawV_new_instance(paw_Env *P, Class *cls, TypeTag type);
-void pawV_free_instance(paw_Env *P, Instance *ins, TypeTag type);
-Value *pawV_find_attr(paw_Env *P, TypeTag type, Value *attrs, String *name);
+Instance *pawV_new_instance(paw_Env *P, int nattrs);
+void pawV_free_instance(paw_Env *P, Instance *ins, Type *type);
+Value *pawV_find_attr(Value *attrs, String *name, Type *type);
 
 // Method bound to an instance
 typedef struct Method {
@@ -417,11 +322,8 @@ typedef struct Foreign {
 } Foreign;
 
 Foreign *pawV_push_foreign(paw_Env *P, size_t size, int nattrs);
-void pawV_free_foreign(paw_Env *P, Foreign *ud, TypeTag type);
-Foreign *pawV_new_builtin(paw_Env *P, int nbound);
+void pawV_free_foreign(paw_Env *P, Foreign *ud, Type *type);
 
 const char *pawV_name(ValueKind type);
-paw_Int pawV_to_int(Var v);
-paw_Float pawV_to_float(Var v);
 
 #endif // PAW_VALUE_H

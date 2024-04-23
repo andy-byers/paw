@@ -9,9 +9,9 @@
 #include "paw.h"
 
 typedef enum ExprType {
-    EXPR_FN,
     EXPR_VAR,
     EXPR_PRIMITIVE,
+    EXPR_LITERAL,
     EXPR_ARRAY,
     EXPR_MAP,
     EXPR_CHAIN,
@@ -23,6 +23,10 @@ typedef enum ExprType {
     EXPR_COND,
     EXPR_INDEX,
     EXPR_ACCESS,
+    EXPR_INVOKE,
+    EXPR_SYMBOL,
+    EXPR_TYPE,
+    EXPR_INIT,
 } ExprType;
 
 typedef enum StmtType {
@@ -38,6 +42,7 @@ typedef enum StmtType {
     STMT_ATTR,
     STMT_FN,
     STMT_DEF,
+    STMT_ITEM,
     STMT_PARAM,
     STMT_RETURN,
     STMT_TYPENAME,
@@ -46,10 +51,13 @@ typedef enum StmtType {
 #define NODE_HEADER \
     int line;       \
     uint8_t kind
-#define STMT_HEADER NODE_HEADER
+#define STMT_HEADER \
+    NODE_HEADER;    \
+    struct Stmt *next
 #define EXPR_HEADER \
     NODE_HEADER;    \
-    TypeTag type
+    Type *type;     \
+    struct Expr *next
 
 typedef struct Node {
     NODE_HEADER;
@@ -63,6 +71,13 @@ typedef struct Stmt {
     STMT_HEADER;
 } Stmt;
 
+typedef struct Symbol {
+    EXPR_HEADER;
+    paw_Bool is_init: 1;
+    paw_Bool is_type: 1;
+    String *name;
+} Symbol;
+
 typedef struct Arena {
     struct Arena *prev;
     size_t used;
@@ -73,67 +88,54 @@ typedef struct Arena {
     _Alignas(void *) char data[];
 } Arena;
 
-// Linked list of NodeVec objects
-// Used to avoid traversal of the AST during cleanup.
-typedef struct VecList {
-    struct VecList *prev;
-    struct NodeVec *nvec;
-} VecList;
-
-// Vector for storing AST nodes
-// Since we cannot tell if a given node is an Expr or a Stmt, this
-// container is only capable of storing one or the other. The user
-// must know from context which type is stored.
-typedef struct NodeVec {
-    VecList list;
-    Node **nodes;
-    int size;
-    int alloc;
-} NodeVec;
-
-#define link_nvec(x, pv) ((pv)->list.nvec = (pv), \
-                          (pv)->list.prev = (x)->ast->vecs, \
-                          (x)->ast->vecs = &(pv)->list)
-
 typedef struct Block {
     STMT_HEADER;
-    NodeVec stmts;
-    SymbolTable *scope; // scope for block 
+    Stmt *stmts;
+    Scope *scope; // scope for block 
+    int nstmts;
 } Block;
 
-typedef struct TypeName {
-    STMT_HEADER;
-    uint8_t resolved;
-    TypeTag tag;
+typedef struct TypeDecl TypeDecl;
+
+typedef struct BasicTypeDecl {
+    paw_Type t;
+} BasicTypeDecl;
+
+typedef struct NamedTypeDecl {
+    String *name;
+} NamedTypeDecl;
+
+typedef struct SignatureDecl {
+    TypeDecl *ret;
+    Expr *args;
+    int nargs;
+} SignatureDecl;
+
+struct TypeDecl {
+    EXPR_HEADER;
+    TypeKind group;
     union {
-        struct {
-            struct TypeName *elem;
-        } arr;
-        struct {
-            struct TypeName *key;
-            struct TypeName *value;
-        } map;
-        struct {
-            String *name;
-        } cls;
+        BasicTypeDecl basic; 
+        NamedTypeDecl named;
+        SignatureDecl sig;
     };
-} TypeName;
+};
 
 typedef struct Function {
-    SymbolTable *scope; // function-scoped variables                            
-    TypeTag type;                        
-    Lex *lex; // lexical state
+    Scope *scope; // function-scoped variables                            
+    Type *type;                        
     String *name; // name of the function
-    NodeVec param; // AST nodes for parameters
-    TypeName *ret; // return type annotation
+    Stmt *args; // AST nodes for parameters
+    TypeDecl *ret; // return type annotation
     Block *body; // function body
     FnKind kind; // type of function
+    int nargs;
 } Function;
 
 typedef struct Tree {
     Arena *arena;
-    NodeVec root;
-    VecList *vecs;
+    Stmt *stmts;
+    int nstmts;
 } Tree;
 
 typedef enum VarKind {
@@ -144,15 +146,28 @@ typedef enum VarKind {
 } VarKind;
 
 typedef struct VarInfo {
-    TypeTag type;
+    Type *type;
     enum VarKind kind;
     int index;
 } VarInfo;
 
+typedef struct ItemStmt {
+    STMT_HEADER;
+    String *name; // attribute name
+    Expr *value;
+} ItemStmt;
+
+typedef struct InitExpr { 
+    EXPR_HEADER; 
+    Expr *prefix;
+    Stmt *attrs; // list of ItemStmt
+    int nattrs;
+} InitExpr;
+
 typedef struct UnOpExpr { 
     EXPR_HEADER; 
     UnaryOp op;
-    FnType *mm;
+    FunctionType *mm;
     Expr *target; 
 } UnOpExpr;
 
@@ -162,10 +177,10 @@ typedef struct UnOpExpr {
         b \
         Expr *lhs; \
         Expr *rhs; \
-        FnType *mm; \
+        FunctionType *mm; \
     } a ## Expr;
 
-make_binary_expr(BinOp, BinaryOp op; TypeTag common;)
+make_binary_expr(BinOp, BinaryOp op;)
 make_binary_expr(Cond, Expr *cond;)
 make_binary_expr(Logical, uint8_t is_and;)
 make_binary_expr(Coalesce, )
@@ -181,13 +196,9 @@ typedef struct ChainExpr {
 
 typedef struct CallExpr {
     SUFFIXED_HEADER;
-    NodeVec param;
+    Expr *args;
+    int nargs;
 } CallExpr;
-
-typedef struct FnExpr {
-    EXPR_HEADER;
-    Function fn;
-} FnExpr;
 
 typedef struct IndexExpr {
     SUFFIXED_HEADER; // common fields
@@ -197,52 +208,60 @@ typedef struct IndexExpr {
 
 typedef struct AccessExpr {
     SUFFIXED_HEADER; // common fields
-    uint8_t call; // 1 if an invocation, 0 otherwise
     uint16_t index; // index in constants table
     String *name; // field name
 } AccessExpr;
+
+typedef struct InvokeExpr {
+    SUFFIXED_HEADER; // common fields
+    int index;                     
+    String *name; // method name
+    Expr *args;
+    int nargs;
+} InvokeExpr;
 
 typedef struct VarExpr {
     EXPR_HEADER; // common fields
     String *name; // name of the variable
 } VarExpr;
 
-#define CONTAINER_HEADER EXPR_HEADER; TypeTag t
+#define CONTAINER_HEADER EXPR_HEADER; Type *t
 typedef struct ContainerExpr {
     CONTAINER_HEADER;
 } ContainerExpr;
 
 typedef struct ArrayExpr {
     CONTAINER_HEADER;
-    NodeVec items;
+    Expr *items;
+    int nitems;
 } ArrayExpr;
-
-typedef struct MapExpr {
-    CONTAINER_HEADER;
-    TypeTag t1;
-    TypeTag t2;
-    NodeVec items;
-} MapExpr;
 
 typedef struct PrimitiveExpr {
     EXPR_HEADER;
-    int t;
+    paw_Type t;
     Value v;
 } PrimitiveExpr;
+
+typedef struct LiteralExpr {
+    EXPR_HEADER;
+    paw_Type t;
+    const char *label;
+    Expr *expr;
+} LiteralExpr;
 
 typedef struct DefStmt {
     STMT_HEADER; // common fields
     struct {
         paw_Bool global: 1; // uses 'global' keyword
     } flags;
-    TypeName *tag; // type annotation
+    TypeDecl *tag; // type annotation
     String *name; // variable name
     Expr *init; // initial value
 } DefStmt;
 
 typedef struct ParamStmt {
     STMT_HEADER;
-    TypeName *tag; // type annotation
+    TypeDecl *tag; // type annotation
     String *name; // variable name
 } ParamStmt;
 
@@ -260,21 +279,22 @@ typedef struct AttrStmt {
     uint8_t is_fn; // // 1 if 'fn' is valid, 0 otherwise
     String *name; // attribute name
     union {
-        TypeName *tag; // type annotation
+        TypeDecl *tag; // type annotation
         Function fn; // method info
     };                  
 } AttrStmt;
 
 typedef struct ClassStmt {
     STMT_HEADER;
-    SymbolTable *scope;
+    Scope *scope;
     struct {
         paw_Bool global: 1; // uses 'global' keyword
     } flags;
     Expr *super;
     String *name;
-    NodeVec attrs; // list of AttrStmt
-    Class *cls;
+    Stmt *attrs; // list of AttrStmt
+    ClassType *cls;
+    int nattrs;
 } ClassStmt;
 
 typedef struct ReturnStmt {
@@ -319,7 +339,7 @@ typedef struct ForNum {
 
 typedef struct ForStmt {
     STMT_HEADER;
-    SymbolTable *scope; // scope for entire loop
+    Scope *scope; // scope for entire loop
     String *name; // loop control variable name
     Block *block; // body of loop
     union {
@@ -332,10 +352,6 @@ typedef struct ForStmt {
 #define cast_stmt(x) ((Stmt *)(x))
 #define cast_expr(x) ((Expr *)(x))
 #define cast_to(x, tp) ((tp *)(x))
-
-#define emplace_node(x, L, tt, tp) ((L)->next = pawK_add_node(x, tt, tp))
-#define push_node(x, nv, v) (*pawK_nvec_add(env(x), nv) = (Node *)(v))
-Node **pawK_nvec_add(paw_Env *P, NodeVec *nvec);
 
 void pawK_dump_ast(Lex *lex, FILE *out);
 
@@ -354,8 +370,9 @@ struct Visitor {
     void (*assign)(Visitor *V, Expr *lhs, Expr *rhs);
 
     void (*expr)(Visitor *V, Expr *expr);
-    void (*expr_vec)(Visitor *V, NodeVec vec);
+    void (*expr_list)(Visitor *V, Expr *head);
     void (*primitive_expr)(Visitor *V, PrimitiveExpr *e);
+    void (*literal_expr)(Visitor *V, LiteralExpr *e);
     void (*chain_expr)(Visitor *V, ChainExpr *e);
     void (*coalesce_expr)(Visitor *V, CoalesceExpr *e);
     void (*logical_expr)(Visitor *V, LogicalExpr *e);
@@ -363,15 +380,15 @@ struct Visitor {
     void (*binop_expr)(Visitor *V, BinOpExpr *e);
     void (*call_expr)(Visitor *V, CallExpr *e);
     void (*cond_expr)(Visitor *V, CondExpr *e);
-    void (*fn_expr)(Visitor *V, FnExpr *e);
     void (*var_expr)(Visitor *V, VarExpr *e);
+    void (*init_expr)(Visitor *V, InitExpr *e);
     void (*array_expr)(Visitor *V, ArrayExpr *e);
-    void (*map_expr)(Visitor *V, MapExpr *e);
     void (*index_expr)(Visitor *V, IndexExpr *e);
     void (*access_expr)(Visitor *V, AccessExpr *e);
+    void (*invoke_expr)(Visitor *V, InvokeExpr *e);
 
     void (*stmt)(Visitor *V, Stmt *stmt);
-    void (*stmt_vec)(Visitor *V, NodeVec vec);
+    void (*stmt_list)(Visitor *V, Stmt *head);
     void (*expr_stmt)(Visitor *V, ExprStmt *s);
     void (*return_stmt)(Visitor *V, ReturnStmt *s);
     void (*ifelse_stmt)(Visitor *V, IfElseStmt *s);
@@ -381,6 +398,7 @@ struct Visitor {
     void (*label_stmt)(Visitor *V, LabelStmt *s);
     void (*param_stmt)(Visitor *V, ParamStmt *s);
     void (*fn_stmt)(Visitor *V, FnStmt *s);
+    void (*item_stmt)(Visitor *V, ItemStmt *s);
     void (*attr_stmt)(Visitor *V, AttrStmt *s);
     void (*class_stmt)(Visitor *V, ClassStmt *s);
     void (*def_stmt)(Visitor *V, DefStmt *s);
