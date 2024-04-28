@@ -109,6 +109,8 @@ void pawC_stack_overflow(paw_Env *P)
 
 void pawC_stack_grow(paw_Env *P, int n)
 {
+    paw_assert(n > 0);
+    paw_assert(P->bound.p >= P->stack.p);
     const int alloc = cast_size(P->bound.p - P->stack.p);
     pawC_stack_realloc(P, next_alloc(alloc, n));
 }
@@ -168,7 +170,7 @@ static void handle_ccall(paw_Env *P, StackPtr base, Native *ccall)
     cf->top.p = base;
 
     // call the C function
-    const int nret = ccall->call(P); // TODO: Multi-return
+    const int nret = ccall->func(P);
     base = restore_pointer(P, pos);
     call_return(P, base, nret);
     //pawR_close_upvalues(P, base);

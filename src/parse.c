@@ -2,12 +2,13 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "parse.h"
+#include "ast.h"
 #include "auxlib.h"
 #include "call.h"
 #include "code.h"
 #include "check.h"
 #include "env.h"
-#include "gc.h"
+#include "gc_aux.h"
 #include "lex.h"
 #include "map.h"
 #include "mem.h"
@@ -24,10 +25,17 @@
 #include <stdio.h>
 #include <string.h>
 
+#define new_expr(lex, kind) pawA_new_expr((lex)->pm->ast, kind)
+#define new_decl(lex, kind) pawA_new_decl((lex)->pm->ast, kind)
+#define new_stmt(lex, kind) pawA_new_stmt((lex)->pm->ast, kind)
+#define new_expr_list(lex) pawA_new_expr_list((lex)->pm->ast)
+#define new_decl_list(lex) pawA_new_decl_list((lex)->pm->ast)
+#define new_stmt_list(lex) pawA_new_stmt_list((lex)->pm->ast)
+
 // recursive non-terminals
-static Expr *subexpr(Lex *lex, unsigned prec);
-static Stmt *stmt(Lex *lex);
-#define expr0(x) subexpr(x, 0)
+static AstExpr *expression(Lex *lex, unsigned prec);
+static AstStmt *statement(Lex *lex);
+#define expression0(x) expression(x, 0)
 
 static void expected_symbol(Lex *lex, const char *want)
 {
@@ -170,8 +178,6 @@ static InfixOp get_infixop(TokenKind kind)
             return INFIX_IN;
         case TK_QUESTION2:
             return INFIX_COND;
-        case TK_ELVIS:
-            return INFIX_COALESCE;
         case TK_EQUALS2:
             return INFIX_EQ;
         case TK_LESS2:
@@ -239,124 +245,137 @@ static String *parse_name(Lex *lex)
     return name;
 }
 
-static Expr *emit_primitive(Lex *lex, Value v, int type)
+static AstExpr *new_basic_lit(Lex *lex, Value v, paw_Type code)
 {
-    PrimitiveExpr *expr = pawK_add_node(lex, EXPR_PRIMITIVE, PrimitiveExpr);
-    expr->t = type;
-    expr->v = v;
-    return cast_expr(expr);
+    AstExpr *r = new_expr(lex, EXPR_LITERAL);
+    r->literal.basic.t = code;
+    r->literal.basic.value = v;
+    return r;
 }
 
-static Expr *emit_bool(Lex *lex, paw_Bool b)
+static AstExpr *emit_unit(Lex *lex)
+{
+    AstExpr *r = new_expr(lex, EXPR_LITERAL);
+    r->literal.basic.t = PAW_TUNIT;
+    return r;
+}
+
+static AstExpr *emit_bool(Lex *lex, paw_Bool b)
 {
     Value v;
     v_set_bool(&v, b);
-    return emit_primitive(lex, v, PAW_TBOOL);
+    return new_basic_lit(lex, v, PAW_TBOOL);
 }
 
-#define make_link_node(suffix, T) \
-    static void link_ ## suffix(T **phead, T **plast, T *next) \
+#define make_link_node(suffix, T, source, link) \
+    static void link_ ## suffix(T ## List *list, T **plast, T *next) \
     { \
-        if (*phead == NULL) { \
-            *phead = next; \
+        if (list->first == NULL) { \
+            list->first = next; \
         } else { \
-            (*plast)->next = next; \
+            (*plast)->source.link = next; \
         } \
         *plast = next; \
+        ++list->count; \
     }
-make_link_node(stmt, Stmt)
-make_link_node(expr, Expr)
+make_link_node(decl, AstDecl, hdr, next)
+make_link_node(expr, AstExpr, hdr, next)
+make_link_node(stmt, AstStmt, hdr, next)
+make_link_node(method, AstDecl, func, sibling)
 
-// letstmt := storage [const] name [`:` Type] `=` expr
-//
-//global x: int = 2
-//let const x: int = 3
-//global const x: int = 4
-//
-// storage := let | global
-//
-// Type := TBasic | TArray | TVector | TEnum | TFunction | TClass
-//
-// TArray := `[` Type `;` Length `]`
-//
-// TVector := `[` Type `]`
-//
-// TODO: TGenerics should not appear in type annotation for variable
-// TGenerics := `[` name {`,` name} `]`
-//
-// TArgs := `(` [Type {`,` Type}] `)`
-//
-// TFunction := `fn` [TGenerics] TArgs [ `:` Type ]
-//
-// TClass :=  name [TGenerics]
-//
-// TBasic := bool | int | float | string
-//
-static TypeDecl *type_decl(Lex *lex);
+static AstExpr *type_expr(Lex *lex);
 
-static void parse_signature(Lex *lex, TypeDecl *pdecl)
+static AstExprList *parse_type_list(Lex *lex)
 {
-    pdecl->group = TYPE_SIGNATURE;
-    skip(lex); // '(' token
+    ++lex->expr_depth;
+    AstExprList *list = new_expr_list(lex);
+    AstExpr *prev;
+    do {
+        if (list->count == ARGC_MAX) {
+            limit_error(lex, "generic type arguments", ARGC_MAX);
+        }
+        AstExpr *type = type_expr(lex);
+        link_expr(list, &prev, type);
+    } while (test_next(lex, ','));
+    --lex->expr_depth;
+    return list;
+}
+
+static AstExprList *maybe_type_args(Lex *lex)
+{
+    AstExprList *types = NULL;
+    const int line = lex->line;
+    if (test_next(lex, '[')) {
+        // type arguments (requires at least 1)
+        types = parse_type_list(lex);
+        delim_next(lex, ']', '[', line);
+    }
+    return types;
+}
+
+static AstExprList *parse_param(Lex *lex, int line)
+{
+    if (test_next(lex, ')')) {
+        return new_expr_list(lex);
+    }
+    AstExprList *list = parse_type_list(lex);
+    delim_next(lex, ')', '(', line);
+    return list;
+}
+
+static void parse_signature(Lex *lex, AstExpr *pe)
+{
+    const int line = lex->line;
+    pe->func.kind = EXPR_FUNC_TYPE;
+    check_next(lex, '(');
 
     // function parameters
-    const int line = lex->lastline;
-    if (!test_next(lex, ')')) {
-        Expr **phead = &pdecl->sig.args;
-        Expr *last;
-        int nargs = 0;
-        do {
-            if (nargs == ARGC_MAX) {
-                limit_error(lex, "function type parameters", ARGC_MAX);
-            }
-            check(lex, TK_NAME);
-            TypeDecl *arg = type_decl(lex);
-            link_expr(phead, &last, cast_expr(arg));
-            ++nargs;
-        } while (test_next(lex, ','));
-        delim_next(lex, ')', '(', line);
-        pdecl->sig.nargs = nargs;
-    }
+    pe->func.params = parse_param(lex, line);
 
     // return type annotation
     if (test_next(lex, TK_ARROW)) {
-        pdecl->sig.ret = type_decl(lex);
+        pe->func.return_ = type_expr(lex);
+    } else {
+        pe->func.return_ = emit_unit(lex);
     }
 }
 
-static void parse_typename(Lex *lex, TypeDecl *pdecl)
+static void parse_named_type(Lex *lex, AstExpr *pe)
 {
     String *name = parse_name(lex);
-    if (name->flag < 0) { // found primitive type
-        const int code = -name->flag - 1;
-        pdecl->group = TYPE_PRIMITIVE;
-        pdecl->basic.t = code;
-    } else { // found class type
-        pdecl->named.name = name;
-        pdecl->group = TYPE_CLASS;
-    }
+    pe->type_name.name = name;
+    pe->type_name.kind = EXPR_TYPE_NAME;
+    // list of concrete types between '[' and ']'
+    pe->type_name.args = maybe_type_args(lex);
 }
 
-static TypeDecl *type_decl(Lex *lex)
+static AstExpr *type_expr(Lex *lex)
 {
-    TypeDecl *decl = pawK_add_node(lex, EXPR_TYPE, TypeDecl);
+    AstExpr *r = new_expr(lex, 0 /* set in parse_*() */);
     if (test_next(lex, TK_FN)) {
-        parse_signature(lex, decl); 
+        parse_signature(lex, r); 
     } else {
-        parse_typename(lex, decl);
+        parse_named_type(lex, r);
     }
-    return decl;
+    return r;
 }
 
-static TypeDecl *ret_annotation(Lex *lex)
+static AstExpr *unit_type(Lex *lex)
 {
-    return test_next(lex, TK_ARROW) ? type_decl(lex) : NULL;
+    AstExpr *r = new_expr(lex, EXPR_TYPE_NAME);
+    r->type_name.name = pawE_cstr(env(lex), CSTR_UNIT);
+    return r;
 }
 
-static TypeDecl *var_annotation(Lex *lex)
+static AstExpr *ret_annotation(Lex *lex)
+{
+    return test_next(lex, TK_ARROW) ? type_expr(lex) : unit_type(lex);
+}
+
+static AstExpr *var_annotation(Lex *lex)
 {
     if (test_next(lex, ':')) {
-        TypeDecl *tn = type_decl(lex);
+        AstExpr *tn = type_expr(lex);
         if (tn == NULL) {
             pawX_error(lex, "invalid type annotation");
         }
@@ -365,64 +384,93 @@ static TypeDecl *var_annotation(Lex *lex)
     return NULL; // needs inference
 }
 
-static Stmt *parameter_def(Lex *lex)
+static AstDecl *param_decl(Lex *lex)
 {
-    ParamStmt *result = pawK_add_node(lex, STMT_PARAM, ParamStmt);
-    result->name = parse_name(lex);
-    result->tag = var_annotation(lex);
-    if (result->tag == NULL) {
+    AstDecl *r = new_decl(lex, DECL_FIELD);
+    r->field.name = parse_name(lex);
+    r->field.tag = var_annotation(lex);
+    if (r->field.tag == NULL) {
         pawX_error(lex, "expected type annotation on parameter '%s'", 
-                   result->name->text);
+                   r->field.name->text);
     }
-    return cast_stmt(result);
+    return r;
 }
 
-static Stmt *variable_def(Lex *lex, int line, paw_Bool global)
+static AstDecl *var_decl(Lex *lex, int line, paw_Bool global)
 {
-    DefStmt *result = pawK_add_node(lex, STMT_DEF, DefStmt);
-    result->line = line; // line containing 'global' or 'let'
-    result->name = parse_name(lex);
-    result->tag = var_annotation(lex);
+    AstDecl *r = new_decl(lex, DECL_VAR);
+    r->var.line = line; // line containing 'global' or 'let'
+    r->var.name = parse_name(lex);
+    r->var.tag = var_annotation(lex);
     if (!test_next(lex, '=')) {
         pawX_error(lex, "missing initializer");
     }
-    result->init = expr0(lex);
-    result->flags.global = global;
+    r->var.init = expression0(lex);
+    r->var.is_global = global;
     semicolon(lex);
-    return cast_stmt(result);
+    return r;
 }
 
-static int call_parameters(Lex *lex, Expr **phead)
+static AstExprList *expr_list1(Lex *lex, const char *what)
+{
+    AstExprList *list = new_expr_list(lex);
+    AstExpr *prev;
+    do {
+        if (list->count == ARGC_MAX) {
+            limit_error(lex, what, ARGC_MAX);
+        }
+        link_expr(list, &prev, expression0(lex));
+    } while (test_next(lex, ','));
+    return list;
+}
+
+static AstExpr *item_expr(Lex *lex)
+{
+    AstExpr *r = new_expr(lex, EXPR_ITEM);
+    r->item.name = parse_name(lex);
+    check_next(lex, ':');
+    r->item.value = expression0(lex);
+    return r;
+}
+
+static AstExprList *item_list0(Lex *lex, const char *what)
+{
+    AstExprList *list = new_expr_list(lex);
+    AstExpr *prev;
+    do {
+        if (test(lex, '}')) {
+            break;
+        } else if (list->count== LOCAL_MAX) {
+            limit_error(lex, what, LOCAL_MAX);
+        }
+        AstExpr *next = item_expr(lex);
+        link_expr(list, &prev, next);
+    } while (test_next(lex, ','));
+    return list;
+}
+
+static AstExprList *arguments(Lex *lex)
 {
     const int line = lex->line;
     skip(lex); // '(' token
 
-    Expr *last;
-    int nargs = 0;
-    if (!test_next(lex, ')')) {
-        link_expr(phead, &last, expr0(lex));
-        nargs = 1;
-        while (test_next(lex, ',')) {
-            if (nargs == ARGC_MAX) {
-                limit_error(lex, "function parameters", ARGC_MAX);
-            }
-            link_expr(phead, &last, expr0(lex));
-            ++nargs;
-        }
-        delim_next(lex, ')', '(', line);
+    if (test_next(lex, ')')) {
+        return new_expr_list(lex); // empty
     }
-    return nargs;
+    AstExprList *list = expr_list1(lex, "function parameters");
+    delim_next(lex, ')', '(', line);
+    return list;
 }
 
-// Parse a variable name
-static Expr *varexpr(Lex *lex)
+// Parse an identifier
+static AstExpr *name_expr(Lex *lex)
 {
-    VarExpr *result = pawK_add_node(lex, EXPR_VAR, VarExpr);
-    result->name = parse_name(lex);
-    return cast_expr(result);
+    AstExpr *r = new_expr(lex, EXPR_NAME);
+    r->name.name = parse_name(lex);
+    return r;
 }
 
-Scope *pawP_add_scope(Lex *lex, SymbolTable *table)
+Scope *pawP_new_scope(Lex *lex, SymbolTable *table)
 {
     if (table->nscopes == UINT16_MAX) {
         limit_error(lex, "scopes", UINT16_MAX);
@@ -433,10 +481,19 @@ Scope *pawP_add_scope(Lex *lex, SymbolTable *table)
     return scope;
 }
 
+void pawP_add_scope(Lex *lex, SymbolTable *table, Scope *scope)
+{
+    if (table->nscopes == UINT16_MAX) {
+        limit_error(lex, "scopes", UINT16_MAX);
+    }
+    pawM_grow(env(lex), table->scopes, table->nscopes, table->capacity);
+    table->scopes[table->nscopes++] = scope;
+}
+
 Symbol *pawP_add_symbol(Lex *lex, Scope *table)
 {
     pawM_grow(env(lex), table->symbols, table->nsymbols, table->capacity);
-    Symbol *sym = pawK_add_node(lex, EXPR_SYMBOL, Symbol);
+    Symbol *sym = pawA_new_symbol(lex);
     table->symbols[table->nsymbols++] = sym;
     return sym;
 }
@@ -446,79 +503,69 @@ int pawP_find_symbol(Scope *scope, const String *name)
     Symbol **symbols = scope->symbols;
     for (int i = scope->nsymbols - 1; i >= 0; --i) {
         if (pawS_eq(name, symbols[i]->name)) {
-            return i;
+            if (symbols[i]->is_init) {
+                return i;
+            }
         }
     }
     return -1;
 }
 
-// static void code_invoke(Lex *lex, Op op, ExprState *e)
-//{
-//     const int name = add_name(lex, e->s);
-//     discard(e);
-//
-//     const int argc = call_parameters(lex);
-//     pawK_code_AB(lex->fs, op, name, argc);
-// }
-//
-// static void push_special(Lex *lex, unsigned ctag)
-//{
-//     ExprState e;
-//     if (ctag == CSTR_SELF) {
-//         // 'self' is always in slot 0
-//         init_expr(&e, EXPR_LOCAL, 0);
-//     } else {
-//         // 'super' is an upvalue
-//         const Value v = pawE_cstr(lex->P, ctag);
-//         find_var(lex, &e, v_string(v));
-//     }
-//     discharge(&e);
-// }
-
-////static void superexpr(Lex *lex, ExprState *e)
-////{
-////    if (!lex->cls) {
-////        pawX_error(lex, "'super' used outside class body");
-////    } else if (!lex->cls->has_super) {
-////        pawX_error(lex, "class has no superclass");
-////    }
-////
-////    skip(lex); // 'super' token
-////    check_next(lex, '.');
-////
-////    const int name = parse_name(lex, e);
-////    if (test(lex, '(')) {
-////        const int argc = call_parameters(lex);
-////        push_special(lex, CSTR_SELF);
-////        push_special(lex, CSTR_SUPER);
-////        pawK_code_AB(lex->fs, OP_INVOKESUPER, name, argc);
-////        e->kind = EXPR_CALL;
-////    } else {
-////        push_special(lex, CSTR_SELF);
-////        push_special(lex, CSTR_SUPER);
-////        pawK_code_U(lex->fs, OP_GETSUPER, name);
-////        e->kind = EXPR_ACCESS;
-////    }
-////}
-
-static Expr *unop_expr(Lex *lex, UnOp op)
+static AstExpr *unop_expr(Lex *lex, UnOp op)
 {
-    UnOpExpr *result = pawK_add_node(lex, EXPR_UNOP, UnOpExpr);
+    AstExpr *result = new_expr(lex, EXPR_UNOP);
+    UnOpExpr *r = &result->unop;
     skip(lex); // unary operator token
-    result->op = (UnaryOp)op; // same order
-    result->target = subexpr(lex, kUnOpPrecedence);
-    return cast_expr(result);
+    r->op = (UnaryOp)op; // same order
+    r->target = expression(lex, kUnOpPrecedence);
+    return result;
 }
 
-static Expr *paren_expr(Lex *lex)
+// Parse either a parenthsized expression or a tuple
+static AstExpr *paren_expr(Lex *lex)
 {
     // Just parse and return the expression contained within the parenthesis.
     // There is no need for an extra node type.
     const int line = lex->line;
+    AstExpr *elems = NULL;
+    int nelems = 0;
     skip(lex); // '(' token
-    Expr *result = expr0(lex);
-    delim_next(lex, ')', '(', line);
-    return result;
+    if (!test(lex, ')')) {
+        ++lex->expr_depth;
+        elems = expression0(lex);
+        --lex->expr_depth;
+        if (test_next(lex, ')')) {
+            return elems;
+        }
+    }
+    pawX_error(lex, "TODO: tuples are not yet implemented");
+    return NULL;
+
+//    if (!test(lex, ')')) {
+//        elems = expression0(lex);
+//        if (test_next(lex, ')')) {
+//            // Found a normal parenthesized exprssion: "(" AstExpr ")".
+//            return elems; 
+//        }
+//    //    // Expect an n-tuple (1-tuple requires a trailing ',').
+//    //    while (test_next(lex, ',')) {
+//    //        if (nelems > UINT8_MAX) {
+//    //            limit_error(lex, "tuple elements", UINT8_MAX);
+//    //        }
+//    //        elems->hdr.next = expression0(lex); 
+//    //        elems = elems->hdr.next;
+//    //        ++nelems;
+//    //    }
+//    }
+//    --lex->expr_depth;
+//    AstExpr *result = new_expr(lex, EXPR_LITERAL);
+//    LiteralExpr *lit = &result->literal;
+//    TupleLit *r = &lit->tuple;
+//    lit->line = line;
+//    r->elems = elems;
+//    r->nelems = nelems;
+//    delim_next(lex, ')', '(', line);
+//    return result;
 }
 
 static paw_Bool end_of_block(Lex *lex)
@@ -527,248 +574,223 @@ static paw_Bool end_of_block(Lex *lex)
            test(lex, TK_END); // truncated block
 }
 
-static int stmtlist(Lex *lex, Stmt **phead)
+static AstStmtList *stmt_list(Lex *lex)
 {
-    Stmt *last;
-    int nstmts = 0;
+    AstStmtList *list = new_stmt_list(lex);
+    AstStmt *last;
     while (!end_of_block(lex)) {
-        const TokenKind tk = lex->t.kind;
-        Stmt *next = stmt(lex);
-        link_stmt(phead, &last, next);
-        ++nstmts;
-        if (tk == TK_RETURN) {
-            break;
+        AstStmt *next = statement(lex);
+        if (next != NULL) {
+            link_stmt(list, &last, next);
+            if (a_kind(next) == STMT_RETURN || // 'return'
+                a_kind(next) == STMT_LABEL) { // 'break' | 'continue'
+                break; // must be last statement in block
+            }
         }
     }
-    return nstmts;
+    return list;
 }
 
-static Expr *array_expr(Lex *lex)
+static AstExpr *array_expr(Lex *lex)
 {
-    ArrayExpr *result = pawK_add_node(lex, EXPR_ARRAY, ArrayExpr);
-    const int line = lex->line;
-    skip(lex); // '[' token
-
-    int nitems = 0;
-    Expr *items = result->items;
-    do {
-        if (test(lex, ']')) {
-            break;
-        } else if (nitems == LOCAL_MAX) {
-            limit_error(lex, "array elements", LOCAL_MAX);
-        }
-        items->next = expr0(lex);
-        items = items->next;
-        ++nitems;
-    } while (test_next(lex, ','));
-    delim_next(lex, ']', '[', line);
-    return cast_expr(result);
+//    AstExpr *result = new_expr(lex, EXPR_ARRAY);
+//    ArrayExpr *r = &result->array;
+//    const int line = lex->line;
+//    skip(lex); // '[' token
+//
+//    int nitems = 0;
+//    AstExpr *items = r->items;
+//    do {
+//        if (test(lex, ']')) {
+//            break;
+//        } else if (nitems == LOCAL_MAX) {
+//            limit_error(lex, "array elements", LOCAL_MAX);
+//        }
+//        items->next = expression0(lex);
+//        items = items->next;
+//        ++nitems;
+//    } while (test_next(lex, ','));
+//    delim_next(lex, ']', '[', line);
+//    return result;
 }
 
-static Expr *map_expr(Lex *lex)
+static AstExpr *map_expr(Lex *lex)
 {
 //    const int line = lex->line;
 //    skip(lex); // '{' token
-//    MapExpr *result = pawK_add_node(lex, EXPR_MAP, MapExpr);
+//    AstExpr *result = new_expr(lex, EXPR_MAP);
+//    MapExpr *r = &result->map;
 //
-//    NodeVec *items = &result->items;
+//    NodeVec *items = &r->items;
 //    do {
 //        if (test(lex, '}')) {
 //            break;
 //        } else if (items->size > LOCAL_MAX - 2) {
 //            limit_error(lex, "map items", LOCAL_MAX);
 //        }
-//        push_node(lex, items, expr0(lex));
+//        push_node(lex, items, expression0(lex));
 //        check_next(lex, ':');
-//        push_node(lex, items, expr0(lex));
+//        push_node(lex, items, expression0(lex));
 //    } while (test_next(lex, ','));
 //    delim_next(lex, '}', '{', line);
-//    return cast_expr(result);
+//    return result;
     return NULL;
 }
 
-static Expr *index_expr(Lex *lex, Expr *prefix)
+static AstExpr *index_expr(Lex *lex, AstExpr *target)
 {
-    IndexExpr *result = pawK_add_node(lex, EXPR_INDEX, IndexExpr);
+    AstExpr *result = new_expr(lex, EXPR_INDEX);
+    Index *r = &result->index;
     const int line = lex->line;
     skip(lex); // '[' token
 
-    result->target = prefix;
-    if (test(lex, ':')) {
-        result->first = NULL; // TODO: Won't work: use a special range object 
-    } else {
-        result->first = expr0(lex);
-    }
-    if (!test_next(lex, ':')) {
-        result->second = NULL;
-    } else if (test(lex, ']')) {
-        result->second = NULL; 
-    } else {
-        result->second = expr0(lex); 
-    }
+    r->target = target;
+    r->elems = expr_list1(lex, "bracketed terms");
     delim_next(lex, ']', '[', line);
-    return cast_expr(result);
+    return result;
 }
 
-static Stmt *itemstmt(Lex *lex)
+// Parse a composite literal expression
+static AstExpr *composite_lit(Lex *lex, AstExpr *target)
 {
-    check_next(lex, '.');
-    ItemStmt *result = pawK_add_node(lex, STMT_ITEM, ItemStmt);
-    result->name = parse_name(lex);
-    check_next(lex, '=');
-    result->value = expr0(lex);
-    return cast_stmt(result);
-}
-
-static Expr *initexpr(Lex *lex, Expr *prefix)
-{
-    if (prefix->kind != EXPR_VAR) {
-        pawX_error(lex, "expected class name");
-    }
-    InitExpr *result = pawK_add_node(lex, EXPR_INIT, InitExpr);
-    result->prefix = prefix; 
-    const int line = lex->line;
+    AstExpr *result = new_expr(lex, EXPR_LITERAL);
+    LiteralExpr *lit = &result->literal;
+    lit->lit_kind = LIT_COMPOSITE;
+    CompositeLit *r = &lit->comp;
     skip(lex); // '{' token
-
-    Stmt *last;
-    do {
-        if (test(lex, '}')) {
-            break;
-        } else if (result->nattrs == LOCAL_MAX) {
-            limit_error(lex, "attributes", LOCAL_MAX);
-        }
-        Stmt *next = itemstmt(lex);
-        link_stmt(&result->attrs, &last, next);
-        ++result->nattrs;
-    } while (test_next(lex, ','));
-    delim_next(lex, '}', '{', line);
-    return cast_expr(result);
+    r->items = item_list0(lex, "items");
+    r->target = target;
+    delim_next(lex, '}', '{', lit->line);
+    return result;
 }
 
-static Expr *invokeexpr(Lex *lex, int line, Expr *prefix, String *name)
-{
-    InvokeExpr *result = pawK_add_node(lex, EXPR_INVOKE, InvokeExpr);
-    result->nargs = call_parameters(lex, &result->args);
-    result->target = prefix;
-    result->line = line;
-    result->name = name;
-    return cast_expr(result);
-}
-
-static Expr *accessexpr(Lex *lex, int line, Expr *prefix, String *name)
-{
-    AccessExpr *result = pawK_add_node(lex, EXPR_ACCESS, AccessExpr);
-    result->line = line;
-    result->target = prefix;
-    result->name = name;
-    return cast_expr(result);
-}
-
-static Expr *dotexpr(Lex *lex, Expr *prefix)
+static AstExpr *selector_expr(Lex *lex, AstExpr *target)
 {
     skip(lex); // '.' token
-    const int line = lex->lastline;
-    String *name = parse_name(lex);
-    if (test(lex, '(')) {
-        return invokeexpr(lex, line, prefix, name); 
-    } else {
-        return accessexpr(lex, line, prefix, name);
-    }
+    AstExpr *r = new_expr(lex, EXPR_SELECTOR);
+    r->selector.target = target;
+    r->selector.name = parse_name(lex);
+    return r;
 }
 
-static Expr *call_expr(Lex *lex, Expr *prefix)
+static AstExpr *access_expr(Lex *lex, AstExpr *target)
 {
-    CallExpr *result = pawK_add_node(lex, EXPR_CALL, CallExpr);
-    result->nargs = call_parameters(lex, &result->args);
-    result->target = prefix;
-    return cast_expr(result);
+    skip(lex); // '::' token
+    AstExpr *r = new_expr(lex, EXPR_ACCESS);
+    r->access.target = target;
+    r->access.name = parse_name(lex);
+    return r;
 }
 
-static Expr *chain_expr(Lex *lex, Expr *prefix)
+static AstExpr *call_expr(Lex *lex, AstExpr *target)
 {
-    ChainExpr *result = pawK_add_node(lex, EXPR_UNOP, ChainExpr);
-    result->target = prefix;
+    AstExpr *result = new_expr(lex, EXPR_CALL);
+    CallExpr *r = &result->call;
+    r->args = arguments(lex);
+    r->target = target;
+    return result;
+}
+
+static AstExpr *chain_expr(Lex *lex, AstExpr *target)
+{
+    AstExpr *result = new_expr(lex, EXPR_UNOP);
+    ChainExpr *r = &result->chain;
+    r->target = target;
     skip(lex); // '?' token
-    return cast_expr(result);
+    return result;
 }
 
-static int fn_parameters(Lex *lex, Stmt **phead)
+static AstDeclList *parameters(Lex *lex)
 {
+    AstDeclList *list = new_decl_list(lex);
     const int line = lex->line;
     check_next(lex, '(');
 
-    int argc = 0;
     if (!test_next(lex, ')')) {
-        Stmt *last;
+        AstDecl *prev;
         do {
-            if (argc == ARGC_MAX) {
+            if (list->count == ARGC_MAX) {
                 limit_error(lex, "function parameters", ARGC_MAX);
             } else if (!test(lex, TK_NAME)) {
                 expected_symbol(lex, "name");
             }
             // parse function parameter of form 'name: type'
-            Stmt *next = parameter_def(lex);
-            link_stmt(phead, &last, next);
-            ++argc;
+            AstDecl *next = param_decl(lex);
+            link_decl(list, &prev, next);
         } while (test_next(lex, ','));
         delim_next(lex, ')', '(', line);
     }
-    return argc;
+    return list;
 }
 
 static Block *block(Lex *lex)
 {
     const int line = lex->line;
-    Block *result = pawK_add_node(lex, STMT_BLOCK, Block);
+    AstStmt *result = new_stmt(lex, STMT_BLOCK);
+    Block *r = &result->block;
     check_next(lex, '{');
-    result->nstmts = stmtlist(lex, &result->stmts);
+    r->stmts = stmt_list(lex);
     delim_next(lex, '}', '{', line);
-    return result;
+    return r;
 }
 
-static Expr *primary_expr(Lex *lex)
+static AstExpr *primary_expr(Lex *lex)
 {
     switch (lex->t.kind) {
         case '(':
             return paren_expr(lex);
         case TK_NAME:
-            return varexpr(lex);
+            return name_expr(lex);
         case TK_STRING: {
             const Value v = lex->t.value;
-            skip(lex);
-            return emit_primitive(lex, v, PAW_TSTRING);
+            skip(lex); // string token
+            return new_basic_lit(lex, v, PAW_TSTRING);
         }
-        case '[':
-            return array_expr(lex);
-        case '{':
-            return map_expr(lex);
-        //case TK_SUPER:
-        //    return superexpr(lex, e);
+        //case '[':
+        //    return array_expr(lex);
+        //case '{':
+        //    return map_expr(lex);
+        case TK_FN:
+            return type_expr(lex);
         default:
             expected_symbol(lex, "name or '('");
             return NULL; // never run
     }
 }
 
-static Expr *suffixed_expr(Lex *lex)
+static AstExpr *suffixed_expr(Lex *lex)
 {
-    Expr *e = primary_expr(lex);
-    if (test(lex, '{')) {
-        e = initexpr(lex, e);
-    }
+    AstExpr *e = primary_expr(lex);
     for (;;) { // parse suffix chain
         switch (lex->t.kind) {
+            case '?':
+                e = chain_expr(lex, e);
+                break;
             case '(':
                 e = call_expr(lex, e);
                 break;
             case '.':
-                e = dotexpr(lex, e);
+                e = selector_expr(lex, e);
+                break;
+            case TK_COLON2:
+                e = access_expr(lex, e);
                 break;
             case '[':
                 e = index_expr(lex, e);
                 break;
-            case '?':
-                e = chain_expr(lex, e);
+            case '{':
+                switch (a_kind(e)) {
+                    case EXPR_NAME:
+                    case EXPR_INDEX:
+                    case EXPR_ACCESS:
+                        if (lex->expr_depth < 0) {
+                            return e;
+                        }
+                        break;
+                    default:
+                        return e;
+                }
+                e = composite_lit(lex, e);
                 break;
             default:
                 return e;
@@ -776,9 +798,9 @@ static Expr *suffixed_expr(Lex *lex)
     }
 }
 
-static Expr *simple_expr(Lex *lex)
+static AstExpr *simple_expr(Lex *lex)
 {
-    Expr *expr;
+    AstExpr *expr;
     switch (lex->t.kind) {
         case TK_TRUE:
             expr = emit_bool(lex, PAW_TRUE);
@@ -787,10 +809,10 @@ static Expr *simple_expr(Lex *lex)
             expr = emit_bool(lex, PAW_FALSE);
             break;
         case TK_INTEGER:
-            expr = emit_primitive(lex, lex->t.value, PAW_TINT);
+            expr = new_basic_lit(lex, lex->t.value, PAW_TINT);
             break;
         case TK_FLOAT:
-            expr = emit_primitive(lex, lex->t.value, PAW_TFLOAT);
+            expr = new_basic_lit(lex, lex->t.value, PAW_TFLOAT);
             break;
         default:
             return suffixed_expr(lex);
@@ -799,46 +821,49 @@ static Expr *simple_expr(Lex *lex)
     return expr;
 }
 
-static Expr *binop_expr(Lex *lex, InfixOp op, Expr *lhs)
+static AstExpr *binop_expr(Lex *lex, InfixOp op, AstExpr *lhs)
 {
     skip(lex); // binary operator token
-    Expr *rhs = subexpr(lex, right_prec(op));
+    AstExpr *rhs = expression(lex, right_prec(op));
     if (rhs == NULL) {
         return NULL; // no more binops
     }
-    BinOpExpr *result = pawK_add_node(lex, EXPR_BINOP, BinOpExpr);
-    result->op = (BinaryOp)op; // same order
-    result->lhs = lhs;
-    result->rhs = rhs;
-    return cast_expr(result);
+    AstExpr *result = new_expr(lex, EXPR_BINOP);
+    BinOpExpr *r = &result->binop;
+    r->op = (BinaryOp)op; // same order
+    r->lhs = lhs;
+    r->rhs = rhs;
+    return result;
 }
 
-static Expr *logical_expr(Lex *lex, Expr *lhs, paw_Bool is_and)
+static AstExpr *logical_expr(Lex *lex, AstExpr *lhs, paw_Bool is_and)
 {
     skip(lex); // '&&' or '||' token
-    Expr *rhs = subexpr(lex, right_prec(INFIX_AND));
+    AstExpr *rhs = expression(lex, right_prec(INFIX_AND));
     if (rhs == NULL) {
         return NULL; // no more binops
     }
-    LogicalExpr *result = pawK_add_node(lex, EXPR_LOGICAL, LogicalExpr);
-    result->is_and = is_and;
-    result->lhs = lhs;
-    result->rhs = rhs;
-    return cast_expr(result);
+    AstExpr *result = new_expr(lex, EXPR_LOGICAL);
+    LogicalExpr *r = &result->logical;
+    r->is_and = is_and;
+    r->lhs = lhs;
+    r->rhs = rhs;
+    return result;
 }
 
-static Expr *cond_expr(Lex *lex, Expr *lhs)
+static AstExpr *cond_expr(Lex *lex, AstExpr *lhs)
 {
     skip(lex); // '??' token
-    CondExpr *result = pawK_add_node(lex, EXPR_COND, CondExpr);
-    result->cond = lhs;
-    result->lhs = subexpr(lex, right_prec(INFIX_COND));
+    AstExpr *result = new_expr(lex, EXPR_COND);
+    CondExpr *r = &result->cond;
+    r->cond = lhs;
+    r->lhs = expression(lex, right_prec(INFIX_COND));
     check_next(lex, TK_COLON2);
-    result->rhs = expr0(lex);
-    return cast_expr(result);
+    r->rhs = expression0(lex);
+    return result;
 }
 
-static Expr *infix_expr(Lex *lex, Expr *lhs, unsigned op)
+static AstExpr *infix_expr(Lex *lex, AstExpr *lhs, unsigned op)
 {
     switch (op) {
         case INFIX_AND:
@@ -851,10 +876,10 @@ static Expr *infix_expr(Lex *lex, Expr *lhs, unsigned op)
     }
 }
 
-static Expr *subexpr(Lex *lex, unsigned prec)
+static AstExpr *subexpr(Lex *lex, unsigned prec)
 {
     unsigned op = get_unop(lex->t.kind);
-    Expr *expr = op == NOT_UNOP
+    AstExpr *expr = op == NOT_UNOP
                      ? simple_expr(lex)
                      : unop_expr(lex, op);
 
@@ -866,82 +891,89 @@ static Expr *subexpr(Lex *lex, unsigned prec)
     return expr;
 }
 
-static Stmt *if_stmt(Lex *lex)
+// TODO
+static AstExpr *expression(Lex *lex, unsigned prec)
+{
+    return subexpr(lex, prec);
+}
+
+static AstExpr *basic_expr(Lex *lex)
+{
+    const int prev_depth = lex->expr_depth;
+    lex->expr_depth = -1;
+    AstExpr *expr = subexpr(lex, 0);
+    lex->expr_depth = prev_depth;
+    return expr;
+}
+
+static AstStmt *if_stmt(Lex *lex)
 {
     skip(lex); // 'if' token
-    IfElseStmt *result = pawK_add_node(lex, STMT_IFELSE, IfElseStmt);
-    result->cond = expr0(lex); // conditional
-    result->then_arm = cast_stmt(block(lex)); // 'then' block
+    AstStmt *result = new_stmt(lex, STMT_IF);
+    IfStmt *r = &result->if_;
+    r->cond = basic_expr(lex); // conditional
+    r->then_arm = cast_stmt(block(lex)); // 'then' block
 
     if (test_next(lex, TK_ELSE)) {
         if (test(lex, TK_IF)) {
             // Put the rest of the chain in the else branch. This transformation looks
             // like 'if a {} else if b {} else {}' -> 'if a {} else {if b {} else {}}'.
-            result->else_arm = if_stmt(lex);
+            r->else_arm = if_stmt(lex);
         } else {
-            result->else_arm = cast_stmt(block(lex));
+            r->else_arm = cast_stmt(block(lex));
         }
     }
-    return cast_stmt(result);
+    return result;
 }
 
-static Stmt *exprstmt(Lex *lex)
+static AstStmt *expr_stmt(Lex *lex)
 {
-    ExprStmt *result = pawK_add_node(lex, STMT_EXPR, ExprStmt);
-    result->lhs = suffixed_expr(lex);
+    AstStmt *result = new_stmt(lex, STMT_EXPR);
+    AstExprStmt *r = &result->expr;
+    r->lhs = suffixed_expr(lex);
     if (test_next(lex, '=')) {
-        result->rhs = expr0(lex);
+        r->rhs = expression0(lex);
     }
     semicolon(lex);
-    return cast_stmt(result);
+    return result;
 }
 
-static Expr *emit_literal(Lex *lex, const char *name, Expr *expr, paw_Type t)
+static AstStmt *fornum(Lex *lex, String *ivar)
 {
-    LiteralExpr *result = pawK_add_node(lex, EXPR_LITERAL, LiteralExpr);
-    result->label = name;
-    result->expr = expr;
-    result->t = t;
-    return cast_expr(result);
-}
+    AstStmt *result = new_stmt(lex, STMT_FORNUM);
+    ForStmt *r = &result->for_;
+    ForNum *fornum = &r->fornum;
+    r->name = ivar;
 
-static Expr *literal_expr(Lex *lex, const char *name, paw_Type t)
-{
-    return emit_literal(lex, name, expr0(lex), t);
-}
-
-static Stmt *fornum(Lex *lex, String *ivar)
-{
-    ForStmt *result = pawK_add_node(lex, STMT_FORNUM, ForStmt);
-    ForNum *fornum = &result->fornum;
-    result->name = ivar;
     // Parse the loop bounds ('begin', 'end', and 'step' expressions).
-    fornum->begin = literal_expr(lex, "(for begin)", PAW_TINT);
+    fornum->begin = basic_expr(lex);
     check_next(lex, ',');
-    fornum->end = literal_expr(lex, "(for end)", PAW_TINT);
+    fornum->end = basic_expr(lex);
     if (test_next(lex, ',')) {
-        fornum->step = literal_expr(lex, "(for step)", PAW_TINT);
+        fornum->step = basic_expr(lex);
     } else {
         Value v;
         v_set_int(&v, 1); // step defaults to 1
-        Expr *step = emit_primitive(lex, v, PAW_TINT);
-        fornum->step = emit_literal(lex, "(for step)", step, PAW_TINT);
+        fornum->step = new_basic_lit(lex, v, PAW_TINT);
     }
-    result->block = block(lex);
-    return cast_stmt(result);
+
+    r->block = block(lex);
+    return result;
 }
 
-static Stmt *forin(Lex *lex, String *ivar)
+static AstStmt *forin(Lex *lex, String *ivar)
 {
-    ForStmt *result = pawK_add_node(lex, STMT_FORIN, ForStmt);
-    ForIn *forin = &result->forin;
-    forin->target = expr0(lex);
-    result->name = ivar;
-    result->block = block(lex);
-    return cast_stmt(result);
+    AstStmt *result = new_stmt(lex, STMT_FORIN);
+    ForStmt *r = &result->for_;
+    ForIn *forin = &r->forin;
+
+    forin->target = basic_expr(lex);
+    r->name = ivar;
+    r->block = block(lex);
+    return result;
 }
 
-static Stmt *for_stmt(Lex *lex)
+static AstStmt *for_stmt(Lex *lex)
 {
     skip(lex); // 'for' token
     String *ivar = parse_name(lex); // loop variable
@@ -950,176 +982,241 @@ static Stmt *for_stmt(Lex *lex)
     } else if (!test_next(lex, TK_IN)) {
         expected_symbol(lex, "'=' or 'in'"); // no return
     }
-    return forin(lex, ivar);
+    AstStmt *stmt = forin(lex, ivar);
+    return stmt;
 }
 
-static Stmt *while_stmt(Lex *lex)
+static AstStmt *while_stmt(Lex *lex)
 {
-    WhileStmt *result = pawK_add_node(lex, STMT_WHILE, WhileStmt);
+    AstStmt *result = new_stmt(lex, STMT_WHILE);
+    WhileStmt *r = &result->while_;
     skip(lex); // 'while' token
-    result->cond = expr0(lex);
-    result->block = block(lex);
-    return cast_stmt(result);
+
+    r->cond = basic_expr(lex);
+    r->block = block(lex);
+    return result;
 }
 
-static Stmt *dowhile_stmt(Lex *lex)
+static AstStmt *dowhile_stmt(Lex *lex)
 {
-    WhileStmt *result = pawK_add_node(lex, STMT_DOWHILE, WhileStmt);
     skip(lex); // 'do' token
-    result->block = block(lex);
+    AstStmt *r = new_stmt(lex, STMT_DOWHILE);
+    r->while_.block = block(lex);
     check_next(lex, TK_WHILE);
-    result->cond = expr0(lex);
-    return cast_stmt(result);
+    r->while_.cond = basic_expr(lex);
+    return r;
 }
 
-static Stmt *return_stmt(Lex *lex)
+static AstStmt *return_stmt(Lex *lex)
 {
-    ReturnStmt *result = pawK_add_node(lex, STMT_RETURN, ReturnStmt);
+    AstStmt *result = new_stmt(lex, STMT_RETURN);
+    ReturnStmt *r = &result->return_;
     skip(lex); // 'return' token
     if (end_of_block(lex) || test(lex, ';')) {
-        result->expr = NULL;
+        r->expr = NULL;
     } else {
-        result->expr = expr0(lex);
+        r->expr = expression0(lex);
     }
-    // NOTE: The construct 'return [expr] [`;`]' must be followed by the
-    //       end of the block. This is necessary because the semicolon is
+    // NOTE: The construct 'return [expr] [`;`]' must be followed by the TODO: auto semicolon insertion fixes this
+    //       end of the block. This is necessary because the semicolon is      could relax restriction, make it easier to 'prototype' in paw
     //       optional, and we cannot easily tell if it was intended to go
     //       before or after the '[expr]' part.
     semicolon(lex);
-    return cast_stmt(result);
+    return result;
 }
 
-static Stmt *labelstmt(Lex *lex, LabelKind kind)
+static AstStmt *label_stmt(Lex *lex, LabelKind kind)
 {
-    LabelStmt *result = pawK_add_node(lex, STMT_LABEL, LabelStmt);
-    result->label = kind;
+    AstStmt *result = new_stmt(lex, STMT_LABEL);
+    LabelStmt *r = &result->label;
+    r->label = kind;
     skip(lex); // 'break' or 'continue' token
     semicolon(lex);
-    return cast_stmt(result);
+    return result;
 }
 
-static void function(Lex *lex, String *name, Function *pfn)
+static AstDeclList *maybe_type_param(Lex *lex)
 {
-    pfn->nargs = fn_parameters(lex, &pfn->args);
-    pfn->ret = ret_annotation(lex);
-    pfn->name = name;
-    pfn->body = block(lex);
+    const int line = lex->line;
+    if (!test_next(lex, '[')) { 
+        return NULL;
+    } else if (test_next(lex, ']')) {
+        pawX_error(lex, "empty generic parameters");
+    }
+
+    AstDecl *prev;
+    AstDeclList *list = new_decl_list(lex);
+    ++lex->expr_depth;
+    do {
+        if (list->count == ARGC_MAX) {
+            limit_error(lex, "generic type parameters", ARGC_MAX);
+        }
+        AstDecl *r = new_decl(lex, DECL_GENERIC);
+        r->generic.name = parse_name(lex);
+        link_decl(list, &prev, r);
+    } while (test_next(lex, ','));
+    delim_next(lex, ']', '[', line);
+    --lex->expr_depth;
+    return list;
 }
 
-static Stmt *fn_stmt(Lex *lex, int line, paw_Bool global)
+static AstDecl *function(Lex *lex, String *name, FuncKind kind)
+{
+    AstDecl *d = new_decl(lex, DECL_FUNC);
+    d->func.name = name;
+    d->func.fn_kind = kind;
+    d->func.generics = maybe_type_param(lex);
+    d->func.params = parameters(lex);
+    d->func.return_ = ret_annotation(lex);
+    d->func.is_poly = d->func.generics != NULL;
+    d->func.body = block(lex);
+    return d;
+}
+
+static AstDecl *func_decl(Lex *lex, int line, paw_Bool global)
 {
     skip(lex); // 'fn' token
-    FnStmt *result = pawK_add_node(lex, STMT_FN, FnStmt);
     String *name = parse_name(lex);
-    result->flags.kind = FN_FUNCTION;
-    result->flags.global = global;
-    result->line = line;
-    function(lex, name, &result->fn);
-    return cast_stmt(result);
+    AstDecl *r = function(lex, name, FUNC_FUNCTION);
+    r->func.is_global = global;
+    r->func.line = line;
+    return r;
 }
 
-static Stmt *attr_def(Lex *lex, String *name)
+static AstDecl *field_decl(Lex *lex, String *name)
 {
-    const int line = lex->lastline;
-    AttrStmt *result = pawK_add_node(lex, STMT_ATTR, AttrStmt);
-    result->line = line; // line containing 'global' or 'let'
-    result->name = name;
-    result->tag = var_annotation(lex);
+    AstDecl *r = new_decl(lex, DECL_FIELD);
+    r->field.name = name;
+    r->field.tag = var_annotation(lex);
     semicolon(lex);
-    return cast_stmt(result);
+    return r;
 }
 
-static Stmt *method_def(Lex *lex, String *name)
+static AstDecl *method_decl(Lex *lex, String *name)
 {
-    const int line = lex->lastline;
-    AttrStmt *result = pawK_add_node(lex, STMT_ATTR, AttrStmt);
-    result->name = name;
-    result->line = line;
-    result->is_fn = PAW_TRUE;
-    function(lex, name, &result->fn);
-    return cast_stmt(result);
+    AstDecl *r = function(lex, name, FUNC_METHOD);
+    semicolon(lex);
+    return r;
 }
 
-static Stmt *attrstmt(Lex *lex)
+static AstDecl *attr_decl(Lex *lex)
 {
     String *name = v_string(lex->t.value);
     skip(lex); // name token
-    if (test(lex, ':') || test(lex, '=')) {
-        return attr_def(lex, name);
+    if (test(lex, ':')) {
+        return field_decl(lex, name);
     } else {
-        return method_def(lex, name);
+        return method_decl(lex, name);
     }
 }
 
-static int class_body(Lex *lex, Stmt **phead)
+static void struct_body(Lex *lex, StructDecl *struct_)
 {
-    Stmt *last;
+    AstDecl *last_field;
+    AstDecl *last_method;
     const int line = lex->line;
     check_next(lex, '{');
 
-    int nattrs = 0;
+    struct_->fields = new_decl_list(lex);
+    struct_->methods = new_decl_list(lex);
     while (!test(lex, '}')) {
         check(lex, TK_NAME);
-        if (nattrs > LOCAL_MAX) {
-            limit_error(lex, "attributes", LOCAL_MAX);
+        AstDecl *next = attr_decl(lex);
+        if (a_kind(next) == DECL_FUNC) {
+            if (struct_->methods->count == LOCAL_MAX) {
+                limit_error(lex, "methods", LOCAL_MAX);
+            }
+            // use the method chain, 'next' link used for template instances
+            link_method(struct_->methods, &last_method, next);
+        } else if (struct_->fields->count == LOCAL_MAX) {
+            limit_error(lex, "fields", LOCAL_MAX);
+        } else {
+            link_decl(struct_->fields, &last_field, next);
         }
-        Stmt *next = attrstmt(lex);
-        link_stmt(phead, &last, next);
-        ++nattrs;
     }
     delim_next(lex, '}', '{', line);
-    return nattrs;
 }
 
-static Stmt *class_stmt(Lex *lex, paw_Bool global)
+static AstDecl *struct_decl(Lex *lex, paw_Bool global)
 {
-    skip(lex); // 'class' token
-
-    ClassStmt *s = pawK_add_node(lex, STMT_CLASS, ClassStmt);
-    s->flags.global = global;
-    s->name = parse_name(lex);
-    if (test_next(lex, ':')) {
-        // push superclass
-        s->super = varexpr(lex);
-    }
-    s->nattrs = class_body(lex, &s->attrs);
+    skip(lex); // 'struct' token
+    AstDecl *r = new_decl(lex, DECL_STRUCT);
+    r->struct_.is_global = global;
+    r->struct_.name = parse_name(lex);
+    r->struct_.generics = maybe_type_param(lex);
+    r->struct_.is_poly = r->struct_.generics != NULL;
+    struct_body(lex, &r->struct_);
     semicolon(lex);
-    return cast_stmt(s);
+    return r;
 }
 
-static Stmt *global_stmt(Lex *lex)
+static AstDecl *type_decl(Lex *lex)
 {
-    const int line = lex->lastline;
+    AstDecl *r = new_decl(lex, DECL_TYPE);
+    skip(lex); // 'type' token
+
+    r->type.name = parse_name(lex);
+    r->type.generics = maybe_type_param(lex);
+
+    check_next(lex, '=');
+
+    // 'type_expr()' parses function signatures, which are not allowed
+    // on the RHS of a type expression. This should be caught during
+    // type checking, since we also need to make sure the RHS is not
+    // referring to an uninstantiated template.
+    r->type.rhs = type_expr(lex);
+    semicolon(lex);
+    return r;
+}
+
+static AstDecl *global_decl(Lex *lex)
+{
+    const int line = lex->line;
     skip(lex); // 'global' token
     if (test(lex, TK_FN)) {
         skip(lex); // 'fn' token
-        return fn_stmt(lex, line, PAW_TRUE);
-    } else if (test(lex, TK_CLASS)) {
-        return class_stmt(lex, PAW_TRUE);
+        return func_decl(lex, line, PAW_TRUE);
+    } else if (test(lex, TK_STRUCT)) {
+        return struct_decl(lex, PAW_TRUE);
     } else {
-        return variable_def(lex, line, PAW_TRUE);
+        return var_decl(lex, line, PAW_TRUE);
     }
 }
 
-static Stmt *stmt(Lex *lex)
+static AstDecl *decl(Lex *lex)
 {
-try_again:
+    switch (lex->t.kind) {
+        case TK_FN:
+            return func_decl(lex, lex->line, PAW_FALSE);
+        case TK_STRUCT:
+            return struct_decl(lex, PAW_FALSE);
+        case TK_TYPE:
+            return type_decl(lex);
+        case TK_LET:
+            skip(lex); // 'let' token
+            return var_decl(lex, lex->line, PAW_FALSE);
+        default:
+            paw_assert(lex->t.kind == TK_GLOBAL);
+            return global_decl(lex);
+    }
+}
+
+static AstStmt *decl_stmt(Lex *lex)
+{
+    AstStmt *r = new_stmt(lex, STMT_DECL);
+    r->decl.decl = decl(lex);
+    return r;
+}
+
+static AstStmt *statement(Lex *lex)
+{
     switch (lex->t.kind) {
         case ';':
             // empty statement
             skip(lex); // ';' token
-            goto try_again;
+            return NULL;
         case '{':
             return cast_stmt(block(lex));
-        case TK_FN:
-            return fn_stmt(lex, lex->lastline, PAW_FALSE);
-        case TK_CLASS:
-            return class_stmt(lex, PAW_FALSE);
-        case TK_LET:
-            skip(lex); // 'let' token
-            return variable_def(lex, lex->lastline, PAW_FALSE);
-        case TK_GLOBAL:
-            return global_stmt(lex);
         case TK_IF:
             return if_stmt(lex);
         case TK_FOR:
@@ -1131,20 +1228,27 @@ try_again:
         case TK_RETURN:
             return return_stmt(lex);
         case TK_BREAK:
-            return labelstmt(lex, LBREAK);
+            return label_stmt(lex, LBREAK);
         case TK_CONTINUE:
-            return labelstmt(lex, LCONTINUE);
+            return label_stmt(lex, LCONTINUE);
+        case TK_FN:
+        case TK_STRUCT:
+        case TK_LET:
+        case TK_GLOBAL:
+        case TK_TYPE:
+            return decl_stmt(lex);
         default:
-            return exprstmt(lex);
+            return expr_stmt(lex);
     }
 }
 
-// All paw language keywords (must be in this order, the same order as the
-// keyword variants in the TokenKind enum in lex.h)
+// All paw language keywords
+//
+// ORDER TokenKind
 static const char *kKeywords[] = {
     "fn",
-    "class",
-    "super",
+    "type",
+    "struct",
     "global",
     "let",
     "if",
@@ -1160,11 +1264,12 @@ static const char *kKeywords[] = {
     "false",
 };
 
-static String *new_fixed_string(paw_Env *P, const char *s)
+
+static String *basic_type_name(paw_Env *P, const char *name, paw_Type type)
 {
-    String *str = pawS_new_str(P, s);
-    pawG_fix_object(P, cast_object(str));
-    return str;
+    String *s = pawS_new_fixed(P, name);
+    s->flag = -type - 1; // flag < 0 to distinguish from keywords
+    return s;
 }
 
 void pawP_init(paw_Env *P)
@@ -1173,19 +1278,22 @@ void pawP_init(paw_Env *P)
     // collected. Also added to the lexer string map.
     for (size_t i = 0; i < paw_countof(kKeywords); ++i) {
         const char *kw = kKeywords[i];
-        String *str = new_fixed_string(P, kw);
+        String *str = pawS_new_fixed(P, kw);
         str->flag = i + FIRST_KEYWORD;
     }
     for (Metamethod mm = 0; mm < NMETAMETHODS; ++mm) {
         const char *name = pawT_name(mm);
-        String *str = new_fixed_string(P, name);
+        String *str = pawS_new_fixed(P, name);
         v_set_object(&P->meta_keys[mm], str);
     }
-    v_set_object(&P->str_cache[CSTR_SELF], new_fixed_string(P, "self"));
-    v_set_object(&P->str_cache[CSTR_INIT], pawS_new_str(P, "__init"));
-    v_set_object(&P->str_cache[CSTR_SUPER], pawS_new_str(P, "super"));
-    v_set_object(&P->str_cache[CSTR_TRUE], pawS_new_str(P, "true"));
-    v_set_object(&P->str_cache[CSTR_FALSE], pawS_new_str(P, "false"));
+    P->str_cache[CSTR_SELF] = pawS_new_str(P, "self");
+    P->str_cache[CSTR_TRUE] = pawS_new_str(P, "true");
+    P->str_cache[CSTR_FALSE] = pawS_new_str(P, "false");
+    P->str_cache[CSTR_UNIT] = basic_type_name(P, "()", PAW_TUNIT);
+    P->str_cache[CSTR_BOOL] = basic_type_name(P, "bool", PAW_TBOOL);
+    P->str_cache[CSTR_INT] = basic_type_name(P, "int", PAW_TINT);
+    P->str_cache[CSTR_FLOAT] = basic_type_name(P, "float", PAW_TFLOAT);
+    P->str_cache[CSTR_STRING] = basic_type_name(P, "string", PAW_TSTRING);
 }
 
 static void skip_hashbang(Lex *lex)
@@ -1199,218 +1307,28 @@ static void skip_hashbang(Lex *lex)
     }
 }
 
-static Tree *parse_module(Lex *lex)
+static Ast *parse_module(Lex *lex)
 {
-    Tree *ast = lex->ast;
+    Ast *ast = lex->pm->ast;
     skip_hashbang(lex);
-    ast->nstmts = stmtlist(lex, &ast->stmts);
+    ast->stmts = stmt_list(lex);
     check(lex, TK_END);
     return ast;
-}
-
-static void dump_expr(paw_Env *P, Expr *expr, int indent);
-
-static void dump_symbols(paw_Env *P, Scope *st, int indent)
-{
-    for (int i = 0; i < st->nsymbols; ++i) {
-        for (int i = 0; i < indent; ++i) {
-            printf("    ");
-        }
-        const Symbol *s = st->symbols[i];
-        printf("symbol %s: type = %s\n", s->name->text, pawY_name(y_id(s->type)));
-    }
-}
-
-static void dump_stmt(paw_Env *P, Stmt *stmt, int indent)
-{
-    for (int i = 0; i < indent; ++i) {
-        printf("    ");
-    }
-    if (stmt == NULL) {
-        puts("NULL\n");
-        return;
-    }
-    switch (stmt->kind) {
-        case STMT_EXPR:
-            printf("exprstmt\n");
-            dump_expr(P, cast_expr(cast_to(stmt, ExprStmt)->lhs), indent + 1);
-            if (cast_to(stmt, ExprStmt)->rhs) {
-                dump_expr(P, cast_to(stmt, ExprStmt)->rhs, indent + 1);
-            }
-            break;
-        case STMT_BLOCK: {
-            Block *bn = cast_to(stmt, Block);
-            printf("block\n");
-            dump_symbols(P, bn->scope, indent + 1);
-            for (Stmt *stmt = bn->stmts; stmt; stmt = stmt->next) {
-                dump_stmt(P, cast_stmt(stmt), indent + 1);
-            }
-            break;
-        }
-        case STMT_IFELSE:
-            printf("ifelse\n");
-            break;
-        case STMT_FORIN: {
-            ForStmt *s = cast_to(stmt, ForStmt);
-            printf("forin\n");
-            dump_symbols(P, s->scope, indent + 1);
-            dump_expr(P, s->forin.target, indent + 1);
-            dump_stmt(P, cast_stmt(s->block), indent + 1);
-            break;
-        }
-        case STMT_FORNUM: {
-            ForStmt *s = cast_to(stmt, ForStmt);
-            printf("fornum\n");
-            dump_symbols(P, s->scope, indent + 1);
-            dump_expr(P, s->fornum.begin, indent + 1);
-            dump_expr(P, s->fornum.end, indent + 1);
-            dump_expr(P, s->fornum.step, indent + 1);
-            dump_stmt(P, cast_stmt(s->block), indent + 1);
-            break;
-        }
-        case STMT_WHILE: {
-            WhileStmt *s = cast_to(stmt, WhileStmt);
-            printf("while\n");
-            dump_expr(P, s->cond, indent + 1);
-            dump_stmt(P, cast_stmt(s->block), indent + 1);
-            break;
-        }
-        case STMT_DOWHILE: {
-            WhileStmt *s = cast_to(stmt, WhileStmt);
-            printf("dowhile\n");
-            dump_stmt(P, cast_stmt(s->block), indent + 1);
-            dump_expr(P, s->cond, indent + 1);
-            break;
-        }
-        case STMT_FN: {
-            FnStmt *fn = cast_to(stmt, FnStmt);
-
-            printf("fn (%s) %s: %d\n", fn->flags.global ? "global" : "local", fn->fn.name->text, fn->fn.ret ? fn->fn.ret->type->hdr.id : -1);
-            for (Stmt *arg = fn->fn.args; arg; arg = arg->next) {
-                dump_stmt(P, cast_stmt(arg), indent + 1); // list of DefStmt
-            }
-            dump_stmt(P, cast_stmt(fn->fn.body), indent + 1);
-            break;
-        }
-        case STMT_PARAM: {
-            ParamStmt *in = cast_to(stmt, ParamStmt);
-            printf("%s: %d\n", in->name->text, in->tag ? in->tag->type->hdr.id : 42);
-            break;
-        }
-        case STMT_DEF: {
-            DefStmt *in = cast_to(stmt, DefStmt);
-            printf("%s %s: %d\n", in->flags.global ? "global" : "let", in->name->text, in->tag ? in->tag->type->hdr.id : 42);
-            dump_expr(P, in->init, indent + 1);
-            break;
-        }
-        case STMT_RETURN: {
-            ReturnStmt *bn = cast_to(stmt, ReturnStmt);
-            printf("return\n");
-            dump_expr(P, bn->expr, indent + 1);
-            break;
-        }
-        case STMT_ATTR: {
-            AttrStmt *s = cast_to(stmt, AttrStmt);
-            printf("attr '%s'", s->name->text);
-            if (s->is_fn) { 
-                printf("\n");
-                for (Stmt *arg = s->fn.args; arg; arg = arg->next) {
-                    dump_stmt(P, cast_stmt(arg), indent + 1);
-                }
-                dump_stmt(P, cast_stmt(s->fn.body), indent + 1);
-            } else {
-                printf("%d\n", s->tag->type->hdr.id);
-            }
-            break;
-        }
-        case STMT_CLASS: {
-            ClassStmt *s = cast_to(stmt, ClassStmt);
-            printf("class '%s'\n", s->name->text);
-            for (Stmt *attr = s->attrs; attr; attr = attr->next) {
-                dump_stmt(P, cast_stmt(attr), indent + 1);
-            }
-            break;
-        }
-        default:
-            printf("?\n");
-            break;
-    }
-}
-
-static void dump_expr(paw_Env *P, Expr *expr, int indent)
-{
-    for (int i = 0; i < indent; ++i) {
-        printf("    ");
-    }
-    if (expr == NULL) {
-        puts("NULL\n");
-        return;
-    }
-    if (expr->type) {
-        printf("type (%s): ", pawY_name((int)expr->type->hdr.id));
-    } else {
-        printf("NULL ");
-    }
-    switch (expr->kind) {
-        case EXPR_PRIMITIVE: {
-            Buffer buf;
-            pawL_init_buffer(P, &buf);
-            PrimitiveExpr *ln = cast_to(expr, PrimitiveExpr);
-            pawC_pushv(P, ln->v);
-            pawL_add_value(P, &buf, P->mod->types[ln->t]->hdr.id);
-            pawL_add_char(P, &buf, '\0');
-            puts(buf.data);
-            pawL_discard_result(P, &buf);
-            break;
-        }
-        case EXPR_UNOP:
-            printf("unop %d\n", cast_to(expr, UnOpExpr)->op);
-            dump_expr(P, cast_to(expr, UnOpExpr)->target, indent + 1);
-            break;
-        case EXPR_BINOP:
-            printf("binop %d\n", cast_to(expr, BinOpExpr)->op);
-            dump_expr(P, cast_to(expr, BinOpExpr)->lhs, indent + 1);
-            dump_expr(P, cast_to(expr, BinOpExpr)->rhs, indent + 1);
-            break;
-        case EXPR_CALL:
-            printf("call\n");
-            break;
-        case EXPR_COND:
-            printf("cond\n");
-            dump_expr(P, cast_to(expr, CondExpr)->cond, indent + 1);
-            dump_expr(P, cast_to(expr, CondExpr)->lhs, indent + 1);
-            dump_expr(P, cast_to(expr, CondExpr)->rhs, indent + 1);
-            break;
-        case EXPR_VAR: {
-            printf("var '%s' (%p)\n", cast_to(expr, VarExpr)->name->text, (void*)expr);
-            break;
-        }
-        default:
-            printf("?\n");
-            break;
-    }
-}
-
-#include <stdlib.h>
-static void dump_ast(Lex *lex, Stmt *root)
-{
-    for (; root; root = root->next) {
-        dump_stmt(lex->P, root, 0);
-    }
 }
 
 Closure *pawP_parse(paw_Env *P, paw_Reader input, ParseMemory *pm, const char *name, void *ud)
 {
     // Initialize the lexical state.
     Lex lex = {
-        .mod = P->mod,
         .pm = pm,
         .ud = ud,
         .P = P,
     };
-    pm->st.globals = pawM_new(P, Scope);
+    pm->unifier.lex = &lex;
+    pm->ast = pawA_new_ast(&lex);
+    pm->symbols.globals = pawM_new(P, Scope);
     pawX_set_source(&lex, input);
-    lex.ast = pawK_new_ast(P);
+
     // TODO: AST needs to go on the stack in a Foreign object. We will leak the
     //       AST if an error is thrown between now and when it is freed below.
     //       Use a flag stored somewhere in the object to disambiguate between
@@ -1446,17 +1364,14 @@ Closure *pawP_parse(paw_Env *P, paw_Reader input, ParseMemory *pm, const char *n
 
     // Compile the module.
     parse_module(&lex); // pass 1 (source -> AST)
-    p_check_types(&lex); // pass 2 (AST -> checked AST)
+    p_check_types(&lex); // pass 2 (AST -> graph)
                                
-    dump_ast(&lex, lex.ast->stmts); // TODO: remove
+    pawA_dump_stmt(stdout, lex.pm->ast->stmts->first); // TODO: remove
                                
-    p_generate_code(&lex); // pass 2 (checked AST -> bytecode)
+    p_generate_code(&lex); // pass 2 (graph -> bytecode)
 
     // Pop the lexer map. The strings it contains should be anchored elsewhere.
     // Leave the main closure on top of the stack.
     pawC_stkdec(P, 1);
-
-    // cleanup
-    pawK_free_ast(P, lex.ast);
     return lex.main;
 }

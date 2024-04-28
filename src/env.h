@@ -8,11 +8,60 @@
 #include "opcode.h"
 #include "paw.h"
 #include "str.h"
+#include "type.h"
 #include "value.h"
 #include <stddef.h>
 #include <stdio.h>
 
 struct Jump; // call.c
+
+typedef enum DefKind  {
+    DEF_VAR,
+    DEF_FUNC,
+    DEF_STRUCT,
+    DEF_FIELD,
+    DEF_TYPE,
+} DefKind;
+
+typedef struct Definition Definition;
+
+#define PAWE_DEF_HEADER Type *type;  \
+                        DefId id: 8; \
+                        DefKind kind: 8 
+typedef struct DefHeader {
+    PAWE_DEF_HEADER;
+} DefHeader;
+
+typedef struct VarDef {
+    PAWE_DEF_HEADER;
+    String *name;
+} VarDef;
+
+typedef struct FuncDef {
+    PAWE_DEF_HEADER;
+    String *name;
+} FuncDef;
+
+typedef struct TypeDef {
+    PAWE_DEF_HEADER;
+} TypeDef;
+
+typedef struct AdtDef {
+    PAWE_DEF_HEADER;
+    paw_Bool is_struct: 1;
+    int nattrs;
+    Definition **attrs;
+} AdtDef;
+
+typedef struct Definition {
+    union {
+        DefHeader hdr;
+        VarDef var;
+        FuncDef func;
+        TypeDef type;
+        AdtDef adt; 
+    };
+} Definition;
 
 #define CFF_C 1
 #define CFF_ENTRY 2
@@ -33,10 +82,13 @@ typedef struct CallFrame {
 
 enum {
     CSTR_SELF,
-    CSTR_SUPER,
-    CSTR_INIT,
     CSTR_TRUE,
     CSTR_FALSE,
+    CSTR_UNIT,
+    CSTR_BOOL,
+    CSTR_INT,
+    CSTR_FLOAT,
+    CSTR_STRING,
     NCSTR,
 };
 
@@ -59,12 +111,22 @@ typedef struct paw_Env {
     StackRel bound;
     StackRel top;
 
+    // Array containing a definition for each program construct. Created during
+    // type checking, and kept around for RTTI purposes.
+    Definition *defs;
+    int ndefs;
+
     Map *libs;
     Value object;
-    struct ModuleType *mod;
-    struct Instance *builtin[NOBJECTS];
+    Module *mod;
+    Instance *builtin[NOBJECTS];
     Value meta_keys[NMETAMETHODS];
-    Value str_cache[NCSTR];
+
+    // Array of commonly-used strings.
+    String *str_cache[NCSTR];
+
+    // Contains an error message that is served when the system runs out of memory
+    // (a call to the 'alloc' field below returned NULL).
     Value mem_errmsg;
 
     // TODO: At some point, the globals should go into a struct called Module. Make 
@@ -87,11 +149,11 @@ typedef struct paw_Env {
 } paw_Env;
 
 CallFrame *pawE_extend_cf(paw_Env *P, StackPtr top);
-int pawE_new_global(paw_Env *P, String *name, Type *tag);
+int pawE_new_global(paw_Env *P, String *name, paw_Type type);
 GlobalVar *pawE_find_global(paw_Env *P, String *name);
 #define pawE_get_global(P, i) (&(P)->gv.data[i])
 
-static inline Value pawE_cstr(paw_Env *P, unsigned type)
+static inline String *pawE_cstr(paw_Env *P, unsigned type)
 {
     paw_assert(type < NCSTR);
     return P->str_cache[type];

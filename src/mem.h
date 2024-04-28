@@ -10,8 +10,7 @@
 // Throw an 'out of memory' error
 // The error message is allocated on startup, and there is always an extra
 // stack slot to hold it.
-#define pawM_error(P) ((P)->bound.p - (P)->top.p >= 1,  \
-                       *(P)->top.p++ = (P)->mem_errmsg, \
+#define pawM_error(P) (*(P)->top.p++ = (P)->mem_errmsg, \
                        pawC_throw(P, PAW_EMEMORY))
 
 #define pawM_new(P, type) pawM_new_vec(P, 1, type)

@@ -2,7 +2,7 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "map.h"
-#include "gc.h"
+#include "gc_aux.h"
 #include "mem.h"
 //#include "rt.h"
 #include "util.h"
@@ -18,7 +18,7 @@ static paw_Bool is_unoccupied(Value v)
 
 static size_t prepare_insert(Map *m, Value key)
 {
-    paw_assert(!v_is_null(key));
+    paw_assert(pawH_is_occupied(key));
     size_t itr = pawH_index(m, key);
     pawH_locate(m, key, is_unoccupied);
     // Search for the first vacant slot

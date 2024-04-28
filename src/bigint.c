@@ -6,7 +6,7 @@ TODO: Make BigInt a separate type from int, needs special GC instructions that w
       emit for every single int.
 #include "bigint.h"
 #include "auxlib.h"
-#include "gc.h"
+#include "gc_aux.h"
 #include "mem.h"
 #include "rt.h"
 

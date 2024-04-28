@@ -17,42 +17,39 @@
 
 {
     // Semicolons are not necessary in most cases.
-    let x: int x = 1 + 2 + 3 assert(x == 6)
+    let x: int = 0 x = 1 + 2 + 3 assert(x == 6)
     x = 1 - 2 - 3 x = 4 + 5 + 6 assert(x == 15)    
 }
 
 {
-    // Parenthesis are required to call an anonymous function immediately. This
-    // is also a situation where semicolons are needed to separate statements.
-    // (it looks like a chain of 'suffixed' expressions, i.e. 'x[10](1, 2, 3)')
-    (fn() {})();
-    (fn(a: int) {})(1);
-    (fn(a: int, b: int) {})(1, 2);
-    (fn(a: int, b: int, c: int) {})(1, 2, 3);
-
-    (fn(a: int, 
-        b: int, 
-        c: int) {}) (1, 
-                     2, 
-                     3)
-
-   fn wrapper(n: int, f: fn(int): int) {
-       return f(n)
-   }
-   assert(1 == wrapper(1, fn(n: int) {return n}))
-   assert(2 == wrapper(2, fn(n: int) {return fn(): int {return n}})())
-   assert(3 == wrapper(3, fn(n: int) {return fn(): fn(): int {return fn(): int {return n}}})()())
-
-    // Semicolons are not needed if we are assigning to or initializing a variable.
-    let x = (fn(): int {return 42})()
-    let x = (fn(a: int): int {return a})(1)
-    x = (fn(a: int, b: int): int {return a + b})(1, 2)
-    x = (fn(a: int, b: int, c: int): int {return a + b + c})(1, 2, 3)
-    assert(x != 0)
+    fn wrapper(n: int, f: fn(int) -> int) -> int {
+        return f(n)
+    }
+    fn f1(n: int) -> int {
+        return n
+    }
+    fn f2(n: int) -> int {
+        fn f(n: int) -> int {
+            return n
+        }
+        return f(n)
+    }
+    fn f3(n: int) -> int {
+        fn f(n: int) -> fn() -> int {
+            fn f() -> int {
+                return n
+            }
+            return f
+        }
+        return f(n)()
+    }
+    assert(1 == wrapper(1, f1))
+    assert(2 == wrapper(2, f2))
+    assert(3 == wrapper(3, f3))
 }
 
 {
-    let x: int
+    let x: int = 0
     {;;;};;;{};;;
     {; x = 1; assert(x == 1)}
 }
@@ -63,22 +60,22 @@
     fn f() {return}
     f()
 
-    fn f(): int {let x: int; return x}
+    fn f() -> int {let x: int = 0; return x}
     assert(f() == 0)
 
-    fn f(x: int): int {return x}
-    assert(f(0) == 0)
+    fn f(x: int) -> int {return x}
+    assert(f(1) == 1)
 
-    fn f(x: int, y: int): int {return x}
+    fn f(x: int, y: int) -> int {return x}
     assert(f(0, 1) == 0)
-    fn f(x: int, y: int): int {return y}
+    fn f(x: int, y: int) -> int {return y}
     assert(f(0, 1) == 1)
 
-    fn f(x: int, y: int, z: int): int {return x}
+    fn f(x: int, y: int, z: int) -> int {return x}
     assert(f(0, 1, 2) == 0)
-    fn f(x: int, y: int, z: int): int {return y}
+    fn f(x: int, y: int, z: int) -> int {return y}
     assert(f(0, 1, 2) == 1)
-    fn f(x: int, y: int, z: int): int {return z}
+    fn f(x: int, y: int, z: int) -> int {return z}
     assert(f(0, 1, 2) == 2)
 }
 //
@@ -121,37 +118,30 @@
 //    assert(a[0].ins.x == 2)
 //    assert(a[0].ins.a[0] == 3)
 //}
-//
-//{
-//    fn f() {
-//        {
-//            // Return statement must be the last statement in the block.
-//            return 42
-//        }
-//        return 24 // Unreachable
-//    }
-//    assert(f() == 42)
-//}
-//
-//// String literals: both types of quotes work, and strings can span 
-//// multiple lines.
-//{
-//    assert('abc' == "abc");
-//    assert('abc\n def\n ghi\n\n' == 'abc
-// def
-// ghi
-//
-//')
-//
-//}
-//
-//{
-//    assert(42 == load('return 42')())
-//    assert(42 == load('return fn() {return 42}')()())
-//    let test = load('let v = 42; return fn() {return v;}')
-//    assert(test()() == 42)
-//}
-//
+
+{
+    fn f() -> int {
+        {
+            // Return statement must be the last statement in the block.
+            return 42
+        }
+        return 24 // Unreachable
+    }
+    assert(f() == 42)
+}
+
+// String literals: both types of quotes are okay, and strings can span 
+// multiple lines.
+{
+    assert('abc' == "abc");
+    assert('abc\n def\n ghi\n\n' == 'abc
+ def
+ ghi
+
+')
+
+}
+
 //// Array and map are both 'prefixexpr' constructs, meaning they can appear to the
 //// left of '[]' (__*item) or '.' (__*attr). See grammer.md for details.
 //{
@@ -160,104 +150,21 @@
 //    let m = {0: 0, 1: 1, 2: 2}[1]
 //    assert(m == 1)
 //}
-//
-//{
-//    let s = ''
-//    for a = 0,10 {
-//        s = s ++ 'a'
-//        for b = 0,10 {
-//            s = s ++ 'b'
-//            for c = 0,10 {
-//                s = s ++ 'c'
-//            }
-//        }
-//    }
-//}
-//
-//// Test null chaining operator:
-//{
-//    fn test(arg) {
-//        let v = arg?
-//        return 'nonnull'
-//    }
-//    assert(test(null) == null)
-//    assert(test('nonnull') == 'nonnull')
-//
-//    class Class {
-//        __init() {
-//            self.isnull = null
-//            self.nonnull = self
-//        }
-//        __neg() {
-//            return null
-//        }
-//    }
-//    fn test() {
-//        let c = Class()
-//        let x = c.nonnull?
-//        return 'nonnull'
-//    }
-//    assert(test() == 'nonnull')
-//
-//    fn test() {
-//        let c = Class()
-//        return c.nonnull?.isnull?.nonnull?
-//    }
-//    assert(test() == null)
-//
-//    fn test() {
-//        // '?' is evaluated before any unary prefix operators.
-//        // Note that 'c.__neg()' returns null here, but the '?' is
-//        // applied to 'c' before '__neg' gets called.
-//        let c = Class()
-//        let x = -c? 
-//        return 'nonnull'
-//    }
-//    assert(test() == 'nonnull')
-//
-//    fn test(a, b) {
-//        return a? + b?
-//    }
-//    assert(null == test(null, null))
-//    assert(null == test(1, null))
-//    assert(null == test(null, 2))
-//    assert(3 == test(1, 2))
-//    
-//    fn test(obj) {
-//        for o in obj? {
-//            return 42
-//        }
-//    }
-//    assert(42 == test([1, 2, 3]))
-//    assert(null == test(null))
-//
-//    fn test(first, second, third) {
-//        let v = first?[second?]?[third?]?
-//        return 123
-//    }
-//    assert(123 == test([[0]], 0, 0))
-//    assert(null == test(null, 0, 0))     // first == null
-//    assert(null == test([null], 0, 0))   // first[0] == null
-//    assert(null == test([[null]], 0, 0)) // first[0][0] == null
-//    assert(null == test([[0]], null, 0)) // second == null
-//    assert(null == test([[0]], 0, null)) // third == null
-//
-//    class Class {
-//        __init() {
-//            // Note that 'self' is not an actual keyword: it only has special meaning
-//            // in a member function. It is a local variable in this context.
-//            self.self = self
-//            self.null_ = null
-//        }
-//    }
-//    fn test() {
-//        let c = Class()
-//        let x = c.self?.self?.null_?
-//        return 'nonnull'
-//    }
-//    assert(test() == null)
-//}
-//
+
+{
+    let s = ''
+    for a = 0, 10 {
+        s = s + 'a'
+        for b = 0, 10 {
+            s = s + 'b'
+            for c = 0, 10 {
+                s = s + 'c'
+            }
+        }
+    }
+}
+
+// TODO: Consider short-circuiting behavior
 //{
 //    fn test(a, b) {
 //        return a || b
@@ -290,25 +197,4 @@
 //    assert(!(true && (false || false)))
 //    assert(!((2 == 3) || (4 < 0) && (1 == 1)))
 //}
-//
-//{
-//    let f = fn() {
-//        return 0
-//    }
-//    assert(f() == 0)
-//
-//    let f = fn(a) {
-//        return a
-//    }
-//    assert(f(1) == 1)
-//
-//    let f = fn(a, b) {
-//        return a + b
-//    }
-//    assert(f(1, 2) == 3)
-//
-//    let f = fn(a, b, c) {
-//        return a + b + c
-//    }
-//    assert(f(1, 2, 3) == 6)
-//}
+

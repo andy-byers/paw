@@ -5,7 +5,7 @@
 
 #include "array.h"
 #include "bigint.h"
-#include "gc.h"
+#include "gc_aux.h"
 #include "map.h"
 #include "mem.h"
 #include "str.h"
@@ -50,15 +50,20 @@ const char *pawV_to_string(paw_Env *P, Value v, paw_Type type, size_t *nout)
         case PAW_TSTRING:
             pawC_pushv(P, v); // copy
             break;
-        case PAW_TBOOL:
-            pawC_pushv(P, pawE_cstr(P, v_true(v) ? CSTR_TRUE : CSTR_FALSE));
-            break;
         case PAW_TINT:
             int_to_string(P, v_int(v));
             break;
         case PAW_TFLOAT:
             float_to_string(P, v_float(v));
             break;
+        case PAW_TBOOL: {
+            Value v;
+            v_set_object(&v, pawE_cstr(P, v_true(v) 
+                        ? CSTR_TRUE 
+                        : CSTR_FALSE));
+            pawC_pushv(P, v);
+            break;
+        }
         default:
             return NULL;
     }
@@ -88,8 +93,8 @@ const char *pawV_name(ValueKind kind)
             return "array";
         case VMAP:
             return "map";
-        case VCLASS:
-            return "class";
+        case VSTRUCT:
+            return "struct";
         case VINSTANCE:
             return "instance";
         case VMETHOD:
@@ -167,6 +172,19 @@ void pawV_unlink_upvalue(UpValue *u)
     }
 }
 
+Array_ *pawV_new_array(paw_Env *P, int nelems)
+{
+    Array_ *arr = pawM_new_flex(P, Array_, cast_size(nelems),
+                                  sizeof(arr->elems[0]));
+    pawG_add_object(P, cast_object(arr), VARRAY);
+    return arr;
+}
+
+void pawV_free_array(paw_Env *P, Array_ *arr, int nelems)
+{
+    pawM_free_flex(P, arr, nelems, sizeof(arr->elems[0]));
+}
+
 Closure *pawV_new_closure(paw_Env *P, int nup)
 {
     // Tack on enough space to store 'nup' pointers to UpValue.
@@ -182,36 +200,42 @@ void pawV_free_closure(paw_Env *P, Closure *f)
     pawM_free_flex(P, f, f->nup, sizeof(f->up[0]));
 }
 
-Class *pawV_new_class(paw_Env *P, Type *type)
+Struct *pawV_new_struct(paw_Env *P, Value *pv)
 {
-    Class *cls = pawM_new_flex(P, Class, cast_size(type->cls.nattrs),
-                                  sizeof(cls->attrs[0]));
-    pawG_add_object(P, cast_object(cls), VCLASS);
-    return cls;
+    Struct *struct_ = pawM_new(P, Struct);
+    v_set_object(pv, struct_); // anchor
+    struct_->methods = pawA_new(P);
+    pawG_add_object(P, cast_object(struct_), VSTRUCT);
+    return struct_;
 }
 
-Instance *pawV_new_instance(paw_Env *P, int nattrs)
+void pawV_free_struct(paw_Env *P, Struct *struct_)
 {
-    Instance *ins = pawM_new_flex(P, Instance, cast_size(nattrs),
+    pawM_free(P, struct_);
+}
+
+Instance *pawV_new_instance(paw_Env *P, int nfields)
+{
+    Instance *ins = pawM_new_flex(P, Instance, cast_size(nfields),
                                   sizeof(ins->attrs[0]));
     pawG_add_object(P, cast_object(ins), VINSTANCE);
     return ins;
 }
 
-void pawV_free_instance(paw_Env *P, Instance *ins, Type *type)
+void pawV_free_instance(paw_Env *P, Instance *ins, int nfields)
 {
-    pawM_free_flex(P, ins, cast_size(type->cls.nattrs), sizeof(ins->attrs[0]));
+    pawM_free_flex(P, ins, cast_size(nfields), sizeof(ins->attrs[0]));
 }
 
 Value *pawV_find_attr(Value *attrs, String *name, Type *type)
 {
-    const ClassType *cls = &type->cls;
-    for (int i = 0; i < cls->nattrs; ++i) {
-        NamedField *a = &cls->attrs[i];
-        if (pawS_eq(a->name, name)) {
-            return &attrs[i];
-        }
-    }
+//    const CompositeType *cls = &type->cls;
+//    for (int i = 0; i < cls->nattrs; ++i) {
+//        NamedField *a = &cls->attrs[i];
+//        if (pawS_eq(a->name, name)) {
+//            return &attrs[i];
+//        }
+//    }
     return NULL;
 }
 
@@ -219,22 +243,6 @@ static void clear_attrs(Value *pv, int nattrs)
 {
     memset(pv, 0, cast_size(nattrs) * sizeof(*pv));
 }
-
-//ClassType *pawV_new_class(paw_Env *P)
-//{
-//    Class *c = pawM_new(P, Class);
-//    pawG_add_object(P, cast_object(c), VCLASS);
-//    c->fields = pawM_new(P, Map);
-//    c->methods = pawM_new(P, Map);
-//    return c;
-//}
-//
-//void pawV_free_class(paw_Env *P, Class *c)
-//{
-//    pawH_free(P, c->fields);
-//    pawH_free(P, c->methods);
-//    pawM_free(P, c);
-//}
 
 Method *pawV_new_method(paw_Env *P, Value self, Value call)
 {
@@ -250,12 +258,13 @@ void pawV_free_method(paw_Env *P, Method *m)
     pawM_free(P, m);
 }
 
-Native *pawV_new_native(paw_Env *P, String *name, paw_Function call)
+Native *pawV_new_native(paw_Env *P, paw_Function func, int nup)
 {
-    Native *nat = pawM_new(P, Native);
+    // TODO: nup > UINT16_MAX, check it or assert?
+    Native *nat = pawM_new_flex(P, Native, nup, sizeof(nat->up[0]));
     pawG_add_object(P, cast_object(nat), VNATIVE);
-    nat->name = name;
-    nat->call = call;
+    nat->func = func;
+    nat->nup = nup;
     return nat;
 }
 
@@ -264,13 +273,13 @@ void pawV_free_native(paw_Env *P, Native *nat)
     pawM_free(P, nat);
 }
 
-Foreign *pawV_push_foreign(paw_Env *P, size_t size, int nattrs)
+Foreign *pawV_push_foreign(paw_Env *P, size_t size, int nfields)
 {
     if (size > PAW_SIZE_MAX) {
         pawM_error(P);
     }
     Value *pv = pawC_push0(P);
-    Foreign *ud = pawM_new_flex(P, Foreign, nattrs, sizeof(ud->attrs[0]));
+    Foreign *ud = pawM_new_flex(P, Foreign, nfields, sizeof(ud->attrs[0]));
     pawG_add_object(P, cast_object(ud), VFOREIGN);
     v_set_object(pv, ud); // anchor
     ud->size = size;
@@ -278,14 +287,14 @@ Foreign *pawV_push_foreign(paw_Env *P, size_t size, int nattrs)
         // Allocate space to hold 'size' bytes of foreign data.
         ud->data = pawM_new_vec(P, size, char);
     }
-    clear_attrs(ud->attrs, nattrs);
+    clear_attrs(ud->attrs, nfields);
     return ud;
 }
 
-void pawV_free_foreign(paw_Env *P, Foreign *ud, Type *type)
+void pawV_free_foreign(paw_Env *P, Foreign *ud, int nfields)
 {
-    pawM_free_vec(P, (char *)ud->data, ud->size);
-    pawM_free_flex(P, ud, cast_size(type->cls.nattrs), sizeof(ud->attrs[0]));
+    pawM_free_vec(P, (char *)ud->data, ud->size); // TODO
+    pawM_free_flex(P, ud, cast_size(nfields), sizeof(ud->attrs[0]));
 }
 
 paw_Bool pawV_truthy(Value v, paw_Type type)
@@ -303,7 +312,7 @@ paw_Bool pawV_truthy(Value v, paw_Type type)
 //        case PAW_TMAP:
 //            return pawH_length(v_map(v)) > 0;
         default:
-            return !v_is_null(v);
+            return PAW_FALSE;
     }
 }
 

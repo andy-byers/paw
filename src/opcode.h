@@ -6,8 +6,6 @@
 
 #include "paw.h"
 
-typedef uint32_t OpCode;
-
 #ifndef UPVALUE_MAX
 #define UPVALUE_MAX 64
 #endif
@@ -16,12 +14,16 @@ typedef uint32_t OpCode;
 #define LOCAL_MAX 1024
 #endif
 
-#ifndef JUMP_MAX
-#define JUMP_MAX S_MAX
+#ifndef ATTR_MAX
+#define ATTR_MAX 4096
 #endif
 
 #ifndef ARGC_MAX
 #define ARGC_MAX 256
+#endif
+
+#ifndef JUMP_MAX
+#define JUMP_MAX S_MAX
 #endif
 
 #define decode_jump(x) ((int)(x) - JUMP_MAX)
@@ -66,16 +68,19 @@ typedef uint32_t OpCode;
 #define get_B(v) (((v) >> B_OFFSET) & mask1(B_WIDTH, 0))
 #define set_B(v, b) (*(v) = (*(v) & mask0(B_WIDTH, B_OFFSET)) | ((OpCode)(b) << B_OFFSET))
 
+typedef uint32_t OpCode;
+
 // clang-format off
 //
-// Opcode format: Each instruction is packed into a 32-bit unsigned integer
+// Opcode format: Each instruction is packed into a 32-bit unsigned integer (OpCode)
 //
 // legend:
-//   G = global variable (requires constant string index)
-//   K = constants (requires 16-bit index)
-//   L = local variables (i.e. the stack, requires up to 26-bit index)
-//   Up = upvalues (requires 16-bit index)
-//   P = function prototypes (requires 16-bit index)
+//   G = global variable
+//   K = constants 
+//   L = local variables 
+//   Up = upvalues 
+//   P = function prototypes 
+//   C = class layouts
 //
 // NOTE: Opcode order is only important starting from OP_CALL (opcodes that have
 //       corresponding metamethods).
@@ -86,15 +91,15 @@ OP_PUSHUNIT,//       -           -            ()            -
 OP_PUSHTRUE,//       -           -            true          -
 OP_PUSHFALSE,//      -           -            false         -
 OP_PUSHCONST,//      U           -            K[u]          -
+OP_PUSHSTRUCT,//     U           -            C[u]          -
 
 OP_POP,//            -           v            -             -
+OP_COPY,//           -           v            v v           -
 OP_CLOSE,//          A B         v_a..v_1     -             if b, close stack to v_a
 OP_RETURN,//         -           f..v         v             closes stack to f
 
 OP_CLOSURE,//        A B         v_b..v_1     f             captures v_u..v_1 in f = P[a]
-OP_INVOKE,//         A B         o v_b..v_1   f(v_b..v_1)   calls f = o.K[a], with receiver o
-OP_INVOKESUPER,//    A B         o v_b..v_1   f(v_b..v_1)   calls f = o.K[a], with receiver o 
-OP_GETSUPER,//       U
+OP_INVOKE,//      
 
 OP_JUMP,//           S           -            -             pc += S
 OP_JUMPFALSEPOP,//   S           v            -             pc += S
@@ -109,9 +114,10 @@ OP_SETLOCAL,//       U           v            -             L[u] = v
 OP_GETUPVALUE,//     U           -            Up[u]         -
 OP_SETUPVALUE,//     U           v            -             Up[u] = v
 
-OP_NEWCLASS,//       A B         -            v             v = new class named K[a]
+OP_NEWINSTANCE,//    U           -            v             v = new instance of class C[u]
+OP_INITATTR,// TODO: call this OP_INITFIELD     U           i v          i             i.fields[u] = v
 OP_INHERIT,//        -           x y          x             x subclass of y
-OP_NEWMETHOD,//      U           v f          v             v.K[u] = f
+OP_NEWMETHOD,//      U           v f          v             v.methods[u] = f
 OP_NEWARRAY,//       U           v_u..v_1     [v_u..v_1]    -
 OP_NEWMAP,//         U           v_2n..v_1    {v_2n..v_1}   -
 
@@ -121,7 +127,7 @@ OP_FORIN0,//         S           *-*-*-*-*-*-*-*-* see notes *-*-*-*-*-*-*-*-*
 OP_FORIN,//          S           *-*-*-*-*-*-*-*-* see notes *-*-*-*-*-*-*-*-*
 
 OP_UNOP,//           A B         v            ops[a](v)     -
-OP_BINOP,//          A B         l r          ops[x](l, r)  -
+OP_BINOP,//          A B         l r          ops[a](l, r)  -
 OP_UNMM,//           A B         v            v.attr[a]()   -
 OP_BINMM,//          A B         l r          l.attr[a](r)  -
          
@@ -133,12 +139,13 @@ OP_VARARG,//         A B         v_u..v_1     [v_u..v_1]    -
 OP_INIT,
 OP_CALL,//           U           f v_u..v_1   v             v = f(v_u..v_1)
 
-OP_GETATTR,//        -           v i          v.i           -
-OP_SETATTR,//        -           v i j        -             v.i=j
+OP_GETMETHOD,//      U           v            v.methods[u]  -
+OP_GETATTR,//        U           v            v.fields[u]   -
+OP_SETATTR,//        U           v x          -             v.fields[u]=x
 OP_GETITEM,//        -           v i          v[i]          -
-OP_SETITEM,//        -           v i j        -             v[i]=j
+OP_SETITEM,//        -           v i x        -             v[i]=x
 OP_GETSLICE,//       -           v i j        v[i:j]        -  
-OP_SETSLICE,//       -           v i j k      -             v[i:j]=k
+OP_SETSLICE,//       -           v i j x      -             v[i:j]=x
 
 NOPCODES
 } Op;

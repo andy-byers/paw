@@ -7,7 +7,8 @@
 #include "env.h"
 #include "paw.h"
 
-const char *paw_opcode_name(Op op);
+const char *paw_op_name(Op op);
+void paw_dump_opcode(OpCode opcode);
 void paw_dump_source(paw_Env *P, Proto *proto);
 void paw_dump_stack(paw_Env *P);
 void paw_stacktrace(paw_Env *P);

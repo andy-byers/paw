@@ -4,7 +4,7 @@
 #include "lex.h"
 #include "auxlib.h"
 //#include "bigint.h"
-#include "gc.h"
+#include "gc_aux.h"
 #include "map.h"
 #include "mem.h"
 #include "parse.h"
@@ -16,6 +16,9 @@
 #include <stdlib.h>
 
 #define lex_error(x) pawX_error(x, "syntax error")
+#define save_and_next(x) (save(x, (x)->c), next(x))
+#define is_eof(x) (cast((x)->c, uint8_t) == TK_END)
+#define is_newline(x) ((x)->c == '\r' || (x)->c == '\n')
 
 static void add_location(paw_Env *P, Buffer *print, const String *s, int line)
 {
@@ -39,48 +42,7 @@ void pawX_error(Lex *x, const char *fmt, ...)
     pawC_throw(x->P, PAW_ESYNTAX);
 }
 
-static struct Token make_token(TokenKind kind)
-{
-    return (struct Token){
-        .kind = kind,
-    };
-}
-
-static struct Token make_int(struct Lex *x)
-{
-    const Value v = x->P->top.p[-1];
-    Token t = {.value = v, .kind = TK_INTEGER};
-    //if (!i_is_small(t.value)) {
-    //    // Anchor big integers in the strings table so they don't get collected. They
-    //    // will eventually end up anchored in the constants table. Use the value
-    //    // representation as an integer key (contains pointer info, so it is unique). TODO: Won't work: GC needs the type
-    //    Value key;
-    //    v_set_int(&key, v.i);
-    //    Value *slot = pawH_action(x->P, x->strings, key, MAP_ACTION_CREATE);
-    //    *slot = t.value;
-    //}
-    pawC_stkdec(x->P, 1);
-    return t;
-}
-
-static struct Token make_float(struct Lex *x)
-{
-    const Value v = x->P->top.p[-1];
-    pawC_stkdec(x->P, 1);
-    return (Token){.value = v, .kind = TK_FLOAT};
-}
-
-static struct Token make_string(struct Lex *x, TokenKind kind)
-{
-    ParseMemory *pm = x->pm;
-    struct Token t = make_token(kind);
-    String *s = pawX_scan_string(x, pm->scratch.data, cast_size(pm->scratch.size));
-    v_set_object(&t.value, s);
-    pm->scratch.size = 0;
-    return t;
-}
-
-static char next(struct Lex *x)
+static char next_raw(struct Lex *x)
 {
     paw_Env *P = x->P;
     if (x->nchunk == 0) {
@@ -91,9 +53,27 @@ static char next(struct Lex *x)
         --x->nchunk;
         ++x->chunk;
     } else {
-        x->c = (char)TK_END;
+        x->c = cast(TK_END, char);
     }
     return x->c;
+}
+
+static void increment_line(struct Lex *x)
+{
+    paw_assert(ISNEWLINE(x->c));
+    if (x->line == INT_MAX) {
+        pawX_error(x, "too many lines in module");
+    }
+    ++x->line;
+}
+
+static char next(struct Lex *x)
+{
+    char c = next_raw(x);
+    if (ISNEWLINE(c)) {
+        increment_line(x);
+    }
+    return c;
 }
 
 static void save(struct Lex *x, char c)
@@ -102,9 +82,6 @@ static void save(struct Lex *x, char c)
     pawM_grow(x->P, pm->scratch.data, pm->scratch.size, pm->scratch.alloc);
     pm->scratch.data[pm->scratch.size++] = c;
 }
-
-#define save_and_next(x) (save(x, (x)->c), next(x))
-#define is_eof(x) ((uint8_t)(x)->c == TK_END)
 
 static paw_Bool test_next(struct Lex *x, char c)
 {
@@ -124,6 +101,39 @@ static paw_Bool test_next2(struct Lex *x, const char *c2)
     return PAW_FALSE;
 }
 
+static struct Token make_token(TokenKind kind)
+{
+    return (struct Token){
+        .kind = kind,
+    };
+}
+
+static struct Token make_int(struct Lex *x)
+{
+    const Value v = x->P->top.p[-1];
+    Token t = {.value = v, .kind = TK_INTEGER};
+    pawC_stkdec(x->P, 1);
+    return t;
+}
+
+static struct Token make_float(struct Lex *x)
+{
+    const Value v = x->P->top.p[-1];
+    pawC_stkdec(x->P, 1);
+    return (Token){.value = v, .kind = TK_FLOAT};
+}
+
+static struct Token make_string(struct Lex *x, TokenKind kind)
+{
+    ParseMemory *pm = x->pm;
+    struct CharVec *cv = &pm->scratch;
+    struct Token t = make_token(kind);
+    String *s = pawX_scan_string(x, cv->data, cast_size(cv->size));
+    v_set_object(&t.value, s);
+    cv->size = 0;
+    return t;
+}
+
 static struct Token consume_name(struct Lex *x)
 {
     save_and_next(x);
@@ -132,8 +142,9 @@ static struct Token consume_name(struct Lex *x)
     }
     struct Token t = make_string(x, TK_NAME);
     const String *s = v_string(t.value);
-    t.kind = s->flag > 0 ? (TokenKind)s->flag : t.kind;
-    if (s->length > PAW_NAME_MAX) {
+    if (s->flag > 0) {
+        t.kind = cast(s->flag, TokenKind);
+    } else if (s->length > PAW_NAME_MAX) {
         pawX_error(x, "name (%I chars) is too long",
                    paw_cast_int(s->length));
     }
@@ -203,21 +214,6 @@ static int get_codepoint(struct Lex *x)
            HEXVAL(c[1]) << 8 | //
            HEXVAL(c[2]) << 4 | //
            HEXVAL(c[3]); //
-}
-
-static void increment_line(struct Lex *x)
-{
-    paw_assert(ISNEWLINE(x->c));
-    const char first = x->c;
-    if (x->line == INT_MAX) {
-        pawX_error(x, "too many lines in module");
-    }
-    ++x->line;
-
-    next(x);
-    if (ISNEWLINE(x->c) && x->c != first) {
-        next(x);
-    }
 }
 
 static struct Token consume_string(struct Lex *x)
@@ -311,8 +307,8 @@ static struct Token consume_string(struct Lex *x)
     } else if (test_next(x, quote)) {
         return make_string(x, TK_STRING);
     } else if (ISNEWLINE(x->c)) {
-        save(x, x->c); // newlines allowed in string literals
-        increment_line(x);
+        // unescaped newlines allowed in string literals
+        save_and_next(x); 
     } else if (consume_utf8(x)) {
         lex_error(x);
     }
@@ -366,13 +362,10 @@ static void skip_block_comment(struct Lex *x)
     for (;;) {
         if (test_next(x, '*') && test_next(x, '/')) {
             break;
-        } else if (ISNEWLINE(x->c)) {
-            increment_line(x);
         } else if (is_eof(x)) {
             pawX_error(x, "missing end of block comment");
-        } else {
-            next(x);
         }
+        next(x);
     }
 }
 
@@ -383,126 +376,146 @@ static void skip_line_comment(struct Lex *x)
     }
 }
 
-static Token advance(struct Lex *x)
+static void skip_whitespace(Lex *x)
 {
-#define T(kind) make_token(kind)
-    for (;;) {
-        x->pm->scratch.size = 0;
-        if (ISDIGIT(x->c)) {
-            return consume_number(x);
-        } else if (ISNAME(x->c)) {
-            return consume_name(x);
-        }
-        switch (x->c) {
-            case '\n':
-            case '\r':
-                increment_line(x);
-                break;
-            case ' ':
-            case '\f':
-            case '\t':
-            case '\v':
-                next(x);
-                break;
-            case '\'':
-            case '"':
-                return consume_string(x);
-            case '=':
-                next(x);
-                if (test_next(x, '=')) {
-                    return T(TK_EQUALS2);
-                }
-                return T('=');
-            case '&':
-                next(x);
-                if (test_next(x, '&')) {
-                    return T(TK_AMPER2);
-                }
-                return T('&');
-            case '|':
-                next(x);
-                if (test_next(x, '|')) {
-                    return T(TK_PIPE2);
-                }
-                return T('|');
-            case '-':
-                next(x);
-                if (test_next(x, '>')) {
-                    return T(TK_ARROW);
-                }
-                return T('-');
-            case '?':
-                next(x);
-                if (test_next(x, '?')) {
-                    return T(TK_QUESTION2);
-                } else if (test_next(x, ':')) {
-                    return T(TK_ELVIS);
-                }
-                return T('?');
-            case ':':
-                next(x);
-                if (test_next(x, ':')) {
-                    return T(TK_COLON2);
-                }
-                return T(':');
-            case '!':
-                next(x);
-                if (test_next(x, '=')) {
-                    return T(TK_BANG_EQ);
-                }
-                return T('!');
-            case '<':
-                next(x);
-                if (test_next(x, '<')) {
-                    return T(TK_LESS2);
-                } else if (test_next(x, '=')) {
-                    return T(TK_LESS_EQ);
-                }
-                return T('<');
-            case '>':
-                next(x);
-                if (test_next(x, '>')) {
-                    return T(TK_GREATER2);
-                } else if (test_next(x, '=')) {
-                    return T(TK_GREATER_EQ);
-                }
-                return T('>');
-            case '.':
-                save_and_next(x); // may be float
+    while (x->c == ' ' || x->c == '\t' || 
+           x->c == '\f' || x->c == '\v' ||
+           (is_newline(x) && !x->add_semi)) {
+        next(x);
+    }
+}
+
+static Token advance(Lex *x)
+{
+try_again:
+#define T(kind) make_token(cast(kind, TokenKind))
+    skip_whitespace(x);
+
+    // cast to avoid sign extension
+    Token token = T(cast(x->c, uint8_t));
+    paw_Bool semi = PAW_FALSE;
+    x->pm->scratch.size = 0;
+    switch (x->c) {
+        case '\n':
+        case '\r':
+            paw_assert(x->add_semi);
+            x->add_semi = PAW_FALSE;
+            next(x); // make progress
+            return T(';');
+        case '\'':
+        case '"':
+            token = consume_string(x);
+            semi = PAW_TRUE;
+            break;
+        case ')':
+        case ']':
+        case '}':
+            next(x);
+            semi = PAW_TRUE;
+            break;
+        case '=':
+            next(x);
+            if (test_next(x, '=')) {
+                token = T(TK_EQUALS2);
+            }
+            break;
+        case '&':
+            next(x);
+            if (test_next(x, '&')) {
+                token = T(TK_AMPER2);
+            }
+            break;
+        case '|':
+            next(x);
+            if (test_next(x, '|')) {
+                token = T(TK_PIPE2);
+            }
+            break;
+        case '-':
+            next(x);
+            if (test_next(x, '>')) {
+                token = T(TK_ARROW);
+            }
+            break;
+        case '?':
+            next(x);
+            if (test_next(x, '?')) {
+                token = T(TK_QUESTION2);
+            }
+            break;
+        case ':':
+            next(x);
+            if (test_next(x, ':')) {
+                token = T(TK_COLON2);
+            }
+            break;
+        case '!':
+            next(x);
+            if (test_next(x, '=')) {
+                token = T(TK_BANG_EQ);
+            }
+            break;
+        case '<':
+            next(x);
+            if (test_next(x, '<')) {
+                token = T(TK_LESS2);
+            } else if (test_next(x, '=')) {
+                token = T(TK_LESS_EQ);
+            }
+            break;
+        case '>':
+            next(x);
+            if (test_next(x, '>')) {
+                token = T(TK_GREATER2);
+            } else if (test_next(x, '=')) {
+                token = T(TK_GREATER_EQ);
+            }
+            break;
+        case '.':
+            save_and_next(x); // may be float
+            if (test_next(x, '.')) {
                 if (test_next(x, '.')) {
-                    if (test_next(x, '.')) {
-                        return T(TK_DOT3);
-                    }
-                    lex_error(x); // '..' not allowed
-                } else if (ISDIGIT(x->c)) {
-                    return consume_number(x);
+                    token = T(TK_DOT3);
                 }
-                return T('.');
-            case '/':
+                lex_error(x); // '..' not allowed
+            } else if (ISDIGIT(x->c)) {
+                token = consume_number(x);
+                semi = PAW_TRUE;
+            }
+            break;
+        case '/':
+            next(x);
+            if (test_next(x, '/')) { // TODO: comments may need consideration wrt. auto ';' insertion
+                skip_line_comment(x);
+                goto try_again;
+            } else if (test_next(x, '*')) {
+                skip_block_comment(x);
+                goto try_again;
+            }
+            break;
+        default: {
+            if (ISDIGIT(x->c)) {
+                token = consume_number(x);
+                semi = PAW_TRUE;
+            } else if (ISNAME(x->c)) {
+                token = consume_name(x);
+                semi = token.kind == TK_NAME ||
+                       token.kind == TK_RETURN ||
+                       token.kind == TK_BREAK ||
+                       token.kind == TK_CONTINUE;
+            } else {
                 next(x);
-                if (test_next(x, '/')) {
-                    skip_line_comment(x);
-                    break;
-                } else if (test_next(x, '*')) {
-                    skip_block_comment(x);
-                    break;
-                }
-                return T('/');
-            default: {
-                // Cast to uint8_t first, so we don't get sign extension when converting
-                // to TokenKind. Otherwise, TK_END ends up with the wrong value.
-                const uint8_t c = (uint8_t)x->c;
-                next(x);
-                return T(c);
             }
         }
     }
+    x->add_semi = semi;
+    return token;
 #undef T
 }
 
 TokenKind pawX_next(struct Lex *x)
 {
-    x->lastline = x->line;
+    x->last_line = x->line;
     const TokenKind kind = pawX_peek(x);
     x->t = x->t2;
     x->t2.kind = TK_NONE;

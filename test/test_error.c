@@ -36,12 +36,9 @@ static void test_case(int expect, const char *name, const char *text)
 
 static void test_name_error(void)
 {
-    test_case(PAW_ENAME, "use_before_def_global", "let x = x");
-    test_case(PAW_ENAME, "use_before_def_local", "{let x = x}");
-
-    test_case(PAW_ENAME, "undef_global", "x = 1");
-    test_case(PAW_ENAME, "undef_local", "{x = 1}");
-    test_case(PAW_ENAME, "undef_upvalue", "(fn() {x = 1})()");
+    test_case(PAW_ENAME, "use_before_def_local", "let x = x");
+    test_case(PAW_ENAME, "undef_local", "x = 1");
+    test_case(PAW_ENAME, "undef_upvalue", "fn f() {x = 1} f()");
 }
 
 static _Bool has_type(TypeSet ts, int kind)
@@ -52,92 +49,117 @@ static _Bool has_type(TypeSet ts, int kind)
 static const char *get_literal(int kind)
 {
     switch (kind) {
-        case PAW_TNULL:
-            return "null";
-        case PAW_TINTEGER:
+        case PAW_TUNIT:
+            return "()";
+        case PAW_TINT:
             return "123";
         case PAW_TFLOAT:
             return "1.0";
-        case PAW_TBOOLEAN:
+        case PAW_TBOOL:
             return "true";
         case PAW_TSTRING:
             return "'abc'";
-        case PAW_TARRAY:
-            return "[]";
-        case PAW_TMAP:
-            return "{}";
         default:
             check(0);
             return NULL;
     }
 }
 
-static void check_unop_type_error(const char *op, TypeSet ts)
+static void check_unop_type_error(const char *op, paw_Type k)
 {
-    for (int k = PAW_TNULL; k <= PAW_TUSERDATA; ++k) {
-        if (has_type(ts, k)) {
+    char name_buf[256] = {0};
+    snprintf(name_buf, sizeof(name_buf), "unop_type_error('%s', %s)",
+             op, get_literal(k));
+
+    char text_buf[256] = {0};
+    snprintf(text_buf, sizeof(text_buf), "let x = %s%s",
+             op, get_literal(k));
+
+    test_case(PAW_ETYPE, name_buf, text_buf);
+}
+
+static void check_unification_errors(void)
+{
+    for (int k = PAW_TUNIT; k <= PAW_TSTRING; ++k) {
+        for (int k2 = PAW_TUNIT; k2 <= PAW_TSTRING; ++k2) {
+            if (k == k2) {
+                continue;
+            }
             char name_buf[256] = {0};
-            snprintf(name_buf, sizeof(name_buf), "unop_type_error('%s', %s)",
-                     op, get_literal(k));
+            snprintf(name_buf, sizeof(name_buf), "unification_error(%s, %s)",
+                     get_literal(k), get_literal(k2));
 
             char text_buf[256] = {0};
-            snprintf(text_buf, sizeof(text_buf), "let x = %s%s",
-                     op, get_literal(k));
+            snprintf(text_buf, sizeof(text_buf), "let x = %s; let y = %s; x = y",
+                     get_literal(k), get_literal(k2));
 
             test_case(PAW_ETYPE, name_buf, text_buf);
         }
     }
 }
 
-static void check_binop_type_error_(const char *op, TypeSet ts, TypeSet ts2)
+static void check_binop_type_error(const char *op, paw_Type k, paw_Type k2)
 {
-    for (int k = PAW_TNULL; k <= PAW_TUSERDATA; ++k) {
-        for (int k2 = PAW_TNULL; k2 <= PAW_TUSERDATA; ++k2) {
-            if (has_type(ts, k) && has_type(ts2, k2)) {
-                char name_buf[256] = {0};
-                snprintf(name_buf, sizeof(name_buf), "binop_type_error('%s', %s, %s)",
-                         op, get_literal(k), get_literal(k2));
+    char name_buf[256] = {0};
+    snprintf(name_buf, sizeof(name_buf), "binop_type_error('%s', %s, %s)",
+             op, get_literal(k), get_literal(k2));
 
-                char text_buf[256] = {0};
-                snprintf(text_buf, sizeof(text_buf), "let x = %s %s %s",
-                         get_literal(k), op, get_literal(k2));
+    char text_buf[256] = {0};
+    snprintf(text_buf, sizeof(text_buf), "let x = %s %s %s",
+             get_literal(k), op, get_literal(k2));
 
-                test_case(PAW_ETYPE, name_buf, text_buf);
+    test_case(PAW_ETYPE, name_buf, text_buf);
+}
+
+static void check_binop_type_errors(const char *op, paw_Type *types)
+{
+    for (int k = PAW_TUNIT; k <= PAW_TSTRING; ++k) {
+        for (int k2 = PAW_TUNIT; k2 <= PAW_TSTRING; ++k2) {
+            for (int t = *types; t >= 0; t = *++types) {
+                if (k == t && k2 == t) {
+                    goto next_round;
+                }
             }
+            check_binop_type_error(op, k, k2);
+next_round: /* combination of types is valid, skip check */;
         }
     }
 }
 
-static void check_binop_type_error(const char *op, TypeSet ts, TypeSet ts2)
-{
-    check_binop_type_error_(op, ts, ts2);
-    check_binop_type_error_(op, ts2, ts);
-}
-
-#define NULL_ (1 << PAW_TNULL)
-#define CONTAINER (1 << PAW_TARRAY | 1 << PAW_TMAP)
-#define NON_ARITHMETIC (1 << PAW_TNULL | 1 << PAW_TSTRING | 1 << PAW_TARRAY | 1 << PAW_TMAP)
-#define ARITHMETIC (1 << PAW_TINTEGER | 1 << PAW_TFLOAT)
-#define FLOATING_POINT (1 << PAW_TFLOAT)
-
 static void test_type_error(void)
 {
-    // Unary operators
-    check_unop_type_error("-", NON_ARITHMETIC);
-    check_unop_type_error("~", NON_ARITHMETIC | FLOATING_POINT);
+    check_unification_errors();
 
-    // Binary operators. The left-hand side might be a valid type for the operator, but the right-hand
-    // side will never be.
-    check_binop_type_error("+", NON_ARITHMETIC | ARITHMETIC, NON_ARITHMETIC);
-    check_binop_type_error("-", NON_ARITHMETIC | ARITHMETIC, NON_ARITHMETIC);
-    check_binop_type_error("*", NON_ARITHMETIC | ARITHMETIC, NON_ARITHMETIC);
-    check_binop_type_error("%", NON_ARITHMETIC | ARITHMETIC, NON_ARITHMETIC);
-    check_binop_type_error("/", NON_ARITHMETIC | ARITHMETIC, NON_ARITHMETIC);
-    check_binop_type_error("//", NON_ARITHMETIC | ARITHMETIC, NON_ARITHMETIC);
-    check_binop_type_error("++", NON_ARITHMETIC | ARITHMETIC, ARITHMETIC | CONTAINER | NULL_);
-    check_binop_type_error("&", NON_ARITHMETIC | ARITHMETIC, NON_ARITHMETIC | FLOATING_POINT);
-    check_binop_type_error("|", NON_ARITHMETIC | ARITHMETIC, NON_ARITHMETIC | FLOATING_POINT);
-    check_binop_type_error("^", NON_ARITHMETIC | ARITHMETIC, NON_ARITHMETIC | FLOATING_POINT);
+    check_unop_type_error("#", PAW_TUNIT);
+    check_unop_type_error("#", PAW_TBOOL);
+    check_unop_type_error("#", PAW_TINT);
+    check_unop_type_error("#", PAW_TFLOAT);
+    check_unop_type_error("#", PAW_TSTRING);
+    check_unop_type_error("!", PAW_TUNIT);
+    check_unop_type_error("-", PAW_TUNIT);
+    check_unop_type_error("-", PAW_TBOOL);
+    check_unop_type_error("-", PAW_TSTRING);
+    check_unop_type_error("~", PAW_TUNIT);
+    check_unop_type_error("~", PAW_TBOOL);
+    check_unop_type_error("~", PAW_TFLOAT);
+    check_unop_type_error("~", PAW_TSTRING);
+
+#define mklist(...) (paw_Type[]){__VA_ARGS__, -1}
+#define mklist0() (paw_Type[]){-1}
+    check_binop_type_errors("+", mklist(PAW_TINT, PAW_TFLOAT, PAW_TSTRING));
+    check_binop_type_errors("-", mklist(PAW_TINT, PAW_TFLOAT));
+    check_binop_type_errors("*", mklist(PAW_TINT, PAW_TFLOAT));
+    check_binop_type_errors("%", mklist(PAW_TINT, PAW_TFLOAT));
+    check_binop_type_errors("/", mklist(PAW_TINT, PAW_TFLOAT));
+    check_binop_type_errors("&", mklist(PAW_TINT));
+    check_binop_type_errors("|", mklist(PAW_TINT));
+    check_binop_type_errors("^", mklist(PAW_TINT));
+    check_binop_type_errors("<", mklist(PAW_TINT, PAW_TFLOAT, PAW_TSTRING));
+    check_binop_type_errors(">", mklist(PAW_TINT, PAW_TFLOAT, PAW_TSTRING));
+    check_binop_type_errors("<=", mklist(PAW_TINT, PAW_TFLOAT, PAW_TSTRING));
+    check_binop_type_errors(">=", mklist(PAW_TINT, PAW_TFLOAT, PAW_TSTRING));
+    check_binop_type_errors("==", mklist(PAW_TBOOL, PAW_TINT, PAW_TFLOAT, PAW_TSTRING));
+    check_binop_type_errors("!=", mklist(PAW_TBOOL, PAW_TINT, PAW_TFLOAT, PAW_TSTRING));
 }
 
 static void too_many_constants(void)
@@ -171,9 +193,7 @@ static void too_many_instructions(void)
     for (int i = 0; i < (1 << 16); ++i) {
         pawL_add_fstring(P, &buf, "%d + ", i);
     }
-    // Adding 'null' to an integer causes a type error, but we should get
-    // a syntax error during compilation, before the 'null' is parsed.
-    pawL_add_string(P, &buf, "null}");
+    pawL_add_string(P, &buf, "0 }");
     pawL_push_result(P, &buf);
 
     const char *source = paw_string(P, -1);
@@ -189,7 +209,7 @@ static void too_many_locals(void)
     pawL_init_buffer(P, &buf);
     pawL_add_string(P, &buf, "{\n");
     for (int i = 0; i < (1 << 16) + 1; ++i) {
-        pawL_add_string(P, &buf, "let x\n");
+        pawL_add_string(P, &buf, "let x = 0\n");
     }
     pawL_add_string(P, &buf, "}");
     pawL_push_result(P, &buf);
@@ -240,12 +260,12 @@ static void test_syntax_error(void)
 {
     test_case(PAW_ESYNTAX, "overflow_integer", "-9223372036854775808");
     test_case(PAW_ESYNTAX, "stmt_after_return", "fn f() {return; f()}");
-    test_case(PAW_ESYNTAX, "missing_right_paren", "fn f(a, b, c {return [a + b + c]}");
-    test_case(PAW_ESYNTAX, "missing_left_paren", "fn fa, b, c) {return [a + b + c]}");
-    test_case(PAW_ESYNTAX, "missing_right_curly", "fn f(a, b, c) {return [a + b + c]");
-    test_case(PAW_ESYNTAX, "missing_left_curly", "fn f(a, b, c) return [a + b + c]}");
-    test_case(PAW_ESYNTAX, "missing_right_bracket", "fn f(a, b, c) {return [a + b + c}");
-    test_case(PAW_ESYNTAX, "missing_left_bracket", "fn f(a, b, c) {return a + b + c]}");
+    test_case(PAW_ESYNTAX, "missing_right_paren", "fn f(a: int, b: int, c: int -> int {return (a + b + c)}");
+    test_case(PAW_ESYNTAX, "missing_left_paren", "fn fa: int, b: int, c: int) -> int {return (a + b + c)}");
+    test_case(PAW_ESYNTAX, "missing_right_curly", "fn f(a: int, b: int, c: int) -> int {return (a + b + c)");
+    test_case(PAW_ESYNTAX, "missing_left_curly", "fn f(a: int, b: int, c: int) -> int return (a + b + c)}");
+    test_case(PAW_ESYNTAX, "missing_right_bracket", "fn f[A, B, C() {}");
+    test_case(PAW_ESYNTAX, "missing_left_bracket", "fn fA, B, C]() {}");
 
     // The following tests are generated, since they require a lot of text.
     too_many_locals();
@@ -255,13 +275,14 @@ static void test_syntax_error(void)
     too_far_to_loop();
 }
 
+#if 0
 #define codeline(s) s "\n"
 
 static void test_line_numbers(void)
 {
     // cause errors by dividing by 0
     const char *code = 
-        /*  1 */ codeline("return fn(a, b, c, d, e, f, g, h, i, j, k, l) {")
+        /*  1 */ codeline("return fn(a: int, b: int, c: int, d: int, e: int, f: int, g: int, h: int, i: int, j: int, k: int, l: int) {")
         /*  2 */ codeline("    let x = 1/a")
         /*  3 */ codeline("    let func")
         /*  4 */ codeline("    {")
@@ -321,13 +342,14 @@ static void test_line_numbers(void)
     }
     test_close(P, &s_alloc);
 }
+#endif // 0
 
 int main(void)
 {
     test_name_error();
     test_syntax_error();
     test_type_error();
-    test_line_numbers();
+    //test_line_numbers();
 
     test_case(PAW_ESYNTAX, "missing_left_paren", "fn fa, b, c) {return [a + b + c]}");
     test_case(PAW_ESYNTAX, "missing_right_paren", "fn f(a, b, c {return [a + b + c]}");

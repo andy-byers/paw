@@ -7,7 +7,7 @@
 #include "auxlib.h"
 #include "bigint.h"
 #include "call.h"
-#include "gc.h"
+#include "gc_aux.h"
 #include "lib.h"
 #include "map.h"
 #include "mem.h"
@@ -21,16 +21,20 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <gc.h>
+
 static void *default_alloc(void *ud, void *ptr, size_t size0, size_t size)
 {
     paw_unused(ud);
     if (size0 == 0) {
-        return malloc(cast_size(size));
+        return GC_MALLOC(size);
+        //return malloc(size);
     } else if (size == 0) {
         free(ptr);
         return NULL;
     }
-    return realloc(ptr, cast_size(size));
+    return GC_REALLOC(ptr, size);
+    //return realloc(ptr, size);
 }
 
 static StackPtr access(paw_Env *P, int index)
@@ -61,11 +65,8 @@ static void open_aux(paw_Env *P, void *arg)
     paw_unused(arg);
     pawG_init(P);
     pawC_init(P);
-
-//    P->globals = pawH_new(P);
-
-    pawS_init(P);
     pawY_init(P);
+    pawS_init(P);
     pawP_init(P);
     pawR_init(P);
     pawL_init(P);
@@ -94,8 +95,8 @@ paw_Env *paw_open(paw_Alloc alloc, void *ud)
 void paw_close(paw_Env *P)
 {
     pawG_uninit(P);
-    pawY_uninit(P);
     pawC_uninit(P);
+    pawY_uninit(P);
     pawS_uninit(P);
 
     P->alloc(P->ud, P, sizeof *P, 0);
@@ -143,9 +144,9 @@ paw_Bool paw_is_tuple(paw_Env *P, int index)
     return paw_type(P, index) == PAW_TTUPLE;
 }
 
-paw_Bool paw_is_class(paw_Env *P, int index)
+paw_Bool paw_is_struct(paw_Env *P, int index)
 {
-    return paw_type(P, index) == PAW_TCLASS;
+    return paw_type(P, index) == PAW_TSTRUCT;
 }
 
 paw_Bool paw_is_foreign(paw_Env *P, int index)
@@ -173,8 +174,8 @@ int paw_type(paw_Env *P, int index)
    //         return PAW_TARRAY;
    //     case VMAP:
    //         return PAW_TMAP;
-   //     case VCLASS:
-   //         return PAW_TCLASS;
+   //     case VSTRUCT:
+   //         return PAW_TSTRUCT;
    //     case VBIGINT:
    //     case VNUMBER:
    //         return PAW_TINT;
@@ -311,7 +312,7 @@ const char *paw_string(paw_Env *P, int index)
 
 paw_Function paw_native(paw_Env *P, int index)
 {
-    return v_native(*access(P, index))->call;
+    return v_native(*access(P, index))->func;
 }
 
 paw_Digit *paw_bigint(paw_Env *P, int index)
@@ -389,10 +390,13 @@ int paw_load(paw_Env *P, paw_Reader input, const char *name, void *ud)
     };
     const int status = pawC_try(P, parse_aux, &p);
     pawM_free_vec(P, p.mem.scratch.data, p.mem.scratch.alloc);
-    pawM_free_vec(P, p.mem.st.scopes, p.mem.st.capacity); // TODO: free nested scope tables, symbols
-    pawM_free_vec(P, p.mem.ll.values, p.mem.ll.capacity);
-    pawM_free(P, p.mem.st.globals);
-    pawM_free(P, p.mem.st.toplevel);
+    pawM_free_vec(P, p.mem.symbols.scopes, p.mem.symbols.capacity); // TODO: free nested scope tables, symbols
+    pawM_free_vec(P, p.mem.labels.values, p.mem.labels.capacity);
+    pawM_free(P, p.mem.symbols.globals);
+    pawM_free(P, p.mem.symbols.toplevel);
+    while (p.mem.unifier.table) {
+        pawP_unifier_leave(&p.mem.unifier);
+    }
     return status;
 }
 
@@ -555,16 +559,16 @@ static int upvalue_index(int nup, int index)
 //    }
 //}
 //
-//void paw_set_global(paw_Env *P, const char *name)
-//{
+void paw_set_global(paw_Env *P, const char *name)
+{
 //    paw_push_string(P, name);
 //    paw_rotate(P, -2, 1); // Swap
 //
 //    const Value key = P->top.p[-2];
 //    pawR_write_global(P, key, PAW_TRUE);
 //    paw_pop(P, 1); // Pop 'key'
-//}
-//
+}
+
 //void paw_set_itemi(paw_Env *P, int index, paw_Int idx)
 //{
 //    const int abs = paw_abs_index(P, index);
@@ -587,27 +591,27 @@ static int upvalue_index(int nup, int index)
 //    pawR_setattr_raw(P);
 //}
 //
-//void paw_create_array(paw_Env *P, int n)
-//{
+void paw_create_array(paw_Env *P, int n)
+{
 //    pawR_literal_array(P, n);
-//}
+}
 //
 //void paw_create_map(paw_Env *P, int n)
 //{
 //    pawR_literal_map(P, n);
 //}
 //
-//void paw_create_class(paw_Env *P)
+//void paw_create_struct(paw_Env *P)
 //{
-//    pawV_push_class(P);
+//    pawV_push_struct(P);
 //}
 //
 //void paw_create_instance(paw_Env *P, int index)
 //{
 //    const Value cls = *access(P, index);
-//    if (pawV_is_class(cls)) {
+//    if (pawV_is_struct(cls)) {
 //        Value *pv = pawC_push0(P);
-//        pawV_new_instance(P, pv, v_class(cls));
+//        pawV_new_instance(P, pv, v_struct(cls));
 //    }
 //}
 //

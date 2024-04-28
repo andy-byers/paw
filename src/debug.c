@@ -63,7 +63,7 @@ const char *paw_binop_name(BinaryOp binop)
     }
 }
 
-const char *paw_opcode_name(Op op)
+const char *paw_op_name(Op op)
 {
     switch (op) {
         case OP_CASTBOOL:
@@ -72,6 +72,8 @@ const char *paw_opcode_name(Op op)
             return "CASTINT";
         case OP_CASTFLOAT:
             return "CASTFLOAT";
+        case OP_PUSHSTRUCT:
+            return "PUSHSTRUCT";
         case OP_PUSHUNIT:
             return "PUSHUNIT";
         case OP_PUSHTRUE:
@@ -80,6 +82,10 @@ const char *paw_opcode_name(Op op)
             return "PUSHFALSE";
         case OP_PUSHCONST:
             return "PUSHCONST";
+        case OP_COPY:
+            return "COPY";
+        case OP_INITATTR:
+            return "INITATTR";
         case OP_POP:
             return "POP";
         case OP_CLOSE:
@@ -90,10 +96,6 @@ const char *paw_opcode_name(Op op)
             return "RETURN";
         case OP_CLOSURE:
             return "CLOSURE";
-        case OP_GETSUPER:
-            return "GETSUPER";
-        case OP_INVOKESUPER:
-            return "INVOKESUPER";
         case OP_CALL:
             return "CALL";
         case OP_INVOKE:
@@ -120,8 +122,8 @@ const char *paw_opcode_name(Op op)
             return "GETUPVALUE";
         case OP_SETUPVALUE:
             return "SETUPVALUE";
-        case OP_NEWCLASS:
-            return "NEWCLASS";
+        case OP_NEWINSTANCE:
+            return "NEWINSTANCE";
         case OP_NEWMETHOD:
             return "NEWMETHOD";
         case OP_NEWARRAY:
@@ -155,6 +157,143 @@ const char *paw_opcode_name(Op op)
     }
 }
 
+void paw_dump_opcode(OpCode opcode)
+{
+    switch (get_OP(opcode)) {
+        case OP_CASTBOOL:
+            printf("CASTBOOL\n");
+            break;
+        case OP_CASTINT:
+            printf("CASTINT\n");
+            break;
+        case OP_CASTFLOAT:
+            printf("CASTFLOAT\n");
+            break;
+        case OP_PUSHSTRUCT:
+            printf("PUSHSTRUCT %d\n", get_U(opcode));
+            break;
+        case OP_PUSHUNIT:
+            printf("PUSHUNIT\n");
+            break;
+        case OP_PUSHTRUE:
+            printf("PUSHTRUE\n");
+            break;
+        case OP_PUSHFALSE:
+            printf("PUSHFALSE\n");
+            break;
+        case OP_PUSHCONST:
+            printf("PUSHCONST %d\n", get_U(opcode));
+            break;
+        case OP_COPY:
+            printf("COPY\n");
+            break;
+        case OP_INITATTR:
+            printf("INITATTR\n");
+            break;
+        case OP_POP:
+            printf("POP\n");
+            break;
+        case OP_CLOSE:
+            printf("CLOSE\n");
+            break;
+        case OP_INIT:
+            printf("INIT\n");
+            break;
+        case OP_RETURN:
+            printf("RETURN\n");
+            break;
+        case OP_CLOSURE:
+            printf("CLOSURE\n");
+            break;
+        case OP_CALL:
+            printf("CALL\n");
+            break;
+        case OP_INVOKE:
+            printf("INVOKE\n");
+            break;
+        case OP_JUMP:
+            printf("JUMP\n");
+            break;
+        case OP_JUMPFALSE:
+            printf("JUMPFALSE\n");
+            break;
+        case OP_JUMPFALSEPOP:
+            printf("JUMPFALSEPOP\n");
+            break;
+        case OP_JUMPNULL:
+            printf("JUMPNULL\n");
+            break;
+        case OP_GLOBAL:
+            printf("GLOBAL\n");
+            break;
+        case OP_GETGLOBAL:
+            printf("GETGLOBAL: %d\n", get_U(opcode));
+            break;
+        case OP_SETGLOBAL:
+            printf("SETGLOBAL: %d\n", get_U(opcode));
+            break;
+        case OP_GETLOCAL:
+            printf("GETLOCAL: %d\n", get_U(opcode));
+            break;
+        case OP_SETLOCAL:
+            printf("SETLOCAL: %d\n", get_U(opcode));
+            break;
+        case OP_GETUPVALUE:
+            printf("GETUPVALUE: %d\n", get_U(opcode));
+            break;
+        case OP_SETUPVALUE:
+            printf("SETUPVALUE: %d\n", get_U(opcode));
+            break;
+        case OP_NEWINSTANCE:
+            printf("NEWINSTANCE\n");
+            break;
+        case OP_NEWMETHOD:
+            printf("NEWMETHOD\n");
+            break;
+        case OP_NEWARRAY:
+            printf("NEWARRAY\n");
+            break;
+        case OP_NEWMAP:
+            printf("NEWMAP\n");
+            break;
+        case OP_VARARG:
+            printf("VARARG\n");
+            break;
+        case OP_FORNUM0:
+            printf("FORNUM0\n");
+            break;
+        case OP_FORNUM:
+            printf("FORNUM\n");
+            break;
+        case OP_FORIN0:
+            printf("FORIN0\n");
+            break;
+        case OP_FORIN:
+            printf("FORIN\n");
+            break;
+        case OP_UNOP:
+            printf("UNOP %s %d\n", paw_unop_name(get_A(opcode)), get_B(opcode));
+            break;
+        case OP_BINOP:
+            printf("BINOP %s %d\n", paw_binop_name(get_A(opcode)), get_B(opcode));
+            break;
+        case OP_GETATTR:
+            printf("GETATTR %d\n", get_U(opcode));
+            break;
+        case OP_SETATTR:
+            printf("SETATTR %d\n", get_U(opcode));
+            break;
+        case OP_GETITEM:
+            printf("GETITEM %d\n", get_U(opcode));
+            break;
+        case OP_SETITEM:
+            printf("SETITEM %d\n", get_U(opcode));
+            break;
+        default:
+            printf("???\n");
+    }
+}
+
 void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
 {
     const OpCode *pc = proto->source;
@@ -165,26 +304,31 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
     pawL_add_fstring(P, print, "' (%I bytes)\n", (paw_Int)proto->length);
     pawL_add_fstring(P, print, "constant(s) = %I, upvalue(s) = %I\n", (paw_Int)proto->nk, (paw_Int)proto->nup);
     for (int i = 0; pc != end; ++i) {
-        pawL_add_fstring(P, print, "%d  %I  %s", i, (paw_Int)(pc - proto->source), paw_opcode_name(get_OP(pc[0])));
+        pawL_add_fstring(P, print, "%d  %I  %s", i, (paw_Int)(pc - proto->source), paw_op_name(get_OP(pc[0])));
         const OpCode opcode = *pc++;
         switch (get_OP(opcode)) {
             case OP_UNOP: {
-                pawL_add_fstring(P, print, " ; type = %s", paw_unop_name(get_A(opcode)));
+                pawL_add_fstring(P, print, " ; op = %s", paw_unop_name(get_A(opcode)));
                 break;
             }
 
             case OP_BINOP: {
-                pawL_add_fstring(P, print, " ; type = %s", paw_binop_name(get_A(opcode)));
+                pawL_add_fstring(P, print, " ; op = %s", paw_binop_name(get_A(opcode)));
                 break;
             }
 
             case OP_CLOSE: {
-                pawL_add_fstring(P, print, " ; npop = %d, close = %d", get_A(opcode), get_B(opcode));
+                pawL_add_fstring(P, print, " ; count = %d, close = %d", get_A(opcode), get_B(opcode));
                 break;
             }
 
             case OP_PUSHCONST: {
-                pawL_add_fstring(P, print, " ; id = %d", get_U(opcode));
+                pawL_add_fstring(P, print, " ; k = %d", get_U(opcode));
+                break;
+            }
+
+            case OP_PUSHSTRUCT: {
+                pawL_add_fstring(P, print, " ; $ = %d", get_U(opcode));
                 break;
             }
 
@@ -215,6 +359,16 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
 
             case OP_FORIN: {
                 pawL_add_fstring(P, print, " ; offset = %d", get_S(opcode));
+                break;
+            }
+
+            case OP_GETATTR: {
+                pawL_add_fstring(P, print, " ; id = %d", get_U(opcode));
+                break;
+            }
+
+            case OP_SETATTR: {
+                pawL_add_fstring(P, print, " ; id = %d", get_U(opcode));
                 break;
             }
 
@@ -255,11 +409,6 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
                 break;
             }
 
-            case OP_NEWCLASS: {
-                pawL_add_fstring(P, print, " ; k = %d, superclass? %d", get_A(opcode), get_B(opcode));
-                break;
-            }
-
             case OP_NEWMETHOD: {
                 pawL_add_fstring(P, print, " ; k = %d", get_U(opcode));
                 break;
@@ -275,25 +424,25 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
                 } else {
                     pawL_add_string(P, print, "<anonymous fn>");
                 }
-                pawL_add_fstring(P, print, "', nup = %I", (paw_Int)p->nup);
+                pawL_add_fstring(P, print, "', nupvalues = %I", (paw_Int)p->nup);
                 break;
             }
 
             case OP_INVOKE: {
                 const int id = get_A(opcode);
-                pawL_add_fstring(P, print, " ; id = %d, # params = %d", id, get_B(opcode));
+                pawL_add_fstring(P, print, " ; id = %d, # nargs = %d", id, get_B(opcode));
                 break;
             }
 
             case OP_CALL: {
-                pawL_add_fstring(P, print, " ; # params = %d", get_U(opcode));
+                pawL_add_fstring(P, print, " ; # nargs = %d", get_U(opcode));
                 break;
             }
 
             case OP_VARARG: {
                 const int nfixed = get_U(opcode);
                 const int npassed = paw_get_count(P) - 1;
-                pawL_add_fstring(P, print, " ; # argv = %d", npassed - nfixed);
+                pawL_add_fstring(P, print, " ; # nargs = %d", npassed - nfixed);
                 break;
             }
 
@@ -334,7 +483,6 @@ void paw_dump_source(paw_Env *P, Proto *proto)
     pawL_discard_result(P, &print);
 }
 
-// TODO: Copy of code in error.c. Maybe merge error.c into this TU
 static int current_line(CallFrame *cf)
 {
     Proto *p = cf->fn->p;
@@ -373,6 +521,24 @@ void paw_stacktrace(paw_Env *P)
         ++i;
     }
     pawL_push_result(P, &buf);
+}
+
+// TODO: rename paw_dump_locals
+void paw_dump_stack(paw_Env *P)
+{
+    CallFrame *cf = P->main.next;
+    while (cf != NULL) {
+        const Proto *func = cf->fn->p;
+        printf("Frame: %s\n", func->name->text);
+        for (int i = 0; i < func->ndebug; ++i) {
+            const struct LocalInfo info = func->v[i];
+            const char *capture = info.captured ? "*" : "";
+            const String *name = info.var.name;
+            const paw_Type code = info.var.code;
+            printf("  %3d: %s%s (%d)\n", i, name->text, capture, code);
+        }
+        cf = cf->next;
+    }
 }
 
 void paw_dump_value(paw_Env *P, Value v, paw_Type type)

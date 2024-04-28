@@ -2,7 +2,7 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "mem.h"
-#include "gc.h"
+#include "gc_aux.h"
 #include <assert.h>
 #include <limits.h>
 #include <stdlib.h>
