@@ -1,9 +1,8 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
-#include "gc.h"
+#include "gc_aux.h"
 #include "array.h"
-//#include "bigint.h"
 #include "env.h"
 #include "map.h"
 #include "mem.h"
@@ -13,14 +12,50 @@
 #include <stdlib.h>
 #include <string.h>
 
+// TODO: Using Boehm-Demers-Weiser GC for now
+#include <gc.h>
+
+void pawG_init(paw_Env *P)
+{
+    paw_unused(P);
+}
+
+void pawG_uninit(paw_Env *P)
+{
+    paw_unused(P);
+}
+
+void pawG_collect(paw_Env *P)
+{
+    paw_unused(P);
+    P->gc_bytes = 0;
+}
+
+void pawG_fix_object(paw_Env *P, Object *o)
+{
+    paw_unused(P);
+    paw_unused(o);
+}
+
+void pawG_add_object(paw_Env *P, Object *o, ValueKind kind)
+{
+    paw_unused(P);
+    o->gc_kind = kind;
+}
+
+void pawG_free_object(paw_Env *P, Object *o)
+{
+    paw_unused(P);
+    paw_unused(o);
+}
+
+#if 0
 #ifndef PAW_GC_LIMIT
 #define PAW_GC_LIMIT (1024 * 1024)
 #endif
 
 static void gc_trace_object(const char *msg, void *ptr)
 {
-    if (ptr == (void *)0x104406dc0) {
-    }
 #ifdef PAW_TRACE_GC
     fprintf(stdout, "(gc) %s: %p\n", msg, ptr);
 #else
@@ -377,3 +412,4 @@ void pawG_free_object(paw_Env *P, Object *o)
             paw_assert(PAW_FALSE);
     }
 }
+#endif // 0

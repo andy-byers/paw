@@ -22,7 +22,7 @@
 }
 
 {
-    fn test(n: int): string {
+    fn test(n: int) -> string {
         if n == 0 {
             return 'zero'
         } else if n == 1 {

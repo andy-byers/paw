@@ -4,26 +4,39 @@
 #ifndef PAW_MAP_H
 #define PAW_MAP_H
 
+// TODO: This code won't work properly anymore: we do not have a way to indicate that a
+//       given key is a 'tombstone', without limiting what values can be used (using -1
+//       value, but a valid integer could easily be -1). Before, we just used 'null'. Only
+//       works for pointer keys right now.
+//       Ideas:
+//         (+) Just use chaining.
+//         (+) Reserve a single key value to represent 'null', or 'does not exist'.
+//             Use the value field to indicate either that the item never existed, or that
+//             it was erased. Problematic, as it limits the keyspace.
+//         (+) Use a separate array (a bitfield, really) to track which keys are nonexistent.
+//         (+) Create a somewhat more complicated data structure with an 'index' (see Python
+//             'dict' implementation). 
+
 #include "paw.h"
 #include "util.h"
 #include "value.h"
 
-static inline paw_Bool pawH_is_vacant(Value v)
+static inline paw_Bool pawH_is_vacant(Value key)
 {
-    return v.u == 0;
+    return key.u == 0;
 }
 
-static inline paw_Bool pawH_is_erased(Value v)
+static inline paw_Bool pawH_is_erased(Value key)
 {
-    return v_is_null(v);
+    return key.i == -1;
 }
 
-static inline paw_Bool pawH_is_occupied(Value v)
+static inline paw_Bool pawH_is_occupied(Value key)
 {
-    return !pawH_is_vacant(v) && !pawH_is_erased(v);
+    return !pawH_is_vacant(key) && !pawH_is_erased(key);
 }
 
-#define pawH_index(m, k) check_exp(!v_is_null(k), pawV_hash(k) & ((m)->capacity - 1))
+#define pawH_index(m, k) check_exp(pawH_is_occupied(k), pawV_hash(k) & ((m)->capacity - 1))
 
 // Set 'itr' to the index at which the key 'k' is located, or the first index for
 // which the function-like macro  'cc' evaluates to true (if 'k' is not found).
@@ -80,9 +93,9 @@ static inline Value *pawH_action(paw_Env *P, Map *m, Value key, MapAction action
         return NULL;
     }
     if (action == MAP_ACTION_REMOVE) {
-        v_set_0(&m->keys[itr]);
-        v_set_0(&m->values[itr]);
+        m->keys[itr].i = -1; // tombstone
         --m->length;
+
         // Return the address of the slot to indicate success.
         return &m->keys[itr];
     }

@@ -6,6 +6,7 @@
 #include "paw.h"
 #include "value.h"
 
+// TODO: not necessary, just use the 'name' field of Type
 static inline const char *api_typename(int type)
 {
     switch (type) {
@@ -23,8 +24,8 @@ static inline const char *api_typename(int type)
             return "array";
         case PAW_TFUNCTION:
             return "function";
-        case PAW_TCLASS:
-            return "class";
+        case PAW_TSTRUCT:
+            return "struct";
         case PAW_TFOREIGN:
             return "foreign";
         default:

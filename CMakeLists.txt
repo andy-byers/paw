@@ -31,11 +31,18 @@ else()
             INTERFACE m)
 endif()
 
+include(FetchContent)
+FetchContent_Declare(gc
+    GIT_REPOSITORY https://github.com/ivmai/bdwgc.git
+    GIT_TAG v8.2.6)
+FetchContent_MakeAvailable(gc)
+
 set(PAW_SOURCE_DIR ${PROJECT_SOURCE_DIR}/src)
 
 add_library(paw STATIC)
 target_sources(paw
     PUBLIC  ${PAW_SOURCE_DIR}/api.h
+            ${PAW_SOURCE_DIR}/ast.h
             ${PAW_SOURCE_DIR}/auxlib.h
             ${PAW_SOURCE_DIR}/array.h
             ${PAW_SOURCE_DIR}/bigint.h
@@ -43,7 +50,7 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/code.h
             ${PAW_SOURCE_DIR}/debug.h
             ${PAW_SOURCE_DIR}/env.h
-            ${PAW_SOURCE_DIR}/gc.h
+            ${PAW_SOURCE_DIR}/gc_aux.h
             ${PAW_SOURCE_DIR}/lex.h
             ${PAW_SOURCE_DIR}/lib.h
             ${PAW_SOURCE_DIR}/map.h
@@ -59,6 +66,7 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/util.h
             ${PAW_SOURCE_DIR}/value.h
     PRIVATE ${PAW_SOURCE_DIR}/api.c
+            ${PAW_SOURCE_DIR}/ast.c
             ${PAW_SOURCE_DIR}/auxlib.c
             ${PAW_SOURCE_DIR}/array.c
             ${PAW_SOURCE_DIR}/bigint.c 
@@ -68,7 +76,7 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/codegen.c
             ${PAW_SOURCE_DIR}/debug.c
             ${PAW_SOURCE_DIR}/env.c
-            ${PAW_SOURCE_DIR}/gc.c
+            ${PAW_SOURCE_DIR}/gc_aux.c
             #${PAW_SOURCE_DIR}/iolib.c
             ${PAW_SOURCE_DIR}/lex.c
             ${PAW_SOURCE_DIR}/lib.c
@@ -82,10 +90,12 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/rt.c
             ${PAW_SOURCE_DIR}/str.c
             ${PAW_SOURCE_DIR}/type.c
+            ${PAW_SOURCE_DIR}/unify.c
             ${PAW_SOURCE_DIR}/util.c
             ${PAW_SOURCE_DIR}/value.c)
 target_link_libraries(paw
-    PRIVATE paw_context)
+    PRIVATE paw_context 
+    PUBLIC gc)
 target_include_directories(paw
     PUBLIC ${PAW_SOURCE_DIR})
 target_compile_definitions(paw

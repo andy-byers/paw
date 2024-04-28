@@ -22,7 +22,6 @@ enum MultiChar {
     TK_DOT3,
     TK_QUESTION2,
     TK_COLON2,
-    TK_ELVIS,
     TK_LESS2,
     TK_GREATER2,
     TK_AMPER2,
@@ -41,8 +40,8 @@ enum MultiChar {
 
     // Keywords (must be in this order):
     TK_FN,
-    TK_CLASS,
-    TK_SUPER,
+    TK_TYPE,
+    TK_STRUCT,
     TK_GLOBAL,
     TK_LET,
     TK_IF,
@@ -67,14 +66,10 @@ typedef struct Token {
 
 typedef struct Lex {
     paw_Env *P;
-    struct ClsState *cs;
-    struct FnState *fs;
 
     Map *strings;
     String *modname;
     Closure *main;
-    struct Tree *ast;
-    struct ModuleType *mod;
 
     paw_Reader input;
     const char *chunk;
@@ -88,11 +83,13 @@ typedef struct Lex {
     Token t;
     Token t2;
 
-    int line;
-    int lastline;
-    int fn_depth;
-
     void *ud;
+
+    int line;
+    int last_line;
+    int expr_depth;
+
+    paw_Bool add_semi;
 } Lex;
 
 #define x_base_type(x, t) ((x)->mod->types[t])

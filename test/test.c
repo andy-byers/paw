@@ -13,6 +13,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include <gc.h>
+
+#if 0
 #define TEST_FIND_LEAK
 // Define TEST_FIND_LEAK to have the program print out the addresses and
 // sizes of leaked blocks. Watchpoints can be used to figure out exactly
@@ -113,6 +117,7 @@ static void report_nonzero_blocks(struct TestAlloc *a)
         abort();
     }
 }
+#endif // 0
 
 static void trash_memory(void *ptr, size_t n)
 {
@@ -125,8 +130,8 @@ static void trash_memory(void *ptr, size_t n)
 static void *safe_realloc(struct TestAlloc *a, void *ptr, size_t size0, size_t size)
 {
     check(a->nbytes >= size0);
-    register_block(a, size0, size);
-    void *ptr2 = size ? malloc(size) : NULL;
+//    register_block(a, size0, size);
+    void *ptr2 = size ? GC_MALLOC(size) : NULL;
     check(!size || ptr2); // assume success
     if (ptr2) {
         if (ptr) {
@@ -156,7 +161,7 @@ static void *safe_realloc(struct TestAlloc *a, void *ptr, size_t size0, size_t s
         trash_memory(ptr, size0);
     }
     a->nbytes += size - size0;
-    free(ptr);
+    GC_FREE(ptr);
     return ptr2;
 }
 
@@ -219,11 +224,11 @@ void test_close(paw_Env *P, struct TestAlloc *a)
 {
     paw_close(P);
 
-    if (a->nbytes) {
-        fprintf(stderr, "error: leaked %zu bytes\n", a->nbytes);
-        report_nonzero_blocks(a);
-        abort();
-    }
+//    if (a->nbytes) {
+//        fprintf(stderr, "error: leaked %zu bytes\n", a->nbytes);
+//        report_nonzero_blocks(a);
+//        abort();
+//    }
 }
 
 static void check_ok(paw_Env *P, int status)

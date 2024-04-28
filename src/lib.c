@@ -3,7 +3,7 @@
 #include "array.h"
 #include "auxlib.h"
 #include "call.h"
-#include "gc.h"
+#include "gc_aux.h"
 #include "map.h"
 #include "mem.h"
 #include "os.h"
@@ -14,6 +14,20 @@
 #include <time.h>
 
 #define cf_base(i) P->cf->base.p[i]
+
+void lib_error(paw_Env *P, int error, const char *fmt, ...)
+{
+    Buffer print;
+    pawL_init_buffer(P, &print);
+
+    va_list arg;
+    va_start(arg, fmt);
+    pawL_add_vfstring(P, &print, fmt, arg);
+    va_end(arg);
+
+    pawL_push_result(P, &print);
+    pawC_throw(P, error);
+}
 
 static int get_argc(paw_Env *P)
 {
@@ -387,215 +401,198 @@ static int string_clone(paw_Env *P)
 //    return 1;
 //}
 
-static int count_types(paw_Env *P, paw_Type *ts)
+#define L_MAX_SIZE 256
+
+typedef struct pawL_Property {
+    const char *name;
+    paw_Type type;
+} pawL_Property;
+
+typedef struct pawL_Signature {
+    paw_Type *params;
+    paw_Type return_;
+    int ngenerics;
+} pawL_Signature;
+
+typedef struct pawL_Layout {
+    const char *name;
+    paw_Type super;
+    int ngenerics;
+    int nfields;
+    int nmethods;
+} pawL_Layout;
+
+//
+// struct A[T] {
+//     a: A[int] // ??
+//     b: A[T]
+//     c: A // sugar for A[T]
+// }
+// 
+// A[T] = declare_struct(A, 1)
+// A[int] = instantiate_struct(A, int)
+// A[T] = {
+//  a: A[int],
+// }
+
+typedef struct pawL_GenericCtx {
+    int ngenerics;
+} pawL_GenericCtx;
+
+paw_Type pawL_new_generic_type(paw_Env *P, pawL_GenericCtx *ctx);
+paw_Type pawL_new_func_type(paw_Env *P, paw_Type *pars, paw_Type return_, int ngenerics);
+paw_Type pawL_new_struct_type(paw_Env *P, pawL_Layout *layout);
+void pawL_new_func(paw_Env *P, paw_Function func, int nup);
+void pawL_new_struct(paw_Env *P, paw_Function *methods);
+
+paw_Type pawL_instantiate_func(paw_Env *P, paw_Type base, paw_Type *types);
+paw_Type pawL_instantiate_struct(paw_Env *P, paw_Type base, paw_Type *types);
+
+// Create a global symbol and bind to it the value on top of the stack
+int pawL_new_global(paw_Env *P, const char *name, paw_Type type);
+
+paw_Type pawL_bind_method(paw_Env *P, paw_Function func, int index);
+
+static void create_type_vars(paw_Env *P, int ngenerics, Binder *binder)
 {
-    int nts = 0;
-    for (paw_Type *t = ts; *t >= 0; ++t) {
-        if (nts == ARGC_MAX) {
-            pawC_throw(P, 123); // TODO
-        }
-        ++nts;
+    if (ngenerics > L_GENERIC_MAX) {
+        lib_error(P, PAW_EOVERFLOW, "too many generics");
     }
-    return nts;
+    binder->types = pawM_new_vec(P, ngenerics, Type *);
+    binder->count = ngenerics;
+    for (int i = 0; i < ngenerics; ++i) {
+        Type *type = pawY_type_new(P, P->mod);
+        type->var.kind = TYPE_VAR;
+        type->var.def = 11111; // TODO: Create a global def
+        type->var.index = i;
+        type->var.depth = 0;
+        binder->types[i] = type;
+    }
 }
 
-static Type *register_native(paw_Env *P, paw_Type *argt, paw_Type ret)
+static Type *resolve_type(paw_Env *P, paw_Type type, Binder *generics)
 {
-    const int nargs = count_types(P, argt);
-    Type **args = NULL;
-    if (nargs > 0) {
-        args = pawM_new_vec(P, nargs, Type *);
-        for (int i = 0; i < nargs; ++i) {
-            args[i] = P->mod->types[argt[i]];
+    if (type >= 0) {
+        if (type >= P->mod->ntypes) {
+            lib_error(P, PAW_ETYPE, "unrecognized type");
         }
-    } 
-    Type type = {0};
-    type.sig.kind = TYPE_SIGNATURE;
-    type.sig.ret = P->mod->types[ret];
-    type.sig.args = args;
-    type.sig.nargs = nargs;
+        return P->mod->types[type];
+    } else if (type < l_generic(generics->count)) {
+        lib_error(P, PAW_ETYPE, "invalid generic parameter"); 
+    }
+    type = l_generic(type);
+    return generics->types[type];
+}
 
-    // register function signature
-    return pawY_add_type(P, P->mod, &type);
+static Type *register_native(paw_Env *P, paw_Type *pars, paw_Type return_, int ngenerics)
+{
+    int n = 0;
+    Type *buffer[ARGC_MAX];
+    Type *r = pawY_type_new(P, P->mod);
+    r->func.kind = TYPE_FUNC;
+    create_type_vars(P, ngenerics, &r->func.types);
+
+    // Validate the parameter and return types.
+    for (; *pars != L_LIST_END; ++n, ++pars) {
+        if (n == L_PARAM_MAX) { 
+            lib_error(P, PAW_EOVERFLOW, "too many parameters"); 
+        }
+        buffer[n] = resolve_type(P, *pars, &r->func.types); 
+    }
+
+    r->func.params.count = n;
+    r->func.params.types = pawM_new_vec(P, n, Type *);
+    memcpy(r->func.params.types, buffer, cast_size(n) * sizeof(buffer[0]));
+    r->func.return_ = resolve_type(P, return_, &r->func.types);
+    return r;
 }
 
 struct MethodDesc {
     const char *name;
     paw_Function func;
-    paw_Type *args;
+    paw_Type *pars;
     paw_Type ret;
 };
 
-#define count_list(L, pn) for (; (L) != NULL; ++(L), ++*(pn))
+#define count_list(L, n) for (; (L) != NULL; ++(L), ++(n));
 
-#define push_builtin_class(a, b, c, d) push_builtin_class_aux(a, b, c, d, paw_countof(d))
-static void push_builtin_class_aux(paw_Env *P, paw_Type base, const char *name, struct MethodDesc *mds, int nattrs)
+// TODO: Mangle template instance names to disambiguate between instances of the same template
+int pawL_new_global(paw_Env *P, const char *name, paw_Type type)
 {
-    Type t = {0};
-
-    // register method types and attach to class object
-    t.cls.attrs = pawM_new_vec(P, nattrs, NamedField);
-    for (int i = 0; i < nattrs; ++i) {
-        struct MethodDesc *md = &mds[i];
-        Type *tag = register_native(P, md->args, md->ret);
-        String *str = pawS_new_str(P, md->name);
-        Native *nat = pawV_new_native(P, str, md->func);
-        t.cls.attrs[i].name = str;
-        t.cls.attrs[i].type = tag;
-    }
-
-    // register class type
-    String *str = pawS_new_str(P, name);
-    Type *tag = pawY_add_type(P, P->mod, &t);
-
-    // set global variable
-    const int g = pawE_new_global(P, str, tag);
+    String *gname = pawS_new_str(P, name);
+    const int g = pawE_new_global(P, gname, type);
     GlobalVar *var = pawE_get_global(P, g);
-//    v_set_object(&var->value, t.cls);
-//    var->desc.type = tag;
-
-//    P->builtin[base] = v_class(P->top.p[-1]);
-//    pawC_pop(P);
+    var->value = P->top.p[-1];
+    pawC_pop(P);
+    return g;
 }
 
-static void attach_method(paw_Env *P, Value *pv, struct MethodDesc *m)
+paw_Type pawL_new_func_type(paw_Env *P, paw_Type *pars, paw_Type return_, int ngenerics)
 {
-    Type *tag = register_native(P, m->args, m->ret);
-    String *str = pawS_new_str(P, m->name);
-    Native *nat = pawV_new_native(P, str, m->func);
-    v_set_object(pv, nat);
+    Type *type = register_native(P, pars, return_, ngenerics);
+    return type->hdr.def;
 }
 
-void pawL_bind_method(paw_Env *P, int index, const char *name, paw_Function func, paw_Type *argt, paw_Type ret)
+void pawL_new_func(paw_Env *P, paw_Function func, int nup)
 {
-    Foreign *fr = v_foreign(P->top.p[-1]);
-    attach_method(P, &fr->attrs[index], &(struct MethodDesc){
-                .name = name,
-                .func = func,
-                .args = argt,
-                .ret = ret,
-            });
+    Native *nat = pawV_new_native(P, func, nup); // TODO: take upvalues off top of stack
+    pawC_pusho(P, cast_object(nat));
 }
 
-void pawL_register_function(paw_Env *P, const char *name, paw_Function func, paw_Type *argt, paw_Type ret)
-{
-    Type *tag = register_native(P, argt, ret);
-    String *str = pawS_new_str(P, name);
-    Native *nat = pawV_new_native(P, str, func);
-    const int g = pawE_new_global(P, str, tag);
-    GlobalVar *var = pawE_get_global(P, g);
-    v_set_object(&var->value, nat);
-    var->desc.type = tag;
-}
+//paw_Type pawL_new_struct_type(paw_Env *P, pawL_Class *struct_)
+//{
+//    Type *type = pawY_new_type(P, P->mod);
+//    type->cls.name = pawS_new_str(P, struct_->name);
+//    type->cls.super = type_at(P, struct_->super);
+//    type->cls.nfields = register_props(P, struct_->fields, &type->cls.fields);
+//    type->cls.nmethods = register_props(P, struct_->methods, &type->cls.methods);
+//
+//    Value *pv = pawC_push0(P); // anchor here
+//    Class *c = pawV_new_struct(P, pv);
+//
+//    const int g = pawE_new_global(P, type->hdr.name, type);
+//    GlobalVar *var = pawE_get_global(P, g);
+//    v_set_object(&var->value, c);
+//    var->desc.type = type;
+//    pawC_pop(P); // pop 'c'
+//}
+//
+//paw_Type pawL_bind_method(paw_Env *P, int g, paw_Function func, int index)
+//{
+//    GlobalVar *var = pawE_get_global(P, g);
+//    Class *struct_ = v_struct(var->value);
+//    Value *pmethod = pawA_get(P, struct_->methods, index);
+//    v_set_object(pmethod, func);
+//}
+
+#define reset_ctx(p) ((p)->ngenerics = 0)
 
 void pawL_init(paw_Env *P)
 {
-    pawL_register_function(P, "assert", base_assert, t_list_1(PAW_TBOOL), PAW_TUNIT);
-    pawL_register_function(P, "print", base_print, t_list_1(PAW_TSTRING), PAW_TUNIT);
-//    pawL_register_function(P, "to_float", base_to_float_s, t_list_1(PAW_TSTRING), PAW_TFLOAT);
-//    pawL_register_function(P, "to_float", base_to_float_i, t_list_1(PAW_TINT), PAW_TFLOAT);
-//    pawL_register_function(P, "to_float", base_to_float_f, t_list_1(PAW_TFLOAT), PAW_TFLOAT);
-//    pawL_register_function(P, "to_bool", base_to_bool_s, t_list_1(PAW_TSTRING), PAW_TBOOL);
-//    pawL_register_function(P, "to_bool", base_to_bool_i, t_list_1(PAW_TINT), PAW_TBOOL);
-//    pawL_register_function(P, "to_bool", base_to_bool_f, t_list_1(PAW_TFLOAT), PAW_TBOOL);
-//    pawL_register_function(P, "to_int", base_to_int_s, t_list_1(PAW_TSTRING), PAW_TINT);
-//    pawL_register_function(P, "to_int", base_to_int_i, t_list_1(PAW_TINT), PAW_TINT);
-//    pawL_register_function(P, "to_int", base_to_int_f, t_list_1(PAW_TFLOAT), PAW_TINT);
+    pawL_GenericCtx ctx;
+    paw_Type type, base;
+    paw_Type T, T2;
 
-//    pawL_register_function(P, "try", base_try, t_list_1(PAW_TFUNCTION), PAW_TINT);
-//    pawL_register_function(P, "require", base_require, t_list_1(PAW_TSTRING), PAW_TMODULE);
-//    pawL_register_function(P, "load", base_load, t_list_1(PAW_TSTRING), PAW_TFUNCTION);
-//    pawL_register_function(P, "ord", base_ord, t_list_1(PAW_TSTRING), PAW_TINT);
-//    pawL_register_function(P, "chr", base_chr, t_list_1(PAW_TINT), PAW_TSTRING);
+    // Builtin functions:
 
-//#define PAW_TSELF 0
-//    struct MethodDesc kBigIntDesc[] = {
-//        {"__eq", pawB_eq_bi, t_list_2(PAW_TSELF, PAW_TSELF), PAW_TBOOL},
-//        {"__eq", pawB_eq_i, t_list_2(PAW_TSELF, PAW_TINT), PAW_TBOOL},
-//        {"__eq", pawB_eq_f, t_list_2(PAW_TSELF, PAW_TFLOAT), PAW_TBOOL},
-//        {"__ne", pawB_ne_bi, t_list_2(PAW_TSELF, PAW_TSELF), PAW_TBOOL},
-//        {"__ne", pawB_ne_i, t_list_2(PAW_TSELF, PAW_TINT), PAW_TBOOL},
-//        {"__ne", pawB_ne_f, t_list_2(PAW_TSELF, PAW_TFLOAT), PAW_TBOOL},
-//        {"__lt", pawB_lt_bi, t_list_2(PAW_TSELF, PAW_TSELF), PAW_TBOOL},
-//        {"__lt", pawB_lt_i, t_list_2(PAW_TSELF, PAW_TINT), PAW_TBOOL},
-//        {"__lt", pawB_lt_f, t_list_2(PAW_TSELF, PAW_TFLOAT), PAW_TBOOL},
-//        {"__le", pawB_le_bi, t_list_2(PAW_TSELF, PAW_TSELF), PAW_TBOOL},
-//        {"__le", pawB_le_i, t_list_2(PAW_TSELF, PAW_TINT), PAW_TBOOL},
-//        {"__le", pawB_le_f, t_list_2(PAW_TSELF, PAW_TFLOAT), PAW_TBOOL},
-//        {"__gt", pawB_gt_bi, t_list_2(PAW_TSELF, PAW_TSELF), PAW_TBOOL},
-//        {"__gt", pawB_gt_i, t_list_2(PAW_TSELF, PAW_TINT), PAW_TBOOL},
-//        {"__gt", pawB_gt_f, t_list_2(PAW_TSELF, PAW_TFLOAT), PAW_TBOOL},
-//        {"__ge", pawB_ge_bi, t_list_2(PAW_TSELF, PAW_TSELF), PAW_TBOOL},
-//        {"__ge", pawB_ge_i, t_list_2(PAW_TSELF, PAW_TINT), PAW_TBOOL},
-//        {"__ge", pawB_ge_f, t_list_2(PAW_TSELF, PAW_TFLOAT), PAW_TBOOL},
-//        {"__add", pawB_add_bi, t_list_2(PAW_TSELF, PAW_TSELF), PAW_TSELF},
-//        {"__add", pawB_add_i, t_list_2(PAW_TSELF, PAW_TINT), PAW_TSELF},
-//        {"__add", pawB_add_f, t_list_2(PAW_TSELF, PAW_TFLOAT), PAW_TFLOAT},
-//        {"__sub", pawB_sub_bi, t_list_2(PAW_TSELF, PAW_TSELF), PAW_TSELF},
-//        {"__sub", pawB_sub_i, t_list_2(PAW_TSELF, PAW_TINT), PAW_TSELF},
-//        {"__sub", pawB_sub_f, t_list_2(PAW_TSELF, PAW_TFLOAT), PAW_TFLOAT},
-//        {"__mul", pawB_mul_bi, t_list_2(PAW_TSELF, PAW_TSELF), PAW_TSELF},
-//        {"__mul", pawB_mul_i, t_list_2(PAW_TSELF, PAW_TINT), PAW_TSELF},
-//        {"__mul", pawB_mul_f, t_list_2(PAW_TSELF, PAW_TFLOAT), PAW_TFLOAT},
-//        {"__div", pawB_div_bi, t_list_2(PAW_TSELF, PAW_TSELF), PAW_TSELF},
-//        {"__div", pawB_div_i, t_list_2(PAW_TSELF, PAW_TINT), PAW_TSELF},
-//        {"__div", pawB_div_f, t_list_2(PAW_TSELF, PAW_TFLOAT), PAW_TFLOAT},
-//        {"__mod", pawB_mod_bi, t_list_2(PAW_TSELF, PAW_TSELF), PAW_TSELF},
-//        {"__mod", pawB_mod_i, t_list_2(PAW_TSELF, PAW_TINT), PAW_TSELF},
-//        {"__mod", pawB_mod_f, t_list_2(PAW_TSELF, PAW_TFLOAT), PAW_TFLOAT},
-//        {"__bxor", pawB_bxor_bi, t_list_2(PAW_TSELF, PAW_TSELF), PAW_TSELF},
-//        {"__bxor", pawB_bxor_i, t_list_2(PAW_TSELF, PAW_TINT), PAW_TSELF},
-//        {"__band", pawB_band_bi, t_list_2(PAW_TSELF, PAW_TSELF), PAW_TSELF},
-//        {"__band", pawB_band_i, t_list_2(PAW_TSELF, PAW_TINT), PAW_TSELF},
-//        {"__bor", pawB_bor_bi, t_list_2(PAW_TSELF, PAW_TSELF), PAW_TSELF},
-//        {"__bor", pawB_bor_i, t_list_2(PAW_TSELF, PAW_TINT), PAW_TSELF},
-//        {"__shl", pawB_shl_bi, t_list_2(PAW_TSELF, PAW_TSELF), PAW_TSELF},
-//        {"__shl", pawB_shl_i, t_list_2(PAW_TSELF, PAW_TINT), PAW_TSELF},
-//        {"__shr", pawB_shr_bi, t_list_2(PAW_TSELF, PAW_TSELF), PAW_TSELF},
-//        {"__shr", pawB_shr_i, t_list_2(PAW_TSELF, PAW_TINT), PAW_TSELF},
-//        {"__radd", pawB_radd_bi, t_list_2(PAW_TSELF, PAW_TSELF), PAW_TSELF},
-//        {"__radd", pawB_radd_i, t_list_2(PAW_TSELF, PAW_TINT), PAW_TSELF},
-//        {"__radd", pawB_radd_f, t_list_2(PAW_TSELF, PAW_TFLOAT), PAW_TFLOAT},
-//        {"__rsub", pawB_rsub_bi, t_list_2(PAW_TSELF, PAW_TSELF), PAW_TSELF},
-//        {"__rsub", pawB_rsub_i, t_list_2(PAW_TSELF, PAW_TINT), PAW_TSELF},
-//        {"__rsub", pawB_rsub_f, t_list_2(PAW_TSELF, PAW_TFLOAT), PAW_TFLOAT},
-//        {"__rmul", pawB_rmul_bi, t_list_2(PAW_TSELF, PAW_TSELF), PAW_TSELF},
-//        {"__rmul", pawB_rmul_i, t_list_2(PAW_TSELF, PAW_TINT), PAW_TSELF},
-//        {"__rmul", pawB_rmul_f, t_list_2(PAW_TSELF, PAW_TFLOAT), PAW_TFLOAT},
-//        {"__rdiv", pawB_rdiv_bi, t_list_2(PAW_TSELF, PAW_TSELF), PAW_TSELF},
-//        {"__rdiv", pawB_rdiv_i, t_list_2(PAW_TSELF, PAW_TINT), PAW_TSELF},
-//        {"__rdiv", pawB_rdiv_f, t_list_2(PAW_TSELF, PAW_TFLOAT), PAW_TFLOAT},
-//        {"__rmod", pawB_rmod_bi, t_list_2(PAW_TSELF, PAW_TSELF), PAW_TSELF},
-//        {"__rmod", pawB_rmod_i, t_list_2(PAW_TSELF, PAW_TINT), PAW_TSELF},
-//        {"__rmod", pawB_rmod_f, t_list_2(PAW_TSELF, PAW_TFLOAT), PAW_TFLOAT},
-//        {"__rbxor", pawB_rbxor_bi, t_list_2(PAW_TSELF, PAW_TSELF), PAW_TSELF},
-//        {"__rbxor", pawB_rbxor_i, t_list_2(PAW_TSELF, PAW_TINT), PAW_TSELF},
-//        {"__rband", pawB_rband_bi, t_list_2(PAW_TSELF, PAW_TSELF), PAW_TSELF},
-//        {"__rband", pawB_rband_i, t_list_2(PAW_TSELF, PAW_TINT), PAW_TSELF},
-//        {"__rbor", pawB_rbor_bi, t_list_2(PAW_TSELF, PAW_TSELF), PAW_TSELF},
-//        {"__rbor", pawB_rbor_i, t_list_2(PAW_TSELF, PAW_TINT), PAW_TSELF},
-//        {"__rshl", pawB_rshl_bi, t_list_2(PAW_TSELF, PAW_TSELF), PAW_TSELF},
-//        {"__rshl", pawB_rshl_i, t_list_2(PAW_TSELF, PAW_TINT), PAW_TSELF},
-//        {"__rshr", pawB_rshr_bi, t_list_2(PAW_TSELF, PAW_TSELF), PAW_TSELF},
-//        {"__rshr", pawB_rshr_i, t_list_2(PAW_TSELF, PAW_TINT), PAW_TSELF},
-//    };
-//    push_builtin_class(P, "string", kStringDesc);
+    // fn assert(bool)
+    type = pawL_new_func_type(P, l_list(PAW_TBOOL), PAW_TUNIT, 0);
+    pawL_new_func(P, base_assert, 0);
+    pawL_new_global(P, "assert", type);
 
-//    Type *string_array_tag = pawY_register_array(P, e_tag(P, PAW_TSTRING));
-//    paw_Type string_array = t_type(string_array_tag);
+    // fn print(string)
+    type = pawL_new_func_type(P, l_list(PAW_TSTRING), PAW_TUNIT, 0);
+    pawL_new_func(P, base_print, 0);
+    pawL_new_global(P, "print", type);
 
-    struct MethodDesc kStringDesc[] = {
-        {"starts_with", string_starts_with, t_list_1(PAW_TSTRING), PAW_TBOOL},
-        {"ends_with", string_ends_with, t_list_1(PAW_TSTRING), PAW_TBOOL},
-//        {"split", string_split, t_list_1(PAW_TSTRING), string_array},
-//        {"join", string_join, t_list_1(string_array), PAW_TSTRING},
-    };
-    push_builtin_class(P, PAW_TSTRING, "string", kStringDesc);
-
-//    struct MethodDesc kObjectDesc[] = {
-//        {"clone", object_clone, t_list_0(), PAW_TSELF},
-//    };
-//    push_builtin_class(P, "object", kObjectDesc);
+    // TODO: Builtin function templates
+//    // fn add[T](a: T, b: T) -> T
+//    reset_ctx(&ctx);
+//    T = pawL_new_generic_type(P, &ctx);
+//    base = pawL_new_func_type(P, l_list(T, T), T, 1);
+//    type = pawL_instantiate_func(P, base, l_list(PAW_TINT));
+//    pawL_new_func(P, base_add_i, 0);
+//    pawL_new_global(P, "addi_", type); // TODO: name mangling
 
     // Create a map for caching loaded libraries.
     P->libs = pawH_new(P);

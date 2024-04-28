@@ -2,14 +2,20 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 //
-// Compilation phases:
+// parse.h: compiler entrypoint
 //
-//  Pass | Target | Purpose
-// ------|--------|-----------------------------
-//  1    | code   | build ast, register symbols
-//  2    | tree   | check types
-//  3    | tree   | generate code
+// The compiler converts source code into bytecode that can be run in paw's
+// virtual machine. It works in 3 passes:
 //
+//  Pass | Input       | Output    | Purpose                  
+// ------|-------------|-----------|---------------------------
+//  1    | source code | AST       | build AST                
+//  2    | AST         | typed AST | build symtab, unify types
+//  3    | typed AST   | bytecode  | generate code            
+//
+// TODO: rename some of these files: parse.* should maybe be called compile.*, and
+//       it would be nice to have a separate AST module.
+
 #ifndef PAW_PARSE_H
 #define PAW_PARSE_H
 
@@ -24,7 +30,17 @@
 #define limit_error(x, what, limit) \
     pawX_error(x, "too many %s (limit is %d)", what, limit)
 
-typedef enum LabeKind {
+// TODO: Use this to keep track of dynamic memory
+typedef union DeferredAlloc DeferredAlloc;
+
+typedef enum DeferredKind {
+    DEFER_SCOPE,
+} DeferredKind;
+
+#define DEFERRED_HEADER DeferredAlloc *prev_alloc; \
+                        DeferredKind alloc_kind
+
+typedef enum LabelKind {
     LBREAK,
     LCONTINUE,
 } LabelKind;
@@ -45,6 +61,7 @@ typedef struct LabelList {
 
 // Represents a single lexical scope
 typedef struct Scope {
+    DEFERRED_HEADER;
     struct Symbol **symbols;
     int nsymbols;
     int capacity;
@@ -58,41 +75,97 @@ typedef struct SymbolTable {
     Scope **scopes;
     int nscopes;
     int capacity;
-
-    Type base_types[PAW_NTYPES];
 } SymbolTable;
 
 #define last_scope(t) check_exp((t)->size > 0, (t)->data[(t)->size - 1])
-Scope *pawP_add_scope(Lex *lex, SymbolTable *table);
+Scope *pawP_new_scope(Lex *lex, SymbolTable *table);
+void pawP_add_scope(Lex *lex, SymbolTable *table, Scope *scope);
 struct Symbol *pawP_add_symbol(Lex *lex, Scope *table);
 int pawP_find_symbol(Scope *scope, const String *name);
 
-typedef struct ClsState {
-    struct ClsState *outer;
-} ClsState;
+typedef struct Type Type; // type for unifier
+typedef struct Unifier Unifier; // unification context
+typedef struct UniTable UniTable; // unification table
 
-typedef struct BlkState {
-    struct BlkState *outer;
-    struct Block *bk; // AST representation
+typedef Type *(*Unify)(Unifier *, Type *, Type *);
+
+struct Unifier {
+    UniTable *table;
+    Unify unify;
+    Lex *lex;
+    int depth;
+};
+
+#define p_is_bound(U, t) check_exp(y_is_type_var(t) && \
+                                   (t)->var.depth <= (U)->depth, \
+                                   (t)->var.depth == (U)->depth)
+
+// Apply substitutions to a type TODO: use the other one
+Type *pawP_normalize(Unifier *U, Type *a);
+
+Type *pawP_normalize_(UniTable *table, Type *a);
+
+// Impose the constraint that type variables 'a' and 'b' are equal
+void pawP_unify(Unifier *U, Type *a, Type *b);
+
+// Create a new type variable
+// 'type' must be a GenericType.
+void pawP_new_type_var(Unifier *U, Type *type);
+
+// Generics context handling
+void pawP_unifier_enter(Unifier *U, UniTable *table);
+UniTable *pawP_unifier_leave(Unifier *U);
+void pawP_unifier_replace(Unifier *U, UniTable *table);
+
+// TODO: Don't leak unification tables! Being lazy right now
+
+typedef struct GenericState {
+    struct GenericState *outer;
+} GenericState;
+
+typedef struct StructState {
+    struct StructState *outer;
+    struct StructDecl *struct_;
+    struct AstDecl *method;
+    struct AstDecl *field;
+    int imethod;
+    int ifield;
+} StructState;
+
+typedef struct BlockState {
+    struct BlockState *outer;
     uint8_t is_loop;
+    int isymbol;
     int level;
     int label0;
-} BlkState;
+} BlockState;
 
-typedef enum FnKind {
-    FN_MODULE,
-    FN_FUNCTION,
-    FN_METHOD,
-    FN_INIT,
-} FnKind;
+typedef struct LocalSlot {
+    struct Symbol *symbol;
+    int index;
+} LocalSlot;
 
-typedef struct FnState {
-    struct FnState *outer; // enclosing function
+typedef struct LocalStack {
+    LocalSlot *slots;
+    int nslots;
+    int capacity;
+} LocalStack;
+
+typedef enum FuncKind {
+    FUNC_MODULE,
+    FUNC_FUNCTION,
+    FUNC_METHOD,
+} FuncKind;
+
+// TODO: Need to keep track of scopes that get removed from the symbol table and placed in 'scopes' field.
+//       Either use GC, or link in a 'defer' list.
+typedef struct FuncState {
+    struct FuncState *outer; // enclosing function
+    struct FuncType *type; // function signature
+    struct Generator *G; // codegen state
     SymbolTable scopes; // local scopes
-    Scope locals; // local variables
-    FunctionType *sig; // function signature
-    BlkState *bs; // current block
-    Lex *lex; // lexical state
+    LocalStack locals; // local variables
+    BlockState *bs; // current block
     Proto *proto; // prototype being built
     String *name; // name of the function
     int id; // index in caller's prototype list
@@ -101,24 +174,61 @@ typedef struct FnState {
     int nup; // number of upvalues
     int nk; // number of constants
     int nproto; // number of nested functions
-    int nclasses; // number of nested classes
+    int nstructs; // number of nested structs
     int nlines; // number of source lines
     int pc; // number of instructions
-    FnKind kind; // type of function
-} FnState;
+    FuncKind kind; // type of function
+} FuncState;
 
-#define fn_has_self(kind) (kind >= FN_METHOD)
+// Unifies structures that require dynamic memory
+union DeferredAlloc {
+    Scope scope;
+};
 
+#define fn_has_self(kind) (kind >= FUNC_METHOD)
+
+#define MAX_BINDERS 512
+
+// Keeps track of dynamic memory used by the compiler
 typedef struct ParseMemory {
     // Buffer for accumulating strings
-    struct Scratch {
+    struct CharVec {
         char *data;
         int size;
         int alloc;
     } scratch;
 
-    SymbolTable st;
-    LabelList ll;
+    struct {
+        Binder data[MAX_BINDERS];
+        int size;
+    } temp;
+
+    struct {
+        FuncSig *data;
+        int size;
+        int alloc;
+    } sigs;
+
+    // Operand stack, for linearizing chains of expressions.
+    struct {
+        struct IrOperand **data;
+        int size;
+        int alloc;
+    } opers;
+
+    struct {
+        struct AstDecl **data;
+        int size;
+        int alloc;
+    } decls;
+
+    struct Ast *ast;
+    struct Ir *ir;
+
+    DeferredAlloc *defer;
+    Unifier unifier;
+    SymbolTable symbols;
+    LabelList labels;
 } ParseMemory;
 
 void pawP_init(paw_Env *P);

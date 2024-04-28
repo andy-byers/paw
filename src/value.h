@@ -5,22 +5,19 @@
 #define PAW_VALUE_H
 
 #include "paw.h"
-#include "type.h"
 #include "util.h"
 
 // Initializer for iterator state variables
 #define PAW_ITER_INIT -1
 
 #define f_is_nan(v) ((v).f != (v).f)
-#define v_is_null(v) ((v).u == 0)
 
 #define v_true(v) ((v).u != 0)
 #define v_false(v) (!v_true(v))
 #define v_int(v) ((v).i)
 #define v_float(v) ((v).f)
 
-#define v_check(v) check_exp(!v_is_null(v), v)
-#define v_object(v) (v_check(v).o)
+#define v_object(v) ((v).o)
 #define v_native(v) (o_native(v_object(v)))
 #define v_proto(v) (o_proto(v_object(v))) 
 #define v_closure(v) (o_closure(v_object(v))) 
@@ -28,7 +25,7 @@
 #define v_string(v) (o_string(v_object(v))) 
 #define v_text(v) (v_string(v)->text)
 #define v_instance(v) (o_instance(v_object(v))) 
-#define v_class(v) (o_class(v_object(v))) 
+#define v_struct(v) (o_struct(v_object(v))) 
 #define v_method(v) (o_method(v_object(v))) 
 #define v_foreign(v) (o_foreign(v_object(v))) 
 
@@ -45,7 +42,7 @@
 #define o_is_closure(o) (o_kind(o) == VCLOSURE)
 #define o_is_upvalue(o) (o_kind(o) == VUPVALUE)
 #define o_is_instance(o) (o_kind(o) == VINSTANCE)
-#define o_is_class(o) (o_kind(o) == VCLASS)
+#define o_is_struct(o) (o_kind(o) == VSTRUCT)
 #define o_is_method(o) (o_kind(o) == VMETHOD)
 #define o_is_foreign(o) (o_kind(o) == VFOREIGN)
 
@@ -55,7 +52,7 @@
 #define o_closure(o) check_exp(o_is_closure(o), (Closure *)(o))
 #define o_upvalue(o) check_exp(o_is_upvalue(o), (UpValue *)(o))
 #define o_instance(o) check_exp(o_is_instance(o), (Instance *)(o))
-#define o_class(o) check_exp(o_is_class(o), (Class *)(o))
+#define o_struct(o) check_exp(o_is_struct(o), (Struct *)(o))
 #define o_method(o) check_exp(o_is_method(o), (Method *)(o))
 #define o_foreign(o) check_exp(o_is_foreign(o), (Foreign *)(o))
 
@@ -75,6 +72,7 @@ typedef union Value {
     paw_Int i;
     paw_Float f;
     Object *o;
+    void *p;
 } Value;
 
 typedef Value *StackPtr;
@@ -96,7 +94,7 @@ typedef enum ValueKind {
     VSTRING,
     VARRAY,
     VMAP,
-    VCLASS,
+    VSTRUCT,
     VINSTANCE,
     VMETHOD,
     VFOREIGN,
@@ -129,7 +127,7 @@ static inline int pawV_type(ValueKind vt)
         case VMETHOD:
             return PAW_TFUNCTION;
         case VINSTANCE:
-            return PAW_TCLASS;
+            return PAW_TSTRUCT;
         case VFOREIGN:
             return PAW_TFOREIGN;
         default:
@@ -186,8 +184,8 @@ typedef struct String {
 const char *pawV_to_string(paw_Env *P, Value v, paw_Type type, size_t *nout);
 
 typedef struct VarDesc {
-    Type *type;
     String *name;
+    paw_Type code;
 } VarDesc;
 
 typedef struct Proto {
@@ -217,9 +215,8 @@ typedef struct Proto {
         int line;
     } *lines;
 
-    struct Class *classes;
-
     Value *k; // constants
+    struct Struct **c; // nested structs
     struct Proto **p; // nested functions
     int nup; // number of upvalues
     int nlines; // number of lines
@@ -227,7 +224,7 @@ typedef struct Proto {
     int nk; // number of constants
     int argc; // number of fixed parameters
     int nproto; // number of nested functions
-    int nclasses;
+    int nc; // number of nested structs
 } Proto;
 
 Proto *pawV_new_proto(paw_Env *P);
@@ -266,13 +263,21 @@ void pawV_free_closure(paw_Env *P, Closure *c);
 
 typedef struct Native {
     GC_HEADER;
-    paw_Function call;
-    String *name;
+    uint16_t nup;
+    paw_Function func;
+    UpValue *up[];
 } Native;
 
-Native *pawV_new_native(paw_Env *P, String *name, paw_Function call);
+Native *pawV_new_native(paw_Env *P, paw_Function func, int nup);
 
-typedef struct Array {
+typedef struct Array_ {
+    GC_HEADER;
+    Value elems[];
+} Array_;
+
+Array_ *pawV_new_array(paw_Env *P, int nelems);
+
+typedef struct Array { // TODO: Call this Vector
     GC_HEADER;
     Value *begin;
     Value *end;
@@ -287,22 +292,27 @@ typedef struct Map {
     size_t capacity;
 } Map;
 
-typedef struct Class {
+typedef struct Struct {
     GC_HEADER; // common members for GC
-    Value attrs[]; // fixed array of attributes
-} Class;
+    paw_Type type; // index in module type list
+    VarDesc *field_info; // RTTI for fields
+    VarDesc *method_info; // RTTI for methods
+    Array *methods; // functions with 'self' (Array[Closure])
+} Struct;
 
-Class *pawV_new_class(paw_Env *P, Type *type);
+Struct *pawV_new_struct(paw_Env *P, Value *pv);
+void pawV_free_struct(paw_Env *P, Struct *struct_);
 
-// Instance of a class
+// Instance of a struct
 typedef struct Instance {
     GC_HEADER; // common members for GC
     Value attrs[]; // fixed array of attributes
+    //Value fields[]; // data fields, inc. superstruct
 } Instance;
 
-Instance *pawV_new_instance(paw_Env *P, int nattrs);
-void pawV_free_instance(paw_Env *P, Instance *ins, Type *type);
-Value *pawV_find_attr(Value *attrs, String *name, Type *type);
+Instance *pawV_new_instance(paw_Env *P, int nfields);
+void pawV_free_instance(paw_Env *P, Instance *ins, int nfields);
+//Value *pawV_find_attr(Value *attrs, String *name, Type *type);
 
 // Method bound to an instance
 typedef struct Method {
@@ -314,15 +324,19 @@ typedef struct Method {
 Method *pawV_new_method(paw_Env *P, Value self, Value call);
 void pawV_free_method(paw_Env *P, Method *);
 
+#define BOX_PARSE_MAP 1
+#define BOX_PARSE_BUFFER 2
+
 typedef struct Foreign {
     GC_HEADER;
+    uint8_t flags;
     void *data;
     size_t size;
     Value attrs[]; // fixed array of attributes
 } Foreign;
 
-Foreign *pawV_push_foreign(paw_Env *P, size_t size, int nattrs);
-void pawV_free_foreign(paw_Env *P, Foreign *ud, Type *type);
+Foreign *pawV_push_foreign(paw_Env *P, size_t size, int nfields);
+void pawV_free_foreign(paw_Env *P, Foreign *ud, int nfields);
 
 const char *pawV_name(ValueKind type);
 

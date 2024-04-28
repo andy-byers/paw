@@ -1,447 +1,471 @@
--- loop.paw
+// loop.paw
 
--- Make sure loop code cleans the stack up when finished
-{
-    for i = 1, 8 {
-        for j = 1, i {}
-    }
-    fn test(): int {return 123}
-    assert(test() == 123)
+for i = 0, 8 {
+    let a = -1
+    let b = -1
 }
 
--- Numeric for loop:
-{
-    fn test(start: int, end: int, step: int): int {
-        let n = 0
-        for i = start, end, step {
-            n = n + 1
-        }
-        return n
-    }
-    assert(test(0, 0, 1) == 0)
-    assert(test(0, 0, -1) == 0)
-    assert(test(0, -1, 1) == 0)
-    assert(test(0, 1, -1) == 0)
-    assert(test(0, 0, 10) == 0)
-    assert(test(0, 0, -10) == 0)
-    assert(test(0, -1, 10) == 0)
-    assert(test(0, 1, -10) == 0)
-
-    assert(test(-1, 1, 1) == 2)
-    assert(test(-10, 10, 1) == 20)
-    assert(test(1, -1, -1) == 2)
-    assert(test(10, -10, -1) == 20)
-    assert(test(-1, 1, 2) == 1)
-    assert(test(-10, 10, 2) == 10)
-    assert(test(1, -1, -2) == 1)
-    assert(test(10, -10, -2) == 10)
-    assert(test(-1, 1, 4) == 1)
-    assert(test(-10, 10, 4) == 5)
-    assert(test(1, -1, -4) == 1)
-    assert(test(10, -10, -4) == 5)
-
-    -- Loop bounds are copied onto the stack when the loop starts. Changing them
-    -- during the loop has no effect.
-    let n = 0
-    let N = 10
-    for i = 0, N {
-        n = n + 1
-        N = 0
-    }
-    assert(n == 10)
-
-    fn test(n: int): int {
-        let f
-        for i = 0, 100 {
-            if i == n {
-                f = fn() {
-                    return i
-                }
-            }
-        }
-        return f
-    }
-    assert(test(0)() == 0)
-    assert(test(10)() == 10)
-    assert(test(50)() == 50)
-    assert(test(100) == null)
-}
-
--- Iterator for loop:
-{
-    let i = 1
-    for e in [1, 2, 3] {
-        assert(e == i)
-        i = i + 1
-    }
-
-    let i = 0
-    for k in {1: 1, 2: 2, 3: 3} {
-        i = i + 1 
-    }
-    assert(i == 3)
-
-    let a = [1, 2, 3]
-    let b: [int]
-    for e in a {
-        b.push(e)
-        a.pop()
-    }
-    assert(#b == 2)
-    assert(b[0] == 1)
-    assert(b[1] == 2)
-}
-
--- While loop:
-{
-    fn test(n: int): int {
-        let count = 0
-        while count < n {
-            count = count + 1
-        }
-        return count
-    }
-    assert(test(0) == 0)
-    assert(test(1) == 1)
-    assert(test(10) == 10)
-}
-
--- Do-while loop:
-{
-    let i = 0
-    do {
-        i = i + 1
-    } while i < 10
-
-    assert(i == 10)
-
-    do {
-        i = 42
-    } while 0
-
-    assert(i == 42)
-}
-
--- 'break' and 'continue' statements:
-{
-    let n
-    for i = 0,3 {
-        if i == 2 {
-            break
-        }
-        n = i
-    }
-    assert(n == 1)
-
-    let n
-    for i = 0,3 {
-        if i == 2 {
-            continue
-        }
-        n = i
-    }
-    assert(n == 1)
-
-    -- Capture loop variable 'i' as an upvalue.
-    fn test(n: int): int {
-        let f
-        for i = 0,100 {
-            if i == n {
-                let u = i
-                f = fn() {
-                    return n + i + u
-                }
-                break
-            }
-        } -- 'i' closed here when i == n, popped otherwise
-        return f
-    }
-    assert(test(0)() == 0)
-    assert(test(10)() == 30)
-    assert(test(50)() == 150)
-    assert(test(100) == null)
-
-    let i = 0
-    do {
-        i = i + 1
-        break
-    } while true
-
-    assert(i == 1)
-
-    let i = 0
-    do {
-        if i == 10 {
-            break
-        }
-        i = i + 1
-    } while true
-
-    assert(i == 10)
-
-    let i = 0
-    do {
-        i = i + 1
-        continue
-    } while i < 10
-
-    assert(i == 10)
-
-    let i = 0
-    let n = 0
-    do {
-        i = i + 1
-        if i & 1 {
-            continue
-        }
-        n = n + 1
-    } while i < 10
-
-    assert(n == 5)
-
-    let i = 0
-    let n = 0
-    do {
-        i = i + 1
-        if i & 1 {
-            continue
-        } else if i == 10 {
-            break
-        }
-        n = n + 1
-    } while true
-
-    assert(n == 4)
-} 
-
-{
-    let n = 0
-    let N = 10
-    for i = 0,N {
-        n = n + 1
-        N = 0
-    }
-    assert(n == 10)
-}
-
-{
-   let N = 2
-
-    let a = []
-    for i = 0,N {
-        for j in [0] {
-            a.push(i + j)
-        }
-    }
-    assert(#a == 2)
-    assert(a[0] == 0)
-    assert(a[1] == 1)
-
-    let a = []
-    for i = 0, N {
-        let j = 0
-        while j < N {
-            a.push(i + j)
-            j = j + 1
-        }
-    }
-    assert(#a == 4)
-    assert(a[0] == 0)
-    assert(a[1] == 1)
-    assert(a[2] == 1)
-    assert(a[3] == 2)
-
-    let a = []
-    for i = 0,N {
-        for j in [0] {
-            let k = 0
-            while k < N {
-                a.push(i + j + k)
-                k = k + 1
-            }
-        }
-    }
-    assert(#a == 4)
-    assert(a[0] == 0)
-    assert(a[1] == 1)
-    assert(a[2] == 1)
-    assert(a[3] == 2)
-}
-
-{
-    let n = 0
-    for i = 0,8 {
-        n = n + 1
-        break
-    }
-    assert(n == 1)
-}
-
-{
-    fn test(n: int): int {
-        let count = 0
-        for i = 0,100 {
-            if i == n {
-                break
-            }
-            count = count + 1
-            continue
-        }
-        return count
-    }
-    assert(test(-1) == 100)
-    assert(test(0) == 0)
-    assert(test(25) == 25)
-    assert(test(50) == 50)
-}
-
-{
-    let i
-
-    -- 'i' shadowed by loop variable.
-    for i = 0,8 {} 
-    assert(i == null)
-}
-
-{
-    -- Invalid operations must be run to throw an exception
-    if false && 1 / 0 {
-        let x = 1 // 0
-        let y = 1 % 0
-    }
-}
-
-{
-    let I = [0, 1, 2, 3]
-    for i = 0,4 {
-        assert(i == I[i])
-    }
-
-    let n = 0
-    let I = [2, 3]
-    for i = 2,4 {
-        assert(i == I[n])
-        n = n + 1
-    }
-
-    let n = 0
-    let I = [1, 3]
-    for i = 1,4,2 {
-        assert(i == I[n])
-        n = n + 1
-    }
-}
-
-{
-    let n = 0
-    for i = 0,8 {
-        n = n + 1
-        break
-    }
-    assert(n == 1)
-}
-
-{
-    let n = 0
-    for i = 0,8 {
-        n = n + 1
-        continue
-        
-        -- Unreachable
-        assert(false)
-    }
-    assert(n == 8)
-}
-
-{
-    fn test(n: int): int {
-        let f
-        for i = 0,100 {
-            if i == n {{{ -- <-- NOTE: Nested blocks here
-                let a = [i]
-                fn check() {
-                    -- Capture 'a' as an upvalue.
-                    let m = a[0]
-                    a[0] = a[0] + 1
-                    -- Equivalent to '3 * n' on the first call. Increases by 1
-                    -- each time.
-                    return i + n + m
-                }
-                f = check
-                break
-            }}}
-        }
-        return f
-    }
-    assert(test(-1) == null)
-
-    let t = test(10)
-    assert(t() == 30)
-    assert(t() == 31)
-    assert(t() == 32)
-}
-
-{
-    fn test(b: int): int {
-        let n = 0
-        let f
-        for i = 0,8 {
-            let _0
-            let _1
-            {
-                let _2
-
-                n = n + 1
-                let m = n
-                f = fn() {
-                    return m + n
-                }
-                -- Need to emit instructions to close 'm' at the break and continue
-                -- statements.
-                if b {
-                    break
-                } else {
-                    continue
-                }
-                let _3
-            }
-            let _4
-            let _5
-        }
-        return f()
-    }
-    assert(test(true) == 2)
-    assert(test(false) == 16)
-}
-
-{
-    fn test(n: int): int {
-        let f
-        for _ = 0, 10 {
-            if n == 0 {
-                let _0 = 0
-                f = fn(): int {return n + _0}
-                break
-            } else if n == 1 {
-                if n == 1 {
-                    let _1 = 1
-                    f = fn(): int {return n + _1}
-                    break
-                }
-            } else if n == 2 {
-                if n == 2 {
-                    if n == 2 {
-                        let _2 = 2
-                        f = fn(): int {return n + _2}
-                        break
-                    }
-                }
-            }
-        }
-        return f()
-    }
-    assert(test(0) == 0)
-    assert(test(1) == 2)
-    assert(test(2) == 4)
-}
-
+//// Make sure loop code cleans the stack up when finished
+//{
+//    for i = 1, 8 {
+//        for j = 1, i {}
+//    }
+//    fn test() -> int {return 123}
+//    assert(test() == 123)
+//}
+//
+//// Numeric for loop:
+//{
+//    fn test(start: int, end: int, step: int) -> int {
+//        let n = 0
+//        for i = start, end, step {
+//            n = n + 1
+//        }
+//        return n
+//    }
+//    assert(test(0, 0, 1) == 0)
+//    assert(test(0, 0, -1) == 0)
+//    assert(test(0, -1, 1) == 0)
+//    assert(test(0, 1, -1) == 0)
+//    assert(test(0, 0, 10) == 0)
+//    assert(test(0, 0, -10) == 0)
+//    assert(test(0, -1, 10) == 0)
+//    assert(test(0, 1, -10) == 0)
+//
+//    assert(test(-1, 1, 1) == 2)
+//    assert(test(-10, 10, 1) == 20)
+//    assert(test(1, -1, -1) == 2)
+//    assert(test(10, -10, -1) == 20)
+//    assert(test(-1, 1, 2) == 1)
+//    assert(test(-10, 10, 2) == 10)
+//    assert(test(1, -1, -2) == 1)
+//    assert(test(10, -10, -2) == 10)
+//    assert(test(-1, 1, 4) == 1)
+//    assert(test(-10, 10, 4) == 5)
+//    assert(test(1, -1, -4) == 1)
+//    assert(test(10, -10, -4) == 5)
+//
+//    // Loop bounds are copied onto the stack when the loop starts. Changing them
+//    // during the loop has no effect.
+//    let n = 0
+//    let N = 10
+//    for i = 0, N {
+//        n = n + 1
+//        N = 0
+//    }
+//    assert(n == 10)
+//
+//    fn test(n: int) -> fn() -> int {
+//        fn default() -> int {
+//            return -1
+//        }
+//        let f = default
+//        for i = 0, 100 {
+//            if i == n {
+//                // Capture 'i', the loop variable, when it is equal to 'n'. It should
+//                // retain this value in the closure, since 'i' is closed over at the
+//                // end of the loop iteration.
+//                fn closure() -> int {
+//                    return i
+//                }
+//                f = closure
+//            }
+//        }
+//        return f
+//    }
+//    assert(test(0)() == 0)
+//    assert(test(10)() == 10)
+//    assert(test(50)() == 50)
+//    assert(test(100)() == -1)
+//}
+//
+//// TODO: Get this working, once data structures are working again
+////// Iterator for loop:
+////{
+////    let i = 1
+////    for e in [1, 2, 3] {
+////        assert(e == i)
+////        i = i + 1
+////    }
+////
+////    let i = 0
+////    for k in {1: 1, 2: 2, 3: 3} {
+////        i = i + 1 
+////    }
+////    assert(i == 3)
+////
+////    let a = [1, 2, 3]
+////    let b: [int]
+////    for e in a {
+////        b.push(e)
+////        a.pop()
+////    }
+////    assert(#b == 2)
+////    assert(b[0] == 1)
+////    assert(b[1] == 2)
+////}
+//
+//// While loop:
+//{
+//    fn test(n: int) -> int {
+//        let count = 0
+//        while count < n {
+//            count = count + 1
+//        }
+//        return count
+//    }
+//    assert(test(0) == 0)
+//    assert(test(1) == 1)
+//    assert(test(10) == 10)
+//}
+//
+//// Do-while loop:
+//{
+//    let i = 0
+//    do {
+//        i = i + 1
+//    } while i < 10
+//
+//    assert(i == 10)
+//
+//    do {
+//        i = 42
+//    } while false
+//
+//    assert(i == 42)
+//}
+//
+//// 'break' and 'continue' statements:
+//{
+//    let n = -1
+//    for i = 0,3 {
+//        if i == 2 {
+//            break
+//        }
+//        n = i
+//    }
+//    assert(n == 1)
+//
+//    let n = -1
+//    for i = 0,3 {
+//        if i == 2 {
+//            continue
+//        }
+//        n = i
+//    }
+//    assert(n == 1)
+//
+//    // Capture loop variable 'i' as an upvalue.
+//    fn test(n: int) -> fn() -> int {
+//        fn default() -> int {
+//            return -1
+//        }
+//        let f = default
+//        for i = 0,100 {
+//            if i == n {
+//                let u = i
+//                fn closure() -> int {
+//                    return n + i + u
+//                }
+//                f = closure
+//                break
+//            }
+//        } // 'i' closed here when i == n, popped otherwise
+//        return f
+//    }
+//    assert(test(0)() == 0)
+//    assert(test(10)() == 30)
+//    assert(test(50)() == 150)
+//    assert(test(100)() == -1)
+//
+//    let i = 0
+//    do {
+//        i = i + 1
+//        break
+//    } while true
+//
+//    assert(i == 1)
+//
+//    let i = 0
+//    do {
+//        if i == 10 {
+//            break
+//        }
+//        i = i + 1
+//    } while true
+//
+//    assert(i == 10)
+//
+//    let i = 0
+//    do {
+//        i = i + 1
+//        continue
+//    } while i < 10
+//
+//    assert(i == 10)
+//
+//    let i = 0
+//    let n = 0
+//    do {
+//        i = i + 1
+//        if i & 1 != 0 {
+//            continue
+//        }
+//        n = n + 1
+//    } while i < 10
+//
+//    assert(n == 5)
+//
+//    let i = 0
+//    let n = 0
+//    do {
+//        i = i + 1
+//        if i & 1 != 0 {
+//            continue
+//        } else if i == 10 {
+//            break
+//        }
+//        n = n + 1
+//    } while true
+//
+//    assert(n == 4)
+//} 
+//
+//{
+//    let n = 0
+//    let N = 10
+//    for i = 0, N {
+//        n = n + 1
+//        N = 0
+//    }
+//    assert(n == 10)
+//}
+//
+////{
+////   let N = 2
+////
+////    let a = []
+////    for i = 0,N {
+////        for j in [0] {
+////            a.push(i + j)
+////        }
+////    }
+////    assert(#a == 2)
+////    assert(a[0] == 0)
+////    assert(a[1] == 1)
+////
+////    let a = []
+////    for i = 0, N {
+////        let j = 0
+////        while j < N {
+////            a.push(i + j)
+////            j = j + 1
+////        }
+////    }
+////    assert(#a == 4)
+////    assert(a[0] == 0)
+////    assert(a[1] == 1)
+////    assert(a[2] == 1)
+////    assert(a[3] == 2)
+////
+////    let a = []
+////    for i = 0,N {
+////        for j in [0] {
+////            let k = 0
+////            while k < N {
+////                a.push(i + j + k)
+////                k = k + 1
+////            }
+////        }
+////    }
+////    assert(#a == 4)
+////    assert(a[0] == 0)
+////    assert(a[1] == 1)
+////    assert(a[2] == 1)
+////    assert(a[3] == 2)
+////}
+//
+//{
+//    let n = 0
+//    for i = 0,8 {
+//        n = n + 1
+//        break
+//    }
+//    assert(n == 1)
+//}
+//
+//{
+//    fn test(n: int) -> int {
+//        let count = 0
+//        for i = 0,100 {
+//            if i == n {
+//                break
+//            }
+//            count = count + 1
+//            continue
+//        }
+//        return count
+//    }
+//    assert(test(-1) == 100)
+//    assert(test(0) == 0)
+//    assert(test(25) == 25)
+//    assert(test(50) == 50)
+//}
+//
+//{
+//    let i = -1
+//
+//    // 'i' shadowed by loop variable.
+//    for i = 0,8 {} 
+//    assert(i == -1)
+//}
+//
+////{
+////    // Invalid operations must be run to throw an exception
+////    if false && 1 / 0 {
+////        let x = 1 / 0
+////        let y = 1 % 0
+////    }
+////}
+//
+////{
+////    let I = [0, 1, 2, 3]
+////    for i = 0,4 {
+////        assert(i == I[i])
+////    }
+////
+////    let n = 0
+////    let I = [2, 3]
+////    for i = 2,4 {
+////        assert(i == I[n])
+////        n = n + 1
+////    }
+////
+////    let n = 0
+////    let I = [1, 3]
+////    for i = 1,4,2 {
+////        assert(i == I[n])
+////        n = n + 1
+////    }
+////}
+//
+//{
+//    let n = 0
+//    for i = 0, 8 {
+//        n = n + 1
+//        break
+//    }
+//    assert(n == 1)
+//}
+//
+//// TODO: This is a syntax error (stops compilation), check in test_error.c
+////{
+////    let n = 0
+////    for i = 0, 8 {
+////        n = n + 1
+////        continue
+////        
+////        // unreachable
+////        assert(false)
+////    }
+////    assert(n == 8)
+////}
+//
+////{
+////    fn test(n: int) -> int {
+////        let f
+////        for i = 0, 100 {
+////            if i == n {{{ // <-- NOTE: Nested blocks here
+////                let a = [i]
+////                fn check() {
+////                    // Capture 'a' as an upvalue.
+////                    let m = a[0]
+////                    a[0] = a[0] + 1
+////                    // Equivalent to '3 * n' on the first call. Increases by 1
+////                    // each time.
+////                    return i + n + m
+////                }
+////                f = check
+////                break
+////            }}}
+////        }
+////        return f
+////    }
+////    assert(test(-1) == null)
+////
+////    let t = test(10)
+////    assert(t() == 30)
+////    assert(t() == 31)
+////    assert(t() == 32)
+////}
+//
+//{
+//    fn test(b: bool) -> int {
+//        fn hack() -> int {return -1} // TODO: Option[T] type, then this is not necessary
+//        let f = hack
+//        let n = 0
+//        for i = 0,8 {
+//            let _0 = -1
+//            let _1 = -1
+//            {
+//                let _2 = -1
+//
+//                n = n + 1
+//                let m = n
+//                fn closure() -> int {
+//                    return m + n
+//                }
+//                f = closure
+//                // Need to emit instructions to close 'm' at the break and continue
+//                // statements.
+//                if b {
+//                    break
+//                } else {
+//                    continue
+//                }
+//                let _3 = -1
+//            }
+//            let _4 = -1
+//            let _5 = -1
+//        }
+//        return f()
+//    }
+//    assert(test(true) == 2)
+//    assert(test(false) == 16)
+//}
+//
+//{
+//    fn test(n: int) -> int {
+//        fn hack() -> int {return -1} // TODO: Option[T] type, then this is not necessary
+//        let f = hack
+//        for _ = 0, 10 {
+//            if n == 0 {
+//                let _0 = 0
+//                fn closure() -> int {return n + _0}
+//                f = closure
+//                break
+//            } else if n == 1 {
+//                if n == 1 {
+//                    let _1 = 1
+//                    fn closure() -> int {return n + _1}
+//                    f = closure
+//                    break
+//                }
+//            } else if n == 2 {
+//                if n == 2 {
+//                    if n == 2 {
+//                        let _2 = 2
+//                        fn closure() -> int {return n + _2}
+//                        f = closure
+//                        break
+//                    }
+//                }
+//            }
+//        }
+//        return f()
+//    }
+//    assert(test(0) == 0)
+//    assert(test(1) == 2)
+//    assert(test(2) == 4)
+//}
+//

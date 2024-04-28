@@ -6,29 +6,29 @@
 #include "mem.h"
 #include <limits.h>
 
-static void add_line(FnState *fs)
+static void add_line(FuncState *fs)
 {
-    Lex *lex = fs->lex;
+    Lex *lex = fs->G->lex;
     Proto *p = fs->proto;
     if (fs->nlines == UINT16_MAX) {
         pawX_error(lex, "too many instructions");
     }
     pawM_grow(lex->P, p->lines, fs->nlines, p->nlines);
     p->lines[fs->nlines++] = (struct LineInfo){
-        .line = lex->lastline,
+        .line = lex->line,
         .pc = fs->pc,
     };
 }
 
-void pawK_fix_line(FnState *fs, int line)
+void pawK_fix_line(FuncState *fs, int line)
 {
     paw_assert(fs->nlines > 0);
     fs->proto->lines[fs->nlines - 1].line = line;
 }
 
-static void add_opcode(FnState *fs, OpCode code)
+static void add_opcode(FuncState *fs, OpCode code)
 {
-    Lex *lex = fs->lex;
+    Lex *lex = fs->G->lex;
     Proto *p = fs->proto;
 
     // While code is being generated, the pc is used to track the number of instructions, and
@@ -38,447 +38,104 @@ static void add_opcode(FnState *fs, OpCode code)
     ++fs->pc;
 }
 
-void pawK_code_0(FnState *fs, Op op)
+void pawK_code_0(FuncState *fs, Op op)
 {
     add_line(fs);
     add_opcode(fs, create_OP(op));
 }
 
-void pawK_code_S(FnState *fs, Op op, int s)
+void pawK_code_S(FuncState *fs, Op op, int s)
 {
     add_line(fs);
     add_opcode(fs, create_S(op, s));
 }
 
-void pawK_code_U(FnState *fs, Op op, int u)
+void pawK_code_U(FuncState *fs, Op op, int u)
 {
     add_line(fs);
     add_opcode(fs, create_U(op, u));
 }
 
-void pawK_code_AB(FnState *fs, Op op, int a, int b)
+void pawK_code_AB(FuncState *fs, Op op, int a, int b)
 {
     add_line(fs);
     add_opcode(fs, create_AB(op, a, b));
 }
 
-static Arena *new_arena(paw_Env *P, size_t size)
+// Add a new arena large enough to allocate memory of the 'required_size'
+// Alignment is not considered, since the start of an Arena is suitably-aligned 
+// for any objects created by the compiler.
+static Arena **add_arena(paw_Env *P, Pool *pool, size_t required_size)
 {
+    if (required_size > SIZE_MAX / 2) {
+        pawM_error(P); // sanity check
+    }
+    size_t size = pool->last_size;
+    while (size < required_size) {
+        size *= 2;
+    }
+    pool->last_size = size;
     Arena *a = pawM_new_flex(P, Arena, size, 1);
     memset(a->data, 0, size);
     a->size = size;
-    return a;
+    // attach to pool
+    a->prev = pool->arena;
+    pool->arena = a;
+    return &pool->arena;
 }
 
-Node *pawK_add_node_aux(Lex *lex, unsigned kind, size_t size, size_t align)
+void pawK_pool_init(paw_Env *P, Pool *pool, size_t base_size, size_t min_size)
 {
-    paw_Env *P = lex->P;
-    Tree *ast = lex->ast;
-    Arena *a = ast->arena;
-    const size_t base = (a->used + align - 1) & ~(align - 1);
-    if (base + size > a->size) {
-        if (base + size > (SIZE_MAX / 2) - 1) {
-            pawM_error(P); // sanity check
-        }
-        const size_t nbytes = (base + size + 1) * 2;
-        Arena *anew = new_arena(P, nbytes);
-        anew->prev = a;
-        a = ast->arena = anew;
-    }
-    a->used = base + size;
-    Node *node = (Node *)&a->data[base];
-    node->line = lex->lastline;
-    node->kind = kind;
-    return node;
+    pool->filled = NULL;
+    pool->last_size = base_size;
+    add_arena(P, pool, 0);
+    pool->min_size = min_size;
 }
 
-#define FIRST_ARENA_SIZE 512
-
-Tree *pawK_new_ast(paw_Env *P)
+static void free_arena_list(paw_Env *P, Arena *a)
 {
-    Tree *tree = pawM_new(P, Tree);
-    tree->arena = new_arena(P, FIRST_ARENA_SIZE);
-    return tree;
-}
-
-void pawK_free_ast(paw_Env *P, Tree *ast)
-{
-    // Free the list of arenas backing the AST.
-    for (Arena *a = ast->arena; a;) {
+    while (a) {
         Arena *prev = a->prev;
         pawM_free_flex(P, a, a->size, 1);
         a = prev;
     }
-    pawM_free(P, ast);
 }
 
-// ********************
-//     AST visitors
-// ********************
-
-static void visit_expr_list(Visitor *V, Expr *head)
+void pawK_pool_uninit(paw_Env *P, Pool *pool)
 {
-    for (; head != NULL; head = head->next) {
-        V->expr(V, head);
+    free_arena_list(P, pool->arena);
+    free_arena_list(P, pool->filled);
+}
+
+void *pawK_pool_alloc(paw_Env *P, Pool *pool, size_t size, size_t align)
+{
+    paw_assert(size > 0);
+
+    size_t base;
+    Arena **pa = &pool->arena;
+    while (*pa != NULL) {
+        Arena *a = *pa;
+        base = (a->used + align - 1) & ~(align - 1);
+        if (base + size <= a->size) {
+            break;
+        }
+        pa = &a->prev;
     }
-}
-
-static void visit_logical_expr(Visitor *V, LogicalExpr *e)
-{
-    V->expr(V, e->lhs);
-    V->expr(V, e->rhs);
-}
-
-static void visit_primitive_expr(Visitor *V, PrimitiveExpr *e)
-{
-    paw_unused(V);
-    paw_unused(e);
-}
-
-static void visit_literal_expr(Visitor *V, LiteralExpr *e)
-{
-    paw_unused(V);
-    paw_unused(e);
-}
-
-static void visit_chain_expr(Visitor *V, ChainExpr *e)
-{
-    V->expr(V, e->target);
-}
-
-static void visit_cond_expr(Visitor *V, CondExpr *e)
-{
-    V->expr(V, e->cond);
-    V->expr(V, e->lhs);
-    V->expr(V, e->rhs);
-}
-
-static void visit_coalesce_expr(Visitor *V, CoalesceExpr *e)
-{
-    V->expr(V, e->lhs);
-    V->expr(V, e->rhs);
-}
-
-static void visit_unop_expr(Visitor *V, UnOpExpr *e)
-{
-    V->expr(V, e->target);
-}
-
-static void visit_binop_expr(Visitor *V, BinOpExpr *e)
-{
-    V->expr(V, e->lhs);
-    V->expr(V, e->rhs);
-}
-
-static void visit_assignment(Visitor *V, Expr *lhs, Expr *rhs)
-{
-    V->expr(V, lhs);
-    V->expr(V, rhs);
-}
-
-static void visit_expr_stmt(Visitor *V, ExprStmt *s)
-{
-    if (s->rhs != NULL) {
-        V->assign(V, s->lhs, s->rhs); // assignment
-    } else {
-        V->expr(V, s->lhs); // function call
+    if (*pa == NULL) {
+        // add a new arena to the front of the list, guaranteed to have at
+        // least 'size' bytes
+        pa = add_arena(P, pool, size);
+        base = 0;
     }
-}
-
-static void visit_attr_stmt(Visitor *V, AttrStmt *s)
-{
-    paw_unused(V);
-    paw_unused(s);
-}
-
-static void visit_class_stmt(Visitor *V, ClassStmt *s)
-{
-    V->stmt_list(V, s->attrs);
-}
-
-static void visit_stmt_list(Visitor *V, Stmt *head)
-{
-    for (; head != NULL; head = head->next) {
-        V->stmt(V, head);
+    Arena *a = *pa;
+    a->used = base + size;
+    if (a->size - a->used < pool->min_size) {
+        // arena has very little memory left: stash it so that we don't keep
+        // checking it in the above loop
+        *pa = a->prev;
+        a->prev = pool->filled;
+        pool->filled = a;
     }
+    return a->data + base;
 }
 
-static void visit_block_stmt(Visitor *V, Block *b)
-{
-    V->stmt_list(V, b->stmts);
-}
-
-static void visit_def_stmt(Visitor *V, DefStmt *s)
-{
-    V->expr(V, s->init);
-}
-
-static void visit_param_stmt(Visitor *V, ParamStmt *s)
-{
-    paw_unused(V);
-    paw_unused(s);
-}
-
-static void visit_return_stmt(Visitor *V, ReturnStmt *s)
-{
-    V->expr(V, s->expr);
-}
-
-static void visit_call_expr(Visitor *V, CallExpr *e)
-{
-    V->expr(V, e->target);
-    V->expr_list(V, e->args);
-}
-
-static void visit_var_expr(Visitor *V, VarExpr *e)
-{
-    paw_unused(V);
-    paw_unused(e);
-}
-
-static void visit_fn_stmt(Visitor *V, FnStmt *s)
-{
-    V->stmt_list(V, s->fn.args); // parameters
-    V->block_stmt(V, s->fn.body); // function body
-}
-
-static void visit_ifelse_stmt(Visitor *V, IfElseStmt *s)
-{
-    V->expr(V, s->cond);
-    V->stmt(V, s->then_arm);
-    V->stmt(V, s->else_arm);
-}
-
-static void visit_while_stmt(Visitor *V, WhileStmt *s)
-{
-    V->expr(V, s->cond);
-    V->block_stmt(V, s->block);
-}
-
-static void visit_dowhile_stmt(Visitor *V, WhileStmt *s)
-{
-    V->block_stmt(V, s->block);
-    V->expr(V, s->cond);
-}
-
-static void visit_label_stmt(Visitor *V, LabelStmt *s)
-{
-    paw_unused(V);
-    paw_unused(s);
-}
-
-static void visit_for_stmt(Visitor *V, ForStmt *s)
-{
-    if (s->kind == STMT_FORNUM) {
-        V->expr(V, s->fornum.begin);
-        V->expr(V, s->fornum.end);
-        V->expr(V, s->fornum.step);
-    } else {
-        V->expr(V, s->forin.target);
-    }
-    V->block_stmt(V, s->block);
-}
-
-static void visit_array_expr(Visitor *V, ArrayExpr *e)
-{
-    V->expr_list(V, e->items);
-}
-
-//static void visit_map_expr(Visitor *V, MapExpr *e)
-//{
-//    V->expr_list(V, e->items);
-//}
-
-static void visit_init_expr(Visitor *V, InitExpr *e)
-{
-    Stmt *attr = e->attrs;
-    while (attr != NULL) {
-        V->stmt(V, attr);
-        attr = attr->next;
-    }
-}
-
-static void visit_item_stmt(Visitor *V, ItemStmt *s)
-{
-    V->expr(V, s->value);
-}
-
-static void visit_index_expr(Visitor *V, IndexExpr *e)
-{
-    V->expr(V, e->target);
-    V->expr(V, e->first);
-    V->expr(V, e->second);
-}
-
-static void visit_access_expr(Visitor *V, AccessExpr *e)
-{
-    V->expr(V, e->target);
-}
-
-static void visit_invoke_expr(Visitor *V, InvokeExpr *e)
-{
-    V->expr(V, e->target);
-    Expr *arg = e->args;
-    while (arg != NULL) {
-        V->expr(V, arg);
-        arg = arg->next;
-    }
-}
-
-void pawK_visit_expr(Visitor *V, Expr *expr)
-{
-    if (expr == NULL) {
-        return;
-    }
-    switch (expr->kind) {
-        case EXPR_PRIMITIVE:
-            V->primitive_expr(V, cast_to(expr, PrimitiveExpr));
-            break;
-        case EXPR_LITERAL:
-            V->literal_expr(V, cast_to(expr, LiteralExpr));
-            break;
-        case EXPR_CHAIN:
-            V->chain_expr(V, cast_to(expr, ChainExpr));
-            break;
-        case EXPR_COALESCE:
-            V->coalesce_expr(V, cast_to(expr, CoalesceExpr));
-            break;
-        case EXPR_LOGICAL:
-            V->logical_expr(V, cast_to(expr, LogicalExpr));
-            break;
-        case EXPR_UNOP:
-            V->unop_expr(V, cast_to(expr, UnOpExpr));
-            break;
-        case EXPR_BINOP:
-            V->binop_expr(V, cast_to(expr, BinOpExpr));
-            break;
-        case EXPR_CALL:
-            V->call_expr(V, cast_to(expr, CallExpr));
-            break;
-        case EXPR_COND:
-            V->cond_expr(V, cast_to(expr, CondExpr));
-            break;
-        case EXPR_VAR:
-            V->var_expr(V, cast_to(expr, VarExpr));
-            break;
-        case EXPR_INIT:
-            V->init_expr(V, cast_to(expr, InitExpr));
-            break;
-        case EXPR_ARRAY:
-            V->array_expr(V, cast_to(expr, ArrayExpr));
-            break;
-       // case EXPR_MAP:
-       //     V->map_expr(V, cast_to(expr, MapExpr));
-       //     break;
-        case EXPR_INDEX:
-            V->index_expr(V, cast_to(expr, IndexExpr));
-            break;
-        case EXPR_INVOKE:
-            V->invoke_expr(V, cast_to(expr, InvokeExpr));
-            break;
-        default:
-            paw_assert(expr->kind == EXPR_ACCESS);
-            V->access_expr(V, cast_to(expr, AccessExpr));
-    }
-}
-
-void pawK_visit_stmt(Visitor *V, Stmt *stmt)
-{
-    if (stmt == NULL) {
-        return;
-    }
-    switch (stmt->kind) {
-        case STMT_EXPR:
-            V->expr_stmt(V, cast_to(stmt, ExprStmt));
-            break;
-        case STMT_RETURN:
-            V->return_stmt(V, cast_to(stmt, ReturnStmt));
-            break;
-        case STMT_IFELSE:
-            V->ifelse_stmt(V, cast_to(stmt, IfElseStmt));
-            break;
-        case STMT_FORIN:
-        case STMT_FORNUM:
-            V->for_stmt(V, cast_to(stmt, ForStmt));
-            break;
-        case STMT_WHILE:
-            V->while_stmt(V, cast_to(stmt, WhileStmt));
-            break;
-        case STMT_DOWHILE:
-            V->dowhile_stmt(V, cast_to(stmt, WhileStmt));
-            break;
-        case STMT_LABEL:
-            V->label_stmt(V, cast_to(stmt, LabelStmt));
-            break;
-        case STMT_PARAM:
-            V->param_stmt(V, cast_to(stmt, ParamStmt));
-            break;
-        case STMT_DEF:
-            V->def_stmt(V, cast_to(stmt, DefStmt));
-            break;
-        case STMT_FN:
-            V->fn_stmt(V, cast_to(stmt, FnStmt));
-            break;
-        case STMT_CLASS:
-            V->class_stmt(V, cast_to(stmt, ClassStmt));
-            break;
-        case STMT_ITEM:
-            V->item_stmt(V, cast_to(stmt, ItemStmt));
-            break;
-        case STMT_ATTR:
-            V->attr_stmt(V, cast_to(stmt, AttrStmt));
-            break;
-        default:
-            paw_assert(stmt->kind == STMT_BLOCK);
-            V->block_stmt(V, cast_to(stmt, Block));
-    }
-}
-
-void pawK_init_visitor(Visitor *V, Lex *lex)
-{
-    *V = (Visitor){
-        .lex = lex, 
-
-        .expr = pawK_visit_expr,
-        .stmt = pawK_visit_stmt,
-        .assign = visit_assignment,
-
-        .expr_list = visit_expr_list,
-        .primitive_expr = visit_primitive_expr,
-        .chain_expr = visit_chain_expr,
-        .coalesce_expr = visit_coalesce_expr,
-        .logical_expr = visit_logical_expr,
-        .unop_expr = visit_unop_expr,
-        .binop_expr = visit_binop_expr,
-        .call_expr = visit_call_expr,
-        .cond_expr = visit_cond_expr,
-        .var_expr = visit_var_expr,
-        .array_expr = visit_array_expr,
-        //.map_expr = visit_map_expr,
-        .init_expr = visit_init_expr,
-        .index_expr = visit_index_expr,
-        .access_expr = visit_access_expr,
-        .invoke_expr = visit_invoke_expr,
-
-        .stmt_list = visit_stmt_list,
-        .expr_stmt = visit_expr_stmt,
-        .item_stmt = visit_item_stmt,
-        .return_stmt = visit_return_stmt,
-        .ifelse_stmt = visit_ifelse_stmt,
-        .for_stmt = visit_for_stmt,
-        .while_stmt = visit_while_stmt,
-        .dowhile_stmt = visit_dowhile_stmt,
-        .label_stmt = visit_label_stmt,
-        .fn_stmt = visit_fn_stmt,
-        .param_stmt = visit_param_stmt,
-        .def_stmt = visit_def_stmt,
-        .attr_stmt = visit_attr_stmt,
-        .class_stmt = visit_class_stmt,
-        .block_stmt = visit_block_stmt,
-    };
-}
-
-void pawK_visit(Visitor *V, Tree *tree)
-{
-    V->stmt_list(V, tree->stmts);
-}

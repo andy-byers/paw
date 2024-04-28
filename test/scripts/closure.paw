@@ -1,4 +1,4 @@
--- closure.paw
+// closure.paw
 
 {
     let f
@@ -18,7 +18,7 @@
     }
     assert(f()[0] == 'abc')
     assert(f()[1] == 123)
-    assert(#f() == 6) -- 3 calls == 6 pushes
+    assert(#f() == 6) // 3 calls == 6 pushes
 }
 
 {
@@ -45,7 +45,7 @@
                 return a
             }
             f = closure
-        } -- Close a
+        } // Close a
         {
             let a = []
             fn closure() {
@@ -53,7 +53,7 @@
                 return a
             }
             g = closure
-        } -- Close a
+        } // Close a
     }
     assert(#f() == 1)
     assert(#g() == 1)
@@ -132,7 +132,7 @@
     assert(f(30) == 832040)
 }
 
--- Test vararg functions:
+// Test vararg functions:
 {
     fn test(n) {
         return fn(...) {
@@ -165,7 +165,7 @@
         let temp = argv[0];
         return a + temp + argv[-1]
     }
-    assert(2 == test(0, 1)) -- 0 + 1 + 1
+    assert(2 == test(0, 1)) // 0 + 1 + 1
     assert(21 == test(1, 10))
     assert(102 == test(2, 1, 99))
     assert(503 == test(3, 200, 100, 300))
@@ -174,7 +174,7 @@
         let temp = argv[0];
         return a + b + temp + argv[-1]
     }
-    assert(3 == test(0, 1, 1)) -- 0 + 1 + 1
+    assert(3 == test(0, 1, 1)) // 0 + 1 + 1
     assert(23 == test(1, 2, 10))
     assert(105 == test(2, 3, 1, 99))
     assert(507 == test(3, 4, 200, 100, 300))

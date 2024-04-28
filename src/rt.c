@@ -7,7 +7,7 @@
 #include "auxlib.h"
 #include "call.h"
 #include "env.h"
-#include "gc.h"
+#include "gc_aux.h"
 #include "lex.h"
 #include "lib.h"
 #include "map.h"
@@ -482,7 +482,7 @@ void pawR_setattr(paw_Env *P, int index)
     const Value obj = *vm_peek(1);
 
     Instance *ins = v_instance(obj);
-    ins->attrs[index] = val;
+    ins->attrs[1 + index] = val;
     vm_pop(2);
 }
 
@@ -510,14 +510,14 @@ void pawR_init(paw_Env *P)
     v_set_object(&P->mem_errmsg, errmsg);
 }
 
-//static CallFrame *super_invoke(paw_Env *P, Class *super, Value name, int argc)
+//static CallFrame *super_invoke(paw_Env *P, Struct *super, Value name, int argc)
 //{
 //    Value *base = vm_peek(argc);
 //    const Value *method = pawH_get(P, super->attr, name);
 //    if (!method) {
 //        pawR_attr_error(P, name);
 //    }
-//    // The receiver (subclass) instance + parameters are on top of the stack.
+//    // The receiver (substruct) instance + parameters are on top of the stack.
 //    return pawC_precall(P, base, *method, argc);
 //}
 //
@@ -525,12 +525,12 @@ static CallFrame *invoke(paw_Env *P, int index, int argc)
 {
     Value *base = vm_peek(argc);
     Instance *ins = v_instance(*base);
-    Value method = ins->attrs[index];
-    *base = method; // replace object with callable
+    Struct *struct_ = v_struct(ins->attrs[0]);
+    Value method = struct_->methods->begin[index];
     return pawC_precall(P, base, method.o, argc);
 }
 
-//static void inherit(paw_Env *P, Class *cls, const Class *super)
+//static void inherit(paw_Env *P, Struct *cls, const Struct *super)
 //{
 //    // 'copy-down' inheritance
 //    pawH_extend(P, cls->attr, super->attr);
@@ -967,7 +967,7 @@ void pawR_getattr(paw_Env *P, int index)
     const Value obj = *vm_peek(0);
 
     Instance *ins = v_instance(obj);
-    *vm_peek(0) = ins->attrs[index];
+    *vm_peek(0) = ins->attrs[1 + index];
 }
 
 static void getitem_list(paw_Env *P, Value obj, Value key)
@@ -1021,16 +1021,16 @@ int pawR_getitem(paw_Env *P, int ttarget, int tindex)
 static void cannonicalize_slice(size_t len, Value begin, Value end, paw_Int *bout, paw_Int *eout, paw_Int *nout)
 {
     // TODO: broken now... int value cannot be null
-    const paw_Int ibegin = v_is_null(begin)
-                               ? 0 // null acts like 0
-                               : pawA_abs_index(v_int(begin), len);
-    const paw_Int iend = v_is_null(end)
-                             ? paw_cast_int(len) // null acts like #a
-                             : pawA_abs_index(v_int(end), len);
-    // clamp to sequence bounds
-    *bout = paw_min(paw_max(ibegin, 0), paw_cast_int(len));
-    *eout = paw_min(paw_max(iend, 0), paw_cast_int(len));
-    *nout = paw_max(0, *eout - *bout);
+//    const paw_Int ibegin = v_is_null(begin)
+//                               ? 0 // null acts like 0
+//                               : pawA_abs_index(v_int(begin), len);
+//    const paw_Int iend = v_is_null(end)
+//                             ? paw_cast_int(len) // null acts like #a
+//                             : pawA_abs_index(v_int(end), len);
+//    // clamp to sequence bounds
+//    *bout = paw_min(paw_max(ibegin, 0), paw_cast_int(len));
+//    *eout = paw_min(paw_max(iend, 0), paw_cast_int(len));
+//    *nout = paw_max(0, *eout - *bout);
 }
 
 void pawR_getslice(paw_Env *P, int ttarget)
@@ -1152,20 +1152,25 @@ static paw_Bool should_jump_false(paw_Env *P)
 #include "debug.h"
 void pawR_execute(paw_Env *P, CallFrame *cf)
 {
+    Closure *fn;
     const OpCode *pc;
     const Value *K;
-    Closure *fn;
+    Struct **C;
+    Type **T;
 
 top:
     pc = cf->pc;
     fn = cf->fn;
     K = fn->p->k;
+    C = fn->p->c;
+    T = P->mod->types;
 
     for (;;) {
         const OpCode opcode = *pc++;
 
-        printf("n = %d, %s\n",paw_get_count(P),paw_opcode_name(get_OP(opcode)));
-        // paw_dump_stack(P);
+        printf("n = %d, ",(int)(P->top.p-P->stack.p));
+        paw_dump_opcode(opcode);
+       //  paw_dump_stack(P);
 
         vm_switch(get_OP(opcode))
         {
@@ -1192,6 +1197,11 @@ top:
             vm_case(PUSHCONST) :
             {
                 vm_pushv(K[get_U(opcode)]);
+            }
+
+            vm_case(PUSHSTRUCT) :
+            {
+                vm_pusho(C[get_U(opcode)]);
             }
 
             vm_case(UNOP) :
@@ -1235,78 +1245,36 @@ top:
                 pawR_cast_float(P, get_U(opcode));
             }
 
-            vm_case(NEWCLASS) :
+            vm_case(NEWMETHOD) :
+            {
+                Struct *cls = v_struct(*vm_peek(1));
+                Value method = *vm_peek(0); 
+                const int u = get_U(opcode);
+                cls->methods->begin[u] = method;
+                vm_pop(1);
+            }
+
+            vm_case(NEWINSTANCE) :
             {
                 vm_protect();
-                const paw_Type t = get_U(opcode);
-                Type *type = P->mod->types[t];
-                Class *cls = pawV_new_class(P, type);
-
-                const int nattrs = type->cls.nattrs;
-                for (int i = 0; i < nattrs; ++i) {
-                    cls->attrs[nattrs - i - 1] = *vm_peek(i);
-                }
-                vm_pop(nattrs);
-                vm_pusho(cls);
+                const int nfields = get_U(opcode);
+                Value *pv = vm_peek(0);
+                Struct *struct_ = v_struct(*pv);
+                Instance *ins = pawV_new_instance(P, 1 + nfields);
+                v_set_object(ins->attrs, struct_);
+                v_set_object(pv, ins); // replace Struct
                 check_gc(P);
             }
 
-            vm_case(INIT) :
+            vm_case(INITATTR) :
             {
                 vm_protect();
-                const int nattrs = get_U(opcode);
-                Instance *ins = pawV_new_instance(P, nattrs);
-                for (int i = 0; i < nattrs; ++i) {
-                    ins->attrs[nattrs - i - 1] = *vm_peek(i);
-                }
-                vm_pop(nattrs);
-
-                Class *cls = v_class(*vm_peek(0));
-                for (int i = 0; i < nattrs; ++i) {
-                    if (ins->attrs[i].u != 0) {
-                        ins->attrs[i] = cls->attrs[i];
-                    }    
-                }
-                v_set_object(vm_peek(0), ins);
+                const int u = get_U(opcode);
+                Instance *ins = v_instance(*vm_peek(1));
+                ins->attrs[1 + u] = *vm_peek(0);
+                vm_pop(1);
             }
 
-//            vm_case(GETSUPER) :
-//            {
-//                vm_protect();
-//                // Attributes on 'super' can only refer to methods, not data fields.
-//                const Value parent = *vm_peek(0);
-//                const Value self = *vm_peek(1);
-//                const Value name = K[get_U(opcode)];
-//                vm_pop(1); // pop 'parent'
-//
-//                Class *super = v_class(parent);
-//                Value *value = pawH_get(P, super->attr, name);
-//                if (!value) {
-//                    pawR_attr_error(P, name);
-//                }
-//
-//                Value *pv = vm_push0();
-//                Method *mtd = pawV_new_method(P, self, *value);
-//                v_set_method(pv, mtd);
-//            }
-//
-//            vm_case(INVOKESUPER) :
-//            {
-//                vm_protect();
-//                const Value parent = *vm_peek(0);
-//                const Value name = K[get_A(opcode)];
-//                const int argc = get_B(opcode);
-//                vm_pop(1); // pop 'parent'
-//                vm_save();
-//
-//                Class *super = v_class(parent);
-//                CallFrame *callee = super_invoke(P, super, name, argc);
-//                if (callee) {
-//                    cf = callee;
-//                    goto top;
-//                }
-//            }
-//
             vm_case(GETLOCAL) :
             {
                 const Value local = cf->base.p[get_U(opcode)];
@@ -1343,6 +1311,15 @@ top:
             {
                 const int u = get_U(opcode);
                 pawR_write_global(P, u);
+            }
+
+            vm_case(GETMETHOD) :
+            {
+                vm_protect();
+                const int u = get_U(opcode);
+                Instance *ins = v_instance(*vm_peek(0));
+                Struct *struct_ = v_struct(ins->attrs[0]);
+                *vm_peek(0) = struct_->methods->begin[u];
             }
 
             vm_case(GETATTR) :

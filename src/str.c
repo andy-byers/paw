@@ -3,7 +3,7 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "str.h"
 #include "auxlib.h"
-#include "gc.h"
+#include "gc_aux.h"
 #include "mem.h"
 
 #define st_index(st, h) ((h) & (st->capacity - 1))

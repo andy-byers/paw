@@ -82,7 +82,7 @@ int paw_call(paw_Env *P, int argc);
 #define PAW_TARRAY 6
 #define PAW_TENUM 7
 #define PAW_TFUNCTION 8
-#define PAW_TCLASS 9
+#define PAW_TSTRUCT 9
 #define PAW_TFOREIGN 10
 #define PAW_TMODULE 11
 #define PAW_NTYPES 12
@@ -187,9 +187,12 @@ void paw_pop(paw_Env *P, int n);
 // Return the number of values in the current stack frame
 int paw_get_count(paw_Env *P);
 
+int paw_find_global(paw_Env *P, const char *name);
+int paw_find_attr(paw_Env *P, int index, const char *name);
+
 void paw_get_upvalue(paw_Env *P, int ifn, int index);
-void paw_get_global(paw_Env *P, const char *name);
-void paw_get_attr(paw_Env *P, int index, const char *s);
+void paw_get_global(paw_Env *P, int index);
+void paw_get_attr(paw_Env *P, int index, int iattr);
 void paw_get_item(paw_Env *P, int index);
 void paw_get_itemi(paw_Env *P, int index, paw_Int i);
 
