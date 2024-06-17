@@ -79,6 +79,7 @@ typedef enum AstDeclKind {
     DECL_STRUCT,
     DECL_FIELD,
     DECL_GENERIC,
+    DECL_INSTANCE,
 } AstDeclKind;
 
 #define DECL_HEADER       \
@@ -111,12 +112,8 @@ typedef struct TypeDecl {
 typedef struct FuncDecl {
     DECL_HEADER; // common initial sequence
     paw_Bool is_global: 1; // 1 for global functions, 0 otherwise
-    paw_Bool is_poly: 1; // 1 for templates, 0 otherwise
-    paw_Bool is_visited: 1; // 1 if types resolved, 0 otherwise
-    FuncKind fn_kind: 5; // kind of function (module, method, etc.)
+    FuncKind fn_kind: 7; // kind of function (free function, module, etc.)
     AstDecl *receiver; // pointer to receiver (StructDecl)
-    AstDecl *sibling; // pointer to next method (FuncDecl)
-    UniTable *unify; // unification table
     Scope *scope; // function-scoped symbols, including generics
     AstDeclList *generics; // generic type parameters (FieldDecl)
     AstDeclList *params; // parameter declarations
@@ -124,26 +121,35 @@ typedef struct FuncDecl {
     Block *body; // function body
 } FuncDecl;
 
-// TODO: Need to prevent recursive types, or introduce the concept of indirection...
+// TODO: Need to prevent recursive structures, or introduce the concept of indirection (otherwise, structs that
+//       contain an instance of themselves as a field will become infinitely large)...
 typedef struct StructDecl {
     DECL_HEADER; // common initial sequence
     paw_Bool is_global: 1; // uses 'global' keyword
-    paw_Bool is_poly: 1; // 1 for templates, 0 otherwise
-    paw_Bool is_visited: 1; // 1 if types resolved, 0 otherwise
-    UniTable *unify; // unification table
     Scope *scope; // scope for struct-level symbols
     Scope *field_scope;
-    Scope *method_scope;
     AstDeclList *fields; // list of FieldDecl
-    AstDeclList *methods; // list of FuncDecl
     AstDeclList *generics; // generic type parameters (GenericDecl)
 } StructDecl;
 
 // Represents a template instance
+// Created when an instantiation is found of the template that is currently
+// being visited. For function templates, this node just stores the type of
+// instantiated function for checking recursive calls. For structure
+// templates, this node holds the type of each field, since fields have no
+// direct representation in the type system (type system is 'nominal'). 
 typedef struct InstanceDecl {
     DECL_HEADER; // common initial sequence
-    UniTable *unify; // unification table
+    Scope *scope; // scope for concrete types                
+    Scope *field_scope; // scope for fields
+    AstDeclList *types; // list of GenericDecl
+    AstDeclList *fields; // list of FieldDecl
 } InstanceDecl;
+
+// Represents a generic type parameter
+typedef struct GenericDecl {
+    DECL_HEADER; // common initial sequence
+} GenericDecl;
 
 // AST node representing a 'Field' production
 typedef struct FieldDecl {
@@ -151,16 +157,13 @@ typedef struct FieldDecl {
     AstExpr *tag; // type annotation
 } FieldDecl;
 
-typedef struct GenericDecl {
-    DECL_HEADER; // common initial sequence
-} GenericDecl;
-
 typedef struct AstDecl {
     union {
         AstDeclHeader hdr;
         VarDecl var;
         FuncDecl func;
         StructDecl struct_;
+        InstanceDecl inst;
         FieldDecl field;
         GenericDecl generic;
         TypeDecl type;
@@ -170,7 +173,7 @@ typedef struct AstDecl {
 #define NO_DECL UINT16_MAX
 
 //****************************************************************
-//    AstExpressions
+//    Expressions
 //****************************************************************
 
 typedef enum AstExprKind {
@@ -296,7 +299,6 @@ typedef struct CallExpr {
 
 typedef struct Selector {
     SUFFIXED_HEADER; // common fields
-    paw_Bool is_method: 1; // 1 if selecting a method, 0 otherwise
     String *name; // name of the field
 } Selector;
 
@@ -448,10 +450,10 @@ typedef struct AstStmt {
 // Pointer to a context variable for each compilation pass.
 typedef union AstState {
     void *state;
-    struct Resolver *R; // symbol resolution state (pass 2)
-    struct Stenciler *S; // template expansion state (pass 3)
-    struct Generator *G; // code generation state (pass 4)
-    struct Checker *C;
+    struct Resolver *R; // symbol resolution (pass 2) state
+    struct Generator *G; // code generation (pass 3) state
+    struct Stenciler *S; // template expansion state
+    struct Copier *C; // AST copier state
 } AstState;
 
 // TODO: Should be able to use the entrypoint routines on list elements, may need slightly more specific nodes, like ParamDecl for parameters instead of overloading FieldDecl
@@ -472,10 +474,6 @@ struct AstVisitor {
     void (*visit_expr_list)(AstVisitor *V, AstExprList *list, AstExprPass cb);
     void (*visit_decl_list)(AstVisitor *V, AstDeclList *list, AstDeclPass cb);
     void (*visit_stmt_list)(AstVisitor *V, AstStmtList *list, AstStmtPass cb);
-
-    // Special case for methods (FuncDecl), which are linked by the 'sibling' field,
-    // rather than the 'next' field. 'next' is used by method template instances.
-    void (*visit_method_list)(AstVisitor *V, AstDeclList *list, AstDeclPass cb);
 
     void (*visit_literal_expr)(AstVisitor *V, LiteralExpr *e);
     void (*visit_logical_expr)(AstVisitor *V, LogicalExpr *e);
@@ -509,6 +507,15 @@ struct AstVisitor {
     void (*visit_field_decl)(AstVisitor *V, FieldDecl *d);
     void (*visit_generic_decl)(AstVisitor *V, GenericDecl *d);
     void (*visit_type_decl)(AstVisitor *V, TypeDecl *d);
+    void (*visit_instance_decl)(AstVisitor *V, InstanceDecl *d);
+
+    void *(*visit_type)(AstVisitor *V, Type *type);
+    void *(*visit_basic_type)(AstVisitor *V, TypeHeader *t);
+    void *(*visit_func_type)(AstVisitor *V, FuncSig *t);
+    void *(*visit_adt)(AstVisitor *V, Adt *t);
+    void *(*visit_unknown_type)(AstVisitor *V, Unknown *t);
+    void *(*visit_generic_type)(AstVisitor *V, Generic *t);
+    void (*visit_binder)(AstVisitor *V, Binder *binder);
 };
 
 void pawA_visitor_init(AstVisitor *V, Ast *ast, AstState state);
@@ -530,7 +537,6 @@ struct AstFolder {
     void (*fold_expr_list)(AstFolder *F, AstExprList *list, AstExprFold cb);
     void (*fold_decl_list)(AstFolder *F, AstDeclList *list, AstDeclFold cb);
     void (*fold_stmt_list)(AstFolder *F, AstStmtList *list, AstStmtFold cb);
-    void (*fold_method_list)(AstFolder *F, AstDeclList *list, AstDeclFold cb);
 
     AstExpr *(*fold_literal_expr)(AstFolder *F, LiteralExpr *e);
     AstExpr *(*fold_logical_expr)(AstFolder *F, LogicalExpr *e);
@@ -563,6 +569,15 @@ struct AstFolder {
     AstDecl *(*fold_field_decl)(AstFolder *F, FieldDecl *d);
     AstDecl *(*fold_generic_decl)(AstFolder *F, GenericDecl *d);
     AstDecl *(*fold_type_decl)(AstFolder *F, TypeDecl *d);
+    AstDecl *(*fold_instance_decl)(AstFolder *F, InstanceDecl *d);
+
+    Type *(*fold_type)(AstFolder *F, Type *type);
+    Type *(*fold_basic_type)(AstFolder *F, TypeHeader *t);
+    Type *(*fold_func_type)(AstFolder *F, FuncSig *t);
+    Type *(*fold_adt)(AstFolder *F, Adt *t);
+    Type *(*fold_unknown_type)(AstFolder *F, Unknown *t);
+    Type *(*fold_generic_type)(AstFolder *F, Generic *t);
+    Binder (*fold_binder)(AstFolder *F, Binder *binder);
 };
 
 void pawA_folder_init(AstFolder *F, Ast *ast, AstState state);
@@ -601,7 +616,11 @@ void *pawA_new_pointer_vec(Ast *ast, int nptrs);
 Ast *pawA_new_ast(Lex *lex);
 void pawA_free_ast(Ast *ast);
 
-AstDecl *pawA_stencil(Ast *ast, AstDecl *decl);
+AstDecl *pawA_copy_decl(Ast *ast, AstDecl *decl);
+FuncDecl *pawA_stencil_func(Ast *ast, FuncDecl *base, AstDecl *inst);
+
+DefId pawA_add_decl(Ast *ast, AstDecl *decl);
+AstDecl *pawA_get_decl(Ast *ast, DefId id);
 
 //****************************************************************
 //     AST helpers
@@ -632,9 +651,10 @@ AstDecl *pawA_stencil(Ast *ast, AstDecl *decl);
 #define a_is_template_decl(d) (a_is_func_template_decl(d) || \
                                a_is_struct_template_decl(d)) 
 
-#define a_is_func_template_decl(d) (a_is_func_decl(d) && d->func.is_poly)
-#define a_is_struct_template_decl(d) (a_is_struct_decl(d) && d->struct_.is_poly)
+#define a_is_func_template_decl(d) (a_is_func_decl(d) && (d)->func.generics != NULL)
+#define a_is_struct_template_decl(d) (a_is_struct_decl(d) && (d)->struct_.generics != NULL)
 
+void pawA_dump_type(FILE *out, Type *type);
 void pawA_dump_decl(FILE *out, AstDecl *decl);
 void pawA_dump_expr(FILE *out, AstExpr *expr);
 void pawA_dump_stmt(FILE *out, AstStmt *stmt);

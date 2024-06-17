@@ -76,7 +76,7 @@ static void dump_type(FILE *out, const Type *type)
             dump_type(out, type->func.return_);
             break;
         case TYPE_ADT:
-            fprintf(out, "%d", type->adt.target); // TODO: Print the name
+            fprintf(out, "%d", type->adt.base); // TODO: Print the name
             if (type->adt.types.count > 0) {
                 fprintf(out, "[");
                 const Binder *binder = &type->adt.types;
@@ -89,9 +89,12 @@ static void dump_type(FILE *out, const Type *type)
                 fprintf(out, "]");
             }
             break;
+        case TYPE_UNKNOWN:
+            fprintf(out, "?%d", type->unknown.def);
+            break;
         default:
-            paw_assert(y_is_type_var(type));
-            fprintf(out, "?%s", type->var.name->text);
+            paw_assert(y_is_generic(type));
+            fprintf(out, "?%s", type->generic.name->text);
     }
 }
 
@@ -143,15 +146,11 @@ static void unify_var_var(UniVar *a, UniVar *b)
     }
 }
 
-// Check if a type is resolved, that is, if it is a concrete type or a free 
-// type variable
-#define is_resolved(U, v) (!y_is_type_var(v) || !p_is_bound(U, v))
-
-Type *pawP_normalize(Unifier *U, Type *type)
+Type *pawU_normalize(UniTable *table, Type *type)
 {
-    if (!is_resolved(U, type)) {
-        const int index = type->var.index;
-        UniVar *uvar = U->table->vars[index];
+    if (y_is_unknown(type)) {
+        const int index = type->unknown.index;
+        UniVar *uvar = table->vars[index];
         uvar = find_root(uvar); // normalize
         return uvar->type;
     }
@@ -164,17 +163,15 @@ static void unify_binders(Unifier *U, Binder *a, Binder *b)
         pawX_error(U->lex, "arity mismatch");
     }
     for (int i = 0; i < a->count; ++i) {
-        pawP_unify(U, a->types[i], b->types[i]);
+        pawU_unify(U, a->types[i], b->types[i]);
     }
 }
 
 static void unify_adt(Unifier *U, Adt *a, Type *b)
 {
-    if (y_is_type_var(b)) {
-        return; // ignore free type variables
-    } else if (!y_is_adt(b)) {
+    if (!y_is_adt(b)) {
         pawX_error(U->lex, "expected struct or enum type");
-    } else if (a->target != b->adt.target) {
+    } else if (a->base != b->adt.base) {
         pawX_error(U->lex, "data types are incompatible");
     }
     unify_binders(U, &a->types, &b->adt.types);
@@ -187,7 +184,7 @@ static void unify_func_sig(Unifier *U, FuncSig *a, Type *b)
     }
     // NOTE: 'types' field not unified (not part of function signature)
     unify_binders(U, &a->params, &b->func.params);
-    pawP_unify(U, a->return_, b->func.return_);
+    pawU_unify(U, a->return_, b->func.return_);
 }
 
 static Type *unify_basic(Unifier *U, Type *a, Type *b)
@@ -202,10 +199,7 @@ static Type *unify_basic(Unifier *U, Type *a, Type *b)
 static void unify_types(Unifier *U, Type *a, Type *b)
 {
     debug_log("unify_types", a, b); 
-    if (y_is_type_var(a) || y_is_type_var(b)) {
-        // Don't worry about free generics, they will be type checked during
-        // instantiation of their containing template.
-    } else if (y_is_func(a)) {
+    if (y_is_func(a)) {
         unify_func_sig(U, &a->func, b);
     } else if (y_is_adt(a)) {
         unify_adt(U, &a->adt, b);
@@ -215,36 +209,34 @@ static void unify_types(Unifier *U, Type *a, Type *b)
 }
 
 // TODO: Indicate failure rather than throw errors inside, let the caller throw, for better error messages
-void pawP_unify(Unifier *U, Type *a, Type *b)
+void pawU_unify(Unifier *U, Type *a, Type *b)
 {
     UniTable *ut = U->table;
 
     // Types may have already been unified. Make sure to always use the
     // cannonical type.
-    a = pawP_normalize(U, a);
-    b = pawP_normalize(U, b);
-    if (!is_resolved(U, a)) {
-        UniVar *va = ut->vars[a->var.index];
-        if (!is_resolved(U, b)) {
-            UniVar *vb = ut->vars[b->var.index];
+    a = pawU_normalize(ut, a);
+    b = pawU_normalize(ut, b);
+    if (y_is_unknown(a)) {
+        UniVar *va = ut->vars[a->unknown.index];
+        if (y_is_unknown(b)) {
+            UniVar *vb = ut->vars[b->unknown.index];
             unify_var_var(va, vb);
         } else {
             unify_var_type(va, b);
         }
-    } else if (!is_resolved(U, b)) {
-        UniVar *vb = ut->vars[b->var.index];
+    } else if (y_is_unknown(b)) {
+        UniVar *vb = ut->vars[b->unknown.index];
         unify_var_type(vb, a);
     } else {
         // Both types are known: make sure they are compatible. This is the
-        // only time pawP_unify can encounter an error.
+        // only time pawU_unify can encounter an error.
         unify_types(U, a, b);
     }
 }
 
-void pawP_new_type_var(Unifier *U, Type *type)
+Type *pawU_new_unknown(Unifier *U, DefId id)
 {
-    debug_log("new_type_var", type, type);
-
     paw_Env *P = env(U->lex);
     UniTable *table = U->table;
 
@@ -254,15 +246,18 @@ void pawP_new_type_var(Unifier *U, Type *type)
     const int index = table->nvars++;
     table->vars[index] = uvar;
 
+    Type *type = pawY_type_new(P, P->mod);
+    type->unknown.kind = TYPE_UNKNOWN;
+    type->unknown.index = index;
+    type->unknown.def = id;
+
     // set contains only 'type'
     uvar->parent = uvar;
     uvar->type = type;
-
-    type->var.depth = U->depth;
-    type->var.index = index;
+    return type;
 }
 
-void pawP_unifier_enter(Unifier *U, UniTable *table)
+void pawU_enter_binder(Unifier *U, UniTable *table)
 {
     paw_Env *P = env(U->lex);
     if (table == NULL) {
@@ -273,23 +268,23 @@ void pawP_unifier_enter(Unifier *U, UniTable *table)
     ++U->depth;
 }
 
-static void free_uni_table(Unifier *U, UniTable *table)
-{
-    paw_Env *P = env(U->lex);
-    for (int i = 0; i < table->nvars; ++i) {
-        pawM_free(P, table->vars[i]);
-    }
-    pawM_free(P, table);
-}
+//static void free_uni_table(Unifier *U, UniTable *table)
+//{
+//    paw_Env *P = env(U->lex);
+//    for (int i = 0; i < table->nvars; ++i) {
+//        pawM_free(P, table->vars[i]);
+//    }
+//    pawM_free(P, table);
+//}
+//
+//void pawU_unifier_replace(Unifier *U, UniTable *table)
+//{
+//    table->outer = U->table->outer;
+//    free_uni_table(U, U->table);
+//    U->table = table;    
+//}
 
-void pawP_unifier_replace(Unifier *U, UniTable *table)
-{
-    table->outer = U->table->outer;
-    free_uni_table(U, U->table);
-    U->table = table;    
-}
-
-UniTable *pawP_unifier_leave(Unifier *U)
+UniTable *pawU_leave_binder(Unifier *U)
 {
     UniTable *table = U->table;
     U->table = U->table->outer;

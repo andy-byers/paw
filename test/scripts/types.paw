@@ -1,39 +1,5 @@
 // types.paw
 
-//
-//// TODO: Basic type conversions
-////let i = int(42)
-////assert(i == 42)
-////let f = float(i)
-////assert(f == 42.0)
-////let b = bool(i)
-////assert(b == true)
-
-//// type system is 'nominal', so there is no structural data included for structures
-//// the type of a structure (Adt) requires a reference back to its declaration so this info can be located
-//struct A[T] {
-//    f() -> A[T] {
-//        return A[T]{}
-//    }
-//  //  g() -> A[int] {
-//  //      return A[int]{}
-//  //  }
-//  //  h() -> A[float] {
-//  //      return A[float]{}
-//  //  }
-//}
-//let a = A[int]{}
-//let b = a.f()
-
-fn outer[A, B, C](a: A, b: B, c: C) {
-    let a2 = a
-    let b2 = b
-    let c2 = c
-}
-outer[int, int, int](1, 2, 3)
-outer[float, int, int](1.0, 2, 3)
-
-
 //***********************************************
 //    primitives
 //***********************************************
@@ -131,15 +97,19 @@ outer[float, int, int](1.0, 2, 3)
 //***********************************************
 {
     struct A {a: int}
-    let a = A{a: 123}
-    {}
+    let a = A{a: 123} {/* this is an empty block */}
+    {} {}{}
+    // Automatic semicolon insertion causes the next 2 lines to be parsed
+    // as an Ident followed by a Block.
+    let a = a
+    {} 
     let a = a.a
     assert(a == 123)
 
     // A 'CompositeLit' can start a suffix chain ('.' must be on the 
     // same line as the '}' due to auto ';' insertion)
     struct B {a: A}
-    let b = B{a: A {a: 123}}.a.a
+    let b = B{a: A{a: 123}}.a.a
     assert(b == 123)
 }
 {
@@ -157,95 +127,6 @@ outer[float, int, int](1.0, 2, 3)
     let a = A{a: 123, b: 'abc'}
     let a = A{b: 'def', a: 456}
 }
-
-//***********************************************
-//    methods
-//***********************************************
-{
-    struct A {a() {}}
-    let a = A {}
-    a.a()
-}
-{
-    struct A {
-        a: bool
-        b(x: bool) -> bool {
-            let a: bool = self.a
-            return x == a
-        }
-        c: int
-        d(x: int, y: float) -> bool {
-            assert(!self.b(false))
-            let c = self.c
-            let e = self.e
-            return x == c && y == e
-        }
-        e: float
-    }
-    let a = A {
-        e: 456.0,
-        a: true, 
-        c: 123,
-    }
-    assert(a.b(a.a))
-    assert(a.d(a.c, a.e))
-    
-    struct A {
-        f() -> A {
-            return self
-        }
-        g(a: A) -> A {
-            return a
-        }
-    }
-    let a = A {}
-    a.g(a.f())
-
-    struct A {
-        // not a method: just a function object field
-        func: fn(int) -> int
-    }
-    fn func(i: int) -> int {
-        return i
-    }
-    let a = A {func: func}
-    assert(123 == a.func(123))
-}
-{
-    struct A {
-        value: string
-        prepend(prefix: string) -> A {
-            self.value = prefix + self.value
-            return self
-        }
-        append(suffix: string) -> A {
-            self.value = self.value + suffix
-            return self
-        }
-    }
-
-    let a = A{value: 'test: '}
-    let a = a.prepend('paw_')
-
-    a.append('result')
-    assert(a.value == 'paw_test: result')
-}
-//// TODO: Doesn't work, see TODO in codegen.c (in start_call())
-//{
-//    // Separate a method from its receiver and call it later. Struct
-//    // instances keep a pointer to the Struct object containing the
-//    // methods. Use the type of 'f' (essentially 'f(A, int) -> int')
-//    // to remember the method index. When generating 'f(...)', output
-//    // an OP_INVOKE instead of an OP_CALL with the remembered index.
-//    struct A {
-//        f(i: int) -> int {
-//            return i
-//        }
-//    }
-//    let a = A {}
-//    let f = a.f
-//    assert(f(123) == 123)
-//}
 
 //***********************************************
 //    function templates
@@ -273,6 +154,182 @@ outer[float, int, int](1.0, 2, 3)
     assert(123 == c(123))
     assert(1.0 == c(1.0))
     assert('abc' == c('abc'))
+}
+{
+    fn id[Type](value: Type) -> Type {
+        return value
+    }
+    assert(id[bool](false) == false)
+    assert(id(1) == 1)
+    assert(id(id[float])(2.0) == 2.0)
+    assert(id(id[string])('3') == '3')
+
+    assert(false == id(id(false)))
+    assert(1 == id(id(id(1))))
+    assert(2.0 == id(id(id(id[float])))(2.0))
+    assert('three' == id(id(id(id[fn(string) -> string])))(id[string])('three'))
+}
+{
+    fn forward[X](x: X) -> X {
+        let x = x
+        let y = x
+        return y
+    }
+    assert(-1 == forward[int](-1))
+    assert(2 == forward[int](2))
+    assert(-3.0 == forward[float](-3.0))
+    assert(4.0 == forward[float](4.0))
+
+    assert(-5 == forward(-5))
+    assert(6 == forward(6))
+    assert(-7.0 == forward(-7.0))
+    assert(8.0 == forward(8.0))
+}
+{
+    fn test() -> fn() {
+        fn upvalue[T](t: T) -> T {
+            return t
+        }
+        fn closure() {
+            assert(upvalue(1) == 1)
+            assert(upvalue(2.0) == 2.0)
+            assert(upvalue('3') == '3')
+            let u1 = upvalue[int]
+            let u2 = upvalue[float]
+            let u3 = upvalue[string]
+            assert(u1(1) == 1)
+            assert(u2(2.0) == 2.0)
+            assert(u3('3') == '3')
+        }
+        return closure
+    }
+    let closure = test()
+    closure()
+}
+{
+    let u = 42
+    fn func[T](v: int) {
+        assert(v == u)
+    }
+    func[bool](42)
+    {
+        // Function template instances should be placed adjacent to one
+        // another on the stack, right where the template is declared,
+        // so that they capture the same upvalues.
+        let u = 0
+        func[bool](42)
+        func[int](42)
+    }
+}
+{
+    fn mapone[A, B](f: fn(A) -> B, a: A) -> B {
+        return f(a)
+    }
+
+    fn b2i(b: bool) -> int {
+        return 1
+    }
+    fn i2f(i: int) -> float {
+        return 2.0
+    }
+    fn f2s(f: float) -> string {
+        return 'three'
+    }
+    fn s2b(s: string) -> bool {
+        return true
+    }
+    let i = mapone(b2i, false)
+    let f = mapone(i2f, i)
+    let s = mapone(f2s, f)
+    let b = mapone(s2b, s)
+    assert(b == true)
+}
+{
+    // nested templates
+    fn outer[T](t: T) {
+        fn inner[T2](t2: T2) {}
+        inner(t) // inner[T]
+        inner(1) // inner[int]
+    }
+    outer(false)
+    outer(1)
+    outer(2.0)
+    outer('three')
+
+    outer(true)
+    outer(2)
+    outer(3.0)
+    outer('four')
+}
+{
+    fn fa[A](a: A) {
+        fn fb[B](b: B) {
+            fn fc[C](c: C) {
+                let a = a
+                let b = b
+                let c = c
+            }
+            fc(a)
+            fc(b)
+        }
+        fb(a)
+    }
+    fa(false)
+    fa(1)
+    fa(2.0)
+    fa('three')
+
+    fa(true)
+    fa(2)
+    fa(3.0)
+    fa('four')
+}
+
+//***********************************************
+//    structure templates
+//***********************************************
+{
+    struct A[X] {}
+    struct B[X] {x: X}
+    struct C[X, Y] {x: X; y: Y}
+
+    let a: A[int] = A[int] {}
+    let b: B[int] = B[int] {x: 1}
+    let c: C[int, float] = C[int, float] {x: 1, y: 2.0}
+
+    let a = A[int] {}
+    let b = B[int] {x: 2}
+    let c = C[int, float] {x: 2, y: 3.0}
+
+    struct A[T] {
+        func: fn(T) -> T
+    }
+    fn func(i: int) -> int {
+        return i
+    }
+    let a = A[int] {func: func}
+    assert(123 == a.func(123))
+}
+{
+    fn func[A](a: A) {
+        struct Adt[B] {
+            a: A
+            b: B
+        }
+        let adt = Adt[bool]{a: a, b: false}
+        let adt = Adt[int]{a: a, b: 1}
+        let adt = Adt[float]{a: a, b: 2.0}
+        let adt = Adt[string]{a: a, b: 'three'}
+    }
+    func(true)
+    func(2)
+    func(3.0)
+    func('four')
+}
+{
+    struct B[X] {x: X}
+    let b: B[int] = B[int] {x: 1}
+    let b = B[int] {x: 1} // (1)
 }
 {
     struct A[T] {}
@@ -312,637 +369,54 @@ outer[float, int, int](1.0, 2, 3)
     let r = func(1, f)
     assert(r == 1.0)
 }
-//{
-//    fn id[T](t: T) -> T {
-//        return t
-//    }
-//    assert(id[bool](false) == false)
-//    assert(id(1) == 1)
-//    assert(id(id[float])(2.0) == 2.0)
-//    assert(id(id[string])('3') == '3')
-//}
-//{
-//    fn times2[X](x: X) -> X {
-//        return x + x
-//    }
-//    assert(-2 == times2[int](-1))
-//    assert(2 == times2[int](1))
-//    assert(-2.0 == times2[float](-1.0))
-//    assert(2.0 == times2[float](1.0))
-//
-//    assert(-2 == times2(-1))
-//    assert(2 == times2(1))
-//    assert(-2.0 == times2(-1.0))
-//    assert(2.0 == times2(1.0))
-//}
-//{
-//    // x == y && X == Y must be true
-//    fn same[X, Y](x: X, y: Y) {
-//        fn inner[A, B](a: A, b: B) -> A {
-//            return a + b
-//        }
-//        let a = inner[X, Y](x, x)
-//        let b = inner[X, Y](y, y)
-//        let c = inner[X, Y](x, y)
-//        let d = inner[X, Y](y, x)
-//        assert(a == b)
-//        assert(b == c)
-//        assert(c == d)
-//        let a = inner(x, x)
-//        let b = inner(y, y)
-//        let c = inner(x, y)
-//        let d = inner(y, x)
-//        assert(a == b)
-//        assert(b == c)
-//        assert(c == d)
-//    }
-//    same[int, int](1, 1)
-//    same(1, 1)
-//    same[float, float](1.0, 1.0)
-//    same(1.0, 1.0)
-//}
-//{
-//    fn add[T](a: T, b: T) -> T {
-//        return a + b
-//    }
-//    assert(3    == add(  1,   2))
-//    assert(7.0  == add(3.0, 4.0))
-//    assert('56' == add('5', '6'))
-//}
-////{
-////    fn outer[Func, Arg](func: Func, arg: Arg) {
-////        func(arg)
-////    }
-////    let result = 0
-////    fn inner[T](t: T) {
-////        assert(t == result)
-////    }
-////
-////    result = 123
-////    outer(inner[int], 123)
-////
-////    let func = outer[fn(int), int]
-////    result = 456
-////    func(inner[int], 456)
-////
-////    let func: fn(fn(int), int) = outer[fn(int), int]
-////    result = 789
-////    func(inner[int], 789)
-////}
-//{
-//    fn outer[A, B](a: A, b: B) {
-//        let u = b // upvalue for 'inner'
-//        // 'B' in 'inner' shadows 'B' from outer
-//        fn inner[B, C, D](a: A, b: B, c: C, d: D) {
-//            assert(a == c)
-//            assert(b == d)
-//            assert(b == u)
-//        }
-//        inner[B, A, B](a, b, a, b)
-//        inner(a, b, a, b)
-//    }
-//    outer(1, '2, 3')
-//    outer(1.2, 3)
-//}
-//{
-//    fn test() -> fn() {
-//        fn upvalue[T](t: T) -> T {
-//            return t
-//        }
-//        fn closure() {
-//            assert(upvalue(1) == 1)
-//            assert(upvalue(2.0) == 2.0)
-//            assert(upvalue('3') == '3')
-//            let u1 = upvalue[int]
-//            let u2 = upvalue[float]
-//            let u3 = upvalue[string]
-//            assert(u1(1) == 1)
-//            assert(u2(2.0) == 2.0)
-//            assert(u3('3') == '3')
-//        }
-//        return closure
-//    }
-//    let closure = test()
-//    closure()
-//}
-//{
-//    let u = 42
-//    fn func[T](v: int) {
-//        assert(v == u)
-//    }
-//    func[bool](42)
-//    {
-//        // Function template instances should be placed adjacent to one
-//        // another on the stack, right where the template is declared,
-//        // so that they capture the same upvalues.
-//        let u = 0
-//        func[bool](42)
-//        func[int](42)
-//    }
-//}
-//
-////***********************************************
-////    structure templates
-////***********************************************
-//{
-//    struct A[X] {}
-//    struct B[X] {x: X}
-//    struct C[X, Y] {x: X; y: Y}
-//
-//    let a: A[int] = A[int] {}
-//    let b: B[int] = B[int] {x: 1}
-//    let c: C[int, float] = C[int, float] {x: 1, y: 2.0}
-//
-//    let a = A[int] {}
-//    let b = B[int] {x: 2}
-//    let c = C[int, float] {x: 2, y: 3.0}
-//
-//    struct A[T] {
-//        func: fn(T) -> T
-//    }
-//    fn func(i: int) -> int {
-//        return i
-//    }
-//    let a = A[int] {func: func}
-//    assert(123 == a.func(123))
-//}
-//{
-//    struct B[X] {x: X}
-//    let b: B[int] = B[int] {x: 1}
-//    let b = B[int] {x: 1} // (1)
-//}
-//{
-//    struct A[T] {
-//        a(t: T) -> T {
-//            return self.t + t
-//        }
-//        b(t: T) -> T {
-//            return self.a(t) + 1
-//        }
-//        t: T
-//    }
-//    let a = A[int] {t: 40}
-//    assert(42 == a.b(1))
-//}
-//{
-//    struct A[T] {
-//        t: T
-//    }
-//    let a = A[int] {t: 42}
-//    let b = A[A[int]] {t: a}
-//    let c = A[A[A[int]]] {t: b}
-//    let d = A[A[A[A[int]]]] {t: c}
-//    let e = d.t
-//    let f = e.t
-//    let g = f.t
-//    let h = g.t
-//    assert(h == 42)
-//
-//// TODO: This should not be allowed: requires indirection, which is not yet possible
-////    struct B[T] {
-////        b: B[T]
-////    }
-//
-//    struct A[A] {
-//        a: A
-//    }
-//    let a = A[int] {a: 123}
-//    assert(a.a == 123)
-//}
-//{
-//    struct A[T] {
-//        v: T
-//        f() -> T {
-//            return self.v
-//        }
-//    }
-//    let a = A[string]{v: 'abc'}
-//    assert(a.v == 'abc')
-//
-//    a.v = a.v + 'def'
-//    assert(a.f() == 'abcdef')
-//}
-//{
-//    struct A[T] {
-//        value: T
-//        prepend(prefix: T) -> A[T] {
-//            self.value = prefix + self.value
-//            return self
-//        }
-//        append(suffix: T) -> A[T] {
-//            self.value = self.value + suffix
-//            return self
-//        }
-//    }
-//    let a = A[string]{value: 'test: '}
-//    let a = a.prepend('paw_')
-//    a.append('result')
-//    assert(a.value == 'paw_test: result')
-//}
-//{
-//    struct A[T, T2] {
-//        v: T
-//        f() -> T2 {
-//            // ?T2 = int
-//            return 42
-//        }
-//    }
-//    fn func[T, T2](a: A[T, T2]) -> T2 {
-//        return a.f()
-//    }
-//    let a = A[float, int]{v: 12.3}
-//    let r = func(a)
-//    assert(r == 42)
-//}
-//
-////***********************************************
-////    type aliases 
-////***********************************************
-//{
-//    type Int = int
-//    let i: Int = 123
-//    struct A[T] {t: T}
-//    struct A2[T1, T2] {t1: T1; t2: T2}
-//
-//    type Struct = A[int]
-//    let a: Struct = A[int]{t: 1}
-//    let a: A[int] = Struct{t: 2}
-//    let a: Struct = Struct{t: 3}
-//    let a = Struct{t: 4}
-//    assert(a.t == 4)
-//
-//    type Struct = A[Int]
-//    let a: Struct = A[Int]{t: 1}
-//    let a: A[Int] = Struct{t: 2}
-//    let a: Struct = Struct{t: 3}
-//    let a = Struct{t: 4}
-//    assert(a.t == 4)
-//
-//    type Struct[T] = A[T]
-//    let a = Struct[Int]{t: 4}
-//    assert(a.t == 4)
-//
-//    type Struct[T1, T2] = A[T1]
-//    let a = Struct[Int, string]{t: 4}
-//    assert(a.t == 4)
-//
-//    type Struct[T1, T2] = A[T2]
-//    let a = Struct[Int, string]{t: '4'}
-//    assert(a.t == '4')
-//
-//    type Struct[T1, T2] = A2[T1, T2]
-//    let a2 = Struct[Int, string]{t1: 4, t2: '4'}
-//    assert(a2.t1 == 4)
-//    assert(a2.t2 == '4')
-//}
-//{
-//    struct S1 {}
-//    struct S2[T] {}
-//
-//    fn func[T](t: T) -> T {
-//        type T = T // essentially a NOOP
-//        let t: T = t
-//        return t
-//    }
-//    func(1)
-//    func(2.0)
-//    func('3')
-//    func(S1{})
-//    func(S2[int]{})
-//    func(S2[S1]{})
-//    func(S2[S2[S1]]{})
-//
-//    fn func[T](t: T) -> T {
-//        type A[X] = T // X ignored
-//        type B[X] = X // B[X] == X
-//        let a: A[T] = t
-//        let b: B[T] = a
-//        assert(t == a)
-//        assert(a == b)
-//        return b
-//    }
-//    func(1)
-//    func(2.0)
-//    func('3')
-//    func(S1{})
-//    func(S2[int]{})
-//    func(S2[S1]{})
-//    func(S2[S2[S1]]{})
-//
-//    fn func[T](t: T) -> T {
-//        type A[X] = X
-//        let t: A[T] = t
-//        return t
-//    }
-//    func(1)
-//    func(2.0)
-//    func('3')
-//    func(S1{})
-//    func(S2[int]{})
-//    func(S2[S1]{})
-//    func(S2[S2[S1]]{})
-//}
-//////
-////////***********************************************
-////////    method templates
-////////***********************************************
-//////{
-//////    struct A {
-//////        func[T](t: T) -> T {
-//////            return t
-//////        }
-//////    }
-//////    let a = A {}
-//////    a.func[int](123)
-//////    a.func(123)
-//////    a.func[float](1.0)
-//////    a.func(1.0)
-//////    a.func[string]('abc')
-//////    a.func('abc')
-//////    a.func[A](a)
-//////    a.func(a)
-//////}
-//////{
-//////    // call other methods from a method template instance
-//////    struct A {
-//////        func[T](t: T) -> T {
-//////            let c = self.concrete(t)
-//////            let t = self.template(t)
-//////            return (c + t) / 2
-//////        }
-//////        concrete(i: int) -> int {
-//////            return i
-//////        }
-//////        template[T](t: T) -> T {
-//////            return t
-//////        }
-//////    }
-//////    let a = A {}
-//////    assert(1 == a.func[int](1))
-//////    assert(2 == a.func(2))
-////////    let func = a.func[int]
-////////    assert(3 == func(3))
-//////}
-//////
-////////***********************************************
-////////    struct + method templates
-////////***********************************************
-//////{
-//////    struct A[S] {
-//////        s: S
-//////        get[T](t: T) -> T {
-//////            return self.s + t 
-//////        }
-//////    }
-//////    let a1 = A[int] {s: 1}
-//////    a1.get(1)
-//////}
-//////{
-//////    struct A[S1, S2] {
-//////        x: S1
-//////        y: S2
-//////        get_1[T](t: T) -> T {
-//////            return t + self.x
-//////        }
-//////        get_2[T](t: T) -> T {
-//////            return t + self.y
-//////        }
-//////    }
-//////    let a1 = A[int, float] {x: 1, y: 2.3}
-//////    a1.get_1(123)
-//////    a1.get_2(1.0)
-//////    let a2 = A[float, int] {x: 1.2, y: 3}
-//////    a2.get_1(1.0)
-//////    a2.get_2(123)
-//////}
-//////{
-//////    // S1 == S2 && T1 == T2 must be true
-//////    struct A[S1, T1] {
-//////        f[S2, T2](s2: S2, t2: T2) {
-//////            assert(self.s1 == s2)
-//////            assert(self.t1 == t2)
-//////        }
-//////        s1: S1
-//////        t1: T1
-//////    }
-//////
-//////    fn func[S1, T1, S2, T2](s1: S1, t1: T1, s2: S2, t2: T2) {
-//////        let a = A[S1, T1] {s1: s1, t1: t1}
-//////        a.f[S2, T2](s2, t2)
-//////        a.f(s2, t2)
-//////    }
-//////
-//////    func(1, 2.0, 1, 2.0)
-//////    func[int, float, int, float](1, 2.0, 1, 2.0)
-//////    func(true, '2', true, '2')
-//////    func[bool, string, bool, string](true, '2', true, '2')
-//////}
-//////
+{
+    struct A[T] {
+        t: T
+    }
+    let a = A[int] {t: 42}
+    let b = A[A[int]] {t: a}
+    let c = A[A[A[int]]] {t: b}
+    let d = A[A[A[A[int]]]] {t: c}
+    let e = d.t
+    let f = e.t
+    let g = f.t
+    let h = g.t
+    assert(h == 42)
 
-//struct Test[A, B, C, D, E, F] {}
-//fn test[A, B, C, D, E, F](a: A, b: B, c: C, d: D, e: E, f: F) {
-//    let t = Test[A, B, C, D, E, F]{}
-//}
-
-//fn func[A, B, C](a: A, b: B, c: C) {
-//    a = 123
-//    b = a
-//    c = b
-//    c = 321
-//}
-
-//fn outer[A, B, C](a: A, b: B, c: C) {
-//    fn inner[X](x: X) -> X {
-//        return x
+// TODO: This should not be allowed: requires indirection, which is not yet possible
+//    struct B[T] {
+//        b: B[T]
 //    }
-//    let aa = inner[A](123) // ?A = int
-//    let bb = inner[float](b) // ?B = int
-//    let cc = inner[C](a) // ?A = ?C
-//}
 
-//fn func[A, B](a: A, b: B) {
-//    a = 1
-//    a = b
-//    b = 1.0
-//}
+    struct A[A] {
+        a: A
+    }
+    let a = A[int]{a: 123}
+    assert(a.a == 123)
+}
+{
+    struct A[T] {
+        v: T
+    }
+    let a = A[string]{v: 'abc'}
+    assert(a.v == 'abc')
 
-//fn outer[A](a: A) {
-//    fn inner[B](b: B) {
-//        b = a
-//        b = 1
-//    }
-//    inner(a)
-//}
-//outer(1)
-
-//fn func[A, B](a: A, b: B) {
-//    a = 1
-//    b = a
-//    b = 1
-//}
-
-//fn func[A, B, C, D, E, F](a: A, b: B, c: C, d: D, e: E, f: F) {
-//    // create 2 trees, X and Y ('->' represent parent pointers, so ?E and 
-//    // ?F are the roots of the 2 trees, respectively):
-//    //     X: ?A -> ?B -> ?C -> ?E
-//    //     Y: ?D -> ?F
-//    a = b
-//    b = c
-//    c = e
-//    d = f
-//
-//    // link the roots of X and Y: ?F -> ?E
-//    a = d
-//
-//    // NOOPs, since all type variables are already related
-//    f = a
-//    e = b
-//    d = c
-//}
-//
-//fn func[A, B, C, D, E, F](a: A, b: B, c: C, d: D, e: E, f: F) {
-//    a = b
-//    a = c
-//    a = d
-//    a = e
-//    a = f
-//}
-
-//
-//fn func[T](t: T) {}
-//
-//fn func[T](t: T) {
-//    t = t
-//}
-//
-//fn func[T](t: T) {
-//    t = 1
-//    t = 2 
-//    t = 3
-//}
-//
-//fn func[T](t: T) {
-//    t = 1.0
-//    t = 2.0
-//    t = 3.0
-//}
-//
-//fn func[A, B](a: A, b: B) {
-//    a = b
-//}
-//
-//fn func[A, B](a: A, b: B) {
-//    a = b
-//    b = 1
-//}
-//
-//fn func[A, B, C](a: A, b: B, c: C) {
-//    a = b
-//    b = c
-//    c = 1
-//}
-//
-//
-
-//{
-//    // no constraints on 'T'
-//    fn func[T](t: T) {
-//        t = t
-//    }
-//    func(1)
-//    func(2.0)
-//    func('3')
-//    func[int](1)
-//    func[float](2.0)
-//    func[string]('3')
-//
-//    // T = int
-//    // T = int
-//    fn func[T](t: T) {
-//        t = t + 1
-//    }
-//    func(1)
-//    func[int](1)
-//
-//    // T1 = T2
-//    fn func[T1, T2](t1: T1, t2: T2) {
-//        let t = t1 + t2
-//    }
-//    func(1, 2)
-//    func(3.0, 4.0)
-//    func('5', '6')
-//    func[int, int](1, 2)
-//    func[float, float](3.0, 4.0)
-//    func[string, string]('5', '6')
-//}
-//{
-//    // X == Y
-//    fn outer[X](x: X) {
-//        fn inner[Y](y: Y) {
-//            x = y
-//        }
-//        inner(x)
-//    }
-//    outer(1)
-//    outer(2.0)
-//    outer('3')
-//}
-//{
-//    struct A[T] {
-//        t: T
-//    }
-//    
-//    // T = int
-//    fn func[T](a: A[T]) {
-//        let t = a.t + 1
-//    }
-//
-//    // T = int
-//    fn func[T](a: A[T]) {
-//        let a2: A[int] = a
-//    }
-//
-//    // T1 = T2
-//    fn func[T1, T2](a1: A[T1], a2: A[T2]) {
-//        a1 = a2
-//    }
-//}
-
-//struct A[T] {
-//    t: T
-//}
-//
-//fn func[T](a: A[T]) -> T {
-//    return a.t
-//}
-//let a = A[int] {t: 1}
-//assert(func[int](a) == 1)
-//assert(func(a) == 1)
-//assert(func(A[int]{t: 2}) == 2)
-//
-//fn func[T](a: A[A[T]]) -> T {
-//    return a.t.t
-//}
-////let a = A[int] {t: 1}
-////let a = A[A[int]] {t: a}
-////assert(func[int](a) == 1)
-////assert(func(a) == 1)
-////assert(func(A[A[int]]{t: A[int]{t: 2}}) == 2)
-//
-// TODO: Hoist toplevel functions so that mutual recursion works? Or allow forward decls?
-//fn r1[X, Y, Z]() {
-//    r2[X, Y, Z]()
-//}
-//fn r2[X, Y, Z]() {
-//    r1[Y, Z, X]()
-//}
-//r1[bool, int, float]()
-//
-//// fn r1[bool, int, float]() -> ()
-//// fn r2[bool, int, float]() -> ()
-//// fn r1[int, float, bool]() -> ()
-//// fn r2[int, float, bool]() -> ()
-//// fn r1[float, bool, int]() -> ()
-//// fn r2[float, bool, int]() -> ()
-//// fn r1[bool, int, float]() -> ()
-
+    a.v = a.v + 'def'
+    assert(a.v == 'abcdef')
+}
+{
+    struct Pair[First, Second] {
+        first: First
+        second: Second
+    }
+    fn new_pair[A, B](a: A, b: B) -> Pair[A, B] {
+        return Pair[A, B]{
+            first: a,
+            second: b,
+        }
+    }
+    assert(false == new_pair(false, true).first)
+    assert(1 == new_pair(1, 2).first)
+    assert(3.0 == new_pair(2.0, 3.0).second)
+    assert('five' == new_pair('four', 'five').second)
+}

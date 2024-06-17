@@ -45,7 +45,6 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/ast.h
             ${PAW_SOURCE_DIR}/auxlib.h
             ${PAW_SOURCE_DIR}/array.h
-            ${PAW_SOURCE_DIR}/bigint.h
             ${PAW_SOURCE_DIR}/call.h
             ${PAW_SOURCE_DIR}/code.h
             ${PAW_SOURCE_DIR}/debug.h
@@ -63,13 +62,13 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/rt.h
             ${PAW_SOURCE_DIR}/str.h
             ${PAW_SOURCE_DIR}/type.h
+            ${PAW_SOURCE_DIR}/unify.h
             ${PAW_SOURCE_DIR}/util.h
             ${PAW_SOURCE_DIR}/value.h
     PRIVATE ${PAW_SOURCE_DIR}/api.c
             ${PAW_SOURCE_DIR}/ast.c
             ${PAW_SOURCE_DIR}/auxlib.c
             ${PAW_SOURCE_DIR}/array.c
-            ${PAW_SOURCE_DIR}/bigint.c 
             ${PAW_SOURCE_DIR}/call.c
             ${PAW_SOURCE_DIR}/check.c
             ${PAW_SOURCE_DIR}/code.c

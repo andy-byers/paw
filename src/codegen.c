@@ -17,7 +17,7 @@
 #define code_block(V, b) check_exp((b)->kind == STMT_BLOCK, V->visit_stmt(V, cast_stmt(b)))
 #define basic_decl(G, code) basic_symbol(G, code)->decl
 #define basic_type(G, code) basic_decl(G, code)->type.type
-#define get_decl(G, id) ((G)->lex->pm->decls.data[id])
+#define get_decl(G, id) pawA_get_decl((G)->ast, id)
 #define get_type(G, id) get_decl(G, id)->hdr.type
 #define symbol_type(G, symbol) get_type(G, (symbol)->decl->hdr.def)
 
@@ -25,11 +25,6 @@
 #define visit_stmts(V, list) (V)->visit_stmt_list(V, list, (V)->visit_stmt)
 #define visit_exprs(V, list) (V)->visit_expr_list(V, list, (V)->visit_expr)
 #define visit_decls(V, list) (V)->visit_decl_list(V, list, (V)->visit_decl)
-#define visit_methods(V, list) (V)->visit_method_list(V, list, (V)->visit_decl)
-
-static void code_decl(Generator *, AstDecl *);
-static void code_expr(Generator *, AstExpr *);
-static void code_stmt(Generator *, AstStmt *);
 
 static void mangle_type(Generator *G, Buffer *buf, Type *type)
 {
@@ -44,8 +39,8 @@ static void mangle_type(Generator *G, Buffer *buf, Type *type)
         pawL_add_literal(P, buf, "f"); 
     } else if (y_is_string(type)) {
         pawL_add_literal(P, buf, "s"); 
-    } else if (y_is_type_var(type)) {
-        TypeVar *var = &type->var;
+    } else if (y_is_generic(type)) {
+        Generic *var = &type->generic;
         pawL_add_nstring(P, buf, var->name->text, var->name->length);
     } else if (y_is_adt(type)) {
         Adt *adt = &type->adt;
@@ -68,22 +63,6 @@ static void mangle_type(Generator *G, Buffer *buf, Type *type)
     }
 }
 
-// mangle('recv', 'attr') -> %recv.attr
-static String *mangle_attr(Generator *G, String *recv, String *attr)
-{
-    Buffer buf;
-    paw_Env *P = env(G->lex);
-    pawL_init_buffer(P, &buf);
-    pawL_add_char(P, &buf, '%');
-    pawL_add_nstring(P, &buf, recv->text, recv->length);
-    pawL_add_char(P, &buf, '.');
-    pawL_add_nstring(P, &buf, attr->text, attr->length);
-    pawL_push_result(P, &buf);
-    String *result = v_string(P->top.p[-1]);
-    pawC_pop(P); // unanchor
-    return result;
-}
-
 // mangle('name', ()) -> name_
 // mangle('name', ('int', 'A')) -> nameiA_
 // mangle('name', ('A[int]',)) -> nameAi_
@@ -103,24 +82,12 @@ static String *mangle_name(Generator *G, String *name, Binder *binder)
     return result;
 }
 
-static Symbol *basic_symbol(Generator *G, paw_Type code)
-{
-    paw_assert(code >= 0 && code <= PAW_TSTRING);
-
-    // basic types have fixed locations
-    Scope *toplevel = G->sym->scopes[0];
-    return toplevel->symbols[1 + code]; // TODO
-}
-
-static String *mangle_named_type(Generator *G, Type *type)
+static String *get_type_name(Generator *G, Type *type)
 {
     paw_assert(y_is_adt(type));
     Adt *adt = &type->adt;
-    AstDecl *decl = get_decl(G, adt->def);
-    if (adt->types.count == 0) {
-        return decl->struct_.name;
-    }
-    return mangle_name(G, decl->struct_.name, &adt->types);
+    AstDecl *decl = get_decl(G, adt->base);
+    return decl->struct_.name;
 }
 
 static paw_Type basic_code(const Type *type)
@@ -558,16 +525,11 @@ static VarInfo find_var(Generator *G, String *name);
 static VarInfo resolve_attr(Generator *G, Type *type, String *name)
 {
     paw_assert(y_is_adt(type));
-    AstDecl *decl = get_decl(G, type->hdr.def);
+    AstDecl *decl = get_decl(G, type->adt.base);
     StructDecl *struct_ = &decl->struct_;
     Scope *scope = struct_->field_scope;
     VarInfo info = (VarInfo){.kind = VAR_FIELD};
     info.index = pawP_find_symbol(scope, name);
-    if (info.index < 0) {
-        scope = struct_->method_scope;
-        info.index = pawP_find_symbol(scope, name);
-        info.kind = VAR_METHOD;
-    }
     paw_assert(info.index >= 0); // found in last pass
     info.symbol = scope->symbols[info.index];
     return info;
@@ -670,18 +632,6 @@ static VarInfo find_var(Generator *G, String *name)
     return info;
 }
 
-static void push_self(FuncState *fs)
-{
-    paw_assert(fs->G->cs != NULL);
-    pawK_code_U(fs, OP_GETLOCAL, 0);
-}
-
-static void push_super(FuncState *fs)
-{
-    paw_assert(fs->G->cs != NULL);
-    pawK_code_U(fs, OP_GETUPVALUE, 0);
-}
-
 // Push a variable on to the stack
 static void code_getter(AstVisitor *V, VarInfo info)
 {
@@ -695,11 +645,6 @@ static void code_getter(AstVisitor *V, VarInfo info)
             pawK_code_U(fs, OP_GETUPVALUE, info.index);
             break;
         case VAR_FIELD:
-            pawK_code_U(fs, OP_GETATTR, info.index);
-            break;
-        case VAR_METHOD:
-            // TODO: bind to receiver: this should not be called immediately, that must be
-            //       handled separately so that OP_INVOKE can be generated
             pawK_code_U(fs, OP_GETATTR, info.index);
             break;
         default:
@@ -774,7 +719,7 @@ static void code_composite_lit(AstVisitor *V, LiteralExpr *lit)
     Generator *G = V->state.G;
     FuncState *fs = G->fs;
     CompositeLit *e = &lit->comp;
-    String *name = mangle_named_type(G, e->target->hdr.type);
+    String *name = get_type_name(G, e->target->hdr.type);
     VarInfo info = find_var(G, name);
 
     StructDecl *struct_ = &info.symbol->decl->struct_;
@@ -898,10 +843,9 @@ static void code_expr_stmt(AstVisitor *V, AstExprStmt *s)
     pawK_code_0(fs, OP_POP); // unused return value
 }
 
-static void code_func(AstVisitor *V, FuncDecl *d, FuncKind kind)
+static void code_func(AstVisitor *V, FuncDecl *d)
 {
     Generator *G = V->state.G;
-
     FuncState fs;
     BlockState bs;
     fs.name = d->name;
@@ -910,7 +854,7 @@ static void code_func(AstVisitor *V, FuncDecl *d, FuncKind kind)
     FuncSig *func = &d->type->func;
     const int id = add_proto(G, d->name, &fs.proto);
     fs.proto->argc = func->params.count;
-    enter_function(G, &fs, &bs, d->scope, kind);
+    enter_function(G, &fs, &bs, d->scope, d->fn_kind);
     visit_decls(V, d->params); // code parameters
     V->visit_block_stmt(V, d->body); // code function body
     leave_function(G);
@@ -918,22 +862,21 @@ static void code_func(AstVisitor *V, FuncDecl *d, FuncKind kind)
     code_closure(G->fs, fs.proto, id);
 }
 
-static String *func_name(Generator *G, FuncDecl *func)
+// Stamp out monomorphizations of a function template
+static void monomorphize_func(AstVisitor *V, FuncDecl *d)
 {
-    FuncSig *sig = &func->type->func;
-    if (!func->is_poly && sig->types.count > 0) {
-        // TODO: Consider mangling all symbol names, not just
-        //       template instances. Mangle templates with their
-        //       generic parameter names?
-        return mangle_name(G, func->name, &sig->types);
+    Generator *G = V->state.G;
+    FuncState *fs = G->fs;
+    AstDecl *decl = d->next;
+    while (decl != NULL) {
+        FuncDecl *inst = pawA_stencil_func(V->ast, d, decl);
+        String *mangled = mangle_name(G, inst->name, &inst->type->func.types);
+        const VarInfo info = inject_var(fs, mangled, cast_decl(inst), d->is_global);
+        code_func(V, inst);
+        define_var(fs, info);
+        decl = a_next(decl);
     }
-    return func->name;
-}
-
-static String *method_name(Generator *G, StructDecl *parent, FuncDecl *method)
-{
-    String *name = func_name(G, method);
-    return mangle_attr(G, parent->name, name);
+    ++fs->bs->isymbol;
 }
 
 static void register_fields(Generator *G, StructDecl *parent)
@@ -947,45 +890,6 @@ static void register_fields(Generator *G, StructDecl *parent)
         symbol->name = d->name;
         symbol->decl = fields;
         fields = d->next;
-    }
-}
-
-static void register_methods(Generator *G, StructDecl *parent)
-{
-    AstDecl *methods = parent->methods->first;
-    parent->method_scope = pawM_new(env(G->lex), Scope); // TODO
-    for (int i = 0; i < parent->methods->count; ++i) {
-        AstDecl *decl = methods;
-        if (decl->hdr.next != NULL) {
-            paw_assert(decl->func.is_poly);
-            decl = decl->hdr.next;
-        }
-        while (decl != NULL) {
-            FuncDecl *d = &decl->func;
-            Symbol *symbol = pawP_add_symbol(G->lex, parent->method_scope);
-            symbol->is_init = PAW_TRUE;
-            symbol->name = func_name(G, d);
-            symbol->decl = decl;
-            decl = d->next;
-        }
-        methods = methods->func.sibling;
-    }
-}
-
-static void code_methods(AstVisitor *V, StructDecl *parent, Struct *struct_)
-{
-    Generator *G = V->state.G;
-    FuncState *fs = G->fs;
-    Scope *scope = parent->method_scope;
-    for (int i = 0; i < scope->nsymbols; ++i) {
-        Symbol *symbol = scope->symbols[i];
-        FuncDecl *d = &symbol->decl->func;
-        code_func(V, d, FUNC_METHOD);
-        pawK_code_U(fs, OP_NEWMETHOD, i);
-    }
-    // Make room for the methods to be set at runtime.
-    if (parent->methods->count > 0) {
-        pawA_resize(env(G->lex), struct_->methods, cast_size(parent->methods->count));
     }
 }
 
@@ -1005,28 +909,9 @@ static void code_struct(AstVisitor *V, StructDecl *d)
     enter_block(fs, &bs, d->scope, PAW_FALSE);
 
     register_fields(G, d);
-    register_methods(G, d);
-    code_methods(V, d, struct_);
 
     leave_block(fs); // layout->scope
     pawC_pop(P); // pop 'struct_'
-}
-
-// TODO: Never generate code for structs whose types contain free type variables
-//       Those structures are created 
-static void code_struct_template(AstVisitor *V, StructDecl *tmpl)
-{
-    Generator *G = V->state.G;
-    FuncState *fs = G->fs;
-    AstDecl *d = tmpl->next;
-    while (d != NULL) {
-        StructDecl *struct_ = &d->struct_;
-        String *name = mangle_named_type(G, struct_->type);
-        const VarInfo info = inject_var(fs, name, d, struct_->is_global);
-        define_var(fs, info);
-        code_struct(V, struct_);
-        d = struct_->next;
-    }
 }
 
 static void code_field_decl(AstVisitor *V, FieldDecl *d)
@@ -1045,13 +930,8 @@ static void code_var_decl(AstVisitor *V, VarDecl *s)
 
 static void code_struct_decl(AstVisitor *V, StructDecl *d)
 {
-    if (d->is_poly) {
-        code_struct_template(V, d); 
-        return;
-    }
-    FuncState *fs = V->state.G->fs;
-    const VarInfo info = declare_var(fs, d->is_global);
-    define_var(fs, info);
+    Generator *G = V->state.G;
+    code_var(G, d->is_global);
     code_struct(V, d);
 }
 
@@ -1081,86 +961,65 @@ static void code_return_stmt(AstVisitor *V, ReturnStmt *s)
     pawK_code_0(fs, OP_RETURN);
 }
 
-static paw_Bool is_method_call(const AstExpr *e)
-{
-    return a_kind(e) == EXPR_SELECTOR && e->selector.is_method;
-}
-
 static paw_Bool is_instance_call(const Type *type)
 {
     return type->func.types.count > 0;
 }
 
+static AstDecl *get_base_decl(Generator *G, const Type *type)
+{
+    return get_decl(G, y_is_adt(type) ? type->adt.base : type->func.def);
+}
+
 static void code_instance_getter(AstVisitor *V, Type *type)
 {
+//    printf("DUMP:\n");
+//    for (int i = 0; i < V->state.G->lex->pm->decls.size; ++i) {
+//        if (V->state.G->lex->pm->decls.data[i]->hdr.name) {
+//            const AstDeclKind k = V->state.G->lex->pm->decls.data[i]->hdr.kind;
+//            printf("  %d%s: %s\t\t::\t\t", i, k==DECL_INSTANCE?"*":k==DECL_FUNC?"f":"", V->state.G->lex->pm->decls.data[i]->hdr.name->text);
+//            pawA_dump_type(stdout, V->state.G->lex->pm->decls.data[i]->hdr.type);
+//        } else {
+//            printf("  %d: (noname)\n", i);
+//        }
+//    }
+//    printf("***done***\n\n");
+
     Generator *G = V->state.G;
-    AstDecl *decl = get_decl(G, type->hdr.def);
-    Binder binder = y_is_adt(type) ? type->adt.types : type->func.types;
-    String *name = mangle_name(G, decl->hdr.name, &binder);
+    AstDecl *decl = get_base_decl(G, type);
+    String *name = decl->hdr.name;
+    if (y_is_func(type)) {
+        paw_assert(a_is_func_decl(decl));
+        name = mangle_name(G, name, &type->func.types);
+    }
     const VarInfo info = find_var(G, name);
     code_getter(V, info);
 }
 
 static void code_call_expr(AstVisitor *V, CallExpr *e)
 {
-    //const int invoke = start_call(G, e);
     Generator *G = V->state.G;
     FuncState *fs = G->fs;
 
-    int invoke = -1;
-    if (e->func->hdr.def == NO_DECL) {
-        V->visit_expr(V, e->target);
-    } else if (is_instance_call(e->func)) {
+    if (is_instance_call(e->func)) {
         code_instance_getter(V, e->func);
-    } else if (is_method_call(e->target)) {
-        AstDecl *decl = get_decl(G, e->func->hdr.def);
-        Selector *select = &e->target->selector;
-        Type *parent = a_type(decl->func.receiver);
-        String *name = func_name(G, &decl->func);
-        // emit code for the receiver and save the method index
-        V->visit_expr(V, select->target);
-        const VarInfo info = resolve_attr(G, parent, name);
-        invoke = info.index;
     } else {
         V->visit_expr(V, e->target);
     }
-
-    // push function arguments
     visit_exprs(V, e->args);
-
-    if (invoke < 0) {
-        pawK_code_U(fs, OP_CALL, e->args->count);
-    } else {
-        pawK_code_AB(fs, OP_INVOKE, invoke, e->args->count);
-    }
-}
-
-static void code_func_template(AstVisitor *V, FuncDecl *tmpl)
-{
-    Generator *G = V->state.G;
-    FuncState *fs = G->fs;
-    AstDecl *d = tmpl->next;
-    while (d != NULL) {
-        FuncDecl *func = &d->func;
-        String *name = func_name(G, func);
-        const VarInfo info = inject_var(fs, name, d, func->is_global);
-        code_func(V, func, FUNC_FUNCTION);
-        define_var(fs, info);
-        d = func->next;
-    }
+    pawK_code_U(fs, OP_CALL, e->args->count);
 }
 
 static void code_func_decl(AstVisitor *V, FuncDecl *d)
 {
-    Generator *G = V->state.G;
-    if (d->is_poly) {
-        code_func_template(V, d); 
-        return;
+    FuncState *fs = V->state.G->fs;
+    if (d->generics == NULL) {
+        const VarInfo info = declare_var(fs, d->is_global);
+        code_func(V, d);
+        define_var(fs, info);
+    } else {
+        monomorphize_func(V, d);
     }
-    FuncState *fs = G->fs;
-    const VarInfo info = declare_var(fs, d->is_global);
-    code_func(V, d, FUNC_FUNCTION);
-    define_var(fs, info);
 }
 
 static void code_if_stmt(AstVisitor *V, IfStmt *s)
@@ -1324,11 +1183,11 @@ static void code_for_stmt(AstVisitor *V, ForStmt *s)
 
 static paw_Bool is_index_template(Generator *G, const Type *type)
 {
-    AstDecl *decl = get_decl(G, type->hdr.def);
+    AstDecl *decl = get_base_decl(G, type);
     if (a_is_func_decl(decl)) {
-        return decl->func.is_poly;
+        return decl->func.generics != NULL;
     } else {
-        return decl->struct_.is_poly;
+        return decl->struct_.generics != NULL;
     }
 }
 
@@ -1348,7 +1207,6 @@ static void code_index_expr(AstVisitor *V, Index *e)
     pawK_code_AB(G->fs, OP_GETITEM, tt, et);
 }
 
-// TODO: Need to handle a.b and a.b[c], where 'b' is a method (need to bind to 'self')
 static void code_selector_expr(AstVisitor *V, Selector *e)
 {
     Generator *G = V->state.G;

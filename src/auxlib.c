@@ -3,7 +3,6 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "auxlib.h"
 #include "array.h"
-#include "bigint.h"
 #include "map.h"
 #include "mem.h"
 #include "rt.h"
@@ -45,7 +44,7 @@ static char *reserve_memory(paw_Env *P, Buffer *buf, size_t n, int boxloc)
 void pawL_init_buffer(paw_Env *P, Buffer *buf)
 {
     *buf = (Buffer){.data = buf->stack, .alloc = BUFFER_LIMIT};
-    paw_push_null(P); // placeholder for box
+    paw_push_unit(P, 1); // placeholder for box
 }
 
 void pawL_discard_result(paw_Env *P, Buffer *buf)

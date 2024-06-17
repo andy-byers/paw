@@ -143,158 +143,6 @@ void pawR_error(paw_Env *P, int error, const char *fmt, ...)
     pawC_throw(P, error);
 }
 
-//Value *get_meta(paw_Env *P, Metamethod mm, Value obj)
-//{
-//    if (has_meta(obj)) {
-//        const Value key = P->meta_keys[mm];
-//        return pawV_find_binding(P, obj, key);
-//    }
-//    return NULL;
-//}
-//
-//static paw_Bool meta_call(paw_Env *P, Value x, int argc)
-//{
-//    const Value *meta = get_meta(P, MM_CALL, x);
-//    if (meta) {
-//        // Expect 'x', followed by 'argc' args, on top of the stack.
-//        pawC_call(P, VCLOSURE, *meta, argc);
-//        return PAW_TRUE;
-//    }
-//    return PAW_FALSE;
-//}
-//
-//static paw_Bool meta_single(paw_Env *P, Metamethod mm, Value x)
-//{
-//    const Value *meta = get_meta(P, mm, x);
-//    if (meta) {
-//        vm_pushv(x);
-//        pawC_call(P, VCLOSURE, *meta, 0);
-//        return PAW_TRUE;
-//    }
-//    return PAW_FALSE;
-//}
-//
-//static paw_Bool meta_unop(paw_Env *P, UnaryOp op, Value x)
-//{
-//    return meta_single(P, unop2meta(op), x);
-//}
-//
-//static paw_Bool meta_binop_aux(paw_Env *P, BinaryOp binop, Value x, Value y)
-//{
-//    const Value *meta = get_meta(P, binop2meta(binop), x);
-//    if (meta) {
-//        StackPtr sp = pawC_stkinc(P, 2);
-//        sp[0] = x;
-//        sp[1] = y;
-//        pawC_call(P, VCLOSURE, *meta, 1);
-//        return PAW_TRUE;
-//    }
-//    return PAW_FALSE;
-//}
-//
-//static paw_Bool meta_eq_ne(paw_Env *P, BinaryOp binop, Value x, Value y)
-//{
-//    paw_assert(binop == BINARY_EQ || binop == BINARY_NE);
-//    return meta_binop_aux(P, binop, x, y) ||
-//           meta_binop_aux(P, binop, y, x);
-//}
-//
-//static paw_Bool meta_binop(paw_Env *P, BinaryOp binop, Value x, Value y)
-//{
-//    switch (binop) {
-//        case BINARY_LT:
-//            return meta_binop_aux(P, BINARY_LT, x, y) ||
-//                   meta_binop_aux(P, BINARY_GT, y, x);
-//        case BINARY_LE:
-//            return meta_binop_aux(P, BINARY_LE, x, y) ||
-//                   meta_binop_aux(P, BINARY_GE, y, x);
-//        case BINARY_GT:
-//            return meta_binop_aux(P, BINARY_GT, x, y) ||
-//                   meta_binop_aux(P, BINARY_LT, y, x);
-//        case BINARY_GE:
-//            return meta_binop_aux(P, BINARY_GE, x, y) ||
-//                   meta_binop_aux(P, BINARY_LE, y, x);
-//        case BINARY_IN:
-//            return meta_binop_aux(P, BINARY_IN, y, x);
-//        default:
-//            break;
-//    }
-//
-//    paw_Bool swap = PAW_FALSE;
-//    const Value *meta = get_meta(P, binop2meta(binop), x);
-//    if (!meta && binop_has_r(binop)) {
-//        // Check the reverse metamethod (i.e. y.__<binop>r(x)).
-//        meta = get_meta(P, binop_r(binop), y);
-//        swap = PAW_TRUE;
-//    }
-//    if (meta) {
-//        StackPtr sp = pawC_stkinc(P, 2);
-//        sp[0] = swap ? y : x;
-//        sp[1] = swap ? x : y;
-//        pawC_call(P, VCLOSURE, *meta, 1);
-//        return PAW_TRUE;
-//    }
-//    return PAW_FALSE;
-//}
-//
-//static inline paw_Bool meta_getter(paw_Env *P, Op op, Value obj, Value key)
-//{
-//    const Value *meta = get_meta(P, op - METAMETHOD0, obj);
-//    if (meta) {
-//        StackPtr sp = pawC_stkinc(P, 2);
-//        sp[0] = obj;
-//        sp[1] = key;
-//        pawC_call(P, VCLOSURE, *meta, 1);
-//        return PAW_TRUE;
-//    }
-//    return PAW_FALSE;
-//}
-//
-//static inline paw_Bool meta_getslice(paw_Env *P, Value obj, Value begin, Value end)
-//{
-//    const Value *meta = get_meta(P, MM_GETSLICE, obj);
-//    if (meta) {
-//        StackPtr sp = pawC_stkinc(P, 3);
-//        sp[0] = obj;
-//        sp[1] = begin;
-//        sp[2] = end;
-//        pawC_call(P, VCLOSURE, *meta, 2);
-//        return PAW_TRUE;
-//    }
-//    return PAW_FALSE;
-//}
-//
-//static inline paw_Bool meta_setslice(paw_Env *P, Value obj, Value begin, Value end, Value val)
-//{
-//    const Value *meta = get_meta(P, MM_SETSLICE, obj);
-//    if (meta) {
-//        StackPtr sp = pawC_stkinc(P, 4);
-//        sp[0] = obj;
-//        sp[1] = begin;
-//        sp[2] = end;
-//        sp[3] = val;
-//        pawC_call(P, VCLOSURE, *meta, 3);
-//        vm_pop(1); // unused return value
-//        return PAW_TRUE;
-//    }
-//    return PAW_FALSE;
-//}
-//
-//static inline paw_Bool meta_setter(paw_Env *P, Op op, Value obj, Value key, Value val)
-//{
-//    const Value *meta = get_meta(P, op - METAMETHOD0, obj);
-//    if (meta) {
-//        StackPtr sp = pawC_stkinc(P, 3);
-//        sp[0] = obj;
-//        sp[1] = key;
-//        sp[2] = val;
-//        pawC_call(P, VCLOSURE, *meta, 2);
-//        vm_pop(1); // unused return value
-//        return PAW_TRUE;
-//    }
-//    return PAW_FALSE;
-//}
-
 // Convert a paw_Float to a paw_Int (from Lua)
 // Assumes 2's complement, which means PAW_INT_MIN is a power-of-2 with
 // an exact paw_Float representation. 
@@ -356,7 +204,6 @@ void pawR_cast_float(paw_Env *P, paw_Type type)
     }
 }
 
-// TODO: Call metamethods in the pawR_to_* functions
 void pawR_to_bool(paw_Env *P, paw_Type type)
 {
     Value *pv = vm_peek(0);
@@ -510,37 +357,6 @@ void pawR_init(paw_Env *P)
     v_set_object(&P->mem_errmsg, errmsg);
 }
 
-//static CallFrame *super_invoke(paw_Env *P, Struct *super, Value name, int argc)
-//{
-//    Value *base = vm_peek(argc);
-//    const Value *method = pawH_get(P, super->attr, name);
-//    if (!method) {
-//        pawR_attr_error(P, name);
-//    }
-//    // The receiver (substruct) instance + parameters are on top of the stack.
-//    return pawC_precall(P, base, *method, argc);
-//}
-//
-static CallFrame *invoke(paw_Env *P, int index, int argc)
-{
-    Value *base = vm_peek(argc);
-    Instance *ins = v_instance(*base);
-    Struct *struct_ = v_struct(ins->attrs[0]);
-    Value method = struct_->methods->begin[index];
-    return pawC_precall(P, base, method.o, argc);
-}
-
-//static void inherit(paw_Env *P, Struct *cls, const Struct *super)
-//{
-//    // 'copy-down' inheritance
-//    pawH_extend(P, cls->attr, super->attr);
-//    // Ensure that __init is not inherited. Note that 'sub' has not had any
-//    // of its own attributes added to it yet, so this will not remove the
-//    // actual __init attribute belonging to 'sub'.
-//    const Value key = pawE_cstr(P, CSTR_INIT);
-//    pawH_action(P, cls->attr, key, MAP_ACTION_REMOVE);
-//}
-
 #define stop_loop(i, i2, d) (((d) < 0 && (i) <= (i2)) || \
                              ((d) > 0 && (i) >= (i2)))
 
@@ -576,26 +392,6 @@ static paw_Bool fornum(paw_Env *P)
     return PAW_TRUE;
 }
 
-//static paw_Bool meta_forin_init(paw_Env *P, Value v)
-//{
-//    ptrdiff_t save = save_offset(P, P->top.p);
-//    if (meta_unop(P, UNARY_LEN, v)) {
-//        if (paw_int(P, -1) > 0) {
-//            vm_pop(1); // pop length
-//            // Attempt to get the first item. If 'v' has __getitem, then
-//            // we can iterate over it.
-//            if (meta_getter(P, OP_GETITEM, v, vint(0))) {
-//                // Set up the stack to look like '..., 0, item'.
-//                vm_pushi(0);
-//                paw_rotate(P, -2, 1);
-//                return PAW_FALSE;
-//            }
-//        }
-//    }
-//    P->top.p = restore_pointer(P, save);
-//    return PAW_TRUE; // skip the loop
-//}
-
 static paw_Bool forin_init(paw_Env *P, paw_Type t)
 {
 //    const Value v = *vm_peek(0);
@@ -618,27 +414,6 @@ static paw_Bool forin_init(paw_Env *P, paw_Type t)
 //    }
 //    return PAW_TRUE;
 }
-
-//static paw_Bool meta_forin(paw_Env *P, Value v, paw_Int itr)
-//{
-//    // push the length
-//    meta_unop(P, UNARY_LEN, v);
-//
-//    ++itr;
-//    const paw_Int len = paw_int(P, -1);
-//    vm_pop(1);
-//
-//    if (itr < len) {
-//        // Write the next iterator value and set up the stack for __getitem. 'v'
-//        // replaces the length, and the iterator value gets pushed.
-//        Value *pitr = vm_peek(0);
-//        v_set_int(pitr, itr);
-//
-//        meta_getter(P, OP_GETITEM, v, vint(itr));
-//        return PAW_TRUE;
-//    }
-//    return PAW_FALSE; // finish the loop
-//}
 
 static paw_Bool forin(paw_Env *P, paw_Type t)
 {
@@ -696,32 +471,6 @@ static void string_binop(paw_Env *P, BinaryOp binop, Value lhs, Value rhs)
     }
     vm_shift(2);
 }
-
-//Array *concat_arrays(paw_Env *P, const Array *x, const Array *y)
-//{
-//    // Both 'nx' and 'ny' are in [0,PAW_SIZE_MAX].
-//    const size_t nx = pawA_length(x);
-//    const size_t ny = pawA_length(y);
-//    if (nx > PAW_SIZE_MAX - ny) {
-//        pawM_error(P);
-//    }
-//    Value *pv = vm_push0();
-//    Array *cat = pawA_clone(P, pv, x);
-//    pawA_reserve(P, cat, nx + ny);
-//    for (size_t i = 0; i < ny; ++i) {
-//        pawA_push(P, cat, y->begin[i]);
-//    }
-//    return cat;
-//}
-//
-//static void array_binop(paw_Env *P, BinaryOp binop, Value lhs, Value rhs)
-//{
-//    paw_assert(binop == BINARY_ADD);
-//    Array *x = v_array(lhs);
-//    Array *y = v_array(rhs);
-//    concat_arrays(P, x, y);
-//    vm_shift(2);
-//}
 
 static void eq_ne(paw_Env *P, BinaryOp binop, paw_Type t, Value x, Value y)
 {
@@ -1245,15 +994,6 @@ top:
                 pawR_cast_float(P, get_U(opcode));
             }
 
-            vm_case(NEWMETHOD) :
-            {
-                Struct *cls = v_struct(*vm_peek(1));
-                Value method = *vm_peek(0); 
-                const int u = get_U(opcode);
-                cls->methods->begin[u] = method;
-                vm_pop(1);
-            }
-
             vm_case(NEWINSTANCE) :
             {
                 vm_protect();
@@ -1311,15 +1051,6 @@ top:
             {
                 const int u = get_U(opcode);
                 pawR_write_global(P, u);
-            }
-
-            vm_case(GETMETHOD) :
-            {
-                vm_protect();
-                const int u = get_U(opcode);
-                Instance *ins = v_instance(*vm_peek(0));
-                Struct *struct_ = v_struct(ins->attrs[0]);
-                *vm_peek(0) = struct_->methods->begin[u];
             }
 
             vm_case(GETATTR) :
@@ -1386,19 +1117,6 @@ top:
                                          : fn->up[u.index];
                 }
                 check_gc(P);
-            }
-
-            vm_case(INVOKE) :
-            {
-                const int index = get_A(opcode);
-                const uint8_t argc = get_B(opcode);
-                vm_save();
-
-                CallFrame *callee = invoke(P, index, argc);
-                if (callee) {
-                    cf = callee;
-                    goto top;
-                }
             }
 
             vm_case(CALL) :

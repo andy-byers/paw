@@ -10,18 +10,6 @@
 // contains the function itself. When a method is called, slot 0 contains the
 // implicit 'self' parameter.
 //
-// paw has built-in support for multi-precision integers. Due to the way paw
-// values are stored internally, we have a total of 47 bits available for
-// signed integers. When an integer is encountered that is too wide, it is
-// silently converted to the multi-precision format. If that bigint is then
-// modified, bringing it back in range, it is converted back to a native
-// integer. These conversions are performed automatically within the paw
-// runtime, and multi-precision integers should behave exactly the same as
-// native integers, as far as the user is concerned. Just be careful at API
-// boundaries, especially when reading integers from paw: the conversion from
-// multi-precision integer to paw_Int may result in data loss (see the
-// *_bigint() functions and paw_intx()).
-//
 #ifndef PAW_PAW_H
 #define PAW_PAW_H
 
@@ -103,20 +91,15 @@ int paw_type(paw_Env *P, int index);
 const char *paw_typename(paw_Env *P, int index);
 
 void paw_push_value(paw_Env *P, int index);
-void paw_push_nnull(paw_Env *P, int n);
-void paw_push_boolean(paw_Env *P, paw_Bool b);
-void paw_push_float(paw_Env *P, paw_Float f);
+void paw_push_unit(paw_Env *P, int n);
+void paw_push_bool(paw_Env *P, paw_Bool b);
 void paw_push_int(paw_Env *P, paw_Int i);
-void paw_push_native(paw_Env *P, paw_Function fn, int n);
+void paw_push_float(paw_Env *P, paw_Float f);
+void paw_push_function(paw_Env *P, paw_Function fn, int n);
 const char *paw_push_string(paw_Env *P, const char *s);
 const char *paw_push_nstring(paw_Env *P, const char *s, size_t n);
 const char *paw_push_fstring(paw_Env *P, const char *fmt, ...);
 const char *paw_push_vfstring(paw_Env *P, const char *fmt, va_list arg);
-
-static inline void paw_push_null(paw_Env *P)
-{
-    paw_push_nnull(P, 1);
-}
 
 #define PAW_OPLEN 0
 #define PAW_OPNEG 1
@@ -147,8 +130,21 @@ void paw_unop(paw_Env *P, int op);
 #define PAW_OPSHR 19
 
 void paw_binop(paw_Env *P, int op);
-
 void paw_raw_equals(paw_Env *P);
+
+void paw_arith_int(paw_Env *P, int op);
+void paw_arith_float(paw_Env *P, int op);
+void paw_arith_string(paw_Env *P, int op);
+
+void paw_compare_int(paw_Env *P, int op);
+void paw_compare_float(paw_Env *P, int op);
+void paw_compare_string(paw_Env *P, int op);
+
+void paw_eq_i(paw_Env *P);
+void paw_eq_f(paw_Env *P);
+void paw_eq_s(paw_Env *P);
+void paw_eq_v(paw_Env *P);
+void paw_eq_m(paw_Env *P);
 
 //
 // Getters (stack -> C):
@@ -160,7 +156,7 @@ void paw_raw_equals(paw_Env *P);
 // high bits.
 paw_Int paw_intx(paw_Env *P, int index, paw_Bool *plossless);
 
-paw_Bool paw_boolean(paw_Env *P, int index);
+paw_Bool paw_bool(paw_Env *P, int index);
 paw_Float paw_float(paw_Env *P, int index);
 const char *paw_string(paw_Env *P, int index);
 paw_Function paw_native(paw_Env *P, int index);
@@ -168,18 +164,10 @@ void *paw_pointer(paw_Env *P, int index);
 size_t paw_length(paw_Env *P, int index);
 
 //
-// Specializations for bigint:
-//
-typedef uint8_t paw_Digit;
-paw_Bool paw_is_bigint(paw_Env *P, int index);
-paw_Digit *paw_bigint(paw_Env *P, int index);
-void paw_push_bigint(paw_Env *P, paw_Digit *d, int n, int neg);
-
-//
 // Type conversions:
 //
 void paw_to_float(paw_Env *P, int index);
-void paw_to_integer(paw_Env *P, int index);
+void paw_to_int(paw_Env *P, int index);
 void paw_to_string(paw_Env *P, int index);
 
 void paw_pop(paw_Env *P, int n);

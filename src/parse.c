@@ -281,7 +281,6 @@ static AstExpr *emit_bool(Lex *lex, paw_Bool b)
 make_link_node(decl, AstDecl, hdr, next)
 make_link_node(expr, AstExpr, hdr, next)
 make_link_node(stmt, AstStmt, hdr, next)
-make_link_node(method, AstDecl, func, sibling)
 
 static AstExpr *type_expr(Lex *lex);
 
@@ -372,7 +371,7 @@ static AstExpr *ret_annotation(Lex *lex)
     return test_next(lex, TK_ARROW) ? type_expr(lex) : unit_type(lex);
 }
 
-static AstExpr *var_annotation(Lex *lex)
+static AstExpr *type_annotation(Lex *lex)
 {
     if (test_next(lex, ':')) {
         AstExpr *tn = type_expr(lex);
@@ -384,15 +383,20 @@ static AstExpr *var_annotation(Lex *lex)
     return NULL; // needs inference
 }
 
+static AstExpr *expect_annotation(Lex *lex, const char *what, const String *name)
+{
+    AstExpr *type = type_annotation(lex);
+    if (type == NULL) {
+        pawX_error(lex, "expected type annotation on %s '%s'", what, name->text);
+    }
+    return type;
+}
+
 static AstDecl *param_decl(Lex *lex)
 {
     AstDecl *r = new_decl(lex, DECL_FIELD);
     r->field.name = parse_name(lex);
-    r->field.tag = var_annotation(lex);
-    if (r->field.tag == NULL) {
-        pawX_error(lex, "expected type annotation on parameter '%s'", 
-                   r->field.name->text);
-    }
+    r->field.tag = expect_annotation(lex, "parameter", r->field.name);
     return r;
 }
 
@@ -401,7 +405,7 @@ static AstDecl *var_decl(Lex *lex, int line, paw_Bool global)
     AstDecl *r = new_decl(lex, DECL_VAR);
     r->var.line = line; // line containing 'global' or 'let'
     r->var.name = parse_name(lex);
-    r->var.tag = var_annotation(lex);
+    r->var.tag = type_annotation(lex);
     if (!test_next(lex, '=')) {
         pawX_error(lex, "missing initializer");
     }
@@ -1065,10 +1069,11 @@ static AstDecl *function(Lex *lex, String *name, FuncKind kind)
     AstDecl *d = new_decl(lex, DECL_FUNC);
     d->func.name = name;
     d->func.fn_kind = kind;
-    d->func.generics = maybe_type_param(lex);
+    if (kind != FUNC_METHOD) {
+        d->func.generics = maybe_type_param(lex);
+    }
     d->func.params = parameters(lex);
     d->func.return_ = ret_annotation(lex);
-    d->func.is_poly = d->func.generics != NULL;
     d->func.body = block(lex);
     return d;
 }
@@ -1087,14 +1092,7 @@ static AstDecl *field_decl(Lex *lex, String *name)
 {
     AstDecl *r = new_decl(lex, DECL_FIELD);
     r->field.name = name;
-    r->field.tag = var_annotation(lex);
-    semicolon(lex);
-    return r;
-}
-
-static AstDecl *method_decl(Lex *lex, String *name)
-{
-    AstDecl *r = function(lex, name, FUNC_METHOD);
+    r->field.tag = expect_annotation(lex, "field", r->field.name);
     semicolon(lex);
     return r;
 }
@@ -1103,35 +1101,23 @@ static AstDecl *attr_decl(Lex *lex)
 {
     String *name = v_string(lex->t.value);
     skip(lex); // name token
-    if (test(lex, ':')) {
-        return field_decl(lex, name);
-    } else {
-        return method_decl(lex, name);
-    }
+    return field_decl(lex, name);
 }
 
 static void struct_body(Lex *lex, StructDecl *struct_)
 {
-    AstDecl *last_field;
-    AstDecl *last_method;
+    AstDecl *last;
     const int line = lex->line;
     check_next(lex, '{');
 
     struct_->fields = new_decl_list(lex);
-    struct_->methods = new_decl_list(lex);
     while (!test(lex, '}')) {
         check(lex, TK_NAME);
         AstDecl *next = attr_decl(lex);
-        if (a_kind(next) == DECL_FUNC) {
-            if (struct_->methods->count == LOCAL_MAX) {
-                limit_error(lex, "methods", LOCAL_MAX);
-            }
-            // use the method chain, 'next' link used for template instances
-            link_method(struct_->methods, &last_method, next);
-        } else if (struct_->fields->count == LOCAL_MAX) {
+        if (struct_->fields->count == LOCAL_MAX) {
             limit_error(lex, "fields", LOCAL_MAX);
         } else {
-            link_decl(struct_->fields, &last_field, next);
+            link_decl(struct_->fields, &last, next);
         }
     }
     delim_next(lex, '}', '{', line);
@@ -1144,7 +1130,6 @@ static AstDecl *struct_decl(Lex *lex, paw_Bool global)
     r->struct_.is_global = global;
     r->struct_.name = parse_name(lex);
     r->struct_.generics = maybe_type_param(lex);
-    r->struct_.is_poly = r->struct_.generics != NULL;
     struct_body(lex, &r->struct_);
     semicolon(lex);
     return r;
@@ -1366,7 +1351,7 @@ Closure *pawP_parse(paw_Env *P, paw_Reader input, ParseMemory *pm, const char *n
     parse_module(&lex); // pass 1 (source -> AST)
     p_check_types(&lex); // pass 2 (AST -> graph)
                                
-    pawA_dump_stmt(stdout, lex.pm->ast->stmts->first); // TODO: remove
+    //pawA_dump_stmt(stdout, lex.pm->ast->stmts->first); // TODO: remove
                                
     p_generate_code(&lex); // pass 2 (graph -> bytecode)
 
