@@ -147,10 +147,9 @@ int pawV_num2float(Value *pv, paw_Type type);
 uint32_t pawV_hash(Value v);
 
 // Convert a null-terminated string into an integer
-// May result in either a small integer or a big integer. Understands non-decimal
-// base prefixes '0b', '0o', '0x', and their uppercase counterparts. Returns a
-// nonzero integer if the integer is malformed, 0 otherwise. Throws a memory error
-// if an allocation failed (bigint only). Returns 0 on success, -1 otherwise.
+// Understands non-decimal base prefixes '0b', '0o', '0x', and their uppercase 
+// counterparts. Returns -PAW_ESYNTAX if the integer is malformed, -PAW_EOVERFLOW
+// if it is large to fit in a paw_Int, and PAW_OK otherwise.
 int pawV_parse_integer(paw_Env *P, const char *text);
 
 // Convert a null-terminated string into a float
@@ -158,17 +157,6 @@ int pawV_parse_integer(paw_Env *P, const char *text);
 int pawV_parse_float(paw_Env *P, const char *text);
 
 void pawV_set_default(paw_Env *P, Value *pv, paw_Type type);
-
-// TODO: Move to bigint.h
-typedef paw_Digit BiDigit;
-
-typedef struct BigInt {
-    GC_HEADER;
-    BiDigit *buf;
-    int size;
-    int alloc;
-    int neg;
-} BigInt;
 
 #define str_is_keyword(s) ((s)->flag > 0)
 
@@ -277,12 +265,26 @@ typedef struct Array_ {
 
 Array_ *pawV_new_array(paw_Env *P, int nelems);
 
-typedef struct Array { // TODO: Call this Vector
+typedef struct Array { // TODO: Call this Vec
     GC_HEADER;
     Value *begin;
     Value *end;
     Value *upper;
 } Array;
+
+Array *pawV_vec_new(paw_Env *P);
+void pawV_vec_free(paw_Env *P, Array *a);
+paw_Bool pawV_vec_equals(paw_Env *P, const Array *lhs, const Array *rhs);
+paw_Bool pawV_vec_contains(paw_Env *P, const Array *a, Value v);
+void pawV_vec_resize(paw_Env *P, Array *a, size_t length);
+void pawV_vec_insert(paw_Env *P, Array *a, paw_Int index, Value v);
+void pawV_vec_push(paw_Env *P, Array *a, Value v);
+void pawV_vec_pop(paw_Env *P, Array *a, paw_Int index);
+
+static inline size_t pawV_vec_length(const Array *a)
+{
+    return cast_size(a->end - a->begin);
+}
 
 typedef struct Map {
     GC_HEADER;
@@ -339,5 +341,21 @@ Foreign *pawV_push_foreign(paw_Env *P, size_t size, int nfields);
 void pawV_free_foreign(paw_Env *P, Foreign *ud, int nfields);
 
 const char *pawV_name(ValueKind type);
+
+void pawV_index_error(paw_Env *P, paw_Int index, size_t length);
+
+static paw_Int pawV_abs_index(paw_Int index, size_t length)
+{
+    return index + (index < 0 ? paw_cast_int(length) : 0);
+}
+
+static inline size_t pawV_check_abs(paw_Env *P, paw_Int index, size_t length)
+{
+    index = pawV_abs_index(index, length);
+    if (index < 0 || cast_size(index) >= length) {
+        pawV_index_error(P, index, length);
+    }
+    return cast_size(index);
+}
 
 #endif // PAW_VALUE_H

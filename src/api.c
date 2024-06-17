@@ -5,7 +5,6 @@
 
 #include "api.h"
 #include "auxlib.h"
-#include "bigint.h"
 #include "call.h"
 #include "gc_aux.h"
 #include "lib.h"
@@ -102,13 +101,6 @@ void paw_close(paw_Env *P)
     P->alloc(P->ud, P, sizeof *P, 0);
 }
 
-paw_Bool paw_is_truthy(paw_Env *P, int index)
-{
-    paw_assert(0);
-    return 0;
-//    return pawV_truthy(*access(P, index));
-}
-
 paw_Bool paw_is_bool(paw_Env *P, int index)
 {
     return paw_type(P, index) == PAW_TBOOL;
@@ -197,7 +189,7 @@ void paw_push_value(paw_Env *P, int index)
     pawC_pushv(P, v);
 }
 
-void paw_push_nnull(paw_Env *P, int n)
+void paw_push_unit(paw_Env *P, int n)
 {
     for (int i = 0; i < n; ++i) {
         pawC_push0(P);
@@ -281,10 +273,9 @@ const char *paw_push_fstring(paw_Env *P, const char *fmt, ...)
 //    pawB_copy(P, pv, &bi, 0);
 //}
 
-paw_Bool paw_boolean(paw_Env *P, int index)
+paw_Bool paw_bool(paw_Env *P, int index)
 {
-    const Value v = *access(P, index);
-    //return pawV_truthy(v); TODO!
+    return v_true(*access(P, index));
 }
 
 paw_Int paw_intx(paw_Env *P, int index, paw_Bool *plossless)
@@ -305,26 +296,20 @@ paw_Float paw_float(paw_Env *P, int index)
 
 const char *paw_string(paw_Env *P, int index)
 {
-    Value *pv = access(P, index);
-    const String *s = v_string(*pv);
+    const String *s = v_string(*access(P, index));
     return s->text;
 }
 
 paw_Function paw_native(paw_Env *P, int index)
 {
-    return v_native(*access(P, index))->func;
-}
-
-paw_Digit *paw_bigint(paw_Env *P, int index)
-{
-    paw_assert(0); // TODO
-//    return v_bigint(*access(P, index))->buf;
+    const Native *f = v_native(*access(P, index));
+    return f->func;
 }
 
 void *paw_pointer(paw_Env *P, int index)
 {
-    Value *pv = access(P, index);
-    return v_foreign(*pv)->data;
+    const Foreign *f = v_foreign(*access(P, index));
+    return f->data;
 }
 
 //void paw_to_float(paw_Env *P, int index)
@@ -395,7 +380,7 @@ int paw_load(paw_Env *P, paw_Reader input, const char *name, void *ud)
     pawM_free(P, p.mem.symbols.globals);
     pawM_free(P, p.mem.symbols.toplevel);
     while (p.mem.unifier.table) {
-        pawP_unifier_leave(&p.mem.unifier);
+        pawU_leave_binder(&p.mem.unifier);
     }
     return status;
 }

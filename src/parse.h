@@ -23,6 +23,7 @@
 #include "type.h"
 #include "util.h"
 #include "value.h"
+#include "unify.h"
 
 #define env(x) ((x)->P)
 #define is_toplevel(lex) ((lex)->fs->outer == NULL)
@@ -82,42 +83,6 @@ Scope *pawP_new_scope(Lex *lex, SymbolTable *table);
 void pawP_add_scope(Lex *lex, SymbolTable *table, Scope *scope);
 struct Symbol *pawP_add_symbol(Lex *lex, Scope *table);
 int pawP_find_symbol(Scope *scope, const String *name);
-
-typedef struct Type Type; // type for unifier
-typedef struct Unifier Unifier; // unification context
-typedef struct UniTable UniTable; // unification table
-
-typedef Type *(*Unify)(Unifier *, Type *, Type *);
-
-struct Unifier {
-    UniTable *table;
-    Unify unify;
-    Lex *lex;
-    int depth;
-};
-
-#define p_is_bound(U, t) check_exp(y_is_type_var(t) && \
-                                   (t)->var.depth <= (U)->depth, \
-                                   (t)->var.depth == (U)->depth)
-
-// Apply substitutions to a type TODO: use the other one
-Type *pawP_normalize(Unifier *U, Type *a);
-
-Type *pawP_normalize_(UniTable *table, Type *a);
-
-// Impose the constraint that type variables 'a' and 'b' are equal
-void pawP_unify(Unifier *U, Type *a, Type *b);
-
-// Create a new type variable
-// 'type' must be a GenericType.
-void pawP_new_type_var(Unifier *U, Type *type);
-
-// Generics context handling
-void pawP_unifier_enter(Unifier *U, UniTable *table);
-UniTable *pawP_unifier_leave(Unifier *U);
-void pawP_unifier_replace(Unifier *U, UniTable *table);
-
-// TODO: Don't leak unification tables! Being lazy right now
 
 typedef struct GenericState {
     struct GenericState *outer;

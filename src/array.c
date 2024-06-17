@@ -147,7 +147,7 @@ static paw_Bool elems_equal(paw_Env *P, Value x, Value y)
 //    pawR_binop(P, BINARY_EQ);
     paw_assert(0); // FIXME
 
-    const paw_Bool b = paw_boolean(P, -1);
+    const paw_Bool b = paw_bool(P, -1);
     paw_pop(P, 1);
     return b;
 }

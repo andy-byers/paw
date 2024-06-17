@@ -7,6 +7,9 @@
 // Structures in this file are created during the second pass, used for type
 // checking, and then stored for RTTI purposes. Each type is represented by a 
 // unique Type structure in its containing Module. 
+//
+// TODO: I think it would be better to keep this stuff in the AST module and
+//       build yet another representation for RTTI.
 #ifndef PAW_TYPE_H
 #define PAW_TYPE_H
 
@@ -15,12 +18,12 @@
 #include "str.h"
 
 typedef struct Type Type;
-typedef struct GenericBound GenericBound;
 typedef uint16_t DefId;
 
 typedef enum TypeKind { // type->...
     TYPE_BASIC, // hdr
-    TYPE_VAR, // var
+    TYPE_GENERIC, // generic
+    TYPE_UNKNOWN, // unknown
     TYPE_ADT, // adt
     TYPE_FUNC, // func
     TYPE_MODULE,  // mod
@@ -33,40 +36,48 @@ typedef struct TypeHeader {
     TYPE_HEADER;
 } TypeHeader;
 
-typedef struct TypeVar {
+// Represents a generic type parameter
+typedef struct Generic {
     TYPE_HEADER;
     String *name;
-    int depth;
+} Generic;
+
+// Represents a type that is in the process of being inferred
+typedef struct Unknown {
+    TYPE_HEADER;
     int index;
-} TypeVar;
+} Unknown;
 
 typedef struct Binder {
     Type **types;
     int count;
 } Binder;
 
+#define POLY_HDR TYPE_HEADER; \
+                 Binder types; \
+                 DefId base
+typedef struct PolyHdr {
+    POLY_HDR;
+} PolyHdr;
+
 // Represents a function signature
 // Note that the type variables for a function signature do not participate in
 // unification (they are not part of the function type).
 typedef struct FuncSig {
-    TYPE_HEADER; // common initial sequence
-    DefId base; // base template or 'def'                
-    Type *return_; // return type
+    POLY_HDR; // common initial sequence
     Binder params; // parameter types
-    Binder types; // type variables
+    Type *return_; // return type
 } FuncSig;
 
 // Represents a structure or enumeration type
 typedef struct Adt {
-    TYPE_HEADER; // common initial sequence
-    DefId target; // location of base ADT definition
-    Binder types; // type variables
+    POLY_HDR; // common initial sequence
 } Adt;
 
 // Represents the type of a Paw module
 // Note that basic types ('int', 'float', etc.) are created only once, at the
-// start of the root module's type Binder. Included modules reference these
-// Type objects from the root.
+// start of the root module's type vector. Included modules reference these
+// Type objects in the root.
 typedef struct Module {
     TYPE_HEADER; // common initial sequence
     struct Module *includes; // included modules
@@ -78,8 +89,10 @@ typedef struct Module {
 struct Type {
     union {
         TypeHeader hdr;
+        PolyHdr poly;
+        Generic generic;
+        Unknown unknown;
         Adt adt;
-        TypeVar var;
         FuncSig func;
         Module mod;
     };
@@ -96,9 +109,10 @@ struct Type {
 #define y_is_string(t) (y_is_basic(t) && y_code(t) == PAW_TSTRING)
 
 #define y_is_basic(t) (y_kind(t) == TYPE_BASIC)
+#define y_is_generic(t) (y_kind(t) == TYPE_GENERIC)
+#define y_is_unknown(t) (y_kind(t) == TYPE_UNKNOWN)
 #define y_is_adt(t) (y_kind(t) == TYPE_ADT)
 #define y_is_func(t) (y_kind(t) == TYPE_FUNC)
-#define y_is_type_var(t) (y_kind(t) == TYPE_VAR)
 #define y_is_module(t) (y_kind(t) == TYPE_MODULE)
 
 void pawY_init(paw_Env *P);
@@ -106,5 +120,22 @@ void pawY_uninit(paw_Env *P);
 Module *pawY_module_new(paw_Env *P);
 void pawY_module_free(paw_Env *P, Module *mod);
 Type *pawY_type_new(paw_Env *P, Module *mod);
+
+typedef struct TypeFolder TypeFolder;
+
+struct TypeFolder {
+    void *state;
+
+    Type *(*fold)(TypeFolder *F, Type *type);
+    Type *(*fold_basic)(TypeFolder *F, TypeHeader *t);
+    Type *(*fold_func)(TypeFolder *F, FuncSig *t);
+    Type *(*fold_adt)(TypeFolder *F, Adt *t);
+    Type *(*fold_unknown)(TypeFolder *F, Unknown *t);
+    Type *(*fold_generic)(TypeFolder *F, Generic *t);
+    void (*fold_binder)(TypeFolder *F, Binder *binder);
+};
+
+void pawY_folder_init(TypeFolder *F, void *state);
+Type *pawY_fold(TypeFolder *F, Type *type);
 
 #endif // PAW_TYPE_H

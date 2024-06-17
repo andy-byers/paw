@@ -62,10 +62,10 @@ void pawK_code_AB(FuncState *fs, Op op, int a, int b)
     add_opcode(fs, create_AB(op, a, b));
 }
 
-// Add a new arena large enough to allocate memory of the 'required_size'
+// Create a new arena large enough to allocate memory of the 'required_size'
 // Alignment is not considered, since the start of an Arena is suitably-aligned 
 // for any objects created by the compiler.
-static Arena **add_arena(paw_Env *P, Pool *pool, size_t required_size)
+static Arena *new_arena(paw_Env *P, Pool *pool, size_t required_size)
 {
     if (required_size > SIZE_MAX / 2) {
         pawM_error(P); // sanity check
@@ -78,17 +78,14 @@ static Arena **add_arena(paw_Env *P, Pool *pool, size_t required_size)
     Arena *a = pawM_new_flex(P, Arena, size, 1);
     memset(a->data, 0, size);
     a->size = size;
-    // attach to pool
-    a->prev = pool->arena;
-    pool->arena = a;
-    return &pool->arena;
+    return a;
 }
 
 void pawK_pool_init(paw_Env *P, Pool *pool, size_t base_size, size_t min_size)
 {
     pool->filled = NULL;
     pool->last_size = base_size;
-    add_arena(P, pool, 0);
+    pool->arena = new_arena(P, pool, 0);
     pool->min_size = min_size;
 }
 
@@ -109,33 +106,18 @@ void pawK_pool_uninit(paw_Env *P, Pool *pool)
 
 void *pawK_pool_alloc(paw_Env *P, Pool *pool, size_t size, size_t align)
 {
-    paw_assert(size > 0);
+    paw_assert(size && align);
 
-    size_t base;
-    Arena **pa = &pool->arena;
-    while (*pa != NULL) {
-        Arena *a = *pa;
-        base = (a->used + align - 1) & ~(align - 1);
-        if (base + size <= a->size) {
-            break;
-        }
-        pa = &a->prev;
-    }
-    if (*pa == NULL) {
-        // add a new arena to the front of the list, guaranteed to have at
-        // least 'size' bytes
-        pa = add_arena(P, pool, size);
+    Arena *a = pool->arena;
+    size_t base = (a->used + align - 1) & ~(align - 1);
+    if (base + size > a->size) {
+        // create a new arena, guaranteed to hold at least 'size' bytes
+        a = new_arena(P, pool, size);
+        a->prev = pool->arena;
+        pool->arena = a;
         base = 0;
     }
-    Arena *a = *pa;
     a->used = base + size;
-    if (a->size - a->used < pool->min_size) {
-        // arena has very little memory left: stash it so that we don't keep
-        // checking it in the above loop
-        *pa = a->prev;
-        a->prev = pool->filled;
-        pool->filled = a;
-    }
     return a->data + base;
 }
 

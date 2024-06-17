@@ -4,10 +4,10 @@
 #include "prefix.h"
 
 #include "array.h"
-#include "bigint.h"
 #include "gc_aux.h"
 #include "map.h"
 #include "mem.h"
+#include "rt.h"
 #include "str.h"
 #include "type.h"
 #include "util.h"
@@ -429,11 +429,14 @@ int pawV_parse_integer(paw_Env *P, const char *text)
         if (v >= base) {
             return -1;
         }
+        // TODO: Need to be able to parse exactly PAW_INT_MIN (which cannot be
+        //       represented as a positive integer under 2s complement), handle
+        //       as a special case. No more big integers.
         if (value > (PAW_INT_MAX - v) / base) {
             paw_assert(0);
             // Integer is too large: parse it as a BigInt. Throws an error on
             // allocation failure.
-            return pawB_parse(P, text, base);
+//            return pawB_parse(P, text, base);
         }
         value = value * base + v;
     }
@@ -474,4 +477,183 @@ int pawV_parse_float(paw_Env *P, const char *text)
     }
     pawC_pushf(P, strtod(text, NULL));
     return 0;
+}
+
+static inline Value *pawV_vec_get(paw_Env *P, Array *a, paw_Int index)
+{
+    const paw_Int abs = pawV_abs_index(index, cast_size(a->end - a->begin));
+    const size_t i = pawV_check_abs(P, abs, pawV_vec_length(a));
+    return &a->begin[i];
+}
+
+static inline paw_Bool pawV_vec_iter(const Array *a, paw_Int *itr)
+{
+    return ++*itr < paw_cast_int(pawV_vec_length(a));
+}
+
+void pawV_index_error(paw_Env *P, paw_Int index, size_t length)
+{
+    pawR_error(P, PAW_EINDEX, "index %I is out of bounds for container of length %I",
+               index, paw_cast_int(length));
+}
+
+static size_t array_capacity(const Array *a)
+{
+    return cast_size(a->upper - a->begin);
+}
+
+static void realloc_array(paw_Env *P, Array *a, size_t alloc0, size_t alloc)
+{
+    const size_t end = pawV_vec_length(a);
+    pawM_resize(P, a->begin, alloc0, alloc);
+    a->end = a->begin + end;
+    a->upper = a->begin + alloc;
+    check_gc(P);
+}
+
+static void ensure_space(paw_Env *P, Array *a, size_t have, size_t want)
+{
+    if (want > PAW_SIZE_MAX / sizeof(Value)) {
+        pawM_error(P);
+    }
+    // Use the next power-of-2.
+    size_t n = 1;
+    while (n < want) {
+        n *= 2;
+    }
+    realloc_array(P, a, have, n);
+}
+
+static void reserve_extra(paw_Env *P, Array *a, size_t extra)
+{
+    paw_assert(extra > 0);
+    if (extra <= cast_size(a->upper - a->end)) {
+        return; // Still have enough space
+    }
+    const size_t have = array_capacity(a);
+    ensure_space(P, a, have, have + extra);
+}
+
+static void move_items(Value *src, ptrdiff_t shift, size_t count)
+{
+    memmove(src + shift, src, cast_size(count) * sizeof(src[0]));
+}
+
+static void vec_reserve(paw_Env *P, Array *a, size_t want)
+{
+    const size_t have = array_capacity(a);
+    if (want <= have) {
+        return;
+    }
+    ensure_space(P, a, have, want);
+}
+
+void pawV_vec_push(paw_Env *P, Array *a, Value v)
+{
+    reserve_extra(P, a, 1);
+    *a->end++ = v;
+}
+
+void pawV_vec_resize(paw_Env *P, Array *a, size_t length)
+{
+    const size_t n = pawV_vec_length(a);
+    if (length > n) {
+        // new items are uninitialized
+        vec_reserve(P, a, length);
+    } else if (length == 0) {
+        a->end = a->begin;
+        return;
+    }
+    a->end = a->begin + length;
+}
+
+void pawV_vec_insert(paw_Env *P, Array *a, paw_Int index, Value v)
+{
+    // Clamp to the vector bounds.
+    const size_t len = pawV_vec_length(a);
+    const paw_Int abs = pawV_abs_index(index, len);
+    const size_t i = paw_clamp(cast_size(abs), 0, len);
+
+    reserve_extra(P, a, 1);
+    if (i != len) {
+        move_items(a->begin + abs, 1, len - i);
+    }
+    a->begin[abs] = v;
+    ++a->end;
+}
+
+void pawV_vec_pop(paw_Env *P, Array *a, paw_Int index)
+{
+    const size_t len = pawV_vec_length(a);
+    const paw_Int fixed = pawV_abs_index(index, len);
+    const size_t abs = pawV_check_abs(P, fixed, len);
+    if (abs != len - 1) {
+        // Shift values into place
+        move_items(a->begin + abs + 1, -1, len - abs - 1);
+    }
+    --a->end;
+}
+
+Array *pawV_vec_new(paw_Env *P)
+{
+    Array *a = pawM_new(P, Array);
+    pawG_add_object(P, cast_object(a), VARRAY);
+    return a;
+}
+
+void pawV_vec_free(paw_Env *P, Array *a)
+{
+    pawM_free_vec(P, a->begin, array_capacity(a));
+    pawM_free(P, a);
+}
+
+Array *pawV_vec_clone(paw_Env *P, StackPtr sp, const Array *a)
+{
+    Array *a2 = pawV_vec_new(P);
+    v_set_object(sp, a2); // anchor
+    if (pawV_vec_length(a)) {
+        pawV_vec_resize(P, a2, pawV_vec_length(a));
+        memcpy(a2->begin, a->begin, sizeof(a->begin[0]) * pawV_vec_length(a));
+    }
+    return a2;
+}
+
+static paw_Bool elems_equal(paw_Env *P, Value x, Value y)
+{
+    StackPtr p = pawC_stkinc(P, 2);
+    p[0] = y;
+    p[1] = x;
+
+    // TODO: Need the type of value
+//    // Arrays can contain any type of value. Call pawR_binop() to check
+//    // metamethods on objects.
+//    pawR_binop(P, BINARY_EQ);
+
+    const paw_Bool b = paw_bool(P, -1);
+    paw_pop(P, 1);
+    return b;
+}
+
+paw_Bool pawV_vec_equals(paw_Env *P, const Array *lhs, const Array *rhs)
+{
+    const size_t len = pawV_vec_length(lhs);
+    if (len != pawV_vec_length(rhs)) {
+        return PAW_FALSE;
+    }
+    for (size_t i = 0; i < len; ++i) {
+        if (!elems_equal(P, lhs->begin[i], rhs->begin[i])) {
+            return PAW_FALSE;
+        }
+    }
+    return PAW_TRUE;
+}
+
+paw_Bool pawV_vec_contains(paw_Env *P, const Array *a, const Value v)
+{
+    for (size_t i = 0; i < pawV_vec_length(a); ++i) {
+        if (elems_equal(P, v, a->begin[i])) {
+            return PAW_TRUE;
+        }
+    }
+    return PAW_FALSE;
 }

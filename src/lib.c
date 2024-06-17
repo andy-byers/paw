@@ -139,7 +139,7 @@ static int base_assert(paw_Env *P)
 
 static int base_print(paw_Env *P)
 {
-    String *s = v_string(P->top.p[-1]);
+    const String *s = v_string(P->top.p[-1]);
     pawO_write(stdout, s->text, s->length);
     fflush(stdout);
     return 0;
@@ -416,7 +416,6 @@ typedef struct pawL_Signature {
 
 typedef struct pawL_Layout {
     const char *name;
-    paw_Type super;
     int ngenerics;
     int nfields;
     int nmethods;
@@ -462,10 +461,8 @@ static void create_type_vars(paw_Env *P, int ngenerics, Binder *binder)
     binder->count = ngenerics;
     for (int i = 0; i < ngenerics; ++i) {
         Type *type = pawY_type_new(P, P->mod);
-        type->var.kind = TYPE_VAR;
-        type->var.def = 11111; // TODO: Create a global def
-        type->var.index = i;
-        type->var.depth = 0;
+        type->generic.kind = TYPE_GENERIC;
+        type->generic.def = 11111; // TODO: Create a global def
         binder->types[i] = type;
     }
 }
@@ -593,6 +590,15 @@ void pawL_init(paw_Env *P)
 //    type = pawL_instantiate_func(P, base, l_list(PAW_TINT));
 //    pawL_new_func(P, base_add_i, 0);
 //    pawL_new_global(P, "addi_", type); // TODO: name mangling
+
+//    reset_ctx(&ctx);
+//    T = pawL_new_generic_type(P, &ctx);
+//    base = pawL_new_struct_type(P, &(pawL_Layout){
+//                .name = "Vec",
+//                .ngenerics = 1,
+//            });
+//    type = pawL_new_func_type(P, l_list(T), PAW_TUNIT, 0);
+//    pawL_new_func(P, base_)
 
     // Create a map for caching loaded libraries.
     P->libs = pawH_new(P);

@@ -116,8 +116,6 @@ OP_SETUPVALUE,//     U           v            -             Up[u] = v
 
 OP_NEWINSTANCE,//    U           -            v             v = new instance of class C[u]
 OP_INITATTR,// TODO: call this OP_INITFIELD     U           i v          i             i.fields[u] = v
-OP_INHERIT,//        -           x y          x             x subclass of y
-OP_NEWMETHOD,//      U           v f          v             v.methods[u] = f
 OP_NEWARRAY,//       U           v_u..v_1     [v_u..v_1]    -
 OP_NEWMAP,//         U           v_2n..v_1    {v_2n..v_1}   -
 
@@ -139,7 +137,6 @@ OP_VARARG,//         A B         v_u..v_1     [v_u..v_1]    -
 OP_INIT,
 OP_CALL,//           U           f v_u..v_1   v             v = f(v_u..v_1)
 
-OP_GETMETHOD,//      U           v            v.methods[u]  -
 OP_GETATTR,//        U           v            v.fields[u]   -
 OP_SETATTR,//        U           v x          -             v.fields[u]=x
 OP_GETITEM,//        -           v i          v[i]          -

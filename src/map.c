@@ -4,7 +4,7 @@
 #include "map.h"
 #include "gc_aux.h"
 #include "mem.h"
-//#include "rt.h"
+#include "rt.h"
 #include "util.h"
 #include <assert.h>
 #include <string.h>
@@ -154,7 +154,7 @@ static paw_Bool items_equal(paw_Env *P, const Value x, const Value y)
     paw_assert(0);
 //    pawR_binop(P, BINARY_EQ);
 
-    const paw_Bool b = paw_boolean(P, -1);
+    const paw_Bool b = paw_bool(P, -1);
     paw_pop(P, 1);
     return b;
 }
