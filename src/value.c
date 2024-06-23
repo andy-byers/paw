@@ -3,7 +3,6 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "prefix.h"
 
-#include "array.h"
 #include "gc_aux.h"
 #include "map.h"
 #include "mem.h"
@@ -12,6 +11,7 @@
 #include "type.h"
 #include "util.h"
 #include "value.h"
+#include "vector.h"
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
@@ -70,6 +70,30 @@ const char *pawV_to_string(paw_Env *P, Value v, paw_Type type, size_t *nout)
     const String *s = v_string(P->top.p[-1]);
     *nout = s->length;
     return s->text;
+}
+
+static paw_Int string_to_int(paw_Env *P, String *s)
+{
+    return 0; // TODO
+}
+
+static paw_Int float_to_int(paw_Env *P, paw_Float f)
+{
+    return 0; // TODO
+}
+
+paw_Int pawV_to_int(paw_Env *P, Value v, paw_Type type)
+{
+    switch (type) {
+        case PAW_TBOOL: 
+            return v_true(v) ? 1 : 0;
+        case PAW_TFLOAT:
+            return float_to_int(P, v_float(v));
+        case PAW_TSTRING:
+            return string_to_int(P, v_string(v));
+        default:
+            return v_int(v);
+    }
 }
 
 const char *pawV_name(ValueKind kind)
@@ -172,17 +196,17 @@ void pawV_unlink_upvalue(UpValue *u)
     }
 }
 
-Array_ *pawV_new_array(paw_Env *P, int nelems)
+Tuple *pawV_new_tuple(paw_Env *P, int nelems)
 {
-    Array_ *arr = pawM_new_flex(P, Array_, cast_size(nelems),
-                                  sizeof(arr->elems[0]));
-    pawG_add_object(P, cast_object(arr), VARRAY);
-    return arr;
+    Tuple *t = pawM_new_flex(P, Tuple, cast_size(nelems),
+                                  sizeof(t->elems[0]));
+    pawG_add_object(P, cast_object(t), VARRAY);
+    return t;
 }
 
-void pawV_free_array(paw_Env *P, Array_ *arr, int nelems)
+void pawV_free_tuple(paw_Env *P, Tuple *t, int nelems)
 {
-    pawM_free_flex(P, arr, nelems, sizeof(arr->elems[0]));
+    pawM_free_flex(P, t, nelems, sizeof(t->elems[0]));
 }
 
 Closure *pawV_new_closure(paw_Env *P, int nup)
@@ -204,7 +228,6 @@ Struct *pawV_new_struct(paw_Env *P, Value *pv)
 {
     Struct *struct_ = pawM_new(P, Struct);
     v_set_object(pv, struct_); // anchor
-    struct_->methods = pawA_new(P);
     pawG_add_object(P, cast_object(struct_), VSTRUCT);
     return struct_;
 }
@@ -308,7 +331,7 @@ paw_Bool pawV_truthy(Value v, paw_Type type)
         case PAW_TSTRING:
             return pawS_length(v_string(v)) > 0;
 //        case PAW_TARRAY:
-//            return pawA_length(v_array(v)) > 0;
+//            return pawA_length(v_vector(v)) > 0;
 //        case PAW_TMAP:
 //            return pawH_length(v_map(v)) > 0;
         default:
@@ -367,7 +390,7 @@ paw_Int pawV_length(Value v, paw_Type type)
             len = pawS_length(v_string(v));
             break;
 //        case PAW_TARRAY:
-//            len = pawA_length(v_array(v));
+//            len = pawA_length(v_vector(v));
 //            break;
 //        case PAW_TMAP:
 //            len = pawH_length(v_map(v));
@@ -479,14 +502,14 @@ int pawV_parse_float(paw_Env *P, const char *text)
     return 0;
 }
 
-static inline Value *pawV_vec_get(paw_Env *P, Array *a, paw_Int index)
+static inline Value *pawV_vec_get(paw_Env *P, Vector *a, paw_Int index)
 {
     const paw_Int abs = pawV_abs_index(index, cast_size(a->end - a->begin));
     const size_t i = pawV_check_abs(P, abs, pawV_vec_length(a));
     return &a->begin[i];
 }
 
-static inline paw_Bool pawV_vec_iter(const Array *a, paw_Int *itr)
+static inline paw_Bool pawV_vec_iter(const Vector *a, paw_Int *itr)
 {
     return ++*itr < paw_cast_int(pawV_vec_length(a));
 }
@@ -497,12 +520,12 @@ void pawV_index_error(paw_Env *P, paw_Int index, size_t length)
                index, paw_cast_int(length));
 }
 
-static size_t array_capacity(const Array *a)
+static size_t array_capacity(const Vector *a)
 {
     return cast_size(a->upper - a->begin);
 }
 
-static void realloc_array(paw_Env *P, Array *a, size_t alloc0, size_t alloc)
+static void realloc_array(paw_Env *P, Vector *a, size_t alloc0, size_t alloc)
 {
     const size_t end = pawV_vec_length(a);
     pawM_resize(P, a->begin, alloc0, alloc);
@@ -511,7 +534,7 @@ static void realloc_array(paw_Env *P, Array *a, size_t alloc0, size_t alloc)
     check_gc(P);
 }
 
-static void ensure_space(paw_Env *P, Array *a, size_t have, size_t want)
+static void ensure_space(paw_Env *P, Vector *a, size_t have, size_t want)
 {
     if (want > PAW_SIZE_MAX / sizeof(Value)) {
         pawM_error(P);
@@ -524,7 +547,7 @@ static void ensure_space(paw_Env *P, Array *a, size_t have, size_t want)
     realloc_array(P, a, have, n);
 }
 
-static void reserve_extra(paw_Env *P, Array *a, size_t extra)
+static void reserve_extra(paw_Env *P, Vector *a, size_t extra)
 {
     paw_assert(extra > 0);
     if (extra <= cast_size(a->upper - a->end)) {
@@ -539,7 +562,7 @@ static void move_items(Value *src, ptrdiff_t shift, size_t count)
     memmove(src + shift, src, cast_size(count) * sizeof(src[0]));
 }
 
-static void vec_reserve(paw_Env *P, Array *a, size_t want)
+static void vec_reserve(paw_Env *P, Vector *a, size_t want)
 {
     const size_t have = array_capacity(a);
     if (want <= have) {
@@ -548,13 +571,13 @@ static void vec_reserve(paw_Env *P, Array *a, size_t want)
     ensure_space(P, a, have, want);
 }
 
-void pawV_vec_push(paw_Env *P, Array *a, Value v)
+void pawV_vec_push(paw_Env *P, Vector *a, Value v)
 {
     reserve_extra(P, a, 1);
     *a->end++ = v;
 }
 
-void pawV_vec_resize(paw_Env *P, Array *a, size_t length)
+void pawV_vec_resize(paw_Env *P, Vector *a, size_t length)
 {
     const size_t n = pawV_vec_length(a);
     if (length > n) {
@@ -567,7 +590,7 @@ void pawV_vec_resize(paw_Env *P, Array *a, size_t length)
     a->end = a->begin + length;
 }
 
-void pawV_vec_insert(paw_Env *P, Array *a, paw_Int index, Value v)
+void pawV_vec_insert(paw_Env *P, Vector *a, paw_Int index, Value v)
 {
     // Clamp to the vector bounds.
     const size_t len = pawV_vec_length(a);
@@ -582,7 +605,7 @@ void pawV_vec_insert(paw_Env *P, Array *a, paw_Int index, Value v)
     ++a->end;
 }
 
-void pawV_vec_pop(paw_Env *P, Array *a, paw_Int index)
+void pawV_vec_pop(paw_Env *P, Vector *a, paw_Int index)
 {
     const size_t len = pawV_vec_length(a);
     const paw_Int fixed = pawV_abs_index(index, len);
@@ -594,22 +617,22 @@ void pawV_vec_pop(paw_Env *P, Array *a, paw_Int index)
     --a->end;
 }
 
-Array *pawV_vec_new(paw_Env *P)
+Vector *pawV_vec_new(paw_Env *P)
 {
-    Array *a = pawM_new(P, Array);
+    Vector *a = pawM_new(P, Vector);
     pawG_add_object(P, cast_object(a), VARRAY);
     return a;
 }
 
-void pawV_vec_free(paw_Env *P, Array *a)
+void pawV_vec_free(paw_Env *P, Vector *a)
 {
     pawM_free_vec(P, a->begin, array_capacity(a));
     pawM_free(P, a);
 }
 
-Array *pawV_vec_clone(paw_Env *P, StackPtr sp, const Array *a)
+Vector *pawV_vec_clone(paw_Env *P, StackPtr sp, const Vector *a)
 {
-    Array *a2 = pawV_vec_new(P);
+    Vector *a2 = pawV_vec_new(P);
     v_set_object(sp, a2); // anchor
     if (pawV_vec_length(a)) {
         pawV_vec_resize(P, a2, pawV_vec_length(a));
@@ -634,7 +657,7 @@ static paw_Bool elems_equal(paw_Env *P, Value x, Value y)
     return b;
 }
 
-paw_Bool pawV_vec_equals(paw_Env *P, const Array *lhs, const Array *rhs)
+paw_Bool pawV_vec_equals(paw_Env *P, const Vector *lhs, const Vector *rhs)
 {
     const size_t len = pawV_vec_length(lhs);
     if (len != pawV_vec_length(rhs)) {
@@ -648,7 +671,7 @@ paw_Bool pawV_vec_equals(paw_Env *P, const Array *lhs, const Array *rhs)
     return PAW_TRUE;
 }
 
-paw_Bool pawV_vec_contains(paw_Env *P, const Array *a, const Value v)
+paw_Bool pawV_vec_contains(paw_Env *P, const Vector *a, const Value v)
 {
     for (size_t i = 0; i < pawV_vec_length(a); ++i) {
         if (elems_equal(P, v, a->begin[i])) {

@@ -16,6 +16,7 @@
 #include "str.h"
 #include "type.h"
 #include "value.h"
+#include "vector.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
@@ -128,7 +129,7 @@ paw_Bool paw_is_function(paw_Env *P, int index)
 
 paw_Bool paw_is_array(paw_Env *P, int index)
 {
-    return paw_type(P, index) == PAW_TARRAY;
+    return paw_type(P, index) == PAW_TVECTOR;
 }
 
 paw_Bool paw_is_tuple(paw_Env *P, int index)
@@ -206,32 +207,26 @@ void paw_push_float(paw_Env *P, paw_Float f)
     pawC_pushf(P, f);
 }
 
-//void paw_push_int(paw_Env *P, paw_Int i)
-//{
-//    if (i < PAW_INT_MIN || i > PAW_INT_MAX) {
-//        // 'i' is wider than 47 bits and must go in a bigint.
-//        Value *pv = pawC_push0(P);
-//        pawB_from_int(P, pv, i);
-//    } else {
-//        pawC_pushi(P, i);
-//    }
-//}
-//
-//void paw_push_native(paw_Env *P, paw_Function fn, int n)
-//{
-//    Value *pv = pawC_push0(P);
-//    Native *o = pawV_new_native(P, fn, n);
-//    v_set_native(pv, o);
-//
-//    StackPtr top = P->top.p;
-//    const StackPtr base = top - n - 1;
-//    for (int i = 0; i < n; ++i) {
-//        o->up[i] = base[i];
-//    }
-//    // Replace upvalues with closure object
-//    base[0] = top[-1];
-//    P->top.p = base + 1;
-//}
+void paw_push_int(paw_Env *P, paw_Int i)
+{
+    pawC_pushi(P, i);
+}
+
+void paw_push_native(paw_Env *P, paw_Function fn, int n)
+{
+    Value *pv = pawC_push0(P);
+    Native *o = pawV_new_native(P, fn, n);
+    v_set_object(pv, o);
+
+    StackPtr top = P->top.p;
+    const StackPtr base = top - n - 1;
+    for (int i = 0; i < n; ++i) {
+        o->up[i] = base[i];
+    }
+    // replace upvalues with closure object
+    base[0] = top[-1];
+    P->top.p = base + 1;
+}
 
 const char *paw_push_string(paw_Env *P, const char *s)
 {
@@ -246,10 +241,10 @@ const char *paw_push_nstring(paw_Env *P, const char *s, size_t n)
 
 const char *paw_push_vfstring(paw_Env *P, const char *fmt, va_list arg)
 {
-//    Buffer buf;
-//    pawL_init_buffer(P, &buf);
-//    pawL_add_vfstring(P, &buf, fmt, arg);
-//    pawL_push_result(P, &buf);
+    Buffer buf;
+    pawL_init_buffer(P, &buf);
+    pawL_add_vfstring(P, &buf, fmt, arg);
+    pawL_push_result(P, &buf);
     return paw_string(P, -1);
 }
 
@@ -262,31 +257,14 @@ const char *paw_push_fstring(paw_Env *P, const char *fmt, ...)
     return s;
 }
 
-//void paw_push_bigint(paw_Env *P, paw_Digit *d, int n, int neg)
-//{
-//    const BigInt bi = {
-//        .neg = neg,
-//        .size = n,
-//        .buf = d,
-//    };
-//    Value *pv = pawC_push0(P);
-//    pawB_copy(P, pv, &bi, 0);
-//}
-
 paw_Bool paw_bool(paw_Env *P, int index)
 {
     return v_true(*access(P, index));
 }
 
-paw_Int paw_intx(paw_Env *P, int index, paw_Bool *plossless)
+paw_Int paw_int(paw_Env *P, int index)
 {
-    paw_Bool lossless;
-    const Value v = *access(P, index);
-    //const paw_Int i = pawV_to_int64(v, &lossless);
-    if (plossless) {
-        *plossless = lossless;
-    }
-    //return i;
+    return v_int(*access(P, index));
 }
 
 paw_Float paw_float(paw_Env *P, int index)
@@ -336,15 +314,27 @@ void *paw_pointer(paw_Env *P, int index)
 //    pawR_to_string(P, &len);
 //    paw_replace(P, i);
 //}
-//
+
 size_t paw_length(paw_Env *P, int index)
 {
-//    paw_push_value(P, index);
-//    pawR_unop(P, PAW_OPLEN); // replace value with its length
-//
-//    const paw_Int n = paw_int(P, -1);
-//    paw_pop(P, 1);
-//    return cast_size(n);
+    size_t result;
+    paw_push_value(P, index);
+    const Value v = P->top.p[-1];
+    switch (v.o->gc_kind) {
+        case VSTRING:
+            result = pawS_length(v_string(v));
+            break;
+        case VVECTOR:
+            result = pawA_length(v_vector(v));
+            break;
+        case VMAP:
+            result = pawH_length(v_map(v));
+            break;
+        default:
+            result = 0;
+    }
+    paw_pop(P, 1);
+    return result;
 }
 
 void paw_pop(paw_Env *P, int n)

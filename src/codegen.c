@@ -2,7 +2,6 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
-#include "array.h"
 #include "ast.h"
 #include "code.h"
 #include "gc_aux.h"
@@ -11,6 +10,7 @@
 #include "mem.h"
 #include "parse.h"
 #include "type.h"
+#include "vector.h"
 
 #define syntax_error(G, ...) pawX_error((G)->lex, __VA_ARGS__)
 #define is_global(lex) (is_toplevel(lex) && (lex)->fs->bs->outer == NULL)
@@ -730,7 +730,7 @@ static void code_composite_lit(AstVisitor *V, LiteralExpr *lit)
     AstExpr *attr = e->items->first;
     while (attr != NULL) {
         V->visit_expr(V, attr);
-        pawK_code_U(fs, OP_INITATTR, attr->item.index);
+        pawK_code_U(fs, OP_INITFIELD, attr->item.index);
         attr = attr->hdr.next;
     }
 }
@@ -815,7 +815,7 @@ static void code_unop_expr(AstVisitor *V, UnOpExpr *e)
     FuncState *fs = V->state.G->fs;
 
     V->visit_expr(V, e->target);
-    code_op(fs, OP_UNOP, e->op, e->type);
+    code_op(fs, OP_UNOP, e->op, a_type(e->target));
 }
 
 static void code_binop_expr(AstVisitor *V, BinOpExpr *e)
@@ -823,7 +823,9 @@ static void code_binop_expr(AstVisitor *V, BinOpExpr *e)
     FuncState *fs = V->state.G->fs;
     V->visit_expr(V, e->lhs);
     V->visit_expr(V, e->rhs);
-    code_op(fs, OP_BINOP, e->op, e->type);
+
+    paw_assert(a_type(e->lhs) == a_type(e->rhs));
+    code_op(fs, OP_BINOP, e->op, a_type(e->lhs));
 }
 
 static void code_decl_stmt(AstVisitor *V, AstDeclStmt *s)
@@ -1172,13 +1174,13 @@ static void code_for_stmt(AstVisitor *V, ForStmt *s)
 //    FuncState *fs = G->fs;
 //
 //    visit_exprs(V, e->items);
-//    pawK_code_U(fs, OP_NEWARRAY, e->nitems);
+//    pawK_code_U(fs, OP_NEWVECTOR, e->nitems);
 //}
 //
 //static void code_map_expr(AstVisitor *V, MapExpr *e)
 //{
 //    visit_exprs(V, e->items);
-//    pawK_code_U(G->fs, OP_NEWARRAY, e->items.size);
+//    pawK_code_U(G->fs, OP_NEWMAP, e->items.size);
 //}
 
 static paw_Bool is_index_template(Generator *G, const Type *type)

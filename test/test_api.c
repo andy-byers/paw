@@ -18,7 +18,7 @@ static void check_error(paw_Env *P, int status)
 static paw_Env *start_test(void)
 {
     const char *source =
-        "let var = 'global'          \n"
+        "let var = 'variable'        \n"
         "let set                     \n"
         "let get                     \n"
         "{                           \n"
@@ -123,14 +123,14 @@ int main(void)
     check_error(P, status);
 
     paw_get_global(P, "var");
-    str_equals(P, -1, "global");
+    str_equals(P, -1, "variable");
     paw_pop(P, 1);
 
     // Set global variable 'var', read it back
     paw_push_int(P, 123);
     paw_set_global(P, "var");
     paw_get_global(P, "var");
-    check(paw_is_integer(P, -1));
+    check(paw_is_int(P, -1));
     check(paw_int(P, -1) == 123);
     paw_pop(P, 1);
 

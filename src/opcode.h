@@ -115,8 +115,8 @@ OP_GETUPVALUE,//     U           -            Up[u]         -
 OP_SETUPVALUE,//     U           v            -             Up[u] = v
 
 OP_NEWINSTANCE,//    U           -            v             v = new instance of class C[u]
-OP_INITATTR,// TODO: call this OP_INITFIELD     U           i v          i             i.fields[u] = v
-OP_NEWARRAY,//       U           v_u..v_1     [v_u..v_1]    -
+OP_INITFIELD,//      U           i v          i             i.fields[u] = v
+OP_NEWVECTOR,//      U           v_u..v_1     [v_u..v_1]    -
 OP_NEWMAP,//         U           v_2n..v_1    {v_2n..v_1}   -
 
 OP_FORNUM0,//        S           *-*-*-*-*-*-*-*-* see notes *-*-*-*-*-*-*-*-*
@@ -141,8 +141,6 @@ OP_GETATTR,//        U           v            v.fields[u]   -
 OP_SETATTR,//        U           v x          -             v.fields[u]=x
 OP_GETITEM,//        -           v i          v[i]          -
 OP_SETITEM,//        -           v i x        -             v[i]=x
-OP_GETSLICE,//       -           v i j        v[i:j]        -  
-OP_SETSLICE,//       -           v i j x      -             v[i:j]=x
 
 NOPCODES
 } Op;

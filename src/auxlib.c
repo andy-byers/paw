@@ -2,11 +2,11 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "auxlib.h"
-#include "array.h"
 #include "map.h"
 #include "mem.h"
 #include "rt.h"
 #include "util.h"
+#include "vector.h"
 #include <stdlib.h>
 
 static void grow_buffer(paw_Env *P, Buffer *buf, int boxloc)

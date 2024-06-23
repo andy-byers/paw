@@ -12,9 +12,9 @@ int main(void)
     script("basic");
     script("block");
     script("loop");
+    script("operator");
     return 0; // TODO
     script("string");
-    script("operator");
     script("integer");
     script("float");
     script("closure");

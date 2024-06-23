@@ -23,6 +23,8 @@
 #define v_closure(v) (o_closure(v_object(v))) 
 #define v_upvalue(v) (o_upvalue(v_object(v))) 
 #define v_string(v) (o_string(v_object(v))) 
+#define v_map(v) (o_map(v_object(v))) 
+#define v_vector(v) (o_vector(v_object(v))) 
 #define v_text(v) (v_string(v)->text)
 #define v_instance(v) (o_instance(v_object(v))) 
 #define v_struct(v) (o_struct(v_object(v))) 
@@ -41,6 +43,8 @@
 #define o_is_proto(o) (o_kind(o) == VPROTO)
 #define o_is_closure(o) (o_kind(o) == VCLOSURE)
 #define o_is_upvalue(o) (o_kind(o) == VUPVALUE)
+#define o_is_map(o) (o_kind(o) == VMAP)
+#define o_is_vector(o) (o_kind(o) == VVECTOR)
 #define o_is_instance(o) (o_kind(o) == VINSTANCE)
 #define o_is_struct(o) (o_kind(o) == VSTRUCT)
 #define o_is_method(o) (o_kind(o) == VMETHOD)
@@ -51,6 +55,8 @@
 #define o_proto(o) check_exp(o_is_proto(o), (Proto *)(o))
 #define o_closure(o) check_exp(o_is_closure(o), (Closure *)(o))
 #define o_upvalue(o) check_exp(o_is_upvalue(o), (UpValue *)(o))
+#define o_map(o) check_exp(o_is_map(o), (Map *)(o))
+#define o_vector(o) check_exp(o_is_vector(o), (Vector *)(o))
 #define o_instance(o) check_exp(o_is_instance(o), (Instance *)(o))
 #define o_struct(o) check_exp(o_is_struct(o), (Struct *)(o))
 #define o_method(o) check_exp(o_is_method(o), (Method *)(o))
@@ -94,6 +100,7 @@ typedef enum ValueKind {
     VSTRING,
     VARRAY,
     VMAP,
+    VVECTOR,
     VSTRUCT,
     VINSTANCE,
     VMETHOD,
@@ -170,6 +177,7 @@ typedef struct String {
 } String;
 
 const char *pawV_to_string(paw_Env *P, Value v, paw_Type type, size_t *nout);
+paw_Int pawV_to_int(paw_Env *P, Value v, paw_Type type);
 
 typedef struct VarDesc {
     String *name;
@@ -253,43 +261,52 @@ typedef struct Native {
     GC_HEADER;
     uint16_t nup;
     paw_Function func;
-    UpValue *up[];
+    Value up[];
 } Native;
 
 Native *pawV_new_native(paw_Env *P, paw_Function func, int nup);
 
-typedef struct Array_ {
+typedef struct Tuple {
     GC_HEADER;
     Value elems[];
-} Array_;
+} Tuple;
 
-Array_ *pawV_new_array(paw_Env *P, int nelems);
+Tuple *pawV_new_tuple(paw_Env *P, int nelems);
 
-typedef struct Array { // TODO: Call this Vec
+typedef struct Vector { // TODO: Call this Vec
     GC_HEADER;
     Value *begin;
     Value *end;
     Value *upper;
-} Array;
+} Vector;
 
-Array *pawV_vec_new(paw_Env *P);
-void pawV_vec_free(paw_Env *P, Array *a);
-paw_Bool pawV_vec_equals(paw_Env *P, const Array *lhs, const Array *rhs);
-paw_Bool pawV_vec_contains(paw_Env *P, const Array *a, Value v);
-void pawV_vec_resize(paw_Env *P, Array *a, size_t length);
-void pawV_vec_insert(paw_Env *P, Array *a, paw_Int index, Value v);
-void pawV_vec_push(paw_Env *P, Array *a, Value v);
-void pawV_vec_pop(paw_Env *P, Array *a, paw_Int index);
+Vector *pawV_vec_new(paw_Env *P);
+void pawV_vec_free(paw_Env *P, Vector *a);
+paw_Bool pawV_vec_equals(paw_Env *P, const Vector *lhs, const Vector *rhs);
+paw_Bool pawV_vec_contains(paw_Env *P, const Vector *a, Value v);
+void pawV_vec_resize(paw_Env *P, Vector *a, size_t length);
+void pawV_vec_insert(paw_Env *P, Vector *a, paw_Int index, Value v);
+void pawV_vec_push(paw_Env *P, Vector *a, Value v);
+void pawV_vec_pop(paw_Env *P, Vector *a, paw_Int index);
 
-static inline size_t pawV_vec_length(const Array *a)
+static inline size_t pawV_vec_length(const Vector *a)
 {
     return cast_size(a->end - a->begin);
 }
 
+typedef enum MapState {
+    MAP_ITEM_VACANT,
+    MAP_ITEM_ERASED,
+    MAP_ITEM_OCCUPIED,
+} MapState;
+
+typedef struct MapMeta {
+    MapState state: 2;
+} MapMeta;
+
 typedef struct Map {
     GC_HEADER;
-    Value *keys;
-    Value *values;
+    void *data;
     size_t length;
     size_t capacity;
 } Map;
@@ -297,9 +314,7 @@ typedef struct Map {
 typedef struct Struct {
     GC_HEADER; // common members for GC
     paw_Type type; // index in module type list
-    VarDesc *field_info; // RTTI for fields
-    VarDesc *method_info; // RTTI for methods
-    Array *methods; // functions with 'self' (Array[Closure])
+    VarDesc *fields; // RTTI for fields
 } Struct;
 
 Struct *pawV_new_struct(paw_Env *P, Value *pv);
@@ -309,12 +324,11 @@ void pawV_free_struct(paw_Env *P, Struct *struct_);
 typedef struct Instance {
     GC_HEADER; // common members for GC
     Value attrs[]; // fixed array of attributes
-    //Value fields[]; // data fields, inc. superstruct
+    //Value fields[]; // data fields
 } Instance;
 
 Instance *pawV_new_instance(paw_Env *P, int nfields);
 void pawV_free_instance(paw_Env *P, Instance *ins, int nfields);
-//Value *pawV_find_attr(Value *attrs, String *name, Type *type);
 
 // Method bound to an instance
 typedef struct Method {
