@@ -1,5 +1,5 @@
 #include "debug.h"
-#include "array.h"
+#include "vector.h"
 #include "auxlib.h"
 #include "call.h"
 #include "map.h"
@@ -84,8 +84,8 @@ const char *paw_op_name(Op op)
             return "PUSHCONST";
         case OP_COPY:
             return "COPY";
-        case OP_INITATTR:
-            return "INITATTR";
+        case OP_INITFIELD:
+            return "INITFIELD";
         case OP_POP:
             return "POP";
         case OP_CLOSE:
@@ -122,8 +122,8 @@ const char *paw_op_name(Op op)
             return "SETUPVALUE";
         case OP_NEWINSTANCE:
             return "NEWINSTANCE";
-        case OP_NEWARRAY:
-            return "NEWARRAY";
+        case OP_NEWVECTOR:
+            return "NEWVECTOR";
         case OP_NEWMAP:
             return "NEWMAP";
         case OP_VARARG:
@@ -183,8 +183,8 @@ void paw_dump_opcode(OpCode opcode)
         case OP_COPY:
             printf("COPY\n");
             break;
-        case OP_INITATTR:
-            printf("INITATTR\n");
+        case OP_INITFIELD:
+            printf("INITFIELD\n");
             break;
         case OP_POP:
             printf("POP\n");
@@ -240,8 +240,8 @@ void paw_dump_opcode(OpCode opcode)
         case OP_NEWINSTANCE:
             printf("NEWINSTANCE\n");
             break;
-        case OP_NEWARRAY:
-            printf("NEWARRAY\n");
+        case OP_NEWVECTOR:
+            printf("NEWVECTOR\n");
             break;
         case OP_NEWMAP:
             printf("NEWMAP\n");
@@ -322,7 +322,7 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
                 break;
             }
 
-            case OP_NEWARRAY: {
+            case OP_NEWVECTOR: {
                 pawL_add_fstring(P, print, " ; %d elements", get_U(opcode));
                 break;
             }
@@ -515,6 +515,9 @@ void paw_dump_stack(paw_Env *P)
             const String *name = info.var.name;
             const paw_Type code = info.var.code;
             printf("  %3d: %s%s (%d)\n", i, name->text, capture, code);
+        }
+        if (cf == P->cf) {
+            break;
         }
         cf = cf->next;
     }

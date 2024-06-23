@@ -4,51 +4,87 @@
 #ifndef PAW_MAP_H
 #define PAW_MAP_H
 
-// TODO: This code won't work properly anymore: we do not have a way to indicate that a
-//       given key is a 'tombstone', without limiting what values can be used (using -1
-//       value, but a valid integer could easily be -1). Before, we just used 'null'. Only
-//       works for pointer keys right now.
-//       Ideas:
-//         (+) Just use chaining.
-//         (+) Reserve a single key value to represent 'null', or 'does not exist'.
-//             Use the value field to indicate either that the item never existed, or that
-//             it was erased. Problematic, as it limits the keyspace.
-//         (+) Use a separate array (a bitfield, really) to track which keys are nonexistent.
-//         (+) Create a somewhat more complicated data structure with an 'index' (see Python
-//             'dict' implementation). 
-
 #include "paw.h"
 #include "util.h"
 #include "value.h"
 
-static inline paw_Bool pawH_is_vacant(Value key)
+typedef struct MapCursor {
+    Map *map;
+    size_t index;
+} MapCursor;
+
+#define h_is_vacant(mc) (h_get_state(mc) == MAP_ITEM_VACANT)
+#define h_is_occupied(mc) (h_get_state(mc) == MAP_ITEM_OCCUPIED)
+#define h_is_erased(mc) (h_get_state(mc) == MAP_ITEM_ERASED)
+
+#define pawH_meta(m, index) (&cast((m)->data, MapMeta *)[index])
+
+static inline Value *pawH_key(Map *m, size_t index)
 {
-    return key.u == 0;
+    char *data = cast(m->data, char *);
+    data += sizeof(MapMeta) * m->capacity;
+    return &cast(data, Value *)[index];
 }
 
-static inline paw_Bool pawH_is_erased(Value key)
+static inline Value *pawH_value(Map *m, size_t index)
 {
-    return key.i == -1;
+    return pawH_key(m, index) + m->capacity;
 }
 
-static inline paw_Bool pawH_is_occupied(Value key)
+static inline MapState h_get_state(MapCursor *mc)
 {
-    return !pawH_is_vacant(key) && !pawH_is_erased(key);
+    return cast(mc->map->data, MapMeta *)[mc->index].state;
 }
 
-#define pawH_index(m, k) check_exp(pawH_is_occupied(k), pawV_hash(k) & ((m)->capacity - 1))
+static inline void h_set_state(MapCursor *mc, MapState state)
+{
+    cast(mc->map->data, MapMeta *)[mc->index].state = state;
+}
 
-// Set 'itr' to the index at which the key 'k' is located, or the first index for
-// which the function-like macro  'cc' evaluates to true (if 'k' is not found).
-// Must not be called if the map has length 0
-#define pawH_locate(m, k, cc)                 \
-    for (size_t mask = (m)->capacity - 1;;) { \
-        Value ki = (m)->keys[itr];            \
-        if ((cc)(ki) || (ki).u == (k).u) {    \
-            break;                            \
-        }                                     \
-        itr = (itr + 1) & mask;               \
+static inline Value *h_cursor_key(MapCursor *mc)
+{
+    return pawH_key(mc->map, mc->index);
+}
+
+static inline Value *h_cursor_value(MapCursor *mc)
+{
+    return pawH_value(mc->map, mc->index);
+}
+
+static void h_cursor_next(MapCursor *mc)
+{
+    mc->index = (mc->index + 1) & (mc->map->capacity - 1);
+}
+
+static inline MapCursor h_cursor_init(Map *m, Value key)
+{
+    return (MapCursor){m, pawV_hash(key) & (m->capacity - 1)};
+}
+
+static inline MapCursor h_cursor_lookup(Map *m, Value key)
+{
+    MapCursor mc = h_cursor_init(m, key);
+    while (!h_is_vacant(&mc)) {               
+        if (h_is_occupied(&mc) && h_cursor_key(&mc)->u == key.u) {
+            break;
+        }
+        h_cursor_next(&mc);
     }
+    return mc;
+}
+
+Map *pawH_new(paw_Env *P);
+void pawH_free(paw_Env *P, Map *m);
+paw_Bool pawH_equals(paw_Env *P, Map *lhs, Map *rhs);
+void pawH_extend(paw_Env *P, Map *dst, Map *src);
+void pawH_clone(paw_Env *P, StackPtr sp, Map *m);
+void pawH_key_error(paw_Env *P, Value key, paw_Type type);
+Value *pawH_create(paw_Env *P, Map *m, Value key);
+
+static inline size_t pawH_length(const Map *m)
+{
+    return m->length;
+}
 
 typedef enum MapAction {
     MAP_ACTION_NONE,
@@ -56,51 +92,26 @@ typedef enum MapAction {
     MAP_ACTION_REMOVE,
 } MapAction;
 
-Map *pawH_new(paw_Env *P);
-void pawH_free(paw_Env *P, Map *m);
-paw_Bool pawH_equals(paw_Env *P, Map *lhs, Map *rhs);
-void pawH_extend(paw_Env *P, Map *dst, Map *src);
-void pawH_clone(paw_Env *P, StackPtr sp, Map *m);
-void pawH_key_error(paw_Env *P, Value key);
-size_t pawH_create_aux_(paw_Env *P, Map *m, Value key);
-
-static inline size_t pawH_length(const Map *m)
-{
-    return m->length;
-}
-
-//void pawH_reserve(paw_Env *P, Map *m, size_t length);
-//
-//static size_t pawH_search(paw_Env *P, Map *m, Value key)
-//{
-//    pawH_reserve(P, m, pawH_length(m) + 1);
-//    size_t itr = pawH_index(m, key);
-//    pawH_locate(m, key, pawH_is_vacant);
-//    return itr;
-//}
-
 static inline Value *pawH_action(paw_Env *P, Map *m, Value key, MapAction action)
 {
     if (action == MAP_ACTION_CREATE) {
-        const size_t i = pawH_create_aux_(P, m, key);
-        return &m->values[i];
+        return pawH_create(P, m, key);
     } else if (m->length == 0) {
         return NULL;
     }
-    size_t itr = pawH_index(m, key);
-    pawH_locate(m, key, pawH_is_vacant);
-    if (!pawH_is_occupied(m->keys[itr])) {
+    MapCursor mc = h_cursor_lookup(m, key);
+    if (!h_is_occupied(&mc)) {
         return NULL;
     }
     if (action == MAP_ACTION_REMOVE) {
-        m->keys[itr].i = -1; // tombstone
+        h_set_state(&mc, MAP_ITEM_ERASED);
         --m->length;
 
         // Return the address of the slot to indicate success.
-        return &m->keys[itr];
+        return h_cursor_key(&mc);
     }
     paw_assert(action == MAP_ACTION_NONE);
-    return &m->values[itr];
+    return h_cursor_value(&mc);
 }
 
 static inline paw_Bool pawH_contains(paw_Env *P, Map *m, Value key)
@@ -112,7 +123,7 @@ static inline void pawH_insert(paw_Env *P, Map *m, Value key, Value value)
 {
     Value *slot = pawH_action(P, m, key, MAP_ACTION_CREATE);
     if (!slot) {
-        pawH_key_error(P, key);
+        pawH_key_error(P, key, PAW_TSTRING); // TODO: key type
     }
     *slot = value;
 }
@@ -120,7 +131,7 @@ static inline void pawH_insert(paw_Env *P, Map *m, Value key, Value value)
 static inline void pawH_remove(paw_Env *P, Map *m, Value key)
 {
     if (!pawH_action(P, m, key, MAP_ACTION_REMOVE)) {
-        pawH_key_error(P, key);
+        pawH_key_error(P, key, PAW_TSTRING); // TODO: key type
     }
 }
 
@@ -137,8 +148,8 @@ static inline void pawH_set(paw_Env *P, Map *m, Value key, Value value)
 static inline paw_Bool pawH_iter(const Map *m, paw_Int *itr)
 {
     for (++*itr; *itr < paw_cast_int(m->capacity); ++*itr) {
-        Value *k = &m->keys[*itr];
-        if (pawH_is_occupied(*k)) {
+        const MapMeta *mm = pawH_meta(m, *itr);
+        if (mm->state == MAP_ITEM_OCCUPIED) {
             return PAW_TRUE;
         }
     }

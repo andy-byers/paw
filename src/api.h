@@ -20,8 +20,8 @@ static inline const char *api_typename(int type)
             return "float";
         case PAW_TSTRING:
             return "string";
-        case PAW_TARRAY:
-            return "array";
+        case PAW_TVECTOR:
+            return "vector";
         case PAW_TFUNCTION:
             return "function";
         case PAW_TSTRUCT:

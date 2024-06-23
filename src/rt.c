@@ -3,7 +3,7 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "prefix.h"
 
-#include "array.h"
+#include "vector.h"
 #include "auxlib.h"
 #include "call.h"
 #include "env.h"
@@ -46,18 +46,17 @@
 #define vm_pushb(b) pawC_pushb(P, b)
 #define vm_pusho(o) pawC_pusho(P, cast_object(o))
 
-// Slot 0 (the callable or 'self') is an implicit parameter that doesn't
-// contribute to argc.
+// Slot 0 (the callable) is an implicit parameter.
 #define vm_argc() (paw_get_count(P) - 1)
 
 // Generate code for creating common builtin objects
-// Requires a placeholder slot (the vm_push0() pushes null) so the GC
-// doesn't get confused. Both the vm_push0(), and the pawA_new calls
-// might fail and cause an error to be thrown, so we have to be careful
-// not to leave a junk value on top of the stack.
-#define vm_array_init(pa, pv) \
-    pv = vm_push0();          \
-    pa = pawA_new(P);         \
+// Requires a placeholder slot (the vm_push0() pushes an empty slot) so 
+// the GC doesn't get confused. Both the vm_push0(), and the pawA_new calls
+// might fail and cause an error to be thrown, so we have to be careful not
+// to leave a junk value on top of the stack.
+#define vm_vector_init(pa, pv) \
+    pv = vm_push0();           \
+    pa = pawA_new(P);          \
     v_set_object(pv, pa);
 
 #define vm_map_init(pm, pv) \
@@ -333,21 +332,20 @@ void pawR_setattr(paw_Env *P, int index)
     vm_pop(2);
 }
 
-void pawR_setitem(paw_Env *P, int ttarget, int tindex)
+void pawR_setitem(paw_Env *P, paw_Type ttarget)
 {
-//    // TODO: Don't need index type.
-//    const Value val = *vm_peek(0);
-//    const Value key = *vm_peek(1);
-//    const Value obj = *vm_peek(2);
-//    if (ttarget == PAW_TARRAY) {
-//        const paw_Int idx = v_int(key);
-//        Value *slot = pawA_get(P, v_array(obj), idx);
-//        *slot = val;
-//    } else {
-//        paw_assert(ttarget == PAW_TMAP);
-//        pawH_insert(P, v_map(obj), key, val);
-//    }
-//    vm_pop(3);
+    const Value val = *vm_peek(0);
+    const Value key = *vm_peek(1);
+    const Value obj = *vm_peek(2);
+    if (ttarget == PAW_TVECTOR) {
+        const paw_Int idx = v_int(key);
+        Value *slot = pawA_get(P, v_vector(obj), idx);
+        *slot = val;
+    } else {
+        paw_assert(ttarget == PAW_TMAP);
+        pawH_insert(P, v_map(obj), key, val);
+    }
+    vm_pop(3);
 }
 
 void pawR_init(paw_Env *P)
@@ -396,8 +394,8 @@ static paw_Bool forin_init(paw_Env *P, paw_Type t)
 {
 //    const Value v = *vm_peek(0);
 //    paw_Int itr = PAW_ITER_INIT;
-//    if (t == PAW_TARRAY) {
-//        Array *arr = v_array(v);
+//    if (t == PAW_TVECTOR) {
+//        Vector *arr = v_vector(v);
 //        if (pawA_iter(arr, &itr)) {
 //            vm_pushi(itr);
 //            vm_pushv(arr->begin[itr]);
@@ -419,8 +417,8 @@ static paw_Bool forin(paw_Env *P, paw_Type t)
 {
 //    const Value obj = *vm_peek(1);
 //    const Value itr = *vm_peek(0);
-//    if (t == PAW_TARRAY) {
-//        Array *arr = v_array(obj);
+//    if (t == PAW_TVECTOR) {
+//        Vector *arr = v_vector(obj);
 //        paw_Int i = v_int(itr);
 //        if (pawA_iter(arr, &i)) {
 //            v_set_int(vm_peek(0), i);
@@ -477,18 +475,18 @@ static void eq_ne(paw_Env *P, BinaryOp binop, paw_Type t, Value x, Value y)
     paw_Bool result;
     const paw_Bool bt = binop == BINARY_EQ;
     const paw_Bool bf = binop != BINARY_EQ;
-//    if (t == PAW_TARRAY) {
-//        const Array *lhs = v_array(x);
-//        const Array *rhs = v_array(y);
-//        result = pawA_equals(P, lhs, rhs);
-////    } else if (t == PAW_TMAP) {
-////        Map *lhs = v_map(x);
-////        Map *rhs = v_map(y);
-////        result = pawH_equals(P, lhs, rhs);
-//    } else {
+    if (t == PAW_TVECTOR) {
+        const Vector *lhs = v_vector(x);
+        const Vector *rhs = v_vector(y);
+        result = pawA_equals(P, lhs, rhs);
+    } else if (t == PAW_TMAP) {
+        Map *lhs = v_map(x);
+        Map *rhs = v_map(y);
+        result = pawH_equals(P, lhs, rhs);
+    } else {
         // Fall back to comparing the value representation.
         result = x.u == y.u;
-//    }
+    }
     v_set_bool(vm_peek(1), result ? bt : bf);
     vm_pop(1);
 }
@@ -618,17 +616,16 @@ static void float_binop(paw_Env *P, BinaryOp binop, paw_Float x, paw_Float y)
 static void other_binop(paw_Env *P, BinaryOp binop, paw_Type t, Value x, Value y)
 {
     if (binop == BINARY_IN) {
-//        if (t_is_array(tag)) {
-//            v_set_bool(vm_peek(1), pawA_contains(P, v_array(y), x));
-////        } else {
-////            paw_assert(t_is_map(tag));
-////            v_set_bool(vm_peek(1), pawH_contains(P, v_map(y), x));
-//        }
+        if (t == PAW_TVECTOR) {
+            v_set_bool(vm_peek(1), pawA_contains(P, v_vector(y), x));
+        } else {
+            paw_assert(t == PAW_TMAP);
+            v_set_bool(vm_peek(1), pawH_contains(P, v_map(y), x));
+        }
         vm_pop(1);
-    } else if (t == PAW_TSTRING) {
+    } else {
+        paw_assert(t == PAW_TSTRING);
         string_binop(P, binop, x, y);
-//    } else if (t_is_array(tag)) {
-//        array_binop(P, binop, x, y);
     }
 }
 
@@ -719,23 +716,23 @@ void pawR_getattr(paw_Env *P, int index)
     *vm_peek(0) = ins->attrs[1 + index];
 }
 
-static void getitem_list(paw_Env *P, Value obj, Value key)
+static void getitem_vector(paw_Env *P, Value obj, Value key)
 {
-//    Array *a = v_array(obj);
-//    const paw_Int i = v_int(key);
-//    *vm_peek(1) = *pawA_get(P, a, i);
-//    vm_pop(1);
+    Vector *a = v_vector(obj);
+    const paw_Int i = v_int(key);
+    *vm_peek(1) = *pawA_get(P, a, i);
+    vm_pop(1);
 }
 
 static int getitem_map(paw_Env *P, Value obj, Value key)
 {
-//    const Value *pv = pawH_get(P, v_map(obj), key);
-//    if (pv) {
-//        *vm_peek(1) = *pv;
-//        vm_pop(1);
-//        return 0;
-//    }
-//    return -1;
+    const Value *pv = pawH_get(P, v_map(obj), key);
+    if (pv) {
+        *vm_peek(1) = *pv;
+        vm_pop(1);
+        return 0;
+    }
+    return -1;
 }
 
 static void getitem_string(paw_Env *P, Value obj, Value key)
@@ -749,133 +746,51 @@ static void getitem_string(paw_Env *P, Value obj, Value key)
     vm_pop(1);
 }
 
-int pawR_getitem(paw_Env *P, int ttarget, int tindex)
+int pawR_getitem(paw_Env *P, paw_Type ttarget)
 {
-//    const Value obj = *vm_peek(1);
-//    const Value key = *vm_peek(0);
-//    if (ttarget == PAW_TARRAY) {
-//        getitem_list(P, obj, key);
-//    } else if (ttarget == PAW_TMAP) {
-//        if (getitem_map(P, obj, key)) {
-//            return -1;
-//        }
-//    } else if (ttarget == PAW_TSTRING) {
-//        getitem_string(P, obj, key);
-//    }
-//    return 0;
+    const Value obj = *vm_peek(1);
+    const Value key = *vm_peek(0);
+    if (ttarget == PAW_TVECTOR) {
+        getitem_vector(P, obj, key);
+    } else if (ttarget == PAW_TMAP) {
+        if (getitem_map(P, obj, key)) {
+            return -1;
+        }
+    } else if (ttarget == PAW_TSTRING) {
+        getitem_string(P, obj, key);
+    }
+    return 0;
 }
 
-// NOTE: Only called for range indexing on arrays and strings, where the bounds are
-//       always of type int.
-static void cannonicalize_slice(size_t len, Value begin, Value end, paw_Int *bout, paw_Int *eout, paw_Int *nout)
+void pawR_literal_vector(paw_Env *P, int n)
 {
-    // TODO: broken now... int value cannot be null
-//    const paw_Int ibegin = v_is_null(begin)
-//                               ? 0 // null acts like 0
-//                               : pawA_abs_index(v_int(begin), len);
-//    const paw_Int iend = v_is_null(end)
-//                             ? paw_cast_int(len) // null acts like #a
-//                             : pawA_abs_index(v_int(end), len);
-//    // clamp to sequence bounds
-//    *bout = paw_min(paw_max(ibegin, 0), paw_cast_int(len));
-//    *eout = paw_min(paw_max(iend, 0), paw_cast_int(len));
-//    *nout = paw_max(0, *eout - *bout);
-}
-
-void pawR_getslice(paw_Env *P, int ttarget)
-{
-//    const Value obj = *vm_peek(2);
-//    const Value begin = *vm_peek(1);
-//    const Value end = *vm_peek(0);
-//
-//    if (ttarget == PAW_TARRAY) {
-//        paw_Int i1, i2, n;
-//        const Array *src = v_array(obj);
-//        cannonicalize_slice(pawA_length(src), begin, end, &i1, &i2, &n);
-//
-//        Value *pv;
-//        Array *dst;
-//        vm_array_init(dst, pv);
-//        pawA_resize(P, dst, cast_size(n));
-//        for (paw_Int i = i1; i < i2; ++i) {
-//            dst->begin[i - i1] = src->begin[i];
-//        }
-//    } else {
-//        paw_assert(ttarget == PAW_TSTRING);
-//        paw_Int i1, i2, n;
-//        const String *src = v_string(obj);
-//        cannonicalize_slice(src->length, begin, end, &i1, &i2, &n);
-//
-//        Value *pv = vm_push0(); // placeholder
-//        String *dst = pawS_new_nstr(P, src->text + i1, cast_size(n));
-//        v_set_object(pv, dst);
-//    }
-//    vm_shift(3);
-}
-
-void pawR_setslice(paw_Env *P, int ttarget)
-{
-//    const Value obj = *vm_peek(3);
-//    const Value begin = *vm_peek(2);
-//    const Value end = *vm_peek(1);
-//    const Value val = *vm_peek(0);
-//    paw_assert(ttarget == PAW_TARRAY);
-//
-//    paw_Int i1, i2, replace;
-//    // If 'a == b', then we must be executing something like 'a[i:j] = a'.
-//    // This will work, as long as memmove is used (making room for '#a' items,
-//    // so the first memmove will never overwrite items we still need).
-//    Array *a = v_array(obj);
-//    const Array *b = v_array(val);
-//    const size_t alen = pawA_length(a);
-//    const size_t blen = pawA_length(b);
-//    cannonicalize_slice(alen, begin, end, &i1, &i2, &replace);
-//
-//    // Resize 'a' to the final length, preserving items after the region
-//    // of items being replaced.
-//    if (cast_size(replace) > blen) {
-//        memmove(a->begin + i1 + blen, a->begin + i1 + replace,
-//                (alen - cast_size(i1 + replace)) * sizeof(a->begin[0]));
-//    }
-//    const paw_Int length = i1 + paw_cast_int(alen + blen) - i2;
-//    pawA_resize(P, a, cast_size(length)); // a[:i1] + b + a[i2:]
-//    if (cast_size(replace) < blen) {
-//        memmove(a->begin + i1 + blen, a->begin + i2,
-//                (alen - cast_size(i2)) * sizeof(a->begin[0]));
-//    }
-//    memmove(a->begin + i1, b->begin, blen * sizeof(a->begin[0]));
-//    vm_pop(4);
-}
-
-void pawR_literal_array(paw_Env *P, int n)
-{
-//    Array *a;
-//    StackPtr sp;
-//    vm_array_init(a, sp);
-//    if (n > 0) {
-//        pawA_resize(P, a, cast_size(n));
-//        Value *pv = a->end;
-//        do {
-//            *--pv = *--sp;
-//        } while (pv != a->begin);
-//        // Replace contents with array itself.
-//        vm_shift(n);
-//    }
+    Vector *v;
+    StackPtr sp;
+    vm_vector_init(v, sp);
+    if (n > 0) {
+        pawA_resize(P, v, cast_size(n));
+        Value *pv = v->end;
+        do {
+            *--pv = *--sp;
+        } while (pv != v->begin);
+        // Replace contents with vector itself.
+        vm_shift(n);
+    }
 }
 
 void pawR_literal_map(paw_Env *P, int n)
 {
-//    Map *m;
-//    StackPtr sp;
-//    vm_map_init(m, sp);
-//    if (n > 0) {
-//        for (int i = 0; i < n; ++i) {
-//            const Value value = *--sp;
-//            pawH_insert(P, m, *--sp, value);
-//        }
-//        // Replace contents with map itself.
-//        vm_shift(2 * n);
-//    }
+    Map *m;
+    StackPtr sp;
+    vm_map_init(m, sp);
+    if (n > 0) {
+        for (int i = 0; i < n; ++i) {
+            const Value value = *--sp;
+            pawH_insert(P, m, *--sp, value);
+        }
+        // Replace contents with map itself.
+        vm_shift(2 * n);
+    }
 }
 
 // TODO: 'null' -> Option[T]::None
@@ -898,29 +813,21 @@ static paw_Bool should_jump_false(paw_Env *P)
     return !v_true(*vm_peek(0));
 }
 
-#include "debug.h"
 void pawR_execute(paw_Env *P, CallFrame *cf)
 {
     Closure *fn;
     const OpCode *pc;
     const Value *K;
     Struct **C;
-    Type **T;
 
 top:
     pc = cf->pc;
     fn = cf->fn;
     K = fn->p->k;
     C = fn->p->c;
-    T = P->mod->types;
 
     for (;;) {
         const OpCode opcode = *pc++;
-
-        printf("n = %d, ",(int)(P->top.p-P->stack.p));
-        paw_dump_opcode(opcode);
-       //  paw_dump_stack(P);
-
         vm_switch(get_OP(opcode))
         {
             vm_case(POP) :
@@ -965,19 +872,19 @@ top:
                 pawR_binop(P, get_A(opcode), get_B(opcode));
             }
 
-//            vm_case(NEWARRAY) :
-//            {
-//                vm_protect();
-//                pawR_literal_array(P, get_U(opcode));
-//                check_gc(P);
-//            }
-//
-//            vm_case(NEWMAP) :
-//            {
-//                vm_protect();
-//                pawR_literal_map(P, get_U(opcode));
-//                check_gc(P);
-//            }
+            vm_case(NEWVECTOR) :
+            {
+                vm_protect();
+                pawR_literal_vector(P, get_U(opcode));
+                check_gc(P);
+            }
+
+            vm_case(NEWMAP) :
+            {
+                vm_protect();
+                pawR_literal_map(P, get_U(opcode));
+                check_gc(P);
+            }
 
             vm_case(CASTBOOL) :
             {
@@ -1006,7 +913,7 @@ top:
                 check_gc(P);
             }
 
-            vm_case(INITATTR) :
+            vm_case(INITFIELD) :
             {
                 vm_protect();
                 const int u = get_U(opcode);
@@ -1070,27 +977,15 @@ top:
             vm_case(GETITEM) :
             {
                 vm_protect();
-                if (pawR_getitem(P, get_A(opcode), get_B(opcode))) {
-                    pawH_key_error(P, *vm_peek(0));
+                if (pawR_getitem(P, get_A(opcode))) {
+                    pawH_key_error(P, *vm_peek(0), PAW_TSTRING); // TODO: lookup key type
                 }
             }
 
             vm_case(SETITEM) :
             {
                 vm_protect();
-                pawR_setitem(P, get_A(opcode), get_B(opcode));
-            }
-
-            vm_case(GETSLICE) :
-            {
-                vm_protect();
-                pawR_getslice(P, get_A(opcode));
-            }
-
-            vm_case(SETSLICE) :
-            {
-                vm_protect();
-                pawR_setslice(P, get_A(opcode));
+                pawR_setitem(P, get_U(opcode));
             }
 
             vm_case(CLOSE) :
@@ -1158,15 +1053,15 @@ top:
 //                const int nactual = vm_argc();
 //                const int nextra = nactual - nexpect;
 //                Value *pv;
-//                Array *argv;
-//                vm_array_init(argv, pv);
+//                Vector *argv;
+//                vm_vector_init(argv, pv);
 //                if (nextra) {
 //                    pawA_resize(P, argv, cast_size(nextra));
 //                    StackPtr argv0 = cf->base.p + 1 + nexpect;
 //                    for (int i = 0; i < nextra; ++i) {
 //                        argv->begin[i] = argv0[i];
 //                    }
-//                    // replace first variadic parameter with 'argv' array
+//                    // replace first variadic parameter with 'argv' vector
 //                    vm_shift(nextra);
 //                }
 //                check_gc(P);

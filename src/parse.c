@@ -776,9 +776,10 @@ static AstExpr *suffixed_expr(Lex *lex)
             case '.':
                 e = selector_expr(lex, e);
                 break;
-            case TK_COLON2:
-                e = access_expr(lex, e);
-                break;
+                // TODO: Change syntax of conditional expr so that this will work
+//            case TK_COLON2:
+//                e = access_expr(lex, e);
+//                break;
             case '[':
                 e = index_expr(lex, e);
                 break;

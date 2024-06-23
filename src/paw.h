@@ -67,13 +67,14 @@ int paw_call(paw_Env *P, int argc);
 #define PAW_TFLOAT 3
 #define PAW_TSTRING 4
 #define PAW_TTUPLE 5
-#define PAW_TARRAY 6
-#define PAW_TENUM 7
-#define PAW_TFUNCTION 8
-#define PAW_TSTRUCT 9
-#define PAW_TFOREIGN 10
-#define PAW_TMODULE 11
-#define PAW_NTYPES 12
+#define PAW_TVECTOR 6
+#define PAW_TMAP 7
+#define PAW_TENUM 8
+#define PAW_TFUNCTION 9
+#define PAW_TSTRUCT 10
+#define PAW_TFOREIGN 11
+#define PAW_TMODULE 12
+#define PAW_NTYPES 13
 
 paw_Bool paw_is_truthy(paw_Env *P, int index);
 paw_Bool paw_is_null(paw_Env *P, int index);
@@ -150,13 +151,8 @@ void paw_eq_m(paw_Env *P);
 // Getters (stack -> C):
 //
 
-// Return a value as a 64-bit signed integer
-// If nonnull, this function will store 0 in 'plossless' if the integer was
-// too large to fit in the return type, and 1 otherwise. Truncation affects the
-// high bits.
-paw_Int paw_intx(paw_Env *P, int index, paw_Bool *plossless);
-
 paw_Bool paw_bool(paw_Env *P, int index);
+paw_Int paw_int(paw_Env *P, int index);
 paw_Float paw_float(paw_Env *P, int index);
 const char *paw_string(paw_Env *P, int index);
 paw_Function paw_native(paw_Env *P, int index);
@@ -221,11 +217,6 @@ int paw_abs_index(paw_Env *P, int index);
 void paw_rotate(paw_Env *P, int index, int n);
 void paw_shift(paw_Env *P, int n);
 void paw_copy(paw_Env *P, int from, int to);
-
-static inline paw_Int paw_int(paw_Env *P, int index)
-{
-    return paw_intx(P, index, NULL);
-}
 
 // Move the top stack value to the given index
 // Shifts elements above the target index up by 1 slot.

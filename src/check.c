@@ -6,7 +6,6 @@
 // from the parser into a graph by unifying types based on lexical scope. 
 
 #include "ast.h"
-#include "array.h"
 #include "check.h"
 #include "code.h"
 #include "debug.h"
@@ -17,6 +16,7 @@
 #include "str.h"
 #include "type.h"
 #include "unify.h"
+#include "vector.h"
 
 // Helper macros
 #define syntax_error(R, ...) pawX_error((R)->lex, __VA_ARGS__)
@@ -774,6 +774,7 @@ static void visit_cond_expr(AstVisitor *V, CondExpr *e)
     Type *lhs = resolve_expr(V, e->lhs);
     Type *rhs = resolve_expr(V, e->rhs);
     unify(V->state.R, lhs, rhs);
+    e->type = lhs;
 }
 
 static void visit_unop_expr(AstVisitor *V, UnOpExpr *e)

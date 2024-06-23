@@ -10,11 +10,12 @@ static void handle_error(paw_Env *P, int status, paw_Bool fatal)
 int main(void)
 {
     const char *source =
-        "fn f(n) {        \n"
+        "fn f(n: int) {   \n"
         "    if n > 0 {   \n"
         "        f(n - 1) \n"
         "    }            \n"
-        "}                \n";
+        "}                \n"
+        "return f         \n";
     struct TestAlloc a = {0};
     paw_Env *P = test_open(NULL, &a);
     int status = test_open_string(P, source);
@@ -23,7 +24,7 @@ int main(void)
     status = paw_call(P, 0);
     handle_error(P, status, 1);
 
-    paw_get_global(P, "f");
+    // 'f' is on top of the stack
     paw_push_int(P, PAW_STACK_MAX);
     status = paw_call(P, 1);
     check(status == PAW_EMEMORY);

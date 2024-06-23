@@ -1,6 +1,5 @@
 #include "lib.h"
 #include "api.h"
-#include "array.h"
 #include "auxlib.h"
 #include "call.h"
 #include "gc_aux.h"
@@ -9,6 +8,7 @@
 #include "os.h"
 #include "rt.h"
 #include "type.h"
+#include "vector.h"
 #include <errno.h>
 #include <limits.h>
 #include <time.h>
@@ -203,7 +203,7 @@ static int base_print(paw_Env *P)
 //static int array_insert(paw_Env *P)
 //{
 //    pawL_check_argc(P, 2);
-//    Array *a = v_array(cf_base(0));
+//    Vector *a = v_vector(cf_base(0));
 //    const paw_Int i = pawL_check_int(P, 1);
 //    pawA_insert(P, a, i, cf_base(2));
 //    return 0;
@@ -212,7 +212,7 @@ static int base_print(paw_Env *P)
 //static int array_push(paw_Env *P)
 //{
 //    const int argc = pawL_check_varargc(P, 1, UINT8_MAX);
-//    Array *a = v_array(cf_base(0));
+//    Vector *a = v_vector(cf_base(0));
 //    for (int i = 0; i < argc; ++i) {
 //        pawA_push(P, a, cf_base(i + 1));
 //    }
@@ -226,7 +226,7 @@ static int base_print(paw_Env *P)
 //    // Argument, if present, indicates the index at which to remove an
 //    // element. Default to -1: the last element.
 //    const paw_Int i = argc ? v_int(cf_base(1)) : -1;
-//    Array *a = v_array(cf_base(0));
+//    Vector *a = v_vector(cf_base(0));
 //
 //    P->top.p[-1] = *pawA_get(P, a, i); // may replace 'a'
 //    pawA_pop(P, a, i); // never allocates, last line OK
@@ -236,7 +236,7 @@ static int base_print(paw_Env *P)
 //static int array_clone(paw_Env *P)
 //{
 //    pawL_check_argc(P, 0);
-//    Array *a = v_array(cf_base(0));
+//    Vector *a = v_vector(cf_base(0));
 //    Value *pv = pawC_push0(P);
 //    pawA_clone(P, pv, a);
 //    return 1;
@@ -320,7 +320,7 @@ static int string_find(paw_Env *P)
 //    Buffer buf;
 //    pawL_init_buffer(P, &buf);
 //    paw_Int itr = PAW_ITER_INIT;
-//    Array *a = v_array(seq);
+//    Vector *a = v_vector(seq);
 //    while (pawA_iter(a, &itr)) {
 //        const Value v = a->begin[itr];
 //        // Add a chunk, followed by the separator if necessary.
@@ -370,36 +370,36 @@ static int string_clone(paw_Env *P)
     return 1;
 }
 
-//static int map_get(paw_Env *P)
-//{
-//    const int argc = pawL_check_varargc(P, 1, 2);
-//    const Value key = cf_base(1);
-//    Map *m = v_map(cf_base(0));
-//    const Value *pv = pawH_get(P, m, key);
-//    if (pv) {
-//        P->top.p[-1] = *pv;
-//    } else if (argc != 2) {
-//        pawH_key_error(P, key);
-//    }
-//    return 1;
-//}
-//
-//static int map_erase(paw_Env *P)
-//{
-//    pawL_check_argc(P, 1);
-//    Map *m = v_map(cf_base(0));
-//    pawH_remove(P, m, cf_base(1));
-//    return 0;
-//}
-//
-//static int map_clone(paw_Env *P)
-//{
-//    pawL_check_argc(P, 0);
-//    Map *m = v_map(cf_base(0));
-//    Value *pv = pawC_push0(P);
-//    pawH_clone(P, pv, m);
-//    return 1;
-//}
+static int map_get(paw_Env *P)
+{
+    const int argc = pawL_check_varargc(P, 1, 2);
+    const Value key = cf_base(1);
+    Map *m = v_map(cf_base(0));
+    const Value *pv = pawH_get(P, m, key);
+    if (pv) {
+        P->top.p[-1] = *pv;
+    } else if (argc != 2) {
+        pawH_key_error(P, key, PAW_TUNIT); // TODO: key type for printing
+    }
+    return 1;
+}
+
+static int map_erase(paw_Env *P)
+{
+    pawL_check_argc(P, 1);
+    Map *m = v_map(cf_base(0));
+    pawH_remove(P, m, cf_base(1));
+    return 0;
+}
+
+static int map_clone(paw_Env *P)
+{
+    pawL_check_argc(P, 0);
+    Map *m = v_map(cf_base(0));
+    Value *pv = pawC_push0(P);
+    pawH_clone(P, pv, m);
+    return 1;
+}
 
 #define L_MAX_SIZE 256
 
@@ -420,19 +420,6 @@ typedef struct pawL_Layout {
     int nfields;
     int nmethods;
 } pawL_Layout;
-
-//
-// struct A[T] {
-//     a: A[int] // ??
-//     b: A[T]
-//     c: A // sugar for A[T]
-// }
-// 
-// A[T] = declare_struct(A, 1)
-// A[int] = instantiate_struct(A, int)
-// A[T] = {
-//  a: A[int],
-// }
 
 typedef struct pawL_GenericCtx {
     int ngenerics;

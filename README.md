@@ -28,7 +28,7 @@ Global variables are intoduced with the `global` keyword, and locals with `let`,
 Both globals and locals can only be referenced where they are visible (see [scope](#scope)), but globals can only be declared at the module level.
 Local variables can be shadowed and 'rebound', but globals cannot.
 A global can be shadowed by a local, however.
-Locals can also be captured in a function or method body (see [functions](#functions)).
+Locals can also be captured in a function body (see [functions](#functions)).
 ```
 // initializer (' = 0') is required
 let x: int = 0
@@ -41,9 +41,8 @@ global g: string = "hello, world!"
 ```
 
 ### Types
-paw is statically-typed, meaning that types are bound to variables, not values.
-The type of each variable must be known at compile time.
-paw supports type inference on variable definitions.
+paw is statically-typed, meaning all types must be known at compile-time.
+paw supports type inference on variable definitions and function template calls.
 The following example demonstrates creation of the basic value types.
 
 ```
@@ -55,7 +54,7 @@ let v: Vec[int] = Vec[int]{1, 2, 3}
 let m: Map[string, int] = Map[string, int]{'a': 1, 'b': 2}
 let f: fn() -> int = some_function
 
-// supports type inference
+// type is inferred from the initializer
 let b = false
 let i = 40 + 2
 let f = 1.0 * 2
@@ -74,7 +73,7 @@ let method = instance.times2 // fn(Object, int) -> int
 ```
 
 ### Scope
-paw implements lexical scoping, meaning variables declared in a given block can only be referenced from within that block, or one of its subblocks.
+paw uses lexical scoping, meaning variables declared in a given block can only be referenced from within that block, or one of its subblocks.
 A block begins when a '{' token is encountered, and ends when a matching '}' is found.
 Many language constructs use blocks to create their own scope, like functions, structures, for loops, etc. 
 Explicit scoping blocks are also supported.
@@ -86,7 +85,7 @@ Explicit scoping blocks are also supported.
 
 ### Functions
 Functions are first-class in paw, which means they are treated like any other paw value.
-Functions can be stored in variables, or passed as parameters to compose higher-order functions.
+They can be stored in variables, or passed as parameters to higher-order functions.
 ```
 fn fib(n: int) -> int {
     if n < 2 {
@@ -100,13 +99,15 @@ fib(10)
 ### Structures
 ```
 struct Object {
-    method() {
-        return self.value
-    }
+    a: int
+    b: string
 }
 
-// create an instance
-let o = Object{}
+// all fields must be initialized
+let o = Object{
+    a: 1,
+    b: 'two',
+}
 ```
 
 ### Control flow
@@ -172,62 +173,50 @@ assert(s == ','.join(a))
 ```
 
 ### Generics
+Paw supports basic parametric polymorphism.
+Variables with generic types must be treated generically, that is, they can only be assigned to other variables of the same type, passed to functions expecting a generic parameter, or stored in a container.
+This allows each template to be type checked a single time, rather than once for each unique instantiation, and makes it easier to generate meaningful error messages.
 ```
-// function template
-fn fib[T](n: T) -> T {
-    if n < 2 {
-        return n
-    }
-    return fib(n - 2) + fib(n - 1)
+fn mapval[A, B](f: fn(A) -> B, a: A) -> B {
+    return f(a)
+}
+fn float2int(value: float) -> int {
+    return int(value)
 }
 
-fib[int](10)
-
-// A template has no value representation. 'func' must be explicitly 
-// instantiated before it is stored in a variable.
-let fib_i = fib[int]
-fib_i(10)
-
-fib(10) // infer T = int
+// infer A = float, B = int
+let i = mapval(float2int, 1.5)
+assert(i == 1)
 
 // struct template
-struct Cls[S, T] {
+struct Object[S, T] {
     a: S
     b: T
-    f(s: S, t: T) -> T {
-        self.a = self.a + s
-        return self.b + t
-    }
-    // method template
-    g[U](u: U) -> U {
-        return u
-    }
 }
 
-let c = Cls{
+let c = Object{
     a: 123, // infer S = int
     b: 'abc', // infer T = string
 }
-let g_i = c.g[int]
-g_i(42)
-c.g(123)
+let a = c.a + 1
+let b = c.b + 'two'
 ```
 
 ### Vectors
-TODO: implement as struct template Vec[T]
 ```
-let a = Vec{1, 2, 3} // infer T = int
-assert(a[:1] == Vec {1})
-assert(a[1:-1] == Vec {2})
-assert(a[-1:] == Vec {3})
+let v = Vector{1, 2, 3} // infer T = int
+assert(v[:1] == Vector{1})
+assert(v[1:-1] == Vector{2})
+assert(v[-1:] == Vector{3})
 ```
 
 ### Maps
-TODO: implement as struct template Map[K, V]
 ```
 let m = Map{1: 'a', 2: 'b'} // infer K = int, V = string
 m[3] = 42
 m.erase(1)
+
+assert(m == Map{2: 'b'})
 
 // prints 'default'
 print(m.get(1, 'default'))
@@ -235,8 +224,8 @@ print(m.get(1, 'default'))
 
 ### Error handling
 ```
-fn divide_by_0(n: int) -> int {
-    return n / 0
+fn divide_by_0(n: int) {
+    n = n / 0
 }
 let status = try(divide_by_0, 42)
 assert(status != 0)
@@ -264,13 +253,15 @@ assert(status != 0)
 
 ## Roadmap
 + [x] static typing
++ [ ] builtin containers
 + [ ] pattern matching (`match` construct)
 + [ ] pattern matching (`let` bindings)
 + [ ] sum types/discriminated unions (`enum`)
 + [ ] product types (tuple)
-+ [ ] nested templates
++ [ ] generic constraints/bounds
 + [ ] custom garbage collector
 + [ ] associated types on `struct`s (`A::B`)
++ [ ] struct methods
 + [ ] metamethods
 + [ ] existential types
 

@@ -7,16 +7,16 @@
 #include "paw.h"
 #include "value.h"
 
-Array *pawA_new(paw_Env *P);
-void pawA_free(paw_Env *P, Array *a);
-paw_Bool pawA_equals(paw_Env *P, const Array *lhs, const Array *rhs);
-paw_Bool pawA_contains(paw_Env *P, const Array *a, Value v);
-void pawA_reserve(paw_Env *P, Array *a, size_t capacity);
-void pawA_resize(paw_Env *P, Array *a, size_t length);
-void pawA_insert(paw_Env *P, Array *a, paw_Int index, Value v);
-void pawA_push(paw_Env *P, Array *a, Value v);
-void pawA_pop(paw_Env *P, Array *a, paw_Int index);
-Array *pawA_clone(paw_Env *P, StackPtr sp, const Array *a);
+Vector *pawA_new(paw_Env *P);
+void pawA_free(paw_Env *P, Vector *a);
+paw_Bool pawA_equals(paw_Env *P, const Vector *lhs, const Vector *rhs);
+paw_Bool pawA_contains(paw_Env *P, const Vector *a, Value v);
+void pawA_reserve(paw_Env *P, Vector *a, size_t capacity);
+void pawA_resize(paw_Env *P, Vector *a, size_t length);
+void pawA_insert(paw_Env *P, Vector *a, paw_Int index, Value v);
+void pawA_push(paw_Env *P, Vector *a, Value v);
+void pawA_pop(paw_Env *P, Vector *a, paw_Int index);
+Vector *pawA_clone(paw_Env *P, StackPtr sp, const Vector *a);
 void pawA_index_error(paw_Env *P, paw_Int index, size_t length);
 
 static paw_Int pawA_abs_index(paw_Int index, size_t length)
@@ -33,19 +33,19 @@ static inline size_t pawA_check_abs(paw_Env *P, paw_Int index, size_t length)
     return cast_size(index);
 }
 
-static inline size_t pawA_length(const Array *a)
+static inline size_t pawA_length(const Vector *a)
 {
     return cast_size(a->end - a->begin);
 }
 
-static inline Value *pawA_get(paw_Env *P, Array *a, paw_Int index)
+static inline Value *pawA_get(paw_Env *P, Vector *a, paw_Int index)
 {
     const paw_Int abs = pawA_abs_index(index, cast_size(a->end - a->begin));
     const size_t i = pawA_check_abs(P, abs, pawA_length(a));
     return &a->begin[i];
 }
 
-static inline paw_Bool pawA_iter(const Array *a, paw_Int *itr)
+static inline paw_Bool pawA_iter(const Vector *a, paw_Int *itr)
 {
     return ++*itr < paw_cast_int(pawA_length(a));
 }

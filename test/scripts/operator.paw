@@ -1,30 +1,30 @@
--- operators.paw
+// operator.paw
 
 {
     let s = ''
     s = s + 'abc'
-    s = s * 3
-    assert(s == 'abcabcabc')
+    s = s + s
+    assert(s == 'abcabc')
 }
 
--- Arithmetic operator precedence:
+// Arithmetic operator precedence:
 {
-    assert(5 == 1 + 2 * 3 - 4 // 2)
+    assert(5 == 1 + 2 * 3 - 4 / 2)
     assert(8 == 1 << 2 * 2 >> 1)
     assert(-3 == 1 | ~2 ^ 3 & 4)
 
-    -- '==' and '!=' bind tighter than '&&' and '||'
+    // '==' and '!=' bind tighter than '&&' and '||'
     assert(1 == 1 && 2 == 2) 
-    assert(!(1 == (1 && 2) == 2))
 
-    -- Bitwise operators bind tighter than comparisons
+    // Bitwise operators bind tighter than comparisons
     assert(4 & 5 == 4)
-    assert(!(4 & int(5 == 4)))
+//    assert(!(4 & int(5 == 4)))
+// TODO: int() conversion
 }
 
--- Comparisons:
+// Comparisons:
 {
-    fn test_cmp(a, b) {
+    fn test_icmp(a: int, b: int) {
         assert(a == a)
         assert(a != b)
         assert(a <= a)
@@ -34,60 +34,33 @@
         assert(a < b)
         assert(b > a)
     }
+    test_icmp(1, 2)
+    test_icmp(-1, 1)
+    test_icmp(123, 124)
 
-    test_cmp(1, 2)
-    test_cmp(-1, 1)
-    test_cmp(123, 124)
-    test_cmp('a', 'b')
-    test_cmp('ab', 'abc')
-    test_cmp('abc', 'abd')
-}
-
--- Conversions:
-{
-    assert(int(true)) 
-    assert(float(true)) 
-    assert(int(1))      
-    assert(float(1))      
-    assert(int(1 << 50))
-    assert(float(1 << 50))
-}
-
-{
-    fn gencheck(op) {
-        let f = load('return fn(x, y) {return x' ++ op ++ 'y}')
-        return f() -- Generate function
+    fn test_scmp(a: string, b: string) {
+        assert(a == a)
+        assert(a != b)
+        assert(a <= a)
+        assert(a <= b)
+        assert(a >= a)
+        assert(b >= a)
+        assert(a < b)
+        assert(b > a)
     }
-    let add = gencheck('+')
-    assert(add(123, 321) == 444)
-    assert(add(123, 321.0) == 444.0)
-    assert(add(123.0, 321) == 444.0)
-    assert(add(123.0, 321.0) == 444.0)
-
-    let sub = gencheck('-')
-    assert(sub(123, 321) == -198)
-    assert(sub(123, 321.0) == -198.0)
-    assert(sub(123.0, 321) == -198.0)
-    assert(sub(123.0, 321.0) == -198.0)
-
-    let div = gencheck('/')
-    assert(div(100, 10) == 10.0)
-    assert(div(100, 10.0) == 10.0)
-    assert(div(100.0, 10) == 10.0)
-    assert(div(100.0, 10.0) == 10.0)
-
-    let idiv = gencheck('//')
-    assert(idiv(100, 10) == 10)
-    assert(idiv(100, 10.0) == 10)
-    assert(idiv(100.0, 10) == 10)
-    assert(idiv(100.0, 10.0) == 10)
-
-    let mod = gencheck('%')
-    assert(mod(100, 3) == 1)
-    assert(mod(100, 3.0) == 1.0)
-    assert(mod(100.0, 3) == 1.0)
-    assert(mod(100.0, 3.0) == 1.0)
+    test_scmp('a', 'b')
+    test_scmp('ab', 'abc')
+    test_scmp('abc', 'abd')
 }
+
+// TODO
+//// Conversions:
+//{
+//    assert(1 == int(true)) 
+//    assert(1.0 == float(true)) 
+//    assert(1 == int(1))      
+//    assert(1.0 == float(1))      
+//}
 
 {
     assert(0b0111 == (0b0110 | 0b0011))
@@ -95,30 +68,13 @@
     assert(0b0101 == (0b0110 ^ 0b0011))
 }
 
--- Null coalescing operator:
-{
-    assert(1 == (1 ?: null ?: null))
-    assert(2 == (null ?: 2 ?: null))
-    assert(3 == (null ?: null ?: 3))
-
-    assert(1 == (1 ?: null ?: 3))
-    assert(1 == (1 ?: 2 ?: null))
-    assert(2 == (null ?: 2 ?: 3))
-
-    assert(1 == (1 ?: null ?: null))
-    assert(2 == (null ?: 2 ?: null))
-    assert(3 == (null ?: null ?: 3))
-
-    assert(null == (null ?: null ?: null))
-}
-
--- Conditional expressions:
+// Conditional expressions:
 {
     assert('true' == (true ?? 'true' :: 'false'))
     assert('false' == (false ?? 'true' :: 'false'))
 
-    assert('true' == (1 + 1 + 1 ?? 'true' :: 'false'))
-    assert('false' == (0 + 0 + 0 ?? 'true' :: 'false'))
+    assert('true' == (1 + 1 + 1 == 3 ?? 'true' :: 'false'))
+    assert('false' == (0 + 0 + 0 == 3 ?? 'true' :: 'false'))
 
     assert(42 == (true ?? 40 + 2 :: 0))
     assert(0 == (false ?? 40 + 2 :: 0))
@@ -138,17 +94,7 @@
     let x = true ?? 1 :: 0
     assert(x == 1)
 
-    fn forward(a) {
-        return a 
-    }
-    fn test(a) {
-        return forward(a)? ?? 'then' :: 'else'
-    }
-    assert(test(null) == null)
-    assert(test(0) == 'else')
-    assert(test(1) == 'then')
-
-    fn test(v) {
+    fn test(v: int) -> int {
         return v == 1 ?? 10 :: 
                v == 2 ?? 20 ::
                v == 3 ?? 30 :: 40
@@ -158,462 +104,4 @@
     assert(20 == test(2))
     assert(30 == test(3))
     assert(40 == test(4))
-}
-
--- Test metamethods:
-{
-    let alt = '' -- For metamethods with no return
-    class MM {
-        __init() {self.x = ''}
-        __len() {return '__len'}
-        __neg() {return '__neg'}
-        __not() {return '__not'}
-        __bnot() {return '__bnot'}
-        __add(y) {return '__add'}
-        __sub(y) {return '__sub'}
-        __mul(y) {return '__mul'}
-        __div(y) {return '__div'}
-        __idiv(y) {return '__idiv'}
-        __mod(y) {return '__mod'}
-        __pow(y) {return '__pow'}
-        __concat(y) {return '__concat'}
-        __bxor(y) {return '__bxor'}
-        __band(y) {return '__band'}
-        __bor(y) {return '__bor'}
-        __shl(y) {return '__shl'}
-        __shr(y) {return '__shr'}
-        __eq(y) {return '__eq'}
-        __lt(y) {return '__lt'}
-        __le(y) {return '__le'}
-        __contains(x) {return '__contains'}
-        __getattr(x) {return '__getattr'}
-        __setattr(x, y) {alt = '__setattr'}
-        __getitem(x) {return '__getitem'}
-        __setitem(x, y) {alt = '__setitem'}
-        __radd(x) {return '__radd'}
-        __rsub(x) {return '__rsub'}
-        __rmul(x) {return '__rmul'}
-        __rdiv(x) {return '__rdiv'}
-        __ridiv(x) {return '__ridiv'}
-        __rmod(x) {return '__rmod'}
-        __rpow(x) {return '__rpow'}
-        __rconcat(x) {return '__rconcat'}
-        __rbxor(x) {return '__rbxor'}
-        __rband(x) {return '__rband'}
-        __rbor(x) {return '__rbor'}
-        __rshl(x) {return '__rshl'}
-        __rshr(x) {return '__rshr'}
-    }
-
-    -- Precedence helper
-    fn check(x, y) {
-        assert(x == y)
-    }
-    let v = 123
-    let mm = MM()
-
-    check(#mm, '__len')
-    check(-mm, '__neg')
-    check(!mm, '__not')
-    check(~mm, '__bnot')
-
-    check(mm + v, '__add')
-    check(mm - v, '__sub')
-    check(mm * v, '__mul')
-    check(mm / v, '__div')
-    check(mm // v, '__idiv')
-    check(mm % v, '__mod')
---     check(mm**v, '__pow')
-    check(mm ++ v, '__concat')
-    check(mm ^ v, '__bxor')
-    check(mm & v, '__band')
-    check(mm | v, '__bor')
-    check(mm << v, '__shl')
-    check(mm >> v, '__shr')
-    check(mm == v, '__eq')
-    check(mm < v, '__lt')
-    check(mm <= v, '__le')
-    check(v in mm, '__contains')
-    check(mm.attr, '__getattr')
-    check(mm[0], '__getitem')
-    check(v + mm, '__radd')
-    check(v - mm, '__rsub')
-    check(v * mm, '__rmul')
-    check(v / mm, '__rdiv')
-    check(v // mm, '__ridiv')
-    check(v % mm, '__rmod')
---    check(v**mm, '__rpow')
-    check(v ++ mm, '__rconcat')
-    check(v ^ mm, '__rbxor')
-    check(v & mm, '__rband')
-    check(v | mm, '__rbor')
-    check(v << mm, '__rshl')
-    check(v >> mm, '__rshr')
-
-    -- Assignment is not an expression, so the return value is ignored on
-    -- these 2 metamethods.
-    mm.attr = 'attr'
-    check(alt, '__setattr')
-
-    mm[0] = 'item' 
-    check(alt, '__setitem')
-    
-    -- __*item() can be called with any type of key.
-    mm['key'] = 'item' 
-    check(mm[true], '__getitem') 
-    mm[1.23] = 'item' 
-    check(mm[null], '__getitem') 
-}
-
-{
-    fn test(n) {
-        -- Use up a lot of stack
-        let a = [1, 2, 3, 4, 5, 6, 7, 8,
-                 1, 2, 3, 4, 5, 6, 7, 8,
-                 1, 2, 3, 4, 5, 6, 7, 8,
-                 1, 2, 3, 4, 5, 6, 7, 8,
-                 1, 2, 3, 4, 5, 6, 7, 8,
-                 1, 2, 3, 4, 5, 6, 7, 8,
-                 1, 2, 3, 4, 5, 6, 7, 8,
-                 1, 2, 3, 4, 5, 6, 7, 8]
-        if n > 0 {
-            test(n - 1)
-        }
-    }
-    class Meta {
-        __len() {
-            test(100)
-            return 0
-        }
-    }
-
-    -- Attempt to provoke a stack reallocation in a metamethod
-    let m = Meta()
-    assert(#m == 0)
-}
-
-{
-    class Set {
-        __init(set) {
-            let s = {}
-            for v in set {
-                s[v] = null
-            }
-            self.set = s
-        }
-
-        __add(y) {
-            let s = self.set.clone()
-            s[y] = null
-            return Set(s)
-        }
-        __radd(x) {
-            return self.__add(x)
-        }
-
-        __sub(y) {
-            let s = self.set.clone()
-            s.erase(y)
-            return Set(s)
-        }
-
-        __contains(v) {
-            return v in self.set
-        }
-    }
-
-    fn check(s, a) {
-        for v in a {
-            assert(v in s)
-        }
-        for k in s.set {
-            assert(k in a)
-        }
-    }
-
-    let s = Set([])
-    check(s, [])
-
-    s = s + 2
-    check(s, [2])
-
-    s = 1 + s
-    check(s, [1, 2])
-
-    s = s - 2 - 1
-    check(s, [])
-}
-
-{
-    -- Simulates an integer
-    class Int {
-        __init(v) {self.v = v}
-        __neg() {return Int(-self.v)}
-        __not() {return Int(~self.v)}
-        __bnot() {return Int(~self.v)}
-        __add(y) {return Int(self.v + y.v)}
-        __sub(y) {return Int(self.v - y.v)}
-        __mul(y) {return Int(self.v * y.v)}
-        __div(y) {return Int(self.v / y.v)}
-        __idiv(y) {return Int(self.v // y.v)}
-        __mod(y) {return Int(self.v % y.v)}
---        __pow(y) {return Int(self.v**y.v)}
-        __concat(y) {return Int(self.v ++ y.v)}
-        __bxor(y) {return Int(self.v ^ y.v)}
-        __band(y) {return Int(self.v & y.v)}
-        __bor(y) {return Int(self.v | y.v)}
-        __shl(y) {return Int(self.v << y.v)}
-        __shr(y) {return Int(self.v >> y.v)}
-        __eq(y) {return self.v == y.v}
-        __lt(y) {return self.v < y.v}
-        __le(y) {return self.v <= y.v}
-        __radd(x) {return Int(x.v + self.v)}
-        __rsub(x) {return Int(x.v - self.v)}
-        __rmul(x) {return Int(x.v * self.v)}
-        __rdiv(x) {return Int(x.v / self.v)}
-        __ridiv(x) {return Int(x.v // self.v)}
-        __rmod(x) {return Int(x.v % self.v)}
---        __rpow(x) {return Int(x.v**self.v)}
-        __rconcat(x) {return Int(x.v ++ self.v)}
-        __rbxor(x) {return Int(x.v ^ self.v)}
-        __rband(x) {return Int(x.v & self.v)}
-        __rbor(x) {return Int(x.v | self.v)}
-        __rshl(x) {return Int(x.v << self.v)}
-        __rshr(x) {return Int(x.v >> self.v)}
-    }
-    fn check(lhs, rhs) {
-        assert(lhs.v == rhs)
-    }
-
-    let x = Int(1)
-    let y = Int(2)
-    let z = Int(3)
-    check(x + y * z, 1 + 2 * 3)
-    check(Int(100) / x // y % z, 100 / 1 // 2 % 3)
-}
-
-{
-    class MM {__call() {return 0}}
-    let mm = MM()
-    assert(mm() == 0)
-
-    class MM {__call(x) {return x}}
-    let mm = MM()
-    assert(mm(1) == 1)
-
-    class MM {__call(x, y) {return y}}
-    let mm = MM()
-    assert(mm(1, 2) == 2)
-
-    class MM {__call(x, y, z) {return z}}
-    let mm = MM()
-    assert(mm(1, 2, 3) == 3)
-
-    class MM {__call(...) {return argv[-1]}}
-    let mm = MM()
-    assert(mm(1) == 1)
-    assert(mm(2) == 2)
-    assert(mm(3) == 3)
-
-    class MM {__call(x, ...) {return x + argv[-1]}}
-    let mm = MM()
-    assert(mm(1, 2) == 3)
-    assert(mm(1, 2, 3) == 4)
-    assert(mm(1, 2, 3, 4) == 5)
-
-    class MM {__call(x, y, ...) {return y + argv[-1]}}
-    let mm = MM()
-    assert(mm(1, 2, 3) == 5)
-    assert(mm(1, 2, 3, 4) == 6)
-    assert(mm(1, 2, 3, 4, 5) == 7)
-
-    class MM {__call(x, y, z, ...) {return z + argv[-1]}}
-    let mm = MM()
-    assert(mm(1, 2, 3, 4) == 7)
-    assert(mm(1, 2, 3, 4, 5) == 8)
-    assert(mm(1, 2, 3, 4, 5, 6) == 9)
-}
-
-{
-    class Test {
-        __init(v) {
-            self.value = v
-        }
-
-        __null() {
-            return self.value
-                ?? self 
-                :: null
-        }
-    }
-
-    fn test(v) {
-        let obj = Test(v)
-        let val = obj?.value
-        return 42
-    }
-    assert(0 == test(0).value)
-    assert(42 == test(1))
-
-    assert(1 == (Test(0) ?: 1))
-    assert(1 == (Test(1) ?: 2).value)
-}
-
--- Test iterable instance: when a class has both __len and __getitem,
--- it can be used in for...in loops.
-{
-    class Iterable {
-        __init(n) {
-            self.n = n
-        }
-        
-        __len() {
-            return self.n
-        }
-        
-        __getitem(index) {
-            return index
-        }
-    }
-
-    for i in Iterable(0) {
-        assert(false)
-    }
-
-    let scale = 25
-    for n = 0,2 {
-        let count = 0
-        let total = n * scale + 1
-        let iter = Iterable(total)
-        for value in iter {
-            assert(value == count)
-            count = count + 1
-        }
-        assert(count == total)
-    }
-}
-
--- Short-circuit evaluation:
-{
-    let state = [0, 0, 0]
-    fn setup(i) {
-        return fn(n) {
-            assert(state[i] == 0)
-            state[i] = 1
-            return n
-        }
-    }
-    fn check(a, b, c) {
-        assert(state[0] == a)
-        assert(state[1] == b)
-        assert(state[2] == c)
-        state = [0, 0, 0]
-    }
-    let f = setup(0)
-    let g = setup(1)
-    let h = setup(2)
-
-    fn test(a, b, c) {
-        return f(a) && g(b) && h(c)
-    }
-
-    assert(test(1, 1, 1));  check(1, 1, 1)
-    assert(!test(0, 1, 1)); check(1, 0, 0)
-    assert(!test(1, 0, 1)); check(1, 1, 0)
-    assert(!test(1, 1, 0)); check(1, 1, 1)
-    assert(!test(1, 0, 0)); check(1, 1, 0)
-    assert(!test(0, 1, 0)); check(1, 0, 0)
-    assert(!test(0, 0, 1)); check(1, 0, 0)
-    assert(!test(0, 0, 0)); check(1, 0, 0)
-
-    fn test(a, b, c) {
-        return f(a) || g(b) && h(c)
-    }
-
-    assert(test(1, 1, 1));  check(1, 0, 0)
-    assert(test(0, 1, 1));  check(1, 1, 1)
-    assert(test(1, 0, 1));  check(1, 0, 0)
-    assert(test(1, 1, 0));  check(1, 0, 0)
-    assert(test(1, 0, 0));  check(1, 0, 0)
-    assert(!test(0, 1, 0)); check(1, 1, 1)
-    assert(!test(0, 0, 1)); check(1, 1, 0)
-    assert(!test(0, 0, 0)); check(1, 1, 0)
-
-    fn test(a, b, c) {
-        return f(a) && g(b) || h(c)
-    }
-
-    assert(test(1, 1, 1)); check(1, 1, 0) 
-    assert(test(0, 1, 1)); check(1, 0, 1)
-    assert(test(1, 0, 1)); check(1, 1, 1)
-    assert(test(1, 1, 0)); check(1, 1, 0)
-    assert(!test(1, 0, 0)); check(1, 1, 1)
-    assert(!test(0, 1, 0)); check(1, 0, 1)
-    assert(test(0, 0, 1)); check(1, 0, 1)
-    assert(!test(0, 0, 0)); check(1, 0, 1)
-
-    fn test(a, b, c) {
-        return f(a) || g(b) || h(c)
-    }
-
-    assert(test(1, 1, 1)); check(1, 0, 0)
-    assert(test(0, 1, 1)); check(1, 1, 0)
-    assert(test(1, 0, 1)); check(1, 0, 0)
-    assert(test(1, 1, 0)); check(1, 0, 0)
-    assert(test(1, 0, 0)); check(1, 0, 0)
-    assert(test(0, 1, 0)); check(1, 1, 0)
-    assert(test(0, 0, 1)); check(1, 1, 1)
-    assert(!test(0, 0, 0)); check(1, 1, 1)
-
-    fn check(expr, answer) {
-        assert(expr == answer)
-    }
-    check(0 || 1, 1)
-    check(1 || 2, 1)
-    check(true && true, true)
-    check(true && false, false)
-    check('' && false, '')
-    check(false && '', false)
-    check(false && true, false)
-}
-
-{
-    fn test(_) {
-        fn check(answer, result) {
-            assert(answer == str(result))
-        }
-        check('b', _('a') && _('b'))
-        check('', _('a') && _(''))
-        check('',  _('')  && _('b'))
-        check('',  _('')  && _('b'))
-        check('a', _('a') || _('b'))
-        check('a', _('a') || _(''))
-        check('b', _('')  || _('b'))
-        check('', _('')   || _(''))
-
-        check('b', _('a') && _('b') || _('c'))
-        check('b', _('a') && _('b') || _(''))
-        check('c', _('a') && _('')  || _('c'))
-        check('',  _('a') && _('')  || _(''))
-        check('c', _('')  && _('b') || _('c'))
-        check('',  _('')  && _('b') || _(''))
-        check('c', _('')  && _('')  || _('c'))
-        check('',  _('')  && _('')  || _(''))
-    }
-
-    test(fn(v) {return v})
-
-    class A {
-        __init(v) {
-            self.v = v
-        }
-        __bool() {
-            -- NOTE: must return a boolean, 
-            return self.v
-        }
-        __str() {
-            return self.v
-        }
-    }
-    test(A)
 }
