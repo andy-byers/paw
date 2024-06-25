@@ -58,9 +58,9 @@ const char *pawV_to_string(paw_Env *P, Value v, paw_Type type, size_t *nout)
             break;
         case PAW_TBOOL: {
             Value v;
-            v_set_object(&v, pawE_cstr(P, v_true(v) 
-                        ? CSTR_TRUE 
-                        : CSTR_FALSE));
+            v_set_object(&v, pawE_cstr(P, v_true(v)
+                                              ? CSTR_TRUE
+                                              : CSTR_FALSE));
             pawC_pushv(P, v);
             break;
         }
@@ -85,7 +85,7 @@ static paw_Int float_to_int(paw_Env *P, paw_Float f)
 paw_Int pawV_to_int(paw_Env *P, Value v, paw_Type type)
 {
     switch (type) {
-        case PAW_TBOOL: 
+        case PAW_TBOOL:
             return v_true(v) ? 1 : 0;
         case PAW_TFLOAT:
             return float_to_int(P, v_float(v));
@@ -199,7 +199,7 @@ void pawV_unlink_upvalue(UpValue *u)
 Tuple *pawV_new_tuple(paw_Env *P, int nelems)
 {
     Tuple *t = pawM_new_flex(P, Tuple, cast_size(nelems),
-                                  sizeof(t->elems[0]));
+                             sizeof(t->elems[0]));
     pawG_add_object(P, cast_object(t), VARRAY);
     return t;
 }
@@ -252,13 +252,13 @@ void pawV_free_instance(paw_Env *P, Instance *ins, int nfields)
 
 Value *pawV_find_attr(Value *attrs, String *name, Type *type)
 {
-//    const CompositeType *cls = &type->cls;
-//    for (int i = 0; i < cls->nattrs; ++i) {
-//        NamedField *a = &cls->attrs[i];
-//        if (pawS_eq(a->name, name)) {
-//            return &attrs[i];
-//        }
-//    }
+    //    const CompositeType *cls = &type->cls;
+    //    for (int i = 0; i < cls->nattrs; ++i) {
+    //        NamedField *a = &cls->attrs[i];
+    //        if (pawS_eq(a->name, name)) {
+    //            return &attrs[i];
+    //        }
+    //    }
     return NULL;
 }
 
@@ -330,10 +330,10 @@ paw_Bool pawV_truthy(Value v, paw_Type type)
             return v_float(v) != 0.0;
         case PAW_TSTRING:
             return pawS_length(v_string(v)) > 0;
-//        case PAW_TARRAY:
-//            return pawA_length(v_vector(v)) > 0;
-//        case PAW_TMAP:
-//            return pawH_length(v_map(v)) > 0;
+            //        case PAW_TARRAY:
+            //            return pawA_length(v_vector(v)) > 0;
+            //        case PAW_TMAP:
+            //            return pawH_length(v_map(v)) > 0;
         default:
             return PAW_FALSE;
     }
@@ -371,12 +371,12 @@ void pawV_set_default(paw_Env *P, Value *pv, paw_Type type)
         case PAW_TSTRING:
             v_set_object(pv, pawS_new_str(P, ""));
             break;
-//        case PAW_TARRAY:
-//            v_set_object(pv, pawA_new(P));
-//            break;
-//        case PAW_TMAP:
-//            v_set_object(pv, pawH_new(P));
-//            break;
+            //        case PAW_TARRAY:
+            //            v_set_object(pv, pawA_new(P));
+            //            break;
+            //        case PAW_TMAP:
+            //            v_set_object(pv, pawH_new(P));
+            //            break;
         default:
             v_set_object(pv, NULL);
     }
@@ -389,12 +389,12 @@ paw_Int pawV_length(Value v, paw_Type type)
         case PAW_TSTRING:
             len = pawS_length(v_string(v));
             break;
-//        case PAW_TARRAY:
-//            len = pawA_length(v_vector(v));
-//            break;
-//        case PAW_TMAP:
-//            len = pawH_length(v_map(v));
-//            break;
+            //        case PAW_TARRAY:
+            //            len = pawA_length(v_vector(v));
+            //            break;
+            //        case PAW_TMAP:
+            //            len = pawH_length(v_map(v));
+            //            break;
         default:
             len = 0;
     }
@@ -459,7 +459,7 @@ int pawV_parse_integer(paw_Env *P, const char *text)
             paw_assert(0);
             // Integer is too large: parse it as a BigInt. Throws an error on
             // allocation failure.
-//            return pawB_parse(P, text, base);
+            //            return pawB_parse(P, text, base);
         }
         value = value * base + v;
     }
@@ -648,9 +648,9 @@ static paw_Bool elems_equal(paw_Env *P, Value x, Value y)
     p[1] = x;
 
     // TODO: Need the type of value
-//    // Arrays can contain any type of value. Call pawR_binop() to check
-//    // metamethods on objects.
-//    pawR_binop(P, BINARY_EQ);
+    //    // Arrays can contain any type of value. Call pawR_binop() to check
+    //    // metamethods on objects.
+    //    pawR_binop(P, BINARY_EQ);
 
     const paw_Bool b = paw_bool(P, -1);
     paw_pop(P, 1);

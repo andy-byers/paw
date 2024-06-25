@@ -49,20 +49,20 @@ int pawR_string_starts_with(paw_Env *P);
 int pawR_string_ends_with(paw_Env *P);
 int pawR_string_clone(paw_Env *P);
 
-//static inline paw_Int pawR_check_int(paw_Env *P, Value v)
+// static inline paw_Int pawR_check_int(paw_Env *P, Value v)
 //{
-//    if (pawV_is_int(v)) {
-//        return v_int(v);
-//    } else if (!pawV_is_bigint(v)) {
-//        pawR_error(P, PAW_ETYPE, "expected integer");
-//    }
-//    paw_Bool lossless;
-//    const paw_Int ival = pawV_to_int64(v, &lossless);
-//    if (!lossless) {
-//        pawR_error(P, PAW_EOVERFLOW, "integer is too large");
-//    }
-//    return ival;
-//}
+//     if (pawV_is_int(v)) {
+//         return v_int(v);
+//     } else if (!pawV_is_bigint(v)) {
+//         pawR_error(P, PAW_ETYPE, "expected integer");
+//     }
+//     paw_Bool lossless;
+//     const paw_Int ival = pawV_to_int64(v, &lossless);
+//     if (!lossless) {
+//         pawR_error(P, PAW_EOVERFLOW, "integer is too large");
+//     }
+//     return ival;
+// }
 
 static inline void pawR_check_argc(paw_Env *P, int argc, int expect)
 {

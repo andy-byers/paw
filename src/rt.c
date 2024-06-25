@@ -3,7 +3,6 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "prefix.h"
 
-#include "vector.h"
 #include "auxlib.h"
 #include "call.h"
 #include "env.h"
@@ -20,6 +19,7 @@
 #include "type.h"
 #include "util.h"
 #include "value.h"
+#include "vector.h"
 #include <assert.h>
 #include <math.h>
 #include <stdarg.h>
@@ -50,7 +50,7 @@
 #define vm_argc() (paw_get_count(P) - 1)
 
 // Generate code for creating common builtin objects
-// Requires a placeholder slot (the vm_push0() pushes an empty slot) so 
+// Requires a placeholder slot (the vm_push0() pushes an empty slot) so
 // the GC doesn't get confused. Both the vm_push0(), and the pawA_new calls
 // might fail and cause an error to be thrown, so we have to be careful not
 // to leave a junk value on top of the stack.
@@ -144,11 +144,11 @@ void pawR_error(paw_Env *P, int error, const char *fmt, ...)
 
 // Convert a paw_Float to a paw_Int (from Lua)
 // Assumes 2's complement, which means PAW_INT_MIN is a power-of-2 with
-// an exact paw_Float representation. 
-#define float2int_aux(f, pv) \
-     ((f) >= (paw_Float)(PAW_INT_MIN) && \
-      (f) < -(paw_Float)(PAW_INT_MIN) && \
-      (v_set_int(pv, paw_cast_int(f)), 1))
+// an exact paw_Float representation.
+#define float2int_aux(f, pv)            \
+    ((f) >= (paw_Float)(PAW_INT_MIN) && \
+     (f) < -(paw_Float)(PAW_INT_MIN) && \
+     (v_set_int(pv, paw_cast_int(f)), 1))
 
 static void float2int(paw_Env *P, paw_Float f, Value *pv)
 {
@@ -221,7 +221,7 @@ void pawR_to_int(paw_Env *P, paw_Type type)
         }
         if (neg) {
             sp = vm_peek(0); // new top
-            const paw_Int i = v_int (*sp);
+            const paw_Int i = v_int(*sp);
             if (i == PAW_INT_MIN) {
                 pawR_error(P, PAW_EOVERFLOW, "%I has no positive representation", i);
             }
@@ -262,18 +262,18 @@ const char *pawR_to_string(paw_Env *P, paw_Type type, size_t *plen)
     return out;
 }
 
-//static Value *find_attr(paw_Env *P, Value obj, Value name)
+// static Value *find_attr(paw_Env *P, Value obj, Value name)
 //{
-//    Map *attr = NULL;
-//    if (t_is_instance(obj)) {
-//        attr = v_instance(obj)->attr;
-//    } else if (t_is_foreign(obj)) {
-//        attr = v_foreign(obj)->attr;
-//    } else {
-//        return NULL;
-//    }
-//    return pawH_get(P, attr, name);
-//}
+//     Map *attr = NULL;
+//     if (t_is_instance(obj)) {
+//         attr = v_instance(obj)->attr;
+//     } else if (t_is_foreign(obj)) {
+//         attr = v_foreign(obj)->attr;
+//     } else {
+//         return NULL;
+//     }
+//     return pawH_get(P, attr, name);
+// }
 
 void pawR_read_global(paw_Env *P, int g)
 {
@@ -392,50 +392,50 @@ static paw_Bool fornum(paw_Env *P)
 
 static paw_Bool forin_init(paw_Env *P, paw_Type t)
 {
-//    const Value v = *vm_peek(0);
-//    paw_Int itr = PAW_ITER_INIT;
-//    if (t == PAW_TVECTOR) {
-//        Vector *arr = v_vector(v);
-//        if (pawA_iter(arr, &itr)) {
-//            vm_pushi(itr);
-//            vm_pushv(arr->begin[itr]);
-//            return PAW_FALSE;
-//        }
-//    } else {
-////        paw_assert(t == PAW_TMAP);
-////        Map *map = v_map(v);
-////        if (pawH_iter(map, &itr)) {
-////            vm_pushi(itr);
-////            vm_pushv(map->keys[itr]);
-////            return PAW_FALSE;
-////        }
-//    }
-//    return PAW_TRUE;
+    //    const Value v = *vm_peek(0);
+    //    paw_Int itr = PAW_ITER_INIT;
+    //    if (t == PAW_TVECTOR) {
+    //        Vector *arr = v_vector(v);
+    //        if (pawA_iter(arr, &itr)) {
+    //            vm_pushi(itr);
+    //            vm_pushv(arr->begin[itr]);
+    //            return PAW_FALSE;
+    //        }
+    //    } else {
+    ////        paw_assert(t == PAW_TMAP);
+    ////        Map *map = v_map(v);
+    ////        if (pawH_iter(map, &itr)) {
+    ////            vm_pushi(itr);
+    ////            vm_pushv(map->keys[itr]);
+    ////            return PAW_FALSE;
+    ////        }
+    //    }
+    //    return PAW_TRUE;
 }
 
 static paw_Bool forin(paw_Env *P, paw_Type t)
 {
-//    const Value obj = *vm_peek(1);
-//    const Value itr = *vm_peek(0);
-//    if (t == PAW_TVECTOR) {
-//        Vector *arr = v_vector(obj);
-//        paw_Int i = v_int(itr);
-//        if (pawA_iter(arr, &i)) {
-//            v_set_int(vm_peek(0), i);
-//            vm_pushv(arr->begin[i]);
-//            return PAW_TRUE;
-//        }
-//    } else {
-////        paw_assert(t == PAW_TMAP);
-////        Map *map = v_map(obj);
-////        paw_Int i = v_int(itr);
-////        if (pawH_iter(map, &i)) {
-////            v_set_int(vm_peek(0), i);
-////            vm_pushv(map->keys[i]);
-////            return PAW_TRUE;
-////        }
-//    }
-//    return PAW_FALSE; // stop the loop
+    //    const Value obj = *vm_peek(1);
+    //    const Value itr = *vm_peek(0);
+    //    if (t == PAW_TVECTOR) {
+    //        Vector *arr = v_vector(obj);
+    //        paw_Int i = v_int(itr);
+    //        if (pawA_iter(arr, &i)) {
+    //            v_set_int(vm_peek(0), i);
+    //            vm_pushv(arr->begin[i]);
+    //            return PAW_TRUE;
+    //        }
+    //    } else {
+    ////        paw_assert(t == PAW_TMAP);
+    ////        Map *map = v_map(obj);
+    ////        paw_Int i = v_int(itr);
+    ////        if (pawH_iter(map, &i)) {
+    ////            v_set_int(vm_peek(0), i);
+    ////            vm_pushv(map->keys[i]);
+    ////            return PAW_TRUE;
+    ////        }
+    //    }
+    //    return PAW_FALSE; // stop the loop
 }
 
 #define finish_strcmp(x, y, op) (pawS_cmp(x, y) op 0)
@@ -496,7 +496,7 @@ static void eq_ne(paw_Env *P, BinaryOp binop, paw_Type t, Value x, Value y)
 
 // Generate code for int operators
 // Casts to unsigned to avoid UB (signed integer overflow). Negative
-// numbers 'just work' on processors using 2's complement integers. 
+// numbers 'just work' on processors using 2's complement integers.
 #define i_unop(a, op) u2i(op i2u(a))
 #define i_binop(a, b, op) u2i(i2u(a) op i2u(b))
 
@@ -694,7 +694,7 @@ static void other_unop(paw_Env *P, UnaryOp unop, paw_Type t, Value x)
 static void unop_aux(paw_Env *P, UnaryOp unop, paw_Type t, Value x)
 {
     if (t == PAW_TINT) {
-        int_unop(P, unop, v_int(x)); 
+        int_unop(P, unop, v_int(x));
     } else if (t == PAW_TFLOAT) {
         float_unop(P, unop, v_float(x));
     } else {
@@ -794,7 +794,7 @@ void pawR_literal_map(paw_Env *P, int n)
 }
 
 // TODO: 'null' -> Option[T]::None
-//static paw_Bool should_jump_null(paw_Env *P)
+// static paw_Bool should_jump_null(paw_Env *P)
 //{
 //    const Value *pv = vm_peek(0);
 ////    if (meta_single(P, MM_NULL, *pv)) {
@@ -1045,39 +1045,17 @@ top:
                 goto top;
             }
 
-//            vm_case(VARARG) :
-//            {
-//                vm_protect();
-//                // must be run immediately after OP_CALL
-//                const int nexpect = get_U(opcode);
-//                const int nactual = vm_argc();
-//                const int nextra = nactual - nexpect;
-//                Value *pv;
-//                Vector *argv;
-//                vm_vector_init(argv, pv);
-//                if (nextra) {
-//                    pawA_resize(P, argv, cast_size(nextra));
-//                    StackPtr argv0 = cf->base.p + 1 + nexpect;
-//                    for (int i = 0; i < nextra; ++i) {
-//                        argv->begin[i] = argv0[i];
-//                    }
-//                    // replace first variadic parameter with 'argv' vector
-//                    vm_shift(nextra);
-//                }
-//                check_gc(P);
-//            }
-//
             vm_case(JUMP) :
             {
                 pc += get_S(opcode);
             }
 
-    //        vm_case(JUMPNULL) :
-    //        {
-    //            if (should_jump_null(P)) {
-    //                pc += get_S(opcode);
-    //            }
-    //        }
+            //        vm_case(JUMPNULL) :
+            //        {
+            //            if (should_jump_null(P)) {
+            //                pc += get_S(opcode);
+            //            }
+            //        }
 
             vm_case(JUMPFALSE) :
             {

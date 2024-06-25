@@ -2,14 +2,10 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 //
-// type.h: Type system for paw
+// type.h: Runtime type information for paw programs
 //
-// Structures in this file are created during the second pass, used for type
-// checking, and then stored for RTTI purposes. Each type is represented by a 
-// unique Type structure in its containing Module. 
-//
-// TODO: I think it would be better to keep this stuff in the AST module and
-//       build yet another representation for RTTI.
+// Structures in this file are created during the codegen pass and stored for
+// use in error messages and RTTI queries.
 #ifndef PAW_TYPE_H
 #define PAW_TYPE_H
 
@@ -21,17 +17,15 @@ typedef struct Type Type;
 typedef uint16_t DefId;
 
 typedef enum TypeKind { // type->...
-    TYPE_BASIC, // hdr
     TYPE_GENERIC, // generic
-    TYPE_UNKNOWN, // unknown
     TYPE_ADT, // adt
-    TYPE_FUNC, // func
-    TYPE_MODULE,  // mod
+    TYPE_FUNC_SIG, // func
+    TYPE_MODULE, // mod
 } TypeKind;
 
 #define TYPE_HEADER \
-    DefId def;        \
-    TypeKind kind: 8
+    DefId def;      \
+    TypeKind kind : 8
 typedef struct TypeHeader {
     TYPE_HEADER;
 } TypeHeader;
@@ -42,36 +36,22 @@ typedef struct Generic {
     String *name;
 } Generic;
 
-// Represents a type that is in the process of being inferred
-typedef struct Unknown {
-    TYPE_HEADER;
-    int index;
-} Unknown;
-
 typedef struct Binder {
     Type **types;
     int count;
 } Binder;
 
-#define POLY_HDR TYPE_HEADER; \
-                 Binder types; \
-                 DefId base
-typedef struct PolyHdr {
-    POLY_HDR;
-} PolyHdr;
-
 // Represents a function signature
-// Note that the type variables for a function signature do not participate in
-// unification (they are not part of the function type).
 typedef struct FuncSig {
-    POLY_HDR; // common initial sequence
+    TYPE_HEADER; // common initial sequence
     Binder params; // parameter types
     Type *return_; // return type
 } FuncSig;
 
 // Represents a structure or enumeration type
 typedef struct Adt {
-    POLY_HDR; // common initial sequence
+    TYPE_HEADER; // common initial sequence
+    Binder types;
 } Adt;
 
 // Represents the type of a Paw module
@@ -89,9 +69,7 @@ typedef struct Module {
 struct Type {
     union {
         TypeHeader hdr;
-        PolyHdr poly;
         Generic generic;
-        Unknown unknown;
         Adt adt;
         FuncSig func;
         Module mod;
@@ -110,32 +88,8 @@ struct Type {
 
 #define y_is_basic(t) (y_kind(t) == TYPE_BASIC)
 #define y_is_generic(t) (y_kind(t) == TYPE_GENERIC)
-#define y_is_unknown(t) (y_kind(t) == TYPE_UNKNOWN)
 #define y_is_adt(t) (y_kind(t) == TYPE_ADT)
 #define y_is_func(t) (y_kind(t) == TYPE_FUNC)
 #define y_is_module(t) (y_kind(t) == TYPE_MODULE)
-
-void pawY_init(paw_Env *P);
-void pawY_uninit(paw_Env *P);
-Module *pawY_module_new(paw_Env *P);
-void pawY_module_free(paw_Env *P, Module *mod);
-Type *pawY_type_new(paw_Env *P, Module *mod);
-
-typedef struct TypeFolder TypeFolder;
-
-struct TypeFolder {
-    void *state;
-
-    Type *(*fold)(TypeFolder *F, Type *type);
-    Type *(*fold_basic)(TypeFolder *F, TypeHeader *t);
-    Type *(*fold_func)(TypeFolder *F, FuncSig *t);
-    Type *(*fold_adt)(TypeFolder *F, Adt *t);
-    Type *(*fold_unknown)(TypeFolder *F, Unknown *t);
-    Type *(*fold_generic)(TypeFolder *F, Generic *t);
-    void (*fold_binder)(TypeFolder *F, Binder *binder);
-};
-
-void pawY_folder_init(TypeFolder *F, void *state);
-Type *pawY_fold(TypeFolder *F, Type *type);
 
 #endif // PAW_TYPE_H

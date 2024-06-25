@@ -12,6 +12,8 @@
 typedef struct Ast Ast;
 typedef struct AstVisitor AstVisitor;
 typedef struct AstFolder AstFolder;
+typedef struct AstTypeFolder AstTypeFolder;
+typedef struct AstType AstType;
 typedef struct AstDecl AstDecl;
 typedef struct AstExpr AstExpr;
 typedef struct AstStmt AstStmt;
@@ -22,15 +24,15 @@ typedef struct Block Block;
 // During the type checking pass, a Symbol is created for each declaration that is
 // encountered. When an identifier is referenced, it is looked up in the list of
 // symbol tables representing the enclosing scopes (as well as the global symbol
-// table). 
+// table).
 //
-// The symbol table is used for all symbols, but not every symbol will end up on the 
+// The symbol table is used for all symbols, but not every symbol will end up on the
 // stack. In particular, symbols with 'is_type' equal to 1 will not get a stack slot.
 typedef struct Symbol {
-    paw_Bool is_init: 1;
-    paw_Bool is_type: 1;
-    paw_Bool is_const: 1;
-    paw_Bool is_generic: 1;
+    paw_Bool is_init : 1;
+    paw_Bool is_type : 1;
+    paw_Bool is_const : 1;
+    paw_Bool is_generic : 1;
     String *name; // name of the symbol
     AstDecl *decl; // corresponding declaration
 } Symbol;
@@ -53,20 +55,110 @@ typedef struct VarInfo {
 //    Node containers
 //****************************************************************
 
-typedef struct AstDeclList {
-    AstDecl *first;
+typedef struct AstList {
+    struct AstList *prev;
     int count;
-} AstDeclList;
+    int alloc;
+    void *data[];
+} AstList;
 
-typedef struct AstExprList {
-    AstExpr *first;
-    int count;
-} AstExprList;
+AstList *pawA_list_new(Ast *ast);
+void pawA_list_free(Ast *ast, AstList *list);
+void pawA_list_push(Ast *ast, AstList **plist, void *node);
 
-typedef struct AstStmtList {
-    AstStmt *first;
-    int count;
-} AstStmtList;
+//****************************************************************
+//    Types
+//****************************************************************
+
+typedef enum AstTypeKind { // type->...
+    AST_TYPE_BASIC, // hdr
+    AST_TYPE_GENERIC, // generic
+    AST_TYPE_UNKNOWN, // unknown
+    AST_TYPE_ADT, // adt
+    AST_TYPE_FUNC, // func
+    AST_TYPE_MODULE, // mod
+} AstTypeKind;
+
+#define AST_TYPE_HEADER \
+    DefId def;          \
+    AstTypeKind kind : 8
+typedef struct AstTypeHeader {
+    AST_TYPE_HEADER;
+} AstTypeHeader;
+
+// Represents a generic type parameter
+typedef struct AstGeneric {
+    AST_TYPE_HEADER;
+    String *name;
+} AstGeneric;
+
+// Represents a type that is in the process of being inferred
+typedef struct AstUnknown {
+    AST_TYPE_HEADER;
+    int index;
+} AstUnknown;
+
+#define AST_POLY_HDR \
+    AST_TYPE_HEADER; \
+    AstList *types;  \
+    DefId base
+typedef struct AstPolyHdr {
+    AST_POLY_HDR;
+} AstPolyHdr;
+
+// Represents a function signature
+// Note that the type variables for a function signature do not participate in
+// unification (they are not part of the function type).
+typedef struct AstFuncSig {
+    AST_POLY_HDR; // common initial sequence
+    AstList *params; // parameter types
+    AstType *return_; // return type
+} AstFuncSig;
+
+// Represents a structure or enumeration type
+typedef struct AstAdt {
+    AST_POLY_HDR; // common initial sequence
+} AstAdt;
+
+// Represents the type of a Paw module
+// Note that basic types ('int', 'float', etc.) are created only once, at the
+// start of the root module's type vector. Included modules reference these
+// AstType objects in the root.
+typedef struct AstModule {
+    AST_TYPE_HEADER; // common initial sequence
+    struct AstModule *includes; // included modules
+    AstType **types;
+    int ntypes;
+    int capacity;
+} AstModule;
+
+struct AstType {
+    union {
+        AstTypeHeader hdr;
+        AstPolyHdr poly;
+        AstGeneric generic;
+        AstUnknown unknown;
+        AstAdt adt;
+        AstFuncSig func;
+        AstModule mod;
+    };
+};
+
+#define a_cast_type(x) ((AstType *)(x))
+#define a_type_code(t) ((t)->hdr.def)
+
+#define a_is_unit(t) (a_is_basic(t) && a_type_code(t) == PAW_TUNIT)
+#define a_is_bool(t) (a_is_basic(t) && a_type_code(t) == PAW_TBOOL)
+#define a_is_int(t) (a_is_basic(t) && a_type_code(t) == PAW_TINT)
+#define a_is_float(t) (a_is_basic(t) && a_type_code(t) == PAW_TFLOAT)
+#define a_is_string(t) (a_is_basic(t) && a_type_code(t) == PAW_TSTRING)
+
+#define a_is_basic(t) (a_kind(t) == AST_TYPE_BASIC)
+#define a_is_generic(t) (a_kind(t) == AST_TYPE_GENERIC)
+#define a_is_unknown(t) (a_kind(t) == AST_TYPE_UNKNOWN)
+#define a_is_adt(t) (a_kind(t) == AST_TYPE_ADT)
+#define a_is_func(t) (a_kind(t) == AST_TYPE_FUNC)
+#define a_is_module(t) (a_kind(t) == AST_TYPE_MODULE)
 
 //****************************************************************
 //    Declarations
@@ -83,20 +175,20 @@ typedef enum AstDeclKind {
 } AstDeclKind;
 
 #define DECL_HEADER       \
-    Type *type;           \
+    AstType *type;        \
     struct AstDecl *next; \
     String *name;         \
     int line;             \
     DefId def;            \
-    AstDeclKind kind: 8
+    AstDeclKind kind : 8
 typedef struct AstDeclHeader {
     DECL_HEADER; // common initial sequence
 } AstDeclHeader;
 
 typedef struct VarDecl {
     DECL_HEADER; // common initial sequence
-    paw_Bool is_global: 1; // uses 'global' keyword
-    paw_Bool is_const: 1; // uses 'const' keyword
+    paw_Bool is_global : 1; // uses 'global' keyword
+    paw_Bool is_const : 1; // uses 'const' keyword
     AstExpr *tag; // type annotation
     AstExpr *init; // initial value
 } VarDecl;
@@ -106,30 +198,32 @@ typedef struct VarDecl {
 typedef struct TypeDecl {
     DECL_HEADER; // common initial sequence
     AstExpr *rhs; // type right of '='
-    AstDeclList *generics;
+    AstList *generics;
 } TypeDecl;
 
 typedef struct FuncDecl {
     DECL_HEADER; // common initial sequence
-    paw_Bool is_global: 1; // 1 for global functions, 0 otherwise
-    FuncKind fn_kind: 7; // kind of function (free function, module, etc.)
+    paw_Bool is_global : 1; // 1 for global functions, 0 otherwise
+    FuncKind fn_kind : 7; // kind of function (free function, module, etc.)
     AstDecl *receiver; // pointer to receiver (StructDecl)
     Scope *scope; // function-scoped symbols, including generics
-    AstDeclList *generics; // generic type parameters (FieldDecl)
-    AstDeclList *params; // parameter declarations
+    AstList *generics; // generic type parameters (FieldDecl)
+    AstList *params; // parameter declarations
     AstExpr *return_; // return type
     Block *body; // function body
+    AstList *monos; // list of monomorphizations
 } FuncDecl;
 
 // TODO: Need to prevent recursive structures, or introduce the concept of indirection (otherwise, structs that
 //       contain an instance of themselves as a field will become infinitely large)...
 typedef struct StructDecl {
     DECL_HEADER; // common initial sequence
-    paw_Bool is_global: 1; // uses 'global' keyword
+    paw_Bool is_global : 1; // uses 'global' keyword
     Scope *scope; // scope for struct-level symbols
     Scope *field_scope;
-    AstDeclList *fields; // list of FieldDecl
-    AstDeclList *generics; // generic type parameters (GenericDecl)
+    AstList *fields; // list of FieldDecl
+    AstList *generics; // generic type parameters (GenericDecl)
+    AstList *monos; // list of monomorphizations
 } StructDecl;
 
 // Represents a template instance
@@ -137,13 +231,13 @@ typedef struct StructDecl {
 // being visited. For function templates, this node just stores the type of
 // instantiated function for checking recursive calls. For structure
 // templates, this node holds the type of each field, since fields have no
-// direct representation in the type system (type system is 'nominal'). 
+// direct representation in the type system (type system is 'nominal').
 typedef struct InstanceDecl {
     DECL_HEADER; // common initial sequence
-    Scope *scope; // scope for concrete types                
+    Scope *scope; // scope for concrete types
     Scope *field_scope; // scope for fields
-    AstDeclList *types; // list of GenericDecl
-    AstDeclList *fields; // list of FieldDecl
+    AstList *types; // list of GenericDecl
+    AstList *fields; // list of FieldDecl
 } InstanceDecl;
 
 // Represents a generic type parameter
@@ -196,10 +290,10 @@ typedef enum AstExprKind {
     EXPR_TYPE_NAME,
 } AstExprKind;
 
-#define EXPR_HEADER      \
-    int line;            \
-    AstExprKind kind: 8; \
-    Type *type;          \
+#define EXPR_HEADER       \
+    int line;             \
+    AstExprKind kind : 8; \
+    AstType *type;        \
     struct AstExpr *next
 typedef struct AstExprHeader {
     EXPR_HEADER;
@@ -219,16 +313,16 @@ typedef struct BasicLit {
 } BasicLit;
 
 typedef struct ArrayLit {
-    AstExprList *elems;
+    AstList *elems;
 } ArrayLit;
 
 typedef struct TupleLit {
-    AstExprList *elems;
+    AstList *elems;
 } TupleLit;
 
 typedef struct CompositeLit {
     AstExpr *target;
-    AstExprList *items;
+    AstList *items;
 } CompositeLit;
 
 typedef struct LiteralExpr {
@@ -254,15 +348,15 @@ typedef struct ItemExpr {
     AstExpr *value;
 } ItemExpr;
 
-typedef struct UnOpExpr { 
-    EXPR_HEADER; 
-    UnaryOp op: 8;
-    AstExpr *target; 
+typedef struct UnOpExpr {
+    EXPR_HEADER;
+    UnaryOp op : 8;
+    AstExpr *target;
 } UnOpExpr;
 
 typedef struct BinOpExpr {
     EXPR_HEADER;
-    BinaryOp op: 8;
+    BinaryOp op : 8;
     AstExpr *lhs;
     AstExpr *rhs;
 } BinOpExpr;
@@ -276,13 +370,14 @@ typedef struct CondExpr {
 
 typedef struct LogicalExpr {
     EXPR_HEADER;
-    paw_Bool is_and: 1;
+    paw_Bool is_and : 1;
     AstExpr *lhs;
     AstExpr *rhs;
 } LogicalExpr;
 
-#define SUFFIXED_HEADER EXPR_HEADER; \
-                        AstExpr *target
+#define SUFFIXED_HEADER \
+    EXPR_HEADER;        \
+    AstExpr *target
 typedef struct SuffixedExpr {
     SUFFIXED_HEADER;
 } SuffixedExpr;
@@ -293,8 +388,8 @@ typedef struct ChainExpr {
 
 typedef struct CallExpr {
     SUFFIXED_HEADER;
-    Type *func;
-    AstExprList *args;
+    AstType *func;
+    AstList *args;
 } CallExpr;
 
 typedef struct Selector {
@@ -309,20 +404,20 @@ typedef struct Access {
 
 typedef struct Index {
     SUFFIXED_HEADER; // common fields
-    AstExprList *elems; // list of elements
+    AstList *elems; // list of elements
 } Index;
 
 // A valid TypeName is related to a AstDecl through the symbol table.
 typedef struct TypeName {
     EXPR_HEADER; // common initial sequence
     String *name; // name of the struct or enum
-    AstExprList *args;
+    AstList *args;
 } TypeName;
 
 typedef struct FuncType {
     EXPR_HEADER; // common initial sequence
     AstExpr *return_; // return type annotation
-    AstExprList *params; // parameter types
+    AstList *params; // parameter types
 } FuncType;
 
 typedef struct AstExpr {
@@ -363,9 +458,9 @@ typedef enum AstStmtKind {
     STMT_RETURN,
 } AstStmtKind;
 
-#define STMT_HEADER   \
-    int line;         \
-    AstStmtKind kind: 8; \
+#define STMT_HEADER       \
+    int line;             \
+    AstStmtKind kind : 8; \
     struct AstStmt *next
 typedef struct AstStmtHeader {
     STMT_HEADER;
@@ -384,8 +479,8 @@ typedef struct AstExprStmt {
 
 typedef struct Block {
     STMT_HEADER;
-    Scope *scope; // scope for block 
-    AstStmtList *stmts;
+    Scope *scope; // scope for block
+    AstList *stmts;
 } Block;
 
 typedef struct ReturnStmt {
@@ -420,7 +515,7 @@ typedef struct ForNum {
     AstExpr *begin;
     AstExpr *end;
     AstExpr *step;
-} ForNum; 
+} ForNum;
 
 typedef struct ForStmt {
     STMT_HEADER;
@@ -429,7 +524,7 @@ typedef struct ForStmt {
     Block *block; // body of loop
     union {
         ForIn forin;
-        ForNum fornum; 
+        ForNum fornum;
     };
 } ForStmt;
 
@@ -471,9 +566,9 @@ struct AstVisitor {
     AstStmtPass visit_stmt;
     AstDeclPass visit_decl;
 
-    void (*visit_expr_list)(AstVisitor *V, AstExprList *list, AstExprPass cb);
-    void (*visit_decl_list)(AstVisitor *V, AstDeclList *list, AstDeclPass cb);
-    void (*visit_stmt_list)(AstVisitor *V, AstStmtList *list, AstStmtPass cb);
+    void (*visit_expr_list)(AstVisitor *V, AstList *list, AstExprPass cb);
+    void (*visit_decl_list)(AstVisitor *V, AstList *list, AstDeclPass cb);
+    void (*visit_stmt_list)(AstVisitor *V, AstList *list, AstStmtPass cb);
 
     void (*visit_literal_expr)(AstVisitor *V, LiteralExpr *e);
     void (*visit_logical_expr)(AstVisitor *V, LogicalExpr *e);
@@ -508,14 +603,6 @@ struct AstVisitor {
     void (*visit_generic_decl)(AstVisitor *V, GenericDecl *d);
     void (*visit_type_decl)(AstVisitor *V, TypeDecl *d);
     void (*visit_instance_decl)(AstVisitor *V, InstanceDecl *d);
-
-    void *(*visit_type)(AstVisitor *V, Type *type);
-    void *(*visit_basic_type)(AstVisitor *V, TypeHeader *t);
-    void *(*visit_func_type)(AstVisitor *V, FuncSig *t);
-    void *(*visit_adt)(AstVisitor *V, Adt *t);
-    void *(*visit_unknown_type)(AstVisitor *V, Unknown *t);
-    void *(*visit_generic_type)(AstVisitor *V, Generic *t);
-    void (*visit_binder)(AstVisitor *V, Binder *binder);
 };
 
 void pawA_visitor_init(AstVisitor *V, Ast *ast, AstState state);
@@ -534,9 +621,9 @@ struct AstFolder {
     AstStmtFold fold_stmt;
     AstDeclFold fold_decl;
 
-    void (*fold_expr_list)(AstFolder *F, AstExprList *list, AstExprFold cb);
-    void (*fold_decl_list)(AstFolder *F, AstDeclList *list, AstDeclFold cb);
-    void (*fold_stmt_list)(AstFolder *F, AstStmtList *list, AstStmtFold cb);
+    void (*fold_expr_list)(AstFolder *F, AstList *list, AstExprFold cb);
+    void (*fold_decl_list)(AstFolder *F, AstList *list, AstDeclFold cb);
+    void (*fold_stmt_list)(AstFolder *F, AstList *list, AstStmtFold cb);
 
     AstExpr *(*fold_literal_expr)(AstFolder *F, LiteralExpr *e);
     AstExpr *(*fold_logical_expr)(AstFolder *F, LogicalExpr *e);
@@ -570,24 +657,35 @@ struct AstFolder {
     AstDecl *(*fold_generic_decl)(AstFolder *F, GenericDecl *d);
     AstDecl *(*fold_type_decl)(AstFolder *F, TypeDecl *d);
     AstDecl *(*fold_instance_decl)(AstFolder *F, InstanceDecl *d);
-
-    Type *(*fold_type)(AstFolder *F, Type *type);
-    Type *(*fold_basic_type)(AstFolder *F, TypeHeader *t);
-    Type *(*fold_func_type)(AstFolder *F, FuncSig *t);
-    Type *(*fold_adt)(AstFolder *F, Adt *t);
-    Type *(*fold_unknown_type)(AstFolder *F, Unknown *t);
-    Type *(*fold_generic_type)(AstFolder *F, Generic *t);
-    Binder (*fold_binder)(AstFolder *F, Binder *binder);
 };
 
 void pawA_folder_init(AstFolder *F, Ast *ast, AstState state);
 void pawA_fold(AstFolder *F);
 
+struct AstTypeFolder {
+    void *state;
+
+    AstType *(*fold)(AstTypeFolder *F, AstType *type);
+    AstType *(*fold_basic)(AstTypeFolder *F, AstTypeHeader *t);
+    AstType *(*fold_func)(AstTypeFolder *F, AstFuncSig *t);
+    AstType *(*fold_adt)(AstTypeFolder *F, AstAdt *t);
+    AstType *(*fold_unknown)(AstTypeFolder *F, AstUnknown *t);
+    AstType *(*fold_generic)(AstTypeFolder *F, AstGeneric *t);
+    void (*fold_binder)(AstTypeFolder *F, AstList *binder);
+};
+
+void pawA_type_folder_init(AstTypeFolder *F, void *state);
+AstType *pawA_fold_type(AstTypeFolder *F, AstType *type);
+
 typedef struct Ast {
+    AstType *builtin[7];
+
     Pool nodes;
     Pool symbols;
     Pool sequences;
-    AstStmtList *stmts;
+    AstList *freed;
+    AstList *prelude;
+    AstList *stmts;
     Lex *lex;
 } Ast;
 
@@ -596,12 +694,13 @@ typedef struct Ast {
 //****************************************************************
 
 Symbol *pawA_new_symbol(Lex *lex);
+AstType *pawA_new_type(Ast *ast, AstTypeKind kind);
 AstDecl *pawA_new_decl(Ast *ast, AstDeclKind kind);
 AstExpr *pawA_new_expr(Ast *ast, AstExprKind kind);
 AstStmt *pawA_new_stmt(Ast *ast, AstStmtKind kind);
-AstDeclList *pawA_new_decl_list(Ast *ast);
-AstExprList *pawA_new_expr_list(Ast *ast);
-AstStmtList *pawA_new_stmt_list(Ast *ast);
+AstList *pawA_new_decl_list(Ast *ast);
+AstList *pawA_new_expr_list(Ast *ast);
+AstList *pawA_new_stmt_list(Ast *ast);
 
 void *pawA_new_pointer_vec(Ast *ast, int nptrs);
 
@@ -631,15 +730,6 @@ AstDecl *pawA_get_decl(Ast *ast, DefId id);
 #define a_next(x) ((x)->hdr.next)
 
 // Macros for checking node types
-#define a_is_basic(e) (a_kind(e) == EXPR_BASIC_TYPE)
-#define a_is_unit(e) (a_is_basic(e) && (e)->basic.code == PAW_TUNIT)
-#define a_is_bool(e) (a_is_basic(e) && (e)->basic.code == PAW_TBOOL)
-#define a_is_int(e) (a_is_basic(e) && (e)->basic.code == PAW_TINT)
-#define a_is_float(e) (a_is_basic(e) && (e)->basic.code == PAW_TFLOAT)
-#define a_is_string(e) (a_is_basic(e) && (e)->basic.code == PAW_TSTRING)
-
-#define a_is_struct_layout(e) (a_kind(e) == EXPR_STRUCT_LAYOUT)
-
 #define a_is_generic_type(e) (a_kind(e) == EXPR_GENERIC_TYPE)
 #define a_is_named_type(e) (a_kind(e) == EXPR_TYPE_NAME)
 #define a_is_func_type(e) (a_kind(e) == EXPR_FUNC_TYPE)
@@ -649,12 +739,12 @@ AstDecl *pawA_get_decl(Ast *ast, DefId id);
 
 #define a_has_receiver(d) (a_is_func_decl(d) && (d)->func.receiver != NULL)
 #define a_is_template_decl(d) (a_is_func_template_decl(d) || \
-                               a_is_struct_template_decl(d)) 
+                               a_is_struct_template_decl(d))
 
-#define a_is_func_template_decl(d) (a_is_func_decl(d) && (d)->func.generics != NULL)
-#define a_is_struct_template_decl(d) (a_is_struct_decl(d) && (d)->struct_.generics != NULL)
+#define a_is_func_template_decl(d) (a_is_func_decl(d) && (d)->func.generics->count > 0)
+#define a_is_struct_template_decl(d) (a_is_struct_decl(d) && (d)->struct_.generics->count > 0)
 
-void pawA_dump_type(FILE *out, Type *type);
+void pawA_dump_type(FILE *out, AstType *type);
 void pawA_dump_decl(FILE *out, AstDecl *decl);
 void pawA_dump_expr(FILE *out, AstExpr *expr);
 void pawA_dump_stmt(FILE *out, AstStmt *stmt);

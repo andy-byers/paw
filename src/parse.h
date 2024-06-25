@@ -7,11 +7,11 @@
 // The compiler converts source code into bytecode that can be run in paw's
 // virtual machine. It works in 3 passes:
 //
-//  Pass | Input       | Output    | Purpose                  
+//  Pass | Input       | Output    | Purpose
 // ------|-------------|-----------|---------------------------
-//  1    | source code | AST       | build AST                
+//  1    | source code | AST       | build AST
 //  2    | AST         | typed AST | build symtab, unify types
-//  3    | typed AST   | bytecode  | generate code            
+//  3    | typed AST   | bytecode  | generate code
 //
 // TODO: rename some of these files: parse.* should maybe be called compile.*, and
 //       it would be nice to have a separate AST module.
@@ -21,9 +21,9 @@
 
 #include "lex.h"
 #include "type.h"
+#include "unify.h"
 #include "util.h"
 #include "value.h"
-#include "unify.h"
 
 #define env(x) ((x)->P)
 #define is_toplevel(lex) ((lex)->fs->outer == NULL)
@@ -38,8 +38,9 @@ typedef enum DeferredKind {
     DEFER_SCOPE,
 } DeferredKind;
 
-#define DEFERRED_HEADER DeferredAlloc *prev_alloc; \
-                        DeferredKind alloc_kind
+#define DEFERRED_HEADER        \
+    DeferredAlloc *prev_alloc; \
+    DeferredKind alloc_kind
 
 typedef enum LabelKind {
     LBREAK,

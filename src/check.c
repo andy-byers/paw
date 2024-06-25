@@ -3,10 +3,10 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 //
 // check.c: Implementation of the type checker. This code transforms an AST
-// from the parser into a graph by unifying types based on lexical scope. 
+// from the parser into a graph by unifying types based on lexical scope.
 
-#include "ast.h"
 #include "check.h"
+#include "ast.h"
 #include "code.h"
 #include "debug.h"
 #include "env.h"
@@ -24,19 +24,19 @@
 #define resolve_expr(V, e) ((V)->visit_expr(V, e), a_type(e))
 #define cached_str(R, i) pawE_cstr(env((R)->lex), cast_size(i))
 #define basic_decl(R, code) basic_symbol(R, code)->decl
-#define type2code(e) (y_is_basic(e) ? (e)->hdr.def : -1)
+#define type2code(e) (a_is_basic(e) ? (e)->hdr.def : -1)
 #define is_unit(e) (type2code(e) == PAW_TUNIT)
 #define normalize(table, type) pawU_normalize(table, type)
 #define flag2code(flag) (-(flag) - 1)
 
 // Entrypoint for type unification
-#define unify(R, a, b) pawU_unify(R->U, a, b)
+#define unify(R, a, b) pawU_unify((R)->U, a, b)
 
 // Common state for type-checking routines
 typedef struct Resolver {
     Lex *lex; // lexical state
     StructDecl *struct_; // enclosing struct declaration
-    Type *return_; // enclosing function return type                  
+    AstType *return_; // enclosing function return type
     SymbolTable *sym; // scoped symbol table
     Ast *ast; // AST being checked
     ParseMemory *pm; // dynamic memory
@@ -45,7 +45,7 @@ typedef struct Resolver {
     int func_depth; // number of nested functions
 } Resolver;
 
-static Type *get_type(Resolver *R, DefId id)
+static AstType *get_type(Resolver *R, DefId id)
 {
     paw_assert(id < R->pm->decls.size);
     return a_type(R->pm->decls.data[id]);
@@ -53,31 +53,31 @@ static Type *get_type(Resolver *R, DefId id)
 
 #define are_types_same(a, b) ((a) == (b))
 
-static paw_Bool test_types(Resolver *R, const Type *a, const Type *b);
+static paw_Bool test_types(Resolver *R, const AstType *a, const AstType *b);
 
-static paw_Bool test_binders(Resolver *R, const Binder *a, const Binder *b)
+static paw_Bool test_binders(Resolver *R, const AstList *a, const AstList *b)
 {
     for (int i = 0; i < a->count; ++i) {
-        if (!test_types(R, a->types[i], b->types[i])) {
+        if (!test_types(R, a->data[i], b->data[i])) {
             return PAW_FALSE;
         }
     }
     return PAW_TRUE;
 }
 
-static paw_Bool test_types(Resolver *R, const Type *a, const Type *b)
+static paw_Bool test_types(Resolver *R, const AstType *a, const AstType *b)
 {
-    if (y_kind(a) != y_kind(b)) {
+    if (a_kind(a) != a_kind(b)) {
         return PAW_FALSE;
     }
-    switch (y_kind(a)) {
-        case TYPE_FUNC:
-            return test_binders(R, &a->func.params, &b->func.params);
-        case TYPE_ADT: {
+    switch (a_kind(a)) {
+        case AST_TYPE_FUNC:
+            return test_binders(R, a->func.params, b->func.params);
+        case AST_TYPE_ADT: {
             if (a->adt.base != b->adt.base) {
                 return PAW_FALSE;
             }
-            return test_binders(R, &a->adt.types, &b->adt.types);
+            return test_binders(R, a->adt.types, b->adt.types);
         }
         default:
             return are_types_same(a, b);
@@ -119,11 +119,9 @@ static AstDecl *get_decl(Resolver *R, DefId id)
     return pm->decls.data[id];
 }
 
-static Type *new_type(Resolver *R, DefId id, TypeKind kind)
+static AstType *new_type(Resolver *R, DefId id, AstTypeKind kind)
 {
-    paw_Env *P = env(R->lex);
-    Type *type = pawY_type_new(P, P->mod);
-    type->hdr.kind = kind;
+    AstType *type = pawA_new_type(R->ast, kind);
     type->hdr.def = id;
     if (id != NO_DECL) {
         // set type of associated definition
@@ -133,86 +131,58 @@ static Type *new_type(Resolver *R, DefId id, TypeKind kind)
     return type;
 }
 
-static Type *decl_type_collector(AstVisitor *V, AstDecl *decl)
+static AstType *decl_type_collector(AstVisitor *V, AstDecl *decl)
 {
     paw_unused(V);
     return a_type(decl);
 }
 
-static Type *expr_type_collector(AstVisitor *V, AstExpr *expr)
+static AstType *expr_type_collector(AstVisitor *V, AstExpr *expr)
 {
     return resolve_expr(V, expr);
 }
 
-static Type *param_collector(AstVisitor *V, AstDecl *decl)
+static AstType *param_collector(AstVisitor *V, AstDecl *decl)
 {
     FieldDecl *d = &decl->field;
     d->type = resolve_expr(V, d->tag);
     return d->type;
 }
 
-static Type *param_collector2(AstVisitor *V, AstDecl *decl)
+static AstType *param_collector2(AstVisitor *V, AstDecl *decl)
 {
     FieldDecl *d = &decl->field;
     return resolve_expr(V, d->tag);
 }
 
-static Type *generic_collector(AstVisitor *V, AstDecl *decl)
+static AstType *generic_collector(AstVisitor *V, AstDecl *decl)
 {
     GenericDecl *d = &decl->generic;
     DefId id = add_decl(V->state.R, decl);
-    d->type = new_type(V->state.R, id, TYPE_GENERIC);
+    d->type = new_type(V->state.R, id, AST_TYPE_GENERIC);
     d->type->generic.name = d->name;
     return d->type;
 }
 
-static Binder *temp_binder(Resolver *R, int count)
-{
-    ParseMemory *pm = R->pm;
-    if (pm->temp.size == paw_countof(pm->temp.data)) {
-        syntax_error(R, "too many nested binders");
-    }
-    Binder *binder = &pm->temp.data[pm->temp.size++];
-    binder->types = pawM_new_vec(env(R->lex), count, Type *);
-    binder->count = count;
-    return binder;
-}
-
-#define make_collector(name, T, collect) \
-    static Binder *collect_ ## name(AstVisitor *V, T ## List *list) \
-    { \
-        Resolver *R = V->state.R; \
-        Binder *binder = temp_binder(R, list->count); \
-        T *node = list->first; \
-        for (int i = 0; i < list->count; ++i) { \
-            Type *type = collect(V, node); \
-            binder->types[i] = type; \
-            node = node->hdr.next; \
-        } \
-        return binder; \
+#define make_collector(name, T, collect)                         \
+    static AstList *collect_##name(AstVisitor *V, AstList *list) \
+    {                                                            \
+        Resolver *R = V->state.R;                                \
+        AstList *binder = pawA_list_new(R->ast);                 \
+        const int count = list ? list->count : 0;                \
+        for (int i = 0; i < count; ++i) {                        \
+            AstType *type = collect(V, list->data[i]);           \
+            pawA_list_push(R->ast, &binder, type);               \
+        }                                                        \
+        return binder;                                           \
     }
 make_collector(decl_types, AstDecl, decl_type_collector)
-make_collector(expr_types, AstExpr, expr_type_collector)
-make_collector(params, AstDecl, param_collector)
-make_collector(params2, AstDecl, param_collector2)
-make_collector(generics, AstDecl, generic_collector)
+    make_collector(expr_types, AstExpr, expr_type_collector)
+        make_collector(params, AstDecl, param_collector)
+            make_collector(params2, AstDecl, param_collector2)
+                make_collector(generics, AstDecl, generic_collector)
 
-static void lose_binders(Resolver *R, int count)
-{
-    ParseMemory *pm = R->pm;
-    paw_assert(pm->temp.size >= count);
-    pm->temp.size -= count;
-}
-
-static void free_last_binder(Resolver *R)
-{
-    ParseMemory *pm = R->pm;
-    paw_assert(pm->temp.size > 0);
-    pawM_free_vec(env(R->lex), pm->temp.data, pm->temp.size);
-    --pm->temp.size;
-}
-
-static void enter_inference_ctx(Resolver *R, GenericState *gs, UniTable *table)
+                    static void enter_inference_ctx(Resolver *R, GenericState *gs, UniTable *table)
 {
     gs->outer = R->gs;
     pawU_enter_binder(R->U, table);
@@ -250,7 +220,7 @@ static Symbol *add_global(Resolver *R, String *name, AstDecl *decl)
     for (int i = 0; i < st->nsymbols; ++i) {
         Symbol *sym = st->symbols[i];
         if (pawS_eq(sym->name, name)) {
-            syntax_error(R, "duplicate global '%s'", name->text); 
+            syntax_error(R, "duplicate global '%s'", name->text);
         }
     }
     return add_symbol(R, st, name, decl);
@@ -275,14 +245,13 @@ static Symbol *resolve_symbol(Resolver *R, String *name)
     return scopes->globals->symbols[index];
 }
 
-static AstDecl *resolve_attr(AstDeclList *attrs, String *name)
+static AstDecl *resolve_attr(AstList *attrs, String *name)
 {
-    AstDecl *decl = attrs->first;
-    while (decl != NULL) {
+    for (int i = 0; i < attrs->count; ++i) {
+        AstDecl *decl = attrs->data[i];
         if (pawS_eq(name, decl->hdr.name)) {
-            return decl; 
+            return decl;
         }
-        decl = a_next(decl);
     }
     return NULL;
 }
@@ -325,7 +294,7 @@ static void enter_block(Resolver *R, Scope *scope)
         push_symbol_table(R);
     } else {
         // use an existing scope
-        pawP_add_scope(R->lex, R->sym, scope);    
+        pawP_add_scope(R->lex, R->sym, scope);
     }
 }
 
@@ -357,137 +326,126 @@ static void visit_block_stmt(AstVisitor *V, Block *block)
     block->scope = leave_block(V->state.R);
 }
 
-static Binder *register_generics(AstVisitor *V, AstDeclList *generics)
+static AstList *register_generics(AstVisitor *V, AstList *generics)
 {
     Resolver *R = V->state.R;
-    if (generics == NULL) {
-        return temp_binder(R, 0); // TODO
-    }
-    AstDecl *decl = generics->first;
-    Binder *types = collect_generics(V, generics);
+    AstList *types = collect_generics(V, generics);
     for (int i = 0; i < types->count; ++i) {
-        const Type *type = types->types[i];
+        const AstType *type = types->data[i];
+        AstDecl *decl = generics->data[i];
         Symbol *symbol = new_symbol(R, type->generic.name, decl, PAW_FALSE);
         symbol->is_type = PAW_TRUE;
         symbol->is_generic = PAW_TRUE;
-        decl = a_next(decl);
     }
     return types;
 }
 
 typedef struct Subst {
-    Binder before;
-    Binder after;
+    AstList *before;
+    AstList *after;
     Resolver *R;
 } Subst;
 
-static Binder copy_binder(Resolver *R, Binder *binder)
+static AstList *prep_binder(AstTypeFolder *F, AstList *binder)
 {
-    Binder copy = *temp_binder(R, binder->count);
-    memcpy(copy.types, binder->types, cast_size(binder->count) * sizeof(binder->types[0]));
-    copy.count = binder->count;
+    Subst *subst = F->state;
+    Resolver *R = subst->R;
+    AstList *copy = pawA_list_new(R->ast);
+    for (int i = 0; i < binder->count; ++i) {
+        pawA_list_push(R->ast, &copy, binder->data[i]);
+    }
+    F->fold_binder(F, copy);
     return copy;
 }
 
-static Type *prep_func(TypeFolder *F, FuncSig *t)
+static AstType *prep_func(AstTypeFolder *F, AstFuncSig *t)
 {
     Subst *subst = F->state;
     Resolver *R = subst->R;
-    paw_Env *P = env(R->lex);
-    Type *r = pawY_type_new(P, P->mod);
-    r->func.kind = TYPE_FUNC;
+    AstType *r = pawA_new_type(R->ast, AST_TYPE_FUNC);
     r->func.base = t->def;
-    r->func.types = copy_binder(R, &t->types);
-    r->func.params = copy_binder(R, &t->params);
-    F->fold_binder(F, &r->func.types);
-    F->fold_binder(F, &r->func.params);
+    r->func.types = prep_binder(F, t->types);
+    r->func.params = prep_binder(F, t->params);
     r->func.return_ = F->fold(F, t->return_);
-    lose_binders(R, 2);
     return r;
 }
 
-static Type *prep_adt(TypeFolder *F, Adt *t)
+static AstType *prep_adt(AstTypeFolder *F, AstAdt *t)
 {
     Subst *subst = F->state;
     Resolver *R = subst->R;
-    paw_Env *P = env(R->lex);
-    Type *r = pawY_type_new(P, P->mod);
-    r->adt.kind = TYPE_ADT;
+    AstType *r = pawA_new_type(R->ast, AST_TYPE_ADT);
     r->adt.base = t->base;
-    r->adt.types = copy_binder(R, &t->types);
-    F->fold_binder(F, &r->adt.types);
+    r->adt.types = prep_binder(F, t->types);
     return r;
 }
 
-static Type *maybe_subst(TypeFolder *F, Type *t)
+static AstType *maybe_subst(AstTypeFolder *F, AstType *t)
 {
     Subst *s = F->state;
-    for (int i = 0; i < s->before.count; ++i) {
-        if (are_types_same(t, s->before.types[i])) {
-            printf("subst %s -> #%d\n", t->generic.name->text, s->after.types[i]->hdr.def);
-            return s->after.types[i];
+    for (int i = 0; i < s->before->count; ++i) {
+        if (are_types_same(t, s->before->data[i])) {
+            return s->after->data[i];
         }
     }
     return t;
 }
 
-static Type *prep_generic(TypeFolder *F, Generic *t)
+static AstType *prep_generic(AstTypeFolder *F, AstGeneric *t)
 {
-    return maybe_subst(F, y_cast(t));
+    return maybe_subst(F, a_cast_type(t));
 }
 
-static Type *prep_unknown(TypeFolder *F, Unknown *t)
+static AstType *prep_unknown(AstTypeFolder *F, AstUnknown *t)
 {
-    return maybe_subst(F, y_cast(t));
+    return maybe_subst(F, a_cast_type(t));
 }
 
-// Make a copy of a function template's parameter list, with bound (by the template) 
+// Make a copy of a function template's parameter list, with bound (by the template)
 // type variables replaced with inference variables.
 // The types returned by this function can be unified with the type of each argument
 // passed at the call site to determine a concrete type for each type variable.
-static Binder *prep_inference(AstVisitor *V, AstDeclList *generics, Binder *after, AstDeclList *params)
+static AstList *prep_inference(AstVisitor *V, AstList *generics, AstList *after, AstList *params)
 {
     Resolver *R = V->state.R;
-    Binder *before = collect_decl_types(V, generics);
-    Binder *target = collect_decl_types(V, params);
+    AstList *before = collect_decl_types(V, generics);
+    AstList *target = collect_decl_types(V, params);
 
     Subst subst = {
-        .before = *before,
-        .after = *after,
+        .before = before,
+        .after = after,
         .R = R,
     };
-    TypeFolder F;
-    pawY_folder_init(&F, &subst);
+    AstTypeFolder F;
+    pawA_type_folder_init(&F, &subst);
     F.fold_adt = prep_adt;
     F.fold_func = prep_func;
     F.fold_generic = prep_generic;
     F.fold_unknown = prep_unknown;
     F.fold_binder(&F, target);
-    lose_binders(R, 1);
     return target;
 }
 
-static Type *register_decl_type(AstVisitor *V, AstDecl *decl, TypeKind kind)
+static AstType *register_decl_type(AstVisitor *V, AstDecl *decl, AstTypeKind kind)
 {
     Resolver *R = V->state.R;
     DefId id = add_decl(V->state.R, decl);
-    Type *r = new_type(R, id, kind);
+    AstType *r = new_type(R, id, kind);
     decl->hdr.type = r;
     return r;
 }
 
-static void register_concrete_types(AstVisitor *V, AstDeclList *generics, Binder *types)
+static void register_concrete_types(AstVisitor *V, AstList *generics, AstList *types)
 {
     Resolver *R = V->state.R;
-    AstDecl *decl = generics->first;
     paw_assert(generics->count == types->count);
     for (int i = 0; i < types->count; ++i) {
+        AstDecl *decl = generics->data[i];
         GenericDecl *generic = &decl->generic;
-        generic->type = types->types[i];
+        generic->type = types->data[i];
         Symbol *symbol = new_symbol(R, generic->name, decl, PAW_FALSE);
         symbol->is_type = PAW_TRUE;
         symbol->is_generic = PAW_FALSE;
-        decl = a_next(decl);
     }
 }
 
@@ -496,9 +454,9 @@ static void register_base_func(AstVisitor *V, FuncDecl *d)
     Resolver *R = V->state.R;
     enter_block(R, NULL);
 
-    Type *r = register_decl_type(V, cast_decl(d), TYPE_FUNC);
-    r->func.types = *register_generics(V, d->generics);
-    r->func.params = *collect_params(V, d->params);
+    AstType *r = register_decl_type(V, cast_decl(d), AST_TYPE_FUNC);
+    r->func.types = register_generics(V, d->generics);
+    r->func.params = collect_params(V, d->params);
     r->func.return_ = resolve_expr(V, d->return_);
     r->func.base = d->def;
     d->type = r;
@@ -506,25 +464,16 @@ static void register_base_func(AstVisitor *V, FuncDecl *d)
     d->scope = leave_block(R);
 }
 
-static AstDeclList *transfer_fields(AstVisitor *V, AstDeclList *list, AstDeclPass callback)
+static AstList *transfer_fields(AstVisitor *V, AstList *list, AstDeclPass callback)
 {
-     AstDecl *last;
-     AstDeclList *copy = pawA_new_decl_list(V->ast);
-     AstDecl *source = list->first;
-     for (int i = 0; i < list->count; ++i) {
-         AstDecl *target = pawA_copy_decl(V->ast, source);
-         callback(V, target); // determine types
- printf("ATTR %s\n",target->hdr.name->text);
-         if (i == 0) {
-             copy->first = target; 
-         } else {
-             last->hdr.next = target;
-         }
-         last = target;
-         source = a_next(source);
-         ++copy->count;
-     }
-     return copy;
+    AstList *copy = pawA_list_new(V->ast);
+    for (int i = 0; i < list->count; ++i) {
+        AstDecl *source = list->data[i];
+        AstDecl *target = pawA_copy_decl(V->ast, source);
+        callback(V, target); // determine types
+        pawA_list_push(V->ast, &copy, target);
+    }
+    return copy;
 }
 
 static void decl_callback(AstVisitor *V, AstDecl *decl)
@@ -532,14 +481,13 @@ static void decl_callback(AstVisitor *V, AstDecl *decl)
     add_decl(V->state.R, decl);
 }
 
-static AstDeclList *new_concrete_types(AstVisitor *V, AstDeclList *list)
+static AstList *new_concrete_types(AstVisitor *V, AstList *list)
 {
     return transfer_fields(V, list, decl_callback);
 }
 
-static void register_func_instance(AstVisitor *V, FuncDecl *base, InstanceDecl *inst, Binder *types)
+static void register_func_instance(AstVisitor *V, FuncDecl *base, InstanceDecl *inst, AstList *types)
 {
-printf("REGI %s (%p)\n", base->name->text, (void*)inst);
     Resolver *R = V->state.R;
     enter_block(R, NULL);
 
@@ -547,11 +495,11 @@ printf("REGI %s (%p)\n", base->name->text, (void*)inst);
     inst->types = new_concrete_types(V, base->generics);
     register_concrete_types(V, inst->types, types);
 
-    Type *r = register_decl_type(V, cast_decl(inst), TYPE_FUNC);
+    AstType *r = register_decl_type(V, cast_decl(inst), AST_TYPE_FUNC);
     r->func.base = base->def;
-    r->func.params = *collect_params2(V, base->params);
+    r->func.params = collect_params2(V, base->params);
     r->func.return_ = resolve_expr(V, base->return_);
-    r->func.types = *types;
+    r->func.types = types;
     inst->type = r;
 
     inst->scope = leave_block(R);
@@ -572,8 +520,8 @@ static void register_base_struct(AstVisitor *V, StructDecl *d)
     R->struct_ = d; // enter struct context
     enter_block(R, NULL);
 
-    Type *r = register_decl_type(V, cast_decl(d), TYPE_ADT);
-    r->adt.types = *register_generics(V, d->generics);
+    AstType *r = register_decl_type(V, cast_decl(d), AST_TYPE_ADT);
+    r->adt.types = register_generics(V, d->generics);
     r->adt.base = d->def;
     d->type = r;
 
@@ -585,7 +533,7 @@ static void register_base_struct(AstVisitor *V, StructDecl *d)
     R->struct_ = enclosing;
 }
 
-static void register_struct_instance(AstVisitor *V, StructDecl *base, InstanceDecl *inst, Binder *types)
+static void register_struct_instance(AstVisitor *V, StructDecl *base, InstanceDecl *inst, AstList *types)
 {
     Resolver *R = V->state.R;
     enter_block(R, NULL);
@@ -594,9 +542,9 @@ static void register_struct_instance(AstVisitor *V, StructDecl *base, InstanceDe
     inst->types = new_concrete_types(V, base->generics);
     register_concrete_types(V, inst->types, types);
 
-    Type *r = register_decl_type(V, cast_decl(inst), TYPE_ADT);
+    AstType *r = register_decl_type(V, cast_decl(inst), AST_TYPE_ADT);
     r->adt.base = base->def;
-    r->adt.types = *types;
+    r->adt.types = types;
     inst->type = r;
 
     enter_block(R, NULL);
@@ -606,21 +554,43 @@ static void register_struct_instance(AstVisitor *V, StructDecl *base, InstanceDe
     inst->scope = leave_block(R);
 }
 
-static AstDecl *find_instance(AstVisitor *V, AstDecl *base, Binder *types)
+static AstList *get_monos(AstDecl *base)
+{
+    switch (a_kind(base)) {
+        case DECL_FUNC:
+            return base->func.monos;
+        default:
+            paw_assert(a_kind(base) == DECL_STRUCT);
+            return base->struct_.monos;
+    }
+}
+
+static AstDecl *find_func_instance(AstVisitor *V, FuncDecl *base, AstList *types)
 {
     Resolver *R = V->state.R;
-    AstDecl *inst = a_next(base);
-    while (inst != NULL) {
-        const Type *type = get_type(R, inst->hdr.def);
-        const Binder binder = y_is_adt(type)
-            ? type->adt.types
-            : type->func.types;
-        if (test_binders(R, &binder, types)) {
-            break;
+    for (int i = 0; i < base->monos->count; ++i) {
+        AstDecl *inst = base->monos->data[i];
+        const AstType *type = get_type(R, inst->hdr.def);
+        if (test_binders(R, types, type->func.types)) {
+            return inst;
         }
         inst = inst->hdr.next;
     }
-    return inst;
+    return NULL;
+}
+
+static AstDecl *find_struct_instance(AstVisitor *V, StructDecl *base, AstList *types)
+{
+    Resolver *R = V->state.R;
+    for (int i = 0; i < base->monos->count; ++i) {
+        AstDecl *inst = base->monos->data[i];
+        const AstType *type = get_type(R, inst->hdr.def);
+        if (test_binders(R, types, type->func.types)) {
+            return inst;
+        }
+        inst = inst->hdr.next;
+    }
+    return NULL;
 }
 
 static void visit_param_decl(AstVisitor *V, AstDecl *decl)
@@ -635,13 +605,13 @@ static void visit_param_decl(AstVisitor *V, AstDecl *decl)
 static void visit_func(AstVisitor *V, FuncDecl *d, FuncKind kind)
 {
     Resolver *R = V->state.R;
-    Type *type = get_type(R, d->def);
+    AstType *type = get_type(R, d->def);
     d->fn_kind = kind;
 
     enter_function(R, d->name, d->scope, d);
     V->visit_decl_list(V, d->params, visit_param_decl);
 
-    Type *outer = R->return_;
+    AstType *outer = R->return_;
     R->return_ = type->func.return_;
 
     V->visit_block_stmt(V, d->body);
@@ -652,66 +622,63 @@ static void visit_func(AstVisitor *V, FuncDecl *d, FuncKind kind)
 static void visit_return_stmt(AstVisitor *V, ReturnStmt *s)
 {
     Resolver *R = V->state.R;
-    Type *want = R->return_; // function return type
-    Type *have = s->expr ? resolve_expr(V, s->expr) : NULL;
+    AstType *want = R->return_; // function return type
+    AstType *have = s->expr ? resolve_expr(V, s->expr) : NULL;
 
-    if (y_is_unit(want)) {
-        if (have != NULL && !y_is_unit(have)) {
+    if (a_is_unit(want)) {
+        if (have != NULL && !a_is_unit(have)) {
             type_error(R, "expected '()' or empty return");
         }
     } else if (have != NULL) {
         unify(R, have, want);
     } else {
         type_error(R, "expected nonempty return");
-    } 
+    }
 }
 
-
-static AstDecl *instantiate_func(AstVisitor *V, AstDecl *base, Binder *types)
+static AstDecl *instantiate_func(AstVisitor *V, FuncDecl *base, AstList *types)
 {
-    AstDecl *inst = find_instance(V, base, types);
+    AstDecl *inst = find_func_instance(V, base, types);
     if (inst == NULL) {
         inst = pawA_new_decl(V->ast, DECL_INSTANCE);
-        inst->hdr.line = base->hdr.line;
-        inst->hdr.next = a_next(base);
-        base->hdr.next = inst;
+        inst->hdr.line = base->line;
+        pawA_list_push(V->ast, &base->monos, inst);
 
-        register_func_instance(V, &base->func, &inst->inst, types); 
+        register_func_instance(V, base, &inst->inst, types);
     }
     return inst;
 }
 
-static AstDecl *instantiate_struct(AstVisitor *V, AstDecl *base, Binder *types)
+static AstDecl *instantiate_struct(AstVisitor *V, StructDecl *base, AstList *types)
 {
-    AstDecl *inst = find_instance(V, base, types);
+    AstDecl *inst = find_struct_instance(V, base, types);
     if (inst == NULL) {
         inst = pawA_new_decl(V->ast, DECL_INSTANCE);
-        inst->hdr.line = base->hdr.line;
-        inst->hdr.next = a_next(base);
-        base->hdr.next = inst;
+        inst->hdr.line = base->line;
+        pawA_list_push(V->ast, &base->monos, inst);
 
-        register_struct_instance(V, &base->struct_, &inst->inst, types); 
+        register_struct_instance(V, base, &inst->inst, types);
     }
     return inst;
 }
 
-static void check_template_param(Resolver *R, AstDeclList *params, Binder *args)
+static void check_template_param(Resolver *R, AstList *params, AstList *args)
 {
     if (args->count > params->count) {
-        syntax_error(R, "too many generics"); 
+        syntax_error(R, "too many generics");
     } else if (args->count < params->count) {
-        syntax_error(R, "not enough generics"); 
+        syntax_error(R, "not enough generics");
     }
 }
 
-static Type *init_struct_template(AstVisitor *V, StructDecl *base, Binder *types)
+static AstType *init_struct_template(AstVisitor *V, StructDecl *base, AstList *types)
 {
     GenericState gs;
     Resolver *R = V->state.R;
     enter_inference_ctx(R, &gs, NULL);
 
     check_template_param(R, base->generics, types);
-    AstDecl *inst = instantiate_struct(V, cast_decl(base), types);
+    AstDecl *inst = instantiate_struct(V, base, types);
 
     leave_inference_ctx(R);
     return a_type(inst);
@@ -720,14 +687,14 @@ static Type *init_struct_template(AstVisitor *V, StructDecl *base, Binder *types
 static void expect_bool_expr(AstVisitor *V, AstExpr *e)
 {
     Resolver *R = V->state.R;
-    Type *type = resolve_expr(V, e);
+    AstType *type = resolve_expr(V, e);
     unify(R, type, get_type(R, PAW_TBOOL));
 }
 
 static void expect_int_expr(AstVisitor *V, AstExpr *e)
 {
     Resolver *R = V->state.R;
-    Type *type = resolve_expr(V, e);
+    AstType *type = resolve_expr(V, e);
     unify(R, type, get_type(R, PAW_TINT));
 }
 
@@ -740,7 +707,7 @@ static void visit_type_name_expr(AstVisitor *V, TypeName *e)
         type_error(R, "'%s' is not a type", symbol->name->text);
     } else if (a_is_struct_template_decl(decl)) {
         StructDecl *base = &decl->struct_;
-        Binder *types = collect_expr_types(V, e->args);
+        AstList *types = collect_expr_types(V, e->args);
         e->type = init_struct_template(V, base, types);
     } else {
         e->type = a_type(decl);
@@ -762,17 +729,17 @@ static void visit_logical_expr(AstVisitor *V, LogicalExpr *e)
 
 static void visit_chain_expr(AstVisitor *V, ChainExpr *e)
 {
-    Type *type = resolve_expr(V, e->target);
-//    if (!a_is_object(e->target->hdr.type)) {
-//        type_error(R, "'?' operator requires an object");
-//    }
+    AstType *type = resolve_expr(V, e->target);
+    //    if (!a_is_object(e->target->hdr.type)) {
+    //        type_error(R, "'?' operator requires an object");
+    //    }
 }
 
 static void visit_cond_expr(AstVisitor *V, CondExpr *e)
 {
     expect_bool_expr(V, e->cond);
-    Type *lhs = resolve_expr(V, e->lhs);
-    Type *rhs = resolve_expr(V, e->rhs);
+    AstType *lhs = resolve_expr(V, e->lhs);
+    AstType *rhs = resolve_expr(V, e->rhs);
     unify(V->state.R, lhs, rhs);
     e->type = lhs;
 }
@@ -790,7 +757,7 @@ static void visit_unop_expr(AstVisitor *V, UnOpExpr *e)
     // clang-format on
 
     Resolver *R = V->state.R;
-    Type *type = resolve_expr(V, e->target);
+    AstType *type = resolve_expr(V, e->target);
     const paw_Type code = type2code(type);
     if (!kValidOps[e->op][code]) {
         type_error(R, "unsupported operand type for unary operator");
@@ -827,8 +794,8 @@ static void visit_binop_expr(AstVisitor *V, BinOpExpr *e)
     // clang-format on
 
     Resolver *R = V->state.R;
-    Type *lhs = resolve_expr(V, e->lhs);
-    Type *rhs = resolve_expr(V, e->rhs);
+    AstType *lhs = resolve_expr(V, e->lhs);
+    AstType *rhs = resolve_expr(V, e->rhs);
     unify(R, lhs, rhs);
 
     const paw_Type left = type2code(lhs);
@@ -845,11 +812,11 @@ static void visit_binop_expr(AstVisitor *V, BinOpExpr *e)
 static void visit_signature_expr(AstVisitor *V, FuncType *e)
 {
     Resolver *R = V->state.R;
-    e->type = new_type(R, NO_DECL, TYPE_FUNC);
+    e->type = new_type(R, NO_DECL, AST_TYPE_FUNC);
     e->type->func.base = NO_DECL;
-    e->type->func.params = *collect_expr_types(V, e->params);
+    e->type->func.types = pawA_list_new(V->ast);
+    e->type->func.params = collect_expr_types(V, e->params);
     e->type->func.return_ = resolve_expr(V, e->return_);
-    lose_binders(R, 1);
 }
 
 static void visit_struct_decl(AstVisitor *V, StructDecl *d)
@@ -863,12 +830,12 @@ static void visit_var_decl(AstVisitor *V, VarDecl *d)
 {
     Resolver *R = V->state.R;
     Symbol *symbol = declare_symbol(R, d->name, cast_decl(d), d->is_global);
-    Type *init = resolve_expr(V, d->init);
+    AstType *init = resolve_expr(V, d->init);
     define_symbol(symbol);
 
     if (d->tag != NULL) {
         // check initializer against annotation
-        Type *tag = resolve_expr(V, d->tag);
+        AstType *tag = resolve_expr(V, d->tag);
         unify(R, init, tag);
     }
     add_decl(R, cast_decl(d));
@@ -880,83 +847,80 @@ static void visit_type_decl(AstVisitor *V, TypeDecl *d)
     // TODO: generic parameters for aliases
     Symbol *symbol = declare_symbol(V->state.R, d->name, cast_decl(d), PAW_FALSE);
     d->type = resolve_expr(V, d->rhs);
-    //unify(R, d->name, d->type);
+    // unify(R, d->name, d->type);
     define_symbol(symbol);
 }
 
-static Binder *add_unknowns(AstVisitor *V, AstDeclList *generics)
+static AstList *add_unknowns(AstVisitor *V, AstList *generics)
 {
     Resolver *R = V->state.R;
-    AstDecl *decl = generics->first;
-    Binder *binder = temp_binder(R, generics->count);
+    AstList *binder = pawA_list_new(R->ast);
     for (int i = 0; i < generics->count; ++i) {
-        binder->types[i] = pawU_new_unknown(R->U, decl->hdr.def);
-        decl = a_next(decl);
+        AstDecl *decl = generics->data[i];
+        AstType *unknown = pawU_new_unknown(R->U, decl->hdr.def);
+        pawA_list_push(V->ast, &binder, unknown);
     }
     return binder;
 }
 
-static Binder *infer_template_param(AstVisitor *V, AstDeclList *generics, AstDeclList *params, AstExprList *args)
+static AstList *infer_template_param(AstVisitor *V, AstList *generics, AstList *params, AstList *args)
 {
     GenericState gs;
     Resolver *R = V->state.R;
     enter_inference_ctx(R, &gs, NULL);
 
-    Binder *unknowns = add_unknowns(V, generics);
-    Binder *replaced = prep_inference(V, generics, unknowns, params);
+    AstList *unknowns = add_unknowns(V, generics);
+    AstList *replaced = prep_inference(V, generics, unknowns, params);
 
     // Attempt to determine a type for each generic parameter, using the
     // combination of function parameters and arguments. Any parameter type
     // might equal, or recursively contain, one of the generic type parameters.
-    AstExpr *arg = args->first;
     paw_assert(args->count == replaced->count);
     for (int i = 0; i < replaced->count; ++i) {
-        Type *a = replaced->types[i];
-        Type *b = resolve_expr(V, arg);
+        AstExpr *arg = args->data[i];
+        AstType *a = replaced->data[i];
+        AstType *b = resolve_expr(V, arg);
         unify(R, a, b);
-        arg = a_next(arg);
     }
-    AstDecl *generic = generics->first;
     UniTable *table = leave_inference_ctx(R);
     for (int i = 0; i < generics->count; ++i) {
-        Type *type = normalize(table, unknowns->types[i]);
-        if (y_is_unknown(type)) {
+        AstDecl *generic = generics->data[i];
+        AstType *type = normalize(table, unknowns->data[i]);
+        if (a_is_unknown(type)) {
             const String *name = generic->generic.name;
             type_error(R, "unable to infer generic parameter '%s'", name->text);
         }
-        unknowns->types[i] = type;
-        generic = a_next(generic);
+        unknowns->data[i] = type;
     }
-    lose_binders(R, 1);
     return unknowns;
 }
 
-static Type *init_func_template(AstVisitor *V, FuncDecl *base, Binder *types)
+static AstType *init_func_template(AstVisitor *V, FuncDecl *base, AstList *types)
 {
     Resolver *R = V->state.R;
     check_template_param(R, base->generics, types);
-    AstDecl *inst = instantiate_func(V, cast_decl(base), types);
+    AstDecl *inst = instantiate_func(V, base, types);
     return a_type(inst);
 }
 
-static Type *infer_func_template(AstVisitor *V, FuncDecl *base, AstExprList *args)
+static AstType *infer_func_template(AstVisitor *V, FuncDecl *base, AstList *args)
 {
-    Binder *types = infer_template_param(V, base->generics, base->params, args);
-    AstDecl *inst = instantiate_func(V, cast_decl(base), types);
+    AstList *types = infer_template_param(V, base->generics, base->params, args);
+    AstDecl *inst = instantiate_func(V, base, types);
     return a_type(inst);
 }
 
-static Type *setup_call(AstVisitor *V, CallExpr *e)
+static AstType *setup_call(AstVisitor *V, CallExpr *e)
 {
     Resolver *R = V->state.R;
-    Type *target = resolve_expr(V, e->target);
-    if (!y_is_func(target)) {
+    AstType *target = resolve_expr(V, e->target);
+    if (!a_is_func(target)) {
         type_error(R, "type is not callable");
-    } 
-    FuncSig *func = &target->func;
-    if (e->args->count < func->params.count) {
+    }
+    AstFuncSig *func = &target->func;
+    if (e->args->count < func->params->count) {
         syntax_error(R, "not enough arguments");
-    } else if (e->args->count > func->params.count) {
+    } else if (e->args->count > func->params->count) {
         syntax_error(R, "too many arguments");
     }
     if (func->def != NO_DECL) {
@@ -968,7 +932,6 @@ static Type *setup_call(AstVisitor *V, CallExpr *e)
         }
     }
     return target;
-
 }
 
 static void visit_call_expr(AstVisitor *V, CallExpr *e)
@@ -978,32 +941,32 @@ static void visit_call_expr(AstVisitor *V, CallExpr *e)
     // need type inference, which is handled in setup_call().
     e->func = setup_call(V, e);
     e->type = e->func->func.return_;
-    if (y_kind(e->func) != TYPE_FUNC) {
+    if (a_kind(e->func) != AST_TYPE_FUNC) {
         type_error(R, "type is not callable");
     }
-    FuncSig *func = &e->func->func;
-    Binder *params = &func->params;
+    AstFuncSig *func = &e->func->func;
+    AstList *params = func->params;
     if (params->count != e->args->count) {
-        syntax_error(R, "expected %d parameter(s) but found %d", 
-                     func->params.count, e->args->count);
+        syntax_error(R, "expected %d parameter(s) but found %d",
+                     func->params->count, e->args->count);
     }
     // check call arguments against function parameters
-    AstExpr *arg = e->args->first;
     for (int i = 0; i < params->count; ++i) {
-        Type *type = resolve_expr(V, arg);
-        unify(R, params->types[i], type);
+        AstExpr *arg = e->args->data[i];
+        AstType *type = resolve_expr(V, arg);
+        unify(R, params->data[i], type);
         arg = arg->hdr.next;
     }
 }
 
 struct StructPack {
     String *name;
-    AstDeclList *fields;
+    AstList *fields;
 };
 
-static struct StructPack unpack_struct(Resolver *R, Type *type)
+static struct StructPack unpack_struct(Resolver *R, AstType *type)
 {
-    paw_assert(y_kind(type) == TYPE_ADT);
+    paw_assert(a_kind(type) == AST_TYPE_ADT);
     AstDecl *decl = get_decl(R, type->adt.def);
     if (a_kind(decl) == DECL_INSTANCE) {
         AstDecl *base = get_decl(R, type->adt.base);
@@ -1011,12 +974,10 @@ static struct StructPack unpack_struct(Resolver *R, Type *type)
             .name = base->struct_.name,
             .fields = decl->inst.fields,
         };
-    } 
-    
+    }
+
     if (a_kind(decl) != DECL_STRUCT) {
         type_error(R, "expected structure");
-//    } else if (decl->struct_.generics != NULL) {
-//        type_error(R, "struct template requires explicit type arguments");
     }
     return (struct StructPack){
         .name = decl->struct_.name,
@@ -1030,46 +991,85 @@ static void visit_item_expr(AstVisitor *V, AstExpr *expr)
     e->type = resolve_expr(V, e->value);
 }
 
+static AstType *visit_vector_lit(AstVisitor *V, CompositeLit *e, AstType *target)
+{
+    //    Resolver *R = V->state.R;
+    //    Lex *lex = R->lex;
+    //
+    //    paw_assert(target->adt.types->count == 1);
+    //    AstType *value_t = target->adt.types->data[0];
+    //
+    //    for (int i = 0; i < e->items->count; ++i) {
+    //        AstExpr *expr = e->items->data[i];
+    //        ItemExpr *item = &expr->item;
+    //        AstType *type = resolve_expr(V, item);
+    //        unify(R, type, value_t);
+    //    }
+    //    if (pawH_length(map) > 0) {
+    //        syntax_error(R, "too many initializers for struct '%s'", pack.name->text);
+    //    }
+    //    paw_assert(pack.fields->count == e->items->count);
+    //
+    //    pawC_pop(P); // pop map
+    //    pawM_free_vec(P, order, e->items->count);
+    //    return target;
+}
+
+static AstType *visit_map_lit(AstVisitor *V, CompositeLit *e, AstType *target)
+{
+    Resolver *R = V->state.R;
+    Lex *lex = R->lex;
+
+    paw_assert(target->adt.types->count == 2);
+    Type *key_t = target->adt.types->data[0];
+    Type *value_t = target->adt.types->data[1];
+
+    return target;
+}
+
 // TODO: scratch allocations need to be boxed
 //       could allow unnamed fields for other classes if they are in the correct order already
-static Type *visit_composite_lit(AstVisitor *V, LiteralExpr *lit)
+static AstType *visit_composite_lit(AstVisitor *V, LiteralExpr *lit)
 {
     CompositeLit *e = &lit->comp;
     Resolver *R = V->state.R;
     Lex *lex = R->lex;
 
     // Replace the AstIdent or IndexExpr with the TypeName of the structure.
-    Type *target = resolve_expr(V, e->target);
-    if (!y_is_adt(target)) {
+    AstType *target = resolve_expr(V, e->target);
+    if (!a_is_adt(target)) {
         type_error(R, "expected structure type");
+    } else if (target->adt.base == PAW_TVECTOR) {
+        return visit_vector_lit(V, e, target);
+    } else if (target->adt.base == PAW_TMAP) {
+        return visit_map_lit(V, e, target);
     }
     const struct StructPack pack = unpack_struct(R, target);
     V->visit_expr_list(V, e->items, visit_item_expr);
 
     // Use a temporary Map to avoid searching repeatedly through the
-    // list of attributes. 
+    // list of attributes.
     paw_Env *P = env(lex);
     Value *pv = pawC_push0(P);
     Map *map = pawH_new(P);
     v_set_object(pv, map);
 
     Value key;
-    AstExpr *item = e->items->first;
     AstExpr **order = pawM_new_vec(P, e->items->count, AstExpr *);
-    for (int i = 0; item != NULL; ++i) {
+    for (int i = 0; i < e->items->count; ++i) {
+        AstExpr *item = e->items->data[i];
         ItemExpr *ie = &item->item;
         v_set_object(&key, ie->name);
         if (pawH_contains(P, map, key)) {
-            syntax_error(R, "duplicate attribute '%s' in struct '%s'", 
+            syntax_error(R, "duplicate attribute '%s' in struct '%s'",
                          ie->name->text, pack.name->text);
         }
         Value *value = pawH_action(P, map, key, MAP_ACTION_CREATE);
         v_set_int(value, i);
         order[i] = item;
-        item = ie->next;
     }
-    AstDecl *decl = pack.fields->first;
     for (int i = 0; i < pack.fields->count; ++i) {
+        AstDecl *decl = pack.fields->data[i];
         FieldDecl *field = &decl->field;
         v_set_object(&key, field->name);
         Value *value = pawH_get(P, map, key);
@@ -1083,7 +1083,6 @@ static Type *visit_composite_lit(AstVisitor *V, LiteralExpr *lit)
             unify(R, ie->type, get_type(R, field->def));
         }
         pawH_remove(P, map, key);
-        decl = field->next;
     }
     if (pawH_length(map) > 0) {
         syntax_error(R, "too many initializers for struct '%s'", pack.name->text);
@@ -1122,9 +1121,9 @@ static void visit_if_stmt(AstVisitor *V, IfStmt *s)
 
 static void visit_expr_stmt(AstVisitor *V, AstExprStmt *s)
 {
-    Type *lhs = resolve_expr(V, s->lhs);
+    AstType *lhs = resolve_expr(V, s->lhs);
     if (s->rhs != NULL) {
-        Type *rhs = resolve_expr(V, s->rhs);
+        AstType *rhs = resolve_expr(V, s->rhs);
         unify(V->state.R, lhs, rhs);
     }
 }
@@ -1169,18 +1168,18 @@ static void visit_fornum(AstVisitor *V, ForStmt *s)
     visit_for_body(V, s->name, s->block);
 }
 
-static void visit_forin(AstVisitor *V, ForStmt *s) // TODO: forin would need to encode the type of object being iterated over. look into function call for loop? 
+static void visit_forin(AstVisitor *V, ForStmt *s) // TODO: forin would need to encode the type of object being iterated over. look into function call for loop?
 {
-//    Lex *lex = R->lex;
-//    ForIn *forin = &s->forin;
-//    new_local_literal(R, "(for target)", PAW_TINT);
-//    new_local_literal(R, "(for iterator)", PAW_TINT);
-//    V->visit_expr(V, forin->target);
-//
-//    Type *inner = pawY_unwrap(env(lex), forin->target->type);
-//    new_local(R, s->name, inner);
-//
-//    V->visit_for_body(V, s->name, s->block);
+    //    Lex *lex = R->lex;
+    //    ForIn *forin = &s->forin;
+    //    new_local_literal(R, "(for target)", PAW_TINT);
+    //    new_local_literal(R, "(for iterator)", PAW_TINT);
+    //    V->visit_expr(V, forin->target);
+    //
+    //    AstType *inner = pawY_unwrap(env(lex), forin->target->type);
+    //    new_local(R, s->name, inner);
+    //
+    //    V->visit_for_body(V, s->name, s->block);
 }
 
 static void visit_for_stmt(AstVisitor *V, ForStmt *s)
@@ -1194,38 +1193,39 @@ static void visit_for_stmt(AstVisitor *V, ForStmt *s)
     s->scope = leave_block(V->state.R);
 }
 
-static void check_index(Resolver *R, Type *target, Type *elem)
+static void check_index(Resolver *R, AstType *target, AstType *elem)
 {
     // TODO: Unify elem with the type expected by target container, return contained type
 }
 
-static Type *explicit_func_template(AstVisitor *V, FuncDecl *base, Index *e)
+static AstType *explicit_func_template(AstVisitor *V, FuncDecl *base, Index *e)
 {
-    Binder *types = collect_expr_types(V, e->elems);
+    AstList *types = collect_expr_types(V, e->elems);
     return init_func_template(V, base, types);
 }
 
-static Type *explicit_struct_template(AstVisitor *V, StructDecl *base, Index *e)
+static AstType *explicit_struct_template(AstVisitor *V, StructDecl *base, Index *e)
 {
-    Binder *types = collect_expr_types(V, e->elems);
+    AstList *types = collect_expr_types(V, e->elems);
     return init_struct_template(V, base, types);
 }
 
 static void visit_index_expr(AstVisitor *V, Index *e)
 {
     Resolver *R = V->state.R;
-    Type *target = resolve_expr(V, e->target);
+    AstType *target = resolve_expr(V, e->target);
     AstDecl *decl = get_decl(R, target->hdr.def);
     if (!a_is_template_decl(decl)) {
         // 'e' represents a getter for a container element, rather than a
-        // template instantiation: no folding is necessary 
+        // template instantiation: no folding is necessary
         if (e->elems->count != 1) {
             paw_assert(e->elems->count > 1);
             syntax_error(R, "too many indices (must be 1)");
         }
-        Type *elem = resolve_expr(V, e->elems->first);
-        check_index(R, target, elem);
-    } 
+        AstExpr *elem = e->elems->data[0];
+        AstType *type = resolve_expr(V, elem);
+        check_index(R, target, type);
+    }
     if (a_kind(decl) == DECL_STRUCT) {
         e->type = explicit_struct_template(V, &decl->struct_, e);
     } else {
@@ -1236,14 +1236,14 @@ static void visit_index_expr(AstVisitor *V, Index *e)
 static void visit_selector_expr(AstVisitor *V, Selector *e)
 {
     Resolver *R = V->state.R;
-    Type *type = resolve_expr(V, e->target);
-    if (!y_is_adt(type)) {
+    AstType *type = resolve_expr(V, e->target);
+    if (!a_is_adt(type)) {
         type_error(R, "expected struct instance");
     }
     const struct StructPack pack = unpack_struct(R, type);
     AstDecl *attr = resolve_attr(pack.fields, e->name);
     if (attr == NULL) {
-        syntax_error(R, "attribute '%s' does not exist in struct '%s'", 
+        syntax_error(R, "attribute '%s' does not exist in struct '%s'",
                      e->name->text, pack.name->text);
     }
     e->type = get_type(R, attr->hdr.def);
@@ -1254,29 +1254,42 @@ static void visit_decl_stmt(AstVisitor *V, AstDeclStmt *s)
     V->visit_decl(V, s->decl);
 }
 
+static void visit_prelude_func(AstVisitor *V, FuncDecl *d)
+{
+    Symbol *symbol = declare_symbol(V->state.R, d->name, cast_decl(d), PAW_TRUE);
+    register_base_func(V, d);
+    define_symbol(symbol);
+}
+
+static void visit_prelude_struct(AstVisitor *V, StructDecl *d)
+{
+    Resolver *R = V->state.R;
+    new_symbol(R, d->name, cast_decl(d), PAW_TRUE);
+    register_base_struct(V, d);
+}
+
 static void setup_globals(Resolver *R)
 {
     paw_Env *P = env(R->lex);
+    return;
     for (int i = 0; i < P->gv.size; ++i) {
         // TODO: global type info -> AST type node for globals
         GlobalVar g = P->gv.data[i];
         AstDecl *d = pawA_new_decl(R->ast, DECL_FUNC);
-        d->func.type = P->mod->types[g.desc.code];
+        d->func.type = R->ast->builtin[g.desc.code];
         d->func.is_global = PAW_TRUE;
         const DefId id = add_decl(R, d);
 
-        Type *type = new_type(R, id, TYPE_FUNC);
-        if(0==strcmp(g.desc.name->text,"assert")){ // TODO: Write a function that parses type info into an AST type
-            type->func.params.types = pawM_new_vec(P, 1, Type *);
-            type->func.params.types[0] = get_type(R, PAW_TBOOL);
-            type->func.params.count = 1;
+        AstType *type = new_type(R, id, AST_TYPE_FUNC);
+        if (0 == strcmp(g.desc.name->text, "assert")) { // TODO: Write a function that parses type info into an AST type
+            type->func.params = pawA_list_new(R->ast);
+            pawA_list_push(R->ast, &type->func.params, get_type(R, PAW_TBOOL));
             type->func.return_ = get_type(R, PAW_TUNIT);
-        }else if(0==strcmp(g.desc.name->text,"print")){
-            type->func.params.types = pawM_new_vec(P, 1, Type *);
-            type->func.params.types[0] = get_type(R, PAW_TSTRING);
-            type->func.params.count = 1;
+        } else if (0 == strcmp(g.desc.name->text, "print")) {
+            type->func.params = pawA_list_new(R->ast);
+            pawA_list_push(R->ast, &type->func.params, get_type(R, PAW_TSTRING));
             type->func.return_ = get_type(R, PAW_TUNIT);
-        } else{
+        } else {
             paw_assert(0);
         }
         d->func.type = type;
@@ -1286,10 +1299,10 @@ static void setup_globals(Resolver *R)
     }
 }
 
-static void add_basic_symbol(Resolver *R, String *name)
+static void add_basic_builtin(Resolver *R, String *name)
 {
     AstExpr *e = pawA_new_expr(R->ast, EXPR_TYPE_NAME);
-    e->type_name.args = pawA_new_expr_list(R->ast);
+    e->type_name.args = pawA_list_new(R->ast);
     e->type_name.name = name;
 
     AstDecl *d = pawA_new_decl(R->ast, DECL_TYPE);
@@ -1299,25 +1312,38 @@ static void add_basic_symbol(Resolver *R, String *name)
 
     add_decl(R, d);
 
-    paw_Env *P = env(R->lex);
     const paw_Type code = flag2code(name->flag);
-    d->hdr.type = P->mod->types[code];
+    d->hdr.type = R->ast->builtin[code];
     Symbol *symbol = new_local(R, name, d);
     symbol->is_type = PAW_TRUE;
 }
 
-static void setup_resolver(AstVisitor *V, Resolver *R)
+static void visit_prelude(AstVisitor *V, Resolver *R)
 {
-    add_basic_symbol(R, cached_str(R, CSTR_UNIT));
-    add_basic_symbol(R, cached_str(R, CSTR_BOOL));
-    add_basic_symbol(R, cached_str(R, CSTR_INT));
-    add_basic_symbol(R, cached_str(R, CSTR_FLOAT));
-    add_basic_symbol(R, cached_str(R, CSTR_STRING));
+    add_basic_builtin(R, cached_str(R, CSTR_UNIT));
+    add_basic_builtin(R, cached_str(R, CSTR_BOOL));
+    add_basic_builtin(R, cached_str(R, CSTR_INT));
+    add_basic_builtin(R, cached_str(R, CSTR_FLOAT));
+    add_basic_builtin(R, cached_str(R, CSTR_STRING));
 
     // no generic context
     R->U->depth = -1;
 
     setup_globals(R);
+
+    const AstState state = {.R = R};
+    pawA_visitor_init(V, R->ast, state);
+    V->visit_func_decl = visit_prelude_func;
+    V->visit_struct_decl = visit_prelude_struct;
+    V->visit_type_name_expr = visit_type_name_expr;
+    V->visit_signature_expr = visit_signature_expr;
+
+    V->visit_stmt_list(V, R->ast->prelude, V->visit_stmt);
+}
+
+static void setup_module(AstVisitor *V, Resolver *R)
+{
+    visit_prelude(V, R);
 
     const AstState state = {.R = R};
     pawA_visitor_init(V, R->ast, state);
@@ -1331,7 +1357,7 @@ static void setup_resolver(AstVisitor *V, Resolver *R)
     V->visit_call_expr = visit_call_expr;
     V->visit_index_expr = visit_index_expr;
     V->visit_selector_expr = visit_selector_expr;
-    //V->visit_item_expr = visit_item_expr;
+    // V->visit_item_expr = visit_item_expr;
     V->visit_type_name_expr = visit_type_name_expr;
     V->visit_signature_expr = visit_signature_expr;
     V->visit_block_stmt = visit_block_stmt;
@@ -1348,11 +1374,6 @@ static void setup_resolver(AstVisitor *V, Resolver *R)
     V->visit_type_decl = visit_type_decl;
 }
 
-static void resolve_module(AstVisitor *V)
-{
-    pawA_visit(V);
-}
-
 static void visit_module(Resolver *R)
 {
     Lex *lex = R->lex;
@@ -1361,8 +1382,8 @@ static void visit_module(Resolver *R)
     enter_function(R, lex->modname, NULL, &r->func);
 
     AstVisitor V;
-    setup_resolver(&V, R);
-    resolve_module(&V);
+    setup_module(&V, R);
+    pawA_visit(&V);
 
     sym->toplevel = leave_function(R);
     paw_assert(sym->nscopes == 0);
@@ -1379,4 +1400,3 @@ void p_check_types(Lex *lex)
     };
     visit_module(&R);
 }
-

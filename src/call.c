@@ -94,7 +94,7 @@ void pawC_stack_realloc(paw_Env *P, int n)
 
 void pawC_stack_overflow(paw_Env *P)
 {
-    //pawR_error(P, PAW_ERUNTIME, "stack overflow");
+    // pawR_error(P, PAW_ERUNTIME, "stack overflow");
 }
 
 // When testing with PAW_STRESS > 1, allocate the exact amount of
@@ -149,7 +149,7 @@ static void call_return(paw_Env *P, StackPtr base, paw_Bool has_return)
         Value ret = P->top.p[-1];
         P->top.p = base + 1;
         P->top.p[-1] = ret;
-    } else { 
+    } else {
         // implicit 'return ()'
         P->top.p = base + 1;
         P->top.p->u = 0; // clear value
@@ -173,7 +173,7 @@ static void handle_ccall(paw_Env *P, StackPtr base, Native *ccall)
     const int nret = ccall->func(P);
     base = restore_pointer(P, pos);
     call_return(P, base, nret);
-    //pawR_close_upvalues(P, base);
+    // pawR_close_upvalues(P, base);
 }
 
 static void check_fixed_args(paw_Env *P, Proto *f, int argc)
@@ -205,35 +205,35 @@ CallFrame *pawC_precall(paw_Env *P, StackPtr base, Object *callable, int argc)
         case VCLOSURE:
             fn = o_closure(callable);
             break;
-//        case VMETHOD: {
-//            Method *mtd = v_method(callable);
-//            *base = mtd->self; // replace with self
-//            if (pawV_is_native(mtd->f)) {
-//                ccall = v_native(mtd->f);
-//                goto call_native;
-//            } else {
-//                assert(pawV_is_closure(mtd->f));
-//                fn = v_closure(mtd->f);
-//            }
-//            break;
-//        }
-//        case VCLASS: {
-//            Class *cls = v_class(callable);
-//            pawV_new_instance(P, base, cls);
-//            Value name = pawE_cstr(P, CSTR_INIT); // '__init'
-//            Value *init = pawH_get(P, cls->attr, name);
-//            if (!init) {
-//                // There is no user-defined initializer, so just return
-//                // the instance.
-//                P->top.p = base + 1;
-//                return P->cf;
-//            }
-//            fn = v_closure(*init);
-//            break;
-//        }
+            //        case VMETHOD: {
+            //            Method *mtd = v_method(callable);
+            //            *base = mtd->self; // replace with self
+            //            if (pawV_is_native(mtd->f)) {
+            //                ccall = v_native(mtd->f);
+            //                goto call_native;
+            //            } else {
+            //                assert(pawV_is_closure(mtd->f));
+            //                fn = v_closure(mtd->f);
+            //            }
+            //            break;
+            //        }
+            //        case VCLASS: {
+            //            Class *cls = v_class(callable);
+            //            pawV_new_instance(P, base, cls);
+            //            Value name = pawE_cstr(P, CSTR_INIT); // '__init'
+            //            Value *init = pawH_get(P, cls->attr, name);
+            //            if (!init) {
+            //                // There is no user-defined initializer, so just return
+            //                // the instance.
+            //                P->top.p = base + 1;
+            //                return P->cf;
+            //            }
+            //            fn = v_closure(*init);
+            //            break;
+            //        }
         default:
             paw_assert(0);
-//            pawR_error(P, PAW_ETYPE, "type is not callable");
+            //            pawR_error(P, PAW_ETYPE, "type is not callable");
     }
     CallFrame *cf = next_call_frame(P, P->top.p);
     Proto *p = fn->p;

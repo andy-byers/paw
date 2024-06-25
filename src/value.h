@@ -19,17 +19,17 @@
 
 #define v_object(v) ((v).o)
 #define v_native(v) (o_native(v_object(v)))
-#define v_proto(v) (o_proto(v_object(v))) 
-#define v_closure(v) (o_closure(v_object(v))) 
-#define v_upvalue(v) (o_upvalue(v_object(v))) 
-#define v_string(v) (o_string(v_object(v))) 
-#define v_map(v) (o_map(v_object(v))) 
-#define v_vector(v) (o_vector(v_object(v))) 
+#define v_proto(v) (o_proto(v_object(v)))
+#define v_closure(v) (o_closure(v_object(v)))
+#define v_upvalue(v) (o_upvalue(v_object(v)))
+#define v_string(v) (o_string(v_object(v)))
+#define v_map(v) (o_map(v_object(v)))
+#define v_vector(v) (o_vector(v_object(v)))
 #define v_text(v) (v_string(v)->text)
-#define v_instance(v) (o_instance(v_object(v))) 
-#define v_struct(v) (o_struct(v_object(v))) 
-#define v_method(v) (o_method(v_object(v))) 
-#define v_foreign(v) (o_foreign(v_object(v))) 
+#define v_instance(v) (o_instance(v_object(v)))
+#define v_struct(v) (o_struct(v_object(v)))
+#define v_method(v) (o_method(v_object(v)))
+#define v_foreign(v) (o_foreign(v_object(v)))
 
 #define v_set_0(v) ((v)->u = 0)
 #define v_set_bool(p, b) ((p)->u = (b) ? PAW_TRUE : PAW_FALSE)
@@ -154,7 +154,7 @@ int pawV_num2float(Value *pv, paw_Type type);
 uint32_t pawV_hash(Value v);
 
 // Convert a null-terminated string into an integer
-// Understands non-decimal base prefixes '0b', '0o', '0x', and their uppercase 
+// Understands non-decimal base prefixes '0b', '0o', '0x', and their uppercase
 // counterparts. Returns -PAW_ESYNTAX if the integer is malformed, -PAW_EOVERFLOW
 // if it is large to fit in a paw_Int, and PAW_OK otherwise.
 int pawV_parse_integer(paw_Env *P, const char *text);
@@ -301,7 +301,7 @@ typedef enum MapState {
 } MapState;
 
 typedef struct MapMeta {
-    MapState state: 2;
+    MapState state : 2;
 } MapMeta;
 
 typedef struct Map {
@@ -324,7 +324,7 @@ void pawV_free_struct(paw_Env *P, Struct *struct_);
 typedef struct Instance {
     GC_HEADER; // common members for GC
     Value attrs[]; // fixed array of attributes
-    //Value fields[]; // data fields
+    // Value fields[]; // data fields
 } Instance;
 
 Instance *pawV_new_instance(paw_Env *P, int nfields);

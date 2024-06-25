@@ -3,7 +3,7 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "lex.h"
 #include "auxlib.h"
-//#include "bigint.h"
+// #include "bigint.h"
 #include "gc_aux.h"
 #include "map.h"
 #include "mem.h"
@@ -308,7 +308,7 @@ static struct Token consume_string(struct Lex *x)
         return make_string(x, TK_STRING);
     } else if (ISNEWLINE(x->c)) {
         // unescaped newlines allowed in string literals
-        save_and_next(x); 
+        save_and_next(x);
     } else if (consume_utf8(x)) {
         lex_error(x);
     }
@@ -378,7 +378,7 @@ static void skip_line_comment(struct Lex *x)
 
 static void skip_whitespace(Lex *x)
 {
-    while (x->c == ' ' || x->c == '\t' || 
+    while (x->c == ' ' || x->c == '\t' ||
            x->c == '\f' || x->c == '\v' ||
            (is_newline(x) && !x->add_semi)) {
         next(x);
@@ -532,16 +532,19 @@ TokenKind pawX_peek(struct Lex *x)
 
 #define INITIAL_SCRATCH 128
 
-void pawX_set_source(Lex *x, paw_Reader input)
+void pawX_set_source(Lex *x, paw_Reader input, void *ud)
 {
     paw_Env *P = x->P;
     ParseMemory *pm = x->pm;
     pawM_resize(P, pm->scratch.data, 0, INITIAL_SCRATCH);
     pm->scratch.alloc = INITIAL_SCRATCH;
 
+    x->ud = ud;
     x->input = input;
     x->line = 1;
-    next(x); // load first char
+
+    next(x); // load first chunk of text
+    pawX_next(x); // load first token
 }
 
 String *pawX_scan_string(Lex *x, const char *s, size_t n)

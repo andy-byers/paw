@@ -121,7 +121,7 @@ static void check_binop_type_errors(const char *op, paw_Type *types)
                 }
             }
             check_binop_type_error(op, k, k2);
-next_round: /* combination of types is valid, skip check */;
+        next_round: /* combination of types is valid, skip check */;
         }
     }
 }
@@ -144,8 +144,10 @@ static void test_type_error(void)
     check_unop_type_error("~", PAW_TFLOAT);
     check_unop_type_error("~", PAW_TSTRING);
 
-#define mklist(...) (paw_Type[]){__VA_ARGS__, -1}
-#define mklist0() (paw_Type[]){-1}
+#define mklist(...) \
+    (paw_Type[]) { __VA_ARGS__, -1 }
+#define mklist0() \
+    (paw_Type[]) { -1 }
     check_binop_type_errors("+", mklist(PAW_TINT, PAW_TFLOAT, PAW_TSTRING));
     check_binop_type_errors("-", mklist(PAW_TINT, PAW_TFLOAT));
     check_binop_type_errors("*", mklist(PAW_TINT, PAW_TFLOAT));
@@ -349,7 +351,7 @@ int main(void)
     test_name_error();
     test_syntax_error();
     test_type_error();
-    //test_line_numbers();
+    // test_line_numbers();
 
     test_case(PAW_ESYNTAX, "missing_left_paren", "fn fa, b, c) {return [a + b + c]}");
     test_case(PAW_ESYNTAX, "missing_right_paren", "fn f(a, b, c {return [a + b + c]}");

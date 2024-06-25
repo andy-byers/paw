@@ -64,7 +64,7 @@ static inline MapCursor h_cursor_init(Map *m, Value key)
 static inline MapCursor h_cursor_lookup(Map *m, Value key)
 {
     MapCursor mc = h_cursor_init(m, key);
-    while (!h_is_vacant(&mc)) {               
+    while (!h_is_vacant(&mc)) {
         if (h_is_occupied(&mc) && h_cursor_key(&mc)->u == key.u) {
             break;
         }

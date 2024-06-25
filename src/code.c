@@ -63,7 +63,7 @@ void pawK_code_AB(FuncState *fs, Op op, int a, int b)
 }
 
 // Create a new arena large enough to allocate memory of the 'required_size'
-// Alignment is not considered, since the start of an Arena is suitably-aligned 
+// Alignment is not considered, since the start of an Arena is suitably-aligned
 // for any objects created by the compiler.
 static Arena *new_arena(paw_Env *P, Pool *pool, size_t required_size)
 {
@@ -120,4 +120,3 @@ void *pawK_pool_alloc(paw_Env *P, Pool *pool, size_t size, size_t align)
     a->used = base + size;
     return a->data + base;
 }
-

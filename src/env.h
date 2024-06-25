@@ -15,7 +15,7 @@
 
 struct Jump; // call.c
 
-typedef enum DefKind  {
+typedef enum DefKind {
     DEF_VAR,
     DEF_FUNC,
     DEF_STRUCT,
@@ -25,9 +25,10 @@ typedef enum DefKind  {
 
 typedef struct Definition Definition;
 
-#define PAWE_DEF_HEADER Type *type;  \
-                        DefId id: 8; \
-                        DefKind kind: 8 
+#define PAWE_DEF_HEADER \
+    Type *type;         \
+    DefId id : 8;       \
+    DefKind kind : 8
 typedef struct DefHeader {
     PAWE_DEF_HEADER;
 } DefHeader;
@@ -48,7 +49,7 @@ typedef struct TypeDef {
 
 typedef struct AdtDef {
     PAWE_DEF_HEADER;
-    paw_Bool is_struct: 1;
+    paw_Bool is_struct : 1;
     int nattrs;
     Definition **attrs;
 } AdtDef;
@@ -59,7 +60,7 @@ typedef struct Definition {
         VarDef var;
         FuncDef func;
         TypeDef type;
-        AdtDef adt; 
+        AdtDef adt;
     };
 } Definition;
 
@@ -89,6 +90,8 @@ enum {
     CSTR_INT,
     CSTR_FLOAT,
     CSTR_STRING,
+    CSTR_VECTOR,
+    CSTR_MAP,
     NCSTR,
 };
 
@@ -112,14 +115,14 @@ typedef struct paw_Env {
     StackRel top;
 
     // Array containing a definition for each program construct. Created during
-    // type checking, and kept around for RTTI purposes.
+    // code generation, and kept around for RTTI purposes.
     Definition *defs;
     int ndefs;
 
+    Map *builtin;
     Map *libs;
     Value object;
     Module *mod;
-    Instance *builtin[NOBJECTS];
     Value meta_keys[NMETAMETHODS];
 
     // Array of commonly-used strings.
@@ -129,10 +132,10 @@ typedef struct paw_Env {
     // (a call to the 'alloc' field below returned NULL).
     Value mem_errmsg;
 
-    // TODO: At some point, the globals should go into a struct called Module. Make 
-    //       Module a paw object. 
+    // TODO: At some point, the globals should go into a struct called Module. Make
+    //       Module a paw object.
     struct GlobalVec {
-        GlobalVar *data; 
+        GlobalVar *data;
         int size;
         int alloc;
     } gv;

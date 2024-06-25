@@ -11,9 +11,9 @@
 
 // Total number of bytes needed for each map slot
 // The map's internal buffer is divided into 3 sections: the first is an array
-// of MapMeta, and the last 2 are arrays of Value. Each array has the same length, 
-// equal to the map's 'capacity' field. The 'capacity' is guaranteed to be either 
-// 0 or a power-of-2 greater than or equal to paw_alignof(Value), so the Value 
+// of MapMeta, and the last 2 are arrays of Value. Each array has the same length,
+// equal to the map's 'capacity' field. The 'capacity' is guaranteed to be either
+// 0 or a power-of-2 greater than or equal to paw_alignof(Value), so the Value
 // arrays are suitably-aligned.
 #define MAP_ITEM_TOTAL (sizeof(MapMeta) + sizeof(Value) * 2)
 
@@ -22,14 +22,14 @@ static inline Value *insert_aux(Map *m, Value key)
     MapCursor erased;
     paw_Bool found_erased = PAW_FALSE;
     MapCursor mc = h_cursor_init(m, key);
-    while (!h_is_vacant(&mc)) {               
+    while (!h_is_vacant(&mc)) {
         if (h_is_erased(&mc)) {
             if (!found_erased) {
-                // new item replaces the first erased item, continue searching 
+                // new item replaces the first erased item, continue searching
                 // for a duplicate
                 found_erased = PAW_TRUE;
                 erased = mc;
-            } 
+            }
         } else if (h_cursor_key(&mc)->u == key.u) {
             // found a duplicate: replace it
             return h_cursor_value(&mc);
@@ -87,7 +87,7 @@ static void grow_map(paw_Env *P, Map *m)
     m->capacity = n;
 
     if (old_m.capacity > 0) {
-        rehash_map(old_m, m); 
+        rehash_map(old_m, m);
     }
     free_buffer(P, old_m.data, old_m.capacity);
     check_gc(P);
@@ -130,7 +130,7 @@ static paw_Bool items_equal(paw_Env *P, const Value x, const Value y)
     sp[1] = x;
 
     paw_assert(0); // TODO: need value type
-//    pawR_binop(P, BINARY_EQ);
+    //    pawR_binop(P, BINARY_EQ);
 
     const paw_Bool b = paw_bool(P, -1);
     paw_pop(P, 1);

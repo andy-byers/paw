@@ -4,35 +4,38 @@
 //
 // unify.c: type unification module
 
+#include "ast.h"
 #include "code.h"
-#include "parse.h"
 #include "mem.h"
+#include "parse.h"
 
-#define PAW_DEBUG_UNIFY 1
+// #define PAW_DEBUG_UNIFY 1
 
 #ifdef PAW_DEBUG_UNIFY
-# define debug_log(what, ...) log_unification(what, __VA_ARGS__)
+#define debug_log(what, ...) log_unification(what, __VA_ARGS__)
 #else
-# define debug_log(what, ...)
+#define debug_log(what, ...)
 #endif
 
-#define unpack_var(v) \
-    (TypeVar){ \
-        .type = (v)->type, \
+#define unpack_var(v)              \
+    (TypeVar)                      \
+    {                              \
+        .type = (v)->type,         \
         .resolved = (v)->resolved, \
     }
-#define pack_type(t) \
-    (TypeVar){ \
-        .type = (t), \
+#define pack_type(t)          \
+    (TypeVar)                 \
+    {                         \
+        .type = (t),          \
         .resolved = PAW_TRUE, \
     }
 
 typedef struct UniVar {
     struct UniVar *parent;
-    Type *type;
+    AstType *type;
     int rank;
     int depth;
-    paw_Bool resolved: 1;
+    paw_Bool resolved : 1;
 } UniVar;
 
 typedef struct UniTable {
@@ -42,10 +45,10 @@ typedef struct UniTable {
     int capacity; // capacity of vector
 } UniTable;
 
-static void dump_type(FILE *out, const Type *type)
+static void dump_type(FILE *out, const AstType *type)
 {
-    switch (y_kind(type)) {
-        case TYPE_BASIC:
+    switch (a_kind(type)) {
+        case AST_TYPE_BASIC:
             switch (type->hdr.def) {
                 case PAW_TUNIT:
                     fprintf(out, "()");
@@ -64,24 +67,24 @@ static void dump_type(FILE *out, const Type *type)
                     fprintf(out, "string");
             }
             break;
-        case TYPE_FUNC:
+        case AST_TYPE_FUNC:
             fprintf(out, "fn(");
-            for (int i = 0; i < type->func.params.count; ++i) {
-                dump_type(out, type->func.params.types[i]); 
-                if (i < type->func.params.count - 1) {
+            for (int i = 0; i < type->func.params->count; ++i) {
+                dump_type(out, type->func.params->data[i]);
+                if (i < type->func.params->count - 1) {
                     fprintf(out, ", ");
                 }
             }
             fprintf(out, ") -> ");
             dump_type(out, type->func.return_);
             break;
-        case TYPE_ADT:
+        case AST_TYPE_ADT:
             fprintf(out, "%d", type->adt.base); // TODO: Print the name
-            if (type->adt.types.count > 0) {
+            if (type->adt.types->count > 0) {
                 fprintf(out, "[");
-                const Binder *binder = &type->adt.types;
+                const AstList *binder = type->adt.types;
                 for (int i = 0; i < binder->count; ++i) {
-                    dump_type(out, binder->types[i]); 
+                    dump_type(out, binder->data[i]);
                     if (i < binder->count - 1) {
                         fprintf(out, ", ");
                     }
@@ -89,16 +92,16 @@ static void dump_type(FILE *out, const Type *type)
                 fprintf(out, "]");
             }
             break;
-        case TYPE_UNKNOWN:
+        case AST_TYPE_UNKNOWN:
             fprintf(out, "?%d", type->unknown.def);
             break;
         default:
-            paw_assert(y_is_generic(type));
+            paw_assert(a_is_generic(type));
             fprintf(out, "?%s", type->generic.name->text);
     }
 }
 
-static void log_unification(const char *what, Type *a, Type *b)
+static void log_unification(const char *what, AstType *a, AstType *b)
 {
     paw_assert(a && b);
     printf("%s: ", what);
@@ -127,11 +130,11 @@ static void link_roots(UniVar *a, UniVar *b)
     }
 }
 
-static void unify_var_type(UniVar *uvar, Type *type)
+static void unify_var_type(UniVar *uvar, AstType *type)
 {
     debug_log("unify_var_type", uvar->type, type);
 
-    uvar->type = type; 
+    uvar->type = type;
 }
 
 static void unify_var_var(UniVar *a, UniVar *b)
@@ -139,16 +142,16 @@ static void unify_var_var(UniVar *a, UniVar *b)
     a = find_root(a);
     b = find_root(b);
 
-    debug_log("unify_var_var", a->type, b->type); 
+    debug_log("unify_var_var", a->type, b->type);
 
     if (a != b) {
         link_roots(a, b);
     }
 }
 
-Type *pawU_normalize(UniTable *table, Type *type)
+AstType *pawU_normalize(UniTable *table, AstType *type)
 {
-    if (y_is_unknown(type)) {
+    if (a_is_unknown(type)) {
         const int index = type->unknown.index;
         UniVar *uvar = table->vars[index];
         uvar = find_root(uvar); // normalize
@@ -157,37 +160,37 @@ Type *pawU_normalize(UniTable *table, Type *type)
     return type;
 }
 
-static void unify_binders(Unifier *U, Binder *a, Binder *b)
+static void unify_binders(Unifier *U, AstList *a, AstList *b)
 {
     if (a->count != b->count) {
         pawX_error(U->lex, "arity mismatch");
     }
     for (int i = 0; i < a->count; ++i) {
-        pawU_unify(U, a->types[i], b->types[i]);
+        pawU_unify(U, a->data[i], b->data[i]);
     }
 }
 
-static void unify_adt(Unifier *U, Adt *a, Type *b)
+static void unify_adt(Unifier *U, AstAdt *a, AstType *b)
 {
-    if (!y_is_adt(b)) {
+    if (!a_is_adt(b)) {
         pawX_error(U->lex, "expected struct or enum type");
     } else if (a->base != b->adt.base) {
         pawX_error(U->lex, "data types are incompatible");
     }
-    unify_binders(U, &a->types, &b->adt.types);
+    unify_binders(U, a->types, b->adt.types);
 }
 
-static void unify_func_sig(Unifier *U, FuncSig *a, Type *b)
+static void unify_func_sig(Unifier *U, AstFuncSig *a, AstType *b)
 {
-    if (!y_is_func(b)) {
+    if (!a_is_func(b)) {
         pawX_error(U->lex, "expected function type");
     }
     // NOTE: 'types' field not unified (not part of function signature)
-    unify_binders(U, &a->params, &b->func.params);
+    unify_binders(U, a->params, b->func.params);
     pawU_unify(U, a->return_, b->func.return_);
 }
 
-static Type *unify_basic(Unifier *U, Type *a, Type *b)
+static AstType *unify_basic(Unifier *U, AstType *a, AstType *b)
 {
     // basic types are cannonicalized
     if (a != b) {
@@ -196,12 +199,12 @@ static Type *unify_basic(Unifier *U, Type *a, Type *b)
     return a;
 }
 
-static void unify_types(Unifier *U, Type *a, Type *b)
+static void unify_types(Unifier *U, AstType *a, AstType *b)
 {
-    debug_log("unify_types", a, b); 
-    if (y_is_func(a)) {
+    debug_log("unify_types", a, b);
+    if (a_is_func(a)) {
         unify_func_sig(U, &a->func, b);
-    } else if (y_is_adt(a)) {
+    } else if (a_is_adt(a)) {
         unify_adt(U, &a->adt, b);
     } else {
         unify_basic(U, a, b);
@@ -209,7 +212,7 @@ static void unify_types(Unifier *U, Type *a, Type *b)
 }
 
 // TODO: Indicate failure rather than throw errors inside, let the caller throw, for better error messages
-void pawU_unify(Unifier *U, Type *a, Type *b)
+void pawU_unify(Unifier *U, AstType *a, AstType *b)
 {
     UniTable *ut = U->table;
 
@@ -217,15 +220,15 @@ void pawU_unify(Unifier *U, Type *a, Type *b)
     // cannonical type.
     a = pawU_normalize(ut, a);
     b = pawU_normalize(ut, b);
-    if (y_is_unknown(a)) {
+    if (a_is_unknown(a)) {
         UniVar *va = ut->vars[a->unknown.index];
-        if (y_is_unknown(b)) {
+        if (a_is_unknown(b)) {
             UniVar *vb = ut->vars[b->unknown.index];
             unify_var_var(va, vb);
         } else {
             unify_var_type(va, b);
         }
-    } else if (y_is_unknown(b)) {
+    } else if (a_is_unknown(b)) {
         UniVar *vb = ut->vars[b->unknown.index];
         unify_var_type(vb, a);
     } else {
@@ -235,9 +238,10 @@ void pawU_unify(Unifier *U, Type *a, Type *b)
     }
 }
 
-Type *pawU_new_unknown(Unifier *U, DefId id)
+AstType *pawU_new_unknown(Unifier *U, DefId id)
 {
     paw_Env *P = env(U->lex);
+    Ast *ast = U->lex->pm->ast;
     UniTable *table = U->table;
 
     // add a new set to the forest
@@ -246,8 +250,7 @@ Type *pawU_new_unknown(Unifier *U, DefId id)
     const int index = table->nvars++;
     table->vars[index] = uvar;
 
-    Type *type = pawY_type_new(P, P->mod);
-    type->unknown.kind = TYPE_UNKNOWN;
+    AstType *type = pawA_new_type(ast, AST_TYPE_UNKNOWN);
     type->unknown.index = index;
     type->unknown.def = id;
 
@@ -268,21 +271,14 @@ void pawU_enter_binder(Unifier *U, UniTable *table)
     ++U->depth;
 }
 
-//static void free_uni_table(Unifier *U, UniTable *table)
+// static void free_uni_table(Unifier *U, UniTable *table)
 //{
-//    paw_Env *P = env(U->lex);
-//    for (int i = 0; i < table->nvars; ++i) {
-//        pawM_free(P, table->vars[i]);
-//    }
-//    pawM_free(P, table);
-//}
-//
-//void pawU_unifier_replace(Unifier *U, UniTable *table)
-//{
-//    table->outer = U->table->outer;
-//    free_uni_table(U, U->table);
-//    U->table = table;    
-//}
+//     paw_Env *P = env(U->lex);
+//     for (int i = 0; i < table->nvars; ++i) {
+//         pawM_free(P, table->vars[i]);
+//     }
+//     pawM_free(P, table);
+// }
 
 UniTable *pawU_leave_binder(Unifier *U)
 {
