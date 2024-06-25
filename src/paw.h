@@ -66,9 +66,9 @@ int paw_call(paw_Env *P, int argc);
 #define PAW_TINT 2
 #define PAW_TFLOAT 3
 #define PAW_TSTRING 4
-#define PAW_TTUPLE 5
-#define PAW_TVECTOR 6
-#define PAW_TMAP 7
+#define PAW_TVECTOR 5
+#define PAW_TMAP 6
+#define PAW_TTUPLE 7
 #define PAW_TENUM 8
 #define PAW_TFUNCTION 9
 #define PAW_TSTRUCT 10

@@ -4,11 +4,11 @@
 #include "lex.h"
 #include "type.h"
 
-typedef struct Type Type; // type for unifier
+typedef struct AstType AstType; // type for unifier
 typedef struct Unifier Unifier; // unification context
 typedef struct UniTable UniTable; // unification table
 
-typedef Type *(*Unify)(Unifier *, Type *, Type *);
+typedef AstType *(*Unify)(Unifier *, AstType *, AstType *);
 
 struct Unifier {
     UniTable *table;
@@ -17,13 +17,13 @@ struct Unifier {
     int depth;
 };
 
-Type *pawU_normalize(UniTable *table, Type *a);
+AstType *pawU_normalize(UniTable *table, AstType *a);
 
 // Impose the constraint that type variables 'a' and 'b' are equal
-void pawU_unify(Unifier *U, Type *a, Type *b);
+void pawU_unify(Unifier *U, AstType *a, AstType *b);
 
 // Create a new type variable
-Type *pawU_new_unknown(Unifier *U, DefId id);
+AstType *pawU_new_unknown(Unifier *U, DefId id);
 
 // Generics context handling
 void pawU_enter_binder(Unifier *U, UniTable *table);

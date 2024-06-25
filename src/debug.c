@@ -1,9 +1,9 @@
 #include "debug.h"
-#include "vector.h"
 #include "auxlib.h"
 #include "call.h"
 #include "map.h"
 #include "rt.h"
+#include "vector.h"
 
 const char *paw_unop_name(UnaryOp unop)
 {

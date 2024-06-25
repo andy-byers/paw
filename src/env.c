@@ -3,14 +3,14 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "env.h"
 #include "mem.h"
-//#include "rt.h"
+// #include "rt.h"
 #include <limits.h>
 
 CallFrame *pawE_extend_cf(paw_Env *P, StackPtr top)
 {
     if (P->ncf == INT_MAX) {
         paw_assert(0);
- //       pawR_error(P, PAW_EOVERFLOW, "too many nested function calls");
+        //       pawR_error(P, PAW_EOVERFLOW, "too many nested function calls");
     }
     CallFrame *cf = pawM_new(P, CallFrame);
     P->cf->next = cf;

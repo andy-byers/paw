@@ -1,10 +1,10 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
+#include "vector.h"
 #include "gc_aux.h"
 #include "mem.h"
 #include "rt.h"
-#include "vector.h"
 #include "util.h"
 #include <string.h>
 
@@ -143,7 +143,7 @@ static paw_Bool elems_equal(paw_Env *P, Value x, Value y)
 
     // Arrays can contain any type of value. Call pawR_binop() to check
     // metamethods on objects.
-//    pawR_binop(P, BINARY_EQ);
+    //    pawR_binop(P, BINARY_EQ);
     paw_assert(0); // FIXME
 
     const paw_Bool b = paw_bool(P, -1);

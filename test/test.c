@@ -1,9 +1,9 @@
 #include "test.h"
 #include "env.h"
-//#include "lib.h"
+// #include "lib.h"
 #include "os.h"
 #include "paw.h"
-//#include "rt.h"
+// #include "rt.h"
 #include "util.h"
 #include "value.h"
 #include <assert.h>
@@ -130,7 +130,7 @@ static void trash_memory(void *ptr, size_t n)
 static void *safe_realloc(struct TestAlloc *a, void *ptr, size_t size0, size_t size)
 {
     check(a->nbytes >= size0);
-//    register_block(a, size0, size);
+    //    register_block(a, size0, size);
     void *ptr2 = size ? GC_MALLOC(size) : NULL;
     check(!size || ptr2); // assume success
     if (ptr2) {
@@ -224,11 +224,11 @@ void test_close(paw_Env *P, struct TestAlloc *a)
 {
     paw_close(P);
 
-//    if (a->nbytes) {
-//        fprintf(stderr, "error: leaked %zu bytes\n", a->nbytes);
-//        report_nonzero_blocks(a);
-//        abort();
-//    }
+    //    if (a->nbytes) {
+    //        fprintf(stderr, "error: leaked %zu bytes\n", a->nbytes);
+    //        report_nonzero_blocks(a);
+    //        abort();
+    //    }
 }
 
 static void check_ok(paw_Env *P, int status)
@@ -252,8 +252,8 @@ int test_open_file(paw_Env *P, const char *name)
 
     const int status = paw_load(P, test_reader, pathname, &rd);
     pawO_close(rd.file);
-puts("TODO: remove");
-paw_dump_source(P, v_closure(P->top.p[-1])->p);
+    puts("TODO: remove");
+    paw_dump_source(P, v_closure(P->top.p[-1])->p);
     return status;
 }
 

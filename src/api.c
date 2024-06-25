@@ -28,13 +28,13 @@ static void *default_alloc(void *ud, void *ptr, size_t size0, size_t size)
     paw_unused(ud);
     if (size0 == 0) {
         return GC_MALLOC(size);
-        //return malloc(size);
+        // return malloc(size);
     } else if (size == 0) {
         free(ptr);
         return NULL;
     }
     return GC_REALLOC(ptr, size);
-    //return realloc(ptr, size);
+    // return realloc(ptr, size);
 }
 
 static StackPtr access(paw_Env *P, int index)
@@ -65,7 +65,6 @@ static void open_aux(paw_Env *P, void *arg)
     paw_unused(arg);
     pawG_init(P);
     pawC_init(P);
-    pawY_init(P);
     pawS_init(P);
     pawP_init(P);
     pawR_init(P);
@@ -96,7 +95,6 @@ void paw_close(paw_Env *P)
 {
     pawG_uninit(P);
     pawC_uninit(P);
-    pawY_uninit(P);
     pawS_uninit(P);
 
     P->alloc(P->ud, P, sizeof *P, 0);
@@ -151,32 +149,32 @@ int paw_type(paw_Env *P, int index)
 {
     const Value v = *access(P, index);
     return 0;
-   // switch (v_type(v)) {
-   //     case VNULL:
-   //         return PAW_NULL;
-   //     case VTRUE:
-   //     case VFALSE:
-   //         return PAW_TBOOL;
-   //     case VCLOSURE:
-   //     case VMETHOD:
-   //     case VNATIVE:
-   //         return PAW_TFUNCTION;
-   //     case VSTRING:
-   //         return PAW_TSTRING;
-   //     case VARRAY:
-   //         return PAW_TARRAY;
-   //     case VMAP:
-   //         return PAW_TMAP;
-   //     case VSTRUCT:
-   //         return PAW_TSTRUCT;
-   //     case VBIGINT:
-   //     case VNUMBER:
-   //         return PAW_TINT;
-   //     case VFOREIGN:
-   //         return PAW_TFOREIGN;
-   //     default:
-   //         return PAW_TFLOAT;
-   // }
+    // switch (v_type(v)) {
+    //     case VNULL:
+    //         return PAW_NULL;
+    //     case VTRUE:
+    //     case VFALSE:
+    //         return PAW_TBOOL;
+    //     case VCLOSURE:
+    //     case VMETHOD:
+    //     case VNATIVE:
+    //         return PAW_TFUNCTION;
+    //     case VSTRING:
+    //         return PAW_TSTRING;
+    //     case VARRAY:
+    //         return PAW_TARRAY;
+    //     case VMAP:
+    //         return PAW_TMAP;
+    //     case VSTRUCT:
+    //         return PAW_TSTRUCT;
+    //     case VBIGINT:
+    //     case VNUMBER:
+    //         return PAW_TINT;
+    //     case VFOREIGN:
+    //         return PAW_TFOREIGN;
+    //     default:
+    //         return PAW_TFLOAT;
+    // }
 }
 
 const char *paw_typename(paw_Env *P, int index)
@@ -290,30 +288,30 @@ void *paw_pointer(paw_Env *P, int index)
     return f->data;
 }
 
-//void paw_to_float(paw_Env *P, int index)
+// void paw_to_float(paw_Env *P, int index)
 //{
-//    const int i = paw_abs_index(P, index);
-//    paw_push_value(P, i);
-//    pawR_to_float(P);
-//    paw_replace(P, i);
-//}
+//     const int i = paw_abs_index(P, index);
+//     paw_push_value(P, i);
+//     pawR_to_float(P);
+//     paw_replace(P, i);
+// }
 //
-//void paw_to_int(paw_Env *P, int index)
+// void paw_to_int(paw_Env *P, int index)
 //{
-//    const int i = paw_abs_index(P, index);
-//    paw_push_value(P, i);
-//    pawR_to_integer(P);
-//    paw_replace(P, i);
-//}
+//     const int i = paw_abs_index(P, index);
+//     paw_push_value(P, i);
+//     pawR_to_integer(P);
+//     paw_replace(P, i);
+// }
 //
-//void paw_to_string(paw_Env *P, int index)
+// void paw_to_string(paw_Env *P, int index)
 //{
-//    size_t len;
-//    const int i = paw_abs_index(P, index);
-//    paw_push_value(P, i);
-//    pawR_to_string(P, &len);
-//    paw_replace(P, i);
-//}
+//     size_t len;
+//     const int i = paw_abs_index(P, index);
+//     paw_push_value(P, i);
+//     pawR_to_string(P, &len);
+//     paw_replace(P, i);
+// }
 
 size_t paw_length(paw_Env *P, int index)
 {
@@ -410,178 +408,178 @@ static int upvalue_index(int nup, int index)
     return index;
 }
 
-//void paw_get_upvalue(paw_Env *P, int ifn, int index)
+// void paw_get_upvalue(paw_Env *P, int ifn, int index)
 //{
-//    Value *pv = pawC_push0(P);
-//    const Value fn = *access(P, ifn);
-//    switch (v_type(fn)) {
-//        case VNATIVE: {
-//            Native *f = v_native(fn);
-//            *pv = f->up[upvalue_index(f->nup, index)];
-//            break;
-//        }
-//        case VCLOSURE: {
-//            Closure *f = v_closure(fn);
-//            UpValue *u = f->up[upvalue_index(f->nup, index)];
-//            *pv = *u->p.p;
-//            break;
-//        }
-//        default:
-//            pawR_error(P, PAW_ETYPE, "'%s' has no upvalues",
-//                       api_typename(api_type(fn)));
-//    }
-//}
+//     Value *pv = pawC_push0(P);
+//     const Value fn = *access(P, ifn);
+//     switch (v_type(fn)) {
+//         case VNATIVE: {
+//             Native *f = v_native(fn);
+//             *pv = f->up[upvalue_index(f->nup, index)];
+//             break;
+//         }
+//         case VCLOSURE: {
+//             Closure *f = v_closure(fn);
+//             UpValue *u = f->up[upvalue_index(f->nup, index)];
+//             *pv = *u->p.p;
+//             break;
+//         }
+//         default:
+//             pawR_error(P, PAW_ETYPE, "'%s' has no upvalues",
+//                        api_typename(api_type(fn)));
+//     }
+// }
 //
-//void paw_get_global(paw_Env *P, const char *name)
+// void paw_get_global(paw_Env *P, const char *name)
 //{
-//    if (!paw_check_global(P, name)) {
-//        pawR_error(P, PAW_ENAME, "global '%s' does not exist", name);
-//    }
-//}
+//     if (!paw_check_global(P, name)) {
+//         pawR_error(P, PAW_ENAME, "global '%s' does not exist", name);
+//     }
+// }
 //
-//paw_Bool paw_check_global(paw_Env *P, const char *name)
+// paw_Bool paw_check_global(paw_Env *P, const char *name)
 //{
-//    paw_push_string(P, name);
-//    const Value key = *access(P, -1);
+//     paw_push_string(P, name);
+//     const Value key = *access(P, -1);
 //
-//    paw_Bool found = PAW_FALSE;
-//    if (pawR_read_global(P, key)) {
-//        paw_push_null(P);
-//    } else {
-//        found = PAW_TRUE;
-//    }
-//    paw_shift(P, 1); // replace 'key'
-//    return found;
-//}
+//     paw_Bool found = PAW_FALSE;
+//     if (pawR_read_global(P, key)) {
+//         paw_push_null(P);
+//     } else {
+//         found = PAW_TRUE;
+//     }
+//     paw_shift(P, 1); // replace 'key'
+//     return found;
+// }
 //
-//void paw_get_itemi(paw_Env *P, int index, paw_Int i)
+// void paw_get_itemi(paw_Env *P, int index, paw_Int i)
 //{
-//    const int abs = paw_abs_index(P, index);
-//    paw_push_int(P, i);
-//    paw_get_item(P, abs);
-//}
+//     const int abs = paw_abs_index(P, index);
+//     paw_push_int(P, i);
+//     paw_get_item(P, abs);
+// }
 //
-//paw_Bool paw_check_itemi(paw_Env *P, int index, paw_Int i)
+// paw_Bool paw_check_itemi(paw_Env *P, int index, paw_Int i)
 //{
-//    const int abs = paw_abs_index(P, index);
-//    paw_push_int(P, i);
-//    return paw_check_item(P, abs);
-//}
+//     const int abs = paw_abs_index(P, index);
+//     paw_push_int(P, i);
+//     return paw_check_item(P, abs);
+// }
 //
-//void paw_get_item(paw_Env *P, int index)
+// void paw_get_item(paw_Env *P, int index)
 //{
-//    if (!paw_check_item(P, index)) {
-//        // If the target container is a sequence, and the integer key is
-//        // out of bounds, then the runtime will throw a PAW_EINDEX before
-//        // this code is reached. The key must be a string if control has
-//        // made it here.
-//        pawR_error(P, PAW_ENAME, "key '%s' does not exist", paw_string(P, -1));
-//    }
-//}
+//     if (!paw_check_item(P, index)) {
+//         // If the target container is a sequence, and the integer key is
+//         // out of bounds, then the runtime will throw a PAW_EINDEX before
+//         // this code is reached. The key must be a string if control has
+//         // made it here.
+//         pawR_error(P, PAW_ENAME, "key '%s' does not exist", paw_string(P, -1));
+//     }
+// }
 //
-//paw_Bool paw_check_item(paw_Env *P, int index)
+// paw_Bool paw_check_item(paw_Env *P, int index)
 //{
-//    paw_push_value(P, index); // push container
-//    paw_rotate(P, -2, 1); // place container below key
-//    if (pawR_getitem(P)) {
-//        paw_push_null(P);
-//        paw_shift(P, 2);
-//        return PAW_FALSE;
-//    }
-//    return PAW_TRUE;
-//}
+//     paw_push_value(P, index); // push container
+//     paw_rotate(P, -2, 1); // place container below key
+//     if (pawR_getitem(P)) {
+//         paw_push_null(P);
+//         paw_shift(P, 2);
+//         return PAW_FALSE;
+//     }
+//     return PAW_TRUE;
+// }
 //
-//void paw_get_attr(paw_Env *P, int index, const char *attr)
+// void paw_get_attr(paw_Env *P, int index, const char *attr)
 //{
-//    if (!paw_check_attr(P, index, attr)) {
-//        pawR_error(P, PAW_EATTR, "attribute '%s' does not exist", attr);
-//    }
-//}
+//     if (!paw_check_attr(P, index, attr)) {
+//         pawR_error(P, PAW_EATTR, "attribute '%s' does not exist", attr);
+//     }
+// }
 //
-//paw_Bool paw_check_attr(paw_Env *P, int index, const char *attr)
+// paw_Bool paw_check_attr(paw_Env *P, int index, const char *attr)
 //{
-//    paw_push_value(P, index); // push instance
-//    paw_push_string(P, attr); // push attribute name
-//    if (pawR_getattr_raw(P, PAW_FALSE)) {
-//        paw_push_null(P);
-//        paw_shift(P, 2);
-//        return PAW_FALSE;
-//    }
-//    return PAW_TRUE;
-//}
+//     paw_push_value(P, index); // push instance
+//     paw_push_string(P, attr); // push attribute name
+//     if (pawR_getattr_raw(P, PAW_FALSE)) {
+//         paw_push_null(P);
+//         paw_shift(P, 2);
+//         return PAW_FALSE;
+//     }
+//     return PAW_TRUE;
+// }
 //
-//void paw_set_upvalue(paw_Env *P, int ifn, int index)
+// void paw_set_upvalue(paw_Env *P, int ifn, int index)
 //{
-//    StackPtr top = P->top.p;
-//    const Value fn = *access(P, ifn);
-//    switch (v_type(fn)) {
-//        case VNATIVE: {
-//            Native *f = v_native(fn);
-//            Value *v = &f->up[upvalue_index(f->nup, index)];
-//            *v = top[-1];
-//            paw_pop(P, 1);
-//            break;
-//        }
-//        case VCLOSURE: {
-//            Closure *f = v_closure(fn);
-//            UpValue *u = f->up[upvalue_index(f->nup, index)];
-//            *u->p.p = top[-1];
-//            paw_pop(P, 1);
-//            break;
-//        }
-//        default:
-//            break;
-//    }
-//}
+//     StackPtr top = P->top.p;
+//     const Value fn = *access(P, ifn);
+//     switch (v_type(fn)) {
+//         case VNATIVE: {
+//             Native *f = v_native(fn);
+//             Value *v = &f->up[upvalue_index(f->nup, index)];
+//             *v = top[-1];
+//             paw_pop(P, 1);
+//             break;
+//         }
+//         case VCLOSURE: {
+//             Closure *f = v_closure(fn);
+//             UpValue *u = f->up[upvalue_index(f->nup, index)];
+//             *u->p.p = top[-1];
+//             paw_pop(P, 1);
+//             break;
+//         }
+//         default:
+//             break;
+//     }
+// }
 //
 void paw_set_global(paw_Env *P, const char *name)
 {
-//    paw_push_string(P, name);
-//    paw_rotate(P, -2, 1); // Swap
-//
-//    const Value key = P->top.p[-2];
-//    pawR_write_global(P, key, PAW_TRUE);
-//    paw_pop(P, 1); // Pop 'key'
+    //    paw_push_string(P, name);
+    //    paw_rotate(P, -2, 1); // Swap
+    //
+    //    const Value key = P->top.p[-2];
+    //    pawR_write_global(P, key, PAW_TRUE);
+    //    paw_pop(P, 1); // Pop 'key'
 }
 
-//void paw_set_itemi(paw_Env *P, int index, paw_Int idx)
+// void paw_set_itemi(paw_Env *P, int index, paw_Int idx)
 //{
-//    const int abs = paw_abs_index(P, index);
-//    paw_push_int(P, idx);
-//    paw_set_item(P, abs);
-//}
+//     const int abs = paw_abs_index(P, index);
+//     paw_push_int(P, idx);
+//     paw_set_item(P, abs);
+// }
 //
-//void paw_set_item(paw_Env *P, int index)
+// void paw_set_item(paw_Env *P, int index)
 //{
-//    paw_push_value(P, index);
-//    paw_rotate(P, -3, 1);
-//    pawR_setitem_raw(P);
-//}
+//     paw_push_value(P, index);
+//     paw_rotate(P, -3, 1);
+//     pawR_setitem_raw(P);
+// }
 //
-//void paw_set_attr(paw_Env *P, int index, const char *s)
+// void paw_set_attr(paw_Env *P, int index, const char *s)
 //{
-//    paw_push_value(P, index);
-//    paw_push_string(P, s);
-//    paw_rotate(P, -3, -1);
-//    pawR_setattr_raw(P);
-//}
+//     paw_push_value(P, index);
+//     paw_push_string(P, s);
+//     paw_rotate(P, -3, -1);
+//     pawR_setattr_raw(P);
+// }
 //
 void paw_create_array(paw_Env *P, int n)
 {
-//    pawR_literal_array(P, n);
+    //    pawR_literal_array(P, n);
 }
 //
-//void paw_create_map(paw_Env *P, int n)
+// void paw_create_map(paw_Env *P, int n)
 //{
 //    pawR_literal_map(P, n);
 //}
 //
-//void paw_create_struct(paw_Env *P)
+// void paw_create_struct(paw_Env *P)
 //{
 //    pawV_push_struct(P);
 //}
 //
-//void paw_create_instance(paw_Env *P, int index)
+// void paw_create_instance(paw_Env *P, int index)
 //{
 //    const Value cls = *access(P, index);
 //    if (pawV_is_struct(cls)) {
@@ -590,7 +588,7 @@ void paw_create_array(paw_Env *P, int n)
 //    }
 //}
 //
-//void paw_create_native(paw_Env *P, paw_Function f, int nup)
+// void paw_create_native(paw_Env *P, paw_Function f, int nup)
 //{
 //    // Save the index of the first upvalue.
 //    const int base = paw_get_count(P) - nup;
@@ -605,7 +603,7 @@ void paw_create_array(paw_Env *P, int n)
 //    paw_shift(P, nup);
 //}
 //
-//void *paw_create_foreign(paw_Env *P, size_t size, int nbound)
+// void *paw_create_foreign(paw_Env *P, size_t size, int nbound)
 //{
 //    Foreign *ud = pawV_push_foreign(P, size, nbound);
 //    return ud->data;
@@ -652,35 +650,35 @@ void paw_shift(paw_Env *P, int n)
     paw_pop(P, n);
 }
 
-//void paw_call_global(paw_Env *P, const char *name, int argc)
+// void paw_call_global(paw_Env *P, const char *name, int argc)
 //{
-//    paw_get_global(P, name);
-//    paw_insert(P, -argc - 2);
-//    paw_call(P, argc);
-//}
+//     paw_get_global(P, name);
+//     paw_insert(P, -argc - 2);
+//     paw_call(P, argc);
+// }
 //
-//void paw_call_attr(paw_Env *P, int index, const char *name, int argc)
+// void paw_call_attr(paw_Env *P, int index, const char *name, int argc)
 //{
-//    paw_push_value(P, index);
-//    paw_push_string(P, name);
-//    paw_insert(P, -argc - 3);
-//    paw_call(P, argc);
-//}
+//     paw_push_value(P, index);
+//     paw_push_string(P, name);
+//     paw_insert(P, -argc - 3);
+//     paw_call(P, argc);
+// }
 //
-//void paw_unop(paw_Env *P, int op)
+// void paw_unop(paw_Env *P, int op)
 //{
-//    pawR_unop(P, (UnaryOp)op);
-//}
+//     pawR_unop(P, (UnaryOp)op);
+// }
 //
-//void paw_binop(paw_Env *P, int op)
+// void paw_binop(paw_Env *P, int op)
 //{
-//    pawR_binop(P, (BinaryOp)op);
-//}
+//     pawR_binop(P, (BinaryOp)op);
+// }
 
 void paw_raw_equals(paw_Env *P)
 {
     const Value x = P->top.p[-2];
     const Value y = P->top.p[-1];
-    //paw_push_boolean(P, pawV_equal(x, y));
+    // paw_push_boolean(P, pawV_equal(x, y));
     paw_shift(P, 2);
 }

@@ -42,6 +42,7 @@ typedef struct Generator {
     SymbolTable *sym; // scoped symbol table
     Scope *globals; // global symbols
     struct Ast *ast; // typed AST
+    int iglobal;
 } Generator;
 
 void pawK_fix_line(FuncState *fs, int line);

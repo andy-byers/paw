@@ -1,4 +1,3 @@
-#include "vector.h"
 #include "call.h"
 #include "map.h"
 #include "paw.h"
@@ -6,12 +5,13 @@
 #include "test.h"
 #include "util.h"
 #include "value.h"
+#include "vector.h"
 #include <assert.h>
 #include <float.h>
+#include <inttypes.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <inttypes.h>
 
 // Test the primitive value representations
 static void test_primitives(void)
@@ -106,7 +106,7 @@ static void dump_map(Map *m)
         const MapMeta *mm = pawH_meta(m, i);
         printf("    %.4zu: ", i);
         if (mm->state == MAP_ITEM_OCCUPIED) {
-            printf("%" PRId64 ": %" PRId64 "\n", 
+            printf("%" PRId64 ": %" PRId64 "\n",
                    pawH_key(m, i)->i, pawH_value(m, i)->i);
         } else if (mm->state == MAP_ITEM_ERASED) {
             printf("<erased>\n");

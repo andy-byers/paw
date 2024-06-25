@@ -95,7 +95,7 @@ typedef struct Lex {
 #define x_base_type(x, t) ((x)->mod->types[t])
 
 String *pawX_scan_string(Lex *lex, const char *s, size_t n);
-void pawX_set_source(Lex *lex, paw_Reader input);
+void pawX_set_source(Lex *lex, paw_Reader input, void *ud);
 TokenKind pawX_next(Lex *lex);
 TokenKind pawX_peek(Lex *lex);
 

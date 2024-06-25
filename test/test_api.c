@@ -82,7 +82,7 @@ static int fib(paw_Env *P)
     // Cache the result
     paw_get_upvalue(P, 0, 0);
     paw_get_attr(P, -1, "push"); // Get 'push' method
-    paw_push_value(P, -3);       // Value to push
+    paw_push_value(P, -3); // Value to push
     paw_call(P, 1);
     paw_pop(P, 2);
     return 1;
@@ -91,7 +91,7 @@ static int fib(paw_Env *P)
 static paw_Int call_fib(paw_Env *P, int n)
 {
     paw_push_value(P, -1); // copy closure
-    paw_push_int(P, n);    // push parameter
+    paw_push_int(P, n); // push parameter
     const int status = paw_call(P, 1);
     check(status == PAW_OK);
 
