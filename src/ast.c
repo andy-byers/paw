@@ -204,13 +204,6 @@ static void visit_chain_expr(AstVisitor *V, ChainExpr *e)
     V->visit_expr(V, e->target);
 }
 
-static void visit_cond_expr(AstVisitor *V, CondExpr *e)
-{
-    V->visit_expr(V, e->cond);
-    V->visit_expr(V, e->lhs);
-    V->visit_expr(V, e->rhs);
-}
-
 static void visit_unop_expr(AstVisitor *V, UnOpExpr *e)
 {
     V->visit_expr(V, e->target);
@@ -344,6 +337,11 @@ static void visit_index_expr(AstVisitor *V, Index *e)
     visit_exprs(V, e->elems);
 }
 
+static void visit_access_expr(AstVisitor *V, Access *e)
+{
+    V->visit_expr(V, e->target);
+}
+
 static void visit_selector_expr(AstVisitor *V, Selector *e)
 {
     V->visit_expr(V, e->target);
@@ -373,9 +371,6 @@ static void visit_expr(AstVisitor *V, AstExpr *expr)
         case EXPR_CALL:
             V->visit_call_expr(V, &expr->call);
             break;
-        case EXPR_COND:
-            V->visit_cond_expr(V, &expr->cond);
-            break;
         case EXPR_NAME:
             V->visit_ident_expr(V, &expr->name);
             break;
@@ -390,6 +385,9 @@ static void visit_expr(AstVisitor *V, AstExpr *expr)
             break;
         case EXPR_TYPE_NAME:
             V->visit_type_name_expr(V, &expr->type_name);
+            break;
+        case EXPR_ACCESS:
+            V->visit_access_expr(V, &expr->access);
             break;
         default:
             paw_assert(a_kind(expr) == EXPR_SELECTOR);
@@ -417,6 +415,9 @@ static void visit_decl(AstVisitor *V, AstDecl *decl)
             break;
         case DECL_FUNC:
             V->visit_func_decl(V, &decl->func);
+            break;
+        case DECL_VARIANT:
+            V->visit_variant_decl(V, &decl->variant);
             break;
         default:
             paw_assert(a_kind(decl) == DECL_STRUCT);
@@ -483,9 +484,9 @@ void pawA_visitor_init(AstVisitor *V, Ast *ast, AstState state)
         .visit_chain_expr = visit_chain_expr,
         .visit_unop_expr = visit_unop_expr,
         .visit_binop_expr = visit_binop_expr,
-        .visit_cond_expr = visit_cond_expr,
         .visit_call_expr = visit_call_expr,
         .visit_index_expr = visit_index_expr,
+        .visit_access_expr = visit_access_expr,
         .visit_selector_expr = visit_selector_expr,
         .visit_item_expr = visit_item_expr,
         .visit_type_name_expr = visit_type_name_expr,
@@ -577,14 +578,6 @@ static AstExpr *fold_literal_expr(AstFolder *F, LiteralExpr *e)
 static AstExpr *fold_chain_expr(AstFolder *F, ChainExpr *e)
 {
     e->target = F->fold_expr(F, e->target);
-    return cast_expr(e);
-}
-
-static AstExpr *fold_cond_expr(AstFolder *F, CondExpr *e)
-{
-    e->cond = F->fold_expr(F, e->cond);
-    e->lhs = F->fold_expr(F, e->lhs);
-    e->rhs = F->fold_expr(F, e->rhs);
     return cast_expr(e);
 }
 
@@ -731,6 +724,12 @@ static AstExpr *fold_selector_expr(AstFolder *F, Selector *e)
     return cast_expr(e);
 }
 
+static AstExpr *fold_access_expr(AstFolder *F, Access *e)
+{
+    e->target = F->fold_expr(F, e->target);
+    return cast_expr(e);
+}
+
 static AstExpr *fold_expr(AstFolder *F, AstExpr *expr)
 {
     if (expr == NULL) {
@@ -749,8 +748,6 @@ static AstExpr *fold_expr(AstFolder *F, AstExpr *expr)
             return F->fold_binop_expr(F, &expr->binop);
         case EXPR_CALL:
             return F->fold_call_expr(F, &expr->call);
-        case EXPR_COND:
-            return F->fold_cond_expr(F, &expr->cond);
         case EXPR_NAME:
             return F->fold_ident_expr(F, &expr->name);
         case EXPR_INDEX:
@@ -761,6 +758,8 @@ static AstExpr *fold_expr(AstFolder *F, AstExpr *expr)
             return F->fold_signature_expr(F, &expr->func);
         case EXPR_TYPE_NAME:
             return F->fold_type_name_expr(F, &expr->type_name);
+        case EXPR_ACCESS:
+            return F->fold_access_expr(F, &expr->access);
         default:
             paw_assert(a_kind(expr) == EXPR_SELECTOR);
             return F->fold_selector_expr(F, &expr->selector);
@@ -785,6 +784,8 @@ static AstDecl *fold_decl(AstFolder *F, AstDecl *decl)
             return F->fold_func_decl(F, &decl->func);
         case DECL_INSTANCE:
             return F->fold_instance_decl(F, &decl->inst);
+        case DECL_VARIANT:
+            return F->fold_variant_decl(F, &decl->variant);
         default:
             paw_assert(a_kind(decl) == DECL_STRUCT);
             return F->fold_struct_decl(F, &decl->struct_);
@@ -842,7 +843,6 @@ void pawA_fold_init(AstFolder *F, Ast *ast, AstState state)
         .fold_chain_expr = fold_chain_expr,
         .fold_unop_expr = fold_unop_expr,
         .fold_binop_expr = fold_binop_expr,
-        .fold_cond_expr = fold_cond_expr,
         .fold_call_expr = fold_call_expr,
         .fold_index_expr = fold_index_expr,
         .fold_selector_expr = fold_selector_expr,
@@ -1035,15 +1035,6 @@ static AstExpr *copy_chain_expr(AstFolder *F, ChainExpr *e)
     return r;
 }
 
-static AstExpr *copy_cond_expr(AstFolder *F, CondExpr *e)
-{
-    AstExpr *r = copy_prep_expr(F, e);
-    r->cond.cond = F->fold_expr(F, e->cond);
-    r->cond.lhs = F->fold_expr(F, e->lhs);
-    r->cond.rhs = F->fold_expr(F, e->rhs);
-    return r;
-}
-
 static AstExpr *copy_unop_expr(AstFolder *F, UnOpExpr *e)
 {
     AstExpr *r = copy_prep_expr(F, e);
@@ -1116,6 +1107,14 @@ static AstDecl *copy_struct_decl(AstFolder *F, StructDecl *d)
     r->struct_.name = d->name;
     r->struct_.generics = copy_decls(F, d->generics);
     r->struct_.fields = copy_decls(F, d->fields);
+    return r;
+}
+
+static AstDecl *copy_variant_decl(AstFolder *F, VariantDecl *d)
+{
+    AstDecl *r = copy_prep_decl(F, d);
+    r->variant.name = d->name;
+    r->variant.fields = copy_exprs(F, d->fields);
     return r;
 }
 
@@ -1212,6 +1211,14 @@ static AstExpr *copy_index_expr(AstFolder *F, Index *e)
     return r;
 }
 
+static AstExpr *copy_access_expr(AstFolder *F, Access *e)
+{
+    AstExpr *r = copy_prep_expr(F, e);
+    r->access.target = F->fold_expr(F, e->target);
+    r->access.name = e->name;
+    return r;
+}
+
 static AstExpr *copy_selector_expr(AstFolder *F, Selector *e)
 {
     AstExpr *r = copy_prep_expr(F, e);
@@ -1237,9 +1244,9 @@ static void setup_copy_pass(AstFolder *F, Copier *C)
     F->fold_chain_expr = copy_chain_expr;
     F->fold_unop_expr = copy_unop_expr;
     F->fold_binop_expr = copy_binop_expr;
-    F->fold_cond_expr = copy_cond_expr;
     F->fold_call_expr = copy_call_expr;
     F->fold_index_expr = copy_index_expr;
+    F->fold_access_expr = copy_access_expr;
     F->fold_selector_expr = copy_selector_expr;
     F->fold_item_expr = copy_item_expr;
     F->fold_type_name_expr = copy_type_name_expr;
@@ -1252,6 +1259,7 @@ static void setup_copy_pass(AstFolder *F, Copier *C)
     F->fold_while_stmt = copy_while_stmt;
     F->fold_label_stmt = copy_label_stmt;
     F->fold_return_stmt = copy_return_stmt;
+    F->fold_variant_decl = copy_variant_decl;
     F->fold_var_decl = copy_var_decl;
     F->fold_func_decl = copy_func_decl;
     F->fold_struct_decl = copy_struct_decl;
@@ -1486,15 +1494,6 @@ static AstExpr *stencil_chain_expr(AstFolder *F, ChainExpr *e)
     return r;
 }
 
-static AstExpr *stencil_cond_expr(AstFolder *F, CondExpr *e)
-{
-    AstExpr *r = stencil_prep_expr(F, e);
-    r->cond.cond = F->fold_expr(F, e->cond);
-    r->cond.lhs = F->fold_expr(F, e->lhs);
-    r->cond.rhs = F->fold_expr(F, e->rhs);
-    return r;
-}
-
 static AstExpr *stencil_unop_expr(AstFolder *F, UnOpExpr *e)
 {
     AstExpr *r = stencil_prep_expr(F, e);
@@ -1560,6 +1559,18 @@ static AstDecl *stencil_generic_decl(AstFolder *F, GenericDecl *d)
     return r;
 }
 
+static AstDecl *stencil_variant_decl(AstFolder *F, VariantDecl *d)
+{
+    AstDecl *r = stencil_prep_decl(F, d);
+    r->variant.name = d->name;
+
+    ScopeState state;
+    enter_scope(F, &state, d->scope);
+    r->variant.fields = stencil_decls(F, d->fields);
+    r->variant.scope = leave_scope(F);
+    return r;
+}
+
 static AstDecl *stencil_struct_decl(AstFolder *F, StructDecl *d)
 {
     AstDecl *r = stencil_prep_decl(F, d);
@@ -1568,6 +1579,7 @@ static AstDecl *stencil_struct_decl(AstFolder *F, StructDecl *d)
     enter_scope(F, &state, d->scope);
 
     r->struct_.is_global = d->is_global;
+    r->struct_.is_struct = d->is_struct;
     r->struct_.name = d->name;
     r->struct_.generics = stencil_decls(F, d->generics);
 
@@ -1725,6 +1737,14 @@ static AstExpr *stencil_selector_expr(AstFolder *F, Selector *e)
     return r;
 }
 
+static AstExpr *stencil_access_expr(AstFolder *F, Access *e)
+{
+    AstExpr *r = stencil_prep_expr(F, e);
+    r->access.target = F->fold_expr(F, e->target);
+    r->access.name = e->name;
+    return r;
+}
+
 static AstStmt *stencil_decl_stmt(AstFolder *F, AstDeclStmt *s)
 {
     AstStmt *r = stencil_prep_stmt(F, s);
@@ -1742,9 +1762,9 @@ static void setup_stencil_pass(AstFolder *F, Stenciler *S)
     F->fold_chain_expr = stencil_chain_expr;
     F->fold_unop_expr = stencil_unop_expr;
     F->fold_binop_expr = stencil_binop_expr;
-    F->fold_cond_expr = stencil_cond_expr;
     F->fold_call_expr = stencil_call_expr;
     F->fold_index_expr = stencil_index_expr;
+    F->fold_access_expr = stencil_access_expr;
     F->fold_selector_expr = stencil_selector_expr;
     F->fold_item_expr = stencil_item_expr;
     F->fold_type_name_expr = stencil_type_name_expr;
@@ -1757,6 +1777,7 @@ static void setup_stencil_pass(AstFolder *F, Stenciler *S)
     F->fold_while_stmt = stencil_while_stmt;
     F->fold_label_stmt = stencil_label_stmt;
     F->fold_return_stmt = stencil_return_stmt;
+    F->fold_variant_decl = stencil_variant_decl;
     F->fold_var_decl = stencil_var_decl;
     F->fold_func_decl = stencil_func_decl;
     F->fold_struct_decl = stencil_struct_decl;
@@ -2005,6 +2026,9 @@ static void print_decl_kind(Printer *P, void *node)
         case DECL_VAR:
             fprintf(P->out, "VarDecl");
             break;
+        case DECL_VARIANT:
+            fprintf(P->out, "VariantDecl");
+            break;
         case DECL_STRUCT:
             fprintf(P->out, "StructDecl");
             break;
@@ -2037,9 +2061,6 @@ static void print_expr_kind(Printer *P, void *node)
             break;
         case EXPR_CALL:
             fprintf(P->out, "CallExpr");
-            break;
-        case EXPR_COND:
-            fprintf(P->out, "CondExpr");
             break;
         case EXPR_NAME:
             fprintf(P->out, "Ident");
@@ -2172,9 +2193,13 @@ static void dump_decl(Printer *P, AstDecl *d)
             dump_msg(P, "init: ");
             dump_expr(P, d->var.init);
             break;
+        case DECL_VARIANT:
+            dump_name(P, d->variant.name);
+            dump_decl_list(P, d->variant.fields, "fields");
+            break;
         case DECL_STRUCT:
             dump_name(P, d->struct_.name);
-            dump_fmt(P, "type: %d\n", d->struct_.type->hdr.def);
+            dump_fmt(P, "is_struct: %d\n", d->struct_.is_struct);
             dump_decl_list(P, d->struct_.generics, "generics");
             dump_decl_list(P, d->struct_.fields, "fields");
             dump_decl_list(P, d->func.monos, "monos");
@@ -2329,14 +2354,6 @@ static void dump_expr(Printer *P, AstExpr *e)
             dump_msg(P, "target: ");
             dump_expr(P, e->call.target);
             dump_expr_list(P, e->call.args, "args");
-            break;
-        case EXPR_COND:
-            dump_msg(P, "cond: ");
-            dump_expr(P, e->cond.cond);
-            dump_msg(P, "lhs: ");
-            dump_expr(P, e->cond.lhs);
-            dump_msg(P, "rhs: ");
-            dump_expr(P, e->cond.rhs);
             break;
         case EXPR_NAME:
             dump_name(P, e->name.name);

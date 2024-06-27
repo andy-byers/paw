@@ -142,18 +142,29 @@ static CallFrame *next_call_frame(paw_Env *P, StackPtr top)
     return callee;
 }
 
-static void call_return(paw_Env *P, StackPtr base, paw_Bool has_return)
+// This function performs the following transformation on the stack:
+//     f x1..xm r1..rn => r1..rn
+// Where f is the callee, x1..xm are m local variables, and r1..rn are the n
+// return slots from f. 
+static void call_return(paw_Env *P, StackPtr base, int nresults)
 {
-    if (has_return) {
-        Value ret = P->top.p[-1];
-        P->top.p = base + 1;
-        P->top.p[-1] = ret;
+    if (nresults > 0) {
+        const Value *psrc = &P->top.p[-nresults];
+        for (int i = 0; i < nresults; ++i) {
+            base[i] = *psrc++;
+        }
     } else {
-        // implicit 'return ()'
-        P->top.p = base + 1;
-        P->top.p->u = 0; // clear value
+        v_set_0(base);
+        nresults = 1;
     }
-    P->cf = P->cf->prev;
+    P->top.p = base + nresults;
+}
+
+void pawC_postcall(paw_Env *P, CallFrame *cf, int nresults)
+{
+    pawR_close_upvalues(P, cf->base.p);
+    call_return(P, cf->base.p, nresults);
+    P->cf = cf->prev;
 }
 
 static void handle_ccall(paw_Env *P, StackPtr base, Native *ccall)
@@ -169,10 +180,9 @@ static void handle_ccall(paw_Env *P, StackPtr base, Native *ccall)
     cf->top.p = base;
 
     // call the C function
-    const int nret = ccall->func(P);
+    const int nresults = ccall->func(P);
     base = restore_pointer(P, pos);
-    call_return(P, base, nret);
-    // pawR_close_upvalues(P, base);
+    pawC_postcall(P, cf, nresults);
 }
 
 static void check_fixed_args(paw_Env *P, Proto *f, int argc)
@@ -233,8 +243,7 @@ CallFrame *pawC_precall(paw_Env *P, StackPtr base, Object *callable, int argc)
             //            break;
             //        }
         default:
-            paw_assert(0);
-            //            pawR_error(P, PAW_ETYPE, "type is not callable");
+            pawR_error(P, PAW_ETYPE, "type is not callable");
     }
     CallFrame *cf = next_call_frame(P, P->top.p);
     Proto *p = fn->p;
@@ -255,7 +264,7 @@ call_native:
 
 void pawC_call(paw_Env *P, Object *f, int argc)
 {
-    StackPtr base = P->top.p - argc - 1; // context
+    StackPtr base = P->top.p - argc - 1;
     CallFrame *cf = pawC_precall(P, base, f, argc);
     if (cf) {
         cf->flags |= CFF_ENTRY;
@@ -286,12 +295,8 @@ int pawC_try(paw_Env *P, Call call, void *arg)
         pawR_close_upvalues(P, ptr);
         if (cf == &P->main) {
             // relocate the error message
-            call_return(P, ptr, PAW_TRUE);
+            call_return(P, ptr, 1);
         } else {
-            // TODO: The error message gets ignored so that the error status
-            //       can be returned in paw (no multi-return). Once that gets
-            //       implemented, the error message can be the second return
-            //       value.
             P->top.p = ptr;
         }
         P->cf = cf;
@@ -326,12 +331,3 @@ void pawC_uninit(paw_Env *P)
     pawM_free_vec(P, P->stack.p, P->bound.p - P->stack.p);
 }
 
-StackPtr pawC_return(paw_Env *P, int nret)
-{
-    StackPtr base = cf_stack_return(P->cf);
-    StackPtr top = P->top.p;
-    for (int i = 0; i < nret; ++i) {
-        base[i] = *--top;
-    }
-    return base;
-}

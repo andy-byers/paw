@@ -794,20 +794,12 @@ void pawR_literal_map(paw_Env *P, int n)
     }
 }
 
-// TODO: 'null' -> Option[T]::None
-// static paw_Bool should_jump_null(paw_Env *P)
-//{
-//    const Value *pv = vm_peek(0);
-////    if (meta_single(P, MM_NULL, *pv)) {
-////        if (v_is_null(*vm_peek(0))) {
-////            vm_pop(1);
-////            return PAW_TRUE;
-////        }
-////        vm_shift(1);
-////        return PAW_FALSE;
-////    }
-//    return v_is_null(*pv);
-//}
+static paw_Bool should_jump_null(paw_Env *P)
+{
+    // discriminator is at the end: 0 = None/Err, 1 = Some/Ok
+    const Value *pv = vm_peek(0);
+    return pv->u == 0;
+}
 
 static paw_Bool should_jump_false(paw_Env *P) 
 { 
@@ -1032,15 +1024,9 @@ top:
 
             vm_case(RETURN) :
             {
-                const Value result = *vm_peek(0);
-                vm_pop(1);
-
-                P->top.p = cf_stack_return(cf);
                 vm_save();
+                pawC_postcall(P, cf, get_U(opcode));
 
-                pawR_close_upvalues(P, vm_peek(0));
-                vm_pushv(result);
-                P->cf = cf->prev;
                 if (cf_is_entry(cf)) {
                     return;
                 }
@@ -1053,12 +1039,12 @@ top:
                 pc += get_S(opcode);
             }
 
-            //        vm_case(JUMPNULL) :
-            //        {
-            //            if (should_jump_null(P)) {
-            //                pc += get_S(opcode);
-            //            }
-            //        }
+            vm_case(JUMPNULL) :
+            {
+                if (should_jump_null(P)) {
+                    pc += get_S(opcode);
+                }
+            }
 
             vm_case(JUMPFALSE) :
             {

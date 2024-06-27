@@ -98,16 +98,16 @@ OP_PUSHSTRUCT,//     U           -            C[u]          -
 
 OP_POP,//            -           v            -             -
 OP_COPY,//           -           v            v v           -
-OP_CLOSE,//          A B         v_a..v_1     -             if b, close stack to v_a
-OP_RETURN,//         -           f..v         v             closes stack to f
+OP_CLOSE,//          A B         va..v1       -             if b, close stack to va
+OP_RETURN,//         U           f..vu..v1    vu..v1        closes stack to f
 
-OP_CLOSURE,//        A B         v_b..v_1     f             captures v_u..v_1 in f = P[a]
+OP_CLOSURE,//        A B         vb..v1       f             captures vb..v1 in f = P[a]
 OP_INVOKE,//      
 
-OP_JUMP,//           S           -            -             pc += S
-OP_JUMPFALSEPOP,//   S           v            -             pc += S
-OP_JUMPFALSE,//      S           v            v             if !v, then pc += S
-OP_JUMPNULL,//       S           v            v             if v == null, then pc += S
+OP_JUMP,//           S           -            -             pc += s
+OP_JUMPFALSEPOP,//   S           v            -             pc += s
+OP_JUMPFALSE,//      S           v            v             if !v, then pc += s
+OP_JUMPNULL,//       S           v            v             if v == <null>, then pc += s
 
 OP_GLOBAL,//         U           v            -             define G[K[u]] = v
 OP_GETGLOBAL,//      U           -            G[K[u]]       -
@@ -119,8 +119,8 @@ OP_SETUPVALUE,//     U           v            -             Up[u] = v
 
 OP_NEWINSTANCE,//    U           -            v             v = new instance of class C[u]
 OP_INITFIELD,//      U           i v          i             i.fields[u] = v
-OP_NEWVECTOR,//      U           v_u..v_1     [v_u..v_1]    -
-OP_NEWMAP,//         U           v_2n..v_1    {v_2n..v_1}   -
+OP_NEWVECTOR,//      U           vu..v1       [vu..v1]      -
+OP_NEWMAP,//         U           v2n..v1      {v2n..v1}     -
 
 OP_FORNUM0,//        S           *-*-*-*-*-*-*-*-* see notes *-*-*-*-*-*-*-*-*
 OP_FORNUM,//         S           *-*-*-*-*-*-*-*-* see notes *-*-*-*-*-*-*-*-*
@@ -136,9 +136,9 @@ OP_CASTBOOL,//       U           v            bool(v)       -
 OP_CASTINT,//        U           v            int(v)        - 
 OP_CASTFLOAT,//      U           v            float(v)      - 
          
-OP_VARARG,//         A B         v_u..v_1     [v_u..v_1]    -
+OP_VARARG,//         A B         vb..v1       [vb..v1]      -
 OP_INIT,
-OP_CALL,//           U           f v_u..v_1   v             v = f(v_u..v_1)
+OP_CALL,//           U           f vu..v1     v             v = f(vu..v1)
 
 OP_GETATTR,//        U           v            v.fields[u]   -
 OP_SETATTR,//        U           v x          -             v.fields[u]=x
@@ -166,7 +166,7 @@ typedef enum {
     BINARY_LE,   
     BINARY_GT,   
     BINARY_GE,   
-    BINARY_IN, // TODO: Shouldn't be a binary op, needs 2 type tags  
+    BINARY_IN,
     BINARY_ADD,  
     BINARY_SUB,  
     BINARY_MUL,  

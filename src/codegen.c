@@ -129,6 +129,82 @@ static void pop_local_table(FuncState *fs)
     --st->nscopes;
 }
 
+static int get_width(Generator *G, const AstType *type)
+{
+    if (type->hdr.def == NO_DECL) {
+        return 1; // function pointer
+    }
+
+    int width;
+    const AstDecl *decl = get_decl(G, type->hdr.def);
+    if (a_kind(decl) == DECL_VARIANT) {
+        const DefId id = type->adt.base;
+        const AstDecl *base = get_decl(G, id);
+        width = base->struct_.width;
+    } else if (a_kind(decl) == DECL_STRUCT) {
+        const StructDecl *struct_ = &decl->struct_;
+        width = struct_->width;
+    } else {
+        return 1;
+    }
+    if (width == 0) {
+        syntax_error(G, "recursive types are not allowed");
+    }
+    return width;
+}
+
+static void compute_width(Generator *G, AstDecl *decl);
+
+static int compute_fields_width(Generator *G, const AstList *list)
+{
+    int accum = 0;
+    for (int i = 0; i < list->count; ++i) {
+        AstDecl *decl = list->data[i];
+        compute_width(G, decl);
+
+        FieldDecl *field = &decl->field;
+        field->offset = accum;
+        accum += field->width;
+    }
+    return accum;
+}
+
+static void compute_enum_width(Generator *G, StructDecl *d)
+{
+    paw_assert(d->width == 0);
+    for (int i = 0; i < d->fields->count; ++i) {
+        AstDecl *decl = d->fields->data[i];
+        VariantDecl *var = &decl->variant;
+        paw_assert(var->used == 0);
+        var->used = compute_fields_width(G, var->fields);
+        if (d->width < var->used) {
+            d->width = var->used;
+        }
+    } 
+    // account for discriminator
+    ++d->width;
+}
+
+// Determine the number of stack slots needed to represent the given value 
+// Recursively populates the size of each field in a composite type.
+static void compute_width(Generator *G, AstDecl *decl)
+{
+    if (a_kind(decl) == DECL_VARIANT) {
+        decl->variant.used = compute_fields_width(G, decl->variant.fields);
+    } else if (a_kind(decl) == DECL_FUNC) {
+        decl->func.param_width = compute_fields_width(G, decl->func.params);
+    } else if (a_kind(decl) == DECL_FIELD) {
+        decl->field.width = get_width(G, decl->field.type);
+    } else if (a_kind(decl) != DECL_STRUCT) {
+        // width is 1, implicitly
+    } else if (decl->struct_.is_struct) {
+        decl->struct_.width = 1; // TODO: value semantics for structures
+        //decl->struct_.width = compute_fields_width(G, decl->struct_.fields);
+    } else {
+        compute_enum_width(G, &decl->struct_);
+    }
+}
+
 static int add_constant(Generator *G, Value v)
 {
     FuncState *fs = G->fs;
@@ -160,7 +236,7 @@ static int add_struct(Generator *G, Struct *struct_)
     return sv->size++;
 }
 
-static int add_proto(Generator *G, String *name, Proto **pp)
+static int add_proto(Generator *G, FuncDecl *d, Proto **pp)
 {
     Lex *lex = G->lex;
     FuncState *fs = G->fs;
@@ -174,15 +250,16 @@ static int add_proto(Generator *G, String *name, Proto **pp)
         }
     }
     Proto *callee = pawV_new_proto(env(lex));
+    callee->nresults = get_width(G, a_type(d->return_));
     callee->modname = lex->modname;
-    callee->name = name;
+    callee->name = d->name;
 
     const int id = fs->nproto++;
     p->p[id] = *pp = callee;
     return id;
 }
 
-static void add_debug_info(Generator *G, Symbol *symbol)
+static void add_debug_info(Generator *G, LocalSlot *slot)
 {
     FuncState *fs = G->fs;
     Proto *p = fs->proto;
@@ -194,18 +271,26 @@ static void add_debug_info(Generator *G, Symbol *symbol)
             p->v[i].var = (VarDesc){0}; // clear for GC
         }
     }
+    Symbol *symbol = slot->symbol;
     p->v[fs->ndebug] = (struct LocalInfo){
         .var = {symbol->name, symbol->decl->hdr.def},
+        .index = slot->index,
+        .width = slot->width,
         .pc0 = fs->pc,
     };
+    slot->debug = fs->ndebug;
     ++fs->ndebug;
 }
 
 static struct LocalInfo *local_info(FuncState *fs, int level)
 {
-    return &fs->proto->v[level];
+    const LocalSlot *slot = &fs->locals.slots[level];
+    return &fs->proto->v[slot->debug];
 }
 
+// TODO: Have OP_CLOSE/OP_POP take an immediate argument that specifies n (how many slots to close/pop), 
+//       rather than generating n close/pop instructions! If anything needs to be closed, generate OP_CLOSE,
+//       otherwise OP_POP. Track that info separately to avoid having to search for local.captured == 1?
 static void close_vars(FuncState *fs, int target)
 {
     const int upper = fs->level - 1; // first slot to pop
@@ -213,7 +298,10 @@ static void close_vars(FuncState *fs, int target)
     paw_assert(lower <= upper);
     for (int i = upper; i > lower; --i) {
         struct LocalInfo *local = local_info(fs, i);
-        if (local->captured) {
+        for (int i = 1; i < local->width; ++i) {
+            pawK_code_0(fs, OP_POP);
+        }
+        if (local->is_captured) {
             pawK_code_0(fs, OP_CLOSE);
         } else {
             pawK_code_0(fs, OP_POP);
@@ -224,15 +312,20 @@ static void close_vars(FuncState *fs, int target)
 static VarInfo add_local(FuncState *fs, Symbol *symbol)
 {
     Lex *lex = fs->G->lex;
-    pawM_grow(env(lex), fs->locals.slots, fs->locals.nslots,
-              fs->locals.capacity);
-    const int index = fs->locals.nslots++;
-    fs->locals.slots[index].symbol = symbol;
-    fs->locals.slots[index].index = index; // TODO
+    pawM_grow(env(lex), fs->locals.slots, fs->locals.nslots, fs->locals.capacity);
+    const int width = get_width(fs->G, a_type(symbol->decl));
+    const int islot = fs->locals.nslots++;
+    const int index = fs->locals.width;
+    fs->locals.width += width;
+    fs->locals.slots[islot].index = index;
+    fs->locals.slots[islot].symbol = symbol;
+    fs->locals.slots[islot].width = width;
+    fs->locals.slots[islot].debug = -1;
     return (VarInfo){
         .symbol = symbol,
         .kind = VAR_LOCAL,
         .index = index,
+        .width = width,
     };
 }
 
@@ -259,12 +352,13 @@ static VarInfo transfer_global(Generator *G)
 {
     const int index = G->iglobal++;
     Symbol *symbol = G->globals->symbols[index];
-    pawE_new_global(env(G->lex), symbol->name,
-                    a_type_code(a_type(symbol->decl))); // TODO
+    AstType *type = a_type(symbol->decl);
+    pawE_new_global(env(G->lex), symbol->name, a_type_code(type));
     return (VarInfo){
         .symbol = symbol,
         .kind = VAR_GLOBAL,
         .index = index,
+        .width = get_width(G, type),
     };
 }
 
@@ -379,15 +473,17 @@ static void begin_local_scope(FuncState *fs, int n)
     LocalStack *locals = &fs->locals;
     for (int i = 0; i < n; ++i) {
         const int level = fs->level++;
-        LocalSlot slot = locals->slots[level];
-        add_debug_info(fs->G, slot.symbol);
+        add_debug_info(fs->G, &locals->slots[level]);
     }
 }
 
 static void end_local_scope(FuncState *fs, BlockState *bs)
 {
     for (int i = fs->level - 1; i >= bs->level; --i) {
-        local_info(fs, i)->pc1 = fs->pc;
+        struct LocalInfo *info = local_info(fs, i);
+        fs->locals.width -= info->width;
+        paw_assert(info->index == fs->locals.width);
+        info->pc1 = fs->pc;
     }
     fs->locals.nslots = bs->level;
     fs->level = bs->level;
@@ -408,8 +504,7 @@ static void leave_block(FuncState *fs)
     pop_local_table(fs);
 }
 
-static void enter_block(FuncState *fs, BlockState *bs, Scope *locals,
-                        paw_Bool loop)
+static void enter_block(FuncState *fs, BlockState *bs, Scope *locals, paw_Bool loop)
 {
     bs->label0 = fs->G->lex->pm->labels.length;
     bs->level = fs->level;
@@ -436,7 +531,7 @@ static void leave_function(Generator *G)
     // TODO: Need a return at the end to handle cleaning up the stack
     //       Use a landing pad: all returns are just jumps to the landing pad
     pawK_code_0(fs, OP_PUSHUNIT);
-    pawK_code_0(fs, OP_RETURN);
+    pawK_code_U(fs, OP_RETURN, 1);
 
     pawM_shrink(env(lex), p->source, p->length, fs->pc);
     p->length = fs->pc;
@@ -453,14 +548,6 @@ static void leave_function(Generator *G)
 
     G->fs = fs->outer;
     check_gc(env(lex));
-}
-
-static String *context_name(const FuncState *fs, FuncKind kind)
-{
-    if (fn_has_self(kind)) {
-        return scan_string(fs->G->lex, "(self)");
-    }
-    return fs->proto->name;
 }
 
 static void enter_function(Generator *G, FuncState *fs, BlockState *bs,
@@ -497,9 +584,11 @@ static paw_Bool resolve_global(Generator *G, String *name, VarInfo *pinfo)
     Lex *lex = G->lex;
     Scope *globals = lex->pm->symbols.globals;
     Symbol *symbol = fetch_symbol(globals, name, &index);
+    AstType *type = a_type(symbol->decl);
     pinfo->symbol = symbol;
     pinfo->kind = VAR_GLOBAL;
     pinfo->index = index;
+    pinfo->width = get_width(G, type);
     return PAW_TRUE;
 }
 
@@ -510,7 +599,8 @@ static paw_Bool resolve_local(FuncState *fs, String *name, VarInfo *pinfo)
         if (pawS_eq(slot.symbol->name, name)) {
             pinfo->symbol = slot.symbol;
             pinfo->kind = VAR_LOCAL;
-            pinfo->index = i;
+            pinfo->index = slot.index;
+            pinfo->width = slot.width;
             return PAW_TRUE;
         }
     }
@@ -519,7 +609,7 @@ static paw_Bool resolve_local(FuncState *fs, String *name, VarInfo *pinfo)
 
 static VarInfo find_var(Generator *G, String *name);
 
-static VarInfo resolve_attr(Generator *G, AstType *type, String *name)
+static VarInfo resolve_attr(Generator *G, const AstType *type, const String *name)
 {
     paw_assert(a_is_adt(type));
     AstDecl *decl = get_decl(G, type->adt.base);
@@ -527,6 +617,7 @@ static VarInfo resolve_attr(Generator *G, AstType *type, String *name)
     Scope *scope = struct_->field_scope;
     VarInfo info = (VarInfo){.kind = VAR_FIELD};
     info.index = pawP_find_symbol(scope, name);
+    info.width = get_width(G, type);
     paw_assert(info.index >= 0); // found in last pass
     info.symbol = scope->symbols[info.index];
     return info;
@@ -569,7 +660,7 @@ static paw_Bool resolve_upvalue(FuncState *fs, String *name, VarInfo *pinfo)
     }
     // Check the caller's local variables.
     if (resolve_local(caller, name, pinfo)) {
-        caller->proto->v[pinfo->index].captured = PAW_TRUE;
+        caller->proto->v[pinfo->index].is_captured = PAW_TRUE;
         add_upvalue(fs, name, pinfo, PAW_TRUE);
         return PAW_TRUE;
     }
@@ -631,26 +722,37 @@ static VarInfo find_var(Generator *G, String *name)
     return info;
 }
 
+#define getter_op(G, op, start, width) do { \
+        for (int i = 0; i < (width); ++i) { \
+            pawK_code_U((G)->fs, op, (start) + i); \
+        } \
+    } while (0)
+
 // Push a variable on to the stack
 static void code_getter(AstVisitor *V, VarInfo info)
 {
     Generator *G = V->state.G;
-    FuncState *fs = G->fs;
     switch (info.kind) {
         case VAR_LOCAL:
-            pawK_code_U(fs, OP_GETLOCAL, info.index);
+            getter_op(G, OP_GETLOCAL, info.index, info.width);
             break;
         case VAR_UPVALUE:
-            pawK_code_U(fs, OP_GETUPVALUE, info.index);
+            getter_op(G, OP_GETUPVALUE, info.index, info.width);
             break;
         case VAR_FIELD:
-            pawK_code_U(fs, OP_GETATTR, info.index);
+            getter_op(G, OP_GETATTR, info.index, info.width);
             break;
         default:
             paw_assert(info.kind == VAR_GLOBAL);
-            pawK_code_U(fs, OP_GETGLOBAL, info.index);
+            getter_op(G, OP_GETGLOBAL, info.index, info.width);
     }
 }
+
+#define setter_op(G, op, start, width) do { \
+        for (int i = (width) - 1; i >= 0; --i) { \
+            pawK_code_U((G)->fs, op, (start) + i); \
+        } \
+    } while (0)
 
 static void code_setter(AstVisitor *V, AstExpr *lhs, AstExpr *rhs)
 {
@@ -661,32 +763,39 @@ static void code_setter(AstVisitor *V, AstExpr *lhs, AstExpr *rhs)
         V->visit_expr(V, rhs);
         switch (info.kind) {
             case VAR_LOCAL:
-                pawK_code_U(fs, OP_SETLOCAL, info.index);
+                setter_op(G, OP_SETLOCAL, info.index, info.width);
                 break;
             case VAR_UPVALUE:
-                pawK_code_U(fs, OP_SETUPVALUE, info.index);
+                setter_op(G, OP_SETUPVALUE, info.index, info.width);
                 break;
             default:
                 paw_assert(info.kind == VAR_GLOBAL);
-                pawK_code_U(fs, OP_SETGLOBAL, info.index);
+                setter_op(G, OP_SETGLOBAL, info.index, info.width);
         }
         return;
     }
 
-    // index or field assignment
-    SuffixedExpr *suf = &lhs->suffix; // common base
-    V->visit_expr(V, suf->target); // push up to last expression
+    const SuffixedExpr *suf = &lhs->suffix;
+    V->visit_expr(V, suf->target);
+
+    const AstType *target = a_type(suf->target);
     if (a_kind(lhs) == EXPR_SELECTOR) {
         V->visit_expr(V, rhs);
-        // resolve the field index
-        String *name = lhs->selector.name;
-        const VarInfo info = resolve_attr(G, a_type(suf->target), name);
-        pawK_code_U(fs, OP_SETATTR, info.index);
+
+        const String *name = lhs->selector.name;
+        const VarInfo info = resolve_attr(G, target, name);
+        setter_op(G, OP_SETATTR, info.index, info.width);
     } else {
         paw_assert(a_kind(lhs) == EXPR_INDEX);
         visit_exprs(V, lhs->index.elems);
         V->visit_expr(V, rhs);
-        pawK_code_0(fs, OP_SETITEM);
+
+        // Indexed assignment is passed the value width as an immediate operand. The 
+        // index is specified on the stack, so it is popped after running OP_SETITEM.
+        const AstExpr *elem = lhs->index.elems->data[0];
+        const paw_Type code = basic_code(target);
+        const int width = get_width(G, a_type(elem));
+        pawK_code_AB(fs, OP_SETITEM, code, width);
     }
 }
 
@@ -808,21 +917,8 @@ static void code_chain_expr(AstVisitor *V, ChainExpr *e)
     const int else_jump = code_jump(fs, OP_JUMPNULL);
     const int then_jump = code_jump(fs, OP_JUMP);
     patch_here(fs, else_jump);
-    pawK_code_0(fs, OP_RETURN);
-    patch_here(fs, then_jump);
-}
-
-static void code_cond_expr(AstVisitor *V, CondExpr *e)
-{
-    FuncState *fs = V->state.G->fs;
-
-    V->visit_expr(V, e->cond);
-    const int else_jump = code_jump(fs, OP_JUMPFALSEPOP);
-    V->visit_expr(V, e->lhs);
-    const int then_jump = code_jump(fs, OP_JUMP);
-    patch_here(fs, else_jump);
-    // same type as 'e->lhs'
-    V->visit_expr(V, e->rhs);
+    const int width = get_width(G, e->type);
+    pawK_code_U(G->fs, OP_RETURN, width);
     patch_here(fs, then_jump);
 }
 
@@ -872,9 +968,10 @@ static void code_func(AstVisitor *V, FuncDecl *d)
     fs.name = d->name;
     fs.G = G;
 
-    AstFuncSig *func = &d->type->func;
-    const int id = add_proto(G, d->name, &fs.proto);
-    fs.proto->argc = func->params->count;
+    compute_width(G, cast_decl(d));
+
+    const int id = add_proto(G, d, &fs.proto);
+    fs.proto->argc = d->param_width;
     enter_function(G, &fs, &bs, d->scope, d->fn_kind);
     visit_decls(V, d->params); // code parameters
     V->visit_block_stmt(V, d->body); // code function body
@@ -892,8 +989,7 @@ static void monomorphize_func(AstVisitor *V, FuncDecl *d)
         AstDecl *decl = d->monos->data[i];
         FuncDecl *inst = pawA_stencil_func(V->ast, d, decl);
         String *mangled = mangle_name(G, inst->name, inst->type->func.types);
-        const VarInfo info =
-            inject_var(fs, mangled, cast_decl(inst), d->is_global);
+        const VarInfo info = inject_var(fs, mangled, cast_decl(inst), d->is_global);
         code_func(V, inst);
         define_var(fs, info);
     }
@@ -920,9 +1016,15 @@ static void code_struct_decl(AstVisitor *V, StructDecl *d)
     Lex *lex = G->lex;
     paw_Env *P = env(lex);
 
+    compute_width(G, cast_decl(d));
+
     Value *pv = pawC_push0(P);
-    Struct *struct_ = pawV_new_struct(P, pv);
-    d->location = add_struct(G, struct_);
+    if (d->is_struct) {
+        Struct *struct_ = pawV_new_struct(P, pv);
+        d->location = add_struct(G, struct_);
+    } else {
+        // TODO: Add enum RTTI stuff 
+    }
     pawC_pop(P); // pop 'struct_'
 }
 
@@ -944,22 +1046,17 @@ static void code_return_stmt(AstVisitor *V, ReturnStmt *s)
 {
     Generator *G = V->state.G;
     Lex *lex = G->lex;
-    FuncState *fs = G->fs;
     if (is_toplevel(G)) {
         pawX_error(lex, "return from module is not allowed");
     }
-    V->visit_expr(V, s->expr);
-    pawK_code_0(fs, OP_RETURN);
-}
-
-static paw_Bool is_instance_call(const AstType *type)
-{
-    return type->func.types->count > 0;
-}
-
-static AstDecl *get_base_decl(Generator *G, const AstType *type)
-{
-    return get_decl(G, a_is_adt(type) ? type->adt.base : type->func.def);
+    if (s->expr != NULL) {
+        V->visit_expr(V, s->expr);
+        const int width = get_width(G, a_type(s->expr));
+        pawK_code_U(G->fs, OP_RETURN, width);
+    } else {
+        pawK_code_0(G->fs, OP_PUSHUNIT);
+        pawK_code_U(G->fs, OP_RETURN, 1);
+    }
 }
 
 static void code_instance_getter(AstVisitor *V, AstType *type)
@@ -974,27 +1071,93 @@ static void code_instance_getter(AstVisitor *V, AstType *type)
     code_getter(V, info);
 }
 
-static void code_call_expr(AstVisitor *V, CallExpr *e)
+struct VariantInfo {
+    Scope *fields;
+    int choice;
+    int width;
+    int used;
+};
+
+static struct VariantInfo unpack_variant(Generator *G, AstType *type)
+{
+    AstDecl *decl = get_decl(G, type->func.def);
+    AstDecl *base = get_decl(G, type->func.base);
+    return (struct VariantInfo){
+        .fields = decl->variant.scope,
+        .choice = decl->variant.index,
+        .width = base->struct_.width,
+        .used = decl->variant.used,
+    };
+}
+
+// Generate code for an enumerator
+// Adds padding such that the variant is as wide as the widest variant in
+// the enumeration.
+static void code_variant_constructor(AstVisitor *V, AstType *type, AstList *args)
 {
     Generator *G = V->state.G;
     FuncState *fs = G->fs;
 
-    if (is_instance_call(e->func)) {
+    struct VariantInfo info = unpack_variant(G, type);
+    visit_exprs(V, args); // field values
+    for (int i = info.used; i < info.width - 1; ++i) {
+        pawK_code_0(fs, OP_PUSHUNIT); // padding
+    }
+    const int k = add_constant(G, (Value){.i = info.choice});
+    pawK_code_U(fs, OP_PUSHCONST, k); // discriminator
+}
+
+static paw_Bool is_instance_call(const AstType *type)
+{
+    return type->func.types->count > 0;
+}
+
+static paw_Bool is_variant_constructor(Generator *G, const AstType *type)
+{
+    if (type->hdr.def != NO_DECL) {
+        const AstDecl *decl = get_decl(G, type->hdr.def); 
+        return a_kind(decl) == DECL_VARIANT;
+    }
+    return PAW_FALSE;
+}
+
+static int code_args(AstVisitor *V, AstList *args)
+{
+    int width = 0;
+    Generator *G = V->state.G;
+    for (int i = 0; i < args->count; ++i) {
+        AstExpr *expr = args->data[i];
+        V->visit_expr(V, expr);
+        width += get_width(G, a_type(expr));
+    }
+    return width;
+}
+
+static void code_call_expr(AstVisitor *V, CallExpr *e)
+{
+    paw_assert(a_is_func(e->func));
+    Generator *G = V->state.G;
+    FuncState *fs = G->fs;
+
+    if (is_variant_constructor(G, e->func)) {
+        code_variant_constructor(V, e->func, e->args);
+        return; // variant on top of stack
+    } else if (is_instance_call(e->func)) {
         code_instance_getter(V, e->func);
     } else {
         V->visit_expr(V, e->target);
     }
-    visit_exprs(V, e->args);
-    pawK_code_U(fs, OP_CALL, e->args->count);
+    const int width = code_args(V, e->args);
+    pawK_code_U(fs, OP_CALL, width);
 }
 
 static void code_func_decl(AstVisitor *V, FuncDecl *d)
 {
-    FuncState *fs = V->state.G->fs;
+    Generator *G = V->state.G;
     if (d->generics->count == 0) {
-        const VarInfo info = declare_var(fs, d->is_global);
+        const VarInfo info = declare_var(G->fs, d->is_global);
         code_func(V, d);
-        define_var(fs, info);
+        define_var(G->fs, info);
     } else {
         monomorphize_func(V, d);
     }
@@ -1148,6 +1311,7 @@ static void code_for_stmt(AstVisitor *V, ForStmt *s)
     leave_block(fs);
 }
 
+// NOTE: This function is not called on the 'target' of a composite literal
 static void code_index_expr(AstVisitor *V, Index *e)
 {
     Generator *G = V->state.G;
@@ -1160,10 +1324,15 @@ static void code_index_expr(AstVisitor *V, Index *e)
     V->visit_expr(V, e->target);
     V->visit_expr(V, e->elems->data[0]);
 
-    AstExpr *elem = e->elems->data[0];
-    const paw_Type tt = basic_code(target);
-    const paw_Type et = basic_code(a_type(elem));
-    pawK_code_AB(G->fs, OP_GETITEM, tt, et);
+    const paw_Type code = basic_code(target);
+    const int width = get_width(G, target);
+    pawK_code_AB(G->fs, OP_GETITEM, code, width);
+}
+
+static void code_access_expr(AstVisitor *V, Access *e)
+{
+    paw_unused(V);
+    paw_unused(e);
 }
 
 static void code_selector_expr(AstVisitor *V, Selector *e)
@@ -1177,16 +1346,20 @@ static void code_selector_expr(AstVisitor *V, Selector *e)
 static void code_builtin(Generator *G)
 {
     paw_Env *P = env(G->lex);
-    const VarInfo info = transfer_global(G);
+    const int index = G->iglobal++;
+    Symbol *symbol = G->globals->symbols[index];
+    const AstType *type = a_type(symbol->decl);
+    pawE_new_global(env(G->lex), symbol->name, a_type_code(type));
 
     // Only need to set pointer for functions, since ADT construction is
     // intercepted and handled by special operators.
-    if (a_is_func_decl(info.symbol->decl)) {
-        GlobalVar *var = pawE_get_global(env(G->lex), info.index);
-        const Value key = {.p = info.symbol->name};
-        Value *pvalue = pawH_get(P, P->builtin, key);
+    if (a_is_func_decl(symbol->decl)) {
+        GlobalVar *var = pawE_get_global(env(G->lex), index);
+        const Value key = {.p = symbol->name};
+        const Value *pvalue = pawH_get(P, P->builtin, key);
         var->value = *pvalue;
     }
+    compute_width(G, symbol->decl);
 }
 
 static void setup_pass(AstVisitor *V, Generator *G)
@@ -1199,9 +1372,9 @@ static void setup_pass(AstVisitor *V, Generator *G)
     V->visit_chain_expr = code_chain_expr;
     V->visit_unop_expr = code_unop_expr;
     V->visit_binop_expr = code_binop_expr;
-    V->visit_cond_expr = code_cond_expr;
     V->visit_call_expr = code_call_expr;
     V->visit_index_expr = code_index_expr;
+    V->visit_access_expr = code_access_expr;
     V->visit_selector_expr = code_selector_expr;
     V->visit_item_expr = code_item_expr;
     V->visit_block_stmt = code_block_stmt;

@@ -88,8 +88,6 @@ typedef enum {
     INFIX_SHR, // >>
     INFIX_AND, // &&
     INFIX_OR, // ||
-    INFIX_COND, // ??::
-    INFIX_COALESCE, // ?:
 
     NINFIX
 } InfixOp;
@@ -101,24 +99,38 @@ static const struct {
     uint8_t left;
     uint8_t right;
 } kInfixPrec[NINFIX] = {
-    [INFIX_MUL] = {13, 13}, [INFIX_DIV] = {13, 13},
-    [INFIX_MOD] = {13, 13}, [INFIX_ADD] = {12, 12},
-    [INFIX_SUB] = {12, 12}, [INFIX_SHL] = {10, 10},
-    [INFIX_SHR] = {10, 10}, [INFIX_BAND] = {9, 9},
-    [INFIX_BXOR] = {8, 8},  [INFIX_BOR] = {7, 7},
-    [INFIX_IN] = {6, 6},    [INFIX_LT] = {6, 6},
-    [INFIX_LE] = {6, 6},    [INFIX_GT] = {6, 6},
-    [INFIX_GE] = {6, 6},    [INFIX_EQ] = {5, 5},
-    [INFIX_NE] = {5, 5},    [INFIX_AND] = {4, 4},
-    [INFIX_OR] = {3, 3},    [INFIX_COALESCE] = {2, 2},
-    [INFIX_COND] = {1, 0}, // right-associative
+    [INFIX_MUL] = {13, 13}, 
+    [INFIX_DIV] = {13, 13},
+    [INFIX_MOD] = {13, 13}, 
+    [INFIX_ADD] = {12, 12},
+    [INFIX_SUB] = {12, 12}, 
+    [INFIX_SHL] = {10, 10},
+    [INFIX_SHR] = {10, 10}, 
+    [INFIX_BAND] = {9, 9},
+    [INFIX_BXOR] = {8, 8},  
+    [INFIX_BOR] = {7, 7},
+    [INFIX_IN] = {6, 6},    
+    [INFIX_LT] = {6, 6},
+    [INFIX_LE] = {6, 6},    
+    [INFIX_GT] = {6, 6},
+    [INFIX_GE] = {6, 6},    
+    [INFIX_EQ] = {5, 5},
+    [INFIX_NE] = {5, 5},    
+    [INFIX_AND] = {4, 4},
+    [INFIX_OR] = {3, 3},    
 };
 
 static const uint8_t kUnOpPrecedence = 14;
 
-static unsigned left_prec(InfixOp op) { return kInfixPrec[op].left; }
+static unsigned left_prec(InfixOp op) 
+{
+    return kInfixPrec[op].left; 
+}
 
-static unsigned right_prec(InfixOp op) { return kInfixPrec[op].right; }
+static unsigned right_prec(InfixOp op) 
+{
+    return kInfixPrec[op].right; 
+}
 
 static UnOp get_unop(TokenKind kind)
 {
@@ -161,8 +173,6 @@ static InfixOp get_infixop(TokenKind kind)
             return INFIX_BOR;
         case TK_IN:
             return INFIX_IN;
-        case TK_QUESTION2:
-            return INFIX_COND;
         case TK_EQUALS2:
             return INFIX_EQ;
         case TK_LESS2:
@@ -211,7 +221,10 @@ static paw_Bool test_next(Lex *lex, TokenKind kind)
 }
 
 // Eat a semicolon, if one exists
-static void semicolon(Lex *lex) { test_next(lex, ';'); }
+static void semicolon(Lex *lex) 
+{ 
+    test_next(lex, ';'); 
+}
 
 static String *parse_name(Lex *lex)
 {
@@ -245,50 +258,72 @@ static AstExpr *emit_bool(Lex *lex, paw_Bool b)
 
 static AstExpr *type_expr(Lex *lex);
 
-static void parse_type_list(Lex *lex, AstList *list)
+static AstDecl *variant_field_decl(Lex *lex)
+{
+    AstDecl *r = new_decl(lex, DECL_FIELD);
+    r->field.name = NULL;
+    r->field.tag = type_expr(lex);
+    return r;
+}
+
+static void parse_variant_field_list(Lex *lex, AstList *list, int line)
 {
     ++lex->expr_depth;
     do {
-        if (list->count == ARGC_MAX) {
-            limit_error(lex, "generic type arguments", ARGC_MAX);
+        if (test(lex, ')')) {
+            break;
+        } else if (list->count == ARGC_MAX) {
+            limit_error(lex, "variant fields", ARGC_MAX);
+        }
+        AstDecl *next = variant_field_decl(lex);
+        list_push(lex, list, next);
+    } while (test_next(lex, ','));
+    --lex->expr_depth;
+    delim_next(lex, ')', '(', line);
+}
+
+static void parse_type_list(Lex *lex, AstList *list, TokenKind begin, TokenKind end, int line)
+{
+    ++lex->expr_depth;
+    do {
+        if (test(lex, end)) {
+            break;
+        } else if (list->count == ARGC_MAX) {
+            limit_error(lex, "type arguments", ARGC_MAX);
         }
         AstExpr *type = type_expr(lex);
         list_push(lex, list, type);
     } while (test_next(lex, ','));
     --lex->expr_depth;
+    delim_next(lex, end, begin, line);
 }
 
 static AstList *maybe_type_args(Lex *lex)
 {
-    AstList *types = new_list(lex);
+    AstList *list = new_list(lex);
     const int line = lex->line;
     if (test_next(lex, '[')) {
         // type arguments (requires at least 1)
-        parse_type_list(lex, types);
-        delim_next(lex, ']', '[', line);
+        parse_type_list(lex, list, '[', ']', line);
     }
-    return types;
+    return list;
 }
 
-static AstList *parse_params(Lex *lex, int line)
+static void parse_params(Lex *lex, AstList *list, int line)
 {
-    AstList *list = new_list(lex);
-    if (test_next(lex, ')')) {
-        return list;
-    }
-    parse_type_list(lex, list);
-    delim_next(lex, ')', '(', line);
-    return list;
+    skip(lex); // '(' token
+    parse_type_list(lex, list, '(', ')', line);
 }
 
 static void parse_signature(Lex *lex, AstExpr *pe)
 {
     const int line = lex->line;
     pe->func.kind = EXPR_FUNC_TYPE;
-    check_next(lex, '(');
+    check(lex, '(');
 
     // function parameters
-    pe->func.params = parse_params(lex, line);
+    pe->func.params = new_list(lex);
+    parse_params(lex, pe->func.params, line);
 
     // return type annotation
     if (test_next(lex, TK_ARROW)) {
@@ -413,7 +448,7 @@ static AstList *item_list0(Lex *lex, const char *what)
     AstList *list = new_list(lex);
     do {
         if (test(lex, '}')) {
-            break;
+            break; // allows trailing comma
         } else if (list->count == LOCAL_MAX) {
             limit_error(lex, what, LOCAL_MAX);
         }
@@ -744,11 +779,9 @@ static AstExpr *suffixed_expr(Lex *lex)
             case '.':
                 e = selector_expr(lex, e);
                 break;
-                // TODO: Change syntax of conditional expr so that this will
-                // work
-                //            case TK_COLON2:
-                //                e = access_expr(lex, e);
-                //                break;
+            case TK_COLON2:
+                e = access_expr(lex, e);
+                break;
             case '[':
                 e = index_expr(lex, e);
                 break;
@@ -825,26 +858,13 @@ static AstExpr *logical_expr(Lex *lex, AstExpr *lhs, paw_Bool is_and)
     return result;
 }
 
-static AstExpr *cond_expr(Lex *lex, AstExpr *lhs)
-{
-    skip(lex); // '??' token
-    AstExpr *result = new_expr(lex, EXPR_COND);
-    CondExpr *r = &result->cond;
-    r->cond = lhs;
-    r->lhs = expression(lex, right_prec(INFIX_COND));
-    check_next(lex, TK_COLON2);
-    r->rhs = expression0(lex);
-    return result;
-}
-
 static AstExpr *infix_expr(Lex *lex, AstExpr *lhs, unsigned op)
 {
     switch (op) {
         case INFIX_AND:
+            return logical_expr(lex, lhs, PAW_TRUE);
         case INFIX_OR:
-            return logical_expr(lex, lhs, op == INFIX_AND);
-        case INFIX_COND:
-            return cond_expr(lex, lhs);
+            return logical_expr(lex, lhs, PAW_FALSE);
         default:
             return binop_expr(lex, op, lhs);
     }
@@ -1057,6 +1077,54 @@ static AstDecl *func_decl(Lex *lex, int line, paw_Bool global)
     return r;
 }
 
+static AstDecl *variant_decl(Lex *lex)
+{
+    AstDecl *r = new_decl(lex, DECL_VARIANT);
+    r->variant.name = parse_name(lex);
+    r->variant.fields = new_list(lex);
+
+    const int line = lex->line;
+    if (test_next(lex, '(')) {
+        r->variant.fields = new_list(lex);
+        parse_variant_field_list(lex, r->variant.fields, line);
+    }
+    return r;
+}
+
+static void enum_body(Lex *lex, StructDecl *struct_)
+{
+    const int line = lex->line;
+    check_next(lex, '{');
+
+    ++lex->expr_depth;
+    struct_->fields = new_list(lex);
+    do {
+        if (test(lex, '}')) {
+            break;
+        } else if (struct_->fields->count == LOCAL_MAX) {
+            limit_error(lex, "variants", LOCAL_MAX);
+        }
+        AstDecl *next = variant_decl(lex);
+        list_push(lex, struct_->fields, next);
+    } while (test_next(lex, ','));
+    delim_next(lex, '}', '{', line);
+    --lex->expr_depth;
+}
+
+static AstDecl *enum_decl(Lex *lex, paw_Bool global)
+{
+    skip(lex); // 'struct' token
+    AstDecl *r = new_decl(lex, DECL_STRUCT);
+    r->struct_.is_global = global;
+    r->struct_.is_struct = PAW_FALSE;
+    r->struct_.name = parse_name(lex);
+    r->struct_.generics = maybe_type_param(lex);
+    enum_body(lex, &r->struct_);
+    r->struct_.monos = new_list(lex);
+    semicolon(lex);
+    return r;
+}
+
 static AstDecl *field_decl(Lex *lex, String *name)
 {
     AstDecl *r = new_decl(lex, DECL_FIELD);
@@ -1068,8 +1136,7 @@ static AstDecl *field_decl(Lex *lex, String *name)
 
 static AstDecl *attr_decl(Lex *lex)
 {
-    String *name = v_string(lex->t.value);
-    skip(lex); // name token
+    String *name = parse_name(lex);
     return field_decl(lex, name);
 }
 
@@ -1080,7 +1147,6 @@ static void struct_body(Lex *lex, StructDecl *struct_)
 
     struct_->fields = new_list(lex);
     while (!test(lex, '}')) {
-        check(lex, TK_NAME);
         AstDecl *next = attr_decl(lex);
         if (struct_->fields->count == LOCAL_MAX) {
             limit_error(lex, "fields", LOCAL_MAX);
@@ -1095,6 +1161,7 @@ static AstDecl *struct_decl(Lex *lex, paw_Bool global)
     skip(lex); // 'struct' token
     AstDecl *r = new_decl(lex, DECL_STRUCT);
     r->struct_.is_global = global;
+    r->struct_.is_struct = PAW_TRUE;
     r->struct_.name = parse_name(lex);
     r->struct_.generics = maybe_type_param(lex);
     struct_body(lex, &r->struct_);
@@ -1127,8 +1194,9 @@ static AstDecl *global_decl(Lex *lex)
     const int line = lex->line;
     skip(lex); // 'global' token
     if (test(lex, TK_FN)) {
-        skip(lex); // 'fn' token
         return func_decl(lex, line, PAW_TRUE);
+    } else if (test(lex, TK_ENUM)) {
+        return enum_decl(lex, PAW_TRUE);
     } else if (test(lex, TK_STRUCT)) {
         return struct_decl(lex, PAW_TRUE);
     } else {
@@ -1141,6 +1209,8 @@ static AstDecl *decl(Lex *lex)
     switch (lex->t.kind) {
         case TK_FN:
             return func_decl(lex, lex->line, PAW_FALSE);
+        case TK_ENUM:
+            return enum_decl(lex, PAW_FALSE);
         case TK_STRUCT:
             return struct_decl(lex, PAW_FALSE);
         case TK_TYPE:
@@ -1185,6 +1255,7 @@ static AstStmt *statement(Lex *lex)
         case TK_CONTINUE:
             return label_stmt(lex, LCONTINUE);
         case TK_FN:
+        case TK_ENUM:
         case TK_STRUCT:
         case TK_LET:
         case TK_GLOBAL:
@@ -1196,10 +1267,21 @@ static AstStmt *statement(Lex *lex)
 }
 
 static const char kPrelude[] =
-    "struct Vector[T] {}\n"
-    "struct Map[K, V] {}\n"
+    // Builtin structures:
+    "struct Vector[T] {}         \n"
+    "struct Map[K, V] {}         \n"
+    // Builtin enumerations:
+    "enum Option[T] {            \n"
+    "    None,                   \n"
+    "    Some(T),                \n"
+    "}                           \n"
+    "enum Result[T, E] {         \n"
+    "    Err(E),                 \n"
+    "    Ok(T),                  \n"
+    "}                           \n"
+    // Builtin functions:
     "fn print(message: string) {}\n"
-    "fn assert(cond: bool) {}\n"
+    "fn assert(cond: bool) {}    \n"
     // TODO: Using these until Paw has methods.
     "fn v_push[T](vec: Vector[T], elem: T) {}\n"
     "fn v_pop[T](vec: Vector[T]) -> T {}\n"
@@ -1232,8 +1314,23 @@ static AstList *load_prelude(Lex *lex)
 //
 // ORDER TokenKind
 static const char *kKeywords[] = {
-    "fn", "type",  "struct", "global",   "let",    "if", "else", "for",
-    "do", "while", "break",  "continue", "return", "in", "true", "false",
+    "fn", 
+    "type",  
+    "enum",  
+    "struct", 
+    "global",   
+    "let",    
+    "if", 
+    "else", 
+    "for",
+    "do", 
+    "while", 
+    "break",  
+    "continue", 
+    "return", 
+    "in", 
+    "true", 
+    "false",
 };
 
 static String *basic_type_name(paw_Env *P, const char *name, paw_Type type)

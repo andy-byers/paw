@@ -520,10 +520,9 @@ void paw_dump_stack(paw_Env *P)
         printf("Frame: %s\n", func->name->text);
         for (int i = 0; i < func->ndebug; ++i) {
             const struct LocalInfo info = func->v[i];
-            const char *capture = info.captured ? "*" : "";
+            const char *capture = info.is_captured ? "*" : "";
             const String *name = info.var.name;
-            const paw_Type code = info.var.code;
-            printf("  %3d: %s%s (%d)\n", i, name->text, capture, code);
+            printf("  %3d: %s%s (index=%d, width=%d)\n", i, name->text, capture, info.index, info.width);
         }
         if (cf == P->cf) {
             break;

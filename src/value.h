@@ -62,32 +62,6 @@
 #define o_method(o) check_exp(o_is_method(o), (Method *)(o))
 #define o_foreign(o) check_exp(o_is_foreign(o), (Foreign *)(o))
 
-#define GC_HEADER                                                              \
-    struct Object *gc_next;                                                    \
-    uint64_t gc_nrefs;                                                         \
-    uint8_t gc_kind
-#define cast_uintptr(x) ((uintptr_t)(x))
-#define cast_object(x) ((Object *)(void *)(x))
-
-typedef struct Object {
-    GC_HEADER;
-} Object;
-
-typedef union Value {
-    uint64_t u;
-    paw_Int i;
-    paw_Float f;
-    Object *o;
-    void *p;
-} Value;
-
-typedef Value *StackPtr;
-
-typedef union StackRel {
-    ptrdiff_t d;
-    StackPtr p;
-} StackRel;
-
 typedef enum ValueKind {
     // scalar types
     VBOOL,
@@ -114,6 +88,32 @@ typedef enum ValueKind {
 
     NVTYPES
 } ValueKind;
+
+#define GC_HEADER                                                              \
+    struct Object *gc_next;                                                    \
+    uint8_t gc_mark;                                                           \
+    ValueKind gc_kind: 8
+#define cast_uintptr(x) ((uintptr_t)(x))
+#define cast_object(x) ((Object *)(void *)(x))
+
+typedef struct Object {
+    GC_HEADER;
+} Object;
+
+typedef union Value {
+    uint64_t u;
+    paw_Int i;
+    paw_Float f;
+    Object *o;
+    void *p;
+} Value;
+
+typedef Value *StackPtr;
+
+typedef union StackRel {
+    ptrdiff_t d;
+    StackPtr p;
+} StackRel;
 
 static inline int pawV_type(ValueKind vt)
 {
@@ -183,7 +183,7 @@ typedef struct VarDesc {
 
 typedef struct Proto {
     GC_HEADER;
-    uint8_t is_va;
+    paw_Bool is_va: 1;
 
     String *name;
     String *modname;
@@ -192,15 +192,18 @@ typedef struct Proto {
 
     struct LocalInfo {
         VarDesc var;
+        int index;
+        int width;
         int pc0;
         int pc1;
-        paw_Bool captured;
+        paw_Bool is_captured: 1;
     } *v;
 
     struct UpValueInfo {
         VarDesc var;
-        uint16_t index;
-        paw_Bool is_local;
+        int index;
+        int width;
+        paw_Bool is_local: 1;
     } *u;
 
     struct LineInfo {
@@ -216,6 +219,7 @@ typedef struct Proto {
     int nk; // number of constants
     int argc; // number of fixed parameters
     int nproto; // number of nested functions
+    int nresults; // number of return slots
 } Proto;
 
 Proto *pawV_new_proto(paw_Env *P);

@@ -20,7 +20,6 @@ enum MultiChar {
 
     // Multi-byte tokens:
     TK_DOT3,
-    TK_QUESTION2,
     TK_COLON2,
     TK_LESS2,
     TK_GREATER2,
@@ -41,6 +40,7 @@ enum MultiChar {
     // Keywords (must be in this order):
     TK_FN,
     TK_TYPE,
+    TK_ENUM,
     TK_STRUCT,
     TK_GLOBAL,
     TK_LET,

@@ -439,12 +439,6 @@ try_again:
                 token = T(TK_ARROW);
             }
             break;
-        case '?':
-            next(x);
-            if (test_next(x, '?')) {
-                token = T(TK_QUESTION2);
-            }
-            break;
         case ':':
             next(x);
             if (test_next(x, ':')) {

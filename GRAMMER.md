@@ -1,13 +1,11 @@
 # Paw language grammer (EBNF)
-**TODO: get rid of requirement that "break" | "return" | "continue" is the last statement in the block**
-**      just don't emit unreachable code**
-**      use a tool to validate this...**
+**TODO: get rid of requirement that "break" | "return" | "continue" is the last statement in the block, just don't emit unreachable code**
+**      use a tool to validate this grammer**
 
 ## Statements
 ```
 Stmt     ::= ExprStmt | WhileLoop | DoWhileLoop |
-             ForLoop | IfElse | Declaration | 
-             Block .
+             ForLoop | IfElse | Declaration | Block .
 Chunk    ::= {Stmt [";"]} [LastStmt [";"]] .
 Block    ::= "{" Chunk "}" .
 LastStmt ::= "return" [Expr] | "continue" | "break" .
@@ -31,7 +29,7 @@ MatchArm    ::= Expr | Block .
 ## Declarations
 ```
 Declaration ::= VarDecl | FunctionDecl |
-                ClassDecl | EnumDecl | TypeDecl .
+                StructDecl | EnumDecl | TypeDecl .
 VarDecl     ::= "let" name [":" Type] "=" Expr .
 TypeDecl    ::= "type" name [TypeParam] "=" Type .
 TypeParam   ::= "[" {name ","} name "]" .
@@ -40,18 +38,16 @@ TypeParam   ::= "[" {name ","} name "]" .
 ### Functions
 ```
 FunctionDecl ::= "fn" Function .
-Function     ::= name [TypeParam] FuncType Block .
-FuncType    ::= "(" [{Field ","} Field] ")" ["->" Type] .
+Function     ::= name [TypeParam] FuncSig Block .
+FuncSig      ::= "(" [{Field ","} Field] ")" ["->" Type] .
 Field        ::= name ":" Type .
 ```
 
-### Classes
+### Structures
 ```
-ClassDecl ::= "class" ClassType .
-ClassType ::= name [TypeParam] ClassBody .
-ClassBody ::= "{" {Attribute [";"]} "}" .
-Attribute ::= Method | Field .
-Method    ::= ["static"] Function .
+StructDecl ::= "class" StructType .
+StructType ::= name [TypeParam] StructBody .
+StructBody ::= "{" {Field [";"]} "}" .
 ```
 
 ### Enumerators
@@ -76,9 +72,11 @@ UnOp  ::= "-" | "~" | "!" | "#" .
 Expr        ::= PrimaryExpr | Expr BinOp Expr | UnOp Expr . 
 PrimaryExpr ::= Operand | Call | Literal | "(" Expr ")" .
 Call        ::= PrimaryExpr "(" [ExprList] ")" .
-Operand     ::= name | Index | Selector .
+Operand     ::= name [TypeArgs] | Index |  
+                Selector | Access | Literal .
 Index       ::= PrimaryExpr "[" ExprList "]" .
 Selector    ::= PrimaryExpr "." name .
+Access      ::= PrimaryExpr "::" name .
 ExprList    ::= {Expr ","} Expr .
 ```
 
@@ -96,7 +94,6 @@ TupleType ::= "(" [Type "," [Type]] ")" .
 
 ## Operands
 ```
-Operand  ::= Literal | name [TypeArgs] .
 Literal  ::= BasicLit | CompositeLit .
 BasicLit ::= int_lit | bool_lit | float_lit | string_lit .
 ```
@@ -105,8 +102,8 @@ BasicLit ::= int_lit | bool_lit | float_lit | string_lit .
 Note that the unit type is just a 0-tuple (an tuple with 0 elements).
 A 1-tuple must have a trailing `,` to distinguish it from a parenthesized expression.
 ```
-CompositeLit ::= ClassLit | ArrayLit | TupleLit | VariantLit .
-ClassLit     ::= NamedType "{" [ItemList [","]] "}" .
+CompositeLit ::= StructLit | ArrayLit | TupleLit | VariantLit .
+StructLit     ::= NamedType "{" [ItemList [","]] "}" .
 ArrayLit     ::= "[" [ExprList [","]] "]" .
 TupleLit     ::= "(" [Expr "," [Expr [","]]] ")" .
 VariantLit   ::= name ["(" {Expr ","} Expr ")"] .

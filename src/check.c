@@ -34,7 +34,7 @@
 // Common state for type-checking routines
 typedef struct Resolver {
     Lex *lex; // lexical state
-    StructDecl *struct_; // enclosing struct declaration
+    AstType *adt; // enclosing ADT
     AstType *return_; // enclosing function return type
     SymbolTable *sym; // scoped symbol table
     Ast *ast; // AST being checked
@@ -313,12 +313,11 @@ static Scope *leave_function(Resolver *R)
     return scope;
 }
 
-static void enter_function(Resolver *R, String *name, Scope *scope,
-                           FuncDecl *func)
+static void enter_function(Resolver *R, Scope *scope, FuncDecl *func)
 {
     ++R->func_depth;
     enter_block(R, scope);
-    new_local(R, name, cast_decl(func));
+    new_local(R, func->name, cast_decl(func));
 }
 
 static void new_local_literal(Resolver *R, const char *name, paw_Type code)
@@ -493,11 +492,6 @@ static void decl_callback(AstVisitor *V, AstDecl *decl)
     add_decl(V->state.R, decl);
 }
 
-static AstList *new_concrete_types(AstVisitor *V, AstList *list)
-{
-    return transfer_fields(V, list, decl_callback);
-}
-
 static void register_func_instance(AstVisitor *V, FuncDecl *base,
                                    InstanceDecl *inst, AstList *types)
 {
@@ -505,7 +499,7 @@ static void register_func_instance(AstVisitor *V, FuncDecl *base,
     enter_block(R, NULL);
 
     inst->name = base->name;
-    inst->types = new_concrete_types(V, base->generics);
+    inst->types = transfer_fields(V, base->generics, decl_callback);
     register_concrete_types(V, inst->types, types);
 
     AstType *r = register_decl_type(V, cast_decl(inst), AST_TYPE_FUNC);
@@ -518,19 +512,46 @@ static void register_func_instance(AstVisitor *V, FuncDecl *base,
     inst->scope = leave_block(R);
 }
 
+// TODO: Use this
+static void visit_variant_decl(AstVisitor *V, VariantDecl *d)
+{
+    Resolver *R = V->state.R;
+    add_decl(V->state.R, cast_decl(d));
+
+    // An enum variant name can be thought of as a function from the type of the variant's
+    // fields to the type of the enumeration. For example, given 'enum E {X(string)}',
+    // E::X has type 'fn(string) -> E'.
+    d->type = new_type(R, d->def, AST_TYPE_FUNC);
+    d->type->func.base = R->adt->adt.def;
+    d->type->func.types = pawA_list_new(V->ast);
+    d->type->func.params = collect_params(V, d->fields);
+    d->type->func.return_ = R->adt;
+
+    new_local(R, d->name, cast_decl(d));
+}
+
 static void register_field_decl(AstVisitor *V, AstDecl *decl)
 {
+    Resolver *R = V->state.R;
     add_decl(V->state.R, decl);
-    FieldDecl *d = &decl->field;
-    new_local(V->state.R, d->name, decl);
-    d->type = resolve_expr(V, d->tag);
+    if (a_kind(decl) == DECL_VARIANT) {
+        VariantDecl *d = &decl->variant;
+        d->type = new_type(R, d->def, AST_TYPE_FUNC);
+        d->type->func.base = R->adt->adt.def;
+        d->type->func.types = pawA_list_new(V->ast);
+        d->type->func.params = collect_params(V, d->fields);
+        d->type->func.return_ = R->adt;
+    } else {
+        paw_assert(a_kind(decl) == DECL_FIELD);
+        FieldDecl *d = &decl->field;
+        d->type = resolve_expr(V, d->tag);
+    }
+    new_local(R, decl->hdr.name, decl);
 }
 
 static void register_base_struct(AstVisitor *V, StructDecl *d)
 {
     Resolver *R = V->state.R;
-    StructDecl *enclosing = R->struct_;
-    R->struct_ = d; // enter struct context
     enter_block(R, NULL);
 
     AstType *r = register_decl_type(V, cast_decl(d), AST_TYPE_ADT);
@@ -538,12 +559,15 @@ static void register_base_struct(AstVisitor *V, StructDecl *d)
     r->adt.base = d->def;
     d->type = r;
 
+    AstType *enclosing = R->adt;
+    R->adt = r;
+
     enter_block(R, NULL);
     V->visit_decl_list(V, d->fields, register_field_decl);
     d->field_scope = leave_block(R);
 
     d->scope = leave_block(R);
-    R->struct_ = enclosing;
+    R->adt = enclosing;
 }
 
 static void register_struct_instance(AstVisitor *V, StructDecl *base,
@@ -553,7 +577,7 @@ static void register_struct_instance(AstVisitor *V, StructDecl *base,
     enter_block(R, NULL);
 
     inst->name = base->name;
-    inst->types = new_concrete_types(V, base->generics);
+    inst->types = transfer_fields(V, base->generics, decl_callback);
     register_concrete_types(V, inst->types, types);
 
     AstType *r = register_decl_type(V, cast_decl(inst), AST_TYPE_ADT);
@@ -561,22 +585,15 @@ static void register_struct_instance(AstVisitor *V, StructDecl *base,
     r->adt.types = types;
     inst->type = r;
 
+    AstType *enclosing = R->adt;
+    R->adt = inst->type;
+
     enter_block(R, NULL);
     inst->fields = transfer_fields(V, base->fields, register_field_decl);
     inst->field_scope = leave_block(R);
 
     inst->scope = leave_block(R);
-}
-
-static AstList *get_monos(AstDecl *base)
-{
-    switch (a_kind(base)) {
-        case DECL_FUNC:
-            return base->func.monos;
-        default:
-            paw_assert(a_kind(base) == DECL_STRUCT);
-            return base->struct_.monos;
-    }
+    R->adt = enclosing;
 }
 
 static AstDecl *find_func_instance(AstVisitor *V, FuncDecl *base,
@@ -624,7 +641,7 @@ static void visit_func(AstVisitor *V, FuncDecl *d, FuncKind kind)
     AstType *type = get_type(R, d->def);
     d->fn_kind = kind;
 
-    enter_function(R, d->name, d->scope, d);
+    enter_function(R, d->scope, d);
     V->visit_decl_list(V, d->params, visit_param_decl);
 
     AstType *outer = R->return_;
@@ -751,15 +768,6 @@ static void visit_chain_expr(AstVisitor *V, ChainExpr *e)
     //    if (!a_is_object(e->target->hdr.type)) {
     //        type_error(R, "'?' operator requires an object");
     //    }
-}
-
-static void visit_cond_expr(AstVisitor *V, CondExpr *e)
-{
-    expect_bool_expr(V, e->cond);
-    AstType *lhs = resolve_expr(V, e->lhs);
-    AstType *rhs = resolve_expr(V, e->rhs);
-    unify(V->state.R, lhs, rhs);
-    e->type = lhs;
 }
 
 static AstType *get_value_type(AstType *target)
@@ -990,17 +998,16 @@ static void visit_call_expr(AstVisitor *V, CallExpr *e)
     // Determine the type of the callable, then find its declaration. Template
     // functions will need type inference, which is handled in setup_call().
     e->func = setup_call(V, e);
-    e->type = e->func->func.return_;
+
     if (a_kind(e->func) != AST_TYPE_FUNC) {
         type_error(R, "type is not callable");
     }
-    AstFuncSig *func = &e->func->func;
-    AstList *params = func->params;
+    e->type = e->func->func.return_;
+    const AstList *params = e->func->func.params;
     if (params->count != e->args->count) {
-        syntax_error(R, "expected %d parameter(s) but found %d",
-                     func->params->count, e->args->count);
+        syntax_error(R, "expected %d arguments(s) but found %d",
+                     params->count, e->args->count);
     }
-    // check call arguments against function parameters
     for (int i = 0; i < params->count; ++i) {
         AstExpr *arg = e->args->data[i];
         AstType *type = resolve_expr(V, arg);
@@ -1091,7 +1098,7 @@ static String *resolve_struct_key(AstVisitor *V, const struct StructPack *pack,
 }
 
 // TODO: scratch allocations need to be boxed
-//       could allow unnamed fields for other classes if they are in the correct
+//       could allow unnamed fields for other structs if they are in the correct
 //       order already
 static AstType *visit_composite_lit(AstVisitor *V, LiteralExpr *lit)
 {
@@ -1099,7 +1106,6 @@ static AstType *visit_composite_lit(AstVisitor *V, LiteralExpr *lit)
     Resolver *R = V->state.R;
     Lex *lex = R->lex;
 
-    // Replace the AstIdent or IndexExpr with the TypeName of the structure.
     AstType *target = resolve_expr(V, e->target);
     if (!a_is_adt(target)) {
         type_error(R, "expected structure type");
@@ -1108,8 +1114,7 @@ static AstType *visit_composite_lit(AstVisitor *V, LiteralExpr *lit)
     } else if (target->adt.base == PAW_TMAP) {
         return visit_map_lit(V, e, target);
     }
-    // Use a temporary Map to avoid searching repeatedly through the
-    // list of attributes.
+    // Use a Map to avoid searching repeatedly through the list of fields.
     paw_Env *P = env(lex);
     Value *pv = pawC_push0(P);
     Map *map = pawH_new(P);
@@ -1186,7 +1191,6 @@ static void visit_if_stmt(AstVisitor *V, IfStmt *s)
 
 static void visit_expr_stmt(AstVisitor *V, AstExprStmt *s)
 {
-pawA_dump_expr(stderr, cast_expr(s->lhs));
     AstType *lhs = resolve_expr(V, s->lhs);
     if (s->rhs != NULL) {
         AstType *rhs = resolve_expr(V, s->rhs);
@@ -1306,6 +1310,22 @@ static void visit_index_expr(AstVisitor *V, Index *e)
     }
 }
 
+static void visit_access_expr(AstVisitor *V, Access *e)
+{
+    Resolver *R = V->state.R;
+    AstType *type = resolve_expr(V, e->target);
+    if (!a_is_adt(type)) {
+        type_error(R, "expected ADT");
+    }
+    const struct StructPack pack = unpack_struct(R, type);
+    AstDecl *attr = resolve_attr(pack.fields, e->name);
+    if (attr == NULL) {
+        syntax_error(R, "field '%s' does not exist in ADT '%s'",
+                     e->name->text, pack.name->text);
+    }
+    e->type = get_type(R, attr->hdr.def);
+}
+
 static void visit_selector_expr(AstVisitor *V, Selector *e)
 {
     Resolver *R = V->state.R;
@@ -1324,6 +1344,7 @@ static void visit_selector_expr(AstVisitor *V, Selector *e)
 
 static void visit_decl_stmt(AstVisitor *V, AstDeclStmt *s)
 {
+pawA_dump_decl(stderr, cast_decl(s->decl));
     V->visit_decl(V, s->decl);
 }
 
@@ -1397,6 +1418,18 @@ static void add_basic_builtin(Resolver *R, String *name)
 
 static void visit_prelude(AstVisitor *V, Resolver *R)
 {
+    const AstState state = {.R = R};
+    pawA_visitor_init(V, R->ast, state);
+    V->visit_func_decl = visit_prelude_func;
+    V->visit_struct_decl = visit_prelude_struct;
+    V->visit_type_name_expr = visit_type_name_expr;
+    V->visit_signature_expr = visit_signature_expr;
+
+    V->visit_stmt_list(V, R->ast->prelude, V->visit_stmt);
+}
+
+static void setup_module(AstVisitor *V, Resolver *R, AstDecl *r)
+{
     add_basic_builtin(R, cached_str(R, CSTR_UNIT));
     add_basic_builtin(R, cached_str(R, CSTR_BOOL));
     add_basic_builtin(R, cached_str(R, CSTR_INT));
@@ -1408,18 +1441,12 @@ static void visit_prelude(AstVisitor *V, Resolver *R)
 
     setup_globals(R);
 
-    const AstState state = {.R = R};
-    pawA_visitor_init(V, R->ast, state);
-    V->visit_func_decl = visit_prelude_func;
-    V->visit_struct_decl = visit_prelude_struct;
-    V->visit_type_name_expr = visit_type_name_expr;
-    V->visit_signature_expr = visit_signature_expr;
+    r->func.type = pawA_new_type(R->ast, AST_TYPE_FUNC);
+    r->func.type->func.types = pawA_list_new(R->ast);
+    r->func.type->func.params = pawA_list_new(R->ast);
+    r->func.type->func.return_ = get_type(R, PAW_TUNIT);
+    r->func.params = pawA_list_new(R->ast);
 
-    V->visit_stmt_list(V, R->ast->prelude, V->visit_stmt);
-}
-
-static void setup_module(AstVisitor *V, Resolver *R)
-{
     visit_prelude(V, R);
 
     const AstState state = {.R = R};
@@ -1430,9 +1457,9 @@ static void setup_module(AstVisitor *V, Resolver *R)
     V->visit_chain_expr = visit_chain_expr;
     V->visit_unop_expr = visit_unop_expr;
     V->visit_binop_expr = visit_binop_expr;
-    V->visit_cond_expr = visit_cond_expr;
     V->visit_call_expr = visit_call_expr;
     V->visit_index_expr = visit_index_expr;
+    V->visit_access_expr = visit_access_expr;
     V->visit_selector_expr = visit_selector_expr;
     // V->visit_item_expr = visit_item_expr;
     V->visit_type_name_expr = visit_type_name_expr;
@@ -1446,6 +1473,7 @@ static void setup_module(AstVisitor *V, Resolver *R)
     V->visit_dowhile_stmt = visit_dowhile_stmt;
     V->visit_return_stmt = visit_return_stmt;
     V->visit_var_decl = visit_var_decl;
+    V->visit_variant_decl = visit_variant_decl;
     V->visit_func_decl = visit_func_decl;
     V->visit_struct_decl = visit_struct_decl;
     V->visit_type_decl = visit_type_decl;
@@ -1456,10 +1484,11 @@ static void visit_module(Resolver *R)
     Lex *lex = R->lex;
     SymbolTable *sym = R->sym;
     AstDecl *r = pawA_new_decl(R->ast, DECL_FUNC);
-    enter_function(R, lex->modname, NULL, &r->func);
+    r->func.name = lex->modname;
+    enter_function(R, NULL, &r->func);
 
     AstVisitor V;
-    setup_module(&V, R);
+    setup_module(&V, R, r);
     pawA_visit(&V);
 
     sym->toplevel = leave_function(R);

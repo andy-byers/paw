@@ -38,18 +38,20 @@ typedef struct Symbol {
     AstDecl *decl; // corresponding declaration
 } Symbol;
 
+// ORDER VarKind
 typedef enum VarKind {
+    VAR_LOCAL,
     VAR_GLOBAL,
     VAR_UPVALUE,
-    VAR_LOCAL,
     VAR_FIELD,
-    VAR_METHOD,
 } VarKind;
 
 typedef struct VarInfo {
     Symbol *symbol;
     VarKind kind;
     int index;
+    int width;
+    int debug;
 } VarInfo;
 
 //****************************************************************
@@ -172,6 +174,7 @@ typedef enum AstDeclKind {
     DECL_STRUCT,
     DECL_FIELD,
     DECL_GENERIC,
+    DECL_VARIANT,
     DECL_INSTANCE,
 } AstDeclKind;
 
@@ -213,22 +216,37 @@ typedef struct FuncDecl {
     AstExpr *return_; // return type
     Block *body; // function body
     AstList *monos; // list of monomorphizations
+    int param_width;
 } FuncDecl;
 
-// TODO: Need to prevent recursive structures, or introduce the concept of
-// indirection (otherwise, structs that
+// TODO: Call this AdtDecl?
+//       Need to prevent recursive structures, or introduce the concept of
+//       indirection (otherwise, structs that
 //       contain an instance of themselves as a field will become infinitely
-//       large)...
+//       large)... note that right now, we always allocate struct on the heap
+//       and pass around pointers to them, so this doesn't matter.
+//       In the process of changing that, however, by using a stack slot for
+//       each field.
 typedef struct StructDecl {
     DECL_HEADER; // common initial sequence
     paw_Bool is_global : 1; // uses 'global' keyword
+    paw_Bool is_struct : 1; // 'struct' vs. 'enum'
     Scope *scope; // scope for struct-level symbols
     Scope *field_scope;
     AstList *fields; // list of FieldDecl
     AstList *generics; // generic type parameters (GenericDecl)
     AstList *monos; // list of monomorphizations
     int location;
+    int width;
 } StructDecl;
+
+typedef struct VariantDecl {
+    DECL_HEADER; // common initial sequence
+    Scope *scope; // scope for field symbols
+    AstList *fields; // list of FieldDecl
+    int index; // index in enumeration
+    int used; // number of non-padding slots
+} VariantDecl;
 
 // Represents a template instance
 // Created when an instantiation is found of the template that is currently
@@ -242,6 +260,7 @@ typedef struct InstanceDecl {
     Scope *field_scope; // scope for fields
     AstList *types; // list of GenericDecl
     AstList *fields; // list of FieldDecl
+    int width;
 } InstanceDecl;
 
 // Represents a generic type parameter
@@ -253,6 +272,8 @@ typedef struct GenericDecl {
 typedef struct FieldDecl {
     DECL_HEADER; // common initial sequence
     AstExpr *tag; // type annotation
+    int offset;
+    int width;
 } FieldDecl;
 
 typedef struct AstDecl {
@@ -262,6 +283,7 @@ typedef struct AstDecl {
         FuncDecl func;
         StructDecl struct_;
         InstanceDecl inst;
+        VariantDecl variant;
         FieldDecl field;
         GenericDecl generic;
         TypeDecl type;
@@ -283,7 +305,6 @@ typedef enum AstExprKind {
     EXPR_BINOP,
     EXPR_COALESCE,
     EXPR_LOGICAL,
-    EXPR_COND,
     EXPR_INDEX,
     EXPR_ACCESS,
     EXPR_SELECTOR,
@@ -365,13 +386,6 @@ typedef struct BinOpExpr {
     AstExpr *rhs;
 } BinOpExpr;
 
-typedef struct CondExpr {
-    EXPR_HEADER;
-    AstExpr *cond;
-    AstExpr *lhs;
-    AstExpr *rhs;
-} CondExpr;
-
 typedef struct LogicalExpr {
     EXPR_HEADER;
     paw_Bool is_and : 1;
@@ -433,7 +447,6 @@ typedef struct AstExpr {
         ChainExpr chain;
         UnOpExpr unop;
         BinOpExpr binop;
-        CondExpr cond;
         SuffixedExpr suffix;
         CallExpr call;
         Index index;
@@ -582,7 +595,6 @@ struct AstVisitor {
     void (*visit_chain_expr)(AstVisitor *V, ChainExpr *e);
     void (*visit_unop_expr)(AstVisitor *V, UnOpExpr *e);
     void (*visit_binop_expr)(AstVisitor *V, BinOpExpr *e);
-    void (*visit_cond_expr)(AstVisitor *V, CondExpr *e);
     void (*visit_suffix_expr)(AstVisitor *V, SuffixedExpr *e);
     void (*visit_call_expr)(AstVisitor *V, CallExpr *e);
     void (*visit_index_expr)(AstVisitor *V, Index *e);
@@ -609,6 +621,7 @@ struct AstVisitor {
     void (*visit_generic_decl)(AstVisitor *V, GenericDecl *d);
     void (*visit_type_decl)(AstVisitor *V, TypeDecl *d);
     void (*visit_instance_decl)(AstVisitor *V, InstanceDecl *d);
+    void (*visit_variant_decl)(AstVisitor *V, VariantDecl *d);
 };
 
 void pawA_visitor_init(AstVisitor *V, Ast *ast, AstState state);
@@ -637,7 +650,6 @@ struct AstFolder {
     AstExpr *(*fold_chain_expr)(AstFolder *F, ChainExpr *e);
     AstExpr *(*fold_unop_expr)(AstFolder *F, UnOpExpr *e);
     AstExpr *(*fold_binop_expr)(AstFolder *F, BinOpExpr *e);
-    AstExpr *(*fold_cond_expr)(AstFolder *F, CondExpr *e);
     AstExpr *(*fold_suffix_expr)(AstFolder *F, SuffixedExpr *e);
     AstExpr *(*fold_call_expr)(AstFolder *F, CallExpr *e);
     AstExpr *(*fold_index_expr)(AstFolder *F, Index *e);
@@ -663,6 +675,7 @@ struct AstFolder {
     AstDecl *(*fold_generic_decl)(AstFolder *F, GenericDecl *d);
     AstDecl *(*fold_type_decl)(AstFolder *F, TypeDecl *d);
     AstDecl *(*fold_instance_decl)(AstFolder *F, InstanceDecl *d);
+    AstDecl *(*fold_variant_decl)(AstFolder *F, VariantDecl *d);
 };
 
 void pawA_folder_init(AstFolder *F, Ast *ast, AstState state);

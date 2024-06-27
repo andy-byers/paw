@@ -90,15 +90,6 @@ typedef struct GenericState {
     struct GenericState *outer;
 } GenericState;
 
-typedef struct StructState {
-    struct StructState *outer;
-    struct StructDecl *struct_;
-    struct AstDecl *method;
-    struct AstDecl *field;
-    int imethod;
-    int ifield;
-} StructState;
-
 typedef struct BlockState {
     struct BlockState *outer;
     uint8_t is_loop;
@@ -110,12 +101,15 @@ typedef struct BlockState {
 typedef struct LocalSlot {
     struct Symbol *symbol;
     int index;
+    int width;
+    int debug;
 } LocalSlot;
 
 typedef struct LocalStack {
     LocalSlot *slots;
     int nslots;
     int capacity;
+    int width;
 } LocalStack;
 
 typedef enum FuncKind {
@@ -139,6 +133,7 @@ typedef struct FuncState {
     int id; // index in caller's prototype list
     int level; // current stack index (base = 0)
     int ndebug; // number of debug entries
+    int upwidth; // width of all upvalues
     int nup; // number of upvalues
     int nk; // number of constants
     int nproto; // number of nested functions

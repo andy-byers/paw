@@ -37,7 +37,6 @@ void *pawK_pool_alloc(paw_Env *P, Pool *pool, size_t size, size_t align);
 
 typedef struct Generator {
     Lex *lex; // lexical state
-    StructState *cs; // enclosing structure context
     FuncState *fs; // enclosing function context
     SymbolTable *sym; // scoped symbol table
     Scope *globals; // global symbols

@@ -64,12 +64,16 @@ let f = some_other_function
 
 struct Object {
     value: int
-    times2(a: int) -> int {
-        return a * 2
-    }
 }
-let instance = Object()      // Object
-let method = instance.times2 // fn(Object, int) -> int
+let object = Object{value: 42}
+assert(object.value == 42)
+
+enum Choice {
+    First,
+    Second(int),
+}
+let choice = Choice::First
+let choice = Choice::Second(123)
 ```
 
 ### Scope
@@ -264,6 +268,14 @@ assert(status != 0)
 + [ ] struct methods
 + [ ] metamethods
 + [ ] existential types
+
+## TODO
++ Convert these to issues once the core is more stable
++ Remove `types` field from `AstFuncSig`: function template type parameters don't participate in unification anyway (keep elsewhere for error reporting, though)
++ Consider giving `Vec` and `Map` special syntax, since they are handled a differently than other structs
+    + Could use something like `[T]` for `Vec[T]` and `[K: V]` for `Map[K, V]` 
+    + `[]` would represent an empty vector and `[:]` an empty map
+    + Syntax is from Swift
 
 ## References
 + [Lua](https://www.lua.org/)

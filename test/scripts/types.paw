@@ -1,5 +1,95 @@
 // types.paw
 
+let VALUE = 42
+
+//***********************************************
+//    enumerations
+//***********************************************
+{
+    // E::X(int) occupies 2 stack slots: 1 for the integer field and another for 
+    // the discriminator
+    enum E {
+        X(int),
+    }
+    // Check against a known value to make sure the VM is managing the stack
+    // properly: each scope exit should cause a single 'POP 2' to be emitted.
+    // If the runtime stack doesn't match the layout we determined at compile-
+    // time, then we will likely access the wrong slot for 'v'.
+    let v = VALUE
+    {
+        let e = E::X(1)
+        v = v + 1
+        {
+            let e = E::X(-1)
+            v = v + 1
+        }
+    }
+    assert(v == VALUE + 2)
+}
+{
+    enum E {
+        X,
+        Y,
+    }
+    fn test(q: int) -> E {
+        if q == 0 {
+            return E::X()
+        } else {
+            return E::Y()
+        }
+    } 
+    let v = VALUE
+    {
+        let e = test(0)
+        v = v + 1
+    }
+    assert(v == VALUE + 1)
+}
+{
+    enum E {
+        X,
+        Y(int),
+    }
+    fn test(q: int) -> E {
+        if q == 0 {
+            return E::X()
+        } else {
+            return E::Y(1)
+        }
+    } 
+    let v = VALUE
+    {
+        let e = test(0)
+        v = v + 1
+    }
+    assert(v == VALUE + 1)
+}
+{
+    enum E {
+        X,
+        Y(int),
+    }
+    fn test(e: E) -> E {
+        return e
+    }
+    let v = VALUE
+    let e = E::X()
+    let v = v + 1
+    let e = test(e)
+    assert(v == VALUE + 1)
+
+    let v = VALUE
+    fn test(e: E, dv: int) -> E {
+        v = v + dv
+        return e
+    }
+    let e = E::X()
+    v = v + 1
+    let e = test(e, 2)
+    assert(v == VALUE + 3)
+}
+
+
 //***********************************************
 //    primitives
 //***********************************************
@@ -90,6 +180,56 @@
 
     let r: fn(int) -> int = recursion
     r(30)
+}
+{
+    fn a(upvalue: int) -> fn() -> int {
+        fn b() -> int {
+            return upvalue
+        }
+        return b
+    }
+    assert(1 == a(1)())
+    assert(2 == a(2)())
+    assert(3 == a(3)())
+}
+{
+    fn a(upvalue: int) -> fn() -> fn() -> int {
+        fn b() -> fn() -> int {
+            fn c() -> int {
+                return upvalue
+            }
+            return c
+        }
+        return b
+    }
+    assert(1 == a(1)()())
+    assert(2 == a(2)()())
+    assert(3 == a(3)()())
+}
+// Local mutual recursion test from @munificent/craftinginterpreters. The
+// difference is that we pass 'is_odd' to 'is_even' explicitly since, due
+// to lexical scoping, 'is_even' cannot see the declaration of 'is_odd'.
+{
+    fn is_even(n: int, is_odd: fn(int) -> bool) -> bool {
+        if n == 0 {
+            return true
+        }
+        return is_odd(n - 1)
+    }
+  
+    fn is_odd(n: int) -> bool {
+        if n == 0 {
+            return false
+        }
+        return is_even(n - 1, is_odd)
+    }
+  
+    assert(is_even(0, is_odd))
+    assert(is_even(2, is_odd))
+    assert(is_even(4, is_odd))
+    assert(!is_even(1, is_odd))
+    assert(!is_even(3, is_odd))
+    assert(!is_even(5, is_odd))
 }
 
 //***********************************************
