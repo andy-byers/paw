@@ -444,3 +444,62 @@
     assert(3.0 == new_pair(2.0, 3.0).second)
     assert('five' == new_pair('four', 'five').second)
 }
+
+//***********************************************
+//    enumerations
+//***********************************************
+{
+    enum E {
+        X,
+    }
+    let e = E::X()
+    e = E::X()
+}
+{
+    enum E {
+        X,
+        Y,
+    }
+    let e = E::X()
+    e = E::Y()
+}
+{
+    enum E {
+        X,
+        Y(int),
+    }
+    let e = E::X()
+    e = E::Y(42)
+    
+    fn test(e: E) -> E {
+        let e2 = e
+        return e2
+    }
+    let e = test(E::X())
+    let e = test(E::Y(42))
+
+}
+{
+    enum E[T] {
+        X(T),
+        Y(T, T),
+    }
+    let ex = E[int]::X(1)
+    let ey = E[int]::Y(2, 3)
+    
+    fn test(e: E[int]) -> E[int] {
+        let e2 = e
+        return e2
+    }
+    test(ex)
+    test(ey)
+
+    struct S[T] {
+        x: E[int]
+        y: E[T]
+    }
+    let s = S[float]{
+        x: E[int]::X(1),
+        y: E[float]::Y(2.0, 3.0),
+    }
+}

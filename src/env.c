@@ -25,15 +25,15 @@ int pawE_new_global(paw_Env *P, String *name, paw_Type type)
 {
     struct GlobalVec *gv = &P->gv; // enforce uniqueness
     for (int i = 0; i < gv->size; ++i) {
-        if (pawS_eq(name, gv->data[i].desc.name)) {
+        if (pawS_eq(name, gv->data[i].name)) {
             paw_assert(0); // FIXME
         }
     }
     pawM_grow(P, gv->data, gv->size, gv->alloc);
     const int i = gv->size++;
     GlobalVar *var = &gv->data[i];
-    var->desc.name = name;
-    var->desc.code = type;
+    var->name = name;
+    var->type = type;
     v_set_0(&var->value);
     return i;
 }
@@ -43,7 +43,7 @@ GlobalVar *pawE_find_global(paw_Env *P, String *name)
     struct GlobalVec *gv = &P->gv;
     for (int i = 0; i < gv->size; ++i) {
         GlobalVar *var = &gv->data[i];
-        if (pawS_eq(name, var->desc.name)) {
+        if (pawS_eq(name, var->name)) {
             return var;
         }
     }

@@ -27,8 +27,8 @@ int pawL_load_nchunk(paw_Env *P, const char *name, const char *source,
                      size_t length);
 int pawL_load_chunk(paw_Env *P, const char *name, const char *source);
 
-#define L_GENERIC_MAX ARGC_MAX
-#define L_PARAM_MAX ARGC_MAX
+#define L_GENERIC_MAX PARAM_MAX
+#define L_PARAM_MAX PARAM_MAX
 #define L_LIST_END INT_MIN
 #define L_SELF (INT_MIN + 1)
 

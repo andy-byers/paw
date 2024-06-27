@@ -60,6 +60,7 @@ int paw_load(paw_Env *P, paw_Reader input, const char *name, void *ud);
 // the last parameter on top.
 int paw_call(paw_Env *P, int argc);
 
+// Builtin types
 // ORDER ValueType
 #define PAW_TUNIT 0
 #define PAW_TBOOL 1
@@ -70,8 +71,8 @@ int paw_call(paw_Env *P, int argc);
 #define PAW_TMAP 6
 #define PAW_TTUPLE 7
 #define PAW_TENUM 8
-#define PAW_TFUNCTION 9
-#define PAW_TSTRUCT 10
+#define PAW_TSTRUCT 9
+#define PAW_TFUNCTION 10
 #define PAW_TFOREIGN 11
 #define PAW_TMODULE 12
 #define PAW_NTYPES 13

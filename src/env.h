@@ -96,8 +96,9 @@ enum {
 };
 
 typedef struct GlobalVar {
-    VarDesc desc;
+    String *name;
     Value value;
+    paw_Type type;
 } GlobalVar;
 
 typedef struct paw_Env {

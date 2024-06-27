@@ -265,6 +265,147 @@ assert(status != 0)
 + [ ] metamethods
 + [ ] existential types
 
+## Pattern matching notes
+
+### Match construct
+Identifiers in a match guard create new variable bindings, given that they don't refer to exiting **types** (variables are shadowed).
+Each identifier can be bound at most 1 time per guard (`E::X(a, b, a)` is not allowed).
+A match construct eventually becomes a series of comparisons and jumps, similar to an if-else chain.
+```
+struct S {v: float}
+enum D {A, B(string)}
+enum E {X, Y(int), Z(S), W(D)}
+let e = select_variant()
+let v = match e {
+    E::X => 0,                           
+    E::Y(1) => 1,                        
+    E::Y(i) => i,                        
+    E::Z(S{v}) if v < 0.0 => 4,          
+    E::Z(S{v: renamed}) => int(renamed), 
+    E::W(D::A) => 6,                     
+    E::W(D::B(s)) if #s > 1 => #s,
+    E::W(d) => 8,
+    _ => 9,
+}
+```
+
+### Desugared code
+```
+let v = while 1 {
+    if disc(e) == 0 {
+        break 0
+    }
+    if disc(e) == 1 {
+        if e.0 == 1 {
+            break 1
+        }
+    }
+    if disc(e) == 1 {
+        let i = e.0
+        break i
+    }
+    if disc(e) == 2 {
+        let v = e.0.v
+        if v < 0.0 {
+            break 4
+        }
+    }
+    if disc(e) == 2 {
+        let renamed = e.0.v
+        break int(renamed)
+    }
+    if disc(e) == 3 {
+        if disc(e.0) == 0 {
+            break 6
+        }
+    }
+    if disc(e) == 3 {
+        if disc(e.0) == 1 {
+            let s = e.0.0
+            if #s > 1 {
+                break #s
+            }
+        }
+    }
+    if disc(e) == 3 {
+        let d = e.0
+        break 8
+    }
+    // TODO: exhaustiveness check
+    break 9
+}
+```
+
+### Desugared code with merged cases
+Cases can be moved around, but cannot 'cross' another case selecting the same variant, otherwise the semantics of the program might be changed.
+```
+let v = while 1 {
+    if disc(e) == 0 {
+        break 0
+    }
+    if disc(e) == 1 {
+        if e.0 == 1 {
+            break 1
+        } else {
+            let i = e.0
+            break i
+        }
+    }
+    if disc(e) == 2 {
+        { // careful about scope. although, it may not matter too much if we have already resolved variable accesses
+            let v = e.0.v
+            if v < 0.0 {
+                break 4
+            }
+        }
+        let renamed = e.0.v
+        break int(renamed)
+    }
+    if disc(e) == 3 {
+        if disc(e.0) == 0 {
+            break 6
+        } else if disc(e.0) == 1 {
+            let s = e.0.0
+            if #s > 1 {
+                break #s
+            }
+        } else {
+            break 8
+        }
+    }
+    // TODO: exhaustiveness check
+    break 9
+}
+```
+
+
+### Possible opcodes
+```
+  OP_COPY
+  OP_MATCHVARIANT(0)
+  OP_JUMPFALSE('next1') // patch locally
+  OP_POP(1)
+  OP_PUSHCONST(0)
+  OP_TRANSIT(1)
+  OP_JUMP('out') // save until the end, in label list
+next1:
+  OP_COPY
+  OP_MATCHVARIANT(1)
+  OP_JUMPF('next2')
+  OP_POP(1)
+  OP_GETFIELD(0)
+  OP_PUSHCONST(1)
+  OP_BINARY('==')
+  OP_JUMPF('next2')
+  OP_POP(1)
+  OP_PUSHCONST(1)
+  OP_TRANSIT(1)
+  OP_JUMP('out')
+next2:
+  ...
+out:
+```
+
 ## References
 + [Lua](https://www.lua.org/)
 + [MicroPython](https://micropython.org/)

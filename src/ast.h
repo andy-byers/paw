@@ -13,6 +13,7 @@ typedef struct Ast Ast;
 typedef struct AstVisitor AstVisitor;
 typedef struct AstFolder AstFolder;
 typedef struct AstTypeFolder AstTypeFolder;
+typedef struct AstPat AstPat;
 typedef struct AstType AstType;
 typedef struct AstDecl AstDecl;
 typedef struct AstExpr AstExpr;
@@ -50,6 +51,7 @@ typedef struct VarInfo {
     Symbol *symbol;
     VarKind kind;
     int index;
+    int width;
 } VarInfo;
 
 //****************************************************************
@@ -66,6 +68,19 @@ typedef struct AstList {
 AstList *pawA_list_new(Ast *ast);
 void pawA_list_free(Ast *ast, AstList *list);
 void pawA_list_push(Ast *ast, AstList **plist, void *node);
+
+typedef struct AstPathSegment {
+    String *name; 
+    AstList *types;
+} AstPathSegment;
+
+void pawA_path_push(Ast *ast, AstList **ppath, String *name, AstList *types);
+
+static inline AstPathSegment *pawA_path_get(AstList *path, int index) 
+{
+    paw_assert(index < path->count);
+    return path->data[index];  
+}
 
 //****************************************************************
 //    Types
@@ -162,6 +177,85 @@ struct AstType {
 #define a_is_module(t) (a_kind(t) == AST_TYPE_MODULE)
 
 //****************************************************************
+//    Pattern matching
+//****************************************************************
+
+
+typedef enum AstPatKind {
+    AST_PAT_WILDCARD,
+    AST_PAT_BINDING,
+    AST_PAT_LITERAL,
+    AST_PAT_PATH,
+    AST_PAT_FIELD,
+    AST_PAT_TUPLE,
+    AST_PAT_STRUCT,
+    AST_PAT_VARIANT,
+} AstPatKind;
+
+#define AST_PAT_HEADER AstType *type; \
+                       int line; \
+                       AstPatKind kind: 8
+typedef struct AstPatHdr {
+    AST_PAT_HEADER; // common fields
+} AstPatHdr;
+
+typedef struct AstWildcardPat {
+    AST_PAT_HEADER; // common fields
+} AstWildcardPat;
+
+typedef struct AstLiteralPat {
+    AST_PAT_HEADER; // common fields
+    AstExpr *expr;
+} AstLiteralPat;
+
+typedef struct AstBindingPat {
+    AST_PAT_HEADER; // common fields
+    String *name;
+} AstBindingPat;
+
+typedef struct AstPathPat {
+    AST_PAT_HEADER; // common fields
+    AstList *path;
+} AstPathPat;
+
+typedef struct AstTuplePat {
+    AST_PAT_HEADER; // common fields
+    AstList *elems; // list of AstPat
+} AstTuplePat;
+
+typedef struct AstStructPat {
+    AST_PAT_HEADER; // common fields
+    AstList *path; // path to structure
+    AstList *fields; // list of AstPat
+} AstStructPat;
+
+typedef struct AstVariantPat {
+    AST_PAT_HEADER; // common fields
+    AstList *path; // path to variant
+    AstList *elems; // list of AstPat
+} AstVariantPat;
+
+typedef struct AstFieldPat {
+    AST_PAT_HEADER; // common fields
+    String *name; // name of field
+    AstPat *pat;
+} AstFieldPat;
+
+struct AstPat {
+    union {
+        AstPatHdr hdr;    
+        AstWildcardPat wildcard;    
+        AstLiteralPat literal;    
+        AstBindingPat binding;    
+        AstPathPat path;    
+        AstTuplePat tuple;    
+        AstFieldPat field;    
+        AstStructPat struct_;    
+        AstVariantPat variant;    
+    };
+};
+
+//****************************************************************
 //    Declarations
 //****************************************************************
 
@@ -172,6 +266,7 @@ typedef enum AstDeclKind {
     DECL_STRUCT,
     DECL_FIELD,
     DECL_GENERIC,
+    DECL_VARIANT,
     DECL_INSTANCE,
 } AstDeclKind;
 
@@ -215,13 +310,15 @@ typedef struct FuncDecl {
     AstList *monos; // list of monomorphizations
 } FuncDecl;
 
-// TODO: Need to prevent recursive structures, or introduce the concept of
-// indirection (otherwise, structs that
+// TODO: Call this AdtDecl?
+//       Need to prevent recursive structures, or introduce the concept of
+//       indirection (otherwise, structs that
 //       contain an instance of themselves as a field will become infinitely
 //       large)...
 typedef struct StructDecl {
     DECL_HEADER; // common initial sequence
     paw_Bool is_global : 1; // uses 'global' keyword
+    paw_Bool is_struct : 1; // 'struct' vs. 'enum'
     Scope *scope; // scope for struct-level symbols
     Scope *field_scope;
     AstList *fields; // list of FieldDecl
@@ -229,6 +326,13 @@ typedef struct StructDecl {
     AstList *monos; // list of monomorphizations
     int location;
 } StructDecl;
+
+typedef struct VariantDecl {
+    DECL_HEADER; // common initial sequence
+    Scope *scope;
+    AstList *fields;
+    int index;
+} VariantDecl;
 
 // Represents a template instance
 // Created when an instantiation is found of the template that is currently
@@ -262,6 +366,7 @@ typedef struct AstDecl {
         FuncDecl func;
         StructDecl struct_;
         InstanceDecl inst;
+        VariantDecl variant;
         FieldDecl field;
         GenericDecl generic;
         TypeDecl type;
@@ -281,15 +386,15 @@ typedef enum AstExprKind {
     EXPR_CHAIN,
     EXPR_UNOP,
     EXPR_BINOP,
-    EXPR_COALESCE,
     EXPR_LOGICAL,
-    EXPR_COND,
     EXPR_INDEX,
     EXPR_ACCESS,
     EXPR_SELECTOR,
     EXPR_INVOKE,
     EXPR_SYMBOL,
     EXPR_ITEM,
+    EXPR_MATCH,
+    EXPR_MATCH_ARM,
     EXPR_FUNC_TYPE,
     EXPR_TYPE_NAME,
 } AstExprKind;
@@ -365,13 +470,6 @@ typedef struct BinOpExpr {
     AstExpr *rhs;
 } BinOpExpr;
 
-typedef struct CondExpr {
-    EXPR_HEADER;
-    AstExpr *cond;
-    AstExpr *lhs;
-    AstExpr *rhs;
-} CondExpr;
-
 typedef struct LogicalExpr {
     EXPR_HEADER;
     paw_Bool is_and : 1;
@@ -424,6 +522,20 @@ typedef struct FuncType {
     AstList *params; // parameter types
 } FuncType;
 
+typedef struct MatchArm {
+    EXPR_HEADER;
+    Scope *scope;
+    AstPat *guard;
+    AstExpr *cond;
+    AstExpr *value;
+} MatchArm;
+
+typedef struct MatchExpr {
+    EXPR_HEADER;
+    AstExpr *target;
+    AstList *arms;
+} MatchExpr;
+
 typedef struct AstExpr {
     union {
         AstExprHeader hdr;
@@ -433,7 +545,6 @@ typedef struct AstExpr {
         ChainExpr chain;
         UnOpExpr unop;
         BinOpExpr binop;
-        CondExpr cond;
         SuffixedExpr suffix;
         CallExpr call;
         Index index;
@@ -442,6 +553,8 @@ typedef struct AstExpr {
         ItemExpr item;
         TypeName type_name;
         FuncType func;
+        MatchExpr match;
+        MatchArm arm;
     };
 } AstExpr;
 
@@ -561,6 +674,7 @@ typedef union AstState {
 typedef void (*AstExprPass)(AstVisitor *pass, AstExpr *e);
 typedef void (*AstStmtPass)(AstVisitor *pass, AstStmt *s);
 typedef void (*AstDeclPass)(AstVisitor *pass, AstDecl *d);
+typedef void (*AstPatPass)(AstVisitor *pass, AstPat *p);
 
 // Represents a single pass over an AST
 struct AstVisitor {
@@ -571,6 +685,7 @@ struct AstVisitor {
     AstExprPass visit_expr;
     AstStmtPass visit_stmt;
     AstDeclPass visit_decl;
+    AstPatPass visit_pat;
 
     void (*visit_expr_list)(AstVisitor *V, AstList *list, AstExprPass cb);
     void (*visit_decl_list)(AstVisitor *V, AstList *list, AstDeclPass cb);
@@ -582,7 +697,6 @@ struct AstVisitor {
     void (*visit_chain_expr)(AstVisitor *V, ChainExpr *e);
     void (*visit_unop_expr)(AstVisitor *V, UnOpExpr *e);
     void (*visit_binop_expr)(AstVisitor *V, BinOpExpr *e);
-    void (*visit_cond_expr)(AstVisitor *V, CondExpr *e);
     void (*visit_suffix_expr)(AstVisitor *V, SuffixedExpr *e);
     void (*visit_call_expr)(AstVisitor *V, CallExpr *e);
     void (*visit_index_expr)(AstVisitor *V, Index *e);
@@ -591,6 +705,8 @@ struct AstVisitor {
     void (*visit_item_expr)(AstVisitor *V, ItemExpr *e);
     void (*visit_type_name_expr)(AstVisitor *V, TypeName *e);
     void (*visit_signature_expr)(AstVisitor *V, FuncType *e);
+    void (*visit_match_expr)(AstVisitor *V, MatchExpr *e);
+    void (*visit_arm_expr)(AstVisitor *V, MatchArm *e);
 
     void (*visit_block_stmt)(AstVisitor *V, Block *s);
     void (*visit_expr_stmt)(AstVisitor *V, AstExprStmt *s);
@@ -609,6 +725,14 @@ struct AstVisitor {
     void (*visit_generic_decl)(AstVisitor *V, GenericDecl *d);
     void (*visit_type_decl)(AstVisitor *V, TypeDecl *d);
     void (*visit_instance_decl)(AstVisitor *V, InstanceDecl *d);
+    void (*visit_variant_decl)(AstVisitor *V, VariantDecl *d);
+
+    void (*visit_literal_pat)(AstVisitor *V, AstLiteralPat *p);
+    void (*visit_path_pat)(AstVisitor *V, AstPathPat *p);
+    void (*visit_tuple_pat)(AstVisitor *V, AstTuplePat *p);
+    void (*visit_field_pat)(AstVisitor *V, AstFieldPat *p);
+    void (*visit_struct_pat)(AstVisitor *V, AstStructPat *p);
+    void (*visit_variant_pat)(AstVisitor *V, AstVariantPat *p);
 };
 
 void pawA_visitor_init(AstVisitor *V, Ast *ast, AstState state);
@@ -617,6 +741,7 @@ void pawA_visit(AstVisitor *V);
 typedef AstExpr *(*AstExprFold)(AstFolder *F, AstExpr *e);
 typedef AstStmt *(*AstStmtFold)(AstFolder *F, AstStmt *s);
 typedef AstDecl *(*AstDeclFold)(AstFolder *F, AstDecl *d);
+typedef AstPat *(*AstPatFold)(AstFolder *F, AstPat *p);
 
 struct AstFolder {
     AstState state;
@@ -626,6 +751,7 @@ struct AstFolder {
     AstExprFold fold_expr;
     AstStmtFold fold_stmt;
     AstDeclFold fold_decl;
+    AstPatFold fold_pat;
 
     void (*fold_expr_list)(AstFolder *F, AstList *list, AstExprFold cb);
     void (*fold_decl_list)(AstFolder *F, AstList *list, AstDeclFold cb);
@@ -637,7 +763,6 @@ struct AstFolder {
     AstExpr *(*fold_chain_expr)(AstFolder *F, ChainExpr *e);
     AstExpr *(*fold_unop_expr)(AstFolder *F, UnOpExpr *e);
     AstExpr *(*fold_binop_expr)(AstFolder *F, BinOpExpr *e);
-    AstExpr *(*fold_cond_expr)(AstFolder *F, CondExpr *e);
     AstExpr *(*fold_suffix_expr)(AstFolder *F, SuffixedExpr *e);
     AstExpr *(*fold_call_expr)(AstFolder *F, CallExpr *e);
     AstExpr *(*fold_index_expr)(AstFolder *F, Index *e);
@@ -646,6 +771,8 @@ struct AstFolder {
     AstExpr *(*fold_item_expr)(AstFolder *F, ItemExpr *e);
     AstExpr *(*fold_type_name_expr)(AstFolder *F, TypeName *e);
     AstExpr *(*fold_signature_expr)(AstFolder *F, FuncType *e);
+    AstExpr *(*fold_match_expr)(AstFolder *F, MatchExpr *e);
+    AstExpr *(*fold_arm_expr)(AstFolder *F, MatchArm *e);
 
     AstStmt *(*fold_block_stmt)(AstFolder *F, Block *s);
     AstStmt *(*fold_expr_stmt)(AstFolder *F, AstExprStmt *s);
@@ -663,6 +790,14 @@ struct AstFolder {
     AstDecl *(*fold_generic_decl)(AstFolder *F, GenericDecl *d);
     AstDecl *(*fold_type_decl)(AstFolder *F, TypeDecl *d);
     AstDecl *(*fold_instance_decl)(AstFolder *F, InstanceDecl *d);
+    AstDecl *(*fold_variant_decl)(AstFolder *F, VariantDecl *d);
+
+    AstPat *(*fold_literal_pat)(AstFolder *F, AstLiteralPat *p);
+    AstPat *(*fold_path_pat)(AstFolder *F, AstPathPat *p);
+    AstPat *(*fold_tuple_pat)(AstFolder *F, AstTuplePat *p);
+    AstPat *(*fold_field_pat)(AstFolder *F, AstFieldPat *p);
+    AstPat *(*fold_struct_pat)(AstFolder *F, AstStructPat *p);
+    AstPat *(*fold_variant_pat)(AstFolder *F, AstVariantPat *p);
 };
 
 void pawA_folder_init(AstFolder *F, Ast *ast, AstState state);
@@ -700,6 +835,7 @@ typedef struct Ast {
 //****************************************************************
 
 Symbol *pawA_new_symbol(Lex *lex);
+AstPat *pawA_new_pat(Ast *ast, AstPatKind kind);
 AstType *pawA_new_type(Ast *ast, AstTypeKind kind);
 AstDecl *pawA_new_decl(Ast *ast, AstDeclKind kind);
 AstExpr *pawA_new_expr(Ast *ast, AstExprKind kind);
@@ -713,6 +849,7 @@ void *pawA_new_pointer_vec(Ast *ast, int nptrs);
 #define cast_decl(x) ((AstDecl *)(x))
 #define cast_expr(x) ((AstExpr *)(x))
 #define cast_stmt(x) ((AstStmt *)(x))
+#define cast_pat(x) ((AstPat *)(x))
 
 //****************************************************************
 //     AST manipulation
@@ -752,9 +889,12 @@ AstDecl *pawA_get_decl(Ast *ast, DefId id);
 #define a_is_struct_template_decl(d)                                           \
     (a_is_struct_decl(d) && (d)->struct_.generics->count > 0)
 
+#define a_adt_id(t) check_exp(a_is_adt(t), (t)->adt.base - PAW_TSTRING)
+
 void pawA_dump_type(FILE *out, AstType *type);
 void pawA_dump_decl(FILE *out, AstDecl *decl);
 void pawA_dump_expr(FILE *out, AstExpr *expr);
 void pawA_dump_stmt(FILE *out, AstStmt *stmt);
+void pawA_dump_pat(FILE *out, AstPat *pat);
 
 #endif // PAW_AST_H

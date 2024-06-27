@@ -1,10 +1,10 @@
 // loop.paw
 
-for i = 0, 8 {
-    let a = -1
-    let b = -1
-}
-
+//for i = 0, 8 {
+//    let a = -1
+//    let b = -1
+//}
+//
 //// Make sure loop code cleans the stack up when finished
 //{
 //    for i = 1, 8 {
@@ -13,9 +13,9 @@ for i = 0, 8 {
 //    fn test() -> int {return 123}
 //    assert(test() == 123)
 //}
-//
-//// Numeric for loop:
-//{
+
+// Numeric for loop:
+{
 //    fn test(start: int, end: int, step: int) -> int {
 //        let n = 0
 //        for i = start, end, step {
@@ -54,29 +54,59 @@ for i = 0, 8 {
 //        N = 0
 //    }
 //    assert(n == 10)
-//
-//    fn test(n: int) -> fn() -> int {
-//        fn default() -> int {
-//            return -1
+
+    fn test(n: int) -> fn() -> int {
+        fn default() -> int {
+            return -1
+        }
+        let f = default
+        for i = 0, 100 {
+            if i == n {
+                // Capture 'i', the loop variable, when it is equal to 'n'. It should
+                // retain this value in the closure, since 'i' is closed over at the
+                // end of the loop iteration.
+                fn closure() -> int {
+                    return i
+                }
+                f = closure
+            }
+        }
+        return f
+    }
+    assert(test(0)() == 0)
+    assert(test(10)() == 10)
+    assert(test(50)() == 50)
+    assert(test(100)() == -1)
+}
+//{
+//    let a = 'A'
+//    let b = 'B'
+//    for i = 0, 100 {
+//        let b = 'C'
+//        let c = 'C'
+//        let d = 'D'
+//        a = c
+//        b = d // 'b' shadowed
+//        if i == 10 {
+//            break
+//        } else {
+//            continue
 //        }
-//        let f = default
-//        for i = 0, 100 {
-//            if i == n {
-//                // Capture 'i', the loop variable, when it is equal to 'n'. It should
-//                // retain this value in the closure, since 'i' is closed over at the
-//                // end of the loop iteration.
-//                fn closure() -> int {
-//                    return i
-//                }
-//                f = closure
+//    }
+//    let a = a
+//    let b = b
+//    assert(a == 'C')
+//    assert(b == 'B')
+//}
+//{
+//    for i = 0, 8 {
+//        for j = 0, i {
+//            for k = j, 8 {
+//                assert(j < i)
+//                assert(j <= k)
 //            }
 //        }
-//        return f
 //    }
-//    assert(test(0)() == 0)
-//    assert(test(10)() == 10)
-//    assert(test(50)() == 50)
-//    assert(test(100)() == -1)
 //}
 //
 //// TODO: Get this working, once data structures are working again
@@ -468,4 +498,5 @@ for i = 0, 8 {
 //    assert(test(1) == 2)
 //    assert(test(2) == 4)
 //}
+//
 //

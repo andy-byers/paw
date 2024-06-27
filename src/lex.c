@@ -3,7 +3,6 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "lex.h"
 #include "auxlib.h"
-// #include "bigint.h"
 #include "gc_aux.h"
 #include "map.h"
 #include "mem.h"
@@ -419,6 +418,8 @@ try_again:
             next(x);
             if (test_next(x, '=')) {
                 token = T(TK_EQUALS2);
+            } else if (test_next(x, '>')) {
+                token = T(TK_FAT_ARROW);
             }
             break;
         case '&':
@@ -437,12 +438,6 @@ try_again:
             next(x);
             if (test_next(x, '>')) {
                 token = T(TK_ARROW);
-            }
-            break;
-        case '?':
-            next(x);
-            if (test_next(x, '?')) {
-                token = T(TK_QUESTION2);
             }
             break;
         case ':':

@@ -86,6 +86,10 @@ const char *paw_op_name(Op op)
             return "COPY";
         case OP_INITFIELD:
             return "INITFIELD";
+        case OP_TRANSIT:
+            return "TRANSIT";
+        case OP_MATCHVARIANT:
+            return "MATCHVARIANT";
         case OP_POP:
             return "POP";
         case OP_CLOSE:
@@ -120,6 +124,8 @@ const char *paw_op_name(Op op)
             return "GETUPVALUE";
         case OP_SETUPVALUE:
             return "SETUPVALUE";
+        case OP_NEWVARIANT:
+            return "NEWVARIANT";
         case OP_NEWINSTANCE:
             return "NEWINSTANCE";
         case OP_NEWVECTOR:
@@ -194,6 +200,12 @@ void paw_dump_opcode(OpCode opcode)
             break;
         case OP_INIT:
             printf("INIT\n");
+            break;
+        case OP_MATCHVARIANT:
+            printf("MATCHVARIANT\n");
+            break;
+        case OP_TRANSIT:
+            printf("TRANSIT\n");
             break;
         case OP_RETURN:
             printf("RETURN\n");
@@ -313,9 +325,24 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
                 break;
             }
 
+            case OP_POP: {
+                pawL_add_fstring(P, print, " ; u = %d", get_U(opcode));
+                break;
+            }
+
+            case OP_MATCHVARIANT: {
+                pawL_add_fstring(P, print, " ; k = %d", get_U(opcode));
+                break;
+            }
+
+            case OP_TRANSIT: {
+                pawL_add_fstring(P, print, " ; n = %d", get_U(opcode));
+                break;
+            }
+
             case OP_CLOSE: {
-                pawL_add_fstring(P, print, " ; count = %d, close = %d",
-                                 get_A(opcode), get_B(opcode));
+                pawL_add_fstring(P, print, " ; count = %d",
+                                 get_U(opcode));
                 break;
             }
 
@@ -509,27 +536,6 @@ void paw_stacktrace(paw_Env *P)
         ++i;
     }
     pawL_push_result(P, &buf);
-}
-
-// TODO: rename paw_dump_locals
-void paw_dump_stack(paw_Env *P)
-{
-    CallFrame *cf = P->main.next;
-    while (cf != NULL) {
-        const Proto *func = cf->fn->p;
-        printf("Frame: %s\n", func->name->text);
-        for (int i = 0; i < func->ndebug; ++i) {
-            const struct LocalInfo info = func->v[i];
-            const char *capture = info.captured ? "*" : "";
-            const String *name = info.var.name;
-            const paw_Type code = info.var.code;
-            printf("  %3d: %s%s (%d)\n", i, name->text, capture, code);
-        }
-        if (cf == P->cf) {
-            break;
-        }
-        cf = cf->next;
-    }
 }
 
 void paw_dump_value(paw_Env *P, Value v, paw_Type type)
