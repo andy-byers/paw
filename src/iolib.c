@@ -57,7 +57,8 @@ static int io_open(paw_Env *P)
     if (file) {
         *pfile = file;
     } else {
-        // FIXME: Not exception-worthy: return an error indicator of some sort (Lua returns
+        // FIXME: Not exception-worthy: return an error indicator of some sort
+        // (Lua returns
         //        2 things, nil and an error message.)
         pawO_system_error(P, errno);
     }
@@ -127,14 +128,10 @@ static int io_tell(paw_Env *P)
 }
 
 static const pawL_Attr kIOLib[] = {
-    {"open", io_open},
-    {"close", io_close},
-    {"flush", io_flush},
-    {"read", io_read},
-    {"write", io_write},
-    {"seek", io_seek},
-    {"tell", io_tell},
-    {0},
+    {"open", io_open},   {"close", io_close},
+    {"flush", io_flush}, {"read", io_read},
+    {"write", io_write}, {"seek", io_seek},
+    {"tell", io_tell},   {0},
 };
 
 void pawL_require_iolib(paw_Env *P)

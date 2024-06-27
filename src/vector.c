@@ -10,8 +10,9 @@
 
 void pawA_index_error(paw_Env *P, paw_Int index, size_t length)
 {
-    pawR_error(P, PAW_EINDEX, "index %I is out of bounds for array of length %I",
-               index, paw_cast_int(length) /* fits in paw_Int */);
+    pawR_error(P, PAW_EINDEX,
+               "index %I is out of bounds for array of length %I", index,
+               paw_cast_int(length) /* fits in paw_Int */);
 }
 
 static size_t array_capacity(const Vector *a)
@@ -114,7 +115,7 @@ void pawA_pop(paw_Env *P, Vector *a, paw_Int index)
 Vector *pawA_new(paw_Env *P)
 {
     Vector *a = pawM_new(P, Vector);
-    pawG_add_object(P, cast_object(a), VARRAY);
+    pawG_add_object(P, cast_object(a), VVECTOR);
     return a;
 }
 

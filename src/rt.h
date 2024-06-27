@@ -67,16 +67,20 @@ int pawR_string_clone(paw_Env *P);
 static inline void pawR_check_argc(paw_Env *P, int argc, int expect)
 {
     if (argc != expect) {
-        pawR_error(P, PAW_ERUNTIME, "expected %d argument(s) but found %d", expect, argc);
+        pawR_error(P, PAW_ERUNTIME, "expected %d argument(s) but found %d",
+                   expect, argc);
     }
 }
 
 static inline void pawR_check_varargc(paw_Env *P, int argc, int least, int most)
 {
     if (argc < least) {
-        pawR_error(P, PAW_ERUNTIME, "expected at least %d argument(s) but found %d", least, argc);
+        pawR_error(P, PAW_ERUNTIME,
+                   "expected at least %d argument(s) but found %d", least,
+                   argc);
     } else if (argc > most) {
-        pawR_error(P, PAW_ERUNTIME, "expected at most %d argument(s) but found %d", most, argc);
+        pawR_error(P, PAW_ERUNTIME,
+                   "expected at most %d argument(s) but found %d", most, argc);
     }
 }
 

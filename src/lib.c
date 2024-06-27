@@ -29,10 +29,7 @@ void lib_error(paw_Env *P, int error, const char *fmt, ...)
     pawC_throw(P, error);
 }
 
-static int get_argc(paw_Env *P)
-{
-    return paw_get_count(P) - 1 /* context */;
-}
+static int get_argc(paw_Env *P) { return paw_get_count(P) - 1 /* context */; }
 
 void pawL_check_argc(paw_Env *P, int argc)
 {
@@ -246,7 +243,8 @@ static int vector_clone(paw_Env *P)
 //     return v_string(v);
 // }
 
-static const char *find_substr(const char *str, size_t nstr, const char *sub, size_t nsub)
+static const char *find_substr(const char *str, size_t nstr, const char *sub,
+                               size_t nsub)
 {
     if (nsub == 0) {
         return str;
@@ -254,8 +252,7 @@ static const char *find_substr(const char *str, size_t nstr, const char *sub, si
     const char *ptr = str;
     const char *end = str + nstr;
     while ((ptr = strchr(ptr, sub[0]))) {
-        if (nsub <= cast_size(end - ptr) &&
-            0 == memcmp(ptr, sub, nsub)) {
+        if (nsub <= cast_size(end - ptr) && 0 == memcmp(ptr, sub, nsub)) {
             return ptr;
         }
         str = ptr + nsub;
@@ -268,7 +265,8 @@ static int string_find(paw_Env *P)
     pawL_check_argc(P, 1);
     const String *s = v_string(cf_base(0));
     const String *find = v_string(cf_base(1));
-    const char *result = find_substr(s->text, s->length, find->text, find->length);
+    const char *result =
+        find_substr(s->text, s->length, find->text, find->length);
     if (result) { // index of substring
         v_set_int(P->top.p - 1, result - s->text);
     } else { // not found
@@ -335,8 +333,8 @@ static int string_starts_with(paw_Env *P)
     String *s = v_string(cf_base(0));
     const String *prefix = v_string(cf_base(1));
     const size_t prelen = prefix->length;
-    const paw_Bool b = s->length >= prelen &&
-                       0 == memcmp(prefix->text, s->text, prelen);
+    const paw_Bool b =
+        s->length >= prelen && 0 == memcmp(prefix->text, s->text, prelen);
     v_set_bool(P->top.p - 1, b);
     return 1;
 }
@@ -358,9 +356,9 @@ static int string_ends_with(paw_Env *P)
 
 static int string_clone(paw_Env *P)
 {
-    // Leave the string receiver on top of the stack. The copy of the string into
-    // this function's receiver slot serves as the clone. Strings are immutable:
-    // and have copy-on-write sematics.
+    // Leave the string receiver on top of the stack. The copy of the string
+    // into this function's receiver slot serves as the clone. Strings are
+    // immutable: and have copy-on-write sematics.
     paw_unused(P);
     return 1;
 }
@@ -394,7 +392,8 @@ static int map_clone(paw_Env *P)
 
 void pawL_new_func(paw_Env *P, paw_Function func, int nup)
 {
-    Native *nat = pawV_new_native(P, func, nup); // TODO: take upvalues off top of stack
+    Native *nat =
+        pawV_new_native(P, func, nup); // TODO: take upvalues off top of stack
     pawC_pusho(P, cast_object(nat));
 }
 
@@ -454,14 +453,16 @@ void pawL_require_lib(paw_Env *P, const char *name)
     //    if (load_cached(P, name)) {
     //        return; // already loaded
     //    }
-    //    // Automatically register base libraries. This will prevent libraries with any of
+    //    // Automatically register base libraries. This will prevent libraries
+    //    with any of
     //    // the base library names from being registered.
     //    if (0 == strcmp(name, IOLIB_NAME)) {
     //        pawL_require_iolib(P);
     //    } else if (0 == strcmp(name, MATHLIB_NAME)) {
     //        pawL_require_mathlib(P);
     //    } else {
-    //        pawR_error(P, PAW_ENAME, "library '%s' has not been registered", name);
+    //        pawR_error(P, PAW_ENAME, "library '%s' has not been registered",
+    //        name);
     //    }
 }
 
@@ -503,7 +504,8 @@ static const char *chunk_reader(paw_Env *P, void *ud, size_t *psize)
     return cr->data;
 }
 
-int pawL_load_nchunk(paw_Env *P, const char *name, const char *source, size_t length)
+int pawL_load_nchunk(paw_Env *P, const char *name, const char *source,
+                     size_t length)
 {
     struct ChunkReader cr = {.data = source, .size = length};
     return paw_load(P, chunk_reader, name, &cr);

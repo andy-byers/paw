@@ -25,9 +25,9 @@ typedef enum DefKind {
 
 typedef struct Definition Definition;
 
-#define PAWE_DEF_HEADER \
-    Type *type;         \
-    DefId id : 8;       \
+#define PAWE_DEF_HEADER                                                        \
+    Type *type;                                                                \
+    DefId id : 8;                                                              \
     DefKind kind : 8
 typedef struct DefHeader {
     PAWE_DEF_HEADER;
@@ -128,17 +128,24 @@ typedef struct paw_Env {
     // Array of commonly-used strings.
     String *str_cache[NCSTR];
 
-    // Contains an error message that is served when the system runs out of memory
-    // (a call to the 'alloc' field below returned NULL).
+    // Contains an error message that is served when the system runs out of
+    // memory (a call to the 'alloc' field below returned NULL).
     Value mem_errmsg;
 
-    // TODO: At some point, the globals should go into a struct called Module. Make
+    // TODO: At some point, the globals should go into a struct called Module.
+    // Make
     //       Module a paw object.
     struct GlobalVec {
         GlobalVar *data;
         int size;
         int alloc;
     } gv;
+
+    struct StructVec {
+        Struct **data;
+        int size;
+        int alloc;
+    } sv;
 
     paw_Alloc alloc;
     void *ud;

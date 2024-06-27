@@ -81,10 +81,7 @@ void pawH_clone(paw_Env *P, StackPtr sp, Map *m);
 void pawH_key_error(paw_Env *P, Value key, paw_Type type);
 Value *pawH_create(paw_Env *P, Map *m, Value key);
 
-static inline size_t pawH_length(const Map *m)
-{
-    return m->length;
-}
+static inline size_t pawH_length(const Map *m) { return m->length; }
 
 typedef enum MapAction {
     MAP_ACTION_NONE,
@@ -92,7 +89,8 @@ typedef enum MapAction {
     MAP_ACTION_REMOVE,
 } MapAction;
 
-static inline Value *pawH_action(paw_Env *P, Map *m, Value key, MapAction action)
+static inline Value *pawH_action(paw_Env *P, Map *m, Value key,
+                                 MapAction action)
 {
     if (action == MAP_ACTION_CREATE) {
         return pawH_create(P, m, key);

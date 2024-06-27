@@ -55,18 +55,21 @@
 
 #define create_U(o, u) ((OpCode)(o) | ((OpCode)(u) << U_OFFSET))
 #define get_U(v) (((v) >> U_OFFSET) & mask1(U_WIDTH, 0))
-#define set_U(v, u) (*(v) = (*(v) & mask0(U_WIDTH, U_OFFSET)) | ((OpCode)(u) << U_OFFSET))
+#define set_U(v, u)                                                            \
+    (*(v) = (*(v) & mask0(U_WIDTH, U_OFFSET)) | ((OpCode)(u) << U_OFFSET))
 
 #define create_S(o, s) create_U(o, (int)(s) + S_MAX)
 #define get_S(v) ((int)get_U(v) - S_MAX)
 #define set_S(v, s) set_U(v, (int)(s) + S_MAX)
 
-#define create_AB(o, a, b) ((OpCode)(op) | ((OpCode)(a) << A_OFFSET) | \
-                            ((OpCode)(b) << B_OFFSET))
+#define create_AB(o, a, b)                                                     \
+    ((OpCode)(op) | ((OpCode)(a) << A_OFFSET) | ((OpCode)(b) << B_OFFSET))
 #define get_A(v) ((v) >> A_OFFSET)
-#define set_A(v, a) (*(v) = (*(v) & mask0(A_WIDTH, A_OFFSET)) | ((OpCode)(a) << A_OFFSET))
+#define set_A(v, a)                                                            \
+    (*(v) = (*(v) & mask0(A_WIDTH, A_OFFSET)) | ((OpCode)(a) << A_OFFSET))
 #define get_B(v) (((v) >> B_OFFSET) & mask1(B_WIDTH, 0))
-#define set_B(v, b) (*(v) = (*(v) & mask0(B_WIDTH, B_OFFSET)) | ((OpCode)(b) << B_OFFSET))
+#define set_B(v, b)                                                            \
+    (*(v) = (*(v) & mask0(B_WIDTH, B_OFFSET)) | ((OpCode)(b) << B_OFFSET))
 
 typedef uint32_t OpCode;
 
@@ -181,17 +184,22 @@ typedef enum {
 // clang-format on
 //
 // Notes:
-// * OP_*OP uses argument 'B' to indicate the type of the operands. The operands are
+// * OP_*OP uses argument 'B' to indicate the type of the operands. The operands
+// are
 //   always the same type.
-// * The conversion operators (OP_BOOL, OP_INT, etc.) use argument 'U' to indicate
+// * The conversion operators (OP_BOOL, OP_INT, etc.) use argument 'U' to
+// indicate
 //   the type of 'v'.
-// * OP_RETURN replaces the current call frame with the value on top of the stack.
+// * OP_RETURN replaces the current call frame with the value on top of the
+// stack.
 //   The current call frame consists of the function object or reciever 'f', its
-//   parameters, and all locals declared between the start of the call and the 'return'.
-// * OP_FOR*0 prepare a for loop. The loop body is skipped if the condition is false.
-//   For OP_FORNUM0, the loop 'begin' is compared against the loop 'end' using the
-//   sign of the loop 'step'. For OP_FORIN0, the loop is skipped if the container is
-//   empty. Both instructions will push the loop control variable.
+//   parameters, and all locals declared between the start of the call and the
+//   'return'.
+// * OP_FOR*0 prepare a for loop. The loop body is skipped if the condition is
+// false.
+//   For OP_FORNUM0, the loop 'begin' is compared against the loop 'end' using
+//   the sign of the loop 'step'. For OP_FORIN0, the loop is skipped if the
+//   container is empty. Both instructions will push the loop control variable.
 // * OP_FOR* run a single for-loop step.
 
 #define METAMETHOD0 OP_CALL
@@ -269,27 +277,24 @@ typedef enum {
 } Metamethod;
 
 // sanity check opcode format
-_Static_assert(
-    OP_WIDTH + A_WIDTH + B_WIDTH == sizeof(OpCode) * 8 &&
-        OP_WIDTH + U_WIDTH == sizeof(OpCode) * 8 &&
-        OP_WIDTH + S_WIDTH == sizeof(OpCode) * 8 &&
-        0 /* OP_OFFSET */ + OP_WIDTH == U_OFFSET &&
-        0 /* OP_OFFSET */ + OP_WIDTH == S_OFFSET &&
-        0 /* OP_OFFSET */ + OP_WIDTH == B_OFFSET &&
-        B_OFFSET + B_WIDTH == A_OFFSET &&
-        A_OFFSET + A_WIDTH == sizeof(OpCode) * 8,
-    "invalid opcode format (see opcode.h)");
+_Static_assert(OP_WIDTH + A_WIDTH + B_WIDTH == sizeof(OpCode) * 8 &&
+                   OP_WIDTH + U_WIDTH == sizeof(OpCode) * 8 &&
+                   OP_WIDTH + S_WIDTH == sizeof(OpCode) * 8 &&
+                   0 /* OP_OFFSET */ + OP_WIDTH == U_OFFSET &&
+                   0 /* OP_OFFSET */ + OP_WIDTH == S_OFFSET &&
+                   0 /* OP_OFFSET */ + OP_WIDTH == B_OFFSET &&
+                   B_OFFSET + B_WIDTH == A_OFFSET &&
+                   A_OFFSET + A_WIDTH == sizeof(OpCode) * 8,
+               "invalid opcode format (see opcode.h)");
 
 // sanity check metamethod ordering
-_Static_assert(
-    unop2meta(UNARY_LEN) == MM_LEN &&
-        binop2meta(BINARY_EQ) == MM_EQ &&
-        binop2meta(BINARY_NE) == MM_NE &&
-        binop2meta(BINARY_ADD) == MM_ADD &&
-        !binop_has_r(BINARY_IN) &&
-        binop_has_r(BINARY_SHR) &&
-        binop_r(BINARY_ADD) == MM_RADD &&
-        binop_r(BINARY_SHR) == MM_RSHR,
-    "invalid metamethod format (see opcode.h)");
+_Static_assert(unop2meta(UNARY_LEN) == MM_LEN &&
+                   binop2meta(BINARY_EQ) == MM_EQ &&
+                   binop2meta(BINARY_NE) == MM_NE &&
+                   binop2meta(BINARY_ADD) == MM_ADD &&
+                   !binop_has_r(BINARY_IN) && binop_has_r(BINARY_SHR) &&
+                   binop_r(BINARY_ADD) == MM_RADD &&
+                   binop_r(BINARY_SHR) == MM_RSHR,
+               "invalid metamethod format (see opcode.h)");
 
 #endif // PAW_OPCODE_H

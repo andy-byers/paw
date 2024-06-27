@@ -38,9 +38,9 @@
 //{
 //     switch (y_kind(type)) {
 //         case TYPE_FUNC:
-//             pawM_free_vec(P, type->func.params.types, type->func.params.count);
-//             pawM_free_vec(P, type->func.types.types, type->func.types.count);
-//             break;
+//             pawM_free_vec(P, type->func.params.types,
+//             type->func.params.count); pawM_free_vec(P,
+//             type->func.types.types, type->func.types.count); break;
 //         case TYPE_ADT:
 //             pawM_free_vec(P, type->adt.types.types, type->adt.types.count);
 //             break;

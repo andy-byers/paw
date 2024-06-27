@@ -21,13 +21,14 @@ typedef struct Block Block;
 
 // Represents an entry in the symbol table
 //
-// During the type checking pass, a Symbol is created for each declaration that is
-// encountered. When an identifier is referenced, it is looked up in the list of
-// symbol tables representing the enclosing scopes (as well as the global symbol
-// table).
+// During the type checking pass, a Symbol is created for each declaration that
+// is encountered. When an identifier is referenced, it is looked up in the list
+// of symbol tables representing the enclosing scopes (as well as the global
+// symbol table).
 //
-// The symbol table is used for all symbols, but not every symbol will end up on the
-// stack. In particular, symbols with 'is_type' equal to 1 will not get a stack slot.
+// The symbol table is used for all symbols, but not every symbol will end up on
+// the stack. In particular, symbols with 'is_type' equal to 1 will not get a
+// stack slot.
 typedef struct Symbol {
     paw_Bool is_init : 1;
     paw_Bool is_type : 1;
@@ -79,8 +80,8 @@ typedef enum AstTypeKind { // type->...
     AST_TYPE_MODULE, // mod
 } AstTypeKind;
 
-#define AST_TYPE_HEADER \
-    DefId def;          \
+#define AST_TYPE_HEADER                                                        \
+    DefId def;                                                                 \
     AstTypeKind kind : 8
 typedef struct AstTypeHeader {
     AST_TYPE_HEADER;
@@ -98,9 +99,9 @@ typedef struct AstUnknown {
     int index;
 } AstUnknown;
 
-#define AST_POLY_HDR \
-    AST_TYPE_HEADER; \
-    AstList *types;  \
+#define AST_POLY_HDR                                                           \
+    AST_TYPE_HEADER;                                                           \
+    AstList *types;                                                            \
     DefId base
 typedef struct AstPolyHdr {
     AST_POLY_HDR;
@@ -174,12 +175,12 @@ typedef enum AstDeclKind {
     DECL_INSTANCE,
 } AstDeclKind;
 
-#define DECL_HEADER       \
-    AstType *type;        \
-    struct AstDecl *next; \
-    String *name;         \
-    int line;             \
-    DefId def;            \
+#define DECL_HEADER                                                            \
+    AstType *type;                                                             \
+    struct AstDecl *next;                                                      \
+    String *name;                                                              \
+    int line;                                                                  \
+    DefId def;                                                                 \
     AstDeclKind kind : 8
 typedef struct AstDeclHeader {
     DECL_HEADER; // common initial sequence
@@ -214,8 +215,10 @@ typedef struct FuncDecl {
     AstList *monos; // list of monomorphizations
 } FuncDecl;
 
-// TODO: Need to prevent recursive structures, or introduce the concept of indirection (otherwise, structs that
-//       contain an instance of themselves as a field will become infinitely large)...
+// TODO: Need to prevent recursive structures, or introduce the concept of
+// indirection (otherwise, structs that
+//       contain an instance of themselves as a field will become infinitely
+//       large)...
 typedef struct StructDecl {
     DECL_HEADER; // common initial sequence
     paw_Bool is_global : 1; // uses 'global' keyword
@@ -224,6 +227,7 @@ typedef struct StructDecl {
     AstList *fields; // list of FieldDecl
     AstList *generics; // generic type parameters (GenericDecl)
     AstList *monos; // list of monomorphizations
+    int location;
 } StructDecl;
 
 // Represents a template instance
@@ -290,10 +294,10 @@ typedef enum AstExprKind {
     EXPR_TYPE_NAME,
 } AstExprKind;
 
-#define EXPR_HEADER       \
-    int line;             \
-    AstExprKind kind : 8; \
-    AstType *type;        \
+#define EXPR_HEADER                                                            \
+    int line;                                                                  \
+    AstExprKind kind : 8;                                                      \
+    AstType *type;                                                             \
     struct AstExpr *next
 typedef struct AstExprHeader {
     EXPR_HEADER;
@@ -344,7 +348,7 @@ typedef struct AstIdent {
 typedef struct ItemExpr {
     EXPR_HEADER;
     int index;
-    String *name; // attribute name
+    AstExpr *key;
     AstExpr *value;
 } ItemExpr;
 
@@ -375,8 +379,8 @@ typedef struct LogicalExpr {
     AstExpr *rhs;
 } LogicalExpr;
 
-#define SUFFIXED_HEADER \
-    EXPR_HEADER;        \
+#define SUFFIXED_HEADER                                                        \
+    EXPR_HEADER;                                                               \
     AstExpr *target
 typedef struct SuffixedExpr {
     SUFFIXED_HEADER;
@@ -458,9 +462,9 @@ typedef enum AstStmtKind {
     STMT_RETURN,
 } AstStmtKind;
 
-#define STMT_HEADER       \
-    int line;             \
-    AstStmtKind kind : 8; \
+#define STMT_HEADER                                                            \
+    int line;                                                                  \
+    AstStmtKind kind : 8;                                                      \
     struct AstStmt *next
 typedef struct AstStmtHeader {
     STMT_HEADER;
@@ -551,7 +555,9 @@ typedef union AstState {
     struct Copier *C; // AST copier state
 } AstState;
 
-// TODO: Should be able to use the entrypoint routines on list elements, may need slightly more specific nodes, like ParamDecl for parameters instead of overloading FieldDecl
+// TODO: Should be able to use the entrypoint routines on list elements, may
+// need slightly more specific nodes, like ParamDecl for parameters instead of
+// overloading FieldDecl
 typedef void (*AstExprPass)(AstVisitor *pass, AstExpr *e);
 typedef void (*AstStmtPass)(AstVisitor *pass, AstStmt *s);
 typedef void (*AstDeclPass)(AstVisitor *pass, AstDecl *d);
@@ -738,11 +744,13 @@ AstDecl *pawA_get_decl(Ast *ast, DefId id);
 #define a_is_func_decl(d) (a_kind(d) == DECL_FUNC)
 
 #define a_has_receiver(d) (a_is_func_decl(d) && (d)->func.receiver != NULL)
-#define a_is_template_decl(d) (a_is_func_template_decl(d) || \
-                               a_is_struct_template_decl(d))
+#define a_is_template_decl(d)                                                  \
+    (a_is_func_template_decl(d) || a_is_struct_template_decl(d))
 
-#define a_is_func_template_decl(d) (a_is_func_decl(d) && (d)->func.generics->count > 0)
-#define a_is_struct_template_decl(d) (a_is_struct_decl(d) && (d)->struct_.generics->count > 0)
+#define a_is_func_template_decl(d)                                             \
+    (a_is_func_decl(d) && (d)->func.generics->count > 0)
+#define a_is_struct_template_decl(d)                                           \
+    (a_is_struct_decl(d) && (d)->struct_.generics->count > 0)
 
 void pawA_dump_type(FILE *out, AstType *type);
 void pawA_dump_decl(FILE *out, AstDecl *decl);

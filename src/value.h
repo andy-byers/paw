@@ -62,9 +62,9 @@
 #define o_method(o) check_exp(o_is_method(o), (Method *)(o))
 #define o_foreign(o) check_exp(o_is_foreign(o), (Foreign *)(o))
 
-#define GC_HEADER           \
-    struct Object *gc_next; \
-    uint64_t gc_nrefs;      \
+#define GC_HEADER                                                              \
+    struct Object *gc_next;                                                    \
+    uint64_t gc_nrefs;                                                         \
     uint8_t gc_kind
 #define cast_uintptr(x) ((uintptr_t)(x))
 #define cast_object(x) ((Object *)(void *)(x))
@@ -88,8 +88,6 @@ typedef union StackRel {
     StackPtr p;
 } StackRel;
 
-#define s2v(s) (&(s).v)
-
 typedef enum ValueKind {
     // scalar types
     VBOOL,
@@ -98,9 +96,8 @@ typedef enum ValueKind {
 
     // object types
     VSTRING,
-    VARRAY,
-    VMAP,
     VVECTOR,
+    VMAP,
     VSTRUCT,
     VINSTANCE,
     VMETHOD,
@@ -155,8 +152,8 @@ uint32_t pawV_hash(Value v);
 
 // Convert a null-terminated string into an integer
 // Understands non-decimal base prefixes '0b', '0o', '0x', and their uppercase
-// counterparts. Returns -PAW_ESYNTAX if the integer is malformed, -PAW_EOVERFLOW
-// if it is large to fit in a paw_Int, and PAW_OK otherwise.
+// counterparts. Returns -PAW_ESYNTAX if the integer is malformed,
+// -PAW_EOVERFLOW if it is large to fit in a paw_Int, and PAW_OK otherwise.
 int pawV_parse_integer(paw_Env *P, const char *text);
 
 // Convert a null-terminated string into a float
@@ -212,7 +209,6 @@ typedef struct Proto {
     } *lines;
 
     Value *k; // constants
-    struct Struct **c; // nested structs
     struct Proto **p; // nested functions
     int nup; // number of upvalues
     int nlines; // number of lines
@@ -220,7 +216,6 @@ typedef struct Proto {
     int nk; // number of constants
     int argc; // number of fixed parameters
     int nproto; // number of nested functions
-    int nc; // number of nested structs
 } Proto;
 
 Proto *pawV_new_proto(paw_Env *P);

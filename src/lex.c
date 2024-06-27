@@ -145,8 +145,7 @@ static struct Token consume_name(struct Lex *x)
     if (s->flag > 0) {
         t.kind = cast(s->flag, TokenKind);
     } else if (s->length > PAW_NAME_MAX) {
-        pawX_error(x, "name (%I chars) is too long",
-                   paw_cast_int(s->length));
+        pawX_error(x, "name (%I chars) is too long", paw_cast_int(s->length));
     }
     return t;
 }
@@ -266,8 +265,9 @@ static struct Token consume_string(struct Lex *x)
                     lex_error(x);
                 }
                 if (0xD800 <= codepoint && codepoint <= 0xDFFF) {
-                    // Codepoint is part of a surrogate pair. Expect a high surrogate
-                    // (U+D800–U+DBFF) followed by a low surrogate (U+DC00–U+DFFF).
+                    // Codepoint is part of a surrogate pair. Expect a high
+                    // surrogate (U+D800–U+DBFF) followed by a low surrogate
+                    // (U+DC00–U+DFFF).
                     if (codepoint <= 0xDBFF) {
                         if (save_and_next(x) != '\\' ||
                             save_and_next(x) != 'u') {
@@ -277,12 +277,15 @@ static struct Token consume_string(struct Lex *x)
                         if (codepoint2 < 0xDC00 || codepoint2 > 0xDFFF) {
                             lex_error(x);
                         }
-                        codepoint = (((codepoint - 0xD800) << 10) | (codepoint2 - 0xDC00)) + 0x10000;
+                        codepoint = (((codepoint - 0xD800) << 10) |
+                                     (codepoint2 - 0xDC00)) +
+                                    0x10000;
                     } else {
                         lex_error(x);
                     }
                 }
-                // Translate the codepoint into bytes. Modified from @Tencent/rapidjson.
+                // Translate the codepoint into bytes. Modified from
+                // @Tencent/rapidjson.
                 if (codepoint <= 0x7F) {
                     save(x, (char)codepoint);
                 } else if (codepoint <= 0x7FF) {
@@ -324,14 +327,14 @@ Token consume_number(struct Lex *x)
     save_and_next(x);
 
     // This 'if' statement will allow invalid strings like '.0x0', since we may
-    // have already read a '.'. pawV_parse_float() handles those cases. Also note
-    // that test_next2() saves the character.
-    if (first == '0' && (test_next2(x, "bB") ||
-                         test_next2(x, "oO") ||
-                         test_next2(x, "xX"))) {
+    // have already read a '.'. pawV_parse_float() handles those cases. Also
+    // note that test_next2() saves the character.
+    if (first == '0' &&
+        (test_next2(x, "bB") || test_next2(x, "oO") || test_next2(x, "xX"))) {
     }
 
-    // Consume adjacent floating-point indicators, exponents, and fractional parts.
+    // Consume adjacent floating-point indicators, exponents, and fractional
+    // parts.
     for (;;) {
         if (test_next2(x, "eE")) {
             test_next2(x, "+-");
@@ -378,8 +381,7 @@ static void skip_line_comment(struct Lex *x)
 
 static void skip_whitespace(Lex *x)
 {
-    while (x->c == ' ' || x->c == '\t' ||
-           x->c == '\f' || x->c == '\v' ||
+    while (x->c == ' ' || x->c == '\t' || x->c == '\f' || x->c == '\v' ||
            (is_newline(x) && !x->add_semi)) {
         next(x);
     }
@@ -485,7 +487,9 @@ try_again:
             break;
         case '/':
             next(x);
-            if (test_next(x, '/')) { // TODO: comments may need consideration wrt. auto ';' insertion
+            if (test_next(x,
+                          '/')) { // TODO: comments may need consideration wrt.
+                                  // auto ';' insertion
                 skip_line_comment(x);
                 goto try_again;
             } else if (test_next(x, '*')) {
@@ -499,10 +503,8 @@ try_again:
                 semi = PAW_TRUE;
             } else if (ISNAME(x->c)) {
                 token = consume_name(x);
-                semi = token.kind == TK_NAME ||
-                       token.kind == TK_RETURN ||
-                       token.kind == TK_BREAK ||
-                       token.kind == TK_CONTINUE;
+                semi = token.kind == TK_NAME || token.kind == TK_RETURN ||
+                       token.kind == TK_BREAK || token.kind == TK_CONTINUE;
             } else {
                 next(x);
             }

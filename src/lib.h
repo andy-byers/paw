@@ -23,7 +23,8 @@ void pawL_require_lib(paw_Env *P, const char *name);
 
 // Functions for loading and compiling source code
 int pawL_load_file(paw_Env *P, const char *pathname);
-int pawL_load_nchunk(paw_Env *P, const char *name, const char *source, size_t length);
+int pawL_load_nchunk(paw_Env *P, const char *name, const char *source,
+                     size_t length);
 int pawL_load_chunk(paw_Env *P, const char *name, const char *source);
 
 #define L_GENERIC_MAX ARGC_MAX
@@ -32,9 +33,9 @@ int pawL_load_chunk(paw_Env *P, const char *name, const char *source);
 #define L_SELF (INT_MIN + 1)
 
 #define l_generic(i) (-(i) - 1)
-#define l_list(...) \
+#define l_list(...)                                                            \
     (paw_Type[]) { __VA_ARGS__, L_LIST_END }
-#define l_list_0() \
+#define l_list_0()                                                             \
     (paw_Type[]) { L_LIST_END }
 
 #endif // PAW_LIB_H

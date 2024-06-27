@@ -13,7 +13,8 @@
 //  2    | AST         | typed AST | build symtab, unify types
 //  3    | typed AST   | bytecode  | generate code
 //
-// TODO: rename some of these files: parse.* should maybe be called compile.*, and
+// TODO: rename some of these files: parse.* should maybe be called compile.*,
+// and
 //       it would be nice to have a separate AST module.
 
 #ifndef PAW_PARSE_H
@@ -28,7 +29,7 @@
 #define env(x) ((x)->P)
 #define is_toplevel(lex) ((lex)->fs->outer == NULL)
 #define scan_string(lex, s) pawX_scan_string(lex, s, strlen(s))
-#define limit_error(x, what, limit) \
+#define limit_error(x, what, limit)                                            \
     pawX_error(x, "too many %s (limit is %d)", what, limit)
 
 // TODO: Use this to keep track of dynamic memory
@@ -38,8 +39,8 @@ typedef enum DeferredKind {
     DEFER_SCOPE,
 } DeferredKind;
 
-#define DEFERRED_HEADER        \
-    DeferredAlloc *prev_alloc; \
+#define DEFERRED_HEADER                                                        \
+    DeferredAlloc *prev_alloc;                                                 \
     DeferredKind alloc_kind
 
 typedef enum LabelKind {
@@ -123,7 +124,8 @@ typedef enum FuncKind {
     FUNC_METHOD,
 } FuncKind;
 
-// TODO: Need to keep track of scopes that get removed from the symbol table and placed in 'scopes' field.
+// TODO: Need to keep track of scopes that get removed from the symbol table and
+// placed in 'scopes' field.
 //       Either use GC, or link in a 'defer' list.
 typedef struct FuncState {
     struct FuncState *outer; // enclosing function
@@ -199,6 +201,7 @@ typedef struct ParseMemory {
 
 void pawP_init(paw_Env *P);
 
-Closure *pawP_parse(paw_Env *P, paw_Reader input, ParseMemory *mem, const char *name, void *ud);
+Closure *pawP_parse(paw_Env *P, paw_Reader input, ParseMemory *mem,
+                    const char *name, void *ud);
 
 #endif // PAW_PARSE_H

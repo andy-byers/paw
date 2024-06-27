@@ -13,12 +13,12 @@ int main(void)
     script("block");
     script("loop");
     script("operator");
+    script("vector");
     return 0; // TODO
     script("string");
     script("integer");
     script("float");
     script("closure");
-    script("array");
     script("map");
     script("class");
     script("error");

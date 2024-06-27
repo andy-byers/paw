@@ -26,14 +26,11 @@ static inline uint32_t pawS_hash(const void *data, size_t size, uint32_t hash)
 
 static inline int pawS_cmp(const String *lhs, const String *rhs)
 {
-    return paw_raw_cmp((void *)lhs->text, lhs->length,
-                       (void *)rhs->text, rhs->length);
+    return paw_raw_cmp((void *)lhs->text, lhs->length, (void *)rhs->text,
+                       rhs->length);
 }
 
-static inline size_t pawS_length(const String *s)
-{
-    return s->length;
-}
+static inline size_t pawS_length(const String *s) { return s->length; }
 
 typedef struct StringTable {
     String **strings;

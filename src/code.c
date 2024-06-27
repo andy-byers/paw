@@ -31,8 +31,9 @@ static void add_opcode(FuncState *fs, OpCode code)
     Lex *lex = fs->G->lex;
     Proto *p = fs->proto;
 
-    // While code is being generated, the pc is used to track the number of instructions, and
-    // the length field the capacity. The length is set to the final pc value before execution.
+    // While code is being generated, the pc is used to track the number of
+    // instructions, and the length field the capacity. The length is set to the
+    // final pc value before execution.
     pawM_grow(lex->P, p->source, fs->pc, p->length);
     p->source[fs->pc] = code;
     ++fs->pc;

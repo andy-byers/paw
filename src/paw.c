@@ -103,10 +103,15 @@ static void parse_options(int *pargc, const char ***pargv)
                     if (state->flag) {
                         *state->flag = PAW_TRUE;
                         break; // no argument
-                    } else if (a[1]) { // in '-abc', only 'c' can take an argument
-                        error(PAW_ERUNTIME, "option with argument ('%c') must be last\n", shr);
+                    } else if (a[1]) { // in '-abc', only 'c' can take an
+                                       // argument
+                        error(PAW_ERUNTIME,
+                              "option with argument ('%c') must be last\n",
+                              shr);
                     } else if (*pargc == 0) {
-                        error(PAW_ERUNTIME, "missing argument for option '%s'\n", *(*pargv - 1));
+                        error(PAW_ERUNTIME,
+                              "missing argument for option '%s'\n",
+                              *(*pargv - 1));
                     }
                     const char *arg = get_option(argc, argv);
                     if (state->integer) {
@@ -114,10 +119,13 @@ static void parse_options(int *pargc, const char ***pargv)
                         for (const char *p = arg; p; ++p) {
                             const int v = *p - '0';
                             if (v < 0 || 9 < v) {
-                                error(PAW_ERUNTIME, "invalid integer argument (%s)\n", arg);
+                                error(PAW_ERUNTIME,
+                                      "invalid integer argument (%s)\n", arg);
                             }
                             if (value > (INT_MAX - v) / 10) {
-                                error(PAW_ERUNTIME, "integer argument (%s) is too large\n", arg);
+                                error(PAW_ERUNTIME,
+                                      "integer argument (%s) is too large\n",
+                                      arg);
                             }
                             value = value * 10 + v;
                         }
