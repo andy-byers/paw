@@ -14,7 +14,8 @@
 
 #define syntax_error(G, ...) pawX_error((G)->lex, __VA_ARGS__)
 #define is_global(lex) (is_toplevel(lex) && (lex)->fs->bs->outer == NULL)
-#define code_block(V, b) check_exp((b)->kind == STMT_BLOCK, V->visit_stmt(V, cast_stmt(b)))
+#define code_block(V, b)                                                       \
+    check_exp((b)->kind == STMT_BLOCK, V->visit_stmt(V, cast_stmt(b)))
 #define basic_decl(G, code) basic_symbol(G, code)->decl
 #define basic_type(G, code) basic_decl(G, code)->type.type
 #define get_decl(G, id) pawA_get_decl((G)->ast, id)
@@ -92,8 +93,12 @@ static String *get_type_name(Generator *G, AstType *type)
 
 static paw_Type basic_code(const AstType *type)
 {
-    paw_assert(a_kind(type) == AST_TYPE_BASIC);
-    return type->hdr.def;
+    if (a_kind(type) == AST_TYPE_ADT) {
+        return type->adt.base;
+    } else {
+        paw_assert(a_kind(type) == AST_TYPE_BASIC);
+        return type->hdr.def;
+    }
 }
 
 // TODO: Get rid of this
@@ -143,20 +148,16 @@ static int add_constant(Generator *G, Value v)
     return fs->nk++;
 }
 
-static int add_struct(Generator *G, Struct *c)
+static int add_struct(Generator *G, Struct *struct_)
 {
-    FuncState *fs = G->fs;
-    Proto *p = fs->proto;
-    if (fs->nstructs == UINT16_MAX) {
+    paw_Env *P = env(G->lex);
+    struct StructVec *sv = &P->sv;
+    if (sv->size == UINT16_MAX) {
         syntax_error(G, "too many structs");
-    } else if (fs->nstructs == p->nc) {
-        pawM_grow(env(G->lex), p->c, fs->nstructs, p->nc);
-        for (int i = fs->nstructs; i < p->nc; ++i) {
-            p->c[i] = NULL; // clear for GC (including current)
-        }
     }
-    p->c[fs->nstructs] = c;
-    return fs->nstructs++;
+    pawM_grow(P, sv->data, sv->size, sv->alloc);
+    sv->data[sv->size] = struct_;
+    return sv->size++;
 }
 
 static int add_proto(Generator *G, String *name, Proto **pp)
@@ -223,7 +224,8 @@ static void close_vars(FuncState *fs, int target)
 static VarInfo add_local(FuncState *fs, Symbol *symbol)
 {
     Lex *lex = fs->G->lex;
-    pawM_grow(env(lex), fs->locals.slots, fs->locals.nslots, fs->locals.capacity);
+    pawM_grow(env(lex), fs->locals.slots, fs->locals.nslots,
+              fs->locals.capacity);
     const int index = fs->locals.nslots++;
     fs->locals.slots[index].symbol = symbol;
     fs->locals.slots[index].index = index; // TODO
@@ -257,7 +259,8 @@ static VarInfo transfer_global(Generator *G)
 {
     const int index = G->iglobal++;
     Symbol *symbol = G->globals->symbols[index];
-    pawE_new_global(env(G->lex), symbol->name, a_type_code(a_type(symbol->decl))); // TODO
+    pawE_new_global(env(G->lex), symbol->name,
+                    a_type_code(a_type(symbol->decl))); // TODO
     return (VarInfo){
         .symbol = symbol,
         .kind = VAR_GLOBAL,
@@ -405,7 +408,8 @@ static void leave_block(FuncState *fs)
     pop_local_table(fs);
 }
 
-static void enter_block(FuncState *fs, BlockState *bs, Scope *locals, paw_Bool loop)
+static void enter_block(FuncState *fs, BlockState *bs, Scope *locals,
+                        paw_Bool loop)
 {
     bs->label0 = fs->G->lex->pm->labels.length;
     bs->level = fs->level;
@@ -459,7 +463,8 @@ static String *context_name(const FuncState *fs, FuncKind kind)
     return fs->proto->name;
 }
 
-static void enter_function(Generator *G, FuncState *fs, BlockState *bs, Scope *scope, FuncKind kind)
+static void enter_function(Generator *G, FuncState *fs, BlockState *bs,
+                           Scope *scope, FuncKind kind)
 {
     fs->id = -1; // TODO: not used
     fs->bs = NULL;
@@ -527,7 +532,8 @@ static VarInfo resolve_attr(Generator *G, AstType *type, String *name)
     return info;
 }
 
-static void add_upvalue(FuncState *fs, String *name, VarInfo *info, paw_Bool is_local)
+static void add_upvalue(FuncState *fs, String *name, VarInfo *info,
+                        paw_Bool is_local)
 {
     Proto *f = fs->proto;
     for (int i = 0; i < fs->nup; ++i) {
@@ -577,8 +583,7 @@ static paw_Bool resolve_upvalue(FuncState *fs, String *name, VarInfo *pinfo)
 
 static VarInfo declare_var(FuncState *fs, paw_Bool global)
 {
-    return global ? transfer_global(fs->G)
-                  : transfer_local(fs);
+    return global ? transfer_global(fs->G) : transfer_local(fs);
 }
 
 // Allow a previously-declared variable to be accessed
@@ -587,8 +592,8 @@ static void define_var(FuncState *fs, VarInfo info)
     if (info.kind == VAR_LOCAL) {
         begin_local_scope(fs, 1);
     } else {
-        // Write initial value to the globals table. Reference counts are adjusted
-        // automatically.
+        // Write initial value to the globals table. Reference counts are
+        // adjusted automatically.
         paw_assert(info.kind == VAR_GLOBAL);
         pawK_code_U(fs, OP_SETGLOBAL, info.index);
     }
@@ -602,10 +607,12 @@ static VarInfo code_var(Generator *G, paw_Bool global)
     return info;
 }
 
-static VarInfo inject_var(FuncState *fs, String *name, AstDecl *decl, paw_Bool global)
+static VarInfo inject_var(FuncState *fs, String *name, AstDecl *decl,
+                          paw_Bool global)
 {
     paw_assert(!global);
     Symbol *symbol = pawA_new_symbol(fs->G->lex);
+    symbol->is_init = PAW_TRUE;
     symbol->name = name;
     symbol->decl = decl;
     return add_local(fs, symbol);
@@ -706,24 +713,25 @@ static void code_basic_lit(AstVisitor *V, LiteralExpr *e)
     }
 }
 
-static void code_builtin_composite(AstVisitor *V, CompositeLit *e, unsigned op)
+static void code_builtin_composite(AstVisitor *V, LiteralExpr *lit, unsigned op)
 {
+    CompositeLit *e = &lit->comp;
     visit_exprs(V, e->items);
 
     FuncState *fs = V->state.G->fs;
     pawK_code_U(fs, op, e->items->count);
 }
 
-static void code_custom_composite(AstVisitor *V, CompositeLit *e, String *name)
+static void code_custom_composite(AstVisitor *V, LiteralExpr *lit)
 {
+    CompositeLit *e = &lit->comp;
     Generator *G = V->state.G;
     FuncState *fs = G->fs;
-    VarInfo info = find_var(G, name);
 
-    StructDecl *struct_ = &info.symbol->decl->struct_;
-
-    code_getter(V, info); // get Struct
-    pawK_code_U(fs, OP_NEWINSTANCE, struct_->fields->count);
+    const DefId id = a_type_code(lit->type);
+    StructDecl *d = &get_decl(G, id)->struct_;
+    pawK_code_U(G->fs, OP_PUSHSTRUCT, d->location);
+    pawK_code_U(fs, OP_NEWINSTANCE, d->fields->count);
 
     for (int i = 0; i < e->items->count; ++i) {
         AstExpr *attr = e->items->data[i];
@@ -735,14 +743,13 @@ static void code_custom_composite(AstVisitor *V, CompositeLit *e, String *name)
 static void code_composite_lit(AstVisitor *V, LiteralExpr *lit)
 {
     Generator *G = V->state.G;
-    CompositeLit *e = &lit->comp;
-    String *name = get_type_name(G, e->target->hdr.type);
+    String *name = get_type_name(G, a_type(lit->comp.target));
     if (pawS_eq(name, pawE_cstr(env(G->lex), CSTR_VECTOR))) {
-        code_builtin_composite(V, e, OP_NEWVECTOR);
+        code_builtin_composite(V, lit, OP_NEWVECTOR);
     } else if (pawS_eq(name, pawE_cstr(env(G->lex), CSTR_MAP))) {
-        code_builtin_composite(V, e, OP_NEWVECTOR);
+        code_builtin_composite(V, lit, OP_NEWVECTOR);
     } else {
-        code_custom_composite(V, e, name);
+        code_custom_composite(V, lit);
     }
 }
 
@@ -819,7 +826,8 @@ static void code_cond_expr(AstVisitor *V, CondExpr *e)
     patch_here(fs, then_jump);
 }
 
-#define code_op(fs, op, subop, type) pawK_code_AB(fs, op, cast(subop, int), basic_code(type))
+#define code_op(fs, op, subop, type)                                           \
+    pawK_code_AB(fs, op, cast(subop, int), basic_code(type))
 
 static void code_unop_expr(AstVisitor *V, UnOpExpr *e)
 {
@@ -884,45 +892,12 @@ static void monomorphize_func(AstVisitor *V, FuncDecl *d)
         AstDecl *decl = d->monos->data[i];
         FuncDecl *inst = pawA_stencil_func(V->ast, d, decl);
         String *mangled = mangle_name(G, inst->name, inst->type->func.types);
-        const VarInfo info = inject_var(fs, mangled, cast_decl(inst), d->is_global);
+        const VarInfo info =
+            inject_var(fs, mangled, cast_decl(inst), d->is_global);
         code_func(V, inst);
         define_var(fs, info);
     }
     ++fs->bs->isymbol;
-}
-
-static void register_fields(Generator *G, StructDecl *parent)
-{
-    parent->field_scope = pawM_new(env(G->lex), Scope); // TODO
-    for (int i = 0; i < parent->fields->count; ++i) {
-        AstDecl *field = parent->fields->data[i];
-        FieldDecl *d = &field->field;
-        Symbol *symbol = pawP_add_symbol(G->lex, parent->field_scope);
-        symbol->is_init = PAW_TRUE;
-        symbol->name = d->name;
-        symbol->decl = field;
-    }
-}
-
-static void code_struct(AstVisitor *V, StructDecl *d)
-{
-    BlockState bs;
-    Generator *G = V->state.G;
-    Lex *lex = G->lex;
-    paw_Env *P = env(lex);
-    FuncState *fs = G->fs;
-
-    Value *pv = pawC_push0(P);
-    Struct *struct_ = pawV_new_struct(P, pv);
-    const int index = add_struct(G, struct_);
-
-    pawK_code_U(fs, OP_PUSHSTRUCT, index);
-    enter_block(fs, &bs, d->scope, PAW_FALSE);
-
-    register_fields(G, d);
-
-    leave_block(fs); // layout->scope
-    pawC_pop(P); // pop 'struct_'
 }
 
 static void code_field_decl(AstVisitor *V, FieldDecl *d)
@@ -942,8 +917,13 @@ static void code_var_decl(AstVisitor *V, VarDecl *s)
 static void code_struct_decl(AstVisitor *V, StructDecl *d)
 {
     Generator *G = V->state.G;
-    code_var(G, d->is_global);
-    code_struct(V, d);
+    Lex *lex = G->lex;
+    paw_Env *P = env(lex);
+
+    Value *pv = pawC_push0(P);
+    Struct *struct_ = pawV_new_struct(P, pv);
+    d->location = add_struct(G, struct_);
+    pawC_pop(P); // pop 'struct_'
 }
 
 static void code_item_expr(AstVisitor *V, ItemExpr *e)
@@ -985,12 +965,11 @@ static AstDecl *get_base_decl(Generator *G, const AstType *type)
 static void code_instance_getter(AstVisitor *V, AstType *type)
 {
     Generator *G = V->state.G;
-    AstDecl *decl = get_base_decl(G, type);
+    paw_assert(a_is_func(type));
+    AstDecl *decl = get_decl(G, a_type_code(type));
     String *name = decl->hdr.name;
-    if (a_is_func(type)) {
-        paw_assert(a_is_func_decl(decl));
-        name = mangle_name(G, name, type->func.types);
-    }
+    paw_assert(a_is_func_decl(decl));
+    name = mangle_name(G, name, type->func.types);
     const VarInfo info = find_var(G, name);
     code_getter(V, info);
 }
@@ -1074,8 +1053,8 @@ static void code_while_stmt(AstVisitor *V, WhileStmt *s)
     const int jump = code_jump(fs, OP_JUMPFALSEPOP);
     V->visit_block_stmt(V, s->block);
 
-    // Finish the loop. 'break' labels jump here, 'continue' labels back to right
-    // before where the conditional expression was evaluated.
+    // Finish the loop. 'break' labels jump here, 'continue' labels back to
+    // right before where the conditional expression was evaluated.
     code_loop(fs, OP_JUMP, loop);
     adjust_to(fs, LCONTINUE, loop);
     patch_here(fs, jump);
@@ -1094,8 +1073,8 @@ static void code_dowhile_stmt(AstVisitor *V, WhileStmt *s)
     adjust_from(fs, LCONTINUE);
     V->visit_expr(V, s->cond);
 
-    // If the condition is false, jump over the instruction that moves control back
-    // to the top of the loop.
+    // If the condition is false, jump over the instruction that moves control
+    // back to the top of the loop.
     const int jump = code_jump(fs, OP_JUMPFALSEPOP);
     code_loop(fs, OP_JUMP, loop);
     patch_here(fs, jump);
@@ -1141,7 +1120,10 @@ static void code_fornum_stmt(AstVisitor *V, ForStmt *s)
     code_forbody(V, s->block, OP_FORNUM0, OP_FORNUM);
 }
 
-static void code_forin_stmt(AstVisitor *V, ForStmt *s) // TODO: forin would need to encode the type of object being iterated over. look into function call for loop?
+static void code_forin_stmt(
+    AstVisitor *V,
+    ForStmt *s) // TODO: forin would need to encode the type of object being
+                // iterated over. look into function call for loop?
 {
     Generator *G = V->state.G;
     ForIn *forin = &s->forin;
@@ -1166,29 +1148,21 @@ static void code_for_stmt(AstVisitor *V, ForStmt *s)
     leave_block(fs);
 }
 
-static paw_Bool is_index_template(Generator *G, const AstType *type)
-{
-    AstDecl *decl = get_base_decl(G, type);
-    if (a_is_func_decl(decl)) {
-        return decl->func.generics != NULL;
-    } else {
-        return decl->struct_.generics != NULL;
-    }
-}
-
 static void code_index_expr(AstVisitor *V, Index *e)
 {
     Generator *G = V->state.G;
-    const AstType *target = a_type(e->target);
-    if (is_index_template(G, target)) {
+    AstType *target = a_type(e->target);
+    if (a_is_func(target)) {
         code_instance_getter(V, e->type);
         return;
     }
+    paw_assert(e->elems->count == 1);
     V->visit_expr(V, e->target);
     V->visit_expr(V, e->elems->data[0]);
 
+    AstExpr *elem = e->elems->data[0];
     const paw_Type tt = basic_code(target);
-    const paw_Type et = basic_code(a_cast_type(e->elems->data[0]));
+    const paw_Type et = basic_code(a_type(elem));
     pawK_code_AB(G->fs, OP_GETITEM, tt, et);
 }
 
@@ -1205,8 +1179,8 @@ static void code_builtin(Generator *G)
     paw_Env *P = env(G->lex);
     const VarInfo info = transfer_global(G);
 
-    // Only need to set pointer for functions, since ADT construction is intercepted
-    // and handled by special operators.
+    // Only need to set pointer for functions, since ADT construction is
+    // intercepted and handled by special operators.
     if (a_is_func_decl(info.symbol->decl)) {
         GlobalVar *var = pawE_get_global(env(G->lex), info.index);
         const Value key = {.p = info.symbol->name};

@@ -1,149 +1,156 @@
 // types.paw
 
-//{
-//    // nested templates
-//    fn outer[T](t: T) {
-////        fn inner[T2](t2: T2) {}
-////        inner(t) // inner[T]
-////        inner(1) // inner[int]
-//    }
-//    outer(false)
-////    outer(1)
-//}
+//***********************************************
+//    primitives
+//***********************************************
+{
+    // test type annotations
+    let i: int = 123
+    let s: string = 'abc'
+    let b: bool = true
+    let f: float = 1.0
 
-//let v = Vector[int]{
-//
-//}
+    // test inferred types
+    let I = 123
+    let S = 'abc'
+    let B = true
+    let F = 1.0
 
+    assert(i == I)
+    assert(s == S)
+    assert(b == B)
+    assert(f == F)
 
-////***********************************************
-////    primitives
-////***********************************************
-//{
-//    // test type annotations
-//    let i: int = 123
-//    let s: string = 'abc'
-//    let b: bool = true
-//    let f: float = 1.0
-//
-//    // test inferred types
-//    let I = 123
-//    let S = 'abc'
-//    let B = true
-//    let F = 1.0
-//
-//    assert(i == I)
-//    assert(s == S)
-//    assert(b == B)
-//    assert(f == F)
-//
-//    // rebind different types
-//    let a = 123
-//    assert(a == 123)
-//    let a = 456.0
-//    assert(a == 456.0)
-//    let a = 'abc'
-//    assert(a == 'abc')
-//    {
-//        // shadow different type
-//        let a = true
-//    }
-//    assert(a == 'abc')
-//}
-//{
-//    let x = 100
-//    let x = x
-//    let x = x + 23
-//    assert(x == 123)
-//}
-//
-////***********************************************
-////    functions
-////***********************************************
-//{
-//    fn f() {
-//        // implicit 'return'
-//    }
-//    fn fi(a: int) {
-//        return
-//    }
-//    f()
-//    fi(1)
-//
-//    // test 'int' annotation
-//    fn f_i() -> int {
-//        return 1
-//    }
-//    fn fi_i(a: int) -> int {
-//        return a + 2
-//    }
-//    fn fii_i(a: int, b: int) -> int {
-//        return a + b + 3
-//    }
-//    f_i()
-//    fi_i(1)
-//    fii_i(1, 2)
-//
-//    let f: fn(int, int) -> int = fii_i
-//    f(1, 2)
-//
-//    let f = fii_i
-//    f(3, 4)
-//
-//    // Recursive calls use the function object in local slot 0. Type must
-//    // be set before the function is called.
-//    fn recursion(n: int) -> int {
-//        if n > 0 {
-//            return recursion(n - 1)
-//        }
-//        return -1
-//    }
-//
-//    recursion(10)
-//
-//    let r = recursion
-//    r(20)
-//
-//    let r: fn(int) -> int = recursion
-//    r(30)
-//}
-//
-////***********************************************
-////    structures
-////***********************************************
-//{
-//    struct A {a: int}
-//    let a = A{a: 123} {/* this is an empty block */}
-//    {} {}{}
-//    // Automatic semicolon insertion causes the next 2 lines to be parsed
-//    // as an Ident followed by a Block.
-//    let a = a
-//    {} 
-//    let a = a.a
-//    assert(a == 123)
-//
-//    // A 'CompositeLit' can start a suffix chain ('.' must be on the 
-//    // same line as the '}' due to auto ';' insertion)
-//    struct B {a: A}
-//    let b = B{a: A{a: 123}}.a.a
-//    assert(b == 123)
-//}
-//{
-//    struct A {}
-//    let a = A{}
-//
-//    let a: A = A {}
-//
-//    struct A {a: int}
-//    let a = A{a: 123}
-//
-//    // ';' can go after the type, to separate attributes visually
-//    struct A {a: int; b: string} 
-//    // initializer order doesn't matter
-//    let a = A{a: 123, b: 'abc'}
-//    let a = A{b: 'def', a: 456}
-//}
-//
+    // rebind different types
+    let a = 123
+    assert(a == 123)
+    let a = 456.0
+    assert(a == 456.0)
+    let a = 'abc'
+    assert(a == 'abc')
+    {
+        // shadow different type
+        let a = true
+    }
+    assert(a == 'abc')
+}
+{
+    let x = 100
+    let x = x
+    let x = x + 23
+    assert(x == 123)
+}
+
+//***********************************************
+//    functions
+//***********************************************
+{
+    fn f() {
+        // implicit 'return'
+    }
+    fn fi(a: int) {
+        return
+    }
+    f()
+    fi(1)
+
+    // test 'int' annotation
+    fn f_i() -> int {
+        return 1
+    }
+    fn fi_i(a: int) -> int {
+        return a + 2
+    }
+    fn fii_i(a: int, b: int) -> int {
+        return a + b + 3
+    }
+    f_i()
+    fi_i(1)
+    fii_i(1, 2)
+
+    let f: fn(int, int) -> int = fii_i
+    f(1, 2)
+
+    let f = fii_i
+    f(3, 4)
+
+    // Recursive calls use the function object in local slot 0. Type must
+    // be set before the function is called.
+    fn recursion(n: int) -> int {
+        if n > 0 {
+            return recursion(n - 1)
+        }
+        return -1
+    }
+
+    recursion(10)
+
+    let r = recursion
+    r(20)
+
+    let r: fn(int) -> int = recursion
+    r(30)
+}
+
+//***********************************************
+//    structures
+//***********************************************
+{
+    struct A {a: int}
+    let a = A{a: 123} {/* this is an empty block */}
+    {} {}{}
+    // Automatic semicolon insertion causes the next 2 lines to be parsed
+    // as an Ident followed by a Block.
+    let a = a
+    {} 
+    let a = a.a
+    assert(a == 123)
+
+    // A 'CompositeLit' can start a suffix chain ('.' must be on the 
+    // same line as the '}' due to auto ';' insertion)
+    struct B {a: A}
+    let b = B{a: A{a: 123}}.a.a
+    assert(b == 123)
+}
+{
+    struct A {}
+    let a = A{}
+
+    let a: A = A {}
+
+    struct A {a: int}
+    let a = A{a: 123}
+
+    // ';' can go after the type, to separate attributes visually
+    struct A {a: int; b: string} 
+    // initializer order doesn't matter
+    let a = A{a: 123, b: 'abc'}
+    let a = A{b: 'def', a: 456}
+}
+{
+    struct Inner {
+        a: int
+        b: float
+        c: string
+    }
+    struct Outer {
+        a: bool
+        b: Inner
+    }
+
+    let o = Outer{
+        a: false,
+        b: Inner{
+            a: 1,
+            b: 2.0,
+            c: 'three',
+        },
+    }
+    assert(o.b.a == 1)
+    assert(o.b.b == 2.0)
+    assert(o.b.c == 'three')
+}
+
 //***********************************************
 //    function templates
 //***********************************************
@@ -336,6 +343,7 @@
         let adt = Adt[int]{a: a, b: 1}
         let adt = Adt[float]{a: a, b: 2.0}
         let adt = Adt[string]{a: a, b: 'three'}
+        let adt = Adt[A]{a: a, b: a}
     }
     func(true)
     func(2)

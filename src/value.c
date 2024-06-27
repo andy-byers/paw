@@ -23,7 +23,8 @@ static void int_to_string(paw_Env *P, paw_Int i)
     char *end = temp + paw_countof(temp);
     char *ptr = end - 1;
 
-    // Don't call llabs(INT64_MIN). The result is undefined on 2s complement systems.
+    // Don't call llabs(INT64_MIN). The result is undefined on 2s complement
+    // systems.
     uint64_t u = i == INT64_MIN ? (1ULL << 63) : (uint64_t)llabs(i);
     do {
         *ptr-- = (char)(u % 10 + '0');
@@ -58,9 +59,7 @@ const char *pawV_to_string(paw_Env *P, Value v, paw_Type type, size_t *nout)
             break;
         case PAW_TBOOL: {
             Value v;
-            v_set_object(&v, pawE_cstr(P, v_true(v)
-                                              ? CSTR_TRUE
-                                              : CSTR_FALSE));
+            v_set_object(&v, pawE_cstr(P, v_true(v) ? CSTR_TRUE : CSTR_FALSE));
             pawC_pushv(P, v);
             break;
         }
@@ -113,8 +112,8 @@ const char *pawV_name(ValueKind kind)
             return "proto";
         case VSTRING:
             return "string";
-        case VARRAY:
-            return "array";
+        case VVECTOR:
+            return "vector";
         case VMAP:
             return "map";
         case VSTRUCT:
@@ -198,9 +197,8 @@ void pawV_unlink_upvalue(UpValue *u)
 
 Tuple *pawV_new_tuple(paw_Env *P, int nelems)
 {
-    Tuple *t = pawM_new_flex(P, Tuple, cast_size(nelems),
-                             sizeof(t->elems[0]));
-    pawG_add_object(P, cast_object(t), VARRAY);
+    Tuple *t = pawM_new_flex(P, Tuple, cast_size(nelems), sizeof(t->elems[0]));
+    pawG_add_object(P, cast_object(t), 0 /* TODO: VTUPLE*/);
     return t;
 }
 
@@ -232,15 +230,12 @@ Struct *pawV_new_struct(paw_Env *P, Value *pv)
     return struct_;
 }
 
-void pawV_free_struct(paw_Env *P, Struct *struct_)
-{
-    pawM_free(P, struct_);
-}
+void pawV_free_struct(paw_Env *P, Struct *struct_) { pawM_free(P, struct_); }
 
 Instance *pawV_new_instance(paw_Env *P, int nfields)
 {
-    Instance *ins = pawM_new_flex(P, Instance, cast_size(nfields),
-                                  sizeof(ins->attrs[0]));
+    Instance *ins =
+        pawM_new_flex(P, Instance, cast_size(nfields), sizeof(ins->attrs[0]));
     pawG_add_object(P, cast_object(ins), VINSTANCE);
     return ins;
 }
@@ -276,10 +271,7 @@ Method *pawV_new_method(paw_Env *P, Value self, Value call)
     return mtd;
 }
 
-void pawV_free_method(paw_Env *P, Method *m)
-{
-    pawM_free(P, m);
-}
+void pawV_free_method(paw_Env *P, Method *m) { pawM_free(P, m); }
 
 Native *pawV_new_native(paw_Env *P, paw_Function func, int nup)
 {
@@ -291,10 +283,7 @@ Native *pawV_new_native(paw_Env *P, paw_Function func, int nup)
     return nat;
 }
 
-void pawV_free_native(paw_Env *P, Native *nat)
-{
-    pawM_free(P, nat);
-}
+void pawV_free_native(paw_Env *P, Native *nat) { pawM_free(P, nat); }
 
 Foreign *pawV_push_foreign(paw_Env *P, size_t size, int nfields)
 {
@@ -351,10 +340,7 @@ static uint32_t hash_u64(uint64_t u)
     return (uint32_t)u;
 }
 
-uint32_t pawV_hash(Value v)
-{
-    return hash_u64(v.u);
-}
+uint32_t pawV_hash(Value v) { return hash_u64(v.u); }
 
 void pawV_set_default(paw_Env *P, Value *pv, paw_Type type)
 {
@@ -470,9 +456,9 @@ int pawV_parse_integer(paw_Env *P, const char *text)
     return 0;
 }
 
-#define skip_digits(p)      \
-    while (ISDIGIT(*(p))) { \
-        ++(p);              \
+#define skip_digits(p)                                                         \
+    while (ISDIGIT(*(p))) {                                                    \
+        ++(p);                                                                 \
     }
 
 int pawV_parse_float(paw_Env *P, const char *text)
@@ -516,8 +502,9 @@ static inline paw_Bool pawV_vec_iter(const Vector *a, paw_Int *itr)
 
 void pawV_index_error(paw_Env *P, paw_Int index, size_t length)
 {
-    pawR_error(P, PAW_EINDEX, "index %I is out of bounds for container of length %I",
-               index, paw_cast_int(length));
+    pawR_error(P, PAW_EINDEX,
+               "index %I is out of bounds for container of length %I", index,
+               paw_cast_int(length));
 }
 
 static size_t array_capacity(const Vector *a)
@@ -620,7 +607,7 @@ void pawV_vec_pop(paw_Env *P, Vector *a, paw_Int index)
 Vector *pawV_vec_new(paw_Env *P)
 {
     Vector *a = pawM_new(P, Vector);
-    pawG_add_object(P, cast_object(a), VARRAY);
+    pawG_add_object(P, cast_object(a), VVECTOR);
     return a;
 }
 

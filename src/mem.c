@@ -106,7 +106,8 @@ void *pawM_grow_(paw_Env *P, void *ptr, int n, int *p_alloc, size_t elem_sz)
     return ptr;
 }
 
-void *pawM_shrink_(paw_Env *P, void *ptr, int *palloc0, int alloc, size_t elem_sz)
+void *pawM_shrink_(paw_Env *P, void *ptr, int *palloc0, int alloc,
+                   size_t elem_sz)
 {
     paw_assert(*palloc0 >= alloc);
     if (*palloc0 == alloc) {
@@ -117,7 +118,8 @@ void *pawM_shrink_(paw_Env *P, void *ptr, int *palloc0, int alloc, size_t elem_s
     return ptr;
 }
 
-void *pawM_resize_(paw_Env *P, void *ptr, size_t alloc0, size_t alloc, size_t elem_sz)
+void *pawM_resize_(paw_Env *P, void *ptr, size_t alloc0, size_t alloc,
+                   size_t elem_sz)
 {
     void *ptr2 = pawM_alloc(P, ptr, alloc0 * elem_sz, alloc * elem_sz);
     if (alloc && !ptr2) {

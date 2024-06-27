@@ -49,10 +49,7 @@ static void grow_table(paw_Env *P, StringTable *st)
     check_gc(P);
 }
 
-void pawS_init(paw_Env *P)
-{
-    grow_table(P, &P->strings);
-}
+void pawS_init(paw_Env *P) { grow_table(P, &P->strings); }
 
 void pawS_uninit(paw_Env *P)
 {

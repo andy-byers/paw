@@ -44,10 +44,7 @@ static StackPtr access(paw_Env *P, int index)
     return &P->cf->base.p[i];
 }
 
-paw_Alloc paw_get_allocator(paw_Env *P)
-{
-    return P->alloc;
-}
+paw_Alloc paw_get_allocator(paw_Env *P) { return P->alloc; }
 
 void paw_set_allocator(paw_Env *P, paw_Alloc alloc, void *ud)
 {
@@ -55,10 +52,7 @@ void paw_set_allocator(paw_Env *P, paw_Alloc alloc, void *ud)
     P->ud = ud;
 }
 
-size_t paw_bytes_used(const paw_Env *P)
-{
-    return P->gc_bytes;
-}
+size_t paw_bytes_used(const paw_Env *P) { return P->gc_bytes; }
 
 static void open_aux(paw_Env *P, void *arg)
 {
@@ -195,20 +189,11 @@ void paw_push_unit(paw_Env *P, int n)
     }
 }
 
-void paw_push_boolean(paw_Env *P, paw_Bool b)
-{
-    pawC_pushb(P, b);
-}
+void paw_push_boolean(paw_Env *P, paw_Bool b) { pawC_pushb(P, b); }
 
-void paw_push_float(paw_Env *P, paw_Float f)
-{
-    pawC_pushf(P, f);
-}
+void paw_push_float(paw_Env *P, paw_Float f) { pawC_pushf(P, f); }
 
-void paw_push_int(paw_Env *P, paw_Int i)
-{
-    pawC_pushi(P, i);
-}
+void paw_push_int(paw_Env *P, paw_Int i) { pawC_pushi(P, i); }
 
 void paw_push_native(paw_Env *P, paw_Function fn, int n)
 {
@@ -255,15 +240,9 @@ const char *paw_push_fstring(paw_Env *P, const char *fmt, ...)
     return s;
 }
 
-paw_Bool paw_bool(paw_Env *P, int index)
-{
-    return v_true(*access(P, index));
-}
+paw_Bool paw_bool(paw_Env *P, int index) { return v_true(*access(P, index)); }
 
-paw_Int paw_int(paw_Env *P, int index)
-{
-    return v_int(*access(P, index));
-}
+paw_Int paw_int(paw_Env *P, int index) { return v_int(*access(P, index)); }
 
 paw_Float paw_float(paw_Env *P, int index)
 {
@@ -363,7 +342,9 @@ int paw_load(paw_Env *P, paw_Reader input, const char *name, void *ud)
     };
     const int status = pawC_try(P, parse_aux, &p);
     pawM_free_vec(P, p.mem.scratch.data, p.mem.scratch.alloc);
-    pawM_free_vec(P, p.mem.symbols.scopes, p.mem.symbols.capacity); // TODO: free nested scope tables, symbols
+    pawM_free_vec(
+        P, p.mem.symbols.scopes,
+        p.mem.symbols.capacity); // TODO: free nested scope tables, symbols
     pawM_free_vec(P, p.mem.labels.values, p.mem.labels.capacity);
     pawM_free(P, p.mem.symbols.globals);
     pawM_free(P, p.mem.symbols.toplevel);
@@ -393,10 +374,7 @@ int paw_call(paw_Env *P, int argc)
     return status;
 }
 
-int paw_get_count(paw_Env *P)
-{
-    return P->top.p - P->cf->base.p;
-}
+int paw_get_count(paw_Env *P) { return P->top.p - P->cf->base.p; }
 
 static int upvalue_index(int nup, int index)
 {
@@ -473,7 +451,8 @@ static int upvalue_index(int nup, int index)
 //         // out of bounds, then the runtime will throw a PAW_EINDEX before
 //         // this code is reached. The key must be a string if control has
 //         // made it here.
-//         pawR_error(P, PAW_ENAME, "key '%s' does not exist", paw_string(P, -1));
+//         pawR_error(P, PAW_ENAME, "key '%s' does not exist", paw_string(P,
+//         -1));
 //     }
 // }
 //

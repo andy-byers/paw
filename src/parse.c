@@ -42,10 +42,11 @@ static void expected_symbol(Lex *lex, const char *want)
     pawX_error(lex, "expected %s", want);
 }
 
-static void missing_delim(Lex *lex, TokenKind want, TokenKind open, int open_line)
+static void missing_delim(Lex *lex, TokenKind want, TokenKind open,
+                          int open_line)
 {
-    pawX_error(lex, "expected '%c' to match '%c' on line %d",
-               want, open, open_line);
+    pawX_error(lex, "expected '%c' to match '%c' on line %d", want, open,
+               open_line);
 }
 
 static void delim_next(Lex *lex, TokenKind want, TokenKind open, int open_line)
@@ -100,40 +101,24 @@ static const struct {
     uint8_t left;
     uint8_t right;
 } kInfixPrec[NINFIX] = {
-    [INFIX_MUL] = {13, 13},
-    [INFIX_DIV] = {13, 13},
-    [INFIX_MOD] = {13, 13},
-    [INFIX_ADD] = {12, 12},
-    [INFIX_SUB] = {12, 12},
-    [INFIX_SHL] = {10, 10},
-    [INFIX_SHR] = {10, 10},
-    [INFIX_BAND] = {9, 9},
-    [INFIX_BXOR] = {8, 8},
-    [INFIX_BOR] = {7, 7},
-    [INFIX_IN] = {6, 6},
-    [INFIX_LT] = {6, 6},
-    [INFIX_LE] = {6, 6},
-    [INFIX_GT] = {6, 6},
-    [INFIX_GE] = {6, 6},
-    [INFIX_EQ] = {5, 5},
-    [INFIX_NE] = {5, 5},
-    [INFIX_AND] = {4, 4},
-    [INFIX_OR] = {3, 3},
-    [INFIX_COALESCE] = {2, 2},
+    [INFIX_MUL] = {13, 13}, [INFIX_DIV] = {13, 13},
+    [INFIX_MOD] = {13, 13}, [INFIX_ADD] = {12, 12},
+    [INFIX_SUB] = {12, 12}, [INFIX_SHL] = {10, 10},
+    [INFIX_SHR] = {10, 10}, [INFIX_BAND] = {9, 9},
+    [INFIX_BXOR] = {8, 8},  [INFIX_BOR] = {7, 7},
+    [INFIX_IN] = {6, 6},    [INFIX_LT] = {6, 6},
+    [INFIX_LE] = {6, 6},    [INFIX_GT] = {6, 6},
+    [INFIX_GE] = {6, 6},    [INFIX_EQ] = {5, 5},
+    [INFIX_NE] = {5, 5},    [INFIX_AND] = {4, 4},
+    [INFIX_OR] = {3, 3},    [INFIX_COALESCE] = {2, 2},
     [INFIX_COND] = {1, 0}, // right-associative
 };
 
 static const uint8_t kUnOpPrecedence = 14;
 
-static unsigned left_prec(InfixOp op)
-{
-    return kInfixPrec[op].left;
-}
+static unsigned left_prec(InfixOp op) { return kInfixPrec[op].left; }
 
-static unsigned right_prec(InfixOp op)
-{
-    return kInfixPrec[op].right;
-}
+static unsigned right_prec(InfixOp op) { return kInfixPrec[op].right; }
 
 static UnOp get_unop(TokenKind kind)
 {
@@ -199,10 +184,7 @@ static InfixOp get_infixop(TokenKind kind)
     }
 }
 
-static void skip(Lex *lex)
-{
-    pawX_next(lex);
-}
+static void skip(Lex *lex) { pawX_next(lex); }
 
 static void check(Lex *lex, TokenKind want)
 {
@@ -217,10 +199,7 @@ static void check_next(Lex *lex, TokenKind want)
     skip(lex);
 }
 
-static paw_Bool test(Lex *lex, TokenKind kind)
-{
-    return lex->t.kind == kind;
-}
+static paw_Bool test(Lex *lex, TokenKind kind) { return lex->t.kind == kind; }
 
 static paw_Bool test_next(Lex *lex, TokenKind kind)
 {
@@ -232,10 +211,7 @@ static paw_Bool test_next(Lex *lex, TokenKind kind)
 }
 
 // Eat a semicolon, if one exists
-static void semicolon(Lex *lex)
-{
-    test_next(lex, ';');
-}
+static void semicolon(Lex *lex) { test_next(lex, ';'); }
 
 static String *parse_name(Lex *lex)
 {
@@ -367,11 +343,13 @@ static AstExpr *type_annotation(Lex *lex)
     return NULL; // needs inference
 }
 
-static AstExpr *expect_annotation(Lex *lex, const char *what, const String *name)
+static AstExpr *expect_annotation(Lex *lex, const char *what,
+                                  const String *name)
 {
     AstExpr *type = type_annotation(lex);
     if (type == NULL) {
-        pawX_error(lex, "expected type annotation on %s '%s'", what, name->text);
+        pawX_error(lex, "expected type annotation on %s '%s'", what,
+                   name->text);
     }
     return type;
 }
@@ -412,12 +390,21 @@ static AstList *expr_list1(Lex *lex, const char *what)
     return list;
 }
 
+static AstExpr *composite_lit(Lex *, AstExpr *);
+
+static AstExpr *parse_item(Lex *lex)
+{
+    return test(lex, '{') ? composite_lit(lex, NULL) : expression0(lex);
+}
+
 static AstExpr *item_expr(Lex *lex)
 {
     AstExpr *r = new_expr(lex, EXPR_ITEM);
-    r->item.name = parse_name(lex);
-    check_next(lex, ':');
-    r->item.value = expression0(lex);
+    r->item.value = parse_item(lex);
+    if (test_next(lex, ':')) {
+        r->item.key = r->item.value;
+        r->item.value = parse_item(lex);
+    }
     return r;
 }
 
@@ -757,7 +744,8 @@ static AstExpr *suffixed_expr(Lex *lex)
             case '.':
                 e = selector_expr(lex, e);
                 break;
-                // TODO: Change syntax of conditional expr so that this will work
+                // TODO: Change syntax of conditional expr so that this will
+                // work
                 //            case TK_COLON2:
                 //                e = access_expr(lex, e);
                 //                break;
@@ -865,9 +853,7 @@ static AstExpr *infix_expr(Lex *lex, AstExpr *lhs, unsigned op)
 static AstExpr *subexpr(Lex *lex, unsigned prec)
 {
     unsigned op = get_unop(lex->t.kind);
-    AstExpr *expr = op == NOT_UNOP
-                        ? simple_expr(lex)
-                        : unop_expr(lex, op);
+    AstExpr *expr = op == NOT_UNOP ? simple_expr(lex) : unop_expr(lex, op);
 
     op = get_infixop(lex->t.kind);
     while (op != NOT_INFIX && prec < left_prec(op)) {
@@ -902,8 +888,9 @@ static AstStmt *if_stmt(Lex *lex)
 
     if (test_next(lex, TK_ELSE)) {
         if (test(lex, TK_IF)) {
-            // Put the rest of the chain in the else branch. This transformation looks
-            // like 'if a {} else if b {} else {}' -> 'if a {} else {if b {} else {}}'.
+            // Put the rest of the chain in the else branch. This transformation
+            // looks like 'if a {} else if b {} else {}' -> 'if a {} else {if b
+            // {} else {}}'.
             r->else_arm = if_stmt(lex);
         } else {
             r->else_arm = cast_stmt(block(lex));
@@ -1003,10 +990,13 @@ static AstStmt *return_stmt(Lex *lex)
     } else {
         r->expr = expression0(lex);
     }
-    // NOTE: The construct 'return [expr] [`;`]' must be followed by the TODO: auto semicolon insertion fixes this
-    //       end of the block. This is necessary because the semicolon is      could relax restriction, make it easier to 'prototype' in paw
-    //       optional, and we cannot easily tell if it was intended to go
-    //       before or after the '[expr]' part.
+    // NOTE: The construct 'return [expr] [`;`]' must be followed by the TODO:
+    // auto semicolon insertion fixes this
+    //       end of the block. This is necessary because the semicolon is could
+    //       relax restriction, make it easier to 'prototype' in paw optional,
+    //       and we cannot easily tell if it was intended to go before or after
+    //       the
+    //       '[expr]' part.
     semicolon(lex);
     return result;
 }
@@ -1242,22 +1232,8 @@ static AstList *load_prelude(Lex *lex)
 //
 // ORDER TokenKind
 static const char *kKeywords[] = {
-    "fn",
-    "type",
-    "struct",
-    "global",
-    "let",
-    "if",
-    "else",
-    "for",
-    "do",
-    "while",
-    "break",
-    "continue",
-    "return",
-    "in",
-    "true",
-    "false",
+    "fn", "type",  "struct", "global",   "let",    "if", "else", "for",
+    "do", "while", "break",  "continue", "return", "in", "true", "false",
 };
 
 static String *basic_type_name(paw_Env *P, const char *name, paw_Type type)
@@ -1269,8 +1245,8 @@ static String *basic_type_name(paw_Env *P, const char *name, paw_Type type)
 
 void pawP_init(paw_Env *P)
 {
-    // Add all keywords to the interned strings table. Fix them so they are never
-    // collected. Also added to the lexer string map.
+    // Add all keywords to the interned strings table. Fix them so they are
+    // never collected. Also added to the lexer string map.
     for (size_t i = 0; i < paw_countof(kKeywords); ++i) {
         const char *kw = kKeywords[i];
         String *str = pawS_new_fixed(P, kw);
@@ -1315,7 +1291,8 @@ static Ast *parse_module(Lex *lex, paw_Reader input, void *ud)
     return ast;
 }
 
-Closure *pawP_parse(paw_Env *P, paw_Reader input, ParseMemory *pm, const char *name, void *ud)
+Closure *pawP_parse(paw_Env *P, paw_Reader input, ParseMemory *pm,
+                    const char *name, void *ud)
 {
     // Initialize the lexical state.
     Lex lex = {

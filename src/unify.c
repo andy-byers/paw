@@ -17,18 +17,10 @@
 #define debug_log(what, ...)
 #endif
 
-#define unpack_var(v)              \
-    (TypeVar)                      \
-    {                              \
-        .type = (v)->type,         \
-        .resolved = (v)->resolved, \
-    }
-#define pack_type(t)          \
-    (TypeVar)                 \
-    {                         \
-        .type = (t),          \
-        .resolved = PAW_TRUE, \
-    }
+#define unpack_var(v)                                                          \
+    (TypeVar) { .type = (v)->type, .resolved = (v)->resolved, }
+#define pack_type(t)                                                           \
+    (TypeVar) { .type = (t), .resolved = PAW_TRUE, }
 
 typedef struct UniVar {
     struct UniVar *parent;
@@ -172,9 +164,7 @@ static void unify_binders(Unifier *U, AstList *a, AstList *b)
 
 static void unify_adt(Unifier *U, AstAdt *a, AstType *b)
 {
-    if (!a_is_adt(b)) {
-        pawX_error(U->lex, "expected struct or enum type");
-    } else if (a->base != b->adt.base) {
+    if (a->base != b->adt.base) {
         pawX_error(U->lex, "data types are incompatible");
     }
     unify_binders(U, a->types, b->adt.types);
@@ -182,9 +172,6 @@ static void unify_adt(Unifier *U, AstAdt *a, AstType *b)
 
 static void unify_func_sig(Unifier *U, AstFuncSig *a, AstType *b)
 {
-    if (!a_is_func(b)) {
-        pawX_error(U->lex, "expected function type");
-    }
     // NOTE: 'types' field not unified (not part of function signature)
     unify_binders(U, a->params, b->func.params);
     pawU_unify(U, a->return_, b->func.return_);
@@ -202,7 +189,9 @@ static AstType *unify_basic(Unifier *U, AstType *a, AstType *b)
 static void unify_types(Unifier *U, AstType *a, AstType *b)
 {
     debug_log("unify_types", a, b);
-    if (a_is_func(a)) {
+    if (a_kind(a) != a_kind(b)) {
+        pawX_error(U->lex, "incompatible types");
+    } else if (a_is_func(a)) {
         unify_func_sig(U, &a->func, b);
     } else if (a_is_adt(a)) {
         unify_adt(U, &a->adt, b);
@@ -211,7 +200,8 @@ static void unify_types(Unifier *U, AstType *a, AstType *b)
     }
 }
 
-// TODO: Indicate failure rather than throw errors inside, let the caller throw, for better error messages
+// TODO: Indicate failure rather than throw errors inside, let the caller throw,
+// for better error messages
 void pawU_unify(Unifier *U, AstType *a, AstType *b)
 {
     UniTable *ut = U->table;

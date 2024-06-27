@@ -265,7 +265,8 @@ void paw_dump_opcode(OpCode opcode)
             printf("UNOP %s %d\n", paw_unop_name(get_A(opcode)), get_B(opcode));
             break;
         case OP_BINOP:
-            printf("BINOP %s %d\n", paw_binop_name(get_A(opcode)), get_B(opcode));
+            printf("BINOP %s %d\n", paw_binop_name(get_A(opcode)),
+                   get_B(opcode));
             break;
         case OP_GETATTR:
             printf("GETATTR %d\n", get_U(opcode));
@@ -292,23 +293,29 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
     pawL_add_string(P, print, "function '");
     pawL_add_nstring(P, print, proto->name->text, proto->name->length);
     pawL_add_fstring(P, print, "' (%I bytes)\n", (paw_Int)proto->length);
-    pawL_add_fstring(P, print, "constant(s) = %I, upvalue(s) = %I\n", (paw_Int)proto->nk, (paw_Int)proto->nup);
+    pawL_add_fstring(P, print, "constant(s) = %I, upvalue(s) = %I\n",
+                     (paw_Int)proto->nk, (paw_Int)proto->nup);
     for (int i = 0; pc != end; ++i) {
-        pawL_add_fstring(P, print, "%d  %I  %s", i, (paw_Int)(pc - proto->source), paw_op_name(get_OP(pc[0])));
+        pawL_add_fstring(P, print, "%d  %I  %s", i,
+                         (paw_Int)(pc - proto->source),
+                         paw_op_name(get_OP(pc[0])));
         const OpCode opcode = *pc++;
         switch (get_OP(opcode)) {
             case OP_UNOP: {
-                pawL_add_fstring(P, print, " ; op = %s", paw_unop_name(get_A(opcode)));
+                pawL_add_fstring(P, print, " ; op = %s",
+                                 paw_unop_name(get_A(opcode)));
                 break;
             }
 
             case OP_BINOP: {
-                pawL_add_fstring(P, print, " ; op = %s", paw_binop_name(get_A(opcode)));
+                pawL_add_fstring(P, print, " ; op = %s",
+                                 paw_binop_name(get_A(opcode)));
                 break;
             }
 
             case OP_CLOSE: {
-                pawL_add_fstring(P, print, " ; count = %d, close = %d", get_A(opcode), get_B(opcode));
+                pawL_add_fstring(P, print, " ; count = %d, close = %d",
+                                 get_A(opcode), get_B(opcode));
                 break;
             }
 
@@ -409,7 +416,8 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
                 } else {
                     pawL_add_string(P, print, "<anonymous fn>");
                 }
-                pawL_add_fstring(P, print, "', nupvalues = %I", (paw_Int)p->nup);
+                pawL_add_fstring(P, print, "', nupvalues = %I",
+                                 (paw_Int)p->nup);
                 break;
             }
 
@@ -440,7 +448,8 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
                 break;
             }
 
-                // TODO: Add constant operands and proto names as "; comment" after operator. (like luac)
+                // TODO: Add constant operands and proto names as "; comment"
+                // after operator. (like luac)
         }
         pawL_add_char(P, print, '\n');
     }

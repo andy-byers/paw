@@ -67,7 +67,8 @@ void pawL_buffer_resize(paw_Env *P, Buffer *buf, size_t n)
     buf->size = n;
 }
 
-static void add_nstring(paw_Env *P, Buffer *buf, const char *str, size_t len, int boxloc)
+static void add_nstring(paw_Env *P, Buffer *buf, const char *str, size_t len,
+                        int boxloc)
 {
     char *ptr = reserve_memory(P, buf, len, boxloc);
     memcpy(ptr, str, len);
@@ -79,7 +80,8 @@ void pawL_add_value(paw_Env *P, Buffer *buf, paw_Type type)
     const char *str = pawV_to_string(P, P->top.p[-1], type, &len);
     if (str == NULL) {
         // add the type name and address
-        str = paw_push_fstring(P, "%s (%p)", paw_typename(P, -1), paw_pointer(P, -1));
+        str = paw_push_fstring(P, "%s (%p)", paw_typename(P, -1),
+                               paw_pointer(P, -1));
         len = paw_length(P, -1);
     }
     add_nstring(P, buf, str, len, -3);
@@ -88,10 +90,8 @@ void pawL_add_value(paw_Env *P, Buffer *buf, paw_Type type)
 
 // Table and stringify algorithm modified from micropython
 static const uint8_t kLogBase2[] = {
-    0, 1, 1, 2, 2, 2, 2, 3,
-    3, 3, 3, 3, 3, 3, 3, 4,
-    4, 4, 4, 4, 4, 4, 4, 4,
-    4, 4, 4, 4, 4, 4, 4, 5, //
+    0, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 4,
+    4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, //
 };
 
 size_t pawL_integer_format_size(size_t nbits, int base)

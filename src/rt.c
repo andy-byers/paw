@@ -26,11 +26,11 @@
 
 // Helpers for the VM:
 #define vm_switch(x) switch (x)
-#define vm_case(x) \
-    break;         \
+#define vm_case(x)                                                             \
+    break;                                                                     \
     case OP_##x
-#define vm_default \
-    break;         \
+#define vm_default                                                             \
+    break;                                                                     \
     default
 #define vm_continue continue
 #define vm_shift(n) (*vm_peek(n) = *vm_peek(0), vm_pop(n))
@@ -54,14 +54,14 @@
 // the GC doesn't get confused. Both the vm_push0(), and the pawA_new calls
 // might fail and cause an error to be thrown, so we have to be careful not
 // to leave a junk value on top of the stack.
-#define vm_vector_init(pa, pv) \
-    pv = vm_push0();           \
-    pa = pawA_new(P);          \
+#define vm_vector_init(pa, pv)                                                 \
+    pv = vm_push0();                                                           \
+    pa = pawA_new(P);                                                          \
     v_set_object(pv, pa);
 
-#define vm_map_init(pm, pv) \
-    pv = vm_push0();        \
-    pm = pawH_new(P);       \
+#define vm_map_init(pm, pv)                                                    \
+    pv = vm_push0();                                                           \
+    pm = pawH_new(P);                                                          \
     v_set_object(pv, pm);
 
 static int current_line(const CallFrame *cf)
@@ -95,7 +95,8 @@ static void add_location(paw_Env *P, Buffer *buf)
     }
 }
 
-static void add_3_parts(paw_Env *P, const char *before, const char *value, const char *after)
+static void add_3_parts(paw_Env *P, const char *before, const char *value,
+                        const char *after)
 {
     Buffer buf;
     pawL_init_buffer(P, &buf);
@@ -145,9 +146,8 @@ void pawR_error(paw_Env *P, int error, const char *fmt, ...)
 // Convert a paw_Float to a paw_Int (from Lua)
 // Assumes 2's complement, which means PAW_INT_MIN is a power-of-2 with
 // an exact paw_Float representation.
-#define float2int_aux(f, pv)            \
-    ((f) >= (paw_Float)(PAW_INT_MIN) && \
-     (f) < -(paw_Float)(PAW_INT_MIN) && \
+#define float2int_aux(f, pv)                                                   \
+    ((f) >= (paw_Float)(PAW_INT_MIN) && (f) < -(paw_Float)(PAW_INT_MIN) &&     \
      (v_set_int(pv, paw_cast_int(f)), 1))
 
 static void float2int(paw_Env *P, paw_Float f, Value *pv)
@@ -223,7 +223,8 @@ void pawR_to_int(paw_Env *P, paw_Type type)
             sp = vm_peek(0); // new top
             const paw_Int i = v_int(*sp);
             if (i == PAW_INT_MIN) {
-                pawR_error(P, PAW_EOVERFLOW, "%I has no positive representation", i);
+                pawR_error(P, PAW_EOVERFLOW,
+                           "%I has no positive representation", i);
             }
             v_set_int(sp, -i);
         }
@@ -355,8 +356,8 @@ void pawR_init(paw_Env *P)
     v_set_object(&P->mem_errmsg, errmsg);
 }
 
-#define stop_loop(i, i2, d) (((d) < 0 && (i) <= (i2)) || \
-                             ((d) > 0 && (i) >= (i2)))
+#define stop_loop(i, i2, d)                                                    \
+    (((d) < 0 && (i) <= (i2)) || ((d) > 0 && (i) >= (i2)))
 
 static paw_Bool fornum_init(paw_Env *P)
 {
@@ -613,7 +614,8 @@ static void float_binop(paw_Env *P, BinaryOp binop, paw_Float x, paw_Float y)
     vm_pop(1);
 }
 
-static void other_binop(paw_Env *P, BinaryOp binop, paw_Type t, Value x, Value y)
+static void other_binop(paw_Env *P, BinaryOp binop, paw_Type t, Value x,
+                        Value y)
 {
     if (binop == BINARY_IN) {
         if (t == PAW_TVECTOR) {
@@ -718,9 +720,8 @@ void pawR_getattr(paw_Env *P, int index)
 
 static void getitem_vector(paw_Env *P, Value obj, Value key)
 {
-    Vector *a = v_vector(obj);
-    const paw_Int i = v_int(key);
-    *vm_peek(1) = *pawA_get(P, a, i);
+    Vector *vec = v_vector(obj);
+    *vm_peek(1) = *pawA_get(P, vec, v_int(key));
     vm_pop(1);
 }
 
@@ -808,26 +809,27 @@ void pawR_literal_map(paw_Env *P, int n)
 //    return v_is_null(*pv);
 //}
 
-static paw_Bool should_jump_false(paw_Env *P)
-{
-    return !v_true(*vm_peek(0));
+static paw_Bool should_jump_false(paw_Env *P) 
+{ 
+    return !v_true(*vm_peek(0)); 
 }
 
 void pawR_execute(paw_Env *P, CallFrame *cf)
 {
-    Closure *fn;
-    const OpCode *pc;
     const Value *K;
-    Struct **C;
+    const OpCode *pc;
+    Struct **S = P->sv.data;
+    Closure *fn;
 
 top:
     pc = cf->pc;
     fn = cf->fn;
     K = fn->p->k;
-    C = fn->p->c;
 
     for (;;) {
         const OpCode opcode = *pc++;
+
+        // clang-format off
         vm_switch(get_OP(opcode))
         {
             vm_case(POP) :
@@ -857,7 +859,7 @@ top:
 
             vm_case(PUSHSTRUCT) :
             {
-                vm_pusho(C[get_U(opcode)]);
+                vm_pusho(S[get_U(opcode)]);
             }
 
             vm_case(UNOP) :
@@ -901,13 +903,14 @@ top:
                 pawR_cast_float(P, get_U(opcode));
             }
 
+            // TODO: Instances store a pointer to Struct as the first field. This was how
+            //       method calls were implemented before the switch to static typing.
             vm_case(NEWINSTANCE) :
             {
                 vm_protect();
-                const int nfields = get_U(opcode);
                 Value *pv = vm_peek(0);
                 Struct *struct_ = v_struct(*pv);
-                Instance *ins = pawV_new_instance(P, 1 + nfields);
+                Instance *ins = pawV_new_instance(P, 1 + get_U(opcode));
                 v_set_object(ins->attrs, struct_);
                 v_set_object(pv, ins); // replace Struct
                 check_gc(P);
@@ -1110,5 +1113,6 @@ top:
         vm_default:
             paw_assert(PAW_FALSE);
         }
+        // clang-format on
     }
 }

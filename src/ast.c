@@ -5,6 +5,7 @@
 #include "ast.h"
 #include "map.h"
 #include "mem.h"
+#include <inttypes.h>
 #include <limits.h>
 
 #define FIRST_ARENA_SIZE 512
@@ -42,33 +43,37 @@ void pawA_free_ast(Ast *ast)
     pawM_free(P, ast);
 }
 
-#define make_node_constructor(name, T)                                                     \
-    T *pawA_new_##name(Ast *ast, T##Kind kind)                                             \
-    {                                                                                      \
-        T *r = pawK_pool_alloc(env((ast)->lex), &(ast)->nodes, sizeof(T), paw_alignof(T)); \
-        r->hdr.line = (ast)->lex->line;                                                    \
-        r->hdr.kind = kind;                                                                \
-        return r;                                                                          \
+// clang-format off
+#define make_node_constructor(name, T)                                                             \
+    T *pawA_new_##name(Ast *ast, T##Kind kind)                                                     \
+    {                                                                                              \
+        T *r = pawK_pool_alloc(env((ast)->lex), &(ast)->nodes, sizeof(T), paw_alignof(T));         \
+        r->hdr.line = (ast)->lex->line;                                                            \
+        r->hdr.kind = kind;                                                                        \
+        return r;                                                                                  \
     }
 make_node_constructor(expr, AstExpr)
-    make_node_constructor(decl, AstDecl)
-        make_node_constructor(stmt, AstStmt)
+make_node_constructor(decl, AstDecl)
+make_node_constructor(stmt, AstStmt)
+// clang-format on
 
-            AstType *pawA_new_type(Ast *ast, AstTypeKind kind)
+#define LIST_MIN_ALLOC 8
+
+        AstType *pawA_new_type(Ast *ast, AstTypeKind kind)
 {
-    AstType *r = pawK_pool_alloc(env((ast)->lex), &(ast)->nodes, sizeof(AstType), paw_alignof(AstType));
+    AstType *r = pawK_pool_alloc(env((ast)->lex), &(ast)->nodes,
+                                 sizeof(AstType), paw_alignof(AstType));
     r->hdr.kind = kind;
     return r;
 }
-
-#define LIST_MIN_ALLOC 8
 
 static AstList *new_list(Ast *ast, int alloc)
 {
     paw_Env *P = env(ast->lex);
     pawM_check_size(P, sizeof(AstList), cast_size(alloc), sizeof(void *));
     const size_t size = sizeof(AstList) + cast_size(alloc) * sizeof(void *);
-    AstList *list = pawK_pool_alloc(P, &ast->sequences, size, paw_alignof(AstList));
+    AstList *list =
+        pawK_pool_alloc(P, &ast->sequences, size, paw_alignof(AstList));
     list->alloc = alloc;
     return list;
 }
@@ -125,8 +130,8 @@ void pawA_list_push(Ast *ast, AstList **plist, void *node)
 
 Symbol *pawA_new_symbol(Lex *lex)
 {
-    return pawK_pool_alloc(env(lex), &lex->pm->ast->symbols,
-                           sizeof(Symbol), paw_alignof(Symbol));
+    return pawK_pool_alloc(env(lex), &lex->pm->ast->symbols, sizeof(Symbol),
+                           paw_alignof(Symbol));
 }
 
 DefId pawA_add_decl(Ast *ast, AstDecl *decl)
@@ -147,22 +152,22 @@ AstDecl *pawA_get_decl(Ast *ast, DefId id)
     return pm->decls.data[id];
 }
 
-#define make_list_visitor(name, T)                                                \
-    static void visit_##name##_list_aux(AstVisitor *V, AstList *list, T##Pass cb) \
-    {                                                                             \
-        for (int i = 0; i < list->count; ++i) {                                   \
-            cb(V, list->data[i]);                                                 \
-        }                                                                         \
+#define make_list_visitor(name, T)                                             \
+    static void visit_##name##_list_aux(AstVisitor *V, AstList *list,          \
+                                        T##Pass cb)                            \
+    {                                                                          \
+        for (int i = 0; i < list->count; ++i) {                                \
+            cb(V, list->data[i]);                                              \
+        }                                                                      \
     }
-make_list_visitor(decl, AstDecl)
-    make_list_visitor(expr, AstExpr)
-        make_list_visitor(stmt, AstStmt)
+make_list_visitor(decl, AstDecl) make_list_visitor(expr, AstExpr)
+    make_list_visitor(stmt, AstStmt)
 
 #define visit_stmts(V, list) (V)->visit_stmt_list(V, list, (V)->visit_stmt)
 #define visit_exprs(V, list) (V)->visit_expr_list(V, list, (V)->visit_expr)
 #define visit_decls(V, list) (V)->visit_decl_list(V, list, (V)->visit_decl)
 
-            static void visit_block_stmt(AstVisitor *V, Block *s)
+        static void visit_block_stmt(AstVisitor *V, Block *s)
 {
     visit_stmts(V, s->stmts);
 }
@@ -511,27 +516,28 @@ void pawA_visit(AstVisitor *V)
 
 // Generate code for folding a linked list of AST nodes
 //
-// fold_*_list_aux: Pass over the list, calling the supplied callback on each node. The
-//     callback should return (a) the next node n->source.link (with text replacement)
-//     if the current node n should be removed, (b) n if no folding needs to be
-//     performed, or (c) a freshly-allocated node if creating a new list.
+// fold_*_list_aux: Pass over the list, calling the supplied callback on each
+// node. The
+//     callback should return (a) the next node n->source.link (with text
+//     replacement) if the current node n should be removed, (b) n if no folding
+//     needs to be performed, or (c) a freshly-allocated node if creating a new
+//     list.
 // visit_*_list: Run fold_*_list_aux with the default callback.
-#define make_list_folder(name, T)                                           \
-    static void fold_##name##_list(AstFolder *F, AstList *list, T##Fold cb) \
-    {                                                                       \
-        for (int i = 0; i < list->count; ++i) {                             \
-            cb(F, list->data[i]);                                           \
-        }                                                                   \
-    }                                                                       \
-    static void fold_##name##s(AstFolder *F, AstList *list)                 \
-    {                                                                       \
-        fold_##name##_list(F, list, F->fold_##name);                        \
+#define make_list_folder(name, T)                                              \
+    static void fold_##name##_list(AstFolder *F, AstList *list, T##Fold cb)    \
+    {                                                                          \
+        for (int i = 0; i < list->count; ++i) {                                \
+            cb(F, list->data[i]);                                              \
+        }                                                                      \
+    }                                                                          \
+    static void fold_##name##s(AstFolder *F, AstList *list)                    \
+    {                                                                          \
+        fold_##name##_list(F, list, F->fold_##name);                           \
     }
-make_list_folder(decl, AstDecl)
-    make_list_folder(expr, AstExpr)
-        make_list_folder(stmt, AstStmt)
+make_list_folder(decl, AstDecl) make_list_folder(expr, AstExpr)
+    make_list_folder(stmt, AstStmt)
 
-            static AstStmt *fold_block_stmt(AstFolder *F, Block *s)
+        static AstStmt *fold_block_stmt(AstFolder *F, Block *s)
 {
     fold_stmts(F, s->stmts);
     return cast_stmt(s);
@@ -946,17 +952,16 @@ typedef struct Copier {
     Ast *ast; // AST being copied
 } Copier;
 
-#define make_copy_prep(name, T)                          \
-    static T *copy_prep_##name##_aux(AstFolder *F, T *t) \
-    {                                                    \
-        T *r = pawA_new_##name(F->ast, a_kind(t));       \
-        r->hdr.kind = t->hdr.kind;                       \
-        r->hdr.line = t->hdr.line;                       \
-        return r;                                        \
+#define make_copy_prep(name, T)                                                \
+    static T *copy_prep_##name##_aux(AstFolder *F, T *t)                       \
+    {                                                                          \
+        T *r = pawA_new_##name(F->ast, a_kind(t));                             \
+        r->hdr.kind = t->hdr.kind;                                             \
+        r->hdr.line = t->hdr.line;                                             \
+        return r;                                                              \
     }
-make_copy_prep(expr, AstExpr)
-    make_copy_prep(decl, AstDecl)
-        make_copy_prep(stmt, AstStmt)
+make_copy_prep(expr, AstExpr) make_copy_prep(decl, AstDecl)
+    make_copy_prep(stmt, AstStmt)
 
 // Helpers for copying: create a new node of the given type and kind,
 // and copy the common fields
@@ -964,21 +969,20 @@ make_copy_prep(expr, AstExpr)
 #define copy_prep_decl(F, d) copy_prep_decl_aux(F, cast_decl(d))
 #define copy_prep_stmt(F, s) copy_prep_stmt_aux(F, cast_stmt(s))
 
-#define make_copy_list(name, T)                                     \
-    static AstList *copy_##name##s(AstFolder *F, AstList *old_list) \
-    {                                                               \
-        AstList *new_list = pawA_list_new(F->ast);                  \
-        for (int i = 0; i < old_list->count; ++i) {                 \
-            pawA_list_push(F->ast, &new_list, old_list->data[i]);   \
-        }                                                           \
-        F->fold_##name##_list(F, new_list, F->fold_##name);         \
-        return new_list;                                            \
+#define make_copy_list(name, T)                                                \
+    static AstList *copy_##name##s(AstFolder *F, AstList *old_list)            \
+    {                                                                          \
+        AstList *new_list = pawA_list_new(F->ast);                             \
+        for (int i = 0; i < old_list->count; ++i) {                            \
+            pawA_list_push(F->ast, &new_list, old_list->data[i]);              \
+        }                                                                      \
+        F->fold_##name##_list(F, new_list, F->fold_##name);                    \
+        return new_list;                                                       \
     }
-            make_copy_list(decl, AstDecl)
-                make_copy_list(expr, AstExpr)
-                    make_copy_list(stmt, AstStmt)
+        make_copy_list(decl, AstDecl) make_copy_list(expr, AstExpr)
+            make_copy_list(stmt, AstStmt)
 
-                        static AstStmt *copy_block_stmt(AstFolder *F, Block *s)
+                static AstStmt *copy_block_stmt(AstFolder *F, Block *s)
 {
     AstStmt *r = copy_prep_stmt(F, s);
     r->block.stmts = copy_stmts(F, s->stmts);
@@ -997,8 +1001,8 @@ static AstExpr *copy_logical_expr(AstFolder *F, LogicalExpr *e)
 static AstExpr *copy_item_expr(AstFolder *F, ItemExpr *e)
 {
     AstExpr *r = copy_prep_expr(F, e);
+    r->item.key = F->fold_expr(F, e->key);
     r->item.value = F->fold_expr(F, e->value);
-    r->item.name = e->name;
     r->item.index = e->index;
     return r;
 }
@@ -1302,7 +1306,6 @@ static Scope *new_scope_table(AstFolder *F)
 
 static void enter_scope(AstFolder *F, ScopeState *state, Scope *source)
 {
-    puts("ENTER");
     Stenciler *S = F->state.S;
     state->source = source;
     state->target = new_scope_table(F);
@@ -1312,7 +1315,6 @@ static void enter_scope(AstFolder *F, ScopeState *state, Scope *source)
 
 static Scope *leave_scope(AstFolder *F)
 {
-    puts("LEAVE");
     Stenciler *S = F->state.S;
     ScopeState *r = S->scope;
     S->scope = r->outer;
@@ -1361,34 +1363,39 @@ static void link_decls(AstFolder *F, AstDecl *old_decl, AstDecl *new_decl)
     }
 }
 
-#define make_stencil_prep(name, T, body)                    \
-    static T *stencil_prep_##name##_aux(AstFolder *F, T *t) \
-    {                                                       \
-        T *r = pawA_new_##name(F->ast, a_kind(t));          \
-        r->hdr.kind = t->hdr.kind;                          \
-        r->hdr.line = t->hdr.line;                          \
-        body return r;                                      \
+//clang-format off
+#define make_stencil_prep(name, T, body)                                       \
+    static T *stencil_prep_##name##_aux(AstFolder *F, T *t)                    \
+    {                                                                          \
+        T *r = pawA_new_##name(F->ast, a_kind(t));                             \
+        r->hdr.kind = t->hdr.kind;                                             \
+        r->hdr.line = t->hdr.line;                                             \
+        body return r;                                                         \
     }
-make_stencil_prep(expr, AstExpr, {
-    const DefId id = a_type(t)->hdr.def;
-    if (id != NO_DECL) {
-        AstDecl *old_decl = pawA_get_decl(F->ast, id);
-        AstDecl *new_decl = find_decl(F->state.S, old_decl);
-        r->hdr.type = a_type(new_decl);
-    } else {
-        r->hdr.type = subst_type(F, a_type(t));
-    }
-}) make_stencil_prep(decl, AstDecl, {
-    r->hdr.name = t->hdr.name;
-    r->hdr.def = pawA_add_decl(F->ast, r);
-    link_decls(F, t, r); // subst_type() is dependant
-    AstType *type = subst_type(F, a_type(t));
-    if (y_code(type) == NO_DECL) {
-        type->hdr.def = r->hdr.def;
-    }
-    r->hdr.type = type;
-    return r;
-}) make_stencil_prep(stmt, AstStmt, {})
+make_stencil_prep(expr, AstExpr,
+                  {
+                      const DefId id = a_type(t)->hdr.def;
+                      if (id != NO_DECL) {
+                          AstDecl *old_decl = pawA_get_decl(F->ast, id);
+                          AstDecl *new_decl = find_decl(F->state.S, old_decl);
+                          r->hdr.type = a_type(new_decl);
+                      } else {
+                          r->hdr.type = subst_type(F, a_type(t));
+                      }
+                  })
+    make_stencil_prep(decl, AstDecl,
+                      {
+                          r->hdr.name = t->hdr.name;
+                          r->hdr.def = pawA_add_decl(F->ast, r);
+                          link_decls(F, t, r); // subst_type() is dependant
+                          AstType *type = subst_type(F, a_type(t));
+                          if (y_code(type) == NO_DECL) {
+                              type->hdr.def = r->hdr.def;
+                          }
+                          r->hdr.type = type;
+                          return r;
+                      }) make_stencil_prep(stmt, AstStmt, {})
+//clang-format on
 
 // Helpers for stenciling: create a new node of the given type and kind,
 // and copy the common fields
@@ -1396,19 +1403,20 @@ make_stencil_prep(expr, AstExpr, {
 #define stencil_prep_decl(F, d) stencil_prep_decl_aux(F, cast_decl(d))
 #define stencil_prep_stmt(F, s) stencil_prep_stmt_aux(F, cast_stmt(s))
 
-#define make_stencil_list(name, T)                                     \
-    static AstList *stencil_##name##s(AstFolder *F, AstList *old_list) \
-    {                                                                  \
-        AstList *new_list = pawA_list_new(F->ast);                     \
-        for (int i = 0; i < old_list->count; ++i) {                    \
-            T *decl = F->fold_##name(F, old_list->data[i]);            \
-            pawA_list_push(F->ast, &new_list, decl);                   \
-        }                                                              \
-        return new_list;                                               \
+#define make_stencil_list(name, T)                                             \
+    static AstList *stencil_##name##s(AstFolder *F, AstList *old_list)         \
+    {                                                                          \
+        AstList *new_list = pawA_list_new(F->ast);                             \
+        for (int i = 0; i < old_list->count; ++i) {                            \
+            T *decl = F->fold_##name(F, old_list->data[i]);                    \
+            pawA_list_push(F->ast, &new_list, decl);                           \
+        }                                                                      \
+        return new_list;                                                       \
     }
-    make_stencil_list(expr, AstExpr) make_stencil_list(decl, AstDecl) make_stencil_list(stmt, AstStmt)
+        make_stencil_list(expr, AstExpr) make_stencil_list(decl, AstDecl)
+            make_stencil_list(stmt, AstStmt)
 
-        static AstStmt *stencil_block_stmt(AstFolder *F, Block *s)
+                static AstStmt *stencil_block_stmt(AstFolder *F, Block *s)
 {
     ScopeState state;
     enter_scope(F, &state, s->scope);
@@ -1429,11 +1437,23 @@ static AstExpr *stencil_logical_expr(AstFolder *F, LogicalExpr *e)
     return r;
 }
 
+static AstExpr *stencil_struct_key(AstFolder *F, AstIdent *e)
+{
+    AstExpr *r = pawA_new_expr(F->ast, EXPR_NAME);
+    r->name.line = e->line;
+    r->name.name = e->name;
+    return r;
+}
+
 static AstExpr *stencil_item_expr(AstFolder *F, ItemExpr *e)
 {
     AstExpr *r = stencil_prep_expr(F, e);
+    if (a_kind(e->key) == EXPR_NAME) {
+        r->item.key = stencil_struct_key(F, &e->key->name);
+    } else {
+        r->item.key = F->fold_expr(F, e->key);
+    }
     r->item.value = F->fold_expr(F, e->value);
-    r->item.name = e->name;
     r->item.index = e->index;
     return r;
 }
@@ -1790,6 +1810,7 @@ static AstType *prep_adt(AstTypeFolder *F, AstAdt *t)
     AstDecl *new_base = find_decl(S, old_base);
 
     AstType *r = pawA_new_type(S->ast, AST_TYPE_ADT);
+    r->adt.def = new_base->hdr.def;
     r->adt.base = new_base->hdr.def;
     r->adt.types = prep_binder(F, t->types);
     return r;
@@ -1817,7 +1838,8 @@ static AstType *subst_type(AstFolder *F, AstType *type)
     return S->fold.fold(&S->fold, type);
 }
 
-static void add_existing_link(paw_Env *P, Map *map, AstDecl *key, AstDecl *value)
+static void add_existing_link(paw_Env *P, Map *map, AstDecl *key,
+                              AstDecl *value)
 {
     const Value k = {.p = key};
     const Value v = {.p = value};
@@ -1894,7 +1916,8 @@ static void indent_line(Printer *P)
     }
 }
 
-#define dump_fmt(P, fmt, ...) (indent_line(P), fprintf((P)->out, fmt, __VA_ARGS__))
+#define dump_fmt(P, fmt, ...)                                                  \
+    (indent_line(P), fprintf((P)->out, fmt, __VA_ARGS__))
 #define dump_msg(P, msg) (indent_line(P), fprintf((P)->out, msg))
 
 static void dump_type_aux(Printer *P, AstType *type);
@@ -1912,11 +1935,7 @@ static void dump_binder(Printer *P, AstList *binder)
 static void dump_type_aux(Printer *P, AstType *type)
 {
     const char *basic[] = {
-        "()",
-        "bool",
-        "int",
-        "float",
-        "string",
+        "()", "bool", "int", "float", "string",
     };
     switch (y_kind(type)) {
         case AST_TYPE_UNKNOWN: {
@@ -2023,7 +2042,16 @@ static void print_expr_kind(Printer *P, void *node)
             fprintf(P->out, "CondExpr");
             break;
         case EXPR_NAME:
-            fprintf(P->out, "AstIdent");
+            fprintf(P->out, "Ident");
+            break;
+        case EXPR_INDEX:
+            fprintf(P->out, "Index");
+            break;
+        case EXPR_SELECTOR:
+            fprintf(P->out, "Selector");
+            break;
+        case EXPR_ACCESS:
+            fprintf(P->out, "Access");
             break;
         case EXPR_FUNC_TYPE:
             fprintf(P->out, "FuncType");
@@ -2042,10 +2070,10 @@ static void print_stmt_kind(Printer *P, void *node)
     AstStmt *s = node;
     switch (a_kind(s)) {
         case STMT_EXPR:
-            fprintf(P->out, "AstExprStmt");
+            fprintf(P->out, "ExprStmt");
             break;
         case STMT_DECL:
-            fprintf(P->out, "AstDeclStmt");
+            fprintf(P->out, "DeclStmt");
             break;
         case STMT_BLOCK:
             fprintf(P->out, "Block");
@@ -2069,41 +2097,47 @@ static void print_stmt_kind(Printer *P, void *node)
     }
 }
 
-static int predump_node(Printer *P, void *node, void (*print)(Printer *, void *))
+static int predump_node(Printer *P, void *node,
+                        void (*print)(Printer *, void *))
 {
     if (node != NULL) {
         print(P, node);
-        fprintf(P->out, "(%p) {\n", node);
+        fprintf(P->out, " {\n");
         return 0;
     }
     return -1;
 }
 
-#define dump_block(P, b) check_exp((b)->kind == STMT_BLOCK, dump_stmt(P, cast_stmt(b)))
+#define dump_block(P, b) check_exp((b)->kind == STMT_BLOCK, \
+                                   dump_stmt(P, cast_stmt(b)))
 #define dump_name(P, s) dump_fmt(P, "name: %s\n", s ? s->text : NULL)
 
 static void dump_expr(Printer *P, AstExpr *e);
 static void dump_decl(Printer *P, AstDecl *d);
 static void dump_stmt(Printer *P, AstStmt *s);
 
-#define make_list_dumper(name, T)                                               \
-    static void dump_##name##_list(Printer *P, AstList *list, const char *name) \
-    {                                                                           \
-        dump_fmt(P, "%s: {\n", name);                                           \
-        ++P->indent;                                                            \
-        if (list != NULL) {                                                     \
-            for (int i = 0; i < list->count; ++i) {                             \
-                dump_##name(P, list->data[i]);                                  \
-            }                                                                   \
-        }                                                                       \
-        --P->indent;                                                            \
-        dump_msg(P, "}\n");                                                     \
+// clang-format off
+#define make_list_dumper(name, T)                                              \
+    static void dump_##name##_list(Printer *P, AstList *list,                  \
+                                   const char *name)                           \
+    {                                                                          \
+        dump_fmt(P, "%s: {\n", name);                                          \
+        ++P->indent;                                                           \
+        if (list != NULL) {                                                    \
+            dump_msg(P, "" /* indent */);                                      \
+            for (int i = 0; i < list->count; ++i) {                            \
+                dump_##name(P, list->data[i]);                                 \
+            }                                                                  \
+        }                                                                      \
+        --P->indent;                                                           \
+        dump_msg(P, "}\n");                                                    \
     }
-make_list_dumper(expr, AstExpr)
-    make_list_dumper(decl, AstDecl)
-        make_list_dumper(stmt, AstStmt)
+make_list_dumper(expr, AstExpr) 
+make_list_dumper(decl, AstDecl)
+make_list_dumper(stmt, AstStmt)
+// clang-format on
 
-            static void dump_decl(Printer *P, AstDecl *d)
+static void dump_decl(Printer *P, AstDecl *d)
 {
     if (predump_node(P, d, print_decl_kind)) {
         fprintf(P->out, "(null)\n");
@@ -2244,8 +2278,40 @@ static void dump_expr(Printer *P, AstExpr *e)
     }
     ++P->indent;
     dump_fmt(P, "line: %d\n", e->hdr.line);
+    dump_type(P, a_type(e));
     switch (a_kind(e)) {
         case EXPR_LITERAL:
+            switch (e->literal.lit_kind) {
+                case LIT_BASIC:
+                    switch (e->literal.basic.t) {
+                        case PAW_TUNIT:
+                            dump_msg(P, "type: ()\n");
+                            break;
+                        case PAW_TBOOL:
+                            dump_msg(P, "type: bool\n");
+                            dump_fmt(P, "value: %s\n", v_true(e->literal.basic.value) ? "true" : "false");
+                            break;
+                        case PAW_TINT:
+                            dump_msg(P, "type: int\n");
+                            dump_fmt(P, "value: %" PRId64 "\n", v_int(e->literal.basic.value));
+                            break;
+                        case PAW_TFLOAT:
+                            dump_msg(P, "type: float\n");
+                            dump_fmt(P, "value: %f\n", v_float(e->literal.basic.value));
+                            break;
+                        default:
+                            paw_assert(e->literal.basic.t == PAW_TSTRING);
+                            dump_msg(P, "type: string\n");
+                            dump_fmt(P, "value: %s\n", v_string(e->literal.basic.value)->text);
+                            break;
+                    }
+                    break;
+                default:
+                    paw_assert(e->literal.lit_kind == LIT_COMPOSITE);
+                    dump_msg(P, "target: ");
+                    dump_expr(P, e->literal.comp.target);
+                    dump_expr_list(P, e->literal.comp.items, "items");
+            }
             break;
         case EXPR_UNOP:
             dump_fmt(P, "op: %d\n", e->unop.op);
@@ -2274,6 +2340,16 @@ static void dump_expr(Printer *P, AstExpr *e)
             break;
         case EXPR_NAME:
             dump_name(P, e->name.name);
+            break;
+        case EXPR_INDEX:
+            dump_msg(P, "target: ");
+            dump_expr(P, e->index.target);
+            dump_expr_list(P, e->index.elems, "elems");
+            break;
+        case EXPR_SELECTOR:
+            dump_msg(P, "target: ");
+            dump_expr(P, e->selector.target);
+            dump_name(P, e->selector.name);
             break;
         case EXPR_FUNC_TYPE:
             dump_expr_list(P, e->func.params, "params");

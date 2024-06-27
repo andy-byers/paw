@@ -21,9 +21,9 @@
 
 // Lua-style error handling
 #define c_throw(P, c) longjmp((c)->jmp, 1)
-#define c_try(P, c, a)       \
-    if (!setjmp((c)->jmp)) { \
-        a                    \
+#define c_try(P, c, a)                                                         \
+    if (!setjmp((c)->jmp)) {                                                   \
+        a                                                                      \
     }
 
 struct Jump {
@@ -77,10 +77,9 @@ void pawC_stack_realloc(paw_Env *P, int n)
     // Reallocate the stack. Call one of the low-level allocation functions that
     // doesn't throw an error. Stack references must be corrected, even if the
     // allocation fails.
-    StackPtr stack = pawM_alloc(
-        P, P->stack.p,
-        sizeof(P->stack.p[0]) * cast_size(P->bound.d),
-        sizeof(P->stack.p[0]) * alloc);
+    StackPtr stack =
+        pawM_alloc(P, P->stack.p, sizeof(P->stack.p[0]) * cast_size(P->bound.d),
+                   sizeof(P->stack.p[0]) * alloc);
     P->gc_noem = PAW_FALSE; // allow emergency GC
     if (!stack) {
         finish_resize(P); // fix pointers
@@ -182,7 +181,8 @@ static void check_fixed_args(paw_Env *P, Proto *f, int argc)
         pawR_error(P, PAW_ERUNTIME, "not enough arguments (expected %s%d)",
                    f->is_va ? "at least " : "", f->argc);
     } else if (!f->is_va && argc > f->argc) {
-        pawR_error(P, PAW_ERUNTIME, "too many arguments (expected %d)", f->argc);
+        pawR_error(P, PAW_ERUNTIME, "too many arguments (expected %d)",
+                   f->argc);
     }
 }
 
@@ -223,7 +223,8 @@ CallFrame *pawC_precall(paw_Env *P, StackPtr base, Object *callable, int argc)
             //            Value name = pawE_cstr(P, CSTR_INIT); // '__init'
             //            Value *init = pawH_get(P, cls->attr, name);
             //            if (!init) {
-            //                // There is no user-defined initializer, so just return
+            //                // There is no user-defined initializer, so just
+            //                return
             //                // the instance.
             //                P->top.p = base + 1;
             //                return P->cf;
@@ -269,8 +270,7 @@ static int exceptional_call(paw_Env *P, Call call, void *arg)
         .prev = P->jmp,
     };
     P->jmp = &jmp;
-    c_try(P, &jmp,
-          call(P, arg););
+    c_try(P, &jmp, call(P, arg););
     P->jmp = jmp.prev;
     return jmp.status;
 }
@@ -290,7 +290,8 @@ int pawC_try(paw_Env *P, Call call, void *arg)
         } else {
             // TODO: The error message gets ignored so that the error status
             //       can be returned in paw (no multi-return). Once that gets
-            //       implemented, the error message can be the second return value.
+            //       implemented, the error message can be the second return
+            //       value.
             P->top.p = ptr;
         }
         P->cf = cf;

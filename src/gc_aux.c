@@ -15,15 +15,9 @@
 // TODO: Using Boehm-Demers-Weiser GC for now
 #include <gc.h>
 
-void pawG_init(paw_Env *P)
-{
-    paw_unused(P);
-}
+void pawG_init(paw_Env *P) { paw_unused(P); }
 
-void pawG_uninit(paw_Env *P)
-{
-    paw_unused(P);
-}
+void pawG_uninit(paw_Env *P) { paw_unused(P); }
 
 void pawG_collect(paw_Env *P)
 {
