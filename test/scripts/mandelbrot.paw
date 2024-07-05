@@ -1,53 +1,57 @@
--- mandelbrot.paw
--- usage: paw mandelbrot.paw x0,x1,nx,y0,y1,ny
--- translated from https://rosettacode.org/wiki/Mandelbrot_set#ASCII_2 (Lua).
+// mandelbrot.paw
+// usage: paw mandelbrot.paw x0,x1,nx,y0,y1,ny
+// translated from https://rosettacode.org/wiki/Mandelbrot_set#ASCII_2 (Lua).
 
-let io = require('io')
-let file = io.stdout
+//let io = require('io')
+//let file = io.stdout
 
-let charmap = [
+let charmap = Vector[string]{
     ' ', '.', ':', '-', '=', 
     '+', '*', '#', '%', '@',
-]
-
-fn map(f, seq) {
-    for i = 0, #seq {
-        seq[i] = f(seq[i])
-    }
-    return seq
 }
-print(argv[0])
-let argv = map(float, argv[1].split(',')) 
 
-let x0 = float(argv[0]) 
-let x1 = float(argv[1]) 
-let nx = int(argv[2]) 
-let y0 = float(argv[3]) 
-let y1 = float(argv[4]) 
-let ny = int(argv[5]) 
+//let charmap = [
+//    ' ', '.', ':', '-', '=', 
+//    '+', '*', '#', '%', '@',
+//]
+
+//fn map(f, seq) {
+//    for i = 0, #seq {
+//        seq[i] = f(seq[i])
+//    }
+//    return seq
+//}
+//print(argv[0])
+//let argv = map(float, argv[1].split(',')) 
+
+let x0 = -1.8//float(argv[0]) 
+let x1 = 1.2//float(argv[1]) 
+let nx = 100//int(argv[2]) 
+let y0 = -1.3//float(argv[3]) 
+let y1 = 1.3//float(argv[4]) 
+let ny = 32//int(argv[5]) 
 
 assert(nx > 0 && ny > 0)
-let dy = (y1 - y0) / (ny - 1) 
-let dx = (x1 - x0) / (nx - 1) 
+let dy = (y1 - y0) / float(ny - 1) 
+let dx = (x1 - x0) / float(nx - 1) 
 
 for i = 0, ny {
-    let y = y0 + i * dy
+    let y = y0 + float(i) * dy
     for j = 0, nx {
-        let x = x0 + j * dx
-        let zi = 0
-        let zr = 0
+        let x = x0 + float(j) * dx
+        let zi = 0.0
+        let zr = 0.0
         let i = 0
         while i < 100 {
-            if zi*zi+zr*zr >= 4 {
+            if zi*zi+zr*zr >= 4.0 {
                 break
             }
             let zz = zr*zr - zi*zi + x
-            zi = 2*zr*zi + y
+            zi = 2.0*zr*zi + y
             zr = zz
             i = i + 1
         }
-        io.write(file, charmap[i % 10])
+        print(charmap[i % 10])
     }
-    io.write(file, '\n')
+    print('\n')
 }
-io.flush(file)

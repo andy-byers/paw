@@ -180,33 +180,31 @@ static paw_Bool consume_prefix(const char **str)
 void pawR_cast_bool(paw_Env *P, paw_Type type)
 {
     paw_assert(type < PAW_TSTRING);
-    StackPtr sp = vm_top(1);
-    if (type == PAW_TFLOAT) {
-        const paw_Float f = v_float(*sp);
-        v_set_bool(sp, f != 0.0);
-    } else if (type == PAW_TINT) {
-        const paw_Int i = v_int(*sp);
-        v_set_bool(sp, i != 0);
-    }
+    paw_unused(type);
+
+    Value *pv = vm_top(1);
+    v_set_bool(pv, pv->u != 0);
 }
 
 void pawR_cast_int(paw_Env *P, paw_Type type)
 {
     paw_assert(type < PAW_TSTRING);
-    StackPtr sp = vm_top(1);
     if (type == PAW_TFLOAT) {
-        const paw_Float f = v_float(*sp);
-        float2int(P, f, sp);
+        // NOTE: Other primitives have a value representation compatible with 
+        //       that of the 'int' type.
+        Value *pv = vm_top(1);
+        const paw_Float f = v_float(*pv);
+        float2int(P, f, pv);
     }
 }
 
 void pawR_cast_float(paw_Env *P, paw_Type type)
 {
     paw_assert(type < PAW_TSTRING);
-    StackPtr sp = vm_top(1);
     if (type != PAW_TFLOAT) {
-        const paw_Int i = v_int(*sp);
-        v_set_float(sp, (paw_Float)i);
+        Value *pv = vm_top(1);
+        const paw_Int i = v_int(*pv);
+        v_set_float(pv, cast(i, paw_Float));
     }
 }
 
@@ -270,19 +268,6 @@ const char *pawR_to_string(paw_Env *P, paw_Type type, size_t *plen)
     return out;
 }
 
-// static Value *find_attr(paw_Env *P, Value obj, Value name)
-//{
-//     Map *attr = NULL;
-//     if (t_is_instance(obj)) {
-//         attr = v_instance(obj)->attr;
-//     } else if (t_is_foreign(obj)) {
-//         attr = v_foreign(obj)->attr;
-//     } else {
-//         return NULL;
-//     }
-//     return pawH_get(P, attr, name);
-// }
-
 void pawR_read_global(paw_Env *P, int g)
 {
     paw_assert(g < P->gv.size);
@@ -330,11 +315,18 @@ void pawR_close_upvalues(paw_Env *P, const StackPtr top)
     }
 }
 
+void pawR_settuple(paw_Env *P, int index)
+{
+    const Value val = *vm_top(1);
+    const Value obj = *vm_top(2);
+    v_tuple(obj)->elems[index] = val;
+    vm_pop(2);
+}
+
 void pawR_setattr(paw_Env *P, int index)
 {
     const Value val = *vm_top(1);
     const Value obj = *vm_top(2);
-
     Instance *ins = v_instance(obj);
     ins->attrs[1 + index] = val;
     vm_pop(2);
@@ -346,9 +338,9 @@ void pawR_setitem(paw_Env *P, paw_Type ttarget)
     const Value key = *vm_top(2);
     const Value obj = *vm_top(3);
     if (ttarget == PAW_TVECTOR) {
-        const paw_Int idx = v_int(key);
-        Value *slot = pawA_get(P, v_vector(obj), idx);
-        *slot = val;
+        const paw_Int index = v_int(key);
+        Value *pval = pawA_get(P, v_vector(obj), index);
+        *pval = val;
     } else {
         paw_assert(ttarget == PAW_TMAP);
         pawH_insert(P, v_map(obj), key, val);
@@ -418,7 +410,7 @@ static paw_Bool forin_init(paw_Env *P, paw_Type t)
     ////            return PAW_FALSE;
     ////        }
     //    }
-    //    return PAW_TRUE;
+        return PAW_TRUE;
 }
 
 static paw_Bool forin(paw_Env *P, paw_Type t)
@@ -443,7 +435,7 @@ static paw_Bool forin(paw_Env *P, paw_Type t)
     ////            return PAW_TRUE;
     ////        }
     //    }
-    //    return PAW_FALSE; // stop the loop
+        return PAW_FALSE; // stop the loop
 }
 
 #define finish_strcmp(x, y, op) (pawS_cmp(x, y) op 0)
@@ -717,24 +709,27 @@ void pawR_unop(paw_Env *P, UnaryOp unop, paw_Type t)
     unop_aux(P, unop, t, x);
 }
 
+void pawR_gettuple(paw_Env *P, int index)
+{
+    Tuple *tup = v_tuple(*vm_top(1));
+    *vm_top(1) = tup->elems[index];
+}
+
 void pawR_getattr(paw_Env *P, int index)
 {
-    const Value obj = *vm_top(1);
-
-    Instance *ins = v_instance(obj);
+    Instance *ins = v_instance(*vm_top(1));
     *vm_top(1) = ins->attrs[1 + index];
 }
 
-static void getitem_vector(paw_Env *P, Value obj, Value key)
+static void getitem_vector(paw_Env *P, Vector *vector, paw_Int index)
 {
-    Vector *vec = v_vector(obj);
-    *vm_top(2) = *pawA_get(P, vec, v_int(key));
+    *vm_top(2) = *pawA_get(P, vector, index);
     vm_pop(1);
 }
 
-static int getitem_map(paw_Env *P, Value obj, Value key)
+static int getitem_map(paw_Env *P, Map *map, Value key)
 {
-    const Value *pv = pawH_get(P, v_map(obj), key);
+    const Value *pv = pawH_get(P, map, key);
     if (pv) {
         *vm_top(2) = *pv;
         vm_pop(1);
@@ -743,12 +738,10 @@ static int getitem_map(paw_Env *P, Value obj, Value key)
     return -1;
 }
 
-static void getitem_string(paw_Env *P, Value obj, Value key)
+static void getitem_string(paw_Env *P, const String *string, paw_Int index)
 {
-    paw_Int idx = v_int(key);
-    String *str = v_string(obj);
-    pawA_check_abs(P, idx, str->length);
-    const char c = str->text[idx];
+    pawA_check_abs(P, index, string->length);
+    const char c = string->text[index];
     String *res = pawS_new_nstr(P, &c, 1);
     v_set_object(vm_top(2), res);
     vm_pop(1);
@@ -758,16 +751,29 @@ int pawR_getitem(paw_Env *P, paw_Type ttarget)
 {
     const Value obj = *vm_top(2);
     const Value key = *vm_top(1);
+     if (ttarget == PAW_TMAP) {
+        return getitem_map(P, v_map(obj), key);
+    }
     if (ttarget == PAW_TVECTOR) {
-        getitem_vector(P, obj, key);
-    } else if (ttarget == PAW_TMAP) {
-        if (getitem_map(P, obj, key)) {
-            return -1;
-        }
+        getitem_vector(P, v_vector(obj), v_int(key));
     } else if (ttarget == PAW_TSTRING) {
-        getitem_string(P, obj, key);
+        getitem_string(P, v_string(obj), v_int(key));
     }
     return 0;
+}
+
+void pawR_literal_tuple(paw_Env *P, int n)
+{
+    Value *pv = vm_push0();
+    Tuple *tuple = pawV_new_tuple(P, n);
+    v_set_object(pv, tuple);
+
+    Value *dst = tuple->elems + n;
+    const Value *src = vm_top(1);
+    for (int i = 0; i < n; ++i) {
+        *--dst = *--src;
+    }
+    vm_shift(n);
 }
 
 void pawR_literal_vector(paw_Env *P, int n)
@@ -837,17 +843,6 @@ static void unpack_tuple(paw_Env *P, int n)
     for (int i = 0; i < n; ++i) {
         *vm_top(n - i + 1) = t->elems[i];
     }
-}
-
- static paw_Bool should_jump_null(paw_Env *P)
-{
-    const Variant *pv = v_variant(*vm_top(1));
-    return pv->k == 0;
-}
-
-static paw_Bool should_jump_false(paw_Env *P) 
-{ 
-    return !v_true(*vm_top(1)); 
 }
 
 void pawR_execute(paw_Env *P, CallFrame *cf)
@@ -920,6 +915,13 @@ top:
             {
                 vm_protect();
                 pawR_binop(P, get_A(opcode), get_B(opcode));
+            }
+
+            vm_case(NEWTUPLE) :
+            {
+                vm_protect();
+                pawR_literal_tuple(P, get_U(opcode));
+                check_gc(P);
             }
 
             vm_case(NEWVECTOR) :
@@ -1042,18 +1044,28 @@ top:
                 pawR_write_global(P, u);
             }
 
+            vm_case(GETTUPLE) :
+            {
+                vm_protect();
+                pawR_gettuple(P, get_U(opcode));
+            }
+
             vm_case(GETATTR) :
             {
                 vm_protect();
-                const int u = get_U(opcode);
-                pawR_getattr(P, u);
+                pawR_getattr(P, get_U(opcode));
+            }
+
+            vm_case(SETTUPLE) :
+            {
+                vm_protect();
+                pawR_settuple(P, get_U(opcode));
             }
 
             vm_case(SETATTR) :
             {
                 vm_protect();
-                const int u = get_U(opcode);
-                pawR_setattr(P, u);
+                pawR_setattr(P, get_U(opcode));
             }
 
             vm_case(GETITEM) :
@@ -1138,21 +1150,22 @@ top:
 
             vm_case(JUMPNULL) :
             {
-                if (should_jump_null(P)) {
+                const Variant *pv = v_variant(*vm_top(1));
+                if (pv->k == 0) {
                     pc += get_S(opcode);
                 }
             }
 
             vm_case(JUMPFALSE) :
             {
-                if (should_jump_false(P)) {
+                if (!v_true(*vm_top(1))) {
                     pc += get_S(opcode);
                 }
             }
 
             vm_case(JUMPFALSEPOP) :
             {
-                if (should_jump_false(P)) {
+                if (!v_true(*vm_top(1))) {
                     pc += get_S(opcode);
                 }
                 vm_pop(1);

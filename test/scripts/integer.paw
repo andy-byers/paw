@@ -1,8 +1,8 @@
--- integer.paw
+// integer.paw
 
--- Test integer parsing:
+// Test integer parsing:
 {
-    -- Non-decimal integers
+    // Non-decimal integers
     assert(0b0 == 0)
     assert(0o0 == 0)
     assert(0x0 == 0)
@@ -13,23 +13,10 @@
     assert(0o1234 == 668)
     assert(0x5678 == 22136)
 
-    -- Big integers
-    let x = 84239104721385906132784917234
-    assert(x == 0b1000100000011000011110100010010010101101110100111100100011100011110011001111011100010101011110010)
-    assert(x == 0o104030364222556474434363173425362)
-    assert(x == 0x11030F4495BA791C799EE2AF2)
-
-    let x = 0x100000000000000000000000 -- 93-bit integer
-    let y = 4951760157141521099596496896 -- 'x' as decimal
-    let z = 0x11111111111111111111111111111111111111
-    assert(x == y)
-    assert(x != z)
-    assert(y != z)
-
     assert(int('-100') < 0)
     assert(int('100') > 0)
 
-    fn ok_integer(str, f) {
+    fn ok_integer(str: string, f) {
         assert(int(str) == f)
     }
 
@@ -54,152 +41,7 @@
     bad_integer('1.1')
 }
 
--- Test big integers:
-{
-    let ivalues = [
-        0,
-        111111111111111111111111, 
-        222222222222222222222222,
-        333333333333333333333333,
-        444444444444444444444444,
-        555555555555555555555555,
-        666666666666666666666666,
-        777777777777777777777777,
-        888888888888888888888888,
-        999999999999999999999999,
-    ]
-    fn I(i) {
-        assert(i >= 0 && i < #ivalues)
-        return ivalues[i]
-    }
-    assert(I(1) > (1 << 64))
-    
-    -- Test bigint '+':
-    {
-        assert( I(0) +  I(1) ==  I(1))
-        assert( I(1) +  I(2) ==  I(3))
-        assert( I(1) + -I(2) == -I(1))
-        assert(-I(1) +  I(2) ==  I(1))
-        assert(-I(1) + -I(2) == -I(3))
-    }
-
-    -- Test bigint '-':
-    {
-        assert( I(0) -  I(1) == -I(1))
-        assert( I(1) -  I(2) == -I(1))
-        assert( I(1) - -I(2) ==  I(3))
-        assert(-I(1) -  I(2) == -I(3))
-        assert(-I(1) - -I(2) ==  I(1))
-    }
-
-    -- Test bigint '*':
-    {
-        -- (i * 0) == (0 * i) == 0
-        assert(0 * I(1) == 0)
-        assert(I(1) * 0 == 0)
-
-        -- (i * 1) == (1 * i) == i
-        assert(1 * I(2) == I(2))
-        assert(I(2) * 1 == I(2))
-
-        -- (i * n) == (n * i) == i + ... (n - 1 additions)
-        assert(I(2) * 3 == I(2) + I(2) + I(2))
-        assert(I(3) * 4 == I(3) + I(3) + I(3) + I(3))
-        assert(3 * I(2) == I(2) + I(2) + I(2))
-        assert(4 * I(3) == I(3) + I(3) + I(3) + I(3))
-
-        -- (i+j) * (i+j) == i*i + 2*i*j + j*j
-        fn check(i, j) {
-            let lhs = (I(i) + I(j)) * (I(i) + I(j))
-            let rhs = I(i) * I(i) + 2 * I(i) * I(j) + I(j) * I(j)
-            assert(lhs == rhs)
-        }
-        check(1, 2)
-        check(2, 3)
-    }
-    
-    -- Test bigint '//':
-    {
-        assert(I(9) // 3 == I(3))
-        assert(I(9) // I(3) == 3)
-        assert(I(9) // I(2) == 4)
-        assert(I(5) // I(4) == 1)
-        assert(I(4) // I(5) == 0)
-        assert(I(9) // 23 == 43478260869565217391304)
-    }
-
-    -- Test bigint bitwise operators:
-    {
-        fn check(x, y) {
-            assert(x == y)
-        }
-        let x = 0b10011101000001110011101011000101110001001000010010001000000011010
-        let y = 0b10001100000100011011011001111001000111001101110010100000001110110
-
-        check(!x, false)
-        check(-x, -0b10011101000001110011101011000101110001001000010010001000000011010)
-        check(~x, -0b10011101000001110011101011000101110001001000010010001000000011011)
-        check(x | y, 0b10011101000101111011111011111101110111001101110010101000001111110)
-        check(x & y, 0b10001100000000010011001001000001000001001000010010000000000010010)
-        check(x ^ y, 0b00010001000101101000110010111100110110000101100000101000001101100)
-        check(~(x & y), -0b10001100000000010011001001000001000001001000010010000000000010011)
-    }
-
-    {
-        let v = 33232930569601 * 33232930569601
-        assert(v == 1104427674243920646305299201)
-        assert(v * 1 == v)
-        assert(v * 0 == 0)
-        assert(1 * v == v)
-        assert(0 * v == 0)
-    }
-
-    {
-        let n = 102934891052780914810295901234976854378
-        let qr = [
-            null,
-            null,
-            [51467445526390457405147950617488427189, 0],
-            [34311630350926971603431967078325618126, 0],
-            [25733722763195228702573975308744213594, 2],
-            [20586978210556182962059180246995370875, 3],
-            [17155815175463485801715983539162809063, 0],
-            [14704984436111559258613700176425264911, 1],
-            [12866861381597614351286987654372106797, 2],
-            [11437210116975657201143989026108539375, 3],
-            [10293489105278091481029590123497685437, 8],
-            [9357717368434628619117809203179714034, 4],
-            [8577907587731742900857991769581404531, 6],
-            [7918068542521608831561223171921296490, 8],
-            [7352492218055779629306850088212632455, 8],
-            [6862326070185394320686393415665123625, 3],
-            [6433430690798807175643493827186053398, 10],
-            [6054993591340053812370347131469226728, 2],
-            [5718605058487828600571994513054269687, 12],
-            [5417625844883206042647152696577729177, 15],
-            [5146744552639045740514795061748842718, 18],
-            [4901661478703853086204566725475088303, 15],
-            [4678858684217314309558904601589857017, 4],
-            [4475430045773083252621560923259863233, 19],
-            [4288953793865871450428995884790702265, 18],
-        ]
-        for d = 2,#qr {
-            let q = qr[d][0]
-            let r = qr[d][1]
-            assert(n // d == q)
-            assert(d // n == 0)
-            assert(0 // n == 0)
-            assert(n // n == 1)
-            assert(n % d == r)
-            assert(d % n == d)
-            assert(n % n == 0)
-            assert(0 % n == 0)
-        }
-    }
-
-}
-
--- More tests for big integers and boundary values
+// Boundary values
 {
     fn apply(f, target) {
         for t in target {
@@ -218,7 +60,7 @@
     }
 
     let ismall = [
-        -70368744177663 - 1, -- PAW_INT_MIN
+        -70368744177663 - 1, // PAW_INT_MIN
         -73748835532,
         -8835532,
         -532,
@@ -228,19 +70,19 @@
         407,
         4073748,
         40737488355,
-        70368744177663, -- PAW_INT_MAX
+        70368744177663, // PAW_INT_MAX
     ]
 
     let ilarge = [
         -90121909996521879321156109823471015,
         -488124578190375084952901,
-        -70368744177665, -- PAW_INT_MIN - 1
-        70368744177664, -- PAW_INT_MAX + 1
+        -70368744177665, // PAW_INT_MIN - 1
+        70368744177664, // PAW_INT_MAX + 1
         201767997902333542592493,
         82040031098795190476449481359582068,
     ]
 
-    -- Precedence helper
+    // Precedence helper
     fn check(x, y) {
         assert(x == y)
     }
@@ -252,10 +94,10 @@
         check(~x, ~~~x)
         check(-x, - - -x)
 
-        -- Relationship between '-' and '~':
+        // Relationship between '-' and '~':
         check(~x, -x - 1)
 
-        -- Identity property:
+        // Identity property:
         check(x * 1, x)
         check(x + 0, x)
 
@@ -263,12 +105,12 @@
         check(x << 2, x * 4)
         check(x << 3 >> 1, x << 2)
 
-        -- 'y' must be a bigint
+        // 'y' must be a bigint
         let y = x << 50;
         check(y >> 50, x)
 
         if x < 0 {
-            -- Right shift does sign extension
+            // Right shift does sign extension
             check(x >> 10000, -1)
         } else {
             check(x >> 10000, 0)
@@ -279,19 +121,19 @@
         let x = a[0]
         let y = a[1]
 
-        -- Commutative property:
+        // Commutative property:
         check(x + y, y + x)
         check(x * y, y * x)
 
-        -- Associative property:
+        // Associative property:
         check(x + (y + x), (x + y) + x)
         check(x * (y * x), (x * y) * x)
 
-        -- Distributive property:
+        // Distributive property:
         check(x * (x + y), x * x + x * y)
         check(x * (x - y), x * x - x * y)
 
-        -- Variations/other checks:
+        // Variations/other checks:
         check(x - y, -y + x)
         check(x + y + y, x + 2 * y)
         check(x + x + y + y + y, 2 * x + 3 * y)
@@ -316,7 +158,7 @@
         let x = a[0]
         let y = a[1]
 
-        -- De Morgan's laws
+        // De Morgan's laws
         check(~(x & y), (~x | ~y))
         check(~(x | y), (~x & ~y))
     }

@@ -124,6 +124,8 @@ const char *paw_op_name(Op op)
             return "GETUPVALUE";
         case OP_SETUPVALUE:
             return "SETUPVALUE";
+        case OP_NEWTUPLE:
+            return "NEWTUPLE";
         case OP_NEWVARIANT:
             return "NEWVARIANT";
         case OP_NEWINSTANCE:
@@ -146,8 +148,12 @@ const char *paw_op_name(Op op)
             return "UNOP";
         case OP_BINOP:
             return "BINOP";
+        case OP_GETTUPLE:
+            return "GETTUPLE";
         case OP_GETATTR:
             return "GETATTR";
+        case OP_SETTUPLE:
+            return "SETTUPLE";
         case OP_SETATTR:
             return "SETATTR";
         case OP_GETITEM:
@@ -249,6 +255,9 @@ void paw_dump_opcode(OpCode opcode)
         case OP_SETUPVALUE:
             printf("SETUPVALUE: %d\n", get_U(opcode));
             break;
+        case OP_NEWTUPLE:
+            printf("NEWTUPLE\n");
+            break;
         case OP_NEWINSTANCE:
             printf("NEWINSTANCE\n");
             break;
@@ -280,8 +289,14 @@ void paw_dump_opcode(OpCode opcode)
             printf("BINOP %s %d\n", paw_binop_name(get_A(opcode)),
                    get_B(opcode));
             break;
+        case OP_GETTUPLE:
+            printf("GETTUPLE %d\n", get_U(opcode));
+            break;
         case OP_GETATTR:
             printf("GETATTR %d\n", get_U(opcode));
+            break;
+        case OP_SETTUPLE:
+            printf("SETTUPLE %d\n", get_U(opcode));
             break;
         case OP_SETATTR:
             printf("SETATTR %d\n", get_U(opcode));
@@ -356,13 +371,15 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
                 break;
             }
 
-            case OP_NEWVECTOR: {
-                pawL_add_fstring(P, print, " ; %d elements", get_U(opcode));
+            case OP_NEWVARIANT: {
+                pawL_add_fstring(P, print, " ; #%d", get_U(opcode));
                 break;
             }
 
-            case OP_NEWMAP: {
-                pawL_add_fstring(P, print, " ; %d items", get_U(opcode));
+            case OP_NEWVECTOR:
+            case OP_NEWMAP:
+            case OP_NEWTUPLE: {
+                pawL_add_fstring(P, print, " ; %d values", get_U(opcode));
                 break;
             }
 

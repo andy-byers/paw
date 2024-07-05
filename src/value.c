@@ -196,9 +196,10 @@ void pawV_unlink_upvalue(UpValue *u)
 
 Tuple *pawV_new_tuple(paw_Env *P, int nelems)
 {
-    Tuple *t = pawM_new_flex(P, Tuple, cast_size(nelems), sizeof(t->elems[0]));
-    pawG_add_object(P, cast_object(t), 0 /* TODO: VTUPLE*/);
-    return t;
+    Tuple *tuple = pawM_new_flex(P, Tuple, cast_size(nelems), 
+                                 sizeof(tuple->elems[0]));
+    pawG_add_object(P, cast_object(tuple), VTUPLE);
+    return tuple;
 }
 
 void pawV_free_tuple(paw_Env *P, Tuple *t, int nelems)

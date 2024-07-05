@@ -318,19 +318,70 @@ static AstList *type_args(Lex *lex)
     return new_list(lex);
 }
 
+static void set_unit(Lex *lex, AstExpr *pe)
+{
+    pe->type_name.kind = EXPR_TYPENAME;
+    pe->type_name.name = pawE_cstr(env(lex), CSTR_UNIT);
+    pe->type_name.args = new_list(lex);
+}
+
+static AstExpr *unit_type(Lex *lex)
+{
+    AstExpr *r = new_expr(lex, EXPR_TYPENAME);
+    set_unit(lex, r);
+    return r;
+}
+
+static void parse_type_expr(Lex *lex, AstExpr *pe);
+
+static void parse_typelist(Lex *lex, AstExpr *pe, int line)
+{
+    AstExpr *first = new_expr(lex, 0);
+    *first = *pe;
+
+    pe->typelist.kind = EXPR_TYPELIST;
+    AstList *elems = new_list(lex);
+    list_push(lex, elems, first);
+    pe->typelist.types = elems;
+
+    do {
+        if (test(lex, ')')) {
+            break; 
+        } else if (elems->count == FIELD_MAX) {
+            limit_error(lex, "tuple elements", FIELD_MAX);
+        }
+        AstExpr *type = type_expr(lex);
+        list_push(lex, elems, type);
+    } while (test_next(lex, ','));
+    delim_next(lex, ')', '(', line);
+}
+
+static void parse_paren_type(Lex *lex, AstExpr *pe)
+{
+    const int line = lex->last_line;
+    if (test_next(lex, ')')) {
+        set_unit(lex, pe);
+        return;
+    }
+    parse_type_expr(lex, pe);
+    if (test_next(lex, ',')) {
+        parse_typelist(lex, pe, line);     
+    }
+}
+
 static void parse_signature(Lex *lex, AstExpr *pe)
 {
     const int line = lex->line;
-    pe->func.kind = EXPR_FUNC_TYPE;
+    pe->func.kind = EXPR_FUNCTYPE;
     check_next(lex, '(');
     pe->func.params = new_list(lex);
     if (!test_next(lex, ')')) {
         parse_arg_list(lex, &pe->func.params, line);
     }
     if (test_next(lex, TK_ARROW)) {
-        pe->func.return_ = type_expr(lex);
+        pe->func.result = type_expr(lex);
     } else {
-        pe->func.return_ = emit_unit(lex);
+        pe->func.result = emit_unit(lex);
     }
 }
 
@@ -338,27 +389,26 @@ static void parse_named_type(Lex *lex, AstExpr *pe)
 {
     String *name = parse_name(lex);
     pe->type_name.name = name;
-    pe->type_name.kind = EXPR_TYPE_NAME;
+    pe->type_name.kind = EXPR_TYPENAME;
     // list of concrete types between '[' and ']'
     pe->type_name.args = type_args(lex);
 }
 
-static AstExpr *type_expr(Lex *lex)
+static void parse_type_expr(Lex *lex, AstExpr *pe)
 {
-    AstExpr *r = new_expr(lex, 0 /* set in parse_*() */);
-    if (test_next(lex, TK_FN)) {
-        parse_signature(lex, r);
+    if (test_next(lex, '(')) {
+        parse_paren_type(lex, pe);
+    } else if (test_next(lex, TK_FN)) {
+        parse_signature(lex, pe);
     } else {
-        parse_named_type(lex, r);
+        parse_named_type(lex, pe);
     }
-    return r;
 }
 
-static AstExpr *unit_type(Lex *lex)
+static AstExpr *type_expr(Lex *lex)
 {
-    AstExpr *r = new_expr(lex, EXPR_TYPE_NAME);
-    r->type_name.name = pawE_cstr(env(lex), CSTR_UNIT);
-    r->type_name.args = new_list(lex);
+    AstExpr *r = new_expr(lex, 0);
+    parse_type_expr(lex, r);
     return r;
 }
 
@@ -610,6 +660,7 @@ static AstExpr *paren_expr(Lex *lex)
     AstList *elems = new_list(lex);
     list_push(lex, elems, expr);
     parse_arg_list(lex, &elems, line);
+    r->literal.lit_kind = LIT_TUPLE;
     r->literal.tuple.elems = elems;
     return r;
 }
@@ -666,7 +717,13 @@ static AstExpr *selector_expr(Lex *lex, AstExpr *target)
     AstExpr *r = new_expr(lex, EXPR_SELECTOR);
     skip(lex); // '.' token
     r->selector.target = target;
-    r->selector.name = parse_name(lex);
+    if (test(lex, TK_NAME)) {
+        r->selector.name = parse_name(lex);
+    } else if (test(lex, TK_INTEGER)) {
+        r->selector.index = v_int(lex->t.value);
+        r->selector.is_index = PAW_TRUE;
+        skip(lex); // integer token
+    }
     return r;
 }
 
@@ -679,15 +736,44 @@ static AstExpr *access_expr(Lex *lex, AstExpr *target)
     return r;
 }
 
+static paw_Bool equals_cstr(Lex *lex, const AstIdent *ident, unsigned cstr)
+{
+    return pawS_eq(ident->name, pawE_cstr(env(lex), cstr));
+}
+
+static paw_Bool try_conversion(Lex *lex, AstExpr *target, AstExpr *r)
+{
+    if (a_kind(target) != EXPR_NAME) {
+        return PAW_FALSE;
+    }
+    AstIdent *ident = &target->name;
+    if (equals_cstr(lex, ident, CSTR_BOOL)) {
+        r->conv.to = PAW_TBOOL; 
+    } else if (equals_cstr(lex, ident, CSTR_INT)) {
+        r->conv.to = PAW_TINT; 
+    } else if (equals_cstr(lex, ident, CSTR_FLOAT)) {
+        r->conv.to = PAW_TFLOAT; 
+    } else {
+        return PAW_FALSE;
+    }
+    const int line = lex->last_line;
+    r->conv.kind = EXPR_CONVERSION;
+    r->conv.arg = expression0(lex);
+    delim_next(lex, ')', '(', line);
+    return PAW_TRUE;
+}
+
 static AstExpr *call_expr(Lex *lex, AstExpr *target)
 {
-    AstExpr *result = new_expr(lex, EXPR_CALL);
+    AstExpr *r = new_expr(lex, EXPR_CALL);
     skip(lex); // '(' token
-    CallExpr *r = &result->call;
-    r->args = new_list(lex);
-    parse_arg_list(lex, &r->args, r->line);
-    r->target = target;
-    return result;
+    if (try_conversion(lex, target, r)) {
+        return r; 
+    }
+    r->call.target = target;
+    r->call.args = new_list(lex);
+    parse_arg_list(lex, &r->call.args, r->call.line);
+    return r;
 }
 
 static AstExpr *chain_expr(Lex *lex, AstExpr *target)
@@ -721,7 +807,7 @@ static Block *block(Lex *lex)
 
 static AstExpr *match_arm(Lex *lex)
 {
-    AstExpr *r = new_expr(lex, EXPR_MATCH_ARM);
+    AstExpr *r = new_expr(lex, EXPR_MATCHARM);
     r->arm.guard = pattern(lex);
     if (test_next(lex, TK_IF)) {
         r->arm.cond = expression0(lex);
@@ -1051,7 +1137,7 @@ static AstDecl *function(Lex *lex, String *name, FuncKind kind)
     r->func.fn_kind = kind;
     r->func.generics = type_param(lex);
     r->func.params = parameters(lex);
-    r->func.return_ = ret_annotation(lex);
+    r->func.result = ret_annotation(lex);
     r->func.body = block(lex);
     r->func.monos = new_list(lex);
     return r;
@@ -1067,11 +1153,12 @@ static AstDecl *func_decl(Lex *lex, int line, paw_Bool global)
     return r;
 }
 
-static AstDecl *variant_decl(Lex *lex)
+static AstDecl *variant_decl(Lex *lex, int index)
 {
     AstDecl *r = new_decl(lex, DECL_VARIANT);
     r->variant.name = parse_name(lex);
     r->variant.fields = new_list(lex);
+    r->variant.index = index;
 
     const int line = lex->line;
     if (test_next(lex, '(')) {
@@ -1080,16 +1167,19 @@ static AstDecl *variant_decl(Lex *lex)
     return r;
 }
 
-static AstDecl *field_decl(Lex *lex)
+static void parse_variant_list(Lex *lex, AstList **plist, int line)
 {
-    AstDecl *r = new_decl(lex, DECL_FIELD);
-    r->field.name = parse_name(lex);
-    r->field.tag = expect_annotation(lex, "field", r->field.name);
-    semicolon(lex);
-    return r;
+    do {
+        if (test(lex, '}')) {
+            break;
+        } else if ((*plist)->count == LOCAL_MAX) {
+            limit_error(lex, "variants", LOCAL_MAX);
+        }
+        AstDecl *next = variant_decl(lex, (*plist)->count);
+        list_push(lex, *plist, next);
+    } while (test_next(lex, ','));
+    delim_next(lex, '}', '{', line);
 }
-
-make_list_parser(variant, '{', '}', LOCAL_MAX, "variants", variant_decl, AstDecl)
 
 static void enum_body(Lex *lex, StructDecl *struct_)
 {
@@ -1112,6 +1202,15 @@ static AstDecl *enum_decl(Lex *lex, paw_Bool global)
     r->struct_.generics = type_param(lex);
     enum_body(lex, &r->struct_);
     r->struct_.monos = new_list(lex);
+    return r;
+}
+
+static AstDecl *field_decl(Lex *lex)
+{
+    AstDecl *r = new_decl(lex, DECL_FIELD);
+    r->field.name = parse_name(lex);
+    r->field.tag = expect_annotation(lex, "field", r->field.name);
+    semicolon(lex);
     return r;
 }
 
@@ -1245,12 +1344,12 @@ static const char kPrelude[] =
     "struct Map[K, V] {}         \n"
     // Builtin enumerations:
     "enum Option[T] {            \n"
-    "    None,                   \n"
     "    Some(T),                \n"
+    "    None,                   \n"
     "}                           \n"
     "enum Result[T, E] {         \n"
-    "    Err(E),                 \n"
     "    Ok(T),                  \n"
+    "    Err(E),                 \n"
     "}                           \n"
     // Builtin functions:
     "fn print(message: string) {}\n"

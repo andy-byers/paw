@@ -22,8 +22,10 @@ void pawR_attr_error(paw_Env *P, Value attr);
 void pawR_name_error(paw_Env *P, Value name);
 
 void pawR_getattr(paw_Env *P, int index);
+void pawR_gettuple(paw_Env *P, int index);
 int pawR_getitem(paw_Env *P, paw_Type ttarget);
 void pawR_setattr(paw_Env *P, int index);
+void pawR_settuple(paw_Env *P, int index);
 void pawR_setitem(paw_Env *P, paw_Type ttarget);
 
 int pawR_getattr_raw(paw_Env *P, paw_Bool fallback);

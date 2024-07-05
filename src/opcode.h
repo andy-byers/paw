@@ -133,6 +133,7 @@ OP_UNPACKINSTANCE,// U           v            vu..v1        -
 OP_UNPACKVARIANT,//  U           v            vu..v1        -
 
 OP_NEWVARIANT,//     A B         vb..v1       a(vb..v1)     -
+OP_NEWTUPLE,//       U           vu..v1       (vu..v1)      -
 OP_NEWINSTANCE,//    U           -            v             v = new instance of class C[u]
 OP_INITFIELD,//      U           i v          i             i.fields[u] = v
 OP_NEWVECTOR,//      U           vu..v1       [vu..v1]      -
@@ -156,8 +157,10 @@ OP_VARARG,//         A B         vu..v1       [vu..v1]      -
 OP_INIT,
 OP_CALL,//           U           f vu..v1     v             v = f(vu..v1)
 
-OP_GETATTR,//        U           v            v.fields[u]   -
-OP_SETATTR,//        U           v x          -             v.fields[u]=x
+OP_GETTUPLE,//       U           v            v.u           -
+OP_GETATTR,//        U           v            v.u           -
+OP_SETTUPLE,//       U           v x          -             v.u=x
+OP_SETATTR,//        U           v x          -             v.u=x
 OP_GETITEM,//        -           v i          v[i]          -
 OP_SETITEM,//        -           v i x        -             v[i]=x
 

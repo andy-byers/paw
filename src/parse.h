@@ -135,7 +135,6 @@ typedef struct FuncState {
     BlockState *bs; // current block
     Proto *proto; // prototype being built
     String *name; // name of the function
-    int id; // index in caller's prototype list
     int level; // current stack index (base = 0)
     int nup; // number of upvalues
     int nk; // number of constants
@@ -163,11 +162,6 @@ typedef struct ParseMemory {
         int size;
         int alloc;
     } scratch;
-
-    struct {
-        Binder data[MAX_BINDERS];
-        int size;
-    } temp;
 
     struct {
         FuncSig *data;

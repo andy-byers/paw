@@ -1,4 +1,4 @@
--- string.paw
+// string.paw
 
 {
     assert(!'')
@@ -52,23 +52,23 @@
 //    assert(s[3:] == '')
 //    assert(s[0:0] == '') 
 //
-//    -- clamped
+//    // clamped
 //    assert(s[4:] == '')
 //    assert(s[:-4] == '')
 //}
-
--- String find:
-{
-    fn check(s: string, sub: string, n: int) {
-        assert(n == s.find(sub))
-    }
-    check('abc', 'a', 0)
-    check('abc', 'b', 1)
-    check('abc', 'c', 2)
-    check('abc', 'd', -1)
-}
-
-//-- String split/join:
+//
+//// String find:
+//{
+//    fn check(s: string, sub: string, n: int) {
+//        assert(n == s.find(sub))
+//    }
+//    check('abc', 'a', 0)
+//    check('abc', 'b', 1)
+//    check('abc', 'c', 2)
+//    check('abc', 'd', -1)
+//}
+//
+//// String split/join:
 //{
 //    fn check(s, sep, parts) {
 //        let a = s.split(sep)

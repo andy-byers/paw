@@ -14,7 +14,9 @@
 static void add_builtin_type(Ast *ast, AstTypeKind kind, paw_Type code)
 {
     ast->builtin[code] = pawA_new_type(ast, kind);
-    ast->builtin[code]->hdr.def = code;
+    ast->builtin[code]->adt.types = pawA_list_new(ast);
+    ast->builtin[code]->adt.base = code;
+    ast->builtin[code]->adt.did = code;
 }
 
 Ast *pawA_new_ast(Lex *lex)
@@ -22,16 +24,17 @@ Ast *pawA_new_ast(Lex *lex)
     paw_Env *P = env(lex);
     Ast *tree = pawM_new(P, Ast);
     tree->lex = lex;
+
     // initialize memory pools for storing AST components
     pawK_pool_init(P, &tree->nodes, FIRST_ARENA_SIZE, sizeof(AstDecl));
     pawK_pool_init(P, &tree->symbols, FIRST_ARENA_SIZE, sizeof(Symbol));
     pawK_pool_init(P, &tree->sequences, FIRST_ARENA_SIZE, sizeof(void *) * 8);
 
-    add_builtin_type(tree, AST_TYPE_BASIC, PAW_TUNIT);
-    add_builtin_type(tree, AST_TYPE_BASIC, PAW_TBOOL);
-    add_builtin_type(tree, AST_TYPE_BASIC, PAW_TINT);
-    add_builtin_type(tree, AST_TYPE_BASIC, PAW_TFLOAT);
-    add_builtin_type(tree, AST_TYPE_BASIC, PAW_TSTRING);
+    add_builtin_type(tree, AST_TYPE_ADT, PAW_TUNIT);
+    add_builtin_type(tree, AST_TYPE_ADT, PAW_TBOOL);
+    add_builtin_type(tree, AST_TYPE_ADT, PAW_TINT);
+    add_builtin_type(tree, AST_TYPE_ADT, PAW_TFLOAT);
+    add_builtin_type(tree, AST_TYPE_ADT, PAW_TSTRING);
     return tree;
 }
 
@@ -237,14 +240,17 @@ static void visit_expr_stmt(AstVisitor *V, AstExprStmt *s)
 static void visit_signature_expr(AstVisitor *V, FuncType *e)
 {
     visit_exprs(V, e->params);
-    V->visit_expr(V, e->return_);
+    V->visit_expr(V, e->result);
 }
 
-static void visit_type_name_expr(AstVisitor *V, TypeName *e)
+static void visit_typename_expr(AstVisitor *V, TypeName *e)
 {
-    if (e->args != NULL) {
-        visit_exprs(V, e->args);
-    }
+    visit_exprs(V, e->args);
+}
+
+static void visit_typelist_expr(AstVisitor *V, TypeList *e)
+{
+    visit_exprs(V, e->types);
 }
 
 static void visit_match_expr(AstVisitor *V, MatchExpr *e)
@@ -303,6 +309,11 @@ static void visit_call_expr(AstVisitor *V, CallExpr *e)
     visit_exprs(V, e->args);
 }
 
+static void visit_conversion_expr(AstVisitor *V, ConversionExpr *e)
+{
+    V->visit_expr(V, e->arg);
+}
+
 static void visit_ident_expr(AstVisitor *V, AstIdent *e)
 {
     paw_unused(V);
@@ -315,7 +326,7 @@ static void visit_func_decl(AstVisitor *V, FuncDecl *d)
         visit_decls(V, d->generics);
     }
     visit_decls(V, d->params);
-    V->visit_expr(V, d->return_);
+    V->visit_expr(V, d->result);
     V->visit_block_stmt(V, d->body);
 }
 
@@ -428,6 +439,9 @@ static void visit_expr(AstVisitor *V, AstExpr *expr)
         case EXPR_BINOP:
             V->visit_binop_expr(V, &expr->binop);
             break;
+        case EXPR_CONVERSION:
+            V->visit_conversion_expr(V, &expr->conv);
+            break;
         case EXPR_CALL:
             V->visit_call_expr(V, &expr->call);
             break;
@@ -440,11 +454,14 @@ static void visit_expr(AstVisitor *V, AstExpr *expr)
         case EXPR_ITEM:
             V->visit_item_expr(V, &expr->item);
             break;
-        case EXPR_FUNC_TYPE:
+        case EXPR_FUNCTYPE:
             V->visit_signature_expr(V, &expr->func);
             break;
-        case EXPR_TYPE_NAME:
-            V->visit_type_name_expr(V, &expr->type_name);
+        case EXPR_TYPENAME:
+            V->visit_typename_expr(V, &expr->type_name);
+            break;
+        case EXPR_TYPELIST:
+            V->visit_typelist_expr(V, &expr->typelist);
             break;
         case EXPR_ACCESS:
             V->visit_access_expr(V, &expr->access);
@@ -452,7 +469,7 @@ static void visit_expr(AstVisitor *V, AstExpr *expr)
         case EXPR_MATCH:
             V->visit_match_expr(V, &expr->match);
             break;
-        case EXPR_MATCH_ARM:
+        case EXPR_MATCHARM:
             V->visit_arm_expr(V, &expr->arm);
             break;
         default:
@@ -580,11 +597,13 @@ void pawA_visitor_init(AstVisitor *V, Ast *ast, AstState state)
         .visit_unop_expr = visit_unop_expr,
         .visit_binop_expr = visit_binop_expr,
         .visit_call_expr = visit_call_expr,
+        .visit_conversion_expr = visit_conversion_expr,
         .visit_index_expr = visit_index_expr,
         .visit_access_expr = visit_access_expr,
         .visit_selector_expr = visit_selector_expr,
         .visit_item_expr = visit_item_expr,
-        .visit_type_name_expr = visit_type_name_expr,
+        .visit_typename_expr = visit_typename_expr,
+        .visit_typelist_expr = visit_typelist_expr,
         .visit_signature_expr = visit_signature_expr,
         .visit_match_expr = visit_match_expr,
         .visit_arm_expr = visit_arm_expr,
@@ -707,15 +726,19 @@ static AstStmt *fold_expr_stmt(AstFolder *F, AstExprStmt *s)
 static AstExpr *fold_signature_expr(AstFolder *F, FuncType *e)
 {
     fold_exprs(F, e->params);
-    e->return_ = F->fold_expr(F, e->return_);
+    e->result = F->fold_expr(F, e->result);
     return cast_expr(e);
 }
 
-static AstExpr *fold_type_name_expr(AstFolder *F, TypeName *e)
+static AstExpr *fold_typename_expr(AstFolder *F, TypeName *e)
 {
-    if (e->args != NULL) {
-        fold_exprs(F, e->args);
-    }
+    fold_exprs(F, e->args);
+    return cast_expr(e);
+}
+
+static AstExpr *fold_typelist_expr(AstFolder *F, TypeList *e)
+{
+    fold_exprs(F, e->types);
     return cast_expr(e);
 }
 
@@ -779,6 +802,12 @@ static AstExpr *fold_call_expr(AstFolder *F, CallExpr *e)
     return cast_expr(e);
 }
 
+static AstExpr *fold_conversion_expr(AstFolder *F, ConversionExpr *e)
+{
+    e->arg = F->fold_expr(F, e->arg);
+    return cast_expr(e);
+}
+
 static AstExpr *fold_ident_expr(AstFolder *F, AstIdent *e)
 {
     paw_unused(F);
@@ -789,7 +818,7 @@ static AstDecl *fold_func_decl(AstFolder *F, FuncDecl *d)
 {
     fold_decls(F, d->generics);
     fold_decls(F, d->params);
-    d->return_ = F->fold_expr(F, d->return_);
+    d->result = F->fold_expr(F, d->result);
     d->body = fold_block(F, d->body);
     return cast_decl(d);
 }
@@ -899,6 +928,8 @@ static AstExpr *fold_expr(AstFolder *F, AstExpr *expr)
             return F->fold_unop_expr(F, &expr->unop);
         case EXPR_BINOP:
             return F->fold_binop_expr(F, &expr->binop);
+        case EXPR_CONVERSION:
+            return F->fold_conversion_expr(F, &expr->conv);
         case EXPR_CALL:
             return F->fold_call_expr(F, &expr->call);
         case EXPR_NAME:
@@ -907,13 +938,15 @@ static AstExpr *fold_expr(AstFolder *F, AstExpr *expr)
             return F->fold_index_expr(F, &expr->index);
         case EXPR_ITEM:
             return F->fold_item_expr(F, &expr->item);
-        case EXPR_FUNC_TYPE:
+        case EXPR_FUNCTYPE:
             return F->fold_signature_expr(F, &expr->func);
-        case EXPR_TYPE_NAME:
-            return F->fold_type_name_expr(F, &expr->type_name);
+        case EXPR_TYPENAME:
+            return F->fold_typename_expr(F, &expr->type_name);
+        case EXPR_TYPELIST:
+            return F->fold_typelist_expr(F, &expr->typelist);
         case EXPR_MATCH:
             return F->fold_match_expr(F, &expr->match);
-        case EXPR_MATCH_ARM:
+        case EXPR_MATCHARM:
             return F->fold_arm_expr(F, &expr->arm);
         case EXPR_ACCESS:
             return F->fold_access_expr(F, &expr->access);
@@ -1023,6 +1056,7 @@ void pawA_fold_init(AstFolder *F, Ast *ast, AstState state)
         .fold_chain_expr = fold_chain_expr,
         .fold_unop_expr = fold_unop_expr,
         .fold_binop_expr = fold_binop_expr,
+        .fold_conversion_expr = fold_conversion_expr,
         .fold_call_expr = fold_call_expr,
         .fold_index_expr = fold_index_expr,
         .fold_selector_expr = fold_selector_expr,
@@ -1030,7 +1064,8 @@ void pawA_fold_init(AstFolder *F, Ast *ast, AstState state)
         .fold_match_expr = fold_match_expr,
         .fold_arm_expr = fold_arm_expr,
         .fold_item_expr = fold_item_expr,
-        .fold_type_name_expr = fold_type_name_expr,
+        .fold_typename_expr = fold_typename_expr,
+        .fold_typelist_expr = fold_typelist_expr,
         .fold_signature_expr = fold_signature_expr,
         .fold_block_stmt = fold_block_stmt,
         .fold_expr_stmt = fold_expr_stmt,
@@ -1069,17 +1104,18 @@ static void fold_binder(AstTypeFolder *F, AstList *binder)
     }
 }
 
-static AstType *fold_basic(AstTypeFolder *F, AstTypeHeader *t)
-{
-    paw_unused(F);
-    return a_cast_type(t);
-}
-
-static AstType *fold_func(AstTypeFolder *F, AstFuncSig *t)
+static AstType *fold_func(AstTypeFolder *F, AstFuncDef *t)
 {
     F->fold_binder(F, t->types);
     F->fold_binder(F, t->params);
-    t->return_ = F->fold(F, t->return_);
+    t->result = F->fold(F, t->result);
+    return a_cast_type(t);
+}
+
+static AstType *fold_fptr(AstTypeFolder *F, AstFuncPtr *t)
+{
+    F->fold_binder(F, t->params);
+    t->result = F->fold(F, t->result);
     return a_cast_type(t);
 }
 
@@ -1107,7 +1143,7 @@ void pawA_type_folder_init(AstTypeFolder *F, void *state)
         .state = state,
         .fold = pawA_fold_type,
         .fold_binder = fold_binder,
-        .fold_basic = fold_basic,
+        .fold_fptr = fold_fptr,
         .fold_func = fold_func,
         .fold_adt = fold_adt,
         .fold_unknown = fold_unknown,
@@ -1118,16 +1154,16 @@ void pawA_type_folder_init(AstTypeFolder *F, void *state)
 AstType *pawA_fold_type(AstTypeFolder *F, AstType *type)
 {
     switch (y_kind(type)) {
-        case AST_TYPE_BASIC:
-            return F->fold_basic(F, &type->hdr);
         case AST_TYPE_GENERIC:
             return F->fold_generic(F, &type->generic);
         case AST_TYPE_UNKNOWN:
             return F->fold_unknown(F, &type->unknown);
         case AST_TYPE_ADT:
             return F->fold_adt(F, &type->adt);
+        case AST_TYPE_FPTR:
+            return F->fold_fptr(F, &type->fptr);
         default:
-            paw_assert(a_is_func(type));
+            paw_assert(a_is_fdef(type));
             return F->fold_func(F, &type->func);
     }
 }
@@ -1259,15 +1295,22 @@ static AstExpr *copy_signature_expr(AstFolder *F, FuncType *e)
 {
     AstExpr *r = copy_prep_expr(F, e);
     r->func.params = copy_exprs(F, e->params);
-    r->func.return_ = F->fold_expr(F, e->return_);
+    r->func.result = F->fold_expr(F, e->result);
     return r;
 }
 
-static AstExpr *copy_type_name_expr(AstFolder *F, TypeName *e)
+static AstExpr *copy_typename_expr(AstFolder *F, TypeName *e)
 {
     AstExpr *r = copy_prep_expr(F, e);
     r->type_name.name = e->name;
     r->type_name.args = copy_exprs(F, e->args);
+    return r;
+}
+
+static AstExpr *copy_typelist_expr(AstFolder *F, TypeList *e)
+{
+    AstExpr *r = copy_prep_expr(F, e);
+    r->typelist.types = copy_exprs(F, e->types);
     return r;
 }
 
@@ -1310,6 +1353,7 @@ static AstDecl *copy_variant_decl(AstFolder *F, VariantDecl *d)
     AstDecl *r = copy_prep_decl(F, d);
     r->variant.name = d->name;
     r->variant.fields = copy_decls(F, d->fields);
+    r->variant.index = d->index;
     return r;
 }
 
@@ -1328,6 +1372,13 @@ static AstStmt *copy_return_stmt(AstFolder *F, ReturnStmt *s)
 {
     AstStmt *r = copy_prep_stmt(F, s);
     r->return_.expr = F->fold_expr(F, s->expr);
+    return r;
+}
+
+static AstExpr *copy_conversion_expr(AstFolder *F, ConversionExpr *e)
+{
+    AstExpr *r = copy_prep_expr(F, e);
+    r->conv.arg = F->fold_expr(F, e->arg);
     return r;
 }
 
@@ -1354,7 +1405,7 @@ static AstDecl *copy_func_decl(AstFolder *F, FuncDecl *d)
     r->func.name = d->name;
     r->func.generics = copy_decls(F, d->generics);
     r->func.params = copy_decls(F, d->params);
-    r->func.return_ = F->fold_expr(F, d->return_);
+    r->func.result = F->fold_expr(F, d->result);
     r->func.body = copy_block(F, d->body);
     r->func.fn_kind = d->fn_kind;
     return r;
@@ -1469,12 +1520,14 @@ static void setup_copy_pass(AstFolder *F, Copier *C)
     F->fold_chain_expr = copy_chain_expr;
     F->fold_unop_expr = copy_unop_expr;
     F->fold_binop_expr = copy_binop_expr;
+    F->fold_conversion_expr = copy_conversion_expr;
     F->fold_call_expr = copy_call_expr;
     F->fold_index_expr = copy_index_expr;
     F->fold_access_expr = copy_access_expr;
     F->fold_selector_expr = copy_selector_expr;
     F->fold_item_expr = copy_item_expr;
-    F->fold_type_name_expr = copy_type_name_expr;
+    F->fold_typename_expr = copy_typename_expr;
+    F->fold_typelist_expr = copy_typelist_expr;
     F->fold_signature_expr = copy_signature_expr;
     F->fold_block_stmt = copy_block_stmt;
     F->fold_expr_stmt = copy_expr_stmt;
@@ -1612,27 +1665,34 @@ static void link_decls(AstFolder *F, AstDecl *old_decl, AstDecl *new_decl)
     }
 make_stencil_prep(expr, AstExpr,
                   {
-                      const DefId id = a_type(t)->hdr.def;
-                      if (id != NO_DECL) {
-                          AstDecl *old_decl = pawA_get_decl(F->ast, id);
-                          AstDecl *new_decl = find_decl(F->state.S, old_decl);
-                          r->hdr.type = a_type(new_decl);
+                      Stenciler *S = F->state.S;
+                      if (a_is_adt(t)) {
+                          const DefId did = a_type(t)->adt.did;
+                          AstDecl *decl = pawA_get_decl(F->ast, did);
+                          r->hdr.type = a_type(find_decl(S, decl));
+                      } else if (a_is_fdef(t)) {
+                          const DefId did = a_type(t)->func.did;
+                          AstDecl *decl = pawA_get_decl(F->ast, did);
+                          r->hdr.type = a_type(find_decl(S, decl));
                       } else {
                           r->hdr.type = subst_type(F, a_type(t));
                       }
                   })
-    make_stencil_prep(decl, AstDecl,
-                      {
-                          r->hdr.name = t->hdr.name;
-                          r->hdr.def = pawA_add_decl(F->ast, r);
-                          link_decls(F, t, r); // subst_type() is dependant
-                          AstType *type = subst_type(F, a_type(t));
-                          if (y_code(type) == NO_DECL) {
-                              type->hdr.def = r->hdr.def;
-                          }
-                          r->hdr.type = type;
-                          return r;
-                      }) make_stencil_prep(stmt, AstStmt, {})
+make_stencil_prep(decl, AstDecl,
+                  {
+                      r->hdr.name = t->hdr.name;
+                      r->hdr.def = pawA_add_decl(F->ast, r);
+                      link_decls(F, t, r); // subst_type() is dependant
+                      AstType *type = subst_type(F, a_type(t));
+                      if (a_is_func_decl(r)) {
+                          type->func.did = r->hdr.def;
+                      } else if (a_is_struct_decl(r)) {
+                          type->adt.did = r->hdr.def;
+                      }
+                      r->hdr.type = type;
+                      return r;
+                  }) 
+make_stencil_prep(stmt, AstStmt, {})
 //clang-format on
 
 // Helpers for stenciling: create a new node of the given type and kind,
@@ -1651,10 +1711,11 @@ make_stencil_prep(expr, AstExpr,
         }                                                                      \
         return new_list;                                                       \
     }
-        make_stencil_list(expr, AstExpr) make_stencil_list(decl, AstDecl)
-            make_stencil_list(stmt, AstStmt)
+make_stencil_list(expr, AstExpr) 
+make_stencil_list(decl, AstDecl)
+make_stencil_list(stmt, AstStmt)
 
-                static AstStmt *stencil_block_stmt(AstFolder *F, Block *s)
+static AstStmt *stencil_block_stmt(AstFolder *F, Block *s)
 {
     ScopeState state;
     enter_scope(F, &state, s->scope);
@@ -1753,15 +1814,22 @@ static AstExpr *stencil_signature_expr(AstFolder *F, FuncType *e)
 {
     AstExpr *r = stencil_prep_expr(F, e);
     r->func.params = stencil_exprs(F, e->params);
-    r->func.return_ = F->fold_expr(F, e->return_);
+    r->func.result = F->fold_expr(F, e->result);
     return r;
 }
 
-static AstExpr *stencil_type_name_expr(AstFolder *F, TypeName *e)
+static AstExpr *stencil_typename_expr(AstFolder *F, TypeName *e)
 {
     AstExpr *r = stencil_prep_expr(F, e);
     r->type_name.name = e->name;
     r->type_name.args = stencil_exprs(F, e->args);
+    return r;
+}
+
+static AstExpr *stencil_typelist_expr(AstFolder *F, TypeList *e)
+{
+    AstExpr *r = stencil_prep_expr(F, e);
+    r->typelist.types = stencil_exprs(F, e->types);
     return r;
 }
 
@@ -1798,6 +1866,7 @@ static AstDecl *stencil_variant_decl(AstFolder *F, VariantDecl *d)
     enter_scope(F, &state, d->scope);
     r->variant.fields = stencil_decls(F, d->fields);
     r->variant.scope = leave_scope(F);
+    r->variant.index = d->index;
     return r;
 }
 
@@ -1841,12 +1910,19 @@ static AstStmt *stencil_return_stmt(AstFolder *F, ReturnStmt *s)
     return r;
 }
 
+static AstExpr *stencil_conversion_expr(AstFolder *F, ConversionExpr *e)
+{
+    AstExpr *r = stencil_prep_expr(F, e);
+    r->conv.to = e->to;
+    r->conv.arg = F->fold_expr(F, e->arg);
+    return r;
+}
+
 static AstExpr *stencil_call_expr(AstFolder *F, CallExpr *e)
 {
     AstExpr *r = stencil_prep_expr(F, e);
-    const DefId id = y_code(e->func);
-    if (id != NO_DECL) {
-        AstDecl *old_func = pawA_get_decl(F->ast, y_code(e->func));
+    if (a_is_fdef(e->func)) {
+        AstDecl *old_func = pawA_get_decl(F->ast, e->func->func.did);
         AstDecl *new_func = find_decl(F->state.S, old_func);
         r->call.func = a_type(new_func);
     } else {
@@ -1894,7 +1970,7 @@ static AstDecl *stencil_func_decl(AstFolder *F, FuncDecl *d)
     r->func.name = d->name;
     r->func.generics = stencil_decls(F, d->generics);
     r->func.params = stencil_decls(F, d->params);
-    r->func.return_ = F->fold_expr(F, d->return_);
+    r->func.result = F->fold_expr(F, d->result);
     r->func.body = stencil_block(F, d->body);
     r->func.fn_kind = d->fn_kind;
 
@@ -2022,12 +2098,14 @@ static void setup_stencil_pass(AstFolder *F, Stenciler *S)
     F->fold_chain_expr = stencil_chain_expr;
     F->fold_unop_expr = stencil_unop_expr;
     F->fold_binop_expr = stencil_binop_expr;
+    F->fold_conversion_expr = stencil_conversion_expr;
     F->fold_call_expr = stencil_call_expr;
     F->fold_index_expr = stencil_index_expr;
     F->fold_access_expr = stencil_access_expr;
     F->fold_selector_expr = stencil_selector_expr;
     F->fold_item_expr = stencil_item_expr;
-    F->fold_type_name_expr = stencil_type_name_expr;
+    F->fold_typename_expr = stencil_typename_expr;
+    F->fold_typelist_expr = stencil_typelist_expr;
     F->fold_signature_expr = stencil_signature_expr;
     F->fold_block_stmt = stencil_block_stmt;
     F->fold_expr_stmt = stencil_expr_stmt;
@@ -2063,27 +2141,33 @@ static AstList *prep_binder(AstTypeFolder *F, AstList *binder)
     return copy;
 }
 
-static AstType *prep_func(AstTypeFolder *F, AstFuncSig *t)
+static AstType *prep_fptr(AstTypeFolder *F, AstFuncPtr *t)
+{
+    Subst *subst = F->state;
+    Stenciler *S = subst->S;
+
+    AstType *r = pawA_new_type(S->ast, AST_TYPE_FPTR);
+    r->fptr.params = prep_binder(F, t->params);
+    r->fptr.result = F->fold(F, t->result);
+    return r;
+}
+
+static AstType *prep_func(AstTypeFolder *F, AstFuncDef *t)
 {
     Subst *subst = F->state;
     Stenciler *S = subst->S;
 
     AstType *r = pawA_new_type(S->ast, AST_TYPE_FUNC);
-    if (t->def != NO_DECL) {
-        AstDecl *old_base = pawA_get_decl(S->ast, t->base);
-        AstDecl *new_base = find_decl(S, old_base);
-        AstDecl *old_decl = pawA_get_decl(S->ast, t->def);
-        AstDecl *new_decl = find_decl(S, old_decl);
-        r->func.def = new_decl->hdr.def;
-        r->func.base = new_base->hdr.def;
-    } else {
-        r->func.def = NO_DECL;
-        r->func.base = NO_DECL;
-    }
+    AstDecl *old_base = pawA_get_decl(S->ast, t->base);
+    AstDecl *new_base = find_decl(S, old_base);
+    AstDecl *old_decl = pawA_get_decl(S->ast, t->did);
+    AstDecl *new_decl = find_decl(S, old_decl);
+    r->func.did = new_decl->hdr.def;
+    r->func.base = new_base->hdr.def;
 
     r->func.types = prep_binder(F, t->types);
     r->func.params = prep_binder(F, t->params);
-    r->func.return_ = F->fold(F, t->return_);
+    r->func.result = F->fold(F, t->result);
     return r;
 }
 
@@ -2091,12 +2175,15 @@ static AstType *prep_adt(AstTypeFolder *F, AstAdt *t)
 {
     Subst *subst = F->state;
     Stenciler *S = subst->S;
+    if (t->did <= PAW_TSTRING) {
+        return a_cast_type(t);
+    }
 
     AstDecl *old_base = pawA_get_decl(S->ast, t->base);
     AstDecl *new_base = find_decl(S, old_base);
 
     AstType *r = pawA_new_type(S->ast, AST_TYPE_ADT);
-    r->adt.def = new_base->hdr.def;
+    r->adt.did = new_base->hdr.def;
     r->adt.base = new_base->hdr.def;
     r->adt.types = prep_binder(F, t->types);
     return r;
@@ -2165,6 +2252,7 @@ FuncDecl *pawA_stencil_func(Ast *ast, FuncDecl *base, AstDecl *inst)
 
     pawA_type_folder_init(&S.fold, &S);
     S.fold.fold_adt = prep_adt;
+    S.fold.fold_fptr = prep_fptr;
     S.fold.fold_func = prep_func;
     S.fold.fold_generic = prep_generic;
 
@@ -2180,7 +2268,7 @@ FuncDecl *pawA_stencil_func(Ast *ast, FuncDecl *base, AstDecl *inst)
     inst->func.generics = copy.inst.types;
     add_symbol(&F, inst); // callee slot
     inst->func.params = stencil_decls(&F, base->params);
-    inst->func.return_ = F.fold_expr(&F, base->return_);
+    inst->func.result = F.fold_expr(&F, base->result);
     inst->func.body = stencil_block(&F, base->body);
     inst->func.fn_kind = base->fn_kind;
 
@@ -2225,7 +2313,7 @@ static void dump_type_aux(Printer *P, AstType *type)
     };
     switch (y_kind(type)) {
         case AST_TYPE_UNKNOWN: {
-            printf("?%d", type->unknown.def);
+            printf("<unknown>");
             break;
         }
         case AST_TYPE_GENERIC: {
@@ -2244,7 +2332,7 @@ static void dump_type_aux(Printer *P, AstType *type)
             break;
         }
         case AST_TYPE_FUNC: {
-            AstFuncSig *func = &type->func;
+            AstFuncDef *func = &type->func;
             printf("%d", func->base);
             if (func->types->count > 0) {
                 printf("[");
@@ -2254,12 +2342,18 @@ static void dump_type_aux(Printer *P, AstType *type)
             printf("(");
             dump_binder(P, func->params);
             printf(") -> ");
-            dump_type_aux(P, func->return_);
+            dump_type_aux(P, func->result);
             break;
         }
-        default:
-            paw_assert(a_is_basic(type));
-            printf("%s", basic[type->hdr.def]);
+        default: {
+            paw_assert(a_is_fptr(type));
+            AstFuncPtr *fptr = &type->fptr;
+            printf("fn ");
+            printf("(");
+            dump_binder(P, fptr->params);
+            printf(") -> ");
+            dump_type_aux(P, fptr->result);
+        }
     }
 }
 
@@ -2339,16 +2433,16 @@ static void print_expr_kind(Printer *P, void *node)
         case EXPR_ACCESS:
             fprintf(P->out, "Access");
             break;
-        case EXPR_FUNC_TYPE:
+        case EXPR_FUNCTYPE:
             fprintf(P->out, "FuncType");
             break;
-        case EXPR_TYPE_NAME:
+        case EXPR_TYPENAME:
             fprintf(P->out, "TypeName");
             break;
         case EXPR_MATCH:
             fprintf(P->out, "MatchExpr");
             break;
-        case EXPR_MATCH_ARM:
+        case EXPR_MATCHARM:
             fprintf(P->out, "MatchArm");
             break;
         default:
@@ -2474,8 +2568,8 @@ static void dump_decl(Printer *P, AstDecl *d)
             dump_fmt(P, "name: %s\n", d->func.name->text);
             dump_decl_list(P, d->func.generics, "generics");
             dump_decl_list(P, d->func.params, "params");
-            dump_msg(P, "return_: ");
-            dump_expr(P, d->func.return_);
+            dump_msg(P, "result: ");
+            dump_expr(P, d->func.result);
             dump_msg(P, "body: ");
             dump_block(P, d->func.body);
             dump_decl_list(P, d->func.monos, "monos");
@@ -2704,12 +2798,12 @@ static void dump_expr(Printer *P, AstExpr *e)
             dump_expr(P, e->selector.target);
             dump_name(P, e->selector.name);
             break;
-        case EXPR_FUNC_TYPE:
+        case EXPR_FUNCTYPE:
             dump_expr_list(P, e->func.params, "params");
-            dump_msg(P, "return_: ");
-            dump_expr(P, e->func.return_);
+            dump_msg(P, "result: ");
+            dump_expr(P, e->func.result);
             break;
-        case EXPR_TYPE_NAME:
+        case EXPR_TYPENAME:
             dump_name(P, e->type_name.name);
             dump_expr_list(P, e->type_name.args, "args");
             break;
@@ -2718,7 +2812,7 @@ static void dump_expr(Printer *P, AstExpr *e)
             dump_expr(P, e->match.target);
             dump_expr_list(P, e->match.arms, "arms");
             break;
-        case EXPR_MATCH_ARM:
+        case EXPR_MATCHARM:
             dump_msg(P, "guard: ");
             dump_pat(P, e->arm.guard);
             dump_msg(P, "value: ");

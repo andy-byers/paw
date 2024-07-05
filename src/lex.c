@@ -469,15 +469,12 @@ try_again:
             }
             break;
         case '.':
-            save_and_next(x); // may be float
+            next(x);
             if (test_next(x, '.')) {
                 if (test_next(x, '.')) {
                     token = T(TK_DOT3);
                 }
                 lex_error(x); // '..' not allowed
-            } else if (ISDIGIT(x->c)) {
-                token = consume_number(x);
-                semi = PAW_TRUE;
             }
             break;
         case '/':

@@ -71,31 +71,8 @@
 #define o_method(o) check_exp(o_is_method(o), (Method *)(o))
 #define o_foreign(o) check_exp(o_is_foreign(o), (Foreign *)(o))
 
-#define GC_HEADER                                                              \
-    struct Object *gc_next;                                                    \
-    uint64_t gc_nrefs;                                                         \
-    uint8_t gc_kind
 #define cast_uintptr(x) ((uintptr_t)(x))
 #define cast_object(x) ((Object *)(void *)(x))
-
-typedef struct Object {
-    GC_HEADER;
-} Object;
-
-typedef union Value {
-    uint64_t u;
-    paw_Int i;
-    paw_Float f;
-    Object *o;
-    void *p;
-} Value;
-
-typedef Value *StackPtr;
-
-typedef union StackRel {
-    ptrdiff_t d;
-    StackPtr p;
-} StackRel;
 
 typedef enum ValueKind {
     // scalar types
@@ -126,6 +103,29 @@ typedef enum ValueKind {
 
     NVTYPES
 } ValueKind;
+
+#define GC_HEADER                                                              \
+    struct Object *gc_next;                                                    \
+    uint64_t gc_nrefs;                                                         \
+    ValueKind gc_kind: 8
+typedef struct Object {
+    GC_HEADER;
+} Object;
+
+typedef union Value {
+    uint64_t u;
+    paw_Int i;
+    paw_Float f;
+    Object *o;
+    void *p;
+} Value;
+
+typedef Value *StackPtr;
+
+typedef union StackRel {
+    ptrdiff_t d;
+    StackPtr p;
+} StackRel;
 
 static inline int pawV_type(ValueKind vt)
 {
