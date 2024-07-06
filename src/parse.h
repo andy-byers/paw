@@ -86,22 +86,20 @@ void pawP_add_scope(Lex *lex, SymbolTable *table, Scope *scope);
 struct Symbol *pawP_add_symbol(Lex *lex, Scope *table);
 int pawP_find_symbol(Scope *scope, const String *name);
 
+struct MatchState {
+    struct MatchState *outer;
+    struct MatchExpr *match;
+    AstType *target;
+    AstType *value;
+};
+
 typedef struct GenericState {
     struct GenericState *outer;
 } GenericState;
 
-typedef struct StructState {
-    struct StructState *outer;
-    struct StructDecl *struct_;
-    struct AstDecl *method;
-    struct AstDecl *field;
-    int imethod;
-    int ifield;
-} StructState;
-
 typedef struct BlockState {
     struct BlockState *outer;
-    uint8_t is_loop;
+    paw_Bool is_loop: 1;
     int isymbol;
     int level;
     int label0;
@@ -110,6 +108,7 @@ typedef struct BlockState {
 typedef struct LocalSlot {
     struct Symbol *symbol;
     int index;
+    paw_Bool is_captured: 1;
 } LocalSlot;
 
 typedef struct LocalStack {
@@ -136,9 +135,7 @@ typedef struct FuncState {
     BlockState *bs; // current block
     Proto *proto; // prototype being built
     String *name; // name of the function
-    int id; // index in caller's prototype list
     int level; // current stack index (base = 0)
-    int ndebug; // number of debug entries
     int nup; // number of upvalues
     int nk; // number of constants
     int nproto; // number of nested functions
@@ -165,11 +162,6 @@ typedef struct ParseMemory {
         int size;
         int alloc;
     } scratch;
-
-    struct {
-        Binder data[MAX_BINDERS];
-        int size;
-    } temp;
 
     struct {
         FuncSig *data;

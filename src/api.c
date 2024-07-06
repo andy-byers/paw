@@ -119,11 +119,6 @@ paw_Bool paw_is_function(paw_Env *P, int index)
     return paw_type(P, index) == PAW_TFUNCTION;
 }
 
-paw_Bool paw_is_array(paw_Env *P, int index)
-{
-    return paw_type(P, index) == PAW_TVECTOR;
-}
-
 paw_Bool paw_is_tuple(paw_Env *P, int index)
 {
     return paw_type(P, index) == PAW_TTUPLE;

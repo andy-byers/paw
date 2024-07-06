@@ -18,7 +18,7 @@ struct Jump; // call.c
 typedef enum DefKind {
     DEF_VAR,
     DEF_FUNC,
-    DEF_STRUCT,
+    DEF_ADT,
     DEF_FIELD,
     DEF_TYPE,
 } DefKind;
@@ -96,9 +96,28 @@ enum {
 };
 
 typedef struct GlobalVar {
-    VarDesc desc;
+    String *name;
     Value value;
+    paw_Type type;
 } GlobalVar;
+
+struct GlobalList {
+    int alloc;
+    int count;
+    Value data[];
+};
+
+struct BuiltinList {
+    int alloc;
+    int count;
+    Value data[];
+};
+
+struct MethodList {
+    int alloc;
+    int count;
+    Value data[];
+};
 
 typedef struct paw_Env {
     StringTable strings;
@@ -132,9 +151,6 @@ typedef struct paw_Env {
     // memory (a call to the 'alloc' field below returned NULL).
     Value mem_errmsg;
 
-    // TODO: At some point, the globals should go into a struct called Module.
-    // Make
-    //       Module a paw object.
     struct GlobalVec {
         GlobalVar *data;
         int size;

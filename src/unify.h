@@ -23,7 +23,7 @@ AstType *pawU_normalize(UniTable *table, AstType *a);
 void pawU_unify(Unifier *U, AstType *a, AstType *b);
 
 // Create a new type variable
-AstType *pawU_new_unknown(Unifier *U, DefId id);
+AstType *pawU_new_unknown(Unifier *U);
 
 // Generics context handling
 void pawU_enter_binder(Unifier *U, UniTable *table);

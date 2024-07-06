@@ -20,7 +20,6 @@ enum MultiChar {
 
     // Multi-byte tokens:
     TK_DOT3,
-    TK_QUESTION2,
     TK_COLON2,
     TK_LESS2,
     TK_GREATER2,
@@ -28,6 +27,7 @@ enum MultiChar {
     TK_EQUALS2,
     TK_PIPE2,
     TK_ARROW,
+    TK_FAT_ARROW,
     TK_LESS_EQ,
     TK_GREATER_EQ,
     TK_BANG_EQ,
@@ -41,8 +41,10 @@ enum MultiChar {
     // Keywords (must be in this order):
     TK_FN,
     TK_TYPE,
+    TK_ENUM,
     TK_STRUCT,
     TK_GLOBAL,
+    TK_MATCH,
     TK_LET,
     TK_IF,
     TK_ELSE,
@@ -55,6 +57,8 @@ enum MultiChar {
     TK_IN,
     TK_TRUE,
     TK_FALSE,
+
+    TK_LIMIT // must be last
 };
 
 typedef unsigned TokenKind;

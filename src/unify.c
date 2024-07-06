@@ -40,24 +40,15 @@ typedef struct UniTable {
 static void dump_type(FILE *out, const AstType *type)
 {
     switch (a_kind(type)) {
-        case AST_TYPE_BASIC:
-            switch (type->hdr.def) {
-                case PAW_TUNIT:
-                    fprintf(out, "()");
-                    break;
-                case PAW_TBOOL:
-                    fprintf(out, "bool");
-                    break;
-                case PAW_TINT:
-                    fprintf(out, "int");
-                    break;
-                case PAW_TFLOAT:
-                    fprintf(out, "float");
-                    break;
-                default:
-                    paw_assert(type->hdr.def == PAW_TSTRING);
-                    fprintf(out, "string");
+        case AST_TYPE_TUPLE:
+            fprintf(out, "(");
+            for (int i = 0; i < type->tuple.elems->count; ++i) {
+                dump_type(out, type->tuple.elems->data[i]);
+                if (i < type->tuple.elems->count - 1) {
+                    fprintf(out, ", ");
+                }
             }
+            fprintf(out, ")");
             break;
         case AST_TYPE_FUNC:
             fprintf(out, "fn(");
@@ -68,7 +59,7 @@ static void dump_type(FILE *out, const AstType *type)
                 }
             }
             fprintf(out, ") -> ");
-            dump_type(out, type->func.return_);
+            dump_type(out, type->func.result);
             break;
         case AST_TYPE_ADT:
             fprintf(out, "%d", type->adt.base); // TODO: Print the name
@@ -85,7 +76,7 @@ static void dump_type(FILE *out, const AstType *type)
             }
             break;
         case AST_TYPE_UNKNOWN:
-            fprintf(out, "?%d", type->unknown.def);
+            fprintf(out, "<unknown>");
             break;
         default:
             paw_assert(a_is_generic(type));
@@ -162,19 +153,23 @@ static void unify_binders(Unifier *U, AstList *a, AstList *b)
     }
 }
 
-static void unify_adt(Unifier *U, AstAdt *a, AstType *b)
+static void unify_adt(Unifier *U, AstAdt *a, AstAdt *b)
 {
-    if (a->base != b->adt.base) {
+    if (a->base != b->base) {
         pawX_error(U->lex, "data types are incompatible");
     }
-    unify_binders(U, a->types, b->adt.types);
+    unify_binders(U, a->types, b->types);
 }
 
-static void unify_func_sig(Unifier *U, AstFuncSig *a, AstType *b)
+static void unify_tuple(Unifier *U, AstTupleType *a, AstTupleType *b)
 {
-    // NOTE: 'types' field not unified (not part of function signature)
-    unify_binders(U, a->params, b->func.params);
-    pawU_unify(U, a->return_, b->func.return_);
+    unify_binders(U, a->elems, b->elems);
+}
+
+static void unify_func(Unifier *U, AstFuncPtr *a, AstFuncPtr *b)
+{
+    unify_binders(U, a->params, b->params);
+    pawU_unify(U, a->result, b->result);
 }
 
 static AstType *unify_basic(Unifier *U, AstType *a, AstType *b)
@@ -189,12 +184,15 @@ static AstType *unify_basic(Unifier *U, AstType *a, AstType *b)
 static void unify_types(Unifier *U, AstType *a, AstType *b)
 {
     debug_log("unify_types", a, b);
-    if (a_kind(a) != a_kind(b)) {
+    if ((a_is_fptr(a) || a_is_func(a)) &&
+        (a_is_fptr(b) || a_is_func(b))) {
+        unify_func(U, &a->fptr, &b->fptr);
+    } else if (a_kind(a) != a_kind(b)) {
         pawX_error(U->lex, "incompatible types");
-    } else if (a_is_func(a)) {
-        unify_func_sig(U, &a->func, b);
+    } else if (a_is_tuple(a)) {
+        unify_tuple(U, &a->tuple, &b->tuple);
     } else if (a_is_adt(a)) {
-        unify_adt(U, &a->adt, b);
+        unify_adt(U, &a->adt, &b->adt);
     } else {
         unify_basic(U, a, b);
     }
@@ -228,7 +226,7 @@ void pawU_unify(Unifier *U, AstType *a, AstType *b)
     }
 }
 
-AstType *pawU_new_unknown(Unifier *U, DefId id)
+AstType *pawU_new_unknown(Unifier *U)
 {
     paw_Env *P = env(U->lex);
     Ast *ast = U->lex->pm->ast;
@@ -242,7 +240,6 @@ AstType *pawU_new_unknown(Unifier *U, DefId id)
 
     AstType *type = pawA_new_type(ast, AST_TYPE_UNKNOWN);
     type->unknown.index = index;
-    type->unknown.def = id;
 
     // set contains only 'type'
     uvar->parent = uvar;

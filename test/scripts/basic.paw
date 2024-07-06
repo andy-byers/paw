@@ -78,46 +78,6 @@
     fn f(x: int, y: int, z: int) -> int {return z}
     assert(f(0, 1, 2) == 2)
 }
-//
-//// __*attr, and __*item
-//{
-//    class C {f() {return 42}}
-//    fn get() {return fn() {return C()}}
-//    let c = C()
-//    c.ins = C()
-//    c.ins.get = get
-//    c.ins.a = [0]
-//    let a = [c]
-//    // a = [
-//    //     C { <--------------------------------------- a[0]
-//    //         f() {return 42}, <---------------------- a[0].f
-//    //         ins = C { <----------------------------- a[0].ins
-//    //             f() {return 42}, <------------------ a[0].ins.f
-//    //             get = fn() { <---------------------- a[0].ins.get
-//    //                 return fn() { <----------------- a[0].ins.get()
-//    //                     return C { <---------------- a[0].ins.get()()
-//    //                         f = fn() {return 42} <-- a[0].ins.get()().f
-//    //                     }
-//    //                 }
-//    //             }
-//    //         }
-//    //     }
-//    // ]
-//    //
-//
-//    // __set*
-//    a[0].x = 1
-//    a[0].ins.x = 2
-//    a[0].ins.a[0] = 3
-//
-//    // __get*
-//    assert(a[0].f() == 42)
-//    assert(a[0].ins.f() == 42)
-//    assert(a[0].ins.get()().f() == 42)
-//    assert(a[0].x == 1)
-//    assert(a[0].ins.x == 2)
-//    assert(a[0].ins.a[0] == 3)
-//}
 
 {
     fn f() -> int {
@@ -125,7 +85,7 @@
             // Return statement must be the last statement in the block.
             return 42
         }
-        return 24 // Unreachable
+        return 24 // unreachable
     }
     assert(f() == 42)
 }
@@ -142,59 +102,192 @@
 
 }
 
-//// Array and map are both 'prefixexpr' constructs, meaning they can appear to the
-//// left of '[]' (__*item) or '.' (__*attr). See grammer.md for details.
+// Short-circuiting behavior:
+{
+    let counts = (0, 0, 0)
+    fn check2(a: int, b: int) {
+        assert(counts.0 == a)
+        assert(counts.1 == b)
+        counts.0 = 0
+        counts.1 = 0
+    }
+    fn A(value: int) -> bool {
+        counts.0 = counts.0 + 1
+        return bool(value)
+    }
+    fn B(value: int) -> bool {
+        counts.1 = counts.1 + 1
+        return bool(value)
+    }
+    fn C(value: int) -> bool {
+        counts.2 = counts.2 + 1
+        return bool(value)
+    }
+
+    fn or(a: int, b: int) -> bool {
+        return A(a) || B(b)
+    }
+    assert(!or(0, 0))
+    check2(1, 1)
+    assert(or(0, 1))
+    check2(1, 1)
+    assert(or(1, 0))
+    check2(1, 0)
+    assert(or(1, 1))
+    check2(1, 0)
+
+    fn and(a: int, b: int) -> bool {
+        return A(a) && B(b)
+    }
+    assert(!and(0, 0))
+    check2(1, 0)
+    assert(!and(0, 1))
+    check2(1, 0)
+    assert(!and(1, 0))
+    check2(1, 1)
+    assert(and(1, 1))
+    check2(1, 1)
+
+    fn check3(a: int, b: int, c: int) {
+        check2(a, b)
+        assert(counts.2 == c)
+        counts.2 = 0
+    }
+
+    fn and_or(a: int, b: int, c: int) -> bool {
+        return A(a) && B(b) || C(c)
+    }
+    assert(!and_or(0, 0, 0))
+    check3(1, 0, 1)
+    assert(!and_or(1, 0, 0))
+    check3(1, 1, 1)
+    assert(!and_or(0, 1, 0))
+    check3(1, 0, 1)
+    assert(and_or(0, 0, 1))
+    check3(1, 0, 1)
+    assert(and_or(1, 1, 0))
+    check3(1, 1, 0)
+    assert(and_or(0, 1, 1))
+    check3(1, 0, 1)
+    assert(and_or(1, 0, 1))
+    check3(1, 1, 1)
+    assert(and_or(1, 1, 1))
+    check3(1, 1, 0)
+}
+
+{
+    struct C {
+        val: int
+        get: fn() -> fn() -> C
+    }
+    fn get() -> fn() -> C {
+        fn inner() -> C {return C{get: get, val: 123}}
+        return inner
+    }
+    let c = C{get: get, val: 0}
+    let v = Vector[C]{c}
+
+    v[0].val = 42
+    v[0].get()().val = 0
+    assert(v[0].val == 42)
+    assert(v[0].get()().val == 123)
+}
+
 //{
-//    let a = [0, 1, 2][1]
-//    assert(a == 1)
+//    let v = [0, 1, 2][1]
+//    assert(v == 1)
 //    let m = {0: 0, 1: 1, 2: 2}[1]
 //    assert(m == 1)
 //}
 
 {
     let s = ''
-    for a = 0, 10 {
+    for a = 0, 1 {
         s = s + 'a'
-        for b = 0, 10 {
-            s = s + 'b'
-            for c = 0, 10 {
-                s = s + 'c'
+        for b = 0, 2 {
+            s = 'b' + s
+            for c = 0, 3 {
+                s = 'c' + s + 'd'
             }
         }
     }
+    assert(s == 'cccbcccbadddddd')
 }
 
-// TODO: Consider short-circuiting behavior
-//{
-//    fn test(a, b) {
-//        return a || b
-//    }
-//    assert(1 == test(0, 1))
-//    assert(2 == test(2, 3))
-//
-//    fn test(a, b) {
-//        return a && b
-//    }
-//    assert(0 == test(0, 1))
-//    assert(3 == test(2, 3))
-//
-//    fn test(a, b, c) {
-//        return a && b && c
-//    }
-//    assert(0 == test(0, 0, 0))
-//    assert(0 == test(1, 0, 0))
-//    assert(0 == test(1, 2, 0))
-//    assert(3 == test(1, 2, 3))
-//
-//    fn test(a, b, c) {
-//        return a || b || c
-//    }
-//    assert(0 == test(0, 0, 0))
-//    assert(1 == test(0, 1, 2))
-//    assert(2 == test(0, 0, 2))
-//
-//    assert(true || false && false)
-//    assert(!(true && (false || false)))
-//    assert(!((2 == 3) || (4 < 0) && (1 == 1)))
-//}
+// Chain ('?') expressions:
+{
+    fn opt(b: bool) -> Option[int] {
+        if b {
+            return Option[int]::Some(1)
+        } else {
+            return Option[int]::None()
+        }
+    }
 
+    {
+        let hit = false
+        fn test() -> Option[int] {
+            let o = opt(true)?
+            hit = true
+            return o
+        }
+        test()
+        assert(hit)
+    }
+
+    {
+        fn test() -> Option[int] {
+            let o = opt(false)?
+            assert(false)
+            return o
+        }
+        test()
+    }
+
+    fn opt[T](b: bool, v: T) -> Option[T] {
+        if b {
+            return Option[T]::Some(v)
+        } else {
+            return Option[T]::None()
+        }
+    }
+
+    {
+        fn test[T](v: T) -> Option[T] {
+            let o = opt(false, v)?
+            assert(false)
+            return o
+        }
+        test(123)
+        test('abc')
+    }
+
+    fn res(b: bool) -> Result[int, string] {
+        if b {
+            return Result[int, string]::Ok(42)
+        } else {
+            return Result[int, string]::Err('bad')
+        }
+    }
+
+    {
+        let hit = false
+        fn test() -> Result[int, string] {
+            let r = res(true)?
+            hit = true
+            return r
+        }
+        test()
+        assert(hit)
+    }
+
+    {
+        fn test() -> Result[int, string] {
+            let r = res(false)?
+            assert(false)
+            return r
+        }
+        test()
+    }
+
+}

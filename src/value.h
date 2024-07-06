@@ -26,6 +26,9 @@
 #define v_map(v) (o_map(v_object(v)))
 #define v_vector(v) (o_vector(v_object(v)))
 #define v_text(v) (v_string(v)->text)
+#define v_tuple(v) (o_tuple(v_object(v)))
+#define v_variant(v) (o_variant(v_object(v)))
+#define v_enum(v) (o_enum(v_object(v)))
 #define v_instance(v) (o_instance(v_object(v)))
 #define v_struct(v) (o_struct(v_object(v)))
 #define v_method(v) (o_method(v_object(v)))
@@ -45,6 +48,9 @@
 #define o_is_upvalue(o) (o_kind(o) == VUPVALUE)
 #define o_is_map(o) (o_kind(o) == VMAP)
 #define o_is_vector(o) (o_kind(o) == VVECTOR)
+#define o_is_tuple(o) (o_kind(o) == VTUPLE)
+#define o_is_variant(o) (o_kind(o) == VVARIANT)
+#define o_is_enum(o) (o_kind(o) == VENUM)
 #define o_is_instance(o) (o_kind(o) == VINSTANCE)
 #define o_is_struct(o) (o_kind(o) == VSTRUCT)
 #define o_is_method(o) (o_kind(o) == VMETHOD)
@@ -57,18 +63,51 @@
 #define o_upvalue(o) check_exp(o_is_upvalue(o), (UpValue *)(o))
 #define o_map(o) check_exp(o_is_map(o), (Map *)(o))
 #define o_vector(o) check_exp(o_is_vector(o), (Vector *)(o))
+#define o_tuple(o) check_exp(o_is_tuple(o), (Tuple *)(o))
+#define o_variant(o) check_exp(o_is_variant(o), (Variant *)(o))
+#define o_enum(o) check_exp(o_is_enum(o), (Enum *)(o))
 #define o_instance(o) check_exp(o_is_instance(o), (Instance *)(o))
 #define o_struct(o) check_exp(o_is_struct(o), (Struct *)(o))
 #define o_method(o) check_exp(o_is_method(o), (Method *)(o))
 #define o_foreign(o) check_exp(o_is_foreign(o), (Foreign *)(o))
 
-#define GC_HEADER                                                              \
-    struct Object *gc_next;                                                    \
-    uint64_t gc_nrefs;                                                         \
-    uint8_t gc_kind
 #define cast_uintptr(x) ((uintptr_t)(x))
 #define cast_object(x) ((Object *)(void *)(x))
 
+typedef enum ValueKind {
+    // scalar types
+    VBOOL,
+    VINT,
+    VFLOAT,
+
+    // object types
+    VSTRING,
+    VVECTOR,
+    VMAP,
+    VSTRUCT,
+    VENUM,
+    VTUPLE,
+    VINSTANCE,
+    VVARIANT,
+    VMETHOD,
+    VFOREIGN,
+    VTYPE,
+
+    // function types
+    VNATIVE,
+    VCLOSURE,
+
+    // internal types
+    VPROTO,
+    VUPVALUE,
+
+    NVTYPES
+} ValueKind;
+
+#define GC_HEADER                                                              \
+    struct Object *gc_next;                                                    \
+    uint64_t gc_nrefs;                                                         \
+    ValueKind gc_kind: 8
 typedef struct Object {
     GC_HEADER;
 } Object;
@@ -87,33 +126,6 @@ typedef union StackRel {
     ptrdiff_t d;
     StackPtr p;
 } StackRel;
-
-typedef enum ValueKind {
-    // scalar types
-    VBOOL,
-    VINT,
-    VFLOAT,
-
-    // object types
-    VSTRING,
-    VVECTOR,
-    VMAP,
-    VSTRUCT,
-    VINSTANCE,
-    VMETHOD,
-    VFOREIGN,
-    VTYPE,
-
-    // function types
-    VNATIVE,
-    VCLOSURE,
-
-    // internal types
-    VPROTO,
-    VUPVALUE,
-
-    NVTYPES
-} ValueKind;
 
 static inline int pawV_type(ValueKind vt)
 {
@@ -176,11 +188,6 @@ typedef struct String {
 const char *pawV_to_string(paw_Env *P, Value v, paw_Type type, size_t *nout);
 paw_Int pawV_to_int(paw_Env *P, Value v, paw_Type type);
 
-typedef struct VarDesc {
-    String *name;
-    paw_Type code;
-} VarDesc;
-
 typedef struct Proto {
     GC_HEADER;
     uint8_t is_va;
@@ -190,15 +197,7 @@ typedef struct Proto {
     uint32_t *source;
     int length;
 
-    struct LocalInfo {
-        VarDesc var;
-        int pc0;
-        int pc1;
-        paw_Bool captured;
-    } *v;
-
     struct UpValueInfo {
-        VarDesc var;
         uint16_t index;
         paw_Bool is_local;
     } *u;
@@ -268,7 +267,7 @@ typedef struct Tuple {
 
 Tuple *pawV_new_tuple(paw_Env *P, int nelems);
 
-typedef struct Vector { // TODO: Call this Vec
+typedef struct Vector { 
     GC_HEADER;
     Value *begin;
     Value *end;
@@ -309,7 +308,6 @@ typedef struct Map {
 typedef struct Struct {
     GC_HEADER; // common members for GC
     paw_Type type; // index in module type list
-    VarDesc *fields; // RTTI for fields
 } Struct;
 
 Struct *pawV_new_struct(paw_Env *P, Value *pv);
@@ -324,6 +322,23 @@ typedef struct Instance {
 
 Instance *pawV_new_instance(paw_Env *P, int nfields);
 void pawV_free_instance(paw_Env *P, Instance *ins, int nfields);
+
+typedef struct Enum {
+    GC_HEADER; // common members for GC
+    Value variants[]; // enumerators
+} Enum;
+
+Enum *pawV_new_enum(paw_Env *P, int nvariants);
+void pawV_free_enum(paw_Env *P, Enum *e, int nvariants);
+
+typedef struct Variant {
+    GC_HEADER; // common members for GC
+    uint8_t k; // discriminator
+    Value fields[]; // data fields
+} Variant;
+
+Variant *pawV_new_variant(paw_Env *P, int k, int nfields);
+void pawV_free_variant(paw_Env *P, Variant *var, int nfields);
 
 // Method bound to an instance
 typedef struct Method {

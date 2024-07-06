@@ -187,7 +187,7 @@ void pawL_add_vfstring(paw_Env *P, Buffer *buf, const char *fmt, va_list arg)
                 pawL_add_integer(P, buf, va_arg(arg, int64_t));
                 break;
             case 'c':
-                pawL_add_char(P, buf, *fmt);
+                pawL_add_char(P, buf, va_arg(arg, int));
                 break;
             case 'f':
                 pawL_add_float(P, buf, va_arg(arg, double));

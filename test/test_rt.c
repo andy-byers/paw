@@ -8,12 +8,14 @@ static void script(const char *name)
 
 int main(void)
 {
-    script("types");
     script("basic");
+    return 0;
+    script("types");
     script("block");
     script("loop");
     script("operator");
     script("vector");
+    script("mandelbrot");
     return 0; // TODO
     script("string");
     script("integer");

@@ -40,6 +40,42 @@
     let x = x + 23
     assert(x == 123)
 }
+// Primitive conversion operators:
+{
+    let b = bool(0)
+    assert(b == false)
+    let b = bool(1)
+    assert(b == true)
+    let b = bool(-11)
+    assert(b == true)
+
+    let b = bool(0.0)
+    assert(b == false)
+    let b = bool(0.1)
+    assert(b == true)
+
+    let i = int(1.0)
+    assert(i == 1)
+    let i = int(1.9)
+    assert(i == 1)
+    let i = int(-1.9)
+    assert(i == -1)
+
+    let f = float(1)
+    assert(f < 1.1)
+    let f = float(-10)
+    assert(f > -10.1)
+
+    let i = 0
+    let b = bool(i)
+    let i = int(b)
+    assert(i == 0)
+
+    let i = 1234
+    let b = bool(i)
+    let i = int(b)
+    assert(i == 1)
+}
 
 //***********************************************
 //    functions
@@ -443,4 +479,111 @@
     assert(1 == new_pair(1, 2).first)
     assert(3.0 == new_pair(2.0, 3.0).second)
     assert('five' == new_pair('four', 'five').second)
+}
+
+//***********************************************
+//    tuples
+//***********************************************
+{
+    let t0 = ()
+    let p1 = (false)
+    let t1 = (false,)
+    let t2 = (false, 1)
+
+    // Empty: unit type
+    let t0: () = t0
+
+    // No comma: parenthesized expression
+    let p1: bool = p1
+
+    let t1: (bool,) = t1
+    let t2: (bool, int) = t2
+}
+{
+    let t1 = (false,)
+    let t2 = (false, 1)
+    let t3 = (false, 1, 2.0)
+    let t4 = (false, 1, 2.0, 'three')
+    assert(t1.0 == t2.0 && t2.0 == t3.0 && t3.0 == t4.0 && t4.0 == false)
+    assert(t2.1 == t3.1 && t3.1 == t4.1 && t4.1 == 1)
+    assert(t3.2 == t4.2 && t4.2 == 2.0)
+    assert(t4.3 == 'three')
+}
+{
+    fn test(t: (int, string)) -> (int, string) {
+        let r = t // copy reference
+        r.0 = r.0 * 2
+        r.1 = r.1 + r.1
+        return t
+    }
+    let t = test((1, 'two'))
+    assert(t.0 == 2)
+    assert(t.1 == 'twotwo')
+}
+{
+    struct Test[T] {
+        v: (T, T)
+    }
+    let t = Test[int]{v: (1, 2)}
+    assert(t.v.0 == 1)
+    assert(t.v.1 == 2)
+}
+
+//***********************************************
+//    enumerations
+//***********************************************
+{
+    enum E {
+        X,
+    }
+    let e = E::X()
+    e = E::X()
+}
+{
+    enum E {
+        X,
+        Y,
+    }
+    let e = E::X()
+    e = E::Y()
+}
+{
+    enum E {
+        X,
+        Y(int),
+    }
+    let e = E::X()
+    e = E::Y(42)
+    
+    fn test(e: E) -> E {
+        let e2 = e
+        return e2
+    }
+    let e = test(E::X())
+    let e = test(E::Y(42))
+
+}
+{
+    enum E[T] {
+        X(T),
+        Y(T, T),
+    }
+    let ex = E[int]::X(1)
+    let ey = E[int]::Y(2, 3)
+    
+    fn test(e: E[int]) -> E[int] {
+        let e2 = e
+        return e2
+    }
+    test(ex)
+    test(ey)
+
+    struct S[T] {
+        x: E[int]
+        y: E[T]
+    }
+    let s = S[float]{
+        x: E[int]::X(1),
+        y: E[float]::Y(2.0, 3.0),
+    }
 }

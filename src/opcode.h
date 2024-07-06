@@ -7,23 +7,27 @@
 #include "paw.h"
 
 #ifndef UPVALUE_MAX
-#define UPVALUE_MAX 64
+# define UPVALUE_MAX 64
 #endif
 
 #ifndef LOCAL_MAX
-#define LOCAL_MAX 1024
+# define LOCAL_MAX 1024
 #endif
 
-#ifndef ATTR_MAX
-#define ATTR_MAX 4096
+#ifndef FIELD_MAX
+# define FIELD_MAX 4096
 #endif
 
-#ifndef ARGC_MAX
-#define ARGC_MAX 256
+#ifndef PARAM_MAX
+# define PARAM_MAX 256
+#endif
+
+#ifndef ITEM_MAX
+# define ITEM_MAX A_MAX
 #endif
 
 #ifndef JUMP_MAX
-#define JUMP_MAX S_MAX
+# define JUMP_MAX S_MAX
 #endif
 
 #define decode_jump(x) ((int)(x) - JUMP_MAX)
@@ -73,6 +77,11 @@
 
 typedef uint32_t OpCode;
 
+// match e {
+//    E::X(x) => x,
+//    E::X('x') => 'x',
+// }
+
 // clang-format off
 //
 // Opcode format: Each instruction is packed into a 32-bit unsigned integer (OpCode)
@@ -96,12 +105,13 @@ OP_PUSHFALSE,//      -           -            false         -
 OP_PUSHCONST,//      U           -            K[u]          -
 OP_PUSHSTRUCT,//     U           -            C[u]          -
 
-OP_POP,//            -           v            -             -
+OP_POP,//            U           vu..v1       -             -
+OP_CLOSE,//          U           vu..v1       -             close stack to vu
 OP_COPY,//           -           v            v v           -
-OP_CLOSE,//          A B         v_a..v_1     -             if b, close stack to v_a
 OP_RETURN,//         -           f..v         v             closes stack to f
+OP_TRANSIT,//        U           vu..v1       v1            closes stack to vu
 
-OP_CLOSURE,//        A B         v_b..v_1     f             captures v_u..v_1 in f = P[a]
+OP_CLOSURE,//        A B         vb..v1       f             captures vu..v1 in f = P[a]
 OP_INVOKE,//      
 
 OP_JUMP,//           S           -            -             pc += S
@@ -117,10 +127,17 @@ OP_SETLOCAL,//       U           v            -             L[u] = v
 OP_GETUPVALUE,//     U           -            Up[u]         -
 OP_SETUPVALUE,//     U           v            -             Up[u] = v
 
+OP_MATCHVARIANT,//   U           v            disc(v)==u    -
+OP_UNPACKTUPLE,//    U           v            vu..v1        -  
+OP_UNPACKINSTANCE,// U           v            vu..v1        -
+OP_UNPACKVARIANT,//  U           v            vu..v1        -
+
+OP_NEWVARIANT,//     A B         vb..v1       a(vb..v1)     -
+OP_NEWTUPLE,//       U           vu..v1       (vu..v1)      -
 OP_NEWINSTANCE,//    U           -            v             v = new instance of class C[u]
 OP_INITFIELD,//      U           i v          i             i.fields[u] = v
-OP_NEWVECTOR,//      U           v_u..v_1     [v_u..v_1]    -
-OP_NEWMAP,//         U           v_2n..v_1    {v_2n..v_1}   -
+OP_NEWVECTOR,//      U           vu..v1       [vu..v1]      -
+OP_NEWMAP,//         U           v_2n..v1     {v_2n..v1}    -
 
 OP_FORNUM0,//        S           *-*-*-*-*-*-*-*-* see notes *-*-*-*-*-*-*-*-*
 OP_FORNUM,//         S           *-*-*-*-*-*-*-*-* see notes *-*-*-*-*-*-*-*-*
@@ -136,12 +153,14 @@ OP_CASTBOOL,//       U           v            bool(v)       -
 OP_CASTINT,//        U           v            int(v)        - 
 OP_CASTFLOAT,//      U           v            float(v)      - 
          
-OP_VARARG,//         A B         v_u..v_1     [v_u..v_1]    -
+OP_VARARG,//         A B         vu..v1       [vu..v1]      -
 OP_INIT,
-OP_CALL,//           U           f v_u..v_1   v             v = f(v_u..v_1)
+OP_CALL,//           U           f vu..v1     v             v = f(vu..v1)
 
-OP_GETATTR,//        U           v            v.fields[u]   -
-OP_SETATTR,//        U           v x          -             v.fields[u]=x
+OP_GETTUPLE,//       U           v            v.u           -
+OP_GETATTR,//        U           v            v.u           -
+OP_SETTUPLE,//       U           v x          -             v.u=x
+OP_SETATTR,//        U           v x          -             v.u=x
 OP_GETITEM,//        -           v i          v[i]          -
 OP_SETITEM,//        -           v i x        -             v[i]=x
 

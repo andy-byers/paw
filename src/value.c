@@ -149,7 +149,6 @@ void pawV_free_proto(paw_Env *P, Proto *f)
     pawM_free_vec(P, f->lines, f->nlines);
     pawM_free_vec(P, f->p, f->nproto);
     pawM_free_vec(P, f->k, f->nk);
-    pawM_free_vec(P, f->v, f->ndebug);
     pawM_free_vec(P, f->u, f->nup);
     pawM_free(P, f);
 }
@@ -197,9 +196,10 @@ void pawV_unlink_upvalue(UpValue *u)
 
 Tuple *pawV_new_tuple(paw_Env *P, int nelems)
 {
-    Tuple *t = pawM_new_flex(P, Tuple, cast_size(nelems), sizeof(t->elems[0]));
-    pawG_add_object(P, cast_object(t), 0 /* TODO: VTUPLE*/);
-    return t;
+    Tuple *tuple = pawM_new_flex(P, Tuple, cast_size(nelems), 
+                                 sizeof(tuple->elems[0]));
+    pawG_add_object(P, cast_object(tuple), VTUPLE);
+    return tuple;
 }
 
 void pawV_free_tuple(paw_Env *P, Tuple *t, int nelems)
@@ -234,8 +234,7 @@ void pawV_free_struct(paw_Env *P, Struct *struct_) { pawM_free(P, struct_); }
 
 Instance *pawV_new_instance(paw_Env *P, int nfields)
 {
-    Instance *ins =
-        pawM_new_flex(P, Instance, cast_size(nfields), sizeof(ins->attrs[0]));
+    Instance *ins = pawM_new_flex(P, Instance, cast_size(nfields), sizeof(ins->attrs[0]));
     pawG_add_object(P, cast_object(ins), VINSTANCE);
     return ins;
 }
@@ -243,6 +242,31 @@ Instance *pawV_new_instance(paw_Env *P, int nfields)
 void pawV_free_instance(paw_Env *P, Instance *ins, int nfields)
 {
     pawM_free_flex(P, ins, cast_size(nfields), sizeof(ins->attrs[0]));
+}
+
+Enum *pawV_new_enum(paw_Env *P, int nvariants)
+{
+    Enum *e = pawM_new_flex(P, Enum, cast_size(nvariants), sizeof(e->variants[0]));
+    pawG_add_object(P, cast_object(e), VENUM);
+    return e;
+}
+
+void pawV_free_enum(paw_Env *P, Enum *e, int nvariants)
+{
+    pawM_free_flex(P, e, cast_size(nvariants), sizeof(e->variants[0]));
+}
+
+Variant *pawV_new_variant(paw_Env *P, int k, int nfields)
+{
+    Variant *var = pawM_new_flex(P, Variant, cast_size(nfields), sizeof(var->fields[0]));
+    pawG_add_object(P, cast_object(var), VVARIANT);
+    var->k = k;
+    return var;
+}
+
+void pawV_free_variant(paw_Env *P, Variant *var, int nfields)
+{
+    pawM_free_flex(P, var, cast_size(nfields), sizeof(var->fields[0]));
 }
 
 Value *pawV_find_attr(Value *attrs, String *name, Type *type)
