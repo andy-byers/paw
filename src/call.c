@@ -245,6 +245,7 @@ CallFrame *pawC_precall(paw_Env *P, StackPtr base, Object *callable, int argc)
     cf->top.p = base;
     cf->fn = fn;
 
+    P->modname = p->modname; // TODO: what about C functions called first?
     check_fixed_args(P, p, argc);
     return cf;
 

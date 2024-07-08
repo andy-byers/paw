@@ -32,17 +32,6 @@
 #define limit_error(x, what, limit)                                            \
     pawX_error(x, "too many %s (limit is %d)", what, limit)
 
-// TODO: Use this to keep track of dynamic memory
-typedef union DeferredAlloc DeferredAlloc;
-
-typedef enum DeferredKind {
-    DEFER_SCOPE,
-} DeferredKind;
-
-#define DEFERRED_HEADER                                                        \
-    DeferredAlloc *prev_alloc;                                                 \
-    DeferredKind alloc_kind
-
 typedef enum LabelKind {
     LBREAK,
     LCONTINUE,
@@ -61,30 +50,6 @@ typedef struct LabelList {
     int length;
     int capacity;
 } LabelList;
-
-// Represents a single lexical scope
-typedef struct Scope {
-    DEFERRED_HEADER;
-    struct Symbol **symbols;
-    int nsymbols;
-    int capacity;
-    int bk_depth;
-    int fn_depth;
-} Scope;
-
-typedef struct SymbolTable {
-    Scope *toplevel;
-    Scope *globals;
-    Scope **scopes;
-    int nscopes;
-    int capacity;
-} SymbolTable;
-
-#define last_scope(t) check_exp((t)->size > 0, (t)->data[(t)->size - 1])
-Scope *pawP_new_scope(Lex *lex, SymbolTable *table);
-void pawP_add_scope(Lex *lex, SymbolTable *table, Scope *scope);
-struct Symbol *pawP_add_symbol(Lex *lex, Scope *table);
-int pawP_find_symbol(Scope *scope, const String *name);
 
 struct MatchState {
     struct MatchState *outer;
@@ -119,18 +84,16 @@ typedef struct LocalStack {
 
 typedef enum FuncKind {
     FUNC_MODULE,
+    FUNC_CLOSURE,
     FUNC_FUNCTION,
     FUNC_METHOD,
 } FuncKind;
 
-// TODO: Need to keep track of scopes that get removed from the symbol table and
-// placed in 'scopes' field.
-//       Either use GC, or link in a 'defer' list.
 typedef struct FuncState {
     struct FuncState *outer; // enclosing function
     struct FuncType *type; // function signature
     struct Generator *G; // codegen state
-    SymbolTable scopes; // local scopes
+    struct SymbolTable *scopes; // local scopes
     LocalStack locals; // local variables
     BlockState *bs; // current block
     Proto *proto; // prototype being built
@@ -145,10 +108,13 @@ typedef struct FuncState {
     FuncKind kind; // type of function
 } FuncState;
 
-// Unifies structures that require dynamic memory
-union DeferredAlloc {
-    Scope scope;
-};
+typedef struct UniTable {
+    struct UniTable *outer;
+    struct UniVar **vars; // vector of type variables
+    int nvars; // number of type variables
+    int capacity; // capacity of vector
+    int depth; // depth of binder
+} UniTable;
 
 #define fn_has_self(kind) (kind >= FUNC_METHOD)
 
@@ -164,30 +130,14 @@ typedef struct ParseMemory {
     } scratch;
 
     struct {
-        FuncSig *data;
-        int size;
-        int alloc;
-    } sigs;
-
-    // Operand stack, for linearizing chains of expressions.
-    struct {
-        struct IrOperand **data;
-        int size;
-        int alloc;
-    } opers;
-
-    struct {
         struct AstDecl **data;
         int size;
         int alloc;
     } decls;
 
     struct Ast *ast;
-    struct Ir *ir;
 
-    DeferredAlloc *defer;
     Unifier unifier;
-    SymbolTable symbols;
     LabelList labels;
 } ParseMemory;
 

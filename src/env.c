@@ -3,8 +3,24 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "env.h"
 #include "mem.h"
-// #include "rt.h"
+#include "rt.h"
 #include <limits.h>
+
+void pawE_error(paw_Env *P, int code, int line, const char *fmt, ...)
+{
+    Buffer print;
+    pawL_init_buffer(P, &print);
+    pawL_add_nstring(P, &print, P->modname->text, P->modname->length);
+    pawL_add_fstring(P, &print, ":%d: ", line);
+
+    va_list arg;
+    va_start(arg, fmt);
+    pawL_add_vfstring(P, &print, fmt, arg);
+    va_end(arg);
+
+    pawL_push_result(P, &print);
+    pawC_throw(P, code);
+}
 
 CallFrame *pawE_extend_cf(paw_Env *P, StackPtr top)
 {
@@ -38,14 +54,14 @@ int pawE_new_global(paw_Env *P, String *name, paw_Type type)
     return i;
 }
 
-GlobalVar *pawE_find_global(paw_Env *P, String *name)
+int pawE_find_global(paw_Env *P, String *name)
 {
     struct GlobalVec *gv = &P->gv;
     for (int i = 0; i < gv->size; ++i) {
         GlobalVar *var = &gv->data[i];
         if (pawS_eq(name, var->name)) {
-            return var;
+            return i;
         }
     }
-    return NULL;
+    return -1;
 }

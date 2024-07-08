@@ -6,7 +6,6 @@
 #include "mem.h"
 #include "rt.h"
 #include "util.h"
-#include "vector.h"
 #include <stdlib.h>
 
 static void grow_buffer(paw_Env *P, Buffer *buf, int boxloc)

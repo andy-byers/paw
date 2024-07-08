@@ -33,6 +33,25 @@
 #define new_list(lex) pawA_list_new((lex)->pm->ast)
 #define list_push(lex, list, node) pawA_list_push((lex)->pm->ast, &(list), node)
 
+#define new_path(lex) pawA_path_new((lex)->pm->ast)
+#define new_segment(lex, name, types) pawA_segment_new((lex)->pm->ast, name, types)
+#define path_add(lex, path, name, types) pawA_path_add((lex)->pm->ast, path, name, types, NULL)
+
+static String *unpack_name(const AstExpr *expr)
+{
+    if (a_kind(expr) != EXPR_PATH) {
+        return NULL;
+    }
+    AstPath *path = expr->path.path;
+    if (path->list->count == 1) {
+        AstSegment *seg = pawA_path_get(path, 0);
+        if (seg->types == NULL) {
+            return seg->name;
+        }
+    }
+    return NULL;
+}
+
 // recursive non-terminals
 static AstPat *pattern(Lex *lex);
 static AstExpr *expression(Lex *lex, unsigned prec);
@@ -48,8 +67,7 @@ static void expected_symbol(Lex *lex, const char *want)
     pawX_error(lex, "expected %s", want);
 }
 
-static void missing_delim(Lex *lex, TokenKind want, TokenKind open,
-                          int open_line)
+static void missing_delim(Lex *lex, TokenKind want, TokenKind open, int open_line)
 {
     pawX_error(lex, "expected '%c' to match '%c' on line %d", want, open,
                open_line);
@@ -57,7 +75,13 @@ static void missing_delim(Lex *lex, TokenKind want, TokenKind open,
 
 static void delim_next(Lex *lex, TokenKind want, TokenKind open, int open_line)
 {
-    if (lex->t.kind != want) {
+    const TokenKind have = lex->t.kind;
+    if (have != want) {
+        if (have == TK_GREATER2 && want == '>') {
+            // special case: split '>>' into 2 '>'
+            lex->t.kind = '>';
+            return;
+        }
         missing_delim(lex, want, open, open_line);
     }
     pawX_next(lex);
@@ -288,13 +312,17 @@ static AstDecl *vfield_decl(Lex *lex)
     }
 make_list_parser(arg, '(', ')', LOCAL_MAX, "arguments", expression0, AstExpr)
 make_list_parser(vfield, '(', ')', LOCAL_MAX, "variant fields", vfield_decl, AstDecl)
-make_list_parser(type, '[', ']', LOCAL_MAX, "type arguments", type_expr, AstExpr)
+make_list_parser(type, '<', '>', LOCAL_MAX, "type arguments", type_expr, AstExpr)
 
 static AstList *vfield_list(Lex *lex, int line)
 {
     ++lex->expr_depth;
     AstList *list = new_list(lex);
     parse_vfield_list(lex, &list, line);
+    if (list->count == 0) {
+        pawX_error(lex, "expected at least 1 variant field in parenthesis "
+                        "(remove parenthesis for unit variant)");
+    }
     --lex->expr_depth;
     return list;
 }
@@ -304,30 +332,34 @@ static AstList *type_list(Lex *lex, int line)
     ++lex->expr_depth;
     AstList *list = new_list(lex);
     parse_type_list(lex, &list, line);
+    if (list->count == 0) {
+        pawX_error(lex, "expected at least 1 type");
+    }
     --lex->expr_depth;
     return list;
 }
 
-static AstList *type_args(Lex *lex)
+static AstList *maybe_type_args(Lex *lex)
 {
     const int line = lex->line;
-    if (test_next(lex, '[')) {
+    if (test_next(lex, '<')) {
         // type arguments (requires at least 1)
         return type_list(lex, line);
     }
-    return new_list(lex);
+    return NULL;
 }
 
 static void set_unit(Lex *lex, AstExpr *pe)
 {
-    pe->type_name.kind = EXPR_TYPENAME;
-    pe->type_name.name = pawE_cstr(env(lex), CSTR_UNIT);
-    pe->type_name.args = new_list(lex);
+    pe->path.kind = EXPR_PATHTYPE;
+    pe->path.path = new_path(lex);
+    String *name = pawE_cstr(env(lex), CSTR_UNIT);
+    path_add(lex, pe->path.path, name, NULL);
 }
 
 static AstExpr *unit_type(Lex *lex)
 {
-    AstExpr *r = new_expr(lex, EXPR_TYPENAME);
+    AstExpr *r = new_expr(lex, 0);
     set_unit(lex, r);
     return r;
 }
@@ -371,7 +403,7 @@ static void parse_paren_type(Lex *lex, AstExpr *pe)
 
 static void parse_signature(Lex *lex, AstExpr *pe)
 {
-    const int line = lex->line;
+    const int line = lex->last_line;
     pe->func.kind = EXPR_FUNCTYPE;
     check_next(lex, '(');
     pe->func.params = new_list(lex);
@@ -385,23 +417,76 @@ static void parse_signature(Lex *lex, AstExpr *pe)
     }
 }
 
-static void parse_named_type(Lex *lex, AstExpr *pe)
+static void parse_container_type(Lex *lex, AstExpr *pe)
 {
-    String *name = parse_name(lex);
-    pe->type_name.name = name;
-    pe->type_name.kind = EXPR_TYPENAME;
-    // list of concrete types between '[' and ']'
-    pe->type_name.args = type_args(lex);
+    const int line = lex->last_line;
+    pe->vtype.kind = EXPR_VECTORTYPE;
+    pe->vtype.elem = type_expr(lex);
+    if (test_next(lex, ':')) {
+        struct VectorType vtype = pe->vtype;
+        pe->mtype.kind = EXPR_MAPTYPE;
+        pe->mtype.key = vtype.elem;
+        pe->mtype.value = type_expr(lex);
+    }
+    delim_next(lex, ']', '[', line);
 }
 
+static AstPath *parse_pathexpr(Lex *lex)
+{
+    AstPath *p = new_path(lex);
+    do {
+next_segment:
+        if (p->list->count == LOCAL_MAX) {
+            limit_error(lex, "path segments", LOCAL_MAX);
+        }
+        String *name = parse_name(lex);
+        AstList *args = NULL;
+        if (test_next(lex, TK_COLON2)) {
+            args = maybe_type_args(lex);
+            if (args == NULL) {
+                path_add(lex, p, name, NULL);
+                goto next_segment;
+            }
+        }
+        path_add(lex, p, name, args);
+    } while (test_next(lex, TK_COLON2));
+    return p;
+}
+
+static AstPath *parse_pathtype(Lex *lex)
+{
+    AstPath *p = new_path(lex);
+    do {
+        if (p->list->count == LOCAL_MAX) {
+            limit_error(lex, "path segments", LOCAL_MAX);
+        }
+        String *name = parse_name(lex);
+        AstList *args = NULL;
+        args = maybe_type_args(lex);
+        path_add(lex, p, name, args);
+    } while (test_next(lex, TK_COLON2));
+    return p;
+}
+
+static AstExpr *path_expr(Lex *lex)
+{
+    AstExpr *r = new_expr(lex, EXPR_PATH);
+    r->path.path = parse_pathexpr(lex);
+    return r;
+}
+
+// TODO: Just return a new AstExpr instead of out param? There may have been a reason for it at some point.
 static void parse_type_expr(Lex *lex, AstExpr *pe)
 {
     if (test_next(lex, '(')) {
         parse_paren_type(lex, pe);
+    } else if (test_next(lex, '[')) {
+        parse_container_type(lex, pe);
     } else if (test_next(lex, TK_FN)) {
         parse_signature(lex, pe);
     } else {
-        parse_named_type(lex, pe);
+        pe->path.kind = EXPR_PATHTYPE;
+        pe->path.path = parse_pathtype(lex);
     }
 }
 
@@ -463,21 +548,6 @@ static AstDecl *var_decl(Lex *lex, int line, paw_Bool global)
     return r;
 }
 
-static AstList *parse_path(Lex *lex)
-{
-    Ast *ast = lex->pm->ast;
-    AstList *path = new_list(lex);
-    do {
-        if (path->count == LOCAL_MAX) {
-            limit_error(lex, "path segments", LOCAL_MAX);
-        }
-        String *name = parse_name(lex);
-        AstList *args = type_args(lex);
-        pawA_path_push(ast, &path, name, args);
-    } while (test_next(lex, TK_COLON2));
-    return path;
-}
-
 static AstPat *vfield_pat(Lex *lex)
 {
     AstPat *r = new_pat(lex, AST_PAT_FIELD);
@@ -487,12 +557,9 @@ static AstPat *vfield_pat(Lex *lex)
 
 static AstPat *new_ident_pat(Lex *lex, String *name)
 {
-    Ast *ast = lex->pm->ast;
     AstPat *r = new_pat(lex, AST_PAT_PATH);
-    AstList *path = new_list(lex);
-    AstList *args = new_list(lex);
-    pawA_path_push(ast, &path, name, args);
-    r->path.path = path;
+    r->path.path = new_path(lex);
+    path_add(lex, r->path.path, name, NULL);
     return r;
 }
 
@@ -517,23 +584,32 @@ static AstDecl *generic_param(Lex *lex)
 }
 
 make_list_parser(index, '[', ']', LOCAL_MAX, "elements", expression0, AstExpr)
-make_list_parser(param, '(', ')', LOCAL_MAX, "parameters", param_decl, AstDecl)
-make_list_parser(generic, '[', ']', LOCAL_MAX, "generics", generic_param, AstDecl)
+make_list_parser(func_param, '(', ')', LOCAL_MAX, "function parameters", param_decl, AstDecl)
+make_list_parser(clos_param, '|', '|', LOCAL_MAX, "closure parameters", param_decl, AstDecl)
+make_list_parser(generic, '<', '>', LOCAL_MAX, "generics", generic_param, AstDecl)
 make_list_parser(vfield_pat, '(', ')', LOCAL_MAX, "variant fields", vfield_pat, AstPat)
 make_list_parser(sfield_pat, '{', '}', LOCAL_MAX, "struct fields", sfield_pat, AstPat)
 
 static AstPat *compound_pat(Lex *lex)
 {
     AstPat *r = new_pat(lex, AST_PAT_PATH);
-    AstList *path = parse_path(lex);
+    AstPath *path = parse_pathtype(lex);
     AstList *fields = new_list(lex);
     if (test_next(lex, '(')) {
         parse_vfield_pat_list(lex, &fields, r->hdr.line);
+        if (fields->count == 0) {
+            pawX_error(lex, "expected at least 1 field in variant pattern "
+                            "(remove parenthesis for unit variant)");
+        }
         r->variant.kind = AST_PAT_VARIANT; 
         r->variant.path = path;
         r->variant.elems = fields;
     } else if (test_next(lex, '{')) {
         parse_sfield_pat_list(lex, &fields, r->hdr.line);
+        if (fields->count == 0) {
+            pawX_error(lex, "expected at least 1 field in struct pattern "
+                            "(remove curly braces for unit struct)");
+        }
         r->struct_.kind = AST_PAT_STRUCT; 
         r->struct_.path = path;
         r->struct_.fields = fields;
@@ -563,70 +639,31 @@ static AstExpr *composite_lit(Lex *, AstExpr *);
 
 static AstExpr *parse_item(Lex *lex)
 {
-    return test(lex, '{') ? composite_lit(lex, NULL) : expression0(lex);
+    if (test(lex, '{')) {
+        // nested composite literal with path given by type annotation
+        AstExpr *empty = new_expr(lex, EXPR_PATH);
+        return composite_lit(lex, empty);
+    }
+    return expression0(lex);
 }
 
-static AstExpr *item_expr(Lex *lex)
+static AstExpr *sitem_expr(Lex *lex)
 {
-    AstExpr *r = new_expr(lex, EXPR_ITEM);
-    r->item.value = parse_item(lex);
+    AstExpr *r = new_expr(lex, EXPR_STRUCTITEM);
+    AstExpr *item = parse_item(lex);
     if (test_next(lex, ':')) {
-        r->item.key = r->item.value;
-        r->item.value = parse_item(lex);
-    }
-    return r;
-}
-
-make_list_parser(item, '{', '}', LOCAL_MAX, "items", item_expr, AstExpr)
-
-// Parse an identifier
-static AstExpr *name_expr(Lex *lex)
-{
-    AstExpr *r = new_expr(lex, EXPR_NAME);
-    r->name.name = parse_name(lex);
-    return r;
-}
-
-Scope *pawP_new_scope(Lex *lex, SymbolTable *table)
-{
-    if (table->nscopes == UINT16_MAX) {
-        limit_error(lex, "scopes", UINT16_MAX);
-    }
-    pawM_grow(env(lex), table->scopes, table->nscopes, table->capacity);
-    Scope *scope = pawM_new(env(lex), Scope);
-    table->scopes[table->nscopes++] = scope;
-    return scope;
-}
-
-void pawP_add_scope(Lex *lex, SymbolTable *table, Scope *scope)
-{
-    if (table->nscopes == UINT16_MAX) {
-        limit_error(lex, "scopes", UINT16_MAX);
-    }
-    pawM_grow(env(lex), table->scopes, table->nscopes, table->capacity);
-    table->scopes[table->nscopes++] = scope;
-}
-
-Symbol *pawP_add_symbol(Lex *lex, Scope *table)
-{
-    pawM_grow(env(lex), table->symbols, table->nsymbols, table->capacity);
-    Symbol *sym = pawA_new_symbol(lex);
-    table->symbols[table->nsymbols++] = sym;
-    return sym;
-}
-
-int pawP_find_symbol(Scope *scope, const String *name)
-{
-    Symbol **symbols = scope->symbols;
-    for (int i = scope->nsymbols - 1; i >= 0; --i) {
-        if (pawS_eq(name, symbols[i]->name)) {
-            if (symbols[i]->is_init) {
-                return i;
-            }
+        r->sitem.value = parse_item(lex);
+        r->sitem.name = unpack_name(item);
+        if (r->sitem.name == NULL) {
+            pawX_error(lex, "invalid field name for struct literal");
         }
+    } else {
+        r->sitem.value = item;
     }
-    return -1;
+    return r;
 }
+
+make_list_parser(sitem, '{', '}', LOCAL_MAX, "struct items", sitem_expr, AstExpr)
 
 static AstExpr *unop_expr(Lex *lex, UnOp op)
 {
@@ -689,27 +726,94 @@ static AstList *stmt_list(Lex *lex)
 
 static AstExpr *index_expr(Lex *lex, AstExpr *target)
 {
-    AstExpr *result = new_expr(lex, EXPR_INDEX);
-    Index *r = &result->index;
+    AstExpr *r = new_expr(lex, EXPR_INDEX);
     skip(lex); // '[' token
-    r->target = target;
-    r->elems = new_list(lex);
-    parse_index_list(lex, &r->elems, r->line);
-    return result;
+    r->index.target = target;
+    if (!test(lex, ':')) {
+        r->index.first = expression0(lex);
+    }
+    if (test_next(lex, ':')) {
+        r->index.is_slice = PAW_TRUE;
+        if (!test(lex, ']')) {
+            r->index.second = expression0(lex);
+        }
+    }
+    delim_next(lex, ']', '[', r->index.line);
+    return r;
+}
+
+static paw_Type parse_container_items(Lex *lex, AstList **pitems)
+{
+    AstList *items = *pitems;
+    paw_Type code = -1;
+    do {
+        if (test(lex, ']')) {
+            break;
+        } else if (items->count == LOCAL_MAX) {
+            limit_error(lex, "container literal items", LOCAL_MAX);
+        }
+        AstExpr *item = expression0(lex);
+        if (!test_next(lex, ':')) {
+            code = PAW_TVECTOR;
+        } else if (code == PAW_TVECTOR) {
+            pawX_error(lex, "invalid container literal");
+        } else {
+            code = PAW_TMAP;
+            AstExpr *r = new_expr(lex, EXPR_MAPITEM);
+            r->mitem.value = expression0(lex);
+            r->mitem.key = item;
+            item = r;
+        }
+        list_push(lex, items, item);
+    } while (test_next(lex, ','));
+    *pitems = items;
+    return code;
+}
+
+static AstExpr *container_lit(Lex *lex)
+{
+    AstExpr *r = new_expr(lex, EXPR_LITERAL);
+    skip(lex); // '[' token
+    r->literal.lit_kind = LIT_CONTAINER;
+    ContainerLit *cont = &r->literal.cont;
+    cont->items = new_list(lex);
+    if (test(lex, ']')) {
+        cont->code = PAW_TVECTOR; // empty vector: '[]'
+    } else if (test_next(lex, ':')) {
+        cont->code = PAW_TMAP; // empty map: '[:]'
+    } else {
+        cont->code = parse_container_items(lex, &cont->items);
+    }
+    delim_next(lex, ']', '[', r->hdr.line);
+    return r;
 }
 
 // Parse a composite literal expression
-static AstExpr *composite_lit(Lex *lex, AstExpr *target)
+static AstExpr *composite_lit(Lex *lex, AstExpr *path)
 {
-    AstExpr *result = new_expr(lex, EXPR_LITERAL);
-    LiteralExpr *lit = &result->literal;
+    // PathExpr(path) -> LiteralExpr(PathExpr(path), fields)
+    PathExpr copy = path->path;
+    LiteralExpr *lit = &path->literal;
+    lit->kind = EXPR_LITERAL;
     lit->lit_kind = LIT_COMPOSITE;
-    CompositeLit *r = &lit->comp;
+    lit->comp.path = copy.path;
+
+    const int line = lex->line;
     skip(lex); // '{' token
-    r->items = new_list(lex);
-    parse_item_list(lex, &r->items, lit->line);
-    r->target = target;
-    return result;
+    lit->comp.items = new_list(lex);
+    parse_sitem_list(lex, &lit->comp.items, line);
+    return path;
+}
+
+static AstExpr *try_composite_lit(Lex *lex, AstExpr *path)
+{
+    if (a_kind(path) == EXPR_PATH) {
+        if (lex->expr_depth < 0) {
+            return path;
+        }
+        return composite_lit(lex, path);
+    }
+    return path; 
 }
 
 static AstExpr *selector_expr(Lex *lex, AstExpr *target)
@@ -727,31 +831,26 @@ static AstExpr *selector_expr(Lex *lex, AstExpr *target)
     return r;
 }
 
-static AstExpr *access_expr(Lex *lex, AstExpr *target)
+static paw_Bool equals_cstr(Lex *lex, const String *ident, unsigned cstr)
 {
-    AstExpr *r = new_expr(lex, EXPR_ACCESS);
-    skip(lex); // '::' token
-    r->access.target = target;
-    r->access.name = parse_name(lex);
-    return r;
-}
-
-static paw_Bool equals_cstr(Lex *lex, const AstIdent *ident, unsigned cstr)
-{
-    return pawS_eq(ident->name, pawE_cstr(env(lex), cstr));
+    return pawS_eq(ident, pawE_cstr(env(lex), cstr));
 }
 
 static paw_Bool try_conversion(Lex *lex, AstExpr *target, AstExpr *r)
 {
-    if (a_kind(target) != EXPR_NAME) {
+    if (a_kind(target) != EXPR_PATH) {
         return PAW_FALSE;
     }
-    AstIdent *ident = &target->name;
-    if (equals_cstr(lex, ident, CSTR_BOOL)) {
+    AstPath *path = target->path.path;
+    if (path->list->count != 1) {
+        return PAW_FALSE;
+    }
+    AstSegment *seg = pawA_path_get(path, 0);
+    if (equals_cstr(lex, seg->name, CSTR_BOOL)) {
         r->conv.to = PAW_TBOOL; 
-    } else if (equals_cstr(lex, ident, CSTR_INT)) {
+    } else if (equals_cstr(lex, seg->name, CSTR_INT)) {
         r->conv.to = PAW_TINT; 
-    } else if (equals_cstr(lex, ident, CSTR_FLOAT)) {
+    } else if (equals_cstr(lex, seg->name, CSTR_FLOAT)) {
         r->conv.to = PAW_TFLOAT; 
     } else {
         return PAW_FALSE;
@@ -785,12 +884,21 @@ static AstExpr *chain_expr(Lex *lex, AstExpr *target)
     return result;
 }
 
-static AstList *parameters(Lex *lex)
+static AstList *func_parameters(Lex *lex)
 {
     const int line = lex->line;
     check_next(lex, '(');
     AstList *list = new_list(lex);
-    parse_param_list(lex, &list, line);
+    parse_func_param_list(lex, &list, line);
+    return list;
+}
+
+static AstList *clos_parameters(Lex *lex)
+{
+    const int line = lex->line;
+    check_next(lex, '|');
+    AstList *list = new_list(lex);
+    parse_clos_param_list(lex, &list, line);
     return list;
 }
 
@@ -838,29 +946,37 @@ static AstExpr *match_expr(Lex *lex)
     return r;
 }
 
+static AstExpr *closure(Lex *lex)
+{
+    AstExpr *r = new_expr(lex, EXPR_CLOSURE);
+    r->clos.params = clos_parameters(lex);
+    r->clos.result = ret_annotation(lex);
+    r->clos.body = block(lex);
+    return r;
+}
+
 static AstExpr *primary_expr(Lex *lex)
 {
     switch (lex->t.kind) {
         case '(':
             return paren_expr(lex);
+        case '[':
+            return container_lit(lex);
         case TK_NAME:
-            return name_expr(lex);
-        case TK_STRING: {
-            const Value v = lex->t.value;
-            skip(lex); // string token
-            return new_basic_lit(lex, v, PAW_TSTRING);
-        }
-        case TK_FN:
-            return type_expr(lex);
+            return path_expr(lex);
         default:
-            expected_symbol(lex, "name or '('");
-            return NULL; // never run
+            return NULL;
     }
 }
 
 static AstExpr *suffixed_expr(Lex *lex)
 {
     AstExpr *e = primary_expr(lex);
+    if (e == NULL) {
+        expected_symbol(lex, "operand (path, literal, or parenthesized expression)");
+    } else if (lex->t.kind == '{') {
+        e = try_composite_lit(lex, e);
+    }
     for (;;) { // parse suffix chain
         switch (lex->t.kind) {
             case '?':
@@ -872,25 +988,8 @@ static AstExpr *suffixed_expr(Lex *lex)
             case '.':
                 e = selector_expr(lex, e);
                 break;
-            case TK_COLON2:
-                e = access_expr(lex, e);
-                break;
             case '[':
                 e = index_expr(lex, e);
-                break;
-            case '{':
-                switch (a_kind(e)) {
-                    case EXPR_NAME:
-                    case EXPR_INDEX:
-                    case EXPR_ACCESS:
-                        if (lex->expr_depth < 0) {
-                            return e;
-                        }
-                        break;
-                    default:
-                        return e;
-                }
-                e = composite_lit(lex, e);
                 break;
             default:
                 return e;
@@ -914,6 +1013,17 @@ static AstExpr *simple_expr(Lex *lex)
         case TK_FLOAT:
             expr = new_basic_lit(lex, lex->t.value, PAW_TFLOAT);
             break;
+        case TK_STRING: {
+            const Value v = lex->t.value;
+            expr = new_basic_lit(lex, v, PAW_TSTRING);
+            break;
+        }
+        case TK_PIPE2:
+            lex->t.kind = '|';
+            lex->t2.kind = '|'; 
+            // (fallthrough)
+        case '|':
+            return closure(lex);
         case TK_MATCH:
             return match_expr(lex);
         default:
@@ -997,13 +1107,13 @@ static AstStmt *if_stmt(Lex *lex)
     skip(lex); // 'if' token
     AstStmt *result = new_stmt(lex, STMT_IF);
     IfStmt *r = &result->if_;
-    r->cond = basic_expr(lex); // conditional
-    r->then_arm = cast_stmt(block(lex)); // 'then' block
+    r->cond = basic_expr(lex);
+    r->then_arm = cast_stmt(block(lex));
 
     if (test_next(lex, TK_ELSE)) {
         if (test(lex, TK_IF)) {
             // Put the rest of the chain in the else branch. This transformation
-            // looks like 'if a {} else if b {} else {}' -> 'if a {} else {if b
+            // looks like 'if a {} else if b {} else {}' => 'if a {} else {if b
             // {} else {}}'.
             r->else_arm = if_stmt(lex);
         } else {
@@ -1063,7 +1173,7 @@ static AstStmt *forin(Lex *lex, String *ivar)
 static AstStmt *for_stmt(Lex *lex)
 {
     skip(lex); // 'for' token
-    String *ivar = parse_name(lex); // loop variable
+    String *ivar = parse_name(lex);
     if (test_next(lex, '=')) {
         return fornum(lex, ivar);
     } else if (!test_next(lex, TK_IN)) {
@@ -1117,13 +1227,13 @@ static AstStmt *label_stmt(Lex *lex, LabelKind kind)
 static AstList *type_param(Lex *lex)
 {
     const int line = lex->line;
-    if (test_next(lex, '[')) {
+    if (test_next(lex, '<')) {
         ++lex->expr_depth;
         AstList *list = new_list(lex);
         parse_generic_list(lex, &list, line);
         --lex->expr_depth;
         if (list->count == 0) {
-            pawX_error(lex, "empty generic parameters");
+            pawX_error(lex, "expected at least 1 generic parameter");
         }
         return list;
     }
@@ -1136,7 +1246,7 @@ static AstDecl *function(Lex *lex, String *name, FuncKind kind)
     r->func.name = name;
     r->func.fn_kind = kind;
     r->func.generics = type_param(lex);
-    r->func.params = parameters(lex);
+    r->func.params = func_parameters(lex);
     r->func.result = ret_annotation(lex);
     r->func.body = block(lex);
     r->func.monos = new_list(lex);
@@ -1175,6 +1285,8 @@ static void parse_variant_list(Lex *lex, AstList **plist, int line)
         } else if ((*plist)->count == LOCAL_MAX) {
             limit_error(lex, "variants", LOCAL_MAX);
         }
+        // NOTE: 'variant_decl' requires a second argument, so 'make_list_parser'
+        //       cannot be used as-is.
         AstDecl *next = variant_decl(lex, (*plist)->count);
         list_push(lex, *plist, next);
     } while (test_next(lex, ','));
@@ -1338,27 +1450,20 @@ static AstStmt *statement(Lex *lex)
     }
 }
 
+// TODO: Use the C API instead?
 static const char kPrelude[] =
-    // Builtin structures:
-    "struct Vector[T] {}         \n"
-    "struct Map[K, V] {}         \n"
     // Builtin enumerations:
-    "enum Option[T] {            \n"
+    "enum Option<T> {            \n"
     "    Some(T),                \n"
     "    None,                   \n"
     "}                           \n"
-    "enum Result[T, E] {         \n"
+    "enum Result<T, E> {         \n"
     "    Ok(T),                  \n"
     "    Err(E),                 \n"
     "}                           \n"
     // Builtin functions:
     "fn print(message: string) {}\n"
-    "fn assert(cond: bool) {}    \n"
-    // TODO: Using these until Paw has methods.
-    "fn v_push[T](vec: Vector[T], elem: T) {}\n"
-    "fn v_pop[T](vec: Vector[T]) -> T {}\n"
-    "fn m_erase[K, V](map: Map[K, V], key: K) {}\n"
-    "fn m_get[K, V](map: Map[K, V], key: K, default: V) -> V {}\n";
+    "fn assert(cond: bool) {}    \n";
 
 struct PreludeReader {
     size_t size;
@@ -1471,7 +1576,6 @@ Closure *pawP_parse(paw_Env *P, paw_Reader input, ParseMemory *pm,
     };
     pm->unifier.lex = &lex;
     pm->ast = pawA_new_ast(&lex);
-    pm->symbols.globals = pawM_new(P, Scope);
 
     // TODO: AST needs to go on the stack in a Foreign object. We will leak the
     //       AST if an error is thrown between now and when it is freed below.
@@ -1498,10 +1602,11 @@ Closure *pawP_parse(paw_Env *P, paw_Reader input, ParseMemory *pm,
     String *modname = pawS_new_str(P, name);
     lex.modname = modname;
     f->modname = modname;
+    P->modname = modname;
     f->name = modname;
 
-    void p_check_types(Lex * lex); // from check.c
-    void p_generate_code(Lex * lex); // from codegen.c
+    void p_check_types(Lex *); // from check.c
+    void p_generate_code(Lex *); // from codegen.c
 
     // Compile the module.
     parse_module(&lex, input, ud); // pass 1 (source -> AST)

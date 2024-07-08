@@ -5,7 +5,7 @@
 //let io = require('io')
 //let file = io.stdout
 
-let charmap = Vector[string]{
+let charmap = Vector::<string>{
     ' ', '.', ':', '-', '=', 
     '+', '*', '#', '%', '@',
 }

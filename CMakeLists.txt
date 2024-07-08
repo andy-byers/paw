@@ -64,7 +64,6 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/unify.h
             ${PAW_SOURCE_DIR}/util.h
             ${PAW_SOURCE_DIR}/value.h
-            ${PAW_SOURCE_DIR}/vector.h
     PRIVATE ${PAW_SOURCE_DIR}/api.c
             ${PAW_SOURCE_DIR}/ast.c
             ${PAW_SOURCE_DIR}/auxlib.c

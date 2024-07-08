@@ -5,7 +5,7 @@
 // type.h: Runtime type information for paw programs
 //
 // Structures in this file are created during the codegen pass and stored for
-// use in error messages and RTTI queries.
+// use in error messages, RTTI queries, and the C API.
 #ifndef PAW_TYPE_H
 #define PAW_TYPE_H
 
@@ -19,7 +19,7 @@ typedef uint16_t DefId;
 typedef enum TypeKind { // type->...
     TYPE_GENERIC, // generic
     TYPE_ADT, // adt
-    TYPE_FUNC_SIG, // func
+    TYPE_FUNC, // func
     TYPE_MODULE, // mod
 } TypeKind;
 
@@ -31,10 +31,10 @@ typedef struct TypeHeader {
 } TypeHeader;
 
 // Represents a generic type parameter
-typedef struct Generic {
+typedef struct TypeGeneric {
     TYPE_HEADER;
     String *name;
-} Generic;
+} TypeGeneric;
 
 typedef struct Binder {
     Type **types;
@@ -42,37 +42,24 @@ typedef struct Binder {
 } Binder;
 
 // Represents a function signature
-typedef struct FuncSig {
+typedef struct TypeFunc {
     TYPE_HEADER; // common initial sequence
     Binder params; // parameter types
-    Type *return_; // return type
-} FuncSig;
+    Type *result; // return type
+} TypeFunc;
 
 // Represents a structure or enumeration type
-typedef struct Adt {
+typedef struct TypeAdt {
     TYPE_HEADER; // common initial sequence
     Binder types;
-} Adt;
-
-// Represents the type of a Paw module
-// Note that basic types ('int', 'float', etc.) are created only once, at the
-// start of the root module's type vector. Included modules reference these
-// Type objects in the root.
-typedef struct Module {
-    TYPE_HEADER; // common initial sequence
-    struct Module *includes; // included modules
-    Type **types;
-    int ntypes;
-    int capacity;
-} Module;
+} TypeAdt;
 
 struct Type {
     union {
         TypeHeader hdr;
-        Generic generic;
-        Adt adt;
-        FuncSig func;
-        Module mod;
+        TypeGeneric generic;
+        TypeAdt adt;
+        TypeFunc func;
     };
 };
 
@@ -90,6 +77,5 @@ struct Type {
 #define y_is_generic(t) (y_kind(t) == TYPE_GENERIC)
 #define y_is_adt(t) (y_kind(t) == TYPE_ADT)
 #define y_is_func(t) (y_kind(t) == TYPE_FUNC)
-#define y_is_module(t) (y_kind(t) == TYPE_MODULE)
 
 #endif // PAW_TYPE_H

@@ -26,8 +26,10 @@ void pawU_unify(Unifier *U, AstType *a, AstType *b);
 AstType *pawU_new_unknown(Unifier *U);
 
 // Generics context handling
-void pawU_enter_binder(Unifier *U, UniTable *table);
+void pawU_enter_binder(Unifier *U);
 UniTable *pawU_leave_binder(Unifier *U);
+
+void pawU_check_table(Unifier *U, UniTable *table);
 
 // TODO: Don't leak unification tables! Being lazy right now
 

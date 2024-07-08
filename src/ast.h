@@ -10,6 +10,7 @@
 
 // TODO: Prefix the rest of the structs with 'Ast'
 typedef struct Ast Ast;
+typedef struct AstList AstList;
 typedef struct AstVisitor AstVisitor;
 typedef struct AstFolder AstFolder;
 typedef struct AstTypeFolder AstTypeFolder;
@@ -19,6 +20,26 @@ typedef struct AstDecl AstDecl;
 typedef struct AstExpr AstExpr;
 typedef struct AstStmt AstStmt;
 typedef struct Block Block;
+
+// Represents a single lexical scope
+typedef struct Scope {
+    AstList *symbols;
+    int bk_depth;
+    int fn_depth;
+} Scope;
+
+typedef struct SymbolTable {
+    AstList *scopes;
+    Scope *toplevel;
+    Scope *globals;
+} SymbolTable;
+
+#define last_scope(t) check_exp((t)->size > 0, (t)->data[(t)->size - 1])
+Scope *pawA_new_scope(Ast *ast, SymbolTable *table);
+SymbolTable *pawA_new_symtab(Ast *ast);
+void pawA_add_scope(Ast *ast, SymbolTable *table, Scope *scope);
+struct Symbol *pawA_add_symbol(Ast *ast, Scope *table);
+int pawA_find_symbol(Scope *scope, const String *name);
 
 // Represents an entry in the symbol table
 //
@@ -69,17 +90,37 @@ AstList *pawA_list_new(Ast *ast);
 void pawA_list_free(Ast *ast, AstList *list);
 void pawA_list_push(Ast *ast, AstList **plist, void *node);
 
-typedef struct AstPathSegment {
+//****************************************************************
+//    Paths
+//****************************************************************
+
+typedef struct AstPath {
+    AstList *list;
+} AstPath;
+
+typedef struct AstSegment {
     String *name; 
     AstList *types;
-} AstPathSegment;
+    AstType *type;
+} AstSegment;
 
-void pawA_path_push(Ast *ast, AstList **ppath, String *name, AstList *types);
+AstPath *pawA_path_new(Ast *ast);
+AstSegment *pawA_segment_new(Ast *ast);
 
-static inline AstPathSegment *pawA_path_get(AstList *path, int index) 
+static inline AstSegment *pawA_path_get(AstPath *path, int index) 
 {
-    paw_assert(index < path->count);
-    return path->data[index];  
+    paw_assert(index < path->list->count);
+    return path->list->data[index];  
+}
+
+static inline AstPath *pawA_path_add(Ast *ast, AstPath *p, String *name, AstList *args, AstType *type)
+{
+    AstSegment *seg = pawA_segment_new(ast);
+    seg->name = name;
+    seg->types = args;
+    seg->type = type;
+    pawA_list_push(ast, &p->list, seg);
+    return p;
 }
 
 //****************************************************************
@@ -110,6 +151,7 @@ typedef struct AstGeneric {
 // Represents a type that is in the process of being inferred
 typedef struct AstUnknown {
     AST_TYPE_HEADER;
+    int depth;
     int index;
 } AstUnknown;
 
@@ -172,6 +214,7 @@ struct AstType {
 #define a_is_float(t) (a_is_adt(t) && (t)->adt.did == PAW_TFLOAT)
 #define a_is_string(t) (a_is_adt(t) && (t)->adt.did == PAW_TSTRING)
 #define a_is_basic(t) (a_is_adt(t) && (t)->adt.did <= PAW_TSTRING)
+#define a_is_custom(t) (a_is_adt(t) && (t)->adt.base > PAW_TMAP)
 
 #define a_is_generic(t) (a_kind(t) == AST_TYPE_GENERIC)
 #define a_is_unknown(t) (a_kind(t) == AST_TYPE_UNKNOWN)
@@ -183,9 +226,8 @@ struct AstType {
 #define a_is_module(t) (a_kind(t) == AST_TYPE_MODULE)
 
 //****************************************************************
-//    Pattern matching
+//    Patterns
 //****************************************************************
-
 
 typedef enum AstPatKind {
     AST_PAT_WILDCARD,
@@ -221,7 +263,7 @@ typedef struct AstBindingPat {
 
 typedef struct AstPathPat {
     AST_PAT_HEADER; // common fields
-    AstList *path;
+    AstPath *path;
 } AstPathPat;
 
 typedef struct AstTuplePat {
@@ -231,13 +273,13 @@ typedef struct AstTuplePat {
 
 typedef struct AstStructPat {
     AST_PAT_HEADER; // common fields
-    AstList *path; // path to structure
+    AstPath *path; // path to structure
     AstList *fields; // list of AstPat
 } AstStructPat;
 
 typedef struct AstVariantPat {
     AST_PAT_HEADER; // common fields
-    AstList *path; // path to variant
+    AstPath *path; // path to variant
     AstList *elems; // list of AstPat
 } AstVariantPat;
 
@@ -278,7 +320,6 @@ typedef enum AstDeclKind {
 
 #define DECL_HEADER                                                            \
     AstType *type;                                                             \
-    struct AstDecl *next;                                                      \
     String *name;                                                              \
     int line;                                                                  \
     DefId def;                                                                 \
@@ -386,7 +427,7 @@ typedef struct AstDecl {
 //****************************************************************
 
 typedef enum AstExprKind {
-    EXPR_NAME,
+    EXPR_PATH,
     EXPR_CALL,
     EXPR_LITERAL,
     EXPR_CHAIN,
@@ -394,33 +435,39 @@ typedef enum AstExprKind {
     EXPR_BINOP,
     EXPR_LOGICAL,
     EXPR_INDEX,
-    EXPR_ACCESS,
+    EXPR_CLOSURE,
     EXPR_CONVERSION,
     EXPR_SELECTOR,
-    EXPR_INVOKE,
-    EXPR_ITEM,
+    EXPR_MAPITEM,
+    EXPR_STRUCTITEM,
     EXPR_MATCH,
     EXPR_MATCHARM,
     EXPR_FUNCTYPE,
-    EXPR_TYPENAME,
+    EXPR_VECTORTYPE,
+    EXPR_MAPTYPE,
     EXPR_TYPELIST,
+    EXPR_PATHTYPE,
 } AstExprKind;
 
 #define EXPR_HEADER                                                            \
     int line;                                                                  \
     AstExprKind kind : 8;                                                      \
-    AstType *type;                                                             \
-    struct AstExpr *next
+    AstType *type
 typedef struct AstExprHeader {
     EXPR_HEADER;
 } AstExprHeader;
+
+typedef struct PathExpr {
+    EXPR_HEADER;
+    AstPath *path;
+} PathExpr;
 
 // TODO: rename LiteralType -> LiteralKind
 typedef enum LiteralType {
     LIT_BASIC,
     LIT_COMPOSITE,
+    LIT_CONTAINER,
     LIT_TUPLE,
-    LIT_ARRAY,
 } LiteralType;
 
 typedef struct BasicLit {
@@ -428,16 +475,17 @@ typedef struct BasicLit {
     paw_Type t;
 } BasicLit;
 
-typedef struct ArrayLit {
-    AstList *elems;
-} ArrayLit;
+typedef struct ContainerLit {
+    AstList *items;
+    paw_Type code;
+} ContainerLit;
 
 typedef struct TupleLit {
     AstList *elems;
 } TupleLit;
 
 typedef struct CompositeLit {
-    AstExpr *target;
+    AstPath *path;
     AstList *items;
 } CompositeLit;
 
@@ -447,22 +495,31 @@ typedef struct LiteralExpr {
     union {
         BasicLit basic;
         TupleLit tuple;
-        ArrayLit array;
+        ContainerLit cont;
         CompositeLit comp;
     };
 } LiteralExpr;
 
-typedef struct AstIdent {
-    EXPR_HEADER;
-    String *name;
-} AstIdent;
+typedef struct ClosureExpr {
+    EXPR_HEADER; // common initial sequence
+    Scope *scope; // scope for parameters               
+    AstList *params; // parameter declarations
+    AstExpr *result; // return type
+    Block *body; // function body
+} ClosureExpr;
 
-typedef struct ItemExpr {
+typedef struct StructItem {
     EXPR_HEADER;
     int index;
+    String *name;
+    AstExpr *value;
+} StructItem;
+
+typedef struct MapItem {
+    EXPR_HEADER;
     AstExpr *key;
     AstExpr *value;
-} ItemExpr;
+} MapItem;
 
 typedef struct UnOpExpr {
     EXPR_HEADER;
@@ -510,14 +567,11 @@ typedef struct Selector {
     };
 } Selector;
 
-typedef struct Access {
-    SUFFIXED_HEADER; // common fields
-    String *name; // field name
-} Access;
-
 typedef struct Index {
     SUFFIXED_HEADER; // common fields
-    AstList *elems; // list of elements
+    paw_Bool is_slice: 1;
+    AstExpr *first;
+    AstExpr *second;
 } Index;
 
 typedef struct ConversionExpr {
@@ -531,18 +585,27 @@ typedef struct TypeList {
     AstList *types;
 } TypeList;
 
-// A valid TypeName is related to a AstDecl through the symbol table.
-typedef struct TypeName {
-    EXPR_HEADER; // common initial sequence
-    String *name; // name of the struct or enum
-    AstList *args;
-} TypeName;
+typedef struct PathType {
+    EXPR_HEADER;
+    AstPath *path;
+} PathType;
 
 typedef struct FuncType {
     EXPR_HEADER; // common initial sequence
     AstExpr *result; // return type annotation
     AstList *params; // parameter types
 } FuncType;
+
+typedef struct VectorType {
+    EXPR_HEADER;
+    AstExpr *elem;
+} VectorType;
+
+typedef struct MapType {
+    EXPR_HEADER;
+    AstExpr *key;
+    AstExpr *value;
+} MapType;
 
 typedef struct MatchArm {
     EXPR_HEADER;
@@ -563,20 +626,23 @@ typedef struct AstExpr {
         AstExprHeader hdr;
         LiteralExpr literal;
         LogicalExpr logical;
-        AstIdent name;
+        PathExpr path;
         ChainExpr chain;
         UnOpExpr unop;
         BinOpExpr binop;
+        ClosureExpr clos;
         ConversionExpr conv;
         SuffixedExpr suffix;
         CallExpr call;
         Index index;
-        Access access;
         Selector selector;
         TypeList typelist;
-        ItemExpr item;
-        TypeName type_name;
-        FuncType func;
+        PathType pathtype;
+        StructItem sitem;
+        MapItem mitem;
+        FuncType func; // TODO: rename ftype
+        VectorType vtype;
+        MapType mtype;
         MatchExpr match;
         MatchArm arm;
     };
@@ -601,8 +667,7 @@ typedef enum AstStmtKind {
 
 #define STMT_HEADER                                                            \
     int line;                                                                  \
-    AstStmtKind kind : 8;                                                      \
-    struct AstStmt *next
+    AstStmtKind kind : 8
 typedef struct AstStmtHeader {
     STMT_HEADER;
 } AstStmtHeader;
@@ -689,6 +754,7 @@ typedef union AstState {
     struct Resolver *R; // symbol resolution (pass 2) state
     struct Generator *G; // code generation (pass 3) state
     struct Stenciler *S; // template expansion state
+    struct Normalizer *N; // type normalizer state
     struct Copier *C; // AST copier state
 } AstState;
 
@@ -699,6 +765,7 @@ typedef void (*AstExprPass)(AstVisitor *pass, AstExpr *e);
 typedef void (*AstStmtPass)(AstVisitor *pass, AstStmt *s);
 typedef void (*AstDeclPass)(AstVisitor *pass, AstDecl *d);
 typedef void (*AstPatPass)(AstVisitor *pass, AstPat *p);
+typedef void (*AstPathPass)(AstVisitor *pass, AstPath *p);
 
 // Represents a single pass over an AST
 struct AstVisitor {
@@ -707,6 +774,7 @@ struct AstVisitor {
 
     // Entrypoints for each type of node
     AstExprPass visit_expr;
+    AstPathPass visit_path;
     AstStmtPass visit_stmt;
     AstDeclPass visit_decl;
     AstPatPass visit_pat;
@@ -717,7 +785,7 @@ struct AstVisitor {
 
     void (*visit_literal_expr)(AstVisitor *V, LiteralExpr *e);
     void (*visit_logical_expr)(AstVisitor *V, LogicalExpr *e);
-    void (*visit_ident_expr)(AstVisitor *V, AstIdent *e);
+    void (*visit_path_expr)(AstVisitor *V, PathExpr *e);
     void (*visit_chain_expr)(AstVisitor *V, ChainExpr *e);
     void (*visit_unop_expr)(AstVisitor *V, UnOpExpr *e);
     void (*visit_binop_expr)(AstVisitor *V, BinOpExpr *e);
@@ -725,12 +793,15 @@ struct AstVisitor {
     void (*visit_conversion_expr)(AstVisitor *V, ConversionExpr *e);
     void (*visit_call_expr)(AstVisitor *V, CallExpr *e);
     void (*visit_index_expr)(AstVisitor *V, Index *e);
-    void (*visit_access_expr)(AstVisitor *V, Access *e);
     void (*visit_selector_expr)(AstVisitor *V, Selector *e);
-    void (*visit_item_expr)(AstVisitor *V, ItemExpr *e);
+    void (*visit_mitem_expr)(AstVisitor *V, MapItem *e);
+    void (*visit_sitem_expr)(AstVisitor *V, StructItem *e);
     void (*visit_typelist_expr)(AstVisitor *V, TypeList *e);
-    void (*visit_typename_expr)(AstVisitor *V, TypeName *e);
+    void (*visit_pathtype_expr)(AstVisitor *V, PathType *e);
     void (*visit_signature_expr)(AstVisitor *V, FuncType *e);
+    void (*visit_closure_expr)(AstVisitor *V, ClosureExpr *e);
+    void (*visit_vtype_expr)(AstVisitor *V, VectorType *e);
+    void (*visit_mtype_expr)(AstVisitor *V, MapType *e);
     void (*visit_match_expr)(AstVisitor *V, MatchExpr *e);
     void (*visit_arm_expr)(AstVisitor *V, MatchArm *e);
 
@@ -764,6 +835,7 @@ struct AstVisitor {
 void pawA_visitor_init(AstVisitor *V, Ast *ast, AstState state);
 void pawA_visit(AstVisitor *V);
 
+typedef AstPath *(*AstPathFold)(AstFolder *F, AstPath *e);
 typedef AstExpr *(*AstExprFold)(AstFolder *F, AstExpr *e);
 typedef AstStmt *(*AstStmtFold)(AstFolder *F, AstStmt *s);
 typedef AstDecl *(*AstDeclFold)(AstFolder *F, AstDecl *d);
@@ -775,6 +847,7 @@ struct AstFolder {
 
     // Entrypoints for each type of node
     AstExprFold fold_expr;
+    AstPathFold fold_path;
     AstStmtFold fold_stmt;
     AstDeclFold fold_decl;
     AstPatFold fold_pat;
@@ -785,7 +858,7 @@ struct AstFolder {
 
     AstExpr *(*fold_literal_expr)(AstFolder *F, LiteralExpr *e);
     AstExpr *(*fold_logical_expr)(AstFolder *F, LogicalExpr *e);
-    AstExpr *(*fold_ident_expr)(AstFolder *F, AstIdent *e);
+    AstExpr *(*fold_path_expr)(AstFolder *F, PathExpr *e);
     AstExpr *(*fold_chain_expr)(AstFolder *F, ChainExpr *e);
     AstExpr *(*fold_unop_expr)(AstFolder *F, UnOpExpr *e);
     AstExpr *(*fold_binop_expr)(AstFolder *F, BinOpExpr *e);
@@ -793,12 +866,15 @@ struct AstFolder {
     AstExpr *(*fold_conversion_expr)(AstFolder *F, ConversionExpr *e);
     AstExpr *(*fold_call_expr)(AstFolder *F, CallExpr *e);
     AstExpr *(*fold_index_expr)(AstFolder *F, Index *e);
-    AstExpr *(*fold_access_expr)(AstFolder *F, Access *e);
     AstExpr *(*fold_selector_expr)(AstFolder *F, Selector *e);
-    AstExpr *(*fold_item_expr)(AstFolder *F, ItemExpr *e);
-    AstExpr *(*fold_typename_expr)(AstFolder *F, TypeName *e);
+    AstExpr *(*fold_mitem_expr)(AstFolder *F, MapItem *e);
+    AstExpr *(*fold_sitem_expr)(AstFolder *F, StructItem *e);
     AstExpr *(*fold_typelist_expr)(AstFolder *F, TypeList *e);
+    AstExpr *(*fold_pathtype_expr)(AstFolder *F, PathType *e);
     AstExpr *(*fold_signature_expr)(AstFolder *F, FuncType *e);
+    AstExpr *(*fold_closure_expr)(AstFolder *F, ClosureExpr *e);
+    AstExpr *(*fold_vtype_expr)(AstFolder *F, VectorType *e);
+    AstExpr *(*fold_mtype_expr)(AstFolder *F, MapType *e);
     AstExpr *(*fold_match_expr)(AstFolder *F, MatchExpr *e);
     AstExpr *(*fold_arm_expr)(AstFolder *F, MatchArm *e);
 
@@ -835,10 +911,10 @@ struct AstTypeFolder {
     void *state;
 
     AstType *(*fold)(AstTypeFolder *F, AstType *type);
-    AstType *(*fold_basic)(AstTypeFolder *F, AstTypeHeader *t);
     AstType *(*fold_fptr)(AstTypeFolder *F, AstFuncPtr *t);
     AstType *(*fold_func)(AstTypeFolder *F, AstFuncDef *t);
     AstType *(*fold_adt)(AstTypeFolder *F, AstAdt *t);
+    AstType *(*fold_tuple)(AstTypeFolder *F, AstTupleType *t);
     AstType *(*fold_unknown)(AstTypeFolder *F, AstUnknown *t);
     AstType *(*fold_generic)(AstTypeFolder *F, AstGeneric *t);
     void (*fold_binder)(AstTypeFolder *F, AstList *binder);
@@ -849,7 +925,7 @@ AstType *pawA_fold_type(AstTypeFolder *F, AstType *type);
 
 typedef struct Ast {
     AstType *builtin[7];
-
+    SymbolTable *symtab;
     Pool nodes;
     Pool symbols;
     Pool sequences;
@@ -863,7 +939,7 @@ typedef struct Ast {
 //     Helper routines
 //****************************************************************
 
-Symbol *pawA_new_symbol(Lex *lex);
+Symbol *pawA_new_symbol(Ast *ast);
 AstPat *pawA_new_pat(Ast *ast, AstPatKind kind);
 AstType *pawA_new_type(Ast *ast, AstTypeKind kind);
 AstDecl *pawA_new_decl(Ast *ast, AstDeclKind kind);
@@ -889,6 +965,8 @@ void pawA_free_ast(Ast *ast);
 
 AstDecl *pawA_copy_decl(Ast *ast, AstDecl *decl);
 FuncDecl *pawA_stencil_func(Ast *ast, FuncDecl *base, AstDecl *inst);
+void pawA_normalize_expr(Ast *ast, AstExpr *expr, UniTable *table);
+void pawA_normalize_stmt(Ast *ast, AstStmt *stmt, UniTable *table);
 
 DefId pawA_add_decl(Ast *ast, AstDecl *decl);
 AstDecl *pawA_get_decl(Ast *ast, DefId id);
@@ -899,7 +977,6 @@ AstDecl *pawA_get_decl(Ast *ast, DefId id);
 
 #define a_type(x) ((x)->hdr.type)
 #define a_kind(x) ((x)->hdr.kind)
-#define a_next(x) ((x)->hdr.next)
 
 // Macros for checking node types
 #define a_is_generic_type(e) (a_kind(e) == EXPR_GENERIC_TYPE)
@@ -921,6 +998,7 @@ AstDecl *pawA_get_decl(Ast *ast, DefId id);
 #define a_adt_id(t) check_exp(a_is_adt(t), (t)->adt.base - PAW_TSTRING)
 
 void pawA_dump_type(FILE *out, AstType *type);
+void pawA_dump_path(FILE *out, AstPath *path);
 void pawA_dump_decl(FILE *out, AstDecl *decl);
 void pawA_dump_expr(FILE *out, AstExpr *expr);
 void pawA_dump_stmt(FILE *out, AstStmt *stmt);
