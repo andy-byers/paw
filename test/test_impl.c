@@ -5,7 +5,6 @@
 #include "test.h"
 #include "util.h"
 #include "value.h"
-#include "vector.h"
 #include <assert.h>
 #include <float.h>
 #include <inttypes.h>

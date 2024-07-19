@@ -67,10 +67,9 @@
                 // Capture 'i', the loop variable, when it is equal to 'n'. It should
                 // retain this value in the closure, since 'i' is closed over at the
                 // end of the loop iteration.
-                fn closure() -> int {
+                f = || -> int {
                     return i
                 }
-                f = closure
             }
         }
         return f
@@ -196,10 +195,9 @@
         for i = 0,100 {
             if i == n {
                 let u = i
-                fn closure() -> int {
+                f = || -> int {
                     return n + i + u
                 }
-                f = closure
                 break
             }
         } // 'i' closed here when i == n, popped otherwise

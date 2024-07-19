@@ -20,11 +20,12 @@ function(test_script NAME ARGS)
 endfunction()
 
 build_test(test_impl)
-#build_test(test_api) TODO: Fix this test: use the new API
+#build_test(test_api)
 build_test(test_rt)
 #build_test(test_oom)
 #build_test(test_so)
-#build_test(test_error)
+build_test(test_error)
+#build_test(test_limits)
 
 #test_script(bubble "500")
 #test_script(binary_trees "5")

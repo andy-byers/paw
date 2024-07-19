@@ -6,7 +6,6 @@
 #include "map.h"
 #include "mem.h"
 #include "util.h"
-#include "vector.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>

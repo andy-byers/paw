@@ -1,3 +1,6 @@
+// Copyright (c) 2024, The paw Authors. All rights reserved.
+// This source code is licensed under the MIT License, which can be found in
+// LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "lib.h"
 #include "api.h"
 #include "auxlib.h"
@@ -8,7 +11,6 @@
 #include "os.h"
 #include "rt.h"
 #include "type.h"
-#include "vector.h"
 #include <errno.h>
 #include <limits.h>
 #include <time.h>
@@ -29,7 +31,10 @@ void lib_error(paw_Env *P, int error, const char *fmt, ...)
     pawC_throw(P, error);
 }
 
-static int get_argc(paw_Env *P) { return paw_get_count(P) - 1 /* context */; }
+static int get_argc(paw_Env *P) 
+{ 
+    return paw_get_count(P) - 1 /* context */; 
+}
 
 void pawL_check_argc(paw_Env *P, int argc)
 {
@@ -43,16 +48,16 @@ int pawL_check_varargc(paw_Env *P, int min, int max)
     return narg;
 }
 
-// static void try_aux(paw_Env *P, void *arg)
+//static void try_aux(paw_Env *P, void *arg)
 //{
-//     const int argc = *(int *)arg;
-//     pawC_call(P, cf_base(1), argc - 1);
+//     const int argc = *cast(arg, int *);
+//     const Value f = cf_base(1);
+//     pawC_call(P, v_object(f), argc - 1);
 // }
 //
-// static int base_try(paw_Env *P)
+//static int base_try(paw_Env *P)
 //{
 //     int argc = pawL_check_varargc(P, 1, UINT8_MAX);
-//     pawL_check_type(P, 1, PAW_TFUNCTION);
 //     const int status = pawC_try(P, try_aux, &argc);
 //     paw_push_int(P, status);
 //     return 1;
@@ -197,40 +202,62 @@ static int base_print(paw_Env *P)
 //     return 0;
 // }
 
-// TODO: Remove '/*TODO*/+1' with regex, these should be methods, which take the
-//       context as the implicit first parameter
 static int vector_insert(paw_Env *P)
 {
-    Vector *vec = v_vector(cf_base(0 /*TODO*/ + 1));
-    const paw_Int i = paw_int(P, 1 /*TODO*/ + 1);
-    pawV_vec_insert(P, vec, i, cf_base(2 /*TODO*/ + 1));
+    Vector *vec = v_vector(cf_base(1));
+    const paw_Int index = v_int(cf_base(2));
+    pawV_vec_insert(P, vec, index, cf_base(3));
     return 0;
 }
 
 static int vector_push(paw_Env *P)
 {
-    Vector *vec = v_vector(cf_base(0 /*TODO*/ + 1));
-    pawV_vec_push(P, vec, cf_base(1 /*TODO*/ + 1));
+    Vector *vec = v_vector(cf_base(1));
+    pawV_vec_push(P, vec, cf_base(2));
     return 0;
 }
 
 static int vector_pop(paw_Env *P)
 {
-    Vector *vec = v_vector(cf_base(0 /*TODO*/ + 1));
-    const paw_Int length = paw_cast_int(pawA_length(vec));
+    Vector *vec = v_vector(cf_base(1));
+    const paw_Int length = paw_cast_int(pawV_vec_length(vec));
     if (length == 0) {
         pawR_error(P, PAW_EVALUE, "pop from empty Vector");
     }
-    P->top.p[-1] = *pawA_get(P, vec, length - 1);
-    pawA_pop(P, vec, length - 1);
+    P->top.p[-1] = *pawV_vec_get(P, vec, length - 1);
+    pawV_vec_pop(P, vec, length - 1);
+    return 1;
+}
+
+static paw_Int clamped_index(paw_Env *P, int loc, paw_Int n)
+{
+    const paw_Int i = v_int(cf_base(loc));
+    return i < 0 ? 0 : i >= n ? n - 1 : i;
+}
+
+// TODO: It would be nice to let pop() take an optional parameter indicating the
+//       index at which to erase an element. To me, 'remove' seems like it 
+//       should remove the first matching element using something akin to operator==.
+//       Attempting this will break, since we have no concept of equality between
+//       user-defined types right now.
+static int vector_remove(paw_Env *P)
+{
+    Vector *vec = v_vector(cf_base(1));
+    const paw_Int length = paw_cast_int(pawV_vec_length(vec));
+    if (length == 0) {
+        pawR_error(P, PAW_EVALUE, "remove from empty Vector");
+    }
+    const paw_Int index = v_int(cf_base(2));
+    P->top.p[-1] = *pawV_vec_get(P, vec, index);
+    pawV_vec_pop(P, vec, index);
     return 1;
 }
 
 static int vector_clone(paw_Env *P)
 {
-    Vector *a = v_vector(cf_base(0 /*TODO*/ + 1));
+    const Vector *vec = v_vector(cf_base(1));
     Value *pv = pawC_push0(P);
-    pawA_clone(P, pv, a);
+    pawV_vec_clone(P, pv, vec);
     return 1;
 }
 
@@ -275,6 +302,8 @@ static int string_find(paw_Env *P)
     return 1;
 }
 
+//// TODO: Remove '/*TODO*/+1', these should be methods, which take the
+////       context as the implicit first parameter
 // static int string_split(paw_Env *P)
 //{
 //     pawL_check_argc(P, 1);
@@ -392,9 +421,15 @@ static int map_clone(paw_Env *P)
 
 void pawL_new_func(paw_Env *P, paw_Function func, int nup)
 {
-    Native *nat =
-        pawV_new_native(P, func, nup); // TODO: take upvalues off top of stack
-    pawC_pusho(P, cast_object(nat));
+    Value *pv = pawC_push0(P);
+    Native *nat = pawV_new_native(P, func, nup);
+    v_set_object(pv, nat);
+
+    const Value *up = P->top.p - nup - 1;
+    for (int i = 0; i < nup; ++i) {
+        nat->up[i] = *up++;
+    }
+    paw_shift(P, nup);
 }
 
 static void add_builtin_func(paw_Env *P, const char *name, paw_Function func)
@@ -416,14 +451,12 @@ void pawL_init(paw_Env *P)
     add_builtin_func(P, "assert", base_assert); // fn assert(bool)
     add_builtin_func(P, "print", base_print); // fn print(string)
 
-    add_builtin_func(P, "v_push", vector_push);
-    add_builtin_func(P, "v_pop", vector_pop);
-    add_builtin_func(P, "v_insert", vector_insert);
-    add_builtin_func(P, "v_clone", vector_clone);
-
-    add_builtin_func(P, "m_get", map_get);
-    add_builtin_func(P, "m_erase", map_erase);
-    add_builtin_func(P, "m_clone", map_clone);
+    // TODO: Replace with real methods
+    add_builtin_func(P, "_vector_push", vector_push);
+    add_builtin_func(P, "_vector_pop", vector_pop);
+    add_builtin_func(P, "_vector_insert", vector_insert);
+    add_builtin_func(P, "_vector_erase", vector_remove);
+    add_builtin_func(P, "_vector_clone", vector_clone);
 
     pawC_pop(P);
 }

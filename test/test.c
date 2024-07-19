@@ -252,8 +252,6 @@ int test_open_file(paw_Env *P, const char *name)
 
     const int status = paw_load(P, test_reader, pathname, &rd);
     pawO_close(rd.file);
-    puts("TODO: remove");
-    paw_dump_source(P, v_closure(P->top.p[-1])->p);
     return status;
 }
 

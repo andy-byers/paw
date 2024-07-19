@@ -19,7 +19,6 @@
 #include "type.h"
 #include "util.h"
 #include "value.h"
-#include "vector.h"
 #include <assert.h>
 #include <math.h>
 #include <stdarg.h>
@@ -51,12 +50,12 @@
 
 // Generate code for creating common builtin objects
 // Requires a placeholder slot (the vm_push0() pushes an empty slot) so
-// the GC doesn't get confused. Both the vm_push0(), and the pawA_new calls
+// the GC doesn't get confused. Both the vm_push0(), and the pawV_vec_new calls
 // might fail and cause an error to be thrown, so we have to be careful not
 // to leave a junk value on top of the stack.
 #define vm_vector_init(pa, pv)                                                 \
     pv = vm_push0();                                                           \
-    pa = pawA_new(P);                                                          \
+    pa = pawV_vec_new(P);                                                          \
     v_set_object(pv, pa);
 
 #define vm_map_init(pm, pv)                                                    \
@@ -328,24 +327,72 @@ void pawR_setattr(paw_Env *P, int index)
     const Value val = *vm_top(1);
     const Value obj = *vm_top(2);
     Instance *ins = v_instance(obj);
-    ins->attrs[1 + index] = val;
+    ins->attrs[index] = val;
     vm_pop(2);
 }
 
-void pawR_setitem(paw_Env *P, paw_Type ttarget)
+void pawR_setitem(paw_Env *P, paw_Type t)
 {
     const Value val = *vm_top(1);
     const Value key = *vm_top(2);
     const Value obj = *vm_top(3);
-    if (ttarget == PAW_TVECTOR) {
+    if (t == PAW_TVECTOR) {
         const paw_Int index = v_int(key);
-        Value *pval = pawA_get(P, v_vector(obj), index);
+        Value *pval = pawV_vec_get(P, v_vector(obj), index);
         *pval = val;
     } else {
-        paw_assert(ttarget == PAW_TMAP);
+        paw_assert(t == PAW_TMAP);
         pawH_insert(P, v_map(obj), key, val);
     }
     vm_pop(3);
+}
+
+static size_t check_index(paw_Env *P, paw_Int index, size_t length, const char *what)
+{
+    const paw_Int n = paw_cast_int(length);
+    index = pawV_abs_index(index, length);
+    if (index < 0 || index > n) {
+        pawE_error(P, PAW_ERUNTIME, -1, "index %I is out of bounds for %s of length %I",
+                   index, what, paw_cast_int(length));
+    }
+    return cast_size(index);
+}
+
+static void setslice_vector(paw_Env *P, Vector *va, paw_Int i, paw_Int j, const Vector *vb)
+{
+    const size_t na = pawV_vec_length(va);
+    const size_t nb = pawV_vec_length(vb);
+    const size_t zi = check_index(P, i, na, "vector");
+    const size_t zj = check_index(P, j, na, "vector");
+
+    if (va == vb) {
+        Value *pv = vm_top(1);
+        paw_assert(pv->p == vb);
+        vb = pawV_vec_clone(P, pv, vb);
+    }
+
+    const size_t szelem = sizeof(va->begin[0]);
+    const size_t nelems = na - zj + zi + nb;
+    pawV_vec_reserve(P, va, nelems);
+
+    Value *gap = va->begin + zi;
+    memmove(gap + nb, va->begin + zj, (na - zj) * szelem);
+    memcpy(gap, vb->begin, nb * szelem);
+    pawV_vec_resize(P, va, nelems);
+}
+
+// setslice([a1..an], i, j, [b1..bn]) => [a1..ai b1..bn aj..an]
+void pawR_setslice(paw_Env *P, paw_Type t)
+{
+    const Value va = *vm_top(4);
+    const paw_Int i = v_int(*vm_top(3));
+    const paw_Int j = v_int(*vm_top(2));
+    const Value vb = *vm_top(1);
+
+    paw_assert(t == PAW_TVECTOR);
+    setslice_vector(P, v_vector(va), i, j, v_vector(vb));
+
+    vm_pop(4);
 }
 
 void pawR_init(paw_Env *P)
@@ -396,7 +443,7 @@ static paw_Bool forin_init(paw_Env *P, paw_Type t)
     //    paw_Int itr = PAW_ITER_INIT;
     //    if (t == PAW_TVECTOR) {
     //        Vector *arr = v_vector(v);
-    //        if (pawA_iter(arr, &itr)) {
+    //        if (pawV_vec_iter(arr, &itr)) {
     //            vm_pushi(itr);
     //            vm_pushv(arr->begin[itr]);
     //            return PAW_FALSE;
@@ -420,7 +467,7 @@ static paw_Bool forin(paw_Env *P, paw_Type t)
     //    if (t == PAW_TVECTOR) {
     //        Vector *arr = v_vector(obj);
     //        paw_Int i = v_int(itr);
-    //        if (pawA_iter(arr, &i)) {
+    //        if (pawV_vec_iter(arr, &i)) {
     //            v_set_int(vm_top(1), i);
     //            vm_pushv(arr->begin[i]);
     //            return PAW_TRUE;
@@ -470,6 +517,29 @@ static void string_binop(paw_Env *P, BinaryOp binop, Value lhs, Value rhs)
     vm_shift(2);
 }
 
+static void vector_binop(paw_Env *P, BinaryOp binop, Value lhs, Value rhs)
+{
+    const Vector *x = v_vector(lhs);
+    const Vector *y = v_vector(rhs);
+    paw_assert(binop == BINARY_ADD);
+
+    Value *pv;
+    Vector *z;
+    vm_vector_init(z, pv);
+
+    const size_t zelem = sizeof(z->begin[0]);
+    const size_t nx = pawV_vec_length(x);
+    const size_t ny = pawV_vec_length(y);
+    pawV_vec_resize(P, z, nx + ny);
+    if (nx > 0) {
+        memcpy(z->begin, x->begin, nx * zelem);
+    }
+    if (ny > 0) {
+        memcpy(z->begin + nx, y->begin, ny * zelem);
+    }
+    vm_shift(2);
+}
+
 static void eq_ne(paw_Env *P, BinaryOp binop, paw_Type t, Value x, Value y)
 {
     paw_Bool result;
@@ -478,7 +548,7 @@ static void eq_ne(paw_Env *P, BinaryOp binop, paw_Type t, Value x, Value y)
     if (t == PAW_TVECTOR) {
         const Vector *lhs = v_vector(x);
         const Vector *rhs = v_vector(y);
-        result = pawA_equals(P, lhs, rhs);
+        result = pawV_vec_equals(P, lhs, rhs);
     } else if (t == PAW_TMAP) {
         Map *lhs = v_map(x);
         Map *rhs = v_map(y);
@@ -491,12 +561,12 @@ static void eq_ne(paw_Env *P, BinaryOp binop, paw_Type t, Value x, Value y)
     vm_pop(1);
 }
 
-#define i2u(i) ((uint64_t)(i))
+#define i2u(i) (cast(i, uint64_t))
 #define u2i(u) paw_cast_int(u)
 
 // Generate code for int operators
-// Casts to unsigned to avoid UB (signed integer overflow). Negative
-// numbers 'just work' on processors using 2's complement integers.
+// Casts to unsigned to avoid UB (signed integer overflow). Requires
+// 2's complement integer representation to work properly.
 #define i_unop(a, op) u2i(op i2u(a))
 #define i_binop(a, b, op) u2i(i2u(a) op i2u(b))
 
@@ -550,7 +620,7 @@ static void int_binop(paw_Env *P, BinaryOp binop, paw_Int x, paw_Int y)
             } else if (y == 0) {
                 z = x; // NOOP
             } else {
-                y = paw_min(y, (int)(sizeof(x) * 8 - 1));
+                y = paw_min(y, cast(sizeof(x) * 8 - 1, int));
                 z = paw_cast_int(i2u(x) << y);
             }
             break;
@@ -565,7 +635,7 @@ static void int_binop(paw_Env *P, BinaryOp binop, paw_Int x, paw_Int y)
                 // shift count. If 'x' < 0, then the results of the
                 // shift are implementation-defined (may or may not
                 // preserve the sign).
-                y = paw_min(y, (int)(sizeof(x) * 8 - 1));
+                y = paw_min(y, cast(sizeof(x) * 8 - 1, int));
                 z = x >> y;
             }
     }
@@ -613,20 +683,22 @@ static void float_binop(paw_Env *P, BinaryOp binop, paw_Float x, paw_Float y)
     vm_pop(1);
 }
 
-static void other_binop(paw_Env *P, BinaryOp binop, paw_Type t, Value x,
-                        Value y)
+static void other_binop(paw_Env *P, BinaryOp binop, paw_Type t, Value x, Value y)
 {
     if (binop == BINARY_IN) {
+        Value *pv = vm_top(2);
         if (t == PAW_TVECTOR) {
-            v_set_bool(vm_top(2), pawA_contains(P, v_vector(y), x));
+            v_set_bool(pv, pawV_vec_contains(P, v_vector(y), x));
         } else {
             paw_assert(t == PAW_TMAP);
-            v_set_bool(vm_top(2), pawH_contains(P, v_map(y), x));
+            v_set_bool(pv, pawH_contains(P, v_map(y), x));
         }
         vm_pop(1);
-    } else {
-        paw_assert(t == PAW_TSTRING);
+    } else if (t == PAW_TSTRING) {
         string_binop(P, binop, x, y);
+    } else {
+        paw_assert(t == PAW_TVECTOR);
+        vector_binop(P, binop, x, y);
     }
 }
 
@@ -683,11 +755,9 @@ static void float_unop(paw_Env *P, UnaryOp unop, paw_Float f)
 static void other_unop(paw_Env *P, UnaryOp unop, paw_Type t, Value x)
 {
     if (unop == UNARY_LEN) {
-        // Replace the container with its length.
         v_set_int(vm_top(1), pawV_length(x, t));
     } else {
         paw_assert(unop == UNARY_NOT);
-        // allows expressions like '!str'
         v_set_bool(vm_top(1), !pawV_truthy(x, t));
     }
 }
@@ -718,12 +788,12 @@ void pawR_gettuple(paw_Env *P, int index)
 void pawR_getattr(paw_Env *P, int index)
 {
     Instance *ins = v_instance(*vm_top(1));
-    *vm_top(1) = ins->attrs[1 + index];
+    *vm_top(1) = ins->attrs[index];
 }
 
 static void getitem_vector(paw_Env *P, Vector *vector, paw_Int index)
 {
-    *vm_top(2) = *pawA_get(P, vector, index);
+    *vm_top(2) = *pawV_vec_get(P, vector, index);
     vm_pop(1);
 }
 
@@ -740,26 +810,67 @@ static int getitem_map(paw_Env *P, Map *map, Value key)
 
 static void getitem_string(paw_Env *P, const String *string, paw_Int index)
 {
-    pawA_check_abs(P, index, string->length);
+    pawV_check_abs(P, index, string->length);
     const char c = string->text[index];
     String *res = pawS_new_nstr(P, &c, 1);
     v_set_object(vm_top(2), res);
     vm_pop(1);
 }
 
-int pawR_getitem(paw_Env *P, paw_Type ttarget)
+int pawR_getitem(paw_Env *P, paw_Type t)
 {
     const Value obj = *vm_top(2);
     const Value key = *vm_top(1);
-     if (ttarget == PAW_TMAP) {
+     if (t == PAW_TMAP) {
         return getitem_map(P, v_map(obj), key);
     }
-    if (ttarget == PAW_TVECTOR) {
+    if (t == PAW_TVECTOR) {
         getitem_vector(P, v_vector(obj), v_int(key));
-    } else if (ttarget == PAW_TSTRING) {
+    } else if (t == PAW_TSTRING) {
         getitem_string(P, v_string(obj), v_int(key));
     }
     return 0;
+}
+
+static void getslice_vector(paw_Env *P, Vector *vec, paw_Int i, paw_Int j)
+{
+    const size_t n = pawV_vec_length(vec);
+    const size_t zi = check_index(P, i, n, "vector");
+    const size_t zj = check_index(P, j, n, "vector");
+
+    Value *pv;
+    Vector *slice;
+    vm_vector_init(slice, pv);
+
+    const size_t nelems = zj - zi;
+    pawV_vec_resize(P, slice, nelems);
+    memcpy(slice->begin, vec->begin + zi, nelems * sizeof(vec->begin[0]));
+}
+
+static void getslice_string(paw_Env *P, String *str, paw_Int i, paw_Int j)
+{
+    const size_t n = pawS_length(str);
+    const size_t zi = check_index(P, i, n, "string");
+    const size_t zj = check_index(P, j, n, "string");
+
+    Value *pv = vm_push0();
+    const size_t nbytes = zj - zi;
+    String *slice = pawS_new_nstr(P, str->text + zi, nbytes);
+    v_set_object(pv, slice);
+}
+
+void pawR_getslice(paw_Env *P, paw_Type t)
+{
+    const Value obj = *vm_top(3);
+    const paw_Int i = v_int(*vm_top(2));
+    const paw_Int j = v_int(*vm_top(1));
+     if (t == PAW_TVECTOR) {
+        getslice_vector(P, v_vector(obj), i, j);
+    } else {
+        paw_assert(t == PAW_TSTRING); 
+        getslice_string(P, v_string(obj), i, j);
+    }
+    vm_shift(3);
 }
 
 void pawR_literal_tuple(paw_Env *P, int n)
@@ -782,7 +893,7 @@ void pawR_literal_vector(paw_Env *P, int n)
     StackPtr sp;
     vm_vector_init(v, sp);
     if (n > 0) {
-        pawA_resize(P, v, cast_size(n));
+        pawV_vec_resize(P, v, cast_size(n));
         Value *pv = v->end;
         do {
             *--pv = *--sp;
@@ -849,7 +960,6 @@ void pawR_execute(paw_Env *P, CallFrame *cf)
 {
     const Value *K;
     const OpCode *pc;
-    Struct **S = P->sv.data;
     Closure *fn;
 
 top:
@@ -877,7 +987,8 @@ top:
 
             vm_case(COPY) :
             {
-                vm_pushv(*vm_top(1));
+                const int u = get_U(opcode);
+                vm_pushv(*vm_top(u + 1));
             }
 
             vm_case(PUSHUNIT) :
@@ -898,11 +1009,6 @@ top:
             vm_case(PUSHCONST) :
             {
                 vm_pushv(K[get_U(opcode)]);
-            }
-
-            vm_case(PUSHSTRUCT) :
-            {
-                vm_pusho(S[get_U(opcode)]);
             }
 
             vm_case(UNOP) :
@@ -984,16 +1090,12 @@ top:
                 check_gc(P);
             }
 
-            // TODO: Instances store a pointer to Struct as the first field. This was how
-            //       method calls were implemented before the switch to static typing.
             vm_case(NEWINSTANCE) :
             {
                 vm_protect();
-                Value *pv = vm_top(1);
-                Struct *struct_ = v_struct(*pv);
-                Instance *ins = pawV_new_instance(P, 1 + get_U(opcode));
-                v_set_object(ins->attrs, struct_);
-                v_set_object(pv, ins); // replace Struct
+                Value *pv = vm_push0();
+                Instance *ins = pawV_new_instance(P, get_U(opcode));
+                v_set_object(pv, ins);
                 check_gc(P);
             }
 
@@ -1002,7 +1104,7 @@ top:
                 vm_protect();
                 const int u = get_U(opcode);
                 Instance *ins = v_instance(*vm_top(2));
-                ins->attrs[1 + u] = *vm_top(1);
+                ins->attrs[u] = *vm_top(1);
                 vm_pop(1);
             }
 
@@ -1071,7 +1173,7 @@ top:
             vm_case(GETITEM) :
             {
                 vm_protect();
-                if (pawR_getitem(P, get_A(opcode))) {
+                if (pawR_getitem(P, get_U(opcode))) {
                     pawH_key_error(P, *vm_top(1), PAW_TSTRING); // TODO: lookup key type
                 }
             }
@@ -1080,6 +1182,18 @@ top:
             {
                 vm_protect();
                 pawR_setitem(P, get_U(opcode));
+            }
+
+            vm_case(GETSLICE) :
+            {
+                vm_protect();
+                pawR_getslice(P, get_U(opcode));
+            }
+
+            vm_case(SETSLICE) :
+            {
+                vm_protect();
+                pawR_setslice(P, get_U(opcode));
             }
 
             vm_case(CLOSURE) :
@@ -1150,8 +1264,10 @@ top:
 
             vm_case(JUMPNULL) :
             {
-                const Variant *pv = v_variant(*vm_top(1));
-                if (pv->k == 0) {
+                const Variant *var = v_variant(*vm_top(1));
+                if (var->k == 0) {
+                    // jump over the OP_RETURN and unpack the value
+                    *vm_top(1) = var->fields[0];
                     pc += get_S(opcode);
                 }
             }
@@ -1188,7 +1304,6 @@ top:
 
             vm_case(FORIN0) :
             {
-                vm_protect();
                 if (forin_init(P, get_U(opcode))) {
                     // Skip the loop. We need to add a dummy value to the stack,
                     // since there was an 'OP_POP' generated to pop it. See
@@ -1200,7 +1315,6 @@ top:
 
             vm_case(FORIN) :
             {
-                vm_protect(); // metamethod may throw an error
                 if (forin(P, get_U(opcode))) {
                     pc += get_S(opcode); // continue
                 }

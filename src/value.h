@@ -156,11 +156,28 @@ static inline int pawV_type(ValueKind vt)
 #define NOBJECTS (int)(NVTYPES - VOBJECT0)
 #define obj_index(t) ((t) - VOBJECT0)
 
+void pawV_index_error(paw_Env *P, paw_Int index, size_t length);
 paw_Int pawV_length(Value v, paw_Type type);
 paw_Bool pawV_truthy(Value v, paw_Type type);
 int pawV_num2int(Value *pv, paw_Type type);
 int pawV_num2float(Value *pv, paw_Type type);
 uint32_t pawV_hash(Value v);
+const char *pawV_name(ValueKind type);
+
+
+static paw_Int pawV_abs_index(paw_Int index, size_t length)
+{
+    return index + (index < 0 ? paw_cast_int(length) : 0);
+}
+
+static inline size_t pawV_check_abs(paw_Env *P, paw_Int index, size_t length)
+{
+    index = pawV_abs_index(index, length);
+    if (index < 0 || cast_size(index) >= length) {
+        pawV_index_error(P, index, length);
+    }
+    return cast_size(index);
+}
 
 // Convert a null-terminated string into an integer
 // Understands non-decimal base prefixes '0b', '0o', '0x', and their uppercase
@@ -275,17 +292,31 @@ typedef struct Vector {
 } Vector;
 
 Vector *pawV_vec_new(paw_Env *P);
-void pawV_vec_free(paw_Env *P, Vector *a);
+void pawV_vec_free(paw_Env *P, Vector *vec);
+Vector *pawV_vec_clone(paw_Env *P, Value *pv, const Vector *vec);
 paw_Bool pawV_vec_equals(paw_Env *P, const Vector *lhs, const Vector *rhs);
-paw_Bool pawV_vec_contains(paw_Env *P, const Vector *a, Value v);
-void pawV_vec_resize(paw_Env *P, Vector *a, size_t length);
-void pawV_vec_insert(paw_Env *P, Vector *a, paw_Int index, Value v);
-void pawV_vec_push(paw_Env *P, Vector *a, Value v);
-void pawV_vec_pop(paw_Env *P, Vector *a, paw_Int index);
+paw_Bool pawV_vec_contains(paw_Env *P, const Vector *vec, Value v);
+void pawV_vec_reserve(paw_Env *P, Vector *vec, size_t length);
+void pawV_vec_resize(paw_Env *P, Vector *vec, size_t length);
+void pawV_vec_insert(paw_Env *P, Vector *vec, paw_Int index, Value v);
+void pawV_vec_push(paw_Env *P, Vector *vec, Value v);
+void pawV_vec_pop(paw_Env *P, Vector *vec, paw_Int index);
 
-static inline size_t pawV_vec_length(const Vector *a)
+static inline size_t pawV_vec_length(const Vector *vec)
 {
-    return cast_size(a->end - a->begin);
+    return cast_size(vec->end - vec->begin);
+}
+
+static inline Value *pawV_vec_get(paw_Env *P, Vector *vec, paw_Int index)
+{
+    const paw_Int abs = pawV_abs_index(index, cast_size(vec->end - vec->begin));
+    const size_t i = pawV_check_abs(P, abs, pawV_vec_length(vec));
+    return &vec->begin[i];
+}
+
+static inline paw_Bool pawV_vec_iter(const Vector *vec, paw_Int *itr)
+{
+    return ++*itr < paw_cast_int(pawV_vec_length(vec));
 }
 
 typedef enum MapState {
@@ -363,23 +394,5 @@ typedef struct Foreign {
 
 Foreign *pawV_push_foreign(paw_Env *P, size_t size, int nfields);
 void pawV_free_foreign(paw_Env *P, Foreign *ud, int nfields);
-
-const char *pawV_name(ValueKind type);
-
-void pawV_index_error(paw_Env *P, paw_Int index, size_t length);
-
-static paw_Int pawV_abs_index(paw_Int index, size_t length)
-{
-    return index + (index < 0 ? paw_cast_int(length) : 0);
-}
-
-static inline size_t pawV_check_abs(paw_Env *P, paw_Int index, size_t length)
-{
-    index = pawV_abs_index(index, length);
-    if (index < 0 || cast_size(index) >= length) {
-        pawV_index_error(P, index, length);
-    }
-    return cast_size(index);
-}
 
 #endif // PAW_VALUE_H

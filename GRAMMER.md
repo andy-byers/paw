@@ -60,7 +60,7 @@ Declaration = VarDecl | FunctionDecl | StructDecl |
               EnumDecl | TypeDecl .
 VarDecl     = "let" name [":" Type] "=" Expr .
 TypeDecl    = "type" name [Generics] "=" Type .
-Generics    = "[" {name ","} name "]" .
+Generics    = "<" {name ","} name [","] ">" .
 ```
 
 ### Functions
@@ -110,8 +110,8 @@ Type       = NamedType | TypeLit .
 TypeLit    = FuncType | VectorType | MapType | 
              TupleType | NamedType .
 FuncType   = "fn" "(" [TypeList] ")" ["->" Type] .
-TypeList   = {Type ","} Type .
-TypeArgs   = "[" TypeList "]" .
+TypeList   = {Type ","} Type [","] .
+TypeArgs   = "::" "<" TypeList ">" .
 NamedType  = name [TypeArgs] .
 VectorType = "[" Type "]" .
 MapType    = "[" Type ":" Type "]" .

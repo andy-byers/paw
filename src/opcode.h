@@ -77,11 +77,6 @@
 
 typedef uint32_t OpCode;
 
-// match e {
-//    E::X(x) => x,
-//    E::X('x') => 'x',
-// }
-
 // clang-format off
 //
 // Opcode format: Each instruction is packed into a 32-bit unsigned integer (OpCode)
@@ -98,71 +93,75 @@ typedef uint32_t OpCode;
 //       corresponding metamethods).
 //
 // ORDER Op
-typedef enum Op { // operands    stack in     stack out     side effects
-OP_PUSHUNIT,//       -           -            ()            -
-OP_PUSHTRUE,//       -           -            true          -
-OP_PUSHFALSE,//      -           -            false         -
-OP_PUSHCONST,//      U           -            K[u]          -
-OP_PUSHSTRUCT,//     U           -            C[u]          -
+typedef enum Op { // operands    stack in       stack out     side effects
+OP_PUSHUNIT,//       -           -              ()            -
+OP_PUSHTRUE,//       -           -              true          -
+OP_PUSHFALSE,//      -           -              false         -
+OP_PUSHCONST,//      U           -              K[u]          -
+OP_PUSHSTRUCT,//     U           -              C[u]          -
 
-OP_POP,//            U           vu..v1       -             -
-OP_CLOSE,//          U           vu..v1       -             close stack to vu
-OP_COPY,//           -           v            v v           -
-OP_RETURN,//         -           f..v         v             closes stack to f
-OP_TRANSIT,//        U           vu..v1       v1            closes stack to vu
+OP_POP,//            U           vu..v1         -             -
+OP_CLOSE,//          U           vu..v1         -             close stack to vu
+OP_COPY,//           -           v              v v           -
+OP_RETURN,//         -           f..v           v             closes stack to f
+OP_TRANSIT,//        U           vu..v1         v1            closes stack to vu
 
-OP_CLOSURE,//        A B         vb..v1       f             captures vu..v1 in f = P[a]
+OP_CLOSURE,//        A B         vb..v1         f             captures vu..v1 in f = P[a]
 OP_INVOKE,//      
 
-OP_JUMP,//           S           -            -             pc += S
-OP_JUMPFALSEPOP,//   S           v            -             pc += S
-OP_JUMPFALSE,//      S           v            v             if !v, then pc += S
-OP_JUMPNULL,//       S           v            v             if v == null, then pc += S
+OP_JUMP,//           S           -              -             pc += S
+OP_JUMPFALSEPOP,//   S           v              -             pc += S
+OP_JUMPFALSE,//      S           v              v             if !v, then pc += S
+OP_JUMPNULL,//       S           v              v             if v == null, then pc += S
 
-OP_GLOBAL,//         U           v            -             define G[K[u]] = v
-OP_GETGLOBAL,//      U           -            G[K[u]]       -
-OP_SETGLOBAL,//      U           v            -             G[K[u]] = v
-OP_GETLOCAL,//       U           -            L[u]          -
-OP_SETLOCAL,//       U           v            -             L[u] = v
-OP_GETUPVALUE,//     U           -            Up[u]         -
-OP_SETUPVALUE,//     U           v            -             Up[u] = v
+OP_GLOBAL,//         U           v              -             define G[K[u]] = v
+OP_GETGLOBAL,//      U           -              G[K[u]]       -
+OP_SETGLOBAL,//      U           v              -             G[K[u]] = v
+OP_GETLOCAL,//       U           -              L[u]          -
+OP_SETLOCAL,//       U           v              -             L[u] = v
+OP_GETUPVALUE,//     U           -              Up[u]         -
+OP_SETUPVALUE,//     U           v              -             Up[u] = v
 
-OP_MATCHVARIANT,//   U           v            disc(v)==u    -
-OP_UNPACKTUPLE,//    U           v            vu..v1        -  
-OP_UNPACKINSTANCE,// U           v            vu..v1        -
-OP_UNPACKVARIANT,//  U           v            vu..v1        -
+OP_MATCHVARIANT,//   U           v              disc(v)==u    -
+OP_UNPACKTUPLE,//    U           v              vu..v1        -  
+OP_UNPACKINSTANCE,// U           v              vu..v1        -
+OP_UNPACKVARIANT,//  U           v              vu..v1        -
 
-OP_NEWVARIANT,//     A B         vb..v1       a(vb..v1)     -
-OP_NEWTUPLE,//       U           vu..v1       (vu..v1)      -
-OP_NEWINSTANCE,//    U           -            v             v = new instance of class C[u]
-OP_INITFIELD,//      U           i v          i             i.fields[u] = v
-OP_NEWVECTOR,//      U           vu..v1       [vu..v1]      -
-OP_NEWMAP,//         U           v_2n..v1     {v_2n..v1}    -
+OP_NEWVARIANT,//     A B         vb..v1         a(vb..v1)     -
+OP_NEWTUPLE,//       U           vu..v1         (vu..v1)      -
+OP_NEWINSTANCE,//    U           -              v             v = new instance of class C[u]
+OP_INITFIELD,//      U           i v            i             i.fields[u] = v
+OP_NEWVECTOR,//      U           vu..v1         [vu..v1]      -
+OP_NEWMAP,//         U           v_2n..v1       {v_2n..v1}    -
+
+OP_UNWRAP,//         -           v              t             throws an error if disc(v) != 0
 
 OP_FORNUM0,//        S           *-*-*-*-*-*-*-*-* see notes *-*-*-*-*-*-*-*-*
 OP_FORNUM,//         S           *-*-*-*-*-*-*-*-* see notes *-*-*-*-*-*-*-*-*
 OP_FORIN0,//         S           *-*-*-*-*-*-*-*-* see notes *-*-*-*-*-*-*-*-*
 OP_FORIN,//          S           *-*-*-*-*-*-*-*-* see notes *-*-*-*-*-*-*-*-*
 
-OP_UNOP,//           A B         v            ops[a](v)     -
-OP_BINOP,//          A B         l r          ops[a](l, r)  -
-OP_UNMM,//           A B         v            v.attr[a]()   -
-OP_BINMM,//          A B         l r          l.attr[a](r)  -
+OP_UNOP,//           A B         v              ops[a](v)     -
+OP_BINOP,//          A B         l r            ops[a](l, r)  -
+OP_UNMM,//           A B         v              v.mtd[a]()    -
+OP_BINMM,//          A B         l r            l.mtd[a](r)   -
          
-OP_CASTBOOL,//       U           v            bool(v)       -  
-OP_CASTINT,//        U           v            int(v)        - 
-OP_CASTFLOAT,//      U           v            float(v)      - 
+OP_CASTBOOL,//       U           v              bool(v)       -  
+OP_CASTINT,//        U           v              int(v)        - 
+OP_CASTFLOAT,//      U           v              float(v)      - 
          
-OP_VARARG,//         A B         vu..v1       [vu..v1]      -
+OP_VARARG,//         A B         vu..v1         [vu..v1]      -
 OP_INIT,
-OP_CALL,//           U           f vu..v1     v             v = f(vu..v1)
+OP_CALL,//           U           f vu..v1       v             v = f(vu..v1)
 
-OP_GETTUPLE,//       U           v            v.u           -
-OP_GETATTR,//        U           v            v.u           -
-OP_SETTUPLE,//       U           v x          -             v.u=x
-OP_SETATTR,//        U           v x          -             v.u=x
-OP_GETITEM,//        -           v i          v[i]          -
-OP_SETITEM,//        -           v i x        -             v[i]=x
+OP_GETTUPLE,//       U           v              v.u           -
+OP_GETATTR,//        U           v              v.u           -
+OP_SETTUPLE,//       U           v x            -             v.u=x
+OP_SETATTR,//        U           v x            -             v.u=x
+OP_GETITEM,//        U           v i            v[i]          -
+OP_SETITEM,//        U           v i x          -             v[i]=x
+OP_GETSLICE,//       U           v i j          v[i:j]        -
+OP_SETSLICE,//       U           v i j x        -             v[i:j]=x
 
 NOPCODES
 } Op;
@@ -294,6 +293,22 @@ typedef enum {
 
     NMETAMETHODS
 } Metamethod;
+
+enum VectorOp {
+    VO_CLONE,
+    VO_INSERT,
+    VO_PUSH,
+    VO_POP,
+    VO_POP2,
+};
+
+enum MapOp {
+    MO_CLONE,
+    MO_ERASE,
+};
+
+_Static_assert(NOPCODES <= ((1 << OP_WIDTH) - 1), 
+        "too many opcodes (see opcode.h)");
 
 // sanity check opcode format
 _Static_assert(OP_WIDTH + A_WIDTH + B_WIDTH == sizeof(OpCode) * 8 &&

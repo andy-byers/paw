@@ -4,6 +4,8 @@
 > Some features will not work for a while (builtin functions, metamethods, C API).
 > Pretty much everything is subject to change.
 > See the [roadmap](#roadmap) to get an idea of where things are going.
+> As far as the syntax examples go, just keep in mind that type inference is only implemented for function templates right now, so structure/enumerator/container literals will look pretty verbose.
+> It should be possible to use a similar technique to infer these types.
 
 An unobtrusive scripting language
 
@@ -41,39 +43,42 @@ global g: string = "hello, world!"
 ```
 
 ### Types
-paw is statically-typed, meaning all types must be known at compile-time.
-paw supports type inference on variable definitions and function template calls.
+Paw is statically-typed, meaning all types must be known at compile-time.
+Also note that Paw is strongly typed, meaning implicit conversion are not allowed.
+Conversion operators are provided to convert between primitive types explicitly.
 The following example demonstrates creation of the basic value types.
-
+Composite types are discussed in [tuple](#tuple), [structure](#structure), etc., below.
 ```
 // initializer is validated against the type annotation
 let b: bool = true
 let i: int = 123
 let f: float = 10.0e-1 
-let v: Vec[int] = Vec[int]{1, 2, 3}
-let m: Map[string, int] = Map[string, int]{'a': 1, 'b': 2}
+let s: string = 'abc'
+let v: [int] = [1, 2, 3]
+let m: [string: int] = ['a': 1, 'b': 2]
 let f: fn() -> int = some_function
 
 // type is inferred from the initializer
 let b = false
 let i = 40 + 2
 let f = 1.0 * 2
-let a = Vec{'a', 'b', 'c'}
-let m = Map{1: 1, 2: 2}
-let f = some_other_function
+let s = 'de' + 'f'
+let v = ['a', 'b', 'c']
+let m = [1: 1, 2: 2]
+let F = some_other_function
+
+let b = 1 as bool // int -> bool
+let i = 2 + 3.4 as int // float -> int
 
 struct Object {
     value: int
-    times2(a: int) -> int {
-        return a * 2
-    }
 }
-let instance = Object()      // Object
-let method = instance.times2 // fn(Object, int) -> int
+// all fields must be initialized
+let obj = Object{value: 42}
 ```
 
 ### Scope
-paw uses lexical scoping, meaning variables declared in a given block can only be referenced from within that block, or one of its subblocks.
+Paw uses lexical scoping, meaning variables declared in a given block can only be referenced from within that block, or one of its subblocks.
 A block begins when a '{' token is encountered, and ends when a matching '}' is found.
 Many language constructs use blocks to create their own scope, like functions, structures, for loops, etc. 
 Explicit scoping blocks are also supported.
@@ -110,6 +115,16 @@ let o = Object{
 }
 ```
 
+### Enumerations
+```
+enum Choices {
+    First,
+    Second(int),
+}
+
+let c = Choices::Second(123)
+```
+
 ### Control flow
 paw supports some common types of control flow.
 ```
@@ -122,27 +137,18 @@ if i == 0 {
 
 }
 
-// Conditional (ternary) expressions:
-let v = cond ?? 'then' :: 'else'
-
 // Null chaining operator: return immediately (with None/Err) if the operand is None/Err 
-// (must appear in a function that returns Option[T]/Result[T, E])
-let v = maybe_none()?.field?
+// (must appear in a function that returns Option<T>/Result<T, E>), otherwise, unwraps
+// the Option/Result
+let v = maybe_none()?.field
 
 // 'break'/'continue' (must appear in a loop):
 break
 continue
 
 // Numeric 'for' loop:
-for i in 0, 10, 2 { // start, end, step
+for i in 0, 10, 2 { // start, end[, step]
     
-}
-
-// Iterator 'for' loop: allows iterating over arrays and maps. If a struct implements
-// both '__getitem' and '__len', then instances of that struct can be used in an
-// iterator 'for' loop.
-for v in iterable {
-
 }
 
 // 'while' loop:
@@ -177,49 +183,90 @@ Paw supports basic parametric polymorphism.
 Variables with generic types must be treated generically, that is, they can only be assigned to other variables of the same type, passed to functions expecting a generic parameter, or stored in a container.
 This allows each template to be type checked a single time, rather than once for each unique instantiation, and makes it easier to generate meaningful error messages.
 ```
-fn mapval[A, B](f: fn(A) -> B, a: A) -> B {
-    return f(a)
+fn map<A, B>(f: fn(A) -> B, vec: [A]) -> [B] {
+    let result: [B] = []
+    for a in vec {
+        result.push(f(a))
+    }
+    return result
 }
 fn float2int(value: float) -> int {
     return int(value)
 }
 
 // infer A = float, B = int
-let i = mapval(float2int, 1.5)
-assert(i == 1)
+let vec = map(float2int, [0.5, 1.5, 2.5])
+assert(vec == [0, 1, 2])
 
 // struct template
-struct Object[S, T] {
+struct Object<S, T> {
     a: S
     b: T
 }
 
-let c = Object{
+// explicit instantiation uses 'turbofish'
+let o = Object::<bool, float>{
+    a: false,
+    b: 1.23,
+}
+
+let o = Object{
     a: 123, // infer S = int
     b: 'abc', // infer T = string
 }
-let a = c.a + 1
-let b = c.b + 'two'
+// field access using '.'
+let a = o.a + 1
+let b = o.b + 'two'
+```
+
+### Tuples
+```
+let unit = ()
+let singleton = (42,)
+let pair = (true, 'abc')
+let triplet = (1.0, 'two', 3)
+
+let a = singleton.0
+let b = pair.1
+let c = triplet.2
 ```
 
 ### Vectors
 ```
-let v = Vector{1, 2, 3} // infer T = int
-assert(v[:1] == Vector{1})
-assert(v[1:-1] == Vector{2})
-assert(v[-1:] == Vector{3})
+let empty: [int] = []
+
+let empty = []
+empty.push('a')
+
+let vec = [
+    [[1, 2, 3], [0]],
+    [[4, 5, 6], [1]], 
+    [[7, 8, 9], [2]],
+]
+
+// infer T = int
+let vec = [1, 2, 3] 
+assert(vec[:1] == [1])
+assert(vec[1:-1] == [2])
+assert(vec[-1:] == [3])
 ```
 
 ### Maps
 ```
-let m = Map{1: 'a', 2: 'b'} // infer K = int, V = string
-m[3] = 42
-m.erase(1)
+let empty: [int: string] = [:]
 
-assert(m == Map{2: 'b'})
+let empty = [:]
+empty[0] = 'abc'
+
+// infer K = int, V = string
+let map = [1: 'a', 2: 'b'] 
+map[3] = 42
+map.erase(1)
+
+assert(m == [2: 'b'])
 
 // prints 'default'
-print(m.get(1, 'default'))
+print(m.get_or(1, 'default'))
 ```
 
 ### Error handling
@@ -235,175 +282,45 @@ assert(status != 0)
 
 |Precedence|Operator      |Description                                   |Associativity|
 |:---------|:-------------|:---------------------------------------------|:------------|
-|15        |`() [] . ?`   |Call, Subscript, Member access, Question mark |Left         |
-|14        |`! - ~`       |Not, Negate, Bitwise not                      |Right        |
-|13        |`* / %`       |Multiply, Divide, Modulus                     |Left         |
-|12        |`+ -`         |Add, Subtract                                 |Left         |
-|11        |`++`          |Concatenate                                   |Left         | 
-|10        |`<< >>`       |Shift left, Shift right                       |Left         |
-|9         |`&`           |Bitwise and                                   |Left         |
-|8         |`^`           |Bitwise xor                                   |Left         |
-|7         |<code>&#124;</code>|Bitwise or                               |Left         |
-|6         |`in < <= > >=`|Inclusion, Relational comparisons             |Left         |
-|5         |`== !=`       |Equality comparisons                          |Left         |
-|4         |`&&`          |And                                           |Left         |
-|3         |<code>&#124;&#124;</code>|Or                                 |Left         |
-|2         |`??::`        |Conditional                                   |Right        |
+|14        |`() [] . ?`   |Call, Subscript, Member access, Question mark |Left         |
+|13        |`! - ~ #`     |Not, Negate, Bitwise not, length              |Right        |
+|12        |`as`          |Cast                                          |Left         |
+|11        |`* / %`       |Multiply, Divide, Modulus                     |Left         |
+|10        |`+ -`         |Add, Subtract                                 |Left         |
+|9         |`<< >>`       |Shift left, Shift right                       |Left         |
+|8         |`&`           |Bitwise and                                   |Left         |
+|7         |`^`           |Bitwise xor                                   |Left         |
+|6         |<code>&#124;</code>|Bitwise or                               |Left         |
+|5         |`in < <= > >=`|Inclusion, Relational comparisons             |Left         |
+|4         |`== !=`       |Equality comparisons                          |Left         |
+|3         |`&&`          |And                                           |Left         |
+|2         |<code>&#124;&#124;</code>|Or                                 |Left         |
 |1         |`=`           |Assignment                                    |Right        |
 
 ## Roadmap
 + [x] static typing
-+ [ ] builtin containers
-+ [ ] pattern matching (`match` construct)
-+ [ ] pattern matching (`let` bindings)
-+ [ ] sum types/discriminated unions (`enum`)
-+ [ ] product types (tuple)
-+ [ ] generic constraints/bounds
-+ [ ] custom garbage collector
-+ [ ] associated types on `struct`s (`A::B`)
-+ [ ] struct methods
++ [x] special-cased builtin containers (`[T]` and `[K: V]`)
++ [ ] type inference for ADT templates (including builtin containers)
++ [ ] pattern matching (`switch` construct)
++ [ ] pattern matching (`if let`, `let` bindings)
++ [ ] constness (`var` vs `let`)
++ [x] sum types/discriminated unions (`enum`)
++ [x] product types (tuple)
++ [ ] custom garbage collector (using Boehm GC for now)
++ [ ] methods
 + [ ] metamethods
++ [ ] generic constraints/bounds
++ [ ] associated types on `struct`s (`A::B`)
 + [ ] existential types
 
-## Pattern matching notes
-
-### Match construct
-Identifiers in a match guard create new variable bindings, given that they don't refer to exiting **types** (variables are shadowed).
-Each identifier can be bound at most 1 time per guard (`E::X(a, b, a)` is not allowed).
-A match construct eventually becomes a series of comparisons and jumps, similar to an if-else chain.
+## Known problems
++ Compiler will allow functions that don't return a value in all code paths
+    + Likely requires a CFG and some data flow analysis: it would be very difficult to get right otherwise
++ It isn't possible to create an empty vector or map of a given type without creating a temporary: `let vec: [int] = []`
+    + Could use Swift syntax, or something similar:
 ```
-struct S {v: float}
-enum D {A, B(string)}
-enum E {X, Y(int), Z(S), W(D)}
-let e = select_variant()
-let v = match e {
-    E::X => 0,                           
-    E::Y(1) => 1,                        
-    E::Y(i) => i,                        
-    E::Z(S{v}) if v < 0.0 => 4,          
-    E::Z(S{v: renamed}) => int(renamed), 
-    E::W(D::A) => 6,                     
-    E::W(D::B(s)) if #s > 1 => #s,
-    E::W(d) => 8,
-    _ => 9,
-}
-```
-
-### Desugared code
-```
-let v = while 1 {
-    if disc(e) == 0 {
-        break 0
-    }
-    if disc(e) == 1 {
-        if e.0 == 1 {
-            break 1
-        }
-    }
-    if disc(e) == 1 {
-        let i = e.0
-        break i
-    }
-    if disc(e) == 2 {
-        let v = e.0.v
-        if v < 0.0 {
-            break 4
-        }
-    }
-    if disc(e) == 2 {
-        let renamed = e.0.v
-        break int(renamed)
-    }
-    if disc(e) == 3 {
-        if disc(e.0) == 0 {
-            break 6
-        }
-    }
-    if disc(e) == 3 {
-        if disc(e.0) == 1 {
-            let s = e.0.0
-            if #s > 1 {
-                break #s
-            }
-        }
-    }
-    if disc(e) == 3 {
-        let d = e.0
-        break 8
-    }
-    // TODO: exhaustiveness check
-    break 9
-}
-```
-
-### Desugared code with merged cases
-Cases can be moved around, but cannot 'cross' another case selecting the same variant, otherwise the semantics of the program might be changed.
-```
-let v = while 1 {
-    if disc(e) == 0 {
-        break 0
-    }
-    if disc(e) == 1 {
-        if e.0 == 1 {
-            break 1
-        } else {
-            let i = e.0
-            break i
-        }
-    }
-    if disc(e) == 2 {
-        { // careful about scope. although, it may not matter too much if we have already resolved variable accesses
-            let v = e.0.v
-            if v < 0.0 {
-                break 4
-            }
-        }
-        let renamed = e.0.v
-        break int(renamed)
-    }
-    if disc(e) == 3 {
-        if disc(e.0) == 0 {
-            break 6
-        } else if disc(e.0) == 1 {
-            let s = e.0.0
-            if #s > 1 {
-                break #s
-            }
-        } else {
-            break 8
-        }
-    }
-    // TODO: exhaustiveness check
-    break 9
-}
-```
-
-
-### Possible opcodes
-```
-  OP_COPY
-  OP_MATCHVARIANT(0)
-  OP_JUMPFALSE('next1') // patch locally
-  OP_POP(1)
-  OP_PUSHCONST(0)
-  OP_TRANSIT(1)
-  OP_JUMP('out') // save until the end, in label list
-next1:
-  OP_COPY
-  OP_MATCHVARIANT(1)
-  OP_JUMPF('next2')
-  OP_POP(1)
-  OP_GETFIELD(0)
-  OP_PUSHCONST(1)
-  OP_BINARY('==')
-  OP_JUMPF('next2')
-  OP_POP(1)
-  OP_PUSHCONST(1)
-  OP_TRANSIT(1)
-  OP_JUMP('out')
-next2:
-  ...
-out:
+let empty_vec = [int]()
+let empty_map = [string: int]()
 ```
 
 ## References

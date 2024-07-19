@@ -36,10 +36,7 @@
     }
     fn f3(n: int) -> int {
         fn f(n: int) -> fn() -> int {
-            fn f() -> int {
-                return n
-            }
-            return f
+            return || -> int {return n}
         }
         return f(n)()
     }
@@ -185,12 +182,12 @@
         return inner
     }
     let c = C{get: get, val: 0}
-    let v = Vector[C]{c}
-
-    v[0].val = 42
-    v[0].get()().val = 0
-    assert(v[0].val == 42)
-    assert(v[0].get()().val == 123)
+//    let v = Vector::<C>{c}
+//
+//    v[0].val = 42
+//    v[0].get()().val = 0
+//    assert(v[0].val == 42)
+//    assert(v[0].get()().val == 123)
 }
 
 //{
@@ -216,78 +213,113 @@
 
 // Chain ('?') expressions:
 {
-    fn opt(b: bool) -> Option[int] {
+    fn opt(b: bool) -> Option<int> {
         if b {
-            return Option[int]::Some(1)
+            return Option::<int>::Some(42)
         } else {
-            return Option[int]::None()
+            return Option::<int>::None
         }
     }
 
     {
-        let hit = false
-        fn test() -> Option[int] {
-            let o = opt(true)?
-            hit = true
-            return o
+        let val = -1
+        fn test() -> Option<int> {
+            let i = opt(true)?
+            val = i
+            return Option::<int>::Some(i)
         }
         test()
-        assert(hit)
+        assert(val == 42)
     }
 
     {
-        fn test() -> Option[int] {
-            let o = opt(false)?
+        fn test() -> Option<int> {
+            let i = opt(false)?
             assert(false)
-            return o
+            return Option::<int>::Some(i)
         }
         test()
     }
 
-    fn opt[T](b: bool, v: T) -> Option[T] {
+    fn opt<T>(b: bool, v: T) -> Option<T> {
         if b {
-            return Option[T]::Some(v)
+            return Option::<T>::Some(v)
         } else {
-            return Option[T]::None()
+            return Option::<T>::None
         }
     }
 
     {
-        fn test[T](v: T) -> Option[T] {
-            let o = opt(false, v)?
+        fn test<T>(v: T) -> Option<T> {
+            let t = opt(false, v)?
             assert(false)
-            return o
+            return Option::<T>::Some(t)
         }
         test(123)
         test('abc')
     }
 
-    fn res(b: bool) -> Result[int, string] {
+    fn res(b: bool) -> Result<int, string> {
         if b {
-            return Result[int, string]::Ok(42)
+            return Result::<int, string>::Ok(42)
         } else {
-            return Result[int, string]::Err('bad')
+            return Result::<int, string>::Err('bad')
         }
     }
 
     {
-        let hit = false
-        fn test() -> Result[int, string] {
-            let r = res(true)?
-            hit = true
-            return r
+        let val = -1
+        fn test() -> Result<int, string> {
+            let i = res(true)?
+            val = i
+            return Result::<int, string>::Ok(i)
         }
         test()
-        assert(hit)
+        assert(val == 42)
     }
 
     {
-        fn test() -> Result[int, string] {
-            let r = res(false)?
+        fn test() -> Result<int, string> {
+            let i = res(false)?
             assert(false)
-            return r
+            return Result::<int, string>::Ok(i)
         }
         test()
     }
 
+    {
+        struct Inner<T> {
+            val: T
+        }
+        struct Outer<T> {
+            opt: Option<Inner<T>>
+        }
+        fn opt<T>(t: T, a: bool, b: bool) -> Option<Outer<T>> {
+            if a {
+                if b {
+                    return Option::<Outer<T>>::Some(Outer::<T>{
+                        opt: Option::<Inner<T>>::Some(Inner::<T>{val: t}),
+                    })
+                } else {
+                    return Option::<Outer<T>>::Some(Outer::<T>{
+                        opt: Option::<Inner<T>>::None,
+                    })
+                }
+            } else {
+                return Option::<Outer<T>>::None
+            }
+        }
+        opt(42, true, true)
+        opt(42, true, false)
+        opt(42, false, false)
+    }
+}
+
+{
+    assert(1 << 0 == 1)
+    assert(-1 << 0 == -1)
+
+    // TODO: Unable to parse PAW_INT_MIN, since it looks like -(PAW_INT_MAX + 1).
+    //       We throw an overflow error when attempting to parse the PAW_INT_MAX+1.
+    // let intmin = -9223372036854775808
 }

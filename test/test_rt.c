@@ -9,19 +9,19 @@ static void script(const char *name)
 int main(void)
 {
     script("basic");
-    return 0;
     script("types");
     script("block");
     script("loop");
     script("operator");
     script("vector");
+    script("map");
     script("mandelbrot");
+    printf("TODO: fix remaining tests in test_rt.c");
     return 0; // TODO
     script("string");
     script("integer");
     script("float");
     script("closure");
-    script("map");
     script("class");
     script("error");
     script("misc");

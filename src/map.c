@@ -123,18 +123,10 @@ void pawH_clone(paw_Env *P, StackPtr sp, Map *m)
     pawH_extend(P, m2, m);
 }
 
-static paw_Bool items_equal(paw_Env *P, const Value x, const Value y)
+static paw_Bool items_equal(Value x, Value y)
 {
-    StackPtr sp = pawC_stkinc(P, 2);
-    sp[0] = y;
-    sp[1] = x;
-
-    paw_assert(0); // TODO: need value type
-    //    pawR_binop(P, BINARY_EQ);
-
-    const paw_Bool b = paw_bool(P, -1);
-    paw_pop(P, 1);
-    return b;
+    // TODO: Only allowed for 'basic' types right now. Compiler set to complain otherwise.
+    return x.u == y.u;
 }
 
 paw_Bool pawH_equals(paw_Env *P, Map *lhs, Map *rhs)
@@ -145,7 +137,7 @@ paw_Bool pawH_equals(paw_Env *P, Map *lhs, Map *rhs)
     MapCursor mc = {lhs, 0};
     while (mc.index < lhs->capacity) {
         Value *v = pawH_action(P, rhs, *h_cursor_key(&mc), MAP_ACTION_NONE);
-        if (!v || !items_equal(P, *h_cursor_value(&mc), *v)) {
+        if (!v || !items_equal(*h_cursor_value(&mc), *v)) {
             return PAW_FALSE;
         }
         ++mc.index;

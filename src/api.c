@@ -16,7 +16,6 @@
 #include "str.h"
 #include "type.h"
 #include "value.h"
-#include "vector.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
@@ -297,7 +296,7 @@ size_t paw_length(paw_Env *P, int index)
             result = pawS_length(v_string(v));
             break;
         case VVECTOR:
-            result = pawA_length(v_vector(v));
+            result = pawV_vec_length(v_vector(v));
             break;
         case VMAP:
             result = pawH_length(v_map(v));
@@ -337,15 +336,7 @@ int paw_load(paw_Env *P, paw_Reader input, const char *name, void *ud)
     };
     const int status = pawC_try(P, parse_aux, &p);
     pawM_free_vec(P, p.mem.scratch.data, p.mem.scratch.alloc);
-    pawM_free_vec(
-        P, p.mem.symbols.scopes,
-        p.mem.symbols.capacity); // TODO: free nested scope tables, symbols
     pawM_free_vec(P, p.mem.labels.values, p.mem.labels.capacity);
-    pawM_free(P, p.mem.symbols.globals);
-    pawM_free(P, p.mem.symbols.toplevel);
-    while (p.mem.unifier.table) {
-        pawU_leave_binder(&p.mem.unifier);
-    }
     return status;
 }
 
