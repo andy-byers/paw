@@ -74,9 +74,6 @@ static void mangle_type(Generator *G, Buffer *buf, AstType *type)
     }
 }
 
-// mangle('name', ()) -> name0_
-// mangle('name', ('int', 'A')) -> nameiA_
-// mangle('name', ('A[int]',)) -> nameAi_
 static String *mangle_name(Generator *G, const String *name, AstList *binder)
 {
     Buffer buf;
@@ -93,26 +90,10 @@ static String *mangle_name(Generator *G, const String *name, AstList *binder)
     return result;
 }
 
-static String *get_type_name(Generator *G, AstType *type)
-{
-    paw_assert(a_is_adt(type));
-    AstAdt *adt = &type->adt;
-    AstDecl *decl = get_decl(G, adt->base);
-    return decl->struct_.name;
-}
-
 static paw_Type basic_code(const AstType *type)
 {
     paw_assert(a_is_adt(type));
     return type->adt.base;
-}
-
-// TODO: Get rid of this
-static Symbol *fetch_symbol(Scope *scope, const String *name, int *pindex)
-{
-    *pindex = pawA_find_symbol(scope, name);
-    paw_assert(*pindex >= 0); // found in previous pass
-    return scope->symbols->data[*pindex];
 }
 
 static void push_local_table(FuncState *fs, Scope *symbols)
@@ -145,18 +126,6 @@ static int add_constant(Generator *G, Value v)
     pawM_grow(env(G->lex), p->k, fs->nk, p->nk);
     p->k[fs->nk] = v;
     return fs->nk++;
-}
-
-static int add_struct(Generator *G, Struct *struct_)
-{
-    paw_Env *P = env(G->lex);
-    struct StructVec *sv = &P->sv;
-    if (sv->size == ITEM_MAX) {
-        syntax_error(G, "too many structs");
-    }
-    pawM_grow(P, sv->data, sv->size, sv->alloc);
-    sv->data[sv->size] = struct_;
-    return sv->size++;
 }
 
 static int add_proto(Generator *G, String *name, Proto **pp)
@@ -235,7 +204,6 @@ static VarInfo transfer_global(Generator *G)
     while (symbol_iter(scope, &G->iglobal, &symbol)) {}
     const int g = pawE_new_global(env(G->lex), symbol->name,
                                   a_type(symbol->decl)->adt.did); // TODO
-    printf("new_global %s: %d\n",symbol->name->text, g);
     return (VarInfo){
         .symbol = symbol,
         .kind = VAR_GLOBAL,
@@ -435,7 +403,6 @@ static void enter_function(Generator *G, FuncState *fs, BlockState *bs,
     fs->bs = NULL;
     fs->scopes = pawA_new_symtab(G->ast);
     fs->locals = (LocalStack){0};
-    fs->nstructs = 0;
     fs->nproto = 0;
     fs->nlines = 0;
     fs->level = 0;
@@ -730,7 +697,6 @@ static void code_composite_lit(AstVisitor *V, LiteralExpr *e)
 
     const DefId did = e->type->adt.did;
     StructDecl *d = &get_decl(G, did)->struct_;
-    pawK_code_U(G->fs, OP_PUSHSTRUCT, d->location); // TODO: remove, not using Struct
     pawK_code_U(fs, OP_NEWINSTANCE, d->fields->count);
 
     for (int i = 0; i < lit->items->count; ++i) {
@@ -816,7 +782,7 @@ static void code_binop_expr(AstVisitor *V, BinOpExpr *e)
     FuncState *fs = V->state.G->fs;
     V->visit_expr(V, e->lhs);
     V->visit_expr(V, e->rhs);
-    code_op(fs, OP_BINOP, e->op, a_type(e->lhs));
+    code_op(fs, OP_BINOP, e->op, a_type(e->rhs));
 }
 
 static void code_decl_stmt(AstVisitor *V, AstDeclStmt *s)
@@ -891,9 +857,9 @@ static void monomorphize_func(AstVisitor *V, FuncDecl *d)
     FuncState *fs = G->fs;
     for (int i = 0; i < d->monos->count; ++i) {
         AstDecl *decl = d->monos->data[i];
-        FuncDecl *inst = pawA_stencil_func(V->ast, d, decl);
+        FuncDecl *inst = &decl->func;
         String *mangled = mangle_name(G, inst->name, inst->type->func.types);
-        const VarInfo info = inject_var(fs, mangled, cast_decl(inst), d->is_global);
+        const VarInfo info = inject_var(fs, mangled, decl, d->is_global);
         code_func(V, inst);
         define_var(fs, info);
     }
@@ -916,18 +882,9 @@ static void code_var_decl(AstVisitor *V, VarDecl *s)
 
 static void code_struct_decl(AstVisitor *V, StructDecl *d)
 {
-    Generator *G = V->state.G;
-    Lex *lex = G->lex;
-    paw_Env *P = env(lex);
-
-    Value *pv = pawC_push0(P);
-    if (d->is_struct) {
-        Struct *struct_ = pawV_new_struct(P, pv);
-        d->location = add_struct(G, struct_);
-    } else {
-        // TODO: Add enum RTTI stuff 
-    }
-    pawC_pop(P); // pop 'struct_'
+    // NOOP
+    paw_unused(V);
+    paw_unused(d);
 }
 
 static void code_sitem_expr(AstVisitor *V, StructItem *e)
@@ -1022,8 +979,16 @@ static void code_instance_getter(AstVisitor *V, AstType *type)
     paw_assert(a_is_func(type));
     AstDecl *decl = get_decl(G, type->func.did);
     String *name = decl->hdr.name;
-    paw_assert(a_is_func_decl(decl));
-    name = mangle_name(G, name, type->func.types);
+    if (!pawS_eq(name, scan_string(G->lex, "_vector_push")) &&
+            !pawS_eq(name, scan_string(G->lex, "_vector_pop")) &&
+            !pawS_eq(name, scan_string(G->lex, "_vector_insert")) &&
+            !pawS_eq(name, scan_string(G->lex, "_vector_erase")) &&
+            !pawS_eq(name, scan_string(G->lex, "_vector_clone"))) {
+        // TODO: These functions are native. They use the same code for all instantiations (they
+        //       only move parameters around as 'union Value')
+        paw_assert(a_is_func_decl(decl));
+        name = mangle_name(G, name, type->func.types);
+    }
     const VarInfo info = find_var(G, name);
     code_getter(V, info);
 }
@@ -1400,17 +1365,20 @@ static void setup_pass(AstVisitor *V, Generator *G)
 static void code_module(Generator *G)
 {
     Lex *lex = G->lex;
+    Ast *ast = G->ast;
 
     FuncState fs;
     BlockState bs;
     fs.name = lex->modname;
     fs.proto = lex->main->p;
 
-    Scope *toplevel = G->ast->symtab->toplevel;
+
+    Scope *toplevel = ast->symtab->toplevel;
     enter_function(G, &fs, &bs, toplevel, FUNC_MODULE);
 
     AstVisitor V;
     setup_pass(&V, G);
+    pawA_stencil_stmts(G->ast, ast->stmts);
     pawA_visit(&V);
 
     leave_function(G);

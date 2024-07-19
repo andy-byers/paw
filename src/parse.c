@@ -364,7 +364,7 @@ static AstExpr *unit_type(Lex *lex)
     return r;
 }
 
-static void parse_type_expr(Lex *lex, AstExpr *pe);
+static AstExpr *type_expr(Lex *lex);
 
 static void parse_typelist(Lex *lex, AstExpr *pe, int line)
 {
@@ -388,47 +388,49 @@ static void parse_typelist(Lex *lex, AstExpr *pe, int line)
     delim_next(lex, ')', '(', line);
 }
 
-static void parse_paren_type(Lex *lex, AstExpr *pe)
+static AstExpr *parse_paren_type(Lex *lex)
 {
     const int line = lex->last_line;
     if (test_next(lex, ')')) {
-        set_unit(lex, pe);
-        return;
+        return unit_type(lex);
     }
-    parse_type_expr(lex, pe);
+    AstExpr *e = type_expr(lex);
     if (test_next(lex, ',')) {
-        parse_typelist(lex, pe, line);     
+        parse_typelist(lex, e, line);     
     }
+    return e;
 }
 
-static void parse_signature(Lex *lex, AstExpr *pe)
+static AstExpr *parse_signature(Lex *lex)
 {
     const int line = lex->last_line;
-    pe->func.kind = EXPR_FUNCTYPE;
+    AstExpr *e = new_expr(lex, EXPR_SIGNATURE);
     check_next(lex, '(');
-    pe->func.params = new_list(lex);
+    e->sig.params = new_list(lex);
     if (!test_next(lex, ')')) {
-        parse_arg_list(lex, &pe->func.params, line);
+        parse_arg_list(lex, &e->sig.params, line);
     }
     if (test_next(lex, TK_ARROW)) {
-        pe->func.result = type_expr(lex);
+        e->sig.result = type_expr(lex);
     } else {
-        pe->func.result = emit_unit(lex);
+        e->sig.result = emit_unit(lex);
     }
+    return e;
 }
 
-static void parse_container_type(Lex *lex, AstExpr *pe)
+static AstExpr *parse_container_type(Lex *lex)
 {
     const int line = lex->last_line;
-    pe->vtype.kind = EXPR_VECTORTYPE;
-    pe->vtype.elem = type_expr(lex);
+    AstExpr *e = new_expr(lex, EXPR_VECTORTYPE);
+    e->vtype.elem = type_expr(lex);
     if (test_next(lex, ':')) {
-        struct VectorType vtype = pe->vtype;
-        pe->mtype.kind = EXPR_MAPTYPE;
-        pe->mtype.key = vtype.elem;
-        pe->mtype.value = type_expr(lex);
+        struct VectorType vtype = e->vtype;
+        e->mtype.kind = EXPR_MAPTYPE;
+        e->mtype.key = vtype.elem;
+        e->mtype.value = type_expr(lex);
     }
     delim_next(lex, ']', '[', line);
+    return e;
 }
 
 static AstPath *parse_pathexpr(Lex *lex)
@@ -475,26 +477,18 @@ static AstExpr *path_expr(Lex *lex)
     return r;
 }
 
-// TODO: Just return a new AstExpr instead of out param? There may have been a reason for it at some point.
-static void parse_type_expr(Lex *lex, AstExpr *pe)
-{
-    if (test_next(lex, '(')) {
-        parse_paren_type(lex, pe);
-    } else if (test_next(lex, '[')) {
-        parse_container_type(lex, pe);
-    } else if (test_next(lex, TK_FN)) {
-        parse_signature(lex, pe);
-    } else {
-        pe->path.kind = EXPR_PATHTYPE;
-        pe->path.path = parse_pathtype(lex);
-    }
-}
-
 static AstExpr *type_expr(Lex *lex)
 {
-    AstExpr *r = new_expr(lex, 0);
-    parse_type_expr(lex, r);
-    return r;
+    if (test_next(lex, '(')) {
+        return parse_paren_type(lex);
+    } else if (test_next(lex, '[')) {
+        return parse_container_type(lex);
+    } else if (test_next(lex, TK_FN)) {
+        return parse_signature(lex);
+    }
+    AstExpr *e = new_expr(lex, EXPR_PATHTYPE);
+    e->path.path = parse_pathtype(lex);
+    return e;
 }
 
 static AstExpr *ret_annotation(Lex *lex)
@@ -1463,7 +1457,13 @@ static const char kPrelude[] =
     "}                           \n"
     // Builtin functions:
     "fn print(message: string) {}\n"
-    "fn assert(cond: bool) {}    \n";
+    "fn assert(cond: bool) {}    \n"
+    // TODO: Replace with methods
+    "fn _vector_push<T>(vec: [T], v: T) {}          \n"
+    "fn _vector_pop<T>(vec: [T]) -> T {}            \n"
+    "fn _vector_insert<T>(vec: [T], i: int, v: T) {}\n"
+    "fn _vector_erase<T>(vec: [T], i: int) -> T {}  \n"
+    "fn _vector_clone<T>(vec: [T]) -> [T] {}        \n";
 
 struct PreludeReader {
     size_t size;
@@ -1574,8 +1574,9 @@ Closure *pawP_parse(paw_Env *P, paw_Reader input, ParseMemory *pm,
         .pm = pm,
         .P = P,
     };
-    pm->unifier.lex = &lex;
     pm->ast = pawA_new_ast(&lex);
+    pm->unifier.ast = pm->ast;
+    pm->unifier.lex = &lex;
 
     // TODO: AST needs to go on the stack in a Foreign object. We will leak the
     //       AST if an error is thrown between now and when it is freed below.

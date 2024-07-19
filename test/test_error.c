@@ -185,6 +185,7 @@ static void test_arithmetic_error(void)
 static void test_vector_error(void)
 {
     test_compiler_error(PAW_ETYPE, "vector_cannot_infer", "let a = []");
+    test_compiler_error(PAW_ETYPE, "vector_cannot_infer_binop", "let a = [] + []");
     test_compiler_error(PAW_ETYPE, "vector_use_before_inference", "let a = []; let b = #a");
     test_compiler_error(PAW_ETYPE, "vector_incompatible_types", "let a = []; if true {a = [0]} else {a = [true]}");
     test_compiler_error(PAW_ETYPE, "vector_mixed_types", "let a = [1, 2, 3, 4, '5']");

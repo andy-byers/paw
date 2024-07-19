@@ -56,7 +56,7 @@ static void move_items(Value *src, ptrdiff_t shift, size_t count)
     memmove(src + shift, src, cast_size(count) * sizeof(src[0]));
 }
 
-static void vec_reserve(paw_Env *P, Vector *a, size_t want)
+void pawV_vec_reserve(paw_Env *P, Vector *a, size_t want)
 {
     const size_t have = vector_capacity(a);
     if (want <= have) {
@@ -73,15 +73,9 @@ void pawV_vec_push(paw_Env *P, Vector *a, Value v)
 
 void pawV_vec_resize(paw_Env *P, Vector *a, size_t length)
 {
-    const size_t n = pawV_vec_length(a);
-    if (length > n) {
-        // new items are uninitialized
-        vec_reserve(P, a, length);
-    } else if (length == 0) {
-        a->end = a->begin;
-        return;
-    }
-    a->end = a->begin + length;
+    pawV_vec_reserve(P, a, length);
+    // avoid 'Nullptr with offset' from UBSan 
+    a->end = length ? a->begin + length : a->begin;
 }
 
 void pawV_vec_insert(paw_Env *P, Vector *a, paw_Int index, Value v)

@@ -4,7 +4,7 @@
 //
 // parse.h: compiler entrypoint
 //
-// The compiler converts source code into bytecode that can be run in paw's
+// The compiler converts source code into bytecode that can be run in Paw's
 // virtual machine. It works in 3 passes:
 //
 //  Pass | Input       | Output    | Purpose
@@ -12,10 +12,6 @@
 //  1    | source code | AST       | build AST
 //  2    | AST         | typed AST | build symtab, unify types
 //  3    | typed AST   | bytecode  | generate code
-//
-// TODO: rename some of these files: parse.* should maybe be called compile.*,
-// and
-//       it would be nice to have a separate AST module.
 
 #ifndef PAW_PARSE_H
 #define PAW_PARSE_H
@@ -29,8 +25,7 @@
 #define env(x) ((x)->P)
 #define is_toplevel(lex) ((lex)->fs->outer == NULL)
 #define scan_string(lex, s) pawX_scan_string(lex, s, strlen(s))
-#define limit_error(x, what, limit)                                            \
-    pawX_error(x, "too many %s (limit is %d)", what, limit)
+#define limit_error(x, what, limit) pawX_error(x, "too many %s (limit is %d)", what, limit)
 
 typedef enum LabelKind {
     LBREAK,
@@ -57,10 +52,6 @@ struct MatchState {
     AstType *target;
     AstType *value;
 };
-
-typedef struct GenericState {
-    struct GenericState *outer;
-} GenericState;
 
 typedef struct BlockState {
     struct BlockState *outer;
@@ -102,19 +93,10 @@ typedef struct FuncState {
     int nup; // number of upvalues
     int nk; // number of constants
     int nproto; // number of nested functions
-    int nstructs; // number of nested structs
     int nlines; // number of source lines
     int pc; // number of instructions
     FuncKind kind; // type of function
 } FuncState;
-
-typedef struct UniTable {
-    struct UniTable *outer;
-    struct UniVar **vars; // vector of type variables
-    int nvars; // number of type variables
-    int capacity; // capacity of vector
-    int depth; // depth of binder
-} UniTable;
 
 #define fn_has_self(kind) (kind >= FUNC_METHOD)
 

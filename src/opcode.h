@@ -136,9 +136,6 @@ OP_NEWMAP,//         U           v_2n..v1       {v_2n..v1}    -
 
 OP_UNWRAP,//         -           v              t             throws an error if disc(v) != 0
 
-OP_VECTOROP,//       U           v an..a1       v.u(an..a1)   depends on u
-OP_MAPOP,//          U           m an..a1       m.u(an..a1)   depends on u
-
 OP_FORNUM0,//        S           *-*-*-*-*-*-*-*-* see notes *-*-*-*-*-*-*-*-*
 OP_FORNUM,//         S           *-*-*-*-*-*-*-*-* see notes *-*-*-*-*-*-*-*-*
 OP_FORIN0,//         S           *-*-*-*-*-*-*-*-* see notes *-*-*-*-*-*-*-*-*

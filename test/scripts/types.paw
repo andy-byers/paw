@@ -1,5 +1,23 @@
 // types.paw
 
+{
+    // nested templates
+    fn outer<T>(t: T) {
+        fn inner<T2>(t2: T2) {}
+        inner(t) // inner::<T>
+        inner(1) // inner::<int>
+    }
+    outer(false)
+    outer(1)
+    outer(2.0)
+    outer('three')
+
+    outer(true)
+    outer(2)
+    outer(3.0)
+    outer('four')
+}
+
 //***********************************************
 //    primitives
 //***********************************************
@@ -266,6 +284,7 @@
     closure()
 }
 {
+// TODO: Closure cannot be a template, this should fail to compile!
     let u = 42
     fn func<T>(v: int) {
         assert(v == u)

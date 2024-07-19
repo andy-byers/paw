@@ -24,9 +24,8 @@ void pawE_error(paw_Env *P, int code, int line, const char *fmt, ...)
 
 CallFrame *pawE_extend_cf(paw_Env *P, StackPtr top)
 {
-    if (P->ncf == INT_MAX) {
-        paw_assert(0);
-        //       pawR_error(P, PAW_EOVERFLOW, "too many nested function calls");
+    if (P->ncf >= ITEM_MAX) {
+        pawR_error(P, PAW_EOVERFLOW, "too many nested function calls");
     }
     CallFrame *cf = pawM_new(P, CallFrame);
     P->cf->next = cf;
@@ -54,11 +53,11 @@ int pawE_new_global(paw_Env *P, String *name, paw_Type type)
     return i;
 }
 
-int pawE_find_global(paw_Env *P, String *name)
+int pawE_find_global(paw_Env *P, const String *name)
 {
     struct GlobalVec *gv = &P->gv;
     for (int i = 0; i < gv->size; ++i) {
-        GlobalVar *var = &gv->data[i];
+        const GlobalVar *var = &gv->data[i];
         if (pawS_eq(name, var->name)) {
             return i;
         }

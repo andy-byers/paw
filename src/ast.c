@@ -335,7 +335,7 @@ static void visit_signature_expr(AstVisitor *V, FuncType *e)
 
 static void visit_closure_expr(AstVisitor *V, ClosureExpr *e)
 {
-    visit_exprs(V, e->params);
+    visit_decls(V, e->params);
     V->visit_expr(V, e->result);
     V->visit_block_stmt(V, e->body);
 }
@@ -568,8 +568,8 @@ static void visit_expr(AstVisitor *V, AstExpr *expr)
         case EXPR_CLOSURE:
             V->visit_closure_expr(V, &expr->clos);
             break;
-        case EXPR_FUNCTYPE:
-            V->visit_signature_expr(V, &expr->func);
+        case EXPR_SIGNATURE:
+            V->visit_signature_expr(V, &expr->sig);
             break;
         case EXPR_TYPELIST:
             V->visit_typelist_expr(V, &expr->typelist);
@@ -847,7 +847,7 @@ static AstExpr *fold_signature_expr(AstFolder *F, FuncType *e)
 
 static AstExpr *fold_closure_expr(AstFolder *F, ClosureExpr *e)
 {
-    fold_exprs(F, e->params);
+    fold_decls(F, e->params);
     e->result = F->fold_expr(F, e->result);
     fold_block(F, e->body);
     return cast_expr(e);
@@ -1085,8 +1085,8 @@ static AstExpr *fold_expr(AstFolder *F, AstExpr *expr)
             return F->fold_sitem_expr(F, &expr->sitem);
         case EXPR_CLOSURE:
             return F->fold_closure_expr(F, &expr->clos);
-        case EXPR_FUNCTYPE:
-            return F->fold_signature_expr(F, &expr->func);
+        case EXPR_SIGNATURE:
+            return F->fold_signature_expr(F, &expr->sig);
         case EXPR_VECTORTYPE:
             return F->fold_vtype_expr(F, &expr->vtype);
         case EXPR_MAPTYPE:
@@ -1281,7 +1281,6 @@ static AstType *fold_tuple(AstTypeFolder *F, AstTupleType *t)
 
 static AstType *fold_adt(AstTypeFolder *F, AstAdt *t)
 {
-    printf("FOLD-ADT %d\n", t->base);
     if (t->types != NULL) {
         F->fold_binder(F, t->types);
     }
@@ -1471,15 +1470,15 @@ static AstStmt *copy_expr_stmt(AstFolder *F, AstExprStmt *s)
 static AstExpr *copy_signature_expr(AstFolder *F, FuncType *e)
 {
     AstExpr *r = copy_prep_expr(F, e);
-    r->func.params = copy_exprs(F, e->params);
-    r->func.result = F->fold_expr(F, e->result);
+    r->sig.params = copy_exprs(F, e->params);
+    r->sig.result = F->fold_expr(F, e->result);
     return r;
 }
 
 static AstExpr *copy_closure_expr(AstFolder *F, ClosureExpr *e)
 {
     AstExpr *r = copy_prep_expr(F, e);
-    r->clos.params = copy_exprs(F, e->params);
+    r->clos.params = copy_decls(F, e->params);
     r->clos.result = F->fold_expr(F, e->result);
     r->clos.body = copy_block(F, e->body);
     return r;
@@ -2005,8 +2004,8 @@ static AstStmt *stencil_expr_stmt(AstFolder *F, AstExprStmt *s)
 static AstExpr *stencil_signature_expr(AstFolder *F, FuncType *e)
 {
     AstExpr *r = stencil_prep_expr(F, e);
-    r->func.params = stencil_exprs(F, e->params);
-    r->func.result = F->fold_expr(F, e->result);
+    r->sig.params = stencil_exprs(F, e->params);
+    r->sig.result = F->fold_expr(F, e->result);
     return r;
 }
 
@@ -2016,7 +2015,7 @@ static AstExpr *stencil_closure_expr(AstFolder *F, ClosureExpr *e)
 
     ScopeState state;
     enter_scope(F, &state, e->scope);
-    r->clos.params = stencil_exprs(F, e->params);
+    r->clos.params = stencil_decls(F, e->params);
     r->clos.result = F->fold_expr(F, e->result);
     r->clos.body = stencil_block(F, e->body);
     r->clos.scope = leave_scope(F);
@@ -2498,7 +2497,7 @@ static void init_links(Lex *lex, Map *map, FuncDecl *base, InstanceDecl *inst)
     }
 }
 
-FuncDecl *pawA_stencil_func(Ast *ast, FuncDecl *base, AstDecl *inst)
+static FuncDecl *do_stencil_func(Ast *ast, FuncDecl *base, AstDecl *inst)
 {
     paw_Env *P = env(ast->lex);
     Value *pv = pawC_push0(P);
@@ -2535,11 +2534,13 @@ FuncDecl *pawA_stencil_func(Ast *ast, FuncDecl *base, AstDecl *inst)
     AstDecl copy = *inst;
     inst->func.kind = DECL_FUNC;
     inst->func.name = base->name;
-    inst->func.generics = copy.inst.types;
+    inst->func.generics = copy.inst.types; // TODO: no generics on instances!
+    inst->func.generics = new_list(ast, 0); // TODO
     add_symbol(&F, inst); // callee slot
     inst->func.params = stencil_decls(&F, base->params);
     inst->func.result = F.fold_expr(&F, base->result);
     inst->func.body = stencil_block(&F, base->body);
+    inst->func.monos = new_list(ast, 0);
     inst->func.fn_kind = base->fn_kind;
 
     inst->func.scope = leave_scope(&F);
@@ -2548,81 +2549,25 @@ FuncDecl *pawA_stencil_func(Ast *ast, FuncDecl *base, AstDecl *inst)
     return &inst->func;
 }
 
-struct Normalizer {
-    struct AstTypeFolder fold;
-    struct Unifier *U;
-    struct Ast *ast;
-    UniTable *table;
-};
-
-static AstType *normalize_unknown(AstTypeFolder *F, AstUnknown *t)
+static void stencil_func(AstVisitor *V, FuncDecl *d)
 {
-    struct Normalizer *N = F->state;
-    AstType *type = pawU_normalize(N->table, a_cast_type(t));
-    if (a_is_unknown(type)) {
-        // TODO: better error messaage, line number, etc.
-        pawE_error(env(N->ast->lex), PAW_ETYPE, -1, "unable to infer type");
+    if (d->generics->count == 0) {
+        V->visit_block_stmt(V, d->body);
+        return;
     }
-    return type;
-}
-
-static void normalize_expr(AstVisitor *V, AstExpr *expr)
-{
-    if (expr != NULL) {
-        visit_expr(V, expr);
-
-        struct Normalizer *N = V->state.N;
-        expr->hdr.type = pawA_fold_type(&N->fold, a_type(expr));
+    for (int i = 0; i < d->monos->count; ++i) {
+        AstDecl *decl = d->monos->data[i];
+        do_stencil_func(V->ast, d, decl);
+        V->visit_func_decl(V, &decl->func);
     }
 }
 
-static void normalize_decl(AstVisitor *V, AstDecl *decl)
+void pawA_stencil_stmts(Ast *ast, AstList *stmts)
 {
-    if (decl != NULL) {
-        visit_decl(V, decl);
-
-        struct Normalizer *N = V->state.N;
-        decl->hdr.type = pawA_fold_type(&N->fold, a_type(decl));
-    }
-}
-
-static void normalize_func_decl(AstVisitor *V, FuncDecl *d)
-{
-    // do not enter nested function bodies
-    paw_unused(V);
-    paw_unused(d);
-}
-
-static void setup_normalizer(Ast *ast, struct Normalizer *N, AstVisitor *V, UniTable *table)
-{
-    *N = (struct Normalizer){
-        .U = &ast->lex->pm->unifier,
-        .table = table,
-        .ast = ast,
-    };
-    pawA_visitor_init(V, N->ast, (union AstState){.N = N});
-    V->visit_expr = normalize_expr;
-    V->visit_decl = normalize_decl;
-    V->visit_func_decl = normalize_func_decl;
-
-    pawA_type_folder_init(&N->fold, N);
-    N->fold.fold_unknown = normalize_unknown;
-}
-
-void pawA_normalize_expr(Ast *ast, AstExpr *expr, UniTable *table)
-{
-    struct Normalizer N;
-    struct AstVisitor V;
-    setup_normalizer(ast, &N, &V, table);
-    V.visit_expr(&V, expr);
-}
-
-void pawA_normalize_stmt(Ast *ast, AstStmt *stmt, UniTable *table)
-{
-    struct Normalizer N;
-    struct AstVisitor V;
-    setup_normalizer(ast, &N, &V, table);
-    V.visit_stmt(&V, stmt);
+    AstVisitor V;
+    pawA_visitor_init(&V, ast, (AstState){0});
+    V.visit_func_decl = stencil_func;
+    visit_stmts(&V, stmts);
 }
 
 typedef struct Printer {
@@ -2785,7 +2730,7 @@ static void print_expr_kind(Printer *P, void *node)
         case EXPR_SELECTOR:
             fprintf(P->out, "Selector");
             break;
-        case EXPR_FUNCTYPE:
+        case EXPR_SIGNATURE:
             fprintf(P->out, "FuncType");
             break;
         case EXPR_VECTORTYPE:
@@ -3187,10 +3132,10 @@ static void dump_expr(Printer *P, AstExpr *e)
             dump_msg(P, "value: ");
             dump_expr(P, e->mtype.value);
             break;
-        case EXPR_FUNCTYPE:
-            dump_expr_list(P, e->func.params, "params");
+        case EXPR_SIGNATURE:
+            dump_expr_list(P, e->sig.params, "params");
             dump_msg(P, "result: ");
-            dump_expr(P, e->func.result);
+            dump_expr(P, e->sig.result);
             break;
         case EXPR_MATCH:
             dump_msg(P, "target: ");
@@ -3207,6 +3152,55 @@ static void dump_expr(Printer *P, AstExpr *e)
     }
     --P->indent;
     dump_msg(P, "}\n");
+}
+
+// TODO: Have this output a String, or fill a Buffer, move somewhere else
+void pawA_repr_type(FILE *out, const AstType *type)
+{
+    switch (a_kind(type)) {
+        case AST_TYPE_TUPLE:
+            fprintf(out, "(");
+            for (int i = 0; i < type->tuple.elems->count; ++i) {
+                dump_type(out, type->tuple.elems->data[i]);
+                if (i < type->tuple.elems->count - 1) {
+                    fprintf(out, ", ");
+                }
+            }
+            fprintf(out, ")");
+            break;
+        case AST_TYPE_FPTR:
+        case AST_TYPE_FUNC:
+            fprintf(out, "fn(");
+            for (int i = 0; i < type->fptr.params->count; ++i) {
+                dump_type(out, type->fptr.params->data[i]);
+                if (i < type->fptr.params->count - 1) {
+                    fprintf(out, ", ");
+                }
+            }
+            fprintf(out, ") -> ");
+            dump_type(out, type->fptr.result);
+            break;
+        case AST_TYPE_ADT:
+            fprintf(out, "%d", type->adt.base); // TODO: Print the name
+            if (type->adt.types != NULL) {
+                fprintf(out, "<");
+                const AstList *binder = type->adt.types;
+                for (int i = 0; i < binder->count; ++i) {
+                    dump_type(out, binder->data[i]);
+                    if (i < binder->count - 1) {
+                        fprintf(out, ", ");
+                    }
+                }
+                fprintf(out, ">");
+            }
+            break;
+        case AST_TYPE_UNKNOWN:
+            fprintf(out, "?%d", type->unknown.index);
+            break;
+        default:
+            paw_assert(a_is_generic(type));
+            fprintf(out, "?%s", type->generic.name->text);
+    }
 }
 
 void pawA_dump_type(FILE *out, AstType *type)

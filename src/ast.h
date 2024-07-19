@@ -146,6 +146,7 @@ typedef struct AstTypeHeader {
 typedef struct AstGeneric {
     AST_TYPE_HEADER;
     String *name;
+    DefId did;
 } AstGeneric;
 
 // Represents a type that is in the process of being inferred
@@ -442,7 +443,7 @@ typedef enum AstExprKind {
     EXPR_STRUCTITEM,
     EXPR_MATCH,
     EXPR_MATCHARM,
-    EXPR_FUNCTYPE,
+    EXPR_SIGNATURE,
     EXPR_VECTORTYPE,
     EXPR_MAPTYPE,
     EXPR_TYPELIST,
@@ -640,7 +641,7 @@ typedef struct AstExpr {
         PathType pathtype;
         StructItem sitem;
         MapItem mitem;
-        FuncType func; // TODO: rename ftype
+        FuncType sig;
         VectorType vtype;
         MapType mtype;
         MatchExpr match;
@@ -754,7 +755,6 @@ typedef union AstState {
     struct Resolver *R; // symbol resolution (pass 2) state
     struct Generator *G; // code generation (pass 3) state
     struct Stenciler *S; // template expansion state
-    struct Normalizer *N; // type normalizer state
     struct Copier *C; // AST copier state
 } AstState;
 
@@ -964,9 +964,8 @@ Ast *pawA_new_ast(Lex *lex);
 void pawA_free_ast(Ast *ast);
 
 AstDecl *pawA_copy_decl(Ast *ast, AstDecl *decl);
-FuncDecl *pawA_stencil_func(Ast *ast, FuncDecl *base, AstDecl *inst);
-void pawA_normalize_expr(Ast *ast, AstExpr *expr, UniTable *table);
-void pawA_normalize_stmt(Ast *ast, AstStmt *stmt, UniTable *table);
+
+void pawA_stencil_stmts(Ast *ast, AstList *stmts);
 
 DefId pawA_add_decl(Ast *ast, AstDecl *decl);
 AstDecl *pawA_get_decl(Ast *ast, DefId id);
@@ -997,6 +996,7 @@ AstDecl *pawA_get_decl(Ast *ast, DefId id);
 
 #define a_adt_id(t) check_exp(a_is_adt(t), (t)->adt.base - PAW_TSTRING)
 
+void pawA_repr_type(FILE *out, const AstType *type);
 void pawA_dump_type(FILE *out, AstType *type);
 void pawA_dump_path(FILE *out, AstPath *path);
 void pawA_dump_decl(FILE *out, AstDecl *decl);

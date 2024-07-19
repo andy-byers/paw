@@ -337,9 +337,6 @@ int paw_load(paw_Env *P, paw_Reader input, const char *name, void *ud)
     const int status = pawC_try(P, parse_aux, &p);
     pawM_free_vec(P, p.mem.scratch.data, p.mem.scratch.alloc);
     pawM_free_vec(P, p.mem.labels.values, p.mem.labels.capacity);
-    while (p.mem.unifier.table) {
-        pawU_leave_binder(&p.mem.unifier); // TODO: leaking unification tables! fix it
-    }
     return status;
 }
 

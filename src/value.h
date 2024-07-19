@@ -292,30 +292,31 @@ typedef struct Vector {
 } Vector;
 
 Vector *pawV_vec_new(paw_Env *P);
-void pawV_vec_free(paw_Env *P, Vector *a);
-Vector *pawV_vec_clone(paw_Env *P, Value *pv, const Vector *a);
+void pawV_vec_free(paw_Env *P, Vector *vec);
+Vector *pawV_vec_clone(paw_Env *P, Value *pv, const Vector *vec);
 paw_Bool pawV_vec_equals(paw_Env *P, const Vector *lhs, const Vector *rhs);
-paw_Bool pawV_vec_contains(paw_Env *P, const Vector *a, Value v);
-void pawV_vec_resize(paw_Env *P, Vector *a, size_t length);
-void pawV_vec_insert(paw_Env *P, Vector *a, paw_Int index, Value v);
-void pawV_vec_push(paw_Env *P, Vector *a, Value v);
-void pawV_vec_pop(paw_Env *P, Vector *a, paw_Int index);
+paw_Bool pawV_vec_contains(paw_Env *P, const Vector *vec, Value v);
+void pawV_vec_reserve(paw_Env *P, Vector *vec, size_t length);
+void pawV_vec_resize(paw_Env *P, Vector *vec, size_t length);
+void pawV_vec_insert(paw_Env *P, Vector *vec, paw_Int index, Value v);
+void pawV_vec_push(paw_Env *P, Vector *vec, Value v);
+void pawV_vec_pop(paw_Env *P, Vector *vec, paw_Int index);
 
-static inline size_t pawV_vec_length(const Vector *a)
+static inline size_t pawV_vec_length(const Vector *vec)
 {
-    return cast_size(a->end - a->begin);
+    return cast_size(vec->end - vec->begin);
 }
 
-static inline Value *pawV_vec_get(paw_Env *P, Vector *a, paw_Int index)
+static inline Value *pawV_vec_get(paw_Env *P, Vector *vec, paw_Int index)
 {
-    const paw_Int abs = pawV_abs_index(index, cast_size(a->end - a->begin));
-    const size_t i = pawV_check_abs(P, abs, pawV_vec_length(a));
-    return &a->begin[i];
+    const paw_Int abs = pawV_abs_index(index, cast_size(vec->end - vec->begin));
+    const size_t i = pawV_check_abs(P, abs, pawV_vec_length(vec));
+    return &vec->begin[i];
 }
 
-static inline paw_Bool pawV_vec_iter(const Vector *a, paw_Int *itr)
+static inline paw_Bool pawV_vec_iter(const Vector *vec, paw_Int *itr)
 {
-    return ++*itr < paw_cast_int(pawV_vec_length(a));
+    return ++*itr < paw_cast_int(pawV_vec_length(vec));
 }
 
 typedef enum MapState {

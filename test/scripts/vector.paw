@@ -1,27 +1,5 @@
 // vector.paw
 
-//let vec = []
-//let vec2 = vec
-//vec2 = [1]
-//vec = ['a']
-{
-    fn test<T>(vec: [T]) {}
-    test::<int>([])
-    test([0])
-    let vec: [int] = []
-    test(vec)
-
-    fn test<T>(vec: [T], value: T) {}
-    test::<int>([], 1)
-    // TODO: This type inference should work. It doesn't, because we try to completely infer the type of 
-    //       vec before T in test<T>. In the code (check.c), we enter a new inference context when trying
-    //       to infer the type of 'T' in 'test'. We attempt to normalize the arguments that themselves
-    //       need their types inferred (just the first one here), and find that we don't have a concrete
-    //       type for the vector yet, even though we could just use 'int' from the 'value' argument.
-    // test([], 1)
-}
-
-
 {
     let vec: [int] = []
     assert(0 == #vec)
@@ -223,11 +201,11 @@
     vec = []
     vec = [0]
 
-    fn test(vec: [int]) {}
+    let test = |vec: [int]| {}
     let a = []
     test(a)
 
-    fn test(vec: [[int]]) {}
+    let test = |vec: [[int]]| {}
     let a = []
     test(a)
     let a = [[]]
@@ -262,77 +240,277 @@
     d = [1]
 }
 
-//{
-//    fn map<T>(f: fn(T) -> T, vec: [T]) {
-//        for i = 0, #vec {
-//            vec[i] = f(vec[i])
-//        }
-//    }
-//    fn times2(i: int) -> int {
-//        return i * 2
-//    }
-//    let v = [1, 2, 3]
-//    map(times2, v)
-//    assert(v[0] == 2)
-//    assert(v[1] == 4)
-//    assert(v[2] == 6)
-//    
-//}
-//{
-//    let vec = [1, 2, 3]
-//    vec.push(4)
-//    vec.push(5)
-//    vec.push(6)
-//    assert(#vec == 6)
-//    assert(vec[0] == 1)
-//    assert(vec[5] == 6)
-//    assert(vec[-6] == 1)
-//    assert(vec[-1] == 6)
-//}
-//
-//{
-//    let vec = []
-//    for i = 0, 100 {
-//        vec.push(i)
-//    }
-//    assert(#vec == 100)
-//    for i = 0, 100 {
-//        assert(i in vec)
-//    }
-//    let clone = vec.clone()
-//    for i = 0, 50 {
-//        vec.pop(i)
-//    }
-//    for i = 0, 100, 2 {
-//        vec.insert(i, i)
-//    }
-//    assert(vec == clone)
-//}
-//
-//{
-//    assert([1, 2, 3].clone() == [1, 2, 3])
-//    assert([1, 2, 3] != [1, 2])
-//    assert([1, 2, 3] != [1, 2, 4])
-//}
-//
-//// Inclusion/contains operator:
-//{
-//    assert(3 in [1, 2, 3])
-//    assert(!(4 in [1, 2, 3]))
-//}
-//
-//// Arithmetic on arrays:
-//{
-//    assert([] != [1])
-//    assert([] + [] != [2])
-//    assert([] + [] + [] != [3])
-//
-//    assert([] + [1, 2, 3] == [1, 2, 3])
-//    assert([1] + [2, 3] == [1, 2, 3])
-//    assert([1, 2] + [3] == [1, 2, 3])
-//    assert([1, 2, 3] + [] == [1, 2, 3])
-//}
-//
+{
+    let vec: [int] = []
+    _vector_push(vec, 1)
+    _vector_push(vec, 2)
+    _vector_push(vec, 3)
+    assert(vec == [1, 2, 3])
+}
+{
+    let vec = [1]
+    _vector_push(vec, 2)
+    _vector_push(vec, 3)
+    _vector_push(vec, 4)
+    assert(vec == [1, 2, 3, 4])
+}
+{
+    let vec = [1, 2, 3]
+    assert(3 == _vector_pop(vec))
+    assert(#vec == 2)
+    assert(2 == _vector_pop(vec))
+    assert(#vec == 1)
+    assert(1 == _vector_pop(vec))
+    assert(#vec == 0)
+}
+{
+    let vec: [int] = []
+    _vector_insert(vec, 0, 3)
+    _vector_insert(vec, 0, 2)
+    _vector_insert(vec, 0, 1)
+    assert(vec == [1, 2, 3])
+}
+{
+    let vec: [int] = [1, 2, 3]
+    _vector_insert(vec, 1, 4)
+    _vector_insert(vec, 3, 5)
+    _vector_insert(vec, 5, 6)
+    assert(vec == [1, 4, 2, 5, 3, 6])
+}
+
+{
+    fn check(i: int, j: int, answer: [int]) {
+        let vec = [1, 2, 3]
+        vec[i:j] = [4, 5, 6]
+        assert(vec == answer)
+    }
+    check(0, 0, [4, 5, 6, 1, 2, 3])
+    check(0, 1, [4, 5, 6, 2, 3])
+    check(0, 2, [4, 5, 6, 3])
+    check(0, 3, [4, 5, 6])
+    check(3, 3, [1, 2, 3, 4, 5, 6])
+    check(2, 3, [1, 2, 4, 5, 6])
+    check(1, 3, [1, 4, 5, 6])
+    check(0, 3, [4, 5, 6])
+}
+
+{
+    fn check(i: int, j: int, answer: [int]) {
+        let vec = [1, 2, 3]
+        vec[i:j] = vec
+        assert(vec == answer)
+    }
+    check(1, 3, [1, 1, 2, 3])
+    check(2, 3, [1, 2, 1, 2, 3])
+    check(3, 3, [1, 2, 3, 1, 2, 3])
+
+    check(0, 2, [1, 2, 3, 3])
+    check(0, 1, [1, 2, 3, 2, 3])
+    check(0, 0, [1, 2, 3, 1, 2, 3])
+
+    check(0, 3, [1, 2, 3])
+    check(1, 2, [1, 1, 2, 3, 3])
+
+    let vec = [1, 2, 3, 4, 5]
+    vec[1:3] = vec
+    assert(vec == [1, 1, 2, 3, 4, 5, 4, 5])
+}
+
+{
+    fn map<T>(f: fn(T) -> T, vec: [T]) {
+        for i = 0, #vec {
+            vec[i] = f(vec[i])
+        }
+    }
+    fn times2(i: int) -> int {
+        return i * 2
+    }
+    let v = [1, 2, 3]
+    map(times2, v)
+    assert(v[0] == 2)
+    assert(v[1] == 4)
+    assert(v[2] == 6)
+    
+}
+
+{
+    let vec = [1, 2, 3]
+    _vector_push(vec, 4)
+    _vector_push(vec, 5)
+    _vector_push(vec, 6)
+    assert(#vec == 6)
+    assert(vec[0] == 1)
+    assert(vec[5] == 6)
+    assert(vec[-6] == 1)
+    assert(vec[-1] == 6)
+}
+
+{
+    let vec: [int] = []
+    for i = 0, 100 {
+        _vector_push(vec, i)
+    }
+    assert(#vec == 100)
+    for i = 0, 100 {
+        assert(i in vec)
+    }
+    let clone = _vector_clone(vec)
+    for i = 0, 50 {
+        _vector_erase(vec, i)
+    }
+    for i = 0, 100, 2 {
+        _vector_insert(vec, i, i)
+    }
+    assert(vec == clone)
+}
+
+{
+    assert(_vector_clone([1, 2, 3]) == [1, 2, 3])
+    assert([1, 2, 3] != [1, 2])
+    assert([1, 2, 3] != [1, 2, 4])
+}
+
+// Inclusion/contains operator:
+{
+    assert(3 in [1, 2, 3])
+    assert(!(4 in [1, 2, 3]))
+}
+
+// Arithmetic on arrays:
+{
+    assert([] != [1])
+    assert([] + [] != [2])
+    assert([] + [] + [] != [3])
+    assert([1] == [1])
+    assert([] + [2] == [2])
+    assert([] + [] + [3] == [3])
+
+    assert([] + [1, 2, 3] == [1, 2, 3])
+    assert([1] + [2, 3] == [1, 2, 3])
+    assert([1, 2] + [3] == [1, 2, 3])
+    assert([1, 2, 3] + [] == [1, 2, 3])
+    assert([1] + [2] + [3] == [1, 2, 3])
+    assert([] + [1] + [2] + [] + [] + [3] + [] == [1, 2, 3])
+}
+{
+    let test = |vec: [int]| {
+        assert(#vec == 0)
+    }
+    test([])
+    test([] + [])
+    test([] + [] + [])
+}
+
+{
+    let a = []
+    let b = []
+    let c = []
+    a = b
+    b = c
+    _vector_push(c, 1)
+}
+{
+    let a = []
+    let b = []
+    let c = []
+    a = b
+    b = c
+    _vector_push(a, 1)
+}
+
+{
+    let a = []
+    let b = []
+    let c = []
+    b = a
+    c = a
+    b = [1]
+    assert(a == c)
+    assert(a != b)
+    assert(b != c)
+}
+{
+    let a = []
+    let b = []
+    let c = []
+    b = a
+    c = a
+    a = [1]
+    assert(#a == 1)
+    assert(#b == 0)
+    assert(#c == 0)
+}
+
+{
+    let a = []
+    let b = []
+    let c = []
+    if true {
+        // do nothing
+    } else {
+        _vector_push(a, 1)
+    }
+    b = c
+    c = a
+}
+{
+    let vec = []
+    _vector_push(vec, 1)
+    assert(vec[0] == 1)
+}
+{
+    let a = []
+    let b = a
+    _vector_push(b, 1)
+    assert(a[0] == 1)
+}
+{
+    fn test<T>(vec: [T], val: T) -> [T] {
+        return vec + [val]
+    }
+    assert([1] == test([], 1))
+    assert([1, 2] == test(test([], 1), 2))
+    assert([1, 2, 3] == test(test(test([], 1), 2), 3))
+}
+{
+    struct A<T> {
+        vec: [T]
+    }
+    fn test<T>(vec: [T], val: A<T>) -> [T] {
+        return vec + val.vec
+    }
+    let a = A::<int>{vec: [1]}
+    assert([1] == test([], a))
+    let b = A::<int>{vec: [2, 3]}
+    assert([1, 2, 3] == test(test([], a), b))
+    let c = A::<int>{vec: [4, 5, 6]}
+    assert([1, 2, 3, 4, 5, 6] == test(test(test([], a), b), c))
+}
+{
+    fn test<T>(vec: [T], vec2: [[T]]) {}
+    test([], [[1]])
+    test([], [[[1]]])
+    test([], [[1, 2, 3]])
+    test([], [[[1], [2, 2], [3, 3, 3]]])
+}
+{
+    fn test<T>(vec: [T], val: T) -> int {
+        _vector_push(vec, val)
+        return #vec
+    }
+    assert(1 == test([], 1))
+    assert(1 == test([], test([], 2)))
+    assert(1 == test([], test([], test([], 3))))
+
+    let vec = []
+    assert(1 == test(vec, 1))
+    let vec = []
+    assert(2 == test(vec, test(vec, 2)))
+    let vec = []
+    assert(3 == test(vec, test(vec, test(vec, 3))))
+}
+
+
 //// Slice syntax:
 //{
 //    fn check(vec: Vector::<int>, begin: int, end: int) {
@@ -384,8 +562,6 @@
 //    assert(vec[3:] == result)
 //
 //    let result = vec.clone()
-//    assert(vec[0:None] == result)
-//    assert(vec[None:#vec] == result)
 //    assert(vec[0:] == result)
 //    assert(vec[:#vec] == result)
 //    assert(vec[:] == result)
@@ -393,43 +569,3 @@
 //    assert(vec[1:-1] == [2])
 //    assert(vec[-1:] == [3])
 //}
-//
-//{
-//    fn check(i, j, answer) {
-//        let vec = [1, 2, 3]
-//        vec[i:j] = [4, 5, 6]
-//        assert(vec == answer)
-//    }
-//    check(0, 0, [4, 5, 6, 1, 2, 3])
-//    check(0, 1, [4, 5, 6, 2, 3])
-//    check(0, 2, [4, 5, 6, 3])
-//    check(0, 3, [4, 5, 6])
-//    check(3, 3, [1, 2, 3, 4, 5, 6])
-//    check(2, 3, [1, 2, 4, 5, 6])
-//    check(1, 3, [1, 4, 5, 6])
-//    check(0, 3, [4, 5, 6])
-//}
-//
-//{
-//    fn check(i: int, j: int, answer: [int]) {
-//        let vec = [1, 2, 3]
-//        vec[i:j] = vec
-//        assert(vec == answer)
-//    }
-//    check(1, 3, [1, 1, 2, 3])
-//    check(2, 3, [1, 2, 1, 2, 3])
-//    check(3, 3, [1, 2, 3, 1, 2, 3])
-//
-//    check(0, 2, [1, 2, 3, 3])
-//    check(0, 1, [1, 2, 3, 2, 3])
-//    check(0, 0, [1, 2, 3, 1, 2, 3])
-//
-//    check(0, 3, [1, 2, 3])
-//    check(1, 2, [1, 1, 2, 3, 3])
-//
-//    let vec = [1, 2, 3, 4, 5]
-//    vec[1:3] = vec
-//    assert(vec == [1, 1, 2, 3, 4, 5, 4, 5])
-//}
-//
-

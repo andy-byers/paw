@@ -327,7 +327,7 @@ void pawR_setattr(paw_Env *P, int index)
     const Value val = *vm_top(1);
     const Value obj = *vm_top(2);
     Instance *ins = v_instance(obj);
-    ins->attrs[1 + index] = val;
+    ins->attrs[index] = val;
     vm_pop(2);
 }
 
@@ -347,52 +347,52 @@ void pawR_setitem(paw_Env *P, paw_Type t)
     vm_pop(3);
 }
 
-static paw_Int clamp_index(paw_Int index, size_t length)
+static size_t check_index(paw_Env *P, paw_Int index, size_t length, const char *what)
 {
     const paw_Int n = paw_cast_int(length);
     index = pawV_abs_index(index, length);
-    index = index < 0 ? 0 : index;
-    index = index > n ? n : index;
-    return index;
+    if (index < 0 || index > n) {
+        pawE_error(P, PAW_ERUNTIME, -1, "index %I is out of bounds for %s of length %I",
+                   index, what, paw_cast_int(length));
+    }
+    return cast_size(index);
 }
 
-static void setslice_vector(paw_Env *P, const Vector *lhs, paw_Int i, paw_Int j, const Vector *rhs)
+static void setslice_vector(paw_Env *P, Vector *va, paw_Int i, paw_Int j, const Vector *vb)
 {
-    const size_t n = pawV_vec_length(lhs);
-    const size_t zi = cast_size(clamp_index(i, n));
-    const size_t zj = cast_size(clamp_index(j, n));
+    const size_t na = pawV_vec_length(va);
+    const size_t nb = pawV_vec_length(vb);
+    const size_t zi = check_index(P, i, na, "vector");
+    const size_t zj = check_index(P, j, na, "vector");
 
-    Value *pv;
-    Vector *copy;
-    vm_vector_init(copy, pv);
+    if (va == vb) {
+        Value *pv = vm_top(1);
+        paw_assert(pv->p == vb);
+        vb = pawV_vec_clone(P, pv, vb);
+    }
 
-    const size_t zelem = sizeof(lhs->begin[0]);
-    const size_t before = cast_size(j - i);
-    const size_t after = pawV_vec_length(rhs);
-    const size_t nelems = n - before + after;
-    pawV_vec_resize(P, copy, nelems);
+    const size_t szelem = sizeof(va->begin[0]);
+    const size_t nelems = na - zj + zi + nb;
+    pawV_vec_reserve(P, va, nelems);
 
-    Value *dst = copy->begin;
-    memcpy(dst, lhs->begin, zi * zelem);
-
-    dst += zi;
-    memcpy(dst, rhs->begin, after * zelem);
-
-    dst += after;
-    memcpy(dst, lhs->begin + zj, (n - zj) * zelem);
+    Value *gap = va->begin + zi;
+    memmove(gap + nb, va->begin + zj, (na - zj) * szelem);
+    memcpy(gap, vb->begin, nb * szelem);
+    pawV_vec_resize(P, va, nelems);
 }
 
+// setslice([a1..an], i, j, [b1..bn]) => [a1..ai b1..bn aj..an]
 void pawR_setslice(paw_Env *P, paw_Type t)
 {
-    const Value lhs = *vm_top(4);
+    const Value va = *vm_top(4);
     const paw_Int i = v_int(*vm_top(3));
     const paw_Int j = v_int(*vm_top(2));
-    const Value rhs = *vm_top(1);
+    const Value vb = *vm_top(1);
 
     paw_assert(t == PAW_TVECTOR);
-    setslice_vector(P, v_vector(lhs), i, j, v_vector(rhs));
+    setslice_vector(P, v_vector(va), i, j, v_vector(vb));
 
-    vm_shift(4);
+    vm_pop(4);
 }
 
 void pawR_init(paw_Env *P)
@@ -565,8 +565,8 @@ static void eq_ne(paw_Env *P, BinaryOp binop, paw_Type t, Value x, Value y)
 #define u2i(u) paw_cast_int(u)
 
 // Generate code for int operators
-// Casts to unsigned to avoid UB (signed integer overflow). Negative
-// numbers 'just work' on processors using 2's complement integers.
+// Casts to unsigned to avoid UB (signed integer overflow). Requires
+// 2's complement integer representation to work properly.
 #define i_unop(a, op) u2i(op i2u(a))
 #define i_binop(a, b, op) u2i(i2u(a) op i2u(b))
 
@@ -683,8 +683,7 @@ static void float_binop(paw_Env *P, BinaryOp binop, paw_Float x, paw_Float y)
     vm_pop(1);
 }
 
-static void other_binop(paw_Env *P, BinaryOp binop, paw_Type t, Value x,
-                        Value y)
+static void other_binop(paw_Env *P, BinaryOp binop, paw_Type t, Value x, Value y)
 {
     if (binop == BINARY_IN) {
         Value *pv = vm_top(2);
@@ -756,11 +755,9 @@ static void float_unop(paw_Env *P, UnaryOp unop, paw_Float f)
 static void other_unop(paw_Env *P, UnaryOp unop, paw_Type t, Value x)
 {
     if (unop == UNARY_LEN) {
-        // Replace the container with its length.
         v_set_int(vm_top(1), pawV_length(x, t));
     } else {
         paw_assert(unop == UNARY_NOT);
-        // allows expressions like '!str'
         v_set_bool(vm_top(1), !pawV_truthy(x, t));
     }
 }
@@ -791,7 +788,7 @@ void pawR_gettuple(paw_Env *P, int index)
 void pawR_getattr(paw_Env *P, int index)
 {
     Instance *ins = v_instance(*vm_top(1));
-    *vm_top(1) = ins->attrs[1 + index];
+    *vm_top(1) = ins->attrs[index];
 }
 
 static void getitem_vector(paw_Env *P, Vector *vector, paw_Int index)
@@ -838,27 +835,27 @@ int pawR_getitem(paw_Env *P, paw_Type t)
 static void getslice_vector(paw_Env *P, Vector *vec, paw_Int i, paw_Int j)
 {
     const size_t n = pawV_vec_length(vec);
-    i = clamp_index(i, n);
-    j = clamp_index(j, n);
+    const size_t zi = check_index(P, i, n, "vector");
+    const size_t zj = check_index(P, j, n, "vector");
 
     Value *pv;
     Vector *slice;
     vm_vector_init(slice, pv);
 
-    const size_t nelems = cast_size(j - i);
+    const size_t nelems = zj - zi;
     pawV_vec_resize(P, slice, nelems);
-    memcpy(slice->begin, vec->begin + i, nelems * sizeof(vec->begin[0]));
+    memcpy(slice->begin, vec->begin + zi, nelems * sizeof(vec->begin[0]));
 }
 
 static void getslice_string(paw_Env *P, String *str, paw_Int i, paw_Int j)
 {
     const size_t n = pawS_length(str);
-    i = clamp_index(i, n);
-    j = clamp_index(j, n);
+    const size_t zi = check_index(P, i, n, "string");
+    const size_t zj = check_index(P, j, n, "string");
 
     Value *pv = vm_push0();
-    const size_t nbytes = cast_size(j - i);
-    String *slice = pawS_new_nstr(P, str->text + i, nbytes);
+    const size_t nbytes = zj - zi;
+    String *slice = pawS_new_nstr(P, str->text + zi, nbytes);
     v_set_object(pv, slice);
 }
 
@@ -963,7 +960,6 @@ void pawR_execute(paw_Env *P, CallFrame *cf)
 {
     const Value *K;
     const OpCode *pc;
-    Struct **S = P->sv.data;
     Closure *fn;
 
 top:
@@ -1013,11 +1009,6 @@ top:
             vm_case(PUSHCONST) :
             {
                 vm_pushv(K[get_U(opcode)]);
-            }
-
-            vm_case(PUSHSTRUCT) :
-            {
-                vm_pusho(S[get_U(opcode)]);
             }
 
             vm_case(UNOP) :
@@ -1099,16 +1090,12 @@ top:
                 check_gc(P);
             }
 
-            // TODO: Instances store a pointer to Struct as the first field. This was how
-            //       method calls were implemented before the switch to static typing.
             vm_case(NEWINSTANCE) :
             {
                 vm_protect();
-                Value *pv = vm_top(1);
-                Struct *struct_ = v_struct(*pv);
-                Instance *ins = pawV_new_instance(P, 1 + get_U(opcode));
-                v_set_object(ins->attrs, struct_);
-                v_set_object(pv, ins); // replace Struct
+                Value *pv = vm_push0();
+                Instance *ins = pawV_new_instance(P, get_U(opcode));
+                v_set_object(pv, ins);
                 check_gc(P);
             }
 
@@ -1117,7 +1104,7 @@ top:
                 vm_protect();
                 const int u = get_U(opcode);
                 Instance *ins = v_instance(*vm_top(2));
-                ins->attrs[1 + u] = *vm_top(1);
+                ins->attrs[u] = *vm_top(1);
                 vm_pop(1);
             }
 

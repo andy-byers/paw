@@ -26,11 +26,8 @@
 #define cached_str(R, i) pawE_cstr(env((R)->lex), cast_size(i))
 #define basic_decl(R, code) basic_symbol(R, code)->decl
 #define is_unit(e) (type2code(e) == PAW_TUNIT)
-#define normalize(table, type) pawU_normalize(table, type)
+//#define normalize(table, type) pawU_normalize(table, type)
 #define flag2code(flag) (-(flag) - 1)
-
-// Entrypoint for type unification
-#define unify(R, a, b) pawU_unify((R)->U, a, b)
 
 struct ContainerState {
     struct ContainerState *outer;
@@ -47,7 +44,6 @@ typedef struct Resolver {
     Ast *ast; // AST being checked
     ParseMemory *pm; // dynamic memory
     Unifier *U; // unification tables
-    GenericState *gs; // info about current generic parameters
     struct AstList *clist; // list of container type variables
     struct ContainerState *cs; // info about current container
     struct MatchState *ms; // info about current match expression
@@ -57,6 +53,21 @@ typedef struct Resolver {
     int cdepth;
     paw_Bool in_closure;
 } Resolver;
+
+static AstType *normalize(UnificationTable *table, AstType *type)
+{
+    return pawU_normalize(table, type);
+}
+
+static void unify(Resolver *R, AstType *a, AstType *b)
+{
+    pawU_unify(R->U, a, b);
+    normalize(R->U->table, a);
+    normalize(R->U->table, b);
+}
+
+//// Entrypoint for type unification
+//#define unify(R, a, b) pawU_unify((R)->U, a, b)
 
 static AstType *get_type(Resolver *R, DefId did)
 {
@@ -84,27 +95,6 @@ static paw_Bool is_unit_variant(struct Resolver *R, const struct AstType *type)
             decl->variant.fields->count == 0;
     }
     return PAW_FALSE;
-}
-
-static void discharge_expr_list(struct AstVisitor *V, struct AstList *list)
-{
-    struct Resolver *R = V->state.R;
-    for (int i = 0; i < list->count; ++i) {
-        pawA_normalize_expr(V->ast, list->data[i], R->U->table);
-    }
-}
-
-static void discharge_stmt(struct AstVisitor *V, struct AstStmt *stmt)
-{
-    struct Resolver *R = V->state.R;
-    pawA_normalize_stmt(V->ast, stmt, R->U->table);
-}
-
-static void normalize_stmts(Resolver *R, AstList *stmts, UniTable *table)
-{
-    for (int i = 0; i < stmts->count; ++i) {
-        pawA_normalize_stmt(R->ast, stmts->data[i], table);
-    }
 }
 
 static AstType *new_vector_t(Resolver *R, AstType *elem_t)
@@ -162,39 +152,22 @@ static AstType *map_value(const AstType *t)
     return t->adt.types->data[1];
 }
 
-static AstType *try_normalize(Resolver *R, AstType *t)
-{
-    UniTable *table = R->U->table;
-    if (a_is_unknown(t) && t->unknown.depth == table->depth) {
-        return normalize(table, t); 
-    }
-    return t;
-}
-
 static AstType *resolve_expr(struct AstVisitor *V, struct AstExpr *expr) 
 {
     struct Resolver *R = V->state.R;
     V->visit_expr(V, expr);
 
     struct AstType *type = a_type(expr);
-    type = try_normalize(R, type);
+    type = normalize(R->U->table, type);
     if (is_unit_variant(R, type)) {
         return type->func.result;
     }
     return type;
 }
 
-static void resolve_stmt(struct AstVisitor *V, struct AstStmt *stmt)
+static void visit_stmts(struct AstVisitor *V, struct AstList *list)
 {
-    V->visit_stmt(V, stmt);
-  //  discharge_stmt(V, stmt);
-}
-
-static void resolve_stmt_list(struct AstVisitor *V, struct AstList *list)
-{
-    for (int i = 0; i < list->count; ++i) {
-        resolve_stmt(V, list->data[i]);
-    }
+    V->visit_stmt_list(V, list, V->visit_stmt);
 }
 
 #define are_types_same(a, b) ((a) == (b))
@@ -226,15 +199,20 @@ static paw_Bool test_types(Resolver *R, const AstType *a, const AstType *b)
             return test_types(R, a->func.result, b->func.result) &&
                    test_binders(R, a->func.params, b->func.params);
         case AST_TYPE_ADT: {
-            return a->adt.base == b->adt.base &&
-                   !a->adt.types == !b->adt.types &&
-                   (a->adt.types != NULL 
+            if (a->adt.base == b->adt.base) {
+                if (!a->adt.types == !b->adt.types) {
+                    return a->adt.types != NULL 
                         ? test_binders(R, a->adt.types, b->adt.types) 
-                        : PAW_TRUE);
+                        : PAW_TRUE;
+                }
+            }
+            break;
         }
         default:
+            paw_assert(a_kind(a) == AST_TYPE_GENERIC);
             return are_types_same(a, b);
     }
+    return PAW_FALSE;
 }
 
 static Symbol *basic_symbol(Resolver *R, paw_Type code)
@@ -313,6 +291,7 @@ static AstType *generic_collector(AstVisitor *V, AstDecl *decl)
     DefId did = add_decl(V->state.R, decl);
     d->type = new_type(V->state.R, did, AST_TYPE_GENERIC);
     d->type->generic.name = d->name;
+    d->type->generic.did = did;
     return d->type;
 }
 
@@ -334,17 +313,14 @@ make_collector(params, AstDecl, param_collector)
 make_collector(params2, AstDecl, param_collector2)
 make_collector(generics, AstDecl, generic_collector)
 
-static void enter_inference_ctx(Resolver *R, GenericState *gs, UniTable *table)
+static void enter_inference_ctx(Resolver *R)
 {
-    gs->outer = R->gs;
     pawU_enter_binder(R->U);
-    R->gs = gs;
 }
 
-static UniTable *leave_inference_ctx(Resolver *R)
+static void leave_inference_ctx(Resolver *R)
 {
-    R->gs = R->gs->outer;
-    return pawU_leave_binder(R->U);
+    pawU_leave_binder(R->U);
 }
 
 static Scope *enclosing_scope(Resolver *R)
@@ -389,7 +365,12 @@ static Symbol *try_resolve_symbol(Resolver *R, String *name)
         Scope *scope = scopes->scopes->data[depth];
         const int index = pawA_find_symbol(scope, name);
         if (index >= 0) {
-            if (scope->fn_depth != R->func_depth && !R->in_closure) {
+            Symbol *symbol = scope->symbols->data[index];
+            if (scope->fn_depth != R->func_depth 
+                    && !symbol->is_type
+                    && !R->in_closure) {
+                 // TODO: replace is_type with more specific flag, this will mess up function templates!
+                 //       Types are not captured as upvalues
                 type_error(R, "attempt to reference non-local variable '%s' "
                               "(consider using a closure)", name->text);
             }
@@ -488,7 +469,7 @@ static void new_local_literal(Resolver *R, const char *name, paw_Type code)
 static void visit_block_stmt(AstVisitor *V, Block *block)
 {
     enter_block(V->state.R, block->scope);
-    resolve_stmt_list(V, block->stmts);
+    visit_stmts(V, block->stmts);
     block->scope = leave_block(V->state.R);
 }
 
@@ -827,13 +808,10 @@ static void visit_func(AstVisitor *V, FuncDecl *d, FuncKind kind)
     AstType *outer = R->result;
     R->result = type->func.result;
 
-    GenericState gs; 
     // context for inferring container types
-    enter_inference_ctx(R, &gs, NULL);
+    enter_inference_ctx(R);
     V->visit_block_stmt(V, d->body);
-    UniTable *table = leave_inference_ctx(R);
-    normalize_stmts(R, d->body->stmts, table);
-    pawU_check_table(R->U, table);
+    leave_inference_ctx(R);
 
     d->scope = leave_function(R);
     R->result = outer;
@@ -895,14 +873,9 @@ static void check_template_param(Resolver *R, AstList *params, AstList *args)
 static AstType *init_struct_template(AstVisitor *V, StructDecl *base,
                                      AstList *types)
 {
-    GenericState gs;
     Resolver *R = V->state.R;
-    enter_inference_ctx(R, &gs, NULL);
-
     check_template_param(R, base->generics, types);
     AstDecl *inst = instantiate_struct(V, base, types);
-
-    leave_inference_ctx(R);
     return a_type(inst);
 }
 
@@ -1187,6 +1160,15 @@ static void visit_unop_expr(AstVisitor *V, UnOpExpr *e)
     }
 }
 
+static void op_type_error(Resolver *R, const AstType *type, const char *what)
+{
+    if (a_is_unknown(type)) {
+        type_error(R, "%s type must be known before comparison", what);
+    } else {
+        type_error(R, "%s type not equality comparable", what);
+    }
+}
+
 static AstType *binop_vector(Resolver *R, BinaryOp op, AstType *type)
 {
     const AstType *elem_t = vector_elem(type);
@@ -1194,7 +1176,7 @@ static AstType *binop_vector(Resolver *R, BinaryOp op, AstType *type)
         // 2 vectors with the same element type can be added
         return type;
     } else if (!a_is_basic(elem_t)) {
-        type_error(R, "element type not equality comparable");
+        op_type_error(R, elem_t, "element");
     }
     return get_type(R, PAW_TBOOL);
 }
@@ -1204,9 +1186,9 @@ static AstType *binop_map(Resolver *R, AstType *type)
     const AstType *key_t = map_key(type);
     const AstType *value_t = map_value(type);
     if (!a_is_basic(key_t)) {
-        type_error(R, "key type not equality comparable");
+        op_type_error(R, key_t, "key");
     } else if (!a_is_basic(value_t)) {
-        type_error(R, "value type not equality comparable");
+        op_type_error(R, value_t, "value");
     }
     return get_type(R, PAW_TBOOL);
 }
@@ -1289,8 +1271,10 @@ static void visit_closure_expr(AstVisitor *V, ClosureExpr *e)
     R->in_closure = PAW_TRUE;
     enter_block(R, e->scope);
 
+    V->visit_decl_list(V, e->params, visit_param_decl);
+
     AstType *t = new_type(R, NO_DECL, AST_TYPE_FPTR);
-    t->fptr.params = collect_expr_types(V, e->params);
+    t->fptr.params = collect_decl_types(V, e->params);
     t->fptr.result = resolve_expr(V, e->result);
     R->result = t->fptr.result;
     e->type = t;
@@ -1340,19 +1324,16 @@ static AstList *new_unknowns(AstVisitor *V, int count)
     for (int i = 0; i < count; ++i) {
         AstType *unknown = pawU_new_unknown(R->U);
         pawA_list_push(V->ast, &binder, unknown);
-     printf("create unknown ?%d\n", unknown->unknown.index);
     }
     return binder;
 }
 
 static AstList *infer_template_param(AstVisitor *V, AstList *generics, AstList *params, AstList *args)
 {
-    GenericState gs;
     Resolver *R = V->state.R;
-    enter_inference_ctx(R, &gs, NULL);
 
-    generics = collect_decl_types(V, generics); // [Decl] -> [Type]
-    params = collect_decl_types(V, params); // [Decl] -> [Type]
+    generics = collect_decl_types(V, generics); // [Decl] => [Type]
+    params = collect_decl_types(V, params); // [Decl] => [Type]
     AstList *unknowns = new_unknowns(V, generics->count);
     AstList *replaced = prep_func_inference(V, generics, unknowns, params);
 
@@ -1366,10 +1347,9 @@ static AstList *infer_template_param(AstVisitor *V, AstList *generics, AstList *
         AstType *b = a_type(arg);
         unify(R, a, b);
     }
-    UniTable *table = leave_inference_ctx(R);
     for (int i = 0; i < generics->count; ++i) {
         AstDecl *generic = generics->data[i];
-        AstType *type = normalize(table, unknowns->data[i]);
+        AstType *type = unknowns->data[i];
         if (a_is_unknown(type)) {
             const String *name = generic->generic.name;
             type_error(R, "unable to infer generic parameter '%s'", name->text);
@@ -1381,10 +1361,7 @@ static AstList *infer_template_param(AstVisitor *V, AstList *generics, AstList *
 
 static AstType *infer_func_template(AstVisitor *V, FuncDecl *base, AstList *args)
 {
-    // container literal expressions in 'args' may need inference, resolve them
-    // before entering another inference context
     V->visit_expr_list(V, args, V->visit_expr);
-    discharge_expr_list(V, args);
     AstList *types = infer_template_param(V, base->generics, base->params, args);
     AstDecl *inst = instantiate_func(V, base, types);
     return a_type(inst);
@@ -1393,8 +1370,7 @@ static AstType *infer_func_template(AstVisitor *V, FuncDecl *base, AstList *args
 static AstType *setup_call(AstVisitor *V, CallExpr *e)
 {
     Resolver *R = V->state.R;
-    V->visit_expr(V, e->target);
-    AstType *t = a_type(e->target);
+    AstType *t = resolve_expr(V, e->target);
     if (!a_is_func(t)) {
         type_error(R, "type is not callable");
     } else if (e->args->count < t->fptr.params->count) {
@@ -1464,7 +1440,6 @@ static AstType *visit_vector_lit(AstVisitor *V, ContainerLit *e)
          AstType *type = resolve_expr(V, expr);
          unify(R, type, elem_t);
      }
-     elem_t = normalize(U->table, elem_t);
      return new_vector_t(R, elem_t);
 }
 
@@ -1483,8 +1458,6 @@ static AstType *visit_map_lit(AstVisitor *V, ContainerLit *e)
         unify(R, v, value_t);
         expr->hdr.type = value_t;
     }
-    key_t = normalize(U->table, key_t);
-    value_t = normalize(U->table, value_t);
     return new_map_t(R, key_t, value_t);
 }
 
@@ -1633,7 +1606,7 @@ static void visit_forbody(AstVisitor *V, String *iname, AstType *itype, Block *b
     r->var.type = itype;
 
     new_local(R, iname, r);
-    resolve_stmt_list(V, b->stmts);
+    visit_stmts(V, b->stmts);
     b->scope = leave_block(R);
 }
 
@@ -1760,7 +1733,7 @@ static void visit_decl_stmt(AstVisitor *V, AstDeclStmt *s)
 
 static void visit_literal_pat(AstVisitor *V, AstLiteralPat *p)
 {
-    V->visit_expr(V, p->expr);
+    p->type = resolve_expr(V, p->expr);
 }
 
 static void visit_path_pat(AstVisitor *V, AstPathPat *p)
@@ -1910,6 +1883,7 @@ static void add_container_builtin(Resolver *R, const char *name, paw_Type code, 
         g->generic.name = scan_string(R->lex, *pname);
         g->generic.type = pawA_new_type(R->ast, AST_TYPE_GENERIC);
         g->generic.type->generic.name = g->generic.name;
+        g->generic.type->generic.did = add_decl(R, g);
         g->generic.line = 0;
         pawA_list_push(R->ast, &d->type.generics, g);
     }
@@ -1931,7 +1905,7 @@ static void visit_prelude(AstVisitor *V, Resolver *R)
     V->visit_typelist_expr = visit_typelist_expr;
     V->visit_pathtype_expr = visit_pathtype_expr;
 
-    resolve_stmt_list(V, R->ast->prelude);
+    visit_stmts(V, R->ast->prelude);
 }
 
 static void setup_module(AstVisitor *V, Resolver *R, AstDecl *r)
@@ -2008,17 +1982,14 @@ static void visit_module(Resolver *R)
     AstDecl *r = pawA_new_decl(R->ast, DECL_FUNC);
     r->func.name = lex->modname;
 
-    GenericState gs;
     enter_function(R, NULL, &r->func);
-    enter_inference_ctx(R, &gs, NULL);
+    enter_inference_ctx(R);
 
     AstVisitor V;
     setup_module(&V, R, r);
     pawA_visit(&V);
 
-    UniTable *table = leave_inference_ctx(R);
-    normalize_stmts(R, R->ast->stmts, table);
-    pawU_check_table(R->U, table);
+    leave_inference_ctx(R);
     sym->toplevel = leave_function(R);
     paw_assert(sym->scopes->count == 0);
 }

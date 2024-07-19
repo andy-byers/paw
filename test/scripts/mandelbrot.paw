@@ -5,15 +5,10 @@
 //let io = require('io')
 //let file = io.stdout
 
-let charmap = Vector::<string>{
+let charmap = [
     ' ', '.', ':', '-', '=', 
     '+', '*', '#', '%', '@',
-}
-
-//let charmap = [
-//    ' ', '.', ':', '-', '=', 
-//    '+', '*', '#', '%', '@',
-//]
+]
 
 //fn map(f, seq) {
 //    for i = 0, #seq {
