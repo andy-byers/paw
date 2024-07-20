@@ -185,6 +185,7 @@ typedef enum {
     BINARY_GT,   
     BINARY_GE,   
     BINARY_IN,
+    BINARY_AS,
     BINARY_ADD,  
     BINARY_SUB,  
     BINARY_MUL,  
@@ -262,6 +263,7 @@ typedef enum {
     MM_GT,
     MM_GE,
     MM_CONTAINS,
+    MM_CAST,
 
     // binary arithmetic
     MM_ADD,

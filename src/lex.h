@@ -55,6 +55,7 @@ enum MultiChar {
     TK_CONTINUE,
     TK_RETURN,
     TK_IN,
+    TK_AS,
     TK_TRUE,
     TK_FALSE,
 

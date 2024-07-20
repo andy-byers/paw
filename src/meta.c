@@ -22,7 +22,7 @@ const char *pawT_name(Metamethod mm)
         "__len",      "__neg",      "__not",     "__bnot",
 
         "__eq",       "__ne",       "__lt",      "__le",      "__gt",
-        "__ge",       "__contains",
+        "__ge",       "__contains", "__cast",
 
         "__add",      "__sub",      "__mul",     "__div",     "__mod",
         "__bxor",     "__band",     "__bor",     "__shl",     "__shr",
