@@ -537,8 +537,8 @@ static VarInfo find_var(Generator *G, const String *name)
     Lex *lex = G->lex;
     FuncState *fs = G->fs;
     if (!resolve_local(fs, name, &info) && // not local
-        !resolve_upvalue(fs, name, &info) && // not local to caller
-        !resolve_global(G, name, &info)) { // not found
+            !resolve_upvalue(fs, name, &info) && // not local to caller
+            !resolve_global(G, name, &info)) { // not found
         pawX_error(lex, "undefined variable '%s'", name->text);
     }
     return info;
