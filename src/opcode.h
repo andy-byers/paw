@@ -184,7 +184,7 @@ typedef enum {
     BINARY_LE,   
     BINARY_GT,   
     BINARY_GE,   
-    BINARY_IN, // TODO: Shouldn't be a binary op, needs 2 type tags  
+    BINARY_IN,
     BINARY_ADD,  
     BINARY_SUB,  
     BINARY_MUL,  

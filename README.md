@@ -4,8 +4,6 @@
 > Some features will not work for a while (builtin functions, metamethods, C API).
 > Pretty much everything is subject to change.
 > See the [roadmap](#roadmap) to get an idea of where things are going.
-> As far as the syntax examples go, just keep in mind that type inference is only implemented for function templates right now, so structure/enumerator/container literals will look pretty verbose.
-> It should be possible to use a similar technique to infer these types.
 
 An unobtrusive scripting language
 
@@ -67,8 +65,8 @@ let v = ['a', 'b', 'c']
 let m = [1: 1, 2: 2]
 let F = some_other_function
 
-let b = 1 as bool // int -> bool
-let i = 2 + 3.4 as int // float -> int
+let b = 1 as bool
+let i = 2 + 3.4 as int
 
 struct Object {
     value: int
@@ -300,10 +298,12 @@ assert(status != 0)
 ## Roadmap
 + [x] static typing
 + [x] special-cased builtin containers (`[T]` and `[K: V]`)
-+ [ ] type inference for ADT templates (including builtin containers)
++ [x] type inference for structure templates (including builtin containers)
++ [ ] type inference for enumeration templates
 + [ ] pattern matching (`switch` construct)
 + [ ] pattern matching (`if let`, `let` bindings)
 + [ ] constness (`var` vs `let`)
++ [ ] split `string` into `str` and `String`, where `str` is a byte array and `String` is always valid UTF-8
 + [x] sum types/discriminated unions (`enum`)
 + [x] product types (tuple)
 + [ ] custom garbage collector (using Boehm GC for now)
@@ -316,7 +316,7 @@ assert(status != 0)
 ## Known problems
 + Compiler will allow functions that don't return a value in all code paths
     + Likely requires a CFG and some data flow analysis: it would be very difficult to get right otherwise
-+ It isn't possible to create an empty vector or map of a given type without creating a temporary: `let vec: [int] = []`
++ It isn't possible to create an empty vector or map of a specific known type without creating a temporary: `let vec: [int] = []`
     + Could use Swift syntax, or something similar:
 ```
 let empty_vec = [int]()

@@ -836,6 +836,10 @@ static void visit_return_stmt(AstVisitor *V, ReturnStmt *s)
 
 static AstDecl *instantiate_func(AstVisitor *V, FuncDecl *base, AstList *types)
 {
+    if (types == NULL) {
+        printf("instantiate_func(V, base, NULL)\n");
+        return cast_decl(base);
+    }
     AstDecl *inst = find_func_instance(V, base, types);
     if (inst == NULL) {
         inst = pawA_new_decl(V->ast, DECL_INSTANCE);
@@ -850,6 +854,10 @@ static AstDecl *instantiate_func(AstVisitor *V, FuncDecl *base, AstList *types)
 static AstDecl *instantiate_struct(AstVisitor *V, StructDecl *base,
                                    AstList *types)
 {
+    if (types == NULL) {
+        printf("instantiate_struct(V, base, NULL)\n");
+        return cast_decl(base);
+    }
     AstDecl *inst = find_struct_instance(V, base, types);
     if (inst == NULL) {
         inst = pawA_new_decl(V->ast, DECL_INSTANCE);
@@ -916,20 +924,23 @@ static AstType *explicit_struct_template(AstVisitor *V, StructDecl *base, AstLis
 
 static AstType *instantiate(AstVisitor *V, AstDecl *base, AstList *types)
 {
+    if (types == NULL) {
+        return a_type(base);
+    } 
     if (a_is_struct_template_decl(base)) {
         return explicit_struct_template(V, &base->struct_, types);
     } else if (a_is_func_template_decl(base)) {
-        if (types != NULL) { // TODO: only allows inference on function templates for now 
-            return explicit_func_template(V, &base->func, types);
-        }
+        return explicit_func_template(V, &base->func, types);
     } 
     return a_type(base);
 }
 
 struct StructPack {
     String *name;
+    AstList *generics;
     AstList *fields;
     AstType *type;
+    AstDecl *decl;
     paw_Bool is_struct;
 };
 
@@ -944,6 +955,7 @@ static struct StructPack unpack_struct(Resolver *R, AstType *type)
             .name = decl->variant.name,
             .fields = decl->variant.fields,
             .type = decl->variant.type,
+            .decl = decl,
         };
     }
     AstDecl *decl = get_decl(R, type->adt.did);
@@ -951,16 +963,20 @@ static struct StructPack unpack_struct(Resolver *R, AstType *type)
         return (struct StructPack){
             .is_struct = decl->struct_.is_struct,
             .name = decl->struct_.name,
+            .generics = decl->struct_.generics,
             .fields = decl->struct_.fields,
             .type = decl->struct_.type,
+            .decl = decl,
         };
     }
     AstDecl *base = get_decl(R, type->adt.base);
     return (struct StructPack){
         .is_struct = base->struct_.is_struct,
         .name = base->struct_.name,
+        .generics = decl->struct_.generics,
         .fields = decl->inst.fields,
         .type = decl->inst.type,
+        .decl = decl,
     };
 }
 
@@ -1328,42 +1344,55 @@ static AstList *new_unknowns(AstVisitor *V, int count)
     return binder;
 }
 
-static AstList *infer_template_param(AstVisitor *V, AstList *generics, AstList *params, AstList *args)
+struct Generalization {
+    AstList *types;
+    AstList *fields;
+};
+
+static struct Generalization generalize(AstVisitor *V, AstList *generics, AstList *fields)
 {
-    Resolver *R = V->state.R;
-
-    generics = collect_decl_types(V, generics); // [Decl] => [Type]
-    params = collect_decl_types(V, params); // [Decl] => [Type]
-    AstList *unknowns = new_unknowns(V, generics->count);
-    AstList *replaced = prep_func_inference(V, generics, unknowns, params);
-
-    // Attempt to determine a type for each generic parameter, using the
-    // combination of function parameters and arguments. Any parameter type
-    // might equal, or recursively contain, one of the generic type parameters.
-    paw_assert(args->count == replaced->count);
-    for (int i = 0; i < replaced->count; ++i) {
-        AstExpr *arg = args->data[i];
-        AstType *a = replaced->data[i];
-        AstType *b = a_type(arg);
-        unify(R, a, b);
+    if (generics->count > 0) {
+        generics = collect_decl_types(V, generics);
+        fields = collect_decl_types(V, fields);
+        AstList *unknowns = new_unknowns(V, generics->count);
+        fields = prep_func_inference(V, generics, unknowns, fields);
+        generics = unknowns;
     }
-    for (int i = 0; i < generics->count; ++i) {
-        AstDecl *generic = generics->data[i];
+    return (struct Generalization){
+        .types = generics,
+        .fields = fields,
+    };
+}
+
+static void check_inference(Resolver *R, AstList *unknowns, AstList *generics)
+{
+    if (unknowns == NULL) {
+        return; // no inference
+    }
+    for (int i = 0; i < unknowns->count; ++i) {
         AstType *type = unknowns->data[i];
         if (a_is_unknown(type)) {
+            AstDecl *generic = generics->data[i];
             const String *name = generic->generic.name;
             type_error(R, "unable to infer generic parameter '%s'", name->text);
         }
-        unknowns->data[i] = type;
     }
-    return unknowns;
 }
 
 static AstType *infer_func_template(AstVisitor *V, FuncDecl *base, AstList *args)
 {
-    V->visit_expr_list(V, args, V->visit_expr);
-    AstList *types = infer_template_param(V, base->generics, base->params, args);
-    AstDecl *inst = instantiate_func(V, base, types);
+    struct Generalization g = generalize(V, base->generics, base->params);
+
+    Resolver *R = V->state.R;
+    paw_assert(args->count == g.fields->count);
+    for (int i = 0; i < g.fields->count; ++i) {
+        AstExpr *arg = args->data[i];
+        AstType *a = g.fields->data[i];
+        AstType *b = resolve_expr(V, arg);
+        unify(R, a, b);
+    }
+    check_inference(R, g.types, base->generics);
+    AstDecl *inst = instantiate_func(V, base, g.types);
     return a_type(inst);
 }
 
@@ -1378,14 +1407,6 @@ static AstType *setup_call(AstVisitor *V, CallExpr *e)
     } else if (e->args->count > t->fptr.params->count) {
         syntax_error(R, "too many arguments");
     }
-    if (a_is_fdef(t)) {
-        // Function type has an associated declaration. If that declaration is
-        // for a function template, attempt to infer the type parameters.
-        AstDecl *decl = get_decl(V->state.R, t->func.did);
-        if (a_is_func_template_decl(decl)) {
-            return infer_func_template(V, &decl->func, e->args);
-        }
-    }
     return t;
 }
 
@@ -1396,15 +1417,24 @@ static void visit_call_expr(AstVisitor *V, CallExpr *e)
     // functions will need type inference, which is handled in setup_call().
     e->func = setup_call(V, e);
 
+    if (a_is_fdef(e->func)) {
+        // Function type has an associated declaration. If that declaration is
+        // for a function template, attempt to infer the type parameters.
+        AstDecl *decl = get_decl(R, e->func->func.did);
+        if (a_is_func_template_decl(decl)) {
+            e->func = infer_func_template(V, &decl->func, e->args);
+            e->type = e->func->fptr.result;
+            return;
+        }
+    }
+
     const AstList *params = params = e->func->fptr.params;
     e->type = e->func->fptr.result;
     
-    if (params->count != e->args->count) {
-        type_error(R, "expected %d arguments(s) but found %d",
-                     params->count, e->args->count);
-    } else if (is_unit_variant(R, e->func)) {
-        type_error(R, "cannot call unit variant");
+    if (is_unit_variant(R, e->func)) {
+        type_error(R, "cannot call unit variant (omit '()' to construct)");
     }
+    paw_assert(e->args->count == params->count);
     for (int i = 0; i < params->count; ++i) {
         AstExpr *arg = e->args->data[i];
         AstType *type = resolve_expr(V, arg);
@@ -1498,9 +1528,17 @@ static AstType *visit_composite_lit(AstVisitor *V, LiteralExpr *lit)
     v_set_object(pv, map);
 
     Value key;
+    struct Generalization g;
+    AstList *field_types = NULL;
+    paw_Bool is_inference = PAW_FALSE;
     const struct StructPack pack = unpack_struct(R, target);
     if (!pack.is_struct) {
         type_error(R, "expected structure but found enumeration");
+    } else if (a_is_struct_template_decl(pack.decl)) {
+        StructDecl *d = &pack.decl->struct_;
+        g = generalize(V, d->generics, d->fields);
+        is_inference = PAW_TRUE;
+        field_types = g.fields;
     }
     AstList *order = pawA_list_new(R->ast);
     for (int i = 0; i < e->items->count; ++i) {
@@ -1525,19 +1563,26 @@ static AstType *visit_composite_lit(AstVisitor *V, LiteralExpr *lit)
                        field->name->text, pack.name->text);
         }
         const paw_Int index = v_int(*value);
-        AstType *field_t = get_type(R, field->def);
+        AstType *field_t = is_inference
+            ?field_types->data[i]
+            : a_type(cast_decl(pack.fields->data[i]));
         AstExpr *item = order->data[index];
         item->sitem.index = i; // index of attribute in struct
         unify(R, a_type(item), field_t);
         pawH_remove(P, map, key);
     }
     if (pawH_length(map) > 0) {
-        syntax_error(R, "too many initializers for struct '%s'",
-                     pack.name->text);
+        name_error(R, lit->line, "too many initializers for struct '%s'",
+                   pack.name->text);
     }
     paw_assert(pack.fields->count == e->items->count);
     pawA_list_free(R->ast, order);
     pawC_pop(P); // pop map
+    if (is_inference) {
+        check_inference(R, g.types, pack.decl->struct_.generics);
+        AstDecl *inst = instantiate_struct(V, &pack.decl->struct_, g.types);
+        target = a_type(inst);
+    }
     return target;
 }
 

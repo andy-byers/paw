@@ -182,6 +182,14 @@ static void test_arithmetic_error(void)
     test_runtime_error(PAW_ERUNTIME, "negative_right_shift", "let x = 1 >> -2");
 }
 
+static void test_struct_error(void)
+{
+    test_compiler_error(PAW_ENAME, "struct_missing_field", "struct A {a: int} let a = A{}");
+    test_compiler_error(PAW_ENAME, "struct_extra_field", "struct A {a: int} let a = A{a: 1, b: 2}");
+    test_compiler_error(PAW_ENAME, "struct_duplicate_field", "struct A {a: int} let a = A{a: 1, a: 1}");
+    test_compiler_error(PAW_ENAME, "struct_wrong_field", "struct A {a: int} let a = A{b: 2}");
+}
+
 static void test_vector_error(void)
 {
     test_compiler_error(PAW_ETYPE, "vector_cannot_infer", "let a = []");
@@ -209,6 +217,7 @@ int main(void)
     test_syntax_error();
     test_type_error();
     test_arithmetic_error();
+    test_struct_error();
     test_vector_error();
     test_map_error();
 }
