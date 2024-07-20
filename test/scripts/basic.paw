@@ -1,5 +1,8 @@
 // basic.paw
 
+let a = 1 as int
+a = a + 1
+
 {
     // line comment
     /* block comment */
@@ -110,15 +113,15 @@
     }
     fn A(value: int) -> bool {
         counts.0 = counts.0 + 1
-        return bool(value)
+        return value as bool
     }
     fn B(value: int) -> bool {
         counts.1 = counts.1 + 1
-        return bool(value)
+        return value as bool
     }
     fn C(value: int) -> bool {
         counts.2 = counts.2 + 1
-        return bool(value)
+        return value as bool
     }
 
     fn or(a: int, b: int) -> bool {

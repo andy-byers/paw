@@ -1233,13 +1233,13 @@ static void visit_binop_expr(AstVisitor *V, BinOpExpr *e)
     };
     // clang-format on
 
-    struct Resolver *R = V->state.R;
-    struct AstType *lhs = resolve_expr(V, e->lhs);
-    struct AstType *rhs = resolve_expr(V, e->rhs);
+    Resolver *R = V->state.R;
+    AstType *lhs = resolve_expr(V, e->lhs);
+    AstType *rhs = resolve_expr(V, e->rhs);
     if (e->op == BINARY_IN) {
         e->type = visit_in_expr(R, lhs, rhs);
         return;
-    }
+    } 
     unify(R, lhs, rhs);
 
     const paw_Type left = type2code(lhs);
@@ -1564,7 +1564,7 @@ static AstType *visit_composite_lit(AstVisitor *V, LiteralExpr *lit)
         }
         const paw_Int index = v_int(*value);
         AstType *field_t = is_inference
-            ?field_types->data[i]
+            ? field_types->data[i]
             : a_type(cast_decl(pack.fields->data[i]));
         AstExpr *item = order->data[index];
         item->sitem.index = i; // index of attribute in struct
@@ -1990,7 +1990,6 @@ static void setup_module(AstVisitor *V, Resolver *R, AstDecl *r)
     V->visit_call_expr = visit_call_expr;
     V->visit_index_expr = visit_index_expr;
     V->visit_selector_expr = visit_selector_expr;
-    // V->visit_item_expr = visit_item_expr;
     V->visit_typelist_expr = visit_typelist_expr;
     V->visit_pathtype_expr = visit_pathtype_expr;
     V->visit_path_expr = visit_path_expr;

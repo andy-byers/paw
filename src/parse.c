@@ -106,6 +106,7 @@ typedef enum {
     INFIX_GT, // >
     INFIX_GE, // >=
     INFIX_IN, // in
+    INFIX_AS, // as
     INFIX_ADD, // +
     INFIX_SUB, // -
     INFIX_MUL, // *
@@ -129,6 +130,7 @@ static const struct {
     uint8_t left;
     uint8_t right;
 } kInfixPrec[NINFIX] = {
+    [INFIX_AS] = {14, 14}, 
     [INFIX_MUL] = {13, 13}, 
     [INFIX_DIV] = {13, 13},
     [INFIX_MOD] = {13, 13}, 
@@ -150,7 +152,7 @@ static const struct {
     [INFIX_OR] = {3, 3},    
 };
 
-static const uint8_t kUnOpPrecedence = 14;
+static const uint8_t kUnOpPrecedence = 15;
 
 static unsigned left_prec(InfixOp op) 
 {
@@ -203,6 +205,8 @@ static InfixOp get_infixop(TokenKind kind)
             return INFIX_BOR;
         case TK_IN:
             return INFIX_IN;
+        case TK_AS:
+            return INFIX_AS;
         case TK_EQUALS2:
             return INFIX_EQ;
         case TK_LESS2:
@@ -664,7 +668,7 @@ static AstExpr *unop_expr(Lex *lex, UnOp op)
     AstExpr *result = new_expr(lex, EXPR_UNOP);
     UnOpExpr *r = &result->unop;
     skip(lex); // unary operator token
-    r->op = (UnaryOp)op; // same order
+    r->op = cast(op, UnaryOp); // same order
     r->target = expression(lex, kUnOpPrecedence);
     return result;
 }
@@ -830,39 +834,10 @@ static paw_Bool equals_cstr(Lex *lex, const String *ident, unsigned cstr)
     return pawS_eq(ident, pawE_cstr(env(lex), cstr));
 }
 
-static paw_Bool try_conversion(Lex *lex, AstExpr *target, AstExpr *r)
-{
-    if (a_kind(target) != EXPR_PATH) {
-        return PAW_FALSE;
-    }
-    AstPath *path = target->path.path;
-    if (path->list->count != 1) {
-        return PAW_FALSE;
-    }
-    AstSegment *seg = pawA_path_get(path, 0);
-    if (equals_cstr(lex, seg->name, CSTR_BOOL)) {
-        r->conv.to = PAW_TBOOL; 
-    } else if (equals_cstr(lex, seg->name, CSTR_INT)) {
-        r->conv.to = PAW_TINT; 
-    } else if (equals_cstr(lex, seg->name, CSTR_FLOAT)) {
-        r->conv.to = PAW_TFLOAT; 
-    } else {
-        return PAW_FALSE;
-    }
-    const int line = lex->last_line;
-    r->conv.kind = EXPR_CONVERSION;
-    r->conv.arg = expression0(lex);
-    delim_next(lex, ')', '(', line);
-    return PAW_TRUE;
-}
-
 static AstExpr *call_expr(Lex *lex, AstExpr *target)
 {
     AstExpr *r = new_expr(lex, EXPR_CALL);
     skip(lex); // '(' token
-    if (try_conversion(lex, target, r)) {
-        return r; 
-    }
     r->call.target = target;
     r->call.args = new_list(lex);
     parse_arg_list(lex, &r->call.args, r->call.line);
@@ -1027,16 +1002,43 @@ static AstExpr *simple_expr(Lex *lex)
     return expr;
 }
 
+static AstExpr *conversion_expr(Lex *lex, AstExpr *lhs, AstExpr *rhs)
+{
+    if (a_kind(rhs) != EXPR_PATH ||
+            rhs->path.path->list->count != 1) {
+        pawX_error(lex, "expected basic type name");
+    }
+    AstExpr *r = new_expr(lex, EXPR_CONVERSION);
+    r->conv.arg = lhs;
+
+    AstPath *path = rhs->path.path;
+    AstSegment *seg = pawA_path_get(path, 0);
+    if (equals_cstr(lex, seg->name, CSTR_BOOL)) {
+        r->conv.to = PAW_TBOOL; 
+    } else if (equals_cstr(lex, seg->name, CSTR_INT)) {
+        r->conv.to = PAW_TINT; 
+    } else if (equals_cstr(lex, seg->name, CSTR_FLOAT)) {
+        r->conv.to = PAW_TFLOAT; 
+    } else {
+        pawX_error(lex, "expected basic type");
+    }
+    return r;
+}
+
+
 static AstExpr *binop_expr(Lex *lex, InfixOp op, AstExpr *lhs)
 {
     skip(lex); // binary operator token
     AstExpr *rhs = expression(lex, right_prec(op));
+    if (op == INFIX_AS) {
+        return conversion_expr(lex, lhs, rhs);
+    }
     if (rhs == NULL) {
         return NULL; // no more binops
     }
     AstExpr *result = new_expr(lex, EXPR_BINOP);
     BinOpExpr *r = &result->binop;
-    r->op = (BinaryOp)op; // same order
+    r->op = cast(op, BinaryOp); // same order
     r->lhs = lhs;
     r->rhs = rhs;
     return result;
@@ -1507,6 +1509,7 @@ static const char *kKeywords[] = {
     "continue", 
     "return", 
     "in", 
+    "as", 
     "true", 
     "false",
 };
