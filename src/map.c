@@ -80,6 +80,10 @@ static void grow_map(paw_Env *P, Map *m)
     pawM_check_size(P, 0, n, MAP_ITEM_TOTAL);
     const size_t new_size = n * MAP_ITEM_TOTAL;
     void *buffer = pawM_alloc(P, NULL, 0, new_size);
+    if (buffer == NULL) {
+        pawE_error(P, PAW_EMEMORY, -1,
+                   "cannot allocate map table (out of memory)");
+    }
     memset(buffer, MAP_ITEM_VACANT, n * sizeof(MapMeta));
     const Map old_m = *m;
 
@@ -125,7 +129,8 @@ void pawH_clone(paw_Env *P, StackPtr sp, Map *m)
 
 static paw_Bool items_equal(Value x, Value y)
 {
-    // TODO: Only allowed for 'basic' types right now. Compiler set to complain otherwise.
+    // TODO: Only allowed for 'basic' types right now. Compiler set to complain
+    // otherwise.
     return x.u == y.u;
 }
 

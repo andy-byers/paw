@@ -11,8 +11,8 @@
 #include "type.h"
 #include "value.h"
 #include <stddef.h>
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
 
 struct Jump; // call.c
 

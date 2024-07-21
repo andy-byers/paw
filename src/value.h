@@ -104,10 +104,10 @@ typedef enum ValueKind {
     NVTYPES
 } ValueKind;
 
-#define GC_HEADER                                                              \
-    struct Object *gc_next;                                                    \
-    uint64_t gc_nrefs;                                                         \
-    ValueKind gc_kind: 8
+#define GC_HEADER           \
+    struct Object *gc_next; \
+    uint64_t gc_nrefs;      \
+    ValueKind gc_kind : 8
 typedef struct Object {
     GC_HEADER;
 } Object;
@@ -163,7 +163,6 @@ int pawV_num2int(Value *pv, paw_Type type);
 int pawV_num2float(Value *pv, paw_Type type);
 uint32_t pawV_hash(Value v);
 const char *pawV_name(ValueKind type);
-
 
 static paw_Int pawV_abs_index(paw_Int index, size_t length)
 {
@@ -284,7 +283,7 @@ typedef struct Tuple {
 
 Tuple *pawV_new_tuple(paw_Env *P, int nelems);
 
-typedef struct Vector { 
+typedef struct Vector {
     GC_HEADER;
     Value *begin;
     Value *end;

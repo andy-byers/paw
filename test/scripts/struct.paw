@@ -1,0 +1,208 @@
+// struct.paw
+
+{
+    struct Inner {
+        a: int
+        b: float
+        c: string
+    }
+    struct Outer {
+        a: bool
+        b: Inner
+    }
+
+    let o = Outer{
+        a: false,
+        b: Inner{
+            a: 1,
+            b: 2.0,
+            c: 'three',
+        },
+    }
+    assert(o.b.a == 1)
+    assert(o.b.b == 2.0)
+    assert(o.b.c == 'three')
+}
+
+{
+    fn func<A>(a: A) {
+        struct Adt<B> {
+            a: A
+            b: B
+        }
+        let adt = Adt::<bool>{a: a, b: false}
+        let adt = Adt::<int>{a: a, b: 1}
+        let adt = Adt::<float>{a: a, b: 2.0}
+        let adt = Adt::<string>{a: a, b: 'three'}
+        let adt = Adt::<A>{a: a, b: a}
+    }
+    func(true)
+    func(2)
+    func(3.0)
+    func('four')
+}
+{
+    struct A<X> {x: X}
+    let a: A<int> = A::<int>{x: 1}
+    let a = A::<int>{x: 1}
+}
+{
+    struct A<T> {}
+    fn f<T>(a: A<T>) {}
+
+    f::<bool>(A::<bool>{})
+    let a = A::<bool>{}
+    f::<bool>(a)
+    f(A::<bool>{})
+    f(a)
+
+    f::<A<int>>(A::<A<int>>{})
+    let a = A::<A<int>>{}
+    f::<A<int>>(a)
+    f(A::<A<int>>{})
+    f(a)
+
+    f::<A<A<float>>>(A::<A<A<float>>>{})
+    let a = A::<A<A<float>>>{}
+    f::<A<A<float>>>(a)
+    f(A::<A<A<float>>>{})
+    f(a)
+
+    fn f<T>(a: A<A<T>>) {}
+    f(A::<A<string>>{})
+    f(A::<A<A<float>>>{})
+
+    fn func<T, T2>(t: T, f: fn(T) -> T2) -> T2 {
+        return f(t)
+    }
+    fn f(i: int) -> float {
+        return 1.0
+    }
+    let r = func::<int, float>(1, f)
+    assert(r == 1.0)
+
+    let r = func(1, f)
+    assert(r == 1.0)
+}
+{
+    struct A<T> {
+        t: T
+    }
+    let a = A::<int> {t: 42}
+    let b = A::<A<int>> {t: a}
+    let c = A::<A<A<int>>> {t: b}
+    let d = A::<A<A<A<int>>>> {t: c}
+    let e = d.t
+    let f = e.t
+    let g = f.t
+    let h = g.t
+    assert(h == 42)
+
+// TODO: This should not be allowed: requires indirection, which is not yet possible
+//    struct B<T> {
+//        b: B::<T>
+//    }
+
+    struct A<A> {
+        a: A
+    }
+    let a = A::<int>{a: 123}
+    assert(a.a == 123)
+}
+{
+    struct A<T> {
+        v: T
+    }
+    let a = A::<string>{v: 'abc'}
+    assert(a.v == 'abc')
+
+    a.v = a.v + 'def'
+    assert(a.v == 'abcdef')
+}
+{
+    struct Pair<First, Second> {
+        first: First
+        second: Second
+    }
+    fn new_pair<A, B>(a: A, b: B) -> Pair<A, B> {
+        return Pair::<A, B>{
+            first: a,
+            second: b,
+        }
+    }
+    assert(false == new_pair(false, true).first)
+    assert(1 == new_pair(1, 2).first)
+    assert(3.0 == new_pair(2.0, 3.0).second)
+    assert('five' == new_pair('four', 'five').second)
+}
+// Type inference for structure templates:
+{
+    struct A<T> {
+        v: T
+    }
+    let a = A{v: 123}
+    assert(a.v == 123)
+
+    struct B<T> {
+        v: A<T>
+    }
+    let b = B{v: a}
+    assert(b.v.v == 123)
+
+    struct C<T> {
+        v: B<T>
+    }
+    let c = C{v: b}
+    assert(c.v.v.v == 123)
+}
+{
+    struct A<T> {
+        v: [T]
+    }
+    fn test<T>(n: int, a: A<T>) {
+        assert(#a.v == n)
+    }
+
+    test(1, A{v: [1]})
+    test(2, A{v: [[], [2]]})
+    test(3, A{v: [[], [[]], [[3]]]})
+}
+{
+    struct A<T> {
+        v: [T]
+    }
+    fn test<T>(v: T, a: A<T>) {}
+
+    test(['a', 'b'], A{v: []})
+    test([[], ['c']], A{v: []})
+    test('a', A{v: ['a']})
+    test([], A{v: [['b']]})
+}
+{
+    struct Triplet<A, B, C> {
+        a: (A, B)
+        b: (B, C)
+        c: (C, A)
+    }
+    let t = Triplet{
+        a: (true, 2),
+        b: (2, 3.0),
+        c: (3.0, true),
+    }
+    assert(t.a.1 == t.b.0)
+    assert(t.b.1 == t.c.0)
+    assert(t.a.0 == t.c.1)
+}
+{
+    struct Pair<T> {
+        a: T
+        b: [T]
+    }
+    let p = Pair{
+        a: true,
+        b: [],
+    }
+    _vector_push(p.b, true)
+    assert(p.a == p.b[0])
+}
+

@@ -23,8 +23,8 @@ typedef enum TypeKind { // type->...
     TYPE_MODULE, // mod
 } TypeKind;
 
-#define TYPE_HEADER                                                            \
-    DefId def;                                                                 \
+#define TYPE_HEADER \
+    DefId def;      \
     TypeKind kind : 8
 typedef struct TypeHeader {
     TYPE_HEADER;

@@ -74,7 +74,7 @@ void pawV_vec_push(paw_Env *P, Vector *a, Value v)
 void pawV_vec_resize(paw_Env *P, Vector *a, size_t length)
 {
     pawV_vec_reserve(P, a, length);
-    // avoid 'Nullptr with offset' from UBSan 
+    // avoid 'Nullptr with offset' from UBSan
     a->end = length ? a->begin + length : a->begin;
 }
 
@@ -131,7 +131,8 @@ Vector *pawV_vec_clone(paw_Env *P, Value *pv, const Vector *a)
 
 static paw_Bool elems_equal(Value x, Value y)
 {
-    // TODO: Only allowed for 'basic' types right now. Compiler set to complain otherwise.
+    // TODO: Only allowed for 'basic' types right now. Compiler set to complain
+    // otherwise.
     return x.u == y.u;
 }
 

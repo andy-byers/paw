@@ -15,18 +15,13 @@ int main(void)
         "        f(n - 1) \n"
         "    }            \n"
         "}                \n"
-        "return f         \n";
+        "f(1 << 50)       \n";
     struct TestAlloc a = {0};
     paw_Env *P = test_open(NULL, &a);
     int status = test_open_string(P, source);
     handle_error(P, status, 1);
 
     status = paw_call(P, 0);
-    handle_error(P, status, 1);
-
-    // 'f' is on top of the stack
-    paw_push_int(P, PAW_STACK_MAX);
-    status = paw_call(P, 1);
     check(status == PAW_EMEMORY);
     handle_error(P, status, 0);
     test_close(P, &a);

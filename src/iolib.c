@@ -128,10 +128,14 @@ static int io_tell(paw_Env *P)
 }
 
 static const pawL_Attr kIOLib[] = {
-    {"open", io_open},   {"close", io_close},
-    {"flush", io_flush}, {"read", io_read},
-    {"write", io_write}, {"seek", io_seek},
-    {"tell", io_tell},   {0},
+    {"open", io_open},
+    {"close", io_close},
+    {"flush", io_flush},
+    {"read", io_read},
+    {"write", io_write},
+    {"seek", io_seek},
+    {"tell", io_tell},
+    {0},
 };
 
 void pawL_require_iolib(paw_Env *P)

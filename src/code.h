@@ -10,19 +10,9 @@
 
 typedef int NodeId;
 
-typedef struct Arena {
-    struct Arena *prev;
-    size_t used;
-    size_t size;
-
-    // Must be aligned to at least the strictest alignment required
-    // by an AST or IR node.
-    _Alignas(void *) char data[];
-} Arena;
-
 typedef struct Pool {
-    Arena *filled; // list of filled arenas
-    Arena *arena; // list of available arenas
+    struct Arena *filled; // list of filled arenas
+    struct Arena *arena; // list of available arenas
     size_t last_size; // size of last arena allocated
     size_t min_size; // minimum allocation size
 } Pool;

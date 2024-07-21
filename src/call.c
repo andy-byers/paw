@@ -21,9 +21,9 @@
 
 // Lua-style error handling
 #define c_throw(P, c) longjmp((c)->jmp, 1)
-#define c_try(P, c, a)                                                         \
-    if (!setjmp((c)->jmp)) {                                                   \
-        a                                                                      \
+#define c_try(P, c, a)       \
+    if (!setjmp((c)->jmp)) { \
+        a                    \
     }
 
 struct Jump {

@@ -7,27 +7,27 @@
 #include "paw.h"
 
 #ifndef UPVALUE_MAX
-# define UPVALUE_MAX 64
+#define UPVALUE_MAX 64
 #endif
 
 #ifndef LOCAL_MAX
-# define LOCAL_MAX 1024
+#define LOCAL_MAX 1024
 #endif
 
 #ifndef FIELD_MAX
-# define FIELD_MAX 4096
+#define FIELD_MAX 4096
 #endif
 
 #ifndef PARAM_MAX
-# define PARAM_MAX 256
+#define PARAM_MAX 256
 #endif
 
 #ifndef ITEM_MAX
-# define ITEM_MAX A_MAX
+#define ITEM_MAX A_MAX
 #endif
 
 #ifndef JUMP_MAX
-# define JUMP_MAX S_MAX
+#define JUMP_MAX S_MAX
 #endif
 
 #define decode_jump(x) ((int)(x) - JUMP_MAX)
@@ -59,20 +59,20 @@
 
 #define create_U(o, u) ((OpCode)(o) | ((OpCode)(u) << U_OFFSET))
 #define get_U(v) (((v) >> U_OFFSET) & mask1(U_WIDTH, 0))
-#define set_U(v, u)                                                            \
+#define set_U(v, u) \
     (*(v) = (*(v) & mask0(U_WIDTH, U_OFFSET)) | ((OpCode)(u) << U_OFFSET))
 
 #define create_S(o, s) create_U(o, (int)(s) + S_MAX)
 #define get_S(v) ((int)get_U(v) - S_MAX)
 #define set_S(v, s) set_U(v, (int)(s) + S_MAX)
 
-#define create_AB(o, a, b)                                                     \
+#define create_AB(o, a, b) \
     ((OpCode)(op) | ((OpCode)(a) << A_OFFSET) | ((OpCode)(b) << B_OFFSET))
 #define get_A(v) ((v) >> A_OFFSET)
-#define set_A(v, a)                                                            \
+#define set_A(v, a) \
     (*(v) = (*(v) & mask0(A_WIDTH, A_OFFSET)) | ((OpCode)(a) << A_OFFSET))
 #define get_B(v) (((v) >> B_OFFSET) & mask1(B_WIDTH, 0))
-#define set_B(v, b)                                                            \
+#define set_B(v, b) \
     (*(v) = (*(v) & mask0(B_WIDTH, B_OFFSET)) | ((OpCode)(b) << B_OFFSET))
 
 typedef uint32_t OpCode;
@@ -136,10 +136,12 @@ OP_NEWMAP,//         U           v_2n..v1       {v_2n..v1}    -
 
 OP_UNWRAP,//         -           v              t             throws an error if disc(v) != 0
 
-OP_FORNUM0,//        S           *-*-*-*-*-*-*-*-* see notes *-*-*-*-*-*-*-*-*
-OP_FORNUM,//         S           *-*-*-*-*-*-*-*-* see notes *-*-*-*-*-*-*-*-*
-OP_FORIN0,//         S           *-*-*-*-*-*-*-*-* see notes *-*-*-*-*-*-*-*-*
-OP_FORIN,//          S           *-*-*-*-*-*-*-*-* see notes *-*-*-*-*-*-*-*-*
+OP_FORNUM0,//        S           *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
+OP_FORNUM,//         S           *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
+OP_FORVECTOR0,//     S           *-*-*-*-*-*-*-*-* see notes *-*-*-*-*-*-*-*-*
+OP_FORVECTOR,//      S           *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
+OP_FORMAP0,//        S           *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
+OP_FORMAP,//         S           *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
 
 OP_UNOP,//           A B         v              ops[a](v)     -
 OP_BINOP,//          A B         l r            ops[a](l, r)  -
@@ -309,8 +311,8 @@ enum MapOp {
     MO_ERASE,
 };
 
-_Static_assert(NOPCODES <= ((1 << OP_WIDTH) - 1), 
-        "too many opcodes (see opcode.h)");
+_Static_assert(NOPCODES <= ((1 << OP_WIDTH) - 1),
+               "too many opcodes (see opcode.h)");
 
 // sanity check opcode format
 _Static_assert(OP_WIDTH + A_WIDTH + B_WIDTH == sizeof(OpCode) * 8 &&

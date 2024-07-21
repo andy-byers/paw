@@ -11,9 +11,9 @@
 #define STACK_EXTRA 1 /* number of slots reserved for errors */
 #define save_offset(P, ptr) ((ptr) - (P)->stack.p)
 #define restore_pointer(P, ofs) ((P)->stack.p + (ofs))
-#define ensure_stack(P, n)                                                     \
-    ((P)->bound.p - (P)->top.p < (n) + STACK_EXTRA                             \
-         ? pawC_stack_grow(P, n + STACK_EXTRA)                                 \
+#define ensure_stack(P, n)                         \
+    ((P)->bound.p - (P)->top.p < (n) + STACK_EXTRA \
+         ? pawC_stack_grow(P, n + STACK_EXTRA)     \
          : (void)0)
 
 typedef void (*Call)(paw_Env *P, void *arg);

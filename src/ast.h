@@ -99,7 +99,7 @@ typedef struct AstPath {
 } AstPath;
 
 typedef struct AstSegment {
-    String *name; 
+    String *name;
     AstList *types;
     AstType *type;
 } AstSegment;
@@ -107,13 +107,14 @@ typedef struct AstSegment {
 AstPath *pawA_path_new(Ast *ast);
 AstSegment *pawA_segment_new(Ast *ast);
 
-static inline AstSegment *pawA_path_get(AstPath *path, int index) 
+static inline AstSegment *pawA_path_get(AstPath *path, int index)
 {
     paw_assert(index < path->list->count);
-    return path->list->data[index];  
+    return path->list->data[index];
 }
 
-static inline AstPath *pawA_path_add(Ast *ast, AstPath *p, String *name, AstList *args, AstType *type)
+static inline AstPath *pawA_path_add(Ast *ast, AstPath *p, String *name,
+                                     AstList *args, AstType *type)
 {
     AstSegment *seg = pawA_segment_new(ast);
     seg->name = name;
@@ -159,21 +160,22 @@ typedef struct AstUnknown {
 // Represents a structure or enumeration type
 typedef struct AstAdt {
     AST_TYPE_HEADER; // common initial sequence
-    AstList *types; 
+    AstList *types;
     DefId base;
     DefId did;
 } AstAdt;
 
-#define AST_FUNC_HEADER AST_TYPE_HEADER; \
-                        AstList *params; \
-                        AstType *result
+#define AST_FUNC_HEADER \
+    AST_TYPE_HEADER;    \
+    AstList *params;    \
+    AstType *result
 typedef struct AstFuncPtr {
     AST_FUNC_HEADER; // common initial sequence
 } AstFuncPtr;
 
 typedef struct AstFuncDef {
     AST_FUNC_HEADER; // common initial sequence
-    AstList *types; 
+    AstList *types;
     DefId base;
     DefId did;
 } AstFuncDef;
@@ -182,18 +184,6 @@ typedef struct AstTupleType {
     AST_TYPE_HEADER; // common initial sequence
     AstList *elems; // element types
 } AstTupleType;
-
-// Represents the type of a Paw module
-// Note that basic types ('int', 'float', etc.) are created only once, at the
-// start of the root module's type vector. Included modules reference these
-// AstType objects in the root.
-typedef struct AstModule {
-    AST_TYPE_HEADER; // common initial sequence
-    struct AstModule *includes; // included modules
-    AstType **types;
-    int ntypes;
-    int capacity;
-} AstModule;
 
 struct AstType {
     union {
@@ -204,7 +194,6 @@ struct AstType {
         AstAdt adt;
         AstFuncPtr fptr;
         AstFuncDef func;
-        AstModule mod;
     };
 };
 
@@ -241,9 +230,10 @@ typedef enum AstPatKind {
     AST_PAT_VARIANT,
 } AstPatKind;
 
-#define AST_PAT_HEADER AstType *type; \
-                       int line; \
-                       AstPatKind kind: 8
+#define AST_PAT_HEADER \
+    AstType *type;     \
+    int line;          \
+    AstPatKind kind : 8
 typedef struct AstPatHdr {
     AST_PAT_HEADER; // common fields
 } AstPatHdr;
@@ -292,15 +282,15 @@ typedef struct AstFieldPat {
 
 struct AstPat {
     union {
-        AstPatHdr hdr;    
-        AstWildcardPat wildcard;    
-        AstLiteralPat literal;    
-        AstBindingPat binding;    
-        AstPathPat path;    
-        AstTuplePat tuple;    
-        AstFieldPat field;    
-        AstStructPat struct_;    
-        AstVariantPat variant;    
+        AstPatHdr hdr;
+        AstWildcardPat wildcard;
+        AstLiteralPat literal;
+        AstBindingPat binding;
+        AstPathPat path;
+        AstTuplePat tuple;
+        AstFieldPat field;
+        AstStructPat struct_;
+        AstVariantPat variant;
     };
 };
 
@@ -319,11 +309,11 @@ typedef enum AstDeclKind {
     DECL_INSTANCE,
 } AstDeclKind;
 
-#define DECL_HEADER                                                            \
-    AstType *type;                                                             \
-    String *name;                                                              \
-    int line;                                                                  \
-    DefId def;                                                                 \
+#define DECL_HEADER \
+    AstType *type;  \
+    String *name;   \
+    int line;       \
+    DefId def;      \
     AstDeclKind kind : 8
 typedef struct AstDeclHeader {
     DECL_HEADER; // common initial sequence
@@ -360,9 +350,7 @@ typedef struct FuncDecl {
 
 // TODO: Call this AdtDecl?
 //       Need to prevent recursive structures, or introduce the concept of
-//       indirection (otherwise, structs that
-//       contain an instance of themselves as a field will become infinitely
-//       large)...
+//       indirection
 typedef struct StructDecl {
     DECL_HEADER; // common initial sequence
     paw_Bool is_global : 1; // uses 'global' keyword
@@ -450,9 +438,9 @@ typedef enum AstExprKind {
     EXPR_PATHTYPE,
 } AstExprKind;
 
-#define EXPR_HEADER                                                            \
-    int line;                                                                  \
-    AstExprKind kind : 8;                                                      \
+#define EXPR_HEADER       \
+    int line;             \
+    AstExprKind kind : 8; \
     AstType *type
 typedef struct AstExprHeader {
     EXPR_HEADER;
@@ -503,7 +491,7 @@ typedef struct LiteralExpr {
 
 typedef struct ClosureExpr {
     EXPR_HEADER; // common initial sequence
-    Scope *scope; // scope for parameters               
+    Scope *scope; // scope for parameters
     AstList *params; // parameter declarations
     AstExpr *result; // return type
     Block *body; // function body
@@ -542,8 +530,8 @@ typedef struct LogicalExpr {
     AstExpr *rhs;
 } LogicalExpr;
 
-#define SUFFIXED_HEADER                                                        \
-    EXPR_HEADER;                                                               \
+#define SUFFIXED_HEADER \
+    EXPR_HEADER;        \
     AstExpr *target
 typedef struct SuffixedExpr {
     SUFFIXED_HEADER;
@@ -561,7 +549,7 @@ typedef struct CallExpr {
 
 typedef struct Selector {
     SUFFIXED_HEADER; // common fields
-    paw_Bool is_index: 1;
+    paw_Bool is_index : 1;
     union {
         String *name;
         paw_Int index;
@@ -570,7 +558,7 @@ typedef struct Selector {
 
 typedef struct Index {
     SUFFIXED_HEADER; // common fields
-    paw_Bool is_slice: 1;
+    paw_Bool is_slice : 1;
     AstExpr *first;
     AstExpr *second;
 } Index;
@@ -666,8 +654,8 @@ typedef enum AstStmtKind {
     STMT_RETURN,
 } AstStmtKind;
 
-#define STMT_HEADER                                                            \
-    int line;                                                                  \
+#define STMT_HEADER \
+    int line;       \
     AstStmtKind kind : 8
 typedef struct AstStmtHeader {
     STMT_HEADER;
@@ -986,15 +974,43 @@ AstDecl *pawA_get_decl(Ast *ast, DefId id);
 #define a_is_func_decl(d) (a_kind(d) == DECL_FUNC)
 
 #define a_has_receiver(d) (a_is_func_decl(d) && (d)->func.receiver != NULL)
-#define a_is_template_decl(d)                                                  \
+#define a_is_template_decl(d) \
     (a_is_func_template_decl(d) || a_is_struct_template_decl(d))
 
-#define a_is_func_template_decl(d)                                             \
+#define a_is_func_template_decl(d) \
     (a_is_func_decl(d) && (d)->func.generics->count > 0)
-#define a_is_struct_template_decl(d)                                           \
+#define a_is_struct_template_decl(d) \
     (a_is_struct_decl(d) && (d)->struct_.generics->count > 0)
 
 #define a_adt_id(t) check_exp(a_is_adt(t), (t)->adt.base - PAW_TSTRING)
+
+static inline paw_Bool is_vector_t(const AstType *t)
+{
+    return a_is_adt(t) && t->adt.base == PAW_TVECTOR;
+}
+
+static inline paw_Bool is_map_t(const AstType *t)
+{
+    return a_is_adt(t) && t->adt.base == PAW_TMAP;
+}
+
+static inline AstType *vector_elem(const AstType *t)
+{
+    paw_assert(is_vector_t(t));
+    return t->adt.types->data[0];
+}
+
+static inline AstType *map_key(const AstType *t)
+{
+    paw_assert(is_map_t(t));
+    return t->adt.types->data[0];
+}
+
+static inline AstType *map_value(const AstType *t)
+{
+    paw_assert(is_map_t(t));
+    return t->adt.types->data[1];
+}
 
 void pawA_repr_type(FILE *out, const AstType *type);
 void pawA_dump_type(FILE *out, AstType *type);

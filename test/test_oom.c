@@ -46,11 +46,9 @@ int main(void)
 {
     script("basic");
     script("operator");
-    script("integer");
     script("block");
     script("loop");
-    script("closure");
-    script("array");
+    script("vector");
     script("map");
-    script("class");
+    script("struct");
 }

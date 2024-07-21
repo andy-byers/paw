@@ -9,12 +9,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define CHECK(expr)                                                            \
-    do {                                                                       \
-        if (!(expr)) {                                                         \
-            fprintf(stderr, "error in %s on line %d\n", __func__, __LINE__);   \
-            abort();                                                           \
-        }                                                                      \
+#define CHECK(expr)                                                          \
+    do {                                                                     \
+        if (!(expr)) {                                                       \
+            fprintf(stderr, "error in %s on line %d\n", __func__, __LINE__); \
+            abort();                                                         \
+        }                                                                    \
     } while (0)
 
 #endif // SHELL_TEST_H

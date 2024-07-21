@@ -139,10 +139,14 @@ const char *paw_op_name(Op op)
             return "FORNUM0";
         case OP_FORNUM:
             return "FORNUM";
-        case OP_FORIN0:
-            return "FORIN0";
-        case OP_FORIN:
-            return "FORIN";
+        case OP_FORVECTOR0:
+            return "FORVECTOR0";
+        case OP_FORVECTOR:
+            return "FORVECTOR";
+        case OP_FORMAP0:
+            return "FORMAP0";
+        case OP_FORMAP:
+            return "FORMAP";
         case OP_UNOP:
             return "UNOP";
         case OP_BINOP:
@@ -275,11 +279,17 @@ void paw_dump_opcode(OpCode opcode)
         case OP_FORNUM:
             printf("FORNUM\n");
             break;
-        case OP_FORIN0:
-            printf("FORIN0\n");
+        case OP_FORVECTOR0:
+            printf("FORVECTOR0\n");
             break;
-        case OP_FORIN:
-            printf("FORIN\n");
+        case OP_FORVECTOR:
+            printf("FORVECTOR\n");
+            break;
+        case OP_FORMAP0:
+            printf("FORMAP0\n");
+            break;
+        case OP_FORMAP:
+            printf("FORMAP\n");
             break;
         case OP_UNOP:
             printf("UNOP %s %d\n", paw_unop_name(get_A(opcode)), get_B(opcode));
@@ -355,8 +365,7 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
             }
 
             case OP_CLOSE: {
-                pawL_add_fstring(P, print, " ; count = %d",
-                                 get_U(opcode));
+                pawL_add_fstring(P, print, " ; count = %d", get_U(opcode));
                 break;
             }
 
@@ -382,22 +391,12 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
                 break;
             }
 
-            case OP_FORNUM0: {
-                pawL_add_fstring(P, print, " ; offset = %d", get_S(opcode));
-                break;
-            }
-
-            case OP_FORIN0: {
-                pawL_add_fstring(P, print, " ; offset = %d", get_S(opcode));
-                break;
-            }
-
-            case OP_FORNUM: {
-                pawL_add_fstring(P, print, " ; offset = %d", get_S(opcode));
-                break;
-            }
-
-            case OP_FORIN: {
+            case OP_FORNUM0:
+            case OP_FORNUM:
+            case OP_FORVECTOR0:
+            case OP_FORVECTOR:
+            case OP_FORMAP0:
+            case OP_FORMAP: {
                 pawL_add_fstring(P, print, " ; offset = %d", get_S(opcode));
                 break;
             }

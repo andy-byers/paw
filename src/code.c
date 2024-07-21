@@ -63,6 +63,16 @@ void pawK_code_AB(FuncState *fs, Op op, int a, int b)
     add_opcode(fs, create_AB(op, a, b));
 }
 
+typedef struct Arena {
+    struct Arena *prev;
+    size_t used;
+    size_t size;
+
+    // Must be aligned to at least the strictest alignment required
+    // by an AST or IR node.
+    _Alignas(void *) char data[];
+} Arena;
+
 // Create a new arena large enough to allocate memory of the 'required_size'
 // Alignment is not considered, since the start of an Arena is suitably-aligned
 // for any objects created by the compiler.
