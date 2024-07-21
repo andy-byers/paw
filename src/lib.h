@@ -33,9 +33,9 @@ int pawL_load_chunk(paw_Env *P, const char *name, const char *source);
 #define L_SELF (INT_MIN + 1)
 
 #define l_generic(i) (-(i) - 1)
-#define l_list(...)                                                            \
+#define l_list(...) \
     (paw_Type[]) { __VA_ARGS__, L_LIST_END }
-#define l_list_0()                                                             \
+#define l_list_0() \
     (paw_Type[]) { L_LIST_END }
 
 #endif // PAW_LIB_H

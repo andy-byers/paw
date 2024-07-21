@@ -195,8 +195,8 @@ void pawV_unlink_upvalue(UpValue *u)
 
 Tuple *pawV_new_tuple(paw_Env *P, int nelems)
 {
-    Tuple *tuple = pawM_new_flex(P, Tuple, cast_size(nelems), 
-                                 sizeof(tuple->elems[0]));
+    Tuple *tuple =
+        pawM_new_flex(P, Tuple, cast_size(nelems), sizeof(tuple->elems[0]));
     pawG_add_object(P, cast_object(tuple), VTUPLE);
     return tuple;
 }
@@ -233,7 +233,8 @@ void pawV_free_struct(paw_Env *P, Struct *struct_) { pawM_free(P, struct_); }
 
 Instance *pawV_new_instance(paw_Env *P, int nfields)
 {
-    Instance *ins = pawM_new_flex(P, Instance, cast_size(nfields), sizeof(ins->attrs[0]));
+    Instance *ins =
+        pawM_new_flex(P, Instance, cast_size(nfields), sizeof(ins->attrs[0]));
     pawG_add_object(P, cast_object(ins), VINSTANCE);
     return ins;
 }
@@ -245,7 +246,8 @@ void pawV_free_instance(paw_Env *P, Instance *ins, int nfields)
 
 Enum *pawV_new_enum(paw_Env *P, int nvariants)
 {
-    Enum *e = pawM_new_flex(P, Enum, cast_size(nvariants), sizeof(e->variants[0]));
+    Enum *e =
+        pawM_new_flex(P, Enum, cast_size(nvariants), sizeof(e->variants[0]));
     pawG_add_object(P, cast_object(e), VENUM);
     return e;
 }
@@ -257,7 +259,8 @@ void pawV_free_enum(paw_Env *P, Enum *e, int nvariants)
 
 Variant *pawV_new_variant(paw_Env *P, int k, int nfields)
 {
-    Variant *var = pawM_new_flex(P, Variant, cast_size(nfields), sizeof(var->fields[0]));
+    Variant *var =
+        pawM_new_flex(P, Variant, cast_size(nfields), sizeof(var->fields[0]));
     pawG_add_object(P, cast_object(var), VVARIANT);
     var->k = k;
     return var;
@@ -363,10 +366,7 @@ static uint32_t hash_u64(uint64_t u)
     return (uint32_t)u;
 }
 
-uint32_t pawV_hash(Value v) 
-{ 
-    return hash_u64(v.u); 
-}
+uint32_t pawV_hash(Value v) { return hash_u64(v.u); }
 
 void pawV_set_default(paw_Env *P, Value *pv, paw_Type type)
 {
@@ -479,9 +479,9 @@ int pawV_parse_integer(paw_Env *P, const char *text)
     return 0;
 }
 
-#define skip_digits(p)                                                         \
-    while (ISDIGIT(*(p))) {                                                    \
-        ++(p);                                                                 \
+#define skip_digits(p)      \
+    while (ISDIGIT(*(p))) { \
+        ++(p);              \
     }
 
 int pawV_parse_float(paw_Env *P, const char *text)

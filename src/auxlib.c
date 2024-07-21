@@ -79,7 +79,8 @@ void pawL_add_value(paw_Env *P, Buffer *buf, paw_Type type)
     const char *str = pawV_to_string(P, P->top.p[-1], type, &len);
     if (str == NULL) {
         // add the type name and address
-        str = paw_push_fstring(P, "%s (%p)", paw_typename(P, -1),
+        str = paw_push_fstring(P, "%s (%p)",
+                               "<type>" /*TODO: paw_typename(P, -1)*/,
                                paw_pointer(P, -1));
         len = paw_length(P, -1);
     }

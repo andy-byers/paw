@@ -97,6 +97,11 @@ fn fib(n: int) -> int {
     return fib(n - 2) + fib(n - 1)
 }
 fib(10)
+
+// use closure syntax to capture variables
+let run_fib = || -> int {
+    return fib(5)
+}
 ```
 
 ### Structures
@@ -145,7 +150,7 @@ break
 continue
 
 // Numeric 'for' loop:
-for i in 0, 10, 2 { // start, end[, step]
+for i = 0, 10, 2 { // start, end[, step]
     
 }
 
@@ -182,7 +187,7 @@ Variables with generic types must be treated generically, that is, they can only
 This allows each template to be type checked a single time, rather than once for each unique instantiation, and makes it easier to generate meaningful error messages.
 ```
 fn map<A, B>(f: fn(A) -> B, vec: [A]) -> [B] {
-    let result: [B] = []
+    let result = []
     for a in vec {
         result.push(f(a))
     }
@@ -233,8 +238,9 @@ let c = triplet.2
 ```
 let empty: [int] = []
 
+// infer T = string
 let empty = []
-empty.push('a')
+empty.push('a') 
 
 let vec = [
     [[1, 2, 3], [0]],
@@ -242,7 +248,6 @@ let vec = [
     [[7, 8, 9], [2]],
 ]
 
-// infer T = int
 let vec = [1, 2, 3] 
 assert(vec[:1] == [1])
 assert(vec[1:-1] == [2])
@@ -253,10 +258,10 @@ assert(vec[-1:] == [3])
 ```
 let empty: [int: string] = [:]
 
+// infer K = int, V = string
 let empty = [:]
 empty[0] = 'abc'
 
-// infer K = int, V = string
 let map = [1: 'a', 2: 'b'] 
 map[3] = 42
 map.erase(1)
@@ -296,24 +301,27 @@ assert(status != 0)
 |1         |`=`           |Assignment                                    |Right        |
 
 ## Roadmap
-+ [x] static typing
++ [x] static, string typing
 + [x] special-cased builtin containers (`[T]` and `[K: V]`)
-+ [x] type inference for structure templates (including builtin containers)
-+ [ ] type inference for enumeration templates
++ [x] type inference for `struct` templates and builtin containers
++ [ ] methods using `impl` blocks
++ [ ] module system and `import` keyword
++ [ ] type inference for `enum` templates
 + [ ] pattern matching (`switch` construct)
 + [ ] pattern matching (`if let`, `let` bindings)
 + [ ] constness (`var` vs `let`)
 + [ ] split `string` into `str` and `String`, where `str` is a byte array and `String` is always valid UTF-8
 + [x] sum types/discriminated unions (`enum`)
 + [x] product types (tuple)
++ [ ] compiler optimization passes
 + [ ] custom garbage collector (using Boehm GC for now)
-+ [ ] methods
 + [ ] metamethods
 + [ ] generic constraints/bounds
 + [ ] associated types on `struct`s (`A::B`)
 + [ ] existential types
 
 ## Known problems
++ The C API has pretty much 0 type safety
 + Compiler will allow functions that don't return a value in all code paths
     + Likely requires a CFG and some data flow analysis: it would be very difficult to get right otherwise
 + It isn't possible to create an empty vector or map of a specific known type without creating a temporary: `let vec: [int] = []`

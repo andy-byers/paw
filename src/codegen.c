@@ -13,7 +13,7 @@
 
 #define syntax_error(G, ...) pawX_error((G)->lex, __VA_ARGS__)
 #define is_global(lex) (is_toplevel(lex) && (lex)->fs->bs->outer == NULL)
-#define code_block(V, b)                                                       \
+#define code_block(V, b) \
     check_exp((b)->kind == STMT_BLOCK, V->visit_stmt(V, cast_stmt(b)))
 #define basic_decl(G, code) basic_symbol(G, code)->decl
 #define basic_type(G, code) basic_decl(G, code)->type.type
@@ -192,8 +192,10 @@ static VarInfo transfer_local(FuncState *fs)
     Symbol *symbol;
     // Find the next symbol that belongs on the stack.
     SymbolTable *scopes = fs->scopes; // all function scopes
-    Scope *scope = scopes->scopes->data[scopes->scopes->count - 1]; // last scope
-    while (symbol_iter(scope, &fs->bs->isymbol, &symbol)) {}
+    Scope *scope =
+        scopes->scopes->data[scopes->scopes->count - 1]; // last scope
+    while (symbol_iter(scope, &fs->bs->isymbol, &symbol)) {
+    }
     return add_local(fs, symbol);
 }
 
@@ -201,7 +203,8 @@ static VarInfo transfer_global(Generator *G)
 {
     Symbol *symbol;
     Scope *scope = G->globals;
-    while (symbol_iter(scope, &G->iglobal, &symbol)) {}
+    while (symbol_iter(scope, &G->iglobal, &symbol)) {
+    }
     const int g = pawE_new_global(env(G->lex), symbol->name,
                                   a_type(symbol->decl)->adt.did); // TODO
     return (VarInfo){
@@ -317,10 +320,7 @@ static void adjust_to(FuncState *fs, LabelKind kind, int to)
     }
 }
 
-static void begin_local_scope(FuncState *fs, int n)
-{
-    fs->level += n;
-}
+static void begin_local_scope(FuncState *fs, int n) { fs->level += n; }
 
 static void end_local_scope(FuncState *fs, BlockState *bs)
 {
@@ -488,7 +488,8 @@ static void add_upvalue(FuncState *fs, VarInfo *info, paw_Bool is_local)
     info->kind = VAR_UPVALUE;
 }
 
-static paw_Bool resolve_upvalue(FuncState *fs, const String *name, VarInfo *pinfo)
+static paw_Bool resolve_upvalue(FuncState *fs, const String *name,
+                                VarInfo *pinfo)
 {
     FuncState *caller = fs->outer;
     if (!caller) {
@@ -523,7 +524,7 @@ static void define_var(FuncState *fs, VarInfo info)
     }
 }
 
-static VarInfo code_var(Generator *G, paw_Bool global)
+static VarInfo new_var(Generator *G, paw_Bool global)
 {
     FuncState *fs = G->fs;
     VarInfo info = declare_var(fs, global);
@@ -537,20 +538,23 @@ static VarInfo find_var(Generator *G, const String *name)
     Lex *lex = G->lex;
     FuncState *fs = G->fs;
     if (!resolve_local(fs, name, &info) && // not local
-            !resolve_upvalue(fs, name, &info) && // not local to caller
-            !resolve_global(G, name, &info)) { // not found
+        !resolve_upvalue(fs, name, &info) && // not local to caller
+        !resolve_global(G, name, &info)) { // not found
         pawX_error(lex, "undefined variable '%s'", name->text);
     }
     return info;
 }
 
-#define code_op(fs, op, subop, type)                                           \
+#define code_op(fs, op, subop, type) \
     pawK_code_AB(fs, op, cast(subop, int), basic_code(type))
 
-// TODO: OP_PUSHFALSE is a hack to avoid creating unnecessary constants, essentially pushes integer 0
-//       we would otherwise have to create a new constant for integer 0, else do it at the beginning and stash it somewhere
-//       need to cannonicalize constants, otherwise we end up with a huge amount of redundancy
-static void code_slice_indices(AstVisitor *V, AstExpr *first, AstExpr *second, const AstType *target)
+// TODO: OP_PUSHFALSE is a hack to avoid creating unnecessary constants,
+// essentially pushes integer 0
+//       we would otherwise have to create a new constant for integer 0, else do
+//       it at the beginning and stash it somewhere need to cannonicalize
+//       constants, otherwise we end up with a huge amount of redundancy
+static void code_slice_indices(AstVisitor *V, AstExpr *first, AstExpr *second,
+                               const AstType *target)
 {
     Generator *G = V->state.G;
     FuncState *fs = G->fs;
@@ -559,7 +563,7 @@ static void code_slice_indices(AstVisitor *V, AstExpr *first, AstExpr *second, c
         V->visit_expr(V, first);
     } else {
         // default to the start of the sequence
-        pawK_code_0(fs, OP_PUSHFALSE); 
+        pawK_code_0(fs, OP_PUSHFALSE);
     }
     if (second != NULL) {
         V->visit_expr(V, second);
@@ -683,9 +687,7 @@ static void code_container_lit(AstVisitor *V, LiteralExpr *e)
     visit_exprs(V, lit->items);
 
     FuncState *fs = V->state.G->fs;
-    const Op op = lit->code == PAW_TVECTOR
-        ? OP_NEWVECTOR
-        : OP_NEWMAP;
+    const Op op = lit->code == PAW_TVECTOR ? OP_NEWVECTOR : OP_NEWMAP;
     pawK_code_U(fs, op, lit->items->count);
 }
 
@@ -868,7 +870,7 @@ static void monomorphize_func(AstVisitor *V, FuncDecl *d)
 
 static void code_field_decl(AstVisitor *V, FieldDecl *d)
 {
-    code_var(V->state.G, PAW_FALSE);
+    new_var(V->state.G, PAW_FALSE);
     paw_unused(d);
 }
 
@@ -930,13 +932,12 @@ static int code_match_guard(AstVisitor *V, AstPat *guard)
     if (a_kind(guard) == AST_PAT_VARIANT) {
         return code_variant_guard(V, &guard->variant);
     } else if (a_kind(guard) == AST_PAT_STRUCT) {
-    
-    } else if (a_kind(guard) == AST_PAT_PATH) {
-    
-    } else {
 
+    } else if (a_kind(guard) == AST_PAT_PATH) {
+
+    } else {
     }
-    return -1; 
+    return -1;
 }
 
 static void code_arm_expr(AstVisitor *V, MatchArm *e)
@@ -980,11 +981,12 @@ static void code_instance_getter(AstVisitor *V, AstType *type)
     AstDecl *decl = get_decl(G, type->func.did);
     String *name = decl->hdr.name;
     if (!pawS_eq(name, scan_string(G->lex, "_vector_push")) &&
-            !pawS_eq(name, scan_string(G->lex, "_vector_pop")) &&
-            !pawS_eq(name, scan_string(G->lex, "_vector_insert")) &&
-            !pawS_eq(name, scan_string(G->lex, "_vector_erase")) &&
-            !pawS_eq(name, scan_string(G->lex, "_vector_clone"))) {
-        // TODO: These functions are native. They use the same code for all instantiations (they
+        !pawS_eq(name, scan_string(G->lex, "_vector_pop")) &&
+        !pawS_eq(name, scan_string(G->lex, "_vector_insert")) &&
+        !pawS_eq(name, scan_string(G->lex, "_vector_erase")) &&
+        !pawS_eq(name, scan_string(G->lex, "_vector_clone"))) {
+        // TODO: These functions are native. They use the same code for all
+        // instantiations (they
         //       only move parameters around as 'union Value')
         paw_assert(a_is_func_decl(decl));
         name = mangle_name(G, name, type->func.types);
@@ -1015,14 +1017,15 @@ static paw_Bool is_instance_call(const AstType *type)
 static paw_Bool is_variant_constructor(Generator *G, const AstType *type)
 {
     if (a_is_fdef(type)) {
-        const AstDecl *decl = get_decl(G, type->func.did); 
+        const AstDecl *decl = get_decl(G, type->func.did);
         return a_kind(decl) == DECL_VARIANT;
     }
     return PAW_FALSE;
 }
 
 // Generate code for an enumerator
-static void code_variant_constructor(AstVisitor *V, AstType *type, AstList *args)
+static void code_variant_constructor(AstVisitor *V, AstType *type,
+                                     AstList *args)
 {
     Generator *G = V->state.G;
     FuncState *fs = G->fs;
@@ -1040,7 +1043,7 @@ static void code_variant_constructor(AstVisitor *V, AstType *type, AstList *args
 static void code_path_expr(AstVisitor *V, PathExpr *e)
 {
     Generator *G = V->state.G;
-    if (is_variant_constructor(G, e->type) ) {
+    if (is_variant_constructor(G, e->type)) {
         code_variant_constructor(V, e->type, NULL);
     } else {
         const VarInfo info = resolve_short_path(G, e->path);
@@ -1055,7 +1058,7 @@ static void code_call_expr(AstVisitor *V, CallExpr *e)
     FuncState *fs = G->fs;
 
     if (is_variant_constructor(G, e->func)) {
-        code_variant_constructor(V, e->func, e->args); 
+        code_variant_constructor(V, e->func, e->args);
         return;
     } else if (is_instance_call(e->func)) {
         code_instance_getter(V, e->func);
@@ -1070,10 +1073,10 @@ static void code_conversion_expr(AstVisitor *V, ConversionExpr *e)
 {
     Generator *G = V->state.G;
     const AstType *from = a_type(e->arg);
-    const Op op = e->to == PAW_TBOOL
-        ? OP_CASTBOOL : e->to == PAW_TINT
-        ? OP_CASTINT : OP_CASTFLOAT;
-    
+    const Op op = e->to == PAW_TBOOL  ? OP_CASTBOOL
+                  : e->to == PAW_TINT ? OP_CASTINT
+                                      : OP_CASTFLOAT;
+
     V->visit_expr(V, e->arg);
     pawK_code_U(G->fs, op, from->adt.base);
 }
@@ -1183,10 +1186,10 @@ static void code_forbody(AstVisitor *V, Block *block, Op opinit, Op oploop)
     const int loop = fs->pc;
 
     // Put the control variable in the same scope as any locals declared inside
-    // the loop. If the control variable is captured in a closure, the upvalue 
+    // the loop. If the control variable is captured in a closure, the upvalue
     // must be closed at the end of the iteration.
     enter_block(fs, &bs, block->scope, PAW_FALSE);
-    code_var(G, PAW_FALSE);
+    new_var(G, PAW_FALSE);
     V->visit_stmt_list(V, block->stmts, V->visit_stmt);
     leave_block(fs);
 
@@ -1204,9 +1207,9 @@ static void code_fornum_stmt(AstVisitor *V, ForStmt *s)
     V->visit_expr(V, fornum->begin);
     V->visit_expr(V, fornum->end);
     V->visit_expr(V, fornum->step);
-    code_var(G, PAW_FALSE);
-    code_var(G, PAW_FALSE);
-    code_var(G, PAW_FALSE);
+    new_var(G, PAW_FALSE);
+    new_var(G, PAW_FALSE);
+    new_var(G, PAW_FALSE);
 
     code_forbody(V, s->block, OP_FORNUM0, OP_FORNUM);
 }
@@ -1217,9 +1220,13 @@ static void code_forin_stmt(AstVisitor *V, ForStmt *s)
     ForIn *forin = &s->forin;
 
     V->visit_expr(V, forin->target);
-    code_var(G, PAW_FALSE);
+    new_var(G, PAW_FALSE);
+    new_var(G, PAW_FALSE);
 
-    code_forbody(V, s->block, OP_FORIN0, OP_FORIN);
+    const AstType *t = a_type(forin->target);
+    const Op init = is_vector_t(t) ? OP_FORVECTOR0 : OP_FORMAP0;
+    const Op loop = is_vector_t(t) ? OP_FORVECTOR : OP_FORMAP;
+    code_forbody(V, s->block, init, loop);
 }
 
 static void code_for_stmt(AstVisitor *V, ForStmt *s)
@@ -1288,9 +1295,7 @@ static void code_field_pat(AstVisitor *V, AstFieldPat *p)
 
 static void code_struct_pat(AstVisitor *V, AstStructPat *p)
 {
-    Generator *G = V->state.G;
-    const int target = G->fs->level;
-
+    paw_unused(V);
     paw_unused(p);
 }
 
@@ -1371,7 +1376,6 @@ static void code_module(Generator *G)
     BlockState bs;
     fs.name = lex->modname;
     fs.proto = lex->main->p;
-
 
     Scope *toplevel = ast->symtab->toplevel;
     enter_function(G, &fs, &bs, toplevel, FUNC_MODULE);

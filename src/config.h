@@ -9,7 +9,7 @@
 #define PAW_INT_WIDTH (sizeof(paw_Int) * 8)
 #define PAW_INT_MAX INT64_MAX
 #define PAW_INT_MIN INT64_MIN
-#define PAW_SIZE_MAX                                                           \
+#define PAW_SIZE_MAX \
     (sizeof(size_t) < sizeof(paw_Int) ? SIZE_MAX : (size_t)PAW_INT_MAX)
 #define paw_cast_int(x) ((paw_Int)(x))
 #define paw_int_c(x) INT64_C(x)

@@ -510,62 +510,61 @@
     assert(3 == test(vec, test(vec, test(vec, 3))))
 }
 
+// Slice syntax:
+{
+    let vec = [1, 2, 3]
+    assert(vec[0:] == vec[-3:3])
+    assert(vec[1:] == vec[-2:3])
+    assert(vec[2:] == vec[-1:3])
+    assert(vec[:3] == vec[0:3])
+    assert(vec[:2] == vec[0:-1])
+    assert(vec[:1] == vec[0:-2])
 
-//// Slice syntax:
-//{
-//    fn check(vec: Vector::<int>, begin: int, end: int) {
-//        let b = vec[begin:end]
-//        begin = begin ?: 0    // vec[None:n] == vec[:n] == vec[0:n]
-//        end   = end   ?: #vec // vec[n:None] == vec[n:] == vec[n:#vec]
-//        for i = begin, end {
-//            assert(vec[i] == b[0])
-//            b.pop(0)
-//        }
-//    }
-//    let vec = [1, 2, 3]
-//
-//    for i = 0, 3 {
-//        for j = 0, 3 {
-//            check(vec, i, j)
-//        }
-//    }
-//    let result = vec.clone()
-//    result.pop()
-//    assert(vec[0:-1] == result)
-//    result.pop()
-//    assert(vec[0:-2] == result)
-//    result.pop()
-//    assert(vec[0:-3] == result)
-//
-//    let result = vec.clone()
-//    result.pop(0)
-//    assert(vec[1:#vec] == result)
-//    result.pop(0)
-//    assert(vec[2:#vec] == result)
-//    result.pop(0)
-//    assert(vec[3:#vec] == result)
-//
-//    let result = vec.clone()
-//    result.pop()
-//    assert(vec[:-1] == result)
-//    result.pop()
-//    assert(vec[:-2] == result)
-//    result.pop()
-//    assert(vec[:-3] == result)
-//
-//    let result = vec.clone()
-//    result.pop(0)
-//    assert(vec[1:] == result)
-//    result.pop(0)
-//    assert(vec[2:] == result)
-//    result.pop(0)
-//    assert(vec[3:] == result)
-//
-//    let result = vec.clone()
-//    assert(vec[0:] == result)
-//    assert(vec[:#vec] == result)
-//    assert(vec[:] == result)
-//    assert(vec[:1] == [1])
-//    assert(vec[1:-1] == [2])
-//    assert(vec[-1:] == [3])
-//}
+    assert(vec[:0] == [])
+    assert(vec[3:] == [])
+    assert(vec[1:1] == [])
+    assert(vec[:3] == vec)
+    assert(vec[0:] == vec)
+    assert(vec[0:3] == vec)
+}
+
+{
+    fn map<T>(vec: [T], f: fn(T) -> T) -> [T] {
+        let result = []
+        for elem in vec {
+            _vector_push(result, f(elem))
+        }
+        return result
+    }
+    let vec = [
+        'abc',
+        'def',
+        'ghi',
+    ]
+    let vec = map(vec, |val: string| -> string {
+        return val + val
+    })
+    let result = ''
+    for val in vec {
+        result = result + val
+    }
+    assert(result == 'abcabcdefdefghighi')
+
+    let vec = [
+        ['a', 'b', 'c'],
+        ['d', 'e', 'f'],
+        ['g', 'h', 'i'],
+    ]
+    let vec = map(vec, |row: [string]| -> [string] {
+        return map(row, |val: string| -> string {
+            return val + val + val
+        })
+    })
+    let result = ''
+    for row in vec {
+        for val in row {
+            result = result + val
+        }
+    }
+    assert(result == 'aaabbbcccdddeeefffggghhhiii')
+}

@@ -231,8 +231,8 @@ AstType *pawU_new_unknown(Unifier *U)
 
     // NOTE: inference variables require a stable address, since they point to
     //       each other
-    InferenceVar *ivar = pawK_pool_alloc(P, &U->ast->sequences, sizeof(InferenceVar),
-                                         paw_alignof(InferenceVar));
+    InferenceVar *ivar = pawK_pool_alloc(
+        P, &U->ast->sequences, sizeof(InferenceVar), paw_alignof(InferenceVar));
     const int index = table->ivars->count;
     pawA_list_push(U->ast, &table->ivars, ivar);
 
@@ -248,10 +248,9 @@ AstType *pawU_new_unknown(Unifier *U)
 void pawU_enter_binder(Unifier *U)
 {
     paw_Env *P = env(U->lex);
-    UnificationTable *table = pawK_pool_alloc(
-            P, &U->ast->symbols, 
-            sizeof(UnificationTable), 
-            paw_alignof(UnificationTable));
+    UnificationTable *table =
+        pawK_pool_alloc(P, &U->ast->symbols, sizeof(UnificationTable),
+                        paw_alignof(UnificationTable));
     table->ivars = pawA_list_new(U->ast);
     table->depth = U->depth;
     table->outer = U->table;

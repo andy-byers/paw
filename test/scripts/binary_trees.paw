@@ -1,9 +1,9 @@
--- The Computer Language Benchmarks Game
--- http://benchmarksgame.alioth.debian.org/
--- contributed by Mike Pall
--- modified by Andrew Byers
+// The Computer Language Benchmarks Game
+// http://benchmarksgame.alioth.debian.org/
+// contributed by Mike Pall
+// modified by Andrew Byers
 
-fn Tree(item, depth) {
+fn Tree(item, depth: int) -> (int) {
     if depth > 0 {
         let i = item + item
         depth = depth - 1

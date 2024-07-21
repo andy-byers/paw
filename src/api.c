@@ -93,83 +93,6 @@ void paw_close(paw_Env *P)
     P->alloc(P->ud, P, sizeof *P, 0);
 }
 
-paw_Bool paw_is_bool(paw_Env *P, int index)
-{
-    return paw_type(P, index) == PAW_TBOOL;
-}
-
-paw_Bool paw_is_int(paw_Env *P, int index)
-{
-    return paw_type(P, index) == PAW_TINT;
-}
-
-paw_Bool paw_is_float(paw_Env *P, int index)
-{
-    return paw_type(P, index) == PAW_TFLOAT;
-}
-
-paw_Bool paw_is_string(paw_Env *P, int index)
-{
-    return paw_type(P, index) == PAW_TSTRING;
-}
-
-paw_Bool paw_is_function(paw_Env *P, int index)
-{
-    return paw_type(P, index) == PAW_TFUNCTION;
-}
-
-paw_Bool paw_is_tuple(paw_Env *P, int index)
-{
-    return paw_type(P, index) == PAW_TTUPLE;
-}
-
-paw_Bool paw_is_struct(paw_Env *P, int index)
-{
-    return paw_type(P, index) == PAW_TSTRUCT;
-}
-
-paw_Bool paw_is_foreign(paw_Env *P, int index)
-{
-    return paw_type(P, index) == PAW_TFOREIGN;
-}
-
-int paw_type(paw_Env *P, int index)
-{
-    const Value v = *access(P, index);
-    return 0;
-    // switch (v_type(v)) {
-    //     case VNULL:
-    //         return PAW_NULL;
-    //     case VTRUE:
-    //     case VFALSE:
-    //         return PAW_TBOOL;
-    //     case VCLOSURE:
-    //     case VMETHOD:
-    //     case VNATIVE:
-    //         return PAW_TFUNCTION;
-    //     case VSTRING:
-    //         return PAW_TSTRING;
-    //     case VARRAY:
-    //         return PAW_TARRAY;
-    //     case VMAP:
-    //         return PAW_TMAP;
-    //     case VSTRUCT:
-    //         return PAW_TSTRUCT;
-    //     case VBIGINT:
-    //     case VNUMBER:
-    //         return PAW_TINT;
-    //     case VFOREIGN:
-    //         return PAW_TFOREIGN;
-    //     default:
-    //         return PAW_TFLOAT;
-    // }
-}
-
-const char *paw_typename(paw_Env *P, int index)
-{
-    return api_typename(paw_type(P, index));
-}
-
 void paw_push_value(paw_Env *P, int index)
 {
     const Value v = *access(P, index);
@@ -183,11 +106,20 @@ void paw_push_unit(paw_Env *P, int n)
     }
 }
 
-void paw_push_boolean(paw_Env *P, paw_Bool b) { pawC_pushb(P, b); }
+void paw_push_boolean(paw_Env *P, paw_Bool b)
+{
+    pawC_pushb(P, b);
+}
 
-void paw_push_float(paw_Env *P, paw_Float f) { pawC_pushf(P, f); }
+void paw_push_float(paw_Env *P, paw_Float f)
+{
+    pawC_pushf(P, f);
+}
 
-void paw_push_int(paw_Env *P, paw_Int i) { pawC_pushi(P, i); }
+void paw_push_int(paw_Env *P, paw_Int i)
+{
+    pawC_pushi(P, i);
+}
 
 void paw_push_native(paw_Env *P, paw_Function fn, int n)
 {
@@ -234,9 +166,15 @@ const char *paw_push_fstring(paw_Env *P, const char *fmt, ...)
     return s;
 }
 
-paw_Bool paw_bool(paw_Env *P, int index) { return v_true(*access(P, index)); }
+paw_Bool paw_bool(paw_Env *P, int index)
+{
+    return v_true(*access(P, index));
+}
 
-paw_Int paw_int(paw_Env *P, int index) { return v_int(*access(P, index)); }
+paw_Int paw_int(paw_Env *P, int index)
+{
+    return v_int(*access(P, index));
+}
 
 paw_Float paw_float(paw_Env *P, int index)
 {
@@ -360,7 +298,10 @@ int paw_call(paw_Env *P, int argc)
     return status;
 }
 
-int paw_get_count(paw_Env *P) { return P->top.p - P->cf->base.p; }
+int paw_get_count(paw_Env *P)
+{
+    return P->top.p - P->cf->base.p;
+}
 
 static int upvalue_index(int nup, int index)
 {
@@ -372,35 +313,33 @@ static int upvalue_index(int nup, int index)
     return index;
 }
 
-// void paw_get_upvalue(paw_Env *P, int ifn, int index)
-//{
-//     Value *pv = pawC_push0(P);
-//     const Value fn = *access(P, ifn);
-//     switch (v_type(fn)) {
-//         case VNATIVE: {
-//             Native *f = v_native(fn);
-//             *pv = f->up[upvalue_index(f->nup, index)];
-//             break;
-//         }
-//         case VCLOSURE: {
-//             Closure *f = v_closure(fn);
-//             UpValue *u = f->up[upvalue_index(f->nup, index)];
-//             *pv = *u->p.p;
-//             break;
-//         }
-//         default:
-//             pawR_error(P, PAW_ETYPE, "'%s' has no upvalues",
-//                        api_typename(api_type(fn)));
-//     }
-// }
-//
-// void paw_get_global(paw_Env *P, const char *name)
-//{
-//     if (!paw_check_global(P, name)) {
-//         pawR_error(P, PAW_ENAME, "global '%s' does not exist", name);
-//     }
-// }
-//
+void paw_get_upvalue(paw_Env *P, int ifn, int index)
+{
+    Value *pv = pawC_push0(P);
+    const Value fn = *access(P, ifn);
+    switch (v_object(fn)->gc_kind) {
+        case VNATIVE: {
+            Native *f = v_native(fn);
+            *pv = f->up[upvalue_index(f->nup, index)];
+            break;
+        }
+        case VCLOSURE: {
+            Closure *f = v_closure(fn);
+            UpValue *u = f->up[upvalue_index(f->nup, index)];
+            *pv = *u->p.p;
+            break;
+        }
+        default:
+            pawR_error(P, PAW_ETYPE, "type has no upvalues");
+    }
+}
+
+void paw_get_global(paw_Env *P, int index)
+{
+    GlobalVar *var = pawE_get_global(P, index);
+    pawC_pushv(P, var->value);
+}
+
 // paw_Bool paw_check_global(paw_Env *P, const char *name)
 //{
 //     paw_push_string(P, name);
@@ -499,6 +438,8 @@ static int upvalue_index(int nup, int index)
 //
 void paw_set_global(paw_Env *P, const char *name)
 {
+    paw_unused(P);
+    paw_unused(name);
     //    paw_push_string(P, name);
     //    paw_rotate(P, -2, 1); // Swap
     //
@@ -531,6 +472,8 @@ void paw_set_global(paw_Env *P, const char *name)
 //
 void paw_create_array(paw_Env *P, int n)
 {
+    paw_unused(P);
+    paw_unused(n);
     //    pawR_literal_array(P, n);
 }
 //
@@ -615,13 +558,13 @@ void paw_shift(paw_Env *P, int n)
     paw_pop(P, n);
 }
 
-// void paw_call_global(paw_Env *P, const char *name, int argc)
-//{
-//     paw_get_global(P, name);
-//     paw_insert(P, -argc - 2);
-//     paw_call(P, argc);
-// }
-//
+void paw_call_global(paw_Env *P, int index, int argc)
+{
+    paw_get_global(P, index);
+    paw_insert(P, -argc - 2);
+    paw_call(P, argc);
+}
+
 // void paw_call_attr(paw_Env *P, int index, const char *name, int argc)
 //{
 //     paw_push_value(P, index);
@@ -644,6 +587,6 @@ void paw_raw_equals(paw_Env *P)
 {
     const Value x = P->top.p[-2];
     const Value y = P->top.p[-1];
-    // paw_push_boolean(P, pawV_equal(x, y));
+    paw_push_boolean(P, x.u == y.u);
     paw_shift(P, 2);
 }

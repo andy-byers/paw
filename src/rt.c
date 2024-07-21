@@ -25,11 +25,11 @@
 
 // Helpers for the VM:
 #define vm_switch(x) switch (x)
-#define vm_case(x)                                                             \
-    break;                                                                     \
+#define vm_case(x) \
+    break;         \
     case OP_##x
-#define vm_default                                                             \
-    break;                                                                     \
+#define vm_default \
+    break;         \
     default
 #define vm_continue continue
 #define vm_shift(n) (*vm_top((n) + 1) = *vm_top(1), vm_pop(n))
@@ -53,20 +53,20 @@
 // the GC doesn't get confused. Both the vm_push0(), and the pawV_vec_new calls
 // might fail and cause an error to be thrown, so we have to be careful not
 // to leave a junk value on top of the stack.
-#define vm_vector_init(pa, pv)                                                 \
-    pv = vm_push0();                                                           \
-    pa = pawV_vec_new(P);                                                          \
+#define vm_vector_init(pa, pv) \
+    pv = vm_push0();           \
+    pa = pawV_vec_new(P);      \
     v_set_object(pv, pa);
 
-#define vm_map_init(pm, pv)                                                    \
-    pv = vm_push0();                                                           \
-    pm = pawH_new(P);                                                          \
+#define vm_map_init(pm, pv) \
+    pv = vm_push0();        \
+    pm = pawH_new(P);       \
     v_set_object(pv, pm);
 
 static void add_zeros(paw_Env *P, int n)
 {
     for (int i = 0; i < n; ++i) {
-        vm_push0();    
+        vm_push0();
     }
 }
 
@@ -152,8 +152,8 @@ void pawR_error(paw_Env *P, int error, const char *fmt, ...)
 // Convert a paw_Float to a paw_Int (from Lua)
 // Assumes 2's complement, which means PAW_INT_MIN is a power-of-2 with
 // an exact paw_Float representation.
-#define float2int_aux(f, pv)                                                   \
-    ((f) >= (paw_Float)(PAW_INT_MIN) && (f) < -(paw_Float)(PAW_INT_MIN) &&     \
+#define float2int_aux(f, pv)                                               \
+    ((f) >= (paw_Float)(PAW_INT_MIN) && (f) < -(paw_Float)(PAW_INT_MIN) && \
      (v_set_int(pv, paw_cast_int(f)), 1))
 
 static void float2int(paw_Env *P, paw_Float f, Value *pv)
@@ -189,7 +189,7 @@ void pawR_cast_int(paw_Env *P, paw_Type type)
 {
     paw_assert(type < PAW_TSTRING);
     if (type == PAW_TFLOAT) {
-        // NOTE: Other primitives have a value representation compatible with 
+        // NOTE: Other primitives have a value representation compatible with
         //       that of the 'int' type.
         Value *pv = vm_top(1);
         const paw_Float f = v_float(*pv);
@@ -347,18 +347,21 @@ void pawR_setitem(paw_Env *P, paw_Type t)
     vm_pop(3);
 }
 
-static size_t check_index(paw_Env *P, paw_Int index, size_t length, const char *what)
+static size_t check_index(paw_Env *P, paw_Int index, size_t length,
+                          const char *what)
 {
     const paw_Int n = paw_cast_int(length);
     index = pawV_abs_index(index, length);
     if (index < 0 || index > n) {
-        pawE_error(P, PAW_ERUNTIME, -1, "index %I is out of bounds for %s of length %I",
-                   index, what, paw_cast_int(length));
+        pawE_error(P, PAW_ERUNTIME, -1,
+                   "index %I is out of bounds for %s of length %I", index, what,
+                   paw_cast_int(length));
     }
     return cast_size(index);
 }
 
-static void setslice_vector(paw_Env *P, Vector *va, paw_Int i, paw_Int j, const Vector *vb)
+static void setslice_vector(paw_Env *P, Vector *va, paw_Int i, paw_Int j,
+                            const Vector *vb)
 {
     const size_t na = pawV_vec_length(va);
     const size_t nb = pawV_vec_length(vb);
@@ -402,7 +405,7 @@ void pawR_init(paw_Env *P)
     v_set_object(&P->mem_errmsg, errmsg);
 }
 
-#define stop_loop(i, i2, d)                                                    \
+#define stop_loop(i, i2, d) \
     (((d) < 0 && (i) <= (i2)) || ((d) > 0 && (i) >= (i2)))
 
 static paw_Bool fornum_init(paw_Env *P)
@@ -437,52 +440,60 @@ static paw_Bool fornum(paw_Env *P)
     return PAW_TRUE;
 }
 
-static paw_Bool forin_init(paw_Env *P, paw_Type t)
+static paw_Bool forvector_init(paw_Env *P)
 {
-    //    const Value v = *vm_top(1);
-    //    paw_Int itr = PAW_ITER_INIT;
-    //    if (t == PAW_TVECTOR) {
-    //        Vector *arr = v_vector(v);
-    //        if (pawV_vec_iter(arr, &itr)) {
-    //            vm_pushi(itr);
-    //            vm_pushv(arr->begin[itr]);
-    //            return PAW_FALSE;
-    //        }
-    //    } else {
-    ////        paw_assert(t == PAW_TMAP);
-    ////        Map *map = v_map(v);
-    ////        if (pawH_iter(map, &itr)) {
-    ////            vm_pushi(itr);
-    ////            vm_pushv(map->keys[itr]);
-    ////            return PAW_FALSE;
-    ////        }
-    //    }
-        return PAW_TRUE;
+    const Value v = *vm_top(1);
+    paw_Int itr = PAW_ITER_INIT;
+    Vector *arr = v_vector(v);
+    if (pawV_vec_iter(arr, &itr)) {
+        vm_pushi(itr);
+        vm_pushv(arr->begin[itr]);
+        return PAW_FALSE;
+    }
+    return PAW_TRUE;
 }
 
-static paw_Bool forin(paw_Env *P, paw_Type t)
+static paw_Bool forvector(paw_Env *P)
 {
-    //    const Value obj = *vm_top(2);
-    //    const Value itr = *vm_top(1);
-    //    if (t == PAW_TVECTOR) {
-    //        Vector *arr = v_vector(obj);
-    //        paw_Int i = v_int(itr);
-    //        if (pawV_vec_iter(arr, &i)) {
-    //            v_set_int(vm_top(1), i);
-    //            vm_pushv(arr->begin[i]);
-    //            return PAW_TRUE;
-    //        }
-    //    } else {
-    ////        paw_assert(t == PAW_TMAP);
-    ////        Map *map = v_map(obj);
-    ////        paw_Int i = v_int(itr);
-    ////        if (pawH_iter(map, &i)) {
-    ////            v_set_int(vm_top(1), i);
-    ////            vm_pushv(map->keys[i]);
-    ////            return PAW_TRUE;
-    ////        }
-    //    }
-        return PAW_FALSE; // stop the loop
+    const Value obj = *vm_top(2);
+    const Value itr = *vm_top(1);
+    Vector *arr = v_vector(obj);
+    paw_Int i = v_int(itr);
+    if (pawV_vec_iter(arr, &i)) {
+        v_set_int(vm_top(1), i);
+        vm_pushv(arr->begin[i]);
+        return PAW_TRUE;
+    }
+    return PAW_FALSE;
+}
+
+static paw_Bool formap_init(paw_Env *P)
+{
+    const Value v = *vm_top(1);
+    paw_Int itr = PAW_ITER_INIT;
+    Map *map = v_map(v);
+    if (pawH_iter(map, &itr)) {
+        const Value v = *pawH_key(map, cast_size(itr));
+        vm_pushi(itr);
+        vm_pushv(v);
+        return PAW_FALSE;
+    }
+    return PAW_TRUE;
+}
+
+static paw_Bool formap(paw_Env *P)
+{
+    const Value obj = *vm_top(2);
+    const Value itr = *vm_top(1);
+    Map *map = v_map(obj);
+    paw_Int i = v_int(itr);
+    if (pawH_iter(map, &i)) {
+        const Value v = *pawH_key(map, cast_size(i));
+        v_set_int(vm_top(1), i);
+        vm_pushv(v);
+        return PAW_TRUE;
+    }
+    return PAW_FALSE; // stop the loop
 }
 
 #define finish_strcmp(x, y, op) (pawS_cmp(x, y) op 0)
@@ -683,7 +694,8 @@ static void float_binop(paw_Env *P, BinaryOp binop, paw_Float x, paw_Float y)
     vm_pop(1);
 }
 
-static void other_binop(paw_Env *P, BinaryOp binop, paw_Type t, Value x, Value y)
+static void other_binop(paw_Env *P, BinaryOp binop, paw_Type t, Value x,
+                        Value y)
 {
     if (binop == BINARY_IN) {
         Value *pv = vm_top(2);
@@ -821,7 +833,7 @@ int pawR_getitem(paw_Env *P, paw_Type t)
 {
     const Value obj = *vm_top(2);
     const Value key = *vm_top(1);
-     if (t == PAW_TMAP) {
+    if (t == PAW_TMAP) {
         return getitem_map(P, v_map(obj), key);
     }
     if (t == PAW_TVECTOR) {
@@ -864,10 +876,10 @@ void pawR_getslice(paw_Env *P, paw_Type t)
     const Value obj = *vm_top(3);
     const paw_Int i = v_int(*vm_top(2));
     const paw_Int j = v_int(*vm_top(1));
-     if (t == PAW_TVECTOR) {
+    if (t == PAW_TVECTOR) {
         getslice_vector(P, v_vector(obj), i, j);
     } else {
-        paw_assert(t == PAW_TSTRING); 
+        paw_assert(t == PAW_TSTRING);
         getslice_string(P, v_string(obj), i, j);
     }
     vm_shift(3);
@@ -1302,26 +1314,32 @@ top:
                 }
             }
 
-            vm_case(FORIN0) :
-            {
-                if (forin_init(P, get_U(opcode))) {
-                    // Skip the loop. We need to add a dummy value to the stack,
-                    // since there was an 'OP_POP' generated to pop it. See
-                    // forin() in parse.c for details.
-                    vm_push0();
-                    pc += get_S(opcode);
-                }
+// clang-format off
+#define vm_forin0(t, T) \
+            vm_case(FOR##T##0) : \
+            { \
+                vm_protect(); \
+                if (for##t##_init(P)) { \
+                    vm_push0(); \
+                    pc += get_S(opcode); \
+                } \
             }
-
-            vm_case(FORIN) :
-            {
-                if (forin(P, get_U(opcode))) {
-                    pc += get_S(opcode); // continue
-                }
+#define vm_forin(t, T) \
+            vm_case(FOR##T) : \
+            { \
+                if (for##t(P)) { \
+                    pc += get_S(opcode); \
+                } \
             }
+            vm_forin0(vector, VECTOR)
+            vm_forin0(map, MAP)
+            vm_forin(vector, VECTOR)
+            vm_forin(map, MAP)
+#undef vm_forin0
+#undef vm_forin
+                // clang-format on
 
-        vm_default:
-            paw_assert(PAW_FALSE);
+                vm_default : paw_assert(PAW_FALSE);
         }
         // clang-format on
     }

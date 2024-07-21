@@ -25,7 +25,8 @@
 #define env(x) ((x)->P)
 #define is_toplevel(lex) ((lex)->fs->outer == NULL)
 #define scan_string(lex, s) pawX_scan_string(lex, s, strlen(s))
-#define limit_error(x, what, limit) pawX_error(x, "too many %s (limit is %d)", what, limit)
+#define limit_error(x, what, limit) \
+    pawX_error(x, "too many %s (limit is %d)", what, limit)
 
 typedef enum LabelKind {
     LBREAK,
@@ -55,7 +56,7 @@ struct MatchState {
 
 typedef struct BlockState {
     struct BlockState *outer;
-    paw_Bool is_loop: 1;
+    paw_Bool is_loop : 1;
     int isymbol;
     int level;
     int label0;
@@ -64,7 +65,7 @@ typedef struct BlockState {
 typedef struct LocalSlot {
     struct Symbol *symbol;
     int index;
-    paw_Bool is_captured: 1;
+    paw_Bool is_captured : 1;
 } LocalSlot;
 
 typedef struct LocalStack {

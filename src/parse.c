@@ -34,8 +34,10 @@
 #define list_push(lex, list, node) pawA_list_push((lex)->pm->ast, &(list), node)
 
 #define new_path(lex) pawA_path_new((lex)->pm->ast)
-#define new_segment(lex, name, types) pawA_segment_new((lex)->pm->ast, name, types)
-#define path_add(lex, path, name, types) pawA_path_add((lex)->pm->ast, path, name, types, NULL)
+#define new_segment(lex, name, types) \
+    pawA_segment_new((lex)->pm->ast, name, types)
+#define path_add(lex, path, name, types) \
+    pawA_path_add((lex)->pm->ast, path, name, types, NULL)
 
 static String *unpack_name(const AstExpr *expr)
 {
@@ -57,17 +59,15 @@ static AstPat *pattern(Lex *lex);
 static AstExpr *expression(Lex *lex, unsigned prec);
 static AstStmt *statement(Lex *lex);
 
-static AstExpr *expression0(Lex *lex)
-{
-    return expression(lex, 0);
-}
+static AstExpr *expression0(Lex *lex) { return expression(lex, 0); }
 
 static void expected_symbol(Lex *lex, const char *want)
 {
     pawX_error(lex, "expected %s", want);
 }
 
-static void missing_delim(Lex *lex, TokenKind want, TokenKind open, int open_line)
+static void missing_delim(Lex *lex, TokenKind want, TokenKind open,
+                          int open_line)
 {
     pawX_error(lex, "expected '%c' to match '%c' on line %d", want, open,
                open_line);
@@ -130,39 +130,33 @@ static const struct {
     uint8_t left;
     uint8_t right;
 } kInfixPrec[NINFIX] = {
-    [INFIX_AS] = {14, 14}, 
-    [INFIX_MUL] = {13, 13}, 
+    [INFIX_AS] = {14, 14},
+    [INFIX_MUL] = {13, 13},
     [INFIX_DIV] = {13, 13},
-    [INFIX_MOD] = {13, 13}, 
+    [INFIX_MOD] = {13, 13},
     [INFIX_ADD] = {12, 12},
-    [INFIX_SUB] = {12, 12}, 
+    [INFIX_SUB] = {12, 12},
     [INFIX_SHL] = {10, 10},
-    [INFIX_SHR] = {10, 10}, 
+    [INFIX_SHR] = {10, 10},
     [INFIX_BAND] = {9, 9},
-    [INFIX_BXOR] = {8, 8},  
+    [INFIX_BXOR] = {8, 8},
     [INFIX_BOR] = {7, 7},
-    [INFIX_IN] = {6, 6},    
+    [INFIX_IN] = {6, 6},
     [INFIX_LT] = {6, 6},
-    [INFIX_LE] = {6, 6},    
+    [INFIX_LE] = {6, 6},
     [INFIX_GT] = {6, 6},
-    [INFIX_GE] = {6, 6},    
+    [INFIX_GE] = {6, 6},
     [INFIX_EQ] = {5, 5},
-    [INFIX_NE] = {5, 5},    
+    [INFIX_NE] = {5, 5},
     [INFIX_AND] = {4, 4},
-    [INFIX_OR] = {3, 3},    
+    [INFIX_OR] = {3, 3},
 };
 
 static const uint8_t kUnOpPrecedence = 15;
 
-static unsigned left_prec(InfixOp op) 
-{
-    return kInfixPrec[op].left; 
-}
+static unsigned left_prec(InfixOp op) { return kInfixPrec[op].left; }
 
-static unsigned right_prec(InfixOp op) 
-{
-    return kInfixPrec[op].right; 
-}
+static unsigned right_prec(InfixOp op) { return kInfixPrec[op].right; }
 
 static UnOp get_unop(TokenKind kind)
 {
@@ -255,10 +249,7 @@ static paw_Bool test_next(Lex *lex, TokenKind kind)
 }
 
 // Eat a semicolon, if one exists
-static void semicolon(Lex *lex) 
-{ 
-    test_next(lex, ';'); 
-}
+static void semicolon(Lex *lex) { test_next(lex, ';'); }
 
 static String *parse_name(Lex *lex)
 {
@@ -300,25 +291,27 @@ static AstDecl *vfield_decl(Lex *lex)
     return r;
 }
 
-#define make_list_parser(name, a, b, limit, what, func, T) \
-    static void parse_ ## name ## _list(Lex *lex, AstList **plist, int line) \
-    { \
-        do { \
-            if (test(lex, b)) { \
-                break; \
-            } else if ((*plist)->count == (limit)) { \
-                limit_error(lex, what, (limit)); \
-            } \
-            T *next = (func)(lex); \
-            list_push(lex, *plist, next); \
-        } while (test_next(lex, ',')); \
-        delim_next(lex, b, a, line); \
+#define make_list_parser(name, a, b, limit, what, func, T)               \
+    static void parse_##name##_list(Lex *lex, AstList **plist, int line) \
+    {                                                                    \
+        do {                                                             \
+            if (test(lex, b)) {                                          \
+                break;                                                   \
+            } else if ((*plist)->count == (limit)) {                     \
+                limit_error(lex, what, (limit));                         \
+            }                                                            \
+            T *next = (func)(lex);                                       \
+            list_push(lex, *plist, next);                                \
+        } while (test_next(lex, ','));                                   \
+        delim_next(lex, b, a, line);                                     \
     }
 make_list_parser(arg, '(', ')', LOCAL_MAX, "arguments", expression0, AstExpr)
-make_list_parser(vfield, '(', ')', LOCAL_MAX, "variant fields", vfield_decl, AstDecl)
-make_list_parser(type, '<', '>', LOCAL_MAX, "type arguments", type_expr, AstExpr)
+    make_list_parser(vfield, '(', ')', LOCAL_MAX, "variant fields", vfield_decl,
+                     AstDecl)
+        make_list_parser(type, '<', '>', LOCAL_MAX, "type arguments", type_expr,
+                         AstExpr)
 
-static AstList *vfield_list(Lex *lex, int line)
+            static AstList *vfield_list(Lex *lex, int line)
 {
     ++lex->expr_depth;
     AstList *list = new_list(lex);
@@ -382,7 +375,7 @@ static void parse_typelist(Lex *lex, AstExpr *pe, int line)
 
     do {
         if (test(lex, ')')) {
-            break; 
+            break;
         } else if (elems->count == FIELD_MAX) {
             limit_error(lex, "tuple elements", FIELD_MAX);
         }
@@ -400,7 +393,7 @@ static AstExpr *parse_paren_type(Lex *lex)
     }
     AstExpr *e = type_expr(lex);
     if (test_next(lex, ',')) {
-        parse_typelist(lex, e, line);     
+        parse_typelist(lex, e, line);
     }
     return e;
 }
@@ -441,7 +434,7 @@ static AstPath *parse_pathexpr(Lex *lex)
 {
     AstPath *p = new_path(lex);
     do {
-next_segment:
+    next_segment:
         if (p->list->count == LOCAL_MAX) {
             limit_error(lex, "path segments", LOCAL_MAX);
         }
@@ -581,14 +574,18 @@ static AstDecl *generic_param(Lex *lex)
     return r;
 }
 
-make_list_parser(index, '[', ']', LOCAL_MAX, "elements", expression0, AstExpr)
-make_list_parser(func_param, '(', ')', LOCAL_MAX, "function parameters", param_decl, AstDecl)
-make_list_parser(clos_param, '|', '|', LOCAL_MAX, "closure parameters", param_decl, AstDecl)
-make_list_parser(generic, '<', '>', LOCAL_MAX, "generics", generic_param, AstDecl)
-make_list_parser(vfield_pat, '(', ')', LOCAL_MAX, "variant fields", vfield_pat, AstPat)
-make_list_parser(sfield_pat, '{', '}', LOCAL_MAX, "struct fields", sfield_pat, AstPat)
+make_list_parser(func_param, '(', ')', LOCAL_MAX, "function parameters",
+                 param_decl, AstDecl)
+    make_list_parser(clos_param, '|', '|', LOCAL_MAX, "closure parameters",
+                     param_decl, AstDecl)
+        make_list_parser(generic, '<', '>', LOCAL_MAX, "generics",
+                         generic_param, AstDecl)
+            make_list_parser(vfield_pat, '(', ')', LOCAL_MAX, "variant fields",
+                             vfield_pat, AstPat)
+                make_list_parser(sfield_pat, '{', '}', LOCAL_MAX,
+                                 "struct fields", sfield_pat, AstPat)
 
-static AstPat *compound_pat(Lex *lex)
+                    static AstPat *compound_pat(Lex *lex)
 {
     AstPat *r = new_pat(lex, AST_PAT_PATH);
     AstPath *path = parse_pathtype(lex);
@@ -599,7 +596,7 @@ static AstPat *compound_pat(Lex *lex)
             pawX_error(lex, "expected at least 1 field in variant pattern "
                             "(remove parenthesis for unit variant)");
         }
-        r->variant.kind = AST_PAT_VARIANT; 
+        r->variant.kind = AST_PAT_VARIANT;
         r->variant.path = path;
         r->variant.elems = fields;
     } else if (test_next(lex, '{')) {
@@ -608,7 +605,7 @@ static AstPat *compound_pat(Lex *lex)
             pawX_error(lex, "expected at least 1 field in struct pattern "
                             "(remove curly braces for unit struct)");
         }
-        r->struct_.kind = AST_PAT_STRUCT; 
+        r->struct_.kind = AST_PAT_STRUCT;
         r->struct_.path = path;
         r->struct_.fields = fields;
     } else {
@@ -629,7 +626,7 @@ static AstPat *pattern(Lex *lex)
     if (test(lex, TK_NAME)) {
         return compound_pat(lex);
     } else {
-        return literal_pat(lex); 
+        return literal_pat(lex);
     }
 }
 
@@ -661,9 +658,10 @@ static AstExpr *sitem_expr(Lex *lex)
     return r;
 }
 
-make_list_parser(sitem, '{', '}', LOCAL_MAX, "struct items", sitem_expr, AstExpr)
+make_list_parser(sitem, '{', '}', LOCAL_MAX, "struct items", sitem_expr,
+                 AstExpr)
 
-static AstExpr *unop_expr(Lex *lex, UnOp op)
+    static AstExpr *unop_expr(Lex *lex, UnOp op)
 {
     AstExpr *result = new_expr(lex, EXPR_UNOP);
     UnOpExpr *r = &result->unop;
@@ -811,7 +809,7 @@ static AstExpr *try_composite_lit(Lex *lex, AstExpr *path)
         }
         return composite_lit(lex, path);
     }
-    return path; 
+    return path;
 }
 
 static AstExpr *selector_expr(Lex *lex, AstExpr *target)
@@ -942,7 +940,8 @@ static AstExpr *suffixed_expr(Lex *lex)
 {
     AstExpr *e = primary_expr(lex);
     if (e == NULL) {
-        expected_symbol(lex, "operand (path, literal, or parenthesized expression)");
+        expected_symbol(lex,
+                        "operand (path, literal, or parenthesized expression)");
     } else if (lex->t.kind == '{') {
         e = try_composite_lit(lex, e);
     }
@@ -989,7 +988,7 @@ static AstExpr *simple_expr(Lex *lex)
         }
         case TK_PIPE2:
             lex->t.kind = '|';
-            lex->t2.kind = '|'; 
+            lex->t2.kind = '|';
             // (fallthrough)
         case '|':
             return closure(lex);
@@ -1004,8 +1003,7 @@ static AstExpr *simple_expr(Lex *lex)
 
 static AstExpr *conversion_expr(Lex *lex, AstExpr *lhs, AstExpr *rhs)
 {
-    if (a_kind(rhs) != EXPR_PATH ||
-            rhs->path.path->list->count != 1) {
+    if (a_kind(rhs) != EXPR_PATH || rhs->path.path->list->count != 1) {
         pawX_error(lex, "expected basic type name");
     }
     AstExpr *r = new_expr(lex, EXPR_CONVERSION);
@@ -1014,17 +1012,16 @@ static AstExpr *conversion_expr(Lex *lex, AstExpr *lhs, AstExpr *rhs)
     AstPath *path = rhs->path.path;
     AstSegment *seg = pawA_path_get(path, 0);
     if (equals_cstr(lex, seg->name, CSTR_BOOL)) {
-        r->conv.to = PAW_TBOOL; 
+        r->conv.to = PAW_TBOOL;
     } else if (equals_cstr(lex, seg->name, CSTR_INT)) {
-        r->conv.to = PAW_TINT; 
+        r->conv.to = PAW_TINT;
     } else if (equals_cstr(lex, seg->name, CSTR_FLOAT)) {
-        r->conv.to = PAW_TFLOAT; 
+        r->conv.to = PAW_TFLOAT;
     } else {
         pawX_error(lex, "expected basic type");
     }
     return r;
 }
-
 
 static AstExpr *binop_expr(Lex *lex, InfixOp op, AstExpr *lhs)
 {
@@ -1281,7 +1278,8 @@ static void parse_variant_list(Lex *lex, AstList **plist, int line)
         } else if ((*plist)->count == LOCAL_MAX) {
             limit_error(lex, "variants", LOCAL_MAX);
         }
-        // NOTE: 'variant_decl' requires a second argument, so 'make_list_parser'
+        // NOTE: 'variant_decl' requires a second argument, so
+        // 'make_list_parser'
         //       cannot be used as-is.
         AstDecl *next = variant_decl(lex, (*plist)->count);
         list_push(lex, *plist, next);
@@ -1493,24 +1491,24 @@ static AstList *load_prelude(Lex *lex)
 //
 // ORDER TokenKind
 static const char *kKeywords[] = {
-    "fn", 
-    "type",  
-    "enum",  
-    "struct", 
-    "global",   
-    "match",    
-    "let",    
-    "if", 
-    "else", 
+    "fn",
+    "type",
+    "enum",
+    "struct",
+    "global",
+    "match",
+    "let",
+    "if",
+    "else",
     "for",
-    "do", 
-    "while", 
-    "break",  
-    "continue", 
-    "return", 
-    "in", 
-    "as", 
-    "true", 
+    "do",
+    "while",
+    "break",
+    "continue",
+    "return",
+    "in",
+    "as",
+    "true",
     "false",
 };
 

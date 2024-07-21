@@ -67,7 +67,7 @@ make_node_constructor(pat, AstPat)
 
 #define LIST_MIN_ALLOC 8
 
-AstType *pawA_new_type(Ast *ast, AstTypeKind kind)
+                AstType *pawA_new_type(Ast *ast, AstTypeKind kind)
 {
     AstType *r = pawK_pool_alloc(env((ast)->lex), &(ast)->nodes,
                                  sizeof(AstType), paw_alignof(AstType));
@@ -85,8 +85,7 @@ AstPath *pawA_path_new(Ast *ast)
 
 AstSegment *pawA_segment_new(Ast *ast)
 {
-    return pawK_pool_alloc(env((ast)->lex), &(ast)->nodes,
-                           sizeof(AstSegment), 
+    return pawK_pool_alloc(env((ast)->lex), &(ast)->nodes, sizeof(AstSegment),
                            paw_alignof(AstSegment));
 }
 
@@ -154,9 +153,9 @@ void pawA_list_push(Ast *ast, AstList **plist, void *node)
 void pawA_path_push(Ast *ast, AstList **ppath, String *name, AstList *types)
 {
     Lex *lex = ast->lex;
-    AstSegment *segment = pawK_pool_alloc(env(lex), &lex->pm->ast->nodes, 
-                                          sizeof(AstSegment),
-                                          paw_alignof(Symbol));
+    AstSegment *segment =
+        pawK_pool_alloc(env(lex), &lex->pm->ast->nodes, sizeof(AstSegment),
+                        paw_alignof(Symbol));
     segment->name = name;
     segment->types = types;
     pawA_list_push(ast, ppath, segment);
@@ -196,8 +195,9 @@ static Scope *new_scope(Ast *ast)
 
 SymbolTable *pawA_new_symtab(Ast *ast)
 {
-    SymbolTable *symtab = pawK_pool_alloc(env(ast->lex), &ast->symbols, sizeof(SymbolTable),
-                                          paw_alignof(SymbolTable));
+    SymbolTable *symtab =
+        pawK_pool_alloc(env(ast->lex), &ast->symbols, sizeof(SymbolTable),
+                        paw_alignof(SymbolTable));
     symtab->globals = new_scope(ast);
     symtab->scopes = pawA_list_new(ast);
     return symtab;
@@ -239,13 +239,13 @@ int pawA_find_symbol(Scope *scope, const String *name)
     return -1;
 }
 
-#define make_list_visitor(name, T)                                             \
-    static void visit_##name##_list_aux(AstVisitor *V, AstList *list,          \
-                                        T##Pass cb)                            \
-    {                                                                          \
-        for (int i = 0; i < list->count; ++i) {                                \
-            cb(V, list->data[i]);                                              \
-        }                                                                      \
+#define make_list_visitor(name, T)                                    \
+    static void visit_##name##_list_aux(AstVisitor *V, AstList *list, \
+                                        T##Pass cb)                   \
+    {                                                                 \
+        for (int i = 0; i < list->count; ++i) {                       \
+            cb(V, list->data[i]);                                     \
+        }                                                             \
     }
 make_list_visitor(decl, AstDecl) make_list_visitor(expr, AstExpr)
     make_list_visitor(stmt, AstStmt)
@@ -754,22 +754,21 @@ void pawA_visit(AstVisitor *V)
 }
 
 // Generate code for folding a list of AST nodes
-#define make_list_folder(name, T)                                              \
-    static void fold_##name##_list(AstFolder *F, AstList *list, T##Fold cb)    \
-    {                                                                          \
-        for (int i = 0; i < list->count; ++i) {                                \
-            list->data[i] = cb(F, list->data[i]);                              \
-        }                                                                      \
-    }                                                                          \
-    static void fold_##name##s(AstFolder *F, AstList *list)                    \
-    {                                                                          \
-        fold_##name##_list(F, list, F->fold_##name);                           \
+#define make_list_folder(name, T)                                           \
+    static void fold_##name##_list(AstFolder *F, AstList *list, T##Fold cb) \
+    {                                                                       \
+        for (int i = 0; i < list->count; ++i) {                             \
+            list->data[i] = cb(F, list->data[i]);                           \
+        }                                                                   \
+    }                                                                       \
+    static void fold_##name##s(AstFolder *F, AstList *list)                 \
+    {                                                                       \
+        fold_##name##_list(F, list, F->fold_##name);                        \
     }
-make_list_folder(decl, AstDecl) 
-make_list_folder(expr, AstExpr)
-make_list_folder(stmt, AstStmt)
+make_list_folder(decl, AstDecl) make_list_folder(expr, AstExpr)
+    make_list_folder(stmt, AstStmt)
 
-static AstStmt *fold_block_stmt(AstFolder *F, Block *s)
+        static AstStmt *fold_block_stmt(AstFolder *F, Block *s)
 {
     fold_stmts(F, s->stmts);
     return cast_stmt(s);
@@ -1802,6 +1801,8 @@ static void enter_scope(AstFolder *F, ScopeState *state, Scope *source)
     Stenciler *S = F->state.S;
     state->source = source;
     state->target = new_scope(F->ast);
+    state->target->bk_depth = source->bk_depth;
+    state->target->fn_depth = source->fn_depth;
     state->outer = S->scope;
     S->scope = state;
 }
@@ -1858,33 +1859,29 @@ static void link_decls(AstFolder *F, AstDecl *old_decl, AstDecl *new_decl)
 }
 
 //clang-format off
-#define make_stencil_prep(name, T, body)                                       \
-    static T *stencil_prep_##name##_aux(AstFolder *F, T *t)                    \
-    {                                                                          \
-        T *r = pawA_new_##name(F->ast, a_kind(t));                             \
-        r->hdr.kind = t->hdr.kind;                                             \
-        r->hdr.line = t->hdr.line;                                             \
-        body return r;                                                         \
+#define make_stencil_prep(name, T, body)                    \
+    static T *stencil_prep_##name##_aux(AstFolder *F, T *t) \
+    {                                                       \
+        T *r = pawA_new_##name(F->ast, a_kind(t));          \
+        r->hdr.kind = t->hdr.kind;                          \
+        r->hdr.line = t->hdr.line;                          \
+        body return r;                                      \
     }
-make_stencil_prep(expr, AstExpr,
-                  {
-                      r->hdr.type = subst_type(F, a_type(t));
-                  })
-make_stencil_prep(decl, AstDecl,
-                  {
-                      r->hdr.name = t->hdr.name;
-                      r->hdr.def = pawA_add_decl(F->ast, r);
-                      link_decls(F, t, r); // subst_type() is dependant
-                      AstType *type = subst_type(F, a_type(t));
-                      if (a_is_func_decl(r)) {
-                          type->func.did = r->hdr.def;
-                      } else if (a_is_struct_decl(r)) {
-                          type->adt.did = r->hdr.def;
-                      }
-                      r->hdr.type = type;
-                      return r;
-                  }) 
-make_stencil_prep(stmt, AstStmt, {})
+make_stencil_prep(expr, AstExpr, { r->hdr.type = subst_type(F, a_type(t)); })
+    make_stencil_prep(decl, AstDecl,
+                      {
+                          r->hdr.name = t->hdr.name;
+                          r->hdr.def = pawA_add_decl(F->ast, r);
+                          link_decls(F, t, r); // subst_type() is dependant
+                          AstType *type = subst_type(F, a_type(t));
+                          if (a_is_func_decl(r)) {
+                              type->func.did = r->hdr.def;
+                          } else if (a_is_struct_decl(r)) {
+                              type->adt.did = r->hdr.def;
+                          }
+                          r->hdr.type = type;
+                          return r;
+                      }) make_stencil_prep(stmt, AstStmt, {})
 //clang-format on
 
 // Helpers for stenciling: create a new node of the given type and kind,
@@ -1893,21 +1890,20 @@ make_stencil_prep(stmt, AstStmt, {})
 #define stencil_prep_decl(F, d) stencil_prep_decl_aux(F, cast_decl(d))
 #define stencil_prep_stmt(F, s) stencil_prep_stmt_aux(F, cast_stmt(s))
 
-#define make_stencil_list(name, T)                                             \
-    static AstList *stencil_##name##s(AstFolder *F, AstList *old_list)         \
-    {                                                                          \
-        AstList *new_list = pawA_list_new(F->ast);                             \
-        for (int i = 0; i < old_list->count; ++i) {                            \
-            T *decl = F->fold_##name(F, old_list->data[i]);                    \
-            pawA_list_push(F->ast, &new_list, decl);                           \
-        }                                                                      \
-        return new_list;                                                       \
+#define make_stencil_list(name, T)                                     \
+    static AstList *stencil_##name##s(AstFolder *F, AstList *old_list) \
+    {                                                                  \
+        AstList *new_list = pawA_list_new(F->ast);                     \
+        for (int i = 0; i < old_list->count; ++i) {                    \
+            T *decl = F->fold_##name(F, old_list->data[i]);            \
+            pawA_list_push(F->ast, &new_list, decl);                   \
+        }                                                              \
+        return new_list;                                               \
     }
-make_stencil_list(expr, AstExpr) 
-make_stencil_list(decl, AstDecl)
-make_stencil_list(stmt, AstStmt)
+        make_stencil_list(expr, AstExpr) make_stencil_list(decl, AstDecl)
+            make_stencil_list(stmt, AstStmt)
 
-static AstStmt *stencil_block_stmt(AstFolder *F, Block *s)
+                static AstStmt *stencil_block_stmt(AstFolder *F, Block *s)
 {
     ScopeState state;
     enter_scope(F, &state, s->scope);
@@ -2156,9 +2152,7 @@ static AstPath *stencil_path(AstFolder *F, AstPath *e)
     AstPath *r = pawA_path_new(F->ast);
     for (int i = 0; i < e->list->count; ++i) {
         AstSegment *seg = pawA_path_get(e, i);
-        AstList *args = seg->types 
-            ? stencil_exprs(F, seg->types) 
-            : NULL;
+        AstList *args = seg->types ? stencil_exprs(F, seg->types) : NULL;
         AstType *type = subst_type(F, seg->type);
         pawA_path_add(F->ast, r, seg->name, args, type);
     }
@@ -2276,10 +2270,9 @@ static AstStmt *stencil_for_stmt(AstFolder *F, ForStmt *s)
         transfer_symbols(F, &state, 3);
     } else {
         r->for_.forin.target = F->fold_expr(F, s->forin.target);
-        transfer_symbols(F, &state, 1);
+        transfer_symbols(F, &state, 2); // includes implicit '(for iter)'
     }
     r->for_.block = stencil_forbody(F, s->block);
-
     r->for_.scope = leave_scope(F);
     return r;
 }
@@ -2582,7 +2575,7 @@ static void indent_line(Printer *P)
     }
 }
 
-#define dump_fmt(P, fmt, ...)                                                  \
+#define dump_fmt(P, fmt, ...) \
     (indent_line(P), fprintf((P)->out, fmt, __VA_ARGS__))
 #define dump_msg(P, msg) (indent_line(P), fprintf((P)->out, msg))
 
@@ -2601,7 +2594,11 @@ static void dump_binder(Printer *P, AstList *binder)
 static void dump_type_aux(Printer *P, AstType *type)
 {
     const char *basic[] = {
-        "()", "bool", "int", "float", "string",
+        "()",
+        "bool",
+        "int",
+        "float",
+        "string",
     };
     switch (y_kind(type)) {
         case AST_TYPE_UNKNOWN: {
@@ -2821,8 +2818,8 @@ static int predump_node(Printer *P, void *node,
     return -1;
 }
 
-#define dump_block(P, b) check_exp((b)->kind == STMT_BLOCK, \
-                                   dump_stmt(P, cast_stmt(b)))
+#define dump_block(P, b) \
+    check_exp((b)->kind == STMT_BLOCK, dump_stmt(P, cast_stmt(b)))
 #define dump_name(P, s) dump_fmt(P, "name: %s\n", s ? s->text : NULL)
 
 static void dump_expr(Printer *P, AstExpr *e);
@@ -2850,9 +2847,9 @@ make_list_dumper(expr, AstExpr)
 make_list_dumper(decl, AstDecl)
 make_list_dumper(stmt, AstStmt)
 make_list_dumper(pat, AstPat)
-// clang-format on
+    // clang-format on
 
-static void dump_path(Printer *P, AstPath *p)
+    static void dump_path(Printer *P, AstPath *p)
 {
     for (int i = 0; i < p->list->count; ++i) {
         AstSegment *seg = p->list->data[i];
@@ -3054,20 +3051,25 @@ static void dump_expr(Printer *P, AstExpr *e)
                             break;
                         case PAW_TBOOL:
                             dump_msg(P, "type: bool\n");
-                            dump_fmt(P, "value: %s\n", v_true(e->literal.basic.value) ? "true" : "false");
+                            dump_fmt(P, "value: %s\n",
+                                     v_true(e->literal.basic.value) ? "true"
+                                                                    : "false");
                             break;
                         case PAW_TINT:
                             dump_msg(P, "type: int\n");
-                            dump_fmt(P, "value: %" PRId64 "\n", v_int(e->literal.basic.value));
+                            dump_fmt(P, "value: %" PRId64 "\n",
+                                     v_int(e->literal.basic.value));
                             break;
                         case PAW_TFLOAT:
                             dump_msg(P, "type: float\n");
-                            dump_fmt(P, "value: %f\n", v_float(e->literal.basic.value));
+                            dump_fmt(P, "value: %f\n",
+                                     v_float(e->literal.basic.value));
                             break;
                         default:
                             paw_assert(e->literal.basic.t == PAW_TSTRING);
                             dump_msg(P, "type: string\n");
-                            dump_fmt(P, "value: %s\n", v_string(e->literal.basic.value)->text);
+                            dump_fmt(P, "value: %s\n",
+                                     v_string(e->literal.basic.value)->text);
                             break;
                     }
                     break;
@@ -3157,11 +3159,12 @@ static void dump_expr(Printer *P, AstExpr *e)
 // TODO: Have this output a String, or fill a Buffer, move somewhere else
 void pawA_repr_type(FILE *out, const AstType *type)
 {
+    Printer P = {.out = out};
     switch (a_kind(type)) {
         case AST_TYPE_TUPLE:
             fprintf(out, "(");
             for (int i = 0; i < type->tuple.elems->count; ++i) {
-                dump_type(out, type->tuple.elems->data[i]);
+                dump_type(&P, type->tuple.elems->data[i]);
                 if (i < type->tuple.elems->count - 1) {
                     fprintf(out, ", ");
                 }
@@ -3172,13 +3175,13 @@ void pawA_repr_type(FILE *out, const AstType *type)
         case AST_TYPE_FUNC:
             fprintf(out, "fn(");
             for (int i = 0; i < type->fptr.params->count; ++i) {
-                dump_type(out, type->fptr.params->data[i]);
+                dump_type(&P, type->fptr.params->data[i]);
                 if (i < type->fptr.params->count - 1) {
                     fprintf(out, ", ");
                 }
             }
             fprintf(out, ") -> ");
-            dump_type(out, type->fptr.result);
+            dump_type(&P, type->fptr.result);
             break;
         case AST_TYPE_ADT:
             fprintf(out, "%d", type->adt.base); // TODO: Print the name
@@ -3186,7 +3189,7 @@ void pawA_repr_type(FILE *out, const AstType *type)
                 fprintf(out, "<");
                 const AstList *binder = type->adt.types;
                 for (int i = 0; i < binder->count; ++i) {
-                    dump_type(out, binder->data[i]);
+                    dump_type(&P, binder->data[i]);
                     if (i < binder->count - 1) {
                         fprintf(out, ", ");
                     }

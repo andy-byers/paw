@@ -192,7 +192,7 @@ int main(int argc, const char **argv)
     }
     if (status == PAW_OK) {
         paw_close(P);
-    } else if (paw_get_count(P) && paw_is_string(P, -1)) {
+    } else if (paw_get_count(P) && 1 /*TODO: paw_is_string(P, -1)*/) {
         // error() doesn't return
         error(status, "%s\n", paw_string(P, -1));
     } else {

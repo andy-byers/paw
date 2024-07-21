@@ -1,16 +1,16 @@
--- bubble.paw
+// bubble.paw
 
-fn random(n): [int] {
-    let a: [int] = []
+fn random(n: int) -> [int] {
+    let a = []
     let x = n
     for _ = 0, n {
         x = (140671485 * x + 12820163) % 16777216
-        a.push(x)
+        _vector_push(a, x)
     }
     return a
 }
 
-fn bubble(n: int): [int] {
+let bubble = |n: int| -> [int] {
     let a = random(n)
     while true {
         let swapped = false
@@ -29,4 +29,4 @@ fn bubble(n: int): [int] {
     return a
 }
 
-bubble(#argv > 1 ?? int(argv[1]) :: 500)
+bubble(500)

@@ -31,10 +31,7 @@ void lib_error(paw_Env *P, int error, const char *fmt, ...)
     pawC_throw(P, error);
 }
 
-static int get_argc(paw_Env *P) 
-{ 
-    return paw_get_count(P) - 1 /* context */; 
-}
+static int get_argc(paw_Env *P) { return paw_get_count(P) - 1 /* context */; }
 
 void pawL_check_argc(paw_Env *P, int argc)
 {
@@ -48,88 +45,88 @@ int pawL_check_varargc(paw_Env *P, int min, int max)
     return narg;
 }
 
-//static void try_aux(paw_Env *P, void *arg)
+// static void try_aux(paw_Env *P, void *arg)
 //{
-//     const int argc = *cast(arg, int *);
-//     const Value f = cf_base(1);
-//     pawC_call(P, v_object(f), argc - 1);
-// }
+//      const int argc = *cast(arg, int *);
+//      const Value f = cf_base(1);
+//      pawC_call(P, v_object(f), argc - 1);
+//  }
 //
-//static int base_try(paw_Env *P)
+// static int base_try(paw_Env *P)
 //{
-//     int argc = pawL_check_varargc(P, 1, UINT8_MAX);
-//     const int status = pawC_try(P, try_aux, &argc);
-//     paw_push_int(P, status);
-//     return 1;
-// }
+//      int argc = pawL_check_varargc(P, 1, UINT8_MAX);
+//      const int status = pawC_try(P, try_aux, &argc);
+//      paw_push_int(P, status);
+//      return 1;
+//  }
 //
-// static int base_require(paw_Env *P)
+//  static int base_require(paw_Env *P)
 //{
-//     pawL_check_argc(P, 1);
-//     const char *name = pawL_check_string(P, 1);
-//     pawL_require_lib(P, name);
-//     return 1;
-// }
+//      pawL_check_argc(P, 1);
+//      const char *name = pawL_check_string(P, 1);
+//      pawL_require_lib(P, name);
+//      return 1;
+//  }
 //
-// #def ine  make_to_bool(suffix, T) \
+//  #de f in e  make_to_bool(suffix, T) \
 //    static int base_to_bool_ ## suffix(paw_Env *P) \
 //    { \
 //        pawL_check_argc(P, 1); \
 //        pawR_to_bool(P, T); \
 //        return 1; \
 //    }
-// make_to_bool(s, PAW_TSTRING)
-// make_to_bool(i, PAW_TINT)
-// make_to_bool(f, PAW_TFLOAT)
+//  make_to_bool(s, PAW_TSTRING)
+//  make_to_bool(i, PAW_TINT)
+//  make_to_bool(f, PAW_TFLOAT)
 //
-// #def ine  make_to_int(suffix, T) \
+//  #de f in e  make_to_int(suffix, T) \
 //    static int base_to_int_ ## suffix(paw_Env *P) \
 //    { \
 //        pawL_check_argc(P, 1); \
 //        pawR_to_int(P, T); \
 //        return 1; \
 //    }
-// make_to_int(s, PAW_TSTRING)
-// make_to_int(i, PAW_TINT)
-// make_to_int(f, PAW_TFLOAT)
+//  make_to_int(s, PAW_TSTRING)
+//  make_to_int(i, PAW_TINT)
+//  make_to_int(f, PAW_TFLOAT)
 //
-// #def ine  make_to_float(suffix, T) \
+//  #de f in e  make_to_float(suffix, T) \
 //    static int base_to_float_ ## suffix(paw_Env *P) \
 //    { \
 //        pawL_check_argc(P, 1); \
 //        pawR_to_float(P, T); \
 //        return 1; \
 //    }
-// make_to_float(s, PAW_TSTRING)
-// make_to_float(i, PAW_TINT)
-// make_to_float(f, PAW_TFLOAT)
+//  make_to_float(s, PAW_TSTRING)
+//  make_to_float(i, PAW_TINT)
+//  make_to_float(f, PAW_TFLOAT)
 //
-// static int base_chr(paw_Env *P)
+//  static int base_chr(paw_Env *P)
 //{
-//     pawL_check_argc(P, 1);
-//     const paw_Int ord = pawL_check_int(P, 1);
-//     if (0x00 <= ord && ord <= 0xFF) {
-//         const uint8_t chr[] = {ord};
-//         paw_push_nstring(P, (const char *)chr, 1);
-//     } else {
-//         // TODO: Encode UTF-8 codepoint
-//         pawR_error(P, PAW_EOVERFLOW, "FIXME: Support UTF-8!");
-//     }
-//     return 1;
-// }
+//      pawL_check_argc(P, 1);
+//      const paw_Int ord = pawL_check_int(P, 1);
+//      if (0x00 <= ord && ord <= 0xFF) {
+//          const uint8_t chr[] = {ord};
+//          paw_push_nstring(P, (const char *)chr, 1);
+//      } else {
+//          // TODO: Encode UTF-8 codepoint
+//          pawR_error(P, PAW_EOVERFLOW, "FIXME: Support UTF-8!");
+//      }
+//      return 1;
+//  }
 //
-// static int base_ord(paw_Env *P)
+//  static int base_ord(paw_Env *P)
 //{
-//     pawL_check_argc(P, 1);
-//     const char *str = pawL_check_string(P, 1);
-//     const size_t len = paw_length(P, 1);
-//     if (!len || len > 4) {
-//         pawR_error(P, PAW_EVALUE, "invalid UTF-8");
-//     }
-//     // TODO: Decode UTF-8 codepoint
-//     paw_push_int(P, str[0]);
-//     return 1;
-// }
+//      pawL_check_argc(P, 1);
+//      const char *str = pawL_check_string(P, 1);
+//      const size_t len = paw_length(P, 1);
+//      if (!len || len > 4) {
+//          pawR_error(P, PAW_EVALUE, "invalid UTF-8");
+//      }
+//      // TODO: Decode UTF-8 codepoint
+//      paw_push_int(P, str[0]);
+//      return 1;
+//  }
 
 static int base_assert(paw_Env *P)
 {
@@ -232,14 +229,15 @@ static int vector_pop(paw_Env *P)
 static paw_Int clamped_index(paw_Env *P, int loc, paw_Int n)
 {
     const paw_Int i = v_int(cf_base(loc));
-    return i < 0 ? 0 : i >= n ? n - 1 : i;
+    return i < 0 ? 0 : i >= n ? n - 1
+                              : i;
 }
 
 // TODO: It would be nice to let pop() take an optional parameter indicating the
-//       index at which to erase an element. To me, 'remove' seems like it 
-//       should remove the first matching element using something akin to operator==.
-//       Attempting this will break, since we have no concept of equality between
-//       user-defined types right now.
+//       index at which to erase an element. To me, 'remove' seems like it
+//       should remove the first matching element using something akin to
+//       operator==. Attempting this will break, since we have no concept of
+//       equality between user-defined types right now.
 static int vector_remove(paw_Env *P)
 {
     Vector *vec = v_vector(cf_base(1));
