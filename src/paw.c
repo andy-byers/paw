@@ -62,15 +62,15 @@ static void info(const char *fmt, ...)
     }
 }
 
-static void error(int status, const char *fmt, ...)
+_Noreturn static void error(int status, const char *fmt, ...)
 {
     if (!s_opt.q) {
         va_list arg;
         va_start(arg, fmt);
         vfprintf(stderr, fmt, arg);
         va_end(arg);
-        exit(status);
     }
+    exit(status);
 }
 
 #define get_option(c, v) (--c, ++v, v[-1])
@@ -103,8 +103,7 @@ static void parse_options(int *pargc, const char ***pargv)
                     if (state->flag) {
                         *state->flag = PAW_TRUE;
                         break; // no argument
-                    } else if (a[1]) { // in '-abc', only 'c' can take an
-                                       // argument
+                    } else if (a[1]) { // in '-abc', only 'c' can take an argument
                         error(PAW_ERUNTIME,
                               "option with argument ('%c') must be last\n",
                               shr);
@@ -156,6 +155,8 @@ static void show_help(void)
     }
 }
 
+#define CHUNKNAME "(chunk)"
+
 int main(int argc, const char **argv)
 {
     parse_options(&argc, &argv);
@@ -164,12 +165,19 @@ int main(int argc, const char **argv)
         return 0;
     }
     paw_Env *P = paw_open(NULL, NULL);
-    if (!P) {
-        error(PAW_EMEMORY, "not enough memory");
+    if (P == NULL) {
+        error(PAW_EMEMORY, "not enough memory\n");
     }
 
+    if (s_opt.e != NULL) {
+        paw_push_string(P, CHUNKNAME);
+    } else if (s_pathname != NULL) {
+        paw_push_string(P, s_pathname);
+    } else {
+        // TODO: read from stdin or enter interactive mode
+        error(PAW_ERUNTIME, "missing pathname or chunk\n");
+    }
     // Put arguments to the script in a global array named 'argv'.
-    paw_push_string(P, s_opt.e ? "<chunk>" : s_pathname);
     for (int i = 0; i < argc; ++i) {
         paw_push_string(P, argv[i]);
     }
@@ -179,9 +187,9 @@ int main(int argc, const char **argv)
     int status;
     // Load the source code, either from a string, or a file. If '-e' is passed,
     // then always use the provided string (ignore path).
-    if (s_opt.e) {
-        status = pawL_load_chunk(P, "<chunk>", s_opt.e);
-    } else if (s_pathname) {
+    if (s_opt.e != NULL) {
+        status = pawL_load_chunk(P, CHUNKNAME, s_opt.e);
+    } else if (s_pathname != NULL) {
         status = pawL_load_file(P, s_pathname);
     } else {
         return 0; // nothing to do TODO: interactive mode
@@ -190,13 +198,9 @@ int main(int argc, const char **argv)
         // run the script
         status = paw_call(P, 0);
     }
-    if (status == PAW_OK) {
-        paw_close(P);
-    } else if (paw_get_count(P) && 1 /*TODO: paw_is_string(P, -1)*/) {
-        // error() doesn't return
+    if (status != PAW_OK) {
         error(status, "%s\n", paw_string(P, -1));
-    } else {
-        error(status, "paw returned status code %d\n", status);
     }
+    paw_close(P);
     return status;
 }

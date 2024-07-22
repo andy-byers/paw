@@ -329,8 +329,8 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
     pawL_add_string(P, print, "function '");
     pawL_add_nstring(P, print, proto->name->text, proto->name->length);
     pawL_add_fstring(P, print, "' (%I bytes)\n", (paw_Int)proto->length);
-    pawL_add_fstring(P, print, "constant(s) = %I, upvalue(s) = %I\n",
-                     (paw_Int)proto->nk, (paw_Int)proto->nup);
+    pawL_add_fstring(P, print, "constant(s) = %d, upvalue(s) = %d, arg(s) = %d\n",
+                     proto->nk, proto->nup, proto->argc);
     for (int i = 0; pc != end; ++i) {
         pawL_add_fstring(P, print, "%d  %I  %s", i,
                          (paw_Int)(pc - proto->source),

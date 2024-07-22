@@ -21,7 +21,7 @@ typedef void (*Call)(paw_Env *P, void *arg);
 CallFrame *pawC_precall(paw_Env *P, StackPtr base, Object *callable, int argc);
 StackPtr pawC_return(paw_Env *P, int nret);
 int pawC_try(paw_Env *P, Call call, void *arg);
-void pawC_throw(paw_Env *P, int error);
+_Noreturn void pawC_throw(paw_Env *P, int error);
 void pawC_call(paw_Env *P, Object *f, int argc);
 void pawC_init(paw_Env *P);
 void pawC_uninit(paw_Env *P);

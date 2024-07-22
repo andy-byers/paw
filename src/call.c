@@ -300,13 +300,13 @@ int pawC_try(paw_Env *P, Call call, void *arg)
     return status;
 }
 
-void pawC_throw(paw_Env *P, int error)
+_Noreturn void pawC_throw(paw_Env *P, int error)
 {
-    if (P->jmp) {
-        P->jmp->status = error;
-        c_throw(P, P->jmp);
+    if (P->jmp == NULL) {
+        abort();
     }
-    abort();
+    P->jmp->status = error;
+    c_throw(P, P->jmp);
 }
 
 void pawC_init(paw_Env *P)

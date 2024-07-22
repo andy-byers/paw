@@ -9,8 +9,8 @@
 #define PAW_INT_WIDTH (sizeof(paw_Int) * 8)
 #define PAW_INT_MAX INT64_MAX
 #define PAW_INT_MIN INT64_MIN
-#define PAW_SIZE_MAX \
-    (sizeof(size_t) < sizeof(paw_Int) ? SIZE_MAX : (size_t)PAW_INT_MAX)
+#define PAW_SIZE_MAX (sizeof(size_t) < sizeof(paw_Int) \
+        ? SIZE_MAX : (size_t)PAW_INT_MAX)
 #define paw_cast_int(x) ((paw_Int)(x))
 #define paw_int_c(x) INT64_C(x)
 
@@ -22,10 +22,6 @@
 #define PAW_STACK_MAX 1000000
 #endif
 
-#ifndef PAW_MAX_DIGITS
-#define PAW_MAX_DIGITS 10000
-#endif
-
 #if defined(__APPLE__)
 #define PAW_OS_MACOS
 #define PAW_OS_POSIX
@@ -34,6 +30,14 @@
 #define PAW_OS_POSIX
 #elif defined(_WIN32)
 #define PAW_OS_WINDOWS
+#endif
+
+#if defined(__GNUC__) || defined(__clang__)
+# define PAW_NODISCARD __attribute__((warn_unused_result))
+#elif defined(_MSC_VER)
+# define PAW_NODISCARD _Check_return_
+#else
+# define PAW_NODISCARD
 #endif
 
 #endif // PAW_CONFIG_H

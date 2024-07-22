@@ -126,7 +126,7 @@ typedef struct paw_Env {
 
 void pawE_error(paw_Env *P, int code, int line, const char *fmt, ...);
 CallFrame *pawE_extend_cf(paw_Env *P, StackPtr top);
-int pawE_new_global(paw_Env *P, String *name, paw_Type type);
+int pawE_new_global(paw_Env *P, String *name);
 int pawE_find_global(paw_Env *P, const String *name);
 #define pawE_get_global(P, i) (&(P)->gv.data[i])
 

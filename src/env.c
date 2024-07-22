@@ -36,21 +36,20 @@ CallFrame *pawE_extend_cf(paw_Env *P, StackPtr top)
     return cf;
 }
 
-int pawE_new_global(paw_Env *P, String *name, paw_Type type)
+int pawE_new_global(paw_Env *P, String *name)
 {
     struct GlobalVec *gv = &P->gv; // enforce uniqueness
     for (int i = 0; i < gv->size; ++i) {
         if (pawS_eq(name, gv->data[i].name)) {
-            paw_assert(0); // FIXME
+            pawE_error(P, PAW_ENAME, -1, "duplicate global '%s'", name->text);
         }
     }
     pawM_grow(P, gv->data, gv->size, gv->alloc);
-    const int i = gv->size++;
-    GlobalVar *var = &gv->data[i];
-    var->name = name;
-    var->type = type;
+    const int gid = gv->size++;
+    GlobalVar *var = &gv->data[gid];
     v_set_0(&var->value);
-    return i;
+    var->name = name;
+    return gid;
 }
 
 int pawE_find_global(paw_Env *P, const String *name)
