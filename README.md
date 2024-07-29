@@ -7,7 +7,8 @@
 
 An unobtrusive scripting language
 
-Paw is a high-level, statically-typed programming language and runtime designed for embedding.
+Paw is a high-level programming language and runtime designed for embedding.
+Paw features strong static typing under a sound type system, generics, and bidirectional type checking.
 
 ## Syntax Overview
 
@@ -36,7 +37,11 @@ let x: int = 0
 // rebind 'x' to a float (type is inferred from RHS)
 let x = 6.63e-34 
 
-// create a global string named 'g' (value may be changed by the C API)
+// create a global string named 'g'
+// NOTE: 'global' variables will eventually be replaced with 'pub' variables, with
+//       somewhat different semantics. 'pub' variables must be compile-time constants
+//       defined at the toplevel. They are hoisted to the top of the module so they
+//       can be accessed anywhere.
 global g: string = "hello, world!"
 ```
 
@@ -325,6 +330,7 @@ assert(status != 0)
 + Compiler will allow functions that don't return a value in all code paths
     + Likely requires a CFG and some data flow analysis: it would be very difficult to get right otherwise
 + It isn't possible to create an empty vector or map of a specific known type without creating a temporary: `let vec: [int] = []`
+    + Note that it's still possible to infer a container type: for example, in `let vec = []; vec.push(1)`, `vec` has type `[int]`.
     + Could use Swift syntax, or something similar:
 ```
 let empty_vec = [int]()
