@@ -1288,7 +1288,7 @@ static void code_module(Generator *G)
 
     leave_function(G);
 }
-#include "debug.h"
+
 void p_codegen(struct Compiler *C, struct Hir *hir)
 {
     struct Generator G = {

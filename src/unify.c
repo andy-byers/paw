@@ -14,16 +14,15 @@
 #define error(U, ...) pawE_error(ENV(U), PAW_ETYPE, -1, __VA_ARGS__)
 
 typedef struct InferenceVar {
-    struct InferenceVar *parent;
+    K_ALIGNAS_NODE struct InferenceVar *parent;
     struct HirType *type;
     int rank;
 } InferenceVar;
 
-DECLARE_LIST(struct Hir, var_list_, VarList, struct InferenceVar)
-DEFINE_LIST(struct Hir, 32, var_list_, VarList, struct InferenceVar)
+DEFINE_LIST(struct Hir, var_list_, VarList, struct InferenceVar)
 
 typedef struct UnificationTable {
-    struct UnificationTable *outer;
+    K_ALIGNAS_NODE struct UnificationTable *outer;
     struct VarList *ivars; // vector of type variables
     int depth; // depth of binder
 } UnificationTable;
@@ -235,7 +234,7 @@ struct HirType *pawU_new_unknown(Unifier *U)
     UnificationTable *table = U->table;
 
     // NOTE: inference variables require a stable address, since they point to each other
-    InferenceVar *ivar = pawK_pool_alloc(P, &hir->small, sizeof(InferenceVar), paw_alignof(InferenceVar));
+    InferenceVar *ivar = pawK_pool_alloc(P, &hir->pool, sizeof(InferenceVar));
     const int index = table->ivars->count;
     var_list_push(U->hir, &table->ivars, ivar);
 
@@ -252,8 +251,7 @@ void pawU_enter_binder(Unifier *U)
 {
     paw_Env *P = ENV(U);
     struct Hir *hir = U->hir;
-    UnificationTable *table = pawK_pool_alloc(P, &hir->small, sizeof(UnificationTable),
-                                              paw_alignof(UnificationTable));
+    UnificationTable *table = pawK_pool_alloc(P, &hir->pool, sizeof(UnificationTable));
     table->ivars = var_list_new(U->hir);
     table->depth = U->depth;
     table->outer = U->table;

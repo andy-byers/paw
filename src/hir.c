@@ -11,14 +11,6 @@
 
 #define LIST_MIN 8
 
-DEFINE_LIST(struct Hir, LIST_MIN, pawHir_expr_list_, HirExprList, struct HirExpr)
-DEFINE_LIST(struct Hir, LIST_MIN, pawHir_decl_list_, HirDeclList, struct HirDecl)
-DEFINE_LIST(struct Hir, LIST_MIN, pawHir_stmt_list_, HirStmtList, struct HirStmt)
-DEFINE_LIST(struct Hir, LIST_MIN, pawHir_type_list_, HirTypeList, struct HirType)
-DEFINE_LIST(struct Hir, LIST_MIN, pawHir_symbol_list_, HirSymbolList, struct HirSymbol)
-DEFINE_LIST(struct Hir, LIST_MIN, pawHir_scope_list_, HirScopeList, struct HirScope)
-DEFINE_LIST(struct Hir, LIST_MIN, pawHir_path_, HirPath, struct HirSegment)
-
 #define MAYBE_VISIT_LIST(V, list, L) ((list) != NULL ? (V)->Visit##L(V, list) : paw_unused(NULL))
 #define MAYBE_FOLD_LIST(V, list, L) ((list) != NULL ? (V)->Fold##L(V, list) : NULL)
 
@@ -40,9 +32,7 @@ struct Hir *pawHir_new(struct Compiler *C)
     hir->P = P;
 
     // initialize memory pools for storing HIR components
-    pawK_pool_init(P, &hir->small, FIRST_ARENA_SIZE, sizeof(struct HirDecl));
-    pawK_pool_init(P, &hir->large, FIRST_ARENA_SIZE, sizeof(void *) * LARGE_ARENA_MIN);
-
+    pawK_pool_init(P, &hir->pool, FIRST_ARENA_SIZE, sizeof(void *) * LARGE_ARENA_MIN);
     hir->symtab = pawHir_new_symtab(hir);
 
     add_builtin_type(hir, kHirAdt, PAW_TUNIT);
@@ -58,18 +48,17 @@ struct Hir *pawHir_new(struct Compiler *C)
 void pawHir_free_hir(struct Hir *hir)
 {
     paw_Env *P = ENV(hir);
-    pawK_pool_uninit(P, &hir->small);
-    pawK_pool_uninit(P, &hir->large);
+    pawK_pool_uninit(P, &hir->pool);
     pawM_free(P, hir);
 }
 
-#define new_node(hir, T) pawK_pool_alloc(        \
-        ENV(hir), &(hir)->small,                 \
-        sizeof(struct T), paw_alignof(struct T))
+#define NEW_NODE(hir, T) pawK_pool_alloc( \
+        ENV(hir), &(hir)->pool,           \
+        sizeof(struct T))
 #define DEFINE_NODE_CONSTRUCTOR(name, T)                                \
         struct T *pawHir_new_##name(struct Hir *hir, enum T##Kind kind) \
         {                                                               \
-            struct T *r = new_node(hir, T);                             \
+            struct T *r = NEW_NODE(hir, T);                             \
             r->hdr.line = -1 /*TODO*/;                                  \
             r->hdr.kind = kind;                                         \
             return r;                                                   \
@@ -82,14 +71,14 @@ DEFINE_NODE_CONSTRUCTOR(stmt, HirStmt)
 
 struct HirType *pawHir_new_type(struct Hir *hir, enum HirTypeKind kind)
 {
-    struct HirType *r = new_node(hir, HirType);
+    struct HirType *r = NEW_NODE(hir, HirType);
     r->hdr.kind = kind;
     return r;
 }
 
 struct HirSegment *pawHir_segment_new(struct Hir *hir)
 {
-    return new_node(hir, HirSegment);
+    return NEW_NODE(hir, HirSegment);
 }
 
 DefId pawHir_add_decl(struct Hir *hir, struct HirDecl *decl)
@@ -112,23 +101,19 @@ struct HirDecl *pawHir_get_decl(struct Hir *hir, DefId did)
 
 struct HirSymbol *pawHir_new_symbol(struct Hir *hir)
 {
-    return pawK_pool_alloc(ENV(hir), &hir->small, sizeof(struct HirSymbol),
-                           paw_alignof(struct HirSymbol));
+    return pawK_pool_alloc(ENV(hir), &hir->pool, sizeof(struct HirSymbol));
 }
 
 static struct HirScope *new_scope(struct Hir *hir)
 {
-    struct HirScope *scope = pawK_pool_alloc(ENV(hir), &hir->small, sizeof(struct HirScope),
-                                   paw_alignof(struct HirScope));
+    struct HirScope *scope = pawK_pool_alloc(ENV(hir), &hir->pool, sizeof(struct HirScope));
     scope->symbols = pawHir_symbol_list_new(hir);
     return scope;
 }
 
 struct HirSymtab *pawHir_new_symtab(struct Hir *hir)
 {
-    struct HirSymtab *symtab =
-        pawK_pool_alloc(ENV(hir), &hir->small, sizeof(struct HirSymtab),
-                        paw_alignof(struct HirSymtab));
+    struct HirSymtab *symtab = pawK_pool_alloc(ENV(hir), &hir->pool, sizeof(struct HirSymtab));
     symtab->globals = new_scope(hir);
     symtab->scopes = pawHir_scope_list_new(hir);
     return symtab;
@@ -1931,7 +1916,8 @@ static void dump_typelist(struct Printer *P, struct HirTypeList *list)
 
 static const char *get_typename(struct DynamicMem *dm, DefId did)
 {
-    return dm->decls.data[did]->hdr.name->text;
+    const struct HirDecl *decl = dm->decls.data[did];
+    return decl->hdr.name ? decl->hdr.name->text : "(null)";
 }
 
 static void dump_type_aux(struct Printer *P, struct HirType *type)
@@ -2399,7 +2385,26 @@ static void dump_expr(struct Printer *P, struct HirExpr *e)
     dump_msg(P, "}\n");
 }
 
-// TODO: Have this output a String, or fill a Buffer, move somewhere else
+void pawHir_repr_path(struct Hir *hir, struct HirPath *path)
+{
+    for (int i = 0; i < path->count; ++i) {
+        struct HirSegment *s = pawHir_path_get(path, i);
+        printf("%s", s->name->text);
+        if (s->types != NULL) {
+            printf("<");
+            for (int j = 0; j < s->types->count; ++j) {
+                printf("T");
+                if (j < s->types->count - 1) {
+                    printf(", ");
+                }
+            }
+            printf(">");
+        }
+    }
+    printf("\n");
+}
+
+// TODO: Have this output a String, or fill a Buffer
 void pawHir_repr_type(struct Hir *hir, struct HirType *type)
 {
     struct Printer P = {.dm = hir->dm};

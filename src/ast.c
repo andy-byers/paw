@@ -9,13 +9,6 @@
 #include <limits.h>
 #include <stdlib.h>
 
-#define LIST_MIN 8
-
-DEFINE_LIST(struct Ast, LIST_MIN, pawAst_expr_list_, AstExprList, struct AstExpr)
-DEFINE_LIST(struct Ast, LIST_MIN, pawAst_decl_list_, AstDeclList, struct AstDecl)
-DEFINE_LIST(struct Ast, LIST_MIN, pawAst_stmt_list_, AstStmtList, struct AstStmt)
-DEFINE_LIST(struct Ast, LIST_MIN, pawAst_path_, AstPath, struct AstSegment)
-
 #define FIRST_ARENA_SIZE 512
 #define LARGE_ARENA_MIN 32
 
@@ -27,38 +20,32 @@ struct Ast *pawAst_new(Lex *lex)
     tree->P = P;
 
     // initialize memory pools for storing AST components
-    pawK_pool_init(P, &tree->small, FIRST_ARENA_SIZE, sizeof(struct AstDecl));
-    pawK_pool_init(P, &tree->large, FIRST_ARENA_SIZE, sizeof(void *) * LARGE_ARENA_MIN);
+    pawK_pool_init(P, &tree->pool, FIRST_ARENA_SIZE, sizeof(void *) * LARGE_ARENA_MIN);
     return tree;
 }
 
 void pawAst_free(struct Ast *ast)
 {
     paw_Env *P = ENV(ast);
-    pawK_pool_uninit(P, &ast->small);
-    pawK_pool_uninit(P, &ast->large);
+    pawK_pool_uninit(P, &ast->pool);
     pawM_free(P, ast);
 }
 
-#define DEFINE_NODE_CONSTRUCTOR(name, T)                                        \
-    struct T *pawAst_new_##name(struct Ast *ast, enum T##Kind kind)             \
-    {                                                                           \
-        struct T *r = pawK_pool_alloc(ENV(ast), &(ast)->small,                  \
-                                      sizeof(struct T), paw_alignof(struct T)); \
-        r->hdr.line = (ast)->lex->line;                                         \
-        r->hdr.kind = kind;                                                     \
-        return r;                                                               \
+#define DEFINE_NODE_CONSTRUCTOR(name, T)                                         \
+    struct T *pawAst_new_##name(struct Ast *ast, enum T##Kind kind)              \
+    {                                                                            \
+        struct T *r = pawK_pool_alloc(ENV(ast), &(ast)->pool, sizeof(struct T)); \
+        r->hdr.line = (ast)->lex->line;                                          \
+        r->hdr.kind = kind;                                                      \
+        return r;                                                                \
     }
 DEFINE_NODE_CONSTRUCTOR(expr, AstExpr)
 DEFINE_NODE_CONSTRUCTOR(decl, AstDecl)
 DEFINE_NODE_CONSTRUCTOR(stmt, AstStmt)
 
-#define LIST_MIN_ALLOC 8
-
 struct AstSegment *pawAst_segment_new(struct Ast *ast)
 {
-    return pawK_pool_alloc(ENV((ast)->lex), &(ast)->small, sizeof(struct AstSegment),
-                           paw_alignof(struct AstSegment));
+    return pawK_pool_alloc(ENV((ast)->lex), &(ast)->pool, sizeof(struct AstSegment));
 }
 
 typedef struct Printer {

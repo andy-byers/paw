@@ -1434,6 +1434,7 @@ static struct Ast *parse_module(Lex *lex, paw_Reader input, void *ud)
 struct Ast *p_parse(struct Compiler *C, paw_Reader input, void *ud)
 {
     Lex lex = {
+        .modname = C->modname,
         .dm = C->dm,
         .P = C->P,
     };

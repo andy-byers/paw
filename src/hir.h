@@ -114,33 +114,14 @@ struct HirVarInfo {
     int index;
 };
 
-DECLARE_LIST(struct Hir, pawHir_decl_list_, HirDeclList, struct HirDecl)
-DECLARE_LIST(struct Hir, pawHir_expr_list_, HirExprList, struct HirExpr)
-DECLARE_LIST(struct Hir, pawHir_stmt_list_, HirStmtList, struct HirStmt)
-DECLARE_LIST(struct Hir, pawHir_type_list_, HirTypeList, struct HirType)
-DECLARE_LIST(struct Hir, pawHir_symbol_list_, HirSymbolList, struct HirSymbol)
-DECLARE_LIST(struct Hir, pawHir_scope_list_, HirScopeList, struct HirScope)
-
 struct HirSegment {
     String *name;
     struct HirTypeList *types;
     struct HirType *type;
 };
 
-DECLARE_LIST(struct Hir, pawHir_path_, HirPath, struct HirSegment)
 
 struct HirSegment *pawHir_segment_new(struct Hir *hir);
-
-static inline struct HirSegment *pawHir_path_add(struct Hir *hir, struct HirPath **ppath, String *name,
-                                               struct HirTypeList *args, struct HirType *type)
-{
-    struct HirSegment *ps = pawHir_segment_new(hir);
-    ps->name = name;
-    ps->types = args;
-    ps->type = type;
-    pawHir_path_push(hir, ppath, ps);
-    return ps;
-}
 
 enum HirTypeKind {
 #define DEFINE_ENUM(a, b) kHir##a,
@@ -148,7 +129,9 @@ enum HirTypeKind {
 #undef DEFINE_ENUM
 };
 
-#define HIR_TYPE_HEADER enum HirTypeKind kind : 8
+#define HIR_TYPE_HEADER \
+    K_ALIGNAS_NODE int line; \
+    enum HirTypeKind kind: 8
 struct HirTypeHeader {
     HIR_TYPE_HEADER;
 };
@@ -226,11 +209,11 @@ enum HirDeclKind {
 #undef DEFINE_ENUM
 };
 
-#define HIR_DECL_HEADER \
-    struct HirType *type;  \
-    String *name;   \
-    int line;       \
-    DefId did;      \
+#define HIR_DECL_HEADER                  \
+    K_ALIGNAS_NODE struct HirType *type; \
+    String *name;                        \
+    int line;                            \
+    DefId did;                           \
     enum HirDeclKind kind : 8
 struct HirDeclHeader {
     HIR_DECL_HEADER; 
@@ -338,8 +321,8 @@ enum HirExprKind {
 #undef DEFINE_ENUM
 };
 
-#define HIR_EXPR_HEADER   \
-    int line;             \
+#define HIR_EXPR_HEADER        \
+    K_ALIGNAS_NODE int line;   \
     enum HirExprKind kind : 8; \
     struct HirType *type
 struct HirExprHeader {
@@ -494,8 +477,8 @@ enum HirStmtKind {
 #undef DEFINE_ENUM
 };
 
-#define HIR_STMT_HEADER \
-    int line;           \
+#define HIR_STMT_HEADER      \
+    K_ALIGNAS_NODE int line; \
     enum HirStmtKind kind : 8
 struct HirStmtHeader {
     HIR_STMT_HEADER;
@@ -669,8 +652,7 @@ void pawHir_type_folder_init(struct HirTypeFolder *F, void *state);
 struct HirType *pawHir_fold_type(struct HirTypeFolder *F, struct HirType *type);
 
 struct Hir {
-    struct Pool small;
-    struct Pool large;
+    struct Pool pool;
     struct HirType *builtin[7];
     struct HirSymtab *symtab;
     struct HirStmtList *prelude;
@@ -684,6 +666,14 @@ struct HirType *pawHir_new_type(struct Hir *hir, enum HirTypeKind kind);
 struct HirDecl *pawHir_new_decl(struct Hir *hir, enum HirDeclKind kind);
 struct HirExpr *pawHir_new_expr(struct Hir *hir, enum HirExprKind kind);
 struct HirStmt *pawHir_new_stmt(struct Hir *hir, enum HirStmtKind kind);
+
+DEFINE_LIST(struct Hir, pawHir_decl_list_, HirDeclList, struct HirDecl)
+DEFINE_LIST(struct Hir, pawHir_expr_list_, HirExprList, struct HirExpr)
+DEFINE_LIST(struct Hir, pawHir_stmt_list_, HirStmtList, struct HirStmt)
+DEFINE_LIST(struct Hir, pawHir_type_list_, HirTypeList, struct HirType)
+DEFINE_LIST(struct Hir, pawHir_symbol_list_, HirSymbolList, struct HirSymbol)
+DEFINE_LIST(struct Hir, pawHir_scope_list_, HirScopeList, struct HirScope)
+DEFINE_LIST(struct Hir, pawHir_path_, HirPath, struct HirSegment)
 
 #define HIR_CAST_DECL(x) ((struct HirDecl *)(x))
 #define HIR_CAST_EXPR(x) ((struct HirExpr *)(x))
@@ -724,6 +714,18 @@ static inline struct HirType *hir_map_value(struct HirType *t)
     return HirGetAdt(t)->types->data[1];
 }
 
+static inline struct HirSegment *pawHir_path_add(struct Hir *hir, struct HirPath **ppath, String *name,
+                                               struct HirTypeList *args, struct HirType *type)
+{
+    struct HirSegment *ps = pawHir_segment_new(hir);
+    ps->name = name;
+    ps->types = args;
+    ps->type = type;
+    pawHir_path_push(hir, ppath, ps);
+    return ps;
+}
+
+void pawHir_repr_path(struct Hir *hir, struct HirPath *path);
 void pawHir_repr_type(struct Hir *hir, struct HirType *type);
 void pawHir_dump_type(struct Hir *hir, struct HirType *type);
 void pawHir_dump_path(struct Hir *hir, struct HirPath *path);

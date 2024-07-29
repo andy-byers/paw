@@ -28,16 +28,6 @@ static inline String *pawP_scan_string(paw_Env *P, Map *st, const char *s)
     return pawP_scan_nstring(P, st, s, strlen(s));
 }
 
-// TODO: memcpy this thing over the start of freed lists, keep a pointer to the last free block somewhere
-//       use this construct to recycle freed arena allocations (threaded through the various arenas) probably need 1 per code representation (Ast, Hir, ...)
-//       when we receive a request for an allocation larger than the remaining size of the arena, say 1024 B where we only have 512 B left, we can save the slack of 512 B in this list
-//       before advancing to the next-sized arena, since we only consider 1 arena at a time
-struct FreeBlock {
-    struct FreeBlock *prev;
-    int size;
-    char data[];
-};
-
 struct Compiler {
     struct DynamicMem *dm;
     String *modname;

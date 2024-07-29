@@ -77,21 +77,15 @@ enum AstStmtKind {
 #undef DEFINE_ENUM
 };
 
-DECLARE_LIST(struct Ast, pawAst_decl_list_, AstDeclList, struct AstDecl)
-DECLARE_LIST(struct Ast, pawAst_expr_list_, AstExprList, struct AstExpr)
-DECLARE_LIST(struct Ast, pawAst_stmt_list_, AstStmtList, struct AstStmt)
-
 struct AstSegment {
     String *name;
     struct AstExprList *types;
 };
 
-DECLARE_LIST(struct Ast, pawAst_path_, AstPath, struct AstSegment)
-
-#define AST_DECL_HEADER       \
-    String *name;             \
-    int line;                 \
-    DefId def;                \
+#define AST_DECL_HEADER          \
+    K_ALIGNAS_NODE String *name; \
+    int line;                    \
+    DefId def;                   \
     enum AstDeclKind kind : 8
 
 struct AstDeclHeader {
@@ -169,8 +163,8 @@ struct AstDecl {
     AST_DECL_LIST(DEFINE_ACCESS)
 #undef DEFINE_ACCESS
 
-#define AST_EXPR_HEADER   \
-    int line;             \
+#define AST_EXPR_HEADER      \
+    K_ALIGNAS_NODE int line; \
     enum AstExprKind kind : 8
 
 #define AST_SUFFIXED_HEADER \
@@ -330,7 +324,7 @@ struct AstExpr {
 #undef DEFINE_ACCESS
 
 #define AST_STMT_HEADER       \
-    int line;                 \
+    K_ALIGNAS_NODE int line;  \
     enum AstStmtKind kind : 8
 
 struct AstStmtHeader {
@@ -416,8 +410,7 @@ struct AstStmt {
 #undef DEFINE_ACCESS
 
 struct Ast {
-    struct Pool large;
-    struct Pool small;
+    struct Pool pool;
     struct AstStmtList *prelude;
     struct AstStmtList *stmts;
     struct Lex *lex;
@@ -431,6 +424,11 @@ struct AstStmt *pawAst_new_stmt(struct Ast *ast, enum AstStmtKind kind);
 #define AST_CAST_DECL(x) cast(x, struct AstDecl *)
 #define AST_CAST_EXPR(x) cast(x, struct AstExpr *)
 #define AST_CAST_STMT(x) cast(x, struct AstStmt *)
+
+DEFINE_LIST(struct Ast, pawAst_decl_list_, AstDeclList, struct AstDecl)
+DEFINE_LIST(struct Ast, pawAst_expr_list_, AstExprList, struct AstExpr)
+DEFINE_LIST(struct Ast, pawAst_stmt_list_, AstStmtList, struct AstStmt)
+DEFINE_LIST(struct Ast, pawAst_path_, AstPath, struct AstSegment)
 
 struct Ast *pawAst_new(Lex *lex);
 void pawAst_free(struct Ast *ast);

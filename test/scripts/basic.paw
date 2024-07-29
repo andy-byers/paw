@@ -297,33 +297,32 @@
         test()
     }
 
-    // TODO: Fix this test
-   // {
-   //     struct Inner<T> {
-   //         val: T
-   //     }
-   //     struct Outer<T> {
-   //         opt: Option<Inner<T>>
-   //     }
-   //     fn opt<T>(t: T, a: bool, b: bool) -> Option<Outer<T>> {
-   //         if a {
-   //             if b {
-   //                 return Option::<Outer<T>>::Some(Outer::<T>{
-   //                     opt: Option::<Inner<T>>::Some(Inner::<T>{val: t}),
-   //                 })
-   //             } else {
-   //                 return Option::<Outer<T>>::Some(Outer::<T>{
-   //                     opt: Option::<Inner<T>>::None,
-   //                 })
-   //             }
-   //         } else {
-   //             return Option::<Outer<T>>::None
-   //         }
-   //     }
-   //     opt(42, true, true)
-   //     opt(42, true, false)
-   //     opt(42, false, false)
-   // }
+    {
+        struct Inner<T> {
+            val: T
+        }
+        struct Outer<T> {
+            opt: Option<Inner<T>>
+        }
+        fn opt<T>(t: T, a: bool, b: bool) -> Option<Outer<T>> {
+            if a {
+                if b {
+                    return Option::<Outer<T>>::Some(Outer::<T>{
+                        opt: Option::<Inner<T>>::Some(Inner::<T>{val: t}),
+                    })
+                } else {
+                    return Option::<Outer<T>>::Some(Outer::<T>{
+                        opt: Option::<Inner<T>>::None,
+                    })
+                }
+            } else {
+                return Option::<Outer<T>>::None
+            }
+        }
+        opt(42, true, true)
+        opt(42, true, false)
+        opt(42, false, false)
+    }
 }
 
 {

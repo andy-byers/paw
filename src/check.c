@@ -25,7 +25,7 @@
 #define type_error(R, ...) pawE_error(ENV(R), PAW_ETYPE, -1, __VA_ARGS__)
 #define cached_str(R, i) pawE_cstr(ENV(R), cast_size(i))
 #define basic_decl(R, code) basic_symbol(R, code)->decl
-#define flag2code(flag) (-(flag) - 1)
+#define FLAG2CODE(flag) (-(flag) - 1)
 #define TYPE2CODE(R, type) (pawP_type2code((R)->C, type))
 
 // NOTE: HirFuncPtr and HirFuncDef share the same common initial sequence, so
@@ -487,63 +487,54 @@ static void allocate_decls(struct Resolver *R, struct HirDeclList *decls)
     }
 }
 
-typedef void (*DeclCallback)(struct Resolver *, struct HirDecl *);
+typedef void (*Instantiate)(struct Resolver *, struct HirTypeList *before, struct HirTypeList *after, struct HirDecl *);
 
-static struct HirDeclList *copy_fields(struct Resolver *R, struct HirDeclList *list)
-{
-    struct HirDeclList *copy = pawHir_decl_list_new(R->hir);
-    for (int i = 0; i < list->count; ++i) {
-        struct HirDecl *source = list->data[i];
-        struct HirDecl *target = pawHir_copy_decl(R->hir, source);
-        pawHir_decl_list_push(R->hir, &copy, target);
-    }
-    return copy;
-}
+static struct HirType *instantiate_type(struct Resolver *R, struct HirTypeList *before,
+                                        struct HirTypeList *after, struct HirType *target);
 
-static void register_fields(struct Resolver *R, struct HirDeclList *list, DeclCallback callback)
+static void instantiate_field(struct Resolver *R, struct HirTypeList *before, struct HirTypeList *after, struct HirDecl *decl)
 {
-    for (int i = 0; i < list->count; ++i) {
-        struct HirDecl *decl = list->data[i];
-        callback(R, decl);
-    }
-}
-
-static struct HirDeclList *transfer_fields(struct Resolver *R, struct HirDeclList *list, DeclCallback callback)
-{
-    struct HirDeclList *copy = pawHir_decl_list_new(R->hir);
-    for (int i = 0; i < list->count; ++i) {
-        struct HirDecl *source = list->data[i];
-        struct HirDecl *target = pawHir_copy_decl(R->hir, source);
-        callback(R, target); // determine types
-        pawHir_decl_list_push(R->hir, &copy, target);
-    }
-    return copy;
-}
-
-static void field_callback(struct Resolver *R, struct HirDecl *decl)
-{
+    decl->hdr.type = instantiate_type(R, before, after, HIR_TYPEOF(decl));
     new_local(R, decl->hdr.name, decl);
     add_def(R, decl);
 }
 
-static void variant_callback(struct Resolver *R, struct HirDecl *decl)
+static void instantiate_variant(struct Resolver *R, struct HirTypeList *before, struct HirTypeList *after, struct HirDecl *decl)
 {
-    struct HirDecl *result = pawHir_copy_decl(R->hir, decl);
-    struct HirVariantDecl *r = HirGetVariantDecl(result);
-    field_callback(R, decl);
+    struct HirVariantDecl *r = HirGetVariantDecl(decl);
+    instantiate_field(R, before, after, decl);
+    HirGetFuncDef(r->type)->did = r->did;
 
     enter_block(R, NULL);
-    allocate_decls(R, r->fields);
+    for (int j = 0; j < r->fields->count; ++j) {
+        struct HirDecl *field = r->fields->data[j];
+        instantiate_field(R, before, after, field);
+    }
     r->scope = leave_block(R);
-
-    r->type = r->type ? r->type : register_variant(R, r);
-    HirGetFuncDef(r->type)->base = r->type->fdef.base;
-    HirGetFuncDef(r->type)->did = r->did;
 }
 
-static void decl_callback(struct Resolver *R, struct HirDecl *decl)
+static struct HirDeclList *instantiate_fields(struct Resolver *R, struct HirTypeList *before, struct HirTypeList *after, struct HirDeclList *list, Instantiate callback)
 {
-    add_def(R, decl);
+    struct HirDeclList *copy = pawHir_decl_list_new(R->hir);
+    for (int i = 0; i < list->count; ++i) {
+        struct HirDecl *source = list->data[i];
+        struct HirDecl *target = pawHir_copy_decl(R->hir, source);
+        callback(R, before, after, target);
+        pawHir_decl_list_push(R->hir, &copy, target);
+    }
+    return copy;
+}
+
+static struct HirDeclList *transfer_fields(struct Resolver *R, struct HirDeclList *list)
+{
+    struct HirDeclList *copy = pawHir_decl_list_new(R->hir);
+    for (int i = 0; i < list->count; ++i) {
+        struct HirDecl *source = list->data[i];
+        struct HirDecl *target = pawHir_copy_decl(R->hir, source);
+        add_def(R, target);
+        pawHir_decl_list_push(R->hir, &copy, target);
+    }
+    return copy;
 }
 
 static struct HirDecl *find_func_instance(struct Resolver *R, struct HirFuncDecl *base, struct HirTypeList *types)
@@ -688,35 +679,36 @@ static struct HirTypeList *prep_func_inference(struct Resolver *R, struct HirTyp
     return target;
 }
 
-static void do_instantiate(struct Resolver *R, struct HirTypeList *before,
-                           struct HirTypeList *after, struct HirInstanceDecl *d)
+static struct HirType *instantiate_type(struct Resolver *R, struct HirTypeList *before,
+                                        struct HirTypeList *after, struct HirType *target)
+{
+    struct Subst subst;
+    struct HirTypeFolder F;
+    init_subst_folder(&F, &subst, R, before, after);
+    return F.Fold(&F, target);
+}
+
+static void prep_func_instance(struct Resolver *R, struct HirTypeList *before,
+                               struct HirTypeList *after, struct HirInstanceDecl *d)
 {
     struct Subst subst;
     struct HirTypeFolder F;
     init_subst_folder(&F, &subst, R, before, after);
 
-    if (HirIsFuncDef(d->type)) {
-        struct HirFuncDef *fdef = HirGetFuncDef(d->type);
-        struct HirTypeList *params = fdef->params;
-        for (int i = 0; i < params->count; ++i) {
-            params->data[i] = F.Fold(&F, params->data[i]);
-        }
-        fdef->result = F.Fold(&F, fdef->result);
-    } else {
-        d->type = F.Fold(&F, d->type);
-        for (int i = 0; i < d->fields->count; ++i) {
-            struct HirDecl *decl = pawHir_decl_list_get(d->fields, i);
-            decl->hdr.type = F.Fold(&F, HIR_TYPEOF(decl));
-        }
+    struct HirFuncDef *fdef = HirGetFuncDef(d->type);
+    struct HirTypeList *params = fdef->params;
+    for (int i = 0; i < params->count; ++i) {
+        params->data[i] = F.Fold(&F, params->data[i]);
     }
+    fdef->result = F.Fold(&F, fdef->result);
 }
 
-static void register_func_instance(struct Resolver *R, struct HirFuncDecl *base, struct HirInstanceDecl *inst, struct HirTypeList *types)
+static void instantiate_func_aux(struct Resolver *R, struct HirFuncDecl *base, struct HirInstanceDecl *inst, struct HirTypeList *types)
 {
     enter_block(R, NULL);
     inst->name = base->name;
 
-    inst->types = transfer_fields(R, base->generics, decl_callback);
+    inst->types = transfer_fields(R, base->generics);
     register_concrete_types(R, inst->types, types);
 
     struct HirType *r = register_decl_type(R, HIR_CAST_DECL(inst), kHirFuncDef);
@@ -728,18 +720,18 @@ static void register_func_instance(struct Resolver *R, struct HirFuncDecl *base,
 
     // NOTE: '.field_scope' not used for functions
     struct HirTypeList *generics = HirGetFuncDef(base->type)->types;
-    do_instantiate(R, generics, types, inst);
+    prep_func_instance(R, generics, types, inst);
 
     inst->scope = leave_block(R);
 }
 
-static void register_struct_instance(struct Resolver *R, struct HirAdtDecl *base,
-                                     struct HirInstanceDecl *inst, struct HirTypeList *types)
+static void instantiate_struct_aux(struct Resolver *R, struct HirAdtDecl *base,
+                                   struct HirInstanceDecl *inst, struct HirTypeList *types)
 {
     enter_block(R, NULL);
     inst->name = base->name;
 
-    inst->types = transfer_fields(R, base->generics, decl_callback);
+    inst->types = transfer_fields(R, base->generics);
     register_concrete_types(R, inst->types, types);
 
     struct HirType *r = register_decl_type(R, HIR_CAST_DECL(inst), kHirAdt);
@@ -750,15 +742,14 @@ static void register_struct_instance(struct Resolver *R, struct HirAdtDecl *base
     struct HirType *enclosing = R->adt;
     R->adt = inst->type;
 
-    inst->fields = copy_fields(R, base->fields);
+//    inst->fields = copy_fields(R, base->fields);
 
     struct HirTypeList *generics = HirGetAdt(base->type)->types;
-    do_instantiate(R, generics, types, inst);
+    inst->type = instantiate_type(R, generics, types, inst->type);
 
     enter_block(R, NULL);
-    register_fields(R, inst->fields, base->is_struct 
-            ? field_callback 
-            : variant_callback);
+    Instantiate callback = base->is_struct ? instantiate_field : instantiate_variant;
+    inst->fields = instantiate_fields(R, generics, types, base->fields, callback);
     inst->field_scope = leave_block(R);
 
     inst->scope = leave_block(R);
@@ -779,36 +770,6 @@ static struct HirDeclList *register_generics(struct Resolver *R, struct AstDeclL
     return list;
 }
 
-static struct HirDecl *instantiate_func(struct Resolver *R, struct HirFuncDecl *base, struct HirTypeList *types)
-{
-    if (types == NULL) {
-        return HIR_CAST_DECL(base);
-    }
-    struct HirDecl *inst = find_func_instance(R, base, types);
-    if (inst == NULL) {
-        inst = pawHir_new_decl(R->hir, kHirInstanceDecl);
-        inst->hdr.line = base->line;
-        pawHir_decl_list_push(R->hir, &base->monos, inst);
-        register_func_instance(R, base, &inst->inst, types);
-    }
-    return inst;
-}
-
-static struct HirDecl *instantiate_struct(struct Resolver *R, struct HirAdtDecl *base, struct HirTypeList *types)
-{
-    if (types == NULL) {
-        return HIR_CAST_DECL(base);
-    }
-    struct HirDecl *inst = find_struct_instance(R, base, types);
-    if (inst == NULL) {
-        inst = pawHir_new_decl(R->hir, kHirInstanceDecl);
-        inst->hdr.line = base->line;
-        pawHir_decl_list_push(R->hir, &base->monos, inst);
-        register_struct_instance(R, base, &inst->inst, types);
-    }
-    return inst;
-}
-
 static void check_template_param(struct Resolver *R, struct HirDeclList *params, struct HirTypeList *args)
 {
     if (args->count > params->count) {
@@ -818,19 +779,37 @@ static void check_template_param(struct Resolver *R, struct HirDeclList *params,
     }
 }
 
-static struct HirType *init_struct_template(struct Resolver *R, struct HirAdtDecl *base, struct HirTypeList *types)
+static struct HirDecl *instantiate_struct(struct Resolver *R, struct HirAdtDecl *base, struct HirTypeList *types)
 {
     check_template_param(R, base->generics, types);
-    struct HirDecl *inst = instantiate_struct(R, base, types);
-    return HIR_TYPEOF(inst);
+    if (types == NULL) {
+        return HIR_CAST_DECL(base);
+    }
+    struct HirDecl *inst = find_struct_instance(R, base, types);
+    if (inst == NULL) {
+        inst = pawHir_new_decl(R->hir, kHirInstanceDecl);
+        inst->hdr.line = base->line;
+        pawHir_decl_list_push(R->hir, &base->monos, inst);
+        instantiate_struct_aux(R, base, &inst->inst, types);
+    }
+    return inst;
 }
 
 
-static struct HirType *init_func_template(struct Resolver *R, struct HirFuncDecl *base, struct HirTypeList *types)
+static struct HirDecl *instantiate_func(struct Resolver *R, struct HirFuncDecl *base, struct HirTypeList *types)
 {
     check_template_param(R, base->generics, types);
-    struct HirDecl *inst = instantiate_func(R, base, types);
-    return HIR_TYPEOF(inst);
+    if (types == NULL) {
+        return HIR_CAST_DECL(base);
+    }
+    struct HirDecl *inst = find_func_instance(R, base, types);
+    if (inst == NULL) {
+        inst = pawHir_new_decl(R->hir, kHirInstanceDecl);
+        inst->hdr.line = base->line;
+        pawHir_decl_list_push(R->hir, &base->monos, inst);
+        instantiate_func_aux(R, base, &inst->inst, types);
+    }
+    return inst;
 }
 
 static struct HirType *instantiate(struct Resolver *R, struct HirDecl *base, struct HirTypeList *types)
@@ -839,14 +818,14 @@ static struct HirType *instantiate(struct Resolver *R, struct HirDecl *base, str
         return HIR_TYPEOF(base);
     }
     if (HIR_IS_POLY_ADT(base)) {
-        return init_struct_template(R, &base->adt, types);
+        base = instantiate_struct(R, &base->adt, types);
     } else if (HIR_IS_POLY_FUNC(base)) {
-        return init_func_template(R, &base->func, types);
+        base = instantiate_func(R, &base->func, types);
     }
     return HIR_TYPEOF(base);
 }
 
-static void register_base_func(struct Resolver *R, struct AstFuncDecl *d, struct HirFuncDecl *r)
+static void register_func(struct Resolver *R, struct AstFuncDecl *d, struct HirFuncDecl *r)
 {
     enter_block(R, NULL);
     if (d->generics != NULL) {
@@ -864,16 +843,6 @@ static void register_base_func(struct Resolver *R, struct AstFuncDecl *d, struct
     t->fdef.base = r->did;
     r->type = t;
 }
-
-//static struct HirScope *collect_fields(struct Resolver *R, struct HirDeclList *list)
-//{
-//    enter_block(R, NULL);
-//
-//    for (int i = 0; i < list->count; ++i) {
-//        new_local(R, NULL, list->data[i]);
-//    }
-//    return leave_block(R);
-//}
 
 static struct HirDecl *ResolveFieldDecl(struct Resolver *R, struct AstFieldDecl *d)
 {
@@ -936,7 +905,7 @@ static struct HirDecl *ResolveVariantDecl(struct Resolver *R, struct AstVariantD
 //    new_local(R, d->name, decl);
 //}
 
-static void register_base_struct(struct Resolver *R, struct AstAdtDecl *d, struct HirAdtDecl *r)
+static void register_struct(struct Resolver *R, struct AstAdtDecl *d, struct HirAdtDecl *r)
 {
     struct HirType *t = register_decl_type(R, HIR_CAST_DECL(r), kHirAdt);
     struct HirType *enclosing = R->adt;
@@ -959,11 +928,6 @@ static void register_base_struct(struct Resolver *R, struct AstAdtDecl *d, struc
     t->adt.types = collect_decl_types(R, r->generics);
     t->adt.base = r->did;
     r->type = t;
-
-    //enter_block(R, NULL);
-    //allocate_decls(R, r->fields);
-    //r->field_scope = leave_block(R);
-
 }
 
 static void resolve_func_body(struct Resolver *R, struct AstFuncDecl *d, struct HirFuncDecl *r, enum FuncKind kind)
@@ -1107,27 +1071,6 @@ static struct HirSegment *resolve_next_seg(struct Resolver *R, struct AstSegment
     pawHir_path_push(R->hir, &path, r);
     return r;
 }
-
-#if 0
-static void debug_path(AstPath *p)
-{
-    for (int i = 0; i < p->list->count; ++i) {
-        AstSegment *s = pawHir_path_get(p, i);
-        printf("%s", s->name->text);
-        if (s->types != NULL) {
-            printf("<");
-            for (int j = 0; j < s->types->count; ++j) {
-                printf("T");
-                if (j < s->types->count - 1) {
-                    printf(", ");
-                }
-            }
-            printf(">");
-        }
-    }
-    printf("\n");
-}
-#endif
 
 static struct HirPath *resolve_path(struct Resolver *R, struct AstPath *path)
 {
@@ -1359,14 +1302,6 @@ static struct HirType *new_vector_t(struct Resolver *R, struct HirType *elem_t)
     pawHir_type_list_push(R->hir, &types, elem_t);
     struct HirDecl *inst = instantiate_struct(R, &base->adt, types);
     return HIR_TYPEOF(inst);
-
-    //struct HirType *type = pawHir_new_type(R->hir, kHirAdt);
-    //type->adt.base = R->C->vector_did;
-    //type->adt.did = NO_DECL;
-    //struct HirTypeList *types = pawHir_type_list_new(R->hir);
-    //pawHir_type_list_push(R->hir, &types, elem_t);
-    //type->adt.types = types;
-    //return type;
 }
 
 static struct HirType *new_map_t(struct Resolver *R, struct HirType *key_t, struct HirType *value_t)
@@ -1380,18 +1315,6 @@ static struct HirType *new_map_t(struct Resolver *R, struct HirType *key_t, stru
     pawHir_type_list_push(R->hir, &types, value_t);
     struct HirDecl *inst = instantiate_struct(R, &base->adt, types);
     return HIR_TYPEOF(inst);
-
-    //if (!HirIsUnknown(key_t) && !HIR_IS_BASIC_T(key_t)) {
-    //    type_error(R, "key is not hashable");
-    //}
-    //struct HirType *type = pawHir_new_type(R->hir, kHirAdt);
-    //type->adt.base = R->C->map_did;
-    //type->adt.did = NO_DECL;
-    //struct HirTypeList *types = pawHir_type_list_new(R->hir);
-    //pawHir_type_list_push(R->hir, &types, key_t);
-    //pawHir_type_list_push(R->hir, &types, value_t);
-    //type->adt.types = types;
-    //return type;
 }
 
 static struct HirType *resolve_container_type(struct Resolver *R, struct AstContainerType *e)
@@ -1425,7 +1348,7 @@ static struct HirExpr *resolve_closure_expr(struct Resolver *R, struct AstClosur
     enter_block(R, NULL);
 
     r->params = resolve_decl_list(R, e->params);
-    allocate_decls(R, r->params); // TODO: Is this necessary??
+    allocate_decls(R, r->params);
 
     struct HirType *t = new_type(R, NO_DECL, kHirFuncPtr);
     t->fptr.params = collect_decl_types(R, r->params);
@@ -1451,7 +1374,7 @@ static struct HirDecl *ResolveAdtDecl(struct Resolver *R, struct AstAdtDecl *d)
 
     struct HirSymbol *symbol = new_symbol(R, d->name, result, d->is_global);
     symbol->is_type = PAW_TRUE;
-    register_base_struct(R, d, r);
+    register_struct(R, d, r);
     return result;
 }
 
@@ -1615,7 +1538,6 @@ static struct HirType *resolve_vector_lit(struct Resolver *R, struct AstContaine
         struct HirExpr *hir_expr = resolve_expr(R, ast_expr);
         unify(R, HIR_TYPEOF(hir_expr), elem_t);
 
-        hir_expr->hdr.type = elem_t; // TODO: This and the same logic in resolve_map_lit are likely not necessary. inference logic handles it
         pawHir_expr_list_push(R->hir, &r->items, hir_expr);
     }
     return new_vector_t(R, elem_t);
@@ -1635,7 +1557,6 @@ static struct HirType *resolve_map_lit(struct Resolver *R, struct AstContainerLi
         unify(R, k, key_t);
         unify(R, v, value_t);
 
-        hir_expr->hdr.type = value_t;
         pawHir_expr_list_push(R->hir, &r->items, hir_expr);
     }
     return new_map_t(R, key_t, value_t);
@@ -1732,8 +1653,9 @@ static struct HirType *resolve_composite_lit(struct Resolver *R, struct AstCompo
                                ? field_types->data[i]
                                : HIR_TYPEOF(pack.fields->data[i]);
         struct HirExpr *item = order->data[index];
+        struct HirType *item_t = expr_type(R, item);
         item->sitem.index = i;
-        unify(R, HIR_TYPEOF(item), field_t);
+        unify(R, item_t, field_t);
         pawH_remove(P, map, key);
     }
     if (pawH_length(map) > 0) {
@@ -1782,7 +1704,7 @@ static struct HirDecl *ResolveFuncDecl(struct Resolver *R, struct AstFuncDecl *d
 
     struct HirSymbol *symbol = declare_symbol(R, d->name, result, d->is_global);
     symbol->is_type = d->generics != NULL;
-    register_base_func(R, d, r);
+    register_func(R, d, r);
     resolve_func_body(R, d, r, FUNC_FUNCTION);
     define_symbol(symbol);
     return result;
@@ -2096,18 +2018,14 @@ static struct HirExpr *resolve_expr(struct Resolver *R, struct AstExpr *expr)
     }
 
     struct HirType *type = HIR_TYPEOF(r);
-    type = normalize(R, type);
-    if (is_unit_variant(R, type)) {
-//        type = type->fdef.result;
-    }
     r->hdr.line = expr->hdr.line;
-    r->hdr.type = type;
+    r->hdr.type = normalize(R, type);
     return r;
 }
 
 static void add_basic_builtin(struct Resolver *R, String *name)
 {
-    const paw_Type code = flag2code(name->flag);
+    const paw_Type code = FLAG2CODE(name->flag);
     struct HirType *type = R->hir->builtin[code];
 
     struct HirExpr *e = pawHir_new_expr(R->hir, kHirPathExpr);
@@ -2127,6 +2045,8 @@ static void add_basic_builtin(struct Resolver *R, String *name)
     symbol->is_init = PAW_TRUE;
 }
 
+// TODO: This whole thing is way too hacky. Reconcile with setup code in hir.c.
+//       Same with setup_module...
 static DefId add_container_builtin(struct Resolver *R, const char *name, paw_Type code,
                                    const char **generics)
 {
@@ -2149,7 +2069,7 @@ static DefId add_container_builtin(struct Resolver *R, const char *name, paw_Typ
     d->adt.type = R->hir->builtin[code];
     d->adt.type->adt.base = d->adt.did;
     d->adt.type->adt.did = d->adt.did;
-    // TODO: This whole thing is way too hacky. These were originally created in hir.c, adding generics to them
+    // TODO: These were originally created in hir.c, adding generics to them
     //       so they can be used with the normal template instantiation code.
     d->adt.type->adt.types = pawHir_type_list_new(R->hir);
     for (int i = 0; i < d->adt.generics->count; ++i) {
