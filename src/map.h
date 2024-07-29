@@ -81,7 +81,23 @@ void pawH_clone(paw_Env *P, StackPtr sp, Map *m);
 void pawH_key_error(paw_Env *P, Value key, paw_Type type);
 Value *pawH_create(paw_Env *P, Map *m, Value key);
 
-static inline size_t pawH_length(const Map *m) { return m->length; }
+static inline size_t pawH_length(const Map *m) 
+{
+    return m->length; 
+}
+
+static inline Value *pawH_get_(Map *m, Value key)
+{
+    if (m->length == 0) {
+        return NULL;
+    }
+    MapCursor mc = h_cursor_lookup(m, key);
+    if (h_is_occupied(&mc)) {
+        return h_cursor_value(&mc);
+    }
+    return NULL;
+}
+
 
 typedef enum MapAction {
     MAP_ACTION_NONE,

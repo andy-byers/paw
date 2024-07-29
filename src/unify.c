@@ -4,26 +4,30 @@
 //
 // unify.c: type unification module
 
-#include "ast.h"
+#include "hir.h"
 #include "code.h"
 #include "env.h"
+#include "mem.h"
 #include "parse.h"
+#include <limits.h>
 
-#define error(U, ...) pawE_error(env(U->lex), PAW_ETYPE, -1, __VA_ARGS__)
+#define error(U, ...) pawE_error(ENV(U), PAW_ETYPE, -1, __VA_ARGS__)
 
 typedef struct InferenceVar {
-    struct InferenceVar *parent;
-    AstType *type;
+    K_ALIGNAS_NODE struct InferenceVar *parent;
+    struct HirType *type;
     int rank;
 } InferenceVar;
 
+DEFINE_LIST(struct Hir, var_list_, VarList, struct InferenceVar)
+
 typedef struct UnificationTable {
-    struct UnificationTable *outer;
-    AstList *ivars; // vector of type variables
+    K_ALIGNAS_NODE struct UnificationTable *outer;
+    struct VarList *ivars; // vector of type variables
     int depth; // depth of binder
 } UnificationTable;
 
-static void overwrite_type(InferenceVar *ivar, const AstType *src)
+static void overwrite_type(InferenceVar *ivar, const struct HirType *src)
 {
     *ivar->type = *src;
 }
@@ -34,14 +38,14 @@ static InferenceVar *get_ivar(UnificationTable *table, int index)
     return table->ivars->data[index];
 }
 
-static void debug_log(const char *what, AstType *a, AstType *b)
+static void debug_log(const char *what, struct HirType *a, struct HirType *b)
 {
 #ifdef PAW_DEBUG_UNIFY
     paw_assert(a && b);
     printf("%s: ", what);
-    pawA_repr_type(stdout, a);
+    pawAst_repr_type(stdout, a);
     fprintf(stdout, " = ");
-    pawA_repr_type(stdout, b);
+    pawAst_repr_type(stdout, b);
     fprintf(stdout, "\n");
 #else
     paw_unused(what);
@@ -70,7 +74,7 @@ static void link_roots(InferenceVar *a, InferenceVar *b)
     }
 }
 
-static void unify_var_type(InferenceVar *ivar, AstType *type)
+static void unify_var_type(InferenceVar *ivar, struct HirType *type)
 {
     debug_log("unify_var_type", ivar->type, type);
 
@@ -89,20 +93,20 @@ static void unify_var_var(InferenceVar *a, InferenceVar *b)
     }
 }
 
-static AstType *normalize_unknown(UnificationTable *table, AstType *type)
+static struct HirType *normalize_unknown(UnificationTable *table, struct HirType *type)
 {
     paw_assert(table->depth == type->unknown.depth);
     const int index = type->unknown.index;
     InferenceVar *ivar = get_ivar(table, index);
     const InferenceVar *root = find_root(ivar);
-    if (!a_is_unknown(root->type)) {
+    if (!HirIsUnknown(root->type)) {
         paw_assert(ivar != root);
         overwrite_type(ivar, root->type);
     }
     return root->type;
 }
 
-static void normalize_list(UnificationTable *table, AstList *list)
+static void normalize_list(UnificationTable *table, struct HirTypeList *list)
 {
     if (list == NULL) {
         return;
@@ -112,23 +116,23 @@ static void normalize_list(UnificationTable *table, AstList *list)
     }
 }
 
-AstType *pawU_normalize(UnificationTable *table, AstType *type)
+struct HirType *pawU_normalize(UnificationTable *table, struct HirType *type)
 {
-    switch (a_kind(type)) {
-        case AST_TYPE_FUNC:
-            normalize_list(table, type->func.types);
+    switch (HIR_KINDOF(type)) {
+        case kHirFuncDef:
+            normalize_list(table, type->fdef.types);
             // fallthrough
-        case AST_TYPE_FPTR:
-            normalize_list(table, type->func.params);
-            type->func.result = pawU_normalize(table, type->func.result);
+        case kHirFuncPtr:
+            normalize_list(table, type->fdef.params);
+            type->fdef.result = pawU_normalize(table, type->fdef.result);
             break;
-        case AST_TYPE_UNKNOWN:
+        case kHirUnknown:
             type = normalize_unknown(table, type);
             break;
-        case AST_TYPE_TUPLE:
+        case kHirTupleType:
             normalize_list(table, type->tuple.elems);
             break;
-        case AST_TYPE_ADT:
+        case kHirAdt:
             normalize_list(table, type->adt.types);
             break;
         default:
@@ -137,7 +141,7 @@ AstType *pawU_normalize(UnificationTable *table, AstType *type)
     return type;
 }
 
-static void unify_lists(Unifier *U, AstList *a, AstList *b)
+static void unify_lists(Unifier *U, struct HirTypeList *a, struct HirTypeList *b)
 {
     if (a->count != b->count) {
         error(U, "arity mismatch");
@@ -147,7 +151,7 @@ static void unify_lists(Unifier *U, AstList *a, AstList *b)
     }
 }
 
-static void unify_adt(Unifier *U, AstAdt *a, AstAdt *b)
+static void unify_adt(Unifier *U, struct HirAdt *a, struct HirAdt *b)
 {
     if (a->base != b->base) {
         error(U, "data types are incompatible");
@@ -158,18 +162,18 @@ static void unify_adt(Unifier *U, AstAdt *a, AstAdt *b)
     }
 }
 
-static void unify_tuple(Unifier *U, AstTupleType *a, AstTupleType *b)
+static void unify_tuple(Unifier *U, struct HirTupleType *a, struct HirTupleType *b)
 {
     unify_lists(U, a->elems, b->elems);
 }
 
-static void unify_func(Unifier *U, AstFuncPtr *a, AstFuncPtr *b)
+static void unify_func(Unifier *U, struct HirFuncPtr *a, struct HirFuncPtr *b)
 {
     unify_lists(U, a->params, b->params);
     pawU_unify(U, a->result, b->result);
 }
 
-static AstType *unify_generic(Unifier *U, AstType *a, AstType *b)
+static struct HirType *unify_generic(Unifier *U, struct HirType *a, struct HirType *b)
 {
     if (a->generic.did != b->generic.did) {
         error(U, "generic types are incompatible");
@@ -177,27 +181,27 @@ static AstType *unify_generic(Unifier *U, AstType *a, AstType *b)
     return a;
 }
 
-static void unify_types(Unifier *U, AstType *a, AstType *b)
+static void unify_types(Unifier *U, struct HirType *a, struct HirType *b)
 {
     debug_log("unify_types", a, b);
-    if (a_is_func(a) && a_is_func(b)) {
+    if (HirIsFuncType(a) && HirIsFuncType(b)) {
         // function pointer and definition types are compatible
         unify_func(U, &a->fptr, &b->fptr);
-    } else if (a_kind(a) != a_kind(b)) {
+    } else if (HIR_KINDOF(a) != HIR_KINDOF(b)) {
         error(U, "incompatible types");
-    } else if (a_is_tuple(a)) {
+    } else if (HirIsTupleType(a)) {
         unify_tuple(U, &a->tuple, &b->tuple);
-    } else if (a_is_adt(a)) {
+    } else if (HirIsAdt(a)) {
         unify_adt(U, &a->adt, &b->adt);
     } else {
-        paw_assert(a_kind(a) == AST_TYPE_GENERIC);
+        paw_assert(HirIsGeneric(a));
         unify_generic(U, a, b);
     }
 }
 
 // TODO: Indicate failure rather than throw errors inside, let the caller throw,
 // for better error messages
-void pawU_unify(Unifier *U, AstType *a, AstType *b)
+void pawU_unify(Unifier *U, struct HirType *a, struct HirType *b)
 {
     UnificationTable *ut = U->table;
 
@@ -205,15 +209,15 @@ void pawU_unify(Unifier *U, AstType *a, AstType *b)
     // cannonical type.
     a = pawU_normalize(ut, a);
     b = pawU_normalize(ut, b);
-    if (a_is_unknown(a)) {
+    if (HirIsUnknown(a)) {
         InferenceVar *va = get_ivar(ut, a->unknown.index);
-        if (a_is_unknown(b)) {
+        if (HirIsUnknown(b)) {
             InferenceVar *vb = get_ivar(ut, b->unknown.index);
             unify_var_var(va, vb);
         } else {
             unify_var_type(va, b);
         }
-    } else if (a_is_unknown(b)) {
+    } else if (HirIsUnknown(b)) {
         InferenceVar *vb = get_ivar(ut, b->unknown.index);
         unify_var_type(vb, a);
     } else {
@@ -223,20 +227,18 @@ void pawU_unify(Unifier *U, AstType *a, AstType *b)
     }
 }
 
-AstType *pawU_new_unknown(Unifier *U)
+struct HirType *pawU_new_unknown(Unifier *U)
 {
-    paw_Env *P = env(U->lex);
-    Ast *ast = U->lex->pm->ast;
+    paw_Env *P = ENV(U);
+    struct Hir *hir = U->hir;
     UnificationTable *table = U->table;
 
-    // NOTE: inference variables require a stable address, since they point to
-    //       each other
-    InferenceVar *ivar = pawK_pool_alloc(
-        P, &U->ast->sequences, sizeof(InferenceVar), paw_alignof(InferenceVar));
+    // NOTE: inference variables require a stable address, since they point to each other
+    InferenceVar *ivar = pawK_pool_alloc(P, &hir->pool, sizeof(InferenceVar));
     const int index = table->ivars->count;
-    pawA_list_push(U->ast, &table->ivars, ivar);
+    var_list_push(U->hir, &table->ivars, ivar);
 
-    AstType *type = pawA_new_type(ast, AST_TYPE_UNKNOWN);
+    struct HirType *type = pawHir_new_type(hir, kHirUnknown);
     type->unknown.depth = table->depth;
     type->unknown.index = index;
 
@@ -247,11 +249,10 @@ AstType *pawU_new_unknown(Unifier *U)
 
 void pawU_enter_binder(Unifier *U)
 {
-    paw_Env *P = env(U->lex);
-    UnificationTable *table =
-        pawK_pool_alloc(P, &U->ast->symbols, sizeof(UnificationTable),
-                        paw_alignof(UnificationTable));
-    table->ivars = pawA_list_new(U->ast);
+    paw_Env *P = ENV(U);
+    struct Hir *hir = U->hir;
+    UnificationTable *table = pawK_pool_alloc(P, &hir->pool, sizeof(UnificationTable));
+    table->ivars = var_list_new(U->hir);
     table->depth = U->depth;
     table->outer = U->table;
     U->table = table;
@@ -263,7 +264,7 @@ static void check_table(Unifier *U, UnificationTable *table)
     for (int i = 0; i < table->ivars->count; ++i) {
         const InferenceVar *var = get_ivar(table, i);
         pawU_normalize(table, var->type);
-        if (a_is_unknown(var->type)) {
+        if (HirIsUnknown(var->type)) {
             error(U, "unable to infer type");
         }
     }

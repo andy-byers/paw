@@ -444,10 +444,9 @@
 
                 n = n + 1
                 let m = n
-                fn closure() -> int {
+                f = || -> int {
                     return m + n
                 }
-                f = closure
                 // Need to emit instructions to close 'm' at the break and continue
                 // statements.
                 if b {
@@ -473,22 +472,19 @@
         for _ = 0, 10 {
             if n == 0 {
                 let _0 = 0
-                fn closure() -> int {return n + _0}
-                f = closure
+                f = || -> int {return n + _0}
                 break
             } else if n == 1 {
                 if n == 1 {
                     let _1 = 1
-                    fn closure() -> int {return n + _1}
-                    f = closure
+                    f = || -> int {return n + _1}
                     break
                 }
             } else if n == 2 {
                 if n == 2 {
                     if n == 2 {
                         let _2 = 2
-                        fn closure() -> int {return n + _2}
-                        f = closure
+                        f = || -> int {return n + _2}
                         break
                     }
                 }

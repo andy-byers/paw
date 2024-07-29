@@ -10,7 +10,7 @@
 #include "lib.h"
 #include "map.h"
 #include "mem.h"
-#include "parse.h"
+#include "compile.h"
 #include "paw.h"
 #include "rt.h"
 #include "str.h"
@@ -29,7 +29,8 @@ static void *default_alloc(void *ud, void *ptr, size_t size0, size_t size)
         return GC_MALLOC(size);
         // return malloc(size);
     } else if (size == 0) {
-        free(ptr);
+        GC_FREE(ptr);
+        // free(ptr);
         return NULL;
     }
     return GC_REALLOC(ptr, size);
@@ -252,29 +253,29 @@ void paw_pop(paw_Env *P, int n)
     pawC_stkdec(P, n);
 }
 
-struct ParseState {
+struct CompileState {
     paw_Reader input;
-    ParseMemory mem;
+    struct DynamicMem dm;
     const char *name;
     void *ud;
 };
 
-static void parse_aux(paw_Env *P, void *arg)
+static void compile_aux(paw_Env *P, void *arg)
 {
-    struct ParseState *p = arg;
-    pawP_parse(P, p->input, &p->mem, p->name, p->ud);
+    struct CompileState *p = arg;
+    pawP_compile(P, p->input, &p->dm, p->name, p->ud);
 }
 
 int paw_load(paw_Env *P, paw_Reader input, const char *name, void *ud)
 {
-    struct ParseState p = {
+    struct CompileState p = {
         .input = input,
         .name = name,
         .ud = ud,
     };
-    const int status = pawC_try(P, parse_aux, &p);
-    pawM_free_vec(P, p.mem.scratch.data, p.mem.scratch.alloc);
-    pawM_free_vec(P, p.mem.labels.values, p.mem.labels.capacity);
+    const int status = pawC_try(P, compile_aux, &p);
+    pawM_free_vec(P, p.dm.scratch.data, p.dm.scratch.alloc);
+    pawM_free_vec(P, p.dm.labels.values, p.dm.labels.capacity);
     return status;
 }
 

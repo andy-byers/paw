@@ -3,6 +3,7 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "lex.h"
 #include "auxlib.h"
+#include "compile.h"
 #include "gc_aux.h"
 #include "map.h"
 #include "mem.h"
@@ -77,9 +78,9 @@ static char next(struct Lex *x)
 
 static void save(struct Lex *x, char c)
 {
-    ParseMemory *pm = x->pm;
-    pawM_grow(x->P, pm->scratch.data, pm->scratch.size, pm->scratch.alloc);
-    pm->scratch.data[pm->scratch.size++] = c;
+    struct DynamicMem *dm = x->dm;
+    pawM_grow(x->P, dm->scratch.data, dm->scratch.size, dm->scratch.alloc);
+    dm->scratch.data[dm->scratch.size++] = c;
 }
 
 static paw_Bool test_next(struct Lex *x, char c)
@@ -124,10 +125,10 @@ static struct Token make_float(struct Lex *x)
 
 static struct Token make_string(struct Lex *x, TokenKind kind)
 {
-    ParseMemory *pm = x->pm;
-    struct CharVec *cv = &pm->scratch;
+    struct DynamicMem *dm = x->dm;
+    struct CharVec *cv = &dm->scratch;
     struct Token t = make_token(kind);
-    String *s = pawX_scan_string(x, cv->data, cast_size(cv->size));
+    String *s = pawP_scan_nstring(ENV(x), x->strings, cv->data, cast_size(cv->size));
     v_set_object(&t.value, s);
     cv->size = 0;
     return t;
@@ -321,7 +322,7 @@ Token consume_number(struct Lex *x)
 {
     // Save source text in a buffer until a byte is reached that cannot possibly
     // be part of a number.
-    ParseMemory *pm = x->pm;
+    struct DynamicMem *dm = x->dm;
     const char first = x->c;
     save_and_next(x);
 
@@ -350,9 +351,9 @@ Token consume_number(struct Lex *x)
     save(x, '\0');
 
     // on success, pushes a number onto the stack
-    if (pawV_parse_integer(x->P, pm->scratch.data)) {
-        if (pawV_parse_float(x->P, pm->scratch.data)) {
-            pawX_error(x, "invalid number '%s'", pm->scratch.data);
+    if (pawV_parse_integer(x->P, dm->scratch.data)) {
+        if (pawV_parse_float(x->P, dm->scratch.data)) {
+            pawX_error(x, "invalid number '%s'", dm->scratch.data);
         }
         return make_float(x);
     }
@@ -395,7 +396,7 @@ try_again:
     // cast to avoid sign extension
     Token token = T(cast(x->c, uint8_t));
     paw_Bool semi = PAW_FALSE;
-    x->pm->scratch.size = 0;
+    x->dm->scratch.size = 0;
     switch (x->c) {
         case '\n':
         case '\r':
@@ -529,9 +530,9 @@ TokenKind pawX_peek(struct Lex *x)
 void pawX_set_source(Lex *x, paw_Reader input, void *ud)
 {
     paw_Env *P = x->P;
-    ParseMemory *pm = x->pm;
-    pawM_resize(P, pm->scratch.data, 0, INITIAL_SCRATCH);
-    pm->scratch.alloc = INITIAL_SCRATCH;
+    struct DynamicMem *dm = x->dm;
+    pawM_resize(P, dm->scratch.data, 0, INITIAL_SCRATCH);
+    dm->scratch.alloc = INITIAL_SCRATCH;
 
     x->ud = ud;
     x->input = input;
@@ -539,16 +540,4 @@ void pawX_set_source(Lex *x, paw_Reader input, void *ud)
 
     next(x); // load first chunk of text
     pawX_next(x); // load first token
-}
-
-String *pawX_scan_string(Lex *x, const char *s, size_t n)
-{
-    paw_Env *P = x->P;
-    const Value *pv = pawC_pushns(P, s, n); // anchor
-    Value *value = pawH_action(P, x->strings, *pv, MAP_ACTION_CREATE);
-    *value = *pv; // anchor in map
-    paw_pop(P, 1);
-    check_gc(P);
-
-    return v_string(*value);
 }

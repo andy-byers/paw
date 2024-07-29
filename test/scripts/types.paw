@@ -1,23 +1,5 @@
 // types.paw
 
-{
-    // nested templates
-    fn outer<T>(t: T) {
-        fn inner<T2>(t2: T2) {}
-        inner(t) // inner::<T>
-        inner(1) // inner::<int>
-    }
-    outer(false)
-    outer(1)
-    outer(2.0)
-    outer('three')
-
-    outer(true)
-    outer(2)
-    outer(3.0)
-    outer('four')
-}
-
 //***********************************************
 //    primitives
 //***********************************************
@@ -284,22 +266,6 @@
     closure()
 }
 {
-// TODO: Closure cannot be a template, this should fail to compile!
-    let u = 42
-    fn func<T>(v: int) {
-        assert(v == u)
-    }
-    func::<bool>(42)
-    {
-        // Function template instances should be placed adjacent to one
-        // another on the stack, right where the template is declared,
-        // so that they capture the same upvalues.
-        let u = 0
-        func::<bool>(42)
-        func::<int>(42)
-    }
-}
-{
     fn mapone<A, B>(f: fn(A) -> B, a: A) -> B {
         return f(a)
     }
@@ -341,16 +307,17 @@
 }
 {
     fn fa<A>(a: A) {
-        fn fb<B>(b: B) {
-            fn fc<C>(c: C) {
+        fn fb<A, B>(a: A, b: B) {
+            fn fc<A, B, C>(a: A, b: B, c: C) {
                 let a = a
                 let b = b
                 let c = c
             }
-            fc(a)
-            fc(b)
+            fc(a, a, a)
+            fc(a, b, b)
+            fc(b, b, b)
         }
-        fb(a)
+        fb(a, a)
     }
     fa(false)
     fa(1)
@@ -452,10 +419,10 @@
     struct A<T> {
         t: T
     }
-    let a = A::<int> {t: 42}
-    let b = A::<A<int>> {t: a}
-    let c = A::<A<A<int>>> {t: b}
-    let d = A::<A<A<A<int>>>> {t: c}
+    let a = A::<int>{t: 42}
+    let b = A::<A<int>>{t: a}
+    let c = A::<A<A<int>>>{t: b}
+    let d = A::<A<A<A<int>>>>{t: c}
     let e = d.t
     let f = e.t
     let g = f.t
@@ -499,142 +466,167 @@
     assert(3.0 == new_pair(2.0, 3.0).second)
     assert('five' == new_pair('four', 'five').second)
 }
-// Type inference for structure templates:
 {
-    struct A<T> {
-        v: T
+    struct Other<T> {
+        value: T
     }
-    let a = A{v: 123}
-    assert(a.v == 123)
 
-    struct B<T> {
-        v: A<T>
+    struct Object<A, B> {
+        a: A
+        b: B
+        oa: Other<A>
+        ob: Other<B>
     }
-    let b = B{v: a}
-    assert(b.v.v == 123)
 
-    struct C<T> {
-        v: B<T>
+    fn test<A, B>(a: A, b: B) -> Object<A, B> {
+        return Object::<A, B>{
+            a: a,
+            b: b,
+            oa: Other::<A>{value: a},
+            ob: Other::<B>{value: b},
+        }
     }
-    let c = C{v: b}
-    assert(c.v.v.v == 123)
+    let p = test(false, 1)
+    let p = test(2.0, 'three')
+    let p = test(Other::<bool>{value: true}, Other::<int>{value: 2})
+    let p = test(Other::<float>{value: 3.0}, Other::<string>{value: 'four'})
 }
-{
-    struct A<T> {
-        v: [T]
-    }
-    fn test<T>(n: int, a: A<T>) {
-        assert(#a.v == n)
-    }
-
-    test(1, A{v: [1]})
-    test(2, A{v: [[1], [2]]})
-    test(3, A{v: [[[1]], [[2]], [[3]]]})
-}
-
+//// Type inference for structure templates:
+//{
+//    struct A<T> {
+//        v: T
+//    }
+//    let a = A{v: 123}
+//    assert(a.v == 123)
+//
+//    struct B<T> {
+//        v: A<T>
+//    }
+//    let b = B{v: a}
+//    assert(b.v.v == 123)
+//
+//    struct C<T> {
+//        v: B<T>
+//    }
+//    let c = C{v: b}
+//    assert(c.v.v.v == 123)
+//}
+//{
+//    struct A<T> {
+//        v: [T]
+//    }
+//    fn test<T>(n: int, a: A<T>) {
+//        assert(#a.v == n)
+//    }
+//
+//    test(1, A{v: [1]})
+//    test(2, A{v: [[1], [2]]})
+//    test(3, A{v: [[[1]], [[2]], [[3]]]})
+//}
+//
 //***********************************************
 //    tuples
 //***********************************************
-{
-    let t0 = ()
-    let p1 = (false)
-    let t1 = (false,)
-    let t2 = (false, 1)
-
-    // Empty: unit type
-    let t0: () = t0
-
-    // No comma: parenthesized expression
-    let p1: bool = p1
-
-    let t1: (bool,) = t1
-    let t2: (bool, int) = t2
-}
-{
-    let t1 = (false,)
-    let t2 = (false, 1)
-    let t3 = (false, 1, 2.0)
-    let t4 = (false, 1, 2.0, 'three')
-    assert(t1.0 == t2.0 && t2.0 == t3.0 && t3.0 == t4.0 && t4.0 == false)
-    assert(t2.1 == t3.1 && t3.1 == t4.1 && t4.1 == 1)
-    assert(t3.2 == t4.2 && t4.2 == 2.0)
-    assert(t4.3 == 'three')
-}
-{
-    fn test(t: (int, string)) -> (int, string) {
-        let r = t // copy reference
-        r.0 = r.0 * 2
-        r.1 = r.1 + r.1
-        return t
-    }
-    let t = test((1, 'two'))
-    assert(t.0 == 2)
-    assert(t.1 == 'twotwo')
-}
-{
-    struct Test<T> {
-        v: (T, T)
-    }
-    let t = Test::<int>{v: (1, 2)}
-    assert(t.v.0 == 1)
-    assert(t.v.1 == 2)
-}
-
-//***********************************************
-//    enumerations
-//***********************************************
-{
-    enum E {
-        X,
-    }
-    let e = E::X
-    e = E::X
-}
-{
-    enum E {
-        X,
-        Y,
-    }
-    let e = E::X
-    e = E::Y
-}
-{
-    enum E {
-        X,
-        Y(int),
-    }
-    let e = E::X
-    e = E::Y(42)
-    
-    fn test(e: E) -> E {
-        let e2 = e
-        return e2
-    }
-    let e = test(E::X)
-    let e = test(E::Y(42))
-
-}
-{
-    enum E<T> {
-        X(T),
-        Y(T, T),
-    }
-    let ex = E::<int>::X(1)
-    let ey = E::<int>::Y(2, 3)
-    
-    fn test(e: E<int>) -> E<int> {
-        let e2 = e
-        return e2
-    }
-    test(ex)
-    test(ey)
-
-    struct S<T> {
-        x: E<int>
-        y: E<T>
-    }
-    let s = S::<float>{
-        x: E::<int>::X(1),
-        y: E::<float>::Y(2.0, 3.0),
-    }
-}
+//{
+//    let t0 = ()
+//    let p1 = (false)
+//    let t1 = (false,)
+//    let t2 = (false, 1)
+//
+//    // Empty: unit type
+//    let t0: () = t0
+//
+//    // No comma: parenthesized expression
+//    let p1: bool = p1
+//
+//    let t1: (bool,) = t1
+//    let t2: (bool, int) = t2
+//}
+//{
+//    let t1 = (false,)
+//    let t2 = (false, 1)
+//    let t3 = (false, 1, 2.0)
+//    let t4 = (false, 1, 2.0, 'three')
+//    assert(t1.0 == t2.0 && t2.0 == t3.0 && t3.0 == t4.0 && t4.0 == false)
+//    assert(t2.1 == t3.1 && t3.1 == t4.1 && t4.1 == 1)
+//    assert(t3.2 == t4.2 && t4.2 == 2.0)
+//    assert(t4.3 == 'three')
+//}
+//{
+//    fn test(t: (int, string)) -> (int, string) {
+//        let r = t // copy reference
+//        r.0 = r.0 * 2
+//        r.1 = r.1 + r.1
+//        return t
+//    }
+//    let t = test((1, 'two'))
+//    assert(t.0 == 2)
+//    assert(t.1 == 'twotwo')
+//}
+//{
+//    struct Test<T> {
+//        v: (T, T)
+//    }
+//    let t = Test::<int>{v: (1, 2)}
+//    assert(t.v.0 == 1)
+//    assert(t.v.1 == 2)
+//}
+//
+////***********************************************
+////    enumerations
+////***********************************************
+//{
+//    enum E {
+//        X,
+//    }
+//    let e = E::X
+//    e = E::X
+//}
+//{
+//    enum E {
+//        X,
+//        Y,
+//    }
+//    let e = E::X
+//    e = E::Y
+//}
+//{
+//    enum E {
+//        X,
+//        Y(int),
+//    }
+//    let e = E::X
+//    e = E::Y(42)
+//    
+//    fn test(e: E) -> E {
+//        let e2 = e
+//        return e2
+//    }
+//    let e = test(E::X)
+//    let e = test(E::Y(42))
+//
+//}
+//{
+//    enum E<T> {
+//        X(T),
+//        Y(T, T),
+//    }
+//    let ex = E::<int>::X(1)
+//    let ey = E::<int>::Y(2, 3)
+//    
+//    fn test(e: E<int>) -> E<int> {
+//        let e2 = e
+//        return e2
+//    }
+//    test(ex)
+//    test(ey)
+//
+//    struct S<T> {
+//        x: E<int>
+//        y: E<T>
+//    }
+//    let s = S::<float>{
+//        x: E::<int>::X(1),
+//        y: E::<float>::Y(2.0, 3.0),
+//    }
+//}

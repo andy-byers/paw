@@ -58,10 +58,10 @@
     pa = pawV_vec_new(P);      \
     v_set_object(pv, pa);
 
-#define vm_map_init(pm, pv) \
+#define vm_map_init(dm, pv) \
     pv = vm_push0();        \
-    pm = pawH_new(P);       \
-    v_set_object(pv, pm);
+    dm = pawH_new(P);       \
+    v_set_object(pv, dm);
 
 static void add_zeros(paw_Env *P, int n)
 {

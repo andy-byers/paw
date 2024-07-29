@@ -75,14 +75,14 @@ typedef struct Lex {
     Map *strings;
     String *modname;
     Closure *main;
+    struct Ast *ast;
 
     paw_Reader input;
     const char *chunk;
     size_t nchunk;
     char c;
 
-    struct ParseMemory *pm;
-    int talloc;
+    struct DynamicMem *dm;
 
     // Current token and 1 lookahead
     Token t;

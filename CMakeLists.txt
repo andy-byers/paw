@@ -46,9 +46,11 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/auxlib.h
             ${PAW_SOURCE_DIR}/call.h
             ${PAW_SOURCE_DIR}/code.h
+            ${PAW_SOURCE_DIR}/compile.h
             ${PAW_SOURCE_DIR}/debug.h
             ${PAW_SOURCE_DIR}/env.h
             ${PAW_SOURCE_DIR}/gc_aux.h
+            ${PAW_SOURCE_DIR}/hir.h
             ${PAW_SOURCE_DIR}/lex.h
             ${PAW_SOURCE_DIR}/lib.h
             ${PAW_SOURCE_DIR}/map.h
@@ -71,9 +73,11 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/check.c
             ${PAW_SOURCE_DIR}/code.c
             ${PAW_SOURCE_DIR}/codegen.c
+            ${PAW_SOURCE_DIR}/compile.c
             ${PAW_SOURCE_DIR}/debug.c
             ${PAW_SOURCE_DIR}/env.c
             ${PAW_SOURCE_DIR}/gc_aux.c
+            ${PAW_SOURCE_DIR}/hir.c
             #${PAW_SOURCE_DIR}/iolib.c
             ${PAW_SOURCE_DIR}/lex.c
             ${PAW_SOURCE_DIR}/lib.c
