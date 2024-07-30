@@ -163,19 +163,6 @@ static void float2int(paw_Env *P, paw_Float f, Value *pv)
     }
 }
 
-// Consume at most a single '-' at the start of the number
-static paw_Bool consume_prefix(const char **str)
-{
-    while (ISSPACE(**str)) {
-        ++*str;
-    }
-    if (**str == '-') {
-        ++*str;
-        return PAW_TRUE;
-    }
-    return PAW_FALSE;
-}
-
 void pawR_cast_bool(paw_Env *P, paw_Type type)
 {
     paw_assert(type < PAW_TSTRING);
@@ -213,6 +200,19 @@ void pawR_to_bool(paw_Env *P, paw_Type type)
     v_set_bool(pv, pawV_truthy(*pv, type));
 }
 
+// Consume at most a single '-' at the start of the number
+static paw_Bool consume_prefix(const char **str)
+{
+    while (ISSPACE(**str)) {
+        ++*str;
+    }
+    if (**str == '-') {
+        ++*str;
+        return PAW_TRUE;
+    }
+    return PAW_FALSE;
+}
+
 void pawR_to_int(paw_Env *P, paw_Type type)
 {
     StackPtr sp = vm_top(1);
@@ -220,17 +220,22 @@ void pawR_to_int(paw_Env *P, paw_Type type)
         const char *begin = v_text(*sp);
         const char *str = begin;
         const paw_Bool neg = consume_prefix(&str);
-        if (pawV_parse_integer(P, str)) {
+        const int rc = pawV_parse_uint64(P, str);
+        if (rc == PAW_ESYNTAX) {
             pawR_error(P, PAW_ESYNTAX, "invalid integer '%s'", str);
+        } else if (rc == PAW_EOVERFLOW) {
+            goto handle_overflow;
         }
-        if (neg) {
-            sp = vm_top(1); // new top
-            const paw_Int i = v_int(*sp);
-            if (i == PAW_INT_MIN) {
-                pawR_error(P, PAW_EOVERFLOW,
-                           "%I has no positive representation", i);
-            }
-            v_set_int(sp, -i);
+        sp = vm_top(1); // new top
+        const uint64_t u = sp->u;
+        if (u > PAW_INT_MAX) {
+            if (!neg || u - 1 > PAW_INT_MAX) {
+handle_overflow:
+                pawR_error(P, PAW_EOVERFLOW, "integer '%s' is out of range", str);
+            } 
+            v_set_int(sp, PAW_INT_MIN);
+        } else if (neg) {
+            v_set_int(sp, -paw_cast_int(u));
         }
         vm_shift(1);
     } else {

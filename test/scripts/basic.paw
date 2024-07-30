@@ -325,11 +325,17 @@
     }
 }
 
+// TODO: move to integer.paw (still needs to be fixed)
 {
     assert(1 << 0 == 1)
     assert(-1 << 0 == -1)
 
-    // TODO: Unable to parse PAW_INT_MIN, since it looks like -(PAW_INT_MAX + 1).
-    //       We throw an overflow error when attempting to parse the PAW_INT_MAX+1.
-    // let intmin = -9223372036854775808
+    let imin = -0x7FFFFFFFFFFFFFFF - 1
+    let imax = 0x7FFFFFFFFFFFFFFF
+    assert(imax == -(imin + 1))
+    assert(imin == -imax - 1)
+
+    assert(imin == -9223372036854775807 - 1)
+    assert(imax == 9223372036854775807)
 }
+

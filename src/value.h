@@ -178,11 +178,11 @@ static inline size_t pawV_check_abs(paw_Env *P, paw_Int index, size_t length)
     return cast_size(index);
 }
 
-// Convert a null-terminated string into an integer
+// Convert a null-terminated string into a 64-bit unsigned integer
 // Understands non-decimal base prefixes '0b', '0o', '0x', and their uppercase
-// counterparts. Returns -PAW_ESYNTAX if the integer is malformed,
-// -PAW_EOVERFLOW if it is large to fit in a paw_Int, and PAW_OK otherwise.
-int pawV_parse_integer(paw_Env *P, const char *text);
+// counterparts. Returns PAW_ESYNTAX if the integer is malformed,
+// PAW_EOVERFLOW if it is too large to fit in a paw_Int, and PAW_OK otherwise.
+int pawV_parse_uint64(paw_Env *P, const char *text);
 
 // Convert a null-terminated string into a float
 // Returns 0 on success, -1 otherwise.

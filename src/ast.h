@@ -430,7 +430,7 @@ DEFINE_LIST(struct Ast, pawAst_expr_list_, AstExprList, struct AstExpr)
 DEFINE_LIST(struct Ast, pawAst_stmt_list_, AstStmtList, struct AstStmt)
 DEFINE_LIST(struct Ast, pawAst_path_, AstPath, struct AstSegment)
 
-struct Ast *pawAst_new(Lex *lex);
+struct Ast *pawAst_new(struct Lex *lex);
 void pawAst_free(struct Ast *ast);
 
 struct AstSegment *pawAst_segment_new(struct Ast *ast);

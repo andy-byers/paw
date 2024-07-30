@@ -7,8 +7,9 @@
 #include "value.h"
 
 #define FIRST_KEYWORD TK_FN
-#define is_keyword(s) ((s)->flag > 0)
-#define is_builtin(s) ((s)->flag < 0)
+#define IS_KEYWORD(s) ((s)->flag > 0)
+#define IS_BUILTIN(s) ((s)->flag < 0)
+#define FLAG2CODE(x) (-(x) - 1)
 
 void pawX_read_integer(paw_Env *P, const char *data, int base);
 void pawX_read_float(paw_Env *P, const char *data);
@@ -64,12 +65,12 @@ enum MultiChar {
 
 typedef unsigned TokenKind;
 
-typedef struct Token {
+struct Token {
     TokenKind kind;
     Value value;
-} Token;
+};
 
-typedef struct Lex {
+struct Lex {
     paw_Env *P;
 
     Map *strings;
@@ -85,8 +86,8 @@ typedef struct Lex {
     struct DynamicMem *dm;
 
     // Current token and 1 lookahead
-    Token t;
-    Token t2;
+    struct Token t;
+    struct Token t2;
 
     void *ud;
 
@@ -95,15 +96,13 @@ typedef struct Lex {
     int expr_depth;
 
     paw_Bool add_semi;
-} Lex;
+};
 
-#define x_base_type(x, t) ((x)->mod->types[t])
+String *pawX_scan_string(struct Lex *lex, const char *s, size_t n);
+void pawX_set_source(struct Lex *lex, paw_Reader input, void *ud);
+TokenKind pawX_next(struct Lex *lex);
+TokenKind pawX_peek(struct Lex *lex);
 
-String *pawX_scan_string(Lex *lex, const char *s, size_t n);
-void pawX_set_source(Lex *lex, paw_Reader input, void *ud);
-TokenKind pawX_next(Lex *lex);
-TokenKind pawX_peek(Lex *lex);
-
-void pawX_error(Lex *lex, const char *fmt, ...);
+void pawX_error(struct Lex *lex, const char *fmt, ...);
 
 #endif // PAW_LEX_H

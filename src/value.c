@@ -442,41 +442,38 @@ static int check_suffix(const char *p, const char *text)
 
 #define is_fp(c) (c == 'e' || c == 'E' || c == '.')
 
-int pawV_parse_integer(paw_Env *P, const char *text)
+int pawV_parse_uint64(paw_Env *P, const char *text)
 {
-    int base = 10;
-    if (text[0] == '0') {
-        if (is_fp(text[1])) {
-            return -1; // maybe float
-        } else if ((base = char2base(text[1])) > 0) {
-            text += 2; // non-decimal integer
-        } else if (text[1]) {
-            return -1; // junk after '0'
+    int rc;
+    unsigned base = 10;
+    const char *p = text;
+    if (p[0] == '0') {
+        if ((rc = char2base(p[1])) > 0) {
+            p += 2; // skip base prefix
+            base = cast(rc, unsigned);
+        } else if (p[1] == '\0') {
+            pawC_pushi(P, 0);
+            return PAW_OK;
         } else {
-            pawC_pushi(P, 0); // exactly 0
-            return 0;
+            return PAW_ESYNTAX;
         }
     }
-    paw_Int value = 0;
-    const char *p = text;
+    uint64_t value = 0;
     for (; ISHEX(*p); ++p) {
-        const int v = HEXVAL(*p);
+        const unsigned v = HEXVAL(*p);
         if (v >= base) {
-            return -1;
-        }
-        // TODO: Need to be able to parse exactly PAW_INT_MIN (which cannot be
-        //       represented as a positive integer under 2s complement), handle
-        //       as a special case. No more big integers.
-        if (value > (PAW_INT_MAX - v) / base) {
-            return -1;
+            return PAW_ESYNTAX;
+        } else if (value > (UINT64_MAX - v) / base) {
+            return PAW_EOVERFLOW;
         }
         value = value * base + v;
     }
     if (check_suffix(p, text)) {
-        return -1;
+        return PAW_ESYNTAX;
     }
-    pawC_pushi(P, value);
-    return 0;
+    Value *pv = pawC_push0(P);
+    pv->u = value;
+    return PAW_OK;
 }
 
 #define skip_digits(p)      \
@@ -489,7 +486,7 @@ int pawV_parse_float(paw_Env *P, const char *text)
     // First, validate the number format.
     const char *p = text;
     if (p[0] == '0' && p[1] && !is_fp(p[1])) {
-        return -1;
+        return PAW_ESYNTAX;
     }
     skip_digits(p);
 
@@ -505,8 +502,8 @@ int pawV_parse_float(paw_Env *P, const char *text)
         skip_digits(p);
     }
     if (check_suffix(p, text)) {
-        return -1;
+        return PAW_ESYNTAX;
     }
     pawC_pushf(P, strtod(text, NULL));
-    return 0;
+    return PAW_OK;
 }

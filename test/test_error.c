@@ -1,7 +1,9 @@
 #include "auxlib.h"
+#include "call.h"
 #include "lib.h"
 #include "opcode.h"
 #include "os.h"
+#include "rt.h"
 #include "test.h"
 #include <limits.h>
 
@@ -159,8 +161,13 @@ static void test_type_error(void)
 
 static void test_syntax_error(void)
 {
-    // TODO: see README. need to update number parsing in lex.c/value.*
-//    test_compiler_error(PAW_ESYNTAX, "overflow_integer", "let i = -9223372036854775808");
+    test_compiler_error(PAW_ESYNTAX, "overflow_integer", "let d = -9223372036854775808"); // overflows before '-' applied
+    test_compiler_error(PAW_ESYNTAX, "binary_digit_range", "let b = 0b001201");
+    test_compiler_error(PAW_ESYNTAX, "octal_digit_range", "let o = 0o385273");
+    test_compiler_error(PAW_ESYNTAX, "hex_digit_range", "let x = 0x5A2CG3");
+    test_compiler_error(PAW_ESYNTAX, "malformed_binary", "let b = 0b00$101");
+    test_compiler_error(PAW_ESYNTAX, "malformed_octal", "let o = 0o37=273");
+    test_compiler_error(PAW_ESYNTAX, "malformed_hex", "let x = 0y5A2CF3");
     test_compiler_error(PAW_ESYNTAX, "stmt_after_return", "fn f() {return; f()}");
     test_compiler_error(PAW_ESYNTAX, "missing_right_paren", "fn f(a: int, b: int, c: int -> int {return (a + b + c)}");
     test_compiler_error(PAW_ESYNTAX, "missing_left_paren", "fn fa: int, b: int, c: int) -> int {return (a + b + c)}");
@@ -196,7 +203,8 @@ static void test_vector_error(void)
     test_compiler_error(PAW_ETYPE, "vector_cannot_infer", "let a = []");
     test_compiler_error(PAW_ETYPE, "vector_cannot_infer_binop", "let a = [] + []");
     test_compiler_error(PAW_ETYPE, "vector_use_before_inference", "let a = []; let b = #a");
-    test_compiler_error(PAW_ETYPE, "vector_incompatible_types", "let a = []; if true {a = [0]} else {a = [true]}");
+    test_compiler_error(PAW_ETYPE, "vector_incompatible_types", "let a = [1]; a = [2.0]");
+    test_compiler_error(PAW_ETYPE, "vector_incompatible_types_2", "let a = []; if true {a = [0]} else {a = [true]}");
     test_compiler_error(PAW_ETYPE, "vector_mixed_types", "let a = [1, 2, 3, 4, '5']");
     test_compiler_error(PAW_ETYPE, "vector_mixed_nesting", "let a = [[[1]], [[2]], [3]]");
 }
@@ -205,7 +213,8 @@ static void test_map_error(void)
 {
     test_compiler_error(PAW_ETYPE, "map_cannot_infer", "let a = [:]");
     test_compiler_error(PAW_ETYPE, "map_use_before_inference", "let a = [:]; let b = #a");
-    test_compiler_error(PAW_ETYPE, "map_incompatible_types", "let a = [:]; if true {a = [0: 0]} else {a = [1: true]}");
+    test_compiler_error(PAW_ETYPE, "map_incompatible_types", "let a = [1: 2]; a = [3: 4.0]");
+    test_compiler_error(PAW_ETYPE, "map_incompatible_types_2", "let a = [:]; if true {a = [0: 0]} else {a = [1: true]}");
     test_compiler_error(PAW_ETYPE, "map_mixed_types", "let a = [1: 2, 3: 4, 5: '6']");
     test_compiler_error(PAW_ETYPE, "map_mixed_nesting", "let a = [1: [1: 1], 2: [2: 2], 3: [3: [3: 3]]]");
     test_compiler_error(PAW_ETYPE, "map_nonhashable_literal_key", "let map = [[1]: 1]");

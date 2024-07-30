@@ -26,25 +26,25 @@ static void add_location(paw_Env *P, Buffer *print, const String *s, int line)
     pawL_add_fstring(P, print, ":%d: ", line);
 }
 
-void pawX_error(Lex *x, const char *fmt, ...)
+void pawX_error(struct Lex *x, const char *fmt, ...)
 {
     Buffer print;
-    paw_Env *P = x->P;
+    paw_Env *P = ENV(x);
     pawL_init_buffer(P, &print);
     add_location(P, &print, x->modname, x->line);
 
     va_list arg;
     va_start(arg, fmt);
-    pawL_add_vfstring(x->P, &print, fmt, arg);
+    pawL_add_vfstring(P, &print, fmt, arg);
     va_end(arg);
 
     pawL_push_result(P, &print);
-    pawC_throw(x->P, PAW_ESYNTAX);
+    pawC_throw(P, PAW_ESYNTAX);
 }
 
 static char next_raw(struct Lex *x)
 {
-    paw_Env *P = x->P;
+    paw_Env *P = ENV(x);
     if (x->nchunk == 0) {
         x->chunk = x->input(P, x->ud, &x->nchunk);
     }
@@ -79,7 +79,7 @@ static char next(struct Lex *x)
 static void save(struct Lex *x, char c)
 {
     struct DynamicMem *dm = x->dm;
-    pawM_grow(x->P, dm->scratch.data, dm->scratch.size, dm->scratch.alloc);
+    pawM_grow(ENV(x), dm->scratch.data, dm->scratch.size, dm->scratch.alloc);
     dm->scratch.data[dm->scratch.size++] = c;
 }
 
@@ -110,17 +110,24 @@ static struct Token make_token(TokenKind kind)
 
 static struct Token make_int(struct Lex *x)
 {
-    const Value v = x->P->top.p[-1];
-    Token t = {.value = v, .kind = TK_INTEGER};
-    pawC_stkdec(x->P, 1);
-    return t;
+    paw_Env *P = ENV(x);
+    const Value v = P->top.p[-1];
+    pawC_stkdec(P, 1);
+    return (struct Token){
+        .kind = TK_INTEGER,
+        .value = v, 
+    };
 }
 
 static struct Token make_float(struct Lex *x)
 {
-    const Value v = x->P->top.p[-1];
-    pawC_stkdec(x->P, 1);
-    return (Token){.value = v, .kind = TK_FLOAT};
+    paw_Env *P = ENV(x);
+    const Value v = P->top.p[-1];
+    pawC_stkdec(P, 1);
+    return (struct Token){
+        .kind = TK_FLOAT,
+        .value = v, 
+    };
 }
 
 static struct Token make_string(struct Lex *x, TokenKind kind)
@@ -142,7 +149,7 @@ static struct Token consume_name(struct Lex *x)
     }
     struct Token t = make_string(x, TK_NAME);
     const String *s = v_string(t.value);
-    if (s->flag > 0) {
+    if (IS_KEYWORD(s)) {
         t.kind = cast(s->flag, TokenKind);
     } else if (s->length > PAW_NAME_MAX) {
         pawX_error(x, "name (%I chars) is too long", paw_cast_int(s->length));
@@ -187,7 +194,7 @@ static int consume_utf8(struct Lex *x)
 
     uint32_t state = 0;
     do {
-        const uint8_t c = (uint8_t)x->c;
+        const uint8_t c = cast(x->c, uint8_t);
         state = kLookup1[c] + state * 12;
         state = kLookup2[state];
         save_and_next(x);
@@ -203,16 +210,16 @@ static int get_codepoint(struct Lex *x)
         save_and_next(x),
         save_and_next(x),
     };
-    if (!ISHEX(c[0]) || //
-        !ISHEX(c[1]) || //
-        !ISHEX(c[2]) || //
-        !ISHEX(c[3])) { //
+    if (!ISHEX(c[0]) || 
+            !ISHEX(c[1]) || 
+            !ISHEX(c[2]) || 
+            !ISHEX(c[3])) { 
         return -1;
     }
-    return HEXVAL(c[0]) << 12 | //
-           HEXVAL(c[1]) << 8 | //
-           HEXVAL(c[2]) << 4 | //
-           HEXVAL(c[3]); //
+    return HEXVAL(c[0]) << 12 | 
+        HEXVAL(c[1]) << 8 | 
+        HEXVAL(c[2]) << 4 | 
+        HEXVAL(c[3]); 
 }
 
 static struct Token consume_string(struct Lex *x)
@@ -318,19 +325,49 @@ static struct Token consume_string(struct Lex *x)
     goto handle_ascii;
 }
 
-Token consume_number(struct Lex *x)
+static int try_consume_int(struct Lex *x, struct Token *pt)
+{
+    paw_Env *P = ENV(x);
+    struct DynamicMem *dm = x->dm;
+    const int rc = pawV_parse_uint64(P, dm->scratch.data);
+    if (rc == PAW_EOVERFLOW) {
+         goto handle_overflow;
+    } else if (rc == PAW_ESYNTAX) {
+         return -1;
+    }
+    const Value *pv = &P->top.p[-1];
+    if (pv->u > PAW_INT_MAX) {
+handle_overflow:
+         pawX_error(x, "integer '%s' is out of range for 'int' type", dm->scratch.data);
+    }
+    *pt = make_int(x);
+    return rc;
+}
+
+static struct Token consume_float(struct Lex *x)
+{
+    struct DynamicMem *dm = x->dm;
+    const int rc = pawV_parse_float(ENV(x), dm->scratch.data);
+    if (rc != PAW_OK) {
+         pawX_error(x, "invalid number '%s'", dm->scratch.data);
+    }
+    return make_float(x);
+}
+
+static struct Token consume_number(struct Lex *x)
 {
     // Save source text in a buffer until a byte is reached that cannot possibly
     // be part of a number.
-    struct DynamicMem *dm = x->dm;
     const char first = x->c;
     save_and_next(x);
 
     // This 'if' statement will allow invalid strings like '.0x0', since we may
     // have already read a '.'. pawV_parse_float() handles those cases. Also
     // note that test_next2() saves the character.
-    if (first == '0' &&
-        (test_next2(x, "bB") || test_next2(x, "oO") || test_next2(x, "xX"))) {
+    if (first == '0' && 
+            (test_next2(x, "bB") || 
+             test_next2(x, "oO") || 
+             test_next2(x, "xX"))) {
     }
 
     // Consume adjacent floating-point indicators, exponents, and fractional
@@ -350,14 +387,9 @@ Token consume_number(struct Lex *x)
     }
     save(x, '\0');
 
-    // on success, pushes a number onto the stack
-    if (pawV_parse_integer(x->P, dm->scratch.data)) {
-        if (pawV_parse_float(x->P, dm->scratch.data)) {
-            pawX_error(x, "invalid number '%s'", dm->scratch.data);
-        }
-        return make_float(x);
-    }
-    return make_int(x);
+    struct Token token;
+    const int rc = try_consume_int(x, &token);
+    return rc == 0 ? token : consume_float(x);
 }
 
 static void skip_block_comment(struct Lex *x)
@@ -379,7 +411,7 @@ static void skip_line_comment(struct Lex *x)
     }
 }
 
-static void skip_whitespace(Lex *x)
+static void skip_whitespace(struct Lex *x)
 {
     while (x->c == ' ' || x->c == '\t' || x->c == '\f' || x->c == '\v' ||
            (is_newline(x) && !x->add_semi)) {
@@ -387,14 +419,14 @@ static void skip_whitespace(Lex *x)
     }
 }
 
-static Token advance(Lex *x)
+static struct Token advance(struct Lex *x)
 {
 try_again:
 #define T(kind) make_token(cast(kind, TokenKind))
     skip_whitespace(x);
 
     // cast to avoid sign extension
-    Token token = T(cast(x->c, uint8_t));
+    struct Token token = T(cast(x->c, uint8_t));
     paw_Bool semi = PAW_FALSE;
     x->dm->scratch.size = 0;
     switch (x->c) {
@@ -527,9 +559,9 @@ TokenKind pawX_peek(struct Lex *x)
 
 #define INITIAL_SCRATCH 128
 
-void pawX_set_source(Lex *x, paw_Reader input, void *ud)
+void pawX_set_source(struct Lex *x, paw_Reader input, void *ud)
 {
-    paw_Env *P = x->P;
+    paw_Env *P = ENV(x);
     struct DynamicMem *dm = x->dm;
     pawM_resize(P, dm->scratch.data, 0, INITIAL_SCRATCH);
     dm->scratch.alloc = INITIAL_SCRATCH;
@@ -541,3 +573,4 @@ void pawX_set_source(Lex *x, paw_Reader input, void *ud)
     next(x); // load first chunk of text
     pawX_next(x); // load first token
 }
+

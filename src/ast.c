@@ -12,7 +12,7 @@
 #define FIRST_ARENA_SIZE 512
 #define LARGE_ARENA_MIN 32
 
-struct Ast *pawAst_new(Lex *lex)
+struct Ast *pawAst_new(struct Lex *lex)
 {
     paw_Env *P = ENV(lex);
     struct Ast *tree = pawM_new(P, struct Ast);

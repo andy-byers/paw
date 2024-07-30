@@ -210,6 +210,24 @@ static void driver(void (*callback)(paw_Env *))
     test_close(P, &a);
 }
 
+static void parse_int(paw_Env *P, void *ud)
+{
+    paw_push_string(P, cast(ud, const char *));
+    pawR_to_int(P, PAW_TSTRING);
+}
+
+static void test_parse_int(paw_Env *P)
+{
+    // able to parse PAW_INT_MIN directly, since we consider the '-'
+    check(PAW_OK == pawC_try(P, parse_int, "-9223372036854775808")); 
+    check(PAW_OK == pawC_try(P, parse_int, "  -1")); // '-' must touch first digit
+    check(PAW_ESYNTAX == pawC_try(P, parse_int, "--1"));
+    check(PAW_ESYNTAX == pawC_try(P, parse_int, "- 1"));
+    check(PAW_ESYNTAX == pawC_try(P, parse_int, "01"));
+    check(PAW_EOVERFLOW == pawC_try(P, parse_int, "9223372036854775808")); 
+    check(PAW_EOVERFLOW == pawC_try(P, parse_int, "-9223372036854775809")); 
+}
+
 int main(void)
 {
     test_primitives();
@@ -217,5 +235,6 @@ int main(void)
     driver(test_map1);
     driver(test_map2);
     driver(test_map3);
+    driver(test_parse_int);
     return 0;
 }

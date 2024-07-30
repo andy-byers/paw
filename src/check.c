@@ -5,7 +5,6 @@
 // check.c: Implementation of the type checker. This code transforms an AST
 // from the parser into a graph by unifying types based on lexical scope.
 
-#include "check.h"
 #include "ast.h"
 #include "code.h"
 #include "compile.h"
@@ -25,7 +24,6 @@
 #define type_error(R, ...) pawE_error(ENV(R), PAW_ETYPE, -1, __VA_ARGS__)
 #define cached_str(R, i) pawE_cstr(ENV(R), cast_size(i))
 #define basic_decl(R, code) basic_symbol(R, code)->decl
-#define FLAG2CODE(flag) (-(flag) - 1)
 #define TYPE2CODE(R, type) (pawP_type2code((R)->C, type))
 
 // NOTE: HirFuncPtr and HirFuncDef share the same common initial sequence, so
@@ -33,7 +31,7 @@
 #define HIR_FPTR(t) check_exp(HirIsFuncType(t), &(t)->fptr)
 
 // Common state for type-checking routines
-typedef struct Resolver {
+struct Resolver {
     paw_Env *P;
     Map *strings;
     struct Compiler *C; // compiler state
@@ -49,7 +47,7 @@ typedef struct Resolver {
     int vector_gid;
     int map_gid;
     paw_Bool in_closure; // 1 if the enclosing function is a closure, else 0
-} Resolver;
+};
 
 static struct HirStmt *resolve_stmt(struct Resolver *, struct AstStmt *);
 static struct HirExpr *resolve_expr(struct Resolver *, struct AstExpr *);
@@ -237,42 +235,19 @@ static struct HirType *new_type(struct Resolver *R, DefId did, enum HirTypeKind 
     return type;
 }
 
-static struct HirType *decl_type_collector(struct Resolver *R, struct HirDecl *decl)
-{
-    paw_unused(R);
-    return HIR_TYPEOF(decl);
-}
-
-static struct HirType *expr_type_collector(struct Resolver *R, struct HirExpr *expr)
-{
-    paw_unused(R);
-    return HIR_TYPEOF(expr);
-}
-
-static struct HirType *generic_collector(struct Resolver *R, struct HirDecl *decl)
-{
-    struct HirGenericDecl *d = &decl->generic;
-    const DefId did = add_def(R, decl);
-    d->type = new_type(R, did, kHirGeneric);
-    d->type->generic.name = d->name;
-    d->type->generic.did = did;
-    return d->type;
-}
-
-#define DEFINE_COLLECTOR(name, T, collect)                                              \
+#define DEFINE_COLLECTOR(name, T)                                              \
     static struct HirTypeList *collect_##name(struct Resolver *R, struct T##List *list) \
     {                                                                                   \
         if (list == NULL) return NULL;                                                  \
         struct HirTypeList *new_list = pawHir_type_list_new(R->hir);                    \
         for (int i = 0; i < list->count; ++i) {                                         \
-            struct HirType *type = collect(R, list->data[i]);                           \
+            struct HirType *type = HIR_TYPEOF(list->data[i]);                           \
             pawHir_type_list_push(R->hir, &new_list, type);                             \
         }                                                                               \
         return new_list;                                                                \
     }
-DEFINE_COLLECTOR(decl_types, HirDecl, decl_type_collector)
-DEFINE_COLLECTOR(expr_types, HirExpr, expr_type_collector)
-DEFINE_COLLECTOR(generics, HirDecl, generic_collector)
+DEFINE_COLLECTOR(decl_types, HirDecl)
+DEFINE_COLLECTOR(expr_types, HirExpr)
 
 static void enter_inference_ctx(struct Resolver *R)
 {
@@ -564,18 +539,18 @@ static struct HirDecl *find_struct_instance(struct Resolver *R, struct HirAdtDec
 static struct HirDecl *instantiate_struct(struct Resolver *, struct HirAdtDecl *, struct HirTypeList *);
 static struct HirDecl *instantiate_func(struct Resolver *, struct HirFuncDecl *, struct HirTypeList *);
 
-typedef struct Subst {
+struct Subst {
     struct HirTypeList *before;
     struct HirTypeList *after;
-    Resolver *R;
-} Subst;
+    struct Resolver *R;
+};
 
 #define MAYBE_SUBST_LIST(F, list) ((list) != NULL ? subst_list(F, list) : NULL)
 
 static struct HirTypeList *subst_list(struct HirTypeFolder *F, struct HirTypeList *list)
 {
-    Subst *subst = F->state;
-    Resolver *R = subst->R;
+    struct Subst *subst = F->state;
+    struct Resolver *R = subst->R;
     struct HirTypeList *copy = pawHir_type_list_new(R->hir);
     for (int i = 0; i < list->count; ++i) {
         pawHir_type_list_push(R->hir, &copy, list->data[i]);
@@ -585,8 +560,8 @@ static struct HirTypeList *subst_list(struct HirTypeFolder *F, struct HirTypeLis
 
 static struct HirType *subst_fptr(struct HirTypeFolder *F, struct HirFuncPtr *t)
 {
-    Subst *subst = F->state;
-    Resolver *R = subst->R;
+    struct Subst *subst = F->state;
+    struct Resolver *R = subst->R;
     struct HirType *r = new_type(R, NO_DECL, kHirFuncPtr);
     r->fptr.params = subst_list(F, t->params);
     r->fptr.result = F->Fold(F, t->result);
@@ -595,8 +570,8 @@ static struct HirType *subst_fptr(struct HirTypeFolder *F, struct HirFuncPtr *t)
 
 static struct HirType *subst_fdef(struct HirTypeFolder *F, struct HirFuncDef *t)
 {
-    Subst *subst = F->state;
-    Resolver *R = subst->R;
+    struct Subst *subst = F->state;
+    struct Resolver *R = subst->R;
 
     if (t->types == NULL) {
         struct HirType *result = pawHir_new_type(R->hir, kHirFuncDef);
@@ -615,8 +590,8 @@ static struct HirType *subst_fdef(struct HirTypeFolder *F, struct HirFuncDef *t)
 
 static struct HirType *subst_adt(struct HirTypeFolder *F, struct HirAdt *t)
 {
-    Subst *subst = F->state;
-    Resolver *R = subst->R;
+    struct Subst *subst = F->state;
+    struct Resolver *R = subst->R;
 
     if (t->types == NULL) {
         return HIR_CAST_TYPE(t);
@@ -629,7 +604,7 @@ static struct HirType *subst_adt(struct HirTypeFolder *F, struct HirAdt *t)
 
 static struct HirType *maybe_subst(struct HirTypeFolder *F, struct HirType *t)
 {
-    Subst *s = F->state;
+    struct Subst *s = F->state;
     for (int i = 0; i < s->before->count; ++i) {
         if (are_types_same(t, s->before->data[i])) {
             return s->after->data[i];
@@ -664,19 +639,13 @@ static void init_subst_folder(struct HirTypeFolder *F, struct Subst *subst, stru
     F->FoldUnknown = subst_unknown;
 }
 
-// Make a copy of a function template's parameter list, with bound (by the
-// template) type variables replaced with inference variables. The types
-// returned by this function can be unified with the type of each argument
-// passed at the call site to determine a concrete type for each unknown.
-static struct HirTypeList *prep_func_inference(struct Resolver *R, struct HirTypeList *before,
-                                               struct HirTypeList *after, struct HirTypeList *target)
+static struct HirTypeList *instantiate_typelist(struct Resolver *R, struct HirTypeList *before,
+                                                struct HirTypeList *after, struct HirTypeList *target)
 {
     struct Subst subst;
     struct HirTypeFolder F;
     init_subst_folder(&F, &subst, R, before, after);
-
-    F.FoldList(&F, target);
-    return target;
+    return F.FoldList(&F, target);
 }
 
 static struct HirType *instantiate_type(struct Resolver *R, struct HirTypeList *before,
@@ -741,8 +710,6 @@ static void instantiate_struct_aux(struct Resolver *R, struct HirAdtDecl *base,
 
     struct HirType *enclosing = R->adt;
     R->adt = inst->type;
-
-//    inst->fields = copy_fields(R, base->fields);
 
     struct HirTypeList *generics = HirGetAdt(base->type)->types;
     inst->type = instantiate_type(R, generics, types, inst->type);
@@ -870,40 +837,6 @@ static struct HirDecl *ResolveVariantDecl(struct Resolver *R, struct AstVariantD
     r->type = register_variant(R, r);
     return result;
 }
-
-//static void register_variant_decl(struct Resolver *R, struct HirDecl *decl)
-//{
-//    struct HirVariantDecl *d = HirGetVariantDecl(decl);
-//    struct HirDecl *result = pawHir_new_decl(R->hir, kHirVariantDecl);
-//    struct HirVariantDecl *r = HirGetVariantDecl(result);
-//    add_def(R, result);
-//
-//    r->fields = transfer_fields(R, d->fields, decl_callback); // TODO
-//    r->index = d->index;
-//
-//    // An enum variant name can be thought of as a function from the type of the
-//    // variant's fields to the type of the enumeration. For example, given 'enum
-//    // E {X(string)}', E::X has type 'fn(string) -> E'.
-//    r->type = new_type(R, r->did, kHirFuncDef);
-//    r->type->fdef.base = R->adt->adt.did;
-//    r->type->fdef.types = pawHir_type_list_new(R->hir);
-//    r->type->fdef.params = collect_decl_types(R, r->fields);
-//    r->type->fdef.result = R->adt;
-//
-//    new_local(R, d->name, result);
-//    r->scope = collect_fields(R, d->fields);
-//}
-//
-//static void register_field_decl(struct Resolver *R, struct HirDecl *decl)
-//{
-//    struct HirFieldDecl *d = HirGetFieldDecl(decl);
-//
-//    add_def(R, decl);
-//
-//    d->type = d->type; // TODO: replace generics with concrete types, not using the symbol table for this
-//
-//    new_local(R, d->name, decl);
-//}
 
 static void register_struct(struct Resolver *R, struct AstAdtDecl *d, struct HirAdtDecl *r)
 {
@@ -1425,6 +1358,9 @@ struct Generalization {
     struct HirTypeList *fields;
 };
 
+// Replace generic parameters with inference variables (struct HirUnknown). The 
+// resulting '.fields' list can be unified with another list of types (argument or
+// struct field types) to infer a concrete type for each unknown.
 static struct Generalization generalize(struct Resolver *R, struct HirDeclList *generics, struct HirDeclList *fields)
 {
     if (generics == NULL) {
@@ -1433,7 +1369,7 @@ static struct Generalization generalize(struct Resolver *R, struct HirDeclList *
     struct HirTypeList *gtypes = collect_decl_types(R, generics);
     struct HirTypeList *ftypes = collect_decl_types(R, fields);
     struct HirTypeList *unknowns = new_unknowns(R, generics->count);
-    struct HirTypeList *replaced = prep_func_inference(R, gtypes, unknowns, ftypes);
+    struct HirTypeList *replaced = instantiate_typelist(R, gtypes, unknowns, ftypes);
     return (struct Generalization){
         .types = unknowns,
         .fields = replaced,
@@ -2147,7 +2083,7 @@ struct Hir *p_resolve(struct Compiler *C, struct Ast *ast)
     C->dm->unifier.hir = hir;
     C->dm->hir = hir;
 
-    Resolver R = {
+    struct Resolver R = {
         .C = C,
         .dm = C->dm,
         .ast = ast,
