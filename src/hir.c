@@ -5,6 +5,7 @@
 #include "compile.h"
 #include "map.h"
 #include "mem.h"
+#include "resolve.h"
 #include <inttypes.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -19,7 +20,7 @@
 
 static void add_builtin_type(struct Hir *hir, enum HirTypeKind kind, paw_Type code)
 {
-    hir->builtin[code] = pawHir_new_type(hir, kind);
+    hir->builtin[code] = pawHir_new_type(hir, 0, kind);
     hir->builtin[code]->adt.base = code;
     hir->builtin[code]->adt.did = code;
 }
@@ -52,16 +53,15 @@ void pawHir_free_hir(struct Hir *hir)
     pawM_free(P, hir);
 }
 
-#define NEW_NODE(hir, T) pawK_pool_alloc( \
-        ENV(hir), &(hir)->pool,           \
-        sizeof(struct T))
-#define DEFINE_NODE_CONSTRUCTOR(name, T)                                \
-        struct T *pawHir_new_##name(struct Hir *hir, enum T##Kind kind) \
-        {                                                               \
-            struct T *r = NEW_NODE(hir, T);                             \
-            r->hdr.line = -1 /*TODO*/;                                  \
-            r->hdr.kind = kind;                                         \
-            return r;                                                   \
+#define NEW_NODE(hir, T) pawK_pool_alloc(ENV(hir), &(hir)->pool, sizeof(struct T))
+
+#define DEFINE_NODE_CONSTRUCTOR(name, T) \
+        struct T *pawHir_new_##name(struct Hir *hir, int line, enum T##Kind kind) \
+        { \
+            struct T *r = NEW_NODE(hir, T); \
+            r->hdr.line = line; \
+            r->hdr.kind = kind; \
+            return r; \
         }
 DEFINE_NODE_CONSTRUCTOR(expr, HirExpr)
 DEFINE_NODE_CONSTRUCTOR(decl, HirDecl)
@@ -69,10 +69,11 @@ DEFINE_NODE_CONSTRUCTOR(stmt, HirStmt)
 
 #define LIST_MIN_ALLOC 8
 
-struct HirType *pawHir_new_type(struct Hir *hir, enum HirTypeKind kind)
+struct HirType *pawHir_new_type(struct Hir *hir, int line, enum HirTypeKind kind)
 {
     struct HirType *r = NEW_NODE(hir, HirType);
     r->hdr.kind = kind;
+    r->hdr.line = line;
     return r;
 }
 
@@ -132,13 +133,13 @@ void pawHir_add_scope(struct Hir *hir, struct HirSymtab *table, struct HirScope 
         pawC_throw(ENV(hir), PAW_EMEMORY);
 //        limit_error(hir->C, "scopes", UINT16_MAX); // TODO
     }
-    pawHir_scope_list_push(hir, &table->scopes, scope);
+    pawHir_scope_list_push(hir, table->scopes, scope);
 }
 
 struct HirSymbol *pawHir_add_symbol(struct Hir *hir, struct HirScope *table)
 {
     struct HirSymbol *symbol = pawHir_new_symbol(hir);
-    pawHir_symbol_list_push(hir, &table->symbols, symbol);
+    pawHir_symbol_list_push(hir, table->symbols, symbol);
     return symbol;
 }
 
@@ -156,16 +157,17 @@ int pawHir_find_symbol(struct HirScope *scope, const String *name)
     return -1;
 }
 
-#define DEFINE_LIST_VISITOR(name, T)                                                     \
+#define DEFINE_LIST_VISITOR(name, T) \
     static void visit_##name##_list(struct HirVisitor *V, struct Hir##T##List *list) \
-    {                                                                                    \
-        for (int i = 0; i < list->count; ++i) {                                          \
-            V->Visit##T(V, list->data[i]);                                               \
-        }                                                                                \
+    { \
+        for (int i = 0; i < list->count; ++i) { \
+            V->Visit##T(V, list->data[i]); \
+        } \
     }
 DEFINE_LIST_VISITOR(decl, Decl) 
 DEFINE_LIST_VISITOR(expr, Expr)
 DEFINE_LIST_VISITOR(stmt, Stmt)
+DEFINE_LIST_VISITOR(type, Type)
 
 static void VisitBlock(struct HirVisitor *V, struct HirBlock *s)
 {
@@ -178,13 +180,13 @@ static void VisitLogicalExpr(struct HirVisitor *V, struct HirLogicalExpr *e)
     V->VisitExpr(V, e->rhs);
 }
 
-static void VisitMapItem(struct HirVisitor *V, struct HirMapItem *e)
+static void VisitMapElem(struct HirVisitor *V, struct HirMapElem *e)
 {
     V->VisitExpr(V, e->key);
     V->VisitExpr(V, e->value);
 }
 
-static void VisitStructItem(struct HirVisitor *V, struct HirStructItem *e)
+static void VisitStructField(struct HirVisitor *V, struct HirStructField *e)
 {
     V->VisitExpr(V, e->value);
 }
@@ -266,8 +268,7 @@ static void VisitAdtDecl(struct HirVisitor *V, struct HirAdtDecl *d)
 
 static void VisitInstanceDecl(struct HirVisitor *V, struct HirInstanceDecl *d)
 {
-    V->VisitDeclList(V, d->types);
-    V->VisitDeclList(V, d->fields);
+    V->VisitTypeList(V, d->types);
 }
 
 static void VisitVarDecl(struct HirVisitor *V, struct HirVarDecl *d)
@@ -356,6 +357,41 @@ static void VisitDeclStmt(struct HirVisitor *V, struct HirDeclStmt *s)
     V->VisitDecl(V, s->decl);
 }
 
+static void VisitFuncDef(struct HirVisitor *V, struct HirFuncDef *t)
+{
+    MAYBE_VISIT_LIST(V, t->types, TypeList);
+    V->VisitTypeList(V, t->params);
+    V->VisitType(V, t->result);
+}
+
+static void VisitFuncPtr(struct HirVisitor *V, struct HirFuncPtr *t)
+{
+    V->VisitTypeList(V, t->params);
+    V->VisitType(V, t->result);
+}
+
+static void VisitTupleType(struct HirVisitor *V, struct HirTupleType *t)
+{
+    V->VisitTypeList(V, t->elems);
+}
+
+static void VisitAdt(struct HirVisitor *V, struct HirAdt *t)
+{
+    MAYBE_VISIT_LIST(V, t->types, TypeList);
+}
+
+static void VisitUnknown(struct HirVisitor *V, struct HirUnknown *t)
+{
+    paw_unused(V);
+    paw_unused(t);
+}
+
+static void VisitGeneric(struct HirVisitor *V, struct HirGeneric *t)
+{
+    paw_unused(V);
+    paw_unused(t);
+}
+
 static void VisitExpr(struct HirVisitor *V, struct HirExpr *node)
 {
     if (node == NULL) {
@@ -363,7 +399,7 @@ static void VisitExpr(struct HirVisitor *V, struct HirExpr *node)
     }
     switch (HIR_KINDOF(node)) {
 #define DEFINE_VISIT(a, b) case kHir##a: \
-        V->Visit##a(V, &node->b);        \
+        V->Visit##a(V, &node->b); \
         break;
         HIR_EXPR_LIST(DEFINE_VISIT)
 #undef DEFINE_VISIT
@@ -377,7 +413,7 @@ static void VisitDecl(struct HirVisitor *V, struct HirDecl *node)
     }
     switch (HIR_KINDOF(node)) {
 #define DEFINE_VISIT(a, b) case kHir##a: \
-        V->Visit##a(V, &node->b);        \
+        V->Visit##a(V, &node->b); \
         break;
         HIR_DECL_LIST(DEFINE_VISIT)
 #undef DEFINE_VISIT
@@ -391,32 +427,49 @@ static void VisitStmt(struct HirVisitor *V, struct HirStmt *node)
     }
     switch (HIR_KINDOF(node)) {
 #define DEFINE_VISIT(a, b) case kHir##a: \
-        V->Visit##a(V, &node->b);        \
+        V->Visit##a(V, &node->b); \
         break;
         HIR_STMT_LIST(DEFINE_VISIT)
 #undef DEFINE_VISIT
     }
 }
 
-void pawHir_visitor_init(struct HirVisitor *V, struct Hir *hir, union HirState state)
+static void VisitType(struct HirVisitor *V, struct HirType *node)
+{
+    if (node == NULL) {
+        return;
+    }
+    switch (HIR_KINDOF(node)) {
+#define DEFINE_VISIT(a, b) case kHir##a: \
+        V->Visit##a(V, &node->b); \
+        break;
+        HIR_TYPE_LIST(DEFINE_VISIT)
+#undef DEFINE_VISIT
+    }
+}
+
+void pawHir_visitor_init(struct HirVisitor *V, struct Hir *hir, void *ud)
 {
     *V = (struct HirVisitor){
         .hir = hir,
-        .state = state,
+        .ud = ud,
 
         .VisitExpr = VisitExpr,
         .VisitPath = VisitPath,
         .VisitDecl = VisitDecl,
         .VisitStmt = VisitStmt,
+        .VisitType = VisitType,
 
         .VisitExprList = visit_expr_list,
         .VisitDeclList = visit_decl_list,
         .VisitStmtList = visit_stmt_list,
+        .VisitTypeList = visit_type_list,
 
 #define DEFINE_CALLBACKS(a, b) .Visit##a = Visit##a,
         HIR_EXPR_LIST(DEFINE_CALLBACKS)
         HIR_DECL_LIST(DEFINE_CALLBACKS)
         HIR_STMT_LIST(DEFINE_CALLBACKS)
+        HIR_TYPE_LIST(DEFINE_CALLBACKS)
 #undef DEFINE_CALLBACKS
     };
 }
@@ -424,21 +477,22 @@ void pawHir_visitor_init(struct HirVisitor *V, struct Hir *hir, union HirState s
 void pawHir_visit(struct HirVisitor *V)
 {
     struct Hir *hir = V->hir;
-    V->VisitStmtList(V, hir->stmts);
+    V->VisitDeclList(V, hir->items);
 }
 
 // Generate code for folding a list of HIR nodes
-#define DEFINE_LIST_FOLDER(name, T)                                                                \
+#define DEFINE_LIST_FOLDER(name, T) \
     static struct Hir##T##List *fold_##name##_list(struct HirFolder *F, struct Hir##T##List *list) \
-    {                                                                                              \
-        for (int i = 0; i < list->count; ++i) {                                                    \
-            list->data[i] = F->Fold##T(F, list->data[i]);                                          \
-        }                                                                                          \
-        return list;                                                                               \
+    { \
+        for (int i = 0; i < list->count; ++i) { \
+            list->data[i] = F->Fold##T(F, list->data[i]); \
+        } \
+        return list; \
     } 
 DEFINE_LIST_FOLDER(decl, Decl) 
 DEFINE_LIST_FOLDER(expr, Expr)
 DEFINE_LIST_FOLDER(stmt, Stmt)
+DEFINE_LIST_FOLDER(type, Type)
 
 static struct HirStmt *FoldBlock(struct HirFolder *F, struct HirBlock *s)
 {
@@ -454,14 +508,14 @@ static struct HirExpr *FoldLogicalExpr(struct HirFolder *F, struct HirLogicalExp
     return HIR_CAST_EXPR(e);
 }
 
-static struct HirExpr *FoldMapItem(struct HirFolder *F, struct HirMapItem *e)
+static struct HirExpr *FoldMapElem(struct HirFolder *F, struct HirMapElem *e)
 {
     e->key = F->FoldExpr(F, e->key);
     e->value = F->FoldExpr(F, e->value);
     return HIR_CAST_EXPR(e);
 }
 
-static struct HirExpr *FoldStructItem(struct HirFolder *F, struct HirStructItem *e)
+static struct HirExpr *FoldStructField(struct HirFolder *F, struct HirStructField *e)
 {
     e->value = F->FoldExpr(F, e->value);
     return HIR_CAST_EXPR(e);
@@ -550,8 +604,7 @@ static struct HirDecl *FoldAdtDecl(struct HirFolder *F, struct HirAdtDecl *d)
 
 static struct HirDecl *FoldInstanceDecl(struct HirFolder *F, struct HirInstanceDecl *d)
 {
-    d->types = F->FoldDeclList(F, d->types);
-    d->fields = F->FoldDeclList(F, d->fields);
+    d->types = F->FoldTypeList(F, d->types);
     return HIR_CAST_DECL(d);
 }
 
@@ -654,6 +707,45 @@ static struct HirStmt *FoldDeclStmt(struct HirFolder *F, struct HirDeclStmt *s)
     return HIR_CAST_STMT(s);
 }
 
+static struct HirType *FoldFuncDef(struct HirFolder *F, struct HirFuncDef *t)
+{
+    t->types = MAYBE_FOLD_LIST(F, t->types, TypeList);
+    t->params = F->FoldTypeList(F, t->params);
+    t->result = F->FoldType(F, t->result);
+    return HIR_CAST_TYPE(t);
+}
+
+static struct HirType *FoldFuncPtr(struct HirFolder *F, struct HirFuncPtr *t)
+{
+    t->params = F->FoldTypeList(F, t->params);
+    t->result = F->FoldType(F, t->result);
+    return HIR_CAST_TYPE(t);
+}
+
+static struct HirType *FoldTupleType(struct HirFolder *F, struct HirTupleType *t)
+{
+    t->elems = F->FoldTypeList(F, t->elems);
+    return HIR_CAST_TYPE(t);
+}
+
+static struct HirType *FoldAdt(struct HirFolder *F, struct HirAdt *t)
+{
+    t->types = MAYBE_FOLD_LIST(F, t->types, TypeList);
+    return HIR_CAST_TYPE(t);
+}
+
+static struct HirType *FoldUnknown(struct HirFolder *F, struct HirUnknown *t)
+{
+    paw_unused(F);
+    return HIR_CAST_TYPE(t);
+}
+
+static struct HirType *FoldGeneric(struct HirFolder *F, struct HirGeneric *t)
+{
+    paw_unused(F);
+    return HIR_CAST_TYPE(t);
+}
+
 static struct HirExpr *FoldExpr(struct HirFolder *F, struct HirExpr *node)
 {
     if (node == NULL) {
@@ -693,24 +785,41 @@ static struct HirStmt *FoldStmt(struct HirFolder *F, struct HirStmt *node)
     }
 }
 
-void pawHir_fold_init(struct HirFolder *F, struct Hir *hir, union HirState state)
+static struct HirType *FoldType(struct HirFolder *F, struct HirType *node)
+{
+    if (node == NULL) {
+        return NULL;
+    }
+    switch (HIR_KINDOF(node)) {
+#define DEFINE_FOLD(a, b) case kHir##a: \
+        return F->Fold##a(F, &node->b);
+        HIR_TYPE_LIST(DEFINE_FOLD)
+#undef DEFINE_FOLD
+    }
+}
+
+void pawHir_folder_init(struct HirFolder *F, struct Hir *hir, void *ud)
 {
     *F = (struct HirFolder){
         .hir = hir,
-        .state = state,
+        .ud = ud,
 
         .FoldExpr = FoldExpr,
         .FoldPath = FoldPath,
         .FoldDecl = FoldDecl,
         .FoldStmt = FoldStmt,
+        .FoldType = FoldType,
+
         .FoldExprList = fold_expr_list,
         .FoldDeclList = fold_decl_list,
         .FoldStmtList = fold_stmt_list,
+        .FoldTypeList = fold_type_list,
 
 #define DEFINE_CALLBACKS(a, b) .Fold##a = Fold##a,
         HIR_EXPR_LIST(DEFINE_CALLBACKS)
         HIR_DECL_LIST(DEFINE_CALLBACKS)
         HIR_STMT_LIST(DEFINE_CALLBACKS)
+        HIR_TYPE_LIST(DEFINE_CALLBACKS)
 #undef DEFINE_CALLBACKS
     };
 }
@@ -718,108 +827,24 @@ void pawHir_fold_init(struct HirFolder *F, struct Hir *hir, union HirState state
 void pawHir_fold(struct HirFolder *F)
 {
     struct Hir *hir = F->hir;
-    F->FoldStmtList(F, hir->stmts);
-}
-
-static struct HirTypeList *FoldTypeList(struct HirTypeFolder *F, struct HirTypeList *list)
-{
-    // NOTE: Number of types in the list should never change.
-    for (int i = 0; i < list->count; ++i) {
-        list->data[i] = F->Fold(F, list->data[i]);
-    }
-    return list;
-}
-
-static struct HirType *FoldFuncDef(struct HirTypeFolder *F, struct HirFuncDef *t)
-{
-    t->types = MAYBE_FOLD_LIST(F, t->types, List);
-    t->params = F->FoldList(F, t->params);
-    t->result = F->Fold(F, t->result);
-    return HIR_CAST_TYPE(t);
-}
-
-static struct HirType *FoldFuncPtr(struct HirTypeFolder *F, struct HirFuncPtr *t)
-{
-    t->params = F->FoldList(F, t->params);
-    t->result = F->Fold(F, t->result);
-    return HIR_CAST_TYPE(t);
-}
-
-static struct HirType *FoldTupleType(struct HirTypeFolder *F, struct HirTupleType *t)
-{
-    t->elems = F->FoldList(F, t->elems);
-    return HIR_CAST_TYPE(t);
-}
-
-static struct HirType *FoldAdt(struct HirTypeFolder *F, struct HirAdt *t)
-{
-    if (t->types != NULL) {
-        t->types = F->FoldList(F, t->types);
-    }
-    return HIR_CAST_TYPE(t);
-}
-
-static struct HirType *FoldUnknown(struct HirTypeFolder *F, struct HirUnknown *t)
-{
-    paw_unused(F);
-    return HIR_CAST_TYPE(t);
-}
-
-static struct HirType *FoldGeneric(struct HirTypeFolder *F, struct HirGeneric *t)
-{
-    paw_unused(F);
-    return HIR_CAST_TYPE(t);
-}
-
-void pawHir_type_folder_init(struct HirTypeFolder *F, void *state)
-{
-    *F = (struct HirTypeFolder){
-        .state = state,
-        .Fold = pawHir_fold_type,
-        .FoldList = FoldTypeList,
-        .FoldTupleType = FoldTupleType,
-        .FoldFuncPtr = FoldFuncPtr,
-        .FoldFuncDef = FoldFuncDef,
-        .FoldAdt = FoldAdt,
-        .FoldUnknown = FoldUnknown,
-        .FoldGeneric = FoldGeneric,
-    };
-}
-
-struct HirType *pawHir_fold_type(struct HirTypeFolder *F, struct HirType *type)
-{
-    switch (y_kind(type)) {
-        case kHirGeneric:
-            return F->FoldGeneric(F, &type->generic);
-        case kHirUnknown:
-            return F->FoldUnknown(F, &type->unknown);
-        case kHirAdt:
-            return F->FoldAdt(F, &type->adt);
-        case kHirFuncPtr:
-            return F->FoldFuncPtr(F, &type->fptr);
-        case kHirTupleType:
-            return F->FoldTupleType(F, &type->tuple);
-        default:
-            paw_assert(HirIsFuncDef(type));
-            return F->FoldFuncDef(F, &type->fdef);
-    }
+    F->FoldDeclList(F, hir->items);
 }
 
 // ****************************
 //     HIR copying routines
 // ****************************
 
-typedef struct HirCopier {
+struct Copier {
     struct Hir *hir;
     paw_Env *P;
-} HirCopier;
+};
 
-#define DEFINE_COPY_PREP(name, T)                               \
+#define DEFINE_COPY_PREP(name, T) \
     static T *copy_prep_##name##_aux(struct HirFolder *F, T *t) \
-    {                                                           \
-        T *r = pawHir_new_##name(F->hir, HIR_KINDOF(t));        \
-        r->hdr = t->hdr;                                        \
-        return r;                                               \
+    { \
+        T *r = pawHir_new_##name(F->hir, t->hdr.line, HIR_KINDOF(t)); \
+        r->hdr = t->hdr; \
+        return r; \
     }
 DEFINE_COPY_PREP(expr, struct HirExpr) 
 DEFINE_COPY_PREP(decl, struct HirDecl)
@@ -831,24 +856,25 @@ DEFINE_COPY_PREP(stmt, struct HirStmt)
 #define copy_prep_decl(F, d) copy_prep_decl_aux(F, HIR_CAST_DECL(d))
 #define copy_prep_stmt(F, s) copy_prep_stmt_aux(F, HIR_CAST_STMT(s))
 
-#define DEFINE_COPY_LIST(name, T)                                                                  \
-    static struct Hir##T##List *copy_##name##s(struct HirFolder *F, struct Hir##T##List *old_list) \
-    {                                                                                              \
-        struct Hir##T##List *new_list = pawHir_##name##_list_new(F->hir);                          \
-        for (int i = 0; i < old_list->count; ++i) {                                                \
-            pawHir_##name##_list_push(F->hir, &new_list, old_list->data[i]);                       \
-        }                                                                                          \
-        F->Fold##T##List(F, new_list);                                                             \
-        return new_list;                                                                           \
+#define DEFINE_COPY_LIST(name, T) \
+    static struct Hir##T##List *copy_##name##_list(struct HirFolder *F, struct Hir##T##List *old_list) \
+    { \
+        struct Hir##T##List *new_list = pawHir_##name##_list_new(F->hir); \
+        for (int i = 0; i < old_list->count; ++i) { \
+            struct Hir##T *elem = F->Fold##T(F, old_list->data[i]); \
+            pawHir_##name##_list_push(F->hir, new_list, elem); \
+        } \
+        return new_list; \
     }
 DEFINE_COPY_LIST(decl, Decl) 
 DEFINE_COPY_LIST(expr, Expr)
 DEFINE_COPY_LIST(stmt, Stmt)
+DEFINE_COPY_LIST(type, Type)
 
 static struct HirStmt *copy_block_stmt(struct HirFolder *F, struct HirBlock *s)
 {
     struct HirStmt *r = copy_prep_stmt(F, s);
-    r->block.stmts = copy_stmts(F, s->stmts);
+    r->block.stmts = F->FoldStmtList(F, s->stmts);
     return r;
 }
 
@@ -862,7 +888,7 @@ static struct HirExpr *copy_logical_expr(struct HirFolder *F, struct HirLogicalE
     return r;
 }
 
-static struct HirExpr *copy_map_item(struct HirFolder *F, struct HirMapItem *e)
+static struct HirExpr *copy_map_elem(struct HirFolder *F, struct HirMapElem *e)
 {
     struct HirExpr *r = copy_prep_expr(F, e);
     r->mitem.key = F->FoldExpr(F, e->key);
@@ -870,7 +896,7 @@ static struct HirExpr *copy_map_item(struct HirFolder *F, struct HirMapItem *e)
     return r;
 }
 
-static struct HirExpr *copy_struct_item(struct HirFolder *F, struct HirStructItem *e)
+static struct HirExpr *copy_struct_field(struct HirFolder *F, struct HirStructField *e)
 {
     struct HirExpr *r = copy_prep_expr(F, e);
     r->sitem.name = e->name;
@@ -888,16 +914,16 @@ static struct HirExpr *copy_literal_expr(struct HirFolder *F, struct HirLiteralE
             r->literal.basic = e->basic;
             break;
         case kHirLitTuple:
-            r->literal.tuple.elems = copy_exprs(F, e->tuple.elems);
+            r->literal.tuple.elems = F->FoldExprList(F, e->tuple.elems);
             break;
         case kHirLitContainer:
             r->literal.cont.code = e->cont.code;
-            r->literal.cont.items = copy_exprs(F, e->comp.items);
+            r->literal.cont.items = F->FoldExprList(F, e->cont.items);
             break;
         default:
             paw_assert(e->lit_kind == kHirLitComposite);
             r->literal.comp.path = F->FoldPath(F, e->comp.path);
-            r->literal.comp.items = copy_exprs(F, e->comp.items);
+            r->literal.comp.items = F->FoldExprList(F, e->comp.items);
             break;
     }
     return r;
@@ -938,7 +964,7 @@ static struct HirStmt *copy_expr_stmt(struct HirFolder *F, struct HirExprStmt *s
 static struct HirExpr *copy_closure_expr(struct HirFolder *F, struct HirClosureExpr *e)
 {
     struct HirExpr *r = copy_prep_expr(F, e);
-    r->clos.params = copy_decls(F, e->params);
+    r->clos.params = F->FoldDeclList(F, e->params);
     r->clos.body = COPY_BLOCK(F, e->body);
     return r;
 }
@@ -954,7 +980,7 @@ static struct HirDecl *copy_type_decl(struct HirFolder *F, struct HirTypeDecl *d
 {
     struct HirDecl *r = copy_prep_decl(F, d);
     r->type.name = d->name;
-    r->type.generics = copy_decls(F, d->generics);
+    r->type.generics = F->FoldDeclList(F, d->generics);
     r->type.rhs = F->FoldExpr(F, d->rhs);
     return r;
 }
@@ -969,11 +995,10 @@ static struct HirDecl *copy_generic_decl(struct HirFolder *F, struct HirGenericD
 static struct HirDecl *copy_adt_decl(struct HirFolder *F, struct HirAdtDecl *d)
 {
     struct HirDecl *r = copy_prep_decl(F, d);
-    r->adt.is_global = d->is_global;
     r->adt.name = d->name;
-    r->adt.generics = copy_decls(F, d->generics);
-    r->adt.fields = copy_decls(F, d->fields);
-    r->adt.monos = copy_decls(F, d->monos);
+    r->adt.generics = F->FoldDeclList(F, d->generics);
+    r->adt.fields = F->FoldDeclList(F, d->fields);
+    r->adt.monos = F->FoldDeclList(F, d->monos);
     return r;
 }
 
@@ -981,7 +1006,7 @@ static struct HirDecl *copy_variant_decl(struct HirFolder *F, struct HirVariantD
 {
     struct HirDecl *r = copy_prep_decl(F, d);
     r->variant.name = d->name;
-    r->variant.fields = copy_decls(F, d->fields);
+    r->variant.fields = F->FoldDeclList(F, d->fields);
     r->variant.index = d->index;
     return r;
 }
@@ -989,7 +1014,6 @@ static struct HirDecl *copy_variant_decl(struct HirFolder *F, struct HirVariantD
 static struct HirDecl *copy_var_decl(struct HirFolder *F, struct HirVarDecl *d)
 {
     struct HirDecl *r = copy_prep_decl(F, d);
-    r->var.is_global = d->is_global;
     r->var.is_const = d->is_const;
     r->var.name = d->name;
     r->var.init = F->FoldExpr(F, d->init);
@@ -1015,7 +1039,8 @@ static struct HirExpr *copy_call_expr(struct HirFolder *F, struct HirCallExpr *e
 {
     struct HirExpr *r = copy_prep_expr(F, e);
     r->call.target = F->FoldExpr(F, e->target);
-    r->call.args = copy_exprs(F, e->args);
+    r->call.args = F->FoldExprList(F, e->args);
+    r->call.func = e->func;
     return r;
 }
 
@@ -1024,7 +1049,7 @@ static struct HirPath *copy_path(struct HirFolder *F, struct HirPath *e)
     struct HirPath *r = pawHir_path_new(F->hir);
     for (int i = 0; i < e->count; ++i) {
         struct HirSegment *seg = pawHir_path_get(e, i);
-        pawHir_path_add(F->hir, &r, seg->name, seg->types, seg->type);
+        pawHir_path_add(F->hir, r, seg->name, seg->types, seg->type);
     }
     return r;
 }
@@ -1039,13 +1064,12 @@ static struct HirExpr *copy_path_expr(struct HirFolder *F, struct HirPathExpr *e
 static struct HirDecl *copy_func_decl(struct HirFolder *F, struct HirFuncDecl *d)
 {
     struct HirDecl *r = copy_prep_decl(F, d);
-    r->func.is_global = d->is_global;
     r->func.receiver = NULL; // set during visit_*()
     r->func.name = d->name;
-    r->func.generics = copy_decls(F, d->generics);
-    r->func.params = copy_decls(F, d->params);
+    r->func.generics = F->FoldDeclList(F, d->generics);
+    r->func.params = F->FoldDeclList(F, d->params);
     r->func.body = COPY_BLOCK(F, d->body);
-    r->func.monos = copy_decls(F, d->monos);
+    r->func.monos = F->FoldDeclList(F, d->monos);
     r->func.fn_kind = d->fn_kind;
     return r;
 }
@@ -1079,6 +1103,7 @@ static struct HirStmt *copy_for_stmt(struct HirFolder *F, struct HirForStmt *s)
 {
     struct HirStmt *r = copy_prep_stmt(F, s);
     r->for_.is_fornum = s->is_fornum;
+    r->for_.control = F->FoldDecl(F, s->control);
     if (s->is_fornum) {
         r->for_.fornum.begin = F->FoldExpr(F, s->fornum.begin);
         r->for_.fornum.end = F->FoldExpr(F, s->fornum.end);
@@ -1116,10 +1141,13 @@ static struct HirStmt *copy_decl_stmt(struct HirFolder *F, struct HirDeclStmt *s
     return r;
 }
 
-static void setup_copy_pass(struct HirFolder *F, HirCopier *C)
+static void setup_copy_pass(struct HirFolder *F, struct Copier *C)
 {
-    const union HirState state = {.C = C};
-    pawHir_fold_init(F, C->hir, state);
+    pawHir_folder_init(F, C->hir, C);
+    F->FoldExprList = copy_expr_list;
+    F->FoldDeclList = copy_decl_list;
+    F->FoldStmtList = copy_stmt_list;
+    F->FoldTypeList = copy_type_list;
     F->FoldLiteralExpr = copy_literal_expr;
     F->FoldLogicalExpr = copy_logical_expr;
     F->FoldPath = copy_path;
@@ -1131,8 +1159,8 @@ static void setup_copy_pass(struct HirFolder *F, HirCopier *C)
     F->FoldCallExpr = copy_call_expr;
     F->FoldIndex = copy_index_expr;
     F->FoldSelector = copy_select_expr;
-    F->FoldMapItem = copy_map_item;
-    F->FoldStructItem = copy_struct_item;
+    F->FoldMapElem = copy_map_elem;
+    F->FoldStructField = copy_struct_field;
     F->FoldClosureExpr = copy_closure_expr;
     F->FoldBlock = copy_block_stmt;
     F->FoldExprStmt = copy_expr_stmt;
@@ -1153,7 +1181,7 @@ static void setup_copy_pass(struct HirFolder *F, HirCopier *C)
 
 struct HirDecl *pawHir_copy_decl(struct Hir *hir, struct HirDecl *decl)
 {
-    HirCopier C = {
+    struct Copier C = {
         .P = hir->P,
         .hir = hir,
     };
@@ -1162,597 +1190,217 @@ struct HirDecl *pawHir_copy_decl(struct Hir *hir, struct HirDecl *decl)
     return F.FoldDecl(&F, decl);
 }
 
-// *******************************
-//     HIR stenciling routines
-// *******************************
-
-typedef struct Subst {
-    struct HirStenciler *S;
+struct Subst {
+    struct Subst *outer;
     struct HirTypeList *before;
     struct HirTypeList *after;
-} Subst;
+    struct Stenciler *S;
+};
 
-static struct HirType *subst_type(struct HirFolder *F, struct HirType *type);
-
-typedef struct HirStenciler {
-    struct HirTypeFolder fold;
-    Subst subst;
-    Map *decls;
-    struct Hir *hir; // HIR being copied
+struct Expander {
+    struct HirFolder copy;
+    struct Subst *subst;
+    struct Resolver *R;
+    struct Hir *hir;
     paw_Env *P;
-} HirStenciler;
+    int nexpand;
+};
 
-static struct HirDecl *find_decl(HirStenciler *S, struct HirDecl *old_decl)
+static struct HirTypeList *expand_typelist(struct HirFolder *F, struct HirTypeList *list)
 {
-    const Value key = {.p = old_decl};
-    Value *pvalue = pawH_get(ENV(S), S->decls, key);
-    if (pvalue == NULL) {
-        return old_decl;
-    }
-    return pvalue->p;
-}
-
-static void link_decls(struct HirFolder *F, struct HirDecl *old_decl, struct HirDecl *new_decl)
-{
-    HirStenciler *S = F->state.S;
-    const Value key = {.p = old_decl};
-    const Value value = {.p = new_decl};
-    pawH_insert(ENV(S), S->decls, key, value);
-}
-
-#define MAYBE_STENCIL_DECL_LIST(F, list) ((list) != NULL ? stencil_decls(F, list) : NULL)
-
-#define DEFINE_STENCIL_PREP(name, T, body)                         \
-    static T *stencil_prep_##name##_aux(struct HirFolder *F, T *t) \
-    {                                                              \
-        T *r = pawHir_new_##name(F->hir, HIR_KINDOF(t));           \
-        r->hdr.kind = t->hdr.kind;                                 \
-        r->hdr.line = t->hdr.line;                                 \
-        body                                                       \
-        return r;                                                  \
-    }
-DEFINE_STENCIL_PREP(expr, struct HirExpr, 
-            { 
-                r->hdr.type = subst_type(F, HIR_TYPEOF(t)); 
-            })
-DEFINE_STENCIL_PREP(decl, struct HirDecl,
-            {
-                r->hdr.name = t->hdr.name;
-                r->hdr.did = pawHir_add_decl(F->hir, r);
-                link_decls(F, t, r); // subst_type() is dependant
-                struct HirType *type = subst_type(F, HIR_TYPEOF(t));
-                if (HirIsFuncDecl(r)) {
-                    type->fdef.did = r->hdr.did;
-                } else if (HirIsAdtDecl(r)) {
-                    type->adt.did = r->hdr.did;
-                }
-                r->hdr.type = type;
-                return r;
-            }) 
-DEFINE_STENCIL_PREP(stmt, struct HirStmt, {})
-
-// Helpers for stenciling: create a new node of the given type and kind,
-// and copy the common fields
-#define stencil_prep_expr(F, e) stencil_prep_expr_aux(F, HIR_CAST_EXPR(e))
-#define stencil_prep_decl(F, d) stencil_prep_decl_aux(F, HIR_CAST_DECL(d))
-#define stencil_prep_stmt(F, s) stencil_prep_stmt_aux(F, HIR_CAST_STMT(s))
-
-#define DEFINE_STENCIL_LIST(name, T)                                                                  \
-    static struct Hir##T##List *stencil_##name##s(struct HirFolder *F, struct Hir##T##List *old_list) \
-    {                                                                                                 \
-        struct Hir##T##List *new_list = pawHir_##name##_list_new(F->hir);                             \
-        for (int i = 0; i < old_list->count; ++i) {                                                   \
-            struct Hir##T *decl = F->Fold##T(F, old_list->data[i]);                                   \
-            pawHir_##name##_list_push(F->hir, &new_list, decl);                                       \
-        }                                                                                             \
-        return new_list;                                                                              \
-    }
-DEFINE_STENCIL_LIST(expr, Expr) 
-DEFINE_STENCIL_LIST(decl, Decl)
-DEFINE_STENCIL_LIST(stmt, Stmt)
-
-static struct HirStmt *stencil_block_stmt(struct HirFolder *F, struct HirBlock *s)
-{
-    struct HirStmt *r = stencil_prep_stmt(F, s);
-    r->block.stmts = stencil_stmts(F, s->stmts);
-    return r;
-}
-
-#define STENCIL_BLOCK(F, s) cast((F)->FoldBlock(F, s), struct HirBlock *)
-
-static struct HirExpr *stencil_logical_expr(struct HirFolder *F, struct HirLogicalExpr *e)
-{
-    struct HirExpr *r = stencil_prep_expr(F, e);
-    r->logical.lhs = F->FoldExpr(F, e->lhs);
-    r->logical.rhs = F->FoldExpr(F, e->rhs);
-    return r;
-}
-
-static struct HirExpr *stencil_map_item(struct HirFolder *F, struct HirMapItem *e)
-{
-    struct HirExpr *r = stencil_prep_expr(F, e);
-    r->mitem.key = F->FoldExpr(F, e->key);
-    r->mitem.value = F->FoldExpr(F, e->value);
-    return r;
-}
-
-static struct HirExpr *stencil_struct_item(struct HirFolder *F, struct HirStructItem *e)
-{
-    struct HirExpr *r = stencil_prep_expr(F, e);
-    r->sitem.name = e->name;
-    r->sitem.value = F->FoldExpr(F, e->value);
-    r->sitem.index = e->index;
-    return r;
-}
-
-static struct HirExpr *stencil_literal_expr(struct HirFolder *F, struct HirLiteralExpr *e)
-{
-    struct HirExpr *r = stencil_prep_expr(F, e);
-    r->literal.lit_kind = e->lit_kind;
-    switch (e->lit_kind) {
-        case kHirLitBasic:
-            r->literal.basic = e->basic;
-            break;
-        case kHirLitTuple:
-            r->literal.tuple.elems = stencil_exprs(F, e->tuple.elems);
-            break;
-        case kHirLitContainer:
-            r->literal.cont.code = e->cont.code;
-            r->literal.cont.items = stencil_exprs(F, e->cont.items);
-            break;
-        default:
-            paw_assert(e->lit_kind == kHirLitComposite);
-            r->literal.comp.path = F->FoldPath(F, e->comp.path);
-            r->literal.comp.items = stencil_exprs(F, e->comp.items);
-            break;
-    }
-    return r;
-}
-
-static struct HirExpr *stencil_chain_expr(struct HirFolder *F, struct HirChainExpr *e)
-{
-    struct HirExpr *r = stencil_prep_expr(F, e);
-    r->chain.target = F->FoldExpr(F, e->target);
-    return r;
-}
-
-static struct HirExpr *stencil_unop_expr(struct HirFolder *F, struct HirUnOpExpr *e)
-{
-    struct HirExpr *r = stencil_prep_expr(F, e);
-    r->unop.target = F->FoldExpr(F, e->target);
-    r->unop.op = e->op;
-    return r;
-}
-
-static struct HirExpr *stencil_binop_expr(struct HirFolder *F, struct HirBinOpExpr *e)
-{
-    struct HirExpr *r = stencil_prep_expr(F, e);
-    r->binop.lhs = F->FoldExpr(F, e->lhs);
-    r->binop.rhs = F->FoldExpr(F, e->rhs);
-    r->binop.op = e->op;
-    return r;
-}
-
-static struct HirStmt *stencil_expr_stmt(struct HirFolder *F, struct HirExprStmt *s)
-{
-    struct HirStmt *r = stencil_prep_stmt(F, s);
-    r->expr.lhs = F->FoldExpr(F, s->lhs);
-    r->expr.rhs = F->FoldExpr(F, s->rhs);
-    return r;
-}
-
-static struct HirExpr *stencil_closure_expr(struct HirFolder *F, struct HirClosureExpr *e)
-{
-    struct HirExpr *r = stencil_prep_expr(F, e);
-    r->clos.params = stencil_decls(F, e->params);
-    r->clos.body = STENCIL_BLOCK(F, e->body);
-    return r;
-}
-
-static struct HirDecl *stencil_field_decl(struct HirFolder *F, struct HirFieldDecl *d)
-{
-    struct HirDecl *r = stencil_prep_decl(F, d);
-    r->field.name = d->name;
-    return r;
-}
-
-static struct HirDecl *stencil_type_decl(struct HirFolder *F, struct HirTypeDecl *d)
-{
-    struct HirDecl *r = stencil_prep_decl(F, d);
-    r->type.name = d->name;
-    r->type.generics = MAYBE_STENCIL_DECL_LIST(F, d->generics);
-    r->type.rhs = F->FoldExpr(F, d->rhs);
-    return r;
-}
-
-static struct HirDecl *stencil_generic_decl(struct HirFolder *F, struct HirGenericDecl *d)
-{
-    struct HirDecl *r = stencil_prep_decl(F, d);
-    r->generic.name = d->name;
-    return r;
-}
-
-static struct HirDecl *stencil_variant_decl(struct HirFolder *F, struct HirVariantDecl *d)
-{
-    struct HirDecl *r = stencil_prep_decl(F, d);
-    r->variant.name = d->name;
-
-    r->variant.fields = stencil_decls(F, d->fields);
-    r->variant.index = d->index;
-    return r;
-}
-
-static struct HirDecl *stencil_adt_decl(struct HirFolder *F, struct HirAdtDecl *d)
-{
-    struct HirDecl *r = stencil_prep_decl(F, d);
-
-    r->adt.name = d->name;
-    r->adt.is_global = d->is_global;
-    r->adt.is_struct = d->is_struct;
-    r->adt.generics = MAYBE_STENCIL_DECL_LIST(F, d->generics);
-    r->adt.fields = stencil_decls(F, d->fields);
-    r->adt.monos = MAYBE_STENCIL_DECL_LIST(F, d->monos);
-    return r;
-}
-
-static struct HirDecl *stencil_var_decl(struct HirFolder *F, struct HirVarDecl *d)
-{
-    struct HirDecl *r = stencil_prep_decl(F, d);
-    r->var.is_global = d->is_global;
-    r->var.is_const = d->is_const;
-    r->var.name = d->name;
-    r->var.init = F->FoldExpr(F, d->init);
-    return r;
-}
-
-static struct HirStmt *stencil_return_stmt(struct HirFolder *F, struct HirReturnStmt *s)
-{
-    struct HirStmt *r = stencil_prep_stmt(F, s);
-    r->result.expr = F->FoldExpr(F, s->expr);
-    return r;
-}
-
-static struct HirExpr *stencil_conversion_expr(struct HirFolder *F, struct HirConversionExpr *e)
-{
-    struct HirExpr *r = stencil_prep_expr(F, e);
-    r->conv.arg = F->FoldExpr(F, e->arg);
-    r->conv.to = e->to;
-    return r;
-}
-
-static struct HirExpr *stencil_call_expr(struct HirFolder *F, struct HirCallExpr *e)
-{
-    struct HirExpr *r = stencil_prep_expr(F, e);
-    if (HirIsFuncDef(e->func)) {
-        struct HirDecl *old_func = pawHir_get_decl(F->hir, e->func->fdef.did);
-        struct HirDecl *new_func = find_decl(F->state.S, old_func);
-        r->call.func = HIR_TYPEOF(new_func);
-    } else {
-        r->call.func = subst_type(F, e->func);
-    }
-    r->call.target = F->FoldExpr(F, e->target);
-    r->call.args = stencil_exprs(F, e->args);
-    return r;
-}
-
-static struct HirPath *stencil_path(struct HirFolder *F, struct HirPath *e)
-{
-    struct HirStenciler *S = F->state.S;
-    struct HirPath *r = pawHir_path_new(F->hir);
-    for (int i = 0; i < e->count; ++i) {
-        struct HirSegment *ps = pawHir_path_get(e, i);
-        struct HirTypeList *args = MAYBE_FOLD_LIST(&S->fold, ps->types, List);
-        struct HirType *type = subst_type(F, ps->type);
-        pawHir_path_add(F->hir, &r, ps->name, args, type);
-    }
-    return r;
-}
-
-static struct HirExpr *stencil_path_expr(struct HirFolder *F, struct HirPathExpr *e)
-{
-    struct HirExpr *r = stencil_prep_expr(F, e);
-    r->path.path = F->FoldPath(F, e->path);
-    return r;
-}
-
-static struct HirDecl *stencil_instance_decl(struct HirFolder *F, struct HirInstanceDecl *d)
-{
-    struct HirDecl *r = stencil_prep_decl(F, d);
-    r->inst.types = stencil_decls(F, d->types);
-    if (d->fields != NULL) {
-        r->inst.fields = stencil_decls(F, d->fields);
-    }
-    return r;
-}
-
-static struct HirDecl *stencil_func_decl(struct HirFolder *F, struct HirFuncDecl *d)
-{
-    struct HirDecl *r = stencil_prep_decl(F, d);
-    r->func.is_global = d->is_global;
-    r->func.name = d->name;
-
-    r->func.generics = MAYBE_STENCIL_DECL_LIST(F, d->generics);
-    r->func.params = stencil_decls(F, d->params);
-    r->func.body = STENCIL_BLOCK(F, d->body);
-    r->func.fn_kind = d->fn_kind;
-
-    r->func.monos = MAYBE_STENCIL_DECL_LIST(F, d->monos);
-    return r;
-}
-
-static struct HirStmt *stencil_if_stmt(struct HirFolder *F, struct HirIfStmt *s)
-{
-    struct HirStmt *r = stencil_prep_stmt(F, s);
-    r->if_.cond = F->FoldExpr(F, s->cond);
-    r->if_.then_arm = F->FoldStmt(F, s->then_arm);
-    r->if_.else_arm = F->FoldStmt(F, s->else_arm);
-    return r;
-}
-
-static struct HirStmt *stencil_while_stmt(struct HirFolder *F, struct HirWhileStmt *s)
-{
-    struct HirStmt *r = stencil_prep_stmt(F, s);
-    r->while_.is_dowhile = s->is_dowhile;
-    r->while_.cond = F->FoldExpr(F, s->cond);
-    r->while_.block = STENCIL_BLOCK(F, s->block);
-    return r;
-}
-
-static struct HirStmt *stencil_label_stmt(struct HirFolder *F, struct HirLabelStmt *s)
-{
-    struct HirStmt *r = stencil_prep_stmt(F, s);
-    r->label.label = s->label;
-    return r;
-}
-
-static struct HirBlock *stencil_forbody(struct HirFolder *F, struct HirForStmt *src, struct HirForStmt *dst)
-{
-    dst->control = F->FoldDecl(F, src->control);
-    struct HirStmt *r = stencil_prep_stmt(F, src->block);
-    r->block.stmts = stencil_stmts(F, src->block->stmts);
-    return &r->block;
-}
-
-static struct HirStmt *stencil_for_stmt(struct HirFolder *F, struct HirForStmt *s)
-{
-    struct HirStmt *r = stencil_prep_stmt(F, s);
-    r->for_.is_fornum = s->is_fornum;
-    if (s->is_fornum) {
-        r->for_.fornum.begin = F->FoldExpr(F, s->fornum.begin);
-        r->for_.fornum.end = F->FoldExpr(F, s->fornum.end);
-        r->for_.fornum.step = F->FoldExpr(F, s->fornum.step);
-    } else {
-        r->for_.forin.target = F->FoldExpr(F, s->forin.target);
-    }
-    r->for_.block = stencil_forbody(F, s, &r->for_);
-    return r;
-}
-
-static struct HirExpr *stencil_index_expr(struct HirFolder *F, struct HirIndex *e)
-{
-    struct HirExpr *r = stencil_prep_expr(F, e);
-    r->index.target = F->FoldExpr(F, e->target);
-    r->index.first = F->FoldExpr(F, e->first);
-    r->index.second = F->FoldExpr(F, e->second);
-    r->index.is_slice = e->is_slice;
-    return r;
-}
-
-static struct HirExpr *stencil_select_expr(struct HirFolder *F, struct HirSelector *e)
-{
-    struct HirExpr *r = stencil_prep_expr(F, e);
-    r->select.is_index = e->is_index;
-    r->select.target = F->FoldExpr(F, e->target);
-    r->select.name = e->name;
-    return r;
-}
-
-static struct HirStmt *stencil_decl_stmt(struct HirFolder *F, struct HirDeclStmt *s)
-{
-    struct HirStmt *r = stencil_prep_stmt(F, s);
-    r->decl.decl = F->FoldDecl(F, s->decl);
-    return r;
-}
-
-static void setup_stencil_pass(struct HirFolder *F, HirStenciler *S)
-{
-    const union HirState state = {.S = S};
-    pawHir_fold_init(F, S->hir, state);
-    F->FoldPath = stencil_path;
-    F->FoldLiteralExpr = stencil_literal_expr;
-    F->FoldLogicalExpr = stencil_logical_expr;
-    F->FoldPathExpr = stencil_path_expr;
-    F->FoldChainExpr = stencil_chain_expr;
-    F->FoldUnOpExpr = stencil_unop_expr;
-    F->FoldBinOpExpr = stencil_binop_expr;
-    F->FoldConversionExpr = stencil_conversion_expr;
-    F->FoldCallExpr = stencil_call_expr;
-    F->FoldIndex = stencil_index_expr;
-    F->FoldSelector = stencil_select_expr;
-    F->FoldMapItem = stencil_map_item;
-    F->FoldStructItem = stencil_struct_item;
-    F->FoldClosureExpr = stencil_closure_expr;
-    F->FoldBlock = stencil_block_stmt;
-    F->FoldExprStmt = stencil_expr_stmt;
-    F->FoldDeclStmt = stencil_decl_stmt;
-    F->FoldIfStmt = stencil_if_stmt;
-    F->FoldForStmt = stencil_for_stmt;
-    F->FoldWhileStmt = stencil_while_stmt;
-    F->FoldLabelStmt = stencil_label_stmt;
-    F->FoldReturnStmt = stencil_return_stmt;
-    F->FoldVariantDecl = stencil_variant_decl;
-    F->FoldVarDecl = stencil_var_decl;
-    F->FoldFuncDecl = stencil_func_decl;
-    F->FoldAdtDecl = stencil_adt_decl;
-    F->FoldFieldDecl = stencil_field_decl;
-    F->FoldGenericDecl = stencil_generic_decl;
-    F->FoldInstanceDecl = stencil_instance_decl;
-    F->FoldTypeDecl = stencil_type_decl;
-}
-
-static struct HirTypeList *prep_typelist(struct HirTypeFolder *F, struct HirTypeList *list)
-{
-    HirStenciler *S = F->state;
-    struct HirTypeList *copy = pawHir_type_list_new(S->hir);
+    struct HirTypeList *copy = pawHir_type_list_new(F->hir);
     for (int i = 0; i < list->count; ++i) {
-        pawHir_type_list_push(S->hir, &copy, list->data[i]);
+        struct HirType *type = F->FoldType(F, list->data[i]);
+        pawHir_type_list_push(F->hir, copy, type);
     }
-    F->FoldList(F, copy);
     return copy;
 }
 
-#define MAYBE_PREP_TYPELIST(F, list) ((list) != NULL ? prep_typelist(F, list) : NULL)
+#define MAYBE_EXPAND_TYPELIST(F, list) ((list) != NULL ? expand_typelist(F, list) : NULL)
 
-static struct HirType *prep_tuple(struct HirTypeFolder *F, struct HirTupleType *t)
+static struct HirType *expand_tuple(struct HirFolder *F, struct HirTupleType *t)
 {
-    Subst *subst = F->state;
-    HirStenciler *S = subst->S;
-
-    struct HirType *r = pawHir_new_type(S->hir, kHirTupleType);
-    r->tuple.elems = prep_typelist(F, t->elems);
+    struct Expander *E = F->ud;
+    struct HirType *r = pawHir_new_type(E->hir, t->line, kHirTupleType);
+    r->tuple.elems = F->FoldTypeList(F, t->elems);
     return r;
 }
 
-static struct HirType *prep_fptr(struct HirTypeFolder *F, struct HirFuncPtr *t)
+static struct HirType *expand_fptr(struct HirFolder *F, struct HirFuncPtr *t)
 {
-    Subst *subst = F->state;
-    HirStenciler *S = subst->S;
-
-    struct HirType *r = pawHir_new_type(S->hir, kHirFuncPtr);
-    r->fptr.params = prep_typelist(F, t->params);
-    r->fptr.result = F->Fold(F, t->result);
+    struct Expander *E = F->ud;
+    struct HirType *r = pawHir_new_type(E->hir, t->line, kHirFuncPtr);
+    r->fptr.params = F->FoldTypeList(F, t->params);
+    r->fptr.result = F->FoldType(F, t->result);
     return r;
 }
 
-static struct HirType *prep_fdef(struct HirTypeFolder *F, struct HirFuncDef *t)
+static struct HirType *expand_fdef(struct HirFolder *F, struct HirFuncDef *t)
 {
-    Subst *subst = F->state;
-    HirStenciler *S = subst->S;
-
-    struct HirType *r = pawHir_new_type(S->hir, kHirFuncDef);
-    struct HirDecl *old_base = pawHir_get_decl(S->hir, t->base);
-    struct HirDecl *new_base = find_decl(S, old_base);
-    struct HirDecl *old_decl = pawHir_get_decl(S->hir, t->did);
-    struct HirDecl *new_decl = find_decl(S, old_decl);
-    r->fdef.did = new_decl->hdr.did;
-    r->fdef.base = new_base->hdr.did;
-
-    r->fdef.types = MAYBE_PREP_TYPELIST(F, t->types);
-    r->fdef.params = prep_typelist(F, t->params);
-    r->fdef.result = F->Fold(F, t->result);
-    return r;
+    struct Expander *E = F->ud;
+    struct HirTypeList *types = MAYBE_EXPAND_TYPELIST(F, t->types);
+    struct HirDecl *base = pawHir_get_decl(E->hir, t->base);
+    struct HirDecl *inst = pawP_instantiate(E->R, base, types);
+    return HIR_TYPEOF(inst);
 }
 
-static struct HirType *prep_adt(struct HirTypeFolder *F, struct HirAdt *t)
+static struct HirType *expand_adt(struct HirFolder *F, struct HirAdt *t)
 {
-    Subst *subst = F->state;
-    HirStenciler *S = subst->S;
+    struct Expander *E = F->ud;
     if (t->did <= PAW_TSTRING) {
         return HIR_CAST_TYPE(t);
     }
 
-    struct HirDecl *old_base = pawHir_get_decl(S->hir, t->base);
-    struct HirDecl *new_base = find_decl(S, old_base);
-
-    struct HirType *r = pawHir_new_type(S->hir, kHirAdt);
-    r->adt.did = new_base->hdr.did;
-    r->adt.base = new_base->hdr.did;
-    r->adt.types = MAYBE_PREP_TYPELIST(F, t->types);
-    return r;
+    struct HirTypeList *types = MAYBE_EXPAND_TYPELIST(F, t->types);
+    struct HirDecl *base = pawHir_get_decl(E->hir, t->base);
+    struct HirDecl *inst = pawP_instantiate(E->R, base, types);
+    return HIR_TYPEOF(inst);
 }
 
-static struct HirType *maybe_subst(struct HirTypeFolder *F, struct HirType *t)
+static struct HirType *expand_generic(struct HirFolder *F, struct HirGeneric *t)
 {
-    Subst *s = &cast(F->state, HirStenciler *)->subst;
-    for (int i = 0; i < s->before->count; ++i) {
-        if (t == s->before->data[i]) {
-            return s->after->data[i];
+    struct Expander *E = F->ud;
+    const struct HirTypeList *before = E->subst->before;
+    const struct HirTypeList *after = E->subst->after;
+    for (int i = 0; i < before->count; ++i) {
+        struct HirType *search = before->data[i];
+        if (HirIsGeneric(search)) {
+            struct HirGeneric *g = HirGetGeneric(search);
+            if (t->did == g->did) {
+                return after->data[i];
+            }
         }
     }
-    return t;
+    return HIR_CAST_TYPE(t);
 }
 
-static struct HirType *prep_generic(struct HirTypeFolder *F, struct HirGeneric *t)
+static struct HirFuncDecl *do_expand(struct HirFolder *F, struct HirFuncDecl *base, struct HirDecl *inst)
 {
-    return maybe_subst(F, HIR_CAST_TYPE(t));
-}
-
-static struct HirType *subst_type(struct HirFolder *F, struct HirType *type)
-{
-    HirStenciler *S = F->state.S;
-    return S->fold.Fold(&S->fold, type);
-}
-
-static void add_existing_link(paw_Env *P, Map *map, struct HirDecl *key, struct HirDecl *value)
-{
-    const Value k = {.p = key};
-    const Value v = {.p = value};
-    pawH_insert(P, map, k, v);
-}
-
-static struct HirFuncDecl *do_stencil_func(struct Hir *hir, struct HirFuncDecl *base, struct HirDecl *inst)
-{
-    paw_Env *P = ENV(hir);
-    Value *pv = pawC_push0(P);
-    Map *map = pawH_new(P);
-    v_set_object(pv, map);
-
-    HirStenciler S = {
-        .decls = map,
-        .P = hir->P,
-        .hir = hir,
+    struct Expander *E = F->ud;
+    struct Subst subst = {
+        .outer = E->subst,
+        .before = HirGetFuncDef(base->type)->types,
+        .after = HirGetInstanceDecl(inst)->types,
     };
-    struct HirFolder F;
-    setup_stencil_pass(&F, &S);
+    E->subst = &subst;
 
-    S.subst.before = base->type->fdef.types;
-    S.subst.after = inst->inst.type->fdef.types;
-    S.subst.S = &S;
-
-    pawHir_type_folder_init(&S.fold, &S);
-    S.fold.FoldAdt = prep_adt;
-    S.fold.FoldTupleType = prep_tuple;
-    S.fold.FoldFuncPtr = prep_fptr;
-    S.fold.FoldFuncDef = prep_fdef;
-    S.fold.FoldGeneric = prep_generic;
-
+    inst->func.fn_kind = base->fn_kind;
     inst->func.kind = kHirFuncDecl;
     inst->func.name = base->name;
     inst->func.generics = NULL;
 
-    inst->func.params = stencil_decls(&F, base->params);
-    inst->func.body = STENCIL_BLOCK(&F, base->body);
-    inst->func.fn_kind = base->fn_kind;
+    // copy the original polymorphic function subtree
+    struct HirType *type = E->copy.FoldType(&E->copy, base->type);
+    struct HirDeclList *params = E->copy.FoldDeclList(&E->copy, base->params);
+    struct HirBlock *body = FOLD_BLOCK(&E->copy, base->body);
 
-    pawC_pop(P); // pop decl. map
+    // replace generics with concrete types and create further instantiations to
+    // be expanded next round
+    inst->func.type = F->FoldType(F, type);
+    inst->func.params = F->FoldDeclList(F, params);
+    inst->func.body = FOLD_BLOCK(F, body);
+
+    E->subst = subst.outer;
     return &inst->func;
 }
 
-static void stencil_func(struct HirVisitor *V, struct HirFuncDecl *d)
+static struct HirDecl *find_decl(struct Expander *E, struct HirType *type)
 {
-    if (d->generics == NULL) {
-        V->VisitBlock(V, d->body);
+    DefId did;
+    switch (HIR_KINDOF(type)) {
+        case kHirAdt: 
+            did = HirGetAdt(type)->base;
+            break;
+        case kHirFuncDef: 
+            did = HirGetFuncDef(type)->base;
+            break;
+        default: 
+            did = HirGetGeneric(type)->did;
     }
-    if (d->monos == NULL) {
-        return;
-    }
-    for (int i = 0; i < d->monos->count; ++i) {
-        struct HirDecl *decl = d->monos->data[i];
-        do_stencil_func(V->hir, d, decl);
-        V->VisitFuncDecl(V, &decl->func);
-    }
+    return pawHir_get_decl(E->hir, did);
 }
 
-void pawHir_stencil_stmts(struct Hir *hir, struct HirStmtList *stmts)
+static struct HirPath *expand_path(struct HirFolder *F, struct HirPath *path)
 {
-    struct HirVisitor V;
-    pawHir_visitor_init(&V, hir, (union HirState){0});
-    V.VisitFuncDecl = stencil_func;
-    V.VisitStmtList(&V, stmts);
+    struct Expander *E = F->ud;
+    for (int i = 0; i < path->count; ++i) {
+        struct HirSegment *ps = pawHir_path_get(path, i);
+        if (ps->types != NULL) {
+            struct HirTypeList *types = F->FoldTypeList(F, ps->types);
+            struct HirDecl *base = find_decl(E, ps->type);
+            struct HirDecl *inst = pawP_instantiate(E->R, base, types);
+            ps->type = HIR_TYPEOF(inst);
+        } else {
+            ps->type = F->FoldType(F, ps->type);
+        }
+    }
+    return path;
+}
+
+static struct HirDecl *expand_func_decl(struct HirFolder *F, struct HirFuncDecl *d)
+{
+    struct Expander *E = F->ud;
+    const int n = d->monos ? d->monos->count : 0;
+    for (int i = 0; i < n; ++i) {
+        struct HirDecl *decl = d->monos->data[i];
+        if (HirIsInstanceDecl(decl)) {
+            do_expand(F, d, decl);
+            ++E->nexpand;
+        }
+    }
+    return HIR_CAST_DECL(d);
+}
+
+static struct HirExpr *expand_call_expr(struct HirFolder *F, struct HirCallExpr *e)
+{
+    struct Expander *E = F->ud;
+    if (HirIsFuncDef(e->func)) {
+        struct HirFuncDef *fdef = HirGetFuncDef(e->func);
+        struct HirTypeList *types = MAYBE_EXPAND_TYPELIST(F, fdef->types);
+        struct HirDecl *base = pawHir_get_decl(F->hir, fdef->base);
+        struct HirDecl *inst = pawP_instantiate(E->R, base, types);
+        e->func = HIR_TYPEOF(inst);
+    } else {
+        e->func = F->FoldType(F, e->func);
+    }
+    e->target = F->FoldExpr(F, e->target);
+    e->args = F->FoldExprList(F, e->args);
+    return HIR_CAST_EXPR(e);
+}
+
+void pawHir_expand(struct Resolver *R, struct Hir *hir)
+{
+    struct HirFolder F;
+    struct Expander E = {
+        .hir = R->hir,
+        .P = ENV(R),
+        .R = R,
+    };
+    struct Copier C = {
+        .hir = hir,
+        .P = ENV(R),
+    };
+    setup_copy_pass(&E.copy, &C);
+    pawHir_folder_init(&F, hir, &E);
+    F.FoldFuncDecl = expand_func_decl;
+    F.FoldCallExpr = expand_call_expr;
+    F.FoldPath = expand_path;
+    F.FoldTypeList = expand_typelist;
+    F.FoldAdt = expand_adt;
+    F.FoldTupleType = expand_tuple;
+    F.FoldFuncPtr = expand_fptr;
+    F.FoldFuncDef = expand_fdef;
+    F.FoldGeneric = expand_generic;
+
+    do {
+        E.nexpand = 0;
+        F.FoldDeclList(&F, hir->prelude);
+        F.FoldDeclList(&F, hir->items);
+    } while (E.nexpand > 0);
 }
 
 struct Printer {
-    struct DynamicMem *dm;
+    struct Hir *hir;
     int indent;
 };
 
@@ -1766,12 +1414,12 @@ static void indent_line(struct Printer *P)
 #define dump_fmt(P, fmt, ...) (indent_line(P), printf(fmt, __VA_ARGS__))
 #define dump_msg(P, msg) (indent_line(P), printf(msg))
 
-static void dump_type_aux(struct Printer *P, struct HirType *type);
+static void repr_type_aux(struct Printer *P, struct HirType *type);
 
-static void dump_typelist(struct Printer *P, struct HirTypeList *list)
+static void repr_typelist(struct Printer *P, struct HirTypeList *list)
 {
     for (int i = 0; i < list->count; ++i) {
-        dump_type_aux(P, list->data[i]);
+        repr_type_aux(P, list->data[i]);
         if (i < list->count - 1) {
             printf(", ");
         }
@@ -1784,13 +1432,13 @@ static const char *get_typename(struct DynamicMem *dm, DefId did)
     return decl->hdr.name ? decl->hdr.name->text : "(null)";
 }
 
-static void dump_type_aux(struct Printer *P, struct HirType *type)
+static void repr_type_aux(struct Printer *P, struct HirType *type)
 {
     switch (HIR_KINDOF(type)) {
         case kHirTupleType:
             printf("(");
             for (int i = 0; i < type->tuple.elems->count; ++i) {
-                dump_type_aux(P, type->tuple.elems->data[i]);
+                repr_type_aux(P, type->tuple.elems->data[i]);
                 if (i < type->tuple.elems->count - 1) {
                     printf(", ");
                 }
@@ -1801,25 +1449,25 @@ static void dump_type_aux(struct Printer *P, struct HirType *type)
         case kHirFuncDef:
             printf("fn");
             if (HirIsFuncDef(type)) {
-                printf(" %s", get_typename(P->dm, type->fdef.did));
+                printf(" %s", get_typename(P->hir->dm, type->fdef.did));
             }
             printf("(");
             for (int i = 0; i < type->fptr.params->count; ++i) {
-                dump_type_aux(P, type->fptr.params->data[i]);
+                repr_type_aux(P, type->fptr.params->data[i]);
                 if (i < type->fptr.params->count - 1) {
                     printf(", ");
                 }
             }
             printf(") -> ");
-            dump_type_aux(P, type->fptr.result);
+            repr_type_aux(P, type->fptr.result);
             break;
         case kHirAdt: 
-            printf("%s", get_typename(P->dm, type->adt.did));
+            printf("%s", get_typename(P->hir->dm, type->adt.did));
             if (type->adt.types != NULL) {
                 printf("<");
                 const struct HirTypeList *list = type->adt.types;
                 for (int i = 0; i < list->count; ++i) {
-                    dump_type_aux(P, list->data[i]);
+                    repr_type_aux(P, list->data[i]);
                     if (i < list->count - 1) {
                         printf(", ");
                     }
@@ -1836,12 +1484,10 @@ static void dump_type_aux(struct Printer *P, struct HirType *type)
     }
 }
 
-static void dump_type(struct Printer *P, struct HirType *type)
+static void repr_type(struct Printer *P, struct HirType *type)
 {
-    indent_line(P);
-    printf("type: ");
     if (type != NULL) {
-        dump_type_aux(P, type);
+        repr_type_aux(P, type);
     } else {
         printf("(null)");
     }
@@ -1851,129 +1497,43 @@ static void dump_type(struct Printer *P, struct HirType *type)
 static void dump_stmt(struct Printer *, struct HirStmt *);
 static void dump_expr(struct Printer *, struct HirExpr *);
 
-static void print_decl_kind(struct Printer *P, void *node)
-{
-    struct HirDecl *d = node;
-    switch (HIR_KINDOF(d)) {
-        case kHirFuncDecl:
-            printf("FuncDecl");
-            break;
-        case kHirFieldDecl:
-            printf("FieldDecl");
-            break;
-        case kHirVarDecl:
-            printf("VarDecl");
-            break;
-        case kHirVariantDecl:
-            printf("VariantDecl");
-            break;
-        case kHirAdtDecl:
-            printf("AdtDecl");
-            break;
-        case kHirGenericDecl:
-            printf("GenericDecl");
-            break;
-        case kHirTypeDecl:
-            printf("TypeDecl");
-            break;
-        case kHirInstanceDecl:
-            printf("InstanceDecl");
-            break;
-        default:
-            printf("?");
+#define DEFINE_KIND_PRINTER(name, T) \
+    static int print_##name##_kind(struct Printer *P, void *node) \
+    { \
+        if (node != NULL) { \
+            struct T *typed = node; \
+            printf("%s {\n", k##T##Names[HIR_KINDOF(typed)]); \
+            return 0; \
+        } \
+        printf("(null)\n"); \
+        return -1; \
     }
-}
+DEFINE_KIND_PRINTER(expr, HirExpr) 
+DEFINE_KIND_PRINTER(decl, HirDecl) 
+DEFINE_KIND_PRINTER(stmt, HirStmt) 
+DEFINE_KIND_PRINTER(type, HirType) 
 
-static void print_expr_kind(struct Printer *P, void *node)
-{
-    struct HirExpr *e = node;
-    switch (HIR_KINDOF(e)) {
-        case kHirLiteralExpr:
-            printf("LiteralExpr");
-            break;
-        case kHirUnOpExpr:
-            printf("UnOpExpr");
-            break;
-        case kHirBinOpExpr:
-            printf("BinOpExpr");
-            break;
-        case kHirCallExpr:
-            printf("CallExpr");
-            break;
-        case kHirIndex:
-            printf("Index");
-            break;
-        case kHirSelector:
-            printf("Selector");
-            break;
-        default:
-            printf("?");
-            break;
-    }
-}
-
-static void print_stmt_kind(struct Printer *P, void *node)
-{
-    struct HirStmt *s = node;
-    switch (HIR_KINDOF(s)) {
-        case kHirExprStmt:
-            printf("ExprStmt");
-            break;
-        case kHirDeclStmt:
-            printf("DeclStmt");
-            break;
-        case kHirBlock:
-            printf("Block");
-            break;
-        case kHirIfStmt:
-            printf("IfStmt");
-            break;
-        case kHirForStmt:
-            printf("ForStmt");
-            break;
-        case kHirWhileStmt:
-            printf("WhileStmt");
-            break;
-        case kHirReturnStmt:
-            printf("ReturnStmt");
-            break;
-        default:
-            printf("?");
-    }
-}
-
-static int predump_node(struct Printer *P, void *node,
-                        void (*print)(struct Printer *, void *))
-{
-    if (node != NULL) {
-        print(P, node);
-        printf(" {\n");
-        return 0;
-    }
-    return -1;
-}
-
-#define dump_block(P, b) \
-    check_exp((b)->kind == kHirBlock, dump_stmt(P, HIR_CAST_STMT(b)))
+#define dump_block(P, b) check_exp(HirIsBlock(HIR_CAST_STMT(b)), dump_stmt(P, HIR_CAST_STMT(b)))
 #define dump_name(P, s) dump_fmt(P, "name: %s\n", s ? s->text : NULL)
 
-static void dump_expr(struct Printer *P, struct HirExpr *e);
-static void dump_decl(struct Printer *P, struct HirDecl *d);
-static void dump_stmt(struct Printer *P, struct HirStmt *s);
+static void dump_expr(struct Printer *, struct HirExpr *);
+static void dump_decl(struct Printer *, struct HirDecl *);
+static void dump_stmt(struct Printer *, struct HirStmt *);
+static void dump_type(struct Printer *, struct HirType *);
 
-#define DEFINE_LIST_PRINTER(name, T)                                                          \
+#define DEFINE_LIST_PRINTER(name, T) \
     static void dump_##name##_list(struct Printer *P, struct T##List *list, const char *name) \
-    {                                                                                         \
-        dump_fmt(P, "%s: {\n", name);                                                         \
-        ++P->indent;                                                                          \
-        if (list != NULL) {                                                                   \
-            dump_msg(P, "" /* indent */);                                                     \
-            for (int i = 0; i < list->count; ++i) {                                           \
-                dump_##name(P, list->data[i]);                                                \
-            }                                                                                 \
-        }                                                                                     \
-        --P->indent;                                                                          \
-        dump_msg(P, "}\n");                                                                   \
+    { \
+        dump_fmt(P, "%s: " #T "List {\n", name); \
+        ++P->indent; \
+        if (list != NULL) { \
+            for (int i = 0; i < list->count; ++i) { \
+                dump_msg(P, "" /* indent */); \
+                dump_##name(P, list->data[i]); \
+            } \
+        } \
+        --P->indent; \
+        dump_msg(P, "}\n"); \
     }
 DEFINE_LIST_PRINTER(expr, HirExpr) 
 DEFINE_LIST_PRINTER(decl, HirDecl)
@@ -1984,23 +1544,76 @@ static void dump_path(struct Printer *P, struct HirPath *p)
 {
     for (int i = 0; i < p->count; ++i) {
         struct HirSegment *seg = p->data[i];
-        dump_name(P, seg->name);
-        dump_type_list(P, seg->types, "types");
+        printf("%s", seg->name->text);
+        if (seg->types != NULL) {
+            printf("<");
+            for (int j = 0; j < seg->types->count; ++j) {
+                pawHir_repr_type(P->hir, seg->types->data[i]);
+                if (j < seg->types->count - 1) {
+                    printf(", ");
+                }
+            }
+            printf(">");
+        }
     }
+    printf("\n");
+}
+
+static void dump_type(struct Printer *P, struct HirType *t)
+{
+    if (print_type_kind(P, t)) {
+        return;
+    }
+    ++P->indent;
+    dump_fmt(P, "line: %d\n", t->hdr.line);
+    switch (HIR_KINDOF(t)) {
+        case kHirTupleType:
+            dump_type_list(P, t->tuple.elems, "elems");
+            break;
+        case kHirFuncDef:
+            dump_fmt(P, "base: %d\n", t->fdef.base);
+            dump_fmt(P, "did: %d\n", t->fdef.did);
+            if (t->fdef.types != NULL) {
+                dump_type_list(P, t->fdef.types, "types");
+            }
+            // (fallthrough)
+        case kHirFuncPtr:
+            dump_type_list(P, t->fptr.params, "params");
+            dump_msg(P, "result: ");
+            dump_type(P, t->fptr.result);
+            break;
+        case kHirAdt: 
+            dump_fmt(P, "name: %s\n", get_typename(P->hir->dm, t->adt.did));
+            dump_fmt(P, "base: %d\n", t->adt.base);
+            dump_fmt(P, "did: %d\n", t->adt.did);
+            if (t->adt.types != NULL) {
+                dump_type_list(P, t->adt.types, "types");
+            }
+            break;
+        case kHirUnknown:
+            dump_fmt(P, "index: %d\n", t->unknown.index);
+            break;
+        default:
+            paw_assert(HirIsGeneric(t));
+            dump_fmt(P, "name: %s\n", t->generic.name->text);
+            dump_fmt(P, "did: %d\n", t->generic.did);
+    }
+    --P->indent;
+    dump_msg(P, "}\n");
 }
 
 static void dump_decl(struct Printer *P, struct HirDecl *d)
 {
-    if (predump_node(P, d, print_decl_kind)) {
-        printf("(null)\n");
+    if (print_decl_kind(P, d)) {
         return;
     }
     ++P->indent;
+    dump_fmt(P, "did: %d\n", d->hdr.did);
     dump_fmt(P, "line: %d\n", d->hdr.line);
+    dump_msg(P, "type: ");
     dump_type(P, HIR_TYPEOF(d));
     switch (HIR_KINDOF(d)) {
         case kHirFuncDecl:
-            dump_fmt(P, "is_global: %d\n", d->func.is_global);
             dump_fmt(P, "receiver: %p\n", (void *)d->func.receiver);
             dump_fmt(P, "name: %s\n", d->func.name->text);
             dump_decl_list(P, d->func.generics, "generics");
@@ -2013,7 +1626,6 @@ static void dump_decl(struct Printer *P, struct HirDecl *d)
             dump_name(P, d->field.name);
             break;
         case kHirVarDecl:
-            dump_fmt(P, "is_global: %d\n", d->var.is_global);
             dump_name(P, d->var.name);
             dump_msg(P, "init: ");
             dump_expr(P, d->var.init);
@@ -2040,7 +1652,7 @@ static void dump_decl(struct Printer *P, struct HirDecl *d)
             break;
         case kHirInstanceDecl:
             dump_name(P, d->type.name);
-            dump_decl_list(P, d->inst.fields, "fields");
+            dump_type_list(P, d->inst.types, "types");
             break;
         default:
             paw_assert(0);
@@ -2051,8 +1663,7 @@ static void dump_decl(struct Printer *P, struct HirDecl *d)
 
 static void dump_stmt(struct Printer *P, struct HirStmt *s)
 {
-    if (predump_node(P, s, print_stmt_kind)) {
-        printf("(null)\n");
+    if (print_stmt_kind(P, s)) {
         return;
     }
     ++P->indent;
@@ -2116,12 +1727,12 @@ static void dump_stmt(struct Printer *P, struct HirStmt *s)
 
 static void dump_expr(struct Printer *P, struct HirExpr *e)
 {
-    if (predump_node(P, e, print_expr_kind)) {
-        printf("(null)\n");
+    if (print_expr_kind(P, e)) {
         return;
     }
     ++P->indent;
     dump_fmt(P, "line: %d\n", e->hdr.line);
+    dump_msg(P, "type: ");
     dump_type(P, HIR_TYPEOF(e));
     switch (HIR_KINDOF(e)) {
         case kHirLiteralExpr:
@@ -2130,27 +1741,22 @@ static void dump_expr(struct Printer *P, struct HirExpr *e)
                     dump_msg(P, "lit_kind: BASIC\n");
                     switch (e->literal.basic.t) {
                         case PAW_TUNIT:
-                            dump_msg(P, "type: ()\n");
                             break;
                         case PAW_TBOOL:
-                            dump_msg(P, "type: bool\n");
                             dump_fmt(P, "value: %s\n",
                                      v_true(e->literal.basic.value) ? "true"
                                                                     : "false");
                             break;
                         case PAW_TINT:
-                            dump_msg(P, "type: int\n");
                             dump_fmt(P, "value: %" PRId64 "\n",
                                      v_int(e->literal.basic.value));
                             break;
                         case PAW_TFLOAT:
-                            dump_msg(P, "type: float\n");
                             dump_fmt(P, "value: %f\n",
                                      v_float(e->literal.basic.value));
                             break;
                         default:
                             paw_assert(e->literal.basic.t == PAW_TSTRING);
-                            dump_msg(P, "type: string\n");
                             dump_fmt(P, "value: %s\n",
                                      v_string(e->literal.basic.value)->text);
                             break;
@@ -2212,6 +1818,8 @@ static void dump_expr(struct Printer *P, struct HirExpr *e)
             dump_msg(P, "target: ");
             dump_expr(P, e->call.target);
             dump_expr_list(P, e->call.args, "args");
+            dump_msg(P, "func: ");
+            dump_type(P, e->call.func);
             break;
         case kHirIndex:
             dump_fmt(P, "is_slice: %d\n", e->index.is_slice);
@@ -2231,13 +1839,13 @@ static void dump_expr(struct Printer *P, struct HirExpr *e)
                 dump_name(P, e->select.name);
             }
             break;
-        case kHirMapItem:
+        case kHirMapElem:
             dump_msg(P, "key: ");
             dump_expr(P, e->mitem.key);
             dump_msg(P, "value: ");
             dump_expr(P, e->mitem.value);
             break;
-        case kHirStructItem:
+        case kHirStructField:
             dump_name(P, e->sitem.name);
             dump_msg(P, "value: ");
             dump_expr(P, e->sitem.value);
@@ -2251,57 +1859,78 @@ static void dump_expr(struct Printer *P, struct HirExpr *e)
 
 void pawHir_repr_path(struct Hir *hir, struct HirPath *path)
 {
-    for (int i = 0; i < path->count; ++i) {
-        struct HirSegment *s = pawHir_path_get(path, i);
-        printf("%s", s->name->text);
-        if (s->types != NULL) {
-            printf("<");
-            for (int j = 0; j < s->types->count; ++j) {
-                printf("T");
-                if (j < s->types->count - 1) {
-                    printf(", ");
-                }
-            }
-            printf(">");
-        }
-    }
-    printf("\n");
+    struct Printer P = {.hir = hir};
+    dump_path(&P, path);
 }
 
 // TODO: Have this output a String, or fill a Buffer
 void pawHir_repr_type(struct Hir *hir, struct HirType *type)
 {
-    struct Printer P = {.dm = hir->dm};
-    dump_type(&P, type);
+    struct Printer P = {.hir = hir};
+    repr_type(&P, type);
 }
 
 void pawHir_dump_type(struct Hir *hir, struct HirType *type)
 {
-    struct Printer P = {.dm = hir->dm};
+    struct Printer P = {.hir = hir};
     dump_type(&P, type);
 }
 
 void pawHir_dump_decl(struct Hir *hir, struct HirDecl *decl)
 {
-    struct Printer P = {.dm = hir->dm};
+    struct Printer P = {.hir = hir};
     dump_decl(&P, decl);
 }
 
 void pawHir_dump_expr(struct Hir *hir, struct HirExpr *expr)
 {
-    struct Printer P = {.dm = hir->dm};
+    struct Printer P = {.hir = hir};
     dump_expr(&P, expr);
 }
 
 void pawHir_dump_stmt(struct Hir *hir, struct HirStmt *stmt)
 {
-    struct Printer P = {.dm = hir->dm};
+    struct Printer P = {.hir = hir};
     dump_stmt(&P, stmt);
 }
 
 void pawHir_dump_path(struct Hir *hir, struct HirPath *path)
 {
-    struct Printer P = {.dm = hir->dm};
+    struct Printer P = {.hir = hir};
     dump_path(&P, path);
+}
+
+static void debug_func_decl(struct HirVisitor *V, struct HirFuncDecl *d)
+{
+    struct Printer *P = V->ud;
+    dump_msg(P, "FuncDecl: ");
+    repr_type(P, d->type);
+    dump_msg(P, "body: \n");
+    ++P->indent;
+    V->VisitBlock(V, d->body);
+    --P->indent;
+    if (d->monos != NULL) {
+        dump_msg(P, "monos: \n");
+        ++P->indent;
+        V->VisitDeclList(V, d->monos);
+        --P->indent;
+    }
+}
+
+static void debug_instance_decl(struct HirVisitor *V, struct HirInstanceDecl *d)
+{
+    struct Printer *P = V->ud;
+    dump_msg(P, "InstanceDecl: ");
+    pawHir_repr_type(V->hir, d->type);
+}
+
+void pawHir_debug(struct Hir *hir)
+{
+    struct HirVisitor V;
+    struct Printer P = {.hir = hir};
+    pawHir_visitor_init(&V, hir, &P);
+    V.VisitFuncDecl = debug_func_decl;
+    V.VisitInstanceDecl = debug_instance_decl;
+    pawHir_visit(&V);
 }
 

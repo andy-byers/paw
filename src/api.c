@@ -94,6 +94,19 @@ void paw_close(paw_Env *P)
     P->alloc(P->ud, P, sizeof *P, 0);
 }
 
+int paw_find_public(paw_Env *P)
+{
+    const String *name = v_string(P->top.p[-1]);
+    const int g = pawE_find_global(P, name);
+    paw_pop(P, 1);
+    return g;
+}
+
+void paw_push_public(paw_Env *P, int id)
+{
+    pawR_read_global(P, id);
+}
+
 void paw_push_value(paw_Env *P, int index)
 {
     const Value v = *access(P, index);

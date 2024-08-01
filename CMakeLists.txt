@@ -60,6 +60,7 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/os.h
             ${PAW_SOURCE_DIR}/parse.h
             ${PAW_SOURCE_DIR}/prefix.h
+            ${PAW_SOURCE_DIR}/resolve.h
             ${PAW_SOURCE_DIR}/rt.h
             ${PAW_SOURCE_DIR}/str.h
             ${PAW_SOURCE_DIR}/type.h

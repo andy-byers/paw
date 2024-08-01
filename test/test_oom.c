@@ -44,11 +44,6 @@ static void script(const char *name)
 
 int main(void)
 {
-    script("basic");
-    script("operator");
-    script("block");
-    script("loop");
-    script("vector");
-    script("map");
-    script("struct");
+#define RUN_SCRIPT(name) script(#name);
+    TEST_SCRIPTS(RUN_SCRIPT)
 }

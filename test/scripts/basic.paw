@@ -1,6 +1,6 @@
 // basic.paw
 
-{
+fn test_comments() {
     // line comment
     /* block comment */
     /* multi-line
@@ -15,27 +15,27 @@
     /**/ /**/
 }
 
-{
+fn test_semicolons_are_optional() {
     // Semicolons are not necessary in most cases.
     let x: int = 0 x = 1 + 2 + 3 assert(x == 6)
     x = 1 - 2 - 3 x = 4 + 5 + 6 assert(x == 15)    
 }
 
-{
-    fn wrapper(n: int, f: fn(int) -> int) -> int {
+fn test_function_values() {
+    let wrapper = |n: int, f: fn(int) -> int| -> int {
         return f(n)
     }
-    fn f1(n: int) -> int {
+    let f1 = |n: int| -> int {
         return n
     }
-    fn f2(n: int) -> int {
-        fn f(n: int) -> int {
+    let f2 = |n: int| -> int {
+        let f = |n: int| -> int {
             return n
         }
         return f(n)
     }
-    fn f3(n: int) -> int {
-        fn f(n: int) -> fn() -> int {
+    let f3 = |n: int| -> int {
+        let f = |n: int| -> fn() -> int {
             return || -> int {
                 return n
             }
@@ -47,13 +47,13 @@
     assert(3 == wrapper(3, f3))
 }
 
-{
+fn test_syntax() {
     let x: int = 0
     {;;;};;;{};;;
     {; x = 1; assert(x == 1)}
 }
 
-{
+fn test_arguments() {
     fn f() {}
     f()
     fn f() {return}
@@ -78,7 +78,7 @@
     assert(f(0, 1, 2) == 2)
 }
 
-{
+fn test_return_must_be_last() {
     fn f() -> int {
         {
             // Return statement must be the last statement in the block.
@@ -91,18 +91,16 @@
 
 // String literals: both types of quotes are okay, and strings can span 
 // multiple lines.
-{
+fn test_multiline_string_literals() {
     assert('abc' == "abc");
     assert('abc\n def\n ghi\n\n' == 'abc
  def
  ghi
 
 ')
-
 }
 
-// Short-circuiting behavior:
-{
+fn test_short_circuiting() {
     let counts = (0, 0, 0)
     let check2 = |a: int, b: int| {
         assert(counts.0 == a)
@@ -174,34 +172,14 @@
     check3(1, 1, 0)
 }
 
-{
-    struct C {
-        val: int
-        get: fn() -> fn() -> C
-    }
-    fn get() -> fn() -> C {
-        let inner = || -> C {
-            return C{get: get, val: 123}
-        }
-        return inner
-    }
-    let c = C{get: get, val: 0}
-    let v = [c]
-
-    v[0].val = 42
-    v[0].get()().val = 0
-    assert(v[0].val == 42)
-    assert(v[0].get()().val == 123)
-}
-
-{
+fn test_containers() {
     let v = [0, 1, 2][1]
     assert(v == 1)
     let m = [0: 0, 1: 1, 2: 2][1]
     assert(m == 1)
 }
 
-{
+fn test_string_concat() {
     let s = ''
     for a = 0, 1 {
         s = s + 'a'
@@ -216,117 +194,111 @@
 }
 
 // Chain ('?') expressions:
-{
-    fn opt(b: bool) -> Option<int> {
-        if b {
-            return Option::<int>::Some(42)
-        } else {
-            return Option::<int>::None
-        }
-    }
-
-    {
-        let val = -1
-        let test = || -> Option<int> {
-            let i = opt(true)?
-            val = i
-            return Option::<int>::Some(i)
-        }
-        test()
-        assert(val == 42)
-    }
-
-    {
-        let test = || -> Option<int> {
-            let i = opt(false)?
-            assert(false)
-            return Option::<int>::Some(i)
-        }
-        test()
-    }
-
-    {
-        let test = |o: Option<int>| {}    
-        test(Option::<int>::Some(123))
-        test(Option::<int>::None)
-    }
-
-    fn opt<T>(b: bool, v: T) -> Option<T> {
-        if b {
-            return Option::<T>::Some(v)
-        } else {
-            return Option::<T>::None
-        }
-    }
-
-    {
-        fn test<T>(v: T) -> Option<T> {
-            let t = opt(false, v)?
-            assert(false)
-            return Option::<T>::Some(t)
-        }
-        test(123)
-        test('abc')
-    }
-
-    fn res(b: bool) -> Result<int, string> {
-        if b {
-            return Result::<int, string>::Ok(42)
-        } else {
-            return Result::<int, string>::Err('bad')
-        }
-    }
-
-    {
-        let val = -1
-        let test = || -> Result<int, string> {
-            let i = res(true)?
-            val = i
-            return Result::<int, string>::Ok(i)
-        }
-        test()
-        assert(val == 42)
-    }
-
-    {
-        let test = || -> Result<int, string> {
-            let i = res(false)?
-            assert(false)
-            return Result::<int, string>::Ok(i)
-        }
-        test()
-    }
-
-    {
-        struct Inner<T> {
-            val: T
-        }
-        struct Outer<T> {
-            opt: Option<Inner<T>>
-        }
-        fn opt<T>(t: T, a: bool, b: bool) -> Option<Outer<T>> {
-            if a {
-                if b {
-                    return Option::<Outer<T>>::Some(Outer::<T>{
-                        opt: Option::<Inner<T>>::Some(Inner::<T>{val: t}),
-                    })
-                } else {
-                    return Option::<Outer<T>>::Some(Outer::<T>{
-                        opt: Option::<Inner<T>>::None,
-                    })
-                }
-            } else {
-                return Option::<Outer<T>>::None
-            }
-        }
-        opt(42, true, true)
-        opt(42, true, false)
-        opt(42, false, false)
+fn option(b: bool) -> Option<int> {
+    if b {
+        return Option::<int>::Some(42)
+    } else {
+        return Option::<int>::None
     }
 }
 
+fn test_chain_option() {
+    let val = -1
+    let test = || -> Option<int> {
+        let i = option(true)?
+        val = i
+        return Option::<int>::Some(i)
+    }
+    test()
+    assert(val == 42)
+
+    let test = || -> Option<int> {
+        let i = option(false)?
+        assert(false)
+        return Option::<int>::Some(i)
+    }
+    test()
+
+    let test = |o: Option<int>| {}    
+    test(Option::<int>::Some(123))
+    test(Option::<int>::None)
+}
+
+fn option2<T>(b: bool, v: T) -> Option<T> {
+    if b {
+        return Option::<T>::Some(v)
+    } else {
+        return Option::<T>::None
+    }
+}
+
+fn chain_option2_aux<T>(v: T) -> Option<T> {
+    let t = option2(false, v)?
+    assert(false)
+    return Option::<T>::Some(t)
+}
+fn test_chain_option2() {
+    chain_option2_aux(123)
+    chain_option2_aux('abc')
+}
+
+fn result(b: bool) -> Result<int, string> {
+    if b {
+        return Result::<int, string>::Ok(42)
+    } else {
+        return Result::<int, string>::Err('bad')
+    }
+}
+
+fn test_chain_result() {
+    let val = -1
+    let test = || -> Result<int, string> {
+        let i = result(true)?
+        val = i
+        return Result::<int, string>::Ok(i)
+    }
+    test()
+    assert(val == 42)
+
+    let test = || -> Result<int, string> {
+        let i = result(false)?
+        assert(false)
+        return Result::<int, string>::Ok(i)
+    }
+    test()
+}
+
+struct Inner<T> {
+    val: T
+}
+struct Outer<T> {
+    option: Option<Inner<T>>
+}
+
+fn option3<T>(t: T, a: bool, b: bool) -> Option<Outer<T>> {
+    if a {
+        if b {
+            return Option::<Outer<T>>::Some(Outer::<T>{
+                option: Option::<Inner<T>>::Some(Inner::<T>{val: t}),
+            })
+        } else {
+            return Option::<Outer<T>>::Some(Outer::<T>{
+                option: Option::<Inner<T>>::None,
+            })
+        }
+    } else {
+        return Option::<Outer<T>>::None
+    }
+}
+
+fn test_chain_option3() {
+    option3(42, true, true)
+    option3(42, true, false)
+    option3(42, false, false)
+}
+
 // TODO: move to integer.paw (still needs to be fixed)
-{
+fn test_integers() {
     assert(1 << 0 == 1)
     assert(-1 << 0 == -1)
 

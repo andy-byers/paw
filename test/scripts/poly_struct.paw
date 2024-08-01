@@ -1,0 +1,155 @@
+
+struct Singleton<Value> {
+    value: Value,
+}
+
+fn test_initialization() {
+    let singleton: Singleton<int> = Singleton::<int>{value: 1}
+    let singleton = Singleton::<int>{value: 1}
+}
+
+struct Empty<T> {}
+
+fn touch_empty<T>(v: Empty<T>) {}
+fn touch_nested_empty<T>(v: Empty<Empty<T>>) {}
+
+fn test_arguments() {
+    touch_empty::<bool>(Empty::<bool>{})
+    let empty = Empty::<string>{}
+    touch_empty::<string>(empty)
+    touch_empty(Empty::<float>{})
+    touch_empty(empty)
+
+    touch_empty::<Empty<int>>(Empty::<Empty<int>>{})
+    let a = Empty::<Empty<int>>{}
+    touch_empty::<Empty<int>>(a)
+    touch_empty(Empty::<Empty<int>>{})
+    touch_empty(a)
+
+    touch_empty::<Empty<Empty<float>>>(Empty::<Empty<Empty<float>>>{})
+    let a = Empty::<Empty<Empty<float>>>{}
+    touch_empty::<Empty<Empty<float>>>(a)
+    touch_empty(Empty::<Empty<Empty<float>>>{})
+    touch_empty(a)
+
+    touch_nested_empty(Empty::<Empty<string>>{})
+    touch_nested_empty(Empty::<Empty<Empty<float>>>{})
+}
+
+fn test_field_access() {
+    let a = Singleton::<int> {value: 42}
+    let b = Singleton::<Singleton<int>> {value: a}
+    let c = Singleton::<Singleton<Singleton<int>>> {value: b}
+    let d = Singleton::<Singleton<Singleton<Singleton<int>>>> {value: c}
+    let e = d.value
+    let f = e.value
+    let g = f.value
+    let h = g.value
+    assert(h == 42)
+}
+
+struct TypeShadowsName<TypeShadowsName> {
+    value: TypeShadowsName,
+}
+
+fn test_type_shadows_name() {
+    let tsn = TypeShadowsName::<int>{value: 123}
+    assert(tsn.value == 123)
+}
+
+// TODO: This should not be allowed: requires indirection, which is not yet possible
+//    struct B<T> {
+//        b: B::<T>
+//    }
+
+struct Pair<First, Second> {
+    first: First,
+    second: Second,
+}
+
+fn new_pair<A, B>(a: A, b: B) -> Pair<A, B> {
+    return Pair::<A, B>{
+        first: a,
+        second: b,
+    }
+}
+
+fn test_two_generics() {
+    assert(false == new_pair(false, true).first)
+    assert(1 == new_pair(1, 2).first)
+    assert(3.0 == new_pair(2.0, 3.0).second)
+    assert('five' == new_pair('four', 'five').second)
+}
+
+struct NestedSingleton<T> {
+    value: Singleton<T>,
+}
+
+struct ExtraNestedSingleton<T> {
+    value: NestedSingleton<T>,
+}
+
+fn test_basic_inference() {
+    let a = Singleton{value: 123}
+    assert(a.value == 123)
+
+    let b = NestedSingleton{value: a}
+    assert(b.value.value == 123)
+
+    let c = ExtraNestedSingleton{value: b}
+    assert(c.value.value.value == 123)
+}
+
+struct Container<T> {
+    values: [T],
+}
+
+fn check_length<T>(n: int, c: Container<T>) {
+    assert(#c.values == n)
+}
+
+fn check_types<T>(t: T, c: Container<T>) {}
+
+fn test_inference_with_fn() {
+
+    check_length(1, Container{values: [1]})
+    check_length(2, Container{values: [[], [2]]})
+    check_length(3, Container{values: [[], [[]], [[3]]]})
+
+    check_types(['a', 'b'], Container{values: []})
+    check_types([[], ['c']], Container{values: []})
+    check_types('a', Container{values: ['a']})
+    check_types([], Container{values: [['b']]})
+}
+
+struct MultiPairs<A, B, C> {
+    a: (A, B),
+    b: (B, C),
+    c: (C, A),
+}
+
+fn test_inference_with_tuple() {
+    let t = MultiPairs{
+        a: (true, 2),
+        b: (2, 3.0),
+        c: (3.0, true),
+    }
+    assert(t.a.1 == t.b.0)
+    assert(t.b.1 == t.c.0)
+    assert(t.a.0 == t.c.1)
+}
+
+struct PairWithVec<T> {
+    a: T,
+    b: [T],
+}
+
+fn test_infer_vec_field() {
+    let p = PairWithVec{
+        a: true,
+        b: [],
+    }
+    _vector_push(p.b, p.a)
+    assert(p.a == p.b[0])
+}
+

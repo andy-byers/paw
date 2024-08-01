@@ -38,8 +38,8 @@ struct Ast;
         X(Index,          index)    \
         X(Selector,       selector) \
         X(TupleType,      tuple)    \
-        X(StructItem,     sitem)    \
-        X(MapItem,        mitem)    \
+        X(StructField,     sitem)    \
+        X(MapElem,        mitem)    \
         X(Signature,      sig)      \
         X(ContainerType,  cont) 
 
@@ -94,7 +94,7 @@ struct AstDeclHeader {
 
 struct AstVarDecl {
     AST_DECL_HEADER; 
-    paw_Bool is_global : 1;
+    paw_Bool is_pub : 1;
     paw_Bool is_const : 1;
     struct AstExpr *tag;
     struct AstExpr *init;
@@ -108,7 +108,7 @@ struct AstTypeDecl {
 
 struct AstFuncDecl {
     AST_DECL_HEADER; 
-    paw_Bool is_global : 1;
+    paw_Bool is_pub : 1;
     enum FuncKind fn_kind : 7;
     struct AstDecl *receiver;
     struct AstDeclList *generics;
@@ -121,7 +121,7 @@ struct AstFuncDecl {
 //       indirection
 struct AstAdtDecl {
     AST_DECL_HEADER; 
-    paw_Bool is_global : 1;
+    paw_Bool is_pub : 1;
     paw_Bool is_struct : 1;
     struct AstDeclList *fields;
     struct AstDeclList *generics;
@@ -150,6 +150,12 @@ struct AstDecl {
         AST_DECL_LIST(DEFINE_UNION)
 #undef DEFINE_UNION
     };
+};
+
+static const char *kAstDeclNames[] = {
+#define DEFINE_NAME(a, b) "Ast"#a,
+        AST_DECL_LIST(DEFINE_NAME)
+#undef DEFINE_NAME
 };
 
 #define DEFINE_ACCESS(a, b)                                       \
@@ -218,14 +224,14 @@ struct AstClosureExpr {
     struct AstBlock *body;
 };
 
-struct AstStructItem {
+struct AstStructField {
     AST_EXPR_HEADER;
     int index;
     String *name;
     struct AstExpr *value;
 };
 
-struct AstMapItem {
+struct AstMapElem {
     AST_EXPR_HEADER;
     struct AstExpr *key;
     struct AstExpr *value;
@@ -310,6 +316,12 @@ struct AstExpr {
         AST_EXPR_LIST(DEFINE_UNION)
 #undef DEFINE_UNION
     };
+};
+
+static const char *kAstExprNames[] = {
+#define DEFINE_NAME(a, b) "Ast"#a,
+        AST_EXPR_LIST(DEFINE_NAME)
+#undef DEFINE_NAME
 };
 
 #define DEFINE_ACCESS(a, b)                                       \
@@ -398,6 +410,12 @@ struct AstStmt {
     };
 };
 
+static const char *kAstStmtNames[] = {
+#define DEFINE_NAME(a, b) "Ast"#a,
+        AST_STMT_LIST(DEFINE_NAME)
+#undef DEFINE_NAME
+};
+
 #define DEFINE_ACCESS(a, b)                                       \
     static inline paw_Bool AstIs##a(const struct AstStmt *node) { \
         return node->hdr.kind == kAst##a;                         \
@@ -411,8 +429,8 @@ struct AstStmt {
 
 struct Ast {
     struct Pool pool;
-    struct AstStmtList *prelude;
-    struct AstStmtList *stmts;
+    struct AstDeclList *prelude;
+    struct AstDeclList *items;
     struct Lex *lex;
     paw_Env *P;
 };
@@ -435,12 +453,12 @@ void pawAst_free(struct Ast *ast);
 
 struct AstSegment *pawAst_segment_new(struct Ast *ast);
 
-static inline struct AstSegment *pawAst_path_add(struct Ast *ast, struct AstPath **ppath, String *name, struct AstExprList *args)
+static inline struct AstSegment *pawAst_path_add(struct Ast *ast, struct AstPath *path, String *name, struct AstExprList *args)
 {
     struct AstSegment *ps = pawAst_segment_new(ast);
     ps->name = name;
     ps->types = args;
-    pawAst_path_push(ast, ppath, ps);
+    pawAst_path_push(ast, path, ps);
     return ps;
 }
 

@@ -38,7 +38,6 @@ struct LabelList {
 struct BlockState {
     struct BlockState *outer;
     paw_Bool is_loop : 1;
-    int isymbol;
     int level;
     int label0;
 };

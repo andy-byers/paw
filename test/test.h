@@ -5,6 +5,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#define TEST_SCRIPTS(X) \
+    X(primitive) \
+    X(function) \
+    X(struct) \
+    X(tuple) \
+    X(enum) \
+    X(vector) \
+    X(poly_function) \
+    X(poly_struct) \
+    X(poly_enum)
+
 #define check(x)                                       \
     do {                                               \
         if (!(x)) {                                    \

@@ -157,7 +157,9 @@ void paw_pop(paw_Env *P, int n);
 // Return the number of values in the current stack frame
 int paw_get_count(paw_Env *P);
 
-int paw_find_global(paw_Env *P, const char *name);
+int paw_find_public(paw_Env *P);
+void paw_push_public(paw_Env *P, int id);
+
 int paw_find_attr(paw_Env *P, int index, const char *name);
 
 void paw_get_upvalue(paw_Env *P, int ifn, int index);

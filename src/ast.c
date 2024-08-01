@@ -60,120 +60,28 @@ static void indent_line(Printer *P)
     }
 }
 
-#define dump_fmt(P, fmt, ...) \
-    (indent_line(P), fprintf((P)->out, fmt, __VA_ARGS__))
-#define dump_msg(P, msg) (indent_line(P), fprintf((P)->out, msg))
+#define DUMP_FMT(P, fmt, ...) (indent_line(P), fprintf((P)->out, fmt, __VA_ARGS__))
+#define DUMP_MSG(P, msg) (indent_line(P), fprintf((P)->out, msg))
 
 static void dump_stmt(Printer *, struct AstStmt *);
 static void dump_expr(Printer *, struct AstExpr *);
 
-static void print_decl_kind(Printer *P, void *node)
-{
-    struct AstDecl *d = node;
-    switch (AST_KINDOF(d)) {
-        case kAstFuncDecl:
-            fprintf(P->out, "FuncDecl");
-            break;
-        case kAstFieldDecl:
-            fprintf(P->out, "FieldDecl");
-            break;
-        case kAstVarDecl:
-            fprintf(P->out, "VarDecl");
-            break;
-        case kAstVariantDecl:
-            fprintf(P->out, "VariantDecl");
-            break;
-        case kAstAdtDecl:
-            fprintf(P->out, "StructDecl");
-            break;
-        case kAstGenericDecl:
-            fprintf(P->out, "GenericDecl");
-            break;
-        case kAstTypeDecl:
-            fprintf(P->out, "TypeDecl");
-            break;
-        default:
-            fprintf(P->out, "?");
+#define DEFINE_KIND_PRINTER(name, T) \
+    static int print_##name##_kind(Printer *P, void *node) \
+    { \
+        if (node != NULL) { \
+            struct T *typed = node; \
+            printf("%s {\n", k##T##Names[AST_KINDOF(typed)]); \
+            return 0; \
+        } \
+        return -1; \
     }
-}
-
-static void print_expr_kind(Printer *P, void *node)
-{
-    struct AstExpr *e = node;
-    switch (AST_KINDOF(e)) {
-        case kAstLiteralExpr:
-            fprintf(P->out, "LiteralExpr");
-            break;
-        case kAstUnOpExpr:
-            fprintf(P->out, "UnOpExpr");
-            break;
-        case kAstBinOpExpr:
-            fprintf(P->out, "BinOpExpr");
-            break;
-        case kAstCallExpr:
-            fprintf(P->out, "CallExpr");
-            break;
-        case kAstIndex:
-            fprintf(P->out, "Index");
-            break;
-        case kAstSelector:
-            fprintf(P->out, "Selector");
-            break;
-        case kAstSignature:
-            fprintf(P->out, "FuncType");
-            break;
-        case kAstContainerType:
-            fprintf(P->out, "ContainerType");
-            break;
-        default:
-            fprintf(P->out, "?");
-            break;
-    }
-}
-
-static void print_stmt_kind(Printer *P, void *node)
-{
-    struct AstStmt *s = node;
-    switch (AST_KINDOF(s)) {
-        case kAstExprStmt:
-            fprintf(P->out, "ExprStmt");
-            break;
-        case kAstDeclStmt:
-            fprintf(P->out, "DeclStmt");
-            break;
-        case kAstBlock:
-            fprintf(P->out, "Block");
-            break;
-        case kAstIfStmt:
-            fprintf(P->out, "IfStmt");
-            break;
-        case kAstForStmt:
-            fprintf(P->out, "ForStmt");
-            break;
-        case kAstWhileStmt:
-            fprintf(P->out, "WhileStmt");
-            break;
-        case kAstReturnStmt:
-            fprintf(P->out, "ReturnStmt");
-            break;
-        default:
-            fprintf(P->out, "?");
-    }
-}
-
-static int predump_node(Printer *P, void *node,
-                        void (*print)(Printer *, void *))
-{
-    if (node != NULL) {
-        print(P, node);
-        fprintf(P->out, " {\n");
-        return 0;
-    }
-    return -1;
-}
+DEFINE_KIND_PRINTER(expr, AstExpr) 
+DEFINE_KIND_PRINTER(decl, AstDecl) 
+DEFINE_KIND_PRINTER(stmt, AstStmt) 
 
 #define dump_block(P, b) check_exp(AstIsBlock(AST_CAST_STMT(b)), dump_stmt(P, AST_CAST_STMT(b)))
-#define dump_name(P, s) dump_fmt(P, "name: %s\n", s ? s->text : NULL)
+#define dump_name(P, s) DUMP_FMT(P, "name: %s\n", s ? s->text : NULL)
 
 static void dump_expr(Printer *P, struct AstExpr *e);
 static void dump_decl(Printer *P, struct AstDecl *d);
@@ -184,16 +92,16 @@ static void dump_stmt(Printer *P, struct AstStmt *s);
     static void dump_##name##_list(Printer *P, struct T##List *list,           \
                                    const char *name)                           \
     {                                                                          \
-        dump_fmt(P, "%s: {\n", name);                                          \
+        DUMP_FMT(P, "%s: {\n", name);                                          \
         ++P->indent;                                                           \
         if (list != NULL) {                                                    \
-            dump_msg(P, "" /* indent */);                                      \
+            DUMP_MSG(P, "" /* indent */);                                      \
             for (int i = 0; i < list->count; ++i) {                            \
                 dump_##name(P, list->data[i]);                                 \
             }                                                                  \
         }                                                                      \
         --P->indent;                                                           \
-        dump_msg(P, "}\n");                                                    \
+        DUMP_MSG(P, "}\n");                                                    \
     }
 DEFINE_LIST_PRINTER(expr, AstExpr) 
 DEFINE_LIST_PRINTER(decl, AstDecl)
@@ -211,35 +119,33 @@ static void dump_path(Printer *P, struct AstPath *p)
 
 static void dump_decl(Printer *P, struct AstDecl *d)
 {
-    if (predump_node(P, d, print_decl_kind)) {
+    if (print_decl_kind(P, d)) {
         fprintf(P->out, "(null)\n");
         return;
     }
     ++P->indent;
-    dump_fmt(P, "line: %d\n", d->hdr.line);
+    DUMP_FMT(P, "line: %d\n", d->hdr.line);
     switch (AST_KINDOF(d)) {
         case kAstFuncDecl:
-            dump_fmt(P, "is_global: %d\n", d->func.is_global);
-            dump_fmt(P, "receiver: %p\n", (void *)d->func.receiver);
-            dump_fmt(P, "name: %s\n", d->func.name->text);
+            DUMP_FMT(P, "receiver: %p\n", cast(d->func.receiver, void *));
+            DUMP_FMT(P, "name: %s\n", d->func.name->text);
             dump_decl_list(P, d->func.generics, "generics");
             dump_decl_list(P, d->func.params, "params");
-            dump_msg(P, "result: ");
+            DUMP_MSG(P, "result: ");
             dump_expr(P, d->func.result);
-            dump_msg(P, "body: ");
+            DUMP_MSG(P, "body: ");
             dump_block(P, d->func.body);
             break;
         case kAstFieldDecl:
             dump_name(P, d->field.name);
-            dump_msg(P, "tag: ");
+            DUMP_MSG(P, "tag: ");
             dump_expr(P, d->field.tag);
             break;
         case kAstVarDecl:
-            dump_fmt(P, "is_global: %d\n", d->var.is_global);
             dump_name(P, d->var.name);
-            dump_msg(P, "tag: ");
+            DUMP_MSG(P, "tag: ");
             dump_expr(P, d->var.tag);
-            dump_msg(P, "init: ");
+            DUMP_MSG(P, "init: ");
             dump_expr(P, d->var.init);
             break;
         case kAstVariantDecl:
@@ -248,7 +154,7 @@ static void dump_decl(Printer *P, struct AstDecl *d)
             break;
         case kAstAdtDecl:
             dump_name(P, d->adt.name);
-            dump_fmt(P, "is_struct: %d\n", d->adt.is_struct);
+            DUMP_FMT(P, "is_struct: %d\n", d->adt.is_struct);
             dump_decl_list(P, d->adt.generics, "generics");
             dump_decl_list(P, d->adt.fields, "fields");
             break;
@@ -257,7 +163,7 @@ static void dump_decl(Printer *P, struct AstDecl *d)
             break;
         case kAstTypeDecl:
             dump_name(P, d->type.name);
-            dump_msg(P, "rhs: ");
+            DUMP_MSG(P, "rhs: ");
             dump_expr(P, d->type.rhs);
             dump_decl_list(P, d->type.generics, "generics");
             break;
@@ -265,190 +171,190 @@ static void dump_decl(Printer *P, struct AstDecl *d)
             paw_assert(0);
     }
     --P->indent;
-    dump_msg(P, "}\n");
+    DUMP_MSG(P, "}\n");
 }
 
 static void dump_stmt(Printer *P, struct AstStmt *s)
 {
-    if (predump_node(P, s, print_stmt_kind)) {
+    if (print_stmt_kind(P, s)) {
         fprintf(P->out, "(null)\n");
         return;
     }
     ++P->indent;
-    dump_fmt(P, "line: %d\n", s->hdr.line);
+    DUMP_FMT(P, "line: %d\n", s->hdr.line);
     switch (AST_KINDOF(s)) {
         case kAstExprStmt:
-            dump_msg(P, "lhs: ");
+            DUMP_MSG(P, "lhs: ");
             dump_expr(P, s->expr.lhs);
-            dump_msg(P, "rhs: ");
+            DUMP_MSG(P, "rhs: ");
             dump_expr(P, s->expr.rhs);
             break;
         case kAstBlock:
             dump_stmt_list(P, s->block.stmts, "stmts");
             break;
         case kAstDeclStmt:
-            dump_msg(P, "decl: ");
+            DUMP_MSG(P, "decl: ");
             dump_decl(P, s->decl.decl);
             break;
         case kAstIfStmt:
-            dump_msg(P, "cond: ");
+            DUMP_MSG(P, "cond: ");
             dump_expr(P, s->if_.cond);
-            dump_msg(P, "then_arm: ");
+            DUMP_MSG(P, "then_arm: ");
             dump_stmt(P, s->if_.then_arm);
-            dump_msg(P, "else_arm: ");
+            DUMP_MSG(P, "else_arm: ");
             dump_stmt(P, s->if_.else_arm);
             break;
         case kAstForStmt:
             if (s->for_.is_fornum) {
                 dump_name(P, s->for_.name);
-                dump_msg(P, "begin: ");
+                DUMP_MSG(P, "begin: ");
                 dump_expr(P, s->for_.fornum.begin);
-                dump_msg(P, "end: ");
+                DUMP_MSG(P, "end: ");
                 dump_expr(P, s->for_.fornum.end);
-                dump_msg(P, "step: ");
+                DUMP_MSG(P, "step: ");
                 dump_expr(P, s->for_.fornum.step);
-                dump_msg(P, "block: ");
+                DUMP_MSG(P, "block: ");
                 dump_block(P, s->for_.block);
             } else {
                 dump_name(P, s->for_.name);
-                dump_msg(P, "target: ");
+                DUMP_MSG(P, "target: ");
                 dump_expr(P, s->for_.forin.target);
-                dump_msg(P, "block: ");
+                DUMP_MSG(P, "block: ");
                 dump_block(P, s->for_.block);
             }
             break;
         case kAstWhileStmt:
             if (s->while_.is_dowhile) {
-                dump_msg(P, "block: ");
+                DUMP_MSG(P, "block: ");
                 dump_block(P, s->while_.block);
-                dump_msg(P, "cond: ");
+                DUMP_MSG(P, "cond: ");
                 dump_expr(P, s->while_.cond);
             } else {
-                dump_msg(P, "cond: ");
+                DUMP_MSG(P, "cond: ");
                 dump_expr(P, s->while_.cond);
-                dump_msg(P, "block: ");
+                DUMP_MSG(P, "block: ");
                 dump_block(P, s->while_.block);
             }
             break;
         case kAstReturnStmt:
-            dump_msg(P, "expr: ");
+            DUMP_MSG(P, "expr: ");
             dump_expr(P, s->result.expr);
             break;
         default:
             break;
     }
     --P->indent;
-    dump_msg(P, "}\n");
+    DUMP_MSG(P, "}\n");
 }
 
 static void dump_expr(Printer *P, struct AstExpr *e)
 {
-    if (predump_node(P, e, print_expr_kind)) {
+    if (print_expr_kind(P, e)) {
         fprintf(P->out, "(null)\n");
         return;
     }
     ++P->indent;
-    dump_fmt(P, "line: %d\n", e->hdr.line);
+    DUMP_FMT(P, "line: %d\n", e->hdr.line);
     switch (AST_KINDOF(e)) {
         case kAstLiteralExpr:
             switch (e->literal.lit_kind) {
                 case kAstBasicLit:
-                    dump_msg(P, "lit_kind: BASIC\n");
+                    DUMP_MSG(P, "lit_kind: BASIC\n");
                     switch (e->literal.basic.t) {
                         case PAW_TUNIT:
-                            dump_msg(P, "type: ()\n");
+                            DUMP_MSG(P, "type: ()\n");
                             break;
                         case PAW_TBOOL:
-                            dump_msg(P, "type: bool\n");
-                            dump_fmt(P, "value: %s\n",
+                            DUMP_MSG(P, "type: bool\n");
+                            DUMP_FMT(P, "value: %s\n",
                                      v_true(e->literal.basic.value) ? "true"
                                                                     : "false");
                             break;
                         case PAW_TINT:
-                            dump_msg(P, "type: int\n");
-                            dump_fmt(P, "value: %" PRId64 "\n",
+                            DUMP_MSG(P, "type: int\n");
+                            DUMP_FMT(P, "value: %" PRId64 "\n",
                                      v_int(e->literal.basic.value));
                             break;
                         case PAW_TFLOAT:
-                            dump_msg(P, "type: float\n");
-                            dump_fmt(P, "value: %f\n",
+                            DUMP_MSG(P, "type: float\n");
+                            DUMP_FMT(P, "value: %f\n",
                                      v_float(e->literal.basic.value));
                             break;
                         default:
                             paw_assert(e->literal.basic.t == PAW_TSTRING);
-                            dump_msg(P, "type: string\n");
-                            dump_fmt(P, "value: %s\n",
+                            DUMP_MSG(P, "type: string\n");
+                            DUMP_FMT(P, "value: %s\n",
                                      v_string(e->literal.basic.value)->text);
                             break;
                     }
                     break;
                 case kAstTupleLit:
-                    dump_msg(P, "lit_kind: TUPLE\n");
+                    DUMP_MSG(P, "lit_kind: TUPLE\n");
                     dump_expr_list(P, e->literal.tuple.elems, "elems");
                     break;
                 case kAstContainerLit:
-                    dump_msg(P, "lit_kind: CONTAINER\n");
+                    DUMP_MSG(P, "lit_kind: CONTAINER\n");
                     dump_expr_list(P, e->literal.cont.items, "items");
                     break;
                 default:
                     paw_assert(e->literal.lit_kind == kAstCompositeLit);
-                    dump_msg(P, "lit_kind: COMPOSITE\n");
-                    dump_msg(P, "target: ");
+                    DUMP_MSG(P, "lit_kind: COMPOSITE\n");
+                    DUMP_MSG(P, "target: ");
                     dump_path(P, e->literal.comp.path);
                     dump_expr_list(P, e->literal.comp.items, "items");
             }
             break;
         case kAstUnOpExpr:
-            dump_fmt(P, "op: %d\n", e->unop.op);
-            dump_msg(P, "target: ");
+            DUMP_FMT(P, "op: %d\n", e->unop.op);
+            DUMP_MSG(P, "target: ");
             dump_expr(P, e->unop.target);
             break;
         case kAstBinOpExpr:
-            dump_fmt(P, "op: %d\n", e->binop.op);
-            dump_msg(P, "lhs: ");
+            DUMP_FMT(P, "op: %d\n", e->binop.op);
+            DUMP_MSG(P, "lhs: ");
             dump_expr(P, e->binop.lhs);
-            dump_msg(P, "rhs: ");
+            DUMP_MSG(P, "rhs: ");
             dump_expr(P, e->binop.rhs);
             break;
         case kAstCallExpr:
-            dump_msg(P, "target: ");
+            DUMP_MSG(P, "target: ");
             dump_expr(P, e->call.target);
             dump_expr_list(P, e->call.args, "args");
             break;
         case kAstIndex:
-            dump_fmt(P, "is_slice: %d\n", e->index.is_slice);
-            dump_msg(P, "target: ");
+            DUMP_FMT(P, "is_slice: %d\n", e->index.is_slice);
+            DUMP_MSG(P, "target: ");
             dump_expr(P, e->index.target);
-            dump_msg(P, "first: ");
+            DUMP_MSG(P, "first: ");
             dump_expr(P, e->index.first);
-            dump_msg(P, "second: ");
+            DUMP_MSG(P, "second: ");
             dump_expr(P, e->index.second);
             break;
         case kAstSelector:
-            dump_msg(P, "target: ");
+            DUMP_MSG(P, "target: ");
             dump_expr(P, e->selector.target);
             if (e->selector.is_index) {
-                dump_fmt(P, "index: %" PRId64 "\n", e->selector.index);
+                DUMP_FMT(P, "index: %" PRId64 "\n", e->selector.index);
             } else {
                 dump_name(P, e->selector.name);
             }
             break;
         case kAstContainerType:
-            dump_msg(P, "first: ");
+            DUMP_MSG(P, "first: ");
             dump_expr(P, e->cont.first);
-            dump_msg(P, "second: ");
+            DUMP_MSG(P, "second: ");
             dump_expr(P, e->cont.second);
             break;
         case kAstSignature:
             dump_expr_list(P, e->sig.params, "params");
-            dump_msg(P, "result: ");
+            DUMP_MSG(P, "result: ");
             dump_expr(P, e->sig.result);
             break;
         default:
             break;
     }
     --P->indent;
-    dump_msg(P, "}\n");
+    DUMP_MSG(P, "}\n");
 }
 
 void pawAst_dump_decl(FILE *out, struct AstDecl *decl)

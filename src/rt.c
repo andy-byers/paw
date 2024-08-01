@@ -37,7 +37,7 @@
 #define vm_top(n) (&P->top.p[-(n)])
 #define vm_save() (vm_protect(), cf->top = P->top)
 #define vm_protect() (cf->pc = pc)
-#define vm_upvalue(o) (fn->up[get_U(o)]->p.p)
+#define vm_upvalue(u) (fn->up[u]->p.p)
 #define vm_pushv(v) pawC_pushv(P, v)
 #define vm_push0() pawC_push0(P)
 #define vm_pushi(i) pawC_pushi(P, i)
@@ -1140,13 +1140,15 @@ top:
 
             vm_case(GETUPVALUE) :
             {
-                const Value upval = *vm_upvalue(opcode);
+                const int u = get_U(opcode);
+                const Value upval = *vm_upvalue(u);
                 vm_pushv(upval);
             }
 
             vm_case(SETUPVALUE) :
             {
-                Value *pupval = vm_upvalue(opcode);
+                const int u = get_U(opcode);
+                Value *pupval = vm_upvalue(u);
                 *pupval = *vm_top(1);
                 vm_pop(1);
             }

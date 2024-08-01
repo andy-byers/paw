@@ -10,32 +10,56 @@
 static struct TestAlloc s_alloc;
 typedef uint64_t TypeSet;
 
-static void test_compiler_error(int expect, const char *name, const char *text)
+static void write_main(char *out, const char *items, const char *text)
 {
-    (void)name;
+#define ADD_CHUNK(o, p) \
+        memcpy(o, p, strlen(p)); \
+        (o) += strlen(p);
+    ADD_CHUNK(out, items);
+    ADD_CHUNK(out, "pub fn main() {\n");
+    ADD_CHUNK(out, text);
+    ADD_CHUNK(out, "}\n");
+    *out++ = '\0';
+#undef ADD_CHUNK
+}
+
+static void test_compiler_error(int expect, const char *name, const char *item, const char *text)
+{
+    char buffer[4096];
+    write_main(buffer, item, text);
+
     paw_Env *P = test_open(NULL, &s_alloc);
-    int status = pawL_load_chunk(P, name, text);
+    int status = pawL_load_chunk(P, name, buffer);
     check(status == expect);
+
     test_close(P, &s_alloc);
 }
 
-static void test_runtime_error(int expect, const char *name, const char *text)
+static void test_runtime_error(int expect, const char *name, const char *item, const char *text)
 {
-    (void)name;
+    char buffer[4096];
+    write_main(buffer, item, text);
+
     paw_Env *P = test_open(NULL, &s_alloc);
-    int status = pawL_load_chunk(P, name, text);
+    int status = pawL_load_chunk(P, name, buffer);
     check(status == PAW_OK);
+
+    paw_push_string(P, "main");
+    const int g = paw_find_public(P);
+    paw_push_public(P, g);
+
     status = paw_call(P, 0);
     check(status == expect);
+
     test_close(P, &s_alloc);
 }
 
 static void test_name_error(void)
 {
-    test_compiler_error(PAW_ENAME, "use_before_def_local", "let x = x");
-    test_compiler_error(PAW_ENAME, "undef_local", "x = 1");
-    test_compiler_error(PAW_ENAME, "undef_upvalue", "fn f() {x = 1} f()");
-    test_compiler_error(PAW_ENAME, "undef_field", "struct A {} let a = A{}.value");
+    test_compiler_error(PAW_ENAME, "use_before_def_local", "", "let x = x");
+    test_compiler_error(PAW_ENAME, "undef_local", "", "x = 1");
+    test_compiler_error(PAW_ENAME, "undef_upvalue", "fn f() {x = 1}", " f()");
+    test_compiler_error(PAW_ENAME, "undef_field", "struct A {}", "let a = A{}.value");
 }
 
 static const char *get_literal(int kind)
@@ -67,7 +91,7 @@ static void check_unop_type_error(const char *op, paw_Type k)
     snprintf(text_buf, sizeof(text_buf), "let x = %s%s",
              op, get_literal(k));
 
-    test_compiler_error(PAW_ETYPE, name_buf, text_buf);
+    test_compiler_error(PAW_ETYPE, name_buf, "", text_buf);
 }
 
 static void check_unification_errors(void)
@@ -85,7 +109,7 @@ static void check_unification_errors(void)
             snprintf(text_buf, sizeof(text_buf), "let x = %s; let y = %s; x = y",
                      get_literal(k), get_literal(k2));
 
-            test_compiler_error(PAW_ETYPE, name_buf, text_buf);
+            test_compiler_error(PAW_ETYPE, name_buf, "", text_buf);
         }
     }
 }
@@ -100,7 +124,7 @@ static void check_binop_type_error(const char *op, paw_Type k, paw_Type k2)
     snprintf(text_buf, sizeof(text_buf), "let x = %s %s %s",
              get_literal(k), op, get_literal(k2));
 
-    test_compiler_error(PAW_ETYPE, name_buf, text_buf);
+    test_compiler_error(PAW_ETYPE, name_buf, "", text_buf);
 }
 
 static void check_binop_type_errors(const char *op, paw_Type *types)
@@ -155,70 +179,74 @@ static void test_type_error(void)
     check_binop_type_errors("==", mklist(PAW_TBOOL, PAW_TINT, PAW_TFLOAT, PAW_TSTRING));
     check_binop_type_errors("!=", mklist(PAW_TBOOL, PAW_TINT, PAW_TFLOAT, PAW_TSTRING));
 
-    test_compiler_error(PAW_ETYPE, "call_unit_variant", "enum E {X} let x = E::X()");
-    test_compiler_error(PAW_ETYPE, "wrong_constructor_args", "enum E {X(int)} let x = E::X(1.0)");
+    test_compiler_error(PAW_ETYPE, "call_unit_variant", "enum E {X}", "let x = E::X()");
+    test_compiler_error(PAW_ETYPE, "wrong_constructor_args", "enum E {X(int)}", "let x = E::X(1.0)");
 }
 
 static void test_syntax_error(void)
 {
-    test_compiler_error(PAW_ESYNTAX, "overflow_integer", "let d = -9223372036854775808"); // overflows before '-' applied
-    test_compiler_error(PAW_ESYNTAX, "binary_digit_range", "let b = 0b001201");
-    test_compiler_error(PAW_ESYNTAX, "octal_digit_range", "let o = 0o385273");
-    test_compiler_error(PAW_ESYNTAX, "hex_digit_range", "let x = 0x5A2CG3");
-    test_compiler_error(PAW_ESYNTAX, "malformed_binary", "let b = 0b00$101");
-    test_compiler_error(PAW_ESYNTAX, "malformed_octal", "let o = 0o37=273");
-    test_compiler_error(PAW_ESYNTAX, "malformed_hex", "let x = 0y5A2CF3");
-    test_compiler_error(PAW_ESYNTAX, "stmt_after_return", "fn f() {return; f()}");
-    test_compiler_error(PAW_ESYNTAX, "missing_right_paren", "fn f(a: int, b: int, c: int -> int {return (a + b + c)}");
-    test_compiler_error(PAW_ESYNTAX, "missing_left_paren", "fn fa: int, b: int, c: int) -> int {return (a + b + c)}");
-    test_compiler_error(PAW_ESYNTAX, "missing_right_curly", "fn f(a: int, b: int, c: int) -> int {return (a + b + c)");
-    test_compiler_error(PAW_ESYNTAX, "missing_left_curly", "fn f(a: int, b: int, c: int) -> int return (a + b + c)}");
-    test_compiler_error(PAW_ESYNTAX, "missing_right_angle", "fn f<A, B, C() {}");
-    test_compiler_error(PAW_ESYNTAX, "missing_left_angle", "fn fA, B, C>() {}");
-    test_compiler_error(PAW_ESYNTAX, "missing_turbo", "struct A<T> {} let a = A<int>{}");
-    test_compiler_error(PAW_ESYNTAX, "partial_turbo", "struct A<T> {} let a = A:<int>{}");
-    test_compiler_error(PAW_ESYNTAX, "missing_left_angle_tubofish", "struct A<T> {} let a = A::int>{}");
-    test_compiler_error(PAW_ESYNTAX, "missing_right_angle_turbofish", "struct A<T> {} let a = A::<int{}");
-    test_compiler_error(PAW_ESYNTAX, "square_bracket_generics", "fn f[A, B, C]() {}");
+    test_compiler_error(PAW_ESYNTAX, "overflow_integer", "", "let d = -9223372036854775808"); // overflows before '-' applied
+    test_compiler_error(PAW_ESYNTAX, "binary_digit_range", "", "let b = 0b001201");
+    test_compiler_error(PAW_ESYNTAX, "octal_digit_range", "", "let o = 0o385273");
+    test_compiler_error(PAW_ESYNTAX, "hex_digit_range", "", "let x = 0x5A2CG3");
+    test_compiler_error(PAW_ESYNTAX, "malformed_binary", "", "let b = 0b00$101");
+    test_compiler_error(PAW_ESYNTAX, "malformed_octal", "", "let o = 0o37=273");
+    test_compiler_error(PAW_ESYNTAX, "malformed_hex", "", "let x = 0y5A2CF3");
+    test_compiler_error(PAW_ESYNTAX, "stmt_after_return", "fn f() {return; f()}", "");
+    test_compiler_error(PAW_ESYNTAX, "missing_right_paren", "fn f(a: int, b: int, c: int -> int {return (a + b + c)}", "");
+    test_compiler_error(PAW_ESYNTAX, "missing_left_paren", "fn fa: int, b: int, c: int) -> int {return (a + b + c)}", "");
+    test_compiler_error(PAW_ESYNTAX, "missing_right_curly", "fn f(a: int, b: int, c: int) -> int {return (a + b + c)", "");
+    test_compiler_error(PAW_ESYNTAX, "missing_left_curly", "fn f(a: int, b: int, c: int) -> int return (a + b + c)}", "");
+    test_compiler_error(PAW_ESYNTAX, "missing_right_angle", "fn f<A, B, C() {}", "");
+    test_compiler_error(PAW_ESYNTAX, "missing_left_angle", "fn fA, B, C>() {}", "");
+    test_compiler_error(PAW_ESYNTAX, "missing_turbo", "struct A<T> {}", "let a = A<int>{}");
+    test_compiler_error(PAW_ESYNTAX, "partial_turbo", "struct A<T> {}", "let a = A:<int>{}");
+    test_compiler_error(PAW_ESYNTAX, "missing_left_angle_tubofish", "struct A<T> {}", "let a = A::int>{}");
+    test_compiler_error(PAW_ESYNTAX, "missing_right_angle_turbofish", "struct A<T> {}", "let a = A::<int{}");
+    test_compiler_error(PAW_ESYNTAX, "square_bracket_generics", "fn f[A, B, C]() {}", "");
+    test_compiler_error(PAW_ESYNTAX, "nested_fn", "", "fn f() {}");
+    test_compiler_error(PAW_ESYNTAX, "nested_struct", "", "struct S {x: int}");
+    test_compiler_error(PAW_ESYNTAX, "nested_enum", "", "enum E {X}");
+    test_compiler_error(PAW_ESYNTAX, "toplevel_var", "let v = 1", "");
 }
 
 static void test_arithmetic_error(void)
 {
-    test_runtime_error(PAW_ERUNTIME, "division_by_0_int", "let x = 1 / 0");
-    test_runtime_error(PAW_ERUNTIME, "division_by_0_float", "let x = 1.0 / 0.0");
-    test_runtime_error(PAW_ERUNTIME, "negative_left_shift", "let x = 1 << -2");
-    test_runtime_error(PAW_ERUNTIME, "negative_right_shift", "let x = 1 >> -2");
+    test_runtime_error(PAW_ERUNTIME, "division_by_0_int", "", "let x = 1 / 0");
+    test_runtime_error(PAW_ERUNTIME, "division_by_0_float", "", "let x = 1.0 / 0.0");
+    test_runtime_error(PAW_ERUNTIME, "negative_left_shift", "", "let x = 1 << -2");
+    test_runtime_error(PAW_ERUNTIME, "negative_right_shift", "", "let x = 1 >> -2");
 }
 
 static void test_struct_error(void)
 {
-    test_compiler_error(PAW_ENAME, "struct_missing_field", "struct A {a: int} let a = A{}");
-    test_compiler_error(PAW_ENAME, "struct_extra_field", "struct A {a: int} let a = A{a: 1, b: 2}");
-    test_compiler_error(PAW_ENAME, "struct_duplicate_field", "struct A {a: int} let a = A{a: 1, a: 1}");
-    test_compiler_error(PAW_ENAME, "struct_wrong_field", "struct A {a: int} let a = A{b: 2}");
+    test_compiler_error(PAW_ENAME, "struct_missing_field", "struct A {a: int}", "let a = A{}");
+    test_compiler_error(PAW_ENAME, "struct_extra_field", "struct A {a: int}", "let a = A{a: 1, b: 2}");
+    test_compiler_error(PAW_ENAME, "struct_duplicate_field", "struct A {a: int}", "let a = A{a: 1, a: 1}");
+    test_compiler_error(PAW_ENAME, "struct_wrong_field", "struct A {a: int}", "let a = A{b: 2}");
 }
 
 static void test_vector_error(void)
 {
-    test_compiler_error(PAW_ETYPE, "vector_cannot_infer", "let a = []");
-    test_compiler_error(PAW_ETYPE, "vector_cannot_infer_binop", "let a = [] + []");
-    test_compiler_error(PAW_ETYPE, "vector_use_before_inference", "let a = []; let b = #a");
-    test_compiler_error(PAW_ETYPE, "vector_incompatible_types", "let a = [1]; a = [2.0]");
-    test_compiler_error(PAW_ETYPE, "vector_incompatible_types_2", "let a = []; if true {a = [0]} else {a = [true]}");
-    test_compiler_error(PAW_ETYPE, "vector_mixed_types", "let a = [1, 2, 3, 4, '5']");
-    test_compiler_error(PAW_ETYPE, "vector_mixed_nesting", "let a = [[[1]], [[2]], [3]]");
+    test_compiler_error(PAW_ETYPE, "vector_cannot_infer", "", "let a = []");
+    test_compiler_error(PAW_ETYPE, "vector_cannot_infer_binop", "", "let a = [] + []");
+    test_compiler_error(PAW_ETYPE, "vector_use_before_inference", "", "let a = []; let b = #a");
+    test_compiler_error(PAW_ETYPE, "vector_incompatible_types", "", "let a = [1]; a = [2.0]");
+    test_compiler_error(PAW_ETYPE, "vector_incompatible_types_2", "", "let a = []; if true {a = [0]} else {a = [true]}");
+    test_compiler_error(PAW_ETYPE, "vector_mixed_types", "", "let a = [1, 2, 3, 4, '5']");
+    test_compiler_error(PAW_ETYPE, "vector_mixed_nesting", "", "let a = [[[1]], [[2]], [3]]");
 }
 
 static void test_map_error(void)
 {
-    test_compiler_error(PAW_ETYPE, "map_cannot_infer", "let a = [:]");
-    test_compiler_error(PAW_ETYPE, "map_use_before_inference", "let a = [:]; let b = #a");
-    test_compiler_error(PAW_ETYPE, "map_incompatible_types", "let a = [1: 2]; a = [3: 4.0]");
-    test_compiler_error(PAW_ETYPE, "map_incompatible_types_2", "let a = [:]; if true {a = [0: 0]} else {a = [1: true]}");
-    test_compiler_error(PAW_ETYPE, "map_mixed_types", "let a = [1: 2, 3: 4, 5: '6']");
-    test_compiler_error(PAW_ETYPE, "map_mixed_nesting", "let a = [1: [1: 1], 2: [2: 2], 3: [3: [3: 3]]]");
-    test_compiler_error(PAW_ETYPE, "map_nonhashable_literal_key", "let map = [[1]: 1]");
-    test_compiler_error(PAW_ETYPE, "map_nonhashable_type_key", "let map: [[int]: int] = [:]");
+    test_compiler_error(PAW_ETYPE, "map_cannot_infer", "", "let a = [:]");
+    test_compiler_error(PAW_ETYPE, "map_use_before_inference", "", "let a = [:]; let b = #a");
+    test_compiler_error(PAW_ETYPE, "map_incompatible_types", "", "let a = [1: 2]; a = [3: 4.0]");
+    test_compiler_error(PAW_ETYPE, "map_incompatible_types_2", "", "let a = [:]; if true {a = [0: 0]} else {a = [1: true]}");
+    test_compiler_error(PAW_ETYPE, "map_mixed_types", "", "let a = [1: 2, 3: 4, 5: '6']");
+    test_compiler_error(PAW_ETYPE, "map_mixed_nesting", "", "let a = [1: [1: 1], 2: [2: 2], 3: [3: [3: 3]]]");
+    test_compiler_error(PAW_ETYPE, "map_nonhashable_literal_key", "", "let map = [[1]: 1]");
+    test_compiler_error(PAW_ETYPE, "map_nonhashable_type_key", "", "let map: [[int]: int] = [:]");
 }
 
 int main(void)

@@ -1,0 +1,36 @@
+
+enum Unit {
+    X,
+}
+
+enum Unit2 {
+    X,
+    Y,
+}
+
+fn test_unit_enum() {
+    let e = Unit::X
+    e = Unit::X
+
+    let e = Unit2::X
+    e = Unit2::Y
+}
+
+enum Data {
+    X,
+    Y(int),
+}
+
+fn test(e: Data) -> Data {
+    let e2 = e
+    return e2
+}
+
+fn test_data_enum() {
+    let e = Data::X
+    e = Data::Y(42)
+    
+    let e = test(Data::X)
+    let e = test(Data::Y(42))
+
+}
