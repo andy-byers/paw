@@ -44,7 +44,8 @@ struct BlockState {
 };
 
 struct LocalSlot {
-    struct HirSymbol *symbol;
+    struct HirType *type;
+    String *name;
     int index;
     paw_Bool is_captured : 1;
 };

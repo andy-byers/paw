@@ -109,7 +109,8 @@ enum HirVarKind {
 };
 
 struct HirVarInfo {
-    struct HirSymbol *symbol;
+    String *name;
+    struct HirType *type;
     enum HirVarKind kind;
     int index;
 };
@@ -158,9 +159,9 @@ struct HirAdt {
     DefId did;
 };
 
-#define HIR_FUNC_HEADER \
-    HIR_TYPE_HEADER;    \
-    struct HirTypeList *params;    \
+#define HIR_FUNC_HEADER         \
+    HIR_TYPE_HEADER;            \
+    struct HirTypeList *params; \
     struct HirType *result
 struct HirFuncPtr {
     HIR_FUNC_HEADER; 
@@ -239,7 +240,6 @@ struct HirFuncDecl {
     paw_Bool is_global : 1;
     enum FuncKind fn_kind : 7;
     struct HirDecl *receiver;
-    struct HirScope *scope;
     struct HirDeclList *generics;
     struct HirDeclList *params;
     struct HirBlock *body;
@@ -251,7 +251,6 @@ struct HirAdtDecl {
     paw_Bool is_global : 1;
     paw_Bool is_struct : 1;
     struct HirScope *scope;
-    struct HirScope *field_scope;
     struct HirDeclList *fields;
     struct HirDeclList *generics;
     struct HirDeclList *monos;
@@ -274,7 +273,6 @@ struct HirVariantDecl {
 struct HirInstanceDecl {
     HIR_DECL_HEADER; 
     struct HirScope *scope;
-    struct HirScope *field_scope;
     struct HirDeclList *types;
     struct HirDeclList *fields;
 };
@@ -373,7 +371,6 @@ struct HirLiteralExpr {
 
 struct HirClosureExpr {
     HIR_EXPR_HEADER; 
-    struct HirScope *scope;
     struct HirDeclList *params;
     struct HirBlock *body;
 };
@@ -497,7 +494,6 @@ struct HirExprStmt {
 
 struct HirBlock {
     HIR_STMT_HEADER;
-    struct HirScope *scope;
     struct HirStmtList *stmts;
 };
 
@@ -516,7 +512,6 @@ struct HirIfStmt {
 struct HirWhileStmt {
     HIR_STMT_HEADER;
     paw_Bool is_dowhile : 1;
-    struct HirScope *scope;
     struct HirExpr *cond;
     struct HirBlock *block;
 };
@@ -540,7 +535,6 @@ struct HirForStmt {
     HIR_STMT_HEADER;
     paw_Bool is_fornum : 1;
     struct HirDecl *control;
-    struct HirScope *scope;
     struct HirBlock *block;
     union {
         struct HirForIn forin;

@@ -398,19 +398,13 @@ static void enter_function(struct Resolver *R, struct HirScope *scope, struct Hi
     new_local(R, func->name, HIR_CAST_DECL(func));
 }
 
-static void new_local_literal(struct Resolver *R, const char *name, paw_Type code)
-{
-    struct HirSymbol *symbol = basic_symbol(R, code);
-    new_local(R, SCAN_STRING(R, name), symbol->decl);
-}
-
 static struct HirStmt *ResolveBlock(struct Resolver *R, struct AstBlock *block)
 {
     struct HirStmt *result = pawHir_new_stmt(R->hir, kHirBlock);
     struct HirBlock *r = HirGetBlock(result);
     enter_block(R, NULL);
     r->stmts = resolve_stmt_list(R, block->stmts);
-    r->scope = leave_block(R);
+    leave_block(R);
     return result;
 }
 
@@ -424,19 +418,6 @@ static struct HirType *register_decl_type(struct Resolver *R, struct HirDecl *de
     return r;
 }
 
-static void register_concrete_types(struct Resolver *R, struct HirDeclList *generics, struct HirTypeList *types)
-{
-    paw_assert(generics->count == types->count);
-    for (int i = 0; i < types->count; ++i) {
-        struct HirDecl *decl = generics->data[i];
-        struct HirGenericDecl *generic = HirGetGenericDecl(decl);
-        generic->type = types->data[i];
-        struct HirSymbol *symbol = new_symbol(R, generic->name, decl, PAW_FALSE);
-        symbol->is_type = PAW_TRUE;
-        symbol->is_generic = PAW_FALSE;
-    }
-}
-
 static struct HirType *register_variant(struct Resolver *R, struct HirVariantDecl *d)
 {
     // An enum variant name can be thought of as a function from the type of the
@@ -444,8 +425,6 @@ static struct HirType *register_variant(struct Resolver *R, struct HirVariantDec
     // E {X(string)}', E::X has type 'fn(string) -> E'.
     if (d->type == NULL) {
         d->type = register_decl_type(R, HIR_CAST_DECL(d), kHirFuncDef);
-    } else {
-    //    HirGetFuncDef(d->type)->did = add_def(R, HIR_CAST_DECL(d));
     }
     struct HirFuncDef *t = HirGetFuncDef(d->type);
     t->base = HirGetAdt(R->adt)->did;
@@ -485,7 +464,7 @@ static void instantiate_variant(struct Resolver *R, struct HirTypeList *before, 
         struct HirDecl *field = r->fields->data[j];
         instantiate_field(R, before, after, field);
     }
-    r->scope = leave_block(R);
+    leave_block(R);
 }
 
 static struct HirDeclList *instantiate_fields(struct Resolver *R, struct HirTypeList *before, struct HirTypeList *after, struct HirDeclList *list, Instantiate callback)
@@ -678,7 +657,6 @@ static void instantiate_func_aux(struct Resolver *R, struct HirFuncDecl *base, s
     inst->name = base->name;
 
     inst->types = transfer_fields(R, base->generics);
-    register_concrete_types(R, inst->types, types);
 
     struct HirType *r = register_decl_type(R, HIR_CAST_DECL(inst), kHirFuncDef);
     r->fdef.base = base->did;
@@ -687,11 +665,11 @@ static void instantiate_func_aux(struct Resolver *R, struct HirFuncDecl *base, s
     r->fdef.types = types;
     inst->type = r;
 
-    // NOTE: '.field_scope' not used for functions
+    // NOTE: '.scope' not used for functions
     struct HirTypeList *generics = HirGetFuncDef(base->type)->types;
     prep_func_instance(R, generics, types, inst);
 
-    inst->scope = leave_block(R);
+    leave_block(R);
 }
 
 static void instantiate_struct_aux(struct Resolver *R, struct HirAdtDecl *base,
@@ -701,7 +679,6 @@ static void instantiate_struct_aux(struct Resolver *R, struct HirAdtDecl *base,
     inst->name = base->name;
 
     inst->types = transfer_fields(R, base->generics);
-    register_concrete_types(R, inst->types, types);
 
     struct HirType *r = register_decl_type(R, HIR_CAST_DECL(inst), kHirAdt);
     r->adt.base = base->did;
@@ -717,9 +694,9 @@ static void instantiate_struct_aux(struct Resolver *R, struct HirAdtDecl *base,
     enter_block(R, NULL);
     Instantiate callback = base->is_struct ? instantiate_field : instantiate_variant;
     inst->fields = instantiate_fields(R, generics, types, base->fields, callback);
-    inst->field_scope = leave_block(R);
-
     inst->scope = leave_block(R);
+
+    leave_block(R);
     R->adt = enclosing;
 }
 
@@ -792,7 +769,7 @@ static struct HirType *instantiate(struct Resolver *R, struct HirDecl *base, str
     return HIR_TYPEOF(base);
 }
 
-static void register_func(struct Resolver *R, struct AstFuncDecl *d, struct HirFuncDecl *r)
+static struct HirScope *register_func(struct Resolver *R, struct AstFuncDecl *d, struct HirFuncDecl *r)
 {
     enter_block(R, NULL);
     if (d->generics != NULL) {
@@ -801,7 +778,7 @@ static void register_func(struct Resolver *R, struct AstFuncDecl *d, struct HirF
     }
     r->params = resolve_decl_list(R, d->params);
     struct HirType *result = resolve_type(R, d->result);
-    r->scope = leave_block(R);
+    struct HirScope *scope = leave_block(R);
 
     struct HirType *t = register_decl_type(R, HIR_CAST_DECL(r), kHirFuncDef);
     t->fdef.types = collect_decl_types(R, r->generics);
@@ -809,6 +786,7 @@ static void register_func(struct Resolver *R, struct AstFuncDecl *d, struct HirF
     t->fdef.result = result;
     t->fdef.base = r->did;
     r->type = t;
+    return scope;
 }
 
 static struct HirDecl *ResolveFieldDecl(struct Resolver *R, struct AstFieldDecl *d)
@@ -853,9 +831,9 @@ static void register_struct(struct Resolver *R, struct AstAdtDecl *d, struct Hir
 
     enter_block(R, NULL);
     allocate_decls(R, r->fields);
-    r->field_scope = leave_block(R);
-
     r->scope = leave_block(R);
+
+    leave_block(R);
     R->adt = enclosing;
 
     t->adt.types = collect_decl_types(R, r->generics);
@@ -863,11 +841,11 @@ static void register_struct(struct Resolver *R, struct AstAdtDecl *d, struct Hir
     r->type = t;
 }
 
-static void resolve_func_body(struct Resolver *R, struct AstFuncDecl *d, struct HirFuncDecl *r, enum FuncKind kind)
+static void resolve_func_body(struct Resolver *R, struct AstFuncDecl *d, struct HirFuncDecl *r, struct HirScope *scope, enum FuncKind kind)
 {
     r->fn_kind = kind;
 
-    enter_function(R, r->scope, r);
+    enter_function(R, scope, r);
     allocate_decls(R, r->params);
 
     struct HirType *outer = R->result;
@@ -879,7 +857,7 @@ static void resolve_func_body(struct Resolver *R, struct AstFuncDecl *d, struct 
     r->body = RESOLVE_BLOCK(R, d->body);
     leave_inference_ctx(R);
 
-    r->scope = leave_function(R);
+    leave_function(R);
     R->in_closure = last_state;
     R->result = outer;
 }
@@ -1291,7 +1269,7 @@ static struct HirExpr *resolve_closure_expr(struct Resolver *R, struct AstClosur
 
     r->body = RESOLVE_BLOCK(R, e->body);
 
-    r->scope = leave_block(R);
+    leave_block(R);
     R->in_closure = last_state;
     R->result = last_result;
     return result;
@@ -1640,8 +1618,8 @@ static struct HirDecl *ResolveFuncDecl(struct Resolver *R, struct AstFuncDecl *d
 
     struct HirSymbol *symbol = declare_symbol(R, d->name, result, d->is_global);
     symbol->is_type = d->generics != NULL;
-    register_func(R, d, r);
-    resolve_func_body(R, d, r, FUNC_FUNCTION);
+    struct HirScope *scope = register_func(R, d, r);
+    resolve_func_body(R, d, r, scope, FUNC_FUNCTION);
     define_symbol(symbol);
     return result;
 }
@@ -1681,7 +1659,7 @@ static struct HirStmt *ResolveWhileStmt(struct Resolver *R, struct AstWhileStmt 
     enter_block(R, NULL);
     r->cond = expect_bool_expr(R, s->cond);
     r->block = RESOLVE_BLOCK(R, s->block);
-    r->scope = leave_block(R);
+    leave_block(R);
     return result;
 }
 
@@ -1697,7 +1675,7 @@ static void visit_forbody(struct Resolver *R, String *iname, struct HirType *ity
 
     r->block = new_block(R);
     r->block->stmts = resolve_stmt_list(R, b->stmts);
-    r->block->scope = leave_block(R);
+    leave_block(R);
 }
 
 static void visit_fornum(struct Resolver *R, struct AstForStmt *s, struct HirForStmt *r)
@@ -1707,10 +1685,6 @@ static void visit_fornum(struct Resolver *R, struct AstForStmt *s, struct HirFor
     r->fornum.begin = expect_int_expr(R, fornum->begin);
     r->fornum.end = expect_int_expr(R, fornum->end);
     r->fornum.step = expect_int_expr(R, fornum->step);
-
-    new_local_literal(R, "(for begin)", PAW_TINT);
-    new_local_literal(R, "(for end)", PAW_TINT);
-    new_local_literal(R, "(for step)", PAW_TINT);
 
     visit_forbody(R, s->name, get_type(R, PAW_TINT), s->block, r);
 }
@@ -1725,10 +1699,6 @@ static void visit_forin(struct Resolver *R, struct AstForStmt *s, struct HirForS
     if (elem_t == NULL) {
         type_error(R, "'for..in' not supported for type");
     }
-    const paw_Type code = TYPE2CODE(R, iter_t);
-    new_local_literal(R, "(for target)", code);
-    new_local_literal(R, "(for iter)", PAW_TINT);
-
     visit_forbody(R, s->name, elem_t, s->block, r);
 }
 
@@ -1743,7 +1713,7 @@ static struct HirStmt *ResolveForStmt(struct Resolver *R, struct AstForStmt *s)
     } else {
         visit_forin(R, s, r);
     }
-    r->scope = leave_block(R);
+    leave_block(R);
     return result;
 }
 

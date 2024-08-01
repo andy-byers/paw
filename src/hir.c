@@ -1174,61 +1174,13 @@ typedef struct Subst {
 
 static struct HirType *subst_type(struct HirFolder *F, struct HirType *type);
 
-typedef struct ScopeState {
-    struct ScopeState *outer;
-    struct HirScope *source;
-    struct HirScope *target;
-} ScopeState;
-
 typedef struct HirStenciler {
     struct HirTypeFolder fold;
     Subst subst;
-    ScopeState *scope;
     Map *decls;
     struct Hir *hir; // HIR being copied
     paw_Env *P;
 } HirStenciler;
-
-static void enter_scope(struct HirFolder *F, ScopeState *state, struct HirScope *source)
-{
-    HirStenciler *S = F->state.S;
-    state->source = source;
-    state->target = new_scope(F->hir);
-    state->target->bk_depth = source->bk_depth;
-    state->target->fn_depth = source->fn_depth;
-    state->outer = S->scope;
-    S->scope = state;
-}
-
-static struct HirScope *leave_scope(struct HirFolder *F)
-{
-    HirStenciler *S = F->state.S;
-    ScopeState *r = S->scope;
-    S->scope = r->outer;
-
-    // stenciler should pass over all symbols
-    paw_assert(r->source->symbols->count == r->target->symbols->count);
-    return r->target;
-}
-
-static void add_symbol(struct HirFolder *F, struct HirDecl *decl)
-{
-    HirStenciler *S = F->state.S;
-    struct HirScope *source = S->scope->source;
-    struct HirScope *target = S->scope->target;
-    paw_assert(target->symbols->count < source->symbols->count);
-    const struct HirSymbol *old_sym = source->symbols->data[target->symbols->count];
-    struct HirSymbol *new_sym = pawHir_add_symbol(S->hir, target);
-    paw_assert(old_sym->is_init);
-    *new_sym = (struct HirSymbol){
-        .is_const = old_sym->is_const,
-        .is_generic = old_sym->is_generic,
-        .is_type = old_sym->is_type,
-        .is_init = PAW_TRUE,
-        .name = decl->hdr.name,
-        .decl = decl,
-    };
-}
 
 static struct HirDecl *find_decl(HirStenciler *S, struct HirDecl *old_decl)
 {
@@ -1246,13 +1198,6 @@ static void link_decls(struct HirFolder *F, struct HirDecl *old_decl, struct Hir
     const Value key = {.p = old_decl};
     const Value value = {.p = new_decl};
     pawH_insert(ENV(S), S->decls, key, value);
-   // if (HirIsInstanceDecl(new_decl)) {
-   //     add_symbol(F, new_decl);
-   // }
-   if (!HirIsInstanceDecl(new_decl)) {
-       add_symbol(F, new_decl);
-   }
-       // add_symbol(F, new_decl);
 }
 
 #define MAYBE_STENCIL_DECL_LIST(F, list) ((list) != NULL ? stencil_decls(F, list) : NULL)
@@ -1308,13 +1253,8 @@ DEFINE_STENCIL_LIST(stmt, Stmt)
 
 static struct HirStmt *stencil_block_stmt(struct HirFolder *F, struct HirBlock *s)
 {
-    ScopeState state;
-    enter_scope(F, &state, s->scope);
-
     struct HirStmt *r = stencil_prep_stmt(F, s);
     r->block.stmts = stencil_stmts(F, s->stmts);
-
-    r->block.scope = leave_scope(F);
     return r;
 }
 
@@ -1404,12 +1344,8 @@ static struct HirStmt *stencil_expr_stmt(struct HirFolder *F, struct HirExprStmt
 static struct HirExpr *stencil_closure_expr(struct HirFolder *F, struct HirClosureExpr *e)
 {
     struct HirExpr *r = stencil_prep_expr(F, e);
-
-    ScopeState state;
-    enter_scope(F, &state, e->scope);
     r->clos.params = stencil_decls(F, e->params);
     r->clos.body = STENCIL_BLOCK(F, e->body);
-    r->clos.scope = leave_scope(F);
     return r;
 }
 
@@ -1441,10 +1377,7 @@ static struct HirDecl *stencil_variant_decl(struct HirFolder *F, struct HirVaria
     struct HirDecl *r = stencil_prep_decl(F, d);
     r->variant.name = d->name;
 
-    ScopeState state;
-    enter_scope(F, &state, d->scope);
     r->variant.fields = stencil_decls(F, d->fields);
-    r->variant.scope = leave_scope(F);
     r->variant.index = d->index;
     return r;
 }
@@ -1453,32 +1386,13 @@ static struct HirDecl *stencil_adt_decl(struct HirFolder *F, struct HirAdtDecl *
 {
     struct HirDecl *r = stencil_prep_decl(F, d);
 
-    ScopeState state;
-    enter_scope(F, &state, d->scope);
-
     r->adt.name = d->name;
     r->adt.is_global = d->is_global;
     r->adt.is_struct = d->is_struct;
     r->adt.generics = MAYBE_STENCIL_DECL_LIST(F, d->generics);
-
-    ScopeState field_state;
-    enter_scope(F, &field_state, d->field_scope);
     r->adt.fields = stencil_decls(F, d->fields);
-    r->adt.field_scope = leave_scope(F);
-
-    r->adt.scope = leave_scope(F);
     r->adt.monos = MAYBE_STENCIL_DECL_LIST(F, d->monos);
     return r;
-}
-
-static void transfer_symbols(struct HirFolder *F, ScopeState *state, int n)
-{
-    for (int i = 0; i < n; ++i) {
-        const int index = state->target->symbols->count;
-        paw_assert(index < state->source->symbols->count);
-        const struct HirSymbol *symbol = state->source->symbols->data[index];
-        add_symbol(F, symbol->decl);
-    }
 }
 
 static struct HirDecl *stencil_var_decl(struct HirFolder *F, struct HirVarDecl *d)
@@ -1544,29 +1458,16 @@ static struct HirExpr *stencil_path_expr(struct HirFolder *F, struct HirPathExpr
 static struct HirDecl *stencil_instance_decl(struct HirFolder *F, struct HirInstanceDecl *d)
 {
     struct HirDecl *r = stencil_prep_decl(F, d);
-
-    ScopeState state;
-    enter_scope(F, &state, d->scope);
-
     r->inst.types = stencil_decls(F, d->types);
     if (d->fields != NULL) {
-        ScopeState field_state;
-        enter_scope(F, &field_state, d->field_scope);
         r->inst.fields = stencil_decls(F, d->fields);
-        r->inst.field_scope = leave_scope(F);
     }
-
-    r->inst.scope = leave_scope(F);
     return r;
 }
 
 static struct HirDecl *stencil_func_decl(struct HirFolder *F, struct HirFuncDecl *d)
 {
     struct HirDecl *r = stencil_prep_decl(F, d);
-
-    ScopeState state;
-    enter_scope(F, &state, d->scope);
-    add_symbol(F, r); // callee slot
     r->func.is_global = d->is_global;
     r->func.name = d->name;
 
@@ -1575,7 +1476,6 @@ static struct HirDecl *stencil_func_decl(struct HirFolder *F, struct HirFuncDecl
     r->func.body = STENCIL_BLOCK(F, d->body);
     r->func.fn_kind = d->fn_kind;
 
-    r->func.scope = leave_scope(F);
     r->func.monos = MAYBE_STENCIL_DECL_LIST(F, d->monos);
     return r;
 }
@@ -1591,15 +1491,10 @@ static struct HirStmt *stencil_if_stmt(struct HirFolder *F, struct HirIfStmt *s)
 
 static struct HirStmt *stencil_while_stmt(struct HirFolder *F, struct HirWhileStmt *s)
 {
-    ScopeState state;
-    enter_scope(F, &state, s->scope);
-
     struct HirStmt *r = stencil_prep_stmt(F, s);
     r->while_.is_dowhile = s->is_dowhile;
     r->while_.cond = F->FoldExpr(F, s->cond);
     r->while_.block = STENCIL_BLOCK(F, s->block);
-
-    r->while_.scope = leave_scope(F);
     return r;
 }
 
@@ -1610,37 +1505,26 @@ static struct HirStmt *stencil_label_stmt(struct HirFolder *F, struct HirLabelSt
     return r;
 }
 
-static struct HirBlock *stencil_forbody(struct HirFolder *F, struct HirBlock *s)
+static struct HirBlock *stencil_forbody(struct HirFolder *F, struct HirForStmt *src, struct HirForStmt *dst)
 {
-    ScopeState state;
-    enter_scope(F, &state, s->scope);
-
-    struct HirStmt *r = stencil_prep_stmt(F, s);
-    transfer_symbols(F, &state, 1);
-    r->block.stmts = stencil_stmts(F, s->stmts);
-
-    r->block.scope = leave_scope(F);
+    dst->control = F->FoldDecl(F, src->control);
+    struct HirStmt *r = stencil_prep_stmt(F, src->block);
+    r->block.stmts = stencil_stmts(F, src->block->stmts);
     return &r->block;
 }
 
 static struct HirStmt *stencil_for_stmt(struct HirFolder *F, struct HirForStmt *s)
 {
-    ScopeState state;
-    enter_scope(F, &state, s->scope);
-
     struct HirStmt *r = stencil_prep_stmt(F, s);
     r->for_.is_fornum = s->is_fornum;
     if (s->is_fornum) {
         r->for_.fornum.begin = F->FoldExpr(F, s->fornum.begin);
         r->for_.fornum.end = F->FoldExpr(F, s->fornum.end);
         r->for_.fornum.step = F->FoldExpr(F, s->fornum.step);
-        transfer_symbols(F, &state, 3);
     } else {
         r->for_.forin.target = F->FoldExpr(F, s->forin.target);
-        transfer_symbols(F, &state, 2); // includes implicit '(for iter)'
     }
-    r->for_.block = stencil_forbody(F, s->block);
-    r->for_.scope = leave_scope(F);
+    r->for_.block = stencil_forbody(F, s, &r->for_);
     return r;
 }
 
@@ -1806,23 +1690,12 @@ static void add_existing_link(paw_Env *P, Map *map, struct HirDecl *key, struct 
     pawH_insert(P, map, k, v);
 }
 
-static void init_links(struct Hir *hir, Map *map, struct HirFuncDecl *base, struct HirInstanceDecl *inst)
-{
-    for (int i = 0; i < inst->scope->symbols->count; ++i) {
-        struct HirSymbol *old_sym = base->scope->symbols->data[i];
-        struct HirSymbol *new_sym = inst->scope->symbols->data[i];
-        add_existing_link(ENV(hir), map, old_sym->decl, new_sym->decl);
-    }
-}
-
 static struct HirFuncDecl *do_stencil_func(struct Hir *hir, struct HirFuncDecl *base, struct HirDecl *inst)
 {
     paw_Env *P = ENV(hir);
     Value *pv = pawC_push0(P);
     Map *map = pawH_new(P);
     v_set_object(pv, map);
-
-    init_links(hir, map, base, &inst->inst);
 
     HirStenciler S = {
         .decls = map,
@@ -1843,23 +1716,14 @@ static struct HirFuncDecl *do_stencil_func(struct Hir *hir, struct HirFuncDecl *
     S.fold.FoldFuncDef = prep_fdef;
     S.fold.FoldGeneric = prep_generic;
 
-    ScopeState state = {
-        .source = base->scope,
-        .target = inst->inst.scope,
-    };
-    S.scope = &state;
-
     inst->func.kind = kHirFuncDecl;
     inst->func.name = base->name;
     inst->func.generics = NULL;
-    add_symbol(&F, inst); // callee slot
 
     inst->func.params = stencil_decls(&F, base->params);
     inst->func.body = STENCIL_BLOCK(&F, base->body);
     inst->func.fn_kind = base->fn_kind;
 
-    inst->func.scope = leave_scope(&F);
-    paw_assert(S.scope == NULL);
     pawC_pop(P); // pop decl. map
     return &inst->func;
 }

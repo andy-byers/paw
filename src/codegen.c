@@ -94,25 +94,6 @@ static paw_Type basic_code(Generator *G, struct HirType *type)
     return TYPE2CODE(G, type);
 }
 
-static void push_local_table(struct FuncState *fs, struct HirScope *symbols)
-{
-    Generator *G = fs->G;
-    struct HirSymtab *st = fs->scopes;
-    if (st->scopes->count == ITEM_MAX) {
-        syntax_error(G, "too many nested scopes");
-    }
-    pawHir_add_scope(G->hir, st, symbols);
-}
-
-static void pop_local_table(struct FuncState *fs)
-{
-    // Last symbol table should have been assigned to an HIR node. The
-    // next call to push_symbol_table() will allocate a new table.
-    struct HirSymtab *st = fs->scopes;
-    paw_assert(st->scopes->count > 0);
-    --st->scopes->count;
-}
-
 static int add_constant(Generator *G, Value v)
 {
     struct FuncState *fs = G->fs;
@@ -161,49 +142,30 @@ static void close_vars(struct FuncState *fs, const struct BlockState *bs)
     }
 }
 
-static struct HirVarInfo add_local(struct FuncState *fs, struct HirSymbol *symbol)
+static struct HirVarInfo add_local(struct FuncState *fs, String *name, struct HirType *type)
 {
     Generator *G = fs->G;
     pawM_grow(ENV(G), fs->locals.slots, fs->locals.nslots, fs->locals.capacity);
     const int index = fs->locals.nslots++;
-    fs->locals.slots[index].symbol = symbol;
-    fs->locals.slots[index].index = index;
-    return (struct HirVarInfo){
-        .symbol = symbol,
-        .kind = VAR_LOCAL,
+    fs->locals.slots[index] = (struct LocalSlot){
+        .type = type,
+        .name = name,
         .index = index,
+    };
+    return (struct HirVarInfo){
+        .type = type,
+        .name = name,
+        .index = index,
+        .kind = VAR_LOCAL,
     };
 }
 
-static paw_Bool symbol_iter(struct HirScope *scope, int *pindex, struct HirSymbol **out)
+static struct HirVarInfo add_global(Generator *G, String *name, struct HirType *type)
 {
-    paw_assert(*pindex < scope->symbols->count);
-    *out = scope->symbols->data[*pindex];
-    ++*pindex;
-    return (*out)->is_type; // skip types
-}
-
-static struct HirVarInfo transfer_local(struct FuncState *fs)
-{
-    struct HirSymbol *symbol;
-    // Find the next symbol that belongs on the stack.
-    struct HirSymtab *scopes = fs->scopes; // all function scopes
-    struct HirScope *scope =
-        scopes->scopes->data[scopes->scopes->count - 1]; // last scope
-    while (symbol_iter(scope, &fs->bs->isymbol, &symbol)) {
-    }
-    return add_local(fs, symbol);
-}
-
-static struct HirVarInfo transfer_global(Generator *G)
-{
-    struct HirSymbol *symbol;
-    struct HirScope *scope = G->globals;
-    while (symbol_iter(scope, &G->iglobal, &symbol)) {
-    }
-    const int g = pawE_new_global(ENV(G), symbol->name);
+    const int g = pawE_new_global(ENV(G), name);
     return (struct HirVarInfo){
-        .symbol = symbol,
+        .type = type,
+        .name = name,
         .kind = VAR_GLOBAL,
         .index = g,
     };
@@ -338,11 +300,9 @@ static void leave_block(struct FuncState *fs)
         adjust_labels(fs, bs);
     }
     fs->bs = bs->outer;
-    pop_local_table(fs);
 }
 
-static void enter_block(struct FuncState *fs, struct BlockState *bs, struct HirScope *locals,
-                        paw_Bool loop)
+static void enter_block(struct FuncState *fs, struct BlockState *bs, paw_Bool loop)
 {
     bs->label0 = fs->G->C->dm->labels.length;
     bs->level = fs->level;
@@ -350,8 +310,6 @@ static void enter_block(struct FuncState *fs, struct BlockState *bs, struct HirS
     bs->is_loop = loop;
     bs->outer = fs->bs;
     fs->bs = bs;
-
-    push_local_table(fs, locals);
 }
 
 static void leave_function(Generator *G)
@@ -385,17 +343,13 @@ static void leave_function(Generator *G)
     check_gc(ENV(G));
 }
 
-static struct HirVarInfo synthesize_var(struct FuncState *fs, String *name)
+static struct HirVarInfo synthesize_var(struct FuncState *fs, String *name, struct HirType *type)
 {
-    Generator *G = fs->G;
-    struct HirSymbol *symbol = pawHir_new_symbol(G->hir);
-    symbol->is_init = PAW_TRUE;
-    symbol->name = name;
-    return add_local(fs, symbol);
+    return add_local(fs, name, type);
 }
 
 static void enter_function(Generator *G, struct FuncState *fs, struct BlockState *bs,
-                           struct HirScope *scope, enum FuncKind kind)
+                           struct HirType *type, enum FuncKind kind)
 {
     fs->bs = NULL;
     fs->scopes = pawHir_new_symtab(G->hir);
@@ -413,21 +367,24 @@ static void enter_function(Generator *G, struct FuncState *fs, struct BlockState
     G->fs = fs;
 
     // Enter the function body.
-    enter_block(fs, bs, scope, PAW_FALSE);
+    enter_block(fs, bs, PAW_FALSE);
 
     if (kind == FUNC_CLOSURE) {
-        synthesize_var(fs, fs->name);
+        synthesize_var(fs, fs->name, type);
     } else {
-        transfer_local(fs);
+        add_local(fs, fs->name, type);
     }
     begin_local_scope(fs, 1);
 }
 
 static paw_Bool resolve_global(Generator *G, const String *name, struct HirVarInfo *pinfo)
 {
+    // TODO: Use a struct LocalStack to keep track of all globals
     const int index = pawE_find_global(ENV(G), name);
+    const GlobalVar *gv = pawE_get_global(ENV(G), index);
     paw_assert(index >= 0);
-    pinfo->symbol = NULL;
+    pinfo->name = gv->name;
+    pinfo->type = NULL; // TODO
     pinfo->kind = VAR_GLOBAL;
     pinfo->index = index;
     return PAW_TRUE;
@@ -437,8 +394,9 @@ static paw_Bool resolve_local(struct FuncState *fs, const String *name, struct H
 {
     for (int i = fs->level - 1; i >= 0; --i) {
         struct LocalSlot slot = fs->locals.slots[i];
-        if (pawS_eq(slot.symbol->name, name)) {
-            pinfo->symbol = slot.symbol;
+        if (pawS_eq(slot.name, name)) {
+            pinfo->name = slot.name;
+            pinfo->type = slot.type;
             pinfo->kind = VAR_LOCAL;
             pinfo->index = i;
             return PAW_TRUE;
@@ -454,12 +412,16 @@ static struct HirVarInfo resolve_attr(Generator *G, struct HirType *type, String
     paw_assert(HirIsAdt(type));
     struct HirDecl *decl = get_decl(G, type->adt.base);
     struct HirAdtDecl *adt = &decl->adt;
-    struct HirScope *scope = adt->field_scope;
-    struct HirVarInfo info = (struct HirVarInfo){.kind = VAR_FIELD};
-    info.index = pawHir_find_symbol(scope, name);
-    paw_assert(info.index >= 0); // found in last pass
-    info.symbol = scope->symbols->data[info.index];
-    return info;
+    struct HirScope *scope = adt->scope;
+    const int index = pawHir_find_symbol(scope, name);
+    paw_assert(index >= 0); // already found
+    struct HirSymbol *symbol = scope->symbols->data[index];
+    return (struct HirVarInfo){
+        .type = HIR_TYPEOF(symbol->decl),
+        .name = symbol->name,
+        .kind = VAR_FIELD,
+        .index = index,
+    };
 }
 
 static void add_upvalue(struct FuncState *fs, struct HirVarInfo *info, paw_Bool is_local)
@@ -504,11 +466,11 @@ static paw_Bool resolve_upvalue(struct FuncState *fs, const String *name,
     return PAW_FALSE;
 }
 
-static struct HirVarInfo declare_var(struct FuncState *fs, paw_Bool global)
+static struct HirVarInfo declare_var(struct FuncState *fs, String *name, struct HirType *type, paw_Bool global)
 {
     return global 
-        ? transfer_global(fs->G) 
-        : transfer_local(fs);
+        ? add_global(fs->G, name, type) 
+        : add_local(fs, name, type);
 }
 
 // Allow a previously-declared variable to be accessed
@@ -523,12 +485,18 @@ static void define_var(struct FuncState *fs, struct HirVarInfo info)
     }
 }
 
-static struct HirVarInfo new_var(Generator *G, paw_Bool global)
+static struct HirVarInfo new_var(Generator *G, String *name, struct HirType *type, paw_Bool global)
 {
     struct FuncState *fs = G->fs;
-    struct HirVarInfo info = declare_var(fs, global);
+    struct HirVarInfo info = declare_var(fs, name, type, global);
     define_var(fs, info);
     return info;
+}
+
+static struct HirVarInfo new_local_lit(Generator *G, const char *name, paw_Type code)
+{
+    String *str = SCAN_STRING(G->C, name);
+    return new_var(G, str, get_type(G, code), PAW_FALSE);
 }
 
 static struct HirVarInfo find_var(Generator *G, const String *name)
@@ -813,7 +781,7 @@ static void code_closure_expr(struct HirVisitor *V, struct HirClosureExpr *e)
 
     const int id = add_proto(G, fs.name, &fs.proto);
     fs.proto->argc = e->params->count;
-    enter_function(G, &fs, &bs, e->scope, FUNC_CLOSURE);
+    enter_function(G, &fs, &bs, e->type, FUNC_CLOSURE);
     V->VisitDeclList(V, e->params);
     V->VisitBlock(V, e->body);
     leave_function(G);
@@ -832,7 +800,7 @@ static void code_func(struct HirVisitor *V, struct HirFuncDecl *d)
     struct HirFuncDef *func = &d->type->fdef;
     const int id = add_proto(G, d->name, &fs.proto);
     fs.proto->argc = func->params->count;
-    enter_function(G, &fs, &bs, d->scope, d->fn_kind);
+    enter_function(G, &fs, &bs, d->type, d->fn_kind);
     V->VisitDeclList(V, d->params); // code parameters
     V->VisitBlock(V, d->body); // code function body
     leave_function(G);
@@ -843,11 +811,7 @@ static void code_func(struct HirVisitor *V, struct HirFuncDecl *d)
 static struct HirVarInfo inject_var(struct FuncState *fs, String *name, struct HirDecl *decl, paw_Bool global)
 {
     paw_assert(!global);
-    struct HirSymbol *symbol = pawHir_new_symbol(fs->G->hir);
-    symbol->is_init = PAW_TRUE;
-    symbol->name = name;
-    symbol->decl = decl;
-    return add_local(fs, symbol);
+    return add_local(fs, name, HIR_TYPEOF(decl));
 }
 
 // Stamp out monomorphizations of a function template
@@ -872,15 +836,15 @@ static void monomorphize_func(struct HirVisitor *V, struct HirFuncDecl *d)
 
 static void code_field_decl(struct HirVisitor *V, struct HirFieldDecl *d)
 {
-    new_var(V->state.G, PAW_FALSE);
+    new_var(V->state.G, d->name, d->type, PAW_FALSE);
     paw_unused(d);
 }
 
-static void code_var_decl(struct HirVisitor *V, struct HirVarDecl *s)
+static void code_var_decl(struct HirVisitor *V, struct HirVarDecl *d)
 {
     struct FuncState *fs = V->state.G->fs;
-    const struct HirVarInfo info = declare_var(fs, s->is_global);
-    V->VisitExpr(V, s->init);
+    const struct HirVarInfo info = declare_var(fs, d->name, d->type, d->is_global);
+    V->VisitExpr(V, d->init);
     define_var(fs, info);
 }
 
@@ -895,7 +859,7 @@ static void code_block_stmt(struct HirVisitor *V, struct HirBlock *b)
 {
     struct BlockState bs;
     struct FuncState *fs = V->state.G->fs;
-    enter_block(fs, &bs, b->scope, PAW_FALSE);
+    enter_block(fs, &bs, PAW_FALSE);
     V->VisitStmtList(V, b->stmts);
     leave_block(fs);
 }
@@ -1022,7 +986,7 @@ static void code_func_decl(struct HirVisitor *V, struct HirFuncDecl *d)
 {
     struct FuncState *fs = V->state.G->fs;
     if (d->generics == NULL) {
-        const struct HirVarInfo info = declare_var(fs, d->is_global);
+        const struct HirVarInfo info = declare_var(fs, d->name, d->type, d->is_global);
         code_func(V, d);
         define_var(fs, info);
     } else {
@@ -1075,7 +1039,7 @@ static void code_dowhile_stmt(struct HirVisitor *V, struct HirWhileStmt *s)
     struct FuncState *fs = G->fs;
     struct BlockState bs;
 
-    enter_block(fs, &bs, s->scope, PAW_TRUE);
+    enter_block(fs, &bs, PAW_TRUE);
     const int loop = fs->pc;
     V->VisitBlock(V, s->block);
     adjust_from(fs, LCONTINUE);
@@ -1099,7 +1063,7 @@ static void code_while_stmt(struct HirVisitor *V, struct HirWhileStmt *s)
     struct FuncState *fs = G->fs;
     struct BlockState bs;
 
-    enter_block(fs, &bs, s->scope, PAW_TRUE);
+    enter_block(fs, &bs, PAW_TRUE);
     const int loop = fs->pc;
     V->VisitExpr(V, s->cond);
 
@@ -1114,7 +1078,7 @@ static void code_while_stmt(struct HirVisitor *V, struct HirWhileStmt *s)
     leave_block(fs);
 }
 
-static void code_forbody(struct HirVisitor *V, struct HirBlock *block, Op opinit, Op oploop)
+static void code_forbody(struct HirVisitor *V, struct HirDecl *control, struct HirBlock *block, Op opinit, Op oploop)
 {
     struct BlockState bs;
     Generator *G = V->state.G;
@@ -1128,8 +1092,9 @@ static void code_forbody(struct HirVisitor *V, struct HirBlock *block, Op opinit
     // Put the control variable in the same scope as any locals declared inside
     // the loop. If the control variable is captured in a closure, the upvalue
     // must be closed at the end of the iteration.
-    enter_block(fs, &bs, block->scope, PAW_FALSE);
-    new_var(G, PAW_FALSE);
+    const struct HirVarDecl *var = HirGetVarDecl(control);
+    enter_block(fs, &bs, PAW_FALSE);
+    new_var(G, var->name, var->type, PAW_FALSE);
     V->VisitStmtList(V, block->stmts);
     leave_block(fs);
 
@@ -1147,11 +1112,11 @@ static void code_fornum_stmt(struct HirVisitor *V, struct HirForStmt *s)
     V->VisitExpr(V, fornum->begin);
     V->VisitExpr(V, fornum->end);
     V->VisitExpr(V, fornum->step);
-    new_var(G, PAW_FALSE);
-    new_var(G, PAW_FALSE);
-    new_var(G, PAW_FALSE);
+    new_local_lit(G, "(for begin)", PAW_TINT);
+    new_local_lit(G, "(for end)", PAW_TINT);
+    new_local_lit(G, "(for step)", PAW_TINT);
 
-    code_forbody(V, s->block, OP_FORNUM0, OP_FORNUM);
+    code_forbody(V, s->control, s->block, OP_FORNUM0, OP_FORNUM);
 }
 
 static void code_forin_stmt(struct HirVisitor *V, struct HirForStmt *s)
@@ -1160,13 +1125,14 @@ static void code_forin_stmt(struct HirVisitor *V, struct HirForStmt *s)
     struct HirForIn *forin = &s->forin;
 
     V->VisitExpr(V, forin->target);
-    new_var(G, PAW_FALSE);
-    new_var(G, PAW_FALSE);
+    struct HirType *target = HIR_TYPEOF(forin->target);
+    new_local_lit(G, "(for target)", basic_code(G, target));
+    new_local_lit(G, "(for iter)", PAW_TINT);
 
     struct HirType *t = HIR_TYPEOF(forin->target);
     const Op init = TYPE2CODE(G, t) == PAW_TVECTOR ? OP_FORVECTOR0 : OP_FORMAP0;
     const Op loop = TYPE2CODE(G, t) == PAW_TVECTOR ? OP_FORVECTOR : OP_FORMAP;
-    code_forbody(V, s->block, init, loop);
+    code_forbody(V, s->control, s->block, init, loop);
 }
 
 static void code_for_stmt(struct HirVisitor *V, struct HirForStmt *s)
@@ -1174,7 +1140,7 @@ static void code_for_stmt(struct HirVisitor *V, struct HirForStmt *s)
     struct BlockState bs;
     Generator *G = V->state.G;
     struct FuncState *fs = G->fs;
-    enter_block(fs, &bs, s->scope, PAW_TRUE);
+    enter_block(fs, &bs, PAW_TRUE);
     if (s->is_fornum) {
         code_fornum_stmt(V, s);
     } else {
@@ -1278,8 +1244,7 @@ static void code_module(Generator *G)
     fs.name = G->C->modname;
     fs.proto = G->C->main->p;
 
-    struct HirScope *toplevel = hir->symtab->toplevel;
-    enter_function(G, &fs, &bs, toplevel, FUNC_MODULE);
+    enter_function(G, &fs, &bs, NULL, FUNC_MODULE);
 
     struct HirVisitor V;
     setup_pass(&V, G);
