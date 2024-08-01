@@ -236,7 +236,7 @@ struct HirType *pawU_new_unknown(Unifier *U)
     // NOTE: inference variables require a stable address, since they point to each other
     InferenceVar *ivar = pawK_pool_alloc(P, &hir->pool, sizeof(InferenceVar));
     const int index = table->ivars->count;
-    var_list_push(U->hir, &table->ivars, ivar);
+    var_list_push(U->hir, table->ivars, ivar);
 
     struct HirType *type = pawHir_new_type(hir, kHirUnknown);
     type->unknown.depth = table->depth;

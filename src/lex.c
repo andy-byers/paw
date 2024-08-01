@@ -26,6 +26,7 @@ static void add_location(paw_Env *P, Buffer *print, const String *s, int line)
     pawL_add_fstring(P, print, ":%d: ", line);
 }
 
+_Noreturn
 void pawX_error(struct Lex *x, const char *fmt, ...)
 {
     Buffer print;

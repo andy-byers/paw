@@ -1,0 +1,38 @@
+
+fn map<A, B>(f: fn(A) -> B, a: [A]) -> [B] {
+    let b = []
+    for v in a {
+        _vector_push(b, f(v))
+        // TODO: eventually use b.push(f(v))
+    }
+    return b
+}
+
+fn f2i(f: float) -> int {
+    return f as int
+}
+
+pub fn test_explicit_instantiation() {
+    let source = [0.5, 1.6, 2.7, 3.8, 4.9]
+    let target = [0, 1, 2, 3, 4]
+    let answer = map::<float, int>(f2i, source)
+    assert(answer == target)
+}
+
+fn first_recursive<A, B, C>(a: A, b: B, c: C) {
+    second_recursive(a, b, c)
+}
+
+fn second_recursive<X, Y, Z>(x: X, y: Y, z: Z) {
+    if false {
+        first_recursive(y, z, x)
+    }
+}
+
+pub fn test_recursive_instantiation() {
+    first_recursive(1, 2.0, 'three')
+    second_recursive('four', 5.0, 6)
+    second_recursive(|| -> int {return 42}, [f2i], map::<int, bool>)
+}
+
+

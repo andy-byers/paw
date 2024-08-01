@@ -3,6 +3,41 @@
 **      just don't emit unreachable code**
 **      use a tool to validate this...**
 
+```ebnf
+Module = "mod" name {Item}
+```
+
+## Items
+An item defined in a given module can be accessed from anywhere in the module.
+Items must be placed at the toplevel, and are fixed at compile time.
+```ebnf
+Item = ["pub"] ItemDecl .
+ItemDecl = ConstDecl | FunctionDecl | StructDecl | 
+           EnumDecl | TypeDecl .
+```
+
+### Functions
+```ebnf
+FunctionDecl = "fn" Function .
+Function     = name [Generics] FuncHead Block .
+FuncHead     = "(" [{Field ","} Field] ")" ["->" Type] .
+Field        = name ":" Type .
+```
+
+### Structures
+```ebnf
+StructDecl = "struct" name [Generics] StructBody .
+StructBody = "{" {Field [";"]} "}" .
+```
+
+### Enumerations
+```ebnf
+EnumDecl = "enum" name [Generics] EnumBody .
+EnumBody = "{" [{Variant ","} Variant] "}" .
+Variant  = name [Payload] .
+Payload  = "(" {Type ","} Type ")" .
+```
+
 ## Statements
 ```ebnf
 Stmt     = ExprStmt | WhileStmt | DoWhileStmt |
@@ -56,33 +91,10 @@ PathPat = Path .
 
 ## Declarations
 ```ebnf
-Declaration = VarDecl | FunctionDecl | StructDecl | 
-              EnumDecl | TypeDecl .
+Declaration = VarDecl | TypeDecl .
 VarDecl     = "let" name [":" Type] "=" Expr .
 TypeDecl    = "type" name [Generics] "=" Type .
 Generics    = "<" {name ","} name [","] ">" .
-```
-
-### Functions
-```ebnf
-FunctionDecl = "fn" Function .
-Function     = name [Generics] FuncHead Block .
-FuncHead     = "(" [{Field ","} Field] ")" ["->" Type] .
-Field        = name ":" Type .
-```
-
-### Structures
-```ebnf
-StructDecl = "struct" name [Generics] StructBody .
-StructBody = "{" {Field [";"]} "}" .
-```
-
-### Enumerators
-```ebnf
-EnumDecl = "enum" name [Generics] EnumBody .
-EnumBody = "{" [{Variant ","} Variant] "}" .
-Variant  = name [Payload] .
-Payload  = "(" {Type ","} Type ")" .
 ```
 
 ## Operators

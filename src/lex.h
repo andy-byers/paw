@@ -6,7 +6,7 @@
 
 #include "value.h"
 
-#define FIRST_KEYWORD TK_FN
+#define FIRST_KEYWORD TK_PUB
 #define IS_KEYWORD(s) ((s)->flag > 0)
 #define IS_BUILTIN(s) ((s)->flag < 0)
 #define FLAG2CODE(x) (-(x) - 1)
@@ -40,12 +40,11 @@ enum MultiChar {
     TK_FLOAT,
 
     // Keywords (must be in this order):
+    TK_PUB,
     TK_FN,
     TK_TYPE,
     TK_ENUM,
     TK_STRUCT,
-    TK_GLOBAL,
-    TK_MATCH,
     TK_LET,
     TK_IF,
     TK_ELSE,
@@ -103,6 +102,6 @@ void pawX_set_source(struct Lex *lex, paw_Reader input, void *ud);
 TokenKind pawX_next(struct Lex *lex);
 TokenKind pawX_peek(struct Lex *lex);
 
-void pawX_error(struct Lex *lex, const char *fmt, ...);
+_Noreturn void pawX_error(struct Lex *lex, const char *fmt, ...);
 
 #endif // PAW_LEX_H

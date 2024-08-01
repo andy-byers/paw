@@ -1,0 +1,55 @@
+
+fn test_empty_is_unit() {
+    let empty = ()
+    let empty: () = empty
+}
+
+fn test_single_element() {
+    let no_comma = (false)
+    let with_comma = (false,)
+
+    let expression: bool = no_comma
+    let one_tuple: (bool,) = with_comma
+}
+
+fn test_multiple_elements() {
+    let pair = (false, 1)
+    let triplet = ('a', 5.0, -1)
+
+    let pair: (bool, int) = pair
+    let triplet: (string, float, int) = triplet
+}
+
+fn test_getters() {
+    let t1 = (false,)
+    let t2 = (false, 1)
+    let t3 = (false, 1, 2.0)
+    let t4 = (false, 1, 2.0, 'three')
+    assert(t1.0 == t2.0 && t2.0 == t3.0 && t3.0 == t4.0 && t4.0 == false)
+    assert(t2.1 == t3.1 && t3.1 == t4.1 && t4.1 == 1)
+    assert(t3.2 == t4.2 && t4.2 == 2.0)
+    assert(t4.3 == 'three')
+}
+
+fn alter_tuple(r: (int, string)) -> (string, int) {
+    r.0 = r.0 * 2
+    r.1 = r.1 + r.1
+    return (r.1, r.0)
+}
+
+fn test_arguments() {
+    let t = alter_tuple((1, 'two'))
+    assert(t.0 == 'twotwo')
+    assert(t.1 == 2)
+}
+
+struct Pair<T> {
+    v: (T, T),
+}
+
+fn test_fields() {
+    let p = Pair{v: (1, 2)}
+    assert(p.v.0 == 1)
+    assert(p.v.1 == 2)
+}
+

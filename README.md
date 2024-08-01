@@ -74,7 +74,7 @@ let b = 1 as bool
 let i = 2 + 3.4 as int
 
 struct Object {
-    value: int
+    value: int,
 }
 // all fields must be initialized
 let obj = Object{value: 42}
@@ -112,15 +112,12 @@ let run_fib = || -> int {
 ### Structures
 ```
 struct Object {
-    a: int
-    b: string
+    a: int,
+    b: string,
 }
 
 // all fields must be initialized
-let o = Object{
-    a: 1,
-    b: 'two',
-}
+let o = Object{b: 'two', a: 1}
 ```
 
 ### Enumerations
@@ -148,7 +145,10 @@ if i == 0 {
 // Null chaining operator: return immediately (with None/Err) if the operand is None/Err 
 // (must appear in a function that returns Option<T>/Result<T, E>), otherwise, unwraps
 // the Option/Result
-let v = maybe_none()?.field
+fn maybe() -> Option<int> {
+    let i = maybe_none()?
+    return fallible(i)
+}
 
 // 'break'/'continue' (must appear in a loop):
 break
@@ -208,8 +208,8 @@ assert(vec == [0, 1, 2])
 
 // struct template
 struct Object<S, T> {
-    a: S
-    b: T
+    a: S,
+    b: T,
 }
 
 // explicit instantiation uses 'turbofish'
@@ -327,6 +327,8 @@ assert(status != 0)
 
 ## Known problems
 + The C API has pretty much 0 type safety
++ Stenciler/monomorphization only works by accident
++ Closures allow captures from anywhere
 + Compiler will allow functions that don't return a value in all code paths
     + Likely requires a CFG and some data flow analysis: it would be very difficult to get right otherwise
 + It isn't possible to create an empty vector or map of a specific known type without creating a temporary: `let vec: [int] = []`
