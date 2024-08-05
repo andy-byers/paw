@@ -327,8 +327,6 @@ assert(status != 0)
 
 ## Known problems
 + The C API has pretty much 0 type safety
-+ Stenciler/monomorphization only works by accident
-+ Closures allow captures from anywhere
 + Compiler will allow functions that don't return a value in all code paths
     + Likely requires a CFG and some data flow analysis: it would be very difficult to get right otherwise
 + It isn't possible to create an empty vector or map of a specific known type without creating a temporary: `let vec: [int] = []`
