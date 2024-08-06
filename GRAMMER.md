@@ -182,3 +182,26 @@ octal_digits   = octal_digit {octal_digit} .
 hex_digits     = hex_digit {hex_digit} .
 ```
 
+## Imports
+TODO: support something like this for modules
+mod Mod
+pub fn a() {...}
+pub struct B {...}
+pub enum C {...}
+
+Import statement:
+(a) import Mod
+(b) import Mod::a
+(c) import Mod::{a, B}
+(d) import Mod::a as x
+(e) import Mod::{a as x, B as Y}
+(f) import Mod::*
+
+Symbols added to public/local items:
+(a) Mod::a, Mod::B, Mod::C
+(b) Mod::a
+(c) Mod::a, Mod::B
+(d) x
+(e) x, Y
+(d) a, B, C
+

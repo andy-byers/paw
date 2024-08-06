@@ -14,18 +14,18 @@
 
 // clang-format off
 #define PROGRAM_OPTIONS                                 \
-    opt_str(e, src, "execute program passed as string") \
-    opt_opt(h, "display usage information")             \
-    opt_opt(q, "suppress output") 
+    OPT_STR(e, src, "execute program passed as string") \
+    OPT_OPT(h, "display usage information")             \
+    OPT_OPT(q, "suppress output") 
 
 static struct {
-#define opt_str(name, a, b) const char *name;
-#define opt_int(name, a, b) int name;
-#define opt_opt(name, a) paw_Bool name;
+#define OPT_STR(name, a, b) const char *name;
+#define OPT_INT(name, a, b) int name;
+#define OPT_OPT(name, a) paw_Bool name;
     PROGRAM_OPTIONS
-#undef opt_str
-#undef opt_int
-#undef opt_opt
+#undef OPT_STR
+#undef OPT_INT
+#undef OPT_OPT
 } s_opt;
 
 static const char *s_pathname;
@@ -39,16 +39,16 @@ static struct Option {
     paw_Bool *flag;
     const char *description;
 } s_opt_info[] = {
-#define opt_str(name, arg, help) \
+#define OPT_STR(name, arg, help) \
     {#name, #arg, &s_opt.name, NULL, NULL, help},
-#define opt_int(name, arg, help) \
+#define OPT_INT(name, arg, help) \
     {#name, #arg, NULL, &s_opt.name, NULL, help},
-#define opt_opt(name, help) \
+#define OPT_OPT(name, help) \
     {#name, NULL, NULL, NULL, &s_opt.name, help},
     PROGRAM_OPTIONS
-#undef opt_str
-#undef opt_int
-#undef opt_opt
+#undef OPT_STR
+#undef OPT_INT
+#undef OPT_OPT
 };
 // clang-format on
 
@@ -155,7 +155,58 @@ static void show_help(void)
     }
 }
 
+static void handle_error(paw_Env *P, int status)
+{
+    if (status != PAW_OK) {
+        error(status, "%s", paw_string(P, -1));
+    }
+}
+
 #define CHUNKNAME "(chunk)"
+
+static paw_Env *load_source(void)
+{
+    paw_Env *P = paw_open(NULL, NULL);
+    if (P == NULL) {
+        error(PAW_EMEMORY, "not enough memory\n");
+    }
+
+    int status;
+    // Load the source code, either from a string, or a file. If '-e' is passed,
+    // then always use the provided string (ignore path).
+    if (s_opt.e != NULL) {
+        paw_push_string(P, CHUNKNAME);
+        status = pawL_load_chunk(P, CHUNKNAME, s_opt.e);
+    } else if (s_pathname != NULL) {
+        paw_push_string(P, s_pathname);
+        status = pawL_load_file(P, s_pathname);
+    } else {
+        // TODO: interactive mode or read from stdin
+        error(PAW_ERUNTIME, "missing pathname or chunk\n");
+    }
+    handle_error(P, status);
+    return P;
+}
+
+static void setup_stack(paw_Env *P, int argc, const char **argv)
+{
+    paw_push_string(P, "main");
+    const int pid = paw_find_public(P);
+    if (pid < 0) {
+        error(PAW_ERUNTIME, "unable to find entrypoint (public 'main' function)");
+    }
+    paw_push_public(P, pid);
+
+    for (int i = 0; i < argc; ++i) {
+        paw_push_string(P, argv[i]);
+    }
+}
+
+static void call_main(paw_Env *P, int argc)
+{
+    const int status = paw_call(P, argc);
+    handle_error(P, status);
+}
 
 int main(int argc, const char **argv)
 {
@@ -164,43 +215,12 @@ int main(int argc, const char **argv)
         show_help();
         return 0;
     }
-    paw_Env *P = paw_open(NULL, NULL);
-    if (P == NULL) {
-        error(PAW_EMEMORY, "not enough memory\n");
-    }
+    paw_Env *P = load_source();
+    setup_stack(P, argc, argv);
+    call_main(P, argc);
 
-    if (s_opt.e != NULL) {
-        paw_push_string(P, CHUNKNAME);
-    } else if (s_pathname != NULL) {
-        paw_push_string(P, s_pathname);
-    } else {
-        // TODO: read from stdin or enter interactive mode
-        error(PAW_ERUNTIME, "missing pathname or chunk\n");
-    }
-    // Put arguments to the script in a global array named 'argv'.
-    for (int i = 0; i < argc; ++i) {
-        paw_push_string(P, argv[i]);
-    }
-    paw_create_array(P, 1 + argc);
-    paw_set_global(P, "argv");
-
-    int status;
-    // Load the source code, either from a string, or a file. If '-e' is passed,
-    // then always use the provided string (ignore path).
-    if (s_opt.e != NULL) {
-        status = pawL_load_chunk(P, CHUNKNAME, s_opt.e);
-    } else if (s_pathname != NULL) {
-        status = pawL_load_file(P, s_pathname);
-    } else {
-        return 0; // nothing to do TODO: interactive mode
-    }
-    if (status == PAW_OK) {
-        // run the script
-        status = paw_call(P, 0);
-    }
-    if (status != PAW_OK) {
-        error(status, "%s\n", paw_string(P, -1));
-    }
     paw_close(P);
-    return status;
+    return 0;
 }
+
+
