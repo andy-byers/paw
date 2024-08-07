@@ -193,7 +193,10 @@ static enum InfixOp get_infixop(TokenKind kind)
     }
 }
 
-static void skip(struct Lex *lex) { pawX_next(lex); }
+static void skip(struct Lex *lex) 
+{
+     pawX_next(lex); 
+}
 
 static void check(struct Lex *lex, TokenKind want)
 {
@@ -268,18 +271,18 @@ static struct AstDecl *vfield_decl(struct Lex *lex)
     return r;
 }
 
-#define DEFINE_LIST_PARSER(name, a, b, limit, what, func, prefix, L)      \
+#define DEFINE_LIST_PARSER(name, a, b, limit, what, func, prefix, L) \
     static void parse_##name##_list(struct Lex *lex, struct L *list, int line) \
-    {                                                                     \
-        do {                                                              \
-            if (test(lex, b)) {                                           \
-                break;                                                    \
-            } else if ((list)->count == (limit)) {                      \
-                limit_error(lex, what, (limit));                          \
-            }                                                             \
-            prefix##push((lex)->dm->ast, list, (func)(lex));             \
-        } while (test_next(lex, ','));                                    \
-        delim_next(lex, b, a, line);                                      \
+    { \
+        do { \
+            if (test(lex, b)) { \
+                break; \
+            } else if ((list)->count == (limit)) { \
+                limit_error(lex, what, (limit)); \
+            } \
+            prefix##push((lex)->dm->ast, list, (func)(lex)); \
+        } while (test_next(lex, ',')); \
+        delim_next(lex, b, a, line); \
     }
 DEFINE_LIST_PARSER(arg, '(', ')', LOCAL_MAX, "arguments", expression0, pawAst_expr_list_, AstExprList)
 DEFINE_LIST_PARSER(vfield, '(', ')', LOCAL_MAX, "variant fields", vfield_decl, pawAst_decl_list_, AstDeclList)
@@ -594,7 +597,7 @@ static struct AstExpr *paren_expr(struct Lex *lex)
 
 static paw_Bool end_of_block(struct Lex *lex)
 {
-    return test(lex, '}') || // found end of block
+    return test(lex, '}') || // found proper end
            test(lex, TK_END); // truncated block
 }
 
@@ -759,15 +762,6 @@ static struct AstDeclList *clos_parameters(struct Lex *lex)
     struct AstDeclList *list = pawAst_decl_list_new(lex->ast);
     parse_clos_param_list(lex, list, line);
     return list;
-}
-
-static void ensure_return(struct Lex *lex, struct AstStmtList *L)
-{
-    if (L->count > 0 && AstIsReturnStmt(L->data[L->count - 1])) {
-        return;
-    }
-    struct AstStmt *result = pawAst_new_stmt(lex->ast, kAstReturnStmt);
-    pawAst_stmt_list_push(lex->ast, L, result);
 }
 
 static struct AstBlock *block(struct Lex *lex)
@@ -1077,7 +1071,7 @@ static struct AstStmt *return_stmt(struct Lex *lex)
         r->expr = expression0(lex);
     }
     semicolon(lex);
-    return r;
+    return result;
 }
 
 static struct AstStmt *label_stmt(struct Lex *lex, enum LabelKind kind)
@@ -1136,7 +1130,6 @@ static struct AstDecl *variant_decl(struct Lex *lex, int index)
 {
     struct AstDecl *r = pawAst_new_decl(lex->ast, kAstVariantDecl);
     r->variant.name = parse_name(lex);
-    r->variant.fields = pawAst_decl_list_new(lex->ast);
     r->variant.index = index;
 
     const int line = lex->line;
@@ -1201,10 +1194,10 @@ static struct AstDeclList *sfield_list(struct Lex *lex, int line)
     ++lex->expr_depth;
     struct AstDeclList *list = pawAst_decl_list_new(lex->ast);
     parse_sfield_list(lex, list, line);
-//    if (list->count == 0) {
-//        pawX_error(lex, "expected at least 1 variant field between curly braces "
-//                        "(remove parenthesis for unit struct)");
-//    }
+    if (list->count == 0) {
+        pawX_error(lex, "expected at least 1 struct field between curly braces "
+                        "(remove curly braces for unit structure)");
+    }
     --lex->expr_depth;
     return list;
 }
@@ -1212,8 +1205,9 @@ static struct AstDeclList *sfield_list(struct Lex *lex, int line)
 static void struct_body(struct Lex *lex, struct AstAdtDecl *adt)
 {
     const int line = lex->line;
-    check_next(lex, '{');
-    adt->fields = sfield_list(lex, line);
+    if (test_next(lex, '{')) {
+        adt->fields = sfield_list(lex, line);
+    }
 }
 
 static struct AstDecl *struct_decl(struct Lex *lex, paw_Bool pub)
@@ -1332,10 +1326,10 @@ next_item:
 
 // TODO: Use the C API instead?
 static const char kPrelude[] =
-    "pub enum Option<T> {   \n"
-    "    Some(T),           \n"
-    "    None,              \n"
-    "}                      \n"
+    "pub enum Option<T> {\n"
+    "    Some(T),        \n"
+    "    None,           \n"
+    "}                   \n"
 
     "pub enum Result<T, E> {\n"
     "    Ok(T),             \n"
@@ -1343,7 +1337,7 @@ static const char kPrelude[] =
     "}                      \n"
 
     "pub fn print(message: str)\n"
-    "pub fn assert(cond: bool)    \n"
+    "pub fn assert(cond: bool) \n"
 
     // TODO: Replace with methods
     "pub fn _vector_push<T>(vec: [T], v: T)          \n"
@@ -1436,11 +1430,11 @@ void pawP_init(paw_Env *P)
 static void skip_hashbang(struct Lex *lex)
 {
     if (test_next(lex, '#') && test_next(lex, '!')) {
-        char c;
-        do {
-            c = lex->c;
-            skip(lex);
-        } while (!ISNEWLINE(c));
+        while (!test(lex, TK_END)) {
+            const char c = lex->c;
+            skip(lex); // skip line
+            if (ISNEWLINE(c)) break;
+        }
     }
 }
 

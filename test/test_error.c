@@ -14,7 +14,8 @@ static void write_main(char *out, const char *items, const char *text)
 {
 #define ADD_CHUNK(o, p) \
         memcpy(o, p, strlen(p)); \
-        (o) += strlen(p);
+        (o) += strlen(p); \
+        *(o)++ = '\n'
     ADD_CHUNK(out, items);
     ADD_CHUNK(out, "pub fn main() {\n");
     ADD_CHUNK(out, text);
@@ -57,9 +58,8 @@ static void test_runtime_error(int expect, const char *name, const char *item, c
 static void test_name_error(void)
 {
     test_compiler_error(PAW_ENAME, "use_before_def_local", "", "let x = x");
-    test_compiler_error(PAW_ENAME, "undef_local", "", "x = 1");
-    test_compiler_error(PAW_ENAME, "undef_upvalue", "fn f() {x = 1}", " f()");
-    test_compiler_error(PAW_ENAME, "undef_field", "struct A {}", "let a = A{}.value");
+    test_compiler_error(PAW_ENAME, "undef_variable", "", "x = 1");
+    test_compiler_error(PAW_ENAME, "undef_field", "struct A", "let a = A.value");
 }
 
 static const char *get_literal(int kind)
@@ -199,10 +199,10 @@ static void test_syntax_error(void)
     test_compiler_error(PAW_ESYNTAX, "missing_left_curly", "fn f(a: int, b: int, c: int) -> int return (a + b + c)}", "");
     test_compiler_error(PAW_ESYNTAX, "missing_right_angle", "fn f<A, B, C() {}", "");
     test_compiler_error(PAW_ESYNTAX, "missing_left_angle", "fn fA, B, C>() {}", "");
-    test_compiler_error(PAW_ESYNTAX, "missing_turbo", "struct A<T> {}", "let a = A<int>{}");
-    test_compiler_error(PAW_ESYNTAX, "partial_turbo", "struct A<T> {}", "let a = A:<int>{}");
-    test_compiler_error(PAW_ESYNTAX, "missing_left_angle_tubofish", "struct A<T> {}", "let a = A::int>{}");
-    test_compiler_error(PAW_ESYNTAX, "missing_right_angle_turbofish", "struct A<T> {}", "let a = A::<int{}");
+    test_compiler_error(PAW_ESYNTAX, "missing_turbo", "struct A<T>", "let a = A<int>");
+    test_compiler_error(PAW_ESYNTAX, "partial_turbo", "struct A<T>", "let a = A:<int>");
+    test_compiler_error(PAW_ESYNTAX, "missing_left_angle_tubofish", "struct A<T>", "let a = A::int>");
+    test_compiler_error(PAW_ESYNTAX, "missing_right_angle_turbofish", "struct A<T>", "let a = A::<int");
     test_compiler_error(PAW_ESYNTAX, "square_bracket_generics", "fn f[A, B, C]() {}", "");
     test_compiler_error(PAW_ESYNTAX, "nested_fn", "", "fn f() {}");
     test_compiler_error(PAW_ESYNTAX, "nested_struct", "", "struct S {x: int}");
@@ -220,7 +220,10 @@ static void test_arithmetic_error(void)
 
 static void test_struct_error(void)
 {
-    test_compiler_error(PAW_ENAME, "struct_missing_field", "struct A {a: int}", "let a = A{}");
+    test_compiler_error(PAW_ESYNTAX, "struct_unit_with_braces_on_def", "struct A {}", "let a = A");
+    test_compiler_error(PAW_ESYNTAX, "struct_unit_with_braces_on_init", "struct A", "let a = A{}");
+    test_compiler_error(PAW_ENAME, "struct_missing_only_field", "struct A {a: int}", "let a = A{}");
+    test_compiler_error(PAW_ENAME, "struct_missing_field", "struct A {a: int, b: float}", "let a = A{a: 1}");
     test_compiler_error(PAW_ENAME, "struct_extra_field", "struct A {a: int}", "let a = A{a: 1, b: 2}");
     test_compiler_error(PAW_ENAME, "struct_duplicate_field", "struct A {a: int}", "let a = A{a: 1, a: 1}");
     test_compiler_error(PAW_ENAME, "struct_wrong_field", "struct A {a: int}", "let a = A{b: 2}");
@@ -251,6 +254,7 @@ static void test_map_error(void)
 
 int main(void)
 {
+    test_compiler_error(PAW_ESYNTAX, "struct_unit_with_braces_on_init", "struct A", "let a = A{}");
     test_name_error();
     test_syntax_error();
     test_type_error();

@@ -53,6 +53,7 @@ static struct HirType *resolve_type(struct Resolver *, struct AstExpr *);
 #define DEFINE_LIST_RESOLVER(name, T, T2) \
     static struct Hir##T2##List *resolve_##name##_list(struct Resolver *R, struct Ast##T##List *list) \
     { \
+        if (list == NULL) return NULL; \
         struct Hir##T2##List *r = pawHir_##name##_list_new(R->hir); \
         for (int i = 0; i < list->count; ++i) { \
             struct Hir##T2 *node = resolve_##name(R, list->data[i]); \
@@ -111,15 +112,51 @@ static paw_Bool is_unit_variant(struct Resolver *R, const struct HirType *type)
     if (HirIsFuncDef(type)) {
         struct HirDecl *decl = get_decl(R, type->fdef.did);
         return HirIsVariantDecl(decl) && 
-            HirGetVariantDecl(decl)->fields->count == 0;
+            HirGetVariantDecl(decl)->fields == NULL;
+    }
+    return PAW_FALSE;
+}
+
+static struct HirSymbol *resolve_symbol(struct Resolver *R, const String *name);
+static struct HirAdtDecl *lookup_struct(struct Resolver *R, struct HirPath *path)
+{
+    // NOTE: no associated types on structures
+    if (path->count > 1) return NULL; 
+    struct HirSegment *base = pawHir_path_get(path, 0);
+    struct HirSymbol *symbol = resolve_symbol(R, base->name);    
+    if (HirIsAdtDecl(symbol->decl)) {
+        struct HirAdtDecl *adt = HirGetAdtDecl(symbol->decl);
+        return adt->is_struct ? adt : NULL; 
+    }
+    return NULL;
+}
+
+static paw_Bool fix_unit_struct(struct Resolver *R, struct HirExpr *expr)
+{
+    if (!HirIsPathExpr(expr)) return PAW_FALSE;
+    struct HirPathExpr e = *HirGetPathExpr(expr);
+    struct HirAdtDecl *adt = lookup_struct(R, e.path);
+    if (adt != NULL) {
+        if (adt->fields != NULL) {
+            SYNTAX_ERROR(R, "missing fields on initializer for struct '%s'", adt->name->text);
+        }
+        expr->hdr.kind = kHirLiteralExpr;
+        struct HirLiteralExpr *r = HirGetLiteralExpr(expr);
+        r->lit_kind = kHirLitComposite;
+        r->comp.items = pawHir_expr_list_new(R->hir);
+        r->comp.path = e.path;
+        return PAW_TRUE;
     }
     return PAW_FALSE;
 }
 
 static struct HirType *expr_type(struct Resolver *R, struct HirExpr *expr)
 {
+    const paw_Bool fixed = fix_unit_struct(R, expr);
     struct HirType *type = HIR_TYPEOF(expr);
-    return is_unit_variant(R, type) ? HIR_FPTR(type)->result : type;
+    return !fixed && is_unit_variant(R, type) 
+        ? HIR_FPTR(type)->result 
+        : type;
 }
 
 #define are_types_same(a, b) ((a) == (b))
@@ -408,13 +445,16 @@ static struct HirType *register_variant(struct Resolver *R, struct HirVariantDec
     }
     struct HirFuncDef *t = HirGetFuncDef(d->type);
     t->base = HirGetAdt(R->adt)->did;
-    t->params = collect_decl_types(R, d->fields);
+    t->params = d->fields != NULL
+        ? collect_decl_types(R, d->fields)
+        : pawHir_type_list_new(R->hir);
     t->result = R->adt;
     return d->type;
 }
 
 static void allocate_decls(struct Resolver *R, struct HirDeclList *decls)
 {
+    if (decls == NULL) return;
     for (int i = 0; i < decls->count; ++i) {
         struct HirDecl *decl = decls->data[i];
         new_local(R, decl->hdr.name, decl);
@@ -438,6 +478,7 @@ static void instantiate_variant(struct Resolver *R, struct HirTypeList *before, 
     struct HirVariantDecl *r = HirGetVariantDecl(decl);
     instantiate_field(R, before, after, decl);
     HirGetFuncDef(r->type)->did = r->did;
+    if (r->fields == NULL) return;
 
     enter_block(R, NULL);
     for (int j = 0; j < r->fields->count; ++j) {
@@ -449,6 +490,7 @@ static void instantiate_variant(struct Resolver *R, struct HirTypeList *before, 
 
 static struct HirDeclList *instantiate_fields(struct Resolver *R, struct HirTypeList *before, struct HirTypeList *after, struct HirDeclList *list, Instantiate callback)
 {
+    if (list == NULL) return NULL;
     struct HirDeclList *copy = pawHir_decl_list_new(R->hir);
     for (int i = 0; i < list->count; ++i) {
         struct HirDecl *source = list->data[i];
@@ -467,12 +509,9 @@ static struct HirDecl *find_func_instance(struct Resolver *R, struct HirFuncDecl
     for (int i = 0; i < base->monos->count; ++i) {
         struct HirDecl *inst = base->monos->data[i];
         const struct HirType *type = HIR_TYPEOF(inst);
-pawHir_repr_type(R->hir, type);
         if (test_lists(R, types, type->fdef.types)) {
-    printf("FOUND\n");
             return inst;
         }
-    printf("notFOUND\n");
     }
     return NULL;
 }
@@ -1466,7 +1505,6 @@ static struct HirType *resolve_tuple_lit(struct Resolver *R, struct AstTupleLit 
 static struct HirType *resolve_vector_lit(struct Resolver *R, struct AstContainerLit *e, struct HirContainerLit *r)
 {
     struct Unifier *U = R->U;
-
     struct HirType *elem_t = pawU_new_unknown(U);
     for (int i = 0; i < e->items->count; ++i) {
         struct AstExpr *ast_expr = e->items->data[i];
@@ -1481,7 +1519,6 @@ static struct HirType *resolve_vector_lit(struct Resolver *R, struct AstContaine
 static struct HirType *resolve_map_lit(struct Resolver *R, struct AstContainerLit *e, struct HirContainerLit *r)
 {
     struct Unifier *U = R->U;
-
     struct HirType *key_t = pawU_new_unknown(U);
     struct HirType *value_t = pawU_new_unknown(U);
     for (int i = 0; i < e->items->count; ++i) {
@@ -1551,7 +1588,10 @@ static struct HirType *resolve_composite_lit(struct Resolver *R, struct AstCompo
     paw_Bool is_inference = PAW_FALSE;
     const struct StructPack pack = unpack_struct(R, target);
     if (!pack.is_struct) {
-        TYPE_ERROR(R, "expected structure but found enumeration");
+        TYPE_ERROR(R, "expected structure but found enumeration '%s'", pack.name->text);
+    } else if (pack.fields == NULL) {
+        SYNTAX_ERROR(R, "unexpected curly braces on initializer for unit structure '%s'"
+                        "(use name without '{}' to create unit struct)", pack.name->text);
     } else if (HIR_IS_POLY_ADT(pack.decl)) {
         struct HirAdtDecl *d = &pack.decl->adt;
         g = generalize(R, d->generics, d->fields);
@@ -1565,8 +1605,7 @@ static struct HirType *resolve_composite_lit(struct Resolver *R, struct AstCompo
         struct HirStructField *item = HirGetStructField(hir_item);
         v_set_object(&key, item->name);
         if (pawH_contains(P, map, key)) {
-            NAME_ERROR(R, hir_item->hdr.line,
-                       "duplicate field '%s' in struct literal '%s'", 
+            NAME_ERROR(R, hir_item->hdr.line, "duplicate field '%s' in initializer for struct '%s'", 
                        item->name->text, pack.name->text);
         }
         Value *value = pawH_action(P, map, key, MAP_ACTION_CREATE);
@@ -1579,8 +1618,7 @@ static struct HirType *resolve_composite_lit(struct Resolver *R, struct AstCompo
         v_set_object(&key, field->name);
         Value *value = pawH_get(P, map, key);
         if (value == NULL) {
-            NAME_ERROR(R, field->line,
-                       "missing initializer for field '%s' in struct '%s'",
+            NAME_ERROR(R, field->line, "missing initializer for field '%s' in struct '%s'",
                        field->name->text, pack.name->text);
         }
         const paw_Int index = v_int(*value);
@@ -1593,9 +1631,11 @@ static struct HirType *resolve_composite_lit(struct Resolver *R, struct AstCompo
         unify(R, item_t, field_t);
         pawH_remove(P, map, key);
     }
-    if (pawH_length(map) > 0) {
-        NAME_ERROR(R, -1, "too many initializers for struct '%s'",
-                   pack.name->text);
+    paw_Int iter = PAW_ITER_INIT;
+    while (pawH_iter(map, &iter)) {
+        const Value *pkey = pawH_key(map, cast_size(iter));
+        NAME_ERROR(R, -1, "unexpected field '%s' in initializer for struct '%s'",
+                   v_string(*pkey), pack.name->text);
     }
     paw_assert(pack.fields->count == e->items->count);
     pawC_pop(P); // pop map
@@ -1823,11 +1863,13 @@ static struct HirExpr *resolve_selector(struct Resolver *R, struct AstSelector *
     }
     const struct StructPack pack = unpack_struct(R, target);
     if (!pack.is_struct) {
-        TYPE_ERROR(R, "cannot select field of enum variant "
-                      "(use pattern matching to unpack variant fields)");
+        TYPE_ERROR(R, "cannot select field of enum variant (use pattern "
+                      "matching to unpack variant fields)");
     } else if (e->is_index) {
-        TYPE_ERROR(R, "expected name of struct field "
-                      "(integer indices can only be used with tuples)");
+        TYPE_ERROR(R, "expected name of struct field (integer indices can "
+                      "only be used with tuples)");
+    } else if (pack.fields == NULL) {
+        NAME_ERROR(R, e->line, "unit structure '%s' has no fields", pack.name->text);
     }
     struct HirDecl *attr = expect_attr(R, &pack, e->name);
     r->type = HIR_TYPEOF(attr);

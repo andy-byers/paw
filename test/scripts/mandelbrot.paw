@@ -5,48 +5,51 @@
 //let io = require('io')
 //let file = io.stdout
 
-let charmap = [
-    ' ', '.', ':', '-', '=', 
-    '+', '*', '#', '%', '@',
-]
+pub fn main(args: [str]) -> int {
+    let charmap = [
+        ' ', '.', ':', '-', '=', 
+        '+', '*', '#', '%', '@',
+    ]
 
-//fn map(f, seq) {
-//    for i = 0, #seq {
-//        seq[i] = f(seq[i])
-//    }
-//    return seq
-//}
-//print(argv[0])
-//let argv = map(float, argv[1].split(',')) 
+    //fn map(f, seq) {
+    //    for i = 0, #seq {
+    //        seq[i] = f(seq[i])
+    //    }
+    //    return seq
+    //}
+    //print(args[0])
+    //let args = map(float, args[1].split(',')) 
 
-let x0 = -1.8//argv[0] as float 
-let x1 = 1.2//argv[1] as float 
-let nx = 100//int(argv[2]) 
-let y0 = -1.3//argv[3] as float 
-let y1 = 1.3//argv[4] as float 
-let ny = 32//int(argv[5]) 
+    let x0 = -1.8//args[0] as float 
+    let x1 = 1.2//args[1] as float 
+    let nx = 100//int(args[2]) 
+    let y0 = -1.3//args[3] as float 
+    let y1 = 1.3//args[4] as float 
+    let ny = 32//int(args[5]) 
 
-assert(nx > 0 && ny > 0)
-let dy = (y1 - y0) / (ny - 1) as float
-let dx = (x1 - x0) / (nx - 1) as float
+    assert(nx > 0 && ny > 0)
+    let dy = (y1 - y0) / (ny - 1) as float
+    let dx = (x1 - x0) / (nx - 1) as float
 
-for i = 0, ny {
-    let y = y0 + i as float * dy
-    for j = 0, nx {
-        let x = x0 + j as float * dx
-        let zi = 0.0
-        let zr = 0.0
-        let i = 0
-        while i < 100 {
-            if zi*zi+zr*zr >= 4.0 {
-                break
+    for i = 0, ny {
+        let y = y0 + i as float * dy
+        for j = 0, nx {
+            let x = x0 + j as float * dx
+            let zi = 0.0
+            let zr = 0.0
+            let i = 0
+            while i < 100 {
+                if zi*zi+zr*zr >= 4.0 {
+                    break
+                }
+                let zz = zr*zr - zi*zi + x
+                zi = 2.0*zr*zi + y
+                zr = zz
+                i = i + 1
             }
-            let zz = zr*zr - zi*zi + x
-            zi = 2.0*zr*zi + y
-            zr = zz
-            i = i + 1
+            print(charmap[i % 10])
         }
-        print(charmap[i % 10])
+        print('\n')
     }
-    print('\n')
+    return 0
 }

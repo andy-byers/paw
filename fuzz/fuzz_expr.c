@@ -57,28 +57,23 @@ static const char *fuzz_reader(paw_Env *P, void *ud, size_t *size)
     return (char *)fr->data;
 }
 
-// Prevent fuzzer inputs from gaining access to outside resources. At
-// present, the only way this would be possible is by importing a library,
-// like 'io', so just reject all inputs containing the string "import".
-static paw_Bool is_unsafe(const uint8_t *data, size_t size)
-{
-    const char *haystack = (const char *)data;
-    const char needle[] = "import";
-    const size_t n = sizeof(needle) - 1;
-    while (size >= n) {
-        if (0 == memcmp(haystack, needle, n)) {
-            return PAW_TRUE;
-        }
-        ++haystack;
-        --size;
-    }
-    return PAW_FALSE;
-}
+static const char kPrefix[] = "pub fn main(args: [str]) -> int {";
+static const char kSuffix[] = "}";
 
 extern int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
-    // reject inputs that might be unsafe to run
-    if (is_unsafe(data, size)) return -1;
+    const size_t len = paw_lengthof(kPrefix) + 1 +
+                       paw_lengthof(kSuffix) + 1 +
+                       size + 1;
+    char *ptr = malloc(len);
+    const char *buf = ptr;
+#define CHUNK(s, n) memcpy(ptr, s, n); \
+                    (ptr) += (n); \
+                    *(ptr)++ = '\n';
+    CHUNK(kPrefix, paw_lengthof(kPrefix));
+    CHUNK(data, size);
+    CHUNK(kSuffix, paw_lengthof(kSuffix));
+
     struct FuzzAlloc fa = {0};
     struct FuzzReader fr = {
         .data = data,
@@ -86,21 +81,21 @@ extern int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     };
     // open a new environment and load the input
     paw_Env *P = paw_open(fuzz_alloc, &fa);
-    int status = pawL_load_nchunk(P, "fuzz", (const char *)data, size);
+    const int status = pawL_load_nchunk(P, "fuzz", buf, len);
     if (status != PAW_OK) {
-        paw_close(P);
-        return 0;
+        goto cleanup;
     }
-    // search for a public function named 'f'
-    paw_push_string(P, "f");
+    paw_push_string(P, "main");
     const int pid = paw_find_public(P);
     if (pid < 0) return 0;
     paw_push_public(P, pid);
 
     // call 'f()'
     paw_call(P, 0);
-    paw_close(P);
 
+cleanup:
+    paw_close(P);
     FUZZ_CHECK(fa.nbytes == 0, "leaked memory");
+    free((void *)buf);
     return 0;
 }

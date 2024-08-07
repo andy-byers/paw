@@ -1,9 +1,11 @@
 
-struct Empty {}
+struct Empty
 
-fn test_empty_struct() {
-    let empty: Empty = Empty {}
-    let empty = Empty{}
+fn test_unit_struct() {
+    let empty: Empty = Empty
+    let empty = Empty
+    let f = |x, y| {}
+    f(Empty, Empty)
 }
 
 struct Integer {
@@ -37,8 +39,8 @@ fn test_struct_syntax() {
 
 struct Inner {
     a: int,
-    b: float,
-    c: str,
+    b: str,
+    c: Empty,
 }
 
 struct Outer {
@@ -51,11 +53,10 @@ fn test_nested_struct() {
         a: false,
         b: Inner{
             a: 1,
-            b: 2.0,
-            c: 'three',
+            b: 'two',
+            c: Empty,
         },
     }
     assert(o.b.a == 1)
-    assert(o.b.b == 2.0)
-    assert(o.b.c == 'three')
+    assert(o.b.b == 'two')
 }

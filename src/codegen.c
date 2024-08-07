@@ -657,7 +657,7 @@ static void code_composite_lit(struct HirVisitor *V, struct HirLiteralExpr *e)
 
     const DefId did = e->type->adt.did;
     struct HirAdtDecl *d = &GET_DECL(G, did)->adt;
-    pawK_code_U(fs, OP_NEWINSTANCE, d->fields->count);
+    pawK_code_U(fs, OP_NEWINSTANCE, d->fields ? d->fields->count : 0);
 
     for (int i = 0; i < lit->items->count; ++i) {
         struct HirExpr *attr = lit->items->data[i];

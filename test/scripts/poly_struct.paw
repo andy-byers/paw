@@ -8,39 +8,39 @@ fn test_initialization() {
     let singleton = Singleton::<int>{value: 1}
 }
 
-struct Empty<T> {}
+struct Empty<T>
 
 fn touch_empty<T>(v: Empty<T>) {}
 fn touch_nested_empty<T>(v: Empty<Empty<T>>) {}
 
 fn test_arguments() {
-    touch_empty::<bool>(Empty::<bool>{})
-    let empty = Empty::<str>{}
+    touch_empty::<bool>(Empty::<bool>)
+    let empty = Empty::<str>
     touch_empty::<str>(empty)
-    touch_empty(Empty::<float>{})
+    touch_empty(Empty::<float>)
     touch_empty(empty)
 
-    touch_empty::<Empty<int>>(Empty::<Empty<int>>{})
-    let a = Empty::<Empty<int>>{}
+    touch_empty::<Empty<int>>(Empty::<Empty<int>>)
+    let a = Empty::<Empty<int>>
     touch_empty::<Empty<int>>(a)
-    touch_empty(Empty::<Empty<int>>{})
+    touch_empty(Empty::<Empty<int>>)
     touch_empty(a)
 
-    touch_empty::<Empty<Empty<float>>>(Empty::<Empty<Empty<float>>>{})
-    let a = Empty::<Empty<Empty<float>>>{}
+    touch_empty::<Empty<Empty<float>>>(Empty::<Empty<Empty<float>>>)
+    let a = Empty::<Empty<Empty<float>>>
     touch_empty::<Empty<Empty<float>>>(a)
-    touch_empty(Empty::<Empty<Empty<float>>>{})
+    touch_empty(Empty::<Empty<Empty<float>>>)
     touch_empty(a)
 
-    touch_nested_empty(Empty::<Empty<str>>{})
-    touch_nested_empty(Empty::<Empty<Empty<float>>>{})
+    touch_nested_empty(Empty::<Empty<str>>)
+    touch_nested_empty(Empty::<Empty<Empty<float>>>)
 }
 
 fn test_field_access() {
-    let a = Singleton::<int> {value: 42}
-    let b = Singleton::<Singleton<int>> {value: a}
-    let c = Singleton::<Singleton<Singleton<int>>> {value: b}
-    let d = Singleton::<Singleton<Singleton<Singleton<int>>>> {value: c}
+    let a = Singleton{value: 42}
+    let b = Singleton{value: a}
+    let c = Singleton{value: b}
+    let d = Singleton{value: c}
     let e = d.value
     let f = e.value
     let g = f.value
@@ -152,4 +152,3 @@ fn test_infer_vec_field() {
     _vector_push(p.b, p.a)
     assert(p.a == p.b[0])
 }
-

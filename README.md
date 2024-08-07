@@ -127,6 +127,10 @@ struct Object {
 
 // all fields must be initialized
 let o = Object{b: 'two', a: 1}
+
+// unit structs are written without curly braces
+struct Unit
+let u = Unit
 ```
 
 ### Enumerations
@@ -136,6 +140,8 @@ enum Choices {
     Second(int),
 }
 
+// unit variants are written without parenthesis
+let c = Choices::First
 let c = Choices::Second(123)
 ```
 

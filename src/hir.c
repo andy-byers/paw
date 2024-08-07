@@ -11,10 +11,6 @@
 #include <stdlib.h>
 
 #define LIST_MIN 8
-
-#define MAYBE_VISIT_LIST(V, list, L) ((list) != NULL ? (V)->Visit##L(V, list) : paw_unused(NULL))
-#define MAYBE_FOLD_LIST(V, list, L) ((list) != NULL ? (V)->Fold##L(V, list) : NULL)
-
 #define FIRST_ARENA_SIZE 512
 #define LARGE_ARENA_MIN 32
 
@@ -160,6 +156,7 @@ int pawHir_find_symbol(struct HirScope *scope, const String *name)
 #define DEFINE_LIST_VISITOR(name, T) \
     static void visit_##name##_list(struct HirVisitor *V, struct Hir##T##List *list) \
     { \
+        if (list == NULL) return; \
         for (int i = 0; i < list->count; ++i) { \
             V->Visit##T(V, list->data[i]); \
         } \
@@ -249,7 +246,7 @@ static void VisitFieldDecl(struct HirVisitor *V, struct HirFieldDecl *d)
 
 static void VisitTypeDecl(struct HirVisitor *V, struct HirTypeDecl *d)
 {
-    MAYBE_VISIT_LIST(V, d->generics, DeclList);
+    V->VisitDeclList(V, d->generics);
     V->VisitExpr(V, d->rhs);
 }
 
@@ -266,7 +263,7 @@ static void VisitVariantDecl(struct HirVisitor *V, struct HirVariantDecl *d)
 
 static void VisitAdtDecl(struct HirVisitor *V, struct HirAdtDecl *d)
 {
-    MAYBE_VISIT_LIST(V, d->generics, DeclList);
+    V->VisitDeclList(V, d->generics);
     V->VisitDeclList(V, d->fields);
 }
 
@@ -303,7 +300,7 @@ static void VisitPathExpr(struct HirVisitor *V, struct HirPathExpr *e)
 
 static void VisitFuncDecl(struct HirVisitor *V, struct HirFuncDecl *d)
 {
-    MAYBE_VISIT_LIST(V, d->generics, DeclList);
+    V->VisitDeclList(V, d->generics);
     V->VisitDeclList(V, d->params);
     V->VisitBlock(V, d->body);
 }
@@ -363,7 +360,7 @@ static void VisitDeclStmt(struct HirVisitor *V, struct HirDeclStmt *s)
 
 static void VisitFuncDef(struct HirVisitor *V, struct HirFuncDef *t)
 {
-    MAYBE_VISIT_LIST(V, t->types, TypeList);
+    V->VisitTypeList(V, t->types);
     V->VisitTypeList(V, t->params);
     V->VisitType(V, t->result);
 }
@@ -381,7 +378,7 @@ static void VisitTupleType(struct HirVisitor *V, struct HirTupleType *t)
 
 static void VisitAdt(struct HirVisitor *V, struct HirAdt *t)
 {
-    MAYBE_VISIT_LIST(V, t->types, TypeList);
+    V->VisitTypeList(V, t->types);
 }
 
 static void VisitUnknown(struct HirVisitor *V, struct HirUnknown *t)
@@ -488,6 +485,7 @@ void pawHir_visit(struct HirVisitor *V)
 #define DEFINE_LIST_FOLDER(name, T) \
     static struct Hir##T##List *fold_##name##_list(struct HirFolder *F, struct Hir##T##List *list) \
     { \
+        if (list == NULL) return NULL; \
         for (int i = 0; i < list->count; ++i) { \
             list->data[i] = F->Fold##T(F, list->data[i]); \
         } \
@@ -586,7 +584,7 @@ static struct HirDecl *FoldFieldDecl(struct HirFolder *F, struct HirFieldDecl *d
 
 static struct HirDecl *FoldTypeDecl(struct HirFolder *F, struct HirTypeDecl *d)
 {
-    d->generics = MAYBE_FOLD_LIST(F, d->generics, DeclList);
+    d->generics = F->FoldDeclList(F, d->generics);
     d->rhs = F->FoldExpr(F, d->rhs);
     return HIR_CAST_DECL(d);
 }
@@ -605,7 +603,7 @@ static struct HirDecl *FoldVariantDecl(struct HirFolder *F, struct HirVariantDec
 
 static struct HirDecl *FoldAdtDecl(struct HirFolder *F, struct HirAdtDecl *d)
 {
-    d->generics = MAYBE_FOLD_LIST(F, d->generics, DeclList);
+    d->generics = F->FoldDeclList(F, d->generics);
     d->fields = F->FoldDeclList(F, d->fields);
     return HIR_CAST_DECL(d);
 }
@@ -649,7 +647,7 @@ static struct HirExpr *FoldPathExpr(struct HirFolder *F, struct HirPathExpr *e)
 
 static struct HirDecl *FoldFuncDecl(struct HirFolder *F, struct HirFuncDecl *d)
 {
-    d->generics = MAYBE_FOLD_LIST(F, d->generics, DeclList);
+    d->generics = F->FoldDeclList(F, d->generics);
     d->params = F->FoldDeclList(F, d->params);
     d->body = FOLD_BLOCK(F, d->body);
     return HIR_CAST_DECL(d);
@@ -717,7 +715,7 @@ static struct HirStmt *FoldDeclStmt(struct HirFolder *F, struct HirDeclStmt *s)
 
 static struct HirType *FoldFuncDef(struct HirFolder *F, struct HirFuncDef *t)
 {
-    t->types = MAYBE_FOLD_LIST(F, t->types, TypeList);
+    t->types = F->FoldTypeList(F, t->types);
     t->params = F->FoldTypeList(F, t->params);
     t->result = F->FoldType(F, t->result);
     return HIR_CAST_TYPE(t);
@@ -738,7 +736,7 @@ static struct HirType *FoldTupleType(struct HirFolder *F, struct HirTupleType *t
 
 static struct HirType *FoldAdt(struct HirFolder *F, struct HirAdt *t)
 {
-    t->types = MAYBE_FOLD_LIST(F, t->types, TypeList);
+    t->types = F->FoldTypeList(F, t->types);
     return HIR_CAST_TYPE(t);
 }
 
@@ -867,6 +865,7 @@ DEFINE_COPY_PREP(stmt, struct HirStmt)
 #define DEFINE_COPY_LIST(name, T) \
     static struct Hir##T##List *copy_##name##_list(struct HirFolder *F, struct Hir##T##List *old_list) \
     { \
+        if (old_list == NULL) return NULL; \
         struct Hir##T##List *new_list = pawHir_##name##_list_new(F->hir); \
         for (int i = 0; i < old_list->count; ++i) { \
             struct Hir##T *elem = F->Fold##T(F, old_list->data[i]); \
@@ -1018,9 +1017,9 @@ static struct HirDecl *copy_adt_decl(struct HirFolder *F, struct HirAdtDecl *d)
 static struct HirDecl *copy_variant_decl(struct HirFolder *F, struct HirVariantDecl *d)
 {
     struct HirDecl *r = copy_prep_decl(F, d);
-    r->variant.name = d->name;
     r->variant.fields = F->FoldDeclList(F, d->fields);
     r->variant.index = d->index;
+    r->variant.name = d->name;
     return r;
 }
 
@@ -1221,6 +1220,7 @@ struct Expander {
 
 static struct HirTypeList *expand_typelist(struct HirFolder *F, struct HirTypeList *list)
 {
+    if (list == NULL) return NULL;
     struct HirTypeList *copy = pawHir_type_list_new(F->hir);
     for (int i = 0; i < list->count; ++i) {
         struct HirType *type = F->FoldType(F, list->data[i]);
@@ -1228,8 +1228,6 @@ static struct HirTypeList *expand_typelist(struct HirFolder *F, struct HirTypeLi
     }
     return copy;
 }
-
-#define MAYBE_EXPAND_TYPELIST(F, list) ((list) != NULL ? expand_typelist(F, list) : NULL)
 
 static struct HirType *expand_tuple(struct HirFolder *F, struct HirTupleType *t)
 {
@@ -1251,7 +1249,7 @@ static struct HirType *expand_fptr(struct HirFolder *F, struct HirFuncPtr *t)
 static struct HirType *expand_fdef(struct HirFolder *F, struct HirFuncDef *t)
 {
     struct Expander *E = F->ud;
-    struct HirTypeList *types = MAYBE_EXPAND_TYPELIST(F, t->types);
+    struct HirTypeList *types = expand_typelist(F, t->types);
     struct HirDecl *base = pawHir_get_decl(E->hir, t->base);
     struct HirDecl *inst = pawP_instantiate(E->R, base, types);
     return HIR_TYPEOF(inst);
@@ -1264,7 +1262,7 @@ static struct HirType *expand_adt(struct HirFolder *F, struct HirAdt *t)
         return HIR_CAST_TYPE(t);
     }
 
-    struct HirTypeList *types = MAYBE_EXPAND_TYPELIST(F, t->types);
+    struct HirTypeList *types = expand_typelist(F, t->types);
     struct HirDecl *base = pawHir_get_decl(E->hir, t->base);
     struct HirDecl *inst = pawP_instantiate(E->R, base, types);
     return HIR_TYPEOF(inst);
@@ -1369,7 +1367,7 @@ static struct HirExpr *expand_call_expr(struct HirFolder *F, struct HirCallExpr 
     struct Expander *E = F->ud;
     if (HirIsFuncDef(e->func)) {
         struct HirFuncDef *fdef = HirGetFuncDef(e->func);
-        struct HirTypeList *types = MAYBE_EXPAND_TYPELIST(F, fdef->types);
+        struct HirTypeList *types = expand_typelist(F, fdef->types);
         struct HirDecl *base = pawHir_get_decl(F->hir, fdef->base);
         struct HirDecl *inst = pawP_instantiate(E->R, base, types);
         e->func = HIR_TYPEOF(inst);

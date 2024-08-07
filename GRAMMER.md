@@ -27,8 +27,8 @@ Field        = name ":" Type .
 
 ### Structures
 ```ebnf
-StructDecl = "struct" name [Generics] StructBody .
-StructBody = "{" {Field [";"]} "}" .
+StructDecl = "struct" name [Generics] [StructBody] .
+StructBody = "{" {Field ","} Field [","] "}" .
 ```
 
 ### Enumerations
@@ -36,7 +36,7 @@ StructBody = "{" {Field [";"]} "}" .
 EnumDecl = "enum" name [Generics] EnumBody .
 EnumBody = "{" [{Variant ","} Variant] "}" .
 Variant  = name [Payload] .
-Payload  = "(" {Type ","} Type ")" .
+Payload  = "(" {Type ","} Type [","] ")" .
 ```
 
 ## Statements

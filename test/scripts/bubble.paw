@@ -10,7 +10,7 @@ fn random(n: int) -> [int] {
     return a
 }
 
-let bubble = |n: int| -> [int] {
+fn bubble(n: int) -> [int] {
     let a = random(n)
     while true {
         let swapped = false
@@ -29,4 +29,7 @@ let bubble = |n: int| -> [int] {
     return a
 }
 
-bubble(500)
+pub fn main(args: [str]) -> int {
+    bubble(500)
+    return 0
+}

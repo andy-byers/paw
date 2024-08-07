@@ -13,9 +13,9 @@
 #include <string.h>
 
 // clang-format off
-#define PROGRAM_OPTIONS                                 \
+#define PROGRAM_OPTIONS \
     OPT_STR(e, src, "execute program passed as string") \
-    OPT_OPT(h, "display usage information")             \
+    OPT_OPT(h, "display usage information") \
     OPT_OPT(q, "suppress output") 
 
 static struct {
@@ -91,7 +91,7 @@ static void parse_options(int *pargc, const char ***pargv)
             // Found a script pathname (the only non-option argument).
             s_pathname = option;
             break;
-        } else if (a[1] == '-' && !a[2]) {
+        } else if (a[1] == '-' && a[2] == '\0') {
             // Found '--': the rest of the arguments go to the script.
             break;
         }
@@ -100,31 +100,24 @@ static void parse_options(int *pargc, const char ***pargv)
             for (size_t i = 0; i < paw_countof(s_opt_info); ++i) {
                 state = &s_opt_info[i];
                 if (shr == state->name[0]) {
-                    if (state->flag) {
+                    if (state->flag != NULL) {
                         *state->flag = PAW_TRUE;
                         break; // no argument
-                    } else if (a[1]) { // in '-abc', only 'c' can take an argument
-                        error(PAW_ERUNTIME,
-                              "option with argument ('%c') must be last\n",
-                              shr);
+                    } else if (a[1] != '\0') { // in '-abc', only 'c' can take an argument
+                        error(PAW_ERUNTIME, "option with argument ('%c') must be last\n", shr);
                     } else if (*pargc == 0) {
-                        error(PAW_ERUNTIME,
-                              "missing argument for option '%s'\n",
-                              *(*pargv - 1));
+                        error(PAW_ERUNTIME, "missing argument for option '%s'\n", *(*pargv - 1));
                     }
                     const char *arg = get_option(argc, argv);
-                    if (state->integer) {
+                    if (state->integer != NULL) {
                         int value = 0;
                         for (const char *p = arg; p; ++p) {
                             const int v = *p - '0';
                             if (v < 0 || 9 < v) {
-                                error(PAW_ERUNTIME,
-                                      "invalid integer argument (%s)\n", arg);
+                                error(PAW_ERUNTIME, "invalid integer argument (%s)\n", arg);
                             }
                             if (value > (INT_MAX - v) / 10) {
-                                error(PAW_ERUNTIME,
-                                      "integer argument (%s) is too large\n",
-                                      arg);
+                                error(PAW_ERUNTIME, "integer argument (%s) is too large\n", arg);
                             }
                             value = value * 10 + v;
                         }

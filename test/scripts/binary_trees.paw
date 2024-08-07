@@ -21,7 +21,7 @@ fn ItemCheck(tree) {
     }
 }
 
-fn Main(N) {
+fn Main(N: int) {
     let mindepth = 4
     let maxdepth = mindepth + 2
     if maxdepth < N { 
@@ -52,4 +52,7 @@ fn Main(N) {
           '\t check: ', ItemCheck(longlivedtree))
 }
 
-Main(#argv > 1 ?? int(argv[1]) :: 0)
+pub fn main(args: [str]) -> int {
+    Main(10)
+    return 0
+}

@@ -54,13 +54,6 @@ struct Resolver;
         X(LabelStmt,  label)  \
         X(ReturnStmt, result)
 
-#define HIR_SEQUENCE_LIST(X) \
-        X(ExprList)          \
-        X(DeclList)          \
-        X(StmtList)          \
-        X(TypeList)          \
-        X(Path)
-
 struct Hir;
 
 // Represents a single lexical scope
@@ -417,25 +410,25 @@ struct HirLogicalExpr {
     struct HirExpr *rhs;
 };
 
-#define SUFFIXED_HEADER \
+#define HIR_SUFFIXED_HEADER \
     HIR_EXPR_HEADER;        \
     struct HirExpr *target
 struct HirSuffixedExpr {
-    SUFFIXED_HEADER;
+    HIR_SUFFIXED_HEADER;
 };
 
 struct HirChainExpr {
-    SUFFIXED_HEADER;
+    HIR_SUFFIXED_HEADER;
 };
 
 struct HirCallExpr {
-    SUFFIXED_HEADER;
+    HIR_SUFFIXED_HEADER;
     struct HirType *func;
     struct HirExprList *args;
 };
 
 struct HirSelector {
-    SUFFIXED_HEADER;
+    HIR_SUFFIXED_HEADER;
     paw_Bool is_index : 1;
     union {
         String *name;
@@ -444,7 +437,7 @@ struct HirSelector {
 };
 
 struct HirIndex {
-    SUFFIXED_HEADER;
+    HIR_SUFFIXED_HEADER;
     paw_Bool is_slice : 1;
     struct HirExpr *first;
     struct HirExpr *second;

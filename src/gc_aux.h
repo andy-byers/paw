@@ -7,11 +7,6 @@
 #include "paw.h"
 #include "value.h"
 
-// Macros for interacting with an object reference count
-#define g_hasref(o) check_exp((o)->gc_nrefs >= 0, (o)->gc_nrefs > 0)
-#define g_incref(o) (++(o)->gc_nrefs)
-#define g_decref(o) check_exp(g_hasref(o), --(o)->gc_nrefs)
-
 #define check_gc(P)                          \
     do {                                     \
         if ((P)->gc_bytes > (P)->gc_limit) { \
