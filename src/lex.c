@@ -362,9 +362,6 @@ static struct Token consume_number(struct Lex *x)
     const char first = x->c;
     save_and_next(x);
 
-    // This 'if' statement will allow invalid strings like '.0x0', since we may
-    // have already read a '.'. pawV_parse_float() handles those cases. Also
-    // note that test_next2() saves the character.
     if (first == '0' && 
             (test_next2(x, "bB") || 
              test_next2(x, "oO") || 
@@ -523,7 +520,7 @@ try_again:
                 goto try_again;
             }
             break;
-        default: {
+        default: 
             if (ISDIGIT(x->c)) {
                 token = consume_number(x);
                 semi = PAW_TRUE;
@@ -534,7 +531,6 @@ try_again:
             } else {
                 next(x);
             }
-        }
     }
     x->add_semi = semi;
     return token;

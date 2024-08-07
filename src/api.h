@@ -19,7 +19,7 @@ static inline const char *api_typename(int type)
         case PAW_TFLOAT:
             return "float";
         case PAW_TSTRING:
-            return "string";
+            return "str";
         case PAW_TFUNCTION:
             return "function";
         case PAW_TSTRUCT:

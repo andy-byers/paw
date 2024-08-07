@@ -1,7 +1,7 @@
 # paw
 
 > NOTE: Paw is now statically typed!
-> Some features will not work for a while (builtin functions, metamethods, C API).
+> Some features will not work for a while (metamethods, C API).
 > Pretty much everything is subject to change.
 > See the [roadmap](#roadmap) to get an idea of where things are going.
 
@@ -13,7 +13,7 @@ Paw features strong static typing under a sound type system, generics, and bidir
 ## Syntax Overview
 
 ### Comments
-paw supports both line- and block-style comments.
+Paw supports both line- and block-style comments.
 Nesting is not allowed in block-style comments.
 ```
 // line comment
@@ -22,33 +22,20 @@ Nesting is not allowed in block-style comments.
    comment */
 ```
 
-### Variables
-Any variable referenced in the runtime must first be declared.
-Otherwise, a "name error" is raised (see the section on [error handling](#error-handling) below).
-Global variables are intoduced with the `global` keyword, and locals with `let`,
-Both globals and locals can only be referenced where they are visible (see [scope](#scope)), but globals can only be declared at the module level.
-Local variables can be shadowed and 'rebound', but globals cannot.
-A global can be shadowed by a local, however.
-Locals can also be captured in a function body (see [functions](#functions)).
-```
-// initializer (' = 0') is required
-let x: int = 0
+### Modules
+In Paw, toplevel declarations are treated as global items, meaning they can be accessed from anywhere within the module.
+Such items can be marked `pub` to indicate public visibility, which allows access from the outside (C or other Paw modules).
+Otherwise, items are considered private to the containing module.
+Items are resolved at compile-time, meaning only named functions, abstract data type (ADT) definitions, and compile-time constants may appear at the toplevel.
 
-// rebind 'x' to a float (type is inferred from RHS)
-let x = 6.63e-34 
-
-// create a global string named 'g'
-// NOTE: 'global' variables will eventually be replaced with 'pub' variables, with
-//       somewhat different semantics. 'pub' variables must be compile-time constants
-//       defined at the toplevel. They are hoisted to the top of the module so they
-//       can be accessed anywhere.
-global g: string = "hello, world!"
-```
+Modules that are intended to run as scripts under the bundled Paw interpreter `paw` should define an entrypoint function called `main` with signature `pub fn main(argv: [str]) -> int`.
+`paw` will look for `main` in the module's exported symbols and call it with arguments forwarded from the commandline.
+When `main` is finished, its return value is passed back to the process that invoked `paw`.
 
 ### Types
-Paw is statically-typed, meaning all types must be known at compile-time.
-Also note that Paw is strongly typed, meaning implicit conversion are not allowed.
-Conversion operators are provided to convert between primitive types explicitly.
+Paw is statically-typed, meaning all types must be known (and are fixed at) at compile-time.
+Also note that Paw is strongly typed, meaning implicit conversions are not allowed.
+
 The following example demonstrates creation of the basic value types.
 Composite types are discussed in [tuple](#tuple), [structure](#structure), etc., below.
 ```
@@ -56,33 +43,51 @@ Composite types are discussed in [tuple](#tuple), [structure](#structure), etc.,
 let b: bool = true
 let i: int = 123
 let f: float = 10.0e-1 
-let s: string = 'abc'
-let v: [int] = [1, 2, 3]
-let m: [string: int] = ['a': 1, 'b': 2]
-let f: fn() -> int = some_function
+let s: str = 'abc'
+let f: fn() -> int = || 123
 
 // type is inferred from the initializer
 let b = false
 let i = 40 + 2
 let f = 1.0 * 2
 let s = 'de' + 'f'
-let v = ['a', 'b', 'c']
-let m = [1: 1, 2: 2]
-let F = some_other_function
+let F = |x| x * 2
 
+// explicit type conversion operator
 let b = 1 as bool
 let i = 2 + 3.4 as int
+```
 
-struct Object {
-    value: int,
-}
-// all fields must be initialized
-let obj = Object{value: 42}
+The previous example showed examples of a simple kind of type inference, where the type of a variable is inferred from an initializer expression (the expression to the right of the `=`).
+Paw supports a more general kind of type inference for containers and closures, where the type of each 'unknown' must be inferred before the declaration in question goes out of scope, or is used in a way in which the type cannot be determined.
+The main caveat here is that Paw does not yet have support for 'generic bounds', so we can't handle, for example, a closure like `|a, b| a + b` where the operator `+` imposes a bound on both `a` and `b`, restricting the types they can be 'instantiated' with (uses the same code as generics).
+For example:
+```
+let f = |a| a // fn(?0) -> ?0
+f(123) // infer ?0 = int
+f(42)
+
+let v = [] // [?1]
+v.push('a') // infer ?1 = str
+let s: str = v[0]
+```
+
+### Variables
+Any variable referenced in the runtime must first be declared (all variables are locals, see [Modules](#modules) above).
+Otherwise, a "name error" is raised (see the section on [error handling](#error-handling) below).
+Local variables can be shadowed and 'rebound', and a global item may be shadowed by a local.
+Locals can also be captured in the body of a closure (see [closures](#closures)).
+```
+// initializer (' = 0') is required
+let x: int = 0
+
+// rebind 'x' to a float (type is inferred from initializer)
+let x = 6.63e-34 
 ```
 
 ### Scope
-Paw uses lexical scoping, meaning variables declared in a given block can only be referenced from within that block, or one of its subblocks.
-A block begins when a '{' token is encountered, and ends when a matching '}' is found.
+Paw uses lexical scoping: variables declared in a given block can only be referenced from within that block, or one of its subblocks.
+A block begins when a `{` token is encountered, and ends when the matching `}` is found.
 Many language constructs use blocks to create their own scope, like functions, structures, for loops, etc. 
 Explicit scoping blocks are also supported.
 ```
@@ -92,8 +97,10 @@ Explicit scoping blocks are also supported.
 ```
 
 ### Functions
-Functions are first-class in paw, which means they are treated like any other paw value.
+Functions are first-class in Paw, which means they are treated like any other Paw value.
 They can be stored in variables, or passed as parameters to higher-order functions.
+Note that named functions can only be defined at the toplevel in Paw.
+[Closures](#closures), however, may be nested arbitrarily.
 ```
 fn fib(n: int) -> int {
     if n < 2 {
@@ -101,11 +108,13 @@ fn fib(n: int) -> int {
     }
     return fib(n - 2) + fib(n - 1)
 }
-fib(10)
+```
 
-// use closure syntax to capture variables
-let run_fib = || -> int {
-    return fib(5)
+### Closures
+```
+fn make_fib(n: int) -> fn() -> int {
+    // captures 'n'
+    return || fib(n)
 }
 ```
 
@@ -113,7 +122,7 @@ let run_fib = || -> int {
 ```
 struct Object {
     a: int,
-    b: string,
+    b: str,
 }
 
 // all fields must be initialized
@@ -131,7 +140,7 @@ let c = Choices::Second(123)
 ```
 
 ### Control flow
-paw supports some common types of control flow.
+Paw supports many common types of control flow.
 ```
 // 'if-else' statement:
 if i == 0 {
@@ -198,12 +207,9 @@ fn map<A, B>(f: fn(A) -> B, vec: [A]) -> [B] {
     }
     return result
 }
-fn float2int(value: float) -> int {
-    return int(value)
-}
 
 // infer A = float, B = int
-let vec = map(float2int, [0.5, 1.5, 2.5])
+let vec = map(|a| a as int, [0.5, 1.5, 2.5])
 assert(vec == [0, 1, 2])
 
 // struct template
@@ -218,9 +224,10 @@ let o = Object::<bool, float>{
     b: 1.23,
 }
 
+// type inference is supported
 let o = Object{
     a: 123, // infer S = int
-    b: 'abc', // infer T = string
+    b: 'abc', // infer T = str
 }
 // field access using '.'
 let a = o.a + 1
@@ -243,7 +250,7 @@ let c = triplet.2
 ```
 let empty: [int] = []
 
-// infer T = string
+// infer T = str
 let empty = []
 empty.push('a') 
 
@@ -261,9 +268,9 @@ assert(vec[-1:] == [3])
 
 ### Maps
 ```
-let empty: [int: string] = [:]
+let empty: [int: str] = [:]
 
-// infer K = int, V = string
+// infer K = int, V = str
 let empty = [:]
 empty[0] = 'abc'
 
@@ -306,20 +313,21 @@ assert(status != 0)
 |1         |`=`           |Assignment                                    |Right        |
 
 ## Roadmap
-+ [x] static, string typing
++ [x] static, strong typing
 + [x] special-cased builtin containers (`[T]` and `[K: V]`)
 + [x] type inference for `struct` templates and builtin containers
-+ [ ] methods using `impl` blocks
++ [x] sum types/discriminated unions (`enum`)
++ [x] product types (tuple)
 + [ ] module system and `import` keyword
++ [ ] methods using `impl` blocks
++ [ ] error handling
 + [ ] type inference for `enum` templates
 + [ ] pattern matching (`switch` construct)
 + [ ] pattern matching (`if let`, `let` bindings)
-+ [ ] constness (`var` vs `let`)
-+ [ ] split `string` into `str` and `String`, where `str` is a byte array and `String` is always valid UTF-8
-+ [x] sum types/discriminated unions (`enum`)
-+ [x] product types (tuple)
-+ [ ] compiler optimization passes
 + [ ] custom garbage collector (using Boehm GC for now)
++ [ ] split off UTF-8 stuff into `String` structure, where `str` is a byte array and `String` is always valid UTF-8
++ [ ] constness (`var` vs `let`)
++ [ ] compiler optimization passes
 + [ ] metamethods
 + [ ] generic constraints/bounds
 + [ ] associated types on `struct`s (`A::B`)
@@ -334,8 +342,10 @@ assert(status != 0)
     + Could use Swift syntax, or something similar:
 ```
 let empty_vec = [int]()
-let empty_map = [string: int]()
+let empty_map = [str: int]()
 ```
++ Selector on nested tuple breaks the lexer (looks like a float: `t.0.1`)
+    + Could resolve with an extra lexing pass, or use index expression (`t[x][y]`, where `x` and `y` are compile-time constant expressions)
 
 ## References
 + [Lua](https://www.lua.org/)

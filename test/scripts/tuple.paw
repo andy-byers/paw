@@ -1,3 +1,4 @@
+// TODO: nested tuple selectors look like floats...
 
 fn test_empty_is_unit() {
     let empty = ()
@@ -17,7 +18,7 @@ fn test_multiple_elements() {
     let triplet = ('a', 5.0, -1)
 
     let pair: (bool, int) = pair
-    let triplet: (string, float, int) = triplet
+    let triplet: (str, float, int) = triplet
 }
 
 fn test_getters() {
@@ -31,7 +32,7 @@ fn test_getters() {
     assert(t4.3 == 'three')
 }
 
-fn alter_tuple(r: (int, string)) -> (string, int) {
+fn alter_tuple(r: (int, str)) -> (str, int) {
     r.0 = r.0 * 2
     r.1 = r.1 + r.1
     return (r.1, r.0)

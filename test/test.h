@@ -8,6 +8,7 @@
 #define TEST_SCRIPTS(X) \
     X(primitive) \
     X(function) \
+    X(closure) \
     X(struct) \
     X(tuple) \
     X(enum) \

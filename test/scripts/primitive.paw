@@ -2,7 +2,7 @@
 fn test_initializer_annotations() {
     // test type annotations
     let i: int = 123
-    let s: string = 'abc'
+    let s: str = 'abc'
     let b: bool = true
     let f: float = 1.0
 

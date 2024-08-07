@@ -15,8 +15,8 @@ fn touch_nested_empty<T>(v: Empty<Empty<T>>) {}
 
 fn test_arguments() {
     touch_empty::<bool>(Empty::<bool>{})
-    let empty = Empty::<string>{}
-    touch_empty::<string>(empty)
+    let empty = Empty::<str>{}
+    touch_empty::<str>(empty)
     touch_empty(Empty::<float>{})
     touch_empty(empty)
 
@@ -32,7 +32,7 @@ fn test_arguments() {
     touch_empty(Empty::<Empty<Empty<float>>>{})
     touch_empty(a)
 
-    touch_nested_empty(Empty::<Empty<string>>{})
+    touch_nested_empty(Empty::<Empty<str>>{})
     touch_nested_empty(Empty::<Empty<Empty<float>>>{})
 }
 

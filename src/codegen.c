@@ -777,7 +777,12 @@ static void code_closure_expr(struct HirVisitor *V, struct HirClosureExpr *e)
     fs.proto->argc = e->params->count;
     enter_function(G, &fs, &bs, e->type, FUNC_CLOSURE);
     V->VisitDeclList(V, e->params);
-    V->VisitBlock(V, e->body);
+    if (e->has_body) {
+        V->VisitBlock(V, e->body);
+    } else {
+        V->VisitExpr(V, e->expr);
+        pawK_code_0(G->fs, OP_RETURN);
+    }
     leave_function(G);
 
     const int pid = add_proto(G, fs.proto);

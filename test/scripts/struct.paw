@@ -38,7 +38,7 @@ fn test_struct_syntax() {
 struct Inner {
     a: int,
     b: float,
-    c: string,
+    c: str,
 }
 
 struct Outer {

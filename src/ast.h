@@ -219,9 +219,13 @@ struct AstLiteralExpr {
 
 struct AstClosureExpr {
     AST_EXPR_HEADER; 
+    paw_Bool has_body : 1;
     struct AstDeclList *params;
     struct AstExpr *result;
-    struct AstBlock *body;
+    union {
+        struct AstExpr *expr;
+        struct AstBlock *body;
+    };
 };
 
 struct AstStructField {

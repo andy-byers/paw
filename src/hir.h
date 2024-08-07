@@ -376,8 +376,12 @@ struct HirLiteralExpr {
 
 struct HirClosureExpr {
     HIR_EXPR_HEADER; 
+    paw_Bool has_body : 1;
     struct HirDeclList *params;
-    struct HirBlock *body;
+    union {
+        struct HirExpr *expr;
+        struct HirBlock *body;
+    };
 };
 
 struct HirStructField {

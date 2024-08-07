@@ -459,11 +459,6 @@ static struct AstExpr *type_expr(struct Lex *lex)
     return e;
 }
 
-static struct AstExpr *ret_annotation(struct Lex *lex)
-{
-    return test_next(lex, TK_ARROW) ? type_expr(lex) : unit_type(lex);
-}
-
 static struct AstExpr *type_annotation(struct Lex *lex)
 {
     if (test_next(lex, ':')) {
@@ -487,11 +482,19 @@ static struct AstExpr *expect_annotation(struct Lex *lex, const char *what,
     return type;
 }
 
-static struct AstDecl *param_decl(struct Lex *lex)
+static struct AstDecl *func_param_decl(struct Lex *lex)
 {
     struct AstDecl *r = pawAst_new_decl(lex->ast, kAstFieldDecl);
     r->field.name = parse_name(lex);
-    r->field.tag = expect_annotation(lex, "parameter", r->field.name);
+    r->field.tag = expect_annotation(lex, "function parameter", r->field.name);
+    return r;
+}
+
+static struct AstDecl *clos_param_decl(struct Lex *lex)
+{
+    struct AstDecl *r = pawAst_new_decl(lex->ast, kAstFieldDecl);
+    r->field.name = parse_name(lex);
+    r->field.tag = type_annotation(lex);
     return r;
 }
 
@@ -518,8 +521,8 @@ static struct AstDecl *generic_param(struct Lex *lex)
     return r;
 }
 
-DEFINE_LIST_PARSER(func_param, '(', ')', LOCAL_MAX, "function parameters", param_decl, pawAst_decl_list_, AstDeclList)
-DEFINE_LIST_PARSER(clos_param, '|', '|', LOCAL_MAX, "closure parameters", param_decl, pawAst_decl_list_, AstDeclList)
+DEFINE_LIST_PARSER(func_param, '(', ')', LOCAL_MAX, "function parameters", func_param_decl, pawAst_decl_list_, AstDeclList)
+DEFINE_LIST_PARSER(clos_param, '|', '|', LOCAL_MAX, "closure parameters", clos_param_decl, pawAst_decl_list_, AstDeclList)
 DEFINE_LIST_PARSER(generic, '<', '>', LOCAL_MAX, "generics", generic_param, pawAst_decl_list_, AstDeclList)
 
 static struct AstExpr *composite_lit(struct Lex *, struct AstExpr *);
@@ -758,6 +761,15 @@ static struct AstDeclList *clos_parameters(struct Lex *lex)
     return list;
 }
 
+static void ensure_return(struct Lex *lex, struct AstStmtList *L)
+{
+    if (L->count > 0 && AstIsReturnStmt(L->data[L->count - 1])) {
+        return;
+    }
+    struct AstStmt *result = pawAst_new_stmt(lex->ast, kAstReturnStmt);
+    pawAst_stmt_list_push(lex->ast, L, result);
+}
+
 static struct AstBlock *block(struct Lex *lex)
 {
     const int line = lex->line;
@@ -773,10 +785,19 @@ static struct AstExpr *basic_expr(struct Lex *lex);
 
 static struct AstExpr *closure(struct Lex *lex)
 {
+    paw_Bool has_body = PAW_FALSE;
     struct AstExpr *r = pawAst_new_expr(lex->ast, kAstClosureExpr);
     r->clos.params = clos_parameters(lex);
-    r->clos.result = ret_annotation(lex);
-    r->clos.body = block(lex);
+    if (test_next(lex, TK_ARROW)) {
+        r->clos.result = type_expr(lex);
+        has_body = PAW_TRUE;
+    }
+    if (test(lex, '{') || has_body) {
+        r->clos.body = block(lex);
+        r->clos.has_body = PAW_TRUE;
+    } else {
+        r->clos.expr = expression0(lex);
+    }
     return r;
 }
 
@@ -1047,12 +1068,13 @@ static struct AstStmt *dowhile_stmt(struct Lex *lex)
 
 static struct AstStmt *return_stmt(struct Lex *lex)
 {
-    struct AstStmt *r = pawAst_new_stmt(lex->ast, kAstReturnStmt);
+    struct AstStmt *result = pawAst_new_stmt(lex->ast, kAstReturnStmt);
+    struct AstReturnStmt *r = AstGetReturnStmt(result);
     skip(lex); // 'return' token
     if (end_of_block(lex) || test(lex, ';')) {
-        r->result.expr = NULL;
+        r->expr = NULL;
     } else {
-        r->result.expr = expression0(lex);
+        r->expr = expression0(lex);
     }
     semicolon(lex);
     return r;
@@ -1090,8 +1112,12 @@ static struct AstDecl *function(struct Lex *lex, String *name, enum FuncKind kin
     r->func.fn_kind = kind;
     r->func.generics = type_param(lex);
     r->func.params = func_parameters(lex);
-    r->func.result = ret_annotation(lex);
-    r->func.body = block(lex);
+    r->func.result = test_next(lex, TK_ARROW) 
+        ? type_expr(lex) 
+        : unit_type(lex);
+    r->func.body = lex->in_prelude
+        ? NULL
+        : block(lex);
     return r;
 }
 
@@ -1306,24 +1332,25 @@ next_item:
 
 // TODO: Use the C API instead?
 static const char kPrelude[] =
-    // Builtin enumerations:
-    "pub enum Option<T> {     \n"
-    "    Some(T),             \n"
-    "    None,                \n"
-    "}                        \n"
-    "pub enum Result<T, E> {  \n"
-    "    Ok(T),               \n"
-    "    Err(E),              \n"
-    "}                        \n"
-    // Builtin functions:
-    "pub fn print(message: string) {}\n"
-    "pub fn assert(cond: bool) {}    \n"
+    "pub enum Option<T> {   \n"
+    "    Some(T),           \n"
+    "    None,              \n"
+    "}                      \n"
+
+    "pub enum Result<T, E> {\n"
+    "    Ok(T),             \n"
+    "    Err(E),            \n"
+    "}                      \n"
+
+    "pub fn print(message: str)\n"
+    "pub fn assert(cond: bool)    \n"
+
     // TODO: Replace with methods
-    "pub fn _vector_push<T>(vec: [T], v: T) {}          \n"
-    "pub fn _vector_pop<T>(vec: [T]) -> T {}            \n"
-    "pub fn _vector_insert<T>(vec: [T], i: int, v: T) {}\n"
-    "pub fn _vector_erase<T>(vec: [T], i: int) -> T {}  \n"
-    "pub fn _vector_clone<T>(vec: [T]) -> [T] {}        \n";
+    "pub fn _vector_push<T>(vec: [T], v: T)          \n"
+    "pub fn _vector_pop<T>(vec: [T]) -> T            \n"
+    "pub fn _vector_insert<T>(vec: [T], i: int, v: T)\n"
+    "pub fn _vector_erase<T>(vec: [T], i: int) -> T  \n"
+    "pub fn _vector_clone<T>(vec: [T]) -> [T]        \n";
 
 struct PreludeReader {
     size_t size;
@@ -1342,7 +1369,9 @@ static struct AstDeclList *load_prelude(struct Lex *lex)
 {
     struct PreludeReader reader = {paw_lengthof(kPrelude)};
     pawX_set_source(lex, prelude_reader, &reader);
+    lex->in_prelude = PAW_TRUE;
     struct AstDeclList *items = toplevel_items(lex);
+    lex->in_prelude = PAW_FALSE;
     check(lex, TK_END);
     return items;
 }
@@ -1399,7 +1428,7 @@ void pawP_init(paw_Env *P)
     P->str_cache[CSTR_BOOL] = basic_type_name(P, "bool", PAW_TBOOL);
     P->str_cache[CSTR_INT] = basic_type_name(P, "int", PAW_TINT);
     P->str_cache[CSTR_FLOAT] = basic_type_name(P, "float", PAW_TFLOAT);
-    P->str_cache[CSTR_STRING] = basic_type_name(P, "string", PAW_TSTRING);
+    P->str_cache[CSTR_STRING] = basic_type_name(P, "str", PAW_TSTRING);
     P->str_cache[CSTR_VECTOR] = basic_type_name(P, "Vector", PAW_TVECTOR);
     P->str_cache[CSTR_MAP] = basic_type_name(P, "Map", PAW_TMAP);
 }

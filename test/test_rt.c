@@ -46,6 +46,5 @@ int main(void)
     script("string");
     script("integer");
     script("float");
-    script("closure");
     script("misc");
 }

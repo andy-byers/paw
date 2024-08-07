@@ -529,7 +529,7 @@ fn test_infer_l() {
         'def',
         'ghi',
     ]
-    let vec = map2(vec, |val: string| -> string {
+    let vec = map2(vec, |val: str| -> str {
         return val + val
     })
     let result = ''
@@ -543,8 +543,8 @@ fn test_infer_l() {
         ['d', 'e', 'f'],
         ['g', 'h', 'i'],
     ]
-    let vec = map2(vec, |row: [string]| -> [string] {
-        return map2(row, |val: string| -> string {
+    let vec = map2(vec, |row: [str]| -> [str] {
+        return map2(row, |val: str| -> str {
             return val + val + val
         })
     })

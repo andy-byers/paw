@@ -18,6 +18,7 @@ struct Resolver {
     struct HirSymtab *symtab; // scoped symbol table
     struct DynamicMem *dm; // dynamic memory
     int func_depth; // number of nested functions
+    int nresults;
     int vector_gid;
     int map_gid;
     paw_Bool in_closure; // 1 if the enclosing function is a closure, else 0

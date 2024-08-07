@@ -234,7 +234,11 @@ static void VisitExprStmt(struct HirVisitor *V, struct HirExprStmt *s)
 static void VisitClosureExpr(struct HirVisitor *V, struct HirClosureExpr *e)
 {
     V->VisitDeclList(V, e->params);
-    V->VisitBlock(V, e->body);
+    if (e->has_body) {
+        V->VisitBlock(V, e->body);
+    } else {
+        V->VisitExpr(V, e->expr);
+    }
 }
 
 static void VisitFieldDecl(struct HirVisitor *V, struct HirFieldDecl *d)
@@ -566,7 +570,11 @@ static struct HirStmt *FoldExprStmt(struct HirFolder *F, struct HirExprStmt *s)
 static struct HirExpr *FoldClosureExpr(struct HirFolder *F, struct HirClosureExpr *e)
 {
     e->params = F->FoldDeclList(F, e->params);
-    e->body = FOLD_BLOCK(F, e->body);
+    if (e->has_body) {
+        e->body = FOLD_BLOCK(F, e->body);
+    } else {
+        e->expr = F->FoldExpr(F, e->expr);
+    }
     return HIR_CAST_EXPR(e);
 }
 
@@ -965,7 +973,12 @@ static struct HirExpr *copy_closure_expr(struct HirFolder *F, struct HirClosureE
 {
     struct HirExpr *r = copy_prep_expr(F, e);
     r->clos.params = F->FoldDeclList(F, e->params);
-    r->clos.body = COPY_BLOCK(F, e->body);
+    if (e->has_body) {
+        r->clos.body = COPY_BLOCK(F, e->body);
+        r->clos.has_body = PAW_TRUE;
+    } else {
+        r->clos.expr = F->FoldExpr(F, e->expr);
+    }
     return r;
 }
 
@@ -1394,7 +1407,6 @@ void pawHir_expand(struct Resolver *R, struct Hir *hir)
 
     do {
         E.nexpand = 0;
-        F.FoldDeclList(&F, hir->prelude);
         F.FoldDeclList(&F, hir->items);
     } while (E.nexpand > 0);
 }
@@ -1791,7 +1803,11 @@ static void dump_expr(struct Printer *P, struct HirExpr *e)
             break;
         case kHirClosureExpr:
             dump_decl_list(P, e->clos.params, "params");
-            dump_block(P, e->clos.body);
+            if (e->clos.has_body) {
+                dump_block(P, e->clos.body);
+            } else {
+                dump_expr(P, e->clos.expr);
+            }
             break;
         case kHirPathExpr:
             dump_msg(P, "path: ");

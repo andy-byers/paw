@@ -95,6 +95,7 @@ struct Lex {
     int expr_depth;
 
     paw_Bool add_semi;
+    paw_Bool in_prelude;
 };
 
 String *pawX_scan_string(struct Lex *lex, const char *s, size_t n);

@@ -300,8 +300,9 @@ static struct HirSymbol *try_resolve_symbol(struct Resolver *R, const String *na
             struct HirSymbol *symbol = scope->symbols->data[index];
             if (scope->fn_depth != R->func_depth && 
                     !HirIsFuncDecl(symbol->decl) &&
-                    !symbol->is_type &&
-                    !R->in_closure) {
+                    !symbol->is_type) {
+                // TODO: note that this is not currently possible: named functions (non-closures) can only
+                //       appear at the toplevel, anything they reference outside themselves is global
                 // TODO: replace is_type with more specific flag, this will mess
                 //       up function templates!
                 TYPE_ERROR(R, "attempt to reference non-local variable '%s' "
@@ -401,7 +402,7 @@ static struct HirType *register_variant(struct Resolver *R, struct HirVariantDec
 {
     // An enum variant name can be thought of as a function from the type of the
     // variant's fields to the type of the enumeration. For example, given 'enum
-    // E {X(string)}', E::X has type 'fn(string) -> E'.
+    // E {X(str)}', E::X has type 'fn(str) -> E'.
     if (d->type == NULL) {
         d->type = register_decl_type(R, HIR_CAST_DECL(d), kHirFuncDef);
     }
@@ -466,9 +467,12 @@ static struct HirDecl *find_func_instance(struct Resolver *R, struct HirFuncDecl
     for (int i = 0; i < base->monos->count; ++i) {
         struct HirDecl *inst = base->monos->data[i];
         const struct HirType *type = HIR_TYPEOF(inst);
+pawHir_repr_type(R->hir, type);
         if (test_lists(R, types, type->fdef.types)) {
+    printf("FOUND\n");
             return inst;
         }
+    printf("notFOUND\n");
     }
     return NULL;
 }
@@ -554,6 +558,17 @@ static struct HirType *subst_adt(struct HirFolder *F, struct HirAdt *t)
     return HIR_TYPEOF(inst);
 }
 
+static struct HirType *subst_tuple(struct HirFolder *F, struct HirTupleType *t)
+{
+    struct Subst *subst = F->ud;
+    struct Resolver *R = subst->R;
+
+    struct HirType *result = new_type(R, NO_DECL, kHirTupleType, t->line);
+    struct HirTupleType *r = HirGetTupleType(result);
+    r->elems = subst_list(F, t->elems);
+    return result;
+}
+
 static struct HirType *maybe_subst(struct HirFolder *F, struct HirType *t)
 {
     struct Subst *s = F->ud;
@@ -589,6 +604,7 @@ static void init_subst_folder(struct HirFolder *F, struct Subst *subst, struct R
     F->FoldFuncDef = subst_fdef;
     F->FoldGeneric = subst_generic;
     F->FoldUnknown = subst_unknown;
+    F->FoldTupleType = subst_tuple;
 }
 
 static struct HirTypeList *instantiate_typelist(struct Resolver *R, struct HirTypeList *before,
@@ -695,12 +711,20 @@ static void check_template_param(struct Resolver *R, struct HirDeclList *params,
     }
 }
 
+static void normalize_type_list(struct Resolver *R, struct HirTypeList *types)
+{
+    for (int i = 0; i < types->count; ++i) {
+        normalize(R, types->data[i]);
+    }
+}
+
 static struct HirDecl *instantiate_struct(struct Resolver *R, struct HirAdtDecl *base, struct HirTypeList *types)
 {
     check_template_param(R, base->generics, types);
     if (types == NULL) {
         return HIR_CAST_DECL(base);
     }
+    normalize_type_list(R, types);
     struct HirDecl *inst = find_struct_instance(R, base, types);
     if (inst == NULL) {
         inst = pawHir_new_decl(R->hir, base->line, kHirAdtDecl);
@@ -717,6 +741,7 @@ static struct HirDecl *instantiate_func(struct Resolver *R, struct HirFuncDecl *
     if (types == NULL) {
         return HIR_CAST_DECL(base);
     }
+    normalize_type_list(R, types);
     struct HirDecl *inst = find_func_instance(R, base, types);
     if (inst == NULL) {
         inst = pawHir_new_decl(R->hir, base->line, kHirInstanceDecl);
@@ -817,18 +842,18 @@ static void resolve_func_body(struct Resolver *R, struct AstFuncDecl *d, struct 
     enter_function(R, scope, r);
     allocate_decls(R, r->params);
 
-    struct HirType *outer = R->result;
-    const paw_Bool last_state = R->in_closure;
+    struct HirType *last_result = R->result;
+    const int last_count = R->nresults;
     R->result = HirGetFuncDef(r->type)->result;
-    R->in_closure = PAW_FALSE;
+    R->nresults = 0;
 
     enter_inference_ctx(R);
     r->body = RESOLVE_BLOCK(R, d->body);
     leave_inference_ctx(R);
 
     leave_function(R);
-    R->in_closure = last_state;
-    R->result = outer;
+    R->nresults = last_count;
+    R->result = last_result;
 }
 
 static struct HirStmt *ResolveReturnStmt(struct Resolver *R, struct AstReturnStmt *s)
@@ -841,17 +866,12 @@ static struct HirStmt *ResolveReturnStmt(struct Resolver *R, struct AstReturnStm
     if (s->expr != NULL) {
         r->expr = resolve_expr(R, s->expr); 
         have = expr_type(R, r->expr);
+    } else {
+        have = get_type(R, PAW_TUNIT);
     }
 
-    if (HIR_IS_UNIT_T(want)) {
-        if (have != NULL && !HIR_IS_UNIT_T(have)) {
-            TYPE_ERROR(R, "expected '()' or empty return");
-        }
-    } else if (have != NULL) {
-        unify(R, have, want);
-    } else {
-        TYPE_ERROR(R, "expected nonempty return");
-    }
+    unify(R, have, want);
+    ++R->nresults;
     return result;
 }
 
@@ -968,8 +988,7 @@ static struct HirType *resolve_tuple_type(struct Resolver *R, struct AstTupleTyp
         return get_type(R, PAW_TUNIT);
     }
     struct HirType *r = new_type(R, NO_DECL, kHirTupleType, e->line);
-    struct HirExprList *elems = resolve_expr_list(R, e->types);
-    r->tuple.elems = collect_expr_types(R, elems);
+    r->tuple.elems = resolve_type_list(R, e->types);
     return r;
 }
 
@@ -1151,13 +1170,13 @@ static struct HirExpr *resolve_binop_expr(struct Resolver *R, struct AstBinOpExp
     }
     unify(R, lhs, rhs);
 
-    const paw_Type left = TYPE2CODE(R, lhs);
-    const paw_Type right = TYPE2CODE(R, rhs);
-    if (left < 0 || right < 0 || left != right || !kValidOps[e->op][left]) {
+    const paw_Type type = TYPE2CODE(R, lhs);
+    paw_assert(type == TYPE2CODE(R, rhs));
+    if (type < 0 || !kValidOps[e->op][type]) {
         TYPE_ERROR(R, "unsupported operand types for binary operator");
-    } else if (left == PAW_TVECTOR) {
+    } else if (type == PAW_TVECTOR) {
         r->type = binop_vector(R, e->op, lhs);
-    } else if (left == PAW_TMAP) {
+    } else if (type == PAW_TMAP) {
         r->type = binop_map(R, lhs);
     } else if (binop_is_bool(e->op)) {
         r->type = get_type(R, PAW_TBOOL);
@@ -1189,6 +1208,40 @@ static struct HirType *new_map_t(struct Resolver *R, struct HirType *key_t, stru
     return HIR_TYPEOF(inst);
 }
 
+static struct HirTypeList *new_unknowns(struct Resolver *R, int count)
+{
+    struct HirTypeList *list = pawHir_type_list_new(R->hir);
+    for (int i = 0; i < count; ++i) {
+        struct HirType *unknown = pawU_new_unknown(R->U);
+        pawHir_type_list_push(R->hir, list, unknown);
+    }
+    return list;
+}
+
+struct Generalization {
+    struct HirTypeList *types;
+    struct HirTypeList *fields;
+    struct HirType *result;
+};
+
+// Replace generic parameters with inference variables (struct HirUnknown). The 
+// resulting '.fields' list can be unified with another list of types (argument or
+// struct field types) to infer a concrete type for each unknown.
+static struct Generalization generalize(struct Resolver *R, struct HirDeclList *generics, struct HirDeclList *fields)
+{
+    if (generics == NULL) {
+        return (struct Generalization){0};
+    }
+    struct HirTypeList *gtypes = collect_decl_types(R, generics);
+    struct HirTypeList *ftypes = collect_decl_types(R, fields);
+    struct HirTypeList *unknowns = new_unknowns(R, generics->count);
+    struct HirTypeList *replaced = instantiate_typelist(R, gtypes, unknowns, ftypes);
+    return (struct Generalization){
+        .types = unknowns,
+        .fields = replaced,
+    };
+}
+
 static struct HirType *resolve_container_type(struct Resolver *R, struct AstContainerType *e)
 {
     struct HirType *first = resolve_type(R, e->first);
@@ -1209,29 +1262,61 @@ static struct HirType *resolve_signature(struct Resolver *R, struct AstSignature
     return type;
 }
 
+static struct HirDecl *resolve_closure_param(struct Resolver *R, struct AstFieldDecl *d)
+{
+    struct HirDecl *result = pawHir_new_decl(R->hir, d->line, kHirFieldDecl);
+    struct HirFieldDecl *r = HirGetFieldDecl(result);
+    add_def(R, result);
+
+    r->name = d->name;
+    r->type = d->tag == NULL
+        ? pawU_new_unknown(R->U)
+        : resolve_type(R, d->tag);
+    new_local(R, r->name, result);
+    return result;
+}
+
 static struct HirExpr *resolve_closure_expr(struct Resolver *R, struct AstClosureExpr *e)
 {
     struct HirExpr *result = pawHir_new_expr(R->hir, e->line, kHirClosureExpr);
     struct HirClosureExpr *r = HirGetClosureExpr(result);
 
     struct HirType *last_result = R->result;
-    const paw_Bool last_state = R->in_closure;
-    R->in_closure = PAW_TRUE;
+    const int last_count = R->nresults;
     enter_block(R, NULL);
+    R->nresults = 0;
 
-    r->params = resolve_decl_list(R, e->params);
-    allocate_decls(R, r->params);
+    r->params = pawHir_decl_list_new(R->hir);
+    for (int i = 0; i < e->params->count; ++i) {
+        struct AstFieldDecl *src = AstGetFieldDecl(e->params->data[i]);
+        struct HirDecl *dst = resolve_closure_param(R, src);
+        pawHir_decl_list_push(R->hir, r->params, dst);
+    }
+    struct HirType *ret = e->result == NULL
+        ? pawU_new_unknown(R->U)
+        : resolve_type(R, e->result);
 
     struct HirType *t = new_type(R, NO_DECL, kHirFuncPtr, e->line);
     t->fptr.params = collect_decl_types(R, r->params);
-    t->fptr.result = resolve_type(R, e->result);
-    R->result = t->fptr.result;
+    t->fptr.result = ret;
+    R->result = ret;
     r->type = t;
 
-    r->body = RESOLVE_BLOCK(R, e->body);
+    if (e->has_body) {
+        r->body = RESOLVE_BLOCK(R, e->body);
+        r->has_body = PAW_TRUE;
+        if (R->nresults == 0) {
+            // implicit 'return ()'
+            unify(R, ret, get_type(R, PAW_TUNIT));
+        }
+    } else {
+        r->expr = resolve_expr(R, e->expr);
+        struct HirType *type = expr_type(R, r->expr);
+        unify(R, ret, type);
+    }
 
     leave_block(R);
-    R->in_closure = last_state;
+    R->nresults = last_count;
     R->result = last_result;
     return result;
 }
@@ -1288,39 +1373,6 @@ static struct HirDecl *ResolveTypeDecl(struct Resolver *R, struct AstTypeDecl *d
     r->type = expr_type(R, r->rhs);
     define_local(symbol);
     return result;
-}
-
-static struct HirTypeList *new_unknowns(struct Resolver *R, int count)
-{
-    struct HirTypeList *list = pawHir_type_list_new(R->hir);
-    for (int i = 0; i < count; ++i) {
-        struct HirType *unknown = pawU_new_unknown(R->U);
-        pawHir_type_list_push(R->hir, list, unknown);
-    }
-    return list;
-}
-
-struct Generalization {
-    struct HirTypeList *types;
-    struct HirTypeList *fields;
-};
-
-// Replace generic parameters with inference variables (struct HirUnknown). The 
-// resulting '.fields' list can be unified with another list of types (argument or
-// struct field types) to infer a concrete type for each unknown.
-static struct Generalization generalize(struct Resolver *R, struct HirDeclList *generics, struct HirDeclList *fields)
-{
-    if (generics == NULL) {
-        return (struct Generalization){0};
-    }
-    struct HirTypeList *gtypes = collect_decl_types(R, generics);
-    struct HirTypeList *ftypes = collect_decl_types(R, fields);
-    struct HirTypeList *unknowns = new_unknowns(R, generics->count);
-    struct HirTypeList *replaced = instantiate_typelist(R, gtypes, unknowns, ftypes);
-    return (struct Generalization){
-        .types = unknowns,
-        .fields = replaced,
-    };
 }
 
 static struct HirType *infer_func_template(struct Resolver *R, struct HirFuncDecl *base, struct HirExprList *args)
@@ -1595,7 +1647,9 @@ static void resolve_func_item(struct Resolver *R, struct ItemSlot *slot)
 {
     struct AstFuncDecl *ast_func = AstGetFuncDecl(slot->ast_decl);
     struct HirFuncDecl *hir_func = HirGetFuncDecl(slot->hir_decl);
-    resolve_func_body(R, ast_func, hir_func, slot->scope, FUNC_FUNCTION);
+    if (ast_func->body != NULL) {
+        resolve_func_body(R, ast_func, hir_func, slot->scope, FUNC_FUNCTION);
+    }
 }
 
 static struct HirDecl *ResolveFuncDecl(struct Resolver *R, struct AstFuncDecl *d)
@@ -1715,7 +1769,7 @@ static struct HirExpr *resolve_index(struct Resolver *R, struct AstIndex *e)
     } else if (is_map_t(R, target)) {
         if (e->is_slice) {
             TYPE_ERROR(R, "slice operation not supported on map "
-                          "(requires '[T]' or 'string')");
+                          "(requires '[T]' or 'str')");
         }
         expect = hir_map_key(target);
         r->type = hir_map_value(target);
