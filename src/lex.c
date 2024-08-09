@@ -4,7 +4,7 @@
 #include "lex.h"
 #include "auxlib.h"
 #include "compile.h"
-#include "gc_aux.h"
+#include "gc.h"
 #include "map.h"
 #include "mem.h"
 #include "parse.h"
@@ -17,7 +17,7 @@
 
 #define lex_error(x) pawX_error(x, "syntax error")
 #define save_and_next(x) (save(x, (x)->c), next(x))
-#define is_eof(x) (cast((x)->c, uint8_t) == TK_END)
+#define is_eof(x) (CAST((x)->c, uint8_t) == TK_END)
 #define is_newline(x) ((x)->c == '\r' || (x)->c == '\n')
 
 static void add_location(paw_Env *P, Buffer *print, const String *s, int line)
@@ -54,7 +54,7 @@ static char next_raw(struct Lex *x)
         --x->nchunk;
         ++x->chunk;
     } else {
-        x->c = cast(TK_END, char);
+        x->c = CAST(TK_END, char);
     }
     return x->c;
 }
@@ -80,8 +80,8 @@ static char next(struct Lex *x)
 static void save(struct Lex *x, char c)
 {
     struct DynamicMem *dm = x->dm;
-    pawM_grow(ENV(x), dm->scratch.data, dm->scratch.size, dm->scratch.alloc);
-    dm->scratch.data[dm->scratch.size++] = c;
+    pawM_grow(ENV(x), dm->scratch.data, dm->scratch.count, dm->scratch.alloc);
+    dm->scratch.data[dm->scratch.count++] = c;
 }
 
 static paw_Bool test_next(struct Lex *x, char c)
@@ -136,9 +136,9 @@ static struct Token make_string(struct Lex *x, TokenKind kind)
     struct DynamicMem *dm = x->dm;
     struct CharVec *cv = &dm->scratch;
     struct Token t = make_token(kind);
-    String *s = pawP_scan_nstring(ENV(x), x->strings, cv->data, cast_size(cv->size));
+    String *s = pawP_scan_nstring(ENV(x), x->strings, cv->data, CAST_SIZE(cv->count));
     v_set_object(&t.value, s);
-    cv->size = 0;
+    cv->count = 0;
     return t;
 }
 
@@ -151,7 +151,7 @@ static struct Token consume_name(struct Lex *x)
     struct Token t = make_string(x, TK_NAME);
     const String *s = v_string(t.value);
     if (IS_KEYWORD(s)) {
-        t.kind = cast(s->flag, TokenKind);
+        t.kind = CAST(s->flag, TokenKind);
     } else if (s->length > PAW_NAME_MAX) {
         pawX_error(x, "name (%I chars) is too long", paw_cast_int(s->length));
     }
@@ -195,7 +195,7 @@ static int consume_utf8(struct Lex *x)
 
     uint32_t state = 0;
     do {
-        const uint8_t c = cast(x->c, uint8_t);
+        const uint8_t c = CAST(x->c, uint8_t);
         state = kLookup1[c] + state * 12;
         state = kLookup2[state];
         save_and_next(x);
@@ -420,13 +420,13 @@ static void skip_whitespace(struct Lex *x)
 static struct Token advance(struct Lex *x)
 {
 try_again:
-#define T(kind) make_token(cast(kind, TokenKind))
+#define T(kind) make_token(CAST(kind, TokenKind))
     skip_whitespace(x);
 
     // cast to avoid sign extension
-    struct Token token = T(cast(x->c, uint8_t));
+    struct Token token = T(CAST(x->c, uint8_t));
     paw_Bool semi = PAW_FALSE;
-    x->dm->scratch.size = 0;
+    x->dm->scratch.count = 0;
     switch (x->c) {
         case '\n':
         case '\r':
@@ -560,8 +560,11 @@ void pawX_set_source(struct Lex *x, paw_Reader input, void *ud)
 {
     paw_Env *P = ENV(x);
     struct DynamicMem *dm = x->dm;
-    pawM_resize(P, dm->scratch.data, 0, INITIAL_SCRATCH);
-    dm->scratch.alloc = INITIAL_SCRATCH;
+    if (dm->scratch.alloc < INITIAL_SCRATCH) {
+        pawM_resize(P, dm->scratch.data, dm->scratch.alloc, INITIAL_SCRATCH);
+        dm->scratch.alloc = INITIAL_SCRATCH;
+    }
+    dm->scratch.count = 0;
 
     x->ud = ud;
     x->input = input;

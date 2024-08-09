@@ -6,7 +6,7 @@
 #include "api.h"
 #include "auxlib.h"
 #include "call.h"
-#include "gc_aux.h"
+#include "gc.h"
 #include "lib.h"
 #include "map.h"
 #include "mem.h"
@@ -22,19 +22,15 @@
 
 #include <gc.h>
 
-static void *default_alloc(void *ud, void *ptr, size_t size0, size_t size)
+static void *default_alloc(void *ud, void *ptr, size_t old_size, size_t new_size)
 {
     paw_unused(ud);
-    if (size0 == 0) {
-        return GC_MALLOC(size);
-        // return malloc(size);
-    } else if (size == 0) {
-        GC_FREE(ptr);
-        // free(ptr);
+    if (new_size == 0) {
+        free(ptr);
         return NULL;
-    }
-    return GC_REALLOC(ptr, size);
-    // return realloc(ptr, size);
+    } 
+    if (old_size == 0) return malloc(new_size);
+    return realloc(ptr, new_size);
 }
 
 static StackPtr access(paw_Env *P, int index)
@@ -44,7 +40,10 @@ static StackPtr access(paw_Env *P, int index)
     return &P->cf->base.p[i];
 }
 
-paw_Alloc paw_get_allocator(paw_Env *P) { return P->alloc; }
+paw_Alloc paw_get_allocator(paw_Env *P) 
+{
+    return P->alloc; 
+}
 
 void paw_set_allocator(paw_Env *P, paw_Alloc alloc, void *ud)
 {
@@ -63,21 +62,26 @@ static void open_aux(paw_Env *P, void *arg)
     pawP_init(P);
     pawR_init(P);
     pawL_init(P);
-    check_gc(P);
+    CHECK_GC(P);
 }
 
 paw_Env *paw_open(paw_Alloc alloc, void *ud)
 {
     alloc = alloc ? alloc : default_alloc;
     paw_Env *P = alloc(ud, NULL, 0, sizeof *P);
-    if (!P) {
-        return NULL;
-    }
+    if (P == NULL) return NULL;
     *P = (paw_Env){
         .alloc = alloc,
         .ud = ud,
     };
 
+    // TODO: let user pass in options. These options should work for programs that
+    //       don't use a huge amount of memory.
+    const size_t heap_size =  8388608 * 2;
+    if (pawZ_init(P, heap_size)) {
+        alloc(ud, P, sizeof(*P), 0);
+        return NULL;
+    }
     if (pawC_try(P, open_aux, NULL)) {
         paw_close(P);
         return NULL;
@@ -89,7 +93,9 @@ void paw_close(paw_Env *P)
 {
     pawG_uninit(P);
     pawC_uninit(P);
+    pawE_uninit(P);
     pawS_uninit(P);
+    pawZ_uninit(P);
 
     P->alloc(P->ud, P, sizeof *P, 0);
 }
@@ -287,8 +293,7 @@ int paw_load(paw_Env *P, paw_Reader input, const char *name, void *ud)
         .ud = ud,
     };
     const int status = pawC_try(P, compile_aux, &p);
-    pawM_free_vec(P, p.dm.scratch.data, p.dm.scratch.alloc);
-    pawM_free_vec(P, p.dm.labels.values, p.dm.labels.capacity);
+    pawP_cleanup(P, &p.dm);
     return status;
 }
 

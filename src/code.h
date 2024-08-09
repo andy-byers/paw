@@ -47,7 +47,7 @@ void pawK_pool_free(struct Pool *pool, void *ptr, size_t size);
     static inline struct L *func##new(ctx *X) \
     { \
         pawM_check_size(X->P, 0, K_LIST_MIN, sizeof(void *)); \
-        const size_t size = cast_size(K_LIST_MIN) * sizeof(void *); \
+        const size_t size = CAST_SIZE(K_LIST_MIN) * sizeof(void *); \
         struct L *list = pawK_pool_alloc(X->P, &X->pool, sizeof(struct L)); \
         list->data = pawK_pool_alloc(X->P, &X->pool, size); \
         list->alloc = K_LIST_MIN; \
@@ -60,12 +60,12 @@ void pawK_pool_free(struct Pool *pool, void *ptr, size_t size);
                 pawM_error(X->P); \
             } \
             const size_t elemsz = sizeof(list->data[0]); \
-            const size_t nextcap = cast_size(list->alloc) * 2; \
+            const size_t nextcap = CAST_SIZE(list->alloc) * 2; \
             const size_t bufsz = nextcap * elemsz; \
             void *next = pawK_pool_alloc(X->P, &X->pool, bufsz); \
-            const size_t usedsz = cast_size(list->count) * elemsz; \
+            const size_t usedsz = CAST_SIZE(list->count) * elemsz; \
             memcpy(next, list->data, usedsz); \
-            list->alloc = nextcap; \
+            list->alloc = CAST(nextcap, int); \
             list->data = next; \
         } \
         list->data[list->count++] = node; \

@@ -14,22 +14,26 @@
 #define paw_cast_int(x) ((paw_Int)(x))
 #define paw_int_c(x) INT64_C(x)
 
+#ifndef PAW_ALIGN
+# define PAW_ALIGN 8
+#endif
+
 #ifndef PAW_NAME_MAX
-#define PAW_NAME_MAX 128
+# define PAW_NAME_MAX 128
 #endif
 
 #ifndef PAW_STACK_MAX
-#define PAW_STACK_MAX 1000000
+# define PAW_STACK_MAX 1000000
 #endif
 
 #if defined(__APPLE__)
-#define PAW_OS_MACOS
-#define PAW_OS_POSIX
+# define PAW_OS_MACOS
+# define PAW_OS_POSIX
 #elif defined(__linux__)
-#define PAW_OS_LINUX
-#define PAW_OS_POSIX
+# define PAW_OS_LINUX
+# define PAW_OS_POSIX
 #elif defined(_WIN32)
-#define PAW_OS_WINDOWS
+# define PAW_OS_WINDOWS
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)

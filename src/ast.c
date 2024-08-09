@@ -9,26 +9,30 @@
 #include <limits.h>
 #include <stdlib.h>
 
-#define FIRST_ARENA_SIZE 512
+#define FIRST_ARENA_SIZE 4096
 #define LARGE_ARENA_MIN 32
 
 struct Ast *pawAst_new(struct Lex *lex)
 {
     paw_Env *P = ENV(lex);
-    struct Ast *tree = pawM_new(P, struct Ast);
-    tree->lex = lex;
-    tree->P = P;
+    struct Ast *ast = pawM_new(P, struct Ast);
+    *ast = (struct Ast){
+        .lex = lex,
+        .P = P,
+    };
 
     // initialize memory pools for storing AST components
-    pawK_pool_init(P, &tree->pool, FIRST_ARENA_SIZE, sizeof(void *) * LARGE_ARENA_MIN);
-    return tree;
+    pawK_pool_init(P, &ast->pool, FIRST_ARENA_SIZE, sizeof(void *) * LARGE_ARENA_MIN);
+    return ast;
 }
 
 void pawAst_free(struct Ast *ast)
 {
-    paw_Env *P = ENV(ast);
-    pawK_pool_uninit(P, &ast->pool);
-    pawM_free(P, ast);
+    if (ast != NULL) {
+        paw_Env *P = ENV(ast);
+        pawK_pool_uninit(P, &ast->pool);
+        pawM_free(P, ast);
+    }
 }
 
 #define DEFINE_NODE_CONSTRUCTOR(name, T)                                         \
@@ -80,7 +84,7 @@ DEFINE_KIND_PRINTER(expr, AstExpr)
 DEFINE_KIND_PRINTER(decl, AstDecl) 
 DEFINE_KIND_PRINTER(stmt, AstStmt) 
 
-#define dump_block(P, b) check_exp(AstIsBlock(AST_CAST_STMT(b)), dump_stmt(P, AST_CAST_STMT(b)))
+#define dump_block(P, b) CHECK_EXP(AstIsBlock(AST_CAST_STMT(b)), dump_stmt(P, AST_CAST_STMT(b)))
 #define dump_name(P, s) DUMP_FMT(P, "name: %s\n", s ? s->text : NULL)
 
 static void dump_expr(Printer *P, struct AstExpr *e);
@@ -127,7 +131,7 @@ static void dump_decl(Printer *P, struct AstDecl *d)
     DUMP_FMT(P, "line: %d\n", d->hdr.line);
     switch (AST_KINDOF(d)) {
         case kAstFuncDecl:
-            DUMP_FMT(P, "receiver: %p\n", cast(d->func.receiver, void *));
+            DUMP_FMT(P, "receiver: %p\n", CAST(d->func.receiver, void *));
             DUMP_FMT(P, "name: %s\n", d->func.name->text);
             dump_decl_list(P, d->func.generics, "generics");
             dump_decl_list(P, d->func.params, "params");

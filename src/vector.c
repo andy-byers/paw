@@ -1,7 +1,8 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
-#include "gc_aux.h"
+
+#include "gc.h"
 #include "mem.h"
 #include "rt.h"
 #include "util.h"
@@ -16,7 +17,7 @@ void pawV_index_error(paw_Env *P, paw_Int index, size_t length)
 
 static size_t vector_capacity(const Vector *a)
 {
-    return cast_size(a->upper - a->begin);
+    return CAST_SIZE(a->upper - a->begin);
 }
 
 static void realloc_vector(paw_Env *P, Vector *a, size_t alloc0, size_t alloc)
@@ -25,7 +26,7 @@ static void realloc_vector(paw_Env *P, Vector *a, size_t alloc0, size_t alloc)
     pawM_resize(P, a->begin, alloc0, alloc);
     a->end = a->begin + end;
     a->upper = a->begin + alloc;
-    check_gc(P);
+    CHECK_GC(P);
 }
 
 static void ensure_space(paw_Env *P, Vector *a, size_t have, size_t want)
@@ -44,7 +45,7 @@ static void ensure_space(paw_Env *P, Vector *a, size_t have, size_t want)
 static void reserve_extra(paw_Env *P, Vector *a, size_t extra)
 {
     paw_assert(extra > 0);
-    if (extra <= cast_size(a->upper - a->end)) {
+    if (extra <= CAST_SIZE(a->upper - a->end)) {
         return; // Still have enough space
     }
     const size_t have = vector_capacity(a);
@@ -53,7 +54,7 @@ static void reserve_extra(paw_Env *P, Vector *a, size_t extra)
 
 static void move_items(Value *src, ptrdiff_t shift, size_t count)
 {
-    memmove(src + shift, src, cast_size(count) * sizeof(src[0]));
+    memmove(src + shift, src, CAST_SIZE(count) * sizeof(src[0]));
 }
 
 void pawV_vec_reserve(paw_Env *P, Vector *a, size_t want)
@@ -83,7 +84,7 @@ void pawV_vec_insert(paw_Env *P, Vector *a, paw_Int index, Value v)
     // Clamp to the vector bounds.
     const size_t len = pawV_vec_length(a);
     const paw_Int abs = pawV_abs_index(index, len);
-    const size_t i = paw_clamp(cast_size(abs), 0, len);
+    const size_t i = PAW_CLAMP(CAST_SIZE(abs), 0, len);
 
     reserve_extra(P, a, 1);
     if (i != len) {
@@ -108,7 +109,7 @@ void pawV_vec_pop(paw_Env *P, Vector *a, paw_Int index)
 Vector *pawV_vec_new(paw_Env *P)
 {
     Vector *a = pawM_new(P, Vector);
-    pawG_add_object(P, cast_object(a), VVECTOR);
+    pawG_add_object(P, CAST_OBJECT(a), VVECTOR);
     return a;
 }
 

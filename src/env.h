@@ -1,10 +1,10 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
-#ifndef PAW_CONTEXT_H
-#define PAW_CONTEXT_H
+#ifndef PAW_ENV_H
+#define PAW_ENV_H
 
-#include "meta.h"
+#include "alloc.h"
 #include "opcode.h"
 #include "paw.h"
 #include "str.h"
@@ -15,15 +15,6 @@
 #include <stdio.h>
 
 struct Jump; // call.c
-
-typedef struct Module {
-    Struct **structs;
-    Enum **enums;
-    Value *slots;
-    int nstructs;
-    int nenums;
-    int nslots;
-} Module;
 
 #define CFF_C 1
 #define CFF_ENTRY 2
@@ -80,7 +71,7 @@ struct MethodList {
     Value data[];
 };
 
-typedef struct paw_Env {
+typedef struct paw_Env {    paw_Bool done; // TODO: remove
     StringTable strings;
 
     CallFrame main;
@@ -97,7 +88,6 @@ typedef struct paw_Env {
     String *modname;
     Map *builtin;
     Map *libs;
-    Module *mod;
     Value meta_keys[NMETAMETHODS];
 
     // Array of commonly-used strings.
@@ -113,6 +103,7 @@ typedef struct paw_Env {
         int alloc;
     } gv;
 
+    struct Heap *H;
     paw_Alloc alloc;
     void *ud;
 
@@ -124,6 +115,7 @@ typedef struct paw_Env {
     paw_Bool gc_noem;
 } paw_Env;
 
+void pawE_uninit(paw_Env *P);
 void pawE_error(paw_Env *P, int code, int line, const char *fmt, ...);
 CallFrame *pawE_extend_cf(paw_Env *P, StackPtr top);
 int pawE_new_global(paw_Env *P, String *name);
@@ -136,4 +128,4 @@ static inline String *pawE_cstr(paw_Env *P, unsigned type)
     return P->str_cache[type];
 }
 
-#endif // PAW_CONTEXT_H
+#endif // PAW_ENV_H

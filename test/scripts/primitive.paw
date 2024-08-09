@@ -84,3 +84,18 @@ fn test_conversions() {
     let i = b as int
     assert(i == 1)
 }
+
+fn test_lots_of_strings() {
+    let alphabet = 'abcdefghijklmnopqrstuvwxyz'
+
+    // put strings in a vector so they don't get collected
+    let v = []
+    for i = 0, #alphabet {
+        for j = 0, #alphabet {
+            let s = alphabet[:i] + alphabet[j:] +
+                    alphabet[i:] + alphabet[:j]
+            _vector_push(v, s)
+        }
+    }
+}
+

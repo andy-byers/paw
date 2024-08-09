@@ -5,7 +5,7 @@
 #include "compile.h"
 #include "ast.h"
 #include "call.h"
-#include "gc_aux.h"
+#include "gc.h"
 #include "hir.h"
 #include "map.h"
 #include "parse.h"
@@ -32,7 +32,7 @@ String *pawP_scan_nstring(paw_Env *P, Map *st, const char *s, size_t n)
     Value *value = pawH_action(P, st, *pv, MAP_ACTION_CREATE);
     *value = *pv; // anchor in map
     pawC_pop(P);
-    check_gc(P);
+    CHECK_GC(P);
 
     return v_string(*value);
 }
@@ -81,4 +81,14 @@ Closure *pawP_compile(paw_Env *P, paw_Reader input, struct DynamicMem *dm, const
     // Leave the main closure on top of the stack.
     pawC_stkdec(P, 1);
     return C.main;
+}
+
+void pawP_cleanup(paw_Env *P, const struct DynamicMem *dm)
+{
+    pawM_free_vec(P, dm->labels.values, dm->labels.capacity);
+    pawM_free_vec(P, dm->scratch.data, dm->scratch.alloc);
+    pawM_free_vec(P, dm->decls.data, dm->decls.alloc);
+    pawM_free_vec(P, dm->vars.data, dm->vars.alloc);
+    pawAst_free(dm->ast);
+    pawHir_free(dm->hir);
 }

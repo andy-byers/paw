@@ -69,7 +69,7 @@ struct HirSymtab {
     struct HirScope *globals;
 };
 
-#define last_scope(t) check_exp((t)->size > 0, (t)->data[(t)->size - 1])
+#define last_scope(t) CHECK_EXP((t)->size > 0, (t)->data[(t)->size - 1])
 struct HirScope *pawHir_new_scope(struct Hir *hir, struct HirSymtab *table);
 struct HirSymtab *pawHir_new_symtab(struct Hir *hir);
 void pawHir_add_scope(struct Hir *hir, struct HirSymtab *table, struct HirScope *scope);
@@ -688,7 +688,7 @@ struct HirDecl *pawHir_get_decl(struct Hir *hir, DefId id);
 
 // NOTE: HirFuncPtr and HirFuncDef share the same common initial sequence, so
 //       HirFuncPtr fields can be accessed on a HirFuncDef
-#define HIR_FPTR(t) check_exp(HirIsFuncType(t), &(t)->fptr)
+#define HIR_FPTR(t) CHECK_EXP(HirIsFuncType(t), &(t)->fptr)
 
 static inline struct HirType *hir_vector_elem(struct HirType *t)
 {

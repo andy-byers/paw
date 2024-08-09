@@ -162,7 +162,7 @@ static void test_map3(paw_Env *P)
         map_put(P, m, known[i], known[i]);
     }
 
-    check(cast_size(paw_length(P, -1)) == paw_countof(known));
+    check(CAST_SIZE(paw_length(P, -1)) == paw_countof(known));
 
     // Fill the map with nonnegative integers (may have repeats).
     paw_Int integers[N];
@@ -172,18 +172,18 @@ static void test_map3(paw_Env *P)
         integers[i] = ival;
     }
 
-    check(cast_size(paw_length(P, -1)) <= N + paw_countof(known));
+    check(CAST_SIZE(paw_length(P, -1)) <= N + paw_countof(known));
 
     // Erase all nonnegative integers.
     paw_Int itr = PAW_ITER_INIT;
     while (pawH_iter(m, &itr)) {
-        const Value key = *pawH_key(m, cast_size(itr));
+        const Value key = *pawH_key(m, CAST_SIZE(itr));
         if (v_int(key) >= 0) {
             map_del(P, m, key.i);
         }
     }
 
-    check(cast_size(pawH_length(m)) <= paw_countof(known));
+    check(CAST_SIZE(pawH_length(m)) <= paw_countof(known));
 
     // Check known items.
     for (size_t i = 0; i < paw_countof(known); ++i) {
@@ -192,6 +192,33 @@ static void test_map3(paw_Env *P)
     }
 
     map_free(P, m);
+}
+
+static void test_strings(paw_Env *P)
+{
+    paw_push_nstring(P, "fixed\0\1", 7);
+    const void *fixed = P->top.p[-1].p;
+
+    int total_words = 0;
+    const char data[] =
+        "abcdefghijklmnopqrstuvwxyz"
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    for (size_t wordlen = 1; wordlen < 26; ++wordlen) {
+        const size_t nwords = paw_lengthof(data) - wordlen;
+        for (size_t i = 0; i < nwords; ++i) {
+            paw_push_nstring(P, data + i, wordlen);
+            ++total_words;
+        }
+        if (total_words > 50) {
+            const int npop = total_words / 3;
+            total_words -= npop;
+            paw_pop(P, npop);
+        }
+    }
+    printf("total %d\n",total_words);
+
+    paw_push_nstring(P, "fixed\0\1", 7);
+    check(fixed == P->top.p[-1].p);
 }
 
 static void test_stack(paw_Env *P)
@@ -212,7 +239,7 @@ static void driver(void (*callback)(paw_Env *))
 
 static void parse_int(paw_Env *P, void *ud)
 {
-    paw_push_string(P, cast(ud, const char *));
+    paw_push_string(P, CAST(ud, const char *));
     pawR_to_int(P, PAW_TSTRING);
 }
 
@@ -231,6 +258,7 @@ static void test_parse_int(paw_Env *P)
 int main(void)
 {
     test_primitives();
+    driver(test_strings);
     driver(test_stack);
     driver(test_map1);
     driver(test_map2);

@@ -14,46 +14,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <gc.h>
-
-#if 0
-#define TEST_FIND_LEAK
-// Define TEST_FIND_LEAK to have the program print out the addresses and
-// sizes of leaked blocks. Watchpoints can be used to figure out exactly
-// where the block was allocated. Note that the tests are very slow with
-// this option enabled.
-#ifdef TEST_FIND_LEAK
-struct Chunk {
-    void *data;
-    size_t size;
-};
-
-static struct {
-    struct Chunk *blocks;
-    size_t size;
-    size_t alloc;
-} s_chunks;
-
-static struct Chunk *get_chunk(void *ptr)
-{
-    if (s_chunks.size == s_chunks.alloc) {
-        s_chunks.alloc = paw_max(s_chunks.alloc * 2, 256);
-        s_chunks.blocks = realloc(s_chunks.blocks, s_chunks.alloc * sizeof(s_chunks.blocks[0]));
-    }
-    for (size_t i = 0; i < s_chunks.size; ++i) {
-        struct Chunk *c = &s_chunks.blocks[i];
-        if (ptr == c->data) {
-            return c;
-        }
-    }
-    struct Chunk *c = &s_chunks.blocks[s_chunks.size++];
-    *c = (struct Chunk){
-        .data = ptr,
-    };
-    return c;
-}
-#endif // TEST_FIND_LEAK
-
 static unsigned *get_block(struct TestAlloc *a, size_t size)
 {
     if (size < BLOCK_LIMIT) {
@@ -61,7 +21,7 @@ static unsigned *get_block(struct TestAlloc *a, size_t size)
     }
     // Chunks past BLOCK_LIMIT represent BLOCK_LIMIT bytes each, except for the last block,
     // which represents all allocations greater than the preceeding block. Block 0 is unused.
-    size = paw_min(size / BLOCK_LIMIT, BLOCK_LIMIT);
+    size = PAW_MIN(size / BLOCK_LIMIT, BLOCK_LIMIT);
     return &a->blocks[size + BLOCK_LIMIT];
 }
 
@@ -82,15 +42,6 @@ static void register_block(struct TestAlloc *a, size_t size0, size_t size)
 static void report_nonzero_blocks(struct TestAlloc *a)
 {
     size_t nonzero = 0;
-#ifdef TEST_FIND_LEAK
-    // Print the exact pointers that were leaked.
-    for (size_t i = 0; i < s_chunks.size; ++i) {
-        struct Chunk c = s_chunks.blocks[i];
-        if (c.size) {
-            fprintf(stderr, "leaked %zu bytes at address %p\n", c.size, c.data);
-        }
-    }
-#else
     // Just give a rough indication of what size blocks were leaked.
     unsigned *block = a->blocks;
     for (size_t i = 0; i < BLOCK_LIMIT; ++i, ++block) {
@@ -110,14 +61,12 @@ static void report_nonzero_blocks(struct TestAlloc *a)
         fprintf(stderr, "leaked %u large block(s)\n", *block);
         ++nonzero;
     }
-#endif // !TEST_FIND_LEAK
     if (nonzero) {
         fprintf(stderr, "leaked %zu allocations (%zu bytes total)\n",
                 nonzero, a->nbytes);
         abort();
     }
 }
-#endif // 0
 
 static void trash_memory(void *ptr, size_t n)
 {
@@ -129,39 +78,30 @@ static void trash_memory(void *ptr, size_t n)
 
 static void *safe_realloc(struct TestAlloc *a, void *ptr, size_t size0, size_t size)
 {
+    check((size0 == 0) == (ptr == NULL));
     check(a->nbytes >= size0);
-    //    register_block(a, size0, size);
-    void *ptr2 = size ? GC_MALLOC(size) : NULL;
-    check(!size || ptr2); // assume success
-    if (ptr2) {
-        if (ptr) {
+    void *ptr2 = size ? malloc(size) : NULL;
+    check(size == 0 || ptr2 != NULL); // assume success
+    if (ptr2 != NULL) {
+        if (ptr != NULL) {
             // resize: copy old contents
-            memcpy(ptr2, ptr, paw_min(size0, size));
+            memcpy(ptr2, ptr, PAW_MIN(size0, size));
         }
         if (size0 < size) {
             // grow: fill uninitialized memory
             trash_memory((char *)ptr2 + size0, size - size0);
         }
     }
-#ifdef TEST_FIND_LEAK
-    if (ptr) {
-        struct Chunk *c = get_chunk(ptr);
-        check(c->size == size0);
-        c->size = 0;
+    if (ptr != NULL || ptr2 != NULL) {
+        register_block(a, size0, size);
     }
-    if (ptr2) {
-        struct Chunk *c = get_chunk(ptr2);
-        check(c->size == 0);
-        c->size = size;
-    }
-#endif
-    if (ptr) {
+    if (ptr != NULL) {
         // Trash the old allocation in an attempt to mess up any code
         // that still depends on it.
         trash_memory(ptr, size0);
     }
     a->nbytes += size - size0;
-    GC_FREE(ptr);
+    free(ptr);
     return ptr2;
 }
 
@@ -178,7 +118,7 @@ static void next_chunk(struct TestReader *rd)
         rd->length = pawO_read(rd->file, rd->buf, sizeof(rd->buf));
         return;
     }
-    const size_t n = paw_min(rd->ndata, READ_MAX);
+    const size_t n = PAW_MIN(rd->ndata, READ_MAX);
     memcpy(rd->buf, rd->data, n);
     rd->data += n;
     rd->ndata -= n;
@@ -197,7 +137,7 @@ const char *test_reader(paw_Env *P, void *ud, size_t *size)
         }
     }
     const size_t r = (size_t)rand();
-    *size = paw_max(1, r % rd->length);
+    *size = PAW_MAX(1, r % rd->length);
     const char *ptr = rd->buf + rd->index;
     rd->length -= *size;
     rd->index += *size;
@@ -224,11 +164,11 @@ void test_close(paw_Env *P, struct TestAlloc *a)
 {
     paw_close(P);
 
-    //    if (a->nbytes) {
-    //        fprintf(stderr, "error: leaked %zu bytes\n", a->nbytes);
-    //        report_nonzero_blocks(a);
-    //        abort();
-    //    }
+    if (a->nbytes > 0) {
+        fprintf(stderr, "error: leaked %zu bytes\n", a->nbytes);
+        report_nonzero_blocks(a);
+        abort();
+    }
 }
 
 static void check_ok(paw_Env *P, int status)

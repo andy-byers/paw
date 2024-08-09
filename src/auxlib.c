@@ -142,7 +142,7 @@ void pawL_add_pointer(paw_Env *P, Buffer *buf, void *p)
 {
     char temp[32];
     const int n = snprintf(temp, sizeof(temp), "%p", p);
-    pawL_add_nstring(P, buf, temp, cast_size(n));
+    pawL_add_nstring(P, buf, temp, CAST_SIZE(n));
 }
 
 static const char *add_non_fmt(paw_Env *P, Buffer *buf, const char *ptr)
@@ -152,7 +152,7 @@ static const char *add_non_fmt(paw_Env *P, Buffer *buf, const char *ptr)
         ++p;
     }
     if (p != ptr) {
-        pawL_add_nstring(P, buf, ptr, cast_size(p - ptr));
+        pawL_add_nstring(P, buf, ptr, CAST_SIZE(p - ptr));
         ptr = p;
     }
     return ptr;

@@ -17,13 +17,13 @@ typedef struct MapCursor {
 #define h_is_occupied(mc) (h_get_state(mc) == MAP_ITEM_OCCUPIED)
 #define h_is_erased(mc) (h_get_state(mc) == MAP_ITEM_ERASED)
 
-#define pawH_meta(m, index) (&cast((m)->data, MapMeta *)[index])
+#define pawH_meta(m, index) (&CAST((m)->data, MapMeta *)[index])
 
 static inline Value *pawH_key(Map *m, size_t index)
 {
-    char *data = cast(m->data, char *);
+    char *data = CAST(m->data, char *);
     data += sizeof(MapMeta) * m->capacity;
-    return &cast(data, Value *)[index];
+    return &CAST(data, Value *)[index];
 }
 
 static inline Value *pawH_value(Map *m, size_t index)
@@ -33,12 +33,12 @@ static inline Value *pawH_value(Map *m, size_t index)
 
 static inline MapState h_get_state(MapCursor *mc)
 {
-    return cast(mc->map->data, MapMeta *)[mc->index].state;
+    return CAST(mc->map->data, MapMeta *)[mc->index].state;
 }
 
 static inline void h_set_state(MapCursor *mc, MapState state)
 {
-    cast(mc->map->data, MapMeta *)[mc->index].state = state;
+    CAST(mc->map->data, MapMeta *)[mc->index].state = state;
 }
 
 static inline Value *h_cursor_key(MapCursor *mc)

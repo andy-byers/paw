@@ -16,13 +16,14 @@
 #define paw_lengthof(s) (sizeof(s) - 1)
 #define paw_alignof(x) _Alignof(x)
 #define paw_countof(a) (sizeof(a) / sizeof((a)[0]))
-#define paw_min(x, y) ((x) < (y) ? (x) : (y))
-#define paw_max(x, y) ((x) > (y) ? (x) : (y))
-#define paw_clamp(v, x, y) paw_min(paw_max(v, x), y)
+#define PAW_MIN(x, y) ((x) < (y) ? (x) : (y))
+#define PAW_MAX(x, y) ((x) > (y) ? (x) : (y))
+#define PAW_CLAMP(v, x, y) PAW_MIN(PAW_MAX(v, x), y)
 
-#define check_exp(c, e) (paw_assert(c), e)
-#define cast(x, t) ((t)(x))
-#define cast_size(x) cast(x, size_t)
+#define CHECK_EXP(c, e) (paw_assert(c), e)
+#define CAST(x, t) ((t)(x))
+#define CAST_SIZE(x) CAST(x, size_t)
+#define CAST_UPTR(x) CAST(x, uintptr_t)
 
 // Check for inclusion in one of the character classes
 #define ISDIGIT(c) (kCharClassTable[(uint8_t)(c)] & 1)
@@ -38,7 +39,7 @@
 
 static inline int paw_raw_cmp(void *x, size_t nx, void *y, size_t ny)
 {
-    const size_t min = paw_min(nx, ny);
+    const size_t min = PAW_MIN(nx, ny);
     const int r = memcmp(x, y, min);
     if (r == 0) {
         if (nx < ny) {

@@ -9,11 +9,11 @@
 #include "value.h"
 
 #define STACK_EXTRA 1 /* number of slots reserved for errors */
-#define save_offset(P, ptr) ((ptr) - (P)->stack.p)
-#define restore_pointer(P, ofs) ((P)->stack.p + (ofs))
-#define ensure_stack(P, n)                         \
+#define SAVE_OFFSET(P, ptr) ((ptr) - (P)->stack.p)
+#define RESTORE_POINTER(P, ofs) ((P)->stack.p + (ofs))
+#define ENSURE_STACK(P, n) \
     ((P)->bound.p - (P)->top.p < (n) + STACK_EXTRA \
-         ? pawC_stack_grow(P, n + STACK_EXTRA)     \
+         ? pawC_stack_grow(P, n + STACK_EXTRA) \
          : (void)0)
 
 typedef void (*Call)(paw_Env *P, void *arg);
@@ -30,14 +30,17 @@ void pawC_stack_grow(paw_Env *P, int count);
 void pawC_stack_realloc(paw_Env *P, int n);
 void pawC_stack_overflow(paw_Env *P);
 
-static inline int pawC_stklen(paw_Env *P) { return P->top.p - P->stack.p; }
+static inline int pawC_stklen(paw_Env *P) 
+{
+    return CAST(P->top.p - P->stack.p, int); 
+}
 
 // Increase the stack size
 // New slots have unspecified values and must be set before the next
 // collection runs.
 static inline StackPtr pawC_stkinc(paw_Env *P, int n)
 {
-    ensure_stack(P, n);
+    ENSURE_STACK(P, n);
     StackPtr sp = P->top.p;
     P->top.p += n;
     return sp;
@@ -99,6 +102,9 @@ static inline Value *pawC_pusho(paw_Env *P, Object *o)
 Value *pawC_pushns(paw_Env *P, const char *s, size_t n);
 Value *pawC_pushs(paw_Env *P, const char *s);
 
-static inline void pawC_pop(paw_Env *P) { pawC_stkdec(P, 1); }
+static inline void pawC_pop(paw_Env *P) 
+{
+    pawC_stkdec(P, 1); 
+}
 
 #endif // PAW_CALL_H

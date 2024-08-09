@@ -21,6 +21,7 @@
 
 Closure *pawP_compile(paw_Env *P, paw_Reader input, struct DynamicMem *dm, 
                       const char *name, void *ud);
+void pawP_cleanup(paw_Env *P, const struct DynamicMem *dm);
 
 String *pawP_scan_nstring(paw_Env *P, Map *st, const char *s, size_t n);
 static inline String *pawP_scan_string(paw_Env *P, Map *st, const char *s)

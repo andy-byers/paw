@@ -3,25 +3,12 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "prefix.h"
 
-#include "auxlib.h"
-#include "call.h"
 #include "env.h"
-#include "gc_aux.h"
-#include "lex.h"
-#include "lib.h"
+#include "call.h"
+#include "gc.h"
 #include "map.h"
-#include "mem.h"
-#include "opcode.h"
-#include "os.h"
-#include "paw.h"
-#include "rt.h"
-#include "str.h"
-#include "type.h"
-#include "util.h"
 #include "value.h"
-#include <assert.h>
 #include <math.h>
-#include <stdarg.h>
 
 // Helpers for the VM:
 #define vm_switch(x) switch (x)
@@ -43,7 +30,7 @@
 #define vm_pushi(i) pawC_pushi(P, i)
 #define vm_pushf(f) pawC_pushf(P, f)
 #define vm_pushb(b) pawC_pushb(P, b)
-#define vm_pusho(o) pawC_pusho(P, cast_object(o))
+#define vm_pusho(o) pawC_pusho(P, CAST_OBJECT(o))
 
 // Slot 0 (the callable) is an implicit parameter.
 #define vm_argc() (paw_get_count(P) - 1)
@@ -73,7 +60,7 @@ static void add_zeros(paw_Env *P, int n)
 static int current_line(const CallFrame *cf)
 {
     Proto *p = cf->fn->p;
-    const int pc = cf->pc - p->source;
+    const int pc = CAST(cf->pc - p->source, int);
 
     int i = 0;
     for (; i < p->nlines - 1; ++i) {
@@ -190,7 +177,7 @@ void pawR_cast_float(paw_Env *P, paw_Type type)
     if (type != PAW_TFLOAT) {
         Value *pv = vm_top(1);
         const paw_Int i = v_int(*pv);
-        v_set_float(pv, cast(i, paw_Float));
+        v_set_float(pv, CAST(i, paw_Float));
     }
 }
 
@@ -362,7 +349,7 @@ static size_t check_index(paw_Env *P, paw_Int index, size_t length,
                    "index %I is out of bounds for %s of length %I", index, what,
                    paw_cast_int(length));
     }
-    return cast_size(index);
+    return CAST_SIZE(index);
 }
 
 static void setslice_vector(paw_Env *P, Vector *va, paw_Int i, paw_Int j,
@@ -406,7 +393,7 @@ void pawR_setslice(paw_Env *P, paw_Type t)
 void pawR_init(paw_Env *P)
 {
     String *errmsg = pawS_new_str(P, "not enough memory");
-    pawG_fix_object(P, cast_object(errmsg));
+    pawG_fix_object(P, CAST_OBJECT(errmsg));
     v_set_object(&P->mem_errmsg, errmsg);
 }
 
@@ -478,7 +465,7 @@ static paw_Bool formap_init(paw_Env *P)
     paw_Int itr = PAW_ITER_INIT;
     Map *map = v_map(v);
     if (pawH_iter(map, &itr)) {
-        const Value v = *pawH_key(map, cast_size(itr));
+        const Value v = *pawH_key(map, CAST_SIZE(itr));
         vm_pushi(itr);
         vm_pushv(v);
         return PAW_FALSE;
@@ -493,7 +480,7 @@ static paw_Bool formap(paw_Env *P)
     Map *map = v_map(obj);
     paw_Int i = v_int(itr);
     if (pawH_iter(map, &i)) {
-        const Value v = *pawH_key(map, cast_size(i));
+        const Value v = *pawH_key(map, CAST_SIZE(i));
         v_set_int(vm_top(1), i);
         vm_pushv(v);
         return PAW_TRUE;
@@ -577,7 +564,7 @@ static void eq_ne(paw_Env *P, BinaryOp binop, paw_Type t, Value x, Value y)
     vm_pop(1);
 }
 
-#define i2u(i) (cast(i, uint64_t))
+#define i2u(i) (CAST(i, uint64_t))
 #define u2i(u) paw_cast_int(u)
 
 // Generate code for int operators
@@ -636,7 +623,7 @@ static void int_binop(paw_Env *P, BinaryOp binop, paw_Int x, paw_Int y)
             } else if (y == 0) {
                 z = x; // NOOP
             } else {
-                y = paw_min(y, cast(sizeof(x) * 8 - 1, int));
+                y = PAW_MIN(y, CAST(sizeof(x) * 8 - 1, int));
                 z = paw_cast_int(i2u(x) << y);
             }
             break;
@@ -651,7 +638,7 @@ static void int_binop(paw_Env *P, BinaryOp binop, paw_Int x, paw_Int y)
                 // shift count. If 'x' < 0, then the results of the
                 // shift are implementation-defined (may or may not
                 // preserve the sign).
-                y = paw_min(y, cast(sizeof(x) * 8 - 1, int));
+                y = PAW_MIN(y, CAST(sizeof(x) * 8 - 1, int));
                 z = x >> y;
             }
     }
@@ -910,7 +897,7 @@ void pawR_literal_vector(paw_Env *P, int n)
     StackPtr sp;
     vm_vector_init(v, sp);
     if (n > 0) {
-        pawV_vec_resize(P, v, cast_size(n));
+        pawV_vec_resize(P, v, CAST_SIZE(n));
         Value *pv = v->end;
         do {
             *--pv = *--sp;
@@ -1044,21 +1031,21 @@ top:
             {
                 vm_protect();
                 pawR_literal_tuple(P, get_U(opcode));
-                check_gc(P);
+                CHECK_GC(P);
             }
 
             vm_case(NEWVECTOR) :
             {
                 vm_protect();
                 pawR_literal_vector(P, get_U(opcode));
-                check_gc(P);
+                CHECK_GC(P);
             }
 
             vm_case(NEWMAP) :
             {
                 vm_protect();
                 pawR_literal_map(P, get_U(opcode));
-                check_gc(P);
+                CHECK_GC(P);
             }
 
             vm_case(CASTBOOL) :
@@ -1104,7 +1091,7 @@ top:
             {
                 vm_protect();
                 new_variant(P, get_A(opcode), get_B(opcode));
-                check_gc(P);
+                CHECK_GC(P);
             }
 
             vm_case(NEWINSTANCE) :
@@ -1113,7 +1100,7 @@ top:
                 Value *pv = vm_push0();
                 Instance *ins = pawV_new_instance(P, get_U(opcode));
                 v_set_object(pv, ins);
-                check_gc(P);
+                CHECK_GC(P);
             }
 
             vm_case(INITFIELD) :
@@ -1232,7 +1219,7 @@ top:
                                          ? capture_upvalue(P, base + u.index)
                                          : fn->up[u.index];
                 }
-                check_gc(P);
+                CHECK_GC(P);
             }
 
             vm_case(CALL) :

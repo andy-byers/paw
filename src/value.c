@@ -3,7 +3,7 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "prefix.h"
 
-#include "gc_aux.h"
+#include "gc.h"
 #include "map.h"
 #include "mem.h"
 #include "rt.h"
@@ -34,14 +34,14 @@ static void int_to_string(paw_Env *P, paw_Int i)
     } else {
         ++ptr;
     }
-    pawC_pushns(P, ptr, cast_size(end - ptr));
+    pawC_pushns(P, ptr, CAST_SIZE(end - ptr));
 }
 
 static void float_to_string(paw_Env *P, paw_Float f)
 {
     char temp[32];
     const int n = snprintf(temp, paw_countof(temp), "%.*g", 17, f);
-    pawC_pushns(P, temp, cast_size(n));
+    pawC_pushns(P, temp, CAST_SIZE(n));
 }
 
 const char *pawV_to_string(paw_Env *P, Value v, paw_Type type, size_t *nout)
@@ -56,12 +56,10 @@ const char *pawV_to_string(paw_Env *P, Value v, paw_Type type, size_t *nout)
         case PAW_TFLOAT:
             float_to_string(P, v_float(v));
             break;
-        case PAW_TBOOL: {
-            Value v;
+        case PAW_TBOOL:
             v_set_object(&v, pawE_cstr(P, v_true(v) ? CSTR_TRUE : CSTR_FALSE));
             pawC_pushv(P, v);
             break;
-        }
         default:
             return NULL;
     }
@@ -131,14 +129,14 @@ const char *pawV_name(ValueKind kind)
 Proto *pawV_new_proto(paw_Env *P)
 {
     Proto *p = pawM_new(P, Proto);
-    pawG_add_object(P, cast_object(p), VPROTO);
+    pawG_add_object(P, CAST_OBJECT(p), VPROTO);
     return p;
 }
 
 Type *pawV_new_type(paw_Env *P)
 {
     Type *t = pawM_new(P, Type);
-    pawG_add_object(P, cast_object(t), VTYPE);
+    pawG_add_object(P, CAST_OBJECT(t), VTYPE);
     return t;
 }
 
@@ -155,7 +153,7 @@ void pawV_free_proto(paw_Env *P, Proto *f)
 UpValue *pawV_new_upvalue(paw_Env *P)
 {
     UpValue *u = pawM_new(P, UpValue);
-    pawG_add_object(P, cast_object(u), VUPVALUE);
+    pawG_add_object(P, CAST_OBJECT(u), VUPVALUE);
     return u;
 }
 
@@ -195,23 +193,23 @@ void pawV_unlink_upvalue(UpValue *u)
 
 Tuple *pawV_new_tuple(paw_Env *P, int nelems)
 {
-    Tuple *tuple =
-        pawM_new_flex(P, Tuple, cast_size(nelems), sizeof(tuple->elems[0]));
-    pawG_add_object(P, cast_object(tuple), VTUPLE);
+    Tuple *tuple = pawM_new_flex(P, Tuple, CAST_SIZE(nelems), sizeof(tuple->elems[0]));
+    pawG_add_object(P, CAST_OBJECT(tuple), VTUPLE);
+    tuple->nelems = nelems;
     return tuple;
 }
 
-void pawV_free_tuple(paw_Env *P, Tuple *t, int nelems)
+void pawV_free_tuple(paw_Env *P, Tuple *t)
 {
-    pawM_free_flex(P, t, nelems, sizeof(t->elems[0]));
+    pawM_free_flex(P, t, t->nelems, sizeof(t->elems[0]));
 }
 
 Closure *pawV_new_closure(paw_Env *P, int nup)
 {
     // Tack on enough space to store 'nup' pointers to UpValue.
     Closure *f = pawM_new_flex(P, Closure, nup, sizeof(f->up[0]));
-    pawG_add_object(P, cast_object(f), VCLOSURE);
-    memset(f->up, 0, cast_size(nup) * sizeof(f->up[0]));
+    pawG_add_object(P, CAST_OBJECT(f), VCLOSURE);
+    memset(f->up, 0, CAST_SIZE(nup) * sizeof(f->up[0]));
     f->nup = nup;
     return f;
 }
@@ -221,54 +219,31 @@ void pawV_free_closure(paw_Env *P, Closure *f)
     pawM_free_flex(P, f, f->nup, sizeof(f->up[0]));
 }
 
-Struct *pawV_new_struct(paw_Env *P, Value *pv)
-{
-    Struct *struct_ = pawM_new(P, Struct);
-    v_set_object(pv, struct_); // anchor
-    pawG_add_object(P, cast_object(struct_), VSTRUCT);
-    return struct_;
-}
-
-void pawV_free_struct(paw_Env *P, Struct *struct_) { pawM_free(P, struct_); }
-
 Instance *pawV_new_instance(paw_Env *P, int nfields)
 {
-    Instance *ins =
-        pawM_new_flex(P, Instance, cast_size(nfields), sizeof(ins->attrs[0]));
-    pawG_add_object(P, cast_object(ins), VINSTANCE);
+    Instance *ins = pawM_new_flex(P, Instance, CAST_SIZE(nfields), sizeof(ins->attrs[0]));
+    pawG_add_object(P, CAST_OBJECT(ins), VINSTANCE);
+    ins->nfields = nfields;
     return ins;
 }
 
-void pawV_free_instance(paw_Env *P, Instance *ins, int nfields)
+void pawV_free_instance(paw_Env *P, Instance *ins)
 {
-    pawM_free_flex(P, ins, cast_size(nfields), sizeof(ins->attrs[0]));
-}
-
-Enum *pawV_new_enum(paw_Env *P, int nvariants)
-{
-    Enum *e =
-        pawM_new_flex(P, Enum, cast_size(nvariants), sizeof(e->variants[0]));
-    pawG_add_object(P, cast_object(e), VENUM);
-    return e;
-}
-
-void pawV_free_enum(paw_Env *P, Enum *e, int nvariants)
-{
-    pawM_free_flex(P, e, cast_size(nvariants), sizeof(e->variants[0]));
+    pawM_free_flex(P, ins, CAST_SIZE(ins->nfields), sizeof(ins->attrs[0]));
 }
 
 Variant *pawV_new_variant(paw_Env *P, int k, int nfields)
 {
-    Variant *var =
-        pawM_new_flex(P, Variant, cast_size(nfields), sizeof(var->fields[0]));
-    pawG_add_object(P, cast_object(var), VVARIANT);
+    Variant *var = pawM_new_flex(P, Variant, CAST_SIZE(nfields), sizeof(var->fields[0]));
+    pawG_add_object(P, CAST_OBJECT(var), VVARIANT);
+    var->nfields = nfields;
     var->k = k;
     return var;
 }
 
-void pawV_free_variant(paw_Env *P, Variant *var, int nfields)
+void pawV_free_variant(paw_Env *P, Variant *var)
 {
-    pawM_free_flex(P, var, cast_size(nfields), sizeof(var->fields[0]));
+    pawM_free_flex(P, var, CAST_SIZE(var->nfields), sizeof(var->fields[0]));
 }
 
 Value *pawV_find_attr(Value *attrs, String *name, Type *type)
@@ -285,31 +260,37 @@ Value *pawV_find_attr(Value *attrs, String *name, Type *type)
 
 static void clear_attrs(Value *pv, int nattrs)
 {
-    memset(pv, 0, cast_size(nattrs) * sizeof(*pv));
+    memset(pv, 0, CAST_SIZE(nattrs) * sizeof(*pv));
 }
 
 Method *pawV_new_method(paw_Env *P, Value self, Value call)
 {
     Method *mtd = pawM_new(P, Method);
-    pawG_add_object(P, cast_object(mtd), VMETHOD);
+    pawG_add_object(P, CAST_OBJECT(mtd), VMETHOD);
     mtd->self = self;
     mtd->f = call;
     return mtd;
 }
 
-void pawV_free_method(paw_Env *P, Method *m) { pawM_free(P, m); }
+void pawV_free_method(paw_Env *P, Method *m)
+{
+    pawM_free(P, m); 
+}
 
 Native *pawV_new_native(paw_Env *P, paw_Function func, int nup)
 {
     // TODO: nup > UINT16_MAX, check it or assert?
     Native *nat = pawM_new_flex(P, Native, nup, sizeof(nat->up[0]));
-    pawG_add_object(P, cast_object(nat), VNATIVE);
+    pawG_add_object(P, CAST_OBJECT(nat), VNATIVE);
     nat->func = func;
     nat->nup = nup;
     return nat;
 }
 
-void pawV_free_native(paw_Env *P, Native *nat) { pawM_free(P, nat); }
+void pawV_free_native(paw_Env *P, Native *f) 
+{
+    pawM_free_flex(P, f, f->nup, sizeof(f->up[0])); 
+}
 
 Foreign *pawV_push_foreign(paw_Env *P, size_t size, int nfields)
 {
@@ -318,8 +299,9 @@ Foreign *pawV_push_foreign(paw_Env *P, size_t size, int nfields)
     }
     Value *pv = pawC_push0(P);
     Foreign *ud = pawM_new_flex(P, Foreign, nfields, sizeof(ud->attrs[0]));
-    pawG_add_object(P, cast_object(ud), VFOREIGN);
+    pawG_add_object(P, CAST_OBJECT(ud), VFOREIGN);
     v_set_object(pv, ud); // anchor
+    ud->nfields = nfields;
     ud->size = size;
     if (size > 0) {
         // Allocate space to hold 'size' bytes of foreign data.
@@ -329,10 +311,10 @@ Foreign *pawV_push_foreign(paw_Env *P, size_t size, int nfields)
     return ud;
 }
 
-void pawV_free_foreign(paw_Env *P, Foreign *ud, int nfields)
+void pawV_free_foreign(paw_Env *P, Foreign *ud)
 {
     pawM_free_vec(P, (char *)ud->data, ud->size); // TODO
-    pawM_free_flex(P, ud, cast_size(nfields), sizeof(ud->attrs[0]));
+    pawM_free_flex(P, ud, CAST_SIZE(ud->nfields), sizeof(ud->attrs[0]));
 }
 
 paw_Bool pawV_truthy(Value v, paw_Type type)
@@ -450,7 +432,7 @@ int pawV_parse_uint64(paw_Env *P, const char *text)
     if (p[0] == '0') {
         if ((rc = char2base(p[1])) > 0) {
             p += 2; // skip base prefix
-            base = cast(rc, unsigned);
+            base = CAST(rc, unsigned);
         } else if (p[1] == '\0') {
             pawC_pushi(P, 0);
             return PAW_OK;

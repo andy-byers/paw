@@ -20,6 +20,7 @@ function(test_script NAME ARGS)
 endfunction()
 
 build_test(test_impl)
+build_test(test_alloc)
 build_test(test_rt)
 build_test(test_oom)
 build_test(test_so)

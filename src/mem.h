@@ -17,21 +17,21 @@
 #define pawM_free(P, ptr) pawM_free_vec(P, ptr, 1)
 
 #define pawM_new_vec(P, n, type) \
-    (type *)pawM_new_vec_(P, cast_size(n), sizeof(type))
+    (type *)pawM_new_vec_(P, CAST_SIZE(n), sizeof(type))
 #define pawM_free_vec(P, ptr, n) \
-    pawM_free_(P, ptr, cast_size(n) * sizeof((ptr)[0]))
+    pawM_free_(P, ptr, CAST_SIZE(n) * sizeof((ptr)[0]))
 
 #define pawM_new_flex(P, tobj, n, e) \
-    (tobj *)pawM_new_flex_(P, sizeof(tobj), cast_size(n), e)
+    (tobj *)pawM_new_flex_(P, sizeof(tobj), CAST_SIZE(n), e)
 #define pawM_free_flex(P, ptr, n, e) \
-    pawM_free_(P, ptr, sizeof(*(ptr)) + (cast_size(n) * cast_size(e)))
+    pawM_free_(P, ptr, sizeof(*(ptr)) + (CAST_SIZE(n) * CAST_SIZE(e)))
 
 #define pawM_grow(P, ptr, size, alloc) \
     ((ptr) = pawM_grow_(P, ptr, size, &(alloc), sizeof((ptr)[0])))
 #define pawM_shrink(P, ptr, alloc0, alloc) \
     ((ptr) = pawM_shrink_(P, ptr, &(alloc0), alloc, sizeof((ptr)[0])))
 #define pawM_resize(P, ptr, alloc0, alloc) \
-    ((ptr) = pawM_resize_aux(P, ptr, cast_size(alloc0), cast_size(alloc)))
+    ((ptr) = pawM_resize_aux(P, ptr, CAST_SIZE(alloc0), CAST_SIZE(alloc)))
 
 // Ensure that the expression 'o + n * e' will not wrap
 #define pawM_check_size(P, o, n, e) \

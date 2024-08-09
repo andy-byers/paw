@@ -3,10 +3,10 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "str.h"
 #include "auxlib.h"
-#include "gc_aux.h"
+#include "gc.h"
 #include "mem.h"
 
-#define st_index(st, h) ((h) & (st->capacity - 1))
+#define ST_INDEX(st, h) ((h) & (st->capacity - 1))
 
 static String *new_string(paw_Env *P, size_t length)
 {
@@ -14,7 +14,7 @@ static String *new_string(paw_Env *P, size_t length)
         pawM_error(P); // size too big for paw_Int
     }
     String *str = pawM_new_flex(P, String, length + 1, sizeof(char));
-    pawG_add_object(P, cast_object(str), VSTRING);
+    pawG_add_object(P, CAST_OBJECT(str), VSTRING);
     str->text[length] = '\0';
     str->length = length;
     str->next = NULL;
@@ -39,21 +39,25 @@ static void grow_table(paw_Env *P, StringTable *st)
     for (size_t i = 0; i < old.capacity; ++i) {
         for (String *src = old.strings[i]; src;) {
             String *next = src->next; // save next string
-            String **pdst = &st->strings[st_index(st, src->hash)];
+            String **pdst = &st->strings[ST_INDEX(st, src->hash)];
             src->next = *pdst;
             *pdst = src;
             src = next;
         }
     }
     pawM_free_vec(P, old.strings, old.capacity);
-    check_gc(P);
+    CHECK_GC(P);
 }
 
-void pawS_init(paw_Env *P) { grow_table(P, &P->strings); }
+void pawS_init(paw_Env *P) 
+{
+    grow_table(P, &P->strings); 
+}
 
 void pawS_uninit(paw_Env *P)
 {
     StringTable *st = &P->strings;
+    // strings contained in the table are freed during GC shutdown
     pawM_free_vec(P, st->strings, st->capacity);
     st->capacity = 0;
     st->count = 0;
@@ -67,7 +71,7 @@ String *pawS_new_nstr(paw_Env *P, const char *s, size_t n)
     }
 
     const uint32_t hash = pawS_hash(s, n, 0);
-    String **plist = &st->strings[st_index(st, hash)];
+    String **plist = &st->strings[ST_INDEX(st, hash)];
     for (String *p = *plist; p; p = p->next) {
         if (n == p->length && 0 == memcmp(p->text, s, n)) {
             return p; // already exists
@@ -91,7 +95,7 @@ String *pawS_new_str(paw_Env *P, const char *text)
 String *pawS_new_fixed(paw_Env *P, const char *text)
 {
     String *s = pawS_new_str(P, text);
-    Object *o = cast_object(s);
+    Object *o = CAST_OBJECT(s);
     if (o == P->gc_all) {
         pawG_fix_object(P, o);
     }
@@ -101,7 +105,7 @@ String *pawS_new_fixed(paw_Env *P, const char *text)
 void pawS_free_str(paw_Env *P, String *s)
 {
     StringTable *st = &P->strings;
-    String **p = &st->strings[st_index(st, s->hash)];
+    String **p = &st->strings[ST_INDEX(st, s->hash)];
     while (*p != s) {
         p = &(*p)->next;
     }

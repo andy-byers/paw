@@ -56,23 +56,22 @@
 #define o_is_method(o) (o_kind(o) == VMETHOD)
 #define o_is_foreign(o) (o_kind(o) == VFOREIGN)
 
-#define o_string(o) check_exp(o_is_string(o), (String *)(o))
-#define o_native(o) check_exp(o_is_native(o), (Native *)(o))
-#define o_proto(o) check_exp(o_is_proto(o), (Proto *)(o))
-#define o_closure(o) check_exp(o_is_closure(o), (Closure *)(o))
-#define o_upvalue(o) check_exp(o_is_upvalue(o), (UpValue *)(o))
-#define o_map(o) check_exp(o_is_map(o), (Map *)(o))
-#define o_vector(o) check_exp(o_is_vector(o), (Vector *)(o))
-#define o_tuple(o) check_exp(o_is_tuple(o), (Tuple *)(o))
-#define o_variant(o) check_exp(o_is_variant(o), (Variant *)(o))
-#define o_enum(o) check_exp(o_is_enum(o), (Enum *)(o))
-#define o_instance(o) check_exp(o_is_instance(o), (Instance *)(o))
-#define o_struct(o) check_exp(o_is_struct(o), (Struct *)(o))
-#define o_method(o) check_exp(o_is_method(o), (Method *)(o))
-#define o_foreign(o) check_exp(o_is_foreign(o), (Foreign *)(o))
+#define o_string(o) CHECK_EXP(o_is_string(o), (String *)(o))
+#define o_native(o) CHECK_EXP(o_is_native(o), (Native *)(o))
+#define o_proto(o) CHECK_EXP(o_is_proto(o), (Proto *)(o))
+#define o_closure(o) CHECK_EXP(o_is_closure(o), (Closure *)(o))
+#define o_upvalue(o) CHECK_EXP(o_is_upvalue(o), (UpValue *)(o))
+#define o_map(o) CHECK_EXP(o_is_map(o), (Map *)(o))
+#define o_vector(o) CHECK_EXP(o_is_vector(o), (Vector *)(o))
+#define o_tuple(o) CHECK_EXP(o_is_tuple(o), (Tuple *)(o))
+#define o_variant(o) CHECK_EXP(o_is_variant(o), (Variant *)(o))
+#define o_enum(o) CHECK_EXP(o_is_enum(o), (Enum *)(o))
+#define o_instance(o) CHECK_EXP(o_is_instance(o), (Instance *)(o))
+#define o_struct(o) CHECK_EXP(o_is_struct(o), (Struct *)(o))
+#define o_method(o) CHECK_EXP(o_is_method(o), (Method *)(o))
+#define o_foreign(o) CHECK_EXP(o_is_foreign(o), (Foreign *)(o))
 
-#define cast_uintptr(x) ((uintptr_t)(x))
-#define cast_object(x) ((Object *)(void *)(x))
+#define CAST_OBJECT(x) (CAST(CAST(x, void *), Object *))
 
 typedef enum ValueKind {
     // scalar types
@@ -104,10 +103,10 @@ typedef enum ValueKind {
     NVTYPES
 } ValueKind;
 
-#define GC_HEADER           \
+#define GC_HEADER \
     struct Object *gc_next; \
-    uint64_t gc_nrefs;      \
-    ValueKind gc_kind : 8
+    uint8_t gc_mark : 2; \
+    ValueKind gc_kind : 6
 typedef struct Object {
     GC_HEADER;
 } Object;
@@ -172,10 +171,10 @@ static paw_Int pawV_abs_index(paw_Int index, size_t length)
 static inline size_t pawV_check_abs(paw_Env *P, paw_Int index, size_t length)
 {
     index = pawV_abs_index(index, length);
-    if (index < 0 || cast_size(index) >= length) {
+    if (index < 0 || CAST_SIZE(index) >= length) {
         pawV_index_error(P, index, length);
     }
-    return cast_size(index);
+    return CAST_SIZE(index);
 }
 
 // Convert a null-terminated string into a 64-bit unsigned integer
@@ -208,6 +207,7 @@ typedef struct Proto {
     GC_HEADER;
     uint8_t is_va;
 
+    Object *gc_list;
     String *name;
     String *modname;
     uint32_t *source;
@@ -227,7 +227,6 @@ typedef struct Proto {
     struct Proto **p; // nested functions
     int nup; // number of upvalues
     int nlines; // number of lines
-    int ndebug; // number of locals
     int nk; // number of constants
     int argc; // number of fixed parameters
     int nproto; // number of nested functions
@@ -255,12 +254,13 @@ void pawV_link_upvalue(paw_Env *P, UpValue *u, UpValue *prev, UpValue *next);
 void pawV_unlink_upvalue(UpValue *u);
 
 #define upv_is_open(up) ((up)->p.p != &(up)->closed)
-#define upv_level(up) check_exp(upv_is_open(up), (StackPtr)((up)->p.p))
+#define upv_level(up) CHECK_EXP(upv_is_open(up), (StackPtr)((up)->p.p))
 
 typedef struct Closure {
     GC_HEADER;
     uint16_t nup;
     Proto *p;
+    Object *gc_list;
     UpValue *up[];
 } Closure;
 
@@ -270,21 +270,27 @@ void pawV_free_closure(paw_Env *P, Closure *c);
 typedef struct Native {
     GC_HEADER;
     uint16_t nup;
+    Object *gc_list;
     paw_Function func;
     Value up[];
 } Native;
 
 Native *pawV_new_native(paw_Env *P, paw_Function func, int nup);
+void pawV_free_native(paw_Env *P, Native *f);
 
 typedef struct Tuple {
     GC_HEADER;
+    int nelems;
+    Object *gc_list;
     Value elems[];
 } Tuple;
 
 Tuple *pawV_new_tuple(paw_Env *P, int nelems);
+void pawV_free_tuple(paw_Env *P, Tuple *t);
 
 typedef struct Vector {
     GC_HEADER;
+    Object *gc_list;
     Value *begin;
     Value *end;
     Value *upper;
@@ -303,12 +309,12 @@ void pawV_vec_pop(paw_Env *P, Vector *vec, paw_Int index);
 
 static inline size_t pawV_vec_length(const Vector *vec)
 {
-    return cast_size(vec->end - vec->begin);
+    return CAST_SIZE(vec->end - vec->begin);
 }
 
 static inline Value *pawV_vec_get(paw_Env *P, Vector *vec, paw_Int index)
 {
-    const paw_Int abs = pawV_abs_index(index, cast_size(vec->end - vec->begin));
+    const paw_Int abs = pawV_abs_index(index, CAST_SIZE(vec->end - vec->begin));
     const size_t i = pawV_check_abs(P, abs, pawV_vec_length(vec));
     return &vec->begin[i];
 }
@@ -330,49 +336,39 @@ typedef struct MapMeta {
 
 typedef struct Map {
     GC_HEADER;
+    Object *gc_list;
     void *data;
     size_t length;
     size_t capacity;
 } Map;
 
-typedef struct Struct {
-    GC_HEADER; // common members for GC
-    paw_Type type; // index in module type list
-} Struct;
-
-Struct *pawV_new_struct(paw_Env *P, Value *pv);
-void pawV_free_struct(paw_Env *P, Struct *struct_);
-
 // Instance of a struct
 typedef struct Instance {
     GC_HEADER; // common members for GC
+    int nfields;
+    Object *gc_list;
     Value attrs[]; // fixed array of attributes
     // Value fields[]; // data fields
 } Instance;
 
 Instance *pawV_new_instance(paw_Env *P, int nfields);
-void pawV_free_instance(paw_Env *P, Instance *ins, int nfields);
-
-typedef struct Enum {
-    GC_HEADER; // common members for GC
-    Value variants[]; // enumerators
-} Enum;
-
-Enum *pawV_new_enum(paw_Env *P, int nvariants);
-void pawV_free_enum(paw_Env *P, Enum *e, int nvariants);
+void pawV_free_instance(paw_Env *P, Instance *ins);
 
 typedef struct Variant {
     GC_HEADER; // common members for GC
     uint8_t k; // discriminator
+    int nfields;
+    Object *gc_list;
     Value fields[]; // data fields
 } Variant;
 
 Variant *pawV_new_variant(paw_Env *P, int k, int nfields);
-void pawV_free_variant(paw_Env *P, Variant *var, int nfields);
+void pawV_free_variant(paw_Env *P, Variant *var);
 
 // Method bound to an instance
 typedef struct Method {
     GC_HEADER;
+    Object *gc_list;
     Value self;
     Value f;
 } Method;
@@ -386,12 +382,14 @@ void pawV_free_method(paw_Env *P, Method *);
 typedef struct Foreign {
     GC_HEADER;
     uint8_t flags;
+    int nfields;
+    Object *gc_list;
     void *data;
     size_t size;
-    Value attrs[]; // fixed array of attributes
+    Value attrs[];
 } Foreign;
 
 Foreign *pawV_push_foreign(paw_Env *P, size_t size, int nfields);
-void pawV_free_foreign(paw_Env *P, Foreign *ud, int nfields);
+void pawV_free_foreign(paw_Env *P, Foreign *ud);
 
 #endif // PAW_VALUE_H

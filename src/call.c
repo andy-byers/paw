@@ -16,15 +16,11 @@
 #include <limits.h>
 #include <setjmp.h>
 #include <stdarg.h>
-#include <stdio.h>
 #include <stdlib.h>
 
 // Lua-style error handling
-#define c_throw(P, c) longjmp((c)->jmp, 1)
-#define c_try(P, c, a)       \
-    if (!setjmp((c)->jmp)) { \
-        a                    \
-    }
+#define THROW(P, c) longjmp((c)->jmp, 1)
+#define TRY(P, c, a) if (!setjmp((c)->jmp)) {a}
 
 struct Jump {
     struct Jump *prev;
@@ -34,27 +30,27 @@ struct Jump {
 
 static void start_resize(paw_Env *P)
 {
-    P->top.d = save_offset(P, P->top.p);
-    P->bound.d = save_offset(P, P->bound.p);
+    P->top.d = SAVE_OFFSET(P, P->top.p);
+    P->bound.d = SAVE_OFFSET(P, P->bound.p);
     for (CallFrame *cf = P->cf; cf; cf = cf->prev) {
-        cf->base.d = save_offset(P, cf->base.p);
-        cf->top.d = save_offset(P, cf->top.p);
+        cf->base.d = SAVE_OFFSET(P, cf->base.p);
+        cf->top.d = SAVE_OFFSET(P, cf->top.p);
     }
     for (UpValue *up = P->up_list; up; up = up->open.next) {
-        up->p.d = save_offset(P, upv_level(up));
+        up->p.d = SAVE_OFFSET(P, upv_level(up));
     }
 }
 
 static void finish_resize(paw_Env *P)
 {
-    P->top.p = restore_pointer(P, P->top.d);
-    P->bound.p = restore_pointer(P, P->bound.d);
+    P->top.p = RESTORE_POINTER(P, P->top.d);
+    P->bound.p = RESTORE_POINTER(P, P->bound.d);
     for (CallFrame *cf = P->cf; cf; cf = cf->prev) {
-        cf->base.p = restore_pointer(P, cf->base.d);
-        cf->top.p = restore_pointer(P, cf->top.d);
+        cf->base.p = RESTORE_POINTER(P, cf->base.d);
+        cf->top.p = RESTORE_POINTER(P, cf->top.d);
     }
     for (UpValue *up = P->up_list; up; up = up->open.next) {
-        up->p.p = restore_pointer(P, up->p.d);
+        up->p.p = RESTORE_POINTER(P, up->p.d);
     }
 }
 
@@ -66,10 +62,9 @@ void pawC_stack_realloc(paw_Env *P, int n)
     _Static_assert(PAW_STACK_MAX <= INT_MAX, "stack limit is too large");
     paw_assert(n >= pawC_stklen(P)); // don't lose live values
 
-    const size_t alloc = paw_max(cast_size(n), STACK_MIN);
-    if (alloc > PAW_STACK_MAX) {
-        pawM_error(P);
-    }
+    const size_t alloc = PAW_MAX(CAST_SIZE(n), STACK_MIN);
+    if (alloc > PAW_STACK_MAX) pawM_error(P);
+    
     // Turn off emergency GC and convert pointers into the stack into offsets
     // from P->stack.p.
     P->gc_noem = PAW_TRUE;
@@ -77,23 +72,23 @@ void pawC_stack_realloc(paw_Env *P, int n)
     // Reallocate the stack. Call one of the low-level allocation functions that
     // doesn't throw an error. Stack references must be corrected, even if the
     // allocation fails.
-    StackPtr stack =
-        pawM_alloc(P, P->stack.p, sizeof(P->stack.p[0]) * cast_size(P->bound.d),
-                   sizeof(P->stack.p[0]) * alloc);
+    StackPtr stack = pawM_alloc(P, P->stack.p, 
+                                sizeof(P->stack.p[0]) * CAST_SIZE(P->bound.d),
+                                sizeof(P->stack.p[0]) * alloc);
     P->gc_noem = PAW_FALSE; // allow emergency GC
-    if (!stack) {
+    if (stack == NULL) {
         finish_resize(P); // fix pointers
         pawM_error(P); // out of memory
     }
     // Cause the 'bound' pointer to be placed at the new end of the stack.
-    P->bound.d = (ptrdiff_t)alloc;
+    P->bound.d = CAST(alloc, ptrdiff_t);
     P->stack.p = stack;
     finish_resize(P);
 }
 
 void pawC_stack_overflow(paw_Env *P)
 {
-    // pawR_error(P, PAW_ERUNTIME, "stack overflow");
+     pawR_error(P, PAW_ERUNTIME, "stack overflow");
 }
 
 // When testing with PAW_STRESS > 1, allocate the exact amount of
@@ -101,17 +96,17 @@ void pawC_stack_overflow(paw_Env *P)
 // the stack to be reallocated. This option also causes pawC_stkdec
 // to trim the stack each time it is called.
 #if PAW_STRESS > 1
-#define next_alloc(n0, dn) ((n0) + (dn))
+# define NEXT_ALLOC(n0, dn) ((n0) + (dn))
 #else
-#define next_alloc(n0, dn) paw_max((n0) + (dn), (n0) * 2)
+# define NEXT_ALLOC(n0, dn) PAW_MAX((n0) + (dn), (n0) * 2)
 #endif
 
 void pawC_stack_grow(paw_Env *P, int n)
 {
     paw_assert(n > 0);
     paw_assert(P->bound.p >= P->stack.p);
-    const int alloc = cast_size(P->bound.p - P->stack.p);
-    pawC_stack_realloc(P, next_alloc(alloc, n));
+    const int alloc = CAST_SIZE(P->bound.p - P->stack.p);
+    pawC_stack_realloc(P, NEXT_ALLOC(alloc, n));
 }
 
 Value *pawC_pushns(paw_Env *P, const char *s, size_t n)
@@ -160,7 +155,7 @@ static void handle_ccall(paw_Env *P, StackPtr base, Native *ccall)
 {
     // The C function may cause the stack to be reallocated. Save the relative
     // position of 'base' so it can be restored after the call.
-    const ptrdiff_t pos = save_offset(P, base);
+    const ptrdiff_t pos = SAVE_OFFSET(P, base);
     CallFrame *cf = next_call_frame(P, P->top.p);
     cf->flags = CFF_C;
     cf->pc = NULL;
@@ -170,7 +165,7 @@ static void handle_ccall(paw_Env *P, StackPtr base, Native *ccall)
 
     // call the C function
     const int nret = ccall->func(P);
-    base = restore_pointer(P, pos);
+    base = RESTORE_POINTER(P, pos);
     call_return(P, base, nret);
     // pawR_close_upvalues(P, base);
 }
@@ -192,9 +187,9 @@ static void check_fixed_args(paw_Env *P, Proto *f, int argc)
 
 CallFrame *pawC_precall(paw_Env *P, StackPtr base, Object *callable, int argc)
 {
-    const ptrdiff_t offset = save_offset(P, base);
-    ensure_stack(P, FRAME_EXTRA);
-    base = restore_pointer(P, offset);
+    const ptrdiff_t offset = SAVE_OFFSET(P, base);
+    ENSURE_STACK(P, FRAME_EXTRA);
+    base = RESTORE_POINTER(P, offset);
 
     Native *ccall;
     Closure *fn = NULL;
@@ -205,36 +200,8 @@ CallFrame *pawC_precall(paw_Env *P, StackPtr base, Object *callable, int argc)
         case VCLOSURE:
             fn = o_closure(callable);
             break;
-            //        case VMETHOD: {
-            //            Method *mtd = v_method(callable);
-            //            *base = mtd->self; // replace with self
-            //            if (pawV_is_native(mtd->f)) {
-            //                ccall = v_native(mtd->f);
-            //                goto call_native;
-            //            } else {
-            //                assert(pawV_is_closure(mtd->f));
-            //                fn = v_closure(mtd->f);
-            //            }
-            //            break;
-            //        }
-            //        case VCLASS: {
-            //            Class *cls = v_class(callable);
-            //            pawV_new_instance(P, base, cls);
-            //            Value name = pawE_cstr(P, CSTR_INIT); // '__init'
-            //            Value *init = pawH_get(P, cls->attr, name);
-            //            if (!init) {
-            //                // There is no user-defined initializer, so just
-            //                return
-            //                // the instance.
-            //                P->top.p = base + 1;
-            //                return P->cf;
-            //            }
-            //            fn = v_closure(*init);
-            //            break;
-            //        }
         default:
-            paw_assert(0);
-            //            pawR_error(P, PAW_ETYPE, "type is not callable");
+            pawR_error(P, PAW_ETYPE, "type is not callable");
     }
     CallFrame *cf = next_call_frame(P, P->top.p);
     Proto *p = fn->p;
@@ -271,7 +238,7 @@ static int exceptional_call(paw_Env *P, Call call, void *arg)
         .prev = P->jmp,
     };
     P->jmp = &jmp;
-    c_try(P, &jmp, call(P, arg););
+    TRY(P, &jmp, call(P, arg);)
     P->jmp = jmp.prev;
     return jmp.status;
 }
@@ -279,20 +246,16 @@ static int exceptional_call(paw_Env *P, Call call, void *arg)
 int pawC_try(paw_Env *P, Call call, void *arg)
 {
     CallFrame *cf = P->cf;
-    const ptrdiff_t top = save_offset(P, P->top.p);
+    const ptrdiff_t top = SAVE_OFFSET(P, P->top.p);
     const int status = exceptional_call(P, call, arg);
     if (status != PAW_OK) {
-        paw_assert(top <= save_offset(P, P->top.p));
-        StackPtr ptr = restore_pointer(P, top);
+        paw_assert(top <= SAVE_OFFSET(P, P->top.p));
+        StackPtr ptr = RESTORE_POINTER(P, top);
         pawR_close_upvalues(P, ptr);
         if (cf == &P->main) {
             // relocate the error message
             call_return(P, ptr, PAW_TRUE);
         } else {
-            // TODO: The error message gets ignored so that the error status
-            //       can be returned in paw (no multi-return). Once that gets
-            //       implemented, the error message can be the second return
-            //       value.
             P->top.p = ptr;
         }
         P->cf = cf;
@@ -306,7 +269,7 @@ _Noreturn void pawC_throw(paw_Env *P, int error)
         abort();
     }
     P->jmp->status = error;
-    c_throw(P, P->jmp);
+    THROW(P, P->jmp);
 }
 
 void pawC_init(paw_Env *P)

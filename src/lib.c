@@ -5,7 +5,7 @@
 #include "api.h"
 #include "auxlib.h"
 #include "call.h"
-#include "gc_aux.h"
+#include "gc.h"
 #include "map.h"
 #include "mem.h"
 #include "os.h"
@@ -15,7 +15,7 @@
 #include <limits.h>
 #include <time.h>
 
-#define cf_base(i) P->cf->base.p[i]
+#define CF_BASE(i) P->cf->base.p[i]
 
 void lib_error(paw_Env *P, int error, const char *fmt, ...)
 {
@@ -47,8 +47,8 @@ int pawL_check_varargc(paw_Env *P, int min, int max)
 
 // static void try_aux(paw_Env *P, void *arg)
 //{
-//      const int argc = *cast(arg, int *);
-//      const Value f = cf_base(1);
+//      const int argc = *CAST(arg, int *);
+//      const Value f = CF_BASE(1);
 //      pawC_call(P, v_object(f), argc - 1);
 //  }
 //
@@ -130,7 +130,7 @@ int pawL_check_varargc(paw_Env *P, int min, int max)
 
 static int base_assert(paw_Env *P)
 {
-    if (v_false(cf_base(1))) {
+    if (v_false(CF_BASE(1))) {
         pawR_error(P, PAW_ERUNTIME, "assertion failed");
     }
     return 0;
@@ -201,22 +201,22 @@ static int base_print(paw_Env *P)
 
 static int vector_insert(paw_Env *P)
 {
-    Vector *vec = v_vector(cf_base(1));
-    const paw_Int index = v_int(cf_base(2));
-    pawV_vec_insert(P, vec, index, cf_base(3));
+    Vector *vec = v_vector(CF_BASE(1));
+    const paw_Int index = v_int(CF_BASE(2));
+    pawV_vec_insert(P, vec, index, CF_BASE(3));
     return 0;
 }
 
 static int vector_push(paw_Env *P)
 {
-    Vector *vec = v_vector(cf_base(1));
-    pawV_vec_push(P, vec, cf_base(2));
+    Vector *vec = v_vector(CF_BASE(1));
+    pawV_vec_push(P, vec, CF_BASE(2));
     return 0;
 }
 
 static int vector_pop(paw_Env *P)
 {
-    Vector *vec = v_vector(cf_base(1));
+    Vector *vec = v_vector(CF_BASE(1));
     const paw_Int length = paw_cast_int(pawV_vec_length(vec));
     if (length == 0) {
         pawR_error(P, PAW_EVALUE, "pop from empty Vector");
@@ -228,7 +228,7 @@ static int vector_pop(paw_Env *P)
 
 static paw_Int clamped_index(paw_Env *P, int loc, paw_Int n)
 {
-    const paw_Int i = v_int(cf_base(loc));
+    const paw_Int i = v_int(CF_BASE(loc));
     return i < 0 ? 0 : i >= n ? n - 1
                               : i;
 }
@@ -240,12 +240,12 @@ static paw_Int clamped_index(paw_Env *P, int loc, paw_Int n)
 //       equality between user-defined types right now.
 static int vector_remove(paw_Env *P)
 {
-    Vector *vec = v_vector(cf_base(1));
+    Vector *vec = v_vector(CF_BASE(1));
     const paw_Int length = paw_cast_int(pawV_vec_length(vec));
     if (length == 0) {
         pawR_error(P, PAW_EVALUE, "remove from empty Vector");
     }
-    const paw_Int index = v_int(cf_base(2));
+    const paw_Int index = v_int(CF_BASE(2));
     P->top.p[-1] = *pawV_vec_get(P, vec, index);
     pawV_vec_pop(P, vec, index);
     return 1;
@@ -253,7 +253,7 @@ static int vector_remove(paw_Env *P)
 
 static int vector_clone(paw_Env *P)
 {
-    const Vector *vec = v_vector(cf_base(1));
+    const Vector *vec = v_vector(CF_BASE(1));
     Value *pv = pawC_push0(P);
     pawV_vec_clone(P, pv, vec);
     return 1;
@@ -261,7 +261,7 @@ static int vector_clone(paw_Env *P)
 
 // static String *check_string(paw_Env *P, int i)
 //{
-//     const Value v = cf_base(i);
+//     const Value v = CF_BASE(i);
 //     if (v_type(v) != VSTRING) {
 //         pawR_error(P, PAW_ETYPE, "expected string");
 //     }
@@ -277,7 +277,7 @@ static const char *find_substr(const char *str, size_t nstr, const char *sub,
     const char *ptr = str;
     const char *end = str + nstr;
     while ((ptr = strchr(ptr, sub[0]))) {
-        if (nsub <= cast_size(end - ptr) && 0 == memcmp(ptr, sub, nsub)) {
+        if (nsub <= CAST_SIZE(end - ptr) && 0 == memcmp(ptr, sub, nsub)) {
             return ptr;
         }
         str = ptr + nsub;
@@ -288,8 +288,8 @@ static const char *find_substr(const char *str, size_t nstr, const char *sub,
 static int string_find(paw_Env *P)
 {
     pawL_check_argc(P, 1);
-    const String *s = v_string(cf_base(0));
-    const String *find = v_string(cf_base(1));
+    const String *s = v_string(CF_BASE(0));
+    const String *find = v_string(CF_BASE(1));
     const char *result =
         find_substr(s->text, s->length, find->text, find->length);
     if (result) { // index of substring
@@ -305,8 +305,8 @@ static int string_find(paw_Env *P)
 // static int string_split(paw_Env *P)
 //{
 //     pawL_check_argc(P, 1);
-//     const String *sep = v_string(cf_base(1));
-//     String *s = v_string(cf_base(0));
+//     const String *sep = v_string(CF_BASE(1));
+//     String *s = v_string(CF_BASE(0));
 //     if (sep->length == 0) {
 //         pawR_error(P, PAW_EVALUE, "empty separator");
 //     }
@@ -316,7 +316,7 @@ static int string_find(paw_Env *P)
 //     size_t nstr = s->length;
 //     const char *pstr = s->text;
 //     while ((part = find_substr(pstr, nstr, sep->text, sep->length))) {
-//         const size_t n = cast_size(part - pstr);
+//         const size_t n = CAST_SIZE(part - pstr);
 //         pawC_pushns(P, pstr, n);
 //         part += sep->length; // skip separator
 //         pstr = part;
@@ -324,7 +324,7 @@ static int string_find(paw_Env *P)
 //         ++npart;
 //     }
 //     const char *end = s->text + s->length; // add the rest
-//     pawC_pushns(P, pstr, cast_size(end - pstr));
+//     pawC_pushns(P, pstr, CAST_SIZE(end - pstr));
 //     ++npart;
 //
 //     pawR_literal_array(P, npart);
@@ -334,8 +334,8 @@ static int string_find(paw_Env *P)
 // static int string_join(paw_Env *P)
 //{
 //     pawL_check_argc(P, 1);
-//     const Value seq = cf_base(1);
-//     String *s = v_string(cf_base(0));
+//     const Value seq = CF_BASE(1);
+//     String *s = v_string(CF_BASE(0));
 //
 //     Buffer buf;
 //     pawL_init_buffer(P, &buf);
@@ -346,7 +346,7 @@ static int string_find(paw_Env *P)
 //         // Add a chunk, followed by the separator if necessary.
 //         const String *chunk = v_string(v);
 //         pawL_add_nstring(P, &buf, chunk->text, chunk->length);
-//         if (cast_size(itr + 1) < pawA_length(a)) {
+//         if (CAST_SIZE(itr + 1) < pawA_length(a)) {
 //             pawL_add_nstring(P, &buf, s->text, s->length);
 //         }
 //     }
@@ -357,8 +357,8 @@ static int string_find(paw_Env *P)
 static int string_starts_with(paw_Env *P)
 {
     pawL_check_argc(P, 1);
-    String *s = v_string(cf_base(0));
-    const String *prefix = v_string(cf_base(1));
+    String *s = v_string(CF_BASE(0));
+    const String *prefix = v_string(CF_BASE(1));
     const size_t prelen = prefix->length;
     const paw_Bool b =
         s->length >= prelen && 0 == memcmp(prefix->text, s->text, prelen);
@@ -369,8 +369,8 @@ static int string_starts_with(paw_Env *P)
 static int string_ends_with(paw_Env *P)
 {
     pawL_check_argc(P, 1);
-    String *s = v_string(cf_base(0));
-    const String *suffix = v_string(cf_base(1));
+    String *s = v_string(CF_BASE(0));
+    const String *suffix = v_string(CF_BASE(1));
     const size_t suflen = suffix->length;
     paw_Bool b = PAW_FALSE;
     if (s->length >= suflen) {
@@ -392,8 +392,8 @@ static int string_clone(paw_Env *P)
 
 static int map_get(paw_Env *P)
 {
-    const Value key = cf_base(1 /*TODO*/ + 1);
-    Map *m = v_map(cf_base(0 /*TODO*/ + 1));
+    const Value key = CF_BASE(1 /*TODO*/ + 1);
+    Map *m = v_map(CF_BASE(0 /*TODO*/ + 1));
     const Value *pv = pawH_get(P, m, key);
     if (pv != NULL) {
         // replace default value
@@ -404,14 +404,14 @@ static int map_get(paw_Env *P)
 
 static int map_erase(paw_Env *P)
 {
-    Map *m = v_map(cf_base(0 /*TODO*/ + 1));
-    pawH_remove(P, m, cf_base(1 /*TODO*/ + 1));
+    Map *m = v_map(CF_BASE(0 /*TODO*/ + 1));
+    pawH_remove(P, m, CF_BASE(1 /*TODO*/ + 1));
     return 0;
 }
 
 static int map_clone(paw_Env *P)
 {
-    Map *m = v_map(cf_base(0 /*TODO*/ + 1));
+    Map *m = v_map(CF_BASE(0 /*TODO*/ + 1));
     Value *pv = pawC_push0(P);
     pawH_clone(P, pv, m);
     return 1;
@@ -441,8 +441,8 @@ static void add_builtin_func(paw_Env *P, const char *name, paw_Function func)
 void pawL_init(paw_Env *P)
 {
     Value *pv = pawC_push0(P);
-    P->builtin = pawH_new(P);
     P->libs = pawH_new(P);
+    P->builtin = pawH_new(P);
     v_set_object(pv, P->builtin);
 
     // Builtin functions:

@@ -31,17 +31,12 @@ else()
             INTERFACE m)
 endif()
 
-include(FetchContent)
-FetchContent_Declare(gc
-    GIT_REPOSITORY https://github.com/ivmai/bdwgc.git
-    GIT_TAG v8.2.6)
-FetchContent_MakeAvailable(gc)
-
 set(PAW_SOURCE_DIR ${PROJECT_SOURCE_DIR}/src)
 
 add_library(paw STATIC)
 target_sources(paw
-    PUBLIC  ${PAW_SOURCE_DIR}/api.h
+    PUBLIC  ${PAW_SOURCE_DIR}/alloc.h
+            ${PAW_SOURCE_DIR}/api.h
             ${PAW_SOURCE_DIR}/ast.h
             ${PAW_SOURCE_DIR}/auxlib.h
             ${PAW_SOURCE_DIR}/call.h
@@ -49,13 +44,12 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/compile.h
             ${PAW_SOURCE_DIR}/debug.h
             ${PAW_SOURCE_DIR}/env.h
-            ${PAW_SOURCE_DIR}/gc_aux.h
+            ${PAW_SOURCE_DIR}/gc.h
             ${PAW_SOURCE_DIR}/hir.h
             ${PAW_SOURCE_DIR}/lex.h
             ${PAW_SOURCE_DIR}/lib.h
             ${PAW_SOURCE_DIR}/map.h
             ${PAW_SOURCE_DIR}/mem.h
-            ${PAW_SOURCE_DIR}/meta.h
             ${PAW_SOURCE_DIR}/opcode.h
             ${PAW_SOURCE_DIR}/os.h
             ${PAW_SOURCE_DIR}/parse.h
@@ -67,17 +61,17 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/unify.h
             ${PAW_SOURCE_DIR}/util.h
             ${PAW_SOURCE_DIR}/value.h
-    PRIVATE ${PAW_SOURCE_DIR}/api.c
+    PRIVATE ${PAW_SOURCE_DIR}/alloc.c
+            ${PAW_SOURCE_DIR}/api.c
             ${PAW_SOURCE_DIR}/ast.c
             ${PAW_SOURCE_DIR}/auxlib.c
             ${PAW_SOURCE_DIR}/call.c
-            ${PAW_SOURCE_DIR}/check.c
             ${PAW_SOURCE_DIR}/code.c
             ${PAW_SOURCE_DIR}/codegen.c
             ${PAW_SOURCE_DIR}/compile.c
             ${PAW_SOURCE_DIR}/debug.c
             ${PAW_SOURCE_DIR}/env.c
-            ${PAW_SOURCE_DIR}/gc_aux.c
+            ${PAW_SOURCE_DIR}/gc.c
             ${PAW_SOURCE_DIR}/hir.c
             #${PAW_SOURCE_DIR}/iolib.c
             ${PAW_SOURCE_DIR}/lex.c
@@ -85,10 +79,10 @@ target_sources(paw
             #${PAW_SOURCE_DIR}/mathlib.c
             ${PAW_SOURCE_DIR}/map.c
             ${PAW_SOURCE_DIR}/mem.c
-            ${PAW_SOURCE_DIR}/meta.c
             ${PAW_SOURCE_DIR}/opcode.c
             ${PAW_SOURCE_DIR}/os.c
             ${PAW_SOURCE_DIR}/parse.c
+            ${PAW_SOURCE_DIR}/resolve.c
             ${PAW_SOURCE_DIR}/rt.c
             ${PAW_SOURCE_DIR}/str.c
             ${PAW_SOURCE_DIR}/type.c
@@ -96,9 +90,6 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/util.c
             ${PAW_SOURCE_DIR}/value.c
             ${PAW_SOURCE_DIR}/vector.c)
-target_link_libraries(paw
-    PRIVATE paw_context 
-    PUBLIC gc)
 target_include_directories(paw
     PUBLIC ${PAW_SOURCE_DIR})
 target_compile_definitions(paw

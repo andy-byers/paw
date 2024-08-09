@@ -49,12 +49,6 @@ struct LocalSlot {
     paw_Bool is_captured : 1;
 };
 
-struct LocalStack {
-    struct LocalSlot *slots;
-    int nslots;
-    int capacity;
-};
-
 enum FuncKind {
     FUNC_MODULE,
     FUNC_CLOSURE,
@@ -67,11 +61,11 @@ struct FuncState {
     struct FuncType *type; // function signature
     struct Generator *G; // codegen state
     struct HirSymtab *scopes; // local scopes
-    struct LocalStack locals; // local variables
     struct BlockState *bs; // current block
     Proto *proto; // prototype being built
     String *name; // name of the function
-    int level; // current stack index (base = 0)
+    int first_local; // index of function in DynamicMem array
+    int nlocals; // number of locals
     int nup; // number of upvalues
     int nk; // number of constants
     int nproto; // number of nested functions
@@ -85,15 +79,21 @@ struct DynamicMem {
     // Buffer for accumulating strings
     struct CharVec {
         char *data;
-        int size;
+        int count;
         int alloc;
     } scratch;
 
     struct {
         struct HirDecl **data;
-        int size;
+        int count;
         int alloc;
     } decls;
+
+    struct {
+        struct LocalSlot *data;
+        int count;
+        int alloc;
+    } vars;
 
     struct Ast *ast;
     struct Hir *hir;

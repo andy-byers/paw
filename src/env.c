@@ -22,6 +22,12 @@ void pawE_error(paw_Env *P, int code, int line, const char *fmt, ...)
     pawC_throw(P, code);
 }
 
+void pawE_uninit(paw_Env *P)
+{
+    struct GlobalVec *gv = &P->gv;
+    pawM_free_vec(P, gv->data, gv->alloc);
+}
+
 CallFrame *pawE_extend_cf(paw_Env *P, StackPtr top)
 {
     if (P->ncf >= ITEM_MAX) {
@@ -38,7 +44,7 @@ CallFrame *pawE_extend_cf(paw_Env *P, StackPtr top)
 
 int pawE_new_global(paw_Env *P, String *name)
 {
-    struct GlobalVec *gv = &P->gv; // enforce uniqueness
+    struct GlobalVec *gv = &P->gv;
     for (int i = 0; i < gv->size; ++i) {
         if (pawS_eq(name, gv->data[i].name)) {
             pawE_error(P, PAW_ENAME, -1, "duplicate global '%s'", name->text);
@@ -62,4 +68,4 @@ int pawE_find_global(paw_Env *P, const String *name)
         }
     }
     return -1;
-}
+} 

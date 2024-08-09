@@ -2,7 +2,7 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "map.h"
-#include "gc_aux.h"
+#include "gc.h"
 #include "mem.h"
 #include "rt.h"
 #include "util.h"
@@ -94,13 +94,13 @@ static void grow_map(paw_Env *P, Map *m)
         rehash_map(old_m, m);
     }
     free_buffer(P, old_m.data, old_m.capacity);
-    check_gc(P);
+    CHECK_GC(P);
 }
 
 Map *pawH_new(paw_Env *P)
 {
     Map *m = pawM_new(P, Map);
-    pawG_add_object(P, cast_object(m), VMAP);
+    pawG_add_object(P, CAST_OBJECT(m), VMAP);
     return m;
 }
 
@@ -122,9 +122,9 @@ Value *pawH_create(paw_Env *P, Map *m, Value key)
 
 void pawH_clone(paw_Env *P, StackPtr sp, Map *m)
 {
-    Map *m2 = pawH_new(P);
-    v_set_object(sp, m2);
-    pawH_extend(P, m2, m);
+    Map *clone = pawH_new(P);
+    v_set_object(sp, clone);
+    pawH_extend(P, clone, m);
 }
 
 static paw_Bool items_equal(Value x, Value y)
@@ -142,7 +142,7 @@ paw_Bool pawH_equals(paw_Env *P, Map *lhs, Map *rhs)
     MapCursor mc = {lhs, 0};
     while (mc.index < lhs->capacity) {
         Value *v = pawH_action(P, rhs, *h_cursor_key(&mc), MAP_ACTION_NONE);
-        if (!v || !items_equal(*h_cursor_value(&mc), *v)) {
+        if (v == NULL || !items_equal(*h_cursor_value(&mc), *v)) {
             return PAW_FALSE;
         }
         ++mc.index;

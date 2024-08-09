@@ -7,7 +7,6 @@
 #include "test.h"
 #include <limits.h>
 
-static struct TestAlloc s_alloc;
 typedef uint64_t TypeSet;
 
 static void write_main(char *out, const char *items, const char *text)
@@ -29,11 +28,11 @@ static void test_compiler_error(int expect, const char *name, const char *item, 
     char buffer[4096];
     write_main(buffer, item, text);
 
-    paw_Env *P = test_open(NULL, &s_alloc);
+    paw_Env *P = paw_open(NULL, NULL);
     int status = pawL_load_chunk(P, name, buffer);
     check(status == expect);
 
-    test_close(P, &s_alloc);
+    paw_close(P);
 }
 
 static void test_runtime_error(int expect, const char *name, const char *item, const char *text)
@@ -41,7 +40,7 @@ static void test_runtime_error(int expect, const char *name, const char *item, c
     char buffer[4096];
     write_main(buffer, item, text);
 
-    paw_Env *P = test_open(NULL, &s_alloc);
+    paw_Env *P = paw_open(NULL, NULL);
     int status = pawL_load_chunk(P, name, buffer);
     check(status == PAW_OK);
 
@@ -52,7 +51,7 @@ static void test_runtime_error(int expect, const char *name, const char *item, c
     status = paw_call(P, 0);
     check(status == expect);
 
-    test_close(P, &s_alloc);
+    paw_close(P);
 }
 
 static void test_name_error(void)

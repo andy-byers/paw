@@ -275,9 +275,8 @@ static struct AstDecl *vfield_decl(struct Lex *lex)
     static void parse_##name##_list(struct Lex *lex, struct L *list, int line) \
     { \
         do { \
-            if (test(lex, b)) { \
-                break; \
-            } else if ((list)->count == (limit)) { \
+            if (test(lex, b)) break; \
+            if ((list)->count == (limit)) { \
                 limit_error(lex, what, (limit)); \
             } \
             prefix##push((lex)->dm->ast, list, (func)(lex)); \
@@ -349,9 +348,8 @@ static void parse_tuple_type(struct Lex *lex, struct AstExpr *pe, int line)
     pawAst_expr_list_push(lex->ast, elems, first);
 
     do {
-        if (test(lex, ')')) {
-            break;
-        } else if (elems->count == FIELD_MAX) {
+        if (test(lex, ')')) break;
+        if (elems->count == FIELD_MAX) {
             limit_error(lex, "tuple elements", FIELD_MAX);
         }
         struct AstExpr *type = type_expr(lex);
@@ -563,7 +561,7 @@ static struct AstExpr *unop_expr(struct Lex *lex, enum UnOp op)
     struct AstExpr *result = pawAst_new_expr(lex->ast, kAstUnOpExpr);
     struct AstUnOpExpr *r = &result->unop;
     skip(lex); // unary operator token
-    r->op = cast(op, UnaryOp); // same order
+    r->op = CAST(op, UnaryOp); // same order
     r->target = expression(lex, kUnOpPrecedence);
     return result;
 }
@@ -639,9 +637,8 @@ static paw_Type parse_container_items(struct Lex *lex, struct AstExprList **pite
     struct AstExprList *items = *pitems;
     paw_Type code = -1;
     do {
-        if (test(lex, ']')) {
-            break;
-        } else if (items->count == LOCAL_MAX) {
+        if (test(lex, ']')) break;
+        if (items->count == LOCAL_MAX) {
             limit_error(lex, "container literal items", LOCAL_MAX);
         }
         struct AstExpr *item = expression0(lex);
@@ -904,7 +901,7 @@ static struct AstExpr *binop_expr(struct Lex *lex, enum InfixOp op, struct AstEx
         return NULL; // no more binops
     }
     struct AstExpr *r = pawAst_new_expr(lex->ast, kAstBinOpExpr);
-    r->binop.op = cast(op, BinaryOp); // same order
+    r->binop.op = CAST(op, BinaryOp); // same order
     r->binop.lhs = lhs;
     r->binop.rhs = rhs;
     return r;
@@ -1142,9 +1139,8 @@ static struct AstDecl *variant_decl(struct Lex *lex, int index)
 static void parse_variant_list(struct Lex *lex, struct AstDeclList *list, int line)
 {
     do {
-        if (test(lex, '}')) {
-            break;
-        } else if (list->count == LOCAL_MAX) {
+        if (test(lex, '}')) break;
+        if (list->count == LOCAL_MAX) {
             limit_error(lex, "variants", LOCAL_MAX);
         }
         // NOTE: 'variant_decl' requires a second argument, so 'DEFINE_LIST_PARSER'
@@ -1409,11 +1405,6 @@ void pawP_init(paw_Env *P)
         const char *kw = kKeywords[i];
         String *str = pawS_new_fixed(P, kw);
         str->flag = i + FIRST_KEYWORD;
-    }
-    for (Metamethod mm = 0; mm < NMETAMETHODS; ++mm) {
-        const char *name = pawT_name(mm);
-        String *str = pawS_new_fixed(P, name);
-        v_set_object(&P->meta_keys[mm], str);
     }
     P->str_cache[CSTR_SELF] = pawS_new_str(P, "self");
     P->str_cache[CSTR_TRUE] = pawS_new_str(P, "true");

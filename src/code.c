@@ -118,8 +118,8 @@ void pawK_pool_uninit(paw_Env *P, struct Pool *pool)
 static void *find_free_block(struct Pool *pool, size_t size)
 {
     for (struct FreeBlock **p = &pool->free; *p; p = &(*p)->prev) {
-        if (size <= cast_size((*p)->size)) {
-            paw_assert(0 == (cast(*p, uintptr_t) & (K_ALIGNOF_NODE - 1)));
+        if (size <= CAST_SIZE((*p)->size)) {
+            paw_assert(0 == (CAST_UPTR(*p) & (K_ALIGNOF_NODE - 1)));
             struct FreeBlock *block = *p;
             *p = (*p)->prev;
             return block;
@@ -154,7 +154,7 @@ void *pawK_pool_alloc(paw_Env *P, struct Pool *pool, size_t size)
 
 void pawK_pool_free(struct Pool *pool, void *ptr, size_t size)
 {
-//    paw_assert(0 == (cast(ptr, uintptr_t) & _Alignof(struct FreeBlock)));
+//    paw_assert(0 == (CAST_UPTR(ptr) & _Alignof(struct FreeBlock)));
 //    paw_assert(size >= sizeof(struct FreeBlock));
 //    const struct FreeBlock prototype = {
 //        .prev = pool->free,

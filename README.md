@@ -324,13 +324,14 @@ assert(status != 0)
 + [x] type inference for `struct` templates and builtin containers
 + [x] sum types/discriminated unions (`enum`)
 + [x] product types (tuple)
++ [ ] refactor user-provided allocation interface to allow heap expansion
 + [ ] module system and `import` keyword
 + [ ] methods using `impl` blocks
 + [ ] error handling
 + [ ] type inference for `enum` templates
 + [ ] pattern matching (`switch` construct)
 + [ ] pattern matching (`if let`, `let` bindings)
-+ [ ] custom garbage collector (using Boehm GC for now)
++ [x] custom garbage collector (using Boehm GC for now)
 + [ ] split off UTF-8 stuff into `String` structure, where `str` is a byte array and `String` is always valid UTF-8
 + [ ] constness (`var` vs `let`)
 + [ ] compiler optimization passes

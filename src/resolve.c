@@ -10,7 +10,7 @@
 #include "compile.h"
 #include "debug.h"
 #include "env.h"
-#include "gc_aux.h"
+#include "gc.h"
 #include "hir.h"
 #include "map.h"
 #include "mem.h"
@@ -23,7 +23,7 @@
 #define NAME_ERROR(R, line, ...) pawE_error(ENV(R), PAW_ENAME, line, __VA_ARGS__)
 #define SYNTAX_ERROR(R, ...) pawE_error(ENV(R), PAW_ESYNTAX, -1, __VA_ARGS__)
 #define TYPE_ERROR(R, ...) pawE_error(ENV(R), PAW_ETYPE, -1, __VA_ARGS__)
-#define CACHED_STR(R, i) pawE_cstr(ENV(R), cast_size(i))
+#define CACHED_STR(R, i) pawE_cstr(ENV(R), CAST_SIZE(i))
 #define TYPE2CODE(R, type) (pawP_type2code((R)->C, type))
 
 struct ItemSlot {
@@ -80,7 +80,7 @@ static void unify(struct Resolver *R, struct HirType *a, struct HirType *b)
 
 static struct HirType *get_type(struct Resolver *R, DefId did)
 {
-    paw_assert(did < R->dm->decls.size);
+    paw_assert(did < R->dm->decls.count);
     return HIR_TYPEOF(R->dm->decls.data[did]);
 }
 
@@ -97,7 +97,7 @@ static paw_Bool is_map_t(struct Resolver *R, struct HirType *type)
 static struct HirDecl *get_decl(struct Resolver *R, DefId did)
 {
     struct DynamicMem *dm = R->dm;
-    paw_assert(did < dm->decls.size);
+    paw_assert(did < dm->decls.count);
     return dm->decls.data[did];
 }
 
@@ -221,7 +221,7 @@ static void pop_symbol_table(struct Resolver *R)
 static void sanity_check(struct Resolver *R, struct HirDecl *new_decl)
 {
     struct DynamicMem *dm = R->dm;
-    for (DefId did = 0; did < dm->decls.size; ++did) {
+    for (DefId did = 0; did < dm->decls.count; ++did) {
         struct HirDecl *old_decl = dm->decls.data[did];
         paw_assert(old_decl->hdr.did == did);
         paw_assert(old_decl != new_decl);
@@ -403,7 +403,7 @@ static void enter_block(struct Resolver *R, struct HirScope *scope)
 static struct HirScope *leave_function(struct Resolver *R)
 {
     struct HirScope *scope = leave_block(R);
-    check_gc(ENV(R));
+    CHECK_GC(ENV(R));
     --R->func_depth;
     return scope;
 }
@@ -1633,7 +1633,7 @@ static struct HirType *resolve_composite_lit(struct Resolver *R, struct AstCompo
     }
     paw_Int iter = PAW_ITER_INIT;
     while (pawH_iter(map, &iter)) {
-        const Value *pkey = pawH_key(map, cast_size(iter));
+        const Value *pkey = pawH_key(map, CAST_SIZE(iter));
         NAME_ERROR(R, -1, "unexpected field '%s' in initializer for struct '%s'",
                    v_string(*pkey), pack.name->text);
     }
@@ -1654,7 +1654,7 @@ static struct HirExpr *resolve_literal_expr(struct Resolver *R, struct AstLitera
     struct HirLiteralExpr *r = HirGetLiteralExpr(result);
 
     // literal kinds correspond 1-to-1 between AST and HIR
-    r->lit_kind = cast(e->lit_kind, enum HirLitKind);
+    r->lit_kind = CAST(e->lit_kind, enum HirLitKind);
 
     if (e->lit_kind == kAstBasicLit) {
         r->type = resolve_basic_lit(R, &e->basic, &r->basic);

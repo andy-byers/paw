@@ -1,0 +1,118 @@
+// Copyright (c) 2024, The paw Authors. All rights reserved.
+// This source code is licensed under the MIT License, which can be found in
+// LICENSE.md. See AUTHORS.md for a list of contributor names.
+
+#include "alloc.h"
+#include "test.h"
+#include "util.h"
+
+static void driver(void (*test_callback)(paw_Env *P))
+{
+    struct TestAlloc a = {0};
+    paw_Env *P = test_open(test_alloc, &a);
+    test_callback(P);
+    test_close(P, &a);
+}
+
+static void open_and_close(paw_Env *P)
+{
+    paw_unused(P);
+}
+
+static void alloc_and_free(paw_Env *P, size_t size)
+{
+    void *ptr = pawZ_alloc(P, NULL, 0, size);
+    pawZ_alloc(P, ptr, size, 0);
+}
+
+#define MAX_DEFER 16384
+static struct DeferredAlloc {
+    void *ptr;
+    size_t size;
+} s_defer[MAX_DEFER];
+static int s_ndefer = 0;
+
+static void set_defer_data(void *ptr, size_t size)
+{
+    memset(ptr, size & 255, size);
+}
+
+static void check_defer_data(const void *ptr, size_t size)
+{
+    const uint8_t *data = ptr;
+    for (size_t i = 0; i < size; ++i) {
+        check(data[i] == CAST(size & 255, uint8_t));
+    }
+}
+
+static void alloc_and_defer(paw_Env *P, size_t size)
+{
+    check(s_ndefer < MAX_DEFER);
+    void *ptr = pawZ_alloc(P, NULL, 0, size);
+    const int index = s_ndefer++;
+    s_defer[index] = (struct DeferredAlloc){
+        .size = size,
+        .ptr = ptr,
+    };
+    set_defer_data(ptr, size);
+}
+
+static void free_deferred_ptrs(paw_Env *P)
+{
+    while (s_ndefer > 0) {
+        struct DeferredAlloc defer = s_defer[--s_ndefer];
+        check_defer_data(defer.ptr, defer.size);
+        pawZ_alloc(P, defer.ptr, defer.size, 0);
+    }
+}
+
+static void alloc_pattern(paw_Env *P, size_t size)
+{
+    alloc_and_defer(P, size + 10);
+    alloc_and_defer(P, size + 11);
+    alloc_and_defer(P, size + 12);
+    alloc_and_defer(P, size + 13);
+    alloc_and_free(P, size + 1);
+    alloc_and_defer(P, size + 14);
+    alloc_and_defer(P, size + 15);
+    alloc_and_defer(P, size + 16);
+    alloc_and_free(P, size + 2);
+    alloc_and_free(P, size + 3);
+    alloc_and_defer(P, size + 17);
+    alloc_and_defer(P, size + 18);
+    alloc_and_free(P, size + 4);
+    alloc_and_free(P, size + 5);
+    alloc_and_free(P, size + 6);
+    alloc_and_defer(P, size + 19);
+    alloc_and_free(P, size + 7);
+    alloc_and_free(P, size + 8);
+    alloc_and_free(P, size + 9);
+}
+
+static void test_small_allocations(paw_Env *P)
+{
+    const size_t sizes[] = {0, 10, 11, 100, 101, 102};
+    for (size_t i = 0; i < paw_countof(sizes); ++i) {
+        alloc_pattern(P, sizes[i]);
+        alloc_pattern(P, sizes[i]);
+    }
+    free_deferred_ptrs(P);
+}
+
+static void test_lots_of_allocations(paw_Env *P)
+{
+    for (size_t i = 0; i < 1000; ++i) {
+        alloc_pattern(P, CAST_SIZE(rand() % 100 + 1));
+    }
+    for (size_t i = 0; i < 100; ++i) {
+        alloc_pattern(P, CAST_SIZE(rand() % 10000 + 1));
+    }
+    free_deferred_ptrs(P);
+}
+
+int main(void)
+{
+    driver(open_and_close);
+    driver(test_small_allocations);
+    driver(test_lots_of_allocations);
+}

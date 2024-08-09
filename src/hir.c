@@ -1,3 +1,4 @@
+// Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
@@ -11,7 +12,7 @@
 #include <stdlib.h>
 
 #define LIST_MIN 8
-#define FIRST_ARENA_SIZE 512
+#define FIRST_ARENA_SIZE 4096
 #define LARGE_ARENA_MIN 32
 
 static void add_builtin_type(struct Hir *hir, enum HirTypeKind kind, paw_Type code)
@@ -42,11 +43,13 @@ struct Hir *pawHir_new(struct Compiler *C)
     return hir;
 }
 
-void pawHir_free_hir(struct Hir *hir)
+void pawHir_free(struct Hir *hir)
 {
-    paw_Env *P = ENV(hir);
-    pawK_pool_uninit(P, &hir->pool);
-    pawM_free(P, hir);
+    if (hir != NULL) {
+        paw_Env *P = ENV(hir);
+        pawK_pool_uninit(P, &hir->pool);
+        pawM_free(P, hir);
+    }
 }
 
 #define NEW_NODE(hir, T) pawK_pool_alloc(ENV(hir), &(hir)->pool, sizeof(struct T))
@@ -82,8 +85,8 @@ DefId pawHir_add_decl(struct Hir *hir, struct HirDecl *decl)
 {
     paw_Env *P = ENV(hir);
     struct DynamicMem *dm = hir->dm;
-    pawM_grow(P, dm->decls.data, dm->decls.size, dm->decls.alloc);
-    const DefId id = dm->decls.size++;
+    pawM_grow(P, dm->decls.data, dm->decls.count, dm->decls.alloc);
+    const DefId id = dm->decls.count++;
     dm->decls.data[id] = decl;
     decl->hdr.did = id;
     return id;
@@ -92,7 +95,7 @@ DefId pawHir_add_decl(struct Hir *hir, struct HirDecl *decl)
 struct HirDecl *pawHir_get_decl(struct Hir *hir, DefId did)
 {
     struct DynamicMem *dm = hir->dm;
-    paw_assert(did < dm->decls.size);
+    paw_assert(did < dm->decls.count);
     return dm->decls.data[did];
 }
 
@@ -501,7 +504,7 @@ static struct HirStmt *FoldBlock(struct HirFolder *F, struct HirBlock *s)
     s->stmts = F->FoldStmtList(F, s->stmts);
     return HIR_CAST_STMT(s);
 }
-#define FOLD_BLOCK(F, s) cast((F)->FoldBlock(F, s), struct HirBlock *)
+#define FOLD_BLOCK(F, s) CAST((F)->FoldBlock(F, s), struct HirBlock *)
 
 static struct HirExpr *FoldLogicalExpr(struct HirFolder *F, struct HirLogicalExpr *e)
 {
@@ -885,7 +888,7 @@ static struct HirStmt *copy_block_stmt(struct HirFolder *F, struct HirBlock *s)
     return r;
 }
 
-#define COPY_BLOCK(F, s) cast((F)->FoldBlock(F, s), struct HirBlock *)
+#define COPY_BLOCK(F, s) CAST((F)->FoldBlock(F, s), struct HirBlock *)
 
 static struct HirExpr *copy_logical_expr(struct HirFolder *F, struct HirLogicalExpr *e)
 {
@@ -1523,7 +1526,7 @@ DEFINE_KIND_PRINTER(decl, HirDecl)
 DEFINE_KIND_PRINTER(stmt, HirStmt) 
 DEFINE_KIND_PRINTER(type, HirType) 
 
-#define dump_block(P, b) check_exp(HirIsBlock(HIR_CAST_STMT(b)), dump_stmt(P, HIR_CAST_STMT(b)))
+#define dump_block(P, b) CHECK_EXP(HirIsBlock(HIR_CAST_STMT(b)), dump_stmt(P, HIR_CAST_STMT(b)))
 #define dump_name(P, s) dump_fmt(P, "name: %s\n", s ? s->text : NULL)
 
 static void dump_expr(struct Printer *, struct HirExpr *);

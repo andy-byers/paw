@@ -1,7 +1,7 @@
 # Paw language grammer (EBNF)
 **TODO: get rid of requirement that "break" | "return" | "continue" is the last statement in the block**
 **      just don't emit unreachable code**
-**      use a tool to validate this...**
+**      use a tool to validate this EBNF...**
 
 ## Module
 ```ebnf

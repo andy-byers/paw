@@ -3,7 +3,7 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
 #include "code.h"
-#include "gc_aux.h"
+#include "gc.h"
 #include "hir.h"
 #include "map.h"
 #include "mem.h"
@@ -94,8 +94,11 @@ static String *mangle_name(struct Generator *G, const String *name, struct HirTy
     }
     pawL_add_char(P, &buf, '_');
     pawL_push_result(P, &buf);
+    // anchor in compiler string table
     String *result = v_string(P->top.p[-1]);
-    pawC_pop(P); // unanchor
+    const Value key = {.o = CAST_OBJECT(result)};
+    pawH_insert(P, G->C->strings, key, key);
+    pawC_pop(P);
     return result;
 }
 
@@ -124,8 +127,12 @@ static int add_proto(struct Generator *G, Proto *proto)
     Proto *p = fs->proto;
     if (fs->nproto == ITEM_MAX) {
         SYNTAX_ERROR(G, "too many functions");
+    } else if (fs->nproto == p->nproto) {
+        pawM_grow(ENV(G), p->p, fs->nproto, p->nproto);
+        for (int i = fs->nproto; i < p->nproto; ++i) {
+            p->p[i] = NULL;
+        }
     }
-    pawM_grow(ENV(G), p->p, fs->nproto, p->nproto);
     const int id = fs->nproto++;
     p->p[id] = proto;
     return id;
@@ -148,30 +155,36 @@ static void pop_proto(struct Generator *G)
     pawC_pop(ENV(G));
 }
 
+static struct LocalSlot *get_local_slot(struct FuncState *fs, int index)
+{
+    return &fs->G->C->dm->vars.data[fs->first_local + index];
+}
+
 static paw_Bool needs_close(struct FuncState *fs, const struct BlockState *bs)
 {
-    for (int i = fs->level - 1; i >= bs->level; --i) {
-        if (fs->locals.slots[i].is_captured) {
-            return PAW_TRUE;
-        }
+    struct DynamicMem *dm = fs->G->C->dm;
+    for (int i = fs->nlocals - 1; i >= bs->level; --i) {
+        const struct LocalSlot *slot = get_local_slot(fs, i);
+        if (slot->is_captured) return PAW_TRUE;
     }
     return PAW_FALSE;
 }
 
 static void close_vars(struct FuncState *fs, const struct BlockState *bs)
 {
-    if (fs->level > bs->level) {
+    if (fs->nlocals > bs->level) {
         const Op op = needs_close(fs, bs) ? OP_CLOSE : OP_POP;
-        pawK_code_U(fs, op, fs->level - bs->level);
+        pawK_code_U(fs, op, fs->nlocals - bs->level);
     }
 }
 
 static struct HirVarInfo declare_local(struct FuncState *fs, String *name, struct HirType *type)
 {
     struct Generator *G = fs->G;
-    pawM_grow(ENV(G), fs->locals.slots, fs->locals.nslots, fs->locals.capacity);
-    const int index = fs->locals.nslots++;
-    fs->locals.slots[index] = (struct LocalSlot){
+    struct DynamicMem *dm = G->C->dm;
+    pawM_grow(ENV(G), dm->vars.data, dm->vars.count, dm->vars.alloc);
+    const int index = dm->vars.count++;
+    dm->vars.data[index] = (struct LocalSlot){
         .type = type,
         .name = name,
         .index = index,
@@ -195,13 +208,14 @@ static struct HirVarInfo new_global(struct Generator *G, String *name, struct Hi
 
 static void begin_local_scope(struct FuncState *fs, int n) 
 {
-    fs->level += n; 
+    fs->nlocals += n; 
 }
 
 static void end_local_scope(struct FuncState *fs, struct BlockState *bs)
 {
-    fs->locals.nslots = bs->level;
-    fs->level = bs->level;
+    struct DynamicMem *dm = fs->G->C->dm;
+    dm->vars.count = fs->first_local + bs->level;
+    fs->nlocals = bs->level;
 }
 
 static void define_local(struct FuncState *fs)
@@ -268,7 +282,7 @@ static void add_label(struct FuncState *fs, enum LabelKind kind)
     ll->values[ll->length] = (struct Label){
         .kind = kind,
         .line = -1, // TODO: Get from HirLabelStmt
-        .level = fs->level - fs->bs->level,
+        .level = fs->nlocals - fs->bs->level,
         .pc = code_jump(fs, OP_JUMP),
     };
     ++ll->length;
@@ -344,7 +358,7 @@ static void leave_block(struct FuncState *fs)
 static void enter_block(struct FuncState *fs, struct BlockState *bs, paw_Bool loop)
 {
     bs->label0 = fs->G->C->dm->labels.length;
-    bs->level = fs->level;
+    bs->level = fs->nlocals;
     bs->is_loop = loop;
     bs->outer = fs->bs;
     fs->bs = bs;
@@ -358,7 +372,7 @@ static void leave_function(struct Generator *G)
 
     // end function-scoped locals
     end_local_scope(fs, bs);
-    paw_assert(fs->level == 0);
+    paw_assert(fs->nlocals == 0);
     paw_assert(bs->outer == NULL);
 
     // TODO: Need a return at the end to handle cleaning up the stack
@@ -378,30 +392,25 @@ static void leave_function(struct Generator *G)
     p->nk = fs->nk;
 
     G->fs = fs->outer;
-    check_gc(ENV(G));
+    CHECK_GC(ENV(G));
 }
 
 static void enter_function(struct Generator *G, struct FuncState *fs, struct BlockState *bs,
-                           struct HirType *type, enum FuncKind kind)
+                           String *name, Proto *proto, struct HirType *type, enum FuncKind kind)
 {
-    fs->bs = NULL;
-    fs->scopes = pawHir_new_symtab(G->hir);
-    fs->locals = (struct LocalStack){0};
-    fs->nproto = 0;
-    fs->nlines = 0;
-    fs->level = 0;
-    fs->nup = 0;
-    fs->nk = 0;
-    fs->pc = 0;
-
-    fs->kind = kind;
-    fs->outer = G->fs;
-    fs->G = G;
+    *fs = (struct FuncState){
+        .first_local = G->C->dm->vars.count,
+        .scopes = pawHir_new_symtab(G->hir),
+        .proto = proto,
+        .outer = G->fs,
+        .name = name,
+        .kind = kind,
+        .G = G,
+    };
     G->fs = fs;
 
-    // Enter the function body.
+    // enter the function body
     enter_block(fs, bs, PAW_FALSE);
-
     new_local(fs, fs->name, type);
 }
 
@@ -417,9 +426,10 @@ static paw_Bool resolve_global(struct Generator *G, const String *name, struct H
 
 static paw_Bool resolve_local(struct FuncState *fs, const String *name, struct HirVarInfo *pinfo)
 {
-    for (int i = fs->level - 1; i >= 0; --i) {
-        struct LocalSlot slot = fs->locals.slots[i];
-        if (pawS_eq(slot.name, name)) {
+    struct DynamicMem *dm = fs->G->C->dm;
+    for (int i = fs->nlocals - 1; i >= 0; --i) {
+        struct LocalSlot *slot = get_local_slot(fs, i);
+        if (pawS_eq(slot->name, name)) {
             pinfo->kind = VAR_LOCAL;
             pinfo->index = i;
             return PAW_TRUE;
@@ -470,12 +480,12 @@ static void add_upvalue(struct FuncState *fs, struct HirVarInfo *info, paw_Bool 
 static paw_Bool resolve_upvalue(struct FuncState *fs, const String *name,
                                 struct HirVarInfo *pinfo)
 {
+    struct DynamicMem *dm = fs->G->C->dm;
     struct FuncState *caller = fs->outer;
-    if (!caller) {
-        return PAW_FALSE;
-    }
+    if (caller == NULL) return PAW_FALSE;
     if (resolve_local(caller, name, pinfo)) {
-        caller->locals.slots[pinfo->index].is_captured = PAW_TRUE;
+        get_local_slot(caller, pinfo->index)
+            ->is_captured = PAW_TRUE;
         add_upvalue(fs, pinfo, PAW_TRUE);
         return PAW_TRUE;
     }
@@ -499,7 +509,7 @@ static struct HirVarInfo find_var(struct Generator *G, const String *name)
 }
 
 #define CODE_OP(fs, op, subop, type) \
-    pawK_code_AB(fs, op, cast(subop, int), basic_code((fs)->G, type))
+    pawK_code_AB(fs, op, CAST(subop, int), basic_code((fs)->G, type))
 
 // TODO: OP_PUSHFALSE is a hack to avoid creating unnecessary constants,
 // essentially pushes integer 0
@@ -770,12 +780,11 @@ static void code_closure_expr(struct HirVisitor *V, struct HirClosureExpr *e)
     struct FuncState fs;
     struct BlockState bs;
     struct Generator *G = V->ud;
-    fs.name = SCAN_STRING(G->C, "(closure)");
-    fs.G = G;
+    String *name = SCAN_STRING(G->C, "(closure)");
+    Proto *proto = push_proto(G, name);
+    proto->argc = e->params->count;
 
-    fs.proto = push_proto(G, fs.name);
-    fs.proto->argc = e->params->count;
-    enter_function(G, &fs, &bs, e->type, FUNC_CLOSURE);
+    enter_function(G, &fs, &bs, name, proto, e->type, FUNC_CLOSURE);
     V->VisitDeclList(V, e->params);
     if (e->has_body) {
         V->VisitBlock(V, e->body);
@@ -805,13 +814,11 @@ static void code_func(struct HirVisitor *V, struct HirFuncDecl *d, struct HirVar
     struct Generator *G = V->ud;
     struct FuncState fs;
     struct BlockState bs;
-    fs.name = d->name;
-    fs.G = G;
-
     struct HirFuncDef *func = &d->type->fdef;
-    fs.proto = push_proto(G, d->name);
-    fs.proto->argc = func->params->count;
-    enter_function(G, &fs, &bs, d->type, d->fn_kind);
+    Proto *proto = push_proto(G, d->name);
+    proto->argc = func->params->count;
+
+    enter_function(G, &fs, &bs, d->name, proto, d->type, d->fn_kind);
     V->VisitDeclList(V, d->params); // code parameters
     V->VisitBlock(V, d->body); // code function body
     leave_function(G);
@@ -1238,7 +1245,7 @@ static void add_builtin_func(struct Generator *G, const char *name)
     String *str = SCAN_STRING(G->C, name);
     const int g = pawE_new_global(P, str);
     GlobalVar *gv = pawE_get_global(P, g);
-    const Value key = {.o = cast_object(str)};
+    const Value key = {.o = CAST_OBJECT(str)};
     const Value *pv = pawH_get_(P->builtin, key);
     gv->value = *pv;
 }
@@ -1280,24 +1287,12 @@ static void setup_pass(struct HirVisitor *V, struct Generator *G)
     add_builtin_func(G, "_vector_clone");
 }
 
-static void code_module(struct Generator *G)
+static void code_module(struct Generator *G, struct Hir *hir)
 {
-    struct Hir *hir = G->hir;
-
-    struct FuncState fs;
-    struct BlockState bs;
-    fs.name = G->C->modname;
-    fs.proto = G->C->main->p;
-
-    enter_function(G, &fs, &bs, NULL, FUNC_MODULE);
-
     struct HirVisitor V;
     setup_pass(&V, G);
-
     register_items(G, hir->items);
     code_items(&V);
-
-    leave_function(G);
 }
 
 void p_codegen(struct Compiler *C, struct Hir *hir)
@@ -1310,5 +1305,5 @@ void p_codegen(struct Compiler *C, struct Hir *hir)
         .P = ENV(C),
         .C = C,
     };
-    code_module(&G);
+    code_module(&G, hir);
 }

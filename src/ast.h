@@ -443,9 +443,9 @@ struct AstDecl *pawAst_new_decl(struct Ast *ast, enum AstDeclKind kind);
 struct AstExpr *pawAst_new_expr(struct Ast *ast, enum AstExprKind kind);
 struct AstStmt *pawAst_new_stmt(struct Ast *ast, enum AstStmtKind kind);
 
-#define AST_CAST_DECL(x) cast(x, struct AstDecl *)
-#define AST_CAST_EXPR(x) cast(x, struct AstExpr *)
-#define AST_CAST_STMT(x) cast(x, struct AstStmt *)
+#define AST_CAST_DECL(x) CAST(x, struct AstDecl *)
+#define AST_CAST_EXPR(x) CAST(x, struct AstExpr *)
+#define AST_CAST_STMT(x) CAST(x, struct AstStmt *)
 
 DEFINE_LIST(struct Ast, pawAst_decl_list_, AstDeclList, struct AstDecl)
 DEFINE_LIST(struct Ast, pawAst_expr_list_, AstExprList, struct AstExpr)
