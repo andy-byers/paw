@@ -23,7 +23,7 @@ struct GcFlag {
     uint8_t value;
 };
 
-#define FAST_BIN_COUNT 1024
+#define FAST_BIN_COUNT 64
 
 struct FastBins {
     struct BinInfo *info[FAST_BIN_COUNT];

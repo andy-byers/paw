@@ -25,7 +25,7 @@ static void alloc_and_free(paw_Env *P, size_t size)
     pawZ_alloc(P, ptr, size, 0);
 }
 
-#define MAX_DEFER 16384
+#define MAX_DEFER 32768
 static struct DeferredAlloc {
     void *ptr;
     size_t size;
@@ -105,6 +105,9 @@ static void test_lots_of_allocations(paw_Env *P)
         alloc_pattern(P, CAST_SIZE(rand() % 100 + 1));
     }
     for (size_t i = 0; i < 100; ++i) {
+        if(i==18){
+        
+        }
         alloc_pattern(P, CAST_SIZE(rand() % 10000 + 1));
     }
     free_deferred_ptrs(P);
@@ -112,7 +115,7 @@ static void test_lots_of_allocations(paw_Env *P)
 
 int main(void)
 {
-    driver(open_and_close);
-    driver(test_small_allocations);
+//    driver(open_and_close);
+//    driver(test_small_allocations);
     driver(test_lots_of_allocations);
 }

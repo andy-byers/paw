@@ -424,7 +424,7 @@ int pawZ_init(paw_Env *P, size_t heap_size)
     void *heap = OS_MALLOC(P, heap_size);
     if (heap == NULL) goto no_memory;
     H->heap = heap;
-printf("heap: %p-%p\n", heap,BUMP(heap,H->heap_size));
+
 #define SKIP_CHUNK(z) (heap = BUMP(heap, aligned(z)), \
                        heap_size -= aligned(z))
     H->a_block = heap;
