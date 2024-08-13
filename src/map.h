@@ -86,83 +86,37 @@ static inline size_t pawH_length(const Map *m)
     return m->length; 
 }
 
-static inline Value *pawH_get_(Map *m, Value key)
+static inline Value *pawH_get(Map *m, Value key)
 {
-    if (m->length == 0) {
-        return NULL;
-    }
+    if (m->length == 0) return NULL;
     MapCursor mc = h_cursor_lookup(m, key);
-    if (h_is_occupied(&mc)) {
-        return h_cursor_value(&mc);
-    }
-    return NULL;
-}
-
-
-typedef enum MapAction {
-    MAP_ACTION_NONE,
-    MAP_ACTION_CREATE,
-    MAP_ACTION_REMOVE,
-} MapAction;
-
-static inline Value *pawH_action(paw_Env *P, Map *m, Value key,
-                                 MapAction action)
-{
-    if (action == MAP_ACTION_CREATE) {
-        return pawH_create(P, m, key);
-    } else if (m->length == 0) {
-        return NULL;
-    }
-    MapCursor mc = h_cursor_lookup(m, key);
-    if (!h_is_occupied(&mc)) {
-        return NULL;
-    }
-    if (action == MAP_ACTION_REMOVE) {
-        h_set_state(&mc, MAP_ITEM_ERASED);
-        --m->length;
-
-        // Return the address of the slot to indicate success.
-        return h_cursor_key(&mc);
-    }
-    paw_assert(action == MAP_ACTION_NONE);
+    if (!h_is_occupied(&mc)) return NULL;
     return h_cursor_value(&mc);
 }
 
-static inline paw_Bool pawH_contains(paw_Env *P, Map *m, Value key)
+static inline void pawH_erase(Map *m, Value key)
 {
-    return pawH_action(P, m, key, MAP_ACTION_NONE) != NULL;
+    if (m->length == 0) return;
+    MapCursor mc = h_cursor_lookup(m, key);
+    if (!h_is_occupied(&mc)) return;
+    h_set_state(&mc, MAP_ITEM_ERASED);
+    --m->length;
 }
 
 static inline void pawH_insert(paw_Env *P, Map *m, Value key, Value value)
 {
-    Value *slot = pawH_action(P, m, key, MAP_ACTION_CREATE);
-    if (!slot) {
-        pawH_key_error(P, key, PAW_TSTRING); // TODO: key type
-    }
-    *slot = value;
+    *pawH_create(P, m, key) = value;
 }
 
-static inline void pawH_remove(paw_Env *P, Map *m, Value key)
+static inline paw_Bool pawH_contains(Map *m, Value key)
 {
-    if (!pawH_action(P, m, key, MAP_ACTION_REMOVE)) {
-        pawH_key_error(P, key, PAW_TSTRING); // TODO: key type
-    }
+    return pawH_get(m, key) != NULL;
 }
 
-static inline Value *pawH_get(paw_Env *P, Map *m, Value key)
+static inline paw_Bool pawH_iter(const Map *m, paw_Int *pi)
 {
-    return pawH_action(P, m, key, MAP_ACTION_NONE);
-}
-
-static inline void pawH_set(paw_Env *P, Map *m, Value key, Value value)
-{
-    *pawH_get(P, m, key) = value;
-}
-
-static inline paw_Bool pawH_iter(const Map *m, paw_Int *itr)
-{
-    for (++*itr; *itr < paw_cast_int(m->capacity); ++*itr) {
-        const MapMeta *mm = pawH_meta(m, *itr);
+    for (++*pi; *pi < paw_cast_int(m->capacity); ++*pi) {
+        const MapMeta *mm = pawH_meta(m, *pi);
         if (mm->state == MAP_ITEM_OCCUPIED) {
             return PAW_TRUE;
         }

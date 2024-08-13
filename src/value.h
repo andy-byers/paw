@@ -331,7 +331,7 @@ typedef enum MapState {
 } MapState;
 
 typedef struct MapMeta {
-    MapState state : 2;
+    uint8_t state : 2;
 } MapMeta;
 
 typedef struct Map {

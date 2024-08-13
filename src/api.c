@@ -20,8 +20,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <gc.h>
-
 static void *default_alloc(void *ud, void *ptr, size_t old_size, size_t new_size)
 {
     paw_unused(ud);
@@ -65,21 +63,34 @@ static void open_aux(paw_Env *P, void *arg)
     CHECK_GC(P);
 }
 
-paw_Env *paw_open(paw_Alloc alloc, void *ud)
+#define OR_DEFAULT(a, b) ((a) ? (a) : (b))
+
+paw_Env *paw_open(const struct paw_Options *o)
 {
-    alloc = alloc ? alloc : default_alloc;
-    paw_Env *P = alloc(ud, NULL, 0, sizeof *P);
-    if (P == NULL) return NULL;
+    size_t heap_size = OR_DEFAULT(o->heap_size, PAW_HEAP_DEFAULT);
+    heap_size &= ~(PAW_ALIGN - 1); // round down
+    if (heap_size < PAW_HEAP_MIN) return NULL;
+
+    void *ud = OR_DEFAULT(o->ud, NULL);
+    paw_Alloc alloc = OR_DEFAULT(o->alloc, default_alloc);
+    void *heap = OR_DEFAULT(o->heap, alloc(ud, NULL, 0, heap_size));
+    const paw_Bool owns_heap = o->heap == NULL;
+    if (heap == NULL) return NULL;
+    paw_assert(PAW_IS_ALIGNED(heap));
+    const size_t zh = heap_size;
+    void *ph = heap;
+
+    paw_Env *P = heap;
     *P = (paw_Env){
-        .alloc = alloc,
+        .heap_size = heap_size,
+        .alloc = alloc, 
         .ud = ud,
     };
+    heap = BUMP_PTR(heap, PAW_ROUND_UP(sizeof(*P)));
+    heap_size -= PAW_ROUND_UP(sizeof(*P));
 
-    // TODO: let user pass in options. These options should work for programs that
-    //       don't use a huge amount of memory.
-    const size_t heap_size =  8388608 * 2;
-    if (pawZ_init(P, heap_size)) {
-        alloc(ud, P, sizeof(*P), 0);
+    if (pawZ_init(P, heap, heap_size, owns_heap)) {
+        if (owns_heap) alloc(ud, ph, zh, 0);
         return NULL;
     }
     if (pawC_try(P, open_aux, NULL)) {
@@ -96,8 +107,6 @@ void paw_close(paw_Env *P)
     pawE_uninit(P);
     pawS_uninit(P);
     pawZ_uninit(P);
-
-    P->alloc(P->ud, P, sizeof *P, 0);
 }
 
 int paw_find_public(paw_Env *P)
@@ -319,7 +328,7 @@ int paw_call(paw_Env *P, int argc)
 
 int paw_get_count(paw_Env *P)
 {
-    return P->top.p - P->cf->base.p;
+    return CAST(P->top.p - P->cf->base.p, int);
 }
 
 static int upvalue_index(int nup, int index)

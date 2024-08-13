@@ -105,7 +105,7 @@ void pawC_stack_grow(paw_Env *P, int n)
 {
     paw_assert(n > 0);
     paw_assert(P->bound.p >= P->stack.p);
-    const int alloc = CAST_SIZE(P->bound.p - P->stack.p);
+    const int alloc = CAST(P->bound.p - P->stack.p, int);
     pawC_stack_realloc(P, NEXT_ALLOC(alloc, n));
 }
 

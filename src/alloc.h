@@ -4,11 +4,8 @@
 //
 // alloc: Low-level memory allocation routines
 //
-// Uses 2 different heuristics depending on allocation size. For small allocations,
-// we use a slotted allocator that never attempts to merge freelist entries. For 
-// large allocations we use a slightly-modified version of the memsys3 allocator from 
-// SQLite (mem3.c). The large object allocator uses only the hash-based partitioning 
-// scheme, since it expects only large objects.
+// Uses code modified from SQLite's memsys3 allocator, which can be found in 
+// 'src/mem3.c' in the SQLite repository.
 //
 // TODO: Handle expanding the heap: change paw_Alloc to be more like sbrk, since
 //       that is all we really need from the user (an initial 'heap' pointer, and a callback
@@ -23,24 +20,12 @@ struct GcFlag {
     uint8_t value;
 };
 
-#define FAST_BIN_COUNT 64
-
-struct FastBins {
-    struct BinInfo *info[FAST_BIN_COUNT];
-    size_t uninit_size;
-    size_t arena_size;
-    void *uninit;
-    void *arena;
-};
-
-
 struct Heap {
-    struct FastBins bins;
-    struct BlockAllocator *a_block;
+    struct Allocator *a;
     uintptr_t bounds[2];
-    size_t heap_size;
-    void *heap;
     paw_Env *P;
+
+    paw_Bool is_owned;
 
     size_t nflags;
     uint8_t flags[];
@@ -48,10 +33,11 @@ struct Heap {
 
 #define Z_IN_BOUNDS(H, u) ((H)->bounds[0] <= (u) && (u) < (H)->bounds[1])
 
-int pawZ_init(paw_Env *P, size_t heap_size);
+int pawZ_init(paw_Env *P, void *heap, size_t heap_size, paw_Bool is_owned);
 void pawZ_uninit(paw_Env *P);
 
-void *pawZ_alloc(paw_Env *P, void *ptr, size_t old_size, size_t new_size);
+size_t pawZ_sizeof(void *ptr);
+void *pawZ_alloc(paw_Env *P, void *ptr, size_t size);
 
 void pawZ_set_flag(struct Heap *H, uintptr_t ptr);
 void pawZ_clear_flag(struct Heap *H, uintptr_t ptr);

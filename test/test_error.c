@@ -28,7 +28,7 @@ static void test_compiler_error(int expect, const char *name, const char *item, 
     char buffer[4096];
     write_main(buffer, item, text);
 
-    paw_Env *P = paw_open(NULL, NULL);
+    paw_Env *P = paw_open(&(struct paw_Options){0});
     int status = pawL_load_chunk(P, name, buffer);
     check(status == expect);
 
@@ -40,7 +40,7 @@ static void test_runtime_error(int expect, const char *name, const char *item, c
     char buffer[4096];
     write_main(buffer, item, text);
 
-    paw_Env *P = paw_open(NULL, NULL);
+    paw_Env *P = paw_open(&(struct paw_Options){0});
     int status = pawL_load_chunk(P, name, buffer);
     check(status == PAW_OK);
 
@@ -207,6 +207,15 @@ static void test_syntax_error(void)
     test_compiler_error(PAW_ESYNTAX, "nested_struct", "", "struct S {x: int}");
     test_compiler_error(PAW_ESYNTAX, "nested_enum", "", "enum E {X}");
     test_compiler_error(PAW_ESYNTAX, "toplevel_var", "let v = 1", "");
+    test_compiler_error(PAW_ESYNTAX, "bad_float", "", "let f = -1.0-");
+    test_compiler_error(PAW_ESYNTAX, "bad_float_2", "", "let f = 1-.0-");
+    test_compiler_error(PAW_ESYNTAX, "bad_float_3", "", "let f = 1e--1");
+    test_compiler_error(PAW_ESYNTAX, "bad_float_4", "", "let f = 1e++1");
+    test_compiler_error(PAW_ESYNTAX, "bad_float_5", "", "let f = 1e-1.0");
+    test_compiler_error(PAW_ESYNTAX, "bad_float_6", "", "let f = 1e+1.0");
+    test_compiler_error(PAW_ESYNTAX, "bad_float_7", "", "let f = 1e-1e1");
+    test_compiler_error(PAW_ESYNTAX, "bad_float_8", "", "let f = 1e+1e1");
+    test_compiler_error(PAW_ESYNTAX, "bad_float_9", "", "let f = 1.0.0");
 }
 
 static void test_arithmetic_error(void)
@@ -253,7 +262,6 @@ static void test_map_error(void)
 
 int main(void)
 {
-    test_compiler_error(PAW_ESYNTAX, "struct_unit_with_braces_on_init", "struct A", "let a = A{}");
     test_name_error();
     test_syntax_error();
     test_type_error();

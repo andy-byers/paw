@@ -60,7 +60,7 @@ static void add_zeros(paw_Env *P, int n)
 static int current_line(const CallFrame *cf)
 {
     Proto *p = cf->fn->p;
-    const int pc = CAST(cf->pc - p->source, int);
+    const int pc = CAST(cf->pc - p->source - 1, int);
 
     int i = 0;
     for (; i < p->nlines - 1; ++i) {
@@ -695,7 +695,7 @@ static void other_binop(paw_Env *P, BinaryOp binop, paw_Type t, Value x,
             v_set_bool(pv, pawV_vec_contains(P, v_vector(y), x));
         } else {
             paw_assert(t == PAW_TMAP);
-            v_set_bool(pv, pawH_contains(P, v_map(y), x));
+            v_set_bool(pv, pawH_contains(v_map(y), x));
         }
         vm_pop(1);
     } else if (t == PAW_TSTRING) {
@@ -803,7 +803,7 @@ static void getitem_vector(paw_Env *P, Vector *vector, paw_Int index)
 
 static int getitem_map(paw_Env *P, Map *map, Value key)
 {
-    const Value *pv = pawH_get(P, map, key);
+    const Value *pv = pawH_get(map, key);
     if (pv) {
         *vm_top(2) = *pv;
         vm_pop(1);

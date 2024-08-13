@@ -4,14 +4,10 @@
 #include "mem.h"
 #include "alloc.h"
 #include "gc.h"
-#include <assert.h>
-#include <limits.h>
-#include <stdlib.h>
-#include <string.h>
 
-static void *first_try(paw_Env *P, void *ptr, size_t size0, size_t size)
+static void *first_try(paw_Env *P, void *ptr, size_t size)
 {
-//#if PAW_STRESS > 0
+#if PAW_STRESS > 0
     if (size > 0 && !P->gc_noem) {
         // Fail on the first attempt to get more memory, but only if the
         // runtime is allowed to perform emergency collections. Otherwise,
@@ -20,14 +16,14 @@ static void *first_try(paw_Env *P, void *ptr, size_t size0, size_t size)
         // not allowed.
         return NULL;
     }
-//#endif
-    return pawZ_alloc(P, ptr, size0, size);
+#endif
+    return pawZ_alloc(P, ptr, size);
 }
 
-static void *try_again(paw_Env *P, void *ptr, size_t size0, size_t size)
+static void *try_again(paw_Env *P, void *ptr, size_t size)
 {
     pawG_collect(P); // emergency collection
-    return pawZ_alloc(P, ptr, size0, size);
+    return pawZ_alloc(P, ptr, size);
 }
 
 static void *m_alloc(paw_Env *P, void *ptr, size_t size0, size_t size)
@@ -35,13 +31,13 @@ static void *m_alloc(paw_Env *P, void *ptr, size_t size0, size_t size)
     if (size == 0) {
         if (ptr == NULL) return NULL;
         P->gc_bytes -= size0; // 'free' never fails
-        return pawZ_alloc(P, ptr, size0, 0);
+        return pawZ_alloc(P, ptr, 0);
     }
     // (re)allocate memory
-    void *ptr2 = first_try(P, ptr, size0, size);
+    void *ptr2 = first_try(P, ptr, size);
     if (ptr2 == NULL && !P->gc_noem) {
         // run an emergency collection and try again
-        ptr2 = try_again(P, ptr, size0, size);
+        ptr2 = try_again(P, ptr, size);
     }
     if (ptr2 != NULL) {
         P->gc_bytes += size - size0;

@@ -1,0 +1,45 @@
+// Translated from https://github.com/attractivechaos/plb2/blob/master/src/lua/matmul.lua
+
+fn matgen(n: int) -> [[float]] {
+	let tmp = 1.0 / 
+              n as float / 
+              n as float
+	let a = []
+	for i = 0, n {
+        _vector_push(a, [])
+		for j = 0, n {
+            let x = tmp * 
+                    (i - j) as float * 
+                    (i + j - 2) as float
+            _vector_push(a[i], x)
+		}
+	}
+	return a
+}
+
+fn matmul(n: int, a: [[float]], b: [[float]]) -> [[float]] {
+	let c = []
+	for i = 1, n {
+		let ci = []
+		for j = 0, n { 
+            _vector_push(ci, 0.0)
+        }
+		for k = 0, n {
+            let t = a[i][k]
+            let bk = b[k]
+			for j = 0, n {
+				ci[j] = ci[j] + t * bk[j]
+			}
+		}
+        _vector_push(c, ci)
+	}
+	return c
+}
+
+pub fn main(args: [str]) {
+    let n = 100
+    let a = matgen(n)
+    let b = matgen(n)
+    let c = matmul(n, a, b)
+    let r = (c[n / 2][n / 2])
+}

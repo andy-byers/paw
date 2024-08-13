@@ -57,6 +57,7 @@ static void rehash_map(Map old_m, Map *m)
     const size_t count = m->length;
     m->length = 0;
     for (size_t i = 0; m->length < count; ++i) {
+        paw_assert(i < old_m.capacity);
         if (mm[i].state == MAP_ITEM_OCCUPIED) {
             add_item(m, ks[i], vs[i]);
         }
@@ -141,7 +142,7 @@ paw_Bool pawH_equals(paw_Env *P, Map *lhs, Map *rhs)
     }
     MapCursor mc = {lhs, 0};
     while (mc.index < lhs->capacity) {
-        Value *v = pawH_action(P, rhs, *h_cursor_key(&mc), MAP_ACTION_NONE);
+        Value *v = pawH_get(rhs, *h_cursor_key(&mc));
         if (v == NULL || !items_equal(*h_cursor_value(&mc), *v)) {
             return PAW_FALSE;
         }
@@ -156,7 +157,7 @@ void pawH_extend(paw_Env *P, Map *dst, Map *src)
     while (mc.index < src->capacity) {
         if (h_get_state(&mc) != MAP_ITEM_OCCUPIED) {
             const Value key = *h_cursor_key(&mc);
-            Value *value = pawH_action(P, dst, key, MAP_ACTION_CREATE);
+            Value *value = pawH_create(P, dst, key);
             *value = *h_cursor_value(&mc);
         }
         ++mc.index;

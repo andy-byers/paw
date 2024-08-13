@@ -45,89 +45,6 @@ int pawL_check_varargc(paw_Env *P, int min, int max)
     return narg;
 }
 
-// static void try_aux(paw_Env *P, void *arg)
-//{
-//      const int argc = *CAST(arg, int *);
-//      const Value f = CF_BASE(1);
-//      pawC_call(P, v_object(f), argc - 1);
-//  }
-//
-// static int base_try(paw_Env *P)
-//{
-//      int argc = pawL_check_varargc(P, 1, UINT8_MAX);
-//      const int status = pawC_try(P, try_aux, &argc);
-//      paw_push_int(P, status);
-//      return 1;
-//  }
-//
-//  static int base_require(paw_Env *P)
-//{
-//      pawL_check_argc(P, 1);
-//      const char *name = pawL_check_string(P, 1);
-//      pawL_require_lib(P, name);
-//      return 1;
-//  }
-//
-//  #de f in e  make_to_bool(suffix, T) \
-//    static int base_to_bool_ ## suffix(paw_Env *P) \
-//    { \
-//        pawL_check_argc(P, 1); \
-//        pawR_to_bool(P, T); \
-//        return 1; \
-//    }
-//  make_to_bool(s, PAW_TSTRING)
-//  make_to_bool(i, PAW_TINT)
-//  make_to_bool(f, PAW_TFLOAT)
-//
-//  #de f in e  make_to_int(suffix, T) \
-//    static int base_to_int_ ## suffix(paw_Env *P) \
-//    { \
-//        pawL_check_argc(P, 1); \
-//        pawR_to_int(P, T); \
-//        return 1; \
-//    }
-//  make_to_int(s, PAW_TSTRING)
-//  make_to_int(i, PAW_TINT)
-//  make_to_int(f, PAW_TFLOAT)
-//
-//  #de f in e  make_to_float(suffix, T) \
-//    static int base_to_float_ ## suffix(paw_Env *P) \
-//    { \
-//        pawL_check_argc(P, 1); \
-//        pawR_to_float(P, T); \
-//        return 1; \
-//    }
-//  make_to_float(s, PAW_TSTRING)
-//  make_to_float(i, PAW_TINT)
-//  make_to_float(f, PAW_TFLOAT)
-//
-//  static int base_chr(paw_Env *P)
-//{
-//      pawL_check_argc(P, 1);
-//      const paw_Int ord = pawL_check_int(P, 1);
-//      if (0x00 <= ord && ord <= 0xFF) {
-//          const uint8_t chr[] = {ord};
-//          paw_push_nstring(P, (const char *)chr, 1);
-//      } else {
-//          // TODO: Encode UTF-8 codepoint
-//          pawR_error(P, PAW_EOVERFLOW, "FIXME: Support UTF-8!");
-//      }
-//      return 1;
-//  }
-//
-//  static int base_ord(paw_Env *P)
-//{
-//      pawL_check_argc(P, 1);
-//      const char *str = pawL_check_string(P, 1);
-//      const size_t len = paw_length(P, 1);
-//      if (!len || len > 4) {
-//          pawR_error(P, PAW_EVALUE, "invalid UTF-8");
-//      }
-//      // TODO: Decode UTF-8 codepoint
-//      paw_push_int(P, str[0]);
-//      return 1;
-//  }
-
 static int base_assert(paw_Env *P)
 {
     if (v_false(CF_BASE(1))) {
@@ -143,61 +60,6 @@ static int base_print(paw_Env *P)
     fflush(stdout);
     return 0;
 }
-
-// struct ReaderState {
-//     const char *data;
-//     size_t size;
-// };
-//
-// static const char *reader(paw_Env *P, void *ud, size_t *size)
-//{
-//     paw_unused(P);
-//     struct ReaderState *ld = ud;
-//
-//     // Return the whole string.
-//     *size = ld->size;
-//     ld->size = 0;
-//     return ld->data;
-// }
-//
-// static int base_load(paw_Env *P)
-//{
-//     // load() takes a single parameter: a string containing source code.
-//     pawL_check_argc(P, 1);
-//     pawL_check_type(P, 1, PAW_TSTRING);
-//
-//     struct ReaderState state = {
-//         .data = paw_string(P, 1),
-//         .size = paw_length(P, 1),
-//     };
-//     // Load the code and leave it in a closure object on the stack.
-//     const int status = paw_load(P, reader, "", &state);
-//     if (status != PAW_OK) {
-//         // Rethrow the error. The error message is already on the stack.
-//         pawC_throw(P, status);
-//     }
-//     return 1;
-// }
-//
-// static int base_getattr(paw_Env *P)
-//{
-//     const int argc = pawL_check_varargc(P, 2, 3);
-//     const paw_Bool fallback = argc == 3;
-//     if (fallback) {
-//         paw_rotate(P, -3, 1);
-//     }
-//     if (pawR_getattr_raw(P, fallback)) {
-//         pawR_attr_error(P, P->top.p[-1]);
-//     }
-//     return 1;
-// }
-//
-// static int base_setattr(paw_Env *P)
-//{
-//     pawL_check_argc(P, 3);
-//     pawR_setattr(P);
-//     return 0;
-// }
 
 static int vector_insert(paw_Env *P)
 {
@@ -229,8 +91,7 @@ static int vector_pop(paw_Env *P)
 static paw_Int clamped_index(paw_Env *P, int loc, paw_Int n)
 {
     const paw_Int i = v_int(CF_BASE(loc));
-    return i < 0 ? 0 : i >= n ? n - 1
-                              : i;
+    return i < 0 ? 0 : i >= n ? n - 1 : i;
 }
 
 // TODO: It would be nice to let pop() take an optional parameter indicating the
@@ -259,25 +120,14 @@ static int vector_clone(paw_Env *P)
     return 1;
 }
 
-// static String *check_string(paw_Env *P, int i)
-//{
-//     const Value v = CF_BASE(i);
-//     if (v_type(v) != VSTRING) {
-//         pawR_error(P, PAW_ETYPE, "expected string");
-//     }
-//     return v_string(v);
-// }
-
-static const char *find_substr(const char *str, size_t nstr, const char *sub,
-                               size_t nsub)
+static const char *find_substr(const char *str, size_t nstr, const char *sub, size_t nsub)
 {
-    if (nsub == 0) {
-        return str;
-    }
+    if (nsub == 0) return str;
     const char *ptr = str;
     const char *end = str + nstr;
     while ((ptr = strchr(ptr, sub[0]))) {
-        if (nsub <= CAST_SIZE(end - ptr) && 0 == memcmp(ptr, sub, nsub)) {
+        if (nsub <= CAST_SIZE(end - ptr) && 
+                0 == memcmp(ptr, sub, nsub)) {
             return ptr;
         }
         str = ptr + nsub;
@@ -287,11 +137,12 @@ static const char *find_substr(const char *str, size_t nstr, const char *sub,
 
 static int string_find(paw_Env *P)
 {
-    pawL_check_argc(P, 1);
-    const String *s = v_string(CF_BASE(0));
-    const String *find = v_string(CF_BASE(1));
-    const char *result =
-        find_substr(s->text, s->length, find->text, find->length);
+    pawL_check_argc(P, 2);
+    const String *s = v_string(CF_BASE(1));
+    const String *find = v_string(CF_BASE(2));
+    const char *result = find_substr(
+            s->text, s->length, 
+            find->text, find->length);
     if (result) { // index of substring
         v_set_int(P->top.p - 1, result - s->text);
     } else { // not found
@@ -300,77 +151,76 @@ static int string_find(paw_Env *P)
     return 1;
 }
 
-//// TODO: Remove '/*TODO*/+1', these should be methods, which take the
-////       context as the implicit first parameter
-// static int string_split(paw_Env *P)
-//{
-//     pawL_check_argc(P, 1);
-//     const String *sep = v_string(CF_BASE(1));
-//     String *s = v_string(CF_BASE(0));
-//     if (sep->length == 0) {
-//         pawR_error(P, PAW_EVALUE, "empty separator");
-//     }
-//
-//     paw_Int npart = 0;
-//     const char *part;
-//     size_t nstr = s->length;
-//     const char *pstr = s->text;
-//     while ((part = find_substr(pstr, nstr, sep->text, sep->length))) {
-//         const size_t n = CAST_SIZE(part - pstr);
-//         pawC_pushns(P, pstr, n);
-//         part += sep->length; // skip separator
-//         pstr = part;
-//         nstr -= n;
-//         ++npart;
-//     }
-//     const char *end = s->text + s->length; // add the rest
-//     pawC_pushns(P, pstr, CAST_SIZE(end - pstr));
-//     ++npart;
-//
-//     pawR_literal_array(P, npart);
-//     return 1;
-// }
-//
-// static int string_join(paw_Env *P)
-//{
-//     pawL_check_argc(P, 1);
-//     const Value seq = CF_BASE(1);
-//     String *s = v_string(CF_BASE(0));
-//
-//     Buffer buf;
-//     pawL_init_buffer(P, &buf);
-//     paw_Int itr = PAW_ITER_INIT;
-//     Vector *a = v_vector(seq);
-//     while (pawA_iter(a, &itr)) {
-//         const Value v = a->begin[itr];
-//         // Add a chunk, followed by the separator if necessary.
-//         const String *chunk = v_string(v);
-//         pawL_add_nstring(P, &buf, chunk->text, chunk->length);
-//         if (CAST_SIZE(itr + 1) < pawA_length(a)) {
-//             pawL_add_nstring(P, &buf, s->text, s->length);
-//         }
-//     }
-//     pawL_push_result(P, &buf);
-//     return 1;
-// }
+// TODO: These should be methods, which take the context as the implicit first parameter
+static int string_split(paw_Env *P)
+{
+     pawL_check_argc(P, 2);
+     const String *sep = v_string(CF_BASE(2));
+     String *s = v_string(CF_BASE(1));
+     if (sep->length == 0) {
+         pawR_error(P, PAW_EVALUE, "empty separator");
+     }
+
+     paw_Int npart = 0;
+     const char *part;
+     size_t nstr = s->length;
+     const char *pstr = s->text;
+     while ((part = find_substr(pstr, nstr, sep->text, sep->length))) {
+         const size_t n = CAST_SIZE(part - pstr);
+         pawC_pushns(P, pstr, n);
+         part += sep->length; // skip separator
+         pstr = part;
+         nstr -= n;
+         ++npart;
+     }
+     const char *end = s->text + s->length; // add the rest
+     pawC_pushns(P, pstr, CAST_SIZE(end - pstr));
+     ++npart;
+
+     pawR_literal_vector(P, npart);
+     return 1;
+ }
+
+static int string_join(paw_Env *P)
+{
+     pawL_check_argc(P, 2);
+     String *s = v_string(CF_BASE(1));
+     const Value seq = CF_BASE(2);
+
+     Buffer buf;
+     pawL_init_buffer(P, &buf);
+     paw_Int itr = PAW_ITER_INIT;
+     Vector *a = v_vector(seq);
+     while (pawV_vec_iter(a, &itr)) {
+         const Value v = a->begin[itr];
+         // Add a chunk, followed by the separator if necessary.
+         const String *chunk = v_string(v);
+         pawL_add_nstring(P, &buf, chunk->text, chunk->length);
+         if (CAST_SIZE(itr + 1) < pawV_vec_length(a)) {
+             pawL_add_nstring(P, &buf, s->text, s->length);
+         }
+     }
+     pawL_push_result(P, &buf);
+     return 1;
+ }
 
 static int string_starts_with(paw_Env *P)
 {
-    pawL_check_argc(P, 1);
-    String *s = v_string(CF_BASE(0));
-    const String *prefix = v_string(CF_BASE(1));
+    pawL_check_argc(P, 2);
+    String *s = v_string(CF_BASE(1));
+    const String *prefix = v_string(CF_BASE(2));
     const size_t prelen = prefix->length;
-    const paw_Bool b =
-        s->length >= prelen && 0 == memcmp(prefix->text, s->text, prelen);
+    const paw_Bool b = s->length >= prelen && 
+        0 == memcmp(prefix->text, s->text, prelen);
     v_set_bool(P->top.p - 1, b);
     return 1;
 }
 
 static int string_ends_with(paw_Env *P)
 {
-    pawL_check_argc(P, 1);
-    String *s = v_string(CF_BASE(0));
-    const String *suffix = v_string(CF_BASE(1));
+    pawL_check_argc(P, 2);
+    String *s = v_string(CF_BASE(1));
+    const String *suffix = v_string(CF_BASE(2));
     const size_t suflen = suffix->length;
     paw_Bool b = PAW_FALSE;
     if (s->length >= suflen) {
@@ -381,20 +231,17 @@ static int string_ends_with(paw_Env *P)
     return 1;
 }
 
-static int string_clone(paw_Env *P)
+static int int_to_string(paw_Env *P)
 {
-    // Leave the string receiver on top of the stack. The copy of the string
-    // into this function's receiver slot serves as the clone. Strings are
-    // immutable: and have copy-on-write sematics.
-    paw_unused(P);
+    pawR_to_string(P, PAW_TINT, NULL);
     return 1;
 }
 
 static int map_get(paw_Env *P)
 {
-    const Value key = CF_BASE(1 /*TODO*/ + 1);
-    Map *m = v_map(CF_BASE(0 /*TODO*/ + 1));
-    const Value *pv = pawH_get(P, m, key);
+    Map *m = v_map(CF_BASE(1));
+    const Value key = CF_BASE(2);
+    const Value *pv = pawH_get(m, key);
     if (pv != NULL) {
         // replace default value
         P->top.p[-1] = *pv;
@@ -404,14 +251,16 @@ static int map_get(paw_Env *P)
 
 static int map_erase(paw_Env *P)
 {
-    Map *m = v_map(CF_BASE(0 /*TODO*/ + 1));
-    pawH_remove(P, m, CF_BASE(1 /*TODO*/ + 1));
+    pawL_check_argc(P, 2);
+    Map *m = v_map(CF_BASE(1));
+    pawH_erase(m, CF_BASE(2));
     return 0;
 }
 
 static int map_clone(paw_Env *P)
 {
-    Map *m = v_map(CF_BASE(0 /*TODO*/ + 1));
+    pawL_check_argc(P, 1);
+    Map *m = v_map(CF_BASE(1));
     Value *pv = pawC_push0(P);
     pawH_clone(P, pv, m);
     return 1;
@@ -450,6 +299,11 @@ void pawL_init(paw_Env *P)
     add_builtin_func(P, "print", base_print); // fn print(string)
 
     // TODO: Replace with real methods
+    add_builtin_func(P, "_string_starts_with", string_starts_with);
+    add_builtin_func(P, "_string_ends_with", string_ends_with);
+    add_builtin_func(P, "_string_find", string_find);
+    add_builtin_func(P, "_string_split", string_split);
+    add_builtin_func(P, "_string_join", string_join);
     add_builtin_func(P, "_vector_push", vector_push);
     add_builtin_func(P, "_vector_pop", vector_pop);
     add_builtin_func(P, "_vector_insert", vector_insert);
@@ -468,10 +322,9 @@ static paw_Bool load_cached(paw_Env *P, const char *name)
     paw_push_string(P, name);
     const Value key = P->top.p[-1];
 
-    Value *pvalue = pawH_get(P, P->libs, key);
-    if (!pvalue) {
-        return PAW_FALSE;
-    }
+    Value *pvalue = pawH_get(P->libs, key);
+    if (pvalue == NULL) return PAW_FALSE;
+
     // replace library name
     pawC_pushv(P, *pvalue);
     paw_shift(P, 1);

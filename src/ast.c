@@ -39,7 +39,7 @@ void pawAst_free(struct Ast *ast)
     struct T *pawAst_new_##name(struct Ast *ast, enum T##Kind kind)              \
     {                                                                            \
         struct T *r = pawK_pool_alloc(ENV(ast), &(ast)->pool, sizeof(struct T)); \
-        r->hdr.line = (ast)->lex->line;                                          \
+        r->hdr.line = (ast)->lex->last_line;                                     \
         r->hdr.kind = kind;                                                      \
         return r;                                                                \
     }

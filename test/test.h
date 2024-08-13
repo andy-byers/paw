@@ -9,10 +9,12 @@
     X(primitive) \
     X(function) \
     X(closure) \
+    X(string) \
     X(struct) \
     X(tuple) \
     X(enum) \
     X(vector) \
+    X(map) \
     X(poly_function) \
     X(poly_struct) \
     X(poly_enum)
@@ -47,7 +49,7 @@ struct TestReader {
 void *test_alloc(void *ud, void *ptr, size_t size0, size_t size);
 const char *test_reader(paw_Env *X, void *ud, size_t *size);
 
-paw_Env *test_open(paw_Alloc alloc, struct TestAlloc *state);
+paw_Env *test_open(paw_Alloc alloc, struct TestAlloc *state, size_t heap_size);
 void test_close(paw_Env *P, struct TestAlloc *a);
 int test_open_file(paw_Env *P, const char *pathname);
 int test_open_string(paw_Env *P, const char *source);

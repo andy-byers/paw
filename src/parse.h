@@ -71,6 +71,7 @@ struct FuncState {
     int nproto; // number of nested functions
     int nlines; // number of source lines
     int pc; // number of instructions
+    int line;        
     enum FuncKind kind; // type of function
 };
 

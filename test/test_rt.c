@@ -8,7 +8,7 @@
 
 void run_tests(const char *name, struct TestAlloc *a)
 {
-    paw_Env *P = test_open(test_alloc, a);
+    paw_Env *P = test_open(test_alloc, a, 0);
     check(PAW_OK == test_open_file(P, name));
     
     struct GlobalVec *gvec = &P->gv;

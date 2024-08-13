@@ -9,7 +9,7 @@
 static void driver(void (*test_callback)(paw_Env *P))
 {
     struct TestAlloc a = {0};
-    paw_Env *P = test_open(test_alloc, &a);
+    paw_Env *P = test_open(test_alloc, &a, 1024 * 1024 * 8);
     test_callback(P);
     test_close(P, &a);
 }
@@ -19,10 +19,20 @@ static void open_and_close(paw_Env *P)
     paw_unused(P);
 }
 
+static void test_utils(void)
+{
+    for (size_t i = 1; i < PAW_ALIGN; ++i) {
+        check(PAW_ROUND_UP(i) == PAW_ALIGN);
+    }
+    check(PAW_ROUND_UP(PAW_ALIGN) == PAW_ALIGN);
+    check(PAW_ROUND_UP(PAW_ALIGN + 1) == 2 * PAW_ALIGN);
+    check(PAW_ROUND_UP(PAW_ALIGN * 2 + 1) == 3 * PAW_ALIGN);
+}
+
 static void alloc_and_free(paw_Env *P, size_t size)
 {
-    void *ptr = pawZ_alloc(P, NULL, 0, size);
-    pawZ_alloc(P, ptr, size, 0);
+    void *ptr = pawZ_alloc(P, NULL, size);
+    pawZ_alloc(P, ptr, 0);
 }
 
 #define MAX_DEFER 32768
@@ -48,7 +58,7 @@ static void check_defer_data(const void *ptr, size_t size)
 static void alloc_and_defer(paw_Env *P, size_t size)
 {
     check(s_ndefer < MAX_DEFER);
-    void *ptr = pawZ_alloc(P, NULL, 0, size);
+    void *ptr = pawZ_alloc(P, NULL, size);
     const int index = s_ndefer++;
     s_defer[index] = (struct DeferredAlloc){
         .size = size,
@@ -62,7 +72,7 @@ static void free_deferred_ptrs(paw_Env *P)
     while (s_ndefer > 0) {
         struct DeferredAlloc defer = s_defer[--s_ndefer];
         check_defer_data(defer.ptr, defer.size);
-        pawZ_alloc(P, defer.ptr, defer.size, 0);
+        pawZ_alloc(P, defer.ptr, 0);
     }
 }
 
@@ -105,9 +115,6 @@ static void test_lots_of_allocations(paw_Env *P)
         alloc_pattern(P, CAST_SIZE(rand() % 100 + 1));
     }
     for (size_t i = 0; i < 100; ++i) {
-        if(i==18){
-        
-        }
         alloc_pattern(P, CAST_SIZE(rand() % 10000 + 1));
     }
     free_deferred_ptrs(P);
@@ -115,7 +122,8 @@ static void test_lots_of_allocations(paw_Env *P)
 
 int main(void)
 {
-//    driver(open_and_close);
-//    driver(test_small_allocations);
+    test_utils();
+    driver(open_and_close);
+    driver(test_small_allocations);
     driver(test_lots_of_allocations);
 }

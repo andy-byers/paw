@@ -15,7 +15,7 @@ static void add_line(struct FuncState *fs)
     }
     pawM_grow(P, p->lines, fs->nlines, p->nlines);
     p->lines[fs->nlines++] = (struct LineInfo){
-        .line = -1, // TODO: Get line from somewhere...
+        .line = fs->line,
         .pc = fs->pc,
     };
 }

@@ -29,7 +29,7 @@ paw_Type pawP_type2code(struct Compiler *C, struct HirType *type)
 String *pawP_scan_nstring(paw_Env *P, Map *st, const char *s, size_t n)
 {
     const Value *pv = pawC_pushns(P, s, n);
-    Value *value = pawH_action(P, st, *pv, MAP_ACTION_CREATE);
+    Value *value = pawH_create(P, st, *pv);
     *value = *pv; // anchor in map
     pawC_pop(P);
     CHECK_GC(P);

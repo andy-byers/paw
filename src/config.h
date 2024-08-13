@@ -26,6 +26,14 @@
 # define PAW_STACK_MAX 1000000
 #endif
 
+#ifndef PAW_HEAP_DEFAULT
+# define PAW_HEAP_DEFAULT ((size_t)16777216)
+#endif
+
+#ifndef PAW_HEAP_MIN
+# define PAW_HEAP_MIN ((size_t)16384)
+#endif
+
 #if defined(__APPLE__)
 # define PAW_OS_MACOS
 # define PAW_OS_POSIX

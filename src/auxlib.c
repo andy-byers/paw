@@ -91,7 +91,7 @@ void pawL_add_value(paw_Env *P, Buffer *buf, paw_Type type)
 // Table and stringify algorithm modified from micropython
 static const uint8_t kLogBase2[] = {
     0, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 4,
-    4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, //
+    4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5,
 };
 
 size_t pawL_integer_format_size(size_t nbits, int base)

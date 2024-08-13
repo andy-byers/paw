@@ -1,6 +1,6 @@
 // map.paw
 
-{
+pub fn test_getters() {
     let map = [
         1: 'abc',
         2: 'def',
@@ -10,16 +10,20 @@
     assert(map[2] == 'def')
     assert(map[3] == 'ghi')
 }
-{
+
+pub fn test_empty_maps_with_annotations() {
     let map: [bool: int] = [:]
-    let map: [float: string] = [:]
-    let map: [string: bool] = [:]
+    let map: [float: str] = [:]
+    let map: [str: bool] = [:]
 }
-{
+
+fn call(map: [int: int]) {}
+fn call2(map: [int: [int: int]]) {}
+
+pub fn test_inference() {
     let map = [1: [2, 3]] // [int: [int]]
     let map = [1: [2: 3]] // [int: [int: int]]
-}
-{
+
     let map = [1: [2: 3], 4: [:], 5: [:]]
     let map = [1: [:], 2: [3: 4], 5: [:]]
     let map = [1: [:], 2: [:], 3: [4: 5]]
@@ -32,8 +36,7 @@
 
     let map: [int: [int]] = [1: [2, 3]]
     let map: [int: [int: int]] = [1: [2: 3]]
-}
-{
+
     let map = [:]
     map = [0: 0]
     
@@ -45,13 +48,11 @@
     map = [:]
     map = [0: 0]
 
-    fn test(map: [int: int]) {}
     let a = [:]
-    test(a)
+    call(a)
 
-    fn test(map: [int: [int: int]]) {}
     let a = [0: [:]]
-    test(a)
+    call2(a)
 
     let a = [:]
     let b = a

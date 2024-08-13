@@ -155,9 +155,13 @@ static const char *test_pathname(const char *name)
     return s_buf;
 }
 
-paw_Env *test_open(paw_Alloc alloc, struct TestAlloc *state)
+paw_Env *test_open(paw_Alloc alloc, struct TestAlloc *state, size_t heap_size)
 {
-    return paw_open(alloc ? alloc : test_alloc, state);
+    return paw_open(&(struct paw_Options){
+                .heap_size = heap_size,
+                .alloc = alloc,
+                .ud = state,
+            });
 }
 
 void test_close(paw_Env *P, struct TestAlloc *a)
@@ -178,7 +182,6 @@ static void check_ok(paw_Env *P, int status)
     }
 }
 
-#include "debug.h"
 int test_open_file(paw_Env *P, const char *name)
 {
     const char *pathname = test_pathname(name);
@@ -217,7 +220,7 @@ void test_recover(paw_Env *P, paw_Bool fatal)
 
 void test_script(const char *name, struct TestAlloc *a)
 {
-    paw_Env *P = test_open(test_alloc, a);
+    paw_Env *P = test_open(test_alloc, a, 0);
     check_ok(P, test_open_file(P, name));
     check_ok(P, paw_call(P, 0));
     test_close(P, a);

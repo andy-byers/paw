@@ -70,18 +70,18 @@ static void map_free(paw_Env *P, Map *map)
     pawC_pop(P);
 }
 
-static paw_Int map_get(paw_Env *P, Map *map, paw_Int k)
+static paw_Int map_get(Map *map, paw_Int k)
 {
     const Value key = {.i = k};
-    const Value *pvalue = pawH_get(P, map, key);
+    const Value *pvalue = pawH_get(map, key);
     paw_assert(pvalue != NULL);
     return pvalue->i;
 }
 
-static const paw_Int *map_try(paw_Env *P, Map *map, paw_Int k)
+static const paw_Int *map_try(Map *map, paw_Int k)
 {
     const Value key = {.i = k};
-    const Value *pvalue = pawH_get(P, map, key);
+    const Value *pvalue = pawH_get(map, key);
     return pvalue ? &pvalue->i : NULL;
 }
 
@@ -92,28 +92,10 @@ static void map_put(paw_Env *P, Map *map, paw_Int k, paw_Int v)
     pawH_insert(P, map, key, value);
 }
 
-static void map_del(paw_Env *P, Map *map, paw_Int k)
+static void map_del(Map *map, paw_Int k)
 {
     const Value key = {.i = k};
-    pawH_remove(P, map, key);
-}
-
-static void dump_map(Map *m)
-{
-    printf("Map{\n");
-    for (size_t i = 0; i < m->capacity; ++i) {
-        const MapMeta *mm = pawH_meta(m, i);
-        printf("    %.4zu: ", i);
-        if (mm->state == MAP_ITEM_OCCUPIED) {
-            printf("%" PRId64 ": %" PRId64 "\n",
-                   pawH_key(m, i)->i, pawH_value(m, i)->i);
-        } else if (mm->state == MAP_ITEM_ERASED) {
-            printf("<erased>\n");
-        } else if (mm->state == MAP_ITEM_VACANT) {
-            printf("<vacant>\n");
-        }
-    }
-    printf("}\n");
+    pawH_erase(map, key);
 }
 
 static void test_map1(paw_Env *P)
@@ -122,9 +104,9 @@ static void test_map1(paw_Env *P)
     map_put(P, m, 1, 1);
     map_put(P, m, 2, 2);
     map_put(P, m, 3, 3);
-    check(1 == map_get(P, m, 1));
-    check(2 == map_get(P, m, 2));
-    check(3 == map_get(P, m, 3));
+    check(1 == map_get(m, 1));
+    check(2 == map_get(m, 2));
+    check(3 == map_get(m, 3));
     map_free(P, m);
 }
 
@@ -138,17 +120,17 @@ static void test_map2(paw_Env *P)
     map_put(P, m, 5, 5);
     map_put(P, m, 6, 6);
 
-    map_del(P, m, 1);
-    map_del(P, m, 2);
-    map_del(P, m, 4);
-    map_del(P, m, 5);
+    map_del(m, 1);
+    map_del(m, 2);
+    map_del(m, 4);
+    map_del(m, 5);
 
-    check(NULL == map_try(P, m, 1));
-    check(NULL == map_try(P, m, 2));
-    check(3 == map_get(P, m, 3));
-    check(NULL == map_try(P, m, 4));
-    check(NULL == map_try(P, m, 5));
-    check(6 == map_get(P, m, 6));
+    check(NULL == map_try(m, 1));
+    check(NULL == map_try(m, 2));
+    check(3 == map_get(m, 3));
+    check(NULL == map_try(m, 4));
+    check(NULL == map_try(m, 5));
+    check(6 == map_get(m, 6));
     map_free(P, m);
 }
 
@@ -165,11 +147,9 @@ static void test_map3(paw_Env *P)
     check(CAST_SIZE(paw_length(P, -1)) == paw_countof(known));
 
     // Fill the map with nonnegative integers (may have repeats).
-    paw_Int integers[N];
     for (int i = 0; i < N; ++i) {
         const paw_Int ival = test_randint(0, 10000);
         map_put(P, m, ival, ival);
-        integers[i] = ival;
     }
 
     check(CAST_SIZE(paw_length(P, -1)) <= N + paw_countof(known));
@@ -178,16 +158,14 @@ static void test_map3(paw_Env *P)
     paw_Int itr = PAW_ITER_INIT;
     while (pawH_iter(m, &itr)) {
         const Value key = *pawH_key(m, CAST_SIZE(itr));
-        if (v_int(key) >= 0) {
-            map_del(P, m, key.i);
-        }
+        if (v_int(key) >= 0) map_del(m, key.i);
     }
 
     check(CAST_SIZE(pawH_length(m)) <= paw_countof(known));
 
     // Check known items.
     for (size_t i = 0; i < paw_countof(known); ++i) {
-        const paw_Int value = map_get(P, m, known[i]);
+        const paw_Int value = map_get(m, known[i]);
         check(value == known[i]);
     }
 
@@ -232,7 +210,10 @@ static void test_stack(paw_Env *P)
 static void driver(void (*callback)(paw_Env *))
 {
     struct TestAlloc a = {0};
-    paw_Env *P = paw_open(test_alloc, &a);
+    paw_Env *P = paw_open(&(struct paw_Options){
+                .alloc = test_alloc,
+                .ud = &a,
+            });
     callback(P);
     test_close(P, &a);
 }

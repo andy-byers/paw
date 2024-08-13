@@ -15,6 +15,7 @@
 // clang-format off
 #define PROGRAM_OPTIONS \
     OPT_STR(e, src, "execute program passed as string") \
+    OPT_INT(H, log_heap, "log of default heap size in bytes") \
     OPT_OPT(h, "display usage information") \
     OPT_OPT(q, "suppress output") 
 
@@ -151,15 +152,17 @@ static void show_help(void)
 static void handle_error(paw_Env *P, int status)
 {
     if (status != PAW_OK) {
-        error(status, "%s", paw_string(P, -1));
+        error(status, "%s\n", paw_string(P, -1));
     }
 }
 
 #define CHUNKNAME "(chunk)"
 
-static paw_Env *load_source(void)
+static paw_Env *load_source(size_t heap_size)
 {
-    paw_Env *P = paw_open(NULL, NULL);
+    paw_Env *P = paw_open(&(struct paw_Options){
+                .heap_size = heap_size,
+            });
     if (P == NULL) {
         error(PAW_EMEMORY, "not enough memory\n");
     }
@@ -186,7 +189,7 @@ static void setup_stack(paw_Env *P, int argc, const char **argv)
     paw_push_string(P, "main");
     const int pid = paw_find_public(P);
     if (pid < 0) {
-        error(PAW_ERUNTIME, "unable to find entrypoint (public 'main' function)");
+        error(PAW_ERUNTIME, "unable to find entrypoint (public 'main' function)\n");
     }
     paw_push_public(P, pid);
 
@@ -208,7 +211,9 @@ int main(int argc, const char **argv)
         show_help();
         return 0;
     }
-    paw_Env *P = load_source();
+    paw_Env *P = load_source(s_opt.H
+            ? 1 << s_opt.H
+            : 0 /* use default */);
     setup_stack(P, argc, argv);
     call_main(P, argc);
 

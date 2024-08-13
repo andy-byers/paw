@@ -1,90 +1,78 @@
 // string.paw
 
-{
-    assert(!'')
-    assert('s')
-    assert(!!'s')
-
-    assert('str'.clone() == 'str')
-}
-
-{
+pub fn test_starts_with() {
     let str = 'abcdef'
-    assert(str.starts_with('abcdef'))
-    assert(str.starts_with('abcde'))
-    assert(str.starts_with('abc'))
-    assert(str.starts_with('a'))
-    assert(str.starts_with(''))
-    assert(str.ends_with('abcdef'))
-    assert(str.ends_with('bcdef'))
-    assert(str.ends_with('def'))
-    assert(str.ends_with('f'))
-    assert(str.ends_with(''))
-    assert(!str.starts_with('bcdef'))
-    assert(!str.starts_with('abcdf'))
-    assert(!str.starts_with('abd'))
-    assert(!str.starts_with('ac'))
-    assert(!str.ends_with('abcde'))
-    assert(!str.ends_with('acdef'))
-    assert(!str.ends_with('cef'))
-    assert(!str.ends_with('df'))
+    assert(_string_starts_with(str, 'abcdef'))
+    assert(_string_starts_with(str, 'abcde'))
+    assert(_string_starts_with(str, 'abc'))
+    assert(_string_starts_with(str, 'a'))
+    assert(_string_starts_with(str, ''))
+    assert(!_string_starts_with(str, 'bcdef'))
+    assert(!_string_starts_with(str, 'abcdf'))
+    assert(!_string_starts_with(str, 'abd'))
+    assert(!_string_starts_with(str, 'ac'))
 }
 
-//{
-//    let s = 'abc'
-//    assert(s[:] == 'abc')    
-//    assert(s[:null] == 'abc')    
-//    assert(s[null:] == 'abc')    
-//    assert(s[null:null] == 'abc')    
-//    assert(s[0:#s] == 'abc')    
-//
-//    assert(s[:-1] == 'ab')
-//    assert(s[:#s-1] == 'ab')
-//    assert(s[:-2] == 'a')
-//    assert(s[:#s-2] == 'a')
-//    assert(s[:-3] == '')
-//    assert(s[:#s-3] == '')
-//
-//    assert(s[1:] == 'bc')
-//    assert(s[-2:] == 'bc')
-//    assert(s[2:] == 'c')
-//    assert(s[-1:] == 'c')
-//    assert(s[3:] == '')
-//    assert(s[0:0] == '') 
-//
-//    // clamped
-//    assert(s[4:] == '')
-//    assert(s[:-4] == '')
-//}
-//
-//// String find:
-//{
-//    fn check(s: string, sub: string, n: int) {
-//        assert(n == s.find(sub))
-//    }
-//    check('abc', 'a', 0)
-//    check('abc', 'b', 1)
-//    check('abc', 'c', 2)
-//    check('abc', 'd', -1)
-//}
-//
-//// String split/join:
-//{
-//    fn check(s, sep, parts) {
-//        let a = s.split(sep)
-//        for i = 0, #a {
-//            assert(a[i] == parts[i])
-//        }
-//        assert(#a == #parts)
-//        let result = sep.join(a)
-//        assert(result == s);
-//    }
-//    check('abc', 'a', ['', 'bc'])
-//    check('abc', 'b', ['a', 'c'])
-//    check('abc', 'c', ['ab', ''])
-//    check('abc', 'd', ['abc'])
-//
-//    let a = ',a,,b,,,c,,,,d,,,,,e,,,,,,'.split(',')
-//    assert(''.join(a) == 'abcde')
-//}
+pub fn test_ends_with() {
+    let str = 'abcdef'
+    assert(_string_ends_with(str, 'abcdef'))
+    assert(_string_ends_with(str, 'bcdef'))
+    assert(_string_ends_with(str, 'def'))
+    assert(_string_ends_with(str, 'f'))
+    assert(_string_ends_with(str, ''))
+    assert(!_string_ends_with(str, 'abcde'))
+    assert(!_string_ends_with(str, 'acdef'))
+    assert(!_string_ends_with(str, 'cef'))
+    assert(!_string_ends_with(str, 'df'))
+}
+
+pub fn test_slices() {
+    let s = 'abc'
+    assert(s[:] == 'abc')    
+    assert(s[0:#s] == 'abc')    
+
+    assert(s[:-1] == 'ab')
+    assert(s[:#s-1] == 'ab')
+    assert(s[:-2] == 'a')
+    assert(s[:#s-2] == 'a')
+    assert(s[:-3] == '')
+    assert(s[:#s-3] == '')
+
+    assert(s[1:] == 'bc')
+    assert(s[-2:] == 'bc')
+    assert(s[2:] == 'c')
+    assert(s[-1:] == 'c')
+    assert(s[3:] == '')
+    assert(s[0:0] == '') 
+}
+
+pub fn test_find() {
+    let check = |s, sub, n| {
+        assert(n == _string_find(s, sub))
+    }
+    check('abc', 'a', 0)
+    check('abc', 'b', 1)
+    check('abc', 'c', 2)
+    check('abc', 'd', -1)
+}
+
+pub fn test_split_and_join() {
+    let check = |s, sep, parts: [str]| {
+        let a = _string_split(s, sep)
+        for i = 0, #a {
+            assert(a[i] == parts[i])
+        }
+        assert(#a == #parts)
+        let result = _string_join(sep, a)
+        assert(result == s);
+    }
+    check('abc', 'a', ['', 'bc'])
+    check('abc', 'b', ['a', 'c'])
+    check('abc', 'c', ['ab', ''])
+    check('abc', 'd', ['abc'])
+
+    let s = ',a,,b,,,c,,,,d,,,,,e,,,,,,'
+    let a = _string_split(s, ',')
+    assert(_string_join('', a) == 'abcde')
+}
 

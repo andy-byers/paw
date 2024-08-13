@@ -31,7 +31,13 @@ typedef void *(*paw_Alloc)(void *ud, void *ptr, size_t size0, size_t size);
 typedef const char *(*paw_Reader)(paw_Env *P, void *ud, size_t *size);
 typedef int (*paw_Function)(paw_Env *P);
 
-paw_Env *paw_open(paw_Alloc alloc, void *ud);
+struct paw_Options {
+    paw_Alloc alloc;
+    size_t heap_size;
+    void *heap;
+    void *ud;
+};
+paw_Env *paw_open(const struct paw_Options *o);
 void paw_close(paw_Env *P);
 
 paw_Alloc paw_get_allocator(paw_Env *P);

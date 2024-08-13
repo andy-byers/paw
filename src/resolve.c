@@ -2,9 +2,10 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 //
-// check.c: Implementation of the type checker. This code transforms an AST
-// from the parser into a graph by unifying types based on lexical scope.
+// resolve.c: Implementation of the type checker. This code transforms an AST
+// from the parser into a type-annotated HIR tree.
 
+#include "resolve.h"
 #include "ast.h"
 #include "code.h"
 #include "compile.h"
@@ -15,14 +16,13 @@
 #include "map.h"
 #include "mem.h"
 #include "parse.h"
-#include "resolve.h"
 #include "str.h"
 #include "type.h"
 #include "unify.h"
 
-#define NAME_ERROR(R, line, ...) pawE_error(ENV(R), PAW_ENAME, line, __VA_ARGS__)
-#define SYNTAX_ERROR(R, ...) pawE_error(ENV(R), PAW_ESYNTAX, -1, __VA_ARGS__)
-#define TYPE_ERROR(R, ...) pawE_error(ENV(R), PAW_ETYPE, -1, __VA_ARGS__)
+#define NAME_ERROR(R, ...) pawE_error(ENV(R), PAW_ENAME, (R)->line, __VA_ARGS__)
+#define SYNTAX_ERROR(R, ...) pawE_error(ENV(R), PAW_ESYNTAX, (R)->line, __VA_ARGS__)
+#define TYPE_ERROR(R, ...) pawE_error(ENV(R), PAW_ETYPE, (R)->line, __VA_ARGS__)
 #define CACHED_STR(R, i) pawE_cstr(ENV(R), CAST_SIZE(i))
 #define TYPE2CODE(R, type) (pawP_type2code((R)->C, type))
 
@@ -315,8 +315,7 @@ static struct HirSymbol *new_global(struct Resolver *R, String *name, struct Hir
     for (int i = 0; i < st->symbols->count; ++i) {
         struct HirSymbol *symbol = st->symbols->data[i];
         if (pawS_eq(symbol->name, name)) {
-            NAME_ERROR(R, decl->hdr.line,
-                       "duplicate global '%s' (declared previously on line %d)",
+            NAME_ERROR(R, "duplicate global '%s' (declared previously on line %d)",
                        name->text, symbol->decl->hdr.line);
         }
     }
@@ -335,16 +334,6 @@ static struct HirSymbol *try_resolve_symbol(struct Resolver *R, const String *na
         const int index = pawHir_find_symbol(scope, name);
         if (index >= 0) {
             struct HirSymbol *symbol = scope->symbols->data[index];
-            if (scope->fn_depth != R->func_depth && 
-                    !HirIsFuncDecl(symbol->decl) &&
-                    !symbol->is_type) {
-                // TODO: note that this is not currently possible: named functions (non-closures) can only
-                //       appear at the toplevel, anything they reference outside themselves is global
-                // TODO: replace is_type with more specific flag, this will mess
-                //       up function templates!
-                TYPE_ERROR(R, "attempt to reference non-local variable '%s' "
-                              "(consider using a closure)", name->text);
-            }
             return scope->symbols->data[index];
         }
     }
@@ -360,7 +349,7 @@ static struct HirSymbol *resolve_symbol(struct Resolver *R, const String *name)
 {
     struct HirSymbol *symbol = try_resolve_symbol(R, name);
     if (symbol == NULL) {
-        NAME_ERROR(R, -1, "undefined symbol '%s'", name->text);
+        NAME_ERROR(R, "undefined symbol '%s'", name->text);
     }
     return symbol;
 }
@@ -692,7 +681,6 @@ static void instantiate_func_aux(struct Resolver *R, struct HirFuncDecl *base, s
     r->fdef.types = types;
     inst->type = r;
 
-    // NOTE: '.scope' not used for functions
     struct HirTypeList *generics = HirGetFuncDef(base->type)->types;
     prep_func_instance(R, generics, types, inst);
 
@@ -777,9 +765,7 @@ static struct HirDecl *instantiate_struct(struct Resolver *R, struct HirAdtDecl 
 static struct HirDecl *instantiate_func(struct Resolver *R, struct HirFuncDecl *base, struct HirTypeList *types)
 {
     check_template_param(R, base->generics, types);
-    if (types == NULL) {
-        return HIR_CAST_DECL(base);
-    }
+    if (types == NULL) return HIR_CAST_DECL(base);
     normalize_type_list(R, types);
     struct HirDecl *inst = find_func_instance(R, base, types);
     if (inst == NULL) {
@@ -792,9 +778,8 @@ static struct HirDecl *instantiate_func(struct Resolver *R, struct HirFuncDecl *
 
 struct HirDecl *pawP_instantiate(struct Resolver *R, struct HirDecl *base, struct HirTypeList *types)
 {
-    if (types == NULL) {
-        // not polymorphic
-    } else if (HIR_IS_POLY_ADT(base)) {
+    if (types == NULL) return base; 
+    if (HIR_IS_POLY_ADT(base)) {
         return instantiate_struct(R, &base->adt, types);
     } else if (HIR_IS_POLY_FUNC(base)) {
         return instantiate_func(R, &base->func, types);
@@ -968,7 +953,7 @@ static struct HirDecl *expect_attr(struct Resolver *R, const struct StructPack *
 {
     struct HirDecl *attr = resolve_attr(pack->fields, name);
     if (attr == NULL) {
-        NAME_ERROR(R, -1, "field '%s' does not exist in type '%s'", name->text,
+        NAME_ERROR(R, "field '%s' does not exist in type '%s'", name->text,
                    pack->name->text);
     }
     return attr;
@@ -1023,9 +1008,7 @@ static struct HirType *typeof_path(struct HirPath *path)
 
 static struct HirType *resolve_tuple_type(struct Resolver *R, struct AstTupleType *e)
 {
-    if (e->types->count == 0) {
-        return get_type(R, PAW_TUNIT);
-    }
+    if (e->types->count == 0) return get_type(R, PAW_TUNIT);
     struct HirType *r = new_type(R, NO_DECL, kHirTupleType, e->line);
     r->tuple.elems = resolve_type_list(R, e->types);
     return r;
@@ -1150,10 +1133,8 @@ static void op_type_error(struct Resolver *R, const struct HirType *type, const 
 static struct HirType *binop_vector(struct Resolver *R, BinaryOp op, struct HirType *type)
 {
     const struct HirType *elem_t = hir_vector_elem(type);
-    if (op == BINARY_ADD) {
-        // 2 vectors with the same element type can be added
-        return type;
-    } else if (!HIR_IS_BASIC_T(elem_t)) {
+    if (op == BINARY_ADD) return type;
+    if (!HIR_IS_BASIC_T(elem_t)) {
         op_type_error(R, elem_t, "element");
     }
     return get_type(R, PAW_TBOOL);
@@ -1604,11 +1585,11 @@ static struct HirType *resolve_composite_lit(struct Resolver *R, struct AstCompo
         struct HirExpr *hir_item = resolve_expr(R, ast_item);
         struct HirStructField *item = HirGetStructField(hir_item);
         v_set_object(&key, item->name);
-        if (pawH_contains(P, map, key)) {
-            NAME_ERROR(R, hir_item->hdr.line, "duplicate field '%s' in initializer for struct '%s'", 
+        if (pawH_contains(map, key)) {
+            NAME_ERROR(R, "duplicate field '%s' in initializer for struct '%s'", 
                        item->name->text, pack.name->text);
         }
-        Value *value = pawH_action(P, map, key, MAP_ACTION_CREATE);
+        Value *value = pawH_create(P, map, key);
         v_set_int(value, i);
         pawHir_expr_list_push(R->hir, order, hir_item);
     }
@@ -1616,9 +1597,9 @@ static struct HirType *resolve_composite_lit(struct Resolver *R, struct AstCompo
         struct HirDecl *decl = pack.fields->data[i];
         struct HirFieldDecl *field = HirGetFieldDecl(decl);
         v_set_object(&key, field->name);
-        Value *value = pawH_get(P, map, key);
+        Value *value = pawH_get(map, key);
         if (value == NULL) {
-            NAME_ERROR(R, field->line, "missing initializer for field '%s' in struct '%s'",
+            NAME_ERROR(R, "missing initializer for field '%s' in struct '%s'",
                        field->name->text, pack.name->text);
         }
         const paw_Int index = v_int(*value);
@@ -1629,12 +1610,12 @@ static struct HirType *resolve_composite_lit(struct Resolver *R, struct AstCompo
         struct HirType *item_t = expr_type(R, item);
         item->sitem.index = i;
         unify(R, item_t, field_t);
-        pawH_remove(P, map, key);
+        pawH_erase(map, key);
     }
     paw_Int iter = PAW_ITER_INIT;
     while (pawH_iter(map, &iter)) {
         const Value *pkey = pawH_key(map, CAST_SIZE(iter));
-        NAME_ERROR(R, -1, "unexpected field '%s' in initializer for struct '%s'",
+        NAME_ERROR(R, "unexpected field '%s' in initializer for struct '%s'",
                    v_string(*pkey), pack.name->text);
     }
     paw_assert(pack.fields->count == e->items->count);
@@ -1819,7 +1800,7 @@ static struct HirExpr *resolve_index(struct Resolver *R, struct AstIndex *e)
         expect = get_type(R, PAW_TINT);
         r->type = get_type(R, PAW_TSTRING);
     } else {
-    not_container:
+not_container:
         TYPE_ERROR(R, "type cannot be indexed (not a container)");
     }
     if (e->is_slice) {
@@ -1869,7 +1850,7 @@ static struct HirExpr *resolve_selector(struct Resolver *R, struct AstSelector *
         TYPE_ERROR(R, "expected name of struct field (integer indices can "
                       "only be used with tuples)");
     } else if (pack.fields == NULL) {
-        NAME_ERROR(R, e->line, "unit structure '%s' has no fields", pack.name->text);
+        NAME_ERROR(R, "unit structure '%s' has no fields", pack.name->text);
     }
     struct HirDecl *attr = expect_attr(R, &pack, e->name);
     r->type = HIR_TYPEOF(attr);
@@ -1907,6 +1888,7 @@ static struct HirDecl *ResolveGenericDecl(struct Resolver *R, struct AstGenericD
 
 static struct HirDecl *resolve_decl(struct Resolver *R, struct AstDecl *decl)
 {
+    R->line = decl->hdr.line;
     switch (AST_KINDOF(decl)) {
 #define DEFINE_CASE(a, b)                       \
         case kAst##a:                           \
@@ -1918,6 +1900,7 @@ static struct HirDecl *resolve_decl(struct Resolver *R, struct AstDecl *decl)
 
 static struct HirStmt *resolve_stmt(struct Resolver *R, struct AstStmt *stmt)
 {
+    R->line = stmt->hdr.line;
     switch (AST_KINDOF(stmt)) {
 #define DEFINE_CASE(a, b)                       \
         case kAst##a:                           \
@@ -1934,6 +1917,7 @@ static struct HirStmt *resolve_stmt(struct Resolver *R, struct AstStmt *stmt)
 static struct HirType *resolve_type(struct Resolver *R, struct AstExpr *expr)
 {
     struct HirType *r;
+    R->line = expr->hdr.line;
     switch (AST_KINDOF(expr)) {
         case kAstPathExpr:
             r = resolve_path_type(R, AstGetPathExpr(expr));
@@ -1953,6 +1937,7 @@ static struct HirType *resolve_type(struct Resolver *R, struct AstExpr *expr)
 static struct HirExpr *resolve_expr(struct Resolver *R, struct AstExpr *expr)
 {
     struct HirExpr *r;
+    R->line = expr->hdr.line;
     switch (AST_KINDOF(expr)) {
         case kAstLiteralExpr:
             r = resolve_literal_expr(R, AstGetLiteralExpr(expr));

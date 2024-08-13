@@ -33,7 +33,7 @@ struct Resolver;
         X(CallExpr,       call)   \
         X(Index,          index)  \
         X(Selector,       select) \
-        X(StructField,     sitem)  \
+        X(StructField,    sitem)  \
         X(MapElem,        mitem)
 
 #define HIR_TYPE_LIST(X)    \

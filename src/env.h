@@ -71,7 +71,7 @@ struct MethodList {
     Value data[];
 };
 
-typedef struct paw_Env {    paw_Bool done; // TODO: remove
+typedef struct paw_Env {
     StringTable strings;
 
     CallFrame main;
@@ -103,6 +103,7 @@ typedef struct paw_Env {    paw_Bool done; // TODO: remove
         int alloc;
     } gv;
 
+    size_t heap_size;
     struct Heap *H;
     paw_Alloc alloc;
     void *ud;

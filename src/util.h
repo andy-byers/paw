@@ -7,8 +7,8 @@
 #include "paw.h"
 #include <assert.h>
 #include <stdarg.h>
-#include <stdio.h>
 #include <string.h>
+#include <limits.h>
 
 #define paw_assert assert
 
@@ -19,11 +19,15 @@
 #define PAW_MIN(x, y) ((x) < (y) ? (x) : (y))
 #define PAW_MAX(x, y) ((x) > (y) ? (x) : (y))
 #define PAW_CLAMP(v, x, y) PAW_MIN(PAW_MAX(v, x), y)
+#define PAW_ROUND_UP(n) ((n) + (-(n) & (PAW_ALIGN - 1)))
+#define PAW_IS_ALIGNED(p) (!(CAST_UPTR(p) & (PAW_ALIGN - 1)))
 
 #define CHECK_EXP(c, e) (paw_assert(c), e)
 #define CAST(x, t) ((t)(x))
 #define CAST_SIZE(x) CAST(x, size_t)
 #define CAST_UPTR(x) CAST(x, uintptr_t)
+#define ERASE_TYPE(p) CAST(p, void *)
+#define BUMP_PTR(p, n) ERASE_TYPE(CAST_UPTR(p) + (n))
 
 // Check for inclusion in one of the character classes
 #define ISDIGIT(c) (kCharClassTable[(uint8_t)(c)] & 1)

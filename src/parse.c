@@ -1336,11 +1336,17 @@ static const char kPrelude[] =
     "pub fn assert(cond: bool) \n"
 
     // TODO: Replace with methods
-    "pub fn _vector_push<T>(vec: [T], v: T)          \n"
-    "pub fn _vector_pop<T>(vec: [T]) -> T            \n"
-    "pub fn _vector_insert<T>(vec: [T], i: int, v: T)\n"
-    "pub fn _vector_erase<T>(vec: [T], i: int) -> T  \n"
-    "pub fn _vector_clone<T>(vec: [T]) -> [T]        \n";
+    "pub fn _int_to_string(self: int, base: int) -> str\n"
+    "pub fn _string_split(self: str, sep: str) -> [str]        \n"
+    "pub fn _string_join(self: str, seq: [str]) -> str         \n"
+    "pub fn _string_find(self: str, target: str) -> int        \n"
+    "pub fn _string_starts_with(self: str, prefix: str) -> bool\n"
+    "pub fn _string_ends_with(self: str, suffix: str) -> bool  \n"
+    "pub fn _vector_push<T>(self: [T], v: T)          \n"
+    "pub fn _vector_pop<T>(self: [T]) -> T            \n"
+    "pub fn _vector_insert<T>(self: [T], i: int, v: T)\n"
+    "pub fn _vector_erase<T>(self: [T], i: int) -> T  \n"
+    "pub fn _vector_clone<T>(self: [T]) -> [T]        \n";
 
 struct PreludeReader {
     size_t size;

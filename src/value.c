@@ -24,9 +24,11 @@ static void int_to_string(paw_Env *P, paw_Int i)
 
     // Don't call llabs(INT64_MIN). The result is undefined on 2s complement
     // systems.
-    uint64_t u = i == INT64_MIN ? (1ULL << 63) : (uint64_t)llabs(i);
+    uint64_t u = i == INT64_MIN 
+        ? UINT64_C(1) << 63 
+        : CAST(llabs(i), uint64_t);
     do {
-        *ptr-- = (char)(u % 10 + '0');
+        *ptr-- = CAST(u % 10 + '0', char);
         u /= 10;
     } while (u);
     if (negative) {
@@ -44,7 +46,7 @@ static void float_to_string(paw_Env *P, paw_Float f)
     pawC_pushns(P, temp, CAST_SIZE(n));
 }
 
-const char *pawV_to_string(paw_Env *P, Value v, paw_Type type, size_t *nout)
+const char *pawV_to_string(paw_Env *P, Value v, paw_Type type, size_t *plength)
 {
     switch (type) {
         case PAW_TSTRING:
@@ -64,7 +66,7 @@ const char *pawV_to_string(paw_Env *P, Value v, paw_Type type, size_t *nout)
             return NULL;
     }
     const String *s = v_string(P->top.p[-1]);
-    *nout = s->length;
+    if (plength != NULL) *plength = s->length;
     return s->text;
 }
 
@@ -408,17 +410,13 @@ static int char2base(char c)
     }
 }
 
-static int check_suffix(const char *p, const char *text)
+static int check_suffix(const char *p, const char *base)
 {
-    if (*p && !ISSPACE(*p)) {
-        return -1;
-    }
+    if (*p != '\0' && !ISSPACE(*p)) return -1;
     // If one of the pawV_parse_* functions are called on a string like " ",
     // then all of the checks will pass, despite " " not being a valid number.
     // Make sure that doesn't happen.
-    if (p == text) {
-        return -1;
-    }
+    if (p == base) return -1;
     return 0;
 }
 
@@ -458,30 +456,28 @@ int pawV_parse_uint64(paw_Env *P, const char *text)
     return PAW_OK;
 }
 
-#define skip_digits(p)      \
+#define SKIP_DIGITS(p) \
     while (ISDIGIT(*(p))) { \
-        ++(p);              \
+        ++(p); \
     }
 
 int pawV_parse_float(paw_Env *P, const char *text)
 {
     // First, validate the number format.
     const char *p = text;
-    if (p[0] == '0' && p[1] && !is_fp(p[1])) {
+    if (p[0] == '0' && p[1] != '\0' && !is_fp(p[1])) {
         return PAW_ESYNTAX;
     }
-    skip_digits(p);
+    SKIP_DIGITS(p)
 
     if (*p == '.') {
         ++p;
-        skip_digits(p);
+        SKIP_DIGITS(p)
     }
     if (*p == 'e' || *p == 'E') {
-        ++p;
-        if (*p == '+' || *p == '-') {
-            ++p;
-        }
-        skip_digits(p);
+        p += 1 + (p[1] == '+' || p[1] == '-');
+        if (!ISDIGIT(*p)) return PAW_ESYNTAX;
+        SKIP_DIGITS(p)
     }
     if (check_suffix(p, text)) {
         return PAW_ESYNTAX;

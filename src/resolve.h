@@ -21,6 +21,7 @@ struct Resolver {
     int nresults;
     int vector_gid;
     int map_gid;
+    int line;
     paw_Bool in_closure; // 1 if the enclosing function is a closure, else 0
 };
 
