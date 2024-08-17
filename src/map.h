@@ -13,10 +13,6 @@ typedef struct MapCursor {
     size_t index;
 } MapCursor;
 
-#define h_is_vacant(mc) (h_get_state(mc) == MAP_ITEM_VACANT)
-#define h_is_occupied(mc) (h_get_state(mc) == MAP_ITEM_OCCUPIED)
-#define h_is_erased(mc) (h_get_state(mc) == MAP_ITEM_ERASED)
-
 #define pawH_meta(m, index) (&CAST((m)->data, MapMeta *)[index])
 
 static inline Value *pawH_key(Map *m, size_t index)
@@ -64,8 +60,9 @@ static inline MapCursor h_cursor_init(Map *m, Value key)
 static inline MapCursor h_cursor_lookup(Map *m, Value key)
 {
     MapCursor mc = h_cursor_init(m, key);
-    while (!h_is_vacant(&mc)) {
-        if (h_is_occupied(&mc) && h_cursor_key(&mc)->u == key.u) {
+    while (h_get_state(&mc) != MAP_ITEM_VACANT) {
+        if (h_get_state(&mc) == MAP_ITEM_OCCUPIED && 
+                h_cursor_key(&mc)->u == key.u) {
             break;
         }
         h_cursor_next(&mc);
@@ -90,17 +87,20 @@ static inline Value *pawH_get(Map *m, Value key)
 {
     if (m->length == 0) return NULL;
     MapCursor mc = h_cursor_lookup(m, key);
-    if (!h_is_occupied(&mc)) return NULL;
-    return h_cursor_value(&mc);
+    if (h_get_state(&mc) == MAP_ITEM_OCCUPIED) {
+        return h_cursor_value(&mc);
+    }
+    return NULL;
 }
 
 static inline void pawH_erase(Map *m, Value key)
 {
     if (m->length == 0) return;
     MapCursor mc = h_cursor_lookup(m, key);
-    if (!h_is_occupied(&mc)) return;
-    h_set_state(&mc, MAP_ITEM_ERASED);
-    --m->length;
+    if (h_get_state(&mc) == MAP_ITEM_OCCUPIED) {
+        h_set_state(&mc, MAP_ITEM_ERASED);
+        --m->length;
+    }
 }
 
 static inline void pawH_insert(paw_Env *P, Map *m, Value key, Value value)
@@ -115,7 +115,7 @@ static inline paw_Bool pawH_contains(Map *m, Value key)
 
 static inline paw_Bool pawH_iter(const Map *m, paw_Int *pi)
 {
-    for (++*pi; *pi < paw_cast_int(m->capacity); ++*pi) {
+    for (++*pi; *pi < PAW_CAST_INT(m->capacity); ++*pi) {
         const MapMeta *mm = pawH_meta(m, *pi);
         if (mm->state == MAP_ITEM_OCCUPIED) {
             return PAW_TRUE;

@@ -6,7 +6,6 @@
 #include "compile.h"
 #include "map.h"
 #include "mem.h"
-#include "resolve.h"
 #include <inttypes.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -25,22 +24,23 @@ static void add_builtin_type(struct Hir *hir, enum HirTypeKind kind, paw_Type co
 struct Hir *pawHir_new(struct Compiler *C)
 {
     paw_Env *P = ENV(C);
-    struct Hir *hir = pawM_new(P, struct Hir);
-    hir->dm = C->dm;
-    hir->P = P;
+    struct DynamicMem *dm = C->dm;
+    dm->hir = pawM_new(P, struct Hir);
+    dm->hir->dm = C->dm;
+    dm->hir->P = P;
 
     // initialize memory pools for storing HIR components
-    pawK_pool_init(P, &hir->pool, FIRST_ARENA_SIZE, sizeof(void *) * LARGE_ARENA_MIN);
-    hir->symtab = pawHir_new_symtab(hir);
+    pawK_pool_init(P, &dm->hir->pool, FIRST_ARENA_SIZE, sizeof(void *) * LARGE_ARENA_MIN);
+    dm->hir->symtab = pawHir_new_symtab(dm->hir);
 
-    add_builtin_type(hir, kHirAdt, PAW_TUNIT);
-    add_builtin_type(hir, kHirAdt, PAW_TBOOL);
-    add_builtin_type(hir, kHirAdt, PAW_TINT);
-    add_builtin_type(hir, kHirAdt, PAW_TFLOAT);
-    add_builtin_type(hir, kHirAdt, PAW_TSTRING);
-    add_builtin_type(hir, kHirAdt, PAW_TVECTOR);
-    add_builtin_type(hir, kHirAdt, PAW_TMAP);
-    return hir;
+    add_builtin_type(dm->hir, kHirAdt, PAW_TUNIT);
+    add_builtin_type(dm->hir, kHirAdt, PAW_TBOOL);
+    add_builtin_type(dm->hir, kHirAdt, PAW_TINT);
+    add_builtin_type(dm->hir, kHirAdt, PAW_TFLOAT);
+    add_builtin_type(dm->hir, kHirAdt, PAW_TSTRING);
+    add_builtin_type(dm->hir, kHirAdt, PAW_TVECTOR);
+    add_builtin_type(dm->hir, kHirAdt, PAW_TMAP);
+    return dm->hir;
 }
 
 void pawHir_free(struct Hir *hir)
@@ -1757,21 +1757,21 @@ static void dump_expr(struct Printer *P, struct HirExpr *e)
                             break;
                         case PAW_TBOOL:
                             dump_fmt(P, "value: %s\n",
-                                     v_true(e->literal.basic.value) ? "true"
+                                     V_TRUE(e->literal.basic.value) ? "true"
                                                                     : "false");
                             break;
                         case PAW_TINT:
                             dump_fmt(P, "value: %" PRId64 "\n",
-                                     v_int(e->literal.basic.value));
+                                     V_INT(e->literal.basic.value));
                             break;
                         case PAW_TFLOAT:
                             dump_fmt(P, "value: %f\n",
-                                     v_float(e->literal.basic.value));
+                                     V_FLOAT(e->literal.basic.value));
                             break;
                         default:
                             paw_assert(e->literal.basic.t == PAW_TSTRING);
                             dump_fmt(P, "value: %s\n",
-                                     v_string(e->literal.basic.value)->text);
+                                     V_STRING(e->literal.basic.value)->text);
                             break;
                     }
                     break;

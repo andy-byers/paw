@@ -6,8 +6,6 @@
 
 #include "code.h"
 #include "compile.h"
-#include "paw.h"
-#include "type.h"
 
 struct Resolver;
 
@@ -715,6 +713,9 @@ static inline struct HirSegment *pawHir_path_add(struct Hir *hir, struct HirPath
     pawHir_path_push(hir, path, ps);
     return ps;
 }
+
+// TODO: convert HIR to string instead of printing
+#include <stdio.h>
 
 void pawHir_repr_path(struct Hir *hir, struct HirPath *path);
 void pawHir_repr_type(struct Hir *hir, struct HirType *type);

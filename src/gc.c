@@ -3,11 +3,11 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
 #include "gc.h"
+#include "alloc.h"
 #include "env.h"
 #include "map.h"
 #include "mem.h"
 #include "util.h"
-#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -44,26 +44,26 @@ static Object **get_gc_list(Object *o)
 {
     switch (o->gc_kind) {
         case VFOREIGN:
-            return &o_foreign(o)->gc_list;
+            return &O_FOREIGN(o)->gc_list;
         case VVECTOR:
-            return &o_vector(o)->gc_list;
+            return &O_VECTOR(o)->gc_list;
         case VMAP:
-            return &o_map(o)->gc_list;
+            return &O_MAP(o)->gc_list;
         case VCLOSURE:
-            return &o_closure(o)->gc_list;
+            return &O_CLOSURE(o)->gc_list;
         case VPROTO:
-            return &o_proto(o)->gc_list;
+            return &O_PROTO(o)->gc_list;
         case VINSTANCE:
-            return &o_instance(o)->gc_list;
+            return &O_INSTANCE(o)->gc_list;
         case VVARIANT:
-            return &o_variant(o)->gc_list;
+            return &O_VARIANT(o)->gc_list;
         case VTUPLE:
-            return &o_tuple(o)->gc_list;
+            return &O_TUPLE(o)->gc_list;
         case VNATIVE:
-            return &o_native(o)->gc_list;
+            return &O_NATIVE(o)->gc_list;
         default:
             paw_assert(o->gc_kind == VMETHOD);
-            return &(o_method(o))->gc_list;
+            return &(O_METHOD(o))->gc_list;
     }
 }
 
@@ -86,7 +86,7 @@ static void mark_object(paw_Env *P, Object *o)
     gc_trace_object("mark", o);
     switch (o->gc_kind) {
         case VUPVALUE: {
-            UpValue *u = o_upvalue(o);
+            UpValue *u = O_UPVALUE(o);
             mark_value(P, *u->p.p);
             SET_BLACK(u);
             break;
@@ -102,7 +102,7 @@ static void mark_object(paw_Env *P, Object *o)
 static void mark_value(paw_Env *P, Value v)
 {
     if (pawZ_is_object(P->H, v.u)) {
-        mark_object(P, v_object(v));
+        mark_object(P, V_OBJECT(v));
     }
 }
 
@@ -152,8 +152,8 @@ static void traverse_instance(paw_Env *P, Instance *i)
 
 static void traverse_method(paw_Env *P, Method *m)
 {
-    mark_object(P, v_object(m->self));
-    mark_object(P, v_object(m->f));
+    mark_object(P, V_OBJECT(m->self));
+    mark_object(P, V_OBJECT(m->f));
 }
 
 static void traverse_vector(paw_Env *P, Vector *a)
@@ -215,34 +215,34 @@ static void traverse_objects(paw_Env *P)
         gc_trace_object("traverse", o);
         switch (o->gc_kind) {
             case VCLOSURE:
-                traverse_closure(P, o_closure(o));
+                traverse_closure(P, O_CLOSURE(o));
                 break;
             case VPROTO:
-                traverse_proto(P, o_proto(o));
+                traverse_proto(P, O_PROTO(o));
                 break;
             case VNATIVE:
-                traverse_native(P, o_native(o));
+                traverse_native(P, O_NATIVE(o));
                 break;
             case VTUPLE:
-                traverse_tuple(P, o_tuple(o));
+                traverse_tuple(P, O_TUPLE(o));
                 break;
             case VINSTANCE:
-                traverse_instance(P, o_instance(o));
+                traverse_instance(P, O_INSTANCE(o));
                 break;
             case VMETHOD:
-                traverse_method(P, o_method(o));
+                traverse_method(P, O_METHOD(o));
                 break;
             case VVECTOR:
-                traverse_vector(P, o_vector(o));
+                traverse_vector(P, O_VECTOR(o));
                 break;
             case VMAP:
-                traverse_map(P, o_map(o));
+                traverse_map(P, O_MAP(o));
                 break;
             case VFOREIGN:
-                traverse_foreign(P, o_foreign(o));
+                traverse_foreign(P, O_FOREIGN(o));
                 break;
             default:
-                traverse_variant(P, o_variant(o));
+                traverse_variant(P, O_VARIANT(o));
         }
     }
 }
@@ -295,12 +295,14 @@ void pawG_init(paw_Env *P)
 
 void pawG_uninit(paw_Env *P)
 {
+    // clear GC roots
     P->libs = NULL;
     P->builtin = NULL;
     P->up_list = NULL;
     P->top = P->stack;
     P->gv.size = 0;
 
+    // collect all non-fixed objects
     pawG_collect(P);
 
     for (CallFrame *cf = P->main.next; cf;) {
@@ -335,40 +337,40 @@ void pawG_free_object(paw_Env *P, Object *o)
     pawZ_clear_flag(P->H, CAST_UPTR(o));
     switch (o->gc_kind) {
         case VUPVALUE:
-            pawV_free_upvalue(P, o_upvalue(o));
+            pawV_free_upvalue(P, O_UPVALUE(o));
             break;
         case VCLOSURE:
-            pawV_free_closure(P, o_closure(o));
+            pawV_free_closure(P, O_CLOSURE(o));
             break;
         case VFOREIGN:
-            pawV_free_foreign(P, o_foreign(o));
+            pawV_free_foreign(P, O_FOREIGN(o));
             break;
         case VSTRING:
-            pawS_free_str(P, o_string(o));
+            pawS_free_str(P, O_STRING(o));
             break;
         case VMAP:
-            pawH_free(P, o_map(o));
+            pawH_free(P, O_MAP(o));
             break;
         case VVECTOR:
-            pawV_vec_free(P, o_vector(o));
+            pawV_vec_free(P, O_VECTOR(o));
             break;
         case VPROTO:
-            pawV_free_proto(P, o_proto(o));
+            pawV_free_proto(P, O_PROTO(o));
             break;
         case VINSTANCE:
-            pawV_free_instance(P, o_instance(o));
+            pawV_free_instance(P, O_INSTANCE(o));
             break;
         case VMETHOD:
-            pawV_free_method(P, o_method(o));
+            pawV_free_method(P, O_METHOD(o));
             break;
         case VNATIVE:
-            pawV_free_native(P, o_native(o));
+            pawV_free_native(P, O_NATIVE(o));
             break;
         case VVARIANT:
-            pawV_free_variant(P, o_variant(o));
+            pawV_free_variant(P, O_VARIANT(o));
             break;
         default:
-            pawV_free_tuple(P, o_tuple(o));
+            pawV_free_tuple(P, O_TUPLE(o));
             break;
     }
 }

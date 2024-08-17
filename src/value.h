@@ -12,64 +12,64 @@
 
 #define f_is_nan(v) ((v).f != (v).f)
 
-#define v_true(v) ((v).u != 0)
-#define v_false(v) (!v_true(v))
-#define v_int(v) ((v).i)
-#define v_float(v) ((v).f)
+#define V_TRUE(v) ((v).u != 0)
+#define V_FALSE(v) (!V_TRUE(v))
+#define V_INT(v) ((v).i)
+#define V_FLOAT(v) ((v).f)
 
-#define v_object(v) ((v).o)
-#define v_native(v) (o_native(v_object(v)))
-#define v_proto(v) (o_proto(v_object(v)))
-#define v_closure(v) (o_closure(v_object(v)))
-#define v_upvalue(v) (o_upvalue(v_object(v)))
-#define v_string(v) (o_string(v_object(v)))
-#define v_map(v) (o_map(v_object(v)))
-#define v_vector(v) (o_vector(v_object(v)))
-#define v_text(v) (v_string(v)->text)
-#define v_tuple(v) (o_tuple(v_object(v)))
-#define v_variant(v) (o_variant(v_object(v)))
-#define v_enum(v) (o_enum(v_object(v)))
-#define v_instance(v) (o_instance(v_object(v)))
-#define v_struct(v) (o_struct(v_object(v)))
-#define v_method(v) (o_method(v_object(v)))
-#define v_foreign(v) (o_foreign(v_object(v)))
+#define V_OBJECT(v) ((v).o)
+#define V_NATIVE(v) (O_NATIVE(V_OBJECT(v)))
+#define V_PROTO(v) (O_PROTO(V_OBJECT(v)))
+#define V_CLOSURE(v) (O_CLOSURE(V_OBJECT(v)))
+#define V_UPVALUE(v) (O_UPVALUE(V_OBJECT(v)))
+#define V_STRING(v) (O_STRING(V_OBJECT(v)))
+#define V_MAP(v) (O_MAP(V_OBJECT(v)))
+#define V_VECTOR(v) (O_VECTOR(V_OBJECT(v)))
+#define V_TEXT(v) (V_STRING(v)->text)
+#define V_TUPLE(v) (O_TUPLE(V_OBJECT(v)))
+#define V_VARIANT(v) (O_VARIANT(V_OBJECT(v)))
+#define V_ENUM(v) (O_ENUM(V_OBJECT(v)))
+#define V_INSTANCE(v) (O_INSTANCE(V_OBJECT(v)))
+#define V_STRUCT(v) (O_STRUCT(V_OBJECT(v)))
+#define V_METHOD(v) (O_METHOD(V_OBJECT(v)))
+#define V_FOREIGN(v) (O_FOREIGN(V_OBJECT(v)))
 
-#define v_set_0(v) ((v)->u = 0)
-#define v_set_bool(p, b) ((p)->u = (b) ? PAW_TRUE : PAW_FALSE)
-#define v_set_int(p, I) ((p)->i = (I))
-#define v_set_float(p, F) ((p)->f = F)
-#define v_set_object(p, O) ((p)->o = (Object *)(O))
+#define V_SET_0(v) ((v)->u = 0)
+#define V_SET_BOOL(p, b) ((p)->u = (b) ? PAW_TRUE : PAW_FALSE)
+#define V_SET_INT(p, I) ((p)->i = (I))
+#define V_SET_FLOAT(p, F) ((p)->f = F)
+#define V_SET_OBJECT(p, O) ((p)->o = (Object *)(O))
 
-#define o_kind(o) ((o)->gc_kind)
-#define o_is_string(o) (o_kind(o) == VSTRING)
-#define o_is_native(o) (o_kind(o) == VNATIVE)
-#define o_is_proto(o) (o_kind(o) == VPROTO)
-#define o_is_closure(o) (o_kind(o) == VCLOSURE)
-#define o_is_upvalue(o) (o_kind(o) == VUPVALUE)
-#define o_is_map(o) (o_kind(o) == VMAP)
-#define o_is_vector(o) (o_kind(o) == VVECTOR)
-#define o_is_tuple(o) (o_kind(o) == VTUPLE)
-#define o_is_variant(o) (o_kind(o) == VVARIANT)
-#define o_is_enum(o) (o_kind(o) == VENUM)
-#define o_is_instance(o) (o_kind(o) == VINSTANCE)
-#define o_is_struct(o) (o_kind(o) == VSTRUCT)
-#define o_is_method(o) (o_kind(o) == VMETHOD)
-#define o_is_foreign(o) (o_kind(o) == VFOREIGN)
+#define O_KIND(o) ((o)->gc_kind)
+#define O_IS_STRING(o) (O_KIND(o) == VSTRING)
+#define O_IS_NATIVE(o) (O_KIND(o) == VNATIVE)
+#define O_IS_PROTO(o) (O_KIND(o) == VPROTO)
+#define O_IS_CLOSURE(o) (O_KIND(o) == VCLOSURE)
+#define O_IS_UPVALUE(o) (O_KIND(o) == VUPVALUE)
+#define O_IS_MAP(o) (O_KIND(o) == VMAP)
+#define O_IS_VECTOR(o) (O_KIND(o) == VVECTOR)
+#define O_IS_TUPLE(o) (O_KIND(o) == VTUPLE)
+#define O_IS_VARIANT(o) (O_KIND(o) == VVARIANT)
+#define O_IS_ENUM(o) (O_KIND(o) == VENUM)
+#define O_IS_INSTANCE(o) (O_KIND(o) == VINSTANCE)
+#define O_IS_STRUCT(o) (O_KIND(o) == VSTRUCT)
+#define O_IS_METHOD(o) (O_KIND(o) == VMETHOD)
+#define O_IS_FOREIGN(o) (O_KIND(o) == VFOREIGN)
 
-#define o_string(o) CHECK_EXP(o_is_string(o), (String *)(o))
-#define o_native(o) CHECK_EXP(o_is_native(o), (Native *)(o))
-#define o_proto(o) CHECK_EXP(o_is_proto(o), (Proto *)(o))
-#define o_closure(o) CHECK_EXP(o_is_closure(o), (Closure *)(o))
-#define o_upvalue(o) CHECK_EXP(o_is_upvalue(o), (UpValue *)(o))
-#define o_map(o) CHECK_EXP(o_is_map(o), (Map *)(o))
-#define o_vector(o) CHECK_EXP(o_is_vector(o), (Vector *)(o))
-#define o_tuple(o) CHECK_EXP(o_is_tuple(o), (Tuple *)(o))
-#define o_variant(o) CHECK_EXP(o_is_variant(o), (Variant *)(o))
-#define o_enum(o) CHECK_EXP(o_is_enum(o), (Enum *)(o))
-#define o_instance(o) CHECK_EXP(o_is_instance(o), (Instance *)(o))
-#define o_struct(o) CHECK_EXP(o_is_struct(o), (Struct *)(o))
-#define o_method(o) CHECK_EXP(o_is_method(o), (Method *)(o))
-#define o_foreign(o) CHECK_EXP(o_is_foreign(o), (Foreign *)(o))
+#define O_STRING(o) CHECK_EXP(O_IS_STRING(o), (String *)(o))
+#define O_NATIVE(o) CHECK_EXP(O_IS_NATIVE(o), (Native *)(o))
+#define O_PROTO(o) CHECK_EXP(O_IS_PROTO(o), (Proto *)(o))
+#define O_CLOSURE(o) CHECK_EXP(O_IS_CLOSURE(o), (Closure *)(o))
+#define O_UPVALUE(o) CHECK_EXP(O_IS_UPVALUE(o), (UpValue *)(o))
+#define O_MAP(o) CHECK_EXP(O_IS_MAP(o), (Map *)(o))
+#define O_VECTOR(o) CHECK_EXP(O_IS_VECTOR(o), (Vector *)(o))
+#define O_TUPLE(o) CHECK_EXP(O_IS_TUPLE(o), (Tuple *)(o))
+#define O_VARIANT(o) CHECK_EXP(O_IS_VARIANT(o), (Variant *)(o))
+#define O_ENUM(o) CHECK_EXP(O_IS_ENUM(o), (Enum *)(o))
+#define O_INSTANCE(o) CHECK_EXP(O_IS_INSTANCE(o), (Instance *)(o))
+#define O_STRUCT(o) CHECK_EXP(O_IS_STRUCT(o), (Struct *)(o))
+#define O_METHOD(o) CHECK_EXP(O_IS_METHOD(o), (Method *)(o))
+#define O_FOREIGN(o) CHECK_EXP(O_IS_FOREIGN(o), (Foreign *)(o))
 
 #define CAST_OBJECT(x) (CAST(CAST(x, void *), Object *))
 
@@ -155,7 +155,7 @@ static inline int pawV_type(ValueKind vt)
 #define NOBJECTS (int)(NVTYPES - VOBJECT0)
 #define obj_index(t) ((t) - VOBJECT0)
 
-void pawV_index_error(paw_Env *P, paw_Int index, size_t length);
+void pawV_index_error(paw_Env *P, paw_Int index, size_t length, const char *what);
 paw_Int pawV_length(Value v, paw_Type type);
 paw_Bool pawV_truthy(Value v, paw_Type type);
 int pawV_num2int(Value *pv, paw_Type type);
@@ -165,14 +165,14 @@ const char *pawV_name(ValueKind type);
 
 static paw_Int pawV_abs_index(paw_Int index, size_t length)
 {
-    return index + (index < 0 ? paw_cast_int(length) : 0);
+    return index + (index < 0 ? PAW_CAST_INT(length) : 0);
 }
 
-static inline size_t pawV_check_abs(paw_Env *P, paw_Int index, size_t length)
+static inline size_t pawV_check_abs(paw_Env *P, paw_Int index, size_t length, const char *what)
 {
     index = pawV_abs_index(index, length);
     if (index < 0 || CAST_SIZE(index) >= length) {
-        pawV_index_error(P, index, length);
+        pawV_index_error(P, index, length, what);
     }
     return CAST_SIZE(index);
 }
@@ -180,8 +180,8 @@ static inline size_t pawV_check_abs(paw_Env *P, paw_Int index, size_t length)
 // Convert a null-terminated string into a 64-bit unsigned integer
 // Understands non-decimal base prefixes '0b', '0o', '0x', and their uppercase
 // counterparts. Returns PAW_ESYNTAX if the integer is malformed,
-// PAW_EOVERFLOW if it is too large to fit in a paw_Int, and PAW_OK otherwise.
-int pawV_parse_uint64(paw_Env *P, const char *text);
+// PAW_EOVERFLOW if it is too large to fit in a uint64_t, and PAW_OK otherwise.
+int pawV_parse_uint64(paw_Env *P, const char *text, int base);
 
 // Convert a null-terminated string into a float
 // Returns 0 on success, -1 otherwise.
@@ -201,7 +201,7 @@ typedef struct String {
 } String;
 
 const char *pawV_to_string(paw_Env *P, Value v, paw_Type type, size_t *nout);
-paw_Int pawV_to_int(paw_Env *P, Value v, paw_Type type);
+int pawV_parse_int(paw_Env *P, const char *text, int base);
 
 typedef struct Proto {
     GC_HEADER;
@@ -315,13 +315,13 @@ static inline size_t pawV_vec_length(const Vector *vec)
 static inline Value *pawV_vec_get(paw_Env *P, Vector *vec, paw_Int index)
 {
     const paw_Int abs = pawV_abs_index(index, CAST_SIZE(vec->end - vec->begin));
-    const size_t i = pawV_check_abs(P, abs, pawV_vec_length(vec));
+    const size_t i = pawV_check_abs(P, abs, pawV_vec_length(vec), "vector");
     return &vec->begin[i];
 }
 
 static inline paw_Bool pawV_vec_iter(const Vector *vec, paw_Int *itr)
 {
-    return ++*itr < paw_cast_int(pawV_vec_length(vec));
+    return ++*itr < PAW_CAST_INT(pawV_vec_length(vec));
 }
 
 typedef enum MapState {

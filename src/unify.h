@@ -2,7 +2,6 @@
 #define PAW_UNIFY_H
 
 #include "lex.h"
-#include "type.h"
 
 typedef struct Unifier Unifier; // unification context
 typedef struct UnificationTable UnificationTable; // unification table
@@ -11,6 +10,7 @@ struct Unifier {
     struct Ast *ast;
     struct Hir *hir;
     UnificationTable *table;
+    struct Resolver *R;
     paw_Env *P;
     int depth;
 };

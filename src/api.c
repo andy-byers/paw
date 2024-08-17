@@ -4,6 +4,7 @@
 #include "prefix.h"
 
 #include "api.h"
+#include "alloc.h"
 #include "auxlib.h"
 #include "call.h"
 #include "gc.h"
@@ -12,9 +13,9 @@
 #include "mem.h"
 #include "compile.h"
 #include "paw.h"
+#include "parse.h"
 #include "rt.h"
 #include "str.h"
-#include "type.h"
 #include "value.h"
 #include <assert.h>
 #include <stdlib.h>
@@ -31,7 +32,7 @@ static void *default_alloc(void *ud, void *ptr, size_t old_size, size_t new_size
     return realloc(ptr, new_size);
 }
 
-static StackPtr access(paw_Env *P, int index)
+static StackPtr at(paw_Env *P, int index)
 {
     const int i = paw_abs_index(P, index);
     paw_assert(i < paw_get_count(P));
@@ -111,7 +112,7 @@ void paw_close(paw_Env *P)
 
 int paw_find_public(paw_Env *P)
 {
-    const String *name = v_string(P->top.p[-1]);
+    const String *name = V_STRING(P->top.p[-1]);
     const int g = pawE_find_global(P, name);
     paw_pop(P, 1);
     return g;
@@ -124,7 +125,7 @@ void paw_push_public(paw_Env *P, int id)
 
 void paw_push_value(paw_Env *P, int index)
 {
-    const Value v = *access(P, index);
+    const Value v = *at(P, index);
     pawC_pushv(P, v);
 }
 
@@ -154,7 +155,7 @@ void paw_push_native(paw_Env *P, paw_Function fn, int n)
 {
     Value *pv = pawC_push0(P);
     Native *o = pawV_new_native(P, fn, n);
-    v_set_object(pv, o);
+    V_SET_OBJECT(pv, o);
 
     StackPtr top = P->top.p;
     const StackPtr base = top - n - 1;
@@ -174,7 +175,7 @@ const char *paw_push_string(paw_Env *P, const char *s)
 const char *paw_push_nstring(paw_Env *P, const char *s, size_t n)
 {
     const Value *pv = pawC_pushns(P, s, n);
-    return v_text(*pv);
+    return V_TEXT(*pv);
 }
 
 const char *paw_push_vfstring(paw_Env *P, const char *fmt, va_list arg)
@@ -197,34 +198,34 @@ const char *paw_push_fstring(paw_Env *P, const char *fmt, ...)
 
 paw_Bool paw_bool(paw_Env *P, int index)
 {
-    return v_true(*access(P, index));
+    return V_TRUE(*at(P, index));
 }
 
 paw_Int paw_int(paw_Env *P, int index)
 {
-    return v_int(*access(P, index));
+    return V_INT(*at(P, index));
 }
 
 paw_Float paw_float(paw_Env *P, int index)
 {
-    return v_float(*access(P, index));
+    return V_FLOAT(*at(P, index));
 }
 
 const char *paw_string(paw_Env *P, int index)
 {
-    const String *s = v_string(*access(P, index));
+    const String *s = V_STRING(*at(P, index));
     return s->text;
 }
 
 paw_Function paw_native(paw_Env *P, int index)
 {
-    const Native *f = v_native(*access(P, index));
+    const Native *f = V_NATIVE(*at(P, index));
     return f->func;
 }
 
 void *paw_pointer(paw_Env *P, int index)
 {
-    const Foreign *f = v_foreign(*access(P, index));
+    const Foreign *f = V_FOREIGN(*at(P, index));
     return f->data;
 }
 
@@ -260,13 +261,13 @@ size_t paw_length(paw_Env *P, int index)
     const Value v = P->top.p[-1];
     switch (v.o->gc_kind) {
         case VSTRING:
-            result = pawS_length(v_string(v));
+            result = pawS_length(V_STRING(v));
             break;
         case VVECTOR:
-            result = pawV_vec_length(v_vector(v));
+            result = pawV_vec_length(V_VECTOR(v));
             break;
         case VMAP:
-            result = pawH_length(v_map(v));
+            result = pawH_length(V_MAP(v));
             break;
         default:
             result = 0;
@@ -290,8 +291,10 @@ struct CompileState {
 
 static void compile_aux(paw_Env *P, void *arg)
 {
+    struct Compiler C;
     struct CompileState *p = arg;
-    pawP_compile(P, p->input, &p->dm, p->name, p->ud);
+    pawP_startup(P, &C, &p->dm, p->name);
+    pawP_compile(&C, p->input, p->ud);
 }
 
 int paw_load(paw_Env *P, paw_Reader input, const char *name, void *ud)
@@ -302,7 +305,7 @@ int paw_load(paw_Env *P, paw_Reader input, const char *name, void *ud)
         .ud = ud,
     };
     const int status = pawC_try(P, compile_aux, &p);
-    pawP_cleanup(P, &p.dm);
+    pawP_teardown(P, &p.dm);
     return status;
 }
 
@@ -314,7 +317,7 @@ struct CallState {
 void eval_aux(paw_Env *P, void *arg)
 {
     const struct CallState *ctx = arg;
-    pawC_call(P, v_object(*ctx->fn), ctx->argc);
+    pawC_call(P, V_OBJECT(*ctx->fn), ctx->argc);
 }
 
 int paw_call(paw_Env *P, int argc)
@@ -344,15 +347,15 @@ static int upvalue_index(int nup, int index)
 void paw_get_upvalue(paw_Env *P, int ifn, int index)
 {
     Value *pv = pawC_push0(P);
-    const Value fn = *access(P, ifn);
-    switch (v_object(fn)->gc_kind) {
+    const Value fn = *at(P, ifn);
+    switch (V_OBJECT(fn)->gc_kind) {
         case VNATIVE: {
-            Native *f = v_native(fn);
+            Native *f = V_NATIVE(fn);
             *pv = f->up[upvalue_index(f->nup, index)];
             break;
         }
         case VCLOSURE: {
-            Closure *f = v_closure(fn);
+            Closure *f = V_CLOSURE(fn);
             UpValue *u = f->up[upvalue_index(f->nup, index)];
             *pv = *u->p.p;
             break;
@@ -371,7 +374,7 @@ void paw_get_global(paw_Env *P, int index)
 // paw_Bool paw_check_global(paw_Env *P, const char *name)
 //{
 //     paw_push_string(P, name);
-//     const Value key = *access(P, -1);
+//     const Value key = *at(P, -1);
 //
 //     paw_Bool found = PAW_FALSE;
 //     if (pawR_read_global(P, key)) {
@@ -443,17 +446,17 @@ void paw_get_global(paw_Env *P, int index)
 // void paw_set_upvalue(paw_Env *P, int ifn, int index)
 //{
 //     StackPtr top = P->top.p;
-//     const Value fn = *access(P, ifn);
-//     switch (v_type(fn)) {
+//     const Value fn = *at(P, ifn);
+//     switch (V_TYPE(fn)) {
 //         case VNATIVE: {
-//             Native *f = v_native(fn);
+//             Native *f = V_NATIVE(fn);
 //             Value *v = &f->up[upvalue_index(f->nup, index)];
 //             *v = top[-1];
 //             paw_pop(P, 1);
 //             break;
 //         }
 //         case VCLOSURE: {
-//             Closure *f = v_closure(fn);
+//             Closure *f = V_CLOSURE(fn);
 //             UpValue *u = f->up[upvalue_index(f->nup, index)];
 //             *u->p.p = top[-1];
 //             paw_pop(P, 1);
@@ -517,10 +520,10 @@ void paw_create_array(paw_Env *P, int n)
 //
 // void paw_create_instance(paw_Env *P, int index)
 //{
-//    const Value cls = *access(P, index);
+//    const Value cls = *at(P, index);
 //    if (pawV_is_struct(cls)) {
 //        Value *pv = pawC_push0(P);
-//        pawV_new_instance(P, pv, v_struct(cls));
+//        pawV_new_instance(P, pv, V_STRUCT(cls));
 //    }
 //}
 //
@@ -530,7 +533,7 @@ void paw_create_array(paw_Env *P, int n)
 //    const int base = paw_get_count(P) - nup;
 //    Value *pv = pawC_push0(P);
 //    Native *nt = pawV_new_native(P, f, nup);
-//    v_set_native(pv, nt);
+//    V_SET_NATIVE(pv, nt);
 //
 //    for (int i = 0; i < nup; ++i) {
 //        paw_push_value(P, base + i);
@@ -565,7 +568,7 @@ static void reverse(StackPtr from, StackPtr to)
 void paw_rotate(paw_Env *P, int index, int n)
 {
     StackPtr t = P->top.p - 1;
-    StackPtr p = access(P, index);
+    StackPtr p = at(P, index);
     paw_assert((n >= 0 ? n : -n) <= t - p + 1);
     StackPtr m = n >= 0 ? t - n : p - n - 1;
     reverse(p, m); // Reverse A to get A'
@@ -575,8 +578,8 @@ void paw_rotate(paw_Env *P, int index, int n)
 
 void paw_copy(paw_Env *P, int from, int to)
 {
-    StackPtr src = access(P, from);
-    StackPtr dst = access(P, to);
+    StackPtr src = at(P, from);
+    StackPtr dst = at(P, to);
     *dst = *src;
 }
 

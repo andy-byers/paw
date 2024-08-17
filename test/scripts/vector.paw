@@ -184,8 +184,7 @@ fn test_equality_comparisons() {
 }
 
 // each vector must have its type inferred at some point before it
-// goes out of scope or is used in a type-agnostic way (calling a 
-// method like vec.pop(), or even using the '#' operator)
+// goes out of scope
 fn test_infer_later() {
     let vec = []
     vec = [0]
@@ -235,6 +234,23 @@ fn test_infer_later() {
     let c = b
     let d = c
     d = [1]
+}
+
+fn test_generic_ops() {
+    let a = []
+    assert(#a == 0)
+    _vector_push(a, 1)
+
+    let a = []
+    let b = []
+    let c = a + b
+    _vector_push(c, 1)
+
+    let a = []
+    let b = []
+    let c = []
+    let d = a + b + c
+    _vector_push(d, 1)
 }
 
 fn test_push() {

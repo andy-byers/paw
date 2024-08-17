@@ -1,143 +1,80 @@
 #!/usr/bin/env paw
--- misc.paw
+// misc.paw
 
-{
-    fn test(a, b, c, d, e) {
-        fn fa() {
-            let _1
-            fn fb() {
-                let _1
-                let _2
-                fn fc() {
-                    let _1
-                    let _2
-                    let _3
-                    fn fd() {
-                        let _1
-                        let _2
-                        let _3
-                        let _4
-                        return 1 / e
-                    }
-                    return fd() / d
-                }
-                return fc() / c
-            }
-            return fb() / b
-        }
-        return fa() / a
-    }
-    assert(0 == try(test, 1, 1, 1, 1, 1))
-    assert(0 != try(test, 0, 1, 1, 1, 1))
-    assert(0 != try(test, 1, 0, 1, 1, 1))
-    assert(0 != try(test, 1, 1, 0, 1, 1))
-    assert(0 != try(test, 1, 1, 1, 0, 1))
-    assert(0 != try(test, 1, 1, 1, 1, 0))
-}
+// TODO: try(), or some other error handling mechanism, and 'import'
+//fn test_try_1() {
+//    fn test(a, b, c, d, e) {
+//        fn fa() {
+//            let _1
+//            fn fb() {
+//                let _1
+//                let _2
+//                fn fc() {
+//                    let _1
+//                    let _2
+//                    let _3
+//                    fn fd() {
+//                        let _1
+//                        let _2
+//                        let _3
+//                        let _4
+//                        return 1 / e
+//                    }
+//                    return fd() / d
+//                }
+//                return fc() / c
+//            }
+//            return fb() / b
+//        }
+//        return fa() / a
+//    }
+//    assert(0 == try(test, 1, 1, 1, 1, 1))
+//    assert(0 != try(test, 0, 1, 1, 1, 1))
+//    assert(0 != try(test, 1, 0, 1, 1, 1))
+//    assert(0 != try(test, 1, 1, 0, 1, 1))
+//    assert(0 != try(test, 1, 1, 1, 0, 1))
+//    assert(0 != try(test, 1, 1, 1, 1, 0))
+//}
+//
+//fn test_try_2() {
+//    let test = |i| 1 / i 
+//    assert(try(test, 0) != 0)
+//    assert(try(test, 1) == 0)
+//}
+//
+//fn test_basic_io() {
+//    let io = require('io')
+//    let file = io.open('./paw_test_data_', 'w+')
+//    let input = 'Hello, world'
+//    io.write(file, 'Hello')
+//    io.write(file, ', ')
+//    io.write(file, 'world!')
+//    io.seek(file, 0, io.begin)
+//    assert(io.tell(file) == 0)
+//    let msg = io.read(file, #input)
+//
+//    assert(msg == input)
+//    io.close(file)
+//}
 
-{
-    let a = []
-    assert(null == a.push(1))
-    assert(null == a.insert(0, 0))
-    let m = {'a': 1}
-    assert(null == m.erase('a'))
-}
-
--- Test lots of local variables: OP_CLOSE can only remove 127 variables 
--- at a time.
-{
-    fn make_local(id) {
-        return '_' ++ id
-    }
-    let N = 300
-    let chunk = 'let f; {'
-    for i = 0, N {
-        chunk = chunk ++ 'let ' ++ make_local(i) ++ ' '
-    }
-    chunk = chunk ++ 'f = fn() {'
-    fn call_chunk(code) {
-        let chunk = chunk ++ code ++ '}}'
-        load(chunk)() -- load and call
-    }
-
-    -- capture the last local
-    let code = 'let a = ' ++ make_local(N - 1)
-    call_chunk(code)
-
-    -- capture the first local
-    let code = 'let a = ' ++ make_local(0)
-    call_chunk(code)
-
-    -- capture multiple locals
-    let code = 'let a = ' ++ make_local(100) ++ ' ' ++
-               'let b = ' ++ make_local(101) ++ ' ' ++ 
-               'let c = ' ++ make_local(200) ++ ' ' ++
-               'let d = ' ++ make_local(202)
-    call_chunk(code)
-}
-
-{
-    let io = require('io')
-    let file = io.open('./paw_test_data_', 'w+')
-    let input = 'Hello, world'
-    io.write(file, 'Hello')
-    io.write(file, ', ')
-    io.write(file, 'world!')
-    io.seek(file, 0, io.begin)
-    assert(io.tell(file) == 0)
-    let msg = io.read(file, #input)
-
-    assert(msg == input)
-    io.close(file)
-}
-
-{
-    fn test(i) {
-        -- Return is value ignored
-        return 1 / i 
-    }
-    assert(try(test, 0) != 0)
-    assert(try(test, 1) == 0)
-}
-
-{
-    fn test(code) {
-        -- Use 'load' so the script itself parses. Otherwise, if the
-        -- source code containing syntax error does not exist as a string,
-        -- the whole compilation will be aborted.
-        load(code)
-    }
-    assert(0 != try(test, 'l'))
-    assert(0 != try(test, 'let'))
-    assert(0 == try(test, 'let x'))
-    assert(0 != try(test, 'let x ='))
-    assert(0 != try(test, 'let x = "abc'))
-    assert(0 == try(test, 'let x = "abc"'))
-
-    assert(0 != try(test, 'let x = 01'))
-    assert(0 != try(test, 'let x = 1a'))
-    assert(0 != try(test, 'let x = 1 a'))
-    assert(0 == try(test, 'let x = 0x1'))
-}
-
-{
-    fn ack(m, n) {
+pub fn test_ackermann() {
+    let ack = |m, n| {
         let stack = [m, n]
         while #stack > 1 {
             n = stack.pop()
             m = stack.pop()
             if m == 0 {
-                stack.push(n + 1)
+                _vector_push(stack, n + 1)
             } else if m == 1 {
-                stack.push(n + 2)
+                _vector_push(stack, n + 2)
             } else if m == 2 {
-                stack.push(2 * n + 3)
+                _vector_push(stack, 2 * n + 3)
             } else if m == 3 {
-                stack.push((1 << (n + 3)) - 3)
+                _vector_push(stack, (1 << (n + 3)) - 3)
             } else if n == 0 {
-                stack.push(m - 1, 1)
+                _vector_push(stack, m - 1, 1)
             } else {
-                stack.push(m - 1, m, n - 1)
+                _vector_push(stack, m - 1, m, n - 1)
             }
         }
         return stack[0]
@@ -146,12 +83,5 @@
     assert(125 == ack(3, 4))
     assert(1 == ack(0, 0))
     assert(125 == ack(3, 4))
-
-    let big = ack(4, 2)
-    let s = str(big)
-
-    assert(19729 == #s)
-    assert(s.starts_with('20035299304068464649790723515602'))
-    assert(s.ends_with('7777506072339445587895905719156733'))
 }
 

@@ -7,8 +7,13 @@
 
 #define TEST_SCRIPTS(X) \
     X(primitive) \
+    X(operator) \
+    X(block) \
+    X(loop) \
     X(function) \
     X(closure) \
+    X(integer) \
+    X(float) \
     X(string) \
     X(struct) \
     X(tuple) \
@@ -19,12 +24,12 @@
     X(poly_struct) \
     X(poly_enum)
 
-#define check(x)                                       \
-    do {                                               \
-        if (!(x)) {                                    \
+#define check(x) \
+    do { \
+        if (!(x)) { \
             fprintf(stderr, "check failed: %s\n", #x); \
-            abort();                                   \
-        }                                              \
+            abort(); \
+        } \
     } while (0)
 
 struct TestAlloc {

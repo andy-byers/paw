@@ -77,7 +77,7 @@ struct Allocator {
 
 _Static_assert(PAW_HEAP_MIN >= HEAP_META_SIZE, "PAW_HEAP_MIN is too small");
 
-uint8_t pawZ_get_flag(struct Heap *H, uintptr_t uptr)
+uint8_t pawZ_get_flag(const struct Heap *H, uintptr_t uptr)
 {
     const size_t id = FLAG_BASE(H, uptr);
     const uint8_t flag = H->flags[FLAG_ID(id)];
@@ -375,6 +375,8 @@ static void z_free(struct Heap *H, void *ptr)
     unsafe_free(H, ptr);
 }
 
+// TODO: poison redzones around heap regions, add total redzone size to
+//       HEAP_META_SIZE
 static size_t compute_flag_count(size_t h)
 {
     const size_t F = FLAGS_PER_BYTE;
@@ -386,30 +388,35 @@ static size_t compute_flag_count(size_t h)
 int pawZ_init(paw_Env *P, void *heap, size_t heap_size, paw_Bool is_owned)
 {
     paw_assert(heap != NULL);
+    paw_assert(PAW_IS_ALIGNED(heap));
+    paw_assert(PAW_IS_ALIGNED(heap_size));
     const size_t nf = compute_flag_count(heap_size);
-    const size_t zf = nf / FLAGS_PER_BYTE;
 
+    // initialize heap manager
+    struct Heap *H = heap;
+    {
 #define SKIP_CHUNK(z) (heap = BUMP_PTR(heap, PAW_ROUND_UP(z)), \
                        heap_size -= PAW_ROUND_UP(z))
-    struct Heap *H = heap;
-    P->H = H;
-    *H = (struct Heap){
-        .is_owned = is_owned,
-        .nflags = nf, 
-        .P = P,
-    };
-    memset(H->flags, 0, zf);
-    SKIP_CHUNK(sizeof(struct Heap));
-    SKIP_CHUNK(zf);
-
-    H->a = heap;
-    SKIP_CHUNK(sizeof(struct Allocator));
-    init_chunk_allocator(H->a, heap, heap_size);
+        P->H = H;
+        *H = (struct Heap){
+            .is_owned = is_owned,
+            .nflags = nf, 
+            .P = P,
+        };
+        const size_t flag_zone = (nf + FLAGS_PER_BYTE - 1) / FLAGS_PER_BYTE;
+        memset(H->flags, 0, flag_zone);
+        SKIP_CHUNK(sizeof(struct Heap));
+        SKIP_CHUNK(flag_zone);
+        H->a = heap;
+        SKIP_CHUNK(sizeof(struct Allocator));
+        init_chunk_allocator(H->a, heap, heap_size);
 #undef SKIP_CHUNK
-    // flags must cover the entire usable heap space
+    }
+
+    const size_t zf = nf * sizeof(void *);
+    paw_assert(heap_size >= zf);
     H->bounds[0] = CAST_UPTR(heap);
-    paw_assert(nf * sizeof(void *) <= heap_size);
-    H->bounds[1] = H->bounds[0] + nf * sizeof(void *);
+    H->bounds[1] = H->bounds[0] + zf;
     return PAW_OK;
 
 no_memory:
@@ -417,29 +424,28 @@ no_memory:
     return PAW_EMEMORY;
 }
 
-// TODO: option for detect_leaks(P);
-#if 0
+// TODO: option for detect_leaks(P), and don't print anything to the console
 static void detect_leaks(paw_Env *P)
 {
+#if 0
     paw_Bool leak_detected = PAW_FALSE;
     const struct Heap *H = P->H;
-    for (size_t i = 0; i < H->nflags; ++i) {
-        if (H->flags[i].value != 0) {
-            fprintf(stderr, "leak @ %p\n", ERASE_TYPE(H->bounds[0] + i * sizeof(void *)));
+    for (uintptr_t u = H->bounds[0]; u < H->bounds[1]; u += sizeof(void *)) {
+        if (pawZ_get_flag(H, u) != 0) {
+            fprintf(stderr, "leak @ %p\n", ERASE_TYPE(u));
             leak_detected = PAW_TRUE;
         }     
     }
-    if (leak_detected) {
+    if (leak_detected || P->gc_bytes > 0){
+        printf("%zu bytes not accounted for\n", P->gc_bytes);
         __builtin_trap();
     }
-    if (P->gc_bytes>0){
-    printf("gc_bytes = %zu\n\n",P->gc_bytes);
-    }
-}
 #endif // 0
+}
 
 void pawZ_uninit(paw_Env *P)
 {
+    detect_leaks(P);
     if (P->H->is_owned) {
         P->alloc(P->ud, P, P->heap_size, 0);
     }

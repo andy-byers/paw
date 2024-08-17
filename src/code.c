@@ -1,10 +1,9 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
+
 #include "code.h"
-#include "env.h"
-#include "mem.h"
-#include <limits.h>
+#include "compile.h"
 
 static void add_line(struct FuncState *fs)
 {

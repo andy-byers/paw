@@ -41,10 +41,10 @@ void *pawZ_alloc(paw_Env *P, void *ptr, size_t size);
 
 void pawZ_set_flag(struct Heap *H, uintptr_t ptr);
 void pawZ_clear_flag(struct Heap *H, uintptr_t ptr);
-uint8_t pawZ_get_flag(struct Heap *H, uintptr_t ptr);
+uint8_t pawZ_get_flag(const struct Heap *H, uintptr_t ptr);
 
 // Return PAW_TRUE if 'u' points to the start of an Object *, PAW_FALSE otherwise
-static inline paw_Bool pawZ_is_object(struct Heap *H, uintptr_t u)
+static inline paw_Bool pawZ_is_object(const struct Heap *H, uintptr_t u)
 {
     return Z_IN_BOUNDS(H, u) && pawZ_get_flag(H, u);
 }

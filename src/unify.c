@@ -4,14 +4,11 @@
 //
 // unify.c: type unification module
 
-#include "hir.h"
-#include "code.h"
 #include "env.h"
-#include "mem.h"
-#include "parse.h"
-#include <limits.h>
+#include "hir.h"
+#include "unify.h"
 
-#define error(U, ...) pawE_error(ENV(U), PAW_ETYPE, -1, __VA_ARGS__)
+#define ERROR(U, ...) pawE_error(ENV(U), PAW_ETYPE, (U)->R->line, __VA_ARGS__)
 
 typedef struct InferenceVar {
     K_ALIGNAS_NODE struct InferenceVar *parent;
@@ -144,7 +141,7 @@ struct HirType *pawU_normalize(UnificationTable *table, struct HirType *type)
 static void unify_lists(Unifier *U, struct HirTypeList *a, struct HirTypeList *b)
 {
     if (a->count != b->count) {
-        error(U, "arity mismatch");
+        ERROR(U, "arity mismatch");
     }
     for (int i = 0; i < a->count; ++i) {
         pawU_unify(U, a->data[i], b->data[i]);
@@ -154,7 +151,7 @@ static void unify_lists(Unifier *U, struct HirTypeList *a, struct HirTypeList *b
 static void unify_adt(Unifier *U, struct HirAdt *a, struct HirAdt *b)
 {
     if (a->base != b->base) {
-        error(U, "data types are incompatible");
+        ERROR(U, "data types are incompatible");
     }
     paw_assert(!a->types == !b->types);
     if (a->types != NULL) {
@@ -176,7 +173,7 @@ static void unify_func(Unifier *U, struct HirFuncPtr *a, struct HirFuncPtr *b)
 static struct HirType *unify_generic(Unifier *U, struct HirType *a, struct HirType *b)
 {
     if (a->generic.did != b->generic.did) {
-        error(U, "generic types are incompatible");
+        ERROR(U, "generic types are incompatible");
     }
     return a;
 }
@@ -188,7 +185,7 @@ static void unify_types(Unifier *U, struct HirType *a, struct HirType *b)
         // function pointer and definition types are compatible
         unify_func(U, &a->fptr, &b->fptr);
     } else if (HIR_KINDOF(a) != HIR_KINDOF(b)) {
-        error(U, "incompatible types");
+        ERROR(U, "incompatible types");
     } else if (HirIsTupleType(a)) {
         unify_tuple(U, &a->tuple, &b->tuple);
     } else if (HirIsAdt(a)) {
@@ -265,7 +262,7 @@ static void check_table(Unifier *U, UnificationTable *table)
         const InferenceVar *var = get_ivar(table, i);
         pawU_normalize(table, var->type);
         if (HirIsUnknown(var->type)) {
-            error(U, "unable to infer type");
+            ERROR(U, "unable to infer type");
         }
     }
 }

@@ -54,7 +54,7 @@ int pawR_string_clone(paw_Env *P);
 // static inline paw_Int pawR_check_int(paw_Env *P, Value v)
 //{
 //     if (pawV_is_int(v)) {
-//         return v_int(v);
+//         return V_INT(v);
 //     } else if (!pawV_is_bigint(v)) {
 //         pawR_error(P, PAW_ETYPE, "expected integer");
 //     }

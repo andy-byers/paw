@@ -7,21 +7,11 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 
-static void isqrt(paw_Env *P)
-{
-    paw_assert(0); // TODO
-    (void)P;
-}
-
 static int math_sqrt(paw_Env *P)
 {
     pawL_check_argc(P, 1);
-    if (paw_is_float(P, 1)) {
-        const paw_Float f = paw_float(P, 1);
-        paw_push_float(P, sqrt(f));
-    } else if (paw_is_int(P, 1)) {
-        isqrt(P);
-    }
+    const paw_Float f = paw_float(P, 1);
+    paw_push_float(P, sqrt(f));
     return 1;
 }
 

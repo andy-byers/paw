@@ -17,17 +17,17 @@
 #ifndef PAW_COMPILE_H
 #define PAW_COMPILE_H
 
-#include "parse.h"
+#include "mem.h"
 
-Closure *pawP_compile(paw_Env *P, paw_Reader input, struct DynamicMem *dm, 
-                      const char *name, void *ud);
-void pawP_cleanup(paw_Env *P, const struct DynamicMem *dm);
+struct HirTypeList;
 
 String *pawP_scan_nstring(paw_Env *P, Map *st, const char *s, size_t n);
 static inline String *pawP_scan_string(paw_Env *P, Map *st, const char *s)
 {
     return pawP_scan_nstring(P, st, s, strlen(s));
 }
+
+typedef uint16_t DefId;
 
 struct Compiler {
     struct DynamicMem *dm;
@@ -40,6 +40,63 @@ struct Compiler {
     DefId result_did;
     DefId option_did;
 };
+
+// Common state for type-checking routines
+struct Resolver {
+    paw_Env *P;
+    Map *strings;
+    struct Unifier *U; // unification tables
+    struct Compiler *C; // compiler state
+    struct Ast *ast; // AST being resolved
+    struct Hir *hir; // HIR being built
+    struct HirType *adt; // enclosing ADT
+    struct HirType *result; // enclosing function return type
+    struct HirSymtab *symtab; // scoped symbol table
+    struct DynamicMem *dm; // dynamic memory
+    int func_depth; // number of nested functions
+    int nresults;
+    int vector_gid;
+    int map_gid;
+    int line;
+    paw_Bool in_closure; // 1 if the enclosing function is a closure, else 0
+};
+
+typedef struct Generator {
+    struct Compiler *C;
+    struct HirSymtab *sym;
+    struct HirScope *globals;
+    struct Hir *hir;
+    struct FuncState *fs;
+    struct ToplevelList *items;
+    paw_Env *P;
+} Generator;
+
+// Instantiate a polymorphic function or type
+// Expects that 'decl' is already resolved, meaning the type of each symbol has been
+// filled in. Works by replacing each generic type with the corresponding concrete 
+// type from the given 'types'. Returns a HirInstanceDecl if 'decl' is a function, 
+// and a HirAdtDecl otherwise. We avoid recursively visiting the function body here, 
+// since doing so might cause further instantiations due to the presence of recursion. 
+// Function instance bodies are expanded during stenciling.
+struct HirDecl *pawP_instantiate(
+        struct Resolver *R, 
+        struct HirDecl *decl, 
+        struct HirTypeList *types);
+
+void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const char *modname);
+void pawP_teardown(paw_Env *P, const struct DynamicMem *dm);
+
+struct Ast *pawP_parse(struct Compiler *C, paw_Reader input, void *ud);
+struct Hir *pawP_resolve(struct Compiler *C, struct Ast *ast);
+void pawP_codegen(struct Compiler *C, struct Hir *hir);
+
+static inline void pawP_compile(struct Compiler *C, paw_Reader input, void *ud)
+{
+    // compile the module (source -> AST -> HIR -> bytecode)
+    struct Ast *ast = pawP_parse(C, input, ud);
+    struct Hir *hir = pawP_resolve(C, ast);
+    pawP_codegen(C, hir);
+}
 
 paw_Type pawP_type2code(struct Compiler *C, struct HirType *type);
 

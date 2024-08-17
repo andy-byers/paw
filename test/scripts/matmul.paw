@@ -38,8 +38,11 @@ fn matmul(n: int, a: [[float]], b: [[float]]) -> [[float]] {
 
 pub fn main(args: [str]) {
     let n = 100
+    if #args > 0 {
+        n = _string_parse_int(args[0], 10)
+    }
     let a = matgen(n)
     let b = matgen(n)
     let c = matmul(n, a, b)
-    let r = (c[n / 2][n / 2])
+    let r = c[n / 2][n / 2]
 }

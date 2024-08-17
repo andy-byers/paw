@@ -17,41 +17,41 @@ static void test_primitives(void)
 {
     Value v = {.i = -1};
 
-    v_set_0(&v);
+    V_SET_0(&v);
     check(v.u == 0);
 
-    v_set_bool(&v, PAW_TRUE);
-    check(v_true(v));
-    v_set_bool(&v, PAW_FALSE);
-    check(!v_true(v));
+    V_SET_BOOL(&v, PAW_TRUE);
+    check(V_TRUE(v));
+    V_SET_BOOL(&v, PAW_FALSE);
+    check(!V_TRUE(v));
 
-    v_set_float(&v, 0.0);
-    check(v_float(v) == 0.0);
-    v_set_float(&v, 12.3);
-    check(v_float(v) == 12.3);
-    v_set_float(&v, 12.3e123);
-    check(v_float(v) == 12.3e123);
-    v_set_float(&v, INFINITY);
-    check(!isfinite(v_float(v)));
-    v_set_float(&v, -INFINITY);
-    check(!isfinite(v_float(v)));
-    v_set_float(&v, nan(""));
-    check(isnan(v_float(v)));
-    v_set_float(&v, DBL_MAX);
-    check(isfinite(v_float(v)));
-    v_set_float(&v, DBL_MIN);
-    check(isfinite(v_float(v)));
+    V_SET_FLOAT(&v, 0.0);
+    check(V_FLOAT(v) == 0.0);
+    V_SET_FLOAT(&v, 12.3);
+    check(V_FLOAT(v) == 12.3);
+    V_SET_FLOAT(&v, 12.3e123);
+    check(V_FLOAT(v) == 12.3e123);
+    V_SET_FLOAT(&v, INFINITY);
+    check(!isfinite(V_FLOAT(v)));
+    V_SET_FLOAT(&v, -INFINITY);
+    check(!isfinite(V_FLOAT(v)));
+    V_SET_FLOAT(&v, nan(""));
+    check(isnan(V_FLOAT(v)));
+    V_SET_FLOAT(&v, DBL_MAX);
+    check(isfinite(V_FLOAT(v)));
+    V_SET_FLOAT(&v, DBL_MIN);
+    check(isfinite(V_FLOAT(v)));
 
-    v_set_int(&v, 0);
-    check(v_int(v) == 0);
-    v_set_int(&v, 123);
-    check(v_int(v) == 123);
-    v_set_int(&v, -123);
-    check(v_int(v) == -123);
-    v_set_int(&v, PAW_INT_MAX);
-    check(v_int(v) == PAW_INT_MAX);
-    v_set_int(&v, PAW_INT_MIN);
-    check(v_int(v) == PAW_INT_MIN);
+    V_SET_INT(&v, 0);
+    check(V_INT(v) == 0);
+    V_SET_INT(&v, 123);
+    check(V_INT(v) == 123);
+    V_SET_INT(&v, -123);
+    check(V_INT(v) == -123);
+    V_SET_INT(&v, PAW_INT_MAX);
+    check(V_INT(v) == PAW_INT_MAX);
+    V_SET_INT(&v, PAW_INT_MIN);
+    check(V_INT(v) == PAW_INT_MIN);
 }
 
 #define N 500
@@ -60,7 +60,7 @@ static Map *map_new(paw_Env *P)
 {
     Value *pv = pawC_stkinc(P, 1);
     Map *m = pawH_new(P);
-    v_set_object(pv, m); // anchor
+    V_SET_OBJECT(pv, m); // anchor
     return m;
 }
 
@@ -158,7 +158,7 @@ static void test_map3(paw_Env *P)
     paw_Int itr = PAW_ITER_INIT;
     while (pawH_iter(m, &itr)) {
         const Value key = *pawH_key(m, CAST_SIZE(itr));
-        if (v_int(key) >= 0) map_del(m, key.i);
+        if (V_INT(key) >= 0) map_del(m, key.i);
     }
 
     check(CAST_SIZE(pawH_length(m)) <= paw_countof(known));
@@ -193,8 +193,6 @@ static void test_strings(paw_Env *P)
             paw_pop(P, npop);
         }
     }
-    printf("total %d\n",total_words);
-
     paw_push_nstring(P, "fixed\0\1", 7);
     check(fixed == P->top.p[-1].p);
 }
@@ -218,22 +216,35 @@ static void driver(void (*callback)(paw_Env *))
     test_close(P, &a);
 }
 
-static void parse_int(paw_Env *P, void *ud)
+static int parse_int(paw_Env *P, void *ud)
 {
-    paw_push_string(P, CAST(ud, const char *));
-    pawR_to_int(P, PAW_TSTRING);
+    const int rc = pawV_parse_int(P, CAST(ud, const char *), 0);
+    if (rc == PAW_OK) paw_pop(P, 1);
+    return rc;
+}
+
+static void parse_and_check_int(paw_Env *P, void *ud, paw_Int result)
+{
+    check(PAW_OK == pawV_parse_int(P, CAST(ud, const char *), 0));
+    check(paw_int(P, -1) == result);
+    paw_pop(P, 1);
 }
 
 static void test_parse_int(paw_Env *P)
 {
     // able to parse PAW_INT_MIN directly, since we consider the '-'
-    check(PAW_OK == pawC_try(P, parse_int, "-9223372036854775808")); 
-    check(PAW_OK == pawC_try(P, parse_int, "  -1")); // '-' must touch first digit
-    check(PAW_ESYNTAX == pawC_try(P, parse_int, "--1"));
-    check(PAW_ESYNTAX == pawC_try(P, parse_int, "- 1"));
-    check(PAW_ESYNTAX == pawC_try(P, parse_int, "01"));
-    check(PAW_EOVERFLOW == pawC_try(P, parse_int, "9223372036854775808")); 
-    check(PAW_EOVERFLOW == pawC_try(P, parse_int, "-9223372036854775809")); 
+    parse_and_check_int(P, "-9223372036854775808", INT64_MIN); 
+    parse_and_check_int(P, "9223372036854775807", INT64_MAX); 
+    parse_and_check_int(P, "  -1", -1); // sign must touch first digit
+    parse_and_check_int(P, " +2  ", 2); 
+
+    check(PAW_ESYNTAX == parse_int(P, "--1"));
+    check(PAW_ESYNTAX == parse_int(P, "- 1"));
+    check(PAW_ESYNTAX == parse_int(P, "01"));
+    check(PAW_ESYNTAX == parse_int(P, "123 4"));
+    check(PAW_ESYNTAX == parse_int(P, "123.4"));
+    check(PAW_EOVERFLOW == parse_int(P, "9223372036854775808")); 
+    check(PAW_EOVERFLOW == parse_int(P, "-9223372036854775809")); 
 }
 
 int main(void)

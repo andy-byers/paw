@@ -1,11 +1,13 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
+
 #include "auxlib.h"
 #include "map.h"
 #include "mem.h"
 #include "rt.h"
 #include "util.h"
+#include <stdio.h>
 #include <stdlib.h>
 
 static void grow_buffer(paw_Env *P, Buffer *buf, int boxloc)
@@ -13,7 +15,7 @@ static void grow_buffer(paw_Env *P, Buffer *buf, int boxloc)
     paw_assert(buf->alloc <= SIZE_MAX / 2);
     const size_t alloc = buf->alloc * 2;
     if (pawL_boxed(buf)) {
-        Foreign *ud = v_foreign(P->top.p[boxloc]);
+        Foreign *ud = V_FOREIGN(P->top.p[boxloc]);
         pawM_resize(P, buf->data, buf->alloc, alloc);
         ud->data = buf->data;
         ud->size = alloc;
@@ -24,7 +26,7 @@ static void grow_buffer(paw_Env *P, Buffer *buf, int boxloc)
         memcpy(ud->data, buf->stack, buf->size);
         buf->data = ud->data;
         Value *pbox = &P->top.p[boxloc - 1];
-        v_set_object(pbox, ud);
+        V_SET_OBJECT(pbox, ud);
         paw_pop(P, 1);
     }
     buf->alloc = alloc;
@@ -119,7 +121,7 @@ void pawL_add_nstring(paw_Env *P, Buffer *buf, const char *s, size_t n)
 void pawL_add_integer(paw_Env *P, Buffer *buf, paw_Int i)
 {
     Value v;
-    v_set_int(&v, i);
+    V_SET_INT(&v, i);
 
     size_t len;
     const char *str = pawV_to_string(P, v, PAW_TINT, &len);
@@ -130,7 +132,7 @@ void pawL_add_integer(paw_Env *P, Buffer *buf, paw_Int i)
 void pawL_add_float(paw_Env *P, Buffer *buf, paw_Float f)
 {
     Value v;
-    v_set_float(&v, f);
+    V_SET_FLOAT(&v, f);
 
     size_t len;
     const char *str = pawV_to_string(P, v, PAW_TFLOAT, &len);

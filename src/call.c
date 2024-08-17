@@ -1,6 +1,7 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
+
 #include "prefix.h"
 
 #include "call.h"
@@ -113,7 +114,7 @@ Value *pawC_pushns(paw_Env *P, const char *s, size_t n)
 {
     Value *pv = pawC_push0(P);
     String *str = pawS_new_nstr(P, s, n);
-    v_set_object(pv, str);
+    V_SET_OBJECT(pv, str);
     return pv;
 }
 
@@ -146,7 +147,7 @@ static void call_return(paw_Env *P, StackPtr base, paw_Bool has_return)
     } else {
         // implicit 'return ()'
         P->top.p = base + 1;
-        P->top.p->u = 0; // clear value
+        V_SET_0(P->top.p);
     }
     P->cf = P->cf->prev;
 }
@@ -167,7 +168,7 @@ static void handle_ccall(paw_Env *P, StackPtr base, Native *ccall)
     const int nret = ccall->func(P);
     base = RESTORE_POINTER(P, pos);
     call_return(P, base, nret);
-    // pawR_close_upvalues(P, base);
+    pawR_close_upvalues(P, base);
 }
 
 static void check_fixed_args(paw_Env *P, Proto *f, int argc)
@@ -193,12 +194,12 @@ CallFrame *pawC_precall(paw_Env *P, StackPtr base, Object *callable, int argc)
 
     Native *ccall;
     Closure *fn = NULL;
-    switch (o_kind(callable)) {
+    switch (O_KIND(callable)) {
         case VNATIVE:
-            ccall = o_native(callable);
+            ccall = O_NATIVE(callable);
             goto call_native;
         case VCLOSURE:
-            fn = o_closure(callable);
+            fn = O_CLOSURE(callable);
             break;
         default:
             pawR_error(P, PAW_ETYPE, "type is not callable");

@@ -3,12 +3,11 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
 #include "code.h"
+#include "compile.h"
 #include "gc.h"
 #include "hir.h"
 #include "map.h"
 #include "mem.h"
-#include "parse.h"
-#include "type.h"
 
 #define SYNTAX_ERROR(G, ...) pawE_error(ENV(G), PAW_ESYNTAX, (G)->fs->line, __VA_ARGS__)
 #define GET_DECL(G, id) pawHir_get_decl((G)->hir, id)
@@ -95,7 +94,7 @@ static String *mangle_name(struct Generator *G, const String *name, struct HirTy
     pawL_add_char(P, &buf, '_');
     pawL_push_result(P, &buf);
     // anchor in compiler string table
-    String *result = v_string(P->top.p[-1]);
+    String *result = V_STRING(P->top.p[-1]);
     const Value key = {.o = CAST_OBJECT(result)};
     pawH_insert(P, G->C->strings, key, key);
     pawC_pop(P);
@@ -143,7 +142,7 @@ static Proto *push_proto(struct Generator *G, String *name)
     paw_Env *P = ENV(G);
     Value *pv = pawC_push0(P);
     Proto *proto = pawV_new_proto(P);
-    v_set_object(pv, proto);
+    V_SET_OBJECT(pv, proto);
     proto->modname = G->C->modname;
     proto->name = name;
     return proto;
@@ -151,7 +150,7 @@ static Proto *push_proto(struct Generator *G, String *name)
 
 static void pop_proto(struct Generator *G)
 {
-    paw_assert(o_is_proto(ENV(G)->top.p[-1].o));
+    paw_assert(O_IS_PROTO(ENV(G)->top.p[-1].o));
     pawC_pop(ENV(G));
 }
 
@@ -632,7 +631,7 @@ static void code_basic_lit(struct HirVisitor *V, struct HirLiteralExpr *e)
     } else if (e->basic.t != PAW_TBOOL) {
         const int k = add_constant(G, e->basic.value);
         pawK_code_U(fs, OP_PUSHCONST, k);
-    } else if (v_true(e->basic.value)) {
+    } else if (V_TRUE(e->basic.value)) {
         pawK_code_0(fs, OP_PUSHTRUE);
     } else {
         pawK_code_0(fs, OP_PUSHFALSE);
@@ -815,7 +814,7 @@ static void set_entrypoint(struct Generator *G, Proto *proto, int g)
     struct GlobalVar *var = pawE_get_global(P, g);
 
     Closure *closure = pawV_new_closure(P, 0);
-    v_set_object(&var->value, closure);
+    V_SET_OBJECT(&var->value, closure);
     closure->p = proto;
 }
 
@@ -1277,6 +1276,9 @@ static void setup_pass(struct HirVisitor *V, struct Generator *G)
     add_builtin_func(G, "assert");
     add_builtin_func(G, "print");
 
+    add_builtin_func(G, "_int_to_string");
+    add_builtin_func(G, "_string_parse_int");
+    add_builtin_func(G, "_string_parse_float");
     add_builtin_func(G, "_string_split");
     add_builtin_func(G, "_string_join");
     add_builtin_func(G, "_string_find");
@@ -1297,15 +1299,17 @@ static void code_module(struct Generator *G, struct Hir *hir)
     code_items(&V);
 }
 
-void p_codegen(struct Compiler *C, struct Hir *hir)
+void pawP_codegen(struct Compiler *C, struct Hir *hir)
 {
+    paw_Env *P = ENV(C);
     struct Generator G = {
         .hir = hir,
         .sym = hir->symtab,
         .globals = hir->symtab->globals,
         .items = item_list_new(hir),
-        .P = ENV(C),
+        .P = P,
         .C = C,
     };
+
     code_module(&G, hir);
 }

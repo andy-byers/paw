@@ -5,9 +5,8 @@
 #include "ast.h"
 #include "map.h"
 #include "mem.h"
+#include "parse.h"
 #include <inttypes.h>
-#include <limits.h>
-#include <stdlib.h>
 
 #define FIRST_ARENA_SIZE 4096
 #define LARGE_ARENA_MIN 32
@@ -15,15 +14,16 @@
 struct Ast *pawAst_new(struct Lex *lex)
 {
     paw_Env *P = ENV(lex);
-    struct Ast *ast = pawM_new(P, struct Ast);
-    *ast = (struct Ast){
+    struct DynamicMem *dm = lex->dm;
+    dm->ast = pawM_new(P, struct Ast);
+    *dm->ast = (struct Ast){
         .lex = lex,
         .P = P,
     };
 
     // initialize memory pools for storing AST components
-    pawK_pool_init(P, &ast->pool, FIRST_ARENA_SIZE, sizeof(void *) * LARGE_ARENA_MIN);
-    return ast;
+    pawK_pool_init(P, &dm->ast->pool, FIRST_ARENA_SIZE, sizeof(void *) * LARGE_ARENA_MIN);
+    return dm->ast;
 }
 
 void pawAst_free(struct Ast *ast)
@@ -35,13 +35,13 @@ void pawAst_free(struct Ast *ast)
     }
 }
 
-#define DEFINE_NODE_CONSTRUCTOR(name, T)                                         \
-    struct T *pawAst_new_##name(struct Ast *ast, enum T##Kind kind)              \
-    {                                                                            \
+#define DEFINE_NODE_CONSTRUCTOR(name, T) \
+    struct T *pawAst_new_##name(struct Ast *ast, enum T##Kind kind) \
+    { \
         struct T *r = pawK_pool_alloc(ENV(ast), &(ast)->pool, sizeof(struct T)); \
-        r->hdr.line = (ast)->lex->last_line;                                     \
-        r->hdr.kind = kind;                                                      \
-        return r;                                                                \
+        r->hdr.line = (ast)->lex->last_line; \
+        r->hdr.kind = kind; \
+        return r; \
     }
 DEFINE_NODE_CONSTRUCTOR(expr, AstExpr)
 DEFINE_NODE_CONSTRUCTOR(decl, AstDecl)
@@ -57,6 +57,12 @@ typedef struct Printer {
     int indent;
 } Printer;
 
+#define DUMP_FMT(P, fmt, ...) (indent_line(P), fprintf((P)->out, fmt, __VA_ARGS__))
+#define DUMP_MSG(P, msg) (indent_line(P), fprintf((P)->out, msg))
+
+#define DUMP_BLOCK(P, b) CHECK_EXP(AstIsBlock(AST_CAST_STMT(b)), dump_stmt(P, AST_CAST_STMT(b)))
+#define DUMP_NAME(P, s) DUMP_FMT(P, "name: %s\n", s ? s->text : NULL)
+
 static void indent_line(Printer *P)
 {
     for (int i = 0; i < P->indent; ++i) {
@@ -64,11 +70,28 @@ static void indent_line(Printer *P)
     }
 }
 
-#define DUMP_FMT(P, fmt, ...) (indent_line(P), fprintf((P)->out, fmt, __VA_ARGS__))
-#define DUMP_MSG(P, msg) (indent_line(P), fprintf((P)->out, msg))
+static void dump_expr(Printer *P, struct AstExpr *e);
+static void dump_decl(Printer *P, struct AstDecl *d);
+static void dump_stmt(Printer *P, struct AstStmt *s);
 
-static void dump_stmt(Printer *, struct AstStmt *);
-static void dump_expr(Printer *, struct AstExpr *);
+#define DEFINE_LIST_PRINTER(name, T) \
+    static void dump_##name##_list(Printer *P, struct T##List *list, \
+                                   const char *name) \
+    { \
+        DUMP_FMT(P, "%s: {\n", name); \
+        ++P->indent; \
+        if (list != NULL) { \
+            DUMP_MSG(P, "" /* indent */); \
+            for (int i = 0; i < list->count; ++i) { \
+                dump_##name(P, list->data[i]); \
+            } \
+        } \
+        --P->indent; \
+        DUMP_MSG(P, "}\n"); \
+    }
+DEFINE_LIST_PRINTER(expr, AstExpr) 
+DEFINE_LIST_PRINTER(decl, AstDecl)
+DEFINE_LIST_PRINTER(stmt, AstStmt)
 
 #define DEFINE_KIND_PRINTER(name, T) \
     static int print_##name##_kind(Printer *P, void *node) \
@@ -84,39 +107,11 @@ DEFINE_KIND_PRINTER(expr, AstExpr)
 DEFINE_KIND_PRINTER(decl, AstDecl) 
 DEFINE_KIND_PRINTER(stmt, AstStmt) 
 
-#define dump_block(P, b) CHECK_EXP(AstIsBlock(AST_CAST_STMT(b)), dump_stmt(P, AST_CAST_STMT(b)))
-#define dump_name(P, s) DUMP_FMT(P, "name: %s\n", s ? s->text : NULL)
-
-static void dump_expr(Printer *P, struct AstExpr *e);
-static void dump_decl(Printer *P, struct AstDecl *d);
-static void dump_stmt(Printer *P, struct AstStmt *s);
-
-// clang-format off
-#define DEFINE_LIST_PRINTER(name, T)                                           \
-    static void dump_##name##_list(Printer *P, struct T##List *list,           \
-                                   const char *name)                           \
-    {                                                                          \
-        DUMP_FMT(P, "%s: {\n", name);                                          \
-        ++P->indent;                                                           \
-        if (list != NULL) {                                                    \
-            DUMP_MSG(P, "" /* indent */);                                      \
-            for (int i = 0; i < list->count; ++i) {                            \
-                dump_##name(P, list->data[i]);                                 \
-            }                                                                  \
-        }                                                                      \
-        --P->indent;                                                           \
-        DUMP_MSG(P, "}\n");                                                    \
-    }
-DEFINE_LIST_PRINTER(expr, AstExpr) 
-DEFINE_LIST_PRINTER(decl, AstDecl)
-DEFINE_LIST_PRINTER(stmt, AstStmt)
-// clang-format on
-
 static void dump_path(Printer *P, struct AstPath *p)
 {
     for (int i = 0; i < p->count; ++i) {
         struct AstSegment *seg = p->data[i];
-        dump_name(P, seg->name);
+        DUMP_NAME(P, seg->name);
         dump_expr_list(P, seg->types, "types");
     }
 }
@@ -138,35 +133,35 @@ static void dump_decl(Printer *P, struct AstDecl *d)
             DUMP_MSG(P, "result: ");
             dump_expr(P, d->func.result);
             DUMP_MSG(P, "body: ");
-            dump_block(P, d->func.body);
+            DUMP_BLOCK(P, d->func.body);
             break;
         case kAstFieldDecl:
-            dump_name(P, d->field.name);
+            DUMP_NAME(P, d->field.name);
             DUMP_MSG(P, "tag: ");
             dump_expr(P, d->field.tag);
             break;
         case kAstVarDecl:
-            dump_name(P, d->var.name);
+            DUMP_NAME(P, d->var.name);
             DUMP_MSG(P, "tag: ");
             dump_expr(P, d->var.tag);
             DUMP_MSG(P, "init: ");
             dump_expr(P, d->var.init);
             break;
         case kAstVariantDecl:
-            dump_name(P, d->variant.name);
+            DUMP_NAME(P, d->variant.name);
             dump_decl_list(P, d->variant.fields, "fields");
             break;
         case kAstAdtDecl:
-            dump_name(P, d->adt.name);
+            DUMP_NAME(P, d->adt.name);
             DUMP_FMT(P, "is_struct: %d\n", d->adt.is_struct);
             dump_decl_list(P, d->adt.generics, "generics");
             dump_decl_list(P, d->adt.fields, "fields");
             break;
         case kAstGenericDecl:
-            dump_name(P, d->generic.name);
+            DUMP_NAME(P, d->generic.name);
             break;
         case kAstTypeDecl:
-            dump_name(P, d->type.name);
+            DUMP_NAME(P, d->type.name);
             DUMP_MSG(P, "rhs: ");
             dump_expr(P, d->type.rhs);
             dump_decl_list(P, d->type.generics, "generics");
@@ -210,7 +205,7 @@ static void dump_stmt(Printer *P, struct AstStmt *s)
             break;
         case kAstForStmt:
             if (s->for_.is_fornum) {
-                dump_name(P, s->for_.name);
+                DUMP_NAME(P, s->for_.name);
                 DUMP_MSG(P, "begin: ");
                 dump_expr(P, s->for_.fornum.begin);
                 DUMP_MSG(P, "end: ");
@@ -218,26 +213,26 @@ static void dump_stmt(Printer *P, struct AstStmt *s)
                 DUMP_MSG(P, "step: ");
                 dump_expr(P, s->for_.fornum.step);
                 DUMP_MSG(P, "block: ");
-                dump_block(P, s->for_.block);
+                DUMP_BLOCK(P, s->for_.block);
             } else {
-                dump_name(P, s->for_.name);
+                DUMP_NAME(P, s->for_.name);
                 DUMP_MSG(P, "target: ");
                 dump_expr(P, s->for_.forin.target);
                 DUMP_MSG(P, "block: ");
-                dump_block(P, s->for_.block);
+                DUMP_BLOCK(P, s->for_.block);
             }
             break;
         case kAstWhileStmt:
             if (s->while_.is_dowhile) {
                 DUMP_MSG(P, "block: ");
-                dump_block(P, s->while_.block);
+                DUMP_BLOCK(P, s->while_.block);
                 DUMP_MSG(P, "cond: ");
                 dump_expr(P, s->while_.cond);
             } else {
                 DUMP_MSG(P, "cond: ");
                 dump_expr(P, s->while_.cond);
                 DUMP_MSG(P, "block: ");
-                dump_block(P, s->while_.block);
+                DUMP_BLOCK(P, s->while_.block);
             }
             break;
         case kAstReturnStmt:
@@ -271,24 +266,24 @@ static void dump_expr(Printer *P, struct AstExpr *e)
                         case PAW_TBOOL:
                             DUMP_MSG(P, "type: bool\n");
                             DUMP_FMT(P, "value: %s\n",
-                                     v_true(e->literal.basic.value) ? "true"
+                                     V_TRUE(e->literal.basic.value) ? "true"
                                                                     : "false");
                             break;
                         case PAW_TINT:
                             DUMP_MSG(P, "type: int\n");
                             DUMP_FMT(P, "value: %" PRId64 "\n",
-                                     v_int(e->literal.basic.value));
+                                     V_INT(e->literal.basic.value));
                             break;
                         case PAW_TFLOAT:
                             DUMP_MSG(P, "type: float\n");
                             DUMP_FMT(P, "value: %f\n",
-                                     v_float(e->literal.basic.value));
+                                     V_FLOAT(e->literal.basic.value));
                             break;
                         default:
                             paw_assert(e->literal.basic.t == PAW_TSTRING);
                             DUMP_MSG(P, "type: string\n");
                             DUMP_FMT(P, "value: %s\n",
-                                     v_string(e->literal.basic.value)->text);
+                                     V_STRING(e->literal.basic.value)->text);
                             break;
                     }
                     break;
@@ -340,7 +335,7 @@ static void dump_expr(Printer *P, struct AstExpr *e)
             if (e->selector.is_index) {
                 DUMP_FMT(P, "index: %" PRId64 "\n", e->selector.index);
             } else {
-                dump_name(P, e->selector.name);
+                DUMP_NAME(P, e->selector.name);
             }
             break;
         case kAstContainerType:

@@ -1,6 +1,7 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
+
 #ifndef PAW_CALL_H
 #define PAW_CALL_H
 
@@ -67,35 +68,35 @@ static inline Value *pawC_pushv(paw_Env *P, Value v)
 static inline Value *pawC_push0(paw_Env *P)
 {
     StackPtr sp = pawC_stkinc(P, 1);
-    v_set_0(sp);
+    V_SET_0(sp);
     return sp;
 }
 
 static inline Value *pawC_pushi(paw_Env *P, paw_Int i)
 {
     StackPtr sp = pawC_stkinc(P, 1);
-    v_set_int(sp, i);
+    V_SET_INT(sp, i);
     return sp;
 }
 
 static inline Value *pawC_pushf(paw_Env *P, paw_Float f)
 {
     StackPtr sp = pawC_stkinc(P, 1);
-    v_set_float(sp, f);
+    V_SET_FLOAT(sp, f);
     return sp;
 }
 
 static inline Value *pawC_pushb(paw_Env *P, paw_Bool b)
 {
     StackPtr sp = pawC_stkinc(P, 1);
-    v_set_bool(sp, b);
+    V_SET_BOOL(sp, b);
     return sp;
 }
 
 static inline Value *pawC_pusho(paw_Env *P, Object *o)
 {
     StackPtr sp = pawC_stkinc(P, 1);
-    v_set_object(sp, o);
+    V_SET_OBJECT(sp, o);
     return sp;
 }
 

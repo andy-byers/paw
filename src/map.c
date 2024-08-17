@@ -1,12 +1,12 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
+
 #include "map.h"
 #include "gc.h"
 #include "mem.h"
 #include "rt.h"
 #include "util.h"
-#include <assert.h>
 #include <string.h>
 
 // Total number of bytes needed for each map slot
@@ -22,8 +22,8 @@ static inline Value *insert_aux(Map *m, Value key)
     MapCursor erased;
     paw_Bool found_erased = PAW_FALSE;
     MapCursor mc = h_cursor_init(m, key);
-    while (!h_is_vacant(&mc)) {
-        if (h_is_erased(&mc)) {
+    while (h_get_state(&mc) != MAP_ITEM_VACANT) {
+        if (h_get_state(&mc) == MAP_ITEM_ERASED) {
             if (!found_erased) {
                 // new item replaces the first erased item, continue searching
                 // for a duplicate
@@ -124,7 +124,7 @@ Value *pawH_create(paw_Env *P, Map *m, Value key)
 void pawH_clone(paw_Env *P, StackPtr sp, Map *m)
 {
     Map *clone = pawH_new(P);
-    v_set_object(sp, clone);
+    V_SET_OBJECT(sp, clone);
     pawH_extend(P, clone, m);
 }
 

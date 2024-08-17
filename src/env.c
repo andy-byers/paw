@@ -1,6 +1,7 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
+
 #include "env.h"
 #include "mem.h"
 #include "rt.h"
@@ -10,8 +11,10 @@ void pawE_error(paw_Env *P, int code, int line, const char *fmt, ...)
 {
     Buffer print;
     pawL_init_buffer(P, &print);
-    pawL_add_nstring(P, &print, P->modname->text, P->modname->length);
-    pawL_add_fstring(P, &print, ":%d: ", line);
+    if (line >= 0) {
+        paw_assert(P->modname != NULL);
+        pawL_add_fstring(P, &print, "%s:%d: ", P->modname->text, line);
+    }
 
     va_list arg;
     va_start(arg, fmt);
@@ -53,7 +56,7 @@ int pawE_new_global(paw_Env *P, String *name)
     pawM_grow(P, gv->data, gv->size, gv->alloc);
     const int gid = gv->size++;
     GlobalVar *var = &gv->data[gid];
-    v_set_0(&var->value);
+    V_SET_0(&var->value);
     var->name = name;
     return gid;
 }

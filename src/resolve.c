@@ -5,7 +5,6 @@
 // resolve.c: Implementation of the type checker. This code transforms an AST
 // from the parser into a type-annotated HIR tree.
 
-#include "resolve.h"
 #include "ast.h"
 #include "code.h"
 #include "compile.h"
@@ -17,7 +16,6 @@
 #include "mem.h"
 #include "parse.h"
 #include "str.h"
-#include "type.h"
 #include "unify.h"
 
 #define NAME_ERROR(R, ...) pawE_error(ENV(R), PAW_ENAME, (R)->line, __VA_ARGS__)
@@ -1109,7 +1107,7 @@ static struct HirExpr *resolve_unop_expr(struct Resolver *R, struct AstUnOpExpr 
 
     struct HirType *type = expr_type(R, r->target);
     const paw_Type code = TYPE2CODE(R, type);
-    if (!kValidOps[e->op][code]) {
+    if (code < 0 || !kValidOps[e->op][code]) {
         TYPE_ERROR(R, "unsupported operand type for unary operator");
     } else if (unop_is_bool(e->op)) {
         r->type = get_type(R, PAW_TBOOL);
@@ -1190,13 +1188,13 @@ static struct HirExpr *resolve_binop_expr(struct Resolver *R, struct AstBinOpExp
     }
     unify(R, lhs, rhs);
 
-    const paw_Type type = TYPE2CODE(R, lhs);
-    paw_assert(type == TYPE2CODE(R, rhs));
-    if (type < 0 || !kValidOps[e->op][type]) {
+    const paw_Type code = TYPE2CODE(R, lhs);
+    paw_assert(code == TYPE2CODE(R, rhs));
+    if (code < 0 || !kValidOps[e->op][code]) {
         TYPE_ERROR(R, "unsupported operand types for binary operator");
-    } else if (type == PAW_TVECTOR) {
+    } else if (code == PAW_TVECTOR) {
         r->type = binop_vector(R, e->op, lhs);
-    } else if (type == PAW_TMAP) {
+    } else if (code == PAW_TMAP) {
         r->type = binop_map(R, lhs);
     } else if (binop_is_bool(e->op)) {
         r->type = get_type(R, PAW_TBOOL);
@@ -1561,7 +1559,7 @@ static struct HirType *resolve_composite_lit(struct Resolver *R, struct AstCompo
     paw_Env *P = ENV(R);
     Value *pv = pawC_push0(P);
     Map *map = pawH_new(P);
-    v_set_object(pv, map);
+    V_SET_OBJECT(pv, map);
 
     Value key;
     struct Generalization g;
@@ -1584,25 +1582,25 @@ static struct HirType *resolve_composite_lit(struct Resolver *R, struct AstCompo
         struct AstExpr *ast_item = e->items->data[i];
         struct HirExpr *hir_item = resolve_expr(R, ast_item);
         struct HirStructField *item = HirGetStructField(hir_item);
-        v_set_object(&key, item->name);
+        V_SET_OBJECT(&key, item->name);
         if (pawH_contains(map, key)) {
             NAME_ERROR(R, "duplicate field '%s' in initializer for struct '%s'", 
                        item->name->text, pack.name->text);
         }
         Value *value = pawH_create(P, map, key);
-        v_set_int(value, i);
+        V_SET_INT(value, i);
         pawHir_expr_list_push(R->hir, order, hir_item);
     }
     for (int i = 0; i < pack.fields->count; ++i) {
         struct HirDecl *decl = pack.fields->data[i];
         struct HirFieldDecl *field = HirGetFieldDecl(decl);
-        v_set_object(&key, field->name);
+        V_SET_OBJECT(&key, field->name);
         Value *value = pawH_get(map, key);
         if (value == NULL) {
             NAME_ERROR(R, "missing initializer for field '%s' in struct '%s'",
                        field->name->text, pack.name->text);
         }
-        const paw_Int index = v_int(*value);
+        const paw_Int index = V_INT(*value);
         struct HirType *field_t = is_inference
                                ? field_types->data[i]
                                : HIR_TYPEOF(pack.fields->data[i]);
@@ -1616,7 +1614,7 @@ static struct HirType *resolve_composite_lit(struct Resolver *R, struct AstCompo
     while (pawH_iter(map, &iter)) {
         const Value *pkey = pawH_key(map, CAST_SIZE(iter));
         NAME_ERROR(R, "unexpected field '%s' in initializer for struct '%s'",
-                   v_string(*pkey), pack.name->text);
+                   V_STRING(*pkey), pack.name->text);
     }
     paw_assert(pack.fields->count == e->items->count);
     pawC_pop(P); // pop map
@@ -2125,14 +2123,9 @@ static void visit_module(struct Resolver *R)
     pawHir_expand(R, hir);
 }
 
-struct Hir *p_resolve(struct Compiler *C, struct Ast *ast)
+struct Hir *pawP_resolve(struct Compiler *C, struct Ast *ast)
 {
     struct Hir *hir = pawHir_new(C);
-    C->dm->unifier.ast = ast;
-    C->dm->unifier.hir = hir;
-    C->dm->unifier.P = ENV(C);
-    C->dm->hir = hir;
-
     struct Resolver R = {
         .dm = C->dm,
         .ast = ast,
@@ -2143,6 +2136,11 @@ struct Hir *p_resolve(struct Compiler *C, struct Ast *ast)
         .P = ENV(C),
         .C = C,
     };
+    C->dm->unifier.ast = ast;
+    C->dm->unifier.hir = hir;
+    C->dm->unifier.P = ENV(C);
+    C->dm->unifier.R = &R;
+    C->dm->hir = hir;
     visit_module(&R);
     return hir;
 }

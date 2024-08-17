@@ -54,10 +54,8 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/os.h
             ${PAW_SOURCE_DIR}/parse.h
             ${PAW_SOURCE_DIR}/prefix.h
-            ${PAW_SOURCE_DIR}/resolve.h
             ${PAW_SOURCE_DIR}/rt.h
             ${PAW_SOURCE_DIR}/str.h
-            ${PAW_SOURCE_DIR}/type.h
             ${PAW_SOURCE_DIR}/unify.h
             ${PAW_SOURCE_DIR}/util.h
             ${PAW_SOURCE_DIR}/value.h
@@ -85,7 +83,6 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/resolve.c
             ${PAW_SOURCE_DIR}/rt.c
             ${PAW_SOURCE_DIR}/str.c
-            ${PAW_SOURCE_DIR}/type.c
             ${PAW_SOURCE_DIR}/unify.c
             ${PAW_SOURCE_DIR}/util.c
             ${PAW_SOURCE_DIR}/value.c

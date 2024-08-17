@@ -1,6 +1,6 @@
 // block.paw
 
-{
+pub fn test_locals() {
     let _0 = 0
     {
         let _1 = 1
@@ -21,8 +21,8 @@
     assert(_0 == 123)
 }
 
-{
-    fn test(n: int) -> string {
+pub fn test_if_else() {
+    let test = |n| {
         if n == 0 {
             return 'zero'
         } else if n == 1 {

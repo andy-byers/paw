@@ -8,13 +8,6 @@
 #include "util.h"
 #include <string.h>
 
-void pawV_index_error(paw_Env *P, paw_Int index, size_t length)
-{
-    pawR_error(P, PAW_EINDEX,
-               "index %I is out of bounds for container of length %I", index,
-               paw_cast_int(length));
-}
-
 static size_t vector_capacity(const Vector *a)
 {
     return CAST_SIZE(a->upper - a->begin);
@@ -98,7 +91,7 @@ void pawV_vec_pop(paw_Env *P, Vector *a, paw_Int index)
 {
     const size_t len = pawV_vec_length(a);
     const paw_Int fixed = pawV_abs_index(index, len);
-    const size_t abs = pawV_check_abs(P, fixed, len);
+    const size_t abs = pawV_check_abs(P, fixed, len, "vector");
     if (abs != len - 1) {
         // Shift values into place
         move_items(a->begin + abs + 1, -1, len - abs - 1);
@@ -122,7 +115,7 @@ void pawV_vec_free(paw_Env *P, Vector *a)
 Vector *pawV_vec_clone(paw_Env *P, Value *pv, const Vector *a)
 {
     Vector *a2 = pawV_vec_new(P);
-    v_set_object(pv, a2); // anchor
+    V_SET_OBJECT(pv, a2); // anchor
     if (pawV_vec_length(a)) {
         pawV_vec_resize(P, a2, pawV_vec_length(a));
         memcpy(a2->begin, a->begin, sizeof(a->begin[0]) * pawV_vec_length(a));

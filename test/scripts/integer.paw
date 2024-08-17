@@ -1,67 +1,60 @@
 // integer.paw
 
-// Test integer parsing:
-{
-    // Non-decimal integers
+pub fn test_non_decimal() {
     assert(0b0 == 0)
     assert(0o0 == 0)
     assert(0x0 == 0)
-    assert(0B1 == 1)
-    assert(0O1 == 1)
-    assert(0X1 == 1)
+    assert(0b00 == 0)
+    assert(0o000 == 0)
+    assert(0x0000 == 0)
+
     assert(0b1010 == 10)
     assert(0o1234 == 668)
     assert(0x5678 == 22136)
 
-    assert(int('-100') < 0)
-    assert(int('100') > 0)
-
-    fn ok_integer(str: string, f) {
-        assert(int(str) == f)
-    }
-
-    ok_integer('0', 0)
-    ok_integer('1', 1)
-    ok_integer('10', 10)
-    ok_integer('  1', 1)
-    ok_integer('1  ', 1)
-    ok_integer(' 1 ', 1)
-    ok_integer('  -1', -1)
-    ok_integer('-1  ', -1)
-    ok_integer(' -1 ', -1)
-    ok_integer(str(1 << 80), 1 << 80)
-
-    fn bad_integer(str) {
-        assert(0 != try(int, str))
-    }
-
-    bad_integer('abc')
-    bad_integer(' ')
-    bad_integer('0.9')
-    bad_integer('1.1')
+    // some C and C++ compilers fail to parse these
+    // see https://stackoverflow.com/questions/49543516
+    assert(0xe-1 == 0xe - 1)
+    assert(0xe+1 == 0xe + 1)
 }
 
-// Boundary values
-{
-    fn apply(f, target) {
-        for t in target {
-            f(t)
-        }
+pub fn test_parse() {
+    let check = |s: str, want: int| {
+        assert(_string_parse_int(s, 10) == want)
     }
 
-    fn combine(lhs, rhs) {
-        let out = []
-        for x in lhs {
-            for y in rhs {
-                out.push([x, y])
-            }
-        }
-        return out
-    }
+    check('0', 0)
+    check('1', 1)
+    check('10', 10)
+    check('  1', 1)
+    check('1  ', 1)
+    check(' 1 ', 1)
+    check('  -1', -1)
+    check('-1  ', -1)
+    check(' -1 ', -1)
+    check(_int_to_string(1 << 32), 1 << 32)
+}
 
-    let ismall = [
-        -70368744177663 - 1, // PAW_INT_MIN
-        -73748835532,
+fn apply<T>(f: fn(T), target: [T]) {
+    for t in target {
+        f(t)
+    }
+}
+
+fn combine<T>(lhs: [T], rhs: [T]) -> [(T, T)] {
+    let out = []
+    for x in lhs {
+        for y in rhs {
+            _vector_push(out, (x, y))
+        }
+    }
+    return out
+}
+
+pub fn test_boundary_values() {
+    let imax = 0x7FFFFFFFFFFFFFFF
+    let imin = -imax - 1
+    let values = [
         -8835532,
         -532,
         -1,
@@ -69,25 +62,14 @@
         2, 
         407,
         4073748,
-        40737488355,
-        70368744177663, // PAW_INT_MAX
-    ]
-
-    let ilarge = [
-        -90121909996521879321156109823471015,
-        -488124578190375084952901,
-        -70368744177665, // PAW_INT_MIN - 1
-        70368744177664, // PAW_INT_MAX + 1
-        201767997902333542592493,
-        82040031098795190476449481359582068,
     ]
 
     // Precedence helper
-    fn check(x, y) {
+    let check = |x: int, y: int| {
         assert(x == y)
     }
 
-    fn test_single(x) {
+    let test_single = |x: int| {
         check(x, x)
         check(x, ~~x)
         check(x, - -x)
@@ -105,10 +87,6 @@
         check(x << 2, x * 4)
         check(x << 3 >> 1, x << 2)
 
-        // 'y' must be a bigint
-        let y = x << 50;
-        check(y >> 50, x)
-
         if x < 0 {
             // Right shift does sign extension
             check(x >> 10000, -1)
@@ -117,9 +95,9 @@
         }
     }
 
-    fn test_arith(a) {
-        let x = a[0]
-        let y = a[1]
+    let test_arith = |a: (int, int)| {
+        let x = a.0
+        let y = a.1
 
         // Commutative property:
         check(x + y, y + x)
@@ -137,52 +115,49 @@
         check(x - y, -y + x)
         check(x + y + y, x + 2 * y)
         check(x + x + y + y + y, 2 * x + 3 * y)
-        check(x * 100 // 50, x * 2)
-        check(y * 100 // 50, y * 2)
-        check(x * 369 // 3, x * 123)
-        check(y * 369 // 3, y * 123)
-        if (x) {
-            check(y * x // x, y)
+        check(x * 100 / 50, x * 2)
+        check(y * 100 / 50, y * 2)
+        check(x * 369 / 3, x * 123)
+        check(y * 369 / 3, y * 123)
+        if x != 0 {
+            check(y * x / x, y)
         }
-        if (y) {
-           check(x * y // y, x)
+        if y != 0 {
+            check(x * y / y, x)
         }
-        fn checkmod(a1, b1, a2, b2, m) {
+        let checkmod = |a1: int, b1: int, 
+                        a2: int, b2: int, 
+                        m: int| {
             check((a1 - b1) % m, (a2 - b2) % m)
         }
         checkmod(x, y, x + 3, y + 3, 7)
         checkmod(x, y, x - 3, y - 3, 7)
     }
 
-    fn test_bitwise(a) {
-        let x = a[0]
-        let y = a[1]
+    let test_bitwise = |a: (int, int)| {
+        let x = a.0
+        let y = a.1
 
         // De Morgan's laws
         check(~(x & y), (~x | ~y))
         check(~(x | y), (~x & ~y))
     }
 
-    fn test_rel(a) {
-        let x = a[0]
-        let y = a[1]
+    let test_rel = |a: (int, int)| {
+        let x = a.0
+        let y = a.1
 
+        // shadow 'check' with a version that operates on booleans
+        let check = |x: bool, y: bool| {
+            assert(x == y)
+        }
         check(x == y, !(x != y))
         check(x < y, y > x)
         check(x <= y, y >= x)
     }
-    apply(test_single, ismall)
-    apply(test_single, ilarge)
-    apply(test_arith, combine(ismall, ismall))
-    apply(test_arith, combine(ismall, ilarge))
-    apply(test_arith, combine(ilarge, ismall))
-    apply(test_arith, combine(ilarge, ilarge))
-    apply(test_rel, combine(ismall, ismall))
-    apply(test_rel, combine(ismall, ilarge))
-    apply(test_rel, combine(ilarge, ismall))
-    apply(test_rel, combine(ilarge, ilarge))
-    apply(test_bitwise, combine(ismall, ismall))
-    apply(test_bitwise, combine(ismall, ilarge))
-    apply(test_bitwise, combine(ilarge, ismall))
-    apply(test_bitwise, combine(ilarge, ilarge))
+
+    apply(test_single, values)
+    apply(test_arith, combine(values, values))
+    apply(test_rel, combine(values, values))
+    apply(test_bitwise, combine(values, values))
 }

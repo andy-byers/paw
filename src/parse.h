@@ -5,11 +5,7 @@
 #ifndef PAW_PARSE_H
 #define PAW_PARSE_H
 
-#include "lex.h"
-#include "type.h"
 #include "unify.h"
-#include "util.h"
-#include "value.h"
 
 #define is_toplevel(x) ((x)->fs->outer == NULL)
 #define limit_error(x, what, limit) pawX_error(x, "too many %s (limit is %d)", what, limit)
@@ -104,8 +100,5 @@ struct DynamicMem {
 };
 
 void pawP_init(paw_Env *P);
-
-Closure *pawP_parse(paw_Env *P, paw_Reader input, struct DynamicMem *mem,
-                    const char *name, void *ud);
 
 #endif // PAW_PARSE_H

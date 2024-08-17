@@ -1,64 +1,41 @@
--- float.paw
+// float.paw
 
--- Test float parsing:
-{
-    assert(0.0 == 0)
-    assert(0.00 == 0)
-    assert(.0 == 0)
-    assert(.00 == 0)
-    assert(0. == 0)
-    assert(0.0e0 == 0)
-    assert(0.0e1 == 0)
+pub fn test_zeros() {
+    assert(0.0 == 0.0)
+    assert(0.00 == 0.0)
+    assert(0. == 0.0)
+    assert(0.0e0 == 0.0)
+    assert(0.0e1 == 0.0)
+}
 
+pub fn test_exponents() {
     assert(1e1 == 10.0)
     assert(10e-1 == 1.0)
     assert(10e+1 == 100.0)
     assert(10e-001 == 1.0)
     assert(10e+001 == 100.0)
+}
 
-    assert(float('-1e-10') < 0)
-    assert(float('1e-10') > 0)
-
-    fn ok_float(str, f) {
-        assert(float(str) == f)
+pub fn test_parse() {
+    let check = |s, f| {
+        assert(_string_parse_float(s) == f)
     }
 
-    ok_float('0.0', 0.0)
-    ok_float('1.0', 1.0)
-    ok_float('10.0', 10.0)
-    ok_float('1e10', 1e10)
-    ok_float('1E10', 1e10)
-    ok_float('1e+10', 1e+10)
-    ok_float('  1.0', 1.0)
-    ok_float('1.0  ', 1.0)
-    ok_float(' 1.0 ', 1.0)
-    ok_float('  -1.0', -1.0)
-    ok_float('-1.0  ', -1.0)
-    ok_float(' -1.0 ', -1.0)
-    ok_float('.0', 0.0)
-    ok_float('0.', 0.0)
-    ok_float('0', 0.0)
-    ok_float('1', 1.0)
-    ok_float('100', 100.0)
-
-    fn bad_float(str) {
-        assert(0 != try(float, str))
-    }
-
-    bad_float('--1.0')
-    bad_float(' --1.0')
-    bad_float('---1.0')
-    bad_float('- -1.0')
-    bad_float('1e--1')
-    bad_float('1e++1')
-    bad_float('1e-1.0')
-    bad_float('1e+1.0')
-    bad_float('1e-1-1')
-    bad_float('1e+1+1')
-    bad_float('1e-1e1')
-    bad_float('1e+1e1')
-    bad_float('1.0.0')
-    bad_float('abc')
-    bad_float(' ')
-    bad_float('0x1')
+    check('0.0', 0.0)
+    check('1.0', 1.0)
+    check('10.0', 10.0)
+    check('1e10', 1e10)
+    check('1E10', 1e10)
+    check('1e+10', 1e+10)
+    check('  1.0', 1.0)
+    check('1.0  ', 1.0)
+    check(' 1.0 ', 1.0)
+    check('  -1.0', -1.0)
+    check('-1.0  ', -1.0)
+    check(' -1.0 ', -1.0)
+    check('.0', 0.0)
+    check('0.', 0.0)
+    check('0', 0.0)
+    check('1', 1.0)
+    check('100', 100.0)
 }

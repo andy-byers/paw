@@ -184,6 +184,8 @@ static paw_Env *load_source(size_t heap_size)
     return P;
 }
 
+// TODO: expose this in paw.h
+#include "rt.h"
 static void setup_stack(paw_Env *P, int argc, const char **argv)
 {
     paw_push_string(P, "main");
@@ -196,6 +198,7 @@ static void setup_stack(paw_Env *P, int argc, const char **argv)
     for (int i = 0; i < argc; ++i) {
         paw_push_string(P, argv[i]);
     }
+    pawR_literal_vector(P, argc);
 }
 
 static void call_main(paw_Env *P, int argc)

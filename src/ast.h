@@ -10,7 +10,7 @@
 #define PAW_AST_H
 
 #include "code.h"
-#include "paw.h"
+#include "compile.h"
 
 // TODO: Make *Expr, *Stmt, *Decl, and HirType opaque (typedef and put definition in *.c file)
 //       forces use of accessor functions
@@ -467,6 +467,9 @@ static inline struct AstSegment *pawAst_path_add(struct Ast *ast, struct AstPath
 }
 
 #define AST_KINDOF(x) ((x)->hdr.kind)
+
+// TODO: convert AST to string instead of printing
+#include <stdio.h>
 
 void pawAst_dump_path(FILE *out, struct AstPath *path);
 void pawAst_dump_decl(FILE *out, struct AstDecl *decl);

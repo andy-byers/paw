@@ -36,17 +36,4 @@ int main(void)
 {
 #define RUN_SCRIPT(name) script(#name);
     TEST_SCRIPTS(RUN_SCRIPT)
-
-    printf("TODO: fix remaining tests in test_rt.c\n");
-    return 0;
-    script("block");
-    script("loop");
-    script("operator");
-    script("map");
-    script("bubble");
-    script("mandelbrot");
-    script("string");
-    script("integer");
-    script("float");
-    script("misc");
 }

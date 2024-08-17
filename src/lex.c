@@ -137,7 +137,7 @@ static struct Token make_string(struct Lex *x, TokenKind kind)
     struct CharVec *cv = &dm->scratch;
     struct Token t = make_token(kind);
     String *s = pawP_scan_nstring(ENV(x), x->strings, cv->data, CAST_SIZE(cv->count));
-    v_set_object(&t.value, s);
+    V_SET_OBJECT(&t.value, s);
     cv->count = 0;
     return t;
 }
@@ -149,11 +149,11 @@ static struct Token consume_name(struct Lex *x)
         save_and_next(x);
     }
     struct Token t = make_string(x, TK_NAME);
-    const String *s = v_string(t.value);
+    const String *s = V_STRING(t.value);
     if (IS_KEYWORD(s)) {
         t.kind = CAST(s->flag, TokenKind);
     } else if (s->length > PAW_NAME_MAX) {
-        pawX_error(x, "name (%I chars) is too long", paw_cast_int(s->length));
+        pawX_error(x, "name (%I chars) is too long", PAW_CAST_INT(s->length));
     }
     return t;
 }
@@ -326,23 +326,18 @@ static struct Token consume_string(struct Lex *x)
     goto handle_ascii;
 }
 
-static int try_consume_int(struct Lex *x, struct Token *pt)
+static struct Token consume_int(struct Lex *x)
 {
     paw_Env *P = ENV(x);
     struct DynamicMem *dm = x->dm;
-    const int rc = pawV_parse_uint64(P, dm->scratch.data);
+    const int rc = pawV_parse_int(P, dm->scratch.data, 0);
     if (rc == PAW_EOVERFLOW) {
-         goto handle_overflow;
+         pawX_error(x, "integer '%s' is out of range for 'int' type", dm->scratch.data);
     } else if (rc == PAW_ESYNTAX) {
-         return -1;
+         pawX_error(x, "malformed integer '%s'", dm->scratch.data);
     }
     const Value *pv = &P->top.p[-1];
-    if (pv->u > PAW_INT_MAX) {
-handle_overflow:
-         pawX_error(x, "integer '%s' is out of range for 'int' type", dm->scratch.data);
-    }
-    *pt = make_int(x);
-    return rc;
+    return make_int(x);
 }
 
 static struct Token consume_float(struct Lex *x)
@@ -362,22 +357,32 @@ static struct Token consume_number(struct Lex *x)
     const char first = x->c;
     save_and_next(x);
 
-    if (first == '0' && 
+    paw_Bool likely_float = PAW_FALSE;
+    paw_Bool likely_int = first == '0' && 
             (test_next2(x, "bB") || 
              test_next2(x, "oO") || 
-             test_next2(x, "xX"))) {
-    }
+             test_next2(x, "xX"));
 
     // Consume adjacent floating-point indicators, exponents, and fractional
     // parts.
     for (;;) {
-        if (test_next2(x, "eE")) {
+        // Make sure not to consume byte sequences like "e+" or "E-" if we have
+        // already encountered a non-decimal integer prefix. This allows expressions
+        // like "0x1e+1" to be parsed like "0x1e + 1" instead of raising a syntax 
+        // error, which seems to be what some major C and C++ compilers do.
+        if (!likely_int && test_next2(x, "eE")) {
+            likely_float = PAW_TRUE;
             test_next2(x, "+-");
-        } else if (ISHEX(x->c) || x->c == '.') {
-            save_and_next(x);
+            continue;
+        } 
+        if (ISHEX(x->c)) {
+            // save digits below
+        } else if (x->c == '.') {
+            likely_float = PAW_TRUE;
         } else {
             break;
         }
+        save_and_next(x);
     }
     if (ISNAME(x->c)) {
         // cause pawV_to_number() to fail
@@ -385,9 +390,13 @@ static struct Token consume_number(struct Lex *x)
     }
     save(x, '\0');
 
-    struct Token token;
-    const int rc = try_consume_int(x, &token);
-    return rc == 0 ? token : consume_float(x);
+    if (likely_int && likely_float) {
+        pawX_error(x, "malformed number '%s'", x->dm->scratch.data); 
+    } else if (likely_float) {
+        return consume_float(x); 
+    } else {
+        return consume_int(x); 
+    }
 }
 
 static void skip_block_comment(struct Lex *x)
@@ -427,7 +436,7 @@ try_again:
     struct Token token = T(CAST(x->c, uint8_t));
     paw_Bool semi = PAW_FALSE;
     x->dm->scratch.count = 0;
-    switch (x->c) {
+    switch (token.kind) {
         case '\n':
         case '\r':
             paw_assert(x->add_semi);

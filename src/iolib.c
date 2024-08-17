@@ -7,30 +7,28 @@
 #include <errno.h>
 #include <stdio.h>
 
-#if !defined(p_fseek)
-#if defined(PAW_OS_POSIX)
-#define p_fseek fseeko
-#elif _MSC_VER >= 1400
-#define p_fseek _fseeki64
-#elif defined(__MINGW32__)
-#define p_fseek fseeko64
-#else
-#define p_fseek fseek
-#endif
+#if !defined(P_FSEEK)
+# if defined(PAW_OS_POSIX)
+#  define P_FSEEK fseeko
+# elif _MSC_VER >= 1400
+#  define P_FSEEK _fseeki64
+# elif defined(__MINGW32__)
+#  define P_FSEEK fseeko64
+# else
+#  define P_FSEEK fseek
+# endif
 #endif
 
-#if !defined(p_ftell)
-#if defined(PAW_OS_POSIX)
-#define p_ftell ftello
-#undef p_ftell
-#define p_ftell ftell
-#elif _MSC_VER >= 1400
-#define p_ftell _ftelli64
-#elif defined(__MINGW32__)
-#define p_ftell ftello64
-#else
-#define p_ftell ftell
-#endif
+#if !defined(P_FTELL)
+# if defined(PAW_OS_POSIX)
+#  define P_FTELL ftello
+# elif _MSC_VER >= 1400
+#  define P_FTELL _ftelli64
+# elif defined(__MINGW32__)
+#  define P_FTELL ftello64
+# else
+#  define P_FTELL ftell
+# endif
 #endif
 
 static FILE *get_handle(paw_Env *P, int index)
@@ -113,7 +111,7 @@ static int io_seek(paw_Env *P)
     const paw_Int offset = pawL_check_int(P, 2);
     const paw_Int origin = pawL_check_int(P, 3);
     FILE *file = get_handle(P, 1);
-    if (p_fseek(file, offset, origin)) {
+    if (P_FSEEK(file, offset, origin)) {
         pawO_system_error(P, errno);
     }
     return 0;
@@ -123,7 +121,7 @@ static int io_tell(paw_Env *P)
 {
     pawL_check_argc(P, 1);
     FILE *file = get_handle(P, 1);
-    paw_push_int(P, p_ftell(file));
+    paw_push_int(P, P_FTELL(file));
     return 1;
 }
 

@@ -1,14 +1,12 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
+
 #ifndef PAW_CODE_H
 #define PAW_CODE_H
 
-#include "compile.h"
-#include "opcode.h"
 #include "mem.h"
 #include "parse.h"
-#include "paw.h"
 
 #define K_ALIGNOF_NODE _Alignof(void *)
 #define K_ALIGNAS_NODE _Alignas(void *)
@@ -75,16 +73,6 @@ void pawK_pool_free(struct Pool *pool, void *ptr, size_t size);
         paw_assert(index < list->count); \
         return list->data[index]; \
     }
-
-typedef struct Generator {
-    struct Compiler *C;
-    struct HirSymtab *sym;
-    struct HirScope *globals;
-    struct Hir *hir;
-    struct FuncState *fs;
-    struct ToplevelList *items;
-    paw_Env *P;
-} Generator;
 
 void pawK_fix_line(struct FuncState *fs, int line);
 

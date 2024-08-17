@@ -1,8 +1,10 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
+
 #include "parse.h"
 #include "ast.h"
+#include "compile.h"
 
 static String *unpack_name(const struct AstExpr *expr)
 {
@@ -234,7 +236,7 @@ static void semicolon(struct Lex *lex)
 static String *parse_name(struct Lex *lex)
 {
     check(lex, TK_NAME);
-    String *name = v_string(lex->t.value);
+    String *name = V_STRING(lex->t.value);
     skip(lex);
     return name;
 }
@@ -257,7 +259,7 @@ static struct AstExpr *emit_unit(struct Lex *lex)
 static struct AstExpr *emit_bool(struct Lex *lex, paw_Bool b)
 {
     Value v;
-    v_set_bool(&v, b);
+    V_SET_BOOL(&v, b);
     return new_basic_lit(lex, v, PAW_TBOOL);
 }
 
@@ -713,7 +715,7 @@ static struct AstExpr *selector_expr(struct Lex *lex, struct AstExpr *target)
     if (test(lex, TK_NAME)) {
         r->selector.name = parse_name(lex);
     } else if (test(lex, TK_INTEGER)) {
-        r->selector.index = v_int(lex->t.value);
+        r->selector.index = V_INT(lex->t.value);
         r->selector.is_index = PAW_TRUE;
         skip(lex); // integer token
     }
@@ -1007,7 +1009,7 @@ static struct AstStmt *fornum(struct Lex *lex, String *ivar)
         fornum->step = basic_expr(lex);
     } else {
         Value v;
-        v_set_int(&v, 1); // step defaults to 1
+        V_SET_INT(&v, 1); // step defaults to 1
         fornum->step = new_basic_lit(lex, v, PAW_TINT);
     }
 
@@ -1336,7 +1338,9 @@ static const char kPrelude[] =
     "pub fn assert(cond: bool) \n"
 
     // TODO: Replace with methods
-    "pub fn _int_to_string(self: int, base: int) -> str\n"
+    "pub fn _int_to_string(self: int) -> str\n"
+    "pub fn _string_parse_int(self: str, base: int) -> int     \n"
+    "pub fn _string_parse_float(self: str) -> float            \n"
     "pub fn _string_split(self: str, sep: str) -> [str]        \n"
     "pub fn _string_join(self: str, seq: [str]) -> str         \n"
     "pub fn _string_find(self: str, target: str) -> int        \n"
@@ -1446,7 +1450,7 @@ static struct Ast *parse_module(struct Lex *lex, paw_Reader input, void *ud)
     return ast;
 }
 
-struct Ast *p_parse(struct Compiler *C, paw_Reader input, void *ud)
+struct Ast *pawP_parse(struct Compiler *C, paw_Reader input, void *ud)
 {
     struct Lex lex = {
         .modname = C->modname,

@@ -1,9 +1,7 @@
 #include "test.h"
 #include "env.h"
-// #include "lib.h"
 #include "os.h"
 #include "paw.h"
-// #include "rt.h"
 #include "util.h"
 #include "value.h"
 #include <assert.h>
@@ -185,9 +183,8 @@ static void check_ok(paw_Env *P, int status)
 int test_open_file(paw_Env *P, const char *name)
 {
     const char *pathname = test_pathname(name);
-    if (!P) {
-        return PAW_EMEMORY;
-    }
+    if (P == NULL) return PAW_EMEMORY;
+
     FILE *file = pawO_open(pathname, "r");
     struct TestReader rd = {.file = file};
     rd.data = rd.buf;

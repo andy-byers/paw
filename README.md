@@ -33,7 +33,7 @@ Modules that are intended to run as scripts under the bundled Paw interpreter `p
 When `main` is finished, its return value is passed back to the process that invoked `paw`.
 
 ### Types
-Paw is statically-typed, meaning all types must be known (and are fixed at) at compile-time.
+Paw is statically-typed, meaning all types must be known at compile-time.
 Also note that Paw is strongly typed, meaning implicit conversions are not allowed.
 
 The following example demonstrates creation of the basic value types.
@@ -215,7 +215,7 @@ fn map<A, B>(f: fn(A) -> B, vec: [A]) -> [B] {
 }
 
 // infer A = float, B = int
-let vec = map(|a| a as int, [0.5, 1.5, 2.5])
+let vec = map(|f: float| f as int, [0.5, 1.5, 2.5])
 assert(vec == [0, 1, 2])
 
 // struct template
