@@ -12,7 +12,7 @@ int main(void)
     const char *source =
         "pub fn f(n: int) { \n"
         "    if n > 0 {     \n"
-        "        f(n - 1)   \n"
+        "        f(n - 1);  \n"
         "    }              \n"
         "}                  \n";
     struct TestAlloc a = {0};

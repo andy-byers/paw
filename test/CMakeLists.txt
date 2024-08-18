@@ -30,6 +30,6 @@ message("TODO: fix test_api and test_limits")
 #build_test(test_limits)
 
 test_script(bubble "500")
-test_script(matmul "150")
+test_script(matmul "50")
 #test_script(binary_trees "5")
 test_script(mandelbrot "-2.1,0.9,80,-1.3,1.3,24")

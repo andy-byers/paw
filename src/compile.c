@@ -16,7 +16,7 @@ paw_Type pawP_type2code(struct Compiler *C, struct HirType *type)
             return PAW_TVECTOR; 
         } else if (adt->base == C->map_did) {
             return PAW_TMAP; 
-        } else {
+        } else if (adt->base <= PAW_TSTRING) {
             return adt->base;
         }
     }

@@ -1,0 +1,14 @@
+// seed.paw
+
+fn math_operations() {
+    let a = $
+    let b = $a
+
+    let a = $
+    let b = $
+    let c = a $ b
+}
+
+pub fn main() {
+    math_operations()
+}

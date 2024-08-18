@@ -23,12 +23,12 @@ fn test_expr_result() {
 
 fn test_empty_block() {
     let f = || -> () {};
-    let f = || -> () {return};
+    let f = || -> () {return;};
 }
 
 fn test_infer_empty_block() {
     let f = || {};
-    let f = || {return};
+    let f = || {return;};
 }
 
 fn test_infer_block_return() {
@@ -44,26 +44,26 @@ fn test_infer_block_return() {
         };
     };
 
-    assert('dabcd' == choose(-1) +;
-                      choose(0) +;
-                      choose(1) +;
-                      choose(2) +;
+    assert('dabcd' == choose(-1) +
+                      choose(0) +
+                      choose(1) +
+                      choose(2) +
                       choose(3));
 
 }
 
 fn test_infer_from_annotation() {
     // this line would result in an inference error if not for the annotation,
-    // since we never call it and the parameters are never used, meaning the type;
-    // cannot be inferred;
+    // since we never call it and the parameters are never used, meaning the type
+    // cannot be inferred
     let f: fn(int, float) = |a, b| {};
 
-    // infer inner: fn(int) -> int;
+    // infer inner: fn(int) -> int
     let outer = |a: fn(int) -> int| {};
     let inner = |a| a;
     outer(inner) ;
 
-    // infer inner: fn(str) -> (bool, str);
+    // infer inner: fn(str) -> (bool, str)
     let outer = |a: fn(str) -> (bool, str)| {};
     let inner = |a| (false, a);
     outer(inner);
@@ -72,26 +72,26 @@ fn test_infer_from_annotation() {
 }
 
 fn test_infer_param_from_body() {
-    let f = |a| {return a + 1};
-    let f = |a| {return a + 'two'};
+    let f = |a| {return a + 1;};
+    let f = |a| {return a + 'two';};
 
-    // one of the two parameters must be annotated: the type of each operand to;
-    // binary '+' must be known.;
-    let f = |a, b: int| {return a + b};
+    // one of the two parameters must be annotated: the type of each operand to
+    // binary '+' must be known.
+    let f = |a, b: int| {return a + b;};
     assert(f(1, 2) == 3);
     assert(f(10, 20) == 30);
 
-    let f = |a: str, b| {return a + b};
+    let f = |a: str, b| {return a + b;};
     assert(f('a', 'b') == 'ab');
     assert(f('cd', 'ef') == 'cdef');
 }
 
 fn test_infer_param_from_call() {
-    let f = |a| {return a};
+    let f = |a| {return a;};
     assert(f(1) == 1);
     assert(f(10) == 10);
 
-    let f = |a| {return a};
+    let f = |a| {return a;};
     assert(f('a') == 'a');
     assert(f('bc') == 'bc');
 }
@@ -111,18 +111,18 @@ fn test_generics() {
     let b = map(|a| a, [2, 3]);
     assert(b == [2, 3]);
 
-    // infer type of 'a' and '[]' from '-> int' (requires block due to presence of ;
-    // arrow, otherwise the syntax looks strange);
-    let b = map(|a| -> int {return a}, []);
+    // infer type of 'a' and '[]' from '-> int' (requires block due to presence of
+    // arrow, otherwise the syntax looks strange)
+    let b = map(|a| -> int {return a;}, []);
     assert(b == []);
-    // infer closure return type and '[]' from annotation on 'a';
+    // infer closure return type and '[]' from annotation on 'a'
     let b = map(|a: int| a, []);
     assert(b == []);
 }
 
 fn pipeline<A, B, C>(
-        f: fn(A) -> B, ;
-        g: fn(B) -> C, ;
+        f: fn(A) -> B,
+        g: fn(B) -> C,
         a: A) -> C {
     let b = f(a);
     let c = g(b);
@@ -153,17 +153,17 @@ fn test_pipeline_2() {
 }
 
 fn compose<A, B>(
-        f: fn(A) -> B, ;
+        f: fn(A) -> B,
         a: A) -> (A, B) {
     return (a, f(a));
 }
 
 fn test_compose() {
-    let x = compose(|a| {return 2},
+    let x = compose(|a| {return 2;},
                     1);
     assert(x.0 == 1);
     assert(x.1 == 2);
-    let x = compose(|a| {return 2.0},
+    let x = compose(|a| {return 2.0;},
                     true);
     assert(x.0 == true);
     assert(x.1 == 2.0);
@@ -187,16 +187,16 @@ fn test_capture_separate_lists() {
                 _vector_push(a, #a);
                 return a;
             };
-        } // Close a;
+        }; // Close a
         let make_2 = || {
             let a = [];
             return || {
                 _vector_push(a, #a);
                 return a;
             };
-        } // Close a;
+        }; // Close a
         return (
-            make_1(), ;
+            make_1(),
             make_2(),
         );
     };

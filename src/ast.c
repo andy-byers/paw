@@ -183,10 +183,8 @@ static void dump_stmt(Printer *P, struct AstStmt *s)
     DUMP_FMT(P, "line: %d\n", s->hdr.line);
     switch (AST_KINDOF(s)) {
         case kAstExprStmt:
-            DUMP_MSG(P, "lhs: ");
-            dump_expr(P, s->expr.lhs);
-            DUMP_MSG(P, "rhs: ");
-            dump_expr(P, s->expr.rhs);
+            DUMP_MSG(P, "expr: ");
+            dump_expr(P, s->expr.expr);
             break;
         case kAstBlock:
             dump_stmt_list(P, s->block.stmts, "stmts");
@@ -307,6 +305,12 @@ static void dump_expr(Printer *P, struct AstExpr *e)
             DUMP_FMT(P, "op: %d\n", e->unop.op);
             DUMP_MSG(P, "target: ");
             dump_expr(P, e->unop.target);
+            break;
+        case kAstAssignExpr:
+            DUMP_MSG(P, "lhs: ");
+            dump_expr(P, e->assign.lhs);
+            DUMP_MSG(P, "rhs: ");
+            dump_expr(P, e->assign.rhs);
             break;
         case kAstBinOpExpr:
             DUMP_FMT(P, "op: %d\n", e->binop.op);

@@ -10,8 +10,8 @@ fn test_initialization() {
 
 struct Empty<T>;
 
-fn touch_empty<T>(v: Empty<T>) {};
-fn touch_nested_empty<T>(v: Empty<Empty<T>>) {};
+fn touch_empty<T>(v: Empty<T>) {}
+fn touch_nested_empty<T>(v: Empty<Empty<T>>) {}
 
 fn test_arguments() {
     touch_empty::<bool>(Empty::<bool>);
@@ -108,7 +108,7 @@ fn check_length<T>(n: int, c: Container<T>) {
     assert(#c.values == n);
 }
 
-fn check_types<T>(t: T, c: Container<T>) {};
+fn check_types<T>(t: T, c: Container<T>) {}
 
 fn test_inference_with_fn() {
 

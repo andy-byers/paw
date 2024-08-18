@@ -6,7 +6,7 @@ fn random(n: int) -> [int] {
     for _ = 0, n {
         x = (140671485 * x + 12820163) % 16777216;
         _vector_push(a, x);
-    };
+    }
     return a;
 }
 
@@ -20,12 +20,12 @@ fn bubble(n: int) -> [int] {
                 a[i] = a[i - 1];
                 a[i - 1] = t;
                 swapped = true;
-            };
-        };
+            }
+        }
         if !swapped {
             break;
-        };
-    };
+        }
+    }
     return a;
 }
 

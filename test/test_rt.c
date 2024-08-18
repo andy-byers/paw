@@ -6,10 +6,20 @@
 #include "env.h"
 #include "test.h"
 
-void run_tests(const char *name, struct TestAlloc *a)
+static void expect_ok(paw_Env *P, int status)
+{
+    if (status != PAW_OK) {
+        const char *errmsg = paw_string(P, -1);
+        fprintf(stderr, "error: %s\n", errmsg);
+        abort();
+    }
+}
+
+static void run_tests(const char *name, struct TestAlloc *a)
 {
     paw_Env *P = test_open(test_alloc, a, 0);
-    check(PAW_OK == test_open_file(P, name));
+    int status = test_open_file(P, name);
+    expect_ok(P, status);
     
     struct GlobalVec *gvec = &P->gv;
     for (int i = 0; i < gvec->size; ++i) {
@@ -20,7 +30,8 @@ void run_tests(const char *name, struct TestAlloc *a)
                 0 == memcmp(gvar->name->text, kPrefix, kLength)) {
             printf("running %s.%s...\n", name, gvar->name->text);
             pawC_pushv(P, gvar->value);
-            check(PAW_OK == paw_call(P, 0));
+            status = paw_call(P, 0);
+            expect_ok(P, status);
         }
     }
     test_close(P, a);
@@ -34,6 +45,7 @@ static void script(const char *name)
 
 int main(void)
 {
+    script("struct");
 #define RUN_SCRIPT(name) script(#name);
     TEST_SCRIPTS(RUN_SCRIPT)
 }

@@ -12,10 +12,10 @@ pub fn test_operator_precedence() {
     assert(8 == 1 << 2 * 2 >> 1);
     assert(-3 == 1 | ~2 ^ 3 & 4);
 
-    // '==' and '!=' bind tighter than '&&' and '||';
+    // '==' and '!=' bind tighter than '&&' and '||'
     assert(1 == 1 && 2 == 2) ;
 
-    // Bitwise operators bind tighter than comparisons;
+    // Bitwise operators bind tighter than comparisons
     assert(4 & 5 == 4);
     assert(!(4 & (5 == 4) as int));
 }

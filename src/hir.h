@@ -32,7 +32,8 @@ struct Resolver;
         X(Index,          index)  \
         X(Selector,       select) \
         X(StructField,    sitem)  \
-        X(MapElem,        mitem)
+        X(MapElem,        mitem)  \
+        X(AssignExpr,     assign)
 
 #define HIR_TYPE_LIST(X)    \
         X(Adt, adt)         \
@@ -447,6 +448,12 @@ struct HirConversionExpr {
     struct HirExpr *arg;
 };
 
+struct HirAssignExpr {
+    HIR_EXPR_HEADER;
+    struct HirExpr *lhs;
+    struct HirExpr *rhs;
+};
+
 struct HirExpr {
     union {
         struct HirExprHeader hdr;
@@ -494,8 +501,7 @@ struct HirDeclStmt {
 
 struct HirExprStmt {
     HIR_STMT_HEADER;
-    struct HirExpr *lhs;
-    struct HirExpr *rhs;
+    struct HirExpr *expr;
 };
 
 struct HirBlock {

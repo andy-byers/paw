@@ -1024,8 +1024,16 @@ static struct HirExpr *resolve_path_expr(struct Resolver *R, struct AstPathExpr 
 static struct HirType *resolve_path_type(struct Resolver *R, struct AstPathExpr *e)
 {
     // TODO: recycle 'path' memory
-    struct HirPath *path = resolve_path(R, e->path);
-    return typeof_path(path);
+    if (e->path->count != 1) SYNTAX_ERROR(R, "expected basic path");
+    struct AstSegment *base = pawAst_path_get(e->path, 0);
+    struct HirSymbol *symbol = resolve_symbol(R, base->name);
+    if (!symbol->is_type) SYNTAX_ERROR(R, "expected type");
+    struct HirDecl *decl = symbol->decl;
+    if (base->types != NULL) {
+        struct HirTypeList *types = resolve_type_list(R, base->types);
+        decl = pawP_instantiate(R, symbol->decl, types);
+    }
+    return HIR_TYPEOF(decl);
 }
 
 static struct HirExpr *resolve_logical_expr(struct Resolver *R, struct AstLogicalExpr *e)
@@ -1204,6 +1212,25 @@ static struct HirExpr *resolve_binop_expr(struct Resolver *R, struct AstBinOpExp
     return result;
 }
 
+static struct HirExpr *resolve_assign_expr(struct Resolver *R, struct AstAssignExpr *s)
+{
+    struct HirExpr *result = pawHir_new_expr(R->hir, s->line, kHirAssignExpr);
+    struct HirAssignExpr *r = HirGetAssignExpr(result);
+
+    r->lhs = resolve_expr(R, s->lhs);
+    if (!HirIsPathExpr(r->lhs) &&
+            !HirIsIndex(r->lhs) &&
+            !HirIsSelector(r->lhs)) {
+        SYNTAX_ERROR(R, "invalid place for assignment");
+    }
+    r->rhs = resolve_expr(R, s->rhs);
+    struct HirType *lhs = expr_type(R, r->lhs);
+    struct HirType *rhs = expr_type(R, r->rhs);
+    unify(R, lhs, rhs);
+    r->type = lhs;
+    return result;
+}
+
 static struct HirType *new_vector_t(struct Resolver *R, struct HirType *elem_t)
 {
     struct HirDecl *base = get_decl(R, R->C->vector_did);
@@ -1274,8 +1301,7 @@ static struct HirType *resolve_signature(struct Resolver *R, struct AstSignature
 {
     struct HirType *type = new_type(R, NO_DECL, kHirFuncPtr, e->line);
     struct HirType *result = resolve_type(R, e->result);
-    struct HirExprList *params = resolve_expr_list(R, e->params);
-    type->fptr.params = collect_expr_types(R, params);
+    type->fptr.params = resolve_type_list(R, e->params);
     type->fptr.result = result;
     return type;
 }
@@ -1695,14 +1721,7 @@ static struct HirStmt *ResolveExprStmt(struct Resolver *R, struct AstExprStmt *s
 {
     struct HirStmt *result = pawHir_new_stmt(R->hir, s->line, kHirExprStmt);
     struct HirExprStmt *r = HirGetExprStmt(result);
-
-    r->lhs = resolve_expr(R, s->lhs);
-    if (s->rhs != NULL) {
-        r->rhs = resolve_expr(R, s->rhs);
-        struct HirType *lhs = expr_type(R, r->lhs);
-        struct HirType *rhs = expr_type(R, r->rhs);
-        unify(R, lhs, rhs);
-    }
+    r->expr = resolve_expr(R, s->expr);
     return result;
 }
 
@@ -1972,6 +1991,9 @@ static struct HirExpr *resolve_expr(struct Resolver *R, struct AstExpr *expr)
             break; 
         case kAstStructField:
             r = resolve_struct_field(R, AstGetStructField(expr));
+            break;
+        case kAstAssignExpr:
+            r = resolve_assign_expr(R, AstGetAssignExpr(expr));
             break;
         default:
             r = resolve_map_elem(R, AstGetMapElem(expr));

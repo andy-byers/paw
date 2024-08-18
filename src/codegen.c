@@ -815,18 +815,22 @@ static void code_decl_stmt(struct HirVisitor *V, struct HirDeclStmt *s)
     V->VisitDecl(V, s->decl);
 }
 
+static void code_assign_expr(struct HirVisitor *V, struct HirAssignExpr *s)
+{
+    struct Generator *G = V->ud;
+    struct FuncState *fs = G->fs;
+    fs->line = s->line;
+    code_setter(V, s->lhs, s->rhs);
+}
+
 static void code_expr_stmt(struct HirVisitor *V, struct HirExprStmt *s)
 {
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
     fs->line = s->line;
 
-    if (s->rhs != NULL) {
-        code_setter(V, s->lhs, s->rhs);
-        return;
-    }
-    V->VisitExpr(V, s->lhs); // function call
-    pawK_code_U(fs, OP_POP, 1); // unused return value
+    V->VisitExpr(V, s->expr);
+    pawK_code_U(fs, OP_POP, 1);
 }
 
 static void code_closure_expr(struct HirVisitor *V, struct HirClosureExpr *e)
@@ -1307,6 +1311,7 @@ static void setup_pass(struct HirVisitor *V, struct Generator *G)
     V->VisitIndex = code_index_expr;
     V->VisitSelector = code_selector_expr;
     V->VisitClosureExpr = code_closure_expr;
+    V->VisitAssignExpr = code_assign_expr;
     V->VisitBlock = code_block_stmt;
     V->VisitExprStmt = code_expr_stmt;
     V->VisitDeclStmt = code_decl_stmt;

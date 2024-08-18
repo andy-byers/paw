@@ -1,27 +1,21 @@
 // basic.paw
 
-fn test_comments() {
-    // line comment;
-    /* block comment */;
-    /* multi-line;
-       block;
-       comment */;
-    /* /* */;
-    /* * / */;
+pub fn test_comments() {
+    // line comment
+    /* block comment */
+    /* multi-line
+       block
+       comment */
+    /* /* */
+    /* * / */
 
-    // 2 block comments, side-by-side;
-    /**//**/;
-    /* *//* */;
-    /**/ /**/;
+    // 2 block comments, side-by-side
+    /**//**/
+    /* *//* */
+    /**/ /**/
 }
 
-fn test_semicolons_are_optional() {
-    // Semicolons are not necessary in most cases.;
-    let x: int = 0 x = 1 + 2 + 3 assert(x == 6);
-    x = 1 - 2 - 3 x = 4 + 5 + 6 assert(x == 15)    ;
-}
-
-fn test_function_values() {
+pub fn test_function_values() {
     let wrapper = |n: int, f: fn(int) -> int| -> int {
         return f(n);
     };
@@ -47,60 +41,64 @@ fn test_function_values() {
     assert(3 == wrapper(3, f3));
 }
 
-fn test_syntax() {
+pub fn test_syntax() 
+{
     let x: int = 0;
     {;;;};;;{};;;
-    {; x = 1; assert(x == 1)};
+    {; x = 1; assert(x == 1);};
+    x = x
+      + 0 +
+        1;
 }
 
-fn test_arguments() {
-    fn f() {};
+pub fn test_arguments() {
+    let f = || {};
     f();
-    fn f() {return};
+    let f = || {return;};
     f();
 
-    fn f() -> int {let x: int = 0; return x};
+    let f = || -> int {let x: int = 0; return x;};
     assert(f() == 0);
 
-    fn f(x: int) -> int {return x};
+    let f = |x: int| -> int {return x;};
     assert(f(1) == 1);
 
-    fn f(x: int, y: int) -> int {return x};
+    let f = |x: int, y: int| -> int {return x;};
     assert(f(0, 1) == 0);
-    fn f(x: int, y: int) -> int {return y};
+    let f = |x: int, y: int| -> int {return y;};
     assert(f(0, 1) == 1);
 
-    fn f(x: int, y: int, z: int) -> int {return x};
+    let f = |x: int, y: int, z: int| -> int {return x;};
     assert(f(0, 1, 2) == 0);
-    fn f(x: int, y: int, z: int) -> int {return y};
+    let f = |x: int, y: int, z: int| -> int {return y;};
     assert(f(0, 1, 2) == 1);
-    fn f(x: int, y: int, z: int) -> int {return z};
+    let f = |x: int, y: int, z: int| -> int {return z;};
     assert(f(0, 1, 2) == 2);
 }
 
-fn test_return_must_be_last() {
-    fn f() -> int {
+pub fn test_return_must_be_last() {
+    let f = || -> int {
         {
-            // Return statement must be the last statement in the block.;
+            // Return statement must be the last statement in the block.
             return 42;
-        };
-        return 24 // unreachable;
+        }
+        return 24; // unreachable
     };
     assert(f() == 42);
 }
 
 // String literals: both types of quotes are okay, and strings can span 
 // multiple lines.
-fn test_multiline_string_literals() {
+pub fn test_multiline_string_literals() {
     assert('abc' == "abc");
-    assert('abc\n def\n ghi\n\n' == 'abc;
- def;
- ghi;
+    assert('abc\n def\n ghi\n\n' == 'abc
+ def
+ ghi
 
-')
+');
 }
 
-fn test_short_circuiting() {
+pub fn test_short_circuiting() {
     let counts = (0, 0, 0);
     let check2 = |a: int, b: int| {
         assert(counts.0 == a);
@@ -172,14 +170,14 @@ fn test_short_circuiting() {
     check3(1, 1, 0);
 }
 
-fn test_containers() {
+pub fn test_containers() {
     let v = [0, 1, 2][1];
     assert(v == 1);
     let m = [0: 0, 1: 1, 2: 2][1];
     assert(m == 1);
 }
 
-fn test_string_concat() {
+pub fn test_string_concat() {
     let s = '';
     for a = 0, 1 {
         s = s + 'a';
@@ -202,7 +200,7 @@ fn option(b: bool) -> Option<int> {
     };
 }
 
-fn test_chain_option() {
+pub fn test_chain_option() {
     let val = -1;
     let test = || -> Option<int> {
         let i = option(true)?;
@@ -237,42 +235,42 @@ fn chain_option2_aux<T>(v: T) -> Option<T> {
     assert(false);
     return Option::<T>::Some(t);
 }
-fn test_chain_option2() {
+pub fn test_chain_option2() {
     chain_option2_aux(123);
     chain_option2_aux('abc');
 }
 
-fn result(b: bool) -> Result<int, string> {
+fn result(b: bool) -> Result<int, str> {
     if b {
-        return Result::<int, string>::Ok(42);
+        return Result::<int, str>::Ok(42);
     } else {
-        return Result::<int, string>::Err('bad');
+        return Result::<int, str>::Err('bad');
     };
 }
 
-fn test_chain_result() {
+pub fn test_chain_result() {
     let val = -1;
-    let test = || -> Result<int, string> {
+    let test = || -> Result<int, str> {
         let i = result(true)?;
         val = i;
-        return Result::<int, string>::Ok(i);
+        return Result::<int, str>::Ok(i);
     };
     test();
     assert(val == 42);
 
-    let test = || -> Result<int, string> {
+    let test = || -> Result<int, str> {
         let i = result(false)?;
         assert(false);
-        return Result::<int, string>::Ok(i);
+        return Result::<int, str>::Ok(i);
     };
     test();
 }
 
 struct Inner<T> {
-    val: T;
+    val: T,
 }
 struct Outer<T> {
-    option: Option<Inner<T>>;
+    option: Option<Inner<T>>
 }
 
 fn option3<T>(t: T, a: bool, b: bool) -> Option<Outer<T>> {
@@ -291,14 +289,14 @@ fn option3<T>(t: T, a: bool, b: bool) -> Option<Outer<T>> {
     };
 }
 
-fn test_chain_option3() {
+pub fn test_chain_option3() {
     option3(42, true, true);
     option3(42, true, false);
     option3(42, false, false);
 }
 
 // TODO: move to integer.paw (still needs to be fixed)
-fn test_integers() {
+pub fn test_integers() {
     assert(1 << 0 == 1);
     assert(-1 << 0 == -1);
 

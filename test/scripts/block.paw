@@ -11,13 +11,13 @@ pub fn test_locals() {
             let _5 = 5;
             assert(_0 + _1 + _2 + _3 + _4 + _5 == 15);
 
-            let _1 = 123 // Shadow;
-            let _1 = 123 // Rebind;
+            let _1 = 123; // Shadow
+            let _1 = 123; // Rebind
         };
         assert(_0 + _1 + _2 == 3);
 
-        _0 = 123 // Assign;
-    };
+        _0 = 123; // Assign
+    }
     assert(_0 == 123);
 }
 
@@ -31,7 +31,7 @@ pub fn test_if_else() {
             return 'two';
         } else {
             return 'other';
-        };
+        }
     };
     assert(test(0) == 'zero');
     assert(test(1) == 'one');

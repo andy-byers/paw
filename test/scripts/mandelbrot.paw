@@ -7,7 +7,7 @@
 
 pub fn main(args: [str]) -> int {
     let charmap = [
-        ' ', '.', ':', '-', '=', ;
+        ' ', '.', ':', '-', '=',
         '+', '*', '#', '%', '@',
     ];
 
@@ -17,12 +17,12 @@ pub fn main(args: [str]) -> int {
     } else {
         values = ['-2.1', '0.9', '80', '-1.3', '1.3', '24'];
     };
-    let x0 = _string_parse_float(values[0]) ;
-    let x1 = _string_parse_float(values[1]) ;
-    let nx = _string_parse_int(values[2], 10) ;
-    let y0 = _string_parse_float(values[3]) ;
-    let y1 = _string_parse_float(values[4]) ;
-    let ny = _string_parse_int(values[5], 10) ;
+    let x0 = _string_parse_float(values[0]);
+    let x1 = _string_parse_float(values[1]);
+    let nx = _string_parse_int(values[2], 10);
+    let y0 = _string_parse_float(values[3]);
+    let y1 = _string_parse_float(values[4]);
+    let ny = _string_parse_int(values[5], 10);
 
     assert(nx > 0 && ny > 0);
     let dy = (y1 - y0) / (ny - 1) as float;

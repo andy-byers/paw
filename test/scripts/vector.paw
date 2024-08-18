@@ -111,7 +111,7 @@ fn check<T>(vec: [[T]], counts: (int, int, int)) {
     assert(counts.2 == #vec[2]);
 }
 
-enum E {X, Y, Z, W};
+enum E {X, Y, Z, W}
 
 fn test_empty_vectors() {
     check([[1], [2], [3]], (1, 1, 1));
@@ -165,7 +165,7 @@ fn test_slices() {
     assert(3 == vec[2:][0]);
 }
 
-// TODO: handle composite element types;
+// TODO: handle composite element types
 fn test_equality_comparisons() {
     assert([false, true] == [false, true]);
     assert([2, 3] == [2, 3]);
@@ -183,8 +183,8 @@ fn test_equality_comparisons() {
     assert(['six', 'seven'] != ['six']);
 }
 
-// each vector must have its type inferred at some point before it;
-// goes out of scope;
+// each vector must have its type inferred at some point before it
+// goes out of scope
 fn test_infer_later() {
     let vec = [];
     vec = [0];
@@ -210,7 +210,7 @@ fn test_infer_later() {
     let a = [];
     let b = a;
     b = [1];
-    // type of 'a' inferred from 'b';
+    // type of 'a' inferred from 'b'
     assert(#a == 0);
 
     let a = [];
@@ -440,14 +440,11 @@ fn test_infer_e() {
     let a = [];
     let b = [];
     let c = [];
-    let d = if true {
-        // do nothing;
-        let x = a
-        -1
+    if true {
+        // do nothing
     } else {
         _vector_push(a, 1);
-        let x = a - 1
-    };
+    }
     b = c;
     c = a;
 }
@@ -476,7 +473,7 @@ fn test_infer_h() {
 }
 
 struct Vec<T> {
-    vec: [T];
+    vec: [T],
 }
 
 fn infer_fn_2<T>(vec: [T], val: Vec<T>) -> [T] {
@@ -492,7 +489,7 @@ fn test_infer_i() {
     assert([1, 2, 3, 4, 5, 6] == infer_fn_2(infer_fn_2(infer_fn_2([], a), b), c));
 }
 
-fn infer_fn_3<T>(vec: [T], vec2: [[T]]) {};
+fn infer_fn_3<T>(vec: [T], vec2: [[T]]) {}
 
 fn test_infer_j() {
     infer_fn_3([], [[1]]);
@@ -563,9 +560,9 @@ fn test_infer_l() {
         ['g', 'h', 'i'],
     ];
     let vec = map2(vec, |row: [str]| -> [str] {
-        map2(row, |val: str| -> str {
-            val + val + val
-        })
+        return map2(row, |val: str| -> str {
+            return val + val + val;
+        });
     });
     let result = '';
     for row in vec {

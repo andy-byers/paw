@@ -186,6 +186,12 @@ static void VisitMapElem(struct HirVisitor *V, struct HirMapElem *e)
     V->VisitExpr(V, e->value);
 }
 
+static void VisitAssignExpr(struct HirVisitor *V, struct HirAssignExpr *e)
+{
+    V->VisitExpr(V, e->lhs);
+    V->VisitExpr(V, e->rhs);
+}
+
 static void VisitStructField(struct HirVisitor *V, struct HirStructField *e)
 {
     V->VisitExpr(V, e->value);
@@ -227,8 +233,7 @@ static void VisitBinOpExpr(struct HirVisitor *V, struct HirBinOpExpr *e)
 
 static void VisitExprStmt(struct HirVisitor *V, struct HirExprStmt *s)
 {
-    V->VisitExpr(V, s->lhs);
-    V->VisitExpr(V, s->rhs);
+    V->VisitExpr(V, s->expr);
 }
 
 static void VisitClosureExpr(struct HirVisitor *V, struct HirClosureExpr *e)
@@ -520,6 +525,13 @@ static struct HirExpr *FoldMapElem(struct HirFolder *F, struct HirMapElem *e)
     return HIR_CAST_EXPR(e);
 }
 
+static struct HirExpr *FoldAssignExpr(struct HirFolder *F, struct HirAssignExpr *e)
+{
+    e->lhs = F->FoldExpr(F, e->lhs);
+    e->rhs = F->FoldExpr(F, e->rhs);
+    return HIR_CAST_EXPR(e);
+}
+
 static struct HirExpr *FoldStructField(struct HirFolder *F, struct HirStructField *e)
 {
     e->value = F->FoldExpr(F, e->value);
@@ -563,8 +575,7 @@ static struct HirExpr *FoldBinOpExpr(struct HirFolder *F, struct HirBinOpExpr *e
 
 static struct HirStmt *FoldExprStmt(struct HirFolder *F, struct HirExprStmt *s)
 {
-    s->lhs = F->FoldExpr(F, s->lhs);
-    s->rhs = F->FoldExpr(F, s->rhs);
+    s->expr = F->FoldExpr(F, s->expr);
     return HIR_CAST_STMT(s);
 }
 
@@ -906,6 +917,15 @@ static struct HirExpr *copy_map_elem(struct HirFolder *F, struct HirMapElem *e)
     return r;
 }
 
+static struct HirExpr *copy_assign_expr(struct HirFolder *F, struct HirAssignExpr *e)
+{
+    struct HirExpr *result = copy_prep_expr(F, e);
+    struct HirAssignExpr *r = HirGetAssignExpr(result);
+    r->lhs = F->FoldExpr(F, e->lhs);
+    r->rhs = F->FoldExpr(F, e->rhs);
+    return result;
+}
+
 static struct HirExpr *copy_struct_field(struct HirFolder *F, struct HirStructField *e)
 {
     struct HirExpr *r = copy_prep_expr(F, e);
@@ -966,8 +986,7 @@ static struct HirExpr *copy_binop_expr(struct HirFolder *F, struct HirBinOpExpr 
 static struct HirStmt *copy_expr_stmt(struct HirFolder *F, struct HirExprStmt *s)
 {
     struct HirStmt *r = copy_prep_stmt(F, s);
-    r->expr.lhs = F->FoldExpr(F, s->lhs);
-    r->expr.rhs = F->FoldExpr(F, s->rhs);
+    r->expr.expr = F->FoldExpr(F, s->expr);
     return r;
 }
 
@@ -1175,6 +1194,7 @@ static void setup_copy_pass(struct HirFolder *F, struct Copier *C)
     F->FoldIndex = copy_index_expr;
     F->FoldSelector = copy_select_expr;
     F->FoldMapElem = copy_map_elem;
+    F->FoldAssignExpr = copy_assign_expr;
     F->FoldStructField = copy_struct_field;
     F->FoldClosureExpr = copy_closure_expr;
     F->FoldBlock = copy_block_stmt;
@@ -1683,10 +1703,8 @@ static void dump_stmt(struct Printer *P, struct HirStmt *s)
     dump_fmt(P, "line: %d\n", s->hdr.line);
     switch (HIR_KINDOF(s)) {
         case kHirExprStmt:
-            dump_msg(P, "lhs: ");
-            dump_expr(P, s->expr.lhs);
-            dump_msg(P, "rhs: ");
-            dump_expr(P, s->expr.rhs);
+            dump_msg(P, "expr: ");
+            dump_expr(P, s->expr.expr);
             break;
         case kHirBlock:
             dump_stmt_list(P, s->block.stmts, "stmts");
@@ -1861,6 +1879,12 @@ static void dump_expr(struct Printer *P, struct HirExpr *e)
             dump_expr(P, e->mitem.key);
             dump_msg(P, "value: ");
             dump_expr(P, e->mitem.value);
+            break;
+        case kHirAssignExpr:
+            dump_msg(P, "lhs: ");
+            dump_expr(P, e->assign.lhs);
+            dump_msg(P, "rhs: ");
+            dump_expr(P, e->assign.rhs);
             break;
         case kHirStructField:
             dump_name(P, e->sitem.name);

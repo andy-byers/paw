@@ -17,12 +17,12 @@ pub fn test_empty_maps_with_annotations() {
     let map: [str: bool] = [:];
 }
 
-fn call(map: [int: int]) {};
-fn call2(map: [int: [int: int]]) {};
+fn call(map: [int: int]) {}
+fn call2(map: [int: [int: int]]) {}
 
 pub fn test_inference() {
-    let map = [1: [2, 3]] // [int: [int]];
-    let map = [1: [2: 3]] // [int: [int: int]];
+    let map = [1: [2, 3]]; // [int: [int]]
+    let map = [1: [2: 3]]; // [int: [int: int]]
 
     let map = [1: [2: 3], 4: [:], 5: [:]];
     let map = [1: [:], 2: [3: 4], 5: [:]];
@@ -39,7 +39,7 @@ pub fn test_inference() {
 
     let map = [:];
     map = [0: 0];
-    ;
+
     let map = [:];
     map = [0: 0];
     map = [1: 1];
@@ -57,7 +57,7 @@ pub fn test_inference() {
     let a = [:];
     let b = a;
     b = [1: 1];
-    // type of 'a' inferred from 'b';
+    // type of 'a' inferred from 'b'
     assert(#a == 0);
 
     let a = [:];

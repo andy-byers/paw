@@ -22,17 +22,15 @@ struct NestedInt {
 }
 
 fn test_struct_syntax() {
-    let i = Integer{value: 123} {/* this is an empty block */};
-    {} {}{};
-    // Automatic semicolon insertion causes the next 2 lines to be parsed;
-    // as an Ident followed by a Block.;
+    let i = Integer{value: 123}; {/* this is an empty block */}
+    {} {}{}
     let i = i;
-    {} ;
+    {}
     let i = i.value;
     assert(i == 123);
 
-    // A 'CompositeLit' can start a suffix chain ('.' must be on the ;
-    // same line as the '}' due to auto ';' insertion);
+    // A 'CompositeLit' can start a suffix chain ('.' must be on the 
+    // same line as the '}' due to auto ';' insertion)
     let nested = NestedInt{value: Integer{value: 123}}.value.value;
     assert(nested == 123);
 }

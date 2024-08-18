@@ -10,6 +10,7 @@
     X(operator) \
     X(block) \
     X(loop) \
+    X(basic) \
     X(function) \
     X(closure) \
     X(integer) \

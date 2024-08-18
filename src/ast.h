@@ -38,10 +38,11 @@ struct Ast;
         X(Index,          index)    \
         X(Selector,       selector) \
         X(TupleType,      tuple)    \
-        X(StructField,     sitem)    \
+        X(StructField,    sitem)    \
         X(MapElem,        mitem)    \
         X(Signature,      sig)      \
-        X(ContainerType,  cont) 
+        X(ContainerType,  cont)     \
+        X(AssignExpr,     assign) 
 
 #define AST_STMT_LIST(X)      \
         X(Block,      block)  \
@@ -313,6 +314,12 @@ struct AstContainerType {
     struct AstExpr *second;
 };
 
+struct AstAssignExpr {
+    AST_EXPR_HEADER;
+    struct AstExpr *lhs;
+    struct AstExpr *rhs;
+};
+
 struct AstExpr {
     union {
         struct AstExprHeader hdr;
@@ -354,13 +361,14 @@ struct AstDeclStmt {
 
 struct AstExprStmt {
     AST_STMT_HEADER;
-    struct AstExpr *lhs;
-    struct AstExpr *rhs;
+    paw_Bool ends_block : 1;
+    struct AstExpr *expr;
 };
 
 struct AstBlock {
     AST_STMT_HEADER;
     struct AstStmtList *stmts;
+    struct AstExpr *result;
 };
 
 struct AstReturnStmt {

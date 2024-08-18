@@ -1,24 +1,14 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
-#include "lex.h"
-#include "auxlib.h"
-#include "compile.h"
-#include "gc.h"
-#include "map.h"
-#include "mem.h"
-#include "parse.h"
-#include "str.h"
-#include "util.h"
-#include "value.h"
-#include <assert.h>
-#include <limits.h>
-#include <stdlib.h>
 
-#define lex_error(x) pawX_error(x, "syntax error")
-#define save_and_next(x) (save(x, (x)->c), next(x))
-#define is_eof(x) (CAST((x)->c, uint8_t) == TK_END)
-#define is_newline(x) ((x)->c == '\r' || (x)->c == '\n')
+#include "lex.h"
+#include "compile.h"
+
+#define LEX_ERROR(x) pawX_error(x, "syntax error")
+#define SAVE_AND_NEXT(x) (save(x, (x)->c), next(x))
+#define IS_EOF(x) (CAST((x)->c, uint8_t) == TK_END)
+#define IS_NEWLINE(x) ((x)->c == '\r' || (x)->c == '\n')
 
 static void add_location(paw_Env *P, Buffer *print, const String *s, int line)
 {
@@ -96,7 +86,7 @@ static paw_Bool test_next(struct Lex *x, char c)
 static paw_Bool test_next2(struct Lex *x, const char *c2)
 {
     if (x->c == c2[0] || x->c == c2[1]) {
-        save_and_next(x);
+        SAVE_AND_NEXT(x);
         return PAW_TRUE;
     }
     return PAW_FALSE;
@@ -144,9 +134,9 @@ static struct Token make_string(struct Lex *x, TokenKind kind)
 
 static struct Token consume_name(struct Lex *x)
 {
-    save_and_next(x);
+    SAVE_AND_NEXT(x);
     while (ISNAME(x->c) || ISDIGIT(x->c)) {
-        save_and_next(x);
+        SAVE_AND_NEXT(x);
     }
     struct Token t = make_string(x, TK_NAME);
     const String *s = V_STRING(t.value);
@@ -198,7 +188,7 @@ static int consume_utf8(struct Lex *x)
         const uint8_t c = CAST(x->c, uint8_t);
         state = kLookup1[c] + state * 12;
         state = kLookup2[state];
-        save_and_next(x);
+        SAVE_AND_NEXT(x);
     } while (state % 8 != 0);
     return state ? -1 : 0;
 }
@@ -206,10 +196,10 @@ static int consume_utf8(struct Lex *x)
 static int get_codepoint(struct Lex *x)
 {
     const char c[] = {
-        save_and_next(x),
-        save_and_next(x),
-        save_and_next(x),
-        save_and_next(x),
+        SAVE_AND_NEXT(x),
+        SAVE_AND_NEXT(x),
+        SAVE_AND_NEXT(x),
+        SAVE_AND_NEXT(x),
     };
     if (!ISHEX(c[0]) || 
             !ISHEX(c[1]) || 
@@ -233,7 +223,7 @@ static struct Token consume_string(struct Lex *x)
         if (ISASCIIEND(x->c)) {
             break;
         }
-        save_and_next(x);
+        SAVE_AND_NEXT(x);
     }
 
     if (test_next(x, '\\')) {
@@ -270,26 +260,26 @@ static struct Token consume_string(struct Lex *x)
             case 'u': {
                 int codepoint = get_codepoint(x);
                 if (codepoint < 0) {
-                    lex_error(x);
+                    LEX_ERROR(x);
                 }
                 if (0xD800 <= codepoint && codepoint <= 0xDFFF) {
                     // Codepoint is part of a surrogate pair. Expect a high
                     // surrogate (U+D800–U+DBFF) followed by a low surrogate
                     // (U+DC00–U+DFFF).
                     if (codepoint <= 0xDBFF) {
-                        if (save_and_next(x) != '\\' ||
-                            save_and_next(x) != 'u') {
-                            lex_error(x);
+                        if (SAVE_AND_NEXT(x) != '\\' ||
+                            SAVE_AND_NEXT(x) != 'u') {
+                            LEX_ERROR(x);
                         }
                         const int codepoint2 = get_codepoint(x);
                         if (codepoint2 < 0xDC00 || codepoint2 > 0xDFFF) {
-                            lex_error(x);
+                            LEX_ERROR(x);
                         }
                         codepoint = (((codepoint - 0xD800) << 10) |
                                      (codepoint2 - 0xDC00)) +
                                     0x10000;
                     } else {
-                        lex_error(x);
+                        LEX_ERROR(x);
                     }
                 }
                 // Translate the codepoint into bytes. Modified from
@@ -313,15 +303,15 @@ static struct Token consume_string(struct Lex *x)
                 break;
             }
             default:
-                lex_error(x);
+                LEX_ERROR(x);
         }
     } else if (test_next(x, quote)) {
         return make_string(x, TK_STRING);
     } else if (ISNEWLINE(x->c)) {
         // unescaped newlines allowed in string literals
-        save_and_next(x);
+        SAVE_AND_NEXT(x);
     } else if (consume_utf8(x)) {
-        lex_error(x);
+        LEX_ERROR(x);
     }
     goto handle_ascii;
 }
@@ -355,7 +345,7 @@ static struct Token consume_number(struct Lex *x)
     // Save source text in a buffer until a byte is reached that cannot possibly
     // be part of a number.
     const char first = x->c;
-    save_and_next(x);
+    SAVE_AND_NEXT(x);
 
     paw_Bool likely_float = PAW_FALSE;
     paw_Bool likely_int = first == '0' && 
@@ -382,11 +372,11 @@ static struct Token consume_number(struct Lex *x)
         } else {
             break;
         }
-        save_and_next(x);
+        SAVE_AND_NEXT(x);
     }
     if (ISNAME(x->c)) {
         // cause pawV_to_number() to fail
-        save_and_next(x);
+        SAVE_AND_NEXT(x);
     }
     save(x, '\0');
 
@@ -404,7 +394,7 @@ static void skip_block_comment(struct Lex *x)
     for (;;) {
         if (test_next(x, '*') && test_next(x, '/')) {
             break;
-        } else if (is_eof(x)) {
+        } else if (IS_EOF(x)) {
             pawX_error(x, "missing end of block comment");
         }
         next(x);
@@ -413,7 +403,7 @@ static void skip_block_comment(struct Lex *x)
 
 static void skip_line_comment(struct Lex *x)
 {
-    while (!is_eof(x) && !ISNEWLINE(x->c)) {
+    while (!IS_EOF(x) && !ISNEWLINE(x->c)) {
         next(x);
     }
 }
@@ -424,7 +414,7 @@ static void skip_whitespace(struct Lex *x)
             x->c == '\t' || 
             x->c == '\f' || 
             x->c == '\v' || 
-            is_newline(x)) {
+            IS_NEWLINE(x)) {
         next(x);
     }
 }
@@ -508,14 +498,12 @@ try_again:
                 if (test_next(x, '.')) {
                     token = T(TK_DOT3);
                 }
-                lex_error(x); // '..' not allowed
+                LEX_ERROR(x); // '..' not allowed
             }
             break;
         case '/':
             next(x);
-            if (test_next(x,
-                          '/')) { // TODO: comments may need consideration wrt.
-                                  // auto ';' insertion
+            if (test_next(x, '/')) {
                 skip_line_comment(x);
                 goto try_again;
             } else if (test_next(x, '*')) {

@@ -4,7 +4,6 @@
 
 #include "fuzz.h"
 #include "lib.h"
-#include "util.h"
 
 extern int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
