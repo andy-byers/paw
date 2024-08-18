@@ -17,7 +17,11 @@
 #ifndef PAW_COMPILE_H
 #define PAW_COMPILE_H
 
+#include "code.h"
 #include "mem.h"
+#include "unify.h"
+
+#define ENV(x) ((x)->P)
 
 struct HirTypeList;
 
@@ -59,6 +63,34 @@ struct Resolver {
     int map_gid;
     int line;
     paw_Bool in_closure; // 1 if the enclosing function is a closure, else 0
+};
+
+// Keeps track of dynamic memory used by the compiler
+struct DynamicMem {
+    // Buffer for accumulating strings
+    struct CharVec {
+        char *data;
+        int count;
+        int alloc;
+    } scratch;
+
+    struct {
+        struct HirDecl **data;
+        int count;
+        int alloc;
+    } decls;
+
+    struct {
+        struct LocalSlot *data;
+        int count;
+        int alloc;
+    } vars;
+
+    struct Ast *ast;
+    struct Hir *hir;
+
+    Unifier unifier;
+    struct LabelList labels;
 };
 
 typedef struct Generator {

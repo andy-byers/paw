@@ -5,80 +5,81 @@ pub fn test_getters() {
         1: 'abc',
         2: 'def',
         3: 'ghi',
-    ]
-    assert(map[1] == 'abc')
-    assert(map[2] == 'def')
-    assert(map[3] == 'ghi')
+    ];
+    assert(map[1] == 'abc');
+    assert(map[2] == 'def');
+    assert(map[3] == 'ghi');
 }
 
 pub fn test_empty_maps_with_annotations() {
-    let map: [bool: int] = [:]
-    let map: [float: str] = [:]
-    let map: [str: bool] = [:]
+    let map: [bool: int] = [:];
+    let map: [float: str] = [:];
+    let map: [str: bool] = [:];
 }
 
-fn call(map: [int: int]) {}
-fn call2(map: [int: [int: int]]) {}
+fn call(map: [int: int]) {};
+fn call2(map: [int: [int: int]]) {};
 
 pub fn test_inference() {
-    let map = [1: [2, 3]] // [int: [int]]
-    let map = [1: [2: 3]] // [int: [int: int]]
+    let map = [1: [2, 3]] // [int: [int]];
+    let map = [1: [2: 3]] // [int: [int: int]];
 
-    let map = [1: [2: 3], 4: [:], 5: [:]]
-    let map = [1: [:], 2: [3: 4], 5: [:]]
-    let map = [1: [:], 2: [:], 3: [4: 5]]
-    let map: [int: [int: int]] = [1: [:], 2: [:], 3: [:]]
+    let map = [1: [2: 3], 4: [:], 5: [:]];
+    let map = [1: [:], 2: [3: 4], 5: [:]];
+    let map = [1: [:], 2: [:], 3: [4: 5]];
+    let map: [int: [int: int]] = [1: [:], 2: [:], 3: [:]];
 
-    let map = [1: [2, 3], 4: [], 5: []]
-    let map = [1: [], 2: [3, 4], 5: []]
-    let map = [1: [], 2: [], 3: [4, 5]]
-    let map: [int: [int]] = [1: [], 2: [], 3: []]
+    let map = [1: [2, 3], 4: [], 5: []];
+    let map = [1: [], 2: [3, 4], 5: []];
+    let map = [1: [], 2: [], 3: [4, 5]];
+    let map: [int: [int]] = [1: [], 2: [], 3: []];
 
-    let map: [int: [int]] = [1: [2, 3]]
-    let map: [int: [int: int]] = [1: [2: 3]]
+    let map: [int: [int]] = [1: [2, 3]];
+    let map: [int: [int: int]] = [1: [2: 3]];
 
-    let map = [:]
-    map = [0: 0]
-    
-    let map = [:]
-    map = [0: 0]
-    map = [1: 1]
+    let map = [:];
+    map = [0: 0];
+    ;
+    let map = [:];
+    map = [0: 0];
+    map = [1: 1];
 
-    let map = [:]
-    map = [:]
-    map = [0: 0]
+    let map = [:];
+    map = [:];
+    map = [0: 0];
 
-    let a = [:]
-    call(a)
+    let a = [:];
+    call(a);
 
-    let a = [0: [:]]
-    call2(a)
+    let a = [0: [:]];
+    call2(a);
 
-    let a = [:]
-    let b = a
-    b = [1: 1]
-    // type of 'a' inferred from 'b'
-    assert(#a == 0)
+    let a = [:];
+    let b = a;
+    b = [1: 1];
+    // type of 'a' inferred from 'b';
+    assert(#a == 0);
 
-    let a = [:]
-    let b = a
-    b = [1: 1]
-    assert(#a == 0)
-    a = [2: 2]
-    assert(a[2] == 2)
+    let a = [:];
+    let b = a;
+    b = [1: 1];
+    assert(#a == 0);
+    a = [2: 2];
+    assert(a[2] == 2);
 
-    let a = [0: [:]]
-    let b = a
-    assert(#a == 1)
-    b = [1: [1: 1]]
-    assert(#a == 1)
-    assert(#a[0] == 0)
-    a = [2: [2: 2]]
-    assert(a[2][2] == 2)
+    let a = [0: [:]];
+    let b = a;
+    assert(#a == 1);
+    b = [1: [1: 1]];
+    assert(#a == 1);
+    assert(#a[0] == 0);
+    a = [2: [2: 2]];
+    assert(a[2][2] == 2);
 
-    let a = [:]
-    let b = a
-    let c = b
-    let d = c
-    d = [1: 1]
+    let a = [:];
+    let b = a;
+    let c = b;
+    let d = c;
+    d = [1: 1];
 }
+

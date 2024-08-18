@@ -1,11 +1,11 @@
 
-struct Empty
+struct Empty;
 
 fn test_unit_struct() {
-    let empty: Empty = Empty
-    let empty = Empty
-    let f = |x, y| {}
-    f(Empty, Empty)
+    let empty: Empty = Empty;
+    let empty = Empty;
+    let f = |x, y| {};
+    f(Empty, Empty);
 }
 
 struct Integer {
@@ -13,8 +13,8 @@ struct Integer {
 }
 
 fn test_struct_fields() {
-    let i: Integer = Integer{value: 123}
-    let i = Integer{value: 123}
+    let i: Integer = Integer{value: 123};
+    let i = Integer{value: 123};
 }
 
 struct NestedInt {
@@ -22,19 +22,19 @@ struct NestedInt {
 }
 
 fn test_struct_syntax() {
-    let i = Integer{value: 123} {/* this is an empty block */}
-    {} {}{}
-    // Automatic semicolon insertion causes the next 2 lines to be parsed
-    // as an Ident followed by a Block.
-    let i = i
-    {} 
-    let i = i.value
-    assert(i == 123)
+    let i = Integer{value: 123} {/* this is an empty block */};
+    {} {}{};
+    // Automatic semicolon insertion causes the next 2 lines to be parsed;
+    // as an Ident followed by a Block.;
+    let i = i;
+    {} ;
+    let i = i.value;
+    assert(i == 123);
 
-    // A 'CompositeLit' can start a suffix chain ('.' must be on the 
-    // same line as the '}' due to auto ';' insertion)
-    let nested = NestedInt{value: Integer{value: 123}}.value.value
-    assert(nested == 123)
+    // A 'CompositeLit' can start a suffix chain ('.' must be on the ;
+    // same line as the '}' due to auto ';' insertion);
+    let nested = NestedInt{value: Integer{value: 123}}.value.value;
+    assert(nested == 123);
 }
 
 struct Inner {
@@ -56,7 +56,7 @@ fn test_nested_struct() {
             b: 'two',
             c: Empty,
         },
-    }
-    assert(o.b.a == 1)
-    assert(o.b.b == 'two')
+    };
+    assert(o.b.a == 1);
+    assert(o.b.b == 'two');
 }

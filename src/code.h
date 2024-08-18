@@ -6,7 +6,6 @@
 #define PAW_CODE_H
 
 #include "mem.h"
-#include "parse.h"
 
 #define K_ALIGNOF_NODE _Alignof(void *)
 #define K_ALIGNAS_NODE _Alignas(void *)
@@ -73,6 +72,72 @@ void pawK_pool_free(struct Pool *pool, void *ptr, size_t size);
         paw_assert(index < list->count); \
         return list->data[index]; \
     }
+
+enum LabelKind {
+    LBREAK,
+    LCONTINUE,
+};
+
+struct Label {
+    int pc;
+    int line;
+    int level;
+    int close;
+    enum LabelKind kind;
+};
+
+struct LabelList {
+    struct Label *values;
+    int length;
+    int capacity;
+};
+
+struct BlockState {
+    struct BlockState *outer;
+    paw_Bool is_loop : 1;
+    int level;
+    int label0;
+};
+
+struct LocalSlot {
+    struct HirType *type;
+    String *name;
+    int index;
+    paw_Bool is_captured : 1;
+};
+
+enum FuncKind {
+    FUNC_MODULE,
+    FUNC_CLOSURE,
+    FUNC_FUNCTION,
+    FUNC_METHOD,
+};
+
+struct KCache {
+    Map *ints;                           
+    Map *strs;                           
+    Map *flts;                           
+};
+
+struct FuncState {
+    struct FuncState *outer; // enclosing function
+    struct FuncType *type; // function signature
+    struct Generator *G; // codegen state
+    struct HirSymtab *scopes; // local scopes
+    struct BlockState *bs; // current block
+    struct KCache kcache;                           
+    Proto *proto; // prototype being built
+    String *name; // name of the function
+    int first_local; // index of function in DynamicMem array
+    int nlocals; // number of locals
+    int nup; // number of upvalues
+    int nk; // number of constants
+    int nproto; // number of nested functions
+    int nlines; // number of source lines
+    int pc; // number of instructions
+    int line;        
+    enum FuncKind kind; // type of function
+};
 
 void pawK_fix_line(struct FuncState *fs, int line);
 

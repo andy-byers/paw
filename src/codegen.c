@@ -8,6 +8,7 @@
 #include "hir.h"
 #include "map.h"
 #include "mem.h"
+#include "parse.h"
 
 #define SYNTAX_ERROR(G, ...) pawE_error(ENV(G), PAW_ESYNTAX, (G)->fs->line, __VA_ARGS__)
 #define GET_DECL(G, id) pawHir_get_decl((G)->hir, id)
@@ -107,16 +108,36 @@ static paw_Type basic_code(struct Generator *G, struct HirType *type)
     return TYPE2CODE(G, type);
 }
 
-static int add_constant(struct Generator *G, Value v)
+static Map *kcache_map(struct FuncState *fs, paw_Type code)
+{
+    if (code == PAW_TINT) {
+        return fs->kcache.ints; 
+    } else if (code == PAW_TFLOAT) {
+        return fs->kcache.flts; 
+    } else {
+        paw_assert(code == PAW_TSTRING);
+        return fs->kcache.strs; 
+    }
+}
+
+static int add_constant(struct Generator *G, Value v, paw_Type code)
 {
     struct FuncState *fs = G->fs;
     Proto *p = fs->proto;
+
+    // ensure uniqueness of constant values per function
+    Map *kmap = kcache_map(fs, code);
+    Value *pk = pawH_get(kmap, v);
+    if (pk != NULL) return CAST(pk->i, int);
 
     if (fs->nk == ITEM_MAX) {
         SYNTAX_ERROR(G, "too many constants");
     }
     pawM_grow(ENV(G), p->k, fs->nk, p->nk);
     p->k[fs->nk] = v;
+
+    const Value id = {.i = fs->nk};
+    pawH_insert(ENV(G), kmap, v, id);
     return fs->nk++;
 }
 
@@ -363,6 +384,26 @@ static void enter_block(struct FuncState *fs, struct BlockState *bs, paw_Bool lo
     fs->bs = bs;
 }
 
+static void enter_kcache(struct FuncState *fs)
+{
+    paw_Env *P = ENV(fs->G);
+    Value *ints = pawC_push0(P);
+    Value *strs = pawC_push0(P);
+    Value *flts = pawC_push0(P);
+    fs->kcache.ints = pawH_new(P);
+    V_SET_OBJECT(ints, fs->kcache.ints);
+    fs->kcache.strs = pawH_new(P);
+    V_SET_OBJECT(strs, fs->kcache.strs);
+    fs->kcache.flts = pawH_new(P);
+    V_SET_OBJECT(flts, fs->kcache.flts);
+}
+
+static void leave_kcache(struct FuncState *fs)
+{
+    paw_Env *P = ENV(fs->G);
+    pawC_stkdec(P, 3);
+}
+
 static void leave_function(struct Generator *G)
 {
     struct FuncState *fs = G->fs;
@@ -390,6 +431,8 @@ static void leave_function(struct Generator *G)
     pawM_shrink(ENV(G), p->k, p->nk, fs->nk);
     p->nk = fs->nk;
 
+    leave_kcache(fs);
+
     G->fs = fs->outer;
     CHECK_GC(ENV(G));
 }
@@ -407,6 +450,8 @@ static void enter_function(struct Generator *G, struct FuncState *fs, struct Blo
         .G = G,
     };
     G->fs = fs;
+
+    enter_kcache(fs);
 
     // enter the function body
     enter_block(fs, bs, PAW_FALSE);
@@ -629,7 +674,7 @@ static void code_basic_lit(struct HirVisitor *V, struct HirLiteralExpr *e)
     if (e->basic.t == PAW_TUNIT) {
         pawK_code_0(fs, OP_PUSHUNIT);
     } else if (e->basic.t != PAW_TBOOL) {
-        const int k = add_constant(G, e->basic.value);
+        const int k = add_constant(G, e->basic.value, e->basic.t);
         pawK_code_U(fs, OP_PUSHCONST, k);
     } else if (V_TRUE(e->basic.value)) {
         pawK_code_0(fs, OP_PUSHTRUE);

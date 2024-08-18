@@ -1,574 +1,577 @@
 // vector.paw
 
 fn test_initialization() {
-    let vec: [int] = []
-    assert(0 == #vec)
+    let vec: [int] = [];
+    assert(0 == #vec);
 
-    let vec: [int] = [1]
-    assert(1 == #vec)
+    let vec: [int] = [1];
+    assert(1 == #vec);
 
-    let vec: [int] = [1, 2]
-    assert(2 == #vec)
+    let vec: [int] = [1, 2];
+    assert(2 == #vec);
 
-    let vec: [int] = [1, 2, 3]
-    assert(3 == #vec)
+    let vec: [int] = [1, 2, 3];
+    assert(3 == #vec);
 }
 
 fn test_infer_initializer() {
-    let vec = [1]
-    assert(1 == #vec)
+    let vec = [1];
+    assert(1 == #vec);
 
-    let vec = [1, 2]
-    assert(2 == #vec)
+    let vec = [1, 2];
+    assert(2 == #vec);
 
-    let vec = [1, 2, 3]
-    assert(3 == #vec)
+    let vec = [1, 2, 3];
+    assert(3 == #vec);
 
-    let vec = [false]
-    let vec = [1.0, 2.0]
-    let vec = ['three', 'four', 'five']
+    let vec = [false];
+    let vec = [1.0, 2.0];
+    let vec = ['three', 'four', 'five'];
 }
 
 fn test_getters() {
-    let vec = [1, 2, 3]
-    assert(1 == vec[0])
-    assert(2 == vec[1])
-    assert(3 == vec[2])
-    assert(1 == vec[-3])
-    assert(2 == vec[-2])
-    assert(3 == vec[-1])
+    let vec = [1, 2, 3];
+    assert(1 == vec[0]);
+    assert(2 == vec[1]);
+    assert(3 == vec[2]);
+    assert(1 == vec[-3]);
+    assert(2 == vec[-2]);
+    assert(3 == vec[-1]);
 }
 
 fn test_nesting() {
-    let vec = [[1]]
-    assert(1 == #vec)
-    assert(1 == #vec[0])
-    assert(1 == vec[0][0])
-    let vec = [[[2]]]
-    assert(1 == #vec)
-    assert(1 == #vec[0])
-    assert(1 == #vec[0][0])
-    assert(2 == vec[0][0][0])
-    let vec = [[[[3]]]]
-    assert(1 == #vec)
-    assert(1 == #vec[0])
-    assert(1 == #vec[0][0])
-    assert(1 == #vec[0][0][0])
-    assert(3 == vec[0][0][0][0])
+    let vec = [[1]];
+    assert(1 == #vec);
+    assert(1 == #vec[0]);
+    assert(1 == vec[0][0]);
+    let vec = [[[2]]];
+    assert(1 == #vec);
+    assert(1 == #vec[0]);
+    assert(1 == #vec[0][0]);
+    assert(2 == vec[0][0][0]);
+    let vec = [[[[3]]]];
+    assert(1 == #vec);
+    assert(1 == #vec[0]);
+    assert(1 == #vec[0][0]);
+    assert(1 == #vec[0][0][0]);
+    assert(3 == vec[0][0][0][0]);
 
     let vec = [
         [[1, 2, 3], [0]],
-        [[4, 5, 6], [1]], 
+        [[4, 5, 6], [1]],
         [[7, 8, 9], [2]],
-    ]
+    ];
 
-    let vec: [int] = []
+    let vec: [int] = [];
 
-    let vec: [[int]] = [[]]
-    let vec: [[int]] = [[], []]
-    let vec: [[int]] = [[], [], []]
+    let vec: [[int]] = [[]];
+    let vec: [[int]] = [[], []];
+    let vec: [[int]] = [[], [], []];
 
-    let vec: [[[int]]] = []
-    let vec: [[[int]]] = [[]]
-    let vec: [[[int]]] = [[], []]
-    let vec: [[[int]]] = [[], [], []]
-    let vec: [[[int]]] = [[[]]]
-    let vec: [[[int]]] = [[[]], [[]]]
-    let vec: [[[int]]] = [[[]], [[]], [[]]]
+    let vec: [[[int]]] = [];
+    let vec: [[[int]]] = [[]];
+    let vec: [[[int]]] = [[], []];
+    let vec: [[[int]]] = [[], [], []];
+    let vec: [[[int]]] = [[[]]];
+    let vec: [[[int]]] = [[[]], [[]]];
+    let vec: [[[int]]] = [[[]], [[]], [[]]];
 
     let check = |vec: [[int]]| {
-        assert(1 == vec[0][0])
-        assert(4 == vec[1][0])
-        assert(6 == vec[2][0])
-        assert(2 == vec[-3][-2])
-        assert(3 == vec[-3][-1])
-        assert(5 == vec[-2][-1])
-    }
+        assert(1 == vec[0][0]);
+        assert(4 == vec[1][0]);
+        assert(6 == vec[2][0]);
+        assert(2 == vec[-3][-2]);
+        assert(3 == vec[-3][-1]);
+        assert(5 == vec[-2][-1]);
+    };
     let vec = [
         [1, 2, 3],
         [4, 5],
         [6],
-    ]
-    check(vec)
+    ];
+    check(vec);
 
     let vec = [
         [1, 2, 3],
         [4, 5],
         [6],
-    ]
-    check(vec)
+    ];
+    check(vec);
 
     check([
         [1, 2, 3],
         [4, 5],
         [6],
-    ])
+    ]);
 }
 
 fn check<T>(vec: [[T]], counts: (int, int, int)) {
-    assert(counts.0 == #vec[0])
-    assert(counts.1 == #vec[1])
-    assert(counts.2 == #vec[2])
+    assert(counts.0 == #vec[0]);
+    assert(counts.1 == #vec[1]);
+    assert(counts.2 == #vec[2]);
 }
 
-enum E {X, Y, Z, W}
+enum E {X, Y, Z, W};
 
 fn test_empty_vectors() {
-    check([[1], [2], [3]], (1, 1, 1))
-    check([[1], [2], []], (1, 1, 0))
-    check([[], [2], [3]], (0, 1, 1))
-    check([[1], [], [3]], (1, 0, 1))
-    check([[1], [], []], (1, 0, 0))
-    check([[], [2], []], (0, 1, 0))
-    check([[], [], [3]], (0, 0, 1))
+    check([[1], [2], [3]], (1, 1, 1));
+    check([[1], [2], []], (1, 1, 0));
+    check([[], [2], [3]], (0, 1, 1));
+    check([[1], [], [3]], (1, 0, 1));
+    check([[1], [], []], (1, 0, 0));
+    check([[], [2], []], (0, 1, 0));
+    check([[], [], [3]], (0, 0, 1));
 
-    check([[[1]], [], []], (1, 0, 0))
-    check([[], [[2]], []], (0, 1, 0))
-    check([[], [], [[3]]], (0, 0, 1))
-    check([[[[1]]], [[]], []], (1, 1, 0))
-    check([[], [[[2]]], [[]]], (0, 1, 1))
-    check([[[]], [], [[[3]]]], (1, 0, 1))
+    check([[[1]], [], []], (1, 0, 0));
+    check([[], [[2]], []], (0, 1, 0));
+    check([[], [], [[3]]], (0, 0, 1));
+    check([[[[1]]], [[]], []], (1, 1, 0));
+    check([[], [[[2]]], [[]]], (0, 1, 1));
+    check([[[]], [], [[[3]]]], (1, 0, 1));
 
-    check([[[1]], [], []], (1, 0, 0))
-    check([[], [[2]], []], (0, 1, 0))
-    check([[], [], [[3]]], (0, 0, 1))
-    check([[[[1]]], [[]], []], (1, 1, 0))
-    check([[], [[[2]]], [[]]], (0, 1, 1))
-    check([[[]], [], [[[3]]]], (1, 0, 1))
+    check([[[1]], [], []], (1, 0, 0));
+    check([[], [[2]], []], (0, 1, 0));
+    check([[], [], [[3]]], (0, 0, 1));
+    check([[[[1]]], [[]], []], (1, 1, 0));
+    check([[], [[[2]]], [[]]], (0, 1, 1));
+    check([[[]], [], [[[3]]]], (1, 0, 1));
 
-    check([[E::X, E::Y], [], [E::Z, E::W]], (2, 0, 2))
-    check([[[[], [E::X], [E::Y]]], [], [[[E::Z, E::W]]]], (1, 0, 1))
+    check([[E::X, E::Y], [], [E::Z, E::W]], (2, 0, 2));
+    check([[[[], [E::X], [E::Y]]], [], [[[E::Z, E::W]]]], (1, 0, 1));
 
-    assert([1, 2] == [1] + [2] + [])
-    assert([1, 3] == [1] + [] + [3])
-    assert([2, 3] == [] + [2] + [3])
-    assert([1] == [1] + [] + [])
-    assert([2] == [] + [2] + [])
-    assert([3] == [] + [] + [3])
+    assert([1, 2] == [1] + [2] + []);
+    assert([1, 3] == [1] + [] + [3]);
+    assert([2, 3] == [] + [2] + [3]);
+    assert([1] == [1] + [] + []);
+    assert([2] == [] + [2] + []);
+    assert([3] == [] + [] + [3]);
 }
 
 fn test_slices() {
-    let vec = [1, 2, 3]
-    assert(3 == #vec[0:#vec])
-    assert(2 == #vec[0:-1])
-    assert(1 == #vec[0:-2])
-    assert(0 == #vec[0:-3])
-    assert(2 == #vec[1:#vec])
-    assert(1 == #vec[2:#vec])
-    assert(0 == #vec[3:#vec])
-    assert(3 == #vec[:])
+    let vec = [1, 2, 3];
+    assert(3 == #vec[0:#vec]);
+    assert(2 == #vec[0:-1]);
+    assert(1 == #vec[0:-2]);
+    assert(0 == #vec[0:-3]);
+    assert(2 == #vec[1:#vec]);
+    assert(1 == #vec[2:#vec]);
+    assert(0 == #vec[3:#vec]);
+    assert(3 == #vec[:]);
 
-    assert(2 == vec[:-1][-1])
-    assert(1 == vec[:-2][-1])
-    assert(1 == vec[0:][0])
-    assert(2 == vec[1:][0])
-    assert(3 == vec[2:][0])
+    assert(2 == vec[:-1][-1]);
+    assert(1 == vec[:-2][-1]);
+    assert(1 == vec[0:][0]);
+    assert(2 == vec[1:][0]);
+    assert(3 == vec[2:][0]);
 }
 
-// TODO: handle composite element types
+// TODO: handle composite element types;
 fn test_equality_comparisons() {
-    assert([false, true] == [false, true])
-    assert([2, 3] == [2, 3])
-    assert([4.0, 5.0] == [4.0, 5.0])
-    assert(['six', 'seven'] == ['six', 'seven'])
+    assert([false, true] == [false, true]);
+    assert([2, 3] == [2, 3]);
+    assert([4.0, 5.0] == [4.0, 5.0]);
+    assert(['six', 'seven'] == ['six', 'seven']);
 
-    assert([false, true] != [false, false])
-    assert([2, 3] != [2, 2])
-    assert([4.0, 5.0] != [4.0, 4.0])
-    assert(['six', 'seven'] != ['six', 'six'])
+    assert([false, true] != [false, false]);
+    assert([2, 3] != [2, 2]);
+    assert([4.0, 5.0] != [4.0, 4.0]);
+    assert(['six', 'seven'] != ['six', 'six']);
 
-    assert([false, true] != [false])
-    assert([2, 3] != [2])
-    assert([4.0, 5.0] != [4.0])
-    assert(['six', 'seven'] != ['six'])
+    assert([false, true] != [false]);
+    assert([2, 3] != [2]);
+    assert([4.0, 5.0] != [4.0]);
+    assert(['six', 'seven'] != ['six']);
 }
 
-// each vector must have its type inferred at some point before it
-// goes out of scope
+// each vector must have its type inferred at some point before it;
+// goes out of scope;
 fn test_infer_later() {
-    let vec = []
-    vec = [0]
-    
-    let vec = []
-    vec = [0]
-    vec = [1]
+    let vec = [];
+    vec = [0];
+    ;
+    let vec = [];
+    vec = [0];
+    vec = [1];
 
-    let vec = []
-    vec = []
-    vec = [0]
+    let vec = [];
+    vec = [];
+    vec = [0];
 
-    let test = |vec: [int]| {}
-    let a = []
-    test(a)
+    let test = |vec: [int]| {};
+    let a = [];
+    test(a);
 
-    let test = |vec: [[int]]| {}
-    let a = []
-    test(a)
-    let a = [[]]
-    test(a)
+    let test = |vec: [[int]]| {};
+    let a = [];
+    test(a);
+    let a = [[]];
+    test(a);
 
-    let a = []
-    let b = a
-    b = [1]
-    // type of 'a' inferred from 'b'
-    assert(#a == 0)
+    let a = [];
+    let b = a;
+    b = [1];
+    // type of 'a' inferred from 'b';
+    assert(#a == 0);
 
-    let a = []
-    let b = a
-    b = [1]
-    assert(#a == 0)
-    a = [2]
-    assert(a[0] == 2)
+    let a = [];
+    let b = a;
+    b = [1];
+    assert(#a == 0);
+    a = [2];
+    assert(a[0] == 2);
 
-    let a = [[]]
-    let b = a
-    assert(#a == 1)
-    b = [[1]]
-    assert(#a == 1)
-    assert(#a[0] == 0)
-    a = [[2]]
-    assert(a[0][0] == 2)
+    let a = [[]];
+    let b = a;
+    assert(#a == 1);
+    b = [[1]];
+    assert(#a == 1);
+    assert(#a[0] == 0);
+    a = [[2]];
+    assert(a[0][0] == 2);
 
-    let a = []
-    let b = a
-    let c = b
-    let d = c
-    d = [1]
+    let a = [];
+    let b = a;
+    let c = b;
+    let d = c;
+    d = [1];
 }
 
 fn test_generic_ops() {
-    let a = []
-    assert(#a == 0)
-    _vector_push(a, 1)
+    let a = [];
+    assert(#a == 0);
+    _vector_push(a, 1);
 
-    let a = []
-    let b = []
-    let c = a + b
-    _vector_push(c, 1)
+    let a = [];
+    let b = [];
+    let c = a + b;
+    _vector_push(c, 1);
 
-    let a = []
-    let b = []
-    let c = []
-    let d = a + b + c
-    _vector_push(d, 1)
+    let a = [];
+    let b = [];
+    let c = [];
+    let d = a + b + c;
+    _vector_push(d, 1);
 }
 
 fn test_push() {
-    let vec: [int] = []
-    _vector_push(vec, 1)
-    _vector_push(vec, 2)
-    _vector_push(vec, 3)
-    assert(vec == [1, 2, 3])
+    let vec: [int] = [];
+    _vector_push(vec, 1);
+    _vector_push(vec, 2);
+    _vector_push(vec, 3);
+    assert(vec == [1, 2, 3]);
 
-    let vec = [1]
-    _vector_push(vec, 2)
-    _vector_push(vec, 3)
-    _vector_push(vec, 4)
-    assert(vec == [1, 2, 3, 4])
+    let vec = [1];
+    _vector_push(vec, 2);
+    _vector_push(vec, 3);
+    _vector_push(vec, 4);
+    assert(vec == [1, 2, 3, 4]);
 }
 
 fn test_pop() {
-    let vec = [1, 2, 3]
-    assert(3 == _vector_pop(vec))
-    assert(#vec == 2)
-    assert(2 == _vector_pop(vec))
-    assert(#vec == 1)
-    assert(1 == _vector_pop(vec))
-    assert(#vec == 0)
+    let vec = [1, 2, 3];
+    assert(3 == _vector_pop(vec));
+    assert(#vec == 2);
+    assert(2 == _vector_pop(vec));
+    assert(#vec == 1);
+    assert(1 == _vector_pop(vec));
+    assert(#vec == 0);
 }
 
 fn test_insert() {
-    let vec: [int] = []
-    _vector_insert(vec, 0, 3)
-    _vector_insert(vec, 0, 2)
-    _vector_insert(vec, 0, 1)
-    assert(vec == [1, 2, 3])
+    let vec: [int] = [];
+    _vector_insert(vec, 0, 3);
+    _vector_insert(vec, 0, 2);
+    _vector_insert(vec, 0, 1);
+    assert(vec == [1, 2, 3]);
 
-    let vec: [int] = [1, 2, 3]
-    _vector_insert(vec, 1, 4)
-    _vector_insert(vec, 3, 5)
-    _vector_insert(vec, 5, 6)
-    assert(vec == [1, 4, 2, 5, 3, 6])
+    let vec: [int] = [1, 2, 3];
+    _vector_insert(vec, 1, 4);
+    _vector_insert(vec, 3, 5);
+    _vector_insert(vec, 5, 6);
+    assert(vec == [1, 4, 2, 5, 3, 6]);
 }
 
 fn test_set_slice() {
     let check = |i: int, j: int, answer: [int]| {
-        let vec = [1, 2, 3]
-        vec[i:j] = [4, 5, 6]
-        assert(vec == answer)
-    }
-    check(0, 0, [4, 5, 6, 1, 2, 3])
-    check(0, 1, [4, 5, 6, 2, 3])
-    check(0, 2, [4, 5, 6, 3])
-    check(0, 3, [4, 5, 6])
-    check(3, 3, [1, 2, 3, 4, 5, 6])
-    check(2, 3, [1, 2, 4, 5, 6])
-    check(1, 3, [1, 4, 5, 6])
-    check(0, 3, [4, 5, 6])
+        let vec = [1, 2, 3];
+        vec[i:j] = [4, 5, 6];
+        assert(vec == answer);
+    };
+    check(0, 0, [4, 5, 6, 1, 2, 3]);
+    check(0, 1, [4, 5, 6, 2, 3]);
+    check(0, 2, [4, 5, 6, 3]);
+    check(0, 3, [4, 5, 6]);
+    check(3, 3, [1, 2, 3, 4, 5, 6]);
+    check(2, 3, [1, 2, 4, 5, 6]);
+    check(1, 3, [1, 4, 5, 6]);
+    check(0, 3, [4, 5, 6]);
 
     let check = |i: int, j: int, answer: [int]| {
-        let vec = [1, 2, 3]
-        vec[i:j] = vec
-        assert(vec == answer)
-    }
-    check(1, 3, [1, 1, 2, 3])
-    check(2, 3, [1, 2, 1, 2, 3])
-    check(3, 3, [1, 2, 3, 1, 2, 3])
+        let vec = [1, 2, 3];
+        vec[i:j] = vec;
+        assert(vec == answer);
+    };
+    check(1, 3, [1, 1, 2, 3]);
+    check(2, 3, [1, 2, 1, 2, 3]);
+    check(3, 3, [1, 2, 3, 1, 2, 3]);
 
-    check(0, 2, [1, 2, 3, 3])
-    check(0, 1, [1, 2, 3, 2, 3])
-    check(0, 0, [1, 2, 3, 1, 2, 3])
+    check(0, 2, [1, 2, 3, 3]);
+    check(0, 1, [1, 2, 3, 2, 3]);
+    check(0, 0, [1, 2, 3, 1, 2, 3]);
 
-    check(0, 3, [1, 2, 3])
-    check(1, 2, [1, 1, 2, 3, 3])
+    check(0, 3, [1, 2, 3]);
+    check(1, 2, [1, 1, 2, 3, 3]);
 
-    let vec = [1, 2, 3, 4, 5]
-    vec[1:3] = vec
-    assert(vec == [1, 1, 2, 3, 4, 5, 4, 5])
+    let vec = [1, 2, 3, 4, 5];
+    vec[1:3] = vec;
+    assert(vec == [1, 1, 2, 3, 4, 5, 4, 5]);
 }
 
 fn map<T>(f: fn(T) -> T, vec: [T]) {
     for i = 0, #vec {
-        vec[i] = f(vec[i])
-    }
+        vec[i] = f(vec[i]);
+    };
 }
 
 fn test_infer_poly_function() {
     let times2 = |i: int| -> int {
-        return i * 2
-    }
-    let v = [1, 2, 3]
-    map(times2, v)
-    assert(v[0] == 2)
-    assert(v[1] == 4)
-    assert(v[2] == 6)
-    
+        return i * 2;
+    };
+    let v = [1, 2, 3];
+    map(times2, v);
+    assert(v[0] == 2);
+    assert(v[1] == 4);
+    assert(v[2] == 6);
+    ;
 }
 
 fn test_misc() {
-    let vec: [int] = []
+    let vec: [int] = [];
     for i = 0, 100 {
-        _vector_push(vec, i)
-    }
-    assert(#vec == 100)
+        _vector_push(vec, i);
+    };
+    assert(#vec == 100);
     for i = 0, 100 {
-        assert(i in vec)
-    }
-    let clone = _vector_clone(vec)
+        assert(i in vec);
+    };
+    let clone = _vector_clone(vec);
     for i = 0, 50 {
-        _vector_erase(vec, i)
-    }
+        _vector_erase(vec, i);
+    };
     for i = 0, 100, 2 {
-        _vector_insert(vec, i, i)
-    }
-    assert(vec == clone)
+        _vector_insert(vec, i, i);
+    };
+    assert(vec == clone);
 }
 
 fn test_contains() {
-    assert(3 in [1, 2, 3])
-    assert(!(4 in [1, 2, 3]))
+    assert(3 in [1, 2, 3]);
+    assert(!(4 in [1, 2, 3]));
 }
 
 fn test_addition() {
-    assert([] != [1])
-    assert([] + [] != [2])
-    assert([] + [] + [] != [3])
-    assert([1] == [1])
-    assert([] + [2] == [2])
-    assert([] + [] + [3] == [3])
+    assert([] != [1]);
+    assert([] + [] != [2]);
+    assert([] + [] + [] != [3]);
+    assert([1] == [1]);
+    assert([] + [2] == [2]);
+    assert([] + [] + [3] == [3]);
 
-    assert([] + [1, 2, 3] == [1, 2, 3])
-    assert([1] + [2, 3] == [1, 2, 3])
-    assert([1, 2] + [3] == [1, 2, 3])
-    assert([1, 2, 3] + [] == [1, 2, 3])
-    assert([1] + [2] + [3] == [1, 2, 3])
-    assert([] + [1] + [2] + [] + [] + [3] + [] == [1, 2, 3])
+    assert([] + [1, 2, 3] == [1, 2, 3]);
+    assert([1] + [2, 3] == [1, 2, 3]);
+    assert([1, 2] + [3] == [1, 2, 3]);
+    assert([1, 2, 3] + [] == [1, 2, 3]);
+    assert([1] + [2] + [3] == [1, 2, 3]);
+    assert([] + [1] + [2] + [] + [] + [3] + [] == [1, 2, 3]);
 }
 
 fn test_infer_closure() {
     let test = |vec: [int]| {
-        assert(#vec == 0)
-    }
-    test([])
-    test([] + [])
-    test([] + [] + [])
+        assert(#vec == 0);
+    };
+    test([]);
+    test([] + []);
+    test([] + [] + []);
 }
 
 fn test_infer_a() {
-    let a = []
-    let b = []
-    let c = []
-    a = b
-    b = c
-    _vector_push(c, 1)
+    let a = [];
+    let b = [];
+    let c = [];
+    a = b;
+    b = c;
+    _vector_push(c, 1);
 }
 
 fn test_infer_b() {
-    let a = []
-    let b = []
-    let c = []
-    a = b
-    b = c
-    _vector_push(a, 1)
+    let a = [];
+    let b = [];
+    let c = [];
+    a = b;
+    b = c;
+    _vector_push(a, 1);
 }
 
 fn test_infer_c() {
-    let a = []
-    let b = []
-    let c = []
-    b = a
-    c = a
-    b = [1]
-    assert(a == c)
-    assert(a != b)
-    assert(b != c)
+    let a = [];
+    let b = [];
+    let c = [];
+    b = a;
+    c = a;
+    b = [1];
+    assert(a == c);
+    assert(a != b);
+    assert(b != c);
 }
 
 fn test_infer_d() {
-    let a = []
-    let b = []
-    let c = []
-    b = a
-    c = a
-    a = [1]
-    assert(#a == 1)
-    assert(#b == 0)
-    assert(#c == 0)
+    let a = [];
+    let b = [];
+    let c = [];
+    b = a;
+    c = a;
+    a = [1];
+    assert(#a == 1);
+    assert(#b == 0);
+    assert(#c == 0);
 }
 
 fn test_infer_e() {
-    let a = []
-    let b = []
-    let c = []
-    if true {
-        // do nothing
+    let a = [];
+    let b = [];
+    let c = [];
+    let d = if true {
+        // do nothing;
+        let x = a
+        -1
     } else {
-        _vector_push(a, 1)
-    }
-    b = c
-    c = a
+        _vector_push(a, 1);
+        let x = a - 1
+    };
+    b = c;
+    c = a;
 }
 
 fn test_infer_f() {
-    let vec = []
-    _vector_push(vec, 1)
-    assert(vec[0] == 1)
+    let vec = [];
+    _vector_push(vec, 1);
+    assert(vec[0] == 1);
 }
 
 fn test_infer_g() {
-    let a = []
-    let b = a
-    _vector_push(b, 1)
-    assert(a[0] == 1)
+    let a = [];
+    let b = a;
+    _vector_push(b, 1);
+    assert(a[0] == 1);
 }
 
 fn infer_func<T>(vec: [T], val: T) -> [T] {
-    return vec + [val]
+    return vec + [val];
 }
 
 fn test_infer_h() {
-    assert([1] == infer_func([], 1))
-    assert([1, 2] == infer_func(infer_func([], 1), 2))
-    assert([1, 2, 3] == infer_func(infer_func(infer_func([], 1), 2), 3))
+    assert([1] == infer_func([], 1));
+    assert([1, 2] == infer_func(infer_func([], 1), 2));
+    assert([1, 2, 3] == infer_func(infer_func(infer_func([], 1), 2), 3));
 }
 
 struct Vec<T> {
-    vec: [T]
+    vec: [T];
 }
 
 fn infer_fn_2<T>(vec: [T], val: Vec<T>) -> [T] {
-    return vec + val.vec
+    return vec + val.vec;
 }
 
 fn test_infer_i() {
-    let a = Vec::<int>{vec: [1]}
-    assert([1] == infer_fn_2([], a))
-    let b = Vec::<int>{vec: [2, 3]}
-    assert([1, 2, 3] == infer_fn_2(infer_fn_2([], a), b))
-    let c = Vec::<int>{vec: [4, 5, 6]}
-    assert([1, 2, 3, 4, 5, 6] == infer_fn_2(infer_fn_2(infer_fn_2([], a), b), c))
+    let a = Vec::<int>{vec: [1]};
+    assert([1] == infer_fn_2([], a));
+    let b = Vec::<int>{vec: [2, 3]};
+    assert([1, 2, 3] == infer_fn_2(infer_fn_2([], a), b));
+    let c = Vec::<int>{vec: [4, 5, 6]};
+    assert([1, 2, 3, 4, 5, 6] == infer_fn_2(infer_fn_2(infer_fn_2([], a), b), c));
 }
 
-fn infer_fn_3<T>(vec: [T], vec2: [[T]]) {}
+fn infer_fn_3<T>(vec: [T], vec2: [[T]]) {};
 
 fn test_infer_j() {
-    infer_fn_3([], [[1]])
-    infer_fn_3([], [[[1]]])
-    infer_fn_3([], [[1, 2, 3]])
-    infer_fn_3([], [[[1], [2, 2], [3, 3, 3]]])
+    infer_fn_3([], [[1]]);
+    infer_fn_3([], [[[1]]]);
+    infer_fn_3([], [[1, 2, 3]]);
+    infer_fn_3([], [[[1], [2, 2], [3, 3, 3]]]);
 }
 
 fn infer_fn_4<T>(vec: [T], val: T) -> int {
-    _vector_push(vec, val)
-    return #vec
+    _vector_push(vec, val);
+    return #vec;
 }
 fn test_infer_k() {
-    assert(1 == infer_fn_4([], 1))
-    assert(1 == infer_fn_4([], infer_fn_4([], 2)))
-    assert(1 == infer_fn_4([], infer_fn_4([], infer_fn_4([], 3))))
+    assert(1 == infer_fn_4([], 1));
+    assert(1 == infer_fn_4([], infer_fn_4([], 2)));
+    assert(1 == infer_fn_4([], infer_fn_4([], infer_fn_4([], 3))));
 
-    let vec = []
-    assert(1 == infer_fn_4(vec, 1))
-    let vec = []
-    assert(2 == infer_fn_4(vec, infer_fn_4(vec, 2)))
-    let vec = []
-    assert(3 == infer_fn_4(vec, infer_fn_4(vec, infer_fn_4(vec, 3))))
+    let vec = [];
+    assert(1 == infer_fn_4(vec, 1));
+    let vec = [];
+    assert(2 == infer_fn_4(vec, infer_fn_4(vec, 2)));
+    let vec = [];
+    assert(3 == infer_fn_4(vec, infer_fn_4(vec, infer_fn_4(vec, 3))));
 }
 
 fn test_slice_equality() {
-    let vec = [1, 2, 3]
-    assert(vec[0:] == vec[-3:3])
-    assert(vec[1:] == vec[-2:3])
-    assert(vec[2:] == vec[-1:3])
-    assert(vec[:3] == vec[0:3])
-    assert(vec[:2] == vec[0:-1])
-    assert(vec[:1] == vec[0:-2])
+    let vec = [1, 2, 3];
+    assert(vec[0:] == vec[-3:3]);
+    assert(vec[1:] == vec[-2:3]);
+    assert(vec[2:] == vec[-1:3]);
+    assert(vec[:3] == vec[0:3]);
+    assert(vec[:2] == vec[0:-1]);
+    assert(vec[:1] == vec[0:-2]);
 
-    assert(vec[:0] == [])
-    assert(vec[3:] == [])
-    assert(vec[1:1] == [])
-    assert(vec[:3] == vec)
-    assert(vec[0:] == vec)
-    assert(vec[0:3] == vec)
+    assert(vec[:0] == []);
+    assert(vec[3:] == []);
+    assert(vec[1:1] == []);
+    assert(vec[:3] == vec);
+    assert(vec[0:] == vec);
+    assert(vec[0:3] == vec);
 }
 
 fn map2<T>(vec: [T], f: fn(T) -> T) -> [T] {
-    let result = []
+    let result = [];
     for elem in vec {
-        _vector_push(result, f(elem))
-    }
-    return result
+        _vector_push(result, f(elem));
+    };
+    return result;
 }
 fn test_infer_l() {
     let vec = [
         'abc',
         'def',
         'ghi',
-    ]
+    ];
     let vec = map2(vec, |val: str| -> str {
-        return val + val
-    })
-    let result = ''
+        return val + val;
+    });
+    let result = '';
     for val in vec {
-        result = result + val
-    }
-    assert(result == 'abcabcdefdefghighi')
+        result = result + val;
+    };
+    assert(result == 'abcabcdefdefghighi');
 
     let vec = [
         ['a', 'b', 'c'],
         ['d', 'e', 'f'],
         ['g', 'h', 'i'],
-    ]
+    ];
     let vec = map2(vec, |row: [str]| -> [str] {
-        return map2(row, |val: str| -> str {
-            return val + val + val
+        map2(row, |val: str| -> str {
+            val + val + val
         })
-    })
-    let result = ''
+    });
+    let result = '';
     for row in vec {
         for val in row {
-            result = result + val
-        }
-    }
-    assert(result == 'aaabbbcccdddeeefffggghhhiii')
+            result = result + val;
+        };
+    };
+    assert(result == 'aaabbbcccdddeeefffggghhhiii');
 }

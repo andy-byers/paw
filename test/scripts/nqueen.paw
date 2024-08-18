@@ -1,45 +1,45 @@
 // Translated from https://github.com/attractivechaos/plb2/blob/master/src/lua/nqueen.lua
 fn nq_solve(n: int) -> int {
-	let m = 0
-    let a = []
-    let l = []
-    let c = []
-    let r = []
-	let y0 = (1 << n) - 1
+	let m = 0;
+    let a = [];
+    let l = [];
+    let c = [];
+    let r = [];
+	let y0 = (1 << n) - 1;
 	for i = 0, n {
-        _vector_push(a, -1)
-        _vector_push(l, 0)
-        _vector_push(c, 0)
-        _vector_push(r, 0)
+        _vector_push(a, -1);
+        _vector_push(l, 0);
+        _vector_push(c, 0);
+        _vector_push(r, 0);
 	}
-	let k = 0
+	let k = 0;
 	while k >= 0 {
-		let y = ((l[k] | c[k]) | r[k]) & y0
+		let y = ((l[k] | c[k]) | r[k]) & y0;
 		if ((y ^ y0) >> (a[k] + 1)) != 0 {
-			let i = a[k] + 1
+			let i = a[k] + 1;
 			while i < n && (y & (1 << i)) != 0 {
-				i = i + 1
-			}
+				i = i + 1;
+			};
 			if k < n - 1 {
-				let z = 1 << i
-				a[k] = i
-				k = k + 1
-				l[k] = (l[k - 1] | z) << 1
-				c[k] = c[k - 1] | z
-				r[k] = (r[k - 1] | z) >> 1
+				let z = 1 << i;
+				a[k] = i;
+				k = k + 1;
+				l[k] = (l[k - 1] | z) << 1;
+				c[k] = c[k - 1] | z;
+				r[k] = (r[k - 1] | z) >> 1;
 			} else {
-				m = m + 1
-				k = k - 1
-			}
+				m = m + 1;
+				k = k - 1;
+			};
 		} else {
-			a[k] = -1
-			k = k - 1
-		}
+			a[k] = -1;
+			k = k - 1;
+		};
 	}
-	return m
+	return m;
 }
 
 pub fn main() {
-    let n = 5
-    let m = nq_solve(n)
+    let n = 5;
+    let m = nq_solve(n);
 }

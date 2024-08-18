@@ -1,101 +1,101 @@
 
 fn test_initializer_annotations() {
-    // test type annotations
-    let i: int = 123
-    let s: str = 'abc'
-    let b: bool = true
-    let f: float = 1.0
+    // test type annotations;
+    let i: int = 123;
+    let s: str = 'abc';
+    let b: bool = true;
+    let f: float = 1.0;
 
-    assert(i == 123)
-    assert(s == 'abc')
-    assert(b == true)
-    assert(f == 1.0)
+    assert(i == 123);
+    assert(s == 'abc');
+    assert(b == true);
+    assert(f == 1.0);
 }
 
 fn test_initializer_inference() {
-    // test inferred types
-    let i = 123
-    let s = 'abc'
-    let b = true
-    let f = 1.0
+    // test inferred types;
+    let i = 123;
+    let s = 'abc';
+    let b = true;
+    let f = 1.0;
 
-    assert(i == 123)
-    assert(s == 'abc')
-    assert(b == true)
-    assert(f == 1.0)
+    assert(i == 123);
+    assert(s == 'abc');
+    assert(b == true);
+    assert(f == 1.0);
 }
 
 fn test_shadowed_identifiers() {
-    let a = 'abc'
+    let a = 'abc';
     {
-        let a = true
-        let a = 'def'
-    }
-    assert(a == 'abc')
+        let a = true;
+        let a = 'def';
+    };
+    assert(a == 'abc');
 }
 
 fn test_rebound_identifiers() {
-    // rebind different types
-    let a = 123
-    assert(a == 123)
-    let a = 456.0
-    assert(a == 456.0)
-    let a = 'abc'
-    assert(a == 'abc')
+    // rebind different types;
+    let a = 123;
+    assert(a == 123);
+    let a = 456.0;
+    assert(a == 456.0);
+    let a = 'abc';
+    assert(a == 'abc');
 
-    let x = 100
-    let x = x
-    let x = x + 23
-    assert(x == 123)
+    let x = 100;
+    let x = x;
+    let x = x + 23;
+    assert(x == 123);
 }
 
 fn test_conversions() {
-    let b = 0 as bool
-    assert(b == false)
-    let b = 1 as bool
-    assert(b == true)
-    let b = -11 as bool
-    assert(b == true)
+    let b = 0 as bool;
+    assert(b == false);
+    let b = 1 as bool;
+    assert(b == true);
+    let b = -11 as bool;
+    assert(b == true);
 
-    let b = 0.0 as bool
-    assert(b == false)
-    let b = 0.1 as bool
-    assert(b == true)
+    let b = 0.0 as bool;
+    assert(b == false);
+    let b = 0.1 as bool;
+    assert(b == true);
 
-    let i = 1.0 as int
-    assert(i == 1)
-    let i = 1.9 as int
-    assert(i == 1)
-    let i = -1.9 as int
-    assert(i == -1)
+    let i = 1.0 as int;
+    assert(i == 1);
+    let i = 1.9 as int;
+    assert(i == 1);
+    let i = -1.9 as int;
+    assert(i == -1);
 
-    let f = 1 as float
-    assert(f < 1.1)
-    let f = -10 as float
-    assert(f > -10.1)
+    let f = 1 as float;
+    assert(f < 1.1);
+    let f = -10 as float;
+    assert(f > -10.1);
 
-    let i = 0
-    let b = i as bool
-    let i = b as int
-    assert(i == 0)
+    let i = 0;
+    let b = i as bool;
+    let i = b as int;
+    assert(i == 0);
 
-    let i = 1234
-    let b = i as bool
-    let i = b as int
-    assert(i == 1)
+    let i = 1234;
+    let b = i as bool;
+    let i = b as int;
+    assert(i == 1);
 }
 
 fn test_lots_of_strings() {
-    let alphabet = 'abcdefghijklmnopqrstuvwxyz'
+    let alphabet = 'abcdefghijklmnopqrstuvwxyz';
 
-    // put strings in a vector so they don't get collected
-    let v = []
+    // put strings in a vector so they don't get collected;
+    let v = [];
     for i = 0, #alphabet {
         for j = 0, #alphabet {
-            let s = alphabet[:i] + alphabet[j:] +
-                    alphabet[i:] + alphabet[:j]
-            _vector_push(v, s)
-        }
-    }
+            let s = alphabet[:i] + alphabet[j:] +;
+                    alphabet[i:] + alphabet[:j];
+            _vector_push(v, s);
+        };
+    };
 }
 

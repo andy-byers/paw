@@ -1,41 +1,41 @@
 // block.paw
 
 pub fn test_locals() {
-    let _0 = 0
+    let _0 = 0;
     {
-        let _1 = 1
-        let _2 = 2
+        let _1 = 1;
+        let _2 = 2;
         {
-            let _3 = 3
-            let _4 = 4
-            let _5 = 5
-            assert(_0 + _1 + _2 + _3 + _4 + _5 == 15)
+            let _3 = 3;
+            let _4 = 4;
+            let _5 = 5;
+            assert(_0 + _1 + _2 + _3 + _4 + _5 == 15);
 
-            let _1 = 123 // Shadow
-            let _1 = 123 // Rebind
-        }
-        assert(_0 + _1 + _2 == 3)
+            let _1 = 123 // Shadow;
+            let _1 = 123 // Rebind;
+        };
+        assert(_0 + _1 + _2 == 3);
 
-        _0 = 123 // Assign
-    }
-    assert(_0 == 123)
+        _0 = 123 // Assign;
+    };
+    assert(_0 == 123);
 }
 
 pub fn test_if_else() {
     let test = |n| {
         if n == 0 {
-            return 'zero'
+            return 'zero';
         } else if n == 1 {
-            return 'one'
+            return 'one';
         } else if n == 2 {
-            return 'two'
+            return 'two';
         } else {
-            return 'other'
-        }
-    }
-    assert(test(0) == 'zero')
-    assert(test(1) == 'one')
-    assert(test(2) == 'two')
-    assert(test(3) == 'other')
-    assert(test(-1) == 'other')
+            return 'other';
+        };
+    };
+    assert(test(0) == 'zero');
+    assert(test(1) == 'one');
+    assert(test(2) == 'two');
+    assert(test(3) == 'other');
+    assert(test(-1) == 'other');
 }

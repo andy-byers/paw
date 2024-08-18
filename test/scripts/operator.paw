@@ -1,64 +1,64 @@
 // operator.paw
 
 pub fn test_add_strings() {
-    let s = ''
-    s = s + 'abc'
-    s = s + s
-    assert(s == 'abcabc')
+    let s = '';
+    s = s + 'abc';
+    s = s + s;
+    assert(s == 'abcabc');
 }
 
 pub fn test_operator_precedence() {
-    assert(5 == 1 + 2 * 3 - 4 / 2)
-    assert(8 == 1 << 2 * 2 >> 1)
-    assert(-3 == 1 | ~2 ^ 3 & 4)
+    assert(5 == 1 + 2 * 3 - 4 / 2);
+    assert(8 == 1 << 2 * 2 >> 1);
+    assert(-3 == 1 | ~2 ^ 3 & 4);
 
-    // '==' and '!=' bind tighter than '&&' and '||'
-    assert(1 == 1 && 2 == 2) 
+    // '==' and '!=' bind tighter than '&&' and '||';
+    assert(1 == 1 && 2 == 2) ;
 
-    // Bitwise operators bind tighter than comparisons
-    assert(4 & 5 == 4)
-    assert(!(4 & (5 == 4) as int))
+    // Bitwise operators bind tighter than comparisons;
+    assert(4 & 5 == 4);
+    assert(!(4 & (5 == 4) as int));
 }
 
 pub fn test_comparisons() {
     let test_icmp = |a: int, b: int| {
-        assert(a == a)
-        assert(a != b)
-        assert(a <= a)
-        assert(a <= b)
-        assert(a >= a)
-        assert(b >= a)
-        assert(a < b)
-        assert(b > a)
-    }
-    test_icmp(1, 2)
-    test_icmp(-1, 1)
-    test_icmp(123, 124)
+        assert(a == a);
+        assert(a != b);
+        assert(a <= a);
+        assert(a <= b);
+        assert(a >= a);
+        assert(b >= a);
+        assert(a < b);
+        assert(b > a);
+    };
+    test_icmp(1, 2);
+    test_icmp(-1, 1);
+    test_icmp(123, 124);
 
     let test_scmp = |a: str, b: str| {
-        assert(a == a)
-        assert(a != b)
-        assert(a <= a)
-        assert(a <= b)
-        assert(a >= a)
-        assert(b >= a)
-        assert(a < b)
-        assert(b > a)
-    }
-    test_scmp('a', 'b')
-    test_scmp('ab', 'abc')
-    test_scmp('abc', 'abd')
+        assert(a == a);
+        assert(a != b);
+        assert(a <= a);
+        assert(a <= b);
+        assert(a >= a);
+        assert(b >= a);
+        assert(a < b);
+        assert(b > a);
+    };
+    test_scmp('a', 'b');
+    test_scmp('ab', 'abc');
+    test_scmp('abc', 'abd');
 }
 
 pub fn test_conversions() {
-    assert(1 == true as int) 
-    assert(1.0 == true as float) 
-    assert(1 == 1 as int)      
-    assert(1.0 == 1 as float)      
+    assert(1 == true as int) ;
+    assert(1.0 == true as float) ;
+    assert(1 == 1 as int)      ;
+    assert(1.0 == 1 as float)      ;
 }
 
 pub fn test_bitwise_ops() {
-    assert(0b0111 == 0b0110 | 0b0011)
-    assert(0b0010 == 0b0110 & 0b0011)
-    assert(0b0101 == 0b0110 ^ 0b0011)
+    assert(0b0111 == 0b0110 | 0b0011);
+    assert(0b0010 == 0b0110 & 0b0011);
+    assert(0b0101 == 0b0110 ^ 0b0011);
 }

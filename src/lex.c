@@ -420,8 +420,11 @@ static void skip_line_comment(struct Lex *x)
 
 static void skip_whitespace(struct Lex *x)
 {
-    while (x->c == ' ' || x->c == '\t' || x->c == '\f' || x->c == '\v' ||
-           (is_newline(x) && !x->add_semi)) {
+    while (x->c == ' ' || 
+            x->c == '\t' || 
+            x->c == '\f' || 
+            x->c == '\v' || 
+            is_newline(x)) {
         next(x);
     }
 }
@@ -434,25 +437,16 @@ try_again:
 
     // cast to avoid sign extension
     struct Token token = T(CAST(x->c, uint8_t));
-    paw_Bool semi = PAW_FALSE;
     x->dm->scratch.count = 0;
     switch (token.kind) {
-        case '\n':
-        case '\r':
-            paw_assert(x->add_semi);
-            x->add_semi = PAW_FALSE;
-            next(x); // make progress
-            return T(';');
         case '\'':
         case '"':
             token = consume_string(x);
-            semi = PAW_TRUE;
             break;
         case ')':
         case ']':
         case '}':
             next(x);
-            semi = PAW_TRUE;
             break;
         case '=':
             next(x);
@@ -532,16 +526,12 @@ try_again:
         default: 
             if (ISDIGIT(x->c)) {
                 token = consume_number(x);
-                semi = PAW_TRUE;
             } else if (ISNAME(x->c)) {
                 token = consume_name(x);
-                semi = token.kind == TK_NAME || token.kind == TK_RETURN ||
-                       token.kind == TK_BREAK || token.kind == TK_CONTINUE;
             } else {
                 next(x);
             }
     }
-    x->add_semi = semi;
     return token;
 #undef T
 }

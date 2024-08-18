@@ -1,477 +1,477 @@
 // loop.paw
 
 pub fn test_basic_loop() {
-    let one = 1
+    let one = 1;
     for i = 0, 8 {
-        let a = -1
-        let b = -1
-    }
-    let two = 2
+        let a = -1;
+        let b = -1;
+    };
+    let two = 2;
     for i = 1, 8 {
-        for j = 1, i {}
-    }
+        for j = 1, i {};
+    };
     let test = || -> int {
-        return one + two
-    }
-    assert(test() == 3)
+        return one + two;
+    };
+    assert(test() == 3);
 }
 
 pub fn test_numeric_for_loop() {
     let test = |start: int, end: int, step: int| -> int {
-        let n = 0
+        let n = 0;
         for i = start, end, step {
-            n = n + 1
-        }
-        return n
-    }
-    assert(test(0, 0, 1) == 0)
-    assert(test(0, 0, -1) == 0)
-    assert(test(0, -1, 1) == 0)
-    assert(test(0, 1, -1) == 0)
-    assert(test(0, 0, 10) == 0)
-    assert(test(0, 0, -10) == 0)
-    assert(test(0, -1, 10) == 0)
-    assert(test(0, 1, -10) == 0)
+            n = n + 1;
+        };
+        return n;
+    };
+    assert(test(0, 0, 1) == 0);
+    assert(test(0, 0, -1) == 0);
+    assert(test(0, -1, 1) == 0);
+    assert(test(0, 1, -1) == 0);
+    assert(test(0, 0, 10) == 0);
+    assert(test(0, 0, -10) == 0);
+    assert(test(0, -1, 10) == 0);
+    assert(test(0, 1, -10) == 0);
 
-    assert(test(-1, 1, 1) == 2)
-    assert(test(-10, 10, 1) == 20)
-    assert(test(1, -1, -1) == 2)
-    assert(test(10, -10, -1) == 20)
-    assert(test(-1, 1, 2) == 1)
-    assert(test(-10, 10, 2) == 10)
-    assert(test(1, -1, -2) == 1)
-    assert(test(10, -10, -2) == 10)
-    assert(test(-1, 1, 4) == 1)
-    assert(test(-10, 10, 4) == 5)
-    assert(test(1, -1, -4) == 1)
-    assert(test(10, -10, -4) == 5)
+    assert(test(-1, 1, 1) == 2);
+    assert(test(-10, 10, 1) == 20);
+    assert(test(1, -1, -1) == 2);
+    assert(test(10, -10, -1) == 20);
+    assert(test(-1, 1, 2) == 1);
+    assert(test(-10, 10, 2) == 10);
+    assert(test(1, -1, -2) == 1);
+    assert(test(10, -10, -2) == 10);
+    assert(test(-1, 1, 4) == 1);
+    assert(test(-10, 10, 4) == 5);
+    assert(test(1, -1, -4) == 1);
+    assert(test(10, -10, -4) == 5);
 
-    // Loop bounds are copied onto the stack when the loop starts. Changing them
-    // during the loop has no effect.
-    let n = 0
-    let N = 10
+    // Loop bounds are copied onto the stack when the loop starts. Changing them;
+    // during the loop has no effect.;
+    let n = 0;
+    let N = 10;
     for i = 0, N {
-        n = n + 1
-        N = 0
-    }
-    assert(n == 10)
+        n = n + 1;
+        N = 0;
+    };
+    assert(n == 10);
 
     let test = |n| {
-        let f = || -1
+        let f = || -1;
         for i = 0, 100 {
             if i == n {
-                // Capture 'i', the loop variable, when it is equal to 'n'. It should
-                // retain this value in the closure, since 'i' is closed over at the
-                // end of the loop iteration.
-                f = || i
-            }
-        }
-        return f
-    }
-    assert(test(0)() == 0)
-    assert(test(10)() == 10)
-    assert(test(50)() == 50)
-    assert(test(100)() == -1)
+                // Capture 'i', the loop variable, when it is equal to 'n'. It should;
+                // retain this value in the closure, since 'i' is closed over at the;
+                // end of the loop iteration.;
+                f = || i;
+            };
+        };
+        return f;
+    };
+    assert(test(0)() == 0);
+    assert(test(10)() == 10);
+    assert(test(50)() == 50);
+    assert(test(100)() == -1);
 }
 
 pub fn test_nested_loops() {
     for i = 0, 8 {
         for j = 0, i {
             for k = j, 8 {
-                assert(j < i)
-                assert(j <= k)
-            }
-        }
-    }
+                assert(j < i);
+                assert(j <= k);
+            };
+        };
+    };
 }
 
 pub fn test_iterator_for_loop() {
-    let i = 1
+    let i = 1;
     for e in [1, 2, 3] {
-        assert(e == i)
-        i = i + 1
-    }
+        assert(e == i);
+        i = i + 1;
+    };
 
-    let i = 0
+    let i = 0;
     for k in [1: 1, 2: 2, 3: 3] {
-        i = i + 1 
-    }
-    assert(i == 3)
+        i = i + 1 ;
+    };
+    assert(i == 3);
 
-    let a = [1, 2, 3]
-    let b = []
+    let a = [1, 2, 3];
+    let b = [];
     for e in a {
-        _vector_push(b, e)
-        _vector_pop(a)
-    }
-    assert(#b == 2)
-    assert(b[0] == 1)
-    assert(b[1] == 2)
+        _vector_push(b, e);
+        _vector_pop(a);
+    };
+    assert(#b == 2);
+    assert(b[0] == 1);
+    assert(b[1] == 2);
 }
 
 pub fn test_while_loop() {
     let test = |n| {
-        let count = 0
+        let count = 0;
         while count < n {
-            count = count + 1
-        }
-        return count
-    }
-    assert(test(0) == 0)
-    assert(test(1) == 1)
-    assert(test(10) == 10)
+            count = count + 1;
+        };
+        return count;
+    };
+    assert(test(0) == 0);
+    assert(test(1) == 1);
+    assert(test(10) == 10);
 }
 
 pub fn test_dowhile_loop() {
-    let i = 0
+    let i = 0;
     do {
-        i = i + 1
-    } while i < 10
+        i = i + 1;
+    } while i < 10;
 
-    assert(i == 10)
+    assert(i == 10);
 
     do {
-        i = 42
-    } while false
+        i = 42;
+    } while false;
 
-    assert(i == 42)
+    assert(i == 42);
 }
 
 pub fn test_break_continue_1() {
-    let a = 'A'
-    let b = 'B'
+    let a = 'A';
+    let b = 'B';
     for i = 0, 100 {
-        let b = 'C'
-        let c = 'C'
-        let d = 'D'
-        a = c
-        b = d // 'b' shadowed
+        let b = 'C';
+        let c = 'C';
+        let d = 'D';
+        a = c;
+        b = d // 'b' shadowed;
         if i == 10 {
-            break
+            break;
         } else {
-            continue
-        }
-    }
-    let a = a
-    let b = b
-    assert(a == 'C')
-    assert(b == 'B')
+            continue;
+        };
+    };
+    let a = a;
+    let b = b;
+    assert(a == 'C');
+    assert(b == 'B');
 }
 
 pub fn test_break_continue_2() {
-    let n = -1
+    let n = -1;
     for i = 0, 3 {
         if i == 2 {
-            break
-        }
-        n = i
-    }
-    assert(n == 1)
+            break;
+        };
+        n = i;
+    };
+    assert(n == 1);
 
-    let n = -1
+    let n = -1;
     for i = 0, 3 {
         if i == 2 {
-            continue
-        }
-        n = i
-    }
-    assert(n == 1)
+            continue;
+        };
+        n = i;
+    };
+    assert(n == 1);
 
-    // Capture loop variable 'i' as an upvalue.
+    // Capture loop variable 'i' as an upvalue.;
     let test = |n| {
-        let f = || -1
+        let f = || -1;
         for i = 0, 100 {
             if i == n {
-                let u = i
+                let u = i;
                 f = || -> int {
-                    return n + i + u
-                }
-                break
-            }
-        } // 'i' closed here when i == n, popped otherwise
-        return f
-    }
-    assert(test(0)() == 0)
-    assert(test(10)() == 30)
-    assert(test(50)() == 150)
-    assert(test(100)() == -1)
+                    return n + i + u;
+                };
+                break;
+            };
+        } // 'i' closed here when i == n, popped otherwise;
+        return f;
+    };
+    assert(test(0)() == 0);
+    assert(test(10)() == 30);
+    assert(test(50)() == 150);
+    assert(test(100)() == -1);
 
-    let i = 0
+    let i = 0;
     do {
-        i = i + 1
-        break
-    } while true
+        i = i + 1;
+        break;
+    } while true;
 
-    assert(i == 1)
+    assert(i == 1);
 
-    let i = 0
+    let i = 0;
     do {
         if i == 10 {
-            break
-        }
-        i = i + 1
-    } while true
+            break;
+        };
+        i = i + 1;
+    } while true;
 
-    assert(i == 10)
+    assert(i == 10);
 
-    let i = 0
+    let i = 0;
     do {
-        i = i + 1
-        continue
-    } while i < 10
+        i = i + 1;
+        continue;
+    } while i < 10;
 
-    assert(i == 10)
+    assert(i == 10);
 
-    let i = 0
-    let n = 0
+    let i = 0;
+    let n = 0;
     do {
-        i = i + 1
+        i = i + 1;
         if i & 1 != 0 {
-            continue
-        }
-        n = n + 1
-    } while i < 10
+            continue;
+        };
+        n = n + 1;
+    } while i < 10;
 
-    assert(n == 5)
+    assert(n == 5);
 
-    let i = 0
-    let n = 0
+    let i = 0;
+    let n = 0;
     do {
-        i = i + 1
+        i = i + 1;
         if i & 1 != 0 {
-            continue
+            continue;
         } else if i == 10 {
-            break
-        }
-        n = n + 1
-    } while true
+            break;
+        };
+        n = n + 1;
+    } while true;
 
-    assert(n == 4)
+    assert(n == 4);
 } 
 
 pub fn test_loop_bounds_are_constant() {
-    let n = 0
-    let N = 10
+    let n = 0;
+    let N = 10;
     for i = 0, N {
-        n = n + 1
-        N = 0
-    }
-    assert(n == 10)
+        n = n + 1;
+        N = 0;
+    };
+    assert(n == 10);
 }
 
 pub fn test_break_continue_3() {
-    let n = 0
+    let n = 0;
     for i = 0, 8 {
-        n = n + 1
-        break
-    }
-    assert(n == 1)
+        n = n + 1;
+        break;
+    };
+    assert(n == 1);
 
     let test = |n: int| -> int {
-        let count = 0
+        let count = 0;
         for i = 0, 100 {
             if i == n {
-                break
-            }
-            count = count + 1
-            continue
-        }
-        return count
-    }
-    assert(test(-1) == 100)
-    assert(test(0) == 0)
-    assert(test(25) == 25)
-    assert(test(50) == 50)
+                break;
+            };
+            count = count + 1;
+            continue;
+        };
+        return count;
+    };
+    assert(test(-1) == 100);
+    assert(test(0) == 0);
+    assert(test(25) == 25);
+    assert(test(50) == 50);
 }
 
 pub fn test_shadowed_by_loop_var() {
-    let i = -1
+    let i = -1;
 
-    // 'i' shadowed by loop variable.
-    for i = 0, 8 {} 
-    assert(i == -1)
+    // 'i' shadowed by loop variable.;
+    for i = 0, 8 {} ;
+    assert(i == -1);
 }
 
 pub fn test_misc() {
-    let N = 2
+    let N = 2;
     {
-        let a = []
+        let a = [];
         for i = 0, N {
             for j in [0] {
-                _vector_push(a, i + j)
-            }
-        }
-        assert(#a == 2)
-        assert(a[0] == 0)
-        assert(a[1] == 1)
-    }
+                _vector_push(a, i + j);
+            };
+        };
+        assert(#a == 2);
+        assert(a[0] == 0);
+        assert(a[1] == 1);
+    };
     {
-        let a = []
+        let a = [];
         for i = 0, N {
-            let j = 0
+            let j = 0;
             while j < N {
-                _vector_push(a, i + j)
-                j = j + 1
-            }
-        }
-        assert(#a == 4)
-        assert(a[0] == 0)
-        assert(a[1] == 1)
-        assert(a[2] == 1)
-        assert(a[3] == 2)
-    }
+                _vector_push(a, i + j);
+                j = j + 1;
+            };
+        };
+        assert(#a == 4);
+        assert(a[0] == 0);
+        assert(a[1] == 1);
+        assert(a[2] == 1);
+        assert(a[3] == 2);
+    };
     {
-        let a = []
+        let a = [];
         for i = 0, N {
             for j in [0] {
-                let k = 0
+                let k = 0;
                 while k < N {
-                    _vector_push(a, i + j + k)
-                    k = k + 1
-                }
-            }
-        }
-        assert(#a == 4)
-        assert(a[0] == 0)
-        assert(a[1] == 1)
-        assert(a[2] == 1)
-        assert(a[3] == 2)
-    }
+                    _vector_push(a, i + j + k);
+                    k = k + 1;
+                };
+            };
+        };
+        assert(#a == 4);
+        assert(a[0] == 0);
+        assert(a[1] == 1);
+        assert(a[2] == 1);
+        assert(a[3] == 2);
+    };
     {
-        let I = [0, 1, 2, 3]
+        let I = [0, 1, 2, 3];
         for i = 0, 4 {
-            assert(i == I[i])
-        }
+            assert(i == I[i]);
+        };
 
-        let n = 0
-        let I = [2, 3]
+        let n = 0;
+        let I = [2, 3];
         for i = 2, 4 {
-            assert(i == I[n])
-            n = n + 1
-        }
+            assert(i == I[n]);
+            n = n + 1;
+        };
 
-        let n = 0
-        let I = [1, 3]
+        let n = 0;
+        let I = [1, 3];
         for i = 1, 4, 2 {
-            assert(i == I[n])
-            n = n + 1
-        }
-    }
+            assert(i == I[n]);
+            n = n + 1;
+        };
+    };
 
     {
-        let n = 0
+        let n = 0;
         for i = 0, 8 {
-            n = n + 1
-            break
-        }
-        assert(n == 1)
-    }
+            n = n + 1;
+            break;
+        };
+        assert(n == 1);
+    };
 
     {
         let test = |n| {
-            let f = || -1
+            let f = || -1;
             for _ = 0, 10 {
                 if n == 0 {
-                    let _0 = 0
-                    f = || n + _0
-                    break
+                    let _0 = 0;
+                    f = || n + _0;
+                    break;
                 } else if n == 1 {
                     if n == 1 {
-                        let _1 = 1
-                        f = || n + _1
-                        break
-                    }
+                        let _1 = 1;
+                        f = || n + _1;
+                        break;
+                    };
                 } else if n == 2 {
                     if n == 2 {
                         if n == 2 {
-                            let _2 = 2
-                            f = || n + _2
-                            break
-                        }
-                    }
-                }
-            }
-            return f()
-        }
-        assert(test(0) == 0)
-        assert(test(1) == 2)
-        assert(test(2) == 4)
-    }
+                            let _2 = 2;
+                            f = || n + _2;
+                            break;
+                        };
+                    };
+                };
+            };
+            return f();
+        };
+        assert(test(0) == 0);
+        assert(test(1) == 2);
+        assert(test(2) == 4);
+    };
     {
-        let a = 42
+        let a = 42;
         while true {
-            let b = 1
+            let b = 1;
             while true {
-                break
-            }
+                break;
+            };
             {
-                assert(b == 1)
-                break
-            }
-            let c = 2
-            let d = 3
-        }
-        assert(a == 42)
-    }
+                assert(b == 1);
+                break;
+            };
+            let c = 2;
+            let d = 3;
+        };
+        assert(a == 42);
+    };
 }
 
 pub fn test_capture_loop_var_1() {
     let test = |n| {
-        let f = || -1
+        let f = || -1;
         for i = 0, 100 {
             if i == n {
-                let a = [i]
+                let a = [i];
                 f = || -> int {
-                    // Capture 'a' as an upvalue.
-                    let m = a[0]
-                    a[0] = a[0] + 1
-                    // Equivalent to '3 * n' on the first call. Increases by 1
-                    // each time.
-                    return i + n + m
-                }
-                break
-            }
-        }
-        return f
-    }
-    assert(test(-1)() == -1)
+                    // Capture 'a' as an upvalue.;
+                    let m = a[0];
+                    a[0] = a[0] + 1;
+                    // Equivalent to '3 * n' on the first call. Increases by 1;
+                    // each time.;
+                    return i + n + m;
+                };
+                break;
+            };
+        };
+        return f;
+    };
+    assert(test(-1)() == -1);
 
-    let t = test(10)
-    assert(t() == 30)
-    assert(t() == 31)
-    assert(t() == 32)
+    let t = test(10);
+    assert(t() == 30);
+    assert(t() == 31);
+    assert(t() == 32);
 }
 
 pub fn test_capture_loop_var_2() {
     let test = |b| {
-        let f = || -1
-        let n = 0
+        let f = || -1;
+        let n = 0;
         for i = 0, 8 {
-            let _0 = -1
-            let _1 = -1
+            let _0 = -1;
+            let _1 = -1;
             {
-                let _2 = -1
+                let _2 = -1;
 
-                n = n + 1
-                let m = n
-                f = || m + n
+                n = n + 1;
+                let m = n;
+                f = || m + n;
 
-                // Need to emit instructions to close 'm' at the break and continue
-                // statements.
+                // Need to emit instructions to close 'm' at the break and continue;
+                // statements.;
                 if b {
-                    break
+                    break;
                 } else {
-                    continue
-                }
-                let _3 = -1
-            }
-            let _4 = -1
-            let _5 = -1
-        }
-        return f()
-    }
-    assert(test(true) == 2)
-    assert(test(false) == 16)
+                    continue;
+                };
+                let _3 = -1;
+            };
+            let _4 = -1;
+            let _5 = -1;
+        };
+        return f();
+    };
+    assert(test(true) == 2);
+    assert(test(false) == 16);
 }
 
 

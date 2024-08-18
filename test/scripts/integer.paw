@@ -1,163 +1,163 @@
 // integer.paw
 
 pub fn test_non_decimal() {
-    assert(0b0 == 0)
-    assert(0o0 == 0)
-    assert(0x0 == 0)
-    assert(0b00 == 0)
-    assert(0o000 == 0)
-    assert(0x0000 == 0)
+    assert(0b0 == 0);
+    assert(0o0 == 0);
+    assert(0x0 == 0);
+    assert(0b00 == 0);
+    assert(0o000 == 0);
+    assert(0x0000 == 0);
 
-    assert(0b1010 == 10)
-    assert(0o1234 == 668)
-    assert(0x5678 == 22136)
+    assert(0b1010 == 10);
+    assert(0o1234 == 668);
+    assert(0x5678 == 22136);
 
-    // some C and C++ compilers fail to parse these
-    // see https://stackoverflow.com/questions/49543516
-    assert(0xe-1 == 0xe - 1)
-    assert(0xe+1 == 0xe + 1)
+    // some C and C++ compilers fail to parse these;
+    // see https://stackoverflow.com/questions/49543516;
+    assert(0xe-1 == 0xe - 1);
+    assert(0xe+1 == 0xe + 1);
 }
 
 pub fn test_parse() {
     let check = |s: str, want: int| {
-        assert(_string_parse_int(s, 10) == want)
-    }
+        assert(_string_parse_int(s, 10) == want);
+    };
 
-    check('0', 0)
-    check('1', 1)
-    check('10', 10)
-    check('  1', 1)
-    check('1  ', 1)
-    check(' 1 ', 1)
-    check('  -1', -1)
-    check('-1  ', -1)
-    check(' -1 ', -1)
-    check(_int_to_string(1 << 32), 1 << 32)
+    check('0', 0);
+    check('1', 1);
+    check('10', 10);
+    check('  1', 1);
+    check('1  ', 1);
+    check(' 1 ', 1);
+    check('  -1', -1);
+    check('-1  ', -1);
+    check(' -1 ', -1);
+    check(_int_to_string(1 << 32), 1 << 32);
 }
 
 fn apply<T>(f: fn(T), target: [T]) {
     for t in target {
-        f(t)
-    }
+        f(t);
+    };
 }
 
 fn combine<T>(lhs: [T], rhs: [T]) -> [(T, T)] {
-    let out = []
+    let out = [];
     for x in lhs {
         for y in rhs {
-            _vector_push(out, (x, y))
-        }
-    }
-    return out
+            _vector_push(out, (x, y));
+        };
+    };
+    return out;
 }
 
 pub fn test_boundary_values() {
-    let imax = 0x7FFFFFFFFFFFFFFF
-    let imin = -imax - 1
+    let imax = 0x7FFFFFFFFFFFFFFF;
+    let imin = -imax - 1;
     let values = [
         -8835532,
         -532,
         -1,
         0,
-        2, 
+        2, ;
         407,
         4073748,
-    ]
+    ];
 
-    // Precedence helper
+    // Precedence helper;
     let check = |x: int, y: int| {
-        assert(x == y)
-    }
+        assert(x == y);
+    };
 
     let test_single = |x: int| {
-        check(x, x)
-        check(x, ~~x)
-        check(x, - -x)
-        check(~x, ~~~x)
-        check(-x, - - -x)
+        check(x, x);
+        check(x, ~~x);
+        check(x, - -x);
+        check(~x, ~~~x);
+        check(-x, - - -x);
 
-        // Relationship between '-' and '~':
-        check(~x, -x - 1)
+        // Relationship between '-' and '~':;
+        check(~x, -x - 1);
 
-        // Identity property:
-        check(x * 1, x)
-        check(x + 0, x)
+        // Identity property:;
+        check(x * 1, x);
+        check(x + 0, x);
 
-        check(x << 1, x * 2)
-        check(x << 2, x * 4)
-        check(x << 3 >> 1, x << 2)
+        check(x << 1, x * 2);
+        check(x << 2, x * 4);
+        check(x << 3 >> 1, x << 2);
 
         if x < 0 {
-            // Right shift does sign extension
-            check(x >> 10000, -1)
+            // Right shift does sign extension;
+            check(x >> 10000, -1);
         } else {
-            check(x >> 10000, 0)
-        }
-    }
+            check(x >> 10000, 0);
+        };
+    };
 
     let test_arith = |a: (int, int)| {
-        let x = a.0
-        let y = a.1
+        let x = a.0;
+        let y = a.1;
 
-        // Commutative property:
-        check(x + y, y + x)
-        check(x * y, y * x)
+        // Commutative property:;
+        check(x + y, y + x);
+        check(x * y, y * x);
 
-        // Associative property:
-        check(x + (y + x), (x + y) + x)
-        check(x * (y * x), (x * y) * x)
+        // Associative property:;
+        check(x + (y + x), (x + y) + x);
+        check(x * (y * x), (x * y) * x);
 
-        // Distributive property:
-        check(x * (x + y), x * x + x * y)
-        check(x * (x - y), x * x - x * y)
+        // Distributive property:;
+        check(x * (x + y), x * x + x * y);
+        check(x * (x - y), x * x - x * y);
 
-        // Variations/other checks:
-        check(x - y, -y + x)
-        check(x + y + y, x + 2 * y)
-        check(x + x + y + y + y, 2 * x + 3 * y)
-        check(x * 100 / 50, x * 2)
-        check(y * 100 / 50, y * 2)
-        check(x * 369 / 3, x * 123)
-        check(y * 369 / 3, y * 123)
+        // Variations/other checks:;
+        check(x - y, -y + x);
+        check(x + y + y, x + 2 * y);
+        check(x + x + y + y + y, 2 * x + 3 * y);
+        check(x * 100 / 50, x * 2);
+        check(y * 100 / 50, y * 2);
+        check(x * 369 / 3, x * 123);
+        check(y * 369 / 3, y * 123);
         if x != 0 {
-            check(y * x / x, y)
-        }
+            check(y * x / x, y);
+        };
         if y != 0 {
-            check(x * y / y, x)
-        }
-        let checkmod = |a1: int, b1: int, 
-                        a2: int, b2: int, 
+            check(x * y / y, x);
+        };
+        let checkmod = |a1: int, b1: int, ;
+                        a2: int, b2: int, ;
                         m: int| {
-            check((a1 - b1) % m, (a2 - b2) % m)
-        }
-        checkmod(x, y, x + 3, y + 3, 7)
-        checkmod(x, y, x - 3, y - 3, 7)
-    }
+            check((a1 - b1) % m, (a2 - b2) % m);
+        };
+        checkmod(x, y, x + 3, y + 3, 7);
+        checkmod(x, y, x - 3, y - 3, 7);
+    };
 
     let test_bitwise = |a: (int, int)| {
-        let x = a.0
-        let y = a.1
+        let x = a.0;
+        let y = a.1;
 
-        // De Morgan's laws
-        check(~(x & y), (~x | ~y))
-        check(~(x | y), (~x & ~y))
-    }
+        // De Morgan's laws;
+        check(~(x & y), (~x | ~y));
+        check(~(x | y), (~x & ~y));
+    };
 
     let test_rel = |a: (int, int)| {
-        let x = a.0
-        let y = a.1
+        let x = a.0;
+        let y = a.1;
 
-        // shadow 'check' with a version that operates on booleans
+        // shadow 'check' with a version that operates on booleans;
         let check = |x: bool, y: bool| {
-            assert(x == y)
-        }
-        check(x == y, !(x != y))
-        check(x < y, y > x)
-        check(x <= y, y >= x)
-    }
+            assert(x == y);
+        };
+        check(x == y, !(x != y));
+        check(x < y, y > x);
+        check(x <= y, y >= x);
+    };
 
-    apply(test_single, values)
-    apply(test_arith, combine(values, values))
-    apply(test_rel, combine(values, values))
-    apply(test_bitwise, combine(values, values))
+    apply(test_single, values);
+    apply(test_arith, combine(values, values));
+    apply(test_rel, combine(values, values));
+    apply(test_bitwise, combine(values, values));
 }

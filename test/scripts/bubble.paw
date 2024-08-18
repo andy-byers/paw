@@ -1,35 +1,35 @@
 // bubble.paw
 
 fn random(n: int) -> [int] {
-    let a = []
-    let x = n
+    let a = [];
+    let x = n;
     for _ = 0, n {
-        x = (140671485 * x + 12820163) % 16777216
-        _vector_push(a, x)
-    }
-    return a
+        x = (140671485 * x + 12820163) % 16777216;
+        _vector_push(a, x);
+    };
+    return a;
 }
 
 fn bubble(n: int) -> [int] {
-    let a = random(n)
+    let a = random(n);
     while true {
-        let swapped = false
+        let swapped = false;
         for i = 1, n {
             if a[i] < a[i - 1] {
-                let t = a[i]
-                a[i] = a[i - 1]
-                a[i - 1] = t
-                swapped = true
-            }
-        }
+                let t = a[i];
+                a[i] = a[i - 1];
+                a[i - 1] = t;
+                swapped = true;
+            };
+        };
         if !swapped {
-            break
-        }
-    }
-    return a
+            break;
+        };
+    };
+    return a;
 }
 
 pub fn main(args: [str]) -> int {
-    bubble(500)
-    return 0
+    bubble(500);
+    return 0;
 }

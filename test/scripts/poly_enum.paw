@@ -6,30 +6,30 @@ enum Enum<T> {
 }
 
 fn test_initialization() {
-    let ex = Enum::<int>::X
-    let ey = Enum::<int>::Y(1)
-    let ez = Enum::<int>::Z(2, 3)
+    let ex = Enum::<int>::X;
+    let ey = Enum::<int>::Y(1);
+    let ez = Enum::<int>::Z(2, 3);
 }
 
 fn noop(e: Enum<int>) -> Enum<int> {
-    let e2 = e
-    return e2
+    let e2 = e;
+    return e2;
 }
 
 fn test_arguments() {
-    noop(Enum::<int>::X)
-    noop(Enum::<int>::Y(1))
-    noop(Enum::<int>::Z(2, 3))
+    noop(Enum::<int>::X);
+    noop(Enum::<int>::Y(1));
+    noop(Enum::<int>::Z(2, 3));
 }
 
 fn test_assignment() {
-    let ex = Enum::<int>::X
-    let ey = Enum::<int>::Y(1)
-    let ez = Enum::<int>::Z(2, 3)
+    let ex = Enum::<int>::X;
+    let ey = Enum::<int>::Y(1);
+    let ez = Enum::<int>::Z(2, 3);
 
-    ez = ex
-    ex = ey
-    ey = ez
+    ez = ex;
+    ex = ey;
+    ey = ez;
 }
 
 struct Struct<T> {
@@ -41,9 +41,9 @@ fn test_fields() {
     let s = Struct::<bool>{
         x: Enum::<int>::X,
         y: Enum::<bool>::Y(true),
-    }
+    };
     let s = Struct::<float>{
         x: Enum::<int>::Y(1),
         y: Enum::<float>::Z(2.0, 3.0),
-    }
+    };
 }

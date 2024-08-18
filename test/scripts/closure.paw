@@ -1,210 +1,210 @@
 // closure.paw
 
 fn test_expr_result() {
-    let f = || 1
-    assert(f() == 1)
-    assert(f() == 1)
-    let f = || 'two'
-    assert(f() == 'two')
+    let f = || 1;
+    assert(f() == 1);
+    assert(f() == 1);
+    let f = || 'two';
+    assert(f() == 'two');
 
-    let f = |a| a + 1
-    assert(f(1) == 2)
-    assert(f(2) == 3)
-    let f = |a| a + 'two'
-    assert(f('') == 'two')
-    assert(f('2') == '2two')
+    let f = |a| a + 1;
+    assert(f(1) == 2);
+    assert(f(2) == 3);
+    let f = |a| a + 'two';
+    assert(f('') == 'two');
+    assert(f('2') == '2two');
 
-    let f = |a, b, c| [[[a]], [[b], [c]]]
-    let v = f(0, 1, 2)
-    assert(v[0][0][0] == 0)
-    assert(v[1][0][0] == 1)
-    assert(v[1][1][0] == 2)
+    let f = |a, b, c| [[[a]], [[b], [c]]];
+    let v = f(0, 1, 2);
+    assert(v[0][0][0] == 0);
+    assert(v[1][0][0] == 1);
+    assert(v[1][1][0] == 2);
 }
 
 fn test_empty_block() {
-    let f = || -> () {}
-    let f = || -> () {return}
+    let f = || -> () {};
+    let f = || -> () {return};
 }
 
 fn test_infer_empty_block() {
-    let f = || {}
-    let f = || {return}
+    let f = || {};
+    let f = || {return};
 }
 
 fn test_infer_block_return() {
     let choose = |i| {
         if i == 0 {
-            return 'a'
+            return 'a';
         } else if i == 1 {
-            return 'b'
+            return 'b';
         } else if i == 2 {
-            return 'c'
+            return 'c';
         } else {
-            return 'd'
-        }
-    }
+            return 'd';
+        };
+    };
 
-    assert('dabcd' == choose(-1) +
-                      choose(0) +
-                      choose(1) +
-                      choose(2) +
-                      choose(3))
+    assert('dabcd' == choose(-1) +;
+                      choose(0) +;
+                      choose(1) +;
+                      choose(2) +;
+                      choose(3));
 
 }
 
 fn test_infer_from_annotation() {
     // this line would result in an inference error if not for the annotation,
-    // since we never call it and the parameters are never used, meaning the type
-    // cannot be inferred
-    let f: fn(int, float) = |a, b| {}
+    // since we never call it and the parameters are never used, meaning the type;
+    // cannot be inferred;
+    let f: fn(int, float) = |a, b| {};
 
-    // infer inner: fn(int) -> int
-    let outer = |a: fn(int) -> int| {}
-    let inner = |a| a
-    outer(inner) 
+    // infer inner: fn(int) -> int;
+    let outer = |a: fn(int) -> int| {};
+    let inner = |a| a;
+    outer(inner) ;
 
-    // infer inner: fn(str) -> (bool, str)
-    let outer = |a: fn(str) -> (bool, str)| {}
-    let inner = |a| (false, a)
-    outer(inner)
-    assert(inner('one').0 == false)
-    assert(inner('one').1 == 'one')
+    // infer inner: fn(str) -> (bool, str);
+    let outer = |a: fn(str) -> (bool, str)| {};
+    let inner = |a| (false, a);
+    outer(inner);
+    assert(inner('one').0 == false);
+    assert(inner('one').1 == 'one');
 }
 
 fn test_infer_param_from_body() {
-    let f = |a| {return a + 1}
-    let f = |a| {return a + 'two'}
+    let f = |a| {return a + 1};
+    let f = |a| {return a + 'two'};
 
-    // one of the two parameters must be annotated: the type of each operand to
-    // binary '+' must be known.
-    let f = |a, b: int| {return a + b}
-    assert(f(1, 2) == 3)
-    assert(f(10, 20) == 30)
+    // one of the two parameters must be annotated: the type of each operand to;
+    // binary '+' must be known.;
+    let f = |a, b: int| {return a + b};
+    assert(f(1, 2) == 3);
+    assert(f(10, 20) == 30);
 
-    let f = |a: str, b| {return a + b}
-    assert(f('a', 'b') == 'ab')
-    assert(f('cd', 'ef') == 'cdef')
+    let f = |a: str, b| {return a + b};
+    assert(f('a', 'b') == 'ab');
+    assert(f('cd', 'ef') == 'cdef');
 }
 
 fn test_infer_param_from_call() {
-    let f = |a| {return a}
-    assert(f(1) == 1)
-    assert(f(10) == 10)
+    let f = |a| {return a};
+    assert(f(1) == 1);
+    assert(f(10) == 10);
 
-    let f = |a| {return a}
-    assert(f('a') == 'a')
-    assert(f('bc') == 'bc')
+    let f = |a| {return a};
+    assert(f('a') == 'a');
+    assert(f('bc') == 'bc');
 }
 
 fn map<A, B>(f: fn(A) -> B, a: [A]) -> [B] {
-    let b = []
+    let b = [];
     for x in a {
-        let y = f(x)
-        _vector_push(b, y)
-    }
-    return b
+        let y = f(x);
+        _vector_push(b, y);
+    };
+    return b;
 }
 
 fn test_generics() {
-    let b = map(|a| a, [1])
-    assert(b == [1])
-    let b = map(|a| a, [2, 3])
-    assert(b == [2, 3])
+    let b = map(|a| a, [1]);
+    assert(b == [1]);
+    let b = map(|a| a, [2, 3]);
+    assert(b == [2, 3]);
 
-    // infer type of 'a' and '[]' from '-> int' (requires block due to presence of 
-    // arrow, otherwise the syntax looks strange)
-    let b = map(|a| -> int {return a}, [])
-    assert(b == [])
-    // infer closure return type and '[]' from annotation on 'a'
-    let b = map(|a: int| a, [])
-    assert(b == [])
+    // infer type of 'a' and '[]' from '-> int' (requires block due to presence of ;
+    // arrow, otherwise the syntax looks strange);
+    let b = map(|a| -> int {return a}, []);
+    assert(b == []);
+    // infer closure return type and '[]' from annotation on 'a';
+    let b = map(|a: int| a, []);
+    assert(b == []);
 }
 
 fn pipeline<A, B, C>(
-        f: fn(A) -> B, 
-        g: fn(B) -> C, 
+        f: fn(A) -> B, ;
+        g: fn(B) -> C, ;
         a: A) -> C {
-    let b = f(a)
-    let c = g(b)
-    return c
+    let b = f(a);
+    let c = g(b);
+    return c;
 }
 
 fn test_pipeline() {
-    let c = pipeline(|a| a, |b| b, 42)
-    assert(c == 42)
-    let c = pipeline(|a| 2, |b| 3, 1)
-    assert(c == 3)
+    let c = pipeline(|a| a, |b| b, 42);
+    assert(c == 42);
+    let c = pipeline(|a| 2, |b| 3, 1);
+    assert(c == 3);
     let c = pipeline(|a: float| a as int,
                      |b: int| b as float,
-                     2.5)
-    assert(c == 2.0)
+                     2.5);
+    assert(c == 2.0);
 }
 
 fn pipeline_2<A, B, C>(a: A, b: B, c: C) -> C {
-    return pipeline(|a| b, |b| c, a)
+    return pipeline(|a| b, |b| c, a);
 }
 
 fn test_pipeline_2() {
-    let c = pipeline_2(1, 2, 3)
-    assert(c == 3)
+    let c = pipeline_2(1, 2, 3);
+    assert(c == 3);
 
-    let c = pipeline_2(1, 2.0, 'three')
-    assert(c == 'three')
+    let c = pipeline_2(1, 2.0, 'three');
+    assert(c == 'three');
 }
 
 fn compose<A, B>(
-        f: fn(A) -> B, 
+        f: fn(A) -> B, ;
         a: A) -> (A, B) {
-    return (a, f(a))
+    return (a, f(a));
 }
 
 fn test_compose() {
     let x = compose(|a| {return 2},
-                    1)
-    assert(x.0 == 1)
-    assert(x.1 == 2)
+                    1);
+    assert(x.0 == 1);
+    assert(x.1 == 2);
     let x = compose(|a| {return 2.0},
-                    true)
-    assert(x.0 == true)
-    assert(x.1 == 2.0)
+                    true);
+    assert(x.0 == true);
+    assert(x.1 == 2.0);
 }
 
 fn test_basic_capture() {
     let make_closure = || {
-        let b = 1
-        return |a| a + b
-    }
-    let f = make_closure()
-    assert(f(1) == 2)
-    assert(f(2) == 3)
+        let b = 1;
+        return |a| a + b;
+    };
+    let f = make_closure();
+    assert(f(1) == 2);
+    assert(f(2) == 3);
 }
 
 fn test_capture_separate_lists() {
     let make_closures = || {
         let make_1 = || {
-            let a = []
+            let a = [];
             return || {
-                _vector_push(a, #a)
-                return a
-            }
-        } // Close a
+                _vector_push(a, #a);
+                return a;
+            };
+        } // Close a;
         let make_2 = || {
-            let a = []
+            let a = [];
             return || {
-                _vector_push(a, #a)
-                return a
-            }
-        } // Close a
+                _vector_push(a, #a);
+                return a;
+            };
+        } // Close a;
         return (
-            make_1(), 
+            make_1(), ;
             make_2(),
-        )
-    }
-    let r = make_closures()
-    let f = r.0
-    let g = r.1
-    assert(#f() == 1)
-    assert(#g() == 1)
-    assert(#f() == 2)
-    assert(#g() == 2)
+        );
+    };
+    let r = make_closures();
+    let f = r.0;
+    let g = r.1;
+    assert(#f() == 1);
+    assert(#g() == 1);
+    assert(#f() == 2);
+    assert(#g() == 2);
 }
