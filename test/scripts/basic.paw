@@ -1,9 +1,5 @@
 // basic.paw
 
-fn test_problem() {
-    let o = Option::<int>::Some(42);
-}
-
 pub fn test_comments() {
     // line comment
     /* block comment */

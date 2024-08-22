@@ -9,62 +9,25 @@
 
 void pawR_init(paw_Env *P);
 
-void pawR_to_bool(paw_Env *P, paw_Type type);
-void pawR_to_int(paw_Env *P, paw_Type type);
-void pawR_to_float(paw_Env *P, paw_Type type);
-const char *pawR_to_string(paw_Env *P, paw_Type type, size_t *plen);
-
 void pawR_unop(paw_Env *P, UnaryOp unop, paw_Type t);
 void pawR_binop(paw_Env *P, BinaryOp binop, paw_Type t);
 
 void pawR_error(paw_Env *P, int status, const char *fmt, ...);
-void pawR_attr_error(paw_Env *P, Value attr);
+void pawR_field_error(paw_Env *P, Value field);
 void pawR_name_error(paw_Env *P, Value name);
 
-void pawR_getattr(paw_Env *P, int index);
+void pawR_getfield(paw_Env *P, int index);
 void pawR_gettuple(paw_Env *P, int index);
-int pawR_getitem(paw_Env *P, paw_Type ttarget);
-void pawR_setattr(paw_Env *P, int index);
+int pawR_getelem(paw_Env *P, paw_Type type);
+void pawR_setfield(paw_Env *P, int index);
 void pawR_settuple(paw_Env *P, int index);
-void pawR_setitem(paw_Env *P, paw_Type ttarget);
-
-int pawR_getattr_raw(paw_Env *P, paw_Bool fallback);
-void pawR_setattr_raw(paw_Env *P);
-void pawR_setitem_raw(paw_Env *P);
-
-void pawR_read_global(paw_Env *P, int g);
-void pawR_write_global(paw_Env *P, int g);
+void pawR_setelem(paw_Env *P, paw_Type type);
 
 void pawR_execute(paw_Env *P, CallFrame *cf);
 void pawR_literal_list(paw_Env *P, int n);
 void pawR_literal_map(paw_Env *P, int n);
 
 void pawR_close_upvalues(paw_Env *P, const StackPtr top);
-
-int pawR_list_insert(paw_Env *P);
-int pawR_list_push(paw_Env *P);
-int pawR_list_pop(paw_Env *P);
-int pawR_list_clone(paw_Env *P);
-int pawR_map_erase(paw_Env *P);
-int pawR_map_clone(paw_Env *P);
-int pawR_string_starts_with(paw_Env *P);
-int pawR_string_ends_with(paw_Env *P);
-int pawR_string_clone(paw_Env *P);
-
-// static inline paw_Int pawR_check_int(paw_Env *P, Value v)
-//{
-//     if (pawV_is_int(v)) {
-//         return V_INT(v);
-//     } else if (!pawV_is_bigint(v)) {
-//         pawR_error(P, PAW_ETYPE, "expected integer");
-//     }
-//     paw_Bool lossless;
-//     const paw_Int ival = pawV_to_int64(v, &lossless);
-//     if (!lossless) {
-//         pawR_error(P, PAW_EOVERFLOW, "integer is too large");
-//     }
-//     return ival;
-// }
 
 static inline void pawR_check_argc(paw_Env *P, int argc, int expect)
 {

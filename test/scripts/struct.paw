@@ -1,7 +1,7 @@
 
 struct Empty;
 
-fn test_unit_struct() {
+pub fn test_unit_struct() {
     let empty: Empty = Empty;
     let empty = Empty;
     let f = |x, y| {};
@@ -12,7 +12,7 @@ struct Integer {
     value: int,
 }
 
-fn test_struct_fields() {
+pub fn test_struct_fields() {
     let i: Integer = Integer{value: 123};
     let i = Integer{value: 123};
 }
@@ -21,7 +21,7 @@ struct NestedInt {
     value: Integer,
 }
 
-fn test_struct_syntax() {
+pub fn test_struct_syntax() {
     let i = Integer{value: 123}; {/* this is an empty block */}
     {} {}{}
     let i = i;
@@ -46,7 +46,7 @@ struct Outer {
     b: Inner,
 }
 
-fn test_nested_struct() {
+pub fn test_nested_struct() {
     let o = Outer{
         a: false,
         b: Inner{

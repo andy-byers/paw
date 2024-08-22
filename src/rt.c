@@ -1,6 +1,7 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
+#include "auxlib.h"
 #include "prefix.h"
 
 #include "env.h"
@@ -37,21 +38,12 @@
 
 // Generate code for creating common builtin objects
 // Requires a placeholder slot (the VM_PUSH0() pushes an empty slot) so
-<<<<<<< HEAD
-// the GC doesn't get confused. Both the VM_PUSH0(), and the pawV_vec_new calls
-// might fail and cause an error to be thrown, so we have to be careful not
-// to leave a junk value on top of the stack.
-#define VM_VECTOR_INIT(pa, pv) \
-    pv = VM_PUSH0();           \
-    pa = pawV_vec_new(P);      \
-=======
 // the GC doesn't get confused. Both the VM_PUSH0(), and the pawV_list_new calls
 // might fail and cause an error to be thrown, so we have to be careful not
 // to leave a junk value on top of the stack.
 #define VM_LIST_INIT(pa, pv) \
     pv = VM_PUSH0();           \
     pa = pawV_list_new(P);      \
->>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
     V_SET_OBJECT(pv, pa);
 
 #define VM_MAP_INIT(dm, pv) \
@@ -113,9 +105,9 @@ void pawR_name_error(paw_Env *P, Value name)
     pawC_throw(P, PAW_ENAME);
 }
 
-void pawR_attr_error(paw_Env *P, Value name)
+void pawR_field_error(paw_Env *P, Value name)
 {
-    add_3_parts(P, "attribute '", V_TEXT(name), "' does not exist");
+    add_3_parts(P, "field '", V_TEXT(name), "' does not exist");
     pawC_throw(P, PAW_EATTR);
 }
 
@@ -191,20 +183,6 @@ void pawR_cast_float(paw_Env *P, paw_Type type)
     }
 }
 
-void pawR_read_global(paw_Env *P, int g)
-{
-    paw_assert(g < P->gv.size);
-    const GlobalVar *global = &P->gv.data[g];
-    VM_PUSHV(global->value);
-}
-
-void pawR_write_global(paw_Env *P, int g)
-{
-    GlobalVar *global = &P->gv.data[g];
-    global->value = *VM_TOP(1);
-    VM_POP(1);
-}
-
 static UpValue *capture_upvalue(paw_Env *P, StackPtr local)
 {
     UpValue *prev = NULL;
@@ -246,25 +224,21 @@ void pawR_settuple(paw_Env *P, int index)
     VM_SHIFT(1);
 }
 
-void pawR_setattr(paw_Env *P, int index)
+void pawR_setfield(paw_Env *P, int index)
 {
     const Value val = *VM_TOP(1);
     const Value obj = *VM_TOP(2);
     Instance *ins = V_INSTANCE(obj);
-    ins->attrs[index] = val;
+    ins->fields[index] = val;
     VM_SHIFT(1);
 }
 
-void pawR_setitem(paw_Env *P, paw_Type t)
+void pawR_setelem(paw_Env *P, paw_Type t)
 {
     const Value val = *VM_TOP(1);
     const Value key = *VM_TOP(2);
     const Value obj = *VM_TOP(3);
-<<<<<<< HEAD
-    if (t == PAW_TVECTOR) {
-=======
     if (t == PAW_TLIST) {
->>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
         const paw_Int index = V_INT(key);
         Value *pval = pawV_list_get(P, V_LIST(obj), index);
         *pval = val;
@@ -371,13 +345,8 @@ static paw_Bool forlist_init(paw_Env *P)
 {
     const Value v = *VM_TOP(1);
     paw_Int itr = PAW_ITER_INIT;
-<<<<<<< HEAD
-    Vector *arr = V_VECTOR(v);
-    if (pawV_vec_iter(arr, &itr)) {
-=======
     List *arr = V_LIST(v);
     if (pawV_list_iter(arr, &itr)) {
->>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
         VM_PUSHI(itr);
         VM_PUSHV(arr->begin[itr]);
         return PAW_FALSE;
@@ -389,15 +358,9 @@ static paw_Bool forlist(paw_Env *P)
 {
     const Value obj = *VM_TOP(2);
     const Value itr = *VM_TOP(1);
-<<<<<<< HEAD
-    Vector *arr = V_VECTOR(obj);
-    paw_Int i = V_INT(itr);
-    if (pawV_vec_iter(arr, &i)) {
-=======
     List *arr = V_LIST(obj);
     paw_Int i = V_INT(itr);
     if (pawV_list_iter(arr, &i)) {
->>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
         V_SET_INT(VM_TOP(1), i);
         VM_PUSHV(arr->begin[i]);
         return PAW_TRUE;
@@ -473,13 +436,8 @@ static void list_binop(paw_Env *P, BinaryOp binop, Value lhs, Value rhs)
     paw_assert(binop == BINARY_ADD);
 
     Value *pv;
-<<<<<<< HEAD
-    Vector *z;
-    VM_VECTOR_INIT(z, pv);
-=======
     List *z;
     VM_LIST_INIT(z, pv);
->>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
 
     const size_t zelem = sizeof(z->begin[0]);
     const size_t nx = pawV_list_length(x);
@@ -646,13 +604,8 @@ static void other_binop(paw_Env *P, BinaryOp binop, paw_Type t, Value x,
 {
     if (binop == BINARY_IN) {
         Value *pv = VM_TOP(2);
-<<<<<<< HEAD
-        if (t == PAW_TVECTOR) {
-            V_SET_BOOL(pv, pawV_vec_contains(P, V_VECTOR(y), x));
-=======
         if (t == PAW_TLIST) {
             V_SET_BOOL(pv, pawV_list_contains(P, V_LIST(y), x));
->>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
         } else {
             paw_assert(t == PAW_TMAP);
             V_SET_BOOL(pv, pawH_contains(V_MAP(y), x));
@@ -749,26 +702,22 @@ void pawR_gettuple(paw_Env *P, int index)
     *VM_TOP(1) = tup->elems[index];
 }
 
-void pawR_getattr(paw_Env *P, int index)
+void pawR_getfield(paw_Env *P, int index)
 {
     Instance *ins = V_INSTANCE(*VM_TOP(1));
-    *VM_TOP(1) = ins->attrs[index];
+    *VM_TOP(1) = ins->fields[index];
 }
 
-static void getitem_list(paw_Env *P, List *list, paw_Int index)
+static void getelem_list(paw_Env *P, List *list, paw_Int index)
 {
-<<<<<<< HEAD
-    *VM_TOP(2) = *pawV_vec_get(P, vector, index);
-=======
     *VM_TOP(2) = *pawV_list_get(P, list, index);
->>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
     VM_POP(1);
 }
 
-static int getitem_map(paw_Env *P, Map *map, Value key)
+static int getelem_map(paw_Env *P, Map *map, Value key)
 {
     const Value *pv = pawH_get(map, key);
-    if (pv) {
+    if (pv != NULL) {
         *VM_TOP(2) = *pv;
         VM_POP(1);
         return 0;
@@ -776,7 +725,7 @@ static int getitem_map(paw_Env *P, Map *map, Value key)
     return -1;
 }
 
-static void getitem_string(paw_Env *P, const String *string, paw_Int index)
+static void getelem_string(paw_Env *P, const String *string, paw_Int index)
 {
     pawV_check_abs(P, index, string->length, "str");
     const char c = string->text[index];
@@ -785,17 +734,17 @@ static void getitem_string(paw_Env *P, const String *string, paw_Int index)
     VM_POP(1);
 }
 
-int pawR_getitem(paw_Env *P, paw_Type t)
+int pawR_getelem(paw_Env *P, paw_Type t)
 {
     const Value obj = *VM_TOP(2);
     const Value key = *VM_TOP(1);
     if (t == PAW_TMAP) {
-        return getitem_map(P, V_MAP(obj), key);
+        return getelem_map(P, V_MAP(obj), key);
     }
     if (t == PAW_TLIST) {
-        getitem_list(P, V_LIST(obj), V_INT(key));
+        getelem_list(P, V_LIST(obj), V_INT(key));
     } else if (t == PAW_TSTRING) {
-        getitem_string(P, V_STRING(obj), V_INT(key));
+        getelem_string(P, V_STRING(obj), V_INT(key));
     }
     return 0;
 }
@@ -807,13 +756,8 @@ static void getslice_list(paw_Env *P, List *list, paw_Int i, paw_Int j)
     const size_t zj = check_slice_bound(P, j, n, "end", "list");
 
     Value *pv;
-<<<<<<< HEAD
-    Vector *slice;
-    VM_VECTOR_INIT(slice, pv);
-=======
     List *slice;
     VM_LIST_INIT(slice, pv);
->>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
 
     const size_t nelems = zj - zi;
     pawV_list_resize(P, slice, nelems);
@@ -837,13 +781,8 @@ void pawR_getslice(paw_Env *P, paw_Type t)
     const Value obj = *VM_TOP(3);
     const paw_Int i = V_INT(*VM_TOP(2));
     const paw_Int j = V_INT(*VM_TOP(1));
-<<<<<<< HEAD
-    if (t == PAW_TVECTOR) {
-        getslice_vector(P, V_VECTOR(obj), i, j);
-=======
     if (t == PAW_TLIST) {
         getslice_list(P, V_LIST(obj), i, j);
->>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
     } else {
         paw_assert(t == PAW_TSTRING);
         getslice_string(P, V_STRING(obj), i, j);
@@ -869,22 +808,14 @@ void pawR_literal_list(paw_Env *P, int n)
 {
     List *v;
     StackPtr sp;
-<<<<<<< HEAD
-    VM_VECTOR_INIT(v, sp);
-=======
     VM_LIST_INIT(v, sp);
->>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
     if (n > 0) {
         pawV_list_resize(P, v, CAST_SIZE(n));
         Value *pv = v->end;
         do {
             *--pv = *--sp;
         } while (pv != v->begin);
-<<<<<<< HEAD
-        // Replace contents with vector itself.
-=======
         // Replace contents with list itself.
->>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
         VM_SHIFT(n);
     }
 }
@@ -929,7 +860,7 @@ static void unpack_instance(paw_Env *P, int n)
     const Instance *s = V_INSTANCE(*VM_TOP(1));
     add_zeros(P, n - 1);
     for (int i = 0; i < n; ++i) {
-        *VM_TOP(n - i + 1) = s->attrs[i];
+        *VM_TOP(n - i + 1) = s->fields[i];
     }
 }
 
@@ -955,24 +886,23 @@ top:
 
     for (;;) {
         const OpCode opcode = *pc++;
-
-        vm_switch(get_OP(opcode))
+        vm_switch(GET_OP(opcode))
         {
             vm_case(POP) :
             {
-                VM_POP(get_U(opcode));
+                VM_POP(GET_U(opcode));
             }
 
             vm_case(CLOSE) :
             {
-                const int u = get_U(opcode);
+                const int u = GET_U(opcode);
                 pawR_close_upvalues(P, VM_TOP(u));
                 VM_POP(u);
             }
 
             vm_case(COPY) :
             {
-                const int u = get_U(opcode);
+                const int u = GET_U(opcode);
                 VM_PUSHV(*VM_TOP(u + 1));
             }
 
@@ -993,89 +923,85 @@ top:
 
             vm_case(PUSHCONST) :
             {
-                VM_PUSHV(K[get_U(opcode)]);
+                VM_PUSHV(K[GET_U(opcode)]);
             }
 
             vm_case(UNOP) :
             {
                 VM_PROTECT();
-                pawR_unop(P, get_A(opcode), get_B(opcode));
+                pawR_unop(P, GET_A(opcode), GET_B(opcode));
             }
 
             vm_case(BINOP) :
             {
                 VM_PROTECT();
-                pawR_binop(P, get_A(opcode), get_B(opcode));
+                pawR_binop(P, GET_A(opcode), GET_B(opcode));
             }
 
             vm_case(NEWTUPLE) :
             {
                 VM_PROTECT();
-                pawR_literal_tuple(P, get_U(opcode));
+                pawR_literal_tuple(P, GET_U(opcode));
                 CHECK_GC(P);
             }
 
             vm_case(NEWLIST) :
             {
                 VM_PROTECT();
-<<<<<<< HEAD
-                pawR_literal_vector(P, get_U(opcode));
-=======
-                pawR_literal_list(P, get_U(opcode));
->>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
+                pawR_literal_list(P, GET_U(opcode));
                 CHECK_GC(P);
             }
 
             vm_case(NEWMAP) :
             {
                 VM_PROTECT();
-                pawR_literal_map(P, get_U(opcode));
+                pawR_literal_map(P, GET_U(opcode));
                 CHECK_GC(P);
             }
 
             vm_case(CASTBOOL) :
             {
-                pawR_cast_bool(P, get_U(opcode));
+                pawR_cast_bool(P, GET_U(opcode));
             }
 
             vm_case(CASTINT) :
             {
-                pawR_cast_int(P, get_U(opcode));
+                pawR_cast_int(P, GET_U(opcode));
             }
 
             vm_case(CASTFLOAT) :
             {
-                pawR_cast_float(P, get_U(opcode));
+                pawR_cast_float(P, GET_U(opcode));
             }
 
             vm_case(MATCHVARIANT) :
             {
                 const Variant *var = V_VARIANT(*VM_TOP(1));
-                VM_PUSHB(var->k == get_U(opcode));
+                VM_PUSHB(var->k == GET_U(opcode));
             }
 
             vm_case(UNPACKVARIANT) :
             {
                 VM_PROTECT();
-                unpack_variant(P, get_U(opcode));
+                unpack_variant(P, GET_U(opcode));
             }
 
             vm_case(UNPACKINSTANCE) :
             {
                 VM_PROTECT();
-                unpack_instance(P, get_U(opcode));
+                unpack_instance(P, GET_U(opcode));
             }
 
             vm_case(UNPACKTUPLE) :
             {
                 VM_PROTECT();
-                unpack_tuple(P, get_U(opcode));
+                unpack_tuple(P, GET_U(opcode));
             }
 
             vm_case(NEWVARIANT) :
             {
                 VM_PROTECT();
-                new_variant(P, get_A(opcode), get_B(opcode));
+                new_variant(P, GET_A(opcode), GET_B(opcode));
                 CHECK_GC(P);
             }
 
@@ -1083,7 +1009,7 @@ top:
             {
                 VM_PROTECT();
                 Value *pv = VM_PUSH0();
-                Instance *ins = pawV_new_instance(P, get_U(opcode));
+                Instance *ins = pawV_new_instance(P, GET_U(opcode));
                 V_SET_OBJECT(pv, ins);
                 CHECK_GC(P);
             }
@@ -1091,105 +1017,106 @@ top:
             vm_case(INITFIELD) :
             {
                 VM_PROTECT();
-                const int u = get_U(opcode);
+                const int u = GET_U(opcode);
                 Instance *ins = V_INSTANCE(*VM_TOP(2));
-                ins->attrs[u] = *VM_TOP(1);
+                ins->fields[u] = *VM_TOP(1);
                 VM_POP(1);
             }
 
             vm_case(GETLOCAL) :
             {
-                const Value local = cf->base.p[get_U(opcode)];
+                const Value local = cf->base.p[GET_U(opcode)];
                 VM_PUSHV(local);
             }
 
             vm_case(SETLOCAL) :
             {
-                Value *plocal = &cf->base.p[get_U(opcode)];
+                Value *plocal = &cf->base.p[GET_U(opcode)];
                 *plocal = *VM_TOP(1);
             }
 
             vm_case(GETUPVALUE) :
             {
-                const int u = get_U(opcode);
+                const int u = GET_U(opcode);
                 const Value upval = *VM_UPVALUE(u);
                 VM_PUSHV(upval);
             }
 
             vm_case(SETUPVALUE) :
             {
-                const int u = get_U(opcode);
+                const int u = GET_U(opcode);
                 Value *pupval = VM_UPVALUE(u);
                 *pupval = *VM_TOP(1);
             }
 
             vm_case(GETGLOBAL) :
             {
-                const int u = get_U(opcode);
-                pawR_read_global(P, u);
+                const int u = GET_U(opcode);
+                VM_PUSHV(*pawE_get_val(P, u));
             }
 
             vm_case(SETGLOBAL) :
             {
-                const int u = get_U(opcode);
-                pawR_write_global(P, u);
+                const int u = GET_U(opcode);
+                *pawE_get_val(P, u) = *VM_TOP(1);
+                VM_POP(1);
             }
 
             vm_case(GETTUPLE) :
             {
                 VM_PROTECT();
-                pawR_gettuple(P, get_U(opcode));
+                pawR_gettuple(P, GET_U(opcode));
             }
 
-            vm_case(GETATTR) :
+            vm_case(GETFIELD) :
             {
                 VM_PROTECT();
-                pawR_getattr(P, get_U(opcode));
+                pawR_getfield(P, GET_U(opcode));
             }
 
             vm_case(SETTUPLE) :
             {
                 VM_PROTECT();
-                pawR_settuple(P, get_U(opcode));
+                pawR_settuple(P, GET_U(opcode));
             }
 
-            vm_case(SETATTR) :
+            vm_case(SETFIELD) :
             {
                 VM_PROTECT();
-                pawR_setattr(P, get_U(opcode));
+                pawR_setfield(P, GET_U(opcode));
             }
 
-            vm_case(GETITEM) :
+            vm_case(GETELEM) :
             {
                 VM_PROTECT();
-                if (pawR_getitem(P, get_U(opcode))) {
+                if (pawR_getelem(P, GET_U(opcode))) {
                     pawH_key_error(P, *VM_TOP(1), PAW_TSTRING); // TODO: lookup key type
                 }
             }
 
-            vm_case(SETITEM) :
+            vm_case(SETELEM) :
             {
                 VM_PROTECT();
-                pawR_setitem(P, get_U(opcode));
+                pawR_setelem(P, GET_U(opcode));
             }
 
             vm_case(GETSLICE) :
             {
                 VM_PROTECT();
-                pawR_getslice(P, get_U(opcode));
+                pawR_getslice(P, GET_U(opcode));
             }
 
             vm_case(SETSLICE) :
             {
                 VM_PROTECT();
-                pawR_setslice(P, get_U(opcode));
+                pawR_setslice(P, GET_U(opcode));
             }
 
             vm_case(CLOSURE) :
             {
                 VM_PROTECT();
                 Value *pv = VM_PUSH0();
-                Proto *proto = fn->p->p[get_U(opcode)];
+                Proto *proto = fn->p->p[GET_U(opcode)];
                 Closure *closure = pawV_new_closure(P, proto->nup);
                 V_SET_OBJECT(pv, closure);
                 closure->p = proto;
@@ -1207,7 +1134,7 @@ top:
 
             vm_case(CALL) :
             {
-                const uint8_t argc = get_U(opcode);
+                const uint8_t argc = GET_U(opcode);
                 StackPtr ptr = VM_TOP(argc + 1);
                 VM_SAVE();
 
@@ -1218,14 +1145,11 @@ top:
                 }
             }
 
-            vm_case(TRANSIT) :
+            vm_case(SHIFT) :
             {
-                const int u = get_U(opcode);
-                const Value v = *VM_TOP(1);
-                VM_POP(u - 1);
-
-                pawR_close_upvalues(P, VM_TOP(1));
-                *VM_TOP(1) = v;
+                const int u = GET_U(opcode);
+                pawR_close_upvalues(P, VM_TOP(u));
+                VM_SHIFT(u);
             }
 
             vm_case(RETURN) :
@@ -1248,7 +1172,7 @@ top:
 
             vm_case(JUMP) :
             {
-                pc += get_S(opcode);
+                pc += GET_S(opcode);
             }
 
             vm_case(JUMPNULL) :
@@ -1257,21 +1181,21 @@ top:
                 if (var->k == 0) {
                     // jump over the OP_RETURN and unpack the value
                     *VM_TOP(1) = var->fields[0];
-                    pc += get_S(opcode);
+                    pc += GET_S(opcode);
                 }
             }
 
             vm_case(JUMPFALSE) :
             {
                 if (!V_TRUE(*VM_TOP(1))) {
-                    pc += get_S(opcode);
+                    pc += GET_S(opcode);
                 }
             }
 
             vm_case(JUMPFALSEPOP) :
             {
                 if (!V_TRUE(*VM_TOP(1))) {
-                    pc += get_S(opcode);
+                    pc += GET_S(opcode);
                 }
                 VM_POP(1);
             }
@@ -1280,14 +1204,14 @@ top:
             {
                 VM_PROTECT();
                 if (fornum_init(P)) {
-                    pc += get_S(opcode); // skip
+                    pc += GET_S(opcode); // skip
                 }
             }
 
             vm_case(FORNUM) :
             {
                 if (fornum(P)) {
-                    pc += get_S(opcode); // continue
+                    pc += GET_S(opcode); // continue
                 }
             }
 
@@ -1297,25 +1221,19 @@ top:
                 VM_PROTECT(); \
                 if (for##t##_init(P)) { \
                     VM_PUSH0(); \
-                    pc += get_S(opcode); \
+                    pc += GET_S(opcode); \
                 } \
             }
 #define VM_FORIN(t, T) \
             vm_case(FOR##T) : \
             { \
                 if (for##t(P)) { \
-                    pc += get_S(opcode); \
+                    pc += GET_S(opcode); \
                 } \
             }
-<<<<<<< HEAD
-            VM_FORIN0(vector, VECTOR)
-            VM_FORIN0(map, MAP)
-            VM_FORIN(vector, VECTOR)
-=======
             VM_FORIN0(list, LIST)
             VM_FORIN0(map, MAP)
             VM_FORIN(list, LIST)
->>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
             VM_FORIN(map, MAP)
 #undef VM_FORIN0
 #undef VM_FORIN

@@ -11,6 +11,9 @@
 
 struct Jump; // call.c
 
+typedef uint16_t DefId;
+typedef uint16_t ValueId;
+
 #define CFF_C 1
 #define CFF_ENTRY 2
 
@@ -41,11 +44,116 @@ enum {
     NCSTR,
 };
 
-typedef struct GlobalVar {
+struct Field {
     String *name;
-    Value value;
-    paw_Type type;
-} GlobalVar;
+    struct Def *def;
+};
+
+struct FieldList {
+    struct Field *data;
+    int count;
+};
+
+struct TypeList {
+    struct Type **data;
+    int count;
+};
+
+// TODO: Consider making Type a GC'd object that can be used for RTTI stuff
+enum TypeKind {
+    TYPE_ADT,
+    TYPE_FUNC,
+    TYPE_TUPLE,
+};
+
+#define TYPE_HEADER enum TypeKind kind : 8
+                    
+struct TypeHeader {
+    TYPE_HEADER;
+};
+
+struct Adt {
+    TYPE_HEADER;
+    DefId did;
+    struct TypeList types;
+};
+
+struct FuncType {
+    TYPE_HEADER;
+    struct TypeList params;
+    struct Type *result;
+};
+
+struct TupleType {
+    TYPE_HEADER;
+    struct TypeList types;
+};
+
+struct Type {
+    union {
+        struct TypeHeader hdr;
+        struct Adt adt;
+        struct FuncType func;
+        struct TupleType tuple;
+    };
+};
+
+enum DefKind {
+    DEF_ADT,
+    DEF_FUNC,
+    DEF_VAR,
+};
+
+#define DEF_HEADER String *name; \
+                   struct Def *next_pub; \
+                   struct Type *type; \
+                   enum DefKind kind : 7; \
+                   paw_Bool is_pub : 1
+
+struct DefHeader {
+    DEF_HEADER;
+};
+
+struct AdtDef {
+    DEF_HEADER;
+    paw_Bool is_struct : 1;
+    struct FieldList fields;
+};
+
+struct FuncDef {
+    DEF_HEADER;
+    ValueId vid;
+    struct FieldList params;
+};
+
+struct VarDef {
+    DEF_HEADER;
+    ValueId vid;
+};
+
+struct Def {
+    union {
+        struct DefHeader hdr;
+        struct AdtDef adt;
+        struct FuncDef func;
+        struct VarDef var;
+    };
+};
+
+struct Type *pawE_new_adt(paw_Env *P, int ntypes);
+struct Type *pawE_new_func(paw_Env *P, int nparams);
+struct Type *pawE_new_tuple(paw_Env *P, int ntypes);
+struct Field *pawE_new_field(paw_Env *P, String *name, struct Def *def);
+
+struct AdtDef *pawE_define_adt(paw_Env *P, String *name, int nfields);
+struct FuncDef *pawE_define_func(paw_Env *P, String *name, int nparams);
+struct VarDef *pawE_define_var(paw_Env *P, String *name);
+
+void pawE_init_type_list(paw_Env *P, struct TypeList *plist, int count);
+void pawE_init_field_list(paw_Env *P, struct FieldList *plist, int count);
+
+struct Type *pawE_new_type(paw_Env *P, enum TypeKind kind);
+struct Def *pawE_new_def(paw_Env *P, enum DefKind kind);
 
 typedef struct paw_Env {
     StringTable strings;
@@ -73,11 +181,23 @@ typedef struct paw_Env {
     // memory (a call to the 'alloc' field below returned NULL).
     Value mem_errmsg;
 
-    struct GlobalVec {
-        GlobalVar *data;
-        int size;
+    struct ValList {
+        Value *data;
+        int count;
         int alloc;
-    } gv;
+    } vals;
+
+    struct {
+        struct Type **data;
+        int count;
+        int alloc;
+    } types;
+
+    struct DefList {
+        struct Def **data;
+        int count;
+        int alloc;
+    } defs;
 
     size_t heap_size;
     struct Heap *H;
@@ -95,14 +215,26 @@ typedef struct paw_Env {
 void pawE_uninit(paw_Env *P);
 void pawE_error(paw_Env *P, int code, int line, const char *fmt, ...);
 CallFrame *pawE_extend_cf(paw_Env *P, StackPtr top);
-int pawE_new_global(paw_Env *P, String *name);
-int pawE_find_global(paw_Env *P, const String *name);
-#define pawE_get_global(P, i) (&(P)->gv.data[i])
+int pawE_locate(paw_Env *P, const String *name);
+
+static inline struct Def *pawE_get_def(paw_Env *P, int i)
+{
+    paw_assert(i < P->defs.count);
+    return P->defs.data[i];
+}
+
+static inline Value *pawE_get_val(paw_Env *P, int i)
+{
+    paw_assert(i < P->vals.count);
+    return &P->vals.data[i];
+}
 
 static inline String *pawE_cstr(paw_Env *P, unsigned type)
 {
     paw_assert(type < NCSTR);
     return P->str_cache[type];
 }
+
+void pawE_print_type(paw_Env *P, Buffer *buffer, struct Type *type);
 
 #endif // PAW_ENV_H

@@ -5,7 +5,7 @@ enum Enum<T> {
     Z(T, T),
 }
 
-fn test_initialization() {
+pub fn test_initialization() {
     let ex = Enum::<int>::X;
     let ey = Enum::<int>::Y(1);
     let ez = Enum::<int>::Z(2, 3);
@@ -16,13 +16,13 @@ fn noop(e: Enum<int>) -> Enum<int> {
     return e2;
 }
 
-fn test_arguments() {
+pub fn test_arguments() {
     noop(Enum::<int>::X);
     noop(Enum::<int>::Y(1));
     noop(Enum::<int>::Z(2, 3));
 }
 
-fn test_assignment() {
+pub fn test_assignment() {
     let ex = Enum::<int>::X;
     let ey = Enum::<int>::Y(1);
     let ez = Enum::<int>::Z(2, 3);
@@ -37,7 +37,7 @@ struct Struct<T> {
     y: Enum<T>,
 }
 
-fn test_fields() {
+pub fn test_fields() {
     let s = Struct::<bool>{
         x: Enum::<int>::X,
         y: Enum::<bool>::Y(true),

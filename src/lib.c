@@ -30,7 +30,10 @@ void lib_error(paw_Env *P, int error, const char *fmt, ...)
     pawC_throw(P, error);
 }
 
-static int get_argc(paw_Env *P) { return paw_get_count(P) - 1 /* context */; }
+static int get_argc(paw_Env *P) 
+{
+    return paw_get_count(P) - 1 /* context */; 
+}
 
 void pawL_check_argc(paw_Env *P, int argc)
 {
@@ -270,10 +273,7 @@ static int map_get(paw_Env *P)
     Map *m = V_MAP(CF_BASE(1));
     const Value key = CF_BASE(2);
     const Value *pv = pawH_get(m, key);
-    if (pv != NULL) {
-        // replace default value
-        P->top.p[-1] = *pv;
-    }
+    if (pv != NULL) P->top.p[-1] = *pv;
     return 1;
 }
 
@@ -312,7 +312,7 @@ static void add_builtin_func(paw_Env *P, const char *name, paw_Function func)
     paw_push_value(P, -1);
     paw_push_string(P, name);
     pawL_new_func(P, func, 0);
-    pawR_setitem(P, PAW_TMAP);
+    pawR_setelem(P, PAW_TMAP);
     pawC_stkdec(P, 1);
 }
 
@@ -420,8 +420,7 @@ static const char *chunk_reader(paw_Env *P, void *ud, size_t *psize)
     return cr->data;
 }
 
-int pawL_load_nchunk(paw_Env *P, const char *name, const char *source,
-                     size_t length)
+int pawL_load_nchunk(paw_Env *P, const char *name, const char *source, size_t length)
 {
     struct ChunkReader cr = {.data = source, .size = length};
     return paw_load(P, chunk_reader, name, &cr);

@@ -238,7 +238,7 @@ static void *key_chunk_alloc(struct Allocator *a, uint32_t nchunks)
         return p;
     } else {
         struct ChunkId newi = {a->key.v + a->key_size - nchunks};
-        assert(newi.v > a->key.v+1);
+        assert(newi.v > a->key.v + 1);
         CHUNK_HDR(a, a->key.v + a->key_size)->prev_size = nchunks;
         CHUNK_HDR(a, a->key.v + a->key_size)->size4x |= 2;
         CHUNK_HDR(a, newi.v)->size4x = nchunks * 4 + 1;
@@ -336,8 +336,10 @@ size_t pawZ_sizeof(void *ptr)
 // Modified from SQLite (mem3.c)
 static void unsafe_free(struct Heap *H, void *ptr)
 {
-    struct Allocator *a = H->a;
     struct Chunk *b = ptr;
+    if (b == NULL) return;
+
+    struct Allocator *a = H->a;
     paw_assert(b > a->chunks && b < &a->chunks[a->nchunks]);
     const struct ChunkId i = {b - a->chunks};
     uint32_t nchunks = CHUNK_HDR(a, i.v)->size4x / 4;

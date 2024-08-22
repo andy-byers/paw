@@ -6,32 +6,54 @@
 #include "env.h"
 #include "test.h"
 
-static void expect_ok(paw_Env *P, int status)
+static struct {
+    int tests;
+    int failures;
+    int modules;
+    int compile_errors;
+    int runtime_errors;
+} s_counters;
+
+static int handle_error(paw_Env *P, int status)
 {
     if (status != PAW_OK) {
         const char *errmsg = paw_string(P, -1);
         fprintf(stderr, "error: %s\n", errmsg);
-        abort();
+        paw_pop(P, 1); // pop error message
+        ++s_counters.failures;
     }
+    return status;
 }
 
-static void run_tests(const char *name, struct TestAlloc *a)
+// Run all toplevel functions with names starting with 'test_'
+static void run_tests(const char *name, struct TestAlloc *a, const char *prefix)
 {
+    ++s_counters.modules;
     paw_Env *P = test_open(test_alloc, a, 0);
     int status = test_open_file(P, name);
-    expect_ok(P, status);
+    if (handle_error(P, status)) {
+        ++s_counters.compile_errors;
+        return;
+    }
     
-    struct GlobalVec *gvec = &P->gv;
-    for (int i = 0; i < gvec->size; ++i) {
-        static const char kPrefix[] = "test_";
-        static const size_t kLength = paw_lengthof(kPrefix);
-        struct GlobalVar *gvar = &gvec->data[i]; 
-        if (gvar->name->length >= kLength &&
-                0 == memcmp(gvar->name->text, kPrefix, kLength)) {
-            printf("running %s.%s...\n", name, gvar->name->text);
-            pawC_pushv(P, gvar->value);
+    fprintf(stderr, "running %s...\n", name);
+    const size_t length = strlen(prefix);
+    struct DefList defs = P->defs;
+    for (int i = 0; i < defs.count; ++i) {
+        struct Def *def = defs.data[i]; 
+        const String *name = def->hdr.name;
+        if (def->hdr.kind == DEF_FUNC &&
+                name->length >= length &&
+                memcmp(name->text, prefix, length) == 0) {
+            // toplevel functions prefixed with 'test_' must be public
+            check(def->hdr.is_pub);
+            fprintf(stderr, "    %s\n", def->func.name->text);
+            pawC_pushv(P, *pawE_get_val(P, def->func.vid));
             status = paw_call(P, 0);
-            expect_ok(P, status);
+            if (handle_error(P, status)) {
+                ++s_counters.runtime_errors;
+            }
+            ++s_counters.tests;
         }
     }
     test_close(P, a);
@@ -40,12 +62,22 @@ static void run_tests(const char *name, struct TestAlloc *a)
 static void script(const char *name)
 {
     struct TestAlloc a = {0};
-    run_tests(name, &a);
+    run_tests(name, &a, "test_");
 }
 
 int main(void)
 {
-    script("struct");
 #define RUN_SCRIPT(name) script(#name);
     TEST_SCRIPTS(RUN_SCRIPT)
+#undef RUN_SCRIPT
+
+    fprintf(stderr, "=(Stats)=============\n");
+    fprintf(stderr, " modules: %d\n", s_counters.modules);
+    fprintf(stderr, " tests: %d\n", s_counters.tests);
+    fprintf(stderr, " failures: %d\n", s_counters.failures);
+    if (s_counters.failures > 0) {
+        fprintf(stderr, " compile errors: %d\n", s_counters.compile_errors);
+        fprintf(stderr, " runtime errors: %d\n", s_counters.runtime_errors);
+        return -1;
+    }
 }

@@ -3,6 +3,7 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
 #include "ast.h"
+#include "compile.h"
 #include "map.h"
 #include "mem.h"
 #include "parse.h"

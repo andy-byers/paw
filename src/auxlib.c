@@ -68,8 +68,7 @@ void pawL_buffer_resize(paw_Env *P, Buffer *buf, size_t n)
     buf->size = n;
 }
 
-static void add_nstring(paw_Env *P, Buffer *buf, const char *str, size_t len,
-                        int boxloc)
+static void add_nstring(paw_Env *P, Buffer *buf, const char *str, size_t len, int boxloc)
 {
     char *ptr = reserve_memory(P, buf, len, boxloc);
     memcpy(ptr, str, len);

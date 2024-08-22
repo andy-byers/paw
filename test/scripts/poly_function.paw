@@ -55,7 +55,7 @@ fn self_recursive<T>(t: T, i: int) {
     }
 }
 
-fn test_self_recursion() {
+pub fn test_self_recursion() {
     self_recursive(true, 10);
     self_recursive(2, 11);
     self_recursive(self_recursive::<float>, 12);

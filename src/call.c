@@ -289,6 +289,7 @@ void pawC_init(paw_Env *P)
 void pawC_uninit(paw_Env *P)
 {
     pawM_free_vec(P, P->stack.p, P->bound.p - P->stack.p);
+    P->bound.p = P->top.p = P->stack.p; // clear GC root
 }
 
 StackPtr pawC_return(paw_Env *P, int nret)

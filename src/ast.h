@@ -10,53 +10,53 @@
 #define PAW_AST_H
 
 #include "code.h"
-#include "compile.h"
 
 // TODO: Make *Expr, *Stmt, *Decl, and HirType opaque (typedef and put definition in *.c file)
 //       forces use of accessor functions
 struct Ast;
+struct Compiler;
 
-#define AST_DECL_LIST(X)        \
-        X(FieldDecl,   field)   \
-        X(FuncDecl,    func)    \
+#define AST_DECL_LIST(X) \
+        X(FieldDecl,   field) \
+        X(FuncDecl,    func) \
         X(GenericDecl, generic) \
-        X(AdtDecl,     adt)     \
-        X(TypeDecl,    type)    \
-        X(VarDecl,     var)     \
+        X(AdtDecl,     adt) \
+        X(TypeDecl,    type) \
+        X(VarDecl,     var) \
         X(VariantDecl, variant)
 
-#define AST_EXPR_LIST(X)            \
-        X(LiteralExpr,    literal)  \
-        X(LogicalExpr,    logical)  \
-        X(PathExpr,       path)     \
-        X(ChainExpr,      chain)    \
-        X(UnOpExpr,       unop)     \
-        X(BinOpExpr,      binop)    \
-        X(ClosureExpr,    clos)     \
-        X(ConversionExpr, conv)     \
-        X(CallExpr,       call)     \
-        X(Index,          index)    \
+#define AST_EXPR_LIST(X) \
+        X(LiteralExpr,    literal) \
+        X(LogicalExpr,    logical) \
+        X(PathExpr,       path) \
+        X(ChainExpr,      chain) \
+        X(UnOpExpr,       unop) \
+        X(BinOpExpr,      binop) \
+        X(ClosureExpr,    clos) \
+        X(ConversionExpr, conv) \
+        X(CallExpr,       call) \
+        X(Index,          index) \
         X(Selector,       selector) \
-        X(TupleType,      tuple)    \
-        X(FieldExpr,      field)    \
-        X(Signature,      sig)      \
-        X(ContainerType,  cont)     \
+        X(TupleType,      tuple) \
+        X(FieldExpr,      field) \
+        X(Signature,      sig) \
+        X(ContainerType,  cont) \
         X(AssignExpr,     assign) 
 
-#define AST_STMT_LIST(X)      \
-        X(Block,      block)  \
-        X(ExprStmt,   expr)   \
-        X(DeclStmt,   decl)   \
-        X(IfStmt,     if_)    \
-        X(ForStmt,    for_)   \
+#define AST_STMT_LIST(X) \
+        X(Block,      block) \
+        X(ExprStmt,   expr) \
+        X(DeclStmt,   decl) \
+        X(IfStmt,     if_) \
+        X(ForStmt,    for_) \
         X(WhileStmt,  while_) \
-        X(LabelStmt,  label)  \
+        X(LabelStmt,  label) \
         X(ReturnStmt, result)
 
 #define AST_SEQUENCE_LIST(X) \
-        X(ExprList)          \
-        X(DeclList)          \
-        X(StmtList)          \
+        X(ExprList) \
+        X(DeclList) \
+        X(StmtList) \
         X(Path)
 
 enum AstDeclKind {
@@ -82,10 +82,10 @@ struct AstSegment {
     struct AstExprList *types;
 };
 
-#define AST_DECL_HEADER          \
+#define AST_DECL_HEADER \
     K_ALIGNAS_NODE String *name; \
-    int line;                    \
-    DefId def;                   \
+    int line; \
+    DefId def; \
     enum AstDeclKind kind : 8
 
 struct AstDeclHeader {
@@ -158,23 +158,23 @@ static const char *kAstDeclNames[] = {
 #undef DEFINE_NAME
 };
 
-#define DEFINE_ACCESS(a, b)                                       \
+#define DEFINE_ACCESS(a, b) \
     static inline paw_Bool AstIs##a(const struct AstDecl *node) { \
-        return node->hdr.kind == kAst##a;                         \
-    }                                                             \
+        return node->hdr.kind == kAst##a; \
+    } \
     static inline struct Ast##a *AstGet##a(struct AstDecl *node) { \
-        paw_assert(AstIs##a(node));                                \
-        return &node->b;                                           \
+        paw_assert(AstIs##a(node)); \
+        return &node->b; \
     }
     AST_DECL_LIST(DEFINE_ACCESS)
 #undef DEFINE_ACCESS
 
-#define AST_EXPR_HEADER      \
+#define AST_EXPR_HEADER \
     K_ALIGNAS_NODE int line; \
     enum AstExprKind kind : 8
 
 #define AST_SUFFIXED_HEADER \
-    AST_EXPR_HEADER;        \
+    AST_EXPR_HEADER; \
     struct AstExpr *target
 
 struct AstExprHeader {
@@ -331,19 +331,19 @@ static const char *kAstExprNames[] = {
 #undef DEFINE_NAME
 };
 
-#define DEFINE_ACCESS(a, b)                                       \
+#define DEFINE_ACCESS(a, b) \
     static inline paw_Bool AstIs##a(const struct AstExpr *node) { \
-        return node->hdr.kind == kAst##a;                         \
-    }                                                             \
+        return node->hdr.kind == kAst##a; \
+    } \
     static inline struct Ast##a *AstGet##a(struct AstExpr *node) { \
-        paw_assert(AstIs##a(node));                                \
-        return &node->b;                                           \
+        paw_assert(AstIs##a(node)); \
+        return &node->b; \
     }
     AST_EXPR_LIST(DEFINE_ACCESS)
 #undef DEFINE_ACCESS
 
-#define AST_STMT_HEADER       \
-    K_ALIGNAS_NODE int line;  \
+#define AST_STMT_HEADER \
+    K_ALIGNAS_NODE int line; \
     enum AstStmtKind kind : 8
 
 struct AstStmtHeader {
@@ -424,13 +424,13 @@ static const char *kAstStmtNames[] = {
 #undef DEFINE_NAME
 };
 
-#define DEFINE_ACCESS(a, b)                                       \
+#define DEFINE_ACCESS(a, b) \
     static inline paw_Bool AstIs##a(const struct AstStmt *node) { \
-        return node->hdr.kind == kAst##a;                         \
-    }                                                             \
+        return node->hdr.kind == kAst##a; \
+    } \
     static inline struct Ast##a *AstGet##a(struct AstStmt *node) { \
-        paw_assert(AstIs##a(node));                                \
-        return &node->b;                                           \
+        paw_assert(AstIs##a(node)); \
+        return &node->b; \
     }
     AST_STMT_LIST(DEFINE_ACCESS)
 #undef DEFINE_ACCESS

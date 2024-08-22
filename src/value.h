@@ -347,8 +347,7 @@ typedef struct Instance {
     GC_HEADER; // common members for GC
     int nfields;
     Object *gc_list;
-    Value attrs[]; // fixed array of attributes
-    // Value fields[]; // data fields
+    Value fields[];
 } Instance;
 
 Instance *pawV_new_instance(paw_Env *P, int nfields);
@@ -386,7 +385,7 @@ typedef struct Foreign {
     Object *gc_list;
     void *data;
     size_t size;
-    Value attrs[];
+    Value fields[];
 } Foreign;
 
 Foreign *pawV_push_foreign(paw_Env *P, size_t size, int nfields);

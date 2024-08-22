@@ -103,24 +103,21 @@ paw_Env *paw_open(const struct paw_Options *o)
 
 void paw_close(paw_Env *P)
 {
-    pawG_uninit(P);
-    pawC_uninit(P);
     pawE_uninit(P);
+    pawC_uninit(P);
+    pawG_uninit(P);
     pawS_uninit(P);
     pawZ_uninit(P);
 }
 
-int paw_find_public(paw_Env *P)
+int paw_find_global(paw_Env *P)
 {
+    paw_push_string(P, "_");
+    paw_binop(P, PAW_OPADD, PAW_TSTRING);
     const String *name = V_STRING(P->top.p[-1]);
-    const int g = pawE_find_global(P, name);
+    const int g = pawE_locate(P, name);
     paw_pop(P, 1);
     return g;
-}
-
-void paw_push_public(paw_Env *P, int id)
-{
-    pawR_read_global(P, id);
 }
 
 void paw_push_value(paw_Env *P, int index)
@@ -347,60 +344,37 @@ static int upvalue_index(int nup, int index)
 void paw_get_upvalue(paw_Env *P, int ifn, int index)
 {
     Value *pv = pawC_push0(P);
-    const Value fn = *at(P, ifn);
-    switch (V_OBJECT(fn)->gc_kind) {
+    Object *o = at(P, ifn)->o;
+    switch (o->gc_kind) {
         case VNATIVE: {
-            Native *f = V_NATIVE(fn);
+            Native *f = O_NATIVE(o);
             *pv = f->up[upvalue_index(f->nup, index)];
             break;
         }
         case VCLOSURE: {
-            Closure *f = V_CLOSURE(fn);
+            Closure *f = O_CLOSURE(o);
             UpValue *u = f->up[upvalue_index(f->nup, index)];
             *pv = *u->p.p;
             break;
         }
         default:
-            pawR_error(P, PAW_ETYPE, "type has no upvalues");
+            pawR_error(P, PAW_ETYPE, "type of object has no upvalues");
     }
 }
 
 void paw_get_global(paw_Env *P, int index)
 {
-    GlobalVar *var = pawE_get_global(P, index);
-    pawC_pushv(P, var->value);
+    pawC_pushv(P, *pawE_get_val(P, index));
 }
 
-// paw_Bool paw_check_global(paw_Env *P, const char *name)
-//{
-//     paw_push_string(P, name);
-//     const Value key = *at(P, -1);
-//
-//     paw_Bool found = PAW_FALSE;
-//     if (pawR_read_global(P, key)) {
-//         paw_push_null(P);
-//     } else {
-//         found = PAW_TRUE;
-//     }
-//     paw_shift(P, 1); // replace 'key'
-//     return found;
-// }
-//
-// void paw_get_itemi(paw_Env *P, int index, paw_Int i)
+//void paw_get_elemi(paw_Env *P, int index, paw_Int i)
 //{
 //     const int abs = paw_abs_index(P, index);
 //     paw_push_int(P, i);
-//     paw_get_item(P, abs);
-// }
+//     paw_get_elem(P, abs);
+//}
 //
-// paw_Bool paw_check_itemi(paw_Env *P, int index, paw_Int i)
-//{
-//     const int abs = paw_abs_index(P, index);
-//     paw_push_int(P, i);
-//     return paw_check_item(P, abs);
-// }
-//
-// void paw_get_item(paw_Env *P, int index)
+//void paw_get_item(paw_Env *P, int index)
 //{
 //     if (!paw_check_item(P, index)) {
 //         // If the target container is a sequence, and the integer key is
@@ -410,26 +384,26 @@ void paw_get_global(paw_Env *P, int index)
 //         pawR_error(P, PAW_ENAME, "key '%s' does not exist", paw_string(P,
 //         -1));
 //     }
-// }
+//}
 //
-// paw_Bool paw_check_item(paw_Env *P, int index)
+//paw_Bool paw_check_item(paw_Env *P, int index)
 //{
 //     paw_push_value(P, index); // push container
 //     paw_rotate(P, -2, 1); // place container below key
-//     if (pawR_getitem(P)) {
+//     if (pawR_getelem(P)) {
 //         paw_push_null(P);
 //         paw_shift(P, 2);
 //         return PAW_FALSE;
 //     }
 //     return PAW_TRUE;
-// }
+//}
 //
-// void paw_get_attr(paw_Env *P, int index, const char *attr)
+//void paw_get_field(paw_Env *P, int index, int ifield)
 //{
 //     if (!paw_check_attr(P, index, attr)) {
 //         pawR_error(P, PAW_EATTR, "attribute '%s' does not exist", attr);
 //     }
-// }
+//}
 //
 // paw_Bool paw_check_attr(paw_Env *P, int index, const char *attr)
 //{
@@ -445,20 +419,19 @@ void paw_get_global(paw_Env *P, int index)
 //
 // void paw_set_upvalue(paw_Env *P, int ifn, int index)
 //{
-//     StackPtr top = P->top.p;
 //     const Value fn = *at(P, ifn);
-//     switch (V_TYPE(fn)) {
+//     switch (O_KIND(fn.o)) {
 //         case VNATIVE: {
 //             Native *f = V_NATIVE(fn);
 //             Value *v = &f->up[upvalue_index(f->nup, index)];
-//             *v = top[-1];
+//             *v = P->top.p[-1];
 //             paw_pop(P, 1);
 //             break;
 //         }
 //         case VCLOSURE: {
 //             Closure *f = V_CLOSURE(fn);
 //             UpValue *u = f->up[upvalue_index(f->nup, index)];
-//             *u->p.p = top[-1];
+//             *u->p.p = P->top.p[-1];
 //             paw_pop(P, 1);
 //             break;
 //         }
@@ -466,7 +439,7 @@ void paw_get_global(paw_Env *P, int index)
 //             break;
 //     }
 // }
-//
+
 void paw_set_global(paw_Env *P, const char *name)
 {
     paw_unused(P);
@@ -501,18 +474,16 @@ void paw_set_global(paw_Env *P, const char *name)
 //     pawR_setattr_raw(P);
 // }
 //
-void paw_create_array(paw_Env *P, int n)
+void paw_new_list(paw_Env *P, int n)
 {
-    paw_unused(P);
-    paw_unused(n);
-    //    pawR_literal_array(P, n);
+    pawR_literal_list(P, n);
 }
-//
-// void paw_create_map(paw_Env *P, int n)
-//{
-//    pawR_literal_map(P, n);
-//}
-//
+
+void paw_new_map(paw_Env *P, int n)
+{
+    pawR_literal_map(P, n);
+}
+
 // void paw_create_struct(paw_Env *P)
 //{
 //    pawV_push_struct(P);
@@ -604,15 +575,15 @@ void paw_call_global(paw_Env *P, int index, int argc)
 //     paw_call(P, argc);
 // }
 //
-// void paw_unop(paw_Env *P, int op)
-//{
-//     pawR_unop(P, (UnaryOp)op);
-// }
-//
-// void paw_binop(paw_Env *P, int op)
-//{
-//     pawR_binop(P, (BinaryOp)op);
-// }
+void paw_unop(paw_Env *P, int op, paw_Type type)
+{
+     pawR_unop(P, CAST(op, UnaryOp), type);
+}
+
+void paw_binop(paw_Env *P, int op, paw_Type type)
+{
+     pawR_binop(P, CAST(op, BinaryOp), type);
+}
 
 void paw_raw_equals(paw_Env *P)
 {

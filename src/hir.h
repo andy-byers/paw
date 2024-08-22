@@ -5,18 +5,18 @@
 #define PAW_HIR_H
 
 #include "code.h"
-#include "compile.h"
 
+struct Compiler;
 struct Resolver;
 
-#define HIR_DECL_LIST(X)        \
-        X(FieldDecl,   field)   \
-        X(FuncDecl,    func)    \
+#define HIR_DECL_LIST(X) \
+        X(FieldDecl,   field) \
+        X(FuncDecl,    func) \
         X(GenericDecl, generic) \
-        X(InstanceDecl, inst)   \
-        X(AdtDecl,     adt)     \
-        X(TypeDecl,    type)    \
-        X(VarDecl,     var)     \
+        X(InstanceDecl, inst) \
+        X(AdtDecl,     adt) \
+        X(TypeDecl,    type) \
+        X(VarDecl,     var) \
         X(VariantDecl, variant)
 
 #define HIR_EXPR_LIST(X) \
@@ -35,22 +35,22 @@ struct Resolver;
         X(FieldExpr,      field) \
         X(AssignExpr,     assign)
 
-#define HIR_TYPE_LIST(X)    \
-        X(Adt, adt)         \
-        X(FuncDef, fdef)    \
-        X(FuncPtr, fptr)    \
+#define HIR_TYPE_LIST(X) \
+        X(Adt, adt) \
+        X(FuncDef, fdef) \
+        X(FuncPtr, fptr) \
         X(Unknown, unknown) \
         X(Generic, generic) \
         X(TupleType, tuple)
 
-#define HIR_STMT_LIST(X)      \
-        X(Block,      block)  \
-        X(ExprStmt,   expr)   \
-        X(DeclStmt,   decl)   \
-        X(IfStmt,     if_)    \
-        X(ForStmt,    for_)   \
+#define HIR_STMT_LIST(X) \
+        X(Block,      block) \
+        X(ExprStmt,   expr) \
+        X(DeclStmt,   decl) \
+        X(IfStmt,     if_) \
+        X(ForStmt,    for_) \
         X(WhileStmt,  while_) \
-        X(LabelStmt,  label)  \
+        X(LabelStmt,  label) \
         X(ReturnStmt, result)
 
 struct Hir;
@@ -100,6 +100,7 @@ enum HirVarKind {
     VAR_LOCAL,
     VAR_FIELD,
     VAR_METHOD,
+    VAR_CFUNC,
 };
 
 struct HirVarInfo {
@@ -150,8 +151,8 @@ struct HirAdt {
     DefId did;
 };
 
-#define HIR_FUNC_HEADER         \
-    HIR_TYPE_HEADER;            \
+#define HIR_FUNC_HEADER \
+    HIR_TYPE_HEADER; \
     struct HirTypeList *params; \
     struct HirType *result
 struct HirFuncPtr {
@@ -185,13 +186,13 @@ static const char *kHirTypeNames[] = {
 #undef DEFINE_NAME
 };
 
-#define DEFINE_ACCESS(a, b)                                       \
+#define DEFINE_ACCESS(a, b) \
     static inline paw_Bool HirIs##a(const struct HirType *node) { \
-        return node->hdr.kind == kHir##a;                         \
-    }                                                             \
+        return node->hdr.kind == kHir##a; \
+    } \
     static inline struct Hir##a *HirGet##a(struct HirType *node) { \
-        paw_assert(HirIs##a(node));                                \
-        return &node->b;                                           \
+        paw_assert(HirIs##a(node)); \
+        return &node->b; \
     }
     HIR_TYPE_LIST(DEFINE_ACCESS)
 #undef DEFINE_ACCESS
@@ -207,11 +208,11 @@ enum HirDeclKind {
 #undef DEFINE_ENUM
 };
 
-#define HIR_DECL_HEADER                  \
+#define HIR_DECL_HEADER \
     K_ALIGNAS_NODE struct HirType *type; \
-    String *name;                        \
-    int line;                            \
-    DefId did;                           \
+    String *name; \
+    int line; \
+    DefId did; \
     enum HirDeclKind kind : 8
 struct HirDeclHeader {
     HIR_DECL_HEADER; 
@@ -291,22 +292,19 @@ static const char *kHirDeclNames[] = {
 #undef DEFINE_NAME
 };
 
-#define DEFINE_ACCESS(a, b)                                       \
+#define DEFINE_ACCESS(a, b) \
     static inline paw_Bool HirIs##a(const struct HirDecl *node) { \
-        return node->hdr.kind == kHir##a;                         \
-    }                                                             \
+        return node->hdr.kind == kHir##a; \
+    } \
     static inline struct Hir##a *HirGet##a(struct HirDecl *node) { \
-        paw_assert(HirIs##a(node));                                \
-        return &node->b;                                           \
+        paw_assert(HirIs##a(node)); \
+        return &node->b; \
     }
     HIR_DECL_LIST(DEFINE_ACCESS)
 #undef DEFINE_ACCESS
 
+// TODO: move to compile.h? Use DeclId as well as DefId, should also include local position info
 #define NO_DECL UINT16_MAX
-
-//****************************************************************
-//    Expressions
-//****************************************************************
 
 enum HirExprKind {
 #define DEFINE_ENUM(a, b) kHir##a,
@@ -314,8 +312,8 @@ enum HirExprKind {
 #undef DEFINE_ENUM
 };
 
-#define HIR_EXPR_HEADER        \
-    K_ALIGNAS_NODE int line;   \
+#define HIR_EXPR_HEADER \
+    K_ALIGNAS_NODE int line; \
     enum HirExprKind kind : 8; \
     struct HirType *type
 struct HirExprHeader {
@@ -405,7 +403,7 @@ struct HirLogicalExpr {
 };
 
 #define HIR_SUFFIXED_HEADER \
-    HIR_EXPR_HEADER;        \
+    HIR_EXPR_HEADER; \
     struct HirExpr *target
 struct HirSuffixedExpr {
     HIR_SUFFIXED_HEADER;
@@ -472,13 +470,13 @@ static const char *kHirExprNames[] = {
 #undef DEFINE_NAME
 };
 
-#define DEFINE_ACCESS(a, b)                                       \
+#define DEFINE_ACCESS(a, b) \
     static inline paw_Bool HirIs##a(const struct HirExpr *node) { \
-        return node->hdr.kind == kHir##a;                         \
-    }                                                             \
+        return node->hdr.kind == kHir##a; \
+    } \
     static inline struct Hir##a *HirGet##a(struct HirExpr *node) { \
-        paw_assert(HirIs##a(node));                                \
-        return &node->b;                                           \
+        paw_assert(HirIs##a(node)); \
+        return &node->b; \
     }
     HIR_EXPR_LIST(DEFINE_ACCESS)
 #undef DEFINE_ACCESS
@@ -489,7 +487,7 @@ enum HirStmtKind {
 #undef DEFINE_ENUM
 };
 
-#define HIR_STMT_HEADER      \
+#define HIR_STMT_HEADER \
     K_ALIGNAS_NODE int line; \
     enum HirStmtKind kind : 8
 struct HirStmtHeader {
@@ -571,13 +569,13 @@ static const char *kHirStmtNames[] = {
 #undef DEFINE_NAME
 };
 
-#define DEFINE_ACCESS(a, b)                                       \
+#define DEFINE_ACCESS(a, b) \
     static inline paw_Bool HirIs##a(const struct HirStmt *node) { \
-        return node->hdr.kind == kHir##a;                         \
-    }                                                             \
+        return node->hdr.kind == kHir##a; \
+    } \
     static inline struct Hir##a *HirGet##a(struct HirStmt *node) { \
-        paw_assert(HirIs##a(node));                                \
-        return &node->b;                                           \
+        paw_assert(HirIs##a(node)); \
+        return &node->b; \
     }
     HIR_STMT_LIST(DEFINE_ACCESS)
 #undef DEFINE_ACCESS
@@ -652,6 +650,7 @@ struct Hir {
     struct HirDeclList *items;
     struct DynamicMem *dm;
     paw_Env *P;
+    int nprelude;
 };
 
 struct HirSymbol *pawHir_new_symbol(struct Hir *hir);
@@ -684,8 +683,8 @@ struct Hir *pawHir_new(struct Compiler *C);
 void pawHir_free(struct Hir *hir);
 
 struct HirDecl *pawHir_copy_decl(struct Hir *hir, struct HirDecl *decl);
-void pawHir_stencil_stmts(struct Resolver *R, struct HirStmtList *stmts);
 void pawHir_expand(struct Resolver *R, struct Hir *hir);
+struct HirDeclList *pawHir_define(struct Compiler *C, struct Hir *hir);
 
 DefId pawHir_add_decl(struct Hir *hir, struct HirDecl *decl);
 struct HirDecl *pawHir_get_decl(struct Hir *hir, DefId id);
@@ -693,8 +692,7 @@ struct HirDecl *pawHir_get_decl(struct Hir *hir, DefId id);
 #define HIR_TYPEOF(x) ((x)->hdr.type)
 #define HIR_KINDOF(x) ((x)->hdr.kind)
 
-// NOTE: HirFuncPtr and HirFuncDef share the same common initial sequence, so
-//       HirFuncPtr fields can be accessed on a HirFuncDef
+// NOTE: HirFuncPtr is a prefix of HirFuncDef
 #define HIR_FPTR(t) CHECK_EXP(HirIsFuncType(t), &(t)->fptr)
 
 static inline struct HirType *hir_list_elem(struct HirType *t)

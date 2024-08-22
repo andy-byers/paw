@@ -4,6 +4,7 @@
 //
 // unify.c: type unification module
 
+#include "compile.h"
 #include "env.h"
 #include "hir.h"
 #include "unify.h"

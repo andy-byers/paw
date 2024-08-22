@@ -1,11 +1,11 @@
 // TODO: nested tuple selectors look like floats...
 
-fn test_empty_is_unit() {
+pub fn test_empty_is_unit() {
     let empty = ();
     let empty: () = empty;
 }
 
-fn test_single_element() {
+pub fn test_single_element() {
     let no_comma = (false);
     let with_comma = (false,);
 
@@ -13,7 +13,7 @@ fn test_single_element() {
     let one_tuple: (bool,) = with_comma;
 }
 
-fn test_multiple_elements() {
+pub fn test_multiple_elements() {
     let pair = (false, 1);
     let triplet = ('a', 5.0, -1);
 
@@ -21,7 +21,7 @@ fn test_multiple_elements() {
     let triplet: (str, float, int) = triplet;
 }
 
-fn test_getters() {
+pub fn test_getters() {
     let t1 = (false,);
     let t2 = (false, 1);
     let t3 = (false, 1, 2.0);
@@ -38,7 +38,7 @@ fn alter_tuple(r: (int, str)) -> (str, int) {
     return (r.1, r.0);
 }
 
-fn test_arguments() {
+pub fn test_arguments() {
     let t = alter_tuple((1, 'two'));
     assert(t.0 == 'twotwo');
     assert(t.1 == 2);
@@ -48,7 +48,7 @@ struct Pair<T> {
     v: (T, T),
 }
 
-fn test_fields() {
+pub fn test_fields() {
     let p = Pair{v: (1, 2)};
     assert(p.v.0 == 1);
     assert(p.v.1 == 2);

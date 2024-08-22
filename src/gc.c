@@ -147,7 +147,7 @@ static void traverse_tuple(paw_Env *P, Tuple *t)
 
 static void traverse_instance(paw_Env *P, Instance *i)
 {
-    traverse_fields(P, i->attrs, i->nfields);
+    traverse_fields(P, i->fields, i->nfields);
 }
 
 static void traverse_method(paw_Env *P, Method *m)
@@ -180,7 +180,7 @@ static void traverse_variant(paw_Env *P, Variant *v)
 
 static void traverse_foreign(paw_Env *P, Foreign *u)
 {
-    traverse_fields(P, u->attrs, u->nfields);
+    traverse_fields(P, u->fields, u->nfields);
 }
 
 static void mark_roots(paw_Env *P)
@@ -194,9 +194,12 @@ static void mark_roots(paw_Env *P)
     for (UpValue *u = P->up_list; u; u = u->open.next) {
         mark_object(P, CAST_OBJECT(u));
     }
-    for (int i = 0; i < P->gv.size; ++i) {
-        mark_object(P, CAST_OBJECT(P->gv.data[i].name));
-        mark_value(P, P->gv.data[i].value);
+    for (int i = 0; i < P->vals.count; ++i) {
+        mark_value(P, P->vals.data[i]);
+    }
+    for (int i = 0; i < P->defs.count; ++i) {
+        struct Def *def = P->defs.data[i];
+        mark_object(P, CAST_OBJECT(def->hdr.name));
     }
     mark_object(P, CAST_OBJECT(P->builtin));
     mark_object(P, CAST_OBJECT(P->libs));
@@ -301,8 +304,6 @@ void pawG_uninit(paw_Env *P)
     P->libs = NULL;
     P->builtin = NULL;
     P->up_list = NULL;
-    P->top = P->stack;
-    P->gv.size = 0;
 
     // collect all non-fixed objects
     pawG_collect(P);

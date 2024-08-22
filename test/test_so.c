@@ -1,4 +1,5 @@
 #include "test.h"
+#include "env.h"
 
 static void handle_error(paw_Env *P, int status, paw_Bool fatal)
 {
@@ -21,8 +22,10 @@ int main(void)
     handle_error(P, status, PAW_TRUE);
 
     paw_push_string(P, "f");
-    const int id = paw_find_public(P);
-    paw_push_public(P, id);
+    const int did = paw_find_global(P);
+    const struct Def *def = pawE_get_def(P, did);
+    check(def->hdr.kind == DEF_FUNC);
+    paw_get_global(P, def->func.vid);
 
     paw_push_int(P, 1 << 24);
     status = paw_call(P, 1);

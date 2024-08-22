@@ -1,6 +1,6 @@
 // closure.paw
 
-fn test_expr_result() {
+pub fn test_expr_result() {
     let f = || 1;
     assert(f() == 1);
     assert(f() == 1);
@@ -21,17 +21,17 @@ fn test_expr_result() {
     assert(v[1][1][0] == 2);
 }
 
-fn test_empty_block() {
+pub fn test_empty_block() {
     let f = || -> () {};
     let f = || -> () {return;};
 }
 
-fn test_infer_empty_block() {
+pub fn test_infer_empty_block() {
     let f = || {};
     let f = || {return;};
 }
 
-fn test_infer_block_return() {
+pub fn test_infer_block_return() {
     let choose = |i| {
         if i == 0 {
             return 'a';
@@ -52,7 +52,7 @@ fn test_infer_block_return() {
 
 }
 
-fn test_infer_from_annotation() {
+pub fn test_infer_from_annotation() {
     // this line would result in an inference error if not for the annotation,
     // since we never call it and the parameters are never used, meaning the type
     // cannot be inferred
@@ -71,7 +71,7 @@ fn test_infer_from_annotation() {
     assert(inner('one').1 == 'one');
 }
 
-fn test_infer_param_from_body() {
+pub fn test_infer_param_from_body() {
     let f = |a| {return a + 1;};
     let f = |a| {return a + 'two';};
 
@@ -86,7 +86,7 @@ fn test_infer_param_from_body() {
     assert(f('cd', 'ef') == 'cdef');
 }
 
-fn test_infer_param_from_call() {
+pub fn test_infer_param_from_call() {
     let f = |a| {return a;};
     assert(f(1) == 1);
     assert(f(10) == 10);
@@ -105,7 +105,7 @@ fn map<A, B>(f: fn(A) -> B, a: [A]) -> [B] {
     return b;
 }
 
-fn test_generics() {
+pub fn test_generics() {
     let b = map(|a| a, [1]);
     assert(b == [1]);
     let b = map(|a| a, [2, 3]);
@@ -129,7 +129,7 @@ fn pipeline<A, B, C>(
     return c;
 }
 
-fn test_pipeline() {
+pub fn test_pipeline() {
     let c = pipeline(|a| a, |b| b, 42);
     assert(c == 42);
     let c = pipeline(|a| 2, |b| 3, 1);
@@ -144,7 +144,7 @@ fn pipeline_2<A, B, C>(a: A, b: B, c: C) -> C {
     return pipeline(|a| b, |b| c, a);
 }
 
-fn test_pipeline_2() {
+pub fn test_pipeline_2() {
     let c = pipeline_2(1, 2, 3);
     assert(c == 3);
 
@@ -158,7 +158,7 @@ fn compose<A, B>(
     return (a, f(a));
 }
 
-fn test_compose() {
+pub fn test_compose() {
     let x = compose(|a| {return 2;},
                     1);
     assert(x.0 == 1);
@@ -169,7 +169,7 @@ fn test_compose() {
     assert(x.1 == 2.0);
 }
 
-fn test_basic_capture() {
+pub fn test_basic_capture() {
     let make_closure = || {
         let b = 1;
         return |a| a + b;
@@ -179,7 +179,7 @@ fn test_basic_capture() {
     assert(f(2) == 3);
 }
 
-fn test_capture_separate_lists() {
+pub fn test_capture_separate_lists() {
     let make_closures = || {
         let make_1 = || {
             let a = [];

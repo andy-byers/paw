@@ -8,7 +8,7 @@ enum Unit2 {
     Y,
 }
 
-fn test_unit_enum() {
+pub fn test_unit_enum() {
     let e = Unit::X;
     e = Unit::X;
 
@@ -21,15 +21,14 @@ enum Data {
     Y(int),
 }
 
-fn test(e: Data) -> Data {
-    let e2 = e;
-    return e2;
-}
-
-fn test_data_enum() {
+pub fn test_data_enum() {
     let e = Data::X;
     e = Data::Y(42);
-    ;
+
+    let test = |e: Data| {
+        let e2 = e;
+        return e2;
+    };
     let e = test(Data::X);
     let e = test(Data::Y(42));
 

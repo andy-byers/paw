@@ -102,7 +102,7 @@ const char *paw_push_vfstring(paw_Env *P, const char *fmt, va_list arg);
 #define PAW_OPNOT 2
 #define PAW_OPBNOT 3
 
-void paw_unop(paw_Env *P, int op);
+void paw_unop(paw_Env *P, int op, paw_Type type);
 
 #define PAW_OPEQ 0
 #define PAW_OPNE 1
@@ -111,21 +111,19 @@ void paw_unop(paw_Env *P, int op);
 #define PAW_OPGT 4
 #define PAW_OPGE 5
 #define PAW_OPIN 6
-#define PAW_OPADD 7
-#define PAW_OPSUB 8
-#define PAW_OPMUL 9
-#define PAW_OPDIV 10
-#define PAW_OPIDIV 11
+#define PAW_OPAS 7
+#define PAW_OPADD 8
+#define PAW_OPSUB 9
+#define PAW_OPMUL 10
+#define PAW_OPDIV 11
 #define PAW_OPMOD 12
-#define PAW_OPPOW 13
-#define PAW_OPCONCAT 14
-#define PAW_OPBXOR 15
-#define PAW_OPBAND 16
-#define PAW_OPBOR 17
-#define PAW_OPSHL 18
-#define PAW_OPSHR 19
+#define PAW_OPBXOR 13
+#define PAW_OPBAND 14
+#define PAW_OPBOR 15
+#define PAW_OPSHL 16
+#define PAW_OPSHR 17
 
-void paw_binop(paw_Env *P, int op);
+void paw_binop(paw_Env *P, int op, paw_Type type);
 void paw_raw_equals(paw_Env *P);
 
 void paw_arith_int(paw_Env *P, int op);
@@ -157,30 +155,28 @@ size_t paw_length(paw_Env *P, int index);
 //
 // Type conversions:
 //
-void paw_to_float(paw_Env *P, int index);
-void paw_to_int(paw_Env *P, int index);
-void paw_to_string(paw_Env *P, int index);
+void paw_to_float(paw_Env *P, int index, paw_Type type);
+void paw_to_int(paw_Env *P, int index, paw_Type type);
+void paw_to_string(paw_Env *P, int index, paw_Type type);
 
 void paw_pop(paw_Env *P, int n);
 
 // Return the number of values in the current stack frame
 int paw_get_count(paw_Env *P);
 
-int paw_find_public(paw_Env *P);
-void paw_push_public(paw_Env *P, int id);
+// Determine the location of a global in the loaded module
+// Expects a string on top of the stack (which is consumed), indicating the name of 
+// the global. Returns a nonnegative integer if the global exists, -1 otherwise.
+int paw_find_global(paw_Env *P);
 
-int paw_find_attr(paw_Env *P, int index, const char *name);
+// Get the global with the given identifier
+// The 'gid' must be a nonnegative integer returned by 'paw_find_global'.
+void paw_get_global(paw_Env *P, int gid);
 
-void paw_get_upvalue(paw_Env *P, int ifn, int index);
-void paw_get_global(paw_Env *P, int index);
-void paw_get_attr(paw_Env *P, int index, int iattr);
-void paw_get_item(paw_Env *P, int index);
-void paw_get_itemi(paw_Env *P, int index, paw_Int i);
-
-paw_Bool paw_check_global(paw_Env *P, const char *name);
-paw_Bool paw_check_attr(paw_Env *P, int index, const char *s);
-paw_Bool paw_check_item(paw_Env *P, int index);
-paw_Bool paw_check_itemi(paw_Env *P, int index, paw_Int i);
+void paw_get_upvalue(paw_Env *P, int index, int iup);
+void paw_get_field(paw_Env *P, int index, int ifield);
+void paw_get_elem(paw_Env *P, int index);
+void paw_get_elemi(paw_Env *P, int index, paw_Int i);
 
 void paw_list_slice(paw_Env *P, int index, paw_Int begin, paw_Int end);
 void paw_list_push(paw_Env *P, int index, paw_Int i);
@@ -188,11 +184,6 @@ void paw_list_pop(paw_Env *P, int index, paw_Int i);
 
 void paw_map_erase(paw_Env *P, int index);
 void paw_map_erasei(paw_Env *P, int index, paw_Int i);
-
-// Push a global variable onto the stack, or null if the variable does
-// not exist
-// Returns PAW_TRUE if the variable exists, PAW_FALSE otherwise.
-paw_Bool paw_check_global(paw_Env *P, const char *name);
 
 void paw_set_upvalue(paw_Env *P, int ifn, int index);
 void paw_set_global(paw_Env *P, const char *name);
@@ -202,12 +193,12 @@ void paw_set_itemi(paw_Env *P, int index, paw_Int i);
 void paw_call_global(paw_Env *P, int index, int argc);
 void paw_call_attr(paw_Env *P, int index, const char *name, int argc);
 
-void *paw_create_foreign(paw_Env *P, size_t size, int nbound);
-void paw_create_native(paw_Env *P, paw_Function f, int nup);
-void paw_create_class(paw_Env *P);
-void paw_create_instance(paw_Env *P, int index);
-void paw_create_array(paw_Env *P, int n);
-void paw_create_map(paw_Env *P, int n);
+void *paw_new_foreign(paw_Env *P, size_t size, int nbound);
+void paw_new_native(paw_Env *P, paw_Function f, int nup);
+void paw_new_list(paw_Env *P, int n);
+void paw_new_map(paw_Env *P, int n);
+void paw_new_enum(paw_Env *P, int n, int k);
+void paw_new_struct(paw_Env *P, int n);
 
 int paw_abs_index(paw_Env *P, int index);
 void paw_rotate(paw_Env *P, int index, int n);

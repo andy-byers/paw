@@ -90,8 +90,8 @@ const char *paw_op_name(Op op)
             return "COPY";
         case OP_INITFIELD:
             return "INITFIELD";
-        case OP_TRANSIT:
-            return "TRANSIT";
+        case OP_SHIFT:
+            return "SHIFT";
         case OP_MATCHVARIANT:
             return "MATCHVARIANT";
         case OP_POP:
@@ -158,16 +158,16 @@ const char *paw_op_name(Op op)
             return "BINOP";
         case OP_GETTUPLE:
             return "GETTUPLE";
-        case OP_GETATTR:
-            return "GETATTR";
+        case OP_GETFIELD:
+            return "GETFIELD";
         case OP_SETTUPLE:
             return "SETTUPLE";
-        case OP_SETATTR:
-            return "SETATTR";
-        case OP_GETITEM:
-            return "GETITEM";
-        case OP_SETITEM:
-            return "SETITEM";
+        case OP_SETFIELD:
+            return "SETFIELD";
+        case OP_GETELEM:
+            return "GETELEM";
+        case OP_SETELEM:
+            return "SETELEM";
         default:
             return "???";
     }
@@ -175,7 +175,7 @@ const char *paw_op_name(Op op)
 
 void paw_dump_opcode(OpCode opcode)
 {
-    switch (get_OP(opcode)) {
+    switch (GET_OP(opcode)) {
         case OP_CASTBOOL:
             printf("CASTBOOL\n");
             break;
@@ -186,7 +186,7 @@ void paw_dump_opcode(OpCode opcode)
             printf("CASTFLOAT\n");
             break;
         case OP_PUSHSTRUCT:
-            printf("PUSHSTRUCT %d\n", get_U(opcode));
+            printf("PUSHSTRUCT %d\n", GET_U(opcode));
             break;
         case OP_PUSHUNIT:
             printf("PUSHUNIT\n");
@@ -198,7 +198,7 @@ void paw_dump_opcode(OpCode opcode)
             printf("PUSHFALSE\n");
             break;
         case OP_PUSHCONST:
-            printf("PUSHCONST %d\n", get_U(opcode));
+            printf("PUSHCONST %d\n", GET_U(opcode));
             break;
         case OP_COPY:
             printf("COPY\n");
@@ -218,8 +218,8 @@ void paw_dump_opcode(OpCode opcode)
         case OP_MATCHVARIANT:
             printf("MATCHVARIANT\n");
             break;
-        case OP_TRANSIT:
-            printf("TRANSIT\n");
+        case OP_SHIFT:
+            printf("SHIFT\n");
             break;
         case OP_RETURN:
             printf("RETURN\n");
@@ -228,7 +228,7 @@ void paw_dump_opcode(OpCode opcode)
             printf("CLOSURE\n");
             break;
         case OP_CALL:
-            printf("CALL nargs = %d\n", get_U(opcode));
+            printf("CALL nargs = %d\n", GET_U(opcode));
             break;
         case OP_JUMP:
             printf("JUMP\n");
@@ -246,22 +246,22 @@ void paw_dump_opcode(OpCode opcode)
             printf("GLOBAL\n");
             break;
         case OP_GETGLOBAL:
-            printf("GETGLOBAL: %d\n", get_U(opcode));
+            printf("GETGLOBAL: %d\n", GET_U(opcode));
             break;
         case OP_SETGLOBAL:
-            printf("SETGLOBAL: %d\n", get_U(opcode));
+            printf("SETGLOBAL: %d\n", GET_U(opcode));
             break;
         case OP_GETLOCAL:
-            printf("GETLOCAL: %d\n", get_U(opcode));
+            printf("GETLOCAL: %d\n", GET_U(opcode));
             break;
         case OP_SETLOCAL:
-            printf("SETLOCAL: %d\n", get_U(opcode));
+            printf("SETLOCAL: %d\n", GET_U(opcode));
             break;
         case OP_GETUPVALUE:
-            printf("GETUPVALUE: %d\n", get_U(opcode));
+            printf("GETUPVALUE: %d\n", GET_U(opcode));
             break;
         case OP_SETUPVALUE:
-            printf("SETUPVALUE: %d\n", get_U(opcode));
+            printf("SETUPVALUE: %d\n", GET_U(opcode));
             break;
         case OP_NEWTUPLE:
             printf("NEWTUPLE\n");
@@ -297,29 +297,29 @@ void paw_dump_opcode(OpCode opcode)
             printf("FORMAP\n");
             break;
         case OP_UNOP:
-            printf("UNOP %s %d\n", paw_unop_name(get_A(opcode)), get_B(opcode));
+            printf("UNOP %s %d\n", paw_unop_name(GET_A(opcode)), GET_B(opcode));
             break;
         case OP_BINOP:
-            printf("BINOP %s %d\n", paw_binop_name(get_A(opcode)),
-                   get_B(opcode));
+            printf("BINOP %s %d\n", paw_binop_name(GET_A(opcode)),
+                   GET_B(opcode));
             break;
         case OP_GETTUPLE:
-            printf("GETTUPLE %d\n", get_U(opcode));
+            printf("GETTUPLE %d\n", GET_U(opcode));
             break;
-        case OP_GETATTR:
-            printf("GETATTR %d\n", get_U(opcode));
+        case OP_GETFIELD:
+            printf("GETFIELD %d\n", GET_U(opcode));
             break;
         case OP_SETTUPLE:
-            printf("SETTUPLE %d\n", get_U(opcode));
+            printf("SETTUPLE %d\n", GET_U(opcode));
             break;
-        case OP_SETATTR:
-            printf("SETATTR %d\n", get_U(opcode));
+        case OP_SETFIELD:
+            printf("SETFIELD %d\n", GET_U(opcode));
             break;
-        case OP_GETITEM:
-            printf("GETITEM %d\n", get_U(opcode));
+        case OP_GETELEM:
+            printf("GETELEM %d\n", GET_U(opcode));
             break;
-        case OP_SETITEM:
-            printf("SETITEM %d\n", get_U(opcode));
+        case OP_SETELEM:
+            printf("SETELEM %d\n", GET_U(opcode));
             break;
         default:
             printf("???\n");
@@ -339,60 +339,60 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
     for (int i = 0; pc != end; ++i) {
         pawL_add_fstring(P, print, "%d  %I  %s", i,
                          (paw_Int)(pc - proto->source),
-                         paw_op_name(get_OP(pc[0])));
+                         paw_op_name(GET_OP(pc[0])));
         const OpCode opcode = *pc++;
-        switch (get_OP(opcode)) {
+        switch (GET_OP(opcode)) {
             case OP_UNOP: {
                 pawL_add_fstring(P, print, " ; op = %s",
-                                 paw_unop_name(get_A(opcode)));
+                                 paw_unop_name(GET_A(opcode)));
                 break;
             }
 
             case OP_BINOP: {
                 pawL_add_fstring(P, print, " ; op = %s",
-                                 paw_binop_name(get_A(opcode)));
+                                 paw_binop_name(GET_A(opcode)));
                 break;
             }
 
             case OP_POP: {
-                pawL_add_fstring(P, print, " ; u = %d", get_U(opcode));
+                pawL_add_fstring(P, print, " ; u = %d", GET_U(opcode));
                 break;
             }
 
             case OP_MATCHVARIANT: {
-                pawL_add_fstring(P, print, " ; k = %d", get_U(opcode));
+                pawL_add_fstring(P, print, " ; k = %d", GET_U(opcode));
                 break;
             }
 
-            case OP_TRANSIT: {
-                pawL_add_fstring(P, print, " ; n = %d", get_U(opcode));
+            case OP_SHIFT: {
+                pawL_add_fstring(P, print, " ; n = %d", GET_U(opcode));
                 break;
             }
 
             case OP_CLOSE: {
-                pawL_add_fstring(P, print, " ; count = %d", get_U(opcode));
+                pawL_add_fstring(P, print, " ; count = %d", GET_U(opcode));
                 break;
             }
 
             case OP_PUSHCONST: {
-                pawL_add_fstring(P, print, " ; k = %d", get_U(opcode));
+                pawL_add_fstring(P, print, " ; k = %d", GET_U(opcode));
                 break;
             }
 
             case OP_PUSHSTRUCT: {
-                pawL_add_fstring(P, print, " ; $ = %d", get_U(opcode));
+                pawL_add_fstring(P, print, " ; $ = %d", GET_U(opcode));
                 break;
             }
 
             case OP_NEWVARIANT: {
-                pawL_add_fstring(P, print, " ; #%d", get_U(opcode));
+                pawL_add_fstring(P, print, " ; #%d", GET_U(opcode));
                 break;
             }
 
             case OP_NEWLIST:
             case OP_NEWMAP:
             case OP_NEWTUPLE: {
-                pawL_add_fstring(P, print, " ; %d values", get_U(opcode));
+                pawL_add_fstring(P, print, " ; %d values", GET_U(opcode));
                 break;
             }
 
@@ -402,59 +402,59 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
             case OP_FORLIST:
             case OP_FORMAP0:
             case OP_FORMAP: {
-                pawL_add_fstring(P, print, " ; offset = %d", get_S(opcode));
+                pawL_add_fstring(P, print, " ; offset = %d", GET_S(opcode));
                 break;
             }
 
-            case OP_GETATTR: {
-                pawL_add_fstring(P, print, " ; id = %d", get_U(opcode));
+            case OP_GETFIELD: {
+                pawL_add_fstring(P, print, " ; id = %d", GET_U(opcode));
                 break;
             }
 
-            case OP_SETATTR: {
-                pawL_add_fstring(P, print, " ; id = %d", get_U(opcode));
+            case OP_SETFIELD: {
+                pawL_add_fstring(P, print, " ; id = %d", GET_U(opcode));
                 break;
             }
 
             case OP_GETLOCAL: {
-                pawL_add_fstring(P, print, " ; id = %d", get_U(opcode));
+                pawL_add_fstring(P, print, " ; id = %d", GET_U(opcode));
                 break;
             }
 
             case OP_SETLOCAL: {
-                pawL_add_fstring(P, print, " ; id = %d", get_U(opcode));
+                pawL_add_fstring(P, print, " ; id = %d", GET_U(opcode));
                 break;
             }
 
             case OP_GETUPVALUE: {
-                pawL_add_fstring(P, print, "%d", get_U(opcode));
+                pawL_add_fstring(P, print, "%d", GET_U(opcode));
                 break;
             }
 
             case OP_SETUPVALUE: {
-                pawL_add_fstring(P, print, "%d", get_U(opcode));
+                pawL_add_fstring(P, print, "%d", GET_U(opcode));
                 break;
             }
 
             case OP_GETGLOBAL: {
-                const int iw = get_U(opcode);
+                const int iw = GET_U(opcode);
                 pawL_add_string(P, print, " ; id = ");
                 pawL_add_integer(P, print, iw);
                 break;
             }
 
             case OP_SETGLOBAL: {
-                pawL_add_fstring(P, print, " ; id = %d", get_U(opcode));
+                pawL_add_fstring(P, print, " ; id = %d", GET_U(opcode));
                 break;
             }
 
             case OP_GLOBAL: {
-                pawL_add_fstring(P, print, " ; k = %d", get_U(opcode));
+                pawL_add_fstring(P, print, " ; k = %d", GET_U(opcode));
                 break;
             }
 
             case OP_CLOSURE: {
-                const int idx = get_U(opcode);
+                const int idx = GET_U(opcode);
                 Proto *p = proto->p[idx];
                 String *s = p->name;
                 pawL_add_string(P, print, " ; '");
@@ -469,29 +469,29 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
             }
 
             case OP_CALL: {
-                pawL_add_fstring(P, print, " ; # nargs = %d", get_U(opcode));
+                pawL_add_fstring(P, print, " ; # nargs = %d", GET_U(opcode));
                 break;
             }
 
             case OP_VARARG: {
-                const int nfixed = get_U(opcode);
+                const int nfixed = GET_U(opcode);
                 const int npassed = paw_get_count(P) - 1;
                 pawL_add_fstring(P, print, " ; # nargs = %d", npassed - nfixed);
                 break;
             }
 
             case OP_JUMP: {
-                pawL_add_fstring(P, print, " ; offset = %d", get_S(opcode));
+                pawL_add_fstring(P, print, " ; offset = %d", GET_S(opcode));
                 break;
             }
 
             case OP_JUMPFALSE: {
-                pawL_add_fstring(P, print, " ; offset = %d", get_S(opcode));
+                pawL_add_fstring(P, print, " ; offset = %d", GET_S(opcode));
                 break;
             }
 
             case OP_JUMPNULL: {
-                pawL_add_fstring(P, print, " ; offset = %d", get_S(opcode));
+                pawL_add_fstring(P, print, " ; offset = %d", GET_S(opcode));
                 break;
             }
 

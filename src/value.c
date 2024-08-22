@@ -212,7 +212,7 @@ void pawV_free_closure(paw_Env *P, Closure *f)
 
 Instance *pawV_new_instance(paw_Env *P, int nfields)
 {
-    Instance *ins = pawM_new_flex(P, Instance, CAST_SIZE(nfields), sizeof(ins->attrs[0]));
+    Instance *ins = pawM_new_flex(P, Instance, CAST_SIZE(nfields), sizeof(ins->fields[0]));
     pawG_add_object(P, CAST_OBJECT(ins), VINSTANCE);
     ins->nfields = nfields;
     return ins;
@@ -220,7 +220,7 @@ Instance *pawV_new_instance(paw_Env *P, int nfields)
 
 void pawV_free_instance(paw_Env *P, Instance *ins)
 {
-    pawM_free_flex(P, ins, CAST_SIZE(ins->nfields), sizeof(ins->attrs[0]));
+    pawM_free_flex(P, ins, CAST_SIZE(ins->nfields), sizeof(ins->fields[0]));
 }
 
 Variant *pawV_new_variant(paw_Env *P, int k, int nfields)
@@ -277,7 +277,7 @@ Foreign *pawV_push_foreign(paw_Env *P, size_t size, int nfields)
         pawM_error(P);
     }
     Value *pv = pawC_push0(P);
-    Foreign *ud = pawM_new_flex(P, Foreign, nfields, sizeof(ud->attrs[0]));
+    Foreign *ud = pawM_new_flex(P, Foreign, nfields, sizeof(ud->fields[0]));
     pawG_add_object(P, CAST_OBJECT(ud), VFOREIGN);
     V_SET_OBJECT(pv, ud); // anchor
     ud->nfields = nfields;
@@ -286,14 +286,14 @@ Foreign *pawV_push_foreign(paw_Env *P, size_t size, int nfields)
         // Allocate space to hold 'size' bytes of foreign data.
         ud->data = pawM_new_vec(P, size, char);
     }
-    clear_attrs(ud->attrs, nfields);
+    clear_attrs(ud->fields, nfields);
     return ud;
 }
 
 void pawV_free_foreign(paw_Env *P, Foreign *ud)
 {
     pawM_free_vec(P, (char *)ud->data, ud->size); // TODO
-    pawM_free_flex(P, ud, CAST_SIZE(ud->nfields), sizeof(ud->attrs[0]));
+    pawM_free_flex(P, ud, CAST_SIZE(ud->nfields), sizeof(ud->fields[0]));
 }
 
 paw_Bool pawV_truthy(Value v, paw_Type type)

@@ -50,30 +50,30 @@
 #define A_MAX ((1 << A_WIDTH) - 1)
 #define B_MAX ((1 << B_WIDTH) - 1)
 
-#define mask1(n, p) ((~((~(OpCode)0) << n)) << p)
-#define mask0(n, p) (~mask1(n, p))
+#define MASK1(n, p) ((~((~(OpCode)0) << n)) << p)
+#define MASK0(n, p) (~MASK1(n, p))
 
-#define create_OP(o) ((OpCode)(o))
-#define get_OP(v) ((v) & mask1(OP_WIDTH, 0))
-#define set_OP(v, o) (*(v) = (*(v) & mask0(OP_WIDTH, 0)) | (OpCode)(o))
+#define CREATE_OP(o) ((OpCode)(o))
+#define GET_OP(v) ((v) & MASK1(OP_WIDTH, 0))
+#define SET_OP(v, o) (*(v) = (*(v) & MASK0(OP_WIDTH, 0)) | (OpCode)(o))
 
-#define create_U(o, u) ((OpCode)(o) | ((OpCode)(u) << U_OFFSET))
-#define get_U(v) (((v) >> U_OFFSET) & mask1(U_WIDTH, 0))
-#define set_U(v, u) \
-    (*(v) = (*(v) & mask0(U_WIDTH, U_OFFSET)) | ((OpCode)(u) << U_OFFSET))
+#define CREATE_U(o, u) ((OpCode)(o) | ((OpCode)(u) << U_OFFSET))
+#define GET_U(v) (((v) >> U_OFFSET) & MASK1(U_WIDTH, 0))
+#define SET_U(v, u) \
+    (*(v) = (*(v) & MASK0(U_WIDTH, U_OFFSET)) | ((OpCode)(u) << U_OFFSET))
 
-#define create_S(o, s) create_U(o, (int)(s) + S_MAX)
-#define get_S(v) ((int)get_U(v) - S_MAX)
-#define set_S(v, s) set_U(v, (int)(s) + S_MAX)
+#define CREATE_S(o, s) CREATE_U(o, (int)(s) + S_MAX)
+#define GET_S(v) ((int)GET_U(v) - S_MAX)
+#define SET_S(v, s) SET_U(v, (int)(s) + S_MAX)
 
-#define create_AB(o, a, b) \
+#define CREATE_AB(o, a, b) \
     ((OpCode)(op) | ((OpCode)(a) << A_OFFSET) | ((OpCode)(b) << B_OFFSET))
-#define get_A(v) ((v) >> A_OFFSET)
-#define set_A(v, a) \
-    (*(v) = (*(v) & mask0(A_WIDTH, A_OFFSET)) | ((OpCode)(a) << A_OFFSET))
-#define get_B(v) (((v) >> B_OFFSET) & mask1(B_WIDTH, 0))
-#define set_B(v, b) \
-    (*(v) = (*(v) & mask0(B_WIDTH, B_OFFSET)) | ((OpCode)(b) << B_OFFSET))
+#define GET_A(v) ((v) >> A_OFFSET)
+#define SET_A(v, a) \
+    (*(v) = (*(v) & MASK0(A_WIDTH, A_OFFSET)) | ((OpCode)(a) << A_OFFSET))
+#define GET_B(v) (((v) >> B_OFFSET) & MASK1(B_WIDTH, 0))
+#define SET_B(v, b) \
+    (*(v) = (*(v) & MASK0(B_WIDTH, B_OFFSET)) | ((OpCode)(b) << B_OFFSET))
 
 typedef uint32_t OpCode;
 
@@ -104,7 +104,7 @@ OP_POP,//            U           vu..v1         -             -
 OP_CLOSE,//          U           vu..v1         -             close stack to vu
 OP_COPY,//           -           v              v v           -
 OP_RETURN,//         -           f..v           v             closes stack to f
-OP_TRANSIT,//        U           vu..v1         v1            closes stack to vu
+OP_SHIFT,//          U           vu..v1         v1            closes stack to vu
 
 OP_CLOSURE,//        A B         vb..v1         f             captures vu..v1 in f = P[a]
 OP_INVOKE,//      
@@ -131,15 +131,15 @@ OP_NEWVARIANT,//     A B         vb..v1         a(vb..v1)     -
 OP_NEWTUPLE,//       U           vu..v1         (vu..v1)      -
 OP_NEWINSTANCE,//    U           -              v             v = new instance of class C[u]
 OP_INITFIELD,//      U           i v            i             i.fields[u] = v
-OP_NEWLIST,//      U           vu..v1         [vu..v1]      -
+OP_NEWLIST,//        U           vu..v1         [vu..v1]      -
 OP_NEWMAP,//         U           v_2n..v1       {v_2n..v1}    -
 
 OP_UNWRAP,//         -           v              t             throws an error if disc(v) != 0
 
 OP_FORNUM0,//        S           *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
 OP_FORNUM,//         S           *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
-OP_FORLIST0,//     S           *-*-*-*-*-*-*-*-* see notes *-*-*-*-*-*-*-*-*
-OP_FORLIST,//      S           *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
+OP_FORLIST0,//       S           *-*-*-*-*-*-*-*    see notes    *-*-*-*-*-*-*
+OP_FORLIST,//        S           *-*-*-*-*-*-*-*   for details   *-*-*-*-*-*-*
 OP_FORMAP0,//        S           *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
 OP_FORMAP,//         S           *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
 
@@ -148,20 +148,20 @@ OP_BINOP,//          A B         l r            ops[a](l, r)  -
 OP_UNMM,//           A B         v              v.mtd[a]()    -
 OP_BINMM,//          A B         l r            l.mtd[a](r)   -
          
-OP_CASTBOOL,//       U           v              bool(v)       -  
-OP_CASTINT,//        U           v              int(v)        - 
-OP_CASTFLOAT,//      U           v              float(v)      - 
+OP_CASTBOOL,//       U           v              v as bool     -  
+OP_CASTINT,//        U           v              v as int      - 
+OP_CASTFLOAT,//      U           v              v as float    - 
          
 OP_VARARG,//         A B         vu..v1         [vu..v1]      -
 OP_INIT,
 OP_CALL,//           U           f vu..v1       v             v = f(vu..v1)
 
+OP_GETFIELD,//       U           v              v.u           -
+OP_SETFIELD,//       U           v x            -             v.u=x
 OP_GETTUPLE,//       U           v              v.u           -
-OP_GETATTR,//        U           v              v.u           -
 OP_SETTUPLE,//       U           v x            -             v.u=x
-OP_SETATTR,//        U           v x            -             v.u=x
-OP_GETITEM,//        U           v i            v[i]          -
-OP_SETITEM,//        U           v i x          -             v[i]=x
+OP_GETELEM,//        U           v i            v[i]          -
+OP_SETELEM,//        U           v i x          -             v[i]=x
 OP_GETSLICE,//       U           v i j          v[i:j]        -
 OP_SETSLICE,//       U           v i j x        -             v[i:j]=x
 

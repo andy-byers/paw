@@ -69,7 +69,6 @@ static void define_prelude(struct Compiler *C, const char *name, enum BuiltinKin
     };
 }
 
- // TODO: represent unit type as empty tuple
 void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const char *modname)
 {
     Value *pv = pawC_push0(P);
@@ -109,14 +108,7 @@ void pawP_teardown(paw_Env *P, const struct DynamicMem *dm)
 {
     pawM_free_vec(P, dm->labels.values, dm->labels.capacity);
     pawM_free_vec(P, dm->scratch.data, dm->scratch.alloc);
-    pawM_free_vec(P, dm->decls.data, dm->decls.alloc);
     pawM_free_vec(P, dm->vars.data, dm->vars.alloc);
     pawAst_free(dm->ast);
     pawHir_free(dm->hir);
 }
-
-void pawP_define_cfunc(struct Compiler *C, paw_Function f, const char *name, const char **params, const char *result)
-{
-
-}
-

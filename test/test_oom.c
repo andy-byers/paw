@@ -15,22 +15,24 @@ static void *oom_alloc(void *ud, void *ptr, size_t size0, size_t size)
 
 static int run_tests(paw_Env *P)
 {
-    struct GlobalVec *gvec = &P->gv;
-    for (int i = 0; i < gvec->size; ++i) {
+    struct DefList defs = P->defs;
+    for (int i = 0; i < defs.count; ++i) {
         static const char kPrefix[] = "test_";
         static const size_t kLength = paw_lengthof(kPrefix);
-        struct GlobalVar *gvar = &gvec->data[i]; 
-        if (gvar->name->length >= kLength &&
-                0 == memcmp(gvar->name->text, kPrefix, kLength)) {
-            pawC_pushv(P, gvar->value);
-            const int status = paw_call(P, 0);
-            if (status != PAW_OK) return status;
+        struct Def *def = defs.data[i]; 
+        if (!def->hdr.is_pub) continue;
+        const String *name = def->hdr.name;
+        if (name->length >= kLength &&
+                0 == memcmp(name->text, kPrefix, kLength)) {
+            check(def->hdr.kind == DEF_FUNC);
+            pawC_pushv(P, *pawE_get_val(P, def->func.vid));
+            return paw_call(P, 0);
         }
     }
     return PAW_OK;
 }
 
-static int script_aux(const char *name, paw_Alloc alloc, struct TestAlloc *a, size_t heap_size)
+static int script_aux(const char *name, paw_Alloc alloc, struct TestAlloc *a, size_t heap_size, int count)
 {
     paw_Env *P = paw_open(&(struct paw_Options){
                 .heap_size = heap_size,
@@ -59,7 +61,7 @@ static void script(const char *name)
         // Run the script, allowing twice the number of bytes to be allocated
         // each time. Eventually, it should be able to allocate enough memory
         // to complete.
-        rc = script_aux(name, oom_alloc, &a, 0);
+        rc = script_aux(name, oom_alloc, &a, 0, count);
         a.extra = nextra;
         nextra *= 2;
         ++count;
@@ -75,7 +77,7 @@ static void real_oom(const char *name)
     int count = 0;
     int rc;
     do {
-        rc = script_aux(name, NULL, NULL, heap_size);
+        rc = script_aux(name, NULL, NULL, heap_size, count);
         heap_size *= 2;
         ++count;
     } while (rc == PAW_EMEMORY);

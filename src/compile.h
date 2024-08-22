@@ -17,7 +17,10 @@
 #ifndef PAW_COMPILE_H
 #define PAW_COMPILE_H
 
+#include "ast.h"
 #include "code.h"
+#include "env.h"
+#include "hir.h"
 #include "mem.h"
 #include "unify.h"
 
@@ -31,8 +34,6 @@ static inline String *pawP_scan_string(paw_Env *P, Map *st, const char *s)
 {
     return pawP_scan_nstring(P, st, s, strlen(s));
 }
-
-typedef uint16_t DefId;
 
 enum BuiltinKind {
     BUILTIN_UNIT,
@@ -95,21 +96,6 @@ struct DynamicMem {
     } scratch;
 
     struct {
-        struct HirDecl **data;
-        int count;
-        int alloc;
-    } decls;
-
-    struct {
-<<<<<<< HEAD
-=======
-        struct CDecl **data;
-        int count;
-        int alloc;
-    } cdecls;
-
-    struct {
->>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
         struct LocalSlot *data;
         int count;
         int alloc;
@@ -120,6 +106,11 @@ struct DynamicMem {
 
     Unifier unifier;
     struct LabelList labels;
+
+    // NOTE: Backing storage for this field is located in the HIR pool, so
+    //       '.decls' does not need to be freed separately. It is kept here
+    //       for convenience, since it is used during multiple passes.
+    struct HirDeclList *decls;
 };
 
 typedef struct Generator {
@@ -130,6 +121,7 @@ typedef struct Generator {
     struct FuncState *fs;
     struct ToplevelList *items;
     paw_Env *P;
+    int nvals;
 } Generator;
 
 // Instantiate a polymorphic function or type

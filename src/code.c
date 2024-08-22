@@ -41,25 +41,25 @@ static void add_opcode(struct FuncState *fs, OpCode code)
 void pawK_code_0(struct FuncState *fs, Op op)
 {
     add_line(fs);
-    add_opcode(fs, create_OP(op));
+    add_opcode(fs, CREATE_OP(op));
 }
 
 void pawK_code_S(struct FuncState *fs, Op op, int s)
 {
     add_line(fs);
-    add_opcode(fs, create_S(op, s));
+    add_opcode(fs, CREATE_S(op, s));
 }
 
 void pawK_code_U(struct FuncState *fs, Op op, int u)
 {
     add_line(fs);
-    add_opcode(fs, create_U(op, u));
+    add_opcode(fs, CREATE_U(op, u));
 }
 
 void pawK_code_AB(struct FuncState *fs, Op op, int a, int b)
 {
     add_line(fs);
-    add_opcode(fs, create_AB(op, a, b));
+    add_opcode(fs, CREATE_AB(op, a, b));
 }
 
 typedef struct Arena {

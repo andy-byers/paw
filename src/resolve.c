@@ -24,16 +24,16 @@
 #define CACHED_STR(R, i) pawE_cstr(ENV(R), CAST_SIZE(i))
 #define TYPE2CODE(R, type) (pawP_type2code((R)->C, type))
 
-struct ItemSlot {
+struct PartialItem {
     struct AstDecl *ast_decl;
     struct HirDecl *hir_decl;
     struct HirScope *scope;
 };
 
-static struct ItemSlot *new_item_slot(struct Resolver *R, struct AstDecl *ad, struct HirDecl *hd, struct HirScope *scope)
+static struct PartialItem *new_partial_item(struct Resolver *R, struct AstDecl *ad, struct HirDecl *hd, struct HirScope *scope)
 {
-    struct ItemSlot *slot = pawK_pool_alloc(ENV(R), &R->hir->pool, sizeof(struct ItemSlot));
-    *slot = (struct ItemSlot){
+    struct PartialItem *slot = pawK_pool_alloc(ENV(R), &R->hir->pool, sizeof(struct PartialItem));
+    *slot = (struct PartialItem){
         .ast_decl = ad,
         .hir_decl = hd,
         .scope = scope, 
@@ -41,7 +41,7 @@ static struct ItemSlot *new_item_slot(struct Resolver *R, struct AstDecl *ad, st
     return slot;
 }
 
-DEFINE_LIST(struct Hir, item_list_, ItemList, struct ItemSlot)
+DEFINE_LIST(struct Hir, item_list_, PartialItemList, struct PartialItem)
 
 static struct HirStmt *resolve_stmt(struct Resolver *, struct AstStmt *);
 static struct HirExpr *resolve_expr(struct Resolver *, struct AstExpr *);
@@ -78,8 +78,8 @@ static void unify(struct Resolver *R, struct HirType *a, struct HirType *b)
 
 static struct HirType *get_type(struct Resolver *R, DefId did)
 {
-    paw_assert(did < R->dm->decls.count);
-    return HIR_TYPEOF(R->dm->decls.data[did]);
+    paw_assert(did < R->dm->decls->count);
+    return HIR_TYPEOF(R->dm->decls->data[did]);
 }
 
 static paw_Bool is_list_t(struct Resolver *R, struct HirType *type)
@@ -95,8 +95,8 @@ static paw_Bool is_map_t(struct Resolver *R, struct HirType *type)
 static struct HirDecl *get_decl(struct Resolver *R, DefId did)
 {
     struct DynamicMem *dm = R->dm;
-    paw_assert(did < dm->decls.count);
-    return dm->decls.data[did];
+    paw_assert(did < dm->decls->count);
+    return dm->decls->data[did];
 }
 
 static struct HirBlock *new_block(struct Resolver *R, int line)
@@ -198,12 +198,17 @@ static void pop_symbol_table(struct Resolver *R)
 
 static void sanity_check(struct Resolver *R, struct HirDecl *new_decl)
 {
+#ifndef NDEBUG
     struct DynamicMem *dm = R->dm;
-    for (DefId did = 0; did < dm->decls.count; ++did) {
-        struct HirDecl *old_decl = dm->decls.data[did];
+    for (DefId did = 0; did < dm->decls->count; ++did) {
+        struct HirDecl *old_decl = dm->decls->data[did];
         paw_assert(old_decl->hdr.did == did);
         paw_assert(old_decl != new_decl);
     }
+#else
+    paw_unused(R);
+    paw_unused(new_decl);
+#endif
 }
 
 static DefId add_def(struct Resolver *R, struct HirDecl *decl)
@@ -792,7 +797,9 @@ static struct HirDecl *ResolveFieldDecl(struct Resolver *R, struct AstFieldDecl 
     struct HirFieldDecl *r = HirGetFieldDecl(result);
     add_def(R, result);
 
-    r->name = d->name;
+    r->name = d->name == NULL
+        ? SCAN_STRING(R, "(field)")
+        : d->name;
     r->type = resolve_type(R, d->tag);
     return result;
 }
@@ -1074,22 +1081,10 @@ static struct HirExpr *resolve_path_expr(struct Resolver *R, struct AstPathExpr 
 
 static struct HirType *resolve_path_type(struct Resolver *R, struct AstPathExpr *e)
 {
-<<<<<<< HEAD
-    // TODO: recycle 'path' memory
-    if (e->path->count != 1) SYNTAX_ERROR(R, "expected basic path");
-    struct AstSegment *base = pawAst_path_get(e->path, 0);
-    struct HirSymbol *symbol = resolve_symbol(R, base->name);
-    if (!symbol->is_type) SYNTAX_ERROR(R, "expected type");
-    struct HirDecl *decl = symbol->decl;
-    if (base->types != NULL) {
-        struct HirTypeList *types = resolve_type_list(R, base->types);
-        decl = pawP_instantiate(R, symbol->decl, types);
-=======
     struct HirPath *path = resolve_path(R, e->path);
     struct HirDecl *decl = resolve_location(R, path);
     if (HirIsVarDecl(decl) || HirIsFuncDecl(decl)) {
         TYPE_ERROR(R, "'%s' is not a type", decl->hdr.name->text);
->>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
     }
     return HIR_TYPEOF(decl);
 }
@@ -1269,28 +1264,6 @@ static struct HirExpr *resolve_binop_expr(struct Resolver *R, struct AstBinOpExp
 }
 
 static struct HirExpr *resolve_assign_expr(struct Resolver *R, struct AstAssignExpr *s)
-<<<<<<< HEAD
-{
-    struct HirExpr *result = pawHir_new_expr(R->hir, s->line, kHirAssignExpr);
-    struct HirAssignExpr *r = HirGetAssignExpr(result);
-
-    r->lhs = resolve_expr(R, s->lhs);
-    if (!HirIsPathExpr(r->lhs) &&
-            !HirIsIndex(r->lhs) &&
-            !HirIsSelector(r->lhs)) {
-        SYNTAX_ERROR(R, "invalid place for assignment");
-    }
-    r->rhs = resolve_expr(R, s->rhs);
-    struct HirType *lhs = expr_type(R, r->lhs);
-    struct HirType *rhs = expr_type(R, r->rhs);
-    unify(R, lhs, rhs);
-    r->type = lhs;
-    return result;
-}
-
-static struct HirType *new_vector_t(struct Resolver *R, struct HirType *elem_t)
-=======
->>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
 {
     struct HirExpr *result = pawHir_new_expr(R->hir, s->line, kHirAssignExpr);
     struct HirAssignExpr *r = HirGetAssignExpr(result);
@@ -1444,7 +1417,7 @@ static struct HirExpr *resolve_closure_expr(struct Resolver *R, struct AstClosur
 static void maybe_fix_builtin(struct Resolver *R, String *name, DefId did)
 {
     struct Builtin *b = R->C->builtins;
-    for (enum BuiltinKind k = FIRST_BUILTIN_ADT; k < NBUILTINS; ++k) {
+    for (enum BuiltinKind k = 0; k < NBUILTINS; ++k) {
         if (pawS_eq(b[k].name, name)) {
             b[k].did = did;
             break;
@@ -1452,7 +1425,7 @@ static void maybe_fix_builtin(struct Resolver *R, String *name, DefId did)
     }
 }
 
-static struct ItemSlot *register_adt_item(struct Resolver *R, struct AstAdtDecl *d)
+static struct PartialItem *register_adt_item(struct Resolver *R, struct AstAdtDecl *d)
 {
     struct HirDecl *result = pawHir_new_decl(R->hir, d->line, kHirAdtDecl);
     struct HirAdtDecl *r = HirGetAdtDecl(result);
@@ -1464,7 +1437,7 @@ static struct ItemSlot *register_adt_item(struct Resolver *R, struct AstAdtDecl 
     symbol->is_type = PAW_TRUE;
     register_struct(R, d, r);
     maybe_fix_builtin(R, r->name, r->did);
-    return new_item_slot(R, AST_CAST_DECL(d), result, NULL);
+    return new_partial_item(R, AST_CAST_DECL(d), result, NULL);
 }
 
 static struct HirDecl *ResolveAdtDecl(struct Resolver *R, struct AstAdtDecl *d)
@@ -1780,7 +1753,7 @@ static struct HirExpr *resolve_literal_expr(struct Resolver *R, struct AstLitera
     return result;
 }
 
-static struct ItemSlot *register_func_item(struct Resolver *R, struct AstFuncDecl *d)
+static struct PartialItem *register_func_item(struct Resolver *R, struct AstFuncDecl *d)
 {
     struct HirDecl *result = pawHir_new_decl(R->hir, d->line, kHirFuncDecl);
     struct HirFuncDecl *r = HirGetFuncDecl(result);
@@ -1791,10 +1764,10 @@ static struct ItemSlot *register_func_item(struct Resolver *R, struct AstFuncDec
     struct HirSymbol *symbol = new_global(R, d->name, result, d->is_pub);
     symbol->is_type = d->generics != NULL;
     struct HirScope *scope = register_func(R, d, r);
-    return new_item_slot(R, AST_CAST_DECL(d), result, scope);
+    return new_partial_item(R, AST_CAST_DECL(d), result, scope);
 }
 
-static void resolve_func_item(struct Resolver *R, struct ItemSlot *slot)
+static void resolve_func_item(struct Resolver *R, struct PartialItem *slot)
 {
     struct AstFuncDecl *ast_func = AstGetFuncDecl(slot->ast_decl);
     struct HirFuncDecl *hir_func = HirGetFuncDecl(slot->hir_decl);
@@ -2098,9 +2071,6 @@ static struct HirExpr *resolve_expr(struct Resolver *R, struct AstExpr *expr)
         case kAstAssignExpr:
             r = resolve_assign_expr(R, AstGetAssignExpr(expr));
             break;
-        case kAstAssignExpr:
-            r = resolve_assign_expr(R, AstGetAssignExpr(expr));
-            break;
         default:
             r = resolve_field_expr(R, AstGetFieldExpr(expr));
     }
@@ -2116,13 +2086,13 @@ static DefId find_builtin(struct Resolver *R, String *name)
     return symbol->decl->hdr.did;
 }
 
-static struct HirDeclList *register_items(struct Resolver *R, struct AstDeclList *items, struct ItemList **pslots)
+static struct HirDeclList *register_items(struct Resolver *R, struct AstDeclList *items, struct PartialItemList **pslots)
 {
-    struct ItemList *slots = item_list_new(R->hir);
+    struct PartialItemList *slots = item_list_new(R->hir);
     struct HirDeclList *output = pawHir_decl_list_new(R->hir);
     for (int i = 0; i < items->count; ++i) {
         struct AstDecl *item = items->data[i];
-        struct ItemSlot *slot;
+        struct PartialItem *slot;
         switch (HIR_KINDOF(item)) {
             case kAstAdtDecl:
                 slot = register_adt_item(R, AstGetAdtDecl(item));
@@ -2137,10 +2107,10 @@ static struct HirDeclList *register_items(struct Resolver *R, struct AstDeclList
     return output;
 }
 
-static void resolve_items(struct Resolver *R, struct ItemList *items)
+static void resolve_items(struct Resolver *R, struct PartialItemList *items)
 {
     for (int i = 0; i < items->count; ++i) {
-        struct ItemSlot *item = items->data[i];
+        struct PartialItem *item = items->data[i];
         if (AstIsFuncDecl(item->ast_decl)) {
             resolve_func_item(R, item);
         }
@@ -2149,7 +2119,7 @@ static void resolve_items(struct Resolver *R, struct ItemList *items)
 
 static struct HirDeclList *resolve_module(struct Resolver *R, struct AstDeclList *items)
 {
-    struct ItemList *slots;
+    struct PartialItemList *slots;
     struct HirDeclList *output = register_items(R, items, &slots);
     resolve_items(R, slots);
     return output;
@@ -2158,30 +2128,50 @@ static struct HirDeclList *resolve_module(struct Resolver *R, struct AstDeclList
 static struct HirDeclList *resolve_prelude(struct Resolver *R, struct AstDeclList *prelude)
 {
     struct Hir *hir = R->hir;
-
-    // create builtin primitives manually: they are not declared in the prelude, 
-    // and the prelude depends on them
-    struct Builtin *b = R->C->builtins;
-    for (enum BuiltinKind k = 0; k < FIRST_BUILTIN_ADT; ++k) {
-        struct HirType *type = pawHir_new_type(hir, 0, kHirAdt);
-        HirGetAdt(type)->base = k;
-        HirGetAdt(type)->did = k;
-
-        struct HirDecl *decl = pawHir_new_decl(hir, 0, kHirAdtDecl);
-        HirGetAdtDecl(decl)->name = b[k].name;
-        HirGetAdtDecl(decl)->type = type;
-        HirGetAdtDecl(decl)->did = k;
-
-        struct HirSymbol *symbol = new_global(R, b[k].name, decl, PAW_TRUE);
-        symbol->is_type = PAW_TRUE;
-        b[k].did = k;
-
-        const DefId did = add_def(R, decl);
-        paw_assert(did == k);
-        paw_unused(did);
-    }
-
+//
+//    // create builtin primitives manually: they are not declared in the prelude, 
+//    // and the prelude depends on them
+//    struct Builtin *b = R->C->builtins;
+//    for (enum BuiltinKind k = 0; k < FIRST_BUILTIN_ADT; ++k) {
+//        struct HirType *type = pawHir_new_type(hir, 0, kHirAdt);
+//        HirGetAdt(type)->base = k;
+//        HirGetAdt(type)->did = k;
+//
+//        struct HirDecl *decl = pawHir_new_decl(hir, 0, kHirAdtDecl);
+//        HirGetAdtDecl(decl)->name = b[k].name;
+//        HirGetAdtDecl(decl)->type = type;
+//        HirGetAdtDecl(decl)->did = k;
+//
+//        struct HirSymbol *symbol = new_global(R, b[k].name, decl, PAW_TRUE);
+//        symbol->is_type = PAW_TRUE;
+//        b[k].did = k;
+//
+//        const DefId did = add_def(R, decl);
+//        paw_assert(did == k);
+//        paw_unused(did);
+//    }
+//
     return resolve_module(R, prelude);
+//    struct HirDeclList *result = resolve_module(R, prelude);
+//    for (enum BuiltinKind k = 0; k < FIRST_BUILTIN_ADT; ++k) {
+//        struct HirType *type = pawHir_new_type(hir, 0, kHirAdt);
+//        HirGetAdt(type)->base = k;
+//        HirGetAdt(type)->did = k;
+//
+//        struct HirDecl *decl = pawHir_new_decl(hir, 0, kHirAdtDecl);
+//        HirGetAdtDecl(decl)->name = b[k].name;
+//        HirGetAdtDecl(decl)->type = type;
+//        HirGetAdtDecl(decl)->did = k;
+//
+//        struct HirSymbol *symbol = new_global(R, b[k].name, decl, PAW_TRUE);
+//        symbol->is_type = PAW_TRUE;
+//        b[k].did = k;
+//
+//        const DefId did = add_def(R, decl);
+//        paw_assert(did == k);
+//        paw_unused(did);
+//    }
+
 }
 
 static void visit_module(struct Resolver *R)
@@ -2216,6 +2206,7 @@ struct Hir *pawP_resolve(struct Compiler *C, struct Ast *ast)
         .P = ENV(C),
         .C = C,
     };
+    C->dm->decls = pawHir_decl_list_new(hir);
     C->dm->unifier.ast = ast;
     C->dm->unifier.hir = hir;
     C->dm->unifier.P = ENV(C);

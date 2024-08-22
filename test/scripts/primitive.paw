@@ -1,5 +1,6 @@
+// primitive.paw
 
-fn test_initializer_annotations() {
+pub fn test_initializer_annotations() {
     let i: int = 123;
     let s: str = 'abc';
     let b: bool = true;
@@ -11,7 +12,7 @@ fn test_initializer_annotations() {
     assert(f == 1.0);
 }
 
-fn test_initializer_inference() {
+pub fn test_initializer_inference() {
     let i = 123;
     let s = 'abc';
     let b = true;
@@ -23,7 +24,7 @@ fn test_initializer_inference() {
     assert(f == 1.0);
 }
 
-fn test_shadowed_identifiers() {
+pub fn test_shadowed_identifiers() {
     let a = 'abc';
     {
         let a = true;
@@ -32,7 +33,7 @@ fn test_shadowed_identifiers() {
     assert(a == 'abc');
 }
 
-fn test_rebound_identifiers() {
+pub fn test_rebound_identifiers() {
     let a = 123;
     assert(a == 123);
     let a = 456.0;
@@ -46,7 +47,7 @@ fn test_rebound_identifiers() {
     assert(x == 123);
 }
 
-fn test_conversions() {
+pub fn test_conversions() {
     let b = 0 as bool;
     assert(b == false);
     let b = 1 as bool;
@@ -82,7 +83,7 @@ fn test_conversions() {
     assert(i == 1);
 }
 
-fn test_lots_of_strings() {
+pub fn test_lots_of_strings() {
     let alphabet = 'abcdefghijklmnopqrstuvwxyz';
 
     // put strings in a list so they don't get collected

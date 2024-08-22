@@ -1339,9 +1339,8 @@ static struct AstStmt *statement(struct Lex *lex)
     return stmt;
 }
 
-static struct AstDeclList *toplevel_items(struct Lex *lex)
+static struct AstDeclList *toplevel_items(struct Lex *lex, struct AstDeclList *list)
 {
-    struct AstDeclList *list = pawAst_decl_list_new(lex->ast);
     while (!test_next(lex, TK_END)) {
         struct AstDecl *item;
         const paw_Bool is_pub = test_next(lex, TK_PUB);
@@ -1409,15 +1408,15 @@ const char *prelude_reader(paw_Env *P, void *ud, size_t *size)
     return kPrelude;
 }
 
-static struct AstDeclList *load_prelude(struct Lex *lex)
+static void load_prelude(struct Lex *lex)
 {
+    struct Ast *ast = lex->ast;
     struct PreludeReader reader = {paw_lengthof(kPrelude)};
     pawX_set_source(lex, prelude_reader, &reader);
     lex->in_prelude = PAW_TRUE;
-    struct AstDeclList *prelude = toplevel_items(lex);
+    toplevel_items(lex, ast->prelude);
     lex->in_prelude = PAW_FALSE;
     check(lex, TK_END);
-    return prelude;
 }
 
 // All paw language keywords
@@ -1484,11 +1483,14 @@ static void skip_hashbang(struct Lex *lex)
 
 static struct Ast *parse_module(struct Lex *lex, paw_Reader input, void *ud)
 {
-    struct Ast *ast = lex->ast;
-    ast->prelude = load_prelude(lex);
+    load_prelude(lex);
+
     pawX_set_source(lex, input, ud);
     skip_hashbang(lex);
-    ast->items = toplevel_items(lex);
+
+    struct Ast *ast = lex->ast;
+    ast->items = pawAst_decl_list_new(ast);
+    toplevel_items(lex, ast->items);
     check(lex, TK_END);
     return ast;
 }

@@ -3,6 +3,7 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "prefix.h"
 
+#include "env.h"
 #include "lib.h"
 #include "paw.h"
 #include "util.h"
@@ -184,16 +185,32 @@ static paw_Env *load_source(size_t heap_size)
     return P;
 }
 
-// TODO: expose this in paw.h
-#include "rt.h"
-static void setup_stack(paw_Env *P, int argc, const char **argv)
+static ValueId find_main(paw_Env *P)
 {
     paw_push_string(P, "main");
-    const int pid = paw_find_public(P);
-    if (pid < 0) {
-        error(PAW_ERUNTIME, "unable to find entrypoint (public 'main' function)\n");
+    const int did = paw_find_global(P);
+    if (did < 0) error(PAW_ERUNTIME, "unable to find entrypoint ('main' function)\n");
+    const struct Def *def = pawE_get_def(P, did);
+    if (def->hdr.kind != DEF_FUNC) error(PAW_ERUNTIME, "'main' is not a function\n");
+    if (!def->func.is_pub) error(PAW_ERUNTIME, "'main' is not public\n");
+    const struct FuncDef *f = &def->func;
+    if (f->params.count == 1) {
+        // TODO: check argument type
+        //struct Field param = f->params.data[0];
+        //if (!pawE_is_list_of(P, param, PAW_TSTRING)) {
+        //    error(PAW_ETYPE, "expected '[str]' argument to 'main'");
+        //}
+    } else if (f->params.count != 0) {
+        error(PAW_ETYPE, "'main' requires 0 or 1 argument(s)\n");
     }
-    paw_push_public(P, pid);
+    return def->func.vid;
+}
+
+#include "rt.h"  // TODO: need pawR_literal_list functionality exposed in main API
+static void setup_stack(paw_Env *P, int argc, const char **argv)
+{
+    const int gid = find_main(P);
+    paw_get_global(P, gid);
 
     for (int i = 0; i < argc; ++i) {
         paw_push_string(P, argv[i]);
