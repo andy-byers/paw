@@ -107,8 +107,8 @@ const char *pawV_name(ValueKind kind)
             return "proto";
         case VSTRING:
             return "string";
-        case VVECTOR:
-            return "vector";
+        case VLIST:
+            return "list";
         case VMAP:
             return "map";
         case VSTRUCT:
@@ -307,7 +307,7 @@ paw_Bool pawV_truthy(Value v, paw_Type type)
         case PAW_TSTRING:
             return pawS_length(V_STRING(v)) > 0;
             //        case PAW_TARRAY:
-            //            return pawA_length(V_VECTOR(v)) > 0;
+            //            return pawA_length(V_LIST(v)) > 0;
             //        case PAW_TMAP:
             //            return pawH_length(V_MAP(v)) > 0;
         default:
@@ -344,8 +344,8 @@ void pawV_set_default(paw_Env *P, Value *pv, paw_Type type)
         case PAW_TSTRING:
             V_SET_OBJECT(pv, pawS_new_str(P, ""));
             break;
-        case PAW_TVECTOR:
-            V_SET_OBJECT(pv, pawV_vec_new(P));
+        case PAW_TLIST:
+            V_SET_OBJECT(pv, pawV_list_new(P));
             break;
         case PAW_TMAP:
             V_SET_OBJECT(pv, pawH_new(P));
@@ -362,8 +362,8 @@ paw_Int pawV_length(Value v, paw_Type type)
         case PAW_TSTRING:
             len = pawS_length(V_STRING(v));
             break;
-        case PAW_TVECTOR:
-            len = pawV_vec_length(V_VECTOR(v));
+        case PAW_TLIST:
+            len = pawV_list_length(V_LIST(v));
             break;
         case PAW_TMAP:
             len = pawH_length(V_MAP(v));

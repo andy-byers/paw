@@ -45,7 +45,7 @@ fn combine<T>(lhs: [T], rhs: [T]) -> [(T, T)] {
     let out = [];
     for x in lhs {
         for y in rhs {
-            _vector_push(out, (x, y));
+            _list_push(out, (x, y));
         };
     };
     return out;

@@ -1,12 +1,4 @@
 
-fn test_x() {
-    let alphabet = 'abcdefghijklmnopqrstuvwxyz';
-    for i = 0, #alphabet {
-        for j = 0, #alphabet {
-        }
-    }
-}
-
 fn test_initializer_annotations() {
     let i: int = 123;
     let s: str = 'abc';
@@ -93,13 +85,13 @@ fn test_conversions() {
 fn test_lots_of_strings() {
     let alphabet = 'abcdefghijklmnopqrstuvwxyz';
 
-    // put strings in a vector so they don't get collected
+    // put strings in a list so they don't get collected
     let v = [];
     for i = 0, #alphabet {
         for j = 0, #alphabet {
             let s = alphabet[:i] + alphabet[j:] +
                     alphabet[i:] + alphabet[:j];
-            _vector_push(v, s);
+            _list_push(v, s);
         }
     }
 }

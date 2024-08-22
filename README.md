@@ -206,17 +206,17 @@ Paw supports basic parametric polymorphism.
 Variables with generic types must be treated generically, that is, they can only be assigned to other variables of the same type, passed to functions expecting a generic parameter, or stored in a container.
 This allows each template to be type checked a single time, rather than once for each unique instantiation, and makes it easier to generate meaningful error messages.
 ```
-fn map<A, B>(f: fn(A) -> B, vec: [A]) -> [B] {
+fn map<A, B>(f: fn(A) -> B, list: [A]) -> [B] {
     let result = [];
-    for a in vec {
+    for a in list {
         result.push(f(a));
     }
     return result;
 }
 
 // infer A = float, B = int
-let vec = map(|f: float| f as int, [0.5, 1.5, 2.5]);
-assert(vec == [0, 1, 2]);
+let list = map(|f: float| f as int, [0.5, 1.5, 2.5]);
+assert(list == [0, 1, 2]);
 
 // struct template
 struct Object<S, T> {
@@ -252,7 +252,7 @@ let b = pair.1;
 let c = triplet.2;
 ```
 
-### Vectors
+### Lists
 ```
 let empty: [int] = [];
 
@@ -260,16 +260,16 @@ let empty: [int] = [];
 let empty = [];
 empty.push('a'); 
 
-let vec = [
+let list = [
     [[1, 2, 3], [0]],
     [[4, 5, 6], [1]], 
     [[7, 8, 9], [2]],
 ]
 
-let vec = [1, 2, 3];
-assert(vec[:1] == [1]);
-assert(vec[1:-1] == [2]);
-assert(vec[-1:] == [3]);
+let list = [1, 2, 3];
+assert(list[:1] == [1]);
+assert(list[1:-1] == [2]);
+assert(list[-1:] == [3]);
 ```
 
 ### Maps
@@ -345,8 +345,8 @@ assert(status != 0);
 + The C API has pretty much 0 type safety
 + Compiler will allow functions that don't return a value in all code paths
     + Likely requires a CFG and some data flow analysis: it would be very difficult to get right otherwise
-+ It isn't possible to create an empty vector or map of a specific known type without creating a temporary: `let vec: [int] = []`
-    + Note that it's still possible to infer a container type: for example, in `let vec = []; vec.push(1)`, `vec` has type `[int]`.
++ It isn't possible to create an empty list or map of a specific known type without creating a temporary: `let list: [int] = []`
+    + Note that it's still possible to infer a container type: for example, in `let list = []; list.push(1)`, `list` has type `[int]`.
     + Could use Swift syntax, or something similar:
 ```
 let empty_vec = [int]()

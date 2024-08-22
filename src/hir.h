@@ -19,20 +19,20 @@ struct Resolver;
         X(VarDecl,     var)     \
         X(VariantDecl, variant)
 
-#define HIR_EXPR_LIST(X)          \
-        X(LiteralExpr,    literal)\
-        X(LogicalExpr,    logical)\
-        X(PathExpr,       path)   \
-        X(ChainExpr,      chain)  \
-        X(UnOpExpr,       unop)   \
-        X(BinOpExpr,      binop)  \
-        X(ClosureExpr,    clos)   \
-        X(ConversionExpr, conv)   \
-        X(CallExpr,       call)   \
-        X(Index,          index)  \
+#define HIR_EXPR_LIST(X) \
+        X(LiteralExpr,    literal) \
+        X(LogicalExpr,    logical) \
+        X(PathExpr,       path) \
+        X(ChainExpr,      chain) \
+        X(UnOpExpr,       unop) \
+        X(BinOpExpr,      binop) \
+        X(ClosureExpr,    clos) \
+        X(ConversionExpr, conv) \
+        X(CallExpr,       call) \
+        X(VariantExpr,    variant) \
+        X(Index,          index) \
         X(Selector,       select) \
-        X(StructField,    sitem)  \
-        X(MapElem,        mitem)  \
+        X(FieldExpr,      field) \
         X(AssignExpr,     assign)
 
 #define HIR_TYPE_LIST(X)    \
@@ -110,9 +110,8 @@ struct HirVarInfo {
 struct HirSegment {
     String *name;
     struct HirTypeList *types;
-    struct HirType *type;
+    struct HirDecl *result;
 };
-
 
 struct HirSegment *pawHir_segment_new(struct Hir *hir);
 
@@ -252,14 +251,13 @@ struct HirAdtDecl {
     struct HirDeclList *fields;
     struct HirDeclList *generics;
     struct HirDeclList *monos;
-    int location;
 };
 
 struct HirVariantDecl {
     HIR_DECL_HEADER; 
+    int index;
     struct HirScope *scope;
     struct HirDeclList *fields;
-    int index;
 };
 
 // Represents an instance of a polymorphic function
@@ -376,16 +374,13 @@ struct HirClosureExpr {
     };
 };
 
-struct HirStructField {
+struct HirFieldExpr {
     HIR_EXPR_HEADER;
-    int index;
-    String *name;
-    struct HirExpr *value;
-};
-
-struct HirMapElem {
-    HIR_EXPR_HEADER;
-    struct HirExpr *key;
+    int fid;
+    union {
+        struct HirExpr *key;
+        String *name;
+    };
     struct HirExpr *value;
 };
 
@@ -440,6 +435,13 @@ struct HirIndex {
     paw_Bool is_slice : 1;
     struct HirExpr *first;
     struct HirExpr *second;
+};
+
+struct HirVariantExpr {
+    HIR_EXPR_HEADER;
+    int index;
+    struct HirTypeList *types;
+    struct HirExprList *fields;
 };
 
 struct HirConversionExpr {
@@ -653,6 +655,7 @@ struct Hir {
 };
 
 struct HirSymbol *pawHir_new_symbol(struct Hir *hir);
+struct HirPath *pawHir_new_path(struct Hir *hir);
 struct HirType *pawHir_new_type(struct Hir *hir, int line, enum HirTypeKind kind);
 struct HirDecl *pawHir_new_decl(struct Hir *hir, int line, enum HirDeclKind kind);
 struct HirExpr *pawHir_new_expr(struct Hir *hir, int line, enum HirExprKind kind);
@@ -694,7 +697,7 @@ struct HirDecl *pawHir_get_decl(struct Hir *hir, DefId id);
 //       HirFuncPtr fields can be accessed on a HirFuncDef
 #define HIR_FPTR(t) CHECK_EXP(HirIsFuncType(t), &(t)->fptr)
 
-static inline struct HirType *hir_vector_elem(struct HirType *t)
+static inline struct HirType *hir_list_elem(struct HirType *t)
 {
     return pawHir_type_list_get(HirGetAdt(t)->types, 0);
 }
@@ -710,12 +713,12 @@ static inline struct HirType *hir_map_value(struct HirType *t)
 }
 
 static inline struct HirSegment *pawHir_path_add(struct Hir *hir, struct HirPath *path, String *name,
-                                                 struct HirTypeList *args, struct HirType *type)
+                                                 struct HirTypeList *args, struct HirDecl *result)
 {
     struct HirSegment *ps = pawHir_segment_new(hir);
     ps->name = name;
     ps->types = args;
-    ps->type = type;
+    ps->result = result;
     pawHir_path_push(hir, path, ps);
     return ps;
 }

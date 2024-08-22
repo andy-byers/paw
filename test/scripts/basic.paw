@@ -1,5 +1,9 @@
 // basic.paw
 
+fn test_problem() {
+    let o = Option::<int>::Some(42);
+}
+
 pub fn test_comments() {
     // line comment
     /* block comment */
@@ -41,6 +45,17 @@ pub fn test_function_values() {
     assert(3 == wrapper(3, f3));
 }
 
+pub fn function_syntax
+(
+    a
+    : int
+    , b: int) -> int
+{
+    return
+        a
+        + b;
+}
+
 pub fn test_syntax() 
 {
     let x: int = 0;
@@ -49,6 +64,23 @@ pub fn test_syntax()
     x = x
       + 0 +
         1;
+    assert(24 == function_syntax(1, 23));
+}
+
+pub fn test_expr_stmts() {
+    let x = 1;
+    2;
+    x + 3;
+}
+
+pub fn test_assignment_expr() {
+    let x = -1;
+    (x = 4) + 5;
+    assert(x == 4);
+    assert(13 == (x = 6 + 7));
+
+    while (x = x + 1) < 100 {}
+    assert(x == 100);
 }
 
 pub fn test_arguments() {

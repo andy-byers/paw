@@ -10,7 +10,7 @@
 // Initializer for iterator state variables
 #define PAW_ITER_INIT -1
 
-#define f_is_nan(v) ((v).f != (v).f)
+#define V_ISNAN(v) ((v).f != (v).f)
 
 #define V_TRUE(v) ((v).u != 0)
 #define V_FALSE(v) (!V_TRUE(v))
@@ -24,7 +24,7 @@
 #define V_UPVALUE(v) (O_UPVALUE(V_OBJECT(v)))
 #define V_STRING(v) (O_STRING(V_OBJECT(v)))
 #define V_MAP(v) (O_MAP(V_OBJECT(v)))
-#define V_VECTOR(v) (O_VECTOR(V_OBJECT(v)))
+#define V_LIST(v) (O_LIST(V_OBJECT(v)))
 #define V_TEXT(v) (V_STRING(v)->text)
 #define V_TUPLE(v) (O_TUPLE(V_OBJECT(v)))
 #define V_VARIANT(v) (O_VARIANT(V_OBJECT(v)))
@@ -47,7 +47,7 @@
 #define O_IS_CLOSURE(o) (O_KIND(o) == VCLOSURE)
 #define O_IS_UPVALUE(o) (O_KIND(o) == VUPVALUE)
 #define O_IS_MAP(o) (O_KIND(o) == VMAP)
-#define O_IS_VECTOR(o) (O_KIND(o) == VVECTOR)
+#define O_IS_LIST(o) (O_KIND(o) == VLIST)
 #define O_IS_TUPLE(o) (O_KIND(o) == VTUPLE)
 #define O_IS_VARIANT(o) (O_KIND(o) == VVARIANT)
 #define O_IS_ENUM(o) (O_KIND(o) == VENUM)
@@ -62,7 +62,7 @@
 #define O_CLOSURE(o) CHECK_EXP(O_IS_CLOSURE(o), (Closure *)(o))
 #define O_UPVALUE(o) CHECK_EXP(O_IS_UPVALUE(o), (UpValue *)(o))
 #define O_MAP(o) CHECK_EXP(O_IS_MAP(o), (Map *)(o))
-#define O_VECTOR(o) CHECK_EXP(O_IS_VECTOR(o), (Vector *)(o))
+#define O_LIST(o) CHECK_EXP(O_IS_LIST(o), (List *)(o))
 #define O_TUPLE(o) CHECK_EXP(O_IS_TUPLE(o), (Tuple *)(o))
 #define O_VARIANT(o) CHECK_EXP(O_IS_VARIANT(o), (Variant *)(o))
 #define O_ENUM(o) CHECK_EXP(O_IS_ENUM(o), (Enum *)(o))
@@ -81,7 +81,7 @@ typedef enum ValueKind {
 
     // object types
     VSTRING,
-    VVECTOR,
+    VLIST,
     VMAP,
     VSTRUCT,
     VENUM,
@@ -288,40 +288,40 @@ typedef struct Tuple {
 Tuple *pawV_new_tuple(paw_Env *P, int nelems);
 void pawV_free_tuple(paw_Env *P, Tuple *t);
 
-typedef struct Vector {
+typedef struct List {
     GC_HEADER;
     Object *gc_list;
     Value *begin;
     Value *end;
     Value *upper;
-} Vector;
+} List;
 
-Vector *pawV_vec_new(paw_Env *P);
-void pawV_vec_free(paw_Env *P, Vector *vec);
-Vector *pawV_vec_clone(paw_Env *P, Value *pv, const Vector *vec);
-paw_Bool pawV_vec_equals(paw_Env *P, const Vector *lhs, const Vector *rhs);
-paw_Bool pawV_vec_contains(paw_Env *P, const Vector *vec, Value v);
-void pawV_vec_reserve(paw_Env *P, Vector *vec, size_t length);
-void pawV_vec_resize(paw_Env *P, Vector *vec, size_t length);
-void pawV_vec_insert(paw_Env *P, Vector *vec, paw_Int index, Value v);
-void pawV_vec_push(paw_Env *P, Vector *vec, Value v);
-void pawV_vec_pop(paw_Env *P, Vector *vec, paw_Int index);
+List *pawV_list_new(paw_Env *P);
+void pawV_list_free(paw_Env *P, List *vec);
+List *pawV_list_clone(paw_Env *P, Value *pv, const List *vec);
+paw_Bool pawV_list_equals(paw_Env *P, const List *lhs, const List *rhs);
+paw_Bool pawV_list_contains(paw_Env *P, const List *vec, Value v);
+void pawV_list_reserve(paw_Env *P, List *vec, size_t length);
+void pawV_list_resize(paw_Env *P, List *vec, size_t length);
+void pawV_list_insert(paw_Env *P, List *vec, paw_Int index, Value v);
+void pawV_list_push(paw_Env *P, List *vec, Value v);
+void pawV_list_pop(paw_Env *P, List *vec, paw_Int index);
 
-static inline size_t pawV_vec_length(const Vector *vec)
+static inline size_t pawV_list_length(const List *vec)
 {
     return CAST_SIZE(vec->end - vec->begin);
 }
 
-static inline Value *pawV_vec_get(paw_Env *P, Vector *vec, paw_Int index)
+static inline Value *pawV_list_get(paw_Env *P, List *vec, paw_Int index)
 {
     const paw_Int abs = pawV_abs_index(index, CAST_SIZE(vec->end - vec->begin));
-    const size_t i = pawV_check_abs(P, abs, pawV_vec_length(vec), "vector");
+    const size_t i = pawV_check_abs(P, abs, pawV_list_length(vec), "vector");
     return &vec->begin[i];
 }
 
-static inline paw_Bool pawV_vec_iter(const Vector *vec, paw_Int *itr)
+static inline paw_Bool pawV_list_iter(const List *vec, paw_Int *itr)
 {
-    return ++*itr < PAW_CAST_INT(pawV_vec_length(vec));
+    return ++*itr < PAW_CAST_INT(pawV_list_length(vec));
 }
 
 typedef enum MapState {

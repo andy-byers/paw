@@ -60,30 +60,30 @@ static int base_print(paw_Env *P)
     return 0;
 }
 
-static int vector_insert(paw_Env *P)
+static int list_insert(paw_Env *P)
 {
-    Vector *vec = V_VECTOR(CF_BASE(1));
+    List *list = V_LIST(CF_BASE(1));
     const paw_Int index = V_INT(CF_BASE(2));
-    pawV_vec_insert(P, vec, index, CF_BASE(3));
+    pawV_list_insert(P, list, index, CF_BASE(3));
     return 0;
 }
 
-static int vector_push(paw_Env *P)
+static int list_push(paw_Env *P)
 {
-    Vector *vec = V_VECTOR(CF_BASE(1));
-    pawV_vec_push(P, vec, CF_BASE(2));
+    List *list = V_LIST(CF_BASE(1));
+    pawV_list_push(P, list, CF_BASE(2));
     return 0;
 }
 
-static int vector_pop(paw_Env *P)
+static int list_pop(paw_Env *P)
 {
-    Vector *vec = V_VECTOR(CF_BASE(1));
-    const paw_Int length = PAW_CAST_INT(pawV_vec_length(vec));
+    List *list = V_LIST(CF_BASE(1));
+    const paw_Int length = PAW_CAST_INT(pawV_list_length(list));
     if (length == 0) {
-        pawR_error(P, PAW_EVALUE, "pop from empty Vector");
+        pawR_error(P, PAW_EVALUE, "pop from empty List");
     }
-    P->top.p[-1] = *pawV_vec_get(P, vec, length - 1);
-    pawV_vec_pop(P, vec, length - 1);
+    P->top.p[-1] = *pawV_list_get(P, list, length - 1);
+    pawV_list_pop(P, list, length - 1);
     return 1;
 }
 
@@ -98,24 +98,24 @@ static paw_Int clamped_index(paw_Env *P, int loc, paw_Int n)
 //       should remove the first matching element using something akin to
 //       operator==. Attempting this will break, since we have no concept of
 //       equality between user-defined types right now.
-static int vector_remove(paw_Env *P)
+static int list_remove(paw_Env *P)
 {
-    Vector *vec = V_VECTOR(CF_BASE(1));
-    const paw_Int length = PAW_CAST_INT(pawV_vec_length(vec));
+    List *list = V_LIST(CF_BASE(1));
+    const paw_Int length = PAW_CAST_INT(pawV_list_length(list));
     if (length == 0) {
-        pawR_error(P, PAW_EVALUE, "remove from empty Vector");
+        pawR_error(P, PAW_EVALUE, "remove from empty List");
     }
     const paw_Int index = V_INT(CF_BASE(2));
-    P->top.p[-1] = *pawV_vec_get(P, vec, index);
-    pawV_vec_pop(P, vec, index);
+    P->top.p[-1] = *pawV_list_get(P, list, index);
+    pawV_list_pop(P, list, index);
     return 1;
 }
 
-static int vector_clone(paw_Env *P)
+static int list_clone(paw_Env *P)
 {
-    const Vector *vec = V_VECTOR(CF_BASE(1));
+    const List *list = V_LIST(CF_BASE(1));
     Value *pv = pawC_push0(P);
-    pawV_vec_clone(P, pv, vec);
+    pawV_list_clone(P, pv, list);
     return 1;
 }
 
@@ -176,7 +176,7 @@ static int string_split(paw_Env *P)
      pawC_pushns(P, pstr, CAST_SIZE(end - pstr));
      ++npart;
 
-     pawR_literal_vector(P, npart);
+     pawR_literal_list(P, npart);
      return 1;
  }
 
@@ -189,13 +189,13 @@ static int string_join(paw_Env *P)
      Buffer buf;
      pawL_init_buffer(P, &buf);
      paw_Int itr = PAW_ITER_INIT;
-     Vector *a = V_VECTOR(seq);
-     while (pawV_vec_iter(a, &itr)) {
+     List *a = V_LIST(seq);
+     while (pawV_list_iter(a, &itr)) {
          const Value v = a->begin[itr];
          // Add a chunk, followed by the separator if necessary.
          const String *chunk = V_STRING(v);
          pawL_add_nstring(P, &buf, chunk->text, chunk->length);
-         if (CAST_SIZE(itr + 1) < pawV_vec_length(a)) {
+         if (CAST_SIZE(itr + 1) < pawV_list_length(a)) {
              pawL_add_nstring(P, &buf, s->text, s->length);
          }
      }
@@ -336,11 +336,11 @@ void pawL_init(paw_Env *P)
     add_builtin_func(P, "_string_find", string_find);
     add_builtin_func(P, "_string_split", string_split);
     add_builtin_func(P, "_string_join", string_join);
-    add_builtin_func(P, "_vector_push", vector_push);
-    add_builtin_func(P, "_vector_pop", vector_pop);
-    add_builtin_func(P, "_vector_insert", vector_insert);
-    add_builtin_func(P, "_vector_erase", vector_remove);
-    add_builtin_func(P, "_vector_clone", vector_clone);
+    add_builtin_func(P, "_list_push", list_push);
+    add_builtin_func(P, "_list_pop", list_pop);
+    add_builtin_func(P, "_list_insert", list_insert);
+    add_builtin_func(P, "_list_erase", list_remove);
+    add_builtin_func(P, "_list_clone", list_clone);
 
     pawC_pop(P);
 }

@@ -40,7 +40,7 @@ typedef struct StringTable {
 
 // Macro for testing equality between two interned strings
 // Both x and y must be pointers to struct String from the string table.
-#define pawS_eq(x, y) (x == y)
+#define pawS_eq(x, y) ((x) == (y))
 
 void pawS_init(paw_Env *P);
 void pawS_uninit(paw_Env *P);

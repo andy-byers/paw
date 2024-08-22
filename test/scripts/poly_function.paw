@@ -2,7 +2,7 @@
 fn map<A, B>(f: fn(A) -> B, a: [A]) -> [B] {
     let b = [];
     for v in a {
-        _vector_push(b, f(v));
+        _list_push(b, f(v));
         // TODO: eventually use b.push(f(v))
     }
     return b;
@@ -17,6 +17,48 @@ pub fn test_explicit_instantiation() {
     let target = [0, 1, 2, 3, 4];
     let answer = map::<float, int>(f2i, source);
     assert(answer == target);
+}
+
+struct One<A>{a: A}
+struct Two<A, B>{a: A, b: B}
+struct Three<A, B, C>{a: A, b: B, c: C}
+
+fn implicit<A, B, C>(
+        a: One<A>, 
+        b: [B], 
+        c: Two<B, [C]>) -> Three<C, A, B> {
+    return Three{
+        a: c.b[-1], // C
+        b: a.a, // A
+        c: b[0], // B
+    };
+}
+
+pub fn test_implicit_instantiation() {
+    // implicit<[str: int], bool, int>(...) -> Three<int, [str: int], bool>
+    let three = implicit(
+        One{a: ['a': 1, 'b': 2, 'c': 3]},
+        [false, true],
+        Two{a: true, b: [1, 2, 3]});
+    assert(three.b['c'] == three.a);
+
+    let answer = map(|x| x, [false, true]);
+    assert(answer == [false, true]);
+
+    let answer = map(|x: bool| !x, [false, true]);
+    assert(answer == [true, false]);
+}
+
+fn self_recursive<T>(t: T, i: int) {
+    if i > 0 {
+        self_recursive(t, i - 1);
+    }
+}
+
+fn test_self_recursion() {
+    self_recursive(true, 10);
+    self_recursive(2, 11);
+    self_recursive(self_recursive::<float>, 12);
 }
 
 fn first_recursive<A, B, C>(a: A, b: B, c: C) {

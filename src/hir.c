@@ -14,13 +14,6 @@
 #define FIRST_ARENA_SIZE 4096
 #define LARGE_ARENA_MIN 32
 
-static void add_builtin_type(struct Hir *hir, enum HirTypeKind kind, paw_Type code)
-{
-    hir->builtin[code] = pawHir_new_type(hir, 0, kind);
-    hir->builtin[code]->adt.base = code;
-    hir->builtin[code]->adt.did = code;
-}
-
 struct Hir *pawHir_new(struct Compiler *C)
 {
     paw_Env *P = ENV(C);
@@ -32,14 +25,6 @@ struct Hir *pawHir_new(struct Compiler *C)
     // initialize memory pools for storing HIR components
     pawK_pool_init(P, &dm->hir->pool, FIRST_ARENA_SIZE, sizeof(void *) * LARGE_ARENA_MIN);
     dm->hir->symtab = pawHir_new_symtab(dm->hir);
-
-    add_builtin_type(dm->hir, kHirAdt, PAW_TUNIT);
-    add_builtin_type(dm->hir, kHirAdt, PAW_TBOOL);
-    add_builtin_type(dm->hir, kHirAdt, PAW_TINT);
-    add_builtin_type(dm->hir, kHirAdt, PAW_TFLOAT);
-    add_builtin_type(dm->hir, kHirAdt, PAW_TSTRING);
-    add_builtin_type(dm->hir, kHirAdt, PAW_TVECTOR);
-    add_builtin_type(dm->hir, kHirAdt, PAW_TMAP);
     return dm->hir;
 }
 
@@ -180,9 +165,9 @@ static void VisitLogicalExpr(struct HirVisitor *V, struct HirLogicalExpr *e)
     V->VisitExpr(V, e->rhs);
 }
 
-static void VisitMapElem(struct HirVisitor *V, struct HirMapElem *e)
+static void VisitFieldExpr(struct HirVisitor *V, struct HirFieldExpr *e)
 {
-    V->VisitExpr(V, e->key);
+    if (e->fid < 0) V->VisitExpr(V, e->key);
     V->VisitExpr(V, e->value);
 }
 
@@ -190,11 +175,6 @@ static void VisitAssignExpr(struct HirVisitor *V, struct HirAssignExpr *e)
 {
     V->VisitExpr(V, e->lhs);
     V->VisitExpr(V, e->rhs);
-}
-
-static void VisitStructField(struct HirVisitor *V, struct HirStructField *e)
-{
-    V->VisitExpr(V, e->value);
 }
 
 static void VisitLiteralExpr(struct HirVisitor *V, struct HirLiteralExpr *e)
@@ -294,6 +274,12 @@ static void VisitCallExpr(struct HirVisitor *V, struct HirCallExpr *e)
 {
     V->VisitExpr(V, e->target);
     V->VisitExprList(V, e->args);
+}
+
+static void VisitVariantExpr(struct HirVisitor *V, struct HirVariantExpr *e)
+{
+    V->VisitTypeList(V, e->types);
+    V->VisitExprList(V, e->fields);
 }
 
 static void VisitConversionExpr(struct HirVisitor *V, struct HirConversionExpr *e)
@@ -518,9 +504,9 @@ static struct HirExpr *FoldLogicalExpr(struct HirFolder *F, struct HirLogicalExp
     return HIR_CAST_EXPR(e);
 }
 
-static struct HirExpr *FoldMapElem(struct HirFolder *F, struct HirMapElem *e)
+static struct HirExpr *FoldFieldExpr(struct HirFolder *F, struct HirFieldExpr *e)
 {
-    e->key = F->FoldExpr(F, e->key);
+    if (e->fid < 0) e->key = F->FoldExpr(F, e->key);
     e->value = F->FoldExpr(F, e->value);
     return HIR_CAST_EXPR(e);
 }
@@ -529,12 +515,6 @@ static struct HirExpr *FoldAssignExpr(struct HirFolder *F, struct HirAssignExpr 
 {
     e->lhs = F->FoldExpr(F, e->lhs);
     e->rhs = F->FoldExpr(F, e->rhs);
-    return HIR_CAST_EXPR(e);
-}
-
-static struct HirExpr *FoldStructField(struct HirFolder *F, struct HirStructField *e)
-{
-    e->value = F->FoldExpr(F, e->value);
     return HIR_CAST_EXPR(e);
 }
 
@@ -644,6 +624,13 @@ static struct HirExpr *FoldCallExpr(struct HirFolder *F, struct HirCallExpr *e)
 {
     e->target = F->FoldExpr(F, e->target);
     e->args = F->FoldExprList(F, e->args);
+    return HIR_CAST_EXPR(e);
+}
+
+static struct HirExpr *FoldVariantExpr(struct HirFolder *F, struct HirVariantExpr *e)
+{
+    e->types = F->FoldTypeList(F, e->types);
+    e->fields = F->FoldExprList(F, e->fields);
     return HIR_CAST_EXPR(e);
 }
 
@@ -909,12 +896,18 @@ static struct HirExpr *copy_logical_expr(struct HirFolder *F, struct HirLogicalE
     return r;
 }
 
-static struct HirExpr *copy_map_elem(struct HirFolder *F, struct HirMapElem *e)
+static struct HirExpr *copy_field_expr(struct HirFolder *F, struct HirFieldExpr *e)
 {
-    struct HirExpr *r = copy_prep_expr(F, e);
-    r->mitem.key = F->FoldExpr(F, e->key);
-    r->mitem.value = F->FoldExpr(F, e->value);
-    return r;
+    struct HirExpr *result = copy_prep_expr(F, e);
+    struct HirFieldExpr *r = HirGetFieldExpr(result);
+    r->fid = e->fid;
+    if (e->fid < 0) {
+        r->key = F->FoldExpr(F, e->key);
+    } else {
+        r->name = e->name;
+    }
+    r->value = F->FoldExpr(F, e->value);
+    return result;
 }
 
 static struct HirExpr *copy_assign_expr(struct HirFolder *F, struct HirAssignExpr *e)
@@ -924,15 +917,6 @@ static struct HirExpr *copy_assign_expr(struct HirFolder *F, struct HirAssignExp
     r->lhs = F->FoldExpr(F, e->lhs);
     r->rhs = F->FoldExpr(F, e->rhs);
     return result;
-}
-
-static struct HirExpr *copy_struct_field(struct HirFolder *F, struct HirStructField *e)
-{
-    struct HirExpr *r = copy_prep_expr(F, e);
-    r->sitem.name = e->name;
-    r->sitem.value = F->FoldExpr(F, e->value);
-    r->sitem.index = e->index;
-    return r;
 }
 
 static struct HirExpr *copy_literal_expr(struct HirFolder *F, struct HirLiteralExpr *e)
@@ -1078,12 +1062,22 @@ static struct HirExpr *copy_call_expr(struct HirFolder *F, struct HirCallExpr *e
     return r;
 }
 
+static struct HirExpr *copy_variant_expr(struct HirFolder *F, struct HirVariantExpr *e)
+{
+    struct HirExpr *result = copy_prep_expr(F, e);
+    struct HirVariantExpr *r = HirGetVariantExpr(result);
+    r->types = F->FoldTypeList(F, e->types);
+    r->fields = F->FoldExprList(F, e->fields);
+    r->index = e->index;
+    return result;
+}
+
 static struct HirPath *copy_path(struct HirFolder *F, struct HirPath *e)
 {
     struct HirPath *r = pawHir_path_new(F->hir);
     for (int i = 0; i < e->count; ++i) {
         struct HirSegment *seg = pawHir_path_get(e, i);
-        pawHir_path_add(F->hir, r, seg->name, seg->types, seg->type);
+        pawHir_path_add(F->hir, r, seg->name, seg->types, seg->result);
     }
     return r;
 }
@@ -1191,11 +1185,11 @@ static void setup_copy_pass(struct HirFolder *F, struct Copier *C)
     F->FoldBinOpExpr = copy_binop_expr;
     F->FoldConversionExpr = copy_conversion_expr;
     F->FoldCallExpr = copy_call_expr;
+    F->FoldVariantExpr = copy_variant_expr;
     F->FoldIndex = copy_index_expr;
     F->FoldSelector = copy_select_expr;
-    F->FoldMapElem = copy_map_elem;
+    F->FoldFieldExpr = copy_field_expr;
     F->FoldAssignExpr = copy_assign_expr;
-    F->FoldStructField = copy_struct_field;
     F->FoldClosureExpr = copy_closure_expr;
     F->FoldBlock = copy_block_stmt;
     F->FoldExprStmt = copy_expr_stmt;
@@ -1361,11 +1355,7 @@ static struct HirPath *expand_path(struct HirFolder *F, struct HirPath *path)
         struct HirSegment *ps = pawHir_path_get(path, i);
         if (ps->types != NULL) {
             struct HirTypeList *types = F->FoldTypeList(F, ps->types);
-            struct HirDecl *base = find_decl(E, ps->type);
-            struct HirDecl *inst = pawP_instantiate(E->R, base, types);
-            ps->type = HIR_TYPEOF(inst);
-        } else {
-            ps->type = F->FoldType(F, ps->type);
+            ps->result = pawP_instantiate(E->R, ps->result, types);
         }
     }
     return path;
@@ -1399,6 +1389,21 @@ static struct HirExpr *expand_call_expr(struct HirFolder *F, struct HirCallExpr 
     }
     e->target = F->FoldExpr(F, e->target);
     e->args = F->FoldExprList(F, e->args);
+    return HIR_CAST_EXPR(e);
+}
+
+static struct HirExpr *expand_variant_expr(struct HirFolder *F, struct HirVariantExpr *e)
+{
+    struct Expander *E = F->ud;
+    struct HirAdt *adt = HirGetAdt(e->type);
+    if (e->types != NULL) {
+        struct HirTypeList *types = F->FoldTypeList(F, e->types);
+        struct HirDecl *base = pawHir_get_decl(F->hir, adt->base);
+        struct HirDecl *inst = pawP_instantiate(E->R, base, types);
+        e->type = HIR_TYPEOF(inst);
+        e->types = types;
+    }
+    e->fields = F->FoldExprList(F, e->fields);
     return HIR_CAST_EXPR(e);
 }
 
@@ -1874,22 +1879,21 @@ static void dump_expr(struct Printer *P, struct HirExpr *e)
                 dump_name(P, e->select.name);
             }
             break;
-        case kHirMapElem:
-            dump_msg(P, "key: ");
-            dump_expr(P, e->mitem.key);
+        case kHirFieldExpr:
+            if (e->field.fid >= 0) {
+                dump_name(P, e->field.name);
+            } else {
+                dump_msg(P, "key: ");
+                dump_expr(P, e->field.key);
+            }
             dump_msg(P, "value: ");
-            dump_expr(P, e->mitem.value);
+            dump_expr(P, e->field.value);
             break;
         case kHirAssignExpr:
             dump_msg(P, "lhs: ");
             dump_expr(P, e->assign.lhs);
             dump_msg(P, "rhs: ");
             dump_expr(P, e->assign.rhs);
-            break;
-        case kHirStructField:
-            dump_name(P, e->sitem.name);
-            dump_msg(P, "value: ");
-            dump_expr(P, e->sitem.value);
             break;
         default:
             paw_assert(0);

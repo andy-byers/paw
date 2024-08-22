@@ -73,6 +73,7 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/hir.c
             #${PAW_SOURCE_DIR}/iolib.c
             ${PAW_SOURCE_DIR}/lex.c
+            ${PAW_SOURCE_DIR}/list.c
             ${PAW_SOURCE_DIR}/lib.c
             #${PAW_SOURCE_DIR}/mathlib.c
             ${PAW_SOURCE_DIR}/map.c
@@ -85,8 +86,7 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/str.c
             ${PAW_SOURCE_DIR}/unify.c
             ${PAW_SOURCE_DIR}/util.c
-            ${PAW_SOURCE_DIR}/value.c
-            ${PAW_SOURCE_DIR}/vector.c)
+            ${PAW_SOURCE_DIR}/value.c)
 target_include_directories(paw
     PUBLIC ${PAW_SOURCE_DIR})
 target_compile_definitions(paw

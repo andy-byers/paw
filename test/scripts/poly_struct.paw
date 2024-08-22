@@ -149,6 +149,10 @@ fn test_infer_vec_field() {
         a: true,
         b: [],
     };
+<<<<<<< HEAD
     _vector_push(p.b, p.a);
+=======
+    _list_push(p.b, p.a);
+>>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
     assert(p.a == p.b[0]);
 }

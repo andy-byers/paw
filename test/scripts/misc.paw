@@ -64,6 +64,7 @@ pub fn test_ackermann() {
             n = stack.pop();
             m = stack.pop();
             if m == 0 {
+<<<<<<< HEAD
                 _vector_push(stack, n + 1);
             } else if m == 1 {
                 _vector_push(stack, n + 2);
@@ -75,6 +76,19 @@ pub fn test_ackermann() {
                 _vector_push(stack, m - 1, 1);
             } else {
                 _vector_push(stack, m - 1, m, n - 1);
+=======
+                _list_push(stack, n + 1);
+            } else if m == 1 {
+                _list_push(stack, n + 2);
+            } else if m == 2 {
+                _list_push(stack, 2 * n + 3);
+            } else if m == 3 {
+                _list_push(stack, (1 << (n + 3)) - 3);
+            } else if n == 0 {
+                _list_push(stack, m - 1, 1);
+            } else {
+                _list_push(stack, m - 1, m, n - 1);
+>>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
             };
         };
         return stack[0];

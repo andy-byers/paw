@@ -131,15 +131,15 @@ OP_NEWVARIANT,//     A B         vb..v1         a(vb..v1)     -
 OP_NEWTUPLE,//       U           vu..v1         (vu..v1)      -
 OP_NEWINSTANCE,//    U           -              v             v = new instance of class C[u]
 OP_INITFIELD,//      U           i v            i             i.fields[u] = v
-OP_NEWVECTOR,//      U           vu..v1         [vu..v1]      -
+OP_NEWLIST,//      U           vu..v1         [vu..v1]      -
 OP_NEWMAP,//         U           v_2n..v1       {v_2n..v1}    -
 
 OP_UNWRAP,//         -           v              t             throws an error if disc(v) != 0
 
 OP_FORNUM0,//        S           *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
 OP_FORNUM,//         S           *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
-OP_FORVECTOR0,//     S           *-*-*-*-*-*-*-*-* see notes *-*-*-*-*-*-*-*-*
-OP_FORVECTOR,//      S           *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
+OP_FORLIST0,//     S           *-*-*-*-*-*-*-*-* see notes *-*-*-*-*-*-*-*-*
+OP_FORLIST,//      S           *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
 OP_FORMAP0,//        S           *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
 OP_FORMAP,//         S           *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
 
@@ -298,7 +298,7 @@ typedef enum {
     NMETAMETHODS
 } Metamethod;
 
-enum VectorOp {
+enum ListOp {
     VO_CLONE,
     VO_INSERT,
     VO_PUSH,

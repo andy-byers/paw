@@ -101,8 +101,13 @@ pub fn test_iterator_for_loop() {
     let a = [1, 2, 3];
     let b = [];
     for e in a {
+<<<<<<< HEAD
         _vector_push(b, e);
         _vector_pop(a);
+=======
+        _list_push(b, e);
+        _list_pop(a);
+>>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
     }
     assert(#b == 2);
     assert(b[0] == 1);
@@ -298,7 +303,11 @@ pub fn test_misc() {
         let a = [];
         for i = 0, N {
             for j in [0] {
+<<<<<<< HEAD
                 _vector_push(a, i + j);
+=======
+                _list_push(a, i + j);
+>>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
             }
         }
         assert(#a == 2);
@@ -310,7 +319,11 @@ pub fn test_misc() {
         for i = 0, N {
             let j = 0;
             while j < N {
+<<<<<<< HEAD
                 _vector_push(a, i + j);
+=======
+                _list_push(a, i + j);
+>>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
                 j = j + 1;
             }
         }
@@ -326,7 +339,11 @@ pub fn test_misc() {
             for j in [0] {
                 let k = 0;
                 while k < N {
+<<<<<<< HEAD
                     _vector_push(a, i + j + k);
+=======
+                    _list_push(a, i + j + k);
+>>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
                     k = k + 1;
                 }
             }

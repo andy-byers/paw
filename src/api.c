@@ -263,8 +263,8 @@ size_t paw_length(paw_Env *P, int index)
         case VSTRING:
             result = pawS_length(V_STRING(v));
             break;
-        case VVECTOR:
-            result = pawV_vec_length(V_VECTOR(v));
+        case VLIST:
+            result = pawV_list_length(V_LIST(v));
             break;
         case VMAP:
             result = pawH_length(V_MAP(v));

@@ -32,12 +32,11 @@ enum {
     CSTR_SELF,
     CSTR_TRUE,
     CSTR_FALSE,
-    CSTR_UNIT,
     CSTR_BOOL,
     CSTR_INT,
     CSTR_FLOAT,
     CSTR_STRING,
-    CSTR_VECTOR,
+    CSTR_LIST,
     CSTR_MAP,
     NCSTR,
 };
@@ -47,24 +46,6 @@ typedef struct GlobalVar {
     Value value;
     paw_Type type;
 } GlobalVar;
-
-struct GlobalList {
-    int alloc;
-    int count;
-    Value data[];
-};
-
-struct BuiltinList {
-    int alloc;
-    int count;
-    Value data[];
-};
-
-struct MethodList {
-    int alloc;
-    int count;
-    Value data[];
-};
 
 typedef struct paw_Env {
     StringTable strings;

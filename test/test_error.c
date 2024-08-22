@@ -3,6 +3,7 @@
 #include "lib.h"
 #include "opcode.h"
 #include "os.h"
+#include "paw.h"
 #include "rt.h"
 #include "test.h"
 #include <limits.h>
@@ -225,6 +226,23 @@ static void test_syntax_error(void)
     test_compiler_error(PAW_ESYNTAX, "binop_invalid_rhs", "", "let a = 1 + $;");
     test_compiler_error(PAW_ESYNTAX, "binop_missing_lhs", "", "let a = + 2");
     test_compiler_error(PAW_ESYNTAX, "binop_invalid_lhs", "", "let a = & + 2;");
+
+    test_compiler_error(PAW_ETYPE, "primitive_type_is_not_a_value_1", "", "let a = int;");
+    test_compiler_error(PAW_ETYPE, "primitive_type_is_not_a_value_2", "", "let a = (1, float,);");
+    test_compiler_error(PAW_ETYPE, "primitive_type_is_not_a_value_3", "", "let a = ['two', str];");
+    test_compiler_error(PAW_ETYPE, "generic_type_is_not_a_value", "fn f<T>() {let t = T;}", "");
+    test_compiler_error(PAW_ETYPE, "function_is_not_a_type", "fn test() {}", "let a: test = test;");
+    test_compiler_error(PAW_ETYPE, "variable_is_not_a_type", "", "let a = 1; let b: a = a;");
+    test_compiler_error(PAW_ETYPE, "own_name_is_not_a_type", "", "let a: a = 1;");
+}
+
+static void test_closure_error(void)
+{
+    test_compiler_error(PAW_OK, "infer_by_usage", "", "let f = |x| {}; f(1);");
+
+    test_compiler_error(PAW_ETYPE, "call_with_wrong_type_annotation", "", "let f = |x: int| x; f(2.0);");
+    test_compiler_error(PAW_ETYPE, "call_with_wrong_type_inference", "", "let f = |x| x; f(1); f(2.0);");
+    test_compiler_error(PAW_ETYPE, "cannot_infer_unused_param", "", "let f = |x| {};");
 }
 
 static void test_arithmetic_error(void)
@@ -238,7 +256,9 @@ static void test_arithmetic_error(void)
 static void test_struct_error(void)
 {
     test_compiler_error(PAW_ESYNTAX, "struct_unit_with_braces_on_def", "struct A {}", "let a = A;");
-    test_compiler_error(PAW_ESYNTAX, "struct_unit_with_braces_on_init", "struct A", "let a = A{};");
+    test_compiler_error(PAW_ESYNTAX, "struct_unit_with_braces_on_init", "struct A;", "let a = A{};");
+    test_compiler_error(PAW_ESYNTAX, "struct_unit_without_semicolon", "struct A", "");
+    test_compiler_error(PAW_ESYNTAX, "struct_missing_braces", "struct A {a: int}", "let a = A;");
     test_compiler_error(PAW_ENAME, "struct_missing_only_field", "struct A {a: int}", "let a = A{};");
     test_compiler_error(PAW_ENAME, "struct_missing_field", "struct A {a: int, b: float}", "let a = A{a: 1};");
     test_compiler_error(PAW_ENAME, "struct_extra_field", "struct A {a: int}", "let a = A{a: 1, b: 2};");
@@ -246,15 +266,30 @@ static void test_struct_error(void)
     test_compiler_error(PAW_ENAME, "struct_wrong_field", "struct A {a: int}", "let a = A{b: 2};");
 }
 
-static void test_vector_error(void)
+static void test_enum_error(void)
 {
-    test_compiler_error(PAW_ETYPE, "vector_cannot_infer", "", "let a = [];");
-    test_compiler_error(PAW_ETYPE, "vector_cannot_infer_binop", "", "let a = [] + [];");
-    test_compiler_error(PAW_ETYPE, "vector_use_before_inference", "", "let a = []; let b = #a;");
-    test_compiler_error(PAW_ETYPE, "vector_incompatible_types", "", "let a = [1]; a = [2.0];");
-    test_compiler_error(PAW_ETYPE, "vector_incompatible_types_2", "", "let a = []; if true {a = [0];} else {a = [true];}");
-    test_compiler_error(PAW_ETYPE, "vector_mixed_types", "", "let a = [1, 2, 3, 4, '5'];");
-    test_compiler_error(PAW_ETYPE, "vector_mixed_nesting", "", "let a = [[[1]], [[2]], [3]];");
+    test_compiler_error(PAW_ESYNTAX, "enum_unit_with_braces_on_def", "enum A {}", "let a = A;");
+    test_compiler_error(PAW_ETYPE, "enum_unit_with_braces_on_init", "enum A;", 
+                                   "let a = A{}; // looks like struct literal");
+    test_compiler_error(PAW_ESYNTAX, "enum_unit_without_semicolon", "enum A", "");
+    test_compiler_error(PAW_ESYNTAX, "enum_missing_variant", "enum A {X}", "let a = A;");
+    test_compiler_error(PAW_ENAME, "enum_duplicate_variant", "enum A {X, X}", "");
+    test_compiler_error(PAW_ENAME, "enum_nonexistent_variant", "enum A {X}", "let a = A::Y;");
+    test_compiler_error(PAW_ETYPE, "enum_missing_only_field", "enum A {X(int)}", "let a = A::X;");
+    test_compiler_error(PAW_ESYNTAX, "enum_missing_field", "enum A {X(int, float)}", "let a = A::X(42);");
+    test_compiler_error(PAW_ESYNTAX, "enum_extra_field", "enum A {X(int)}", "let a = A::X(42, true);");
+    test_compiler_error(PAW_ETYPE, "enum_wrong_field_type", "enum A {X(int)}", "let a = A::X(1.0);");
+}
+
+static void test_list_error(void)
+{
+    test_compiler_error(PAW_ETYPE, "list_cannot_infer", "", "let a = [];");
+    test_compiler_error(PAW_ETYPE, "list_cannot_infer_binop", "", "let a = [] + [];");
+    test_compiler_error(PAW_ETYPE, "list_use_before_inference", "", "let a = []; let b = #a;");
+    test_compiler_error(PAW_ETYPE, "list_incompatible_types", "", "let a = [1]; a = [2.0];");
+    test_compiler_error(PAW_ETYPE, "list_incompatible_types_2", "", "let a = []; if true {a = [0];} else {a = [true];}");
+    test_compiler_error(PAW_ETYPE, "list_mixed_types", "", "let a = [1, 2, 3, 4, '5'];");
+    test_compiler_error(PAW_ETYPE, "list_mixed_nesting", "", "let a = [[[1]], [[2]], [3]];");
 }
 
 static void test_map_error(void)
@@ -271,11 +306,13 @@ static void test_map_error(void)
 
 int main(void)
 {
+    test_enum_error();
     test_name_error();
     test_syntax_error();
     test_type_error();
+    test_closure_error();
     test_arithmetic_error();
     test_struct_error();
-    test_vector_error();
+    test_list_error();
     test_map_error();
 }

@@ -7,10 +7,17 @@ fn nq_solve(n: int) -> int {
     let r = [];
 	let y0 = (1 << n) - 1;
 	for i = 0, n {
+<<<<<<< HEAD
         _vector_push(a, -1);
         _vector_push(l, 0);
         _vector_push(c, 0);
         _vector_push(r, 0);
+=======
+        _list_push(a, -1);
+        _list_push(l, 0);
+        _list_push(c, 0);
+        _list_push(r, 0);
+>>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
 	}
 	let k = 0;
 	while k >= 0 {

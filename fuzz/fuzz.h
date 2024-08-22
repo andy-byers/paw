@@ -20,6 +20,25 @@
         abort(); \
     } while (0)
 
+static inline void *fuzz_malloc(size_t size)
+{
+    void *ptr = malloc(size);
+    FUZZ_CHECK(ptr != NULL, "malloc(%zu) failed", size);
+    return ptr;
+}
+
+static inline void *fuzz_realloc(void *ptr, size_t size)
+{
+    void *new_ptr = realloc(ptr, size);
+    FUZZ_CHECK(new_ptr != NULL, "realloc(%p, %zu) failed", ptr, size);
+    return new_ptr;
+}
+
+static inline void fuzz_free(void *ptr)
+{
+    free(ptr);
+}
+
 struct FuzzState {
     size_t heap_size;
     void *heap;
@@ -28,15 +47,15 @@ struct FuzzState {
 
 static inline struct FuzzState fuzz_open(size_t heap_size)
 {
-    struct paw_Options o = {.heap_size = heap_size};
-    o.heap = malloc(o.heap_size);
-    FUZZ_CHECK(o.heap != NULL, "malloc() failed");
-
-    paw_Env *P = paw_open(&o);
+    void *heap = fuzz_malloc(heap_size);
+    paw_Env *P = paw_open(&(struct paw_Options){
+        .heap_size = heap_size,
+        .heap = heap,
+    });
     FUZZ_CHECK(P != NULL, "paw_open() failed\n");
     return (struct FuzzState){
         .heap_size = heap_size,
-        .heap = o.heap,
+        .heap = heap,
         .P = P,
     };
 }
@@ -44,7 +63,7 @@ static inline struct FuzzState fuzz_open(size_t heap_size)
 static inline void fuzz_close(struct FuzzState fs)
 {
     paw_close(fs.P);
-    free(fs.heap);
+    fuzz_free(fs.heap);
 }
 
 struct FuzzReader {

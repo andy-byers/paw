@@ -5,7 +5,7 @@ fn random(n: int) -> [int] {
     let x = n;
     for _ = 0, n {
         x = (140671485 * x + 12820163) % 16777216;
-        _vector_push(a, x);
+        _list_push(a, x);
     }
     return a;
 }

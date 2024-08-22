@@ -11,7 +11,7 @@
 // ---------|-----------------|--------------------------- 
 //  parse   | source -> AST   | syntactical analysis 
 //  resolve | AST -> HIR      | resolve symbols and types 
-//  stencil | HIR -> HIR      | expand template instances 
+//  expand  | HIR -> HIR      | expand polymorphic instances 
 //  codegen | HIR -> bytecode | generate code 
 
 #ifndef PAW_COMPILE_H
@@ -22,6 +22,7 @@
 #include "unify.h"
 
 #define ENV(x) ((x)->P)
+#define SCAN_STRING(x, s) pawP_scan_string(ENV(x), (x)->strings, s)
 
 struct HirTypeList;
 
@@ -33,16 +34,35 @@ static inline String *pawP_scan_string(paw_Env *P, Map *st, const char *s)
 
 typedef uint16_t DefId;
 
+enum BuiltinKind {
+    BUILTIN_UNIT,
+    BUILTIN_BOOL,
+    BUILTIN_INT,
+    BUILTIN_FLOAT,
+    BUILTIN_STR,
+
+    FIRST_BUILTIN_ADT,
+    BUILTIN_LIST = FIRST_BUILTIN_ADT,
+    BUILTIN_MAP,
+    BUILTIN_OPTION,
+    BUILTIN_RESULT,
+
+    NBUILTINS,
+};
+
+struct Builtin {
+    String *name;
+    DefId did;
+};
+
 struct Compiler {
+    Pool pool;
+    struct Builtin builtins[NBUILTINS];
     struct DynamicMem *dm;
     String *modname;
     Closure *main;
     Map *strings;
     paw_Env *P;
-    DefId vector_did;
-    DefId map_did;
-    DefId result_did;
-    DefId option_did;
 };
 
 // Common state for type-checking routines
@@ -59,7 +79,7 @@ struct Resolver {
     struct DynamicMem *dm; // dynamic memory
     int func_depth; // number of nested functions
     int nresults;
-    int vector_gid;
+    int list_gid;
     int map_gid;
     int line;
     paw_Bool in_closure; // 1 if the enclosing function is a closure, else 0
@@ -81,6 +101,15 @@ struct DynamicMem {
     } decls;
 
     struct {
+<<<<<<< HEAD
+=======
+        struct CDecl **data;
+        int count;
+        int alloc;
+    } cdecls;
+
+    struct {
+>>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
         struct LocalSlot *data;
         int count;
         int alloc;
@@ -109,7 +138,7 @@ typedef struct Generator {
 // type from the given 'types'. Returns a HirInstanceDecl if 'decl' is a function, 
 // and a HirAdtDecl otherwise. We avoid recursively visiting the function body here, 
 // since doing so might cause further instantiations due to the presence of recursion. 
-// Function instance bodies are expanded during stenciling.
+// Function instance bodies are expanded in a separate pass.
 struct HirDecl *pawP_instantiate(
         struct Resolver *R, 
         struct HirDecl *decl, 

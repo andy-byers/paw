@@ -70,6 +70,7 @@ struct Token {
 };
 
 struct Lex {
+    struct Compiler *C;
     paw_Env *P;
 
     Map *strings;
@@ -93,6 +94,7 @@ struct Lex {
     int line;
     int last_line;
     int expr_depth;
+    int nest_depth;
 
     paw_Bool add_semi;
     paw_Bool in_prelude;

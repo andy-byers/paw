@@ -37,12 +37,21 @@
 
 // Generate code for creating common builtin objects
 // Requires a placeholder slot (the VM_PUSH0() pushes an empty slot) so
+<<<<<<< HEAD
 // the GC doesn't get confused. Both the VM_PUSH0(), and the pawV_vec_new calls
 // might fail and cause an error to be thrown, so we have to be careful not
 // to leave a junk value on top of the stack.
 #define VM_VECTOR_INIT(pa, pv) \
     pv = VM_PUSH0();           \
     pa = pawV_vec_new(P);      \
+=======
+// the GC doesn't get confused. Both the VM_PUSH0(), and the pawV_list_new calls
+// might fail and cause an error to be thrown, so we have to be careful not
+// to leave a junk value on top of the stack.
+#define VM_LIST_INIT(pa, pv) \
+    pv = VM_PUSH0();           \
+    pa = pawV_list_new(P);      \
+>>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
     V_SET_OBJECT(pv, pa);
 
 #define VM_MAP_INIT(dm, pv) \
@@ -251,9 +260,13 @@ void pawR_setitem(paw_Env *P, paw_Type t)
     const Value val = *VM_TOP(1);
     const Value key = *VM_TOP(2);
     const Value obj = *VM_TOP(3);
+<<<<<<< HEAD
     if (t == PAW_TVECTOR) {
+=======
+    if (t == PAW_TLIST) {
+>>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
         const paw_Int index = V_INT(key);
-        Value *pval = pawV_vec_get(P, V_VECTOR(obj), index);
+        Value *pval = pawV_list_get(P, V_LIST(obj), index);
         *pval = val;
     } else {
         paw_assert(t == PAW_TMAP);
@@ -274,28 +287,28 @@ static size_t check_slice_bound(paw_Env *P, paw_Int index, size_t length, const 
     return CAST_SIZE(index);
 }
 
-static void setslice_vector(paw_Env *P, Vector *va, paw_Int i, paw_Int j,
-                            const Vector *vb)
+static void setslice_list(paw_Env *P, List *va, paw_Int i, paw_Int j,
+                            const List *vb)
 {
-    const size_t na = pawV_vec_length(va);
-    const size_t nb = pawV_vec_length(vb);
-    const size_t zi = check_slice_bound(P, i, na, "start", "vector");
-    const size_t zj = check_slice_bound(P, j, na, "end", "vector");
+    const size_t na = pawV_list_length(va);
+    const size_t nb = pawV_list_length(vb);
+    const size_t zi = check_slice_bound(P, i, na, "start", "list");
+    const size_t zj = check_slice_bound(P, j, na, "end", "list");
 
     if (va == vb) {
         Value *pv = VM_TOP(1);
         paw_assert(pv->p == vb);
-        vb = pawV_vec_clone(P, pv, vb);
+        vb = pawV_list_clone(P, pv, vb);
     }
 
     const size_t szelem = sizeof(va->begin[0]);
     const size_t nelems = na - zj + zi + nb;
-    pawV_vec_reserve(P, va, nelems);
+    pawV_list_reserve(P, va, nelems);
 
     Value *gap = va->begin + zi;
     memmove(gap + nb, va->begin + zj, (na - zj) * szelem);
     memcpy(gap, vb->begin, nb * szelem);
-    pawV_vec_resize(P, va, nelems);
+    pawV_list_resize(P, va, nelems);
 }
 
 // setslice([a1..an], i, j, [b1..bn]) => [a1..ai b1..bn aj..an]
@@ -306,8 +319,8 @@ void pawR_setslice(paw_Env *P, paw_Type t)
     const paw_Int j = V_INT(*VM_TOP(2));
     const Value vb = *VM_TOP(1);
 
-    paw_assert(t == PAW_TVECTOR);
-    setslice_vector(P, V_VECTOR(va), i, j, V_VECTOR(vb));
+    paw_assert(t == PAW_TLIST);
+    setslice_list(P, V_LIST(va), i, j, V_LIST(vb));
 
     VM_SHIFT(3);
 }
@@ -354,12 +367,17 @@ static paw_Bool fornum(paw_Env *P)
     return PAW_TRUE;
 }
 
-static paw_Bool forvector_init(paw_Env *P)
+static paw_Bool forlist_init(paw_Env *P)
 {
     const Value v = *VM_TOP(1);
     paw_Int itr = PAW_ITER_INIT;
+<<<<<<< HEAD
     Vector *arr = V_VECTOR(v);
     if (pawV_vec_iter(arr, &itr)) {
+=======
+    List *arr = V_LIST(v);
+    if (pawV_list_iter(arr, &itr)) {
+>>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
         VM_PUSHI(itr);
         VM_PUSHV(arr->begin[itr]);
         return PAW_FALSE;
@@ -367,13 +385,19 @@ static paw_Bool forvector_init(paw_Env *P)
     return PAW_TRUE;
 }
 
-static paw_Bool forvector(paw_Env *P)
+static paw_Bool forlist(paw_Env *P)
 {
     const Value obj = *VM_TOP(2);
     const Value itr = *VM_TOP(1);
+<<<<<<< HEAD
     Vector *arr = V_VECTOR(obj);
     paw_Int i = V_INT(itr);
     if (pawV_vec_iter(arr, &i)) {
+=======
+    List *arr = V_LIST(obj);
+    paw_Int i = V_INT(itr);
+    if (pawV_list_iter(arr, &i)) {
+>>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
         V_SET_INT(VM_TOP(1), i);
         VM_PUSHV(arr->begin[i]);
         return PAW_TRUE;
@@ -442,20 +466,25 @@ static void string_binop(paw_Env *P, BinaryOp binop, Value lhs, Value rhs)
     VM_SHIFT(2);
 }
 
-static void vector_binop(paw_Env *P, BinaryOp binop, Value lhs, Value rhs)
+static void list_binop(paw_Env *P, BinaryOp binop, Value lhs, Value rhs)
 {
-    const Vector *x = V_VECTOR(lhs);
-    const Vector *y = V_VECTOR(rhs);
+    const List *x = V_LIST(lhs);
+    const List *y = V_LIST(rhs);
     paw_assert(binop == BINARY_ADD);
 
     Value *pv;
+<<<<<<< HEAD
     Vector *z;
     VM_VECTOR_INIT(z, pv);
+=======
+    List *z;
+    VM_LIST_INIT(z, pv);
+>>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
 
     const size_t zelem = sizeof(z->begin[0]);
-    const size_t nx = pawV_vec_length(x);
-    const size_t ny = pawV_vec_length(y);
-    pawV_vec_resize(P, z, nx + ny);
+    const size_t nx = pawV_list_length(x);
+    const size_t ny = pawV_list_length(y);
+    pawV_list_resize(P, z, nx + ny);
     if (nx > 0) {
         memcpy(z->begin, x->begin, nx * zelem);
     }
@@ -470,10 +499,10 @@ static void eq_ne(paw_Env *P, BinaryOp binop, paw_Type t, Value x, Value y)
     paw_Bool result;
     const paw_Bool bt = binop == BINARY_EQ;
     const paw_Bool bf = binop != BINARY_EQ;
-    if (t == PAW_TVECTOR) {
-        const Vector *lhs = V_VECTOR(x);
-        const Vector *rhs = V_VECTOR(y);
-        result = pawV_vec_equals(P, lhs, rhs);
+    if (t == PAW_TLIST) {
+        const List *lhs = V_LIST(x);
+        const List *rhs = V_LIST(y);
+        result = pawV_list_equals(P, lhs, rhs);
     } else if (t == PAW_TMAP) {
         Map *lhs = V_MAP(x);
         Map *rhs = V_MAP(y);
@@ -617,8 +646,13 @@ static void other_binop(paw_Env *P, BinaryOp binop, paw_Type t, Value x,
 {
     if (binop == BINARY_IN) {
         Value *pv = VM_TOP(2);
+<<<<<<< HEAD
         if (t == PAW_TVECTOR) {
             V_SET_BOOL(pv, pawV_vec_contains(P, V_VECTOR(y), x));
+=======
+        if (t == PAW_TLIST) {
+            V_SET_BOOL(pv, pawV_list_contains(P, V_LIST(y), x));
+>>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
         } else {
             paw_assert(t == PAW_TMAP);
             V_SET_BOOL(pv, pawH_contains(V_MAP(y), x));
@@ -627,8 +661,8 @@ static void other_binop(paw_Env *P, BinaryOp binop, paw_Type t, Value x,
     } else if (t == PAW_TSTRING) {
         string_binop(P, binop, x, y);
     } else {
-        paw_assert(t == PAW_TVECTOR);
-        vector_binop(P, binop, x, y);
+        paw_assert(t == PAW_TLIST);
+        list_binop(P, binop, x, y);
     }
 }
 
@@ -721,9 +755,13 @@ void pawR_getattr(paw_Env *P, int index)
     *VM_TOP(1) = ins->attrs[index];
 }
 
-static void getitem_vector(paw_Env *P, Vector *vector, paw_Int index)
+static void getitem_list(paw_Env *P, List *list, paw_Int index)
 {
+<<<<<<< HEAD
     *VM_TOP(2) = *pawV_vec_get(P, vector, index);
+=======
+    *VM_TOP(2) = *pawV_list_get(P, list, index);
+>>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
     VM_POP(1);
 }
 
@@ -754,27 +792,32 @@ int pawR_getitem(paw_Env *P, paw_Type t)
     if (t == PAW_TMAP) {
         return getitem_map(P, V_MAP(obj), key);
     }
-    if (t == PAW_TVECTOR) {
-        getitem_vector(P, V_VECTOR(obj), V_INT(key));
+    if (t == PAW_TLIST) {
+        getitem_list(P, V_LIST(obj), V_INT(key));
     } else if (t == PAW_TSTRING) {
         getitem_string(P, V_STRING(obj), V_INT(key));
     }
     return 0;
 }
 
-static void getslice_vector(paw_Env *P, Vector *vec, paw_Int i, paw_Int j)
+static void getslice_list(paw_Env *P, List *list, paw_Int i, paw_Int j)
 {
-    const size_t n = pawV_vec_length(vec);
-    const size_t zi = check_slice_bound(P, i, n, "start", "vector");
-    const size_t zj = check_slice_bound(P, j, n, "end", "vector");
+    const size_t n = pawV_list_length(list);
+    const size_t zi = check_slice_bound(P, i, n, "start", "list");
+    const size_t zj = check_slice_bound(P, j, n, "end", "list");
 
     Value *pv;
+<<<<<<< HEAD
     Vector *slice;
     VM_VECTOR_INIT(slice, pv);
+=======
+    List *slice;
+    VM_LIST_INIT(slice, pv);
+>>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
 
     const size_t nelems = zj - zi;
-    pawV_vec_resize(P, slice, nelems);
-    memcpy(slice->begin, vec->begin + zi, nelems * sizeof(vec->begin[0]));
+    pawV_list_resize(P, slice, nelems);
+    memcpy(slice->begin, list->begin + zi, nelems * sizeof(list->begin[0]));
 }
 
 static void getslice_string(paw_Env *P, String *str, paw_Int i, paw_Int j)
@@ -794,8 +837,13 @@ void pawR_getslice(paw_Env *P, paw_Type t)
     const Value obj = *VM_TOP(3);
     const paw_Int i = V_INT(*VM_TOP(2));
     const paw_Int j = V_INT(*VM_TOP(1));
+<<<<<<< HEAD
     if (t == PAW_TVECTOR) {
         getslice_vector(P, V_VECTOR(obj), i, j);
+=======
+    if (t == PAW_TLIST) {
+        getslice_list(P, V_LIST(obj), i, j);
+>>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
     } else {
         paw_assert(t == PAW_TSTRING);
         getslice_string(P, V_STRING(obj), i, j);
@@ -817,18 +865,26 @@ void pawR_literal_tuple(paw_Env *P, int n)
     VM_SHIFT(n);
 }
 
-void pawR_literal_vector(paw_Env *P, int n)
+void pawR_literal_list(paw_Env *P, int n)
 {
-    Vector *v;
+    List *v;
     StackPtr sp;
+<<<<<<< HEAD
     VM_VECTOR_INIT(v, sp);
+=======
+    VM_LIST_INIT(v, sp);
+>>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
     if (n > 0) {
-        pawV_vec_resize(P, v, CAST_SIZE(n));
+        pawV_list_resize(P, v, CAST_SIZE(n));
         Value *pv = v->end;
         do {
             *--pv = *--sp;
         } while (pv != v->begin);
+<<<<<<< HEAD
         // Replace contents with vector itself.
+=======
+        // Replace contents with list itself.
+>>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
         VM_SHIFT(n);
     }
 }
@@ -959,10 +1015,14 @@ top:
                 CHECK_GC(P);
             }
 
-            vm_case(NEWVECTOR) :
+            vm_case(NEWLIST) :
             {
                 VM_PROTECT();
+<<<<<<< HEAD
                 pawR_literal_vector(P, get_U(opcode));
+=======
+                pawR_literal_list(P, get_U(opcode));
+>>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
                 CHECK_GC(P);
             }
 
@@ -1247,9 +1307,15 @@ top:
                     pc += get_S(opcode); \
                 } \
             }
+<<<<<<< HEAD
             VM_FORIN0(vector, VECTOR)
             VM_FORIN0(map, MAP)
             VM_FORIN(vector, VECTOR)
+=======
+            VM_FORIN0(list, LIST)
+            VM_FORIN0(map, MAP)
+            VM_FORIN(list, LIST)
+>>>>>>> 6e1befd (Refactor how prelude types are added and rename Vector to List)
             VM_FORIN(map, MAP)
 #undef VM_FORIN0
 #undef VM_FORIN

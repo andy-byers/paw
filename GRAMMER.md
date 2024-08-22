@@ -12,7 +12,7 @@ Module = "mod" name {Item} .
 An item defined in a given module can be accessed from anywhere in the module.
 Items must be placed at the toplevel, and are fixed at compile time.
 ```ebnf
-Item = ["pub"] ItemDecl .
+Item     = ["pub"] ItemDecl .
 ItemDecl = ConstDecl | FunctionDecl | StructDecl | 
            EnumDecl | TypeDecl .
 ```
@@ -42,12 +42,9 @@ Payload  = "(" {Type ","} Type [","] ")" .
 ## Statements
 ```ebnf
 Stmt     = ExprStmt | WhileStmt | DoWhileStmt |
-           ForStmt | IfElse | Declaration | 
-           Block .
-Chunk    = {Stmt [";"]} [LastStmt [";"]] .
-Block    = "{" Chunk "}" .
-LastStmt = "return" [Expr] | "continue" | "break" .
-ExprStmt = Operand "=" Expr | Call | Match .
+           ForStmt | IfElse | Declaration | Block .
+Block    = "{" {Stmt ";"} "}" .
+ExprStmt = Expr .
 ```
 
 ### Control flow
@@ -118,13 +115,13 @@ ExprList    = {Expr ","} Expr .
 ## Types
 ```ebnf
 Type       = NamedType | TypeLit .
-TypeLit    = FuncType | VectorType | MapType | 
+TypeLit    = FuncType | ListType | MapType | 
              TupleType | NamedType .
 FuncType   = "fn" "(" [TypeList] ")" ["->" Type] .
 TypeList   = {Type ","} Type [","] .
 TypeArgs   = "::" "<" TypeList ">" .
 NamedType  = name [TypeArgs] .
-VectorType = "[" Type "]" .
+ListType = "[" Type "]" .
 MapType    = "[" Type ":" Type "]" .
 TupleType  = "(" [{Type ","} Type "," [Type]] ")".
 ```
@@ -139,16 +136,18 @@ BasicLit = int_lit | bool_lit | float_lit | string_lit .
 ### Composite literals
 Note that the unit type is just a 0-tuple (an tuple with 0 elements).
 A 1-tuple must have a trailing `,` to distinguish it from a parenthesized expression.
+Enumerator literals are not listed here: they are created using constructor syntax, which is indistinguishable from calling a function with the same name as the variant.
+A constructor function takes the enumerator's fields as arguments and returns an instance of the enumeration.
 ```ebnf
-CompositeLit = VectorLit | MapLit | TupleLit | StructLit | VariantLit .
-VectorLit    = "[" [ExprList [","]] "]" .
-MapLit       = "[" ":" "]" | "[" [ItemList [","]] "]" .
+CompositeLit = TupleLit | ListLit | MapLit | StructLit .
 TupleLit     = "(" [{Expr ","} Expr "," [Expr]] ")".
-StructLit    = Path "{" [ItemList [","]] "}" .
-VariantLit   = Path ["(" {Expr ","} Expr ")"] .
-ItemList     = KeyedItem {"," KeyedItem} [","] .
-KeyedItem    = [Key ":"] Expr .
-Key          = name | Expr .
+ListLit    = "[" [ExprList [","]] "]" .
+MapLit       = "[" ":" "]" | "[" [MapElems [","]] "]" .
+MapElems     = MapElem {"," MapElem} [","] .
+MapElem      = Expr ":" Expr .
+StructLit    = Path ["{" [StructFields [","]] "}"] .
+StructFields = StructField {"," StructField} [","] .
+StructField  = name ":" Expr .
 ```
 
 ### Integer literals

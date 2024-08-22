@@ -38,8 +38,7 @@ struct Ast;
         X(Index,          index)    \
         X(Selector,       selector) \
         X(TupleType,      tuple)    \
-        X(StructField,    sitem)    \
-        X(MapElem,        mitem)    \
+        X(FieldExpr,      field)    \
         X(Signature,      sig)      \
         X(ContainerType,  cont)     \
         X(AssignExpr,     assign) 
@@ -229,16 +228,13 @@ struct AstClosureExpr {
     };
 };
 
-struct AstStructField {
+struct AstFieldExpr {
     AST_EXPR_HEADER;
-    int index;
-    String *name;
-    struct AstExpr *value;
-};
-
-struct AstMapElem {
-    AST_EXPR_HEADER;
-    struct AstExpr *key;
+    int fid;
+    union {
+        struct AstExpr *key;
+        String *name;
+    };
     struct AstExpr *value;
 };
 
@@ -443,13 +439,12 @@ struct Ast {
     struct Pool pool;
     struct AstDeclList *prelude;
     struct AstDeclList *items;
-    struct Lex *lex;
     paw_Env *P;
 };
 
-struct AstDecl *pawAst_new_decl(struct Ast *ast, enum AstDeclKind kind);
-struct AstExpr *pawAst_new_expr(struct Ast *ast, enum AstExprKind kind);
-struct AstStmt *pawAst_new_stmt(struct Ast *ast, enum AstStmtKind kind);
+struct AstDecl *pawAst_new_decl(struct Ast *ast, int line, enum AstDeclKind kind);
+struct AstExpr *pawAst_new_expr(struct Ast *ast, int line, enum AstExprKind kind);
+struct AstStmt *pawAst_new_stmt(struct Ast *ast, int line, enum AstStmtKind kind);
 
 #define AST_CAST_DECL(x) CAST(x, struct AstDecl *)
 #define AST_CAST_EXPR(x) CAST(x, struct AstExpr *)
@@ -460,7 +455,7 @@ DEFINE_LIST(struct Ast, pawAst_expr_list_, AstExprList, struct AstExpr)
 DEFINE_LIST(struct Ast, pawAst_stmt_list_, AstStmtList, struct AstStmt)
 DEFINE_LIST(struct Ast, pawAst_path_, AstPath, struct AstSegment)
 
-struct Ast *pawAst_new(struct Lex *lex);
+struct Ast *pawAst_new(struct Compiler *C);
 void pawAst_free(struct Ast *ast);
 
 struct AstSegment *pawAst_segment_new(struct Ast *ast);

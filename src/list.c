@@ -8,21 +8,21 @@
 #include "util.h"
 #include <string.h>
 
-static size_t vector_capacity(const Vector *a)
+static size_t list_capacity(const List *a)
 {
     return CAST_SIZE(a->upper - a->begin);
 }
 
-static void realloc_vector(paw_Env *P, Vector *a, size_t alloc0, size_t alloc)
+static void realloc_list(paw_Env *P, List *a, size_t alloc0, size_t alloc)
 {
-    const size_t end = pawV_vec_length(a);
+    const size_t end = pawV_list_length(a);
     pawM_resize(P, a->begin, alloc0, alloc);
     a->end = a->begin + end;
     a->upper = a->begin + alloc;
     CHECK_GC(P);
 }
 
-static void ensure_space(paw_Env *P, Vector *a, size_t have, size_t want)
+static void ensure_space(paw_Env *P, List *a, size_t have, size_t want)
 {
     if (want > PAW_SIZE_MAX / sizeof(Value)) {
         pawM_error(P);
@@ -32,16 +32,16 @@ static void ensure_space(paw_Env *P, Vector *a, size_t have, size_t want)
     while (n < want) {
         n *= 2;
     }
-    realloc_vector(P, a, have, n);
+    realloc_list(P, a, have, n);
 }
 
-static void reserve_extra(paw_Env *P, Vector *a, size_t extra)
+static void reserve_extra(paw_Env *P, List *a, size_t extra)
 {
     paw_assert(extra > 0);
     if (extra <= CAST_SIZE(a->upper - a->end)) {
         return; // Still have enough space
     }
-    const size_t have = vector_capacity(a);
+    const size_t have = list_capacity(a);
     ensure_space(P, a, have, have + extra);
 }
 
@@ -50,32 +50,32 @@ static void move_items(Value *src, ptrdiff_t shift, size_t count)
     memmove(src + shift, src, CAST_SIZE(count) * sizeof(src[0]));
 }
 
-void pawV_vec_reserve(paw_Env *P, Vector *a, size_t want)
+void pawV_list_reserve(paw_Env *P, List *a, size_t want)
 {
-    const size_t have = vector_capacity(a);
+    const size_t have = list_capacity(a);
     if (want <= have) {
         return;
     }
     ensure_space(P, a, have, want);
 }
 
-void pawV_vec_push(paw_Env *P, Vector *a, Value v)
+void pawV_list_push(paw_Env *P, List *a, Value v)
 {
     reserve_extra(P, a, 1);
     *a->end++ = v;
 }
 
-void pawV_vec_resize(paw_Env *P, Vector *a, size_t length)
+void pawV_list_resize(paw_Env *P, List *a, size_t length)
 {
-    pawV_vec_reserve(P, a, length);
+    pawV_list_reserve(P, a, length);
     // avoid 'Nullptr with offset' from UBSan
     a->end = length ? a->begin + length : a->begin;
 }
 
-void pawV_vec_insert(paw_Env *P, Vector *a, paw_Int index, Value v)
+void pawV_list_insert(paw_Env *P, List *a, paw_Int index, Value v)
 {
-    // Clamp to the vector bounds.
-    const size_t len = pawV_vec_length(a);
+    // Clamp to the list bounds.
+    const size_t len = pawV_list_length(a);
     const paw_Int abs = pawV_abs_index(index, len);
     const size_t i = PAW_CLAMP(CAST_SIZE(abs), 0, len);
 
@@ -87,11 +87,11 @@ void pawV_vec_insert(paw_Env *P, Vector *a, paw_Int index, Value v)
     ++a->end;
 }
 
-void pawV_vec_pop(paw_Env *P, Vector *a, paw_Int index)
+void pawV_list_pop(paw_Env *P, List *a, paw_Int index)
 {
-    const size_t len = pawV_vec_length(a);
+    const size_t len = pawV_list_length(a);
     const paw_Int fixed = pawV_abs_index(index, len);
-    const size_t abs = pawV_check_abs(P, fixed, len, "vector");
+    const size_t abs = pawV_check_abs(P, fixed, len, "list");
     if (abs != len - 1) {
         // Shift values into place
         move_items(a->begin + abs + 1, -1, len - abs - 1);
@@ -99,26 +99,26 @@ void pawV_vec_pop(paw_Env *P, Vector *a, paw_Int index)
     --a->end;
 }
 
-Vector *pawV_vec_new(paw_Env *P)
+List *pawV_list_new(paw_Env *P)
 {
-    Vector *a = pawM_new(P, Vector);
-    pawG_add_object(P, CAST_OBJECT(a), VVECTOR);
+    List *a = pawM_new(P, List);
+    pawG_add_object(P, CAST_OBJECT(a), VLIST);
     return a;
 }
 
-void pawV_vec_free(paw_Env *P, Vector *a)
+void pawV_list_free(paw_Env *P, List *a)
 {
-    pawM_free_vec(P, a->begin, vector_capacity(a));
+    pawM_free_vec(P, a->begin, list_capacity(a));
     pawM_free(P, a);
 }
 
-Vector *pawV_vec_clone(paw_Env *P, Value *pv, const Vector *a)
+List *pawV_list_clone(paw_Env *P, Value *pv, const List *a)
 {
-    Vector *a2 = pawV_vec_new(P);
+    List *a2 = pawV_list_new(P);
     V_SET_OBJECT(pv, a2); // anchor
-    if (pawV_vec_length(a)) {
-        pawV_vec_resize(P, a2, pawV_vec_length(a));
-        memcpy(a2->begin, a->begin, sizeof(a->begin[0]) * pawV_vec_length(a));
+    if (pawV_list_length(a)) {
+        pawV_list_resize(P, a2, pawV_list_length(a));
+        memcpy(a2->begin, a->begin, sizeof(a->begin[0]) * pawV_list_length(a));
     }
     return a2;
 }
@@ -130,10 +130,10 @@ static paw_Bool elems_equal(Value x, Value y)
     return x.u == y.u;
 }
 
-paw_Bool pawV_vec_equals(paw_Env *P, const Vector *lhs, const Vector *rhs)
+paw_Bool pawV_list_equals(paw_Env *P, const List *lhs, const List *rhs)
 {
-    const size_t len = pawV_vec_length(lhs);
-    if (len != pawV_vec_length(rhs)) {
+    const size_t len = pawV_list_length(lhs);
+    if (len != pawV_list_length(rhs)) {
         return PAW_FALSE;
     }
     for (size_t i = 0; i < len; ++i) {
@@ -144,9 +144,9 @@ paw_Bool pawV_vec_equals(paw_Env *P, const Vector *lhs, const Vector *rhs)
     return PAW_TRUE;
 }
 
-paw_Bool pawV_vec_contains(paw_Env *P, const Vector *a, const Value v)
+paw_Bool pawV_list_contains(paw_Env *P, const List *a, const Value v)
 {
-    for (size_t i = 0; i < pawV_vec_length(a); ++i) {
+    for (size_t i = 0; i < pawV_list_length(a); ++i) {
         if (elems_equal(v, a->begin[i])) {
             return PAW_TRUE;
         }

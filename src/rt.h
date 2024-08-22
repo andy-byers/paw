@@ -36,15 +36,15 @@ void pawR_read_global(paw_Env *P, int g);
 void pawR_write_global(paw_Env *P, int g);
 
 void pawR_execute(paw_Env *P, CallFrame *cf);
-void pawR_literal_vector(paw_Env *P, int n);
+void pawR_literal_list(paw_Env *P, int n);
 void pawR_literal_map(paw_Env *P, int n);
 
 void pawR_close_upvalues(paw_Env *P, const StackPtr top);
 
-int pawR_vector_insert(paw_Env *P);
-int pawR_vector_push(paw_Env *P);
-int pawR_vector_pop(paw_Env *P);
-int pawR_vector_clone(paw_Env *P);
+int pawR_list_insert(paw_Env *P);
+int pawR_list_push(paw_Env *P);
+int pawR_list_pop(paw_Env *P);
+int pawR_list_clone(paw_Env *P);
 int pawR_map_erase(paw_Env *P);
 int pawR_map_clone(paw_Env *P);
 int pawR_string_starts_with(paw_Env *P);

@@ -12,13 +12,26 @@ paw_Type pawP_type2code(struct Compiler *C, struct HirType *type)
 {
     if (HirIsAdt(type)) {
         struct HirAdt *adt = HirGetAdt(type);
-        if (adt->base == C->vector_did) {
-            return PAW_TVECTOR; 
-        } else if (adt->base == C->map_did) {
-            return PAW_TMAP; 
-        } else if (adt->base <= PAW_TSTRING) {
-            return adt->base;
+        if (adt->base == C->builtins[BUILTIN_UNIT].did) {
+            return PAW_TUNIT;
+        } else if (adt->base == C->builtins[BUILTIN_BOOL].did) {
+            return PAW_TBOOL;
+        } else if (adt->base == C->builtins[BUILTIN_INT].did) {
+            return PAW_TINT;
+        } else if (adt->base == C->builtins[BUILTIN_FLOAT].did) {
+            return PAW_TFLOAT;
+        } else if (adt->base == C->builtins[BUILTIN_STR].did) {
+            return PAW_TSTRING;
+        } else if (adt->base == C->builtins[BUILTIN_LIST].did) {
+            return PAW_TLIST;
+        } else if (adt->base == C->builtins[BUILTIN_MAP].did) {
+            return PAW_TMAP;
         }
+        struct HirDecl *decl = pawHir_get_decl(C->dm->hir, adt->base);
+        struct HirAdtDecl *d = HirGetAdtDecl(decl);
+        return d->is_struct ? PAW_TSTRUCT : PAW_TENUM;
+    } else if (HirIsFuncType(type)) {
+        return PAW_TFUNCTION;
     }
     return -1;
 }
@@ -34,20 +47,62 @@ String *pawP_scan_nstring(paw_Env *P, Map *st, const char *s, size_t n)
     return V_STRING(*value);
 }
 
+static void define_basic(struct Compiler *C, const char *name, enum BuiltinKind kind)
+{
+    struct Ast *ast = C->dm->ast;
+    struct AstDecl *decl = pawAst_new_decl(ast, 0, kAstAdtDecl);
+    struct AstAdtDecl *r = AstGetAdtDecl(decl);
+    r->name = SCAN_STRING(C, name);
+    r->is_pub = PAW_TRUE;
+    pawAst_decl_list_push(ast, ast->prelude, decl);
+    C->builtins[kind] = (struct Builtin){
+        .name = r->name,
+        .did = NO_DECL,
+    };
+}
+
+static void define_prelude(struct Compiler *C, const char *name, enum BuiltinKind kind)
+{
+    C->builtins[kind] = (struct Builtin){
+        .name = SCAN_STRING(C, name),
+        .did = NO_DECL,
+    };
+}
+
+ // TODO: represent unit type as empty tuple
 void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const char *modname)
 {
     Value *pv = pawC_push0(P);
     Map *strings = pawH_new(P);
     V_SET_OBJECT(pv, strings);
 
-    P->modname = pawP_scan_string(P, strings, modname);
-
     *C = (struct Compiler){
-        .modname = P->modname,
         .strings = strings,
         .dm = dm,
         .P = P,
     };
+    P->modname = SCAN_STRING(C, modname);
+    C->modname = P->modname;
+
+    // AST is created early to store builtins
+    dm->ast = pawAst_new(C);
+    dm->ast->prelude = pawAst_decl_list_new(dm->ast);
+
+    // builtin primitives
+    define_basic(C, "(unit)", BUILTIN_UNIT);
+    define_basic(C, "bool", BUILTIN_BOOL);
+    define_basic(C, "int", BUILTIN_INT);
+    define_basic(C, "float", BUILTIN_FLOAT);
+    define_basic(C, "str", BUILTIN_STR);
+
+    // builtin containers (in Paw code, _List<T> can be written as [T], and 
+    // _Map<K, V> as [K: V])
+    define_prelude(C, "_List", BUILTIN_LIST);
+    define_prelude(C, "_Map", BUILTIN_MAP);
+
+    // builtin enumerations
+    define_prelude(C, "Option", BUILTIN_OPTION);
+    define_prelude(C, "Result", BUILTIN_RESULT);
 }
 
 void pawP_teardown(paw_Env *P, const struct DynamicMem *dm)
@@ -59,3 +114,9 @@ void pawP_teardown(paw_Env *P, const struct DynamicMem *dm)
     pawAst_free(dm->ast);
     pawHir_free(dm->hir);
 }
+
+void pawP_define_cfunc(struct Compiler *C, paw_Function f, const char *name, const char **params, const char *result)
+{
+
+}
+

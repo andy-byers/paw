@@ -134,8 +134,8 @@ const char *paw_op_name(Op op)
             return "NEWVARIANT";
         case OP_NEWINSTANCE:
             return "NEWINSTANCE";
-        case OP_NEWVECTOR:
-            return "NEWVECTOR";
+        case OP_NEWLIST:
+            return "NEWLIST";
         case OP_NEWMAP:
             return "NEWMAP";
         case OP_VARARG:
@@ -144,10 +144,10 @@ const char *paw_op_name(Op op)
             return "FORNUM0";
         case OP_FORNUM:
             return "FORNUM";
-        case OP_FORVECTOR0:
-            return "FORVECTOR0";
-        case OP_FORVECTOR:
-            return "FORVECTOR";
+        case OP_FORLIST0:
+            return "FORLIST0";
+        case OP_FORLIST:
+            return "FORLIST";
         case OP_FORMAP0:
             return "FORMAP0";
         case OP_FORMAP:
@@ -269,8 +269,8 @@ void paw_dump_opcode(OpCode opcode)
         case OP_NEWINSTANCE:
             printf("NEWINSTANCE\n");
             break;
-        case OP_NEWVECTOR:
-            printf("NEWVECTOR\n");
+        case OP_NEWLIST:
+            printf("NEWLIST\n");
             break;
         case OP_NEWMAP:
             printf("NEWMAP\n");
@@ -284,11 +284,11 @@ void paw_dump_opcode(OpCode opcode)
         case OP_FORNUM:
             printf("FORNUM\n");
             break;
-        case OP_FORVECTOR0:
-            printf("FORVECTOR0\n");
+        case OP_FORLIST0:
+            printf("FORLIST0\n");
             break;
-        case OP_FORVECTOR:
-            printf("FORVECTOR\n");
+        case OP_FORLIST:
+            printf("FORLIST\n");
             break;
         case OP_FORMAP0:
             printf("FORMAP0\n");
@@ -389,7 +389,7 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
                 break;
             }
 
-            case OP_NEWVECTOR:
+            case OP_NEWLIST:
             case OP_NEWMAP:
             case OP_NEWTUPLE: {
                 pawL_add_fstring(P, print, " ; %d values", get_U(opcode));
@@ -398,8 +398,8 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
 
             case OP_FORNUM0:
             case OP_FORNUM:
-            case OP_FORVECTOR0:
-            case OP_FORVECTOR:
+            case OP_FORLIST0:
+            case OP_FORLIST:
             case OP_FORMAP0:
             case OP_FORMAP: {
                 pawL_add_fstring(P, print, " ; offset = %d", get_S(opcode));

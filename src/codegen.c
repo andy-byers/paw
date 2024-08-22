@@ -66,8 +66,8 @@ static void mangle_type(struct Generator *G, Buffer *buf, struct HirType *type)
     } else {
         paw_assert(HirIsAdt(type));
         struct HirAdt *adt = &type->adt;
-        if (TYPE2CODE(G, type) == PAW_TVECTOR) {
-            pawL_add_literal(P, buf, "(Vector)");
+        if (TYPE2CODE(G, type) == PAW_TLIST) {
+            pawL_add_literal(P, buf, "(List)");
         } else if (TYPE2CODE(G, type) == PAW_TMAP) {
             pawL_add_literal(P, buf, "(Map)");
         } else {
@@ -605,14 +605,15 @@ static void code_getter(struct HirVisitor *V, struct HirVarInfo info)
 static struct HirVarInfo resolve_short_path(struct Generator *G, struct HirPath *path)
 {
     paw_assert(path->count == 1);
-    struct HirSegment *ident = pawHir_path_get(path, 0);
-    const String *name = ident->name;
-    if (HirIsFuncDef(ident->type) && ident->types != NULL) {
-        name = mangle_name(G, name, ident->type->fdef.types);
-    } else if (HirIsAdt(ident->type) && ident->types != NULL) {
-        name = mangle_name(G, name, ident->type->adt.types);
+    struct HirSegment *base = pawHir_path_get(path, 0);
+    struct HirDecl *decl = base->result;
+    const String *name = base->name;
+    if (HirIsFuncDecl(decl) && base->types != NULL) {
+        name = mangle_name(G, name, base->types);
+    } else if (HirIsAdtDecl(decl) && base->types != NULL) {
+        name = mangle_name(G, name, base->types);
     }
-    return find_var(G, name);
+    return find_var(G, decl->hdr.name);
 }
 
 static void code_setter(struct HirVisitor *V, struct HirExpr *lhs, struct HirExpr *rhs)
@@ -704,7 +705,7 @@ static void code_container_lit(struct HirVisitor *V, struct HirLiteralExpr *e)
     struct HirContainerLit *lit = &e->cont;
     V->VisitExprList(V, lit->items);
 
-    const Op op = lit->code == PAW_TVECTOR ? OP_NEWVECTOR : OP_NEWMAP;
+    const Op op = lit->code == PAW_TLIST ? OP_NEWLIST : OP_NEWMAP;
     pawK_code_U(fs, op, lit->items->count);
 }
 
@@ -721,9 +722,9 @@ static void code_composite_lit(struct HirVisitor *V, struct HirLiteralExpr *e)
     pawK_code_U(fs, OP_NEWINSTANCE, d->fields ? d->fields->count : 0);
 
     for (int i = 0; i < lit->items->count; ++i) {
-        struct HirExpr *attr = lit->items->data[i];
-        V->VisitExpr(V, attr);
-        pawK_code_U(fs, OP_INITFIELD, attr->sitem.index);
+        struct HirExpr *field = lit->items->data[i];
+        V->VisitExpr(V, field);
+        pawK_code_U(fs, OP_INITFIELD, field->field.fid);
     }
 }
 
@@ -937,11 +938,11 @@ static void code_instance_getter(struct HirVisitor *V, struct HirType *type)
     paw_assert(HirIsFuncType(type));
     struct HirDecl *decl = GET_DECL(G, type->fdef.did);
     String *name = decl->hdr.name;
-    if (!pawS_eq(name, SCAN_STRING(G->C, "_vector_push")) &&
-            !pawS_eq(name, SCAN_STRING(G->C, "_vector_pop")) &&
-            !pawS_eq(name, SCAN_STRING(G->C, "_vector_insert")) &&
-            !pawS_eq(name, SCAN_STRING(G->C, "_vector_erase")) &&
-            !pawS_eq(name, SCAN_STRING(G->C, "_vector_clone"))) {
+    if (!pawS_eq(name, SCAN_STRING(G->C, "_list_push")) &&
+            !pawS_eq(name, SCAN_STRING(G->C, "_list_pop")) &&
+            !pawS_eq(name, SCAN_STRING(G->C, "_list_insert")) &&
+            !pawS_eq(name, SCAN_STRING(G->C, "_list_erase")) &&
+            !pawS_eq(name, SCAN_STRING(G->C, "_list_clone"))) {
         // TODO: These functions are native. They use the same code for all
         // instantiations (they
         //       only move parameters around as 'union Value')
@@ -1232,8 +1233,8 @@ static void code_forin_stmt(struct HirVisitor *V, struct HirForStmt *s)
     new_local_lit(G, "(for iter)", PAW_TINT);
 
     struct HirType *t = HIR_TYPEOF(forin->target);
-    const Op init = TYPE2CODE(G, t) == PAW_TVECTOR ? OP_FORVECTOR0 : OP_FORMAP0;
-    const Op loop = TYPE2CODE(G, t) == PAW_TVECTOR ? OP_FORVECTOR : OP_FORMAP;
+    const Op init = TYPE2CODE(G, t) == PAW_TLIST ? OP_FORLIST0 : OP_FORMAP0;
+    const Op loop = TYPE2CODE(G, t) == PAW_TLIST ? OP_FORLIST : OP_FORMAP;
     code_forbody(V, s->control, s->block, init, loop);
 }
 
@@ -1334,11 +1335,11 @@ static void setup_pass(struct HirVisitor *V, struct Generator *G)
     add_builtin_func(G, "_string_find");
     add_builtin_func(G, "_string_starts_with");
     add_builtin_func(G, "_string_ends_with");
-    add_builtin_func(G, "_vector_push");
-    add_builtin_func(G, "_vector_pop");
-    add_builtin_func(G, "_vector_insert");
-    add_builtin_func(G, "_vector_erase");
-    add_builtin_func(G, "_vector_clone");
+    add_builtin_func(G, "_list_push");
+    add_builtin_func(G, "_list_pop");
+    add_builtin_func(G, "_list_insert");
+    add_builtin_func(G, "_list_erase");
+    add_builtin_func(G, "_list_clone");
 }
 
 static void code_module(struct Generator *G, struct Hir *hir)

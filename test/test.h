@@ -19,7 +19,7 @@
     X(struct) \
     X(tuple) \
     X(enum) \
-    X(vector) \
+    X(list) \
     X(map) \
     X(poly_function) \
     X(poly_struct) \

@@ -45,8 +45,8 @@ static Object **get_gc_list(Object *o)
     switch (o->gc_kind) {
         case VFOREIGN:
             return &O_FOREIGN(o)->gc_list;
-        case VVECTOR:
-            return &O_VECTOR(o)->gc_list;
+        case VLIST:
+            return &O_LIST(o)->gc_list;
         case VMAP:
             return &O_MAP(o)->gc_list;
         case VCLOSURE:
@@ -156,11 +156,11 @@ static void traverse_method(paw_Env *P, Method *m)
     mark_object(P, V_OBJECT(m->f));
 }
 
-static void traverse_vector(paw_Env *P, Vector *a)
+static void traverse_list(paw_Env *P, List *a)
 {
     paw_Int itr = PAW_ITER_INIT;
-    while (pawV_vec_iter(a, &itr)) {
-        mark_value(P, *pawV_vec_get(P, a, itr));
+    while (pawV_list_iter(a, &itr)) {
+        mark_value(P, *pawV_list_get(P, a, itr));
     }
 }
 
@@ -232,8 +232,8 @@ static void traverse_objects(paw_Env *P)
             case VMETHOD:
                 traverse_method(P, O_METHOD(o));
                 break;
-            case VVECTOR:
-                traverse_vector(P, O_VECTOR(o));
+            case VLIST:
+                traverse_list(P, O_LIST(o));
                 break;
             case VMAP:
                 traverse_map(P, O_MAP(o));
@@ -276,7 +276,9 @@ void pawG_collect(paw_Env *P)
     mark_phase(P);
     sweep_phase(P);
 
-    P->gc_limit = P->gc_bytes * 2;
+    P->gc_limit = PAW_MIN(
+            P->gc_bytes * 2, 
+            P->heap_size);
 }
 
 void pawG_add_object(paw_Env *P, Object *o, ValueKind kind)
@@ -351,8 +353,8 @@ void pawG_free_object(paw_Env *P, Object *o)
         case VMAP:
             pawH_free(P, O_MAP(o));
             break;
-        case VVECTOR:
-            pawV_vec_free(P, O_VECTOR(o));
+        case VLIST:
+            pawV_list_free(P, O_LIST(o));
             break;
         case VPROTO:
             pawV_free_proto(P, O_PROTO(o));

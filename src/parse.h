@@ -8,7 +8,6 @@
 #include "lex.h"
 
 #define limit_error(x, what, limit) pawX_error(x, "too many %s (limit is %d)", what, limit)
-#define SCAN_STRING(x, s) pawP_scan_string(ENV(x), (x)->strings, s)
 
 void pawP_init(paw_Env *P);
 

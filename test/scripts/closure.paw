@@ -100,7 +100,7 @@ fn map<A, B>(f: fn(A) -> B, a: [A]) -> [B] {
     let b = [];
     for x in a {
         let y = f(x);
-        _vector_push(b, y);
+        _list_push(b, y);
     };
     return b;
 }
@@ -184,14 +184,14 @@ fn test_capture_separate_lists() {
         let make_1 = || {
             let a = [];
             return || {
-                _vector_push(a, #a);
+                _list_push(a, #a);
                 return a;
             };
         }; // Close a
         let make_2 = || {
             let a = [];
             return || {
-                _vector_push(a, #a);
+                _list_push(a, #a);
                 return a;
             };
         }; // Close a
