@@ -1170,7 +1170,7 @@ static struct HirExpr *resolve_unop_expr(struct Resolver *R, struct AstUnOpExpr 
     const paw_Type code = TYPE2CODE(R, type);
     if (code < 0 || !kValidOps[e->op][code]) {
         TYPE_ERROR(R, "unsupported operand type for unary operator");
-    } else if (unop_is_bool(e->op)) {
+    } else if (UNOP_IS_BOOL(e->op)) {
         r->type = get_type(R, PAW_TBOOL);
     } else if (e->op == UNARY_LEN) {
         r->type = get_type(R, PAW_TINT);
@@ -1255,7 +1255,7 @@ static struct HirExpr *resolve_binop_expr(struct Resolver *R, struct AstBinOpExp
         r->type = binop_list(R, e->op, lhs);
     } else if (code == PAW_TMAP) {
         r->type = binop_map(R, lhs);
-    } else if (binop_is_bool(e->op)) {
+    } else if (BINOP_IS_BOOL(e->op)) {
         r->type = get_type(R, PAW_TBOOL);
     } else {
         r->type = lhs;

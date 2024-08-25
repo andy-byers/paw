@@ -247,9 +247,31 @@ static void test_parse_int(paw_Env *P)
     check(PAW_EOVERFLOW == parse_int(P, "-9223372036854775809")); 
 }
 
+static void test_immediates(void)
+{
+    OpCode opcode;
+#define CHECK_BOUND(X, v) ( \
+            opcode = 0, \
+            SET_##X(&opcode, v) /* set immediate */, \
+            SET_OP(&opcode, 0) /* corrupt */, \
+            (v) == GET_##X(opcode) ? (void)0 : ( \
+                fprintf(stderr, "'%s' unrepresentable by operand '%s'\n", #v, #X), \
+                abort()))
+    CHECK_BOUND(S, S_MAX);
+    CHECK_BOUND(S, -S_MAX);
+    CHECK_BOUND(U, 0);
+    CHECK_BOUND(U, U_MAX);
+    CHECK_BOUND(A, 0);
+    CHECK_BOUND(B, B_MAX);
+    CHECK_BOUND(B, 0);
+    CHECK_BOUND(A, A_MAX);
+#undef CHECK_BOUND
+}
+
 int main(void)
 {
     test_primitives();
+    test_immediates();
     driver(test_strings);
     driver(test_stack);
     driver(test_map1);

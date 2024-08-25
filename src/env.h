@@ -172,7 +172,6 @@ typedef struct paw_Env {
     String *modname;
     Map *builtin;
     Map *libs;
-    Value meta_keys[NMETAMETHODS];
 
     // Array of commonly-used strings.
     String *str_cache[NCSTR];

@@ -78,7 +78,6 @@ target_sources(paw
             #${PAW_SOURCE_DIR}/mathlib.c
             ${PAW_SOURCE_DIR}/map.c
             ${PAW_SOURCE_DIR}/mem.c
-            ${PAW_SOURCE_DIR}/opcode.c
             ${PAW_SOURCE_DIR}/os.c
             ${PAW_SOURCE_DIR}/parse.c
             ${PAW_SOURCE_DIR}/resolve.c

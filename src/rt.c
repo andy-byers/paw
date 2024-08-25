@@ -906,19 +906,19 @@ top:
                 VM_PUSHV(*VM_TOP(u + 1));
             }
 
-            vm_case(PUSHUNIT) :
+            vm_case(PUSHZERO) :
             {
                 VM_PUSH0();
             }
 
-            vm_case(PUSHTRUE) :
+            vm_case(PUSHONE) :
             {
-                VM_PUSHB(PAW_TRUE);
+                VM_PUSHI(1);
             }
 
-            vm_case(PUSHFALSE) :
+            vm_case(PUSHSMALLINT) :
             {
-                VM_PUSHB(PAW_FALSE);
+                VM_PUSHI(GET_S(opcode));
             }
 
             vm_case(PUSHCONST) :
@@ -972,30 +972,6 @@ top:
             vm_case(CASTFLOAT) :
             {
                 pawR_cast_float(P, GET_U(opcode));
-            }
-
-            vm_case(MATCHVARIANT) :
-            {
-                const Variant *var = V_VARIANT(*VM_TOP(1));
-                VM_PUSHB(var->k == GET_U(opcode));
-            }
-
-            vm_case(UNPACKVARIANT) :
-            {
-                VM_PROTECT();
-                unpack_variant(P, GET_U(opcode));
-            }
-
-            vm_case(UNPACKINSTANCE) :
-            {
-                VM_PROTECT();
-                unpack_instance(P, GET_U(opcode));
-            }
-
-            vm_case(UNPACKTUPLE) :
-            {
-                VM_PROTECT();
-                unpack_tuple(P, GET_U(opcode));
             }
 
             vm_case(NEWVARIANT) :
@@ -1053,13 +1029,6 @@ top:
             {
                 const int u = GET_U(opcode);
                 VM_PUSHV(*pawE_get_val(P, u));
-            }
-
-            vm_case(SETGLOBAL) :
-            {
-                const int u = GET_U(opcode);
-                *pawE_get_val(P, u) = *VM_TOP(1);
-                VM_POP(1);
             }
 
             vm_case(GETTUPLE) :
@@ -1237,6 +1206,9 @@ top:
             VM_FORIN(map, MAP)
 #undef VM_FORIN0
 #undef VM_FORIN
+
+            vm_default:
+                break;
         }
     }
 }

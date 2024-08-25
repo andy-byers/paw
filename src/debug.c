@@ -76,14 +76,12 @@ const char *paw_op_name(Op op)
             return "CASTINT";
         case OP_CASTFLOAT:
             return "CASTFLOAT";
-        case OP_PUSHSTRUCT:
-            return "PUSHSTRUCT";
-        case OP_PUSHUNIT:
-            return "PUSHUNIT";
-        case OP_PUSHTRUE:
-            return "PUSHTRUE";
-        case OP_PUSHFALSE:
-            return "PUSHFALSE";
+        case OP_PUSHZERO:
+            return "PUSHZERO";
+        case OP_PUSHONE:
+            return "PUSHONE";
+        case OP_PUSHSMALLINT:
+            return "PUSHSMALLINT";
         case OP_PUSHCONST:
             return "PUSHCONST";
         case OP_COPY:
@@ -92,14 +90,10 @@ const char *paw_op_name(Op op)
             return "INITFIELD";
         case OP_SHIFT:
             return "SHIFT";
-        case OP_MATCHVARIANT:
-            return "MATCHVARIANT";
         case OP_POP:
             return "POP";
         case OP_CLOSE:
             return "CLOSE";
-        case OP_INIT:
-            return "INIT";
         case OP_RETURN:
             return "RETURN";
         case OP_CLOSURE:
@@ -118,8 +112,6 @@ const char *paw_op_name(Op op)
             return "GLOBAL";
         case OP_GETGLOBAL:
             return "GETGLOBAL";
-        case OP_SETGLOBAL:
-            return "SETGLOBAL";
         case OP_GETLOCAL:
             return "GETLOCAL";
         case OP_SETLOCAL:
@@ -138,8 +130,6 @@ const char *paw_op_name(Op op)
             return "NEWLIST";
         case OP_NEWMAP:
             return "NEWMAP";
-        case OP_VARARG:
-            return "VARARG";
         case OP_FORNUM0:
             return "FORNUM0";
         case OP_FORNUM:
@@ -185,17 +175,14 @@ void paw_dump_opcode(OpCode opcode)
         case OP_CASTFLOAT:
             printf("CASTFLOAT\n");
             break;
-        case OP_PUSHSTRUCT:
-            printf("PUSHSTRUCT %d\n", GET_U(opcode));
+        case OP_PUSHZERO:
+            printf("PUSHZERO\n");
             break;
-        case OP_PUSHUNIT:
-            printf("PUSHUNIT\n");
+        case OP_PUSHONE:
+            printf("PUSHONE\n");
             break;
-        case OP_PUSHTRUE:
-            printf("PUSHTRUE\n");
-            break;
-        case OP_PUSHFALSE:
-            printf("PUSHFALSE\n");
+        case OP_PUSHSMALLINT:
+            printf("PUSHSMALLINT\n");
             break;
         case OP_PUSHCONST:
             printf("PUSHCONST %d\n", GET_U(opcode));
@@ -211,12 +198,6 @@ void paw_dump_opcode(OpCode opcode)
             break;
         case OP_CLOSE:
             printf("CLOSE\n");
-            break;
-        case OP_INIT:
-            printf("INIT\n");
-            break;
-        case OP_MATCHVARIANT:
-            printf("MATCHVARIANT\n");
             break;
         case OP_SHIFT:
             printf("SHIFT\n");
@@ -248,9 +229,6 @@ void paw_dump_opcode(OpCode opcode)
         case OP_GETGLOBAL:
             printf("GETGLOBAL: %d\n", GET_U(opcode));
             break;
-        case OP_SETGLOBAL:
-            printf("SETGLOBAL: %d\n", GET_U(opcode));
-            break;
         case OP_GETLOCAL:
             printf("GETLOCAL: %d\n", GET_U(opcode));
             break;
@@ -274,9 +252,6 @@ void paw_dump_opcode(OpCode opcode)
             break;
         case OP_NEWMAP:
             printf("NEWMAP\n");
-            break;
-        case OP_VARARG:
-            printf("VARARG\n");
             break;
         case OP_FORNUM0:
             printf("FORNUM0\n");
@@ -359,11 +334,6 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
                 break;
             }
 
-            case OP_MATCHVARIANT: {
-                pawL_add_fstring(P, print, " ; k = %d", GET_U(opcode));
-                break;
-            }
-
             case OP_SHIFT: {
                 pawL_add_fstring(P, print, " ; n = %d", GET_U(opcode));
                 break;
@@ -376,11 +346,6 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
 
             case OP_PUSHCONST: {
                 pawL_add_fstring(P, print, " ; k = %d", GET_U(opcode));
-                break;
-            }
-
-            case OP_PUSHSTRUCT: {
-                pawL_add_fstring(P, print, " ; $ = %d", GET_U(opcode));
                 break;
             }
 
@@ -443,11 +408,6 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
                 break;
             }
 
-            case OP_SETGLOBAL: {
-                pawL_add_fstring(P, print, " ; id = %d", GET_U(opcode));
-                break;
-            }
-
             case OP_GLOBAL: {
                 pawL_add_fstring(P, print, " ; k = %d", GET_U(opcode));
                 break;
@@ -470,13 +430,6 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
 
             case OP_CALL: {
                 pawL_add_fstring(P, print, " ; # nargs = %d", GET_U(opcode));
-                break;
-            }
-
-            case OP_VARARG: {
-                const int nfixed = GET_U(opcode);
-                const int npassed = paw_get_count(P) - 1;
-                pawL_add_fstring(P, print, " ; # nargs = %d", npassed - nfixed);
                 break;
             }
 

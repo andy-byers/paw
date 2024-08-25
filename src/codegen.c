@@ -286,7 +286,7 @@ static void patch_here(struct FuncState *fs, int from)
 static void code_loop(struct FuncState *fs, Op op, int to)
 {
     const int jump = to - (fs->pc + 1);
-    if (jump > JUMP_MAX) {
+    if (jump < -JUMP_MAX) {
         SYNTAX_ERROR(fs->G, "too many instructions in loop");
     }
     pawK_code_S(fs, op, jump);
@@ -303,10 +303,10 @@ static void add_label(struct FuncState *fs, enum LabelKind kind)
     struct LabelList *ll = &G->C->dm->labels;
     pawM_grow(ENV(G), ll->values, ll->length, ll->capacity);
     ll->values[ll->length] = (struct Label){
-        .kind = kind,
-        .line = -1, // TODO: Get from HirLabelStmt
         .level = fs->nlocals - fs->bs->level,
         .pc = code_jump(fs, OP_JUMP),
+        .line = fs->line,
+        .kind = kind,
     };
     ++ll->length;
 }
@@ -421,7 +421,7 @@ static void leave_function(struct Generator *G)
 
     // TODO: Need a return at the end to handle cleaning up the stack
     //       Use a landing pad: all returns are just jumps to the landing pad
-    pawK_code_0(fs, OP_PUSHUNIT);
+    pawK_code_0(fs, OP_PUSHZERO);
     pawK_code_0(fs, OP_RETURN);
 
     pawM_shrink(P, p->source, p->length, fs->pc);
@@ -560,7 +560,7 @@ static struct HirVarInfo find_var(struct Generator *G, const String *name)
 #define CODE_OP(fs, op, subop, type) \
     pawK_code_AB(fs, op, CAST(subop, int), basic_code((fs)->G, type))
 
-// TODO: OP_PUSHFALSE is a hack to avoid creating unnecessary constants,
+// TODO: OP_PUSHZERO is a hack to avoid creating unnecessary constants,
 // essentially pushes integer 0. we cache constants, but it would also be
 // nice to have an instruction that pushes a small immediate integer. No
 // need to use a constant slot if we can squeeze the value into the opcode.
@@ -574,7 +574,7 @@ static void code_slice_indices(struct HirVisitor *V, struct HirExpr *first, stru
         V->VisitExpr(V, first);
     } else {
         // default to the start of the sequence
-        pawK_code_0(fs, OP_PUSHFALSE);
+        pawK_code_0(fs, OP_PUSHZERO);
     }
     if (second != NULL) {
         V->VisitExpr(V, second);
@@ -633,12 +633,9 @@ static void code_setter(struct HirVisitor *V, struct HirExpr *lhs, struct HirExp
             case VAR_LOCAL:
                 pawK_code_U(fs, OP_SETLOCAL, info.index);
                 break;
-            case VAR_UPVALUE:
-                pawK_code_U(fs, OP_SETUPVALUE, info.index);
-                break;
             default:
-                paw_assert(info.kind == VAR_GLOBAL);
-                pawK_code_U(fs, OP_SETGLOBAL, info.index);
+                paw_assert(info.kind == VAR_UPVALUE);
+                pawK_code_U(fs, OP_SETUPVALUE, info.index);
         }
         return;
     }
@@ -672,22 +669,33 @@ static void code_setter(struct HirVisitor *V, struct HirExpr *lhs, struct HirExp
     }
 }
 
+static int code_if_small(struct FuncState *fs, paw_Int i)
+{
+    if (i == 0) {
+        pawK_code_0(fs, OP_PUSHZERO);
+    } else if (i == 1) {
+        pawK_code_0(fs, OP_PUSHONE);
+    } else if ((i < 0 && i >= -S_MAX) || 
+            (i > 0 && i <= S_MAX)) {
+        pawK_code_S(fs, OP_PUSHSMALLINT, i);
+    } else {
+        return -1;
+    }
+    return 0;
+}
+
 static void code_basic_lit(struct HirVisitor *V, struct HirLiteralExpr *e)
 {
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
     fs->line = e->line;
 
-    if (e->basic.t == PAW_TUNIT) {
-        pawK_code_0(fs, OP_PUSHUNIT);
-    } else if (e->basic.t != PAW_TBOOL) {
+    const paw_Type type = e->basic.t != PAW_TUNIT && e->basic.t != PAW_TBOOL 
+        ? e->basic.t : PAW_TINT;
+    if (type != PAW_TINT || code_if_small(fs, e->basic.value.i)) {
         const int k = add_constant(G, e->basic.value, e->basic.t);
         pawK_code_U(fs, OP_PUSHCONST, k);
-    } else if (V_TRUE(e->basic.value)) {
-        pawK_code_0(fs, OP_PUSHTRUE);
-    } else {
-        pawK_code_0(fs, OP_PUSHFALSE);
-    }
+    } 
 }
 
 static void code_tuple_lit(struct HirVisitor *V, struct HirLiteralExpr *e)

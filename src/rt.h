@@ -1,8 +1,8 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
-#ifndef PAW_VM_H
-#define PAW_VM_H
+#ifndef PAW_RT_H
+#define PAW_RT_H
 
 #include "env.h"
 #include "paw.h"
@@ -49,4 +49,4 @@ static inline void pawR_check_varargc(paw_Env *P, int argc, int least, int most)
     }
 }
 
-#endif // PAW_VM_H
+#endif // PAW_RT_H
