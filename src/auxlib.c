@@ -45,7 +45,7 @@ static char *reserve_memory(paw_Env *P, Buffer *buf, size_t n, int boxloc)
 void pawL_init_buffer(paw_Env *P, Buffer *buf)
 {
     *buf = (Buffer){.data = buf->stack, .alloc = BUFFER_LIMIT};
-    paw_push_unit(P, 1); // placeholder for box
+    paw_push_zero(P, 1); // placeholder for box
 }
 
 void pawL_discard_result(paw_Env *P, Buffer *buf)
@@ -82,7 +82,7 @@ void pawL_add_value(paw_Env *P, Buffer *buf, paw_Type type)
         // add the type name and address
         str = paw_push_fstring(P, "%s (%p)",
                                "<type>" /*TODO: paw_typename(P, -1)*/,
-                               paw_pointer(P, -1));
+                               paw_userdata(P, -1));
         len = paw_length(P, -1);
     }
     add_nstring(P, buf, str, len, -3);

@@ -1262,7 +1262,7 @@ static struct HirType *expand_fdef(struct HirFolder *F, struct HirFuncDef *t)
 static struct HirType *expand_adt(struct HirFolder *F, struct HirAdt *t)
 {
     struct Expander *E = F->ud;
-    if (t->did <= PAW_TSTRING) return HIR_CAST_TYPE(t);
+    if (t->did <= PAW_TSTR) return HIR_CAST_TYPE(t);
     struct HirTypeList *types = expand_typelist(F, t->types);
     struct HirDecl *base = pawHir_get_decl(E->hir, t->base);
     struct HirDecl *inst = pawP_instantiate(E->R, base, types);
@@ -2077,7 +2077,7 @@ static void dump_expr(struct Printer *P, struct HirExpr *e)
                                      V_FLOAT(e->literal.basic.value));
                             break;
                         default:
-                            paw_assert(e->literal.basic.t == PAW_TSTRING);
+                            paw_assert(e->literal.basic.t == PAW_TSTR);
                             dump_fmt(P, "value: %s\n",
                                      V_STRING(e->literal.basic.value)->text);
                             break;

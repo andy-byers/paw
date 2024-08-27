@@ -301,22 +301,22 @@ assert(status != 0);
 
 ## Operators
 
-|Precedence|Operator      |Description                                   |Associativity|
-|:---------|:-------------|:---------------------------------------------|:------------|
-|14        |`() [] . ?`   |Call, Subscript, Member access, Question mark |Left         |
-|13        |`! - ~ #`     |Not, Negate, Bitwise not, length              |Right        |
-|12        |`as`          |Cast                                          |Left         |
-|11        |`* / %`       |Multiply, Divide, Modulus                     |Left         |
-|10        |`+ -`         |Add, Subtract                                 |Left         |
-|9         |`<< >>`       |Shift left, Shift right                       |Left         |
-|8         |`&`           |Bitwise and                                   |Left         |
-|7         |`^`           |Bitwise xor                                   |Left         |
-|6         |<code>&#124;</code>|Bitwise or                               |Left         |
-|5         |`in < <= > >=`|Inclusion, Relational comparisons             |Left         |
-|4         |`== !=`       |Equality comparisons                          |Left         |
-|3         |`&&`          |And                                           |Left         |
-|2         |<code>&#124;&#124;</code>|Or                                 |Left         |
-|1         |`=`           |Assignment                                    |Right        |
+|Precedence|Operator   |Description                                   |Associativity|
+|:---------|:----------|:---------------------------------------------|:------------|
+|14        |`() [] . ?`|Call, Subscript, Member access, Question mark |Left         |
+|13        |`! - ~ #`  |Not, Negate, Bitwise not, length              |Right        |
+|12        |`as`       |Cast                                          |Left         |
+|11        |`* / %`    |Multiply, Divide, Modulus                     |Left         |
+|10        |`+ -`      |Add, Subtract                                 |Left         |
+|9         |`<< >>`    |Shift left, Shift right                       |Left         |
+|8         |`&`        |Bitwise and                                   |Left         |
+|7         |`^`        |Bitwise xor                                   |Left         |
+|6         |<code>&#124;</code>|Bitwise or                            |Left         |
+|5         |`< <= > >=`|Relational comparisons                        |Left         |
+|4         |`== !=`    |Equality comparisons                          |Left         |
+|3         |`&&`       |And                                           |Left         |
+|2         |<code>&#124;&#124;</code>|Or                              |Left         |
+|1         |`=`        |Assignment                                    |Right        |
 
 ## Roadmap
 + [x] static, strong typing

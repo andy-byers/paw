@@ -4,7 +4,7 @@
 #ifndef PAW_HIR_H
 #define PAW_HIR_H
 
-#include "code.h"
+#include "compile.h"
 
 struct Compiler;
 struct Resolver;
@@ -384,13 +384,13 @@ struct HirFieldExpr {
 
 struct HirUnOpExpr {
     HIR_EXPR_HEADER;
-    UnaryOp op : 8;
+    enum UnaryOp op : 8;
     struct HirExpr *target;
 };
 
 struct HirBinOpExpr {
     HIR_EXPR_HEADER;
-    BinaryOp op : 8;
+    enum BinaryOp op : 8;
     struct HirExpr *lhs;
     struct HirExpr *rhs;
 };
@@ -674,7 +674,7 @@ DEFINE_LIST(struct Hir, pawHir_path_, HirPath, struct HirSegment)
 #define HIR_CAST_TYPE(x) ((struct HirType *)(x))
 
 #define HIR_IS_UNIT_T(x) (HirIsAdt(x) && (x)->adt.base == PAW_TUNIT)
-#define HIR_IS_BASIC_T(x) (HirIsAdt(x) && (x)->adt.base <= PAW_TSTRING)
+#define HIR_IS_BASIC_T(x) (HirIsAdt(x) && (x)->adt.base <= PAW_TSTR)
 
 #define HIR_IS_POLY_FUNC(decl) (HirIsFuncDecl(decl) && HirGetFuncDecl(decl)->generics != NULL)
 #define HIR_IS_POLY_ADT(decl) (HirIsAdtDecl(decl) && HirGetAdtDecl(decl)->generics != NULL)

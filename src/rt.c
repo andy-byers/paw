@@ -8,10 +8,12 @@
 #include "call.h"
 #include "gc.h"
 #include "map.h"
+#include "rt.h"
 #include "value.h"
 #include <math.h>
 
 // Helpers for the VM:
+
 #define vm_switch(x) switch (x)
 #define vm_case(x) \
     break;         \
@@ -20,41 +22,55 @@
     break;         \
     default
 #define VM_CONTINUE continue
+
 #define VM_SHIFT(n) (*VM_TOP((n) + 1) = *VM_TOP(1), VM_POP(n))
 #define VM_POP(n) pawC_stkdec(P, n)
-#define VM_TOP(n) (&P->top.p[-(n)])
+#define VM_TOP(i) (&P->top.p[-(i)])
 #define VM_SAVE() (VM_PROTECT(), cf->top = P->top)
 #define VM_PROTECT() (cf->pc = pc)
 #define VM_UPVALUE(u) (fn->up[u]->p.p)
-#define VM_PUSHV(v) pawC_pushv(P, v)
-#define VM_PUSH0() pawC_push0(P)
-#define VM_PUSHI(i) pawC_pushi(P, i)
-#define VM_PUSHF(f) pawC_pushf(P, f)
-#define VM_PUSHB(b) pawC_pushb(P, b)
-#define VM_PUSHO(o) pawC_pusho(P, CAST_OBJECT(o))
+
+#define VM_PUSH(v) pawC_pushv(P, v)
+#define VM_PUSH_0() pawC_push0(P)
+#define VM_PUSH_BOOL(b) pawC_pushb(P, b)
+#define VM_PUSH_INT(i) pawC_pushi(P, i)
+#define VM_PUSH_FLOAT(f) pawC_pushf(P, f)
+#define VM_PUSH_OBJECT(o) pawC_pusho(P, CAST_OBJECT(o))
+
+#define VM_SET_0(top) V_SET_0(VM_TOP(top))
+#define VM_SET_BOOL(top, b) V_SET_BOOL(VM_TOP(top), b)
+#define VM_SET_INT(top, i) V_SET_INT(VM_TOP(top), i)
+#define VM_SET_FLOAT(top, f) V_SET_FLOAT(VM_TOP(top), f)
+#define VM_SET_OBJECT(top, o) V_SET_OBJECT(VM_TOP(top), o)
+
+#define VM_INT(top) V_INT(*VM_TOP(top))
+#define VM_BOOL(top) V_BOOL(*VM_TOP(top))
+#define VM_FLOAT(top) V_FLOAT(*VM_TOP(top))
+#define VM_STR(top) V_STRING(*VM_TOP(top))
+#define VM_LIST(top) V_LIST(*VM_TOP(top))
+#define VM_MAP(top) V_MAP(*VM_TOP(top))
 
 // Slot 0 (the callable) is an implicit parameter.
 #define VM_ARGC() (paw_get_count(P) - 1)
 
 // Generate code for creating common builtin objects
-// Requires a placeholder slot (the VM_PUSH0() pushes an empty slot) so
-// the GC doesn't get confused. Both the VM_PUSH0(), and the pawV_list_new calls
+// Requires a placeholder slot (the VM_PUSH_0() pushes an empty slot) so
+// the GC doesn't get confused. Both the VM_PUSH_0(), and the pawV_list_new calls
 // might fail and cause an error to be thrown, so we have to be careful not
 // to leave a junk value on top of the stack.
-#define VM_LIST_INIT(pa, pv) \
-    pv = VM_PUSH0();           \
-    pa = pawV_list_new(P);      \
-    V_SET_OBJECT(pv, pa);
-
-#define VM_MAP_INIT(dm, pv) \
-    pv = VM_PUSH0();        \
-    dm = pawH_new(P);       \
-    V_SET_OBJECT(pv, dm);
+#define VM_LIST_INIT(plist, pv) \
+    pv = VM_PUSH_0(); \
+    plist = pawV_list_new(P); \
+    V_SET_OBJECT(pv, plist);
+#define VM_MAP_INIT(pmap, pv) \
+    pv = VM_PUSH_0(); \
+    pmap = pawH_new(P); \
+    V_SET_OBJECT(pv, pmap);
 
 static void add_zeros(paw_Env *P, int n)
 {
     for (int i = 0; i < n; ++i) {
-        VM_PUSH0();
+        VM_PUSH_0();
     }
 }
 
@@ -154,7 +170,7 @@ static void float2int(paw_Env *P, paw_Float f, Value *pv)
 
 void pawR_cast_bool(paw_Env *P, paw_Type type)
 {
-    paw_assert(type < PAW_TSTRING);
+    paw_assert(type < PAW_TSTR);
     paw_unused(type);
 
     Value *pv = VM_TOP(1);
@@ -163,7 +179,7 @@ void pawR_cast_bool(paw_Env *P, paw_Type type)
 
 void pawR_cast_int(paw_Env *P, paw_Type type)
 {
-    paw_assert(type < PAW_TSTRING);
+    paw_assert(type < PAW_TSTR);
     if (type == PAW_TFLOAT) {
         // NOTE: Other primitives have a value representation compatible with
         //       that of the 'int' type.
@@ -175,7 +191,7 @@ void pawR_cast_int(paw_Env *P, paw_Type type)
 
 void pawR_cast_float(paw_Env *P, paw_Type type)
 {
-    paw_assert(type < PAW_TSTRING);
+    paw_assert(type < PAW_TSTR);
     if (type != PAW_TFLOAT) {
         Value *pv = VM_TOP(1);
         const paw_Int i = V_INT(*pv);
@@ -233,72 +249,6 @@ void pawR_setfield(paw_Env *P, int index)
     VM_SHIFT(1);
 }
 
-void pawR_setelem(paw_Env *P, paw_Type t)
-{
-    const Value val = *VM_TOP(1);
-    const Value key = *VM_TOP(2);
-    const Value obj = *VM_TOP(3);
-    if (t == PAW_TLIST) {
-        const paw_Int index = V_INT(key);
-        Value *pval = pawV_list_get(P, V_LIST(obj), index);
-        *pval = val;
-    } else {
-        paw_assert(t == PAW_TMAP);
-        pawH_insert(P, V_MAP(obj), key, val);
-    }
-    VM_SHIFT(2);
-}
-
-static size_t check_slice_bound(paw_Env *P, paw_Int index, size_t length, const char *what, const char *cont)
-{
-    const paw_Int n = PAW_CAST_INT(length);
-    index = pawV_abs_index(index, length);
-    if (index < 0 || index > n) {
-        pawE_error(P, PAW_ERUNTIME, -1,
-                   "slice %s index %I is out of bounds for %s of length %I", 
-                   what, index, cont, PAW_CAST_INT(length));
-    }
-    return CAST_SIZE(index);
-}
-
-static void setslice_list(paw_Env *P, List *va, paw_Int i, paw_Int j,
-                            const List *vb)
-{
-    const size_t na = pawV_list_length(va);
-    const size_t nb = pawV_list_length(vb);
-    const size_t zi = check_slice_bound(P, i, na, "start", "list");
-    const size_t zj = check_slice_bound(P, j, na, "end", "list");
-
-    if (va == vb) {
-        Value *pv = VM_TOP(1);
-        paw_assert(pv->p == vb);
-        vb = pawV_list_clone(P, pv, vb);
-    }
-
-    const size_t szelem = sizeof(va->begin[0]);
-    const size_t nelems = na - zj + zi + nb;
-    pawV_list_reserve(P, va, nelems);
-
-    Value *gap = va->begin + zi;
-    memmove(gap + nb, va->begin + zj, (na - zj) * szelem);
-    memcpy(gap, vb->begin, nb * szelem);
-    pawV_list_resize(P, va, nelems);
-}
-
-// setslice([a1..an], i, j, [b1..bn]) => [a1..ai b1..bn aj..an]
-void pawR_setslice(paw_Env *P, paw_Type t)
-{
-    const Value va = *VM_TOP(4);
-    const paw_Int i = V_INT(*VM_TOP(3));
-    const paw_Int j = V_INT(*VM_TOP(2));
-    const Value vb = *VM_TOP(1);
-
-    paw_assert(t == PAW_TLIST);
-    setslice_list(P, V_LIST(va), i, j, V_LIST(vb));
-
-    VM_SHIFT(3);
-}
-
 void pawR_init(paw_Env *P)
 {
     String *errmsg = pawS_new_str(P, "not enough memory");
@@ -322,7 +272,7 @@ static paw_Bool fornum_init(paw_Env *P)
         V_SET_INT(VM_TOP(3), begin);
         V_SET_INT(VM_TOP(2), end);
         V_SET_INT(VM_TOP(1), step);
-        VM_PUSHI(begin);
+        VM_PUSH_INT(begin);
     }
     return skip;
 }
@@ -337,7 +287,7 @@ static paw_Bool fornum(paw_Env *P)
         return PAW_FALSE;
     }
     V_SET_INT(VM_TOP(3), next);
-    VM_PUSHI(next);
+    VM_PUSH_INT(next);
     return PAW_TRUE;
 }
 
@@ -347,8 +297,8 @@ static paw_Bool forlist_init(paw_Env *P)
     paw_Int itr = PAW_ITER_INIT;
     List *arr = V_LIST(v);
     if (pawV_list_iter(arr, &itr)) {
-        VM_PUSHI(itr);
-        VM_PUSHV(arr->begin[itr]);
+        VM_PUSH_INT(itr);
+        VM_PUSH(arr->begin[itr]);
         return PAW_FALSE;
     }
     return PAW_TRUE;
@@ -362,7 +312,7 @@ static paw_Bool forlist(paw_Env *P)
     paw_Int i = V_INT(itr);
     if (pawV_list_iter(arr, &i)) {
         V_SET_INT(VM_TOP(1), i);
-        VM_PUSHV(arr->begin[i]);
+        VM_PUSH(arr->begin[i]);
         return PAW_TRUE;
     }
     return PAW_FALSE;
@@ -375,8 +325,8 @@ static paw_Bool formap_init(paw_Env *P)
     Map *map = V_MAP(v);
     if (pawH_iter(map, &itr)) {
         const Value v = *pawH_key(map, CAST_SIZE(itr));
-        VM_PUSHI(itr);
-        VM_PUSHV(v);
+        VM_PUSH_INT(itr);
+        VM_PUSH(v);
         return PAW_FALSE;
     }
     return PAW_TRUE;
@@ -391,86 +341,10 @@ static paw_Bool formap(paw_Env *P)
     if (pawH_iter(map, &i)) {
         const Value v = *pawH_key(map, CAST_SIZE(i));
         V_SET_INT(VM_TOP(1), i);
-        VM_PUSHV(v);
+        VM_PUSH(v);
         return PAW_TRUE;
     }
     return PAW_FALSE; // stop the loop
-}
-
-#define finish_strcmp(x, y, op) (pawS_cmp(x, y) op 0)
-
-static void string_binop(paw_Env *P, BinaryOp binop, Value lhs, Value rhs)
-{
-    const String *x = V_STRING(lhs);
-    const String *y = V_STRING(rhs);
-    switch (binop) {
-        case BINARY_ADD: {
-            // 's + t' concatenates strings 's' and 't'
-            Buffer print;
-            pawL_init_buffer(P, &print);
-            pawL_add_nstring(P, &print, x->text, x->length);
-            pawL_add_nstring(P, &print, y->text, y->length);
-            pawL_push_result(P, &print);
-            break;
-        }
-        case BINARY_LT:
-            VM_PUSHB(finish_strcmp(x, y, <));
-            break;
-        case BINARY_LE:
-            VM_PUSHB(finish_strcmp(x, y, <=));
-            break;
-        case BINARY_GT:
-            VM_PUSHB(finish_strcmp(x, y, >));
-            break;
-        default:
-            paw_assert(binop == BINARY_GE);
-            VM_PUSHB(finish_strcmp(x, y, >=));
-    }
-    VM_SHIFT(2);
-}
-
-static void list_binop(paw_Env *P, BinaryOp binop, Value lhs, Value rhs)
-{
-    const List *x = V_LIST(lhs);
-    const List *y = V_LIST(rhs);
-    paw_assert(binop == BINARY_ADD);
-
-    Value *pv;
-    List *z;
-    VM_LIST_INIT(z, pv);
-
-    const size_t zelem = sizeof(z->begin[0]);
-    const size_t nx = pawV_list_length(x);
-    const size_t ny = pawV_list_length(y);
-    pawV_list_resize(P, z, nx + ny);
-    if (nx > 0) {
-        memcpy(z->begin, x->begin, nx * zelem);
-    }
-    if (ny > 0) {
-        memcpy(z->begin + nx, y->begin, ny * zelem);
-    }
-    VM_SHIFT(2);
-}
-
-static void eq_ne(paw_Env *P, BinaryOp binop, paw_Type t, Value x, Value y)
-{
-    paw_Bool result;
-    const paw_Bool bt = binop == BINARY_EQ;
-    const paw_Bool bf = binop != BINARY_EQ;
-    if (t == PAW_TLIST) {
-        const List *lhs = V_LIST(x);
-        const List *rhs = V_LIST(y);
-        result = pawV_list_equals(P, lhs, rhs);
-    } else if (t == PAW_TMAP) {
-        Map *lhs = V_MAP(x);
-        Map *rhs = V_MAP(y);
-        result = pawH_equals(P, lhs, rhs);
-    } else {
-        // Fall back to comparing the value representation.
-        result = x.u == y.u;
-    }
-    V_SET_BOOL(VM_TOP(2), result ? bt : bf);
-    VM_POP(1);
 }
 
 #define I2U(i) (CAST(i, uint64_t))
@@ -482,218 +356,441 @@ static void eq_ne(paw_Env *P, BinaryOp binop, paw_Type t, Value x, Value y)
 #define I_UNOP(a, op) U2I(op I2U(a))
 #define I_BINOP(a, b, op) U2I(I2U(a) op I2U(b))
 
-static void int_binop(paw_Env *P, BinaryOp binop, paw_Int x, paw_Int y)
+#define CMP_CASES(x, y, z) \
+    case CMP_EQ: \
+        (z) = (x) == (y); \
+        break; \
+    case CMP_NE: \
+        (z) = (x) != (y); \
+        break; \
+    case CMP_LT: \
+        (z) = (x) < (y); \
+        break; \
+    case CMP_LE: \
+        (z) = (x) <= (y); \
+        break; \
+    case CMP_GT: \
+        (z) = (x) > (y); \
+        break; \
+    case CMP_GE: \
+        (z) = (x) >= (y);
+
+#define DIVIDE_BY_0(P) pawR_error(P, PAW_ERUNTIME, "divide by 0")
+
+static void int_cmp(paw_Env *P, enum CmpOp op, paw_Int x, paw_Int y)
 {
-    paw_Int z = 0;
-    switch (binop) {
-        case BINARY_LT:
-            z = x < y;
+    paw_Bool z;
+    switch (op) {
+        CMP_CASES(x, y, z)
+    }
+    VM_SET_BOOL(2, z);
+    VM_POP(1);
+}
+
+void pawR_cmpi(paw_Env *P, enum CmpOp op)
+{
+    int_cmp(P, op, VM_INT(2), VM_INT(1));
+}
+
+void pawR_arithi1(paw_Env *P, enum ArithOp1 op)
+{
+    paw_Int x = VM_INT(1);
+    switch (op) {
+        case ARITH_NEG:
+            x = I_UNOP(x, -);
+    }
+    VM_SET_INT(1, x);
+}
+
+void pawR_arithi2(paw_Env *P, enum ArithOp2 op)
+{
+    paw_Int x = VM_INT(2);
+    const paw_Int y = VM_INT(1);
+    switch (op) {
+        case ARITH_ADD:
+            x = I_BINOP(x, y, +);
             break;
-        case BINARY_LE:
-            z = x <= y;
+        case ARITH_SUB:
+            x = I_BINOP(x, y, -);
             break;
-        case BINARY_GT:
-            z = x > y;
+        case ARITH_MUL:
+            x = I_BINOP(x, y, *);
             break;
-        case BINARY_GE:
-            z = x >= y;
-            break;
-        case BINARY_ADD:
-            z = I_BINOP(x, y, +);
-            break;
-        case BINARY_SUB:
-            z = I_BINOP(x, y, -);
-            break;
-        case BINARY_MUL:
-            z = I_BINOP(x, y, *);
-            break;
-        case BINARY_DIV:
-        case BINARY_MOD:
+        case ARITH_DIV:
+        case ARITH_MOD:
             if (y == 0) {
-                pawR_error(P, PAW_ERUNTIME, "divide by 0");
+                DIVIDE_BY_0(P);
             } else if (x == PAW_INT_MIN && y == -1) {
                 // If x / y is undefined, then so too is x % y (see C11 section 6.5.5,
                 // item 6). Both cases equal 0 in Paw (x / y wraps).
-                z = 0; 
-            } else if (binop == BINARY_DIV) {
-                z = x / y; 
+                x = 0; 
+            } else if (op == ARITH_DIV) {
+                x = x / y; 
             } else {
-                z = x % y; 
+                x = x % y; 
             }
+    }
+    VM_SET_INT(2, x);
+    VM_POP(1);
+}
+
+void pawR_bitwi1(paw_Env *P, enum BitwOp1 op)
+{
+    paw_Int x = VM_INT(1);
+    switch (op) {
+        case BITW_NOT:
+            x = I_UNOP(x, ~);
+    }
+    VM_SET_INT(1, x);
+}
+
+void pawR_bitwi2(paw_Env *P, enum BitwOp2 op)
+{
+    paw_Int x = VM_INT(2);
+    paw_Int y = VM_INT(1);
+    switch (op) {
+        case BITW_AND:
+            x = I_BINOP(x, y, &);
             break;
-        case BINARY_BAND:
-            z = I_BINOP(x, y, &);
+        case BITW_OR:
+            x = I_BINOP(x, y, |);
             break;
-        case BINARY_BOR:
-            z = I_BINOP(x, y, |);
+        case BITW_XOR:
+            x = I_BINOP(x, y, ^);
             break;
-        case BINARY_BXOR:
-            z = I_BINOP(x, y, ^);
-            break;
-        case BINARY_SHL:
+        case BITW_SHL:
             if (y < 0) {
                 pawR_error(P, PAW_ERUNTIME, "negative shift count");
-            } else if (y == 0) {
-                z = x; // NOOP
-            } else {
+            } else if (y > 0) {
                 y = PAW_MIN(y, U2I(sizeof(x) * 8 - 1));
-                z = U2I(I2U(x) << y);
+                x = U2I(I2U(x) << y);
             }
             break;
-        default:
-            paw_assert(binop == BINARY_SHR);
+        case BITW_SHR:
             if (y < 0) {
                 pawR_error(P, PAW_ERUNTIME, "negative shift count");
-            } else if (y == 0) {
-                z = x; // NOOP
-            } else {
+            } else if (y > 0) {
                 // Right shift by >= width of 'x' is UB in C. Clamp the
                 // shift count. If 'x' < 0, then the results of the
                 // shift are implementation-defined (may or may not
                 // preserve the sign).
                 y = PAW_MIN(y, U2I(sizeof(x) * 8 - 1));
-                z = x >> y;
+                x = x >> y;
             }
     }
-    V_SET_INT(VM_TOP(2), z);
+    VM_SET_INT(2, x);
     VM_POP(1);
 }
 
-#define finish_cmp(x, y, op) (V_SET_BOOL(VM_TOP(2), (x)op(y)), VM_POP(1))
-
-static void float_binop(paw_Env *P, BinaryOp binop, paw_Float x, paw_Float y)
+void pawR_cmpf(paw_Env *P, enum CmpOp op)
 {
-    Value *pv = VM_TOP(2);
-    switch (binop) {
-        case BINARY_LT:
-            finish_cmp(x, y, <);
-            return;
-        case BINARY_LE:
-            finish_cmp(x, y, <=);
-            return;
-        case BINARY_GT:
-            finish_cmp(x, y, >);
-            return;
-        case BINARY_GE:
-            finish_cmp(x, y, >=);
-            return;
-        case BINARY_ADD:
-            V_SET_FLOAT(pv, x + y);
-            break;
-        case BINARY_SUB:
-            V_SET_FLOAT(pv, x - y);
-            break;
-        case BINARY_MUL:
-            V_SET_FLOAT(pv, x * y);
-            break;
-        default:
-            if (y == 0) {
-                pawR_error(P, PAW_ERUNTIME, "divide by 0");
-            } else if (binop == BINARY_DIV) {
-                V_SET_FLOAT(pv, x / y);
-            } else {
-                paw_assert(binop == BINARY_MOD);
-                V_SET_FLOAT(pv, fmod(x, y));
-            }
+    const paw_Float x = VM_FLOAT(2);
+    const paw_Float y = VM_FLOAT(1);
+    paw_Bool z;
+    switch (op) {
+        CMP_CASES(x, y, z)
     }
+    VM_SET_BOOL(2, z);
     VM_POP(1);
 }
 
-static void other_binop(paw_Env *P, BinaryOp binop, paw_Type t, Value x,
-                        Value y)
+void pawR_arithf1(paw_Env *P, enum ArithOp1 op)
 {
-    if (binop == BINARY_IN) {
-        Value *pv = VM_TOP(2);
-        if (t == PAW_TLIST) {
-            V_SET_BOOL(pv, pawV_list_contains(P, V_LIST(y), x));
-        } else {
-            paw_assert(t == PAW_TMAP);
-            V_SET_BOOL(pv, pawH_contains(V_MAP(y), x));
-        }
-        VM_POP(1);
-    } else if (t == PAW_TSTRING) {
-        string_binop(P, binop, x, y);
-    } else {
-        paw_assert(t == PAW_TLIST);
-        list_binop(P, binop, x, y);
+    const paw_Float x = VM_FLOAT(1);
+    paw_Float y;
+    switch (op) {
+        case ARITH_NEG:
+            y = -x;
+    }
+    VM_SET_FLOAT(1, y);
+}
+
+void pawR_arithf2(paw_Env *P, enum ArithOp2 op)
+{
+    paw_Float x = VM_FLOAT(2);
+    const paw_Float y = VM_FLOAT(1);
+    switch (op) {
+        case ARITH_ADD:
+            x = x + y;
+            break;
+        case ARITH_SUB:
+            x = x - y;
+            break;
+        case ARITH_MUL:
+            x = x * y;
+            break;
+        case ARITH_DIV:
+            if (y == 0.0) DIVIDE_BY_0(P);
+            x = x / y;
+            break;
+        case ARITH_MOD:
+            if (y == 0.0) DIVIDE_BY_0(P);
+            x = fmod(x, y);
+    }
+    VM_SET_FLOAT(2, x);
+    VM_POP(1);
+}
+
+static size_t check_slice_bound(paw_Env *P, paw_Int index, size_t length, const char *what, const char *cont)
+{
+    const paw_Int n = PAW_CAST_INT(length);
+    index = pawV_abs_index(index, length);
+    if (index < 0 || index > n) {
+        pawE_error(P, PAW_ERUNTIME, -1,
+                   "slice %s index %I is out of bounds for %s of length %I", 
+                   what, index, cont, PAW_CAST_INT(length));
+    }
+    return CAST_SIZE(index);
+}
+
+void pawR_boolop(paw_Env *P, enum BoolOp op)
+{
+    paw_Bool x = VM_INT(1);
+    switch (op) {
+        case BOOL_NOT:
+            x = !x; 
+    }
+    VM_SET_BOOL(1, x);
+}
+
+void pawR_cmps(paw_Env *P, enum CmpOp op)
+{
+    const String *x = VM_STR(2);
+    const String *y = VM_STR(1);
+    const int cmp = pawS_cmp(x, y);
+    paw_Bool z;
+    switch (op) {
+        CMP_CASES(cmp, 0, z);
+    }
+    VM_SET_BOOL(2, z);
+    VM_POP(1);
+}
+
+static void str_len(paw_Env *P)
+{
+    const String *str = VM_STR(1);
+    const size_t len = pawS_length(str);
+    V_SET_INT(VM_TOP(1), len);
+}
+
+static void str_add(paw_Env *P)
+{
+    const String *x = VM_STR(2);
+    const String *y = VM_STR(1);
+
+    Buffer print;
+    pawL_init_buffer(P, &print);
+    pawL_add_nstring(P, &print, x->text, x->length);
+    pawL_add_nstring(P, &print, y->text, y->length);
+    pawL_push_result(P, &print);
+    VM_SHIFT(2);
+}
+
+static void str_get(paw_Env *P)
+{
+    const String *str = VM_STR(2);
+    const paw_Int idx = VM_INT(1);
+    pawV_check_abs(P, idx, str->length, "str");
+    const char c = str->text[idx];
+    String *res = pawS_new_nstr(P, &c, 1);
+    V_SET_OBJECT(VM_TOP(2), res);
+    VM_POP(1);
+}
+
+static void str_getn(paw_Env *P)
+{
+    const String *str = VM_STR(3);
+    const paw_Int i = VM_INT(2);
+    const paw_Int j = VM_INT(1);
+
+    const size_t n = pawS_length(str);
+    const size_t zi = check_slice_bound(P, i, n, "start", "string");
+    const size_t zj = check_slice_bound(P, j, n, "end", "string");
+
+    Value *pv = VM_PUSH_0();
+    const size_t nbytes = zj - zi;
+    String *slice = pawS_new_nstr(P, str->text + zi, nbytes);
+    V_SET_OBJECT(pv, slice);
+
+    VM_SHIFT(3);
+}
+
+void pawR_strop(paw_Env *P, enum StrOp op)
+{
+    switch (op) {
+        case STR_LEN:
+            str_len(P);
+            break;
+        case STR_ADD:
+            str_add(P);
+            break;
+        case STR_GET:
+            str_get(P);
+            break;
+        case STR_GETN:
+            str_getn(P);
+            break;
     }
 }
 
-static int binop_aux(paw_Env *P, BinaryOp binop, paw_Type t, Value x, Value y)
+static void list_len(paw_Env *P)
 {
-    if (binop == BINARY_EQ || binop == BINARY_NE) {
-        eq_ne(P, binop, t, x, y);
-    } else if (t == PAW_TINT) {
-        int_binop(P, binop, V_INT(x), V_INT(y));
-    } else if (t == PAW_TFLOAT) {
-        float_binop(P, binop, V_FLOAT(x), V_FLOAT(y));
-    } else {
-        other_binop(P, binop, t, x, y);
+    const List *list = V_LIST(*VM_TOP(1));
+    const size_t len = pawV_list_length(list);
+    V_SET_INT(VM_TOP(1), len);
+}
+
+static void list_add(paw_Env *P)
+{
+    const List *x = V_LIST(*VM_TOP(2));
+    const List *y = V_LIST(*VM_TOP(1));
+
+    List *z;
+    Value *pv;
+    VM_LIST_INIT(z, pv);
+
+    const size_t nx = pawV_list_length(x);
+    const size_t ny = pawV_list_length(y);
+    pawV_list_resize(P, z, nx + ny);
+    if (nx > 0) memcpy(z->begin, x->begin, nx * sizeof(z->begin[0]));
+    if (ny > 0) memcpy(z->begin + nx, y->begin, ny * sizeof(z->begin[0]));
+    VM_SHIFT(2);
+}
+
+static void list_get(paw_Env *P)
+{
+    List *list = VM_LIST(2);
+    const paw_Int key = VM_INT(1);
+    *VM_TOP(2) = *pawV_list_get(P, list, key);
+    VM_POP(1);
+}
+
+static void list_getn(paw_Env *P)
+{
+    const List *list = VM_LIST(3);
+    const paw_Int i = VM_INT(2);
+    const paw_Int j = VM_INT(1);
+
+    const size_t n = pawV_list_length(list);
+    const size_t zi = check_slice_bound(P, i, n, "start", "list");
+    const size_t zj = check_slice_bound(P, j, n, "end", "list");
+
+    Value *pv;
+    List *slice;
+    VM_LIST_INIT(slice, pv);
+
+    const size_t nelems = zj - zi;
+    pawV_list_resize(P, slice, nelems);
+    memcpy(slice->begin, list->begin + zi, 
+            nelems * sizeof(list->begin[0]));
+
+    VM_SHIFT(3);
+}
+
+static void list_set(paw_Env *P)
+{
+    const Value val = *VM_TOP(1);
+    const Value key = *VM_TOP(2);
+    const Value obj = *VM_TOP(3);
+    const paw_Int index = V_INT(key);
+    Value *pval = pawV_list_get(P, V_LIST(obj), index);
+    *pval = val;
+    VM_SHIFT(2);
+}
+
+// setn([a1..an], i, j, [b1..bn]) => [a1..ai b1..bn aj..an]
+static void list_setn(paw_Env *P)
+{
+    List *va = VM_LIST(4);
+    const paw_Int i = VM_INT(3);
+    const paw_Int j = VM_INT(2);
+    const List *vb = VM_LIST(1);
+
+    const size_t na = pawV_list_length(va);
+    const size_t nb = pawV_list_length(vb);
+    const size_t zi = check_slice_bound(P, i, na, "start", "list");
+    const size_t zj = check_slice_bound(P, j, na, "end", "list");
+
+    if (va == vb) {
+        Value *pv = VM_TOP(1);
+        paw_assert(pv->p == vb);
+        vb = pawV_list_clone(P, pv, vb);
     }
+
+    const size_t szelem = sizeof(va->begin[0]);
+    const size_t nelems = na - zj + zi + nb;
+    pawV_list_reserve(P, va, nelems);
+
+    Value *gap = va->begin + zi;
+    memmove(gap + nb, va->begin + zj, (na - zj) * szelem);
+    memcpy(gap, vb->begin, nb * szelem);
+    pawV_list_resize(P, va, nelems);
+
+    VM_SHIFT(3);
+}
+
+void pawR_listop(paw_Env *P, enum ListOp op)
+{
+    switch (op) {
+        case LIST_LEN:
+            list_len(P);
+            break;
+        case LIST_ADD:
+            list_add(P);
+            break;
+        case LIST_GET:
+            list_get(P);
+            break;
+        case LIST_SET:
+            list_set(P);
+            break;
+        case LIST_GETN:
+            list_getn(P);
+            break;
+        case LIST_SETN:
+            list_setn(P);
+    }
+}
+
+static void map_len(paw_Env *P)
+{
+    const Map *map = VM_MAP(1);
+    const size_t len = pawH_length(map);
+    V_SET_INT(VM_TOP(1), len);
+}
+
+static int map_get(paw_Env *P)
+{
+    const Value obj = *VM_TOP(2);
+    const Value key = *VM_TOP(1);
+    const Value *pv = pawH_get(V_MAP(obj), key);
+    if (pv == NULL) return -1;
+    *VM_TOP(2) = *pv;
+    VM_POP(1);
     return 0;
 }
 
-void pawR_binop(paw_Env *P, BinaryOp binop, paw_Type t)
+static void map_set(paw_Env *P)
 {
-    const Value x = *VM_TOP(2);
-    const Value y = *VM_TOP(1);
-    binop_aux(P, binop, t, x, y);
+    const Value val = *VM_TOP(1);
+    const Value key = *VM_TOP(2);
+    const Value obj = *VM_TOP(3);
+    pawH_insert(P, V_MAP(obj), key, val);
+    VM_SHIFT(2);
 }
 
-static void int_unop(paw_Env *P, UnaryOp unop, paw_Int i)
+void pawR_mapop(paw_Env *P, enum MapOp op)
 {
-    Value *pv = VM_TOP(1);
-    switch (unop) {
-        case UNARY_NEG:
-            V_SET_INT(pv, I_UNOP(i, -));
+    switch (op) {
+        case MAP_LEN:
+            map_len(P);
             break;
-        case UNARY_NOT:
-            V_SET_BOOL(pv, I_UNOP(i, !));
+        case MAP_GET:
+            map_get(P);
             break;
-        default:
-            paw_assert(unop == UNARY_BNOT);
-            V_SET_INT(pv, I_UNOP(i, ~));
+        case MAP_SET:
+            map_set(P);
     }
-}
-
-static void float_unop(paw_Env *P, UnaryOp unop, paw_Float f)
-{
-    Value *pv = VM_TOP(1);
-    switch (unop) {
-        case UNARY_NEG:
-            V_SET_FLOAT(pv, -f);
-            break;
-        default:
-            paw_assert(unop == UNARY_NOT);
-            V_SET_BOOL(pv, !f);
-    }
-}
-
-static void other_unop(paw_Env *P, UnaryOp unop, paw_Type t, Value x)
-{
-    if (unop == UNARY_LEN) {
-        V_SET_INT(VM_TOP(1), pawV_length(x, t));
-    } else {
-        paw_assert(unop == UNARY_NOT);
-        V_SET_BOOL(VM_TOP(1), !pawV_truthy(x, t));
-    }
-}
-
-static void unop_aux(paw_Env *P, UnaryOp unop, paw_Type t, Value x)
-{
-    if (t == PAW_TINT) {
-        int_unop(P, unop, V_INT(x));
-    } else if (t == PAW_TFLOAT) {
-        float_unop(P, unop, V_FLOAT(x));
-    } else {
-        other_unop(P, unop, t, x);
-    }
-}
-
-void pawR_unop(paw_Env *P, UnaryOp unop, paw_Type t)
-{
-    const Value x = *VM_TOP(1);
-    unop_aux(P, unop, t, x);
 }
 
 void pawR_gettuple(paw_Env *P, int index)
@@ -708,91 +805,9 @@ void pawR_getfield(paw_Env *P, int index)
     *VM_TOP(1) = ins->fields[index];
 }
 
-static void getelem_list(paw_Env *P, List *list, paw_Int index)
-{
-    *VM_TOP(2) = *pawV_list_get(P, list, index);
-    VM_POP(1);
-}
-
-static int getelem_map(paw_Env *P, Map *map, Value key)
-{
-    const Value *pv = pawH_get(map, key);
-    if (pv != NULL) {
-        *VM_TOP(2) = *pv;
-        VM_POP(1);
-        return 0;
-    }
-    return -1;
-}
-
-static void getelem_string(paw_Env *P, const String *string, paw_Int index)
-{
-    pawV_check_abs(P, index, string->length, "str");
-    const char c = string->text[index];
-    String *res = pawS_new_nstr(P, &c, 1);
-    V_SET_OBJECT(VM_TOP(2), res);
-    VM_POP(1);
-}
-
-int pawR_getelem(paw_Env *P, paw_Type t)
-{
-    const Value obj = *VM_TOP(2);
-    const Value key = *VM_TOP(1);
-    if (t == PAW_TMAP) {
-        return getelem_map(P, V_MAP(obj), key);
-    }
-    if (t == PAW_TLIST) {
-        getelem_list(P, V_LIST(obj), V_INT(key));
-    } else if (t == PAW_TSTRING) {
-        getelem_string(P, V_STRING(obj), V_INT(key));
-    }
-    return 0;
-}
-
-static void getslice_list(paw_Env *P, List *list, paw_Int i, paw_Int j)
-{
-    const size_t n = pawV_list_length(list);
-    const size_t zi = check_slice_bound(P, i, n, "start", "list");
-    const size_t zj = check_slice_bound(P, j, n, "end", "list");
-
-    Value *pv;
-    List *slice;
-    VM_LIST_INIT(slice, pv);
-
-    const size_t nelems = zj - zi;
-    pawV_list_resize(P, slice, nelems);
-    memcpy(slice->begin, list->begin + zi, nelems * sizeof(list->begin[0]));
-}
-
-static void getslice_string(paw_Env *P, String *str, paw_Int i, paw_Int j)
-{
-    const size_t n = pawS_length(str);
-    const size_t zi = check_slice_bound(P, i, n, "start", "string");
-    const size_t zj = check_slice_bound(P, j, n, "end", "string");
-
-    Value *pv = VM_PUSH0();
-    const size_t nbytes = zj - zi;
-    String *slice = pawS_new_nstr(P, str->text + zi, nbytes);
-    V_SET_OBJECT(pv, slice);
-}
-
-void pawR_getslice(paw_Env *P, paw_Type t)
-{
-    const Value obj = *VM_TOP(3);
-    const paw_Int i = V_INT(*VM_TOP(2));
-    const paw_Int j = V_INT(*VM_TOP(1));
-    if (t == PAW_TLIST) {
-        getslice_list(P, V_LIST(obj), i, j);
-    } else {
-        paw_assert(t == PAW_TSTRING);
-        getslice_string(P, V_STRING(obj), i, j);
-    }
-    VM_SHIFT(3);
-}
-
 void pawR_literal_tuple(paw_Env *P, int n)
 {
-    Value *pv = VM_PUSH0();
+    Value *pv = VM_PUSH_0();
     Tuple *tuple = pawV_new_tuple(P, n);
     V_SET_OBJECT(pv, tuple);
 
@@ -837,7 +852,7 @@ void pawR_literal_map(paw_Env *P, int n)
 
 static void new_variant(paw_Env *P, int k, int nfields)
 {
-    Value *pv = VM_PUSH0();
+    Value *pv = VM_PUSH_0();
     Variant *var = pawV_new_variant(P, k, nfields);
     V_SET_OBJECT(pv, var);
     for (int i = 0; i < nfields; ++i) {
@@ -888,6 +903,11 @@ top:
         const OpCode opcode = *pc++;
         vm_switch(GET_OP(opcode))
         {
+            vm_case(NOOP) : 
+            {
+                // do nothing
+            }
+
             vm_case(POP) :
             {
                 VM_POP(GET_U(opcode));
@@ -903,39 +923,95 @@ top:
             vm_case(COPY) :
             {
                 const int u = GET_U(opcode);
-                VM_PUSHV(*VM_TOP(u + 1));
+                VM_PUSH(*VM_TOP(u + 1));
             }
 
             vm_case(PUSHZERO) :
             {
-                VM_PUSH0();
+                VM_PUSH_0();
             }
 
             vm_case(PUSHONE) :
             {
-                VM_PUSHI(1);
+                VM_PUSH_INT(1);
             }
 
-            vm_case(PUSHSMALLINT) :
+            vm_case(PUSHSMI) :
             {
-                VM_PUSHI(GET_S(opcode));
+                VM_PUSH_INT(GET_S(opcode));
             }
 
             vm_case(PUSHCONST) :
             {
-                VM_PUSHV(K[GET_U(opcode)]);
+                VM_PUSH(K[GET_U(opcode)]);
             }
 
-            vm_case(UNOP) :
+            vm_case(CMPI) :
             {
-                VM_PROTECT();
-                pawR_unop(P, GET_A(opcode), GET_B(opcode));
+                pawR_cmpi(P, GET_U(opcode));
             }
 
-            vm_case(BINOP) :
+            vm_case(CMPF) :
+            {
+                pawR_cmpf(P, GET_U(opcode));
+            }
+
+            vm_case(CMPS) :
+            {
+                pawR_cmps(P, GET_U(opcode));
+            }
+
+            vm_case(ARITHI1) :
+            {
+                pawR_arithi1(P, GET_U(opcode));
+            }
+
+            vm_case(ARITHI2) :
+            {
+                pawR_arithi2(P, GET_U(opcode));
+            }
+
+            vm_case(ARITHF1) :
+            {
+                pawR_arithf1(P, GET_U(opcode));
+            }
+
+            vm_case(ARITHF2) :
+            {
+                pawR_arithf2(P, GET_U(opcode));
+            }
+
+            vm_case(BITWI1) :
+            {
+                pawR_bitwi1(P, GET_U(opcode));
+            }
+
+            vm_case(BITWI2) :
+            {
+                pawR_bitwi2(P, GET_U(opcode));
+            }
+
+            vm_case(BOOLOP) :
+            {
+                pawR_boolop(P, GET_U(opcode));
+            }
+
+            vm_case(STROP) :
             {
                 VM_PROTECT();
-                pawR_binop(P, GET_A(opcode), GET_B(opcode));
+                pawR_strop(P, GET_U(opcode));
+            }
+
+            vm_case(LISTOP) :
+            {
+                VM_PROTECT();
+                pawR_listop(P, GET_U(opcode));
+            }
+
+            vm_case(MAPOP) :
+            {
+                VM_PROTECT();
+                pawR_mapop(P, GET_U(opcode));
             }
 
             vm_case(NEWTUPLE) :
@@ -984,7 +1060,7 @@ top:
             vm_case(NEWINSTANCE) :
             {
                 VM_PROTECT();
-                Value *pv = VM_PUSH0();
+                Value *pv = VM_PUSH_0();
                 Instance *ins = pawV_new_instance(P, GET_U(opcode));
                 V_SET_OBJECT(pv, ins);
                 CHECK_GC(P);
@@ -1002,7 +1078,7 @@ top:
             vm_case(GETLOCAL) :
             {
                 const Value local = cf->base.p[GET_U(opcode)];
-                VM_PUSHV(local);
+                VM_PUSH(local);
             }
 
             vm_case(SETLOCAL) :
@@ -1015,7 +1091,7 @@ top:
             {
                 const int u = GET_U(opcode);
                 const Value upval = *VM_UPVALUE(u);
-                VM_PUSHV(upval);
+                VM_PUSH(upval);
             }
 
             vm_case(SETUPVALUE) :
@@ -1028,7 +1104,7 @@ top:
             vm_case(GETGLOBAL) :
             {
                 const int u = GET_U(opcode);
-                VM_PUSHV(*pawE_get_val(P, u));
+                VM_PUSH(*pawE_get_val(P, u));
             }
 
             vm_case(GETTUPLE) :
@@ -1055,36 +1131,10 @@ top:
                 pawR_setfield(P, GET_U(opcode));
             }
 
-            vm_case(GETELEM) :
-            {
-                VM_PROTECT();
-                if (pawR_getelem(P, GET_U(opcode))) {
-                    pawH_key_error(P, *VM_TOP(1), PAW_TSTRING); // TODO: lookup key type
-                }
-            }
-
-            vm_case(SETELEM) :
-            {
-                VM_PROTECT();
-                pawR_setelem(P, GET_U(opcode));
-            }
-
-            vm_case(GETSLICE) :
-            {
-                VM_PROTECT();
-                pawR_getslice(P, GET_U(opcode));
-            }
-
-            vm_case(SETSLICE) :
-            {
-                VM_PROTECT();
-                pawR_setslice(P, GET_U(opcode));
-            }
-
             vm_case(CLOSURE) :
             {
                 VM_PROTECT();
-                Value *pv = VM_PUSH0();
+                Value *pv = VM_PUSH_0();
                 Proto *proto = fn->p->p[GET_U(opcode)];
                 Closure *closure = pawV_new_closure(P, proto->nup);
                 V_SET_OBJECT(pv, closure);
@@ -1130,7 +1180,7 @@ top:
                 VM_SAVE();
 
                 pawR_close_upvalues(P, VM_TOP(1));
-                VM_PUSHV(result);
+                VM_PUSH(result);
                 P->cf = cf->prev;
                 if (cf_is_entry(cf)) {
                     return;
@@ -1189,7 +1239,7 @@ top:
             { \
                 VM_PROTECT(); \
                 if (for##t##_init(P)) { \
-                    VM_PUSH0(); \
+                    VM_PUSH_0(); \
                     pc += GET_S(opcode); \
                 } \
             }
@@ -1208,7 +1258,7 @@ top:
 #undef VM_FORIN
 
             vm_default:
-                break;
+                PAW_UNREACHABLE();
         }
     }
 }

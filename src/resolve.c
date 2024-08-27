@@ -322,18 +322,14 @@ static struct HirSymbol *try_resolve_symbol(struct Resolver *R, const String *na
     }
     // search the global symbols
     const int index = pawHir_find_symbol(scopes->globals, name);
-    if (index < 0) {
-        return NULL;
-    }
+    if (index < 0) return NULL;
     return scopes->globals->symbols->data[index];
 }
 
 static struct HirSymbol *resolve_symbol(struct Resolver *R, const String *name)
 {
     struct HirSymbol *symbol = try_resolve_symbol(R, name);
-    if (symbol == NULL) {
-        NAME_ERROR(R, "undefined symbol '%s'", name->text);
-    }
+    if (symbol == NULL) NAME_ERROR(R, "undefined symbol '%s'", name->text);
     return symbol;
 }
 
@@ -561,9 +557,7 @@ static struct HirType *subst_adt(struct HirFolder *F, struct HirAdt *t)
     struct Subst *subst = F->ud;
     struct Resolver *R = subst->R;
 
-    if (t->types == NULL) {
-        return HIR_CAST_TYPE(t);
-    }
+    if (t->types == NULL) return HIR_CAST_TYPE(t);
     struct HirTypeList *types = subst_list(F, t->types);
     struct HirAdtDecl *base = HirGetAdtDecl(get_decl(R, t->base));
     struct HirDecl *inst = instantiate_struct(R, base, types);
@@ -988,7 +982,6 @@ static struct HirType *resolve_tuple_type(struct Resolver *R, struct AstTupleTyp
     return r;
 }
 
-// TODO: '()' is not a path! Works because the user cannot create another type named '()', but is hacky.
 static struct HirPath *resolve_path(struct Resolver *R, struct AstPath *path)
 {
     paw_assert(path->count > 0);
@@ -1045,7 +1038,7 @@ static void maybe_fix_unit_struct(struct Resolver *R, struct HirDecl *decl, stru
 {
     if (HirIsAdtDecl(decl)) {
         struct HirAdtDecl *adt = HirGetAdtDecl(decl);
-        if (adt->did <= PAW_TSTRING) {
+        if (adt->did <= PAW_TSTR) {
             goto not_operand;
         }
         if (!adt->is_struct) {
@@ -1152,8 +1145,8 @@ static struct HirType *resolve_in_expr(struct Resolver *R, struct HirType *elem,
 static struct HirExpr *resolve_unop_expr(struct Resolver *R, struct AstUnOpExpr *e)
 {
     // clang-format off
-    static const uint8_t kValidOps[NUNARYOPS][PAW_NTYPES] = {
-        //     type  =  0, b, i, f, s, v, m, ...
+    static const uint8_t kValidOps[NUNARYOPS][PAW_NTYPES + 2] = {
+        //     type  =  0, b, i, f, s, l, m
         [UNARY_LEN]  = {0, 0, 0, 0, 1, 1, 1},
         [UNARY_NEG]  = {0, 0, 1, 1, 0, 0, 0}, 
         [UNARY_NOT]  = {0, 1, 1, 1, 0, 0, 0}, 
@@ -1189,7 +1182,7 @@ static void op_type_error(struct Resolver *R, const struct HirType *type, const 
     }
 }
 
-static struct HirType *binop_list(struct Resolver *R, BinaryOp op, struct HirType *type)
+static struct HirType *binop_list(struct Resolver *R, enum BinaryOp op, struct HirType *type)
 {
     const struct HirType *elem_t = hir_list_elem(type);
     if (op == BINARY_ADD) return type;
@@ -1213,10 +1206,10 @@ static struct HirType *binop_map(struct Resolver *R, struct HirType *type)
 
 static struct HirExpr *resolve_binop_expr(struct Resolver *R, struct AstBinOpExpr *e)
 {
-    static const uint8_t kValidOps[NBINARYOPS][PAW_NTYPES] = {
-        //     type   =  0, b, i, f, s, v, m, ...
-        [BINARY_EQ]   = {0, 1, 1, 1, 1, 1, 1},
-        [BINARY_NE]   = {0, 1, 1, 1, 1, 1, 1},
+    static const uint8_t kValidOps[NBINARYOPS][PAW_NTYPES + 2] = {
+        //     type   =  0, b, i, f, s, l, m
+        [BINARY_EQ]   = {0, 1, 1, 1, 1, 0, 0},
+        [BINARY_NE]   = {0, 1, 1, 1, 1, 0, 0},
         [BINARY_LT]   = {0, 0, 1, 1, 1, 0, 0},
         [BINARY_LE]   = {0, 0, 1, 1, 1, 0, 0},
         [BINARY_GT]   = {0, 0, 1, 1, 1, 0, 0},
@@ -1241,19 +1234,15 @@ static struct HirExpr *resolve_binop_expr(struct Resolver *R, struct AstBinOpExp
 
     struct HirType *lhs = resolve_operand(R, r->lhs);
     struct HirType *rhs = resolve_operand(R, r->rhs);
-    if (e->op == BINARY_IN) {
-        r->type = resolve_in_expr(R, lhs, rhs);
-        return result;
-    }
     unify(R, lhs, rhs);
 
     const paw_Type code = TYPE2CODE(R, lhs);
     paw_assert(code == TYPE2CODE(R, rhs));
     if (code < 0 || !kValidOps[e->op][code]) {
         TYPE_ERROR(R, "unsupported operand types for binary operator");
-    } else if (code == PAW_TLIST) {
+    } else if (code == BUILTIN_LIST) {
         r->type = binop_list(R, e->op, lhs);
-    } else if (code == PAW_TMAP) {
+    } else if (code == BUILTIN_MAP) {
         r->type = binop_map(R, lhs);
     } else if (BINOP_IS_BOOL(e->op)) {
         r->type = get_type(R, PAW_TBOOL);
@@ -1568,7 +1557,7 @@ static struct HirExpr *resolve_conversion_expr(struct Resolver *R, struct AstCon
     struct HirType *type = resolve_operand(R, r->arg);
     if (!HirIsAdt(type) || 
             HirGetAdt(type)->did == PAW_TUNIT ||
-            HirGetAdt(type)->did == PAW_TSTRING) {
+            HirGetAdt(type)->did == PAW_TSTR) {
         TYPE_ERROR(R, "argument to conversion must be scalar");
     }
     r->type = get_type(R, e->to);
@@ -1628,10 +1617,10 @@ static struct HirType *resolve_container_lit(struct Resolver *R, struct AstConta
 {
     r->code = e->code;
     r->items = pawHir_expr_list_new(R->hir);
-    if (e->code == PAW_TLIST) {
+    if (e->code == BUILTIN_LIST) {
         return resolve_list_lit(R, e, r);
     } else {
-        paw_assert(e->code == PAW_TMAP);
+        paw_assert(e->code == BUILTIN_MAP);
         return resolve_map_lit(R, e, r);
     }
 }
@@ -1891,9 +1880,9 @@ static struct HirExpr *resolve_index(struct Resolver *R, struct AstIndex *e)
         expect = hir_map_key(target);
         r->type = hir_map_value(target);
     } else if (HirIsAdt(target) &&
-            HirGetAdt(target)->base == PAW_TSTRING) {
+            HirGetAdt(target)->base == PAW_TSTR) {
         expect = get_type(R, PAW_TINT);
-        r->type = get_type(R, PAW_TSTRING);
+        r->type = get_type(R, PAW_TSTR);
     } else {
         TYPE_ERROR(R, "type cannot be indexed (not a container)");
     }
@@ -2080,12 +2069,6 @@ static struct HirExpr *resolve_expr(struct Resolver *R, struct AstExpr *expr)
     return r;
 }
 
-static DefId find_builtin(struct Resolver *R, String *name)
-{
-    const struct HirSymbol *symbol = resolve_symbol(R, name);
-    return symbol->decl->hdr.did;
-}
-
 static struct HirDeclList *register_items(struct Resolver *R, struct AstDeclList *items, struct PartialItemList **pslots)
 {
     struct PartialItemList *slots = item_list_new(R->hir);
@@ -2125,53 +2108,20 @@ static struct HirDeclList *resolve_module(struct Resolver *R, struct AstDeclList
     return output;
 }
 
+static DefId find_builtin(struct Resolver *R, String *name)
+{
+    const struct HirSymbol *symbol = resolve_symbol(R, name);
+    return symbol->decl->hdr.did;
+}
+
 static struct HirDeclList *resolve_prelude(struct Resolver *R, struct AstDeclList *prelude)
 {
+    paw_Env *P = ENV(R);
     struct Hir *hir = R->hir;
-//
-//    // create builtin primitives manually: they are not declared in the prelude, 
-//    // and the prelude depends on them
-//    struct Builtin *b = R->C->builtins;
-//    for (enum BuiltinKind k = 0; k < FIRST_BUILTIN_ADT; ++k) {
-//        struct HirType *type = pawHir_new_type(hir, 0, kHirAdt);
-//        HirGetAdt(type)->base = k;
-//        HirGetAdt(type)->did = k;
-//
-//        struct HirDecl *decl = pawHir_new_decl(hir, 0, kHirAdtDecl);
-//        HirGetAdtDecl(decl)->name = b[k].name;
-//        HirGetAdtDecl(decl)->type = type;
-//        HirGetAdtDecl(decl)->did = k;
-//
-//        struct HirSymbol *symbol = new_global(R, b[k].name, decl, PAW_TRUE);
-//        symbol->is_type = PAW_TRUE;
-//        b[k].did = k;
-//
-//        const DefId did = add_def(R, decl);
-//        paw_assert(did == k);
-//        paw_unused(did);
-//    }
-//
-    return resolve_module(R, prelude);
-//    struct HirDeclList *result = resolve_module(R, prelude);
-//    for (enum BuiltinKind k = 0; k < FIRST_BUILTIN_ADT; ++k) {
-//        struct HirType *type = pawHir_new_type(hir, 0, kHirAdt);
-//        HirGetAdt(type)->base = k;
-//        HirGetAdt(type)->did = k;
-//
-//        struct HirDecl *decl = pawHir_new_decl(hir, 0, kHirAdtDecl);
-//        HirGetAdtDecl(decl)->name = b[k].name;
-//        HirGetAdtDecl(decl)->type = type;
-//        HirGetAdtDecl(decl)->did = k;
-//
-//        struct HirSymbol *symbol = new_global(R, b[k].name, decl, PAW_TRUE);
-//        symbol->is_type = PAW_TRUE;
-//        b[k].did = k;
-//
-//        const DefId did = add_def(R, decl);
-//        paw_assert(did == k);
-//        paw_unused(did);
-//    }
-
+    struct HirDeclList *result = resolve_module(R, prelude);
+    R->option_did = find_builtin(R, pawE_cstr(P, CSTR_OPTION));
+    R->result_did = find_builtin(R, pawE_cstr(P, CSTR_RESULT));
+    return result;
 }
 
 static void visit_module(struct Resolver *R)

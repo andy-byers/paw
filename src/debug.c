@@ -3,13 +3,16 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
 #include "debug.h"
+#include "alloc.h"
 #include "auxlib.h"
 #include "call.h"
+#include "compile.h"
 #include "map.h"
 #include "rt.h"
 #include <stdio.h>
+#include <inttypes.h>
 
-const char *paw_unop_name(UnaryOp unop)
+const char *paw_unop_name(enum UnaryOp unop)
 {
     switch (unop) {
         case UNARY_LEN:
@@ -25,7 +28,7 @@ const char *paw_unop_name(UnaryOp unop)
     }
 }
 
-const char *paw_binop_name(BinaryOp binop)
+const char *paw_binop_name(enum BinaryOp binop)
 {
     switch (binop) {
         case BINARY_ADD:
@@ -60,8 +63,6 @@ const char *paw_binop_name(BinaryOp binop)
             return "GT";
         case BINARY_GE:
             return "GE";
-        case BINARY_IN:
-            return "IN";
         default:
             return "?";
     }
@@ -80,8 +81,8 @@ const char *paw_op_name(Op op)
             return "PUSHZERO";
         case OP_PUSHONE:
             return "PUSHONE";
-        case OP_PUSHSMALLINT:
-            return "PUSHSMALLINT";
+        case OP_PUSHSMI:
+            return "PUSHSMI";
         case OP_PUSHCONST:
             return "PUSHCONST";
         case OP_COPY:
@@ -108,8 +109,6 @@ const char *paw_op_name(Op op)
             return "JUMPFALSEPOP";
         case OP_JUMPNULL:
             return "JUMPNULL";
-        case OP_GLOBAL:
-            return "GLOBAL";
         case OP_GETGLOBAL:
             return "GETGLOBAL";
         case OP_GETLOCAL:
@@ -142,10 +141,32 @@ const char *paw_op_name(Op op)
             return "FORMAP0";
         case OP_FORMAP:
             return "FORMAP";
-        case OP_UNOP:
-            return "UNOP";
-        case OP_BINOP:
-            return "BINOP";
+        case OP_ARITHI1:
+            return "ARITHI1";
+        case OP_ARITHI2:
+            return "ARITHI2";
+        case OP_ARITHF1:
+            return "ARITHF1";
+        case OP_ARITHF2:
+            return "ARITHF2";
+        case OP_BITWI1:
+            return "BITWI1";
+        case OP_BITWI2:
+            return "BITWI2";
+        case OP_CMPI:
+            return "CMPI";
+        case OP_CMPF:
+            return "CMPF";
+        case OP_CMPS:
+            return "CMPS";
+        case OP_BOOLOP:
+            return "BOOLOP";
+        case OP_STROP:
+            return "STROP";
+        case OP_LISTOP:
+            return "LISTOP";
+        case OP_MAPOP:
+            return "MAPOP";
         case OP_GETTUPLE:
             return "GETTUPLE";
         case OP_GETFIELD:
@@ -154,10 +175,6 @@ const char *paw_op_name(Op op)
             return "SETTUPLE";
         case OP_SETFIELD:
             return "SETFIELD";
-        case OP_GETELEM:
-            return "GETELEM";
-        case OP_SETELEM:
-            return "SETELEM";
         default:
             return "???";
     }
@@ -165,139 +182,41 @@ const char *paw_op_name(Op op)
 
 void paw_dump_opcode(OpCode opcode)
 {
+    const char *opname = paw_op_name(GET_OP(opcode));
     switch (GET_OP(opcode)) {
-        case OP_CASTBOOL:
-            printf("CASTBOOL\n");
-            break;
-        case OP_CASTINT:
-            printf("CASTINT\n");
-            break;
-        case OP_CASTFLOAT:
-            printf("CASTFLOAT\n");
-            break;
-        case OP_PUSHZERO:
-            printf("PUSHZERO\n");
-            break;
-        case OP_PUSHONE:
-            printf("PUSHONE\n");
-            break;
-        case OP_PUSHSMALLINT:
-            printf("PUSHSMALLINT\n");
+        case OP_JUMP:
+        case OP_JUMPFALSE:
+        case OP_JUMPFALSEPOP:
+        case OP_JUMPNULL:
+            printf("%s %d\n", opname, GET_S(opcode));
             break;
         case OP_PUSHCONST:
-            printf("PUSHCONST %d\n", GET_U(opcode));
-            break;
-        case OP_COPY:
-            printf("COPY\n");
-            break;
-        case OP_INITFIELD:
-            printf("INITFIELD\n");
-            break;
         case OP_POP:
-            printf("POP\n");
-            break;
-        case OP_CLOSE:
-            printf("CLOSE\n");
-            break;
-        case OP_SHIFT:
-            printf("SHIFT\n");
-            break;
-        case OP_RETURN:
-            printf("RETURN\n");
-            break;
-        case OP_CLOSURE:
-            printf("CLOSURE\n");
-            break;
         case OP_CALL:
-            printf("CALL nargs = %d\n", GET_U(opcode));
-            break;
-        case OP_JUMP:
-            printf("JUMP\n");
-            break;
-        case OP_JUMPFALSE:
-            printf("JUMPFALSE\n");
-            break;
-        case OP_JUMPFALSEPOP:
-            printf("JUMPFALSEPOP\n");
-            break;
-        case OP_JUMPNULL:
-            printf("JUMPNULL\n");
-            break;
-        case OP_GLOBAL:
-            printf("GLOBAL\n");
-            break;
         case OP_GETGLOBAL:
-            printf("GETGLOBAL: %d\n", GET_U(opcode));
-            break;
         case OP_GETLOCAL:
-            printf("GETLOCAL: %d\n", GET_U(opcode));
-            break;
         case OP_SETLOCAL:
-            printf("SETLOCAL: %d\n", GET_U(opcode));
-            break;
         case OP_GETUPVALUE:
-            printf("GETUPVALUE: %d\n", GET_U(opcode));
-            break;
         case OP_SETUPVALUE:
-            printf("SETUPVALUE: %d\n", GET_U(opcode));
-            break;
-        case OP_NEWTUPLE:
-            printf("NEWTUPLE\n");
-            break;
-        case OP_NEWINSTANCE:
-            printf("NEWINSTANCE\n");
-            break;
-        case OP_NEWLIST:
-            printf("NEWLIST\n");
-            break;
-        case OP_NEWMAP:
-            printf("NEWMAP\n");
-            break;
-        case OP_FORNUM0:
-            printf("FORNUM0\n");
-            break;
-        case OP_FORNUM:
-            printf("FORNUM\n");
-            break;
-        case OP_FORLIST0:
-            printf("FORLIST0\n");
-            break;
-        case OP_FORLIST:
-            printf("FORLIST\n");
-            break;
-        case OP_FORMAP0:
-            printf("FORMAP0\n");
-            break;
-        case OP_FORMAP:
-            printf("FORMAP\n");
-            break;
-        case OP_UNOP:
-            printf("UNOP %s %d\n", paw_unop_name(GET_A(opcode)), GET_B(opcode));
-            break;
-        case OP_BINOP:
-            printf("BINOP %s %d\n", paw_binop_name(GET_A(opcode)),
-                   GET_B(opcode));
-            break;
+        case OP_ARITHI1:
+        case OP_ARITHI2:
+        case OP_BITWI1:
+        case OP_BITWI2:
+        case OP_CMPI:
+        case OP_CMPF:
+        case OP_CMPS:
+        case OP_BOOLOP:
+        case OP_STROP:
+        case OP_LISTOP:
+        case OP_MAPOP:
         case OP_GETTUPLE:
-            printf("GETTUPLE %d\n", GET_U(opcode));
-            break;
         case OP_GETFIELD:
-            printf("GETFIELD %d\n", GET_U(opcode));
-            break;
         case OP_SETTUPLE:
-            printf("SETTUPLE %d\n", GET_U(opcode));
-            break;
         case OP_SETFIELD:
-            printf("SETFIELD %d\n", GET_U(opcode));
-            break;
-        case OP_GETELEM:
-            printf("GETELEM %d\n", GET_U(opcode));
-            break;
-        case OP_SETELEM:
-            printf("SETELEM %d\n", GET_U(opcode));
+            printf("%s %d\n", opname, GET_U(opcode));
             break;
         default:
-            printf("???\n");
+            printf("%s\n", opname);
     }
 }
 
@@ -317,18 +236,6 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
                          paw_op_name(GET_OP(pc[0])));
         const OpCode opcode = *pc++;
         switch (GET_OP(opcode)) {
-            case OP_UNOP: {
-                pawL_add_fstring(P, print, " ; op = %s",
-                                 paw_unop_name(GET_A(opcode)));
-                break;
-            }
-
-            case OP_BINOP: {
-                pawL_add_fstring(P, print, " ; op = %s",
-                                 paw_binop_name(GET_A(opcode)));
-                break;
-            }
-
             case OP_POP: {
                 pawL_add_fstring(P, print, " ; u = %d", GET_U(opcode));
                 break;
@@ -408,11 +315,6 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
                 break;
             }
 
-            case OP_GLOBAL: {
-                pawL_add_fstring(P, print, " ; k = %d", GET_U(opcode));
-                break;
-            }
-
             case OP_CLOSURE: {
                 const int idx = GET_U(opcode);
                 Proto *p = proto->p[idx];
@@ -458,6 +360,19 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
     for (int i = 0; i < proto->nproto; ++i) {
         pawL_add_char(P, print, '\n');
         dump_aux(P, proto->p[i], print);
+    }
+}
+
+void paw_dump_stack(paw_Env *P)
+{
+    StackPtr sp = P->stack.p;
+    for (int i = 0; sp != P->top.p; ++sp, ++i) {
+        const Value v = *sp;
+        if (pawZ_is_object(P->H, CAST_UPTR(v.p))) {
+            printf("%d: Object @ %p\n", i, v.p); 
+        } else {
+            printf("%d: Value{%" PRIu64 "}\n", i, v.u); 
+        }
     }
 }
 

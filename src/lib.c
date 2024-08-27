@@ -312,7 +312,7 @@ static void add_builtin_func(paw_Env *P, const char *name, paw_Function func)
     paw_push_value(P, -1);
     paw_push_string(P, name);
     pawL_new_func(P, func, 0);
-    pawR_setelem(P, PAW_TMAP);
+    pawR_mapop(P, MAP_SET);
     pawC_stkdec(P, 1);
 }
 

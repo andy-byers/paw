@@ -38,9 +38,11 @@ enum {
     CSTR_BOOL,
     CSTR_INT,
     CSTR_FLOAT,
-    CSTR_STRING,
+    CSTR_STR,
     CSTR_LIST,
     CSTR_MAP,
+    CSTR_RESULT,
+    CSTR_OPTION,
     NCSTR,
 };
 

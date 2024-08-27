@@ -107,17 +107,17 @@ fn map<A, B>(f: fn(A) -> B, a: [A]) -> [B] {
 
 pub fn test_generics() {
     let b = map(|a| a, [1]);
-    assert(b == [1]);
+    assert(b[-1] == 1);
     let b = map(|a| a, [2, 3]);
-    assert(b == [2, 3]);
+    assert(b[-1] == 3);
 
     // infer type of 'a' and '[]' from '-> int' (requires block due to presence of
     // arrow, otherwise the syntax looks strange)
     let b = map(|a| -> int {return a;}, []);
-    assert(b == []);
+    assert(#b == 0);
     // infer closure return type and '[]' from annotation on 'a'
     let b = map(|a: int| a, []);
-    assert(b == []);
+    assert(#b == 0);
 }
 
 fn pipeline<A, B, C>(

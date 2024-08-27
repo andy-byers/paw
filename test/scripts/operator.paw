@@ -21,7 +21,7 @@ pub fn test_operator_precedence() {
 }
 
 pub fn test_comparisons() {
-    let test_icmp = |a: int, b: int| {
+    let test_cmpi = |a: int, b: int| {
         assert(a == a);
         assert(a != b);
         assert(a <= a);
@@ -31,11 +31,11 @@ pub fn test_comparisons() {
         assert(a < b);
         assert(b > a);
     };
-    test_icmp(1, 2);
-    test_icmp(-1, 1);
-    test_icmp(123, 124);
+    test_cmpi(1, 2);
+    test_cmpi(-1, 1);
+    test_cmpi(123, 124);
 
-    let test_scmp = |a: str, b: str| {
+    let test_cmps = |a: str, b: str| {
         assert(a == a);
         assert(a != b);
         assert(a <= a);
@@ -45,9 +45,9 @@ pub fn test_comparisons() {
         assert(a < b);
         assert(b > a);
     };
-    test_scmp('a', 'b');
-    test_scmp('ab', 'abc');
-    test_scmp('abc', 'abd');
+    test_cmps('a', 'b');
+    test_cmps('ab', 'abc');
+    test_cmps('abc', 'abd');
 }
 
 pub fn test_conversions() {

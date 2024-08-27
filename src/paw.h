@@ -69,25 +69,25 @@ int paw_load(paw_Env *P, paw_Reader input, const char *name, void *ud);
 // the last parameter on top.
 int paw_call(paw_Env *P, int argc);
 
-// Builtin types
-// ORDER ValueType
+// Type kinds
+#define PAW_TKBASIC 0
+#define PAW_TKTUPLE 1
+#define PAW_TKENUM 2
+#define PAW_TKSTRUCT 3
+#define PAW_TKFUNCTION 4
+#define PAW_TKFOREIGN 5
+#define PAW_NTYPEKINDS 6
+
+// ORDER BuiltinKind
 #define PAW_TUNIT 0
 #define PAW_TBOOL 1
 #define PAW_TINT 2
 #define PAW_TFLOAT 3
-#define PAW_TSTRING 4
-#define PAW_TLIST 5
-#define PAW_TMAP 6
-#define PAW_TTUPLE 7
-#define PAW_TENUM 8
-#define PAW_TSTRUCT 9
-#define PAW_TFUNCTION 10
-#define PAW_TFOREIGN 11
-#define PAW_TMODULE 12
-#define PAW_NTYPES 13
+#define PAW_TSTR 4
+#define PAW_NTYPES 5
 
 void paw_push_value(paw_Env *P, int index);
-void paw_push_unit(paw_Env *P, int n);
+void paw_push_zero(paw_Env *P, int n);
 void paw_push_bool(paw_Env *P, paw_Bool b);
 void paw_push_int(paw_Env *P, paw_Int i);
 void paw_push_float(paw_Env *P, paw_Float f);
@@ -97,48 +97,80 @@ const char *paw_push_nstring(paw_Env *P, const char *s, size_t n);
 const char *paw_push_fstring(paw_Env *P, const char *fmt, ...);
 const char *paw_push_vfstring(paw_Env *P, const char *fmt, va_list arg);
 
-#define PAW_OPLEN 0
-#define PAW_OPNEG 1
-#define PAW_OPNOT 2
-#define PAW_OPBNOT 3
+// ORDER ArithOp1
+#define PAW_OPNEG 0
 
-void paw_unop(paw_Env *P, int op, paw_Type type);
+// ORDER ArithOp2
+#define PAW_OPADD 0
+#define PAW_OPSUB 1
+#define PAW_OPMUL 2
+#define PAW_OPDIV 3
+#define PAW_OPMOD 4
 
+void paw_arithi1(paw_Env *P, int op);
+void paw_arithi2(paw_Env *P, int op);
+void paw_arithf1(paw_Env *P, int op);
+void paw_arithf2(paw_Env *P, int op);
+
+// ORDER BitwOp1
+#define PAW_OPBNOT 0
+
+// ORDER BitwOp2
+#define PAW_OPBXOR 0
+#define PAW_OPBAND 1
+#define PAW_OPBOR 2
+#define PAW_OPSHL 3
+#define PAW_OPSHR 4
+
+void paw_bitw1(paw_Env *P, int op);
+void paw_bitw2(paw_Env *P, int op);
+
+// ORDER CmpOp
 #define PAW_OPEQ 0
 #define PAW_OPNE 1
 #define PAW_OPLT 2
 #define PAW_OPLE 3
 #define PAW_OPGT 4
 #define PAW_OPGE 5
-#define PAW_OPIN 6
-#define PAW_OPAS 7
-#define PAW_OPADD 8
-#define PAW_OPSUB 9
-#define PAW_OPMUL 10
-#define PAW_OPDIV 11
-#define PAW_OPMOD 12
-#define PAW_OPBXOR 13
-#define PAW_OPBAND 14
-#define PAW_OPBOR 15
-#define PAW_OPSHL 16
-#define PAW_OPSHR 17
 
-void paw_binop(paw_Env *P, int op, paw_Type type);
-void paw_raw_equals(paw_Env *P);
+// Comparison operations
+// Returns an integer, the sign of which describes the relationship between 
+// the left and right operands: negative if the left operand is less than the
+// right, positive  if the left operand is greater than the right, and 0 if 
+// the operands are equal.
+void paw_cmpi(paw_Env *P, int op);
+void paw_cmpf(paw_Env *P, int op);
+void paw_cmps(paw_Env *P, int op);
 
-void paw_arith_int(paw_Env *P, int op);
-void paw_arith_float(paw_Env *P, int op);
-void paw_arith_string(paw_Env *P, int op);
+// ORDER BoolOp
+#define PAW_OPNOT 0
 
-void paw_compare_int(paw_Env *P, int op);
-void paw_compare_float(paw_Env *P, int op);
-void paw_compare_string(paw_Env *P, int op);
+void paw_boolop(paw_Env *P, int op);
 
-void paw_eq_i(paw_Env *P);
-void paw_eq_f(paw_Env *P);
-void paw_eq_s(paw_Env *P);
-void paw_eq_v(paw_Env *P);
-void paw_eq_m(paw_Env *P);
+// ORDER StrOp
+#define PAW_SLEN 0
+#define PAW_SADD 1
+#define PAW_SGET 2
+#define PAW_SGETN 3
+
+void paw_strop(paw_Env *P, int op);
+
+// ORDER ListOp
+#define PAW_LLEN 0
+#define PAW_LADD 1
+#define PAW_LGET 2
+#define PAW_LSET 3
+#define PAW_LGETN 4
+#define PAW_LSETN 5
+
+void paw_listop(paw_Env *P, int op);
+
+// ORDER MapOp
+#define PAW_MLEN 0
+#define PAW_MGET 1
+#define PAW_MSET 2
+
+void paw_mapop(paw_Env *P, int op);
 
 //
 // Getters (stack -> C):
@@ -149,15 +181,8 @@ paw_Int paw_int(paw_Env *P, int index);
 paw_Float paw_float(paw_Env *P, int index);
 const char *paw_string(paw_Env *P, int index);
 paw_Function paw_native(paw_Env *P, int index);
-void *paw_pointer(paw_Env *P, int index);
+void *paw_userdata(paw_Env *P, int index);
 size_t paw_length(paw_Env *P, int index);
-
-//
-// Type conversions:
-//
-void paw_to_float(paw_Env *P, int index, paw_Type type);
-void paw_to_int(paw_Env *P, int index, paw_Type type);
-void paw_to_string(paw_Env *P, int index, paw_Type type);
 
 void paw_pop(paw_Env *P, int n);
 
@@ -173,32 +198,18 @@ int paw_find_global(paw_Env *P);
 // The 'gid' must be a nonnegative integer returned by 'paw_find_global'.
 void paw_get_global(paw_Env *P, int gid);
 
+void paw_call_global(paw_Env *P, int gid, int argc);
+
 void paw_get_upvalue(paw_Env *P, int index, int iup);
 void paw_get_field(paw_Env *P, int index, int ifield);
-void paw_get_elem(paw_Env *P, int index);
-void paw_get_elemi(paw_Env *P, int index, paw_Int i);
 
-void paw_list_slice(paw_Env *P, int index, paw_Int begin, paw_Int end);
-void paw_list_push(paw_Env *P, int index, paw_Int i);
-void paw_list_pop(paw_Env *P, int index, paw_Int i);
+void paw_set_upvalue(paw_Env *P, int index, int iup);
+void paw_set_field(paw_Env *P, int index, int ifield);
 
-void paw_map_erase(paw_Env *P, int index);
-void paw_map_erasei(paw_Env *P, int index, paw_Int i);
-
-void paw_set_upvalue(paw_Env *P, int ifn, int index);
-void paw_set_global(paw_Env *P, const char *name);
-void paw_set_attr(paw_Env *P, int index, const char *s);
-void paw_set_item(paw_Env *P, int index);
-void paw_set_itemi(paw_Env *P, int index, paw_Int i);
-void paw_call_global(paw_Env *P, int index, int argc);
-void paw_call_attr(paw_Env *P, int index, const char *name, int argc);
-
-void *paw_new_foreign(paw_Env *P, size_t size, int nbound);
+void *paw_new_foreign(paw_Env *P, size_t size, int nfields);
 void paw_new_native(paw_Env *P, paw_Function f, int nup);
 void paw_new_list(paw_Env *P, int n);
 void paw_new_map(paw_Env *P, int n);
-void paw_new_enum(paw_Env *P, int n, int k);
-void paw_new_struct(paw_Env *P, int n);
 
 int paw_abs_index(paw_Env *P, int index);
 void paw_rotate(paw_Env *P, int index, int n);

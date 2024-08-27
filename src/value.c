@@ -69,7 +69,7 @@ static void float_to_string(paw_Env *P, paw_Float f)
 const char *pawV_to_string(paw_Env *P, Value v, paw_Type type, size_t *plength)
 {
     switch (type) {
-        case PAW_TSTRING:
+        case PAW_TSTR:
             pawC_pushv(P, v); // copy
             break;
         case PAW_TINT:
@@ -111,8 +111,6 @@ const char *pawV_name(ValueKind kind)
             return "list";
         case VMAP:
             return "map";
-        case VSTRUCT:
-            return "struct";
         case VINSTANCE:
             return "instance";
         case VMETHOD:
@@ -304,7 +302,7 @@ paw_Bool pawV_truthy(Value v, paw_Type type)
             return V_TRUE(v);
         case PAW_TFLOAT:
             return V_FLOAT(v) != 0.0;
-        case PAW_TSTRING:
+        case PAW_TSTR:
             return pawS_length(V_STRING(v)) > 0;
             //        case PAW_TARRAY:
             //            return pawA_length(V_LIST(v)) > 0;
@@ -328,51 +326,6 @@ static uint32_t hash_u64(uint64_t u)
 }
 
 uint32_t pawV_hash(Value v) { return hash_u64(v.u); }
-
-void pawV_set_default(paw_Env *P, Value *pv, paw_Type type)
-{
-    switch (type) {
-        case PAW_TBOOL:
-            V_SET_BOOL(pv, PAW_FALSE);
-            break;
-        case PAW_TINT:
-            V_SET_INT(pv, 0);
-            break;
-        case PAW_TFLOAT:
-            V_SET_FLOAT(pv, 0.0);
-            break;
-        case PAW_TSTRING:
-            V_SET_OBJECT(pv, pawS_new_str(P, ""));
-            break;
-        case PAW_TLIST:
-            V_SET_OBJECT(pv, pawV_list_new(P));
-            break;
-        case PAW_TMAP:
-            V_SET_OBJECT(pv, pawH_new(P));
-            break;
-        default:
-            V_SET_OBJECT(pv, NULL);
-    }
-}
-
-paw_Int pawV_length(Value v, paw_Type type)
-{
-    size_t len;
-    switch (type) {
-        case PAW_TSTRING:
-            len = pawS_length(V_STRING(v));
-            break;
-        case PAW_TLIST:
-            len = pawV_list_length(V_LIST(v));
-            break;
-        case PAW_TMAP:
-            len = pawH_length(V_MAP(v));
-            break;
-        default:
-            len = 0;
-    }
-    return PAW_CAST_INT(len);
-}
 
 static int char2base(char c)
 {

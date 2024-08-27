@@ -9,7 +9,7 @@
 #ifndef PAW_AST_H
 #define PAW_AST_H
 
-#include "code.h"
+#include "compile.h"
 
 // TODO: Make *Expr, *Stmt, *Decl, and HirType opaque (typedef and put definition in *.c file)
 //       forces use of accessor functions
@@ -240,13 +240,13 @@ struct AstFieldExpr {
 
 struct AstUnOpExpr {
     AST_EXPR_HEADER;
-    UnaryOp op : 8;
+    enum UnaryOp op : 8;
     struct AstExpr *target;
 };
 
 struct AstBinOpExpr {
     AST_EXPR_HEADER;
-    BinaryOp op : 8;
+    enum BinaryOp op : 8;
     struct AstExpr *lhs;
     struct AstExpr *rhs;
 };

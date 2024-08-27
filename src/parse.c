@@ -92,7 +92,6 @@ enum InfixOp {
     INFIX_GT, // >
     INFIX_GE, // >=
     INFIX_IN, // in
-    INFIX_AS, // as
     INFIX_ADD, // +
     INFIX_SUB, // -
     INFIX_MUL, // *
@@ -106,6 +105,7 @@ enum InfixOp {
     INFIX_AND, // &&
     INFIX_OR, // ||
     INFIX_ASSIGN, // =
+    INFIX_AS, // as
 
     NINFIX
 };
@@ -562,7 +562,7 @@ static struct AstExpr *unop_expr(struct Lex *lex, enum UnOp op)
     struct AstExpr *result = NEW_EXPR(lex, kAstUnOpExpr);
     struct AstUnOpExpr *r = &result->unop;
     skip(lex); // unary operator token
-    r->op = CAST(op, UnaryOp); // same order
+    r->op = CAST(op, enum UnaryOp); // same order
     r->target = expression(lex, kUnOpPrecedence);
     leave_nested(lex);
     return result;
@@ -647,11 +647,11 @@ static paw_Type parse_container_items(struct Lex *lex, struct AstExprList **pite
         }
         struct AstExpr *item = expr0(lex);
         if (!test_next(lex, ':')) {
-            code = PAW_TLIST;
-        } else if (code == PAW_TLIST) {
+            code = BUILTIN_LIST;
+        } else if (code == BUILTIN_LIST) {
             pawX_error(lex, "invalid container literal");
         } else {
-            code = PAW_TMAP;
+            code = BUILTIN_MAP;
             struct AstExpr *result = NEW_EXPR(lex, kAstFieldExpr);
             struct AstFieldExpr *r = AstGetFieldExpr(result);
             r->fid = -1; // not a fixed structure field
@@ -673,9 +673,9 @@ static struct AstExpr *container_lit(struct Lex *lex)
     struct AstContainerLit *cont = &r->literal.cont;
     cont->items = pawAst_expr_list_new(lex->ast);
     if (test(lex, ']')) {
-        cont->code = PAW_TLIST; // empty list: '[]'
+        cont->code = BUILTIN_LIST; // empty list: '[]'
     } else if (test_next(lex, ':')) {
-        cont->code = PAW_TMAP; // empty map: '[:]'
+        cont->code = BUILTIN_MAP; // empty map: '[:]'
     } else {
         cont->code = parse_container_items(lex, &cont->items);
     }
@@ -874,7 +874,7 @@ static struct AstExpr *simple_expr(struct Lex *lex)
             break;
         case TK_STRING: {
             const Value v = lex->t.value;
-            expr = new_basic_lit(lex, v, PAW_TSTRING);
+            expr = new_basic_lit(lex, v, PAW_TSTR);
             break;
         }
         case TK_PIPE2:
@@ -928,7 +928,7 @@ static struct AstExpr *binop_expr(struct Lex *lex, enum InfixOp op, struct AstEx
     struct AstExpr *rhs = expression(lex, right_prec(op));
     struct AstExpr *result = NEW_EXPR(lex, kAstBinOpExpr);
     struct AstBinOpExpr *r = AstGetBinOpExpr(result);
-    r->op = CAST(op, BinaryOp); // same order
+    r->op = CAST(op, enum BinaryOp); // same order
     r->lhs = lhs;
     r->rhs = rhs;
     leave_nested(lex);
@@ -1459,15 +1459,18 @@ void pawP_init(paw_Env *P)
         String *str = pawS_new_fixed(P, kw);
         str->flag = i + FIRST_KEYWORD;
     }
+    // note that keywords are already fixed
     P->str_cache[CSTR_SELF] = pawS_new_str(P, "self");
     P->str_cache[CSTR_TRUE] = pawS_new_str(P, "true");
     P->str_cache[CSTR_FALSE] = pawS_new_str(P, "false");
     P->str_cache[CSTR_BOOL] = basic_type_name(P, "bool", PAW_TBOOL);
     P->str_cache[CSTR_INT] = basic_type_name(P, "int", PAW_TINT);
     P->str_cache[CSTR_FLOAT] = basic_type_name(P, "float", PAW_TFLOAT);
-    P->str_cache[CSTR_STRING] = basic_type_name(P, "str", PAW_TSTRING);
-    P->str_cache[CSTR_LIST] = basic_type_name(P, "_List", PAW_TLIST);
-    P->str_cache[CSTR_MAP] = basic_type_name(P, "_Map", PAW_TMAP);
+    P->str_cache[CSTR_STR] = basic_type_name(P, "str", PAW_TSTR);
+    P->str_cache[CSTR_LIST] = pawS_new_fixed(P, "_List");
+    P->str_cache[CSTR_MAP] = pawS_new_fixed(P, "_Map");
+    P->str_cache[CSTR_OPTION] = pawS_new_fixed(P, "Option");
+    P->str_cache[CSTR_RESULT] = pawS_new_fixed(P, "Result");
 }
 
 static void skip_hashbang(struct Lex *lex)

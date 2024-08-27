@@ -33,7 +33,7 @@
 
 static FILE *get_handle(paw_Env *P, int index)
 {
-    FILE **pfile = paw_pointer(P, index);
+    FILE **pfile = paw_userdata(P, index);
     return *pfile;
 }
 

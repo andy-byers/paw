@@ -277,7 +277,7 @@ static void dump_expr(Printer *P, struct AstExpr *e)
                                      V_FLOAT(e->literal.basic.value));
                             break;
                         default:
-                            paw_assert(e->literal.basic.t == PAW_TSTRING);
+                            paw_assert(e->literal.basic.t == PAW_TSTR);
                             DUMP_MSG(P, "type: string\n");
                             DUMP_FMT(P, "value: %s\n",
                                      V_STRING(e->literal.basic.value)->text);

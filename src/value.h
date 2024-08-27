@@ -28,9 +28,7 @@
 #define V_TEXT(v) (V_STRING(v)->text)
 #define V_TUPLE(v) (O_TUPLE(V_OBJECT(v)))
 #define V_VARIANT(v) (O_VARIANT(V_OBJECT(v)))
-#define V_ENUM(v) (O_ENUM(V_OBJECT(v)))
 #define V_INSTANCE(v) (O_INSTANCE(V_OBJECT(v)))
-#define V_STRUCT(v) (O_STRUCT(V_OBJECT(v)))
 #define V_METHOD(v) (O_METHOD(V_OBJECT(v)))
 #define V_FOREIGN(v) (O_FOREIGN(V_OBJECT(v)))
 
@@ -50,9 +48,7 @@
 #define O_IS_LIST(o) (O_KIND(o) == VLIST)
 #define O_IS_TUPLE(o) (O_KIND(o) == VTUPLE)
 #define O_IS_VARIANT(o) (O_KIND(o) == VVARIANT)
-#define O_IS_ENUM(o) (O_KIND(o) == VENUM)
 #define O_IS_INSTANCE(o) (O_KIND(o) == VINSTANCE)
-#define O_IS_STRUCT(o) (O_KIND(o) == VSTRUCT)
 #define O_IS_METHOD(o) (O_KIND(o) == VMETHOD)
 #define O_IS_FOREIGN(o) (O_KIND(o) == VFOREIGN)
 
@@ -65,7 +61,6 @@
 #define O_LIST(o) CHECK_EXP(O_IS_LIST(o), (List *)(o))
 #define O_TUPLE(o) CHECK_EXP(O_IS_TUPLE(o), (Tuple *)(o))
 #define O_VARIANT(o) CHECK_EXP(O_IS_VARIANT(o), (Variant *)(o))
-#define O_ENUM(o) CHECK_EXP(O_IS_ENUM(o), (Enum *)(o))
 #define O_INSTANCE(o) CHECK_EXP(O_IS_INSTANCE(o), (Instance *)(o))
 #define O_STRUCT(o) CHECK_EXP(O_IS_STRUCT(o), (Struct *)(o))
 #define O_METHOD(o) CHECK_EXP(O_IS_METHOD(o), (Method *)(o))
@@ -83,8 +78,6 @@ typedef enum ValueKind {
     VSTRING,
     VLIST,
     VMAP,
-    VSTRUCT,
-    VENUM,
     VTUPLE,
     VINSTANCE,
     VVARIANT,
@@ -126,40 +119,12 @@ typedef union StackRel {
     StackPtr p;
 } StackRel;
 
-static inline int pawV_type(ValueKind vt)
-{
-    switch (vt) {
-        case VBOOL:
-            return PAW_TBOOL;
-        case VINT:
-            return PAW_TINT;
-        case VFLOAT:
-            return PAW_TFLOAT;
-        case VSTRING:
-            return PAW_TSTRING;
-        case VNATIVE:
-        case VCLOSURE:
-        case VMETHOD:
-            return PAW_TFUNCTION;
-        case VINSTANCE:
-            return PAW_TSTRUCT;
-        case VFOREIGN:
-            return PAW_TFOREIGN;
-        default:
-            // other types are never exposed
-            return PAW_TUNIT;
-    }
-}
-
 #define VOBJECT0 VSTRING
 #define NOBJECTS (int)(NVTYPES - VOBJECT0)
 #define obj_index(t) ((t) - VOBJECT0)
 
 void pawV_index_error(paw_Env *P, paw_Int index, size_t length, const char *what);
-paw_Int pawV_length(Value v, paw_Type type);
 paw_Bool pawV_truthy(Value v, paw_Type type);
-int pawV_num2int(Value *pv, paw_Type type);
-int pawV_num2float(Value *pv, paw_Type type);
 uint32_t pawV_hash(Value v);
 const char *pawV_name(ValueKind type);
 

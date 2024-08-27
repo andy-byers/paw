@@ -91,7 +91,7 @@ typedef uint32_t OpCode;
 typedef enum Op { // operands    stack in       stack out     side effects
 OP_PUSHZERO,//       -           -              0             -
 OP_PUSHONE,//        -           -              1             -
-OP_PUSHSMALLINT,//   U           -              u             -
+OP_PUSHSMI,//        U           -              u             -
 OP_PUSHCONST,//      U           -              K[u]          -
 
 OP_NOOP,//           -           -              -             -
@@ -107,7 +107,6 @@ OP_JUMPFALSEPOP,//   S           v              -             pc += S
 OP_JUMPFALSE,//      S           v              v             if !v, then pc += S
 OP_JUMPNULL,//       S           v              v             if v == null, then pc += S
 
-OP_GLOBAL,//         U           v              -             define G[K[u]] = v
 OP_GETGLOBAL,//      U           -              G[K[u]]       -
 OP_GETLOCAL,//       U           -              L[u]          -
 OP_SETLOCAL,//       U           v              -             L[u] = v
@@ -129,9 +128,20 @@ OP_FORLIST,//        S           *-*-*-*-*-*-*-*   description   *-*-*-*-*-*-*
 OP_FORMAP0,//        S           *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
 OP_FORMAP,//         S           *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
 
-OP_UNOP,//           A B         v              ops[a](v)     -
-OP_BINOP,//          A B         l r            ops[a](l, r)  -
-         
+OP_CMPI,//           U           x y            z             -  
+OP_CMPF,//           U           x y            z             -
+OP_CMPS,//           U           x y            z             -
+OP_ARITHI1,//        U           x              y             -
+OP_ARITHF1,//        U           x              y             -   
+OP_ARITHI2,//        U           x y            z             -
+OP_ARITHF2,//        U           x y            z             -   
+OP_BITWI1,//         U           x              y             -
+OP_BITWI2,//         U           x y            z             -
+OP_BOOLOP,//         U           v[ v1..vn]     z             -
+OP_STROP,//          U           v[ v1..vn]     z             -
+OP_LISTOP,//         U           v[ v1..vn]     z             -
+OP_MAPOP,//          U           v[ v1..vn]     z             -
+
 OP_CASTBOOL,//       U           v              v as bool     -  
 OP_CASTINT,//        U           v              v as int      - 
 OP_CASTFLOAT,//      U           v              v as float    - 
@@ -142,47 +152,77 @@ OP_GETFIELD,//       U           v              v.u           -
 OP_SETFIELD,//       U           v x            -             v.u=x
 OP_GETTUPLE,//       U           v              v.u           -
 OP_SETTUPLE,//       U           v x            -             v.u=x
-OP_GETELEM,//        U           v i            v[i]          -
-OP_SETELEM,//        U           v i x          -             v[i]=x
-OP_GETSLICE,//       U           v i j          v[i:j]        -
-OP_SETSLICE,//       U           v i j x        -             v[i:j]=x
 
 NOPCODES
 } Op;
 
-// ORDER UnaryOp
-typedef enum {
-    UNARY_LEN, 
-    UNARY_NEG, 
-    UNARY_NOT, 
-    UNARY_BNOT,
+// ORDER CmpOp
+enum CmpOp {
+    CMP_EQ,
+    CMP_NE,
+    CMP_LT,
+    CMP_LE,
+    CMP_GT,
+    CMP_GE,
+};
 
-    NUNARYOPS
-} UnaryOp;
+// ORDER ArithOp1
+enum ArithOp1 {
+    ARITH_NEG,
+};
 
-// ORDER BinaryOp
-typedef enum {
-    BINARY_EQ,   
-    BINARY_NE,   
-    BINARY_LT,   
-    BINARY_LE,   
-    BINARY_GT,   
-    BINARY_GE,   
-    BINARY_IN,
-    BINARY_AS,
-    BINARY_ADD,  
-    BINARY_SUB,  
-    BINARY_MUL,  
-    BINARY_DIV,  
-    BINARY_MOD,  
-    BINARY_BXOR,
-    BINARY_BAND,
-    BINARY_BOR,
-    BINARY_SHL,
-    BINARY_SHR,
+// ORDER ArithOp2
+enum ArithOp2 {
+    ARITH_ADD,
+    ARITH_SUB,
+    ARITH_MUL,
+    ARITH_DIV,
+    ARITH_MOD,
+};
 
-    NBINARYOPS
-} BinaryOp;
+// ORDER BitwOp1
+enum BitwOp1 {
+    BITW_NOT,
+};
+
+// ORDER BitwOp2
+enum BitwOp2 {
+    BITW_XOR,
+    BITW_AND,
+    BITW_OR,
+    BITW_SHL,
+    BITW_SHR,
+};
+
+// ORDER BoolOp
+enum BoolOp {
+    BOOL_NOT,
+};
+
+// ORDER StrOp
+enum StrOp {
+    STR_LEN,
+    STR_ADD,
+    STR_GET,
+    STR_GETN,
+};
+
+// ORDER ListOp
+enum ListOp {
+    LIST_LEN,
+    LIST_ADD,
+    LIST_GET,
+    LIST_SET,
+    LIST_GETN,
+    LIST_SETN,
+};
+
+// ORDER MapOp
+enum MapOp {
+    MAP_LEN,
+    MAP_GET,
+    MAP_SET,
+};
 
 #define BINOP_IS_BOOL(op) ((op) <= BINARY_GE)
 #define UNOP_IS_BOOL(op) ((op) == UNARY_NOT)
@@ -200,8 +240,8 @@ typedef enum {
 //   if the container is empty. Both instructions will push the loop control variable.
 // * OP_FOR* run a single for-loop step.
 
-//_Static_assert(JUMP_MAX <= S_MAX, 
-//        "JUMP_MAX is too large");
+_Static_assert(JUMP_MAX <= S_MAX, 
+        "JUMP_MAX is too large");
 
 _Static_assert(NOPCODES <= OP_MAX,
         "too many opcodes");

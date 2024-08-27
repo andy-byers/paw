@@ -21,17 +21,12 @@ paw_Type pawP_type2code(struct Compiler *C, struct HirType *type)
         } else if (adt->base == C->builtins[BUILTIN_FLOAT].did) {
             return PAW_TFLOAT;
         } else if (adt->base == C->builtins[BUILTIN_STR].did) {
-            return PAW_TSTRING;
+            return PAW_TSTR;
         } else if (adt->base == C->builtins[BUILTIN_LIST].did) {
-            return PAW_TLIST;
+            return BUILTIN_LIST;
         } else if (adt->base == C->builtins[BUILTIN_MAP].did) {
-            return PAW_TMAP;
+            return BUILTIN_MAP;
         }
-        struct HirDecl *decl = pawHir_get_decl(C->dm->hir, adt->base);
-        struct HirAdtDecl *d = HirGetAdtDecl(decl);
-        return d->is_struct ? PAW_TSTRUCT : PAW_TENUM;
-    } else if (HirIsFuncType(type)) {
-        return PAW_TFUNCTION;
     }
     return -1;
 }

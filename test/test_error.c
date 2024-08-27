@@ -75,7 +75,7 @@ static const char *get_literal(int kind)
             return "1.0";
         case PAW_TBOOL:
             return "true";
-        case PAW_TSTRING:
+        case PAW_TSTR:
             return "'abc'";
         default:
             check(0);
@@ -98,8 +98,8 @@ static void check_unop_type_error(const char *op, paw_Type k)
 
 static void check_unification_errors(void)
 {
-    for (int k = PAW_TUNIT; k <= PAW_TSTRING; ++k) {
-        for (int k2 = PAW_TUNIT; k2 <= PAW_TSTRING; ++k2) {
+    for (int k = PAW_TUNIT; k <= PAW_TSTR; ++k) {
+        for (int k2 = PAW_TUNIT; k2 <= PAW_TSTR; ++k2) {
             if (k == k2) {
                 continue;
             }
@@ -131,8 +131,8 @@ static void check_binop_type_error(const char *op, paw_Type k, paw_Type k2)
 
 static void check_binop_type_errors(const char *op, paw_Type *types)
 {
-    for (int k = PAW_TUNIT; k <= PAW_TSTRING; ++k) {
-        for (int k2 = PAW_TUNIT; k2 <= PAW_TSTRING; ++k2) {
+    for (int k = PAW_TUNIT; k <= PAW_TSTR; ++k) {
+        for (int k2 = PAW_TUNIT; k2 <= PAW_TSTR; ++k2) {
             paw_Type *pt = types;
             for (int t = *pt; t >= 0; t = *++pt) {
                 if (k == t && k2 == t) {
@@ -156,17 +156,17 @@ static void test_type_error(void)
     check_unop_type_error("!", PAW_TUNIT);
     check_unop_type_error("-", PAW_TUNIT);
     check_unop_type_error("-", PAW_TBOOL);
-    check_unop_type_error("-", PAW_TSTRING);
+    check_unop_type_error("-", PAW_TSTR);
     check_unop_type_error("~", PAW_TUNIT);
     check_unop_type_error("~", PAW_TBOOL);
     check_unop_type_error("~", PAW_TFLOAT);
-    check_unop_type_error("~", PAW_TSTRING);
+    check_unop_type_error("~", PAW_TSTR);
 
 #define mklist(...) \
     (paw_Type[]) { __VA_ARGS__, -1 }
 #define mklist0() \
     (paw_Type[]) { -1 }
-    check_binop_type_errors("+", mklist(PAW_TINT, PAW_TFLOAT, PAW_TSTRING));
+    check_binop_type_errors("+", mklist(PAW_TINT, PAW_TFLOAT, PAW_TSTR));
     check_binop_type_errors("-", mklist(PAW_TINT, PAW_TFLOAT));
     check_binop_type_errors("*", mklist(PAW_TINT, PAW_TFLOAT));
     check_binop_type_errors("%", mklist(PAW_TINT, PAW_TFLOAT));
@@ -174,12 +174,12 @@ static void test_type_error(void)
     check_binop_type_errors("&", mklist(PAW_TINT));
     check_binop_type_errors("|", mklist(PAW_TINT));
     check_binop_type_errors("^", mklist(PAW_TINT));
-    check_binop_type_errors("<", mklist(PAW_TINT, PAW_TFLOAT, PAW_TSTRING));
-    check_binop_type_errors(">", mklist(PAW_TINT, PAW_TFLOAT, PAW_TSTRING));
-    check_binop_type_errors("<=", mklist(PAW_TINT, PAW_TFLOAT, PAW_TSTRING));
-    check_binop_type_errors(">=", mklist(PAW_TINT, PAW_TFLOAT, PAW_TSTRING));
-    check_binop_type_errors("==", mklist(PAW_TBOOL, PAW_TINT, PAW_TFLOAT, PAW_TSTRING));
-    check_binop_type_errors("!=", mklist(PAW_TBOOL, PAW_TINT, PAW_TFLOAT, PAW_TSTRING));
+    check_binop_type_errors("<", mklist(PAW_TINT, PAW_TFLOAT, PAW_TSTR));
+    check_binop_type_errors(">", mklist(PAW_TINT, PAW_TFLOAT, PAW_TSTR));
+    check_binop_type_errors("<=", mklist(PAW_TINT, PAW_TFLOAT, PAW_TSTR));
+    check_binop_type_errors(">=", mklist(PAW_TINT, PAW_TFLOAT, PAW_TSTR));
+    check_binop_type_errors("==", mklist(PAW_TBOOL, PAW_TINT, PAW_TFLOAT, PAW_TSTR));
+    check_binop_type_errors("!=", mklist(PAW_TBOOL, PAW_TINT, PAW_TFLOAT, PAW_TSTR));
 
     test_compiler_error(PAW_ETYPE, "call_unit_variant", "enum E {X}", "let x = E::X();");
     test_compiler_error(PAW_ETYPE, "wrong_constructor_args", "enum E {X(int)}", "let x = E::X(1.0);");

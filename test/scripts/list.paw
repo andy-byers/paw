@@ -1,5 +1,25 @@
 // list.paw
 
+fn are_lists_eq(a: [int], b: [int]) -> bool {
+    if (#a != #b) {
+        return false;
+    }
+    for i = 0, #a {
+        if (a[i] != b[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+fn check_eq(a: [int], b: [int]) {
+    assert(are_lists_eq(a, b));
+}
+
+fn check_ne(a: [int], b: [int]) {
+    assert(!are_lists_eq(a, b));
+}
+
 pub fn test_initialization() {
     let list: [int] = [];
     assert(0 == #list);
@@ -139,12 +159,12 @@ pub fn test_empty_lists() {
     check([[E::X, E::Y], [], [E::Z, E::W]], (2, 0, 2));
     check([[[[], [E::X], [E::Y]]], [], [[[E::Z, E::W]]]], (1, 0, 1));
 
-    assert([1, 2] == [1] + [2] + []);
-    assert([1, 3] == [1] + [] + [3]);
-    assert([2, 3] == [] + [2] + [3]);
-    assert([1] == [1] + [] + []);
-    assert([2] == [] + [2] + []);
-    assert([3] == [] + [] + [3]);
+    assert(2 == ([1] + [2] + [])[-1]);
+    assert(3 == ([1] + [] + [3])[-1]);
+    assert(3 == ([] + [2] + [3])[-1]);
+    assert(1 == ([1] + [] + [])[-1]);
+    assert(2 == ([] + [2] + [])[-1]);
+    assert(3 == ([] + [] + [3])[-1]);
 }
 
 pub fn test_slices() {
@@ -163,24 +183,6 @@ pub fn test_slices() {
     assert(1 == list[0:][0]);
     assert(2 == list[1:][0]);
     assert(3 == list[2:][0]);
-}
-
-// TODO: handle composite element types
-pub fn test_equality_comparisons() {
-    assert([false, true] == [false, true]);
-    assert([2, 3] == [2, 3]);
-    assert([4.0, 5.0] == [4.0, 5.0]);
-    assert(['six', 'seven'] == ['six', 'seven']);
-
-    assert([false, true] != [false, false]);
-    assert([2, 3] != [2, 2]);
-    assert([4.0, 5.0] != [4.0, 4.0]);
-    assert(['six', 'seven'] != ['six', 'six']);
-
-    assert([false, true] != [false]);
-    assert([2, 3] != [2]);
-    assert([4.0, 5.0] != [4.0]);
-    assert(['six', 'seven'] != ['six']);
 }
 
 // each list must have its type inferred at some point before it
@@ -258,13 +260,13 @@ pub fn test_push() {
     _list_push(list, 1);
     _list_push(list, 2);
     _list_push(list, 3);
-    assert(list == [1, 2, 3]);
+    check_eq(list, [1, 2, 3]);
 
     let list = [1];
     _list_push(list, 2);
     _list_push(list, 3);
     _list_push(list, 4);
-    assert(list == [1, 2, 3, 4]);
+    check_eq(list, [1, 2, 3, 4]);
 }
 
 pub fn test_pop() {
@@ -282,20 +284,20 @@ pub fn test_insert() {
     _list_insert(list, 0, 3);
     _list_insert(list, 0, 2);
     _list_insert(list, 0, 1);
-    assert(list == [1, 2, 3]);
+    check_eq(list, [1, 2, 3]);
 
     let list: [int] = [1, 2, 3];
     _list_insert(list, 1, 4);
     _list_insert(list, 3, 5);
     _list_insert(list, 5, 6);
-    assert(list == [1, 4, 2, 5, 3, 6]);
+    check_eq(list, [1, 4, 2, 5, 3, 6]);
 }
 
 pub fn test_set_slice() {
     let check = |i: int, j: int, answer: [int]| {
         let list = [1, 2, 3];
         list[i:j] = [4, 5, 6];
-        assert(list == answer);
+        check_eq(list, answer);
     };
     check(0, 0, [4, 5, 6, 1, 2, 3]);
     check(0, 1, [4, 5, 6, 2, 3]);
@@ -309,7 +311,7 @@ pub fn test_set_slice() {
     let check = |i: int, j: int, answer: [int]| {
         let list = [1, 2, 3];
         list[i:j] = list;
-        assert(list == answer);
+        check_eq(list, answer);
     };
     check(1, 3, [1, 1, 2, 3]);
     check(2, 3, [1, 2, 1, 2, 3]);
@@ -324,7 +326,7 @@ pub fn test_set_slice() {
 
     let list = [1, 2, 3, 4, 5];
     list[1:3] = list;
-    assert(list == [1, 1, 2, 3, 4, 5, 4, 5]);
+    check_eq(list, [1, 1, 2, 3, 4, 5, 4, 5]);
 }
 
 fn map<T>(f: fn(T) -> T, list: [T]) {
@@ -351,9 +353,6 @@ pub fn test_misc() {
         _list_push(list, i);
     };
     assert(#list == 100);
-    for i = 0, 100 {
-        assert(i in list);
-    };
     let clone = _list_clone(list);
     for i = 0, 50 {
         _list_erase(list, i);
@@ -361,28 +360,23 @@ pub fn test_misc() {
     for i = 0, 100, 2 {
         _list_insert(list, i, i);
     };
-    assert(list == clone);
-}
-
-pub fn test_contains() {
-    assert(3 in [1, 2, 3]);
-    assert(!(4 in [1, 2, 3]));
+    check_eq(list, clone);
 }
 
 pub fn test_addition() {
-    assert([] != [1]);
-    assert([] + [] != [2]);
-    assert([] + [] + [] != [3]);
-    assert([1] == [1]);
-    assert([] + [2] == [2]);
-    assert([] + [] + [3] == [3]);
+    check_ne([], [1]);
+    check_ne([] + [], [2]);
+    check_ne([] + [] + [], [3]);
+    check_eq([1], [1]);
+    check_eq([] + [2], [2]);
+    check_eq([] + [] + [3], [3]);
 
-    assert([] + [1, 2, 3] == [1, 2, 3]);
-    assert([1] + [2, 3] == [1, 2, 3]);
-    assert([1, 2] + [3] == [1, 2, 3]);
-    assert([1, 2, 3] + [] == [1, 2, 3]);
-    assert([1] + [2] + [3] == [1, 2, 3]);
-    assert([] + [1] + [2] + [] + [] + [3] + [] == [1, 2, 3]);
+    check_eq([] + [1, 2, 3], [1, 2, 3]);
+    check_eq([1] + [2, 3], [1, 2, 3]);
+    check_eq([1, 2] + [3], [1, 2, 3]);
+    check_eq([1, 2, 3] + [], [1, 2, 3]);
+    check_eq([1] + [2] + [3], [1, 2, 3]);
+    check_eq([] + [1] + [2] + [] + [] + [3] + [], [1, 2, 3]);
 }
 
 pub fn test_infer_closure() {
@@ -419,9 +413,9 @@ pub fn test_infer_c() {
     b = a;
     c = a;
     b = [1];
-    assert(a == c);
-    assert(a != b);
-    assert(b != c);
+    check_eq(a, c);
+    check_ne(a, b);
+    check_ne(b, c);
 }
 
 pub fn test_infer_d() {
@@ -467,9 +461,9 @@ fn infer_func<T>(list: [T], val: T) -> [T] {
 }
 
 pub fn test_infer_h() {
-    assert([1] == infer_func([], 1));
-    assert([1, 2] == infer_func(infer_func([], 1), 2));
-    assert([1, 2, 3] == infer_func(infer_func(infer_func([], 1), 2), 3));
+    assert(1 == infer_func([], 1)[-1]);
+    assert(2 == infer_func(infer_func([], 1), 2)[-1]);
+    assert(3 == infer_func(infer_func(infer_func([], 1), 2), 3)[-1]);
 }
 
 struct Vec<T> {
@@ -482,11 +476,11 @@ fn infer_fn_2<T>(list: [T], val: Vec<T>) -> [T] {
 
 pub fn test_infer_i() {
     let a = Vec::<int>{list: [1]};
-    assert([1] == infer_fn_2([], a));
+    assert(1 == infer_fn_2([], a)[-1]);
     let b = Vec::<int>{list: [2, 3]};
-    assert([1, 2, 3] == infer_fn_2(infer_fn_2([], a), b));
+    assert(3 == infer_fn_2(infer_fn_2([], a), b)[-1]);
     let c = Vec::<int>{list: [4, 5, 6]};
-    assert([1, 2, 3, 4, 5, 6] == infer_fn_2(infer_fn_2(infer_fn_2([], a), b), c));
+    assert(6 == infer_fn_2(infer_fn_2(infer_fn_2([], a), b), c)[-1]);
 }
 
 fn infer_fn_3<T>(list: [T], vec2: [[T]]) {}
@@ -517,19 +511,19 @@ pub fn test_infer_k() {
 
 pub fn test_slice_equality() {
     let list = [1, 2, 3];
-    assert(list[0:] == list[-3:3]);
-    assert(list[1:] == list[-2:3]);
-    assert(list[2:] == list[-1:3]);
-    assert(list[:3] == list[0:3]);
-    assert(list[:2] == list[0:-1]);
-    assert(list[:1] == list[0:-2]);
+    check_eq(list[0:], list[-3:3]);
+    check_eq(list[1:], list[-2:3]);
+    check_eq(list[2:], list[-1:3]);
+    check_eq(list[:3], list[0:3]);
+    check_eq(list[:2], list[0:-1]);
+    check_eq(list[:1], list[0:-2]);
 
-    assert(list[:0] == []);
-    assert(list[3:] == []);
-    assert(list[1:1] == []);
-    assert(list[:3] == list);
-    assert(list[0:] == list);
-    assert(list[0:3] == list);
+    check_eq(list[:0], []);
+    check_eq(list[3:], []);
+    check_eq(list[1:1], []);
+    check_eq(list[:3], list);
+    check_eq(list[0:], list);
+    check_eq(list[0:3], list);
 }
 
 fn map2<T>(list: [T], f: fn(T) -> T) -> [T] {

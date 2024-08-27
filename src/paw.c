@@ -197,7 +197,7 @@ static ValueId find_main(paw_Env *P)
     if (f->params.count == 1) {
         // TODO: check argument type
         //struct Field param = f->params.data[0];
-        //if (!pawE_is_list_of(P, param, PAW_TSTRING)) {
+        //if (!pawE_is_list_of(P, param, PAW_TSTR)) {
         //    error(PAW_ETYPE, "expected '[str]' argument to 'main'");
         //}
     } else if (f->params.count != 0) {

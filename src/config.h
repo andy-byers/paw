@@ -47,10 +47,14 @@
 
 #if defined(__GNUC__) || defined(__clang__)
 # define PAW_NODISCARD __attribute__((warn_unused_result))
+# define PAW_UNREACHABLE __builtin_unreachable
 #elif defined(_MSC_VER)
 # define PAW_NODISCARD _Check_return_
+# define PAW_UNREACHABLE __assume(0)
 #else
 # define PAW_NODISCARD
+# define PAW_UNREACHABLE paw_unreachable_
+_Noreturn static inline void paw_unreachable_(void) {}
 #endif
 
 #endif // PAW_CONFIG_H

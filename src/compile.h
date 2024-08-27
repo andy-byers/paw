@@ -17,10 +17,8 @@
 #ifndef PAW_COMPILE_H
 #define PAW_COMPILE_H
 
-#include "ast.h"
 #include "code.h"
 #include "env.h"
-#include "hir.h"
 #include "mem.h"
 #include "unify.h"
 
@@ -35,6 +33,40 @@ static inline String *pawP_scan_string(paw_Env *P, Map *st, const char *s)
     return pawP_scan_nstring(P, st, s, strlen(s));
 }
 
+// ORDER UnaryOp
+enum UnaryOp {
+    UNARY_LEN, 
+    UNARY_NEG, 
+    UNARY_NOT, 
+    UNARY_BNOT,
+
+    NUNARYOPS
+};
+
+// ORDER BinaryOp
+enum BinaryOp {
+    BINARY_EQ,   
+    BINARY_NE,   
+    BINARY_LT,   
+    BINARY_LE,   
+    BINARY_GT,   
+    BINARY_GE,   
+    BINARY_AS,
+    BINARY_ADD,  
+    BINARY_SUB,  
+    BINARY_MUL,  
+    BINARY_DIV,  
+    BINARY_MOD,  
+    BINARY_BXOR,
+    BINARY_BAND,
+    BINARY_BOR,
+    BINARY_SHL,
+    BINARY_SHR,
+
+    NBINARYOPS
+};
+
+// ORDER BuiltinKind
 enum BuiltinKind {
     BUILTIN_UNIT,
     BUILTIN_BOOL,
@@ -83,6 +115,8 @@ struct Resolver {
     int list_gid;
     int map_gid;
     int line;
+    DefId option_did;
+    DefId result_did;
     paw_Bool in_closure; // 1 if the enclosing function is a closure, else 0
 };
 

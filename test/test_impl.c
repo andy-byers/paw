@@ -66,7 +66,7 @@ static Map *map_new(paw_Env *P)
 
 static void map_free(paw_Env *P, Map *map)
 {
-    paw_assert(map == P->top.p[-1].p);
+    check(map == P->top.p[-1].p);
     pawC_pop(P);
 }
 
@@ -199,7 +199,7 @@ static void test_strings(paw_Env *P)
 
 static void test_stack(paw_Env *P)
 {
-    paw_push_unit(P, 2);
+    paw_push_zero(P, 2);
     check(paw_get_count(P) == 2);
     check(paw_int(P, 0) == 0);
     check(paw_int(P, 1) == 0);

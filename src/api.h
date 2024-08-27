@@ -8,31 +8,4 @@
 #include "paw.h"
 #include "value.h"
 
-// TODO: not necessary, just use the 'name' field of Type
-static inline const char *api_typename(int type)
-{
-    switch (type) {
-        case PAW_TUNIT:
-            return "unit";
-        case PAW_TBOOL:
-            return "boolean";
-        case PAW_TINT:
-            return "integer";
-        case PAW_TFLOAT:
-            return "float";
-        case PAW_TSTRING:
-            return "str";
-        case PAW_TFUNCTION:
-            return "function";
-        case PAW_TSTRUCT:
-            return "struct";
-        case PAW_TENUM:
-            return "enum";
-        case PAW_TFOREIGN:
-            return "foreign";
-        default:
-            return "?";
-    }
-}
-
 #endif // PAW_API_H
