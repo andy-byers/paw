@@ -97,80 +97,77 @@ const char *paw_push_nstring(paw_Env *P, const char *s, size_t n);
 const char *paw_push_fstring(paw_Env *P, const char *fmt, ...);
 const char *paw_push_vfstring(paw_Env *P, const char *fmt, va_list arg);
 
-// ORDER ArithOp1
-#define PAW_OPNEG 0
-
-// ORDER ArithOp2
-#define PAW_OPADD 0
-#define PAW_OPSUB 1
-#define PAW_OPMUL 2
-#define PAW_OPDIV 3
-#define PAW_OPMOD 4
-
-void paw_arithi1(paw_Env *P, int op);
-void paw_arithi2(paw_Env *P, int op);
-void paw_arithf1(paw_Env *P, int op);
-void paw_arithf2(paw_Env *P, int op);
-
-// ORDER BitwOp1
-#define PAW_OPBNOT 0
-
-// ORDER BitwOp2
-#define PAW_OPBXOR 0
-#define PAW_OPBAND 1
-#define PAW_OPBOR 2
-#define PAW_OPSHL 3
-#define PAW_OPSHR 4
-
-void paw_bitw1(paw_Env *P, int op);
-void paw_bitw2(paw_Env *P, int op);
-
-// ORDER CmpOp
-#define PAW_OPEQ 0
-#define PAW_OPNE 1
-#define PAW_OPLT 2
-#define PAW_OPLE 3
-#define PAW_OPGT 4
-#define PAW_OPGE 5
+enum paw_CmpOp {
+    PAW_CMP_EQ,
+    PAW_CMP_NE,
+    PAW_CMP_LT,
+    PAW_CMP_LE,
+    PAW_CMP_GT,
+    PAW_CMP_GE,
+};
 
 // Comparison operations
 // Returns an integer, the sign of which describes the relationship between 
 // the left and right operands: negative if the left operand is less than the
 // right, positive  if the left operand is greater than the right, and 0 if 
 // the operands are equal.
-void paw_cmpi(paw_Env *P, int op);
-void paw_cmpf(paw_Env *P, int op);
-void paw_cmps(paw_Env *P, int op);
+void paw_cmpi(paw_Env *P, enum paw_CmpOp op);
+void paw_cmpf(paw_Env *P, enum paw_CmpOp op);
+void paw_cmps(paw_Env *P, enum paw_CmpOp op);
 
-// ORDER BoolOp
-#define PAW_OPNOT 0
+enum paw_ArithOp {
+    PAW_ARITH_NEG,
+    PAW_ARITH_ADD,
+    PAW_ARITH_SUB,
+    PAW_ARITH_MUL,
+    PAW_ARITH_DIV,
+    PAW_ARITH_MOD,
+};
 
-void paw_boolop(paw_Env *P, int op);
+void paw_arithi(paw_Env *P, enum paw_ArithOp op);
+void paw_arithf(paw_Env *P, enum paw_ArithOp op);
 
-// ORDER StrOp
-#define PAW_SLEN 0
-#define PAW_SADD 1
-#define PAW_SGET 2
-#define PAW_SGETN 3
+enum paw_BitwOp {
+    PAW_BITW_NOT,
+    PAW_BITW_XOR,
+    PAW_BITW_AND,
+    PAW_BITW_OR,
+    PAW_BITW_SHL,
+    PAW_BITW_SHR,
+};
 
-void paw_strop(paw_Env *P, int op);
+void paw_bitw(paw_Env *P, enum paw_BitwOp op);
 
-// ORDER ListOp
-#define PAW_LLEN 0
-#define PAW_LADD 1
-#define PAW_LGET 2
-#define PAW_LSET 3
-#define PAW_LGETN 4
-#define PAW_LSETN 5
+enum paw_BoolOp {
+    PAW_BOOL_NOT,
+};
 
-void paw_listop(paw_Env *P, int op);
+enum paw_StrOp {
+    PAW_STR_LEN,
+    PAW_STR_CONCAT,
+    PAW_STR_GET,
+    PAW_STR_GETN,
+};
 
-// ORDER MapOp
-#define PAW_MLEN 0
-#define PAW_MGET 1
-#define PAW_MSET 2
+enum paw_ListOp {
+    PAW_LIST_LEN,
+    PAW_LIST_CONCAT,
+    PAW_LIST_GET,
+    PAW_LIST_SET,
+    PAW_LIST_GETN,
+    PAW_LIST_SETN,
+};
 
-void paw_mapop(paw_Env *P, int op);
+enum paw_MapOp {
+    PAW_MAP_LEN,
+    PAW_MAP_GET,
+    PAW_MAP_SET,
+};
+
+void paw_boolop(paw_Env *P, enum paw_BoolOp op);
+void paw_strop(paw_Env *P, enum paw_StrOp op);
+void paw_listop(paw_Env *P, enum paw_ListOp op);
+void paw_mapop(paw_Env *P, enum paw_MapOp op);
 
 //
 // Getters (stack -> C):

@@ -149,10 +149,10 @@ const char *paw_op_name(Op op)
             return "ARITHF1";
         case OP_ARITHF2:
             return "ARITHF2";
-        case OP_BITWI1:
-            return "BITWI1";
-        case OP_BITWI2:
-            return "BITWI2";
+        case OP_BITW1:
+            return "BITW1";
+        case OP_BITW2:
+            return "BITW2";
         case OP_CMPI:
             return "CMPI";
         case OP_CMPF:
@@ -200,8 +200,8 @@ void paw_dump_opcode(OpCode opcode)
         case OP_SETUPVALUE:
         case OP_ARITHI1:
         case OP_ARITHI2:
-        case OP_BITWI1:
-        case OP_BITWI2:
+        case OP_BITW1:
+        case OP_BITW2:
         case OP_CMPI:
         case OP_CMPF:
         case OP_CMPS:

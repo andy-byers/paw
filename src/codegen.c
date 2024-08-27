@@ -837,7 +837,7 @@ static void code_boolop(struct FuncState *fs, enum BoolOp op)
 
 static void code_bitw1(struct FuncState *fs, enum BitwOp1 op)
 {
-    CODE_OP(fs, OP_BITWI1, op);
+    CODE_OP(fs, OP_BITW1, op);
 }
 
 static void code_unop_expr(struct HirVisitor *V, struct HirUnOpExpr *e)
@@ -855,13 +855,13 @@ static void code_unop_expr(struct HirVisitor *V, struct HirUnOpExpr *e)
             code_len(fs, type);
             break;
         case UNARY_NEG:
-            code_arith1(fs, ARITH_NEG, type);
+            code_arith1(fs, ARITH1_NEG, type);
             break;
         case UNARY_NOT:
             code_boolop(fs, BOOL_NOT);
             break;
         case UNARY_BNOT:
-            code_bitw1(fs, BITW_NOT);
+            code_bitw1(fs, BITW1_NOT);
             break;
         case NUNARYOPS:
             PAW_UNREACHABLE();
@@ -883,7 +883,7 @@ static void code_arith2(struct FuncState *fs, enum ArithOp2 op, paw_Type type)
 
 static void code_bitw2(struct FuncState *fs, enum BitwOp2 op)
 {
-    CODE_OP(fs, OP_BITWI2, op);
+    CODE_OP(fs, OP_BITW2, op);
 }
 
 static void code_binop_expr(struct HirVisitor *V, struct HirBinOpExpr *e)
@@ -918,39 +918,39 @@ static void code_binop_expr(struct HirVisitor *V, struct HirBinOpExpr *e)
             break;
         case BINARY_ADD:  
             if (type == PAW_TSTR) {
-                CODE_OP(fs, OP_STROP, STR_ADD);
+                CODE_OP(fs, OP_STROP, STR_CONCAT);
             } else if (type == BUILTIN_LIST) {
-                CODE_OP(fs, OP_LISTOP, LIST_ADD);
+                CODE_OP(fs, OP_LISTOP, LIST_CONCAT);
             } else {
-                code_arith2(fs, ARITH_ADD, type);
+                code_arith2(fs, ARITH2_ADD, type);
             }
             break;
         case BINARY_SUB:  
-            code_arith2(fs, ARITH_SUB, type);
+            code_arith2(fs, ARITH2_SUB, type);
             break;
         case BINARY_MUL:  
-            code_arith2(fs, ARITH_MUL, type);
+            code_arith2(fs, ARITH2_MUL, type);
             break;
         case BINARY_DIV:  
-            code_arith2(fs, ARITH_DIV, type);
+            code_arith2(fs, ARITH2_DIV, type);
             break;
         case BINARY_MOD:  
-            code_arith2(fs, ARITH_MOD, type);
+            code_arith2(fs, ARITH2_MOD, type);
             break;
         case BINARY_BXOR:
-            code_bitw2(fs, BITW_XOR);
+            code_bitw2(fs, BITW2_XOR);
             break;
         case BINARY_BAND:
-            code_bitw2(fs, BITW_AND);
+            code_bitw2(fs, BITW2_AND);
             break;
         case BINARY_BOR:
-            code_bitw2(fs, BITW_OR);
+            code_bitw2(fs, BITW2_OR);
             break;
         case BINARY_SHL:
-            code_bitw2(fs, BITW_SHL);
+            code_bitw2(fs, BITW2_SHL);
             break;
         case BINARY_SHR:
-            code_bitw2(fs, BITW_SHR);
+            code_bitw2(fs, BITW2_SHR);
             break;
         case BINARY_AS:
         case NBINARYOPS:

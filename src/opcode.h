@@ -135,12 +135,12 @@ OP_ARITHI1,//        U           x              y             -
 OP_ARITHF1,//        U           x              y             -   
 OP_ARITHI2,//        U           x y            z             -
 OP_ARITHF2,//        U           x y            z             -   
-OP_BITWI1,//         U           x              y             -
-OP_BITWI2,//         U           x y            z             -
-OP_BOOLOP,//         U           v[ v1..vn]     z             -
-OP_STROP,//          U           v[ v1..vn]     z             -
-OP_LISTOP,//         U           v[ v1..vn]     z             -
-OP_MAPOP,//          U           v[ v1..vn]     z             -
+OP_BITW1,//          U           x              y             -
+OP_BITW2,//          U           x y            z             -
+OP_BOOLOP,//         U           v1..vn         z             -
+OP_STROP,//          U           v1..vn         z             -
+OP_LISTOP,//         U           v1..vn         z             -
+OP_MAPOP,//          U           v1..vn         z             -
 
 OP_CASTBOOL,//       U           v              v as bool     -  
 OP_CASTINT,//        U           v              v as int      - 
@@ -156,7 +156,6 @@ OP_SETTUPLE,//       U           v x            -             v.u=x
 NOPCODES
 } Op;
 
-// ORDER CmpOp
 enum CmpOp {
     CMP_EQ,
     CMP_NE,
@@ -166,58 +165,50 @@ enum CmpOp {
     CMP_GE,
 };
 
-// ORDER ArithOp1
 enum ArithOp1 {
-    ARITH_NEG,
+    ARITH1_NEG,
 };
 
-// ORDER ArithOp2
 enum ArithOp2 {
-    ARITH_ADD,
-    ARITH_SUB,
-    ARITH_MUL,
-    ARITH_DIV,
-    ARITH_MOD,
+    ARITH2_ADD,
+    ARITH2_SUB,
+    ARITH2_MUL,
+    ARITH2_DIV,
+    ARITH2_MOD,
 };
 
-// ORDER BitwOp1
 enum BitwOp1 {
-    BITW_NOT,
+    BITW1_NOT,
 };
 
-// ORDER BitwOp2
 enum BitwOp2 {
-    BITW_XOR,
-    BITW_AND,
-    BITW_OR,
-    BITW_SHL,
-    BITW_SHR,
+    BITW2_XOR,
+    BITW2_AND,
+    BITW2_OR,
+    BITW2_SHL,
+    BITW2_SHR,
 };
 
-// ORDER BoolOp
 enum BoolOp {
     BOOL_NOT,
 };
 
-// ORDER StrOp
 enum StrOp {
     STR_LEN,
-    STR_ADD,
+    STR_CONCAT,
     STR_GET,
     STR_GETN,
 };
 
-// ORDER ListOp
 enum ListOp {
     LIST_LEN,
-    LIST_ADD,
+    LIST_CONCAT,
     LIST_GET,
     LIST_SET,
     LIST_GETN,
     LIST_SETN,
 };
 
-// ORDER MapOp
 enum MapOp {
     MAP_LEN,
     MAP_GET,

@@ -396,7 +396,7 @@ void pawR_arithi1(paw_Env *P, enum ArithOp1 op)
 {
     paw_Int x = VM_INT(1);
     switch (op) {
-        case ARITH_NEG:
+        case ARITH1_NEG:
             x = I_UNOP(x, -);
     }
     VM_SET_INT(1, x);
@@ -407,24 +407,24 @@ void pawR_arithi2(paw_Env *P, enum ArithOp2 op)
     paw_Int x = VM_INT(2);
     const paw_Int y = VM_INT(1);
     switch (op) {
-        case ARITH_ADD:
+        case ARITH2_ADD:
             x = I_BINOP(x, y, +);
             break;
-        case ARITH_SUB:
+        case ARITH2_SUB:
             x = I_BINOP(x, y, -);
             break;
-        case ARITH_MUL:
+        case ARITH2_MUL:
             x = I_BINOP(x, y, *);
             break;
-        case ARITH_DIV:
-        case ARITH_MOD:
+        case ARITH2_DIV:
+        case ARITH2_MOD:
             if (y == 0) {
                 DIVIDE_BY_0(P);
             } else if (x == PAW_INT_MIN && y == -1) {
                 // If x / y is undefined, then so too is x % y (see C11 section 6.5.5,
                 // item 6). Both cases equal 0 in Paw (x / y wraps).
                 x = 0; 
-            } else if (op == ARITH_DIV) {
+            } else if (op == ARITH2_DIV) {
                 x = x / y; 
             } else {
                 x = x % y; 
@@ -438,7 +438,7 @@ void pawR_bitwi1(paw_Env *P, enum BitwOp1 op)
 {
     paw_Int x = VM_INT(1);
     switch (op) {
-        case BITW_NOT:
+        case BITW1_NOT:
             x = I_UNOP(x, ~);
     }
     VM_SET_INT(1, x);
@@ -449,16 +449,16 @@ void pawR_bitwi2(paw_Env *P, enum BitwOp2 op)
     paw_Int x = VM_INT(2);
     paw_Int y = VM_INT(1);
     switch (op) {
-        case BITW_AND:
+        case BITW2_AND:
             x = I_BINOP(x, y, &);
             break;
-        case BITW_OR:
+        case BITW2_OR:
             x = I_BINOP(x, y, |);
             break;
-        case BITW_XOR:
+        case BITW2_XOR:
             x = I_BINOP(x, y, ^);
             break;
-        case BITW_SHL:
+        case BITW2_SHL:
             if (y < 0) {
                 pawR_error(P, PAW_ERUNTIME, "negative shift count");
             } else if (y > 0) {
@@ -466,7 +466,7 @@ void pawR_bitwi2(paw_Env *P, enum BitwOp2 op)
                 x = U2I(I2U(x) << y);
             }
             break;
-        case BITW_SHR:
+        case BITW2_SHR:
             if (y < 0) {
                 pawR_error(P, PAW_ERUNTIME, "negative shift count");
             } else if (y > 0) {
@@ -499,7 +499,7 @@ void pawR_arithf1(paw_Env *P, enum ArithOp1 op)
     const paw_Float x = VM_FLOAT(1);
     paw_Float y;
     switch (op) {
-        case ARITH_NEG:
+        case ARITH1_NEG:
             y = -x;
     }
     VM_SET_FLOAT(1, y);
@@ -510,20 +510,20 @@ void pawR_arithf2(paw_Env *P, enum ArithOp2 op)
     paw_Float x = VM_FLOAT(2);
     const paw_Float y = VM_FLOAT(1);
     switch (op) {
-        case ARITH_ADD:
+        case ARITH2_ADD:
             x = x + y;
             break;
-        case ARITH_SUB:
+        case ARITH2_SUB:
             x = x - y;
             break;
-        case ARITH_MUL:
+        case ARITH2_MUL:
             x = x * y;
             break;
-        case ARITH_DIV:
+        case ARITH2_DIV:
             if (y == 0.0) DIVIDE_BY_0(P);
             x = x / y;
             break;
-        case ARITH_MOD:
+        case ARITH2_MOD:
             if (y == 0.0) DIVIDE_BY_0(P);
             x = fmod(x, y);
     }
@@ -573,7 +573,7 @@ static void str_len(paw_Env *P)
     V_SET_INT(VM_TOP(1), len);
 }
 
-static void str_add(paw_Env *P)
+static void str_concat(paw_Env *P)
 {
     const String *x = VM_STR(2);
     const String *y = VM_STR(1);
@@ -621,8 +621,8 @@ void pawR_strop(paw_Env *P, enum StrOp op)
         case STR_LEN:
             str_len(P);
             break;
-        case STR_ADD:
-            str_add(P);
+        case STR_CONCAT:
+            str_concat(P);
             break;
         case STR_GET:
             str_get(P);
@@ -640,7 +640,7 @@ static void list_len(paw_Env *P)
     V_SET_INT(VM_TOP(1), len);
 }
 
-static void list_add(paw_Env *P)
+static void list_concat(paw_Env *P)
 {
     const List *x = V_LIST(*VM_TOP(2));
     const List *y = V_LIST(*VM_TOP(1));
@@ -735,8 +735,8 @@ void pawR_listop(paw_Env *P, enum ListOp op)
         case LIST_LEN:
             list_len(P);
             break;
-        case LIST_ADD:
-            list_add(P);
+        case LIST_CONCAT:
+            list_concat(P);
             break;
         case LIST_GET:
             list_get(P);
@@ -981,12 +981,12 @@ top:
                 pawR_arithf2(P, GET_U(opcode));
             }
 
-            vm_case(BITWI1) :
+            vm_case(BITW1) :
             {
                 pawR_bitwi1(P, GET_U(opcode));
             }
 
-            vm_case(BITWI2) :
+            vm_case(BITW2) :
             {
                 pawR_bitwi2(P, GET_U(opcode));
             }

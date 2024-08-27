@@ -113,7 +113,7 @@ void paw_close(paw_Env *P)
 int paw_find_global(paw_Env *P)
 {
     paw_push_string(P, "_");
-    paw_strop(P, PAW_SADD);
+    paw_strop(P, PAW_STR_CONCAT);
     const String *name = V_STRING(P->top.p[-1]);
     const int g = pawE_locate(P, name);
     paw_pop(P, 1);
@@ -406,75 +406,89 @@ void paw_call_global(paw_Env *P, int gid, int argc)
     paw_call(P, argc);
 }
 
-void paw_arithi1(paw_Env *P, int op)
+#define CAST_ARITH2(op) CAST(op - PAW_ARITH_ADD, enum ArithOp2)
+_Static_assert(ARITH2_ADD == 0, "CAST_ARITH2 is incorrect");
+
+void paw_arithi(paw_Env *P, enum paw_ArithOp op)
 {
-     pawR_arithi1(P, CAST(op, enum ArithOp1));
+    switch (op) {
+        case PAW_ARITH_NEG:
+            pawR_arithi1(P, ARITH1_NEG);
+            break;
+        case PAW_ARITH_ADD:
+        case PAW_ARITH_SUB:
+        case PAW_ARITH_MUL:
+        case PAW_ARITH_DIV:
+        case PAW_ARITH_MOD:
+            pawR_arithi2(P, CAST_ARITH2(op));
+    }
 }
 
-void paw_arithi2(paw_Env *P, int op)
+void paw_arithf(paw_Env *P, enum paw_ArithOp op)
 {
-     pawR_arithi2(P, CAST(op, enum ArithOp2));
+    switch (op) {
+        case PAW_ARITH_NEG:
+            pawR_arithf1(P, ARITH1_NEG);
+            break;
+        case PAW_ARITH_ADD:
+        case PAW_ARITH_SUB:
+        case PAW_ARITH_MUL:
+        case PAW_ARITH_DIV:
+        case PAW_ARITH_MOD:
+            pawR_arithf2(P, CAST_ARITH2(op));
+    }
 }
 
-void paw_arithf1(paw_Env *P, int op)
-{
-     pawR_arithf1(P, CAST(op, enum ArithOp1));
-}
-
-void paw_arithf2(paw_Env *P, int op)
-{
-     pawR_arithf2(P, CAST(op, enum ArithOp2));
-}
-
-void paw_cmpi(paw_Env *P, int op)
+void paw_cmpi(paw_Env *P, enum paw_CmpOp op)
 {
      pawR_cmpi(P, CAST(op, enum CmpOp));
 }
 
-void paw_cmpf(paw_Env *P, int op)
+void paw_cmpf(paw_Env *P, enum paw_CmpOp op)
 {
      pawR_cmpf(P, CAST(op, enum CmpOp));
 }
 
-void paw_cmps(paw_Env *P, int op)
+void paw_cmps(paw_Env *P, enum paw_CmpOp op)
 {
      pawR_cmps(P, CAST(op, enum CmpOp));
 }
 
-void paw_bitwi1(paw_Env *P, int op)
+#define CAST_BITW2(op) CAST(op - PAW_BITW_XOR, enum BitwOp2)
+_Static_assert(BITW2_XOR == 0, "CAST_BITW2 is incorrect");
+
+void paw_bitw(paw_Env *P, enum paw_BitwOp op)
 {
-     pawR_bitwi1(P, CAST(op, enum BitwOp1));
+     switch (op) {
+        case PAW_BITW_NOT:
+            pawR_bitwi1(P, BITW1_NOT);
+            break;
+        case PAW_BITW_XOR:
+        case PAW_BITW_AND:
+        case PAW_BITW_OR:
+        case PAW_BITW_SHL:
+        case PAW_BITW_SHR:
+            pawR_bitwi2(P, CAST_BITW2(op));
+     }
 }
 
-void paw_bitwi2(paw_Env *P, int op)
+void paw_boolop(paw_Env *P, enum paw_BoolOp op)
 {
-     pawR_bitwi2(P, CAST(op, enum BitwOp2));
+    pawR_boolop(P, CAST(op, enum BoolOp));
 }
 
-void paw_boolop(paw_Env *P, int op)
-{
-     pawR_boolop(P, CAST(op, enum BoolOp));
-}
-
-void paw_strop(paw_Env *P, int op)
+void paw_strop(paw_Env *P, enum paw_StrOp op)
 {
      pawR_strop(P, CAST(op, enum StrOp));
 }
 
-void paw_listop(paw_Env *P, int op)
+void paw_listop(paw_Env *P, enum paw_ListOp op)
 {
      pawR_listop(P, CAST(op, enum ListOp));
 }
 
-void paw_mapop(paw_Env *P, int op)
+void paw_mapop(paw_Env *P, enum paw_MapOp op)
 {
      pawR_mapop(P, CAST(op, enum MapOp));
 }
 
-void paw_raw_equals(paw_Env *P)
-{
-    const Value x = P->top.p[-2];
-    const Value y = P->top.p[-1];
-    paw_push_boolean(P, x.u == y.u);
-    paw_shift(P, 2);
-}
