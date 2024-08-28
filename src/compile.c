@@ -8,6 +8,9 @@
 #include "hir.h"
 #include "map.h"
 
+// All paw language keywords
+//
+// ORDER TokenKind
 static const char *kKeywords[] = {
     "pub",
     "fn",

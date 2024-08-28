@@ -1418,9 +1418,6 @@ static void load_prelude(struct Lex *lex)
     check(lex, TK_END);
 }
 
-// All paw language keywords
-//
-// ORDER TokenKind
 static void skip_hashbang(struct Lex *lex)
 {
     if (test_next(lex, '#') && test_next(lex, '!')) {
