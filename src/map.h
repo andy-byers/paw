@@ -72,10 +72,7 @@ static inline MapCursor h_cursor_lookup(Map *m, Value key)
 
 Map *pawH_new(paw_Env *P);
 void pawH_free(paw_Env *P, Map *m);
-paw_Bool pawH_equals(paw_Env *P, Map *lhs, Map *rhs);
 void pawH_extend(paw_Env *P, Map *dst, Map *src);
-void pawH_clone(paw_Env *P, StackPtr sp, Map *m);
-void pawH_key_error(paw_Env *P, Value key, paw_Type type);
 Value *pawH_create(paw_Env *P, Map *m, Value key);
 
 static inline size_t pawH_length(const Map *m) 

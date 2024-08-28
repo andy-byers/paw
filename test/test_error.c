@@ -187,6 +187,17 @@ static void test_type_error(void)
 
 static void test_syntax_error(void)
 {
+    test_compiler_error(PAW_ESYNTAX, "string_missing_second_surrogate", "", "let s = '\\ud801';");
+    test_compiler_error(PAW_ESYNTAX, "string_missing_first_surrogate", "", "let s = '\\udc00';");
+    test_compiler_error(PAW_ESYNTAX, "string_malformed_surrogate_1", "", "let s = '\\ud801\\....';");
+    test_compiler_error(PAW_ESYNTAX, "string_malformed_surrogate_2", "", "let s = '\\ud801\\u....';");
+    test_compiler_error(PAW_ESYNTAX, "string_invalid_surrogate_low", "", "let s = '\\ud801\\udbff';");
+    test_compiler_error(PAW_ESYNTAX, "string_invalid_surrogate_high", "", "let s = '\\ud801\\ue000';");
+
+    test_compiler_error(PAW_ESYNTAX, "misplaced_2dots", "", "let x = ..;");
+    test_compiler_error(PAW_ESYNTAX, "misplaced_3dots", "", "let x = ...;");
+    test_compiler_error(PAW_ESYNTAX, "misplaced_fat_arrow", "", "let x => 1;");
+    test_compiler_error(PAW_ESYNTAX, "missing_end_of_block_comment", "", "/* block comment");
     test_compiler_error(PAW_ESYNTAX, "overflow_integer", "", "let d = -9223372036854775808;"); // overflows before '-' applied
     test_compiler_error(PAW_ESYNTAX, "binary_digit_range", "", "let b = 0b001201;");
     test_compiler_error(PAW_ESYNTAX, "octal_digit_range", "", "let o = 0o385273;");
@@ -219,6 +230,7 @@ static void test_syntax_error(void)
     test_compiler_error(PAW_ESYNTAX, "bad_float_7", "", "let f = 1e-1e1;");
     test_compiler_error(PAW_ESYNTAX, "bad_float_8", "", "let f = 1e+1e1;");
     test_compiler_error(PAW_ESYNTAX, "bad_float_9", "", "let f = 1.0.0;");
+    test_compiler_error(PAW_ESYNTAX, "float_with_base_prefix", "", "let f = 0x1.0;");
 
     test_compiler_error(PAW_ESYNTAX, "missing_semicolon_after_stmt", "", "let a = 1");
     test_compiler_error(PAW_ESYNTAX, "missing_semicolon_between_stmts", "", "let a = 2\nlet b = 3;");
@@ -255,6 +267,12 @@ static void test_arithmetic_error(void)
     test_runtime_error(PAW_ERUNTIME, "negative_right_shift", "", "let x = 1 >> -2;");
 }
 
+static void test_tuple_error(void)
+{
+    test_compiler_error(PAW_ETYPE, "tuple_square_brackets", "", "let x = (1, 2); let y = x[0];");
+    test_compiler_error(PAW_ETYPE, "tuple_index_out_of_range", "", "let x = (1, 2); let y = x.2;");
+}
+
 static void test_struct_error(void)
 {
     test_compiler_error(PAW_ESYNTAX, "struct_unit_with_braces_on_def", "struct A {}", "let a = A;");
@@ -266,6 +284,7 @@ static void test_struct_error(void)
     test_compiler_error(PAW_ENAME, "struct_extra_field", "struct A {a: int}", "let a = A{a: 1, b: 2};");
     test_compiler_error(PAW_ENAME, "struct_duplicate_field", "struct A {a: int}", "let a = A{a: 1, a: 1};");
     test_compiler_error(PAW_ENAME, "struct_wrong_field", "struct A {a: int}", "let a = A{b: 2};");
+    test_compiler_error(PAW_ETYPE, "struct_access_by_index", "struct S{x: int}", "let x = S{x: 1}; let y = x.0;");
 }
 
 static void test_enum_error(void)
@@ -281,6 +300,7 @@ static void test_enum_error(void)
     test_compiler_error(PAW_ESYNTAX, "enum_missing_field", "enum A {X(int, float)}", "let a = A::X(42);");
     test_compiler_error(PAW_ESYNTAX, "enum_extra_field", "enum A {X(int)}", "let a = A::X(42, true);");
     test_compiler_error(PAW_ETYPE, "enum_wrong_field_type", "enum A {X(int)}", "let a = A::X(1.0);");
+    test_compiler_error(PAW_ETYPE, "enum_requires_pattern_matching", "enum E{X(int)}", "let x = E::X(1); let y = x.0;");
 }
 
 static void test_list_error(void)
@@ -314,6 +334,7 @@ int main(void)
     test_type_error();
     test_closure_error();
     test_arithmetic_error();
+    test_tuple_error();
     test_struct_error();
     test_list_error();
     test_map_error();

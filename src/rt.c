@@ -99,7 +99,7 @@ static void add_location(paw_Env *P, Buffer *buf)
             pawL_add_fstring(P, buf, "%s:%d: ", name, line);
             break;
         } else if (cf_is_entry(cf)) {
-            pawL_add_literal(P, buf, "[C]: ");
+            L_ADD_LITERAL(P, buf, "[C]: ");
             break;
         }
     }
@@ -125,17 +125,6 @@ void pawR_field_error(paw_Env *P, Value name)
 {
     add_3_parts(P, "field '", V_TEXT(name), "' does not exist");
     pawC_throw(P, PAW_EATTR);
-}
-
-void pawR_int_error(paw_Env *P)
-{
-    Buffer buf;
-    pawL_init_buffer(P, &buf);
-    pawL_add_string(P, &buf, "integer ");
-    pawL_add_value(P, &buf, PAW_TINT); // value on stack
-    pawL_add_string(P, &buf, " is too large");
-    pawL_push_result(P, &buf);
-    pawC_throw(P, PAW_EOVERFLOW);
 }
 
 void pawR_error(paw_Env *P, int error, const char *fmt, ...)
@@ -232,20 +221,11 @@ void pawR_close_upvalues(paw_Env *P, const StackPtr top)
     }
 }
 
-void pawR_settuple(paw_Env *P, int index)
-{
-    const Value val = *VM_TOP(1);
-    const Value obj = *VM_TOP(2);
-    V_TUPLE(obj)->elems[index] = val;
-    VM_SHIFT(1);
-}
-
 void pawR_setfield(paw_Env *P, int index)
 {
     const Value val = *VM_TOP(1);
     const Value obj = *VM_TOP(2);
-    Instance *ins = V_INSTANCE(obj);
-    ins->fields[index] = val;
+    V_TUPLE(obj)->elems[index] = val;
     VM_SHIFT(1);
 }
 
@@ -698,6 +678,17 @@ static void list_set(paw_Env *P)
     VM_SHIFT(2);
 }
 
+static List *list_copy(paw_Env *P, Value *pv, const List *list)
+{
+    List *copy = pawV_list_new(P);
+    V_SET_OBJECT(pv, copy); // anchor
+    if (pawV_list_length(list)) {
+        pawV_list_resize(P, copy, pawV_list_length(list));
+        memcpy(copy->begin, list->begin, sizeof(list->begin[0]) * pawV_list_length(list));
+    }
+    return copy;
+}
+
 // setn([a1..an], i, j, [b1..bn]) => [a1..ai b1..bn aj..an]
 static void list_setn(paw_Env *P)
 {
@@ -714,7 +705,7 @@ static void list_setn(paw_Env *P)
     if (va == vb) {
         Value *pv = VM_TOP(1);
         paw_assert(pv->p == vb);
-        vb = pawV_list_clone(P, pv, vb);
+        vb = list_copy(P, pv, vb);
     }
 
     const size_t szelem = sizeof(va->begin[0]);
@@ -759,15 +750,14 @@ static void map_len(paw_Env *P)
     V_SET_INT(VM_TOP(1), len);
 }
 
-static int map_get(paw_Env *P)
+static void map_get(paw_Env *P)
 {
-    const Value obj = *VM_TOP(2);
+    Map *map = VM_MAP(2);
     const Value key = *VM_TOP(1);
-    const Value *pv = pawH_get(V_MAP(obj), key);
-    if (pv == NULL) return -1;
+    const Value *pv = pawH_get(map, key);
+    if (pv == NULL) pawR_error(P, PAW_EKEY, "key does not exist");
     *VM_TOP(2) = *pv;
     VM_POP(1);
-    return 0;
 }
 
 static void map_set(paw_Env *P)
@@ -793,16 +783,10 @@ void pawR_mapop(paw_Env *P, enum MapOp op)
     }
 }
 
-void pawR_gettuple(paw_Env *P, int index)
+void pawR_getfield(paw_Env *P, int index)
 {
     Tuple *tup = V_TUPLE(*VM_TOP(1));
     *VM_TOP(1) = tup->elems[index];
-}
-
-void pawR_getfield(paw_Env *P, int index)
-{
-    Instance *ins = V_INSTANCE(*VM_TOP(1));
-    *VM_TOP(1) = ins->fields[index];
 }
 
 void pawR_literal_tuple(paw_Env *P, int n)
@@ -859,33 +843,6 @@ static void new_variant(paw_Env *P, int k, int nfields)
         var->fields[i] = P->top.p[i - nfields - 1];
     }
     VM_SHIFT(nfields);
-}
-
-static void unpack_variant(paw_Env *P, int n)
-{
-    const Variant *v = V_VARIANT(*VM_TOP(1));
-    add_zeros(P, n - 1);
-    for (int i = 0; i < n; ++i) {
-        *VM_TOP(n - i + 1) = v->fields[i];
-    }
-}
-
-static void unpack_instance(paw_Env *P, int n)
-{
-    const Instance *s = V_INSTANCE(*VM_TOP(1));
-    add_zeros(P, n - 1);
-    for (int i = 0; i < n; ++i) {
-        *VM_TOP(n - i + 1) = s->fields[i];
-    }
-}
-
-static void unpack_tuple(paw_Env *P, int n)
-{
-    const Tuple *t = V_TUPLE(*VM_TOP(1));
-    add_zeros(P, n - 1);
-    for (int i = 0; i < n; ++i) {
-        *VM_TOP(n - i + 1) = t->elems[i];
-    }
 }
 
 void pawR_execute(paw_Env *P, CallFrame *cf)
@@ -1061,8 +1018,8 @@ top:
             {
                 VM_PROTECT();
                 Value *pv = VM_PUSH_0();
-                Instance *ins = pawV_new_instance(P, GET_U(opcode));
-                V_SET_OBJECT(pv, ins);
+                Tuple *tuple = pawV_new_tuple(P, GET_U(opcode));
+                V_SET_OBJECT(pv, tuple);
                 CHECK_GC(P);
             }
 
@@ -1070,8 +1027,8 @@ top:
             {
                 VM_PROTECT();
                 const int u = GET_U(opcode);
-                Instance *ins = V_INSTANCE(*VM_TOP(2));
-                ins->fields[u] = *VM_TOP(1);
+                Tuple *tuple = V_TUPLE(*VM_TOP(2));
+                tuple->elems[u] = *VM_TOP(1);
                 VM_POP(1);
             }
 
@@ -1107,22 +1064,10 @@ top:
                 VM_PUSH(*pawE_get_val(P, u));
             }
 
-            vm_case(GETTUPLE) :
-            {
-                VM_PROTECT();
-                pawR_gettuple(P, GET_U(opcode));
-            }
-
             vm_case(GETFIELD) :
             {
                 VM_PROTECT();
                 pawR_getfield(P, GET_U(opcode));
-            }
-
-            vm_case(SETTUPLE) :
-            {
-                VM_PROTECT();
-                pawR_settuple(P, GET_U(opcode));
             }
 
             vm_case(SETFIELD) :

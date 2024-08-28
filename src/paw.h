@@ -179,7 +179,6 @@ paw_Float paw_float(paw_Env *P, int index);
 const char *paw_string(paw_Env *P, int index);
 paw_Function paw_native(paw_Env *P, int index);
 void *paw_userdata(paw_Env *P, int index);
-size_t paw_length(paw_Env *P, int index);
 
 void paw_pop(paw_Env *P, int n);
 

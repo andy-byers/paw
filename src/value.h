@@ -12,8 +12,8 @@
 
 #define V_ISNAN(v) ((v).f != (v).f)
 
+#define V_FALSE(v) ((v).u == 0)
 #define V_TRUE(v) ((v).u != 0)
-#define V_FALSE(v) (!V_TRUE(v))
 #define V_INT(v) ((v).i)
 #define V_FLOAT(v) ((v).f)
 
@@ -28,7 +28,6 @@
 #define V_TEXT(v) (V_STRING(v)->text)
 #define V_TUPLE(v) (O_TUPLE(V_OBJECT(v)))
 #define V_VARIANT(v) (O_VARIANT(V_OBJECT(v)))
-#define V_INSTANCE(v) (O_INSTANCE(V_OBJECT(v)))
 #define V_METHOD(v) (O_METHOD(V_OBJECT(v)))
 #define V_FOREIGN(v) (O_FOREIGN(V_OBJECT(v)))
 
@@ -48,7 +47,6 @@
 #define O_IS_LIST(o) (O_KIND(o) == VLIST)
 #define O_IS_TUPLE(o) (O_KIND(o) == VTUPLE)
 #define O_IS_VARIANT(o) (O_KIND(o) == VVARIANT)
-#define O_IS_INSTANCE(o) (O_KIND(o) == VINSTANCE)
 #define O_IS_METHOD(o) (O_KIND(o) == VMETHOD)
 #define O_IS_FOREIGN(o) (O_KIND(o) == VFOREIGN)
 
@@ -61,8 +59,6 @@
 #define O_LIST(o) CHECK_EXP(O_IS_LIST(o), (List *)(o))
 #define O_TUPLE(o) CHECK_EXP(O_IS_TUPLE(o), (Tuple *)(o))
 #define O_VARIANT(o) CHECK_EXP(O_IS_VARIANT(o), (Variant *)(o))
-#define O_INSTANCE(o) CHECK_EXP(O_IS_INSTANCE(o), (Instance *)(o))
-#define O_STRUCT(o) CHECK_EXP(O_IS_STRUCT(o), (Struct *)(o))
 #define O_METHOD(o) CHECK_EXP(O_IS_METHOD(o), (Method *)(o))
 #define O_FOREIGN(o) CHECK_EXP(O_IS_FOREIGN(o), (Foreign *)(o))
 
@@ -79,7 +75,6 @@ typedef enum ValueKind {
     VLIST,
     VMAP,
     VTUPLE,
-    VINSTANCE,
     VVARIANT,
     VMETHOD,
     VFOREIGN,
@@ -124,9 +119,7 @@ typedef union StackRel {
 #define obj_index(t) ((t) - VOBJECT0)
 
 void pawV_index_error(paw_Env *P, paw_Int index, size_t length, const char *what);
-paw_Bool pawV_truthy(Value v, paw_Type type);
 uint32_t pawV_hash(Value v);
-const char *pawV_name(ValueKind type);
 
 static paw_Int pawV_abs_index(paw_Int index, size_t length)
 {
@@ -148,13 +141,11 @@ static inline size_t pawV_check_abs(paw_Env *P, paw_Int index, size_t length, co
 // PAW_EOVERFLOW if it is too large to fit in a uint64_t, and PAW_OK otherwise.
 int pawV_parse_uint64(paw_Env *P, const char *text, int base);
 
+int pawV_parse_int(paw_Env *P, const char *text, int base);
+
 // Convert a null-terminated string into a float
 // Returns 0 on success, -1 otherwise.
 int pawV_parse_float(paw_Env *P, const char *text);
-
-void pawV_set_default(paw_Env *P, Value *pv, paw_Type type);
-
-#define str_is_keyword(s) ((s)->flag > 0)
 
 typedef struct String {
     GC_HEADER;
@@ -166,7 +157,6 @@ typedef struct String {
 } String;
 
 const char *pawV_to_string(paw_Env *P, Value v, paw_Type type, size_t *nout);
-int pawV_parse_int(paw_Env *P, const char *text, int base);
 
 typedef struct Proto {
     GC_HEADER;
@@ -263,9 +253,6 @@ typedef struct List {
 
 List *pawV_list_new(paw_Env *P);
 void pawV_list_free(paw_Env *P, List *vec);
-List *pawV_list_clone(paw_Env *P, Value *pv, const List *vec);
-paw_Bool pawV_list_equals(paw_Env *P, const List *lhs, const List *rhs);
-paw_Bool pawV_list_contains(paw_Env *P, const List *vec, Value v);
 void pawV_list_reserve(paw_Env *P, List *vec, size_t length);
 void pawV_list_resize(paw_Env *P, List *vec, size_t length);
 void pawV_list_insert(paw_Env *P, List *vec, paw_Int index, Value v);
@@ -307,17 +294,6 @@ typedef struct Map {
     size_t capacity;
 } Map;
 
-// Instance of a struct
-typedef struct Instance {
-    GC_HEADER; // common members for GC
-    int nfields;
-    Object *gc_list;
-    Value fields[];
-} Instance;
-
-Instance *pawV_new_instance(paw_Env *P, int nfields);
-void pawV_free_instance(paw_Env *P, Instance *ins);
-
 typedef struct Variant {
     GC_HEADER; // common members for GC
     uint8_t k; // discriminator
@@ -339,9 +315,6 @@ typedef struct Method {
 
 Method *pawV_new_method(paw_Env *P, Value self, Value call);
 void pawV_free_method(paw_Env *P, Method *);
-
-#define BOX_PARSE_MAP 1
-#define BOX_PARSE_BUFFER 2
 
 typedef struct Foreign {
     GC_HEADER;

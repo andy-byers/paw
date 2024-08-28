@@ -721,16 +721,6 @@ static inline struct HirSegment *pawHir_path_add(struct Hir *hir, struct HirPath
     return ps;
 }
 
-// TODO: convert HIR to string instead of printing
-#include <stdio.h>
-
-void pawHir_repr_path(struct Hir *hir, struct HirPath *path);
-void pawHir_repr_type(struct Hir *hir, struct HirType *type);
-void pawHir_dump_type(struct Hir *hir, struct HirType *type);
-void pawHir_dump_path(struct Hir *hir, struct HirPath *path);
-void pawHir_dump_decl(struct Hir *hir, struct HirDecl *decl);
-void pawHir_dump_expr(struct Hir *hir, struct HirExpr *expr);
-void pawHir_dump_stmt(struct Hir *hir, struct HirStmt *stmt);
-void pawHir_debug(struct Hir *hir);
+void pawHir_dump(struct Hir *hir);
 
 #endif // PAW_HIR_H

@@ -121,58 +121,15 @@ Value *pawH_create(paw_Env *P, Map *m, Value key)
     return insert_aux(m, key);
 }
 
-void pawH_clone(paw_Env *P, StackPtr sp, Map *m)
-{
-    Map *clone = pawH_new(P);
-    V_SET_OBJECT(sp, clone);
-    pawH_extend(P, clone, m);
-}
-
-static paw_Bool items_equal(Value x, Value y)
-{
-    // TODO: Only allowed for 'basic' types right now. Compiler set to complain
-    // otherwise.
-    return x.u == y.u;
-}
-
-paw_Bool pawH_equals(paw_Env *P, Map *lhs, Map *rhs)
-{
-    if (lhs->length != rhs->length) {
-        return PAW_FALSE;
-    }
-    MapCursor mc = {lhs, 0};
-    while (mc.index < lhs->capacity) {
-        Value *v = pawH_get(rhs, *h_cursor_key(&mc));
-        if (v == NULL || !items_equal(*h_cursor_value(&mc), *v)) {
-            return PAW_FALSE;
-        }
-        ++mc.index;
-    }
-    return PAW_TRUE;
-}
-
 void pawH_extend(paw_Env *P, Map *dst, Map *src)
 {
     MapCursor mc = {src, 0};
     while (mc.index < src->capacity) {
-        if (h_get_state(&mc) != MAP_ITEM_OCCUPIED) {
+        if (h_get_state(&mc) == MAP_ITEM_OCCUPIED) {
             const Value key = *h_cursor_key(&mc);
             Value *value = pawH_create(P, dst, key);
             *value = *h_cursor_value(&mc);
         }
         ++mc.index;
     }
-}
-
-void pawH_key_error(paw_Env *P, Value key, paw_Type type)
-{
-    Buffer buf;
-    pawL_init_buffer(P, &buf);
-    pawL_add_string(P, &buf, "key '");
-    pawC_pushv(P, key);
-    pawL_add_value(P, &buf, type);
-    pawL_add_string(P, &buf, "' does not exist");
-    pawL_add_char(P, &buf, '\0');
-    pawL_push_result(P, &buf);
-    pawC_throw(P, PAW_EKEY);
 }

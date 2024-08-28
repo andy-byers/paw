@@ -98,7 +98,7 @@ static void map_del(Map *map, paw_Int k)
     pawH_erase(map, key);
 }
 
-static void test_map1(paw_Env *P)
+static void test_map_get_and_put(paw_Env *P)
 {
     Map *m = map_new(P);
     map_put(P, m, 1, 1);
@@ -110,7 +110,7 @@ static void test_map1(paw_Env *P)
     map_free(P, m);
 }
 
-static void test_map2(paw_Env *P)
+static void test_map_erase(paw_Env *P)
 {
     Map *m = map_new(P);
     map_put(P, m, 1, 1);
@@ -125,16 +125,19 @@ static void test_map2(paw_Env *P)
     map_del(m, 4);
     map_del(m, 5);
 
-    check(NULL == map_try(m, 1));
+    map_put(P, m, 1, 10);
+    map_put(P, m, 4, 40);
+
+    check(10 == map_get(m, 1));
     check(NULL == map_try(m, 2));
     check(3 == map_get(m, 3));
-    check(NULL == map_try(m, 4));
+    check(40 == map_get(m, 4));
     check(NULL == map_try(m, 5));
     check(6 == map_get(m, 6));
     map_free(P, m);
 }
 
-static void test_map3(paw_Env *P)
+static void test_map_ops(paw_Env *P)
 {
     Map *m = map_new(P);
 
@@ -144,7 +147,7 @@ static void test_map3(paw_Env *P)
         map_put(P, m, known[i], known[i]);
     }
 
-    check(CAST_SIZE(paw_length(P, -1)) == paw_countof(known));
+    check(m->length  == paw_countof(known));
 
     // Fill the map with nonnegative integers (may have repeats).
     for (int i = 0; i < N; ++i) {
@@ -152,7 +155,7 @@ static void test_map3(paw_Env *P)
         map_put(P, m, ival, ival);
     }
 
-    check(CAST_SIZE(paw_length(P, -1)) <= N + paw_countof(known));
+    check(m->length <= N + paw_countof(known));
 
     // Erase all nonnegative integers.
     paw_Int itr = PAW_ITER_INIT;
@@ -170,6 +173,58 @@ static void test_map3(paw_Env *P)
     }
 
     map_free(P, m);
+}
+
+static void test_map_ops_2(paw_Env *P)
+{
+    const int nrounds = 10;
+    Map *m = map_new(P);
+
+    for (int iter = 0; iter < nrounds; ++iter) {
+        const int start = iter * N;
+        for (int i = start; i < start + N; i += 1) map_put(P, m, i, i);
+        for (int i = start; i < start + N; i += 2) map_del(m, i);
+    }
+    for (int i = 0; i < N; i += 1) map_put(P, m, i, i * 2);
+    for (int i = 0; i < N; i += 2) map_del(m, i);
+    
+    for (int i = 0; i < nrounds * N; ++i) {
+        if (i & 1) {
+            const int scale = i < N ? 2 : 1;
+            check(map_get(m, i) == i * scale); 
+        } else {
+            check(map_try(m, i) == NULL);
+        }
+    }
+
+    map_free(P, m);
+}
+
+static void test_map_extend(paw_Env *P)
+{
+    Map *a = map_new(P);
+    Map *b = map_new(P);
+    map_put(P, a, 1, 10);
+    map_put(P, a, 2, 20);
+    map_put(P, a, 3, 30);
+    map_put(P, a, 4, 40);
+
+    map_put(P, b, 3, 31);
+    map_put(P, b, 4, 41);
+    map_put(P, b, 5, 51);
+
+    map_del(a, 4);
+
+    pawH_extend(P, a, b);
+
+    check(10 == map_get(a, 1));
+    check(20 == map_get(a, 2));
+    check(31 == map_get(a, 3));
+    check(41 == map_get(a, 4));
+    check(51 == map_get(a, 5));
+
+    map_free(P, b);
+    map_free(P, a);
 }
 
 static void test_strings(paw_Env *P)
@@ -218,16 +273,33 @@ static void driver(void (*callback)(paw_Env *))
 
 static int parse_int(paw_Env *P, void *ud)
 {
-    const int rc = pawV_parse_int(P, CAST(ud, const char *), 0);
+    const int rc = pawV_parse_int(P, ud, 0);
     if (rc == PAW_OK) paw_pop(P, 1);
     return rc;
 }
 
-static void parse_and_check_int(paw_Env *P, void *ud, paw_Int result)
+static void roundtrip_int(paw_Env *P, paw_Int i);
+
+static void pac_int_aux(paw_Env *P, void *ud, paw_Int result)
 {
-    check(PAW_OK == pawV_parse_int(P, CAST(ud, const char *), 0));
+    check(PAW_OK == pawV_parse_int(P, ud, 0));
     check(paw_int(P, -1) == result);
     paw_pop(P, 1);
+}
+
+static void roundtrip_int(paw_Env *P, paw_Int i)
+{
+    pawV_to_string(P, (Value){.i = i}, PAW_TINT, NULL);
+    const char *str = paw_string(P, -1);
+    printf("%s\n",str);
+    pac_int_aux(P, ERASE_TYPE(str), i);
+    paw_pop(P, 1);
+}
+
+static void parse_and_check_int(paw_Env *P, void *ud, paw_Int result)
+{
+    pac_int_aux(P, ud, result);
+    roundtrip_int(P, result);
 }
 
 static void test_parse_int(paw_Env *P)
@@ -235,6 +307,12 @@ static void test_parse_int(paw_Env *P)
     // able to parse PAW_INT_MIN directly, since we consider the '-'
     parse_and_check_int(P, "-9223372036854775808", INT64_MIN); 
     parse_and_check_int(P, "9223372036854775807", INT64_MAX); 
+    parse_and_check_int(P, "0b111111111111111111111111111111111111111111111111111111111111111", INT64_MAX); 
+    parse_and_check_int(P, "-0b1000000000000000000000000000000000000000000000000000000000000000", INT64_MIN); 
+    parse_and_check_int(P, "0o777777777777777777777", INT64_MAX); 
+    parse_and_check_int(P, "-0o1000000000000000000000", INT64_MIN); 
+    parse_and_check_int(P, "0x7FFFFFFFFFFFFFFF", INT64_MAX); 
+    parse_and_check_int(P, "-0x8000000000000000", INT64_MIN); 
     parse_and_check_int(P, "  -1", -1); // sign must touch first digit
     parse_and_check_int(P, " +2  ", 2); 
 
@@ -245,6 +323,68 @@ static void test_parse_int(paw_Env *P)
     check(PAW_ESYNTAX == parse_int(P, "123.4"));
     check(PAW_EOVERFLOW == parse_int(P, "9223372036854775808")); 
     check(PAW_EOVERFLOW == parse_int(P, "-9223372036854775809")); 
+    check(PAW_EOVERFLOW == parse_int(P, "999999999999999999999999999999999999999")); 
+    check(PAW_EOVERFLOW == parse_int(P, "-999999999999999999999999999999999999999")); 
+
+    check(PAW_EVALUE == pawV_parse_int(P, "0b0", 10 /* wrong base */));
+    check(PAW_EVALUE == pawV_parse_int(P, "0o0", 10 /* wrong base */));
+    check(PAW_EVALUE == pawV_parse_int(P, "0x0", 10 /* wrong base */));
+}
+
+static int parse_float(paw_Env *P, void *ud)
+{
+    const int rc = pawV_parse_float(P, ud);
+    if (rc == PAW_OK) paw_pop(P, 1);
+    return rc;
+}
+
+static void pac_float_aux(paw_Env *P, void *ud, paw_Float result)
+{
+    check(PAW_OK == pawV_parse_float(P, ud));
+    check(paw_float(P, -1) == result);
+    paw_pop(P, 1);
+}
+
+static void roundtrip_float(paw_Env *P, paw_Float f)
+{
+    pawV_to_string(P, (Value){.f = f}, PAW_TFLOAT, NULL);
+    const char *str = paw_string(P, -1);
+    printf("%s\n",str);
+    pac_float_aux(P, ERASE_TYPE(str), f);
+    paw_pop(P, 1);
+}
+
+static void parse_and_check_float(paw_Env *P, void *ud, paw_Float result)
+{
+    pac_float_aux(P, ud, result);
+    roundtrip_float(P, result);
+}
+
+static void test_parse_float(paw_Env *P)
+{
+    check(PAW_OK == parse_float(P, "1.23"));
+    check(PAW_OK == parse_float(P, "12.3"));
+    check(PAW_OK == parse_float(P, "123."));
+    check(PAW_OK == parse_float(P, "1.2e3"));
+    check(PAW_OK == parse_float(P, "1.e23"));
+    check(PAW_OK == parse_float(P, "1.e+23"));
+
+    // small integers and powers of 2 can be represented exactly
+    parse_and_check_float(P, "0.0", 0.0); 
+    parse_and_check_float(P, "1.0", 1.0); 
+    parse_and_check_float(P, "-1.0", -1.0); 
+    parse_and_check_float(P, "1.0e+2", 100.0); 
+    parse_and_check_float(P, "-10000e-2", -100.0); 
+    parse_and_check_float(P, "-9223372036854775808.0", (paw_Float)INT64_MIN); 
+    parse_and_check_float(P, "9223372036854775808.0", -((paw_Float)INT64_MIN)); 
+    parse_and_check_float(P, "  -1.0", -1.0); // sign must touch first digit
+    parse_and_check_float(P, " +2.0  ", 2.0); 
+    parse_and_check_float(P, "123", 123.0);
+
+    check(PAW_ESYNTAX == parse_float(P, "--1"));
+    check(PAW_ESYNTAX == parse_float(P, "- 1"));
+    check(PAW_ESYNTAX == parse_float(P, "01.0"));
+    check(PAW_ESYNTAX == parse_float(P, "123 4"));
 }
 
 static void test_immediates(void)
@@ -268,15 +408,65 @@ static void test_immediates(void)
 #undef CHECK_BOUND
 }
 
+#include "ast.h"
+#include "hir.h"
+#include "compile.h"
+#include "os.h"
+#include <stdio.h>
+
+static void maybe_print_tree(void)
+{
+#ifdef PAW_TEST_PRINT_TREES
+    fprintf(stderr, "%s\n", paw_string(P, -1));
+#endif
+}
+
+static void dump_trees_from_file(paw_Env *P, const char *name)
+{
+    const char *pathname = test_pathname(name);
+
+    FILE *file = pawO_open(pathname, "r");
+    struct TestReader rd = {.file = file};
+    rd.data = rd.buf;
+    check(file);
+
+    struct Compiler C;
+    struct DynamicMem dm = {0};
+    pawP_startup(P, &C, &dm, "test");
+
+    struct Ast *ast = pawP_parse(&C, test_reader, &rd);
+    pawAst_dump(ast);
+    maybe_print_tree();
+    paw_pop(P, 1);
+
+    struct Hir *hir = pawP_resolve(&C, ast);
+    pawHir_dump(hir);
+    maybe_print_tree();
+    paw_pop(P, 1);
+    
+    pawP_teardown(P, &dm);
+}
+
+static void test_dump_trees(paw_Env *P)
+{
+#define DUMP_TREE(name) dump_trees_from_file(P, #name);
+    TEST_SCRIPTS(DUMP_TREE)
+#undef DUMP_TREE
+}
+
 int main(void)
 {
     test_primitives();
     test_immediates();
     driver(test_strings);
     driver(test_stack);
-    driver(test_map1);
-    driver(test_map2);
-    driver(test_map3);
+    driver(test_map_get_and_put);
+    driver(test_map_erase);
+    driver(test_map_ops);
+    driver(test_map_ops_2);
+    driver(test_map_extend);
     driver(test_parse_int);
+    driver(test_parse_float);
+    driver(test_dump_trees);
     return 0;
 }

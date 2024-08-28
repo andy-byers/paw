@@ -49,15 +49,15 @@ static void mangle_type(struct Generator *G, Buffer *buf, struct HirType *type)
     paw_Env *P = ENV(G);
     if (HIR_IS_BASIC_T(type)) {
          if (HIR_IS_UNIT_T(type)) {
-            pawL_add_literal(P, buf, "0");
+            L_ADD_LITERAL(P, buf, "0");
         } else if (type->adt.base == PAW_TBOOL) {
-            pawL_add_literal(P, buf, "b");
+            L_ADD_LITERAL(P, buf, "b");
         } else if (type->adt.base == PAW_TINT) {
-            pawL_add_literal(P, buf, "i");
+            L_ADD_LITERAL(P, buf, "i");
         } else if (type->adt.base == PAW_TFLOAT) {
-            pawL_add_literal(P, buf, "f");
+            L_ADD_LITERAL(P, buf, "f");
         } else if (type->adt.base == PAW_TSTR) {
-            pawL_add_literal(P, buf, "s");
+            L_ADD_LITERAL(P, buf, "s");
         }
     } else if (HirIsGeneric(type)) {
         struct HirGeneric *var = &type->generic;
@@ -656,7 +656,7 @@ static void code_setter(struct HirVisitor *V, struct HirExpr *lhs, struct HirExp
         String *name = lhs->select.name;
         struct HirType *target = HIR_TYPEOF(suf->target);
         if (lhs->select.is_index) {
-            pawK_code_U(fs, OP_SETTUPLE, lhs->select.index);
+            pawK_code_U(fs, OP_SETFIELD, lhs->select.index);
         } else {
             const struct HirVarInfo info = resolve_attr(G, target, name);
             pawK_code_U(fs, OP_SETFIELD, info.index);
@@ -1394,7 +1394,7 @@ static void code_selector_expr(struct HirVisitor *V, struct HirSelector *e)
 
     V->VisitExpr(V, e->target);
     if (e->is_index) {
-        pawK_code_U(fs, OP_GETTUPLE, e->index);
+        pawK_code_U(fs, OP_GETFIELD, e->index);
     } else {
         const struct HirVarInfo info = resolve_attr(G, HIR_TYPEOF(e->target), e->name);
         pawK_code_U(fs, OP_GETFIELD, info.index);

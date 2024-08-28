@@ -6,7 +6,6 @@
 #include "compile.h"
 #include "map.h"
 #include "mem.h"
-#include <inttypes.h>
 #include <limits.h>
 #include <stdlib.h>
 
@@ -1724,18 +1723,24 @@ struct HirDeclList *pawHir_define(struct Compiler *C, struct Hir *hir)
 
 struct Printer {
     struct Hir *hir;
+    Buffer *buf;
+    paw_Env *P;
     int indent;
 };
+
+#define DUMP_LITERAL(P, lit) L_ADD_LITERAL(ENV(P), (P)->buf, lit)
+#define DUMP_STRING(P, str) pawL_add_string(ENV(P), (P)->buf, str)
+#define DUMP_FSTRING(P, ...) pawL_add_fstring(ENV(P), (P)->buf, __VA_ARGS__)
 
 static void indent_line(struct Printer *P)
 {
     for (int i = 0; i < P->indent; ++i) {
-        printf("    ");
+        DUMP_LITERAL(P, "    ");
     }
 }
 
-#define dump_fmt(P, fmt, ...) (indent_line(P), printf(fmt, __VA_ARGS__))
-#define dump_msg(P, msg) (indent_line(P), printf(msg))
+#define DUMP_FMT(P, ...) (indent_line(P), pawL_add_fstring(ENV(P), (P)->buf, __VA_ARGS__))
+#define DUMP_MSG(P, msg) (indent_line(P), pawL_add_string(ENV(P), (P)->buf, msg))
 
 static void repr_type_aux(struct Printer *P, struct HirType *type);
 
@@ -1744,7 +1749,7 @@ static void repr_typelist(struct Printer *P, struct HirTypeList *list)
     for (int i = 0; i < list->count; ++i) {
         repr_type_aux(P, list->data[i]);
         if (i < list->count - 1) {
-            printf(", ");
+            DUMP_LITERAL(P, ", ");
         }
     }
 }
@@ -1759,51 +1764,51 @@ static void repr_type_aux(struct Printer *P, struct HirType *type)
 {
     switch (HIR_KINDOF(type)) {
         case kHirTupleType:
-            printf("(");
+            DUMP_LITERAL(P, "(");
             for (int i = 0; i < type->tuple.elems->count; ++i) {
                 repr_type_aux(P, type->tuple.elems->data[i]);
                 if (i < type->tuple.elems->count - 1) {
-                    printf(", ");
+                    DUMP_LITERAL(P, ", ");
                 }
             }
-            printf(")");
+            DUMP_LITERAL(P, ")");
             break;
         case kHirFuncPtr:
         case kHirFuncDef:
-            printf("fn");
+            DUMP_LITERAL(P, "fn");
             if (HirIsFuncDef(type)) {
-                printf(" %s", get_typename(P->hir->dm, type->fdef.did));
+                DUMP_FSTRING(P, " %s", get_typename(P->hir->dm, type->fdef.did));
             }
-            printf("(");
+            DUMP_LITERAL(P, "(");
             for (int i = 0; i < type->fptr.params->count; ++i) {
                 repr_type_aux(P, type->fptr.params->data[i]);
                 if (i < type->fptr.params->count - 1) {
-                    printf(", ");
+                    DUMP_LITERAL(P, ", ");
                 }
             }
-            printf(") -> ");
+            DUMP_LITERAL(P, ") -> ");
             repr_type_aux(P, type->fptr.result);
             break;
         case kHirAdt: 
-            printf("%s", get_typename(P->hir->dm, type->adt.did));
+            DUMP_FSTRING(P, "%s", get_typename(P->hir->dm, type->adt.did));
             if (type->adt.types != NULL) {
-                printf("<");
+                DUMP_LITERAL(P, "<");
                 const struct HirTypeList *list = type->adt.types;
                 for (int i = 0; i < list->count; ++i) {
                     repr_type_aux(P, list->data[i]);
                     if (i < list->count - 1) {
-                        printf(", ");
+                        DUMP_LITERAL(P, ", ");
                     }
                 }
-                printf(">");
+                DUMP_LITERAL(P, ">");
             }
             break;
         case kHirUnknown:
-            printf("?%d", type->unknown.index);
+            DUMP_FSTRING(P, "?%d", type->unknown.index);
             break;
         default:
             paw_assert(HirIsGeneric(type));
-            printf("?%s", type->generic.name->text);
+            DUMP_FSTRING(P, "?%s", type->generic.name->text);
     }
 }
 
@@ -1812,9 +1817,9 @@ static void repr_type(struct Printer *P, struct HirType *type)
     if (type != NULL) {
         repr_type_aux(P, type);
     } else {
-        printf("(null)");
+        DUMP_LITERAL(P, "(null)");
     }
-    printf("\n");
+    DUMP_LITERAL(P, "\n");
 }
 
 static void dump_stmt(struct Printer *, struct HirStmt *);
@@ -1825,10 +1830,10 @@ static void dump_expr(struct Printer *, struct HirExpr *);
     { \
         if (node != NULL) { \
             struct T *typed = node; \
-            printf("%s {\n", k##T##Names[HIR_KINDOF(typed)]); \
+            DUMP_FSTRING(P, "%s {\n", k##T##Names[HIR_KINDOF(typed)]); \
             return 0; \
         } \
-        printf("(null)\n"); \
+        DUMP_LITERAL(P, "(null)\n"); \
         return -1; \
     }
 DEFINE_KIND_PRINTER(expr, HirExpr) 
@@ -1836,8 +1841,8 @@ DEFINE_KIND_PRINTER(decl, HirDecl)
 DEFINE_KIND_PRINTER(stmt, HirStmt) 
 DEFINE_KIND_PRINTER(type, HirType) 
 
-#define dump_block(P, b) CHECK_EXP(!(b) || HirIsBlock(HIR_CAST_STMT(b)), (b) ? dump_stmt(P, HIR_CAST_STMT(b)) : printf("{}\n"))
-#define dump_name(P, s) dump_fmt(P, "name: %s\n", s ? s->text : NULL)
+#define DUMP_BLOCK(P, b) CHECK_EXP(!(b) || HirIsBlock(HIR_CAST_STMT(b)), (b) ? dump_stmt(P, HIR_CAST_STMT(b)) : DUMP_LITERAL(P, "{}\n"))
+#define DUMP_NAME(P, s) DUMP_FMT(P, "name: %s\n", s ? s->text : "(null)")
 
 static void dump_expr(struct Printer *, struct HirExpr *);
 static void dump_decl(struct Printer *, struct HirDecl *);
@@ -1847,16 +1852,16 @@ static void dump_type(struct Printer *, struct HirType *);
 #define DEFINE_LIST_PRINTER(name, T) \
     static void dump_##name##_list(struct Printer *P, struct T##List *list, const char *name) \
     { \
-        dump_fmt(P, "%s: " #T "List {\n", name); \
+        DUMP_FMT(P, "%s: " #T "List {\n", name); \
         ++P->indent; \
         if (list != NULL) { \
             for (int i = 0; i < list->count; ++i) { \
-                dump_msg(P, "" /* indent */); \
+                DUMP_MSG(P, "" /* indent */); \
                 dump_##name(P, list->data[i]); \
             } \
         } \
         --P->indent; \
-        dump_msg(P, "}\n"); \
+        DUMP_MSG(P, "}\n"); \
     }
 DEFINE_LIST_PRINTER(expr, HirExpr) 
 DEFINE_LIST_PRINTER(decl, HirDecl)
@@ -1867,19 +1872,19 @@ static void dump_path(struct Printer *P, struct HirPath *p)
 {
     for (int i = 0; i < p->count; ++i) {
         struct HirSegment *seg = p->data[i];
-        printf("%s", seg->name->text);
+        DUMP_STRING(P, seg->name->text);
         if (seg->types != NULL) {
-            printf("<");
+            DUMP_LITERAL(P, "<");
             for (int j = 0; j < seg->types->count; ++j) {
-                pawHir_repr_type(P->hir, seg->types->data[i]);
+                repr_type(P, seg->types->data[i]);
                 if (j < seg->types->count - 1) {
-                    printf(", ");
+                    DUMP_LITERAL(P, ", ");
                 }
             }
-            printf(">");
+            DUMP_LITERAL(P, ">");
         }
     }
-    printf("\n");
+    DUMP_LITERAL(P, "\n");
 }
 
 static void dump_type(struct Printer *P, struct HirType *t)
@@ -1888,41 +1893,41 @@ static void dump_type(struct Printer *P, struct HirType *t)
         return;
     }
     ++P->indent;
-    dump_fmt(P, "line: %d\n", t->hdr.line);
+    DUMP_FMT(P, "line: %d\n", t->hdr.line);
     switch (HIR_KINDOF(t)) {
         case kHirTupleType:
             dump_type_list(P, t->tuple.elems, "elems");
             break;
         case kHirFuncDef:
-            dump_fmt(P, "base: %d\n", t->fdef.base);
-            dump_fmt(P, "did: %d\n", t->fdef.did);
+            DUMP_FMT(P, "base: %d\n", t->fdef.base);
+            DUMP_FMT(P, "did: %d\n", t->fdef.did);
             if (t->fdef.types != NULL) {
                 dump_type_list(P, t->fdef.types, "types");
             }
             // (fallthrough)
         case kHirFuncPtr:
             dump_type_list(P, t->fptr.params, "params");
-            dump_msg(P, "result: ");
+            DUMP_MSG(P, "result: ");
             dump_type(P, t->fptr.result);
             break;
         case kHirAdt: 
-            dump_fmt(P, "name: %s\n", get_typename(P->hir->dm, t->adt.did));
-            dump_fmt(P, "base: %d\n", t->adt.base);
-            dump_fmt(P, "did: %d\n", t->adt.did);
+            DUMP_FMT(P, "name: %s\n", get_typename(P->hir->dm, t->adt.did));
+            DUMP_FMT(P, "base: %d\n", t->adt.base);
+            DUMP_FMT(P, "did: %d\n", t->adt.did);
             if (t->adt.types != NULL) {
                 dump_type_list(P, t->adt.types, "types");
             }
             break;
         case kHirUnknown:
-            dump_fmt(P, "index: %d\n", t->unknown.index);
+            DUMP_FMT(P, "index: %d\n", t->unknown.index);
             break;
         default:
             paw_assert(HirIsGeneric(t));
-            dump_fmt(P, "name: %s\n", t->generic.name->text);
-            dump_fmt(P, "did: %d\n", t->generic.did);
+            DUMP_FMT(P, "name: %s\n", t->generic.name->text);
+            DUMP_FMT(P, "did: %d\n", t->generic.did);
     }
     --P->indent;
-    dump_msg(P, "}\n");
+    DUMP_MSG(P, "}\n");
 }
 
 static void dump_decl(struct Printer *P, struct HirDecl *d)
@@ -1931,57 +1936,57 @@ static void dump_decl(struct Printer *P, struct HirDecl *d)
         return;
     }
     ++P->indent;
-    dump_fmt(P, "did: %d\n", d->hdr.did);
-    dump_fmt(P, "line: %d\n", d->hdr.line);
-    dump_msg(P, "type: ");
+    DUMP_FMT(P, "did: %d\n", d->hdr.did);
+    DUMP_FMT(P, "line: %d\n", d->hdr.line);
+    DUMP_MSG(P, "type: ");
     dump_type(P, HIR_TYPEOF(d));
     switch (HIR_KINDOF(d)) {
         case kHirFuncDecl:
-            dump_fmt(P, "receiver: %p\n", (void *)d->func.receiver);
-            dump_fmt(P, "name: %s\n", d->func.name->text);
+            DUMP_FMT(P, "receiver: %p\n", (void *)d->func.receiver);
+            DUMP_FMT(P, "name: %s\n", d->func.name->text);
             dump_decl_list(P, d->func.generics, "generics");
             dump_decl_list(P, d->func.params, "params");
-            dump_msg(P, "body: ");
-            dump_block(P, d->func.body);
+            DUMP_MSG(P, "body: ");
+            DUMP_BLOCK(P, d->func.body);
             dump_decl_list(P, d->func.monos, "monos");
             break;
         case kHirFieldDecl:
-            dump_name(P, d->field.name);
+            DUMP_NAME(P, d->field.name);
             break;
         case kHirVarDecl:
-            dump_name(P, d->var.name);
-            dump_msg(P, "init: ");
+            DUMP_NAME(P, d->var.name);
+            DUMP_MSG(P, "init: ");
             dump_expr(P, d->var.init);
             break;
         case kHirVariantDecl:
-            dump_name(P, d->variant.name);
+            DUMP_NAME(P, d->variant.name);
             dump_decl_list(P, d->variant.fields, "fields");
             break;
         case kHirAdtDecl:
-            dump_name(P, d->adt.name);
-            dump_fmt(P, "is_struct: %d\n", d->adt.is_struct);
+            DUMP_NAME(P, d->adt.name);
+            DUMP_FMT(P, "is_struct: %d\n", d->adt.is_struct);
             dump_decl_list(P, d->adt.generics, "generics");
             dump_decl_list(P, d->adt.fields, "fields");
             dump_decl_list(P, d->func.monos, "monos");
             break;
         case kHirGenericDecl:
-            dump_name(P, d->generic.name);
+            DUMP_NAME(P, d->generic.name);
             break;
         case kHirTypeDecl:
-            dump_name(P, d->type.name);
-            dump_msg(P, "rhs: ");
+            DUMP_NAME(P, d->type.name);
+            DUMP_MSG(P, "rhs: ");
             dump_expr(P, d->type.rhs);
             dump_decl_list(P, d->type.generics, "generics");
             break;
         case kHirInstanceDecl:
-            dump_name(P, d->type.name);
+            DUMP_NAME(P, d->type.name);
             dump_type_list(P, d->inst.types, "types");
             break;
         default:
             paw_assert(0);
     }
     --P->indent;
-    dump_msg(P, "}\n");
+    DUMP_MSG(P, "}\n");
 }
 
 static void dump_stmt(struct Printer *P, struct HirStmt *s)
@@ -1990,60 +1995,60 @@ static void dump_stmt(struct Printer *P, struct HirStmt *s)
         return;
     }
     ++P->indent;
-    dump_fmt(P, "line: %d\n", s->hdr.line);
+    DUMP_FMT(P, "line: %d\n", s->hdr.line);
     switch (HIR_KINDOF(s)) {
         case kHirExprStmt:
-            dump_msg(P, "expr: ");
+            DUMP_MSG(P, "expr: ");
             dump_expr(P, s->expr.expr);
             break;
         case kHirBlock:
             dump_stmt_list(P, s->block.stmts, "stmts");
             break;
         case kHirDeclStmt:
-            dump_msg(P, "decl: ");
+            DUMP_MSG(P, "decl: ");
             dump_decl(P, s->decl.decl);
             break;
         case kHirIfStmt:
-            dump_msg(P, "cond: ");
+            DUMP_MSG(P, "cond: ");
             dump_expr(P, s->if_.cond);
-            dump_msg(P, "then_arm: ");
+            DUMP_MSG(P, "then_arm: ");
             dump_stmt(P, s->if_.then_arm);
-            dump_msg(P, "else_arm: ");
+            DUMP_MSG(P, "else_arm: ");
             dump_stmt(P, s->if_.else_arm);
             break;
         case kHirForStmt:
             if (s->for_.is_fornum) {
-                dump_msg(P, "begin: ");
+                DUMP_MSG(P, "begin: ");
                 dump_expr(P, s->for_.fornum.begin);
-                dump_msg(P, "end: ");
+                DUMP_MSG(P, "end: ");
                 dump_expr(P, s->for_.fornum.end);
-                dump_msg(P, "step: ");
+                DUMP_MSG(P, "step: ");
                 dump_expr(P, s->for_.fornum.step);
-                dump_msg(P, "block: ");
-                dump_block(P, s->for_.block);
+                DUMP_MSG(P, "block: ");
+                DUMP_BLOCK(P, s->for_.block);
             } else {
-                dump_msg(P, "target: ");
+                DUMP_MSG(P, "target: ");
                 dump_expr(P, s->for_.forin.target);
-                dump_msg(P, "block: ");
-                dump_block(P, s->for_.block);
+                DUMP_MSG(P, "block: ");
+                DUMP_BLOCK(P, s->for_.block);
             }
             break;
         case kHirWhileStmt:
-            dump_fmt(P, "is_dowhile: %d\n", s->while_.is_dowhile);
-            dump_msg(P, "cond: ");
+            DUMP_FMT(P, "is_dowhile: %d\n", s->while_.is_dowhile);
+            DUMP_MSG(P, "cond: ");
             dump_expr(P, s->while_.cond);
-            dump_msg(P, "block: ");
-            dump_block(P, s->while_.block);
+            DUMP_MSG(P, "block: ");
+            DUMP_BLOCK(P, s->while_.block);
             break;
         case kHirReturnStmt:
-            dump_msg(P, "expr: ");
+            DUMP_MSG(P, "expr: ");
             dump_expr(P, s->result.expr);
             break;
         default:
             break;
     }
     --P->indent;
-    dump_msg(P, "}\n");
+    DUMP_MSG(P, "}\n");
 }
 
 static void dump_expr(struct Printer *P, struct HirExpr *e)
@@ -2052,215 +2057,153 @@ static void dump_expr(struct Printer *P, struct HirExpr *e)
         return;
     }
     ++P->indent;
-    dump_fmt(P, "line: %d\n", e->hdr.line);
-    dump_msg(P, "type: ");
+    DUMP_FMT(P, "line: %d\n", e->hdr.line);
+    DUMP_MSG(P, "type: ");
     dump_type(P, HIR_TYPEOF(e));
     switch (HIR_KINDOF(e)) {
         case kHirLiteralExpr:
             switch (e->literal.lit_kind) {
                 case kHirLitBasic:
-                    dump_msg(P, "lit_kind: BASIC\n");
+                    DUMP_MSG(P, "lit_kind: BASIC\n");
                     switch (e->literal.basic.t) {
                         case PAW_TUNIT:
                             break;
                         case PAW_TBOOL:
-                            dump_fmt(P, "value: %s\n",
+                            DUMP_FMT(P, "value: %s\n",
                                      V_TRUE(e->literal.basic.value) ? "true"
                                                                     : "false");
                             break;
                         case PAW_TINT:
-                            dump_fmt(P, "value: %" PRId64 "\n",
+                            DUMP_FMT(P, "value: %I\n",
                                      V_INT(e->literal.basic.value));
                             break;
                         case PAW_TFLOAT:
-                            dump_fmt(P, "value: %f\n",
+                            DUMP_FMT(P, "value: %f\n",
                                      V_FLOAT(e->literal.basic.value));
                             break;
                         default:
                             paw_assert(e->literal.basic.t == PAW_TSTR);
-                            dump_fmt(P, "value: %s\n",
+                            DUMP_FMT(P, "value: %s\n",
                                      V_STRING(e->literal.basic.value)->text);
                             break;
                     }
                     break;
                 case kHirLitTuple:
-                    dump_msg(P, "lit_kind: TUPLE\n");
+                    DUMP_MSG(P, "lit_kind: TUPLE\n");
                     dump_expr_list(P, e->literal.tuple.elems, "elems");
                     break;
                 case kHirLitContainer:
-                    dump_msg(P, "lit_kind: CONTAINER\n");
+                    DUMP_MSG(P, "lit_kind: CONTAINER\n");
                     dump_expr_list(P, e->literal.cont.items, "items");
                     break;
                 default:
                     paw_assert(e->literal.lit_kind == kHirLitComposite);
-                    dump_msg(P, "lit_kind: COMPOSITE\n");
-                    dump_msg(P, "target: ");
+                    DUMP_MSG(P, "lit_kind: COMPOSITE\n");
+                    DUMP_MSG(P, "target: ");
                     dump_path(P, e->literal.comp.path);
                     dump_expr_list(P, e->literal.comp.items, "items");
             }
             break;
         case kHirChainExpr:
-            dump_msg(P, "target: ");
+            DUMP_MSG(P, "target: ");
             dump_expr(P, e->chain.target);
             break;
         case kHirLogicalExpr:
-            dump_fmt(P, "is_and: %d\n", e->logical.is_and);
-            dump_msg(P, "lhs: ");
+            DUMP_FMT(P, "is_and: %d\n", e->logical.is_and);
+            DUMP_MSG(P, "lhs: ");
             dump_expr(P, e->logical.lhs);
-            dump_msg(P, "rhs: ");
+            DUMP_MSG(P, "rhs: ");
             dump_expr(P, e->logical.rhs);
             break;
         case kHirClosureExpr:
             dump_decl_list(P, e->clos.params, "params");
             if (e->clos.has_body) {
-                dump_block(P, e->clos.body);
+                DUMP_BLOCK(P, e->clos.body);
             } else {
                 dump_expr(P, e->clos.expr);
             }
             break;
         case kHirPathExpr:
-            dump_msg(P, "path: ");
+            DUMP_MSG(P, "path: ");
             dump_path(P, e->path.path);
             break;
         case kHirConversionExpr:
-            dump_fmt(P, "to: %d\n", e->conv.to);
-            dump_msg(P, "arg: ");
+            DUMP_FMT(P, "to: %d\n", e->conv.to);
+            DUMP_MSG(P, "arg: ");
             dump_expr(P, e->conv.arg);
             break;
         case kHirUnOpExpr:
-            dump_fmt(P, "op: %d\n", e->unop.op);
-            dump_msg(P, "target: ");
+            DUMP_FMT(P, "op: %d\n", e->unop.op);
+            DUMP_MSG(P, "target: ");
             dump_expr(P, e->unop.target);
             break;
         case kHirBinOpExpr:
-            dump_fmt(P, "op: %d\n", e->binop.op);
-            dump_msg(P, "lhs: ");
+            DUMP_FMT(P, "op: %d\n", e->binop.op);
+            DUMP_MSG(P, "lhs: ");
             dump_expr(P, e->binop.lhs);
-            dump_msg(P, "rhs: ");
+            DUMP_MSG(P, "rhs: ");
             dump_expr(P, e->binop.rhs);
             break;
         case kHirCallExpr:
-            dump_msg(P, "target: ");
+            DUMP_MSG(P, "target: ");
             dump_expr(P, e->call.target);
             dump_expr_list(P, e->call.args, "args");
-            dump_msg(P, "func: ");
+            DUMP_MSG(P, "func: ");
             dump_type(P, e->call.func);
             break;
         case kHirIndex:
-            dump_fmt(P, "is_slice: %d\n", e->index.is_slice);
-            dump_msg(P, "target: ");
+            DUMP_FMT(P, "is_slice: %d\n", e->index.is_slice);
+            DUMP_MSG(P, "target: ");
             dump_expr(P, e->index.target);
-            dump_msg(P, "first: ");
+            DUMP_MSG(P, "first: ");
             dump_expr(P, e->index.first);
-            dump_msg(P, "second: ");
+            DUMP_MSG(P, "second: ");
             dump_expr(P, e->index.second);
             break;
         case kHirSelector:
-            dump_msg(P, "target: ");
+            DUMP_MSG(P, "target: ");
             dump_expr(P, e->select.target);
             if (e->select.is_index) {
-                dump_fmt(P, "index: %" PRId64 "\n", e->select.index);
+                DUMP_FMT(P, "index: %I\n", e->select.index);
             } else {
-                dump_name(P, e->select.name);
+                DUMP_NAME(P, e->select.name);
             }
             break;
         case kHirFieldExpr:
             if (e->field.fid >= 0) {
-                dump_name(P, e->field.name);
+                DUMP_NAME(P, e->field.name);
             } else {
-                dump_msg(P, "key: ");
+                DUMP_MSG(P, "key: ");
                 dump_expr(P, e->field.key);
             }
-            dump_msg(P, "value: ");
+            DUMP_MSG(P, "value: ");
             dump_expr(P, e->field.value);
             break;
         case kHirAssignExpr:
-            dump_msg(P, "lhs: ");
+            DUMP_MSG(P, "lhs: ");
             dump_expr(P, e->assign.lhs);
-            dump_msg(P, "rhs: ");
+            DUMP_MSG(P, "rhs: ");
             dump_expr(P, e->assign.rhs);
             break;
         default:
             paw_assert(0);
     }
     --P->indent;
-    dump_msg(P, "}\n");
+    DUMP_MSG(P, "}\n");
 }
 
-void pawHir_repr_path(struct Hir *hir, struct HirPath *path)
+void pawHir_dump(struct Hir *hir)
 {
-    struct Printer P = {.hir = hir};
-    dump_path(&P, path);
-}
-
-// TODO: Have this output a String, or fill a Buffer
-void pawHir_repr_type(struct Hir *hir, struct HirType *type)
-{
-    struct Printer P = {.hir = hir};
-    repr_type(&P, type);
-}
-
-void pawHir_dump_type(struct Hir *hir, struct HirType *type)
-{
-    struct Printer P = {.hir = hir};
-    dump_type(&P, type);
-}
-
-void pawHir_dump_decl(struct Hir *hir, struct HirDecl *decl)
-{
-    struct Printer P = {.hir = hir};
-    dump_decl(&P, decl);
-}
-
-void pawHir_dump_expr(struct Hir *hir, struct HirExpr *expr)
-{
-    struct Printer P = {.hir = hir};
-    dump_expr(&P, expr);
-}
-
-void pawHir_dump_stmt(struct Hir *hir, struct HirStmt *stmt)
-{
-    struct Printer P = {.hir = hir};
-    dump_stmt(&P, stmt);
-}
-
-void pawHir_dump_path(struct Hir *hir, struct HirPath *path)
-{
-    struct Printer P = {.hir = hir};
-    dump_path(&P, path);
-}
-
-static void debug_func_decl(struct HirVisitor *V, struct HirFuncDecl *d)
-{
-    struct Printer *P = V->ud;
-    dump_msg(P, "FuncDecl: ");
-    repr_type(P, d->type);
-    dump_msg(P, "body: \n");
-    ++P->indent;
-    V->VisitBlock(V, d->body);
-    --P->indent;
-    if (d->monos != NULL) {
-        dump_msg(P, "monos: \n");
-        ++P->indent;
-        V->VisitDeclList(V, d->monos);
-        --P->indent;
+    Buffer buf;
+    paw_Env *P = ENV(hir);
+    pawL_init_buffer(P, &buf);
+    struct Printer print = {
+        .buf = &buf,
+        .hir = hir,
+        .P = P, 
+    };
+    for (int i = 0; i < hir->items->count; ++i) {
+        dump_decl(&print, hir->items->data[i]);
     }
+    pawL_push_result(P, &buf);
 }
-
-static void debug_instance_decl(struct HirVisitor *V, struct HirInstanceDecl *d)
-{
-    struct Printer *P = V->ud;
-    dump_msg(P, "InstanceDecl: ");
-    pawHir_repr_type(V->hir, d->type);
-}
-
-void pawHir_debug(struct Hir *hir)
-{
-    struct HirVisitor V;
-    struct Printer P = {.hir = hir};
-    pawHir_visitor_init(&V, hir, &P);
-    V.VisitFuncDecl = debug_func_decl;
-    V.VisitInstanceDecl = debug_instance_decl;
-    pawHir_visit(&V);
-}
-

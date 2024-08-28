@@ -43,24 +43,4 @@ void pawR_literal_map(paw_Env *P, int n);
 
 void pawR_close_upvalues(paw_Env *P, const StackPtr top);
 
-static inline void pawR_check_argc(paw_Env *P, int argc, int expect)
-{
-    if (argc != expect) {
-        pawR_error(P, PAW_ERUNTIME, "expected %d argument(s) but found %d",
-                   expect, argc);
-    }
-}
-
-static inline void pawR_check_varargc(paw_Env *P, int argc, int least, int most)
-{
-    if (argc < least) {
-        pawR_error(P, PAW_ERUNTIME,
-                   "expected at least %d argument(s) but found %d", least,
-                   argc);
-    } else if (argc > most) {
-        pawR_error(P, PAW_ERUNTIME,
-                   "expected at most %d argument(s) but found %d", most, argc);
-    }
-}
-
 #endif // PAW_RT_H

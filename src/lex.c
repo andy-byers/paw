@@ -195,12 +195,12 @@ static int consume_utf8(struct Lex *x)
 
 static int get_codepoint(struct Lex *x)
 {
-    const char c[] = {
-        SAVE_AND_NEXT(x),
-        SAVE_AND_NEXT(x),
-        SAVE_AND_NEXT(x),
-        SAVE_AND_NEXT(x),
-    };
+    char c[4];
+    c[0] = x->c; next(x);
+    c[1] = x->c; next(x);
+    c[2] = x->c; next(x);
+    c[3] = x->c; next(x);
+
     if (!ISHEX(c[0]) || 
             !ISHEX(c[1]) || 
             !ISHEX(c[2]) || 
@@ -259,16 +259,13 @@ static struct Token consume_string(struct Lex *x)
                 break;
             case 'u': {
                 int codepoint = get_codepoint(x);
-                if (codepoint < 0) {
-                    LEX_ERROR(x);
-                }
+                if (codepoint < 0) LEX_ERROR(x);
                 if (0xD800 <= codepoint && codepoint <= 0xDFFF) {
                     // Codepoint is part of a surrogate pair. Expect a high
                     // surrogate (U+D800–U+DBFF) followed by a low surrogate
                     // (U+DC00–U+DFFF).
                     if (codepoint <= 0xDBFF) {
-                        if (SAVE_AND_NEXT(x) != '\\' ||
-                            SAVE_AND_NEXT(x) != 'u') {
+                        if (!test_next(x, '\\') || !test_next(x, 'u')) {
                             LEX_ERROR(x);
                         }
                         const int codepoint2 = get_codepoint(x);
@@ -276,8 +273,7 @@ static struct Token consume_string(struct Lex *x)
                             LEX_ERROR(x);
                         }
                         codepoint = (((codepoint - 0xD800) << 10) |
-                                     (codepoint2 - 0xDC00)) +
-                                    0x10000;
+                                     (codepoint2 - 0xDC00)) + 0x10000;
                     } else {
                         LEX_ERROR(x);
                     }

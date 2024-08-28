@@ -54,6 +54,7 @@ struct TestReader {
 
 void *test_alloc(void *ud, void *ptr, size_t size0, size_t size);
 const char *test_reader(paw_Env *X, void *ud, size_t *size);
+const char *test_pathname(const char *name);
 
 paw_Env *test_open(paw_Alloc alloc, struct TestAlloc *state, size_t heap_size);
 void test_close(paw_Env *P, struct TestAlloc *a);

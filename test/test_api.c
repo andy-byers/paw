@@ -6,6 +6,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "env.h"
+#include "env.h"
+
 static struct TestAlloc s_alloc;
 
 static void check_error(paw_Env *P, int status)
@@ -18,26 +21,11 @@ static void check_error(paw_Env *P, int status)
 static paw_Env *start_test(void)
 {
     const char *source =
-        "let var = 'variable'        \n"
-        "let set                     \n"
-        "let get                     \n"
-        "{                           \n"
-        "    let value               \n"
-        "    get = fn() {            \n"
-        "        assert(dep != null) \n" // Name error if 'dep' is not created by the caller
-        "        return value + var  \n" // Type error if 'value' or 'var' are not numeric types
-        "    }                       \n"
-        "    set = fn(v) {           \n"
-        "        value = v           \n"
-        "    }                       \n"
-        "}                           \n"
-        "class Class {               \n"
-        "    __init(v) {             \n"
-        "        self.v = v          \n"
-        "    }                       \n"
-        "}                           \n";
-    paw_Env *P = test_open(NULL, &s_alloc);
-    int status = pawL_load_chunk(P, "test", source);
+        "pub fn main(args: [str]) -> int {\n"
+        "    return #args;                \n"
+        "}                                \n";
+    paw_Env *P = test_open(NULL, &s_alloc, PAW_HEAP_MIN);
+    const int status = pawL_load_chunk(P, "test", source);
     check_error(P, status);
     return P;
 }
@@ -57,9 +45,14 @@ static int fib(paw_Env *P)
     paw_get_upvalue(P, 0, 0);
     check(n >= 0);
 
-    if (n < (int)paw_length(P, -1)) {
+    paw_listop(P, PAW_LIST_LEN);
+    const paw_Int ncached = paw_int(P, -1);
+    paw_pop(P, -1);
+    if (n < ncached) {
         // fib(n) has already been computed
-        paw_get_itemi(P, -1, n);
+        paw_get_upvalue(P, 0, 0);
+        paw_push_int(P, n);
+        paw_listop(P, PAW_LIST_GET);
         return 1;
     }
 
@@ -77,14 +70,13 @@ static int fib(paw_Env *P)
         paw_push_int(P, n - 1);
         paw_call(P, 1);
         // Compute fib(n)
-        paw_binop(P, PAW_OPADD);
+        paw_arithi(P, PAW_ARITH_ADD);
     }
     // Cache the result
     paw_get_upvalue(P, 0, 0);
-    paw_get_attr(P, -1, "push"); // Get 'push' method
-    paw_push_value(P, -3); // Value to push
-    paw_call(P, 1);
-    paw_pop(P, 2);
+    List *list = V_LIST(P->top.p[-1]); // TODO: add functionality to main API
+    pawV_list_push(P, list, (Value){.i = paw_int(P, -2)});
+    paw_pop(P, 1);
     return 1;
 }
 
@@ -100,44 +92,27 @@ static paw_Int call_fib(paw_Env *P, int n)
     return fibn;
 }
 
-static void str_equals(paw_Env *P, int index, const char *s)
-{
-    check(paw_is_string(P, index));
-    const size_t n = strlen(s);
-    check(n == paw_length(P, index));
-    check(0 == memcmp(s, paw_string(P, index), n));
-}
-
 int main(void)
 {
     paw_Env *P = start_test();
 
-    // Global variables, functions, and classes defined by the module can only
-    // be accessed after the module code is run. We can, however, create globals
-    // that the module will depend on.
-    paw_push_string(P, "abc");
-    paw_set_global(P, "dep");
+    paw_push_string(P, "main");
+    const int gid = paw_find_global(P);
+    struct Def *def = pawE_get_def(P, gid);
+    paw_get_global(P, def->func.vid);
 
-    // Call the module
-    const int status = paw_call(P, 0);
+    paw_push_string(P, "abc");
+    paw_new_list(P, 1);
+    const int status = paw_call(P, 1);
     check_error(P, status);
 
-    paw_get_global(P, "var");
-    str_equals(P, -1, "variable");
+    check(paw_int(P, -1) == 1);
     paw_pop(P, 1);
 
-    // Set global variable 'var', read it back
-    paw_push_int(P, 123);
-    paw_set_global(P, "var");
-    paw_get_global(P, "var");
-    check(paw_is_int(P, -1));
-    check(paw_int(P, -1) == 123);
-    paw_pop(P, 1);
-
-    // Test native closures by generating Fibonacci numbers. Use an array upvalue
+    // Test native closures by generating Fibonacci numbers. Use a list upvalue
     // to cache intermediate results.
-    paw_create_array(P, 0);
-    paw_push_native(P, fib, 1);
+    paw_new_list(P, 0);
+    paw_new_native(P, fib, 1);
     check(0 == call_fib(P, 0));
     check(1 == call_fib(P, 1));
     check(1 == call_fib(P, 2));
@@ -145,54 +120,35 @@ int main(void)
     check(12586269025 == call_fib(P, 50));
     paw_pop(P, 1);
 
-    // Roundtrip an integer string (through bigint). Make it very long, so the
-    // buffer needs to be boxed.
-    {
-        char str[1024] = {'9'}; // don't start with '0'
-        const size_t len = sizeof(str) - 1;
-        for (size_t i = 1; i < len; ++i) {
-            str[i] = test_randint('0', '9');
-        }
-        str[len] = '\0';
-        paw_push_string(P, str);
-        // Convert to bigint
-        paw_to_integer(P, -1);
-        check(paw_is_bigint(P, -1));
-        paw_to_string(P, -1);
-        check(paw_length(P, -1) == len);
-        check(0 == memcmp(str, paw_string(P, -1), len));
-        paw_pop(P, 1);
-    }
-
     // Perform some VM operations.
     {
         // 1 + 1 == 2
         paw_push_int(P, 1);
         paw_push_int(P, 1);
-        paw_binop(P, PAW_OPADD);
+        paw_arithi(P, PAW_ARITH_ADD);
         paw_push_int(P, 2);
-        paw_raw_equals(P);
-        check(paw_boolean(P, -1));
+        paw_cmpi(P, PAW_CMP_EQ);
+        check(paw_bool(P, -1));
         paw_pop(P, 1);
 
         // 1 << 1 <= 2
         paw_push_int(P, 1);
         paw_push_int(P, 1);
-        paw_binop(P, PAW_OPSHL);
+        paw_bitw(P, PAW_BITW_SHL);
         paw_push_int(P, 2);
-        paw_binop(P, PAW_OPLE);
-        check(paw_boolean(P, -1));
+        paw_cmpi(P, PAW_CMP_LE);
+        check(paw_bool(P, -1));
         paw_pop(P, 1);
 
-        // "ab" ++ "c" ++ 123 == "abc123"
+        // "ab" + "c" + "123" == "abc123"
         paw_push_string(P, "ab");
         paw_push_string(P, "c");
-        paw_binop(P, PAW_OPCONCAT);
-        paw_push_int(P, 123);
-        paw_binop(P, PAW_OPCONCAT);
+        paw_strop(P, PAW_STR_CONCAT);
+        paw_push_string(P, "123");
+        paw_strop(P, PAW_STR_CONCAT);
         paw_push_string(P, "abc123");
-        paw_binop(P, PAW_OPEQ);
-        check(paw_boolean(P, -1));
+        paw_cmps(P, PAW_CMP_EQ);
+        check(paw_bool(P, -1));
         paw_pop(P, 1);
     }
 

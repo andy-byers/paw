@@ -71,11 +71,9 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/env.c
             ${PAW_SOURCE_DIR}/gc.c
             ${PAW_SOURCE_DIR}/hir.c
-            #${PAW_SOURCE_DIR}/iolib.c
             ${PAW_SOURCE_DIR}/lex.c
             ${PAW_SOURCE_DIR}/list.c
             ${PAW_SOURCE_DIR}/lib.c
-            #${PAW_SOURCE_DIR}/mathlib.c
             ${PAW_SOURCE_DIR}/map.c
             ${PAW_SOURCE_DIR}/mem.c
             ${PAW_SOURCE_DIR}/os.c

@@ -53,8 +53,6 @@ static Object **get_gc_list(Object *o)
             return &O_CLOSURE(o)->gc_list;
         case VPROTO:
             return &O_PROTO(o)->gc_list;
-        case VINSTANCE:
-            return &O_INSTANCE(o)->gc_list;
         case VVARIANT:
             return &O_VARIANT(o)->gc_list;
         case VTUPLE:
@@ -145,17 +143,6 @@ static void traverse_tuple(paw_Env *P, Tuple *t)
     traverse_fields(P, t->elems, t->nelems);
 }
 
-static void traverse_instance(paw_Env *P, Instance *i)
-{
-    traverse_fields(P, i->fields, i->nfields);
-}
-
-static void traverse_method(paw_Env *P, Method *m)
-{
-    mark_object(P, V_OBJECT(m->self));
-    mark_object(P, V_OBJECT(m->f));
-}
-
 static void traverse_list(paw_Env *P, List *a)
 {
     paw_Int itr = PAW_ITER_INIT;
@@ -228,12 +215,6 @@ static void traverse_objects(paw_Env *P)
                 break;
             case VTUPLE:
                 traverse_tuple(P, O_TUPLE(o));
-                break;
-            case VINSTANCE:
-                traverse_instance(P, O_INSTANCE(o));
-                break;
-            case VMETHOD:
-                traverse_method(P, O_METHOD(o));
                 break;
             case VLIST:
                 traverse_list(P, O_LIST(o));
@@ -359,12 +340,6 @@ void pawG_free_object(paw_Env *P, Object *o)
             break;
         case VPROTO:
             pawV_free_proto(P, O_PROTO(o));
-            break;
-        case VINSTANCE:
-            pawV_free_instance(P, O_INSTANCE(o));
-            break;
-        case VMETHOD:
-            pawV_free_method(P, O_METHOD(o));
             break;
         case VNATIVE:
             pawV_free_native(P, O_NATIVE(o));

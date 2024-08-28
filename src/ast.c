@@ -7,7 +7,6 @@
 #include "map.h"
 #include "mem.h"
 #include "parse.h"
-#include <inttypes.h>
 
 #define FIRST_ARENA_SIZE 4096
 #define LARGE_ARENA_MIN 32
@@ -52,22 +51,26 @@ struct AstSegment *pawAst_segment_new(struct Ast *ast)
 }
 
 typedef struct Printer {
-    FILE *out;
+    Buffer *buf;
+    paw_Env *P;
     int indent;
 } Printer;
 
-#define DUMP_FMT(P, fmt, ...) (indent_line(P), fprintf((P)->out, fmt, __VA_ARGS__))
-#define DUMP_MSG(P, msg) (indent_line(P), fprintf((P)->out, msg))
-
-#define DUMP_BLOCK(P, b) CHECK_EXP(AstIsBlock(AST_CAST_STMT(b)), dump_stmt(P, AST_CAST_STMT(b)))
-#define DUMP_NAME(P, s) DUMP_FMT(P, "name: %s\n", s ? s->text : NULL)
+#define DUMP_LITERAL(P, lit) L_ADD_LITERAL(ENV(P), (P)->buf, lit)
+#define DUMP_STRING(P, str) pawL_add_string(ENV(P), (P)->buf, str)
+#define DUMP_FSTRING(P, ...) pawL_add_fstring(ENV(P), (P)->buf, __VA_ARGS__)
 
 static void indent_line(Printer *P)
 {
     for (int i = 0; i < P->indent; ++i) {
-        fprintf(P->out, "    ");
+        DUMP_LITERAL(P, "    ");
     }
 }
+
+#define DUMP_FMT(P, ...) (indent_line(P), pawL_add_fstring(ENV(P), (P)->buf, __VA_ARGS__))
+#define DUMP_MSG(P, msg) (indent_line(P), pawL_add_string(ENV(P), (P)->buf, msg))
+#define DUMP_BLOCK(P, b) CHECK_EXP(AstIsBlock(AST_CAST_STMT(b)), dump_stmt(P, AST_CAST_STMT(b)))
+#define DUMP_NAME(P, s) DUMP_FMT(P, "name: %s\n", s ? s->text : "(null)")
 
 static void dump_expr(Printer *P, struct AstExpr *e);
 static void dump_decl(Printer *P, struct AstDecl *d);
@@ -97,7 +100,7 @@ DEFINE_LIST_PRINTER(stmt, AstStmt)
     { \
         if (node != NULL) { \
             struct T *typed = node; \
-            printf("%s {\n", k##T##Names[AST_KINDOF(typed)]); \
+            DUMP_FSTRING(P, "%s {\n", k##T##Names[AST_KINDOF(typed)]); \
             return 0; \
         } \
         return -1; \
@@ -118,7 +121,7 @@ static void dump_path(Printer *P, struct AstPath *p)
 static void dump_decl(Printer *P, struct AstDecl *d)
 {
     if (print_decl_kind(P, d)) {
-        fprintf(P->out, "(null)\n");
+        DUMP_LITERAL(P, "(null)\n");
         return;
     }
     ++P->indent;
@@ -175,7 +178,7 @@ static void dump_decl(Printer *P, struct AstDecl *d)
 static void dump_stmt(Printer *P, struct AstStmt *s)
 {
     if (print_stmt_kind(P, s)) {
-        fprintf(P->out, "(null)\n");
+        DUMP_LITERAL(P, "(null)\n");
         return;
     }
     ++P->indent;
@@ -246,7 +249,7 @@ static void dump_stmt(Printer *P, struct AstStmt *s)
 static void dump_expr(Printer *P, struct AstExpr *e)
 {
     if (print_expr_kind(P, e)) {
-        fprintf(P->out, "(null)\n");
+        DUMP_LITERAL(P, "(null)\n");
         return;
     }
     ++P->indent;
@@ -268,7 +271,7 @@ static void dump_expr(Printer *P, struct AstExpr *e)
                             break;
                         case PAW_TINT:
                             DUMP_MSG(P, "type: int\n");
-                            DUMP_FMT(P, "value: %" PRId64 "\n",
+                            DUMP_FMT(P, "value: %I\n",
                                      V_INT(e->literal.basic.value));
                             break;
                         case PAW_TFLOAT:
@@ -336,7 +339,7 @@ static void dump_expr(Printer *P, struct AstExpr *e)
             DUMP_MSG(P, "target: ");
             dump_expr(P, e->selector.target);
             if (e->selector.is_index) {
-                DUMP_FMT(P, "index: %" PRId64 "\n", e->selector.index);
+                DUMP_FMT(P, "index: %I\n", e->selector.index);
             } else {
                 DUMP_NAME(P, e->selector.name);
             }
@@ -359,26 +362,17 @@ static void dump_expr(Printer *P, struct AstExpr *e)
     DUMP_MSG(P, "}\n");
 }
 
-void pawAst_dump_decl(FILE *out, struct AstDecl *decl)
+void pawAst_dump(struct Ast *ast)
 {
-    Printer P = {.out = out};
-    dump_decl(&P, decl);
-}
-
-void pawAst_dump_expr(FILE *out, struct AstExpr *expr)
-{
-    Printer P = {.out = out};
-    dump_expr(&P, expr);
-}
-
-void pawAst_dump_stmt(FILE *out, struct AstStmt *stmt)
-{
-    Printer P = {.out = out};
-    dump_stmt(&P, stmt);
-}
-
-void pawAst_dump_path(FILE *out, struct AstPath *path)
-{
-    Printer P = {.out = out};
-    dump_path(&P, path);
+    Buffer buf;
+    paw_Env *P = ENV(ast);
+    pawL_init_buffer(P, &buf);
+    Printer print = {
+        .buf = &buf,
+        .P = P, 
+    };
+    for (int i = 0; i < ast->items->count; ++i) {
+        dump_decl(&print, ast->items->data[i]);
+    }
+    pawL_push_result(P, &buf);
 }

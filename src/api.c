@@ -226,28 +226,6 @@ void *paw_userdata(paw_Env *P, int index)
     return f->data;
 }
 
-size_t paw_length(paw_Env *P, int index)
-{
-    size_t result;
-    paw_push_value(P, index);
-    const Value v = P->top.p[-1];
-    switch (v.o->gc_kind) {
-        case VSTRING:
-            result = pawS_length(V_STRING(v));
-            break;
-        case VLIST:
-            result = pawV_list_length(V_LIST(v));
-            break;
-        case VMAP:
-            result = pawH_length(V_MAP(v));
-            break;
-        default:
-            result = 0;
-    }
-    paw_pop(P, 1);
-    return result;
-}
-
 void paw_pop(paw_Env *P, int n)
 {
     paw_assert(n <= pawC_stklen(P));

@@ -143,7 +143,7 @@ const char *test_reader(paw_Env *P, void *ud, size_t *size)
     return ptr;
 }
 
-static const char *test_pathname(const char *name)
+const char *test_pathname(const char *name)
 {
     static char s_buf[paw_lengthof(TEST_PREFIX) + 64];
     s_buf[0] = '\0'; // Reset length
@@ -209,8 +209,7 @@ void test_recover(paw_Env *P, paw_Bool fatal)
 
     if (fatal) {
         const char *s = paw_string(P, -1);
-        const size_t n = paw_length(P, -1);
-        fprintf(stderr, "%.*s\n", (int)n, s);
+        fprintf(stderr, "%s\n", s);
         abort();
     }
     paw_pop(P, 1);

@@ -919,58 +919,11 @@ static struct HirExpr *expect_int_expr(struct Resolver *R, struct AstExpr *e)
     return r;
 }
 
-struct StructPack {
-    String *name;
-    struct HirDeclList *generics;
-    struct HirDeclList *fields;
-    struct HirType *type;
-    struct HirDecl *decl;
-    paw_Bool is_struct;
-};
-
-static struct StructPack unpack_struct(struct Resolver *R, struct HirType *type)
-{
-    if (HirIsFuncType(type)) {
-        struct HirDecl *decl = get_decl(R, type->fdef.did);
-        return (struct StructPack){
-            .name = decl->variant.name,
-            .fields = decl->variant.fields,
-            .type = decl->variant.type,
-            .decl = decl,
-        };
-    } else if (!HirIsAdt(type)) {
-        TYPE_ERROR(R, "expected structure or enumerator");
-    } else if (HIR_IS_BASIC_T(type) || HirGetAdt(type)->did == NO_DECL) {
-        TYPE_ERROR(R, "fields/methods not yet implemented on builtin types"); // TODO
-    }
-    struct HirDecl *decl = get_decl(R, type->adt.did);
-    struct HirAdtDecl *adt = HirGetAdtDecl(decl);
-    return (struct StructPack){
-        .is_struct = adt->is_struct,
-        .name = adt->name,
-        .generics = adt->generics,
-        .fields = adt->fields,
-        .type = adt->type,
-        .decl = decl,
-    };
-}
-
-// TODO: use this one, don't need unpack_struct
-static struct HirDecl *expect_field_(struct Resolver *R, struct HirAdtDecl *adt, String *name)
+static struct HirDecl *expect_field(struct Resolver *R, const struct HirAdtDecl *adt, String *name)
 {
     struct HirDecl *field = resolve_field(adt->fields, name);
     if (field == NULL) NAME_ERROR(R, "field '%s' does not exist in type '%s'", 
                                   name->text, adt->name->text);
-    return field;
-}
-
-static struct HirDecl *expect_field(struct Resolver *R, const struct StructPack *pack, String *name)
-{
-    struct HirDecl *field = resolve_field(pack->fields, name);
-    if (field == NULL) {
-        NAME_ERROR(R, "field '%s' does not exist in type '%s'", name->text,
-                   pack->name->text);
-    }
     return field;
 }
 
@@ -1014,7 +967,7 @@ static struct HirDecl *resolve_next_seg(struct Resolver *R, struct HirDecl *prev
     if (!is_enum_decl(prev)) TYPE_ERROR(R, "expected enumerator");
     if (next->types != NULL) TYPE_ERROR(R, "expected generic item");
     struct HirAdtDecl *adt = HirGetAdtDecl(prev);
-    next->result = expect_field_(R, adt, next->name);
+    next->result = expect_field(R, adt, next->name);
     return next->result;
 }
 
@@ -1497,7 +1450,7 @@ static struct HirExpr *resolve_variant_expr(struct Resolver *R, struct AstCallEx
 
     struct HirPath *path = HirGetPathExpr(expr)->path;
     struct HirSegment *last = pawHir_path_get(path, path->count - 1);
-    struct HirDecl *decl = expect_field_(R, adt, last->name);
+    struct HirDecl *decl = expect_field(R, adt, last->name);
     r->index = HirGetVariantDecl(decl)->index;
     return result;
 }
@@ -1659,15 +1612,14 @@ static struct HirType *resolve_composite_lit(struct Resolver *R, struct AstCompo
     struct HirTypeList *field_types = NULL;
     paw_Bool is_inference = PAW_FALSE;
     struct HirType *target = HIR_TYPEOF(decl);
-    const struct StructPack pack = unpack_struct(R, target);
-    if (!pack.is_struct) {
-        TYPE_ERROR(R, "expected structure but found enumeration '%s'", pack.name->text);
-    } else if (pack.fields == NULL) {
+    struct HirAdtDecl *adt = HirGetAdtDecl(decl);
+    if (!adt->is_struct) {
+        TYPE_ERROR(R, "expected structure but found enumeration '%s'", adt->name->text);
+    } else if (adt->fields == NULL) {
         SYNTAX_ERROR(R, "unexpected curly braces on initializer for unit structure '%s'"
-                        "(use name without '{}' to create unit struct)", pack.name->text);
-    } else if (HIR_IS_POLY_ADT(pack.decl)) {
-        struct HirAdtDecl *d = &pack.decl->adt;
-        g = generalize(R, d->generics, d->fields);
+                        "(use name without '{}' to create unit struct)", adt->name->text);
+    } else if (HIR_IS_POLY_ADT(decl)) {
+        g = generalize(R, adt->generics, adt->fields);
         is_inference = PAW_TRUE;
         field_types = g.fields;
     }
@@ -1679,25 +1631,25 @@ static struct HirType *resolve_composite_lit(struct Resolver *R, struct AstCompo
         V_SET_OBJECT(&key, item->name);
         if (pawH_contains(map, key)) {
             NAME_ERROR(R, "duplicate field '%s' in initializer for struct '%s'", 
-                       item->name->text, pack.name->text);
+                       item->name->text, adt->name->text);
         }
         Value *value = pawH_create(P, map, key);
         V_SET_INT(value, i);
         pawHir_expr_list_push(R->hir, order, hir_item);
     }
-    for (int i = 0; i < pack.fields->count; ++i) {
-        struct HirDecl *decl = pack.fields->data[i];
+    for (int i = 0; i < adt->fields->count; ++i) {
+        struct HirDecl *decl = adt->fields->data[i];
         struct HirFieldDecl *field = HirGetFieldDecl(decl);
         V_SET_OBJECT(&key, field->name);
         Value *value = pawH_get(map, key);
         if (value == NULL) {
             NAME_ERROR(R, "missing initializer for field '%s' in struct '%s'",
-                       field->name->text, pack.name->text);
+                       field->name->text, adt->name->text);
         }
         const paw_Int index = V_INT(*value);
         struct HirType *field_t = is_inference
                                ? field_types->data[i]
-                               : HIR_TYPEOF(pack.fields->data[i]);
+                               : HIR_TYPEOF(adt->fields->data[i]);
         struct HirExpr *item = order->data[index];
         struct HirType *item_t = resolve_operand(R, item);
         item->field.fid = i;
@@ -1708,13 +1660,13 @@ static struct HirType *resolve_composite_lit(struct Resolver *R, struct AstCompo
     while (pawH_iter(map, &iter)) {
         const Value *pkey = pawH_key(map, CAST_SIZE(iter));
         NAME_ERROR(R, "unexpected field '%s' in initializer for struct '%s'",
-                   V_STRING(*pkey), pack.name->text);
+                   V_STRING(*pkey), adt->name->text);
     }
-    paw_assert(pack.fields->count == e->items->count);
+    paw_assert(adt->fields->count == e->items->count);
     pawC_pop(P); // pop map
 
     if (is_inference) {
-        struct HirDecl *inst = instantiate_struct(R, &pack.decl->adt, g.types);
+        struct HirDecl *inst = instantiate_struct(R, adt, g.types);
         target = HIR_TYPEOF(inst);
     }
     r->items = order;
@@ -1924,17 +1876,17 @@ static struct HirExpr *resolve_selector(struct Resolver *R, struct AstSelector *
         r->type = types->data[e->index];
         return result;
     }
-    const struct StructPack pack = unpack_struct(R, target);
-    if (!pack.is_struct) {
+    const struct HirAdtDecl *adt = get_adt(R, target);
+    if (!adt->is_struct) {
         TYPE_ERROR(R, "cannot select field of enum variant (use pattern "
                       "matching to unpack variant fields)");
     } else if (e->is_index) {
         TYPE_ERROR(R, "expected name of struct field (integer indices can "
                       "only be used with tuples)");
-    } else if (pack.fields == NULL) {
-        NAME_ERROR(R, "unit structure '%s' has no fields", pack.name->text);
+    } else if (adt->fields == NULL) {
+        NAME_ERROR(R, "unit structure '%s' has no fields", adt->name->text);
     }
-    struct HirDecl *field = expect_field(R, &pack, e->name);
+    struct HirDecl *field = expect_field(R, adt, e->name);
     r->type = HIR_TYPEOF(field);
     r->name = e->name;
     return result;
@@ -1972,8 +1924,8 @@ static struct HirDecl *resolve_decl(struct Resolver *R, struct AstDecl *decl)
 {
     R->line = decl->hdr.line;
     switch (AST_KINDOF(decl)) {
-#define DEFINE_CASE(a, b)                       \
-        case kAst##a:                           \
+#define DEFINE_CASE(a, b) \
+        case kAst##a: \
             return Resolve##a(R, AstGet##a(decl));
         AST_DECL_LIST(DEFINE_CASE)
 #undef DEFINE_CASE
@@ -1984,8 +1936,8 @@ static struct HirStmt *resolve_stmt(struct Resolver *R, struct AstStmt *stmt)
 {
     R->line = stmt->hdr.line;
     switch (AST_KINDOF(stmt)) {
-#define DEFINE_CASE(a, b)                       \
-        case kAst##a:                           \
+#define DEFINE_CASE(a, b) \
+        case kAst##a: \
             return Resolve##a(R, AstGet##a(stmt));
         AST_STMT_LIST(DEFINE_CASE)
 #undef DEFINE_CASE

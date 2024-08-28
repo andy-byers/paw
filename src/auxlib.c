@@ -14,7 +14,7 @@ static void grow_buffer(paw_Env *P, Buffer *buf, int boxloc)
 {
     paw_assert(buf->alloc <= SIZE_MAX / 2);
     const size_t alloc = buf->alloc * 2;
-    if (pawL_boxed(buf)) {
+    if (L_IS_BOXED(buf)) {
         Foreign *ud = V_FOREIGN(P->top.p[boxloc]);
         pawM_resize(P, buf->data, buf->alloc, alloc);
         ud->data = buf->data;
@@ -72,33 +72,6 @@ static void add_nstring(paw_Env *P, Buffer *buf, const char *str, size_t len, in
 {
     char *ptr = reserve_memory(P, buf, len, boxloc);
     memcpy(ptr, str, len);
-}
-
-void pawL_add_value(paw_Env *P, Buffer *buf, paw_Type type)
-{
-    size_t len; // value must be on top of the stack
-    const char *str = pawV_to_string(P, P->top.p[-1], type, &len);
-    if (str == NULL) {
-        // add the type name and address
-        str = paw_push_fstring(P, "%s (%p)",
-                               "<type>" /*TODO: paw_typename(P, -1)*/,
-                               paw_userdata(P, -1));
-        len = paw_length(P, -1);
-    }
-    add_nstring(P, buf, str, len, -3);
-    pawC_stkdec(P, 2); // pop value and string
-}
-
-// Table and stringify algorithm modified from micropython
-static const uint8_t kLogBase2[] = {
-    0, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 4,
-    4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5,
-};
-
-size_t pawL_integer_format_size(size_t nbits, int base)
-{
-    assert(2 <= base && base <= 32);
-    return nbits / kLogBase2[base - 1] + 1;
 }
 
 void pawL_add_char(paw_Env *P, Buffer *buf, char c)

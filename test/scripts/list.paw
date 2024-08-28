@@ -1,11 +1,11 @@
 // list.paw
 
 fn are_lists_eq(a: [int], b: [int]) -> bool {
-    if (#a != #b) {
+    if #a != #b {
         return false;
     }
     for i = 0, #a {
-        if (a[i] != b[i]) {
+        if a[i] != b[i] {
             return false;
         }
     }
@@ -332,7 +332,7 @@ pub fn test_set_slice() {
 fn map<T>(f: fn(T) -> T, list: [T]) {
     for i = 0, #list {
         list[i] = f(list[i]);
-    };
+    }
 }
 
 pub fn test_infer_poly_function() {
@@ -344,7 +344,6 @@ pub fn test_infer_poly_function() {
     assert(v[0] == 2);
     assert(v[1] == 4);
     assert(v[2] == 6);
-    ;
 }
 
 pub fn test_misc() {
@@ -353,14 +352,17 @@ pub fn test_misc() {
         _list_push(list, i);
     };
     assert(#list == 100);
-    let clone = _list_clone(list);
+    let copy = [];
+    for x in list {
+        _list_push(copy, x);
+    }
     for i = 0, 50 {
         _list_erase(list, i);
-    };
+    }
     for i = 0, 100, 2 {
         _list_insert(list, i, i);
-    };
-    check_eq(list, clone);
+    }
+    check_eq(list, copy);
 }
 
 pub fn test_addition() {
@@ -530,7 +532,7 @@ fn map2<T>(list: [T], f: fn(T) -> T) -> [T] {
     let result = [];
     for elem in list {
         _list_push(result, f(elem));
-    };
+    }
     return result;
 }
 pub fn test_infer_l() {
@@ -545,7 +547,7 @@ pub fn test_infer_l() {
     let result = '';
     for val in list {
         result = result + val;
-    };
+    }
     assert(result == 'abcabcdefdefghighi');
 
     let list = [
@@ -562,7 +564,7 @@ pub fn test_infer_l() {
     for row in list {
         for val in row {
             result = result + val;
-        };
-    };
+        }
+    }
     assert(result == 'aaabbbcccdddeeefffggghhhiii');
 }

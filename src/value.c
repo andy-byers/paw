@@ -78,48 +78,14 @@ const char *pawV_to_string(paw_Env *P, Value v, paw_Type type, size_t *plength)
         case PAW_TFLOAT:
             float_to_string(P, V_FLOAT(v));
             break;
-        case PAW_TBOOL:
+        default:
+            paw_assert(type == PAW_TBOOL);
             V_SET_OBJECT(&v, pawE_cstr(P, V_TRUE(v) ? CSTR_TRUE : CSTR_FALSE));
             pawC_pushv(P, v);
-            break;
-        default:
-            return NULL;
     }
     const String *s = V_STRING(P->top.p[-1]);
     if (plength != NULL) *plength = s->length;
     return s->text;
-}
-
-const char *pawV_name(ValueKind kind)
-{
-    switch (kind) {
-        case VBOOL:
-            return "bool";
-        case VINT:
-            return "int";
-        case VNATIVE:
-            return "cfunction";
-        case VUPVALUE:
-            return "upvalue";
-        case VCLOSURE:
-            return "closure";
-        case VPROTO:
-            return "proto";
-        case VSTRING:
-            return "string";
-        case VLIST:
-            return "list";
-        case VMAP:
-            return "map";
-        case VINSTANCE:
-            return "instance";
-        case VMETHOD:
-            return "method";
-        case VFOREIGN:
-            return "foreign";
-        default:
-            return "float";
-    }
 }
 
 Proto *pawV_new_proto(paw_Env *P)
@@ -172,12 +138,8 @@ void pawV_unlink_upvalue(UpValue *u)
 {
     UpValue *prev = u->open.prev;
     UpValue *next = u->open.next;
-    if (prev) {
-        prev->open.next = next;
-    }
-    if (next) {
-        next->open.prev = prev;
-    }
+    if (prev != NULL) prev->open.next = next;
+    if (next != NULL) next->open.prev = prev;
 }
 
 Tuple *pawV_new_tuple(paw_Env *P, int nelems)
@@ -208,19 +170,6 @@ void pawV_free_closure(paw_Env *P, Closure *f)
     pawM_free_flex(P, f, f->nup, sizeof(f->up[0]));
 }
 
-Instance *pawV_new_instance(paw_Env *P, int nfields)
-{
-    Instance *ins = pawM_new_flex(P, Instance, CAST_SIZE(nfields), sizeof(ins->fields[0]));
-    pawG_add_object(P, CAST_OBJECT(ins), VINSTANCE);
-    ins->nfields = nfields;
-    return ins;
-}
-
-void pawV_free_instance(paw_Env *P, Instance *ins)
-{
-    pawM_free_flex(P, ins, CAST_SIZE(ins->nfields), sizeof(ins->fields[0]));
-}
-
 Variant *pawV_new_variant(paw_Env *P, int k, int nfields)
 {
     Variant *var = pawM_new_flex(P, Variant, CAST_SIZE(nfields), sizeof(var->fields[0]));
@@ -238,20 +187,6 @@ void pawV_free_variant(paw_Env *P, Variant *var)
 static void clear_attrs(Value *pv, int nattrs)
 {
     memset(pv, 0, CAST_SIZE(nattrs) * sizeof(*pv));
-}
-
-Method *pawV_new_method(paw_Env *P, Value self, Value call)
-{
-    Method *mtd = pawM_new(P, Method);
-    pawG_add_object(P, CAST_OBJECT(mtd), VMETHOD);
-    mtd->self = self;
-    mtd->f = call;
-    return mtd;
-}
-
-void pawV_free_method(paw_Env *P, Method *m)
-{
-    pawM_free(P, m); 
 }
 
 Native *pawV_new_native(paw_Env *P, paw_Function func, int nup)
@@ -290,27 +225,8 @@ Foreign *pawV_push_foreign(paw_Env *P, size_t size, int nfields)
 
 void pawV_free_foreign(paw_Env *P, Foreign *ud)
 {
-    pawM_free_vec(P, (char *)ud->data, ud->size); // TODO
+    pawM_free_vec(P, ud->data, ud->size);
     pawM_free_flex(P, ud, CAST_SIZE(ud->nfields), sizeof(ud->fields[0]));
-}
-
-paw_Bool pawV_truthy(Value v, paw_Type type)
-{
-    switch (type) {
-        case PAW_TBOOL:
-        case PAW_TINT:
-            return V_TRUE(v);
-        case PAW_TFLOAT:
-            return V_FLOAT(v) != 0.0;
-        case PAW_TSTR:
-            return pawS_length(V_STRING(v)) > 0;
-            //        case PAW_TARRAY:
-            //            return pawA_length(V_LIST(v)) > 0;
-            //        case PAW_TMAP:
-            //            return pawH_length(V_MAP(v)) > 0;
-        default:
-            return PAW_FALSE;
-    }
 }
 
 // from https://gist.github.com/badboy/6267743
@@ -325,7 +241,10 @@ static uint32_t hash_u64(uint64_t u)
     return (uint32_t)u;
 }
 
-uint32_t pawV_hash(Value v) { return hash_u64(v.u); }
+uint32_t pawV_hash(Value v) 
+{
+    return hash_u64(v.u); 
+}
 
 static int char2base(char c)
 {
