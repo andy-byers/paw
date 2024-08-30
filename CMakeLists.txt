@@ -17,7 +17,7 @@ option(PAW_BuildFuzzers "Build the fuzz targets" Off)
 option(PAW_BuildTests "Build the tests" ${MAIN_PROJECT})
 
 set(PAW_STRESS 0 CACHE STRING 
-    "Enable expensive checks (up to level 2)")
+    "Enable expensive checks (supports up to level 2)")
  
 add_library(paw_context INTERFACE)
 if(${CMAKE_C_COMPILER_ID} STREQUAL MSVC)

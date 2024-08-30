@@ -23,6 +23,8 @@
 #define THROW(P, c) longjmp((c)->jmp, 1)
 #define TRY(P, c, a) if (!setjmp((c)->jmp)) {a}
 
+#define FRAME_SIZE 512
+
 struct Jump {
     struct Jump *prev;
     jmp_buf jmp;
@@ -55,15 +57,13 @@ static void finish_resize(paw_Env *P)
     }
 }
 
-#define STACK_MIN 8
-
 void pawC_stack_realloc(paw_Env *P, int n)
 {
-    _Static_assert(PAW_STACK_MAX >= STACK_MIN, "stack limit is too small");
+    _Static_assert(PAW_STACK_MAX >= FRAME_SIZE, "stack limit is too small");
     _Static_assert(PAW_STACK_MAX <= INT_MAX, "stack limit is too large");
     paw_assert(n >= pawC_stklen(P)); // don't lose live values
 
-    const size_t alloc = PAW_MAX(CAST_SIZE(n), STACK_MIN);
+    const size_t alloc = PAW_MAX(CAST_SIZE(n), FRAME_SIZE);
     if (alloc > PAW_STACK_MAX) pawM_error(P);
     
     // Turn off emergency GC and convert pointers into the stack into offsets
@@ -154,9 +154,12 @@ static void call_return(paw_Env *P, StackPtr base, paw_Bool has_return)
 
 static void handle_ccall(paw_Env *P, StackPtr base, Native *ccall)
 {
+    const ptrdiff_t offset = SAVE_OFFSET(P, base);
+    ENSURE_STACK(P, FRAME_SIZE + STACK_EXTRA);
+    base = RESTORE_POINTER(P, offset);
+
     // The C function may cause the stack to be reallocated. Save the relative
     // position of 'base' so it can be restored after the call.
-    const ptrdiff_t pos = SAVE_OFFSET(P, base);
     CallFrame *cf = next_call_frame(P, P->top.p);
     cf->flags = CFF_C;
     cf->pc = NULL;
@@ -166,7 +169,6 @@ static void handle_ccall(paw_Env *P, StackPtr base, Native *ccall)
 
     // call the C function
     const int nret = ccall->func(P);
-    base = RESTORE_POINTER(P, pos);
     call_return(P, base, nret);
     pawR_close_upvalues(P, base);
 }
@@ -182,16 +184,8 @@ static void check_fixed_args(paw_Env *P, Proto *f, int argc)
     }
 }
 
-// Make sure there is at least this number of stack slots available for
-// the callee.
-#define FRAME_EXTRA 0 /*64*/
-
 CallFrame *pawC_precall(paw_Env *P, StackPtr base, Object *callable, int argc)
 {
-    const ptrdiff_t offset = SAVE_OFFSET(P, base);
-    ENSURE_STACK(P, FRAME_EXTRA);
-    base = RESTORE_POINTER(P, offset);
-
     Native *ccall;
     Closure *fn = NULL;
     switch (O_KIND(callable)) {
@@ -204,8 +198,12 @@ CallFrame *pawC_precall(paw_Env *P, StackPtr base, Object *callable, int argc)
         default:
             pawR_error(P, PAW_ETYPE, "type is not callable");
     }
-    CallFrame *cf = next_call_frame(P, P->top.p);
     Proto *p = fn->p;
+    const ptrdiff_t offset = SAVE_OFFSET(P, base);
+    ENSURE_STACK(P, p->max_stack + STACK_EXTRA);
+    base = RESTORE_POINTER(P, offset);
+
+    CallFrame *cf = next_call_frame(P, P->top.p);
 
     cf->flags = 0;
     cf->pc = p->source;
@@ -275,8 +273,8 @@ _Noreturn void pawC_throw(paw_Env *P, int error)
 
 void pawC_init(paw_Env *P)
 {
-    P->stack.p = pawM_new_vec(P, STACK_MIN, Value);
-    P->bound.p = P->stack.p + STACK_MIN;
+    P->stack.p = pawM_new_vec(P, FRAME_SIZE + STACK_EXTRA, Value);
+    P->bound.p = P->stack.p + FRAME_SIZE + STACK_EXTRA;
     P->top.p = P->stack.p;
 
     // Set up the main call frame.

@@ -2,24 +2,16 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "prefix.h"
+#include <stdlib.h>
 
-#include "api.h"
+#include "paw.h"
 #include "alloc.h"
-#include "auxlib.h"
-#include "call.h"
+#include "compile.h"
+#include "env.h"
 #include "gc.h"
 #include "lib.h"
-#include "map.h"
-#include "mem.h"
-#include "compile.h"
-#include "paw.h"
 #include "parse.h"
 #include "rt.h"
-#include "str.h"
-#include "value.h"
-#include <assert.h>
-#include <stdlib.h>
-#include <string.h>
 
 static void *default_alloc(void *ud, void *ptr, size_t old_size, size_t new_size)
 {
@@ -39,18 +31,10 @@ static StackPtr at(paw_Env *P, int index)
     return &P->cf->base.p[i];
 }
 
-paw_Alloc paw_get_allocator(paw_Env *P) 
+size_t paw_bytes_used(const paw_Env *P) 
 {
-    return P->alloc; 
+    return P->gc_bytes; 
 }
-
-void paw_set_allocator(paw_Env *P, paw_Alloc alloc, void *ud)
-{
-    P->alloc = alloc;
-    P->ud = ud;
-}
-
-size_t paw_bytes_used(const paw_Env *P) { return P->gc_bytes; }
 
 static void open_aux(paw_Env *P, void *arg)
 {
@@ -110,14 +94,29 @@ void paw_close(paw_Env *P)
     pawZ_uninit(P);
 }
 
-int paw_find_global(paw_Env *P)
+int paw_mangle_name(paw_Env *P, paw_Type *types)
 {
+    // TODO: move name mangling functions into env.c, call from here
     paw_push_string(P, "_");
     paw_strop(P, PAW_STR_CONCAT);
+    return 0;
+}
+
+int paw_lookup_item(paw_Env *P, struct paw_Item *pitem)
+{
     const String *name = V_STRING(P->top.p[-1]);
-    const int g = pawE_locate(P, name);
+    const int did = pawE_locate(P, name, PAW_TRUE);
     paw_pop(P, 1);
-    return g;
+
+    if (did < 0) return PAW_ENAME;
+    if (pitem == NULL) return 0;
+    const struct Def *def = P->defs.data[did];
+    *pitem = (struct paw_Item){
+        .global_id = def->hdr.kind == DEF_FUNC ? def->func.vid :
+            def->hdr.kind == DEF_VAR ? def->var.vid : -1, 
+        .type = def->hdr.type->hdr.code,
+    };
+    return 0;
 }
 
 void paw_push_value(paw_Env *P, int index)
@@ -284,6 +283,27 @@ int paw_get_count(paw_Env *P)
     return CAST(P->top.p - P->cf->base.p, int);
 }
 
+void paw_get_typename(paw_Env *P, paw_Type code)
+{
+    Buffer buf;
+    pawL_init_buffer(P, &buf);
+    struct Type *type = pawE_get_type(P, code);
+    pawE_print_type(P, &buf, type);
+    pawL_push_result(P, &buf);
+}
+
+void paw_get_global(paw_Env *P, int gid)
+{
+    *pawC_push0(P) = *pawE_get_val(P, gid);
+}
+
+void paw_call_global(paw_Env *P, int gid, int argc)
+{
+    paw_get_global(P, gid);
+    paw_insert(P, -argc - 2);
+    paw_call(P, argc);
+}
+
 static int upvalue_index(int nup, int index)
 {
     if (index < 0) {
@@ -313,11 +333,6 @@ void paw_get_upvalue(paw_Env *P, int ifn, int index)
         default:
             pawR_error(P, PAW_ETYPE, "type of object has no upvalues");
     }
-}
-
-void paw_get_global(paw_Env *P, int index)
-{
-    pawC_pushv(P, *pawE_get_val(P, index));
 }
 
 void paw_new_list(paw_Env *P, int n)
@@ -375,13 +390,6 @@ void paw_shift(paw_Env *P, int n)
 {
     paw_copy(P, -1, -n - 1);
     paw_pop(P, n);
-}
-
-void paw_call_global(paw_Env *P, int gid, int argc)
-{
-    paw_get_global(P, gid);
-    paw_insert(P, -argc - 2);
-    paw_call(P, argc);
 }
 
 #define CAST_ARITH2(op) CAST(op - PAW_ARITH_ADD, enum ArithOp2)

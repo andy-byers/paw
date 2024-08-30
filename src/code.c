@@ -5,13 +5,111 @@
 #include "code.h"
 #include "compile.h"
 
+static int stack_effect(OpCode opcode)
+{
+    const Op op = GET_OP(opcode);
+    switch (op) {
+        case OP_NEWVARIANT:
+            return 1 - GET_B(opcode);
+        case OP_NEWTUPLE:
+        case OP_NEWLIST:
+            return 1 - GET_U(opcode);
+        case OP_NEWMAP:
+            return 1 - GET_U(opcode) * 2;
+        case OP_POP:
+        case OP_CLOSE:
+        case OP_SHIFT:
+        case OP_CALL:
+            return -GET_U(opcode);
+        case OP_SETFIELD:
+        case OP_SETTUPLE:
+            return -3;
+        case OP_PUSHZERO:
+        case OP_PUSHONE:
+        case OP_PUSHSMI:
+        case OP_PUSHCONST:
+        case OP_COPY:
+        case OP_NEWINSTANCE:
+        case OP_GETGLOBAL:
+        case OP_GETLOCAL:
+        case OP_GETUPVALUE:
+        case OP_FORNUM0:
+        case OP_FORNUM:
+        case OP_FORLIST:
+        case OP_FORMAP:
+        case OP_CLOSURE:
+            return 1;
+        case OP_FORLIST0:
+        case OP_FORMAP0:
+            return 2;
+        case OP_RETURN:
+        case OP_NOOP:
+        case OP_JUMP:
+        case OP_JUMPFALSE:
+        case OP_JUMPNULL:
+        case OP_ARITHI1:
+        case OP_ARITHF1:
+        case OP_BITW1:
+        case OP_CASTBOOL:
+        case OP_CASTINT:
+        case OP_CASTFLOAT:
+            return 0;
+        case OP_JUMPFALSEPOP:
+        case OP_SETLOCAL:
+        case OP_SETUPVALUE:
+        case OP_INITFIELD:
+        case OP_CMPI:
+        case OP_CMPF:
+        case OP_CMPS:
+        case OP_ARITHI2:
+        case OP_ARITHF2:
+        case OP_BITW2:
+        case OP_GETFIELD:
+        case OP_GETTUPLE:
+            return -1;
+        case OP_BOOLOP:
+            return 0; 
+        case OP_STROP:
+            switch (GET_U(opcode)) {
+                case STR_LEN:
+                    return 0;
+                case STR_CONCAT:
+                case STR_GET:
+                    return -1;
+                case STR_GETN:
+                    return -2;
+            }
+        case OP_LISTOP:
+            switch (GET_U(opcode)) {
+                case LIST_LEN:
+                    return 0;
+                case LIST_CONCAT:
+                case LIST_GET:
+                    return -1;
+                case LIST_SET:
+                case LIST_GETN:
+                    return -2;
+                case LIST_SETN:
+                    return -4;
+            }
+        case OP_MAPOP:
+            switch (GET_U(opcode)) {
+                case MAP_LEN:
+                    return 0;
+                case MAP_GET:
+                    return -1;
+                case MAP_SET:
+                    return -2;
+            }
+        case NOPCODES:
+            PAW_UNREACHABLE();
+    }
+}
+
 static void add_line(struct FuncState *fs)
 {
     Proto *p = fs->proto;
     paw_Env *P = ENV(fs->G);
-    if (fs->nlines == UINT16_MAX) {
-        pawE_error(P, PAW_EMEMORY, -1, "too many instructions");
-    }
     pawM_grow(P, p->lines, fs->nlines, p->nlines);
     p->lines[fs->nlines++] = (struct LineInfo){
         .line = fs->line,
@@ -24,18 +122,23 @@ void pawK_fix_line(struct FuncState *fs, int line)
     paw_assert(fs->nlines > 0);
     fs->proto->lines[fs->nlines - 1].line = line;
 }
-
+#include <stdio.h>
 static void add_opcode(struct FuncState *fs, OpCode code)
 {
     paw_Env *P = ENV(fs->G);
     Proto *p = fs->proto;
 
-    // While code is being generated, the pc is used to track the number of
-    // instructions, and the length field the capacity. The length is set to the
-    // final pc value before execution.
+    // While code is being generated, the 'pc' is used to track the number of
+    // instructions, while the 'length' holds the capacity. The 'length' is set to the
+    // final 'pc' before execution.
     pawM_grow(P, p->source, fs->pc, p->length);
     p->source[fs->pc] = code;
     ++fs->pc;
+
+    fs->nstack += stack_effect(code);
+    if (p->max_stack < fs->nstack) {
+        p->max_stack = fs->nstack;
+    }
 }
 
 void pawK_code_0(struct FuncState *fs, Op op)

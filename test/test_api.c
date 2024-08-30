@@ -21,7 +21,17 @@ static void check_error(paw_Env *P, int status)
 static paw_Env *start_test(void)
 {
     const char *source =
+        "pub struct Struct<T> {\n"
+        "    t: T,             \n"
+        "}                     \n"
+        "pub enum Enum<T> {\n"
+        "    A,            \n"
+        "    B(T),         \n"
+        "}                 \n"
+        "pub fn f(v: (int, str)) {}\n"
         "pub fn main(args: [str]) -> int {\n"
+        "    let s = Struct{t: 42};       \n"
+        "    let b = Enum::<str>::B('B'); \n"
         "    return #args;                \n"
         "}                                \n";
     paw_Env *P = test_open(NULL, &s_alloc, PAW_HEAP_MIN);
@@ -92,18 +102,37 @@ static paw_Int call_fib(paw_Env *P, int n)
     return fibn;
 }
 
+static void test_print_type(paw_Env *P, const char *name, paw_Bool mangle /*TODO: remove*/)
+{
+    paw_push_string(P, name);
+    if (mangle) paw_mangle_name(P, NULL);
+
+    struct paw_Item info;
+    int status = paw_lookup_item(P, &info);
+    check(status == PAW_OK);
+
+    paw_get_typename(P, info.type);
+
+    const char *type = paw_string(P, -1);
+    fprintf(stderr, "test_print_type: print '%s: %s'\n", name, type);
+    paw_pop(P, 1);
+}
+
 int main(void)
 {
     paw_Env *P = start_test();
 
     paw_push_string(P, "main");
-    const int gid = paw_find_global(P);
-    struct Def *def = pawE_get_def(P, gid);
-    paw_get_global(P, def->func.vid);
+    paw_mangle_name(P, NULL);
+
+    struct paw_Item info;
+    int status = paw_lookup_item(P, &info);
+    check(status == PAW_OK && info.global_id >= 0);
+    paw_get_global(P, info.global_id);
 
     paw_push_string(P, "abc");
     paw_new_list(P, 1);
-    const int status = paw_call(P, 1);
+    status = paw_call(P, 1);
     check_error(P, status);
 
     check(paw_int(P, -1) == 1);
@@ -111,14 +140,16 @@ int main(void)
 
     // Test native closures by generating Fibonacci numbers. Use a list upvalue
     // to cache intermediate results.
-    paw_new_list(P, 0);
-    paw_new_native(P, fib, 1);
-    check(0 == call_fib(P, 0));
-    check(1 == call_fib(P, 1));
-    check(1 == call_fib(P, 2));
-    check(55 == call_fib(P, 10));
-    check(12586269025 == call_fib(P, 50));
-    paw_pop(P, 1);
+    {
+        paw_new_list(P, 0);
+        paw_new_native(P, fib, 1);
+        check(0 == call_fib(P, 0));
+        check(1 == call_fib(P, 1));
+        check(1 == call_fib(P, 2));
+        check(55 == call_fib(P, 10));
+        check(12586269025 == call_fib(P, 50));
+        paw_pop(P, 1);
+    }
 
     // Perform some VM operations.
     {
@@ -150,7 +181,36 @@ int main(void)
         paw_cmps(P, PAW_CMP_EQ);
         check(paw_bool(P, -1));
         paw_pop(P, 1);
+
+        // m = [1: 1.0, 2: 2.0, 3: 3.0]
+        paw_push_int(P, 1);
+        paw_push_float(P, 1.0);
+        paw_push_int(P, 2);
+        paw_push_float(P, 2.0);
+        paw_push_int(P, 3);
+        paw_push_float(P, 3.0);
+        paw_new_map(P, 3);
+
+        // #m == 3
+        paw_push_value(P, -1);
+        paw_mapop(P, PAW_MAP_LEN);
+        check(paw_int(P, -1) == 3);
+        paw_pop(P, 1);
+
+        // m[2] == 2.0
+        paw_push_value(P, -1);
+        paw_push_int(P, 2);
+        paw_mapop(P, PAW_MAP_GET);
+        paw_push_float(P, 2.0);
+        paw_cmpf(P, PAW_CMP_EQ);
+        check(paw_bool(P, -1));
     }
+
+    // TODO: remove 'mangle' parameter and get compiler to mangle ADT names
+    test_print_type(P, "main", 1);
+    test_print_type(P, "f", 1);
+    test_print_type(P, "Struct", 0);
+    test_print_type(P, "Enum", 0);
 
     finish_test(P);
     return 0;

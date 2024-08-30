@@ -35,7 +35,6 @@ void pawL_add_nstring(paw_Env *P, Buffer *buf, const char *s, size_t n);
 void pawL_add_integer(paw_Env *P, Buffer *buf, paw_Int i);
 void pawL_add_float(paw_Env *P, Buffer *buf, paw_Float f);
 void pawL_add_pointer(paw_Env *P, Buffer *buf, void *p);
-void pawL_add_value(paw_Env *P, Buffer *print, paw_Type type);
 void pawL_add_vfstring(paw_Env *P, Buffer *buf, const char *fmt, va_list arg);
 void pawL_add_fstring(paw_Env *P, Buffer *buf, const char *fmt, ...);
 

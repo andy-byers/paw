@@ -817,6 +817,7 @@ static struct HirDecl *ResolveVariantDecl(struct Resolver *R, struct AstVariantD
 static struct HirDeclList *resolve_fields(struct Resolver *R, struct AstDeclList *src, String *parent)
 {
     paw_Env *P = ENV(R);
+    ENSURE_STACK(P, 1);
     Value *pv = pawC_push0(P);
     Map *map = pawH_new(P);
     V_SET_OBJECT(pv, map);
@@ -1603,6 +1604,7 @@ static struct HirType *resolve_composite_lit(struct Resolver *R, struct AstCompo
     // Use a temporary Map to avoid searching repeatedly through the list of
     // fields.
     paw_Env *P = ENV(R);
+    ENSURE_STACK(P, 1);
     Value *pv = pawC_push0(P);
     Map *map = pawH_new(P);
     V_SET_OBJECT(pv, map);

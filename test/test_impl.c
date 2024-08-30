@@ -1,3 +1,7 @@
+// Copyright (c) 2024, The paw Authors. All rights reserved.
+// This source code is licensed under the MIT License, which can be found in
+// LICENSE.md. See AUTHORS.md for a list of contributor names.
+
 #include "call.h"
 #include "map.h"
 #include "paw.h"
@@ -291,7 +295,6 @@ static void roundtrip_int(paw_Env *P, paw_Int i)
 {
     pawV_to_string(P, (Value){.i = i}, PAW_TINT, NULL);
     const char *str = paw_string(P, -1);
-    printf("%s\n",str);
     pac_int_aux(P, ERASE_TYPE(str), i);
     paw_pop(P, 1);
 }
@@ -349,7 +352,6 @@ static void roundtrip_float(paw_Env *P, paw_Float f)
 {
     pawV_to_string(P, (Value){.f = f}, PAW_TFLOAT, NULL);
     const char *str = paw_string(P, -1);
-    printf("%s\n",str);
     pac_float_aux(P, ERASE_TYPE(str), f);
     paw_pop(P, 1);
 }

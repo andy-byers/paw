@@ -188,25 +188,15 @@ static paw_Env *load_source(size_t heap_size)
 static ValueId find_main(paw_Env *P)
 {
     paw_push_string(P, "main");
-    const int did = paw_find_global(P);
-    if (did < 0) error(PAW_ERUNTIME, "unable to find entrypoint ('main' function)\n");
-    const struct Def *def = pawE_get_def(P, did);
-    if (def->hdr.kind != DEF_FUNC) error(PAW_ERUNTIME, "'main' is not a function\n");
-    if (!def->func.is_pub) error(PAW_ERUNTIME, "'main' is not public\n");
-    const struct FuncDef *f = &def->func;
-    if (f->params.count == 1) {
-        // TODO: check argument type
-        //struct Field param = f->params.data[0];
-        //if (!pawE_is_list_of(P, param, PAW_TSTR)) {
-        //    error(PAW_ETYPE, "expected '[str]' argument to 'main'");
-        //}
-    } else if (f->params.count != 0) {
-        error(PAW_ETYPE, "'main' requires 0 or 1 argument(s)\n");
-    }
-    return def->func.vid;
+    paw_mangle_name(P, NULL);
+
+    struct paw_Item item;
+    const int status = paw_lookup_item(P, &item);
+    if (status != PAW_OK) error(PAW_ERUNTIME, "unable to find entrypoint ('main' function)\n");
+    if (item.global_id < 0) error(PAW_ERUNTIME, "'main' is not a function\n"); // TODO: check signature, exclude constants
+    return item.global_id;
 }
 
-#include "rt.h"  // TODO: need pawR_literal_list functionality exposed in main API
 static void setup_stack(paw_Env *P, int argc, const char **argv)
 {
     const int gid = find_main(P);
@@ -215,7 +205,7 @@ static void setup_stack(paw_Env *P, int argc, const char **argv)
     for (int i = 0; i < argc; ++i) {
         paw_push_string(P, argv[i]);
     }
-    pawR_literal_list(P, argc);
+    paw_new_list(P, argc);
 }
 
 static void call_main(paw_Env *P, int argc)

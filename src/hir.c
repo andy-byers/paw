@@ -999,6 +999,8 @@ static struct HirDecl *copy_generic_decl(struct HirFolder *F, struct HirGenericD
 static struct HirDecl *copy_adt_decl(struct HirFolder *F, struct HirAdtDecl *d)
 {
     struct HirDecl *r = COPY_PREP_DECL(F, d);
+    r->adt.is_struct = d->is_struct;
+    r->adt.is_pub = d->is_pub;
     r->adt.name = d->name;
     r->adt.generics = F->FoldDeclList(F, d->generics);
     r->adt.fields = F->FoldDeclList(F, d->fields);
@@ -1078,6 +1080,7 @@ static struct HirExpr *copy_path_expr(struct HirFolder *F, struct HirPathExpr *e
 static struct HirDecl *copy_func_decl(struct HirFolder *F, struct HirFuncDecl *d)
 {
     struct HirDecl *r = COPY_PREP_DECL(F, d);
+    r->func.is_pub = d->is_pub;
     r->func.receiver = NULL; // set during visit_*()
     r->func.name = d->name;
     r->func.generics = F->FoldDeclList(F, d->generics);
@@ -1294,6 +1297,7 @@ static struct HirFuncDecl *do_expand(struct HirFolder *F, struct HirFuncDecl *ba
     };
     E->subst = &subst;
 
+    inst->func.is_pub = base->is_pub;
     inst->func.fn_kind = base->fn_kind;
     inst->func.kind = kHirFuncDecl;
     inst->func.name = base->name;
@@ -1520,6 +1524,8 @@ static paw_Type map_types(struct DefGenerator *dg, struct HirType *src, struct T
     paw_Env *P = ENV(dg);
     paw_assert(find_type(dg, src) == NULL);
     pawH_insert(P, dg->types, (Value){.p = src}, (Value){.p = dst});
+
+    dst->hdr.code = P->types.count;
     pawM_grow(P, P->types.data, P->types.count, P->types.alloc);
     P->types.data[P->types.count++] = dst;
     return P->types.count - 1;
@@ -1692,6 +1698,7 @@ static void define_variant_decl(struct HirVisitor *V, struct HirVariantDecl *d)
 struct HirDeclList *pawHir_define(struct Compiler *C, struct Hir *hir)
 {
     paw_Env *P = ENV(hir);
+    ENSURE_STACK(P, 1);
     Value *pv = pawC_push0(P);
     struct DefGenerator dg = {
         .decls = pawHir_decl_list_new(hir),

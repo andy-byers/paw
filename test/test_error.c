@@ -46,10 +46,12 @@ static void test_runtime_error(int expect, const char *name, const char *item, c
     check(status == PAW_OK);
 
     paw_push_string(P, "main");
-    const int g = paw_find_global(P);
-    const struct Def *def = pawE_get_def(P, g);
-    check(def->hdr.kind == DEF_FUNC);
-    paw_get_global(P, def->func.vid);
+    paw_mangle_name(P, NULL);
+
+    struct paw_Item info;
+    status = paw_lookup_item(P, &info);
+    check(status == PAW_OK && info.global_id >= 0);
+    paw_get_global(P, info.global_id);
 
     status = paw_call(P, 0);
     check(status == expect);

@@ -1,3 +1,8 @@
+// Copyright (c) 2024, The paw Authors. All rights reserved.
+// This source code is licensed under the MIT License, which can be found in
+// LICENSE.md. See AUTHORS.md for a list of contributor names.
+
+#include "paw.h"
 #include "test.h"
 #include "env.h"
 
@@ -22,10 +27,12 @@ int main(void)
     handle_error(P, status, PAW_TRUE);
 
     paw_push_string(P, "f");
-    const int did = paw_find_global(P);
-    const struct Def *def = pawE_get_def(P, did);
-    check(def->hdr.kind == DEF_FUNC);
-    paw_get_global(P, def->func.vid);
+    paw_mangle_name(P, NULL);
+
+    struct paw_Item item;
+    status = paw_lookup_item(P, &item);
+    check(status == PAW_OK && item.global_id >= 0);
+    paw_get_global(P, item.global_id);
 
     paw_push_int(P, 1 << 24);
     status = paw_call(P, 1);

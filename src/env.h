@@ -61,14 +61,14 @@ struct TypeList {
     int count;
 };
 
-// TODO: Consider making Type a GC'd object that can be used for RTTI stuff
 enum TypeKind {
     TYPE_ADT,
     TYPE_FUNC,
     TYPE_TUPLE,
 };
 
-#define TYPE_HEADER enum TypeKind kind : 8
+#define TYPE_HEADER paw_Type code; \
+                    enum TypeKind kind : 8
                     
 struct TypeHeader {
     TYPE_HEADER;
@@ -142,15 +142,6 @@ struct Def {
     };
 };
 
-struct Type *pawE_new_adt(paw_Env *P, int ntypes);
-struct Type *pawE_new_func(paw_Env *P, int nparams);
-struct Type *pawE_new_tuple(paw_Env *P, int ntypes);
-struct Field *pawE_new_field(paw_Env *P, String *name, struct Def *def);
-
-struct AdtDef *pawE_define_adt(paw_Env *P, String *name, int nfields);
-struct FuncDef *pawE_define_func(paw_Env *P, String *name, int nparams);
-struct VarDef *pawE_define_var(paw_Env *P, String *name);
-
 void pawE_init_type_list(paw_Env *P, struct TypeList *plist, int count);
 void pawE_init_field_list(paw_Env *P, struct FieldList *plist, int count);
 
@@ -216,18 +207,24 @@ typedef struct paw_Env {
 void pawE_uninit(paw_Env *P);
 void pawE_error(paw_Env *P, int code, int line, const char *fmt, ...);
 CallFrame *pawE_extend_cf(paw_Env *P, StackPtr top);
-int pawE_locate(paw_Env *P, const String *name);
+int pawE_locate(paw_Env *P, const String *name, paw_Bool only_pub);
 
 static inline struct Def *pawE_get_def(paw_Env *P, int i)
 {
-    paw_assert(i < P->defs.count);
+    paw_assert(0 <= i && i < P->defs.count);
     return P->defs.data[i];
 }
 
 static inline Value *pawE_get_val(paw_Env *P, int i)
 {
-    paw_assert(i < P->vals.count);
+    paw_assert(0 <= i && i < P->vals.count);
     return &P->vals.data[i];
+}
+
+static inline struct Type *pawE_get_type(paw_Env *P, int i)
+{
+    paw_assert(0 <= i && i < P->types.count);
+    return P->types.data[i];
 }
 
 static inline String *pawE_cstr(paw_Env *P, unsigned type)

@@ -425,14 +425,3 @@ void paw_stacktrace(paw_Env *P)
     }
     pawL_push_result(P, &buf);
 }
-
-void paw_dump_value(paw_Env *P, Value v, paw_Type type)
-{
-    Buffer buf;
-    pawL_init_buffer(P, &buf);
-    pawC_pushv(P, v);
-    pawL_add_value(P, &buf, type);
-    pawL_add_char(P, &buf, '\0');
-    printf("%s\n", buf.data);
-    pawL_discard_result(P, &buf);
-}

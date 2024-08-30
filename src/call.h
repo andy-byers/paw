@@ -41,7 +41,7 @@ static inline int pawC_stklen(paw_Env *P)
 // collection runs.
 static inline StackPtr pawC_stkinc(paw_Env *P, int n)
 {
-    ENSURE_STACK(P, n);
+    paw_assert(n <= CAST(P->bound.p - P->top.p, int));
     StackPtr sp = P->top.p;
     P->top.p += n;
     return sp;
@@ -51,11 +51,6 @@ static inline StackPtr pawC_stkinc(paw_Env *P, int n)
 static inline void pawC_stkdec(paw_Env *P, int n)
 {
     P->top.p -= n;
-
-#if PAW_STRESS > 1
-    // trim excess slots, respecting the slots reserved for error messages
-    pawC_stack_realloc(P, pawC_stklen(P) + STACK_EXTRA);
-#endif
 }
 
 static inline Value *pawC_pushv(paw_Env *P, Value v)

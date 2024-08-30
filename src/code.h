@@ -136,6 +136,7 @@ struct FuncState {
     int nlines; // number of source lines
     int pc; // number of instructions
     int line;        
+    int nstack;
     enum FuncKind kind; // type of function
 };
 

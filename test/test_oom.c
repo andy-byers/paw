@@ -1,3 +1,9 @@
+// Copyright (c) 2024, The paw Authors. All rights reserved.
+// This source code is licensed under the MIT License, which can be found in
+// LICENSE.md. See AUTHORS.md for a list of contributor names.
+//
+// test_oom.c: Heap exhaustion tests
+
 #include "test.h"
 #include "call.h"
 #include "env.h"
@@ -32,62 +38,36 @@ static int run_tests(paw_Env *P)
     return PAW_OK;
 }
 
-static int script_aux(const char *name, paw_Alloc alloc, struct TestAlloc *a, size_t heap_size, int count)
+static int script(const char *name, size_t heap_size)
 {
     paw_Env *P = paw_open(&(struct paw_Options){
                 .heap_size = heap_size,
-                .alloc = alloc,
-                .ud = a,
             });
     if (P == NULL) return PAW_EMEMORY;
 
     int status = test_open_file(P, name);
-    if (status == PAW_OK) run_tests(P);
-    if (a == NULL) {
-        paw_close(P);
-    } else {
-        test_close(P, a);
-    }
+    if (status == PAW_OK) status = run_tests(P);
+    paw_close(P);
     return status;
 }
 
-static void script(const char *name)
-{
-    struct TestAlloc a = {0};
-    size_t nextra = 10;
-    int count = 0;
-    int rc;
-    do {
-        // Run the script, allowing twice the number of bytes to be allocated
-        // each time. Eventually, it should be able to allocate enough memory
-        // to complete.
-        rc = script_aux(name, oom_alloc, &a, 0, count);
-        a.extra = nextra;
-        nextra *= 2;
-        ++count;
-    } while (rc == PAW_EMEMORY);
-    check(rc == PAW_OK);
-    check(count > 0);
-    printf("simulated OOM count: %d\n", count);
-}
-
-static void real_oom(const char *name)
+static void test_oom(const char *name)
 {
     size_t heap_size = 1;
     int count = 0;
     int rc;
     do {
-        rc = script_aux(name, NULL, NULL, heap_size, count);
+        rc = script(name, heap_size);
         heap_size *= 2;
         ++count;
     } while (rc == PAW_EMEMORY);
     check(rc == PAW_OK);
     check(count > 0);
-    printf("actual OOM count: %d\n", count);
+    printf("OOM count: %d\n", count);
 }
 
 int main(void)
 {
-#define RUN_SCRIPT(name) real_oom(#name); script(#name);
+#define RUN_SCRIPT(name) test_oom(#name);
     TEST_SCRIPTS(RUN_SCRIPT)
 }

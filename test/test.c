@@ -1,3 +1,7 @@
+// Copyright (c) 2024, The paw Authors. All rights reserved.
+// This source code is licensed under the MIT License, which can be found in
+// LICENSE.md. See AUTHORS.md for a list of contributor names.
+
 #include "test.h"
 #include "call.h"
 #include "env.h"
@@ -12,60 +16,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-static unsigned *get_block(struct TestAlloc *a, size_t size)
-{
-    if (size < BLOCK_LIMIT) {
-        return &a->blocks[size];
-    }
-    // Chunks past BLOCK_LIMIT represent BLOCK_LIMIT bytes each, except for the last block,
-    // which represents all allocations greater than the preceeding block. Block 0 is unused.
-    size = PAW_MIN(size / BLOCK_LIMIT, BLOCK_LIMIT);
-    return &a->blocks[size + BLOCK_LIMIT];
-}
-
-static void register_block(struct TestAlloc *a, size_t size0, size_t size)
-{
-    if (size0) {
-        unsigned *block0 = get_block(a, size0);
-        check(*block0 > 0);
-        --*block0;
-    }
-    if (size) {
-        unsigned *block = get_block(a, size);
-        ++*block;
-    }
-}
-
-// Print out information about leaked allocations (# blocks leaked, block size)
-static void report_nonzero_blocks(struct TestAlloc *a)
-{
-    size_t nonzero = 0;
-    // Just give a rough indication of what size blocks were leaked.
-    unsigned *block = a->blocks;
-    for (size_t i = 0; i < BLOCK_LIMIT; ++i, ++block) {
-        if (*block) {
-            fprintf(stderr, "leaked %u block(s) of size %zu\n", *block, i);
-            ++nonzero;
-        }
-    }
-    for (size_t i = 0; i < BLOCK_LIMIT; ++i, ++block) {
-        if (*block) {
-            fprintf(stderr, "leaked %u block(s) of size between %zu and %zu\n",
-                    *block, (i + 1) * BLOCK_LIMIT, (i + 2) * BLOCK_LIMIT);
-            ++nonzero;
-        }
-    }
-    if (*block) {
-        fprintf(stderr, "leaked %u large block(s)\n", *block);
-        ++nonzero;
-    }
-    if (nonzero) {
-        fprintf(stderr, "leaked %zu allocations (%zu bytes total)\n",
-                nonzero, a->nbytes);
-        abort();
-    }
-}
 
 static void trash_memory(void *ptr, size_t n)
 {
@@ -90,9 +40,6 @@ static void *safe_realloc(struct TestAlloc *a, void *ptr, size_t size0, size_t s
             // grow: fill uninitialized memory
             trash_memory((char *)ptr2 + size0, size - size0);
         }
-    }
-    if (ptr != NULL || ptr2 != NULL) {
-        register_block(a, size0, size);
     }
     if (ptr != NULL) {
         // Trash the old allocation in an attempt to mess up any code
@@ -169,7 +116,6 @@ void test_close(paw_Env *P, struct TestAlloc *a)
 
     if (a->nbytes > 0) {
         fprintf(stderr, "error: leaked %zu bytes\n", a->nbytes);
-        report_nonzero_blocks(a);
         abort();
     }
 }

@@ -185,15 +185,29 @@ void paw_pop(paw_Env *P, int n);
 // Return the number of values in the current stack frame
 int paw_get_count(paw_Env *P);
 
-// Determine the location of a global in the loaded module
-// Expects a string on top of the stack (which is consumed), indicating the name of 
-// the global. Returns a nonnegative integer if the global exists, -1 otherwise.
-int paw_find_global(paw_Env *P);
+int paw_mangle_name(paw_Env *P, paw_Type *types);
 
-// Get the global with the given identifier
-// The 'gid' must be a nonnegative integer returned by 'paw_find_global'.
+struct paw_Item {
+    int global_id;
+    paw_Type type;
+};
+
+// Get information about a toplevel item in the loaded module
+// Expects a string on top of the stack (which is consumed), indicating the mangled
+// name of the item. Returns PAW_OK on success, an error code otherwise.
+int paw_lookup_item(paw_Env *P, struct paw_Item *pitem);
+
+// Routines for working with toplevel types
+
+// Push a human-readable string representation of a type on to the stack
+void paw_get_typename(paw_Env *P, paw_Type type);
+
+// Routines for working with global values
+
+// Push a global value on to the stack
 void paw_get_global(paw_Env *P, int gid);
 
+// Call a global function
 void paw_call_global(paw_Env *P, int gid, int argc);
 
 void paw_get_upvalue(paw_Env *P, int index, int iup);

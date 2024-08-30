@@ -185,6 +185,7 @@ typedef struct Proto {
     int nk; // number of constants
     int argc; // number of fixed parameters
     int nproto; // number of nested functions
+    int max_stack;
 } Proto;
 
 Proto *pawV_new_proto(paw_Env *P);

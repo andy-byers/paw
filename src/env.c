@@ -51,88 +51,18 @@ CallFrame *pawE_extend_cf(paw_Env *P, StackPtr top)
     return cf;
 }
 
-int pawE_locate(paw_Env *P, const String *name)
+int pawE_locate(paw_Env *P, const String *name, paw_Bool only_pub)
 {
     const struct DefList defs = P->defs;
     for (int i = 0; i < defs.count; ++i) {
         const struct Def *def = P->defs.data[i];
-        if (pawS_eq(name, def->hdr.name)) {
+        if (pawS_eq(name, def->hdr.name) && 
+                def->hdr.is_pub >= only_pub) {
             return i;
         }
     }
     return -1;
 } 
-
-#define BAD_DEF UINT16_C(-1)
-#define BAD_VALUE UINT16_C(-1)
-#define INIT_LIST(P, list, n, T) ((list).data = pawM_new_vec(P, n, T), \
-                                  (list).count = (n))
-
-static struct Type *new_type(paw_Env *P, enum TypeKind kind)
-{
-    // TODO: GC types
-    struct Type *type = pawM_new(P, struct Type); 
-    type->hdr = (struct TypeHeader){
-        .kind = kind, 
-    };
-    return type;
-}
-
-struct Type *pawE_new_adt(paw_Env *P, int ntypes)
-{
-    struct Type *type = new_type(P, TYPE_ADT); 
-    INIT_LIST(P, type->adt.types, ntypes, struct Type *);
-    type->adt.did = BAD_DEF;
-    return type;
-}
-
-struct Type *pawE_new_func(paw_Env *P, int nparams)
-{
-    struct Type *type = new_type(P, TYPE_FUNC); 
-    INIT_LIST(P, type->func.params, nparams, struct Type *);
-    return type;
-}
-
-struct Type *pawE_new_tuple(paw_Env *P, int ntypes)
-{
-    struct Type *type = new_type(P, TYPE_TUPLE); 
-    INIT_LIST(P, type->tuple.types, ntypes, struct Type *);
-    return type;
-}
-
-static struct Def *new_def(paw_Env *P, enum DefKind kind, String *name)
-{
-    struct Def *def = pawM_new(P, struct Def); 
-    def->hdr = (struct DefHeader){
-        .name = name, 
-        .kind = kind,
-    };
-    pawM_grow(P, P->defs.data, P->defs.count, P->defs.alloc);
-    P->defs.data[P->defs.count++] = def;
-    return def;
-}
-
-struct AdtDef *pawE_define_adt(paw_Env *P, String *name, int nfields)
-{
-    struct Def *def = new_def(P, DEF_ADT, name);
-    INIT_LIST(P, def->adt.fields, nfields, struct Field);
-    return &def->adt;
-}
-
-struct FuncDef *pawE_define_func(paw_Env *P, String *name, int nparams)
-{
-    struct Def *def = new_def(P, DEF_FUNC, name);
-    INIT_LIST(P, def->func.params, nparams, struct Field);
-    def->func.vid = BAD_VALUE;
-    return &def->func;
-}
-
-struct VarDef *pawE_define_var(paw_Env *P, String *name)
-{
-    struct Def *def = new_def(P, DEF_VAR, name);
-    def->func.vid = BAD_VALUE;
-    return &def->var;
-}
 
 void pawE_init_type_list(paw_Env *P, struct TypeList *plist, int count)
 {
@@ -152,7 +82,6 @@ void pawE_init_field_list(paw_Env *P, struct FieldList *plist, int count)
 
 struct Type *pawE_new_type(paw_Env *P, enum TypeKind kind)
 {
-    // TODO: make Type a GC'd type
     struct Type *type = pawM_new(P, struct Type); 
     type->hdr.kind = kind;
     return type;

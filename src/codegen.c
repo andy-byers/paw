@@ -94,6 +94,7 @@ static String *mangle_name(struct Generator *G, const String *name, struct HirTy
 {
     Buffer buf;
     paw_Env *P = ENV(G);
+    ENSURE_STACK(P, 1);
     pawL_init_buffer(P, &buf);
     pawL_add_nstring(P, &buf, name->text, name->length);
     const int ntypes = types != NULL ? types->count : 0;
@@ -138,7 +139,7 @@ static int add_constant(struct Generator *G, Value v, paw_Type code)
     Value *pk = pawH_get(kmap, v);
     if (pk != NULL) return CAST(pk->i, int);
 
-    if (fs->nk == ITEM_MAX) {
+    if (fs->nk == CONSTANT_MAX) {
         SYNTAX_ERROR(G, "too many constants");
     }
     pawM_grow(ENV(G), p->k, fs->nk, p->nk);
@@ -169,6 +170,7 @@ static int add_proto(struct Generator *G, Proto *proto)
 static Proto *push_proto(struct Generator *G, String *name)
 {
     paw_Env *P = ENV(G);
+    ENSURE_STACK(P, 1);
     Value *pv = pawC_push0(P);
     Proto *proto = pawV_new_proto(P);
     V_SET_OBJECT(pv, proto);
@@ -225,6 +227,9 @@ static struct HirVarInfo declare_local(struct FuncState *fs, String *name, struc
 
 static void begin_local_scope(struct FuncState *fs, int n) 
 {
+    if (fs->nlocals > LOCAL_MAX - n) {
+        SYNTAX_ERROR(fs->G, "too many locals");
+    }
     fs->nlocals += n; 
 }
 
@@ -384,6 +389,7 @@ static void enter_block(struct FuncState *fs, struct BlockState *bs, paw_Bool lo
 static void enter_kcache(struct FuncState *fs)
 {
     paw_Env *P = ENV(fs->G);
+    ENSURE_STACK(P, 3);
     Value *ints = pawC_push0(P);
     Value *strs = pawC_push0(P);
     Value *flts = pawC_push0(P);
@@ -459,8 +465,7 @@ static void enter_function(struct Generator *G, struct FuncState *fs, struct Blo
 static paw_Bool resolve_global(struct Generator *G, const String *name, struct HirVarInfo *pinfo)
 {
     paw_Env *P = ENV(G);
-    const int did = pawE_locate(P, name);
-    paw_assert(did >= 0);
+    const int did = pawE_locate(P, name, PAW_FALSE);
     const struct Def *def = pawE_get_def(P, did);
     paw_assert(def->hdr.kind == DEF_FUNC);
     pinfo->kind = VAR_GLOBAL;
@@ -1176,9 +1181,8 @@ static void code_conversion_expr(struct HirVisitor *V, struct HirConversionExpr 
 {
     struct Generator *G = V->ud;
     const struct HirType *from = HIR_TYPEOF(e->arg);
-    const Op op = e->to == PAW_TBOOL ? OP_CASTBOOL
-                : e->to == PAW_TINT  ? OP_CASTINT
-                                     : OP_CASTFLOAT;
+    const Op op = e->to == PAW_TBOOL ? OP_CASTBOOL : 
+        e->to == PAW_TINT ? OP_CASTINT : OP_CASTFLOAT;
     G->fs->line = e->line;
 
     V->VisitExpr(V, e->arg);

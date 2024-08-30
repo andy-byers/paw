@@ -23,6 +23,10 @@
 #define PARAM_MAX 256
 #endif
 
+#ifndef CONSTANT_MAX
+#define CONSTANT_MAX A_MAX
+#endif
+
 #ifndef ITEM_MAX
 #define ITEM_MAX A_MAX
 #endif
@@ -117,7 +121,7 @@ OP_NEWVARIANT,//     A B         vb..v1         a(vb..v1)     -
 OP_NEWTUPLE,//       U           vu..v1         (vu..v1)      -
 OP_NEWINSTANCE,//    U           -              v             -
 OP_NEWLIST,//        U           vu..v1         [vu..v1]      -
-OP_NEWMAP,//         U           v_2n..v1       [v_2n..v1]    -
+OP_NEWMAP,//         U           v_2u..v1       [v_2u..v1]    -
 
 OP_INITFIELD,//      U           i v            i             i.fields[u] = v
 
@@ -137,10 +141,10 @@ OP_ARITHI2,//        U           x y            z             -
 OP_ARITHF2,//        U           x y            z             -   
 OP_BITW1,//          U           x              y             -
 OP_BITW2,//          U           x y            z             -
-OP_BOOLOP,//         U           v1..vn         z             -
-OP_STROP,//          U           v1..vn         z             -
-OP_LISTOP,//         U           v1..vn         z             -
-OP_MAPOP,//          U           v1..vn         z             -
+OP_BOOLOP,//         U           v [v1..vn]     z             -
+OP_STROP,//          U           v [v1..vn]     z             -
+OP_LISTOP,//         U           v [v1..vn]     z             -
+OP_MAPOP,//          U           v [v1..vn]     z             -
 
 OP_CASTBOOL,//       U           v              v as bool     -  
 OP_CASTINT,//        U           v              v as int      - 
@@ -231,11 +235,14 @@ enum MapOp {
 //   if the container is empty. Both instructions will push the loop control variable.
 // * OP_FOR* run a single for-loop step.
 
-_Static_assert(JUMP_MAX <= S_MAX, 
-        "JUMP_MAX is too large");
-
-_Static_assert(NOPCODES <= OP_MAX,
-        "too many opcodes");
+_Static_assert(UPVALUE_MAX <= A_MAX, "UPVALUE_MAX is too large");
+_Static_assert(LOCAL_MAX <= A_MAX, "LOCAL_MAX is too large");
+_Static_assert(FIELD_MAX <= U_MAX, "FIELD_MAX is too large");
+_Static_assert(PARAM_MAX <= A_MAX, "PARAM_MAX is too large");
+_Static_assert(CONSTANT_MAX <= A_MAX, "CONSTANT_MAX is too large");
+_Static_assert(ITEM_MAX <= U_MAX, "ITEM_MAX is too large");
+_Static_assert(JUMP_MAX <= S_MAX, "JUMP_MAX is too large");
+_Static_assert(NOPCODES <= OP_MAX, "too many opcodes");
 
 // sanity check opcode format
 _Static_assert(OP_WIDTH + A_WIDTH + B_WIDTH == sizeof(OpCode) * 8 &&
