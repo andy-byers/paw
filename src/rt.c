@@ -1,41 +1,45 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
-#include "auxlib.h"
 #include "prefix.h"
+#include <math.h>
 
+#include "rt.h"
+#include "auxlib.h"
+#include "debug.h"
 #include "env.h"
 #include "call.h"
 #include "gc.h"
 #include "map.h"
-#include "rt.h"
 #include "value.h"
-#include <math.h>
 
 // Helpers for the VM:
 
 #define vm_switch(x) switch (x)
-#define vm_case(x) \
-    break;         \
-    case OP_##x
-#define vm_default \
-    break;         \
-    default
-#define VM_CONTINUE continue
+#define vm_case(x) break; case OP_##x
+#define vm_default break; default
+
+#define VM_FETCH(P) do { \
+        if (PAW_UNLIKELY(trap)) { \
+            trap = pawD_trace_exec(P, pc); \
+            updatebase(ci); \
+        } \
+        i = *pc++; \
+    } while (0)
 
 #define VM_SHIFT(n) (*VM_TOP((n) + 1) = *VM_TOP(1), VM_POP(n))
 #define VM_POP(n) pawC_stkdec(P, n)
 #define VM_TOP(i) (&P->top.p[-(i)])
-#define VM_SAVE() (VM_PROTECT(), cf->top = P->top)
-#define VM_PROTECT() (cf->pc = pc)
+#define VM_SAVE_PC() (cf->pc = pc)
 #define VM_UPVALUE(u) (fn->up[u]->p.p)
 
-#define VM_PUSH(v) pawC_pushv(P, v)
-#define VM_PUSH_0() pawC_push0(P)
-#define VM_PUSH_BOOL(b) pawC_pushb(P, b)
-#define VM_PUSH_INT(i) pawC_pushi(P, i)
-#define VM_PUSH_FLOAT(f) pawC_pushf(P, f)
-#define VM_PUSH_OBJECT(o) pawC_pusho(P, CAST_OBJECT(o))
+#define VM_PUSH(v) CHECK_EXP((P)->bound.p - (P)->top.p > 0, \
+        (*P->top.p++ = (v), &P->top.p[-1]))
+#define VM_PUSH_0() VM_PUSH((Value){.u = 0})
+#define VM_PUSH_BOOL(B) VM_PUSH((Value){.b = B})
+#define VM_PUSH_INT(I) VM_PUSH((Value){.i = I})
+#define VM_PUSH_FLOAT(F) VM_PUSH((Value){.f = F})
+#define VM_PUSH_OBJECT(O) VM_PUSH((Value){.o = O})
 
 #define VM_SET_0(top) V_SET_0(VM_TOP(top))
 #define VM_SET_BOOL(top, b) V_SET_BOOL(VM_TOP(top), b)
@@ -49,9 +53,6 @@
 #define VM_STR(top) V_STRING(*VM_TOP(top))
 #define VM_LIST(top) V_LIST(*VM_TOP(top))
 #define VM_MAP(top) V_MAP(*VM_TOP(top))
-
-// Slot 0 (the callable) is an implicit parameter.
-#define VM_ARGC() (paw_get_count(P) - 1)
 
 // Generate code for creating common builtin objects
 // Requires a placeholder slot (the VM_PUSH_0() pushes an empty slot) so
@@ -74,31 +75,17 @@ static void add_zeros(paw_Env *P, int n)
     }
 }
 
-static int current_line(const CallFrame *cf)
-{
-    Proto *p = cf->fn->p;
-    const int pc = CAST(cf->pc - p->source - 1, int);
-
-    int i = 0;
-    for (; i < p->nlines - 1; ++i) {
-        if (p->lines[i].pc >= pc) {
-            break;
-        }
-    }
-    return p->lines[i].line;
-}
-
 static void add_location(paw_Env *P, Buffer *buf)
 {
     const CallFrame *cf = P->cf;
     for (; cf != &P->main; cf = cf->prev) {
-        if (cf_is_paw(cf)) {
+        const int line = pawD_line_number(cf, cf->pc);
+        if (line >= 0) {
             const Proto *p = cf->fn->p;
-            const int line = current_line(cf);
             const char *name = p->modname->text;
             pawL_add_fstring(P, buf, "%s:%d: ", name, line);
             break;
-        } else if (cf_is_entry(cf)) {
+        } else if (CF_IS_ENTRY(cf)) {
             L_ADD_LITERAL(P, buf, "[C]: ");
             break;
         }
@@ -146,8 +133,8 @@ void pawR_error(paw_Env *P, int error, const char *fmt, ...)
 // Assumes 2's complement, which means PAW_INT_MIN is a power-of-2 with
 // an exact paw_Float representation.
 #define FLOAT2INT_AUX(f, pv) \
-    ((f) >= CAST(PAW_INT_MIN, paw_Float) && \
-     (f) < -CAST(PAW_INT_MIN, paw_Float) && \
+    ((f) >= CAST(paw_Float, PAW_INT_MIN) && \
+     (f) < -CAST(paw_Float, PAW_INT_MIN) && \
      (V_SET_INT(pv, PAW_CAST_INT(f)), 1))
 
 static void float2int(paw_Env *P, paw_Float f, Value *pv)
@@ -184,7 +171,7 @@ void pawR_cast_float(paw_Env *P, paw_Type type)
     if (type != PAW_TFLOAT) {
         Value *pv = VM_TOP(1);
         const paw_Int i = V_INT(*pv);
-        V_SET_FLOAT(pv, CAST(i, paw_Float));
+        V_SET_FLOAT(pv, CAST(paw_Float, i));
     }
 }
 
@@ -236,7 +223,7 @@ void pawR_init(paw_Env *P)
     V_SET_OBJECT(&P->mem_errmsg, errmsg);
 }
 
-#define stop_loop(i, i2, d) \
+#define STOP_LOOP(i, i2, d) \
     (((d) < 0 && (i) <= (i2)) || ((d) > 0 && (i) >= (i2)))
 
 static paw_Bool fornum_init(paw_Env *P)
@@ -247,7 +234,7 @@ static paw_Bool fornum_init(paw_Env *P)
     if (step == 0) {
         pawR_error(P, PAW_ERUNTIME, "loop step equals 0");
     }
-    const paw_Bool skip = stop_loop(begin, end, step);
+    const paw_Bool skip = STOP_LOOP(begin, end, step);
     if (!skip) {
         V_SET_INT(VM_TOP(3), begin);
         V_SET_INT(VM_TOP(2), end);
@@ -263,7 +250,7 @@ static paw_Bool fornum(paw_Env *P)
     const paw_Int step = V_INT(*VM_TOP(1));
     const paw_Int end = V_INT(*VM_TOP(2));
     const paw_Int next = itr + step;
-    if (stop_loop(next, end, step)) {
+    if (STOP_LOOP(next, end, step)) {
         return PAW_FALSE;
     }
     V_SET_INT(VM_TOP(3), next);
@@ -327,7 +314,7 @@ static paw_Bool formap(paw_Env *P)
     return PAW_FALSE; // stop the loop
 }
 
-#define I2U(i) (CAST(i, uint64_t))
+#define I2U(i) (CAST(uint64_t, i))
 #define U2I(u) PAW_CAST_INT(u)
 
 // Generate code for int operators
@@ -414,7 +401,7 @@ void pawR_arithi2(paw_Env *P, enum ArithOp2 op)
     VM_POP(1);
 }
 
-void pawR_bitwi1(paw_Env *P, enum BitwOp1 op)
+void pawR_bitw1(paw_Env *P, enum BitwOp1 op)
 {
     paw_Int x = VM_INT(1);
     switch (op) {
@@ -424,7 +411,7 @@ void pawR_bitwi1(paw_Env *P, enum BitwOp1 op)
     VM_SET_INT(1, x);
 }
 
-void pawR_bitwi2(paw_Env *P, enum BitwOp2 op)
+void pawR_bitw2(paw_Env *P, enum BitwOp2 op)
 {
     paw_Int x = VM_INT(2);
     paw_Int y = VM_INT(1);
@@ -558,12 +545,18 @@ static void str_concat(paw_Env *P)
     const String *x = VM_STR(2);
     const String *y = VM_STR(1);
 
-    Buffer print;
-    pawL_init_buffer(P, &print);
-    pawL_add_nstring(P, &print, x->text, x->length);
-    pawL_add_nstring(P, &print, y->text, y->length);
-    pawL_push_result(P, &print);
-    VM_SHIFT(2);
+    paw_assert(x->length < PAW_SIZE_MAX);
+    paw_assert(y->length < PAW_SIZE_MAX);
+    if (x->length > PAW_SIZE_MAX - y->length) {
+        pawR_error(P, PAW_EMEMORY, "string is too large"); 
+    }
+    String *z = pawS_new_uninit(P, x->length + y->length);
+    memcpy(z->text, x->text, x->length);
+    memcpy(z->text + x->length, y->text, y->length);
+    pawS_register(P, &z);
+
+    V_SET_OBJECT(VM_TOP(2), z);
+    VM_POP(1);
 }
 
 static void str_get(paw_Env *P)
@@ -850,7 +843,6 @@ void pawR_execute(paw_Env *P, CallFrame *cf)
     const Value *K;
     const OpCode *pc;
     Closure *fn;
-
 top:
     pc = cf->pc;
     fn = cf->fn;
@@ -880,7 +872,8 @@ top:
             vm_case(COPY) :
             {
                 const int u = GET_U(opcode);
-                VM_PUSH(*VM_TOP(u + 1));
+                const Value v = *VM_TOP(u + 1);
+                VM_PUSH(v);
             }
 
             vm_case(PUSHZERO) :
@@ -940,12 +933,12 @@ top:
 
             vm_case(BITW1) :
             {
-                pawR_bitwi1(P, GET_U(opcode));
+                pawR_bitw1(P, GET_U(opcode));
             }
 
             vm_case(BITW2) :
             {
-                pawR_bitwi2(P, GET_U(opcode));
+                pawR_bitw2(P, GET_U(opcode));
             }
 
             vm_case(BOOLOP) :
@@ -955,39 +948,39 @@ top:
 
             vm_case(STROP) :
             {
-                VM_PROTECT();
+                VM_SAVE_PC();
                 pawR_strop(P, GET_U(opcode));
             }
 
             vm_case(LISTOP) :
             {
-                VM_PROTECT();
+                VM_SAVE_PC();
                 pawR_listop(P, GET_U(opcode));
             }
 
             vm_case(MAPOP) :
             {
-                VM_PROTECT();
+                VM_SAVE_PC();
                 pawR_mapop(P, GET_U(opcode));
             }
 
             vm_case(NEWTUPLE) :
             {
-                VM_PROTECT();
+                VM_SAVE_PC();
                 pawR_literal_tuple(P, GET_U(opcode));
                 CHECK_GC(P);
             }
 
             vm_case(NEWLIST) :
             {
-                VM_PROTECT();
+                VM_SAVE_PC();
                 pawR_literal_list(P, GET_U(opcode));
                 CHECK_GC(P);
             }
 
             vm_case(NEWMAP) :
             {
-                VM_PROTECT();
+                VM_SAVE_PC();
                 pawR_literal_map(P, GET_U(opcode));
                 CHECK_GC(P);
             }
@@ -1009,14 +1002,14 @@ top:
 
             vm_case(NEWVARIANT) :
             {
-                VM_PROTECT();
+                VM_SAVE_PC();
                 new_variant(P, GET_A(opcode), GET_B(opcode));
                 CHECK_GC(P);
             }
 
             vm_case(NEWINSTANCE) :
             {
-                VM_PROTECT();
+                VM_SAVE_PC();
                 Value *pv = VM_PUSH_0();
                 Tuple *tuple = pawV_new_tuple(P, GET_U(opcode));
                 V_SET_OBJECT(pv, tuple);
@@ -1025,7 +1018,7 @@ top:
 
             vm_case(INITFIELD) :
             {
-                VM_PROTECT();
+                VM_SAVE_PC();
                 const int u = GET_U(opcode);
                 Tuple *tuple = V_TUPLE(*VM_TOP(2));
                 tuple->elems[u] = *VM_TOP(1);
@@ -1066,19 +1059,19 @@ top:
 
             vm_case(GETFIELD) :
             {
-                VM_PROTECT();
+                VM_SAVE_PC();
                 pawR_getfield(P, GET_U(opcode));
             }
 
             vm_case(SETFIELD) :
             {
-                VM_PROTECT();
+                VM_SAVE_PC();
                 pawR_setfield(P, GET_U(opcode));
             }
 
             vm_case(CLOSURE) :
             {
-                VM_PROTECT();
+                VM_SAVE_PC();
                 Value *pv = VM_PUSH_0();
                 Proto *proto = fn->p->p[GET_U(opcode)];
                 Closure *closure = pawV_new_closure(P, proto->nup);
@@ -1100,7 +1093,7 @@ top:
             {
                 const uint8_t argc = GET_U(opcode);
                 StackPtr ptr = VM_TOP(argc + 1);
-                VM_SAVE();
+                VM_SAVE_PC();
 
                 CallFrame *callee = pawC_precall(P, ptr, V_OBJECT(*ptr), argc);
                 if (callee) {
@@ -1121,13 +1114,13 @@ top:
                 const Value result = *VM_TOP(1);
                 VM_POP(1);
 
-                P->top.p = cf_stack_return(cf);
-                VM_SAVE();
+                P->top.p = CF_STACK_RETURN(cf);
+                VM_SAVE_PC();
 
                 pawR_close_upvalues(P, VM_TOP(1));
                 VM_PUSH(result);
                 P->cf = cf->prev;
-                if (cf_is_entry(cf)) {
+                if (CF_IS_ENTRY(cf)) {
                     return;
                 }
                 cf = P->cf;
@@ -1166,7 +1159,7 @@ top:
 
             vm_case(FORNUM0) :
             {
-                VM_PROTECT();
+                VM_SAVE_PC();
                 if (fornum_init(P)) {
                     pc += GET_S(opcode); // skip
                 }
@@ -1182,7 +1175,7 @@ top:
 #define VM_FORIN0(t, T) \
             vm_case(FOR##T##0) : \
             { \
-                VM_PROTECT(); \
+                VM_SAVE_PC(); \
                 if (for##t##_init(P)) { \
                     VM_PUSH_0(); \
                     pc += GET_S(opcode); \

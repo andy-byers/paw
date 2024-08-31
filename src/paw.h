@@ -180,6 +180,10 @@ const char *paw_string(paw_Env *P, int index);
 paw_Function paw_native(paw_Env *P, int index);
 void *paw_userdata(paw_Env *P, int index);
 
+// Get a pointer to the internal representation of an object
+// Value must be of object type, e.g. a list or a function.
+void *paw_pointer(paw_Env *P, int index);
+
 void paw_pop(paw_Env *P, int n);
 
 // Return the number of values in the current stack frame
@@ -208,7 +212,7 @@ void paw_get_typename(paw_Env *P, paw_Type type);
 void paw_get_global(paw_Env *P, int gid);
 
 // Call a global function
-void paw_call_global(paw_Env *P, int gid, int argc);
+int paw_call_global(paw_Env *P, int gid, int argc);
 
 void paw_get_upvalue(paw_Env *P, int index, int iup);
 void paw_get_field(paw_Env *P, int index, int ifield);
@@ -246,5 +250,7 @@ static inline void paw_replace(paw_Env *P, int index)
     paw_copy(P, -1, index);
     paw_pop(P, 1);
 }
+
+const char *paw_to_string(paw_Env *P, int index, paw_Type type, size_t *plen);
 
 #endif // PAW_PAW_H

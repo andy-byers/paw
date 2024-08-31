@@ -12,6 +12,24 @@
 #include <stdio.h>
 #include <inttypes.h>
 
+#define PC_REL(p, pc) CAST(int, (pc) - (p)->source - 1)
+
+int pawD_line_number(const CallFrame *cf, const OpCode *pc)
+{
+    if (!CF_IS_PAW(cf)) return -1;
+
+    int i = 0;
+    Proto *p = cf->fn->p;
+    const int r = PC_REL(p, pc);
+    for (; i < p->nlines - 1; ++i) {
+        if (p->lines[i].pc >= r) break;
+    }
+    return p->lines[i].line;
+}
+
+// TODO: Most of this should not be in the core: use hooks for debugging
+#if defined(PAW_DEBUG_EXTRA)
+
 const char *paw_unop_name(enum UnaryOp unop)
 {
     switch (unop) {
@@ -309,9 +327,8 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
             }
 
             case OP_GETGLOBAL: {
-                const int iw = GET_U(opcode);
-                pawL_add_string(P, print, " ; id = ");
-                pawL_add_integer(P, print, iw);
+                const int u = GET_U(opcode);
+                pawL_add_fstring(P, print, " ; id = %d", u);
                 break;
             }
 
@@ -413,7 +430,7 @@ void paw_stacktrace(paw_Env *P)
         pawL_add_fstring(P, &buf, "%d: File ", i);
         pawL_add_nstring(P, &buf, modname->text, modname->length);
         pawL_add_fstring(P, &buf, ", line %d, in ", current_line(cf));
-        if (cf_is_paw(cf)) {
+        if (CF_IS_PAW(cf)) {
             Proto *p = cf->fn->p;
             const String *name = p->name;
             pawL_add_nstring(P, &buf, name->text, name->length);
@@ -425,3 +442,5 @@ void paw_stacktrace(paw_Env *P)
     }
     pawL_push_result(P, &buf);
 }
+
+#endif // defined(PAW_DEBUG_EXTRA)

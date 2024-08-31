@@ -14,4 +14,6 @@ int pawL_load_file(paw_Env *P, const char *pathname);
 int pawL_load_nchunk(paw_Env *P, const char *name, const char *source, size_t length);
 int pawL_load_chunk(paw_Env *P, const char *name, const char *source);
 
+int pawL_register_func(paw_Env *P, const char *name, paw_Function func, int nup);
+
 #endif // PAW_LIB_H

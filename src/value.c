@@ -2,17 +2,15 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "prefix.h"
+#include <stdlib.h>
+#include <stdio.h>
 
+#include "value.h"
 #include "gc.h"
 #include "map.h"
 #include "mem.h"
 #include "rt.h"
 #include "str.h"
-#include "util.h"
-#include "value.h"
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
 
 #define ERROR(P, kind, ...) pawE_error(P, kind, -1, __VA_ARGS__)
 
@@ -35,7 +33,7 @@ static int check_suffix(const char *p, const char *base)
     return 0;
 }
 
-static void int_to_string(paw_Env *P, paw_Int i)
+static void int_to_string(paw_Env *P, paw_Int i, Value *out)
 {
     char temp[32];
     const paw_Bool negative = i < 0;
@@ -46,9 +44,9 @@ static void int_to_string(paw_Env *P, paw_Int i)
     // systems.
     uint64_t u = i == INT64_MIN 
         ? UINT64_C(1) << 63 
-        : CAST(llabs(i), uint64_t);
+        : CAST(uint64_t, llabs(i));
     do {
-        *ptr-- = CAST(u % 10 + '0', char);
+        *ptr-- = CAST(char, u % 10 + '0');
         u /= 10;
     } while (u);
     if (negative) {
@@ -56,34 +54,34 @@ static void int_to_string(paw_Env *P, paw_Int i)
     } else {
         ++ptr;
     }
-    pawC_pushns(P, ptr, CAST_SIZE(end - ptr));
+    String *str = pawS_new_nstr(P, ptr, CAST_SIZE(end - ptr));
+    V_SET_OBJECT(out, str);
 }
 
-static void float_to_string(paw_Env *P, paw_Float f)
+static void float_to_string(paw_Env *P, paw_Float f, Value *out)
 {
     char temp[32];
     const int n = snprintf(temp, paw_countof(temp), "%.*g", 17, f);
-    pawC_pushns(P, temp, CAST_SIZE(n));
+    String *str = pawS_new_nstr(P, temp, CAST_SIZE(n));
+    V_SET_OBJECT(out, str);
 }
 
-const char *pawV_to_string(paw_Env *P, Value v, paw_Type type, size_t *plength)
+const char *pawV_to_string(paw_Env *P, Value *pv, paw_Type type, size_t *plength)
 {
     switch (type) {
         case PAW_TSTR:
-            pawC_pushv(P, v); // copy
             break;
         case PAW_TINT:
-            int_to_string(P, V_INT(v));
+            int_to_string(P, V_INT(*pv), pv);
             break;
         case PAW_TFLOAT:
-            float_to_string(P, V_FLOAT(v));
+            float_to_string(P, V_FLOAT(*pv), pv);
             break;
         default:
             paw_assert(type == PAW_TBOOL);
-            V_SET_OBJECT(&v, pawE_cstr(P, V_TRUE(v) ? CSTR_TRUE : CSTR_FALSE));
-            pawC_pushv(P, v);
+            V_SET_OBJECT(pv, pawE_cstr(P, V_TRUE(*pv) ? CSTR_TRUE : CSTR_FALSE));
     }
-    const String *s = V_STRING(P->top.p[-1]);
+    const String *s = V_STRING(*pv);
     if (plength != NULL) *plength = s->length;
     return s->text;
 }
@@ -184,14 +182,9 @@ void pawV_free_variant(paw_Env *P, Variant *var)
     pawM_free_flex(P, var, CAST_SIZE(var->nfields), sizeof(var->fields[0]));
 }
 
-static void clear_attrs(Value *pv, int nattrs)
-{
-    memset(pv, 0, CAST_SIZE(nattrs) * sizeof(*pv));
-}
-
 Native *pawV_new_native(paw_Env *P, paw_Function func, int nup)
 {
-    // TODO: nup > UINT16_MAX, check it or assert?
+    paw_assert(nup <= UINT16_MAX);
     Native *nat = pawM_new_flex(P, Native, nup, sizeof(nat->up[0]));
     pawG_add_object(P, CAST_OBJECT(nat), VNATIVE);
     nat->func = func;
@@ -204,22 +197,19 @@ void pawV_free_native(paw_Env *P, Native *f)
     pawM_free_flex(P, f, f->nup, sizeof(f->up[0])); 
 }
 
-Foreign *pawV_push_foreign(paw_Env *P, size_t size, int nfields)
+Foreign *pawV_new_foreign(paw_Env *P, size_t size, int nfields, Value *out)
 {
-    if (size > PAW_SIZE_MAX) {
-        pawM_error(P);
-    }
-    Value *pv = pawC_push0(P);
+    if (size > PAW_SIZE_MAX) pawM_error(P);
     Foreign *ud = pawM_new_flex(P, Foreign, nfields, sizeof(ud->fields[0]));
     pawG_add_object(P, CAST_OBJECT(ud), VFOREIGN);
-    V_SET_OBJECT(pv, ud); // anchor
+    V_SET_OBJECT(out, ud); // anchor
     ud->nfields = nfields;
     ud->size = size;
     if (size > 0) {
-        // Allocate space to hold 'size' bytes of foreign data.
+        // allocate space to hold 'size' bytes of foreign data
         ud->data = pawM_new_vec(P, size, char);
     }
-    clear_attrs(ud->fields, nfields);
+    memset(ud->fields, 0, CAST_SIZE(nfields) * sizeof(ud->fields[0]));
     return ud;
 }
 
@@ -264,7 +254,7 @@ static int char2base(char c)
 #define SKIP_SPACES(p) \
     while (ISSPACE(*(p))) ++(p);
 
-int pawV_parse_uint64(paw_Env *P, const char *text, int base)
+int pawV_parse_uint64(paw_Env *P, const char *text, int base, uint64_t *out)
 {
     int b = 10;
     SKIP_SPACES(text);
@@ -276,7 +266,7 @@ int pawV_parse_uint64(paw_Env *P, const char *text, int base)
             }
             p += 2; // skip base prefix
         } else if (p[1] == '\0') {
-            pawC_pushi(P, 0);
+            *out = 0;
             return PAW_OK;
         } else {
             return PAW_ESYNTAX;
@@ -296,8 +286,7 @@ int pawV_parse_uint64(paw_Env *P, const char *text, int base)
     if (check_suffix(p, text)) {
         return PAW_ESYNTAX;
     }
-    Value *pv = pawC_push0(P);
-    pv->u = value;
+    *out = value;
     return PAW_OK;
 }
 
@@ -311,19 +300,20 @@ static paw_Bool parse_negative(const char **ptext)
     return PAW_FALSE;
 }
 
-int pawV_parse_int(paw_Env *P, const char *text, int base)
+int pawV_parse_int(paw_Env *P, const char *text, int base, paw_Int *out)
 {
     const char *original = text;
     SKIP_SPACES(text);
     const paw_Bool negative = parse_negative(&text);
     if (!ISHEX(*text)) return PAW_ESYNTAX;
-    const int rc = pawV_parse_uint64(P, text, base);
-    if (rc != PAW_OK) return rc;
-    Value *pv = &P->top.p[-1];
-    if (pv->u > CAST(PAW_INT_MAX, uint64_t) + negative) {
+
+    uint64_t u;
+    const int status = pawV_parse_uint64(P, text, base, &u);
+    if (status != PAW_OK) return status;
+    if (u > CAST(uint64_t, PAW_INT_MAX) + negative) {
         return PAW_EOVERFLOW;
     }
-    pv->i = PAW_CAST_INT(negative ? -pv->u : pv->u);
+    *out = PAW_CAST_INT(negative ? -u : u);
     return PAW_OK;
 }
 
@@ -332,7 +322,7 @@ int pawV_parse_int(paw_Env *P, const char *text, int base)
         ++(p); \
     }
 
-int pawV_parse_float(paw_Env *P, const char *text)
+int pawV_parse_float(paw_Env *P, const char *text, paw_Float *out)
 {
     const char *original = text;
     SKIP_SPACES(text);
@@ -358,6 +348,6 @@ int pawV_parse_float(paw_Env *P, const char *text)
         return PAW_ESYNTAX;
     }
     const paw_Float f = strtod(text, NULL);
-    pawC_pushf(P, negative ? -f : f);
+    *out = negative ? -f : f;
     return PAW_OK;
 }

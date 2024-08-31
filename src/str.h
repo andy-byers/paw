@@ -46,10 +46,14 @@ void pawS_init(paw_Env *P);
 void pawS_uninit(paw_Env *P);
 
 void pawS_remove_str(paw_Env *P, String *s);
-String *pawS_alloc_str(paw_Env *P, size_t length);
 String *pawS_new_str(paw_Env *P, const char *text);
 String *pawS_new_nstr(paw_Env *P, const char *text, size_t length);
 String *pawS_new_fixed(paw_Env *P, const char *text);
 void pawS_free_str(paw_Env *P, String *s);
+
+// TODO: Hack for 2-phase initialization, used by string concatenation in
+//       rt.c.
+String *pawS_new_uninit(paw_Env *P, size_t length);
+void pawS_register(paw_Env *P, String **pinit);
 
 #endif // PAW_STR_H

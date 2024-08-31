@@ -62,7 +62,7 @@ void pawK_pool_free(struct Pool *pool, void *ptr, size_t size);
             void *next = pawK_pool_alloc(X->P, &X->pool, bufsz); \
             const size_t usedsz = CAST_SIZE(list->count) * elemsz; \
             memcpy(next, list->data, usedsz); \
-            list->alloc = CAST(nextcap, int); \
+            list->alloc = CAST(int, nextcap); \
             list->data = next; \
         } \
         list->data[list->count++] = node; \

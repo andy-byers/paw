@@ -208,12 +208,6 @@ static void setup_stack(paw_Env *P, int argc, const char **argv)
     paw_new_list(P, argc);
 }
 
-static void call_main(paw_Env *P, int argc)
-{
-    const int status = paw_call(P, argc);
-    handle_error(P, status);
-}
-
 int main(int argc, const char **argv)
 {
     parse_options(&argc, &argv);
@@ -225,7 +219,8 @@ int main(int argc, const char **argv)
             ? 1 << s_opt.H
             : 0 /* use default */);
     setup_stack(P, argc, argv);
-    call_main(P, argc);
+    const int status = paw_call(P, 1);
+    handle_error(P, status);
 
     paw_close(P);
     return 0;

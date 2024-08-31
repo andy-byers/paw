@@ -22,12 +22,10 @@ static void grow_buffer(paw_Env *P, Buffer *buf, int boxloc)
     } else {
         // Add a new Foreign 'box' to contain the buffer. Prevents a memory leak
         // if an error is thrown before the buffer is freed.
-        Foreign *ud = pawV_push_foreign(P, alloc, 0);
+        Value *pbox = &P->top.p[boxloc];
+        Foreign *ud = pawV_new_foreign(P, alloc, 0, pbox);
         memcpy(ud->data, buf->stack, buf->size);
         buf->data = ud->data;
-        Value *pbox = &P->top.p[boxloc - 1];
-        V_SET_OBJECT(pbox, ud);
-        paw_pop(P, 1);
     }
     buf->alloc = alloc;
 }
@@ -90,29 +88,33 @@ void pawL_add_nstring(paw_Env *P, Buffer *buf, const char *s, size_t n)
     add_nstring(P, buf, s, n, -1);
 }
 
-void pawL_add_integer(paw_Env *P, Buffer *buf, paw_Int i)
+void pawL_add_value(paw_Env *P, Buffer *buf, paw_Type type)
 {
-    Value v;
-    V_SET_INT(&v, i);
-
     size_t len;
-    const char *str = pawV_to_string(P, v, PAW_TINT, &len);
-    add_nstring(P, buf, str, len, -2); // string above box
-    pawC_stkdec(P, 1);
+    const char *str = pawV_to_string(P, &P->top.p[-1], type, &len);
+    add_nstring(P, buf, str, len, -2);
+    paw_pop(P, 1);
 }
 
-void pawL_add_float(paw_Env *P, Buffer *buf, paw_Float f)
+static void add_int(paw_Env *P, Buffer *buf, paw_Int i)
 {
-    Value v;
-    V_SET_FLOAT(&v, f);
-
     size_t len;
-    const char *str = pawV_to_string(P, v, PAW_TFLOAT, &len);
+    paw_push_int(P, i);
+    const char *str = paw_to_string(P, -1, PAW_TINT, &len);
     add_nstring(P, buf, str, len, -2); // string above box
-    pawC_stkdec(P, 1);
+    paw_pop(P, 1);
 }
 
-void pawL_add_pointer(paw_Env *P, Buffer *buf, void *p)
+static void add_float(paw_Env *P, Buffer *buf, paw_Float f)
+{
+    size_t len;
+    paw_push_float(P, f);
+    const char *str = paw_to_string(P, -1, PAW_TFLOAT, &len);
+    add_nstring(P, buf, str, len, -2); // string above box
+    paw_pop(P, 1);
+}
+
+static void add_pointer(paw_Env *P, Buffer *buf, void *p)
 {
     char temp[32];
     const int n = snprintf(temp, sizeof(temp), "%p", p);
@@ -136,11 +138,8 @@ void pawL_add_vfstring(paw_Env *P, Buffer *buf, const char *fmt, va_list arg)
 {
     for (;; ++fmt) {
         fmt = add_non_fmt(P, buf, fmt);
-        if (!*fmt) {
-            break;
-        }
-        // Skip '%'.
-        ++fmt;
+        if (*fmt == '\0') break;
+        ++fmt; // skip '%'
 
         switch (*fmt) {
             case 's': {
@@ -152,22 +151,22 @@ void pawL_add_vfstring(paw_Env *P, Buffer *buf, const char *fmt, va_list arg)
                 pawL_add_char(P, buf, '%');
                 break;
             case 'u':
-                pawL_add_integer(P, buf, va_arg(arg, unsigned));
+                add_int(P, buf, va_arg(arg, unsigned));
                 break;
             case 'd':
-                pawL_add_integer(P, buf, va_arg(arg, int));
+                add_int(P, buf, va_arg(arg, int));
                 break;
             case 'I':
-                pawL_add_integer(P, buf, va_arg(arg, int64_t));
+                add_int(P, buf, va_arg(arg, int64_t));
                 break;
             case 'c':
                 pawL_add_char(P, buf, va_arg(arg, int));
                 break;
             case 'f':
-                pawL_add_float(P, buf, va_arg(arg, double));
+                add_float(P, buf, va_arg(arg, double));
                 break;
             case 'p':
-                pawL_add_pointer(P, buf, va_arg(arg, void *));
+                add_pointer(P, buf, va_arg(arg, void *));
                 break;
             default:
                 pawR_error(P, PAW_EVALUE, "invalid format option '%%%c'", *fmt);

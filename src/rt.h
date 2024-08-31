@@ -17,8 +17,8 @@ void pawR_arithi1(paw_Env *P, enum ArithOp1 op);
 void pawR_arithi2(paw_Env *P, enum ArithOp2 op);
 void pawR_arithf1(paw_Env *P, enum ArithOp1 op);
 void pawR_arithf2(paw_Env *P, enum ArithOp2 op);
-void pawR_bitwi1(paw_Env *P, enum BitwOp1 op);
-void pawR_bitwi2(paw_Env *P, enum BitwOp2 op);
+void pawR_bitw1(paw_Env *P, enum BitwOp1 op);
+void pawR_bitw2(paw_Env *P, enum BitwOp2 op);
 
 void pawR_boolop(paw_Env *P, enum BoolOp op);
 void pawR_strop(paw_Env *P, enum StrOp op);

@@ -34,7 +34,7 @@ void pawO_close(FILE *file)
     for (int i = 0; i < INTR_TIMEOUT; ++i) {
         const int rc = fclose(file);
         if (rc == 0 || errno != EINTR) {
-            break; // Success or non-interrupt failure
+            break; // success or non-interrupt failure
         }
     }
 }

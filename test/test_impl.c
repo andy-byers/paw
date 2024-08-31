@@ -2,6 +2,12 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
+#include <assert.h>
+#include <float.h>
+#include <inttypes.h>
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include "call.h"
 #include "map.h"
 #include "paw.h"
@@ -9,12 +15,6 @@
 #include "test.h"
 #include "util.h"
 #include "value.h"
-#include <assert.h>
-#include <float.h>
-#include <inttypes.h>
-#include <math.h>
-#include <stdio.h>
-#include <stdlib.h>
 
 // Test the primitive value representations
 static void test_primitives(void)
@@ -275,33 +275,33 @@ static void driver(void (*callback)(paw_Env *))
     test_close(P, &a);
 }
 
-static int parse_int(paw_Env *P, void *ud)
+static int parse_int(paw_Env *P, const char *text)
 {
-    const int rc = pawV_parse_int(P, ud, 0);
-    if (rc == PAW_OK) paw_pop(P, 1);
-    return rc;
+    paw_Int i;
+    return pawV_parse_int(P, text, 0, &i);
 }
 
 static void roundtrip_int(paw_Env *P, paw_Int i);
 
-static void pac_int_aux(paw_Env *P, void *ud, paw_Int result)
+static void pac_int_aux(paw_Env *P, const char *text, paw_Int result)
 {
-    check(PAW_OK == pawV_parse_int(P, ud, 0));
-    check(paw_int(P, -1) == result);
-    paw_pop(P, 1);
+    paw_Int i;
+    check(PAW_OK == pawV_parse_int(P, text, 0, &i));
+    check(i == result);
 }
 
 static void roundtrip_int(paw_Env *P, paw_Int i)
 {
-    pawV_to_string(P, (Value){.i = i}, PAW_TINT, NULL);
+    paw_push_int(P, i);
+    paw_to_string(P, -1, PAW_TINT, NULL);
     const char *str = paw_string(P, -1);
     pac_int_aux(P, ERASE_TYPE(str), i);
     paw_pop(P, 1);
 }
 
-static void parse_and_check_int(paw_Env *P, void *ud, paw_Int result)
+static void parse_and_check_int(paw_Env *P, const char *text, paw_Int result)
 {
-    pac_int_aux(P, ud, result);
+    pac_int_aux(P, text, result);
     roundtrip_int(P, result);
 }
 
@@ -329,36 +329,37 @@ static void test_parse_int(paw_Env *P)
     check(PAW_EOVERFLOW == parse_int(P, "999999999999999999999999999999999999999")); 
     check(PAW_EOVERFLOW == parse_int(P, "-999999999999999999999999999999999999999")); 
 
-    check(PAW_EVALUE == pawV_parse_int(P, "0b0", 10 /* wrong base */));
-    check(PAW_EVALUE == pawV_parse_int(P, "0o0", 10 /* wrong base */));
-    check(PAW_EVALUE == pawV_parse_int(P, "0x0", 10 /* wrong base */));
+    paw_Int i;
+    check(PAW_EVALUE == pawV_parse_int(P, "0b0", 10 /* wrong base */, &i));
+    check(PAW_EVALUE == pawV_parse_int(P, "0o0", 10 /* wrong base */, &i));
+    check(PAW_EVALUE == pawV_parse_int(P, "0x0", 10 /* wrong base */, &i));
 }
 
-static int parse_float(paw_Env *P, void *ud)
+static int parse_float(paw_Env *P, const char *text)
 {
-    const int rc = pawV_parse_float(P, ud);
-    if (rc == PAW_OK) paw_pop(P, 1);
-    return rc;
+    paw_Float f;
+    return pawV_parse_float(P, text, &f);
 }
 
-static void pac_float_aux(paw_Env *P, void *ud, paw_Float result)
+static void pac_float_aux(paw_Env *P, const char *text, paw_Float result)
 {
-    check(PAW_OK == pawV_parse_float(P, ud));
-    check(paw_float(P, -1) == result);
-    paw_pop(P, 1);
+    paw_Float f;
+    check(PAW_OK == pawV_parse_float(P, text, &f));
+    check(f == result);
 }
 
 static void roundtrip_float(paw_Env *P, paw_Float f)
 {
-    pawV_to_string(P, (Value){.f = f}, PAW_TFLOAT, NULL);
+    paw_push_float(P, f);
+    paw_to_string(P, -1, PAW_TFLOAT, NULL);
     const char *str = paw_string(P, -1);
     pac_float_aux(P, ERASE_TYPE(str), f);
     paw_pop(P, 1);
 }
 
-static void parse_and_check_float(paw_Env *P, void *ud, paw_Float result)
+static void parse_and_check_float(paw_Env *P, const char *text, paw_Float result)
 {
-    pac_float_aux(P, ud, result);
+    pac_float_aux(P, text, result);
     roundtrip_float(P, result);
 }
 
@@ -410,50 +411,29 @@ static void test_immediates(void)
 #undef CHECK_BOUND
 }
 
-#include "ast.h"
-#include "hir.h"
-#include "compile.h"
-#include "os.h"
-#include <stdio.h>
-
-static void maybe_print_tree(void)
+static void test_buffer(paw_Env *P)
 {
-#ifdef PAW_TEST_PRINT_TREES
-    fprintf(stderr, "%s\n", paw_string(P, -1));
-#endif
-}
+    Buffer buf;
+    pawL_init_buffer(P, &buf);
+    pawL_add_char(P, &buf, 'a');
+    pawL_add_string(P, &buf, "bc");
+    pawL_add_nstring(P, &buf, "def", 2);
+    check(buf.size == 5);
+    check(memcmp(buf.data, "abcde", 5) == 0);
+    pawL_discard_result(P, &buf);
 
-static void dump_trees_from_file(paw_Env *P, const char *name)
-{
-    const char *pathname = test_pathname(name);
+    pawL_init_buffer(P, &buf);
+    for (int i = 0; i < 1234; ++i) {
+        paw_push_int(P, i);
+        pawL_add_value(P, &buf, PAW_TINT);
+    }
+    pawL_buffer_resize(P, &buf, 16);
+    pawL_push_result(P, &buf);
 
-    FILE *file = pawO_open(pathname, "r");
-    struct TestReader rd = {.file = file};
-    rd.data = rd.buf;
-    check(file);
-
-    struct Compiler C;
-    struct DynamicMem dm = {0};
-    pawP_startup(P, &C, &dm, "test");
-
-    struct Ast *ast = pawP_parse(&C, test_reader, &rd);
-    pawAst_dump(ast);
-    maybe_print_tree();
+    paw_push_string(P, "0123456789101112");
+    paw_cmps(P, PAW_CMP_EQ);
+    check(paw_bool(P, -1));
     paw_pop(P, 1);
-
-    struct Hir *hir = pawP_resolve(&C, ast);
-    pawHir_dump(hir);
-    maybe_print_tree();
-    paw_pop(P, 1);
-    
-    pawP_teardown(P, &dm);
-}
-
-static void test_dump_trees(paw_Env *P)
-{
-#define DUMP_TREE(name) dump_trees_from_file(P, #name);
-    TEST_SCRIPTS(DUMP_TREE)
-#undef DUMP_TREE
 }
 
 int main(void)
@@ -469,6 +449,6 @@ int main(void)
     driver(test_map_extend);
     driver(test_parse_int);
     driver(test_parse_float);
-    driver(test_dump_trees);
+    driver(test_buffer);
     return 0;
 }

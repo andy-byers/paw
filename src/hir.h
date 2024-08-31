@@ -29,7 +29,6 @@ struct Resolver;
         X(ClosureExpr,    clos) \
         X(ConversionExpr, conv) \
         X(CallExpr,       call) \
-        X(VariantExpr,    variant) \
         X(Index,          index) \
         X(Selector,       select) \
         X(FieldExpr,      field) \
@@ -55,23 +54,7 @@ struct Resolver;
 
 struct Hir;
 
-// Represents a single lexical scope
-struct HirScope {
-    struct HirSymbolList *symbols;
-    int bk_depth;
-    int fn_depth;
-};
-
-struct HirSymtab {
-    struct HirScopeList *scopes;
-    struct HirScope *toplevel;
-    struct HirScope *globals;
-};
-
 #define last_scope(t) CHECK_EXP((t)->size > 0, (t)->data[(t)->size - 1])
-struct HirScope *pawHir_new_scope(struct Hir *hir, struct HirSymtab *table);
-struct HirSymtab *pawHir_new_symtab(struct Hir *hir);
-void pawHir_add_scope(struct Hir *hir, struct HirSymtab *table, struct HirScope *scope);
 struct HirSymbol *pawHir_add_symbol(struct Hir *hir, struct HirScope *table);
 int pawHir_find_symbol(struct HirScope *scope, const String *name);
 
@@ -213,6 +196,7 @@ enum HirDeclKind {
     String *name; \
     int line; \
     DefId did; \
+    uint8_t flags : 8; \
     enum HirDeclKind kind : 8
 struct HirDeclHeader {
     HIR_DECL_HEADER; 
@@ -248,7 +232,6 @@ struct HirAdtDecl {
     HIR_DECL_HEADER; 
     paw_Bool is_pub : 1;
     paw_Bool is_struct : 1;
-    struct HirScope *scope;
     struct HirDeclList *fields;
     struct HirDeclList *generics;
     struct HirDeclList *monos;
@@ -257,7 +240,6 @@ struct HirAdtDecl {
 struct HirVariantDecl {
     HIR_DECL_HEADER; 
     int index;
-    struct HirScope *scope;
     struct HirDeclList *fields;
 };
 
@@ -433,13 +415,6 @@ struct HirIndex {
     paw_Bool is_slice : 1;
     struct HirExpr *first;
     struct HirExpr *second;
-};
-
-struct HirVariantExpr {
-    HIR_EXPR_HEADER;
-    int index;
-    struct HirTypeList *types;
-    struct HirExprList *fields;
 };
 
 struct HirConversionExpr {
@@ -664,14 +639,14 @@ DEFINE_LIST(struct Hir, pawHir_decl_list_, HirDeclList, struct HirDecl)
 DEFINE_LIST(struct Hir, pawHir_expr_list_, HirExprList, struct HirExpr)
 DEFINE_LIST(struct Hir, pawHir_stmt_list_, HirStmtList, struct HirStmt)
 DEFINE_LIST(struct Hir, pawHir_type_list_, HirTypeList, struct HirType)
-DEFINE_LIST(struct Hir, pawHir_symbol_list_, HirSymbolList, struct HirSymbol)
-DEFINE_LIST(struct Hir, pawHir_scope_list_, HirScopeList, struct HirScope)
+DEFINE_LIST(struct Hir, pawHir_scope_, HirScope, struct HirSymbol)
+DEFINE_LIST(struct Hir, pawHir_symtab_, HirSymtab, struct HirScope)
 DEFINE_LIST(struct Hir, pawHir_path_, HirPath, struct HirSegment)
 
-#define HIR_CAST_DECL(x) ((struct HirDecl *)(x))
-#define HIR_CAST_EXPR(x) ((struct HirExpr *)(x))
-#define HIR_CAST_STMT(x) ((struct HirStmt *)(x))
-#define HIR_CAST_TYPE(x) ((struct HirType *)(x))
+#define HIR_CAST_DECL(x) CAST(struct HirDecl *, x)
+#define HIR_CAST_EXPR(x) CAST(struct HirExpr *, x)
+#define HIR_CAST_STMT(x) CAST(struct HirStmt *, x)
+#define HIR_CAST_TYPE(x) CAST(struct HirType *, x)
 
 #define HIR_IS_UNIT_T(x) (HirIsAdt(x) && (x)->adt.base == PAW_TUNIT)
 #define HIR_IS_BASIC_T(x) (HirIsAdt(x) && (x)->adt.base <= PAW_TSTR)

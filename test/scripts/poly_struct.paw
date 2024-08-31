@@ -6,6 +6,21 @@ struct Singleton<Value> {
 pub fn test_initialization() {
     let singleton: Singleton<int> = Singleton::<int>{value: 1};
     let singleton = Singleton::<int>{value: 1};
+
+    let a = Singleton::<(int,)>{value: (1,)};
+    let b = Singleton::<fn(int) -> float>{value: |x: int| x as float};
+    let c = Singleton::<Singleton<int>>{value: Singleton::<int>{value: 2}};
+
+    let a2 = Singleton{value: (1,)};
+    let b2 = Singleton{value: |x: int| x as float};
+    let c2 = Singleton{value: Singleton{value: 2}};
+
+    a = a2;
+    b = b2;
+    c = c2;
+
+    // from further down in the file
+    let b = TopLevelB{t: 42};
 }
 
 struct Empty<T>;
@@ -152,3 +167,27 @@ pub fn test_infer_vec_field() {
     _list_push(p.b, p.a);
     assert(p.a == p.b[0]);
 }
+
+pub fn test_scope() {
+    let a = TopLevelA{
+        b: TopLevelB{
+            t: TopLevelB{t: 42}
+        }
+    };
+    assert(a.b.t.t == 42);
+    let b = toplevel_call(a);
+    assert(b.t.t == 42);
+}
+
+struct TopLevelA<T> {
+    b: TopLevelB<T>
+}
+
+struct TopLevelB<T> {
+    t: T
+}
+
+fn toplevel_call<T>(a: TopLevelA<T>) -> TopLevelB<T> {
+    return a.b;
+}
+

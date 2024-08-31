@@ -2,12 +2,12 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
+#include <limits.h>
+#include <stdlib.h>
 #include "hir.h"
 #include "compile.h"
 #include "map.h"
 #include "mem.h"
-#include <limits.h>
-#include <stdlib.h>
 
 #define LIST_MIN 8
 #define FIRST_ARENA_SIZE 4096
@@ -23,7 +23,7 @@ struct Hir *pawHir_new(struct Compiler *C)
 
     // initialize memory pools for storing HIR components
     pawK_pool_init(P, &dm->hir->pool, FIRST_ARENA_SIZE, sizeof(void *) * LARGE_ARENA_MIN);
-    dm->hir->symtab = pawHir_new_symtab(dm->hir);
+    dm->hir->symtab = pawHir_symtab_new(dm->hir);
     return dm->hir;
 }
 
@@ -87,49 +87,23 @@ struct HirSymbol *pawHir_new_symbol(struct Hir *hir)
     return pawK_pool_alloc(ENV(hir), &hir->pool, sizeof(struct HirSymbol));
 }
 
-static struct HirScope *new_scope(struct Hir *hir)
-{
-    struct HirScope *scope = pawK_pool_alloc(ENV(hir), &hir->pool, sizeof(struct HirScope));
-    scope->symbols = pawHir_symbol_list_new(hir);
-    return scope;
-}
-
-struct HirSymtab *pawHir_new_symtab(struct Hir *hir)
-{
-    struct HirSymtab *symtab = pawK_pool_alloc(ENV(hir), &hir->pool, sizeof(struct HirSymtab));
-    symtab->globals = new_scope(hir);
-    symtab->scopes = pawHir_scope_list_new(hir);
-    return symtab;
-}
-
-struct HirScope *pawHir_new_scope(struct Hir *hir, struct HirSymtab *table)
-{
-    struct HirScope *scope = new_scope(hir);
-    pawHir_add_scope(hir, table, scope);
-    return scope;
-}
-
 void pawHir_add_scope(struct Hir *hir, struct HirSymtab *table, struct HirScope *scope)
 {
-    if (table->scopes->count == UINT16_MAX) {
-        pawC_throw(ENV(hir), PAW_EMEMORY);
-//        limit_error(hir->C, "scopes", UINT16_MAX); // TODO
-    }
-    pawHir_scope_list_push(hir, table->scopes, scope);
+    if (table->count == UINT16_MAX) pawM_error(ENV(hir));
+    pawHir_symtab_push(hir, table, scope);
 }
 
 struct HirSymbol *pawHir_add_symbol(struct Hir *hir, struct HirScope *table)
 {
     struct HirSymbol *symbol = pawHir_new_symbol(hir);
-    pawHir_symbol_list_push(hir, table->symbols, symbol);
+    pawHir_scope_push(hir, table, symbol);
     return symbol;
 }
 
 int pawHir_find_symbol(struct HirScope *scope, const String *name)
 {
-    struct HirSymbolList *list = scope->symbols;
-    for (int i = list->count - 1; i >= 0; --i) {
-        const struct HirSymbol *symbol = list->data[i];
+    for (int i = scope->count - 1; i >= 0; --i) {
+        const struct HirSymbol *symbol = scope->data[i];
         if (pawS_eq(name, symbol->name)) {
             if (symbol->is_init) {
                 return i;
@@ -274,12 +248,6 @@ static void VisitCallExpr(struct HirVisitor *V, struct HirCallExpr *e)
     V->VisitExprList(V, e->args);
 }
 
-static void VisitVariantExpr(struct HirVisitor *V, struct HirVariantExpr *e)
-{
-    V->VisitTypeList(V, e->types);
-    V->VisitExprList(V, e->fields);
-}
-
 static void VisitConversionExpr(struct HirVisitor *V, struct HirConversionExpr *e)
 {
     V->VisitExpr(V, e->arg);
@@ -294,7 +262,7 @@ static void VisitFuncDecl(struct HirVisitor *V, struct HirFuncDecl *d)
 {
     V->VisitDeclList(V, d->generics);
     V->VisitDeclList(V, d->params);
-    V->VisitBlock(V, d->body);
+    if (d->body != NULL) V->VisitBlock(V, d->body);
 }
 
 static void VisitIfStmt(struct HirVisitor *V, struct HirIfStmt *s)
@@ -487,7 +455,7 @@ static struct HirStmt *FoldBlock(struct HirFolder *F, struct HirBlock *s)
     s->stmts = F->FoldStmtList(F, s->stmts);
     return HIR_CAST_STMT(s);
 }
-#define FOLD_BLOCK(F, s) CAST((F)->FoldBlock(F, s), struct HirBlock *)
+#define FOLD_BLOCK(F, s) CAST(struct HirBlock *, (F)->FoldBlock(F, s))
 #define MAYBE_FOLD_BLOCK(F, s) ((s) != NULL ? FOLD_BLOCK(F, s) : NULL)
 
 static struct HirExpr *FoldLogicalExpr(struct HirFolder *F, struct HirLogicalExpr *e)
@@ -619,13 +587,6 @@ static struct HirExpr *FoldCallExpr(struct HirFolder *F, struct HirCallExpr *e)
     return HIR_CAST_EXPR(e);
 }
 
-static struct HirExpr *FoldVariantExpr(struct HirFolder *F, struct HirVariantExpr *e)
-{
-    e->types = F->FoldTypeList(F, e->types);
-    e->fields = F->FoldExprList(F, e->fields);
-    return HIR_CAST_EXPR(e);
-}
-
 static struct HirExpr *FoldConversionExpr(struct HirFolder *F, struct HirConversionExpr *e)
 {
     e->arg = F->FoldExpr(F, e->arg);
@@ -642,7 +603,7 @@ static struct HirDecl *FoldFuncDecl(struct HirFolder *F, struct HirFuncDecl *d)
 {
     d->generics = F->FoldDeclList(F, d->generics);
     d->params = F->FoldDeclList(F, d->params);
-    d->body = FOLD_BLOCK(F, d->body);
+    if (d->body != NULL) d->body = FOLD_BLOCK(F, d->body);
     return HIR_CAST_DECL(d);
 }
 
@@ -872,7 +833,7 @@ static struct HirStmt *copy_block_stmt(struct HirFolder *F, struct HirBlock *s)
     return r;
 }
 
-#define COPY_BLOCK(F, s) CAST((F)->FoldBlock(F, s), struct HirBlock *)
+#define COPY_BLOCK(F, s) CAST(struct HirBlock *, (F)->FoldBlock(F, s))
 
 static struct HirExpr *copy_logical_expr(struct HirFolder *F, struct HirLogicalExpr *e)
 {
@@ -1050,16 +1011,6 @@ static struct HirExpr *copy_call_expr(struct HirFolder *F, struct HirCallExpr *e
     return r;
 }
 
-static struct HirExpr *copy_variant_expr(struct HirFolder *F, struct HirVariantExpr *e)
-{
-    struct HirExpr *result = COPY_PREP_EXPR(F, e);
-    struct HirVariantExpr *r = HirGetVariantExpr(result);
-    r->types = F->FoldTypeList(F, e->types);
-    r->fields = F->FoldExprList(F, e->fields);
-    r->index = e->index;
-    return result;
-}
-
 static struct HirPath *copy_path(struct HirFolder *F, struct HirPath *e)
 {
     struct HirPath *r = pawHir_path_new(F->hir);
@@ -1085,7 +1036,7 @@ static struct HirDecl *copy_func_decl(struct HirFolder *F, struct HirFuncDecl *d
     r->func.name = d->name;
     r->func.generics = F->FoldDeclList(F, d->generics);
     r->func.params = F->FoldDeclList(F, d->params);
-    r->func.body = COPY_BLOCK(F, d->body);
+    if (d->body != NULL) r->func.body = COPY_BLOCK(F, d->body);
     r->func.monos = F->FoldDeclList(F, d->monos);
     r->func.fn_kind = d->fn_kind;
     return r;
@@ -1174,7 +1125,6 @@ static void setup_copy_pass(struct HirFolder *F, struct Copier *C)
     F->FoldBinOpExpr = copy_binop_expr;
     F->FoldConversionExpr = copy_conversion_expr;
     F->FoldCallExpr = copy_call_expr;
-    F->FoldVariantExpr = copy_variant_expr;
     F->FoldIndex = copy_index_expr;
     F->FoldSelector = copy_select_expr;
     F->FoldFieldExpr = copy_field_expr;
@@ -1378,21 +1328,6 @@ static struct HirExpr *expand_call_expr(struct HirFolder *F, struct HirCallExpr 
     return HIR_CAST_EXPR(e);
 }
 
-static struct HirExpr *expand_variant_expr(struct HirFolder *F, struct HirVariantExpr *e)
-{
-    struct Expander *E = F->ud;
-    struct HirAdt *adt = HirGetAdt(e->type);
-    if (e->types != NULL) {
-        struct HirTypeList *types = F->FoldTypeList(F, e->types);
-        struct HirDecl *base = pawHir_get_decl(F->hir, adt->base);
-        struct HirDecl *inst = pawP_instantiate(E->R, base, types);
-        e->type = HIR_TYPEOF(inst);
-        e->types = types;
-    }
-    e->fields = F->FoldExprList(F, e->fields);
-    return HIR_CAST_EXPR(e);
-}
-
 static struct HirDecl *expand_adt_decl(struct HirFolder *F, struct HirAdtDecl *d)
 {
     paw_unused(F);
@@ -1457,7 +1392,7 @@ static void enter_def_(struct DefGenerator *dg, struct DefState *ds, struct HirD
     dg->ds = ds;
 }
 
-#define ENTER_DEF(dg, ds, decl, def) enter_def_(dg, ds, HIR_CAST_DECL(decl), CAST(def, struct Def *))
+#define ENTER_DEF(dg, ds, decl, def) enter_def_(dg, ds, HIR_CAST_DECL(decl), CAST(struct Def *, def))
 #define LEAVE_DEF(dg) ((dg)->ds = (dg)->ds->outer)
 
 static struct Type *create_type(struct DefGenerator *dg, struct HirType *type);
@@ -1728,6 +1663,8 @@ struct HirDeclList *pawHir_define(struct Compiler *C, struct Hir *hir)
     return dg.decls;
 }
 
+#if defined(PAW_DEBUG_EXTRA)
+
 struct Printer {
     struct Hir *hir;
     Buffer *buf;
@@ -1749,88 +1686,11 @@ static void indent_line(struct Printer *P)
 #define DUMP_FMT(P, ...) (indent_line(P), pawL_add_fstring(ENV(P), (P)->buf, __VA_ARGS__))
 #define DUMP_MSG(P, msg) (indent_line(P), pawL_add_string(ENV(P), (P)->buf, msg))
 
-static void repr_type_aux(struct Printer *P, struct HirType *type);
-
-static void repr_typelist(struct Printer *P, struct HirTypeList *list)
-{
-    for (int i = 0; i < list->count; ++i) {
-        repr_type_aux(P, list->data[i]);
-        if (i < list->count - 1) {
-            DUMP_LITERAL(P, ", ");
-        }
-    }
-}
-
 static const char *get_typename(struct DynamicMem *dm, DefId did)
 {
     const struct HirDecl *decl = dm->decls->data[did];
     return decl->hdr.name ? decl->hdr.name->text : "(null)";
 }
-
-static void repr_type_aux(struct Printer *P, struct HirType *type)
-{
-    switch (HIR_KINDOF(type)) {
-        case kHirTupleType:
-            DUMP_LITERAL(P, "(");
-            for (int i = 0; i < type->tuple.elems->count; ++i) {
-                repr_type_aux(P, type->tuple.elems->data[i]);
-                if (i < type->tuple.elems->count - 1) {
-                    DUMP_LITERAL(P, ", ");
-                }
-            }
-            DUMP_LITERAL(P, ")");
-            break;
-        case kHirFuncPtr:
-        case kHirFuncDef:
-            DUMP_LITERAL(P, "fn");
-            if (HirIsFuncDef(type)) {
-                DUMP_FSTRING(P, " %s", get_typename(P->hir->dm, type->fdef.did));
-            }
-            DUMP_LITERAL(P, "(");
-            for (int i = 0; i < type->fptr.params->count; ++i) {
-                repr_type_aux(P, type->fptr.params->data[i]);
-                if (i < type->fptr.params->count - 1) {
-                    DUMP_LITERAL(P, ", ");
-                }
-            }
-            DUMP_LITERAL(P, ") -> ");
-            repr_type_aux(P, type->fptr.result);
-            break;
-        case kHirAdt: 
-            DUMP_FSTRING(P, "%s", get_typename(P->hir->dm, type->adt.did));
-            if (type->adt.types != NULL) {
-                DUMP_LITERAL(P, "<");
-                const struct HirTypeList *list = type->adt.types;
-                for (int i = 0; i < list->count; ++i) {
-                    repr_type_aux(P, list->data[i]);
-                    if (i < list->count - 1) {
-                        DUMP_LITERAL(P, ", ");
-                    }
-                }
-                DUMP_LITERAL(P, ">");
-            }
-            break;
-        case kHirUnknown:
-            DUMP_FSTRING(P, "?%d", type->unknown.index);
-            break;
-        default:
-            paw_assert(HirIsGeneric(type));
-            DUMP_FSTRING(P, "?%s", type->generic.name->text);
-    }
-}
-
-static void repr_type(struct Printer *P, struct HirType *type)
-{
-    if (type != NULL) {
-        repr_type_aux(P, type);
-    } else {
-        DUMP_LITERAL(P, "(null)");
-    }
-    DUMP_LITERAL(P, "\n");
-}
-
-static void dump_stmt(struct Printer *, struct HirStmt *);
-static void dump_expr(struct Printer *, struct HirExpr *);
 
 #define DEFINE_KIND_PRINTER(name, T) \
     static int print_##name##_kind(struct Printer *P, void *node) \
@@ -1883,7 +1743,7 @@ static void dump_path(struct Printer *P, struct HirPath *p)
         if (seg->types != NULL) {
             DUMP_LITERAL(P, "<");
             for (int j = 0; j < seg->types->count; ++j) {
-                repr_type(P, seg->types->data[i]);
+                dump_type(P, seg->types->data[i]);
                 if (j < seg->types->count - 1) {
                     DUMP_LITERAL(P, ", ");
                 }
@@ -1928,8 +1788,7 @@ static void dump_type(struct Printer *P, struct HirType *t)
         case kHirUnknown:
             DUMP_FMT(P, "index: %d\n", t->unknown.index);
             break;
-        default:
-            paw_assert(HirIsGeneric(t));
+        case kHirGeneric:
             DUMP_FMT(P, "name: %s\n", t->generic.name->text);
             DUMP_FMT(P, "did: %d\n", t->generic.did);
     }
@@ -1989,8 +1848,6 @@ static void dump_decl(struct Printer *P, struct HirDecl *d)
             DUMP_NAME(P, d->type.name);
             dump_type_list(P, d->inst.types, "types");
             break;
-        default:
-            paw_assert(0);
     }
     --P->indent;
     DUMP_MSG(P, "}\n");
@@ -2051,8 +1908,8 @@ static void dump_stmt(struct Printer *P, struct HirStmt *s)
             DUMP_MSG(P, "expr: ");
             dump_expr(P, s->result.expr);
             break;
-        default:
-            break;
+        case kHirLabelStmt:
+            DUMP_FMT(P, "label: %s\n", s->label.label == LBREAK ? "BREAK" : "CONTINUE");
     }
     --P->indent;
     DUMP_MSG(P, "}\n");
@@ -2103,8 +1960,7 @@ static void dump_expr(struct Printer *P, struct HirExpr *e)
                     DUMP_MSG(P, "lit_kind: CONTAINER\n");
                     dump_expr_list(P, e->literal.cont.items, "items");
                     break;
-                default:
-                    paw_assert(e->literal.lit_kind == kHirLitComposite);
+                case kHirLitComposite:
                     DUMP_MSG(P, "lit_kind: COMPOSITE\n");
                     DUMP_MSG(P, "target: ");
                     dump_path(P, e->literal.comp.path);
@@ -2191,9 +2047,6 @@ static void dump_expr(struct Printer *P, struct HirExpr *e)
             dump_expr(P, e->assign.lhs);
             DUMP_MSG(P, "rhs: ");
             dump_expr(P, e->assign.rhs);
-            break;
-        default:
-            paw_assert(0);
     }
     --P->indent;
     DUMP_MSG(P, "}\n");
@@ -2214,3 +2067,5 @@ void pawHir_dump(struct Hir *hir)
     }
     pawL_push_result(P, &buf);
 }
+
+#endif

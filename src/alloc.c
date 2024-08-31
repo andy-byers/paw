@@ -75,8 +75,6 @@ struct Allocator {
     uint32_t key_min;
 };
 
-_Static_assert(PAW_HEAP_MIN >= HEAP_META_SIZE, "PAW_HEAP_MIN is too small");
-
 uint8_t pawZ_get_flag(const struct Heap *H, uintptr_t uptr)
 {
     const size_t id = FLAG_BASE(H, uptr);
@@ -384,6 +382,7 @@ static size_t compute_flag_count(size_t h)
     const size_t F = FLAGS_PER_BYTE;
     const size_t m = HEAP_META_SIZE;
     const size_t p = sizeof(void *);
+    if (h < m) return 0; // too small
     return F * (h - m) / (F * p + 1);
 }
 
@@ -393,6 +392,7 @@ int pawZ_init(paw_Env *P, void *heap, size_t heap_size, paw_Bool is_owned)
     paw_assert(PAW_IS_ALIGNED(heap));
     paw_assert(PAW_IS_ALIGNED(heap_size));
     const size_t nf = compute_flag_count(heap_size);
+    if (nf == 0) return PAW_EMEMORY;
 
     // initialize heap manager
     struct Heap *H = heap;

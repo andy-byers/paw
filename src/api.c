@@ -4,13 +4,14 @@
 #include "prefix.h"
 #include <stdlib.h>
 
-#include "paw.h"
+#include "api.h"
 #include "alloc.h"
 #include "compile.h"
 #include "env.h"
 #include "gc.h"
 #include "lib.h"
 #include "parse.h"
+#include "paw.h"
 #include "rt.h"
 
 static void *default_alloc(void *ud, void *ptr, size_t old_size, size_t new_size)
@@ -39,8 +40,8 @@ size_t paw_bytes_used(const paw_Env *P)
 static void open_aux(paw_Env *P, void *arg)
 {
     paw_unused(arg);
-    pawG_init(P);
     pawC_init(P);
+    pawG_init(P);
     pawS_init(P);
     pawP_init(P);
     pawR_init(P);
@@ -49,12 +50,13 @@ static void open_aux(paw_Env *P, void *arg)
 }
 
 #define OR_DEFAULT(a, b) ((a) ? (a) : (b))
+#define HEAP_MIN (PAW_ROUND_UP(sizeof(paw_Env)))
 
 paw_Env *paw_open(const struct paw_Options *o)
 {
     size_t heap_size = OR_DEFAULT(o->heap_size, PAW_HEAP_DEFAULT);
     heap_size &= ~(PAW_ALIGN - 1); // round down
-    if (heap_size < PAW_HEAP_MIN) return NULL;
+    if (heap_size < HEAP_MIN) return NULL;
 
     void *ud = OR_DEFAULT(o->ud, NULL);
     paw_Alloc alloc = OR_DEFAULT(o->alloc, default_alloc);
@@ -78,7 +80,7 @@ paw_Env *paw_open(const struct paw_Options *o)
         if (owns_heap) alloc(ud, ph, zh, 0);
         return NULL;
     }
-    if (pawC_try(P, open_aux, NULL)) {
+    if (pawC_raw_try(P, open_aux, NULL)) {
         paw_close(P);
         return NULL;
     }
@@ -122,36 +124,41 @@ int paw_lookup_item(paw_Env *P, struct paw_Item *pitem)
 void paw_push_value(paw_Env *P, int index)
 {
     const Value v = *at(P, index);
-    pawC_pushv(P, v);
+    *P->top.p = v;
+    API_INCR_TOP(P, 1);
 }
 
 void paw_push_zero(paw_Env *P, int n)
 {
     for (int i = 0; i < n; ++i) {
-        pawC_push0(P);
+        V_SET_0(P->top.p + i);
     }
+    API_INCR_TOP(P, n);
 }
 
 void paw_push_boolean(paw_Env *P, paw_Bool b)
 {
-    pawC_pushb(P, b);
+    V_SET_BOOL(P->top.p, b);
+    API_INCR_TOP(P, 1);
 }
 
 void paw_push_float(paw_Env *P, paw_Float f)
 {
-    pawC_pushf(P, f);
+    V_SET_FLOAT(P->top.p, f);
+    API_INCR_TOP(P, 1);
 }
 
 void paw_push_int(paw_Env *P, paw_Int i)
 {
-    pawC_pushi(P, i);
+    V_SET_INT(P->top.p, i);
+    API_INCR_TOP(P, 1);
 }
 
 void paw_new_native(paw_Env *P, paw_Function fn, int nup)
 {
-    Value *pv = pawC_push0(P);
     Native *o = pawV_new_native(P, fn, nup);
-    V_SET_OBJECT(pv, o);
+    V_SET_OBJECT(P->top.p, o);
+    API_INCR_TOP(P, 1);
 
     StackPtr top = P->top.p;
     const StackPtr base = top - nup - 1;
@@ -170,8 +177,10 @@ const char *paw_push_string(paw_Env *P, const char *s)
 
 const char *paw_push_nstring(paw_Env *P, const char *s, size_t n)
 {
-    const Value *pv = pawC_pushns(P, s, n);
-    return V_TEXT(*pv);
+    String *str = pawS_new_nstr(P, s, n);
+    V_SET_OBJECT(P->top.p, str);
+    API_INCR_TOP(P, 1);
+    return str->text;
 }
 
 const char *paw_push_vfstring(paw_Env *P, const char *fmt, va_list arg)
@@ -221,8 +230,21 @@ paw_Function paw_native(paw_Env *P, int index)
 
 void *paw_userdata(paw_Env *P, int index)
 {
-    const Foreign *f = V_FOREIGN(*at(P, index));
-    return f->data;
+    Value v = *at(P, index);
+    return V_FOREIGN(v)->data;
+}
+
+void *paw_pointer(paw_Env *P, int index)
+{
+    // must be an object
+    Object *o = V_OBJECT(*at(P, index));
+    if (o->gc_kind == VNATIVE) {
+        return ERASE_TYPE(CAST_UPTR(O_NATIVE(o)->func)); 
+    } else if (o->gc_kind == VFOREIGN) {
+        return O_FOREIGN(o)->data; 
+    } else {
+        return o;
+    }
 }
 
 void paw_pop(paw_Env *P, int n)
@@ -280,7 +302,7 @@ int paw_call(paw_Env *P, int argc)
 
 int paw_get_count(paw_Env *P)
 {
-    return CAST(P->top.p - P->cf->base.p, int);
+    return CAST(int, P->top.p - P->cf->base.p);
 }
 
 void paw_get_typename(paw_Env *P, paw_Type code)
@@ -294,14 +316,16 @@ void paw_get_typename(paw_Env *P, paw_Type code)
 
 void paw_get_global(paw_Env *P, int gid)
 {
-    *pawC_push0(P) = *pawE_get_val(P, gid);
+    *P->top.p = *pawE_get_val(P, gid);
+    API_INCR_TOP(P, 1);
 }
 
-void paw_call_global(paw_Env *P, int gid, int argc)
+int paw_call_global(paw_Env *P, int gid, int argc)
 {
+    // a1..an f => f a1..an
     paw_get_global(P, gid);
-    paw_insert(P, -argc - 2);
-    paw_call(P, argc);
+    paw_insert(P, -argc - 1);
+    return paw_call(P, argc);
 }
 
 static int upvalue_index(int nup, int index)
@@ -316,23 +340,23 @@ static int upvalue_index(int nup, int index)
 
 void paw_get_upvalue(paw_Env *P, int ifn, int index)
 {
-    Value *pv = pawC_push0(P);
     Object *o = at(P, ifn)->o;
     switch (o->gc_kind) {
         case VNATIVE: {
             Native *f = O_NATIVE(o);
-            *pv = f->up[upvalue_index(f->nup, index)];
+            *P->top.p = f->up[upvalue_index(f->nup, index)];
             break;
         }
         case VCLOSURE: {
             Closure *f = O_CLOSURE(o);
             UpValue *u = f->up[upvalue_index(f->nup, index)];
-            *pv = *u->p.p;
+            *P->top.p = *u->p.p;
             break;
         }
         default:
             pawR_error(P, PAW_ETYPE, "type of object has no upvalues");
     }
+    API_INCR_TOP(P, 1);
 }
 
 void paw_new_list(paw_Env *P, int n)
@@ -347,7 +371,8 @@ void paw_new_map(paw_Env *P, int n)
 
 void *paw_new_foreign(paw_Env *P, size_t size, int nfields)
 {
-    Foreign *ud = pawV_push_foreign(P, size, nfields);
+    Foreign *ud = pawV_new_foreign(P, size, nfields, P->top.p);
+    API_INCR_TOP(P, 1);
     return ud->data;
 }
 
@@ -392,7 +417,7 @@ void paw_shift(paw_Env *P, int n)
     paw_pop(P, n);
 }
 
-#define CAST_ARITH2(op) CAST(op - PAW_ARITH_ADD, enum ArithOp2)
+#define CAST_ARITH2(op) CAST(enum ArithOp2, op - PAW_ARITH_ADD)
 _Static_assert(ARITH2_ADD == 0, "CAST_ARITH2 is incorrect");
 
 void paw_arithi(paw_Env *P, enum paw_ArithOp op)
@@ -427,54 +452,59 @@ void paw_arithf(paw_Env *P, enum paw_ArithOp op)
 
 void paw_cmpi(paw_Env *P, enum paw_CmpOp op)
 {
-     pawR_cmpi(P, CAST(op, enum CmpOp));
+     pawR_cmpi(P, CAST(enum CmpOp, op));
 }
 
 void paw_cmpf(paw_Env *P, enum paw_CmpOp op)
 {
-     pawR_cmpf(P, CAST(op, enum CmpOp));
+     pawR_cmpf(P, CAST(enum CmpOp, op));
 }
 
 void paw_cmps(paw_Env *P, enum paw_CmpOp op)
 {
-     pawR_cmps(P, CAST(op, enum CmpOp));
+     pawR_cmps(P, CAST(enum CmpOp, op));
 }
 
-#define CAST_BITW2(op) CAST(op - PAW_BITW_XOR, enum BitwOp2)
+#define CAST_BITW2(op) CAST(enum BitwOp2, op - PAW_BITW_XOR)
 _Static_assert(BITW2_XOR == 0, "CAST_BITW2 is incorrect");
 
 void paw_bitw(paw_Env *P, enum paw_BitwOp op)
 {
      switch (op) {
         case PAW_BITW_NOT:
-            pawR_bitwi1(P, BITW1_NOT);
+            pawR_bitw1(P, BITW1_NOT);
             break;
         case PAW_BITW_XOR:
         case PAW_BITW_AND:
         case PAW_BITW_OR:
         case PAW_BITW_SHL:
         case PAW_BITW_SHR:
-            pawR_bitwi2(P, CAST_BITW2(op));
+            pawR_bitw2(P, CAST_BITW2(op));
      }
 }
 
 void paw_boolop(paw_Env *P, enum paw_BoolOp op)
 {
-    pawR_boolop(P, CAST(op, enum BoolOp));
+    pawR_boolop(P, CAST(enum BoolOp, op));
 }
 
 void paw_strop(paw_Env *P, enum paw_StrOp op)
 {
-     pawR_strop(P, CAST(op, enum StrOp));
+     pawR_strop(P, CAST(enum StrOp, op));
 }
 
 void paw_listop(paw_Env *P, enum paw_ListOp op)
 {
-     pawR_listop(P, CAST(op, enum ListOp));
+     pawR_listop(P, CAST(enum ListOp, op));
 }
 
 void paw_mapop(paw_Env *P, enum paw_MapOp op)
 {
-     pawR_mapop(P, CAST(op, enum MapOp));
+     pawR_mapop(P, CAST(enum MapOp, op));
 }
 
+const char *paw_to_string(paw_Env *P, int index, paw_Type type, size_t *plen)
+{
+    Value *pv = at(P, index);
+    return pawV_to_string(P, pv, type, plen);
+}

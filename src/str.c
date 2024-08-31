@@ -11,7 +11,7 @@
 static String *new_string(paw_Env *P, size_t length)
 {
     if (length > PAW_SIZE_MAX - sizeof(String) - 1 /* '\0' */) {
-        pawM_error(P); // size too big for paw_Int
+        pawM_error(P);
     }
     String *str = pawM_new_flex(P, String, length + 1, sizeof(char));
     pawG_add_object(P, CAST_OBJECT(str), VSTRING);
@@ -106,11 +106,47 @@ void pawS_free_str(paw_Env *P, String *s)
 {
     StringTable *st = &P->strings;
     String **p = &st->strings[ST_INDEX(st, s->hash)];
-    while (*p != s) {
-        p = &(*p)->next;
-    }
+    while (*p != s) p = &(*p)->next;
     *p = s->next; // remove
     --st->count;
 
     pawM_free_flex(P, s, s->length + 1, sizeof(char));
+}
+
+String *pawS_new_uninit(paw_Env *P, size_t length)
+{
+    StringTable *st = &P->strings;
+    if (st->count * 4 > st->capacity) {
+        grow_table(P, st);
+    }
+    if (length > PAW_SIZE_MAX - sizeof(String) - 1 /* '\0' */) {
+        pawM_error(P);
+    }
+    String *str = pawM_new_flex(P, String, length + 1, sizeof(char));
+    str->text[length] = '\0';
+    str->length = length;
+    str->next = NULL;
+    str->flag = 0;
+    return str;
+}
+
+void pawS_register(paw_Env *P, String **pinit)
+{
+    String *str = *pinit;
+    StringTable *st = &P->strings;
+    const uint32_t hash = pawS_hash(str->text, str->length, 0);
+    String **plist = &st->strings[ST_INDEX(st, hash)];
+    for (String *p = *plist; p; p = p->next) {
+        if (str->length == p->length && 
+                memcmp(p->text, str->text, str->length) == 0) {
+            pawM_free_flex(P, str, str->length + 1, sizeof(char));
+            *pinit = p;
+            return;
+        }
+    }
+    pawG_add_object(P, CAST_OBJECT(str), VSTRING);
+    str->hash = hash;
+    ++st->count;
+    str->next = *plist;
+    *plist = str;
 }

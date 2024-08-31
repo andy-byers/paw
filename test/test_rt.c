@@ -48,7 +48,8 @@ static void run_tests(const char *name, struct TestAlloc *a, const char *prefix)
             // toplevel functions prefixed with 'test_' must be public
             check(def->hdr.is_pub);
             fprintf(stderr, "    %s\n", def->func.name->text);
-            pawC_pushv(P, *pawE_get_val(P, def->func.vid));
+            paw_push_zero(P, 1);
+            P->top.p[-1] = *pawE_get_val(P, def->func.vid);
             status = paw_call(P, 0);
             if (handle_error(P, status)) {
                 ++s_counters.runtime_errors;

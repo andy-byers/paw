@@ -1,0 +1,18 @@
+// fib.paw
+
+fn fib(n: int) -> int {
+    if n < 2 {
+        return n;
+    }
+    return fib(n - 2) + fib(n - 1);
+}
+
+pub fn main(args: [str]) {
+    let n = 35;
+    if #args > 0 {
+        n = _string_parse_int(args[0], 10);
+    }
+    let r = fib(n);
+    print('fib(' + _int_to_string(n) + ') = ' + 
+          _int_to_string(r) + '\n');
+}

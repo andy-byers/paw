@@ -34,7 +34,7 @@ static paw_Env *start_test(void)
         "    let b = Enum::<str>::B('B'); \n"
         "    return #args;                \n"
         "}                                \n";
-    paw_Env *P = test_open(NULL, &s_alloc, PAW_HEAP_MIN);
+    paw_Env *P = test_open(NULL, &s_alloc, PAW_HEAP_DEFAULT);
     const int status = pawL_load_chunk(P, "test", source);
     check_error(P, status);
     return P;
@@ -128,12 +128,13 @@ int main(void)
     struct paw_Item info;
     int status = paw_lookup_item(P, &info);
     check(status == PAW_OK && info.global_id >= 0);
-    paw_get_global(P, info.global_id);
 
     paw_push_string(P, "abc");
     paw_new_list(P, 1);
-    status = paw_call(P, 1);
+    status = paw_call_global(P, info.global_id, 1);
     check_error(P, status);
+
+    check(paw_bytes_used(P) > 0);
 
     check(paw_int(P, -1) == 1);
     paw_pop(P, 1);
@@ -152,25 +153,66 @@ int main(void)
     }
 
     // Perform some VM operations.
+#define CHECK_AND_POP_I(i) \
+        paw_push_int(P, i); \
+        paw_cmpi(P, PAW_CMP_EQ); \
+        check(paw_bool(P, -1)); \
+        paw_pop(P, 1);
     {
+        // -(-1) == 1
+        paw_push_int(P, -1);
+        paw_arithi(P, PAW_ARITH_NEG);
+        CHECK_AND_POP_I(1);
+
         // 1 + 1 == 2
         paw_push_int(P, 1);
         paw_push_int(P, 1);
         paw_arithi(P, PAW_ARITH_ADD);
-        paw_push_int(P, 2);
-        paw_cmpi(P, PAW_CMP_EQ);
-        check(paw_bool(P, -1));
-        paw_pop(P, 1);
+        CHECK_AND_POP_I(2);
+
+        // ~1 == -2
+        paw_push_int(P, 1);
+        paw_bitw(P, PAW_BITW_NOT);
+        CHECK_AND_POP_I(-2);
 
         // 1 << 1 <= 2
         paw_push_int(P, 1);
         paw_push_int(P, 1);
         paw_bitw(P, PAW_BITW_SHL);
+        CHECK_AND_POP_I(2);
+
+        // 2 <= 2
+        paw_push_int(P, 2);
         paw_push_int(P, 2);
         paw_cmpi(P, PAW_CMP_LE);
         check(paw_bool(P, -1));
         paw_pop(P, 1);
+    }
+#define CHECK_AND_POP_F(f) \
+        paw_push_float(P, f); \
+        paw_cmpf(P, PAW_CMP_EQ); \
+        check(paw_bool(P, -1)); \
+        paw_pop(P, 1);
+    {
+        // -(-1.0) == 1.0
+        paw_push_float(P, -1.0);
+        paw_arithf(P, PAW_ARITH_NEG);
+        CHECK_AND_POP_F(1.0);
 
+        // 1.0 + 1.0 == 2.0
+        paw_push_float(P, 1.0);
+        paw_push_float(P, 1.0);
+        paw_arithf(P, PAW_ARITH_ADD);
+        CHECK_AND_POP_F(2.0);
+
+        // 1.1 > 1.0
+        paw_push_float(P, 1.1);
+        paw_push_float(P, 1.0);
+        paw_cmpf(P, PAW_CMP_GT);
+        check(paw_bool(P, -1));
+        paw_pop(P, 1);
+    }
+    {
         // "ab" + "c" + "123" == "abc123"
         paw_push_string(P, "ab");
         paw_push_string(P, "c");
@@ -211,6 +253,15 @@ int main(void)
     test_print_type(P, "f", 1);
     test_print_type(P, "Struct", 0);
     test_print_type(P, "Enum", 0);
+
+    // test foreign objects
+    void *ptr = paw_new_foreign(P, 8, 1);
+    ((paw_Int *)ptr)[0] = 42;
+    check(((paw_Int *)paw_userdata(P, -1))[0] == 42);
+    paw_pop(P, 1);
+
+    // test format strings
+    paw_push_fstring(P, "%% %s %u %d %I %c %f %p", "str", 1U, -1, PAW_INT_MIN, 'P', 1.0, P);
 
     finish_test(P);
     return 0;

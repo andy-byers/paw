@@ -13,7 +13,7 @@
 #include <string.h>
 
 #ifndef PAW_GC_LIMIT
-#define PAW_GC_LIMIT (1024 * 1024)
+# define PAW_GC_LIMIT (1024 * 1024)
 #endif
 
 static void gc_trace_object(const char *msg, void *ptr)
@@ -57,11 +57,9 @@ static Object **get_gc_list(Object *o)
             return &O_VARIANT(o)->gc_list;
         case VTUPLE:
             return &O_TUPLE(o)->gc_list;
-        case VNATIVE:
-            return &O_NATIVE(o)->gc_list;
         default:
-            paw_assert(o->gc_kind == VMETHOD);
-            return &(O_METHOD(o))->gc_list;
+            paw_assert(o->gc_kind == VNATIVE);
+            return &O_NATIVE(o)->gc_list;
     }
 }
 
@@ -252,7 +250,6 @@ static void sweep_phase(paw_Env *P)
     }
 }
 
-void pawS_check(paw_Env*P);
 void pawG_collect(paw_Env *P)
 {
     P->gc_gray = NULL;

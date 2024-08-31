@@ -17,7 +17,7 @@
 #include "mem.h"
 #include "parse.h"
 
-#define SYNTAX_ERROR(G, ...) pawE_error(ENV(G), PAW_ESYNTAX, (G)->fs->line, __VA_ARGS__)
+#define ERROR(G, code, ...) pawE_error(ENV(G), code, (G)->fs->line, __VA_ARGS__)
 #define GET_DECL(G, id) pawHir_get_decl((G)->hir, id)
 #define TYPE_CODE(G, type) (pawP_type2code((G)->C, type))
 
@@ -137,10 +137,10 @@ static int add_constant(struct Generator *G, Value v, paw_Type code)
     // ensure uniqueness of constant values per function
     Map *kmap = kcache_map(fs, code);
     Value *pk = pawH_get(kmap, v);
-    if (pk != NULL) return CAST(pk->i, int);
+    if (pk != NULL) return CAST(int, pk->i);
 
     if (fs->nk == CONSTANT_MAX) {
-        SYNTAX_ERROR(G, "too many constants");
+        ERROR(G, PAW_ESYNTAX, "too many constants");
     }
     pawM_grow(ENV(G), p->k, fs->nk, p->nk);
     p->k[fs->nk] = v;
@@ -155,7 +155,7 @@ static int add_proto(struct Generator *G, Proto *proto)
     struct FuncState *fs = G->fs;
     Proto *p = fs->proto;
     if (fs->nproto == ITEM_MAX) {
-        SYNTAX_ERROR(G, "too many functions");
+        ERROR(G, PAW_ESYNTAX, "too many functions");
     } else if (fs->nproto == p->nproto) {
         pawM_grow(ENV(G), p->p, fs->nproto, p->nproto);
         for (int i = fs->nproto; i < p->nproto; ++i) {
@@ -228,7 +228,7 @@ static struct HirVarInfo declare_local(struct FuncState *fs, String *name, struc
 static void begin_local_scope(struct FuncState *fs, int n) 
 {
     if (fs->nlocals > LOCAL_MAX - n) {
-        SYNTAX_ERROR(fs->G, "too many locals");
+        ERROR(fs->G, PAW_ESYNTAX, "too many locals");
     }
     fs->nlocals += n; 
 }
@@ -271,7 +271,7 @@ static void patch_jump(struct FuncState *fs, int from, int to)
 {
     const int jump = to - (from + 1);
     if (jump > JUMP_MAX) {
-        SYNTAX_ERROR(fs->G, "too many instructions to jump");
+        ERROR(fs->G, PAW_ESYNTAX, "too many instructions to jump");
     }
     Proto *p = fs->proto;
     SET_S(&p->source[from], jump);
@@ -286,7 +286,7 @@ static void code_loop(struct FuncState *fs, Op op, int to)
 {
     const int jump = to - (fs->pc + 1);
     if (jump < -JUMP_MAX) {
-        SYNTAX_ERROR(fs->G, "too many instructions in loop");
+        ERROR(fs->G, PAW_ESYNTAX, "too many instructions in loop");
     }
     pawK_code_S(fs, op, jump);
 }
@@ -414,6 +414,9 @@ static void leave_function(struct Generator *G)
     struct BlockState *bs = fs->bs;
     Proto *p = fs->proto;
 
+    // module itself has no prototype
+    if (fs->kind == FUNC_MODULE) return;
+
     // end function-scoped locals
     end_local_scope(fs, bs);
     paw_assert(fs->nlocals == 0);
@@ -446,7 +449,7 @@ static void enter_function(struct Generator *G, struct FuncState *fs, struct Blo
 {
     *fs = (struct FuncState){
         .first_local = G->C->dm->vars.count,
-        .scopes = pawHir_new_symtab(G->hir),
+        .scopes = pawHir_symtab_new(G->hir),
         .proto = proto,
         .outer = G->fs,
         .name = name,
@@ -494,9 +497,15 @@ static struct HirVarInfo resolve_attr(struct Generator *G, struct HirType *type,
     paw_assert(HirIsAdt(type));
     struct HirDecl *decl = GET_DECL(G, type->adt.base);
     struct HirAdtDecl *adt = &decl->adt;
-    struct HirScope *scope = adt->scope;
-    const int index = pawHir_find_symbol(scope, name);
-    paw_assert(index >= 0); // already found
+    int index; // must exist: found in last pass
+    for (int i = 0; i < adt->fields->count; ++i) {
+        struct HirDecl *decl = adt->fields->data[i];
+        struct HirFieldDecl *field = HirGetFieldDecl(decl);
+        if (pawS_eq(field->name, name)) {
+            index = i;
+            break;
+        }
+    }
     return (struct HirVarInfo){
         .kind = VAR_FIELD,
         .index = index,
@@ -515,7 +524,7 @@ static void add_upvalue(struct FuncState *fs, struct HirVarInfo *info, paw_Bool 
         }
     }
     if (fs->nup == UPVALUE_MAX) {
-        SYNTAX_ERROR(fs->G, "too many upvalues");
+        ERROR(fs->G, PAW_ESYNTAX, "too many upvalues");
     }
     pawM_grow(ENV(fs->G), f->u, fs->nup, f->nup);
     f->u[fs->nup] = (struct UpValueInfo){
@@ -556,7 +565,7 @@ static struct HirVarInfo find_var(struct Generator *G, const String *name)
     return info;
 }
 
-#define CODE_OP(fs, op, subop) pawK_code_U(fs, op, CAST(subop, int))
+#define CODE_OP(fs, op, subop) pawK_code_U(fs, op, CAST(int, subop))
 
 // Get the length of the container object on top of the stack
 static void code_len(struct FuncState *fs, paw_Type type);
@@ -1094,25 +1103,13 @@ static void code_instance_getter(struct HirVisitor *V, struct HirType *type)
 
     const String *name = decl->hdr.name;
     const Value k = {.o = CAST_OBJECT(name)};
-    const Value *pv = pawH_get(P->builtin, k);
+    // builtins are not monomorphized: there is a single C function implementing each
+    // builtin function that might handle some paramenters generically
+    const Value *pv = pawH_get(P->builtin, k); 
     name = mangle_name(G, name, pv ? NULL : type->fdef.types);
 
     const struct HirVarInfo info = find_var(G, name);
     code_getter(V, info);
-}
-
-struct VariantInfo {
-    struct HirScope *fields;
-    int choice;
-};
-
-static struct VariantInfo unpack_variant(struct Generator *G, struct HirType *type)
-{
-    struct HirDecl *decl = GET_DECL(G, type->fdef.did);
-    return (struct VariantInfo){
-        .fields = decl->variant.scope,
-        .choice = decl->variant.index,
-    };
 }
 
 static paw_Bool is_instance_call(const struct HirType *type)
@@ -1136,13 +1133,14 @@ static void code_variant_constructor(struct HirVisitor *V, struct HirType *type,
     struct FuncState *fs = G->fs;
 
     int count = 0;
-    struct VariantInfo info = unpack_variant(G, type);
+    struct HirDecl *decl = GET_DECL(G, HirGetFuncDef(type)->did);
+    struct HirVariantDecl *d = HirGetVariantDecl(decl);
     if (args != NULL) {
         V->VisitExprList(V, args);
         count = args->count;
         paw_assert(count > 0);
     }
-    pawK_code_AB(fs, OP_NEWVARIANT, info.choice, count);
+    pawK_code_AB(fs, OP_NEWVARIANT, d->index, count);
 }
 
 static void code_path_expr(struct HirVisitor *V, struct HirPathExpr *e)
@@ -1431,23 +1429,30 @@ static void set_cfunc(struct Generator *G, String *name, int g)
 
     const Value k = {.o = CAST_OBJECT(name)};
     const Value *pv = pawH_get(P->builtin, k);
+    if (pv == NULL) ERROR(G, PAW_ENAME, "C function '%s' not loaded", name->text);
     *pval = *pv;
 }
 
 static void code_items(struct HirVisitor *V)
 {
+    struct FuncState fs;
+    struct BlockState bs;
     struct Generator *G = V->ud;
     struct ToplevelList *items = G->items;
+    String *name = SCAN_STRING(G->C, "(toplevel)");
+    enter_function(G, &fs, &bs, name, NULL, NULL,  FUNC_MODULE);
     for (int i = 0; i < items->count; ++i) {
         struct ItemSlot *item = items->data[i];
         if (!HirIsFuncDecl(item->decl)) continue;
         struct HirFuncDecl *d = HirGetFuncDecl(item->decl);
+        fs.line = d->line;
         if (item->info.kind == VAR_CFUNC) {
             set_cfunc(G, d->name, item->info.index);
         } else {
             code_func(V, d, item->info);
         }
     }
+    leave_function(G);
 }
 
 static void setup_pass(struct HirVisitor *V, struct Generator *G)
@@ -1492,7 +1497,6 @@ void pawP_codegen(struct Compiler *C, struct Hir *hir)
     struct Generator G = {
         .hir = hir,
         .sym = hir->symtab,
-        .globals = hir->symtab->globals,
         .items = item_list_new(hir),
         .P = P,
         .C = C,

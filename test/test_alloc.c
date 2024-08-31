@@ -54,7 +54,7 @@ static void check_defer_data(const void *ptr, size_t size)
 {
     const uint8_t *data = ptr;
     for (size_t i = 0; i < size; ++i) {
-        check(data[i] == CAST(size & 255, uint8_t));
+        check(data[i] == (uint8_t)(size & 255));
     }
 }
 

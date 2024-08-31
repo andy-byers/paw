@@ -8,6 +8,8 @@
 #include "env.h"
 #include "paw.h"
 
+int pawD_line_number(const CallFrame *cf, const OpCode *pc);
+
 const char *paw_op_name(Op op);
 void paw_dump_opcode(OpCode opcode);
 void paw_dump_source(paw_Env *P, Proto *proto);

@@ -13,13 +13,13 @@ typedef struct MapCursor {
     size_t index;
 } MapCursor;
 
-#define pawH_meta(m, index) (&CAST((m)->data, MapMeta *)[index])
+#define pawH_meta(m, index) (&CAST(MapMeta *, (m)->data)[index])
 
 static inline Value *pawH_key(Map *m, size_t index)
 {
-    char *data = CAST(m->data, char *);
+    char *data = CAST(char *, m->data);
     data += sizeof(MapMeta) * m->capacity;
-    return &CAST(data, Value *)[index];
+    return &CAST(Value *, data)[index];
 }
 
 static inline Value *pawH_value(Map *m, size_t index)
@@ -29,12 +29,12 @@ static inline Value *pawH_value(Map *m, size_t index)
 
 static inline MapState h_get_state(MapCursor *mc)
 {
-    return CAST(mc->map->data, MapMeta *)[mc->index].state;
+    return CAST(MapMeta *, mc->map->data)[mc->index].state;
 }
 
 static inline void h_set_state(MapCursor *mc, MapState state)
 {
-    CAST(mc->map->data, MapMeta *)[mc->index].state = state;
+    CAST(MapMeta *, mc->map->data)[mc->index].state = state;
 }
 
 static inline Value *h_cursor_key(MapCursor *mc)

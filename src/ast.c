@@ -50,6 +50,8 @@ struct AstSegment *pawAst_segment_new(struct Ast *ast)
     return pawK_pool_alloc(ENV(ast), &ast->pool, sizeof(struct AstSegment));
 }
 
+#if defined(PAW_DEBUG_EXTRA)
+
 typedef struct Printer {
     Buffer *buf;
     paw_Env *P;
@@ -128,7 +130,7 @@ static void dump_decl(Printer *P, struct AstDecl *d)
     DUMP_FMT(P, "line: %d\n", d->hdr.line);
     switch (AST_KINDOF(d)) {
         case kAstFuncDecl:
-            DUMP_FMT(P, "receiver: %p\n", CAST(d->func.receiver, void *));
+            DUMP_FMT(P, "receiver: %p\n", CAST(void *, d->func.receiver));
             DUMP_FMT(P, "name: %s\n", d->func.name->text);
             dump_decl_list(P, d->func.generics, "generics");
             dump_decl_list(P, d->func.params, "params");
@@ -376,3 +378,5 @@ void pawAst_dump(struct Ast *ast)
     }
     pawL_push_result(P, &buf);
 }
+
+#endif

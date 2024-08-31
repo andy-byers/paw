@@ -109,7 +109,9 @@ struct Resolver {
     struct HirType *adt; // enclosing ADT
     struct HirType *result; // enclosing function return type
     struct HirSymtab *symtab; // scoped symbol table
+    struct HirScope *globals;
     struct DynamicMem *dm; // dynamic memory
+    struct LazyItemList *items;                           
     int func_depth; // number of nested functions
     int nresults;
     int list_gid;
@@ -150,7 +152,6 @@ struct DynamicMem {
 typedef struct Generator {
     struct Compiler *C;
     struct HirSymtab *sym;
-    struct HirScope *globals;
     struct Hir *hir;
     struct FuncState *fs;
     struct ToplevelList *items;

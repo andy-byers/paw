@@ -28,7 +28,6 @@
 #define V_TEXT(v) (V_STRING(v)->text)
 #define V_TUPLE(v) (O_TUPLE(V_OBJECT(v)))
 #define V_VARIANT(v) (O_VARIANT(V_OBJECT(v)))
-#define V_METHOD(v) (O_METHOD(V_OBJECT(v)))
 #define V_FOREIGN(v) (O_FOREIGN(V_OBJECT(v)))
 
 #define V_SET_0(v) ((v)->u = 0)
@@ -47,7 +46,6 @@
 #define O_IS_LIST(o) (O_KIND(o) == VLIST)
 #define O_IS_TUPLE(o) (O_KIND(o) == VTUPLE)
 #define O_IS_VARIANT(o) (O_KIND(o) == VVARIANT)
-#define O_IS_METHOD(o) (O_KIND(o) == VMETHOD)
 #define O_IS_FOREIGN(o) (O_KIND(o) == VFOREIGN)
 
 #define O_STRING(o) CHECK_EXP(O_IS_STRING(o), (String *)(o))
@@ -59,10 +57,9 @@
 #define O_LIST(o) CHECK_EXP(O_IS_LIST(o), (List *)(o))
 #define O_TUPLE(o) CHECK_EXP(O_IS_TUPLE(o), (Tuple *)(o))
 #define O_VARIANT(o) CHECK_EXP(O_IS_VARIANT(o), (Variant *)(o))
-#define O_METHOD(o) CHECK_EXP(O_IS_METHOD(o), (Method *)(o))
 #define O_FOREIGN(o) CHECK_EXP(O_IS_FOREIGN(o), (Foreign *)(o))
 
-#define CAST_OBJECT(x) (CAST(CAST(x, void *), Object *))
+#define CAST_OBJECT(x) ((Object *)(void *)(x))
 
 typedef enum ValueKind {
     // scalar types
@@ -76,7 +73,6 @@ typedef enum ValueKind {
     VMAP,
     VTUPLE,
     VVARIANT,
-    VMETHOD,
     VFOREIGN,
     VTYPE,
 
@@ -139,13 +135,13 @@ static inline size_t pawV_check_abs(paw_Env *P, paw_Int index, size_t length, co
 // Understands non-decimal base prefixes '0b', '0o', '0x', and their uppercase
 // counterparts. Returns PAW_ESYNTAX if the integer is malformed,
 // PAW_EOVERFLOW if it is too large to fit in a uint64_t, and PAW_OK otherwise.
-int pawV_parse_uint64(paw_Env *P, const char *text, int base);
+int pawV_parse_uint64(paw_Env *P, const char *text, int base, uint64_t *out);
 
-int pawV_parse_int(paw_Env *P, const char *text, int base);
+int pawV_parse_int(paw_Env *P, const char *text, int base, paw_Int *out);
 
 // Convert a null-terminated string into a float
 // Returns 0 on success, -1 otherwise.
-int pawV_parse_float(paw_Env *P, const char *text);
+int pawV_parse_float(paw_Env *P, const char *text, paw_Float *out);
 
 typedef struct String {
     GC_HEADER;
@@ -156,7 +152,7 @@ typedef struct String {
     char text[];
 } String;
 
-const char *pawV_to_string(paw_Env *P, Value v, paw_Type type, size_t *nout);
+const char *pawV_to_string(paw_Env *P, Value *pv, paw_Type type, size_t *nout);
 
 typedef struct Proto {
     GC_HEADER;
@@ -306,17 +302,6 @@ typedef struct Variant {
 Variant *pawV_new_variant(paw_Env *P, int k, int nfields);
 void pawV_free_variant(paw_Env *P, Variant *var);
 
-// Method bound to an instance
-typedef struct Method {
-    GC_HEADER;
-    Object *gc_list;
-    Value self;
-    Value f;
-} Method;
-
-Method *pawV_new_method(paw_Env *P, Value self, Value call);
-void pawV_free_method(paw_Env *P, Method *);
-
 typedef struct Foreign {
     GC_HEADER;
     uint8_t flags;
@@ -327,7 +312,7 @@ typedef struct Foreign {
     Value fields[];
 } Foreign;
 
-Foreign *pawV_push_foreign(paw_Env *P, size_t size, int nfields);
+Foreign *pawV_new_foreign(paw_Env *P, size_t size, int nfields, Value *out);
 void pawV_free_foreign(paw_Env *P, Foreign *ud);
 
 #endif // PAW_VALUE_H

@@ -7,7 +7,7 @@
 
 extern int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
-    struct FuzzState fs = fuzz_open(PAW_HEAP_MIN);
+    struct FuzzState fs = fuzz_open(PAW_HEAP_DEFAULT);
     pawL_load_nchunk(fs.P, "fuzz", (const char *)data, size);
     fuzz_close(fs);
     return 0;

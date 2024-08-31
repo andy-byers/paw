@@ -562,7 +562,7 @@ static struct AstExpr *unop_expr(struct Lex *lex, enum UnOp op)
     struct AstExpr *result = NEW_EXPR(lex, kAstUnOpExpr);
     struct AstUnOpExpr *r = &result->unop;
     skip(lex); // unary operator token
-    r->op = CAST(op, enum UnaryOp); // same order
+    r->op = CAST(enum UnaryOp, op); // same order
     r->target = expression(lex, kUnOpPrecedence);
     leave_nested(lex);
     return result;
@@ -928,7 +928,7 @@ static struct AstExpr *binop_expr(struct Lex *lex, enum InfixOp op, struct AstEx
     struct AstExpr *rhs = expression(lex, right_prec(op));
     struct AstExpr *result = NEW_EXPR(lex, kAstBinOpExpr);
     struct AstBinOpExpr *r = AstGetBinOpExpr(result);
-    r->op = CAST(op, enum BinaryOp); // same order
+    r->op = CAST(enum BinaryOp, op); // same order
     r->lhs = lhs;
     r->rhs = rhs;
     leave_nested(lex);
@@ -1137,7 +1137,7 @@ static struct AstDecl *function(struct Lex *lex, String *name, enum FuncKind kin
     r->func.result = test_next(lex, TK_ARROW) 
         ? type_expr(lex) 
         : unit_type(lex);
-    r->func.body = lex->in_prelude
+    r->func.body = test_next(lex, ';')
         ? NULL
         : block(lex);
     return r;
@@ -1377,22 +1377,22 @@ static const char kPrelude[] =
     "    Err(E),            \n"
     "}                      \n"
 
-    "pub fn print(message: str)\n"
-    "pub fn assert(cond: bool) \n"
+    "pub fn print(message: str);\n"
+    "pub fn assert(cond: bool); \n"
 
     // TODO: Replace with methods
-    "pub fn _int_to_string(self: int) -> str\n"
-    "pub fn _string_parse_int(self: str, base: int) -> int     \n"
-    "pub fn _string_parse_float(self: str) -> float            \n"
-    "pub fn _string_split(self: str, sep: str) -> [str]        \n"
-    "pub fn _string_join(self: str, seq: [str]) -> str         \n"
-    "pub fn _string_find(self: str, target: str) -> int        \n"
-    "pub fn _string_starts_with(self: str, prefix: str) -> bool\n"
-    "pub fn _string_ends_with(self: str, suffix: str) -> bool  \n"
-    "pub fn _list_push<T>(self: [T], v: T)          \n"
-    "pub fn _list_pop<T>(self: [T]) -> T            \n"
-    "pub fn _list_insert<T>(self: [T], i: int, v: T)\n"
-    "pub fn _list_erase<T>(self: [T], i: int) -> T  \n";
+    "pub fn _int_to_string(self: int) -> str;\n"
+    "pub fn _string_parse_int(self: str, base: int) -> int;     \n"
+    "pub fn _string_parse_float(self: str) -> float;            \n"
+    "pub fn _string_split(self: str, sep: str) -> [str];        \n"
+    "pub fn _string_join(self: str, seq: [str]) -> str;         \n"
+    "pub fn _string_find(self: str, target: str) -> int;        \n"
+    "pub fn _string_starts_with(self: str, prefix: str) -> bool;\n"
+    "pub fn _string_ends_with(self: str, suffix: str) -> bool;  \n"
+    "pub fn _list_push<T>(self: [T], v: T);          \n"
+    "pub fn _list_pop<T>(self: [T]) -> T;            \n"
+    "pub fn _list_insert<T>(self: [T], i: int, v: T);\n"
+    "pub fn _list_erase<T>(self: [T], i: int) -> T;  \n";
 
 struct PreludeReader {
     size_t size;
@@ -1421,57 +1421,6 @@ static void load_prelude(struct Lex *lex)
 // All paw language keywords
 //
 // ORDER TokenKind
-static const char *kKeywords[] = {
-    "pub",
-    "fn",
-    "type",
-    "enum",
-    "struct",
-    "let",
-    "if",
-    "else",
-    "for",
-    "do",
-    "while",
-    "break",
-    "continue",
-    "return",
-    "in",
-    "as",
-    "true",
-    "false",
-};
-
-static String *basic_type_name(paw_Env *P, const char *name, paw_Type code)
-{
-    String *s = pawS_new_fixed(P, name);
-    s->flag = FLAG2CODE(code); // works either direction
-    return s;
-}
-
-void pawP_init(paw_Env *P)
-{
-    // Add all keywords to the interned strings table. Fix them so they are
-    // never collected. Also added to the lexer string map.
-    for (size_t i = 0; i < paw_countof(kKeywords); ++i) {
-        const char *kw = kKeywords[i];
-        String *str = pawS_new_fixed(P, kw);
-        str->flag = i + FIRST_KEYWORD;
-    }
-    // note that keywords are already fixed
-    P->str_cache[CSTR_SELF] = pawS_new_str(P, "self");
-    P->str_cache[CSTR_TRUE] = pawS_new_str(P, "true");
-    P->str_cache[CSTR_FALSE] = pawS_new_str(P, "false");
-    P->str_cache[CSTR_BOOL] = basic_type_name(P, "bool", PAW_TBOOL);
-    P->str_cache[CSTR_INT] = basic_type_name(P, "int", PAW_TINT);
-    P->str_cache[CSTR_FLOAT] = basic_type_name(P, "float", PAW_TFLOAT);
-    P->str_cache[CSTR_STR] = basic_type_name(P, "str", PAW_TSTR);
-    P->str_cache[CSTR_LIST] = pawS_new_fixed(P, "_List");
-    P->str_cache[CSTR_MAP] = pawS_new_fixed(P, "_Map");
-    P->str_cache[CSTR_OPTION] = pawS_new_fixed(P, "Option");
-    P->str_cache[CSTR_RESULT] = pawS_new_fixed(P, "Result");
-}
-
 static void skip_hashbang(struct Lex *lex)
 {
     if (test_next(lex, '#') && test_next(lex, '!')) {

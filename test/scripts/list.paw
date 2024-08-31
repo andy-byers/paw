@@ -568,3 +568,27 @@ pub fn test_infer_l() {
     }
     assert(result == 'aaabbbcccdddeeefffggghhhiii');
 }
+
+struct ComplexStruct<T> {
+    value: ComplexEnum<T>
+}
+
+enum ComplexEnum<T> {
+    JustT(T),
+    WithStr(T, str),
+}
+
+pub fn test_complex_elem() {
+    let list = [];
+    for i = 0, 1000 {
+        if i < 500 {
+            _list_push(list, ComplexStruct{
+                value: ComplexEnum::<int>::JustT(i),
+            });
+        } else {
+            _list_push(list, ComplexStruct{
+                value: ComplexEnum::<int>::WithStr(i, 'str-' + _int_to_string(i)),
+            });
+        }
+    }
+}

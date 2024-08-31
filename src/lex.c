@@ -7,7 +7,7 @@
 
 #define LEX_ERROR(x) pawX_error(x, "syntax error")
 #define SAVE_AND_NEXT(x) (save(x, (x)->c), next(x))
-#define IS_EOF(x) (CAST((x)->c, uint8_t) == TK_END)
+#define IS_EOF(x) (CAST(uint8_t, (x)->c) == TK_END)
 #define IS_NEWLINE(x) ((x)->c == '\r' || (x)->c == '\n')
 
 static void add_location(paw_Env *P, Buffer *print, const String *s, int line)
@@ -44,7 +44,7 @@ static char next_raw(struct Lex *x)
         --x->nchunk;
         ++x->chunk;
     } else {
-        x->c = CAST(TK_END, char);
+        x->c = CAST(char, TK_END);
     }
     return x->c;
 }
@@ -103,7 +103,6 @@ static struct Token make_int(struct Lex *x)
 {
     paw_Env *P = ENV(x);
     const Value v = P->top.p[-1];
-    pawC_stkdec(P, 1);
     return (struct Token){
         .kind = TK_INTEGER,
         .value = v, 
@@ -114,7 +113,6 @@ static struct Token make_float(struct Lex *x)
 {
     paw_Env *P = ENV(x);
     const Value v = P->top.p[-1];
-    pawC_stkdec(P, 1);
     return (struct Token){
         .kind = TK_FLOAT,
         .value = v, 
@@ -141,7 +139,7 @@ static struct Token consume_name(struct Lex *x)
     struct Token t = make_string(x, TK_NAME);
     const String *s = V_STRING(t.value);
     if (IS_KEYWORD(s)) {
-        t.kind = CAST(s->flag, TokenKind);
+        t.kind = CAST(TokenKind, s->flag);
     } else if (s->length > PAW_NAME_MAX) {
         pawX_error(x, "name (%I chars) is too long", PAW_CAST_INT(s->length));
     }
@@ -185,7 +183,7 @@ static int consume_utf8(struct Lex *x)
 
     uint32_t state = 0;
     do {
-        const uint8_t c = CAST(x->c, uint8_t);
+        const uint8_t c = CAST(uint8_t, x->c);
         state = kLookup1[c] + state * 12;
         state = kLookup2[state];
         SAVE_AND_NEXT(x);
@@ -316,24 +314,32 @@ static struct Token consume_int(struct Lex *x)
 {
     paw_Env *P = ENV(x);
     struct DynamicMem *dm = x->dm;
-    const int rc = pawV_parse_int(P, dm->scratch.data, 0);
+    paw_Int i;
+
+    const int rc = pawV_parse_int(P, dm->scratch.data, 0, &i);
     if (rc == PAW_EOVERFLOW) {
          pawX_error(x, "integer '%s' is out of range for 'int' type", dm->scratch.data);
     } else if (rc == PAW_ESYNTAX) {
-         pawX_error(x, "malformed integer '%s'", dm->scratch.data);
+         pawX_error(x, "invalid integer '%s'", dm->scratch.data);
     }
-    const Value *pv = &P->top.p[-1];
-    return make_int(x);
+    return (struct Token){
+        .kind = TK_INTEGER,
+        .value.i = i, 
+    };
 }
 
 static struct Token consume_float(struct Lex *x)
 {
+    paw_Env *P = ENV(x);
     struct DynamicMem *dm = x->dm;
-    const int rc = pawV_parse_float(ENV(x), dm->scratch.data);
-    if (rc != PAW_OK) {
-         pawX_error(x, "invalid number '%s'", dm->scratch.data);
-    }
-    return make_float(x);
+    paw_Float f;
+
+    const int rc = pawV_parse_float(ENV(x), dm->scratch.data, &f);
+    if (rc != PAW_OK) pawX_error(x, "invalid number '%s'", dm->scratch.data);
+    return (struct Token){
+        .kind = TK_FLOAT,
+        .value.f = f, 
+    };
 }
 
 static struct Token consume_number(struct Lex *x)
@@ -418,11 +424,11 @@ static void skip_whitespace(struct Lex *x)
 static struct Token advance(struct Lex *x)
 {
 try_again:
-#define T(kind) make_token(CAST(kind, TokenKind))
+#define T(kind) make_token(CAST(TokenKind, kind))
     skip_whitespace(x);
 
     // cast to avoid sign extension
-    struct Token token = T(CAST(x->c, uint8_t));
+    struct Token token = T(CAST(uint8_t, x->c));
     x->dm->scratch.count = 0;
     switch (token.kind) {
         case '\'':

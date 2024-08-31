@@ -27,6 +27,7 @@ build_test(test_so)
 build_test(test_error)
 build_test(test_api)
 
+test_script(fib "15")
 test_script(bubble "500")
 test_script(matmul "50")
 test_script(mandelbrot "-2.1,0.9,80,-1.3,1.3,24")

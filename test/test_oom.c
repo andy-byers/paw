@@ -5,19 +5,9 @@
 // test_oom.c: Heap exhaustion tests
 
 #include "test.h"
+#include "alloc.h"
 #include "call.h"
 #include "env.h"
-
-static void *oom_alloc(void *ud, void *ptr, size_t size0, size_t size)
-{
-    struct TestAlloc *a = ud;
-    if (a->extra + size0 < size) {
-        return NULL;
-    }
-    a->extra += size0;
-    a->extra -= size;
-    return test_alloc(ud, ptr, size0, size);
-}
 
 static int run_tests(paw_Env *P)
 {
@@ -29,45 +19,147 @@ static int run_tests(paw_Env *P)
         if (!def->hdr.is_pub) continue;
         const String *name = def->hdr.name;
         if (name->length >= kLength &&
-                0 == memcmp(name->text, kPrefix, kLength)) {
+                memcmp(name->text, kPrefix, kLength) == 0) {
             check(def->hdr.kind == DEF_FUNC);
-            pawC_pushv(P, *pawE_get_val(P, def->func.vid));
+            paw_push_zero(P, 1);
+            P->top.p[-1] = *pawE_get_val(P, def->func.vid);
             return paw_call(P, 0);
         }
     }
     return PAW_OK;
 }
 
-static int script(const char *name, size_t heap_size)
+static void check_status(paw_Env *P, int status)
+{
+    if (status != PAW_OK && status != PAW_EMEMORY) {
+        check(paw_get_count(P) >= 1);
+        const char *s = paw_string(P, -1);
+        fprintf(stderr, "%s\n", s);
+        abort();
+    }
+}
+
+static int run_script_or_chunk(const char *name_or_chunk, size_t heap_size, paw_Bool is_chunk)
 {
     paw_Env *P = paw_open(&(struct paw_Options){
                 .heap_size = heap_size,
             });
     if (P == NULL) return PAW_EMEMORY;
 
-    int status = test_open_file(P, name);
+    int status = is_chunk 
+        ? test_open_string(P, name_or_chunk)
+        : test_open_file(P, name_or_chunk);
     if (status == PAW_OK) status = run_tests(P);
+    check_status(P, status);
     paw_close(P);
     return status;
 }
 
-static void test_oom(const char *name)
+static size_t s_passing_heap_size;
+static const char *s_name_or_chunk;
+static paw_Bool s_is_chunk;
+static int s_count;
+
+static void start_oom(const char *name_or_chunk, paw_Bool is_chunk)
 {
-    size_t heap_size = 1;
-    int count = 0;
-    int rc;
+    s_count = 0;
+    s_passing_heap_size = 0;
+    s_name_or_chunk = name_or_chunk;
+    s_is_chunk = is_chunk;
+}
+
+static int run_one(size_t heap_size)
+{
+    const int status = run_script_or_chunk(s_name_or_chunk, heap_size, s_is_chunk);
+    if (status != PAW_EMEMORY) {
+        check(status == PAW_OK);
+        s_passing_heap_size = heap_size;
+    } else {
+        ++s_count; 
+    }
+    return status;
+}
+
+static void finish_oom(void)
+{
+    check(s_count > 0);
+
+    printf("[PASS] %s: passing_heap_size=%zu, oom_count=%d\n", 
+            s_is_chunk ? "(chunk)" : s_name_or_chunk, 
+            s_passing_heap_size, s_count);
+}
+
+static void test_oom(const char *name_or_chunk, paw_Bool is_chunk)
+{
+    // list of heap sizes that are too small
+    const size_t special_sizes[] = {
+        1,
+        sizeof(paw_Env),
+        sizeof(struct Heap),
+        sizeof(struct Heap) + 1,
+        sizeof(struct Heap) + 10,
+        sizeof(struct Heap) + 100,
+        sizeof(struct Heap) + 200,
+        sizeof(struct Heap) + 300,
+        sizeof(struct Heap) + 500,
+        sizeof(struct Heap) + 1000,
+        sizeof(struct Heap) + 10000,
+    };
+    start_oom(name_or_chunk, is_chunk);
+    for (size_t i = 0; i < paw_countof(special_sizes); ++i) {
+        const int status = run_one(special_sizes[i]);
+        check(status == PAW_EMEMORY);
+    }
+
+    int status;
+    size_t heap_size = 1 << 10;
     do {
-        rc = script(name, heap_size);
-        heap_size *= 2;
-        ++count;
-    } while (rc == PAW_EMEMORY);
-    check(rc == PAW_OK);
-    check(count > 0);
-    printf("OOM count: %d\n", count);
+        status = run_one(heap_size);
+        heap_size += heap_size;
+    } while (status != PAW_OK);
+    finish_oom();
+}
+
+static void test_call_frames(void)
+{
+    test_oom(
+            "fn poly_recur<T>(_: T, n: int) {\n"
+            "    if n > 0 {                  \n"
+            "        poly_recur(_, n - 1);   \n"
+            "    }                           \n"
+            "}                               \n"
+            "fn recur(n: int) {   \n"
+            "    if n > 0 {       \n"
+            "        recur(n - 1);\n"
+            "    }                \n"
+            "}                    \n"
+            "pub fn test_call_frames() {\n"
+            "    recur(25);\n"
+            "    poly_recur(true, 250);\n"
+            "    poly_recur(1.0, 2500);\n"
+            "}\n", PAW_TRUE);
+}
+
+static void test_list_ops(void)
+{
+    test_oom(
+            "fn push_n<T>(list: [T], value: T, n: int) {\n"
+            "    for i = 0, n {                         \n"
+            "        _list_push(list, value);           \n"
+            "    }                                      \n"
+            "}                                          \n"
+            "pub fn test_lists() {       \n"
+            "    let list = [];          \n"
+            "    push_n(list, 42, 10000);\n"
+            "}\n", PAW_TRUE);
 }
 
 int main(void)
 {
-#define RUN_SCRIPT(name) test_oom(#name);
+#define RUN_SCRIPT(name) test_oom(#name, PAW_FALSE);
     TEST_SCRIPTS(RUN_SCRIPT)
+#undef RUN_SCRIPT
+
+    test_call_frames();
+    test_list_ops();
 }

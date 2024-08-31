@@ -23,10 +23,10 @@
 #define PAW_IS_ALIGNED(p) (!(CAST_UPTR(p) & (PAW_ALIGN - 1)))
 
 #define CHECK_EXP(c, e) (paw_assert(c), e)
-#define CAST(x, t) ((t)(x))
-#define CAST_SIZE(x) CAST(x, size_t)
-#define CAST_UPTR(x) CAST(x, uintptr_t)
-#define ERASE_TYPE(p) CAST(p, void *)
+#define CAST(t, x) ((t)(x))
+#define CAST_SIZE(x) CAST(size_t, x)
+#define CAST_UPTR(x) CAST(uintptr_t, x)
+#define ERASE_TYPE(p) CAST(void *, p)
 #define BUMP_PTR(p, n) ERASE_TYPE(CAST_UPTR(p) + (n))
 
 // Check for inclusion in one of the character classes

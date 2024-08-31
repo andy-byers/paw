@@ -17,9 +17,9 @@ typedef uint16_t ValueId;
 #define CFF_C 1
 #define CFF_ENTRY 2
 
-#define cf_is_paw(cf) (!((cf)->flags & CFF_C))
-#define cf_is_entry(cf) ((cf)->flags & CFF_ENTRY)
-#define cf_stack_return(cf) ((cf)->base.p)
+#define CF_IS_PAW(cf) (!((cf)->flags & CFF_C))
+#define CF_IS_ENTRY(cf) ((cf)->flags & CFF_ENTRY)
+#define CF_STACK_RETURN(cf) ((cf)->base.p)
 
 typedef struct CallFrame {
     struct CallFrame *prev;

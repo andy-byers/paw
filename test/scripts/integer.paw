@@ -19,7 +19,7 @@ pub fn test_non_decimal() {
 }
 
 pub fn test_parse() {
-    let check = |s: str, want: int| {
+    let check = |s, want| {
         assert(_string_parse_int(s, 10) == want);
     };
 

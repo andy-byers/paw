@@ -31,10 +31,6 @@
 # define PAW_HEAP_DEFAULT ((size_t)33554432)
 #endif
 
-#ifndef PAW_HEAP_MIN
-# define PAW_HEAP_MIN ((size_t)262144)
-#endif
-
 #if defined(__APPLE__)
 # define PAW_OS_MACOS
 # define PAW_OS_POSIX
@@ -59,6 +55,16 @@ _Noreturn static inline void paw_unreachable_(void)
 # define PAW_NODISCARD
 # define PAW_UNREACHABLE paw_unreachable_
 _Noreturn static inline void paw_unreachable_(void) {}
+#endif
+
+#if !defined(PAW_LIKELY)
+# if defined(__GNUC__) || defined(__clang__)
+#  define P_LIKELY(x) (__builtin_expect((x) != 0, 1))
+#  define P_UNLIKELY(x) (__builtin_expect((x) != 0, 0))
+# else
+#  define PAW_LIKELY(x) (x)
+#  define PAW_UNLIKELY(x) (x)
+# endif
 #endif
 
 #endif // PAW_CONFIG_H
