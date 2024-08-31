@@ -24,6 +24,32 @@ static int stack_effect(OpCode opcode)
         case OP_SETFIELD:
         case OP_SETTUPLE:
             return -3;
+        case OP_JUMPFALSEPOP:
+        case OP_SETLOCAL:
+        case OP_SETUPVALUE:
+        case OP_INITFIELD:
+        case OP_CMPI:
+        case OP_CMPF:
+        case OP_CMPS:
+        case OP_ARITHI2:
+        case OP_ARITHF2:
+        case OP_BITW2:
+        case OP_GETFIELD:
+        case OP_GETTUPLE:
+            return -1;
+        case OP_RETURN:
+        case OP_NOOP:
+        case OP_JUMP:
+        case OP_JUMPFALSE:
+        case OP_JUMPNULL:
+        case OP_ARITHI1:
+        case OP_ARITHF1:
+        case OP_BITW1:
+        case OP_CASTBOOL:
+        case OP_CASTINT:
+        case OP_CASTFLOAT:
+        case OP_BOOLOP:
+            return 0;
         case OP_PUSHZERO:
         case OP_PUSHONE:
         case OP_PUSHSMI:
@@ -42,33 +68,6 @@ static int stack_effect(OpCode opcode)
         case OP_FORLIST0:
         case OP_FORMAP0:
             return 2;
-        case OP_RETURN:
-        case OP_NOOP:
-        case OP_JUMP:
-        case OP_JUMPFALSE:
-        case OP_JUMPNULL:
-        case OP_ARITHI1:
-        case OP_ARITHF1:
-        case OP_BITW1:
-        case OP_CASTBOOL:
-        case OP_CASTINT:
-        case OP_CASTFLOAT:
-            return 0;
-        case OP_JUMPFALSEPOP:
-        case OP_SETLOCAL:
-        case OP_SETUPVALUE:
-        case OP_INITFIELD:
-        case OP_CMPI:
-        case OP_CMPF:
-        case OP_CMPS:
-        case OP_ARITHI2:
-        case OP_ARITHF2:
-        case OP_BITW2:
-        case OP_GETFIELD:
-        case OP_GETTUPLE:
-            return -1;
-        case OP_BOOLOP:
-            return 0; 
         case OP_STROP:
             switch (GET_U(opcode)) {
                 case STR_LEN:
@@ -122,7 +121,7 @@ void pawK_fix_line(struct FuncState *fs, int line)
     paw_assert(fs->nlines > 0);
     fs->proto->lines[fs->nlines - 1].line = line;
 }
-#include <stdio.h>
+
 static void add_opcode(struct FuncState *fs, OpCode code)
 {
     paw_Env *P = ENV(fs->G);

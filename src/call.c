@@ -13,10 +13,7 @@
 #include "rt.h"
 #include "str.h"
 #include "util.h"
-#include <assert.h>
-#include <limits.h>
 #include <setjmp.h>
-#include <stdarg.h>
 #include <stdlib.h>
 
 // Lua-style error handling
