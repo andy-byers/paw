@@ -169,6 +169,20 @@ void paw_strop(paw_Env *P, enum paw_StrOp op);
 void paw_listop(paw_Env *P, enum paw_ListOp op);
 void paw_mapop(paw_Env *P, enum paw_MapOp op);
 
+enum paw_AdtKind {
+    PAW_ADT_STR,
+    PAW_ADT_LIST,
+    PAW_ADT_MAP,
+};
+
+void paw_length(paw_Env *P, enum paw_AdtKind kind);
+void paw_concat(paw_Env *P, enum paw_AdtKind kind);
+void paw_getelem(paw_Env *P, enum paw_AdtKind kind);
+void paw_setelem(paw_Env *P, enum paw_AdtKind kind);
+void paw_getrange(paw_Env *P, enum paw_AdtKind kind);
+void paw_setrange(paw_Env *P, enum paw_AdtKind kind);
+
+
 //
 // Getters (stack -> C):
 //

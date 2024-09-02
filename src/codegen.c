@@ -21,6 +21,12 @@
 #define GET_DECL(G, id) pawHir_get_decl((G)->hir, id)
 #define TYPE_CODE(G, type) (pawP_type2code((G)->C, type))
 
+static enum paw_AdtKind adt_kind(paw_Type code)
+{
+    return code == BUILTIN_LIST ? PAW_ADT_LIST :
+        code == BUILTIN_MAP ? PAW_ADT_MAP : PAW_ADT_STR;
+}
+
 struct ItemSlot {
     struct HirVarInfo info;
     struct HirDecl *decl;
@@ -109,12 +115,6 @@ static String *mangle_name(struct Generator *G, const String *name, struct HirTy
     pawH_insert(P, G->C->strings, key, key);
     pawC_pop(P);
     return result;
-}
-
-static paw_Type basic_code(struct Generator *G, struct HirType *type)
-{
-    paw_assert(HirIsAdt(type));
-    return TYPE_CODE(G, type);
 }
 
 static Map *kcache_map(struct FuncState *fs, paw_Type code)
@@ -568,7 +568,7 @@ static struct HirVarInfo find_var(struct Generator *G, const String *name)
 #define CODE_OP(fs, op, subop) pawK_code_U(fs, op, CAST(int, subop))
 
 // Get the length of the container object on top of the stack
-static void code_len(struct FuncState *fs, paw_Type type);
+static void code_len(struct FuncState *fs, enum paw_AdtKind kind);
 
 static void code_slice_indices(struct HirVisitor *V, struct HirExpr *first, 
                                struct HirExpr *second, struct HirType *target)
@@ -586,8 +586,9 @@ static void code_slice_indices(struct HirVisitor *V, struct HirExpr *first,
         V->VisitExpr(V, second);
     } else {
         // default to the end of the sequence
+        const paw_Type code = TYPE_CODE(G, target);
         pawK_code_U(fs, OP_COPY, 1);
-        code_len(fs, TYPE_CODE(G, target));
+        code_len(fs, adt_kind(code));
     }
 }
 
@@ -628,22 +629,6 @@ static struct HirVarInfo resolve_short_path(struct Generator *G, struct HirPath 
     return find_var(G, name);
 }
 
-static void code_set(struct FuncState *fs, paw_Type type)
-{
-    if (type == BUILTIN_LIST) {
-        CODE_OP(fs, OP_LISTOP, LIST_SET); 
-    } else {
-        paw_assert(type == BUILTIN_MAP);
-        CODE_OP(fs, OP_MAPOP, MAP_SET); 
-    }
-}
-
-static void code_setn(struct FuncState *fs, paw_Type type)
-{
-    paw_assert(type == BUILTIN_LIST);
-    CODE_OP(fs, OP_LISTOP, LIST_SETN); 
-}
-
 static void code_setter(struct HirVisitor *V, struct HirExpr *lhs, struct HirExpr *rhs)
 {
     struct Generator *G = V->ud;
@@ -679,14 +664,15 @@ static void code_setter(struct HirVisitor *V, struct HirExpr *lhs, struct HirExp
         paw_assert(HirIsIndex(lhs));
         const struct HirIndex *index = &lhs->index;
         struct HirType *target = HIR_TYPEOF(index->target);
+        const enum paw_AdtKind t = adt_kind(TYPE_CODE(G, target));
         if (index->is_slice) {
             code_slice_indices(V, index->first, index->second, target);
             V->VisitExpr(V, rhs);
-            code_setn(fs, basic_code(G, target));
+            CODE_OP(fs, OP_SETRANGE, t); 
         } else {
             V->VisitExpr(V, lhs->index.first);
             V->VisitExpr(V, rhs);
-            code_set(fs, basic_code(G, target));
+            CODE_OP(fs, OP_SETELEM, t); 
         }
     }
 }
@@ -826,27 +812,15 @@ static void code_chain_expr(struct HirVisitor *V, struct HirChainExpr *e)
     patch_here(fs, jump);
 }
 
-static void code_len(struct FuncState *fs, paw_Type type)
+static void code_len(struct FuncState *fs, enum paw_AdtKind kind)
 {
-    if (type == PAW_TSTR) {
-        CODE_OP(fs, OP_STROP, STR_LEN); 
-    } else if (type == BUILTIN_LIST) {
-        CODE_OP(fs, OP_LISTOP, LIST_LEN); 
-    } else {
-        paw_assert(BUILTIN_MAP);
-        CODE_OP(fs, OP_MAPOP, MAP_LEN); 
-    }
+    CODE_OP(fs, OP_LENGTH, kind); 
 }
 
 static void code_arith1(struct FuncState *fs, enum ArithOp1 op, paw_Type type)
 {
     const int base = type == PAW_TINT ? OP_ARITHI1 : OP_ARITHF1;
     CODE_OP(fs, base, op);
-}
-
-static void code_boolop(struct FuncState *fs, enum BoolOp op)
-{
-    CODE_OP(fs, OP_BOOLOP, op);
 }
 
 static void code_bitw1(struct FuncState *fs, enum BitwOp1 op)
@@ -866,13 +840,13 @@ static void code_unop_expr(struct HirVisitor *V, struct HirUnOpExpr *e)
     const paw_Type type = TYPE_CODE(G, target);
     switch (e->op) {
         case UNARY_LEN:
-            code_len(fs, type);
+            code_len(fs, adt_kind(type));
             break;
         case UNARY_NEG:
             code_arith1(fs, ARITH1_NEG, type);
             break;
         case UNARY_NOT:
-            code_boolop(fs, BOOL_NOT);
+            pawK_code_0(fs, OP_NOT);
             break;
         case UNARY_BNOT:
             code_bitw1(fs, BITW1_NOT);
@@ -931,10 +905,10 @@ static void code_binop_expr(struct HirVisitor *V, struct HirBinOpExpr *e)
             code_cmp(fs, CMP_GE, type);
             break;
         case BINARY_ADD:  
-            if (type == PAW_TSTR) {
-                CODE_OP(fs, OP_STROP, STR_CONCAT);
+            if (type == BUILTIN_STR) {
+                CODE_OP(fs, OP_CONCAT, PAW_ADT_STR);
             } else if (type == BUILTIN_LIST) {
-                CODE_OP(fs, OP_LISTOP, LIST_CONCAT);
+                CODE_OP(fs, OP_CONCAT, PAW_ADT_LIST);
             } else {
                 code_arith2(fs, ARITH2_ADD, type);
             }
@@ -1323,7 +1297,7 @@ static void code_forin_stmt(struct HirVisitor *V, struct HirForStmt *s)
 
     V->VisitExpr(V, forin->target);
     struct HirType *target = HIR_TYPEOF(forin->target);
-    new_local_lit(G, "(for target)", basic_code(G, target));
+    new_local_lit(G, "(for target)", TYPE_CODE(G, target));
     new_local_lit(G, "(for iter)", PAW_TINT);
 
     struct HirType *t = HIR_TYPEOF(forin->target);
@@ -1348,43 +1322,21 @@ static void code_for_stmt(struct HirVisitor *V, struct HirForStmt *s)
     leave_block(fs);
 }
 
-static void code_get(struct FuncState *fs, paw_Type type)
-{
-    if (type == PAW_TSTR) {
-        CODE_OP(fs, OP_STROP, STR_GET); 
-    } else if (type == BUILTIN_LIST) {
-        CODE_OP(fs, OP_LISTOP, LIST_GET); 
-    } else {
-        paw_assert(type == BUILTIN_MAP);
-        CODE_OP(fs, OP_MAPOP, MAP_GET); 
-    }
-}
-
-static void code_getn(struct FuncState *fs, paw_Type type)
-{
-    if (type == PAW_TSTR) {
-        CODE_OP(fs, OP_STROP, STR_GETN); 
-    } else {
-        paw_assert(type == BUILTIN_LIST);
-        CODE_OP(fs, OP_LISTOP, LIST_GETN); 
-    }
-}
-
 static void code_index_expr(struct HirVisitor *V, struct HirIndex *e)
 {
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
     struct HirType *target = HIR_TYPEOF(e->target);
-    const paw_Type t = basic_code(G, target);
+    const enum paw_AdtKind t = adt_kind(TYPE_CODE(G, target));
     fs->line = e->line;
 
     V->VisitExpr(V, e->target);
     if (e->is_slice) {
         code_slice_indices(V, e->first, e->second, target);
-        code_getn(fs, t);
+        CODE_OP(fs, OP_GETRANGE, t); 
     } else {
         V->VisitExpr(V, e->first);
-        code_get(fs, t);
+        CODE_OP(fs, OP_GETELEM, t); 
     }
 }
 

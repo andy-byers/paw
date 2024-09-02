@@ -141,10 +141,14 @@ OP_ARITHI2,//        U           x y            z             -
 OP_ARITHF2,//        U           x y            z             -   
 OP_BITW1,//          U           x              y             -
 OP_BITW2,//          U           x y            z             -
-OP_BOOLOP,//         U           v [v1..vn]     z             -
-OP_STROP,//          U           v [v1..vn]     z             -
-OP_LISTOP,//         U           v [v1..vn]     z             -
-OP_MAPOP,//          U           v [v1..vn]     z             -
+
+OP_NOT,//            -           v              !v            -
+OP_LENGTH,//         U           v              #v            -
+OP_CONCAT,//         U           x y            x+y           -
+OP_GETELEM,//        U           v i            v[i]          -
+OP_SETELEM,//        U           v i x          v[i] = x      -
+OP_GETRANGE,//       U           v i j          v[i:j]        -
+OP_SETRANGE,//       U           v i j x        v[i:j] = x    -
 
 OP_CASTBOOL,//       U           v              v as bool     -  
 OP_CASTINT,//        U           v              v as int      - 

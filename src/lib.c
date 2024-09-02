@@ -274,7 +274,7 @@ static void add_builtin_func(paw_Env *P, const char *name, paw_Function func)
     paw_push_value(P, -1);
     paw_push_string(P, name);
     pawL_new_func(P, func, 0);
-    pawR_mapop(P, MAP_SET);
+    pawR_setelem(P, PAW_ADT_MAP);
     pawC_stkdec(P, 1);
 }
 
@@ -370,6 +370,6 @@ int pawL_register_func(paw_Env *P, const char *name, paw_Function func, int nup)
 
     // func, builtin, name => builtin, name, func
     paw_rotate(P, -3, -1);
-    paw_mapop(P, PAW_MAP_SET);
+    paw_setelem(P, PAW_ADT_MAP);
     return 0;
 }

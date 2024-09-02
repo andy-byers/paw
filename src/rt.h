@@ -20,10 +20,12 @@ void pawR_arithf2(paw_Env *P, enum ArithOp2 op);
 void pawR_bitw1(paw_Env *P, enum BitwOp1 op);
 void pawR_bitw2(paw_Env *P, enum BitwOp2 op);
 
-void pawR_boolop(paw_Env *P, enum BoolOp op);
-void pawR_strop(paw_Env *P, enum StrOp op);
-void pawR_listop(paw_Env *P, enum ListOp op);
-void pawR_mapop(paw_Env *P, enum MapOp op);
+void pawR_length(paw_Env *P, enum paw_AdtKind kind);
+void pawR_concat(paw_Env *P, enum paw_AdtKind kind);
+void pawR_getelem(paw_Env *P, enum paw_AdtKind kind);
+void pawR_setelem(paw_Env *P, enum paw_AdtKind kind);
+void pawR_getrange(paw_Env *P, enum paw_AdtKind kind);
+void pawR_setrange(paw_Env *P, enum paw_AdtKind kind);
 
 void pawR_error(paw_Env *P, int status, const char *fmt, ...);
 void pawR_field_error(paw_Env *P, Value field);

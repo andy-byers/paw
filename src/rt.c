@@ -228,17 +228,17 @@ void pawR_init(paw_Env *P)
 
 static paw_Bool fornum_init(paw_Env *P)
 {
-    const paw_Int begin = V_INT(*VM_TOP(3));
-    const paw_Int end = V_INT(*VM_TOP(2));
-    const paw_Int step = V_INT(*VM_TOP(1));
+    const paw_Int begin = VM_INT(3);
+    const paw_Int end = VM_INT(2);
+    const paw_Int step = VM_INT(1);
     if (step == 0) {
         pawR_error(P, PAW_ERUNTIME, "loop step equals 0");
     }
     const paw_Bool skip = STOP_LOOP(begin, end, step);
     if (!skip) {
-        V_SET_INT(VM_TOP(3), begin);
-        V_SET_INT(VM_TOP(2), end);
-        V_SET_INT(VM_TOP(1), step);
+        VM_SET_INT(3, begin);
+        VM_SET_INT(2, end);
+        VM_SET_INT(1, step);
         VM_PUSH_INT(begin);
     }
     return skip;
@@ -246,14 +246,14 @@ static paw_Bool fornum_init(paw_Env *P)
 
 static paw_Bool fornum(paw_Env *P)
 {
-    const paw_Int itr = V_INT(*VM_TOP(3));
-    const paw_Int step = V_INT(*VM_TOP(1));
-    const paw_Int end = V_INT(*VM_TOP(2));
+    const paw_Int itr = VM_INT(3);
+    const paw_Int step = VM_INT(1);
+    const paw_Int end = VM_INT(2);
     const paw_Int next = itr + step;
     if (STOP_LOOP(next, end, step)) {
         return PAW_FALSE;
     }
-    V_SET_INT(VM_TOP(3), next);
+    VM_SET_INT(3, next);
     VM_PUSH_INT(next);
     return PAW_TRUE;
 }
@@ -278,7 +278,7 @@ static paw_Bool forlist(paw_Env *P)
     List *arr = V_LIST(obj);
     paw_Int i = V_INT(itr);
     if (pawV_list_iter(arr, &i)) {
-        V_SET_INT(VM_TOP(1), i);
+        VM_SET_INT(1, i);
         VM_PUSH(arr->begin[i]);
         return PAW_TRUE;
     }
@@ -307,7 +307,7 @@ static paw_Bool formap(paw_Env *P)
     paw_Int i = V_INT(itr);
     if (pawH_iter(map, &i)) {
         const Value v = *pawH_key(map, CAST_SIZE(i));
-        V_SET_INT(VM_TOP(1), i);
+        VM_SET_INT(1, i);
         VM_PUSH(v);
         return PAW_TRUE;
     }
@@ -510,34 +510,23 @@ static size_t check_slice_bound(paw_Env *P, paw_Int index, size_t length, const 
     return CAST_SIZE(index);
 }
 
-void pawR_boolop(paw_Env *P, enum BoolOp op)
+static size_t get_length(Value v, enum paw_AdtKind kind)
 {
-    paw_Bool x = VM_INT(1);
-    switch (op) {
-        case BOOL_NOT:
-            x = !x; 
+    switch (kind) {
+        case PAW_ADT_STR:
+            return pawS_length(V_STRING(v));
+        case PAW_ADT_LIST:
+            return pawV_list_length(V_LIST(v));
+        case PAW_ADT_MAP:
+            return pawH_length(V_MAP(v));
     }
-    VM_SET_BOOL(1, x);
 }
 
-void pawR_cmps(paw_Env *P, enum CmpOp op)
+void pawR_length(paw_Env *P, enum paw_AdtKind kind)
 {
-    const String *x = VM_STR(2);
-    const String *y = VM_STR(1);
-    const int cmp = pawS_cmp(x, y);
-    paw_Bool z;
-    switch (op) {
-        CMP_CASES(cmp, 0, z);
-    }
-    VM_SET_BOOL(2, z);
-    VM_POP(1);
-}
-
-static void str_len(paw_Env *P)
-{
-    const String *str = VM_STR(1);
-    const size_t len = pawS_length(str);
-    V_SET_INT(VM_TOP(1), len);
+    Value *pv = VM_TOP(1);
+    const size_t length = get_length(*pv, kind);
+    V_SET_INT(pv, length);
 }
 
 static void str_concat(paw_Env *P)
@@ -555,8 +544,39 @@ static void str_concat(paw_Env *P)
     memcpy(z->text + x->length, y->text, y->length);
     pawS_register(P, &z);
 
-    V_SET_OBJECT(VM_TOP(2), z);
+    VM_SET_OBJECT(2, z);
     VM_POP(1);
+}
+
+static void list_concat(paw_Env *P)
+{
+    const List *x = VM_LIST(2);
+    const List *y = VM_LIST(1);
+
+    List *z;
+    Value *pv;
+    VM_LIST_INIT(z, pv);
+
+    const size_t nx = pawV_list_length(x);
+    const size_t ny = pawV_list_length(y);
+    pawV_list_resize(P, z, nx + ny);
+    if (nx > 0) memcpy(z->begin, x->begin, nx * sizeof(z->begin[0]));
+    if (ny > 0) memcpy(z->begin + nx, y->begin, ny * sizeof(z->begin[0]));
+    VM_SHIFT(2);
+}
+
+void pawR_concat(paw_Env *P, enum paw_AdtKind kind)
+{
+    switch (kind) {
+        case PAW_ADT_STR:
+            str_concat(P);
+            break;
+        case PAW_ADT_LIST:
+            list_concat(P);
+            break;
+        case PAW_ADT_MAP:
+            PAW_UNREACHABLE();
+    }
 }
 
 static void str_get(paw_Env *P)
@@ -568,6 +588,71 @@ static void str_get(paw_Env *P)
     String *res = pawS_new_nstr(P, &c, 1);
     V_SET_OBJECT(VM_TOP(2), res);
     VM_POP(1);
+}
+
+static void list_get(paw_Env *P)
+{
+    List *list = VM_LIST(2);
+    const paw_Int key = VM_INT(1);
+    *VM_TOP(2) = *pawV_list_get(P, list, key);
+    VM_POP(1);
+}
+
+static void map_get(paw_Env *P)
+{
+    Map *map = VM_MAP(2);
+    const Value key = *VM_TOP(1);
+    const Value *pv = pawH_get(map, key);
+    if (pv == NULL) pawR_error(P, PAW_EKEY, "key does not exist");
+    *VM_TOP(2) = *pv;
+    VM_POP(1);
+}
+
+void pawR_getelem(paw_Env *P, enum paw_AdtKind kind)
+{
+    switch (kind) {
+        case PAW_ADT_STR:
+            str_get(P);
+            break;
+        case PAW_ADT_LIST:
+            list_get(P);
+            break;
+        case PAW_ADT_MAP:
+            map_get(P);
+    }
+}
+
+static void list_set(paw_Env *P)
+{
+    const Value val = *VM_TOP(1);
+    const paw_Int index = VM_INT(2);
+    List *list = VM_LIST(3);
+    Value *pval = pawV_list_get(P, list, index);
+    *pval = val;
+    VM_SHIFT(2);
+}
+
+static void map_set(paw_Env *P)
+{
+    const Value val = *VM_TOP(1);
+    const Value key = *VM_TOP(2);
+    Map *map = VM_MAP(3);
+    pawH_insert(P, map, key, val);
+    VM_SHIFT(2);
+}
+
+void pawR_setelem(paw_Env *P, enum paw_AdtKind kind)
+{
+    switch (kind) {
+        case PAW_ADT_LIST:
+            list_set(P);
+            break;
+        case PAW_ADT_MAP:
+            map_set(P);
+            break;
+        case PAW_ADT_STR:
+            PAW_UNREACHABLE();
+    }
 }
 
 static void str_getn(paw_Env *P)
@@ -586,56 +671,6 @@ static void str_getn(paw_Env *P)
     V_SET_OBJECT(pv, slice);
 
     VM_SHIFT(3);
-}
-
-void pawR_strop(paw_Env *P, enum StrOp op)
-{
-    switch (op) {
-        case STR_LEN:
-            str_len(P);
-            break;
-        case STR_CONCAT:
-            str_concat(P);
-            break;
-        case STR_GET:
-            str_get(P);
-            break;
-        case STR_GETN:
-            str_getn(P);
-            break;
-    }
-}
-
-static void list_len(paw_Env *P)
-{
-    const List *list = V_LIST(*VM_TOP(1));
-    const size_t len = pawV_list_length(list);
-    V_SET_INT(VM_TOP(1), len);
-}
-
-static void list_concat(paw_Env *P)
-{
-    const List *x = V_LIST(*VM_TOP(2));
-    const List *y = V_LIST(*VM_TOP(1));
-
-    List *z;
-    Value *pv;
-    VM_LIST_INIT(z, pv);
-
-    const size_t nx = pawV_list_length(x);
-    const size_t ny = pawV_list_length(y);
-    pawV_list_resize(P, z, nx + ny);
-    if (nx > 0) memcpy(z->begin, x->begin, nx * sizeof(z->begin[0]));
-    if (ny > 0) memcpy(z->begin + nx, y->begin, ny * sizeof(z->begin[0]));
-    VM_SHIFT(2);
-}
-
-static void list_get(paw_Env *P)
-{
-    List *list = VM_LIST(2);
-    const paw_Int key = VM_INT(1);
-    *VM_TOP(2) = *pawV_list_get(P, list, key);
-    VM_POP(1);
 }
 
 static void list_getn(paw_Env *P)
@@ -660,15 +695,18 @@ static void list_getn(paw_Env *P)
     VM_SHIFT(3);
 }
 
-static void list_set(paw_Env *P)
+void pawR_getrange(paw_Env *P, enum paw_AdtKind kind)
 {
-    const Value val = *VM_TOP(1);
-    const Value key = *VM_TOP(2);
-    const Value obj = *VM_TOP(3);
-    const paw_Int index = V_INT(key);
-    Value *pval = pawV_list_get(P, V_LIST(obj), index);
-    *pval = val;
-    VM_SHIFT(2);
+    switch (kind) {
+        case PAW_ADT_LIST:
+            list_getn(P);
+            break;
+        case PAW_ADT_STR:
+            str_getn(P);
+            break;
+        case PAW_ADT_MAP:
+            PAW_UNREACHABLE();
+    }
 }
 
 static List *list_copy(paw_Env *P, Value *pv, const List *list)
@@ -701,79 +739,41 @@ static void list_setn(paw_Env *P)
         vb = list_copy(P, pv, vb);
     }
 
-    const size_t szelem = sizeof(va->begin[0]);
+    const size_t zelem = sizeof(va->begin[0]);
     const size_t nelems = na - zj + zi + nb;
     pawV_list_reserve(P, va, nelems);
 
     Value *gap = va->begin + zi;
-    memmove(gap + nb, va->begin + zj, (na - zj) * szelem);
-    memcpy(gap, vb->begin, nb * szelem);
+    memmove(gap + nb, va->begin + zj, (na - zj) * zelem);
+    memcpy(gap, vb->begin, nb * zelem);
     pawV_list_resize(P, va, nelems);
 
     VM_SHIFT(3);
 }
 
-void pawR_listop(paw_Env *P, enum ListOp op)
+void pawR_setrange(paw_Env *P, enum paw_AdtKind kind)
 {
-    switch (op) {
-        case LIST_LEN:
-            list_len(P);
-            break;
-        case LIST_CONCAT:
-            list_concat(P);
-            break;
-        case LIST_GET:
-            list_get(P);
-            break;
-        case LIST_SET:
-            list_set(P);
-            break;
-        case LIST_GETN:
-            list_getn(P);
-            break;
-        case LIST_SETN:
+    switch (kind) {
+        case PAW_ADT_LIST:
             list_setn(P);
+            break;
+        case PAW_ADT_STR:
+        case PAW_ADT_MAP:
+            PAW_UNREACHABLE();
     }
 }
 
-static void map_len(paw_Env *P)
+void pawR_cmps(paw_Env *P, enum CmpOp op)
 {
-    const Map *map = VM_MAP(1);
-    const size_t len = pawH_length(map);
-    V_SET_INT(VM_TOP(1), len);
-}
-
-static void map_get(paw_Env *P)
-{
-    Map *map = VM_MAP(2);
-    const Value key = *VM_TOP(1);
-    const Value *pv = pawH_get(map, key);
-    if (pv == NULL) pawR_error(P, PAW_EKEY, "key does not exist");
-    *VM_TOP(2) = *pv;
-    VM_POP(1);
-}
-
-static void map_set(paw_Env *P)
-{
-    const Value val = *VM_TOP(1);
-    const Value key = *VM_TOP(2);
-    const Value obj = *VM_TOP(3);
-    pawH_insert(P, V_MAP(obj), key, val);
-    VM_SHIFT(2);
-}
-
-void pawR_mapop(paw_Env *P, enum MapOp op)
-{
+    const String *x = VM_STR(2);
+    const String *y = VM_STR(1);
+    const int cmp = pawS_cmp(x, y);
+    paw_Bool z;
     switch (op) {
-        case MAP_LEN:
-            map_len(P);
-            break;
-        case MAP_GET:
-            map_get(P);
-            break;
-        case MAP_SET:
-            map_set(P);
+        CMP_CASES(cmp, 0, z);
     }
+    VM_SET_BOOL(2, z);
+    VM_POP(1);
 }
 
 void pawR_getfield(paw_Env *P, int index)
@@ -941,27 +941,51 @@ top:
                 pawR_bitw2(P, GET_U(opcode));
             }
 
-            vm_case(BOOLOP) :
+            vm_case(NOT) :
             {
-                pawR_boolop(P, GET_U(opcode));
+                const paw_Bool b = VM_INT(1);
+                VM_SET_INT(1, !b);
             }
 
-            vm_case(STROP) :
+            vm_case(LENGTH) :
             {
-                VM_SAVE_PC();
-                pawR_strop(P, GET_U(opcode));
+                const int u = GET_U(opcode);
+                pawR_length(P, u);
             }
 
-            vm_case(LISTOP) :
+            vm_case(CONCAT) :
             {
                 VM_SAVE_PC();
-                pawR_listop(P, GET_U(opcode));
+                const int u = GET_U(opcode);
+                pawR_concat(P, u);
             }
 
-            vm_case(MAPOP) :
+            vm_case(GETELEM) :
             {
                 VM_SAVE_PC();
-                pawR_mapop(P, GET_U(opcode));
+                const int u = GET_U(opcode);
+                pawR_getelem(P, u);
+            }
+
+            vm_case(SETELEM) :
+            {
+                VM_SAVE_PC();
+                const int u = GET_U(opcode);
+                pawR_setelem(P, u);
+            }
+
+            vm_case(GETRANGE) :
+            {
+                VM_SAVE_PC();
+                const int u = GET_U(opcode);
+                pawR_getrange(P, u);
+            }
+
+            vm_case(SETRANGE) :
+            {
+                VM_SAVE_PC();
+                const int u = GET_U(opcode);
+                pawR_setrange(P, u);
             }
 
             vm_case(NEWTUPLE) :

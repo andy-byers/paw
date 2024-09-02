@@ -21,9 +21,14 @@ static int stack_effect(OpCode opcode)
         case OP_SHIFT:
         case OP_CALL:
             return -GET_U(opcode);
+        case OP_SETRANGE:
+            return -4;
         case OP_SETFIELD:
         case OP_SETTUPLE:
+        case OP_SETELEM:
             return -3;
+        case OP_GETRANGE:
+            return -2;
         case OP_JUMPFALSEPOP:
         case OP_SETLOCAL:
         case OP_SETUPVALUE:
@@ -36,6 +41,8 @@ static int stack_effect(OpCode opcode)
         case OP_BITW2:
         case OP_GETFIELD:
         case OP_GETTUPLE:
+        case OP_GETELEM:
+        case OP_CONCAT:
             return -1;
         case OP_RETURN:
         case OP_NOOP:
@@ -48,7 +55,8 @@ static int stack_effect(OpCode opcode)
         case OP_CASTBOOL:
         case OP_CASTINT:
         case OP_CASTFLOAT:
-        case OP_BOOLOP:
+        case OP_NOT:
+        case OP_LENGTH:
             return 0;
         case OP_PUSHZERO:
         case OP_PUSHONE:
@@ -68,38 +76,6 @@ static int stack_effect(OpCode opcode)
         case OP_FORLIST0:
         case OP_FORMAP0:
             return 2;
-        case OP_STROP:
-            switch (GET_U(opcode)) {
-                case STR_LEN:
-                    return 0;
-                case STR_CONCAT:
-                case STR_GET:
-                    return -1;
-                case STR_GETN:
-                    return -2;
-            }
-        case OP_LISTOP:
-            switch (GET_U(opcode)) {
-                case LIST_LEN:
-                    return 0;
-                case LIST_CONCAT:
-                case LIST_GET:
-                    return -1;
-                case LIST_SET:
-                case LIST_GETN:
-                    return -2;
-                case LIST_SETN:
-                    return -4;
-            }
-        case OP_MAPOP:
-            switch (GET_U(opcode)) {
-                case MAP_LEN:
-                    return 0;
-                case MAP_GET:
-                    return -1;
-                case MAP_SET:
-                    return -2;
-            }
         case NOPCODES:
             PAW_UNREACHABLE();
     }

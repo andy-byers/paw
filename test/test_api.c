@@ -55,14 +55,14 @@ static int fib(paw_Env *P)
     paw_get_upvalue(P, 0, 0);
     check(n >= 0);
 
-    paw_listop(P, PAW_LIST_LEN);
+    paw_length(P, PAW_ADT_LIST);
     const paw_Int ncached = paw_int(P, -1);
     paw_pop(P, -1);
     if (n < ncached) {
         // fib(n) has already been computed
         paw_get_upvalue(P, 0, 0);
         paw_push_int(P, n);
-        paw_listop(P, PAW_LIST_GET);
+        paw_getelem(P, PAW_ADT_LIST);
         return 1;
     }
 
@@ -216,9 +216,9 @@ int main(void)
         // "ab" + "c" + "123" == "abc123"
         paw_push_string(P, "ab");
         paw_push_string(P, "c");
-        paw_strop(P, PAW_STR_CONCAT);
+        paw_concat(P, PAW_ADT_STR);
         paw_push_string(P, "123");
-        paw_strop(P, PAW_STR_CONCAT);
+        paw_concat(P, PAW_ADT_STR);
         paw_push_string(P, "abc123");
         paw_cmps(P, PAW_CMP_EQ);
         check(paw_bool(P, -1));
@@ -235,14 +235,14 @@ int main(void)
 
         // #m == 3
         paw_push_value(P, -1);
-        paw_mapop(P, PAW_MAP_LEN);
+        paw_length(P, PAW_ADT_MAP);
         check(paw_int(P, -1) == 3);
         paw_pop(P, 1);
 
         // m[2] == 2.0
         paw_push_value(P, -1);
         paw_push_int(P, 2);
-        paw_mapop(P, PAW_MAP_GET);
+        paw_getelem(P, PAW_ADT_MAP);
         paw_push_float(P, 2.0);
         paw_cmpf(P, PAW_CMP_EQ);
         check(paw_bool(P, -1));

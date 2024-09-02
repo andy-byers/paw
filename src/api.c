@@ -100,7 +100,7 @@ int paw_mangle_name(paw_Env *P, paw_Type *types)
 {
     // TODO: move name mangling functions into env.c, call from here
     paw_push_string(P, "_");
-    paw_strop(P, PAW_STR_CONCAT);
+    paw_concat(P, PAW_ADT_STR);
     return 0;
 }
 
@@ -483,24 +483,34 @@ void paw_bitw(paw_Env *P, enum paw_BitwOp op)
      }
 }
 
-void paw_boolop(paw_Env *P, enum paw_BoolOp op)
+void paw_length(paw_Env *P, enum paw_AdtKind kind)
 {
-    pawR_boolop(P, CAST(enum BoolOp, op));
+    pawR_length(P, kind);
 }
 
-void paw_strop(paw_Env *P, enum paw_StrOp op)
+void paw_concat(paw_Env *P, enum paw_AdtKind kind)
 {
-     pawR_strop(P, CAST(enum StrOp, op));
+    pawR_concat(P, kind);
 }
 
-void paw_listop(paw_Env *P, enum paw_ListOp op)
+void paw_getelem(paw_Env *P, enum paw_AdtKind kind)
 {
-     pawR_listop(P, CAST(enum ListOp, op));
+    pawR_getelem(P, kind);
 }
 
-void paw_mapop(paw_Env *P, enum paw_MapOp op)
+void paw_setelem(paw_Env *P, enum paw_AdtKind kind)
 {
-     pawR_mapop(P, CAST(enum MapOp, op));
+    pawR_setelem(P, kind);
+}
+
+void paw_getrange(paw_Env *P, enum paw_AdtKind kind)
+{
+    pawR_getrange(P, kind);
+}
+
+void paw_setrange(paw_Env *P, enum paw_AdtKind kind)
+{
+    pawR_setrange(P, kind);
 }
 
 const char *paw_to_string(paw_Env *P, int index, paw_Type type, size_t *plen)
