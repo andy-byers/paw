@@ -150,3 +150,63 @@ void pawE_print_type(paw_Env *P, Buffer *buffer, struct Type *type)
             print_adt(P, buffer, &type->adt);
     }
 }
+
+void pawE_mangle_start(paw_Env *P, Buffer *buffer, const String *name)
+{
+    L_ADD_STRING(P, buffer, name);
+}
+
+void pawE_mangle_add_arg(paw_Env *P, Buffer *buffer, const struct Type *type)
+{
+    switch (type->hdr.kind) {
+        case TYPE_ADT:
+            if (type->adt.code == PAW_TUNIT) {
+                L_ADD_LITERAL(P, buffer, "0");
+            } else if (type->adt.code == PAW_TBOOL) {
+                L_ADD_LITERAL(P, buffer, "b");
+            } else if (type->adt.code == PAW_TINT) {
+                L_ADD_LITERAL(P, buffer, "i");
+            } else if (type->adt.code == PAW_TFLOAT) {
+                L_ADD_LITERAL(P, buffer, "f");
+            } else if (type->adt.code == PAW_TSTR) {
+                L_ADD_LITERAL(P, buffer, "s");
+            } else {
+                const struct Def *def = pawE_get_def(P, type->adt.did);
+                const struct Adt adt = def->hdr.type->adt;
+                L_ADD_STRING(P, buffer, def->hdr.name);
+                if (adt.types.count > 0) {
+                    for (int i = 0; i < adt.types.count; ++i) {
+                        pawE_mangle_add_arg(P, buffer, adt.types.data[i]);
+                    }
+                }
+            }
+            break;
+        case TYPE_FUNC: {
+            const struct FuncType func = type->func;
+            pawL_add_char(P, buffer, 'F');
+            for (int i = 0; i < func.params.count; ++i) {
+                pawE_mangle_add_arg(P, buffer, func.params.data[i]);
+            }
+            pawL_add_char(P, buffer, '_');
+            if (func.result->hdr.kind != TYPE_ADT || 
+                    func.result->adt.code != PAW_TUNIT) {
+                pawE_mangle_add_arg(P, buffer, func.result);
+            }
+            break;
+        }
+        case TYPE_TUPLE: {
+            struct TupleType tuple = type->tuple;
+            pawL_add_char(P, buffer, 't');
+            for (int i = 0; i < tuple.types.count; ++i) {
+                pawE_mangle_add_arg(P, buffer, tuple.types.data[i]);
+            }
+            pawL_add_char(P, buffer, '_');
+        }
+    }
+}
+
+void pawE_mangle_finish(paw_Env *P, Buffer *buffer)
+{
+    pawL_add_char(P, buffer, '_');
+}
+

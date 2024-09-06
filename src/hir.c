@@ -225,6 +225,14 @@ static void VisitAdtDecl(struct HirVisitor *V, struct HirAdtDecl *d)
 {
     V->VisitDeclList(V, d->generics);
     V->VisitDeclList(V, d->fields);
+    V->VisitDeclList(V, d->monos);
+}
+
+static void VisitImplDecl(struct HirVisitor *V, struct HirImplDecl *d)
+{
+    V->VisitDeclList(V, d->generics);
+    V->VisitDeclList(V, d->methods);
+    V->VisitDeclList(V, d->monos);
 }
 
 static void VisitInstanceDecl(struct HirVisitor *V, struct HirInstanceDecl *d)
@@ -260,6 +268,7 @@ static void VisitPathExpr(struct HirVisitor *V, struct HirPathExpr *e)
 
 static void VisitFuncDecl(struct HirVisitor *V, struct HirFuncDecl *d)
 {
+    V->VisitType(V, d->self);
     V->VisitDeclList(V, d->generics);
     V->VisitDeclList(V, d->params);
     if (d->body != NULL) V->VisitBlock(V, d->body);
@@ -559,6 +568,15 @@ static struct HirDecl *FoldAdtDecl(struct HirFolder *F, struct HirAdtDecl *d)
 {
     d->generics = F->FoldDeclList(F, d->generics);
     d->fields = F->FoldDeclList(F, d->fields);
+    d->monos = F->FoldDeclList(F, d->monos);
+    return HIR_CAST_DECL(d);
+}
+
+static struct HirDecl *FoldImplDecl(struct HirFolder *F, struct HirImplDecl *d)
+{
+    d->generics = F->FoldDeclList(F, d->generics);
+    d->methods = F->FoldDeclList(F, d->methods);
+    d->monos = F->FoldDeclList(F, d->monos);
     return HIR_CAST_DECL(d);
 }
 
@@ -601,6 +619,7 @@ static struct HirExpr *FoldPathExpr(struct HirFolder *F, struct HirPathExpr *e)
 
 static struct HirDecl *FoldFuncDecl(struct HirFolder *F, struct HirFuncDecl *d)
 {
+    d->self = F->FoldType(F, d->self);
     d->generics = F->FoldDeclList(F, d->generics);
     d->params = F->FoldDeclList(F, d->params);
     if (d->body != NULL) d->body = FOLD_BLOCK(F, d->body);
@@ -969,6 +988,16 @@ static struct HirDecl *copy_adt_decl(struct HirFolder *F, struct HirAdtDecl *d)
     return r;
 }
 
+static struct HirDecl *copy_impl_decl(struct HirFolder *F, struct HirImplDecl *d)
+{
+    struct HirDecl *result = COPY_PREP_DECL(F, d);
+    struct HirImplDecl *r = HirGetImplDecl(result);
+    r->generics = F->FoldDeclList(F, d->generics);
+    r->methods = F->FoldDeclList(F, d->methods);
+    r->monos = F->FoldDeclList(F, d->monos);
+    return result;
+}
+
 static struct HirDecl *copy_variant_decl(struct HirFolder *F, struct HirVariantDecl *d)
 {
     struct HirDecl *r = COPY_PREP_DECL(F, d);
@@ -1032,7 +1061,7 @@ static struct HirDecl *copy_func_decl(struct HirFolder *F, struct HirFuncDecl *d
 {
     struct HirDecl *r = COPY_PREP_DECL(F, d);
     r->func.is_pub = d->is_pub;
-    r->func.receiver = NULL; // set during visit_*()
+    r->func.self = d->self;
     r->func.name = d->name;
     r->func.generics = F->FoldDeclList(F, d->generics);
     r->func.params = F->FoldDeclList(F, d->params);
@@ -1142,6 +1171,7 @@ static void setup_copy_pass(struct HirFolder *F, struct Copier *C)
     F->FoldVarDecl = copy_var_decl;
     F->FoldFuncDecl = copy_func_decl;
     F->FoldAdtDecl = copy_adt_decl;
+    F->FoldImplDecl = copy_impl_decl;
     F->FoldFieldDecl = copy_field_decl;
     F->FoldGenericDecl = copy_generic_decl;
     F->FoldTypeDecl = copy_type_decl;
@@ -1237,6 +1267,34 @@ static struct HirType *expand_generic(struct HirFolder *F, struct HirGeneric *t)
     return HIR_CAST_TYPE(t);
 }
 
+static struct HirFuncDecl *do_expand_aux(struct HirFolder *F, struct HirFuncDecl *base, struct HirDecl *inst, struct Subst *subst)
+{
+    struct Expander *E = F->ud;
+    E->subst = subst;
+
+    inst->func.kind = kHirFuncDecl;
+    struct HirFuncDecl *r = HirGetFuncDecl(inst);
+    r->is_pub = base->is_pub;
+    r->fn_kind = base->fn_kind;
+    r->name = base->name;
+    r->generics = NULL;
+
+    // copy the original polymorphic function subtree
+// TODO    struct HirType *type = E->copy.FoldType(&E->copy, base->type);
+    struct HirDeclList *params = E->copy.FoldDeclList(&E->copy, base->params);
+    struct HirBlock *body = MAYBE_FOLD_BLOCK(&E->copy, base->body);
+
+    // replace generics with concrete types and create further instantiations to
+    // be expanded next round
+//TODO    r->type = HIR_TYPEOF(inst); // TODO F->FoldType(F, type);
+    r->self = F->FoldType(F, base->self);
+    r->params = F->FoldDeclList(F, params);
+    r->body = MAYBE_FOLD_BLOCK(F, body);
+
+    E->subst = subst->outer;
+    return r;
+}
+
 static struct HirFuncDecl *do_expand(struct HirFolder *F, struct HirFuncDecl *base, struct HirDecl *inst)
 {
     struct Expander *E = F->ud;
@@ -1245,26 +1303,7 @@ static struct HirFuncDecl *do_expand(struct HirFolder *F, struct HirFuncDecl *ba
         .before = HirGetFuncDef(base->type)->types,
         .after = HirGetInstanceDecl(inst)->types,
     };
-    E->subst = &subst;
-
-    inst->func.is_pub = base->is_pub;
-    inst->func.fn_kind = base->fn_kind;
-    inst->func.kind = kHirFuncDecl;
-    inst->func.name = base->name;
-    inst->func.generics = NULL;
-
-    // copy the original polymorphic function subtree
-    struct HirType *type = E->copy.FoldType(&E->copy, base->type);
-    struct HirDeclList *params = E->copy.FoldDeclList(&E->copy, base->params);
-    struct HirBlock *body = MAYBE_FOLD_BLOCK(&E->copy, base->body);
-
-    // replace generics with concrete types and create further instantiations to
-    // be expanded next round
-    inst->func.type = F->FoldType(F, type);
-    inst->func.params = F->FoldDeclList(F, params);
-    inst->func.body = MAYBE_FOLD_BLOCK(F, body);
-
-    E->subst = subst.outer;
+    do_expand_aux(F, base, inst, &subst);
     return &inst->func;
 }
 
@@ -1334,6 +1373,42 @@ static struct HirDecl *expand_adt_decl(struct HirFolder *F, struct HirAdtDecl *d
     return HIR_CAST_DECL(d);
 }
 
+static struct HirTypeList *collect_decl_types(struct Hir *hir, struct HirDeclList *list) 
+{                                                                                   
+    if (list == NULL) return NULL;
+    struct HirTypeList *new_list = pawHir_type_list_new(hir);
+    for (int i = 0; i < list->count; ++i) {                                         
+        struct HirType *type = HIR_TYPEOF(list->data[i]);
+        pawHir_type_list_push(hir, new_list, type);
+    }                                                                               
+    return new_list;
+}
+
+static struct HirDecl *expand_impl_decl(struct HirFolder *F, struct HirImplDecl *d)
+{
+    struct Expander *E = F->ud;
+    if (d->monos != NULL) {
+        for (int i = 0; i < d->monos->count; ++i) {
+            struct HirImplDecl *mono = HirGetImplDecl(d->monos->data[i]);
+            paw_assert(mono->methods->count == d->methods->count);
+            for (int j = 0; j < d->methods->count; ++j) {
+                struct HirDecl *inst_decl = mono->methods->data[j];
+                struct HirFuncDecl *base_func = HirGetFuncDecl(d->methods->data[j]);
+                if (HirIsInstanceDecl(inst_decl)) {
+                    struct Subst subst = {
+                        .outer = E->subst,
+                        .before = d->subst,
+                        .after = mono->subst,
+                    };
+                    do_expand_aux(F, base_func, inst_decl, &subst);
+                    ++E->nexpand;
+                }
+            }
+        }
+    }
+    return HIR_CAST_DECL(d);
+}
+
 void pawHir_expand(struct Resolver *R, struct Hir *hir)
 {
     struct HirFolder F;
@@ -1349,6 +1424,7 @@ void pawHir_expand(struct Resolver *R, struct Hir *hir)
     setup_copy_pass(&E.copy, &C);
     pawHir_folder_init(&F, hir, &E);
     F.FoldAdtDecl = expand_adt_decl;
+    F.FoldImplDecl = expand_impl_decl;
     F.FoldFuncDecl = expand_func_decl;
     F.FoldCallExpr = expand_call_expr;
     F.FoldPath = expand_path;
@@ -1377,8 +1453,7 @@ struct DefGenerator {
     struct Hir *hir;
     struct HirDeclList *decls;
     struct Def *pub_list;
-    paw_Env *P;
-    Map *types;
+    struct Compiler *C;
     int nvals;
 };
 
@@ -1430,7 +1505,7 @@ static paw_Bool match_adts(struct DefGenerator *dg, struct HirType *lhs, struct 
 static Value *find_type(struct DefGenerator *dg, struct HirType *type)
 {
     const Value key = {.p = type};
-    return pawH_get(dg->types, key);
+    return pawH_get(dg->C->types, key);
 }
 
 static paw_Bool match_types(struct DefGenerator *dg, struct HirType *lhs, struct Type *rhs)
@@ -1440,30 +1515,28 @@ static paw_Bool match_types(struct DefGenerator *dg, struct HirType *lhs, struct
         match_adts(dg, lhs, rhs);
 }
 
+static void map_types(struct DefGenerator *dg, struct HirType *src, struct Type *dst)
+{
+    paw_Env *P = ENV(dg->C);
+    paw_assert(find_type(dg, src) == NULL);
+    pawH_insert(P, dg->C->types, P2V(src), P2V(dst));
+}
+
 static struct Type *search_type(struct DefGenerator *dg, struct HirType *target)
 {
-    paw_Env *P = ENV(dg);
+    paw_Env *P = ENV(dg->C);
     // check if this particular HirType has been seen already
     Value *pv = find_type(dg, target);
     if (pv != NULL) return pv->p;
     // check if there is an existing type that is equivalent to this one
     for (int i = 0; i < P->types.count; ++i) {
         struct Type *type = P->types.data[i]; 
-        if (match_types(dg, target, type)) return type;
+        if (match_types(dg, target, type)) {
+            map_types(dg, target, type);
+            return type;
+        }
     }
     return NULL;
-}
-
-static paw_Type map_types(struct DefGenerator *dg, struct HirType *src, struct Type *dst)
-{
-    paw_Env *P = ENV(dg);
-    paw_assert(find_type(dg, src) == NULL);
-    pawH_insert(P, dg->types, (Value){.p = src}, (Value){.p = dst});
-
-    dst->hdr.code = P->types.count;
-    pawM_grow(P, P->types.data, P->types.count, P->types.alloc);
-    P->types.data[P->types.count++] = dst;
-    return P->types.count - 1;
 }
 
 static struct Type *new_type(struct DefGenerator *, struct HirType *);
@@ -1471,7 +1544,7 @@ static struct Type *new_type(struct DefGenerator *, struct HirType *);
 static void init_type_list(struct DefGenerator *dg, struct HirTypeList *x, struct TypeList *y)
 {
     if (x == NULL) return;
-    pawE_init_type_list(ENV(dg), y, x->count);
+    pawE_init_type_list(ENV(dg->C), y, x->count);
     for (int i = 0; i < x->count; ++i) {
         y->data[i] = new_type(dg, x->data[i]);
     }
@@ -1482,7 +1555,7 @@ static struct Type *new_type(struct DefGenerator *dg, struct HirType *src)
     struct Type *dst = search_type(dg, src);
     if (dst != NULL) return dst;
 
-    paw_Env *P = ENV(dg);
+    paw_Env *P = ENV(dg->C);
     switch (HIR_KINDOF(src)) {
         case kHirFuncDef:
         case kHirFuncPtr: {
@@ -1504,6 +1577,10 @@ static struct Type *new_type(struct DefGenerator *dg, struct HirType *src)
             init_type_list(dg, adt->types, &dst->adt.types);
         }
     }
+    dst->hdr.code = P->types.count;
+    pawM_grow(P, P->types.data, P->types.count, P->types.alloc);
+    P->types.data[P->types.count++] = dst;
+
     map_types(dg, src, dst);
     return dst;
 }
@@ -1535,7 +1612,7 @@ static paw_Bool has_generic(struct HirType *type)
 static struct Def *new_def_(struct DefGenerator *dg, struct HirDecl *decl)
 {
     struct Def *def;
-    paw_Env *P = ENV(dg);
+    paw_Env *P = ENV(dg->C);
     switch (HIR_KINDOF(decl)) {
 #define LEN(L) ((L) != NULL ? (L)->count : 0)
         case kHirVarDecl: 
@@ -1566,13 +1643,22 @@ static struct Def *new_def_(struct DefGenerator *dg, struct HirDecl *decl)
 
 #define NEW_DEF(dg, decl) new_def_(dg, HIR_CAST_DECL(decl))
 
+static void register_fdef(struct DefGenerator *dg, struct HirFuncDef *fdef)
+{
+    if (fdef->types == NULL) return;
+    for (int i = 0; i < fdef->types->count; ++i) {
+        new_type(dg, fdef->types->data[i]);
+    }
+}
+
 static void define_func_decl(struct HirVisitor *V, struct HirFuncDecl *d) 
 {
     struct DefGenerator *dg = V->ud;
     if (handle_monos(V, d->monos)) return;
     if (has_generic(d->type)) return;
+    register_fdef(dg, HirGetFuncDef(d->type));
 
-    paw_Env *P = ENV(dg);
+    paw_Env *P = ENV(dg->C);
     struct Def *result = NEW_DEF(dg, d);
     struct FuncDef *def = &result->func;
     def->is_pub = d->is_pub;
@@ -1594,7 +1680,7 @@ static void define_adt_decl(struct HirVisitor *V, struct HirAdtDecl *d)
     if (handle_monos(V, d->monos)) return;
     if (has_generic(d->type)) return;
 
-    paw_Env *P = ENV(dg);
+    paw_Env *P = ENV(dg->C);
     const int did = P->defs.count;
     struct Def *result = NEW_DEF(dg, d);
     struct AdtDef *def = &result->adt;
@@ -1606,6 +1692,16 @@ static void define_adt_decl(struct HirVisitor *V, struct HirAdtDecl *d)
     ENTER_DEF(dg, &ds, d, def);
     V->VisitDeclList(V, d->fields);
     LEAVE_DEF(dg);
+}
+
+static void define_impl_decl(struct HirVisitor *V, struct HirImplDecl *d) 
+{
+    struct DefGenerator *dg = V->ud;
+    if (handle_monos(V, d->monos)) return;
+    if (has_generic(d->type)) return;
+
+    paw_assert(d->generics == NULL);
+    V->VisitDeclList(V, d->methods);
 }
 
 static void define_field_decl(struct HirVisitor *V, struct HirFieldDecl *d) 
@@ -1633,28 +1729,23 @@ static void define_variant_decl(struct HirVisitor *V, struct HirVariantDecl *d)
 struct HirDeclList *pawHir_define(struct Compiler *C, struct Hir *hir)
 {
     paw_Env *P = ENV(hir);
-    ENSURE_STACK(P, 1);
-    Value *pv = pawC_push0(P);
     struct DefGenerator dg = {
         .decls = pawHir_decl_list_new(hir),
-        .types = pawH_new(P),
         .hir = hir,
-        .P = P,
+        .C = C,
     };
-    V_SET_OBJECT(pv, dg.types);
 
     struct HirVisitor V;
     pawHir_visitor_init(&V, hir, &dg);
     V.VisitFieldDecl = define_field_decl;
     V.VisitVarDecl = define_var_decl;
     V.VisitAdtDecl = define_adt_decl;
+    V.VisitImplDecl = define_impl_decl;
     V.VisitFuncDecl = define_func_decl;
     V.VisitVariantDecl = define_variant_decl;
 
     V.VisitDeclList(&V, hir->prelude);
     V.VisitDeclList(&V, hir->items);
-
-    pawC_pop(P);
 
     paw_assert(dg.decls->count == P->defs.count);
     paw_assert(P->vals.data == NULL);
@@ -1808,7 +1899,7 @@ static void dump_decl(struct Printer *P, struct HirDecl *d)
     dump_type(P, HIR_TYPEOF(d));
     switch (HIR_KINDOF(d)) {
         case kHirFuncDecl:
-            DUMP_FMT(P, "receiver: %p\n", (void *)d->func.receiver);
+            DUMP_FMT(P, "self: %p\n", (void *)d->func.self);
             DUMP_FMT(P, "name: %s\n", d->func.name->text);
             dump_decl_list(P, d->func.generics, "generics");
             dump_decl_list(P, d->func.params, "params");
@@ -1833,7 +1924,14 @@ static void dump_decl(struct Printer *P, struct HirDecl *d)
             DUMP_FMT(P, "is_struct: %d\n", d->adt.is_struct);
             dump_decl_list(P, d->adt.generics, "generics");
             dump_decl_list(P, d->adt.fields, "fields");
-            dump_decl_list(P, d->func.monos, "monos");
+            dump_decl_list(P, d->adt.monos, "monos");
+            break;
+        case kHirImplDecl:
+            DUMP_NAME(P, d->impl.name);
+            dump_type_list(P, d->impl.subst, "subst");
+            dump_decl_list(P, d->impl.generics, "generics");
+            dump_decl_list(P, d->impl.methods, "methods");
+            dump_decl_list(P, d->impl.monos, "monos");
             break;
         case kHirGenericDecl:
             DUMP_NAME(P, d->generic.name);

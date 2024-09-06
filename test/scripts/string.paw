@@ -41,28 +41,28 @@ pub fn test_valid_utf8() {
 
 pub fn test_starts_with() {
     let str = 'abcdef';
-    assert(_string_starts_with(str, 'abcdef'));
-    assert(_string_starts_with(str, 'abcde'));
-    assert(_string_starts_with(str, 'abc'));
-    assert(_string_starts_with(str, 'a'));
-    assert(_string_starts_with(str, ''));
-    assert(!_string_starts_with(str, 'bcdef'));
-    assert(!_string_starts_with(str, 'abcdf'));
-    assert(!_string_starts_with(str, 'abd'));
-    assert(!_string_starts_with(str, 'ac'));
+    assert(str.starts_with('abcdef'));
+    assert(str.starts_with('abcde'));
+    assert(str.starts_with('abc'));
+    assert(str.starts_with('a'));
+    assert(str.starts_with(''));
+    assert(!str.starts_with('bcdef'));
+    assert(!str.starts_with('abcdf'));
+    assert(!str.starts_with('abd'));
+    assert(!str.starts_with('ac'));
 }
 
 pub fn test_ends_with() {
     let str = 'abcdef';
-    assert(_string_ends_with(str, 'abcdef'));
-    assert(_string_ends_with(str, 'bcdef'));
-    assert(_string_ends_with(str, 'def'));
-    assert(_string_ends_with(str, 'f'));
-    assert(_string_ends_with(str, ''));
-    assert(!_string_ends_with(str, 'abcde'));
-    assert(!_string_ends_with(str, 'acdef'));
-    assert(!_string_ends_with(str, 'cef'));
-    assert(!_string_ends_with(str, 'df'));
+    assert(str.ends_with('abcdef'));
+    assert(str.ends_with('bcdef'));
+    assert(str.ends_with('def'));
+    assert(str.ends_with('f'));
+    assert(str.ends_with(''));
+    assert(!str.ends_with('abcde'));
+    assert(!str.ends_with('acdef'));
+    assert(!str.ends_with('cef'));
+    assert(!str.ends_with('df'));
 }
 
 pub fn test_slices() {
@@ -86,8 +86,8 @@ pub fn test_slices() {
 }
 
 pub fn test_find() {
-    let check = |s, sub, n| {
-        assert(n == _string_find(s, sub));
+    let check = |s: str, sub, n| {
+        assert(n == s.find(sub));
     };
     check('abc', 'a', 0);
     check('abc', 'b', 1);
@@ -96,13 +96,13 @@ pub fn test_find() {
 }
 
 pub fn test_split_and_join() {
-    let check = |s, sep, parts: [str]| {
-        let a = _string_split(s, sep);
+    let check = |s: str, sep, parts: [str]| {
+        let a = s.split(sep);
         for i = 0, #a {
             assert(a[i] == parts[i]);
         };
         assert(#a == #parts);
-        let result = _string_join(sep, a);
+        let result = sep.join(a);
         assert(result == s);
     };
     check('abc', 'a', ['', 'bc']);
@@ -111,7 +111,7 @@ pub fn test_split_and_join() {
     check('abc', 'd', ['abc']);
 
     let s = ',a,,b,,,c,,,,d,,,,,e,,,,,,';
-    let a = _string_split(s, ',');
-    assert(_string_join('', a) == 'abcde');
+    let a = s.split(',');
+    assert(('').join(a) == 'abcde');
 }
 

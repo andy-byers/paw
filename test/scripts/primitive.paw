@@ -92,7 +92,7 @@ pub fn test_lots_of_strings() {
         for j = 0, #alphabet {
             let s = alphabet[:i] + alphabet[j:] +
                     alphabet[i:] + alphabet[:j];
-            _list_push(v, s);
+            v.push(s);
         }
     }
 }

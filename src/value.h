@@ -112,7 +112,8 @@ typedef union StackRel {
 
 #define VOBJECT0 VSTRING
 #define NOBJECTS (int)(NVTYPES - VOBJECT0)
-#define obj_index(t) ((t) - VOBJECT0)
+#define P2V(x) (Value){.p = (void *)(x)}
+#define I2V(x) (Value){.i = (paw_Int)(x)}
 
 void pawV_index_error(paw_Env *P, paw_Int index, size_t length, const char *what);
 uint32_t pawV_hash(Value v);

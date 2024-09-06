@@ -25,6 +25,7 @@
     X(enum) \
     X(list) \
     X(map) \
+    X(method) \
     X(misc) \
     X(poly_function) \
     X(poly_struct) \

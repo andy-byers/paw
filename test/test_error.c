@@ -335,6 +335,19 @@ static void test_map_error(void)
     test_compiler_status(PAW_ETYPE, "map_slice", "", "let map = [:]; let val = map[0:10];");
 }
 
+static int run_main(paw_Env *P, int nargs)
+{
+    paw_push_string(P, "main");
+    paw_mangle_name(P, NULL);
+
+    struct paw_Item info;
+    const int status = paw_lookup_item(P, &info);
+    check(status == PAW_OK && info.global_id >= 0);
+    paw_get_global(P, info.global_id);
+
+    return paw_call(P, nargs);
+}
+
 static int next_conflicting_int(paw_Env *P)
 {
     paw_unused(P);
@@ -365,23 +378,101 @@ static void test_gc_conflict(void)
     int status = pawL_load_chunk(P, "gc_conflict", source);
     check(status == PAW_OK);
 
-    paw_push_string(P, "main");
-    paw_mangle_name(P, NULL);
-
-    struct paw_Item info;
-    status = paw_lookup_item(P, &info);
-    check(status == PAW_OK && info.global_id >= 0);
-    paw_get_global(P, info.global_id);
-
-    status = paw_call(P, 0);
+    status = run_main(P, 0);
     check(status == PAW_OK);
 
     paw_close(P);
 }
 
+static void check_impl_item(const char *name, int expect, const char *impl, const char *main)
+{
+    const char item_fmt[] = 
+            "pub struct Object<T> {\n"
+            "    value: T\n"
+            "}\n"
+            "%s\n";
+
+    char item_buf[4096];
+    int rc = snprintf(item_buf, sizeof(item_buf), item_fmt, impl);
+    check(rc >= 0 && CAST_SIZE(rc) < sizeof(item_buf));
+
+    const char main_fmt[] = 
+            "let o = Object{value: 42};\n%s";
+
+    char main_buf[4096];
+    rc = snprintf(main_buf, sizeof(main_buf), main_fmt, main);
+    check(rc >= 0 && CAST_SIZE(rc) < sizeof(main_buf));
+
+    test_compiler_status(expect, name, item_buf, main_buf);
+}
+
+static void check_impl_block(const char *name, int expect, const char *impl, const char *main)
+{
+    const char impl_fmt[] = 
+            "impl<T> Object<T> {\n"
+            "%s\n"
+            "}\n";
+
+    char item_buf[4096];
+    int rc = snprintf(item_buf, sizeof(item_buf), impl_fmt, impl);
+    check(rc >= 0 && CAST_SIZE(rc) < sizeof(item_buf));
+
+    check_impl_item(name, expect, item_buf, main);
+}
+
+static void check_impl_body(const char *name, int expect, const char *ret, const char *impl, const char *main)
+{
+    const char item_fmt[] = 
+            "pub fn method(value: T) %s{%s}\n";
+
+    char item_buf[4096];
+    int rc = snprintf(item_buf, sizeof(item_buf), item_fmt, ret, impl);
+    check(rc >= 0 && CAST_SIZE(rc) < sizeof(item_buf));
+
+    check_impl_block(name, expect, item_buf, main);
+}
+
+static void test_impl_error(void)
+{
+    // TODO: check for duplicates between impl blocks: use the 'self' ADT and method
+    //       name to check if the method being registered or resolved is already accessible.
+    // there are 2 versions of 'f' accessible by Object<int>, 1 from 'impl Object<int>'
+    // and the other from the generic 'impl' block 'impl<T> Object<T>',
+//    check_impl_item("duplicate_methods_between_blocks", PAW_ENAME,
+//            "impl<T> Object<T> {pub fn f() {}}\n"
+//            "impl Object<int> {pub fn f() {}}\n",
+//            "o.f();\n");
+    check_impl_block("duplicate_method_within_block", PAW_ENAME,
+            "pub fn f() {}\n"
+            "pub fn f() {}\n",
+            "o.f();\n");
+
+    check_impl_item("unbound_generic", PAW_ETYPE,
+            "impl<A, B> Object<B> {\n"
+            "    pub fn f() -> A {}\n"
+            "}\n",
+            "o.f();\n"); // 'A' cannot be determined
+
+    check_impl_body("body_sanity_check", PAW_OK,
+            "-> T ", 
+            "return self.value;", 
+            "assert(o.method(123) == 42);");
+
+    check_impl_body("bad_return_type", PAW_ETYPE,
+            "-> bool", "return self.value;", "");
+    check_impl_body("nonexistent_method", PAW_ENAME,
+            "", "", "o.method2();");
+    check_impl_body("unexpected_return", PAW_ETYPE,
+            "", "return self.value;", "");
+// TODO: checks for missing return type
+//    check_impl_body("expected_return", PAW_ETYPE, 
+//            "-> T ", "", "");
+}
+
 int main(void)
 {
     test_gc_conflict();
+    test_impl_error();
     test_enum_error();
     test_name_error();
     test_syntax_error();

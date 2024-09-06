@@ -17,6 +17,7 @@ struct Resolver;
         X(AdtDecl,     adt) \
         X(TypeDecl,    type) \
         X(VarDecl,     var) \
+        X(ImplDecl,    impl) \
         X(VariantDecl, variant)
 
 #define HIR_EXPR_LIST(X) \
@@ -82,7 +83,6 @@ enum HirVarKind {
     VAR_UPVALUE,
     VAR_LOCAL,
     VAR_FIELD,
-    VAR_METHOD,
     VAR_CFUNC,
 };
 
@@ -165,7 +165,7 @@ struct HirType {
 
 static const char *kHirTypeNames[] = {
 #define DEFINE_NAME(a, b) "Hir"#a,
-        HIR_TYPE_LIST(DEFINE_NAME)
+    HIR_TYPE_LIST(DEFINE_NAME)
 #undef DEFINE_NAME
 };
 
@@ -221,7 +221,7 @@ struct HirFuncDecl {
     HIR_DECL_HEADER; 
     paw_Bool is_pub : 1;
     enum FuncKind fn_kind : 7;
-    struct HirDecl *receiver;
+    struct HirType *self;
     struct HirDeclList *generics;
     struct HirDeclList *params;
     struct HirBlock *body;
@@ -259,6 +259,16 @@ struct HirFieldDecl {
     HIR_DECL_HEADER; 
 };
 
+// HIR node representing an 'impl' block
+struct HirImplDecl {
+    HIR_DECL_HEADER; 
+    struct HirScope *scope;
+    struct HirTypeList *subst;
+    struct HirDeclList *generics;
+    struct HirDeclList *methods;
+    struct HirDeclList *monos;
+};
+
 struct HirDecl {
     union {
         struct HirDeclHeader hdr;
@@ -270,7 +280,7 @@ struct HirDecl {
 
 static const char *kHirDeclNames[] = {
 #define DEFINE_NAME(a, b) "Hir"#a,
-        HIR_DECL_LIST(DEFINE_NAME)
+    HIR_DECL_LIST(DEFINE_NAME)
 #undef DEFINE_NAME
 };
 
@@ -441,7 +451,7 @@ struct HirExpr {
 
 static const char *kHirExprNames[] = {
 #define DEFINE_NAME(a, b) "Hir"#a,
-        HIR_EXPR_LIST(DEFINE_NAME)
+    HIR_EXPR_LIST(DEFINE_NAME)
 #undef DEFINE_NAME
 };
 
@@ -540,7 +550,7 @@ struct HirStmt {
 
 static const char *kHirStmtNames[] = {
 #define DEFINE_NAME(a, b) "Hir"#a,
-        HIR_STMT_LIST(DEFINE_NAME)
+    HIR_STMT_LIST(DEFINE_NAME)
 #undef DEFINE_NAME
 };
 
@@ -653,6 +663,7 @@ DEFINE_LIST(struct Hir, pawHir_path_, HirPath, struct HirSegment)
 
 #define HIR_IS_POLY_FUNC(decl) (HirIsFuncDecl(decl) && HirGetFuncDecl(decl)->generics != NULL)
 #define HIR_IS_POLY_ADT(decl) (HirIsAdtDecl(decl) && HirGetAdtDecl(decl)->generics != NULL)
+#define HIR_IS_POLY_IMPL(decl) (HirIsImplDecl(decl) && HirGetImplDecl(decl)->generics != NULL)
 
 struct Hir *pawHir_new(struct Compiler *C);
 void pawHir_free(struct Hir *hir);

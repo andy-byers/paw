@@ -13,16 +13,16 @@ pub fn main(args: [str]) -> int {
 
     let values = [];
     if #args > 0 {
-        values = _string_split(args[0], ',');
+        values = args[0].split(',');
     } else {
         values = ['-2.1', '0.9', '80', '-1.3', '1.3', '24'];
-    };
-    let x0 = _string_parse_float(values[0]);
-    let x1 = _string_parse_float(values[1]);
-    let nx = _string_parse_int(values[2], 10);
-    let y0 = _string_parse_float(values[3]);
-    let y1 = _string_parse_float(values[4]);
-    let ny = _string_parse_int(values[5], 10);
+    }
+    let x0 = values[0].parse_float();
+    let x1 = values[1].parse_float();
+    let nx = values[2].parse_int(10);
+    let y0 = values[3].parse_float();
+    let y1 = values[4].parse_float();
+    let ny = values[5].parse_int(10);
 
     assert(nx > 0 && ny > 0);
     let dy = (y1 - y0) / (ny - 1) as float;
@@ -38,15 +38,15 @@ pub fn main(args: [str]) -> int {
             while i < 100 {
                 if zi*zi+zr*zr >= 4.0 {
                     break;
-                };
+                }
                 let zz = zr*zr - zi*zi + x;
                 zi = 2.0*zr*zi + y;
                 zr = zz;
                 i = i + 1;
-            };
+            }
             print(charmap[i % 10]);
-        };
+        }
         print('\n');
-    };
+    }
     return 0;
 }

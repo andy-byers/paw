@@ -36,7 +36,7 @@ static void run_tests(const char *name, struct TestAlloc *a, const char *prefix)
         return;
     }
     
-    fprintf(stderr, "running %s...\n", name);
+    fprintf(stderr, "running %s.paw...\n", name);
     const size_t length = strlen(prefix);
     struct DefList defs = P->defs;
     for (int i = 0; i < defs.count; ++i) {

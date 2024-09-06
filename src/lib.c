@@ -1,6 +1,7 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
+
 #include "lib.h"
 #include "api.h"
 #include "auxlib.h"
@@ -11,8 +12,6 @@
 #include "os.h"
 #include "rt.h"
 #include <errno.h>
-#include <limits.h>
-#include <time.h>
 
 #define CF_BASE(i) (P->cf->base.p + i)
 
@@ -56,14 +55,51 @@ static int list_insert(paw_Env *P)
     List *list = V_LIST(*CF_BASE(1));
     const paw_Int index = V_INT(*CF_BASE(2));
     pawV_list_insert(P, list, index, *CF_BASE(3));
-    return 0;
+    paw_pop(P, 2); // return 'self'
+    return 1;
+}
+
+static int enum_is_zero(paw_Env *P)
+{
+    const Variant *var = V_VARIANT(*CF_BASE(1));
+    V_SET_BOOL(CF_BASE(1), var->k == 0);
+    return 1;
+}
+
+static int enum_is_one(paw_Env *P)
+{
+    const Variant *var = V_VARIANT(*CF_BASE(1));
+    V_SET_BOOL(CF_BASE(1), var->k == 1);
+    return 1;
+}
+
+static int enum_unwrap(paw_Env *P)
+{
+    Variant *var = V_VARIANT(*CF_BASE(1));
+    if (var->k != 0) pawR_error(P, PAW_ERUNTIME, "failed to unwrap");
+    *CF_BASE(1) = var->fields[0];
+    return 1;
+}
+
+static int enum_unwrap_or(paw_Env *P)
+{
+    Variant *var = V_VARIANT(*CF_BASE(1));
+    if (var->k == 0) *CF_BASE(2) = var->fields[0];
+    return 1;
+}
+
+static int list_length(paw_Env *P)
+{
+    pawR_length(P, PAW_ADT_LIST);
+    return 1;
 }
 
 static int list_push(paw_Env *P)
 {
     List *list = V_LIST(*CF_BASE(1));
     pawV_list_push(P, list, *CF_BASE(2));
-    return 0;
+    paw_pop(P, 1); // return 'self'
+    return 1;
 }
 
 static int list_pop(paw_Env *P)
@@ -207,10 +243,24 @@ static int string_ends_with(paw_Env *P)
     return 1;
 }
 
+static int bool_to_string(paw_Env *P)
+{
+    Value *pv = CF_BASE(1);
+    pawV_to_string(P, pv, PAW_TBOOL, NULL);
+    return 1;
+}
+
 static int int_to_string(paw_Env *P)
 {
     Value *pv = CF_BASE(1);
     pawV_to_string(P, pv, PAW_TINT, NULL);
+    return 1;
+}
+
+static int float_to_string(paw_Env *P)
+{
+    Value *pv = CF_BASE(1);
+    pawV_to_string(P, pv, PAW_TFLOAT, NULL);
     return 1;
 }
 
@@ -240,7 +290,13 @@ static int string_parse_int(paw_Env *P)
     return 1;
 }
 
-static int map_get(paw_Env *P)
+static int map_length(paw_Env *P)
+{
+    pawR_length(P, PAW_ADT_MAP);
+    return 1;
+}
+
+static int map_get_or(paw_Env *P)
 {
     Map *m = V_MAP(*CF_BASE(1));
     const Value key = *CF_BASE(2);
@@ -253,7 +309,8 @@ static int map_erase(paw_Env *P)
 {
     Map *m = V_MAP(*CF_BASE(1));
     pawH_erase(m, *CF_BASE(2));
-    return 0;
+    paw_pop(P, 1); // return 'self'
+    return 1;
 }
 
 void pawL_new_func(paw_Env *P, paw_Function func, int nup)
@@ -273,7 +330,22 @@ static void add_builtin_func(paw_Env *P, const char *name, paw_Function func)
 {
     paw_push_value(P, -1);
     paw_push_string(P, name);
+    paw_mangle_name(P, NULL);
     pawL_new_func(P, func, 0);
+
+    pawR_setelem(P, PAW_ADT_MAP);
+    pawC_stkdec(P, 1);
+}
+
+static void add_builtin_method(paw_Env *P, const char *self, const char *name, paw_Function func)
+{
+    paw_push_value(P, -1);
+    paw_push_string(P, name);
+    paw_mangle_name(P, NULL);
+    paw_push_string(P, self);
+    paw_mangle_self(P, NULL);
+    pawL_new_func(P, func, 0);
+
     pawR_setelem(P, PAW_ADT_MAP);
     pawC_stkdec(P, 1);
 }
@@ -290,18 +362,42 @@ void pawL_init(paw_Env *P)
     add_builtin_func(P, "print", base_print); // fn print(string)
 
     // TODO: Replace with real methods
-    add_builtin_func(P, "_int_to_string", int_to_string);
-    add_builtin_func(P, "_string_parse_int", string_parse_int);
-    add_builtin_func(P, "_string_parse_float", string_parse_float);
-    add_builtin_func(P, "_string_starts_with", string_starts_with);
-    add_builtin_func(P, "_string_ends_with", string_ends_with);
-    add_builtin_func(P, "_string_find", string_find);
-    add_builtin_func(P, "_string_split", string_split);
-    add_builtin_func(P, "_string_join", string_join);
     add_builtin_func(P, "_list_push", list_push);
     add_builtin_func(P, "_list_pop", list_pop);
     add_builtin_func(P, "_list_insert", list_insert);
     add_builtin_func(P, "_list_erase", list_remove);
+
+    add_builtin_method(P, "bool", "to_string", bool_to_string);
+    add_builtin_method(P, "int", "to_string", int_to_string);
+    add_builtin_method(P, "float", "to_string", float_to_string);
+
+    add_builtin_method(P, "str", "parse_int", string_parse_int);
+    add_builtin_method(P, "str", "parse_float", string_parse_float);
+    add_builtin_method(P, "str", "split", string_split);
+    add_builtin_method(P, "str", "join", string_join);
+    add_builtin_method(P, "str", "find", string_find);
+    add_builtin_method(P, "str", "starts_with", string_starts_with);
+    add_builtin_method(P, "str", "ends_with", string_ends_with);
+
+    add_builtin_method(P, "_List", "length", list_length);
+    add_builtin_method(P, "_List", "push", list_push);
+    add_builtin_method(P, "_List", "insert", list_insert);
+    add_builtin_method(P, "_List", "remove", list_remove);
+    add_builtin_method(P, "_List", "pop", list_pop);
+
+    add_builtin_method(P, "_Map", "length", map_length);
+    add_builtin_method(P, "_Map", "get_or", map_get_or);
+    add_builtin_method(P, "_Map", "erase", map_erase);
+
+    add_builtin_method(P, "Option", "is_some", enum_is_zero);
+    add_builtin_method(P, "Option", "is_none", enum_is_one);
+    add_builtin_method(P, "Option", "unwrap", enum_unwrap);
+    add_builtin_method(P, "Option", "unwrap_or", enum_unwrap_or);
+
+    add_builtin_method(P, "Result", "is_ok", enum_is_zero);
+    add_builtin_method(P, "Result", "is_err", enum_is_one);
+    add_builtin_method(P, "Result", "unwrap", enum_unwrap);
+    add_builtin_method(P, "Result", "unwrap_or", enum_unwrap_or);
 
     pawC_pop(P);
 }
@@ -367,6 +463,7 @@ int pawL_register_func(paw_Env *P, const char *name, paw_Function func, int nup)
     API_INCR_TOP(P, 1);
 
     paw_push_string(P, name);
+    paw_mangle_name(P, NULL);
 
     // func, builtin, name => builtin, name, func
     paw_rotate(P, -3, -1);

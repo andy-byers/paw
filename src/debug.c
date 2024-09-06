@@ -9,7 +9,6 @@
 #include "compile.h"
 #include "map.h"
 #include "rt.h"
-#include <stdio.h>
 #include <inttypes.h>
 
 #define PC_REL(p, pc) CAST(int, (pc) - (p)->source - 1)
@@ -29,6 +28,8 @@ int pawD_line_number(const CallFrame *cf, const OpCode *pc)
 
 // TODO: Most of this should not be in the core: use hooks for debugging
 #if defined(PAW_DEBUG_EXTRA)
+
+#include <stdio.h>
 
 const char *paw_unop_name(enum UnaryOp unop)
 {
@@ -177,14 +178,16 @@ const char *paw_op_name(Op op)
             return "CMPF";
         case OP_CMPS:
             return "CMPS";
-        case OP_BOOLOP:
-            return "BOOLOP";
-        case OP_STROP:
-            return "STROP";
-        case OP_LISTOP:
-            return "LISTOP";
-        case OP_MAPOP:
-            return "MAPOP";
+        case OP_LENGTH:
+            return "LENGTH";
+        case OP_GETELEM:
+            return "GETELEM";
+        case OP_SETELEM:
+            return "SETELEM";
+        case OP_GETRANGE:
+            return "GETRANGE";
+        case OP_SETRANGE:
+            return "SETRANGE";
         case OP_GETTUPLE:
             return "GETTUPLE";
         case OP_GETFIELD:
@@ -223,10 +226,11 @@ void paw_dump_opcode(OpCode opcode)
         case OP_CMPI:
         case OP_CMPF:
         case OP_CMPS:
-        case OP_BOOLOP:
-        case OP_STROP:
-        case OP_LISTOP:
-        case OP_MAPOP:
+        case OP_LENGTH:
+        case OP_GETELEM:
+        case OP_SETELEM:
+        case OP_GETRANGE:
+        case OP_SETRANGE:
         case OP_GETTUPLE:
         case OP_GETFIELD:
         case OP_SETTUPLE:

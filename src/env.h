@@ -233,6 +233,11 @@ static inline String *pawE_cstr(paw_Env *P, unsigned type)
     return P->str_cache[type];
 }
 
+void pawE_mangle_start(paw_Env *P, Buffer *buffer, const String *name);
+void pawE_mangle_add_arg(paw_Env *P, Buffer *buffer, const struct Type *type);
+void pawE_mangle_finish(paw_Env *P, Buffer *buffer);
+
+// Append a human-readable representation of the 'type' to the 'buffer'
 void pawE_print_type(paw_Env *P, Buffer *buffer, struct Type *type);
 
 #endif // PAW_ENV_H

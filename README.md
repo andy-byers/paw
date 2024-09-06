@@ -1,14 +1,14 @@
 # paw
 
-> NOTE: Paw is now statically typed!
-> Some features will not work for a while (metamethods, C API).
-> Pretty much everything is subject to change.
+> NOTE: Paw is under active development and is not ready for production use.
 > See the [roadmap](#roadmap) to get an idea of where things are going.
+> Also see [known issues](#known-issues) for a list of known problems that will eventually be fixed.
 
-An unobtrusive scripting language
+An expressive scripting language
 
-Paw is a high-level programming language and runtime designed for embedding.
-Paw features strong static typing under a sound type system, generics, and bidirectional type checking.
+Paw is a high-level scripting language and runtime designed for embedding.
+Paw features static strong typing under a sound type system, generics, and bidirectional type checking.
+Paw is an interpreted language that runs on a stack-based virtual machine written in C.
 
 ## Syntax Overview
 
@@ -26,10 +26,10 @@ Nesting is not allowed in block-style comments.
 In Paw, toplevel declarations are treated as global items, meaning they can be accessed from anywhere within the module.
 Such items can be marked `pub` to indicate public visibility, which allows access from the outside (C or other Paw modules).
 Otherwise, items are considered private to the containing module.
-Items are resolved at compile-time, meaning only named functions, abstract data type (ADT) definitions, and compile-time constants may appear at the toplevel.
+Items are resolved at compile-time, meaning only named functions, abstract data type (ADT) definitions, `impl` blocks, and compile-time constants may appear at the toplevel.
 
 Modules that are intended to run as scripts under the bundled Paw interpreter `paw` should define an entrypoint function called `main` with signature `pub fn main(argv: [str]) -> int`.
-`paw` will look for `main` in the module's exported symbols and call it with arguments forwarded from the commandline.
+`paw` (the builtin Paw interpreter) will look for `main` in the module's exported symbols and call it with arguments forwarded from the commandline.
 When `main` is finished, its return value is passed back to the process that invoked `paw`.
 
 ### Types
@@ -59,8 +59,8 @@ let i = 2 + 3.4 as int;
 ```
 
 The previous example showed examples of a simple kind of type inference, where the type of a variable is inferred from an initializer expression (the expression to the right of the `=`).
-Paw supports a more general kind of type inference for containers and closures, where the type of each 'unknown' must be inferred before the declaration in question goes out of scope, or is used in a way in which the type cannot be determined.
-The main caveat here is that Paw does not yet have support for 'generic bounds', so we can't handle, for example, a closure like `|a, b| a + b` where the operator `+` imposes a bound on both `a` and `b`, restricting the types they can be 'instantiated' with (uses the same code as generics).
+Paw supports a more general kind of type inference for containers and closures, where the type of each 'unknown' must be inferred before the declaration in question goes out of scope.
+The main caveat here is that Paw does not yet have support for 'generic bounds', so we can't handle, for example, a closure like `|a, b| a + b` where the operator `+` imposes a bound on both `a` and `b`, restricting the types they can be instantiated with.
 For example:
 ```
 let f = |a| a; // fn(?0) -> ?0
@@ -224,20 +224,47 @@ struct Object<S, T> {
     b: T,
 }
 
-// explicit instantiation uses 'turbofish'
-let o = Object::<bool, float>{
-    a: false,
-    b: 1.23,
+impl<A, B> Object<A, B> {
+    // methods on all instances of Object...
 }
+
+impl<T> Object<T> {
+    // methods for when '.a' and '.b' have the same type...
+
+    // For example:
+    pub fn swap() {
+        let t = self.a;
+        self.a = self.b;
+        self.b = t;
+    }
+}
+
+impl Object<int, str> {
+    // methods for this specific type of Object...
+
+    // For example:
+    pub fn equals(a: int, b: str) -> bool {
+        return a == self.a && b == self.b;
+    }
+}
+
+// explicit instantiation uses 'turbofish'
+let o = Object::<float, float>{
+    a: 0.99,
+    b: 1.23,
+};
+o.swap();
 
 // type inference is supported
 let o = Object{
     a: 123, // infer S = int
     b: 'abc', // infer T = str
-}
-// field access using '.'
+};
+// field and method access using '.'
 let a = o.a + 1;
 let b = o.b + 'two';
+let c = o.equals(a, b);
+// o.swap not available: S != T
 ```
 
 ### Tuples
@@ -321,39 +348,38 @@ assert(status != 0);
 ## Roadmap
 + [x] static, strong typing
 + [x] special-cased builtin containers (`[T]` and `[K: V]`)
-+ [x] type inference for `struct` templates and builtin containers
++ [x] type inference for polymorphic `fn` and `struct`
 + [x] sum types/discriminated unions (`enum`)
 + [x] product types (tuple)
-+ [ ] Rust-like expression blocks
-+ [ ] refactor user-provided allocation interface to allow heap expansion
++ [x] custom garbage collector (using Boehm GC for now)
++ [x] methods using `impl` blocks
++ [ ] error handling (`try` needs to be an operator, or we need something like a 'parameter pack' for generics)
 + [ ] module system and `import` keyword
-+ [ ] methods using `impl` blocks
-+ [ ] error handling
-+ [ ] type inference for `enum` templates
 + [ ] pattern matching (`switch` construct)
 + [ ] pattern matching (`if let`, `let` bindings)
-+ [x] custom garbage collector (using Boehm GC for now)
-+ [ ] split off UTF-8 stuff into `String` structure, where `str` is a byte array and `String` is always valid UTF-8
-+ [ ] constness (`var` vs `let`)
-+ [ ] compiler optimization passes
-+ [ ] metamethods
++ [ ] type inference for polymorphic `enum`
 + [ ] generic constraints/bounds
-+ [ ] associated types on `struct`s (`A::B`)
-+ [ ] existential types
++ [ ] compiler optimization passes
++ [ ] refactor user-provided allocation interface to allow heap expansion
 
 ## Known problems
 + The C API has pretty much 0 type safety
 + Compiler will allow functions that don't return a value in all code paths
     + Likely requires a CFG and some data flow analysis: it would be very difficult to get right otherwise
-+ It isn't possible to create an empty list or map of a specific known type without creating a temporary: `let list: [int] = []`
-    + Note that it's still possible to infer a container type: for example, in `let list = []; list.push(1)`, `list` has type `[int]`.
-    + Could use Swift syntax, or something similar:
-```
-let empty_vec = [int]()
-let empty_map = [str: int]()
-```
 + Selector on nested tuple breaks the lexer (looks like a float: `t.0.1`)
     + Could resolve with an extra lexing pass, or use index expression (`t[x][y]`, where `x` and `y` are compile-time constant expressions)
+    + Similarly, we can't write things like `1.to_string()`: we require parenthesis around the `1`
++ Need to prevent situations where 2 methods with the same name are accessible from the same type
+    + Complicated by the fact that impl blocks can either target a polymorphic ADT, or an instantiation thereof
+    + In the first case, methods are available to all instantiations of the ADT, while in the second case they are available only to that particular instance.
+    + The second case allows us to specialize the body of a method for each specific type of instance.
+    + Could rework the code that checks if a method can be called on a given type: just check to see if a method exists already before registering/resolving it
+    + Probably don't want to resolve/instantiate things while searching, which is what the code currently does
++ May create multiple HIR decl. nodes for builtin container instantiations
+    + Builtin containers (`[T]` and `[K: V]`) are ADTs that support type inference on their generic parameters after creation (normally, type params are inferred from the initializer)
+    + Need to deduplicate if we end up inferring a type that already exists
+    + Run dedup code when declarations go out of scope
+    + Might as well support inferring all ADT type parameters after creation, since we have to do it for builtin containers anyway
 
 ## References
 + [Lua](https://www.lua.org/)

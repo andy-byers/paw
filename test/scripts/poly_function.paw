@@ -3,7 +3,10 @@ fn map<A, B>(f: fn(A) -> B, a: [A]) -> [B] {
     let b = [];
     for v in a {
         _list_push(b, f(v));
-        // TODO: eventually use b.push(f(v))
+        // TODO: _List::push doesn't get created, seemingly becuase it is only called
+        //       from this function, which is polymorphic. Creating a list and pushing
+        //       to it from a non-polymorphic function causes this to work.
+        //b.push(f(v));
     }
     return b;
 }

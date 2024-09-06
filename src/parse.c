@@ -1258,6 +1258,41 @@ static struct AstDecl *struct_decl(struct Lex *lex, paw_Bool pub)
     return r;
 }
 
+static struct AstDecl *method_decl(struct Lex *lex)
+{
+    const int line = lex->line;
+    const paw_Bool is_pub = test_next(lex, TK_PUB);
+    check_next(lex, TK_FN);
+    String *name = parse_name(lex);
+    struct AstDecl *r = function(lex, name, FUNC_METHOD);
+    r->func.is_pub = is_pub;
+    r->func.line = line;
+    return r;
+}
+
+static struct AstDecl *impl_decl(struct Lex *lex)
+{
+    skip(lex); // 'impl' token
+    struct AstDecl *result = NEW_DECL(lex, kAstImplDecl);
+    struct AstImplDecl *r = AstGetImplDecl(result);
+    r->name = SCAN_STRING(lex, "(impl)");
+    r->generics = type_param(lex);
+    r->self = parse_pathtype(lex);
+
+    const int line = lex->line;
+    check_next(lex, '{');
+    r->methods = pawAst_decl_list_new(lex->ast);
+    while (!end_of_block(lex)) {
+        if (r->methods->count == LOCAL_MAX) {
+            limit_error(lex, "methods", LOCAL_MAX);
+        }
+        struct AstDecl *method = method_decl(lex);
+        pawAst_decl_list_push(lex->dm->ast, r->methods, method);
+    }
+    delim_next(lex, '}', '{', line);
+    return result;
+}
+
 static struct AstDecl *type_decl(struct Lex *lex)
 {
     struct AstDecl *r = NEW_DECL(lex, kAstTypeDecl);
@@ -1339,30 +1374,38 @@ static struct AstStmt *statement(struct Lex *lex)
     return stmt;
 }
 
+static void ensure_not_pub(struct Lex *lex, paw_Bool has_qualifier)
+{
+    if (has_qualifier) pawX_error(lex, "visibility qualifier not allowed here");
+}
+
+static struct AstDecl *toplevel_item(struct Lex *lex, paw_Bool is_pub)
+{
+    switch (lex->t.kind) {
+        default:
+            pawX_error(lex, "expected toplevel item");
+        case TK_FN:
+            return func_decl(lex, is_pub);
+        case TK_ENUM:
+            return enum_decl(lex, is_pub);
+        case TK_STRUCT:
+            return struct_decl(lex, is_pub);
+        case TK_IMPL:
+            ensure_not_pub(lex, is_pub);
+            return impl_decl(lex);
+    }
+}
+
 static struct AstDeclList *toplevel_items(struct Lex *lex, struct AstDeclList *list)
 {
     while (!test_next(lex, TK_END)) {
-        struct AstDecl *item;
         const paw_Bool is_pub = test_next(lex, TK_PUB);
-        switch (lex->t.kind) {
-            case TK_FN:
-                item = func_decl(lex, is_pub);
-                break;
-            case TK_ENUM:
-                item = enum_decl(lex, is_pub);
-                break;
-            case TK_STRUCT:
-                item = struct_decl(lex, is_pub);
-                break;
-            default:
-                pawX_error(lex, "expected toplevel item");
-        }
+        struct AstDecl *item = toplevel_item(lex, is_pub);
         pawAst_decl_list_push(lex->ast, list, item);
     }
     return list;
 }
 
-// TODO: Use the C API instead?
 static const char kPrelude[] =
     "pub struct _List<T>;\n"
     "pub struct _Map<K, V>;\n"
@@ -1380,15 +1423,57 @@ static const char kPrelude[] =
     "pub fn print(message: str);\n"
     "pub fn assert(cond: bool); \n"
 
-    // TODO: Replace with methods
-    "pub fn _int_to_string(self: int) -> str;\n"
-    "pub fn _string_parse_int(self: str, base: int) -> int;     \n"
-    "pub fn _string_parse_float(self: str) -> float;            \n"
-    "pub fn _string_split(self: str, sep: str) -> [str];        \n"
-    "pub fn _string_join(self: str, seq: [str]) -> str;         \n"
-    "pub fn _string_find(self: str, target: str) -> int;        \n"
-    "pub fn _string_starts_with(self: str, prefix: str) -> bool;\n"
-    "pub fn _string_ends_with(self: str, suffix: str) -> bool;  \n"
+    "impl bool {                   \n"
+    "    pub fn to_string() -> str;\n"
+    "}                             \n"
+
+    "impl int {                    \n"
+    "    pub fn to_string() -> str;\n"
+    "}                             \n"
+
+    "impl float {                  \n"
+    "    pub fn to_string() -> str;\n"
+    "}                             \n"
+
+    "impl str {                                  \n"
+    "    pub fn parse_int(base: int) -> int;     \n"
+    "    pub fn parse_float() -> float;          \n"
+    "    pub fn split(sep: str) -> [str];        \n"
+    "    pub fn join(seq: [str]) -> str;         \n"
+    "    pub fn find(target: str) -> int;        \n"
+    "    pub fn starts_with(prefix: str) -> bool;\n"
+    "    pub fn ends_with(suffix: str) -> bool;  \n"
+    "}                                           \n"
+
+    "impl<T> _List<T> {                          \n"
+    "    pub fn length() -> int;                 \n"
+    "    pub fn push(value: T) -> Self;          \n"
+    "    pub fn insert(i: int, value: T) -> Self;\n"
+    "    pub fn remove(i: int) -> T;             \n"
+    "    pub fn pop() -> T;                      \n"
+    "}                                           \n"
+
+    "impl<K, V> _Map<K, V> {                    \n"
+    "    pub fn length() -> int;                \n"
+    "    pub fn get_or(key: K, default: V) -> V;\n"
+    "    pub fn erase(key: K) -> Self;          \n"
+    "}                                          \n"
+
+    "impl<T> Option<T> {                 \n"
+    "    pub fn is_some() -> bool;       \n"
+    "    pub fn is_none() -> bool;       \n"
+    "    pub fn unwrap() -> T;           \n"
+    "    pub fn unwrap_or(value: T) -> T;\n"
+    "}                                   \n"
+
+    "impl<T, E> Result<T, E> {           \n"
+    "    pub fn is_ok() -> bool;         \n"
+    "    pub fn is_err() -> bool;        \n"
+    "    pub fn unwrap() -> T;           \n"
+    "    pub fn unwrap_or(value: T) -> T;\n"
+    "}                                   \n"
+
+    // TODO: Use method versions
     "pub fn _list_push<T>(self: [T], v: T);          \n"
     "pub fn _list_pop<T>(self: [T]) -> T;            \n"
     "pub fn _list_insert<T>(self: [T], i: int, v: T);\n"

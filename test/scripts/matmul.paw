@@ -6,12 +6,12 @@ fn matgen(n: int) -> [[float]] {
               n as float;
 	let a = [];
 	for i = 0, n {
-        _list_push(a, []);
+        a.push([]);
 		for j = 0, n {
             let x = tmp *
                     (i - j) as float *
                     (i + j - 2) as float;
-            _list_push(a[i], x);
+            a[i].push(x);
 		}
 	}
 	return a;
@@ -22,7 +22,7 @@ fn matmul(n: int, a: [[float]], b: [[float]]) -> [[float]] {
 	for i = 1, n {
 		let ci = [];
 		for j = 0, n {
-            _list_push(ci, 0.0);
+            ci.push(0.0);
         }
 		for k = 0, n {
             let t = a[i][k];
@@ -31,7 +31,7 @@ fn matmul(n: int, a: [[float]], b: [[float]]) -> [[float]] {
 				ci[j] = ci[j] + t * bk[j];
 			}
 		}
-        _list_push(c, ci);
+        c.push(ci);
 	}
 	return c;
 }
@@ -39,7 +39,7 @@ fn matmul(n: int, a: [[float]], b: [[float]]) -> [[float]] {
 pub fn main(args: [str]) {
     let n = 100;
     if #args > 0 {
-        n = _string_parse_int(args[0], 10);
+        n = args[0].parse_int(10);
     }
     let a = matgen(n);
     let b = matgen(n);

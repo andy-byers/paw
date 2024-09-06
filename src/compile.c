@@ -17,6 +17,7 @@ static const char *kKeywords[] = {
     "type",
     "enum",
     "struct",
+    "impl",
     "let",
     "if",
     "else",
@@ -49,7 +50,6 @@ void pawP_init(paw_Env *P)
         str->flag = i + FIRST_KEYWORD;
     }
     // note that keywords are already fixed
-    P->str_cache[CSTR_SELF] = pawS_new_str(P, "self");
     P->str_cache[CSTR_TRUE] = pawS_new_str(P, "true");
     P->str_cache[CSTR_FALSE] = pawS_new_str(P, "false");
     P->str_cache[CSTR_BOOL] = basic_type_name(P, "bool", PAW_TBOOL);
@@ -60,6 +60,7 @@ void pawP_init(paw_Env *P)
     P->str_cache[CSTR_MAP] = pawS_new_fixed(P, "_Map");
     P->str_cache[CSTR_OPTION] = pawS_new_fixed(P, "Option");
     P->str_cache[CSTR_RESULT] = pawS_new_fixed(P, "Result");
+    P->str_cache[CSTR_SELF] = pawS_new_fixed(P, "self");
 }
 
 paw_Type pawP_type2code(struct Compiler *C, struct HirType *type)
@@ -123,9 +124,13 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const c
     Value *pv = pawC_push0(P);
     Map *strings = pawH_new(P);
     V_SET_OBJECT(pv, strings);
+    pv = pawC_push0(P);
+    Map *types = pawH_new(P);
+    V_SET_OBJECT(pv, types);
 
     *C = (struct Compiler){
         .strings = strings,
+        .types = types,
         .dm = dm,
         .P = P,
     };
@@ -160,4 +165,6 @@ void pawP_teardown(paw_Env *P, const struct DynamicMem *dm)
     pawM_free_vec(P, dm->vars.data, dm->vars.alloc);
     pawAst_free(dm->ast);
     pawHir_free(dm->hir);
+    pawC_pop(P); // .types
+// TODO: why is this already popped?    pawC_pop(P); // .strings
 }

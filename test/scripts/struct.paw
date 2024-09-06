@@ -58,3 +58,5 @@ pub fn test_nested_struct() {
     assert(o.b.a == 1);
     assert(o.b.b == 'two');
 }
+
+

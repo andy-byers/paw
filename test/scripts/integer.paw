@@ -19,20 +19,23 @@ pub fn test_non_decimal() {
 }
 
 pub fn test_parse() {
-    let check = |s, want| {
-        assert(_string_parse_int(s, 10) == want);
+    let check = |base, s: str, want| {
+        assert(s.parse_int(base) == want);
     };
 
-    check('0', 0);
-    check('1', 1);
-    check('10', 10);
-    check('  1', 1);
-    check('1  ', 1);
-    check(' 1 ', 1);
-    check('  -1', -1);
-    check('-1  ', -1);
-    check(' -1 ', -1);
-    check(_int_to_string(1 << 32), 1 << 32);
+    check(10, '0', 0);
+    check(10, '1', 1);
+    check(10, '10', 10);
+    check(10, '  1', 1);
+    check(10, '1  ', 1);
+    check(10, ' 1 ', 1);
+    check(10, '  -1', -1);
+    check(10, '-1  ', -1);
+    check(10, ' -1 ', -1);
+
+    let i = 1234567890;
+    check(10, i.to_string(), i);
+    check(10, (-i).to_string(), -i);
 }
 
 fn apply<T>(f: fn(T), target: [T]) {

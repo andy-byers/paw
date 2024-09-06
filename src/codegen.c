@@ -53,47 +53,38 @@ static struct Def *get_def(struct Generator *G, DefId did)
 static void mangle_type(struct Generator *G, Buffer *buf, struct HirType *type)
 {
     paw_Env *P = ENV(G);
-    if (HIR_IS_BASIC_T(type)) {
-         if (HIR_IS_UNIT_T(type)) {
-            L_ADD_LITERAL(P, buf, "0");
-        } else if (type->adt.base == PAW_TBOOL) {
-            L_ADD_LITERAL(P, buf, "b");
-        } else if (type->adt.base == PAW_TINT) {
-            L_ADD_LITERAL(P, buf, "i");
-        } else if (type->adt.base == PAW_TFLOAT) {
-            L_ADD_LITERAL(P, buf, "f");
-        } else if (type->adt.base == PAW_TSTR) {
-            L_ADD_LITERAL(P, buf, "s");
-        }
-    } else if (HirIsGeneric(type)) {
-        struct HirGeneric *var = &type->generic;
-        pawL_add_nstring(P, buf, var->name->text, var->name->length);
-    } else if (HirIsTupleType(type)) {
-        struct HirTupleType *tup = &type->tuple;
-        pawL_add_char(P, buf, 'T');
-        for (int i = 0; i < tup->elems->count; ++i) {
-            mangle_type(G, buf, tup->elems->data[i]);
-        }
-        pawL_add_char(P, buf, '_');
-    } else if (HirIsFuncType(type)) {
-        pawL_add_char(P, buf, 'F');
-        for (int i = 0; i < type->fptr.params->count; ++i) {
-            mangle_type(G, buf, type->fptr.params->data[i]);
-        }
-        pawL_add_char(P, buf, '_');
-        mangle_type(G, buf, type->fptr.result);
+    const struct Type *t;
+    if (TYPE_CODE(G, type) >= 0) {
+        t = P->types.data[TYPE_CODE(G, type)];
     } else {
-        paw_assert(HirIsAdt(type));
-        struct HirAdt *adt = &type->adt;
-        struct HirDecl *d = GET_DECL(G, adt->did);
-        const String *name = d->adt.name;
-        pawL_add_nstring(P, buf, name->text, name->length);
-        if (adt->types != NULL) {
-            for (int i = 0; i < adt->types->count; ++i) {
-                mangle_type(G, buf, adt->types->data[i]);
-            }
+        Value *pv = pawH_get(G->C->types, P2V(type));
+        paw_assert(pv != NULL);
+        t = pv->p;
+    }
+    pawE_mangle_add_arg(P, buf, t);
+}
+
+static void mangle_add(struct Generator *G, Buffer *buf, const String *name, struct HirTypeList *types)
+{
+    paw_Env *P = ENV(G);
+    pawE_mangle_start(P, buf, name);
+    //pawL_add_nstring(P, buf, name->text, name->length);
+    if (types != NULL) {
+        for (int i = 0; i < types->count; ++i) {
+            mangle_type(G, buf, types->data[i]);
         }
     }
+    pawE_mangle_finish(P, buf);
+    pawL_push_result(P, buf);
+}
+
+static String *mangle_finish(paw_Env *P, struct Compiler *C)
+{
+    // anchor in compiler string table
+    String *str = V_STRING(P->top.p[-1]);
+    pawH_insert(P, C->strings, P2V(str), P2V(str));
+    pawC_pop(P);
+    return str;
 }
 
 static String *mangle_name(struct Generator *G, const String *name, struct HirTypeList *types)
@@ -102,19 +93,31 @@ static String *mangle_name(struct Generator *G, const String *name, struct HirTy
     paw_Env *P = ENV(G);
     ENSURE_STACK(P, 1);
     pawL_init_buffer(P, &buf);
-    pawL_add_nstring(P, &buf, name->text, name->length);
-    const int ntypes = types != NULL ? types->count : 0;
-    for (int i = 0; i < ntypes; ++i) {
-        mangle_type(G, &buf, types->data[i]);
-    }
-    pawL_add_char(P, &buf, '_');
-    pawL_push_result(P, &buf);
-    // anchor in compiler string table
-    String *result = V_STRING(P->top.p[-1]);
-    const Value key = {.o = CAST_OBJECT(result)};
-    pawH_insert(P, G->C->strings, key, key);
-    pawC_pop(P);
-    return result;
+    mangle_add(G, &buf, name, types);
+    return mangle_finish(P, G->C);
+}
+
+static String *mangle_attr(struct Generator *G, const String *base, struct HirTypeList *base_types, const String *attr, struct HirTypeList *attr_types)
+{
+    Buffer buf;
+    paw_Env *P = ENV(G);
+    ENSURE_STACK(P, 1);
+    pawL_init_buffer(P, &buf);
+    mangle_add(G, &buf, attr, attr_types);
+    L_ADD_LITERAL(P, &buf, "_"); // separator
+    mangle_add(G, &buf, base, base_types);
+    return mangle_finish(P, G->C);
+}
+
+static String *func_name(struct Generator *G, struct HirFuncDef *fdef)
+{
+    struct HirFuncDecl *fd = HirGetFuncDecl(GET_DECL(G, fdef->did));
+    struct HirTypeList *fd_types = fd->body ? fdef->types : NULL;
+    if (fd->self == NULL) return mangle_name(G, fd->name, fd_types);
+    struct HirAdt *adt = HirGetAdt(fd->self);
+    struct HirAdtDecl *ad = HirGetAdtDecl(GET_DECL(G, adt->did));
+    struct HirTypeList *ad_types = fd->body ? adt->types : NULL;
+    return mangle_attr(G, ad->name, ad_types, fd->name, fd_types);
 }
 
 static Map *kcache_map(struct FuncState *fs, paw_Type code)
@@ -1014,6 +1017,11 @@ static void code_func(struct HirVisitor *V, struct HirFuncDecl *d, struct HirVar
     proto->argc = func->params->count;
 
     enter_function(G, &fs, &bs, d->name, proto, d->type, d->fn_kind);
+    if (d->fn_kind == FUNC_METHOD) {
+        String *name = pawE_cstr(ENV(G), CSTR_SELF);
+        new_local(&fs, name, d->self);
+        ++proto->argc;
+    }
     V->VisitDeclList(V, d->params);
     if (d->body != NULL) V->VisitBlock(V, d->body);
     leave_function(G);
@@ -1076,10 +1084,10 @@ static void code_instance_getter(struct HirVisitor *V, struct HirType *type)
     paw_Env *P = ENV(G);
 
     const String *name = decl->hdr.name;
-    const Value k = {.o = CAST_OBJECT(name)};
+    const String *key = mangle_name(G, name, NULL);
     // builtins are not monomorphized: there is a single C function implementing each
-    // builtin function that might handle some paramenters generically
-    const Value *pv = pawH_get(P->builtin, k); 
+    // builtin function that might handle paramenters generically
+    const Value *pv = pawH_get(P->builtin, P2V(key)); 
     name = mangle_name(G, name, pv ? NULL : type->fdef.types);
 
     const struct HirVarInfo info = find_var(G, name);
@@ -1130,6 +1138,24 @@ static void code_path_expr(struct HirVisitor *V, struct HirPathExpr *e)
     }
 }
 
+static paw_Bool is_method_call(struct HirCallExpr *e)
+{
+    return HirIsFuncDef(e->func) &&
+        HirIsSelector(e->target);
+}
+
+static struct HirExpr *prep_method_call(struct Generator *G, struct HirCallExpr *e)
+{
+    paw_assert(is_method_call(e));
+    struct HirSelector *select = HirGetSelector(e->target);
+    struct HirFuncDef *fdef = HirGetFuncDef(e->func);
+    const String *name = func_name(G, fdef);
+    const struct HirVarInfo info = find_var(G, name);
+    paw_assert(info.kind == VAR_GLOBAL); // always toplevel
+    pawK_code_U(G->fs, OP_GETGLOBAL, info.index);
+    return select->target;
+}
+
 static void code_call_expr(struct HirVisitor *V, struct HirCallExpr *e)
 {
     paw_assert(HirIsFuncType(e->func));
@@ -1137,16 +1163,21 @@ static void code_call_expr(struct HirVisitor *V, struct HirCallExpr *e)
     struct FuncState *fs = G->fs;
     fs->line = e->line;
 
+    int nargs = e->args->count;
     if (is_variant_constructor(G, e->func)) {
         code_variant_constructor(V, e->func, e->args);
         return;
     } else if (is_instance_call(e->func)) {
         code_instance_getter(V, e->func);
+    } else if (is_method_call(e)) {
+        struct HirExpr *target = prep_method_call(G, e);
+        V->VisitExpr(V, target);
+        ++nargs; // account for 'self'
     } else {
         V->VisitExpr(V, e->target);
     }
     V->VisitExprList(V, e->args);
-    pawK_code_U(fs, OP_CALL, e->args->count);
+    pawK_code_U(fs, OP_CALL, nargs);
 }
 
 static void code_conversion_expr(struct HirVisitor *V, struct HirConversionExpr *e)
@@ -1365,7 +1396,7 @@ static void register_items(struct Generator *G, struct HirDeclList *items)
             struct HirFuncDef *t = HirGetFuncDef(d->type);
             paw_assert(d->generics == NULL);
 
-            fdef->name = mangle_name(G, d->name, d->body ? t->types : NULL);
+            fdef->name = func_name(G, t);
             struct HirVarInfo info = {.index = fdef->vid};
             if (d->body == NULL) info.kind = VAR_CFUNC;
             struct ItemSlot *slot = new_item_slot(G, HIR_CAST_DECL(d), info);
@@ -1374,14 +1405,14 @@ static void register_items(struct Generator *G, struct HirDeclList *items)
     }
 }
 
-static void set_cfunc(struct Generator *G, String *name, int g)
+static void set_cfunc(struct Generator *G, struct HirFuncDecl *d, int g)
 {
     paw_Env *P = ENV(G);
     Value *pval = pawE_get_val(P, g);
 
-    const Value k = {.o = CAST_OBJECT(name)};
-    const Value *pv = pawH_get(P->builtin, k);
-    if (pv == NULL) ERROR(G, PAW_ENAME, "C function '%s' not loaded", name->text);
+    String *mangled = func_name(G, HirGetFuncDef(d->type));
+    const Value *pv = pawH_get(P->builtin, P2V(mangled));
+    if (pv == NULL) ERROR(G, PAW_ENAME, "C function '%s' not loaded", d->name->text);
     *pval = *pv;
 }
 
@@ -1399,7 +1430,7 @@ static void code_items(struct HirVisitor *V)
         struct HirFuncDecl *d = HirGetFuncDecl(item->decl);
         fs.line = d->line;
         if (item->info.kind == VAR_CFUNC) {
-            set_cfunc(G, d->name, item->info.index);
+            set_cfunc(G, d, item->info.index);
         } else {
             code_func(V, d, item->info);
         }
@@ -1438,6 +1469,7 @@ static void code_module(struct Generator *G, struct Hir *hir)
 {
     struct HirVisitor V;
     struct HirDeclList *items = pawHir_define(G->C, hir);
+
     setup_pass(&V, G);
     register_items(G, items);
     code_items(&V);
@@ -1453,6 +1485,5 @@ void pawP_codegen(struct Compiler *C, struct Hir *hir)
         .P = P,
         .C = C,
     };
-
     code_module(&G, hir);
 }

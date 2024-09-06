@@ -95,6 +95,7 @@ struct Compiler {
     String *modname;
     Closure *main;
     Map *strings;
+    Map *types;
     paw_Env *P;
 };
 
@@ -108,10 +109,14 @@ struct Resolver {
     struct Hir *hir; // HIR being built
     struct HirType *adt; // enclosing ADT
     struct HirType *result; // enclosing function return type
+    struct HirImplDecl *impl_d; // enclosing impl block
     struct HirSymtab *symtab; // scoped symbol table
     struct HirScope *globals;
     struct DynamicMem *dm; // dynamic memory
-    struct LazyItemList *items;                           
+    struct LazyItemList *impl_state;
+    struct LazyItemList *items;
+// TODO: use Map *items; // String * => HirDecl *
+    Map *impls; // HirAdtDecl * => HirImplDecl *
     int func_depth; // number of nested functions
     int nresults;
     int list_gid;

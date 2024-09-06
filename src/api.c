@@ -96,10 +96,40 @@ void paw_close(paw_Env *P)
     pawZ_uninit(P);
 }
 
+static void mangle_arg(paw_Env *P, Buffer *buf, paw_Type code)
+{
+    const struct Type *type = pawE_get_type(P, code);
+    pawE_mangle_add_arg(P, buf, type);
+}
+
 int paw_mangle_name(paw_Env *P, paw_Type *types)
 {
-    // TODO: move name mangling functions into env.c, call from here
+    API_CHECK_POP(P, 1);
+    const String *name = V_STRING(P->top.p[-1]);
+
+    Buffer buf;
+    pawL_init_buffer(P, &buf);
+    pawE_mangle_start(P, &buf, name);
+    paw_pop(P, 1); // pop 'name'
+    if (types != NULL) {
+        while (*types >= 0) {
+            mangle_arg(P, &buf, *types++);
+        }
+    }
+    pawE_mangle_finish(P, &buf);
+    pawL_push_result(P, &buf);
+    return 0;
+}
+
+int paw_mangle_self(paw_Env *P, paw_Type *types)
+{
+    API_CHECK_POP(P, 2);
+    paw_mangle_name(P, types);
+
+    // name, adt => name + '_' + adt
     paw_push_string(P, "_");
+    paw_rotate(P, -2, 1);
+    paw_concat(P, PAW_ADT_STR);
     paw_concat(P, PAW_ADT_STR);
     return 0;
 }

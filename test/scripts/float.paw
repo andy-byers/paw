@@ -17,8 +17,8 @@ pub fn test_exponents() {
 }
 
 pub fn test_parse() {
-    let check = |s, f| {
-        assert(_string_parse_float(s) == f);
+    let check = |s: str, f| {
+        assert(s.parse_float() == f);
     };
 
     check('0.0', 0.0);

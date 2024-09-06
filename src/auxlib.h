@@ -28,6 +28,7 @@ void pawL_push_result(paw_Env *P, Buffer *buf);
 void pawL_buffer_resize(paw_Env *P, Buffer *buf, size_t n);
 
 #define L_ADD_LITERAL(P, buf, s) pawL_add_nstring(P, buf, s, paw_lengthof(s))
+#define L_ADD_STRING(P, buf, s) pawL_add_nstring(P, buf, (s)->text, pawS_length(s))
 
 void pawL_add_char(paw_Env *P, Buffer *buf, char c);
 void pawL_add_string(paw_Env *P, Buffer *buf, const char *s);

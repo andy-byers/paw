@@ -5,7 +5,7 @@ fn random(n: int) -> [int] {
     let x = n;
     for _ = 0, n {
         x = (140671485 * x + 12820163) % 16777216;
-        _list_push(a, x);
+        a.push(x);
     }
     return a;
 }
@@ -30,6 +30,10 @@ fn bubble(n: int) -> [int] {
 }
 
 pub fn main(args: [str]) -> int {
+    let n = 500;
+    if #args > 0 {
+        n = args[0].parse_int(10);
+    }
     bubble(500);
     return 0;
 }

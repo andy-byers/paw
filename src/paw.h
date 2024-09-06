@@ -204,6 +204,7 @@ void paw_pop(paw_Env *P, int n);
 int paw_get_count(paw_Env *P);
 
 int paw_mangle_name(paw_Env *P, paw_Type *types);
+int paw_mangle_self(paw_Env *P, paw_Type *types);
 
 struct paw_Item {
     int global_id;

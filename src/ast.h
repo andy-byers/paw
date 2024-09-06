@@ -23,6 +23,7 @@ struct Compiler;
         X(AdtDecl,     adt) \
         X(TypeDecl,    type) \
         X(VarDecl,     var) \
+        X(ImplDecl,    impl) \
         X(VariantDecl, variant)
 
 #define AST_EXPR_LIST(X) \
@@ -123,9 +124,8 @@ struct AstAdtDecl {
     AST_DECL_HEADER; 
     paw_Bool is_pub : 1;
     paw_Bool is_struct : 1;
-    struct AstDeclList *fields;
     struct AstDeclList *generics;
-    int location;
+    struct AstDeclList *fields;
 };
 
 struct AstVariantDecl {
@@ -141,6 +141,13 @@ struct AstGenericDecl {
 struct AstFieldDecl {
     AST_DECL_HEADER; 
     struct AstExpr *tag;
+};
+
+struct AstImplDecl {
+    AST_DECL_HEADER; 
+    struct AstPath *self;
+    struct AstDeclList *generics;
+    struct AstDeclList *methods;
 };
 
 struct AstDecl {

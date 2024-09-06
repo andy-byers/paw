@@ -20,8 +20,8 @@ ItemDecl = ConstDecl | FunctionDecl | StructDecl |
 ### Functions
 ```ebnf
 FunctionDecl = "fn" Function .
-Function     = name [Generics] FuncHead Block .
-FuncHead     = "(" [{Field ","} Field] ")" ["->" Type] .
+Function     = name [Generics] Signature Block .
+Signature    = "(" [{Field ","} Field] ")" ["->" Type] .
 Field        = name ":" Type .
 ```
 
@@ -141,7 +141,7 @@ A constructor function takes the enumerator's fields as arguments and returns an
 ```ebnf
 CompositeLit = TupleLit | ListLit | MapLit | StructLit .
 TupleLit     = "(" [{Expr ","} Expr "," [Expr]] ")".
-ListLit    = "[" [ExprList [","]] "]" .
+ListLit      = "[" [ExprList [","]] "]" .
 MapLit       = "[" ":" "]" | "[" [MapElems [","]] "]" .
 MapElems     = MapElem {"," MapElem} [","] .
 MapElem      = Expr ":" Expr .
@@ -189,12 +189,12 @@ pub struct B {...}
 pub enum C {...}
 
 Import statement:
-(a) import Mod
-(b) import Mod::a
-(c) import Mod::{a, B}
-(d) import Mod::a as x
-(e) import Mod::{a as x, B as Y}
-(f) import Mod::*
+(a) use Mod
+(b) use Mod::a
+(c) use Mod::{a, B}
+(d) use Mod::a as x
+(e) use Mod::{a as x, B as Y}
+(f) use Mod::*
 
 Symbols added to public/local items:
 (a) Mod::a, Mod::B, Mod::C

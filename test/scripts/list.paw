@@ -190,7 +190,7 @@ pub fn test_slices() {
 pub fn test_infer_later() {
     let list = [];
     list = [0];
-    ;
+
     let list = [];
     list = [0];
     list = [1];
@@ -236,60 +236,65 @@ pub fn test_infer_later() {
     let c = b;
     let d = c;
     d = [1];
+
+    let a = [];
+    assert(#a == 0);
+    assert(a.length() == 0);
+    a.push(42);
 }
 
 pub fn test_generic_ops() {
     let a = [];
     assert(#a == 0);
-    _list_push(a, 1);
+    a.push(1);
 
     let a = [];
     let b = [];
     let c = a + b;
-    _list_push(c, 1);
+    c.push(1);
 
     let a = [];
     let b = [];
     let c = [];
     let d = a + b + c;
-    _list_push(d, 1);
+    d.push(1);
 }
 
 pub fn test_push() {
     let list: [int] = [];
-    _list_push(list, 1);
-    _list_push(list, 2);
-    _list_push(list, 3);
+    list.push(1);
+    list.push(2);
+    list.push(3);
     check_eq(list, [1, 2, 3]);
 
     let list = [1];
-    _list_push(list, 2);
-    _list_push(list, 3);
-    _list_push(list, 4);
+    list.push(2);
+    list.push(3);
+    list.push(4);
     check_eq(list, [1, 2, 3, 4]);
 }
 
 pub fn test_pop() {
     let list = [1, 2, 3];
-    assert(3 == _list_pop(list));
+    assert(3 == list.pop());
     assert(#list == 2);
-    assert(2 == _list_pop(list));
+    assert(2 == list.pop());
     assert(#list == 1);
-    assert(1 == _list_pop(list));
+    assert(1 == list.pop());
     assert(#list == 0);
 }
 
 pub fn test_insert() {
     let list: [int] = [];
-    _list_insert(list, 0, 3);
-    _list_insert(list, 0, 2);
-    _list_insert(list, 0, 1);
+    list.insert(0, 3);
+    list.insert(0, 2);
+    list.insert(0, 1);
     check_eq(list, [1, 2, 3]);
 
     let list: [int] = [1, 2, 3];
-    _list_insert(list, 1, 4);
-    _list_insert(list, 3, 5);
-    _list_insert(list, 5, 6);
+    list.insert(1, 4);
+    list.insert(3, 5);
+    list.insert(5, 6);
     check_eq(list, [1, 4, 2, 5, 3, 6]);
 }
 
@@ -349,18 +354,18 @@ pub fn test_infer_poly_function() {
 pub fn test_misc() {
     let list: [int] = [];
     for i = 0, 100 {
-        _list_push(list, i);
-    };
+        list.push(i);
+    }
     assert(#list == 100);
     let copy = [];
     for x in list {
-        _list_push(copy, x);
+        copy.push(x);
     }
     for i = 0, 50 {
-        _list_erase(list, i);
+        list.remove(i);
     }
     for i = 0, 100, 2 {
-        _list_insert(list, i, i);
+        list.insert(i, i);
     }
     check_eq(list, copy);
 }
@@ -396,7 +401,7 @@ pub fn test_infer_a() {
     let c = [];
     a = b;
     b = c;
-    _list_push(c, 1);
+    c.push(1);
 }
 
 pub fn test_infer_b() {
@@ -405,7 +410,7 @@ pub fn test_infer_b() {
     let c = [];
     a = b;
     b = c;
-    _list_push(a, 1);
+    a.push(1);
 }
 
 pub fn test_infer_c() {
@@ -439,7 +444,7 @@ pub fn test_infer_e() {
     if true {
         // do nothing
     } else {
-        _list_push(a, 1);
+        a.push(1);
     }
     b = c;
     c = a;
@@ -447,14 +452,14 @@ pub fn test_infer_e() {
 
 pub fn test_infer_f() {
     let list = [];
-    _list_push(list, 1);
+    list.push(1);
     assert(list[0] == 1);
 }
 
 pub fn test_infer_g() {
     let a = [];
     let b = a;
-    _list_push(b, 1);
+    b.push(1);
     assert(a[0] == 1);
 }
 
@@ -495,7 +500,7 @@ pub fn test_infer_j() {
 }
 
 fn infer_fn_4<T>(list: [T], val: T) -> int {
-    _list_push(list, val);
+    list.push(val);
     return #list;
 }
 pub fn test_infer_k() {
@@ -531,7 +536,7 @@ pub fn test_slice_equality() {
 fn map2<T>(list: [T], f: fn(T) -> T) -> [T] {
     let result = [];
     for elem in list {
-        _list_push(result, f(elem));
+        result.push(f(elem));
     }
     return result;
 }
@@ -582,12 +587,12 @@ pub fn test_complex_elem() {
     let list = [];
     for i = 0, 1000 {
         if i < 500 {
-            _list_push(list, ComplexStruct{
+            list.push(ComplexStruct{
                 value: ComplexEnum::<int>::JustT(i),
             });
         } else {
-            _list_push(list, ComplexStruct{
-                value: ComplexEnum::<int>::WithStr(i, 'str-' + _int_to_string(i)),
+            list.push(ComplexStruct{
+                value: ComplexEnum::<int>::WithStr(i, 'str-' + i.to_string()),
             });
         }
     }
