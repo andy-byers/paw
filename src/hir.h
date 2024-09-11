@@ -262,7 +262,7 @@ struct HirFieldDecl {
 // HIR node representing an 'impl' block
 struct HirImplDecl {
     HIR_DECL_HEADER; 
-    struct HirScope *scope;
+    struct HirPath *self;
     struct HirTypeList *subst;
     struct HirDeclList *generics;
     struct HirDeclList *methods;

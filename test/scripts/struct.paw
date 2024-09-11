@@ -1,3 +1,4 @@
+// struct.paw
 
 struct Empty;
 
@@ -57,6 +58,19 @@ pub fn test_nested_struct() {
     };
     assert(o.b.a == 1);
     assert(o.b.b == 'two');
+}
+
+pub fn instantiate_in_signature<T>(s: Struct<T>) -> Struct<int> {
+    return Struct{v: 42};
+}
+
+struct Struct<T> {
+    v: T
+}
+
+pub fn test_instantiate_in_signature() {
+    let s = instantiate_in_signature(Struct{v: true});
+    assert(s.v == 42);
 }
 
 

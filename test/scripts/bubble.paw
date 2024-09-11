@@ -34,6 +34,6 @@ pub fn main(args: [str]) -> int {
     if #args > 0 {
         n = args[0].parse_int(10);
     }
-    bubble(500);
+    bubble(n);
     return 0;
 }

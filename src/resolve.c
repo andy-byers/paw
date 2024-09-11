@@ -1090,9 +1090,21 @@ static void resolve_methods(struct Resolver *R, struct LazyItemList *items, stru
     }
 }
 
+static struct HirDecl *resolve_location(struct Resolver *R, struct HirPath *path); // TODO
+                                                                                   
 static void resolve_impl_methods(struct Resolver *R, struct AstImplDecl *d, struct HirImplDecl *r, struct HirScope *scope)
 {
     enter_block(R, scope);
+
+    // Lookup the 'self' ADT. If the ADT is an instance of a polymorphic ADT, it
+    // may need to be instantiated here. Either way, the LazyItem holding the ADT
+    // will be resolved (this is fine, since impl blocks are resolved in a separate
+    // pass, after all ADTs have been registered).
+    // use the identifier 'Self' to refer to the 'self' ADT
+    String *name = SCAN_STRING(R, "Self");
+    struct HirAdtDecl *self = get_adt(R, r->type);
+    struct HirSymbol *symbol = new_local(R, name, HIR_CAST_DECL(self));
+    symbol->is_type = PAW_TRUE;
 
     // first register signatures, then resolve bodies (which may refer to other methods
     // in the impl block)
@@ -1583,19 +1595,15 @@ static struct LazyItem *register_impl_item(struct Resolver *R, struct AstImplDec
         r->subst = collect_decl_types(R, r->generics);
         r->monos = pawHir_decl_list_new(R->hir);
     }
+    r->self = resolve_path(R, d->self);
 
     // Lookup the 'self' ADT. If the ADT is an instance of a polymorphic ADT, it
     // may need to be instantiated here. Either way, the LazyItem holding the ADT
     // will be resolved (this is fine, since impl blocks are resolved in a separate
     // pass, after all ADTs have been registered).
-    struct HirPath *path = resolve_path(R, d->self);
-    struct HirDecl *self = resolve_location(R, path);
+    struct HirDecl *self = resolve_location(R, r->self);
     if (!HirIsAdtDecl(self)) TYPE_ERROR(R, "expected ADT as target of 'impl' block");
     r->type = HIR_TYPEOF(self);
-
-    // use the identifier 'Self' to refer to the 'self' ADT
-    struct HirSymbol *symbol = new_local(R, SCAN_STRING(R, "Self"), self);
-    symbol->is_type = PAW_TRUE;
 
     struct HirScope *scope = leave_block(R);
     struct LazyItem *item = new_lazy_item(R, AST_CAST_DECL(d), result, scope, NULL);
@@ -2266,14 +2274,15 @@ static struct HirDeclList *register_items(struct Resolver *R, struct AstDeclList
     struct HirDeclList *output = pawHir_decl_list_new(R->hir);
     for (int i = 0; i < decls->count; ++i) {
         struct AstDecl *decl = decls->data[i];
-        struct LazyItem *item;
-        if (AstIsFuncDecl(decl)) {
-            item = register_func_item(R, AstGetFuncDecl(decl));
-        } else if (AstIsAdtDecl(decl)) {
-            item = register_adt_item(R, AstGetAdtDecl(decl));
-        } else {
-            continue;
-        }
+        if (!AstIsAdtDecl(decl)) continue; 
+        struct LazyItem *item = register_adt_item(R, AstGetAdtDecl(decl));
+        pawHir_decl_list_push(R->hir, output, item->hir_decl);
+        item_list_push(R->hir, *pitems, item);
+    }
+    for (int i = 0; i < decls->count; ++i) {
+        struct AstDecl *decl = decls->data[i];
+        if (!AstIsFuncDecl(decl)) continue; 
+        struct LazyItem *item = register_func_item(R, AstGetFuncDecl(decl));
         pawHir_decl_list_push(R->hir, output, item->hir_decl);
         item_list_push(R->hir, *pitems, item);
     }
