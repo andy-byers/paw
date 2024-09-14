@@ -65,21 +65,21 @@ void pawP_init(paw_Env *P)
 
 paw_Type pawP_type2code(struct Compiler *C, struct HirType *type)
 {
-    if (HirIsAdt(type)) {
-        struct HirAdt *adt = HirGetAdt(type);
-        if (adt->base == C->builtins[BUILTIN_UNIT].did) {
+    if (HirIsPathType(type)) {
+        const DeclId base = hir_adt_base(type);
+        if (base == C->builtins[BUILTIN_UNIT].did) {
             return PAW_TUNIT;
-        } else if (adt->base == C->builtins[BUILTIN_BOOL].did) {
+        } else if (base == C->builtins[BUILTIN_BOOL].did) {
             return PAW_TBOOL;
-        } else if (adt->base == C->builtins[BUILTIN_INT].did) {
+        } else if (base == C->builtins[BUILTIN_INT].did) {
             return PAW_TINT;
-        } else if (adt->base == C->builtins[BUILTIN_FLOAT].did) {
+        } else if (base == C->builtins[BUILTIN_FLOAT].did) {
             return PAW_TFLOAT;
-        } else if (adt->base == C->builtins[BUILTIN_STR].did) {
+        } else if (base == C->builtins[BUILTIN_STR].did) {
             return PAW_TSTR;
-        } else if (adt->base == C->builtins[BUILTIN_LIST].did) {
+        } else if (base == C->builtins[BUILTIN_LIST].did) {
             return BUILTIN_LIST;
-        } else if (adt->base == C->builtins[BUILTIN_MAP].did) {
+        } else if (base == C->builtins[BUILTIN_MAP].did) {
             return BUILTIN_MAP;
         }
     }
@@ -165,6 +165,4 @@ void pawP_teardown(paw_Env *P, const struct DynamicMem *dm)
     pawM_free_vec(P, dm->vars.data, dm->vars.alloc);
     pawAst_free(dm->ast);
     pawHir_free(dm->hir);
-    pawC_pop(P); // .types
-// TODO: why is this already popped?    pawC_pop(P); // .strings
 }

@@ -41,6 +41,12 @@
 # define PAW_OS_WINDOWS
 #endif
 
+#if defined(__has_attribute)
+# define PAW_HAS_ATTRIBUTE(X) __has_attribute(X)
+#else
+# define PAW_HAS_ATTRIBUTE(X) 0
+#endif
+
 #if defined(__GNUC__) || defined(__clang__)
 # define PAW_NODISCARD __attribute__((warn_unused_result))
 # define PAW_UNREACHABLE __builtin_unreachable

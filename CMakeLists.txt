@@ -56,6 +56,7 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/prefix.h
             ${PAW_SOURCE_DIR}/rt.h
             ${PAW_SOURCE_DIR}/str.h
+            ${PAW_SOURCE_DIR}/type.h
             ${PAW_SOURCE_DIR}/unify.h
             ${PAW_SOURCE_DIR}/util.h
             ${PAW_SOURCE_DIR}/value.h
@@ -66,14 +67,17 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/call.c
             ${PAW_SOURCE_DIR}/code.c
             ${PAW_SOURCE_DIR}/codegen.c
+            ${PAW_SOURCE_DIR}/collect.c
             ${PAW_SOURCE_DIR}/compile.c
             ${PAW_SOURCE_DIR}/debug.c
             ${PAW_SOURCE_DIR}/env.c
             ${PAW_SOURCE_DIR}/gc.c
             ${PAW_SOURCE_DIR}/hir.c
+            ${PAW_SOURCE_DIR}/instantiate.c
             ${PAW_SOURCE_DIR}/lex.c
             ${PAW_SOURCE_DIR}/list.c
             ${PAW_SOURCE_DIR}/lib.c
+            ${PAW_SOURCE_DIR}/lower_ast.c
             ${PAW_SOURCE_DIR}/map.c
             ${PAW_SOURCE_DIR}/mem.c
             ${PAW_SOURCE_DIR}/os.c
@@ -81,6 +85,7 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/resolve.c
             ${PAW_SOURCE_DIR}/rt.c
             ${PAW_SOURCE_DIR}/str.c
+            ${PAW_SOURCE_DIR}/type.c
             ${PAW_SOURCE_DIR}/unify.c
             ${PAW_SOURCE_DIR}/util.c
             ${PAW_SOURCE_DIR}/value.c)

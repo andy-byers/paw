@@ -16,6 +16,7 @@
 #include "map.h"
 #include "mem.h"
 #include "parse.h"
+#include "type.h"
 
 #define ERROR(G, code, ...) pawE_error(ENV(G), code, (G)->fs->line, __VA_ARGS__)
 #define GET_DECL(G, id) pawHir_get_decl((G)->hir, id)
@@ -61,20 +62,20 @@ static void mangle_type(struct Generator *G, Buffer *buf, struct HirType *type)
         paw_assert(pv != NULL);
         t = pv->p;
     }
-    pawE_mangle_add_arg(P, buf, t);
+    pawY_mangle_add_arg(P, buf, t->hdr.code);
 }
 
 static void mangle_add(struct Generator *G, Buffer *buf, const String *name, struct HirTypeList *types)
 {
     paw_Env *P = ENV(G);
-    pawE_mangle_start(P, buf, name);
+    pawY_mangle_start(P, buf, name);
     //pawL_add_nstring(P, buf, name->text, name->length);
     if (types != NULL) {
         for (int i = 0; i < types->count; ++i) {
             mangle_type(G, buf, types->data[i]);
         }
     }
-    pawE_mangle_finish(P, buf);
+    pawY_mangle_finish(P, buf);
     pawL_push_result(P, buf);
 }
 
@@ -114,9 +115,8 @@ static String *func_name(struct Generator *G, struct HirFuncDef *fdef)
     struct HirFuncDecl *fd = HirGetFuncDecl(GET_DECL(G, fdef->did));
     struct HirTypeList *fd_types = fd->body ? fdef->types : NULL;
     if (fd->self == NULL) return mangle_name(G, fd->name, fd_types);
-    struct HirAdt *adt = HirGetAdt(fd->self);
-    struct HirAdtDecl *ad = HirGetAdtDecl(GET_DECL(G, adt->did));
-    struct HirTypeList *ad_types = fd->body ? adt->types : NULL;
+    struct HirAdtDecl *ad = HirGetAdtDecl(GET_DECL(G, hir_adt_did(fd->self)));
+    struct HirTypeList *ad_types = fd->body ? hir_adt_types(fd->self) : NULL;
     return mangle_attr(G, ad->name, ad_types, fd->name, fd_types);
 }
 
@@ -472,7 +472,7 @@ static paw_Bool resolve_global(struct Generator *G, const String *name, struct H
 {
     paw_Env *P = ENV(G);
     const int did = pawE_locate(P, name, PAW_FALSE);
-    const struct Def *def = pawE_get_def(P, did);
+    const struct Def *def = Y_DEF(P, did);
     paw_assert(def->hdr.kind == DEF_FUNC);
     pinfo->kind = VAR_GLOBAL;
     pinfo->index = def->func.vid;
@@ -497,8 +497,8 @@ static struct HirVarInfo find_var(struct Generator *G, const String *name);
 
 static struct HirVarInfo resolve_attr(struct Generator *G, struct HirType *type, String *name)
 {
-    paw_assert(HirIsAdt(type));
-    struct HirDecl *decl = GET_DECL(G, type->adt.base);
+    paw_assert(HirIsPathType(type));
+    struct HirDecl *decl = GET_DECL(G, hir_adt_did(type));
     struct HirAdtDecl *adt = &decl->adt;
     int index; // must exist: found in last pass
     for (int i = 0; i < adt->fields->count; ++i) {
@@ -616,8 +616,9 @@ static void code_getter(struct HirVisitor *V, struct HirVarInfo info)
     }
 }
 
-static paw_Bool should_mangle(struct HirDecl *decl)
+static paw_Bool should_mangle(struct Generator *G, DeclId did)
 {
+    struct HirDecl *decl = GET_DECL(G, did);
     paw_assert(!HirIsGenericDecl(decl));
     return !HirIsVarDecl(decl) && !HirIsFieldDecl(decl);
 }
@@ -626,7 +627,7 @@ static struct HirVarInfo resolve_short_path(struct Generator *G, struct HirPath 
 {
     paw_assert(path->count == 1);
     struct HirSegment *base = pawHir_path_get(path, 0);
-    const String *name = should_mangle(base->result)
+    const String *name = should_mangle(G, base->did)
         ? mangle_name(G, base->name, base->types)
         : base->name;
     return find_var(G, name);
@@ -742,7 +743,7 @@ static void code_composite_lit(struct HirVisitor *V, struct HirLiteralExpr *e)
     struct FuncState *fs = G->fs;
     fs->line = e->line;
 
-    const DefId did = e->type->adt.did;
+    const DefId did = hir_adt_did(e->type);
     struct HirAdtDecl *d = &GET_DECL(G, did)->adt;
     pawK_code_U(fs, OP_NEWINSTANCE, d->fields ? d->fields->count : 0);
 
@@ -1000,7 +1001,7 @@ static void code_closure_expr(struct HirVisitor *V, struct HirClosureExpr *e)
 static void set_entrypoint(struct Generator *G, Proto *proto, int g)
 {
     paw_Env *P = ENV(G);
-    Value *pval = pawE_get_val(P, g);
+    Value *pval = Y_PVAL(P, g);
 
     Closure *closure = pawV_new_closure(P, 0);
     V_SET_OBJECT(pval, closure);
@@ -1189,7 +1190,7 @@ static void code_conversion_expr(struct HirVisitor *V, struct HirConversionExpr 
     G->fs->line = e->line;
 
     V->VisitExpr(V, e->arg);
-    pawK_code_U(G->fs, op, from->adt.base);
+    pawK_code_U(G->fs, op, hir_adt_did(from));
 }
 
 static void code_if_stmt(struct HirVisitor *V, struct HirIfStmt *s)
@@ -1408,7 +1409,7 @@ static void register_items(struct Generator *G, struct HirDeclList *items)
 static void set_cfunc(struct Generator *G, struct HirFuncDecl *d, int g)
 {
     paw_Env *P = ENV(G);
-    Value *pval = pawE_get_val(P, g);
+    Value *pval = Y_PVAL(P, g);
 
     String *mangled = func_name(G, HirGetFuncDef(d->type));
     const Value *pv = pawH_get(P->builtin, P2V(mangled));
@@ -1480,7 +1481,6 @@ void pawP_codegen(struct Compiler *C, struct Hir *hir)
     paw_Env *P = ENV(C);
     struct Generator G = {
         .hir = hir,
-        .sym = hir->symtab,
         .items = item_list_new(hir),
         .P = P,
         .C = C,

@@ -1,5 +1,14 @@
 // method.paw
 
+// TODO: Fix this
+fn fix_list() {
+    print('TODO: fix ADT instantiation inside polymorphic function not creating methods\n');
+    let list = [];
+    list.push(123);
+    list.pop();
+    list.length();
+}
+
 pub fn test_list_methods() {
     let list = [1, 3, 5, -20, -10];
     assert(list.length() == 5);

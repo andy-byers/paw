@@ -6,11 +6,11 @@
 
 #include "rt.h"
 #include "auxlib.h"
-#include "debug.h"
 #include "env.h"
 #include "call.h"
 #include "gc.h"
 #include "map.h"
+#include "type.h"
 #include "value.h"
 
 // Helpers for the VM:
@@ -1078,7 +1078,7 @@ top:
             vm_case(GETGLOBAL) :
             {
                 const int u = GET_U(opcode);
-                VM_PUSH(*pawE_get_val(P, u));
+                VM_PUSH(*Y_PVAL(P, u));
             }
 
             vm_case(GETFIELD) :

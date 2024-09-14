@@ -13,6 +13,7 @@
 #include "parse.h"
 #include "paw.h"
 #include "rt.h"
+#include "type.h"
 
 static void *default_alloc(void *ud, void *ptr, size_t old_size, size_t new_size)
 {
@@ -98,8 +99,8 @@ void paw_close(paw_Env *P)
 
 static void mangle_arg(paw_Env *P, Buffer *buf, paw_Type code)
 {
-    const struct Type *type = pawE_get_type(P, code);
-    pawE_mangle_add_arg(P, buf, type);
+    const struct Type *type = Y_TYPE(P, code);
+    pawY_mangle_add_arg(P, buf, type->hdr.code);
 }
 
 int paw_mangle_name(paw_Env *P, paw_Type *types)
@@ -109,14 +110,14 @@ int paw_mangle_name(paw_Env *P, paw_Type *types)
 
     Buffer buf;
     pawL_init_buffer(P, &buf);
-    pawE_mangle_start(P, &buf, name);
+    pawY_mangle_start(P, &buf, name);
     paw_pop(P, 1); // pop 'name'
     if (types != NULL) {
         while (*types >= 0) {
             mangle_arg(P, &buf, *types++);
         }
     }
-    pawE_mangle_finish(P, &buf);
+    pawY_mangle_finish(P, &buf);
     pawL_push_result(P, &buf);
     return 0;
 }
@@ -146,7 +147,7 @@ int paw_lookup_item(paw_Env *P, struct paw_Item *pitem)
     *pitem = (struct paw_Item){
         .global_id = def->hdr.kind == DEF_FUNC ? def->func.vid :
             def->hdr.kind == DEF_VAR ? def->var.vid : -1, 
-        .type = def->hdr.type->hdr.code,
+        .type = def->hdr.code,
     };
     return 0;
 }
@@ -339,14 +340,14 @@ void paw_get_typename(paw_Env *P, paw_Type code)
 {
     Buffer buf;
     pawL_init_buffer(P, &buf);
-    struct Type *type = pawE_get_type(P, code);
-    pawE_print_type(P, &buf, type);
+    struct Type *type = Y_TYPE(P, code);
+    pawY_print_type(P, &buf, type->hdr.code);
     pawL_push_result(P, &buf);
 }
 
 void paw_get_global(paw_Env *P, int gid)
 {
-    *P->top.p = *pawE_get_val(P, gid);
+    *P->top.p = *Y_PVAL(P, gid);
     API_INCR_TOP(P, 1);
 }
 

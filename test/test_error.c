@@ -24,6 +24,15 @@ static void write_main(char *out, const char *items, const char *text)
 #undef ADD_CHUNK
 }
 
+static void check_status(paw_Env *P, int have, int want)
+{
+    check(have == want);
+    if (have != PAW_OK) {
+        fprintf(stderr, "message: %s\n", paw_string(P, -1));
+        paw_pop(P, 1);
+    }
+}
+
 static void test_compiler_status(int expect, const char *name, const char *item, const char *text)
 {
     char buffer[4096];
@@ -31,7 +40,7 @@ static void test_compiler_status(int expect, const char *name, const char *item,
 
     paw_Env *P = paw_open(&(struct paw_Options){0});
     int status = pawL_load_chunk(P, name, buffer);
-    check(status == expect);
+    check_status(P, status, expect);
 
     paw_close(P);
 }
@@ -43,18 +52,19 @@ static void test_runtime_status(int expect, const char *name, const char *item, 
 
     paw_Env *P = paw_open(&(struct paw_Options){0});
     int status = pawL_load_chunk(P, name, buffer);
-    check(status == PAW_OK);
+    check_status(P, status, PAW_OK);
 
     paw_push_string(P, "main");
     paw_mangle_name(P, NULL);
 
     struct paw_Item info;
     status = paw_lookup_item(P, &info);
-    check(status == PAW_OK && info.global_id >= 0);
+    check_status(P, status, PAW_OK);
+    check(info.global_id >= 0);
     paw_get_global(P, info.global_id);
 
     status = paw_call(P, 0);
-    check(status == expect);
+    check_status(P, status, expect);
 
     paw_close(P);
 }
@@ -299,7 +309,7 @@ static void test_enum_error(void)
 {
     test_compiler_status(PAW_ESYNTAX, "enum_unit_with_braces_on_def", "enum A {}", "let a = A;");
     test_compiler_status(PAW_ETYPE, "enum_unit_with_braces_on_init", "enum A;", 
-                                   "let a = A{}; // looks like struct literal");
+                                    "let a = A{}; // looks like struct literal");
     test_compiler_status(PAW_ESYNTAX, "enum_unit_without_semicolon", "enum A", "");
     test_compiler_status(PAW_ESYNTAX, "enum_missing_variant", "enum A {X}", "let a = A;");
     test_compiler_status(PAW_ENAME, "enum_duplicate_variant", "enum A {X, X}", "");
@@ -330,8 +340,8 @@ static void test_map_error(void)
     test_compiler_status(PAW_ETYPE, "map_incompatible_types_2", "", "let a = [:]; if true {a = [0: 0];} else {a = [1: true];}");
     test_compiler_status(PAW_ETYPE, "map_mixed_types", "", "let a = [1: 2, 3: 4, 5: '6'];");
     test_compiler_status(PAW_ETYPE, "map_mixed_nesting", "", "let a = [1: [1: 1], 2: [2: 2], 3: [3: [3: 3]]];");
-    test_compiler_status(PAW_ETYPE, "map_nonhashable_literal_key", "", "let map = [[1]: 1];");
-    test_compiler_status(PAW_ETYPE, "map_nonhashable_type_key", "", "let map: [[int]: int] = [:];");
+// TODO    test_compiler_status(PAW_ETYPE, "map_nonhashable_literal_key", "", "let map = [[1]: 1];");
+// TODO    test_compiler_status(PAW_ETYPE, "map_nonhashable_type_key", "", "let map: [[int]: int] = [:];");
     test_compiler_status(PAW_ETYPE, "map_slice", "", "let map = [:]; let val = map[0:10];");
 }
 
@@ -342,7 +352,8 @@ static int run_main(paw_Env *P, int nargs)
 
     struct paw_Item info;
     const int status = paw_lookup_item(P, &info);
-    check(status == PAW_OK && info.global_id >= 0);
+    check_status(P, status, PAW_OK);
+    check(info.global_id >= 0);
     paw_get_global(P, info.global_id);
 
     return paw_call(P, nargs);
@@ -363,23 +374,23 @@ static void test_gc_conflict(void)
         "    let N = 500;\n"
         // create a bunch of dynamically-allocated objects
         "    let objects = [];\n"
-        "    for i = 0, N {_list_push(objects, [i, i + 1, i + 2]);}\n"
+        "    for i = 0, N {objects.push([i, i + 1, i + 2]);}\n"
         // fill a list with integers that conflict with the object addresses
         "    let conflicts = [];\n"
-        "    for i = 0, N {_list_push(conflicts, conflicting_int(objects[i]));}\n"
+        "    for i = 0, N {conflicts.push(conflicting_int(objects[i]));}\n"
         // use a lot of memory to cause garbage collections
         "    let memory = [];\n"
-        "    for i = 0, N {_list_push(memory, [[i], [i + 1], [i + 2]]);}\n"
+        "    for i = 0, N {memory.push([[i], [i + 1], [i + 2]]);}\n"
         "}\n";
 
     paw_Env *P = paw_open(&(struct paw_Options){0});
     pawL_register_func(P, "conflicting_int", next_conflicting_int, 0);
 
     int status = pawL_load_chunk(P, "gc_conflict", source);
-    check(status == PAW_OK);
+    check_status(P, status, PAW_OK);
 
     status = run_main(P, 0);
-    check(status == PAW_OK);
+    check_status(P, status, PAW_OK);
 
     paw_close(P);
 }

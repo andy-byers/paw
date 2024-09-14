@@ -32,6 +32,9 @@ void pawK_pool_free(struct Pool *pool, void *ptr, size_t size);
 #define K_LIST_MAX (1 << 15)
 #define K_LIST_MIN 8
 
+#define K_LIST_GET(L, i) CHECK_EXP(0 <= (i) && (i) < (L)->count, (L)->data[i])
+#define K_LIST_SET(L, i, v) CHECK_EXP(0 <= (i) && (i) < (L)->count, (L)->data[i] = (v))
+
 // Generate functions for working with a list containing nodes of a given type
 #define DEFINE_LIST(ctx, func, L, T) \
     struct L { \

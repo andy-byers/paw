@@ -164,7 +164,7 @@ pub fn test_infer_vec_field() {
         a: true,
         b: [],
     };
-    _list_push(p.b, p.a);
+    p.b.push(p.a);
     assert(p.a == p.b[0]);
 }
 
@@ -191,58 +191,71 @@ fn toplevel_call<T>(a: TopLevelA<T>) -> TopLevelB<T> {
     return a.b;
 }
 
-// Recursive ADTs will compile, since every ADT is implicitly boxed. It is
-// not possible to actually create one of these ADTs, however.
-
-// TODO: Wrap fields in Option to allow construction
-
-struct PolyRecursive<X, Y> {
-    value: Option<PolyRecursive<X, Y>>,
-    value2: Option<PolyRecursive<Empty<Y>, Y>>,
-    value3: Option<PolyRecursive<bool, str>>,
-}
-
 pub fn test_recursion() {
-    let pr = PolyRecursive{
-        value: Option::<PolyRecursive<int, bool>>::None,
-        value2: Option::<PolyRecursive<Empty<bool>, bool>>::None,
-        value3: Option::<PolyRecursive<bool, str>>::None,
+}
+pub fn test_recursion2() {
+}
+
+struct PolyRecur2<X, Y> {
+    value: Option<PolyRecur2<X, Y>>,
+    value2: Option<PolyRecur2<Empty<Y>, Y>>,
+    value3: Option<PolyRecur2<bool, str>>,
+}
+
+pub fn test_recursion3() {
+    let pr = PolyRecur2{
+        value: Option::<PolyRecur2<int, bool>>::None,
+        value2: Option::<PolyRecur2<Empty<bool>, bool>>::None,
+        value3: Option::<PolyRecur2<bool, str>>::None,
     };
-    pr.value = Option::<PolyRecursive<int, bool>>::Some(PolyRecursive {
-        value: Option::<PolyRecursive<int, bool>>::None,
-        value2: Option::<PolyRecursive<Empty<bool>, bool>>::None,
-        value3: Option::<PolyRecursive<bool, str>>::None,
+    pr.value = Option::<PolyRecur2<int, bool>>::Some(PolyRecur2 {
+        value: Option::<PolyRecur2<int, bool>>::None,
+        value2: Option::<PolyRecur2<Empty<bool>, bool>>::None,
+        value3: Option::<PolyRecur2<bool, str>>::None,
     });
-    pr.value2 = Option::<PolyRecursive<Empty<bool>, bool>>::Some(PolyRecursive {
-        value: Option::<PolyRecursive<Empty<bool>, bool>>::None,
-        value2: Option::<PolyRecursive<Empty<bool>, bool>>::None,
-        value3: Option::<PolyRecursive<bool, str>>::None,
+    pr.value2 = Option::<PolyRecur2<Empty<bool>, bool>>::Some(PolyRecur2 {
+        value: Option::<PolyRecur2<Empty<bool>, bool>>::None,
+        value2: Option::<PolyRecur2<Empty<bool>, bool>>::None,
+        value3: Option::<PolyRecur2<bool, str>>::None,
     });
-// TODO: This commented-out code crashes the program. Somewhere along the line, we end up
-//       with an instantiation of PolyRecursive that has no fields. When we set the fields
-//       that should exist, we write past the end of the Tuple struct's flex array, causing
-//       some allocator metadata to become corrupted, tripping an assertion. Really should
-//       invest some time to get the allocator redzones working: it is possible that having
-//       redzones would have caused a trap right when the bad write happens to avoid having
-//       to mess with watchpoints and such.
-//       NOTE: 'value3' is the only field that does not depend on generic parameters from
-//             PolyRecursive's binder.
-//    pr.value3 = Option::<PolyRecursive<bool, str>>::Some(PolyRecursive {
-//        value: Option::<PolyRecursive<bool, str>>::None,
-//        value2: Option::<PolyRecursive<Empty<str>, str>>::None,
-//        value3: Option::<PolyRecursive<bool, str>>::None,
-//    });
+    pr.value3 = Option::<PolyRecur2<bool, str>>::Some(PolyRecur2 {
+        value: Option::<PolyRecur2<bool, str>>::None,
+        value2: Option::<PolyRecur2<Empty<str>, str>>::None,
+        value3: Option::<PolyRecur2<bool, str>>::None,
+    });
 }
 
-// TODO: Use Option to test these, like the above test
-struct PolyRecursiveA<X, Y, Z> {
-    value: PolyRecursiveB<X, Y, Z>,
-    value2: PolyRecursiveB<X, str, Z>,
-    value3: PolyRecursiveB<bool, [int], str>,
+struct PolyRecur2A<X, Y, Z> {
+    value: Option<PolyRecur2B<X, Y, Z>>,
+    value2: Option<PolyRecur2B<X, str, Z>>,
+    value3: Option<PolyRecur2B<bool, [int], str>>,
 }
 
-struct PolyRecursiveB<X, Y, Z> {
-    value: PolyRecursiveA<Z, X, Y>,
-    value2: PolyRecursiveA<Z, X, [bool]>,
-    value3: PolyRecursiveA<str, float, Empty<X>>,
+struct PolyRecur2B<X, Y, Z> {
+    value: Option<PolyRecur2A<Z, X, Y>>,
+    value2: Option<PolyRecur2A<Z, X, [bool]>>,
+    value3: Option<PolyRecur2A<str, float, X>>,
+}
+
+pub fn test_recursion4() {
+    let pr = PolyRecur2A{
+        value: Option::<PolyRecur2B<bool, int, float>>::None,
+        value2: Option::<PolyRecur2B<bool, str, float>>::None,
+        value3: Option::<PolyRecur2B<bool, [int], str>>::None,
+    };
+    pr.value = Option::<PolyRecur2B<bool, int, float>>::Some(PolyRecur2B{
+        value: Option::<PolyRecur2A<float, bool, int>>::None,
+        value2: Option::<PolyRecur2A<float, bool, [bool]>>::None,
+        value3: Option::<PolyRecur2A<str, float, bool>>::None,
+    });
+    pr.value2 = Option::<PolyRecur2B<bool, str, float>>::Some(PolyRecur2B{
+        value: Option::<PolyRecur2A<float, bool, str>>::None,
+        value2: Option::<PolyRecur2A<float, bool, [bool]>>::None,
+        value3: Option::<PolyRecur2A<str, float, bool>>::None,
+    });
+    pr.value3 = Option::<PolyRecur2B<bool, [int], str>>::Some(PolyRecur2B{
+        value: Option::<PolyRecur2A<str, bool, [int]>>::None,
+        value2: Option::<PolyRecur2A<str, bool, [bool]>>::None,
+        value3: Option::<PolyRecur2A<str, float, bool>>::None,
+    });
 }

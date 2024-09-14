@@ -41,9 +41,9 @@ static void debug_log(const char *what, struct HirType *a, struct HirType *b)
 #ifdef PAW_DEBUG_UNIFY
     paw_assert(a && b);
     printf("%s: ", what);
-    pawAst_repr_type(stdout, a);
+    pawHir_repr_type(stdout, a);
     fprintf(stdout, " = ");
-    pawAst_repr_type(stdout, b);
+    pawHir_repr_type(stdout, b);
     fprintf(stdout, "\n");
 #else
     paw_unused(what);
@@ -106,11 +106,17 @@ static struct HirType *normalize_unknown(UnificationTable *table, struct HirType
 
 static void normalize_list(UnificationTable *table, struct HirTypeList *list)
 {
-    if (list == NULL) {
-        return;
-    }
+    if (list == NULL) return;
     for (int i = 0; i < list->count; ++i) {
         list->data[i] = pawU_normalize(table, list->data[i]);
+    }
+}
+
+static void normalize_path(UnificationTable *table, struct HirPath *path)
+{
+    for (int i = 0; i < path->count; ++i) {
+        struct HirSegment *seg = K_LIST_GET(path, i);
+        normalize_list(table, seg->types);
     }
 }
 
@@ -118,20 +124,20 @@ struct HirType *pawU_normalize(UnificationTable *table, struct HirType *type)
 {
     switch (HIR_KINDOF(type)) {
         case kHirFuncDef:
-            normalize_list(table, type->fdef.types);
+            normalize_list(table, HirGetFuncDef(type)->types);
             // fallthrough
         case kHirFuncPtr:
-            normalize_list(table, type->fdef.params);
-            type->fdef.result = pawU_normalize(table, type->fdef.result);
+            normalize_list(table, HIR_FPTR(type)->params);
+            type->fdef.result = pawU_normalize(table, HIR_FPTR(type)->result);
             break;
         case kHirUnknown:
             type = normalize_unknown(table, type);
             break;
         case kHirTupleType:
-            normalize_list(table, type->tuple.elems);
+            normalize_list(table, HirGetTupleType(type)->elems);
             break;
-        case kHirAdt:
-            normalize_list(table, type->adt.types);
+        case kHirPathType:
+            normalize_path(table, HirGetPathType(type)->path);
             break;
         default:
             break;
@@ -139,67 +145,72 @@ struct HirType *pawU_normalize(UnificationTable *table, struct HirType *type)
     return type;
 }
 
-static void unify_lists(Unifier *U, struct HirTypeList *a, struct HirTypeList *b)
+static int unify_lists(struct Unifier *U, struct HirTypeList *a, struct HirTypeList *b)
 {
-    if (a->count != b->count) {
-        ERROR(U, "arity mismatch");
-    }
+    paw_assert(a && b);
+    if (a->count != b->count) return -1;
     for (int i = 0; i < a->count; ++i) {
-        pawU_unify(U, a->data[i], b->data[i]);
+        if (U->action(U, a->data[i], b->data[i])) {
+            return -1;
+        }
     }
+    return 0;
 }
 
-static void unify_adt(Unifier *U, struct HirAdt *a, struct HirAdt *b)
+static int unify_adt(struct Unifier *U, struct HirPathType *a, struct HirPathType *b)
 {
-    if (a->base != b->base) {
-        ERROR(U, "data types are incompatible");
+    if (a->path->count != b->path->count) return -1;
+    for (int i = 0; i < a->path->count; ++i) {
+        struct HirSegment *x = a->path->data[i]; 
+        struct HirSegment *y = b->path->data[i]; 
+        if (x->base != y->base) return -1;
+        if (!x->types != !y->types) return -1;
+        if (x->types == NULL) continue;
+        if (unify_lists(U, x->types, y->types)) {
+            return -1;
+        }
     }
-    paw_assert(!a->types == !b->types);
-    if (a->types != NULL) {
-        unify_lists(U, a->types, b->types);
-    }
+    return 0;
 }
 
-static void unify_tuple(Unifier *U, struct HirTupleType *a, struct HirTupleType *b)
+static int unify_tuple(struct Unifier *U, struct HirTupleType *a, struct HirTupleType *b)
 {
-    unify_lists(U, a->elems, b->elems);
+    return unify_lists(U, a->elems, b->elems);
 }
 
-static void unify_func(Unifier *U, struct HirFuncPtr *a, struct HirFuncPtr *b)
+static int unify_func(struct Unifier *U, struct HirFuncPtr *a, struct HirFuncPtr *b)
 {
-    unify_lists(U, a->params, b->params);
-    pawU_unify(U, a->result, b->result);
+    if (unify_lists(U, a->params, b->params)) return -1;
+    return U->action(U, a->result, b->result);
 }
 
-static struct HirType *unify_generic(Unifier *U, struct HirType *a, struct HirType *b)
+static int unify_generic(struct Unifier *U, struct HirType *a, struct HirType *b)
 {
-    if (a->generic.did != b->generic.did) {
-        ERROR(U, "generic types are incompatible");
-    }
-    return a;
+    return a->generic.did == b->generic.did ? 0 : -1;
 }
 
-static void unify_types(Unifier *U, struct HirType *a, struct HirType *b)
+static int unify_types(struct Unifier *U, struct HirType *a, struct HirType *b)
 {
     debug_log("unify_types", a, b);
+
     if (HirIsFuncType(a) && HirIsFuncType(b)) {
         // function pointer and definition types are compatible
-        unify_func(U, &a->fptr, &b->fptr);
+        return unify_func(U, &a->fptr, &b->fptr);
     } else if (HIR_KINDOF(a) != HIR_KINDOF(b)) {
-        ERROR(U, "incompatible types");
+        return -1;
     } else if (HirIsTupleType(a)) {
-        unify_tuple(U, &a->tuple, &b->tuple);
-    } else if (HirIsAdt(a)) {
-        unify_adt(U, &a->adt, &b->adt);
+        return unify_tuple(U, &a->tuple, &b->tuple);
+    } else if (HirIsPathType(a)) {
+        return unify_adt(U, &a->path, &b->path);
+    } else if (HirIsGeneric(a)) {
+        return unify_generic(U, a, b);
     } else {
-        paw_assert(HirIsGeneric(a));
-        unify_generic(U, a, b);
+        paw_assert(HirIsUnknown(a));
+        return a == b ? 0 : -1; 
     }
 }
 
-// TODO: Indicate failure rather than throw errors inside, let the caller throw,
-// for better error messages
-void pawU_unify(Unifier *U, struct HirType *a, struct HirType *b)
+static int unify(struct Unifier *U, struct HirType *a, struct HirType *b)
 {
     UnificationTable *ut = U->table;
 
@@ -220,12 +231,42 @@ void pawU_unify(Unifier *U, struct HirType *a, struct HirType *b)
         unify_var_type(vb, a);
     } else {
         // Both types are known: make sure they are compatible. This is the
-        // only time pawU_unify can encounter an error.
-        unify_types(U, a, b);
+        // only time we can encounter an error.
+        return unify_types(U, a, b);
     }
+    return 0;
 }
 
-struct HirType *pawU_new_unknown(Unifier *U)
+#define RUN_ACTION(U, a, b, f) ((U)->action = f)(U, a, b)
+
+// TODO: return 0 or -1 so caller can provide better error message? or just display the type names in the error message
+void pawU_unify(struct Unifier *U, struct HirType *a, struct HirType *b)
+{
+    const int rc = RUN_ACTION(U, a, b, unify);
+    if (rc == 0) return;
+
+    pawHir_print_type(U->hir, a);
+    pawHir_print_type(U->hir, b);
+    ERROR(U, "incompatible types '%s' and '%s'", 
+            paw_string(ENV(U), -2), 
+            paw_string(ENV(U), -1));
+}
+
+static int equate(struct Unifier *U, struct HirType *a, struct HirType *b)
+{
+    UnificationTable *ut = U->table;
+
+    a = pawU_normalize(ut, a);
+    b = pawU_normalize(ut, b);
+    return unify_types(U, a, b);
+}
+
+paw_Bool pawU_equals(struct Unifier *U, struct HirType *a, struct HirType *b)
+{
+    return RUN_ACTION(U, a, b, equate) == 0;
+}
+
+struct HirType *pawU_new_unknown(struct Unifier *U)
 {
     paw_Env *P = ENV(U);
     struct Hir *hir = U->hir;
@@ -245,7 +286,7 @@ struct HirType *pawU_new_unknown(Unifier *U)
     return type;
 }
 
-void pawU_enter_binder(Unifier *U)
+void pawU_enter_binder(struct Unifier *U)
 {
     paw_Env *P = ENV(U);
     struct Hir *hir = U->hir;
@@ -257,7 +298,7 @@ void pawU_enter_binder(Unifier *U)
     ++U->depth;
 }
 
-static void check_table(Unifier *U, UnificationTable *table)
+static void check_table(struct Unifier *U, UnificationTable *table)
 {
     for (int i = 0; i < table->ivars->count; ++i) {
         const InferenceVar *var = get_ivar(table, i);
@@ -268,7 +309,7 @@ static void check_table(Unifier *U, UnificationTable *table)
     }
 }
 
-void pawU_leave_binder(Unifier *U)
+void pawU_leave_binder(struct Unifier *U)
 {
     check_table(U, U->table);
     U->table = U->table->outer;

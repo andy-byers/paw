@@ -8,6 +8,7 @@
 #include "alloc.h"
 #include "call.h"
 #include "env.h"
+#include "type.h"
 
 static int run_tests(paw_Env *P)
 {
@@ -22,7 +23,7 @@ static int run_tests(paw_Env *P)
                 memcmp(name->text, kPrefix, kLength) == 0) {
             check(def->hdr.kind == DEF_FUNC);
             paw_push_zero(P, 1);
-            P->top.p[-1] = *pawE_get_val(P, def->func.vid);
+            P->top.p[-1] = *Y_PVAL(P, def->func.vid);
             return paw_call(P, 0);
         }
     }
@@ -143,9 +144,11 @@ static void test_call_frames(void)
 static void test_list_ops(void)
 {
     test_oom(
+            "fn fix_list() {let list = []; list.push(42);}\n" // TODO: remove
+ 
             "fn push_n<T>(list: [T], value: T, n: int) {\n"
             "    for i = 0, n {                         \n"
-            "        _list_push(list, value);           \n"
+            "        list.push(value);                  \n"
             "    }                                      \n"
             "}                                          \n"
             "pub fn test_lists() {       \n"

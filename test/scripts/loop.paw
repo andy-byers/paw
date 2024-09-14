@@ -101,8 +101,8 @@ pub fn test_iterator_for_loop() {
     let a = [1, 2, 3];
     let b = [];
     for e in a {
-        _list_push(b, e);
-        _list_pop(a);
+        b.push(e);
+        a.pop();
     }
     assert(#b == 2);
     assert(b[0] == 1);
@@ -298,7 +298,7 @@ pub fn test_misc() {
         let a = [];
         for i = 0, N {
             for j in [0] {
-                _list_push(a, i + j);
+                a.push(i + j);
             }
         }
         assert(#a == 2);
@@ -310,7 +310,7 @@ pub fn test_misc() {
         for i = 0, N {
             let j = 0;
             while j < N {
-                _list_push(a, i + j);
+                a.push(i + j);
                 j = j + 1;
             }
         }
@@ -326,7 +326,7 @@ pub fn test_misc() {
             for j in [0] {
                 let k = 0;
                 while k < N {
-                    _list_push(a, i + j + k);
+                    a.push(i + j + k);
                     k = k + 1;
                 }
             }

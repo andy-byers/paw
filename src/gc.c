@@ -7,10 +7,11 @@
 #include "env.h"
 #include "map.h"
 #include "mem.h"
-#include "util.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "type.h"
+
+#ifdef PAW_TRACE_GC
+# include <stdio.h>
+#endif 
 
 #ifndef PAW_GC_LIMIT
 # define PAW_GC_LIMIT (1024 * 1024)
@@ -78,7 +79,8 @@ static void mark_value(paw_Env *P, Value v);
 
 static void mark_object(paw_Env *P, Object *o)
 {
-    if (!o || !IS_WHITE(o)) return;
+    if (o == NULL) return;
+    if (!IS_WHITE(o)) return;
     gc_trace_object("mark", o);
     switch (o->gc_kind) {
         case VUPVALUE: {
@@ -240,6 +242,7 @@ static void sweep_phase(paw_Env *P)
     for (Object **p = &P->gc_all; *p;) {
         Object *o = *p;
         if (IS_WHITE(o)) {
+            gc_trace_object("free", o);
             *p = o->gc_next;
             pawG_free_object(P, o);
         } else {

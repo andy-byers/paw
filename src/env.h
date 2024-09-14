@@ -10,7 +10,6 @@
 #include "value.h"
 
 struct Jump; // call.c
-
 typedef uint16_t DefId;
 typedef uint16_t ValueId;
 
@@ -45,108 +44,6 @@ enum {
     CSTR_OPTION,
     NCSTR,
 };
-
-struct Field {
-    String *name;
-    struct Def *def;
-};
-
-struct FieldList {
-    struct Field *data;
-    int count;
-};
-
-struct TypeList {
-    struct Type **data;
-    int count;
-};
-
-enum TypeKind {
-    TYPE_ADT,
-    TYPE_FUNC,
-    TYPE_TUPLE,
-};
-
-#define TYPE_HEADER paw_Type code; \
-                    enum TypeKind kind : 8
-                    
-struct TypeHeader {
-    TYPE_HEADER;
-};
-
-struct Adt {
-    TYPE_HEADER;
-    DefId did;
-    struct TypeList types;
-};
-
-struct FuncType {
-    TYPE_HEADER;
-    struct TypeList params;
-    struct Type *result;
-};
-
-struct TupleType {
-    TYPE_HEADER;
-    struct TypeList types;
-};
-
-struct Type {
-    union {
-        struct TypeHeader hdr;
-        struct Adt adt;
-        struct FuncType func;
-        struct TupleType tuple;
-    };
-};
-
-enum DefKind {
-    DEF_ADT,
-    DEF_FUNC,
-    DEF_VAR,
-};
-
-#define DEF_HEADER String *name; \
-                   struct Def *next_pub; \
-                   struct Type *type; \
-                   enum DefKind kind : 7; \
-                   paw_Bool is_pub : 1
-
-struct DefHeader {
-    DEF_HEADER;
-};
-
-struct AdtDef {
-    DEF_HEADER;
-    paw_Bool is_struct : 1;
-    struct FieldList fields;
-};
-
-struct FuncDef {
-    DEF_HEADER;
-    ValueId vid;
-    struct FieldList params;
-};
-
-struct VarDef {
-    DEF_HEADER;
-    ValueId vid;
-};
-
-struct Def {
-    union {
-        struct DefHeader hdr;
-        struct AdtDef adt;
-        struct FuncDef func;
-        struct VarDef var;
-    };
-};
-
-void pawE_init_type_list(paw_Env *P, struct TypeList *plist, int count);
-void pawE_init_field_list(paw_Env *P, struct FieldList *plist, int count);
-
-struct Type *pawE_new_type(paw_Env *P, enum TypeKind kind);
-struct Def *pawE_new_def(paw_Env *P, enum DefKind kind);
 
 typedef struct paw_Env {
     StringTable strings;
@@ -205,39 +102,14 @@ typedef struct paw_Env {
 } paw_Env;
 
 void pawE_uninit(paw_Env *P);
-void pawE_error(paw_Env *P, int code, int line, const char *fmt, ...);
+_Noreturn void pawE_error(paw_Env *P, int code, int line, const char *fmt, ...);
 CallFrame *pawE_extend_cf(paw_Env *P, StackPtr top);
 int pawE_locate(paw_Env *P, const String *name, paw_Bool only_pub);
 
-static inline struct Def *pawE_get_def(paw_Env *P, int i)
+static inline String *pawE_cstr(paw_Env *P, unsigned kind)
 {
-    paw_assert(0 <= i && i < P->defs.count);
-    return P->defs.data[i];
+    paw_assert(kind < NCSTR);
+    return P->str_cache[kind];
 }
-
-static inline Value *pawE_get_val(paw_Env *P, int i)
-{
-    paw_assert(0 <= i && i < P->vals.count);
-    return &P->vals.data[i];
-}
-
-static inline struct Type *pawE_get_type(paw_Env *P, int i)
-{
-    paw_assert(0 <= i && i < P->types.count);
-    return P->types.data[i];
-}
-
-static inline String *pawE_cstr(paw_Env *P, unsigned type)
-{
-    paw_assert(type < NCSTR);
-    return P->str_cache[type];
-}
-
-void pawE_mangle_start(paw_Env *P, Buffer *buffer, const String *name);
-void pawE_mangle_add_arg(paw_Env *P, Buffer *buffer, const struct Type *type);
-void pawE_mangle_finish(paw_Env *P, Buffer *buffer);
-
-// Append a human-readable representation of the 'type' to the 'buffer'
-void pawE_print_type(paw_Env *P, Buffer *buffer, struct Type *type);
 
 #endif // PAW_ENV_H

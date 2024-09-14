@@ -63,12 +63,16 @@ void pawS_uninit(paw_Env *P)
     st->count = 0;
 }
 
+#define ENSURE_SPACE(P, st) do { \
+        if ((st)->count > (st)->capacity / 4) { \
+            grow_table(P, st); \
+        } \
+    } while (0)
+
 String *pawS_new_nstr(paw_Env *P, const char *s, size_t n)
 {
     StringTable *st = &P->strings;
-    if (st->count * 4 > st->capacity) {
-        grow_table(P, st);
-    }
+    ENSURE_SPACE(P, st);
 
     const uint32_t hash = pawS_hash(s, n, 0);
     String **plist = &st->strings[ST_INDEX(st, hash)];
@@ -104,48 +108,40 @@ String *pawS_new_fixed(paw_Env *P, const char *text)
 
 void pawS_free_str(paw_Env *P, String *s)
 {
+    // remove from string table, if present (strings from pawS_new_uninit are
+    // not in the table until pawS_register is called)
     StringTable *st = &P->strings;
     String **p = &st->strings[ST_INDEX(st, s->hash)];
-    while (*p != s) p = &(*p)->next;
-    *p = s->next; // remove
-    --st->count;
+    while (*p != NULL && *p != s) p = &(*p)->next;
+    if (*p != NULL) {
+        paw_assert(*p == s);
+        *p = s->next; // remove
+        --st->count;
+    }
 
     pawM_free_flex(P, s, s->length + 1, sizeof(char));
 }
 
 String *pawS_new_uninit(paw_Env *P, size_t length)
 {
-    StringTable *st = &P->strings;
-    if (st->count * 4 > st->capacity) {
-        grow_table(P, st);
-    }
-    if (length > PAW_SIZE_MAX - sizeof(String) - 1 /* '\0' */) {
-        pawM_error(P);
-    }
-    String *str = pawM_new_flex(P, String, length + 1, sizeof(char));
-    str->text[length] = '\0';
-    str->length = length;
-    str->next = NULL;
-    str->flag = 0;
-    return str;
+    ENSURE_SPACE(P, &P->strings);
+    return new_string(P, length);
 }
 
 void pawS_register(paw_Env *P, String **pinit)
 {
     String *str = *pinit;
     StringTable *st = &P->strings;
-    const uint32_t hash = pawS_hash(str->text, str->length, 0);
-    String **plist = &st->strings[ST_INDEX(st, hash)];
+    str->hash = pawS_hash(str->text, str->length, 0);
+    String **const plist = &st->strings[ST_INDEX(st, str->hash)];
     for (String *p = *plist; p; p = p->next) {
-        if (str->length == p->length && 
+        if (p->hash == str->hash &&
+                p->length == str->length && 
                 memcmp(p->text, str->text, str->length) == 0) {
-            pawM_free_flex(P, str, str->length + 1, sizeof(char));
             *pinit = p;
             return;
         }
     }
-    pawG_add_object(P, CAST_OBJECT(str), VSTRING);
-    str->hash = hash;
     ++st->count;
     str->next = *plist;
     *plist = str;

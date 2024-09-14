@@ -25,6 +25,7 @@
 #define ENV(x) ((x)->P)
 #define SCAN_STRING(x, s) pawP_scan_string(ENV(x), (x)->strings, s)
 
+struct HirDecl;
 struct HirTypeList;
 
 String *pawP_scan_nstring(paw_Env *P, Map *st, const char *s, size_t n);
@@ -89,7 +90,6 @@ struct Builtin {
 };
 
 struct Compiler {
-    Pool pool;
     struct Builtin builtins[NBUILTINS];
     struct DynamicMem *dm;
     String *modname;
@@ -97,6 +97,7 @@ struct Compiler {
     Map *strings;
     Map *types;
     paw_Env *P;
+    int nbinders;
 };
 
 // Common state for type-checking routines
@@ -105,22 +106,14 @@ struct Resolver {
     Map *strings;
     struct Unifier *U; // unification tables
     struct Compiler *C; // compiler state
-    struct Ast *ast; // AST being resolved
     struct Hir *hir; // HIR being built
     struct HirType *adt; // enclosing ADT
-    struct HirType *result; // enclosing function return type
-    struct HirImplDecl *impl_d; // enclosing impl block
     struct HirSymtab *symtab; // scoped symbol table
     struct HirScope *globals;
     struct DynamicMem *dm; // dynamic memory
-    struct LazyItemList *impl_state;
-    struct LazyItemList *items;
-// TODO: use Map *items; // String * => HirDecl *
+    struct ResultState *rs;
     Map *impls; // HirAdtDecl * => HirImplDecl *
     int func_depth; // number of nested functions
-    int nresults;
-    int list_gid;
-    int map_gid;
     int line;
     DefId option_did;
     DefId result_did;
@@ -145,18 +138,17 @@ struct DynamicMem {
     struct Ast *ast;
     struct Hir *hir;
 
-    Unifier unifier;
+    struct Unifier unifier;
     struct LabelList labels;
 
     // NOTE: Backing storage for this field is located in the HIR pool, so
-    //       '.decls' does not need to be freed separately. It is kept here
-    //       for convenience, since it is used during multiple passes.
+    //       it doesn't need to be freed separately. It is kept here for
+    //       convenience, since it is used during multiple passes.
     struct HirDeclList *decls;
 };
 
 typedef struct Generator {
     struct Compiler *C;
-    struct HirSymtab *sym;
     struct Hir *hir;
     struct FuncState *fs;
     struct ToplevelList *items;
@@ -164,15 +156,37 @@ typedef struct Generator {
     int nvals;
 } Generator;
 
+struct Hir *pawP_lower_ast(struct Compiler *C, struct Ast *ast);
+struct HirScope *pawP_collect_items(struct Compiler *C, struct Hir *hir);
+
+struct Generalization {
+    struct HirTypeList *types;
+    struct HirTypeList *fields;
+    struct HirType *result;
+};
+
+struct Generalization pawP_generalize(
+        struct Compiler *C, 
+        struct HirDeclList *generics, 
+        struct HirDeclList *fields);
+
+struct HirType *pawP_instantiate_type(struct Compiler *C, struct HirTypeList *before,
+                                      struct HirTypeList *after, struct HirType *target);
+
 // Instantiate a polymorphic function or type
 // Expects that 'decl' is already resolved, meaning the type of each symbol has been
 // filled in. Works by replacing each generic type with the corresponding concrete 
 // type from the given 'types'. Returns a HirInstanceDecl if 'decl' is a function, 
-// and a HirAdtDecl otherwise. We avoid recursively visiting the function body here, 
-// since doing so might cause further instantiations due to the presence of recursion. 
+// and 'decl' otherwise. We avoid recursively visiting the function body here, since 
+// doing so might cause further instantiations due to the presence of recursion. 
 // Function instance bodies are expanded in a separate pass.
 struct HirDecl *pawP_instantiate(
-        struct Resolver *R, 
+        struct Compiler *C, 
+        struct HirDecl *decl, 
+        struct HirTypeList *types);
+
+struct HirDecl *pawP_preinstantiate(
+        struct Compiler *C, 
         struct HirDecl *decl, 
         struct HirTypeList *types);
 

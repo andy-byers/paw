@@ -1472,12 +1472,12 @@ static const char kPrelude[] =
     "    pub fn unwrap() -> T;           \n"
     "    pub fn unwrap_or(value: T) -> T;\n"
     "}                                   \n"
-
-    // TODO: Use method versions
-    "pub fn _list_push<T>(self: [T], v: T);          \n"
-    "pub fn _list_pop<T>(self: [T]) -> T;            \n"
-    "pub fn _list_insert<T>(self: [T], i: int, v: T);\n"
-    "pub fn _list_erase<T>(self: [T], i: int) -> T;  \n";
+;
+//    // TODO: Use method versions
+//    "pub fn _list_push<T>(self: [T], v: T);          \n"
+//    "pub fn _list_pop<T>(self: [T]) -> T;            \n"
+//    "pub fn _list_insert<T>(self: [T], i: int, v: T);\n"
+//    "pub fn _list_erase<T>(self: [T], i: int) -> T;  \n";
 
 struct PreludeReader {
     size_t size;

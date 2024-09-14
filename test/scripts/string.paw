@@ -40,29 +40,29 @@ pub fn test_valid_utf8() {
 }
 
 pub fn test_starts_with() {
-    let str = 'abcdef';
-    assert(str.starts_with('abcdef'));
-    assert(str.starts_with('abcde'));
-    assert(str.starts_with('abc'));
-    assert(str.starts_with('a'));
-    assert(str.starts_with(''));
-    assert(!str.starts_with('bcdef'));
-    assert(!str.starts_with('abcdf'));
-    assert(!str.starts_with('abd'));
-    assert(!str.starts_with('ac'));
+    let s = 'abcdef';
+    assert(s.starts_with('abcdef'));
+    assert(s.starts_with('abcde'));
+    assert(s.starts_with('abc'));
+    assert(s.starts_with('a'));
+    assert(s.starts_with(''));
+    assert(!s.starts_with('bcdef'));
+    assert(!s.starts_with('abcdf'));
+    assert(!s.starts_with('abd'));
+    assert(!s.starts_with('ac'));
 }
 
 pub fn test_ends_with() {
-    let str = 'abcdef';
-    assert(str.ends_with('abcdef'));
-    assert(str.ends_with('bcdef'));
-    assert(str.ends_with('def'));
-    assert(str.ends_with('f'));
-    assert(str.ends_with(''));
-    assert(!str.ends_with('abcde'));
-    assert(!str.ends_with('acdef'));
-    assert(!str.ends_with('cef'));
-    assert(!str.ends_with('df'));
+    let s = 'abcdef';
+    assert(s.ends_with('abcdef'));
+    assert(s.ends_with('bcdef'));
+    assert(s.ends_with('def'));
+    assert(s.ends_with('f'));
+    assert(s.ends_with(''));
+    assert(!s.ends_with('abcde'));
+    assert(!s.ends_with('acdef'));
+    assert(!s.ends_with('cef'));
+    assert(!s.ends_with('df'));
 }
 
 pub fn test_slices() {
