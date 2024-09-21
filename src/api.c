@@ -17,7 +17,7 @@
 
 static void *default_alloc(void *ud, void *ptr, size_t old_size, size_t new_size)
 {
-    paw_unused(ud);
+    PAW_UNUSED(ud);
     if (new_size == 0) {
         free(ptr);
         return NULL;
@@ -40,7 +40,7 @@ size_t paw_bytes_used(const paw_Env *P)
 
 static void open_aux(paw_Env *P, void *arg)
 {
-    paw_unused(arg);
+    PAW_UNUSED(arg);
     pawC_init(P);
     pawG_init(P);
     pawS_init(P);

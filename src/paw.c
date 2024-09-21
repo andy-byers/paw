@@ -99,7 +99,7 @@ static void parse_options(int *pargc, const char ***pargv)
         }
         for (++a; *a; ++a) {
             const char shr = *a;
-            for (size_t i = 0; i < paw_countof(s_opt_info); ++i) {
+            for (size_t i = 0; i < PAW_COUNTOF(s_opt_info); ++i) {
                 state = &s_opt_info[i];
                 if (shr == state->name[0]) {
                     if (state->flag != NULL) {
@@ -140,7 +140,7 @@ static void show_help(void)
 {
     info("usage: %s OPTIONS [FILE] ...\n", s_program_name);
     info("OPTIONS:\n");
-    for (size_t i = 0; i < paw_countof(s_opt_info); ++i) {
+    for (size_t i = 0; i < PAW_COUNTOF(s_opt_info); ++i) {
         struct Option opt = s_opt_info[i];
         if (opt.flag) {
             info("-%s     : %s\n", opt.name, opt.description);

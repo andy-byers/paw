@@ -12,10 +12,10 @@
 
 #define paw_assert assert
 
-#define paw_unused(x) ((void)(x))
-#define paw_lengthof(s) (sizeof(s) - 1)
-#define paw_alignof(x) _Alignof(x)
-#define paw_countof(a) (sizeof(a) / sizeof((a)[0]))
+#define PAW_UNUSED(x) ((void)(x))
+#define PAW_LENGTHOF(s) (sizeof(s) - 1)
+#define PAW_ALIGNOF(x) _Alignof(x)
+#define PAW_COUNTOF(a) (sizeof(a) / sizeof((a)[0]))
 #define PAW_MIN(x, y) ((x) < (y) ? (x) : (y))
 #define PAW_MAX(x, y) ((x) > (y) ? (x) : (y))
 #define PAW_CLAMP(v, x, y) PAW_MIN(PAW_MAX(v, x), y)

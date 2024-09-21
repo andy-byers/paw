@@ -46,9 +46,9 @@ static void debug_log(const char *what, struct HirType *a, struct HirType *b)
     pawHir_repr_type(stdout, b);
     fprintf(stdout, "\n");
 #else
-    paw_unused(what);
-    paw_unused(a);
-    paw_unused(b);
+    PAW_UNUSED(what);
+    PAW_UNUSED(a);
+    PAW_UNUSED(b);
 #endif
 }
 

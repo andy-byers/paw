@@ -410,7 +410,7 @@ struct FileReader {
 
 static const char *file_reader(paw_Env *P, void *ud, size_t *psize)
 {
-    paw_unused(P);
+    PAW_UNUSED(P);
     struct FileReader *fr = ud;
     const size_t zchunk = sizeof(fr->data);
     *psize = pawO_read(fr->file, fr->data, zchunk);
@@ -437,7 +437,7 @@ struct ChunkReader {
 
 static const char *chunk_reader(paw_Env *P, void *ud, size_t *psize)
 {
-    paw_unused(P);
+    PAW_UNUSED(P);
     struct ChunkReader *cr = ud;
     *psize = cr->size;
     cr->size = 0;

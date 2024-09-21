@@ -15,7 +15,7 @@ static int run_tests(paw_Env *P)
     struct DefList defs = P->defs;
     for (int i = 0; i < defs.count; ++i) {
         static const char kPrefix[] = "test_";
-        static const size_t kLength = paw_lengthof(kPrefix);
+        static const size_t kLength = PAW_LENGTHOF(kPrefix);
         struct Def *def = defs.data[i]; 
         if (!def->hdr.is_pub) continue;
         const String *name = def->hdr.name;
@@ -107,7 +107,7 @@ static void test_oom(const char *name_or_chunk, paw_Bool is_chunk)
         sizeof(struct Heap) + 10000,
     };
     start_oom(name_or_chunk, is_chunk);
-    for (size_t i = 0; i < paw_countof(special_sizes); ++i) {
+    for (size_t i = 0; i < PAW_COUNTOF(special_sizes); ++i) {
         const int status = run_one(special_sizes[i]);
         check(status == PAW_EMEMORY);
     }

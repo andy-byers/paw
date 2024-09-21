@@ -361,7 +361,7 @@ static int run_main(paw_Env *P, int nargs)
 
 static int next_conflicting_int(paw_Env *P)
 {
-    paw_unused(P);
+    PAW_UNUSED(P);
     // return the pointer, caller reinterprets as an integer
     return 1;
 }

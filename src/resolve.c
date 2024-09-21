@@ -1214,8 +1214,8 @@ static void resolve_selector(struct Resolver *R, struct HirSelector *e)
 
 static void ResolveLabelStmt(struct Resolver *R, struct HirLabelStmt *s)
 {
-    paw_unused(R);
-    paw_unused(s);
+    PAW_UNUSED(R);
+    PAW_UNUSED(s);
 }
 
 static void ResolveDeclStmt(struct Resolver *R, struct HirDeclStmt *s)

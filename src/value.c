@@ -37,7 +37,7 @@ static void int_to_string(paw_Env *P, paw_Int i, Value *out)
 {
     char temp[32];
     const paw_Bool negative = i < 0;
-    char *end = temp + paw_countof(temp);
+    char *end = temp + PAW_COUNTOF(temp);
     char *ptr = end - 1;
 
     // Don't call llabs(INT64_MIN). The result is undefined on 2s complement
@@ -61,7 +61,7 @@ static void int_to_string(paw_Env *P, paw_Int i, Value *out)
 static void float_to_string(paw_Env *P, paw_Float f, Value *out)
 {
     char temp[32];
-    const int n = snprintf(temp, paw_countof(temp), "%.*g", 17, f);
+    const int n = snprintf(temp, PAW_COUNTOF(temp), "%.*g", 17, f);
     String *str = pawS_new_nstr(P, temp, CAST_SIZE(n));
     V_SET_OBJECT(out, str);
 }

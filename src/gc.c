@@ -22,8 +22,8 @@ static void gc_trace_object(const char *msg, void *ptr)
 #ifdef PAW_TRACE_GC
     fprintf(stdout, "(gc) %s: %p\n", msg, ptr);
 #else
-    paw_unused(msg);
-    paw_unused(ptr);
+    PAW_UNUSED(msg);
+    PAW_UNUSED(ptr);
 #endif
 }
 
@@ -260,9 +260,10 @@ void pawG_collect(paw_Env *P)
     mark_phase(P);
     sweep_phase(P);
 
-    P->gc_limit = PAW_MIN(
-            P->gc_bytes * 2, 
-            P->heap_size);
+#define HEAP_GROWTH_PERCENT 50
+    P->gc_limit = PAW_MIN(P->gc_bytes +
+        (P->gc_bytes * HEAP_GROWTH_PERCENT / 100), 
+        P->heap_size);
 }
 
 void pawG_add_object(paw_Env *P, Object *o, ValueKind kind)

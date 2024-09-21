@@ -17,7 +17,7 @@ static void driver(void (*test_callback)(paw_Env *P))
 
 static void open_and_close(paw_Env *P)
 {
-    paw_unused(P);
+    PAW_UNUSED(P);
 }
 
 static void test_utils(void)
@@ -132,7 +132,7 @@ static void test_basic(paw_Env *P)
 static void test_small_allocations(paw_Env *P)
 {
     const size_t sizes[] = {0, 10, 11, 100, 101, 102};
-    for (size_t i = 0; i < paw_countof(sizes); ++i) {
+    for (size_t i = 0; i < PAW_COUNTOF(sizes); ++i) {
         alloc_pattern(P, sizes[i]);
         alloc_pattern(P, sizes[i]);
     }
@@ -149,7 +149,7 @@ static void test_large_allocations(paw_Env *P)
         P->heap_size >> 8,
         P->heap_size >> 7,
     };
-    for (size_t i = 0; i < paw_countof(sizes); ++i) {
+    for (size_t i = 0; i < PAW_COUNTOF(sizes); ++i) {
         alloc_pattern(P, sizes[i]);
         alloc_pattern(P, sizes[i]);
     }

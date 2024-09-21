@@ -6,6 +6,7 @@
 
 #include "rt.h"
 #include "auxlib.h"
+#include "debug.h"
 #include "env.h"
 #include "call.h"
 #include "gc.h"
@@ -147,7 +148,7 @@ static void float2int(paw_Env *P, paw_Float f, Value *pv)
 void pawR_cast_bool(paw_Env *P, paw_Type type)
 {
     paw_assert(type < PAW_TSTR);
-    paw_unused(type);
+    PAW_UNUSED(type);
 
     Value *pv = VM_TOP(1);
     V_SET_BOOL(pv, pv->u != 0);

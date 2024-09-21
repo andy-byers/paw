@@ -35,7 +35,7 @@
 
 // Ensure that the expression 'o + n * e' will not wrap
 #define pawM_check_size(P, o, n, e) \
-    (n) > (SIZE_MAX - o) / (e) ? pawM_error(P) : paw_unused(0)
+    (n) > (SIZE_MAX - o) / (e) ? pawM_error(P) : PAW_UNUSED(0)
 
 // Resize a chunk of memory, ensuring that the new allocation size will
 // not overflow

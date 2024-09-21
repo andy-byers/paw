@@ -198,8 +198,8 @@ static void VisitClosureExpr(struct HirVisitor *V, struct HirClosureExpr *e)
 
 static void VisitFieldDecl(struct HirVisitor *V, struct HirFieldDecl *d)
 {
-    paw_unused(V);
-    paw_unused(d);
+    PAW_UNUSED(V);
+    PAW_UNUSED(d);
 }
 
 static void VisitTypeDecl(struct HirVisitor *V, struct HirTypeDecl *d)
@@ -210,8 +210,8 @@ static void VisitTypeDecl(struct HirVisitor *V, struct HirTypeDecl *d)
 
 static void VisitGenericDecl(struct HirVisitor *V, struct HirGenericDecl *d)
 {
-    paw_unused(V);
-    paw_unused(d);
+    PAW_UNUSED(V);
+    PAW_UNUSED(d);
 }
 
 static void VisitVariantDecl(struct HirVisitor *V, struct HirVariantDecl *d)
@@ -287,8 +287,8 @@ static void VisitWhileStmt(struct HirVisitor *V, struct HirWhileStmt *s)
 
 static void VisitLabelStmt(struct HirVisitor *V, struct HirLabelStmt *s)
 {
-    paw_unused(V);
-    paw_unused(s);
+    PAW_UNUSED(V);
+    PAW_UNUSED(s);
 }
 
 static void VisitForStmt(struct HirVisitor *V, struct HirForStmt *s)
@@ -316,8 +316,8 @@ static void VisitSelector(struct HirVisitor *V, struct HirSelector *e)
 
 static void VisitPath(struct HirVisitor *V, struct HirPath *path)
 {
-    paw_unused(V);
-    paw_unused(path);
+    PAW_UNUSED(V);
+    PAW_UNUSED(path);
 }
 
 static void VisitDeclStmt(struct HirVisitor *V, struct HirDeclStmt *s)
@@ -353,14 +353,14 @@ static void VisitPathType(struct HirVisitor *V, struct HirPathType *t)
 
 static void VisitUnknown(struct HirVisitor *V, struct HirUnknown *t)
 {
-    paw_unused(V);
-    paw_unused(t);
+    PAW_UNUSED(V);
+    PAW_UNUSED(t);
 }
 
 static void VisitGeneric(struct HirVisitor *V, struct HirGeneric *t)
 {
-    paw_unused(V);
-    paw_unused(t);
+    PAW_UNUSED(V);
+    PAW_UNUSED(t);
 }
 
 static void VisitExpr(struct HirVisitor *V, struct HirExpr *node)
@@ -559,7 +559,7 @@ static struct HirDecl *FoldTypeDecl(struct HirFolder *F, struct HirTypeDecl *d)
 
 static struct HirDecl *FoldGenericDecl(struct HirFolder *F, struct HirGenericDecl *d)
 {
-    paw_unused(F);
+    PAW_UNUSED(F);
     return HIR_CAST_DECL(d);
 }
 
@@ -648,7 +648,7 @@ static struct HirStmt *FoldWhileStmt(struct HirFolder *F, struct HirWhileStmt *s
 
 static struct HirStmt *FoldLabelStmt(struct HirFolder *F, struct HirLabelStmt *s)
 {
-    paw_unused(F);
+    PAW_UNUSED(F);
     return HIR_CAST_STMT(s);
 }
 
@@ -726,13 +726,13 @@ static struct HirType *FoldPathType(struct HirFolder *F, struct HirPathType *t)
 
 static struct HirType *FoldUnknown(struct HirFolder *F, struct HirUnknown *t)
 {
-    paw_unused(F);
+    PAW_UNUSED(F);
     return HIR_CAST_TYPE(t);
 }
 
 static struct HirType *FoldGeneric(struct HirFolder *F, struct HirGeneric *t)
 {
-    paw_unused(F);
+    PAW_UNUSED(F);
     return HIR_CAST_TYPE(t);
 }
 
@@ -1417,7 +1417,7 @@ static struct HirExpr *expand_call_expr(struct HirFolder *F, struct HirCallExpr 
 
 static struct HirDecl *expand_adt_decl_(struct HirFolder *F, struct HirAdtDecl *d)
 {
-    paw_unused(F);
+    PAW_UNUSED(F);
     return HIR_CAST_DECL(d);
 }
 

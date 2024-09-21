@@ -1485,7 +1485,7 @@ struct PreludeReader {
 
 const char *prelude_reader(paw_Env *P, void *ud, size_t *size)
 {
-    paw_unused(P);
+    PAW_UNUSED(P);
     struct PreludeReader *pr = ud;
     *size = pr->size;
     pr->size = 0;
@@ -1495,7 +1495,7 @@ const char *prelude_reader(paw_Env *P, void *ud, size_t *size)
 static void load_prelude(struct Lex *lex)
 {
     struct Ast *ast = lex->ast;
-    struct PreludeReader reader = {paw_lengthof(kPrelude)};
+    struct PreludeReader reader = {PAW_LENGTHOF(kPrelude)};
     pawX_set_source(lex, prelude_reader, &reader);
     lex->in_prelude = PAW_TRUE;
     toplevel_items(lex, ast->prelude);

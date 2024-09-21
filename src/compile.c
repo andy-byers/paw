@@ -44,7 +44,7 @@ void pawP_init(paw_Env *P)
 {
     // Add all keywords to the interned strings table. Fix them so they are
     // never collected. Also added to the lexer string map.
-    for (size_t i = 0; i < paw_countof(kKeywords); ++i) {
+    for (size_t i = 0; i < PAW_COUNTOF(kKeywords); ++i) {
         const char *kw = kKeywords[i];
         String *str = pawS_new_fixed(P, kw);
         str->flag = i + FIRST_KEYWORD;

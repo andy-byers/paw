@@ -13,7 +13,7 @@
 // The map's internal buffer is divided into 3 sections: the first is an array
 // of MapMeta, and the last 2 are arrays of Value. Each array has the same
 // length, equal to the map's 'capacity' field. The 'capacity' is guaranteed to
-// be either 0 or a power-of-2 greater than or equal to paw_alignof(Value), so
+// be either 0 or a power-of-2 greater than or equal to PAW_ALIGNOF(Value), so
 // the Value arrays are suitably-aligned.
 #define MAP_ITEM_TOTAL (sizeof(MapMeta) + sizeof(Value) * 2)
 
@@ -71,7 +71,7 @@ static void free_buffer(paw_Env *P, void *buffer, size_t capacity)
 
 static void grow_map(paw_Env *P, Map *m)
 {
-    size_t n = paw_alignof(Value);
+    size_t n = PAW_ALIGNOF(Value);
     while (n <= m->capacity) {
         n *= 2;
     }

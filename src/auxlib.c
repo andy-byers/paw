@@ -12,7 +12,7 @@
 
 static void grow_buffer(paw_Env *P, Buffer *buf, int boxloc)
 {
-    paw_assert(buf->alloc <= SIZE_MAX / 2);
+    if (buf->alloc > SIZE_MAX / 2) pawM_error(P);
     const size_t alloc = buf->alloc * 2;
     if (L_IS_BOXED(buf)) {
         Foreign *ud = V_FOREIGN(P->top.p[boxloc]);
@@ -48,7 +48,7 @@ void pawL_init_buffer(paw_Env *P, Buffer *buf)
 
 void pawL_discard_result(paw_Env *P, Buffer *buf)
 {
-    paw_unused(buf);
+    PAW_UNUSED(buf);
     paw_pop(P, 1); // pop box or placeholder
 }
 

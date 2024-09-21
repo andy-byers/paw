@@ -147,11 +147,11 @@ static void test_map_ops(paw_Env *P)
 
     // Add known integers for validation.
     const paw_Int known[] = {-1, -2, -10, -20, -100, -200};
-    for (size_t i = 0; i < paw_countof(known); ++i) {
+    for (size_t i = 0; i < PAW_COUNTOF(known); ++i) {
         map_put(P, m, known[i], known[i]);
     }
 
-    check(m->length  == paw_countof(known));
+    check(m->length  == PAW_COUNTOF(known));
 
     // Fill the map with nonnegative integers (may have repeats).
     for (int i = 0; i < N; ++i) {
@@ -159,7 +159,7 @@ static void test_map_ops(paw_Env *P)
         map_put(P, m, ival, ival);
     }
 
-    check(m->length <= N + paw_countof(known));
+    check(m->length <= N + PAW_COUNTOF(known));
 
     // Erase all nonnegative integers.
     paw_Int itr = PAW_ITER_INIT;
@@ -168,10 +168,10 @@ static void test_map_ops(paw_Env *P)
         if (V_INT(key) >= 0) map_del(m, key.i);
     }
 
-    check(CAST_SIZE(pawH_length(m)) <= paw_countof(known));
+    check(CAST_SIZE(pawH_length(m)) <= PAW_COUNTOF(known));
 
     // Check known items.
-    for (size_t i = 0; i < paw_countof(known); ++i) {
+    for (size_t i = 0; i < PAW_COUNTOF(known); ++i) {
         const paw_Int value = map_get(m, known[i]);
         check(value == known[i]);
     }
@@ -241,7 +241,7 @@ static void test_strings(paw_Env *P)
         "abcdefghijklmnopqrstuvwxyz"
         "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     for (size_t wordlen = 1; wordlen < 26; ++wordlen) {
-        const size_t nwords = paw_lengthof(data) - wordlen;
+        const size_t nwords = PAW_LENGTHOF(data) - wordlen;
         for (size_t i = 0; i < nwords; ++i) {
             paw_push_nstring(P, data + i, wordlen);
             ++total_words;

@@ -74,7 +74,7 @@ static void next_chunk(struct TestReader *rd)
 // Read a source file in small chunks to make sure the parser can work incrementally
 const char *test_reader(paw_Env *P, void *ud, size_t *size)
 {
-    paw_unused(P);
+    PAW_UNUSED(P);
     struct TestReader *rd = ud;
     if (!rd->length) {
         next_chunk(rd);
@@ -92,7 +92,7 @@ const char *test_reader(paw_Env *P, void *ud, size_t *size)
 
 const char *test_pathname(const char *name)
 {
-    static char s_buf[paw_lengthof(TEST_PREFIX) + 64];
+    static char s_buf[PAW_LENGTHOF(TEST_PREFIX) + 64];
     s_buf[0] = '\0'; // Reset length
     strcat(s_buf, TEST_PREFIX);
     strcat(s_buf, "scripts/");
