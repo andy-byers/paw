@@ -5,6 +5,7 @@
 #include "parse.h"
 #include "ast.h"
 #include "compile.h"
+#include "map.h"
 
 #define NEW_EXPR(lex, kind) pawAst_new_expr((lex)->ast, (lex)->last_line, kind)
 #define NEW_STMT(lex, kind) pawAst_new_stmt((lex)->ast, (lex)->last_line, kind)
@@ -303,7 +304,7 @@ static struct AstDecl *vfield_decl(struct Lex *lex)
             if ((list)->count == (limit)) { \
                 limit_error(lex, what, (limit)); \
             } \
-            prefix##push((lex)->dm->ast, list, (func)(lex)); \
+            prefix##push((lex)->ast, list, (func)(lex)); \
         } while (test_next(lex, ',')); \
         delim_next(lex, b, a, line); \
     }
@@ -1143,6 +1144,21 @@ static struct AstDecl *function(struct Lex *lex, String *name, enum FuncKind kin
     return r;
 }
 
+static struct AstDecl *use_decl(struct Lex *lex, paw_Bool pub)
+{
+    const int line = lex->line;
+    skip(lex); // 'use' token
+    struct AstDecl *result = NEW_DECL(lex, kAstUseDecl);
+    struct AstUseDecl *r = AstGetUseDecl(result);
+    r->path = parse_pathtype(lex);
+    r->is_pub = pub;
+    r->line = line;
+
+    r->name = K_LIST_GET(r->path, r->path->count - 1)->name;
+    semicolon(lex);
+    return result;
+}
+
 static struct AstDecl *func_decl(struct Lex *lex, paw_Bool pub)
 {
     const int line = lex->line;
@@ -1287,7 +1303,7 @@ static struct AstDecl *impl_decl(struct Lex *lex)
             limit_error(lex, "methods", LOCAL_MAX);
         }
         struct AstDecl *method = method_decl(lex);
-        pawAst_decl_list_push(lex->dm->ast, r->methods, method);
+        pawAst_decl_list_push(lex->ast, r->methods, method);
     }
     delim_next(lex, '}', '{', line);
     return result;
@@ -1384,6 +1400,8 @@ static struct AstDecl *toplevel_item(struct Lex *lex, paw_Bool is_pub)
     switch (lex->t.kind) {
         default:
             pawX_error(lex, "expected toplevel item");
+        case TK_USE:
+            return use_decl(lex, is_pub);
         case TK_FN:
             return func_decl(lex, is_pub);
         case TK_ENUM:
@@ -1471,13 +1489,7 @@ static const char kPrelude[] =
     "    pub fn is_err() -> bool;        \n"
     "    pub fn unwrap() -> T;           \n"
     "    pub fn unwrap_or(value: T) -> T;\n"
-    "}                                   \n"
-;
-//    // TODO: Use method versions
-//    "pub fn _list_push<T>(self: [T], v: T);          \n"
-//    "pub fn _list_pop<T>(self: [T]) -> T;            \n"
-//    "pub fn _list_insert<T>(self: [T], i: int, v: T);\n"
-//    "pub fn _list_erase<T>(self: [T], i: int) -> T;  \n";
+    "}                                   \n";
 
 struct PreludeReader {
     size_t size;
@@ -1492,14 +1504,12 @@ const char *prelude_reader(paw_Env *P, void *ud, size_t *size)
     return kPrelude;
 }
 
-static void load_prelude(struct Lex *lex)
+static void parse_prelude(struct Lex *lex)
 {
     struct Ast *ast = lex->ast;
     struct PreludeReader reader = {PAW_LENGTHOF(kPrelude)};
     pawX_set_source(lex, prelude_reader, &reader);
-    lex->in_prelude = PAW_TRUE;
-    toplevel_items(lex, ast->prelude);
-    lex->in_prelude = PAW_FALSE;
+    toplevel_items(lex, ast->items);
     check(lex, TK_END);
 }
 
@@ -1516,8 +1526,6 @@ static void skip_hashbang(struct Lex *lex)
 
 static struct Ast *parse_module(struct Lex *lex, paw_Reader input, void *ud)
 {
-    load_prelude(lex);
-
     pawX_set_source(lex, input, ud);
     skip_hashbang(lex);
 
@@ -1528,18 +1536,41 @@ static struct Ast *parse_module(struct Lex *lex, paw_Reader input, void *ud)
     return ast;
 }
 
-struct Ast *pawP_parse(struct Compiler *C, paw_Reader input, void *ud)
+static void init_lexer(struct Compiler *C, struct Ast *ast, struct Lex *lex)
 {
-    struct Lex lex = {
-        .modname = C->modname,
+    *lex = (struct Lex){
+        .modname = ast->name,
+        .strings = C->strings,
+        .ast = ast,
         .dm = C->dm,
         .P = C->P,
     };
-    lex.ast = C->dm->ast;
-    lex.strings = C->strings;
-    lex.dm->ast = lex.ast;
+}
 
-    // convert source to AST
+static struct Ast *new_ast(struct Compiler *C, String *name)
+{
+    const int modno = pawH_length(C->imports) + 1 /* skip prelude */;
+    struct Ast *ast = pawAst_new(C, name, modno);
+    pawH_insert(ENV(C), C->imports, P2V(name), P2V(ast));
+    return ast;
+}
+
+struct Ast *pawP_parse_module(struct Compiler *C, String *modname, paw_Reader input, void *ud)
+{
+    struct Ast *ast = new_ast(C, modname);
+
+    struct Lex lex;
+    init_lexer(C, ast, &lex);
+
     parse_module(&lex, input, ud);
-    return lex.dm->ast;
+    return ast;
+}
+
+struct Ast *pawP_parse_prelude(struct Compiler *C)
+{
+    struct Lex lex;
+    init_lexer(C, C->prelude, &lex);
+
+    parse_prelude(&lex);
+    return lex.ast;
 }

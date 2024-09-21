@@ -65,7 +65,7 @@ struct Allocator {
     struct ChunkId small[MAX_SMALL - 1];
     struct ChunkId hash[NUM_HASH];
     struct Chunk *chunks;
-    size_t nchunks;
+    uint32_t nchunks;
 
     paw_Alloc alloc;
     paw_Env *P;

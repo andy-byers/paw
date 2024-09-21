@@ -9,7 +9,7 @@
 #include "hir.h"
 #include "unify.h"
 
-#define ERROR(U, ...) pawE_error(ENV(U), PAW_ETYPE, (U)->R->line, __VA_ARGS__)
+#define ERROR(U, line, ...) pawE_error(ENV((U)->C), PAW_ETYPE, line, __VA_ARGS__)
 
 typedef struct InferenceVar {
     K_ALIGNAS_NODE struct InferenceVar *parent;
@@ -247,9 +247,10 @@ void pawU_unify(struct Unifier *U, struct HirType *a, struct HirType *b)
 
     pawHir_print_type(U->hir, a);
     pawHir_print_type(U->hir, b);
-    ERROR(U, "incompatible types '%s' and '%s'", 
-            paw_string(ENV(U), -2), 
-            paw_string(ENV(U), -1));
+    ERROR(U, a->hdr.line, 
+            "incompatible types '%s' and '%s'", 
+            paw_string(ENV(U->C), -2), 
+            paw_string(ENV(U->C), -1));
 }
 
 static int equate(struct Unifier *U, struct HirType *a, struct HirType *b)
@@ -266,16 +267,18 @@ paw_Bool pawU_equals(struct Unifier *U, struct HirType *a, struct HirType *b)
     return RUN_ACTION(U, a, b, equate) == 0;
 }
 
+// TODO: consider accepting the line number, or the type (containing the line number)
+//       this unknown is being used to infer
 struct HirType *pawU_new_unknown(struct Unifier *U)
 {
-    paw_Env *P = ENV(U);
+    paw_Env *P = ENV(U->C);
     struct Hir *hir = U->hir;
     UnificationTable *table = U->table;
 
     // NOTE: inference variables require a stable address, since they point to each other
-    InferenceVar *ivar = pawK_pool_alloc(P, &hir->pool, sizeof(InferenceVar));
+    InferenceVar *ivar = pawK_pool_alloc(P, hir->pool, sizeof(InferenceVar));
     const int index = table->ivars->count;
-    var_list_push(U->hir, table->ivars, ivar);
+    var_list_push(hir, table->ivars, ivar);
 
     struct HirType *type = pawHir_new_type(hir, -1, kHirUnknown);
     type->unknown.depth = table->depth;
@@ -288,9 +291,8 @@ struct HirType *pawU_new_unknown(struct Unifier *U)
 
 void pawU_enter_binder(struct Unifier *U)
 {
-    paw_Env *P = ENV(U);
-    struct Hir *hir = U->hir;
-    UnificationTable *table = pawK_pool_alloc(P, &hir->pool, sizeof(UnificationTable));
+    paw_Env *P = ENV(U->C);
+    UnificationTable *table = pawK_pool_alloc(P, U->C->pool, sizeof(UnificationTable));
     table->ivars = var_list_new(U->hir);
     table->depth = U->depth;
     table->outer = U->table;
@@ -304,7 +306,7 @@ static void check_table(struct Unifier *U, UnificationTable *table)
         const InferenceVar *var = get_ivar(table, i);
         pawU_normalize(table, var->type);
         if (HirIsUnknown(var->type)) {
-            ERROR(U, "unable to infer type");
+            ERROR(U, var->type->hdr.line, "unable to infer type");
         }
     }
 }

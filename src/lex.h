@@ -41,6 +41,7 @@ enum MultiChar {
 
     // Keywords (must be in this order):
     TK_PUB,
+    TK_USE,
     TK_FN,
     TK_TYPE,
     TK_ENUM,
@@ -96,9 +97,6 @@ struct Lex {
     int last_line;
     int expr_depth;
     int nest_depth;
-
-    paw_Bool add_semi;
-    paw_Bool in_prelude;
 };
 
 String *pawX_scan_string(struct Lex *lex, const char *s, size_t n);

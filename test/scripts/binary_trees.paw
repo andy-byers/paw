@@ -1,0 +1,79 @@
+// The Computer Language Benchmarks Game
+// https://salsa.debian.org/benchmarksgame-team/benchmarksgame/
+// originally contributed by Mike Pall
+// translated to Paw by Andy
+
+struct Tree {
+    left: Option<Tree>,
+    right: Option<Tree>,
+}
+
+fn new_tree(lt: Option<Tree>, rt: Option<Tree>) -> Option<Tree> {
+    return Option::<Tree>::Some(Tree{
+        left: lt,
+        right: rt,
+    });
+}
+
+fn empty_tree() -> Option<Tree> {
+    return new_tree(
+        Option::<Tree>::None,
+        Option::<Tree>::None);
+}
+
+fn bottom_up_tree(depth: int) -> Option<Tree> {
+    if depth > 0 {
+        depth = depth - 1;
+        return new_tree(
+            bottom_up_tree(depth),
+            bottom_up_tree(depth));
+    }
+    return empty_tree();
+}
+
+fn item_check_aux(tree: Tree) -> int {
+    if tree.left.is_some() {
+        return 1 + 
+            item_check_aux(tree.left.unwrap()) + 
+            item_check_aux(tree.right.unwrap());
+    }
+    return 1;
+}
+
+fn item_check(tree: Option<Tree>) -> int {
+    return item_check_aux(tree.unwrap());
+}
+
+pub fn main(args: [str]) {
+    let N = 0;
+    if #args > 0 {
+        N = args[0].parse_int(10);
+    }
+    let mindepth = 4;
+    let maxdepth = mindepth + 2;
+    if maxdepth < N { 
+        maxdepth = N;
+    }
+
+    {
+        let stretchdepth = maxdepth + 1;
+        let stretchtree = bottom_up_tree(stretchdepth);
+        print('stretch tree of depth ' + stretchdepth.to_string() +
+              '\t check: ' + item_check(stretchtree).to_string() + '\n');
+    }
+
+    let longlivedtree = bottom_up_tree(maxdepth);
+
+    for depth = mindepth, maxdepth, 2 {
+        let iterations = 1 << (maxdepth - depth + mindepth);
+        let check = 0;
+        for i = 0, iterations {
+            check = check + item_check(bottom_up_tree(depth));
+        }
+        print(iterations.to_string() + '\t trees of depth ' + depth.to_string() +
+              '\t check: ' + check.to_string() + '\n');
+    }
+
+    print('long lived tree of depth ' + maxdepth.to_string() + 
+          '\t check: ' + item_check(longlivedtree).to_string() + '\n');
+}

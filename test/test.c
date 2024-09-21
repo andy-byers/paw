@@ -57,11 +57,11 @@ void *test_alloc(void *ud, void *ptr, size_t size0, size_t size)
     return safe_realloc(a, ptr, size0, size);
 }
 
-static void next_chunk(struct TestReader *rd)
+static void next_chunk(paw_Env *P, struct TestReader *rd)
 {
     rd->index = 0;
     if (rd->file) {
-        rd->length = pawO_read(rd->file, rd->buf, sizeof(rd->buf));
+        rd->length = pawO_read(P, rd->file, rd->buf, sizeof(rd->buf));
         return;
     }
     const size_t n = PAW_MIN(rd->ndata, READ_MAX);
@@ -77,7 +77,7 @@ const char *test_reader(paw_Env *P, void *ud, size_t *size)
     PAW_UNUSED(P);
     struct TestReader *rd = ud;
     if (!rd->length) {
-        next_chunk(rd);
+        next_chunk(P, rd);
         if (!rd->length) {
             return NULL;
         }
@@ -132,7 +132,9 @@ int test_open_file(paw_Env *P, const char *name)
     const char *pathname = test_pathname(name);
     if (P == NULL) return PAW_EMEMORY;
 
-    FILE *file = pawO_open(pathname, "r");
+    File *file = pawO_new_file(P);
+    const int rc = pawO_open(file, pathname, "r");
+    check(rc == 0);
     struct TestReader rd = {.file = file};
     rd.data = rd.buf;
     check(file);

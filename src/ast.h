@@ -24,6 +24,7 @@ struct Compiler;
         X(TypeDecl,    type) \
         X(VarDecl,     var) \
         X(ImplDecl,    impl) \
+        X(UseDecl,     use) \
         X(VariantDecl, variant)
 
 #define AST_EXPR_LIST(X) \
@@ -126,6 +127,13 @@ struct AstAdtDecl {
     paw_Bool is_struct : 1;
     struct AstDeclList *generics;
     struct AstDeclList *fields;
+};
+
+struct AstUseDecl {
+    AST_DECL_HEADER; 
+    paw_Bool is_pub : 1;
+    struct AstPath *path;
+    int modno;
 };
 
 struct AstVariantDecl {
@@ -443,10 +451,11 @@ static const char *kAstStmtNames[] = {
 #undef DEFINE_ACCESS
 
 struct Ast {
-    struct Pool pool;
-    struct AstDeclList *prelude;
     struct AstDeclList *items;
+    struct Pool *pool;
+    String *name;
     paw_Env *P;
+    int modno;
 };
 
 struct AstDecl *pawAst_new_decl(struct Ast *ast, int line, enum AstDeclKind kind);
@@ -462,7 +471,7 @@ DEFINE_LIST(struct Ast, pawAst_expr_list_, AstExprList, struct AstExpr)
 DEFINE_LIST(struct Ast, pawAst_stmt_list_, AstStmtList, struct AstStmt)
 DEFINE_LIST(struct Ast, pawAst_path_, AstPath, struct AstSegment)
 
-struct Ast *pawAst_new(struct Compiler *C);
+struct Ast *pawAst_new(struct Compiler *C, String *name, int modno);
 void pawAst_free(struct Ast *ast);
 
 struct AstSegment *pawAst_segment_new(struct Ast *ast);

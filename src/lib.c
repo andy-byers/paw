@@ -2,37 +2,23 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
+#include "prefix.h"
+
+#include <errno.h>
+#include <stdio.h>
+
 #include "lib.h"
 #include "api.h"
 #include "auxlib.h"
 #include "call.h"
 #include "gc.h"
+#include "os.h"
 #include "map.h"
 #include "mem.h"
 #include "os.h"
 #include "rt.h"
-#include <errno.h>
 
 #define CF_BASE(i) (P->cf->base.p + i)
-
-void lib_error(paw_Env *P, int error, const char *fmt, ...)
-{
-    Buffer print;
-    pawL_init_buffer(P, &print);
-
-    va_list arg;
-    va_start(arg, fmt);
-    pawL_add_vfstring(P, &print, fmt, arg);
-    va_end(arg);
-
-    pawL_push_result(P, &print);
-    pawC_throw(P, error);
-}
-
-static int get_argc(paw_Env *P) 
-{
-    return paw_get_count(P) - 1 /* context */; 
-}
 
 static int base_assert(paw_Env *P)
 {
@@ -45,8 +31,8 @@ static int base_assert(paw_Env *P)
 static int base_print(paw_Env *P)
 {
     const String *s = V_STRING(P->top.p[-1]);
-    pawO_write_all(P, stdout, s->text, s->length);
-    fflush(stdout);
+    pawO_write_all(P, pawO_stdout(), s->text, s->length);
+    pawO_flush(pawO_stdout());
     return 0;
 }
 
@@ -326,7 +312,7 @@ void pawL_new_func(paw_Env *P, paw_Function func, int nup)
     paw_shift(P, nup);
 }
 
-static void add_builtin_func(paw_Env *P, const char *name, paw_Function func)
+static void add_prelude_func(paw_Env *P, const char *name, paw_Function func)
 {
     paw_push_value(P, -1);
     paw_push_string(P, name);
@@ -337,7 +323,7 @@ static void add_builtin_func(paw_Env *P, const char *name, paw_Function func)
     pawC_stkdec(P, 1);
 }
 
-static void add_builtin_method(paw_Env *P, const char *self, const char *name, paw_Function func)
+static void add_prelude_method(paw_Env *P, const char *self, const char *name, paw_Function func)
 {
     paw_push_value(P, -1);
     paw_push_string(P, name);
@@ -358,53 +344,53 @@ void pawL_init(paw_Env *P)
     V_SET_OBJECT(pv, P->builtin);
 
     // Builtin functions:
-    add_builtin_func(P, "assert", base_assert); // fn assert(bool)
-    add_builtin_func(P, "print", base_print); // fn print(string)
+    add_prelude_func(P, "assert", base_assert); // fn assert(bool)
+    add_prelude_func(P, "print", base_print); // fn print(string)
 
     // TODO: Replace with real methods
-    add_builtin_func(P, "_list_push", list_push);
-    add_builtin_func(P, "_list_pop", list_pop);
-    add_builtin_func(P, "_list_insert", list_insert);
-    add_builtin_func(P, "_list_erase", list_remove);
+    add_prelude_func(P, "_list_push", list_push);
+    add_prelude_func(P, "_list_pop", list_pop);
+    add_prelude_func(P, "_list_insert", list_insert);
+    add_prelude_func(P, "_list_erase", list_remove);
 
-    add_builtin_method(P, "bool", "to_string", bool_to_string);
-    add_builtin_method(P, "int", "to_string", int_to_string);
-    add_builtin_method(P, "float", "to_string", float_to_string);
+    add_prelude_method(P, "bool", "to_string", bool_to_string);
+    add_prelude_method(P, "int", "to_string", int_to_string);
+    add_prelude_method(P, "float", "to_string", float_to_string);
 
-    add_builtin_method(P, "str", "parse_int", string_parse_int);
-    add_builtin_method(P, "str", "parse_float", string_parse_float);
-    add_builtin_method(P, "str", "split", string_split);
-    add_builtin_method(P, "str", "join", string_join);
-    add_builtin_method(P, "str", "find", string_find);
-    add_builtin_method(P, "str", "starts_with", string_starts_with);
-    add_builtin_method(P, "str", "ends_with", string_ends_with);
+    add_prelude_method(P, "str", "parse_int", string_parse_int);
+    add_prelude_method(P, "str", "parse_float", string_parse_float);
+    add_prelude_method(P, "str", "split", string_split);
+    add_prelude_method(P, "str", "join", string_join);
+    add_prelude_method(P, "str", "find", string_find);
+    add_prelude_method(P, "str", "starts_with", string_starts_with);
+    add_prelude_method(P, "str", "ends_with", string_ends_with);
 
-    add_builtin_method(P, "_List", "length", list_length);
-    add_builtin_method(P, "_List", "push", list_push);
-    add_builtin_method(P, "_List", "insert", list_insert);
-    add_builtin_method(P, "_List", "remove", list_remove);
-    add_builtin_method(P, "_List", "pop", list_pop);
+    add_prelude_method(P, "_List", "length", list_length);
+    add_prelude_method(P, "_List", "push", list_push);
+    add_prelude_method(P, "_List", "insert", list_insert);
+    add_prelude_method(P, "_List", "remove", list_remove);
+    add_prelude_method(P, "_List", "pop", list_pop);
 
-    add_builtin_method(P, "_Map", "length", map_length);
-    add_builtin_method(P, "_Map", "get_or", map_get_or);
-    add_builtin_method(P, "_Map", "erase", map_erase);
+    add_prelude_method(P, "_Map", "length", map_length);
+    add_prelude_method(P, "_Map", "get_or", map_get_or);
+    add_prelude_method(P, "_Map", "erase", map_erase);
 
-    add_builtin_method(P, "Option", "is_some", enum_is_zero);
-    add_builtin_method(P, "Option", "is_none", enum_is_one);
-    add_builtin_method(P, "Option", "unwrap", enum_unwrap);
-    add_builtin_method(P, "Option", "unwrap_or", enum_unwrap_or);
+    add_prelude_method(P, "Option", "is_some", enum_is_zero);
+    add_prelude_method(P, "Option", "is_none", enum_is_one);
+    add_prelude_method(P, "Option", "unwrap", enum_unwrap);
+    add_prelude_method(P, "Option", "unwrap_or", enum_unwrap_or);
 
-    add_builtin_method(P, "Result", "is_ok", enum_is_zero);
-    add_builtin_method(P, "Result", "is_err", enum_is_one);
-    add_builtin_method(P, "Result", "unwrap", enum_unwrap);
-    add_builtin_method(P, "Result", "unwrap_or", enum_unwrap_or);
+    add_prelude_method(P, "Result", "is_ok", enum_is_zero);
+    add_prelude_method(P, "Result", "is_err", enum_is_one);
+    add_prelude_method(P, "Result", "unwrap", enum_unwrap);
+    add_prelude_method(P, "Result", "unwrap_or", enum_unwrap_or);
 
     pawC_pop(P);
 }
 
 struct FileReader {
     char data[512];
-    FILE *file;
+    File *file;
     paw_Bool err;
 };
 
@@ -413,16 +399,17 @@ static const char *file_reader(paw_Env *P, void *ud, size_t *psize)
     PAW_UNUSED(P);
     struct FileReader *fr = ud;
     const size_t zchunk = sizeof(fr->data);
-    *psize = pawO_read(fr->file, fr->data, zchunk);
-    if (*psize != zchunk) fr->err = ferror(fr->file);
+    *psize = pawO_read(P, fr->file, fr->data, zchunk);
+// TODO: don't throw errors in os.c    if (*psize != zchunk) fr->err = ferror(fr->file);
     return *psize > 0 ? fr->data : NULL;
 }
 
 int pawL_load_file(paw_Env *P, const char *pathname)
 {
     struct FileReader fr = {0};
-    fr.file = pawO_open(pathname, "r");
-    if (fr.file != NULL) {
+    fr.file = pawO_new_file(P);
+    const int rc = pawO_open(fr.file, pathname, "r");
+    if (rc == 0) {
         const int status = paw_load(P, file_reader, pathname, &fr);
         if (!fr.err) return status;
     }
@@ -469,4 +456,94 @@ int pawL_register_func(paw_Env *P, const char *name, paw_Function func, int nup)
     paw_rotate(P, -3, -1);
     paw_setelem(P, PAW_ADT_MAP);
     return 0;
+}
+
+void *pawL_chunk_reader(paw_Env *P, const char *text, size_t length, paw_Reader *preader)
+{
+    struct ChunkReader *r = paw_new_foreign(P, sizeof(struct ChunkReader), 0);
+    *preader = chunk_reader;
+    *r = (struct ChunkReader){
+        .size = length,
+        .data = text,
+    };
+    return r;
+}
+
+void pawL_add_extern_func(paw_Env *P, const char *modname, const char *name, paw_Function func)
+{
+    paw_push_value(P, -1);
+    paw_push_string(P, modname);
+    paw_push_string(P, ":");
+    paw_push_string(P, name);
+    paw_mangle_name(P, NULL);
+    paw_concat(P, PAW_ADT_STR);
+    paw_concat(P, PAW_ADT_STR);
+    pawL_new_func(P, func, 0);
+
+    pawR_setelem(P, PAW_ADT_MAP);
+    pawC_stkdec(P, 1);
+}
+
+void pawL_add_extern_method(paw_Env *P, const char *modname, const char *self, const char *name, paw_Function func)
+{
+    paw_push_value(P, -1);
+    paw_push_string(P, modname);
+    paw_push_string(P, ":");
+    paw_push_string(P, name);
+    paw_mangle_name(P, NULL);
+    paw_push_string(P, self);
+    paw_mangle_self(P, NULL);
+    paw_concat(P, PAW_ADT_STR);
+    paw_concat(P, PAW_ADT_STR);
+    pawL_new_func(P, func, 0);
+
+    pawR_setelem(P, PAW_ADT_MAP);
+    pawC_stkdec(P, 1);
+}
+
+#define MATCHES_MODULE(str, lit) ((str)->length == PAW_LENGTHOF(lit) && \
+                                  memcmp((str)->text, lit, PAW_LENGTHOF(lit)) == 0)
+
+static const char *file_import_reader(paw_Env *P, void *ud, size_t *psize)
+{
+    PAW_UNUSED(P);
+    struct FileReader *fr = ud;
+    if (fr->err) {
+        *psize = 0;
+        return NULL;
+    }
+    *psize = pawO_read(P, fr->file, fr->data, sizeof(fr->data));
+// TODO    if (*psize != sizeof(fr->data)) fr->err = ferror(fr->file);
+    return *psize > 0 ? fr->data : NULL;
+}
+
+void *pawL_start_import(paw_Env *P, paw_Reader *preader)
+{
+    void *l_import_io(paw_Env *P, paw_Reader *preader);
+    void *l_import_math(paw_Env *P, paw_Reader *preader);
+
+    Value *pv = &P->top.p[-1];
+    const String *name = V_STRING(*pv);
+    if (MATCHES_MODULE(name, "io")) {
+        return l_import_io(P, preader);
+    } else if (MATCHES_MODULE(name, "math")) {
+        return l_import_math(P, preader);
+    }
+    struct FileReader *r = paw_new_foreign(P, sizeof(struct FileReader), 0);
+    Foreign *f = V_FOREIGN(P->top.p[-1]);
+    f->flags = 0 /* TODO: flag for GC */;
+
+    File *file = pawO_new_file(P);
+    const int rc = pawO_open(file, name->text, "r"); // TODO: look in various directories
+    if (rc != 0) pawO_error(P);
+    *preader = file_import_reader;
+    *r = (struct FileReader){
+        .file = file,
+    };
+    return r;
+}
+
+void pawL_finish_import(paw_Env *P)
+{
+    paw_pop(P, 1);
 }

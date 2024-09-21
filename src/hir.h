@@ -9,9 +9,6 @@
 struct Compiler;
 struct Resolver;
 
-typedef uint16_t TypeId;
-#define NO_TYPE UINT16_MAX
-
 typedef uint16_t DeclId;
 #define NO_DECL UINT16_MAX
 
@@ -24,6 +21,7 @@ typedef uint16_t DeclId;
         X(TypeDecl,    type) \
         X(VarDecl,     var) \
         X(ImplDecl,    impl) \
+        X(UseDecl,     use) \
         X(VariantDecl, variant)
 
 #define HIR_EXPR_LIST(X) \
@@ -42,6 +40,7 @@ typedef uint16_t DeclId;
         X(AssignExpr,     assign)
 
 #define HIR_TYPE_LIST(X) \
+        X(Adt, adt) \
         X(FuncDef, fdef) \
         X(FuncPtr, fptr) \
         X(Unknown, unknown) \
@@ -100,6 +99,7 @@ struct HirVarInfo {
 struct HirSegment {
     String *name;
     struct HirTypeList *types;
+    int modno;
     DeclId base;
     DeclId did;
 };
@@ -133,6 +133,14 @@ struct HirUnknown {
     int index;
 };
 
+struct HirAdt {
+    HIR_TYPE_HEADER; 
+    struct HirTypeList *types;
+    int modno;
+    DeclId base;
+    DeclId did;
+};
+
 // Represents a structure or enumeration type
 struct HirPathType {
     HIR_TYPE_HEADER; 
@@ -150,6 +158,7 @@ struct HirFuncPtr {
 struct HirFuncDef {
     HIR_FUNC_HEADER; 
     struct HirTypeList *types;
+    int modno;
     DeclId base;
     DeclId did;
 };
@@ -242,6 +251,13 @@ struct HirAdtDecl {
     struct HirDeclList *generics;
     struct HirDeclList *fields;
     struct HirDeclList *monos;
+};
+
+struct HirUseDecl {
+    HIR_DECL_HEADER; 
+    paw_Bool is_pub : 1;
+    struct HirPath *path;
+    int modno;
 };
 
 struct HirVariantDecl {
@@ -609,6 +625,8 @@ struct HirFolder {
     struct HirDecl *(*FoldDecl)(struct HirFolder *F, struct HirDecl *decl);
     struct HirType *(*FoldType)(struct HirFolder *F, struct HirType *type);
 
+    struct HirType *(*PostFoldType)(struct HirFolder *F, struct HirType *type);
+
     struct HirExprList *(*FoldExprList)(struct HirFolder *F, struct HirExprList *list);
     struct HirDeclList *(*FoldDeclList)(struct HirFolder *F, struct HirDeclList *list);
     struct HirStmtList *(*FoldStmtList)(struct HirFolder *F, struct HirStmtList *list);
@@ -635,11 +653,12 @@ void pawHir_folder_init(struct HirFolder *F, struct Hir *hir, void *ud);
 void pawHir_fold(struct HirFolder *F);
 
 struct Hir {
-    struct Pool pool;
-    struct HirDeclList *prelude;
     struct HirDeclList *items;
-    struct DynamicMem *dm;
+    struct Compiler *C;
+    struct Pool *pool;
+    String *name;
     paw_Env *P;
+    int modno;
 };
 
 struct HirSymbol *pawHir_new_symbol(struct Hir *hir);
@@ -669,13 +688,13 @@ DEFINE_LIST(struct Hir, pawHir_path_, HirPath, struct HirSegment)
 #define HIR_IS_POLY_ADT(decl) (HirIsAdtDecl(decl) && HirGetAdtDecl(decl)->generics != NULL)
 #define HIR_IS_POLY_IMPL(decl) (HirIsImplDecl(decl) && HirGetImplDecl(decl)->generics != NULL)
 
-struct Hir *pawHir_new(struct Compiler *C);
+struct Hir *pawHir_new(struct Compiler *C, String *name, int modno);
 void pawHir_free(struct Hir *hir);
 
 struct HirDecl *pawHir_copy_decl(struct Hir *hir, struct HirDecl *decl);
-void pawHir_expand_adt(struct Compiler *C, struct HirAdtDecl *base, struct HirDecl *inst);
-void pawHir_expand_bodies(struct Compiler *C, struct Hir *hir);
-struct HirDeclList *pawHir_define(struct Compiler *C, struct Hir *hir);
+void pawHir_expand_adt(struct Hir *hir, struct HirAdtDecl *base, struct HirDecl *inst);
+void pawHir_expand_bodies(struct Hir *hir);
+void pawHir_define(struct ModuleInfo *m, struct HirDeclList *out, int *poffset);
 
 DeclId pawHir_add_decl(struct Hir *hir, struct HirDecl *decl);
 struct HirDecl *pawHir_get_decl(struct Hir *hir, DeclId id);

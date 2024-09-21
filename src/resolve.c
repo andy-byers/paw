@@ -18,6 +18,7 @@
 #include "str.h"
 #include "unify.h"
 
+#define DLOG(R, ...) PAWD_LOG(ENV(R), __VA_ARGS__)
 #define NAME_ERROR(R, ...) pawE_error(ENV(R), PAW_ENAME, (R)->line, __VA_ARGS__)
 #define SYNTAX_ERROR(R, ...) pawE_error(ENV(R), PAW_ESYNTAX, (R)->line, __VA_ARGS__)
 #define TYPE_ERROR(R, ...) pawE_error(ENV(R), PAW_ETYPE, (R)->line, __VA_ARGS__)
@@ -34,7 +35,7 @@ struct ResultState {
 
 _Noreturn static void not_a_type(struct Resolver *R, struct HirType *type)
 {
-    pawHir_print_type(R->hir, type);
+    pawHir_print_type(R->m->hir, type);
     TYPE_ERROR(R, "'%s' is not a type", paw_string(ENV(R), -1));
 }
 
@@ -100,14 +101,9 @@ static struct HirType *get_type(struct Resolver *R, DeclId did)
     return get_decl(R, did)->hdr.type;
 }
 
-static struct HirType *func_result(struct Resolver *R, struct HirFuncDecl *d)
-{
-    return HIR_FPTR(d->type)->result;
-}
-
 static struct HirSymbol *new_symbol(struct Resolver *R, struct HirDecl *decl)
 {
-    struct HirSymbol *symbol = pawHir_new_symbol(R->hir);
+    struct HirSymbol *symbol = pawHir_new_symbol(R->m->hir);
     *symbol = (struct HirSymbol){
         .is_init = PAW_TRUE,
         .name = decl->hdr.name,
@@ -132,11 +128,11 @@ static struct HirAdtDecl *get_adt(struct Resolver *R, struct HirType *type)
     return HirGetAdtDecl(decl);
 }
 
-static struct HirDeclList *impls_for_adt(struct Resolver *R, struct HirType *adt)
+static struct HirDeclList *impls_for_adt(struct Compiler *C, struct HirType *adt)
 {
-    struct HirDecl *k = get_decl(R, hir_adt_base(adt));
-    const Value *pv = pawH_get(R->impls, P2V(k));
-    if (pv == NULL) NAME_ERROR(R, "type '%s' has no methods", k->hdr.name->text);
+    struct HirDecl *k = K_LIST_GET(C->dm->decls, hir_adt_base(adt));
+    const Value *pv = pawH_get(C->impls, P2V(k));
+    if (pv == NULL) return NULL;
     return pv->p;
 }
 
@@ -162,21 +158,21 @@ static struct HirType *resolve_operand(struct Resolver *R, struct HirExpr *expr)
 
 static DeclId add_decl(struct Resolver *R, struct HirDecl *decl)
 {
-    return pawHir_add_decl(R->hir, decl);
+    return pawHir_add_decl(R->m->hir, decl);
 }
 
 static struct HirType *new_type(struct Resolver *R, DeclId did, enum HirTypeKind kind, int line)
 {
-    return pawHir_attach_type(R->hir, did, kind, line);
+    return pawHir_attach_type(R->m->hir, did, kind, line);
 }
 
 static struct HirTypeList *resolve_exprs(struct Resolver *R, struct HirExprList *list) 
 {                                                                                   
     if (list == NULL) return NULL;
-    struct HirTypeList *new_list = pawHir_type_list_new(R->hir);
+    struct HirTypeList *new_list = pawHir_type_list_new(R->m->hir);
     for (int i = 0; i < list->count; ++i) {                                         
         struct HirType *type = resolve_operand(R, list->data[i]);
-        pawHir_type_list_push(R->hir, new_list, type);
+        pawHir_type_list_push(R->m->hir, new_list, type);
     }                                                                               
     return new_list;
 }
@@ -184,10 +180,10 @@ static struct HirTypeList *resolve_exprs(struct Resolver *R, struct HirExprList 
 static struct HirTypeList *collect_decl_types(struct Resolver *R, struct HirDeclList *list) 
 {                                                                                   
     if (list == NULL) return NULL;
-    struct HirTypeList *new_list = pawHir_type_list_new(R->hir);
+    struct HirTypeList *new_list = pawHir_type_list_new(R->m->hir);
     for (int i = 0; i < list->count; ++i) {                                         
         struct HirType *type = HIR_TYPEOF(list->data[i]);
-        pawHir_type_list_push(R->hir, new_list, type);
+        pawHir_type_list_push(R->m->hir, new_list, type);
     }                                                                               
     return new_list;
 }
@@ -210,7 +206,7 @@ static struct HirScope *enclosing_scope(struct HirSymtab *st)
 
 static struct HirSymbol *add_symbol(struct Resolver *R, struct HirScope *scope, String *name, struct HirDecl *decl)
 {
-    struct HirSymbol *symbol = pawHir_add_symbol(R->hir, scope);
+    struct HirSymbol *symbol = pawHir_add_symbol(R->m->hir, scope);
     symbol->name = name;
     symbol->decl = decl;
     return symbol;
@@ -244,9 +240,9 @@ static struct HirSymbol *try_resolve_symbol(struct Resolver *R, const String *na
     }
 
     // search the global symbols
-    const int index = pawHir_find_symbol(R->globals, name);
+    const int index = pawHir_find_symbol(R->m->globals, name);
     if (index < 0) return NULL;
-    return R->globals->data[index];
+    return R->m->globals->data[index];
 }
 
 static struct HirSymbol *resolve_symbol(struct Resolver *R, const String *name)
@@ -267,20 +263,20 @@ static struct HirDecl *find_field(struct HirDeclList *fields, String *name)
 }
 
 // Return true if 'a' is more generic than or equal to 'b', false otherwise
-static paw_Bool is_compat(struct Resolver *R, struct HirType *a, struct HirType *b);
+static paw_Bool is_compat(struct Compiler *C, struct HirType *a, struct HirType *b);
 
-static paw_Bool are_lists_compat(struct Resolver *R, struct HirTypeList *a, struct HirTypeList *b)
+static paw_Bool are_lists_compat(struct Compiler *C, struct HirTypeList *a, struct HirTypeList *b)
 {
     paw_assert(a->count == b->count);
     for (int i = 0; i < a->count; ++i) {
         struct HirType *x = pawHir_type_list_get(a, i); 
         struct HirType *y = pawHir_type_list_get(b, i); 
-        if (!is_compat(R, x, y)) return PAW_FALSE;
+        if (!is_compat(C, x, y)) return PAW_FALSE;
     }
     return PAW_TRUE;
 }
 
-static paw_Bool are_paths_compat(struct Resolver *R, struct HirPath *a, struct HirPath *b)
+static paw_Bool are_paths_compat(struct Compiler *C, struct HirPath *a, struct HirPath *b)
 {
     paw_assert(a->count == b->count);
     for (int i = 0; i < a->count; ++i) {
@@ -288,29 +284,29 @@ static paw_Bool are_paths_compat(struct Resolver *R, struct HirPath *a, struct H
         struct HirSegment *y = K_LIST_GET(b, i); 
         if (x->base != y->base) return PAW_FALSE;
         paw_assert(!x->types == !y->types);
-        if (x->types != NULL && !are_lists_compat(R, x->types, y->types)) {
+        if (x->types != NULL && !are_lists_compat(C, x->types, y->types)) {
             return PAW_FALSE;
         }
     }
     return PAW_TRUE;
 }
 
-static paw_Bool is_compat(struct Resolver *R, struct HirType *a, struct HirType *b)
+static paw_Bool is_compat(struct Compiler *C, struct HirType *a, struct HirType *b)
 {
-    if (pawU_equals(R->U, a, b)) return PAW_TRUE;
+    if (pawU_equals(&C->dm->unifier, a, b)) return PAW_TRUE;
+    if (HirIsGeneric(a) || HirIsGeneric(b)) return PAW_TRUE;
 
     switch (HIR_KINDOF(a)) {
         case kHirTupleType:
-            return are_lists_compat(R, a->tuple.elems, b->tuple.elems);
+            if (!HirIsTupleType(b)) return PAW_FALSE;
+            return are_lists_compat(C, a->tuple.elems, b->tuple.elems);
         case kHirFuncPtr:
         case kHirFuncDef:
-            return is_compat(R, HIR_FPTR(a)->result, HIR_FPTR(b)->result) &&
-                are_lists_compat(R, HIR_FPTR(a)->params, HIR_FPTR(b)->params);
+            return is_compat(C, HIR_FPTR(a)->result, HIR_FPTR(b)->result) &&
+                are_lists_compat(C, HIR_FPTR(a)->params, HIR_FPTR(b)->params);
         case kHirPathType:
-            return are_paths_compat(R, a->path.path, b->path.path);
-        case kHirGeneric:
-            return PAW_TRUE;
-        case kHirUnknown:
+            return are_paths_compat(C, a->path.path, b->path.path);
+        default:
             return a == b;
     }
     return PAW_FALSE;
@@ -333,8 +329,8 @@ static struct HirScope *leave_block(struct Resolver *R)
 
 static void enter_block(struct Resolver *R, struct HirScope *scope)
 {
-    if (scope == NULL) scope = pawHir_scope_new(R->hir);
-    pawHir_symtab_push(R->hir, R->symtab, scope);
+    if (scope == NULL) scope = pawHir_scope_new(R->m->hir);
+    pawHir_symtab_push(R->m->hir, R->symtab, scope);
 }
 
 static struct HirScope *leave_function(struct Resolver *R)
@@ -346,7 +342,7 @@ static struct HirScope *leave_function(struct Resolver *R)
 
 static void create_context(struct Resolver *R, struct HirAdtDecl *adt, int line)
 {
-    struct HirDecl *result = pawHir_new_decl(R->hir, line, kHirVarDecl);
+    struct HirDecl *result = pawHir_new_decl(R->m->hir, line, kHirVarDecl);
     struct HirVarDecl *r = HirGetVarDecl(result);
     r->name = pawE_cstr(ENV(R), CSTR_SELF); // 'self'
     r->type = adt->type;
@@ -401,11 +397,12 @@ static void resolve_func_item(struct Resolver *R, struct HirFuncDecl *d)
     enter_function(R, d);
     allocate_decls(R, d->generics);
     allocate_decls(R, d->params);
+    d->result = resolve_type(R, d->result);
 
     if (d->body != NULL) {
         struct ResultState rs = {
             // named function has explicit return type
-            .prev = func_result(R, d),
+            .prev = d->result,
             .outer = R->rs,
         };
         R->rs = &rs;
@@ -472,15 +469,19 @@ static void resolve_impl_methods(struct Resolver *R, struct HirImplDecl *d)
     leave_block(R);
 }
 
-static struct HirDecl *find_method(struct Resolver *R, struct HirType *adt, String *name);
+struct HirDecl *pawP_find_field(struct Compiler *C, struct ModuleInfo *m, struct HirAdtDecl *adt, String *name)
+{
+    struct HirDecl *field = find_field(adt->fields, name);
+    if (field != NULL) return field;
+    return pawP_find_method(C, m, adt->type, name);
+}
 
 static struct HirDecl *expect_field(struct Resolver *R, struct HirAdtDecl *adt, String *name)
 {
-    struct HirDecl *field = find_field(adt->fields, name);
-    if (field == NULL) field = find_method(R, adt->type, name);
-    if (field == NULL) NAME_ERROR(R, "field '%s' does not exist on type '%s'", 
-                           name->text, adt->name->text);
-    return field;
+    struct HirDecl *result = pawP_find_field(R->C, R->m, adt, name);
+    if (result == NULL) NAME_ERROR(R, "field '%s' does not exist on type '%s'", 
+                                   name->text, adt->name->text);
+    return result;
 }
 
 static void expect_bool_expr(struct Resolver *R, struct HirExpr *e)
@@ -504,7 +505,7 @@ static struct HirType *resolve_tuple_type(struct Resolver *R, struct HirTupleTyp
 
 static struct HirDecl *instantiate(struct Resolver *R, struct HirDecl *base, struct HirTypeList *types)
 {
-    return pawP_instantiate(R->C, base, types);
+    return pawP_instantiate(R->m->hir, base, types);
 }
 
 static paw_Bool is_enum_decl(struct HirDecl *decl)
@@ -512,41 +513,63 @@ static paw_Bool is_enum_decl(struct HirDecl *decl)
     return HirIsAdtDecl(decl) && !HirGetAdtDecl(decl)->is_struct;
 }
 
-static struct HirDecl *resolve_base_seg(struct Resolver *R, struct HirSegment *base)
-{
-    resolve_type_list(R, base->types);
-    struct HirSymbol *symbol = resolve_symbol(R, base->name);
-    struct HirType *type = HIR_TYPEOF(symbol->decl);
-    struct HirDecl *inst = instantiate(R, symbol->decl, base->types);
-    base->base = symbol->decl->hdr.did;
-    base->did = inst->hdr.did;
-    return inst;
-}
-
-static struct HirDecl *resolve_next_seg(struct Resolver *R, struct HirDecl *prev, struct HirSegment *next)
-{
-    if (!is_enum_decl(prev)) TYPE_ERROR(R, "expected enumerator");
-    if (next->types != NULL) TYPE_ERROR(R, "expected generic item");
-    struct HirAdtDecl *adt = HirGetAdtDecl(prev);
-    struct HirDecl *result = expect_field(R, adt, next->name);
-    next->base = next->did = result->hdr.did;
-    return result;
-}
+//static struct HirDecl *resolve_base_seg(struct Resolver *R, struct HirPath *path, int *pi)
+//{
+//    struct HirSegment *base;
+//    struct HirSymbol *symbol;
+//    for (*pi = 0; *pi < path->count - 1; ++*pi) {
+//        base = pawHir_path_get(path, *pi);
+//        symbol = resolve_symbol(R, base->name);
+//    }
+//
+//    resolve_type_list(R, base->types);
+//    struct HirDecl *inst = instantiate(R, symbol->decl, base->types);
+//    base->base = symbol->decl->hdr.did;
+//    base->did = inst->hdr.did;
+//    return inst;
+//}
+//
+//static struct HirDecl *resolve_next_seg(struct Resolver *R, struct HirDecl *prev, struct HirSegment *next)
+//{
+//    if (!is_enum_decl(prev)) TYPE_ERROR(R, "expected enumerator");
+//    if (next->types != NULL) TYPE_ERROR(R, "expected generic item");
+//    struct HirAdtDecl *adt = HirGetAdtDecl(prev);
+//    struct HirDecl *result = expect_field(R, adt, next->name);
+//    next->base = next->did = result->hdr.did;
+//    return result;
+//}
 
 static struct HirDecl *resolve_location(struct Resolver *R, struct HirPath *path)
 {
-    paw_assert(path->count > 0);
-    struct HirSegment *seg = pawHir_path_get(path, 0);
-    struct HirDecl *decl = resolve_base_seg(R, seg);
-    for (int i = 1; i < path->count; ++i) {
-        seg = pawHir_path_get(path, i);
-        decl = resolve_next_seg(R, decl, seg);
+    for (int i = 0; i < path->count; ++i) {
+        struct HirSegment *seg = K_LIST_GET(path, i);
+        resolve_type_list(R, seg->types);
     }
-    // NOTE: Paw does not support associated types or static fields, etc., so it
-    //       is not possible to have a path of length > 2. Such a path should
-    //       cause a type error in the above loop.
-    paw_assert(path->count < 3);
-    return decl;
+    // TODO: not entirely correct, need to let locals shadow toplevel items. incorporate searching local symbol table into pawP_lookup
+    if (path->count == 1) {
+        struct HirSegment *seg = K_LIST_GET(path, 0);
+        struct HirSymbol *sym = try_resolve_symbol(R, seg->name);
+        if (sym != NULL) {
+            struct HirDecl *inst = pawP_instantiate(R->m->hir, sym->decl, seg->types);
+            seg->modno = R->m->hir->modno;
+            seg->base = sym->decl->hdr.did;
+            seg->did = inst->hdr.did;
+            return inst;
+        }
+    }
+    return pawP_lookup(R->C, R->m, path);
+//    int i;
+//    paw_assert(path->count > 0);
+//    struct HirDecl *decl = resolve_base_seg(R, path, &i);
+//    for (; i < path->count; ++i) {
+//        struct HirSegment *seg = pawHir_path_get(path, i);
+//        decl = resolve_next_seg(R, decl, seg);
+//    }
+//    // NOTE: Paw does not support associated types or static fields, etc., so it
+//    //       is not possible to have a path of length > 2. Such a path should
+//    //       cause a type error in the above loop.
+//    paw_assert(path->count < 3);
+//    return decl;
 }
 
 static void maybe_fix_unit_struct(struct Resolver *R, struct HirDecl *decl, struct HirExpr *expr)
@@ -566,7 +589,7 @@ static void maybe_fix_unit_struct(struct Resolver *R, struct HirDecl *decl, stru
         expr->hdr.kind = kHirLiteralExpr;
         struct HirLiteralExpr *r = HirGetLiteralExpr(expr);
         r->lit_kind = kHirLitComposite;
-        r->comp.items = pawHir_expr_list_new(R->hir);
+        r->comp.items = pawHir_expr_list_new(R->m->hir);
         r->comp.path = path;
     } else if (HirIsGenericDecl(decl)) {
 not_operand:
@@ -689,24 +712,24 @@ static void resolve_binop_expr(struct Resolver *R, struct HirBinOpExpr *e)
     }
 }
 
-static void resolve_assign_expr(struct Resolver *R, struct HirAssignExpr *s)
+static void resolve_assign_expr(struct Resolver *R, struct HirAssignExpr *e)
 {
-    if (!HirIsPathExpr(s->lhs) &&
-            !HirIsIndex(s->lhs) &&
-            !HirIsSelector(s->lhs)) {
+    if (!HirIsPathExpr(e->lhs) &&
+            !HirIsIndex(e->lhs) &&
+            !HirIsSelector(e->lhs)) {
         SYNTAX_ERROR(R, "invalid place for assignment");
     }
-    struct HirType *lhs = resolve_operand(R, s->lhs);
-    struct HirType *rhs = resolve_operand(R, s->rhs);
+    struct HirType *lhs = resolve_operand(R, e->lhs);
+    struct HirType *rhs = resolve_operand(R, e->rhs);
     unify(R, lhs, rhs);
-    s->type = lhs;
+    e->type = lhs;
 }
 
 static struct HirType *new_list_t(struct Resolver *R, struct HirType *elem_t)
 {
     struct HirDecl *base = get_decl(R, R->C->builtins[BUILTIN_LIST].did);
-    struct HirTypeList *types = pawHir_type_list_new(R->hir);
-    pawHir_type_list_push(R->hir, types, elem_t);
+    struct HirTypeList *types = pawHir_type_list_new(R->m->hir);
+    pawHir_type_list_push(R->m->hir, types, elem_t);
     struct HirDecl *inst = instantiate(R, base, types);
     return HIR_TYPEOF(inst);
 }
@@ -715,19 +738,19 @@ static struct HirType *new_map_t(struct Resolver *R, struct HirType *key_t, stru
 {
     check_map_key(R, key_t);
     struct HirDecl *base = get_decl(R, R->C->builtins[BUILTIN_MAP].did);
-    struct HirTypeList *types = pawHir_type_list_new(R->hir);
-    pawHir_type_list_push(R->hir, types, key_t);
-    pawHir_type_list_push(R->hir, types, value_t);
+    struct HirTypeList *types = pawHir_type_list_new(R->m->hir);
+    pawHir_type_list_push(R->m->hir, types, key_t);
+    pawHir_type_list_push(R->m->hir, types, value_t);
     struct HirDecl *inst = instantiate(R, base, types);
     return HIR_TYPEOF(inst);
 }
 
 static struct HirTypeList *new_unknowns(struct Resolver *R, int count)
 {
-    struct HirTypeList *list = pawHir_type_list_new(R->hir);
+    struct HirTypeList *list = pawHir_type_list_new(R->m->hir);
     for (int i = 0; i < count; ++i) {
         struct HirType *unknown = pawU_new_unknown(R->U);
-        pawHir_type_list_push(R->hir, list, unknown);
+        pawHir_type_list_push(R->m->hir, list, unknown);
     }
     return list;
 }
@@ -785,28 +808,48 @@ static void resolve_closure_expr(struct Resolver *R, struct HirClosureExpr *e)
     R->rs = rs.outer;
 }
 
-static struct HirDecl *find_method(struct Resolver *R, struct HirType *adt, String *name)
+// TODO: This routine needs quite a bit of work, as well as some expanatory comments
+static struct HirDecl *find_method_aux(struct Compiler *C, struct ModuleInfo *m, struct HirDecl *base, struct HirType *self, String *name)
 {
-    struct HirDeclList *impls = impls_for_adt(R, adt);
+    struct HirImplDecl *impl = HirGetImplDecl(base);
+    struct HirDecl *adt_decl = K_LIST_GET(C->dm->decls, hir_adt_did(self));
+    struct HirAdtDecl *adt = HirGetAdtDecl(adt_decl);
+
+    if (!is_compat(C, impl->type, adt->type)) return NULL;
+    if (HIR_IS_POLY_IMPL(base)) {
+        struct HirTypeList *types = hir_adt_types(self);
+        struct HirDecl *inst = pawP_instantiate(m->hir, base, types);
+        impl = HirGetImplDecl(inst);
+    }
+    for (int j = 0; j < impl->methods->count; ++j) {
+        struct HirDecl *method = K_LIST_GET(impl->methods, j);
+        if (pawS_eq(name, method->hdr.name)) return method;
+    }
+    return NULL;
+}
+
+struct HirDecl *pawP_find_method(struct Compiler *C, struct ModuleInfo *m, struct HirType *adt, String *name)
+{
+    struct HirDeclList *impls = impls_for_adt(C, adt);
     if (impls == NULL) return NULL; // no impl blocks
 
     for (int i = 0; i < impls->count; ++i) {
         struct HirDecl *decl = K_LIST_GET(impls, i);
-        resolve_lazy(R, decl);
-        struct HirImplDecl *impl = HirGetImplDecl(decl);
-        struct HirAdtDecl *d = get_adt(R, adt);
-        if (!is_compat(R, impl->type, d->type)) continue;
-        if (HIR_IS_POLY_IMPL(decl)) {
-            struct HirDecl *inst = instantiate(R, decl, hir_adt_types(adt));
-            impl = HirGetImplDecl(inst);
-        }
-        for (int j = 0; j < impl->methods->count; ++j) {
-            struct HirDecl *method = K_LIST_GET(impl->methods, j);
-            if (pawS_eq(name, method->hdr.name)) return method;
-        }
+        struct HirDecl *method = find_method_aux(C, m, decl, adt, name);
+        if (method != NULL) return method;
     }
     return NULL;
-    //return get_decl(R, hir_adt_did(adt));
+}
+
+static struct HirDecl *find_method(struct Resolver *R, struct HirType *adt, String *name)
+{
+    struct HirDecl *result = pawP_find_method(R->C, R->m, adt, name);
+    if (result == NULL) {
+        struct HirAdtDecl *d = get_adt(R, adt);
+        NAME_ERROR(R, "method '%s' does not exist on type '%s'",
+                name->text, d->name->text);
+    }
+    return result;
 }
 
 static void resolve_impl_item(struct Resolver *R, struct HirImplDecl *d)
@@ -864,7 +907,7 @@ static void resolve_type_decl(struct Resolver *R, struct HirTypeDecl *d)
 
 static struct HirType *infer_poly_func(struct Resolver *R, struct HirFuncDecl *base, struct HirExprList *args)
 {
-    struct Generalization g = pawP_generalize(R->C, base->generics, base->params);
+    struct Generalization g = pawP_generalize(R->m->hir, base->generics, base->params);
 
     paw_assert(args->count == g.fields->count);
     for (int i = 0; i < g.fields->count; ++i) {
@@ -932,10 +975,10 @@ static struct HirType *resolve_basic_lit(struct Resolver *R, struct HirBasicLit 
 static struct HirTypeList *resolve_operand_list(struct Resolver *R, struct HirExprList *list) 
 {                                                                                   
     if (list == NULL) return NULL;
-    struct HirTypeList *new_list = pawHir_type_list_new(R->hir);
+    struct HirTypeList *new_list = pawHir_type_list_new(R->m->hir);
     for (int i = 0; i < list->count; ++i) {                                         
         struct HirType *type = resolve_operand(R, list->data[i]);
-        pawHir_type_list_push(R->hir, new_list, type);
+        pawHir_type_list_push(R->m->hir, new_list, type);
     }                                                                               
     return new_list;
 }
@@ -955,6 +998,7 @@ static struct HirType *resolve_list_lit(struct Resolver *R, struct HirContainerL
         struct HirExpr *expr = e->items->data[i];
         struct HirType *type = resolve_operand(R, expr);
         unify(R, type, elem_t);
+        expr->hdr.type = elem_t;
     }
     return new_list_t(R, elem_t);
 }
@@ -972,6 +1016,7 @@ static struct HirType *resolve_map_lit(struct Resolver *R, struct HirContainerLi
         struct HirType *v = resolve_operand(R, field->value);
         unify(R, k, key_t);
         unify(R, v, value_t);
+        field->type = value_t;
     }
     return new_map_t(R, key_t, value_t);
 }
@@ -990,6 +1035,26 @@ static void resolve_field_expr(struct Resolver *R, struct HirFieldExpr *e)
 {
     if (e->fid < 0) resolve_expr(R, e->key);
     e->type = resolve_operand(R, e->value);
+}
+
+static struct HirExprList *collect_field_exprs(struct Resolver *R, struct HirExprList *items, Map *map, const String *adt)
+{
+    Value key;
+    paw_Env *P = ENV(R);
+    struct HirExprList *order = pawHir_expr_list_new(R->m->hir);
+    for (int i = 0; i < items->count; ++i) {
+        struct HirExpr *expr = items->data[i];
+        struct HirFieldExpr *item = HirGetFieldExpr(expr);
+        V_SET_OBJECT(&key, item->name);
+        if (pawH_contains(map, key)) {
+            NAME_ERROR(R, "duplicate field '%s' in initializer for struct '%s'", 
+                       item->name->text, adt->text);
+        }
+        Value *value = pawH_create(P, map, key);
+        V_SET_INT(value, i);
+        pawHir_expr_list_push(R->m->hir, order, expr);
+    }
+    return order;
 }
 
 static struct HirType *resolve_composite_lit(struct Resolver *R, struct HirCompositeLit *e)
@@ -1017,23 +1082,11 @@ static struct HirType *resolve_composite_lit(struct Resolver *R, struct HirCompo
         SYNTAX_ERROR(R, "unexpected curly braces on initializer for unit structure '%s'"
                         "(use name without '{}' to create unit struct)", adt->name->text);
     } else if (HIR_IS_POLY_ADT(decl)) {
-        g = pawP_generalize(R->C, adt->generics, adt->fields);
+        g = pawP_generalize(R->m->hir, adt->generics, adt->fields);
         is_inference = PAW_TRUE;
         field_types = g.fields;
     }
-    struct HirExprList *order = pawHir_expr_list_new(R->hir);
-    for (int i = 0; i < e->items->count; ++i) {
-        struct HirExpr *expr = e->items->data[i];
-        struct HirFieldExpr *item = HirGetFieldExpr(expr);
-        V_SET_OBJECT(&key, item->name);
-        if (pawH_contains(map, key)) {
-            NAME_ERROR(R, "duplicate field '%s' in initializer for struct '%s'", 
-                       item->name->text, adt->name->text);
-        }
-        Value *value = pawH_create(P, map, key);
-        V_SET_INT(value, i);
-        pawHir_expr_list_push(R->hir, order, expr);
-    }
+    struct HirExprList *order = collect_field_exprs(R, e->items, map, adt->name);
     for (int i = 0; i < adt->fields->count; ++i) {
         struct HirDecl *decl = adt->fields->data[i];
         struct HirFieldDecl *field = HirGetFieldDecl(decl);
@@ -1044,15 +1097,15 @@ static struct HirType *resolve_composite_lit(struct Resolver *R, struct HirCompo
                        field->name->text, adt->name->text);
         }
         struct HirType *type = is_inference
-                               ? field_types->data[i]
-                               : HIR_TYPEOF(adt->fields->data[i]);
+            ? field_types->data[i]
+            : HIR_TYPEOF(adt->fields->data[i]);
         struct HirExpr *item = order->data[V_INT(*value)];
         unify(R, type, resolve_operand(R, item));
         pawH_erase(map, key);
         item->field.fid = i;
     }
     paw_Int iter = PAW_ITER_INIT;
-    while (pawH_iter(map, &iter)) {
+    if (pawH_iter(map, &iter)) {
         const Value *pkey = pawH_key(map, CAST_SIZE(iter));
         NAME_ERROR(R, "unexpected field '%s' in initializer for struct '%s'",
                    V_STRING(*pkey), adt->name->text);
@@ -1205,10 +1258,10 @@ static void resolve_selector(struct Resolver *R, struct HirSelector *e)
         return;
     } 
     if (!HirIsPathType(target)) TYPE_ERROR(R, "type has no fields");
-    struct HirDecl *adt = resolve_location(R, HirGetPathType(target)->path);
     if (e->is_index) TYPE_ERROR(R, "expected field name (integer indices can "
                                    "only be used with tuples)");
-    struct HirDecl *field = expect_field(R, HirGetAdtDecl(adt), e->name);
+    struct HirAdtDecl *adt = get_adt(R, target);
+    struct HirDecl *field = expect_field(R, adt, e->name);
     e->type = HIR_TYPEOF(field);
 }
 
@@ -1257,9 +1310,13 @@ static void resolve_stmt(struct Resolver *R, struct HirStmt *stmt)
 
 static struct HirType *resolve_type(struct Resolver *R, struct HirType *type)
 {
+    if (type == NULL) return NULL;
+
     struct HirType *r;
     R->line = type->hdr.line;
     switch (HIR_KINDOF(type)) {
+        default:
+            TYPE_ERROR(R, "expected type"); // no return
         case kHirPathType: {
             struct HirPathType *path = HirGetPathType(type);
             struct HirDecl *decl = resolve_location(R, path->path);
@@ -1279,9 +1336,6 @@ static struct HirType *resolve_type(struct Resolver *R, struct HirType *type)
         case kHirGeneric:
         case kHirUnknown:
             r = type;
-            break;
-        default:
-            TYPE_ERROR(R, "expected type");
     }
     return normalize(R, r);
 }
@@ -1334,19 +1388,6 @@ static struct HirType *resolve_expr(struct Resolver *R, struct HirExpr *expr)
     return HIR_TYPEOF(expr);
 }
 
-static void map_adt_to_impl(struct Resolver *R, struct HirDecl *adt, struct HirDecl *impl)
-{
-    // map to the polymorphic ADT declaration
-    adt = resolve_symbol(R, adt->hdr.name)->decl;
-    Value *pv = pawH_get(R->impls, P2V(adt));
-    if (pv == NULL) {
-        pv = pawH_create(ENV(R), R->impls, P2V(adt)); 
-        pv->p = pawHir_decl_list_new(R->hir);
-    }
-    struct HirDeclList *impls = pv->p;
-    pawHir_decl_list_push(R->hir, impls, impl);
-}
-
 static void register_if_impl(struct Resolver *R, struct HirDecl *item)
 {
     if (!HirIsImplDecl(item)) return;
@@ -1357,14 +1398,13 @@ static void register_if_impl(struct Resolver *R, struct HirDecl *item)
     allocate_decls(R, impl->generics);
     struct HirDecl *self = resolve_location(R, impl->self);
     impl->type = HIR_TYPEOF(self);
-    map_adt_to_impl(R, self, item);
 
     leave_block(R);
 }
 
 static void resolve_item(struct Resolver *R, struct HirDecl *item)
 {
-    item->hdr.type = resolve_type(R, HIR_TYPEOF(item));
+    // TODO: should have been resolved by collect.c item->hdr.type = resolve_type(R, HIR_TYPEOF(item));
     if (HirIsFuncDecl(item)) {
         resolve_func_item(R, HirGetFuncDecl(item));
     } else if (HirIsImplDecl(item)) {
@@ -1375,17 +1415,8 @@ static void resolve_item(struct Resolver *R, struct HirDecl *item)
 static void resolve_items(struct Resolver *R, struct HirDeclList *items)
 {
     for (int i = 0; i < items->count; ++i) {
-        register_if_impl(R, items->data[i]);
-    }
-    for (int i = 0; i < items->count; ++i) {
         resolve_item(R, items->data[i]);
     }
-}
-
-static void resolve_module(struct Resolver *R)
-{
-    resolve_items(R, R->hir->prelude);
-    resolve_items(R, R->hir->items);
 }
 
 static DeclId find_builtin(struct Resolver *R, String *name)
@@ -1394,56 +1425,60 @@ static DeclId find_builtin(struct Resolver *R, String *name)
     return symbol->decl->hdr.did;
 }
 
-static void visit_module(struct Resolver *R)
+static void resolve_module(struct Resolver *R, struct ModuleInfo *mod)
 {
-    struct Hir *hir = R->hir;
-    struct HirSymtab *symtab = R->symtab;
+    struct Hir *hir = mod->hir;
+    DLOG(R, "resolving '%s'", hir->name->text);
+
+    R->symtab = pawHir_symtab_new(hir);
+    R->U->hir = hir;
+    R->m = mod;
 
     enter_block(R, NULL);
     enter_inference_ctx(R);
 
-    resolve_module(R);
+    resolve_items(R, hir->items);
 
     leave_inference_ctx(R);
     leave_block(R);
 
     // control should not be within a scope block
-    paw_assert(symtab->count == 0);
-
-    // monomorphize polymorphic functions
-    pawHir_expand_bodies(R->C, hir);
+    paw_assert(R->symtab->count == 0);
 }
 
-struct Hir *pawP_resolve(struct Compiler *C, struct Ast *ast)
+void pawP_resolve(struct Compiler *C)
 {
     paw_Env *P = ENV(C);
+    ENSURE_STACK(P, 1);
+
     struct DynamicMem *dm = C->dm;
     struct Unifier *U = &dm->unifier;
-    struct Hir *hir = pawP_lower_ast(C, ast);
-    dm->decls = pawHir_decl_list_new(hir);
-    paw_new_map(P, 0);
 
     struct Resolver R = {
-        .impls = V_MAP(P->top.p[-1]),
-        .symtab = pawHir_symtab_new(hir),
         .strings = C->strings,
+        .impls = C->impls,
         .P = ENV(C),
-        .hir = hir,
         .dm = dm,
         .U = U,
         .C = C,
     };
-    dm->hir = hir;
-    U->hir = hir;
-    U->P = P;
-    U->R = &R;
 
-    // determine the type of each toplevel item
-    R.globals = pawP_collect_items(C, hir);
+    // transform AST -> HIR and add declarations for toplevel items
+    pawP_lower_ast(C); 
+
+    // determine the type of each toplevel item in each module (allows pawP_lookup to
+    // resolve paths pointing between modules in the next pass)
+    pawP_collect_items(C);
 
     // run the type checker
-    visit_module(&R);
+    for (int i = 0; i < dm->modules->count; ++i) {
+        R.m = K_LIST_GET(dm->modules, i);
+        resolve_module(&R, R.m);
+    }
 
-    pawC_pop(P);
-    return hir;
+    // monomorphize polymorphic functions
+    for (int i = 0; i < dm->modules->count; ++i) {
+        struct ModuleInfo *mod = K_LIST_GET(dm->modules, i);
+        pawHir_expand_bodies(mod->hir);
+    }
 }

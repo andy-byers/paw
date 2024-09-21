@@ -13,8 +13,7 @@ struct Unifier {
     struct Hir *hir;
     Unify action;
     UnificationTable *table;
-    struct Resolver *R;
-    paw_Env *P;
+    struct Compiler *C;
     int depth;
 };
 

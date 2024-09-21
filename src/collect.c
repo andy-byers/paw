@@ -9,24 +9,28 @@
 //     or function signature refer either to ADTs or to generics from an 
 //     enclosing binder, meaning only ADTs are instantiated in this module.
 
+#include "debug.h"
 #include "hir.h"
 #include "gc.h"
 #include "map.h"
 
+#define DLOG(X, ...) PAWD_LOG(ENV(X), __VA_ARGS__)
 #define NAME_ERROR(X, ...) pawE_error(ENV(X), PAW_ENAME, (X)->line, __VA_ARGS__)
 #define SYNTAX_ERROR(X, ...) pawE_error(ENV(X), PAW_ESYNTAX, (X)->line, __VA_ARGS__)
 #define TYPE_ERROR(X, ...) pawE_error(ENV(X), PAW_ETYPE, (X)->line, __VA_ARGS__)
 #define CACHED_STR(X, i) pawE_cstr(ENV(X), CAST_SIZE(i))
 
 struct Collector {
+    struct Pool *pool;
     struct HirFolder F;
     struct HirSymtab *symtab;
-    struct HirScope *globals;
     struct DynamicMem *dm;
     struct Compiler *C;
-    struct Hir *hir;
+    struct ModuleInfo *m;
     struct HirType *adt;
+    Map *impls;
     paw_Env *P;
+    int nexpand;
     int line;
 };
 
@@ -35,21 +39,31 @@ struct PartialAdt {
     struct HirScope *scope;
 };
 
-static struct PartialAdt *new_partial_adt(struct Collector *X, struct HirAdtDecl *d)
+struct PartialMod {
+    struct PartialAdtList *pal;
+    struct ModuleInfo *m;
+};
+
+DEFINE_LIST(struct Collector, pa_list_, PartialAdtList, struct PartialAdt)
+DEFINE_LIST(struct Collector, pm_list_, PartialModList, struct PartialMod)
+
+static struct PartialAdt *new_partial_adt(struct Collector *X, struct HirAdtDecl *d, struct HirScope *scope)
 {
-    struct PartialAdt *pa = pawK_pool_alloc(ENV(X), &X->hir->pool, sizeof(struct PartialAdt));
-    *pa = (struct PartialAdt){.d = d};
+    struct PartialAdt *pa = pawK_pool_alloc(ENV(X), X->pool, sizeof(struct PartialAdt));
+    *pa = (struct PartialAdt){.d = d, .scope = scope};
     return pa;
 }
 
-DEFINE_LIST(struct Hir, pa_list_, PartialAdtList, struct PartialAdt)
+static struct PartialMod *new_partial_mod(struct Collector *X, struct ModuleInfo *m, struct PartialAdtList *pal)
+{
+    struct PartialMod *pm = pawK_pool_alloc(ENV(X), X->pool, sizeof(struct PartialMod));
+    *pm = (struct PartialMod){.pal = pal, .m = m};
+    return pm;
+}
 
 static DefId add_decl(struct Collector *X, struct HirDecl *decl)
 {
-    const DefId did = X->dm->decls->count;
-    pawHir_decl_list_push(X->hir, X->dm->decls, decl);
-    decl->hdr.did = did;
-    return did;
+    return pawHir_add_decl(X->m->hir, decl);
 }
 
 static struct HirScope *enclosing_scope(struct HirSymtab *st)
@@ -60,7 +74,7 @@ static struct HirScope *enclosing_scope(struct HirSymtab *st)
 
 static struct HirSymbol *add_symbol(struct Collector *X, struct HirScope *scope, String *name, struct HirDecl *decl)
 {
-    struct HirSymbol *symbol = pawHir_add_symbol(X->hir, scope);
+    struct HirSymbol *symbol = pawHir_add_symbol(X->m->hir, scope);
     symbol->name = name;
     symbol->decl = decl;
     return symbol;
@@ -80,7 +94,7 @@ static void define_local(struct HirSymbol *symbol)
 static struct HirSymbol *new_global(struct Collector *X, struct HirDecl *decl)
 {
     String *name = decl->hdr.name;
-    struct HirScope *scope = X->globals;
+    struct HirScope *scope = X->m->globals;
     for (int i = 0; i < scope->count; ++i) {
         struct HirSymbol *symbol = scope->data[i];
         if (pawS_eq(symbol->name, name)) {
@@ -108,9 +122,9 @@ static struct HirSymbol *try_resolve_symbol(struct Collector *X, const String *n
     }
 
     // search the global symbols
-    const int index = pawHir_find_symbol(X->globals, name);
+    const int index = pawHir_find_symbol(X->m->globals, name);
     if (index < 0) return NULL;
-    return X->globals->data[index];
+    return X->m->globals->data[index];
 }
 
 static struct HirSymbol *resolve_symbol(struct Collector *X, const String *name)
@@ -137,8 +151,8 @@ static struct HirScope *leave_block(struct Collector *X)
 
 static void enter_block(struct Collector *X, struct HirScope *scope)
 {
-    scope = scope != NULL ? scope : pawHir_scope_new(X->hir);
-    pawHir_symtab_push(X->hir, X->symtab, scope);
+    scope = scope != NULL ? scope : pawHir_scope_new(X->m->hir);
+    pawHir_symtab_push(X->m->hir, X->symtab, scope);
 }
 
 static struct HirScope *leave_function(struct Collector *X)
@@ -150,7 +164,7 @@ static struct HirScope *leave_function(struct Collector *X)
 
 static void create_context(struct Collector *X, struct HirDecl *decl, int line)
 {
-    struct HirDecl *result = pawHir_new_decl(X->hir, line, kHirVarDecl);
+    struct HirDecl *result = pawHir_new_decl(X->m->hir, line, kHirVarDecl);
     struct HirVarDecl *r = HirGetVarDecl(result);
     r->name = pawE_cstr(ENV(X), CSTR_SELF); // 'self'
     r->type = HIR_TYPEOF(decl);
@@ -162,7 +176,7 @@ static void create_context(struct Collector *X, struct HirDecl *decl, int line)
 static struct HirAdtDecl *get_adt(struct Collector *X, struct HirType *type)
 {
     const DeclId did = hir_adt_did(type);
-    struct HirDecl *decl = pawHir_get_decl(X->hir, did);
+    struct HirDecl *decl = pawHir_get_decl(X->m->hir, did);
     return HirGetAdtDecl(decl);
 }
 
@@ -173,7 +187,7 @@ static void enter_function(struct Collector *X, struct HirFuncDecl *func)
     if (func->fn_kind == FUNC_METHOD) {
         // methods use local slot 1 for the implicit context variable
         const DeclId did = hir_adt_did(func->self);
-        struct HirDecl *self = pawHir_get_decl(X->hir, did);
+        struct HirDecl *self = pawHir_get_decl(X->m->hir, did);
         create_context(X, self, func->line);
     }
 }
@@ -207,25 +221,37 @@ static struct HirType *collect_type(struct Collector *X, struct HirType *type)
     return X->F.FoldType(&X->F, type);
 }
 
-static struct HirDecl *instantiate_adt(struct Collector *X, struct HirDecl *base, struct HirTypeList *types)
+static void map_adt_to_impl(struct Collector *X, struct HirDecl *adt, struct HirDecl *impl)
 {
-    paw_assert(HirIsAdtDecl(base));
-    return pawP_preinstantiate(X->C, base, types);
+    Value *pv = pawH_get(X->impls, P2V(adt));
+    if (pv == NULL) {
+        pv = pawH_create(ENV(X), X->impls, P2V(adt)); 
+        pv->p = pawHir_decl_list_new(X->m->hir);
+    }
+    struct HirDeclList *impls = pv->p;
+    pawHir_decl_list_push(X->m->hir, impls, impl);
 }
 
 static struct HirType *collect_path(struct Collector *X, struct HirPath *path)
 {
-    struct HirSegment *seg = K_LIST_GET(path, 0);
-    seg->types = X->F.FoldTypeList(&X->F, seg->types);
-    struct HirSymbol *sym = resolve_symbol(X, seg->name);
-    struct HirDecl *decl = sym->decl;
-    if (HirIsGenericDecl(decl)) return HIR_TYPEOF(decl); 
-    seg->base = seg->did = decl->hdr.did;
-    if (HirIsInstanceDecl(decl)) return HIR_TYPEOF(decl);
-    if (!HirIsAdtDecl(decl)) TYPE_ERROR(X, "'%s' is not a type", sym->name->text);
-    struct HirDecl *inst = instantiate_adt(X, decl, seg->types);
-    seg->did = inst->hdr.did;
-    return HIR_TYPEOF(inst);
+    for (int i = 0; i < path->count; ++i) {
+        struct HirSegment *seg = K_LIST_GET(path, i);
+        seg->types = X->F.FoldTypeList(&X->F, seg->types);
+    }
+    if (path->count == 1) {
+        // check this module first, including local scopes
+        struct HirSegment *seg = K_LIST_GET(path, 0);
+        struct HirSymbol *sym = try_resolve_symbol(X, seg->name);
+        if (sym != NULL) {
+            struct HirDecl *inst = pawP_instantiate(X->m->hir, sym->decl, seg->types);
+            seg->modno = X->m->hir->modno;
+            seg->base = sym->decl->hdr.did;
+            seg->did = inst->hdr.did;
+            return HIR_TYPEOF(inst);
+        }
+    }
+    struct HirDecl *result = pawP_lookup(X->C, X->m, path);
+    return HIR_TYPEOF(result);
 }
 
 // Resolve a toplevel path
@@ -249,13 +275,13 @@ static struct HirDecl *get_decl(struct Collector *X, DefId did)
 
 static struct HirType *new_type(struct Collector *X, DeclId did, enum HirTypeKind kind, int line)
 {
-    return pawHir_attach_type(X->hir, did, kind, line);
+    return pawHir_attach_type(X->m->hir, did, kind, line);
 }
 
 static struct HirType *register_decl_type(struct Collector *X, struct HirDecl *decl, enum HirTypeKind kind)
 {
-    const DeclId did = add_decl(X, decl);
-    return pawHir_attach_type(X->hir, did, kind, decl->hdr.line);
+    const DeclId did = decl->hdr.did;
+    return pawHir_attach_type(X->m->hir, did, kind, decl->hdr.line);
 }
 
 static void register_generics(struct Collector *X, struct HirDeclList *generics)
@@ -275,12 +301,12 @@ static void register_generics(struct Collector *X, struct HirDeclList *generics)
 static struct HirTypeList *collect_generic_types(struct Collector *X, struct HirDeclList *generics)
 {
     if (generics == NULL) return NULL;
-    return pawHir_collect_generics(X->hir, generics);
+    return pawHir_collect_generics(X->m->hir, generics);
 }
 
 static struct HirTypeList *collect_field_types(struct Collector *X, struct HirDeclList *fields)
 {
-    return pawHir_collect_fields(X->hir, fields);
+    return pawHir_collect_fields(X->m->hir, fields);
 }
 
 static struct HirType *register_func(struct Collector *X, struct HirFuncDecl *d)
@@ -290,6 +316,7 @@ static struct HirType *register_func(struct Collector *X, struct HirFuncDecl *d)
     t->types = collect_generic_types(X, d->generics);
     t->params = collect_field_types(X, d->params);
     t->result = collect_type(X, d->result);
+    t->modno = X->m->hir->modno;
     t->base = t->did = d->did;
     return type;
 }
@@ -298,20 +325,20 @@ static struct HirType *register_adt(struct Collector *X, struct HirAdtDecl *d)
 {
     struct HirType *type = register_decl_type(X, HIR_CAST_DECL(d), kHirPathType);
     struct HirPathType *t = HirGetPathType(type);
-    t->path = pawHir_path_new(X->hir);
+    t->path = pawHir_path_new(X->m->hir);
 
     struct HirTypeList *generics = d->generics != NULL
         ? collect_generic_types(X, d->generics)
         : NULL;
 
-    struct HirSegment *seg = pawHir_path_add(X->hir, t->path, d->name, generics);
+    struct HirSegment *seg = pawHir_path_add(X->m->hir, t->path, d->name, generics);
     seg->base = seg->did = d->did;
+    seg->modno = X->m->hir->modno;
     return type;
 }
 
 static void collect_field_decl(struct Collector *X, struct HirFieldDecl *d)
 {
-    add_decl(X, HIR_CAST_DECL(d));
     d->type = collect_type(X, d->tag);
 }
 
@@ -346,10 +373,11 @@ static void collect_variant_decl(struct Collector *X, struct HirVariantDecl *d)
     // E {X(str)}', E::X has type 'fn(str) -> E'.
     struct HirType *type = register_decl_type(X, HIR_CAST_DECL(d), kHirFuncDef);
     struct HirFuncDef *t = HirGetFuncDef(type);
+    t->modno = X->m->hir->modno;
     t->base = d->did;
     t->params = d->fields != NULL
         ? collect_field_types(X, d->fields)
-        : pawHir_type_list_new(X->hir);
+        : pawHir_type_list_new(X->m->hir);
     t->result = X->adt;
     d->type = type;
 }
@@ -410,7 +438,10 @@ static void expand_adt(struct Collector *X, struct HirAdtDecl *d)
 {
     for (int i = 0; i < d->monos->count; ++i) {
         struct HirDecl *inst = K_LIST_GET(d->monos, i);
-        if (HirIsInstanceDecl(inst)) pawHir_expand_adt(X->C, d, inst);
+        if (HirIsInstanceDecl(inst)) {
+            pawHir_expand_adt(X->m->hir, d, inst);
+            ++X->nexpand;
+        }
     }
 }
 
@@ -419,20 +450,9 @@ static void correct_adt_decl(struct Collector *X, struct HirAdtDecl *d)
     if (d->monos != NULL) expand_adt(X, d);
 }
 
-static void register_methods(struct Collector *X, struct HirDeclList *methods, struct HirType *self)
-{
-    Map *map = start_dupcheck(X);
-
-    for (int i = 0; i < methods->count; ++i) {
-        struct HirDecl *decl = K_LIST_GET(methods, i);
-        dupcheck(X, map, decl->hdr.name, "method");
-    }
-
-    finish_dupcheck(X);
-}
-
 static void collect_methods(struct Collector *X, struct HirDeclList *methods)
 {
+    // TODO: Need to prevent duplicates between different impl blocks on the same type
     Map *map = start_dupcheck(X);
     for (int i = 0; i < methods->count; ++i) {
         struct HirDecl *decl = K_LIST_GET(methods, i);
@@ -444,76 +464,149 @@ static void collect_methods(struct Collector *X, struct HirDeclList *methods)
     finish_dupcheck(X);
 }
 
-static struct HirType *collect_self(struct Collector *X, struct HirPath *path)
+static struct HirType *collect_self(struct Collector *X, struct HirImplDecl *d)
 {
     String *name = SCAN_STRING(X->C, "Self");
-    struct HirType *self = collect_path(X, path);
-    struct HirDecl *decl = get_decl(X, hir_adt_did(self));
-    struct HirSymbol *symbol = new_local(X, name, decl);
+    struct HirType *self = collect_path(X, d->self);
+    struct HirDecl *base = get_decl(X, hir_adt_base(self));
+    struct HirDecl *inst = get_decl(X, hir_adt_did(self));
+    struct HirSymbol *symbol = new_local(X, name, inst);
+    map_adt_to_impl(X, base, HIR_CAST_DECL(d));
     symbol->is_type = PAW_TRUE;
     return self;
 }
 
 static void collect_impl_decl(struct Collector *X, struct HirImplDecl *d)
 {
-    add_decl(X, HIR_CAST_DECL(d));
-
     enter_block(X, NULL);
     register_generics(X, d->generics);
     d->subst = collect_generic_types(X, d->generics);
-    WITH_ADT_CONTEXT(X, 
-            collect_self(X, d->self), 
+    d->type = collect_self(X, d);
+    WITH_ADT_CONTEXT(X, d->type,
             collect_methods(X, d->methods););
     leave_block(X);
 }
 
-static void collect_items(struct Collector *X, struct HirDeclList *items)
+static struct ModuleInfo *use_module(struct Collector *X, struct ModuleInfo *m)
 {
-    struct PartialAdtList *pa_list = pa_list_new(X->hir);
+    X->m = m;
+    return m;
+}
+
+static struct PartialAdtList *register_adts(struct Collector *X, struct HirDeclList *items)
+{
+    struct PartialAdtList *list = pa_list_new(X);
     for (int i = 0; i < items->count; ++i) {
         struct HirDecl *item = K_LIST_GET(items, i);
         if (!HirIsAdtDecl(item)) continue;
-        struct PartialAdt *pa = new_partial_adt(X, HirGetAdtDecl(item));
-        pa->scope = register_adt_decl(X, HirGetAdtDecl(item));
-        pa_list_push(X->hir, pa_list, pa);
+        struct HirAdtDecl *d = HirGetAdtDecl(item);
+        struct HirScope *scope = register_adt_decl(X, d);
+        struct PartialAdt *pa = new_partial_adt(X, d, scope);
+        pa_list_push(X, list, pa);
     }
-    for (int i = 0; i < pa_list->count; ++i) {
-        struct PartialAdt *pa = K_LIST_GET(pa_list, i);
+    return list;
+}
+
+static void collect_adts(struct Collector *X, struct PartialAdtList *list)
+{
+    for (int i = 0; i < list->count; ++i) {
+        struct PartialAdt *pa = K_LIST_GET(list, i);
         collect_adt_decl(X, pa);
     }
-    for (int i = 0; i < items->count; ++i) {
-        struct HirDecl *item = K_LIST_GET(items, i);
+}
+
+static struct PartialModList *collect_phase_1(struct Collector *X, struct ModuleList *ml)
+{
+    struct PartialModList *pml = pm_list_new(X);
+
+    // collect toplevel ADT names and type parameters
+    for (int i = 0; i < ml->count; ++i) {
+        struct ModuleInfo *m = use_module(X, K_LIST_GET(ml, i));
+        if (X->symtab == NULL) {
+            X->symtab = pawHir_symtab_new(m->hir); // TODO: create symtab using Compiler * instead of Hir *
+        }
+        paw_assert(m->globals->count == 0);
+        struct PartialAdtList *pal = register_adts(X, m->hir->items);
+        struct PartialMod *pm = new_partial_mod(X, m, pal);
+        pm_list_push(X, pml, pm);
+        m->globals = X->m->globals;
+    }
+
+    // fill in toplevel ADT field types (may instantiate polymorphic ADTs)
+    for (int i = 0; i < pml->count; ++i) {
+        struct PartialMod *pm = K_LIST_GET(pml, i);
+        use_module(X, pm->m);
+        collect_adts(X, pm->pal);
+    }
+
+    return pml;
+}
+
+static void correct_adts(struct Collector *X, struct PartialAdtList *list)
+{
+    for (int i = 0; i < list->count; ++i) {
+        struct PartialAdt *pa = K_LIST_GET(list, i);
+        correct_adt_decl(X, pa->d);
+    }
+}
+
+static void monomorphize_adts(struct Collector *X, struct PartialModList *pml)
+{
+    do {
+        X->nexpand = 0; 
+        for (int i = 0; i < pml->count; ++i) {
+            struct PartialMod *pm = K_LIST_GET(pml, i);
+            use_module(X, pm->m);
+            correct_adts(X, pm->pal);
+        }
+        DLOG(X, "expanded %d ADTs", X->nexpand);
+    } while (X->nexpand > 0);
+}
+
+static void collect_items(struct Collector *X, struct Hir *hir)
+{
+    X->symtab = pawHir_symtab_new(hir);
+    for (int i = 0; i < hir->items->count; ++i) {
+        struct HirDecl *item = K_LIST_GET(hir->items, i);
         if (HirIsFuncDecl(item)) {
             collect_func_decl(X, HirGetFuncDecl(item));
         } else if (HirIsImplDecl(item)) {
             collect_impl_decl(X, HirGetImplDecl(item));
         }
     }
-    for (int i = 0; i < pa_list->count; ++i) {
-        struct PartialAdt *pa = K_LIST_GET(pa_list, i);
-        correct_adt_decl(X, pa->d);
+}
+
+static void collect_phase_2(struct Collector *X, struct ModuleList *ml, struct PartialModList *pml)
+{
+    // collect toplevel function and method types
+    for (int i = 0; i < ml->count; ++i) {
+        struct ModuleInfo *m = use_module(X, K_LIST_GET(ml, i));
+        collect_items(X, m->hir);
     }
+
+    // monomorphize polymorphic ADTs
+    monomorphize_adts(X, pml);
 }
 
 // Entrypoint to item collection
-struct HirScope *pawP_collect_items(struct Compiler *C, struct Hir *hir)
+void pawP_collect_items(struct Compiler *C)
 {
+    struct DynamicMem *dm = C->dm;
     struct Collector X = {
-        .globals = pawHir_scope_new(hir),
-        .symtab = pawHir_symtab_new(hir),
-        .dm = C->dm,
+        .pool = &dm->pool,
+        .impls = C->impls,
         .P = ENV(C),
-        .hir = hir,
+        .dm = dm,
         .C = C,
     };
-    pawHir_folder_init(&X.F, hir, &X);
+    pawHir_folder_init(&X.F, NULL /*TODO*/, &X);
     X.F.FoldPathType = fold_path_type;
 
-    struct Unifier *U = &X.dm->unifier;
-    pawU_enter_binder(U);
-    collect_items(&X, hir->prelude);
-    collect_items(&X, hir->items);
-    pawU_leave_binder(U);
+    DLOG(&X, "collecting %d module(s)", dm->modules->count);
 
-    return X.globals;
+    struct PartialModList *pml = collect_phase_1(&X, dm->modules);
+    collect_phase_2(&X, dm->modules, pml);
+
+    // finished with collection, indicate that ADTs should now be fully instantiated
+    pawP_set_instantiate(C, PAW_TRUE);
 }

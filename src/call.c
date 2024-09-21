@@ -198,7 +198,7 @@ CallFrame *pawC_precall(paw_Env *P, StackPtr base, Object *callable, int argc)
     }
     Proto *p = fn->p;
     const ptrdiff_t offset = SAVE_OFFSET(P, base);
-    const size_t frame_size = p->max_stack + STACK_EXTRA;
+    const int frame_size = p->max_stack + STACK_EXTRA;
     ENSURE_STACK(P, frame_size);
     base = RESTORE_POINTER(P, offset);
 

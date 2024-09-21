@@ -11,32 +11,29 @@
 #define FIRST_ARENA_SIZE 4096
 #define LARGE_ARENA_MIN 32
 
-struct Ast *pawAst_new(struct Compiler *C)
+struct Ast *pawAst_new(struct Compiler *C, String *name, int modno)
 {
     paw_Env *P = ENV(C);
-    struct DynamicMem *dm = C->dm;
-    dm->ast = pawM_new(P, struct Ast);
-    *dm->ast = (struct Ast){
+    struct Ast *ast = pawK_pool_alloc(P, C->pool, sizeof(struct Ast));
+    *ast = (struct Ast){
+        .modno = modno,
+        .pool = C->pool,
+        .name = name,
         .P = P,
     };
-    // initialize memory pools for storing AST components
-    pawK_pool_init(P, &dm->ast->pool, FIRST_ARENA_SIZE, sizeof(void *) * LARGE_ARENA_MIN);
-    return dm->ast;
+    ast->items = pawAst_decl_list_new(ast);
+    return ast;
 }
 
 void pawAst_free(struct Ast *ast)
 {
-    if (ast != NULL) {
-        paw_Env *P = ENV(ast);
-        pawK_pool_uninit(P, &ast->pool);
-        pawM_free(P, ast);
-    }
+    PAW_UNUSED(ast);
 }
 
 #define DEFINE_NODE_CONSTRUCTOR(name, T) \
     struct T *pawAst_new_##name(struct Ast *ast, int line, enum T##Kind kind) \
     { \
-        struct T *r = pawK_pool_alloc(ENV(ast), &(ast)->pool, sizeof(struct T)); \
+        struct T *r = pawK_pool_alloc(ENV(ast), (ast)->pool, sizeof(struct T)); \
         r->hdr.line = line; \
         r->hdr.kind = kind; \
         return r; \
@@ -47,7 +44,7 @@ DEFINE_NODE_CONSTRUCTOR(stmt, AstStmt)
 
 struct AstSegment *pawAst_segment_new(struct Ast *ast)
 {
-    return pawK_pool_alloc(ENV(ast), &ast->pool, sizeof(struct AstSegment));
+    return pawK_pool_alloc(ENV(ast), ast->pool, sizeof(struct AstSegment));
 }
 
 #if defined(PAW_DEBUG_EXTRA)

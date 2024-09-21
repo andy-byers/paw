@@ -179,7 +179,7 @@ void pawK_pool_init(paw_Env *P, struct Pool *pool, size_t base_size, size_t min_
 
 static void free_arena_list(paw_Env *P, Arena *a)
 {
-    while (a) {
+    while (a != NULL) {
         Arena *prev = a->prev;
         pawM_free_flex(P, a, a->size, 1);
         a = prev;

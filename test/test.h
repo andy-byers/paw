@@ -6,6 +6,7 @@
 #define PAW_TEST_H
 
 #include "paw.h"
+#include "os.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -50,7 +51,7 @@ struct TestAlloc {
 #define READ_MAX 16
 
 struct TestReader {
-    FILE *file;
+    File *file;
     const char *data;
     char buf[READ_MAX];
     size_t ndata;

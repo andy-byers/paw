@@ -23,9 +23,9 @@ static void grow_buffer(paw_Env *P, Buffer *buf, int boxloc)
         // Add a new Foreign 'box' to contain the buffer. Prevents a memory leak
         // if an error is thrown before the buffer is freed.
         Value *pbox = &P->top.p[boxloc];
-        Foreign *ud = pawV_new_foreign(P, alloc, 0, pbox);
-        memcpy(ud->data, buf->stack, buf->size);
-        buf->data = ud->data;
+        Foreign *f = pawV_new_foreign(P, alloc, 0, pbox);
+        memcpy(f->data, buf->stack, buf->size);
+        buf->data = f->data;
     }
     buf->alloc = alloc;
 }

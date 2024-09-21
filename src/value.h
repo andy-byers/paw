@@ -303,6 +303,10 @@ typedef struct Variant {
 Variant *pawV_new_variant(paw_Env *P, int k, int nfields);
 void pawV_free_variant(paw_Env *P, Variant *var);
 
+enum {
+    VBOX_FILE = 1,
+};
+
 typedef struct Foreign {
     GC_HEADER;
     uint8_t flags;

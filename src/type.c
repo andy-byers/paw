@@ -150,7 +150,6 @@ static void print_adt(paw_Env *P, Buffer *buffer, struct Adt *type)
 {
     struct Def *def = Y_DEF(P, type->did);
     const String *name = def->hdr.name;
-
     struct Type *base = Y_CAST_TYPE(type);
     pawL_add_nstring(P, buffer, name->text, name->length);
     if (base->nsubtypes > 0) {

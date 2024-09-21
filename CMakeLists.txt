@@ -73,12 +73,16 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/env.c
             ${PAW_SOURCE_DIR}/gc.c
             ${PAW_SOURCE_DIR}/hir.c
+            ${PAW_SOURCE_DIR}/import.c
             ${PAW_SOURCE_DIR}/instantiate.c
+            ${PAW_SOURCE_DIR}/iomod.c
             ${PAW_SOURCE_DIR}/lex.c
             ${PAW_SOURCE_DIR}/list.c
             ${PAW_SOURCE_DIR}/lib.c
+            ${PAW_SOURCE_DIR}/lookup.c
             ${PAW_SOURCE_DIR}/lower_ast.c
             ${PAW_SOURCE_DIR}/map.c
+            ${PAW_SOURCE_DIR}/mathmod.c
             ${PAW_SOURCE_DIR}/mem.c
             ${PAW_SOURCE_DIR}/os.c
             ${PAW_SOURCE_DIR}/parse.c

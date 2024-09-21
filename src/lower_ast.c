@@ -11,6 +11,7 @@
 #include "hir.h"
 #include "map.h"
 #include "mem.h"
+#include "opcode.h"
 #include "parse.h"
 #include "str.h"
 #include "unify.h"
@@ -23,10 +24,16 @@ struct LowerAst {
     struct DynamicMem *dm;
     struct Compiler *C;
     struct Hir *hir;
-//    struct HirType *adt;
     paw_Env *P;
     int line;
 };
+
+static struct HirDecl *new_decl(struct LowerAst *L, int line, enum HirDeclKind kind)
+{
+    struct HirDecl *decl = pawHir_new_decl(L->hir, line, kind);
+    pawHir_add_decl(L->hir, decl);
+    return decl;
+}
 
 static struct HirStmt *lower_stmt(struct LowerAst *, struct AstStmt *);
 static struct HirExpr *lower_expr(struct LowerAst *, struct AstExpr *);
@@ -86,7 +93,7 @@ static void register_func(struct LowerAst *L, struct AstFuncDecl *d, struct HirF
 
 static struct HirDecl *LowerFieldDecl(struct LowerAst *L, struct AstFieldDecl *d)
 {
-    struct HirDecl *result = pawHir_new_decl(L->hir, d->line, kHirFieldDecl);
+    struct HirDecl *result = new_decl(L, d->line, kHirFieldDecl);
     struct HirFieldDecl *r = HirGetFieldDecl(result);
 
     r->name =  d->name;
@@ -96,7 +103,7 @@ static struct HirDecl *LowerFieldDecl(struct LowerAst *L, struct AstFieldDecl *d
 
 static struct HirDecl *LowerVariantDecl(struct LowerAst *L, struct AstVariantDecl *d)
 {
-    struct HirDecl *result = pawHir_new_decl(L->hir, d->line, kHirVariantDecl);
+    struct HirDecl *result = new_decl(L, d->line, kHirVariantDecl);
     struct HirVariantDecl *r = HirGetVariantDecl(result);
     r->index = d->index;
     r->name = d->name;
@@ -262,7 +269,7 @@ static struct HirType *new_map_t(struct LowerAst *L, struct HirType *key_t, stru
 
 static struct HirDecl *lower_closure_param(struct LowerAst *L, struct AstFieldDecl *d)
 {
-    struct HirDecl *result = pawHir_new_decl(L->hir, d->line, kHirFieldDecl);
+    struct HirDecl *result = new_decl(L, d->line, kHirFieldDecl);
     struct HirFieldDecl *r = HirGetFieldDecl(result);
 
     r->name = d->name;
@@ -296,9 +303,20 @@ static struct HirExpr *LowerClosureExpr(struct LowerAst *L, struct AstClosureExp
     return result;
 }
 
+static struct HirDecl *LowerUseDecl(struct LowerAst *L, struct AstUseDecl *d)
+{
+    struct HirDecl *result = new_decl(L, d->line, kHirUseDecl);
+    struct HirUseDecl *r = HirGetUseDecl(result);
+    r->is_pub = d->is_pub;
+    r->path = lower_path(L, d->path);
+    r->modno = d->modno;
+    r->name = d->name;
+    return result;
+}
+
 static struct HirDecl *LowerAdtDecl(struct LowerAst *L, struct AstAdtDecl *d)
 {
-    struct HirDecl *result = pawHir_new_decl(L->hir, d->line, kHirAdtDecl);
+    struct HirDecl *result = new_decl(L, d->line, kHirAdtDecl);
     struct HirAdtDecl *r = HirGetAdtDecl(result);
     r->is_pub = d->is_pub;
     r->is_struct = d->is_struct;
@@ -312,7 +330,7 @@ static struct HirDecl *LowerAdtDecl(struct LowerAst *L, struct AstAdtDecl *d)
 
 static struct HirDecl *LowerImplDecl(struct LowerAst *L, struct AstImplDecl *d)
 {
-    struct HirDecl *result = pawHir_new_decl(L->hir, d->line, kHirImplDecl);
+    struct HirDecl *result = new_decl(L, d->line, kHirImplDecl);
     struct HirImplDecl *r = HirGetImplDecl(result);
     r->name = d->name;
 
@@ -327,7 +345,7 @@ static struct HirDecl *LowerImplDecl(struct LowerAst *L, struct AstImplDecl *d)
 
 static struct HirDecl *LowerVarDecl(struct LowerAst *L, struct AstVarDecl *d)
 {
-    struct HirDecl *result = pawHir_new_decl(L->hir, d->line, kHirVarDecl);
+    struct HirDecl *result = new_decl(L, d->line, kHirVarDecl);
     struct HirVarDecl *r = HirGetVarDecl(result);
 
     r->name = d->name;
@@ -338,7 +356,7 @@ static struct HirDecl *LowerVarDecl(struct LowerAst *L, struct AstVarDecl *d)
 
 static struct HirDecl *LowerTypeDecl(struct LowerAst *L, struct AstTypeDecl *d)
 {
-    struct HirDecl *result = pawHir_new_decl(L->hir, d->line, kHirTypeDecl);
+    struct HirDecl *result = new_decl(L, d->line, kHirTypeDecl);
     struct HirTypeDecl *r = HirGetTypeDecl(result);
     r->generics = NULL; // TODO: generic parameters for aliases
 
@@ -457,7 +475,7 @@ static struct HirExpr *LowerLiteralExpr(struct LowerAst *L, struct AstLiteralExp
 
 static struct HirDecl *LowerFuncDecl(struct LowerAst *L, struct AstFuncDecl *d)
 {
-    struct HirDecl *result = pawHir_new_decl(L->hir, d->line, kHirFuncDecl);
+    struct HirDecl *result = new_decl(L, d->line, kHirFuncDecl);
     struct HirFuncDecl *r = HirGetFuncDecl(result);
     register_func(L, d, r);
 
@@ -498,7 +516,7 @@ static struct HirStmt *LowerWhileStmt(struct LowerAst *L, struct AstWhileStmt *s
 
 static void visit_forbody(struct LowerAst *L, String *iname, struct AstBlock *b, struct HirForStmt *r)
 {
-    r->control = pawHir_new_decl(L->hir, b->line, kHirVarDecl);
+    r->control = new_decl(L, b->line, kHirVarDecl);
     struct HirVarDecl *control = HirGetVarDecl(r->control);
     control->name = iname;
 
@@ -583,7 +601,7 @@ static struct HirStmt *LowerDeclStmt(struct LowerAst *L, struct AstDeclStmt *s)
 
 static struct HirDecl *LowerGenericDecl(struct LowerAst *L, struct AstGenericDecl *d)
 {
-    struct HirDecl *result = pawHir_new_decl(L->hir, d->line, kHirGenericDecl);
+    struct HirDecl *result = new_decl(L, d->line, kHirGenericDecl);
     struct HirGenericDecl *r = HirGetGenericDecl(result);
     r->name = d->name;
     return result;
@@ -605,8 +623,18 @@ static struct HirType *LowerContainerType(struct LowerAst *L, struct AstContaine
     return new_map_t(L, first, second);
 }
 
+static struct HirType *unit_type(struct LowerAst *L)
+{
+    struct HirType *result = new_type(L, kHirPathType, 0);
+    struct HirPathType *r = HirGetPathType(result);
+    r->path = pawHir_path_new(L->hir);
+    pawHir_path_add(L->hir, r->path, SCAN_STRING(L->C, "(unit)"), NULL);
+    return result;
+}
+
 static struct HirType *LowerTupleType(struct LowerAst *L, struct AstTupleType *e)
 {
+    if (e->types->count == 0) return unit_type(L);
     struct HirType *result = new_type(L, kHirTupleType, e->line);
     struct HirTupleType *r = HirGetTupleType(result);
     r->elems = lower_type_list(L, e->types);
@@ -648,7 +676,6 @@ static struct HirStmt *lower_stmt(struct LowerAst *L, struct AstStmt *stmt)
 
 static struct HirExpr *lower_expr(struct LowerAst *L, struct AstExpr *expr)
 {
-    struct HirExpr *r;
     L->line = expr->hdr.line;
     switch (AST_KINDOF(expr)) {
         case kAstLiteralExpr:
@@ -682,7 +709,6 @@ static struct HirExpr *lower_expr(struct LowerAst *L, struct AstExpr *expr)
 
 static struct HirType *lower_type(struct LowerAst *L, struct AstExpr *expr)
 {
-    struct HirType *r;
     L->line = expr->hdr.line;
     switch (AST_KINDOF(expr)) {
         default:
@@ -698,21 +724,39 @@ static struct HirType *lower_type(struct LowerAst *L, struct AstExpr *expr)
     }
 }
 
-// Entrypoint to AST lowering
-struct Hir *pawP_lower_ast(struct Compiler *C, struct Ast *ast)
+static struct Hir *lower_ast(struct LowerAst *L, struct Ast *ast)
 {
-    paw_Env *P = ENV(C);
-    struct Hir *hir = pawHir_new(C);
+    struct ModuleList *mods = L->dm->modules;
+    while (ast->modno >= mods->count) {
+        pawP_mod_list_push(L->C, mods, NULL);
+    }
+    L->hir = pawHir_new(L->C, ast->name, ast->modno);
+    L->hir->modno = ast->modno;
+    if (L->C->dm->decls == NULL) {
+        // TODO: should have functions like pawHir_decl_list_new take a Compiler * instead of an Hir *,
+        //       then allocate this list in pawP_startup
+        L->C->dm->decls = pawHir_decl_list_new(L->hir);
+    }
+    struct ModuleInfo *mod = pawP_mi_new(L->C, L->hir);
+    K_LIST_SET(mods, L->hir->modno, mod);
+    L->hir->items = lower_decl_list(L, ast->items);
+    return L->hir;
+}
+
+void pawP_lower_ast(struct Compiler *C)
+{
     struct LowerAst L = {
         .dm = C->dm,
-        .hir = hir,
         .P = ENV(C),
         .C = C,
     };
-    C->dm->hir = hir;
-    C->dm->decls = pawHir_decl_list_new(hir);
 
-    hir->prelude = lower_decl_list(&L, ast->prelude);
-    hir->items = lower_decl_list(&L, ast->items);
-    return hir;
+    // prelude must be lowered first, so its first DeclId is equal to 0
+    lower_ast(&L, C->prelude);
+
+    paw_Int itr = PAW_ITER_INIT;
+    while (pawH_iter(C->imports, &itr)) {
+        Value *pv = pawH_value(C->imports, itr);
+        lower_ast(&L, pv->p);
+    }
 }

@@ -3,6 +3,7 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
 #include "compile.h"
+#include "api.h"
 #include "ast.h"
 #include "gc.h"
 #include "hir.h"
@@ -13,6 +14,7 @@
 // ORDER TokenKind
 static const char *kKeywords[] = {
     "pub",
+    "use",
     "fn",
     "type",
     "enum",
@@ -99,19 +101,19 @@ String *pawP_scan_nstring(paw_Env *P, Map *st, const char *s, size_t n)
 
 static void define_basic(struct Compiler *C, const char *name, enum BuiltinKind kind)
 {
-    struct Ast *ast = C->dm->ast;
+    struct Ast *ast = C->prelude;
     struct AstDecl *decl = pawAst_new_decl(ast, 0, kAstAdtDecl);
     struct AstAdtDecl *r = AstGetAdtDecl(decl);
     r->name = SCAN_STRING(C, name);
     r->is_pub = PAW_TRUE;
-    pawAst_decl_list_push(ast, ast->prelude, decl);
+    pawAst_decl_list_push(ast, ast->items, decl);
     C->builtins[kind] = (struct Builtin){
         .name = r->name,
         .did = NO_DECL,
     };
 }
 
-static void define_prelude(struct Compiler *C, const char *name, enum BuiltinKind kind)
+static void define_adt(struct Compiler *C, const char *name, enum BuiltinKind kind)
 {
     C->builtins[kind] = (struct Builtin){
         .name = SCAN_STRING(C, name),
@@ -119,17 +121,37 @@ static void define_prelude(struct Compiler *C, const char *name, enum BuiltinKin
     };
 }
 
+#define FIRST_ARENA_SIZE 4096
+#define LARGE_ARENA_MIN (32 * sizeof(void *))
+
 void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const char *modname)
 {
-    Value *pv = pawC_push0(P);
+    ENSURE_STACK(P, 4);
+
+    // '.strings' anchors all strings used during compilation so they are not
+    // collected by the GC.
     Map *strings = pawH_new(P);
-    V_SET_OBJECT(pv, strings);
-    pv = pawC_push0(P);
+    V_SET_OBJECT(P->top.p++, strings);
+
     Map *types = pawH_new(P);
-    V_SET_OBJECT(pv, types);
+    V_SET_OBJECT(P->top.p++, types);
+
+    // '.imports' maps modules names to ASTs for each module being compiled.
+    Map *imports = pawH_new(P);
+    V_SET_OBJECT(P->top.p++, imports);
+
+    // '.impls' maps each ADT to a list containing all of their 'impl' blocks. 
+    // Includes ADTs from all modules being compiled.
+    Map *impls = pawH_new(P);
+    V_SET_OBJECT(P->top.p++, impls);
+
+    pawK_pool_init(P, &dm->pool, FIRST_ARENA_SIZE, LARGE_ARENA_MIN);
 
     *C = (struct Compiler){
+        .pool = &dm->pool,
+        .imports = imports,
         .strings = strings,
+        .impls = impls,
         .types = types,
         .dm = dm,
         .P = P,
@@ -137,9 +159,11 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const c
     P->modname = SCAN_STRING(C, modname);
     C->modname = P->modname;
 
-    // AST is created early to store builtins
-    dm->ast = pawAst_new(C);
-    dm->ast->prelude = pawAst_decl_list_new(dm->ast);
+    pawP_set_instantiate(C, PAW_FALSE);
+    C->prelude = pawAst_new(C, SCAN_STRING(C, "prelude"), 0);
+
+    C->dm->modules = pawP_mod_list_new(C);
+    C->dm->unifier.C = C;
 
     // builtin primitives
     define_basic(C, "(unit)", BUILTIN_UNIT);
@@ -150,19 +174,28 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const c
 
     // builtin containers (in Paw code, _List<T> can be written as [T], and 
     // _Map<K, V> as [K: V])
-    define_prelude(C, "_List", BUILTIN_LIST);
-    define_prelude(C, "_Map", BUILTIN_MAP);
+    define_adt(C, "_List", BUILTIN_LIST);
+    define_adt(C, "_Map", BUILTIN_MAP);
 
     // builtin enumerations
-    define_prelude(C, "Option", BUILTIN_OPTION);
-    define_prelude(C, "Result", BUILTIN_RESULT);
+    define_adt(C, "Option", BUILTIN_OPTION);
+    define_adt(C, "Result", BUILTIN_RESULT);
 }
 
-void pawP_teardown(paw_Env *P, const struct DynamicMem *dm)
+void pawP_teardown(paw_Env *P, struct DynamicMem *dm)
 {
+    pawK_pool_uninit(P, &dm->pool);
     pawM_free_vec(P, dm->labels.values, dm->labels.capacity);
     pawM_free_vec(P, dm->scratch.data, dm->scratch.alloc);
     pawM_free_vec(P, dm->vars.data, dm->vars.alloc);
-    pawAst_free(dm->ast);
-    pawHir_free(dm->hir);
+}
+
+struct ModuleInfo *pawP_mi_new(struct Compiler *C, struct Hir *hir)
+{
+    struct ModuleInfo *mi = pawK_pool_alloc(ENV(C), C->pool, sizeof(*mi));
+    *mi = (struct ModuleInfo){
+        .globals = pawHir_scope_new(hir),
+        .hir = hir,
+    };
+    return mi;
 }

@@ -9,6 +9,7 @@
 #include "gc.h"
 #include "map.h"
 #include "mem.h"
+#include "os.h"
 #include "rt.h"
 #include "str.h"
 
@@ -213,10 +214,13 @@ Foreign *pawV_new_foreign(paw_Env *P, size_t size, int nfields, Value *out)
     return ud;
 }
 
-void pawV_free_foreign(paw_Env *P, Foreign *ud)
+void pawV_free_foreign(paw_Env *P, Foreign *f)
 {
-    pawM_free_vec(P, ud->data, ud->size);
-    pawM_free_flex(P, ud, CAST_SIZE(ud->nfields), sizeof(ud->fields[0]));
+    if (f->flags == VBOX_FILE) {
+        pawO_close(f->data);
+    }
+    pawM_free_vec(P, f->data, f->size);
+    pawM_free_flex(P, f, CAST_SIZE(f->nfields), sizeof(f->fields[0]));
 }
 
 // from https://gist.github.com/badboy/6267743

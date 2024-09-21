@@ -14,7 +14,7 @@ Paw is an interpreted language that runs on a stack-based virtual machine writte
 
 ### Comments
 Paw supports both line- and block-style comments.
-Nesting is not allowed in block-style comments.
+Nesting is not supported in block-style comments.
 ```
 // line comment
 
@@ -23,10 +23,12 @@ Nesting is not allowed in block-style comments.
 ```
 
 ### Modules
-In Paw, toplevel declarations are treated as global items, meaning they can be accessed from anywhere within the module.
-Such items can be marked `pub` to indicate public visibility, which allows access from the outside (C or other Paw modules).
+In Paw, toplevel declarations are called 'items'.
+Items can be accessed from anywhere within the module in which they are defined.
+Items can be marked `pub` to indicate public visibility, which allows access from the outside (C or other Paw modules).
 Otherwise, items are considered private to the containing module.
-Items are resolved at compile-time, meaning only named functions, abstract data type (ADT) definitions, `impl` blocks, and compile-time constants may appear at the toplevel.
+Items are resolved at compile-time, meaning missing definition errors cannot occur at runtime.
+Only named functions, abstract data type (ADT) definitions, `impl` blocks, and compile-time constants may appear at the toplevel.
 
 Modules that are intended to run as scripts under the bundled Paw interpreter `paw` should define an entrypoint function called `main` with signature `pub fn main(argv: [str]) -> int`.
 `paw` (the builtin Paw interpreter) will look for `main` in the module's exported symbols and call it with arguments forwarded from the commandline.
@@ -51,7 +53,7 @@ let b = false;
 let i = 40 + 2;
 let f = 1.0 * 2;
 let s = 'de' + 'f';
-let F = |x| x * 2;
+let F = |x: int| x * 2;
 
 // explicit type conversion operator
 let b = 1 as bool;
@@ -353,11 +355,12 @@ assert(status != 0);
 + [x] product types (tuple)
 + [x] custom garbage collector (using Boehm GC for now)
 + [x] methods using `impl` blocks
++ [x] module system and `use` keyword
 + [ ] error handling (`try` needs to be an operator, or we need something like a 'parameter pack' for generics)
-+ [ ] module system and `import` keyword
 + [ ] pattern matching (`switch` construct)
 + [ ] pattern matching (`if let`, `let` bindings)
 + [ ] type inference for polymorphic `enum`
++ [ ] more featureful `use` declarations: `use mod::*`, `use mod::specific_symbol`, `use mod as alias`, etc.
 + [ ] generic constraints/bounds
 + [ ] compiler optimization passes
 + [ ] refactor user-provided allocation interface to allow heap expansion
@@ -377,9 +380,10 @@ assert(status != 0);
     + Probably don't want to resolve/instantiate things while searching, which is what the code currently does
 + May create multiple HIR decl. nodes for builtin container instantiations
     + Builtin containers (`[T]` and `[K: V]`) are ADTs that support type inference on their generic parameters after creation (normally, type params are inferred from the initializer)
-    + Need to deduplicate if we end up inferring a type that already exists
-    + Run dedup code when declarations go out of scope
     + Might as well support inferring all ADT type parameters after creation, since we have to do it for builtin containers anyway
+    + Could fix by not ever 'instantiating' ADTs: just record instance type args and use the base decl. plus an instance's type args to do some substitution to get the instance's field types
+        + Needs to happen when dealing with 'selector' expressions and composite literals, but that's about it
++ Module system needs a lot of work
 
 ## References
 + [Lua](https://www.lua.org/)

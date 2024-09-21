@@ -11,7 +11,7 @@
 // ---------|-----------------|--------------------------- 
 //  parse   | source -> AST   | syntactical analysis 
 //  resolve | AST -> HIR      | resolve symbols and types 
-//  expand  | HIR -> HIR      | expand polymorphic instances 
+//  expand  | HIR -> HIR      | monomorphize functions 
 //  codegen | HIR -> bytecode | generate code 
 
 #ifndef PAW_COMPILE_H
@@ -25,7 +25,9 @@
 #define ENV(x) ((x)->P)
 #define SCAN_STRING(x, s) pawP_scan_string(ENV(x), (x)->strings, s)
 
+struct HirPath;
 struct HirDecl;
+struct HirAdtDecl;
 struct HirTypeList;
 
 String *pawP_scan_nstring(paw_Env *P, Map *st, const char *s, size_t n);
@@ -89,11 +91,17 @@ struct Builtin {
     DefId did;
 };
 
+typedef struct HirDecl *(*Instantiate)(struct Hir *, struct HirDecl *, struct HirTypeList *);
+
 struct Compiler {
     struct Builtin builtins[NBUILTINS];
     struct DynamicMem *dm;
+    struct Pool *pool;
+    struct Ast *prelude;
+    Instantiate finst;
     String *modname;
-    Closure *main;
+    Map *impls; // HirAdtDecl * => HirImplDecl *
+    Map *imports;
     Map *strings;
     Map *types;
     paw_Env *P;
@@ -104,24 +112,32 @@ struct Compiler {
 struct Resolver {
     paw_Env *P;
     Map *strings;
+    struct ModuleInfo *m;
     struct Unifier *U; // unification tables
     struct Compiler *C; // compiler state
-    struct Hir *hir; // HIR being built
     struct HirType *adt; // enclosing ADT
-    struct HirSymtab *symtab; // scoped symbol table
-    struct HirScope *globals;
     struct DynamicMem *dm; // dynamic memory
     struct ResultState *rs;
-    Map *impls; // HirAdtDecl * => HirImplDecl *
+    struct HirSymtab *symtab;
+    Map *impls; // '.impls' from Compiler
     int func_depth; // number of nested functions
     int line;
-    DefId option_did;
-    DefId result_did;
     paw_Bool in_closure; // 1 if the enclosing function is a closure, else 0
 };
 
+struct ModuleInfo {
+    struct HirScope *globals;
+    struct Hir *hir;
+};
+
+struct ModuleInfo *pawP_mi_new(struct Compiler *C, struct Hir *hir);
+
+DEFINE_LIST(struct Compiler, pawP_mod_list_, ModuleList, struct ModuleInfo)
+
 // Keeps track of dynamic memory used by the compiler
 struct DynamicMem {
+    struct Pool pool;
+
     // Buffer for accumulating strings
     struct CharVec {
         char *data;
@@ -135,29 +151,32 @@ struct DynamicMem {
         int alloc;
     } vars;
 
-    struct Ast *ast;
-    struct Hir *hir;
-
     struct Unifier unifier;
     struct LabelList labels;
 
-    // NOTE: Backing storage for this field is located in the HIR pool, so
-    //       it doesn't need to be freed separately. It is kept here for
-    //       convenience, since it is used during multiple passes.
+    // NOTE: Backing storage for these fields are located in the compiler 
+    //       memory pool, so they don't need to be freed separately. They 
+    //       are kept here for convenience, since they are used during 
+    //       multiple passes.
+    struct ModuleList *modules;
     struct HirDeclList *decls;
 };
 
 typedef struct Generator {
     struct Compiler *C;
-    struct Hir *hir;
+    struct ModuleInfo *m;
     struct FuncState *fs;
     struct ToplevelList *items;
+    struct Pool *pool;
     paw_Env *P;
     int nvals;
 } Generator;
 
-struct Hir *pawP_lower_ast(struct Compiler *C, struct Ast *ast);
-struct HirScope *pawP_collect_items(struct Compiler *C, struct Hir *hir);
+void pawP_lower_ast(struct Compiler *C);
+void pawP_collect_items(struct Compiler *C);
+
+struct HirDecl *pawP_find_field(struct Compiler *C, struct ModuleInfo *m, struct HirAdtDecl *adt, String *name);
+struct HirDecl *pawP_find_method(struct Compiler *C, struct ModuleInfo *m, struct HirType *self, String *name);
 
 struct Generalization {
     struct HirTypeList *types;
@@ -166,12 +185,9 @@ struct Generalization {
 };
 
 struct Generalization pawP_generalize(
-        struct Compiler *C, 
+        struct Hir *hir, 
         struct HirDeclList *generics, 
         struct HirDeclList *fields);
-
-struct HirType *pawP_instantiate_type(struct Compiler *C, struct HirTypeList *before,
-                                      struct HirTypeList *after, struct HirType *target);
 
 // Instantiate a polymorphic function or type
 // Expects that 'decl' is already resolved, meaning the type of each symbol has been
@@ -181,28 +197,47 @@ struct HirType *pawP_instantiate_type(struct Compiler *C, struct HirTypeList *be
 // doing so might cause further instantiations due to the presence of recursion. 
 // Function instance bodies are expanded in a separate pass.
 struct HirDecl *pawP_instantiate(
-        struct Compiler *C, 
+        struct Hir *hir, 
         struct HirDecl *decl, 
         struct HirTypeList *types);
 
-struct HirDecl *pawP_preinstantiate(
-        struct Compiler *C, 
-        struct HirDecl *decl, 
-        struct HirTypeList *types);
+void pawP_set_instantiate(struct Compiler *C, paw_Bool full);
+
+void pawP_collect_imports(struct Compiler *C, struct Ast *ast);
+
+// Determine which toplevel declaration the 'path' refers to, relative to the
+// current module 'm'
+struct HirDecl *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct HirPath *path);
 
 void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const char *modname);
-void pawP_teardown(paw_Env *P, const struct DynamicMem *dm);
+void pawP_teardown(paw_Env *P, struct DynamicMem *dm);
 
-struct Ast *pawP_parse(struct Compiler *C, paw_Reader input, void *ud);
-struct Hir *pawP_resolve(struct Compiler *C, struct Ast *ast);
-void pawP_codegen(struct Compiler *C, struct Hir *hir);
+struct Ast *pawP_parse_prelude(struct Compiler *C);
+struct Ast *pawP_parse_module(struct Compiler *C, String *modname, paw_Reader input, void *ud);
+void pawP_resolve(struct Compiler *C);
+void pawP_codegen(struct Compiler *C);
 
 static inline void pawP_compile(struct Compiler *C, paw_Reader input, void *ud)
 {
-    // compile the module (source -> AST -> HIR -> bytecode)
-    struct Ast *ast = pawP_parse(C, input, ud);
-    struct Hir *hir = pawP_resolve(C, ast);
-    pawP_codegen(C, hir);
+    pawP_parse_prelude(C);
+
+    // parse an AST for the target module, as well as each imported module
+    struct Ast *ast = pawP_parse_module(C, C->modname, input, ud);
+    pawP_collect_imports(C, ast);
+
+    // run the type checker, then codegen
+    pawP_resolve(C);
+    pawP_codegen(C);
+}
+
+static inline void pawP_pool_init(struct Compiler *C, struct Pool *pool)
+{
+    pawK_pool_init(ENV(C), pool, 512, 8);
+}
+
+static inline void pawP_pool_uninit(struct Compiler *C, struct Pool *pool)
+{
+    pawK_pool_uninit(ENV(C), pool);
 }
 
 paw_Type pawP_type2code(struct Compiler *C, struct HirType *type);

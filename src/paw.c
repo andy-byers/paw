@@ -113,7 +113,7 @@ static void parse_options(int *pargc, const char ***pargv)
                     const char *arg = get_option(argc, argv);
                     if (state->integer != NULL) {
                         int value = 0;
-                        for (const char *p = arg; p; ++p) {
+                        for (const char *p = arg; *p; ++p) {
                             const int v = *p - '0';
                             if (v < 0 || 9 < v) {
                                 error(PAW_ERUNTIME, "invalid integer argument (%s)\n", arg);

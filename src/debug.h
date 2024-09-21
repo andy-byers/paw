@@ -8,7 +8,14 @@
 #include "env.h"
 #include "paw.h"
 
+#if defined(PAW_DEBUG_LOG)
+# define PAWD_LOG(P, ...) pawD_debug_log(P, __VA_ARGS__)
+#else
+# define PAWD_LOG(P, ...)
+#endif
+
 int pawD_line_number(const CallFrame *cf, const OpCode *pc);
+void pawD_debug_log(paw_Env *P, const char *fmt, ...);
 
 const char *paw_op_name(Op op);
 void paw_dump_opcode(OpCode opcode);

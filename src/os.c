@@ -3,82 +3,137 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "prefix.h"
 
+#include <errno.h>
+#include <stdio.h>
 #include "call.h"
 #include "os.h"
 #include "util.h"
-#include <errno.h>
 
 #define INTR_TIMEOUT 100
 
-void pawO_system_error(paw_Env *P, int error)
+struct File {
+    FILE *file;
+};
+
+File *pawO_stdout(void)
 {
-    paw_push_string(P, strerror(error));
+    static File file;
+    file.file = stdout;
+    return &file;
+}
+
+paw_Bool pawO_is_open(const File *file)
+{
+    return file->file != NULL;
+}
+
+void pawO_error(paw_Env *P)
+{
+    paw_push_string(P, strerror(errno));
     pawC_throw(P, PAW_ESYSTEM);
 }
 
-FILE *pawO_open(const char *pathname, const char *mode)
+File *pawO_new_file(paw_Env *P)
+{
+    File *file = paw_new_foreign(P, sizeof(File), 0);
+    *file = (File){0};
+    return file;
+}
+
+int pawO_open(File *file, const char *pathname, const char *mode)
 {
     for (int i = 0; i < INTR_TIMEOUT; ++i) {
-        FILE *file = fopen(pathname, mode);
-        if (file) {
-            return file;
+        FILE *f = fopen(pathname, mode);
+        if (f != NULL) {
+            file->file = f;
+            return 0;
         } else if (errno != EINTR) {
             break;
         }
     }
-    return NULL;
+    return -1;
 }
 
-void pawO_close(FILE *file)
+void pawO_close(File *file)
 {
+    if (file->file == NULL) return;
     for (int i = 0; i < INTR_TIMEOUT; ++i) {
-        const int rc = fclose(file);
+        const int rc = fclose(file->file);
         if (rc == 0 || errno != EINTR) {
             break; // success or non-interrupt failure
         }
     }
 }
 
-size_t pawO_read(FILE *file, void *data, size_t size)
+int pawO_seek(File *file, paw_Int offset, int whence)
+{
+    return fseek(file->file, offset, whence);    
+}
+
+paw_Int pawO_tell(File *file)
+{
+    return ftell(file->file);
+}
+
+int pawO_flush(File *file)
+{
+    return fflush(file->file);
+}
+
+static void check_for_errors(paw_Env *P, File *file)
+{
+    if (errno != EINTR) {
+        paw_assert(ferror(file->file));
+        pawO_error(P);
+    }
+}
+
+size_t pawO_read(paw_Env *P, File *file, void *data, size_t size)
 {
     const size_t original = size;
-    for (size_t i = 0; size > 0 && i < INTR_TIMEOUT; ++i) {
-        const size_t n = fread(data, 1, size, file);
-        if (n > 0) {
-            data = (char *)data + n;
-            size -= n;
-        } else if (feof(file) || errno != EINTR) {
+    for (size_t i = 0; i < INTR_TIMEOUT; ++i) {
+        const size_t n = fread(data, 1, size, file->file);
+        data = CAST(char *, data) + n;
+        size -= n;
+
+        if (size == 0) {
             break;
+        } else if (feof(file->file)) {
+            break;
+        } else {
+            check_for_errors(P, file);
         }
     }
     return original - size;
 }
 
-size_t pawO_write(FILE *file, const void *data, size_t size)
+size_t pawO_write(paw_Env *P, File *file, const void *data, size_t size)
 {
     const size_t original = size;
-    for (size_t i = 0; size > 0 && i < INTR_TIMEOUT; ++i) {
-        const size_t n = fwrite(data, 1, size, file);
-        if (n > 0) {
-            data = (char *)data + n;
-            size -= n;
-        } else if (feof(file) || errno != EINTR) {
+    for (size_t i = 0; i < INTR_TIMEOUT; ++i) {
+        const size_t n = fwrite(data, 1, size, file->file);
+        data = CAST(char *, data) + n;
+        size -= n;
+
+        if (size == 0) {
             break;
+        } else {
+            check_for_errors(P, file);
         }
     }
     return original - size;
 }
 
-void pawO_read_exact(paw_Env *P, FILE *file, void *data, size_t size)
+void pawO_read_exact(paw_Env *P, File *file, void *data, size_t size)
 {
-    if (pawO_read(file, data, size) != size) {
-        pawO_system_error(P, errno);
+    if (pawO_read(P, file, data, size) != size) {
+        pawO_error(P);
     }
 }
 
-void pawO_write_all(paw_Env *P, FILE *file, const void *data, size_t size)
+void pawO_write_all(paw_Env *P, File *file, const void *data, size_t size)
 {
-    if (pawO_write(file, data, size) != size) {
-        pawO_system_error(P, errno);
+    if (pawO_write(P, file, data, size) != size) {
+        pawO_error(P);
     }
 }

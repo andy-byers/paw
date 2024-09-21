@@ -29,12 +29,12 @@ struct Stack<T> {
     ts: [T]
 }
 
-impl<T> Stack<T> {
-    pub fn push(t: T) {
+impl<X> Stack<X> {
+    pub fn push(t: X) {
         self.ts.push(t);
     }
 
-    pub fn pop() -> T {
+    pub fn pop() -> X {
         return self.ts.pop();
     }
 

@@ -9,7 +9,7 @@
 #include "compile.h"
 #include "map.h"
 #include "rt.h"
-#include <inttypes.h>
+#include <stdio.h>
 
 #define PC_REL(p, pc) CAST(int, (pc) - (p)->source - 1)
 
@@ -24,6 +24,17 @@ int pawD_line_number(const CallFrame *cf, const OpCode *pc)
         if (p->lines[i].pc >= r) break;
     }
     return p->lines[i].line;
+}
+
+void pawD_debug_log(paw_Env *P, const char *fmt, ...)
+{
+    va_list arg;
+    va_start(arg, fmt);
+    vfprintf(stderr, fmt, arg);
+    va_end(arg);
+
+    fputc('\n', stderr);
+    fflush(stderr);
 }
 
 // TODO: Most of this should not be in the core: use hooks for debugging

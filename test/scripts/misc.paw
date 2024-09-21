@@ -1,5 +1,7 @@
 // misc.paw
 
+use math;
+
 struct Struct<T> {v: T}
 enum Enum<T> {X(T)}
 
@@ -19,4 +21,33 @@ pub fn test_gc() {
     recur_with_objects(5, 123);
     recur_with_objects(10, 1.0);
     recur_with_objects(100, 'abc');
+}
+
+use io;
+
+fn file_size(f: io::File) -> int {
+    f.seek(0, io::Seek::End);
+    return f.tell();
+}
+
+fn poly<T>(t: T) {}
+
+pub fn test_io() {
+    let test = 'test string';
+    let file = io::open('abc.txt', 'w+');
+    assert(file_size(file) == 0);
+    let n = file.write(test);
+    assert(n == #test);
+
+    file.seek(0, io::Seek::Begin);
+    assert(file.read(#test) == test);
+    assert(file.tell() == n);
+    assert(file_size(file) == n);
+
+    let files = [
+        io::File,
+        io::File,
+        io::File,
+    ];
+// TODO: poly(io::File);
 }
