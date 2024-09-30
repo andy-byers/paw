@@ -79,13 +79,13 @@ static void unify(struct Resolver *R, struct HirType *a, struct HirType *b)
 
 static paw_Bool is_list_t(struct Resolver *R, struct HirType *type)
 {
-    if (!HirIsPathType(type)) return PAW_FALSE;
+    if (!HirIsAdt(type)) return PAW_FALSE;
     return hir_adt_base(type) == R->C->builtins[BUILTIN_LIST].did;
 }
 
 static paw_Bool is_map_t(struct Resolver *R, struct HirType *type)
 {
-    if (!HirIsPathType(type)) return PAW_FALSE;
+    if (!HirIsAdt(type)) return PAW_FALSE;
     return hir_adt_base(type) == R->C->builtins[BUILTIN_MAP].did;
 }
 
@@ -276,21 +276,6 @@ static paw_Bool are_lists_compat(struct Compiler *C, struct HirTypeList *a, stru
     return PAW_TRUE;
 }
 
-static paw_Bool are_paths_compat(struct Compiler *C, struct HirPath *a, struct HirPath *b)
-{
-    paw_assert(a->count == b->count);
-    for (int i = 0; i < a->count; ++i) {
-        struct HirSegment *x = K_LIST_GET(a, i); 
-        struct HirSegment *y = K_LIST_GET(b, i); 
-        if (x->base != y->base) return PAW_FALSE;
-        paw_assert(!x->types == !y->types);
-        if (x->types != NULL && !are_lists_compat(C, x->types, y->types)) {
-            return PAW_FALSE;
-        }
-    }
-    return PAW_TRUE;
-}
-
 static paw_Bool is_compat(struct Compiler *C, struct HirType *a, struct HirType *b)
 {
     if (pawU_equals(&C->dm->unifier, a, b)) return PAW_TRUE;
@@ -299,13 +284,14 @@ static paw_Bool is_compat(struct Compiler *C, struct HirType *a, struct HirType 
     switch (HIR_KINDOF(a)) {
         case kHirTupleType:
             if (!HirIsTupleType(b)) return PAW_FALSE;
-            return are_lists_compat(C, a->tuple.elems, b->tuple.elems);
+            return are_lists_compat(C, HirGetTupleType(a)->elems, HirGetTupleType(b)->elems);
         case kHirFuncPtr:
         case kHirFuncDef:
             return is_compat(C, HIR_FPTR(a)->result, HIR_FPTR(b)->result) &&
                 are_lists_compat(C, HIR_FPTR(a)->params, HIR_FPTR(b)->params);
-        case kHirPathType:
-            return are_paths_compat(C, a->path.path, b->path.path);
+        case kHirAdt:
+            return HirGetAdt(a)->base == HirGetAdt(b)->base &&
+                are_lists_compat(C, HirGetAdt(a)->types, HirGetAdt(b)->types);
         default:
             return a == b;
     }
@@ -439,7 +425,7 @@ static void resolve_lazy(struct Resolver *R, struct HirDecl *decl)
     }
 }
 
-static void resolve_methods(struct Resolver *R, struct HirDeclList *items, struct HirPathType *self)
+static void resolve_methods(struct Resolver *R, struct HirDeclList *items, struct HirAdt *self)
 {
     for (int i = 0; i < items->count; ++i) {
         resolve_lazy(R, items->data[i]);
@@ -463,7 +449,7 @@ static void resolve_impl_methods(struct Resolver *R, struct HirImplDecl *d)
     symbol->is_type = PAW_TRUE;
 
     struct HirType *self_type = self->hdr.type;
-    resolve_methods(R, d->methods, HirGetPathType(self_type));
+    resolve_methods(R, d->methods, HirGetAdt(self_type));
     allocate_decls(R, d->methods);
 
     leave_block(R);
@@ -619,14 +605,14 @@ static void resolve_logical_expr(struct Resolver *R, struct HirLogicalExpr *e)
     e->type = get_type(R, PAW_TBOOL);
 }
 
-static paw_Bool is_option_t(struct Resolver *R, const struct HirType *type)
+static paw_Bool is_option_t(struct Resolver *R, struct HirType *type)
 {
-    return HirIsPathType(type) && hir_adt_base(type) == R->C->builtins[BUILTIN_OPTION].did;
+    return HirIsAdt(type) && hir_adt_base(type) == R->C->builtins[BUILTIN_OPTION].did;
 }
 
-static paw_Bool is_result_t(struct Resolver *R, const struct HirType *type)
+static paw_Bool is_result_t(struct Resolver *R, struct HirType *type)
 {
-    return HirIsPathType(type) && hir_adt_base(type) == R->C->builtins[BUILTIN_RESULT].did;
+    return HirIsAdt(type) && hir_adt_base(type) == R->C->builtins[BUILTIN_RESULT].did;
 }
 
 static void resolve_chain_expr(struct Resolver *R, struct HirChainExpr *e)
@@ -959,7 +945,7 @@ static void resolve_call_expr(struct Resolver *R, struct HirCallExpr *e)
 static void resolve_conversion_expr(struct Resolver *R, struct HirConversionExpr *e)
 {
     struct HirType *type = resolve_operand(R, e->arg);
-    if (!HirIsPathType(type) || 
+    if (!HirIsAdt(type) || 
             hir_adt_base(type) == PAW_TUNIT ||
             hir_adt_base(type) == PAW_TSTR) {
         TYPE_ERROR(R, "argument to conversion must be scalar");
@@ -1214,7 +1200,7 @@ static void check_index(struct Resolver *R, struct HirIndex *e, struct HirType *
         }
         expect = hir_map_key(target);
         e->type = hir_map_value(target);
-    } else if (HirIsPathType(target) &&
+    } else if (HirIsAdt(target) &&
             hir_adt_base(target) == PAW_TSTR) {
         expect = get_type(R, PAW_TINT);
         e->type = get_type(R, PAW_TSTR);
@@ -1257,7 +1243,7 @@ static void resolve_selector(struct Resolver *R, struct HirSelector *e)
         e->type = types->data[e->index];
         return;
     } 
-    if (!HirIsPathType(target)) TYPE_ERROR(R, "type has no fields");
+    if (!HirIsAdt(target)) TYPE_ERROR(R, "type has no fields");
     if (e->is_index) TYPE_ERROR(R, "expected field name (integer indices can "
                                    "only be used with tuples)");
     struct HirAdtDecl *adt = get_adt(R, target);
@@ -1335,6 +1321,7 @@ static struct HirType *resolve_type(struct Resolver *R, struct HirType *type)
             break;
         case kHirGeneric:
         case kHirUnknown:
+        case kHirAdt:
             r = type;
     }
     return normalize(R, r);

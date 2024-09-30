@@ -62,6 +62,7 @@ static struct HirTypeList *new_unknowns(struct InstanceState *I, int count)
 
 static paw_Bool test_lists(struct InstanceState *I, struct HirTypeList *lhs, struct HirTypeList *rhs)
 {
+    if (!lhs != !rhs) return PAW_FALSE;
     if (lhs->count != rhs->count) return PAW_FALSE;
     for (int i = 0; i < lhs->count; ++i) {
         struct HirType *a = K_LIST_GET(lhs, i);
@@ -83,16 +84,15 @@ static struct HirDecl *find_func_instance(struct InstanceState *I, struct HirFun
     return NULL;
 }
 
-#define TEST_SELF_ADT(I, base, types) test_lists(I, types, hir_adt_types((base)->type))
+#define TEST_SELF_ADT(I, base, types) test_lists(I, types, HirGetAdt((base)->type)->types)
 
 static struct HirDecl *find_adt_instance(struct InstanceState *I, struct HirAdtDecl *base, struct HirTypeList *types)
 {
     if (TEST_SELF_ADT(I, base, types)) return HIR_CAST_DECL(base);
     for (int i = 0; i < base->monos->count; ++i) {
         struct HirDecl *inst = base->monos->data[i];
-        const struct HirPathType *path = HirGetPathType(HIR_TYPEOF(inst));
-        const struct HirSegment *seg = K_LIST_GET(path->path, 0);
-        if (test_lists(I, types, seg->types)) return inst;
+        const struct HirAdt *adt = HirGetAdt(HIR_TYPEOF(inst));
+        if (test_lists(I, types, adt->types)) return inst;
     }
     return NULL;
 }
@@ -157,25 +157,15 @@ static struct HirType *subst_func_def(struct HirFolder *F, struct HirFuncDef *t)
     return HIR_TYPEOF(inst);
 }
 
-static struct HirType *subst_path_type(struct HirFolder *F, struct HirPathType *t)
+static struct HirType *subst_adt(struct HirFolder *F, struct HirAdt *t)
 {
     struct Subst *subst = F->ud;
     struct InstanceState *I = subst->I;
-    paw_assert(t->path->count == 1);
 
-    struct HirSegment *seg = K_LIST_GET(t->path, 0);
-    if (seg->types == NULL) return HIR_CAST_TYPE(t);
-    struct HirTypeList *types = subst_list(F, seg->types);
-
-    struct HirDecl *base = get_decl(I, seg->base);
+    if (t->types == NULL) return HIR_CAST_TYPE(t);
+    struct HirDecl *base = get_decl(I, t->base);
+    struct HirTypeList *types = subst_list(F, t->types);
     struct HirDecl *inst = pawP_instantiate(I->hir, base, types);
-
-    struct HirType *result = new_type(I, NO_DECL, kHirPathType, t->line);
-    struct HirPathType *r = HirGetPathType(result);
-    r->path = pawHir_path_new(I->hir);
-    seg = pawHir_path_add(I->hir, r->path, seg->name, types);
-    seg->base = base->hdr.did;
-    seg->did = inst->hdr.did;
     return HIR_TYPEOF(inst);
 }
 
@@ -225,7 +215,7 @@ static void init_subst_folder(struct HirFolder *F, struct Subst *subst, struct I
         .I = I,
     };
     pawHir_folder_init(F, I->hir, subst);
-    F->FoldPathType = subst_path_type;
+    F->FoldAdt = subst_adt;
     F->FoldFuncPtr = subst_func_ptr;
     F->FoldFuncDef = subst_func_def;
     F->FoldGeneric = subst_generic;
@@ -288,13 +278,12 @@ static void instantiate_adt_aux(struct InstanceState *I, struct HirAdtDecl *base
     inst->name = base->name;
     inst->types = types;
 
-    struct HirType *result = register_decl_type(I, HIR_CAST_DECL(inst), kHirPathType);
-    struct HirPathType *r = HirGetPathType(result);
-    r->path = pawHir_path_new(I->hir);
-
-    struct HirSegment *seg = pawHir_path_add(I->hir, r->path, base->name, types);
-    seg->base = base->did;
-    seg->did = inst->did;
+    struct HirType *result = register_decl_type(I, HIR_CAST_DECL(inst), kHirAdt);
+    struct HirAdt *r = HirGetAdt(result);
+    r->types = types;
+    r->modno = I->hir->modno;
+    r->base = base->did;
+    r->did = inst->did;
 }
 
 static void check_template_param(struct InstanceState *I, struct HirDeclList *params, struct HirTypeList *args)
@@ -332,9 +321,9 @@ static struct HirDecl *instantiate_impl_method(struct InstanceState *I, struct H
     return result;
 }
 
-static struct HirDecl *instantiate_impl_aux(struct InstanceState *I, struct HirImplDecl *base, struct HirTypeList *types, struct HirType *adt)
+static struct HirDecl *instantiate_impl_aux(struct InstanceState *I, struct HirImplDecl *base, struct HirTypeList *types, struct HirType *self)
 {
-    paw_assert(HirIsPathType(adt));
+    paw_assert(HirIsAdt(self));
     struct HirDecl *result = find_impl_instance(I, base, types);
     if (result != NULL) return result;
     result = pawHir_new_decl(I->hir, base->line, kHirImplDecl);
@@ -342,7 +331,7 @@ static struct HirDecl *instantiate_impl_aux(struct InstanceState *I, struct HirI
     r->methods = pawHir_decl_list_new(I->hir);
     r->name = base->name;
     r->subst = types;
-    r->type = adt;
+    r->type = self;
 
     struct HirTypeList *generics = collect_generic_types(I, base->generics);
     paw_assert(generics->count == types->count);

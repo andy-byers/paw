@@ -1653,9 +1653,9 @@ static paw_Bool match_tuples(struct DefGenerator *dg, struct HirType *lhs, struc
 
 static paw_Bool match_adts(struct DefGenerator *dg, struct HirType *lhs, struct Type *rhs)
 {
-    if (!HirIsPathType(lhs) || rhs->hdr.kind != TYPE_ADT) return PAW_FALSE;
+    if (!HirIsAdt(lhs) || rhs->hdr.kind != TYPE_ADT) return PAW_FALSE;
     struct HirDecl *decl = dg->decls->data[rhs->adt.did];
-    return HirIsAdtDecl(decl) && hir_adt_did(HIR_TYPEOF(decl)) == hir_adt_did(lhs);
+    return HirIsAdtDecl(decl) && HirGetAdt(HIR_TYPEOF(decl))->did == HirGetAdt(lhs)->did;
 }
 
 static Value *find_type(struct DefGenerator *dg, struct HirType *type)
@@ -1731,10 +1731,9 @@ static struct Type *new_type(struct DefGenerator *dg, struct HirType *src)
             break;
         }
         default: {
-            struct HirPathType *path = HirGetPathType(src);
-            struct HirSegment *seg = K_LIST_GET(path->path, 0);
-            dst = pawY_new_adt(P, seg->types ? seg->types->count : 0);
-            init_type_list(dg, seg->types, dst->subtypes, &dst->nsubtypes);
+            struct HirAdt *adt = HirGetAdt(src);
+            dst = pawY_new_adt(P, adt->types ? adt->types->count : 0);
+            init_type_list(dg, adt->types, dst->subtypes, &dst->nsubtypes);
             dst->adt.did = 0;
         }
     }
@@ -1757,7 +1756,7 @@ static paw_Bool has_generic(struct HirType *type)
     struct HirTypeList *types = 
         HirIsFuncDef(type) ? HirGetFuncDef(type)->types : 
         HirIsTupleType(type) ? HirGetTupleType(type)->elems : 
-        HirIsPathType(type) ? hir_adt_types(type) : NULL;
+        HirIsAdt(type) ? hir_adt_types(type) : NULL;
     if (types == NULL) return PAW_FALSE;
     for (int i = 0; i < types->count; ++i) {
         struct HirType *type = K_LIST_GET(types, i);
@@ -1897,20 +1896,18 @@ static void define_type(struct HirVisitor *V, struct HirType *type)
     if (!has_generic(type)) new_type(V->ud, type);
 }
 
-static struct HirDecl *lookup_adt(struct Compiler *C, struct ModuleInfo *m, struct HirPath *path)
+static struct HirDecl *lookup_adt(struct Compiler *C, struct ModuleInfo *m, struct HirAdt *adt)
 {
-    struct HirSegment *seg = K_LIST_GET(path, path->count - 1);
-    struct HirDecl *base = C->dm->decls->data[seg->base];
-    if (seg->base == seg->did) return base;
-    return pawP_instantiate(m->hir, base, seg->types);
+    struct HirDecl *base = C->dm->decls->data[adt->base];
+    if (adt->base == adt->did) return base;
+    return pawP_instantiate(m->hir, base, adt->types);
 }
 
 static struct HirType *cannonicalize_type(struct HirFolder *F, struct HirType *type)
 {
     struct DefGenerator *dg = F->ud;
-    if (!HirIsPathType(type)) return type;
-    struct HirPathType *path = HirGetPathType(type);
-    struct HirDecl *decl = lookup_adt(dg->C, dg->m, path->path);
+    if (!HirIsAdt(type)) return type;
+    struct HirDecl *decl = lookup_adt(dg->C, dg->m, HirGetAdt(type));
     return HIR_TYPEOF(decl);
 }
 
@@ -2032,8 +2029,8 @@ static void print_type(struct Printer *P, struct HirType *type)
             PRINT_LITERAL(P, "fn(");
             print_type_list(P, fptr->params);
             PRINT_CHAR(P, ')');
-            if (!HirIsPathType(fptr->result)
-                    || hir_adt_base(fptr->result) != PAW_TUNIT) {
+            if (!HirIsAdt(fptr->result)
+                    || HirGetAdt(fptr->result)->did != PAW_TUNIT) {
                 PRINT_LITERAL(P, " -> ");
                 print_type(P, fptr->result);
             }
@@ -2049,17 +2046,28 @@ static void print_type(struct Printer *P, struct HirType *type)
             PRINT_FORMAT(P, "?%d", un->index);
             break;
         }
-        default: {
+        case kHirPathType: {
             struct HirPathType *path = HirGetPathType(type);
             for (int i = 0; i < path->path->count; ++i) {
-                struct HirSegment *seg = K_LIST_GET(path->path, i);
                 if (i > 0) PRINT_LITERAL(P, "::");
+                struct HirSegment *seg = K_LIST_GET(path->path, i);
                 PRINT_STRING(P, seg->name);
                 if (seg->types != NULL) {
                     PRINT_CHAR(P, '<');
                     print_type_list(P, seg->types);
                     PRINT_CHAR(P, '>');
                 }
+            }
+            break;
+        }
+        default: {
+            struct HirAdt *adt = HirGetAdt(type);
+            struct HirDecl *decl = pawHir_get_decl(P->hir, adt->did);
+            PRINT_STRING(P, decl->hdr.name);
+            if (adt->types != NULL) {
+                PRINT_CHAR(P, '<');
+                print_type_list(P, adt->types);
+                PRINT_CHAR(P, '>');
             }
             break;
         } 
@@ -2188,6 +2196,14 @@ static void dump_type(struct Printer *P, struct HirType *t)
             DUMP_MSG(P, "result: ");
             dump_type(P, t->fptr.result);
             break;
+        case kHirAdt: {
+            DUMP_FMT(P, "base: %d\n", t->adt.base);
+            DUMP_FMT(P, "did: %d\n", t->adt.did);
+            if (seg->types != NULL) {
+                dump_type_list(P, t->adt.types, "types");
+            }
+            break;
+        }
         case kHirPathType: 
             for (int i = 0; i < t->path.path->count; ++i) {
                 struct HirSegment *seg = K_LIST_GET(t->path.path, i);

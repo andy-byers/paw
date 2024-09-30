@@ -1463,12 +1463,12 @@ static const char kPrelude[] =
     "    pub fn ends_with(suffix: str) -> bool;  \n"
     "}                                           \n"
 
-    "impl<T> _List<T> {                          \n"
+    "impl<TT> _List<TT> {                          \n"
     "    pub fn length() -> int;                 \n"
-    "    pub fn push(value: T) -> Self;          \n"
-    "    pub fn insert(i: int, value: T) -> Self;\n"
-    "    pub fn remove(i: int) -> T;             \n"
-    "    pub fn pop() -> T;                      \n"
+    "    pub fn push(value: TT) -> _List<TT>;          \n"
+    "    pub fn insert(i: int, value: TT) -> Self;\n"
+    "    pub fn remove(i: int) -> TT;             \n"
+    "    pub fn pop() -> TT;                      \n"
     "}                                           \n"
 
     "impl<K, V> _Map<K, V> {                    \n"

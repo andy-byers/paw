@@ -230,7 +230,7 @@ impl<A, B> Object<A, B> {
     // methods on all instances of Object...
 }
 
-impl<T> Object<T> {
+impl<T> Object<T, T> {
     // methods for when '.a' and '.b' have the same type...
 
     // For example:
@@ -250,7 +250,7 @@ impl Object<int, str> {
     }
 }
 
-// explicit instantiation uses 'turbofish'
+// explicit instantiation requires 'turbofish' ('::<>')
 let o = Object::<float, float>{
     a: 0.99,
     b: 1.23,

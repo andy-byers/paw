@@ -196,11 +196,10 @@ void pawY_mangle_add_arg(paw_Env *P, Buffer *buffer, paw_Type code)
                 L_ADD_LITERAL(P, buffer, "s");
             } else {
                 const struct Def *def = Y_DEF(P, type->adt.did);
-                const struct Type *adt = Y_TYPE(P, def->hdr.code);
                 L_ADD_STRING(P, buffer, def->hdr.name);
-                if (adt->nsubtypes > 0) {
-                    for (int i = 0; i < adt->nsubtypes; ++i) {
-                        pawY_mangle_add_arg(P, buffer, adt->subtypes[i]);
+                if (type->nsubtypes > 0) {
+                    for (int i = 0; i < type->nsubtypes; ++i) {
+                        pawY_mangle_add_arg(P, buffer, type->subtypes[i]);
                     }
                 }
             }

@@ -112,14 +112,6 @@ static void normalize_list(UnificationTable *table, struct HirTypeList *list)
     }
 }
 
-static void normalize_path(UnificationTable *table, struct HirPath *path)
-{
-    for (int i = 0; i < path->count; ++i) {
-        struct HirSegment *seg = K_LIST_GET(path, i);
-        normalize_list(table, seg->types);
-    }
-}
-
 struct HirType *pawU_normalize(UnificationTable *table, struct HirType *type)
 {
     switch (HIR_KINDOF(type)) {
@@ -136,11 +128,14 @@ struct HirType *pawU_normalize(UnificationTable *table, struct HirType *type)
         case kHirTupleType:
             normalize_list(table, HirGetTupleType(type)->elems);
             break;
+        case kHirAdt:
+            normalize_list(table, HirGetAdt(type)->types);
+            break;
+        case kHirGeneric:
+            break;
         case kHirPathType:
-            normalize_path(table, HirGetPathType(type)->path);
-            break;
-        default:
-            break;
+            // paths are resolved
+            PAW_UNREACHABLE();
     }
     return type;
 }
@@ -157,20 +152,12 @@ static int unify_lists(struct Unifier *U, struct HirTypeList *a, struct HirTypeL
     return 0;
 }
 
-static int unify_adt(struct Unifier *U, struct HirPathType *a, struct HirPathType *b)
+static int unify_adt(struct Unifier *U, struct HirAdt *a, struct HirAdt *b)
 {
-    if (a->path->count != b->path->count) return -1;
-    for (int i = 0; i < a->path->count; ++i) {
-        struct HirSegment *x = a->path->data[i]; 
-        struct HirSegment *y = b->path->data[i]; 
-        if (x->base != y->base) return -1;
-        if (!x->types != !y->types) return -1;
-        if (x->types == NULL) continue;
-        if (unify_lists(U, x->types, y->types)) {
-            return -1;
-        }
-    }
-    return 0;
+    if (a->base != b->base) return -1;
+    if (!a->types != !b->types) return -1;
+    if (a->types == NULL) return 0;
+    return unify_lists(U, a->types, b->types);
 }
 
 static int unify_tuple(struct Unifier *U, struct HirTupleType *a, struct HirTupleType *b)
@@ -184,9 +171,9 @@ static int unify_func(struct Unifier *U, struct HirFuncPtr *a, struct HirFuncPtr
     return U->action(U, a->result, b->result);
 }
 
-static int unify_generic(struct Unifier *U, struct HirType *a, struct HirType *b)
+static int unify_generic(struct Unifier *U, struct HirGeneric *a, struct HirGeneric *b)
 {
-    return a->generic.did == b->generic.did ? 0 : -1;
+    return a->did == b->did ? 0 : -1;
 }
 
 static int unify_types(struct Unifier *U, struct HirType *a, struct HirType *b)
@@ -195,15 +182,15 @@ static int unify_types(struct Unifier *U, struct HirType *a, struct HirType *b)
 
     if (HirIsFuncType(a) && HirIsFuncType(b)) {
         // function pointer and definition types are compatible
-        return unify_func(U, &a->fptr, &b->fptr);
+        return unify_func(U, HIR_FPTR(a), HIR_FPTR(b));
     } else if (HIR_KINDOF(a) != HIR_KINDOF(b)) {
         return -1;
     } else if (HirIsTupleType(a)) {
-        return unify_tuple(U, &a->tuple, &b->tuple);
-    } else if (HirIsPathType(a)) {
-        return unify_adt(U, &a->path, &b->path);
+        return unify_tuple(U, HirGetTupleType(a), HirGetTupleType(b));
+    } else if (HirIsAdt(a)) {
+        return unify_adt(U, HirGetAdt(a), HirGetAdt(b));
     } else if (HirIsGeneric(a)) {
-        return unify_generic(U, a, b);
+        return unify_generic(U, HirGetGeneric(a), HirGetGeneric(b));
     } else {
         paw_assert(HirIsUnknown(a));
         return a == b ? 0 : -1; 

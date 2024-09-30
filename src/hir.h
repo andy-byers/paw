@@ -45,8 +45,8 @@ typedef uint16_t DeclId;
         X(FuncPtr, fptr) \
         X(Unknown, unknown) \
         X(Generic, generic) \
-        X(PathType, path) \
-        X(TupleType, tuple)
+        X(TupleType, tuple) \
+        X(PathType, path)
 
 #define HIR_STMT_LIST(X) \
         X(Block,      block) \
@@ -681,8 +681,8 @@ DEFINE_LIST(struct Hir, pawHir_path_, HirPath, struct HirSegment)
 #define HIR_CAST_STMT(x) CAST(struct HirStmt *, x)
 #define HIR_CAST_TYPE(x) CAST(struct HirType *, x)
 
-#define HIR_IS_UNIT_T(x) (HirIsPathType(x) && hir_adt_base(x) == PAW_TUNIT)
-#define HIR_IS_BASIC_T(x) (HirIsPathType(x) && hir_adt_base(x) <= PAW_TSTR)
+#define HIR_IS_UNIT_T(x) (HirIsAdt(x) && hir_adt_base(x) == PAW_TUNIT)
+#define HIR_IS_BASIC_T(x) (HirIsAdt(x) && hir_adt_base(x) <= PAW_TSTR)
 
 #define HIR_IS_POLY_FUNC(decl) (HirIsFuncDecl(decl) && HirGetFuncDecl(decl)->generics != NULL)
 #define HIR_IS_POLY_ADT(decl) (HirIsAdtDecl(decl) && HirGetAdtDecl(decl)->generics != NULL)
@@ -705,44 +705,34 @@ struct HirDecl *pawHir_get_decl(struct Hir *hir, DeclId id);
 // NOTE: HirFuncPtr is a prefix of HirFuncDef
 #define HIR_FPTR(t) CHECK_EXP(HirIsFuncType(t), &(t)->fptr)
 
-static String *hir_adt_name(const struct HirType *type)
+static struct HirTypeList *hir_adt_types(struct HirType *type)
 {
-    paw_assert(HirIsPathType(type));
-    return K_LIST_GET(type->path.path, 0)->name;
+    return HirGetAdt(type)->types;
 }
 
-static struct HirTypeList *hir_adt_types(const struct HirType *type)
+static DeclId hir_adt_did(struct HirType *type)
 {
-    paw_assert(HirIsPathType(type));
-    return K_LIST_GET(type->path.path, 0)->types;
+    return HirGetAdt(type)->did;
 }
 
-static DeclId hir_adt_did(const struct HirType *type)
+static DeclId hir_adt_base(struct HirType *type)
 {
-    return K_LIST_GET(type->path.path, 0)->did;
+    return HirGetAdt(type)->base;
 }
 
-static DeclId hir_adt_base(const struct HirType *type)
+static inline struct HirType *hir_list_elem(struct HirType *type)
 {
-    return K_LIST_GET(type->path.path, 0)->base;
+    return K_LIST_GET(HirGetAdt(type)->types, 0);
 }
 
-static inline struct HirType *hir_list_elem(struct HirType *t)
+static inline struct HirType *hir_map_key(struct HirType *type)
 {
-    const struct HirPath *path = HirGetPathType(t)->path;
-    return K_LIST_GET(hir_adt_types(t), 0);
+    return K_LIST_GET(HirGetAdt(type)->types, 0);
 }
 
-static inline struct HirType *hir_map_key(struct HirType *t)
+static inline struct HirType *hir_map_value(struct HirType *type)
 {
-    const struct HirPath *path = HirGetPathType(t)->path;
-    return K_LIST_GET(hir_adt_types(t), 0);
-}
-
-static inline struct HirType *hir_map_value(struct HirType *t)
-{
-    const struct HirPath *path = HirGetPathType(t)->path;
-    return K_LIST_GET(hir_adt_types(t), 1);
+    return K_LIST_GET(HirGetAdt(type)->types, 1);
 }
 
 static inline struct HirSegment *pawHir_path_add(struct Hir *hir, struct HirPath *path, String *name,

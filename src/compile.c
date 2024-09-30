@@ -8,6 +8,7 @@
 #include "gc.h"
 #include "hir.h"
 #include "map.h"
+#include "type.h"
 
 // All paw language keywords
 //
@@ -67,7 +68,7 @@ void pawP_init(paw_Env *P)
 
 paw_Type pawP_type2code(struct Compiler *C, struct HirType *type)
 {
-    if (HirIsPathType(type)) {
+    if (HirIsAdt(type)) {
         const DeclId base = hir_adt_base(type);
         if (base == C->builtins[BUILTIN_UNIT].did) {
             return PAW_TUNIT;
@@ -126,6 +127,8 @@ static void define_adt(struct Compiler *C, const char *name, enum BuiltinKind ki
 
 void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const char *modname)
 {
+    pawY_uninit(P);
+
     ENSURE_STACK(P, 4);
 
     // '.strings' anchors all strings used during compilation so they are not

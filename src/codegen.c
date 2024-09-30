@@ -34,6 +34,7 @@ struct ItemSlot {
     struct HirVarInfo info;
     struct HirDecl *decl;
     struct ModuleInfo *m;
+    String *name;
 };
 
 static struct ItemSlot *new_item_slot(struct Generator *G, struct HirDecl *decl, struct HirVarInfo info, struct ModuleInfo *m)
@@ -503,12 +504,14 @@ static void enter_function(struct Generator *G, struct FuncState *fs, struct Blo
 static paw_Bool resolve_global(struct Generator *G, const String *name, struct HirVarInfo *pinfo)
 {
     paw_Env *P = ENV(G);
-    const int did = pawE_locate(P, name, PAW_FALSE);
-    const struct Def *def = Y_DEF(P, did);
-    paw_assert(def->hdr.kind == DEF_FUNC);
-    pinfo->kind = VAR_GLOBAL;
-    pinfo->index = def->func.vid;
-    return PAW_TRUE;
+    for (int i = 0; i < G->items->count; ++i) {
+        struct ItemSlot *is = K_LIST_GET(G->items, i);
+        if (pawS_eq(is->name, name)) {
+            *pinfo = is->info;
+            return PAW_TRUE;
+        }
+    }
+    return PAW_FALSE;
 }
 
 static paw_Bool resolve_local(struct FuncState *fs, const String *name, struct HirVarInfo *pinfo)
@@ -528,9 +531,8 @@ static struct HirVarInfo find_var(struct Generator *G, const String *name);
 
 static struct HirVarInfo resolve_attr(struct Generator *G, struct HirType *type, String *name)
 {
-    paw_assert(HirIsPathType(type));
     struct HirDecl *decl = GET_DECL(G, hir_adt_did(type));
-    struct HirAdtDecl *adt = &decl->adt;
+    struct HirAdtDecl *adt = HirGetAdtDecl(decl);
     int index; // must exist: found in last pass
     for (int i = 0; i < adt->fields->count; ++i) {
         struct HirDecl *decl = adt->fields->data[i];
@@ -641,8 +643,8 @@ static void code_getter(struct HirVisitor *V, struct HirVarInfo info)
         case VAR_FIELD:
             pawK_code_U(fs, OP_GETFIELD, info.index);
             break;
-        default:
-            paw_assert(info.kind == VAR_GLOBAL);
+        case VAR_GLOBAL:
+        case VAR_CFUNC:
             pawK_code_U(fs, OP_GETGLOBAL, info.index);
     }
 }
@@ -1212,7 +1214,6 @@ static struct HirExpr *prep_method_call(struct Generator *G, struct HirCallExpr 
     const String *modname = prefix_for_modno(G, fdef->modno);
     const String *name = func_name(G, modname, e->func);
     const struct HirVarInfo info = find_var(G, name);
-    paw_assert(info.kind == VAR_GLOBAL); // always toplevel
     pawK_code_U(G->fs, OP_GETGLOBAL, info.index);
     return select->target;
 }
@@ -1244,7 +1245,7 @@ static void code_call_expr(struct HirVisitor *V, struct HirCallExpr *e)
 static void code_conversion_expr(struct HirVisitor *V, struct HirConversionExpr *e)
 {
     struct Generator *G = V->ud;
-    const struct HirType *from = HIR_TYPEOF(e->arg);
+    struct HirType *from = HIR_TYPEOF(e->arg);
     const Op op = e->to == PAW_TBOOL ? OP_CASTBOOL : 
         e->to == PAW_TINT ? OP_CASTINT : OP_CASTFLOAT;
     G->fs->line = e->line;
@@ -1463,14 +1464,17 @@ static void register_items(struct Generator *G, struct HirDeclList *items, struc
             struct HirFuncDecl *d = HirGetFuncDecl(item);
             paw_assert(d->generics == NULL);
 
-            fdef->name = func_name(G, modname, d->type);
             struct HirVarInfo info = {.index = fdef->vid};
             if (d->body == NULL) info.kind = VAR_CFUNC;
             struct ItemSlot *is = new_item_slot(G, item, info, G->m);
+            is->name = fdef->mangled_name = func_name(G, modname, d->type);
             item_list_push(G, G->items, is);
         } else if (HirIsAdtDecl(item)) {
+            struct AdtDef *adt = &get_def(G, i)->adt;
+
             struct HirVarInfo info = {.kind = VAR_GLOBAL, .index = i};
             struct ItemSlot *is = new_item_slot(G, item, info, G->m);
+            is->name = adt->mangled_name = adt_name(G, HIR_TYPEOF(is->decl));
             item_list_push(G, adts, is);
         }
     }
@@ -1545,12 +1549,6 @@ static void register_modules(struct Generator *G, struct ModuleList *modules)
     for (int i = 0; i < modules->count; ++i) {
         G->m = K_LIST_GET(modules, i); 
         register_items(G, items, adts);
-    }
-    for (int i = 0; i < adts->count; ++i) {
-        struct ItemSlot *is = K_LIST_GET(adts, i);
-        struct AdtDef *adt = &get_def(G, is->info.index)->adt;
-        paw_assert(adt->kind == DEF_ADT);
-// TODO       adt->name = adt_name(G, is->decl->hdr.type);
     }
 
     paw_Env *P = ENV(G);

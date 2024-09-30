@@ -102,10 +102,10 @@ static paw_Int call_fib(paw_Env *P, int n)
     return fibn;
 }
 
-static void test_print_type(paw_Env *P, const char *name, paw_Bool mangle /*TODO: remove*/)
+static void test_print_type(paw_Env *P, const char *name, paw_Type *types)
 {
     paw_push_string(P, name);
-    if (mangle) paw_mangle_name(P, NULL);
+    paw_mangle_name(P, types);
 
     struct paw_Item info;
     int status = paw_lookup_item(P, &info);
@@ -248,11 +248,10 @@ int main(void)
         check(paw_bool(P, -1));
     }
 
-    // TODO: remove 'mangle' parameter and get compiler to mangle ADT names
-    test_print_type(P, "main", 1);
-    test_print_type(P, "f", 1);
-    test_print_type(P, "Struct", 0);
-    test_print_type(P, "Enum", 0);
+    test_print_type(P, "main", NULL);
+    test_print_type(P, "f", NULL);
+    test_print_type(P, "Struct", (paw_Type[]){PAW_TINT, -1});
+    test_print_type(P, "Enum", (paw_Type[]){PAW_TSTR, -1});
 
     // test foreign objects
     void *ptr = paw_new_foreign(P, 8, 1);

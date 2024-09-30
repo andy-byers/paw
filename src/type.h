@@ -78,6 +78,7 @@ struct AdtDef {
     paw_Bool is_struct : 1;
     int nfields;
     DefId *fields;
+    String *mangled_name;
 };
 
 struct FuncDef {
@@ -86,6 +87,7 @@ struct FuncDef {
     paw_Type self;
     int ntypes;
     paw_Type *types;
+    String *mangled_name;
 };
 
 struct FieldDef {

@@ -323,17 +323,14 @@ static struct HirType *register_func(struct Collector *X, struct HirFuncDecl *d)
 
 static struct HirType *register_adt(struct Collector *X, struct HirAdtDecl *d)
 {
-    struct HirType *type = register_decl_type(X, HIR_CAST_DECL(d), kHirPathType);
-    struct HirPathType *t = HirGetPathType(type);
-    t->path = pawHir_path_new(X->m->hir);
+    struct HirType *type = register_decl_type(X, HIR_CAST_DECL(d), kHirAdt);
+    struct HirAdt *t = HirGetAdt(type);
 
-    struct HirTypeList *generics = d->generics != NULL
+    t->types = d->generics != NULL
         ? collect_generic_types(X, d->generics)
         : NULL;
-
-    struct HirSegment *seg = pawHir_path_add(X->m->hir, t->path, d->name, generics);
-    seg->base = seg->did = d->did;
-    seg->modno = X->m->hir->modno;
+    t->modno = X->m->hir->modno;
+    t->base = t->did = d->did;
     return type;
 }
 

@@ -111,7 +111,6 @@ int paw_mangle_name(paw_Env *P, paw_Type *types)
     Buffer buf;
     pawL_init_buffer(P, &buf);
     pawY_mangle_start(P, &buf, name);
-    paw_pop(P, 1); // pop 'name'
     if (types != NULL) {
         while (*types >= 0) {
             mangle_arg(P, &buf, *types++);
@@ -119,6 +118,7 @@ int paw_mangle_name(paw_Env *P, paw_Type *types)
     }
     pawY_mangle_finish(P, &buf);
     pawL_push_result(P, &buf);
+    paw_shift(P, 1); // replace 'name'
     return 0;
 }
 
