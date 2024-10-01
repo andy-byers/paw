@@ -166,7 +166,7 @@ typedef struct Generator {
     struct Compiler *C;
     struct ModuleInfo *m;
     struct FuncState *fs;
-    struct ToplevelList *items;
+    struct ItemList *items;
     struct Pool *pool;
     paw_Env *P;
     int nvals;
@@ -205,6 +205,8 @@ void pawP_set_instantiate(struct Compiler *C, paw_Bool full);
 
 void pawP_collect_imports(struct Compiler *C, struct Ast *ast);
 
+struct ItemList *pawP_define_all(struct Compiler *C, struct ModuleList *modules, int *poffset);
+
 // Determine which toplevel declaration the 'path' refers to, relative to the
 // current module 'm'
 struct HirDecl *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct HirPath *path);
@@ -241,5 +243,29 @@ static inline void pawP_pool_uninit(struct Compiler *C, struct Pool *pool)
 }
 
 paw_Type pawP_type2code(struct Compiler *C, struct HirType *type);
+
+enum VarKind {
+    VAR_GLOBAL,
+    VAR_UPVALUE,
+    VAR_LOCAL,
+    VAR_FIELD,
+    VAR_CFUNC,
+};
+
+struct VarInfo {
+    enum VarKind kind;
+    int index;
+};
+
+struct ItemSlot {
+    struct VarInfo info;
+    struct HirDecl *decl;
+    struct ModuleInfo *m;
+    String *name;
+};
+
+struct ItemSlot *pawP_new_item_slot(struct Compiler *C, struct HirDecl *decl, struct ModuleInfo *m);
+
+DEFINE_LIST(struct Compiler, pawP_item_list_, ItemList, struct ItemSlot)
 
 #endif // PAW_COMPILE_H

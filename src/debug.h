@@ -8,6 +8,9 @@
 #include "env.h"
 #include "paw.h"
 
+#warning "debug.h"
+#define PAW_DEBUG_LOG
+
 #if defined(PAW_DEBUG_LOG)
 # define PAWD_LOG(P, ...) pawD_debug_log(P, __VA_ARGS__)
 #else

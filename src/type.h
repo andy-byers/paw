@@ -60,6 +60,8 @@ enum DefKind {
 
 #define DEF_HEADER String *name; \
                    paw_Type code; \
+                   int modno; \
+                   DefId did; \
                    enum DefKind kind : 7; \
                    paw_Bool is_pub : 1
 struct DefHeader {

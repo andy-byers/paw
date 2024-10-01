@@ -83,19 +83,6 @@ struct HirSymbol {
     struct HirDecl *decl;
 };
 
-enum HirVarKind {
-    VAR_GLOBAL,
-    VAR_UPVALUE,
-    VAR_LOCAL,
-    VAR_FIELD,
-    VAR_CFUNC,
-};
-
-struct HirVarInfo {
-    enum HirVarKind kind;
-    int index;
-};
-
 struct HirSegment {
     String *name;
     struct HirTypeList *types;

@@ -21,7 +21,8 @@
 
 #define DLOG(G, ...) PAWD_LOG(ENV(G), __VA_ARGS__)
 #define ERROR(G, code, ...) pawE_error(ENV(G), code, (G)->fs->line, __VA_ARGS__)
-#define GET_DECL(G, id) pawHir_get_decl((G)->m->hir, id)
+#define PRELUDE(G) ((G)->C->dm->modules->data[0])
+#define GET_DECL(G, id) pawHir_get_decl(PRELUDE(G)->hir, id)
 #define TYPE_CODE(G, type) (pawP_type2code((G)->C, type))
 
 static enum paw_AdtKind adt_kind(paw_Type code)
@@ -29,26 +30,6 @@ static enum paw_AdtKind adt_kind(paw_Type code)
     return code == BUILTIN_LIST ? PAW_ADT_LIST :
         code == BUILTIN_MAP ? PAW_ADT_MAP : PAW_ADT_STR;
 }
-
-struct ItemSlot {
-    struct HirVarInfo info;
-    struct HirDecl *decl;
-    struct ModuleInfo *m;
-    String *name;
-};
-
-static struct ItemSlot *new_item_slot(struct Generator *G, struct HirDecl *decl, struct HirVarInfo info, struct ModuleInfo *m)
-{
-    struct ItemSlot *slot = pawK_pool_alloc(ENV(G), G->pool, sizeof(struct ItemSlot));
-    *slot = (struct ItemSlot){
-        .decl = decl,
-        .info = info,
-        .m = m,
-    };
-    return slot;
-}
-
-DEFINE_LIST(struct Generator, item_list_, ToplevelList, struct ItemSlot)
 
 static struct Def *get_def(struct Generator *G, DefId did)
 {
@@ -61,16 +42,46 @@ static paw_Bool is_foreign_mod(const struct Generator *G)
         G->m->hir->modno > 0;
 }
 
+static struct Type *lookup_type(struct Generator *G, struct HirType *type)
+{
+    Value *pv = pawH_get(G->C->types, P2V(type));
+    return pv != NULL ? pv->p : NULL;
+}
+
 static void mangle_type(struct Generator *G, Buffer *buf, struct HirType *type)
 {
-    paw_Env *P = ENV(G);
-    const struct Type *t;
+    // TODO: This an ugly hack. The 'G->C->types' map should map DeclId to struct Type * instead of struct HirType *
+    if (HirIsFuncDef(type)) {
+        struct HirDecl *decl = GET_DECL(G, HirGetFuncDef(type)->did);
+        type = HIR_TYPEOF(decl);
+    } else if (HirIsAdt(type)) {
+        struct HirDecl *decl = GET_DECL(G, HirGetAdt(type)->did);
+        type = HIR_TYPEOF(decl);
+    } else if (HirIsTupleType(type)) {
+        pawL_add_char(G->P, buf, 't');
+        for (int i = 0; i < type->tuple.elems->count; ++i) {
+            mangle_type(G, buf, type->tuple.elems->data[i]);
+        }
+        pawL_add_char(G->P, buf, '_');
+        return;
+    } else if (HirIsFuncPtr(type)) {
+        const struct HirFuncPtr func = type->fptr;
+        pawL_add_char(G->P, buf, 'F');
+        for (int i = 0; i < func.params->count; ++i) {
+            mangle_type(G, buf, func.params->data[i]);
+        }
+        pawL_add_char(G->P, buf, '_');
+        const struct HirType *result = func.result;
+        if (result->hdr.kind != TYPE_ADT || 
+                result->adt.did != PAW_TUNIT) {
+            mangle_type(G, buf, func.result);
+        }
+        return;
+    }
+    struct Type *t = lookup_type(G, type);
+    paw_assert(t != NULL);
 
-    Value *pv = pawH_get(G->C->types, P2V(type));
-    paw_assert(pv != NULL);
-    t = pv->p;
-
-    pawY_mangle_add_arg(P, buf, t->hdr.code);
+    pawY_mangle_add_arg(ENV(G), buf, t->hdr.code);
 }
 
 static void mangle_add(struct Generator *G, Buffer *buf, const String *name, struct HirTypeList *types)
@@ -244,7 +255,7 @@ static void close_vars(struct FuncState *fs, const struct BlockState *bs)
     }
 }
 
-static struct HirVarInfo declare_local(struct FuncState *fs, String *name, struct HirType *type)
+static struct VarInfo declare_local(struct FuncState *fs, String *name, struct HirType *type)
 {
     struct Generator *G = fs->G;
     struct DynamicMem *dm = G->C->dm;
@@ -255,7 +266,7 @@ static struct HirVarInfo declare_local(struct FuncState *fs, String *name, struc
         .name = name,
         .index = index,
     };
-    return (struct HirVarInfo){
+    return (struct VarInfo){
         .kind = VAR_LOCAL,
         .index = index,
     };
@@ -281,14 +292,14 @@ static void define_local(struct FuncState *fs)
     begin_local_scope(fs, 1);
 }
 
-static struct HirVarInfo new_local(struct FuncState *fs, String *name, struct HirType *type)
+static struct VarInfo new_local(struct FuncState *fs, String *name, struct HirType *type)
 {
-     const struct HirVarInfo info = declare_local(fs, name, type); 
+     const struct VarInfo info = declare_local(fs, name, type); 
      define_local(fs);
      return info;
 }
 
-static struct HirVarInfo new_local_lit(struct Generator *G, const char *name, paw_Type code)
+static struct VarInfo new_local_lit(struct Generator *G, const char *name, paw_Type code)
 {
     String *str = SCAN_STRING(G->C, name);
     struct HirDecl *decl = GET_DECL(G, code);
@@ -485,7 +496,7 @@ static void enter_function(struct Generator *G, struct FuncState *fs, struct Blo
 {
     *fs = (struct FuncState){
         .first_local = G->C->dm->vars.count,
-        .scopes = pawHir_symtab_new(G->m->hir),
+        .scopes = pawHir_symtab_new(PRELUDE(G)->hir),
         .proto = proto,
         .outer = G->fs,
         .name = name,
@@ -501,7 +512,7 @@ static void enter_function(struct Generator *G, struct FuncState *fs, struct Blo
     new_local(fs, fs->name, type);
 }
 
-static paw_Bool resolve_global(struct Generator *G, const String *name, struct HirVarInfo *pinfo)
+static paw_Bool resolve_global(struct Generator *G, const String *name, struct VarInfo *pinfo)
 {
     paw_Env *P = ENV(G);
     for (int i = 0; i < G->items->count; ++i) {
@@ -514,7 +525,7 @@ static paw_Bool resolve_global(struct Generator *G, const String *name, struct H
     return PAW_FALSE;
 }
 
-static paw_Bool resolve_local(struct FuncState *fs, const String *name, struct HirVarInfo *pinfo)
+static paw_Bool resolve_local(struct FuncState *fs, const String *name, struct VarInfo *pinfo)
 {
     for (int i = fs->nlocals - 1; i >= 0; --i) {
         struct LocalSlot *slot = get_local_slot(fs, i);
@@ -527,9 +538,9 @@ static paw_Bool resolve_local(struct FuncState *fs, const String *name, struct H
     return PAW_FALSE;
 }
 
-static struct HirVarInfo find_var(struct Generator *G, const String *name);
+static struct VarInfo find_var(struct Generator *G, const String *name);
 
-static struct HirVarInfo resolve_attr(struct Generator *G, struct HirType *type, String *name)
+static struct VarInfo resolve_attr(struct Generator *G, struct HirType *type, String *name)
 {
     struct HirDecl *decl = GET_DECL(G, hir_adt_did(type));
     struct HirAdtDecl *adt = HirGetAdtDecl(decl);
@@ -542,13 +553,13 @@ static struct HirVarInfo resolve_attr(struct Generator *G, struct HirType *type,
             break;
         }
     }
-    return (struct HirVarInfo){
+    return (struct VarInfo){
         .kind = VAR_FIELD,
         .index = index,
     };
 }
 
-static void add_upvalue(struct FuncState *fs, struct HirVarInfo *info, paw_Bool is_local)
+static void add_upvalue(struct FuncState *fs, struct VarInfo *info, paw_Bool is_local)
 {
     Proto *f = fs->proto;
     for (int i = 0; i < fs->nup; ++i) {
@@ -571,7 +582,7 @@ static void add_upvalue(struct FuncState *fs, struct HirVarInfo *info, paw_Bool 
     info->kind = VAR_UPVALUE;
 }
 
-static paw_Bool resolve_upvalue(struct FuncState *fs, const String *name, struct HirVarInfo *pinfo)
+static paw_Bool resolve_upvalue(struct FuncState *fs, const String *name, struct VarInfo *pinfo)
 {
     struct DynamicMem *dm = fs->G->C->dm;
     struct FuncState *caller = fs->outer;
@@ -589,9 +600,9 @@ static paw_Bool resolve_upvalue(struct FuncState *fs, const String *name, struct
     return PAW_FALSE;
 }
 
-static struct HirVarInfo find_var(struct Generator *G, const String *name)
+static struct VarInfo find_var(struct Generator *G, const String *name)
 {
-    struct HirVarInfo info;
+    struct VarInfo info;
     struct FuncState *fs = G->fs;
     if (!resolve_local(fs, name, &info) && // not local
             !resolve_upvalue(fs, name, &info) && // not local to caller
@@ -629,7 +640,7 @@ static void code_slice_indices(struct HirVisitor *V, struct HirExpr *first,
 }
 
 // Push a variable on to the stack
-static void code_getter(struct HirVisitor *V, struct HirVarInfo info)
+static void code_getter(struct HirVisitor *V, struct VarInfo info)
 {
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
@@ -656,7 +667,7 @@ static paw_Bool should_mangle(struct Generator *G, DeclId did)
     return !HirIsVarDecl(decl) && !HirIsFieldDecl(decl);
 }
 
-static struct HirVarInfo resolve_short_path(struct Generator *G, struct HirPath *path)
+static struct VarInfo resolve_short_path(struct Generator *G, struct HirPath *path)
 {
     paw_assert(path->count == 1);
     struct HirSegment *base = pawHir_path_get(path, 0);
@@ -666,7 +677,7 @@ static struct HirVarInfo resolve_short_path(struct Generator *G, struct HirPath 
     return find_var(G, name);
 }
 
-static struct HirVarInfo resolve_path(struct Generator *G, struct HirPath *path)
+static struct VarInfo resolve_path(struct Generator *G, struct HirPath *path)
 {
     if (path->count == 1) return resolve_short_path(G, path);
     paw_assert(path->count == 2);
@@ -683,7 +694,7 @@ static void code_setter(struct HirVisitor *V, struct HirExpr *lhs, struct HirExp
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
     if (HirIsPathExpr(lhs)) {
-        const struct HirVarInfo info = resolve_path(G, lhs->path.path);
+        const struct VarInfo info = resolve_path(G, lhs->path.path);
         V->VisitExpr(V, rhs);
         switch (info.kind) {
             case VAR_LOCAL:
@@ -706,7 +717,7 @@ static void code_setter(struct HirVisitor *V, struct HirExpr *lhs, struct HirExp
         if (lhs->select.is_index) {
             pawK_code_U(fs, OP_SETFIELD, lhs->select.index);
         } else {
-            const struct HirVarInfo info = resolve_attr(G, target, name);
+            const struct VarInfo info = resolve_attr(G, target, name);
             pawK_code_U(fs, OP_SETFIELD, info.index);
         }
     } else {
@@ -1053,7 +1064,7 @@ static void set_entrypoint(struct Generator *G, Proto *proto, int g)
     closure->p = proto;
 }
 
-static void code_func(struct HirVisitor *V, struct HirFuncDecl *d, struct HirVarInfo info)
+static void code_func(struct HirVisitor *V, struct HirFuncDecl *d, struct VarInfo info)
 {
     struct FuncState fs;
     struct BlockState bs;
@@ -1136,7 +1147,7 @@ static void code_instance_getter(struct HirVisitor *V, struct HirType *type)
     const Value *pv = pawH_get(P->builtin, P2V(key)); 
     name = mangle_name(G, NULL, name, pv ? NULL : type->fdef.types);
 
-    const struct HirVarInfo info = find_var(G, name);
+    const struct VarInfo info = find_var(G, name);
     code_getter(V, info);
 }
 
@@ -1179,7 +1190,7 @@ static void code_path_expr(struct HirVisitor *V, struct HirPathExpr *e)
     if (is_variant_constructor(G, e->type)) {
         code_variant_constructor(V, e->type, NULL);
     } else {
-        const struct HirVarInfo info = resolve_path(G, e->path);
+        const struct VarInfo info = resolve_path(G, e->path);
         code_getter(V, info);
     }
 }
@@ -1213,7 +1224,7 @@ static struct HirExpr *prep_method_call(struct Generator *G, struct HirCallExpr 
     struct HirFuncDef *fdef = HirGetFuncDef(select->type);
     const String *modname = prefix_for_modno(G, fdef->modno);
     const String *name = func_name(G, modname, e->func);
-    const struct HirVarInfo info = find_var(G, name);
+    const struct VarInfo info = find_var(G, name);
     pawK_code_U(G->fs, OP_GETGLOBAL, info.index);
     return select->target;
 }
@@ -1443,39 +1454,34 @@ static void code_selector_expr(struct HirVisitor *V, struct HirSelector *e)
     if (e->is_index) {
         pawK_code_U(fs, OP_GETFIELD, e->index);
     } else {
-        const struct HirVarInfo info = resolve_attr(G, HIR_TYPEOF(e->target), e->name);
+        const struct VarInfo info = resolve_attr(G, HIR_TYPEOF(e->target), e->name);
         pawK_code_U(fs, OP_GETFIELD, info.index);
     }
 }
 
-static void register_items(struct Generator *G, struct HirDeclList *items, struct ToplevelList *adts)
+static void register_items2(struct Generator *G, struct ModuleList *modules)
 {
-    DLOG(G, "generating code for '%s'", G->m->hir->name->text);
+    struct ItemList *items = pawP_define_all(G->C, modules, &G->nvals);
 
-    const int offset = items->count;
-    pawHir_define(G->m, items, &G->nvals);
-
-    const String *modname = get_mod_prefix(G, G->m);
-    for (int i = offset; i < items->count; ++i) {
-        struct HirDecl *item = items->data[i];
-        if (HirIsFuncDecl(item)) {
+    for (int i = 0; i < items->count; ++i) {
+        struct ItemSlot *item = K_LIST_GET(items, i);
+        const String *modname = get_mod_prefix(G, item->m);
+        if (HirIsFuncDecl(item->decl)) {
             struct FuncDef *fdef = &get_def(G, i)->func;
             paw_assert(fdef->kind == DEF_FUNC);
-            struct HirFuncDecl *d = HirGetFuncDecl(item);
+            struct HirFuncDecl *d = HirGetFuncDecl(item->decl);
             paw_assert(d->generics == NULL);
 
-            struct HirVarInfo info = {.index = fdef->vid};
-            if (d->body == NULL) info.kind = VAR_CFUNC;
-            struct ItemSlot *is = new_item_slot(G, item, info, G->m);
-            is->name = fdef->mangled_name = func_name(G, modname, d->type);
-            item_list_push(G, G->items, is);
-        } else if (HirIsAdtDecl(item)) {
+            item->info = (struct VarInfo){
+                .index = fdef->vid,
+                .kind = VAR_GLOBAL,
+            };
+            if (d->body == NULL) item->info.kind = VAR_CFUNC;
+            item->name = fdef->mangled_name = func_name(G, modname, d->type);
+            pawP_item_list_push(G->C, G->items, item);
+        } else if (HirIsAdtDecl(item->decl)) {
             struct AdtDef *adt = &get_def(G, i)->adt;
-
-            struct HirVarInfo info = {.kind = VAR_GLOBAL, .index = i};
-            struct ItemSlot *is = new_item_slot(G, item, info, G->m);
-            is->name = adt->mangled_name = adt_name(G, HIR_TYPEOF(is->decl));
-            item_list_push(G, adts, is);
+            item->name = adt->mangled_name = adt_name(G, HIR_TYPEOF(item->decl));
         }
     }
 }
@@ -1492,7 +1498,7 @@ static void set_cfunc(struct Generator *G, struct HirFuncDecl *d, int g)
     *pval = *pv;
 }
 
-static void code_items(struct HirVisitor *V, struct ToplevelList *items)
+static void code_items(struct HirVisitor *V, struct ItemList *items)
 {
     struct FuncState fs;
     struct BlockState bs;
@@ -1516,7 +1522,7 @@ static void code_items(struct HirVisitor *V, struct ToplevelList *items)
 
 static void setup_pass(struct HirVisitor *V, struct Generator *G)
 {
-    pawHir_visitor_init(V, G->m->hir, G);
+    pawHir_visitor_init(V, PRELUDE(G)->hir, G);
     V->VisitLiteralExpr = code_literal_expr;
     V->VisitLogicalExpr = code_logical_expr;
     V->VisitChainExpr = code_chain_expr;
@@ -1541,15 +1547,9 @@ static void setup_pass(struct HirVisitor *V, struct Generator *G)
     V->VisitFieldDecl = code_field_decl;
 }
 
-static void register_modules(struct Generator *G, struct ModuleList *modules)
+static void register_modules2(struct Generator *G, struct ModuleList *modules)
 {
-    struct ToplevelList *adts = item_list_new(G);
-    struct ModuleInfo *prelude = K_LIST_GET(modules, 0);
-    struct HirDeclList *items = pawHir_decl_list_new(prelude->hir);
-    for (int i = 0; i < modules->count; ++i) {
-        G->m = K_LIST_GET(modules, i); 
-        register_items(G, items, adts);
-    }
+    register_items2(G, modules);
 
     paw_Env *P = ENV(G);
     paw_assert(P->vals.data == NULL);
@@ -1573,7 +1573,7 @@ void pawP_codegen(struct Compiler *C)
         .P = P,
         .C = C,
     };
-    G.items = item_list_new(&G);
-    register_modules(&G, C->dm->modules);
+    G.items = pawP_item_list_new(C);
+    register_modules2(&G, C->dm->modules);
     code_modules(&G);
 }

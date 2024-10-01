@@ -50,6 +50,7 @@ pub fn test_io() {
         io::File,
     ];
     poly(io::File);
-// TODO    poly([io::File, io::File]);
+    poly([io::File]);
+//    poly([io::File, io::File]);
 // TODO    poly((io::File, io::File));
 }
