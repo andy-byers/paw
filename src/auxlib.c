@@ -10,30 +10,30 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static void grow_buffer(paw_Env *P, Buffer *buf, int boxloc)
+static void grow_buffer(paw_Env *P, Buffer *buf)
 {
     if (buf->alloc > SIZE_MAX / 2) pawM_error(P);
     const size_t alloc = buf->alloc * 2;
+    StackPtr pbox = RESTORE_POINTER(P, buf->boxloc);
     if (L_IS_BOXED(buf)) {
-        Foreign *ud = V_FOREIGN(P->top.p[boxloc]);
+        Foreign *ud = V_FOREIGN(*pbox);
         pawM_resize(P, buf->data, buf->alloc, alloc);
         ud->data = buf->data;
         ud->size = alloc;
     } else {
         // Add a new Foreign 'box' to contain the buffer. Prevents a memory leak
         // if an error is thrown before the buffer is freed.
-        Value *pbox = &P->top.p[boxloc];
-        Foreign *f = pawV_new_foreign(P, alloc, 0, pbox);
+        Foreign *f = pawV_new_foreign(P, alloc, 0, 0, pbox);
         memcpy(f->data, buf->stack, buf->size);
         buf->data = f->data;
     }
     buf->alloc = alloc;
 }
 
-static char *reserve_memory(paw_Env *P, Buffer *buf, size_t n, int boxloc)
+static char *reserve_memory(paw_Env *P, Buffer *buf, size_t n)
 {
     while (buf->size + n > buf->alloc) {
-        grow_buffer(P, buf, boxloc);
+        grow_buffer(P, buf);
     }
     char *ptr = buf->data + buf->size;
     buf->size += n;
@@ -43,6 +43,7 @@ static char *reserve_memory(paw_Env *P, Buffer *buf, size_t n, int boxloc)
 void pawL_init_buffer(paw_Env *P, Buffer *buf)
 {
     *buf = (Buffer){.data = buf->stack, .alloc = BUFFER_LIMIT};
+    buf->boxloc = SAVE_OFFSET(P, P->top.p);
     paw_push_zero(P, 1); // placeholder for box
 }
 
@@ -61,20 +62,20 @@ void pawL_push_result(paw_Env *P, Buffer *buf)
 void pawL_buffer_resize(paw_Env *P, Buffer *buf, size_t n)
 {
     while (n > buf->alloc) {
-        grow_buffer(P, buf, -1);
+        grow_buffer(P, buf);
     }
     buf->size = n;
 }
 
-static void add_nstring(paw_Env *P, Buffer *buf, const char *str, size_t len, int boxloc)
+static void add_nstring(paw_Env *P, Buffer *buf, const char *str, size_t len)
 {
-    char *ptr = reserve_memory(P, buf, len, boxloc);
+    char *ptr = reserve_memory(P, buf, len);
     memcpy(ptr, str, len);
 }
 
 void pawL_add_char(paw_Env *P, Buffer *buf, char c)
 {
-    char *ptr = reserve_memory(P, buf, 1, -1);
+    char *ptr = reserve_memory(P, buf, 1);
     ptr[0] = c;
 }
 
@@ -85,14 +86,14 @@ void pawL_add_string(paw_Env *P, Buffer *buf, const char *s)
 
 void pawL_add_nstring(paw_Env *P, Buffer *buf, const char *s, size_t n)
 {
-    add_nstring(P, buf, s, n, -1);
+    add_nstring(P, buf, s, n);
 }
 
 void pawL_add_value(paw_Env *P, Buffer *buf, paw_Type type)
 {
     size_t len;
     const char *str = pawV_to_string(P, &P->top.p[-1], type, &len);
-    add_nstring(P, buf, str, len, -2);
+    add_nstring(P, buf, str, len);
     paw_pop(P, 1);
 }
 
@@ -101,7 +102,7 @@ static void add_int(paw_Env *P, Buffer *buf, paw_Int i)
     size_t len;
     paw_push_int(P, i);
     const char *str = paw_to_string(P, -1, PAW_TINT, &len);
-    add_nstring(P, buf, str, len, -2); // string above box
+    add_nstring(P, buf, str, len);
     paw_pop(P, 1);
 }
 
@@ -110,7 +111,7 @@ static void add_float(paw_Env *P, Buffer *buf, paw_Float f)
     size_t len;
     paw_push_float(P, f);
     const char *str = paw_to_string(P, -1, PAW_TFLOAT, &len);
-    add_nstring(P, buf, str, len, -2); // string above box
+    add_nstring(P, buf, str, len);
     paw_pop(P, 1);
 }
 

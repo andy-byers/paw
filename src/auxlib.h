@@ -13,6 +13,7 @@
 #define BUFFER_LIMIT 512
 
 typedef struct Buffer {
+    ptrdiff_t boxloc;
     char *data;
     size_t size;
     size_t alloc;

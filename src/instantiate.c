@@ -148,6 +148,7 @@ static struct HirType *subst_func_def(struct HirFolder *F, struct HirFuncDef *t)
         struct HirFuncDef *r = HirGetFuncDef(result);
         r->params = subst_list(F, t->params);
         r->result = F->FoldType(F, t->result);
+        r->modno = t->modno;
         r->base = t->did;
         return result;
     }
@@ -254,6 +255,7 @@ static void instantiate_func_aux(struct InstanceState *I, struct HirFuncDecl *ba
 
     struct HirType *result = register_decl_type(I, HIR_CAST_DECL(inst), kHirFuncDef);
     struct HirFuncDef *r = HirGetFuncDef(result);
+    r->modno = HirGetFuncDef(base->type)->modno;
     r->base = base->did;
     r->params = collect_field_types(I, base->params);
     r->result = func_result(base);
@@ -280,10 +282,10 @@ static void instantiate_adt_aux(struct InstanceState *I, struct HirAdtDecl *base
 
     struct HirType *result = register_decl_type(I, HIR_CAST_DECL(inst), kHirAdt);
     struct HirAdt *r = HirGetAdt(result);
-    r->types = types;
-    r->modno = I->hir->modno;
+    r->modno = HirGetAdt(base->type)->modno;
     r->base = base->did;
     r->did = inst->did;
+    r->types = types;
 }
 
 static void check_template_param(struct InstanceState *I, struct HirDeclList *params, struct HirTypeList *args)

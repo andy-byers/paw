@@ -8,6 +8,7 @@
 //           or presence in the builtins map to indicate that a function is a C function 
 //           or not. Use flags in the AST and HIR nodes to store this info instead.
 
+#include "api.h"
 #include "auxlib.h"
 #include "code.h"
 #include "compile.h"
@@ -17,6 +18,7 @@
 #include "map.h"
 #include "mem.h"
 #include "parse.h"
+#include "lib.h"
 #include "type.h"
 
 #define DLOG(G, ...) PAWD_LOG(ENV(G), __VA_ARGS__)
@@ -646,6 +648,21 @@ static void code_getter(struct HirVisitor *V, struct VarInfo info)
     }
 }
 
+static struct ModuleInfo *get_mod(struct Generator *G, int modno)
+{
+    return K_LIST_GET(G->C->dm->modules, modno);
+}
+
+static const String *get_mod_prefix(struct Generator *G, struct ModuleInfo *m)
+{
+    struct Hir *hir = m->hir;
+    const String *modname =  hir->name;
+    // omit module prefix for target and prelude modules
+    if (hir->modno == 0) modname = NULL;
+    if (pawS_eq(modname, G->C->modname)) modname = NULL;
+    return modname;
+}
+
 static paw_Bool should_mangle(struct Generator *G, DeclId did)
 {
     struct HirDecl *decl = GET_DECL(G, did);
@@ -657,8 +674,10 @@ static struct VarInfo resolve_short_path(struct Generator *G, struct HirPath *pa
 {
     paw_assert(path->count == 1);
     struct HirSegment *base = pawHir_path_get(path, 0);
+    struct ModuleInfo *m = get_mod(G, base->modno);
+    const String *modname = get_mod_prefix(G, m);
     const String *name = should_mangle(G, base->did)
-        ? mangle_name(G, NULL, base->name, base->types)
+        ? mangle_name(G, modname, base->name, base->types)
         : base->name;
     return find_var(G, name);
 }
@@ -669,8 +688,10 @@ static struct VarInfo resolve_path(struct Generator *G, struct HirPath *path)
     paw_assert(path->count == 2);
     struct HirSegment *mod = pawHir_path_get(path, 0);
     struct HirSegment *base = pawHir_path_get(path, 1);
+    const String *modname = pawS_eq(G->C->modname, mod->name)
+        ? NULL : mod->name;
     const String *name = should_mangle(G, base->did)
-        ? mangle_name(G, mod->name, base->name, base->types)
+        ? mangle_name(G, modname, base->name, base->types)
         : base->name;
     return find_var(G, name);
 }
@@ -1061,7 +1082,7 @@ static void code_func(struct HirVisitor *V, struct HirFuncDecl *d, struct VarInf
 
     enter_function(G, &fs, &bs, d->name, proto, d->type, d->fn_kind);
     if (d->fn_kind == FUNC_METHOD) {
-        String *name = pawE_cstr(ENV(G), CSTR_SELF);
+        String *name = CACHED_STRING(ENV(G), CSTR_SELF);
         new_local(&fs, name, d->self);
         ++proto->argc;
     }
@@ -1126,12 +1147,15 @@ static void code_instance_getter(struct HirVisitor *V, struct HirType *type)
     struct HirDecl *decl = GET_DECL(G, type->fdef.did);
     paw_Env *P = ENV(G);
 
+    struct ModuleInfo *m = get_mod(G, HirGetFuncDef(type)->modno);
+    const String *modname = get_mod_prefix(G, m);
+
     const String *name = decl->hdr.name;
-    const String *key = mangle_name(G, NULL, name, NULL);
+    const String *key = mangle_name(G, modname, name, NULL);
     // builtins are not monomorphized: there is a single C function implementing each
     // polymorphic builtin function
-    const Value *pv = pawH_get(P->builtin, P2V(key)); 
-    name = mangle_name(G, NULL, name, pv ? NULL : type->fdef.types);
+    const Value *pv = pawH_get(G->builtin, P2V(key)); 
+    name = mangle_name(G, modname, name, pv ? NULL : type->fdef.types);
 
     const struct VarInfo info = find_var(G, name);
     code_getter(V, info);
@@ -1185,16 +1209,6 @@ static paw_Bool is_method_call(struct HirCallExpr *e)
 {
     return HirIsFuncDef(e->func) &&
         HirIsSelector(e->target);
-}
-
-static const String *get_mod_prefix(struct Generator *G, struct ModuleInfo *m)
-{
-    struct Hir *hir = m->hir;
-    const String *modname =  hir->name;
-    // omit module prefix for target and prelude modules
-    if (hir->modno == 0) modname = NULL;
-    if (pawS_eq(modname, G->C->modname)) modname = NULL;
-    return modname;
 }
 
 static const String *prefix_for_modno(struct Generator *G, int modno)
@@ -1479,7 +1493,7 @@ static void set_cfunc(struct Generator *G, struct HirFuncDecl *d, int g)
 
     const String *modname = get_mod_prefix(G, G->m);
     const String *mangled = func_name(G, modname, d->type);
-    const Value *pv = pawH_get(P->builtin, P2V(mangled));
+    const Value *pv = pawH_get(G->builtin, P2V(mangled));
     if (pv == NULL) ERROR(G, PAW_ENAME, "C function '%s' not loaded", d->name->text);
     *pval = *pv;
 }
@@ -1554,7 +1568,10 @@ static void code_modules(struct Generator *G)
 void pawP_codegen(struct Compiler *C)
 {
     paw_Env *P = ENV(C);
+    pawL_push_builtin_map(P);
+
     struct Generator G = {
+        .builtin = V_MAP(P->top.p[-1]),
         .pool = C->pool,
         .P = P,
         .C = C,
@@ -1562,4 +1579,6 @@ void pawP_codegen(struct Compiler *C)
     G.items = pawP_item_list_new(C);
     register_modules(&G, C->dm->modules);
     code_modules(&G);
+
+    pawC_pop(P);
 }

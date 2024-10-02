@@ -9,6 +9,7 @@
 #include "compile.h"
 #include "map.h"
 #include "rt.h"
+#include <inttypes.h>
 #include <stdio.h>
 
 #define PC_REL(p, pc) CAST(int, (pc) - (p)->source - 1)

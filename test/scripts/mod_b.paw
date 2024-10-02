@@ -1,0 +1,32 @@
+
+use mod_a;
+
+pub struct External {
+    value: str,
+}
+
+pub struct PolyExternal<T> {
+    value: T,
+}
+
+pub fn external(value: str) -> External {
+    return External{value: value};
+}
+
+pub fn poly_external<X>(value: X) -> PolyExternal<X> {
+    return PolyExternal{value: value};
+}
+
+pub fn recursive(n: int) -> int {
+    if n > 0 {
+        return mod_a::recursive(n - 1) + 1;
+    }
+    return 0;
+}
+
+pub fn poly_recursive<T>(n: int, t: T, list: [T]) {
+    if n > 0 {
+        list.push(t);
+        mod_a::poly_recursive(n - 1, t, list);
+    }
+}

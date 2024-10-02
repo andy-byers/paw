@@ -5,7 +5,9 @@
 
 #include <errno.h>
 #include <stdio.h>
+#include "api.h"
 #include "call.h"
+#include "mem.h"
 #include "os.h"
 #include "util.h"
 
@@ -35,7 +37,10 @@ void pawO_error(paw_Env *P)
 
 File *pawO_new_file(paw_Env *P)
 {
-    File *file = paw_new_foreign(P, sizeof(File), 0);
+    Value *pv = pawC_push0(P);
+    Foreign *f = pawV_new_foreign(P, sizeof(File), 0, VBOX_FILE, pv);
+
+    File *file = f->data;
     *file = (File){0};
     return file;
 }
@@ -51,7 +56,7 @@ int pawO_open(File *file, const char *pathname, const char *mode)
             break;
         }
     }
-    return -1;
+    return -errno;
 }
 
 void pawO_close(File *file)
@@ -137,3 +142,17 @@ void pawO_write_all(paw_Env *P, File *file, const void *data, size_t size)
         pawO_error(P);
     }
 }
+
+File *pawO_detach_file(paw_Env *P, File *src)
+{
+    File *dst = pawM_new(P, File);
+    *dst = *src;
+    *src = (File){0};
+    return dst;
+}
+
+void pawO_free_file(paw_Env *P, File *file)
+{
+    pawM_free(P, file);
+}
+

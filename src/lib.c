@@ -6,6 +6,7 @@
 
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "lib.h"
 #include "api.h"
@@ -184,24 +185,27 @@ static int string_split(paw_Env *P)
 
 static int string_join(paw_Env *P)
 {
-     String *s = V_STRING(*CF_BASE(1));
-     const Value seq = *CF_BASE(2);
+    String *sep = V_STRING(*CF_BASE(1));
 
-     Buffer buf;
-     pawL_init_buffer(P, &buf);
-     paw_Int itr = PAW_ITER_INIT;
-     List *a = V_LIST(seq);
-     while (pawV_list_iter(a, &itr)) {
-         const Value v = a->begin[itr];
-         // Add a chunk, followed by the separator if necessary.
-         const String *chunk = V_STRING(v);
-         pawL_add_nstring(P, &buf, chunk->text, chunk->length);
-         if (CAST_SIZE(itr + 1) < pawV_list_length(a)) {
-             pawL_add_nstring(P, &buf, s->text, s->length);
-         }
-     }
-     pawL_push_result(P, &buf);
-     return 1;
+    Buffer buf;
+    pawL_init_buffer(P, &buf);
+    paw_push_int(P, PAW_ITER_INIT);
+    while (paw_list_next(P, 2)) {
+        const char *chunk = paw_string(P, -1);
+        const paw_Int chunklen = paw_str_rawlen(P, -1);
+        pawL_add_nstring(P, &buf, chunk, chunklen);
+        L_ADD_STRING(P, &buf, sep);
+        paw_pop(P, 1);
+    }
+    paw_pop(P, 1);
+
+    if (buf.size > 0) {
+        // remove the last separator
+        paw_assert(buf.size >= sep->length);
+        buf.size -= sep->length;
+    }
+    pawL_push_result(P, &buf);
+    return 1;
  }
 
 static int string_starts_with(paw_Env *P)
@@ -299,6 +303,80 @@ static int map_erase(paw_Env *P)
     return 1;
 }
 
+const char *find_last_sep(const char *s, size_t n, size_t *pn)
+{
+    paw_assert(n > 0);
+    const char *s0 = s;
+    s += n; *pn = 0;
+
+    do {
+        --s; ++*pn;
+        const char *q = PAW_FOLDER_SEPS;
+        while (*q != '\0') {
+            if (*q++ == *s) return s;
+        }
+    } while (s != s0);
+    return NULL;
+}
+
+static void path_to_modname(const char *pathname, size_t pathlen, char *modname)
+{
+    size_t modlen;
+    const char *begin = find_last_sep(pathname, pathlen, &modlen);
+    if (begin != NULL) {
+        // skip separator
+        --modlen;
+        ++begin; 
+    } else {
+        begin = pathname;
+        modlen = pathlen;
+    }
+    const char *end = strchr(begin, '.');
+    if (end != NULL) modlen = end - begin;
+    memcpy(modname, begin, modlen);
+    modname[modlen] = '\0';
+}
+
+struct FileReader {
+    struct LoaderState state;
+    char data[512];
+    File *file;
+    paw_Bool err;
+};
+
+static const char *file_reader(paw_Env *P, void *ud, size_t *psize)
+{
+    struct FileReader *fr = ud;
+    const size_t zchunk = sizeof(fr->data);
+    *psize = pawO_read(P, fr->file, fr->data, zchunk);
+// TODO: don't throw errors in os.c    if (*psize != zchunk) fr->err = ferror(fr->file);
+    return *psize > 0 ? fr->data : NULL;
+}
+
+struct ChunkReader {
+    struct LoaderState state;
+    const char *data;
+    size_t size;
+};
+
+static const char *chunk_reader(paw_Env *P, void *ud, size_t *psize)
+{
+    PAW_UNUSED(P);
+    struct ChunkReader *cr = ud;
+    *psize = cr->size;
+    cr->size = 0;
+    return cr->data;
+}
+
+void pawL_close_loader(paw_Env *P, void *state)
+{
+    PAW_UNUSED(P);
+    if (state == NULL) return;
+    struct FileReader *fr = state;
+    pawO_close(fr->file);
+    pawO_free_file(P, fr->file);
+}
+
 void pawL_new_func(paw_Env *P, paw_Function func, int nup)
 {
     Value *pv = pawC_push0(P);
@@ -336,14 +414,22 @@ static void add_prelude_method(paw_Env *P, const char *self, const char *name, p
     pawC_stkdec(P, 1);
 }
 
-void pawL_init(paw_Env *P)
+void pawL_push_builtin_map(paw_Env *P)
 {
-    Value *pv = pawC_push0(P);
-    P->libs = pawH_new(P);
-    P->builtin = pawH_new(P);
-    V_SET_OBJECT(pv, P->builtin);
+    pawE_push_cstr(P, CSTR_KBUILTIN);
+    paw_map_getelem(P, PAW_REGISTRY_INDEX);
+}
 
-    // Builtin functions:
+void pawL_push_modules_map(paw_Env *P)
+{
+    pawE_push_cstr(P, CSTR_KMODULES);
+    paw_map_getelem(P, PAW_REGISTRY_INDEX);
+}
+
+// Load function pointers for prelude functions
+// Expects the 'paw.builtin' map (from the registry) on top of the stack
+static void load_builtins(paw_Env *P)
+{
     add_prelude_func(P, "assert", base_assert); // fn assert(bool)
     add_prelude_func(P, "print", base_print); // fn print(string)
 
@@ -378,56 +464,189 @@ void pawL_init(paw_Env *P)
     add_prelude_method(P, "Result", "is_err", enum_is_one);
     add_prelude_method(P, "Result", "unwrap", enum_unwrap);
     add_prelude_method(P, "Result", "unwrap_or", enum_unwrap_or);
-
-    pawC_pop(P);
 }
 
-struct FileReader {
-    char data[512];
-    File *file;
-    paw_Bool err;
-};
-
-static const char *file_reader(paw_Env *P, void *ud, size_t *psize)
+paw_Bool l_getenv(paw_Env *P) 
 {
-    PAW_UNUSED(P);
-    struct FileReader *fr = ud;
-    const size_t zchunk = sizeof(fr->data);
-    *psize = pawO_read(P, fr->file, fr->data, zchunk);
-// TODO: don't throw errors in os.c    if (*psize != zchunk) fr->err = ferror(fr->file);
-    return *psize > 0 ? fr->data : NULL;
+    const char *env = getenv(paw_string(P, -1));
+    paw_pop(P, 1);
+
+    if (env == NULL) return PAW_FALSE;
+    paw_push_string(P, env);
+    return PAW_TRUE;
+}
+
+static paw_Bool matches_modname(paw_Env *P, const char *modname)
+{
+    paw_push_value(P, -1);
+    paw_push_string(P, modname);
+    paw_cmps(P, PAW_CMP_EQ);
+    const paw_Bool found = paw_bool(P, -1);
+    paw_pop(P, 1);
+    return found;
+}
+
+static struct FileReader *new_file_reader(paw_Env *P, const char *pathname)
+{
+    File *file = pawO_new_file(P);
+    const int rc = pawO_open(file, pathname, "r");
+    if (rc == -ENOENT) {
+        paw_pop(P, 1);
+        return NULL;
+    } else if (rc < 0) {
+        pawO_error(P);
+    }
+
+    struct FileReader *r = paw_new_foreign(P, sizeof(struct FileReader), 0);
+    Foreign *f = V_FOREIGN(P->top.p[-1]);
+    r->file = pawO_detach_file(P, file);
+    r->state.f = file_reader;
+    f->flags = VBOX_LOADER;
+    paw_shift(P, 1);
+
+    return r;
+}
+
+static int searcher_Paw(paw_Env *P)
+{
+    void l_import_io(paw_Env *P);
+    void l_import_math(paw_Env *P);
+
+    if (matches_modname(P, "io")) {
+        l_import_io(P);
+    } else if (matches_modname(P, "math")) {
+        l_import_math(P);
+    } else {
+        paw_push_zero(P, 1);
+    }
+    return 1;
+}
+
+static int searcher_cwd(paw_Env *P)
+{
+    if (P->modname != NULL) {
+        char modname[PATH_MAX + 1];
+        const char *pathname = P->modname->text;
+        const size_t pathlen = P->modname->length;
+        paw_assert(pathlen <= PATH_MAX);
+
+        size_t modlen;
+        const char *sep = find_last_sep(pathname, pathlen, &modlen);
+        if (sep == NULL) goto use_current_dir;
+        paw_push_nstring(P, pathname, sep - pathname + 1);
+    } else {
+use_current_dir:;
+        char prefix[] = {'.', PAW_FOLDER_SEPS[0], '\0'};
+        paw_push_string(P, prefix);
+    }
+    paw_rotate(P, -2, 1);
+    PAW_PUSH_LITERAL(P, PAW_MODULE_EXT);
+    paw_str_concat(P, 3);
+
+    struct FileReader *fr = new_file_reader(P, paw_string(P, -1));
+    if (fr == NULL) paw_push_zero(P, 1); // indicate failure
+
+    return 1;
+}
+
+static void push_prelude_method(paw_Env *P, const char *self, const char *name)
+{
+    pawE_push_cstr(P, CSTR_KBUILTIN);
+    paw_map_getelem(P, PAW_REGISTRY_INDEX);
+
+    paw_push_string(P, name);
+    paw_mangle_name(P, NULL, PAW_FALSE);
+    paw_push_string(P, self);
+    paw_mangle_self(P, NULL, PAW_FALSE);
+
+    paw_map_getelem(P, -2);
+    paw_shift(P, 1);
+}
+#include"stdio.h"
+static int searcher_env(paw_Env *P)
+{
+    PAW_PUSH_LITERAL(P, PAW_PATH_VAR);
+    if (l_getenv(P)) {
+        // split on the path separator
+        push_prelude_method(P, "str", "split");
+        paw_rotate(P, -2, 1);
+        PAW_PUSH_LITERAL(P, PAW_PATH_SEP);
+        paw_call(P, 2);
+
+        paw_push_int(P, PAW_ITER_INIT);
+        while (paw_list_next(P, -2)) {
+            // path + sep + modname + ext
+            paw_push_nstring(P, PAW_FOLDER_SEPS, 1);
+            paw_push_value(P, 1); // modname
+            PAW_PUSH_LITERAL(P, PAW_MODULE_EXT);
+            paw_str_concat(P, 4);
+
+            struct FileReader *fr = new_file_reader(P, paw_string(P, -1));
+            if (fr != NULL) return 1;
+
+            paw_pop(P, 1);
+        }
+    }
+    paw_push_zero(P, 1);
+    return 1;
+}
+
+static int init_searchers(paw_Env *P)
+{
+    const paw_Function fs[] = {
+        searcher_Paw, // check stdlib first
+        searcher_cwd,
+        searcher_env,
+    };
+    for (int i = 0; i < PAW_COUNTOF(fs); ++i) {
+        pawL_new_func(P, fs[i], 0);
+    }
+    return PAW_COUNTOF(fs);
+}
+
+void pawL_init(paw_Env *P)
+{
+    // create system registry objects
+    pawE_push_cstr(P, CSTR_KSEARCHERS);
+    paw_new_list(P, init_searchers(P));
+    pawE_push_cstr(P, CSTR_KMODULES);
+    paw_new_map(P, 0);
+    pawE_push_cstr(P, CSTR_KBUILTIN);
+    paw_new_map(P, 0);
+    load_builtins(P);
+
+    // create the registry itself
+    paw_new_map(P, 3);
+    P->registry = P->top.p[-1];
+    paw_pop(P, 1);
 }
 
 int pawL_load_file(paw_Env *P, const char *pathname)
 {
-    struct FileReader fr = {0};
-    fr.file = pawO_new_file(P);
+    struct FileReader fr = {
+        .file = pawO_new_file(P),
+        .state.f = file_reader, 
+    };
     const int rc = pawO_open(fr.file, pathname, "r");
     if (rc == 0) {
-        const int status = paw_load(P, file_reader, pathname, &fr);
+        char modname[PATH_MAX + 1];
+        const size_t pathlen = strlen(pathname);
+        paw_assert(pathlen <= PATH_MAX);
+        path_to_modname(pathname, pathlen, modname);
+        const int status = paw_load(P, file_reader, modname, &fr);
         if (!fr.err) return status;
     }
     paw_push_string(P, strerror(errno));
     return PAW_ESYSTEM;
 }
 
-struct ChunkReader {
-    const char *data;
-    size_t size;
-};
-
-static const char *chunk_reader(paw_Env *P, void *ud, size_t *psize)
-{
-    PAW_UNUSED(P);
-    struct ChunkReader *cr = ud;
-    *psize = cr->size;
-    cr->size = 0;
-    return cr->data;
-}
-
 int pawL_load_nchunk(paw_Env *P, const char *name, const char *source, size_t length)
 {
-    struct ChunkReader cr = {.data = source, .size = length};
+    struct ChunkReader cr = {
+        .state.f = chunk_reader,
+        .data = source, 
+        .size = length,
+    };
     return paw_load(P, chunk_reader, name, &cr);
 }
 
@@ -438,25 +657,20 @@ int pawL_load_chunk(paw_Env *P, const char *name, const char *source)
 
 int pawL_register_func(paw_Env *P, const char *name, paw_Function func, int nup)
 {
-    paw_new_native(P, func, nup);
-
-    V_SET_OBJECT(P->top.p, P->builtin);
-    API_INCR_TOP(P, 1);
-
+    // map[mangle(name)] = func
+    pawL_push_builtin_map(P);
     paw_push_string(P, name);
     paw_mangle_name(P, NULL, PAW_FALSE);
-
-    // func, builtin, name => builtin, name, func
-    paw_rotate(P, -3, -1);
-    paw_setelem(P, PAW_ADT_MAP);
+    paw_new_native(P, func, nup);
+    paw_map_setelem(P, -3);
     return 0;
 }
 
-void *pawL_chunk_reader(paw_Env *P, const char *text, size_t length, paw_Reader *preader)
+void *pawL_chunk_reader(paw_Env *P, const char *text, size_t length)
 {
     struct ChunkReader *r = paw_new_foreign(P, sizeof(struct ChunkReader), 0);
-    *preader = chunk_reader;
     *r = (struct ChunkReader){
+        .state.f = chunk_reader,
         .size = length,
         .data = text,
     };
@@ -490,9 +704,6 @@ void pawL_add_extern_method(paw_Env *P, const char *modname, const char *self, c
     pawC_stkdec(P, 1);
 }
 
-#define MATCHES_MODULE(str, lit) ((str)->length == PAW_LENGTHOF(lit) && \
-                                  memcmp((str)->text, lit, PAW_LENGTHOF(lit)) == 0)
-
 static const char *file_import_reader(paw_Env *P, void *ud, size_t *psize)
 {
     PAW_UNUSED(P);
@@ -506,30 +717,26 @@ static const char *file_import_reader(paw_Env *P, void *ud, size_t *psize)
     return *psize > 0 ? fr->data : NULL;
 }
 
-void *pawL_start_import(paw_Env *P, paw_Reader *preader)
+struct LoaderState *pawL_start_import(paw_Env *P)
 {
-    void *l_import_io(paw_Env *P, paw_Reader *preader);
-    void *l_import_math(paw_Env *P, paw_Reader *preader);
+    pawE_push_cstr(P, CSTR_KSEARCHERS);
+    paw_map_getelem(P, PAW_REGISTRY_INDEX);
 
-    Value *pv = &P->top.p[-1];
-    const String *name = V_STRING(*pv);
-    if (MATCHES_MODULE(name, "io")) {
-        return l_import_io(P, preader);
-    } else if (MATCHES_MODULE(name, "math")) {
-        return l_import_math(P, preader);
+    // .. name searchers iter
+    paw_push_int(P, PAW_ITER_INIT);
+    while (paw_list_next(P, -2)) {
+        // .. name searchers iter f name
+        paw_push_value(P, -4); // name
+        const int status = paw_call(P, 1); // state = f(name)
+        if (status != PAW_OK) pawC_throw(P, status);
+        if (paw_rawptr(P, -1) != NULL) {
+            paw_shift(P, 3);
+            return paw_pointer(P, -1);
+        }
+        paw_pop(P, 1);
     }
-    struct FileReader *r = paw_new_foreign(P, sizeof(struct FileReader), 0);
-    Foreign *f = V_FOREIGN(P->top.p[-1]);
-    f->flags = 0 /* TODO: flag for GC */;
-
-    File *file = pawO_new_file(P);
-    const int rc = pawO_open(file, name->text, "r"); // TODO: look in various directories
-    if (rc != 0) pawO_error(P);
-    *preader = file_import_reader;
-    *r = (struct FileReader){
-        .file = file,
-    };
-    return r;
+    paw_pop(P, 2);
+    return NULL;
 }
 
 void pawL_finish_import(paw_Env *P)

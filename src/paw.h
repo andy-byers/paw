@@ -20,6 +20,8 @@
 #include <stdarg.h>
 #include <stddef.h>
 
+#define PAW_REGISTRY_INDEX (-PAW_STACK_MAX - 1000)
+
 typedef int paw_Type;
 typedef int64_t paw_Int;
 typedef double paw_Float;
@@ -92,10 +94,36 @@ void paw_push_bool(paw_Env *P, paw_Bool b);
 void paw_push_int(paw_Env *P, paw_Int i);
 void paw_push_float(paw_Env *P, paw_Float f);
 void paw_push_function(paw_Env *P, paw_Function fn, int n);
+void paw_push_rawptr(paw_Env *P, void *ptr);
 const char *paw_push_string(paw_Env *P, const char *s);
 const char *paw_push_nstring(paw_Env *P, const char *s, size_t n);
 const char *paw_push_fstring(paw_Env *P, const char *fmt, ...);
 const char *paw_push_vfstring(paw_Env *P, const char *fmt, va_list arg);
+
+#define PAW_PUSH_LITERAL(P, s) paw_push_nstring(P, "" s, sizeof(s))
+
+
+//
+// Getters (stack -> C):
+//
+
+paw_Bool paw_bool(paw_Env *P, int index);
+paw_Int paw_int(paw_Env *P, int index);
+paw_Float paw_float(paw_Env *P, int index);
+const char *paw_string(paw_Env *P, int index);
+paw_Function paw_native(paw_Env *P, int index);
+void *paw_userdata(paw_Env *P, int index);
+void *paw_rawptr(paw_Env *P, int index);
+
+// Get a pointer to the internal representation of an object
+// Value must be of object type, e.g. a list or a function.
+void *paw_pointer(paw_Env *P, int index);
+
+void paw_pop(paw_Env *P, int n);
+
+// Return the number of values in the current stack frame
+int paw_get_count(paw_Env *P);
+
 
 enum paw_CmpOp {
     PAW_CMP_EQ,
@@ -138,70 +166,55 @@ enum paw_BitwOp {
 
 void paw_bitw(paw_Env *P, enum paw_BitwOp op);
 
-enum paw_BoolOp {
-    PAW_BOOL_NOT,
-};
 
-enum paw_StrOp {
-    PAW_STR_LEN,
-    PAW_STR_CONCAT,
-    PAW_STR_GET,
-    PAW_STR_GETN,
-};
-
-enum paw_ListOp {
-    PAW_LIST_LEN,
-    PAW_LIST_CONCAT,
-    PAW_LIST_GET,
-    PAW_LIST_SET,
-    PAW_LIST_GETN,
-    PAW_LIST_SETN,
-};
-
-enum paw_MapOp {
-    PAW_MAP_LEN,
-    PAW_MAP_GET,
-    PAW_MAP_SET,
-};
-
-void paw_boolop(paw_Env *P, enum paw_BoolOp op);
-void paw_strop(paw_Env *P, enum paw_StrOp op);
-void paw_listop(paw_Env *P, enum paw_ListOp op);
-void paw_mapop(paw_Env *P, enum paw_MapOp op);
-
-enum paw_AdtKind {
-    PAW_ADT_STR,
-    PAW_ADT_LIST,
-    PAW_ADT_MAP,
-};
-
-void paw_length(paw_Env *P, enum paw_AdtKind kind);
-void paw_concat(paw_Env *P, enum paw_AdtKind kind);
-void paw_getelem(paw_Env *P, enum paw_AdtKind kind);
-void paw_setelem(paw_Env *P, enum paw_AdtKind kind);
-void paw_getrange(paw_Env *P, enum paw_AdtKind kind);
-void paw_setrange(paw_Env *P, enum paw_AdtKind kind);
+void paw_str_length(paw_Env *P, int index);
+void paw_str_concat(paw_Env *P, int count);
+void paw_str_getelem(paw_Env *P, int index);
+void paw_str_getrange(paw_Env *P, int index);
 
 
-//
-// Getters (stack -> C):
-//
+// Initializer for iterator state variables
+#define PAW_ITER_INIT PAW_CAST_INT(-1)
 
-paw_Bool paw_bool(paw_Env *P, int index);
-paw_Int paw_int(paw_Env *P, int index);
-paw_Float paw_float(paw_Env *P, int index);
-const char *paw_string(paw_Env *P, int index);
-paw_Function paw_native(paw_Env *P, int index);
-void *paw_userdata(paw_Env *P, int index);
+void paw_list_length(paw_Env *P, int index);
+void paw_list_concat(paw_Env *P, int count);
+void paw_list_getelem(paw_Env *P, int index);
+void paw_list_setelem(paw_Env *P, int index);
+void paw_list_getrange(paw_Env *P, int index);
+void paw_list_setrange(paw_Env *P, int index);
+paw_Bool paw_list_next(paw_Env *P, int index);
 
-// Get a pointer to the internal representation of an object
-// Value must be of object type, e.g. a list or a function.
-void *paw_pointer(paw_Env *P, int index);
 
-void paw_pop(paw_Env *P, int n);
+void paw_map_length(paw_Env *P, int index);
+void paw_map_getelem(paw_Env *P, int index);
+void paw_map_setelem(paw_Env *P, int index);
+paw_Bool paw_map_next(paw_Env *P, int index);
 
-// Return the number of values in the current stack frame
-int paw_get_count(paw_Env *P);
+
+static inline paw_Int paw_str_rawlen(paw_Env *P, int index)
+{
+    paw_str_length(P, index);
+    const paw_Int n = paw_int(P, -1);
+    paw_pop(P, 1);
+    return n;
+}
+
+static inline paw_Int paw_list_rawlen(paw_Env *P, int index)
+{
+    paw_list_length(P, index);
+    const paw_Int n = paw_int(P, -1);
+    paw_pop(P, 1);
+    return n;
+}
+
+static inline paw_Int paw_map_rawlen(paw_Env *P, int index)
+{
+    paw_map_length(P, index);
+    const paw_Int n = paw_int(P, -1);
+    paw_pop(P, 1);
+    return n;
+}
+
 
 int paw_mangle_name(paw_Env *P, paw_Type *types, paw_Bool has_modname);
 int paw_mangle_self(paw_Env *P, paw_Type *types, paw_Bool has_modname);

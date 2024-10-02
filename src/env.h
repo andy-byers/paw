@@ -42,6 +42,9 @@ enum {
     CSTR_MAP,
     CSTR_RESULT,
     CSTR_OPTION,
+    CSTR_KMODULES,
+    CSTR_KBUILTIN,
+    CSTR_KSEARCHERS,
     NCSTR,
 };
 
@@ -60,11 +63,10 @@ typedef struct paw_Env {
     StackRel top;
 
     String *modname;
-    Map *builtin;
-    Map *libs;
+    Value registry;
 
     // Array of commonly-used strings.
-    String *str_cache[NCSTR];
+    String *string_cache[NCSTR];
 
     // Contains an error message that is served when the system runs out of
     // memory (a call to the 'alloc' field below returned NULL).
@@ -106,10 +108,7 @@ _Noreturn void pawE_error(paw_Env *P, int code, int line, const char *fmt, ...);
 CallFrame *pawE_extend_cf(paw_Env *P, StackPtr top);
 int pawE_locate(paw_Env *P, const String *name, paw_Bool only_pub);
 
-static inline String *pawE_cstr(paw_Env *P, unsigned kind)
-{
-    paw_assert(kind < NCSTR);
-    return P->str_cache[kind];
-}
+#define CACHED_STRING(P, k) CHECK_EXP((k) < NCSTR, (P)->string_cache[k])
+void pawE_push_cstr(paw_Env *P, unsigned kind);
 
 #endif // PAW_ENV_H

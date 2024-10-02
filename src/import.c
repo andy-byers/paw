@@ -10,6 +10,7 @@
 #include "map.h"
 
 #define DLOG(I, ...) PAWD_LOG(ENV(I->C), __VA_ARGS__)
+#define NAME_ERROR(I, ...) pawE_error(ENV(I->C), PAW_ENAME, -1/*TODO*/, __VA_ARGS__)
 
 struct Importer {
     struct Compiler *C;
@@ -42,13 +43,15 @@ static int import_module(struct Importer *I, String *name)
     DLOG(I, "importing '%s'", name->text);
 
     paw_Env *P = ENV(I->C);
+    const ptrdiff_t saved = SAVE_OFFSET(P, P->top.p);
     V_SET_OBJECT(P->top.p++, name);
 
-    paw_Reader reader;
-    void *state = pawL_start_import(P, &reader);
-    ast = pawP_parse_module(I->C, name, reader, state);
+    struct LoaderState *state = pawL_start_import(P);
+    if (state == NULL) NAME_ERROR(I, "module '%s' not found", name->text);
+    ast = pawP_parse_module(I->C, name, state->f, state);
     pawL_finish_import(P);
 
+    P->top.p = RESTORE_POINTER(P, saved);
     add_import(I, name, ast);
     collect_imports_from(I, ast);
     return ast->modno;

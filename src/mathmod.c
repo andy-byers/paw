@@ -61,7 +61,7 @@ static int math_atan2(paw_Env *P)
 }
 
 
-void *l_import_math(paw_Env *P, paw_Reader *preader)
+void l_import_math(paw_Env *P)
 {
     static const char s_math[] =
         "pub fn sin(f: float) -> float;\n"
@@ -72,9 +72,8 @@ void *l_import_math(paw_Env *P, paw_Reader *preader)
         "pub fn atan(f: float) -> float;\n"
         "pub fn atan2(a: float, b: float) -> float;\n";
 
-    API_CHECK_PUSH(P, 1);
-    V_SET_OBJECT(P->top.p, P->builtin);
-    API_INCR_TOP(P, 1);
+    pawE_push_cstr(P, CSTR_KBUILTIN);
+    paw_map_getelem(P, PAW_REGISTRY_INDEX);
 
     pawL_add_extern_func(P, "math", "sin", math_sin);
     pawL_add_extern_func(P, "math", "cos", math_cos);
@@ -83,6 +82,8 @@ void *l_import_math(paw_Env *P, paw_Reader *preader)
     pawL_add_extern_func(P, "math", "acos", math_acos);
     pawL_add_extern_func(P, "math", "atan", math_atan);
     pawL_add_extern_func(P, "math", "atan2", math_atan2);
-    return pawL_chunk_reader(P, s_math, PAW_LENGTHOF(s_math), preader);
+    paw_pop(P, 1); // paw.builtin
+
+    pawL_chunk_reader(P, s_math, PAW_LENGTHOF(s_math));
 }
 

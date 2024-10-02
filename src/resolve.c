@@ -22,7 +22,7 @@
 #define NAME_ERROR(R, ...) pawE_error(ENV(R), PAW_ENAME, (R)->line, __VA_ARGS__)
 #define SYNTAX_ERROR(R, ...) pawE_error(ENV(R), PAW_ESYNTAX, (R)->line, __VA_ARGS__)
 #define TYPE_ERROR(R, ...) pawE_error(ENV(R), PAW_ETYPE, (R)->line, __VA_ARGS__)
-#define CACHED_STR(R, i) pawE_cstr(ENV(R), CAST_SIZE(i))
+#define CSTR(R, i) CACHED_STRING(ENV(R), CAST_SIZE(i))
 #define TYPE2CODE(R, type) (pawP_type2code((R)->C, type))
 #define IS_BUILTIN_DECL(R, decl) ((decl)->hdr.did <= (R)->C->builtins[NBUILTINS - 1].did)
 // TODO: IS_BUILTIN_DECL should make sure decl is an adt decl (use CHECK_EXP since it should be known from context)
@@ -330,7 +330,7 @@ static void create_context(struct Resolver *R, struct HirAdtDecl *adt, int line)
 {
     struct HirDecl *result = pawHir_new_decl(R->m->hir, line, kHirVarDecl);
     struct HirVarDecl *r = HirGetVarDecl(result);
-    r->name = pawE_cstr(ENV(R), CSTR_SELF); // 'self'
+    r->name = CSTR(R, CSTR_SELF); // 'self'
     r->type = adt->type;
 
     new_local(R, r->name, result);

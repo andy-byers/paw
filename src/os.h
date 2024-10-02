@@ -10,9 +10,12 @@ typedef struct File File;
 
 File *pawO_stdout(void);
 
+File *pawO_new_file(paw_Env *P);
+void pawO_free_file(paw_Env *P, File *file);
+File *pawO_detach_file(paw_Env *P, File *src);
+
 paw_Bool pawO_is_open(const File *file);
 void pawO_error(paw_Env *P);
-File *pawO_new_file(paw_Env *P);
 int pawO_open(File *file, const char *pathname, const char *mode);
 void pawO_close(File *file);
 int pawO_seek(File *file, paw_Int offset, int whence);

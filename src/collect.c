@@ -18,7 +18,7 @@
 #define NAME_ERROR(X, ...) pawE_error(ENV(X), PAW_ENAME, (X)->line, __VA_ARGS__)
 #define SYNTAX_ERROR(X, ...) pawE_error(ENV(X), PAW_ESYNTAX, (X)->line, __VA_ARGS__)
 #define TYPE_ERROR(X, ...) pawE_error(ENV(X), PAW_ETYPE, (X)->line, __VA_ARGS__)
-#define CACHED_STR(X, i) pawE_cstr(ENV(X), CAST_SIZE(i))
+#define CSTR(X, i) CACHED_STRING(ENV(X), CAST_SIZE(i))
 
 struct Collector {
     struct Pool *pool;
@@ -166,7 +166,7 @@ static void create_context(struct Collector *X, struct HirDecl *decl, int line)
 {
     struct HirDecl *result = pawHir_new_decl(X->m->hir, line, kHirVarDecl);
     struct HirVarDecl *r = HirGetVarDecl(result);
-    r->name = pawE_cstr(ENV(X), CSTR_SELF); // 'self'
+    r->name = CSTR(X, CSTR_SELF); // 'self'
     r->type = HIR_TYPEOF(decl);
 
     new_local(X, r->name, result);

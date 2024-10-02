@@ -426,23 +426,24 @@ no_memory:
     return PAW_EMEMORY;
 }
 
-// TODO: option for detect_leaks(P), and don't print anything to the console
 static void detect_leaks(paw_Env *P)
 {
-#if 0
-    paw_Bool leak_detected = PAW_FALSE;
+#if defined(PAW_DEBUG_EXTRA)
+    // ensure that all memory has been released
     const struct Heap *H = P->H;
-    for (uintptr_t u = H->bounds[0]; u < H->bounds[1]; u += sizeof(void *)) {
+    for (uintptr_t u = H->bounds[0]; 
+            u < H->bounds[1]; 
+            u += sizeof(void *)) {
         if (pawZ_get_flag(H, u) != 0) {
-            fprintf(stderr, "leak @ %p\n", ERASE_TYPE(u));
-            leak_detected = PAW_TRUE;
+            __builtin_trap();
         }     
     }
-    if (leak_detected || P->gc_bytes > 0){
-        printf("%zu bytes not accounted for\n", P->gc_bytes);
+    if (P->gc_bytes > 0) {
         __builtin_trap();
     }
-#endif // 0
+#else
+    PAW_UNUSED(P);
+#endif
 }
 
 void pawZ_uninit(paw_Env *P)

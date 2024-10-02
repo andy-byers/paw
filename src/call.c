@@ -136,17 +136,21 @@ static CallFrame *next_call_frame(paw_Env *P, StackPtr top)
     return callee;
 }
 
-static void call_return(paw_Env *P, StackPtr base, paw_Bool has_return)
+static void call_return(paw_Env *P, StackPtr base, int nreturn)
 {
-    if (has_return) {
-        Value ret = P->top.p[-1];
-        P->top.p = base + 1;
-        P->top.p[-1] = ret;
-    } else {
+    if (nreturn == 1) {
+        base[0] = P->top.p[-1];
+    } else if (nreturn == 0) {
         // implicit 'return ()'
-        P->top.p = base + 1;
-        V_SET_0(P->top.p);
+        V_SET_0(base);
+        nreturn = 1;
+    } else {
+        StackPtr pret = P->top.p - nreturn;
+        for (int i = 0; i < nreturn; ++i) {
+            base[i] = *pret++; 
+        }
     }
+    P->top.p = base + nreturn;
     P->cf = P->cf->prev;
 }
 
@@ -270,11 +274,13 @@ _Noreturn void pawC_throw(paw_Env *P, int error)
 
 void pawC_init(paw_Env *P)
 {
-    const int frame_size = CFRAME_SIZE + STACK_EXTRA;
+    const size_t frame_size = CFRAME_SIZE + STACK_EXTRA;
+    const size_t stack_size = frame_size * sizeof(Value);
     // allocate manually since normal error handling code requires the stack (this is the
     // stack allocation itself)
-    Value *ptr = pawZ_alloc(P, NULL, frame_size * sizeof(Value));
+    Value *ptr = pawZ_alloc(P, NULL, stack_size);
     if (ptr == NULL) pawC_throw(P, PAW_EMEMORY);
+    P->gc_bytes += stack_size; // account for memory
     P->bound.p = ptr + frame_size;
     P->stack.p = ptr;
     P->top.p = ptr;
@@ -290,15 +296,6 @@ void pawC_init(paw_Env *P)
 void pawC_uninit(paw_Env *P)
 {
     pawM_free_vec(P, P->stack.p, P->bound.p - P->stack.p);
-    P->bound.p = P->top.p = P->stack.p; // clear GC root
+    P->bound.p = P->top.p = P->stack.p = NULL; // clear GC root
 }
 
-StackPtr pawC_return(paw_Env *P, int nret)
-{
-    StackPtr base = CF_STACK_RETURN(P->cf);
-    StackPtr top = P->top.p;
-    for (int i = 0; i < nret; ++i) {
-        base[i] = *--top;
-    }
-    return base;
-}

@@ -54,17 +54,21 @@ void pawP_init(paw_Env *P)
         str->flag = i + FIRST_KEYWORD;
     }
     // note that keywords are already fixed
-    P->str_cache[CSTR_TRUE] = pawS_new_str(P, "true");
-    P->str_cache[CSTR_FALSE] = pawS_new_str(P, "false");
-    P->str_cache[CSTR_BOOL] = basic_type_name(P, "bool", PAW_TBOOL);
-    P->str_cache[CSTR_INT] = basic_type_name(P, "int", PAW_TINT);
-    P->str_cache[CSTR_FLOAT] = basic_type_name(P, "float", PAW_TFLOAT);
-    P->str_cache[CSTR_STR] = basic_type_name(P, "str", PAW_TSTR);
-    P->str_cache[CSTR_LIST] = pawS_new_fixed(P, "_List");
-    P->str_cache[CSTR_MAP] = pawS_new_fixed(P, "_Map");
-    P->str_cache[CSTR_OPTION] = pawS_new_fixed(P, "Option");
-    P->str_cache[CSTR_RESULT] = pawS_new_fixed(P, "Result");
-    P->str_cache[CSTR_SELF] = pawS_new_fixed(P, "self");
+    P->string_cache[CSTR_TRUE] = pawS_new_str(P, "true");
+    P->string_cache[CSTR_FALSE] = pawS_new_str(P, "false");
+    P->string_cache[CSTR_BOOL] = basic_type_name(P, "bool", PAW_TBOOL);
+    P->string_cache[CSTR_INT] = basic_type_name(P, "int", PAW_TINT);
+    P->string_cache[CSTR_FLOAT] = basic_type_name(P, "float", PAW_TFLOAT);
+    P->string_cache[CSTR_STR] = basic_type_name(P, "str", PAW_TSTR);
+    P->string_cache[CSTR_LIST] = pawS_new_fixed(P, "_List");
+    P->string_cache[CSTR_MAP] = pawS_new_fixed(P, "_Map");
+    P->string_cache[CSTR_OPTION] = pawS_new_fixed(P, "Option");
+    P->string_cache[CSTR_RESULT] = pawS_new_fixed(P, "Result");
+    P->string_cache[CSTR_SELF] = pawS_new_fixed(P, "self");
+
+    P->string_cache[CSTR_KBUILTIN] = pawS_new_fixed(P, "paw.builtin");
+    P->string_cache[CSTR_KMODULES] = pawS_new_fixed(P, "paw.modules");
+    P->string_cache[CSTR_KSEARCHERS] = pawS_new_fixed(P, "paw.searchers");
 }
 
 paw_Type pawP_type2code(struct Compiler *C, struct HirType *type)

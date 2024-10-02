@@ -1298,6 +1298,7 @@ static struct HirType *expand_func_def(struct HirFolder *F, struct HirFuncDef *t
         r->params = F->FoldTypeList(F, t->params);
         r->result = F->FoldType(F, t->result);
         r->base = r->did = t->did;
+        r->modno = t->modno;
         return result;
     }
     struct Expander *E = F->ud;
@@ -1851,7 +1852,7 @@ static void dump_type(struct Printer *P, struct HirType *t)
         case kHirAdt: {
             DUMP_FMT(P, "base: %d\n", t->adt.base);
             DUMP_FMT(P, "did: %d\n", t->adt.did);
-            if (seg->types != NULL) {
+            if (t->adt.types != NULL) {
                 dump_type_list(P, t->adt.types, "types");
             }
             break;

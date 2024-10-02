@@ -3,10 +3,18 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
 #include "env.h"
+#include "api.h"
 #include "mem.h"
 #include "rt.h"
 #include "type.h"
 #include <limits.h>
+
+void pawE_push_cstr(paw_Env *P, unsigned kind)
+{
+    API_CHECK_PUSH(P, 1);
+    V_SET_OBJECT(P->top.p, P->string_cache[kind]);
+    API_INCR_TOP(P, 1);
+}
 
 _Noreturn void pawE_error(paw_Env *P, int code, int line, const char *fmt, ...)
 {

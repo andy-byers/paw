@@ -77,6 +77,12 @@
 #define SET_B(v, b) \
     (*(v) = (*(v) & MASK0(B_WIDTH, B_OFFSET)) | ((OpCode)(b) << B_OFFSET))
 
+enum paw_AdtKind {
+    PAW_ADT_STR,
+    PAW_ADT_LIST,
+    PAW_ADT_MAP,
+};
+
 typedef uint32_t OpCode;
 
 // Opcode format: Each instruction is packed into a 32-bit unsigned integer (OpCode)

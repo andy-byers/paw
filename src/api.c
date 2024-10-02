@@ -10,6 +10,7 @@
 #include "env.h"
 #include "gc.h"
 #include "lib.h"
+#include "map.h"
 #include "parse.h"
 #include "paw.h"
 #include "rt.h"
@@ -28,8 +29,11 @@ static void *default_alloc(void *ud, void *ptr, size_t old_size, size_t new_size
 
 static StackPtr at(paw_Env *P, int index)
 {
+    if (index == PAW_REGISTRY_INDEX) {
+        return &P->registry; 
+    } 
     const int i = paw_abs_index(P, index);
-    paw_assert(i < paw_get_count(P));
+    API_CHECK(P, 0 <= i && i < paw_get_count(P), "index out of range");
     return &P->cf->base.p[i];
 }
 
@@ -146,7 +150,7 @@ int paw_mangle_self(paw_Env *P, paw_Type *types, paw_Bool has_modname)
     pawL_push_result(P, &buf);
     paw_shift(P, 1 + has_modname);
 
-    paw_concat(P, PAW_ADT_STR);
+    paw_str_concat(P, 2);
     return 0;
 }
 
@@ -247,6 +251,12 @@ const char *paw_push_fstring(paw_Env *P, const char *fmt, ...)
     return s;
 }
 
+void paw_push_rawptr(paw_Env *P, void *ptr)
+{
+    P->top.p->p = ptr;
+    API_INCR_TOP(P, 1);
+}
+
 paw_Bool paw_bool(paw_Env *P, int index)
 {
     return V_TRUE(*at(P, index));
@@ -276,8 +286,13 @@ paw_Function paw_native(paw_Env *P, int index)
 
 void *paw_userdata(paw_Env *P, int index)
 {
-    Value v = *at(P, index);
+    const Value v = *at(P, index);
     return V_FOREIGN(v)->data;
+}
+
+void *paw_rawptr(paw_Env *P, int index)
+{
+    return at(P, index)->p;
 }
 
 void *paw_pointer(paw_Env *P, int index)
@@ -417,8 +432,8 @@ void paw_new_map(paw_Env *P, int n)
 
 void *paw_new_foreign(paw_Env *P, size_t size, int nfields)
 {
-    Foreign *ud = pawV_new_foreign(P, size, nfields, P->top.p);
-    API_INCR_TOP(P, 1);
+    Value *pv = pawC_push0(P);
+    Foreign *ud = pawV_new_foreign(P, size, nfields, 0, pv);
     return ud->data;
 }
 
@@ -529,38 +544,125 @@ void paw_bitw(paw_Env *P, enum paw_BitwOp op)
      }
 }
 
-void paw_length(paw_Env *P, enum paw_AdtKind kind)
-{
-    pawR_length(P, kind);
-}
-
-void paw_concat(paw_Env *P, enum paw_AdtKind kind)
-{
-    pawR_concat(P, kind);
-}
-
-void paw_getelem(paw_Env *P, enum paw_AdtKind kind)
-{
-    pawR_getelem(P, kind);
-}
-
-void paw_setelem(paw_Env *P, enum paw_AdtKind kind)
-{
-    pawR_setelem(P, kind);
-}
-
-void paw_getrange(paw_Env *P, enum paw_AdtKind kind)
-{
-    pawR_getrange(P, kind);
-}
-
-void paw_setrange(paw_Env *P, enum paw_AdtKind kind)
-{
-    pawR_setrange(P, kind);
-}
-
 const char *paw_to_string(paw_Env *P, int index, paw_Type type, size_t *plen)
 {
     Value *pv = at(P, index);
     return pawV_to_string(P, pv, type, plen);
+}
+
+void paw_str_length(paw_Env *P, int index)
+{
+    Value *pv = at(P, index);
+    const String *str = V_STRING(*pv);
+    const size_t len = pawS_length(str);
+    paw_push_int(P, PAW_CAST_INT(len));
+}
+
+void paw_str_concat(paw_Env *P, int count)
+{
+    while (count-- > 1) pawR_concat(P, PAW_ADT_STR);
+}
+
+void paw_str_getelem(paw_Env *P, int index)
+{
+    paw_push_value(P, index);
+    paw_rotate(P, -2, 1);
+    pawR_getelem(P, PAW_ADT_STR);
+}
+
+void paw_str_getrange(paw_Env *P, int index)
+{
+    paw_push_value(P, index);
+    paw_rotate(P, -3, 1);
+    pawR_getrange(P, PAW_ADT_STR);
+}
+
+void paw_list_length(paw_Env *P, int index)
+{
+    Value *pv = at(P, index);
+    const List *list = V_LIST(*pv);
+    const size_t len = pawV_list_length(list);
+    paw_push_int(P, PAW_CAST_INT(len));
+}
+
+void paw_list_concat(paw_Env *P, int count)
+{
+    while (count-- > 1) pawR_concat(P, PAW_ADT_LIST);
+}
+
+void paw_list_getelem(paw_Env *P, int index)
+{
+    paw_push_value(P, index);
+    paw_rotate(P, -2, 1);
+    pawR_getelem(P, PAW_ADT_LIST);
+}
+
+void paw_list_setelem(paw_Env *P, int index)
+{
+    paw_push_value(P, index);
+    paw_rotate(P, -3, 1);
+    pawR_setelem(P, PAW_ADT_LIST);
+}
+
+void paw_list_getrange(paw_Env *P, int index)
+{
+    paw_push_value(P, index);
+    paw_rotate(P, -3, 1);
+    pawR_getrange(P, PAW_ADT_LIST);
+}
+
+void paw_list_setrange(paw_Env *P, int index)
+{
+    paw_push_value(P, index);
+    paw_rotate(P, -4, 1);
+    pawR_setrange(P, PAW_ADT_LIST);
+}
+
+paw_Bool paw_list_next(paw_Env *P, int index)
+{
+    API_CHECK_PUSH(P, 1);
+    List *list = V_LIST(*at(P, index));
+    paw_Int *piter = &P->top.p[-1].i;
+    if (pawV_list_iter(list, piter)) {
+        P->top.p[0] = *pawV_list_get(P, list, *piter);
+        API_INCR_TOP(P, 1);
+        return PAW_TRUE;
+    }
+    return PAW_FALSE;
+}
+
+void paw_map_length(paw_Env *P, int index)
+{
+    Value *pv = at(P, index);
+    const Map *map = V_MAP(*pv);
+    const size_t len = pawH_length(map);
+    paw_push_int(P, PAW_CAST_INT(len));
+}
+
+void paw_map_getelem(paw_Env *P, int index)
+{
+    paw_push_value(P, index);
+    paw_rotate(P, -2, 1);
+    pawR_getelem(P, PAW_ADT_MAP);
+}
+
+void paw_map_setelem(paw_Env *P, int index)
+{
+    paw_push_value(P, index);
+    paw_rotate(P, -3, 1);
+    pawR_setelem(P, PAW_ADT_MAP);
+}
+
+paw_Bool paw_map_next(paw_Env *P, int index)
+{
+    API_CHECK_PUSH(P, 2);
+    Map *map = V_MAP(*at(P, index));
+    paw_Int *piter = &P->top.p[-1].i;
+    if (pawH_iter(map, piter)) {
+        P->top.p[0] = *pawH_key(map, *piter);
+        P->top.p[1] = *pawH_value(map, *piter);
+        API_INCR_TOP(P, 2);
+        return PAW_TRUE;
+    }
+    return PAW_FALSE;
 }

@@ -80,7 +80,7 @@ static int file_write(paw_Env *P)
 {
     File *file = paw_pointer(P, 1);
     const char *data = paw_string(P, 2);
-    paw_length(P, PAW_ADT_STR);
+    paw_str_length(P, -1);
     const paw_Int size = paw_int(P, -1);
 
     const paw_Int nwrite = pawO_write(P, file, data, size);
@@ -88,7 +88,7 @@ static int file_write(paw_Env *P)
     return 1;
 }
 
-void *l_import_io(paw_Env *P, paw_Reader *preader)
+void l_import_io(paw_Env *P)
 {
     static const char s_io[] =
         "pub fn open(pathname: str, mode: str) -> File;\n"
@@ -108,15 +108,16 @@ void *l_import_io(paw_Env *P, paw_Reader *preader)
         "    pub fn write(data: str) -> int;\n"
         "}\n";
 
-    API_CHECK_PUSH(P, 1);
-    V_SET_OBJECT(P->top.p, P->builtin);
-    API_INCR_TOP(P, 1);
+    pawE_push_cstr(P, CSTR_KBUILTIN);
+    paw_map_getelem(P, PAW_REGISTRY_INDEX);
 
     pawL_add_extern_func(P, "io", "open", io_open);
     pawL_add_extern_method(P, "io", "File", "seek", file_seek);
     pawL_add_extern_method(P, "io", "File", "tell", file_tell);
     pawL_add_extern_method(P, "io", "File", "read", file_read);
     pawL_add_extern_method(P, "io", "File", "write", file_write);
-    return pawL_chunk_reader(P, s_io, PAW_LENGTHOF(s_io), preader);
+    paw_pop(P, 1); // paw.builtin
+
+    pawL_chunk_reader(P, s_io, PAW_LENGTHOF(s_io));
 }
 

@@ -7,6 +7,7 @@
 
 #include "value.h"
 #include "gc.h"
+#include "lib.h"
 #include "map.h"
 #include "mem.h"
 #include "os.h"
@@ -80,7 +81,7 @@ const char *pawV_to_string(paw_Env *P, Value *pv, paw_Type type, size_t *plength
             break;
         default:
             paw_assert(type == PAW_TBOOL);
-            V_SET_OBJECT(pv, pawE_cstr(P, V_TRUE(*pv) ? CSTR_TRUE : CSTR_FALSE));
+            V_SET_OBJECT(pv, CACHED_STRING(P, V_TRUE(*pv) ? CSTR_TRUE : CSTR_FALSE));
     }
     const String *s = V_STRING(*pv);
     if (plength != NULL) *plength = s->length;
@@ -198,26 +199,29 @@ void pawV_free_native(paw_Env *P, Native *f)
     pawM_free_flex(P, f, f->nup, sizeof(f->up[0])); 
 }
 
-Foreign *pawV_new_foreign(paw_Env *P, size_t size, int nfields, Value *out)
+Foreign *pawV_new_foreign(paw_Env *P, size_t size, int nfields, uint8_t flags, Value *out)
 {
     if (size > PAW_SIZE_MAX) pawM_error(P);
-    Foreign *ud = pawM_new_flex(P, Foreign, nfields, sizeof(ud->fields[0]));
-    pawG_add_object(P, CAST_OBJECT(ud), VFOREIGN);
-    V_SET_OBJECT(out, ud); // anchor
-    ud->nfields = nfields;
-    ud->size = size;
+    Foreign *f = pawM_new_flex(P, Foreign, nfields, sizeof(f->fields[0]));
+    pawG_add_object(P, CAST_OBJECT(f), VFOREIGN);
+    V_SET_OBJECT(out, f); // anchor
+    f->nfields = nfields;
+    f->flags = flags;
+    f->size = size;
     if (size > 0) {
         // allocate space to hold 'size' bytes of foreign data
-        ud->data = pawM_new_vec(P, size, char);
+        f->data = pawM_new_vec(P, size, char);
     }
-    memset(ud->fields, 0, CAST_SIZE(nfields) * sizeof(ud->fields[0]));
-    return ud;
+    memset(f->fields, 0, CAST_SIZE(nfields) * sizeof(f->fields[0]));
+    return f;
 }
 
 void pawV_free_foreign(paw_Env *P, Foreign *f)
 {
     if (f->flags == VBOX_FILE) {
         pawO_close(f->data);
+    } else if (f->flags == VBOX_LOADER) {
+        pawL_close_loader(P, f->data); 
     }
     pawM_free_vec(P, f->data, f->size);
     pawM_free_flex(P, f, CAST_SIZE(f->nfields), sizeof(f->fields[0]));

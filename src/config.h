@@ -73,4 +73,28 @@ _Noreturn static inline void paw_unreachable_(void) {}
 # endif
 #endif
 
+#if !defined(PAW_MODULE_EXT)
+# define PAW_MODULE_EXT ".paw"
+#endif
+
+#if !defined(PAW_PATH_VAR)
+# define PAW_PATH_VAR "PAW_PATH"
+#endif
+
+#if !defined(PAW_FOLDER_SEPS)
+# if defined(PAW_OS_WINDOWS)
+#  define PAW_FOLDER_SEPS "\\/"
+# else
+#  define PAW_FOLDER_SEPS "/"
+# endif
+#endif
+
+#if !defined(PAW_PATH_SEP)
+# if defined(PAW_OS_WINDOWS)
+#  define PAW_PATH_SEP ";"
+# else
+#  define PAW_PATH_SEP ":"
+# endif
+#endif
+
 #endif // PAW_CONFIG_H

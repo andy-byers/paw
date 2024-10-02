@@ -7,9 +7,6 @@
 #include "paw.h"
 #include "util.h"
 
-// Initializer for iterator state variables
-#define PAW_ITER_INIT -1
-
 #define V_ISNAN(v) ((v).f != (v).f)
 
 #define V_FALSE(v) ((v).u == 0)
@@ -271,7 +268,7 @@ static inline Value *pawV_list_get(paw_Env *P, List *vec, paw_Int index)
 
 static inline paw_Bool pawV_list_iter(const List *vec, paw_Int *itr)
 {
-    return ++*itr < PAW_CAST_INT(pawV_list_length(vec));
+    return ++(*itr) < PAW_CAST_INT(pawV_list_length(vec));
 }
 
 typedef enum MapState {
@@ -305,6 +302,7 @@ void pawV_free_variant(paw_Env *P, Variant *var);
 
 enum {
     VBOX_FILE = 1,
+    VBOX_LOADER,
 };
 
 typedef struct Foreign {
@@ -317,7 +315,7 @@ typedef struct Foreign {
     Value fields[];
 } Foreign;
 
-Foreign *pawV_new_foreign(paw_Env *P, size_t size, int nfields, Value *out);
+Foreign *pawV_new_foreign(paw_Env *P, size_t size, int nfields, uint8_t flags, Value *out);
 void pawV_free_foreign(paw_Env *P, Foreign *ud);
 
 #endif // PAW_VALUE_H

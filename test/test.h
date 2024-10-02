@@ -11,6 +11,7 @@
 #include <stdlib.h>
 
 #define TEST_SCRIPTS(X) \
+    X(import) \
     X(primitive) \
     X(operator) \
     X(block) \

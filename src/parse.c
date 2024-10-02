@@ -728,7 +728,7 @@ static struct AstExpr *selector_expr(struct Lex *lex, struct AstExpr *target)
 
 static paw_Bool equals_cstr(struct Lex *lex, const String *ident, unsigned cstr)
 {
-    return pawS_eq(ident, pawE_cstr(ENV(lex), cstr));
+    return pawS_eq(ident, CACHED_STRING(ENV(lex), cstr));
 }
 
 static struct AstExpr *call_expr(struct Lex *lex, struct AstExpr *target)

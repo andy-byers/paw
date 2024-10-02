@@ -1,0 +1,14 @@
+
+use mod_a;
+
+fn call_test(k: str) {
+    let f = mod_a::get_test(k);
+    f();
+}
+
+pub fn test_import() {
+    assert(mod_a::return_42() == 42);
+
+    call_test('external');
+    call_test('recursive');
+}

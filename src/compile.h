@@ -168,6 +168,7 @@ typedef struct Generator {
     struct FuncState *fs;
     struct ItemList *items;
     struct Pool *pool;
+    Map *builtin;
     paw_Env *P;
     int nvals;
 } Generator;
@@ -204,6 +205,7 @@ struct HirDecl *pawP_instantiate(
 void pawP_set_instantiate(struct Compiler *C, paw_Bool full);
 
 void pawP_collect_imports(struct Compiler *C, struct Ast *ast);
+void pawP_import(struct Compiler *C, void *state);
 
 struct ItemList *pawP_define_all(struct Compiler *C, struct ModuleList *modules, int *poffset);
 

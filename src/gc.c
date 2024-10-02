@@ -188,8 +188,7 @@ static void mark_roots(paw_Env *P)
         struct Def *def = P->defs.data[i];
         mark_object(P, CAST_OBJECT(def->hdr.name));
     }
-    mark_object(P, CAST_OBJECT(P->builtin));
-    mark_object(P, CAST_OBJECT(P->libs));
+    mark_value(P, P->registry);
 }
 
 static void traverse_objects(paw_Env *P)
@@ -283,8 +282,7 @@ void pawG_init(paw_Env *P)
 void pawG_uninit(paw_Env *P)
 {
     // clear GC roots
-    P->libs = NULL;
-    P->builtin = NULL;
+    P->registry.u = 0;
     P->up_list = NULL;
 
     // collect all non-fixed objects
@@ -350,7 +348,6 @@ void pawG_free_object(paw_Env *P, Object *o)
             break;
         default:
             pawV_free_tuple(P, O_TUPLE(o));
-            break;
     }
 }
 

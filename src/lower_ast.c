@@ -18,7 +18,7 @@
 
 #define SYNTAX_ERROR(L, ...) pawE_error(ENV(L), PAW_ESYNTAX, (L)->line, __VA_ARGS__)
 #define TYPE_ERROR(L, ...) pawE_error(ENV(L), PAW_ETYPE, (L)->line, __VA_ARGS__)
-#define CACHED_STR(L, i) pawE_cstr(ENV(L), CAST_SIZE(i))
+#define CSTR(L, i) CACHED_STRING(ENV(L), CAST_SIZE(i))
 
 struct LowerAst {
     struct DynamicMem *dm;
@@ -247,8 +247,7 @@ static struct HirType *new_list_t(struct LowerAst *L, struct HirType *elem_t)
     struct HirTypeList *types = pawHir_type_list_new(L->hir);
     pawHir_type_list_push(L->hir, types, elem_t);
 
-    String *name = CACHED_STR(L, CSTR_LIST);
-    pawHir_path_add(L->hir, t->path, name, types);
+    pawHir_path_add(L->hir, t->path, CSTR(L, CSTR_LIST), types);
     return type;
 }
 
@@ -262,8 +261,7 @@ static struct HirType *new_map_t(struct LowerAst *L, struct HirType *key_t, stru
     pawHir_type_list_push(L->hir, types, key_t);
     pawHir_type_list_push(L->hir, types, value_t);
 
-    String *name = CACHED_STR(L, CSTR_MAP);
-    pawHir_path_add(L->hir, t->path, name, types);
+    pawHir_path_add(L->hir, t->path, CSTR(L, CSTR_MAP), types);
     return type;
 }
 
