@@ -55,7 +55,7 @@ static void test_runtime_status(int expect, const char *name, const char *item, 
     check_status(P, status, PAW_OK);
 
     paw_push_string(P, "main");
-    paw_mangle_name(P, NULL);
+    paw_mangle_name(P, NULL, PAW_FALSE);
 
     struct paw_Item info;
     status = paw_lookup_item(P, &info);
@@ -348,7 +348,7 @@ static void test_map_error(void)
 static int run_main(paw_Env *P, int nargs)
 {
     paw_push_string(P, "main");
-    paw_mangle_name(P, NULL);
+    paw_mangle_name(P, NULL, PAW_FALSE);
 
     struct paw_Item info;
     const int status = paw_lookup_item(P, &info);

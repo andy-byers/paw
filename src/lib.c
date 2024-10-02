@@ -316,7 +316,7 @@ static void add_prelude_func(paw_Env *P, const char *name, paw_Function func)
 {
     paw_push_value(P, -1);
     paw_push_string(P, name);
-    paw_mangle_name(P, NULL);
+    paw_mangle_name(P, NULL, PAW_FALSE);
     pawL_new_func(P, func, 0);
 
     pawR_setelem(P, PAW_ADT_MAP);
@@ -327,9 +327,9 @@ static void add_prelude_method(paw_Env *P, const char *self, const char *name, p
 {
     paw_push_value(P, -1);
     paw_push_string(P, name);
-    paw_mangle_name(P, NULL);
+    paw_mangle_name(P, NULL, PAW_FALSE);
     paw_push_string(P, self);
-    paw_mangle_self(P, NULL);
+    paw_mangle_self(P, NULL, PAW_FALSE);
     pawL_new_func(P, func, 0);
 
     pawR_setelem(P, PAW_ADT_MAP);
@@ -346,12 +346,6 @@ void pawL_init(paw_Env *P)
     // Builtin functions:
     add_prelude_func(P, "assert", base_assert); // fn assert(bool)
     add_prelude_func(P, "print", base_print); // fn print(string)
-
-    // TODO: Replace with real methods
-    add_prelude_func(P, "_list_push", list_push);
-    add_prelude_func(P, "_list_pop", list_pop);
-    add_prelude_func(P, "_list_insert", list_insert);
-    add_prelude_func(P, "_list_erase", list_remove);
 
     add_prelude_method(P, "bool", "to_string", bool_to_string);
     add_prelude_method(P, "int", "to_string", int_to_string);
@@ -450,7 +444,7 @@ int pawL_register_func(paw_Env *P, const char *name, paw_Function func, int nup)
     API_INCR_TOP(P, 1);
 
     paw_push_string(P, name);
-    paw_mangle_name(P, NULL);
+    paw_mangle_name(P, NULL, PAW_FALSE);
 
     // func, builtin, name => builtin, name, func
     paw_rotate(P, -3, -1);
@@ -473,11 +467,8 @@ void pawL_add_extern_func(paw_Env *P, const char *modname, const char *name, paw
 {
     paw_push_value(P, -1);
     paw_push_string(P, modname);
-    paw_push_string(P, ":");
     paw_push_string(P, name);
-    paw_mangle_name(P, NULL);
-    paw_concat(P, PAW_ADT_STR);
-    paw_concat(P, PAW_ADT_STR);
+    paw_mangle_name(P, NULL, PAW_TRUE);
     pawL_new_func(P, func, 0);
 
     pawR_setelem(P, PAW_ADT_MAP);
@@ -488,13 +479,11 @@ void pawL_add_extern_method(paw_Env *P, const char *modname, const char *self, c
 {
     paw_push_value(P, -1);
     paw_push_string(P, modname);
-    paw_push_string(P, ":");
     paw_push_string(P, name);
-    paw_mangle_name(P, NULL);
+    paw_mangle_name(P, NULL, PAW_TRUE);
+    paw_push_string(P, modname);
     paw_push_string(P, self);
-    paw_mangle_self(P, NULL);
-    paw_concat(P, PAW_ADT_STR);
-    paw_concat(P, PAW_ADT_STR);
+    paw_mangle_self(P, NULL, PAW_TRUE);
     pawL_new_func(P, func, 0);
 
     pawR_setelem(P, PAW_ADT_MAP);

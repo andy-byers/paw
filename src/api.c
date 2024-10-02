@@ -103,34 +103,49 @@ static void mangle_arg(paw_Env *P, Buffer *buf, paw_Type code)
     pawY_mangle_add_arg(P, buf, type->hdr.code);
 }
 
-int paw_mangle_name(paw_Env *P, paw_Type *types)
+static void mangle_types(paw_Env *P, Buffer *buf, paw_Type *types)
 {
-    API_CHECK_POP(P, 1);
+    if (types != NULL) {
+        pawY_mangle_start_generic_args(P, buf);
+        while (*types >= 0) {
+            mangle_arg(P, buf, *types++);
+        }
+        pawY_mangle_finish_generic_args(P, buf);
+    }
+}
+
+int paw_mangle_name(paw_Env *P, paw_Type *types, paw_Bool has_modname)
+{
+    API_CHECK_POP(P, 1 + has_modname);
     const String *name = V_STRING(P->top.p[-1]);
+    const String *modname = has_modname 
+        ? V_STRING(P->top.p[-2]) : NULL;
 
     Buffer buf;
     pawL_init_buffer(P, &buf);
-    pawY_mangle_start(P, &buf, name);
-    if (types != NULL) {
-        while (*types >= 0) {
-            mangle_arg(P, &buf, *types++);
-        }
-    }
+    pawY_mangle_start(P, &buf, modname, name);
+    mangle_types(P, &buf, types);
     pawY_mangle_finish(P, &buf);
     pawL_push_result(P, &buf);
-    paw_shift(P, 1); // replace 'name'
+    paw_shift(P, 1 + has_modname);
     return 0;
 }
 
-int paw_mangle_self(paw_Env *P, paw_Type *types)
+int paw_mangle_self(paw_Env *P, paw_Type *types, paw_Bool has_modname)
 {
-    API_CHECK_POP(P, 2);
-    paw_mangle_name(P, types);
+    API_CHECK_POP(P, 2 + has_modname);
+    const String *name = V_STRING(P->top.p[-1]);
+    const String *modname = has_modname 
+        ? V_STRING(P->top.p[-2]) : NULL;
 
-    // name, adt => name + '_' + adt
-    paw_push_string(P, "_");
-    paw_rotate(P, -2, 1);
-    paw_concat(P, PAW_ADT_STR);
+    Buffer buf;
+    pawL_init_buffer(P, &buf);
+    pawY_mangle_add_self(P, &buf, modname, name);
+    mangle_types(P, &buf, types);
+    pawY_mangle_finish(P, &buf);
+    pawL_push_result(P, &buf);
+    paw_shift(P, 1 + has_modname);
+
     paw_concat(P, PAW_ADT_STR);
     return 0;
 }

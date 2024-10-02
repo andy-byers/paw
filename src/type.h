@@ -59,8 +59,8 @@ enum DefKind {
 };
 
 #define DEF_HEADER String *name; \
+                   String *modname; \
                    paw_Type code; \
-                   int modno; \
                    DefId did; \
                    enum DefKind kind : 7; \
                    paw_Bool is_pub : 1
@@ -109,8 +109,6 @@ struct Def {
         struct FuncDef func;
         struct VarDef var;
     };
-    int nsubdefs;
-    DefId subdefs[];
 };
 
 #define Y_CAST_DEF(p) CAST(struct Def *, p)
@@ -130,8 +128,11 @@ struct Def *pawY_new_field_def(paw_Env *P);
 struct Def *pawY_new_var_def(paw_Env *P);
 void pawY_uninit(paw_Env *P);
 
-void pawY_mangle_start(paw_Env *P, Buffer *buffer, const String *name);
+void pawY_mangle_start(paw_Env *P, Buffer *buffer, const String *modname, const String *name);
+void pawY_mangle_start_generic_args(paw_Env *P, Buffer *buf);
+void pawY_mangle_finish_generic_args(paw_Env *P, Buffer *buf);
 void pawY_mangle_add_arg(paw_Env *P, Buffer *buffer, paw_Type code);
+void pawY_mangle_add_self(paw_Env *P, Buffer *buffer, const String *modname, const String *name);
 void pawY_mangle_finish(paw_Env *P, Buffer *buffer);
 
 // Append a human-readable representation of the type with the given 'code' to the 

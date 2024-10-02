@@ -56,6 +56,7 @@ struct Type *pawY_new_adt(paw_Env *P, int ntypes)
 {
     struct Type *type = NEW_TYPE(P, ntypes);
     type->hdr.kind = TYPE_ADT;
+    type->nsubtypes = ntypes;
     return add_type(P, type);
 }
 
@@ -63,6 +64,7 @@ struct Type *pawY_new_signature(paw_Env *P, int nparams)
 {
     struct Type *type = NEW_TYPE(P, nparams);
     type->hdr.kind = TYPE_SIGNATURE;
+    type->nsubtypes = nparams;
     return add_type(P, type);
 }
 
@@ -70,6 +72,7 @@ struct Type *pawY_new_tuple(paw_Env *P, int nelems)
 {
     struct Type *type = NEW_TYPE(P, nelems);
     type->hdr.kind = TYPE_TUPLE;
+    type->nsubtypes = nelems;
     return add_type(P, type);
 }
 
@@ -116,120 +119,152 @@ struct Def *pawY_new_var_def(paw_Env *P)
     return new_def(P, DEF_VAR);
 }
 
-static int print_subtypes_(paw_Env *P, Buffer *buffer, struct Type *type)
+static int print_subtypes_(paw_Env *P, Buffer *buf, struct Type *type)
 {
     for (int i = 0; i < type->nsubtypes; ++i) {
-        pawY_print_type(P, buffer, type->subtypes[i]);
+        pawY_print_type(P, buf, type->subtypes[i]);
         if (i == type->nsubtypes - 1) break;
-        pawL_add_string(P, buffer, ", ");
+        pawL_add_string(P, buf, ", ");
     }
     return type->nsubtypes;
 }
 #define PRINT_SUBTYPES(P, buf, type) print_subtypes_(P, buf, CAST(struct Type *, type))
 
-static void print_func_type(paw_Env *P, Buffer *buffer, struct Signature *type)
+static void print_func_type(paw_Env *P, Buffer *buf, struct Signature *type)
 {
-    pawL_add_string(P, buffer, "fn(");
-    PRINT_SUBTYPES(P, buffer, type);
-    pawL_add_char(P, buffer, ')');
+    pawL_add_string(P, buf, "fn(");
+    PRINT_SUBTYPES(P, buf, type);
+    pawL_add_char(P, buf, ')');
     if (type->result > 0) {
-        pawL_add_string(P, buffer, " -> ");
-        pawY_print_type(P, buffer, type->result); 
+        pawL_add_string(P, buf, " -> ");
+        pawY_print_type(P, buf, type->result); 
     }
 }
 
-static void print_tuple_type(paw_Env *P, Buffer *buffer, struct TupleType *type)
+static void print_tuple_type(paw_Env *P, Buffer *buf, struct TupleType *type)
 {
-    pawL_add_char(P, buffer, '(');
-    const int n = PRINT_SUBTYPES(P, buffer, type);
-    if (n == 1) pawL_add_char(P, buffer, ',');
-    pawL_add_char(P, buffer, ')');
+    pawL_add_char(P, buf, '(');
+    const int n = PRINT_SUBTYPES(P, buf, type);
+    if (n == 1) pawL_add_char(P, buf, ',');
+    pawL_add_char(P, buf, ')');
 }
 
-static void print_adt(paw_Env *P, Buffer *buffer, struct Adt *type)
+static void print_adt(paw_Env *P, Buffer *buf, struct Adt *type)
 {
     struct Def *def = Y_DEF(P, type->did);
     const String *name = def->hdr.name;
     struct Type *base = Y_CAST_TYPE(type);
-    pawL_add_nstring(P, buffer, name->text, name->length);
+    pawL_add_nstring(P, buf, name->text, name->length);
     if (base->nsubtypes > 0) {
-        pawL_add_char(P, buffer, '<');
-        print_subtypes_(P, buffer, base);
-        pawL_add_char(P, buffer, '>');
+        pawL_add_char(P, buf, '<');
+        print_subtypes_(P, buf, base);
+        pawL_add_char(P, buf, '>');
     }
 }
 
-void pawY_print_type(paw_Env *P, Buffer *buffer, paw_Type code)
+void pawY_print_type(paw_Env *P, Buffer *buf, paw_Type code)
 {
     struct Type *type = Y_TYPE(P, code);
     switch (type->hdr.kind) {
         case TYPE_SIGNATURE:
-            print_func_type(P, buffer, &type->sig);
+            print_func_type(P, buf, &type->sig);
             break;
         case TYPE_TUPLE:
-            print_tuple_type(P, buffer, &type->tuple);
+            print_tuple_type(P, buf, &type->tuple);
             break;
         case TYPE_ADT:
-            print_adt(P, buffer, &type->adt);
+            print_adt(P, buf, &type->adt);
     }
 }
 
-void pawY_mangle_start(paw_Env *P, Buffer *buffer, const String *name)
+static void add_string_with_len(paw_Env *P, Buffer *buf, const String *str)
 {
-    L_ADD_STRING(P, buffer, name);
+    paw_push_int(P, str->length);
+    pawL_add_value(P, buf, PAW_TINT);
+    pawL_add_nstring(P, buf, str->text, str->length);
 }
 
-void pawY_mangle_add_arg(paw_Env *P, Buffer *buffer, paw_Type code)
+void pawY_mangle_start(paw_Env *P, Buffer *buf, const String *modname, const String *name)
+{
+    L_ADD_LITERAL(P, buf, "_P");
+    pawY_mangle_add_self(P, buf, modname, name);
+}
+
+void pawY_mangle_start_generic_args(paw_Env *P, Buffer *buf)
+{
+    pawL_add_char(P, buf, 'I');
+}
+
+void pawY_mangle_finish_generic_args(paw_Env *P, Buffer *buf)
+{
+    pawL_add_char(P, buf, 'E');
+}
+
+void pawY_mangle_add_self(paw_Env *P, Buffer *buf, const String *modname, const String *name)
+{
+    if (modname != NULL) add_string_with_len(P, buf, modname);
+    add_string_with_len(P, buf, name);
+}
+
+void pawY_mangle_add_arg(paw_Env *P, Buffer *buf, paw_Type code)
 {
     struct Type *type = Y_TYPE(P, code);
     switch (type->hdr.kind) {
         case TYPE_ADT:
-            if (type->adt.code == PAW_TUNIT) {
-                L_ADD_LITERAL(P, buffer, "0");
-            } else if (type->adt.code == PAW_TBOOL) {
-                L_ADD_LITERAL(P, buffer, "b");
-            } else if (type->adt.code == PAW_TINT) {
-                L_ADD_LITERAL(P, buffer, "i");
-            } else if (type->adt.code == PAW_TFLOAT) {
-                L_ADD_LITERAL(P, buffer, "f");
-            } else if (type->adt.code == PAW_TSTR) {
-                L_ADD_LITERAL(P, buffer, "s");
-            } else {
-                const struct Def *def = Y_DEF(P, type->adt.did);
-                L_ADD_STRING(P, buffer, def->hdr.name);
-                if (type->nsubtypes > 0) {
-                    for (int i = 0; i < type->nsubtypes; ++i) {
-                        pawY_mangle_add_arg(P, buffer, type->subtypes[i]);
+            switch (type->adt.code) {
+                case PAW_TUNIT:
+                    pawL_add_char(P, buf, '0');
+                    break;
+                case PAW_TBOOL:
+                    pawL_add_char(P, buf, 'b');
+                    break;
+                case PAW_TINT:
+                    pawL_add_char(P, buf, 'i');
+                    break;
+                case PAW_TFLOAT:
+                    pawL_add_char(P, buf, 'f');
+                    break;
+                case PAW_TSTR:
+                    pawL_add_char(P, buf, 's');
+                    break;
+                default: {
+                    const struct Def *def = Y_DEF(P, type->adt.did);
+                    add_string_with_len(P, buf, def->hdr.name);
+                    if (type->nsubtypes > 0) {
+                        pawY_mangle_start_generic_args(P, buf);
+                        for (int i = 0; i < type->nsubtypes; ++i) {
+                            pawY_mangle_add_arg(P, buf, type->subtypes[i]);
+                        }
+                        pawY_mangle_finish_generic_args(P, buf);
                     }
                 }
             }
             break;
         case TYPE_SIGNATURE: {
             const struct Signature func = type->sig;
-            pawL_add_char(P, buffer, 'F');
+            pawL_add_char(P, buf, 'F');
             for (int i = 0; i < type->nsubtypes; ++i) {
-                pawY_mangle_add_arg(P, buffer, type->subtypes[i]);
+                pawY_mangle_add_arg(P, buf, type->subtypes[i]);
             }
-            pawL_add_char(P, buffer, '_');
+            pawL_add_char(P, buf, 'E');
             const struct Type *result = Y_TYPE(P, func.result);
             if (result->hdr.kind != TYPE_ADT || 
                     result->adt.code != PAW_TUNIT) {
-                pawY_mangle_add_arg(P, buffer, func.result);
+                pawY_mangle_add_arg(P, buf, func.result);
             }
             break;
         }
         case TYPE_TUPLE: {
-            pawL_add_char(P, buffer, 't');
+            pawL_add_char(P, buf, 'T');
             for (int i = 0; i < type->nsubtypes; ++i) {
-                pawY_mangle_add_arg(P, buffer, type->subtypes[i]);
+                pawY_mangle_add_arg(P, buf, type->subtypes[i]);
             }
-            pawL_add_char(P, buffer, '_');
+            pawL_add_char(P, buf, 'E');
         }
     }
 }
 
-void pawY_mangle_finish(paw_Env *P, Buffer *buffer)
+void pawY_mangle_finish(paw_Env *P, Buffer *buf)
 {
-    pawL_add_char(P, buffer, '_');
 }
 

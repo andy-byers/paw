@@ -84,27 +84,21 @@ static void mangle_type(struct Generator *G, Buffer *buf, struct HirType *type)
     pawY_mangle_add_arg(ENV(G), buf, t->hdr.code);
 }
 
-static void mangle_add(struct Generator *G, Buffer *buf, const String *name, struct HirTypeList *types)
+static void mangle_types(struct Generator *G, Buffer *buf, struct HirTypeList *types)
 {
-    paw_Env *P = ENV(G);
-    pawY_mangle_start(P, buf, name);
-    if (types != NULL) {
-        for (int i = 0; i < types->count; ++i) {
-            mangle_type(G, buf, types->data[i]);
-        }
+    if (types == NULL) return;
+    pawY_mangle_start_generic_args(ENV(G), buf);
+    for (int i = 0; i < types->count; ++i) {
+        mangle_type(G, buf, types->data[i]);
     }
+    pawY_mangle_finish_generic_args(ENV(G), buf);
 }
 
-static void mangle_start(paw_Env *P, Buffer *buf, struct Generator *G)
+static void mangle_start(paw_Env *P, Buffer *buf, struct Generator *G, const String *modname, const String *name)
 {
     ENSURE_STACK(P, 1);
     pawL_init_buffer(P, buf);
-
-   // if (is_foreign_mod(G)) {
-   //     const String *modname = G->m->hir->name;
-   //     pawL_add_nstring(P, buf, modname->text, modname->length);
-   //     pawL_add_char(P, buf, ':');
-   // }
+    pawY_mangle_start(P, buf, modname, name);
 }
 
 static String *mangle_finish(paw_Env *P, Buffer *buf, struct Generator *G)
@@ -123,12 +117,8 @@ static String *mangle_name(struct Generator *G, const String *modname, const Str
 {
     Buffer buf;
     paw_Env *P = ENV(G);
-    mangle_start(P, &buf, G);
-    if (modname != NULL) {
-        pawL_add_nstring(P, &buf, modname->text, modname->length);
-        pawL_add_char(P, &buf, ':');
-    }
-    mangle_add(G, &buf, name, types);
+    mangle_start(P, &buf, G, modname, name);
+    mangle_types(G, &buf, types);
     return mangle_finish(P, &buf, G);
 }
 
@@ -136,14 +126,10 @@ static String *mangle_attr(struct Generator *G, const String *modname, const Str
 {
     Buffer buf;
     paw_Env *P = ENV(G);
-    mangle_start(P, &buf, G);
-    if (modname != NULL) {
-        pawL_add_nstring(P, &buf, modname->text, modname->length);
-        pawL_add_char(P, &buf, ':');
-    }
-    mangle_add(G, &buf, attr, attr_types);
-    L_ADD_LITERAL(P, &buf, "__"); // separator
-    mangle_add(G, &buf, base, base_types);
+    mangle_start(P, &buf, G, modname, attr);
+    mangle_types(G, &buf, attr_types);
+    pawY_mangle_add_self(P, &buf, modname, base);
+    mangle_types(G, &buf, base_types);
     return mangle_finish(P, &buf, G);
 }
 
@@ -158,10 +144,10 @@ static String *func_name(struct Generator *G, const String *modname, struct HirT
     return mangle_attr(G, modname, ad->name, ad_types, fd->name, fd_types);
 }
 
-static String *adt_name(struct Generator *G, struct HirType *type)
+static String *adt_name(struct Generator *G, const String *modname, struct HirType *type)
 {
     struct HirAdtDecl *d = HirGetAdtDecl(GET_DECL(G, hir_adt_did(type)));
-    return mangle_name(G, NULL, d->name, hir_adt_types(type));
+    return mangle_name(G, modname, d->name, hir_adt_types(type));
 }
 
 static Map *kcache_map(struct FuncState *fs, paw_Type code)
@@ -1459,7 +1445,7 @@ static void code_selector_expr(struct HirVisitor *V, struct HirSelector *e)
     }
 }
 
-static void register_items2(struct Generator *G, struct ModuleList *modules)
+static void register_items(struct Generator *G, struct ModuleList *modules)
 {
     struct ItemList *items = pawP_define_all(G->C, modules, &G->nvals);
 
@@ -1481,7 +1467,7 @@ static void register_items2(struct Generator *G, struct ModuleList *modules)
             pawP_item_list_push(G->C, G->items, item);
         } else if (HirIsAdtDecl(item->decl)) {
             struct AdtDef *adt = &get_def(G, i)->adt;
-            item->name = adt->mangled_name = adt_name(G, HIR_TYPEOF(item->decl));
+            item->name = adt->mangled_name = adt_name(G, modname, HIR_TYPEOF(item->decl));
         }
     }
 }
@@ -1547,9 +1533,9 @@ static void setup_pass(struct HirVisitor *V, struct Generator *G)
     V->VisitFieldDecl = code_field_decl;
 }
 
-static void register_modules2(struct Generator *G, struct ModuleList *modules)
+static void register_modules(struct Generator *G, struct ModuleList *modules)
 {
-    register_items2(G, modules);
+    register_items(G, modules);
 
     paw_Env *P = ENV(G);
     paw_assert(P->vals.data == NULL);
@@ -1574,6 +1560,6 @@ void pawP_codegen(struct Compiler *C)
         .C = C,
     };
     G.items = pawP_item_list_new(C);
-    register_modules2(&G, C->dm->modules);
+    register_modules(&G, C->dm->modules);
     code_modules(&G);
 }

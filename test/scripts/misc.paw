@@ -32,6 +32,10 @@ fn file_size(f: io::File) -> int {
 
 fn poly<T>(t: T) {}
 
+struct File {
+    f: io::File,
+}
+
 pub fn test_io() {
     let test = 'test string';
     let file = io::open('abc.txt', 'w+');
@@ -51,6 +55,5 @@ pub fn test_io() {
     ];
     poly(io::File);
     poly([io::File]);
-//    poly([io::File, io::File]);
-// TODO    poly((io::File, io::File));
+    poly((io::File, io::File));
 }
