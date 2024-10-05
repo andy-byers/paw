@@ -97,6 +97,11 @@ struct Lex {
     int last_line;
     int expr_depth;
     int nest_depth;
+
+    // When 'in_impl == true', the parameter at 'param_index == 0' may omit the
+    // type annotation, given that it is named 'self'. 'self: Self' is implied.
+    int param_index;
+    paw_Bool in_impl;
 };
 
 String *pawX_scan_string(struct Lex *lex, const char *s, size_t n);

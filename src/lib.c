@@ -19,6 +19,14 @@
 #include "os.h"
 #include "rt.h"
 
+// TODO: avoid using an upper bound on path length, or at least make sure not to overflow
+//       the automatic buffers used to hold paths in this file
+#if defined(PAW_OS_POSIX)
+# define PAW_PATH_MAX PATH_MAX
+#else
+# define PAW_PATH_MAX 2048
+#endif
+
 #define CF_BASE(i) (P->cf->base.p + i)
 
 static int base_assert(paw_Env *P)
@@ -525,10 +533,10 @@ static int searcher_Paw(paw_Env *P)
 static int searcher_cwd(paw_Env *P)
 {
     if (P->modname != NULL) {
-        char modname[PATH_MAX + 1];
+        char modname[PAW_PATH_MAX + 1];
         const char *pathname = P->modname->text;
         const size_t pathlen = P->modname->length;
-        paw_assert(pathlen <= PATH_MAX);
+        paw_assert(pathlen <= PAW_PATH_MAX); // TODO: throw an error at least
 
         size_t modlen;
         const char *sep = find_last_sep(pathname, pathlen, &modlen);
@@ -629,9 +637,9 @@ int pawL_load_file(paw_Env *P, const char *pathname)
     };
     const int rc = pawO_open(fr.file, pathname, "r");
     if (rc == 0) {
-        char modname[PATH_MAX + 1];
+        char modname[PAW_PATH_MAX + 1];
         const size_t pathlen = strlen(pathname);
-        paw_assert(pathlen <= PATH_MAX);
+        paw_assert(pathlen <= PAW_PATH_MAX); // TODO
         path_to_modname(pathname, pathlen, modname);
         const int status = paw_load(P, file_reader, modname, &fr);
         if (!fr.err) return status;

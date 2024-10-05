@@ -20,6 +20,7 @@
 #include "code.h"
 #include "env.h"
 #include "mem.h"
+#include "paw.h"
 #include "unify.h"
 
 #define ENV(x) ((x)->P)
@@ -115,7 +116,7 @@ struct Resolver {
     struct ModuleInfo *m;
     struct Unifier *U; // unification tables
     struct Compiler *C; // compiler state
-    struct HirType *adt; // enclosing ADT
+    struct HirDecl *self; // enclosing ADT
     struct DynamicMem *dm; // dynamic memory
     struct ResultState *rs;
     struct HirSymtab *symtab;
@@ -123,6 +124,7 @@ struct Resolver {
     int func_depth; // number of nested functions
     int line;
     paw_Bool in_closure; // 1 if the enclosing function is a closure, else 0
+    paw_Bool in_impl;
 };
 
 struct ModuleInfo {

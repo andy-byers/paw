@@ -379,6 +379,14 @@ static void collect_variant_decl(struct Collector *X, struct HirVariantDecl *d)
     d->type = type;
 }
 
+static paw_Bool check_static_method(struct HirType *self, struct HirDeclList *params)
+{
+    if (self == NULL) return PAW_FALSE; // not a method
+    if (params->count == 0) return PAW_TRUE;
+    struct HirFieldDecl *first = HirGetFieldDecl(K_LIST_GET(params, 0));
+    return first->type != self;
+}
+
 static void collect_func(struct Collector *X, struct HirFuncDecl *d)
 {
     enter_function(X, d);
@@ -386,6 +394,8 @@ static void collect_func(struct Collector *X, struct HirFuncDecl *d)
     collect_fields(X, d->params);
     d->type = register_func(X, d);
     leave_function(X);
+
+    d->is_assoc = check_static_method(d->self, d->params);
 }
 
 static void collect_func_decl(struct Collector *X, struct HirFuncDecl *d)
@@ -463,11 +473,11 @@ static void collect_methods(struct Collector *X, struct HirDeclList *methods)
 
 static struct HirType *collect_self(struct Collector *X, struct HirImplDecl *d)
 {
-    String *name = SCAN_STRING(X->C, "Self");
+    String *selfname = SCAN_STRING(X->C, "Self");
     struct HirType *self = collect_path(X, d->self);
     struct HirDecl *base = get_decl(X, hir_adt_base(self));
     struct HirDecl *inst = get_decl(X, hir_adt_did(self));
-    struct HirSymbol *symbol = new_local(X, name, inst);
+    struct HirSymbol *symbol = new_local(X, selfname, inst);
     map_adt_to_impl(X, base, HIR_CAST_DECL(d));
     symbol->is_type = PAW_TRUE;
     return self;

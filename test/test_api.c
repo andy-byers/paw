@@ -22,7 +22,7 @@ static paw_Env *start_test(void)
 {
     const char *source =
         "pub struct Struct<T> {\n"
-        "    t: T,             \n"
+        "    pub t: T,             \n"
         "}                     \n"
         "pub enum Enum<T> {\n"
         "    A,            \n"

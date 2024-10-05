@@ -10,7 +10,7 @@ pub fn test_unit_struct() {
 }
 
 struct Integer {
-    value: int,
+    pub value: int,
 }
 
 pub fn test_struct_fields() {
@@ -19,7 +19,7 @@ pub fn test_struct_fields() {
 }
 
 struct NestedInt {
-    value: Integer,
+    pub value: Integer,
 }
 
 pub fn test_struct_syntax() {
@@ -37,14 +37,14 @@ pub fn test_struct_syntax() {
 }
 
 struct Inner {
-    a: int,
-    b: str,
-    c: Empty,
+    pub a: int,
+    pub b: str,
+    pub c: Empty,
 }
 
 struct Outer {
-    a: bool,
-    b: Inner,
+    pub a: bool,
+    pub b: Inner,
 }
 
 pub fn test_nested_struct() {
@@ -65,7 +65,7 @@ pub fn instantiate_in_signature<T>(s: Struct<T>) -> Struct<int> {
 }
 
 struct Struct<T> {
-    v: T
+    pub v: T
 }
 
 pub fn test_instantiate_in_signature() {

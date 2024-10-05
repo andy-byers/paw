@@ -69,3 +69,17 @@ pub fn get_test(k: str) -> fn() {
 pub fn return_42() -> int {
     return 42;
 }
+
+pub struct Obj<T> {
+    t: T,
+}
+
+impl<X> Obj<X> {
+    pub fn new(x: X) -> Self {
+        return Self{t: x};
+    }
+    
+    pub fn get_t(self) -> X {
+        return self.t;
+    }
+}

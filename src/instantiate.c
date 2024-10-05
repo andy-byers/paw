@@ -250,6 +250,7 @@ static void prep_func_instance(struct InstanceState *I, struct HirTypeList *befo
 
 static void instantiate_func_aux(struct InstanceState *I, struct HirFuncDecl *base, struct HirInstanceDecl *inst, struct HirTypeList *types)
 {
+    inst->is_pub = base->is_pub;
     inst->name = base->name;
     inst->types = types;
 
@@ -308,15 +309,20 @@ static struct HirDecl *instantiate_impl_method(struct InstanceState *I, struct H
 {
     struct HirDecl *result = pawHir_new_decl(I->hir, func->line, kHirInstanceDecl);
     struct HirInstanceDecl *r = HirGetInstanceDecl(result);
+    r->is_pub = func->is_pub;
+    r->is_assoc = func->is_assoc;
+    r->self = func->self;
     r->name = func->name;
     r->types = types;
 
+    const struct HirAdt *self = HirGetAdt(func->self);
     struct HirType *type = register_decl_type(I, result, kHirFuncDef);
     struct HirFuncDef *t = HirGetFuncDef(type);
     t->types = collect_generic_types(I, func->generics);
     t->params = collect_field_types(I, func->params);
     t->result = func_result(func);
     t->base = func->did;
+    t->modno = self->modno;
     r->type = type;
 
     prep_func_instance(I, generics, types, r, t);

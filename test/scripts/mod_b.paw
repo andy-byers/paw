@@ -2,11 +2,11 @@
 use mod_a;
 
 pub struct External {
-    value: str,
+    pub value: str,
 }
 
 pub struct PolyExternal<T> {
-    value: T,
+    pub value: T,
 }
 
 pub fn external(value: str) -> External {

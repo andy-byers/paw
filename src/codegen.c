@@ -685,15 +685,41 @@ static struct VarInfo resolve_short_path(struct Generator *G, struct HirPath *pa
 static struct VarInfo resolve_path(struct Generator *G, struct HirPath *path)
 {
     if (path->count == 1) return resolve_short_path(G, path);
-    paw_assert(path->count == 2);
-    struct HirSegment *mod = pawHir_path_get(path, 0);
-    struct HirSegment *base = pawHir_path_get(path, 1);
-    const String *modname = pawS_eq(G->C->modname, mod->name)
-        ? NULL : mod->name;
-    const String *name = should_mangle(G, base->did)
-        ? mangle_name(G, modname, base->name, base->types)
-        : base->name;
+    paw_assert(path->count >= 2);
+    struct HirSegment *seg = pawHir_path_get(path, path->count - 1);
+    const String *name = seg->name;
+    if (should_mangle(G, seg->did)) {
+        struct HirDecl *decl = GET_DECL(G, seg->did);
+        struct HirType *type = HIR_TYPEOF(decl);
+        if (HirIsAdt(type)) {
+            struct HirAdt *t = HirGetAdt(type);
+            struct ModuleInfo *m = get_mod(G, t->modno);
+            const String *modname = get_mod_prefix(G, m);
+            name = mangle_name(G, modname, name, seg->types);
+        } else {
+            struct HirFuncDef *t = HirGetFuncDef(type);
+            struct ModuleInfo *m = get_mod(G, t->modno);
+            const String *modname = get_mod_prefix(G, m);
+            struct HirFuncDecl *func = HirGetFuncDecl(decl);
+            if (func->self != NULL) {
+                struct HirAdt *adt = HirGetAdt(func->self);
+                struct HirDecl *self = GET_DECL(G, adt->did);
+                const String *selfname = HirGetAdtDecl(self)->name;
+                name =  mangle_attr(G, modname, selfname, adt->types, name, seg->types);
+            } else {
+                name = mangle_name(G, modname, name, seg->types);
+            }
+        }
+    }
     return find_var(G, name);
+//    struct HirSegment *mod = pawHir_path_get(path, 0);
+//    struct HirSegment *base = pawHir_path_get(path, 1);
+//    const String *modname = pawS_eq(G->C->modname, mod->name)
+//        ? NULL : mod->name;
+//    const String *name = should_mangle(G, base->did)
+//        ? mangle_name(G, modname, base->name, base->types)
+//        : base->name;
+//    return find_var(G, name);
 }
 
 static void code_setter(struct HirVisitor *V, struct HirExpr *lhs, struct HirExpr *rhs)
@@ -1081,11 +1107,6 @@ static void code_func(struct HirVisitor *V, struct HirFuncDecl *d, struct VarInf
     proto->argc = func->params->count;
 
     enter_function(G, &fs, &bs, d->name, proto, d->type, d->fn_kind);
-    if (d->fn_kind == FUNC_METHOD) {
-        String *name = CACHED_STRING(ENV(G), CSTR_SELF);
-        new_local(&fs, name, d->self);
-        ++proto->argc;
-    }
     V->VisitDeclList(V, d->params);
     if (d->body != NULL) V->VisitBlock(V, d->body);
     leave_function(G);
@@ -1244,7 +1265,7 @@ static void code_call_expr(struct HirVisitor *V, struct HirCallExpr *e)
         code_instance_getter(V, e->func);
     } else if (is_method_call(e)) {
         struct HirExpr *target = prep_method_call(G, e);
-        V->VisitExpr(V, target);
+        V->VisitExpr(V, target); // push 'self'
         ++nargs; // account for 'self'
     } else {
         V->VisitExpr(V, e->target);

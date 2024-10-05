@@ -1,6 +1,6 @@
 
 struct Singleton<Value> {
-    value: Value,
+    pub value: Value,
 }
 
 pub fn test_initialization() {
@@ -64,7 +64,7 @@ pub fn test_field_access() {
 }
 
 struct TypeShadowsName<TypeShadowsName> {
-    value: TypeShadowsName,
+    pub value: TypeShadowsName,
 }
 
 pub fn test_type_shadows_name() {
@@ -72,14 +72,9 @@ pub fn test_type_shadows_name() {
     assert(tsn.value == 123);
 }
 
-// TODO: This should not be allowed: requires indirection, which is not yet possible
-//    struct B<T> {
-//        b: B::<T>
-//    }
-
 struct Pair<First, Second> {
-    first: First,
-    second: Second,
+    pub first: First,
+    pub second: Second,
 }
 
 fn new_pair<A, B>(a: A, b: B) -> Pair<A, B> {
@@ -97,11 +92,11 @@ pub fn test_two_generics() {
 }
 
 struct NestedSingleton<T> {
-    value: Singleton<T>,
+    pub value: Singleton<T>,
 }
 
 struct ExtraNestedSingleton<T> {
-    value: NestedSingleton<T>,
+    pub value: NestedSingleton<T>,
 }
 
 pub fn test_basic_inference() {
@@ -116,7 +111,7 @@ pub fn test_basic_inference() {
 }
 
 struct Container<T> {
-    values: [T],
+    pub values: [T],
 }
 
 fn check_length<T>(n: int, c: Container<T>) {
@@ -138,9 +133,9 @@ pub fn test_inference_with_fn() {
 }
 
 struct MultiPairs<A, B, C> {
-    a: (A, B),
-    b: (B, C),
-    c: (C, A),
+    pub a: (A, B),
+    pub b: (B, C),
+    pub c: (C, A),
 }
 
 pub fn test_inference_with_tuple() {
@@ -155,8 +150,8 @@ pub fn test_inference_with_tuple() {
 }
 
 struct PairWithVec<T> {
-    a: T,
-    b: [T],
+    pub a: T,
+    pub b: [T],
 }
 
 pub fn test_infer_vec_field() {
@@ -180,11 +175,11 @@ pub fn test_scope() {
 }
 
 struct TopLevelA<T> {
-    b: TopLevelB<T>
+    pub b: TopLevelB<T>
 }
 
 struct TopLevelB<T> {
-    t: T
+    pub t: T
 }
 
 fn toplevel_call<T>(a: TopLevelA<T>) -> TopLevelB<T> {
@@ -197,9 +192,9 @@ pub fn test_recursion2() {
 }
 
 struct PolyRecur2<X, Y> {
-    value: Option<PolyRecur2<X, Y>>,
-    value2: Option<PolyRecur2<Empty<Y>, Y>>,
-    value3: Option<PolyRecur2<bool, str>>,
+    pub value: Option<PolyRecur2<X, Y>>,
+    pub value2: Option<PolyRecur2<Empty<Y>, Y>>,
+    pub value3: Option<PolyRecur2<bool, str>>,
 }
 
 pub fn test_recursion3() {
@@ -226,15 +221,15 @@ pub fn test_recursion3() {
 }
 
 struct PolyRecur2A<X, Y, Z> {
-    value: Option<PolyRecur2B<X, Y, Z>>,
-    value2: Option<PolyRecur2B<X, str, Z>>,
-    value3: Option<PolyRecur2B<bool, [int], str>>,
+    pub value: Option<PolyRecur2B<X, Y, Z>>,
+    pub value2: Option<PolyRecur2B<X, str, Z>>,
+    pub value3: Option<PolyRecur2B<bool, [int], str>>,
 }
 
 struct PolyRecur2B<X, Y, Z> {
-    value: Option<PolyRecur2A<Z, X, Y>>,
-    value2: Option<PolyRecur2A<Z, X, [bool]>>,
-    value3: Option<PolyRecur2A<str, float, X>>,
+    pub value: Option<PolyRecur2A<Z, X, Y>>,
+    pub value2: Option<PolyRecur2A<Z, X, [bool]>>,
+    pub value3: Option<PolyRecur2A<str, float, X>>,
 }
 
 pub fn test_recursion4() {

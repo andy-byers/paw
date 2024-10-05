@@ -231,7 +231,7 @@ static void test_syntax_error(void)
     test_compiler_status(PAW_ESYNTAX, "missing_right_angle_turbofish", "struct A<T>", "let a = A::<int;");
     test_compiler_status(PAW_ESYNTAX, "square_bracket_generics", "fn f[A, B, C]() {}", "");
     test_compiler_status(PAW_ESYNTAX, "nested_fn", "", "fn f() {}");
-    test_compiler_status(PAW_ESYNTAX, "nested_struct", "", "struct S {x: int};");
+    test_compiler_status(PAW_ESYNTAX, "nested_struct", "", "struct S {pub x: int};");
     test_compiler_status(PAW_ESYNTAX, "nested_enum", "", "enum E {X};");
     test_compiler_status(PAW_ESYNTAX, "toplevel_var", "let v = 1", ";");
     test_compiler_status(PAW_ESYNTAX, "bad_float", "", "let f = -1.0-;");
@@ -294,13 +294,13 @@ static void test_struct_error(void)
     test_compiler_status(PAW_ESYNTAX, "struct_unit_with_braces_on_def", "struct A {}", "let a = A;");
     test_compiler_status(PAW_ESYNTAX, "struct_unit_with_braces_on_init", "struct A;", "let a = A{};");
     test_compiler_status(PAW_ESYNTAX, "struct_unit_without_semicolon", "struct A", "");
-    test_compiler_status(PAW_ESYNTAX, "struct_missing_braces", "struct A {a: int}", "let a = A;");
-    test_compiler_status(PAW_ENAME, "struct_missing_only_field", "struct A {a: int}", "let a = A{};");
-    test_compiler_status(PAW_ENAME, "struct_missing_field", "struct A {a: int, b: float}", "let a = A{a: 1};");
-    test_compiler_status(PAW_ENAME, "struct_extra_field", "struct A {a: int}", "let a = A{a: 1, b: 2};");
-    test_compiler_status(PAW_ENAME, "struct_duplicate_field", "struct A {a: int}", "let a = A{a: 1, a: 1};");
-    test_compiler_status(PAW_ENAME, "struct_wrong_field", "struct A {a: int}", "let a = A{b: 2};");
-    test_compiler_status(PAW_ETYPE, "struct_access_by_index", "struct S{x: int}", "let x = S{x: 1}; let y = x.0;");
+    test_compiler_status(PAW_ESYNTAX, "struct_missing_braces", "struct A {pub a: int}", "let a = A;");
+    test_compiler_status(PAW_ENAME, "struct_missing_only_field", "struct A {pub a: int}", "let a = A{};");
+    test_compiler_status(PAW_ENAME, "struct_missing_field", "struct A {pub a: int, pub b: float}", "let a = A{a: 1};");
+    test_compiler_status(PAW_ENAME, "struct_extra_field", "struct A {pub a: int}", "let a = A{a: 1, b: 2};");
+    test_compiler_status(PAW_ENAME, "struct_duplicate_field", "struct A {pub a: int}", "let a = A{a: 1, a: 1};");
+    test_compiler_status(PAW_ENAME, "struct_wrong_field", "struct A {pub a: int}", "let a = A{b: 2};");
+    test_compiler_status(PAW_ETYPE, "struct_access_by_index", "struct S{pub x: int}", "let x = S{x: 1}; let y = x.0;");
     test_compiler_status(PAW_ETYPE, "struct_not_enough_types", "struct S<A, B, C>;", "let x = S::<int, float>;");
     test_compiler_status(PAW_ETYPE, "struct_too_many_types", "struct S<A, B>;", "let x = S::<int, float, bool>;");
 }
@@ -399,7 +399,7 @@ static void check_impl_item(const char *name, int expect, const char *impl, cons
 {
     const char item_fmt[] = 
             "pub struct Object<T> {\n"
-            "    value: T\n"
+            "    pub value: T\n"
             "}\n"
             "%s\n";
 
@@ -434,7 +434,7 @@ static void check_impl_block(const char *name, int expect, const char *impl, con
 static void check_impl_body(const char *name, int expect, const char *ret, const char *impl, const char *main)
 {
     const char item_fmt[] = 
-            "pub fn method(value: T) %s{%s}\n";
+            "pub fn method(self, value: T) %s{%s}\n";
 
     char item_buf[4096];
     int rc = snprintf(item_buf, sizeof(item_buf), item_fmt, ret, impl);
@@ -445,6 +445,14 @@ static void check_impl_body(const char *name, int expect, const char *ret, const
 
 static void test_impl_error(void)
 {
+    check_impl_block("call_private_method", PAW_ENAME,
+            "fn f(self) {}\n",
+            "o.f();\n");
+
+    check_impl_block("self_misspelling", PAW_ESYNTAX,
+            "pub fn f(self_) {}\n",
+            "o.f();\n");
+
     // TODO: check for duplicates between impl blocks: use the 'self' ADT and method
     //       name to check if the method being registered or resolved is already accessible.
     // there are 2 versions of 'f' accessible by Object<int>, 1 from 'impl Object<int>'
@@ -454,13 +462,13 @@ static void test_impl_error(void)
 //            "impl Object<int> {pub fn f() {}}\n",
 //            "o.f();\n");
     check_impl_block("duplicate_method_within_block", PAW_ENAME,
-            "pub fn f() {}\n"
-            "pub fn f() {}\n",
+            "pub fn f(self) {}\n"
+            "pub fn f(self) {}\n",
             "o.f();\n");
 
     check_impl_item("unbound_generic", PAW_ETYPE,
             "impl<A, B> Object<B> {\n"
-            "    pub fn f() -> A {}\n"
+            "    pub fn f(self) -> A {}\n"
             "}\n",
             "o.f();\n"); // 'A' cannot be determined
 

@@ -256,7 +256,7 @@ static struct HirDecl *find_field(struct HirDeclList *fields, String *name)
 {
     if (fields == NULL) return NULL;
     for (int i = 0; i < fields->count; ++i) {
-        struct HirDecl *decl = pawHir_decl_list_get(fields, i);
+        struct HirDecl *decl = K_LIST_GET(fields, i);
         if (pawS_eq(name, decl->hdr.name)) return decl;
     }
     return NULL;
@@ -341,11 +341,11 @@ static void enter_function(struct Resolver *R, struct HirFuncDecl *func)
 {
     enter_block(R, NULL);
     new_local(R, func->name, HIR_CAST_DECL(func));
-    if (func->fn_kind == FUNC_METHOD) {
-        // methods use local slot 1 for the implicit context variable
-        struct HirAdtDecl *adt = get_adt(R, func->self);
-        create_context(R, adt, func->line);
-    }
+    //if (func->fn_kind == FUNC_METHOD) {
+    //    // methods use local slot 1 for the implicit context variable
+    //    struct HirAdtDecl *adt = get_adt(R, func->self);
+    //    create_context(R, adt, func->line);
+    //}
 }
 
 static void ResolveBlock(struct Resolver *R, struct HirBlock *block)
@@ -444,11 +444,10 @@ static void resolve_impl_methods(struct Resolver *R, struct HirImplDecl *d)
     // pass, after all ADTs have been registered).
     // use the identifier 'Self' to refer to the 'self' ADT
     String *name = SCAN_STRING(R, "Self");
-    struct HirDecl *self = resolve_location(R, d->self);
-    struct HirSymbol *symbol = new_local(R, name, self);
+    struct HirSymbol *symbol = new_local(R, name, R->self);
     symbol->is_type = PAW_TRUE;
 
-    struct HirType *self_type = self->hdr.type;
+    struct HirType *self_type = HIR_TYPEOF(R->self);
     resolve_methods(R, d->methods, HirGetAdt(self_type));
     allocate_decls(R, d->methods);
 
@@ -840,12 +839,14 @@ static struct HirDecl *find_method(struct Resolver *R, struct HirType *adt, Stri
 
 static void resolve_impl_item(struct Resolver *R, struct HirImplDecl *d)
 {
+    R->self = resolve_location(R, d->self);
     enter_block(R, NULL);
 
     allocate_decls(R, d->generics);
     resolve_impl_methods(R, d);
 
     leave_block(R);
+    R->self = NULL;
 }
 
 static void resolve_var_decl(struct Resolver *R, struct HirVarDecl *d)
@@ -891,12 +892,25 @@ static void resolve_type_decl(struct Resolver *R, struct HirTypeDecl *d)
     define_local(symbol);
 }
 
+static struct HirType *get_self_(struct HirDecl *func)
+{
+    if (HirIsFuncDecl(func)) {
+        return HirGetFuncDecl(func)->is_assoc ? NULL : HirGetFuncDecl(func)->self;
+    } else if (HirIsInstanceDecl(func)) {
+        return HirGetInstanceDecl(func)->is_assoc ? NULL : HirGetInstanceDecl(func)->self;
+    }
+    return NULL;
+}
+#define GET_SELF(decl) get_self_(HIR_CAST_DECL(decl))
+
 static struct HirType *infer_poly_func(struct Resolver *R, struct HirFuncDecl *base, struct HirExprList *args)
 {
     struct Generalization g = pawP_generalize(R->m->hir, base->generics, base->params);
+    struct HirType *self = GET_SELF(base);
 
-    paw_assert(args->count == g.fields->count);
-    for (int i = 0; i < g.fields->count; ++i) {
+    // skip 'self' parameter, which is not present in 'args'
+    paw_assert(args->count == g.fields->count - !!self);
+    for (int i = !!self; i < g.fields->count; ++i) {
         struct HirType *a = g.fields->data[i];
         struct HirType *b = resolve_operand(R, args->data[i]);
         unify(R, a, b);
@@ -905,15 +919,27 @@ static struct HirType *infer_poly_func(struct Resolver *R, struct HirFuncDecl *b
     return HIR_TYPEOF(inst);
 }
 
+static struct HirType *method_ctx(struct Resolver *R, struct HirType *type)
+{
+    if (!HirIsFuncDef(type)) return NULL;
+    struct HirFuncDef *fdef = HirGetFuncDef(type);
+    struct HirDecl *decl = get_decl(R, fdef->did);
+    return GET_SELF(decl);
+}
+
 // Resolve a function call or enumerator constructor
 static void resolve_call_expr(struct Resolver *R, struct HirCallExpr *e)
 {
     e->func = resolve_expr(R, e->target);
+
+    const struct HirFuncPtr *fptr = HIR_FPTR(e->func);
+    struct HirType *self = method_ctx(R, e->func);
+    const int nparams = fptr->params->count - !!self;
     if (!HirIsFuncType(e->func)) {
         TYPE_ERROR(R, "type is not callable");
-    } else if (e->args->count < HIR_FPTR(e->func)->params->count) {
+    } else if (e->args->count < nparams) {
         SYNTAX_ERROR(R, "not enough arguments");
-    } else if (e->args->count > HIR_FPTR(e->func)->params->count) {
+    } else if (e->args->count > nparams) {
         SYNTAX_ERROR(R, "too many arguments");
     }
 
@@ -922,7 +948,7 @@ static void resolve_call_expr(struct Resolver *R, struct HirCallExpr *e)
         // for a function template, attempt to infer the type parameters.
         struct HirDecl *decl = get_decl(R, HirGetFuncDef(e->func)->did);
         if (HIR_IS_POLY_FUNC(decl)) {
-            e->func = infer_poly_func(R, &decl->func, e->args);
+            e->func = infer_poly_func(R, HirGetFuncDecl(decl), e->args);
             e->type = HIR_FPTR(e->func)->result; // 'fptr' is common prefix
             return;
         }
@@ -935,10 +961,10 @@ static void resolve_call_expr(struct Resolver *R, struct HirCallExpr *e)
     const struct HirTypeList *params = func->params;
     e->type = func->result;
 
-    paw_assert(e->args->count == params->count);
-    for (int i = 0; i < params->count; ++i) {
-        struct HirExpr *arg = pawHir_expr_list_get(e->args, i);
-        unify(R, params->data[i], resolve_operand(R, arg));
+    for (int i = !!self; i < params->count; ++i) {
+        struct HirType *param = K_LIST_GET(params, i);
+        struct HirExpr *arg = K_LIST_GET(e->args, i - !!self);
+        unify(R, param, resolve_operand(R, arg));
     }
 }
 
@@ -1043,6 +1069,25 @@ static struct HirExprList *collect_field_exprs(struct Resolver *R, struct HirExp
     return order;
 }
 
+static paw_Bool is_adt_self(struct Resolver *R, struct HirDecl *adt)
+{
+    if (R->self != NULL) {
+        struct HirType *self = HIR_TYPEOF(R->self);
+        struct HirType *type = HIR_TYPEOF(adt);
+        return is_compat(R->C, self, type);
+    }
+    return PAW_FALSE;
+}
+
+static void ensure_accessible_field(struct Resolver *R, struct HirDecl *field, struct HirDecl *adt)
+{
+    const String *name = field->hdr.name;
+    const paw_Bool is_pub = HirIsFieldDecl(field) ? HirGetFieldDecl(field)->is_pub :
+        HirIsFuncDecl(field) ? HirGetFuncDecl(field)->is_pub : HirGetInstanceDecl(field)->is_pub; 
+    if (is_pub || is_adt_self(R, adt)) return; // field is public or control is inside own impl block
+    NAME_ERROR(R, "'%s.%s' is not a public field", HirGetAdtDecl(adt)->name->text, name->text); 
+}
+
 static struct HirType *resolve_composite_lit(struct Resolver *R, struct HirCompositeLit *e)
 {
     struct HirDecl *decl = resolve_location(R, e->path);
@@ -1074,8 +1119,9 @@ static struct HirType *resolve_composite_lit(struct Resolver *R, struct HirCompo
     }
     struct HirExprList *order = collect_field_exprs(R, e->items, map, adt->name);
     for (int i = 0; i < adt->fields->count; ++i) {
-        struct HirDecl *decl = adt->fields->data[i];
-        struct HirFieldDecl *field = HirGetFieldDecl(decl);
+        struct HirDecl *field_decl = K_LIST_GET(adt->fields, i);
+        struct HirFieldDecl *field = HirGetFieldDecl(field_decl);
+        ensure_accessible_field(R, field_decl, decl);
         V_SET_OBJECT(&key, field->name);
         Value *value = pawH_get(map, key);
         if (value == NULL) {
@@ -1248,6 +1294,7 @@ static void resolve_selector(struct Resolver *R, struct HirSelector *e)
                                    "only be used with tuples)");
     struct HirAdtDecl *adt = get_adt(R, target);
     struct HirDecl *field = expect_field(R, adt, e->name);
+    ensure_accessible_field(R, field, HIR_CAST_DECL(adt));
     e->type = HIR_TYPEOF(field);
 }
 

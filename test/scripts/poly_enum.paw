@@ -33,8 +33,8 @@ pub fn test_assignment() {
 }
 
 struct Struct<T> {
-    x: Enum<int>,
-    y: Enum<T>,
+    pub x: Enum<int>,
+    pub y: Enum<T>,
 }
 
 pub fn test_fields() {

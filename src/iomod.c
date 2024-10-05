@@ -91,9 +91,9 @@ static int file_write(paw_Env *P)
 void l_import_io(paw_Env *P)
 {
     static const char s_io[] =
-        "pub fn open(pathname: str, mode: str) -> File;\n"
-
-        "struct File;\n"
+        "struct File {\n"
+        "    inner: (),\n"
+        "}\n"
 
         "enum Seek {\n"
         "    Begin,\n"
@@ -102,16 +102,17 @@ void l_import_io(paw_Env *P)
         "}\n"
 
         "impl File {\n"
-        "    pub fn seek(offset: int, whence: Seek);\n"
-        "    pub fn tell() -> int;\n"
-        "    pub fn read(size: int) -> str;\n"
-        "    pub fn write(data: str) -> int;\n"
+        "    pub fn open(pathname: str, mode: str) -> Self;\n"
+        "    pub fn seek(self, offset: int, whence: Seek);\n"
+        "    pub fn tell(self) -> int;\n"
+        "    pub fn read(self, size: int) -> str;\n"
+        "    pub fn write(self, data: str) -> int;\n"
         "}\n";
 
     pawE_push_cstr(P, CSTR_KBUILTIN);
     paw_map_getelem(P, PAW_REGISTRY_INDEX);
 
-    pawL_add_extern_func(P, "io", "open", io_open);
+    pawL_add_extern_method(P, "io", "File", "open", io_open);
     pawL_add_extern_method(P, "io", "File", "seek", file_seek);
     pawL_add_extern_method(P, "io", "File", "tell", file_tell);
     pawL_add_extern_method(P, "io", "File", "read", file_read);

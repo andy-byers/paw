@@ -3,6 +3,7 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
 #include "parse.h"
+#include "env.h"
 #include "ast.h"
 #include "compile.h"
 #include "map.h"
@@ -10,6 +11,9 @@
 #define NEW_EXPR(lex, kind) pawAst_new_expr((lex)->ast, (lex)->last_line, kind)
 #define NEW_STMT(lex, kind) pawAst_new_stmt((lex)->ast, (lex)->last_line, kind)
 #define NEW_DECL(lex, kind) pawAst_new_decl((lex)->ast, (lex)->last_line, kind)
+
+#define SELF_TYPENAME(lex) SCAN_STRING(lex, "Self")
+#define SELF_VARNAME(lex) CACHED_STRING(ENV(lex), CSTR_SELF)
 
 static String *unpack_name(const struct AstExpr *expr)
 {
@@ -502,12 +506,39 @@ static struct AstExpr *sig_param_expr(struct Lex *lex)
     return result;
 }
 
+static struct AstExpr *self_type(struct Lex *lex)
+{
+    struct AstExpr *result = NEW_EXPR(lex, kAstPathExpr);
+    struct AstPathExpr *r = AstGetPathExpr(result);
+    r->path = pawAst_path_new(lex->ast);
+    pawAst_path_add(lex->ast, r->path, SELF_TYPENAME(lex), NULL);
+    return result;
+}
+
+static void expect_self(struct Lex *lex, const String *name)
+{
+    if (pawS_eq(name, SELF_VARNAME(lex))) return;
+    pawX_error(lex, "expected parameter named 'self' but found '%s'", 
+            name->text);
+}
+
 static struct AstDecl *func_param_decl(struct Lex *lex)
 {
-    struct AstDecl *r = NEW_DECL(lex, kAstFieldDecl);
-    r->field.name = parse_name(lex);
-    r->field.tag = expect_annotation(lex, "function parameter", r->field.name);
-    return r;
+    struct AstDecl *result = NEW_DECL(lex, kAstFieldDecl);
+    struct AstFieldDecl *r = AstGetFieldDecl(result);
+    r->name = parse_name(lex);
+    if (!lex->in_impl || lex->param_index != 0) {
+        // usual case: expect a type annotation on each parameter
+        r->tag = expect_annotation(lex, "parameter", r->name);
+        return result;
+    }
+    // first parameter to method: 'self' means 'self: Self'
+    r->tag = type_annotation(lex);
+    if (r->tag == NULL) {
+        r->tag = self_type(lex);
+        expect_self(lex, r->name);
+    }
+    return result;
 }
 
 static struct AstDecl *clos_param_decl(struct Lex *lex)
@@ -754,6 +785,7 @@ static struct AstDeclList *func_parameters(struct Lex *lex)
     const int line = lex->line;
     check_next(lex, '(');
     struct AstDeclList *list = pawAst_decl_list_new(lex->ast);
+    lex->param_index = 0; // 'self' allowed if '.in_impl'
     parse_func_param_list(lex, list, line);
     return list;
 }
@@ -1232,6 +1264,7 @@ static struct AstDecl *enum_decl(struct Lex *lex, paw_Bool pub)
 static struct AstDecl *field_decl(struct Lex *lex)
 {
     struct AstDecl *r = NEW_DECL(lex, kAstFieldDecl);
+    r->field.is_pub = test_next(lex, TK_PUB);
     r->field.name = parse_name(lex);
     r->field.tag = expect_annotation(lex, "field", r->field.name);
     return r;
@@ -1296,6 +1329,8 @@ static struct AstDecl *impl_decl(struct Lex *lex)
     r->self = parse_pathtype(lex);
 
     const int line = lex->line;
+    // indicate that 'self' has special meaning
+    lex->in_impl = PAW_TRUE; 
     check_next(lex, '{');
     r->methods = pawAst_decl_list_new(lex->ast);
     while (!end_of_block(lex)) {
@@ -1306,6 +1341,7 @@ static struct AstDecl *impl_decl(struct Lex *lex)
         pawAst_decl_list_push(lex->ast, r->methods, method);
     }
     delim_next(lex, '}', '{', line);
+    lex->in_impl = PAW_FALSE; 
     return result;
 }
 
@@ -1429,67 +1465,67 @@ static const char kPrelude[] =
     "pub struct _Map<K, V>;\n"
 
     "pub enum Option<T> {\n"
-    "    Some(T),        \n"
-    "    None,           \n"
-    "}                   \n"
+    "    Some(T),\n"
+    "    None,\n"
+    "}\n"
 
     "pub enum Result<T, E> {\n"
-    "    Ok(T),             \n"
-    "    Err(E),            \n"
-    "}                      \n"
+    "    Ok(T),\n"
+    "    Err(E),\n"
+    "}\n"
 
     "pub fn print(message: str);\n"
-    "pub fn assert(cond: bool); \n"
+    "pub fn assert(cond: bool);\n"
 
-    "impl bool {                   \n"
-    "    pub fn to_string() -> str;\n"
-    "}                             \n"
+    "impl bool {\n"
+    "    pub fn to_string(self) -> str;\n"
+    "}\n"
 
-    "impl int {                    \n"
-    "    pub fn to_string() -> str;\n"
-    "}                             \n"
+    "impl int {\n"
+    "    pub fn to_string(self) -> str;\n"
+    "}\n"
 
-    "impl float {                  \n"
-    "    pub fn to_string() -> str;\n"
-    "}                             \n"
+    "impl float {\n"
+    "    pub fn to_string(self) -> str;\n"
+    "}\n"
 
-    "impl str {                                  \n"
-    "    pub fn parse_int(base: int) -> int;     \n"
-    "    pub fn parse_float() -> float;          \n"
-    "    pub fn split(sep: str) -> [str];        \n"
-    "    pub fn join(seq: [str]) -> str;         \n"
-    "    pub fn find(target: str) -> int;        \n"
-    "    pub fn starts_with(prefix: str) -> bool;\n"
-    "    pub fn ends_with(suffix: str) -> bool;  \n"
-    "}                                           \n"
+    "impl str {\n"
+    "    pub fn parse_int(self, base: int) -> int;\n"
+    "    pub fn parse_float(self) -> float;\n"
+    "    pub fn split(self, sep: str) -> [str];\n"
+    "    pub fn join(self, seq: [str]) -> str;\n"
+    "    pub fn find(self, target: str) -> int;\n"
+    "    pub fn starts_with(self, prefix: str) -> bool;\n"
+    "    pub fn ends_with(self, suffix: str) -> bool;\n"
+    "}\n"
 
-    "impl<TT> _List<TT> {                          \n"
-    "    pub fn length() -> int;                 \n"
-    "    pub fn push(value: TT) -> _List<TT>;          \n"
-    "    pub fn insert(i: int, value: TT) -> Self;\n"
-    "    pub fn remove(i: int) -> TT;             \n"
-    "    pub fn pop() -> TT;                      \n"
-    "}                                           \n"
+    "impl<TT> _List<TT> {\n"
+    "    pub fn length(self) -> int;\n"
+    "    pub fn push(self, value: TT) -> _List<TT>;\n"
+    "    pub fn insert(self, i: int, value: TT) -> Self;\n"
+    "    pub fn remove(self, i: int) -> TT;\n"
+    "    pub fn pop(self) -> TT;\n"
+    "}\n"
 
-    "impl<K, V> _Map<K, V> {                    \n"
-    "    pub fn length() -> int;                \n"
-    "    pub fn get_or(key: K, default: V) -> V;\n"
-    "    pub fn erase(key: K) -> Self;          \n"
-    "}                                          \n"
+    "impl<K, V> _Map<K, V> {\n"
+    "    pub fn length(self) -> int;\n"
+    "    pub fn get_or(self, key: K, default: V) -> V;\n"
+    "    pub fn erase(self, key: K) -> Self;\n"
+    "}\n"
 
-    "impl<T> Option<T> {                 \n"
-    "    pub fn is_some() -> bool;       \n"
-    "    pub fn is_none() -> bool;       \n"
-    "    pub fn unwrap() -> T;           \n"
-    "    pub fn unwrap_or(value: T) -> T;\n"
-    "}                                   \n"
+    "impl<T> Option<T> {\n"
+    "    pub fn is_some(self) -> bool;\n"
+    "    pub fn is_none(self) -> bool;\n"
+    "    pub fn unwrap(self) -> T;\n"
+    "    pub fn unwrap_or(self, value: T) -> T;\n"
+    "}\n"
 
-    "impl<T, E> Result<T, E> {           \n"
-    "    pub fn is_ok() -> bool;         \n"
-    "    pub fn is_err() -> bool;        \n"
-    "    pub fn unwrap() -> T;           \n"
-    "    pub fn unwrap_or(value: T) -> T;\n"
-    "}                                   \n";
+    "impl<T, E> Result<T, E> {\n"
+    "    pub fn is_ok(self) -> bool;\n"
+    "    pub fn is_err(self) -> bool;\n"
+    "    pub fn unwrap(self) -> T;\n"
+    "    pub fn unwrap_or(self, value: T) -> T;\n"
+    "}\n";
 
 struct PreludeReader {
     size_t size;

@@ -26,9 +26,9 @@ pub fn test_explicit_instantiation() {
     let answer = map::<float, int>(f2i, source);
 }
 
-struct One<A>{a: A}
-struct Two<A, B>{a: A, b: B}
-struct Three<A, B, C>{a: A, b: B, c: C}
+struct One<A>{pub a: A}
+struct Two<A, B>{pub a: A, pub b: B}
+struct Three<A, B, C>{pub a: A, pub b: B, pub c: C}
 
 fn implicit<A, B, C>(
         a: One<A>, 

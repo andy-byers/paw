@@ -9,6 +9,85 @@ fn fix_list() {
     list.length();
 }
 
+struct Object {
+    a: int,
+    b: int,
+    pub x: str,
+}
+
+impl Object {
+    // associated function
+    pub fn new(a: int, b: int) -> Self {
+        return Object{
+            a: a,
+            b: b,
+            x: 'public',
+        };
+    }
+
+    // method with context parameter 'self'
+    pub fn get_a(self: Self) -> int {
+        return self.a;
+    }
+
+    // 'self: Self' is implied
+    pub fn get_b(self) -> int {
+        return self.b;
+    }
+
+    pub fn set_a(self, a: int) {
+        self.a = a;
+    }
+
+    pub fn set_b(self, b: int) {
+        self.b = b;
+    }
+}
+
+pub fn test_visibility() {
+    let o = Object::new(1, 2);
+    assert(o.get_a() == 1);
+    assert(o.get_b() == 2);
+
+    o.set_a(11);
+    assert(o.get_a() == 11);
+    assert(o.get_b() == 2);
+
+    o.set_b(22);
+    assert(o.get_a() == 11);
+    assert(o.get_b() == 22);
+
+    assert(o.x == 'public');
+}
+
+struct PolyObject<T> {
+    t: T,
+    pub x: str,
+}
+
+impl<X> PolyObject<X> {
+    pub fn new(x: X) -> Self {
+        return Self{t: x, x: 'public'};
+    }
+    pub fn get_t(self) -> X {
+        return self.t;
+    }
+    pub fn set_t(self, t: X) {
+        self.t = t;
+    }
+}
+
+pub fn test_poly_visibility() {
+    // TODO: infer generic parameter on object using args passed to method
+    let o = PolyObject::<int>::new(1);
+    assert(o.get_t() == 1);
+
+    o.set_t(11);
+    assert(o.get_t() == 11);
+
+    assert(o.x == 'public');
+}
+
 pub fn test_list_methods() {
     let list = [1, 3, 5, -20, -10];
     assert(list.length() == 5);
@@ -26,19 +105,19 @@ pub fn test_list_methods() {
 }
 
 struct Stack<T> {
-    ts: [T]
+    pub ts: [T]
 }
 
 impl<X> Stack<X> {
-    pub fn push(t: X) {
+    pub fn push(self, t: X) {
         self.ts.push(t);
     }
 
-    pub fn pop() -> X {
+    pub fn pop(self) -> X {
         return self.ts.pop();
     }
 
-    pub fn is_empty() -> bool {
+    pub fn is_empty(self) -> bool {
         return self.ts.length() == 0;
     }
 }
@@ -68,21 +147,21 @@ pub fn test_calls() {
 }
 
 struct Mono {
-    value: int
+    pub value: int
 }
 
 impl Mono {
-    pub fn noop() {}
+    pub fn noop(self) {}
 
-    pub fn access_field() -> int {
+    pub fn access_field(self) -> int {
         return self.value;
     }
 
-    pub fn call_method() -> int {
+    pub fn call_method(self) -> int {
         return self.access_field();
     }
 
-    pub fn recursion(count: int) -> int {
+    pub fn recursion(self, count: int) -> int {
         if self.value > 0 {
             self.value = self.value - 1;
             return self.recursion(count + 1);
@@ -90,14 +169,14 @@ impl Mono {
         return count;
     }
 
-    pub fn mutual_recursion(count: int) -> int {
+    pub fn mutual_recursion(self, count: int) -> int {
         if self.value > 0 {
             return self.mutual_recursion_2(count);
         }
         return count;
     }
 
-    pub fn mutual_recursion_2(count: int) -> int {
+    pub fn mutual_recursion_2(self, count: int) -> int {
         self.value = self.value - 1;
         return self.mutual_recursion(count + 1);
     }
@@ -125,39 +204,39 @@ pub fn test_mono_impl() {
 }
 
 struct Poly<T> {
-    value: T
+    pub value: T
 }
 
 impl<T> Poly<T> { 
-    fn method() -> T {
+    pub fn method(self) -> T {
         return self.value;
     }
 }
 
 impl Poly<str> {
-    fn str_only() -> str {
+    pub fn str_only(self) -> str {
         return self.value;
     }
 }
 
 impl Poly<int> {
     // signatures differ between Poly<int> and Poly<float>
-    pub fn different_signatures() -> int {
+    pub fn different_signatures(self) -> int {
         return self.value;
     }
 
     // Poly<int> and Poly<float> have idential signatures
-    pub fn same_signatures() -> int {
+    pub fn same_signatures(self) -> int {
         return self.different_signatures();
     }
 }
 
 impl Poly<float> {
-    pub fn different_signatures() -> float {
+    pub fn different_signatures(self) -> float {
         return self.value;
     }
 
-    pub fn same_signatures() -> int {
+    pub fn same_signatures(self) -> int {
         let p = Poly{value: 42};
         return p.different_signatures();
     }
@@ -180,32 +259,32 @@ pub fn test_poly_impl() {
 }
 
 struct Poly2<A, B> {
-    a: A,
-    b: B,
+    pub a: A,
+    pub b: B,
 }
 
 impl<X, Y> Poly2<Y, X> {
-    pub fn f(a: X) -> Y {
+    pub fn f(self, a: X) -> Y {
         self.b = a;
         return self.a;
     }
 }
 
 impl Poly2<int, int> {
-    pub fn to_str() -> str {
+    pub fn to_str(self) -> str {
         return 'Poly2{' + self.a.to_string() + ', ' +
                           self.b.to_string() + '}';
     }
 }
 impl Poly2<bool, str> {
-    pub fn to_str() -> str {
+    pub fn to_str(self) -> str {
         return 'Poly2{' + self.a.to_string() + ', "' +
                           self.b + '"}';
     }
 }
 
 impl<T> Poly2<T, T> {
-    pub fn swap() {
+    pub fn swap(self) {
         let t = self.a;
         self.a = self.b;
         self.b = t;
@@ -213,14 +292,14 @@ impl<T> Poly2<T, T> {
 }
 
 impl<T> Poly2<Aux<T>, Aux<int>> {
-    pub fn g(a: Aux<T>, scale: int) -> int {
+    pub fn g(self, a: Aux<T>, scale: int) -> int {
         self.a = a;
         return self.b.value * scale;
     }
 }
 
 struct Aux<T> {
-    value: T
+    pub value: T
 }
 
 pub fn test_poly_impl_2() {
@@ -256,13 +335,13 @@ pub fn test_poly_impl_2() {
 }
 
 impl int {
-    pub fn user_defined() -> int {
+    pub fn user_defined(self) -> int {
         return self;
     }
 }
 
 impl<T> Poly<T> { 
-    fn method2() -> [T] {
+    pub fn method2(self) -> [T] {
         return [self.value];
     }
 }

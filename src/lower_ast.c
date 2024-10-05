@@ -77,6 +77,36 @@ static struct HirStmt *LowerBlock(struct LowerAst *L, struct AstBlock *block)
 
 #define LOWER_BLOCK(L, block) HirGetBlock(LowerBlock(L, block))
 
+static struct HirDecl *lower_self_decl(struct LowerAst *L, struct AstDecl *decl)
+{
+    const String *self = CSTR(L, CSTR_SELF);
+    struct AstFieldDecl *d = AstGetFieldDecl(decl);
+
+    struct HirDecl *result = new_decl(L, d->line, kHirFieldDecl);
+    struct HirFieldDecl *r = HirGetFieldDecl(result);
+
+    r->is_pub = d->is_pub;
+    r->name =  d->name;
+    r->tag = lower_type(L, d->tag);
+    if (pawS_eq(d->name, self)) {
+    
+    }
+    return result;
+}
+
+static struct HirDeclList *lower_params(struct LowerAst *L, struct AstFuncDecl *d, struct AstDeclList *params)
+{
+    struct HirDeclList *out = pawHir_decl_list_new(L->hir);
+    for (int i = 0; i < params->count; ++i) {
+        struct AstDecl *ast_param = K_LIST_GET(params, i);
+        struct HirDecl *hir_param = i != 0
+            ? lower_self_decl(L, ast_param)
+            : lower_decl(L, ast_param);
+        pawHir_decl_list_push(L->hir, out, hir_param);
+    }
+    return out;
+}
+
 static void register_func(struct LowerAst *L, struct AstFuncDecl *d, struct HirFuncDecl *r)
 {
     r->is_pub = d->is_pub;
@@ -87,7 +117,7 @@ static void register_func(struct LowerAst *L, struct AstFuncDecl *d, struct HirF
         r->generics = lower_decl_list(L, d->generics);
         r->monos = pawHir_decl_list_new(L->hir);
     }
-    r->params = lower_decl_list(L, d->params);
+    r->params = lower_params(L, d, d->params);
     r->result = lower_type(L, d->result);
 }
 
@@ -96,6 +126,7 @@ static struct HirDecl *LowerFieldDecl(struct LowerAst *L, struct AstFieldDecl *d
     struct HirDecl *result = new_decl(L, d->line, kHirFieldDecl);
     struct HirFieldDecl *r = HirGetFieldDecl(result);
 
+    r->is_pub = d->is_pub;
     r->name =  d->name;
     r->tag = lower_type(L, d->tag);
     return result;

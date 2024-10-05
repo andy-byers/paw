@@ -4,8 +4,8 @@
 // translated to Paw by Andy
 
 struct Tree {
-    left: Option<Tree>,
-    right: Option<Tree>,
+    pub left: Option<Tree>,
+    pub right: Option<Tree>,
 }
 
 fn new_tree(lt: Option<Tree>, rt: Option<Tree>) -> Option<Tree> {

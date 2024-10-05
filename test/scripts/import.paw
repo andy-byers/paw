@@ -12,3 +12,8 @@ pub fn test_import() {
     call_test('external');
     call_test('recursive');
 }
+
+pub fn test_object() {
+    let o = mod_a::Obj::<bool>::new(true);
+    assert(o.get_t());
+}

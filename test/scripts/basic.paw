@@ -295,10 +295,10 @@ pub fn test_chain_result() {
 }
 
 struct Inner<T> {
-    val: T,
+    pub val: T,
 }
 struct Outer<T> {
-    option: Option<Inner<T>>
+    pub option: Option<Inner<T>>
 }
 
 fn option3<T>(t: T, a: bool, b: bool) -> Option<Outer<T>> {

@@ -1,116 +1,99 @@
 // primitive.paw
 
-use io;
+pub fn test_initializer_annotations() {
+    let i: int = 123;
+    let s: str = 'abc';
+    let b: bool = true;
+    let f: float = 1.0;
 
-struct Obj<T> {
-    t: T,
+    assert(i == 123);
+    assert(s == 'abc');
+    assert(b == true);
+    assert(f == 1.0);
 }
 
-fn f<T>(t: T) {
-    let o = Obj{
-        t: t,
-    };
+pub fn test_initializer_inference() {
+    let i = 123;
+    let s = 'abc';
+    let b = true;
+    let f = 1.0;
+
+    assert(i == 123);
+    assert(s == 'abc');
+    assert(b == true);
+    assert(f == 1.0);
 }
 
-pub fn test_x() {
-    f(io::File);
-    f([io::File]);
+pub fn test_shadowed_identifiers() {
+    let a = 'abc';
+    {
+        let a = true;
+        let a = 'def';
+    }
+    assert(a == 'abc');
 }
 
-//pub fn test_initializer_annotations() {
-//    let i: int = 123;
-//    let s: str = 'abc';
-//    let b: bool = true;
-//    let f: float = 1.0;
-//
-//    assert(i == 123);
-//    assert(s == 'abc');
-//    assert(b == true);
-//    assert(f == 1.0);
-//}
-//
-//pub fn test_initializer_inference() {
-//    let i = 123;
-//    let s = 'abc';
-//    let b = true;
-//    let f = 1.0;
-//
-//    assert(i == 123);
-//    assert(s == 'abc');
-//    assert(b == true);
-//    assert(f == 1.0);
-//}
-//
-//pub fn test_shadowed_identifiers() {
-//    let a = 'abc';
-//    {
-//        let a = true;
-//        let a = 'def';
-//    }
-//    assert(a == 'abc');
-//}
-//
-//pub fn test_rebound_identifiers() {
-//    let a = 123;
-//    assert(a == 123);
-//    let a = 456.0;
-//    assert(a == 456.0);
-//    let a = 'abc';
-//    assert(a == 'abc');
-//
-//    let x = 100;
-//    let x = x;
-//    let x = x + 23;
-//    assert(x == 123);
-//}
-//
-//pub fn test_conversions() {
-//    let b = 0 as bool;
-//    assert(b == false);
-//    let b = 1 as bool;
-//    assert(b == true);
-//    let b = -11 as bool;
-//    assert(b == true);
-//
-//    let b = 0.0 as bool;
-//    assert(b == false);
-//    let b = 0.1 as bool;
-//    assert(b == true);
-//
-//    let i = 1.0 as int;
-//    assert(i == 1);
-//    let i = 1.9 as int;
-//    assert(i == 1);
-//    let i = -1.9 as int;
-//    assert(i == -1);
-//
-//    let f = 1 as float;
-//    assert(f < 1.1);
-//    let f = -10 as float;
-//    assert(f > -10.1);
-//
-//    let i = 0;
-//    let b = i as bool;
-//    let i = b as int;
-//    assert(i == 0);
-//
-//    let i = 1234;
-//    let b = i as bool;
-//    let i = b as int;
-//    assert(i == 1);
-//}
-//
-//pub fn test_lots_of_strings() {
-//    let alphabet = 'abcdefghijklmnopqrstuvwxyz';
-//
-//    // put strings in a list so they don't get collected
-//    let v = [];
-//    for i = 0, #alphabet {
-//        for j = 0, #alphabet {
-//            let s = alphabet[:i] + alphabet[j:] +
-//                    alphabet[i:] + alphabet[:j];
-//            v.push(s);
-//        }
-//    }
-//}
-//
+pub fn test_rebound_identifiers() {
+    let a = 123;
+    assert(a == 123);
+    let a = 456.0;
+    assert(a == 456.0);
+    let a = 'abc';
+    assert(a == 'abc');
+
+    let x = 100;
+    let x = x;
+    let x = x + 23;
+    assert(x == 123);
+}
+
+pub fn test_conversions() {
+    let b = 0 as bool;
+    assert(b == false);
+    let b = 1 as bool;
+    assert(b == true);
+    let b = -11 as bool;
+    assert(b == true);
+
+    let b = 0.0 as bool;
+    assert(b == false);
+    let b = 0.1 as bool;
+    assert(b == true);
+
+    let i = 1.0 as int;
+    assert(i == 1);
+    let i = 1.9 as int;
+    assert(i == 1);
+    let i = -1.9 as int;
+    assert(i == -1);
+
+    let f = 1 as float;
+    assert(f < 1.1);
+    let f = -10 as float;
+    assert(f > -10.1);
+
+    let i = 0;
+    let b = i as bool;
+    let i = b as int;
+    assert(i == 0);
+
+    let i = 1234;
+    let b = i as bool;
+    let i = b as int;
+    assert(i == 1);
+}
+
+pub fn test_lots_of_strings() {
+    let alphabet = 'abcdefghijklmnopqrstuvwxyz';
+
+    // put strings in a list so they don't get collected
+    let v = [];
+    for i = 0, #alphabet {
+        for j = 0, #alphabet {
+            let s = alphabet[:i] + alphabet[j:] +
+                    alphabet[i:] + alphabet[:j];
+            v.push(s);
+        }
+    }
+}
+

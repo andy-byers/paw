@@ -222,8 +222,8 @@ assert(list == [0, 1, 2]);
 
 // struct template
 struct Object<S, T> {
-    a: S,
-    b: T,
+    pub a: S,
+    pub b: T,
 }
 
 impl<A, B> Object<A, B> {
@@ -234,7 +234,7 @@ impl<T> Object<T, T> {
     // methods for when '.a' and '.b' have the same type...
 
     // For example:
-    pub fn swap() {
+    pub fn swap(self) {
         let t = self.a;
         self.a = self.b;
         self.b = t;
@@ -245,8 +245,14 @@ impl Object<int, str> {
     // methods for this specific type of Object...
 
     // For example:
-    pub fn equals(a: int, b: str) -> bool {
+    pub fn equals(self, a: int, b: str) -> bool {
         return a == self.a && b == self.b;
+    }
+
+    // methods without 'self', called associated functions, can be called
+    // without an instance
+    pub fn get_constant() -> int {
+        return 42;
     }
 }
 
@@ -262,11 +268,15 @@ let o = Object{
     a: 123, // infer S = int
     b: 'abc', // infer T = str
 };
+
 // field and method access using '.'
 let a = o.a + 1;
 let b = o.b + 'two';
 let c = o.equals(a, b);
 // o.swap not available: S != T
+
+// call the associated function
+let xyz = Object::<int, str>::get_constant();
 ```
 
 ### Tuples
@@ -356,7 +366,7 @@ assert(status != 0);
 + [x] custom garbage collector (using Boehm GC for now)
 + [x] methods using `impl` blocks
 + [x] module system and `use` keyword
-+ [ ] error handling (`try` needs to be an operator, or we need something like a 'parameter pack' for generics)
++ [ ] error handling (`try` needs to be an operator, or we need something like a 'parameter pack' for generics to implement the `try` function)
 + [ ] pattern matching (`switch` construct)
 + [ ] pattern matching (`if let`, `let` bindings)
 + [ ] type inference for polymorphic `enum`
@@ -383,7 +393,10 @@ assert(status != 0);
     + Might as well support inferring all ADT type parameters after creation, since we have to do it for builtin containers anyway
     + Could fix by not ever 'instantiating' ADTs: just record instance type args and use the base decl. plus an instance's type args to do some substitution to get the instance's field types
         + Needs to happen when dealing with 'selector' expressions and composite literals, but that's about it
-+ Module system needs a lot of work
+    + Currently, performing a separate pass to "cannonicalize" types
++ Compiler complains about missing methods in certain cases (when only called inside another polymorphic function; see `fix_list` functions scattered throughout the tests)
+    + Could fix by iterating over matching impl blocks and instantiating them when a polymorphic ADT is instantiated
++ Need to implement type inference on "projections", which appear in associated methods called on polymorphic types and polymorphic enumerations
 
 ## References
 + [Lua](https://www.lua.org/)

@@ -1000,6 +1000,7 @@ static struct HirDecl *copy_field_decl(struct HirFolder *F, struct HirFieldDecl 
 {
     struct HirDecl *result = COPY_PREP_DECL(F, d);
     struct HirFieldDecl *r = HirGetFieldDecl(result);
+    r->is_pub = d->is_pub;
     r->tag = F->FoldType(F, d->tag);
     r->name = d->name;
     return result;
@@ -1441,7 +1442,7 @@ static struct HirDecl *expand_func_decl(struct HirFolder *F, struct HirFuncDecl 
     struct Expander *E = F->ud;
     const int n = d->monos ? d->monos->count : 0;
     for (int i = 0; i < n; ++i) {
-        struct HirDecl *decl = d->monos->data[i];
+        struct HirDecl *decl = K_LIST_GET(d->monos, i);
         if (HirIsInstanceDecl(decl)) {
             do_expand(F, d, decl);
             ++E->nexpand;
@@ -1939,6 +1940,7 @@ static void dump_decl(struct Printer *P, struct HirDecl *d)
             break;
         case kHirInstanceDecl:
             DUMP_NAME(P, d->type.name);
+            DUMP_FMT(P, "is_pub: %d\n", d->inst.is_pub);
             dump_type_list(P, d->inst.types, "types");
             break;
     }

@@ -45,7 +45,7 @@ pub fn test_arguments() {
 }
 
 struct Pair<T> {
-    v: (T, T),
+    pub v: (T, T),
 }
 
 pub fn test_fields() {

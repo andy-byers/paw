@@ -222,7 +222,8 @@ struct HirTypeDecl {
 struct HirFuncDecl {
     HIR_DECL_HEADER; 
     paw_Bool is_pub : 1;
-    enum FuncKind fn_kind : 7;
+    paw_Bool is_assoc : 1;
+    enum FuncKind fn_kind : 6;
     struct HirType *self;
     struct HirDeclList *generics;
     struct HirDeclList *params;
@@ -257,6 +258,9 @@ struct HirVariantDecl {
 // Created during type checking and expanded during monomorphization.
 struct HirInstanceDecl {
     HIR_DECL_HEADER; 
+    paw_Bool is_pub : 1;
+    paw_Bool is_assoc : 1;
+    struct HirType *self;
     struct HirTypeList *types;
 };
 
@@ -268,6 +272,7 @@ struct HirGenericDecl {
 // HIR node representing a 'Field' production
 struct HirFieldDecl {
     HIR_DECL_HEADER; 
+    paw_Bool is_pub : 1;
     struct HirType *tag;
 };
 
