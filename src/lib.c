@@ -139,7 +139,7 @@ static const char *find_substr(const char *str, size_t nstr, const char *sub, si
     const char *ptr = str;
     const char *end = str + nstr;
     while ((ptr = strchr(ptr, sub[0]))) {
-        if (nsub <= CAST_SIZE(end - ptr) && 
+        if (nsub <= CAST_SIZE(end - ptr) &&
                 0 == memcmp(ptr, sub, nsub)) {
             return ptr;
         }
@@ -153,7 +153,7 @@ static int string_find(paw_Env *P)
     const String *s = V_STRING(*CF_BASE(1));
     const String *find = V_STRING(*CF_BASE(2));
     const char *result = find_substr(
-            s->text, s->length, 
+            s->text, s->length,
             find->text, find->length);
     if (result) { // index of substring
         V_SET_INT(P->top.p - 1, result - s->text);
@@ -221,7 +221,7 @@ static int string_starts_with(paw_Env *P)
     String *s = V_STRING(*CF_BASE(1));
     const String *prefix = V_STRING(*CF_BASE(2));
     const size_t prelen = prefix->length;
-    const paw_Bool b = s->length >= prelen && 
+    const paw_Bool b = s->length >= prelen &&
         0 == memcmp(prefix->text, s->text, prelen);
     V_SET_BOOL(P->top.p - 1, b);
     return 1;
@@ -334,7 +334,7 @@ static void path_to_modname(const char *pathname, size_t pathlen, char *modname)
     if (begin != NULL) {
         // skip separator
         --modlen;
-        ++begin; 
+        ++begin;
     } else {
         begin = pathname;
         modlen = pathlen;
@@ -474,7 +474,7 @@ static void load_builtins(paw_Env *P)
     add_prelude_method(P, "Result", "unwrap_or", enum_unwrap_or);
 }
 
-paw_Bool l_getenv(paw_Env *P) 
+paw_Bool l_getenv(paw_Env *P)
 {
     const char *env = getenv(paw_string(P, -1));
     paw_pop(P, 1);
@@ -633,7 +633,7 @@ int pawL_load_file(paw_Env *P, const char *pathname)
 {
     struct FileReader fr = {
         .file = pawO_new_file(P),
-        .state.f = file_reader, 
+        .state.f = file_reader,
     };
     const int rc = pawO_open(fr.file, pathname, "r");
     if (rc == 0) {
@@ -652,7 +652,7 @@ int pawL_load_nchunk(paw_Env *P, const char *name, const char *source, size_t le
 {
     struct ChunkReader cr = {
         .state.f = chunk_reader,
-        .data = source, 
+        .data = source,
         .size = length,
     };
     return paw_load(P, chunk_reader, name, &cr);
@@ -730,10 +730,9 @@ struct LoaderState *pawL_start_import(paw_Env *P)
     pawE_push_cstr(P, CSTR_KSEARCHERS);
     paw_map_getelem(P, PAW_REGISTRY_INDEX);
 
-    // .. name searchers iter
     paw_push_int(P, PAW_ITER_INIT);
+    // .. name searchers iter f
     while (paw_list_next(P, -2)) {
-        // .. name searchers iter f name
         paw_push_value(P, -4); // name
         const int status = paw_call(P, 1); // state = f(name)
         if (status != PAW_OK) pawC_throw(P, status);
@@ -743,7 +742,7 @@ struct LoaderState *pawL_start_import(paw_Env *P)
         }
         paw_pop(P, 1);
     }
-    paw_pop(P, 2);
+    paw_pop(P, 3);
     return NULL;
 }
 

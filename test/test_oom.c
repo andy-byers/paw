@@ -16,7 +16,7 @@ static int run_tests(paw_Env *P)
     for (int i = 0; i < defs.count; ++i) {
         static const char kPrefix[] = "test_";
         static const size_t kLength = PAW_LENGTHOF(kPrefix);
-        struct Def *def = defs.data[i]; 
+        struct Def *def = defs.data[i];
         if (!def->hdr.is_pub) continue;
         const String *name = def->hdr.name;
         if (name->length >= kLength &&
@@ -47,7 +47,7 @@ static int run_script_or_chunk(const char *name_or_chunk, size_t heap_size, paw_
             });
     if (P == NULL) return PAW_EMEMORY;
 
-    int status = is_chunk 
+    int status = is_chunk
         ? test_open_string(P, name_or_chunk)
         : test_open_file(P, name_or_chunk);
     if (status == PAW_OK) status = run_tests(P);
@@ -76,7 +76,7 @@ static int run_one(size_t heap_size)
         check(status == PAW_OK);
         s_passing_heap_size = heap_size;
     } else {
-        ++s_count; 
+        ++s_count;
     }
     return status;
 }
@@ -85,8 +85,8 @@ static void finish_oom(void)
 {
     check(s_count > 0);
 
-    printf("[PASS] %s: passing_heap_size=%zu, oom_count=%d\n", 
-            s_is_chunk ? "(chunk)" : s_name_or_chunk, 
+    printf("[PASS] %s: passing_heap_size=%zu, oom_count=%d\n",
+            s_is_chunk ? "(chunk)" : s_name_or_chunk,
             s_passing_heap_size, s_count);
 }
 
@@ -145,7 +145,7 @@ static void test_list_ops(void)
 {
     test_oom(
             "fn fix_list() {let list = []; list.push(42);}\n" // TODO: remove
- 
+
             "fn push_n<T>(list: [T], value: T, n: int) {\n"
             "    for i = 0, n {                         \n"
             "        list.push(value);                  \n"

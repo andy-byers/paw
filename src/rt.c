@@ -391,11 +391,11 @@ void pawR_arithi2(paw_Env *P, enum ArithOp2 op)
             } else if (x == PAW_INT_MIN && y == -1) {
                 // If x / y is undefined, then so too is x % y (see C11 section 6.5.5,
                 // item 6). Both cases equal 0 in Paw (x / y wraps).
-                x = 0; 
+                x = 0;
             } else if (op == ARITH2_DIV) {
-                x = x / y; 
+                x = x / y;
             } else {
-                x = x % y; 
+                x = x % y;
             }
     }
     VM_SET_INT(2, x);
@@ -505,7 +505,7 @@ static size_t check_slice_bound(paw_Env *P, paw_Int index, size_t length, const 
     index = pawV_abs_index(index, length);
     if (index < 0 || index > n) {
         pawE_error(P, PAW_ERUNTIME, -1,
-                   "slice %s index %I is out of bounds for %s of length %I", 
+                   "slice %s index %I is out of bounds for %s of length %I",
                    what, index, cont, PAW_CAST_INT(length));
     }
     return CAST_SIZE(index);
@@ -538,7 +538,7 @@ static void str_concat(paw_Env *P)
     paw_assert(x->length < PAW_SIZE_MAX);
     paw_assert(y->length < PAW_SIZE_MAX);
     if (x->length > PAW_SIZE_MAX - y->length) {
-        pawR_error(P, PAW_EMEMORY, "string is too large"); 
+        pawR_error(P, PAW_EMEMORY, "string is too large");
     }
     String *z = pawS_new_uninit(P, x->length + y->length);
     memcpy(z->text, x->text, x->length);
@@ -690,7 +690,7 @@ static void list_getn(paw_Env *P)
 
     const size_t nelems = zj - zi;
     pawV_list_resize(P, slice, nelems);
-    memcpy(slice->begin, list->begin + zi, 
+    memcpy(slice->begin, list->begin + zi,
             nelems * sizeof(list->begin[0]));
 
     VM_SHIFT(3);
@@ -853,7 +853,7 @@ top:
         const OpCode opcode = *pc++;
         vm_switch(GET_OP(opcode))
         {
-            vm_case(NOOP) : 
+            vm_case(NOOP) :
             {
                 // do nothing
             }

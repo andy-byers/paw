@@ -1,9 +1,4 @@
 
-fn fix_list() {
-    let list = [];
-    list.push(42);
-}
-
 fn map<A, B>(f: fn(A) -> B, a: [A]) -> [B] {
     let b = [];
     for v in a {

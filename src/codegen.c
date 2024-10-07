@@ -24,7 +24,7 @@
 #define DLOG(G, ...) PAWD_LOG(ENV(G), __VA_ARGS__)
 #define ERROR(G, code, ...) pawE_error(ENV(G), code, (G)->fs->line, __VA_ARGS__)
 #define PRELUDE(G) ((G)->C->dm->modules->data[0])
-#define GET_DECL(G, id) pawHir_get_decl(PRELUDE(G)->hir, id)
+#define GET_DECL(G, id) pawHir_get_decl((G)->C, id)
 #define TYPE_CODE(G, type) (pawP_type2code((G)->C, type))
 
 static enum paw_AdtKind adt_kind(paw_Type code)
@@ -484,7 +484,7 @@ static void enter_function(struct Generator *G, struct FuncState *fs, struct Blo
 {
     *fs = (struct FuncState){
         .first_local = G->C->dm->vars.count,
-        .scopes = pawHir_symtab_new(PRELUDE(G)->hir),
+        .scopes = pawHir_symtab_new(G->C),
         .proto = proto,
         .outer = G->fs,
         .name = name,
@@ -700,6 +700,9 @@ static struct VarInfo resolve_path(struct Generator *G, struct HirPath *path)
             struct HirFuncDef *t = HirGetFuncDef(type);
             struct ModuleInfo *m = get_mod(G, t->modno);
             const String *modname = get_mod_prefix(G, m);
+            if (HirIsVariantDecl(decl)) {
+            
+            }
             struct HirFuncDecl *func = HirGetFuncDecl(decl);
             if (func->self != NULL) {
                 struct HirAdt *adt = HirGetAdt(func->self);
@@ -1585,7 +1588,7 @@ static void code_modules(struct Generator *G)
 
     code_items(&V, G->items);
 }
-
+#include"stdio.h"
 void pawP_codegen(struct Compiler *C)
 {
     paw_Env *P = ENV(C);
@@ -1598,6 +1601,7 @@ void pawP_codegen(struct Compiler *C)
         .C = C,
     };
     G.items = pawP_item_list_new(C);
+
     register_modules(&G, C->dm->modules);
     code_modules(&G);
 

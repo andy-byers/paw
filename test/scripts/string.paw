@@ -1,118 +1,118 @@
 // string.paw
 
-//pub fn test_valid_utf8() {
-//    let s = "\u0060\u012a\u12AB";
-//    let s = "\uD801\udc37";
-//    let s = "\ud83d\ude39\ud83d\udc8d";
-//    let s = "\"\\\/\b\f\n\r\t\v";
-//    let s = "\\u0000";
-//    let s = "\"";
-//    let s = "a/*b*/c/*d//e";
-//    let s = "\\a";
-//    let s = "\\n";
-//    let s = "\u0012";
-//    let s = "\uFFFF";
-//    let s = "\uDBFF\uDFFF";
-//    let s = "new\u00A0line";
-//    let s = "􏿿";
-//    let s = "￿";
-//    let s = "\u0000";
-//    let s = "\u002c";
-//    let s = "π";
-//    let s = "𛿿";
-//    let s = "\uD834\uDd1e";
-//    let s = "\u0821";
-//    let s = "\u0123";
-//    let s = "\u0061\u30af\u30EA\u30b9";
-//    let s = "new\u000Aline";
-//    let s = "\uA66D";
-//    let s = "\u005C";
-//    let s = "⍂㈴⍂";
-//    let s = "\uDBFF\uDFFE";
-//    let s = "\uD83F\uDFFE";
-//    let s = "\u200B";
-//    let s = "\u2064";
-//    let s = "\uFDD0";
-//    let s = "\uFFFE";
-//    let s = "\u0022";
-//    let s = "€𝄞";
-//    let s = "🐱";
-//}
-//
-//pub fn test_starts_with() {
-//    let s = 'abcdef';
-//    assert(s.starts_with('abcdef'));
-//    assert(s.starts_with('abcde'));
-//    assert(s.starts_with('abc'));
-//    assert(s.starts_with('a'));
-//    assert(s.starts_with(''));
-//    assert(!s.starts_with('bcdef'));
-//    assert(!s.starts_with('abcdf'));
-//    assert(!s.starts_with('abd'));
-//    assert(!s.starts_with('ac'));
-//}
-//
-//pub fn test_ends_with() {
-//    let s = 'abcdef';
-//    assert(s.ends_with('abcdef'));
-//    assert(s.ends_with('bcdef'));
-//    assert(s.ends_with('def'));
-//    assert(s.ends_with('f'));
-//    assert(s.ends_with(''));
-//    assert(!s.ends_with('abcde'));
-//    assert(!s.ends_with('acdef'));
-//    assert(!s.ends_with('cef'));
-//    assert(!s.ends_with('df'));
-//}
-//
-//pub fn test_slices() {
-//    let s = 'abc';
-//    assert(s[:] == 'abc')    ;
-//    assert(s[0:#s] == 'abc')    ;
-//
-//    assert(s[:-1] == 'ab');
-//    assert(s[:#s-1] == 'ab');
-//    assert(s[:-2] == 'a');
-//    assert(s[:#s-2] == 'a');
-//    assert(s[:-3] == '');
-//    assert(s[:#s-3] == '');
-//
-//    assert(s[1:] == 'bc');
-//    assert(s[-2:] == 'bc');
-//    assert(s[2:] == 'c');
-//    assert(s[-1:] == 'c');
-//    assert(s[3:] == '');
-//    assert(s[0:0] == '') ;
-//}
-//
-//pub fn test_find() {
-//    let check = |s: str, sub, n| {
-//        assert(n == s.find(sub));
-//    };
-//    check('abc', 'a', 0);
-//    check('abc', 'b', 1);
-//    check('abc', 'c', 2);
-//    check('abc', 'd', -1);
-//}
+pub fn test_valid_utf8() {
+    let s = "\u0060\u012a\u12AB";
+    let s = "\uD801\udc37";
+    let s = "\ud83d\ude39\ud83d\udc8d";
+    let s = "\"\\\/\b\f\n\r\t\v";
+    let s = "\\u0000";
+    let s = "\"";
+    let s = "a/*b*/c/*d//e";
+    let s = "\\a";
+    let s = "\\n";
+    let s = "\u0012";
+    let s = "\uFFFF";
+    let s = "\uDBFF\uDFFF";
+    let s = "new\u00A0line";
+    let s = "􏿿";
+    let s = "￿";
+    let s = "\u0000";
+    let s = "\u002c";
+    let s = "π";
+    let s = "𛿿";
+    let s = "\uD834\uDd1e";
+    let s = "\u0821";
+    let s = "\u0123";
+    let s = "\u0061\u30af\u30EA\u30b9";
+    let s = "new\u000Aline";
+    let s = "\uA66D";
+    let s = "\u005C";
+    let s = "⍂㈴⍂";
+    let s = "\uDBFF\uDFFE";
+    let s = "\uD83F\uDFFE";
+    let s = "\u200B";
+    let s = "\u2064";
+    let s = "\uFDD0";
+    let s = "\uFFFE";
+    let s = "\u0022";
+    let s = "€𝄞";
+    let s = "🐱";
+}
+
+pub fn test_starts_with() {
+    let s = 'abcdef';
+    assert(s.starts_with('abcdef'));
+    assert(s.starts_with('abcde'));
+    assert(s.starts_with('abc'));
+    assert(s.starts_with('a'));
+    assert(s.starts_with(''));
+    assert(!s.starts_with('bcdef'));
+    assert(!s.starts_with('abcdf'));
+    assert(!s.starts_with('abd'));
+    assert(!s.starts_with('ac'));
+}
+
+pub fn test_ends_with() {
+    let s = 'abcdef';
+    assert(s.ends_with('abcdef'));
+    assert(s.ends_with('bcdef'));
+    assert(s.ends_with('def'));
+    assert(s.ends_with('f'));
+    assert(s.ends_with(''));
+    assert(!s.ends_with('abcde'));
+    assert(!s.ends_with('acdef'));
+    assert(!s.ends_with('cef'));
+    assert(!s.ends_with('df'));
+}
+
+pub fn test_slices() {
+    let s = 'abc';
+    assert(s[:] == 'abc')    ;
+    assert(s[0:#s] == 'abc')    ;
+
+    assert(s[:-1] == 'ab');
+    assert(s[:#s-1] == 'ab');
+    assert(s[:-2] == 'a');
+    assert(s[:#s-2] == 'a');
+    assert(s[:-3] == '');
+    assert(s[:#s-3] == '');
+
+    assert(s[1:] == 'bc');
+    assert(s[-2:] == 'bc');
+    assert(s[2:] == 'c');
+    assert(s[-1:] == 'c');
+    assert(s[3:] == '');
+    assert(s[0:0] == '') ;
+}
+
+pub fn test_find() {
+    let check = |s: str, sub, n| {
+        assert(n == s.find(sub));
+    };
+    check('abc', 'a', 0);
+    check('abc', 'b', 1);
+    check('abc', 'c', 2);
+    check('abc', 'd', -1);
+}
 
 pub fn test_split_and_join() {
-//    let check = |s: str, sep, parts: [str]| {
-//        let a = s.split(sep);
-//        for i = 0, #a {
-//            assert(a[i] == parts[i]);
-//        };
-//        assert(#a == #parts);
-//        let result = sep.join(a);
-//        assert(result == s);
-//    };
-//    check('abc', 'a', ['', 'bc']);
-//    check('abc', 'b', ['a', 'c']);
-//    check('abc', 'c', ['ab', '']);
-//    check('abc', 'd', ['abc']);
+    let check = |s: str, sep, parts: [str]| {
+        let a = s.split(sep);
+        for i = 0, #a {
+            assert(a[i] == parts[i]);
+        };
+        assert(#a == #parts);
+        let result = sep.join(a);
+        assert(result == s);
+    };
+    check('abc', 'a', ['', 'bc']);
+    check('abc', 'b', ['a', 'c']);
+    check('abc', 'c', ['ab', '']);
+    check('abc', 'd', ['abc']);
 
     let s = ',a,,b,,,c,,,,d,,,,,e,,,,,,';
     let a = s.split(',');
-print(('').join(a)+'\n');
+
     assert(('').join(a) == 'abcde');
 }
 

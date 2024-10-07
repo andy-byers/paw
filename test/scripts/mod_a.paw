@@ -1,11 +1,6 @@
 
 use mod_b;
 
-fn fix_list() {
-    let list = [];
-    list.push(1);
-}
-
 pub fn test_external() {
     let e = mod_b::external('hello');
     assert(e.value == 'hello');

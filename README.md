@@ -10,7 +10,7 @@ Paw is a high-level scripting language and runtime designed for embedding.
 Paw features static strong typing under a sound type system, generics, and bidirectional type checking.
 Paw is an interpreted language that runs on a stack-based virtual machine written in C.
 
-## Syntax Overview
+## Language Overview
 
 ### Comments
 Paw supports both line- and block-style comments.
@@ -36,7 +36,7 @@ When `main` is finished, its return value is passed back to the process that inv
 
 ### Types
 Paw is statically-typed, meaning all types must be known at compile-time.
-Also note that Paw is strongly typed, meaning implicit conversions are not allowed.
+Paw is also strongly typed, meaning implicit conversions are not allowed.
 
 The following example demonstrates creation of the basic value types.
 Composite types are discussed in [tuple](#tuple), [structure](#structure), etc., below.

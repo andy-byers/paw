@@ -3,11 +3,11 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 //
 // Import rules:
-// (1) Modules are imported by 'use' declarations in Paw code. For example, the 
+// (1) Modules are imported by 'use' declarations in Paw code. For example, the
 //     declaration 'use modname;' imports the module named 'modname'. Symbols
 //     exported by 'modname' can be accessed using 'modname::symbol' syntax.
 // (2) Each module mentioned in a compilation unit is imported exactly once.
-// (3) 
+// (3)
 
 #ifndef PAW_LIB_H
 #define PAW_LIB_H

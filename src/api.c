@@ -22,7 +22,7 @@ static void *default_alloc(void *ud, void *ptr, size_t old_size, size_t new_size
     if (new_size == 0) {
         free(ptr);
         return NULL;
-    } 
+    }
     if (old_size == 0) return malloc(new_size);
     return realloc(ptr, new_size);
 }
@@ -30,16 +30,16 @@ static void *default_alloc(void *ud, void *ptr, size_t old_size, size_t new_size
 static StackPtr at(paw_Env *P, int index)
 {
     if (index == PAW_REGISTRY_INDEX) {
-        return &P->registry; 
-    } 
+        return &P->registry;
+    }
     const int i = paw_abs_index(P, index);
     API_CHECK(P, 0 <= i && i < paw_get_count(P), "index out of range");
     return &P->cf->base.p[i];
 }
 
-size_t paw_bytes_used(const paw_Env *P) 
+size_t paw_bytes_used(const paw_Env *P)
 {
-    return P->gc_bytes; 
+    return P->gc_bytes;
 }
 
 static void open_aux(paw_Env *P, void *arg)
@@ -75,7 +75,7 @@ paw_Env *paw_open(const struct paw_Options *o)
     paw_Env *P = heap;
     *P = (paw_Env){
         .heap_size = heap_size,
-        .alloc = alloc, 
+        .alloc = alloc,
         .ud = ud,
     };
     heap = BUMP_PTR(heap, PAW_ROUND_UP(sizeof(*P)));
@@ -122,7 +122,7 @@ int paw_mangle_name(paw_Env *P, paw_Type *types, paw_Bool has_modname)
 {
     API_CHECK_POP(P, 1 + has_modname);
     const String *name = V_STRING(P->top.p[-1]);
-    const String *modname = has_modname 
+    const String *modname = has_modname
         ? V_STRING(P->top.p[-2]) : NULL;
 
     Buffer buf;
@@ -139,7 +139,7 @@ int paw_mangle_self(paw_Env *P, paw_Type *types, paw_Bool has_modname)
 {
     API_CHECK_POP(P, 2 + has_modname);
     const String *name = V_STRING(P->top.p[-1]);
-    const String *modname = has_modname 
+    const String *modname = has_modname
         ? V_STRING(P->top.p[-2]) : NULL;
 
     Buffer buf;
@@ -165,7 +165,7 @@ int paw_lookup_item(paw_Env *P, struct paw_Item *pitem)
     const struct Def *def = P->defs.data[did];
     *pitem = (struct paw_Item){
         .global_id = def->hdr.kind == DEF_FUNC ? def->func.vid :
-            def->hdr.kind == DEF_VAR ? def->var.vid : -1, 
+            def->hdr.kind == DEF_VAR ? def->var.vid : -1,
         .type = def->hdr.code,
     };
     return 0;
@@ -300,9 +300,9 @@ void *paw_pointer(paw_Env *P, int index)
     // must be an object
     Object *o = V_OBJECT(*at(P, index));
     if (o->gc_kind == VNATIVE) {
-        return ERASE_TYPE(CAST_UPTR(O_NATIVE(o)->func)); 
+        return ERASE_TYPE(CAST_UPTR(O_NATIVE(o)->func));
     } else if (o->gc_kind == VFOREIGN) {
-        return O_FOREIGN(o)->data; 
+        return O_FOREIGN(o)->data;
     } else {
         return o;
     }

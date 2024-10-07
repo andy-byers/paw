@@ -61,7 +61,7 @@ typedef uint16_t DeclId;
 struct Hir;
 
 #define last_scope(t) CHECK_EXP((t)->size > 0, (t)->data[(t)->size - 1])
-struct HirSymbol *pawHir_add_symbol(struct Hir *hir, struct HirScope *table);
+struct HirSymbol *pawHir_add_symbol(struct Compiler *C, struct HirScope *table);
 int pawHir_find_symbol(struct HirScope *scope, const String *name);
 
 // Represents an entry in the symbol table
@@ -91,7 +91,7 @@ struct HirSegment {
     DeclId did;
 };
 
-struct HirSegment *pawHir_segment_new(struct Hir *hir);
+struct HirSegment *pawHir_segment_new(struct Compiler *C);
 
 enum HirTypeKind {
 #define DEFINE_ENUM(a, b) kHir##a,
@@ -121,7 +121,7 @@ struct HirUnknown {
 };
 
 struct HirAdt {
-    HIR_TYPE_HEADER; 
+    HIR_TYPE_HEADER;
     struct HirTypeList *types;
     int modno;
     DeclId base;
@@ -130,7 +130,7 @@ struct HirAdt {
 
 // Represents a structure or enumeration type
 struct HirPathType {
-    HIR_TYPE_HEADER; 
+    HIR_TYPE_HEADER;
     struct HirPath *path;
 };
 
@@ -139,11 +139,11 @@ struct HirPathType {
     struct HirTypeList *params; \
     struct HirType *result
 struct HirFuncPtr {
-    HIR_FUNC_HEADER; 
+    HIR_FUNC_HEADER;
 };
 
 struct HirFuncDef {
-    HIR_FUNC_HEADER; 
+    HIR_FUNC_HEADER;
     struct HirTypeList *types;
     int modno;
     DeclId base;
@@ -151,7 +151,7 @@ struct HirFuncDef {
 };
 
 struct HirTupleType {
-    HIR_TYPE_HEADER; 
+    HIR_TYPE_HEADER;
     struct HirTypeList *elems;
 };
 
@@ -200,11 +200,11 @@ enum HirDeclKind {
     uint8_t flags : 8; \
     enum HirDeclKind kind : 8
 struct HirDeclHeader {
-    HIR_DECL_HEADER; 
+    HIR_DECL_HEADER;
 };
 
 struct HirVarDecl {
-    HIR_DECL_HEADER; 
+    HIR_DECL_HEADER;
     paw_Bool is_pub : 1;
     paw_Bool is_const : 1;
     struct HirExpr *init;
@@ -214,13 +214,13 @@ struct HirVarDecl {
 // Node representing a type declaration
 // Used for type aliases and builtin types.
 struct HirTypeDecl {
-    HIR_DECL_HEADER; 
+    HIR_DECL_HEADER;
     struct HirExpr *rhs;
     struct HirDeclList *generics;
 };
 
 struct HirFuncDecl {
-    HIR_DECL_HEADER; 
+    HIR_DECL_HEADER;
     paw_Bool is_pub : 1;
     paw_Bool is_assoc : 1;
     enum FuncKind fn_kind : 6;
@@ -233,7 +233,7 @@ struct HirFuncDecl {
 };
 
 struct HirAdtDecl {
-    HIR_DECL_HEADER; 
+    HIR_DECL_HEADER;
     paw_Bool is_pub : 1;
     paw_Bool is_struct : 1;
     struct HirDeclList *generics;
@@ -242,14 +242,14 @@ struct HirAdtDecl {
 };
 
 struct HirUseDecl {
-    HIR_DECL_HEADER; 
+    HIR_DECL_HEADER;
     paw_Bool is_pub : 1;
     struct HirPath *path;
     int modno;
 };
 
 struct HirVariantDecl {
-    HIR_DECL_HEADER; 
+    HIR_DECL_HEADER;
     int index;
     struct HirDeclList *fields;
 };
@@ -257,7 +257,7 @@ struct HirVariantDecl {
 // Represents an instance of a polymorphic function
 // Created during type checking and expanded during monomorphization.
 struct HirInstanceDecl {
-    HIR_DECL_HEADER; 
+    HIR_DECL_HEADER;
     paw_Bool is_pub : 1;
     paw_Bool is_assoc : 1;
     struct HirType *self;
@@ -266,19 +266,19 @@ struct HirInstanceDecl {
 
 // Represents a generic type parameter
 struct HirGenericDecl {
-    HIR_DECL_HEADER; 
+    HIR_DECL_HEADER;
 };
 
 // HIR node representing a 'Field' production
 struct HirFieldDecl {
-    HIR_DECL_HEADER; 
+    HIR_DECL_HEADER;
     paw_Bool is_pub : 1;
     struct HirType *tag;
 };
 
 // HIR node representing an 'impl' block
 struct HirImplDecl {
-    HIR_DECL_HEADER; 
+    HIR_DECL_HEADER;
     struct HirPath *self;
     struct HirTypeList *subst;
     struct HirDeclList *generics;
@@ -369,7 +369,7 @@ struct HirLiteralExpr {
 };
 
 struct HirClosureExpr {
-    HIR_EXPR_HEADER; 
+    HIR_EXPR_HEADER;
     paw_Bool has_body : 1;
     struct HirDeclList *params;
     struct HirType *result;
@@ -653,20 +653,20 @@ struct Hir {
     int modno;
 };
 
-struct HirSymbol *pawHir_new_symbol(struct Hir *hir);
-struct HirPath *pawHir_new_path(struct Hir *hir);
-struct HirType *pawHir_new_type(struct Hir *hir, int line, enum HirTypeKind kind);
-struct HirDecl *pawHir_new_decl(struct Hir *hir, int line, enum HirDeclKind kind);
-struct HirExpr *pawHir_new_expr(struct Hir *hir, int line, enum HirExprKind kind);
-struct HirStmt *pawHir_new_stmt(struct Hir *hir, int line, enum HirStmtKind kind);
+struct HirSymbol *pawHir_new_symbol(struct Compiler *C);
+struct HirPath *pawHir_new_path(struct Compiler *C);
+struct HirType *pawHir_new_type(struct Compiler *C, int line, enum HirTypeKind kind);
+struct HirDecl *pawHir_new_decl(struct Compiler *C, int line, enum HirDeclKind kind);
+struct HirExpr *pawHir_new_expr(struct Compiler *C, int line, enum HirExprKind kind);
+struct HirStmt *pawHir_new_stmt(struct Compiler *C, int line, enum HirStmtKind kind);
 
-DEFINE_LIST(struct Hir, pawHir_decl_list_, HirDeclList, struct HirDecl)
-DEFINE_LIST(struct Hir, pawHir_expr_list_, HirExprList, struct HirExpr)
-DEFINE_LIST(struct Hir, pawHir_stmt_list_, HirStmtList, struct HirStmt)
-DEFINE_LIST(struct Hir, pawHir_type_list_, HirTypeList, struct HirType)
-DEFINE_LIST(struct Hir, pawHir_scope_, HirScope, struct HirSymbol)
-DEFINE_LIST(struct Hir, pawHir_symtab_, HirSymtab, struct HirScope)
-DEFINE_LIST(struct Hir, pawHir_path_, HirPath, struct HirSegment)
+DEFINE_LIST(struct Compiler, pawHir_decl_list_, HirDeclList, struct HirDecl)
+DEFINE_LIST(struct Compiler, pawHir_expr_list_, HirExprList, struct HirExpr)
+DEFINE_LIST(struct Compiler, pawHir_stmt_list_, HirStmtList, struct HirStmt)
+DEFINE_LIST(struct Compiler, pawHir_type_list_, HirTypeList, struct HirType)
+DEFINE_LIST(struct Compiler, pawHir_scope_, HirScope, struct HirSymbol)
+DEFINE_LIST(struct Compiler, pawHir_symtab_, HirSymtab, struct HirScope)
+DEFINE_LIST(struct Compiler, pawHir_path_, HirPath, struct HirSegment)
 
 #define HIR_CAST_DECL(x) CAST(struct HirDecl *, x)
 #define HIR_CAST_EXPR(x) CAST(struct HirExpr *, x)
@@ -685,11 +685,11 @@ void pawHir_free(struct Hir *hir);
 
 struct HirDecl *pawHir_copy_decl(struct Hir *hir, struct HirDecl *decl);
 void pawHir_expand_adt(struct Hir *hir, struct HirAdtDecl *base, struct HirDecl *inst);
-void pawHir_expand_bodies(struct Hir *hir);
+int pawHir_expand_bodies(struct Hir *hir);
 void pawHir_define(struct ModuleInfo *m, struct HirDeclList *out, int *poffset);
 
-DeclId pawHir_add_decl(struct Hir *hir, struct HirDecl *decl);
-struct HirDecl *pawHir_get_decl(struct Hir *hir, DeclId id);
+DeclId pawHir_add_decl(struct Compiler *C, struct HirDecl *decl);
+struct HirDecl *pawHir_get_decl(struct Compiler *C, DeclId id);
 
 #define HIR_TYPEOF(x) ((x)->hdr.type)
 #define HIR_KINDOF(x) ((x)->hdr.kind)
@@ -727,19 +727,19 @@ static inline struct HirType *hir_map_value(struct HirType *type)
     return K_LIST_GET(HirGetAdt(type)->types, 1);
 }
 
-static inline struct HirSegment *pawHir_path_add(struct Hir *hir, struct HirPath *path, String *name,
+static inline struct HirSegment *pawHir_path_add(struct Compiler *C, struct HirPath *path, String *name,
                                                  struct HirTypeList *args)
 {
-    struct HirSegment *ps = pawHir_segment_new(hir);
+    struct HirSegment *ps = pawHir_segment_new(C);
     ps->name = name;
     ps->types = args;
-    pawHir_path_push(hir, path, ps);
+    pawHir_path_push(C, path, ps);
     return ps;
 }
 
-struct HirType *pawHir_attach_type(struct Hir *hir, DeclId did, enum HirTypeKind kind, int line);
-struct HirTypeList *pawHir_collect_generics(struct Hir *hir, struct HirDeclList *generics);
-struct HirTypeList *pawHir_collect_fields(struct Hir *hir, struct HirDeclList *fields);
+struct HirType *pawHir_attach_type(struct Compiler *C, DeclId did, enum HirTypeKind kind, int line);
+struct HirTypeList *pawHir_collect_generics(struct Compiler *C, struct HirDeclList *generics);
+struct HirTypeList *pawHir_collect_fields(struct Compiler *C, struct HirDeclList *fields);
 
 void pawHir_print_type(struct Hir *hir, struct HirType *type);
 

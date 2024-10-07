@@ -71,7 +71,7 @@ static int file_read(paw_Env *P)
     pawL_buffer_resize(P, &buf, size);
     const paw_Int nread = pawO_read(P, file, buf.data, size);
     pawL_buffer_resize(P, &buf, nread);
-    
+
     pawL_push_result(P, &buf);
     return 1;
 }

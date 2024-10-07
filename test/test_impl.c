@@ -191,11 +191,11 @@ static void test_map_ops_2(paw_Env *P)
     }
     for (int i = 0; i < N; i += 1) map_put(P, m, i, i * 2);
     for (int i = 0; i < N; i += 2) map_del(m, i);
-    
+
     for (int i = 0; i < nrounds * N; ++i) {
         if (i & 1) {
             const int scale = i < N ? 2 : 1;
-            check(map_get(m, i) == i * scale); 
+            check(map_get(m, i) == i * scale);
         } else {
             check(map_try(m, i) == NULL);
         }
@@ -308,26 +308,26 @@ static void parse_and_check_int(paw_Env *P, const char *text, paw_Int result)
 static void test_parse_int(paw_Env *P)
 {
     // able to parse PAW_INT_MIN directly, since we consider the '-'
-    parse_and_check_int(P, "-9223372036854775808", INT64_MIN); 
-    parse_and_check_int(P, "9223372036854775807", INT64_MAX); 
-    parse_and_check_int(P, "0b111111111111111111111111111111111111111111111111111111111111111", INT64_MAX); 
-    parse_and_check_int(P, "-0b1000000000000000000000000000000000000000000000000000000000000000", INT64_MIN); 
-    parse_and_check_int(P, "0o777777777777777777777", INT64_MAX); 
-    parse_and_check_int(P, "-0o1000000000000000000000", INT64_MIN); 
-    parse_and_check_int(P, "0x7FFFFFFFFFFFFFFF", INT64_MAX); 
-    parse_and_check_int(P, "-0x8000000000000000", INT64_MIN); 
+    parse_and_check_int(P, "-9223372036854775808", INT64_MIN);
+    parse_and_check_int(P, "9223372036854775807", INT64_MAX);
+    parse_and_check_int(P, "0b111111111111111111111111111111111111111111111111111111111111111", INT64_MAX);
+    parse_and_check_int(P, "-0b1000000000000000000000000000000000000000000000000000000000000000", INT64_MIN);
+    parse_and_check_int(P, "0o777777777777777777777", INT64_MAX);
+    parse_and_check_int(P, "-0o1000000000000000000000", INT64_MIN);
+    parse_and_check_int(P, "0x7FFFFFFFFFFFFFFF", INT64_MAX);
+    parse_and_check_int(P, "-0x8000000000000000", INT64_MIN);
     parse_and_check_int(P, "  -1", -1); // sign must touch first digit
-    parse_and_check_int(P, " +2  ", 2); 
+    parse_and_check_int(P, " +2  ", 2);
 
     check(PAW_ESYNTAX == parse_int(P, "--1"));
     check(PAW_ESYNTAX == parse_int(P, "- 1"));
     check(PAW_ESYNTAX == parse_int(P, "01"));
     check(PAW_ESYNTAX == parse_int(P, "123 4"));
     check(PAW_ESYNTAX == parse_int(P, "123.4"));
-    check(PAW_EOVERFLOW == parse_int(P, "9223372036854775808")); 
-    check(PAW_EOVERFLOW == parse_int(P, "-9223372036854775809")); 
-    check(PAW_EOVERFLOW == parse_int(P, "999999999999999999999999999999999999999")); 
-    check(PAW_EOVERFLOW == parse_int(P, "-999999999999999999999999999999999999999")); 
+    check(PAW_EOVERFLOW == parse_int(P, "9223372036854775808"));
+    check(PAW_EOVERFLOW == parse_int(P, "-9223372036854775809"));
+    check(PAW_EOVERFLOW == parse_int(P, "999999999999999999999999999999999999999"));
+    check(PAW_EOVERFLOW == parse_int(P, "-999999999999999999999999999999999999999"));
 
     paw_Int i;
     check(PAW_EVALUE == pawV_parse_int(P, "0b0", 10 /* wrong base */, &i));
@@ -373,15 +373,15 @@ static void test_parse_float(paw_Env *P)
     check(PAW_OK == parse_float(P, "1.e+23"));
 
     // small integers and powers of 2 can be represented exactly
-    parse_and_check_float(P, "0.0", 0.0); 
-    parse_and_check_float(P, "1.0", 1.0); 
-    parse_and_check_float(P, "-1.0", -1.0); 
-    parse_and_check_float(P, "1.0e+2", 100.0); 
-    parse_and_check_float(P, "-10000e-2", -100.0); 
-    parse_and_check_float(P, "-9223372036854775808.0", (paw_Float)INT64_MIN); 
-    parse_and_check_float(P, "9223372036854775808.0", -((paw_Float)INT64_MIN)); 
+    parse_and_check_float(P, "0.0", 0.0);
+    parse_and_check_float(P, "1.0", 1.0);
+    parse_and_check_float(P, "-1.0", -1.0);
+    parse_and_check_float(P, "1.0e+2", 100.0);
+    parse_and_check_float(P, "-10000e-2", -100.0);
+    parse_and_check_float(P, "-9223372036854775808.0", (paw_Float)INT64_MIN);
+    parse_and_check_float(P, "9223372036854775808.0", -((paw_Float)INT64_MIN));
     parse_and_check_float(P, "  -1.0", -1.0); // sign must touch first digit
-    parse_and_check_float(P, " +2.0  ", 2.0); 
+    parse_and_check_float(P, " +2.0  ", 2.0);
     parse_and_check_float(P, "123", 123.0);
 
     check(PAW_ESYNTAX == parse_float(P, "--1"));

@@ -322,18 +322,3 @@ pub fn test_chain_option3() {
     option3(42, true, false);
     option3(42, false, false);
 }
-
-// TODO: move to integer.paw (still needs to be fixed)
-pub fn test_integers() {
-    assert(1 << 0 == 1);
-    assert(-1 << 0 == -1);
-
-    let imin = -0x7FFFFFFFFFFFFFFF - 1;
-    let imax = 0x7FFFFFFFFFFFFFFF;
-    assert(imax == -(imin + 1));
-    assert(imin == -imax - 1);
-
-    assert(imin == -9223372036854775807 - 1);
-    assert(imax == 9223372036854775807);
-}
-

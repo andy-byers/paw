@@ -63,7 +63,7 @@ void pawC_stack_realloc(paw_Env *P, int n)
 
     const size_t alloc = PAW_MAX(CAST_SIZE(n), CFRAME_SIZE);
     if (alloc > PAW_STACK_MAX) pawM_error(P);
-    
+
     // Turn off emergency GC and convert pointers into the stack into offsets
     // from P->stack.p.
     P->gc_noem = PAW_TRUE;
@@ -71,7 +71,7 @@ void pawC_stack_realloc(paw_Env *P, int n)
     // Reallocate the stack. Call one of the low-level allocation functions that
     // doesn't throw an error. Stack references must be corrected, even if the
     // allocation fails.
-    StackPtr stack = pawM_alloc(P, P->stack.p, 
+    StackPtr stack = pawM_alloc(P, P->stack.p,
                                 sizeof(P->stack.p[0]) * CAST_SIZE(P->bound.d),
                                 sizeof(P->stack.p[0]) * alloc);
     P->gc_noem = PAW_FALSE; // allow emergency GC
@@ -147,7 +147,7 @@ static void call_return(paw_Env *P, StackPtr base, int nreturn)
     } else {
         StackPtr pret = P->top.p - nreturn;
         for (int i = 0; i < nreturn; ++i) {
-            base[i] = *pret++; 
+            base[i] = *pret++;
         }
     }
     P->top.p = base + nreturn;

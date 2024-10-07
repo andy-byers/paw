@@ -53,7 +53,7 @@
 #elif defined(_MSC_VER)
 # define PAW_NODISCARD _Check_return_
 # define PAW_UNREACHABLE paw_unreachable_
-_Noreturn static inline void paw_unreachable_(void) 
+_Noreturn static inline void paw_unreachable_(void)
 {
     __assume(0);
 }

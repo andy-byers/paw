@@ -36,12 +36,12 @@ static void run_tests(const char *name, struct TestAlloc *a, const char *prefix)
         ++s_counters.compile_errors;
         return;
     }
-    
+
     fprintf(stderr, "running %s.paw...\n", name);
     const size_t length = strlen(prefix);
     struct DefList defs = P->defs;
     for (int i = 0; i < defs.count; ++i) {
-        struct Def *def = defs.data[i]; 
+        struct Def *def = defs.data[i];
         const String *name = def->hdr.name;
         if (def->hdr.kind == DEF_FUNC &&
                 name->length >= length &&

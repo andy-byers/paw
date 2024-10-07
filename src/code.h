@@ -117,9 +117,9 @@ enum FuncKind {
 };
 
 struct KCache {
-    Map *ints;                           
-    Map *strs;                           
-    Map *flts;                           
+    Map *ints;
+    Map *strs;
+    Map *flts;
 };
 
 struct FuncState {
@@ -128,7 +128,7 @@ struct FuncState {
     struct Generator *G; // codegen state
     struct HirSymtab *scopes; // local scopes
     struct BlockState *bs; // current block
-    struct KCache kcache;                           
+    struct KCache kcache;
     Proto *proto; // prototype being built
     String *name; // name of the function
     int first_local; // index of function in DynamicMem array
@@ -138,7 +138,7 @@ struct FuncState {
     int nproto; // number of nested functions
     int nlines; // number of source lines
     int pc; // number of instructions
-    int line;        
+    int line;
     int nstack;
     enum FuncKind kind; // type of function
 };

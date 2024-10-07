@@ -7,12 +7,12 @@
 // The compiler converts source code into bytecode that can be run in Paw's
 // virtual machine. It works in 4 major passes:
 //
-//  Name    | Input -> Output | Purpose                    
-// ---------|-----------------|--------------------------- 
-//  parse   | source -> AST   | syntactical analysis 
-//  resolve | AST -> HIR      | resolve symbols and types 
-//  expand  | HIR -> HIR      | monomorphize functions 
-//  codegen | HIR -> bytecode | generate code 
+//  Name    | Input -> Output | Purpose
+// ---------|-----------------|---------------------------
+//  parse   | source -> AST   | syntactical analysis
+//  resolve | AST -> HIR      | resolve symbols and types
+//  expand  | HIR -> HIR      | monomorphize functions
+//  codegen | HIR -> bytecode | generate code
 
 #ifndef PAW_COMPILE_H
 #define PAW_COMPILE_H
@@ -26,9 +26,11 @@
 #define ENV(x) ((x)->P)
 #define SCAN_STRING(x, s) pawP_scan_string(ENV(x), (x)->strings, s)
 
+struct Hir;
 struct HirPath;
 struct HirDecl;
 struct HirAdtDecl;
+struct HirInstanceDecl;
 struct HirTypeList;
 
 String *pawP_scan_nstring(paw_Env *P, Map *st, const char *s, size_t n);
@@ -39,9 +41,9 @@ static inline String *pawP_scan_string(paw_Env *P, Map *st, const char *s)
 
 // ORDER UnaryOp
 enum UnaryOp {
-    UNARY_LEN, 
-    UNARY_NEG, 
-    UNARY_NOT, 
+    UNARY_LEN,
+    UNARY_NEG,
+    UNARY_NOT,
     UNARY_BNOT,
 
     NUNARYOPS
@@ -49,18 +51,18 @@ enum UnaryOp {
 
 // ORDER BinaryOp
 enum BinaryOp {
-    BINARY_EQ,   
-    BINARY_NE,   
-    BINARY_LT,   
-    BINARY_LE,   
-    BINARY_GT,   
-    BINARY_GE,   
+    BINARY_EQ,
+    BINARY_NE,
+    BINARY_LT,
+    BINARY_LE,
+    BINARY_GT,
+    BINARY_GE,
     BINARY_AS,
-    BINARY_ADD,  
-    BINARY_SUB,  
-    BINARY_MUL,  
-    BINARY_DIV,  
-    BINARY_MOD,  
+    BINARY_ADD,
+    BINARY_SUB,
+    BINARY_MUL,
+    BINARY_DIV,
+    BINARY_MOD,
     BINARY_BXOR,
     BINARY_BAND,
     BINARY_BOR,
@@ -99,6 +101,7 @@ struct Compiler {
     struct DynamicMem *dm;
     struct Pool *pool;
     struct Ast *prelude;
+    struct Unifier *U;
     Instantiate finst;
     String *modname;
     Map *impls; // HirAdtDecl * => HirImplDecl *
@@ -156,9 +159,9 @@ struct DynamicMem {
     struct Unifier unifier;
     struct LabelList labels;
 
-    // NOTE: Backing storage for these fields are located in the compiler 
-    //       memory pool, so they don't need to be freed separately. They 
-    //       are kept here for convenience, since they are used during 
+    // NOTE: Backing storage for these fields are located in the compiler
+    //       memory pool, so they don't need to be freed separately. They
+    //       are kept here for convenience, since they are used during
     //       multiple passes.
     struct ModuleList *modules;
     struct HirDeclList *decls;
@@ -178,8 +181,8 @@ typedef struct Generator {
 void pawP_lower_ast(struct Compiler *C);
 void pawP_collect_items(struct Compiler *C);
 
-struct HirDecl *pawP_find_field(struct Compiler *C, struct ModuleInfo *m, struct HirAdtDecl *adt, String *name);
-struct HirDecl *pawP_find_method(struct Compiler *C, struct ModuleInfo *m, struct HirType *self, String *name);
+struct HirDecl *pawP_find_field(struct Compiler *C, struct Hir *hir, struct HirAdtDecl *adt, String *name);
+struct HirDecl *pawP_find_method(struct Compiler *C, struct Hir *hir, struct HirType *self, String *name);
 
 struct Generalization {
     struct HirTypeList *types;
@@ -188,23 +191,24 @@ struct Generalization {
 };
 
 struct Generalization pawP_generalize(
-        struct Hir *hir, 
-        struct HirDeclList *generics, 
+        struct Hir *hir,
+        struct HirDeclList *generics,
         struct HirDeclList *fields);
 
 // Instantiate a polymorphic function or type
 // Expects that 'decl' is already resolved, meaning the type of each symbol has been
-// filled in. Works by replacing each generic type with the corresponding concrete 
-// type from the given 'types'. Returns a HirInstanceDecl if 'decl' is a function, 
-// and 'decl' otherwise. We avoid recursively visiting the function body here, since 
-// doing so might cause further instantiations due to the presence of recursion. 
+// filled in. Works by replacing each generic type with the corresponding concrete
+// type from the given 'types'. Returns a HirInstanceDecl if 'decl' is a function,
+// and 'decl' otherwise. We avoid recursively visiting the function body here, since
+// doing so might cause further instantiations due to the presence of recursion.
 // Function instance bodies are expanded in a separate pass.
 struct HirDecl *pawP_instantiate(
-        struct Hir *hir, 
-        struct HirDecl *decl, 
+        struct Hir *hir,
+        struct HirDecl *decl,
         struct HirTypeList *types);
 
 void pawP_set_instantiate(struct Compiler *C, paw_Bool full);
+void pawP_instantiate_impls_for(struct Hir *hir, struct HirAdtDecl *base, struct HirAdtDecl *inst, struct HirTypeList *types);
 
 void pawP_collect_imports(struct Compiler *C, struct Ast *ast);
 void pawP_import(struct Compiler *C, void *state);

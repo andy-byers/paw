@@ -66,5 +66,5 @@ int pawE_locate(paw_Env *P, const String *name, paw_Bool only_pub)
         }
     }
     return -1;
-} 
+}
 

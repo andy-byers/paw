@@ -18,7 +18,7 @@
     OPT_STR(e, src, "execute program passed as string") \
     OPT_INT(H, log_heap, "log of default heap size in bytes") \
     OPT_OPT(h, "display usage information") \
-    OPT_OPT(q, "suppress output") 
+    OPT_OPT(q, "suppress output")
 
 static struct {
 #define OPT_STR(name, a, b) const char *name;

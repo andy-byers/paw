@@ -105,7 +105,7 @@ static struct Token make_int(struct Lex *x)
     const Value v = P->top.p[-1];
     return (struct Token){
         .kind = TK_INTEGER,
-        .value = v, 
+        .value = v,
     };
 }
 
@@ -115,7 +115,7 @@ static struct Token make_float(struct Lex *x)
     const Value v = P->top.p[-1];
     return (struct Token){
         .kind = TK_FLOAT,
-        .value = v, 
+        .value = v,
     };
 }
 
@@ -199,16 +199,16 @@ static int get_codepoint(struct Lex *x)
     c[2] = x->c; next(x);
     c[3] = x->c; next(x);
 
-    if (!ISHEX(c[0]) || 
-            !ISHEX(c[1]) || 
-            !ISHEX(c[2]) || 
-            !ISHEX(c[3])) { 
+    if (!ISHEX(c[0]) ||
+            !ISHEX(c[1]) ||
+            !ISHEX(c[2]) ||
+            !ISHEX(c[3])) {
         return -1;
     }
-    return HEXVAL(c[0]) << 12 | 
-        HEXVAL(c[1]) << 8 | 
-        HEXVAL(c[2]) << 4 | 
-        HEXVAL(c[3]); 
+    return HEXVAL(c[0]) << 12 |
+        HEXVAL(c[1]) << 8 |
+        HEXVAL(c[2]) << 4 |
+        HEXVAL(c[3]);
 }
 
 static struct Token consume_string(struct Lex *x)
@@ -324,7 +324,7 @@ static struct Token consume_int(struct Lex *x)
     }
     return (struct Token){
         .kind = TK_INTEGER,
-        .value.i = i, 
+        .value.i = i,
     };
 }
 
@@ -338,7 +338,7 @@ static struct Token consume_float(struct Lex *x)
     if (rc != PAW_OK) pawX_error(x, "invalid number '%s'", dm->scratch.data);
     return (struct Token){
         .kind = TK_FLOAT,
-        .value.f = f, 
+        .value.f = f,
     };
 }
 
@@ -350,9 +350,9 @@ static struct Token consume_number(struct Lex *x)
     SAVE_AND_NEXT(x);
 
     paw_Bool likely_float = PAW_FALSE;
-    paw_Bool likely_int = first == '0' && 
-            (test_next2(x, "bB") || 
-             test_next2(x, "oO") || 
+    paw_Bool likely_int = first == '0' &&
+            (test_next2(x, "bB") ||
+             test_next2(x, "oO") ||
              test_next2(x, "xX"));
 
     // Consume adjacent floating-point indicators, exponents, and fractional
@@ -360,13 +360,13 @@ static struct Token consume_number(struct Lex *x)
     for (;;) {
         // Make sure not to consume byte sequences like "e+" or "E-" if we have
         // already encountered a non-decimal integer prefix. This allows expressions
-        // like "0x1e+1" to be parsed like "0x1e + 1" instead of raising a syntax 
+        // like "0x1e+1" to be parsed like "0x1e + 1" instead of raising a syntax
         // error, which seems to be what some major C and C++ compilers do.
         if (!likely_int && test_next2(x, "eE")) {
             likely_float = PAW_TRUE;
             test_next2(x, "+-");
             continue;
-        } 
+        }
         if (ISHEX(x->c)) {
             // save digits below
         } else if (x->c == '.') {
@@ -383,11 +383,11 @@ static struct Token consume_number(struct Lex *x)
     save(x, '\0');
 
     if (likely_int && likely_float) {
-        pawX_error(x, "malformed number '%s'", x->dm->scratch.data); 
+        pawX_error(x, "malformed number '%s'", x->dm->scratch.data);
     } else if (likely_float) {
-        return consume_float(x); 
+        return consume_float(x);
     } else {
-        return consume_int(x); 
+        return consume_int(x);
     }
 }
 
@@ -412,10 +412,10 @@ static void skip_line_comment(struct Lex *x)
 
 static void skip_whitespace(struct Lex *x)
 {
-    while (x->c == ' ' || 
-            x->c == '\t' || 
-            x->c == '\f' || 
-            x->c == '\v' || 
+    while (x->c == ' ' ||
+            x->c == '\t' ||
+            x->c == '\f' ||
+            x->c == '\v' ||
             IS_NEWLINE(x)) {
         next(x);
     }
@@ -513,7 +513,7 @@ try_again:
                 goto try_again;
             }
             break;
-        default: 
+        default:
             if (ISDIGIT(x->c)) {
                 token = consume_number(x);
             } else if (ISNAME(x->c)) {
