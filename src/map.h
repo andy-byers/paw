@@ -61,7 +61,7 @@ static inline MapCursor h_cursor_lookup(Map *m, Value key)
 {
     MapCursor mc = h_cursor_init(m, key);
     while (h_get_state(&mc) != MAP_ITEM_VACANT) {
-        if (h_get_state(&mc) == MAP_ITEM_OCCUPIED && 
+        if (h_get_state(&mc) == MAP_ITEM_OCCUPIED &&
                 h_cursor_key(&mc)->u == key.u) {
             break;
         }
@@ -75,9 +75,9 @@ void pawH_free(paw_Env *P, Map *m);
 void pawH_extend(paw_Env *P, Map *dst, Map *src);
 Value *pawH_create(paw_Env *P, Map *m, Value key);
 
-static inline size_t pawH_length(const Map *m) 
+static inline size_t pawH_length(const Map *m)
 {
-    return m->length; 
+    return m->length;
 }
 
 static inline Value *pawH_get(Map *m, Value key)

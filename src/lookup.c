@@ -74,8 +74,9 @@ static struct HirDecl *locate_base_decl(struct QueryState *Q, struct ModuleInfo 
         struct ModuleInfo *prelude = Q->C->dm->modules->data[0];
         q = locate_base_in(Q, prelude, path);
         if (q.base == NULL) {
-            NAME_ERROR(Q, "'%s' does not exist in module '%s'", 
-                    q.seg->name->text, m->hir->name->text);
+            struct HirSegment *seg = K_LIST_GET(path, path->count - 1);
+            NAME_ERROR(Q, "'%s' does not exist in module '%s'",
+                    seg->name->text, m->hir->name->text);
         }
     }
 
@@ -86,9 +87,9 @@ static struct HirDecl *locate_base_decl(struct QueryState *Q, struct ModuleInfo 
 
 static struct HirDecl *expect_field(struct QueryState *Q, struct HirAdtDecl *d, String *name)
 {
-    struct HirDecl *result = pawP_find_field(Q->C, Q->m, d, name);
+    struct HirDecl *result = pawP_find_field(Q->C, Q->m->hir, d, name);
     if (result == NULL) {
-        NAME_ERROR(Q, "field '%s' does not exist on type '%d'", 
+        NAME_ERROR(Q, "field '%s' does not exist on type '%d'",
                 name->text, d->name->text);
     }
     return result;
@@ -133,7 +134,7 @@ struct HirDecl *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct Hir
     // 'Q.index' to the index of the following segment
     struct HirDecl *result = locate_base_decl(&Q, m, path);
     for (; Q.index < path->count; ++Q.index) {
-        // resolve method or enumerator (will throw an error if there is more 
+        // resolve method or enumerator (will throw an error if there is more
         // than 1 additional segment)
         struct HirSegment *seg = pawHir_path_get(path, Q.index);
         result = locate_next_decl(&Q, result, seg);

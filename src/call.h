@@ -31,9 +31,9 @@ void pawC_stack_grow(paw_Env *P, int count);
 void pawC_stack_realloc(paw_Env *P, int n);
 void pawC_stack_overflow(paw_Env *P);
 
-static inline int pawC_stklen(paw_Env *P) 
+static inline int pawC_stklen(paw_Env *P)
 {
-    return CAST(int, P->top.p - P->stack.p); 
+    return CAST(int, P->top.p - P->stack.p);
 }
 
 // Increase the stack size
@@ -62,9 +62,9 @@ static inline Value *pawC_push0(paw_Env *P)
 Value *pawC_pushns(paw_Env *P, const char *s, size_t n);
 Value *pawC_pushs(paw_Env *P, const char *s);
 
-static inline void pawC_pop(paw_Env *P) 
+static inline void pawC_pop(paw_Env *P)
 {
-    pawC_stkdec(P, 1); 
+    pawC_stkdec(P, 1);
 }
 
 #endif // PAW_CALL_H

@@ -303,12 +303,18 @@ static void test_struct_error(void)
     test_compiler_status(PAW_ETYPE, "struct_access_by_index", "struct S{pub x: int}", "let x = S{x: 1}; let y = x.0;");
     test_compiler_status(PAW_ETYPE, "struct_not_enough_types", "struct S<A, B, C>;", "let x = S::<int, float>;");
     test_compiler_status(PAW_ETYPE, "struct_too_many_types", "struct S<A, B>;", "let x = S::<int, float, bool>;");
+
+    test_compiler_status(PAW_ENAME, "struct_select_private_field",
+            "struct S {pub a: int, b: int} impl S {pub fn new() -> S {return S{a: 1, b: 2};}}",
+            "let x = S::new(); let a = x.a; let b = x.b;");
+    test_compiler_status(PAW_ENAME, "struct_literal_private_field", "struct S {pub a: int, b: int}", "let x = S{a: 1, b: 2};");
+    test_compiler_status(PAW_ENAME, "struct_call_private_method", "struct S; impl S {fn private() {}}", "let x = S; x.private();");
 }
 
 static void test_enum_error(void)
 {
     test_compiler_status(PAW_ESYNTAX, "enum_unit_with_braces_on_def", "enum A {}", "let a = A;");
-    test_compiler_status(PAW_ETYPE, "enum_unit_with_braces_on_init", "enum A;", 
+    test_compiler_status(PAW_ETYPE, "enum_unit_with_braces_on_init", "enum A;",
                                     "let a = A{}; // looks like struct literal");
     test_compiler_status(PAW_ESYNTAX, "enum_unit_without_semicolon", "enum A", "");
     test_compiler_status(PAW_ESYNTAX, "enum_missing_variant", "enum A {X}", "let a = A;");
@@ -345,6 +351,14 @@ static void test_map_error(void)
     test_compiler_status(PAW_ETYPE, "map_slice", "", "let map = [:]; let val = map[0:10];");
 }
 
+static void test_import_error(void)
+{
+    test_compiler_status(PAW_ENAME, "missing_import", "use import_not_found;", "");
+    test_compiler_status(PAW_ENAME, "missing_import_adt", "use io;", "let t = io::TypeNotFound;");
+    test_compiler_status(PAW_ENAME, "missing_import_func", "use io;", "let t = io::func_not_found();");
+
+}
+
 static int run_main(paw_Env *P, int nargs)
 {
     paw_push_string(P, "main");
@@ -368,7 +382,7 @@ static int next_conflicting_int(paw_Env *P)
 
 static void test_gc_conflict(void)
 {
-    const char source[] = 
+    const char source[] =
         "pub fn conflicting_int<T>(t: T) -> int;\n"
         "pub fn main() {\n"
         "    let N = 500;\n"
@@ -397,7 +411,7 @@ static void test_gc_conflict(void)
 
 static void check_impl_item(const char *name, int expect, const char *impl, const char *main)
 {
-    const char item_fmt[] = 
+    const char item_fmt[] =
             "pub struct Object<T> {\n"
             "    pub value: T\n"
             "}\n"
@@ -407,7 +421,7 @@ static void check_impl_item(const char *name, int expect, const char *impl, cons
     int rc = snprintf(item_buf, sizeof(item_buf), item_fmt, impl);
     check(rc >= 0 && CAST_SIZE(rc) < sizeof(item_buf));
 
-    const char main_fmt[] = 
+    const char main_fmt[] =
             "let o = Object{value: 42};\n%s";
 
     char main_buf[4096];
@@ -419,7 +433,7 @@ static void check_impl_item(const char *name, int expect, const char *impl, cons
 
 static void check_impl_block(const char *name, int expect, const char *impl, const char *main)
 {
-    const char impl_fmt[] = 
+    const char impl_fmt[] =
             "impl<T> Object<T> {\n"
             "%s\n"
             "}\n";
@@ -433,7 +447,7 @@ static void check_impl_block(const char *name, int expect, const char *impl, con
 
 static void check_impl_body(const char *name, int expect, const char *ret, const char *impl, const char *main)
 {
-    const char item_fmt[] = 
+    const char item_fmt[] =
             "pub fn method(self, value: T) %s{%s}\n";
 
     char item_buf[4096];
@@ -443,8 +457,29 @@ static void check_impl_body(const char *name, int expect, const char *ret, const
     check_impl_block(name, expect, item_buf, main);
 }
 
+static void check_poly_impl_ABC(const char *name, int expect, const char *impl_binder, const char *obj_args, const char *extra, const char *main)
+{
+    const char fmt[] =
+            "struct Obj<A, B> {a: A, b: B}\n"
+            "impl%s Obj%s {pub fn test() {}}%s";
+
+    char buf[4096];
+    int rc = snprintf(buf, sizeof(buf), fmt, impl_binder, obj_args, extra);
+    check(rc >= 0 && CAST_SIZE(rc) < sizeof(buf));
+
+    test_compiler_status(expect, name, buf, main);
+}
+
 static void test_impl_error(void)
 {
+    check_poly_impl_ABC("", PAW_ENAME, "<X>", "<X, int>",
+            // second type must be int to access 'test' but it is generic here
+            "pub fn call<T>(t: T) {\n"
+            "    let o = Obj{a: 1, b: t};\n"
+            "    o.test();\n"
+            "}\n",
+            "call(42);");
+
     check_impl_block("call_private_method", PAW_ENAME,
             "fn f(self) {}\n",
             "o.f();\n");
@@ -473,8 +508,8 @@ static void test_impl_error(void)
             "o.f();\n"); // 'A' cannot be determined
 
     check_impl_body("body_sanity_check", PAW_OK,
-            "-> T ", 
-            "return self.value;", 
+            "-> T ",
+            "return self.value;",
             "assert(o.method(123) == 42);");
 
     check_impl_body("bad_return_type", PAW_ETYPE,
@@ -484,7 +519,7 @@ static void test_impl_error(void)
     check_impl_body("unexpected_return", PAW_ETYPE,
             "", "return self.value;", "");
 // TODO: checks for missing return type
-//    check_impl_body("expected_return", PAW_ETYPE, 
+//    check_impl_body("expected_return", PAW_ETYPE,
 //            "-> T ", "", "");
 }
 
@@ -502,4 +537,5 @@ int main(void)
     test_struct_error();
     test_list_error();
     test_map_error();
+    test_import_error();
 }

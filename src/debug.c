@@ -402,9 +402,9 @@ void paw_dump_stack(paw_Env *P)
     for (int i = 0; sp != P->top.p; ++sp, ++i) {
         const Value v = *sp;
         if (pawZ_is_object(P->H, CAST_UPTR(v.p))) {
-            printf("%d: Object @ %p\n", i, v.p); 
+            printf("%d: Object @ %p\n", i, v.p);
         } else {
-            printf("%d: Value{%" PRIu64 "}\n", i, v.u); 
+            printf("%d: Value{%" PRIu64 "}\n", i, v.u);
         }
     }
 }

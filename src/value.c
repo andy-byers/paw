@@ -19,7 +19,7 @@
 void pawV_index_error(paw_Env *P, paw_Int index, size_t length, const char *what)
 {
     pawR_error(P, PAW_EINDEX,
-               "index %I is out of bounds for %s of length %I", 
+               "index %I is out of bounds for %s of length %I",
                index, what, PAW_CAST_INT(length));
 }
 
@@ -44,8 +44,8 @@ static void int_to_string(paw_Env *P, paw_Int i, Value *out)
 
     // Don't call llabs(INT64_MIN). The result is undefined on 2s complement
     // systems.
-    uint64_t u = i == INT64_MIN 
-        ? UINT64_C(1) << 63 
+    uint64_t u = i == INT64_MIN
+        ? UINT64_C(1) << 63
         : CAST(uint64_t, llabs(i));
     do {
         *ptr-- = CAST(char, u % 10 + '0');
@@ -194,9 +194,9 @@ Native *pawV_new_native(paw_Env *P, paw_Function func, int nup)
     return nat;
 }
 
-void pawV_free_native(paw_Env *P, Native *f) 
+void pawV_free_native(paw_Env *P, Native *f)
 {
-    pawM_free_flex(P, f, f->nup, sizeof(f->up[0])); 
+    pawM_free_flex(P, f, f->nup, sizeof(f->up[0]));
 }
 
 Foreign *pawV_new_foreign(paw_Env *P, size_t size, int nfields, uint8_t flags, Value *out)
@@ -221,7 +221,7 @@ void pawV_free_foreign(paw_Env *P, Foreign *f)
     if (f->flags == VBOX_FILE) {
         pawO_close(f->data);
     } else if (f->flags == VBOX_LOADER) {
-        pawL_close_loader(P, f->data); 
+        pawL_close_loader(P, f->data);
     }
     pawM_free_vec(P, f->data, f->size);
     pawM_free_flex(P, f, CAST_SIZE(f->nfields), sizeof(f->fields[0]));
@@ -239,9 +239,9 @@ static uint32_t hash_u64(uint64_t u)
     return (uint32_t)u;
 }
 
-uint32_t pawV_hash(Value v) 
+uint32_t pawV_hash(Value v)
 {
-    return hash_u64(v.u); 
+    return hash_u64(v.u);
 }
 
 static int char2base(char c)
@@ -335,7 +335,7 @@ int pawV_parse_float(paw_Env *P, const char *text, paw_Float *out)
     const char *original = text;
     SKIP_SPACES(text);
     const paw_Bool negative = parse_negative(&text);
-                 
+
     // First, validate the number format.
     const char *p = text;
     if (p[0] == '0' && p[1] != '\0' && !is_fp(p[1])) {

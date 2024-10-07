@@ -1,14 +1,5 @@
 // method.paw
 
-// TODO: Fix this
-fn fix_list() {
-    print('TODO: fix ADT instantiation inside polymorphic function not creating methods\n');
-    let list = [];
-    list.push(123);
-    list.pop();
-    list.length();
-}
-
 struct Object {
     a: int,
     b: int,
@@ -356,4 +347,57 @@ pub fn test_multiple_impl_blocks() {
     assert(p.method2()[0] == 1.0);
 }
 
+struct Obj<A> {
+    pub a: A,
+}
 
+impl<X> Obj<X> {
+    pub fn test(self) -> X {
+        return self.a;
+    }
+}
+
+struct Obj2<A, B> {
+    pub a: A,
+    pub b: B,
+}
+
+// ?B must be int to call test()
+impl<X> Obj2<X, int> {
+    pub fn test(self) -> X {
+        return self.a;
+    }
+}
+
+fn availability_aux<T>(t: T) -> T {
+    let o = Obj{a: t};
+    o.test();
+
+    let o = Obj{a: [t]};
+    let L = o.test();
+    assert(#L == 1);
+    return L[-1];
+}
+
+fn availability_aux2<T>(t: T) -> T {
+    let o = Obj2{a: t, b: 2};
+    o.test();
+
+    let o = Obj2{a: [t], b: 3};
+    let L = o.test();
+    assert(#L == 1);
+    return L[-1];
+}
+
+pub fn test_method_availability() {
+    assert(availability_aux(false) == false);
+    assert(availability_aux(1) == 1);
+    assert(availability_aux2(2.0) == 2.0);
+    assert(availability_aux2('three') == 'three');
+
+    let o = Obj{a: 1};
+    o.test();
+
+    let o = Obj2{a: true, b: 2};
+    o.test();
+}

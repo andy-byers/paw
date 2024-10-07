@@ -5,7 +5,7 @@
 // TODO: (1) Allow builtin functions to be specialized for different types. Right now,
 //           we always treat generic parameters as union Value and never access the
 //           type-specific representation. Right now, we use lack of a function body
-//           or presence in the builtins map to indicate that a function is a C function 
+//           or presence in the builtins map to indicate that a function is a C function
 //           or not. Use flags in the AST and HIR nodes to store this info instead.
 
 #include "api.h"
@@ -24,7 +24,7 @@
 #define DLOG(G, ...) PAWD_LOG(ENV(G), __VA_ARGS__)
 #define ERROR(G, code, ...) pawE_error(ENV(G), code, (G)->fs->line, __VA_ARGS__)
 #define PRELUDE(G) ((G)->C->dm->modules->data[0])
-#define GET_DECL(G, id) pawHir_get_decl(PRELUDE(G)->hir, id)
+#define GET_DECL(G, id) pawHir_get_decl((G)->C, id)
 #define TYPE_CODE(G, type) (pawP_type2code((G)->C, type))
 
 static enum paw_AdtKind adt_kind(paw_Type code)
@@ -74,7 +74,7 @@ static void mangle_type(struct Generator *G, Buffer *buf, struct HirType *type)
         }
         pawL_add_char(G->P, buf, '_');
         const struct HirType *result = func.result;
-        if (result->hdr.kind != TYPE_ADT || 
+        if (result->hdr.kind != TYPE_ADT ||
                 result->adt.did != PAW_TUNIT) {
             mangle_type(G, buf, func.result);
         }
@@ -155,12 +155,12 @@ static String *adt_name(struct Generator *G, const String *modname, struct HirTy
 static Map *kcache_map(struct FuncState *fs, paw_Type code)
 {
     if (code == PAW_TINT) {
-        return fs->kcache.ints; 
+        return fs->kcache.ints;
     } else if (code == PAW_TFLOAT) {
-        return fs->kcache.flts; 
+        return fs->kcache.flts;
     } else {
         paw_assert(code == PAW_TSTR);
-        return fs->kcache.strs; 
+        return fs->kcache.strs;
     }
 }
 
@@ -260,12 +260,12 @@ static struct VarInfo declare_local(struct FuncState *fs, String *name, struct H
     };
 }
 
-static void begin_local_scope(struct FuncState *fs, int n) 
+static void begin_local_scope(struct FuncState *fs, int n)
 {
     if (fs->nlocals > LOCAL_MAX - n) {
         ERROR(fs->G, PAW_ESYNTAX, "too many locals");
     }
-    fs->nlocals += n; 
+    fs->nlocals += n;
 }
 
 static void end_local_scope(struct FuncState *fs, struct BlockState *bs)
@@ -282,7 +282,7 @@ static void define_local(struct FuncState *fs)
 
 static struct VarInfo new_local(struct FuncState *fs, String *name, struct HirType *type)
 {
-     const struct VarInfo info = declare_local(fs, name, type); 
+     const struct VarInfo info = declare_local(fs, name, type);
      define_local(fs);
      return info;
 }
@@ -484,7 +484,7 @@ static void enter_function(struct Generator *G, struct FuncState *fs, struct Blo
 {
     *fs = (struct FuncState){
         .first_local = G->C->dm->vars.count,
-        .scopes = pawHir_symtab_new(PRELUDE(G)->hir),
+        .scopes = pawHir_symtab_new(G->C),
         .proto = proto,
         .outer = G->fs,
         .name = name,
@@ -605,7 +605,7 @@ static struct VarInfo find_var(struct Generator *G, const String *name)
 // Get the length of the container object on top of the stack
 static void code_len(struct FuncState *fs, enum paw_AdtKind kind);
 
-static void code_slice_indices(struct HirVisitor *V, struct HirExpr *first, 
+static void code_slice_indices(struct HirVisitor *V, struct HirExpr *first,
                                struct HirExpr *second, struct HirType *target)
 {
     struct Generator *G = V->ud;
@@ -700,6 +700,9 @@ static struct VarInfo resolve_path(struct Generator *G, struct HirPath *path)
             struct HirFuncDef *t = HirGetFuncDef(type);
             struct ModuleInfo *m = get_mod(G, t->modno);
             const String *modname = get_mod_prefix(G, m);
+            if (HirIsVariantDecl(decl)) {
+
+            }
             struct HirFuncDecl *func = HirGetFuncDecl(decl);
             if (func->self != NULL) {
                 struct HirAdt *adt = HirGetAdt(func->self);
@@ -761,11 +764,11 @@ static void code_setter(struct HirVisitor *V, struct HirExpr *lhs, struct HirExp
         if (index->is_slice) {
             code_slice_indices(V, index->first, index->second, target);
             V->VisitExpr(V, rhs);
-            CODE_OP(fs, OP_SETRANGE, t); 
+            CODE_OP(fs, OP_SETRANGE, t);
         } else {
             V->VisitExpr(V, lhs->index.first);
             V->VisitExpr(V, rhs);
-            CODE_OP(fs, OP_SETELEM, t); 
+            CODE_OP(fs, OP_SETELEM, t);
         }
     }
 }
@@ -776,7 +779,7 @@ static int code_if_small(struct FuncState *fs, paw_Int i)
         pawK_code_0(fs, OP_PUSHZERO);
     } else if (i == 1) {
         pawK_code_0(fs, OP_PUSHONE);
-    } else if ((i < 0 && i >= -S_MAX) || 
+    } else if ((i < 0 && i >= -S_MAX) ||
             (i > 0 && i <= S_MAX)) {
         pawK_code_S(fs, OP_PUSHSMI, i);
     } else {
@@ -791,12 +794,12 @@ static void code_basic_lit(struct HirVisitor *V, struct HirLiteralExpr *e)
     struct FuncState *fs = G->fs;
     fs->line = e->line;
 
-    const paw_Type type = e->basic.t != PAW_TUNIT && e->basic.t != PAW_TBOOL 
+    const paw_Type type = e->basic.t != PAW_TUNIT && e->basic.t != PAW_TBOOL
         ? e->basic.t : PAW_TINT;
     if (type != PAW_TINT || code_if_small(fs, e->basic.value.i)) {
         const int k = add_constant(G, e->basic.value, e->basic.t);
         pawK_code_U(fs, OP_PUSHCONST, k);
-    } 
+    }
 }
 
 static void code_tuple_lit(struct HirVisitor *V, struct HirLiteralExpr *e)
@@ -907,7 +910,7 @@ static void code_chain_expr(struct HirVisitor *V, struct HirChainExpr *e)
 
 static void code_len(struct FuncState *fs, enum paw_AdtKind kind)
 {
-    CODE_OP(fs, OP_LENGTH, kind); 
+    CODE_OP(fs, OP_LENGTH, kind);
 }
 
 static void code_arith1(struct FuncState *fs, enum ArithOp1 op, paw_Type type)
@@ -951,7 +954,7 @@ static void code_unop_expr(struct HirVisitor *V, struct HirUnOpExpr *e)
 
 static void code_cmp(struct FuncState *fs, enum CmpOp op, paw_Type type)
 {
-    const int base = type == PAW_TFLOAT ? OP_CMPF : 
+    const int base = type == PAW_TFLOAT ? OP_CMPF :
         type == PAW_TSTR ? OP_CMPS : OP_CMPI;
     CODE_OP(fs, base, op);
 }
@@ -979,25 +982,25 @@ static void code_binop_expr(struct HirVisitor *V, struct HirBinOpExpr *e)
     struct HirType *target = HIR_TYPEOF(e->lhs);
     const paw_Type type = TYPE_CODE(G, target);
     switch (e->op) {
-        case BINARY_EQ:   
+        case BINARY_EQ:
             code_cmp(fs, CMP_EQ, type);
             break;
-        case BINARY_NE:   
+        case BINARY_NE:
             code_cmp(fs, CMP_NE, type);
             break;
-        case BINARY_LT:   
+        case BINARY_LT:
             code_cmp(fs, CMP_LT, type);
             break;
-        case BINARY_LE:   
+        case BINARY_LE:
             code_cmp(fs, CMP_LE, type);
             break;
-        case BINARY_GT:   
+        case BINARY_GT:
             code_cmp(fs, CMP_GT, type);
             break;
         case BINARY_GE:
             code_cmp(fs, CMP_GE, type);
             break;
-        case BINARY_ADD:  
+        case BINARY_ADD:
             if (type == BUILTIN_STR) {
                 CODE_OP(fs, OP_CONCAT, PAW_ADT_STR);
             } else if (type == BUILTIN_LIST) {
@@ -1006,16 +1009,16 @@ static void code_binop_expr(struct HirVisitor *V, struct HirBinOpExpr *e)
                 code_arith2(fs, ARITH2_ADD, type);
             }
             break;
-        case BINARY_SUB:  
+        case BINARY_SUB:
             code_arith2(fs, ARITH2_SUB, type);
             break;
-        case BINARY_MUL:  
+        case BINARY_MUL:
             code_arith2(fs, ARITH2_MUL, type);
             break;
-        case BINARY_DIV:  
+        case BINARY_DIV:
             code_arith2(fs, ARITH2_DIV, type);
             break;
-        case BINARY_MOD:  
+        case BINARY_MOD:
             code_arith2(fs, ARITH2_MOD, type);
             break;
         case BINARY_BXOR:
@@ -1112,7 +1115,7 @@ static void code_func(struct HirVisitor *V, struct HirFuncDecl *d, struct VarInf
     leave_function(G);
 
     if (info.kind == VAR_GLOBAL) {
-        set_entrypoint(G, fs.proto, info.index); 
+        set_entrypoint(G, fs.proto, info.index);
     } else {
         const int pid = add_proto(G, fs.proto);
         code_closure(G, pid);
@@ -1175,7 +1178,7 @@ static void code_instance_getter(struct HirVisitor *V, struct HirType *type)
     const String *key = mangle_name(G, modname, name, NULL);
     // builtins are not monomorphized: there is a single C function implementing each
     // polymorphic builtin function
-    const Value *pv = pawH_get(G->builtin, P2V(key)); 
+    const Value *pv = pawH_get(G->builtin, P2V(key));
     name = mangle_name(G, modname, name, pv ? NULL : type->fdef.types);
 
     const struct VarInfo info = find_var(G, name);
@@ -1278,7 +1281,7 @@ static void code_conversion_expr(struct HirVisitor *V, struct HirConversionExpr 
 {
     struct Generator *G = V->ud;
     struct HirType *from = HIR_TYPEOF(e->arg);
-    const Op op = e->to == PAW_TBOOL ? OP_CASTBOOL : 
+    const Op op = e->to == PAW_TBOOL ? OP_CASTBOOL :
         e->to == PAW_TINT ? OP_CASTINT : OP_CASTFLOAT;
     G->fs->line = e->line;
 
@@ -1458,10 +1461,10 @@ static void code_index_expr(struct HirVisitor *V, struct HirIndex *e)
     V->VisitExpr(V, e->target);
     if (e->is_slice) {
         code_slice_indices(V, e->first, e->second, target);
-        CODE_OP(fs, OP_GETRANGE, t); 
+        CODE_OP(fs, OP_GETRANGE, t);
     } else {
         V->VisitExpr(V, e->first);
-        CODE_OP(fs, OP_GETELEM, t); 
+        CODE_OP(fs, OP_GETELEM, t);
     }
 }
 
@@ -1598,6 +1601,7 @@ void pawP_codegen(struct Compiler *C)
         .C = C,
     };
     G.items = pawP_item_list_new(C);
+
     register_modules(&G, C->dm->modules);
     code_modules(&G);
 

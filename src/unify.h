@@ -10,7 +10,6 @@ typedef struct UnificationTable UnificationTable;
 typedef int (*Unify)(struct Unifier *, struct HirType *, struct HirType *);
 
 struct Unifier {
-    struct Hir *hir;
     Unify action;
     UnificationTable *table;
     struct Compiler *C;

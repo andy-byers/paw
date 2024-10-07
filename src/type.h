@@ -2,7 +2,7 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
-// Note that for types 'struct Type' and 'struct Def' below, the active union 
+// Note that for types 'struct Type' and 'struct Def' below, the active union
 // member cannot be changed after it is set in one of the constructor functions.
 // This is because we allocate exactly the amount of memory needed by the
 // active member, which might contain a flexible array member. Common fields
@@ -135,7 +135,7 @@ void pawY_mangle_add_arg(paw_Env *P, Buffer *buffer, paw_Type code);
 void pawY_mangle_add_self(paw_Env *P, Buffer *buffer, const String *modname, const String *name);
 void pawY_mangle_finish(paw_Env *P, Buffer *buffer);
 
-// Append a human-readable representation of the type with the given 'code' to the 
+// Append a human-readable representation of the type with the given 'code' to the
 // end of the 'buffer'
 void pawY_print_type(paw_Env *P, Buffer *buffer, paw_Type code);
 

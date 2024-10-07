@@ -2,8 +2,8 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 //
-// This module contains the abstract syntax tree (AST) for Paw. An AST is created 
-// for a given module during parsing, and is transformed into a HIR tree during type 
+// This module contains the abstract syntax tree (AST) for Paw. An AST is created
+// for a given module during parsing, and is transformed into a HIR tree during type
 // checking.
 
 #ifndef PAW_AST_H
@@ -43,7 +43,7 @@ struct Compiler;
         X(FieldExpr,      field) \
         X(Signature,      sig) \
         X(ContainerType,  cont) \
-        X(AssignExpr,     assign) 
+        X(AssignExpr,     assign)
 
 #define AST_STMT_LIST(X) \
         X(Block,      block) \
@@ -91,11 +91,11 @@ struct AstSegment {
     enum AstDeclKind kind : 8
 
 struct AstDeclHeader {
-    AST_DECL_HEADER; 
+    AST_DECL_HEADER;
 };
 
 struct AstVarDecl {
-    AST_DECL_HEADER; 
+    AST_DECL_HEADER;
     paw_Bool is_pub : 1;
     paw_Bool is_const : 1;
     struct AstExpr *tag;
@@ -103,13 +103,13 @@ struct AstVarDecl {
 };
 
 struct AstTypeDecl {
-    AST_DECL_HEADER; 
+    AST_DECL_HEADER;
     struct AstExpr *rhs;
     struct AstDeclList *generics;
 };
 
 struct AstFuncDecl {
-    AST_DECL_HEADER; 
+    AST_DECL_HEADER;
     paw_Bool is_pub : 1;
     enum FuncKind fn_kind : 7;
     struct AstDecl *receiver;
@@ -122,7 +122,7 @@ struct AstFuncDecl {
 // TODO: Need to prevent recursive structures, or introduce the concept of
 //       indirection
 struct AstAdtDecl {
-    AST_DECL_HEADER; 
+    AST_DECL_HEADER;
     paw_Bool is_pub : 1;
     paw_Bool is_struct : 1;
     struct AstDeclList *generics;
@@ -130,30 +130,30 @@ struct AstAdtDecl {
 };
 
 struct AstUseDecl {
-    AST_DECL_HEADER; 
+    AST_DECL_HEADER;
     paw_Bool is_pub : 1;
     struct AstPath *path;
     int modno;
 };
 
 struct AstVariantDecl {
-    AST_DECL_HEADER; 
+    AST_DECL_HEADER;
     struct AstDeclList *fields;
     int index;
 };
 
 struct AstGenericDecl {
-    AST_DECL_HEADER; 
+    AST_DECL_HEADER;
 };
 
 struct AstFieldDecl {
-    AST_DECL_HEADER; 
+    AST_DECL_HEADER;
     paw_Bool is_pub : 1;
     struct AstExpr *tag;
 };
 
 struct AstImplDecl {
-    AST_DECL_HEADER; 
+    AST_DECL_HEADER;
     struct AstPath *self;
     struct AstDeclList *generics;
     struct AstDeclList *methods;
@@ -234,7 +234,7 @@ struct AstLiteralExpr {
 };
 
 struct AstClosureExpr {
-    AST_EXPR_HEADER; 
+    AST_EXPR_HEADER;
     paw_Bool has_body : 1;
     struct AstDeclList *params;
     struct AstExpr *result;
@@ -288,7 +288,7 @@ struct AstCallExpr {
 };
 
 struct AstSelector {
-    AST_SUFFIXED_HEADER; 
+    AST_SUFFIXED_HEADER;
     paw_Bool is_index : 1;
     union {
         String *name;
@@ -297,7 +297,7 @@ struct AstSelector {
 };
 
 struct AstIndex {
-    AST_SUFFIXED_HEADER; 
+    AST_SUFFIXED_HEADER;
     paw_Bool is_slice : 1;
     struct AstExpr *first;
     struct AstExpr *second;
@@ -315,7 +315,7 @@ struct AstTupleType {
 };
 
 struct AstSignature {
-    AST_EXPR_HEADER; 
+    AST_EXPR_HEADER;
     struct AstExpr *result;
     struct AstExprList *params;
 };
@@ -453,6 +453,7 @@ static const char *kAstStmtNames[] = {
 
 struct Ast {
     struct AstDeclList *items;
+    struct Compiler *C;
     struct Pool *pool;
     String *name;
     paw_Env *P;
@@ -467,22 +468,22 @@ struct AstStmt *pawAst_new_stmt(struct Ast *ast, int line, enum AstStmtKind kind
 #define AST_CAST_EXPR(x) CAST(struct AstExpr *, x)
 #define AST_CAST_STMT(x) CAST(struct AstStmt *, x)
 
-DEFINE_LIST(struct Ast, pawAst_decl_list_, AstDeclList, struct AstDecl)
-DEFINE_LIST(struct Ast, pawAst_expr_list_, AstExprList, struct AstExpr)
-DEFINE_LIST(struct Ast, pawAst_stmt_list_, AstStmtList, struct AstStmt)
-DEFINE_LIST(struct Ast, pawAst_path_, AstPath, struct AstSegment)
+DEFINE_LIST(struct Compiler, pawAst_decl_list_, AstDeclList, struct AstDecl)
+DEFINE_LIST(struct Compiler, pawAst_expr_list_, AstExprList, struct AstExpr)
+DEFINE_LIST(struct Compiler, pawAst_stmt_list_, AstStmtList, struct AstStmt)
+DEFINE_LIST(struct Compiler, pawAst_path_, AstPath, struct AstSegment)
 
 struct Ast *pawAst_new(struct Compiler *C, String *name, int modno);
 void pawAst_free(struct Ast *ast);
 
-struct AstSegment *pawAst_segment_new(struct Ast *ast);
+struct AstSegment *pawAst_segment_new(struct Compiler *C);
 
-static inline struct AstSegment *pawAst_path_add(struct Ast *ast, struct AstPath *path, String *name, struct AstExprList *args)
+static inline struct AstSegment *pawAst_path_add(struct Compiler *C, struct AstPath *path, String *name, struct AstExprList *args)
 {
-    struct AstSegment *ps = pawAst_segment_new(ast);
+    struct AstSegment *ps = pawAst_segment_new(C);
     ps->name = name;
     ps->types = args;
-    pawAst_path_push(ast, path, ps);
+    pawAst_path_push(C, path, ps);
     return ps;
 }
 

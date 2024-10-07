@@ -11,7 +11,7 @@
 
 #ifdef PAW_TRACE_GC
 # include <stdio.h>
-#endif 
+#endif
 
 #ifndef PAW_GC_LIMIT
 # define PAW_GC_LIMIT (1024 * 1024)
@@ -261,7 +261,7 @@ void pawG_collect(paw_Env *P)
 
 #define HEAP_GROWTH_PERCENT 50
     P->gc_limit = PAW_MIN(P->gc_bytes +
-        (P->gc_bytes * HEAP_GROWTH_PERCENT / 100), 
+        (P->gc_bytes * HEAP_GROWTH_PERCENT / 100),
         P->heap_size);
 }
 

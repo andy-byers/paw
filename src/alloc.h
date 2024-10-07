@@ -4,7 +4,7 @@
 //
 // alloc: Low-level memory allocation routines
 //
-// Uses code modified from SQLite's memsys3 allocator, which can be found in 
+// Uses code modified from SQLite's memsys3 allocator, which can be found in
 // 'src/mem3.c' in the SQLite repository.
 //
 // TODO: Handle expanding the heap: change paw_Alloc to be more like sbrk, since

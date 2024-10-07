@@ -49,9 +49,9 @@ static void grow_table(paw_Env *P, StringTable *st)
     CHECK_GC(P);
 }
 
-void pawS_init(paw_Env *P) 
+void pawS_init(paw_Env *P)
 {
-    grow_table(P, &P->strings); 
+    grow_table(P, &P->strings);
 }
 
 void pawS_uninit(paw_Env *P)
@@ -136,7 +136,7 @@ void pawS_register(paw_Env *P, String **pinit)
     String **const plist = &st->strings[ST_INDEX(st, str->hash)];
     for (String *p = *plist; p; p = p->next) {
         if (p->hash == str->hash &&
-                p->length == str->length && 
+                p->length == str->length &&
                 memcmp(p->text, str->text, str->length) == 0) {
             *pinit = p;
             return;

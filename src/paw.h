@@ -135,9 +135,9 @@ enum paw_CmpOp {
 };
 
 // Comparison operations
-// Returns an integer, the sign of which describes the relationship between 
+// Returns an integer, the sign of which describes the relationship between
 // the left and right operands: negative if the left operand is less than the
-// right, positive  if the left operand is greater than the right, and 0 if 
+// right, positive  if the left operand is greater than the right, and 0 if
 // the operands are equal.
 void paw_cmpi(paw_Env *P, enum paw_CmpOp op);
 void paw_cmpf(paw_Env *P, enum paw_CmpOp op);

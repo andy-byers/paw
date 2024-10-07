@@ -38,14 +38,6 @@ pub fn test_parse() {
     check(10, (-i).to_string(), -i);
 }
 
-// TODO: List methods need to be instantiated outside a polymorphic function, otherwise
-//       things break. Needs to be fixed.
-fn fix_list() {
-    print('TODO: see fix_list() in integer.paw\n');
-    let list = [];
-    list.push(1);
-}
-
 fn apply<T>(f: fn(T), target: [T]) {
     for t in target {
         f(t);
@@ -172,3 +164,17 @@ pub fn test_boundary_values() {
     apply(test_rel, combine(values, values));
     apply(test_bitwise, combine(values, values));
 }
+
+pub fn test_limits() {
+    assert(1 << 0 == 1);
+    assert(-1 << 0 == -1);
+
+    let imin = -0x7FFFFFFFFFFFFFFF - 1;
+    let imax = 0x7FFFFFFFFFFFFFFF;
+    assert(imax == -(imin + 1));
+    assert(imin == -imax - 1);
+
+    assert(imin == -9223372036854775807 - 1);
+    assert(imax == 9223372036854775807);
+}
+

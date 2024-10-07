@@ -24,7 +24,7 @@ void __asan_poison_memory_region(const volatile void *ptr, size_t size);
 void __asan_unpoison_memory_region(const volatile void *ptr, size_t size);
 # define POISON_MEMORY_REGION(p, z) __asan_poison_memory_region(p, z)
 # define UNPOISON_MEMORY_REGION(p, z) __asan_unpoison_memory_region(p, z)
-#else 
+#else
 # define POISON_MEMORY_REGION(p, z)
 # define UNPOISON_MEMORY_REGION(p, z)
 #endif
@@ -43,11 +43,11 @@ struct Chunk {
         struct {
             uint32_t prev_size;
             uint32_t size4x;
-        } hdr; 
+        } hdr;
         struct {
             struct ChunkId prev;
             struct ChunkId next;
-        } list; 
+        } list;
     };
 };
 
@@ -149,7 +149,7 @@ static void unlink_chunk(struct Allocator *a, struct ChunkId id)
     paw_assert(size == CHUNK_HDR(a, id.v + size)->prev_size);
     paw_assert(size >= 2);
     if (size <= MAX_SMALL) {
-        unlink_from_list(a, id, &a->small[size - 2]); 
+        unlink_from_list(a, id, &a->small[size - 2]);
     } else {
         const uint32_t hash = size % NUM_HASH;
         unlink_from_list(a, id, &a->hash[hash]);
@@ -213,7 +213,7 @@ static void fix_chunk_list(struct Allocator *a, struct ChunkId *proot)
     }
 }
 
-static void *checkout_chunk(struct Allocator *a, struct ChunkId i, uint32_t nchunks) 
+static void *checkout_chunk(struct Allocator *a, struct ChunkId i, uint32_t nchunks)
 {
     paw_assert(i.v >= 1);
     paw_assert(CHUNK_HDR(a, i.v)->size4x / 4 == nchunks);
@@ -279,8 +279,8 @@ static void *unsafe_malloc(struct Heap *H, size_t nbytes)
         }
     } else {
         const uint32_t hash = nchunks % NUM_HASH;
-        for (struct ChunkId id = a->hash[hash]; 
-                id.v != BAD_CHUNK; 
+        for (struct ChunkId id = a->hash[hash];
+                id.v != BAD_CHUNK;
                 id = CHUNK_LIST(a, id.v)->next) {
             if (CHUNK_HDR(a, id.v)->size4x / 4 == nchunks) {
                 unlink_from_list(a, id, &a->hash[hash]);
@@ -288,13 +288,13 @@ static void *unsafe_malloc(struct Heap *H, size_t nbytes)
             }
         }
     }
-    
+
     if (a->key_size >= nchunks) {
         return key_chunk_alloc(a, nchunks);
     }
-  
-    for (uint32_t to_free = nchunks * 16; 
-            to_free < a->nchunks * 16; 
+
+    for (uint32_t to_free = nchunks * 16;
+            to_free < a->nchunks * 16;
             to_free *= 2) {
         if (a->key.v != BAD_CHUNK) {
             link_chunk(a, a->key);
@@ -348,7 +348,7 @@ static void unsafe_free(struct Heap *H, void *ptr)
     CHUNK_HDR(a, i.v + nchunks)->prev_size = nchunks;
     CHUNK_HDR(a, i.v + nchunks)->size4x &= ~2;
     link_chunk(a, i);
-  
+
     if (a->key.v != BAD_CHUNK) {
         while ((CHUNK_HDR(a, a->key.v)->size4x & 2) == 0) {
             nchunks = CHUNK_HDR(a, a->key.v)->prev_size;
@@ -402,7 +402,7 @@ int pawZ_init(paw_Env *P, void *heap, size_t heap_size, paw_Bool is_owned)
         P->H = H;
         *H = (struct Heap){
             .is_owned = is_owned,
-            .nflags = nf, 
+            .nflags = nf,
             .P = P,
         };
         const size_t flag_zone = (nf + FLAGS_PER_BYTE - 1) / FLAGS_PER_BYTE;
@@ -431,12 +431,12 @@ static void detect_leaks(paw_Env *P)
 #if defined(PAW_DEBUG_EXTRA)
     // ensure that all memory has been released
     const struct Heap *H = P->H;
-    for (uintptr_t u = H->bounds[0]; 
-            u < H->bounds[1]; 
+    for (uintptr_t u = H->bounds[0];
+            u < H->bounds[1];
             u += sizeof(void *)) {
         if (pawZ_get_flag(H, u) != 0) {
             __builtin_trap();
-        }     
+        }
     }
     if (P->gc_bytes > 0) {
         __builtin_trap();
@@ -483,7 +483,7 @@ void *pawZ_alloc(paw_Env *P, void *ptr, size_t size)
     if (size == 0) {
         z_free(H, ptr);
         return NULL;
-    } 
+    }
     if (ptr == NULL) return z_malloc(H, size);
     return z_realloc(H, ptr, size);
 }

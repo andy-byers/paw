@@ -17,7 +17,7 @@ typedef struct InferenceVar {
     int rank;
 } InferenceVar;
 
-DEFINE_LIST(struct Hir, var_list_, VarList, struct InferenceVar)
+DEFINE_LIST(struct Compiler, var_list_, VarList, struct InferenceVar)
 
 typedef struct UnificationTable {
     K_ALIGNAS_NODE struct UnificationTable *outer;
@@ -193,7 +193,7 @@ static int unify_types(struct Unifier *U, struct HirType *a, struct HirType *b)
         return unify_generic(U, HirGetGeneric(a), HirGetGeneric(b));
     } else {
         paw_assert(HirIsUnknown(a));
-        return a == b ? 0 : -1; 
+        return a == b ? 0 : -1;
     }
 }
 
@@ -232,11 +232,12 @@ void pawU_unify(struct Unifier *U, struct HirType *a, struct HirType *b)
     const int rc = RUN_ACTION(U, a, b, unify);
     if (rc == 0) return;
 
-    pawHir_print_type(U->hir, a);
-    pawHir_print_type(U->hir, b);
-    ERROR(U, a->hdr.line, 
-            "incompatible types '%s' and '%s'", 
-            paw_string(ENV(U->C), -2), 
+    struct Hir *prelude = K_LIST_GET(U->C->dm->modules, 0)->hir;
+    pawHir_print_type(prelude, a);
+    pawHir_print_type(prelude, b);
+    ERROR(U, a->hdr.line,
+            "incompatible types '%s' and '%s'",
+            paw_string(ENV(U->C), -2),
             paw_string(ENV(U->C), -1));
 }
 
@@ -259,15 +260,14 @@ paw_Bool pawU_equals(struct Unifier *U, struct HirType *a, struct HirType *b)
 struct HirType *pawU_new_unknown(struct Unifier *U)
 {
     paw_Env *P = ENV(U->C);
-    struct Hir *hir = U->hir;
     UnificationTable *table = U->table;
 
     // NOTE: inference variables require a stable address, since they point to each other
-    InferenceVar *ivar = pawK_pool_alloc(P, hir->pool, sizeof(InferenceVar));
+    InferenceVar *ivar = pawK_pool_alloc(P, U->C->pool, sizeof(InferenceVar));
     const int index = table->ivars->count;
-    var_list_push(hir, table->ivars, ivar);
+    var_list_push(U->C, table->ivars, ivar);
 
-    struct HirType *type = pawHir_new_type(hir, -1, kHirUnknown);
+    struct HirType *type = pawHir_new_type(U->C, -1, kHirUnknown);
     type->unknown.depth = table->depth;
     type->unknown.index = index;
 
@@ -280,7 +280,7 @@ void pawU_enter_binder(struct Unifier *U)
 {
     paw_Env *P = ENV(U->C);
     UnificationTable *table = pawK_pool_alloc(P, U->C->pool, sizeof(UnificationTable));
-    table->ivars = var_list_new(U->hir);
+    table->ivars = var_list_new(U->C);
     table->depth = U->depth;
     table->outer = U->table;
     U->table = table;

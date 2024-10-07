@@ -1,46 +1,5 @@
 // basic.paw
 
-pub fn test_comments() {
-    // line comment
-    /* block comment */
-    /* multi-line
-       block
-       comment */
-    /* /* */
-    /* * / */
-
-    // 2 block comments, side-by-side
-    /**//**/
-    /* *//* */
-    /**/ /**/
-}
-
-pub fn test_function_values() {
-    let wrapper = |n: int, f: fn(int) -> int| -> int {
-        return f(n);
-    };
-    let f1 = |n: int| -> int {
-        return n;
-    };
-    let f2 = |n: int| -> int {
-        let f = |n: int| -> int {
-            return n;
-        };
-        return f(n);
-    };
-    let f3 = |n: int| -> int {
-        let f = |n: int| -> fn() -> int {
-            return || -> int {
-                return n;
-            };
-        };
-        return f(n)();
-    };
-    assert(1 == wrapper(1, f1));
-    assert(2 == wrapper(2, f2));
-    assert(3 == wrapper(3, f3));
-}
-
 pub fn function_syntax
 (
     a
@@ -322,18 +281,3 @@ pub fn test_chain_option3() {
     option3(42, true, false);
     option3(42, false, false);
 }
-
-// TODO: move to integer.paw (still needs to be fixed)
-pub fn test_integers() {
-    assert(1 << 0 == 1);
-    assert(-1 << 0 == -1);
-
-    let imin = -0x7FFFFFFFFFFFFFFF - 1;
-    let imax = 0x7FFFFFFFFFFFFFFF;
-    assert(imax == -(imin + 1));
-    assert(imin == -imax - 1);
-
-    assert(imin == -9223372036854775807 - 1);
-    assert(imax == 9223372036854775807);
-}
-

@@ -19,9 +19,10 @@ struct Ast *pawAst_new(struct Compiler *C, String *name, int modno)
         .modno = modno,
         .pool = C->pool,
         .name = name,
+        .C = C,
         .P = P,
     };
-    ast->items = pawAst_decl_list_new(ast);
+    ast->items = pawAst_decl_list_new(C);
     return ast;
 }
 
@@ -42,9 +43,9 @@ DEFINE_NODE_CONSTRUCTOR(expr, AstExpr)
 DEFINE_NODE_CONSTRUCTOR(decl, AstDecl)
 DEFINE_NODE_CONSTRUCTOR(stmt, AstStmt)
 
-struct AstSegment *pawAst_segment_new(struct Ast *ast)
+struct AstSegment *pawAst_segment_new(struct Compiler *C)
 {
-    return pawK_pool_alloc(ENV(ast), ast->pool, sizeof(struct AstSegment));
+    return pawK_pool_alloc(ENV(C), C->pool, sizeof(struct AstSegment));
 }
 
 #if defined(PAW_DEBUG_EXTRA)
@@ -90,7 +91,7 @@ static void dump_stmt(Printer *P, struct AstStmt *s);
         --P->indent; \
         DUMP_MSG(P, "}\n"); \
     }
-DEFINE_LIST_PRINTER(expr, AstExpr) 
+DEFINE_LIST_PRINTER(expr, AstExpr)
 DEFINE_LIST_PRINTER(decl, AstDecl)
 DEFINE_LIST_PRINTER(stmt, AstStmt)
 
@@ -104,9 +105,9 @@ DEFINE_LIST_PRINTER(stmt, AstStmt)
         } \
         return -1; \
     }
-DEFINE_KIND_PRINTER(expr, AstExpr) 
-DEFINE_KIND_PRINTER(decl, AstDecl) 
-DEFINE_KIND_PRINTER(stmt, AstStmt) 
+DEFINE_KIND_PRINTER(expr, AstExpr)
+DEFINE_KIND_PRINTER(decl, AstDecl)
+DEFINE_KIND_PRINTER(stmt, AstStmt)
 
 static void dump_path(Printer *P, struct AstPath *p)
 {
@@ -368,7 +369,7 @@ void pawAst_dump(struct Ast *ast)
     pawL_init_buffer(P, &buf);
     Printer print = {
         .buf = &buf,
-        .P = P, 
+        .P = P,
     };
     for (int i = 0; i < ast->items->count; ++i) {
         dump_decl(&print, ast->items->data[i]);

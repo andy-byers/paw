@@ -124,9 +124,9 @@ static void test_basic(paw_Env *P)
     enum {N = 100};
     void *ptrs[N];
 
-    for (int i = 0; i < N; ++i) check((ptrs[i] = pawZ_alloc(P, NULL, CAST_SIZE((i + 1) * N)))); 
-    for (int i = 0; i < N; ++i) check((ptrs[i] = pawZ_alloc(P, ptrs[i], CAST_SIZE((N - i) * N)))); 
-    for (int i = 0; i < N; ++i) check(NULL == pawZ_alloc(P, ptrs[i], 0)); 
+    for (int i = 0; i < N; ++i) check((ptrs[i] = pawZ_alloc(P, NULL, CAST_SIZE((i + 1) * N))));
+    for (int i = 0; i < N; ++i) check((ptrs[i] = pawZ_alloc(P, ptrs[i], CAST_SIZE((N - i) * N))));
+    for (int i = 0; i < N; ++i) check(NULL == pawZ_alloc(P, ptrs[i], 0));
 }
 
 static void test_small_allocations(paw_Env *P)

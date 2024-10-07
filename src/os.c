@@ -73,7 +73,7 @@ void pawO_close(File *file)
 
 int pawO_seek(File *file, paw_Int offset, int whence)
 {
-    return fseek(file->file, offset, whence);    
+    return fseek(file->file, offset, whence);
 }
 
 paw_Int pawO_tell(File *file)

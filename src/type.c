@@ -137,7 +137,7 @@ static void print_func_type(paw_Env *P, Buffer *buf, struct Signature *type)
     pawL_add_char(P, buf, ')');
     if (type->result > 0) {
         pawL_add_string(P, buf, " -> ");
-        pawY_print_type(P, buf, type->result); 
+        pawY_print_type(P, buf, type->result);
     }
 }
 
@@ -248,7 +248,7 @@ void pawY_mangle_add_arg(paw_Env *P, Buffer *buf, paw_Type code)
             }
             pawL_add_char(P, buf, 'E');
             const struct Type *result = Y_TYPE(P, func.result);
-            if (result->hdr.kind != TYPE_ADT || 
+            if (result->hdr.kind != TYPE_ADT ||
                     result->adt.code != PAW_TUNIT) {
                 pawY_mangle_add_arg(P, buf, func.result);
             }

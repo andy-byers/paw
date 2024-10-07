@@ -1,11 +1,5 @@
 // closure.paw
 
-fn fix_list() {
-    let list = [];
-    list.push(1);
-    list.pop();
-}
-
 pub fn test_expr_result() {
     let f = || 1;
     assert(f() == 1);

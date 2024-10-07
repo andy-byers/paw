@@ -89,10 +89,10 @@ typedef uint32_t OpCode;
 //
 // legend:
 //   G = global variable
-//   K = constants 
-//   L = local variables 
-//   Up = upvalues 
-//   P = function prototypes 
+//   K = constants
+//   L = local variables
+//   Up = upvalues
+//   P = function prototypes
 //
 // NOTE: Opcode order is only important starting from OP_CALL (opcodes that have
 //       corresponding metamethods).
@@ -138,13 +138,13 @@ OP_FORLIST,//        S           *-*-*-*-*-*-*-*   description   *-*-*-*-*-*-*
 OP_FORMAP0,//        S           *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
 OP_FORMAP,//         S           *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
 
-OP_CMPI,//           U           x y            z             -  
+OP_CMPI,//           U           x y            z             -
 OP_CMPF,//           U           x y            z             -
 OP_CMPS,//           U           x y            z             -
 OP_ARITHI1,//        U           x              y             -
-OP_ARITHF1,//        U           x              y             -   
+OP_ARITHF1,//        U           x              y             -
 OP_ARITHI2,//        U           x y            z             -
-OP_ARITHF2,//        U           x y            z             -   
+OP_ARITHF2,//        U           x y            z             -
 OP_BITW1,//          U           x              y             -
 OP_BITW2,//          U           x y            z             -
 
@@ -156,10 +156,10 @@ OP_SETELEM,//        U           v i x          v[i] = x      -
 OP_GETRANGE,//       U           v i j          v[i:j]        -
 OP_SETRANGE,//       U           v i j x        v[i:j] = x    -
 
-OP_CASTBOOL,//       U           v              v as bool     -  
-OP_CASTINT,//        U           v              v as int      - 
-OP_CASTFLOAT,//      U           v              v as float    - 
-         
+OP_CASTBOOL,//       U           v              v as bool     -
+OP_CASTINT,//        U           v              v as int      -
+OP_CASTFLOAT,//      U           v              v as float    -
+
 OP_CALL,//           U           f vu..v1       v             v = f(vu..v1)
 
 OP_GETFIELD,//       U           v              v.u           -
@@ -241,7 +241,7 @@ enum MapOp {
 //   the stack to that point.
 // * OP_FOR*0 prepare a for loop. The loop body is skipped if the condition is
 //   false. For OP_FORNUM0, the loop 'begin' is compared against the loop 'end' using
-//   the sign of the loop 'step'. For OP_FORLIST0 and OP_FORMAP0, the loop is skipped 
+//   the sign of the loop 'step'. For OP_FORLIST0 and OP_FORMAP0, the loop is skipped
 //   if the container is empty. Both instructions will push the loop control variable.
 // * OP_FOR* run a single for-loop step.
 
