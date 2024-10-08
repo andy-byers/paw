@@ -72,10 +72,26 @@ static void link_roots(InferenceVar *a, InferenceVar *b)
     }
 }
 
-static void unify_var_type(InferenceVar *ivar, struct HirType *type)
+static void check_occurs(struct Unifier *U, InferenceVar *ivar, struct HirType *type)
+{
+    if (ivar->type == type) {
+        paw_assert(HirIsUnknown(type));
+        ERROR(U, type->hdr.line, "encountered cyclic type");
+    }
+    if (!HirIsAdt(type)) return;
+    struct HirAdt *adt = HirGetAdt(type);
+    if (adt->types == NULL) return;
+    for (int i = 0; i < adt->types->count; ++i) {
+        struct HirType *subtype = K_LIST_GET(adt->types, i);
+        check_occurs(U, ivar, subtype);
+    }
+}
+
+static void unify_var_type(struct Unifier *U, InferenceVar *ivar, struct HirType *type)
 {
     debug_log("unify_var_type", ivar->type, type);
 
+    if (HirIsAdt(type)) check_occurs(U, ivar, type);
     overwrite_type(ivar, type);
 }
 
@@ -211,11 +227,11 @@ static int unify(struct Unifier *U, struct HirType *a, struct HirType *b)
             InferenceVar *vb = get_ivar(ut, b->unknown.index);
             unify_var_var(va, vb);
         } else {
-            unify_var_type(va, b);
+            unify_var_type(U, va, b);
         }
     } else if (HirIsUnknown(b)) {
         InferenceVar *vb = get_ivar(ut, b->unknown.index);
-        unify_var_type(vb, a);
+        unify_var_type(U, vb, a);
     } else {
         // Both types are known: make sure they are compatible. This is the
         // only time we can encounter an error.

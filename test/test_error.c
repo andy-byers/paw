@@ -329,6 +329,8 @@ static void test_enum_error(void)
 
 static void test_list_error(void)
 {
+    test_compiler_status(PAW_ETYPE, "list_cyclic_type", "", "let x = []; x = [x];");
+    test_compiler_status(PAW_ETYPE, "list_nested_cyclic_type", "", "let x = []; x = [[x]];");
     test_compiler_status(PAW_ETYPE, "list_cannot_infer", "", "let a = [];");
     test_compiler_status(PAW_ETYPE, "list_cannot_infer_binop", "", "let a = [] + [];");
     test_compiler_status(PAW_ETYPE, "list_use_before_inference", "", "let a = []; let b = #a;");
@@ -340,6 +342,8 @@ static void test_list_error(void)
 
 static void test_map_error(void)
 {
+    test_compiler_status(PAW_ETYPE, "map_cyclic_type", "", "let x = [:]; x = ['cyclic': x];");
+    test_compiler_status(PAW_ETYPE, "map_nested_cyclic_type", "", "let x = [:]; x = ['cyclic': ['nested': x]];");
     test_compiler_status(PAW_ETYPE, "map_cannot_infer", "", "let a = [:];");
     test_compiler_status(PAW_ETYPE, "map_use_before_inference", "", "let a = [:]; let b = #a;");
     test_compiler_status(PAW_ETYPE, "map_incompatible_types", "", "let a = [1: 2]; a = [3: 4.0];");
