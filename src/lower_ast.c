@@ -16,8 +16,6 @@
 #include "str.h"
 #include "unify.h"
 
-#define SYNTAX_ERROR(L, ...) pawE_error(ENV(L), PAW_ESYNTAX, (L)->line, __VA_ARGS__)
-#define TYPE_ERROR(L, ...) pawE_error(ENV(L), PAW_ETYPE, (L)->line, __VA_ARGS__)
 #define CSTR(L, i) CACHED_STRING(ENV(L), CAST_SIZE(i))
 
 struct LowerAst {

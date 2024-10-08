@@ -527,7 +527,8 @@ static struct AstDecl *func_param_decl(struct Lex *lex)
     struct AstDecl *result = NEW_DECL(lex, kAstFieldDecl);
     struct AstFieldDecl *r = AstGetFieldDecl(result);
     r->name = parse_name(lex);
-    if (!lex->in_impl || lex->param_index != 0) {
+    const int param_index = lex->param_index++;
+    if (!lex->in_impl || param_index != 0) {
         // usual case: expect a type annotation on each parameter
         r->tag = expect_annotation(lex, "parameter", r->name);
         return result;

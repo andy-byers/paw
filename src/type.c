@@ -184,10 +184,9 @@ static void add_string_with_len(paw_Env *P, Buffer *buf, const String *str)
     pawL_add_nstring(P, buf, str->text, str->length);
 }
 
-void pawY_mangle_start(paw_Env *P, Buffer *buf, const String *modname, const String *name)
+void pawY_mangle_start(paw_Env *P, Buffer *buf)
 {
     L_ADD_LITERAL(P, buf, "_P");
-    pawY_mangle_add_self(P, buf, modname, name);
 }
 
 void pawY_mangle_start_generic_args(paw_Env *P, Buffer *buf)
@@ -200,9 +199,14 @@ void pawY_mangle_finish_generic_args(paw_Env *P, Buffer *buf)
     pawL_add_char(P, buf, 'E');
 }
 
-void pawY_mangle_add_self(paw_Env *P, Buffer *buf, const String *modname, const String *name)
+void pawY_mangle_add_module(paw_Env *P, Buffer *buf, const String *name)
 {
-    if (modname != NULL) add_string_with_len(P, buf, modname);
+    pawL_add_char(P, buf, 'N');
+    add_string_with_len(P, buf, name);
+}
+
+void pawY_mangle_add_name(paw_Env *P, Buffer *buf, const String *name)
+{
     add_string_with_len(P, buf, name);
 }
 
@@ -262,9 +266,5 @@ void pawY_mangle_add_arg(paw_Env *P, Buffer *buf, paw_Type code)
             pawL_add_char(P, buf, 'E');
         }
     }
-}
-
-void pawY_mangle_finish(paw_Env *P, Buffer *buf)
-{
 }
 

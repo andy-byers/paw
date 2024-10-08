@@ -9,8 +9,6 @@
 #include "mem.h"
 #include "type.h"
 
-#define DLOG(X, ...) PAWD_LOG(ENV(X), __VA_ARGS__)
-
 #define LIST_MIN 8
 
 struct Hir *pawHir_new(struct Compiler *C, String *name, int modno)
@@ -1379,7 +1377,7 @@ static struct HirFuncDecl *do_expand_aux(struct HirFolder *F, struct HirFuncDecl
 static void enter_binder(struct Expander *E, struct HirDecl *inst)
 {
     if (E->C->nbinders >= MAX_EXPANSION_DEPTH) {
-        pawHir_print_type(E->hir, HIR_TYPEOF(inst));
+        pawHir_print_type(E->C, HIR_TYPEOF(inst));
         pawE_error(ENV(E), PAW_ETYPE, inst->hdr.line,
                 "too many nested instantiations for '%s'", paw_string(ENV(E), -1));
     }
@@ -1676,7 +1674,7 @@ struct HirTypeList *pawHir_collect_fields(struct Compiler *C, struct HirDeclList
 }
 
 struct Printer {
-    struct Hir *hir;
+    struct Compiler *C;
     Buffer *buf;
     paw_Env *P;
     int indent;
@@ -1746,7 +1744,7 @@ static void print_type(struct Printer *P, struct HirType *type)
         }
         default: {
             struct HirAdt *adt = HirGetAdt(type);
-            struct HirDecl *decl = pawHir_get_decl(P->hir->C, adt->did);
+            struct HirDecl *decl = pawHir_get_decl(P->C, adt->did);
             PRINT_STRING(P, decl->hdr.name);
             if (adt->types != NULL) {
                 PRINT_CHAR(P, '<');
@@ -1758,16 +1756,16 @@ static void print_type(struct Printer *P, struct HirType *type)
     }
 }
 
-void pawHir_print_type(struct Hir *hir, struct HirType *type)
+void pawHir_print_type(struct Compiler *C, struct HirType *type)
 {
     Buffer buf;
-    paw_Env *P = ENV(hir);
+    paw_Env *P = ENV(C);
     pawL_init_buffer(P, &buf);
 
     print_type(&(struct Printer){
-                .P = ENV(hir),
+                .P = ENV(C),
                 .buf = &buf,
-                .hir = hir,
+                .C = C,
             }, type);
 
     pawL_push_result(P, &buf);
@@ -2178,11 +2176,11 @@ static void dump_expr(struct Printer *P, struct HirExpr *e)
     DUMP_MSG(P, "}\n");
 }
 
-void pawHir_dump_path(struct Hir *hir, struct HirPath *path)
+void pawHir_dump_path(struct Compiler *C, struct HirPath *path)
 {
     dump_path(&(struct Printer){
-                .P = ENV(hir),
-                .hir = hir,
+                .P = ENV(C),
+                .C = C,
             }, path);
 }
 
@@ -2193,7 +2191,7 @@ void pawHir_dump(struct Hir *hir)
     pawL_init_buffer(P, &buf);
     struct Printer print = {
         .buf = &buf,
-        .hir = hir,
+        .C = hir->C,
         .P = P,
     };
     for (int i = 0; i < hir->items->count; ++i) {

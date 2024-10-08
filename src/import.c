@@ -9,12 +9,11 @@
 #include "lib.h"
 #include "map.h"
 
-#define DLOG(I, ...) PAWD_LOG(ENV(I->C), __VA_ARGS__)
-#define NAME_ERROR(I, ...) pawE_error(ENV(I->C), PAW_ENAME, -1/*TODO*/, __VA_ARGS__)
-
 struct Importer {
     struct Compiler *C;
     Map *imports;
+    paw_Env *P;
+    int line; // TODO: never set
 };
 
 static int next_modno(struct Importer *I)
@@ -71,6 +70,7 @@ void pawP_collect_imports(struct Compiler *C, struct Ast *ast)
 {
     struct Importer I = {
         .imports = C->imports,
+        .P = ENV(C),
         .C = C,
     };
 

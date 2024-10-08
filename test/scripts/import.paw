@@ -17,3 +17,26 @@ pub fn test_object() {
     let o = mod_a::Obj::<bool>::new(true);
     assert(o.get_t());
 }
+
+// TODO: should this be supported?
+//impl<Y> mod_a::Obj<Y> {
+//    pub fn f(y: Y) -> Y {
+//        return y;
+//    }
+//    
+//    pub fn g(self, y: Y) -> Y {
+//        self.t = y;
+//        return self.t;
+//    }
+//}
+//
+//pub fn test_external_impl() {
+//    let s = mod_a::Obj::<str>::f('abc');
+//    assert(s == 'abc');
+//
+//    let o = mod_a::Obj::<int>::new(123);
+//    assert(o.get_t() == 123 &&
+//        o.g(321) == 321 && 
+//        o.get_t() == 321);
+//}
+//

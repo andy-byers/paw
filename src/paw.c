@@ -187,8 +187,9 @@ static paw_Env *load_source(size_t heap_size)
 
 static ValueId find_main(paw_Env *P)
 {
+    paw_mangle_start(P);
     paw_push_string(P, "main");
-    paw_mangle_name(P, NULL, PAW_FALSE);
+    paw_mangle_add_name(P);
 
     struct paw_Item item;
     const int status = paw_lookup_item(P, &item);

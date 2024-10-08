@@ -21,7 +21,6 @@
 #include "lib.h"
 #include "type.h"
 
-#define DLOG(G, ...) PAWD_LOG(ENV(G), __VA_ARGS__)
 #define ERROR(G, code, ...) pawE_error(ENV(G), code, (G)->fs->line, __VA_ARGS__)
 #define PRELUDE(G) ((G)->C->dm->modules->data[0])
 #define GET_DECL(G, id) pawHir_get_decl((G)->C, id)
@@ -96,16 +95,15 @@ static void mangle_types(struct Generator *G, Buffer *buf, struct HirTypeList *t
     pawY_mangle_finish_generic_args(ENV(G), buf);
 }
 
-static void mangle_start(paw_Env *P, Buffer *buf, struct Generator *G, const String *modname, const String *name)
+static void mangle_start(paw_Env *P, Buffer *buf, struct Generator *G)
 {
     ENSURE_STACK(P, 1);
     pawL_init_buffer(P, buf);
-    pawY_mangle_start(P, buf, modname, name);
+    pawY_mangle_start(P, buf);
 }
 
 static String *mangle_finish(paw_Env *P, Buffer *buf, struct Generator *G)
 {
-    pawY_mangle_finish(P, buf);
     pawL_push_result(P, buf);
 
     // anchor in compiler string table
@@ -119,7 +117,9 @@ static String *mangle_name(struct Generator *G, const String *modname, const Str
 {
     Buffer buf;
     paw_Env *P = ENV(G);
-    mangle_start(P, &buf, G, modname, name);
+    mangle_start(P, &buf, G);
+    if (modname != NULL) pawY_mangle_add_module(P, &buf, modname);
+    pawY_mangle_add_name(P, &buf, name);
     mangle_types(G, &buf, types);
     return mangle_finish(P, &buf, G);
 }
@@ -128,10 +128,12 @@ static String *mangle_attr(struct Generator *G, const String *modname, const Str
 {
     Buffer buf;
     paw_Env *P = ENV(G);
-    mangle_start(P, &buf, G, modname, attr);
-    mangle_types(G, &buf, attr_types);
-    pawY_mangle_add_self(P, &buf, modname, base);
+    mangle_start(P, &buf, G);
+    if (modname != NULL) pawY_mangle_add_module(P, &buf, modname);
+    pawY_mangle_add_name(P, &buf, base);
     mangle_types(G, &buf, base_types);
+    pawY_mangle_add_name(P, &buf, attr);
+    mangle_types(G, &buf, attr_types);
     return mangle_finish(P, &buf, G);
 }
 
@@ -572,7 +574,6 @@ static void add_upvalue(struct FuncState *fs, struct VarInfo *info, paw_Bool is_
 
 static paw_Bool resolve_upvalue(struct FuncState *fs, const String *name, struct VarInfo *pinfo)
 {
-    struct DynamicMem *dm = fs->G->C->dm;
     struct FuncState *caller = fs->outer;
     if (caller == NULL) return PAW_FALSE;
     if (resolve_local(caller, name, pinfo)) {
@@ -656,7 +657,7 @@ static struct ModuleInfo *get_mod(struct Generator *G, int modno)
 static const String *get_mod_prefix(struct Generator *G, struct ModuleInfo *m)
 {
     struct Hir *hir = m->hir;
-    const String *modname =  hir->name;
+    const String *modname = hir->name;
     // omit module prefix for target and prelude modules
     if (hir->modno == 0) modname = NULL;
     if (pawS_eq(modname, G->C->modname)) modname = NULL;
@@ -691,38 +692,20 @@ static struct VarInfo resolve_path(struct Generator *G, struct HirPath *path)
     if (should_mangle(G, seg->did)) {
         struct HirDecl *decl = GET_DECL(G, seg->did);
         struct HirType *type = HIR_TYPEOF(decl);
-        if (HirIsAdt(type)) {
-            struct HirAdt *t = HirGetAdt(type);
-            struct ModuleInfo *m = get_mod(G, t->modno);
-            const String *modname = get_mod_prefix(G, m);
-            name = mangle_name(G, modname, name, seg->types);
+        struct HirFuncDef *t = HirGetFuncDef(type);
+        struct ModuleInfo *m = get_mod(G, t->modno);
+        const String *modname = get_mod_prefix(G, m);
+        struct HirFuncDecl *func = HirGetFuncDecl(decl);
+        if (func->self != NULL) {
+            struct HirAdt *adt = HirGetAdt(func->self);
+            struct HirDecl *self = GET_DECL(G, adt->did);
+            const String *selfname = HirGetAdtDecl(self)->name;
+            name = mangle_attr(G, modname, selfname, adt->types, name, seg->types);
         } else {
-            struct HirFuncDef *t = HirGetFuncDef(type);
-            struct ModuleInfo *m = get_mod(G, t->modno);
-            const String *modname = get_mod_prefix(G, m);
-            if (HirIsVariantDecl(decl)) {
-
-            }
-            struct HirFuncDecl *func = HirGetFuncDecl(decl);
-            if (func->self != NULL) {
-                struct HirAdt *adt = HirGetAdt(func->self);
-                struct HirDecl *self = GET_DECL(G, adt->did);
-                const String *selfname = HirGetAdtDecl(self)->name;
-                name =  mangle_attr(G, modname, selfname, adt->types, name, seg->types);
-            } else {
-                name = mangle_name(G, modname, name, seg->types);
-            }
+            name = mangle_name(G, modname, name, seg->types);
         }
     }
     return find_var(G, name);
-//    struct HirSegment *mod = pawHir_path_get(path, 0);
-//    struct HirSegment *base = pawHir_path_get(path, 1);
-//    const String *modname = pawS_eq(G->C->modname, mod->name)
-//        ? NULL : mod->name;
-//    const String *name = should_mangle(G, base->did)
-//        ? mangle_name(G, modname, base->name, base->types)
-//        : base->name;
-//    return find_var(G, name);
 }
 
 static void code_setter(struct HirVisitor *V, struct HirExpr *lhs, struct HirExpr *rhs)
@@ -1100,11 +1083,27 @@ static void set_entrypoint(struct Generator *G, Proto *proto, int g)
     closure->p = proto;
 }
 
+static void set_cfunc(struct Generator *G, struct HirFuncDecl *d, int g)
+{
+    paw_Env *P = ENV(G);
+    Value *pval = Y_PVAL(P, g);
+
+    const String *modname = get_mod_prefix(G, G->m);
+    const String *mangled = func_name(G, modname, d->type);
+    const Value *pv = pawH_get(G->builtin, P2V(mangled));
+    if (pv == NULL) ERROR(G, PAW_ENAME, "C function '%s' not loaded", d->name->text);
+    *pval = *pv;
+}
+
 static void code_func(struct HirVisitor *V, struct HirFuncDecl *d, struct VarInfo info)
 {
+    struct Generator *G = V->ud;
+    if (info.kind == VAR_CFUNC) {
+        set_cfunc(G, d, info.index);
+        return;
+    }
     struct FuncState fs;
     struct BlockState bs;
-    struct Generator *G = V->ud;
     struct HirFuncDef *func = &d->type->fdef;
     Proto *proto = push_proto(G, d->name);
     proto->argc = func->params->count;
@@ -1114,12 +1113,8 @@ static void code_func(struct HirVisitor *V, struct HirFuncDecl *d, struct VarInf
     if (d->body != NULL) V->VisitBlock(V, d->body);
     leave_function(G);
 
-    if (info.kind == VAR_GLOBAL) {
-        set_entrypoint(G, fs.proto, info.index);
-    } else {
-        const int pid = add_proto(G, fs.proto);
-        code_closure(G, pid);
-    }
+    paw_assert(info.kind == VAR_GLOBAL);
+    set_entrypoint(G, fs.proto, info.index);
     pop_proto(G);
 }
 
@@ -1510,18 +1505,6 @@ static void register_items(struct Generator *G, struct ModuleList *modules)
     }
 }
 
-static void set_cfunc(struct Generator *G, struct HirFuncDecl *d, int g)
-{
-    paw_Env *P = ENV(G);
-    Value *pval = Y_PVAL(P, g);
-
-    const String *modname = get_mod_prefix(G, G->m);
-    const String *mangled = func_name(G, modname, d->type);
-    const Value *pv = pawH_get(G->builtin, P2V(mangled));
-    if (pv == NULL) ERROR(G, PAW_ENAME, "C function '%s' not loaded", d->name->text);
-    *pval = *pv;
-}
-
 static void code_items(struct HirVisitor *V, struct ItemList *items)
 {
     struct FuncState fs;
@@ -1535,11 +1518,7 @@ static void code_items(struct HirVisitor *V, struct ItemList *items)
         struct HirFuncDecl *d = HirGetFuncDecl(item->decl);
         fs.line = d->line;
         G->m = item->m;
-        if (item->info.kind == VAR_CFUNC) {
-            set_cfunc(G, d, item->info.index);
-        } else {
-            code_func(V, d, item->info);
-        }
+        code_func(V, d, item->info);
     }
     leave_function(G);
 }

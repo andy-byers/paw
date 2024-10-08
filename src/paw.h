@@ -100,7 +100,7 @@ const char *paw_push_nstring(paw_Env *P, const char *s, size_t n);
 const char *paw_push_fstring(paw_Env *P, const char *fmt, ...);
 const char *paw_push_vfstring(paw_Env *P, const char *fmt, va_list arg);
 
-#define PAW_PUSH_LITERAL(P, s) paw_push_nstring(P, "" s, sizeof(s))
+#define PAW_PUSH_LITERAL(P, s) paw_push_nstring(P, "" s, sizeof(s) - 1)
 
 
 //
@@ -216,8 +216,10 @@ static inline paw_Int paw_map_rawlen(paw_Env *P, int index)
 }
 
 
-int paw_mangle_name(paw_Env *P, paw_Type *types, paw_Bool has_modname);
-int paw_mangle_self(paw_Env *P, paw_Type *types, paw_Bool has_modname);
+void paw_mangle_start(paw_Env *P);
+void paw_mangle_add_module(paw_Env *P);
+void paw_mangle_add_name(paw_Env *P);
+void paw_mangle_add_args(paw_Env *P, paw_Type *types);
 
 struct paw_Item {
     int global_id;

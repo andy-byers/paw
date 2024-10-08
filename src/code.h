@@ -56,15 +56,10 @@ void pawK_pool_free(struct Pool *pool, void *ptr, size_t size);
     static inline void func##push(ctx *X, struct L *list, T *node) \
     { \
         if (list->count == list->alloc) { \
-            if (list->alloc > K_LIST_MAX / 2) { \
-                pawM_error(X->P); \
-            } \
-            const size_t elemsz = sizeof(list->data[0]); \
+            if (list->alloc > K_LIST_MAX / 2) pawM_error(X->P); \
             const size_t nextcap = CAST_SIZE(list->alloc) * 2; \
-            const size_t bufsz = nextcap * elemsz; \
-            void *next = pawK_pool_alloc(X->P, X->pool, bufsz); \
-            const size_t usedsz = CAST_SIZE(list->count) * elemsz; \
-            memcpy(next, list->data, usedsz); \
+            void *next = pawK_pool_alloc(X->P, X->pool, nextcap * sizeof(list->data[0])); \
+            memcpy(next, list->data, CAST_SIZE(list->count) * sizeof(list->data[0])); \
             list->alloc = CAST(int, nextcap); \
             list->data = next; \
         } \

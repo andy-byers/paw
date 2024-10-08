@@ -36,19 +36,21 @@ static InferenceVar *get_ivar(UnificationTable *table, int index)
     return table->ivars->data[index];
 }
 
-static void debug_log(const char *what, struct HirType *a, struct HirType *b)
+static void debug_log(struct Unifier *U, const char *what, struct HirType *a, struct HirType *b)
 {
-#ifdef PAW_DEBUG_UNIFY
-    paw_assert(a && b);
-    printf("%s: ", what);
-    pawHir_repr_type(stdout, a);
-    fprintf(stdout, " = ");
-    pawHir_repr_type(stdout, b);
-    fprintf(stdout, "\n");
+    paw_assert(a != NULL);
+    paw_assert(b != NULL);
+
+#if defined(PAW_DEBUG_LOG)
+    paw_Env *P = ENV(U->C);
+    pawHir_print_type(U->C, a);
+    pawHir_print_type(U->C, b);
+    DLOG(U->C, "(unify) %s: %s = %s",
+            what, paw_string(P, -2), paw_string(P, -1));
+    paw_pop(P, 2);
 #else
+    PAW_UNUSED(U);
     PAW_UNUSED(what);
-    PAW_UNUSED(a);
-    PAW_UNUSED(b);
 #endif
 }
 
@@ -89,18 +91,18 @@ static void check_occurs(struct Unifier *U, InferenceVar *ivar, struct HirType *
 
 static void unify_var_type(struct Unifier *U, InferenceVar *ivar, struct HirType *type)
 {
-    debug_log("unify_var_type", ivar->type, type);
+    debug_log(U, "unify_var_type", ivar->type, type);
 
-    if (HirIsAdt(type)) check_occurs(U, ivar, type);
+    check_occurs(U, ivar, type);
     overwrite_type(ivar, type);
 }
 
-static void unify_var_var(InferenceVar *a, InferenceVar *b)
+static void unify_var_var(struct Unifier *U, InferenceVar *a, InferenceVar *b)
 {
     a = find_root(a);
     b = find_root(b);
 
-    debug_log("unify_var_var", a->type, b->type);
+    debug_log(U, "unify_var_var", a->type, b->type);
 
     if (a != b) {
         link_roots(a, b);
@@ -194,7 +196,7 @@ static int unify_generic(struct Unifier *U, struct HirGeneric *a, struct HirGene
 
 static int unify_types(struct Unifier *U, struct HirType *a, struct HirType *b)
 {
-    debug_log("unify_types", a, b);
+    debug_log(U, "unify_types", a, b);
 
     if (HirIsFuncType(a) && HirIsFuncType(b)) {
         // function pointer and definition types are compatible
@@ -222,15 +224,15 @@ static int unify(struct Unifier *U, struct HirType *a, struct HirType *b)
     a = pawU_normalize(ut, a);
     b = pawU_normalize(ut, b);
     if (HirIsUnknown(a)) {
-        InferenceVar *va = get_ivar(ut, a->unknown.index);
+        InferenceVar *va = get_ivar(ut, HirGetUnknown(a)->index);
         if (HirIsUnknown(b)) {
-            InferenceVar *vb = get_ivar(ut, b->unknown.index);
-            unify_var_var(va, vb);
+            InferenceVar *vb = get_ivar(ut, HirGetUnknown(b)->index);
+            unify_var_var(U, va, vb);
         } else {
             unify_var_type(U, va, b);
         }
     } else if (HirIsUnknown(b)) {
-        InferenceVar *vb = get_ivar(ut, b->unknown.index);
+        InferenceVar *vb = get_ivar(ut, HirGetUnknown(b)->index);
         unify_var_type(U, vb, a);
     } else {
         // Both types are known: make sure they are compatible. This is the
@@ -248,9 +250,8 @@ void pawU_unify(struct Unifier *U, struct HirType *a, struct HirType *b)
     const int rc = RUN_ACTION(U, a, b, unify);
     if (rc == 0) return;
 
-    struct Hir *prelude = K_LIST_GET(U->C->dm->modules, 0)->hir;
-    pawHir_print_type(prelude, a);
-    pawHir_print_type(prelude, b);
+    pawHir_print_type(U->C, a);
+    pawHir_print_type(U->C, b);
     ERROR(U, a->hdr.line,
             "incompatible types '%s' and '%s'",
             paw_string(ENV(U->C), -2),
@@ -273,7 +274,7 @@ paw_Bool pawU_equals(struct Unifier *U, struct HirType *a, struct HirType *b)
 
 // TODO: consider accepting the line number, or the type (containing the line number)
 //       this unknown is being used to infer
-struct HirType *pawU_new_unknown(struct Unifier *U)
+struct HirType *pawU_new_unknown(struct Unifier *U, int line)
 {
     paw_Env *P = ENV(U->C);
     UnificationTable *table = U->table;

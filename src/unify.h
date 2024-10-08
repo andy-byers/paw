@@ -25,7 +25,7 @@ paw_Bool pawU_equals(struct Unifier *U, struct HirType *a, struct HirType *b);
 void pawU_unify(struct Unifier *U, struct HirType *a, struct HirType *b);
 
 // Create a new type variable
-struct HirType *pawU_new_unknown(struct Unifier *U);
+struct HirType *pawU_new_unknown(struct Unifier *U, int line);
 
 // Inference context handling
 void pawU_enter_binder(struct Unifier *U);

@@ -741,9 +741,9 @@ struct HirType *pawHir_attach_type(struct Compiler *C, DeclId did, enum HirTypeK
 struct HirTypeList *pawHir_collect_generics(struct Compiler *C, struct HirDeclList *generics);
 struct HirTypeList *pawHir_collect_fields(struct Compiler *C, struct HirDeclList *fields);
 
-void pawHir_print_type(struct Hir *hir, struct HirType *type);
+void pawHir_print_type(struct Compiler *C, struct HirType *type);
 
 void pawHir_dump(struct Hir *hir);
-void pawHir_dump_path(struct Hir *hir, struct HirPath *path);
+void pawHir_dump_path(struct Compiler *C, struct HirPath *path);
 
 #endif // PAW_HIR_H

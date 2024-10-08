@@ -26,8 +26,9 @@ int main(void)
     int status = test_open_string(P, source);
     handle_error(P, status, PAW_TRUE);
 
+    paw_mangle_start(P);
     paw_push_string(P, "f");
-    paw_mangle_name(P, NULL, PAW_FALSE);
+    paw_mangle_add_name(P);
 
     struct paw_Item item;
     status = paw_lookup_item(P, &item);

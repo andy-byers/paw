@@ -34,6 +34,12 @@ pub fn test_initialization() {
     assert(3 == #list);
 }
 
+pub fn test_list_of_unit() {
+    let list = [];
+    list.push(());
+    let unit = list[-1];
+}
+
 pub fn test_infer_initializer() {
     let list = [1];
     assert(1 == #list);

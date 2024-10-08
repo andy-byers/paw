@@ -8,12 +8,11 @@
 
 #include "hir.h"
 
-#define TYPE_ERROR(I, ...) pawE_error(ENV(I->C), PAW_ETYPE, (I)->line, __VA_ARGS__)
-
 struct InstanceState {
     struct Compiler *C;
     struct Unifier *U;
     struct Hir *hir;
+    paw_Env *P;
     int line;
 };
 
@@ -55,7 +54,7 @@ static struct HirTypeList *new_unknowns(struct InstanceState *I, int count)
 {
     struct HirTypeList *list = pawHir_type_list_new(I->C);
     for (int i = 0; i < count; ++i) {
-        struct HirType *unknown = pawU_new_unknown(I->U);
+        struct HirType *unknown = pawU_new_unknown(I->U, I->line);
         pawHir_type_list_push(I->C, list, unknown);
     }
     return list;
@@ -411,6 +410,7 @@ static struct HirDecl *instantiate_partial(struct Hir *hir, struct HirDecl *base
 {
     struct InstanceState I = {
         .U = &hir->C->dm->unifier,
+        .P = ENV(hir->C),
         .C = hir->C,
         .hir = hir,
     };
@@ -443,6 +443,7 @@ struct Generalization pawP_generalize(struct Hir *hir, struct HirDeclList *gener
 {
     struct InstanceState I = {
         .U = &hir->C->dm->unifier,
+        .P = ENV(hir->C),
         .C = hir->C,
         .hir = hir,
     };

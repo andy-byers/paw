@@ -54,8 +54,9 @@ static void test_runtime_status(int expect, const char *name, const char *item, 
     int status = pawL_load_chunk(P, name, buffer);
     check_status(P, status, PAW_OK);
 
+    paw_mangle_start(P);
     paw_push_string(P, "main");
-    paw_mangle_name(P, NULL, PAW_FALSE);
+    paw_mangle_add_name(P);
 
     struct paw_Item info;
     status = paw_lookup_item(P, &info);
@@ -196,6 +197,7 @@ static void test_type_error(void)
     test_compiler_status(PAW_ETYPE, "call_unit_variant", "enum E {X}", "let x = E::X();");
     test_compiler_status(PAW_ETYPE, "wrong_constructor_args", "enum E {X(int)}", "let x = E::X(1.0);");
     test_compiler_status(PAW_ETYPE, "selector_on_function", "fn func() {}", "let a = func.field;");
+    test_compiler_status(PAW_ETYPE, "selector_on_module", "use io;", "let s = io.abc;");
 }
 
 static void test_syntax_error(void)
@@ -263,6 +265,9 @@ static void test_syntax_error(void)
     test_compiler_status(PAW_ETYPE, "own_name_is_not_a_type", "", "let a: a = 1;");
 
     test_compiler_status(PAW_ENAME, "duplicate_global", "struct A; struct A;", "");
+    test_compiler_status(PAW_ESYNTAX, "return_outside_function", "return;", "");
+    test_compiler_status(PAW_ESYNTAX, "break_outside_loop", "", "break;");
+    test_compiler_status(PAW_ESYNTAX, "continue_outside_loop", "", "continue;");
 }
 
 static void test_closure_error(void)
@@ -365,8 +370,9 @@ static void test_import_error(void)
 
 static int run_main(paw_Env *P, int nargs)
 {
+    paw_mangle_start(P);
     paw_push_string(P, "main");
-    paw_mangle_name(P, NULL, PAW_FALSE);
+    paw_mangle_add_name(P);
 
     struct paw_Item info;
     const int status = paw_lookup_item(P, &info);

@@ -42,3 +42,14 @@ pub fn test_io() {
     assert(file.tell() == n);
     assert(file_size(file) == n);
 }
+
+pub fn test_math() {
+    math::sin(1.0);
+    math::cos(1.0);
+    math::tan(1.0);
+    math::asin(1.0);
+    math::acos(1.0);
+    math::atan(1.0);
+    math::atan2(1.0, 1.0);
+}
+

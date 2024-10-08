@@ -18,13 +18,18 @@
 #define PAW_COMPILE_H
 
 #include "code.h"
+#include "debug.h"
 #include "env.h"
 #include "mem.h"
 #include "paw.h"
 #include "unify.h"
 
 #define ENV(x) ((x)->P)
-#define SCAN_STRING(x, s) pawP_scan_string(ENV(x), (x)->strings, s)
+#define DLOG(X, ...) PAWD_LOG(ENV(X), __VA_ARGS__)
+#define SCAN_STRING(X, s) pawP_scan_string(ENV(X), (X)->strings, s)
+#define NAME_ERROR(X, ...) pawE_error(ENV(X), PAW_ENAME, (X)->line, __VA_ARGS__)
+#define SYNTAX_ERROR(X, ...) pawE_error(ENV(X), PAW_ESYNTAX, (X)->line, __VA_ARGS__)
+#define TYPE_ERROR(X, ...) pawE_error(ENV(X), PAW_ETYPE, (X)->line, __VA_ARGS__)
 
 struct Hir;
 struct HirPath;

@@ -18,10 +18,6 @@
 #include "str.h"
 #include "unify.h"
 
-#define DLOG(R, ...) PAWD_LOG(ENV(R), __VA_ARGS__)
-#define NAME_ERROR(R, ...) pawE_error(ENV(R), PAW_ENAME, (R)->line, __VA_ARGS__)
-#define SYNTAX_ERROR(R, ...) pawE_error(ENV(R), PAW_ESYNTAX, (R)->line, __VA_ARGS__)
-#define TYPE_ERROR(R, ...) pawE_error(ENV(R), PAW_ETYPE, (R)->line, __VA_ARGS__)
 #define CSTR(R, i) CACHED_STRING(ENV(R), CAST_SIZE(i))
 #define TYPE2CODE(R, type) (pawP_type2code((R)->C, type))
 #define IS_BUILTIN_DECL(R, decl) ((decl)->hdr.did <= (R)->C->builtins[NBUILTINS - 1].did)
@@ -35,7 +31,7 @@ struct ResultState {
 
 _Noreturn static void not_a_type(struct Resolver *R, struct HirType *type)
 {
-    pawHir_print_type(R->m->hir, type);
+    pawHir_print_type(R->C, type);
     TYPE_ERROR(R, "'%s' is not a type", paw_string(ENV(R), -1));
 }
 
@@ -547,6 +543,7 @@ not_operand:
 static void resolve_path_expr(struct Resolver *R, struct HirPathExpr *e)
 {
     struct HirDecl *decl = resolve_location(R, e->path);
+    if (HirIsUseDecl(decl)) TYPE_ERROR(R, "not an operand");
     e->type = HIR_TYPEOF(decl);
 
     maybe_fix_unit_struct(R, decl, HIR_CAST_EXPR(e));
@@ -692,11 +689,16 @@ static struct HirType *new_map_t(struct Resolver *R, struct HirType *key_t, stru
     return HIR_TYPEOF(inst);
 }
 
+static struct HirType *new_unknown(struct Resolver *R)
+{
+    return pawU_new_unknown(R->U, R->line);
+}
+
 static struct HirTypeList *new_unknowns(struct Resolver *R, int count)
 {
     struct HirTypeList *list = pawHir_type_list_new(R->C);
     for (int i = 0; i < count; ++i) {
-        struct HirType *unknown = pawU_new_unknown(R->U);
+        struct HirType *unknown = new_unknown(R);
         pawHir_type_list_push(R->C, list, unknown);
     }
     return list;
@@ -715,7 +717,7 @@ static struct HirType *resolve_closure_param(struct Resolver *R, struct HirField
     add_decl(R, decl);
     d->type = d->tag != NULL
         ? resolve_type(R, d->tag)
-        : pawU_new_unknown(R->U);
+        : new_unknown(R);
     new_local(R, d->name, decl);
     return d->type;
 }
@@ -732,7 +734,7 @@ static void resolve_closure_expr(struct Resolver *R, struct HirClosureExpr *e)
         resolve_closure_param(R, d);
     }
     struct HirType *ret = e->result == NULL
-        ? pawU_new_unknown(R->U)
+        ? new_unknown(R)
         : resolve_type(R, e->result);
 
     struct HirType *type = new_type(R, NO_DECL, kHirFuncPtr, e->line);
@@ -967,8 +969,7 @@ static struct HirType *resolve_tuple_lit(struct Resolver *R, struct HirTupleLit 
 
 static struct HirType *resolve_list_lit(struct Resolver *R, struct HirContainerLit *e)
 {
-    struct Unifier *U = R->U;
-    struct HirType *elem_t = pawU_new_unknown(U);
+    struct HirType *elem_t = new_unknown(R);
     for (int i = 0; i < e->items->count; ++i) {
         struct HirExpr *expr = e->items->data[i];
         struct HirType *type = resolve_expr(R, expr);
@@ -980,9 +981,8 @@ static struct HirType *resolve_list_lit(struct Resolver *R, struct HirContainerL
 
 static struct HirType *resolve_map_lit(struct Resolver *R, struct HirContainerLit *e)
 {
-    struct Unifier *U = R->U;
-    struct HirType *key_t = pawU_new_unknown(U);
-    struct HirType *value_t = pawU_new_unknown(U);
+    struct HirType *key_t = new_unknown(R);
+    struct HirType *value_t = new_unknown(R);
     for (int i = 0; i < e->items->count; ++i) {
         struct HirExpr *expr = e->items->data[i];
         struct HirFieldExpr *field = HirGetFieldExpr(expr);

@@ -6,14 +6,13 @@
 
 #include "hir.h"
 
-// TODO: line info, but also need module name...
-#define NAME_ERROR(Q, ...) pawE_error(ENV(Q->C), PAW_ENAME, -1, __VA_ARGS__)
-
 struct QueryState {
     struct Compiler *C;
     struct ModuleInfo *m;
+    paw_Env *P;
     int target;
     int index;
+    int line; // TODO: never set
 };
 
 static struct ModuleInfo *get_module(struct QueryState *Q, int modno)
@@ -126,6 +125,7 @@ static struct HirDecl *locate_next_decl(struct QueryState *Q, struct HirDecl *pr
 struct HirDecl *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct HirPath *path)
 {
     struct QueryState Q = {
+        .P = ENV(C),
         .C = C,
     };
 

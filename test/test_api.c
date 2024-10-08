@@ -104,8 +104,10 @@ static paw_Int call_fib(paw_Env *P, int n)
 
 static void test_print_type(paw_Env *P, const char *name, paw_Type *types)
 {
+    paw_mangle_start(P);
     paw_push_string(P, name);
-    paw_mangle_name(P, types, PAW_FALSE);
+    paw_mangle_add_name(P);
+    paw_mangle_add_args(P, types);
 
     struct paw_Item info;
     int status = paw_lookup_item(P, &info);
@@ -122,8 +124,9 @@ int main(void)
 {
     paw_Env *P = start_test();
 
+    paw_mangle_start(P);
     paw_push_string(P, "main");
-    paw_mangle_name(P, NULL, PAW_FALSE);
+    paw_mangle_add_name(P);
 
     struct paw_Item info;
     int status = paw_lookup_item(P, &info);

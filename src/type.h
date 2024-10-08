@@ -128,12 +128,12 @@ struct Def *pawY_new_field_def(paw_Env *P);
 struct Def *pawY_new_var_def(paw_Env *P);
 void pawY_uninit(paw_Env *P);
 
-void pawY_mangle_start(paw_Env *P, Buffer *buffer, const String *modname, const String *name);
+void pawY_mangle_start(paw_Env *P, Buffer *buf);
+void pawY_mangle_add_module(paw_Env *P, Buffer *buf, const String *name);
+void pawY_mangle_add_name(paw_Env *P, Buffer *buf, const String *name);
 void pawY_mangle_start_generic_args(paw_Env *P, Buffer *buf);
 void pawY_mangle_finish_generic_args(paw_Env *P, Buffer *buf);
-void pawY_mangle_add_arg(paw_Env *P, Buffer *buffer, paw_Type code);
-void pawY_mangle_add_self(paw_Env *P, Buffer *buffer, const String *modname, const String *name);
-void pawY_mangle_finish(paw_Env *P, Buffer *buffer);
+void pawY_mangle_add_arg(paw_Env *P, Buffer *buf, paw_Type code);
 
 // Append a human-readable representation of the type with the given 'code' to the
 // end of the 'buffer'

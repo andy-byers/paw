@@ -401,8 +401,9 @@ void pawL_new_func(paw_Env *P, paw_Function func, int nup)
 static void add_prelude_func(paw_Env *P, const char *name, paw_Function func)
 {
     paw_push_value(P, -1);
+    paw_mangle_start(P);
     paw_push_string(P, name);
-    paw_mangle_name(P, NULL, PAW_FALSE);
+    paw_mangle_add_name(P);
     pawL_new_func(P, func, 0);
 
     pawR_setelem(P, PAW_ADT_MAP);
@@ -412,10 +413,11 @@ static void add_prelude_func(paw_Env *P, const char *name, paw_Function func)
 static void add_prelude_method(paw_Env *P, const char *self, const char *name, paw_Function func)
 {
     paw_push_value(P, -1);
-    paw_push_string(P, name);
-    paw_mangle_name(P, NULL, PAW_FALSE);
+    paw_mangle_start(P);
     paw_push_string(P, self);
-    paw_mangle_self(P, NULL, PAW_FALSE);
+    paw_mangle_add_name(P);
+    paw_push_string(P, name);
+    paw_mangle_add_name(P);
     pawL_new_func(P, func, 0);
 
     pawR_setelem(P, PAW_ADT_MAP);
@@ -562,10 +564,11 @@ static void push_prelude_method(paw_Env *P, const char *self, const char *name)
     pawE_push_cstr(P, CSTR_KBUILTIN);
     paw_map_getelem(P, PAW_REGISTRY_INDEX);
 
-    paw_push_string(P, name);
-    paw_mangle_name(P, NULL, PAW_FALSE);
+    paw_mangle_start(P);
     paw_push_string(P, self);
-    paw_mangle_self(P, NULL, PAW_FALSE);
+    paw_mangle_add_name(P);
+    paw_push_string(P, name);
+    paw_mangle_add_name(P);
 
     paw_map_getelem(P, -2);
     paw_shift(P, 1);
@@ -667,8 +670,9 @@ int pawL_register_func(paw_Env *P, const char *name, paw_Function func, int nup)
 {
     // map[mangle(name)] = func
     pawL_push_builtin_map(P);
+    paw_mangle_start(P);
     paw_push_string(P, name);
-    paw_mangle_name(P, NULL, PAW_FALSE);
+    paw_mangle_add_name(P);
     paw_new_native(P, func, nup);
     paw_map_setelem(P, -3);
     return 0;
@@ -688,9 +692,11 @@ void *pawL_chunk_reader(paw_Env *P, const char *text, size_t length)
 void pawL_add_extern_func(paw_Env *P, const char *modname, const char *name, paw_Function func)
 {
     paw_push_value(P, -1);
+    paw_mangle_start(P);
     paw_push_string(P, modname);
+    paw_mangle_add_module(P);
     paw_push_string(P, name);
-    paw_mangle_name(P, NULL, PAW_TRUE);
+    paw_mangle_add_name(P);
     pawL_new_func(P, func, 0);
 
     pawR_setelem(P, PAW_ADT_MAP);
@@ -700,12 +706,13 @@ void pawL_add_extern_func(paw_Env *P, const char *modname, const char *name, paw
 void pawL_add_extern_method(paw_Env *P, const char *modname, const char *self, const char *name, paw_Function func)
 {
     paw_push_value(P, -1);
+    paw_mangle_start(P);
     paw_push_string(P, modname);
-    paw_push_string(P, name);
-    paw_mangle_name(P, NULL, PAW_TRUE);
-    paw_push_string(P, modname);
+    paw_mangle_add_module(P);
     paw_push_string(P, self);
-    paw_mangle_self(P, NULL, PAW_TRUE);
+    paw_mangle_add_name(P);
+    paw_push_string(P, name);
+    paw_mangle_add_name(P);
     pawL_new_func(P, func, 0);
 
     pawR_setelem(P, PAW_ADT_MAP);
