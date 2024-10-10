@@ -222,6 +222,7 @@ fn chain_option2_aux<T>(v: T) -> Option<T> {
     assert(false);
     return Option::<T>::Some(t);
 }
+
 pub fn test_chain_option2() {
     chain_option2_aux(123);
     chain_option2_aux('abc');

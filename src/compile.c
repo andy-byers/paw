@@ -356,7 +356,7 @@ static paw_Bool handle_monos(struct HirVisitor *V, struct HirDeclList *monos)
 {
     if (monos == NULL) return PAW_FALSE;
     for (int i = 0; i < monos->count; ++i) {
-        V->VisitDecl(V, monos->data[i]);
+        pawHir_visit_decl(V, monos->data[i]);
     }
     return PAW_TRUE;
 }
@@ -419,11 +419,11 @@ static void register_fdef_types(struct DefGenerator *dg, struct HirFuncDef *fdef
     }
 }
 
-static void define_func_decl(struct HirVisitor *V, struct HirFuncDecl *d)
+static paw_Bool define_func_decl(struct HirVisitor *V, struct HirFuncDecl *d)
 {
     struct DefGenerator *dg = V->ud;
-    if (handle_monos(V, d->monos)) return;
-    if (has_generic(d->type)) return;
+    if (handle_monos(V, d->monos)) return PAW_FALSE;
+    if (has_generic(d->type)) return PAW_FALSE;
     register_fdef_types(dg, HirGetFuncDef(d->type));
 
     paw_Env *P = ENV(dg->C);
@@ -434,22 +434,23 @@ static void define_func_decl(struct HirVisitor *V, struct HirFuncDecl *d)
 
     struct DefState ds;
     ENTER_DEF(dg, &ds, d, def);
-    V->VisitDeclList(V, d->params);
+    pawHir_visit_decl_list(V, d->params);
     LEAVE_DEF(dg);
 
     // C functions don't have a 'body' field
-    if (d->body == NULL) return;
-    V->VisitBlock(V, d->body);
+    if (d->body == NULL) return PAW_FALSE;
+    pawHir_visit_block(V, d->body);
+    return PAW_FALSE;
 }
 
-static void define_adt_decl(struct HirVisitor *V, struct HirAdtDecl *d)
+static paw_Bool define_adt_decl(struct HirVisitor *V, struct HirAdtDecl *d)
 {
     struct DefGenerator *dg = V->ud;
     paw_Env *P = ENV(dg->C);
 
-    if (handle_monos(V, d->monos)) return;
+    if (handle_monos(V, d->monos)) return PAW_FALSE;
     struct Type *type = lookup_type(dg, d->type);
-    if (type == NULL) return; // not concrete
+    if (type == NULL) return PAW_FALSE; // not concrete
     struct Def *result = Y_DEF(P, type->adt.did);
     struct AdtDef *r = &result->adt;
 
@@ -458,32 +459,33 @@ static void define_adt_decl(struct HirVisitor *V, struct HirAdtDecl *d)
 
     struct DefState ds;
     ENTER_DEF(dg, &ds, d, r);
-    V->VisitDeclList(V, d->fields);
+    pawHir_visit_decl_list(V, d->fields);
     LEAVE_DEF(dg);
+    return PAW_FALSE;
 }
 
-static void define_impl_decl(struct HirVisitor *V, struct HirImplDecl *d)
+static paw_Bool define_impl_decl(struct HirVisitor *V, struct HirImplDecl *d)
 {
     struct DefGenerator *dg = V->ud;
-    if (handle_monos(V, d->monos)) return;
-    if (has_generic(d->type)) return;
-
-    paw_assert(d->generics == NULL);
-    V->VisitDeclList(V, d->methods);
+    if (handle_monos(V, d->monos)) return PAW_FALSE;
+    if (has_generic(d->type)) return PAW_FALSE;
+    return PAW_TRUE;
 }
 
-static void define_field_decl(struct HirVisitor *V, struct HirFieldDecl *d)
+static paw_Bool define_field_decl(struct HirVisitor *V, struct HirFieldDecl *d)
 {
     NEW_DEF(V->ud, d);
+    return PAW_FALSE;
 }
 
-static void define_var_decl(struct HirVisitor *V, struct HirVarDecl *d)
+static paw_Bool define_var_decl(struct HirVisitor *V, struct HirVarDecl *d)
 {
     NEW_DEF(V->ud, d);
-    V->VisitType(V, d->init->hdr.type);
+    pawHir_visit_type(V, d->init->hdr.type);
+    return PAW_FALSE;
 }
 
-static void define_variant_decl(struct HirVisitor *V, struct HirVariantDecl *d)
+static paw_Bool define_variant_decl(struct HirVisitor *V, struct HirVariantDecl *d)
 {
     struct DefGenerator *dg = V->ud;
     struct Def *result = NEW_DEF(dg, d);
@@ -491,14 +493,18 @@ static void define_variant_decl(struct HirVisitor *V, struct HirVariantDecl *d)
 
     struct DefState ds;
     ENTER_DEF(dg, &ds, d, def);
-    V->VisitDeclList(V, d->fields);
+    pawHir_visit_decl_list(V, d->fields);
     LEAVE_DEF(dg);
+
+    // manually visited
+    return PAW_FALSE;
 }
 
-static void define_type(struct HirVisitor *V, struct HirType *type)
+static paw_Bool define_type(struct HirVisitor *V, struct HirType *type)
 {
-    if (type == NULL) return;
+    if (type == NULL) return PAW_FALSE;
     if (!has_generic(type)) new_type(V->ud, type);
+    return PAW_FALSE;
 }
 
 static struct HirDecl *lookup_adt(struct Compiler *C, struct ModuleInfo *m, struct HirAdt *adt)
@@ -508,11 +514,10 @@ static struct HirDecl *lookup_adt(struct Compiler *C, struct ModuleInfo *m, stru
     return pawP_instantiate(m->hir, base, adt->types);
 }
 
-static struct HirType *cannonicalize_type(struct HirFolder *F, struct HirType *type)
+static struct HirType *cannonicalize_adt(struct HirTypeFolder *F, struct HirAdt *t)
 {
     struct DefGenerator *dg = F->ud;
-    if (!HirIsAdt(type)) return type;
-    struct HirDecl *decl = lookup_adt(dg->C, dg->m, HirGetAdt(type));
+    struct HirDecl *decl = lookup_adt(dg->C, dg->m, t);
     return HIR_TYPEOF(decl);
 }
 
@@ -521,21 +526,22 @@ static struct HirType *cannonicalize_type(struct HirFolder *F, struct HirType *t
 //       of some ADT instantiations.
 static void cannonicalize_adts(struct DefGenerator *dg)
 {
-    struct HirFolder F;
+    struct HirTypeFolder F;
     struct Hir *hir = dg->m->hir;
-    pawHir_folder_init(&F, hir, dg);
-    F.PostFoldType = cannonicalize_type;
-    F.FoldDeclList(&F, hir->items);
+    pawHir_type_folder_init(&F, hir, dg);
+    F.FoldAdt = cannonicalize_adt;
+
+    pawHir_fold_decl_list(&F, hir->items);
 }
 
-static void register_adt_decl(struct HirVisitor *V, struct HirAdtDecl *d)
+static paw_Bool register_adt_decl(struct HirVisitor *V, struct HirAdtDecl *d)
 {
     struct DefGenerator *dg = V->ud;
-    if (handle_monos(V, d->monos)) return;
-    if (has_generic(d->type)) return;
+    if (handle_monos(V, d->monos)) return PAW_FALSE;
+    if (has_generic(d->type)) return PAW_FALSE;
     if (lookup_type(dg, d->type)) {
         PAWD_LOG(dg->C->P, "type for '%s' already added", d->name->text);
-        return; // TODO: related to cannonicalize_adts
+        return PAW_FALSE; // TODO: related to cannonicalize_adts
     }
 
     paw_Env *P = ENV(dg->C);
@@ -552,6 +558,7 @@ static void register_adt_decl(struct HirVisitor *V, struct HirAdtDecl *d)
     r->is_pub = d->is_pub;
     r->code = type->hdr.code;
     r->name = d->name;
+    return  PAW_FALSE;
 }
 
 static void register_adts(struct HirVisitor *V, struct HirDeclList *items)
@@ -577,8 +584,9 @@ struct ItemList *pawP_define_all(struct Compiler *C, struct ModuleList *modules,
 
     struct HirVisitor V;
     pawHir_visitor_init(&V, prelude->hir, &dg);
-    V.VisitFieldDecl = define_field_decl;
+
     V.VisitVarDecl = define_var_decl;
+    V.VisitFieldDecl = define_field_decl;
     V.VisitImplDecl = define_impl_decl;
     V.VisitFuncDecl = define_func_decl;
     V.VisitVariantDecl = define_variant_decl;
@@ -594,7 +602,7 @@ struct ItemList *pawP_define_all(struct Compiler *C, struct ModuleList *modules,
     V.VisitAdtDecl = define_adt_decl;
     for (int i = 0; i < modules->count; ++i) {
         dg.m = K_LIST_GET(modules, i);
-        V.VisitDeclList(&V, dg.m->hir->items);
+        pawHir_visit_decl_list(&V, dg.m->hir->items);
     }
     *poffset = dg.nvals;
     return items;

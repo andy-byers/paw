@@ -9,6 +9,7 @@
 #include "compile.h"
 #include "map.h"
 #include "rt.h"
+#include "type.h"
 #include <inttypes.h>
 #include <stdio.h>
 
@@ -42,6 +43,30 @@ void pawD_debug_log(paw_Env *P, const char *fmt, ...)
 #if defined(PAW_DEBUG_EXTRA)
 
 #include <stdio.h>
+
+void pawD_dump_defs(paw_Env *P)
+{
+    Buffer buf;
+    pawL_init_buffer(P, &buf);
+    pawL_add_fstring(P, &buf, "did\tname\ttype\n", P->modname->text);
+    size_t mxname = 0;
+    for (int i = 0; i < P->defs.count; ++i) {
+        struct Def *def = Y_DEF(P, i);
+        if (def->hdr.name == NULL) continue;
+        mxname = PAW_MAX(mxname, def->hdr.name->length);
+    }
+    for (int i = 0; i < P->defs.count; ++i) {
+        struct Def *def = Y_DEF(P, i);
+        const char *name = def->hdr.name != NULL
+                ? def->hdr.name->text : "(null)";
+        pawL_add_fstring(P, &buf, "%d\t%s\t", i, name);
+        pawY_print_type(P, &buf, def->hdr.code);
+        pawL_add_char(P, &buf, '\n');
+    }
+    pawL_add_char(P, &buf, '\0');
+    printf("%s\n", buf.data);
+    pawL_discard_result(P, &buf);
+}
 
 const char *paw_unop_name(enum UnaryOp unop)
 {

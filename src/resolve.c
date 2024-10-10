@@ -20,8 +20,6 @@
 
 #define CSTR(R, i) CACHED_STRING(ENV(R), CAST_SIZE(i))
 #define TYPE2CODE(R, type) (pawP_type2code((R)->C, type))
-#define IS_BUILTIN_DECL(R, decl) ((decl)->hdr.did <= (R)->C->builtins[NBUILTINS - 1].did)
-// TODO: IS_BUILTIN_DECL should make sure decl is an adt decl (use CHECK_EXP since it should be known from context)
 
 struct ResultState {
     struct ResultState *outer;
@@ -356,7 +354,7 @@ static void allocate_decls(struct Resolver *R, struct HirDeclList *decls)
 static void ResolveFieldDecl(struct Resolver *R, struct HirFieldDecl *d)
 {
     add_decl(R, HIR_CAST_DECL(d));
-    d->type = resolve_type(R, d->type);
+    d->tag = d->type = resolve_type(R, d->type);
 }
 
 static void resolve_func_item(struct Resolver *R, struct HirFuncDecl *d)
@@ -715,7 +713,7 @@ static struct HirType *resolve_closure_param(struct Resolver *R, struct HirField
 {
     struct HirDecl *decl = HIR_CAST_DECL(d);
     add_decl(R, decl);
-    d->type = d->tag != NULL
+    d->tag = d->type = d->tag != NULL
         ? resolve_type(R, d->tag)
         : new_unknown(R);
     new_local(R, d->name, decl);
@@ -823,8 +821,8 @@ static void resolve_var_decl(struct Resolver *R, struct HirVarDecl *d)
     define_local(symbol);
 
     if (d->tag != NULL) {
-        struct HirType *tag = resolve_type(R, d->tag);
-        unify(R, init, tag);
+        d->tag = resolve_type(R, d->tag);
+        unify(R, init, d->tag);
     }
     d->type = init;
 }
@@ -1444,11 +1442,9 @@ static void resolve_module(struct Resolver *R, struct ModuleInfo *mod)
     R->m = mod;
 
     enter_block(R, NULL);
-    enter_inference_ctx(R);
 
     resolve_items(R, hir->items);
 
-    leave_inference_ctx(R);
     leave_block(R);
 
     // control should not be within a scope block
@@ -1480,11 +1476,11 @@ void pawP_resolve(struct Compiler *C)
     pawP_collect_items(C);
 
     // run the type checker
+    enter_inference_ctx(&R);
     for (int i = 0; i < dm->modules->count; ++i) {
         R.m = K_LIST_GET(dm->modules, i);
         resolve_module(&R, R.m);
     }
-
-    // monomorphize polymorphic functions
     monomorphize_functions(&R);
+    leave_inference_ctx(&R);
 }

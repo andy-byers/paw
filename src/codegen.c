@@ -613,13 +613,13 @@ static void code_slice_indices(struct HirVisitor *V, struct HirExpr *first,
     struct FuncState *fs = G->fs;
 
     if (first != NULL) {
-        V->VisitExpr(V, first);
+        pawHir_visit_expr(V, first);
     } else {
         // default to the start of the sequence
         pawK_code_0(fs, OP_PUSHZERO);
     }
     if (second != NULL) {
-        V->VisitExpr(V, second);
+        pawHir_visit_expr(V, second);
     } else {
         // default to the end of the sequence
         const paw_Type code = TYPE_CODE(G, target);
@@ -714,7 +714,7 @@ static void code_setter(struct HirVisitor *V, struct HirExpr *lhs, struct HirExp
     struct FuncState *fs = G->fs;
     if (HirIsPathExpr(lhs)) {
         const struct VarInfo info = resolve_path(G, lhs->path.path);
-        V->VisitExpr(V, rhs);
+        pawHir_visit_expr(V, rhs);
         switch (info.kind) {
             case VAR_LOCAL:
                 pawK_code_U(fs, OP_SETLOCAL, info.index);
@@ -727,10 +727,10 @@ static void code_setter(struct HirVisitor *V, struct HirExpr *lhs, struct HirExp
     }
 
     const struct HirSuffixedExpr *suf = &lhs->suffix;
-    V->VisitExpr(V, suf->target);
+    pawHir_visit_expr(V, suf->target);
 
     if (HirIsSelector(lhs)) {
-        V->VisitExpr(V, rhs);
+        pawHir_visit_expr(V, rhs);
         String *name = lhs->select.name;
         struct HirType *target = HIR_TYPEOF(suf->target);
         if (lhs->select.is_index) {
@@ -746,11 +746,11 @@ static void code_setter(struct HirVisitor *V, struct HirExpr *lhs, struct HirExp
         const enum paw_AdtKind t = adt_kind(TYPE_CODE(G, target));
         if (index->is_slice) {
             code_slice_indices(V, index->first, index->second, target);
-            V->VisitExpr(V, rhs);
+            pawHir_visit_expr(V, rhs);
             CODE_OP(fs, OP_SETRANGE, t);
         } else {
-            V->VisitExpr(V, lhs->index.first);
-            V->VisitExpr(V, rhs);
+            pawHir_visit_expr(V, lhs->index.first);
+            pawHir_visit_expr(V, rhs);
             CODE_OP(fs, OP_SETELEM, t);
         }
     }
@@ -792,7 +792,7 @@ static void code_tuple_lit(struct HirVisitor *V, struct HirLiteralExpr *e)
     fs->line = e->line;
 
     struct HirTupleLit *lit = &e->tuple;
-    V->VisitExprList(V, lit->elems);
+    pawHir_visit_expr_list(V, lit->elems);
 
     pawK_code_U(fs, OP_NEWTUPLE, lit->elems->count);
 }
@@ -804,7 +804,7 @@ static void code_container_lit(struct HirVisitor *V, struct HirLiteralExpr *e)
     fs->line = e->line;
 
     struct HirContainerLit *lit = &e->cont;
-    V->VisitExprList(V, lit->items);
+    pawHir_visit_expr_list(V, lit->items);
 
     const Op op = lit->code == BUILTIN_LIST ? OP_NEWLIST : OP_NEWMAP;
     pawK_code_U(fs, op, lit->items->count);
@@ -824,12 +824,12 @@ static void code_composite_lit(struct HirVisitor *V, struct HirLiteralExpr *e)
 
     for (int i = 0; i < lit->items->count; ++i) {
         struct HirExpr *field = lit->items->data[i];
-        V->VisitExpr(V, field);
+        pawHir_visit_expr(V, field);
         pawK_code_U(fs, OP_INITFIELD, field->field.fid);
     }
 }
 
-static void code_literal_expr(struct HirVisitor *V, struct HirLiteralExpr *e)
+static paw_Bool code_literal_expr(struct HirVisitor *V, struct HirLiteralExpr *e)
 {
     switch (e->lit_kind) {
         case kHirLitBasic:
@@ -844,29 +844,30 @@ static void code_literal_expr(struct HirVisitor *V, struct HirLiteralExpr *e)
         default:
             code_composite_lit(V, e);
     }
+    return PAW_FALSE;
 }
 
 static void code_and(struct HirVisitor *V, struct FuncState *fs, struct HirLogicalExpr *e)
 {
-    V->VisitExpr(V, e->lhs);
+    pawHir_visit_expr(V, e->lhs);
     const int jump = code_jump(fs, OP_JUMPFALSE);
     pawK_code_U(fs, OP_POP, 1);
-    V->VisitExpr(V, e->rhs);
+    pawHir_visit_expr(V, e->rhs);
     patch_here(fs, jump);
 }
 
 static void code_or(struct HirVisitor *V, struct FuncState *fs, struct HirLogicalExpr *e)
 {
-    V->VisitExpr(V, e->lhs);
+    pawHir_visit_expr(V, e->lhs);
     const int else_jump = code_jump(fs, OP_JUMPFALSE);
     const int then_jump = code_jump(fs, OP_JUMP);
     patch_here(fs, else_jump);
     pawK_code_U(fs, OP_POP, 1);
-    V->VisitExpr(V, e->rhs);
+    pawHir_visit_expr(V, e->rhs);
     patch_here(fs, then_jump);
 }
 
-static void code_logical_expr(struct HirVisitor *V, struct HirLogicalExpr *e)
+static paw_Bool code_logical_expr(struct HirVisitor *V, struct HirLogicalExpr *e)
 {
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
@@ -877,15 +878,15 @@ static void code_logical_expr(struct HirVisitor *V, struct HirLogicalExpr *e)
     } else {
         code_or(V, fs, e);
     }
+    return PAW_FALSE;
 }
 
-static void code_chain_expr(struct HirVisitor *V, struct HirChainExpr *e)
+static void post_chain_expr(struct HirVisitor *V, struct HirChainExpr *e)
 {
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
     fs->line = e->line;
 
-    V->VisitExpr(V, e->target);
     const int jump = code_jump(fs, OP_JUMPNULL);
     pawK_code_0(fs, OP_RETURN);
     patch_here(fs, jump);
@@ -907,13 +908,11 @@ static void code_bitw1(struct FuncState *fs, enum BitwOp1 op)
     CODE_OP(fs, OP_BITW1, op);
 }
 
-static void code_unop_expr(struct HirVisitor *V, struct HirUnOpExpr *e)
+static void post_unop_expr(struct HirVisitor *V, struct HirUnOpExpr *e)
 {
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
     fs->line = e->line;
-
-    V->VisitExpr(V, e->target);
 
     struct HirType *target = HIR_TYPEOF(e->target);
     const paw_Type type = TYPE_CODE(G, target);
@@ -953,14 +952,11 @@ static void code_bitw2(struct FuncState *fs, enum BitwOp2 op)
     CODE_OP(fs, OP_BITW2, op);
 }
 
-static void code_binop_expr(struct HirVisitor *V, struct HirBinOpExpr *e)
+static void post_binop_expr(struct HirVisitor *V, struct HirBinOpExpr *e)
 {
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
     fs->line = e->line;
-
-    V->VisitExpr(V, e->lhs);
-    V->VisitExpr(V, e->rhs);
 
     struct HirType *target = HIR_TYPEOF(e->lhs);
     const paw_Type type = TYPE_CODE(G, target);
@@ -1025,30 +1021,26 @@ static void code_binop_expr(struct HirVisitor *V, struct HirBinOpExpr *e)
     }
 }
 
-static void code_decl_stmt(struct HirVisitor *V, struct HirDeclStmt *s)
-{
-    V->VisitDecl(V, s->decl);
-}
-
-static void code_assign_expr(struct HirVisitor *V, struct HirAssignExpr *s)
+static paw_Bool code_assign_expr(struct HirVisitor *V, struct HirAssignExpr *s)
 {
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
     fs->line = s->line;
+
     code_setter(V, s->lhs, s->rhs);
+    return PAW_FALSE;
 }
 
-static void code_expr_stmt(struct HirVisitor *V, struct HirExprStmt *s)
+static void post_expr_stmt(struct HirVisitor *V, struct HirExprStmt *s)
 {
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
     fs->line = s->line;
 
-    V->VisitExpr(V, s->expr);
     pawK_code_U(fs, OP_POP, 1);
 }
 
-static void code_closure_expr(struct HirVisitor *V, struct HirClosureExpr *e)
+static paw_Bool code_closure_expr(struct HirVisitor *V, struct HirClosureExpr *e)
 {
     struct FuncState fs;
     struct BlockState bs;
@@ -1058,11 +1050,11 @@ static void code_closure_expr(struct HirVisitor *V, struct HirClosureExpr *e)
     proto->argc = e->params->count;
 
     enter_function(G, &fs, &bs, name, proto, e->type, FUNC_CLOSURE);
-    V->VisitDeclList(V, e->params);
+    pawHir_visit_decl_list(V, e->params);
     if (e->has_body) {
-        V->VisitBlock(V, e->body);
+        pawHir_visit_block(V, e->body);
     } else {
-        V->VisitExpr(V, e->expr);
+        pawHir_visit_expr(V, e->expr);
         pawK_code_0(G->fs, OP_RETURN);
     }
     leave_function(G);
@@ -1070,6 +1062,7 @@ static void code_closure_expr(struct HirVisitor *V, struct HirClosureExpr *e)
     const int pid = add_proto(G, fs.proto);
     code_closure(G, pid);
     pop_proto(G);
+    return PAW_FALSE;
 }
 
 // Wrap a Proto in a Closure so it can be called directly from C
@@ -1095,12 +1088,12 @@ static void set_cfunc(struct Generator *G, struct HirFuncDecl *d, int g)
     *pval = *pv;
 }
 
-static void code_func(struct HirVisitor *V, struct HirFuncDecl *d, struct VarInfo info)
+static paw_Bool code_func(struct HirVisitor *V, struct HirFuncDecl *d, struct VarInfo info)
 {
     struct Generator *G = V->ud;
     if (info.kind == VAR_CFUNC) {
         set_cfunc(G, d, info.index);
-        return;
+        return PAW_FALSE;
     }
     struct FuncState fs;
     struct BlockState bs;
@@ -1109,16 +1102,18 @@ static void code_func(struct HirVisitor *V, struct HirFuncDecl *d, struct VarInf
     proto->argc = func->params->count;
 
     enter_function(G, &fs, &bs, d->name, proto, d->type, d->fn_kind);
-    V->VisitDeclList(V, d->params);
-    if (d->body != NULL) V->VisitBlock(V, d->body);
+    pawHir_visit_decl_list(V, d->params);
+    if (d->body != NULL) pawHir_visit_block(V, d->body);
     leave_function(G);
 
     paw_assert(info.kind == VAR_GLOBAL);
     set_entrypoint(G, fs.proto, info.index);
     pop_proto(G);
+
+    return PAW_FALSE;
 }
 
-static void code_field_decl(struct HirVisitor *V, struct HirFieldDecl *d)
+static void post_field_decl(struct HirVisitor *V, struct HirFieldDecl *d)
 {
     struct Generator *G = V->ud;
     G->fs->line = d->line;
@@ -1126,18 +1121,19 @@ static void code_field_decl(struct HirVisitor *V, struct HirFieldDecl *d)
     new_local(G->fs, d->name, d->type);
 }
 
-static void code_var_decl(struct HirVisitor *V, struct HirVarDecl *d)
+static paw_Bool code_var_decl(struct HirVisitor *V, struct HirVarDecl *d)
 {
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
     fs->line = d->line;
 
     declare_local(fs, d->name, d->type);
-    V->VisitExpr(V, d->init);
+    pawHir_visit_expr(V, d->init);
     define_local(fs);
+    return PAW_FALSE;
 }
 
-static void code_block_stmt(struct HirVisitor *V, struct HirBlock *b)
+static paw_Bool code_block_stmt(struct HirVisitor *V, struct HirBlock *b)
 {
     struct BlockState bs;
     struct Generator *G = V->ud;
@@ -1145,17 +1141,17 @@ static void code_block_stmt(struct HirVisitor *V, struct HirBlock *b)
     fs->line = b->line;
 
     enter_block(fs, &bs, PAW_FALSE);
-    V->VisitStmtList(V, b->stmts);
+    pawHir_visit_stmt_list(V, b->stmts);
     leave_block(fs);
+    return PAW_FALSE;
 }
 
-static void code_return_stmt(struct HirVisitor *V, struct HirReturnStmt *s)
+static void post_return_stmt(struct HirVisitor *V, struct HirReturnStmt *s)
 {
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
     fs->line = s->line;
 
-    V->VisitExpr(V, s->expr);
     pawK_code_0(fs, OP_RETURN);
 }
 
@@ -1204,14 +1200,14 @@ static void code_variant_constructor(struct HirVisitor *V, struct HirType *type,
     struct HirDecl *decl = GET_DECL(G, HirGetFuncDef(type)->did);
     struct HirVariantDecl *d = HirGetVariantDecl(decl);
     if (args != NULL) {
-        V->VisitExprList(V, args);
+        pawHir_visit_expr_list(V, args);
         count = args->count;
         paw_assert(count > 0);
     }
     pawK_code_AB(fs, OP_NEWVARIANT, d->index, count);
 }
 
-static void code_path_expr(struct HirVisitor *V, struct HirPathExpr *e)
+static paw_Bool code_path_expr(struct HirVisitor *V, struct HirPathExpr *e)
 {
     struct Generator *G = V->ud;
     G->fs->line = e->line;
@@ -1222,6 +1218,7 @@ static void code_path_expr(struct HirVisitor *V, struct HirPathExpr *e)
         const struct VarInfo info = resolve_path(G, e->path);
         code_getter(V, info);
     }
+    return PAW_FALSE;
 }
 
 static paw_Bool is_method_call(struct HirCallExpr *e)
@@ -1248,7 +1245,7 @@ static struct HirExpr *prep_method_call(struct Generator *G, struct HirCallExpr 
     return select->target;
 }
 
-static void code_call_expr(struct HirVisitor *V, struct HirCallExpr *e)
+static paw_Bool code_call_expr(struct HirVisitor *V, struct HirCallExpr *e)
 {
     paw_assert(HirIsFuncType(e->func));
     struct Generator *G = V->ud;
@@ -1258,21 +1255,22 @@ static void code_call_expr(struct HirVisitor *V, struct HirCallExpr *e)
     int nargs = e->args->count;
     if (is_variant_constructor(G, e->func)) {
         code_variant_constructor(V, e->func, e->args);
-        return;
+        return PAW_FALSE;
     } else if (is_instance_call(e->func)) {
         code_instance_getter(V, e->func);
     } else if (is_method_call(e)) {
         struct HirExpr *target = prep_method_call(G, e);
-        V->VisitExpr(V, target); // push 'self'
+        pawHir_visit_expr(V, target); // push 'self'
         ++nargs; // account for 'self'
     } else {
-        V->VisitExpr(V, e->target);
+        pawHir_visit_expr(V, e->target);
     }
-    V->VisitExprList(V, e->args);
+    pawHir_visit_expr_list(V, e->args);
     pawK_code_U(fs, OP_CALL, nargs);
+    return PAW_FALSE;
 }
 
-static void code_conversion_expr(struct HirVisitor *V, struct HirConversionExpr *e)
+static void post_conversion_expr(struct HirVisitor *V, struct HirConversionExpr *e)
 {
     struct Generator *G = V->ud;
     struct HirType *from = HIR_TYPEOF(e->arg);
@@ -1280,24 +1278,24 @@ static void code_conversion_expr(struct HirVisitor *V, struct HirConversionExpr 
         e->to == PAW_TINT ? OP_CASTINT : OP_CASTFLOAT;
     G->fs->line = e->line;
 
-    V->VisitExpr(V, e->arg);
     pawK_code_U(G->fs, op, hir_adt_did(from));
 }
 
-static void code_if_stmt(struct HirVisitor *V, struct HirIfStmt *s)
+static paw_Bool code_if_stmt(struct HirVisitor *V, struct HirIfStmt *s)
 {
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
     fs->line = s->line;
 
-    V->VisitExpr(V, s->cond);
+    pawHir_visit_expr(V, s->cond);
     const int else_jump = code_jump(fs, OP_JUMPFALSEPOP);
-    V->VisitStmt(V, s->then_arm);
+    pawHir_visit_stmt(V, s->then_arm);
     // NOTE: If there is no 'else' block, this will produce a NOOP jump.
     const int then_jump = code_jump(fs, OP_JUMP);
     patch_here(fs, else_jump);
-    V->VisitStmt(V, s->else_arm);
+    if (s->else_arm != NULL) pawHir_visit_stmt(V, s->else_arm);
     patch_here(fs, then_jump);
+    return PAW_FALSE;
 }
 
 static void close_until_loop(struct FuncState *fs)
@@ -1316,7 +1314,7 @@ static void close_until_loop(struct FuncState *fs)
     pawE_error(ENV(fs->G), PAW_ESYNTAX, fs->line, "label outside loop");
 }
 
-static void code_label_stmt(struct HirVisitor *V, struct HirLabelStmt *s)
+static void post_label_stmt(struct HirVisitor *V, struct HirLabelStmt *s)
 {
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
@@ -1326,7 +1324,7 @@ static void code_label_stmt(struct HirVisitor *V, struct HirLabelStmt *s)
     add_label(fs, s->label); // emit a jump, to be patched later
 }
 
-static void code_dowhile_stmt(struct HirVisitor *V, struct HirWhileStmt *s)
+static paw_Bool code_dowhile_stmt(struct HirVisitor *V, struct HirWhileStmt *s)
 {
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
@@ -1334,9 +1332,9 @@ static void code_dowhile_stmt(struct HirVisitor *V, struct HirWhileStmt *s)
 
     enter_block(fs, &bs, PAW_TRUE);
     const int loop = fs->pc;
-    V->VisitBlock(V, s->block);
+    pawHir_visit_block(V, s->block);
     adjust_from(fs, LCONTINUE);
-    V->VisitExpr(V, s->cond);
+    pawHir_visit_expr(V, s->cond);
 
     // If the condition is false, jump over the instruction that moves control
     // back to the top of the loop.
@@ -1344,9 +1342,10 @@ static void code_dowhile_stmt(struct HirVisitor *V, struct HirWhileStmt *s)
     code_loop(fs, OP_JUMP, loop);
     patch_here(fs, jump);
     leave_block(fs);
+    return PAW_FALSE;
 }
 
-static void code_while_stmt(struct HirVisitor *V, struct HirWhileStmt *s)
+static paw_Bool code_while_stmt(struct HirVisitor *V, struct HirWhileStmt *s)
 {
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
@@ -1354,15 +1353,14 @@ static void code_while_stmt(struct HirVisitor *V, struct HirWhileStmt *s)
     fs->line = s->line;
 
     if (s->is_dowhile) {
-        code_dowhile_stmt(V, s);
-        return;
+        return code_dowhile_stmt(V, s);
     }
     enter_block(fs, &bs, PAW_TRUE);
     const int loop = fs->pc;
-    V->VisitExpr(V, s->cond);
+    pawHir_visit_expr(V, s->cond);
 
     const int jump = code_jump(fs, OP_JUMPFALSEPOP);
-    V->VisitBlock(V, s->block);
+    pawHir_visit_block(V, s->block);
 
     // Finish the loop. 'break' labels jump here, 'continue' labels back to
     // right before where the conditional expression was evaluated.
@@ -1370,6 +1368,7 @@ static void code_while_stmt(struct HirVisitor *V, struct HirWhileStmt *s)
     adjust_to(fs, LCONTINUE, loop);
     patch_here(fs, jump);
     leave_block(fs);
+    return PAW_FALSE;
 }
 
 static void code_forbody(struct HirVisitor *V, struct HirDecl *control, struct HirBlock *block, Op opinit, Op oploop)
@@ -1389,7 +1388,7 @@ static void code_forbody(struct HirVisitor *V, struct HirDecl *control, struct H
     const struct HirVarDecl *var = HirGetVarDecl(control);
     enter_block(fs, &bs, PAW_FALSE);
     new_local(fs, var->name, var->type);
-    V->VisitStmtList(V, block->stmts);
+    pawHir_visit_stmt_list(V, block->stmts);
     leave_block(fs);
 
     // Continue statements jump here, right before the loop instruction.
@@ -1403,9 +1402,9 @@ static void code_fornum_stmt(struct HirVisitor *V, struct HirForStmt *s)
     struct Generator *G = V->ud;
     struct HirForNum *fornum = &s->fornum;
 
-    V->VisitExpr(V, fornum->begin);
-    V->VisitExpr(V, fornum->end);
-    V->VisitExpr(V, fornum->step);
+    pawHir_visit_expr(V, fornum->begin);
+    pawHir_visit_expr(V, fornum->end);
+    pawHir_visit_expr(V, fornum->step);
     new_local_lit(G, "(for begin)", PAW_TINT);
     new_local_lit(G, "(for end)", PAW_TINT);
     new_local_lit(G, "(for step)", PAW_TINT);
@@ -1418,7 +1417,7 @@ static void code_forin_stmt(struct HirVisitor *V, struct HirForStmt *s)
     struct Generator *G = V->ud;
     struct HirForIn *forin = &s->forin;
 
-    V->VisitExpr(V, forin->target);
+    pawHir_visit_expr(V, forin->target);
     struct HirType *target = HIR_TYPEOF(forin->target);
     new_local_lit(G, "(for target)", TYPE_CODE(G, target));
     new_local_lit(G, "(for iter)", PAW_TINT);
@@ -1429,7 +1428,7 @@ static void code_forin_stmt(struct HirVisitor *V, struct HirForStmt *s)
     code_forbody(V, s->control, s->block, init, loop);
 }
 
-static void code_for_stmt(struct HirVisitor *V, struct HirForStmt *s)
+static paw_Bool code_for_stmt(struct HirVisitor *V, struct HirForStmt *s)
 {
     struct BlockState bs;
     struct Generator *G = V->ud;
@@ -1443,9 +1442,10 @@ static void code_for_stmt(struct HirVisitor *V, struct HirForStmt *s)
         code_forin_stmt(V, s);
     }
     leave_block(fs);
+    return PAW_FALSE;
 }
 
-static void code_index_expr(struct HirVisitor *V, struct HirIndex *e)
+static paw_Bool code_index_expr(struct HirVisitor *V, struct HirIndex *e)
 {
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
@@ -1453,27 +1453,29 @@ static void code_index_expr(struct HirVisitor *V, struct HirIndex *e)
     const enum paw_AdtKind t = adt_kind(TYPE_CODE(G, target));
     fs->line = e->line;
 
-    V->VisitExpr(V, e->target);
+    pawHir_visit_expr(V, e->target);
     if (e->is_slice) {
         code_slice_indices(V, e->first, e->second, target);
         CODE_OP(fs, OP_GETRANGE, t);
     } else {
-        V->VisitExpr(V, e->first);
+        pawHir_visit_expr(V, e->first);
         CODE_OP(fs, OP_GETELEM, t);
     }
+    return PAW_FALSE;
 }
 
-static void code_selector_expr(struct HirVisitor *V, struct HirSelector *e)
+static void post_selector_expr(struct HirVisitor *V, struct HirSelector *e)
 {
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
     fs->line = e->line;
 
-    V->VisitExpr(V, e->target);
+//    pawHir_visit_expr(V, e->target);
     if (e->is_index) {
         pawK_code_U(fs, OP_GETFIELD, e->index);
     } else {
-        const struct VarInfo info = resolve_attr(G, HIR_TYPEOF(e->target), e->name);
+        struct HirType *type = HIR_TYPEOF(e->target);
+        const struct VarInfo info = resolve_attr(G, type, e->name);
         pawK_code_U(fs, OP_GETFIELD, info.index);
     }
 }
@@ -1526,28 +1528,29 @@ static void code_items(struct HirVisitor *V, struct ItemList *items)
 static void setup_pass(struct HirVisitor *V, struct Generator *G)
 {
     pawHir_visitor_init(V, PRELUDE(G)->hir, G);
-    V->VisitLiteralExpr = code_literal_expr;
-    V->VisitLogicalExpr = code_logical_expr;
-    V->VisitChainExpr = code_chain_expr;
-    V->VisitUnOpExpr = code_unop_expr;
-    V->VisitBinOpExpr = code_binop_expr;
-    V->VisitConversionExpr = code_conversion_expr;
+
     V->VisitPathExpr = code_path_expr;
     V->VisitCallExpr = code_call_expr;
     V->VisitIndex = code_index_expr;
-    V->VisitSelector = code_selector_expr;
     V->VisitClosureExpr = code_closure_expr;
-    V->VisitAssignExpr = code_assign_expr;
-    V->VisitBlock = code_block_stmt;
-    V->VisitExprStmt = code_expr_stmt;
-    V->VisitDeclStmt = code_decl_stmt;
     V->VisitIfStmt = code_if_stmt;
     V->VisitForStmt = code_for_stmt;
     V->VisitWhileStmt = code_while_stmt;
-    V->VisitLabelStmt = code_label_stmt;
-    V->VisitReturnStmt = code_return_stmt;
+    V->VisitBlock = code_block_stmt;
     V->VisitVarDecl = code_var_decl;
-    V->VisitFieldDecl = code_field_decl;
+    V->VisitLiteralExpr = code_literal_expr;
+    V->VisitLogicalExpr = code_logical_expr;
+    V->VisitAssignExpr = code_assign_expr;
+
+    V->PostVisitChainExpr = post_chain_expr;
+    V->PostVisitUnOpExpr = post_unop_expr;
+    V->PostVisitBinOpExpr = post_binop_expr;
+    V->PostVisitConversionExpr = post_conversion_expr;
+    V->PostVisitSelector = post_selector_expr;
+    V->PostVisitExprStmt = post_expr_stmt;
+    V->PostVisitLabelStmt = post_label_stmt;
+    V->PostVisitReturnStmt = post_return_stmt;
+    V->PostVisitFieldDecl = post_field_decl;
 }
 
 static void register_modules(struct Generator *G, struct ModuleList *modules)
@@ -1583,6 +1586,5 @@ void pawP_codegen(struct Compiler *C)
 
     register_modules(&G, C->dm->modules);
     code_modules(&G);
-
     pawC_pop(P);
 }

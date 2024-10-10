@@ -109,321 +109,352 @@ int pawHir_find_symbol(struct HirScope *scope, const String *name)
     return -1;
 }
 
-#define DEFINE_LIST_VISITOR(name, T) \
-    static void visit_##name##_list(struct HirVisitor *V, struct Hir##T##List *list) \
+static void AcceptType(struct HirVisitor *V, struct HirType *node);
+static void AcceptExpr(struct HirVisitor *V, struct HirExpr *node);
+static void AcceptDecl(struct HirVisitor *V, struct HirDecl *node);
+static void AcceptStmt(struct HirVisitor *V, struct HirStmt *node);
+
+#define DEFINE_LIST_ACCEPTOR(name, T) \
+    static void accept_##name##_list(struct HirVisitor *V, struct Hir##T##List *list) \
     { \
         if (list == NULL) return; \
         for (int i = 0; i < list->count; ++i) { \
-            V->Visit##T(V, list->data[i]); \
+            Accept##T(V, list->data[i]); \
         } \
     }
-DEFINE_LIST_VISITOR(decl, Decl)
-DEFINE_LIST_VISITOR(expr, Expr)
-DEFINE_LIST_VISITOR(stmt, Stmt)
-DEFINE_LIST_VISITOR(type, Type)
+DEFINE_LIST_ACCEPTOR(decl, Decl)
+DEFINE_LIST_ACCEPTOR(expr, Expr)
+DEFINE_LIST_ACCEPTOR(stmt, Stmt)
+DEFINE_LIST_ACCEPTOR(type, Type)
 
-static void VisitBlock(struct HirVisitor *V, struct HirBlock *s)
+static void AcceptBlock(struct HirVisitor *V, struct HirBlock *s)
 {
-    V->VisitStmtList(V, s->stmts);
+    accept_stmt_list(V, s->stmts);
 }
 
-static void VisitLogicalExpr(struct HirVisitor *V, struct HirLogicalExpr *e)
+static void AcceptLogicalExpr(struct HirVisitor *V, struct HirLogicalExpr *e)
 {
-    V->VisitExpr(V, e->lhs);
-    V->VisitExpr(V, e->rhs);
+    AcceptExpr(V, e->lhs);
+    AcceptExpr(V, e->rhs);
 }
 
-static void VisitFieldExpr(struct HirVisitor *V, struct HirFieldExpr *e)
+static void AcceptFieldExpr(struct HirVisitor *V, struct HirFieldExpr *e)
 {
-    if (e->fid < 0) V->VisitExpr(V, e->key);
-    V->VisitExpr(V, e->value);
+    if (e->fid < 0) AcceptExpr(V, e->key);
+    AcceptExpr(V, e->value);
 }
 
-static void VisitAssignExpr(struct HirVisitor *V, struct HirAssignExpr *e)
+static void AcceptAssignExpr(struct HirVisitor *V, struct HirAssignExpr *e)
 {
-    V->VisitExpr(V, e->lhs);
-    V->VisitExpr(V, e->rhs);
+    AcceptExpr(V, e->lhs);
+    AcceptExpr(V, e->rhs);
 }
 
-static void VisitLiteralExpr(struct HirVisitor *V, struct HirLiteralExpr *e)
+static void AcceptPath(struct HirVisitor *V, struct HirPath *path)
+{
+    for (int i = 0; i < path->count; ++i) {
+        struct HirSegment *seg = K_LIST_GET(path, i);
+        if (seg->types == NULL) continue;
+        for (int j = 0; j < seg->types->count; ++j) {
+            AcceptType(V, K_LIST_GET(seg->types, j));
+        }
+    }
+    if (V->VisitPath != NULL) V->VisitPath(V, path);
+}
+
+static void AcceptLiteralExpr(struct HirVisitor *V, struct HirLiteralExpr *e)
 {
     switch (e->lit_kind) {
         case kHirLitComposite:
-            V->VisitPath(V, e->comp.path);
-            V->VisitExprList(V, e->comp.items);
+            AcceptPath(V, e->comp.path);
+            accept_expr_list(V, e->comp.items);
             break;
         case kHirLitContainer:
-            V->VisitExprList(V, e->cont.items);
+            accept_expr_list(V, e->cont.items);
             break;
         case kHirLitTuple:
-            V->VisitExprList(V, e->tuple.elems);
+            accept_expr_list(V, e->tuple.elems);
             break;
         default:
             break;
     }
 }
 
-static void VisitChainExpr(struct HirVisitor *V, struct HirChainExpr *e)
+static void AcceptChainExpr(struct HirVisitor *V, struct HirChainExpr *e)
 {
-    V->VisitExpr(V, e->target);
+    AcceptExpr(V, e->target);
 }
 
-static void VisitUnOpExpr(struct HirVisitor *V, struct HirUnOpExpr *e)
+static void AcceptUnOpExpr(struct HirVisitor *V, struct HirUnOpExpr *e)
 {
-    V->VisitExpr(V, e->target);
+    AcceptExpr(V, e->target);
 }
 
-static void VisitBinOpExpr(struct HirVisitor *V, struct HirBinOpExpr *e)
+static void AcceptBinOpExpr(struct HirVisitor *V, struct HirBinOpExpr *e)
 {
-    V->VisitExpr(V, e->lhs);
-    V->VisitExpr(V, e->rhs);
+    AcceptExpr(V, e->lhs);
+    AcceptExpr(V, e->rhs);
 }
 
-static void VisitExprStmt(struct HirVisitor *V, struct HirExprStmt *s)
+static void AcceptExprStmt(struct HirVisitor *V, struct HirExprStmt *s)
 {
-    V->VisitExpr(V, s->expr);
+    AcceptExpr(V, s->expr);
 }
 
-static void VisitClosureExpr(struct HirVisitor *V, struct HirClosureExpr *e)
+static void AcceptClosureExpr(struct HirVisitor *V, struct HirClosureExpr *e)
 {
-    V->VisitDeclList(V, e->params);
+    accept_decl_list(V, e->params);
     if (e->has_body) {
-        V->VisitBlock(V, e->body);
+        AcceptBlock(V, e->body);
     } else {
-        V->VisitExpr(V, e->expr);
+        AcceptExpr(V, e->expr);
     }
 }
 
-static void VisitFieldDecl(struct HirVisitor *V, struct HirFieldDecl *d)
+static void AcceptFieldDecl(struct HirVisitor *V, struct HirFieldDecl *d)
+{
+    if (d->tag != NULL) AcceptType(V, d->tag);
+}
+
+static void AcceptTypeDecl(struct HirVisitor *V, struct HirTypeDecl *d)
+{
+    accept_decl_list(V, d->generics);
+    AcceptExpr(V, d->rhs);
+}
+
+static void AcceptGenericDecl(struct HirVisitor *V, struct HirGenericDecl *d)
 {
     PAW_UNUSED(V);
     PAW_UNUSED(d);
 }
 
-static void VisitTypeDecl(struct HirVisitor *V, struct HirTypeDecl *d)
+static void AcceptUseDecl(struct HirVisitor *V, struct HirUseDecl *d)
 {
-    V->VisitDeclList(V, d->generics);
-    V->VisitExpr(V, d->rhs);
+    AcceptPath(V, d->path);
 }
 
-static void VisitGenericDecl(struct HirVisitor *V, struct HirGenericDecl *d)
+static void AcceptVariantDecl(struct HirVisitor *V, struct HirVariantDecl *d)
 {
-    PAW_UNUSED(V);
-    PAW_UNUSED(d);
+    accept_decl_list(V, d->fields);
 }
 
-static void VisitUseDecl(struct HirVisitor *V, struct HirUseDecl *d)
+static void AcceptAdtDecl(struct HirVisitor *V, struct HirAdtDecl *d)
 {
-    V->VisitPath(V, d->path);
+    accept_decl_list(V, d->generics);
+    accept_decl_list(V, d->fields);
+    accept_decl_list(V, d->monos);
 }
 
-static void VisitVariantDecl(struct HirVisitor *V, struct HirVariantDecl *d)
+static void AcceptImplDecl(struct HirVisitor *V, struct HirImplDecl *d)
 {
-    V->VisitDeclList(V, d->fields);
+    accept_decl_list(V, d->generics);
+    accept_decl_list(V, d->methods);
+    accept_decl_list(V, d->monos);
 }
 
-static void VisitAdtDecl(struct HirVisitor *V, struct HirAdtDecl *d)
+static void AcceptInstanceDecl(struct HirVisitor *V, struct HirInstanceDecl *d)
 {
-    V->VisitDeclList(V, d->generics);
-    V->VisitDeclList(V, d->fields);
-    V->VisitDeclList(V, d->monos);
+    if (d->self != NULL) AcceptType(V, d->self);
+    accept_type_list(V, d->types);
 }
 
-static void VisitImplDecl(struct HirVisitor *V, struct HirImplDecl *d)
+static void AcceptVarDecl(struct HirVisitor *V, struct HirVarDecl *d)
 {
-    V->VisitDeclList(V, d->generics);
-    V->VisitDeclList(V, d->methods);
-    V->VisitDeclList(V, d->monos);
+    if (d->tag != NULL) AcceptType(V, d->tag);
+    if (d->init != NULL) AcceptExpr(V, d->init);
 }
 
-static void VisitInstanceDecl(struct HirVisitor *V, struct HirInstanceDecl *d)
+static void AcceptReturnStmt(struct HirVisitor *V, struct HirReturnStmt *s)
 {
-    V->VisitTypeList(V, d->types);
+    if (s->expr != NULL) AcceptExpr(V, s->expr);
 }
 
-static void VisitVarDecl(struct HirVisitor *V, struct HirVarDecl *d)
+static void AcceptCallExpr(struct HirVisitor *V, struct HirCallExpr *e)
 {
-    V->VisitExpr(V, d->init);
+    AcceptType(V, e->func);
+    AcceptExpr(V, e->target);
+    accept_expr_list(V, e->args);
 }
 
-static void VisitReturnStmt(struct HirVisitor *V, struct HirReturnStmt *s)
+static void AcceptConversionExpr(struct HirVisitor *V, struct HirConversionExpr *e)
 {
-    V->VisitExpr(V, s->expr);
+    AcceptExpr(V, e->arg);
 }
 
-static void VisitCallExpr(struct HirVisitor *V, struct HirCallExpr *e)
+static void AcceptPathExpr(struct HirVisitor *V, struct HirPathExpr *e)
 {
-    V->VisitExpr(V, e->target);
-    V->VisitExprList(V, e->args);
+    AcceptPath(V, e->path);
 }
 
-static void VisitConversionExpr(struct HirVisitor *V, struct HirConversionExpr *e)
+static void AcceptFuncDecl(struct HirVisitor *V, struct HirFuncDecl *d)
 {
-    V->VisitExpr(V, e->arg);
+    if (d->self != NULL) AcceptType(V, d->self);
+    accept_decl_list(V, d->generics);
+    accept_decl_list(V, d->params);
+    if (d->body != NULL) AcceptBlock(V, d->body);
 }
 
-static void VisitPathExpr(struct HirVisitor *V, struct HirPathExpr *e)
+static void AcceptIfStmt(struct HirVisitor *V, struct HirIfStmt *s)
 {
-    V->VisitPath(V, e->path);
+    AcceptExpr(V, s->cond);
+    AcceptStmt(V, s->then_arm);
+    if (s->else_arm != NULL) AcceptStmt(V, s->else_arm);
 }
 
-static void VisitFuncDecl(struct HirVisitor *V, struct HirFuncDecl *d)
+static void AcceptWhileStmt(struct HirVisitor *V, struct HirWhileStmt *s)
 {
-    V->VisitType(V, d->self);
-    V->VisitDeclList(V, d->generics);
-    V->VisitDeclList(V, d->params);
-    if (d->body != NULL) V->VisitBlock(V, d->body);
+    AcceptExpr(V, s->cond);
+    AcceptBlock(V, s->block);
 }
 
-static void VisitIfStmt(struct HirVisitor *V, struct HirIfStmt *s)
-{
-    V->VisitExpr(V, s->cond);
-    V->VisitStmt(V, s->then_arm);
-    V->VisitStmt(V, s->else_arm);
-}
-
-static void VisitWhileStmt(struct HirVisitor *V, struct HirWhileStmt *s)
-{
-    V->VisitExpr(V, s->cond);
-    V->VisitBlock(V, s->block);
-}
-
-static void VisitLabelStmt(struct HirVisitor *V, struct HirLabelStmt *s)
+static void AcceptLabelStmt(struct HirVisitor *V, struct HirLabelStmt *s)
 {
     PAW_UNUSED(V);
     PAW_UNUSED(s);
 }
 
-static void VisitForStmt(struct HirVisitor *V, struct HirForStmt *s)
+static void AcceptForStmt(struct HirVisitor *V, struct HirForStmt *s)
 {
     if (s->is_fornum) {
-        V->VisitExpr(V, s->fornum.begin);
-        V->VisitExpr(V, s->fornum.end);
-        V->VisitExpr(V, s->fornum.step);
+        AcceptExpr(V, s->fornum.begin);
+        AcceptExpr(V, s->fornum.end);
+        AcceptExpr(V, s->fornum.step);
     } else {
-        V->VisitExpr(V, s->forin.target);
+        AcceptExpr(V, s->forin.target);
     }
-    V->VisitBlock(V, s->block);
+    AcceptBlock(V, s->block);
 }
 
-static void VisitIndex(struct HirVisitor *V, struct HirIndex *e)
+static void AcceptIndex(struct HirVisitor *V, struct HirIndex *e)
 {
-    V->VisitExpr(V, e->target);
-    V->VisitExpr(V, e->first);
+    AcceptExpr(V, e->target);
+    if (e->first != NULL) AcceptExpr(V, e->first);
+    if (e->second != NULL) AcceptExpr(V, e->second);
 }
 
-static void VisitSelector(struct HirVisitor *V, struct HirSelector *e)
+static void AcceptSelector(struct HirVisitor *V, struct HirSelector *e)
 {
-    V->VisitExpr(V, e->target);
+    AcceptExpr(V, e->target);
 }
 
-static void VisitPath(struct HirVisitor *V, struct HirPath *path)
+static void AcceptDeclStmt(struct HirVisitor *V, struct HirDeclStmt *s)
 {
-    PAW_UNUSED(V);
-    PAW_UNUSED(path);
+    AcceptDecl(V, s->decl);
 }
 
-static void VisitDeclStmt(struct HirVisitor *V, struct HirDeclStmt *s)
+static void AcceptAdt(struct HirVisitor *V, struct HirAdt *t)
 {
-    V->VisitDecl(V, s->decl);
+    accept_type_list(V, t->types);
 }
 
-static void VisitAdt(struct HirVisitor *V, struct HirAdt *t)
+static void AcceptFuncDef(struct HirVisitor *V, struct HirFuncDef *t)
 {
-    V->VisitTypeList(V, t->types);
+    accept_type_list(V, t->types);
+    accept_type_list(V, t->params);
+    AcceptType(V, t->result);
 }
 
-static void VisitFuncDef(struct HirVisitor *V, struct HirFuncDef *t)
+static void AcceptFuncPtr(struct HirVisitor *V, struct HirFuncPtr *t)
 {
-    V->VisitTypeList(V, t->types);
-    V->VisitTypeList(V, t->params);
-    V->VisitType(V, t->result);
+    accept_type_list(V, t->params);
+    AcceptType(V, t->result);
 }
 
-static void VisitFuncPtr(struct HirVisitor *V, struct HirFuncPtr *t)
+static void AcceptTupleType(struct HirVisitor *V, struct HirTupleType *t)
 {
-    V->VisitTypeList(V, t->params);
-    V->VisitType(V, t->result);
+    accept_type_list(V, t->elems);
 }
 
-static void VisitTupleType(struct HirVisitor *V, struct HirTupleType *t)
-{
-    V->VisitTypeList(V, t->elems);
-}
-
-static void VisitPathType(struct HirVisitor *V, struct HirPathType *t)
+static void AcceptPathType(struct HirVisitor *V, struct HirPathType *t)
 {
     for (int i = 0; i < t->path->count; ++i) {
         struct HirSegment *seg = K_LIST_GET(t->path, i);
-        V->VisitTypeList(V, seg->types);
+        accept_type_list(V, seg->types);
     }
 }
 
-static void VisitUnknown(struct HirVisitor *V, struct HirUnknown *t)
+static void AcceptUnknown(struct HirVisitor *V, struct HirUnknown *t)
 {
     PAW_UNUSED(V);
     PAW_UNUSED(t);
 }
 
-static void VisitGeneric(struct HirVisitor *V, struct HirGeneric *t)
+static void AcceptGeneric(struct HirVisitor *V, struct HirGeneric *t)
 {
     PAW_UNUSED(V);
     PAW_UNUSED(t);
 }
 
-static void VisitExpr(struct HirVisitor *V, struct HirExpr *node)
+#define VISITOR_CALL(V, name, x) ((V)->Visit##name != NULL ? (V)->Visit##name(V, x) : 1)
+#define VISITOR_POSTCALL(V, name, x) ((V)->PostVisit##name != NULL ? (V)->PostVisit##name(V, x) : (void)0)
+#define DEFINE_VISITOR_CASES(a, b) case kHir##a: { \
+        struct Hir##a *x = HirGet##a(node); \
+        if (VISITOR_CALL(V, a, x)) Accept##a(V, x); \
+        VISITOR_POSTCALL(V, a, x); \
+    } \
+    break;
+
+static void AcceptExpr(struct HirVisitor *V, struct HirExpr *node)
 {
-    if (node == NULL) return;
-    struct HirType *type = HIR_TYPEOF(node);
-    V->VisitType(V, type);
+    paw_assert(node != NULL);
+    if (!V->VisitExpr(V, node)) return;
 
     switch (HIR_KINDOF(node)) {
-#define DEFINE_VISIT(a, b) case kHir##a: \
-        V->Visit##a(V, &node->b); \
-        break;
-        HIR_EXPR_LIST(DEFINE_VISIT)
-#undef DEFINE_VISIT
+        HIR_EXPR_LIST(DEFINE_VISITOR_CASES)
     }
+
+    V->PostVisitExpr(V, node);
 }
 
-static void VisitDecl(struct HirVisitor *V, struct HirDecl *node)
+static void AcceptDecl(struct HirVisitor *V, struct HirDecl *node)
 {
-    if (node == NULL) return;
-    struct HirType *type = HIR_TYPEOF(node);
-    V->VisitType(V, type);
+    paw_assert(node != NULL);
+    if (!V->VisitDecl(V, node)) return;
 
     switch (HIR_KINDOF(node)) {
-#define DEFINE_VISIT(a, b) case kHir##a: \
-        V->Visit##a(V, &node->b); \
-        break;
-        HIR_DECL_LIST(DEFINE_VISIT)
-#undef DEFINE_VISIT
+        HIR_DECL_LIST(DEFINE_VISITOR_CASES)
     }
+
+    V->PostVisitDecl(V, node);
 }
 
-static void VisitStmt(struct HirVisitor *V, struct HirStmt *node)
+static void AcceptStmt(struct HirVisitor *V, struct HirStmt *node)
 {
-    if (node == NULL) return;
+    paw_assert(node != NULL);
+    if (!V->VisitStmt(V, node)) return;
+
     switch (HIR_KINDOF(node)) {
-#define DEFINE_VISIT(a, b) case kHir##a: \
-        V->Visit##a(V, &node->b); \
-        break;
-        HIR_STMT_LIST(DEFINE_VISIT)
-#undef DEFINE_VISIT
+        HIR_STMT_LIST(DEFINE_VISITOR_CASES)
     }
+
+    V->PostVisitStmt(V, node);
 }
 
-static void VisitType(struct HirVisitor *V, struct HirType *node)
+static void AcceptType(struct HirVisitor *V, struct HirType *node)
 {
-    if (node == NULL) return;
+    paw_assert(node != NULL);
+    if (!V->VisitType(V, node)) return;
+
     switch (HIR_KINDOF(node)) {
-#define DEFINE_VISIT(a, b) case kHir##a: \
-        V->Visit##a(V, &node->b); \
-        break;
-        HIR_TYPE_LIST(DEFINE_VISIT)
-#undef DEFINE_VISIT
+        HIR_TYPE_LIST(DEFINE_VISITOR_CASES)
     }
+
+    V->PostVisitType(V, node);
 }
+
+#undef DEFINE_VISITOR_CASES
+#undef VISITOR_POSTCALL
+#undef VISITOR_CALL
+
+static paw_Bool default_visit_expr(struct HirVisitor *V, struct HirExpr *node) {return PAW_TRUE;}
+static paw_Bool default_visit_decl(struct HirVisitor *V, struct HirDecl *node) {return PAW_TRUE;}
+static paw_Bool default_visit_stmt(struct HirVisitor *V, struct HirStmt *node) {return PAW_TRUE;}
+static paw_Bool default_visit_type(struct HirVisitor *V, struct HirType *node) {return PAW_TRUE;}
+
+static void default_post_visit_expr(struct HirVisitor *V, struct HirExpr *node) {}
+static void default_post_visit_decl(struct HirVisitor *V, struct HirDecl *node) {}
+static void default_post_visit_stmt(struct HirVisitor *V, struct HirStmt *node) {}
+static void default_post_visit_type(struct HirVisitor *V, struct HirType *node) {}
 
 void pawHir_visitor_init(struct HirVisitor *V, struct Hir *hir, void *ud)
 {
@@ -431,311 +462,77 @@ void pawHir_visitor_init(struct HirVisitor *V, struct Hir *hir, void *ud)
         .hir = hir,
         .ud = ud,
 
-        .VisitExpr = VisitExpr,
-        .VisitPath = VisitPath,
-        .VisitDecl = VisitDecl,
-        .VisitStmt = VisitStmt,
-        .VisitType = VisitType,
+        .VisitExpr = default_visit_expr,
+        .VisitDecl = default_visit_decl,
+        .VisitStmt = default_visit_stmt,
+        .VisitType = default_visit_type,
 
-        .VisitExprList = visit_expr_list,
-        .VisitDeclList = visit_decl_list,
-        .VisitStmtList = visit_stmt_list,
-        .VisitTypeList = visit_type_list,
-
-#define DEFINE_CALLBACKS(a, b) .Visit##a = Visit##a,
-        HIR_EXPR_LIST(DEFINE_CALLBACKS)
-        HIR_DECL_LIST(DEFINE_CALLBACKS)
-        HIR_STMT_LIST(DEFINE_CALLBACKS)
-        HIR_TYPE_LIST(DEFINE_CALLBACKS)
-#undef DEFINE_CALLBACKS
+        .PostVisitExpr = default_post_visit_expr,
+        .PostVisitDecl = default_post_visit_decl,
+        .PostVisitStmt = default_post_visit_stmt,
+        .PostVisitType = default_post_visit_type,
     };
 }
 
-void pawHir_visit(struct HirVisitor *V)
-{
-    struct Hir *hir = V->hir;
-    V->VisitDeclList(V, hir->items);
-}
-
-// Generate code for folding a list of HIR nodes
-#define DEFINE_LIST_FOLDER(name, T) \
-    static struct Hir##T##List *fold_##name##_list(struct HirFolder *F, struct Hir##T##List *list) \
-    { \
-        if (list == NULL) return NULL; \
+#define DEFINE_VISITORS(name, T) \
+    void pawHir_visit_##name(struct HirVisitor *V, struct Hir##T *node) { \
+        paw_assert(node != NULL); \
+        V->line = node->hdr.line; \
+        Accept##T(V, node); \
+    } \
+    void pawHir_visit_##name##_list(struct HirVisitor *V, struct Hir##T##List *list) { \
+        if (list == NULL) return; \
         for (int i = 0; i < list->count; ++i) { \
-            list->data[i] = F->Fold##T(F, list->data[i]); \
+            pawHir_visit_##name(V, K_LIST_GET(list, i)); \
         } \
-        return list; \
     }
-DEFINE_LIST_FOLDER(decl, Decl)
-DEFINE_LIST_FOLDER(expr, Expr)
-DEFINE_LIST_FOLDER(stmt, Stmt)
-DEFINE_LIST_FOLDER(type, Type)
+DEFINE_VISITORS(expr, Expr)
+DEFINE_VISITORS(decl, Decl)
+DEFINE_VISITORS(stmt, Stmt)
+DEFINE_VISITORS(type, Type)
+#undef DEFINE_VISITORS
 
-static struct HirStmt *FoldBlock(struct HirFolder *F, struct HirBlock *s)
-{
-    s->stmts = F->FoldStmtList(F, s->stmts);
-    return HIR_CAST_STMT(s);
-}
-#define FOLD_BLOCK(F, s) CAST(struct HirBlock *, (F)->FoldBlock(F, s))
-#define MAYBE_FOLD_BLOCK(F, s) ((s) != NULL ? FOLD_BLOCK(F, s) : NULL)
+static struct HirType *FoldType(struct HirTypeFolder *, struct HirType *);
 
-static struct HirExpr *FoldLogicalExpr(struct HirFolder *F, struct HirLogicalExpr *e)
+static struct HirTypeList *fold_type_list(struct HirTypeFolder *F, struct HirTypeList *list)
 {
-    e->lhs = F->FoldExpr(F, e->lhs);
-    e->rhs = F->FoldExpr(F, e->rhs);
-    return HIR_CAST_EXPR(e);
-}
-
-static struct HirExpr *FoldFieldExpr(struct HirFolder *F, struct HirFieldExpr *e)
-{
-    if (e->fid < 0) e->key = F->FoldExpr(F, e->key);
-    e->value = F->FoldExpr(F, e->value);
-    return HIR_CAST_EXPR(e);
-}
-
-static struct HirExpr *FoldAssignExpr(struct HirFolder *F, struct HirAssignExpr *e)
-{
-    e->lhs = F->FoldExpr(F, e->lhs);
-    e->rhs = F->FoldExpr(F, e->rhs);
-    return HIR_CAST_EXPR(e);
-}
-
-static struct HirExpr *FoldLiteralExpr(struct HirFolder *F, struct HirLiteralExpr *e)
-{
-    switch (e->lit_kind) {
-        case kHirLitComposite:
-            e->comp.path = F->FoldPath(F, e->comp.path);
-            e->comp.items = F->FoldExprList(F, e->comp.items);
-            break;
-        case kHirLitTuple:
-            e->tuple.elems = F->FoldExprList(F, e->tuple.elems);
-            break;
-        default:
-            break;
+    if (list == NULL) return NULL;
+    struct Compiler *C = F->hir->C;
+    for (int i = 0; i < list->count; ++i) {
+        struct HirType *type = FoldType(F, K_LIST_GET(list, i));
+        K_LIST_SET(list, i, type);
     }
-    return HIR_CAST_EXPR(e);
+    return list;
 }
 
-static struct HirExpr *FoldChainExpr(struct HirFolder *F, struct HirChainExpr *e)
-{
-    e->target = F->FoldExpr(F, e->target);
-    return HIR_CAST_EXPR(e);
-}
-
-static struct HirExpr *FoldUnOpExpr(struct HirFolder *F, struct HirUnOpExpr *e)
-{
-    e->target = F->FoldExpr(F, e->target);
-    return HIR_CAST_EXPR(e);
-}
-
-static struct HirExpr *FoldBinOpExpr(struct HirFolder *F, struct HirBinOpExpr *e)
-{
-    e->lhs = F->FoldExpr(F, e->lhs);
-    e->rhs = F->FoldExpr(F, e->rhs);
-    return HIR_CAST_EXPR(e);
-}
-
-static struct HirStmt *FoldExprStmt(struct HirFolder *F, struct HirExprStmt *s)
-{
-    s->expr = F->FoldExpr(F, s->expr);
-    return HIR_CAST_STMT(s);
-}
-
-static struct HirExpr *FoldClosureExpr(struct HirFolder *F, struct HirClosureExpr *e)
-{
-    e->params = F->FoldDeclList(F, e->params);
-    if (e->has_body) {
-        e->body = FOLD_BLOCK(F, e->body);
-    } else {
-        e->expr = F->FoldExpr(F, e->expr);
-    }
-    return HIR_CAST_EXPR(e);
-}
-
-static struct HirDecl *FoldFieldDecl(struct HirFolder *F, struct HirFieldDecl *d)
-{
-    return HIR_CAST_DECL(d);
-}
-
-static struct HirDecl *FoldTypeDecl(struct HirFolder *F, struct HirTypeDecl *d)
-{
-    d->generics = F->FoldDeclList(F, d->generics);
-    d->rhs = F->FoldExpr(F, d->rhs);
-    return HIR_CAST_DECL(d);
-}
-
-static struct HirDecl *FoldGenericDecl(struct HirFolder *F, struct HirGenericDecl *d)
-{
-    PAW_UNUSED(F);
-    return HIR_CAST_DECL(d);
-}
-
-static struct HirDecl *FoldUseDecl(struct HirFolder *F, struct HirUseDecl *d)
-{
-    d->path = F->FoldPath(F, d->path);
-    return HIR_CAST_DECL(d);
-}
-
-static struct HirDecl *FoldVariantDecl(struct HirFolder *F, struct HirVariantDecl *d)
-{
-    d->fields = F->FoldDeclList(F, d->fields);
-    return HIR_CAST_DECL(d);
-}
-
-static struct HirDecl *FoldAdtDecl(struct HirFolder *F, struct HirAdtDecl *d)
-{
-    d->generics = F->FoldDeclList(F, d->generics);
-    d->fields = F->FoldDeclList(F, d->fields);
-    d->monos = F->FoldDeclList(F, d->monos);
-    return HIR_CAST_DECL(d);
-}
-
-static struct HirDecl *FoldImplDecl(struct HirFolder *F, struct HirImplDecl *d)
-{
-    d->generics = F->FoldDeclList(F, d->generics);
-    d->methods = F->FoldDeclList(F, d->methods);
-    d->monos = F->FoldDeclList(F, d->monos);
-    return HIR_CAST_DECL(d);
-}
-
-static struct HirDecl *FoldInstanceDecl(struct HirFolder *F, struct HirInstanceDecl *d)
-{
-    d->types = F->FoldTypeList(F, d->types);
-    return HIR_CAST_DECL(d);
-}
-
-static struct HirDecl *FoldVarDecl(struct HirFolder *F, struct HirVarDecl *d)
-{
-    d->init = F->FoldExpr(F, d->init);
-    return HIR_CAST_DECL(d);
-}
-
-static struct HirStmt *FoldReturnStmt(struct HirFolder *F, struct HirReturnStmt *s)
-{
-    s->expr = F->FoldExpr(F, s->expr);
-    return HIR_CAST_STMT(s);
-}
-
-static struct HirExpr *FoldCallExpr(struct HirFolder *F, struct HirCallExpr *e)
-{
-    e->target = F->FoldExpr(F, e->target);
-    e->args = F->FoldExprList(F, e->args);
-    return HIR_CAST_EXPR(e);
-}
-
-static struct HirExpr *FoldConversionExpr(struct HirFolder *F, struct HirConversionExpr *e)
-{
-    e->arg = F->FoldExpr(F, e->arg);
-    return HIR_CAST_EXPR(e);
-}
-
-static struct HirExpr *FoldPathExpr(struct HirFolder *F, struct HirPathExpr *e)
-{
-    e->path = F->FoldPath(F, e->path);
-    return HIR_CAST_EXPR(e);
-}
-
-static struct HirDecl *FoldFuncDecl(struct HirFolder *F, struct HirFuncDecl *d)
-{
-    d->self = F->FoldType(F, d->self);
-    d->generics = F->FoldDeclList(F, d->generics);
-    d->params = F->FoldDeclList(F, d->params);
-    if (d->body != NULL) d->body = FOLD_BLOCK(F, d->body);
-    return HIR_CAST_DECL(d);
-}
-
-static struct HirStmt *FoldIfStmt(struct HirFolder *F, struct HirIfStmt *s)
-{
-    s->cond = F->FoldExpr(F, s->cond);
-    s->then_arm = F->FoldStmt(F, s->then_arm);
-    s->else_arm = F->FoldStmt(F, s->else_arm);
-    return HIR_CAST_STMT(s);
-}
-
-static struct HirStmt *FoldWhileStmt(struct HirFolder *F, struct HirWhileStmt *s)
-{
-    s->cond = F->FoldExpr(F, s->cond);
-    s->block = FOLD_BLOCK(F, s->block);
-    return HIR_CAST_STMT(s);
-}
-
-static struct HirStmt *FoldLabelStmt(struct HirFolder *F, struct HirLabelStmt *s)
-{
-    PAW_UNUSED(F);
-    return HIR_CAST_STMT(s);
-}
-
-static struct HirStmt *FoldForStmt(struct HirFolder *F, struct HirForStmt *s)
-{
-    if (s->is_fornum) {
-        s->fornum.begin = F->FoldExpr(F, s->fornum.begin);
-        s->fornum.end = F->FoldExpr(F, s->fornum.end);
-        s->fornum.step = F->FoldExpr(F, s->fornum.step);
-    } else {
-        s->forin.target = F->FoldExpr(F, s->forin.target);
-    }
-    s->block = FOLD_BLOCK(F, s->block);
-    return HIR_CAST_STMT(s);
-}
-
-static struct HirExpr *FoldIndex(struct HirFolder *F, struct HirIndex *e)
-{
-    e->target = F->FoldExpr(F, e->target);
-    e->first = F->FoldExpr(F, e->first);
-    e->second = F->FoldExpr(F, e->second);
-    return HIR_CAST_EXPR(e);
-}
-
-static struct HirExpr *FoldSelector(struct HirFolder *F, struct HirSelector *e)
-{
-    e->target = F->FoldExpr(F, e->target);
-    return HIR_CAST_EXPR(e);
-}
-
-static struct HirPath *FoldPath(struct HirFolder *F, struct HirPath *path)
-{
-    for (int i = 0; i < path->count; ++i) {
-        struct HirSegment *seg = K_LIST_GET(path, i);
-        seg->types = F->FoldTypeList(F, seg->types);
-    }
-    return path;
-}
-
-static struct HirStmt *FoldDeclStmt(struct HirFolder *F, struct HirDeclStmt *s)
-{
-    s->decl = F->FoldDecl(F, s->decl);
-    return HIR_CAST_STMT(s);
-}
-
-static struct HirType *FoldAdt(struct HirFolder *F, struct HirAdt *t)
+static struct HirType *FoldAdt(struct HirTypeFolder *F, struct HirAdt *t)
 {
     t->types = F->FoldTypeList(F, t->types);
     return HIR_CAST_TYPE(t);
 }
 
-static struct HirType *FoldFuncDef(struct HirFolder *F, struct HirFuncDef *t)
+static struct HirType *FoldFuncDef(struct HirTypeFolder *F, struct HirFuncDef *t)
 {
     t->types = F->FoldTypeList(F, t->types);
     t->params = F->FoldTypeList(F, t->params);
-    t->result = F->FoldType(F, t->result);
+    t->result = FoldType(F, t->result);
     return HIR_CAST_TYPE(t);
 }
 
-static struct HirType *FoldFuncPtr(struct HirFolder *F, struct HirFuncPtr *t)
+static struct HirType *FoldFuncPtr(struct HirTypeFolder *F, struct HirFuncPtr *t)
 {
     t->params = F->FoldTypeList(F, t->params);
-    t->result = F->FoldType(F, t->result);
+    t->result = FoldType(F, t->result);
     return HIR_CAST_TYPE(t);
 }
 
-static struct HirType *FoldTupleType(struct HirFolder *F, struct HirTupleType *t)
+static struct HirType *FoldTupleType(struct HirTypeFolder *F, struct HirTupleType *t)
 {
     t->elems = F->FoldTypeList(F, t->elems);
     return HIR_CAST_TYPE(t);
 }
 
-static struct HirType *FoldPathType(struct HirFolder *F, struct HirPathType *t)
+static struct HirType *FoldPathType(struct HirTypeFolder *F, struct HirPathType *t)
 {
     for (int i = 0; i < t->path->count; ++i) {
         struct HirSegment *seg = K_LIST_GET(t->path, i);
@@ -744,502 +541,405 @@ static struct HirType *FoldPathType(struct HirFolder *F, struct HirPathType *t)
     return HIR_CAST_TYPE(t);
 }
 
-static struct HirType *FoldUnknown(struct HirFolder *F, struct HirUnknown *t)
+static void FoldExpr(struct HirVisitor *V, struct HirExpr *node)
 {
-    PAW_UNUSED(F);
-    return HIR_CAST_TYPE(t);
+    paw_assert(node != NULL);
+    struct HirTypeFolder *F = V->ud;
+    struct HirType *type = node->hdr.type;
+    node->hdr.type = pawHir_fold_type(F, type);
 }
 
-static struct HirType *FoldGeneric(struct HirFolder *F, struct HirGeneric *t)
+static void FoldDecl(struct HirVisitor *V, struct HirDecl *node)
 {
-    PAW_UNUSED(F);
-    return HIR_CAST_TYPE(t);
+    paw_assert(node != NULL);
+    struct HirTypeFolder *F = V->ud;
+    struct HirType *type = node->hdr.type;
+    node->hdr.type = pawHir_fold_type(F, type);
 }
 
-static struct HirType *NoopFoldType(struct HirFolder *F, struct HirType *type)
-{
-    PAW_UNUSED(F);
-    return type;
-}
-
-static struct HirExpr *FoldExpr(struct HirFolder *F, struct HirExpr *node)
-{
-    if (node == NULL) return NULL;
-    node->hdr.type = F->FoldType(F, node->hdr.type);
-    switch (HIR_KINDOF(node)) {
-#define DEFINE_FOLD(a, b) case kHir##a: \
-        return F->Fold##a(F, &node->b);
-        HIR_EXPR_LIST(DEFINE_FOLD)
-#undef DEFINE_FOLD
-    }
-}
-
-static struct HirDecl *FoldDecl(struct HirFolder *F, struct HirDecl *node)
-{
-    if (node == NULL) return NULL;
-    node->hdr.type = F->FoldType(F, node->hdr.type);
-    switch (HIR_KINDOF(node)) {
-#define DEFINE_FOLD(a, b) case kHir##a: \
-        return F->Fold##a(F, &node->b);
-        HIR_DECL_LIST(DEFINE_FOLD)
-#undef DEFINE_FOLD
-    }
-}
-
-static struct HirStmt *FoldStmt(struct HirFolder *F, struct HirStmt *node)
+static struct HirType *FoldType(struct HirTypeFolder *F, struct HirType *node)
 {
     if (node == NULL) return NULL;
     switch (HIR_KINDOF(node)) {
-#define DEFINE_FOLD(a, b) case kHir##a: \
-        return F->Fold##a(F, &node->b);
-        HIR_STMT_LIST(DEFINE_FOLD)
-#undef DEFINE_FOLD
+#define DEFINE_ACCEPT(a, _) case kHir##a: \
+            if (F->Fold##a == NULL) return node; \
+            return F->Fold##a(F, HirGet##a(node));
+        HIR_TYPE_LIST(DEFINE_ACCEPT)
+#undef DEFINE_ACCEPT
     }
 }
 
-static struct HirType *FoldType(struct HirFolder *F, struct HirType *node)
+void pawHir_type_folder_init(struct HirTypeFolder *F, struct Hir *hir, void *ud)
 {
-    if (node == NULL) return NULL;
-    switch (HIR_KINDOF(node)) {
-#define DEFINE_FOLD(a, b) case kHir##a: \
-        node = F->Fold##a(F, &node->b); \
-        break;
-        HIR_TYPE_LIST(DEFINE_FOLD)
-#undef DEFINE_FOLD
-    }
-    return F->PostFoldType(F, node);
-}
-
-void pawHir_folder_init(struct HirFolder *F, struct Hir *hir, void *ud)
-{
-    *F = (struct HirFolder){
+    *F = (struct HirTypeFolder){
         .hir = hir,
         .ud = ud,
 
-        .FoldExpr = FoldExpr,
-        .FoldPath = FoldPath,
-        .FoldDecl = FoldDecl,
-        .FoldStmt = FoldStmt,
-        .FoldType = FoldType,
-
-        .PostFoldType = NoopFoldType,
-
-        .FoldExprList = fold_expr_list,
-        .FoldDeclList = fold_decl_list,
-        .FoldStmtList = fold_stmt_list,
         .FoldTypeList = fold_type_list,
 
-#define DEFINE_CALLBACKS(a, b) .Fold##a = Fold##a,
-        HIR_EXPR_LIST(DEFINE_CALLBACKS)
-        HIR_DECL_LIST(DEFINE_CALLBACKS)
-        HIR_STMT_LIST(DEFINE_CALLBACKS)
-        HIR_TYPE_LIST(DEFINE_CALLBACKS)
-#undef DEFINE_CALLBACKS
+        .FoldAdt = FoldAdt,
+        .FoldFuncDef = FoldFuncDef,
+        .FoldFuncPtr = FoldFuncPtr,
+        .FoldTupleType = FoldTupleType,
+        .FoldPathType = FoldPathType,
     };
+
+    pawHir_visitor_init(&F->V, hir, F);
+    F->V.PostVisitExpr = FoldExpr;
+    F->V.PostVisitDecl = FoldDecl;
 }
 
-void pawHir_fold(struct HirFolder *F)
+struct HirType *pawHir_fold_type(struct HirTypeFolder *F, struct HirType *node)
 {
-    struct Hir *hir = F->hir;
-    F->FoldDeclList(F, hir->items);
+    return FoldType(F, node);
 }
+
+struct HirTypeList *pawHir_fold_type_list(struct HirTypeFolder *F, struct HirTypeList *list)
+{
+    return list != NULL ? F->FoldTypeList(F, list) : NULL;
+}
+
+#define DEFINE_FOLDERS(name, T) \
+    void pawHir_fold_##name(struct HirTypeFolder *F, struct Hir##T *node) { \
+        paw_assert(node != NULL); \
+        F->line = node->hdr.line; \
+        pawHir_visit_##name(&F->V, node); \
+    } \
+    void pawHir_fold_##name##_list(struct HirTypeFolder *F, struct Hir##T##List *list) { \
+        for (int i = 0; i < list->count; ++i) { \
+            pawHir_visit_##name(&F->V, K_LIST_GET(list, i)); \
+        } \
+    }
+DEFINE_FOLDERS(expr, Expr)
+DEFINE_FOLDERS(decl, Decl)
+DEFINE_FOLDERS(stmt, Stmt)
+#undef DEFINE_FOLDERS
 
 
 // HIR copying routines
 
-struct Copier {
-    struct Hir *hir;
-    paw_Env *P;
-};
-
-#define DEFINE_COPY_PREP(name, T) \
-    static T *copy_prep_##name##_aux(struct HirFolder *F, T *t) \
-    { \
-        T *r = pawHir_new_##name(F->hir->C, t->hdr.line, HIR_KINDOF(t)); \
-        r->hdr = t->hdr; \
-        return r; \
-    }
-DEFINE_COPY_PREP(expr, struct HirExpr)
-DEFINE_COPY_PREP(decl, struct HirDecl)
-DEFINE_COPY_PREP(stmt, struct HirStmt)
-
-// Helpers for copying: create a new node of the given type and kind,
-// and copy the common fields
-#define COPY_PREP_EXPR(F, e) copy_prep_expr_aux(F, HIR_CAST_EXPR(e))
-#define COPY_PREP_DECL(F, d) copy_prep_decl_aux(F, HIR_CAST_DECL(d))
-#define COPY_PREP_STMT(F, s) copy_prep_stmt_aux(F, HIR_CAST_STMT(s))
+struct HirStmt *copy_stmt(struct Compiler *C, struct HirStmt *node);
+struct HirDecl *copy_decl(struct Compiler *C, struct HirDecl *node);
+struct HirExpr *copy_expr(struct Compiler *C, struct HirExpr *node);
 
 #define DEFINE_COPY_LIST(name, T) \
-    static struct Hir##T##List *copy_##name##_list(struct HirFolder *F, struct Hir##T##List *old_list) \
+    static struct Hir##T##List *copy_##name##_list(struct Compiler *C, struct Hir##T##List *old_list) \
     { \
         if (old_list == NULL) return NULL; \
-        struct Hir##T##List *new_list = pawHir_##name##_list_new(F->hir->C); \
+        struct Hir##T##List *new_list = pawHir_##name##_list_new(C); \
         for (int i = 0; i < old_list->count; ++i) { \
-            struct Hir##T *elem = F->Fold##T(F, old_list->data[i]); \
-            pawHir_##name##_list_push(F->hir->C, new_list, elem); \
+            struct Hir##T *elem = copy_##name(C, old_list->data[i]); \
+            pawHir_##name##_list_push(C, new_list, elem); \
         } \
         return new_list; \
     }
 DEFINE_COPY_LIST(decl, Decl)
 DEFINE_COPY_LIST(expr, Expr)
 DEFINE_COPY_LIST(stmt, Stmt)
-DEFINE_COPY_LIST(type, Type)
 
-static struct HirStmt *copy_block_stmt(struct HirFolder *F, struct HirBlock *s)
+static struct HirTypeList *copy_type_list(struct Compiler *C, struct HirTypeList *old_list)
 {
-    struct HirStmt *r = COPY_PREP_STMT(F, s);
-    r->block.stmts = F->FoldStmtList(F, s->stmts);
-    return r;
-}
-
-#define COPY_BLOCK(F, s) CAST(struct HirBlock *, (F)->FoldBlock(F, s))
-
-static struct HirExpr *copy_logical_expr(struct HirFolder *F, struct HirLogicalExpr *e)
-{
-    struct HirExpr *r = COPY_PREP_EXPR(F, e);
-    r->logical.lhs = F->FoldExpr(F, e->lhs);
-    r->logical.rhs = F->FoldExpr(F, e->rhs);
-    return r;
-}
-
-static struct HirExpr *copy_field_expr(struct HirFolder *F, struct HirFieldExpr *e)
-{
-    struct HirExpr *result = COPY_PREP_EXPR(F, e);
-    struct HirFieldExpr *r = HirGetFieldExpr(result);
-    r->fid = e->fid;
-    if (e->fid < 0) {
-        r->key = F->FoldExpr(F, e->key);
-    } else {
-        r->name = e->name;
+    if (old_list == NULL) return NULL;
+    struct HirTypeList *new_list = pawHir_type_list_new(C);
+    for (int i = 0; i < old_list->count; ++i) {
+        pawHir_type_list_push(C, new_list, K_LIST_GET(old_list, i));
     }
-    r->value = F->FoldExpr(F, e->value);
-    return result;
+    return new_list;
 }
 
-static struct HirExpr *copy_assign_expr(struct HirFolder *F, struct HirAssignExpr *e)
+static void CopyBlock(struct Compiler *C, struct HirBlock *s, struct HirBlock *r)
 {
-    struct HirExpr *result = COPY_PREP_EXPR(F, e);
-    struct HirAssignExpr *r = HirGetAssignExpr(result);
-    r->lhs = F->FoldExpr(F, e->lhs);
-    r->rhs = F->FoldExpr(F, e->rhs);
-    return result;
+    r->stmts = copy_stmt_list(C, s->stmts);
 }
+#define COPY_BLOCK(C, b) CAST(struct HirBlock *, copy_stmt(C, HIR_CAST_STMT(b)))
 
-static struct HirExpr *copy_literal_expr(struct HirFolder *F, struct HirLiteralExpr *e)
+static struct HirPath *dup_path(struct Compiler *C, struct HirPath *e)
 {
-    struct HirExpr *r = COPY_PREP_EXPR(F, e);
-    r->literal.lit_kind = e->lit_kind;
-    switch (e->lit_kind) {
-        case kHirLitBasic:
-            r->literal.basic = e->basic;
-            break;
-        case kHirLitTuple:
-            r->literal.tuple.elems = F->FoldExprList(F, e->tuple.elems);
-            break;
-        case kHirLitContainer:
-            r->literal.cont.code = e->cont.code;
-            r->literal.cont.items = F->FoldExprList(F, e->cont.items);
-            break;
-        default:
-            paw_assert(e->lit_kind == kHirLitComposite);
-            r->literal.comp.path = F->FoldPath(F, e->comp.path);
-            r->literal.comp.items = F->FoldExprList(F, e->comp.items);
-            break;
-    }
-    return r;
-}
-
-static struct HirExpr *copy_chain_expr(struct HirFolder *F, struct HirChainExpr *e)
-{
-    struct HirExpr *r = COPY_PREP_EXPR(F, e);
-    r->chain.target = F->FoldExpr(F, e->target);
-    return r;
-}
-
-static struct HirExpr *copy_unop_expr(struct HirFolder *F, struct HirUnOpExpr *e)
-{
-    struct HirExpr *r = COPY_PREP_EXPR(F, e);
-    r->unop.target = F->FoldExpr(F, e->target);
-    r->unop.op = e->op;
-    return r;
-}
-
-static struct HirExpr *copy_binop_expr(struct HirFolder *F, struct HirBinOpExpr *e)
-{
-    struct HirExpr *r = COPY_PREP_EXPR(F, e);
-    r->binop.lhs = F->FoldExpr(F, e->lhs);
-    r->binop.rhs = F->FoldExpr(F, e->rhs);
-    r->binop.op = e->op;
-    return r;
-}
-
-static struct HirStmt *copy_expr_stmt(struct HirFolder *F, struct HirExprStmt *s)
-{
-    struct HirStmt *r = COPY_PREP_STMT(F, s);
-    r->expr.expr = F->FoldExpr(F, s->expr);
-    return r;
-}
-
-static struct HirExpr *copy_closure_expr(struct HirFolder *F, struct HirClosureExpr *e)
-{
-    struct HirExpr *r = COPY_PREP_EXPR(F, e);
-    r->clos.params = F->FoldDeclList(F, e->params);
-    if (e->has_body) {
-        r->clos.body = COPY_BLOCK(F, e->body);
-        r->clos.has_body = PAW_TRUE;
-    } else {
-        r->clos.expr = F->FoldExpr(F, e->expr);
-    }
-    return r;
-}
-
-static struct HirDecl *copy_field_decl(struct HirFolder *F, struct HirFieldDecl *d)
-{
-    struct HirDecl *result = COPY_PREP_DECL(F, d);
-    struct HirFieldDecl *r = HirGetFieldDecl(result);
-    r->is_pub = d->is_pub;
-    r->tag = F->FoldType(F, d->tag);
-    r->name = d->name;
-    return result;
-}
-
-static struct HirDecl *copy_type_decl(struct HirFolder *F, struct HirTypeDecl *d)
-{
-    struct HirDecl *r = COPY_PREP_DECL(F, d);
-    r->type.name = d->name;
-    r->type.generics = F->FoldDeclList(F, d->generics);
-    r->type.rhs = F->FoldExpr(F, d->rhs);
-    return r;
-}
-
-static struct HirDecl *copy_generic_decl(struct HirFolder *F, struct HirGenericDecl *d)
-{
-    struct HirDecl *r = COPY_PREP_DECL(F, d);
-    r->generic.name = d->name;
-    return r;
-}
-
-static struct HirDecl *copy_adt_decl(struct HirFolder *F, struct HirAdtDecl *d)
-{
-    struct HirDecl *r = COPY_PREP_DECL(F, d);
-    r->adt.is_struct = d->is_struct;
-    r->adt.is_pub = d->is_pub;
-    r->adt.name = d->name;
-    r->adt.generics = F->FoldDeclList(F, d->generics);
-    r->adt.fields = F->FoldDeclList(F, d->fields);
-    r->adt.monos = F->FoldDeclList(F, d->monos);
-    return r;
-}
-
-static struct HirDecl *copy_impl_decl(struct HirFolder *F, struct HirImplDecl *d)
-{
-    struct HirDecl *result = COPY_PREP_DECL(F, d);
-    struct HirImplDecl *r = HirGetImplDecl(result);
-    r->generics = F->FoldDeclList(F, d->generics);
-    r->methods = F->FoldDeclList(F, d->methods);
-    r->monos = F->FoldDeclList(F, d->monos);
-    return result;
-}
-
-static struct HirDecl *copy_use_decl(struct HirFolder *F, struct HirUseDecl *d)
-{
-    struct HirDecl *result = COPY_PREP_DECL(F, d);
-    struct HirUseDecl *r = HirGetUseDecl(result);
-    r->path = F->FoldPath(F, d->path);
-    return result;
-}
-
-static struct HirDecl *copy_variant_decl(struct HirFolder *F, struct HirVariantDecl *d)
-{
-    struct HirDecl *r = COPY_PREP_DECL(F, d);
-    r->variant.fields = F->FoldDeclList(F, d->fields);
-    r->variant.index = d->index;
-    r->variant.name = d->name;
-    return r;
-}
-
-static struct HirDecl *copy_var_decl(struct HirFolder *F, struct HirVarDecl *d)
-{
-    struct HirDecl *r = COPY_PREP_DECL(F, d);
-    r->var.is_const = d->is_const;
-    r->var.name = d->name;
-    r->var.init = F->FoldExpr(F, d->init);
-    return r;
-}
-
-static struct HirStmt *copy_return_stmt(struct HirFolder *F, struct HirReturnStmt *s)
-{
-    struct HirStmt *r = COPY_PREP_STMT(F, s);
-    r->result.expr = F->FoldExpr(F, s->expr);
-    return r;
-}
-
-static struct HirExpr *copy_conversion_expr(struct HirFolder *F, struct HirConversionExpr *e)
-{
-    struct HirExpr *r = COPY_PREP_EXPR(F, e);
-    r->conv.arg = F->FoldExpr(F, e->arg);
-    r->conv.to = e->to;
-    return r;
-}
-
-static struct HirExpr *copy_call_expr(struct HirFolder *F, struct HirCallExpr *e)
-{
-    struct HirExpr *r = COPY_PREP_EXPR(F, e);
-    r->call.target = F->FoldExpr(F, e->target);
-    r->call.args = F->FoldExprList(F, e->args);
-    r->call.func = e->func;
-    return r;
-}
-
-static struct HirPath *copy_path(struct HirFolder *F, struct HirPath *e)
-{
-    struct HirPath *r = pawHir_path_new(F->hir->C);
+    struct HirPath *r = pawHir_path_new(C);
     for (int i = 0; i < e->count; ++i) {
         struct HirSegment *src = pawHir_path_get(e, i);
-        struct HirSegment *dst = pawHir_path_add(F->hir->C, r, src->name, NULL);
-        dst->types = F->FoldTypeList(F, src->types);
+        struct HirSegment *dst = pawHir_path_add(C, r, src->name, NULL);
+        dst->types = copy_type_list(C, src->types);
         dst->base = src->base;
         dst->did = src->did;
     }
     return r;
 }
 
-static struct HirExpr *copy_path_expr(struct HirFolder *F, struct HirPathExpr *e)
+static void CopyLogicalExpr(struct Compiler *C, struct HirLogicalExpr *e, struct HirLogicalExpr *r)
 {
-    struct HirExpr *r = COPY_PREP_EXPR(F, e);
-    r->path.path = F->FoldPath(F, e->path);
-    return r;
+    r->lhs = copy_expr(C, e->lhs);
+    r->rhs = copy_expr(C, e->rhs);
 }
 
-static struct HirDecl *copy_func_decl(struct HirFolder *F, struct HirFuncDecl *d)
+static void CopyFieldExpr(struct Compiler *C, struct HirFieldExpr *e, struct HirFieldExpr *r)
 {
-    struct HirDecl *r = COPY_PREP_DECL(F, d);
-    r->func.is_pub = d->is_pub;
-    r->func.self = d->self;
-    r->func.name = d->name;
-    r->func.generics = F->FoldDeclList(F, d->generics);
-    r->func.params = F->FoldDeclList(F, d->params);
-    if (d->body != NULL) r->func.body = COPY_BLOCK(F, d->body);
-    r->func.monos = F->FoldDeclList(F, d->monos);
-    r->func.fn_kind = d->fn_kind;
-    return r;
-}
-
-static struct HirStmt *copy_if_stmt(struct HirFolder *F, struct HirIfStmt *s)
-{
-    struct HirStmt *r = COPY_PREP_STMT(F, s);
-    r->if_.cond = F->FoldExpr(F, s->cond);
-    r->if_.then_arm = F->FoldStmt(F, s->then_arm);
-    r->if_.else_arm = F->FoldStmt(F, s->else_arm);
-    return r;
-}
-
-static struct HirStmt *copy_while_stmt(struct HirFolder *F, struct HirWhileStmt *s)
-{
-    struct HirStmt *r = COPY_PREP_STMT(F, s);
-    r->while_.is_dowhile = s->is_dowhile;
-    r->while_.cond = F->FoldExpr(F, s->cond);
-    r->while_.block = COPY_BLOCK(F, s->block);
-    return r;
-}
-
-static struct HirStmt *copy_label_stmt(struct HirFolder *F, struct HirLabelStmt *s)
-{
-    struct HirStmt *r = COPY_PREP_STMT(F, s);
-    r->label.label = s->label;
-    return r;
-}
-
-static struct HirStmt *copy_for_stmt(struct HirFolder *F, struct HirForStmt *s)
-{
-    struct HirStmt *r = COPY_PREP_STMT(F, s);
-    r->for_.is_fornum = s->is_fornum;
-    r->for_.control = F->FoldDecl(F, s->control);
-    if (s->is_fornum) {
-        r->for_.fornum.begin = F->FoldExpr(F, s->fornum.begin);
-        r->for_.fornum.end = F->FoldExpr(F, s->fornum.end);
-        r->for_.fornum.step = F->FoldExpr(F, s->fornum.step);
+    r->fid = e->fid;
+    if (e->fid < 0) {
+        r->key = copy_expr(C, e->key);
     } else {
-        r->for_.forin.target = F->FoldExpr(F, s->forin.target);
+        r->name = e->name;
     }
-    r->for_.block = COPY_BLOCK(F, s->block);
-    return r;
+    r->value = copy_expr(C, e->value);
 }
 
-static struct HirExpr *copy_index_expr(struct HirFolder *F, struct HirIndex *e)
+static void CopyAssignExpr(struct Compiler *C, struct HirAssignExpr *e, struct HirAssignExpr *r)
 {
-    struct HirExpr *r = COPY_PREP_EXPR(F, e);
-    r->index.target = F->FoldExpr(F, e->target);
-    r->index.first = F->FoldExpr(F, e->first);
-    r->index.second = F->FoldExpr(F, e->second);
-    r->index.is_slice = e->is_slice;
-    return r;
+    r->lhs = copy_expr(C, e->lhs);
+    r->rhs = copy_expr(C, e->rhs);
 }
 
-static struct HirExpr *copy_select_expr(struct HirFolder *F, struct HirSelector *e)
+static void CopyLiteralExpr(struct Compiler *C, struct HirLiteralExpr *e, struct HirLiteralExpr *r)
 {
-    struct HirExpr *r = COPY_PREP_EXPR(F, e);
-    r->select.is_index = e->is_index;
-    r->select.target = F->FoldExpr(F, e->target);
-    r->select.name = e->name;
-    return r;
+    r->lit_kind = e->lit_kind;
+    switch (e->lit_kind) {
+        case kHirLitBasic:
+            r->basic = e->basic;
+            break;
+        case kHirLitTuple:
+            r->tuple.elems = copy_expr_list(C, e->tuple.elems);
+            break;
+        case kHirLitContainer:
+            r->cont.code = e->cont.code;
+            r->cont.items = copy_expr_list(C, e->cont.items);
+            break;
+        default:
+            paw_assert(e->lit_kind == kHirLitComposite);
+            r->comp.path = dup_path(C, e->comp.path);
+            r->comp.items = copy_expr_list(C, e->comp.items);
+            break;
+    }
 }
 
-static struct HirStmt *copy_decl_stmt(struct HirFolder *F, struct HirDeclStmt *s)
+static void CopyChainExpr(struct Compiler *C, struct HirChainExpr *e, struct HirChainExpr *r)
 {
-    struct HirStmt *r = COPY_PREP_STMT(F, s);
-    r->decl.decl = F->FoldDecl(F, s->decl);
-    return r;
+    r->target = copy_expr(C, e->target);
 }
 
-static void setup_copy_pass(struct HirFolder *F, struct Copier *C)
+static void CopyUnOpExpr(struct Compiler *C, struct HirUnOpExpr *e, struct HirUnOpExpr *r)
 {
-    pawHir_folder_init(F, C->hir, C);
-    F->FoldExprList = copy_expr_list;
-    F->FoldDeclList = copy_decl_list;
-    F->FoldStmtList = copy_stmt_list;
-    F->FoldTypeList = copy_type_list;
-    F->FoldLiteralExpr = copy_literal_expr;
-    F->FoldLogicalExpr = copy_logical_expr;
-    F->FoldPath = copy_path;
-    F->FoldPathExpr = copy_path_expr;
-    F->FoldChainExpr = copy_chain_expr;
-    F->FoldUnOpExpr = copy_unop_expr;
-    F->FoldBinOpExpr = copy_binop_expr;
-    F->FoldConversionExpr = copy_conversion_expr;
-    F->FoldCallExpr = copy_call_expr;
-    F->FoldIndex = copy_index_expr;
-    F->FoldSelector = copy_select_expr;
-    F->FoldFieldExpr = copy_field_expr;
-    F->FoldAssignExpr = copy_assign_expr;
-    F->FoldClosureExpr = copy_closure_expr;
-    F->FoldBlock = copy_block_stmt;
-    F->FoldExprStmt = copy_expr_stmt;
-    F->FoldDeclStmt = copy_decl_stmt;
-    F->FoldIfStmt = copy_if_stmt;
-    F->FoldForStmt = copy_for_stmt;
-    F->FoldWhileStmt = copy_while_stmt;
-    F->FoldLabelStmt = copy_label_stmt;
-    F->FoldReturnStmt = copy_return_stmt;
-    F->FoldVariantDecl = copy_variant_decl;
-    F->FoldVarDecl = copy_var_decl;
-    F->FoldFuncDecl = copy_func_decl;
-    F->FoldAdtDecl = copy_adt_decl;
-    F->FoldImplDecl = copy_impl_decl;
-    F->FoldFieldDecl = copy_field_decl;
-    F->FoldGenericDecl = copy_generic_decl;
-    F->FoldTypeDecl = copy_type_decl;
+    r->target = copy_expr(C, e->target);
+    r->op = e->op;
 }
 
-struct HirDecl *pawHir_copy_decl(struct Hir *hir, struct HirDecl *decl)
+static void CopyBinOpExpr(struct Compiler *C, struct HirBinOpExpr *e, struct HirBinOpExpr *r)
 {
-    struct Copier C = {
-        .P = hir->P,
-        .hir = hir,
-    };
-    struct HirFolder F;
-    setup_copy_pass(&F, &C);
-    return F.FoldDecl(&F, decl);
+    r->lhs = copy_expr(C, e->lhs);
+    r->rhs = copy_expr(C, e->rhs);
+    r->op = e->op;
+}
+
+static void CopyExprStmt(struct Compiler *C, struct HirExprStmt *s, struct HirExprStmt *r)
+{
+    r->expr = copy_expr(C, s->expr);
+}
+
+static void CopyClosureExpr(struct Compiler *C, struct HirClosureExpr *e, struct HirClosureExpr *r)
+{
+    r->params = copy_decl_list(C, e->params);
+    if (e->has_body) {
+        r->body = COPY_BLOCK(C, e->body);
+        r->has_body = PAW_TRUE;
+    } else {
+        r->expr = copy_expr(C, e->expr);
+    }
+}
+
+static void CopyFieldDecl(struct Compiler *C, struct HirFieldDecl *d, struct HirFieldDecl *r)
+{
+    r->is_pub = d->is_pub;
+    r->name = d->name;
+    r->tag = d->tag;
+}
+
+static void CopyTypeDecl(struct Compiler *C, struct HirTypeDecl *d, struct HirTypeDecl *r)
+{
+    r->name = d->name;
+    r->generics = copy_decl_list(C, d->generics);
+    r->rhs = copy_expr(C, d->rhs);
+}
+
+static void CopyGenericDecl(struct Compiler *C, struct HirGenericDecl *d, struct HirGenericDecl *r)
+{
+    r->name = d->name;
+}
+
+static void CopyAdtDecl(struct Compiler *C, struct HirAdtDecl *d, struct HirAdtDecl *r)
+{
+    r->is_struct = d->is_struct;
+    r->is_pub = d->is_pub;
+    r->name = d->name;
+    r->generics = copy_decl_list(C, d->generics);
+    r->fields = copy_decl_list(C, d->fields);
+    r->monos = copy_decl_list(C, d->monos);
+}
+
+static void CopyImplDecl(struct Compiler *C, struct HirImplDecl *d, struct HirImplDecl *r)
+{
+    r->generics = copy_decl_list(C, d->generics);
+    r->methods = copy_decl_list(C, d->methods);
+    r->monos = copy_decl_list(C, d->monos);
+}
+
+static void CopyUseDecl(struct Compiler *C, struct HirUseDecl *d, struct HirUseDecl *r)
+{
+    r->path = dup_path(C, d->path);
+}
+
+static void CopyVariantDecl(struct Compiler *C, struct HirVariantDecl *d, struct HirVariantDecl *r)
+{
+    r->fields = copy_decl_list(C, d->fields);
+    r->index = d->index;
+    r->name = d->name;
+}
+
+static void CopyVarDecl(struct Compiler *C, struct HirVarDecl *d, struct HirVarDecl *r)
+{
+    r->is_const = d->is_const;
+    r->name = d->name;
+    r->tag = d->tag;
+    if (d->init != NULL) r->init = copy_expr(C, d->init);
+}
+
+static void CopyReturnStmt(struct Compiler *C, struct HirReturnStmt *s, struct HirReturnStmt *r)
+{
+    r->expr = copy_expr(C, s->expr);
+}
+
+static void CopyConversionExpr(struct Compiler *C, struct HirConversionExpr *e, struct HirConversionExpr *r)
+{
+    r->arg = copy_expr(C, e->arg);
+    r->to = e->to;
+}
+
+static void CopyCallExpr(struct Compiler *C, struct HirCallExpr *e, struct HirCallExpr *r)
+{
+    r->target = copy_expr(C, e->target);
+    r->args = copy_expr_list(C, e->args);
+    r->func = e->func;
+}
+
+static void CopyPathExpr(struct Compiler *C, struct HirPathExpr *e, struct HirPathExpr *r)
+{
+    r->path = dup_path(C, e->path);
+}
+
+static void CopyFuncDecl(struct Compiler *C, struct HirFuncDecl *d, struct HirFuncDecl *r)
+{
+    r->is_pub = d->is_pub;
+    r->self = d->self;
+    r->name = d->name;
+    r->generics = copy_decl_list(C, d->generics);
+    r->params = copy_decl_list(C, d->params);
+    if (d->body != NULL) r->body = COPY_BLOCK(C, d->body);
+    r->monos = copy_decl_list(C, d->monos);
+    r->fn_kind = d->fn_kind;
+}
+
+static void CopyIfStmt(struct Compiler *C, struct HirIfStmt *s, struct HirIfStmt *r)
+{
+    r->cond = copy_expr(C, s->cond);
+    r->then_arm = copy_stmt(C, s->then_arm);
+    if (s->else_arm != NULL) r->else_arm = copy_stmt(C, s->else_arm);
+}
+
+static void CopyWhileStmt(struct Compiler *C, struct HirWhileStmt *s, struct HirWhileStmt *r)
+{
+    r->is_dowhile = s->is_dowhile;
+    r->cond = copy_expr(C, s->cond);
+    r->block = COPY_BLOCK(C, s->block);
+}
+
+static void CopyLabelStmt(struct Compiler *C, struct HirLabelStmt *s, struct HirLabelStmt *r)
+{
+    r->label = s->label;
+}
+
+static void CopyForStmt(struct Compiler *C, struct HirForStmt *s, struct HirForStmt *r)
+{
+    r->is_fornum = s->is_fornum;
+    r->control = copy_decl(C, s->control);
+    if (s->is_fornum) {
+        r->fornum.begin = copy_expr(C, s->fornum.begin);
+        r->fornum.end = copy_expr(C, s->fornum.end);
+        r->fornum.step = copy_expr(C, s->fornum.step);
+    } else {
+        r->forin.target = copy_expr(C, s->forin.target);
+    }
+    r->block = COPY_BLOCK(C, s->block);
+}
+
+static void CopyInstanceDecl(struct Compiler *C, struct HirInstanceDecl *d, struct HirInstanceDecl *r)
+{
+    r->is_assoc = d->is_assoc;
+    r->is_pub = d->is_pub;
+    r->self = d->self;
+    r->types = copy_type_list(C, d->types);
+}
+
+static void CopyIndex(struct Compiler *C, struct HirIndex *e, struct HirIndex *r)
+{
+    r->target = copy_expr(C, e->target);
+    if (e->first != NULL) r->first = copy_expr(C, e->first);
+    if (e->second != NULL) r->second = copy_expr(C, e->second);
+    r->is_slice = e->is_slice;
+}
+
+static void CopySelector(struct Compiler *C, struct HirSelector *e, struct HirSelector *r)
+{
+    r->is_index = e->is_index;
+    r->target = copy_expr(C, e->target);
+    r->name = e->name;
+}
+
+static void CopyDeclStmt(struct Compiler *C, struct HirDeclStmt *s, struct HirDeclStmt *r)
+{
+    r->decl = copy_decl(C, s->decl);
+}
+
+struct HirExpr *copy_expr(struct Compiler *C, struct HirExpr *node)
+{
+    struct HirExpr *result = pawHir_new_expr(
+            C, node->hdr.line, HIR_KINDOF(node));
+    result->hdr = node->hdr;
+    switch (HIR_KINDOF(node)) {
+#define DEFINE_FOLD(a, b) case kHir##a: \
+            Copy##a(C, HirGet##a(node), HirGet##a(result)); \
+            break;
+        HIR_EXPR_LIST(DEFINE_FOLD)
+#undef DEFINE_FOLD
+    }
+    return result;
+}
+
+struct HirDecl *copy_decl(struct Compiler *C, struct HirDecl *node)
+{
+    struct HirDecl *result = pawHir_new_decl(
+            C, node->hdr.line, HIR_KINDOF(node));
+    result->hdr = node->hdr;
+    switch (HIR_KINDOF(node)) {
+#define DEFINE_FOLD(a, b) case kHir##a: \
+            Copy##a(C, HirGet##a(node), HirGet##a(result)); \
+            break;
+        HIR_DECL_LIST(DEFINE_FOLD)
+#undef DEFINE_FOLD
+    }
+    return result;
+}
+
+struct HirStmt *copy_stmt(struct Compiler *C, struct HirStmt *node)
+{
+    struct HirStmt *result = pawHir_new_stmt(
+            C, node->hdr.line, HIR_KINDOF(node));
+    result->hdr = node->hdr;
+    switch (HIR_KINDOF(node)) {
+#define DEFINE_FOLD(a, b) case kHir##a: \
+            Copy##a(C, HirGet##a(node), HirGet##a(result)); \
+            break;
+        HIR_STMT_LIST(DEFINE_FOLD)
+#undef DEFINE_FOLD
+    }
+    return result;
 }
 
 struct Subst {
@@ -1250,9 +950,7 @@ struct Subst {
 };
 
 struct Expander {
-    struct Copier c;
-    struct HirFolder fold;
-    struct HirFolder copy;
+    struct HirTypeFolder F;
     struct Subst *subst;
     struct Compiler *C;
     struct Hir *hir;
@@ -1260,77 +958,77 @@ struct Expander {
     int nexpand;
 };
 
-static struct HirTypeList *expand_type_list(struct HirFolder *F, struct HirTypeList *list)
+static struct HirTypeList *expand_type_list(struct HirTypeFolder *F, struct HirTypeList *list)
 {
     struct Expander *E = F->ud;
     if (list == NULL) return NULL;
     struct HirTypeList *copy = pawHir_type_list_new(E->C);
     for (int i = 0; i < list->count; ++i) {
-        struct HirType *type = F->FoldType(F, list->data[i]);
+        struct HirType *type = pawHir_fold_type(F, list->data[i]);
         pawHir_type_list_push(E->C, copy, type);
     }
     return copy;
 }
 
-static struct HirType *expand_tuple(struct HirFolder *F, struct HirTupleType *t)
+static struct HirType *expand_tuple(struct HirTypeFolder *F, struct HirTupleType *t)
 {
     struct Expander *E = F->ud;
     struct HirType *r = pawHir_new_type(E->C, t->line, kHirTupleType);
-    r->tuple.elems = F->FoldTypeList(F, t->elems);
+    r->tuple.elems = pawHir_fold_type_list(F, t->elems);
     return r;
 }
 
-static struct HirType *expand_func_ptr(struct HirFolder *F, struct HirFuncPtr *t)
+static struct HirType *expand_func_ptr(struct HirTypeFolder *F, struct HirFuncPtr *t)
 {
     struct Expander *E = F->ud;
     struct HirType *r = pawHir_new_type(E->C, t->line, kHirFuncPtr);
-    r->fptr.params = F->FoldTypeList(F, t->params);
-    r->fptr.result = F->FoldType(F, t->result);
+    r->fptr.params = pawHir_fold_type_list(F, t->params);
+    r->fptr.result = pawHir_fold_type(F, t->result);
     return r;
 }
 
-static struct HirType *expand_func_def(struct HirFolder *F, struct HirFuncDef *t)
+static struct HirType *expand_func_def(struct HirTypeFolder *F, struct HirFuncDef *t)
 {
     struct Expander *E = F->ud;
     struct HirDecl *base = pawHir_get_decl(E->C, t->base);
     if (t->types == NULL) {
         struct HirType *result = pawHir_new_type(E->C, t->line, kHirFuncDef);
         struct HirFuncDef *r = HirGetFuncDef(result);
-        r->params = F->FoldTypeList(F, t->params);
-        r->result = F->FoldType(F, t->result);
+        r->params = pawHir_fold_type_list(F, t->params);
+        r->result = pawHir_fold_type(F, t->result);
         r->base = r->did = t->did;
         r->modno = t->modno;
         return result;
     }
     struct HirFuncDecl *func = HirGetFuncDecl(base);
-    struct HirTypeList *types = F->FoldTypeList(F, t->types);
+    struct HirTypeList *types = pawHir_fold_type_list(F, t->types);
     struct HirDecl *inst = pawP_instantiate(F->hir, base, types);
     return HIR_TYPEOF(inst);
 }
 
-static struct HirType *expand_adt(struct HirFolder *F, struct HirAdt *t)
+static struct HirType *expand_adt(struct HirTypeFolder *F, struct HirAdt *t)
 {
     struct Expander *E = F->ud;
     if (t->base <= PAW_TSTR) return HIR_CAST_TYPE(t);
-    struct HirTypeList *types = F->FoldTypeList(F, t->types);
+    struct HirTypeList *types = pawHir_fold_type_list(F, t->types);
     struct HirDecl *base = pawHir_get_decl(E->C, t->base);
     struct HirDecl *inst = pawP_instantiate(F->hir, base, types);
     return HIR_TYPEOF(inst);
 }
 
-static struct HirType *expand_path_type(struct HirFolder *F, struct HirPathType *t)
+static struct HirType *expand_path_type(struct HirTypeFolder *F, struct HirPathType *t)
 {
     struct Expander *E = F->ud;
     struct HirSegment *seg = K_LIST_GET(t->path, 0);
     // paw_Type equals DefId for builtins
     if (seg->base <= PAW_TSTR) return HIR_CAST_TYPE(t);
-    struct HirTypeList *types = F->FoldTypeList(F, seg->types);
+    struct HirTypeList *types = pawHir_fold_type_list(F, seg->types);
     struct HirDecl *base = pawHir_get_decl(E->C, seg->base);
     struct HirDecl *inst = pawP_instantiate(E->hir, base, types);
     return HIR_TYPEOF(inst);
 }
 
-static struct HirType *expand_generic(struct HirFolder *F, struct HirGeneric *t)
+static struct HirType *expand_generic(struct HirTypeFolder *F, struct HirGeneric *t)
 {
     struct Expander *E = F->ud;
     if (E->subst == NULL) return HIR_CAST_TYPE(t);
@@ -1346,7 +1044,7 @@ static struct HirType *expand_generic(struct HirFolder *F, struct HirGeneric *t)
     return HIR_CAST_TYPE(t);
 }
 
-static struct HirFuncDecl *do_expand_aux(struct HirFolder *F, struct HirFuncDecl *base, struct HirDecl *inst, struct Subst *subst)
+static void do_expand_aux(struct HirTypeFolder *F, struct HirFuncDecl *base, struct HirDecl *inst, struct Subst *subst)
 {
     struct Expander *E = F->ud;
     E->subst = subst;
@@ -1358,18 +1056,18 @@ static struct HirFuncDecl *do_expand_aux(struct HirFolder *F, struct HirFuncDecl
     r->name = base->name;
     r->generics = NULL;
 
-    // copy the original polymorphic function subtree
-    struct HirDeclList *params = E->copy.FoldDeclList(&E->copy, base->params);
-    struct HirBlock *body = MAYBE_FOLD_BLOCK(&E->copy, base->body);
+    // Copy the original polymorphic function nodes. Then, replace generics with
+    // concrete types and create further instantiations to be expanded next round.
+    r->self = pawHir_fold_type(F, base->self);
+    r->params = copy_decl_list(E->C, base->params);
+    pawHir_fold_decl_list(F, r->params);
 
-    // replace generics with concrete types and create further instantiations to
-    // be expanded next round
-    r->self = F->FoldType(F, base->self);
-    r->params = F->FoldDeclList(F, params);
-    r->body = MAYBE_FOLD_BLOCK(F, body);
+    if (base->body != NULL) {
+        r->body = COPY_BLOCK(E->C, base->body);
+        pawHir_fold_block(F, r->body);
+    }
 
     E->subst = subst->outer;
-    return r;
 }
 
 #define MAX_EXPANSION_DEPTH 128
@@ -1391,7 +1089,7 @@ static void leave_binder(struct Expander *E)
     --E->C->nbinders;
 }
 
-static struct HirFuncDecl *do_expand(struct HirFolder *F, struct HirFuncDecl *base, struct HirDecl *inst)
+static void do_expand(struct HirTypeFolder *F, struct HirFuncDecl *base, struct HirDecl *inst)
 {
     struct Expander *E = F->ud;
     struct Subst subst = {
@@ -1402,7 +1100,6 @@ static struct HirFuncDecl *do_expand(struct HirFolder *F, struct HirFuncDecl *ba
     enter_binder(E, inst);
     do_expand_aux(F, base, inst, &subst);
     leave_binder(E);
-    return &inst->func;
 }
 
 static struct HirDecl *find_decl(struct Expander *E, struct HirType *type)
@@ -1421,23 +1118,24 @@ static struct HirDecl *find_decl(struct Expander *E, struct HirType *type)
     return pawHir_get_decl(E->C, did);
 }
 
-static struct HirPath *expand_path(struct HirFolder *F, struct HirPath *path)
+static void expand_path(struct HirVisitor *V, struct HirPath *path)
 {
+    struct HirTypeFolder *F = V->ud;
     struct Expander *E = F->ud;
     for (int i = 0; i < path->count; ++i) {
         struct HirSegment *ps = pawHir_path_get(path, i);
         if (ps->types != NULL) {
-            struct HirTypeList *types = F->FoldTypeList(F, ps->types);
+            ps->types = pawHir_fold_type_list(F, ps->types);
             struct HirDecl *base = pawHir_get_decl(E->C, ps->base);
-            struct HirDecl *inst = pawP_instantiate(E->hir, base, types);
+            struct HirDecl *inst = pawP_instantiate(E->hir, base, ps->types);
             ps->did = inst->hdr.did;
         }
     }
-    return path;
 }
 
-static struct HirDecl *expand_func_decl(struct HirFolder *F, struct HirFuncDecl *d)
+static paw_Bool expand_func_decl(struct HirVisitor *V, struct HirFuncDecl *d)
 {
+    struct HirTypeFolder *F = V->ud;
     struct Expander *E = F->ud;
     const int n = d->monos ? d->monos->count : 0;
     for (int i = 0; i < n; ++i) {
@@ -1447,7 +1145,7 @@ static struct HirDecl *expand_func_decl(struct HirFolder *F, struct HirFuncDecl 
             ++E->nexpand;
         }
     }
-    return HIR_CAST_DECL(d);
+    return PAW_FALSE;
 }
 
 static struct HirAdtDecl *get_selector_target(struct Expander *E, struct HirType *type)
@@ -1456,10 +1154,11 @@ static struct HirAdtDecl *get_selector_target(struct Expander *E, struct HirType
     return HirGetAdtDecl(self_decl);
 }
 
-static struct HirExpr *expand_selector(struct HirFolder *F, struct HirSelector *e)
+static paw_Bool expand_selector(struct HirVisitor *V, struct HirSelector *e)
 {
+    struct HirTypeFolder *F = V->ud;
     struct Expander *E = F->ud;
-    e->target = F->FoldExpr(F, e->target);
+    pawHir_fold_expr(F, e->target);
 
     struct HirType *self_type = HIR_TYPEOF(e->target);
     if (HirIsTupleType(self_type)) {
@@ -1470,15 +1169,17 @@ static struct HirExpr *expand_selector(struct HirFolder *F, struct HirSelector *
         struct HirDecl *field = pawP_find_field(E->C, E->hir, self, e->name);
         e->type = HIR_TYPEOF(field);
     }
-    return HIR_CAST_EXPR(e);
+    return PAW_FALSE;
 }
 
-static struct HirExpr *expand_call_expr(struct HirFolder *F, struct HirCallExpr *e)
+static paw_Bool expand_call_expr(struct HirVisitor *V, struct HirCallExpr *e)
 {
+    struct HirTypeFolder *F = V->ud;
     struct Expander *E = F->ud;
 
-    e->target = F->FoldExpr(F, e->target);
-    e->args = F->FoldExprList(F, e->args);
+    pawHir_fold_expr(F, e->target);
+    pawHir_fold_expr_list(F, e->args);
+
     e->func = HIR_TYPEOF(e->target);
     if (HirIsFuncDef(e->func)) {
         struct HirFuncDef *fdef = HirGetFuncDef(e->func);
@@ -1489,13 +1190,14 @@ static struct HirExpr *expand_call_expr(struct HirFolder *F, struct HirCallExpr 
             e->func = HIR_TYPEOF(inst);
         }
     }
-    return HIR_CAST_EXPR(e);
+    return PAW_FALSE;
 }
 
-static struct HirDecl *expand_adt_decl_(struct HirFolder *F, struct HirAdtDecl *d)
+static paw_Bool expand_adt_decl_(struct HirVisitor *V, struct HirAdtDecl *d)
 {
-    PAW_UNUSED(F);
-    return HIR_CAST_DECL(d);
+    PAW_UNUSED(V);
+    PAW_UNUSED(d);
+    return PAW_FALSE;
 }
 
 static struct HirTypeList *collect_decl_types(struct Hir *hir, struct HirDeclList *list)
@@ -1509,8 +1211,9 @@ static struct HirTypeList *collect_decl_types(struct Hir *hir, struct HirDeclLis
     return new_list;
 }
 
-static struct HirDecl *expand_impl_decl(struct HirFolder *F, struct HirImplDecl *d)
+static paw_Bool expand_impl_decl(struct HirVisitor *V, struct HirImplDecl *d)
 {
+    struct HirTypeFolder *F = V->ud;
     struct Expander *E = F->ud;
     if (d->monos != NULL) {
         for (int i = 0; i < d->monos->count; ++i) {
@@ -1532,10 +1235,10 @@ static struct HirDecl *expand_impl_decl(struct HirFolder *F, struct HirImplDecl 
             }
         }
     }
-    return HIR_CAST_DECL(d);
+    return PAW_FALSE;
 }
 
-static struct HirAdtDecl *adt_expand_aux(struct HirFolder *F, struct HirAdtDecl *base, struct HirDecl *inst, struct Subst *subst)
+static struct HirAdtDecl *adt_expand_aux(struct HirTypeFolder *F, struct HirAdtDecl *base, struct HirDecl *inst, struct Subst *subst)
 {
     struct Expander *E = F->ud;
     E->subst = subst;
@@ -1547,20 +1250,14 @@ static struct HirAdtDecl *adt_expand_aux(struct HirFolder *F, struct HirAdtDecl 
     r->name = base->name;
     r->generics = NULL;
 
-    struct HirDeclList *fields = E->copy.FoldDeclList(&E->copy, base->fields);
-    r->fields = F->FoldDeclList(F, fields);
+    r->fields = copy_decl_list(E->C, base->fields);
+    pawHir_visit_decl_list(&F->V, r->fields);
 
     E->subst = subst->outer;
     return r;
 }
 
-struct HirDecl *expand_variant_decl(struct HirFolder *F, struct HirVariantDecl *d)
-{
-    d->fields = F->FoldDeclList(F, d->fields);
-    return HIR_CAST_DECL(d);
-}
-
-static struct HirAdtDecl *do_expand_adt(struct HirFolder *F, struct HirAdtDecl *base, struct HirDecl *inst)
+static void do_expand_adt(struct HirTypeFolder *F, struct HirAdtDecl *base, struct HirDecl *inst)
 {
     struct Expander *E = F->ud;
     struct Subst subst = {
@@ -1571,7 +1268,16 @@ static struct HirAdtDecl *do_expand_adt(struct HirFolder *F, struct HirAdtDecl *
     enter_binder(E, inst);
     adt_expand_aux(F, base, inst, &subst);
     leave_binder(E);
-    return &inst->adt;
+}
+
+static void expand_decl_type(struct HirVisitor *V, struct HirDecl *decl)
+{
+    decl->hdr.type = pawHir_fold_type(V->ud, decl->hdr.type);
+}
+
+static void expand_expr_type(struct HirVisitor *V, struct HirExpr *expr)
+{
+    expr->hdr.type = pawHir_fold_type(V->ud, expr->hdr.type);
 }
 
 static void setup_expander(struct Compiler *C, struct Hir *hir, struct Expander *E)
@@ -1581,26 +1287,24 @@ static void setup_expander(struct Compiler *C, struct Hir *hir, struct Expander 
         .hir = hir,
         .C = C,
     };
-    E->c = (struct Copier){
-        .hir = hir,
-        .P = ENV(C),
-    };
-    setup_copy_pass(&E->copy, &E->c);
-    pawHir_folder_init(&E->fold, hir, E);
-    E->fold.FoldAdtDecl = expand_adt_decl_;
-    E->fold.FoldVariantDecl = expand_variant_decl;
-    E->fold.FoldImplDecl = expand_impl_decl;
-    E->fold.FoldFuncDecl = expand_func_decl;
-    E->fold.FoldCallExpr = expand_call_expr;
-    E->fold.FoldSelector = expand_selector;
-    E->fold.FoldPath = expand_path;
-    E->fold.FoldTypeList = expand_type_list;
-    E->fold.FoldAdt = expand_adt;
-    E->fold.FoldPathType = expand_path_type;
-    E->fold.FoldTupleType = expand_tuple;
-    E->fold.FoldFuncDef = expand_func_def;
-    E->fold.FoldFuncPtr = expand_func_ptr;
-    E->fold.FoldGeneric = expand_generic;
+    pawHir_type_folder_init(&E->F, hir, E);
+
+    E->F.FoldAdt = expand_adt;
+    E->F.FoldPathType = expand_path_type;
+    E->F.FoldTupleType = expand_tuple;
+    E->F.FoldFuncDef = expand_func_def;
+    E->F.FoldFuncPtr = expand_func_ptr;
+    E->F.FoldGeneric = expand_generic;
+    E->F.FoldTypeList = expand_type_list;
+
+    E->F.V.VisitImplDecl = expand_impl_decl;
+    E->F.V.VisitFuncDecl = expand_func_decl;
+    E->F.V.VisitCallExpr = expand_call_expr;
+    E->F.V.VisitSelector = expand_selector;
+    E->F.V.VisitPath = expand_path;
+
+    E->F.V.PostVisitDecl = expand_decl_type;
+    E->F.V.PostVisitExpr = expand_expr_type;
 }
 
 void pawHir_expand_adt(struct Hir *hir, struct HirAdtDecl *base, struct HirDecl *inst)
@@ -1609,19 +1313,19 @@ void pawHir_expand_adt(struct Hir *hir, struct HirAdtDecl *base, struct HirDecl 
 
     struct Expander E;
     setup_expander(hir->C, hir, &E);
-    do_expand_adt(&E.fold, base, inst);
+    do_expand_adt(&E.F, base, inst);
 }
 
 int pawHir_expand_bodies(struct Hir *hir)
 {
     struct Expander E;
     setup_expander(hir->C, hir, &E);
-    struct HirFolder *F = &E.fold;
+    struct HirVisitor *V = &E.F.V;
     int total = 0;
 
     do {
         E.nexpand = 0;
-        F->FoldDeclList(F, hir->items);
+        pawHir_visit_decl_list(V, hir->items);
         total += E.nexpand;
     } while (E.nexpand > 0);
 
@@ -2197,6 +1901,28 @@ void pawHir_dump(struct Hir *hir)
     for (int i = 0; i < hir->items->count; ++i) {
         dump_decl(&print, hir->items->data[i]);
     }
+    pawL_push_result(P, &buf);
+}
+
+void pawHir_dump_decls(struct Compiler *C, struct HirDeclList *decls)
+{
+    Buffer buf;
+    paw_Env *P = ENV(C);
+    pawL_init_buffer(P, &buf);
+    pawL_add_fstring(P, &buf, "did\tname\ttype\n", P->modname->text);
+    for (int i = 0; i < decls->count; ++i) {
+        struct HirDecl *decl = pawHir_get_decl(C, i);
+        const char *name = decl->hdr.name != NULL
+                ? decl->hdr.name->text : "(null)";
+        if (HirIsUseDecl(decl)) {
+            paw_push_string(P, "(use)");
+        } else {
+            pawHir_print_type(C, decl->hdr.type);
+        }
+        pawL_add_fstring(P, &buf, "%d\t%s\t%s\n", i, name, paw_string(P, -1));
+        paw_pop(P, 1);
+    }
+    pawL_add_char(P, &buf, '\0');
     pawL_push_result(P, &buf);
 }
 

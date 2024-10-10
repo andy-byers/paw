@@ -18,6 +18,7 @@ int pawD_line_number(const CallFrame *cf, const OpCode *pc);
 void pawD_debug_log(paw_Env *P, const char *fmt, ...);
 
 const char *paw_op_name(Op op);
+void pawD_dump_defs(paw_Env *P);
 void paw_dump_opcode(OpCode opcode);
 void paw_dump_source(paw_Env *P, Proto *proto);
 void paw_dump_stack(paw_Env *P);

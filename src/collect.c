@@ -18,7 +18,7 @@
 
 struct Collector {
     struct Pool *pool;
-    struct HirFolder F;
+    struct HirTypeFolder F;
     struct HirSymtab *symtab;
     struct DynamicMem *dm;
     struct Compiler *C;
@@ -214,7 +214,7 @@ static void finish_dupcheck(struct Collector *X)
 static struct HirType *collect_type(struct Collector *X, struct HirType *type)
 {
     X->line = type->hdr.line;
-    return X->F.FoldType(&X->F, type);
+    return pawHir_fold_type(&X->F, type);
 }
 
 static void map_adt_to_impl(struct Collector *X, struct HirDecl *adt, struct HirDecl *impl)
@@ -232,7 +232,7 @@ static struct HirType *collect_path(struct Collector *X, struct HirPath *path)
 {
     for (int i = 0; i < path->count; ++i) {
         struct HirSegment *seg = K_LIST_GET(path, i);
-        seg->types = X->F.FoldTypeList(&X->F, seg->types);
+        seg->types = pawHir_fold_type_list(&X->F, seg->types);
     }
     if (path->count == 1) {
         // check this module first, including local scopes
@@ -257,7 +257,7 @@ static struct HirType *collect_path(struct Collector *X, struct HirPath *path)
 // segment being 'C'. Basically, the prefix part ('a::b::') locates the ADT
 // in its containing module, and the suffix part ('<D, E>') indicate a
 // particular instantiation of 'C'.
-static struct HirType *fold_path_type(struct HirFolder *F, struct HirPathType *t)
+static struct HirType *fold_path_type(struct HirTypeFolder *F, struct HirPathType *t)
 {
     return collect_path(F->ud, t->path);
 }
@@ -322,9 +322,7 @@ static struct HirType *register_adt(struct Collector *X, struct HirAdtDecl *d)
     struct HirType *type = register_decl_type(X, HIR_CAST_DECL(d), kHirAdt);
     struct HirAdt *t = HirGetAdt(type);
 
-    t->types = d->generics != NULL
-        ? collect_generic_types(X, d->generics)
-        : NULL;
+    t->types = collect_generic_types(X, d->generics);
     t->modno = X->m->hir->modno;
     t->base = t->did = d->did;
     return type;
@@ -332,7 +330,7 @@ static struct HirType *register_adt(struct Collector *X, struct HirAdtDecl *d)
 
 static void collect_field_decl(struct Collector *X, struct HirFieldDecl *d)
 {
-    d->type = collect_type(X, d->tag);
+    d->tag = d->type = collect_type(X, d->tag);
 }
 
 // 'field' of enumeration has type 'struct HirVariantDecl'
@@ -537,6 +535,7 @@ static struct PartialModList *collect_phase_1(struct Collector *X, struct Module
         struct PartialMod *pm = new_partial_mod(X, m, pal);
         pm_list_push(X, pml, pm);
         m->globals = X->m->globals;
+        finish_module(X);
     }
 
     // fill in toplevel ADT field types (may instantiate polymorphic ADTs)
@@ -544,6 +543,7 @@ static struct PartialModList *collect_phase_1(struct Collector *X, struct Module
         struct PartialMod *pm = K_LIST_GET(pml, i);
         use_module(X, pm->m);
         collect_adts(X, pm->pal);
+        finish_module(X);
     }
 
     return pml;
@@ -565,6 +565,7 @@ static void monomorphize_adts(struct Collector *X, struct PartialModList *pml)
             struct PartialMod *pm = K_LIST_GET(pml, i);
             use_module(X, pm->m);
             correct_adts(X, pm->pal);
+            finish_module(X);
         }
         DLOG(X, "expanded %d ADTs", X->nexpand);
     } while (X->nexpand > 0);
@@ -589,6 +590,7 @@ static void collect_phase_2(struct Collector *X, struct ModuleList *ml, struct P
     for (int i = 0; i < ml->count; ++i) {
         struct ModuleInfo *m = use_module(X, K_LIST_GET(ml, i));
         collect_items(X, m->hir);
+        finish_module(X);
     }
 
     // monomorphize polymorphic ADTs
@@ -607,7 +609,8 @@ void pawP_collect_items(struct Compiler *C)
         .dm = dm,
         .C = C,
     };
-    pawHir_folder_init(&X.F, NULL /*TODO*/, &X);
+    struct ModuleInfo *prelude = K_LIST_GET(C->dm->modules, 0);
+    pawHir_type_folder_init(&X.F, prelude->hir, &X);
     X.F.FoldPathType = fold_path_type;
 
     DLOG(&X, "collecting %d module(s)", dm->modules->count);

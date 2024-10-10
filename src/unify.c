@@ -284,7 +284,7 @@ struct HirType *pawU_new_unknown(struct Unifier *U, int line)
     const int index = table->ivars->count;
     var_list_push(U->C, table->ivars, ivar);
 
-    struct HirType *type = pawHir_new_type(U->C, -1, kHirUnknown);
+    struct HirType *type = pawHir_new_type(U->C, line, kHirUnknown);
     type->unknown.depth = table->depth;
     type->unknown.index = index;
 
