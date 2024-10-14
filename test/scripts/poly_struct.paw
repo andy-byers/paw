@@ -1,3 +1,17 @@
+// poly_struct.paw
+
+pub fn instantiate_in_signature<T>(s: Struct<T>) -> Struct<int> {
+    return Struct{v: 42};
+}
+
+struct Struct<T> {
+    pub v: T
+}
+
+pub fn test_instantiate_in_signature() {
+    let s = instantiate_in_signature(Struct{v: true});
+    assert(s.v == 42);
+}
 
 struct Singleton<Value> {
     pub value: Value,

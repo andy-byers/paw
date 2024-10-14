@@ -172,7 +172,7 @@ static int unify_lists(struct Unifier *U, struct HirTypeList *a, struct HirTypeL
 
 static int unify_adt(struct Unifier *U, struct HirAdt *a, struct HirAdt *b)
 {
-    if (a->base != b->base) return -1;
+    if (a->did != b->did) return -1;
     if (!a->types != !b->types) return -1;
     if (a->types == NULL) return 0;
     return unify_lists(U, a->types, b->types);

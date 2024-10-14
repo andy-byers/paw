@@ -209,18 +209,18 @@ pub fn test_chain_option() {
     test(Option::<int>::None);
 }
 
-fn option2<T>(b: bool, v: T) -> Option<T> {
+fn option2<Ty>(b: bool, v: Ty) -> Option<Ty> {
     if b {
-        return Option::<T>::Some(v);
+        return Option::<Ty>::Some(v);
     } else {
-        return Option::<T>::None;
+        return Option::<Ty>::None;
     };
 }
 
-fn chain_option2_aux<T>(v: T) -> Option<T> {
+fn chain_option2_aux<Ty2>(v: Ty2) -> Option<Ty2> {
     let t = option2(false, v)?;
     assert(false);
-    return Option::<T>::Some(t);
+    return Option::<Ty2>::Some(t);
 }
 
 pub fn test_chain_option2() {
@@ -261,20 +261,20 @@ struct Outer<T> {
     pub option: Option<Inner<T>>
 }
 
-fn option3<T>(t: T, a: bool, b: bool) -> Option<Outer<T>> {
+fn option3<Ty3>(t: Ty3, a: bool, b: bool) -> Option<Outer<Ty3>> {
     if a {
         if b {
-            return Option::<Outer<T>>::Some(Outer::<T>{
-                option: Option::<Inner<T>>::Some(Inner::<T>{val: t}),
+            return Option::<Outer<Ty3>>::Some(Outer::<Ty3>{
+                option: Option::<Inner<Ty3>>::Some(Inner::<Ty3>{val: t}),
             });
         } else {
-            return Option::<Outer<T>>::Some(Outer::<T>{
-                option: Option::<Inner<T>>::None,
+            return Option::<Outer<Ty3>>::Some(Outer::<Ty3>{
+                option: Option::<Inner<Ty3>>::None,
             });
-        };
+        }
     } else {
-        return Option::<Outer<T>>::None;
-    };
+        return Option::<Outer<Ty3>>::None;
+    }
 }
 
 pub fn test_chain_option3() {

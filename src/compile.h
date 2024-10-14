@@ -36,6 +36,7 @@ struct HirPath;
 struct HirDecl;
 struct HirAdtDecl;
 struct HirInstanceDecl;
+struct HirTypeFolder;
 struct HirTypeList;
 
 String *pawP_scan_nstring(paw_Env *P, Map *st, const char *s, size_t n);
@@ -99,15 +100,12 @@ struct Builtin {
     DefId did;
 };
 
-typedef struct HirDecl *(*Instantiate)(struct Hir *, struct HirDecl *, struct HirTypeList *);
-
 struct Compiler {
     struct Builtin builtins[NBUILTINS];
     struct DynamicMem *dm;
     struct Pool *pool;
     struct Ast *prelude;
     struct Unifier *U;
-    Instantiate finst;
     String *modname;
     Map *impls; // HirAdtDecl * => HirImplDecl *
     Map *imports;
@@ -115,24 +113,6 @@ struct Compiler {
     Map *types;
     paw_Env *P;
     int nbinders;
-};
-
-// Common state for type-checking routines
-struct Resolver {
-    paw_Env *P;
-    Map *strings;
-    struct ModuleInfo *m;
-    struct Unifier *U; // unification tables
-    struct Compiler *C; // compiler state
-    struct HirDecl *self; // enclosing ADT
-    struct DynamicMem *dm; // dynamic memory
-    struct ResultState *rs;
-    struct HirSymtab *symtab;
-    Map *impls; // '.impls' from Compiler
-    int func_depth; // number of nested functions
-    int line;
-    paw_Bool in_closure; // 1 if the enclosing function is a closure, else 0
-    paw_Bool in_impl;
 };
 
 struct ModuleInfo {
@@ -186,8 +166,9 @@ typedef struct Generator {
 void pawP_lower_ast(struct Compiler *C);
 void pawP_collect_items(struct Compiler *C);
 
-struct HirDecl *pawP_find_field(struct Compiler *C, struct Hir *hir, struct HirAdtDecl *adt, String *name);
-struct HirDecl *pawP_find_method(struct Compiler *C, struct Hir *hir, struct HirType *self, String *name);
+struct HirType *pawP_instantiate_field(struct Compiler *C, struct HirType *self, struct HirDecl *field);
+struct HirDecl *pawP_find_field(struct Compiler *C, struct HirType *self, String *name);
+struct HirDecl *pawP_find_method(struct Compiler *C, struct HirType *self, String *name);
 
 struct Generalization {
     struct HirTypeList *types;
@@ -196,7 +177,7 @@ struct Generalization {
 };
 
 struct Generalization pawP_generalize(
-        struct Hir *hir,
+        struct Compiler *C,
         struct HirDeclList *generics,
         struct HirDeclList *fields);
 
@@ -207,22 +188,41 @@ struct Generalization pawP_generalize(
 // and 'decl' otherwise. We avoid recursively visiting the function body here, since
 // doing so might cause further instantiations due to the presence of recursion.
 // Function instance bodies are expanded in a separate pass.
-struct HirDecl *pawP_instantiate(
-        struct Hir *hir,
+struct HirType *pawP_instantiate(
+        struct Compiler *C,
+        struct HirDecl *decl,
+        struct HirTypeList *types);
+
+struct HirDecl *pawP_instantiate_impl(
+        struct Compiler *C,
         struct HirDecl *decl,
         struct HirTypeList *types);
 
 void pawP_set_instantiate(struct Compiler *C, paw_Bool full);
-void pawP_instantiate_impls_for(struct Hir *hir, struct HirAdtDecl *base, struct HirAdtDecl *inst, struct HirTypeList *types);
+void pawP_instantiate_impls_for(struct Compiler *C, struct HirAdtDecl *base, struct HirType *inst, struct HirTypeList *types);
+
+struct Substitution {
+    struct HirTypeList *generics;
+    struct HirTypeList *types;
+    struct Compiler *C;
+};
+
+void pawP_init_substitution_folder(struct HirTypeFolder *F, struct Compiler *C, struct Substitution *subst,
+                                 struct HirTypeList *generics, struct HirTypeList *types);
 
 void pawP_collect_imports(struct Compiler *C, struct Ast *ast);
 void pawP_import(struct Compiler *C, void *state);
 
 struct ItemList *pawP_define_all(struct Compiler *C, struct ModuleList *modules, int *poffset);
 
-// Determine which toplevel declaration the 'path' refers to, relative to the
-// current module 'm'
-struct HirDecl *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct HirPath *path);
+enum LookupKind {
+    LOOKUP_TYPE,
+    LOOKUP_VALUE,
+    LOOKUP_EITHER,
+};
+
+// Determine which type the 'path' refers to, relative to the  current module 'm'
+struct HirType *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirPath *path, enum LookupKind kind);
 
 void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const char *modname);
 void pawP_teardown(paw_Env *P, struct DynamicMem *dm);
@@ -273,11 +273,12 @@ struct VarInfo {
 struct ItemSlot {
     struct VarInfo info;
     struct HirDecl *decl;
+    struct HirType *type;
     struct ModuleInfo *m;
     String *name;
 };
 
-struct ItemSlot *pawP_new_item_slot(struct Compiler *C, struct HirDecl *decl, struct ModuleInfo *m);
+struct ItemSlot *pawP_new_item_slot(struct Compiler *C, struct HirDecl *decl, struct HirType *type, struct ModuleInfo *m);
 
 DEFINE_LIST(struct Compiler, pawP_item_list_, ItemList, struct ItemSlot)
 

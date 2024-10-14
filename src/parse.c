@@ -1462,7 +1462,7 @@ static struct AstDeclList *toplevel_items(struct Lex *lex, struct AstDeclList *l
 }
 
 static const char kPrelude[] =
-    "pub struct _List<T>;\n"
+    "pub struct _List<TTT>;\n"
     "pub struct _Map<K, V>;\n"
 
     "pub enum Option<T> {\n"

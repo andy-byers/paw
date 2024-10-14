@@ -154,7 +154,7 @@ static struct HirDeclList *lower_fields(struct LowerAst *L, struct AstDeclList *
 static void register_adt(struct LowerAst *L, struct AstAdtDecl *d, struct HirAdtDecl *r)
 {
     if (d->generics != NULL) {
-        r->monos = pawHir_decl_list_new(L->C);
+        r->monos = pawHir_type_list_new(L->C);
         r->generics = lower_decl_list(L, d->generics);
     }
 }

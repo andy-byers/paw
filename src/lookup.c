@@ -9,6 +9,8 @@
 struct QueryState {
     struct Compiler *C;
     struct ModuleInfo *m;
+    struct HirAdtDecl *adt;
+    struct HirSymtab *symtab;
     paw_Env *P;
     int target;
     int index;
@@ -21,17 +23,26 @@ static struct ModuleInfo *get_module(struct QueryState *Q, int modno)
     return Q->C->dm->modules->data[modno];
 }
 
-
-static struct HirDecl *resolve_symbol(struct QueryState *Q, struct ModuleInfo *m, const String *name)
+static struct HirSymbol *resolve_symbol(struct QueryState *Q, const String *name)
 {
-    // TODO: prevent duplicate 'use' decls with different visibility, currently finds the last one added
-    //       prevent infinite recursion when, say, module 'b' has 'use a::*' and module 'b' has 'use a::*'
-    for (int i = 0; i < m->hir->items->count; ++i) {
-        struct HirDecl *decl = K_LIST_GET(m->hir->items, i);
-        if (pawS_eq(decl->hdr.name, name)) return decl;
+    // search the scoped symbols
+    struct HirSymtab *scopes = Q->symtab;
+    const int nscopes = scopes->count;
+    for (int depth = nscopes - 1; depth >= 0; --depth) {
+        struct HirScope *scope = scopes->data[depth];
+        const int index = pawHir_find_symbol(scope, name);
+        if (index >= 0) {
+            struct HirSymbol *symbol = scope->data[index];
+            return scope->data[index];
+        }
     }
-    return NULL;
+
+    // search the global symbols
+    const int index = pawHir_find_symbol(Q->m->globals, name);
+    if (index < 0) return NULL;
+    return Q->m->globals->data[index];
 }
+
 
 static paw_Bool should_admit(struct QueryState *Q, struct HirUseDecl *use)
 {
@@ -44,16 +55,19 @@ static paw_Bool should_admit(struct QueryState *Q, struct HirUseDecl *use)
 struct QueryBase {
     struct HirSegment *seg;
     struct HirDecl *base;
+    paw_Bool is_type;
 };
 
 static struct QueryBase locate_base_in(struct QueryState *Q, struct ModuleInfo *root, struct HirPath *path)
 {
     struct HirDecl *base;
     struct HirSegment *seg;
+    struct HirSymbol *sym;
     for (Q->m = root, Q->index = 0; Q->index < path->count;) {
         seg = pawHir_path_get(path, Q->index++);
-        base = resolve_symbol(Q, Q->m, seg->name);
-        if (base == NULL) return (struct QueryBase){seg};
+        sym = resolve_symbol(Q, seg->name);
+        if (sym == NULL) return (struct QueryBase){seg};
+        base = sym->decl;
         seg->base = seg->did = base->hdr.did;
         seg->modno = Q->m->hir->modno;
         if (!HirIsUseDecl(base)) break;
@@ -63,10 +77,10 @@ static struct QueryBase locate_base_in(struct QueryState *Q, struct ModuleInfo *
         }
         Q->m = get_module(Q, use->modno);
     }
-    return (struct QueryBase){seg, base};
+    return (struct QueryBase){seg, base, sym->is_type};
 }
 
-static struct HirDecl *locate_base_decl(struct QueryState *Q, struct ModuleInfo *m, struct HirPath *path)
+static struct QueryBase locate_base(struct QueryState *Q, struct ModuleInfo *m, struct HirPath *path)
 {
     struct QueryBase q = locate_base_in(Q, m, path);
     if (q.base == NULL) {
@@ -78,53 +92,52 @@ static struct HirDecl *locate_base_decl(struct QueryState *Q, struct ModuleInfo 
                     seg->name->text, m->hir->name->text);
         }
     }
-
-    struct HirDecl *inst = pawP_instantiate(Q->m->hir, q.base, q.seg->types);
-    q.seg->did = inst->hdr.did;
-    return inst;
+    return q;
 }
 
-static struct HirDecl *expect_field(struct QueryState *Q, struct HirAdtDecl *d, String *name)
+static struct HirType *expect_field(struct QueryState *Q, struct HirType *adt, String *name)
 {
-    struct HirDecl *result = pawP_find_field(Q->C, Q->m->hir, d, name);
-    if (result == NULL) {
+    struct HirDecl *field = pawP_find_field(Q->C, adt, name);
+    if (field == NULL) {
+        struct HirDecl *decl = pawHir_get_decl(Q->C, HirGetAdt(adt)->did);
         NAME_ERROR(Q, "field '%s' does not exist on type '%d'",
-                name->text, d->name->text);
+                name->text, decl->hdr.name->text);
     }
-    return result;
+    return pawP_instantiate_field(Q->C, adt, field);
 }
 
-static struct HirDecl *locate_method(struct QueryState *Q, struct HirAdtDecl *d, struct HirSegment *seg)
+static struct HirType *locate_method(struct QueryState *Q, struct HirType *type, struct HirSegment *seg)
 {
-    struct HirDecl *base = expect_field(Q, d, seg->name);
-    struct HirDecl *inst = pawP_instantiate(Q->m->hir, base, seg->types);
+    struct HirType *inst = expect_field(Q, type, seg->name);
+    const DeclId did = HIR_TYPE_DID(inst);
     seg->modno = Q->m->hir->modno;
-    seg->base = base->hdr.did;
-    seg->did = inst->hdr.did;
+    seg->base = HIR_TYPE_DID(inst);
+    seg->did = did;
     return inst;
 }
 
-static struct HirDecl *locate_enumerator(struct QueryState *Q, struct HirAdtDecl *d, struct HirSegment *seg)
+static struct HirType *locate_enumerator(struct QueryState *Q, struct HirType *type, struct HirSegment *seg)
 {
     if (seg->types != NULL) NAME_ERROR(Q, "unexpected type arguments on enumerator '%s'", seg->name->text);
-    struct HirDecl *result = expect_field(Q, d, seg->name);
-    seg->base = seg->did = result->hdr.did;
+    struct HirType *result = expect_field(Q, type, seg->name);
+    seg->base = seg->did = HIR_TYPE_DID(result);
     seg->modno = Q->m->hir->modno;
     return result;
 }
 
-static struct HirDecl *locate_next_decl(struct QueryState *Q, struct HirDecl *prev, struct HirSegment *next)
+static struct HirType *locate_assoc_item(struct QueryState *Q, struct HirDecl *prev, struct HirType *type, struct HirSegment *next)
 {
-    struct HirAdtDecl *d = HirGetAdtDecl(prev);
-    struct HirDecl *result = d->is_struct
-        ? locate_method(Q, d, next)
-        : locate_enumerator(Q, d, next);
-    return result;
+    struct HirDecl *decl = pawHir_get_decl(Q->C, prev->hdr.did);
+    struct HirAdtDecl *d = HirGetAdtDecl(decl);
+    return d->is_struct
+        ? locate_method(Q, type, next)
+        : locate_enumerator(Q, type, next);
 }
 
-struct HirDecl *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct HirPath *path)
+struct HirType *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirPath *path, enum LookupKind kind)
 {
     struct QueryState Q = {
+        .symtab = symtab,
         .P = ENV(C),
         .C = C,
     };
@@ -132,13 +145,38 @@ struct HirDecl *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct Hir
     paw_assert(path->count > 0);
     // sets 'Q.m' to the module containing the target declaration, and set
     // 'Q.index' to the index of the following segment
-    struct HirDecl *result = locate_base_decl(&Q, m, path);
-    for (; Q.index < path->count; ++Q.index) {
-        // resolve method or enumerator (will throw an error if there is more
-        // than 1 additional segment)
-        struct HirSegment *seg = pawHir_path_get(path, Q.index);
-        result = locate_next_decl(&Q, result, seg);
+    struct QueryBase q = locate_base(&Q, m, path);
+
+    struct HirType *inst;
+    switch (HIR_KINDOF(q.base)) {
+        case kHirAdtDecl:
+        case kHirFuncDecl:
+        case kHirTypeDecl:
+            inst = pawP_instantiate(C, q.base, q.seg->types);
+            q.seg->did = HIR_TYPE_DID(inst);
+            break;
+        case kHirVarDecl:
+        case kHirFieldDecl:
+        case kHirGenericDecl:
+            q.seg->did = q.base->hdr.did;
+            inst = q.base->hdr.type;
+            break;
+        default:
+            goto invalid_path;
     }
-    return result;
+
+    if (Q.index < path->count) {
+        // resolve method or enumerator
+        struct HirSegment *next = K_LIST_GET(path, Q.index);
+        inst = locate_assoc_item(&Q, q.base, inst, next);
+        q.is_type = PAW_FALSE;
+    }
+
+    if ((kind == LOOKUP_VALUE && q.is_type) ||
+            (kind == LOOKUP_TYPE && !q.is_type)) {
+invalid_path:
+        TYPE_ERROR(&Q, "expected %s", q.is_type ? "value" : "type");
+    }
+    return inst;
 }
 

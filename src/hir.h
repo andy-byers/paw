@@ -129,7 +129,6 @@ struct HirAdt {
     HIR_TYPE_HEADER;
     struct HirTypeList *types;
     int modno;
-    DeclId base;
     DeclId did;
 };
 
@@ -158,6 +157,13 @@ struct HirFuncDef {
 struct HirTupleType {
     HIR_TYPE_HEADER;
     struct HirTypeList *elems;
+};
+
+struct HirAssocType {
+    HIR_TYPE_HEADER;
+    struct HirType *self;
+    struct HirTypeList *types;
+    String *name;
 };
 
 struct HirType {
@@ -243,7 +249,7 @@ struct HirAdtDecl {
     paw_Bool is_struct : 1;
     struct HirDeclList *generics;
     struct HirDeclList *fields;
-    struct HirDeclList *monos;
+    struct HirTypeList *monos;
 };
 
 struct HirUseDecl {
@@ -587,7 +593,7 @@ static const char *kHirStmtNames[] = {
 
 // Represents a single pass over an HIR
 struct HirVisitor {
-    struct Hir *hir;
+    struct Compiler *C;
     void *ud;
     int line;
 
@@ -612,7 +618,7 @@ struct HirVisitor {
 #undef DEFINE_CALLBACK
 };
 
-void pawHir_visitor_init(struct HirVisitor *V, struct Hir *hir, void *ud);
+void pawHir_visitor_init(struct HirVisitor *V, struct Compiler *C, void *ud);
 void pawHir_visit_expr(struct HirVisitor *V, struct HirExpr *node);
 void pawHir_visit_stmt(struct HirVisitor *V, struct HirStmt *node);
 void pawHir_visit_decl(struct HirVisitor *V, struct HirDecl *node);
@@ -629,19 +635,18 @@ static inline void pawHir_visit_block(struct HirVisitor *V, struct HirBlock *nod
 
 struct HirTypeFolder {
     struct HirVisitor V;
-    struct Hir *hir;
+    struct Compiler *C;
     void *ud;
     int line;
 
     struct HirTypeList *(*FoldTypeList)(struct HirTypeFolder *F, struct HirTypeList *list);
 
-#define DEFINE_CALLBACK(a, b) struct HirType *(*Fold##a)(struct HirTypeFolder *F, struct Hir##a *node); \
-                              struct HirType *(*PostFold##a)(struct HirTypeFolder *F, struct Hir##a *node);
+#define DEFINE_CALLBACK(a, b) struct HirType *(*Fold##a)(struct HirTypeFolder *F, struct Hir##a *node);
     HIR_TYPE_LIST(DEFINE_CALLBACK)
 #undef DEFINE_CALLBACK
 };
 
-void pawHir_type_folder_init(struct HirTypeFolder *F, struct Hir *hir, void *ud);
+void pawHir_type_folder_init(struct HirTypeFolder *F, struct Compiler *C, void *ud);
 struct HirType *pawHir_fold_type(struct HirTypeFolder *F, struct HirType *node);
 void pawHir_fold_expr(struct HirTypeFolder *F, struct HirExpr *node);
 void pawHir_fold_decl(struct HirTypeFolder *F, struct HirDecl *node);
@@ -680,17 +685,19 @@ DEFINE_LIST(struct Compiler, pawHir_scope_, HirScope, struct HirSymbol)
 DEFINE_LIST(struct Compiler, pawHir_symtab_, HirSymtab, struct HirScope)
 DEFINE_LIST(struct Compiler, pawHir_path_, HirPath, struct HirSegment)
 
-#define HIR_IS_UNIT_T(x) (HirIsAdt(x) && hir_adt_base(x) == PAW_TUNIT)
-#define HIR_IS_BASIC_T(x) (HirIsAdt(x) && hir_adt_base(x) <= PAW_TSTR)
+#define HIR_IS_UNIT_T(x) (HirIsAdt(x) && hir_adt_did(x) == PAW_TUNIT)
+#define HIR_IS_BASIC_T(x) (HirIsAdt(x) && hir_adt_did(x) <= PAW_TSTR)
 
 #define HIR_IS_POLY_FUNC(decl) (HirIsFuncDecl(decl) && HirGetFuncDecl(decl)->generics != NULL)
 #define HIR_IS_POLY_ADT(decl) (HirIsAdtDecl(decl) && HirGetAdtDecl(decl)->generics != NULL)
 #define HIR_IS_POLY_IMPL(decl) (HirIsImplDecl(decl) && HirGetImplDecl(decl)->generics != NULL)
 
+#define HIR_TYPE_DID(type) (HirIsAdt(type) ? HirGetAdt(type)->did : \
+        HirIsFuncDef(type) ? HirGetFuncDef(type)->did : HirGetGeneric(type)->did)
+
 struct Hir *pawHir_new(struct Compiler *C, String *name, int modno);
 void pawHir_free(struct Hir *hir);
 
-void pawHir_expand_adt(struct Hir *hir, struct HirAdtDecl *base, struct HirDecl *inst);
 int pawHir_expand_bodies(struct Hir *hir);
 void pawHir_define(struct ModuleInfo *m, struct HirDeclList *out, int *poffset);
 
@@ -711,11 +718,6 @@ static struct HirTypeList *hir_adt_types(struct HirType *type)
 static DeclId hir_adt_did(struct HirType *type)
 {
     return HirGetAdt(type)->did;
-}
-
-static DeclId hir_adt_base(struct HirType *type)
-{
-    return HirGetAdt(type)->base;
 }
 
 static inline struct HirType *hir_list_elem(struct HirType *type)

@@ -55,9 +55,6 @@ static void mangle_type(struct Generator *G, Buffer *buf, struct HirType *type)
     if (HirIsFuncDef(type)) {
         struct HirDecl *decl = GET_DECL(G, HirGetFuncDef(type)->did);
         type = HIR_TYPEOF(decl);
-    } else if (HirIsAdt(type)) {
-        struct HirDecl *decl = GET_DECL(G, HirGetAdt(type)->did);
-        type = HIR_TYPEOF(decl);
     } else if (HirIsTupleType(type)) {
         pawL_add_char(G->P, buf, 't');
         for (int i = 0; i < type->tuple.elems->count; ++i) {
@@ -1502,7 +1499,7 @@ static void register_items(struct Generator *G, struct ModuleList *modules)
             pawP_item_list_push(G->C, G->items, item);
         } else if (HirIsAdtDecl(item->decl)) {
             struct AdtDef *adt = &get_def(G, i)->adt;
-            item->name = adt->mangled_name = adt_name(G, modname, HIR_TYPEOF(item->decl));
+            item->name = adt->mangled_name = adt_name(G, modname, item->type);
         }
     }
 }
@@ -1527,7 +1524,7 @@ static void code_items(struct HirVisitor *V, struct ItemList *items)
 
 static void setup_pass(struct HirVisitor *V, struct Generator *G)
 {
-    pawHir_visitor_init(V, PRELUDE(G)->hir, G);
+    pawHir_visitor_init(V, G->C, G);
 
     V->VisitPathExpr = code_path_expr;
     V->VisitCallExpr = code_call_expr;
