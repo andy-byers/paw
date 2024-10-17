@@ -14,7 +14,7 @@ pub fn test_import() {
 }
 
 pub fn test_object() {
-    let o = mod_a::Obj::<bool>::new(true);
+    let o = mod_a::Obj::new(true);
     assert(o.get_t());
 }
 

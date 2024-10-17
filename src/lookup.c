@@ -134,6 +134,18 @@ static struct HirType *locate_assoc_item(struct QueryState *Q, struct HirDecl *p
         : locate_enumerator(Q, type, next);
 }
 
+static void maybe_generalize_adt(struct QueryState *Q, struct HirDecl *decl, struct HirSegment *seg)
+{
+    if (seg->types != NULL) return;
+    struct HirAdtDecl *d = HirGetAdtDecl(decl);
+    if (d->generics == NULL) return;
+    seg->types = pawHir_type_list_new(Q->C);
+    for (int i = 0; i < d->generics->count; ++i) {
+        struct HirType *var = pawU_new_unknown(Q->C->U, Q->line);
+        pawHir_type_list_push(Q->C, seg->types, var);
+    }
+}
+
 struct HirType *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirPath *path, enum LookupKind kind)
 {
     struct QueryState Q = {
@@ -150,6 +162,8 @@ struct HirType *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct Hir
     struct HirType *inst;
     switch (HIR_KINDOF(q.base)) {
         case kHirAdtDecl:
+            maybe_generalize_adt(&Q, q.base, q.seg);
+            // (fallthrough)
         case kHirFuncDecl:
         case kHirTypeDecl:
             inst = pawP_instantiate(C, q.base, q.seg->types);

@@ -132,7 +132,7 @@ struct HirAdt {
     DeclId did;
 };
 
-// Represents a structure or enumeration type
+// Path to a type
 struct HirPathType {
     HIR_TYPE_HEADER;
     struct HirPath *path;
@@ -433,7 +433,6 @@ struct HirChainExpr {
 
 struct HirCallExpr {
     HIR_SUFFIXED_HEADER;
-    struct HirType *func;
     struct HirExprList *args;
 };
 
@@ -598,6 +597,7 @@ struct HirVisitor {
     int line;
 
     void (*VisitPath)(struct HirVisitor *V, struct HirPath *path);
+    void (*VisitSegment)(struct HirVisitor *V, struct HirSegment *seg);
 
     paw_Bool (*VisitExpr)(struct HirVisitor *V, struct HirExpr *node);
     paw_Bool (*VisitStmt)(struct HirVisitor *V, struct HirStmt *node);
@@ -640,6 +640,8 @@ struct HirTypeFolder {
     int line;
 
     struct HirTypeList *(*FoldTypeList)(struct HirTypeFolder *F, struct HirTypeList *list);
+    struct HirSegment *(*FoldSegment)(struct HirTypeFolder *F, struct HirSegment *seg);
+    struct HirPath *(*FoldPath)(struct HirTypeFolder *F, struct HirPath *path);
 
 #define DEFINE_CALLBACK(a, b) struct HirType *(*Fold##a)(struct HirTypeFolder *F, struct Hir##a *node);
     HIR_TYPE_LIST(DEFINE_CALLBACK)

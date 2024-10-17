@@ -1220,7 +1220,7 @@ static paw_Bool code_path_expr(struct HirVisitor *V, struct HirPathExpr *e)
 
 static paw_Bool is_method_call(struct HirCallExpr *e)
 {
-    return HirIsFuncDef(e->func) &&
+    return HirIsFuncDef(HIR_TYPEOF(e->target)) &&
         HirIsSelector(e->target);
 }
 
@@ -1236,7 +1236,7 @@ static struct HirExpr *prep_method_call(struct Generator *G, struct HirCallExpr 
     struct HirSelector *select = HirGetSelector(e->target);
     struct HirFuncDef *fdef = HirGetFuncDef(select->type);
     const String *modname = prefix_for_modno(G, fdef->modno);
-    const String *name = func_name(G, modname, e->func);
+    const String *name = func_name(G, modname, HIR_TYPEOF(e->target));
     const struct VarInfo info = find_var(G, name);
     pawK_code_U(G->fs, OP_GETGLOBAL, info.index);
     return select->target;
@@ -1244,17 +1244,18 @@ static struct HirExpr *prep_method_call(struct Generator *G, struct HirCallExpr 
 
 static paw_Bool code_call_expr(struct HirVisitor *V, struct HirCallExpr *e)
 {
-    paw_assert(HirIsFuncType(e->func));
+    struct HirType *target = HIR_TYPEOF(e->target);
+    paw_assert(HirIsFuncType(target));
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
     fs->line = e->line;
 
     int nargs = e->args->count;
-    if (is_variant_constructor(G, e->func)) {
-        code_variant_constructor(V, e->func, e->args);
+    if (is_variant_constructor(G, target)) {
+        code_variant_constructor(V, target, e->args);
         return PAW_FALSE;
-    } else if (is_instance_call(e->func)) {
-        code_instance_getter(V, e->func);
+    } else if (is_instance_call(target)) {
+        code_instance_getter(V, target);
     } else if (is_method_call(e)) {
         struct HirExpr *target = prep_method_call(G, e);
         pawHir_visit_expr(V, target); // push 'self'

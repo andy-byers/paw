@@ -1,0 +1,38 @@
+// unit_variant.paw
+
+enum Unit {U}
+
+pub fn test_init() {
+    let u = Unit::U;
+}
+
+pub fn test_init_annotated() {
+    let u: Unit = Unit::U;
+}
+
+pub fn test_copy() {
+    let u = Unit::U;
+    let u2 = u;
+}
+
+pub fn test_as_argument() {
+    let u = Unit::U;
+    let f = |x| {};
+
+    f(u);
+    f(Unit::U);
+}
+
+impl Unit {
+    pub fn method(self) {}
+    pub fn assoc_function() {}
+}
+
+pub fn test_call_method() {
+    Unit::U.method();
+    Unit::assoc_function();
+
+    let u = Unit::U;
+    u.method();
+}
+

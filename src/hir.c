@@ -109,6 +109,8 @@ int pawHir_find_symbol(struct HirScope *scope, const String *name)
     return -1;
 }
 
+#define VISITOR_CALL(V, name, x) ((V)->Visit##name != NULL ? (V)->Visit##name(V, x) : 1)
+
 static void AcceptType(struct HirVisitor *V, struct HirType *node);
 static void AcceptExpr(struct HirVisitor *V, struct HirExpr *node);
 static void AcceptDecl(struct HirVisitor *V, struct HirDecl *node);
@@ -150,16 +152,23 @@ static void AcceptAssignExpr(struct HirVisitor *V, struct HirAssignExpr *e)
     AcceptExpr(V, e->rhs);
 }
 
-static void AcceptPath(struct HirVisitor *V, struct HirPath *path)
+static void AcceptSegment(struct HirVisitor *V, struct HirSegment *seg)
 {
-    for (int i = 0; i < path->count; ++i) {
-        struct HirSegment *seg = K_LIST_GET(path, i);
-        if (seg->types == NULL) continue;
+    if (seg->types != NULL) {
         for (int j = 0; j < seg->types->count; ++j) {
             AcceptType(V, K_LIST_GET(seg->types, j));
         }
     }
-    if (V->VisitPath != NULL) V->VisitPath(V, path);
+    VISITOR_CALL(V, Segment, seg);
+}
+
+static void AcceptPath(struct HirVisitor *V, struct HirPath *path)
+{
+    for (int i = 0; i < path->count; ++i) {
+        struct HirSegment *seg = K_LIST_GET(path, i);
+        AcceptSegment(V, seg);
+    }
+    VISITOR_CALL(V, Path, path);
 }
 
 static void AcceptLiteralExpr(struct HirVisitor *V, struct HirLiteralExpr *e)
@@ -271,7 +280,6 @@ static void AcceptReturnStmt(struct HirVisitor *V, struct HirReturnStmt *s)
 
 static void AcceptCallExpr(struct HirVisitor *V, struct HirCallExpr *e)
 {
-    AcceptType(V, e->func);
     AcceptExpr(V, e->target);
     accept_expr_list(V, e->args);
 }
@@ -386,7 +394,6 @@ static void AcceptGeneric(struct HirVisitor *V, struct HirGeneric *t)
     PAW_UNUSED(t);
 }
 
-#define VISITOR_CALL(V, name, x) ((V)->Visit##name != NULL ? (V)->Visit##name(V, x) : 1)
 #define VISITOR_POSTCALL(V, name, x) ((V)->PostVisit##name != NULL ? (V)->PostVisit##name(V, x) : (void)0)
 #define DEFINE_VISITOR_CASES(a, b) case kHir##a: { \
         struct Hir##a *x = HirGet##a(node); \
@@ -533,6 +540,21 @@ static struct HirType *FoldTupleType(struct HirTypeFolder *F, struct HirTupleTyp
     return HIR_CAST_TYPE(t);
 }
 
+static struct HirSegment *FoldSegment(struct HirTypeFolder *F, struct HirSegment *seg)
+{
+    F->FoldTypeList(F, seg->types);
+    return seg;
+}
+
+static struct HirPath *FoldPath(struct HirTypeFolder *F, struct HirPath *path)
+{
+    for (int i = 0; i < path->count; ++i) {
+        struct HirSegment *seg = K_LIST_GET(path, i);
+        F->FoldTypeList(F, seg->types);
+    }
+    return path;
+}
+
 static struct HirType *FoldPathType(struct HirTypeFolder *F, struct HirPathType *t)
 {
     for (int i = 0; i < t->path->count; ++i) {
@@ -577,6 +599,8 @@ void pawHir_type_folder_init(struct HirTypeFolder *F, struct Compiler *C, void *
         .C = C,
 
         .FoldTypeList = fold_type_list,
+        .FoldSegment = FoldSegment,
+        .FoldPath = FoldPath,
 
         .FoldAdt = FoldAdt,
         .FoldFuncDef = FoldFuncDef,
@@ -654,15 +678,26 @@ static void CopyBlock(struct Compiler *C, struct HirBlock *s, struct HirBlock *r
 }
 #define COPY_BLOCK(C, b) CAST(struct HirBlock *, copy_stmt(C, HIR_CAST_STMT(b)))
 
+static struct HirSegment *dup_segment(struct Compiler *C, struct HirSegment *src)
+{
+    struct HirSegment *dst = pawHir_segment_new(C);
+    *dst = (struct HirSegment){
+        .name = src->name,
+        .types = copy_type_list(C, src->types),
+        .modno = src->modno,
+        .base = src->base,
+        .did = src->did,
+    };
+    return dst;
+}
+
 static struct HirPath *dup_path(struct Compiler *C, struct HirPath *e)
 {
     struct HirPath *r = pawHir_path_new(C);
     for (int i = 0; i < e->count; ++i) {
         struct HirSegment *src = pawHir_path_get(e, i);
-        struct HirSegment *dst = pawHir_path_add(C, r, src->name, NULL);
-        dst->types = copy_type_list(C, src->types);
-        dst->base = src->base;
-        dst->did = src->did;
+        struct HirSegment *dst = dup_segment(C, src);
+        pawHir_path_push(C, r, dst);
     }
     return r;
 }
@@ -817,7 +852,6 @@ static void CopyCallExpr(struct Compiler *C, struct HirCallExpr *e, struct HirCa
 {
     r->target = copy_expr(C, e->target);
     r->args = copy_expr_list(C, e->args);
-    r->func = e->func;
 }
 
 static void CopyPathExpr(struct Compiler *C, struct HirPathExpr *e, struct HirPathExpr *r)
@@ -1175,16 +1209,6 @@ static paw_Bool expand_call_expr(struct HirVisitor *V, struct HirCallExpr *e)
 
     pawHir_fold_expr(F, e->target);
     pawHir_fold_expr_list(F, e->args);
-
-    e->func = HIR_TYPEOF(e->target);
-    if (HirIsFuncDef(e->func)) {
-        struct HirFuncDef *fdef = HirGetFuncDef(e->func);
-        struct HirDecl *base = pawHir_get_decl(E->C, fdef->base);
-        if (HIR_IS_POLY_FUNC(base)) {
-            struct HirTypeList *types = expand_type_list(F, fdef->types);
-            e->func = pawP_instantiate(E->C, base, types);
-        }
-    }
     return PAW_FALSE;
 }
 
@@ -1488,22 +1512,26 @@ DEFINE_LIST_PRINTER(decl, HirDecl)
 DEFINE_LIST_PRINTER(stmt, HirStmt)
 DEFINE_LIST_PRINTER(type, HirType)
 
+static void dump_segment(struct Printer *P, struct HirSegment *seg)
+{
+    DUMP_STRING(P, seg->name->text);
+    if (seg->types != NULL) {
+        DUMP_LITERAL(P, "<");
+        for (int j = 0; j < seg->types->count; ++j) {
+            dump_type(P, seg->types->data[j]);
+            if (j < seg->types->count - 1) {
+                DUMP_LITERAL(P, ", ");
+            }
+        }
+        DUMP_LITERAL(P, ">");
+    }
+}
+
 static void dump_path(struct Printer *P, struct HirPath *p)
 {
     for (int i = 0; i < p->count; ++i) {
         if (i != 0) DUMP_LITERAL(P, "::");
-        struct HirSegment *seg = p->data[i];
-        DUMP_STRING(P, seg->name->text);
-        if (seg->types != NULL) {
-            DUMP_LITERAL(P, "<");
-            for (int j = 0; j < seg->types->count; ++j) {
-                dump_type(P, seg->types->data[i]);
-                if (j < seg->types->count - 1) {
-                    DUMP_LITERAL(P, ", ");
-                }
-            }
-            DUMP_LITERAL(P, ">");
-        }
+        dump_segment(P, p->data[i]);
     }
     DUMP_LITERAL(P, "\n");
 }
@@ -1786,8 +1814,6 @@ static void dump_expr(struct Printer *P, struct HirExpr *e)
             DUMP_MSG(P, "target: ");
             dump_expr(P, e->call.target);
             dump_expr_list(P, e->call.args, "args");
-            DUMP_MSG(P, "func: ");
-            dump_type(P, e->call.func);
             break;
         case kHirIndex:
             DUMP_FMT(P, "is_slice: %d\n", e->index.is_slice);

@@ -68,6 +68,43 @@ impl<X> PolyObject<X> {
     }
 }
 
+struct Dispatch<Ty> {
+    pub t: Ty,
+}
+
+impl Dispatch<bool> {
+    pub fn is_bool(self) -> bool {
+        return true;
+    }
+}
+
+impl Dispatch<int> {
+    // NOTE: cannot implement for Dispatch<T>, since there would be 2 versions of 'is_bool' 
+    //       callable from the same object
+    pub fn is_bool(self) -> bool {
+        return false;
+    }
+}
+
+pub fn test_dispatch() {
+    assert(Dispatch{t: false}.is_bool());
+    assert(!Dispatch{t: 0}.is_bool());
+}
+
+fn indirect_dispatch<T>(_: T) {
+    // TODO: Unfortunately, there isn't a way to make .is_bool() callable from Dispatch<T> unless
+    //       we have traits. This test doesn't really do much more than 'test_dispatch'. Eventually
+    //       create an IsBool trait and implement it on Dispatch<bool> and Dispatch<int>, have this
+    //       function take a 'b: B' where 'B: IsBool' and return 'b.is_bool()' for the caller to 
+    //       assert on.
+    assert(Dispatch{t: false}.is_bool());
+    assert(!Dispatch{t: 0}.is_bool());
+}
+
+pub fn test_indirect_dispatch() {
+    indirect_dispatch(());
+}
+
 pub fn test_poly_visibility() {
     // TODO: infer generic parameter on object using args passed to method
     let o = PolyObject::<int>::new(1);

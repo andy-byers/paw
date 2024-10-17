@@ -905,23 +905,27 @@ static struct HirType *infer_poly_func(struct Resolver *R, struct HirFuncDecl *b
     return instantiate(R, HIR_CAST_DECL(base), g.types);
 }
 
-static struct HirType *method_ctx(struct Resolver *R, struct HirType *type)
+static struct HirType *method_ctx(struct Resolver *R, struct HirExpr *target)
 {
-    if (!HirIsFuncDef(type)) return NULL;
-    struct HirFuncDef *fdef = HirGetFuncDef(type);
-    struct HirDecl *decl = get_decl(R, fdef->did);
-    return GET_SELF(decl);
+    if (!HirIsSelector(target)) return NULL; // normal function call
+    struct HirSelector *select = HirGetSelector(target);
+    struct HirType *self = HIR_TYPEOF(select->target);
+    self = maybe_unit_variant(R, self); // operand => type
+    struct HirDecl *field = pawP_find_field(R->C, self, select->name);
+    select->type = HIR_TYPEOF(field);
+    if (HirIsFieldDecl(field)) return NULL; // function pointer field
+    return self;
 }
 
 // Resolve a function call or enumerator constructor
 static void resolve_call_expr(struct Resolver *R, struct HirCallExpr *e)
 {
-    e->func = resolve_expr(R, e->target);
+    struct HirType *target = resolve_expr(R, e->target);
 
-    const struct HirFuncPtr *fptr = HIR_FPTR(e->func);
-    struct HirType *self = method_ctx(R, e->func);
+    const struct HirFuncPtr *fptr = HIR_FPTR(target);
+    struct HirType *self = method_ctx(R, e->target);
     const int nparams = fptr->params->count - !!self;
-    if (!HirIsFuncType(e->func)) {
+    if (!HirIsFuncType(target)) {
         TYPE_ERROR(R, "type is not callable");
     } else if (e->args->count < nparams) {
         SYNTAX_ERROR(R, "not enough arguments");
@@ -929,22 +933,22 @@ static void resolve_call_expr(struct Resolver *R, struct HirCallExpr *e)
         SYNTAX_ERROR(R, "too many arguments");
     }
 
-    if (HirIsFuncDef(e->func)) {
+    if (HirIsFuncDef(target)) {
         // Function type has an associated declaration. If that declaration is
         // for a function template, attempt to infer the type parameters.
-        struct HirDecl *decl = get_decl(R, HirGetFuncDef(e->func)->did);
+        struct HirDecl *decl = get_decl(R, HirGetFuncDef(target)->did);
         if (HIR_IS_POLY_FUNC(decl)) {
-            e->func = infer_poly_func(R, HirGetFuncDecl(decl), e->args);
-            e->type = HIR_FPTR(e->func)->result; // 'fptr' is common prefix
-            e->target->hdr.type = e->func; // replace generic type
+            target = infer_poly_func(R, HirGetFuncDecl(decl), e->args);
+            e->type = HIR_FPTR(target)->result; // 'fptr' is common prefix
+            e->target->hdr.type = target; // replace generic type
             return;
         }
     }
 
-    if (is_unit_variant(R, e->func)) {
+    if (is_unit_variant(R, target)) {
         TYPE_ERROR(R, "cannot call unit variant (omit '()' to construct)");
     }
-    const struct HirFuncPtr *func = HIR_FPTR(e->func);
+    const struct HirFuncPtr *func = HIR_FPTR(target);
     const struct HirTypeList *params = func->params;
     e->type = func->result;
 

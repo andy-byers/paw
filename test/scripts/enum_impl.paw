@@ -1,0 +1,12 @@
+// enum_impl.paw
+
+impl<Ty> Option<Ty> {
+    pub fn ensure_some(self) {
+        assert(self.is_some());
+    }
+}
+
+pub fn test_call() {
+    let o = Option::Some(123);
+    o.ensure_some();
+}

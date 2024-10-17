@@ -31,7 +31,11 @@
     X(misc) \
     X(poly_function) \
     X(poly_struct) \
-    X(poly_enum)
+    X(poly_enum) \
+    X(unit_struct) \
+    X(unit_variant) \
+    X(infer_assoc_items) \
+    X(enum_impl)
 
 #define check(x) \
     do { \

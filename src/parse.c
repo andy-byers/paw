@@ -1462,7 +1462,7 @@ static struct AstDeclList *toplevel_items(struct Lex *lex, struct AstDeclList *l
 }
 
 static const char kPrelude[] =
-    "pub struct _List<TTT>;\n"
+    "pub struct _List<T>;\n"
     "pub struct _Map<K, V>;\n"
 
     "pub enum Option<T> {\n"
@@ -1500,12 +1500,12 @@ static const char kPrelude[] =
     "    pub fn ends_with(self, suffix: str) -> bool;\n"
     "}\n"
 
-    "impl<TT> _List<TT> {\n"
+    "impl<T> _List<T> {\n"
     "    pub fn length(self) -> int;\n"
-    "    pub fn push(self, value: TT) -> _List<TT>;\n"
-    "    pub fn insert(self, i: int, value: TT) -> Self;\n"
-    "    pub fn remove(self, i: int) -> TT;\n"
-    "    pub fn pop(self) -> TT;\n"
+    "    pub fn push(self, value: T) -> Self;\n"
+    "    pub fn insert(self, i: int, value: T) -> Self;\n"
+    "    pub fn remove(self, i: int) -> T;\n"
+    "    pub fn pop(self) -> T;\n"
     "}\n"
 
     "impl<K, V> _Map<K, V> {\n"
