@@ -531,16 +531,24 @@ static paw_Bool define_type(struct HirVisitor *V, struct HirType *type)
     return PAW_FALSE;
 }
 
+static struct HirType *cannonicalize_func_def(struct HirTypeFolder *F, struct HirFuncDef *t)
+{
+    struct DefGenerator *dg = F->ud;
+    struct HirDecl *base = pawHir_get_decl(dg->C, t->did);
+    t->types = F->FoldTypeList(F, t->types);
+    return pawP_instantiate(dg->C, base, t->types);
+}
+
 static struct HirType *cannonicalize_adt(struct HirTypeFolder *F, struct HirAdt *t)
 {
     struct DefGenerator *dg = F->ud;
     struct HirDecl *base = pawHir_get_decl(dg->C, t->did);
+    t->types = F->FoldTypeList(F, t->types);
     // NOTE: relies on the fact that pawP_instantiate looks through the 'monos' list on the base ADT and
     //       returns the first matching ADT, rather than always creating a new ADT
     struct HirType *type = pawP_instantiate(dg->C, base, t->types);
     pawH_insert(ENV(dg->C), dg->adts, P2V(type), P2V(type));
-    // TODO: it seems like t->types should be folded before calling pawP_instantiate, figure out
-    //       why this works and that does not
+    // TODO: Figure out why this is necessary.
     type->adt.types = F->FoldTypeList(F, type->adt.types);
     return type;
 }
@@ -551,6 +559,7 @@ static void cannonicalize_adts(struct DefGenerator *dg)
     struct Hir *hir = dg->m->hir;
     pawHir_type_folder_init(&F, dg->C, dg);
     F.FoldAdt = cannonicalize_adt;
+    F.FoldFuncDef = cannonicalize_func_def;
 
     pawHir_fold_decl_list(&F, hir->items);
 }

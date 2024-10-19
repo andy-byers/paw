@@ -68,7 +68,7 @@ static struct QueryBase locate_base_in(struct QueryState *Q, struct ModuleInfo *
         sym = resolve_symbol(Q, seg->name);
         if (sym == NULL) return (struct QueryBase){seg};
         base = sym->decl;
-        seg->base = seg->did = base->hdr.did;
+        seg->did = base->hdr.did;
         seg->modno = Q->m->hir->modno;
         if (!HirIsUseDecl(base)) break;
         struct HirUseDecl *use = HirGetUseDecl(base);
@@ -109,10 +109,8 @@ static struct HirType *expect_field(struct QueryState *Q, struct HirType *adt, S
 static struct HirType *locate_method(struct QueryState *Q, struct HirType *type, struct HirSegment *seg)
 {
     struct HirType *inst = expect_field(Q, type, seg->name);
-    const DeclId did = HIR_TYPE_DID(inst);
+    seg->did = HIR_TYPE_DID(inst);
     seg->modno = Q->m->hir->modno;
-    seg->base = HIR_TYPE_DID(inst);
-    seg->did = did;
     return inst;
 }
 
@@ -120,7 +118,7 @@ static struct HirType *locate_enumerator(struct QueryState *Q, struct HirType *t
 {
     if (seg->types != NULL) NAME_ERROR(Q, "unexpected type arguments on enumerator '%s'", seg->name->text);
     struct HirType *result = expect_field(Q, type, seg->name);
-    seg->base = seg->did = HIR_TYPE_DID(result);
+    seg->did = HIR_TYPE_DID(result);
     seg->modno = Q->m->hir->modno;
     return result;
 }

@@ -52,10 +52,7 @@ static struct Type *lookup_type(struct Generator *G, struct HirType *type)
 static void mangle_type(struct Generator *G, Buffer *buf, struct HirType *type)
 {
     // TODO: This an ugly hack. The 'G->C->types' map should map DeclId to struct Type * instead of struct HirType *
-    if (HirIsFuncDef(type)) {
-        struct HirDecl *decl = GET_DECL(G, HirGetFuncDef(type)->did);
-        type = HIR_TYPEOF(decl);
-    } else if (HirIsTupleType(type)) {
+    if (HirIsTupleType(type)) {
         pawL_add_char(G->P, buf, 't');
         for (int i = 0; i < type->tuple.elems->count; ++i) {
             mangle_type(G, buf, type->tuple.elems->data[i]);

@@ -92,7 +92,6 @@ struct HirSegment {
     String *name;
     struct HirTypeList *types;
     int modno;
-    DeclId base;
     DeclId did;
 };
 
@@ -150,7 +149,6 @@ struct HirFuncDef {
     HIR_FUNC_HEADER;
     struct HirTypeList *types;
     int modno;
-    DeclId base;
     DeclId did;
 };
 
@@ -271,7 +269,6 @@ struct HirInstanceDecl {
     HIR_DECL_HEADER;
     paw_Bool is_pub : 1;
     paw_Bool is_assoc : 1;
-    struct HirType *self;
     struct HirTypeList *types;
 };
 

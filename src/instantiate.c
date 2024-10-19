@@ -146,11 +146,10 @@ static struct HirType *subst_func_def(struct HirTypeFolder *F, struct HirFuncDef
         r->params = pawHir_fold_type_list(F, t->params);
         r->result = pawHir_fold_type(F, t->result);
         r->modno = t->modno;
-        r->base = t->did;
         return result;
     }
     struct HirTypeList *types = pawHir_fold_type_list(F, t->types);
-    struct HirDecl *base = get_decl(I, t->base);
+    struct HirDecl *base = get_decl(I, t->did);
     return pawP_instantiate(I->C, base, types);
 }
 
@@ -203,6 +202,7 @@ static struct HirType *subst_unknown(struct HirTypeFolder *F, struct HirUnknown 
     return maybe_subst(F, HIR_CAST_TYPE(t));
 }
 
+// TODO: remove
 static void init_subst_folder(struct HirTypeFolder *F, struct Subst *subst, struct InstanceState *I,
                               struct HirTypeList *before, struct HirTypeList *after)
 {
@@ -250,10 +250,10 @@ static void instantiate_func_aux(struct InstanceState *I, struct HirFuncDecl *ba
     inst->name = base->name;
     inst->types = types;
 
-    struct HirType *result = register_decl_type(I, HIR_CAST_DECL(inst), kHirFuncDef);
+    struct HirType *result = pawHir_new_type(I->C, base->line, kHirFuncDef);
     struct HirFuncDef *r = HirGetFuncDef(result);
+    r->did = base->did;
     r->modno = HirGetFuncDef(base->type)->modno;
-    r->base = base->did;
     r->params = collect_field_types(I, base->params);
     r->result = func_result(base);
     r->types = types;
@@ -307,14 +307,13 @@ static struct HirDecl *instantiate_impl_method(struct InstanceState *I, struct H
     const struct HirAdt *self = HirGetAdt(func->self);
     struct HirDecl *adt_base = get_decl(I, self->did);
     struct HirTypeList *args = instantiate_typelist(I, generics, types, self->types);
-    r->self = pawP_instantiate(I->C, adt_base, args);
+//    r->self = pawP_instantiate(I->C, adt_base, args);
 
     struct HirType *type = register_decl_type(I, result, kHirFuncDef);
     struct HirFuncDef *t = HirGetFuncDef(type);
     t->types = collect_generic_types(I, func->generics);
     t->params = collect_field_types(I, func->params);
     t->result = func_result(func);
-    t->base = func->did;
     t->modno = self->modno;
     r->type = type;
 
@@ -494,12 +493,11 @@ static struct HirType *substitute_func_def(struct HirTypeFolder *F, struct HirFu
         r->params = pawHir_fold_type_list(F, t->params);
         r->result = pawHir_fold_type(F, t->result);
         r->modno = t->modno;
-        r->base = t->did;
         r->did = t->did;
         return result;
     }
     struct HirTypeList *types = pawHir_fold_type_list(F, t->types);
-    struct HirDecl *base = pawHir_get_decl(C, t->base);
+    struct HirDecl *base = pawHir_get_decl(C, t->did);
     return pawP_instantiate(C, base, types);
 }
 

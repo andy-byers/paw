@@ -879,25 +879,15 @@ static void resolve_type_decl(struct Resolver *R, struct HirTypeDecl *d)
     define_local(symbol);
 }
 
-static struct HirType *get_self_(struct HirDecl *func)
-{
-    if (HirIsFuncDecl(func)) {
-        return HirGetFuncDecl(func)->is_assoc ? NULL : HirGetFuncDecl(func)->self;
-    } else if (HirIsInstanceDecl(func)) {
-        return HirGetInstanceDecl(func)->is_assoc ? NULL : HirGetInstanceDecl(func)->self;
-    }
-    return NULL;
-}
-#define GET_SELF(decl) get_self_(HIR_CAST_DECL(decl))
-
 static struct HirType *infer_poly_func(struct Resolver *R, struct HirFuncDecl *base, struct HirExprList *args)
 {
     struct Generalization g = pawP_generalize(R->C, base->generics, base->params);
-    struct HirType *self = GET_SELF(base);
 
     // skip 'self' parameter, which is not present in 'args'
-    paw_assert(args->count == g.fields->count - !!self);
-    for (int i = !!self; i < g.fields->count; ++i) {
+    const int offset = base->is_assoc;
+    paw_assert(args->count == g.fields->count - offset);
+
+    for (int i = offset; i < g.fields->count; ++i) {
         struct HirType *a = g.fields->data[i];
         struct HirType *b = resolve_operand(R, args->data[i]);
         unify(R, a, b);
@@ -923,8 +913,8 @@ static void resolve_call_expr(struct Resolver *R, struct HirCallExpr *e)
     struct HirType *target = resolve_expr(R, e->target);
 
     const struct HirFuncPtr *fptr = HIR_FPTR(target);
-    struct HirType *self = method_ctx(R, e->target);
-    const int nparams = fptr->params->count - !!self;
+    const int param_offset = method_ctx(R, e->target) != NULL;
+    const int nparams = fptr->params->count - param_offset;
     if (!HirIsFuncType(target)) {
         TYPE_ERROR(R, "type is not callable");
     } else if (e->args->count < nparams) {
@@ -952,9 +942,9 @@ static void resolve_call_expr(struct Resolver *R, struct HirCallExpr *e)
     const struct HirTypeList *params = func->params;
     e->type = func->result;
 
-    for (int i = !!self; i < params->count; ++i) {
+    for (int i = param_offset; i < params->count; ++i) {
         struct HirType *param = K_LIST_GET(params, i);
-        struct HirExpr *arg = K_LIST_GET(e->args, i - !!self);
+        struct HirExpr *arg = K_LIST_GET(e->args, i - param_offset);
         unify(R, param, resolve_operand(R, arg));
     }
 }
@@ -1325,8 +1315,11 @@ static void resolve_decl(struct Resolver *R, struct HirDecl *decl)
         case kHirVariantDecl:
             resolve_variant_decl(R, HirGetVariantDecl(decl));
             break;
-        default:
+        case kHirFieldDecl:
             resolve_field_decl(R, HirGetFieldDecl(decl));
+            break;
+        default:
+            PAW_UNREACHABLE();
     }
 }
 

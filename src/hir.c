@@ -263,7 +263,6 @@ static void AcceptImplDecl(struct HirVisitor *V, struct HirImplDecl *d)
 
 static void AcceptInstanceDecl(struct HirVisitor *V, struct HirInstanceDecl *d)
 {
-    if (d->self != NULL) AcceptType(V, d->self);
     accept_type_list(V, d->types);
 }
 
@@ -685,7 +684,6 @@ static struct HirSegment *dup_segment(struct Compiler *C, struct HirSegment *src
         .name = src->name,
         .types = copy_type_list(C, src->types),
         .modno = src->modno,
-        .base = src->base,
         .did = src->did,
     };
     return dst;
@@ -908,7 +906,6 @@ static void CopyInstanceDecl(struct Compiler *C, struct HirInstanceDecl *d, stru
 {
     r->is_assoc = d->is_assoc;
     r->is_pub = d->is_pub;
-    r->self = d->self;
     r->types = copy_type_list(C, d->types);
 }
 
@@ -1025,13 +1022,13 @@ static struct HirType *expand_func_ptr(struct HirTypeFolder *F, struct HirFuncPt
 static struct HirType *expand_func_def(struct HirTypeFolder *F, struct HirFuncDef *t)
 {
     struct Expander *E = F->ud;
-    struct HirDecl *base = pawHir_get_decl(E->C, t->base);
+    struct HirDecl *base = pawHir_get_decl(E->C, t->did);
     if (t->types == NULL) {
         struct HirType *result = pawHir_new_type(E->C, t->line, kHirFuncDef);
         struct HirFuncDef *r = HirGetFuncDef(result);
         r->params = pawHir_fold_type_list(F, t->params);
         r->result = pawHir_fold_type(F, t->result);
-        r->base = r->did = t->did;
+        r->did = t->did;
         r->modno = t->modno;
         return result;
     }
@@ -1054,9 +1051,9 @@ static struct HirType *expand_path_type(struct HirTypeFolder *F, struct HirPathT
     struct Expander *E = F->ud;
     struct HirSegment *seg = K_LIST_GET(t->path, 0);
     // paw_Type equals DefId for builtins
-    if (seg->base <= PAW_TSTR) return HIR_CAST_TYPE(t);
+    if (seg->did <= PAW_TSTR) return HIR_CAST_TYPE(t);
     struct HirTypeList *types = pawHir_fold_type_list(F, seg->types);
-    struct HirDecl *base = pawHir_get_decl(E->C, seg->base);
+    struct HirDecl *base = pawHir_get_decl(E->C, seg->did);
     return pawP_instantiate(E->C, base, types);
 }
 
@@ -1142,7 +1139,7 @@ static struct HirDecl *find_decl(struct Expander *E, struct HirType *type)
             did = hir_adt_did(type);
             break;
         case kHirFuncDef:
-            did = HirGetFuncDef(type)->base;
+            did = HirGetFuncDef(type)->did;
             break;
         default:
             did = HirGetGeneric(type)->did;
@@ -1158,7 +1155,7 @@ static void expand_path(struct HirVisitor *V, struct HirPath *path)
         struct HirSegment *ps = pawHir_path_get(path, i);
         if (ps->types != NULL) {
             ps->types = pawHir_fold_type_list(F, ps->types);
-            struct HirDecl *base = pawHir_get_decl(E->C, ps->base);
+            struct HirDecl *base = pawHir_get_decl(E->C, ps->did);
             struct HirType *inst = pawP_instantiate(E->C, base, ps->types);
             ps->did = HIR_TYPE_DID(inst);
         }
@@ -1548,7 +1545,6 @@ static void dump_type(struct Printer *P, struct HirType *t)
             dump_type_list(P, t->tuple.elems, "elems");
             break;
         case kHirFuncDef:
-            DUMP_FMT(P, "base: %d\n", t->fdef.base);
             DUMP_FMT(P, "did: %d\n", t->fdef.did);
             if (t->fdef.types != NULL) {
                 dump_type_list(P, t->fdef.types, "types");
@@ -1570,7 +1566,6 @@ static void dump_type(struct Printer *P, struct HirType *t)
             for (int i = 0; i < t->path.path->count; ++i) {
                 struct HirSegment *seg = K_LIST_GET(t->path.path, i);
                 DUMP_FMT(P, "name: %s\n", seg->name->text);
-                DUMP_FMT(P, "base: %d\n", seg->base);
                 DUMP_FMT(P, "did: %d\n", seg->did);
                 if (seg->types != NULL) {
                     dump_type_list(P, seg->types, "types");

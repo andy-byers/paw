@@ -67,7 +67,7 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/call.c
             ${PAW_SOURCE_DIR}/code.c
             ${PAW_SOURCE_DIR}/codegen.c
-            ${PAW_SOURCE_DIR}/collect.c
+            ${PAW_SOURCE_DIR}/collect_items.c
             ${PAW_SOURCE_DIR}/compile.c
             ${PAW_SOURCE_DIR}/debug.c
             ${PAW_SOURCE_DIR}/env.c
