@@ -1338,6 +1338,7 @@ struct HirTypeList *pawHir_collect_generics(struct Compiler *C, struct HirDeclLi
 
 struct HirTypeList *pawHir_collect_fields(struct Compiler *C, struct HirDeclList *fields)
 {
+    if (fields == NULL) return NULL;
     struct HirTypeList *types = pawHir_type_list_new(C);
     for (int i = 0; i < fields->count; ++i) {
         struct HirFieldDecl *d = HirGetFieldDecl(fields->data[i]);

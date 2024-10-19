@@ -34,6 +34,8 @@
 struct Hir;
 struct HirPath;
 struct HirDecl;
+struct HirAdt;
+struct HirFuncDef;
 struct HirAdtDecl;
 struct HirInstanceDecl;
 struct HirTypeFolder;
@@ -170,16 +172,7 @@ struct HirType *pawP_instantiate_field(struct Compiler *C, struct HirType *self,
 struct HirDecl *pawP_find_field(struct Compiler *C, struct HirType *self, String *name);
 struct HirDecl *pawP_find_method(struct Compiler *C, struct HirType *self, String *name);
 
-struct Generalization {
-    struct HirTypeList *types;
-    struct HirTypeList *fields;
-    struct HirType *result;
-};
-
-struct Generalization pawP_generalize(
-        struct Compiler *C,
-        struct HirDeclList *generics,
-        struct HirDeclList *fields);
+struct HirType *pawP_generalize(struct Compiler *C, struct HirType *type);
 
 // Instantiate a polymorphic function or type
 // Expects that 'decl' is already resolved, meaning the type of each symbol has been
@@ -198,7 +191,6 @@ struct HirDecl *pawP_instantiate_impl(
         struct HirDecl *decl,
         struct HirTypeList *types);
 
-void pawP_set_instantiate(struct Compiler *C, paw_Bool full);
 void pawP_instantiate_impls_for(struct Compiler *C, struct HirAdtDecl *base, struct HirType *inst, struct HirTypeList *types);
 
 struct Substitution {

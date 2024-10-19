@@ -212,8 +212,9 @@ struct ModuleInfo *pawP_mi_new(struct Compiler *C, struct Hir *hir)
 
 struct DefState {
     struct DefState *outer;
-    struct HirDecl *decl;
+    struct HirType *type;
     struct Def *def;
+    int index;
 };
 
 struct DefGenerator {
@@ -226,18 +227,23 @@ struct DefGenerator {
     int nvals;
 };
 
-static void enter_def_(struct DefGenerator *dg, struct DefState *ds, struct HirDecl *decl, struct Def *def)
+static void enter_def_(struct DefGenerator *dg, struct DefState *ds, struct HirType *type, struct Def *def)
 {
     *ds = (struct DefState){
         .outer = dg->ds,
-        .decl = decl,
+        .type = type,
         .def = def,
     };
     dg->ds = ds;
 }
 
-#define ENTER_DEF(dg, ds, decl, def) enter_def_(dg, ds, HIR_CAST_DECL(decl), CAST(struct Def *, def))
-#define LEAVE_DEF(dg) ((dg)->ds = (dg)->ds->outer)
+static void leave_def_(struct DefGenerator *dg)
+{
+    dg->ds = dg->ds->outer;
+}
+
+#define ENTER_DEF(dg, ds, type, def) enter_def_(dg, ds, HIR_CAST_TYPE(type), CAST(struct Def *, def))
+#define LEAVE_DEF(dg) leave_def_(dg)
 
 static struct Type *create_type(struct DefGenerator *dg, struct HirType *type);
 static paw_Bool match_types(struct DefGenerator *dg, struct HirType *lhs, paw_Type rhs);
@@ -414,6 +420,26 @@ static struct Def *new_def_(struct DefGenerator *dg, struct HirDecl *decl, struc
 
 #define NEW_DEF(dg, decl, type) new_def_(dg, HIR_CAST_DECL(decl), type)
 
+static struct HirType *finalize_type(struct DefGenerator *dg, struct HirType *type)
+{
+    struct DefState *ds = dg->ds;
+    while (ds != NULL && !HirIsAdt(ds->type)) {
+        ds = ds->outer;
+    }
+    if (ds == NULL) return type;
+
+    struct HirAdt *inst_type = HirGetAdt(ds->type);
+    struct HirDecl *base_decl = pawHir_get_decl(dg->C, inst_type->did);
+    struct HirAdt *base_type = HirGetAdt(HIR_TYPEOF(base_decl));
+    struct HirTypeList *src = base_type->types;
+    struct HirTypeList *dst = inst_type->types;
+
+    struct HirTypeFolder F;
+    struct Substitution subst;
+    pawP_init_substitution_folder(&F, dg->C, &subst, src, dst);
+    return pawHir_fold_type(&F, type);
+}
+
 static void register_fdef_types(struct DefGenerator *dg, struct HirFuncDef *fdef)
 {
     if (fdef->types == NULL) return;
@@ -436,7 +462,7 @@ static paw_Bool define_func_decl(struct HirVisitor *V, struct HirFuncDecl *d)
     def->vid = dg->nvals++; // allocate value slot
 
     struct DefState ds;
-    ENTER_DEF(dg, &ds, d, def);
+    ENTER_DEF(dg, &ds, d->type, def);
     pawHir_visit_decl_list(V, d->params);
     LEAVE_DEF(dg);
 
@@ -462,11 +488,10 @@ static void define_adt(struct HirVisitor *V, struct HirAdtDecl *d, struct HirTyp
     struct HirAdt *adt = HirGetAdt(type);
     init_type_list(dg, adt->types, y->subtypes);
 
-    // TODO: ADT fields need to be special-cased
-//    struct DefState ds;
-//    ENTER_DEF(dg, &ds, d, r);
-//    pawHir_visit_decl_list(V, d->fields);
-//    LEAVE_DEF(dg);
+    struct DefState ds;
+    ENTER_DEF(dg, &ds, type, r);
+    pawHir_visit_decl_list(V, d->fields);
+    LEAVE_DEF(dg);
     return;
 }
 
@@ -492,13 +517,33 @@ static paw_Bool define_adt_decl(struct HirVisitor *V, struct HirAdtDecl *d)
 
 static paw_Bool define_impl_decl(struct HirVisitor *V, struct HirImplDecl *d)
 {
-    if (handle_monos(V, d->monos)) return PAW_FALSE;
-    return !has_generic(d->type);
+    return handle_monos(V, d->monos) ? PAW_FALSE : !has_generic(d->type);
+}
+
+static void set_adt_field(struct DefGenerator *dg, struct Def *def)
+{
+    struct DefState *ds = dg->ds;
+    if (ds == NULL) return;
+
+    struct Def *outer = ds->def;
+    if (outer->hdr.kind != DEF_ADT) return;
+
+    const int i = ds->index++;
+    outer->adt.fields[i] = def->hdr.did;
+}
+
+static int sizeof_object(struct DefGenerator *dg, struct HirType *type)
+{
+    struct Type *y = lookup_type(dg, type);
+    return y->hdr.kind == TYPE_ADT ? y->adt.size : 1;
 }
 
 static paw_Bool define_field_decl(struct HirVisitor *V, struct HirFieldDecl *d)
 {
-    NEW_DEF(V->ud, d, NULL);
+    struct DefGenerator *dg = V->ud;
+    struct HirType *type = finalize_type(dg, d->type);
+    struct Def *def = NEW_DEF(V->ud, d, type);
+    set_adt_field(dg, def);
     return PAW_FALSE;
 }
 
@@ -512,15 +557,14 @@ static paw_Bool define_var_decl(struct HirVisitor *V, struct HirVarDecl *d)
 static paw_Bool define_variant_decl(struct HirVisitor *V, struct HirVariantDecl *d)
 {
     struct DefGenerator *dg = V->ud;
-    struct Def *result = NEW_DEF(dg, d, NULL);
-    struct FuncDef *def = &result->func;
+    struct HirType *type = finalize_type(dg, d->type);
+    struct Def *def = NEW_DEF(dg, d, type);
+    set_adt_field(dg, def);
 
     struct DefState ds;
-    ENTER_DEF(dg, &ds, d, def);
+    ENTER_DEF(dg, &ds, d->type, def);
     pawHir_visit_decl_list(V, d->fields);
     LEAVE_DEF(dg);
-
-    // manually visited
     return PAW_FALSE;
 }
 

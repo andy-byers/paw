@@ -879,22 +879,6 @@ static void resolve_type_decl(struct Resolver *R, struct HirTypeDecl *d)
     define_local(symbol);
 }
 
-static struct HirType *infer_poly_func(struct Resolver *R, struct HirFuncDecl *base, struct HirExprList *args)
-{
-    struct Generalization g = pawP_generalize(R->C, base->generics, base->params);
-
-    // skip 'self' parameter, which is not present in 'args'
-    const int offset = base->is_assoc;
-    paw_assert(args->count == g.fields->count - offset);
-
-    for (int i = offset; i < g.fields->count; ++i) {
-        struct HirType *a = g.fields->data[i];
-        struct HirType *b = resolve_operand(R, args->data[i]);
-        unify(R, a, b);
-    }
-    return instantiate(R, HIR_CAST_DECL(base), g.types);
-}
-
 static struct HirType *method_ctx(struct Resolver *R, struct HirExpr *target)
 {
     if (!HirIsSelector(target)) return NULL; // normal function call
@@ -923,28 +907,26 @@ static void resolve_call_expr(struct Resolver *R, struct HirCallExpr *e)
         SYNTAX_ERROR(R, "too many arguments");
     }
 
+    struct HirTypeList *params = HIR_FPTR(target)->params;
+    e->type = HIR_FPTR(target)->result;
+
     if (HirIsFuncDef(target)) {
-        // Function type has an associated declaration. If that declaration is
-        // for a function template, attempt to infer the type parameters.
-        struct HirDecl *decl = get_decl(R, HirGetFuncDef(target)->did);
+        struct HirDecl *decl = get_decl(R, HIR_TYPE_DID(target));
         if (HIR_IS_POLY_FUNC(decl)) {
-            target = infer_poly_func(R, HirGetFuncDecl(decl), e->args);
-            e->type = HIR_FPTR(target)->result; // 'fptr' is common prefix
-            e->target->hdr.type = target; // replace generic type
-            return;
+            target = pawP_generalize(R->C, target);
+            params = HIR_FPTR(target)->params;
+            e->type = HIR_FPTR(target)->result;
+            e->target->hdr.type = target;
         }
     }
 
     if (is_unit_variant(R, target)) {
         TYPE_ERROR(R, "cannot call unit variant (omit '()' to construct)");
     }
-    const struct HirFuncPtr *func = HIR_FPTR(target);
-    const struct HirTypeList *params = func->params;
-    e->type = func->result;
 
-    for (int i = param_offset; i < params->count; ++i) {
-        struct HirType *param = K_LIST_GET(params, i);
-        struct HirExpr *arg = K_LIST_GET(e->args, i - param_offset);
+    for (int i = 0; i < nparams; ++i) {
+        struct HirType *param = K_LIST_GET(params, i + param_offset);
+        struct HirExpr *arg = K_LIST_GET(e->args, i);
         unify(R, param, resolve_operand(R, arg));
     }
 }
@@ -1086,8 +1068,6 @@ static struct HirType *resolve_composite_lit(struct Resolver *R, struct HirCompo
     if (!HirIsAdt(type)) TYPE_ERROR(R, "expected structure type");
     struct HirDecl *decl = get_decl(R, HIR_TYPE_DID(type));
 
-    const paw_Bool has_type_args = K_LIST_GET(e->path, e->path->count - 1)->types != NULL;
-
     // Use a temporary Map to avoid searching repeatedly through the list of
     // fields.
     paw_Env *P = ENV(R);
@@ -1097,24 +1077,20 @@ static struct HirType *resolve_composite_lit(struct Resolver *R, struct HirCompo
     V_SET_OBJECT(pv, map);
 
     Value key;
-    struct Generalization g;
-    struct HirTypeList *field_types = NULL;
-    paw_Bool is_inference = PAW_FALSE;
     struct HirAdtDecl *adt = HirGetAdtDecl(decl);
+    struct HirTypeList *field_types = pawHir_collect_fields(R->C, adt->fields);
     if (!adt->is_struct) {
         TYPE_ERROR(R, "expected structure but found enumeration '%s'", adt->name->text);
     } else if (adt->fields == NULL) {
         SYNTAX_ERROR(R, "unexpected curly braces on initializer for unit structure '%s'"
                         "(use name without '{}' to create unit struct)", adt->name->text);
-    } else if (HIR_IS_POLY_ADT(decl) && decl->hdr.type == type) {
-        g = pawP_generalize(R->C, adt->generics, adt->fields);
-        is_inference = PAW_TRUE;
-        field_types = g.fields;
-    } else {
-        field_types = pawHir_collect_fields(R->C, adt->fields);
-        field_types = subst_types(R, HirGetAdt(adt->type)->types,
-                HirGetAdt(type)->types, field_types);
+    } else if (pawU_equals(R->U, adt->type, type)) {
+        type = pawP_generalize(R->C, type);
     }
+
+    field_types = subst_types(R, HirGetAdt(adt->type)->types,
+            HirGetAdt(type)->types, field_types);
+
     struct HirExprList *order = collect_field_exprs(R, e->items, map, adt->name);
     for (int i = 0; i < adt->fields->count; ++i) {
         struct HirDecl *field_decl = K_LIST_GET(adt->fields, i);
@@ -1126,7 +1102,7 @@ static struct HirType *resolve_composite_lit(struct Resolver *R, struct HirCompo
             NAME_ERROR(R, "missing initializer for field '%s' in struct '%s'",
                        field->name->text, adt->name->text);
         }
-        struct HirType *type =  field_types->data[i];
+        struct HirType *type = field_types->data[i];
         struct HirExpr *item = order->data[V_INT(*value)];
         unify(R, type, resolve_operand(R, item));
         pawH_erase(map, key);
@@ -1141,9 +1117,6 @@ static struct HirType *resolve_composite_lit(struct Resolver *R, struct HirCompo
     paw_assert(adt->fields->count == e->items->count);
     pawC_pop(P); // pop map
 
-    if (is_inference) {
-        type = instantiate(R, decl, g.types);
-    }
     e->items = order;
     return type;
 }
@@ -1207,7 +1180,6 @@ static void visit_fornum(struct Resolver *R, struct HirForStmt *s)
     visit_forbody(R, get_type(R, PAW_TINT), s->block, s);
 }
 
-// TODO: allow function with signature fn iter<I, T>(I) -> (fn(int) -> T)
 static void visit_forin(struct Resolver *R, struct HirForStmt *s)
 {
     struct HirType *iter_t = resolve_operand(R, s->forin.target);
@@ -1248,19 +1220,9 @@ static void check_index(struct Resolver *R, struct HirIndex *e, struct HirType *
     } else {
         TYPE_ERROR(R, "type cannot be indexed (not a container)");
     }
-    if (e->is_slice) {
-        if (e->first != NULL) {
-            struct HirType *first = resolve_operand(R, e->first);
-            unify(R, expect, first);
-        }
-        if (e->second != NULL) {
-            struct HirType *second = resolve_operand(R, e->second);
-            unify(R, expect, second);
-        }
-    } else {
-        struct HirType *first = resolve_operand(R, e->first);
-        unify(R, expect, first);
-    }
+
+    if (e->first != NULL) unify(R, expect, resolve_operand(R, e->first));
+    if (e->second != NULL) unify(R, expect, resolve_operand(R, e->second));
 }
 
 static void resolve_index(struct Resolver *R, struct HirIndex *e)
@@ -1472,7 +1434,7 @@ static DeclId find_builtin(struct Resolver *R, String *name)
     return symbol->decl->hdr.did;
 }
 
-static void resolve_module(struct Resolver *R, struct ModuleInfo *mod)
+static void check_module_types(struct Resolver *R, struct ModuleInfo *mod)
 {
     struct Hir *hir = mod->hir;
     DLOG(R, "resolving '%s'", hir->name->text);
@@ -1493,7 +1455,7 @@ static void check_types(struct Resolver *R, struct DynamicMem *dm)
     enter_inference_ctx(R);
     for (int i = 0; i < dm->modules->count; ++i) {
         R->m = K_LIST_GET(dm->modules, i);
-        resolve_module(R, R->m);
+        check_module_types(R, R->m);
     }
     leave_inference_ctx(R);
 }

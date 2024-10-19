@@ -137,6 +137,10 @@ struct Stack<T> {
 }
 
 impl<X> Stack<X> {
+    pub fn new() -> Self {
+        return Self{ts: []};
+    }
+
     pub fn push(self, t: X) {
         self.ts.push(t);
     }
@@ -172,6 +176,13 @@ pub fn test_calls() {
         }
         outer.pop();
     }
+}
+
+pub fn test_infer_self_later() {
+    let s = Stack::new();
+    s.push(42);
+
+    assert(s.pop() == 42);
 }
 
 struct Mono {

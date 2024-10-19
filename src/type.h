@@ -28,15 +28,18 @@ struct TypeHeader {
 struct Adt {
     TYPE_HEADER;
     DefId did;
+    int size;
 };
 
 struct Signature {
     TYPE_HEADER;
     paw_Type result;
+    int size;
 };
 
 struct TupleType {
     TYPE_HEADER;
+    int size;
 };
 
 struct Type {

@@ -6,6 +6,7 @@
 //     impl blocks. HirInstanceDecl nodes are used to store the type of each
 //     instance for type checking.
 
+#include "compile.h"
 #include "hir.h"
 
 struct InstanceState {
@@ -107,135 +108,21 @@ static struct HirDecl *find_impl_instance(struct InstanceState *I, struct HirImp
     return NULL;
 }
 
-struct Subst {
-    struct HirTypeList *before;
-    struct HirTypeList *after;
-    struct InstanceState *I;
-};
-
-static struct HirTypeList *subst_list(struct HirTypeFolder *F, struct HirTypeList *list)
-{
-    struct Subst *subst = F->ud;
-    struct InstanceState *I = subst->I;
-    struct HirTypeList *copy = pawHir_type_list_new(I->C);
-    for (int i = 0; i < list->count; ++i) {
-        struct HirType *type = pawHir_fold_type(F, list->data[i]);
-        pawHir_type_list_push(I->C, copy, type);
-    }
-    return copy;
-}
-
-static struct HirType *subst_func_ptr(struct HirTypeFolder *F, struct HirFuncPtr *t)
-{
-    struct Subst *subst = F->ud;
-    struct InstanceState *I = subst->I;
-    struct HirType *r = new_type(I, NO_DECL, kHirFuncPtr, t->line);
-    r->fptr.params = pawHir_fold_type_list(F, t->params);
-    r->fptr.result = pawHir_fold_type(F, t->result);
-    return r;
-}
-
-static struct HirType *subst_func_def(struct HirTypeFolder *F, struct HirFuncDef *t)
-{
-    struct Subst *subst = F->ud;
-    struct InstanceState *I = subst->I;
-
-    if (t->types == NULL) {
-        struct HirType *result = new_type(I, NO_DECL, kHirFuncDef, t->line);
-        struct HirFuncDef *r = HirGetFuncDef(result);
-        r->params = pawHir_fold_type_list(F, t->params);
-        r->result = pawHir_fold_type(F, t->result);
-        r->modno = t->modno;
-        return result;
-    }
-    struct HirTypeList *types = pawHir_fold_type_list(F, t->types);
-    struct HirDecl *base = get_decl(I, t->did);
-    return pawP_instantiate(I->C, base, types);
-}
-
-static struct HirType *subst_adt(struct HirTypeFolder *F, struct HirAdt *t)
-{
-    struct Subst *subst = F->ud;
-    struct InstanceState *I = subst->I;
-
-    if (t->types == NULL) return HIR_CAST_TYPE(t);
-    struct HirDecl *base = get_decl(I, t->did);
-    struct HirTypeList *types = pawHir_fold_type_list(F, t->types);
-    return pawP_instantiate(I->C, base, types);
-}
-
-static struct HirType *subst_tuple(struct HirTypeFolder *F, struct HirTupleType *t)
-{
-    struct Subst *subst = F->ud;
-    struct InstanceState *I = subst->I;
-
-    struct HirType *result = new_type(I, NO_DECL, kHirTupleType, t->line);
-    struct HirTupleType *r = HirGetTupleType(result);
-    r->elems = pawHir_fold_type_list(F, t->elems);
-    return result;
-}
-
-static paw_Bool type_equals(struct InstanceState *I, struct HirType *a, struct HirType *b)
-{
-    return pawU_equals(I->U, a, b);
-}
-
-static struct HirType *maybe_subst(struct HirTypeFolder *F, struct HirType *t)
-{
-    struct Subst *s = F->ud;
-    struct InstanceState *I = s->I;
-    for (int i = 0; i < s->before->count; ++i) {
-        struct HirType *t2 = K_LIST_GET(s->before, i);
-        if (type_equals(I, t, t2)) return K_LIST_GET(s->after, i);
-    }
-    return t;
-}
-
-static struct HirType *subst_generic(struct HirTypeFolder *F, struct HirGeneric *t)
-{
-    return maybe_subst(F, HIR_CAST_TYPE(t));
-}
-
-// TODO: never used, remove
-static struct HirType *subst_unknown(struct HirTypeFolder *F, struct HirUnknown *t)
-{
-    return maybe_subst(F, HIR_CAST_TYPE(t));
-}
-
-// TODO: remove
-static void init_subst_folder(struct HirTypeFolder *F, struct Subst *subst, struct InstanceState *I,
-                              struct HirTypeList *before, struct HirTypeList *after)
-{
-    *subst = (struct Subst){
-        .before = before,
-        .after = after,
-        .I = I,
-    };
-    pawHir_type_folder_init(F, NULL, subst);
-    F->FoldAdt = subst_adt;
-    F->FoldFuncPtr = subst_func_ptr;
-    F->FoldFuncDef = subst_func_def;
-    F->FoldGeneric = subst_generic;
-    F->FoldUnknown = subst_unknown;
-    F->FoldTupleType = subst_tuple;
-    F->FoldTypeList = subst_list;
-}
-
 static struct HirTypeList *instantiate_typelist(struct InstanceState *I, struct HirTypeList *before,
                                                 struct HirTypeList *after, struct HirTypeList *target)
 {
-    struct Subst subst;
     struct HirTypeFolder F;
-    init_subst_folder(&F, &subst, I, before, after);
+    struct Substitution subst;
+    pawP_init_substitution_folder(&F, I->C, &subst, before, after);
     return pawHir_fold_type_list(&F, target);
 }
 
 static void prep_func_instance(struct InstanceState *I, struct HirTypeList *before, struct HirTypeList *after,
                                struct HirInstanceDecl *d, struct HirFuncDef *t)
 {
-    struct Subst subst;
     struct HirTypeFolder F;
-    init_subst_folder(&F, &subst, I, before, after);
+    struct Substitution subst;
+    pawP_init_substitution_folder(&F, I->C, &subst, before, after);
 
     struct HirTypeList *params = t->params;
     for (int i = 0; i < params->count; ++i) {
@@ -407,9 +294,10 @@ struct HirDecl *pawP_instantiate_impl(struct Compiler *C, struct HirDecl *base, 
     return instantiate_impl(&I, &base->impl, types);
 }
 
-static struct HirType *instantiate_aux(struct Compiler *C, struct HirDecl *base, struct HirTypeList *types)
+struct HirType *pawP_instantiate(struct Compiler *C, struct HirDecl *base, struct HirTypeList *types)
 {
     paw_assert(!HirIsImplDecl(base));
+    if (types == NULL) return HIR_TYPEOF(base);
 
     struct InstanceState I = {
         .U = &C->dm->unifier,
@@ -425,37 +313,44 @@ static struct HirType *instantiate_aux(struct Compiler *C, struct HirDecl *base,
     return HIR_TYPEOF(base);
 }
 
-struct HirType *pawP_instantiate(struct Compiler *C, struct HirDecl *base, struct HirTypeList *types)
+static struct HirType *generalize_adt(struct Compiler *C, struct HirAdt *t)
 {
-    if (types == NULL) return HIR_TYPEOF(base);
-    return instantiate_aux(C, base, types);
-}
+    if (t->types == NULL) return HIR_CAST_TYPE(t);
 
-// Replace generic parameters with inference variables (struct HirUnknown). The
-// resulting '.fields' list can be unified with another list of types (argument or
-// struct field types) to infer a concrete type for each unknown.
-struct Generalization pawP_generalize(struct Compiler *C, struct HirDeclList *generics, struct HirDeclList *fields)
-{
     struct InstanceState I = {
         .U = &C->dm->unifier,
         .P = ENV(C),
         .C = C,
     };
 
-    if (generics == NULL) return (struct Generalization){0};
-    struct HirTypeList *gtypes = collect_generic_types(&I, generics);
-    struct HirTypeList *ftypes = collect_field_types(&I, fields);
-    struct HirTypeList *unknowns = new_unknowns(&I, generics->count);
-    struct HirTypeList *replaced = instantiate_typelist(&I, gtypes, unknowns, ftypes);
-    return (struct Generalization){
-        .types = unknowns,
-        .fields = replaced,
-    };
+    struct HirTypeList *unknowns = new_unknowns(&I, t->types->count);
+    struct HirDecl *base = pawHir_get_decl(C, t->did);
+    return pawP_instantiate(C, base, unknowns);
 }
 
-void pawP_set_instantiate(struct Compiler *C, paw_Bool full)
+static struct HirType *generalize_func(struct Compiler *C, struct HirFuncDef *t)
 {
-//    C->finst = full ? instantiate_full : instantiate_partial;
+    if (t->types == NULL) return HIR_CAST_TYPE(t);
+
+    struct InstanceState I = {
+        .U = &C->dm->unifier,
+        .P = ENV(C),
+        .C = C,
+    };
+
+    struct HirTypeList *unknowns = new_unknowns(&I, t->types->count);
+    struct HirDecl *base = pawHir_get_decl(C, t->did);
+    return pawP_instantiate(C, base, unknowns);
+}
+
+// Replace generic parameters with inference variables (struct HirUnknown). The
+// resulting '.fields' list can be unified with another list of types (argument or
+// struct field types) to infer a concrete type for each unknown.
+struct HirType *pawP_generalize(struct Compiler *C, struct HirType *type)
+{
+    if (HirIsAdt(type)) return generalize_adt(C, HirGetAdt(type));
+    if (HirIsFuncDef(type)) return generalize_func(C, HirGetFuncDef(type));
+    return type;
 }
 
 static struct HirTypeList *substitute_list(struct HirTypeFolder *F, struct HirTypeList *list)

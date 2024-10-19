@@ -119,8 +119,6 @@ struct AstFuncDecl {
     struct AstBlock *body;
 };
 
-// TODO: Need to prevent recursive structures, or introduce the concept of
-//       indirection
 struct AstAdtDecl {
     AST_DECL_HEADER;
     paw_Bool is_pub : 1;
