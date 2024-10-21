@@ -33,6 +33,7 @@ typedef uint16_t DeclId;
         X(BinOpExpr,      binop) \
         X(ClosureExpr,    clos) \
         X(ConversionExpr, conv) \
+        X(SwitchDiscr,      iswitch) \
         X(CallExpr,       call) \
         X(Index,          index) \
         X(Selector,       select) \
@@ -56,12 +57,24 @@ typedef uint16_t DeclId;
         X(ForStmt,    for_) \
         X(WhileStmt,  while_) \
         X(LabelStmt,  label) \
-        X(ReturnStmt, result)
+        X(ReturnStmt, result) \
+        X(MatchArm,   arm) \
+        X(MatchStmt,  match)
+
+#define HIR_PAT_LIST(X) \
+        X(FieldPat, field) \
+        X(StructPat, struct_) \
+        X(VariantPat, variant) \
+        X(TuplePat, tuple) \
+        X(PathPat, path) \
+        X(BindingPat, bind) \
+        X(LiteralPat, lit)
 
 #define HIR_CAST_DECL(x) CAST(struct HirDecl *, x)
 #define HIR_CAST_EXPR(x) CAST(struct HirExpr *, x)
 #define HIR_CAST_STMT(x) CAST(struct HirStmt *, x)
 #define HIR_CAST_TYPE(x) CAST(struct HirType *, x)
+#define HIR_CAST_PAT(x) CAST(struct HirPat *, x)
 
 struct Hir;
 
@@ -455,6 +468,12 @@ struct HirConversionExpr {
     struct HirExpr *arg;
 };
 
+struct HirSwitchDiscr {
+    HIR_EXPR_HEADER;
+    int expect;
+    struct HirExpr *target;
+};
+
 struct HirAssignExpr {
     HIR_EXPR_HEADER;
     struct HirExpr *lhs;
@@ -561,6 +580,18 @@ struct HirForStmt {
     };
 };
 
+struct HirMatchArm {
+    HIR_STMT_HEADER;
+    struct HirPat *guard;
+    struct HirBlock *result;
+};
+
+struct HirMatchStmt {
+    HIR_STMT_HEADER;
+    struct HirExpr *target;
+    struct HirStmtList *arms;
+};
+
 struct HirStmt {
     union {
         struct HirStmtHeader hdr;
@@ -587,6 +618,95 @@ static const char *kHirStmtNames[] = {
     HIR_STMT_LIST(DEFINE_ACCESS)
 #undef DEFINE_ACCESS
 
+enum HirPatKind {
+#define DEFINE_ENUM(a, b) kHir##a,
+    HIR_PAT_LIST(DEFINE_ENUM)
+#undef DEFINE_ENUM
+};
+
+#define HIR_PAT_HEADER \
+    K_ALIGNAS_NODE struct HirType *type; \
+    int line; \
+    enum HirPatKind kind : 8
+
+struct HirPatHeader {
+    HIR_PAT_HEADER;
+};
+
+// NOTE: only used for HirStructPat
+struct HirFieldPat {
+    HIR_PAT_HEADER;
+    int index;
+    String *name;
+    struct HirPat *pat;
+};
+
+struct HirStructPat {
+    HIR_PAT_HEADER;
+    struct HirPath *path;
+    struct HirPatList *fields; // [HirFieldPat]
+};
+
+struct HirVariantPat {
+    HIR_PAT_HEADER;
+    int index;
+    struct HirPath *path;
+    struct HirPatList *fields;
+};
+
+struct HirTuplePat {
+    HIR_PAT_HEADER;
+    struct HirPatList *elems;
+};
+
+struct HirPathPat {
+    HIR_PAT_HEADER;
+    int index;
+    struct HirPath *path;
+};
+
+struct HirBindingPat {
+    HIR_PAT_HEADER;
+    String *name;
+};
+
+struct HirIdentPat {
+    HIR_PAT_HEADER;
+    String *name;
+};
+
+struct HirLiteralPat {
+    HIR_PAT_HEADER;
+    struct HirExpr *expr;
+};
+
+struct HirPat {
+    union {
+        struct HirPatHeader hdr;
+#define DEFINE_UNION(a, b) struct Hir##a b;
+        HIR_PAT_LIST(DEFINE_UNION)
+#undef DEFINE_UNION
+    };
+};
+
+static const char *kHirPatNames[] = {
+#define DEFINE_NAME(a, b) "Hir"#a,
+        HIR_PAT_LIST(DEFINE_NAME)
+#undef DEFINE_NAME
+};
+
+#define DEFINE_ACCESS(a, b) \
+    static inline paw_Bool HirIs##a(const struct HirPat *node) { \
+        return node->hdr.kind == kHir##a; \
+    } \
+    static inline struct Hir##a *HirGet##a(struct HirPat *node) { \
+        paw_assert(HirIs##a(node)); \
+        return &node->b; \
+    }
+    HIR_PAT_LIST(DEFINE_ACCESS)
+#undef DEFINE_ACCESS
+
+
 // Represents a single pass over an HIR
 struct HirVisitor {
     struct Compiler *C;
@@ -600,11 +720,13 @@ struct HirVisitor {
     paw_Bool (*VisitStmt)(struct HirVisitor *V, struct HirStmt *node);
     paw_Bool (*VisitDecl)(struct HirVisitor *V, struct HirDecl *node);
     paw_Bool (*VisitType)(struct HirVisitor *V, struct HirType *node);
+    paw_Bool (*VisitPat)(struct HirVisitor *V, struct HirPat *node);
 
     void (*PostVisitExpr)(struct HirVisitor *V, struct HirExpr *node);
     void (*PostVisitStmt)(struct HirVisitor *V, struct HirStmt *node);
     void (*PostVisitDecl)(struct HirVisitor *V, struct HirDecl *node);
     void (*PostVisitType)(struct HirVisitor *V, struct HirType *node);
+    void (*PostVisitPat)(struct HirVisitor *V, struct HirPat *node);
 
 #define DEFINE_CALLBACK(a, b) paw_Bool (*Visit##a)(struct HirVisitor *V, struct Hir##a *node); \
                               void (*PostVisit##a)(struct HirVisitor *V, struct Hir##a *node);
@@ -612,18 +734,23 @@ struct HirVisitor {
     HIR_DECL_LIST(DEFINE_CALLBACK)
     HIR_STMT_LIST(DEFINE_CALLBACK)
     HIR_TYPE_LIST(DEFINE_CALLBACK)
+    HIR_PAT_LIST(DEFINE_CALLBACK)
 #undef DEFINE_CALLBACK
 };
 
 void pawHir_visitor_init(struct HirVisitor *V, struct Compiler *C, void *ud);
+
+// Visitor entrypoints for each kind of HIR node:
 void pawHir_visit_expr(struct HirVisitor *V, struct HirExpr *node);
 void pawHir_visit_stmt(struct HirVisitor *V, struct HirStmt *node);
 void pawHir_visit_decl(struct HirVisitor *V, struct HirDecl *node);
 void pawHir_visit_type(struct HirVisitor *V, struct HirType *node);
+void pawHir_visit_pat(struct HirVisitor *V, struct HirPat *node);
 void pawHir_visit_expr_list(struct HirVisitor *V, struct HirExprList *list);
 void pawHir_visit_stmt_list(struct HirVisitor *V, struct HirStmtList *list);
 void pawHir_visit_decl_list(struct HirVisitor *V, struct HirDeclList *list);
 void pawHir_visit_type_list(struct HirVisitor *V, struct HirTypeList *list);
+void pawHir_visit_pat_list(struct HirVisitor *V, struct HirPatList *list);
 
 static inline void pawHir_visit_block(struct HirVisitor *V, struct HirBlock *node)
 {
@@ -646,13 +773,17 @@ struct HirTypeFolder {
 };
 
 void pawHir_type_folder_init(struct HirTypeFolder *F, struct Compiler *C, void *ud);
+
+// Type folder entrypoints for each kind of HIR node:
 struct HirType *pawHir_fold_type(struct HirTypeFolder *F, struct HirType *node);
 void pawHir_fold_expr(struct HirTypeFolder *F, struct HirExpr *node);
 void pawHir_fold_decl(struct HirTypeFolder *F, struct HirDecl *node);
 void pawHir_fold_stmt(struct HirTypeFolder *F, struct HirStmt *node);
+void pawHir_fold_pat(struct HirTypeFolder *F, struct HirPat *node);
 void pawHir_fold_expr_list(struct HirTypeFolder *F, struct HirExprList *list);
 void pawHir_fold_stmt_list(struct HirTypeFolder *F, struct HirStmtList *list);
 void pawHir_fold_decl_list(struct HirTypeFolder *F, struct HirDeclList *list);
+void pawHir_fold_pat_list(struct HirTypeFolder *F, struct HirPatList *list);
 struct HirTypeList *pawHir_fold_type_list(struct HirTypeFolder *F, struct HirTypeList *list);
 
 static inline void pawHir_fold_block(struct HirTypeFolder *F, struct HirBlock *node)
@@ -675,11 +806,13 @@ struct HirType *pawHir_new_type(struct Compiler *C, int line, enum HirTypeKind k
 struct HirDecl *pawHir_new_decl(struct Compiler *C, int line, enum HirDeclKind kind);
 struct HirExpr *pawHir_new_expr(struct Compiler *C, int line, enum HirExprKind kind);
 struct HirStmt *pawHir_new_stmt(struct Compiler *C, int line, enum HirStmtKind kind);
+struct HirPat *pawHir_new_pat(struct Compiler *C, int line, enum HirPatKind kind);
 
 DEFINE_LIST(struct Compiler, pawHir_decl_list_, HirDeclList, struct HirDecl)
 DEFINE_LIST(struct Compiler, pawHir_expr_list_, HirExprList, struct HirExpr)
 DEFINE_LIST(struct Compiler, pawHir_stmt_list_, HirStmtList, struct HirStmt)
 DEFINE_LIST(struct Compiler, pawHir_type_list_, HirTypeList, struct HirType)
+DEFINE_LIST(struct Compiler, pawHir_pat_list_, HirPatList, struct HirPat)
 DEFINE_LIST(struct Compiler, pawHir_scope_, HirScope, struct HirSymbol)
 DEFINE_LIST(struct Compiler, pawHir_symtab_, HirSymtab, struct HirScope)
 DEFINE_LIST(struct Compiler, pawHir_path_, HirPath, struct HirSegment)
@@ -747,6 +880,8 @@ static inline struct HirSegment *pawHir_path_add(struct Compiler *C, struct HirP
 struct HirType *pawHir_attach_type(struct Compiler *C, DeclId did, enum HirTypeKind kind, int line);
 struct HirTypeList *pawHir_collect_generics(struct Compiler *C, struct HirDeclList *generics);
 struct HirTypeList *pawHir_collect_fields(struct Compiler *C, struct HirDeclList *fields);
+struct HirTypeList *pawHir_collect_decl_types(struct Compiler *C, struct HirDeclList *list);
+struct HirTypeList *pawHir_collect_expr_types(struct Compiler *C, struct HirExprList *list);
 
 void pawHir_print_type(struct Compiler *C, struct HirType *type);
 

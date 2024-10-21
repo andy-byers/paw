@@ -28,6 +28,7 @@ static const char *kKeywords[] = {
     "for",
     "do",
     "while",
+    "match",
     "break",
     "continue",
     "return",

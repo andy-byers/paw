@@ -170,20 +170,6 @@ void pawV_free_closure(paw_Env *P, Closure *f)
     pawM_free_flex(P, f, f->nup, sizeof(f->up[0]));
 }
 
-Variant *pawV_new_variant(paw_Env *P, int k, int nfields)
-{
-    Variant *var = pawM_new_flex(P, Variant, CAST_SIZE(nfields), sizeof(var->fields[0]));
-    pawG_add_object(P, CAST_OBJECT(var), VVARIANT);
-    var->nfields = nfields;
-    var->k = k;
-    return var;
-}
-
-void pawV_free_variant(paw_Env *P, Variant *var)
-{
-    pawM_free_flex(P, var, CAST_SIZE(var->nfields), sizeof(var->fields[0]));
-}
-
 Native *pawV_new_native(paw_Env *P, paw_Function func, int nup)
 {
     paw_assert(nup <= UINT16_MAX);

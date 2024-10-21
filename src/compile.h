@@ -172,6 +172,8 @@ struct HirType *pawP_instantiate_field(struct Compiler *C, struct HirType *self,
 struct HirDecl *pawP_find_field(struct Compiler *C, struct HirType *self, String *name);
 struct HirDecl *pawP_find_method(struct Compiler *C, struct HirType *self, String *name);
 
+void pawP_lower_matches(struct Compiler *C);;
+
 struct HirType *pawP_generalize(struct Compiler *C, struct HirType *type);
 
 // Instantiate a polymorphic function or type

@@ -26,4 +26,9 @@ void paw_stacktrace(paw_Env *P);
 void paw_dump_value(paw_Env *P, Value v, int type);
 void paw_dump_map(paw_Env *P, Map *m);
 
+enum UnaryOp;
+enum BinaryOp;
+const char *paw_unop_name(enum UnaryOp unop);
+const char *paw_binop_name(enum BinaryOp binop);
+
 #endif // PAW_DEBUG_H

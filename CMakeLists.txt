@@ -82,6 +82,7 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/lookup.c
             ${PAW_SOURCE_DIR}/lower_ast.c
             ${PAW_SOURCE_DIR}/map.c
+            ${PAW_SOURCE_DIR}/match.c
             ${PAW_SOURCE_DIR}/mathmod.c
             ${PAW_SOURCE_DIR}/mem.c
             ${PAW_SOURCE_DIR}/os.c

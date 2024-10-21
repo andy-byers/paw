@@ -28,10 +28,12 @@
     X(list) \
     X(map) \
     X(method) \
+    X(match_enum) \
     X(misc) \
     X(poly_function) \
     X(poly_struct) \
     X(poly_enum) \
+    X(match_poly_enum) \
     X(unit_struct) \
     X(unit_variant) \
     X(infer_assoc_items) \

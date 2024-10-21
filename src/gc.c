@@ -54,8 +54,6 @@ static Object **get_gc_list(Object *o)
             return &O_CLOSURE(o)->gc_list;
         case VPROTO:
             return &O_PROTO(o)->gc_list;
-        case VVARIANT:
-            return &O_VARIANT(o)->gc_list;
         case VTUPLE:
             return &O_TUPLE(o)->gc_list;
         default:
@@ -160,11 +158,6 @@ static void traverse_map(paw_Env *P, Map *m)
     }
 }
 
-static void traverse_variant(paw_Env *P, Variant *v)
-{
-    traverse_fields(P, v->fields, v->nfields);
-}
-
 static void traverse_foreign(paw_Env *P, Foreign *u)
 {
     traverse_fields(P, u->fields, u->nfields);
@@ -221,11 +214,8 @@ static void traverse_objects(paw_Env *P)
             case VMAP:
                 traverse_map(P, O_MAP(o));
                 break;
-            case VFOREIGN:
-                traverse_foreign(P, O_FOREIGN(o));
-                break;
             default:
-                traverse_variant(P, O_VARIANT(o));
+                traverse_foreign(P, O_FOREIGN(o));
         }
     }
 }
@@ -342,9 +332,6 @@ void pawG_free_object(paw_Env *P, Object *o)
             break;
         case VNATIVE:
             pawV_free_native(P, O_NATIVE(o));
-            break;
-        case VVARIANT:
-            pawV_free_variant(P, O_VARIANT(o));
             break;
         default:
             pawV_free_tuple(P, O_TUPLE(o));

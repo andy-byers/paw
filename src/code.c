@@ -9,8 +9,6 @@ static int stack_effect(OpCode opcode)
 {
     const Op op = GET_OP(opcode);
     switch (op) {
-        case OP_NEWVARIANT:
-            return 1 - GET_B(opcode);
         case OP_NEWTUPLE:
         case OP_NEWLIST:
             return 1 - GET_U(opcode);
@@ -24,7 +22,6 @@ static int stack_effect(OpCode opcode)
         case OP_SETRANGE:
             return -4;
         case OP_SETFIELD:
-        case OP_SETTUPLE:
         case OP_SETELEM:
             return -3;
         case OP_GETRANGE:
@@ -40,7 +37,6 @@ static int stack_effect(OpCode opcode)
         case OP_ARITHF2:
         case OP_BITW2:
         case OP_GETFIELD:
-        case OP_GETTUPLE:
         case OP_GETELEM:
         case OP_CONCAT:
             return -1;
@@ -57,6 +53,9 @@ static int stack_effect(OpCode opcode)
         case OP_CASTFLOAT:
         case OP_NOT:
         case OP_LENGTH:
+        case OP_SWITCHDISCR:
+        case OP_GETDISCR:
+        case OP_TESTINT:
             return 0;
         case OP_PUSHZERO:
         case OP_PUSHONE:

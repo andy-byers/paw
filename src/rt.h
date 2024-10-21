@@ -40,8 +40,9 @@ void pawR_getelem_map(paw_Env *P);
 void pawR_setelem_map(paw_Env *P);
 
 void pawR_execute(paw_Env *P, CallFrame *cf);
-void pawR_literal_list(paw_Env *P, int n);
-void pawR_literal_map(paw_Env *P, int n);
+Tuple *pawR_literal_tuple(paw_Env *P, int n);
+List *pawR_literal_list(paw_Env *P, int n);
+Map *pawR_literal_map(paw_Env *P, int n);
 
 void pawR_close_upvalues(paw_Env *P, const StackPtr top);
 

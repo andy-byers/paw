@@ -1,0 +1,69 @@
+// match_struct.paw
+
+struct Unit;
+
+struct Object<Ty> {
+    pub value: Ty,
+}
+
+fn check_match(target: Object<int>) -> int {
+    match target {
+        Object{value: 1} => {return 1;},
+        Object{value: 2} => {return 2;},
+        Object{value: v} => {return 3 + v;},
+    };
+}
+
+pub fn test_match() {
+    assert(check_match(Object{value: 0}) == 3);
+    assert(check_match(Object{value: 1}) == 1);
+    assert(check_match(Object{value: 2}) == 2);
+    assert(check_match(Object{value: 3}) == 6);
+}
+
+fn check_nested_match(target: Option<Object<int>>) -> int {
+    match target {
+        Option::None => {return 1;},
+        Option::Some(Object{value: 1}) => {return 2;},
+        Option::Some(Object{value: 2}) => {return 3;},
+        Option::Some(Object{value: v}) => {return 4 + v;},
+    };
+}
+
+pub fn test_nested_match() {
+    let check = check_nested_match;
+    assert(check(Option::None) == 1);
+    assert(check(Option::Some(Object{value: 0})) == 4);
+    assert(check(Option::Some(Object{value: 1})) == 2);
+    assert(check(Option::Some(Object{value: 2})) == 3);
+    assert(check(Option::Some(Object{value: 3})) == 7);
+}
+
+struct ManyFields {
+    pub a: int,
+    pub b: int,
+    pub c: int,
+    pub d: int,
+    pub e: int,
+}
+
+fn check_many_fields(target: ManyFields) -> int {
+    match target {
+        ManyFields{a: 1, b: 2, c: 3, d: 4, e: 5} => {return 1;},
+        ManyFields{b: 1, c: 2, d: 3, e: 4, a: 5} => {return 2;},
+        ManyFields{c: 1, d: 2, e: 3, a: 4, b: 5} => {return 3;},
+        ManyFields{d: 1, e: 2, a: 3, b: 4, c: 5} => {return 4;},
+        ManyFields{e: 1, a: 2, b: 3, c: 4, d: 5} => {return 5;},
+        ManyFields{a: a, b: b, c: c, d: d, e: e} => {return a + b + c + d + e;},
+    };
+}
+
+pub fn test_many_fields() {
+    let check = check_many_fields;
+    assert(check(ManyFields{a: 1, b: 2, c: 3, d: 4, e: 5}) == 1);
+    assert(check(ManyFields{a: 5, b: 1, c: 2, d: 3, e: 4}) == 2);
+    assert(check(ManyFields{a: 4, b: 5, c: 1, d: 2, e: 3}) == 3);
+    assert(check(ManyFields{a: 3, b: 4, c: 5, d: 1, e: 2}) == 4);
+    assert(check(ManyFields{a: 2, b: 3, c: 4, d: 5, e: 1}) == 5);
+    assert(check(ManyFields{a: 1, b: 1, c: 2, d: 1, e: 1}) == 6);
+}

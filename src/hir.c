@@ -45,6 +45,7 @@ void pawHir_free(struct Hir *hir)
 DEFINE_NODE_CONSTRUCTOR(expr, HirExpr)
 DEFINE_NODE_CONSTRUCTOR(decl, HirDecl)
 DEFINE_NODE_CONSTRUCTOR(stmt, HirStmt)
+DEFINE_NODE_CONSTRUCTOR(pat, HirPat)
 
 #define LIST_MIN_ALLOC 8
 
@@ -115,6 +116,7 @@ static void AcceptType(struct HirVisitor *V, struct HirType *node);
 static void AcceptExpr(struct HirVisitor *V, struct HirExpr *node);
 static void AcceptDecl(struct HirVisitor *V, struct HirDecl *node);
 static void AcceptStmt(struct HirVisitor *V, struct HirStmt *node);
+static void AcceptPat(struct HirVisitor *V, struct HirPat *node);
 
 #define DEFINE_LIST_ACCEPTOR(name, T) \
     static void accept_##name##_list(struct HirVisitor *V, struct Hir##T##List *list) \
@@ -128,6 +130,7 @@ DEFINE_LIST_ACCEPTOR(decl, Decl)
 DEFINE_LIST_ACCEPTOR(expr, Expr)
 DEFINE_LIST_ACCEPTOR(stmt, Stmt)
 DEFINE_LIST_ACCEPTOR(type, Type)
+DEFINE_LIST_ACCEPTOR(pat, Pat)
 
 static void AcceptBlock(struct HirVisitor *V, struct HirBlock *s)
 {
@@ -150,6 +153,17 @@ static void AcceptAssignExpr(struct HirVisitor *V, struct HirAssignExpr *e)
 {
     AcceptExpr(V, e->lhs);
     AcceptExpr(V, e->rhs);
+}
+
+static void AcceptMatchArm(struct HirVisitor *V, struct HirMatchArm *e)
+{
+    AcceptPat(V, e->guard);
+    AcceptBlock(V, e->result);
+}
+
+static void AcceptMatchStmt(struct HirVisitor *V, struct HirMatchStmt *e)
+{
+    accept_stmt_list(V, e->arms);
 }
 
 static void AcceptSegment(struct HirVisitor *V, struct HirSegment *seg)
@@ -288,6 +302,11 @@ static void AcceptConversionExpr(struct HirVisitor *V, struct HirConversionExpr 
     AcceptExpr(V, e->arg);
 }
 
+static void AcceptSwitchDiscr(struct HirVisitor *V, struct HirSwitchDiscr *e)
+{
+    AcceptExpr(V, e->target);
+}
+
 static void AcceptPathExpr(struct HirVisitor *V, struct HirPathExpr *e)
 {
     AcceptPath(V, e->path);
@@ -393,6 +412,45 @@ static void AcceptGeneric(struct HirVisitor *V, struct HirGeneric *t)
     PAW_UNUSED(t);
 }
 
+static void AcceptFieldPat(struct HirVisitor *V, struct HirFieldPat *p)
+{
+    AcceptPat(V, p->pat);
+}
+
+static void AcceptStructPat(struct HirVisitor *V, struct HirStructPat *p)
+{
+    AcceptPath(V, p->path);
+    accept_pat_list(V, p->fields);
+}
+
+static void AcceptVariantPat(struct HirVisitor *V, struct HirVariantPat *p)
+{
+    AcceptPath(V, p->path);
+    accept_pat_list(V, p->fields);
+}
+
+static void AcceptTuplePat(struct HirVisitor *V, struct HirTuplePat *p)
+{
+    accept_pat_list(V, p->elems);
+}
+
+static void AcceptBindingPat(struct HirVisitor *V, struct HirBindingPat *p)
+{
+    PAW_UNUSED(V);
+    PAW_UNUSED(p);
+}
+
+static void AcceptPathPat(struct HirVisitor *V, struct HirPathPat *p)
+{
+    PAW_UNUSED(V);
+    PAW_UNUSED(p);
+}
+
+static void AcceptLiteralPat(struct HirVisitor *V, struct HirLiteralPat *p)
+{
+    AcceptExpr(V, p->expr);
+}
+
 #define VISITOR_POSTCALL(V, name, x) ((V)->PostVisit##name != NULL ? (V)->PostVisit##name(V, x) : (void)0)
 #define DEFINE_VISITOR_CASES(a, b) case kHir##a: { \
         struct Hir##a *x = HirGet##a(node); \
@@ -449,6 +507,18 @@ static void AcceptType(struct HirVisitor *V, struct HirType *node)
     V->PostVisitType(V, node);
 }
 
+static void AcceptPat(struct HirVisitor *V, struct HirPat *node)
+{
+    paw_assert(node != NULL);
+    if (!V->VisitPat(V, node)) return;
+
+    switch (HIR_KINDOF(node)) {
+        HIR_PAT_LIST(DEFINE_VISITOR_CASES)
+    }
+
+    V->PostVisitPat(V, node);
+}
+
 #undef DEFINE_VISITOR_CASES
 #undef VISITOR_POSTCALL
 #undef VISITOR_CALL
@@ -457,11 +527,13 @@ static paw_Bool default_visit_expr(struct HirVisitor *V, struct HirExpr *node) {
 static paw_Bool default_visit_decl(struct HirVisitor *V, struct HirDecl *node) {return PAW_TRUE;}
 static paw_Bool default_visit_stmt(struct HirVisitor *V, struct HirStmt *node) {return PAW_TRUE;}
 static paw_Bool default_visit_type(struct HirVisitor *V, struct HirType *node) {return PAW_TRUE;}
+static paw_Bool default_visit_pat(struct HirVisitor *V, struct HirPat *node) {return PAW_TRUE;}
 
 static void default_post_visit_expr(struct HirVisitor *V, struct HirExpr *node) {}
 static void default_post_visit_decl(struct HirVisitor *V, struct HirDecl *node) {}
 static void default_post_visit_stmt(struct HirVisitor *V, struct HirStmt *node) {}
 static void default_post_visit_type(struct HirVisitor *V, struct HirType *node) {}
+static void default_post_visit_pat(struct HirVisitor *V, struct HirPat *node) {}
 
 void pawHir_visitor_init(struct HirVisitor *V, struct Compiler *C, void *ud)
 {
@@ -473,11 +545,13 @@ void pawHir_visitor_init(struct HirVisitor *V, struct Compiler *C, void *ud)
         .VisitDecl = default_visit_decl,
         .VisitStmt = default_visit_stmt,
         .VisitType = default_visit_type,
+        .VisitPat = default_visit_pat,
 
         .PostVisitExpr = default_post_visit_expr,
         .PostVisitDecl = default_post_visit_decl,
         .PostVisitStmt = default_post_visit_stmt,
         .PostVisitType = default_post_visit_type,
+        .PostVisitPat = default_post_visit_pat,
     };
 }
 
@@ -497,6 +571,7 @@ DEFINE_VISITORS(expr, Expr)
 DEFINE_VISITORS(decl, Decl)
 DEFINE_VISITORS(stmt, Stmt)
 DEFINE_VISITORS(type, Type)
+DEFINE_VISITORS(pat, Pat)
 #undef DEFINE_VISITORS
 
 static struct HirType *FoldType(struct HirTypeFolder *, struct HirType *);
@@ -637,6 +712,7 @@ struct HirTypeList *pawHir_fold_type_list(struct HirTypeFolder *F, struct HirTyp
 DEFINE_FOLDERS(expr, Expr)
 DEFINE_FOLDERS(decl, Decl)
 DEFINE_FOLDERS(stmt, Stmt)
+DEFINE_FOLDERS(pat, Pat)
 #undef DEFINE_FOLDERS
 
 
@@ -645,6 +721,7 @@ DEFINE_FOLDERS(stmt, Stmt)
 struct HirStmt *copy_stmt(struct Compiler *C, struct HirStmt *node);
 struct HirDecl *copy_decl(struct Compiler *C, struct HirDecl *node);
 struct HirExpr *copy_expr(struct Compiler *C, struct HirExpr *node);
+struct HirPat *copy_pat(struct Compiler *C, struct HirPat *node);
 
 #define DEFINE_COPY_LIST(name, T) \
     static struct Hir##T##List *copy_##name##_list(struct Compiler *C, struct Hir##T##List *old_list) \
@@ -660,6 +737,8 @@ struct HirExpr *copy_expr(struct Compiler *C, struct HirExpr *node);
 DEFINE_COPY_LIST(decl, Decl)
 DEFINE_COPY_LIST(expr, Expr)
 DEFINE_COPY_LIST(stmt, Stmt)
+DEFINE_COPY_LIST(pat, Pat)
+#undef DEFINE_COPY_LIST
 
 static struct HirTypeList *copy_type_list(struct Compiler *C, struct HirTypeList *old_list)
 {
@@ -721,6 +800,17 @@ static void CopyAssignExpr(struct Compiler *C, struct HirAssignExpr *e, struct H
 {
     r->lhs = copy_expr(C, e->lhs);
     r->rhs = copy_expr(C, e->rhs);
+}
+
+static void CopyMatchArm(struct Compiler *C, struct HirMatchArm *e, struct HirMatchArm *r)
+{
+    r->guard = copy_pat(C, e->guard);
+    r->result = COPY_BLOCK(C, e->result);
+}
+
+static void CopyMatchStmt(struct Compiler *C, struct HirMatchStmt *e, struct HirMatchStmt *r)
+{
+    r->arms = copy_stmt_list(C, e->arms);
 }
 
 static void CopyLiteralExpr(struct Compiler *C, struct HirLiteralExpr *e, struct HirLiteralExpr *r)
@@ -840,6 +930,12 @@ static void CopyReturnStmt(struct Compiler *C, struct HirReturnStmt *s, struct H
     r->expr = copy_expr(C, s->expr);
 }
 
+static void CopySwitchDiscr(struct Compiler *C, struct HirSwitchDiscr *e, struct HirSwitchDiscr *r)
+{
+    r->expect = e->expect;
+    r->target = copy_expr(C, e->target);
+}
+
 static void CopyConversionExpr(struct Compiler *C, struct HirConversionExpr *e, struct HirConversionExpr *r)
 {
     r->arg = copy_expr(C, e->arg);
@@ -929,6 +1025,47 @@ static void CopyDeclStmt(struct Compiler *C, struct HirDeclStmt *s, struct HirDe
     r->decl = copy_decl(C, s->decl);
 }
 
+static void CopyFieldPat(struct Compiler *C, struct HirFieldPat *p, struct HirFieldPat *r)
+{
+    r->name = p->name;
+    r->pat = copy_pat(C, p->pat);
+}
+
+static void CopyStructPat(struct Compiler *C, struct HirStructPat *p, struct HirStructPat *r)
+{
+    r->path = dup_path(C, p->path);
+    r->fields = copy_pat_list(C, p->fields);
+}
+
+static void CopyVariantPat(struct Compiler *C, struct HirVariantPat *p, struct HirVariantPat *r)
+{
+    r->index = p->index;
+    r->path = dup_path(C, p->path);
+    r->fields = copy_pat_list(C, p->fields);
+}
+
+static void CopyTuplePat(struct Compiler *C, struct HirTuplePat *p, struct HirTuplePat *r)
+{
+    r->elems = copy_pat_list(C, p->elems);
+}
+
+static void CopyBindingPat(struct Compiler *C, struct HirBindingPat *p, struct HirBindingPat *r)
+{
+    PAW_UNUSED(C);
+    r->name = p->name;
+}
+
+static void CopyPathPat(struct Compiler *C, struct HirPathPat *p, struct HirPathPat *r)
+{
+    PAW_UNUSED(C);
+    r->path = dup_path(C, p->path);
+}
+
+static void CopyLiteralPat(struct Compiler *C, struct HirLiteralPat *p, struct HirLiteralPat *r)
+{
+    r->expr = copy_expr(C, p->expr);
+}
+
 struct HirExpr *copy_expr(struct Compiler *C, struct HirExpr *node)
 {
     struct HirExpr *result = pawHir_new_expr(
@@ -969,6 +1106,21 @@ struct HirStmt *copy_stmt(struct Compiler *C, struct HirStmt *node)
             Copy##a(C, HirGet##a(node), HirGet##a(result)); \
             break;
         HIR_STMT_LIST(DEFINE_FOLD)
+#undef DEFINE_FOLD
+    }
+    return result;
+}
+
+struct HirPat *copy_pat(struct Compiler *C, struct HirPat *node)
+{
+    struct HirPat *result = pawHir_new_pat(
+            C, node->hdr.line, HIR_KINDOF(node));
+    result->hdr = node->hdr;
+    switch (HIR_KINDOF(node)) {
+#define DEFINE_FOLD(a, b) case kHir##a: \
+            Copy##a(C, HirGet##a(node), HirGet##a(result)); \
+            break;
+        HIR_PAT_LIST(DEFINE_FOLD)
 #undef DEFINE_FOLD
     }
     return result;
@@ -1192,6 +1344,10 @@ static paw_Bool expand_selector(struct HirVisitor *V, struct HirSelector *e)
     if (HirIsTupleType(self_type)) {
         struct HirTupleType *tuple = HirGetTupleType(self_type);
         e->type = K_LIST_GET(tuple->elems, e->index);
+    } else if (e->is_index) {
+        // variant field selector, generated when lowering matches
+        e->type = pawHir_fold_type(F, e->type);
+
     } else {
         struct HirDecl *field = pawP_find_field(E->C, self_type, e->name);
         e->type = pawP_instantiate_field(E->C, self_type, field);
@@ -1323,6 +1479,7 @@ struct HirType *pawHir_attach_type(struct Compiler *C, DeclId did, enum HirTypeK
     return type;
 }
 
+// TODO: remove, along with pawHir_collect_fields: use pawHir_collect_*_types
 struct HirTypeList *pawHir_collect_generics(struct Compiler *C, struct HirDeclList *generics)
 {
     struct HirTypeList *types = pawHir_type_list_new(C);
@@ -1341,11 +1498,34 @@ struct HirTypeList *pawHir_collect_fields(struct Compiler *C, struct HirDeclList
     if (fields == NULL) return NULL;
     struct HirTypeList *types = pawHir_type_list_new(C);
     for (int i = 0; i < fields->count; ++i) {
-        struct HirFieldDecl *d = HirGetFieldDecl(fields->data[i]);
-        pawHir_type_list_push(C, types, d->type);
+        struct HirDecl *decl = K_LIST_GET(fields, i);
+        pawHir_type_list_push(C, types, HIR_TYPEOF(decl));
     }
     return types;
 }
+
+struct HirTypeList *pawHir_collect_decl_types(struct Compiler *C, struct HirDeclList *list)
+{
+    if (list == NULL) return NULL;
+    struct HirTypeList *types = pawHir_type_list_new(C);
+    for (int i = 0; i < list->count; ++i) {
+        struct HirDecl *decl = K_LIST_GET(list, i);
+        pawHir_type_list_push(C, types, HIR_TYPEOF(decl));
+    }
+    return types;
+}
+
+struct HirTypeList *pawHir_collect_expr_types(struct Compiler *C, struct HirExprList *list)
+{
+    if (list == NULL) return NULL;
+    struct HirTypeList *types = pawHir_type_list_new(C);
+    for (int i = 0; i < list->count; ++i) {
+        struct HirExpr *expr = K_LIST_GET(list, i);
+        pawHir_type_list_push(C, types, HIR_TYPEOF(expr));
+    }
+    return types;
+}
+
 
 struct Printer {
     struct Compiler *C;
@@ -1482,6 +1662,7 @@ DEFINE_KIND_PRINTER(expr, HirExpr)
 DEFINE_KIND_PRINTER(decl, HirDecl)
 DEFINE_KIND_PRINTER(stmt, HirStmt)
 DEFINE_KIND_PRINTER(type, HirType)
+DEFINE_KIND_PRINTER(pat, HirPat)
 
 #define DUMP_BLOCK(P, b) CHECK_EXP(!(b) || HirIsBlock(HIR_CAST_STMT(b)), (b) ? dump_stmt(P, HIR_CAST_STMT(b)) : DUMP_LITERAL(P, "{}\n"))
 #define DUMP_NAME(P, s) DUMP_FMT(P, "name: %s\n", s ? s->text : "(null)")
@@ -1490,6 +1671,7 @@ static void dump_expr(struct Printer *, struct HirExpr *);
 static void dump_decl(struct Printer *, struct HirDecl *);
 static void dump_stmt(struct Printer *, struct HirStmt *);
 static void dump_type(struct Printer *, struct HirType *);
+static void dump_pat(struct Printer *, struct HirPat *);
 
 #define DEFINE_LIST_PRINTER(name, T) \
     static void dump_##name##_list(struct Printer *P, struct T##List *list, const char *name) \
@@ -1509,6 +1691,7 @@ DEFINE_LIST_PRINTER(expr, HirExpr)
 DEFINE_LIST_PRINTER(decl, HirDecl)
 DEFINE_LIST_PRINTER(stmt, HirStmt)
 DEFINE_LIST_PRINTER(type, HirType)
+DEFINE_LIST_PRINTER(pat, HirPat)
 
 static void dump_segment(struct Printer *P, struct HirSegment *seg)
 {
@@ -1660,6 +1843,17 @@ static void dump_stmt(struct Printer *P, struct HirStmt *s)
     ++P->indent;
     DUMP_FMT(P, "line: %d\n", s->hdr.line);
     switch (HIR_KINDOF(s)) {
+        case kHirMatchArm:
+            DUMP_MSG(P, "guard: ");
+            dump_pat(P, s->arm.guard);
+            DUMP_MSG(P, "result: ");
+            DUMP_BLOCK(P, s->arm.result);
+            break;
+        case kHirMatchStmt:
+            DUMP_MSG(P, "target: ");
+            dump_expr(P, s->match.target);
+            dump_stmt_list(P, s->match.arms, "arms");
+            break;
         case kHirExprStmt:
             DUMP_MSG(P, "expr: ");
             dump_expr(P, s->expr.expr);
@@ -1709,6 +1903,50 @@ static void dump_stmt(struct Printer *P, struct HirStmt *s)
             break;
         case kHirLabelStmt:
             DUMP_FMT(P, "label: %s\n", s->label.label == LBREAK ? "BREAK" : "CONTINUE");
+    }
+    --P->indent;
+    DUMP_MSG(P, "}\n");
+}
+
+static void dump_pat(struct Printer *P, struct HirPat *p)
+{
+    if (print_pat_kind(P, p)) {
+        return;
+    }
+    ++P->indent;
+    DUMP_FMT(P, "line: %d\n", p->hdr.line);
+    switch (HIR_KINDOF(p)) {
+        case kHirBindingPat:
+            DUMP_MSG(P, "name: ");
+            PRINT_STRING(P, p->bind.name);
+            break;
+        case kHirFieldPat:
+            DUMP_MSG(P, "target: ");
+            PRINT_STRING(P, p->field.name);
+            DUMP_MSG(P, "pat: ");
+            dump_pat(P, p->field.pat);
+            break;
+        case kHirStructPat:
+            DUMP_MSG(P, "path: ");
+            dump_path(P, p->struct_.path);
+            dump_pat_list(P, p->struct_.fields, "fields");
+            break;
+        case kHirVariantPat:
+            DUMP_FMT(P, "index: %d", p->variant.index);
+            DUMP_MSG(P, "path: ");
+            dump_path(P, p->variant.path);
+            dump_pat_list(P, p->variant.fields, "fields");
+            break;
+        case kHirTuplePat:
+            dump_pat_list(P, p->variant.fields, "elems");
+            break;
+        case kHirPathPat:
+            DUMP_MSG(P, "path: ");
+            dump_path(P, p->path.path);
+            break;
+        case kHirLiteralPat:
+            DUMP_MSG(P, "expr: ");
+            dump_expr(P, p->lit.expr);
     }
     --P->indent;
     DUMP_MSG(P, "}\n");
@@ -1789,18 +2027,23 @@ static void dump_expr(struct Printer *P, struct HirExpr *e)
             DUMP_MSG(P, "path: ");
             dump_path(P, e->path.path);
             break;
+        case kHirSwitchDiscr:
+            DUMP_FMT(P, "expect: %d", e->iswitch.expect);
+            DUMP_MSG(P, "target: ");
+            dump_expr(P, e->iswitch.target);
+            break;
         case kHirConversionExpr:
             DUMP_FMT(P, "to: %d\n", e->conv.to);
             DUMP_MSG(P, "arg: ");
             dump_expr(P, e->conv.arg);
             break;
         case kHirUnOpExpr:
-            DUMP_FMT(P, "op: %d\n", e->unop.op);
+            DUMP_FMT(P, "op: %s\n", paw_unop_name(e->unop.op));
             DUMP_MSG(P, "target: ");
             dump_expr(P, e->unop.target);
             break;
         case kHirBinOpExpr:
-            DUMP_FMT(P, "op: %d\n", e->binop.op);
+            DUMP_FMT(P, "op: %s\n", paw_binop_name(e->binop.op));
             DUMP_MSG(P, "lhs: ");
             dump_expr(P, e->binop.lhs);
             DUMP_MSG(P, "rhs: ");

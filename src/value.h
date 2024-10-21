@@ -22,10 +22,11 @@
 #define V_STRING(v) (O_STRING(V_OBJECT(v)))
 #define V_MAP(v) (O_MAP(V_OBJECT(v)))
 #define V_LIST(v) (O_LIST(V_OBJECT(v)))
-#define V_TEXT(v) (V_STRING(v)->text)
 #define V_TUPLE(v) (O_TUPLE(V_OBJECT(v)))
-#define V_VARIANT(v) (O_VARIANT(V_OBJECT(v)))
 #define V_FOREIGN(v) (O_FOREIGN(V_OBJECT(v)))
+
+#define V_TEXT(v) (V_STRING(v)->text)
+#define V_DISCR(v) ((int)O_TUPLE(V_OBJECT(v))->elems[0].i)
 
 #define V_SET_0(v) ((v)->u = 0)
 #define V_SET_BOOL(p, b) ((p)->u = (b) ? PAW_TRUE : PAW_FALSE)
@@ -53,7 +54,6 @@
 #define O_MAP(o) CHECK_EXP(O_IS_MAP(o), (Map *)(o))
 #define O_LIST(o) CHECK_EXP(O_IS_LIST(o), (List *)(o))
 #define O_TUPLE(o) CHECK_EXP(O_IS_TUPLE(o), (Tuple *)(o))
-#define O_VARIANT(o) CHECK_EXP(O_IS_VARIANT(o), (Variant *)(o))
 #define O_FOREIGN(o) CHECK_EXP(O_IS_FOREIGN(o), (Foreign *)(o))
 
 #define CAST_OBJECT(x) ((Object *)(void *)(x))
@@ -288,17 +288,6 @@ typedef struct Map {
     size_t length;
     size_t capacity;
 } Map;
-
-typedef struct Variant {
-    GC_HEADER; // common members for GC
-    uint8_t k; // discriminator
-    int nfields;
-    Object *gc_list;
-    Value fields[]; // data fields
-} Variant;
-
-Variant *pawV_new_variant(paw_Env *P, int k, int nfields);
-void pawV_free_variant(paw_Env *P, Variant *var);
 
 enum {
     VBOX_FILE = 1,

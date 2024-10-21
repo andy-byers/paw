@@ -53,6 +53,7 @@ enum MultiChar {
     TK_FOR,
     TK_DO,
     TK_WHILE,
+    TK_MATCH,
     TK_BREAK,
     TK_CONTINUE,
     TK_RETURN,

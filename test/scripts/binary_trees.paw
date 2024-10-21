@@ -9,7 +9,7 @@ struct Tree {
 }
 
 fn new_tree(lt: Option<Tree>, rt: Option<Tree>) -> Option<Tree> {
-    return Option::<Tree>::Some(Tree{
+    return Option::Some(Tree{
         left: lt,
         right: rt,
     });
@@ -17,8 +17,8 @@ fn new_tree(lt: Option<Tree>, rt: Option<Tree>) -> Option<Tree> {
 
 fn empty_tree() -> Option<Tree> {
     return new_tree(
-        Option::<Tree>::None,
-        Option::<Tree>::None);
+        Option::None,
+        Option::None);
 }
 
 fn bottom_up_tree(depth: int) -> Option<Tree> {

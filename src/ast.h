@@ -53,13 +53,17 @@ struct Compiler;
         X(ForStmt,    for_) \
         X(WhileStmt,  while_) \
         X(LabelStmt,  label) \
-        X(ReturnStmt, result)
+        X(ReturnStmt, result) \
+        X(MatchArm,   arm) \
+        X(MatchStmt,  match)
 
-#define AST_SEQUENCE_LIST(X) \
-        X(ExprList) \
-        X(DeclList) \
-        X(StmtList) \
-        X(Path)
+#define AST_PAT_LIST(X) \
+        X(FieldPat, field) \
+        X(StructPat, struct_) \
+        X(VariantPat, variant) \
+        X(TuplePat, tuple) \
+        X(PathPat, path) \
+        X(LiteralPat, lit)
 
 enum AstDeclKind {
 #define DEFINE_ENUM(a, b) kAst##a,
@@ -76,6 +80,12 @@ enum AstExprKind {
 enum AstStmtKind {
 #define DEFINE_ENUM(a, b) kAst##a,
     AST_STMT_LIST(DEFINE_ENUM)
+#undef DEFINE_ENUM
+};
+
+enum AstPatKind {
+#define DEFINE_ENUM(a, b) kAst##a,
+    AST_PAT_LIST(DEFINE_ENUM)
 #undef DEFINE_ENUM
 };
 
@@ -356,6 +366,75 @@ static const char *kAstExprNames[] = {
     AST_EXPR_LIST(DEFINE_ACCESS)
 #undef DEFINE_ACCESS
 
+
+#define AST_PAT_HEADER \
+    K_ALIGNAS_NODE int line; \
+    enum AstPatKind kind : 8
+
+struct AstPatHeader {
+    AST_PAT_HEADER;
+};
+
+struct AstFieldPat {
+    AST_PAT_HEADER;
+    String *name;
+    struct AstPat *pat;
+};
+
+struct AstStructPat {
+    AST_PAT_HEADER;
+    struct AstPath *path;
+    struct AstPatList *fields; // [AstFieldPat]
+};
+
+struct AstVariantPat {
+    AST_PAT_HEADER;
+    struct AstPath *path;
+    struct AstPatList *fields; // [AstPat]
+};
+
+struct AstTuplePat {
+    AST_PAT_HEADER;
+    struct AstPatList *elems; // [AstPat]
+};
+
+struct AstPathPat {
+    AST_PAT_HEADER;
+    struct AstPath *path;
+};
+
+struct AstLiteralPat {
+    AST_PAT_HEADER;
+    struct AstExpr *expr;
+};
+
+struct AstPat {
+    union {
+        struct AstPatHeader hdr;
+#define DEFINE_UNION(a, b) struct Ast##a b;
+        AST_PAT_LIST(DEFINE_UNION)
+#undef DEFINE_UNION
+    };
+};
+
+static const char *kAstPatNames[] = {
+#define DEFINE_NAME(a, b) "Ast"#a,
+        AST_EXPR_LIST(DEFINE_NAME)
+#undef DEFINE_NAME
+};
+
+#define DEFINE_ACCESS(a, b) \
+    static inline paw_Bool AstIs##a(const struct AstPat *node) { \
+        return node->hdr.kind == kAst##a; \
+    } \
+    static inline struct Ast##a *AstGet##a(struct AstPat *node) { \
+        paw_assert(AstIs##a(node)); \
+        return &node->b; \
+    }
+    AST_PAT_LIST(DEFINE_ACCESS)
+#undef DEFINE_ACCESS
+
+
 #define AST_STMT_HEADER \
     K_ALIGNAS_NODE int line; \
     enum AstStmtKind kind : 8
@@ -423,6 +502,18 @@ struct AstForStmt {
     struct AstBlock *block;
 };
 
+struct AstMatchArm {
+    AST_STMT_HEADER;
+    struct AstPat *guard;
+    struct AstBlock *result;
+};
+
+struct AstMatchStmt {
+    AST_STMT_HEADER;
+    struct AstExpr *target;
+    struct AstStmtList *arms;
+};
+
 struct AstStmt {
     union {
         struct AstStmtHeader hdr;
@@ -461,14 +552,17 @@ struct Ast {
 struct AstDecl *pawAst_new_decl(struct Ast *ast, int line, enum AstDeclKind kind);
 struct AstExpr *pawAst_new_expr(struct Ast *ast, int line, enum AstExprKind kind);
 struct AstStmt *pawAst_new_stmt(struct Ast *ast, int line, enum AstStmtKind kind);
+struct AstPat *pawAst_new_pat(struct Ast *ast, int line, enum AstPatKind kind);
 
 #define AST_CAST_DECL(x) CAST(struct AstDecl *, x)
 #define AST_CAST_EXPR(x) CAST(struct AstExpr *, x)
 #define AST_CAST_STMT(x) CAST(struct AstStmt *, x)
+#define AST_CAST_PAT(x) CAST(struct AstPat *, x)
 
 DEFINE_LIST(struct Compiler, pawAst_decl_list_, AstDeclList, struct AstDecl)
 DEFINE_LIST(struct Compiler, pawAst_expr_list_, AstExprList, struct AstExpr)
 DEFINE_LIST(struct Compiler, pawAst_stmt_list_, AstStmtList, struct AstStmt)
+DEFINE_LIST(struct Compiler, pawAst_pat_list_, AstPatList, struct AstPat)
 DEFINE_LIST(struct Compiler, pawAst_path_, AstPath, struct AstSegment)
 
 struct Ast *pawAst_new(struct Compiler *C, String *name, int modno);

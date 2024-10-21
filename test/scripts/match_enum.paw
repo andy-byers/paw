@@ -1,0 +1,157 @@
+// match.paw
+
+fn match_exact_int(i: int) -> int {
+    match i {
+        -1 => {return -10;},
+        0 => {return 0;},
+        1 => {return 10;},
+        _ => {return 100;},
+    };
+}
+
+pub fn test_basic() {
+    assert(match_exact_int(-10) == 100);
+    assert(match_exact_int(-1) == -10);
+    assert(match_exact_int(0) == 0);
+    assert(match_exact_int(1) == 10);
+    assert(match_exact_int(10) == 100);
+}
+
+pub fn test_target_is_evaluated_once() {
+    let value = 0;
+    match value = value + 1 {
+        0 => {},
+        1 => {},
+        2 => {},
+    };
+    assert(value == 1);
+}
+
+fn check_match_tuple(target: (int, str, float)) -> int {
+    match target {
+        (2, 'two', 3.0) => {return 1;},
+        (1, 'three', 3.0) => {return 2;},
+        (1, 'two', 3.0) => {return 3;},
+        (1, 'two', 4.0) => {return 4;},
+    };
+}
+
+pub fn test_tuple() {
+    assert(check_match_tuple((2, 'two', 3.0)) == 1);
+    assert(check_match_tuple((1, 'three', 3.0)) == 2);
+    assert(check_match_tuple((1, 'two', 3.0)) == 3);
+    assert(check_match_tuple((1, 'two', 4.0)) == 4);
+}
+
+enum WithoutFields {
+    First,
+    Second,
+    Third,
+}
+
+fn check_match_variant_without_fields(target: WithoutFields) -> int {
+    match target {
+        WithoutFields::First => {return 1;},
+        WithoutFields::Second => {return 2;},
+        WithoutFields::Third => {return 3;},
+    };
+}
+
+pub fn test_variant_without_fields() {
+    let check = check_match_variant_without_fields;
+    assert(check(WithoutFields::First) == 1);
+    assert(check(WithoutFields::Second) == 2);
+    assert(check(WithoutFields::Third) == 3);
+}
+
+enum WithFields {
+    First(bool),
+    Second(int, float),
+    Third((WithoutFields, int, int)),
+}
+
+fn check_match_variant_with_fields(target: WithFields) -> int {
+    match target {
+        WithFields::First(false) => {return 1;},
+        WithFields::First(true) => {return 2;},
+        WithFields::Second(a, 0.0) => {return a + 3;},
+        WithFields::Third((WithoutFields::First, b, c)) => {return b + c + 4;},
+        WithFields::Third((WithoutFields::Second, b, c)) => {return b + c + 5;},
+        WithFields::Third((WithoutFields::Third, b, c)) => {return b + c + 6;},
+        _ => {return -1;}
+    };
+}
+
+pub fn test_variant_with_fields() {
+    let check = check_match_variant_with_fields;
+    assert(check(WithFields::First(false)) == 1);
+    assert(check(WithFields::First(true)) == 2);
+    assert(check(WithFields::Second(1, 0.0)) == 4);
+    assert(check(WithFields::Second(10, 0.1)) == -1);
+    assert(check(WithFields::Third((WithoutFields::First, 1, 2))) == 1 + 2 + 4);
+    assert(check(WithFields::Third((WithoutFields::Second, 3, 4))) == 3 + 4 + 5);
+    assert(check(WithFields::Third((WithoutFields::Third, 5, 6))) == 5 + 6 + 6);
+}
+
+enum Nested {
+    First(WithoutFields),
+    Second(WithFields),
+}
+
+fn check_match_nested_fields(target: Nested) -> int {
+    match target {
+        Nested::First(WithoutFields::First) => {return -1;},
+        Nested::First(WithoutFields::Second) => {return -2;},
+        Nested::First(WithoutFields::Third) => {return -3;},
+        Nested::Second(WithFields::First(a)) => {return a as int + 1;},
+        Nested::Second(WithFields::Second(a, 0.0)) => {return a + 2;},
+        Nested::Second(WithFields::Second(a, 1.0)) => {return a + 3;},
+        Nested::Second(WithFields::Third((WithoutFields::First, b, c))) => {return b + c + 4;},
+        Nested::Second(WithFields::Third((WithoutFields::Second, b, c))) => {return b + c + 5;},
+        _ => {return -100;},
+    };
+}
+
+pub fn test_nested_fields() {
+    let check = check_match_nested_fields;
+    assert(check(Nested::First(WithoutFields::First)) == -1);
+    assert(check(Nested::First(WithoutFields::Second)) == -2);
+    assert(check(Nested::First(WithoutFields::Third)) == -3);
+    assert(check(Nested::Second(WithFields::First(false))) == 1);
+    assert(check(Nested::Second(WithFields::First(true))) == 2);
+    assert(check(Nested::Second(WithFields::Second(1, 0.0))) == 3);
+    assert(check(Nested::Second(WithFields::Second(2, 1.0))) == 5);
+    assert(check(Nested::Second(WithFields::Second(3, 2.0))) == -100);
+    assert(check(Nested::Second(WithFields::Third((WithoutFields::First, 10, 20)))) == 34);
+    assert(check(Nested::Second(WithFields::Third((WithoutFields::Second, 20, 40)))) == 65);
+}
+
+enum Choice {
+    First(int),
+    Second(int),
+}
+
+fn check_match_nested_matches(a: Choice, b: Choice) -> int {
+    match a {
+        Choice::First(x) => {
+            match b {
+                Choice::First(y) => {return x + y + 1;},
+                Choice::Second(z) => {return x + z + 2;},
+            };
+        },
+        Choice::Second(x) => {
+            match b {
+                Choice::First(y) => {return x + y + 3;},
+                Choice::Second(y) => {return x + y + 4;},
+            };
+        },
+    };
+}
+
+pub fn test_nested_matches() {
+    let check = check_match_nested_matches;
+    assert(check(Choice::First(1), Choice::First(2)) == 1 + 2 + 1);
+    assert(check(Choice::First(3), Choice::Second(4)) == 3 + 4 + 2);
+    assert(check(Choice::Second(5), Choice::First(6)) == 5 + 6 + 3);
+    assert(check(Choice::Second(7), Choice::Second(8)) == 7 + 8 + 4);
+}

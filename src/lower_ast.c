@@ -37,6 +37,7 @@ static struct HirStmt *lower_stmt(struct LowerAst *, struct AstStmt *);
 static struct HirExpr *lower_expr(struct LowerAst *, struct AstExpr *);
 static struct HirDecl *lower_decl(struct LowerAst *, struct AstDecl *);
 static struct HirType *lower_type(struct LowerAst *, struct AstExpr *);
+static struct HirPat *lower_pat(struct LowerAst *, struct AstPat *);
 
 #define DEFINE_LOWER_LIST(name, T, T2) \
     static struct Hir##T2##List *lower_##name##_list(struct LowerAst *L, struct Ast##T##List *list) \
@@ -53,6 +54,7 @@ DEFINE_LOWER_LIST(expr, Expr, Expr)
 DEFINE_LOWER_LIST(decl, Decl, Decl)
 DEFINE_LOWER_LIST(stmt, Stmt, Stmt)
 DEFINE_LOWER_LIST(type, Expr, Type)
+DEFINE_LOWER_LIST(pat, Pat, Pat)
 
 static struct HirType *new_type(struct LowerAst *L, enum HirTypeKind kind, int line)
 {
@@ -233,7 +235,7 @@ static struct HirExpr *LowerChainExpr(struct LowerAst *L, struct AstChainExpr *e
     return result;
 }
 
-static struct HirExpr *LowerUnopExpr(struct LowerAst *L, struct AstUnOpExpr *e)
+static struct HirExpr *LowerUnOpExpr(struct LowerAst *L, struct AstUnOpExpr *e)
 {
     struct HirExpr *result = pawHir_new_expr(L->C, e->line, kHirUnOpExpr);
     struct HirUnOpExpr *r = HirGetUnOpExpr(result);
@@ -242,7 +244,7 @@ static struct HirExpr *LowerUnopExpr(struct LowerAst *L, struct AstUnOpExpr *e)
     return result;
 }
 
-static struct HirExpr *LowerBinopExpr(struct LowerAst *L, struct AstBinOpExpr *e)
+static struct HirExpr *LowerBinOpExpr(struct LowerAst *L, struct AstBinOpExpr *e)
 {
     struct HirExpr *result = pawHir_new_expr(L->C, e->line, kHirBinOpExpr);
     struct HirBinOpExpr *r = HirGetBinOpExpr(result);
@@ -264,6 +266,24 @@ static struct HirExpr *LowerAssignExpr(struct LowerAst *L, struct AstAssignExpr 
         SYNTAX_ERROR(L, "invalid place for assignment");
     }
     r->rhs = lower_expr(L, s->rhs);
+    return result;
+}
+
+static struct HirStmt *LowerMatchStmt(struct LowerAst *L, struct AstMatchStmt *s)
+{
+    struct HirStmt *result = pawHir_new_stmt(L->C, s->line, kHirMatchStmt);
+    struct HirMatchStmt *r = HirGetMatchStmt(result);
+    r->target = lower_expr(L, s->target);
+    r->arms = lower_stmt_list(L, s->arms);
+    return result;
+}
+
+static struct HirStmt *LowerMatchArm(struct LowerAst *L, struct AstMatchArm *s)
+{
+    struct HirStmt *result = pawHir_new_stmt(L->C, s->line, kHirMatchArm);
+    struct HirMatchArm *r = HirGetMatchArm(result);
+    r->guard = lower_pat(L, s->guard);
+    r->result = LOWER_BLOCK(L, s->result);
     return result;
 }
 
@@ -671,10 +691,55 @@ static struct HirType *LowerTupleType(struct LowerAst *L, struct AstTupleType *e
 static struct HirType *LowerSignature(struct LowerAst *L, struct AstSignature *e)
 {
     struct HirType *type = new_type(L, kHirFuncPtr, e->line);
-    struct HirType *result = lower_type(L, e->result);
     type->fptr.params = lower_type_list(L, e->params);
-    type->fptr.result = result;
+    type->fptr.result = lower_type(L, e->result);
     return type;
+}
+
+static struct HirPat *LowerFieldPat(struct LowerAst *L, struct AstFieldPat *p)
+{
+    struct HirPat *result = pawHir_new_pat(L->C, p->line, kHirFieldPat);
+    struct HirFieldPat *r = HirGetFieldPat(result);
+    r->name = p->name;
+    r->pat = lower_pat(L, p->pat);
+    return result;
+}
+static struct HirPat *LowerStructPat(struct LowerAst *L, struct AstStructPat *p)
+{
+    struct HirPat *result = pawHir_new_pat(L->C, p->line, kHirStructPat);
+    struct HirStructPat *r = HirGetStructPat(result);
+    r->path = lower_path(L, p->path);
+    r->fields = lower_pat_list(L, p->fields);
+    return result;
+}
+static struct HirPat *LowerVariantPat(struct LowerAst *L, struct AstVariantPat *p)
+{
+    struct HirPat *result = pawHir_new_pat(L->C, p->line, kHirVariantPat);
+    struct HirVariantPat *r = HirGetVariantPat(result);
+    r->path = lower_path(L, p->path);
+    r->fields = lower_pat_list(L, p->fields);
+    return result;
+}
+static struct HirPat *LowerTuplePat(struct LowerAst *L, struct AstTuplePat *p)
+{
+    struct HirPat *result = pawHir_new_pat(L->C, p->line, kHirTuplePat);
+    struct HirTuplePat *r = HirGetTuplePat(result);
+    r->elems = lower_pat_list(L, p->elems);
+    return result;
+}
+static struct HirPat *LowerPathPat(struct LowerAst *L, struct AstPathPat *p)
+{
+    struct HirPat *result = pawHir_new_pat(L->C, p->line, kHirPathPat);
+    struct HirPathPat *r = HirGetPathPat(result);
+    r->path = lower_path(L, p->path);
+    return result;
+}
+static struct HirPat *LowerLiteralPat(struct LowerAst *L, struct AstLiteralPat *p)
+{
+    struct HirPat *result = pawHir_new_pat(L->C, p->line, kHirLiteralPat);
+    struct HirLiteralPat *r = HirGetLiteralPat(result);
+    r->expr = lower_expr(L, p->expr);
+    return result;
 }
 
 static struct HirDecl *lower_decl(struct LowerAst *L, struct AstDecl *decl)
@@ -714,9 +779,9 @@ static struct HirExpr *lower_expr(struct LowerAst *L, struct AstExpr *expr)
         case kAstChainExpr:
             return LowerChainExpr(L, AstGetChainExpr(expr));
         case kAstUnOpExpr:
-            return LowerUnopExpr(L, AstGetUnOpExpr(expr));
+            return LowerUnOpExpr(L, AstGetUnOpExpr(expr));
         case kAstBinOpExpr:
-            return LowerBinopExpr(L, AstGetBinOpExpr(expr));
+            return LowerBinOpExpr(L, AstGetBinOpExpr(expr));
         case kAstClosureExpr:
             return LowerClosureExpr(L, AstGetClosureExpr(expr));
         case kAstConversionExpr:
@@ -731,6 +796,17 @@ static struct HirExpr *lower_expr(struct LowerAst *L, struct AstExpr *expr)
             return LowerAssignExpr(L, AstGetAssignExpr(expr));
         default:
             return LowerFieldExpr(L, AstGetFieldExpr(expr));
+    }
+}
+
+static struct HirPat *lower_pat(struct LowerAst *L, struct AstPat *pat)
+{
+    L->line = pat->hdr.line;
+    switch (AST_KINDOF(pat)) {
+#define DEFINE_CASE(a, b) case kAst##a: \
+            return Lower##a(L, AstGet##a(pat));
+        AST_PAT_LIST(DEFINE_CASE)
+#undef DEFINE_CASE
     }
 }
 

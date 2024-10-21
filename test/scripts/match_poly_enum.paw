@@ -1,0 +1,78 @@
+// poly_match.paw
+
+enum WithoutFields<T> {
+    First,
+    Second,
+}
+
+fn check_match_without_fields_concrete(target: WithoutFields<int>) -> int {
+    match target {
+        // generic type inferred by unifying with 'target'
+        WithoutFields::First => {return 1;},
+        WithoutFields::Second => {return 2;},
+    }
+}
+
+pub fn test_without_fields_concrete() {
+    let check = check_match_without_fields_concrete;
+    assert(check(WithoutFields::First) == 1);
+    assert(check(WithoutFields::Second) == 2);
+}
+
+fn check_match_without_fields<Ty>(target: WithoutFields<Ty>) -> int {
+    match target {
+        WithoutFields::First => {return 1;},
+        WithoutFields::Second => {return 2;},
+    }
+}
+
+pub fn test_without_fields() {
+    let check = check_match_without_fields::<int>;
+    assert(check(WithoutFields::First) == 1);
+    assert(check(WithoutFields::Second) == 2);
+}
+
+fn check_match_with_fields_concrete(target: Option<int>) -> int {
+    match target {
+        Option::Some(42) => {return 1;},
+        Option::None => {return 2;},
+        _ => {return 3;}
+    }
+}
+
+pub fn test_with_fields_concrete() {
+    let check = check_match_with_fields_concrete;
+    assert(check(Option::Some(42)) == 1);
+    assert(check(Option::None) == 2);
+    assert(check(Option::Some(0)) == 3);
+}
+
+fn check_match_with_fields<Ty>(target: Option<Ty>) -> Result<Ty, ()> {
+    match target {
+        Option::Some(x) => {return Result::Ok(x);},
+        _ => {return Result::Err(());},
+    }
+}
+
+pub fn test_with_fields() {
+    let check = check_match_with_fields::<int>;
+    assert(check(Option::Some(1)).unwrap() == 1);
+    assert(check(Option::Some(2)).unwrap() == 2);
+    assert(check(Option::None).is_err());
+}
+
+fn check_match_nested_fields_poly(target: Option<Option<int>>) -> int {
+    match target {
+        Option::None => {return 0;},
+        Option::Some(Option::None) => {return 1;},
+        Option::Some(Option::Some(x)) => {return 2 + x;},
+    }
+}
+
+pub fn test_nested_fields_poly() {
+    let check = check_match_nested_fields_poly;
+    assert(check(Option::None) == 0);
+    assert(check(Option::Some(Option::None)) == 1);
+    assert(check(Option::Some(Option::Some(0))) == 2);
+    assert(check(Option::Some(Option::Some(1))) == 3);
+}

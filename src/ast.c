@@ -42,6 +42,7 @@ void pawAst_free(struct Ast *ast)
 DEFINE_NODE_CONSTRUCTOR(expr, AstExpr)
 DEFINE_NODE_CONSTRUCTOR(decl, AstDecl)
 DEFINE_NODE_CONSTRUCTOR(stmt, AstStmt)
+DEFINE_NODE_CONSTRUCTOR(pat, AstPat)
 
 struct AstSegment *pawAst_segment_new(struct Compiler *C)
 {

@@ -94,9 +94,6 @@ typedef uint32_t OpCode;
 //   Up = upvalues
 //   P = function prototypes
 //
-// NOTE: Opcode order is only important starting from OP_CALL (opcodes that have
-//       corresponding metamethods).
-//
 // ORDER Op
 typedef enum Op { // operands    stack in       stack out     side effects
 OP_PUSHZERO,//       -           -              0             -
@@ -111,10 +108,12 @@ OP_CLOSE,//          U           vu..v1         -             close stack to vu
 OP_SHIFT,//          U           vu..v1         v1            closes stack to vu
 OP_RETURN,//         -           f..v           v             closes stack to f
 OP_CLOSURE,//        A B         vb..v1         f             captures vu..v1 in f = P[a]
+OP_CALL,//           U           f vu..v1       v             v = f(vu..v1)
 
 OP_JUMP,//           S           -              -             pc += S
 OP_JUMPFALSEPOP,//   S           v              -             pc += S
 OP_JUMPFALSE,//      S           v              v             if !v, then pc += S
+// TODO: replace with GETDISCR + JUMPFALSE. JUMPFALSEPOP can also be removed once we have a register machine
 OP_JUMPNULL,//       S           v              v             if v == null, then pc += S
 
 OP_GETGLOBAL,//      U           -              G[K[u]]       -
@@ -123,7 +122,6 @@ OP_SETLOCAL,//       U           v              -             L[u] = v
 OP_GETUPVALUE,//     U           -              Up[u]         -
 OP_SETUPVALUE,//     U           v              -             Up[u] = v
 
-OP_NEWVARIANT,//     A B         vb..v1         a(vb..v1)     -
 OP_NEWTUPLE,//       U           vu..v1         (vu..v1)      -
 OP_NEWINSTANCE,//    U           -              v             -
 OP_NEWLIST,//        U           vu..v1         [vu..v1]      -
@@ -155,17 +153,18 @@ OP_GETELEM,//        U           v i            v[i]          -
 OP_SETELEM,//        U           v i x          v[i] = x      -
 OP_GETRANGE,//       U           v i j          v[i:j]        -
 OP_SETRANGE,//       U           v i j x        v[i:j] = x    -
+OP_GETFIELD,//       U           v              v.u           -
+OP_SETFIELD,//       U           v x            -             v.u=x
+
+// TODO: remove, use GETDISCR followed by TESTINT
+OP_SWITCHDISCR,//    U           v              discr(k)==u   -
+
+OP_GETDISCR,//       U           v              discr(k)      -
+OP_TESTINT,//        U           k              k==u          -
 
 OP_CASTBOOL,//       U           v              v as bool     -
 OP_CASTINT,//        U           v              v as int      -
 OP_CASTFLOAT,//      U           v              v as float    -
-
-OP_CALL,//           U           f vu..v1       v             v = f(vu..v1)
-
-OP_GETFIELD,//       U           v              v.u           -
-OP_SETFIELD,//       U           v x            -             v.u=x
-OP_GETTUPLE,//       U           v              v.u           -
-OP_SETTUPLE,//       U           v x            -             v.u=x
 
 NOPCODES
 } Op;

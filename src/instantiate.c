@@ -16,6 +16,8 @@ struct InstanceState {
     int line;
 };
 
+#define SANITY_CHECK_POLY(C, base, type) paw_assert(pawU_equals(C->U, HIR_TYPEOF(base), HIR_CAST_TYPE(type)))
+
 static struct HirDecl *get_decl(struct InstanceState *I, DefId did)
 {
     struct DynamicMem *dm = I->C->dm;
@@ -325,6 +327,7 @@ static struct HirType *generalize_adt(struct Compiler *C, struct HirAdt *t)
 
     struct HirTypeList *unknowns = new_unknowns(&I, t->types->count);
     struct HirDecl *base = pawHir_get_decl(C, t->did);
+    SANITY_CHECK_POLY(C, base, t);
     return pawP_instantiate(C, base, unknowns);
 }
 
@@ -340,6 +343,7 @@ static struct HirType *generalize_func(struct Compiler *C, struct HirFuncDef *t)
 
     struct HirTypeList *unknowns = new_unknowns(&I, t->types->count);
     struct HirDecl *base = pawHir_get_decl(C, t->did);
+    SANITY_CHECK_POLY(C, base, t);
     return pawP_instantiate(C, base, unknowns);
 }
 

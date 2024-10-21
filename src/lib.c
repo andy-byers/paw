@@ -56,30 +56,30 @@ static int list_insert(paw_Env *P)
 
 static int enum_is_zero(paw_Env *P)
 {
-    const Variant *var = V_VARIANT(*CF_BASE(1));
-    V_SET_BOOL(CF_BASE(1), var->k == 0);
+    const int k = V_DISCR(*CF_BASE(1));
+    V_SET_BOOL(CF_BASE(1), k == 0);
     return 1;
 }
 
 static int enum_is_one(paw_Env *P)
 {
-    const Variant *var = V_VARIANT(*CF_BASE(1));
-    V_SET_BOOL(CF_BASE(1), var->k == 1);
+    const int k = V_DISCR(*CF_BASE(1));
+    V_SET_BOOL(CF_BASE(1), k == 1);
     return 1;
 }
 
 static int enum_unwrap(paw_Env *P)
 {
-    Variant *var = V_VARIANT(*CF_BASE(1));
-    if (var->k != 0) pawR_error(P, PAW_ERUNTIME, "failed to unwrap");
-    *CF_BASE(1) = var->fields[0];
+    const Value v = *CF_BASE(1);
+    if (V_DISCR(v) != 0) pawR_error(P, PAW_ERUNTIME, "failed to unwrap");
+    *CF_BASE(1) = V_TUPLE(v)->elems[1];
     return 1;
 }
 
 static int enum_unwrap_or(paw_Env *P)
 {
-    Variant *var = V_VARIANT(*CF_BASE(1));
-    if (var->k == 0) *CF_BASE(2) = var->fields[0];
+    const Value v = *CF_BASE(1);
+    if (V_DISCR(v) == 0) *CF_BASE(2) = V_TUPLE(v)->elems[1];
     return 1;
 }
 

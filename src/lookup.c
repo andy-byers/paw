@@ -86,11 +86,6 @@ static struct QueryBase locate_base(struct QueryState *Q, struct ModuleInfo *m, 
     if (q.base == NULL) {
         struct ModuleInfo *prelude = Q->C->dm->modules->data[0];
         q = locate_base_in(Q, prelude, path);
-        if (q.base == NULL) {
-            struct HirSegment *seg = K_LIST_GET(path, path->count - 1);
-            NAME_ERROR(Q, "'%s' does not exist in module '%s'",
-                    seg->name->text, m->hir->name->text);
-        }
     }
     return q;
 }
@@ -156,6 +151,7 @@ struct HirType *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct Hir
     // sets 'Q.m' to the module containing the target declaration, and set
     // 'Q.index' to the index of the following segment
     struct QueryBase q = locate_base(&Q, m, path);
+    if (q.base == NULL) return NULL;
 
     struct HirType *inst;
     switch (HIR_KINDOF(q.base)) {

@@ -750,19 +750,28 @@ static void code_setter(struct HirVisitor *V, struct HirExpr *lhs, struct HirExp
     }
 }
 
-static int code_if_small(struct FuncState *fs, paw_Int i)
+static paw_Bool is_smi(paw_Int i)
 {
+    return (i < 0 && i >= -S_MAX) ||
+        (i >= 0 && i <= S_MAX);
+}
+
+static void code_smi(struct FuncState *fs, paw_Int i)
+{
+    paw_assert(is_smi(i));
     if (i == 0) {
         pawK_code_0(fs, OP_PUSHZERO);
     } else if (i == 1) {
         pawK_code_0(fs, OP_PUSHONE);
-    } else if ((i < 0 && i >= -S_MAX) ||
-            (i > 0 && i <= S_MAX)) {
-        pawK_code_S(fs, OP_PUSHSMI, i);
     } else {
-        return -1;
+        pawK_code_S(fs, OP_PUSHSMI, i);
     }
-    return 0;
+}
+
+static paw_Type runtime_type(paw_Type code)
+{
+    // convert unit and bool to int to simplify things (unit is always represented by 0)
+    return code == PAW_TUNIT || code == PAW_TBOOL ? PAW_TINT: code;
 }
 
 static void code_basic_lit(struct HirVisitor *V, struct HirLiteralExpr *e)
@@ -771,10 +780,11 @@ static void code_basic_lit(struct HirVisitor *V, struct HirLiteralExpr *e)
     struct FuncState *fs = G->fs;
     fs->line = e->line;
 
-    const paw_Type type = e->basic.t != PAW_TUNIT && e->basic.t != PAW_TBOOL
-        ? e->basic.t : PAW_TINT;
-    if (type != PAW_TINT || code_if_small(fs, e->basic.value.i)) {
-        const int k = add_constant(G, e->basic.value, e->basic.t);
+    const paw_Type type = runtime_type(e->basic.t);
+    if (type == PAW_TINT && is_smi(V_INT(e->basic.value))) {
+        code_smi(fs, V_INT(e->basic.value));
+    } else {
+        const int k = add_constant(G, e->basic.value, type);
         pawK_code_U(fs, OP_PUSHCONST, k);
     }
 }
@@ -1190,15 +1200,16 @@ static void code_variant_constructor(struct HirVisitor *V, struct HirType *type,
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
 
-    int count = 0;
     struct HirDecl *decl = GET_DECL(G, HirGetFuncDef(type)->did);
     struct HirVariantDecl *d = HirGetVariantDecl(decl);
-    if (args != NULL) {
-        pawHir_visit_expr_list(V, args);
-        count = args->count;
-        paw_assert(count > 0);
-    }
-    pawK_code_AB(fs, OP_NEWVARIANT, d->index, count);
+    code_smi(fs, d->index); // discriminator is a small int
+
+    const int nargs = args != NULL ? args->count : 0;
+    pawHir_visit_expr_list(V, args);
+
+    // at runtime, a variant is represented by a tuple '(k, e1..en)', where 'k' is
+    // the discriminator and 'e1..en' are the fields
+    pawK_code_U(fs, OP_NEWTUPLE, 1 + nargs);
 }
 
 static paw_Bool code_path_expr(struct HirVisitor *V, struct HirPathExpr *e)
@@ -1465,7 +1476,16 @@ static void post_selector_expr(struct HirVisitor *V, struct HirSelector *e)
     struct FuncState *fs = G->fs;
     fs->line = e->line;
 
-//    pawHir_visit_expr(V, e->target);
+    // TODO: remove this block once enumerators are unboxed
+    struct HirType *target = HIR_TYPEOF(e->target);
+    if ((HirIsAdt(target))) {
+        struct HirAdt *enum_type = HirGetAdt(target);
+        struct HirDecl *enum_decl = GET_DECL(G, enum_type->did);
+        if (!HirGetAdtDecl(enum_decl)->is_struct) {
+            pawK_code_U(fs, OP_GETFIELD, 1 + e->index);
+            return;
+        }
+    }
     if (e->is_index) {
         pawK_code_U(fs, OP_GETFIELD, e->index);
     } else {
@@ -1473,6 +1493,16 @@ static void post_selector_expr(struct HirVisitor *V, struct HirSelector *e)
         const struct VarInfo info = resolve_attr(G, type, e->name);
         pawK_code_U(fs, OP_GETFIELD, info.index);
     }
+}
+
+static void post_switch_discr(struct HirVisitor *V, struct HirSwitchDiscr *e)
+{
+    struct Generator *G = V->ud;
+    struct FuncState *fs = G->fs;
+    fs->line = e->line;
+
+    paw_assert(e->expect >= 0);
+    pawK_code_U(fs, OP_SWITCHDISCR, e->expect);
 }
 
 static void register_items(struct Generator *G, struct ModuleList *modules)
@@ -1542,6 +1572,7 @@ static void setup_pass(struct HirVisitor *V, struct Generator *G)
     V->PostVisitBinOpExpr = post_binop_expr;
     V->PostVisitConversionExpr = post_conversion_expr;
     V->PostVisitSelector = post_selector_expr;
+    V->PostVisitSwitchDiscr = post_switch_discr;
     V->PostVisitExprStmt = post_expr_stmt;
     V->PostVisitLabelStmt = post_label_stmt;
     V->PostVisitReturnStmt = post_return_stmt;

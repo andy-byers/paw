@@ -783,7 +783,7 @@ void pawR_getfield(paw_Env *P, int index)
     *VM_TOP(1) = tup->elems[index];
 }
 
-void pawR_literal_tuple(paw_Env *P, int n)
+Tuple *pawR_literal_tuple(paw_Env *P, int n)
 {
     Value *pv = VM_PUSH_0();
     Tuple *tuple = pawV_new_tuple(P, n);
@@ -795,46 +795,51 @@ void pawR_literal_tuple(paw_Env *P, int n)
         *--dst = *--src;
     }
     VM_SHIFT(n);
+    return tuple;
 }
 
-void pawR_literal_list(paw_Env *P, int n)
+List *pawR_literal_list(paw_Env *P, int n)
 {
-    List *v;
+    List *list;
     StackPtr sp;
-    VM_LIST_INIT(v, sp);
+    VM_LIST_INIT(list, sp);
     if (n > 0) {
-        pawV_list_resize(P, v, CAST_SIZE(n));
-        Value *pv = v->end;
+        pawV_list_resize(P, list, CAST_SIZE(n));
+        Value *pv = list->end;
         do {
             *--pv = *--sp;
-        } while (pv != v->begin);
+        } while (pv != list->begin);
         // Replace contents with list itself.
         VM_SHIFT(n);
     }
+    return list;
 }
 
-void pawR_literal_map(paw_Env *P, int n)
+Map *pawR_literal_map(paw_Env *P, int n)
 {
-    Map *m;
+    Map *map;
     StackPtr sp;
-    VM_MAP_INIT(m, sp);
+    VM_MAP_INIT(map, sp);
     if (n > 0) {
         for (int i = 0; i < n; ++i) {
             const Value value = *--sp;
-            pawH_insert(P, m, *--sp, value);
+            pawH_insert(P, map, *--sp, value);
         }
         // Replace contents with map itself.
         VM_SHIFT(2 * n);
     }
+    return map;
 }
 
 static void new_variant(paw_Env *P, int k, int nfields)
 {
     Value *pv = VM_PUSH_0();
-    Variant *var = pawV_new_variant(P, k, nfields);
-    V_SET_OBJECT(pv, var);
+    Tuple *tuple = pawV_new_tuple(P, 1 + nfields);
+    V_SET_OBJECT(pv, tuple);
+
+    tuple->elems[0].i = k;
     for (int i = 0; i < nfields; ++i) {
-        var->fields[i] = P->top.p[i - nfields - 1];
+        tuple->elems[1 + i] = *VM_TOP(i - nfields - 1);
     }
     VM_SHIFT(nfields);
 }
@@ -844,6 +849,7 @@ void pawR_execute(paw_Env *P, CallFrame *cf)
     const Value *K;
     const OpCode *pc;
     Closure *fn;
+
 top:
     pc = cf->pc;
     fn = cf->fn;
@@ -948,6 +954,13 @@ top:
                 VM_SET_INT(1, !b);
             }
 
+            vm_case(SWITCHDISCR) :
+            {
+                const int k = GET_U(opcode);
+                Value *pv = VM_TOP(1);
+                V_SET_BOOL(pv, V_DISCR(*pv) == k);
+            }
+
             vm_case(LENGTH) :
             {
                 const int u = GET_U(opcode);
@@ -1023,13 +1036,6 @@ top:
             vm_case(CASTFLOAT) :
             {
                 pawR_cast_float(P, GET_U(opcode));
-            }
-
-            vm_case(NEWVARIANT) :
-            {
-                VM_SAVE_PC();
-                new_variant(P, GET_A(opcode), GET_B(opcode));
-                CHECK_GC(P);
             }
 
             vm_case(NEWINSTANCE) :
@@ -1159,10 +1165,10 @@ top:
 
             vm_case(JUMPNULL) :
             {
-                const Variant *var = V_VARIANT(*VM_TOP(1));
-                if (var->k == 0) {
+                const Value v = *VM_TOP(1);
+                if (V_DISCR(v) == 0) {
                     // jump over the OP_RETURN and unpack the value
-                    *VM_TOP(1) = var->fields[0];
+                    *VM_TOP(1) = V_TUPLE(v)->elems[1];
                     pc += GET_S(opcode);
                 }
             }

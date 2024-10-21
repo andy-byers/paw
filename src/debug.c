@@ -177,8 +177,6 @@ const char *paw_op_name(Op op)
             return "SETUPVALUE";
         case OP_NEWTUPLE:
             return "NEWTUPLE";
-        case OP_NEWVARIANT:
-            return "NEWVARIANT";
         case OP_NEWINSTANCE:
             return "NEWINSTANCE";
         case OP_NEWLIST:
@@ -223,14 +221,12 @@ const char *paw_op_name(Op op)
             return "SETELEM";
         case OP_GETRANGE:
             return "GETRANGE";
+        case OP_SWITCHDISCR:
+            return "SWITCHDISCR";
         case OP_SETRANGE:
             return "SETRANGE";
-        case OP_GETTUPLE:
-            return "GETTUPLE";
         case OP_GETFIELD:
             return "GETFIELD";
-        case OP_SETTUPLE:
-            return "SETTUPLE";
         case OP_SETFIELD:
             return "SETFIELD";
         default:
@@ -268,10 +264,9 @@ void paw_dump_opcode(OpCode opcode)
         case OP_SETELEM:
         case OP_GETRANGE:
         case OP_SETRANGE:
-        case OP_GETTUPLE:
         case OP_GETFIELD:
-        case OP_SETTUPLE:
         case OP_SETFIELD:
+        case OP_SWITCHDISCR:
             printf("%s %d\n", opname, GET_U(opcode));
             break;
         default:
@@ -295,6 +290,11 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
                          paw_op_name(GET_OP(pc[0])));
         const OpCode opcode = *pc++;
         switch (GET_OP(opcode)) {
+            case OP_SWITCHDISCR: {
+                pawL_add_fstring(P, print, " ; k = %d", GET_U(opcode));
+                break;
+            }
+
             case OP_POP: {
                 pawL_add_fstring(P, print, " ; u = %d", GET_U(opcode));
                 break;
@@ -312,11 +312,6 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
 
             case OP_PUSHCONST: {
                 pawL_add_fstring(P, print, " ; k = %d", GET_U(opcode));
-                break;
-            }
-
-            case OP_NEWVARIANT: {
-                pawL_add_fstring(P, print, " ; #%d", GET_U(opcode));
                 break;
             }
 
@@ -398,6 +393,7 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
                 break;
             }
 
+            case OP_JUMPFALSEPOP:
             case OP_JUMPFALSE: {
                 pawL_add_fstring(P, print, " ; offset = %d", GET_S(opcode));
                 break;
