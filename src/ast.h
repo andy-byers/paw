@@ -63,6 +63,7 @@ struct Compiler;
         X(VariantPat, variant) \
         X(TuplePat, tuple) \
         X(PathPat, path) \
+        X(WildcardPat, wildcard) \
         X(LiteralPat, lit)
 
 enum AstDeclKind {
@@ -403,9 +404,18 @@ struct AstPathPat {
     struct AstPath *path;
 };
 
+struct AstWildcardPat {
+    AST_PAT_HEADER;
+};
+
 struct AstLiteralPat {
     AST_PAT_HEADER;
     struct AstExpr *expr;
+};
+
+struct AstOrPat {
+    AST_PAT_HEADER;
+    struct AstPatList *pats;
 };
 
 struct AstPat {

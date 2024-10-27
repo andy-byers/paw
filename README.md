@@ -15,7 +15,7 @@ Paw is an interpreted language that runs on a stack-based virtual machine writte
 ### Comments
 Paw supports both line- and block-style comments.
 Nesting is not supported in block-style comments.
-```
+```paw
 // line comment
 
 /* block
@@ -40,7 +40,7 @@ Paw is also strongly typed, meaning implicit conversions are not allowed.
 
 The following example demonstrates creation of the basic value types.
 Composite types are discussed in [tuple](#tuple), [structure](#structure), etc., below.
-```
+```paw
 // initializer is validated against the type annotation
 let b: bool = true;
 let i: int = 123;
@@ -62,9 +62,9 @@ let i = 2 + 3.4 as int;
 
 The previous example showed examples of a simple kind of type inference, where the type of a variable is inferred from an initializer expression (the expression to the right of the `=`).
 Paw supports a more general kind of type inference for containers and closures, where the type of each 'unknown' must be inferred before the declaration in question goes out of scope.
-The main caveat here is that Paw does not yet have support for 'generic bounds', so we can't handle, for example, a closure like `|a, b| a + b` where the operator `+` imposes a bound on both `a` and `b`, restricting the types they can be instantiated with.
+The main caveat here is that Paw does not yet have support for 'generic bounds', so we can't handle, for example, a closure like `|a, b| a + b` where the operator `+` imposes a bound on both `a` and `b`, restricting the types they can be filled in with.
 For example:
-```
+```paw
 let f = |a| a; // fn(?0) -> ?0
 f(123); // infer ?0 = int
 f(42);
@@ -79,7 +79,7 @@ Any variable referenced in the runtime must first be declared (all variables are
 Otherwise, a "name error" is raised (see the section on [error handling](#error-handling) below).
 Local variables can be shadowed and 'rebound', and a global item may be shadowed by a local.
 Locals can also be captured in the body of a closure (see [closures](#closures)).
-```
+```paw
 // initializer (' = 0') is required
 let x: int = 0;
 
@@ -92,7 +92,7 @@ Paw uses lexical scoping: variables declared in a given block can only be refere
 A block begins when a `{` token is encountered, and ends when the matching `}` is found.
 Many language constructs use blocks to create their own scope, like functions, structures, for loops, etc. 
 Explicit scoping blocks are also supported.
-```
+```paw
 {
     let x = 42;
 } // 'x' goes out of scope here
@@ -103,7 +103,7 @@ Functions are first-class in Paw, which means they are treated like any other Pa
 They can be stored in variables, or passed as parameters to higher-order functions.
 Note that named functions can only be defined at the toplevel in Paw.
 [Closures](#closures), however, may be nested arbitrarily.
-```
+```paw
 fn fib(n: int) -> int {
     if n < 2 {
         return n;
@@ -113,7 +113,7 @@ fn fib(n: int) -> int {
 ```
 
 ### Closures
-```
+```paw
 fn make_fib(n: int) -> fn() -> int {
     // captures 'n'
     return || fib(n);
@@ -121,7 +121,7 @@ fn make_fib(n: int) -> fn() -> int {
 ```
 
 ### Structures
-```
+```paw
 struct Object {
     a: int,
     b: str,
@@ -136,7 +136,7 @@ let u = Unit;
 ```
 
 ### Enumerations
-```
+```paw
 enum Choices {
     First,
     Second(int),
@@ -149,7 +149,7 @@ let c = Choices::Second(123);
 
 ### Control flow
 Paw supports many common types of control flow.
-```
+```paw
 // 'if-else' statement:
 if i == 0 {
 
@@ -190,7 +190,7 @@ do {
 ```
 
 ### Strings
-```
+```paw
 let s = 'Hello, world!';
 assert(s.starts_with('Hello'));
 assert(s.ends_with('world!'));
@@ -207,7 +207,7 @@ assert(s == ','.join(a));
 Paw supports basic parametric polymorphism.
 Variables with generic types must be treated generically, that is, they can only be assigned to other variables of the same type, passed to functions expecting a generic parameter, or stored in a container.
 This allows each template to be type checked a single time, rather than once for each unique instantiation, and makes it easier to generate meaningful error messages.
-```
+```paw
 fn map<A, B>(f: fn(A) -> B, list: [A]) -> [B] {
     let result = [];
     for a in list {
@@ -228,12 +228,17 @@ struct Object<S, T> {
 
 impl<A, B> Object<A, B> {
     // methods on all instances of Object...
+
+    // methods without 'self', called associated functions, can be called
+    // without an instance
+    pub fn get_constant() -> int {
+        return 42;
+    }
 }
 
 impl<T> Object<T, T> {
     // methods for when '.a' and '.b' have the same type...
 
-    // For example:
     pub fn swap(self) {
         let t = self.a;
         self.a = self.b;
@@ -242,17 +247,10 @@ impl<T> Object<T, T> {
 }
 
 impl Object<int, str> {
-    // methods for this specific type of Object...
+    // methods for a specific type of Object...
 
-    // For example:
     pub fn equals(self, a: int, b: str) -> bool {
         return a == self.a && b == self.b;
-    }
-
-    // methods without 'self', called associated functions, can be called
-    // without an instance
-    pub fn get_constant() -> int {
-        return 42;
     }
 }
 
@@ -265,8 +263,8 @@ o.swap();
 
 // type inference is supported
 let o = Object{
-    a: 123, // infer S = int
-    b: 'abc', // infer T = str
+    a: 123,
+    b: 'abc',
 };
 
 // field and method access using '.'
@@ -280,7 +278,7 @@ let xyz = Object::<int, str>::get_constant();
 ```
 
 ### Tuples
-```
+```paw
 let unit = ();
 let singleton = (42,);
 let pair = (true, 'abc');
@@ -292,7 +290,7 @@ let c = triplet.2;
 ```
 
 ### Lists
-```
+```paw
 let empty: [int] = [];
 
 // infer T = str
@@ -305,14 +303,14 @@ let list = [
     [[7, 8, 9], [2]],
 ]
 
-let list = [1, 2, 3];
-assert(list[:1] == [1]);
-assert(list[1:-1] == [2]);
-assert(list[-1:] == [3]);
+// slice syntax is supported:
+let start_of_list = list[:1];
+let middle_of_list = list[1:-1];
+let end_of_list = list[-1:];
 ```
 
 ### Maps
-```
+```paw
 let empty: [int: str] = [:];
 
 // infer K = int, V = str
@@ -330,7 +328,7 @@ print(m.get_or(1, 'default'));
 ```
 
 ### Error handling
-```
+```paw
 fn divide_by_0(n: int) {
     n = n / 0;
 }
@@ -366,10 +364,11 @@ assert(status != 0);
 + [x] custom garbage collector (using Boehm GC for now)
 + [x] methods using `impl` blocks
 + [x] module system and `use` keyword
++ [x] type inference for polymorphic `enum`
++ [x] exhaustive pattern matching (`match` construct)
 + [ ] error handling (`try` needs to be an operator, or we need something like a 'parameter pack' for generics to implement the `try` function)
-+ [ ] pattern matching (`switch` construct)
-+ [ ] pattern matching (`if let`, `let` bindings)
-+ [ ] type inference for polymorphic `enum`
++ [ ] accurate exhaustiveness check for types with many constructors (`int`, `float`, etc.)
++ [ ] `let` bindings/destructuring
 + [ ] more featureful `use` declarations: `use mod::*`, `use mod::specific_symbol`, `use mod as alias`, etc.
 + [ ] generic constraints/bounds
 + [ ] compiler optimization passes
@@ -388,15 +387,6 @@ assert(status != 0);
     + The second case allows us to specialize the body of a method for each specific type of instance.
     + Could rework the code that checks if a method can be called on a given type: just check to see if a method exists already before registering/resolving it
     + Probably don't want to resolve/instantiate things while searching, which is what the code currently does
-+ May create multiple HIR decl. nodes for builtin container instantiations
-    + Builtin containers (`[T]` and `[K: V]`) are ADTs that support type inference on their generic parameters after creation (normally, type params are inferred from the initializer)
-    + Might as well support inferring all ADT type parameters after creation, since we have to do it for builtin containers anyway
-    + Could fix by not ever 'instantiating' ADTs: just record instance type args and use the base decl. plus an instance's type args to do some substitution to get the instance's field types
-        + Needs to happen when dealing with 'selector' expressions and composite literals, but that's about it
-    + Currently, performing a separate pass to "cannonicalize" types
-+ Compiler complains about missing methods in certain cases (when only called inside another polymorphic function; see `fix_list` functions scattered throughout the tests)
-    + Could fix by iterating over matching impl blocks and instantiating them when a polymorphic ADT is instantiated
-+ Need to implement type inference on "projections", which appear in associated methods called on polymorphic types and polymorphic enumerations
 
 ## References
 + [Lua](https://www.lua.org/)

@@ -223,6 +223,10 @@ const char *paw_op_name(Op op)
             return "GETRANGE";
         case OP_SWITCHDISCR:
             return "SWITCHDISCR";
+        case OP_GETDISCR:
+            return "GETDISCR";
+        case OP_TESTINT:
+            return "TESTINT";
         case OP_SETRANGE:
             return "SETRANGE";
         case OP_GETFIELD:
@@ -267,6 +271,7 @@ void paw_dump_opcode(OpCode opcode)
         case OP_GETFIELD:
         case OP_SETFIELD:
         case OP_SWITCHDISCR:
+        case OP_TESTINT:
             printf("%s %d\n", opname, GET_U(opcode));
             break;
         default:
@@ -291,6 +296,11 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
         const OpCode opcode = *pc++;
         switch (GET_OP(opcode)) {
             case OP_SWITCHDISCR: {
+                pawL_add_fstring(P, print, " ; k = %d", GET_U(opcode));
+                break;
+            }
+
+            case OP_TESTINT: {
                 pawL_add_fstring(P, print, " ; k = %d", GET_U(opcode));
                 break;
             }

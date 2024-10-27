@@ -38,6 +38,7 @@ void pawHir_free(struct Hir *hir)
         struct T *pawHir_new_##name(struct Compiler *C, int line, enum T##Kind kind) \
         { \
             struct T *r = NEW_NODE(C, T); \
+            r->hdr.hid = C->nnodes++; \
             r->hdr.line = line; \
             r->hdr.kind = kind; \
             return r; \
@@ -45,17 +46,20 @@ void pawHir_free(struct Hir *hir)
 DEFINE_NODE_CONSTRUCTOR(expr, HirExpr)
 DEFINE_NODE_CONSTRUCTOR(decl, HirDecl)
 DEFINE_NODE_CONSTRUCTOR(stmt, HirStmt)
+DEFINE_NODE_CONSTRUCTOR(type, HirType)
 DEFINE_NODE_CONSTRUCTOR(pat, HirPat)
 
 #define LIST_MIN_ALLOC 8
 
-struct HirType *pawHir_new_type(struct Compiler *C, int line, enum HirTypeKind kind)
-{
-    struct HirType *r = NEW_NODE(C, HirType);
-    r->hdr.kind = kind;
-    r->hdr.line = line;
-    return r;
-}
+// TODO: use the generated version above, remove this!
+//struct HirType *pawHir_new_type(struct Compiler *C, int line, enum HirTypeKind kind)
+//{
+//    struct HirType *r = NEW_NODE(C, HirType);
+//    r->hdr.hid = C->nnodes++;
+//    r->hdr.kind = kind;
+//    r->hdr.line = line;
+//    return r;
+//}
 
 struct HirSegment *pawHir_segment_new(struct Compiler *C)
 {
@@ -163,6 +167,7 @@ static void AcceptMatchArm(struct HirVisitor *V, struct HirMatchArm *e)
 
 static void AcceptMatchStmt(struct HirVisitor *V, struct HirMatchStmt *e)
 {
+    AcceptExpr(V, e->target);
     accept_stmt_list(V, e->arms);
 }
 
@@ -451,6 +456,12 @@ static void AcceptLiteralPat(struct HirVisitor *V, struct HirLiteralPat *p)
     AcceptExpr(V, p->expr);
 }
 
+static void AcceptWildcardPat(struct HirVisitor *V, struct HirWildcardPat *p)
+{
+    PAW_UNUSED(V);
+    PAW_UNUSED(p);
+}
+
 #define VISITOR_POSTCALL(V, name, x) ((V)->PostVisit##name != NULL ? (V)->PostVisit##name(V, x) : (void)0)
 #define DEFINE_VISITOR_CASES(a, b) case kHir##a: { \
         struct Hir##a *x = HirGet##a(node); \
@@ -638,6 +649,14 @@ static struct HirType *FoldPathType(struct HirTypeFolder *F, struct HirPathType 
     return HIR_CAST_TYPE(t);
 }
 
+static void FoldPat(struct HirVisitor *V, struct HirPat *node)
+{
+    paw_assert(node != NULL);
+    struct HirTypeFolder *F = V->ud;
+    struct HirType *type = node->hdr.type;
+    node->hdr.type = pawHir_fold_type(F, type);
+}
+
 static void FoldExpr(struct HirVisitor *V, struct HirExpr *node)
 {
     paw_assert(node != NULL);
@@ -686,6 +705,7 @@ void pawHir_type_folder_init(struct HirTypeFolder *F, struct Compiler *C, void *
     pawHir_visitor_init(&F->V, C, F);
     F->V.PostVisitExpr = FoldExpr;
     F->V.PostVisitDecl = FoldDecl;
+    F->V.PostVisitPat = FoldPat;
 }
 
 struct HirType *pawHir_fold_type(struct HirTypeFolder *F, struct HirType *node)
@@ -1064,6 +1084,13 @@ static void CopyPathPat(struct Compiler *C, struct HirPathPat *p, struct HirPath
 static void CopyLiteralPat(struct Compiler *C, struct HirLiteralPat *p, struct HirLiteralPat *r)
 {
     r->expr = copy_expr(C, p->expr);
+}
+
+static void CopyWildcardPat(struct Compiler *C, struct HirWildcardPat *p, struct HirWildcardPat *r)
+{
+    PAW_UNUSED(C);
+    PAW_UNUSED(p);
+    PAW_UNUSED(r);
 }
 
 struct HirExpr *copy_expr(struct Compiler *C, struct HirExpr *node)
@@ -1699,7 +1726,7 @@ static void dump_segment(struct Printer *P, struct HirSegment *seg)
     if (seg->types != NULL) {
         DUMP_LITERAL(P, "<");
         for (int j = 0; j < seg->types->count; ++j) {
-            dump_type(P, seg->types->data[j]);
+            print_type(P, seg->types->data[j]);
             if (j < seg->types->count - 1) {
                 DUMP_LITERAL(P, ", ");
             }
@@ -1714,7 +1741,6 @@ static void dump_path(struct Printer *P, struct HirPath *p)
         if (i != 0) DUMP_LITERAL(P, "::");
         dump_segment(P, p->data[i]);
     }
-    DUMP_LITERAL(P, "\n");
 }
 
 static void dump_type(struct Printer *P, struct HirType *t)
@@ -1944,6 +1970,8 @@ static void dump_pat(struct Printer *P, struct HirPat *p)
             DUMP_MSG(P, "path: ");
             dump_path(P, p->path.path);
             break;
+        case kHirWildcardPat:
+            break;
         case kHirLiteralPat:
             DUMP_MSG(P, "expr: ");
             dump_expr(P, p->lit.expr);
@@ -2094,10 +2122,14 @@ static void dump_expr(struct Printer *P, struct HirExpr *e)
 
 void pawHir_dump_path(struct Compiler *C, struct HirPath *path)
 {
+    Buffer buf;
+    pawL_init_buffer(ENV(C), &buf);
     dump_path(&(struct Printer){
                 .P = ENV(C),
+                .buf = &buf,
                 .C = C,
             }, path);
+    pawL_push_result(ENV(C), &buf);
 }
 
 void pawHir_dump(struct Hir *hir)

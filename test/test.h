@@ -28,6 +28,7 @@
     X(list) \
     X(map) \
     X(method) \
+    X(match) \
     X(match_enum) \
     X(misc) \
     X(poly_function) \

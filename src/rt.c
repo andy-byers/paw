@@ -1038,6 +1038,19 @@ top:
                 pawR_cast_float(P, GET_U(opcode));
             }
 
+            vm_case(GETDISCR) :
+            {
+                Value *pv = VM_TOP(1);
+                *pv = V_TUPLE(*pv)->elems[0];
+            }
+
+            vm_case(TESTINT) :
+            {
+                const int u = GET_U(opcode);
+                Value *pv = VM_TOP(1);
+                pv->i = V_INT(*pv) == u;
+            }
+
             vm_case(NEWINSTANCE) :
             {
                 VM_SAVE_PC();

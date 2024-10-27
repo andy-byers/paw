@@ -30,6 +30,7 @@ struct ResultState {
 struct MatchState {
     struct MatchState *outer;
     struct HirType *target;
+    struct HirPatList *bindings;
 };
 
 // Common state for type-checking routines
@@ -186,7 +187,8 @@ static struct HirType *maybe_unit_variant(struct Resolver *R, struct HirType *ty
 static struct HirType *resolve_operand(struct Resolver *R, struct HirExpr *expr)
 {
     struct HirType *type = resolve_expr(R, expr);
-    return maybe_unit_variant(R, type);
+    expr->hdr.type = maybe_unit_variant(R, type);
+    return expr->hdr.type;
 }
 
 static DeclId add_decl(struct Resolver *R, struct HirDecl *decl)
@@ -248,7 +250,7 @@ static void leave_inference_ctx(struct Resolver *R)
 
 static void enter_match_ctx(struct Resolver *R, struct MatchState *ms, struct HirType *target)
 {
-    // TODO: Create a new inference variable for the match result, unify with '.result' in each HirMatchArm
+    // TODO: Make match an expression: create a new inference variable for the match result, unify with '.result' in each HirMatchArm
     *ms = (struct MatchState){
         .target = target,
         .outer = R->ms,
@@ -639,8 +641,7 @@ static void resolve_path_expr(struct Resolver *R, struct HirPathExpr *e)
     // path might refer to a unit ADT, so we have to use LOOKUP_EITHER
     e->type = resolve_path(R, e->path, LOOKUP_EITHER);
 
-    struct HirSegment *last = K_LIST_GET(e->path, e->path->count - 1);
-    struct HirDecl *result = get_decl(R, last->did);
+    struct HirDecl *result = get_decl(R, HIR_PATH_RESULT(e->path));
     if (HirIsAdtDecl(result)) {
         maybe_fix_unit_struct(R, e->type, HIR_CAST_EXPR(e));
     } else if (HirIsGenericDecl(result)) {
@@ -782,6 +783,7 @@ static void ResolveMatchArm(struct Resolver *R, struct HirMatchArm *s)
 {
     enter_block(R, NULL);
     struct MatchState *ms = R->ms;
+    ms->bindings = pawHir_pat_list_new(R->C);
     struct HirType *guard = resolve_pat(R, s->guard);
     unify(R, guard, ms->target); // check target type
     ResolveBlock(R, s->result);
@@ -979,13 +981,12 @@ static paw_Bool is_polymorphic(struct Resolver *R, struct HirType *type)
 static void resolve_call_expr(struct Resolver *R, struct HirCallExpr *e)
 {
     struct HirType *target = resolve_expr(R, e->target);
+    if (!HirIsFuncType(target)) TYPE_ERROR(R, "type is not callable");
 
     const struct HirFuncPtr *fptr = HIR_FPTR(target);
     const int param_offset = method_ctx(R, e->target) != NULL;
     const int nparams = fptr->params->count - param_offset;
-    if (!HirIsFuncType(target)) {
-        TYPE_ERROR(R, "type is not callable");
-    } else if (e->args->count < nparams) {
+    if (e->args->count < nparams) {
         SYNTAX_ERROR(R, "not enough arguments");
     } else if (e->args->count > nparams) {
         SYNTAX_ERROR(R, "too many arguments");
@@ -1053,8 +1054,8 @@ static struct HirType *resolve_list_lit(struct Resolver *R, struct HirContainerL
     struct HirType *elem_t = new_unknown(R);
     for (int i = 0; i < e->items->count; ++i) {
         struct HirExpr *expr = K_LIST_GET(e->items, i);
-        struct HirType *v = resolve_expr(R, expr);
-        unify(R, elem_t, maybe_unit_variant(R, v));
+        struct HirType *v = resolve_operand(R, expr);
+        unify(R, elem_t, v);
         expr->hdr.type = v;
     }
     return new_list_t(R, elem_t);
@@ -1070,8 +1071,8 @@ static struct HirType *resolve_map_lit(struct Resolver *R, struct HirContainerLi
         paw_assert(field->fid == -1);
         struct HirType *k = resolve_operand(R, field->key);
         struct HirType *v = resolve_operand(R, field->value);
-        unify(R, key_t, maybe_unit_variant(R, k));
-        unify(R, value_t, maybe_unit_variant(R, v));
+        unify(R, key_t, k);
+        unify(R, value_t, v);
         field->type = v;
     }
     return new_map_t(R, key_t, value_t);
@@ -1089,7 +1090,7 @@ static struct HirType *resolve_container_lit(struct Resolver *R, struct HirConta
 
 static void resolve_field_expr(struct Resolver *R, struct HirFieldExpr *e)
 {
-    if (e->fid < 0) resolve_expr(R, e->key);
+    if (e->fid < 0) resolve_operand(R, e->key);
     e->type = resolve_operand(R, e->value);
 }
 
@@ -1229,7 +1230,7 @@ static void ResolveIfStmt(struct Resolver *R, struct HirIfStmt *s)
 
 static void ResolveExprStmt(struct Resolver *R, struct HirExprStmt *s)
 {
-    resolve_expr(R, s->expr);
+    resolve_operand(R, s->expr);
 }
 
 static void ResolveWhileStmt(struct Resolver *R, struct HirWhileStmt *s)
@@ -1419,7 +1420,9 @@ static struct HirType *ResolveVariantPat(struct Resolver *R, struct HirVariantPa
     }
     unify_lists(R, params, args);
 
-    p->index = -1; // TODO: I forgot, r->did refers to the enumeration b/c polymorphism.  HirGetVariantDecl(var)->index;
+    struct HirVariantDecl *d = HirGetVariantDecl(
+            get_decl(R, HIR_TYPE_DID(p->type)));
+    p->index = d->index;
     return HIR_FPTR(p->type)->result;
 }
 
@@ -1450,6 +1453,17 @@ static struct HirType *convert_path_to_binding(struct Resolver *R, struct HirPat
     pat->hdr.kind = kHirBindingPat;
     struct HirBindingPat *p = HirGetBindingPat(pat);
     p->name = ident->name;
+
+    struct HirPatList *bindings = R->ms->bindings;
+    for (int i = 0; i < bindings->count; ++i) {
+        struct HirPat *pat = K_LIST_GET(bindings, i);
+        if (pawS_eq(p->name, HirGetBindingPat(pat)->name)) {
+            NAME_ERROR(R, "duplicate binding '%s' in pattern",
+                    p->name->text);
+        }
+    }
+    pawHir_pat_list_push(R->C, bindings, pat);
+
     // resolve again as binding
     return resolve_pat(R, pat);
 }
@@ -1457,18 +1471,43 @@ static struct HirType *convert_path_to_binding(struct Resolver *R, struct HirPat
 static struct HirType *ResolvePathPat(struct Resolver *R, struct HirPathPat *p)
 {
     struct HirType *type = lookup_path(R, p->path, LOOKUP_VALUE);
-    if (type != NULL) {
-        p->type = maybe_unit_variant(R, type);
-        return p->type;
+    struct HirDecl *decl = get_decl(R, HIR_PATH_RESULT(p->path));
+    if (type == NULL || (!HirIsAdtDecl(decl) && !HirIsVariantDecl(decl))) {
+        // identifier is unbound, or it refers to a variable declaration
+        if (p->path->count > 1) NAME_ERROR(R, "invalid path");
+        return convert_path_to_binding(R, p);
     }
-    if (p->path->count > 1) NAME_ERROR(R, "invalid path");
-    // identifier is unbound, bind it
-    return convert_path_to_binding(R, p);
+
+    // convert to a more specific type of pattern, now that it is known that
+    // the path refers to a struct or enumerator
+    struct HirPath *path = p->path;
+    struct HirPat *pat = CAST(struct HirPat *, p);
+    if (HirIsAdtDecl(decl)) {
+        paw_assert(!HirGetAdtDecl(decl)->is_struct); // TODO: handle this case
+        pat->hdr.kind = kHirStructPat;
+        HirGetStructPat(pat)->fields = pawHir_pat_list_new(R->C);
+        HirGetStructPat(pat)->type = type;
+        HirGetStructPat(pat)->path = path;
+    } else {
+        pat->hdr.kind = kHirVariantPat;
+        type = maybe_unit_variant(R, type);
+        HirGetVariantPat(pat)->index = HirGetVariantDecl(decl)->index;
+        HirGetVariantPat(pat)->fields = pawHir_pat_list_new(R->C);
+        HirGetVariantPat(pat)->type = type;
+        HirGetVariantPat(pat)->path = path;
+    }
+    return type;
+}
+
+static struct HirType *ResolveWildcardPat(struct Resolver *R, struct HirWildcardPat *p)
+{
+    p->type = new_unknown(R);
+    return p->type;
 }
 
 static struct HirType *ResolveLiteralPat(struct Resolver *R, struct HirLiteralPat *p)
 {
-    p->type = resolve_expr(R, p->expr);
+    p->type = resolve_operand(R, p->expr);
     return p->type;
 }
 
@@ -1628,7 +1667,6 @@ static void monomorphize_functions(struct Resolver *R)
 
 static void resolve_item(struct Resolver *R, struct HirDecl *item)
 {
-    // TODO: should have been resolved by collect.c item->hdr.type = resolve_type(R, HIR_TYPEOF(item));
     if (HirIsFuncDecl(item)) {
         resolve_func_item(R, HirGetFuncDecl(item));
     } else if (HirIsImplDecl(item)) {

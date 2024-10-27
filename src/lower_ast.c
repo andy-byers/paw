@@ -742,6 +742,11 @@ static struct HirPat *LowerLiteralPat(struct LowerAst *L, struct AstLiteralPat *
     return result;
 }
 
+static struct HirPat *LowerWildcardPat(struct LowerAst *L, struct AstWildcardPat *p)
+{
+    return pawHir_new_pat(L->C, p->line, kHirWildcardPat);
+}
+
 static struct HirDecl *lower_decl(struct LowerAst *L, struct AstDecl *decl)
 {
     L->line = decl->hdr.line;

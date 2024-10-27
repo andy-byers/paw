@@ -96,7 +96,7 @@ static const char *get_literal(int kind)
     }
 }
 
-static void check_unop_type_error(const char *op, paw_Type k)
+static void check_unop_error(int expect, const char *op, paw_Type k)
 {
     char name_buf[256] = {0};
     snprintf(name_buf, sizeof(name_buf), "unop_type_error('%s', %s)",
@@ -106,7 +106,12 @@ static void check_unop_type_error(const char *op, paw_Type k)
     snprintf(text_buf, sizeof(text_buf), "let x = %s%s;",
              op, get_literal(k));
 
-    test_compiler_status(PAW_ETYPE, name_buf, "", text_buf);
+    test_compiler_status(expect, name_buf, "", text_buf);
+}
+
+static void check_unop_type_error(const char *op, paw_Type k)
+{
+    check_unop_error(PAW_ETYPE, op, k);
 }
 
 static void check_unification_errors(void)
@@ -167,32 +172,33 @@ static void test_type_error(void)
     check_unop_type_error("#", PAW_TINT);
     check_unop_type_error("#", PAW_TFLOAT);
     check_unop_type_error("!", PAW_TUNIT);
-    check_unop_type_error("-", PAW_TUNIT);
-    check_unop_type_error("-", PAW_TBOOL);
-    check_unop_type_error("-", PAW_TSTR);
     check_unop_type_error("~", PAW_TUNIT);
     check_unop_type_error("~", PAW_TBOOL);
     check_unop_type_error("~", PAW_TFLOAT);
     check_unop_type_error("~", PAW_TSTR);
 
-#define mklist(...) \
+    // NOTE: we end up transforming UnOp(Literal(x)) into Literal(-x) in an early
+    //       stage of compilation (for pattern-matching)
+    check_unop_error(PAW_ESYNTAX, "-", PAW_TUNIT);
+    check_unop_error(PAW_ESYNTAX, "-", PAW_TBOOL);
+    check_unop_error(PAW_ESYNTAX, "-", PAW_TSTR);
+
+#define MAKE_LIST(...) \
     (paw_Type[]) { __VA_ARGS__, -1 }
-#define mklist0() \
-    (paw_Type[]) { -1 }
-    check_binop_type_errors("+", mklist(PAW_TINT, PAW_TFLOAT, PAW_TSTR));
-    check_binop_type_errors("-", mklist(PAW_TINT, PAW_TFLOAT));
-    check_binop_type_errors("*", mklist(PAW_TINT, PAW_TFLOAT));
-    check_binop_type_errors("%", mklist(PAW_TINT, PAW_TFLOAT));
-    check_binop_type_errors("/", mklist(PAW_TINT, PAW_TFLOAT));
-    check_binop_type_errors("&", mklist(PAW_TINT));
-    check_binop_type_errors("|", mklist(PAW_TINT));
-    check_binop_type_errors("^", mklist(PAW_TINT));
-    check_binop_type_errors("<", mklist(PAW_TINT, PAW_TFLOAT, PAW_TSTR));
-    check_binop_type_errors(">", mklist(PAW_TINT, PAW_TFLOAT, PAW_TSTR));
-    check_binop_type_errors("<=", mklist(PAW_TINT, PAW_TFLOAT, PAW_TSTR));
-    check_binop_type_errors(">=", mklist(PAW_TINT, PAW_TFLOAT, PAW_TSTR));
-    check_binop_type_errors("==", mklist(PAW_TBOOL, PAW_TINT, PAW_TFLOAT, PAW_TSTR));
-    check_binop_type_errors("!=", mklist(PAW_TBOOL, PAW_TINT, PAW_TFLOAT, PAW_TSTR));
+    check_binop_type_errors("+", MAKE_LIST(PAW_TINT, PAW_TFLOAT, PAW_TSTR));
+    check_binop_type_errors("-", MAKE_LIST(PAW_TINT, PAW_TFLOAT));
+    check_binop_type_errors("*", MAKE_LIST(PAW_TINT, PAW_TFLOAT));
+    check_binop_type_errors("%", MAKE_LIST(PAW_TINT, PAW_TFLOAT));
+    check_binop_type_errors("/", MAKE_LIST(PAW_TINT, PAW_TFLOAT));
+    check_binop_type_errors("&", MAKE_LIST(PAW_TINT));
+    check_binop_type_errors("|", MAKE_LIST(PAW_TINT));
+    check_binop_type_errors("^", MAKE_LIST(PAW_TINT));
+    check_binop_type_errors("<", MAKE_LIST(PAW_TINT, PAW_TFLOAT, PAW_TSTR));
+    check_binop_type_errors(">", MAKE_LIST(PAW_TINT, PAW_TFLOAT, PAW_TSTR));
+    check_binop_type_errors("<=", MAKE_LIST(PAW_TINT, PAW_TFLOAT, PAW_TSTR));
+    check_binop_type_errors(">=", MAKE_LIST(PAW_TINT, PAW_TFLOAT, PAW_TSTR));
+    check_binop_type_errors("==", MAKE_LIST(PAW_TBOOL, PAW_TINT, PAW_TFLOAT, PAW_TSTR));
+    check_binop_type_errors("!=", MAKE_LIST(PAW_TBOOL, PAW_TINT, PAW_TFLOAT, PAW_TSTR));
 
     test_compiler_status(PAW_ETYPE, "call_unit_variant", "enum E {X}", "let x = E::X();");
     test_compiler_status(PAW_ETYPE, "wrong_constructor_args", "enum E {X(int)}", "let x = E::X(1.0);");
@@ -533,8 +539,74 @@ static void test_impl_error(void)
 //            "-> T ", "", "");
 }
 
+static void test_match_error_maranget_examples(void)
+{
+
+}
+
+static void test_variant_match_error(void)
+{
+    const char *enumeration =
+        "enum Choice {\n"
+        "    First,\n"
+        "    Second(Choice),\n"
+        "}\n";
+
+    test_compiler_status(PAW_ETYPE, "match_int_non_exhaustive", enumeration,
+            "match 123 {\n"
+            "    123 => {},\n"
+            "}\n");
+    test_compiler_status(PAW_ETYPE, "match_variant_non_exhaustive", enumeration,
+            "match Choice::First {\n"
+            "    Choice::First => {},\n"
+            "}\n");
+
+    test_compiler_status(PAW_ETYPE, "match_variant_non_exhaustive_2", enumeration,
+            "match Choice::First {\n"
+            "    Choice::First => {},\n"
+            "    Choice::Second(Choice::First) => {},"
+            "}\n");
+
+    test_compiler_status(PAW_ETYPE, "match_variant_non_exhaustive_3", enumeration,
+            "match Choice::First {\n"
+            "    Choice::First => {},\n"
+            "    Choice::Second(Choice::First) => {},"
+            "    Choice::Second(Choice::Second(Choice::First)) => {},"
+            "}\n");
+
+    // sanity check: exhaustive versions
+    test_compiler_status(PAW_OK, "sanity_check_match_wildcard", enumeration,
+            "match Choice::First {\n"
+            "    _ => {},\n"
+            "}\n");
+    test_compiler_status(PAW_OK, "sanity_check_match_variant_exhaustive", enumeration,
+            "match Choice::First {\n"
+            "    Choice::First => {},\n"
+            "    Choice::Second(_) => {},\n"
+            "}\n");
+    test_compiler_status(PAW_OK, "sanity_check_match_variant_exhaustive_2", enumeration,
+            "match Choice::First {\n"
+            "    Choice::First => {},\n"
+            "    Choice::Second(Choice::First) => {},"
+            "    Choice::Second(Choice::Second(_)) => {},"
+            "}\n");
+    test_compiler_status(PAW_OK, "sanity_check_match_variant_exhaustive_3", enumeration,
+            "match Choice::First {\n"
+            "    Choice::First => {},\n"
+            "    Choice::Second(Choice::First) => {},"
+            "    Choice::Second(Choice::Second(Choice::First)) => {},"
+            "    Choice::Second(Choice::Second(Choice::Second(_))) => {},"
+            "}\n");
+}
+
+static void test_match_error(void)
+{
+    test_variant_match_error();
+}
+
 int main(void)
 {
+    test_match_error();
     test_gc_conflict();
     test_impl_error();
     test_enum_error();

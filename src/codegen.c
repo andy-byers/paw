@@ -16,6 +16,7 @@
 #include "gc.h"
 #include "hir.h"
 #include "map.h"
+#include "match.h"
 #include "mem.h"
 #include "parse.h"
 #include "lib.h"
@@ -689,8 +690,8 @@ static struct VarInfo resolve_path(struct Generator *G, struct HirPath *path)
         struct HirFuncDef *t = HirGetFuncDef(type);
         struct ModuleInfo *m = get_mod(G, t->modno);
         const String *modname = get_mod_prefix(G, m);
-        struct HirFuncDecl *func = HirGetFuncDecl(decl);
-        if (func->self != NULL) {
+        if (HirIsFuncDecl(decl) && HirGetFuncDecl(decl)->self != NULL) {
+            struct HirFuncDecl *func = HirGetFuncDecl(decl);
             struct HirAdt *adt = HirGetAdt(func->self);
             struct HirDecl *self = GET_DECL(G, adt->did);
             const String *selfname = HirGetAdtDecl(self)->name;
@@ -1217,8 +1218,9 @@ static paw_Bool code_path_expr(struct HirVisitor *V, struct HirPathExpr *e)
     struct Generator *G = V->ud;
     G->fs->line = e->line;
 
-    if (is_variant_constructor(G, e->type)) {
-        code_variant_constructor(V, e->type, NULL);
+    struct HirDecl *result = GET_DECL(G, HIR_PATH_RESULT(e->path));
+    if (is_variant_constructor(G, HIR_TYPEOF(result))) {
+        code_variant_constructor(V, HIR_TYPEOF(result), NULL);
     } else {
         const struct VarInfo info = resolve_path(G, e->path);
         code_getter(V, info);

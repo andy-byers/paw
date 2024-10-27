@@ -1,48 +1,5 @@
 // match.paw
 
-fn match_exact_int(i: int) -> int {
-    match i {
-        -1 => {return -10;},
-        0 => {return 0;},
-        1 => {return 10;},
-        _ => {return 100;},
-    };
-}
-
-pub fn test_basic() {
-    assert(match_exact_int(-10) == 100);
-    assert(match_exact_int(-1) == -10);
-    assert(match_exact_int(0) == 0);
-    assert(match_exact_int(1) == 10);
-    assert(match_exact_int(10) == 100);
-}
-
-pub fn test_target_is_evaluated_once() {
-    let value = 0;
-    match value = value + 1 {
-        0 => {},
-        1 => {},
-        2 => {},
-    };
-    assert(value == 1);
-}
-
-fn check_match_tuple(target: (int, str, float)) -> int {
-    match target {
-        (2, 'two', 3.0) => {return 1;},
-        (1, 'three', 3.0) => {return 2;},
-        (1, 'two', 3.0) => {return 3;},
-        (1, 'two', 4.0) => {return 4;},
-    };
-}
-
-pub fn test_tuple() {
-    assert(check_match_tuple((2, 'two', 3.0)) == 1);
-    assert(check_match_tuple((1, 'three', 3.0)) == 2);
-    assert(check_match_tuple((1, 'two', 3.0)) == 3);
-    assert(check_match_tuple((1, 'two', 4.0)) == 4);
-}
-
 enum WithoutFields {
     First,
     Second,

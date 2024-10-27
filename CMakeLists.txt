@@ -49,6 +49,7 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/lex.h
             ${PAW_SOURCE_DIR}/lib.h
             ${PAW_SOURCE_DIR}/map.h
+            ${PAW_SOURCE_DIR}/match.h
             ${PAW_SOURCE_DIR}/mem.h
             ${PAW_SOURCE_DIR}/opcode.h
             ${PAW_SOURCE_DIR}/os.h
@@ -71,6 +72,7 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/compile.c
             ${PAW_SOURCE_DIR}/debug.c
             ${PAW_SOURCE_DIR}/env.c
+            ${PAW_SOURCE_DIR}/exhaustiveness.c
             ${PAW_SOURCE_DIR}/gc.c
             ${PAW_SOURCE_DIR}/hir.c
             ${PAW_SOURCE_DIR}/import.c

@@ -155,12 +155,18 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const c
     Map *impls = pawH_new(P);
     V_SET_OBJECT(P->top.p++, impls);
 
+    // maps each pattern match node to the decision tree it was compiled to
+    // during exhaustiveness checking
+    Map *matches = pawH_new(P);
+    V_SET_OBJECT(P->top.p++, matches);
+
     pawK_pool_init(P, &dm->pool, FIRST_ARENA_SIZE, LARGE_ARENA_MIN);
 
     *C = (struct Compiler){
         .pool = &dm->pool,
         .imports = imports,
         .strings = strings,
+        .matches = matches,
         .U = &dm->unifier,
         .impls = impls,
         .types = types,

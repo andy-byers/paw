@@ -1,6 +1,12 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
+//
+// TODO: The code in this file is somewhat of a hack. It performs a
+//       straightforward conversion from a match statement into an
+//       if-else chain. It may end up generating some inefficient code with
+//       redundant checks. Eventually, the decision tree created in
+//       exhaustiveness.c should be used to generate better code.
 
 #include "compile.h"
 #include "hir.h"
@@ -13,6 +19,7 @@ struct BindingState {
 struct LowerMatches {
     struct BindingState *bs;
     struct Compiler *C;
+    paw_Env *P;
 };
 
 static void enter_arm(struct LowerMatches *L, struct BindingState *bs)
@@ -31,6 +38,11 @@ static void leave_arm(struct LowerMatches *L)
 
 static struct HirExpr *lower_pattern(struct HirVisitor *V, struct HirPat *pat, struct HirExpr *expr);
 
+static struct HirExpr *lower_wildcard_pat(struct HirVisitor *V, struct HirWildcardPat *p, struct HirExpr *expr)
+{
+    return NULL;
+}
+
 static struct HirExpr *lower_binding_pat(struct HirVisitor *V, struct HirBindingPat *p, struct HirExpr *expr)
 {
     struct LowerMatches *L = V->ud;
@@ -42,7 +54,7 @@ static struct HirExpr *lower_binding_pat(struct HirVisitor *V, struct HirBinding
     r->init = expr;
 
     pawHir_decl_list_push(V->C, L->bs->bindings, result);
-    return NULL;
+    return NULL; // no checks
 }
 
 static struct HirExpr *new_path_expr(struct Compiler *C, struct HirDecl *decl, int line)
@@ -225,6 +237,8 @@ static struct HirExpr *lower_pattern_aux(struct HirVisitor *V, struct HirPat *pa
             return lower_path_pat(V, HirGetPathPat(pat), expr);
         case kHirBindingPat:
             return lower_binding_pat(V, HirGetBindingPat(pat), expr);
+        case kHirWildcardPat:
+            return lower_wildcard_pat(V, HirGetWildcardPat(pat), expr);
         case kHirLiteralPat:
             return lower_literal_pat(V, HirGetLiteralPat(pat), expr);
     }
@@ -275,7 +289,7 @@ static void lower_match_arm(struct HirVisitor *V, struct HirMatchArm copy, struc
     leave_arm(V->ud);
 }
 
-static void lower_match_expr(struct HirVisitor *V, struct HirExpr *target, struct HirStmtList *arms, struct HirBlock *result)
+static void lower_match_stmt(struct HirVisitor *V, struct HirExpr *target, struct HirStmtList *arms, struct HirBlock *result)
 {
     struct Compiler *C = V->C;
 
@@ -302,27 +316,30 @@ static void lower_match_expr(struct HirVisitor *V, struct HirExpr *target, struc
     }
 }
 
-static paw_Bool visit_match_expr(struct HirVisitor *V, struct HirMatchStmt *s)
+static paw_Bool visit_match_stmt(struct HirVisitor *V, struct HirMatchStmt *s)
 {
+    pawP_check_exhaustiveness(V->C, s);
+
     struct HirMatchStmt copy = *s;
     struct HirBlock *result = CAST(struct HirBlock *, s);
     result->stmts = pawHir_stmt_list_new(V->C);
 
     s->kind = kHirBlock;
-    lower_match_expr(V, copy.target, copy.arms, result);
+    lower_match_stmt(V, copy.target, copy.arms, result);
     return PAW_FALSE;
 }
 
 void pawP_lower_matches(struct Compiler *C)
 {
     struct LowerMatches L = {
+        .P = ENV(C),
         .C = C,
     };
 
     struct HirVisitor V;
     pawHir_visitor_init(&V, C, &L);
 
-    V.VisitMatchStmt = visit_match_expr;
+    V.VisitMatchStmt = visit_match_stmt;
     V.PostVisitMatchStmt = NULL;
 
     struct ModuleList *modules = C->dm->modules;

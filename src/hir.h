@@ -9,6 +9,7 @@
 struct Compiler;
 struct Resolver;
 
+typedef uint16_t HirId;
 typedef uint16_t DeclId;
 #define NO_DECL UINT16_MAX
 
@@ -68,6 +69,7 @@ typedef uint16_t DeclId;
         X(TuplePat, tuple) \
         X(PathPat, path) \
         X(BindingPat, bind) \
+        X(WildcardPat, or) \
         X(LiteralPat, lit)
 
 #define HIR_CAST_DECL(x) CAST(struct HirDecl *, x)
@@ -118,6 +120,7 @@ enum HirTypeKind {
 
 #define HIR_TYPE_HEADER \
     K_ALIGNAS_NODE int line; \
+    HirId hid; \
     enum HirTypeKind kind: 8
 struct HirTypeHeader {
     HIR_TYPE_HEADER;
@@ -218,6 +221,7 @@ enum HirDeclKind {
     K_ALIGNAS_NODE struct HirType *type; \
     String *name; \
     int line; \
+    HirId hid; \
     DeclId did; \
     uint8_t flags : 8; \
     enum HirDeclKind kind : 8
@@ -342,6 +346,7 @@ enum HirExprKind {
 #define HIR_EXPR_HEADER \
     K_ALIGNAS_NODE struct HirType *type; \
     int line; \
+    HirId hid; \
     enum HirExprKind kind : 8
 struct HirExprHeader {
     HIR_EXPR_HEADER;
@@ -515,6 +520,7 @@ enum HirStmtKind {
 
 #define HIR_STMT_HEADER \
     K_ALIGNAS_NODE int line; \
+    HirId hid; \
     enum HirStmtKind kind : 8
 struct HirStmtHeader {
     HIR_STMT_HEADER;
@@ -627,6 +633,7 @@ enum HirPatKind {
 #define HIR_PAT_HEADER \
     K_ALIGNAS_NODE struct HirType *type; \
     int line; \
+    HirId hid; \
     enum HirPatKind kind : 8
 
 struct HirPatHeader {
@@ -673,6 +680,10 @@ struct HirBindingPat {
 struct HirIdentPat {
     HIR_PAT_HEADER;
     String *name;
+};
+
+struct HirWildcardPat {
+    HIR_PAT_HEADER;
 };
 
 struct HirLiteralPat {
@@ -824,6 +835,7 @@ DEFINE_LIST(struct Compiler, pawHir_path_, HirPath, struct HirSegment)
 #define HIR_IS_POLY_ADT(decl) (HirIsAdtDecl(decl) && HirGetAdtDecl(decl)->generics != NULL)
 #define HIR_IS_POLY_IMPL(decl) (HirIsImplDecl(decl) && HirGetImplDecl(decl)->generics != NULL)
 
+#define HIR_PATH_RESULT(path) ((path)->data[(path)->count - 1]->did)
 #define HIR_TYPE_DID(type) (HirIsAdt(type) ? HirGetAdt(type)->did : \
         HirIsFuncDef(type) ? HirGetFuncDef(type)->did : HirGetGeneric(type)->did)
 

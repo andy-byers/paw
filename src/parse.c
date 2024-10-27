@@ -393,7 +393,7 @@ static struct AstPat *variant_field_pat(struct Lex *lex)
     return result;
 }
 
-static struct AstPat *new_ident_pat(struct Lex *lex, String *name)
+static struct AstPat *new_path_pat(struct Lex *lex, String *name)
 {
     struct AstPat *result = NEW_PAT(lex, kAstPathPat);
     struct AstPathPat *r = AstGetPathPat(result);
@@ -411,13 +411,22 @@ static struct AstPat *struct_field_pat(struct Lex *lex)
         r->pat = pattern(lex);
     } else {
         // binds field to variable of same name
-        r->pat = new_ident_pat(lex, r->name);
+        r->pat = new_path_pat(lex, r->name);
     }
     return result;
 }
 
 DEFINE_LIST_PARSER(variant_field_pat, '(', ')', LOCAL_MAX, "variant fields", pattern, pawAst_pat_list_, AstPatList)
 DEFINE_LIST_PARSER(struct_field_pat, '{', '}', LOCAL_MAX, "struct fields", struct_field_pat, pawAst_pat_list_, AstPatList)
+
+static paw_Bool is_wildcard_path(const struct AstPath *path)
+{
+    paw_assert(path->count > 0);
+    if (path->count > 1) return PAW_FALSE;
+    struct AstSegment *seg = K_LIST_GET(path, 0);
+    return pawS_length(seg->name) == 1 &&
+        seg->name->text[0] == '_';
+}
 
 static struct AstPat *compound_pat(struct Lex *lex)
 {
@@ -436,6 +445,8 @@ static struct AstPat *compound_pat(struct Lex *lex)
         parse_struct_field_pat_list(lex, fields, r->line);
         r->path = path;
         r->fields = fields;
+    } else if (is_wildcard_path(path)) {
+        result->hdr.kind = kAstWildcardPat;
     } else {
         result->hdr.kind = kAstPathPat;
         struct AstPathPat *r = AstGetPathPat(result);
@@ -459,84 +470,88 @@ static struct AstPat *literal_pat(struct Lex *lex)
     struct AstPat *result = NEW_PAT(lex, kAstLiteralPat);
     struct AstLiteralPat *r = AstGetLiteralPat(result);
     r->expr = expr0(lex);
+
+    if (!AstIsLiteralExpr(r->expr)) {
+        pawX_error(lex, "expected literal pattern");
+    }
     return result;
 }
 
 static struct AstPat *pattern(struct Lex *lex)
 {
-    switch (lex->t.kind) {
-        case TK_NAME:
-            return compound_pat(lex);
-        case '(':
-            return tuple_pat(lex);
-        default:
-            return literal_pat(lex);
-    }
+switch (lex->t.kind) {
+    case TK_NAME:
+        return compound_pat(lex);
+    case '(':
+        return tuple_pat(lex);
+    default:
+        return literal_pat(lex);
+}
 }
 
 static struct AstExpr *basic_expr(struct Lex *lex);
 
 static struct AstDeclList *variant_field_list(struct Lex *lex, int line)
 {
-    ++lex->expr_depth;
-    struct AstDeclList *list = pawAst_decl_list_new(lex->C);
-    parse_variant_field_list(lex, list, line);
-    if (list->count == 0) {
-        pawX_error(lex, "expected at least 1 variant field between parenthesis "
-                        "(remove parenthesis for unit variant)");
-    }
-    --lex->expr_depth;
-    return list;
+++lex->expr_depth;
+struct AstDeclList *list = pawAst_decl_list_new(lex->C);
+parse_variant_field_list(lex, list, line);
+if (list->count == 0) {
+    pawX_error(lex, "expected at least 1 variant field between parenthesis "
+                    "(remove parenthesis for unit variant)");
+}
+--lex->expr_depth;
+return list;
 }
 
 static void set_unit(struct Lex *lex, struct AstExpr *pe)
 {
-    pe->tuple.kind = kAstTupleType;
-    pe->tuple.types = pawAst_expr_list_new(lex->C);
+pe->tuple.kind = kAstTupleType;
+pe->tuple.types = pawAst_expr_list_new(lex->C);
 }
 
 static struct AstExpr *unit_type(struct Lex *lex)
 {
-    struct AstExpr *r = NEW_EXPR(lex, 0);
-    set_unit(lex, r);
-    return r;
+struct AstExpr *r = NEW_EXPR(lex, 0);
+set_unit(lex, r);
+return r;
 }
 
 static struct AstExpr *type_expr(struct Lex *lex);
 
 static void parse_tuple_type(struct Lex *lex, struct AstExpr *pe, int line)
 {
-    struct AstExpr *first = NEW_EXPR(lex, 0);
-    *first = *pe;
+struct AstExpr *first = NEW_EXPR(lex, 0);
+*first = *pe;
 
-    struct AstExprList *elems = pawAst_expr_list_new(lex->C);
-    pawAst_expr_list_push(lex->C, elems, first);
+struct AstExprList *elems = pawAst_expr_list_new(lex->C);
+pawAst_expr_list_push(lex->C, elems, first);
 
-    do {
-        if (test(lex, ')')) break;
-        if (elems->count == FIELD_MAX) {
-            limit_error(lex, "tuple elements", FIELD_MAX);
-        }
-        struct AstExpr *type = type_expr(lex);
-        pawAst_expr_list_push(lex->C, elems, type);
-    } while (test_next(lex, ','));
-    delim_next(lex, ')', '(', line);
+do {
+    if (test(lex, ')')) break;
+    if (elems->count == FIELD_MAX) {
+        limit_error(lex, "tuple elements", FIELD_MAX);
+    }
+    struct AstExpr *type = type_expr(lex);
+    pawAst_expr_list_push(lex->C, elems, type);
+} while (test_next(lex, ','));
+delim_next(lex, ')', '(', line);
 
-    pe->tuple.kind = kAstTupleType;
-    pe->tuple.types = elems;
+pe->tuple.kind = kAstTupleType;
+pe->tuple.types = elems;
 }
 
 static struct AstExpr *parse_paren_type(struct Lex *lex)
 {
-    const int line = lex->last_line;
-    if (test_next(lex, ')')) {
-        return unit_type(lex);
-    }
-    struct AstExpr *e = type_expr(lex);
-    if (test_next(lex, ',')) {
-        parse_tuple_type(lex, e, line);
-    }
-    return e;
+const int line = lex->last_line;
+if (test_next(lex, ')')) {
+    return unit_type(lex);
+}
+struct AstExpr *e = type_expr(lex);
+if (test_next(lex, ',')) {
+    parse_tuple_type(lex, e, line);
+}
+return e;
 }
 
 static struct AstExpr *parse_container_type(struct Lex *lex)
@@ -687,11 +702,29 @@ static struct AstExpr *unop_expr(struct Lex *lex, enum UnOp op)
 {
     enter_nested(lex);
     struct AstExpr *result = NEW_EXPR(lex, kAstUnOpExpr);
-    struct AstUnOpExpr *r = &result->unop;
+    struct AstUnOpExpr *r = AstGetUnOpExpr(result);
     skip(lex); // unary operator token
     r->op = CAST(enum UnaryOp, op); // same order
     r->target = expression(lex, kUnOpPrecedence);
     leave_nested(lex);
+
+    // convert UnOp(Literal(x)) into Literal(-x) for numeric literals
+    if (r->op == UNARY_NEG && AstIsLiteralExpr(r->target)) {
+        struct AstLiteralExpr *lit = AstGetLiteralExpr(r->target);
+        if (lit->lit_kind == kAstBasicLit) {
+            if (lit->basic.t == PAW_TINT) {
+                if (lit->basic.value.i == PAW_INT_MIN) {
+                    pawX_error(lex, "signed integer overflow ('-' applied to %I)", PAW_INT_MIN);
+                }
+                lit->basic.value.i = -lit->basic.value.i;
+            } else if (lit->basic.t == PAW_TFLOAT) {
+                lit->basic.value.f = -lit->basic.value.f;
+            } else {
+                pawX_error(lex, "operator '-' applied to non-numeric value");
+            }
+            return r->target;
+        }
+    }
     return result;
 }
 

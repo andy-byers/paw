@@ -240,3 +240,16 @@ void pawK_pool_free(struct Pool *pool, void *ptr, size_t size)
 //    pool->free = ptr;
 }
 
+void *pawK_list_ensure_one(struct Compiler *C, void *data, int count, int *palloc)
+{
+    if (count == *palloc) {
+        if (*palloc > K_LIST_MAX / 2) pawM_error(ENV(C));
+        const size_t nextcap = CAST_SIZE(*palloc) * 2;
+        void *next = pawK_pool_alloc(ENV(C), C->pool, nextcap * sizeof(void *));
+        memcpy(next, data, CAST_SIZE(count) * sizeof(void *));
+        *palloc = CAST(int, nextcap);
+        return next;
+    }
+    return data;
+}
+

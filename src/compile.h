@@ -38,6 +38,7 @@ struct HirAdt;
 struct HirFuncDef;
 struct HirAdtDecl;
 struct HirInstanceDecl;
+struct HirMatchStmt;
 struct HirTypeFolder;
 struct HirTypeList;
 
@@ -113,8 +114,10 @@ struct Compiler {
     Map *imports;
     Map *strings;
     Map *types;
+    Map *matches;
     paw_Env *P;
     int nbinders;
+    int nnodes;
 };
 
 struct ModuleInfo {
@@ -172,6 +175,7 @@ struct HirType *pawP_instantiate_field(struct Compiler *C, struct HirType *self,
 struct HirDecl *pawP_find_field(struct Compiler *C, struct HirType *self, String *name);
 struct HirDecl *pawP_find_method(struct Compiler *C, struct HirType *self, String *name);
 
+void pawP_check_exhaustiveness(struct Compiler *C, struct HirMatchStmt *match);
 void pawP_lower_matches(struct Compiler *C);;
 
 struct HirType *pawP_generalize(struct Compiler *C, struct HirType *type);

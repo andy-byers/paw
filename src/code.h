@@ -7,6 +7,8 @@
 
 #include "mem.h"
 
+struct Compiler;
+
 #define K_ALIGNOF_NODE _Alignof(void *)
 #define K_ALIGNAS_NODE _Alignas(void *)
 
@@ -34,6 +36,11 @@ void pawK_pool_free(struct Pool *pool, void *ptr, size_t size);
 
 #define K_LIST_GET(L, i) CHECK_EXP(0 <= (i) && (i) < (L)->count, (L)->data[i])
 #define K_LIST_SET(L, i, v) CHECK_EXP(0 <= (i) && (i) < (L)->count, (L)->data[i] = (v))
+#define K_LIST_APPEND(C, L, v) ((L)->data = pawK_list_ensure_one(C, (L)->data, (L)->count, &(L)->alloc), \
+                                (L)->data[(L)->count++] = (v))
+#define K_LIST_PREPEND(C, L, v) ((L)->data = pawK_list_ensure_one(C, (L)->data, (L)->count, &(L)->alloc), \
+                                 memmove((L)->data + 1, (L)->data, (L)->count * sizeof((L)->data[0])), \
+                                 (L)->data[0] = (v))
 
 // Generate functions for working with a list containing nodes of a given type
 #define DEFINE_LIST(ctx, func, L, T) \
@@ -70,6 +77,8 @@ void pawK_pool_free(struct Pool *pool, void *ptr, size_t size);
         paw_assert(index < list->count); \
         return list->data[index]; \
     }
+
+void *pawK_list_ensure_one(struct Compiler *C, void *data, int count, int *palloc);
 
 enum LabelKind {
     LBREAK,
