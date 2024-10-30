@@ -925,6 +925,8 @@ static struct AstExpr *selector_expr(struct Lex *lex, struct AstExpr *target)
         r->selector.index = V_INT(lex->t.value);
         r->selector.is_index = PAW_TRUE;
         skip(lex); // integer token
+    } else {
+        pawX_error(lex, "expected identifier or integer after '.'");
     }
     return r;
 }

@@ -963,6 +963,7 @@ static struct HirType *method_ctx(struct Resolver *R, struct HirExpr *target)
     struct HirSelector *select = HirGetSelector(target);
     struct HirType *self = HIR_TYPEOF(select->target);
     self = maybe_unit_variant(R, self); // operand => type
+    if (!HirIsAdt(self)) return NULL;
     struct HirDecl *field = pawP_find_field(R->C, self, select->name);
     select->type = HIR_TYPEOF(field);
     if (HirIsFieldDecl(field)) return NULL; // function pointer field

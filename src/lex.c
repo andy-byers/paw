@@ -354,6 +354,13 @@ static struct Token consume_number(struct Lex *x)
             (test_next2(x, "bB") ||
              test_next2(x, "oO") ||
              test_next2(x, "xX"));
+    const paw_Bool dot_selector = x->t.kind == '.';
+    if (dot_selector) {
+        if (likely_int) {
+            pawX_error(x, "'.' selector must be a base-10 integer");
+        }
+        likely_int = PAW_TRUE;
+    }
 
     // Consume adjacent floating-point indicators, exponents, and fractional
     // parts.
@@ -370,6 +377,7 @@ static struct Token consume_number(struct Lex *x)
         if (ISHEX(x->c)) {
             // save digits below
         } else if (x->c == '.') {
+            if (dot_selector) break;
             likely_float = PAW_TRUE;
         } else {
             break;
