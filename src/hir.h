@@ -63,13 +63,14 @@ typedef uint16_t DeclId;
         X(MatchStmt,  match)
 
 #define HIR_PAT_LIST(X) \
+        X(OrPat, or) \
         X(FieldPat, field) \
         X(StructPat, struct_) \
         X(VariantPat, variant) \
         X(TuplePat, tuple) \
         X(PathPat, path) \
         X(BindingPat, bind) \
-        X(WildcardPat, or) \
+        X(WildcardPat, wild) \
         X(LiteralPat, lit)
 
 #define HIR_CAST_DECL(x) CAST(struct HirDecl *, x)
@@ -638,6 +639,11 @@ enum HirPatKind {
 
 struct HirPatHeader {
     HIR_PAT_HEADER;
+};
+
+struct HirOrPat {
+    HIR_PAT_HEADER;
+    struct HirPatList *pats;
 };
 
 // NOTE: only used for HirStructPat

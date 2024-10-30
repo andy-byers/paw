@@ -465,11 +465,55 @@ static struct AstPat *tuple_pat(struct Lex *lex)
     return result;
 }
 
+static struct AstExpr *literal_expr(struct Lex *lex)
+{
+    const paw_Bool negative = test_next(lex, '-');
+
+    struct AstExpr *expr;
+    switch (lex->t.kind) {
+        case TK_TRUE:
+            expr = emit_bool(lex, PAW_TRUE);
+            break;
+        case TK_FALSE:
+            expr = emit_bool(lex, PAW_FALSE);
+            break;
+        case TK_INTEGER:
+            expr = new_basic_lit(lex, lex->t.value, PAW_TINT);
+            break;
+        case TK_FLOAT:
+            expr = new_basic_lit(lex, lex->t.value, PAW_TFLOAT);
+            break;
+        case TK_STRING: {
+            const Value v = lex->t.value;
+            expr = new_basic_lit(lex, v, PAW_TSTR);
+            break;
+        }
+        default:
+            pawX_error(lex, "expected literal pattern");
+    }
+    skip(lex); // literal token
+
+    if (negative) {
+        struct AstLiteralExpr *e = AstGetLiteralExpr(expr);
+        if (e->basic.t == PAW_TINT) {
+            if (e->basic.value.i == PAW_INT_MIN) {
+                pawX_error(lex, "signed integer overflow ('-' applied to %I)", PAW_INT_MIN);
+            }
+            e->basic.value.i = -e->basic.value.i;
+        } else if (e->basic.t == PAW_TFLOAT) {
+            e->basic.value.f = -e->basic.value.f;
+        } else {
+            pawX_error(lex, "operator '-' applied to non-numeric value");
+        }
+    }
+    return expr;
+}
+
 static struct AstPat *literal_pat(struct Lex *lex)
 {
     struct AstPat *result = NEW_PAT(lex, kAstLiteralPat);
     struct AstLiteralPat *r = AstGetLiteralPat(result);
-    r->expr = expr0(lex);
+    r->expr = literal_expr(lex);
 
     if (!AstIsLiteralExpr(r->expr)) {
         pawX_error(lex, "expected literal pattern");
@@ -477,16 +521,34 @@ static struct AstPat *literal_pat(struct Lex *lex)
     return result;
 }
 
+static struct AstPat *or_pat(struct Lex *lex, struct AstPat *pat)
+{
+    struct AstPat *result = NEW_PAT(lex, kAstOrPat);
+    struct AstOrPat *r = AstGetOrPat(result);
+    r->pats = pawAst_pat_list_new(lex->C);
+    pawAst_pat_list_push(lex->C, r->pats, pat);
+    do {
+        pat = pattern(lex);
+        pawAst_pat_list_push(lex->C, r->pats, pat);
+    } while (test_next(lex, '|'));
+    return result;
+}
+
 static struct AstPat *pattern(struct Lex *lex)
 {
-switch (lex->t.kind) {
-    case TK_NAME:
-        return compound_pat(lex);
-    case '(':
-        return tuple_pat(lex);
-    default:
-        return literal_pat(lex);
-}
+    struct AstPat *pat;
+    switch (lex->t.kind) {
+        case TK_NAME:
+            pat = compound_pat(lex);
+            break;
+        case '(':
+            pat = tuple_pat(lex);
+            break;
+        default:
+            pat = literal_pat(lex);
+    }
+    if (!test_next(lex, '|')) return pat;
+    return or_pat(lex, pat);
 }
 
 static struct AstExpr *basic_expr(struct Lex *lex);
@@ -707,24 +769,6 @@ static struct AstExpr *unop_expr(struct Lex *lex, enum UnOp op)
     r->op = CAST(enum UnaryOp, op); // same order
     r->target = expression(lex, kUnOpPrecedence);
     leave_nested(lex);
-
-    // convert UnOp(Literal(x)) into Literal(-x) for numeric literals
-    if (r->op == UNARY_NEG && AstIsLiteralExpr(r->target)) {
-        struct AstLiteralExpr *lit = AstGetLiteralExpr(r->target);
-        if (lit->lit_kind == kAstBasicLit) {
-            if (lit->basic.t == PAW_TINT) {
-                if (lit->basic.value.i == PAW_INT_MIN) {
-                    pawX_error(lex, "signed integer overflow ('-' applied to %I)", PAW_INT_MIN);
-                }
-                lit->basic.value.i = -lit->basic.value.i;
-            } else if (lit->basic.t == PAW_TFLOAT) {
-                lit->basic.value.f = -lit->basic.value.f;
-            } else {
-                pawX_error(lex, "operator '-' applied to non-numeric value");
-            }
-            return r->target;
-        }
-    }
     return result;
 }
 

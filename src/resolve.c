@@ -1351,6 +1351,16 @@ static void ResolveDeclStmt(struct Resolver *R, struct HirDeclStmt *s)
     resolve_decl(R, s->decl);
 }
 
+static struct HirType *ResolveOrPat(struct Resolver *R, struct HirOrPat *p)
+{
+    p->type = new_unknown(R);
+    for (int i = 0; i < p->pats->count; ++i) {
+        struct HirPat *pat = K_LIST_GET(p->pats, i);
+        unify(R, p->type, resolve_pat(R, pat));
+    }
+    return p->type;
+}
+
 static struct HirType *ResolveFieldPat(struct Resolver *R, struct HirFieldPat *p)
 {
     p->type = resolve_pat(R, p->pat);

@@ -696,6 +696,14 @@ static struct HirType *LowerSignature(struct LowerAst *L, struct AstSignature *e
     return type;
 }
 
+static struct HirPat *LowerOrPat(struct LowerAst *L, struct AstOrPat *p)
+{
+    struct HirPat *result = pawHir_new_pat(L->C, p->line, kHirOrPat);
+    struct HirOrPat *r = HirGetOrPat(result);
+    r->pats = lower_pat_list(L, p->pats);
+    return result;
+}
+
 static struct HirPat *LowerFieldPat(struct LowerAst *L, struct AstFieldPat *p)
 {
     struct HirPat *result = pawHir_new_pat(L->C, p->line, kHirFieldPat);
@@ -704,6 +712,7 @@ static struct HirPat *LowerFieldPat(struct LowerAst *L, struct AstFieldPat *p)
     r->pat = lower_pat(L, p->pat);
     return result;
 }
+
 static struct HirPat *LowerStructPat(struct LowerAst *L, struct AstStructPat *p)
 {
     struct HirPat *result = pawHir_new_pat(L->C, p->line, kHirStructPat);

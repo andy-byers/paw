@@ -58,6 +58,7 @@ struct Compiler;
         X(MatchStmt,  match)
 
 #define AST_PAT_LIST(X) \
+        X(OrPat, or) \
         X(FieldPat, field) \
         X(StructPat, struct_) \
         X(VariantPat, variant) \
@@ -376,6 +377,11 @@ struct AstPatHeader {
     AST_PAT_HEADER;
 };
 
+struct AstOrPat {
+    AST_PAT_HEADER;
+    struct AstPatList *pats;
+};
+
 struct AstFieldPat {
     AST_PAT_HEADER;
     String *name;
@@ -411,11 +417,6 @@ struct AstWildcardPat {
 struct AstLiteralPat {
     AST_PAT_HEADER;
     struct AstExpr *expr;
-};
-
-struct AstOrPat {
-    AST_PAT_HEADER;
-    struct AstPatList *pats;
 };
 
 struct AstPat {

@@ -83,15 +83,25 @@ static struct HirExpr *compose_eq(struct Compiler *C, struct HirExpr *a, struct 
     return result;
 }
 
-static struct HirExpr *compose_and(struct Compiler *C, struct HirExpr *a, struct HirExpr *b)
+static struct HirExpr *compose_logical(struct Compiler *C, struct HirExpr *a, struct HirExpr *b, paw_Bool is_and)
 {
     struct HirExpr *result = pawHir_new_expr(C, b->hdr.line, kHirLogicalExpr);
     struct HirLogicalExpr *r = HirGetLogicalExpr(result);
     r->type = GET_TYPE(C, PAW_TBOOL);
-    r->is_and = PAW_TRUE;
+    r->is_and = is_and;
     r->lhs = a;
     r->rhs = b;
     return result;
+}
+
+static struct HirExpr *compose_and(struct Compiler *C, struct HirExpr *a, struct HirExpr *b)
+{
+    return compose_logical(C, a, b, PAW_TRUE);
+}
+
+static struct HirExpr *compose_or(struct Compiler *C, struct HirExpr *a, struct HirExpr *b)
+{
+    return compose_logical(C, a, b, PAW_FALSE);
 }
 
 static struct HirExpr *new_field_selector(struct Compiler *C, struct HirExpr *target, String *name)
@@ -222,6 +232,19 @@ static struct HirExpr *lower_literal_pat(struct HirVisitor *V, struct HirLiteral
     return result;
 }
 
+static struct HirExpr *lower_or_pat(struct HirVisitor *V, struct HirOrPat *p, struct HirExpr *target)
+{
+    struct Compiler *C = V->C;
+    paw_assert(p->pats->count > 1);
+    struct HirPat *pat = K_LIST_GET(p->pats, 0);
+    struct HirExpr *expr = lower_pattern(V, pat, target);
+    for (int i = 1; i < p->pats->count; ++i) {
+        pat = K_LIST_GET(p->pats, i);
+        expr = compose_or(C, expr, lower_pattern(V, pat, target));
+    }
+    return expr;
+}
+
 static struct HirExpr *lower_pattern_aux(struct HirVisitor *V, struct HirPat *pat, struct HirExpr *expr)
 {
     switch (HIR_KINDOF(pat)) {
@@ -241,6 +264,8 @@ static struct HirExpr *lower_pattern_aux(struct HirVisitor *V, struct HirPat *pa
             return lower_wildcard_pat(V, HirGetWildcardPat(pat), expr);
         case kHirLiteralPat:
             return lower_literal_pat(V, HirGetLiteralPat(pat), expr);
+        case kHirOrPat:
+            return lower_or_pat(V, HirGetOrPat(pat), expr);
     }
 
 }

@@ -417,6 +417,11 @@ static void AcceptGeneric(struct HirVisitor *V, struct HirGeneric *t)
     PAW_UNUSED(t);
 }
 
+static void AcceptOrPat(struct HirVisitor *V, struct HirOrPat *e)
+{
+    accept_pat_list(V, e->pats);
+}
+
 static void AcceptFieldPat(struct HirVisitor *V, struct HirFieldPat *p)
 {
     AcceptPat(V, p->pat);
@@ -1043,6 +1048,11 @@ static void CopySelector(struct Compiler *C, struct HirSelector *e, struct HirSe
 static void CopyDeclStmt(struct Compiler *C, struct HirDeclStmt *s, struct HirDeclStmt *r)
 {
     r->decl = copy_decl(C, s->decl);
+}
+
+static void CopyOrPat(struct Compiler *C, struct HirOrPat *p, struct HirOrPat *r)
+{
+    r->pats = copy_pat_list(C, p->pats);
 }
 
 static void CopyFieldPat(struct Compiler *C, struct HirFieldPat *p, struct HirFieldPat *r)
@@ -1945,6 +1955,9 @@ static void dump_pat(struct Printer *P, struct HirPat *p)
         case kHirBindingPat:
             DUMP_MSG(P, "name: ");
             PRINT_STRING(P, p->bind.name);
+            break;
+        case kHirOrPat:
+            dump_pat_list(P, p->or.pats, "pats");
             break;
         case kHirFieldPat:
             DUMP_MSG(P, "target: ");

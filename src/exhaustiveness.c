@@ -173,6 +173,14 @@ static struct RowList *clone_row_list(struct Usefulness *U, struct RowList *rows
     return result;
 }
 
+static struct HirPatList *flatten_or(struct Usefulness *U, struct HirPat *pat)
+{
+    if (HirIsOrPat(pat)) return HirGetOrPat(pat)->pats;
+    struct HirPatList *pats = pawHir_pat_list_new(U->C);
+    pawHir_pat_list_push(U->C, pats, pat);
+    return pats;
+}
+
 static struct VariableList *variables_for_types(struct Usefulness *U, struct HirTypeList *types)
 {
     struct VariableList *result = variable_list_new(U->C);
@@ -331,25 +339,30 @@ static struct CaseList *compile_constructor_cases(struct Usefulness *U, struct R
             continue;
         }
 
-        // pattern matrix specialization
-        int index = 0;
-        struct HirPatList *fields;
-        if (HirIsVariantPat(col->pat)) {
-            fields = HirGetVariantPat(col->pat)->fields;
-            index = HirGetVariantPat(col->pat)->index;
-        } else {
-            fields = HirGetTuplePat(col->pat)->elems;
-        }
+        struct HirPatList *pats = flatten_or(U, col->pat);
+        for (int i = 0; i < pats->count; ++i) {
+            struct HirPat *pat = K_LIST_GET(pats, i);
 
-        struct RawCase *cs = K_LIST_GET(cases, index);
-        paw_assert(cs->vars->count == fields->count);
-        for (int i = 0; i < fields->count; ++i) {
-            struct Column *c = new_column(U, K_LIST_GET(cs->vars, i),
-                    K_LIST_GET(fields, i));
-            column_list_push(U, row->columns, c);
+            // pattern matrix specialization
+            int index = 0;
+            struct HirPatList *fields;
+            if (HirIsVariantPat(pat)) {
+                fields = HirGetVariantPat(pat)->fields;
+                index = HirGetVariantPat(pat)->index;
+            } else {
+                fields = HirGetTuplePat(pat)->elems;
+            }
+
+            struct RawCase *cs = K_LIST_GET(cases, index);
+            paw_assert(cs->vars->count == fields->count);
+            for (int i = 0; i < fields->count; ++i) {
+                struct Column *c = new_column(U, K_LIST_GET(cs->vars, i),
+                        K_LIST_GET(fields, i));
+                column_list_push(U, row->columns, c);
+            }
+            row = new_row(U, row->columns, row->body);
+            row_list_push(U, cs->rows, row);
         }
-        row = new_row(U, row->columns, row->body);
-        row_list_push(U, cs->rows, row);
     }
 
     return compile_cases(U, cases);
@@ -381,43 +394,48 @@ static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct R
             continue;
         }
 
-        struct HirLiteralPat *p = HirGetLiteralPat(col->pat);
-        struct HirLiteralExpr *e = HirGetLiteralExpr(p->expr);
-        const Value key = e->basic.value;
-        struct Constructor *cons;
+        struct HirPatList *pats = flatten_or(U, col->pat);
+        for (int i = 0; i < pats->count; ++i) {
+            struct HirPat *pat = K_LIST_GET(pats, i);
 
-        switch (e->basic.t) {
-            case PAW_TUNIT:
-                cons = new_constructor(U, CONS_TUPLE);
-                cons->tuple.elems = pawHir_type_list_new(U->C);
-                break;
-            case PAW_TBOOL:
-                cons = new_constructor(U, CONS_BOOL);
-                break;
-            case PAW_TINT:
-                cons = new_constructor(U, CONS_INT);
-                break;
-            case PAW_TFLOAT:
-                cons = new_constructor(U, CONS_FLOAT);
-                break;
-            default:
-                paw_assert(e->basic.t == PAW_TSTR);
-                cons = new_constructor(U, CONS_STR);
-                break;
+            struct HirLiteralPat *p = HirGetLiteralPat(pat);
+            struct HirLiteralExpr *e = HirGetLiteralExpr(p->expr);
+            const Value key = e->basic.value;
+            struct Constructor *cons;
+
+            switch (e->basic.t) {
+                case PAW_TUNIT:
+                    cons = new_constructor(U, CONS_TUPLE);
+                    cons->tuple.elems = pawHir_type_list_new(U->C);
+                    break;
+                case PAW_TBOOL:
+                    cons = new_constructor(U, CONS_BOOL);
+                    break;
+                case PAW_TINT:
+                    cons = new_constructor(U, CONS_INT);
+                    break;
+                case PAW_TFLOAT:
+                    cons = new_constructor(U, CONS_FLOAT);
+                    break;
+                default:
+                    paw_assert(e->basic.t == PAW_TSTR);
+                    cons = new_constructor(U, CONS_STR);
+                    break;
+            }
+
+            Value *pv = pawH_get(tested, key);
+            if (pv != NULL) {
+                struct RawCase *rc = K_LIST_GET(raw_cases, pv->i);
+                row_list_push(U, rc->rows, row);
+                continue;
+            }
+            pawH_insert(P, tested, key, I2V(raw_cases->count));
+            struct RowList *case_rows = clone_row_list(U, fallback); // TODO: rows may need to be cloned in other places too!
+            row_list_push(U, case_rows, row);
+
+            struct RawCase *rc = new_raw_case(U, cons, variable_list_new(U->C), case_rows);
+            raw_case_list_push(U, raw_cases, rc);
         }
-
-        Value *pv = pawH_get(tested, key);
-        if (pv != NULL) {
-            struct RawCase *rc = K_LIST_GET(raw_cases, pv->i);
-            row_list_push(U, rc->rows, row);
-            continue;
-        }
-        pawH_insert(P, tested, key, I2V(raw_cases->count));
-        struct RowList *case_rows = clone_row_list(U, fallback); // TODO: needs to be cloned!
-        row_list_push(U, case_rows, row);
-
-        struct RawCase *rc = new_raw_case(U, cons, variable_list_new(U->C), case_rows);
-        raw_case_list_push(U, raw_cases, rc);
     }
 
     pawC_pop(P); // pop 'tested'
@@ -494,6 +512,25 @@ struct RawCaseList *cases_for_variant(struct Usefulness *U, struct MatchVar *var
     return result;
 }
 
+enum BranchMode {
+    BRANCH_VARIANT,
+    BRANCH_STRUCT,
+    BRANCH_TUPLE,
+    BRANCH_LITERAL,
+};
+
+static enum BranchMode branch_mode(struct Usefulness *U, struct MatchVar *var)
+{
+    if (!HirIsAdt(var->type)) {
+        paw_assert(HirIsTupleType(var->type));
+        return BRANCH_TUPLE;
+    }
+    struct HirDecl *decl = pawHir_get_decl(U->C, HIR_TYPE_DID(var->type));
+    if (!HirGetAdtDecl(decl)->is_struct) return BRANCH_VARIANT;
+    if (HirGetAdtDecl(decl)->did <= PAW_TSTR) return BRANCH_LITERAL;
+    return BRANCH_STRUCT;
+}
+
 static struct Decision *compile_rows(struct Usefulness *U, struct RowList *rows)
 {
     if (rows->count == 0) {
@@ -510,27 +547,26 @@ static struct Decision *compile_rows(struct Usefulness *U, struct RowList *rows)
     }
 
     struct Column *branch_col = find_branch_col(U, first_row->columns);
-    switch (HIR_KINDOF(branch_col->pat)) {
-        case kHirVariantPat: {
+    switch (branch_mode(U, branch_col->var)) {
+        case BRANCH_VARIANT: {
             struct RawCaseList *raw_cases = cases_for_variant(U, branch_col->var);
             struct CaseList *cases = compile_constructor_cases(U, rows, branch_col->var, raw_cases);
             return new_multi(U, branch_col->var, cases, NULL);
         }
-        case kHirStructPat: {
+        case BRANCH_STRUCT: {
             // TODO: implement struct patterns
             TYPE_ERROR(U, "struct patterns are not implemented");
             struct RawCaseList *raw_cases = cases_for_struct(U, branch_col->var);
             struct CaseList *cases = compile_constructor_cases(U, rows, branch_col->var, raw_cases);
             return new_multi(U, branch_col->var, cases, NULL);
         }
-        case kHirTuplePat: {
+        case BRANCH_TUPLE: {
             struct RawCaseList *raw_cases = cases_for_tuple(U, branch_col->var);
             struct CaseList *cases = compile_constructor_cases(U, rows, branch_col->var, raw_cases);
             return new_multi(U, branch_col->var, cases, NULL);
         }
-        default: {
+        case BRANCH_LITERAL: {
             // TODO: handle bool separately since there are only 2 cases
-            paw_assert(HirIsLiteralPat(branch_col->pat));
             struct LiteralResult result = compile_literal_cases(U, rows, branch_col->var);
             return new_multi(U, branch_col->var, result.cases, result.fallback);
         }

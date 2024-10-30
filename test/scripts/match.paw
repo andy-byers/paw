@@ -149,6 +149,27 @@ pub fn test_exact_int() {
     assert(match_exact_int(10) == 100);
 }
 
+fn match_either_int(i: int) -> int {
+    match i {
+        0 | 2 => {return 1;},
+        1 | 3 => {return 2;},
+        4 | 6 => {return 3;},
+        _ => {return 4;},
+    };
+}
+
+pub fn test_either_int() {
+    assert(match_either_int(-1) == 4);
+    assert(match_either_int(0) == 1);
+    assert(match_either_int(1) == 2);
+    assert(match_either_int(2) == 1);
+    assert(match_either_int(3) == 2);
+    assert(match_either_int(4) == 3);
+    assert(match_either_int(5) == 4);
+    assert(match_either_int(6) == 3);
+    assert(match_either_int(7) == 4);
+}
+
 pub fn test_target_is_evaluated_once() {
     let value = 0;
     match value = value + 1 {
@@ -175,5 +196,42 @@ pub fn test_tuple() {
     assert(check_match_tuple((1, 'three', 3.0)) == 2);
     assert(check_match_tuple((1, 'two', 3.0)) == 3);
     assert(check_match_tuple((1, 'two', 4.0)) == 4);
+}
+
+fn match_either_variant(target: Nested) -> int {
+    match target {
+        Nested::Zero => {return 1;},
+
+        Nested::One(Flat::A | Flat::B) => {return 2;},
+        Nested::One(Flat::C) => {return 3;},
+
+        Nested::Two(Flat::A, Flat::A)
+        | Nested::Two(Flat::A, Flat::B) => {return 4;},
+
+        Nested::Two(
+            Flat::B | Flat::C, 
+            Flat::B | Flat::C) => {return 5;},
+
+        _ => {return 6;},
+    };
+}
+
+pub fn test_either_variant() {
+    let check = match_either_variant;
+    assert(check(Nested::Zero) == 1);
+
+    assert(check(Nested::One(Flat::A)) == 2);
+    assert(check(Nested::One(Flat::B)) == 2);
+    assert(check(Nested::One(Flat::C)) == 3);
+
+    assert(check(Nested::Two(Flat::A, Flat::A)) == 4);
+    assert(check(Nested::Two(Flat::A, Flat::B)) == 4);
+    assert(check(Nested::Two(Flat::B, Flat::A)) == 6);
+    assert(check(Nested::Two(Flat::C, Flat::A)) == 6);
+
+    assert(check(Nested::Two(Flat::B, Flat::B)) == 5);
+    assert(check(Nested::Two(Flat::B, Flat::C)) == 5);
+    assert(check(Nested::Two(Flat::C, Flat::B)) == 5);
+    assert(check(Nested::Two(Flat::C, Flat::C)) == 5);
 }
 

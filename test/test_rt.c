@@ -69,6 +69,7 @@ static void script(const char *name)
 
 int main(void)
 {
+    script("match");return 42;
 #define RUN_SCRIPT(name) script(#name);
     TEST_SCRIPTS(RUN_SCRIPT)
 #undef RUN_SCRIPT
