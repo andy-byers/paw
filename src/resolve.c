@@ -513,9 +513,10 @@ struct HirType *pawP_instantiate_field(struct Compiler *C, struct HirType *self,
     struct HirTypeFolder F;
     struct Substitution subst;
     struct HirAdt *t = HirGetAdt(self);
-    struct HirDecl *decl = pawHir_get_decl(C, t->did);
+    struct HirAdtDecl *d = HirGetAdtDecl(pawHir_get_decl(C, t->did));
+    if (d->generics == NULL) return HIR_TYPEOF(field);
     pawP_init_substitution_folder(&F, C, &subst,
-            hir_adt_types(HIR_TYPEOF(decl)), HirGetAdt(self)->types);
+            hir_adt_types(d->type), HirGetAdt(self)->types);
     return pawHir_fold_type(&F, HIR_TYPEOF(field));
 }
 
@@ -1354,11 +1355,8 @@ static void ResolveDeclStmt(struct Resolver *R, struct HirDeclStmt *s)
 
 static struct HirType *ResolveOrPat(struct Resolver *R, struct HirOrPat *p)
 {
-    p->type = new_unknown(R);
-    for (int i = 0; i < p->pats->count; ++i) {
-        struct HirPat *pat = K_LIST_GET(p->pats, i);
-        unify(R, p->type, resolve_pat(R, pat));
-    }
+    p->type = resolve_pat(R, p->lhs);
+    unify(R, p->type, resolve_pat(R, p->rhs));
     return p->type;
 }
 
@@ -1403,6 +1401,8 @@ static struct HirType *ResolveStructPat(struct Resolver *R, struct HirStructPat 
         if (pv != NULL) NAME_ERROR(R, "duplicate field '%s' in struct pattern", field_name->text);
         pawH_insert(P, map, P2V(field_name), P2V(pat));
     }
+
+    struct HirPatList *sorted = pawHir_pat_list_new(R->C);
     for (int i = 0; i < adt_fields->count; ++i) {
         struct HirFieldDecl *adt_field_decl = HirGetFieldDecl(K_LIST_GET(adt->fields, i));
         struct HirType *adt_field_type = K_LIST_GET(adt_fields, i);
@@ -1410,8 +1410,10 @@ static struct HirType *ResolveStructPat(struct Resolver *R, struct HirStructPat 
         if (pv == NULL) NAME_ERROR(R, "missing field '%s' in struct pattern", adt_field_decl->name->text);
         struct HirFieldPat *field_pat = HirGetFieldPat(pv->p);
         unify(R, field_pat->type, adt_field_type);
+        pawHir_pat_list_push(R->C, sorted, pv->p);
         field_pat->index = i;
     }
+    p->fields = sorted;
 
     pawC_pop(P);
     return p->type;

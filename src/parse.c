@@ -350,6 +350,7 @@ static struct AstPath *parse_pathexpr(struct Lex *lex)
         }
         String *name = parse_name(lex);
         struct AstExprList *args = NULL;
+        // permit "::<types..>" between segments
         if (test_next(lex, TK_COLON2)) {
             args = maybe_type_args(lex);
             if (args == NULL) {
@@ -383,7 +384,6 @@ static struct AstExpr *path_expr(struct Lex *lex)
     r->path = parse_pathexpr(lex);
     return result;
 }
-
 
 static struct AstPat *variant_field_pat(struct Lex *lex)
 {
@@ -525,12 +525,8 @@ static struct AstPat *or_pat(struct Lex *lex, struct AstPat *pat)
 {
     struct AstPat *result = NEW_PAT(lex, kAstOrPat);
     struct AstOrPat *r = AstGetOrPat(result);
-    r->pats = pawAst_pat_list_new(lex->C);
-    pawAst_pat_list_push(lex->C, r->pats, pat);
-    do {
-        pat = pattern(lex);
-        pawAst_pat_list_push(lex->C, r->pats, pat);
-    } while (test_next(lex, '|'));
+    r->lhs = pat;
+    r->rhs = pattern(lex);
     return result;
 }
 

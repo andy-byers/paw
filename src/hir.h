@@ -643,7 +643,8 @@ struct HirPatHeader {
 
 struct HirOrPat {
     HIR_PAT_HEADER;
-    struct HirPatList *pats;
+    struct HirPat *lhs;
+    struct HirPat *rhs;
 };
 
 // NOTE: only used for HirStructPat

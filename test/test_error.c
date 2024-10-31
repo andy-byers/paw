@@ -176,12 +176,9 @@ static void test_type_error(void)
     check_unop_type_error("~", PAW_TBOOL);
     check_unop_type_error("~", PAW_TFLOAT);
     check_unop_type_error("~", PAW_TSTR);
-
-    // NOTE: we end up transforming UnOp(Literal(x)) into Literal(-x) in an early
-    //       stage of compilation (for pattern-matching)
-    check_unop_error(PAW_ESYNTAX, "-", PAW_TUNIT);
-    check_unop_error(PAW_ESYNTAX, "-", PAW_TBOOL);
-    check_unop_error(PAW_ESYNTAX, "-", PAW_TSTR);
+    check_unop_type_error("-", PAW_TUNIT);
+    check_unop_type_error("-", PAW_TBOOL);
+    check_unop_type_error("-", PAW_TSTR);
 
 #define MAKE_LIST(...) \
     (paw_Type[]) { __VA_ARGS__, -1 }

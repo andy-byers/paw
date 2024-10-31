@@ -235,14 +235,9 @@ static struct HirExpr *lower_literal_pat(struct HirVisitor *V, struct HirLiteral
 static struct HirExpr *lower_or_pat(struct HirVisitor *V, struct HirOrPat *p, struct HirExpr *target)
 {
     struct Compiler *C = V->C;
-    paw_assert(p->pats->count > 1);
-    struct HirPat *pat = K_LIST_GET(p->pats, 0);
-    struct HirExpr *expr = lower_pattern(V, pat, target);
-    for (int i = 1; i < p->pats->count; ++i) {
-        pat = K_LIST_GET(p->pats, i);
-        expr = compose_or(C, expr, lower_pattern(V, pat, target));
-    }
-    return expr;
+    struct HirExpr *lhs = lower_pattern(V, p->lhs, target);
+    struct HirExpr *rhs = lower_pattern(V, p->rhs, target);
+    return compose_or(C, lhs, rhs);
 }
 
 static struct HirExpr *lower_pattern_aux(struct HirVisitor *V, struct HirPat *pat, struct HirExpr *expr)

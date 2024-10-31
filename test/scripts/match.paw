@@ -1,5 +1,84 @@
 // match.paw
 
+struct Multiple<T> {
+    pub a: T,
+    pub b: T,
+    pub c: T,
+}
+
+fn check_match_struct_with_multiple_fields(target: Multiple<int>) -> int {
+    match target {
+        Multiple{
+            b: 1 | 2 | 3,
+            c: 1 | 2 | 3,
+            a: 1 | 2 | 3,
+        } => {
+            return 1;
+        },
+
+        Multiple{b: 5, a: 4, c: 6}
+        | Multiple{b: 6, a: 5, c: 7} 
+        | Multiple{b: 7, a: 6, c: 8} => {
+            return 2;
+        },
+
+        _ => {
+            return 3;
+        },
+    };
+}
+
+pub fn test_match_struct_with_multiple_fields() {
+    let check = check_match_struct_with_multiple_fields;
+    assert(check(Multiple{a: 1, b: 1, c: 1}) == 1);
+    assert(check(Multiple{a: 1, b: 2, c: 3}) == 1);
+    assert(check(Multiple{a: 3, b: 2, c: 1}) == 1);
+    assert(check(Multiple{a: 4, b: 5, c: 6}) == 2);
+    assert(check(Multiple{a: 5, b: 6, c: 7}) == 2);
+    assert(check(Multiple{a: 6, b: 7, c: 8}) == 2);
+    assert(check(Multiple{b: 6, c: 7, a: 8}) == 3);
+    assert(check(Multiple{a: 7, b: 8, c: 9}) == 3);
+    assert(check(Multiple{a: 0, b: 1, c: 2}) == 3);
+}
+
+fn check_struct_bindings(target: Multiple<int>) -> int {
+    match target {
+        Multiple{c: 1, b, a: c} => {
+            return b + c - 1;
+        },
+        Multiple{c: c, b: x, a} => {
+            return a + x + c;
+        },
+    }
+}
+
+pub fn test_struct_bindings() {
+    let check = check_struct_bindings;
+    assert(check(Multiple{a: 1, b: 2, c: 3}) == 1 + 2 + 3);
+    assert(check(Multiple{a: 2, b: 2, c: 2}) == 2 + 2 + 2);
+    assert(check(Multiple{a: 3, b: 2, c: 1}) == 3 + 2 - 1);
+}
+
+struct Single<T> {
+    pub value: T,
+}
+
+fn check_match_struct_with_one_field(target: Single<int>) -> int {
+    match target {
+        Single{value: 1 | 2 | 3} => {return 1;},
+        Single{value: v} => {return v;},
+    };
+}
+
+pub fn test_match_struct_with_one_field() {
+    let check = check_match_struct_with_one_field;
+    assert(check(Single{value: 0}) == 0);
+    assert(check(Single{value: 1}) == 1);
+    assert(check(Single{value: 2}) == 1);
+    assert(check(Single{value: 3}) == 1);
+    assert(check(Single{value: 4}) == 4);
+}
+
 // Meaning of 'ret' parameter in 'check_single_arm_*' functions:
 //     false: ensure that control jumps out of the match once an arm is taken
 //            (otherwise, result value will be too high)

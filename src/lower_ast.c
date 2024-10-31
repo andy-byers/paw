@@ -700,7 +700,8 @@ static struct HirPat *LowerOrPat(struct LowerAst *L, struct AstOrPat *p)
 {
     struct HirPat *result = pawHir_new_pat(L->C, p->line, kHirOrPat);
     struct HirOrPat *r = HirGetOrPat(result);
-    r->pats = lower_pat_list(L, p->pats);
+    r->lhs = lower_pat(L, p->lhs);
+    r->rhs = lower_pat(L, p->rhs);
     return result;
 }
 

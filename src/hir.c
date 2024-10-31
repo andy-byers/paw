@@ -419,7 +419,8 @@ static void AcceptGeneric(struct HirVisitor *V, struct HirGeneric *t)
 
 static void AcceptOrPat(struct HirVisitor *V, struct HirOrPat *e)
 {
-    accept_pat_list(V, e->pats);
+    AcceptPat(V, e->lhs);
+    AcceptPat(V, e->rhs);
 }
 
 static void AcceptFieldPat(struct HirVisitor *V, struct HirFieldPat *p)
@@ -1052,7 +1053,8 @@ static void CopyDeclStmt(struct Compiler *C, struct HirDeclStmt *s, struct HirDe
 
 static void CopyOrPat(struct Compiler *C, struct HirOrPat *p, struct HirOrPat *r)
 {
-    r->pats = copy_pat_list(C, p->pats);
+    r->lhs = copy_pat(C, p->lhs);
+    r->rhs = copy_pat(C, p->rhs);
 }
 
 static void CopyFieldPat(struct Compiler *C, struct HirFieldPat *p, struct HirFieldPat *r)
@@ -1957,7 +1959,10 @@ static void dump_pat(struct Printer *P, struct HirPat *p)
             PRINT_STRING(P, p->bind.name);
             break;
         case kHirOrPat:
-            dump_pat_list(P, p->or.pats, "pats");
+            DUMP_MSG(P, "lhs: ");
+            dump_pat(P, p->or.lhs);
+            DUMP_MSG(P, "rhs: ");
+            dump_pat(P, p->or.rhs);
             break;
         case kHirFieldPat:
             DUMP_MSG(P, "target: ");

@@ -2,8 +2,8 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 //
-// exhaustiveness.c: Exhaustiveness check for pattern matching based off
-//     the paper 'Warnings for pattern matching'.
+// exhaustiveness.c: Exhaustiveness check for pattern matching, mostly based
+//     off of https://github.com/yorickpeterse/pattern-matching-in-rust.
 
 #include "compile.h"
 #include "hir.h"
@@ -157,6 +157,7 @@ static struct Row *new_row(struct Usefulness *U, struct ColumnList *columns, str
 
 static struct Row *clone_row(struct Usefulness *U, struct Row *row)
 {
+    return row;
     struct ColumnList *cols = column_list_new(U);
     for (int i = 0; i < row->columns->count; ++i) {
         column_list_push(U, cols, K_LIST_GET(row->columns, i));
@@ -166,6 +167,7 @@ static struct Row *clone_row(struct Usefulness *U, struct Row *row)
 
 static struct RowList *clone_row_list(struct Usefulness *U, struct RowList *rows)
 {
+    return rows;
     struct RowList *result = row_list_new(U);
     for (int i = 0; i < rows->count; ++i) {
         row_list_push(U, result, K_LIST_GET(rows, i));
@@ -173,9 +175,21 @@ static struct RowList *clone_row_list(struct Usefulness *U, struct RowList *rows
     return result;
 }
 
+static struct HirPatList *join_lists(struct Usefulness *U, struct HirPatList *lhs, struct HirPatList *rhs)
+{
+    for (int i = 0; i < rhs->count; ++i) {
+        pawHir_pat_list_push(U->C, lhs, K_LIST_GET(rhs, i));
+    }
+    return lhs;
+}
+
 static struct HirPatList *flatten_or(struct Usefulness *U, struct HirPat *pat)
 {
-    if (HirIsOrPat(pat)) return HirGetOrPat(pat)->pats;
+    if (HirIsOrPat(pat)) {
+        struct HirPatList *lhs = flatten_or(U, HirGetOrPat(pat)->lhs);
+        struct HirPatList *rhs = flatten_or(U, HirGetOrPat(pat)->rhs);
+        return join_lists(U, lhs, rhs);
+    }
     struct HirPatList *pats = pawHir_pat_list_new(U->C);
     pawHir_pat_list_push(U->C, pats, pat);
     return pats;
@@ -326,6 +340,16 @@ static struct CaseList *compile_cases(struct Usefulness *U, struct RawCaseList *
     return result;
 }
 
+static struct HirPatList *struct_pat_fields(struct Usefulness *U, struct HirStructPat *p)
+{
+    struct HirPatList *fields = pawHir_pat_list_new(U->C);
+    for (int i = 0; i < p->fields->count; ++i) {
+        struct HirFieldPat *field = HirGetFieldPat(K_LIST_GET(p->fields, i));
+        pawHir_pat_list_push(U->C, fields, field->pat);
+    }
+    return fields;
+}
+
 static struct CaseList *compile_constructor_cases(struct Usefulness *U, struct RowList *rows, struct MatchVar *branch_var, struct RawCaseList *cases)
 {
     for (int irow = 0; irow < rows->count; ++irow) {
@@ -349,6 +373,8 @@ static struct CaseList *compile_constructor_cases(struct Usefulness *U, struct R
             if (HirIsVariantPat(pat)) {
                 fields = HirGetVariantPat(pat)->fields;
                 index = HirGetVariantPat(pat)->index;
+            } else if (HirIsStructPat(pat)){
+                fields = struct_pat_fields(U, HirGetStructPat(pat));
             } else {
                 fields = HirGetTuplePat(pat)->elems;
             }
@@ -457,8 +483,8 @@ static struct HirTypeList *collect_field_types(struct Usefulness *U, struct HirD
     struct HirTypeList *result = pawHir_type_list_new(U->C);
     for (int i = 0; i < d->fields->count; ++i) {
         struct HirDecl *field = K_LIST_GET(d->fields, i);
-        struct HirType *type = pawP_instantiate_field(U->C, type, field);
-        K_LIST_APPEND(U->C, result, type);
+        struct HirType *next = pawP_instantiate_field(U->C, type, field);
+        K_LIST_APPEND(U->C, result, next);
     }
     return result;
 }
@@ -470,7 +496,7 @@ struct RawCaseList *cases_for_struct(struct Usefulness *U, struct MatchVar *var)
     struct HirTypeList *fields = collect_field_types(U, decl, var->type);
     struct VariableList *subvars = variables_for_types(U, fields);
     struct Constructor *cons = new_constructor(U, CONS_STRUCT);
-//    cons->struct_.fields = fields;
+    cons->struct_.type = var->type;
 
     struct RawCase *cs = new_raw_case(U, cons, subvars, row_list_new(U));
     struct RawCaseList *result = raw_case_list_new(U);
@@ -555,7 +581,6 @@ static struct Decision *compile_rows(struct Usefulness *U, struct RowList *rows)
         }
         case BRANCH_STRUCT: {
             // TODO: implement struct patterns
-            TYPE_ERROR(U, "struct patterns are not implemented");
             struct RawCaseList *raw_cases = cases_for_struct(U, branch_col->var);
             struct CaseList *cases = compile_constructor_cases(U, rows, branch_col->var, raw_cases);
             return new_multi(U, branch_col->var, cases, NULL);
@@ -566,7 +591,6 @@ static struct Decision *compile_rows(struct Usefulness *U, struct RowList *rows)
             return new_multi(U, branch_col->var, cases, NULL);
         }
         case BRANCH_LITERAL: {
-            // TODO: handle bool separately since there are only 2 cases
             struct LiteralResult result = compile_literal_cases(U, rows, branch_col->var);
             return new_multi(U, branch_col->var, result.cases, result.fallback);
         }
@@ -593,51 +617,4 @@ void pawP_check_exhaustiveness(struct Compiler *C, struct HirMatchStmt *match)
 
     struct Decision *tree = compile_rows(&U, rows);
     pawH_insert(P, C->matches, I2V(match->hid), P2V(tree));
-}
-
-static void debug_decision_aux(struct Compiler *C, struct Decision *dec, struct Buffer *buf, int indent)
-{
-    paw_Env *P = ENV(C);
-    for (int i = 0; i < indent; ++i) {
-        L_ADD_LITERAL(P, buf, "  ");
-    }
-    if (dec == NULL) {
-        L_ADD_LITERAL(P, buf, "(null)\n");
-        return;
-    }
-
-#define BODY_ID(b) ((b)->block->hid)
-#define EXPR_ID(e) ((e)->hdr.hid)
-    switch (dec->kind) {
-        case DECISION_FAILURE:
-            L_ADD_LITERAL(P, buf, "Failure\n");
-            break;
-        case DECISION_SUCCESS:
-            pawL_add_fstring(P, buf, "Success(body=%d)\n",
-                    BODY_ID(dec->success.body));
-            break;
-        case DECISION_GUARD:
-            pawL_add_fstring(P, buf, "Guard(cond=%d, body=%d)",
-                    EXPR_ID(dec->guard.cond), BODY_ID(dec->guard.body));
-            debug_decision_aux(C, dec->guard.rest, buf, indent);
-            break;
-        case DECISION_MULTIWAY:
-            pawL_add_fstring(P, buf, "Multi(test=%d, #cases=%d)",
-                    dec->multi.test->index, dec->multi.cases->count);
-            L_ADD_LITERAL(P, buf, ")\n");
-            for (int i = 0; i < dec->multi.cases->count; ++i) {
-                struct MatchCase *mc = dec->multi.cases->data[i];
-                debug_decision_aux(C, mc->dec, buf, indent + 1);
-            }
-            debug_decision_aux(C, dec->guard.rest, buf, indent);
-    }
-}
-
-void pawP_debug_decision(struct Compiler *C, struct Decision *dec)
-{
-    Buffer buf;
-    paw_Env *P = ENV(C);
-    pawL_init_buffer(P, &buf);
-    debug_decision_aux(C, dec, &buf, 0);
-    pawL_push_result(P, &buf);
 }

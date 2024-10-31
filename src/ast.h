@@ -379,7 +379,8 @@ struct AstPatHeader {
 
 struct AstOrPat {
     AST_PAT_HEADER;
-    struct AstPatList *pats;
+    struct AstPat *lhs;
+    struct AstPat *rhs;
 };
 
 struct AstFieldPat {
