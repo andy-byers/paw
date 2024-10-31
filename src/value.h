@@ -238,6 +238,9 @@ typedef struct Tuple {
 Tuple *pawV_new_tuple(paw_Env *P, int nelems);
 void pawV_free_tuple(paw_Env *P, Tuple *t);
 
+#define VLIST_MIN_CAPACITY 4
+#define VLIST_MAX_CAPACITY (PAW_SIZE_MAX / sizeof(Value))
+
 typedef struct List {
     GC_HEADER;
     Object *gc_list;

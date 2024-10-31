@@ -24,13 +24,14 @@ static void realloc_list(paw_Env *P, List *a, size_t alloc0, size_t alloc)
 
 static void ensure_space(paw_Env *P, List *a, size_t have, size_t want)
 {
-    if (want > PAW_SIZE_MAX / sizeof(Value)) {
-        pawM_error(P);
-    }
-    // Use the next power-of-2.
-    size_t n = 1;
+    // multiply by 1.5 until 'n' is large enough
+    size_t n = PAW_MAX(have, VLIST_MIN_CAPACITY);
     while (n < want) {
-        n *= 2;
+        const size_t half_n = n / 2;
+        if (n > VLIST_MAX_CAPACITY - half_n) {
+            pawM_error(P);
+        }
+        n += half_n;
     }
     realloc_list(P, a, have, n);
 }

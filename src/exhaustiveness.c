@@ -155,24 +155,11 @@ static struct Row *new_row(struct Usefulness *U, struct ColumnList *columns, str
     return row;
 }
 
-static struct Row *clone_row(struct Usefulness *U, struct Row *row)
+static void extend_row_list(struct Usefulness *U, struct RowList *target, struct RowList *rows)
 {
-    return row;
-    struct ColumnList *cols = column_list_new(U);
-    for (int i = 0; i < row->columns->count; ++i) {
-        column_list_push(U, cols, K_LIST_GET(row->columns, i));
-    }
-    return new_row(U, cols, row->body);
-}
-
-static struct RowList *clone_row_list(struct Usefulness *U, struct RowList *rows)
-{
-    return rows;
-    struct RowList *result = row_list_new(U);
     for (int i = 0; i < rows->count; ++i) {
-        row_list_push(U, result, K_LIST_GET(rows, i));
+        row_list_push(U, target, K_LIST_GET(rows, i));
     }
-    return result;
 }
 
 static struct HirPatList *join_lists(struct Usefulness *U, struct HirPatList *lhs, struct HirPatList *rhs)
@@ -255,6 +242,13 @@ static void print_pat(struct Compiler*C,struct HirPat *pat)
             print_pat(C, pat->field.pat);
             break;
         case kHirLiteralPat:
+            if (HirIsLiteralExpr(pat->lit.expr)) {
+                struct HirLiteralExpr *e = HirGetLiteralExpr(pat->lit.expr);
+                if (e->lit_kind == kHirLitBasic && e->basic.t == PAW_TINT) {
+                    printf("%lld", (long long)e->basic.value.i);
+                    break;
+                }
+            }
             printf("<lit>");
             break;
         case kHirWildcardPat:
@@ -398,7 +392,7 @@ struct LiteralResult {
     struct CaseList *cases;
     struct Decision *fallback;
 };
-
+#include"stdio.h"
 static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct RowList *rows, struct MatchVar *branch_var)
 {
     paw_Env *P = ENV(U);
@@ -410,8 +404,11 @@ static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct R
 
     for (int irow = 0; irow < rows->count; ++irow) {
         struct Row *row = K_LIST_GET(rows, irow);
+
         struct Column *col = remove_column(U, row, branch_var);
         if (col == NULL) {
+            // This row had a wildcard or binding in place of 'branch_var', meaning
+            // it needs to be considered in all other cases.
             row_list_push(U, fallback, row);
             for (int i = 0; i < raw_cases->count; ++i) {
                 struct RawCase *rc = K_LIST_GET(raw_cases, i);
@@ -456,10 +453,10 @@ static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct R
                 continue;
             }
             pawH_insert(P, tested, key, I2V(raw_cases->count));
-            struct RowList *case_rows = clone_row_list(U, fallback); // TODO: rows may need to be cloned in other places too!
-            row_list_push(U, case_rows, row);
-
-            struct RawCase *rc = new_raw_case(U, cons, variable_list_new(U->C), case_rows);
+            struct RowList *rows = row_list_new(U);
+            extend_row_list(U, rows, fallback);
+            row_list_push(U, rows, row);
+            struct RawCase *rc = new_raw_case(U, cons, variable_list_new(U->C), rows);
             raw_case_list_push(U, raw_cases, rc);
         }
     }
