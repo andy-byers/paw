@@ -18,7 +18,7 @@ struct Importer {
 
 static int next_modno(struct Importer *I)
 {
-    return pawH_length(I->imports);
+    return CAST(int, pawH_length(I->imports));
 }
 
 static struct Ast *get_import(struct Importer *I, const String *name)

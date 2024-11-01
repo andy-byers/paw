@@ -104,7 +104,7 @@ static void init_chunk_allocator(struct Allocator *a, void *heap, size_t heap_si
     memset(a, 0, sizeof(*a));
 
     assert(CHUNK_SIZE == 8);
-    a->nchunks = heap_size / CHUNK_SIZE - 2;
+    a->nchunks = CAST(uint32_t, heap_size / CHUNK_SIZE - 2);
     a->chunks = heap;
 
     a->key_size = a->nchunks;
@@ -256,7 +256,7 @@ static void *key_chunk_alloc(struct Allocator *a, uint32_t nchunks)
 // end (in the 'prev_size' field of the following chunk's header).
 _Static_assert(CHUNK_SIZE == 8, "failed allocator precondition");
 #define COMPUTE_NUM_CHUNKS(nbytes) \
-    ((nbytes) > 12 ? ((nbytes) + 11) / 8 : 2)
+    ((nbytes) > 12 ? (CAST(uint32_t, nbytes) + 11) / 8 : 2)
 #define TOO_MANY_CHUNKS(nbytes) \
     ((nbytes) > SIZE_MAX - 11 || \
      ((nbytes) + 11) / CHUNK_SIZE > UINT32_MAX)
@@ -339,7 +339,7 @@ static void unsafe_free(struct Heap *H, void *ptr)
 
     struct Allocator *a = H->a;
     paw_assert(b > a->chunks && b < &a->chunks[a->nchunks]);
-    const struct ChunkId i = {b - a->chunks};
+    const struct ChunkId i = {CAST(uint32_t, b - a->chunks)};
     uint32_t nchunks = CHUNK_HDR(a, i.v)->size4x / 4;
     paw_assert((CHUNK_HDR(a, i.v)->size4x & 1) == 1);
     paw_assert(nchunks == CHUNK_HDR(a, i.v)->size4x / 4);
@@ -420,10 +420,6 @@ int pawZ_init(paw_Env *P, void *heap, size_t heap_size, paw_Bool is_owned)
     H->bounds[0] = CAST_UPTR(heap);
     H->bounds[1] = H->bounds[0] + zf;
     return PAW_OK;
-
-no_memory:
-    pawZ_uninit(P);
-    return PAW_EMEMORY;
 }
 
 static void detect_leaks(paw_Env *P)

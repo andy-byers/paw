@@ -765,7 +765,7 @@ static void code_smi(struct FuncState *fs, paw_Int i)
     } else if (i == 1) {
         pawK_code_0(fs, OP_PUSHONE);
     } else {
-        pawK_code_S(fs, OP_PUSHSMI, i);
+        pawK_code_S(fs, OP_PUSHSMI, CAST(int, i));
     }
 }
 

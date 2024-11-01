@@ -290,7 +290,7 @@ static struct Column *remove_column(struct Usefulness *U, struct Row *row, struc
         if (col->var->id == var->id) {
             struct Column *result = K_LIST_GET(cols, i);
             memmove(cols->data + i, cols->data + i + 1,
-                    CAST_SIZE(cols->count - i - 1));
+                    CAST_SIZE(cols->count - i - 1) * sizeof(cols->data[0]));
             --cols->count;
             return result;
         }

@@ -270,7 +270,7 @@ int pawV_parse_uint64(paw_Env *P, const char *text, int base, uint64_t *out)
     uint64_t value = 0;
     for (; ISHEX(*p); ++p) {
         const unsigned v = HEXVAL(*p);
-        if (v >= base) {
+        if (v >= CAST(unsigned, base)) {
             return PAW_ESYNTAX;
         } else if (value > (UINT64_MAX - v) / base) {
             return PAW_EOVERFLOW;
@@ -307,7 +307,8 @@ int pawV_parse_int(paw_Env *P, const char *text, int base, paw_Int *out)
     if (u > CAST(uint64_t, PAW_INT_MAX) + negative) {
         return PAW_EOVERFLOW;
     }
-    *out = PAW_CAST_INT(negative ? -u : u);
+    *out = PAW_CAST_INT(u);
+    if (negative) *out = -*out;
     return PAW_OK;
 }
 

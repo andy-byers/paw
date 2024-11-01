@@ -302,7 +302,7 @@ struct AstSelector {
     paw_Bool is_index : 1;
     union {
         String *name;
-        paw_Int index;
+        int index;
     };
 };
 

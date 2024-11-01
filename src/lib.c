@@ -171,11 +171,12 @@ static int string_split(paw_Env *P)
          pawR_error(P, PAW_EVALUE, "empty separator");
      }
 
-     paw_Int npart = 0;
+     int npart = 0;
      const char *part;
      size_t nstr = s->length;
      const char *pstr = s->text;
      while ((part = find_substr(pstr, nstr, sep->text, sep->length))) {
+         if (npart == INT_MAX) pawR_error(P, PAW_EOVERFLOW, "too many substrings");
          const size_t n = CAST_SIZE(part - pstr);
          pawC_pushns(P, pstr, n);
          part += sep->length; // skip separator
@@ -276,9 +277,12 @@ static int string_parse_int(paw_Env *P)
 {
     const char *str = V_TEXT(*CF_BASE(1));
     const paw_Int base = V_INT(*CF_BASE(2));
+    if (base > INT_MAX) {
+        pawR_error(P, PAW_EOVERFLOW, "base '%I' is too large", base);
+    }
 
     paw_Int i;
-    const int rc = pawV_parse_int(P, str, base, &i);
+    const int rc = pawV_parse_int(P, str, CAST(int, base), &i);
     if (rc == PAW_ESYNTAX) {
         pawR_error(P, PAW_ESYNTAX, "invalid integer '%s'", str);
     } else if (rc == PAW_EOVERFLOW) {
@@ -535,7 +539,6 @@ static int searcher_Paw(paw_Env *P)
 static int searcher_cwd(paw_Env *P)
 {
     if (P->modname != NULL) {
-        char modname[PAW_PATH_MAX + 1];
         const char *pathname = P->modname->text;
         const size_t pathlen = P->modname->length;
         paw_assert(pathlen <= PAW_PATH_MAX); // TODO: throw an error at least
