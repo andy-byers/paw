@@ -1355,8 +1355,11 @@ static void ResolveDeclStmt(struct Resolver *R, struct HirDeclStmt *s)
 
 static struct HirType *ResolveOrPat(struct Resolver *R, struct HirOrPat *p)
 {
-    p->type = resolve_pat(R, p->lhs);
-    unify(R, p->type, resolve_pat(R, p->rhs));
+    p->type = new_unknown(R);
+    for (int i = 0; i < p->pats->count; ++i) {
+        struct HirPat *pat = K_LIST_GET(p->pats, i);
+        unify(R, p->type, resolve_pat(R, pat));
+    }
     return p->type;
 }
 
@@ -1725,7 +1728,7 @@ static void check_types(struct Resolver *R, struct DynamicMem *dm)
     }
     leave_inference_ctx(R);
 }
-#include"stdio.h"
+
 void pawP_resolve(struct Compiler *C)
 {
     struct DynamicMem *dm = C->dm;

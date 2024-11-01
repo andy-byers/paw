@@ -172,11 +172,7 @@ static struct HirPatList *join_lists(struct Usefulness *U, struct HirPatList *lh
 
 static struct HirPatList *flatten_or(struct Usefulness *U, struct HirPat *pat)
 {
-    if (HirIsOrPat(pat)) {
-        struct HirPatList *lhs = flatten_or(U, HirGetOrPat(pat)->lhs);
-        struct HirPatList *rhs = flatten_or(U, HirGetOrPat(pat)->rhs);
-        return join_lists(U, lhs, rhs);
-    }
+    if (HirIsOrPat(pat)) return HirGetOrPat(pat)->pats;
     struct HirPatList *pats = pawHir_pat_list_new(U->C);
     pawHir_pat_list_push(U->C, pats, pat);
     return pats;
@@ -289,8 +285,9 @@ static struct Column *remove_column(struct Usefulness *U, struct Row *row, struc
         struct Column *col = cols->data[i];
         if (col->var->id == var->id) {
             struct Column *result = K_LIST_GET(cols, i);
+            const size_t rest = CAST_SIZE(cols->count - i - 1);
             memmove(cols->data + i, cols->data + i + 1,
-                    CAST_SIZE(cols->count - i - 1) * sizeof(cols->data[0]));
+                    rest * sizeof(cols->data[0]));
             --cols->count;
             return result;
         }
@@ -392,7 +389,7 @@ struct LiteralResult {
     struct CaseList *cases;
     struct Decision *fallback;
 };
-#include"stdio.h"
+
 static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct RowList *rows, struct MatchVar *branch_var)
 {
     paw_Env *P = ENV(U);

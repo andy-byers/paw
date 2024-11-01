@@ -307,8 +307,9 @@ int pawV_parse_int(paw_Env *P, const char *text, int base, paw_Int *out)
     if (u > CAST(uint64_t, PAW_INT_MAX) + negative) {
         return PAW_EOVERFLOW;
     }
-    *out = PAW_CAST_INT(u);
-    if (negative) *out = -*out;
+    *out = negative
+        ? PAW_CAST_INT(-u)
+        : PAW_CAST_INT(u);
     return PAW_OK;
 }
 
@@ -346,3 +347,4 @@ int pawV_parse_float(paw_Env *P, const char *text, paw_Float *out)
     *out = negative ? -f : f;
     return PAW_OK;
 }
+

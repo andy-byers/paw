@@ -696,12 +696,26 @@ static struct HirType *LowerSignature(struct LowerAst *L, struct AstSignature *e
     return type;
 }
 
+static void combine_or_parts(struct LowerAst *L, struct HirOrPat *or, struct HirPat *part)
+{
+    if (!HirIsOrPat(part)) {
+        pawHir_pat_list_push(L->C, or->pats, part);
+        return;
+    }
+
+    struct HirPatList *pats = HirGetOrPat(part)->pats;
+    for (int i = 0; i < pats->count; ++i) {
+        pawHir_pat_list_push(L->C, or->pats, K_LIST_GET(pats, i));
+    }
+}
+
 static struct HirPat *LowerOrPat(struct LowerAst *L, struct AstOrPat *p)
 {
     struct HirPat *result = pawHir_new_pat(L->C, p->line, kHirOrPat);
     struct HirOrPat *r = HirGetOrPat(result);
-    r->lhs = lower_pat(L, p->lhs);
-    r->rhs = lower_pat(L, p->rhs);
+    r->pats = pawHir_pat_list_new(L->C);
+    combine_or_parts(L, r, lower_pat(L, p->lhs));
+    combine_or_parts(L, r, lower_pat(L, p->rhs));
     return result;
 }
 
