@@ -127,12 +127,8 @@ const char *paw_binop_name(enum BinaryOp binop)
 const char *paw_op_name(Op op)
 {
     switch (op) {
-        case OP_CASTBOOL:
-            return "CASTBOOL";
-        case OP_CASTINT:
-            return "CASTINT";
-        case OP_CASTFLOAT:
-            return "CASTFLOAT";
+        case OP_CAST:
+            return "CAST";
         case OP_PUSHZERO:
             return "PUSHZERO";
         case OP_PUSHONE:

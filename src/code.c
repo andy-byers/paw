@@ -48,9 +48,7 @@ static int stack_effect(OpCode opcode)
         case OP_ARITHI1:
         case OP_ARITHF1:
         case OP_BITW1:
-        case OP_CASTBOOL:
-        case OP_CASTINT:
-        case OP_CASTFLOAT:
+        case OP_CAST:
         case OP_NOT:
         case OP_LENGTH:
         case OP_SWITCHDISCR:

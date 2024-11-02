@@ -145,34 +145,32 @@ static void float2int(paw_Env *P, paw_Float f, Value *pv)
     }
 }
 
-void pawR_cast_bool(paw_Env *P, paw_Type type)
+static void cast_primitive(paw_Env *P, paw_Type from, paw_Type to)
 {
-    paw_assert(type < PAW_TSTR);
-    PAW_UNUSED(type);
+    paw_assert(0 <= to && to < PAW_TSTR);
+    paw_assert(0 <= from && from < PAW_TSTR);
 
     Value *pv = VM_TOP(1);
-    V_SET_BOOL(pv, pv->u != 0);
-}
-
-void pawR_cast_int(paw_Env *P, paw_Type type)
-{
-    paw_assert(type < PAW_TSTR);
-    if (type == PAW_TFLOAT) {
-        // NOTE: Other primitives have a value representation compatible with
-        //       that of the 'int' type.
-        Value *pv = VM_TOP(1);
-        const paw_Float f = V_FLOAT(*pv);
-        float2int(P, f, pv);
-    }
-}
-
-void pawR_cast_float(paw_Env *P, paw_Type type)
-{
-    paw_assert(type < PAW_TSTR);
-    if (type != PAW_TFLOAT) {
-        Value *pv = VM_TOP(1);
-        const paw_Int i = V_INT(*pv);
-        V_SET_FLOAT(pv, CAST(paw_Float, i));
+    switch (to) {
+        case PAW_TBOOL:
+            V_SET_BOOL(pv, pv->u != 0);
+            break;
+        case PAW_TINT:
+            if (from == PAW_TFLOAT) {
+                // NOTE: Other primitives have a value representation compatible
+                //       with that of the 'int' type.
+                const paw_Float f = V_FLOAT(*pv);
+                float2int(P, f, pv);
+            }
+            break;
+        case PAW_TFLOAT:
+            if (from != PAW_TFLOAT) {
+                const paw_Int i = V_INT(*pv);
+                V_SET_FLOAT(pv, CAST(paw_Float, i));
+            }
+            break;
+        default:
+            V_SET_0(pv);
     }
 }
 
@@ -1023,19 +1021,9 @@ top:
                 CHECK_GC(P);
             }
 
-            vm_case(CASTBOOL) :
+            vm_case(CAST) :
             {
-                pawR_cast_bool(P, GET_U(opcode));
-            }
-
-            vm_case(CASTINT) :
-            {
-                pawR_cast_int(P, GET_U(opcode));
-            }
-
-            vm_case(CASTFLOAT) :
-            {
-                pawR_cast_float(P, GET_U(opcode));
+                cast_primitive(P, GET_A(opcode), GET_B(opcode));
             }
 
             vm_case(GETDISCR) :

@@ -162,9 +162,7 @@ OP_SWITCHDISCR,//    U           v              discr(k)==u   -
 OP_GETDISCR,//       U           v              discr(k)      -
 OP_TESTINT,//        U           k              k==u          -
 
-OP_CASTBOOL,//       U           v              v as bool     -
-OP_CASTINT,//        U           v              v as int      -
-OP_CASTFLOAT,//      U           v              v as float    -
+OP_CAST,//           A B         v              v as type(b)  -
 
 NOPCODES
 } Op;

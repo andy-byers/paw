@@ -1282,11 +1282,9 @@ static void post_conversion_expr(struct HirVisitor *V, struct HirConversionExpr 
 {
     struct Generator *G = V->ud;
     struct HirType *from = HIR_TYPEOF(e->arg);
-    const Op op = e->to == PAW_TBOOL ? OP_CASTBOOL :
-        e->to == PAW_TINT ? OP_CASTINT : OP_CASTFLOAT;
     G->fs->line = e->line;
 
-    pawK_code_U(G->fs, op, hir_adt_did(from));
+    pawK_code_AB(G->fs, OP_CAST, hir_adt_did(from), e->to);
 }
 
 static paw_Bool code_if_stmt(struct HirVisitor *V, struct HirIfStmt *s)
