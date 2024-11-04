@@ -29,7 +29,7 @@ struct Row {
 };
 
 struct RawCase {
-    struct Constructor *cons;
+    struct Constructor cons;
     struct VariableList *vars;
     struct RowList *rows;
 };
@@ -39,7 +39,7 @@ DEFINE_LIST(struct Usefulness, column_list_, ColumnList, struct Column)
 DEFINE_LIST(struct Usefulness, row_list_, RowList, struct Row)
 DEFINE_LIST(struct Usefulness, raw_case_list_, RawCaseList, struct RawCase)
 
-static struct RawCase *new_raw_case(struct Usefulness *U, struct Constructor *cons, struct VariableList *vars, struct RowList *rows)
+static struct RawCase *new_raw_case(struct Usefulness *U, struct Constructor cons, struct VariableList *vars, struct RowList *rows)
 {
     struct RawCase *c = pawK_pool_alloc(ENV(U), U->pool, sizeof(struct RawCase));
     *c = (struct RawCase){
@@ -50,7 +50,7 @@ static struct RawCase *new_raw_case(struct Usefulness *U, struct Constructor *co
     return c;
 }
 
-static struct MatchCase *new_case(struct Usefulness *U, struct Constructor *cons, struct VariableList *vars, struct Decision *dec)
+static struct MatchCase *new_case(struct Usefulness *U, struct Constructor cons, struct VariableList *vars, struct Decision *dec)
 {
     struct MatchCase *c = pawK_pool_alloc(ENV(U), U->pool, sizeof(struct MatchCase));
     *c = (struct MatchCase){
@@ -100,19 +100,20 @@ static struct Decision *new_multi(struct Usefulness *U, struct MatchVar *test, s
     return result;
 }
 
-static struct Constructor *new_constructor(struct Usefulness *U, enum ConstructorKind kind)
+static int constructor_index(struct Constructor cons)
 {
-    struct Constructor *cons = pawK_pool_alloc(ENV(U), U->pool, sizeof(struct Constructor));
-    *cons = (struct Constructor){
-        .kind = kind,
-    };
-    return cons;
+    if (cons.kind != CONS_VARIANT) return 0;
+    return cons.variant.index;
 }
 
-static int constructor_index(const struct Constructor *cons)
+static struct Binding *new_binding(struct Usefulness *U, String *name, struct MatchVar *var)
 {
-    if (cons->kind != CONS_VARIANT) return 0;
-    return cons->variant.index;
+    struct Binding *binding = pawK_pool_alloc(ENV(U), U->pool, sizeof(struct Binding));
+    *binding = (struct Binding){
+        .name = name,
+        .var = var,
+    };
+    return binding;
 }
 
 static struct MatchVar *new_variable(struct Usefulness *U, struct HirType *type)
@@ -129,7 +130,7 @@ static struct MatchBody *new_body(struct Usefulness *U, struct HirBlock *block)
 {
     struct MatchBody *result = pawK_pool_alloc(ENV(U), U->pool, sizeof(struct MatchBody));
     *result = (struct MatchBody){
-        .bindings = variable_list_new(U->C),
+        .bindings = binding_list_new(U->C),
         .block = block,
     };
     return result;
@@ -191,7 +192,7 @@ static struct VariableList *variables_for_types(struct Usefulness *U, struct Hir
     return result;
 }
 
-#if 0
+//#if 0
 
 #include"stdio.h"
 
@@ -261,7 +262,7 @@ static void print_col(struct Compiler*C,struct Column *col)
     printf("\n");
 }
 
-#endif // 0
+//#endif // 0
 
 static void move_bindings_to_right(struct Usefulness *U, struct Row *row)
 {
@@ -270,7 +271,9 @@ static void move_bindings_to_right(struct Usefulness *U, struct Row *row)
     for (int icol = 0; icol < row->columns->count; ++icol) {
         struct Column *col = K_LIST_GET(row->columns, icol);
         if (HirIsBindingPat(col->pat)) {
-            K_LIST_APPEND(U->C, row->body->bindings, col->var);
+            String *name = HirGetBindingPat(col->pat)->name;
+            struct Binding *binding = new_binding(U, name, col->var);
+            K_LIST_APPEND(U->C, row->body->bindings, binding);
         } else if (!HirIsWildcardPat(col->pat)){
             K_LIST_APPEND(U->C, columns, col);
         }
@@ -421,25 +424,29 @@ static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct R
             struct HirLiteralPat *p = HirGetLiteralPat(pat);
             struct HirLiteralExpr *e = HirGetLiteralExpr(p->expr);
             const Value key = e->basic.value;
-            struct Constructor *cons;
+            struct Constructor cons = {0};
 
             switch (e->basic.t) {
                 case PAW_TUNIT:
-                    cons = new_constructor(U, CONS_TUPLE);
-                    cons->tuple.elems = pawHir_type_list_new(U->C);
+                    cons.kind = CONS_TUPLE;
+                    cons.tuple.elems = pawHir_type_list_new(U->C);
                     break;
                 case PAW_TBOOL:
-                    cons = new_constructor(U, CONS_BOOL);
+                    cons.kind = CONS_BOOL;
+                    cons.value = e->basic.value;
                     break;
                 case PAW_TINT:
-                    cons = new_constructor(U, CONS_INT);
+                    cons.kind = CONS_INT;
+                    cons.value = e->basic.value;
                     break;
                 case PAW_TFLOAT:
-                    cons = new_constructor(U, CONS_FLOAT);
+                    cons.kind = CONS_FLOAT;
+                    cons.value = e->basic.value;
                     break;
                 default:
                     paw_assert(e->basic.t == PAW_TSTR);
-                    cons = new_constructor(U, CONS_STR);
+                    cons.kind = CONS_STR;
+                    cons.value = e->basic.value;
                     break;
             }
 
@@ -489,8 +496,10 @@ struct RawCaseList *cases_for_struct(struct Usefulness *U, struct MatchVar *var)
 
     struct HirTypeList *fields = collect_field_types(U, decl, var->type);
     struct VariableList *subvars = variables_for_types(U, fields);
-    struct Constructor *cons = new_constructor(U, CONS_STRUCT);
-    cons->struct_.type = var->type;
+    struct Constructor cons = {
+        .kind = CONS_STRUCT,
+        .struct_.type = var->type,
+    };
 
     struct RawCase *cs = new_raw_case(U, cons, subvars, row_list_new(U));
     struct RawCaseList *result = raw_case_list_new(U);
@@ -502,8 +511,10 @@ struct RawCaseList *cases_for_tuple(struct Usefulness *U, struct MatchVar *var)
 {
     struct HirTypeList *elems = HirGetTupleType(var->type)->elems;
     struct VariableList *subvars = variables_for_types(U, elems);
-    struct Constructor *cons = new_constructor(U, CONS_TUPLE);
-    cons->tuple.elems = elems;
+    struct Constructor cons = {
+        .kind = CONS_TUPLE,
+        .tuple.elems = elems,
+    };
 
     struct RawCase *cs = new_raw_case(U, cons, subvars, row_list_new(U));
     struct RawCaseList *result = raw_case_list_new(U);
@@ -522,9 +533,11 @@ struct RawCaseList *cases_for_variant(struct Usefulness *U, struct MatchVar *var
         struct HirDecl *field = K_LIST_GET(fields, i);
         struct HirType *type = pawP_instantiate_field(U->C, var->type, field);
         struct VariableList *subvars = variables_for_types(U, HIR_FPTR(type)->params);
-        struct Constructor *cons = new_constructor(U, CONS_VARIANT);
-        cons->variant.type = type;
-        cons->variant.index = i;
+        struct Constructor cons = {
+            .kind = CONS_VARIANT,
+            .variant.type = type,
+            .variant.index = i,
+        };
 
         struct RawCase *cs = new_raw_case(U, cons, subvars, row_list_new(U));
         raw_case_list_push(U, result, cs);
@@ -574,7 +587,6 @@ static struct Decision *compile_rows(struct Usefulness *U, struct RowList *rows)
             return new_multi(U, branch_col->var, cases, NULL);
         }
         case BRANCH_STRUCT: {
-            // TODO: implement struct patterns
             struct RawCaseList *raw_cases = cases_for_struct(U, branch_col->var);
             struct CaseList *cases = compile_constructor_cases(U, rows, branch_col->var, raw_cases);
             return new_multi(U, branch_col->var, cases, NULL);

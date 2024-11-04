@@ -16,7 +16,6 @@
 #include "gc.h"
 #include "hir.h"
 #include "map.h"
-#include "match.h"
 #include "mem.h"
 #include "parse.h"
 #include "lib.h"

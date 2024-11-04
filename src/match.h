@@ -50,6 +50,8 @@ enum ConstructorKind {
 struct Constructor {
     enum ConstructorKind kind;
     union {
+        Value value;
+
         struct {
             struct HirTypeList *elems;
         } tuple;
@@ -65,6 +67,11 @@ struct Constructor {
     };
 };
 
+struct Binding {
+    struct MatchVar *var;
+    String *name;
+};
+
 struct MatchVar {
     struct HirType *type;
     int index;
@@ -72,19 +79,20 @@ struct MatchVar {
 };
 
 struct MatchBody {
-    struct VariableList *bindings;
+    struct BindingList *bindings;
     struct HirBlock *block;
 };
 
 struct MatchCase {
-    struct Constructor *cons;
+    struct Constructor cons;
     struct VariableList *vars;
     struct Decision *dec;
 };
 
+DEFINE_LIST(struct Compiler, binding_list_, BindingList, struct Binding)
 DEFINE_LIST(struct Compiler, variable_list_, VariableList, struct MatchVar)
 DEFINE_LIST(struct Compiler, case_list_, CaseList, struct MatchCase)
 
-void pawP_debug_decision(struct Compiler *C, struct Decision *dec);
+void pawP_print_decision(struct Compiler *C, struct Decision *dec);
 
 #endif // PAW_MATCH_H
