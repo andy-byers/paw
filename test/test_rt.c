@@ -38,6 +38,7 @@ static void run_tests(const char *name, struct TestAlloc *a, const char *prefix)
     }
 
     fprintf(stderr, "running %s.paw...\n", name);
+
     const size_t length = strlen(prefix);
     struct DefList defs = P->defs;
     for (int i = 0; i < defs.count; ++i) {
@@ -54,6 +55,8 @@ static void run_tests(const char *name, struct TestAlloc *a, const char *prefix)
             status = paw_call(P, 0);
             if (handle_error(P, status)) {
                 ++s_counters.runtime_errors;
+printf("\nFAILED\n\n\n");
+abort();
             }
             ++s_counters.tests;
         }

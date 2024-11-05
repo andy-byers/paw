@@ -57,22 +57,24 @@ static inline MapCursor h_cursor_init(Map *m, Value key)
     return (MapCursor){m, pawV_hash(key) & (m->capacity - 1)};
 }
 
-static inline MapCursor h_cursor_lookup(Map *m, Value key)
+static inline paw_Bool h_cursor_lookup(Map *m, Value key, MapCursor *pmc)
 {
-    MapCursor mc = h_cursor_init(m, key);
-    while (h_get_state(&mc) != MAP_ITEM_VACANT) {
-        if (h_get_state(&mc) == MAP_ITEM_OCCUPIED &&
-                h_cursor_key(&mc)->u == key.u) {
-            break;
+    *pmc = h_cursor_init(m, key);
+    for (size_t i = 0;
+            i < m->capacity && h_get_state(pmc) != MAP_ITEM_VACANT;
+            ++i, h_cursor_next(pmc)) {
+        if (h_get_state(pmc) == MAP_ITEM_OCCUPIED
+                && h_cursor_key(pmc)->u == key.u) {
+            return PAW_TRUE;
         }
-        h_cursor_next(&mc);
     }
-    return mc;
+    return PAW_FALSE;
 }
 
 Map *pawH_new(paw_Env *P);
 void pawH_free(paw_Env *P, Map *m);
 void pawH_extend(paw_Env *P, Map *dst, Map *src);
+void pawH_reserve(paw_Env *P, Map *dst, size_t n);
 Value *pawH_create(paw_Env *P, Map *m, Value key);
 
 static inline size_t pawH_length(const Map *m)
@@ -82,27 +84,38 @@ static inline size_t pawH_length(const Map *m)
 
 static inline Value *pawH_get(Map *m, Value key)
 {
+    MapCursor mc;
     if (m->length == 0) return NULL;
-    MapCursor mc = h_cursor_lookup(m, key);
-    if (h_get_state(&mc) == MAP_ITEM_OCCUPIED) {
+    if (h_cursor_lookup(m, key, &mc)) {
         return h_cursor_value(&mc);
     }
     return NULL;
 }
 
-static inline void pawH_erase(Map *m, Value key)
+static inline void pawH_erase_at(Map *m, size_t index)
 {
     if (m->length == 0) return;
-    MapCursor mc = h_cursor_lookup(m, key);
-    if (h_get_state(&mc) == MAP_ITEM_OCCUPIED) {
+    MapCursor mc = {m, index};
+    paw_assert(h_get_state(&mc) == MAP_ITEM_OCCUPIED);
+    h_set_state(&mc, MAP_ITEM_ERASED);
+    --m->length;
+}
+
+static inline void pawH_erase(Map *m, Value key)
+{
+    MapCursor mc;
+    if (m->length == 0) return;
+    if (h_cursor_lookup(m, key, &mc)) {
         h_set_state(&mc, MAP_ITEM_ERASED);
         --m->length;
     }
 }
 
-static inline void pawH_insert(paw_Env *P, Map *m, Value key, Value value)
+static inline Value *pawH_insert(paw_Env *P, Map *m, Value key, Value value)
 {
-    *pawH_create(P, m, key) = value;
+    Value *pvalue = pawH_create(P, m, key);
+    *pvalue = value;
+    return pvalue;
 }
 
 static inline paw_Bool pawH_contains(Map *m, Value key)

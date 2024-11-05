@@ -52,7 +52,7 @@ struct Compiler;
         X(IfStmt,     if_) \
         X(ForStmt,    for_) \
         X(WhileStmt,  while_) \
-        X(LabelStmt,  label) \
+        X(JumpStmt,   jump) \
         X(ReturnStmt, result) \
         X(MatchArm,   arm) \
         X(MatchStmt,  match)
@@ -491,9 +491,9 @@ struct AstWhileStmt {
     struct AstBlock *block;
 };
 
-struct AstLabelStmt {
+struct AstJumpStmt {
     AST_STMT_HEADER;
-    enum LabelKind label;
+    enum JumpKind jump_kind;
 };
 
 struct AstForStmt {

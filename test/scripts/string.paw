@@ -116,3 +116,16 @@ pub fn test_split_and_join() {
     assert(('').join(a) == 'abcde');
 }
 
+pub fn test_string_concat() {
+    let s = '';
+    for a = 0, 1 {
+        s = s + 'a';
+        for b = 0, 2 {
+            s = 'b' + s;
+            for c = 0, 3 {
+                s = 'c' + s + 'd';
+            };
+        };
+    };
+    assert(s == 'cccbcccbadddddd');
+}

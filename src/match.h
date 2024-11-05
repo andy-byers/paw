@@ -53,16 +53,16 @@ struct Constructor {
         Value value;
 
         struct {
-            struct HirTypeList *elems;
+            struct IrTypeList *elems;
         } tuple;
 
         struct {
-            struct HirType *type;
+            struct IrType *type;
             int index;
         } variant;
 
         struct {
-            struct HirType *type;
+            struct IrType *type;
         } struct_;
     };
 };
@@ -73,7 +73,7 @@ struct Binding {
 };
 
 struct MatchVar {
-    struct HirType *type;
+    struct IrType *type;
     int index;
     int id;
 };
@@ -93,6 +93,6 @@ DEFINE_LIST(struct Compiler, binding_list_, BindingList, struct Binding)
 DEFINE_LIST(struct Compiler, variable_list_, VariableList, struct MatchVar)
 DEFINE_LIST(struct Compiler, case_list_, CaseList, struct MatchCase)
 
-void pawP_print_decision(struct Compiler *C, struct Decision *dec);
+const char *pawP_print_decision(struct Compiler *C, struct Decision *dec);
 
 #endif // PAW_MATCH_H

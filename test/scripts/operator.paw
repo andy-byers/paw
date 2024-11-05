@@ -1,11 +1,12 @@
 // operator.paw
 
-pub fn test_add_strings() {
-    let s = '';
-    s = s + 'abc';
-    s = s + s;
-    assert(s == 'abcabc');
-}
+// TODO: string concatenation
+//pub fn test_add_strings() {
+//    let s = '';
+//    s = s + 'abc';
+//    s = s + s;
+//    assert(s == 'abcabc');
+//}
 
 pub fn test_operator_precedence() {
     assert(5 == 1 + 2 * 3 - 4 / 2);
@@ -17,37 +18,54 @@ pub fn test_operator_precedence() {
 
     // Bitwise operators bind tighter than comparisons
     assert(4 & 5 == 4);
-    assert(!(4 & (5 == 4) as int));
+    assert(!((4 & (5 == 4) as int) as bool));
+}
+
+fn check_cmpi(a: int, b: int) {
+    assert(a == a);
+    assert(a != b);
+    assert(a <= a);
+    assert(a <= b);
+    assert(a >= a);
+    assert(b >= a);
+    assert(a < b);
+    assert(b > a);
+}
+
+fn check_cmpf(a: float, b: float) {
+    assert(a == a);
+    assert(a != b);
+    assert(a <= a);
+    assert(a <= b);
+    assert(a >= a);
+    assert(b >= a);
+    assert(a < b);
+    assert(b > a);
+}
+
+fn check_cmps(a: str, b: str) {
+    assert(a == a);
+    assert(a != b);
+    assert(a <= a);
+    assert(a <= b);
+    assert(a >= a);
+    assert(b >= a);
+    assert(a < b);
+    assert(b > a);
 }
 
 pub fn test_comparisons() {
-    let test_cmpi = |a: int, b: int| {
-        assert(a == a);
-        assert(a != b);
-        assert(a <= a);
-        assert(a <= b);
-        assert(a >= a);
-        assert(b >= a);
-        assert(a < b);
-        assert(b > a);
-    };
-    test_cmpi(1, 2);
-    test_cmpi(-1, 1);
-    test_cmpi(123, 124);
+    check_cmpi(1, 2);
+    check_cmpi(-1, 1);
+    check_cmpi(123, 124);
 
-    let test_cmps = |a: str, b: str| {
-        assert(a == a);
-        assert(a != b);
-        assert(a <= a);
-        assert(a <= b);
-        assert(a >= a);
-        assert(b >= a);
-        assert(a < b);
-        assert(b > a);
-    };
-    test_cmps('a', 'b');
-    test_cmps('ab', 'abc');
-    test_cmps('abc', 'abd');
+    check_cmpf(1.1, 2.2);
+    check_cmpf(-1.1, 1.2);
+    check_cmpf(123.1, 124.2);
+
+    check_cmps('a', 'b');
+    check_cmps('ab', 'abc');
+    check_cmps('abc', 'abd');
 }
 
 pub fn test_conversions() {

@@ -502,6 +502,12 @@ try_again:
                 token = T(TK_GREATER_EQ);
             }
             break;
+        case '+':
+            next(x);
+            if (test_next(x, '+')) {
+                token = T(TK_PLUS2);
+            }
+            break;
         case '.':
             next(x);
             if (test_next(x, '.')) {

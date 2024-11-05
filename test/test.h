@@ -38,6 +38,8 @@
     X(unit_struct) \
     X(unit_variant) \
     X(infer_assoc_items) \
+    X(capture_upvalue) \
+    X(close_loop_variable) \
     X(enum_impl)
 
 #define check(x) \

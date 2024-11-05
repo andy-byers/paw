@@ -192,7 +192,7 @@ static ValueId find_main(paw_Env *P)
     paw_mangle_add_name(P);
 
     struct paw_Item item;
-    const int status = paw_lookup_item(P, &item);
+    const int status = paw_lookup_item(P, -1, &item);
     if (status != PAW_OK) error(PAW_ERUNTIME, "unable to find entrypoint ('main' function)\n");
     if (item.global_id < 0) error(PAW_ERUNTIME, "'main' is not a function\n"); // TODO: check signature, exclude constants
     return item.global_id;

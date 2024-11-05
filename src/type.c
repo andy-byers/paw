@@ -52,19 +52,34 @@ static struct Type *add_type(paw_Env *P, struct Type *type)
 #define NEW_TYPE(P, n) \
     pawM_new_flex(P, struct Type, n, sizeof(paw_Type))
 
-struct Type *pawY_new_adt(paw_Env *P, int ntypes)
+struct Type *pawY_new_adt(paw_Env *P,  DefId did, int ntypes)
 {
     struct Type *type = NEW_TYPE(P, ntypes);
-    type->hdr.kind = TYPE_ADT;
-    type->nsubtypes = ntypes;
+    *type = (struct Type){
+        .adt.kind = TYPE_ADT,
+        .adt.did = did,
+        .nsubtypes = ntypes,
+    };
     return add_type(P, type);
 }
 
-struct Type *pawY_new_signature(paw_Env *P, int nparams)
+struct Type *pawY_new_signature(paw_Env *P, DefId did, int nparams)
 {
     struct Type *type = NEW_TYPE(P, nparams);
-    type->hdr.kind = TYPE_SIGNATURE;
-    type->nsubtypes = nparams;
+    *type = (struct Type){
+        .hdr.kind = TYPE_SIGNATURE,
+        .nsubtypes = nparams,
+    };
+    return add_type(P, type);
+}
+
+struct Type *pawY_new_func_ptr(paw_Env *P, int nparams)
+{
+    struct Type *type = NEW_TYPE(P, nparams);
+    *type = (struct Type){
+        .hdr.kind = TYPE_FUNC_PTR,
+        .nsubtypes = nparams,
+    };
     return add_type(P, type);
 }
 
@@ -80,8 +95,11 @@ static struct Def *new_def(paw_Env *P, enum DefKind kind)
 {
     pawM_grow(P, P->defs.data, P->defs.count, P->defs.alloc);
     struct Def *def = pawM_new(P, struct Def);
+    *def = (struct Def){
+        .hdr.did = P->defs.count,
+        .hdr.kind = kind,
+    };
     P->defs.data[P->defs.count++] = def;
-    def->hdr.kind = kind;
     return def;
 }
 

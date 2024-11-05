@@ -58,7 +58,7 @@ DEFINE_LOWER_LIST(pat, Pat, Pat)
 
 static struct HirType *new_type(struct LowerAst *L, enum HirTypeKind kind, int line)
 {
-    return pawHir_attach_type(L->C, NO_DECL, kind, line);
+    return pawHir_new_type(L->C, line, kind);
 }
 
 static struct HirBlock *new_block(struct LowerAst *L, int line)
@@ -77,7 +77,8 @@ static struct HirStmt *LowerBlock(struct LowerAst *L, struct AstBlock *block)
 
 #define LOWER_BLOCK(L, block) HirGetBlock(LowerBlock(L, block))
 
-static struct HirDecl *lower_self_decl(struct LowerAst *L, struct AstDecl *decl)
+// TODO
+static struct HirDecl *lower_self_param(struct LowerAst *L, struct AstDecl *decl)
 {
     const String *self = CSTR(L, CSTR_SELF);
     struct AstFieldDecl *d = AstGetFieldDecl(decl);
@@ -88,9 +89,6 @@ static struct HirDecl *lower_self_decl(struct LowerAst *L, struct AstDecl *decl)
     r->is_pub = d->is_pub;
     r->name =  d->name;
     r->tag = lower_type(L, d->tag);
-    if (pawS_eq(d->name, self)) {
-
-    }
     return result;
 }
 
@@ -100,7 +98,7 @@ static struct HirDeclList *lower_params(struct LowerAst *L, struct AstFuncDecl *
     for (int i = 0; i < params->count; ++i) {
         struct AstDecl *ast_param = K_LIST_GET(params, i);
         struct HirDecl *hir_param = i != 0
-            ? lower_self_decl(L, ast_param)
+            ? lower_self_param(L, ast_param)
             : lower_decl(L, ast_param);
         pawHir_decl_list_push(L->C, out, hir_param);
     }
@@ -115,7 +113,6 @@ static void register_func(struct LowerAst *L, struct AstFuncDecl *d, struct HirF
 
     if (d->generics != NULL) {
         r->generics = lower_decl_list(L, d->generics);
-        r->monos = pawHir_decl_list_new(L->C);
     }
     r->params = lower_params(L, d, d->params);
     r->result = lower_type(L, d->result);
@@ -156,7 +153,6 @@ static struct HirDeclList *lower_fields(struct LowerAst *L, struct AstDeclList *
 static void register_adt(struct LowerAst *L, struct AstAdtDecl *d, struct HirAdtDecl *r)
 {
     if (d->generics != NULL) {
-        r->monos = pawHir_type_list_new(L->C);
         r->generics = lower_decl_list(L, d->generics);
     }
 }
@@ -189,7 +185,7 @@ static struct HirDeclList *lower_methods(struct LowerAst *L, struct AstDeclList 
     }
     return dst;
 }
-
+#include"stdio.h"
 static struct HirPath *lower_path(struct LowerAst *L, struct AstPath *path)
 {
     paw_assert(path->count > 0);
@@ -370,8 +366,7 @@ static struct HirDecl *LowerAdtDecl(struct LowerAst *L, struct AstAdtDecl *d)
     r->name = d->name;
 
     register_adt(L, d, r);
-
-    if (d->fields != NULL) lower_adt_fields(L, d, r);
+    lower_adt_fields(L, d, r);
     return result;
 }
 
@@ -383,7 +378,6 @@ static struct HirDecl *LowerImplDecl(struct LowerAst *L, struct AstImplDecl *d)
 
     if (d->generics != NULL) {
         r->generics = lower_decl_list(L, d->generics);
-        r->monos = pawHir_decl_list_new(L->C);
     }
     r->self = lower_path(L, d->self);
     r->methods = lower_methods(L, d->methods);
@@ -456,8 +450,7 @@ static void lower_map_lit(struct LowerAst *L, struct AstContainerLit *e, struct 
     for (int i = 0; i < e->items->count; ++i) {
         struct AstExpr *src = e->items->data[i];
         struct HirExpr *dst = lower_expr(L, src);
-        struct HirFieldExpr *field = HirGetFieldExpr(dst);
-        paw_assert(field->fid == -1);
+        paw_assert(HirGetFieldExpr(dst)->fid == -1);
         pawHir_expr_list_push(L->C, r->items, dst);
     }
 }
@@ -561,11 +554,11 @@ static struct HirStmt *LowerWhileStmt(struct LowerAst *L, struct AstWhileStmt *s
     return result;
 }
 
-static void visit_forbody(struct LowerAst *L, String *iname, struct AstBlock *b, struct HirForStmt *r)
+static void visit_forbody(struct LowerAst *L, String *control_name, struct AstBlock *b, struct HirForStmt *r)
 {
     r->control = new_decl(L, b->line, kHirVarDecl);
     struct HirVarDecl *control = HirGetVarDecl(r->control);
-    control->name = iname;
+    control->name = control_name;
 
     r->block = new_block(L, b->line);
     r->block->stmts = lower_stmt_list(L, b->stmts);
@@ -630,11 +623,11 @@ static struct HirExpr *LowerSelector(struct LowerAst *L, struct AstSelector *e)
     return result;
 }
 
-static struct HirStmt *LowerLabelStmt(struct LowerAst *L, struct AstLabelStmt *s)
+static struct HirStmt *LowerJumpStmt(struct LowerAst *L, struct AstJumpStmt *s)
 {
-    struct HirStmt *result = pawHir_new_stmt(L->C, s->line, kHirLabelStmt);
-    struct HirLabelStmt *r = HirGetLabelStmt(result);
-    r->label = s->label;
+    struct HirStmt *result = pawHir_new_stmt(L->C, s->line, kHirJumpStmt);
+    struct HirJumpStmt *r = HirGetJumpStmt(result);
+    r->jump_kind = s->jump_kind;
     return result;
 }
 
@@ -872,6 +865,31 @@ static struct Hir *lower_ast(struct LowerAst *L, struct Ast *ast)
     return hir;
 }
 
+static struct HirDecl *find_builtin(struct HirDeclList *items, const String *name)
+{
+     for (int i = 0; i < items->count; ++i) {
+         struct HirDecl *item = K_LIST_GET(items, i);
+        if (pawS_eq(name, item->hdr.name)) return item;
+     }
+     PAW_UNREACHABLE();
+}
+
+static void set_builtin_adts(struct LowerAst *L, struct HirDeclList *items)
+{
+    struct Builtin *builtins = L->C->builtins;
+
+    // builtin primitives always come first, and there are no intervening decls.
+    builtins[BUILTIN_UNIT].did = K_LIST_GET(items, BUILTIN_UNIT)->hdr.did;
+    builtins[BUILTIN_BOOL].did = K_LIST_GET(items, BUILTIN_BOOL)->hdr.did;
+    builtins[BUILTIN_INT].did = K_LIST_GET(items, BUILTIN_INT)->hdr.did;
+    builtins[BUILTIN_FLOAT].did = K_LIST_GET(items, BUILTIN_FLOAT)->hdr.did;
+    builtins[BUILTIN_STR].did = K_LIST_GET(items, BUILTIN_STR)->hdr.did;
+
+    // builtin objects may declare generics or fields, so they need to be searched for
+    builtins[BUILTIN_LIST].did = find_builtin(items, CSTR(L, CSTR_LIST))->hdr.did;
+    builtins[BUILTIN_MAP].did = find_builtin(items, CSTR(L, CSTR_MAP))->hdr.did;
+}
+
 void pawP_lower_ast(struct Compiler *C)
 {
     struct LowerAst L = {
@@ -880,8 +898,8 @@ void pawP_lower_ast(struct Compiler *C)
         .C = C,
     };
 
-    // prelude must be lowered first, so its first DeclId is equal to 0
-    lower_ast(&L, C->prelude);
+    struct Hir *prelude = lower_ast(&L, C->prelude);
+    set_builtin_adts(&L, prelude->items);
 
     paw_Int itr = PAW_ITER_INIT;
     while (pawH_iter(C->imports, &itr)) {

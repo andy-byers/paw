@@ -5,6 +5,7 @@
 #include "auxlib.h"
 #include "compile.h"
 #include "hir.h"
+#include "ir_type.h"
 #include "match.h"
 
 struct Printer {
@@ -31,7 +32,7 @@ static void print_bindings(struct Printer *P, struct BindingList *bindings)
     for (int i = 0; i < bindings->count; ++i) {
         print_indentation(P);
         struct Binding *b = K_LIST_GET(bindings, i);
-        pawHir_print_type(P->C, b->var->type);
+        pawIr_print_type(P->C, b->var->type);
         PRINT_FORMAT(P, "Binding(#%d, %s: %s),\n", b->var->id,
                 b->name->text, paw_string(P->P, -1));
         paw_pop(P->P, 1);
@@ -58,7 +59,7 @@ static void print_decision(struct Printer *P, struct Decision *dec);
 
 static void print_var(struct Printer *P, struct MatchVar *var)
 {
-    pawHir_print_type(P->C, var->type);
+    pawIr_print_type(P->C, var->type);
     PRINT_FORMAT(P, "Var(#%d, %s),\n", var->id, paw_string(P->P, -1));
     paw_pop(P->P, 1);
 }
@@ -162,7 +163,7 @@ static void print_decision(struct Printer *P, struct Decision *dec)
     }
 }
 
-void pawP_print_decision(struct Compiler *C, struct Decision *dec)
+const char *pawP_print_decision(struct Compiler *C, struct Decision *dec)
 {
     Buffer buf;
     paw_Env *P = ENV(C);
@@ -177,4 +178,5 @@ void pawP_print_decision(struct Compiler *C, struct Decision *dec)
     print_decision(&printer, dec);
 
     pawL_push_result(P, &buf);
+    return paw_string(P, -1);
 }

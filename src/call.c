@@ -208,11 +208,11 @@ CallFrame *pawC_precall(paw_Env *P, StackPtr base, Object *callable, int argc)
 
     CallFrame *cf = next_call_frame(P, P->top.p);
 
+    cf->fn = fn;
     cf->flags = 0;
     cf->pc = p->source;
     cf->base.p = base;
     cf->top.p = base + frame_size;
-    cf->fn = fn;
 
     P->modname = p->modname;
     check_fixed_args(P, p, argc);

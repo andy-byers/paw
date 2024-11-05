@@ -10,6 +10,7 @@
 
 #include "compile.h"
 #include "hir.h"
+#include "ir_type.h"
 
 struct BindingState {
     struct BindingState *outer;
@@ -48,8 +49,8 @@ static struct HirExpr *lower_binding_pat(struct HirVisitor *V, struct HirBinding
     struct LowerMatches *L = V->ud;
     struct HirDecl *result = pawHir_new_decl(V->C, p->line, kHirVarDecl);
     struct HirVarDecl *r = HirGetVarDecl(result);
-    pawHir_add_decl(V->C, result);
-    r->type = HIR_TYPEOF(expr);
+    pawIr_set_type(L->C, r->hid, GET_NODE_TYPE(L->C, expr));
+    pawHir_add_decl(L->C, result);
     r->name = p->name;
     r->init = expr;
 
@@ -62,21 +63,20 @@ static struct HirExpr *new_path_expr(struct Compiler *C, struct HirDecl *decl, i
     struct HirExpr *result = pawHir_new_expr(C, line, kHirPathExpr);
     struct HirPathExpr *r = HirGetPathExpr(result);
     r->path = pawHir_path_new(C);
-    r->type = HIR_TYPEOF(decl);
+    pawIr_set_type(C, r->hid, GET_NODE_TYPE(C, decl));
 
     struct HirSegment *seg = pawHir_path_add(C, r->path, decl->hdr.name, NULL);
-    seg->modno = 1 /* TODO: modno should be part of DeclId */;
     seg->did = decl->hdr.did;
     return result;
 }
 
-#define GET_TYPE(C, t) (pawHir_get_decl(C, t)->hdr.type)
+#define GET_TYPE(C, t) GET_NODE_TYPE(C, pawHir_get_decl(C, (DeclId){.value = t}))
 
 static struct HirExpr *compose_eq(struct Compiler *C, struct HirExpr *a, struct HirExpr *b)
 {
     struct HirExpr *result = pawHir_new_expr(C, b->hdr.line, kHirBinOpExpr);
     struct HirBinOpExpr *r = HirGetBinOpExpr(result);
-    r->type = GET_TYPE(C, PAW_TBOOL);
+    pawIr_set_type(C, r->hid, GET_TYPE(C, PAW_TBOOL));
     r->op = BINARY_EQ;
     r->lhs = a;
     r->rhs = b;
@@ -87,7 +87,7 @@ static struct HirExpr *compose_logical(struct Compiler *C, struct HirExpr *a, st
 {
     struct HirExpr *result = pawHir_new_expr(C, b->hdr.line, kHirLogicalExpr);
     struct HirLogicalExpr *r = HirGetLogicalExpr(result);
-    r->type = GET_TYPE(C, PAW_TBOOL);
+    pawIr_set_type(C, r->hid, GET_TYPE(C, PAW_TBOOL));
     r->is_and = is_and;
     r->lhs = a;
     r->rhs = b;
@@ -128,19 +128,19 @@ static struct HirExpr *new_tuple_selector(struct Compiler *C, struct HirExpr *ta
     struct HirExpr *result = new_index_selector(C, target, index);
     struct HirSelector *r = HirGetSelector(result);
 
-    struct HirTupleType *tuple = HirGetTupleType(HIR_TYPEOF(target));
-    r->type = K_LIST_GET(tuple->elems, index);
+    struct IrTuple *tuple = IrGetTuple(GET_NODE_TYPE(C, target));
+    pawIr_set_type(C, r->hid, K_LIST_GET(tuple->elems, index));
     return result;
 }
 
 // NOTE: variant fields cannot be 'selected' from Paw code, this is just for the implementation of 'match'
-static struct HirExpr *new_variant_selector(struct Compiler *C, struct HirExpr *target, struct HirType *base, int index)
+static struct HirExpr *new_variant_selector(struct Compiler *C, struct HirExpr *target, struct IrType *base, int index)
 {
     struct HirExpr *result = new_index_selector(C, target, index);
     struct HirSelector *r = HirGetSelector(result);
 
-    struct HirFuncPtr *fptr = HIR_FPTR(base);
-    r->type = K_LIST_GET(fptr->params, index);
+    struct IrFuncPtr *fptr = IR_FPTR(base);
+    pawIr_set_type(C, r->hid, K_LIST_GET(fptr->params, index));
     return result;
 }
 
@@ -148,7 +148,7 @@ static struct HirExpr *lower_field_pat(struct HirVisitor *V, struct HirFieldPat 
 {
     struct Compiler *C = V->C;
     struct HirExpr *getter = new_field_selector(C, target, p->name);
-    getter->hdr.type = p->type;
+    SET_NODE_TYPE(C, getter, pawIr_get_type(C, p->hid));
     return lower_pattern(V, p->pat, getter);
 }
 
@@ -180,7 +180,7 @@ static struct HirExpr *lower_variant_pat(struct HirVisitor *V, struct HirVariant
     struct HirSwitchDiscr *r = HirGetSwitchDiscr(result);
     r->target = target;
 
-    struct HirType *type = p->type;
+    struct IrType *type = pawIr_get_type(C, p->hid);
     fill_in_discr(C, r, p->path);
 
     if (p->fields == NULL) return result;
@@ -322,9 +322,9 @@ static void lower_match_stmt(struct HirVisitor *V, struct HirExpr *target, struc
     // more than once
     struct HirStmt *decl_stmt = pawHir_new_stmt(C, result->line, kHirDeclStmt);
     struct HirDecl *var_decl = pawHir_new_decl(C, result->line, kHirVarDecl);
+    SET_NODE_TYPE(C, var_decl, GET_NODE_TYPE(C, target));
     HirGetDeclStmt(decl_stmt)->decl = var_decl;
     HirGetVarDecl(var_decl)->name = SCAN_STRING(C, "(target)");
-    HirGetVarDecl(var_decl)->type = HIR_TYPEOF(target);
     HirGetVarDecl(var_decl)->init = target;
     pawHir_add_decl(C, var_decl);
 
@@ -345,12 +345,12 @@ static paw_Bool visit_match_stmt(struct HirVisitor *V, struct HirMatchStmt *s)
 {
     pawP_check_exhaustiveness(V->C, s);
 
-    struct HirMatchStmt copy = *s;
-    struct HirBlock *result = CAST(struct HirBlock *, s);
-    result->stmts = pawHir_stmt_list_new(V->C);
-
-    s->kind = kHirBlock;
-    lower_match_stmt(V, copy.target, copy.arms, result);
+//    struct HirMatchStmt copy = *s;
+//    struct HirBlock *result = CAST(struct HirBlock *, s);
+//    result->stmts = pawHir_stmt_list_new(V->C);
+//
+//    s->kind = kHirBlock;
+//    lower_match_stmt(V, copy.target, copy.arms, result);
     return PAW_FALSE;
 }
 

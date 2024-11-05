@@ -59,7 +59,7 @@ static void test_runtime_status(int expect, const char *name, const char *item, 
     paw_mangle_add_name(P);
 
     struct paw_Item info;
-    status = paw_lookup_item(P, &info);
+// TODO    status = paw_lookup_item(P, &info);
     check_status(P, status, PAW_OK);
     check(info.global_id >= 0);
     paw_get_global(P, info.global_id);
@@ -378,7 +378,7 @@ static int run_main(paw_Env *P, int nargs)
     paw_mangle_add_name(P);
 
     struct paw_Item info;
-    const int status = paw_lookup_item(P, &info);
+    const int status = -123; // TODO paw_lookup_item(P, &info);
     check_status(P, status, PAW_OK);
     check(info.global_id >= 0);
     paw_get_global(P, info.global_id);

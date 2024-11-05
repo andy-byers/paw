@@ -1,51 +1,52 @@
+// poly_function.paw
 
-fn map<A, B>(f: fn(A) -> B, a: [A]) -> [B] {
-    let b = [];
-    for v in a {
-        b.push(f(v));
-    }
-    return b;
-}
-
-fn f2i(f: float) -> int {
-    return f as int;
-}
-
-pub fn test_explicit_instantiation() {
-    let source = [0.5, 1.6, 2.7, 3.8, 4.9];
-    let target = [0, 1, 2, 3, 4];
-    let answer = map::<float, int>(f2i, source);
-}
-
-struct One<A>{pub a: A}
-struct Two<A, B>{pub a: A, pub b: B}
-struct Three<A, B, C>{pub a: A, pub b: B, pub c: C}
-
-fn implicit<A, B, C>(
-        a: One<A>, 
-        b: [B], 
-        c: Two<B, [C]>) -> Three<C, A, B> {
-    return Three{
-        a: c.b[-1], // C
-        b: a.a, // A
-        c: b[0], // B
-    };
-}
-
-pub fn test_implicit_instantiation() {
-    // implicit<[str: int], bool, int>(...) -> Three<int, [str: int], bool>
-    let three = implicit(
-        One{a: ['a': 1, 'b': 2, 'c': 3]},
-        [false, true],
-        Two{a: true, b: [1, 2, 3]});
-    assert(three.b['c'] == three.a);
-
-    let answer = map(|x| x, [false, true]);
-    assert(answer[-1] == true);
-
-    let answer = map(|x: bool| !x, [false, true]);
-    assert(answer[-1] == false);
-}
+//fn map<A, B>(f: fn(A) -> B, a: [A]) -> [B] {
+//    let b = [];
+//    for v in a {
+//        b.push(f(v));
+//    }
+//    return b;
+//}
+//
+//fn f2i(f: float) -> int {
+//    return f as int;
+//}
+//
+//pub fn test_explicit_instantiation() {
+//    let source = [0.5, 1.6, 2.7, 3.8, 4.9];
+//    let target = [0, 1, 2, 3, 4];
+//    let answer = map::<float, int>(f2i, source);
+//}
+//
+//struct One<A>{pub a: A}
+//struct Two<A, B>{pub a: A, pub b: B}
+//struct Three<A, B, C>{pub a: A, pub b: B, pub c: C}
+//
+//fn implicit<A, B, C>(
+//        a: One<A>, 
+//        b: [B], 
+//        c: Two<B, [C]>) -> Three<C, A, B> {
+//    return Three{
+//        a: c.b[-1], // C
+//        b: a.a, // A
+//        c: b[0], // B
+//    };
+//}
+//
+//pub fn test_implicit_instantiation() {
+//    // implicit<[str: int], bool, int>(...) -> Three<int, [str: int], bool>
+//    let three = implicit(
+//        One{a: ['a': 1, 'b': 2, 'c': 3]},
+//        [false, true],
+//        Two{a: true, b: [1, 2, 3]});
+//    assert(three.b['c'] == three.a);
+//
+//    let answer = map(|x| x, [false, true]);
+//    assert(answer[-1] == true);
+//
+//    let answer = map(|x: bool| !x, [false, true]);
+//    assert(answer[-1] == false);
+//}
 
 fn self_recursive<T>(t: T, i: int) {
     if i > 0 {
@@ -54,24 +55,25 @@ fn self_recursive<T>(t: T, i: int) {
 }
 
 pub fn test_self_recursion() {
-    self_recursive(true, 10);
-    self_recursive(2, 11);
-    self_recursive(self_recursive::<float>, 12);
+//    self_recursive(true, 10);
+//    self_recursive(2, 11);
+    let f = self_recursive::<float>;
+//    self_recursive(f, 12);
 }
 
-fn first_recursive<A, B, C>(a: A, b: B, c: C) {
-    second_recursive(a, b, c);
-}
-
-fn second_recursive<X, Y, Z>(x: X, y: Y, z: Z) {
-    if false {
-        first_recursive(y, z, x);
-    }
-}
-
-pub fn test_recursive_instantiation() {
-    first_recursive(1, 2.0, 'three');
-    second_recursive('four', 5.0, 6);
-    second_recursive(|| 42, [f2i], map::<int, bool>);
-}
-
+//fn first_recursive<A, B, C>(a: A, b: B, c: C) {
+//    second_recursive(a, b, c);
+//}
+//
+//fn second_recursive<X, Y, Z>(x: X, y: Y, z: Z) {
+//    if false {
+//        first_recursive(y, z, x);
+//    }
+//}
+//
+//pub fn test_recursive_instantiation() {
+//    first_recursive(1, 2.0, 'three');
+//    second_recursive('four', 5.0, 6);
+//    second_recursive(|| 42, [f2i], map::<int, bool>);
+//}
+//

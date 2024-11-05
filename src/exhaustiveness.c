@@ -7,6 +7,7 @@
 
 #include "compile.h"
 #include "hir.h"
+#include "ir_type.h"
 #include "map.h"
 #include "match.h"
 
@@ -116,7 +117,7 @@ static struct Binding *new_binding(struct Usefulness *U, String *name, struct Ma
     return binding;
 }
 
-static struct MatchVar *new_variable(struct Usefulness *U, struct HirType *type)
+static struct MatchVar *new_variable(struct Usefulness *U, struct IrType *type)
 {
     struct MatchVar *var = pawK_pool_alloc(ENV(U), U->pool, sizeof(struct MatchVar));
     *var = (struct MatchVar){
@@ -179,7 +180,7 @@ static struct HirPatList *flatten_or(struct Usefulness *U, struct HirPat *pat)
     return pats;
 }
 
-static struct VariableList *variables_for_types(struct Usefulness *U, struct HirTypeList *types)
+static struct VariableList *variables_for_types(struct Usefulness *U, struct IrTypeList *types)
 {
     struct VariableList *result = variable_list_new(U->C);
     if (types == NULL) return result;
@@ -187,7 +188,6 @@ static struct VariableList *variables_for_types(struct Usefulness *U, struct Hir
     for (int i = 0; i < types->count; ++i) {
         struct MatchVar *var = new_variable(U, K_LIST_GET(types, i));
         variable_list_push(U->C, result, var);
-        var->index = i;
     }
     return result;
 }
@@ -305,18 +305,18 @@ static struct ColumnList *unpack_tuple_fields(struct Usefulness *U, struct HirPa
     struct ColumnList *cols = column_list_new(U);
     for (int i = 0; i < pats->count; ++i) {
         struct HirPat *pat = K_LIST_GET(pats, i);
-        struct MatchVar *var = new_variable(U, HIR_TYPEOF(pat));
+        struct MatchVar *var = new_variable(U, GET_NODE_TYPE(U->C, pat));
         K_LIST_APPEND(U->C, cols, new_column(U, var, pat));
     }
     return cols;
 }
 
-static struct ColumnList *unpack_variant_fields(struct Usefulness *U, struct HirPatList *pats, struct HirType *type)
+static struct ColumnList *unpack_variant_fields(struct Usefulness *U, struct HirPatList *pats, struct IrType *type)
 {
     struct ColumnList *cols = column_list_new(U);
     for (int i = 0; i < pats->count; ++i) {
         struct HirPat *pat = K_LIST_GET(pats, i);
-        struct MatchVar *var = new_variable(U, HIR_TYPEOF(pat));
+        struct MatchVar *var = new_variable(U, GET_NODE_TYPE(U->C, pat));
         K_LIST_APPEND(U->C, cols, new_column(U, var, pat));
     }
     return cols;
@@ -429,7 +429,7 @@ static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct R
             switch (e->basic.t) {
                 case PAW_TUNIT:
                     cons.kind = CONS_TUPLE;
-                    cons.tuple.elems = pawHir_type_list_new(U->C);
+                    cons.tuple.elems = pawIr_type_list_new(U->C);
                     break;
                 case PAW_TBOOL:
                     cons.kind = CONS_BOOL;
@@ -478,13 +478,13 @@ static struct Column *find_branch_col(struct Usefulness *U, struct ColumnList *c
     return K_LIST_GET(cols, 0);
 }
 
-static struct HirTypeList *collect_field_types(struct Usefulness *U, struct HirDecl *decl, struct HirType *type)
+static struct IrTypeList *collect_field_types(struct Usefulness *U, struct HirDecl *decl, struct IrType *type)
 {
     struct HirAdtDecl *d = HirGetAdtDecl(decl);
-    struct HirTypeList *result = pawHir_type_list_new(U->C);
+    struct IrTypeList *result = pawIr_type_list_new(U->C);
     for (int i = 0; i < d->fields->count; ++i) {
         struct HirDecl *field = K_LIST_GET(d->fields, i);
-        struct HirType *next = pawP_instantiate_field(U->C, type, field);
+        struct IrType *next = pawP_instantiate_field(U->C, type, field);
         K_LIST_APPEND(U->C, result, next);
     }
     return result;
@@ -492,9 +492,9 @@ static struct HirTypeList *collect_field_types(struct Usefulness *U, struct HirD
 
 struct RawCaseList *cases_for_struct(struct Usefulness *U, struct MatchVar *var)
 {
-    struct HirDecl *decl = pawHir_get_decl(U->C, HIR_TYPE_DID(var->type));
+    struct HirDecl *decl = pawHir_get_decl(U->C, IR_TYPE_DID(var->type));
 
-    struct HirTypeList *fields = collect_field_types(U, decl, var->type);
+    struct IrTypeList *fields = collect_field_types(U, decl, var->type);
     struct VariableList *subvars = variables_for_types(U, fields);
     struct Constructor cons = {
         .kind = CONS_STRUCT,
@@ -509,7 +509,7 @@ struct RawCaseList *cases_for_struct(struct Usefulness *U, struct MatchVar *var)
 
 struct RawCaseList *cases_for_tuple(struct Usefulness *U, struct MatchVar *var)
 {
-    struct HirTypeList *elems = HirGetTupleType(var->type)->elems;
+    struct IrTypeList *elems = IrGetTuple(var->type)->elems;
     struct VariableList *subvars = variables_for_types(U, elems);
     struct Constructor cons = {
         .kind = CONS_TUPLE,
@@ -524,15 +524,15 @@ struct RawCaseList *cases_for_tuple(struct Usefulness *U, struct MatchVar *var)
 
 struct RawCaseList *cases_for_variant(struct Usefulness *U, struct MatchVar *var)
 {
-    struct HirDecl *decl = pawHir_get_decl(U->C, HIR_TYPE_DID(var->type));
+    struct HirDecl *decl = pawHir_get_decl(U->C, IR_TYPE_DID(var->type));
     struct HirDeclList *fields = HirGetAdtDecl(decl)->fields;
     paw_assert(!HirGetAdtDecl(decl)->is_struct);
 
     struct RawCaseList *result = raw_case_list_new(U);
     for (int i = 0; i < fields->count; ++i) {
         struct HirDecl *field = K_LIST_GET(fields, i);
-        struct HirType *type = pawP_instantiate_field(U->C, var->type, field);
-        struct VariableList *subvars = variables_for_types(U, HIR_FPTR(type)->params);
+        struct IrType *type = pawP_instantiate_field(U->C, var->type, field);
+        struct VariableList *subvars = variables_for_types(U, IR_FPTR(type)->params);
         struct Constructor cons = {
             .kind = CONS_VARIANT,
             .variant.type = type,
@@ -554,13 +554,13 @@ enum BranchMode {
 
 static enum BranchMode branch_mode(struct Usefulness *U, struct MatchVar *var)
 {
-    if (!HirIsAdt(var->type)) {
-        paw_assert(HirIsTupleType(var->type));
+    if (!IrIsAdt(var->type)) {
+        paw_assert(IrIsTuple(var->type));
         return BRANCH_TUPLE;
     }
-    struct HirDecl *decl = pawHir_get_decl(U->C, HIR_TYPE_DID(var->type));
+    struct HirDecl *decl = pawHir_get_decl(U->C, IR_TYPE_DID(var->type));
     if (!HirGetAdtDecl(decl)->is_struct) return BRANCH_VARIANT;
-    if (HirGetAdtDecl(decl)->did <= PAW_TSTR) return BRANCH_LITERAL;
+    if (HirGetAdtDecl(decl)->did.value <= PAW_TSTR) return BRANCH_LITERAL;
     return BRANCH_STRUCT;
 }
 
@@ -603,7 +603,7 @@ static struct Decision *compile_rows(struct Usefulness *U, struct RowList *rows)
     }
 }
 
-void pawP_check_exhaustiveness(struct Compiler *C, struct HirMatchStmt *match)
+struct Decision *pawP_check_exhaustiveness(struct Compiler *C, struct HirMatchStmt *match)
 {
     paw_Env *P = ENV(C);
     struct Usefulness U = {
@@ -613,7 +613,7 @@ void pawP_check_exhaustiveness(struct Compiler *C, struct HirMatchStmt *match)
     };
 
     struct RowList *rows = row_list_new(&U);
-    struct MatchVar *var = new_variable(&U, HIR_TYPEOF(match->target));
+    struct MatchVar *var = new_variable(&U, GET_NODE_TYPE(C, match->target));
     for (int i = 0; i < match->arms->count; ++i) {
         struct HirMatchArm *arm = HirGetMatchArm(K_LIST_GET(match->arms, i));
         struct ColumnList *cols = column_list_new(&U);
@@ -621,6 +621,5 @@ void pawP_check_exhaustiveness(struct Compiler *C, struct HirMatchStmt *match)
         K_LIST_APPEND(C, rows, new_row(&U, cols, new_body(&U, arm->result)));
     }
 
-    struct Decision *tree = compile_rows(&U, rows);
-    pawH_insert(P, C->matches, I2V(match->hid), P2V(tree));
+    return compile_rows(&U, rows);
 }

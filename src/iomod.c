@@ -110,7 +110,7 @@ void l_import_io(paw_Env *P)
         "}\n";
 
     pawE_push_cstr(P, CSTR_KBUILTIN);
-    paw_map_getelem(P, PAW_REGISTRY_INDEX);
+    paw_map_get(P, PAW_REGISTRY_INDEX);
 
     pawL_add_extern_method(P, "io", "File", "open", io_open);
     pawL_add_extern_method(P, "io", "File", "seek", file_seek);
