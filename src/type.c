@@ -52,19 +52,34 @@ static struct Type *add_type(paw_Env *P, struct Type *type)
 #define NEW_TYPE(P, n) \
     pawM_new_flex(P, struct Type, n, sizeof(paw_Type))
 
-struct Type *pawY_new_adt(paw_Env *P, int ntypes)
+struct Type *pawY_new_adt(paw_Env *P,  DefId did, int ntypes)
 {
     struct Type *type = NEW_TYPE(P, ntypes);
-    type->hdr.kind = TYPE_ADT;
-    type->nsubtypes = ntypes;
+    *type = (struct Type){
+        .adt.kind = TYPE_ADT,
+        .adt.did = did,
+        .nsubtypes = ntypes,
+    };
     return add_type(P, type);
 }
 
-struct Type *pawY_new_signature(paw_Env *P, int nparams)
+struct Type *pawY_new_signature(paw_Env *P, DefId did, int nparams)
 {
     struct Type *type = NEW_TYPE(P, nparams);
-    type->hdr.kind = TYPE_SIGNATURE;
-    type->nsubtypes = nparams;
+    *type = (struct Type){
+        .hdr.kind = TYPE_SIGNATURE,
+        .nsubtypes = nparams,
+    };
+    return add_type(P, type);
+}
+
+struct Type *pawY_new_func_ptr(paw_Env *P, int nparams)
+{
+    struct Type *type = NEW_TYPE(P, nparams);
+    *type = (struct Type){
+        .hdr.kind = TYPE_FUNC_PTR,
+        .nsubtypes = nparams,
+    };
     return add_type(P, type);
 }
 
@@ -80,8 +95,11 @@ static struct Def *new_def(paw_Env *P, enum DefKind kind)
 {
     pawM_grow(P, P->defs.data, P->defs.count, P->defs.alloc);
     struct Def *def = pawM_new(P, struct Def);
+    *def = (struct Def){
+        .hdr.did = P->defs.count,
+        .hdr.kind = kind,
+    };
     P->defs.data[P->defs.count++] = def;
-    def->hdr.kind = kind;
     return def;
 }
 
@@ -130,7 +148,7 @@ static int print_subtypes_(paw_Env *P, Buffer *buf, struct Type *type)
 }
 #define PRINT_SUBTYPES(P, buf, type) print_subtypes_(P, buf, CAST(struct Type *, type))
 
-static void print_func_type(paw_Env *P, Buffer *buf, struct Signature *type)
+static void print_func_type(paw_Env *P, Buffer *buf, struct FuncPtr *type)
 {
     pawL_add_string(P, buf, "fn(");
     PRINT_SUBTYPES(P, buf, type);
@@ -167,7 +185,8 @@ void pawY_print_type(paw_Env *P, Buffer *buf, paw_Type code)
     struct Type *type = Y_TYPE(P, code);
     switch (type->hdr.kind) {
         case TYPE_SIGNATURE:
-            print_func_type(P, buf, &type->sig);
+        case TYPE_FUNC_PTR:
+            print_func_type(P, buf, &type->fptr);
             break;
         case TYPE_TUPLE:
             print_tuple_type(P, buf, &type->tuple);
@@ -244,8 +263,9 @@ void pawY_mangle_add_arg(paw_Env *P, Buffer *buf, paw_Type code)
                 }
             }
             break;
+        case TYPE_FUNC_PTR:
         case TYPE_SIGNATURE: {
-            const struct Signature func = type->sig;
+            const struct FuncPtr func = type->fptr;
             pawL_add_char(P, buf, 'F');
             for (int i = 0; i < type->nsubtypes; ++i) {
                 pawY_mangle_add_arg(P, buf, type->subtypes[i]);

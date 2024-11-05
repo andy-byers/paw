@@ -1,0 +1,74 @@
+// close_loop_variable.paw: Ensure that for loops close over the loop variable
+//     at the end of each iteration. This causes the captured upvalue to retain
+//     the value it had when it was captured, rather than the value taken during 
+//     the last iteration.
+
+pub fn default_closure() -> (fn() -> int) {
+    return || -1;
+}
+
+pub fn run_close_test(f: fn(int) -> (fn() -> int), lower: int, upper: int) {
+    assert(f(-1)() == lower);
+    assert(f(10)() == upper);
+    for i = 0, 10 {
+        assert(f(i)() == i);
+    }
+}
+
+pub fn check_close_by_return(n: int) -> (fn() -> int) {
+    for i = 0, 10 {
+        if i == n {
+            return || i;
+        }        
+    }
+    return default_closure();
+}
+
+pub fn check_close_by_scope_exit(n: int) -> (fn() -> int) {
+    let f = default_closure();
+    for i = 0, 10 {
+        if i == n {
+            f = || i;
+        }        
+    }
+    return f;
+}
+
+pub fn check_close_by_break(n: int) -> (fn() -> int) {
+    let f = default_closure();
+    for i = 0, 10 {
+        // NOTE: ">=" instead of ">", to test that "break" exits the loop
+        if i >= n {
+            f = || i;
+            break;
+        }        
+    }
+    return f;
+}
+
+pub fn check_close_by_continue(n: int) -> (fn() -> int) {
+    let f = default_closure();
+    for i = 0, 10 {
+        if i == n {
+            f = || i;
+            continue;
+        } 
+    }
+    return f;
+}
+
+pub fn test_close_by_return() {
+    run_close_test(check_close_by_return, -1, -1);
+}
+
+pub fn test_close_by_scope_exit() {
+    run_close_test(check_close_by_scope_exit, -1, -1);
+}
+
+pub fn test_close_by_break() {
+    run_close_test(check_close_by_break, 0, -1);
+}
+
+pub fn test_close_by_continue() {
+    run_close_test(check_close_by_continue, -1, -1);
+}

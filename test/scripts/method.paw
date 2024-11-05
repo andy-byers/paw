@@ -1,5 +1,51 @@
 // method.paw
 
+struct Adt<Ty> {
+    pub value: Ty,
+}
+
+enum Either<A, B> {
+    First(A),
+    Second(B),
+}
+
+impl<X, Y> Adt<(X, Y)> {
+    pub fn get(self, b: bool) -> Either<X, Y> {
+        if b { return Either::Second(self.value.1); }
+        return Either::First(self.value.0);
+    } 
+}
+
+pub fn test_either() {
+    let adt = Adt{
+        value: (123, 4.56),
+    };
+    match adt.get(false) {
+        Either::First(a) => {assert(a == 123);},
+        Either::Second(b) => {assert(false);},
+    }
+    match adt.get(true) {
+        Either::First(a) => {assert(false);},
+        Either::Second(b) => {assert(b == 4.56);},
+    }
+}
+
+fn get_either<U, V>(value: (U, V), b: bool) -> Either<U, V> {
+    let adt = Adt{value: value};
+    return adt.get(b);
+}
+
+pub fn test_either_indirect() {
+    match get_either(('456', 789), false) {
+        Either::First(a) => {assert(a == '456');},
+        Either::Second(b) => {assert(false);},
+    };
+    match get_either(('456', 789), true) {
+        Either::First(a) => {assert(false);},
+        Either::Second(b) => {assert(b == 789);},
+    };
+}
+
 struct Object {
     a: int,
     b: int,
@@ -449,3 +495,38 @@ pub fn test_method_availability() {
     let o = Obj2{a: true, b: 2};
     o.test();
 }
+
+struct Select<Ty> {
+    pub float_version_called: bool,
+    value: Ty,
+}
+
+impl<T> Select<T> {
+    pub fn new(value: T) -> Self {
+        return Self{float_version_called: false, value: value};
+    }
+}
+
+impl Select<int> {
+    pub fn get(self, x: int) -> int {
+        return self.value * x;
+    }
+}
+
+impl Select<float> {
+    pub fn get(self, x: float) -> float {
+        self.float_version_called = true;
+        return self.value * x;
+    }
+}
+
+pub fn test_select_impl() {
+    let num = Select::new(123);
+    assert(num.get(2) == 246);
+    assert(!num.float_version_called);
+
+    let num = Select::new(5.0);
+    assert(num.get(0.0) == 0.0);
+    assert(num.float_version_called);
+}
+

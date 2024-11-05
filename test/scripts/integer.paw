@@ -39,16 +39,16 @@ pub fn test_parse() {
 }
 
 fn apply<T>(f: fn(T), target: [T]) {
-    for t in target {
-        f(t);
+    for i = 0, #target {
+        f(target[i]);
     };
 }
 
 fn combine<T>(lhs: [T], rhs: [T]) -> [(T, T)] {
     let out = [];
-    for x in lhs {
-        for y in rhs {
-            out.push((x, y));
+    for i = 0, #lhs {
+        for j = 0, #rhs {
+            out.push((lhs[i], rhs[j]));
         };
     };
     return out;

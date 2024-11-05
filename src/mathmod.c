@@ -73,7 +73,7 @@ void l_import_math(paw_Env *P)
         "pub fn atan2(a: float, b: float) -> float;\n";
 
     pawE_push_cstr(P, CSTR_KBUILTIN);
-    paw_map_getelem(P, PAW_REGISTRY_INDEX);
+    paw_map_get(P, PAW_REGISTRY_INDEX);
 
     pawL_add_extern_func(P, "math", "sin", math_sin);
     pawL_add_extern_func(P, "math", "cos", math_cos);

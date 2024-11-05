@@ -1,3 +1,4 @@
+// poly_enum.paw
 
 enum Enum<T> {
     X,
@@ -46,4 +47,111 @@ pub fn test_fields() {
         x: Enum::<int>::Y(1),
         y: Enum::<float>::Z(2.0, 3.0),
     };
+}
+
+// TODO: see chain expr code in lower_hir.c
+// Chain ('?') expressions:
+//fn option(b: bool) -> Option<int> {
+//    if b {
+//        return Option::<int>::Some(42);
+//    } else {
+//        return Option::<int>::None;
+//    }
+//}
+//
+//pub fn test_chain_option() {
+//    let val = -1;
+//    let test = || -> Option<int> {
+//        let i = option(true)?;
+//        val = i;
+//        return Option::<int>::Some(i);
+//    };
+//    test();
+//    assert(val == 42);
+//
+//    let test = || -> Option<int> {
+//        let i = option(false)?;
+//        assert(false);
+//        return Option::<int>::Some(i);
+//    };
+//    test();
+//
+//    let test = |o: Option<int>| {}    ;
+//    test(Option::<int>::Some(123));
+//    test(Option::<int>::None);
+//}
+//
+//fn option2<Ty>(b: bool, v: Ty) -> Option<Ty> {
+//    if b {
+//        return Option::<Ty>::Some(v);
+//    } else {
+//        return Option::<Ty>::None;
+//    }
+//}
+//
+//fn chain_option2_aux<Ty2>(v: Ty2) -> Option<Ty2> {
+//    let t = option2(false, v)?;
+//    assert(false);
+//    return Option::<Ty2>::Some(t);
+//}
+//
+//pub fn test_chain_option2() {
+//    chain_option2_aux(123);
+//    chain_option2_aux('abc');
+//}
+//
+//fn result(b: bool) -> Result<int, str> {
+//    if b {
+//        return Result::<int, str>::Ok(42);
+//    } else {
+//        return Result::<int, str>::Err('bad');
+//    }
+//}
+//
+//pub fn test_chain_result() {
+//    let val = -1;
+//    let test = || -> Result<int, str> {
+//        let i = result(true)?;
+//        val = i;
+//        return Result::<int, str>::Ok(i);
+//    };
+//    test();
+//    assert(val == 42);
+//
+//    let test = || -> Result<int, str> {
+//        let i = result(false)?;
+//        assert(false);
+//        return Result::<int, str>::Ok(i);
+//    };
+//    test();
+//}
+
+struct Inner<T> {
+    pub val: T,
+}
+
+struct Outer<T> {
+    pub option: Option<Inner<T>>
+}
+
+fn construct_option<Ty3>(t: Ty3, a: bool, b: bool) -> Option<Outer<Ty3>> {
+    if a {
+        if b {
+            return Option::<Outer<Ty3>>::Some(Outer::<Ty3>{
+                option: Option::<Inner<Ty3>>::Some(Inner::<Ty3>{val: t}),
+            });
+        } else {
+            return Option::<Outer<Ty3>>::Some(Outer::<Ty3>{
+                option: Option::<Inner<Ty3>>::None,
+            });
+        }
+    } else {
+        return Option::<Outer<Ty3>>::None;
+    }
+}
+
+pub fn test_option() {
+    construct_option(42, true, true);
+    construct_option(42, true, false);
+    construct_option(42, false, false);
 }

@@ -5,6 +5,7 @@
 // lookup.c: Resolve paths referring to toplevel items
 
 #include "hir.h"
+#include "ir_type.h"
 
 struct QueryState {
     struct Compiler *C;
@@ -64,12 +65,13 @@ static struct QueryBase locate_base_in(struct QueryState *Q, struct ModuleInfo *
     struct HirSegment *seg;
     struct HirSymbol *sym;
     for (Q->m = root, Q->index = 0; Q->index < path->count;) {
-        seg = pawHir_path_get(path, Q->index++);
+        seg = K_LIST_GET(path, Q->index++);
         sym = resolve_symbol(Q, seg->name);
         if (sym == NULL) return (struct QueryBase){seg};
         base = sym->decl;
+
+        // NOTE: the caller will need to set '.did' to the DeclId of the instance, if seg->types is nonnull
         seg->did = base->hdr.did;
-        seg->modno = Q->m->hir->modno;
         if (!HirIsUseDecl(base)) break;
         struct HirUseDecl *use = HirGetUseDecl(base);
         if (!should_admit(Q, use)) {
@@ -90,56 +92,65 @@ static struct QueryBase locate_base(struct QueryState *Q, struct ModuleInfo *m, 
     return q;
 }
 
-static struct HirType *expect_field(struct QueryState *Q, struct HirType *adt, String *name)
+static struct IrType *expect_field(struct QueryState *Q, struct IrType *adt, String *name)
 {
     struct HirDecl *field = pawP_find_field(Q->C, adt, name);
     if (field == NULL) {
-        struct HirDecl *decl = pawHir_get_decl(Q->C, HirGetAdt(adt)->did);
+        struct HirDecl *decl = pawHir_get_decl(Q->C, IrGetAdt(adt)->did);
         NAME_ERROR(Q, "field '%s' does not exist on type '%d'",
                 name->text, decl->hdr.name->text);
     }
     return pawP_instantiate_field(Q->C, adt, field);
 }
 
-static struct HirType *locate_method(struct QueryState *Q, struct HirType *type, struct HirSegment *seg)
+static struct IrType *locate_method(struct QueryState *Q, struct IrType *type, struct HirSegment *seg)
 {
-    struct HirType *inst = expect_field(Q, type, seg->name);
-    seg->did = HIR_TYPE_DID(inst);
-    seg->modno = Q->m->hir->modno;
+    struct IrType *method = pawP_find_method(Q->C, type, seg->name);
+    if (method == NULL) {
+        struct HirDecl *decl = pawHir_get_decl(Q->C, IR_TYPE_DID(type));
+        const char *base_repr = pawIr_print_type(Q->C, type);
+        NAME_ERROR(Q, "field '%s' does not exist on type '%s'",
+                seg->name->text, base_repr);
+    }
+    seg->did = IR_TYPE_DID(method);
+    return method;
+}
+
+static struct IrType *locate_enumerator(struct QueryState *Q, struct IrType *type, struct HirSegment *seg)
+{
+    if (seg->types != NULL) NAME_ERROR(Q, "unexpected type arguments on enumerator '%s'", seg->name->text);
+    struct HirDecl *field = pawP_find_field(Q->C, type, seg->name);
+    if (field == NULL) return NULL;
+    struct IrType *inst = pawP_instantiate_field(Q->C, type, field);
+    seg->did = IR_TYPE_DID(inst);
     return inst;
 }
 
-static struct HirType *locate_enumerator(struct QueryState *Q, struct HirType *type, struct HirSegment *seg)
-{
-    if (seg->types != NULL) NAME_ERROR(Q, "unexpected type arguments on enumerator '%s'", seg->name->text);
-    struct HirType *result = expect_field(Q, type, seg->name);
-    seg->did = HIR_TYPE_DID(result);
-    seg->modno = Q->m->hir->modno;
-    return result;
-}
-
-static struct HirType *locate_assoc_item(struct QueryState *Q, struct HirDecl *prev, struct HirType *type, struct HirSegment *next)
+static struct IrType *locate_assoc_item(struct QueryState *Q, struct HirDecl *prev, struct IrType *type, struct HirSegment *next)
 {
     struct HirDecl *decl = pawHir_get_decl(Q->C, prev->hdr.did);
     struct HirAdtDecl *d = HirGetAdtDecl(decl);
-    return d->is_struct
-        ? locate_method(Q, type, next)
-        : locate_enumerator(Q, type, next);
-}
-
-static void maybe_generalize_adt(struct QueryState *Q, struct HirDecl *decl, struct HirSegment *seg)
-{
-    if (seg->types != NULL) return;
-    struct HirAdtDecl *d = HirGetAdtDecl(decl);
-    if (d->generics == NULL) return;
-    seg->types = pawHir_type_list_new(Q->C);
-    for (int i = 0; i < d->generics->count; ++i) {
-        struct HirType *var = pawU_new_unknown(Q->C->U, Q->line);
-        pawHir_type_list_push(Q->C, seg->types, var);
+    if (!d->is_struct) {
+        struct IrType *result = locate_enumerator(Q, type, next);
+        if (result != NULL) return result;
     }
+    return locate_method(Q, type, next);
 }
 
-struct HirType *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirPath *path, enum LookupKind kind)
+static struct IrTypeList *maybe_generalize_adt(struct QueryState *Q, struct HirDecl *decl, struct IrTypeList *types)
+{
+    if (types != NULL) return types;
+    struct HirAdtDecl *d = HirGetAdtDecl(decl);
+    if (d->generics == NULL) return types;
+    struct IrTypeList *result = pawIr_type_list_new(Q->C);
+    for (int i = 0; i < d->generics->count; ++i) {
+        struct IrType *var = pawU_new_unknown(Q->C->U, Q->line);
+        K_LIST_PUSH(Q->C, result, var);
+    }
+    return result;
+}
+
+struct IrType *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirPath *path, enum LookupKind kind)
 {
     struct QueryState Q = {
         .symtab = symtab,
@@ -153,21 +164,25 @@ struct HirType *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct Hir
     struct QueryBase q = locate_base(&Q, m, path);
     if (q.base == NULL) return NULL;
 
-    struct HirType *inst;
+    struct IrTypeList *types = q.seg->types != NULL
+        ? pawP_lower_type_list(C, m, symtab, q.seg->types)
+        : NULL;
+
+    struct IrType *inst;
     switch (HIR_KINDOF(q.base)) {
         case kHirAdtDecl:
-            maybe_generalize_adt(&Q, q.base, q.seg);
+            types = maybe_generalize_adt(&Q, q.base, types);
             // (fallthrough)
         case kHirFuncDecl:
         case kHirTypeDecl:
-            inst = pawP_instantiate(C, q.base, q.seg->types);
-            q.seg->did = HIR_TYPE_DID(inst);
+            inst = pawP_instantiate(C, q.base, types);
+            q.seg->did = IR_TYPE_DID(inst);
             break;
         case kHirVarDecl:
         case kHirFieldDecl:
         case kHirGenericDecl:
+            inst = GET_NODE_TYPE(C, q.base);
             q.seg->did = q.base->hdr.did;
-            inst = q.base->hdr.type;
             break;
         default:
             goto invalid_path;

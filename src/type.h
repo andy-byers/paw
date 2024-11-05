@@ -15,6 +15,7 @@
 
 enum TypeKind {
     TYPE_ADT,
+    TYPE_FUNC_PTR,
     TYPE_SIGNATURE,
     TYPE_TUPLE,
 };
@@ -31,10 +32,15 @@ struct Adt {
     int size;
 };
 
+#define FUNCTION_HEADER TYPE_HEADER; \
+                        paw_Type result
+struct FuncPtr {
+    FUNCTION_HEADER;
+};
+
 struct Signature {
-    TYPE_HEADER;
-    paw_Type result;
-    int size;
+    FUNCTION_HEADER;
+    DefId did;
 };
 
 struct TupleType {
@@ -47,6 +53,7 @@ struct Type {
         struct TypeHeader hdr;
         struct Adt adt;
         struct Signature sig;
+        struct FuncPtr fptr;
         struct TupleType tuple;
     };
     int nsubtypes;
@@ -60,6 +67,28 @@ enum DefKind {
     DEF_FIELD,
     DEF_VARIANT,
 };
+
+// TODO: use these instead, don't need to be part of a union though, keep them separate like in ir_type.h
+//struct FieldDef {
+//    String *name;
+//    DefId did;
+//    paw_Bool is_pub : 1;
+//};
+//
+//struct VariantDef {
+//    struct FieldList *fields;
+//    String *name;
+//    int discr;
+//    DefId xdid;
+//};
+//
+//struct AdtDef {
+//    struct VariantList *variants;
+//    String *name;
+//    DefId did;
+//    paw_Bool is_struct : 1;
+//    paw_Bool is_pub : 1;
+//};
 
 #define DEF_HEADER String *name; \
                    String *modname; \
@@ -121,8 +150,9 @@ struct Def {
 #define Y_TYPE(P, i) CHECK_EXP(0 <= (i) && (i) < (P)->types.count, (P)->types.data[i])
 #define Y_PVAL(P, i) CHECK_EXP(0 <= (i) && (i) < (P)->vals.count, &(P)->vals.data[i])
 
-struct Type *pawY_new_adt(paw_Env *P, int ntypes);
-struct Type *pawY_new_signature(paw_Env *P, int nparams);
+struct Type *pawY_new_adt(paw_Env *P, DefId did, int ntypes);
+struct Type *pawY_new_signature(paw_Env *P, DefId did, int nparams);
+struct Type *pawY_new_func_ptr(paw_Env *P, int nparams);
 struct Type *pawY_new_tuple(paw_Env *P, int nelems);
 struct Def *pawY_new_adt_def(paw_Env *P, int nfields);
 struct Def *pawY_new_variant_def(paw_Env *P, int nfields);

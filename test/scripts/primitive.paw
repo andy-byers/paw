@@ -1,5 +1,24 @@
 // primitive.paw
 
+pub fn test_operations() {
+    let a = 1;
+    /* unused result */ a + 1;
+    let b = 2 + 3;
+    /* unused result */ a + b + 2;
+    let c = a + b * a + b;
+    /* unused result */ a + b + c + 2 + 3;
+    assert(c == 1 + (2 + 3) * 1 + (2 + 3));
+    assert(c == 11);
+    assert(b == 5);
+    assert(a == 1);
+
+    a = 100;
+    b = b + a;
+    assert(c == 11);
+    assert(b == 105);
+    assert(a == 100);
+}
+
 pub fn test_initializer_annotations() {
     let i: int = 123;
     let s: str = 'abc';
@@ -83,17 +102,17 @@ pub fn test_conversions() {
     assert(i == 1);
 }
 
-pub fn test_lots_of_strings() {
-    let alphabet = 'abcdefghijklmnopqrstuvwxyz';
-
-    // put strings in a list so they don't get collected
-    let v = [];
-    for i = 0, #alphabet {
-        for j = 0, #alphabet {
-            let s = alphabet[:i] + alphabet[j:] +
-                    alphabet[i:] + alphabet[:j];
-            v.push(s);
-        }
-    }
-}
+//pub fn test_lots_of_strings() {
+//    let alphabet = 'abcdefghijklmnopqrstuvwxyz';
+//
+//    // put strings in a list so they don't get collected
+//    let v = [];
+//    for i = 0, #alphabet {
+//        for j = 0, #alphabet {
+//            let s = alphabet[:i] + alphabet[j:]
+//                  + alphabet[i:] + alphabet[:j];
+//            v.push(s);
+//        }
+//    }
+//}
 

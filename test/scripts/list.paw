@@ -364,8 +364,8 @@ pub fn test_misc() {
     }
     assert(#list == 100);
     let copy = [];
-    for x in list {
-        copy.push(x);
+    for i = 0, #list {
+        copy.push(list[i]);
     }
     for i = 0, 50 {
         list.remove(i);
@@ -541,8 +541,8 @@ pub fn test_slice_equality() {
 
 fn map2<T>(list: [T], f: fn(T) -> T) -> [T] {
     let result = [];
-    for elem in list {
-        result.push(f(elem));
+    for i = 0, #list {
+        result.push(f(list[i]));
     }
     return result;
 }
@@ -556,8 +556,8 @@ pub fn test_infer_l() {
         return val + val;
     });
     let result = '';
-    for val in list {
-        result = result + val;
+    for i = 0, #list{
+        result = result + list[i];
     }
     assert(result == 'abcabcdefdefghighi');
 
@@ -572,9 +572,9 @@ pub fn test_infer_l() {
         });
     });
     let result = '';
-    for row in list {
-        for val in row {
-            result = result + val;
+    for i = 0, #list {
+        for j = 0, #list[i] {
+            result = result + list[i][j];
         }
     }
     assert(result == 'aaabbbcccdddeeefffggghhhiii');

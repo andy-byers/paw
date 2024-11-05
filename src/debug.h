@@ -23,8 +23,9 @@ void paw_dump_opcode(OpCode opcode);
 void paw_dump_source(paw_Env *P, Proto *proto);
 void paw_dump_stack(paw_Env *P);
 void paw_stacktrace(paw_Env *P);
-void paw_dump_value(paw_Env *P, Value v, int type);
-void paw_dump_map(paw_Env *P, Map *m);
+void paw_dump_value(Value v, paw_Type type);
+void paw_dump_map_binary(Map *m);
+void paw_dump_map(Map *m, paw_Type ktype, paw_Type vtype);
 
 enum UnaryOp;
 enum BinaryOp;

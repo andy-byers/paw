@@ -8,8 +8,11 @@
 #include "debug.h"
 #include "gc.h"
 #include "hir.h"
+#include "ir_type.h"
+#include "ir_type.h"
 #include "map.h"
 #include "type.h"
+#include "type_folder.h"
 
 // All paw language keywords
 //
@@ -72,23 +75,23 @@ void pawP_init(paw_Env *P)
     P->string_cache[CSTR_KSEARCHERS] = pawS_new_fixed(P, "paw.searchers");
 }
 
-paw_Type pawP_type2code(struct Compiler *C, struct HirType *type)
+paw_Type pawP_type2code(struct Compiler *C, struct IrType *type)
 {
-    if (HirIsAdt(type)) {
-        const DeclId base = hir_adt_did(type);
-        if (base == C->builtins[BUILTIN_UNIT].did) {
+    if (IrIsAdt(type)) {
+        const DeclId base = IR_TYPE_DID(type);
+        if (base.value == C->builtins[BUILTIN_UNIT].did.value) {
             return PAW_TUNIT;
-        } else if (base == C->builtins[BUILTIN_BOOL].did) {
+        } else if (base.value == C->builtins[BUILTIN_BOOL].did.value) {
             return PAW_TBOOL;
-        } else if (base == C->builtins[BUILTIN_INT].did) {
+        } else if (base.value == C->builtins[BUILTIN_INT].did.value) {
             return PAW_TINT;
-        } else if (base == C->builtins[BUILTIN_FLOAT].did) {
+        } else if (base.value == C->builtins[BUILTIN_FLOAT].did.value) {
             return PAW_TFLOAT;
-        } else if (base == C->builtins[BUILTIN_STR].did) {
+        } else if (base.value == C->builtins[BUILTIN_STR].did.value) {
             return PAW_TSTR;
-        } else if (base == C->builtins[BUILTIN_LIST].did) {
+        } else if (base.value == C->builtins[BUILTIN_LIST].did.value) {
             return BUILTIN_LIST;
-        } else if (base == C->builtins[BUILTIN_MAP].did) {
+        } else if (base.value == C->builtins[BUILTIN_MAP].did.value) {
             return BUILTIN_MAP;
         }
     }
@@ -114,7 +117,7 @@ static void define_prelude_adt(struct Compiler *C, const char *name, enum Builti
     r->name = SCAN_STRING(C, name);
     r->is_pub = PAW_TRUE;
     r->is_struct = PAW_TRUE;
-    pawAst_decl_list_push(C, ast->items, decl);
+    K_LIST_PUSH(C, ast->items, decl);
     C->builtins[kind] = (struct Builtin){
         .name = r->name,
         .did = NO_DECL,
@@ -136,46 +139,24 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const c
 {
     pawY_uninit(P);
 
-    ENSURE_STACK(P, 4);
-
-    // '.strings' anchors all strings used during compilation so they are not
-    // collected by the GC.
-    Map *strings = pawH_new(P);
-    V_SET_OBJECT(P->top.p++, strings);
-
-    Map *types = pawH_new(P);
-    V_SET_OBJECT(P->top.p++, types);
-
-    // '.imports' maps modules names to ASTs for each module being compiled.
-    Map *imports = pawH_new(P);
-    V_SET_OBJECT(P->top.p++, imports);
-
-    // '.impls' maps each ADT to a list containing all of their 'impl' blocks.
-    // Includes ADTs from all modules being compiled.
-    Map *impls = pawH_new(P);
-    V_SET_OBJECT(P->top.p++, impls);
-
-    // maps each pattern match node to the decision tree it was compiled to
-    // during exhaustiveness checking
-    Map *matches = pawH_new(P);
-    V_SET_OBJECT(P->top.p++, matches);
-
     pawK_pool_init(P, &dm->pool, FIRST_ARENA_SIZE, LARGE_ARENA_MIN);
 
     *C = (struct Compiler){
         .pool = &dm->pool,
-        .imports = imports,
-        .strings = strings,
-        .matches = matches,
         .U = &dm->unifier,
-        .impls = impls,
-        .types = types,
         .dm = dm,
         .P = P,
     };
-    P->modname = SCAN_STRING(C, modname);
-    C->modname = P->modname;
 
+    C->strings = pawP_push_map(C);
+    C->method_contexts = pawP_push_map(C);
+    C->method_binders = pawP_push_map(C);
+    C->ir_types = pawP_push_map(C);
+    C->type2rtti = pawP_push_map(C);
+    C->imports = pawP_push_map(C);
+    C->impls = pawP_push_map(C);
+
+    C->modname = P->modname = SCAN_STRING(C, modname);
     C->prelude = pawAst_new(C, SCAN_STRING(C, "prelude"), 0);
 
     C->dm->decls = pawHir_decl_list_new(C);
@@ -202,9 +183,7 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const c
 void pawP_teardown(paw_Env *P, struct DynamicMem *dm)
 {
     pawK_pool_uninit(P, &dm->pool);
-    pawM_free_vec(P, dm->labels.values, dm->labels.capacity);
     pawM_free_vec(P, dm->scratch.data, dm->scratch.alloc);
-    pawM_free_vec(P, dm->vars.data, dm->vars.alloc);
 }
 
 struct ModuleInfo *pawP_mi_new(struct Compiler *C, struct Hir *hir)
@@ -217,9 +196,11 @@ struct ModuleInfo *pawP_mi_new(struct Compiler *C, struct Hir *hir)
     return mi;
 }
 
+#define LOG(dg, ...) PAWD_LOG(ENV((dg)->C), __VA_ARGS__)
+
 struct DefState {
     struct DefState *outer;
-    struct HirType *type;
+    struct IrType *type;
     struct Def *def;
     int index;
 };
@@ -230,11 +211,9 @@ struct DefGenerator {
     struct ItemList *items;
     struct Compiler *C;
     Map *adts;
-    int ntypes;
-    int nvals;
 };
 
-static void enter_def_(struct DefGenerator *dg, struct DefState *ds, struct HirType *type, struct Def *def)
+static void enter_def(struct DefGenerator *dg, struct DefState *ds, struct IrType *type, struct Def *def)
 {
     *ds = (struct DefState){
         .outer = dg->ds,
@@ -244,158 +223,82 @@ static void enter_def_(struct DefGenerator *dg, struct DefState *ds, struct HirT
     dg->ds = ds;
 }
 
-static void leave_def_(struct DefGenerator *dg)
+static void leave_def(struct DefGenerator *dg)
 {
     dg->ds = dg->ds->outer;
 }
 
-#define ENTER_DEF(dg, ds, type, def) enter_def_(dg, ds, HIR_CAST_TYPE(type), CAST(struct Def *, def))
-#define LEAVE_DEF(dg) leave_def_(dg)
-
-static struct Type *create_type(struct DefGenerator *dg, struct HirType *type);
-static paw_Bool match_types(struct DefGenerator *dg, struct HirType *lhs, paw_Type rhs);
-
-static paw_Bool match_type_lists(struct DefGenerator *dg, struct HirTypeList *lhs, paw_Type *rhs, int nrhs)
+static struct Type *lookup_type(struct DefGenerator *dg, struct IrType *type)
 {
-    if (lhs->count != nrhs) return PAW_FALSE;
-    for (int i = 0; i < lhs->count; ++i) {
-        if (!match_types(dg, lhs->data[i], rhs[i])) return PAW_FALSE;
-    }
-    return PAW_TRUE;
-}
-
-static paw_Bool match_functions(struct DefGenerator *dg, struct HirType *lhs, struct Type *rhs)
-{
-    if (!HirIsFuncType(lhs) || rhs->hdr.kind != TYPE_SIGNATURE) return PAW_FALSE;
-    return match_type_lists(dg, HIR_FPTR(lhs)->params, rhs->subtypes, rhs->nsubtypes) &&
-        match_types(dg, HIR_FPTR(lhs)->result, rhs->sig.result);
-}
-
-static paw_Bool match_tuples(struct DefGenerator *dg, struct HirType *lhs, struct Type *rhs)
-{
-    if (!HirIsTupleType(lhs) || rhs->hdr.kind != TYPE_TUPLE) return PAW_FALSE;
-    return match_type_lists(dg, HirGetTupleType(lhs)->elems, rhs->subtypes, rhs->nsubtypes);
-}
-
-static paw_Bool match_adts(struct DefGenerator *dg, struct HirType *lhs, struct Type *rhs)
-{
-    if (!HirIsAdt(lhs) || rhs->hdr.kind != TYPE_ADT) return PAW_FALSE;
-    struct HirDecl *decl = dg->items->data[rhs->adt.did]->decl;
-    return HirIsAdtDecl(decl) && HirGetAdt(HIR_TYPEOF(decl))->did == HirGetAdt(lhs)->did;
-}
-
-static paw_Bool match_types(struct DefGenerator *dg, struct HirType *lhs, paw_Type rhs_code)
-{
-    struct Type *rhs = Y_TYPE(ENV(dg->C), rhs_code);
-    return match_functions(dg, lhs, rhs) ||
-        match_tuples(dg, lhs, rhs) ||
-        match_adts(dg, lhs, rhs);
-}
-
-static struct Type *lookup_type(struct DefGenerator *dg, struct HirType *type)
-{
-    if (HirIsAdt(type)) {
-        type = pawP_instantiate(dg->C, pawHir_get_decl(dg->C, type->adt.did), type->adt.types);
-    } else if (HirIsFuncDef(type)) {
-        type = pawP_instantiate(dg->C, pawHir_get_decl(dg->C, type->fdef.did), type->fdef.types);
-    }
-    Value *pv = pawH_get(dg->C->types, P2V(type));
+    Value *pv = pawH_get(dg->C->type2rtti, P2V(type));
     return pv != NULL ? pv->p : NULL;
 }
 
-static void map_types(struct DefGenerator *dg, struct HirType *src, struct Type *dst)
+static void map_types(struct DefGenerator *dg, struct IrType *type, struct Type *rtti)
 {
     paw_Env *P = ENV(dg->C);
-    paw_assert(lookup_type(dg, src) == NULL);
-    pawH_insert(P, dg->C->types, P2V(src), P2V(dst));
+    pawH_insert(P, dg->C->type2rtti, P2V(type), P2V(rtti));
 }
 
-static struct Type *search_type(struct DefGenerator *dg, struct HirType *target)
-{
-    paw_Env *P = ENV(dg->C);
-    // check if this particular HirType has been seen already
-    struct Type *type = lookup_type(dg, target);
-    if (type != NULL) return type;
-    // check if there is an existing type that is equivalent to this one
-    for (paw_Type t = 0; t < dg->ntypes; ++t) {
-        if (match_types(dg, target, t)) {
-            struct Type *type = Y_TYPE(P, t);
-            map_types(dg, target, type);
-            return type;
-        }
-    }
-    return NULL;
-}
+static struct Type *new_type(struct DefGenerator *, struct IrType *, DefId);
+#define MAKE_TYPE(dg, t, did) new_type(dg, IR_CAST_TYPE(t), did)->hdr.code
 
-static struct Type *new_type(struct DefGenerator *, struct HirType *);
-#define MAKE_TYPE(dg, t) new_type(dg, HIR_CAST_TYPE(t))->hdr.code
-
-static void init_type_list(struct DefGenerator *dg, struct HirTypeList *x, paw_Type *y)
+static void init_type_list(struct DefGenerator *dg, struct IrTypeList *x, paw_Type *y, DefId did)
 {
     if (x == NULL) return;
     for (int i = 0; i < x->count; ++i) {
-        y[i] = MAKE_TYPE(dg, x->data[i]);
+        y[i] = MAKE_TYPE(dg, x->data[i], did);
     }
-}
-
-static struct Type *new_type(struct DefGenerator *dg, struct HirType *src)
-{
-    struct Type *dst = search_type(dg, src);
-    if (dst != NULL) return dst;
-
-    paw_Env *P = ENV(dg->C);
-    switch (HIR_KINDOF(src)) {
-        case kHirAdt:
-            dst = lookup_type(dg, src);
-            paw_assert(dst != NULL);
-            return dst;
-        case kHirFuncDef:
-        case kHirFuncPtr: {
-            struct HirFuncPtr *fptr = HIR_FPTR(src);
-            dst = pawY_new_signature(P, fptr->params->count);
-            init_type_list(dg, fptr->params, dst->subtypes);
-            dst->sig.result = MAKE_TYPE(dg, fptr->result);
-            break;
-        }
-        default: { // kHirTupleType
-            struct HirTupleType *tuple = HirGetTupleType(src);
-            dst = pawY_new_tuple(P, tuple->elems->count);
-            init_type_list(dg, tuple->elems, dst->subtypes);
-        }
-    }
-    map_types(dg, src, dst);
-    ++dg->ntypes;
-    return dst;
-}
-
-static paw_Bool handle_monos(struct HirVisitor *V, struct HirDeclList *monos)
-{
-    if (monos == NULL) return PAW_FALSE;
-    for (int i = 0; i < monos->count; ++i) {
-        pawHir_visit_decl(V, monos->data[i]);
-    }
-    return PAW_TRUE;
-}
-
-static paw_Bool has_generic(struct HirType *type)
-{
-    if (HirIsGeneric(type)) return PAW_TRUE;
-    struct HirTypeList *types =
-        HirIsFuncDef(type) ? HirGetFuncDef(type)->types :
-        HirIsTupleType(type) ? HirGetTupleType(type)->elems :
-        HirIsAdt(type) ? hir_adt_types(type) : NULL;
-    if (types == NULL) return PAW_FALSE;
-    for (int i = 0; i < types->count; ++i) {
-        struct HirType *type = K_LIST_GET(types, i);
-        if (has_generic(type)) return PAW_TRUE;
-    }
-    return PAW_FALSE;
 }
 
 #define LEN(L) ((L) != NULL ? (L)->count : 0)
 
-static struct Def *new_def_(struct DefGenerator *dg, struct HirDecl *decl, struct HirType *type)
+static struct Type *new_type(struct DefGenerator *dg, struct IrType *src, DefId did)
 {
+    struct Type *dst = lookup_type(dg, src);
+    if (dst != NULL) return dst;
+
+    paw_Env *P = ENV(dg->C);
+    switch (IR_KINDOF(src)) {
+        case kIrAdt: {
+            struct IrAdt *adt = IrGetAdt(src);
+            dst = pawY_new_adt(P, did, LEN(adt->types));
+            init_type_list(dg, adt->types, dst->subtypes, did);
+            break;
+        }
+        case kIrSignature: {
+            struct IrSignature *fsig = IrGetSignature(src);
+            dst = pawY_new_signature(P, did, fsig->params->count);
+            init_type_list(dg, fsig->params, dst->subtypes, did);
+            dst->sig.result = MAKE_TYPE(dg, fsig->result, did);
+            break;
+        }
+        case kIrFuncPtr: {
+            struct IrFuncPtr *fptr = IrGetFuncPtr(src);
+            dst = pawY_new_func_ptr(P, fptr->params->count);
+            init_type_list(dg, fptr->params, dst->subtypes, -1);
+            dst->sig.result = MAKE_TYPE(dg, fptr->result, -1);
+            break;
+        }
+        default: { // kIrTuple
+            struct IrTuple *tuple = IrGetTuple(src);
+            dst = pawY_new_tuple(P, tuple->elems->count);
+            init_type_list(dg, tuple->elems, dst->subtypes, -1);
+        }
+    }
+    return dst;
+}
+
+static String *get_modname(struct DefGenerator *dg, DeclId did)
+{
+    struct ModuleList *modules = dg->C->dm->modules;
+    return K_LIST_GET(modules, did.modno)->hir->name;
+}
+
+static struct Def *new_def(struct DefGenerator *dg, DeclId did, struct IrType *type)
+{
+    struct HirDecl *decl = pawHir_get_decl(dg->C, did);
+
     struct Def *def;
     paw_Env *P = ENV(dg->C);
 
@@ -409,321 +312,184 @@ static struct Def *new_def_(struct DefGenerator *dg, struct HirDecl *decl, struc
             break;
         case kHirAdtDecl:
             def = pawY_new_adt_def(P, LEN(HirGetAdtDecl(decl)->fields));
+            def->adt.is_struct = HirGetAdtDecl(decl)->is_struct;
+            def->adt.is_pub = HirGetAdtDecl(decl)->is_pub;
             break;
         default: // kHirVariantDecl
             def = pawY_new_func_def(P, LEN(HirGetVariantDecl(decl)->fields));
     }
-    type = type != NULL ? type : HIR_TYPEOF(decl);
 
+    struct Type *ty = new_type(dg, type, def->hdr.did);
     def->hdr.name = decl->hdr.name;
-    def->hdr.code = MAKE_TYPE(dg, type);
-    def->hdr.modname = dg->m->hir->name;
-    def->hdr.did = dg->items->count;
-
-    struct ItemSlot *item = pawP_new_item_slot(dg->C, decl, type, dg->m);
-    pawP_item_list_push(dg->C, dg->items, item);
+    def->hdr.code = ty->hdr.code;
+    def->hdr.modname = get_modname(dg, did);
     return def;
 }
 
-#define NEW_DEF(dg, decl, type) new_def_(dg, HIR_CAST_DECL(decl), type)
-
-static struct HirType *finalize_type(struct DefGenerator *dg, struct HirType *type)
+static void allocate_other_type(struct DefGenerator *dg, struct IrType *type)
 {
-    struct DefState *ds = dg->ds;
-    while (ds != NULL && !HirIsAdt(ds->type)) {
-        ds = ds->outer;
+    struct Type *rtti = new_type(dg, type, -1);
+    map_types(dg, type, rtti);
+}
+
+static void allocate_adt_def(struct DefGenerator *dg, struct IrType *type)
+{
+    if (!IrIsAdt(type)) {
+        allocate_other_type(dg, type);
+        return;
     }
-    if (ds == NULL) return type;
-
-    struct HirAdt *inst_type = HirGetAdt(ds->type);
-    struct HirDecl *base_decl = pawHir_get_decl(dg->C, inst_type->did);
-    struct HirAdt *base_type = HirGetAdt(HIR_TYPEOF(base_decl));
-    struct HirTypeList *src = base_type->types;
-    struct HirTypeList *dst = inst_type->types;
-
-    struct HirTypeFolder F;
-    struct Substitution subst;
-    pawP_init_substitution_folder(&F, dg->C, &subst, src, dst);
-    return pawHir_fold_type(&F, type);
-}
-
-static void register_fdef_types(struct DefGenerator *dg, struct HirFuncDef *fdef)
-{
-    if (fdef->types == NULL) return;
-    for (int i = 0; i < fdef->types->count; ++i) {
-        new_type(dg, fdef->types->data[i]);
-    }
-}
-
-static paw_Bool define_func_decl(struct HirVisitor *V, struct HirFuncDecl *d)
-{
-    struct DefGenerator *dg = V->ud;
-    if (handle_monos(V, d->monos)) return PAW_FALSE;
-    if (has_generic(d->type)) return PAW_FALSE;
-    register_fdef_types(dg, HirGetFuncDef(d->type));
-
-    paw_Env *P = ENV(dg->C);
-    struct Def *result = NEW_DEF(dg, d, NULL);
-    struct FuncDef *def = &result->func;
-    def->is_pub = d->is_pub;
-    def->vid = dg->nvals++; // allocate value slot
-
-    struct DefState ds;
-    ENTER_DEF(dg, &ds, d->type, def);
-    pawHir_visit_decl_list(V, d->params);
-    LEAVE_DEF(dg);
-
-    // C functions don't have a 'body' field
-    if (d->body == NULL) return PAW_FALSE;
-    pawHir_visit_block(V, d->body);
-    return PAW_FALSE;
-}
-
-static void define_adt(struct HirVisitor *V, struct HirAdtDecl *d, struct HirType *type)
-{
-    struct DefGenerator *dg = V->ud;
-    const Value *pv = pawH_get(dg->adts, P2V(type));
-    if (pv == NULL) return; // not cannonical
-    if (has_generic(type)) return;
-    paw_Env *P = ENV(dg->C);
-
-    struct Type *y = lookup_type(dg, type);
-    paw_assert(y != NULL);
-    struct Def *result = Y_DEF(P, y->adt.did);
-    struct AdtDef *r = &result->adt;
-
-    struct HirAdt *adt = HirGetAdt(type);
-    init_type_list(dg, adt->types, y->subtypes);
-
-    struct DefState ds;
-    ENTER_DEF(dg, &ds, type, r);
-    pawHir_visit_decl_list(V, d->fields);
-    LEAVE_DEF(dg);
-    return;
-}
-
-static void define_poly_adt(struct HirVisitor *V, struct HirAdtDecl *d)
-{
-    if (d->monos == NULL) return;
-    struct DefGenerator *dg = V->ud;
-    for (int i = 0; i < d->monos->count; ++i) {
-        define_adt(V, d, K_LIST_GET(d->monos, i));
-    }
-}
-
-static paw_Bool define_adt_decl(struct HirVisitor *V, struct HirAdtDecl *d)
-{
-    struct DefGenerator *dg = V->ud;
-    if (d->generics != NULL) {
-        define_poly_adt(V, d);
-    } else {
-        define_adt(V, d, d->type);
-    }
-    return PAW_FALSE;
-}
-
-static paw_Bool define_impl_decl(struct HirVisitor *V, struct HirImplDecl *d)
-{
-    return handle_monos(V, d->monos) ? PAW_FALSE : !has_generic(d->type);
-}
-
-static void set_adt_field(struct DefGenerator *dg, struct Def *def)
-{
-    struct DefState *ds = dg->ds;
-    if (ds == NULL) return;
-
-    struct Def *outer = ds->def;
-    if (outer->hdr.kind != DEF_ADT) return;
-
-    const int i = ds->index++;
-    outer->adt.fields[i] = def->hdr.did;
-}
-
-static int sizeof_object(struct DefGenerator *dg, struct HirType *type)
-{
-    struct Type *y = lookup_type(dg, type);
-    return y->hdr.kind == TYPE_ADT ? y->adt.size : 1;
-}
-
-static paw_Bool define_field_decl(struct HirVisitor *V, struct HirFieldDecl *d)
-{
-    struct DefGenerator *dg = V->ud;
-    struct HirType *type = finalize_type(dg, d->type);
-    struct Def *def = NEW_DEF(V->ud, d, type);
-    set_adt_field(dg, def);
-    return PAW_FALSE;
-}
-
-static paw_Bool define_var_decl(struct HirVisitor *V, struct HirVarDecl *d)
-{
-    NEW_DEF(V->ud, d, NULL);
-    pawHir_visit_type(V, d->init->hdr.type);
-    return PAW_FALSE;
-}
-
-static paw_Bool define_variant_decl(struct HirVisitor *V, struct HirVariantDecl *d)
-{
-    struct DefGenerator *dg = V->ud;
-    struct HirType *type = finalize_type(dg, d->type);
-    struct Def *def = NEW_DEF(dg, d, type);
-    set_adt_field(dg, def);
-
-    struct DefState ds;
-    ENTER_DEF(dg, &ds, d->type, def);
-    pawHir_visit_decl_list(V, d->fields);
-    LEAVE_DEF(dg);
-    return PAW_FALSE;
-}
-
-static paw_Bool define_type(struct HirVisitor *V, struct HirType *type)
-{
-    if (type == NULL) return PAW_FALSE;
-    if (!has_generic(type)) new_type(V->ud, type);
-    return PAW_FALSE;
-}
-
-static struct HirType *cannonicalize_func_def(struct HirTypeFolder *F, struct HirFuncDef *t)
-{
-    struct DefGenerator *dg = F->ud;
-    struct HirDecl *base = pawHir_get_decl(dg->C, t->did);
-    t->types = F->FoldTypeList(F, t->types);
-    return pawP_instantiate(dg->C, base, t->types);
-}
-
-static struct HirType *cannonicalize_adt(struct HirTypeFolder *F, struct HirAdt *t)
-{
-    struct DefGenerator *dg = F->ud;
-    struct HirDecl *base = pawHir_get_decl(dg->C, t->did);
-    t->types = F->FoldTypeList(F, t->types);
-    // NOTE: relies on the fact that pawP_instantiate looks through the 'monos' list on the base ADT and
-    //       returns the first matching ADT, rather than always creating a new ADT
-    struct HirType *type = pawP_instantiate(dg->C, base, t->types);
-    pawH_insert(ENV(dg->C), dg->adts, P2V(type), P2V(type));
-    // TODO: Figure out why this is necessary.
-    type->adt.types = F->FoldTypeList(F, type->adt.types);
-    return type;
-}
-
-static void cannonicalize_adts(struct DefGenerator *dg)
-{
-    struct HirTypeFolder F;
-    struct Hir *hir = dg->m->hir;
-    pawHir_type_folder_init(&F, dg->C, dg);
-    F.FoldAdt = cannonicalize_adt;
-    F.FoldFuncDef = cannonicalize_func_def;
-
-    pawHir_fold_decl_list(&F, hir->items);
-}
-
-static void register_adt(struct DefGenerator *dg, struct HirType *type)
-{
-    const Value *pv = pawH_get(dg->adts, P2V(type));
-    if (pv == NULL) return; // not cannonical version
-    if (has_generic(type)) return;
-
-    struct HirAdt *t = HirGetAdt(type);
+    struct IrAdt *t = IrGetAdt(type);
     struct HirDecl *decl = pawHir_get_decl(dg->C, t->did);
     struct HirAdtDecl *d = HirGetAdtDecl(decl);
+
+    struct Def *def = new_def(dg, t->did, type);
+    def->adt.is_struct = d->is_struct;
+    def->adt.is_pub = d->is_pub;
+
+    struct Type *rtti = Y_TYPE(ENV(dg->C), def->func.code);
+    map_types(dg, type, rtti);
+}
+
+static struct IrTypeList *get_mono_list(struct DefGenerator *dg, Map *lists, DeclId did)
+{
     paw_Env *P = ENV(dg->C);
-
-    struct HirAdt *adt = HirGetAdt(type);
-    const int ntypes = adt->types ? adt->types->count : 0;
-    struct Type *y = pawY_new_adt(P, ntypes);
-    y->adt.did = P->defs.count;
-    map_types(dg, type, y);
-
-    struct Def *result = NEW_DEF(dg, d, type);
-    struct AdtDef *r = &result->adt;
-    r->is_struct = d->is_struct;
-    r->is_pub = d->is_pub;
-    r->code = y->hdr.code;
-    r->name = d->name;
+    struct IrTypeList *monos;
+    const Value *pval = pawH_get(lists, I2V(did.value));
+    if (pval == NULL) {
+        struct IrTypeList *monos = pawIr_type_list_new(dg->C);
+        pawH_insert(P, lists, I2V(did.value), P2V(monos));
+        return monos;
+    }
+    return pval->p;
 }
 
-static void register_poly_adt(struct DefGenerator *dg, struct HirAdtDecl *d)
+static void define_decl_list(struct DefGenerator *dg, struct HirDeclList *decls)
 {
-    if (d->monos == NULL) return;
-    for (int i = 0; i < d->monos->count; ++i) {
-        register_adt(dg, K_LIST_GET(d->monos, i));
+    // TODO: define fields for RTTI
+}
+
+static void connect_adt_def(struct DefGenerator *dg, struct IrType *mono)
+{
+    //paw_Env *P = ENV(dg->C);
+    //struct HirDecl *decl = pawHir_get_decl(dg->C, IR_TYPE_DID(mono));
+    //struct HirAdtDecl *d = HirGetAdtDecl(decl);
+    //struct Type *ty = lookup_type(dg, mono);
+    //struct Def *def = Y_DEF(P, ty->adt.did);
+
+    //struct DefState ds;
+    //enter_def(dg, &ds, mono, def);
+    //define_decl_list(dg, d->fields);
+    //leave_def(dg);
+}
+
+static void allocate_types(struct DefGenerator *dg, struct IrTypeList *types)
+{
+    for (int i = 0; i < types->count; ++i) {
+        allocate_adt_def(dg, K_LIST_GET(types, i));
+    }
+    for (int i = 0; i < types->count; ++i) {
+        connect_adt_def(dg, K_LIST_GET(types, i));
     }
 }
 
-static paw_Bool register_adt_decl(struct HirVisitor *V, struct HirAdtDecl *d)
+static struct ItemSlot *allocate_item(struct DefGenerator *dg, struct Mir *body)
 {
-    struct DefGenerator *dg = V->ud;
-    if (d->generics != NULL) {
-        register_poly_adt(dg, d);
-    } else {
-        register_adt(dg, d->type);
-    }
-    return PAW_FALSE;
+    paw_Env *P = ENV(dg->C);
+    struct IrSignature *t = IrGetSignature(body->type);
+    const int ntypes = t->types != NULL ? t->types->count : 0;
+    struct HirFuncDecl *d = HirGetFuncDecl(pawHir_get_decl(dg->C, t->did));
+    struct Def *def = new_def(dg, t->did, body->type);
+    def->func.name = d->name;
+    def->func.is_pub = d->is_pub;
+    def->func.vid = dg->items->count;
+
+    struct DefState ds;
+    enter_def(dg, &ds, body->type, def);
+    define_decl_list(dg, d->params);
+    leave_def(dg);
+
+    struct Type *ty = Y_TYPE(P, def->func.code);
+    ty->sig.did = def->func.did;
+    return pawP_new_item_slot(dg->C, body, ty);
 }
 
-static void register_adts(struct HirVisitor *V, struct HirDeclList *items)
+static void allocate_items(struct DefGenerator *dg, struct MirBodyList *bodies)
 {
-    for (int i = 0; i < items->count; ++i) {
-        struct HirDecl *item = K_LIST_GET(items, i);
-        if (!HirIsAdtDecl(item)) continue;
-        register_adt_decl(V, HirGetAdtDecl(item));
+    for (int i = 0; i < bodies->count; ++i) {
+        struct Mir *body = K_LIST_GET(bodies, i);
+
+        struct ItemSlot *item = allocate_item(dg, body);
+        K_LIST_PUSH(dg->C, dg->items, item);
+        map_types(dg, body->type, item->rtti);
     }
 }
 
-struct ItemList *pawP_define_all(struct Compiler *C, struct ModuleList *modules, int *poffset)
+struct ItemList *pawP_allocate_defs(struct Compiler *C, struct MirBodyList *bodies, struct IrTypeList *types)
 {
-    struct ItemList *items = pawP_item_list_new(C);
-
-    paw_Env *P = ENV(C);
-    ENSURE_STACK(P, 1);
-
-    // DeclId => [struct HirType]
-    Map *adts = pawH_new(P);
-    V_SET_OBJECT(P->top.p, adts);
-    API_INCR_TOP(P, 1);
-
     struct DefGenerator dg = {
-        .nvals = *poffset,
-        .items = items,
-        .adts = adts,
+        .items = pawP_item_list_new(C),
         .C = C,
     };
+    // DeclId => [struct IrType]
+    dg.adts = pawP_push_map(C),
 
-    struct HirVisitor V;
-    pawHir_visitor_init(&V, C, &dg);
+    allocate_types(&dg, types);
+    allocate_items(&dg, bodies);
 
-    V.VisitVarDecl = define_var_decl;
-    V.VisitFieldDecl = define_field_decl;
-    V.VisitImplDecl = define_impl_decl;
-    V.VisitFuncDecl = define_func_decl;
-    V.VisitVariantDecl = define_variant_decl;
-    V.VisitType = define_type;
-
-    for (int i = 0; i < modules->count; ++i) {
-        dg.m = K_LIST_GET(modules, i);
-        cannonicalize_adts(&dg);
-    }
-
-    V.VisitAdtDecl = register_adt_decl;
-    for (int i = 0; i < modules->count; ++i) {
-        dg.m = K_LIST_GET(modules, i);
-        register_adts(&V, dg.m->hir->items);
-    }
-
-    V.VisitAdtDecl = define_adt_decl;
-    for (int i = 0; i < modules->count; ++i) {
-        dg.m = K_LIST_GET(modules, i);
-        pawHir_visit_decl_list(&V, dg.m->hir->items);
-    }
-    *poffset = dg.nvals;
-    return items;
+    pawP_pop_object(C, dg.adts);
+    return dg.items;
 }
 
-struct ItemSlot *pawP_new_item_slot(struct Compiler *C, struct HirDecl *decl, struct HirType *type, struct ModuleInfo *m)
+struct ItemSlot *pawP_new_item_slot(struct Compiler *C, struct Mir *mir, struct Type *rtti)
 {
     struct ItemSlot *slot = pawK_pool_alloc(ENV(C), C->pool, sizeof(struct ItemSlot));
     *slot = (struct ItemSlot){
-        .decl = decl,
-        .type = type,
-        .m = m,
+        .name = mir->name,
+        .rtti = rtti,
+        .mir = mir,
     };
     return slot;
 }
+
+Map *pawP_push_map(struct Compiler *C)
+{
+    paw_Env *P = ENV(C);
+    ENSURE_STACK(P, 1);
+    Map *result = pawH_new(P);
+    V_SET_OBJECT(P->top.p++, result);
+    return result;
+}
+
+static struct IrType *get_self(struct Compiler *C, struct IrSignature *method)
+{
+    const Value *pval = pawH_get(C->method_contexts, P2V(method));
+    return pval != NULL ? pval->p : NULL;
+}
+
+paw_Bool pawP_is_assoc_fn(struct Compiler *C, struct IrSignature *t)
+{
+    return get_self(C, t) != NULL;
+}
+
+struct IrTypeList *pawP_get_binder(struct Compiler *C, DeclId did)
+{
+    const Value *pval = pawH_get(C->method_binders, I2V(did.value));
+    return pval != NULL ? pval->p : NULL;
+}
+
+void pawP_set_binder(struct Compiler *C, DeclId did, struct IrTypeList *binder)
+{
+    pawH_insert(ENV(C), C->method_binders, I2V(did.value), P2V(binder));
+}
+
+void pawP_set_self(struct Compiler *C, struct IrSignature *method, struct IrType *self)
+{
+    pawH_insert(ENV(C), C->method_contexts, P2V(method), P2V(self));
+}
+
+struct IrType *pawP_get_self(struct Compiler *C, struct IrSignature *method)
+{
+    paw_assert(pawP_is_assoc_fn(C, method));
+    return get_self(C, method);
+}
+

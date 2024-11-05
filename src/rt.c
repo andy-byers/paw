@@ -28,53 +28,20 @@
         i = *pc++; \
     } while (0)
 
-#define VM_SHIFT(n) (*VM_TOP((n) + 1) = *VM_TOP(1), VM_POP(n))
-#define VM_POP(n) pawC_stkdec(P, n)
-#define VM_TOP(i) (&P->top.p[-(i)])
 #define VM_SAVE_PC() (cf->pc = pc)
 #define VM_UPVALUE(u) (fn->up[u]->p.p)
 
-#define VM_PUSH(v) CHECK_EXP((P)->bound.p - (P)->top.p > 0, \
-        (*P->top.p++ = (v), &P->top.p[-1]))
-#define VM_PUSH_0() VM_PUSH((Value){.u = 0})
-#define VM_PUSH_BOOL(B) VM_PUSH((Value){.b = B})
-#define VM_PUSH_INT(I) VM_PUSH((Value){.i = I})
-#define VM_PUSH_FLOAT(F) VM_PUSH((Value){.f = F})
-#define VM_PUSH_OBJECT(O) VM_PUSH((Value){.o = O})
+#define VM_RA(opcode) (&cf->base.p[GET_A(opcode)])
+#define VM_RB(opcode) (&cf->base.p[GET_B(opcode)])
+#define VM_RC(opcode) (&cf->base.p[GET_C(opcode)])
 
-#define VM_SET_0(top) V_SET_0(VM_TOP(top))
-#define VM_SET_BOOL(top, b) V_SET_BOOL(VM_TOP(top), b)
-#define VM_SET_INT(top, i) V_SET_INT(VM_TOP(top), i)
-#define VM_SET_FLOAT(top, f) V_SET_FLOAT(VM_TOP(top), f)
-#define VM_SET_OBJECT(top, o) V_SET_OBJECT(VM_TOP(top), o)
-
-#define VM_INT(top) V_INT(*VM_TOP(top))
-#define VM_BOOL(top) V_BOOL(*VM_TOP(top))
-#define VM_FLOAT(top) V_FLOAT(*VM_TOP(top))
-#define VM_STR(top) V_STRING(*VM_TOP(top))
-#define VM_LIST(top) V_LIST(*VM_TOP(top))
-#define VM_MAP(top) V_MAP(*VM_TOP(top))
+#define VM_REG(r) (&cf->base.p[r])
 
 // Generate code for creating common builtin objects
-// Requires a placeholder slot (the VM_PUSH_0() pushes an empty slot) so
-// the GC doesn't get confused. Both the VM_PUSH_0(), and the pawV_list_new calls
-// might fail and cause an error to be thrown, so we have to be careful not
-// to leave a junk value on top of the stack.
-#define VM_LIST_INIT(plist, pv) \
-    pv = VM_PUSH_0(); \
-    plist = pawV_list_new(P); \
-    V_SET_OBJECT(pv, plist);
-#define VM_MAP_INIT(pmap, pv) \
-    pv = VM_PUSH_0(); \
-    pmap = pawH_new(P); \
-    V_SET_OBJECT(pv, pmap);
-
-static void add_zeros(paw_Env *P, int n)
-{
-    for (int i = 0; i < n; ++i) {
-        VM_PUSH_0();
-    }
-}
+#define VM_LIST_INIT(r) \
+    (List *)V_SET_OBJECT(r, pawV_list_new(P));
+#define VM_MAP_INIT(r) \
+    (Map *)V_SET_OBJECT(r, pawH_new(P));
 
 static void add_location(paw_Env *P, Buffer *buf)
 {
@@ -145,35 +112,6 @@ static void float2int(paw_Env *P, paw_Float f, Value *pv)
     }
 }
 
-static void cast_primitive(paw_Env *P, paw_Type from, paw_Type to)
-{
-    paw_assert(0 <= to && to < PAW_TSTR);
-    paw_assert(0 <= from && from < PAW_TSTR);
-
-    Value *pv = VM_TOP(1);
-    switch (to) {
-        case PAW_TBOOL:
-            V_SET_BOOL(pv, pv->u != 0);
-            break;
-        case PAW_TINT:
-            if (from == PAW_TFLOAT) {
-                // NOTE: Other primitives have a value representation compatible
-                //       with that of the 'int' type.
-                const paw_Float f = V_FLOAT(*pv);
-                float2int(P, f, pv);
-            }
-            break;
-        case PAW_TFLOAT:
-            if (from != PAW_TFLOAT) {
-                const paw_Int i = V_INT(*pv);
-                V_SET_FLOAT(pv, CAST(paw_Float, i));
-            }
-            break;
-        default:
-            V_SET_0(pv);
-    }
-}
-
 static UpValue *capture_upvalue(paw_Env *P, StackPtr local)
 {
     UpValue *prev = NULL;
@@ -207,12 +145,14 @@ void pawR_close_upvalues(paw_Env *P, const StackPtr top)
     }
 }
 
-void pawR_setfield(paw_Env *P, int index)
+void pawR_tuple_get(CallFrame *cf, Value *ra, const Value *rb, int index)
 {
-    const Value val = *VM_TOP(1);
-    const Value obj = *VM_TOP(2);
-    V_TUPLE(obj)->elems[index] = val;
-    VM_SHIFT(1);
+    *ra = V_TUPLE(*rb)->elems[index];
+}
+
+void pawR_tuple_set(CallFrame *cf, Value *ra, int index, const Value *rb)
+{
+    V_TUPLE(*ra)->elems[index] = *rb;
 }
 
 void pawR_init(paw_Env *P)
@@ -220,97 +160,6 @@ void pawR_init(paw_Env *P)
     String *errmsg = pawS_new_str(P, "not enough memory");
     pawG_fix_object(P, CAST_OBJECT(errmsg));
     V_SET_OBJECT(&P->mem_errmsg, errmsg);
-}
-
-#define STOP_LOOP(i, i2, d) \
-    (((d) < 0 && (i) <= (i2)) || ((d) > 0 && (i) >= (i2)))
-
-static paw_Bool fornum_init(paw_Env *P)
-{
-    const paw_Int begin = VM_INT(3);
-    const paw_Int end = VM_INT(2);
-    const paw_Int step = VM_INT(1);
-    if (step == 0) {
-        pawR_error(P, PAW_ERUNTIME, "loop step equals 0");
-    }
-    const paw_Bool skip = STOP_LOOP(begin, end, step);
-    if (!skip) {
-        VM_SET_INT(3, begin);
-        VM_SET_INT(2, end);
-        VM_SET_INT(1, step);
-        VM_PUSH_INT(begin);
-    }
-    return skip;
-}
-
-static paw_Bool fornum(paw_Env *P)
-{
-    const paw_Int itr = VM_INT(3);
-    const paw_Int step = VM_INT(1);
-    const paw_Int end = VM_INT(2);
-    const paw_Int next = itr + step;
-    if (STOP_LOOP(next, end, step)) {
-        return PAW_FALSE;
-    }
-    VM_SET_INT(3, next);
-    VM_PUSH_INT(next);
-    return PAW_TRUE;
-}
-
-static paw_Bool forlist_init(paw_Env *P)
-{
-    const Value v = *VM_TOP(1);
-    paw_Int itr = PAW_ITER_INIT;
-    List *arr = V_LIST(v);
-    if (pawV_list_iter(arr, &itr)) {
-        VM_PUSH_INT(itr);
-        VM_PUSH(arr->begin[itr]);
-        return PAW_FALSE;
-    }
-    return PAW_TRUE;
-}
-
-static paw_Bool forlist(paw_Env *P)
-{
-    const Value obj = *VM_TOP(2);
-    const Value itr = *VM_TOP(1);
-    List *arr = V_LIST(obj);
-    paw_Int i = V_INT(itr);
-    if (pawV_list_iter(arr, &i)) {
-        VM_SET_INT(1, i);
-        VM_PUSH(arr->begin[i]);
-        return PAW_TRUE;
-    }
-    return PAW_FALSE;
-}
-
-static paw_Bool formap_init(paw_Env *P)
-{
-    const Value v = *VM_TOP(1);
-    paw_Int itr = PAW_ITER_INIT;
-    Map *map = V_MAP(v);
-    if (pawH_iter(map, &itr)) {
-        const Value v = *pawH_key(map, CAST_SIZE(itr));
-        VM_PUSH_INT(itr);
-        VM_PUSH(v);
-        return PAW_FALSE;
-    }
-    return PAW_TRUE;
-}
-
-static paw_Bool formap(paw_Env *P)
-{
-    const Value obj = *VM_TOP(2);
-    const Value itr = *VM_TOP(1);
-    Map *map = V_MAP(obj);
-    paw_Int i = V_INT(itr);
-    if (pawH_iter(map, &i)) {
-        const Value v = *pawH_key(map, CAST_SIZE(i));
-        VM_SET_INT(1, i);
-        VM_PUSH(v);
-        return PAW_TRUE;
-    }
-    return PAW_FALSE; // stop the loop
 }
 
 #define I2U(i) (CAST(uint64_t, i))
@@ -322,180 +171,7 @@ static paw_Bool formap(paw_Env *P)
 #define I_UNOP(a, op) U2I(op I2U(a))
 #define I_BINOP(a, b, op) U2I(I2U(a) op I2U(b))
 
-#define CMP_CASES(x, y, z) \
-    case CMP_EQ: \
-        (z) = (x) == (y); \
-        break; \
-    case CMP_NE: \
-        (z) = (x) != (y); \
-        break; \
-    case CMP_LT: \
-        (z) = (x) < (y); \
-        break; \
-    case CMP_LE: \
-        (z) = (x) <= (y); \
-        break; \
-    case CMP_GT: \
-        (z) = (x) > (y); \
-        break; \
-    case CMP_GE: \
-        (z) = (x) >= (y);
-
 #define DIVIDE_BY_0(P) pawR_error(P, PAW_ERUNTIME, "divide by 0")
-
-static void int_cmp(paw_Env *P, enum CmpOp op, paw_Int x, paw_Int y)
-{
-    paw_Bool z;
-    switch (op) {
-        CMP_CASES(x, y, z)
-    }
-    VM_SET_BOOL(2, z);
-    VM_POP(1);
-}
-
-void pawR_cmpi(paw_Env *P, enum CmpOp op)
-{
-    int_cmp(P, op, VM_INT(2), VM_INT(1));
-}
-
-void pawR_arithi1(paw_Env *P, enum ArithOp1 op)
-{
-    paw_Int x = VM_INT(1);
-    switch (op) {
-        case ARITH1_NEG:
-            x = I_UNOP(x, -);
-    }
-    VM_SET_INT(1, x);
-}
-
-void pawR_arithi2(paw_Env *P, enum ArithOp2 op)
-{
-    paw_Int x = VM_INT(2);
-    const paw_Int y = VM_INT(1);
-    switch (op) {
-        case ARITH2_ADD:
-            x = I_BINOP(x, y, +);
-            break;
-        case ARITH2_SUB:
-            x = I_BINOP(x, y, -);
-            break;
-        case ARITH2_MUL:
-            x = I_BINOP(x, y, *);
-            break;
-        case ARITH2_DIV:
-        case ARITH2_MOD:
-            if (y == 0) {
-                DIVIDE_BY_0(P);
-            } else if (x == PAW_INT_MIN && y == -1) {
-                // If x / y is undefined, then so too is x % y (see C11 section 6.5.5,
-                // item 6). Both cases equal 0 in Paw (x / y wraps).
-                x = 0;
-            } else if (op == ARITH2_DIV) {
-                x = x / y;
-            } else {
-                x = x % y;
-            }
-    }
-    VM_SET_INT(2, x);
-    VM_POP(1);
-}
-
-void pawR_bitw1(paw_Env *P, enum BitwOp1 op)
-{
-    paw_Int x = VM_INT(1);
-    switch (op) {
-        case BITW1_NOT:
-            x = I_UNOP(x, ~);
-    }
-    VM_SET_INT(1, x);
-}
-
-void pawR_bitw2(paw_Env *P, enum BitwOp2 op)
-{
-    paw_Int x = VM_INT(2);
-    paw_Int y = VM_INT(1);
-    switch (op) {
-        case BITW2_AND:
-            x = I_BINOP(x, y, &);
-            break;
-        case BITW2_OR:
-            x = I_BINOP(x, y, |);
-            break;
-        case BITW2_XOR:
-            x = I_BINOP(x, y, ^);
-            break;
-        case BITW2_SHL:
-            if (y < 0) {
-                pawR_error(P, PAW_ERUNTIME, "negative shift count");
-            } else if (y > 0) {
-                y = PAW_MIN(y, U2I(sizeof(x) * 8 - 1));
-                x = U2I(I2U(x) << y);
-            }
-            break;
-        case BITW2_SHR:
-            if (y < 0) {
-                pawR_error(P, PAW_ERUNTIME, "negative shift count");
-            } else if (y > 0) {
-                // Right shift by >= width of 'x' is UB in C. Clamp the
-                // shift count. If 'x' < 0, then the results of the
-                // shift are implementation-defined (may or may not
-                // preserve the sign).
-                y = PAW_MIN(y, U2I(sizeof(x) * 8 - 1));
-                x = x >> y;
-            }
-    }
-    VM_SET_INT(2, x);
-    VM_POP(1);
-}
-
-void pawR_cmpf(paw_Env *P, enum CmpOp op)
-{
-    const paw_Float x = VM_FLOAT(2);
-    const paw_Float y = VM_FLOAT(1);
-    paw_Bool z;
-    switch (op) {
-        CMP_CASES(x, y, z)
-    }
-    VM_SET_BOOL(2, z);
-    VM_POP(1);
-}
-
-void pawR_arithf1(paw_Env *P, enum ArithOp1 op)
-{
-    const paw_Float x = VM_FLOAT(1);
-    paw_Float y;
-    switch (op) {
-        case ARITH1_NEG:
-            y = -x;
-    }
-    VM_SET_FLOAT(1, y);
-}
-
-void pawR_arithf2(paw_Env *P, enum ArithOp2 op)
-{
-    paw_Float x = VM_FLOAT(2);
-    const paw_Float y = VM_FLOAT(1);
-    switch (op) {
-        case ARITH2_ADD:
-            x = x + y;
-            break;
-        case ARITH2_SUB:
-            x = x - y;
-            break;
-        case ARITH2_MUL:
-            x = x * y;
-            break;
-        case ARITH2_DIV:
-            if (y == 0.0) DIVIDE_BY_0(P);
-            x = x / y;
-            break;
-        case ARITH2_MOD:
-            if (y == 0.0) DIVIDE_BY_0(P);
-            x = fmod(x, y);
-    }
-    VM_SET_FLOAT(2, x);
-    VM_POP(1);
-}
 
 static size_t check_slice_bound(paw_Env *P, paw_Int index, size_t length, const char *what, const char *cont)
 {
@@ -509,210 +185,157 @@ static size_t check_slice_bound(paw_Env *P, paw_Int index, size_t length, const 
     return CAST_SIZE(index);
 }
 
-static size_t get_length(Value v, enum paw_AdtKind kind)
+void pawR_str_concat(paw_Env *P, CallFrame *cf, int n)
 {
-    switch (kind) {
-        case PAW_ADT_STR:
-            return pawS_length(V_STRING(v));
-        case PAW_ADT_LIST:
-            return pawV_list_length(V_LIST(v));
-        case PAW_ADT_MAP:
-            return pawH_length(V_MAP(v));
+    StackPtr ra = P->top.p - n;
+    paw_assert(n >= 1);
+    if (n <= 1) return;
+
+    size_t total_size = 0;
+    for (int i = 0; i < n; ++i) {
+        total_size += pawS_length(V_STRING(ra[i]));
     }
-}
 
-void pawR_length(paw_Env *P, enum paw_AdtKind kind)
-{
-    Value *pv = VM_TOP(1);
-    const size_t length = get_length(*pv, kind);
-    V_SET_INT(pv, length);
-}
+    // caution: unanchored allocation
+    String *r = pawS_new_uninit(P, total_size);
+    char *data = r->text;
 
-static void str_concat(paw_Env *P)
-{
-    const String *x = VM_STR(2);
-    const String *y = VM_STR(1);
-
-    paw_assert(x->length < PAW_SIZE_MAX);
-    paw_assert(y->length < PAW_SIZE_MAX);
-    if (x->length > PAW_SIZE_MAX - y->length) {
-        pawR_error(P, PAW_EMEMORY, "string is too large");
+    paw_assert(data != NULL);
+    for (int i = 0; i < n; ++i) {
+        const String *s = V_STRING(ra[i]);
+        memcpy(data, s->text, s->length);
+        data += s->length;
     }
-    String *z = pawS_new_uninit(P, x->length + y->length);
-    memcpy(z->text, x->text, x->length);
-    memcpy(z->text + x->length, y->text, y->length);
-    pawS_register(P, &z);
+    pawS_register(P, &r);
 
-    VM_SET_OBJECT(2, z);
-    VM_POP(1);
+    V_SET_OBJECT(ra, r);
+    P->top.p = ra + 1;
 }
 
-static void list_concat(paw_Env *P)
+void pawR_str_length(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb)
 {
-    const List *x = VM_LIST(2);
-    const List *y = VM_LIST(1);
-
-    List *z;
-    Value *pv;
-    VM_LIST_INIT(z, pv);
-
-    const size_t nx = pawV_list_length(x);
-    const size_t ny = pawV_list_length(y);
-    pawV_list_resize(P, z, nx + ny);
-    if (nx > 0) memcpy(z->begin, x->begin, nx * sizeof(z->begin[0]));
-    if (ny > 0) memcpy(z->begin + nx, y->begin, ny * sizeof(z->begin[0]));
-    VM_SHIFT(2);
+    const size_t length = pawS_length(V_STRING(*rb));
+    V_SET_INT(ra, PAW_CAST_INT(length));
 }
 
-void pawR_concat(paw_Env *P, enum paw_AdtKind kind)
+void pawR_list_length(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb)
 {
-    switch (kind) {
-        case PAW_ADT_STR:
-            str_concat(P);
-            break;
-        case PAW_ADT_LIST:
-            list_concat(P);
-            break;
-        case PAW_ADT_MAP:
-            PAW_UNREACHABLE();
+    const size_t length = pawV_list_length(V_LIST(*rb));
+    V_SET_INT(ra, PAW_CAST_INT(length));
+}
+
+// TODO: operation needs an extra register since lists need 2 allocations...
+//       the compiler needs to make sure this register exists
+void pawR_list_concat(paw_Env *P, CallFrame *cf, int n)
+{
+    StackPtr ra = P->top.p - n;
+    paw_assert(n >= 1);
+    if (n <= 1) return;
+
+    size_t total_size = 0;
+    for (int i = 0; i < n; ++i) {
+        total_size += pawV_list_length(V_LIST(ra[i]));
     }
+
+    StackPtr temp = P->top.p++;
+    List *r = VM_LIST_INIT(temp);
+    if (total_size > 0) {
+        pawV_list_reserve(P, r, total_size);
+
+        for (int i = 0; i < n; ++i) {
+            const List *list = V_LIST(ra[i]);
+            const size_t length = pawV_list_length(list);
+            memcpy(r->end, list->begin, length * sizeof(list->begin[0]));
+            r->end += length;
+        }
+    }
+
+    V_SET_OBJECT(ra, r);
+    P->top.p = ra + 1;
 }
 
-static void str_get(paw_Env *P)
+void pawR_str_get(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc)
 {
-    const String *str = VM_STR(2);
-    const paw_Int idx = VM_INT(1);
+    const String *str = V_STRING(*rb);
+    const paw_Int idx = V_INT(*rc);
     pawV_check_abs(P, idx, str->length, "str");
-    const char c = str->text[idx];
-    String *res = pawS_new_nstr(P, &c, 1);
-    V_SET_OBJECT(VM_TOP(2), res);
-    VM_POP(1);
+    const char ch = str->text[idx];
+    String *res = pawS_new_nstr(P, &ch, 1);
+    V_SET_OBJECT(ra, res);
 }
 
-static void list_get(paw_Env *P)
+void pawR_list_get(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc)
 {
-    List *list = VM_LIST(2);
-    const paw_Int key = VM_INT(1);
-    *VM_TOP(2) = *pawV_list_get(P, list, key);
-    VM_POP(1);
+    List *list = V_LIST(*rb);
+    const paw_Int idx = V_INT(*rc);
+    *ra = *pawV_list_get(P, list, idx);
 }
 
-static void map_get(paw_Env *P)
+void pawR_list_set(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc)
 {
-    Map *map = VM_MAP(2);
-    const Value key = *VM_TOP(1);
-    const Value *pv = pawH_get(map, key);
-    if (pv == NULL) pawR_error(P, PAW_EKEY, "key does not exist");
-    *VM_TOP(2) = *pv;
-    VM_POP(1);
+    List *list = V_LIST(*ra);
+    const paw_Int idx = V_INT(*rb);
+    Value *pval = pawV_list_get(P, list, idx);
+    *pval = *rc;
 }
 
-void pawR_getelem(paw_Env *P, enum paw_AdtKind kind)
+void pawR_map_length(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb)
 {
-    switch (kind) {
-        case PAW_ADT_STR:
-            str_get(P);
-            break;
-        case PAW_ADT_LIST:
-            list_get(P);
-            break;
-        case PAW_ADT_MAP:
-            map_get(P);
-    }
+    const size_t length = pawH_length(V_MAP(*rb));
+    V_SET_INT(ra, PAW_CAST_INT(length));
 }
 
-static void list_set(paw_Env *P)
+int pawR_map_get(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc)
 {
-    const Value val = *VM_TOP(1);
-    const paw_Int index = VM_INT(2);
-    List *list = VM_LIST(3);
-    Value *pval = pawV_list_get(P, list, index);
-    *pval = val;
-    VM_SHIFT(2);
+    Map *map = V_MAP(*rb);
+    const Value *pval = pawH_get(map, *rc);
+    if (pval == NULL) return -1;
+    *ra = *pval;
+    return 0;
 }
 
-static void map_set(paw_Env *P)
+void pawR_map_set(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc)
 {
-    const Value val = *VM_TOP(1);
-    const Value key = *VM_TOP(2);
-    Map *map = VM_MAP(3);
-    pawH_insert(P, map, key, val);
-    VM_SHIFT(2);
+    pawH_insert(P, V_MAP(*ra), *rb, *rc);
 }
 
-void pawR_setelem(paw_Env *P, enum paw_AdtKind kind)
+void pawR_str_getn(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc)
 {
-    switch (kind) {
-        case PAW_ADT_LIST:
-            list_set(P);
-            break;
-        case PAW_ADT_MAP:
-            map_set(P);
-            break;
-        case PAW_ADT_STR:
-            PAW_UNREACHABLE();
-    }
-}
-
-static void str_getn(paw_Env *P)
-{
-    const String *str = VM_STR(3);
-    const paw_Int i = VM_INT(2);
-    const paw_Int j = VM_INT(1);
+    const String *str = V_STRING(*rb);
+    const paw_Int i = V_INT(rc[0]);
+    const paw_Int j = V_INT(rc[1]);
 
     const size_t n = pawS_length(str);
     const size_t zi = check_slice_bound(P, i, n, "start", "string");
     const size_t zj = check_slice_bound(P, j, n, "end", "string");
 
-    Value *pv = VM_PUSH_0();
     const size_t nbytes = zj - zi;
     String *slice = pawS_new_nstr(P, str->text + zi, nbytes);
-    V_SET_OBJECT(pv, slice);
-
-    VM_SHIFT(3);
+    V_SET_OBJECT(ra, slice);
 }
 
-static void list_getn(paw_Env *P)
+void pawR_list_getn(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc)
 {
-    const List *list = VM_LIST(3);
-    const paw_Int i = VM_INT(2);
-    const paw_Int j = VM_INT(1);
+    const List *list = V_LIST(*rb);
+    const paw_Int i = V_INT(rc[0]);
+    const paw_Int j = V_INT(rc[1]);
 
     const size_t n = pawV_list_length(list);
     const size_t zi = check_slice_bound(P, i, n, "start", "list");
     const size_t zj = check_slice_bound(P, j, n, "end", "list");
-
-    Value *pv;
-    List *slice;
-    VM_LIST_INIT(slice, pv);
+    List *slice = VM_LIST_INIT(ra);
 
     const size_t nelems = zj - zi;
     pawV_list_resize(P, slice, nelems);
     memcpy(slice->begin, list->begin + zi,
             nelems * sizeof(list->begin[0]));
-
-    VM_SHIFT(3);
 }
 
-void pawR_getrange(paw_Env *P, enum paw_AdtKind kind)
-{
-    switch (kind) {
-        case PAW_ADT_LIST:
-            list_getn(P);
-            break;
-        case PAW_ADT_STR:
-            str_getn(P);
-            break;
-        case PAW_ADT_MAP:
-            PAW_UNREACHABLE();
-    }
-}
-
-static List *list_copy(paw_Env *P, Value *pv, const List *list)
+static List *list_copy(paw_Env *P, CallFrame *cf, Value *pv, const List *list)
 {
     List *copy = pawV_list_new(P);
     V_SET_OBJECT(pv, copy); // anchor
-    if (pawV_list_length(list)) {
+    if (pawV_list_length(list) > 0) {
         pawV_list_resize(P, copy, pawV_list_length(list));
         memcpy(copy->begin, list->begin, sizeof(list->begin[0]) * pawV_list_length(list));
     }
@@ -720,127 +343,129 @@ static List *list_copy(paw_Env *P, Value *pv, const List *list)
 }
 
 // setn([a1..an], i, j, [b1..bn]) => [a1..ai b1..bn aj..an]
-static void list_setn(paw_Env *P)
+void pawR_list_setn(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc)
 {
-    List *va = VM_LIST(4);
-    const paw_Int i = VM_INT(3);
-    const paw_Int j = VM_INT(2);
-    const List *vb = VM_LIST(1);
+    List *lhs = V_LIST(*ra);
+    const paw_Int i = V_INT(rb[0]);
+    const paw_Int j = V_INT(rb[1]);
+    const List *rhs = V_LIST(*rc);
 
-    const size_t na = pawV_list_length(va);
-    const size_t nb = pawV_list_length(vb);
+    const size_t na = pawV_list_length(lhs);
+    const size_t nb = pawV_list_length(rhs);
     const size_t zi = check_slice_bound(P, i, na, "start", "list");
     const size_t zj = check_slice_bound(P, j, na, "end", "list");
 
-    if (va == vb) {
-        Value *pv = VM_TOP(1);
-        paw_assert(pv->p == vb);
-        vb = list_copy(P, pv, vb);
+    if (lhs == rhs) {
+        // handles "list[i:j] = list"
+        rhs = list_copy(P, cf, (Value *)rc, rhs);
     }
 
-    const size_t zelem = sizeof(va->begin[0]);
     const size_t nelems = na - zj + zi + nb;
-    pawV_list_reserve(P, va, nelems);
+    pawV_list_reserve(P, lhs, nelems);
 
-    Value *gap = va->begin + zi;
-    memmove(gap + nb, va->begin + zj, (na - zj) * zelem);
-    memcpy(gap, vb->begin, nb * zelem);
-    pawV_list_resize(P, va, nelems);
-
-    VM_SHIFT(3);
+    Value *gap = lhs->begin + zi;
+    memmove(gap + nb, lhs->begin + zj, (na - zj) * sizeof(lhs->begin[0]));
+    memcpy(gap, rhs->begin, nb * sizeof(lhs->begin[0]));
+    pawV_list_resize(P, lhs, nelems);
 }
 
-void pawR_setrange(paw_Env *P, enum paw_AdtKind kind)
-{
-    switch (kind) {
-        case PAW_ADT_LIST:
-            list_setn(P);
-            break;
-        case PAW_ADT_STR:
-        case PAW_ADT_MAP:
-            PAW_UNREACHABLE();
-    }
-}
+//void pawR_init_tuple(paw_Env *P, Value *ra, int b, int c)
+//{
+//    Tuple *tuple = V_TUPLE(*ra);
+//    paw_assert(c <= tuple->nelems);
+//    for (int i = 0; i < c; ++i) {
+//        tuple->elems[b + i] = ra[1 + i];
+//    }
+//}
+//
+//void pawR_init_list(paw_Env *P, Value *ra, int b, int c)
+//{
+//    List *list = V_LIST(*ra);
+//    paw_assert(c <= pawV_list_length(list));
+//    while (c-- > 0) *list->begin++ = *++ra;
+//}
+//
+//void pawR_init_map(paw_Env *P, Value *ra, int b, int c)
+//{
+//    Map *map = V_MAP(*ra);
+//    paw_assert(c <= map->capacity);
+//    while (c-- > 0) {
+//        const Value key = *++ra;
+//        pawH_insert(P, map, key, *++ra);
+//    }
+//}
 
-void pawR_cmps(paw_Env *P, enum CmpOp op)
+Tuple *pawR_new_tuple(paw_Env *P, CallFrame *cf, Value *ra, int b)
 {
-    const String *x = VM_STR(2);
-    const String *y = VM_STR(1);
-    const int cmp = pawS_cmp(x, y);
-    paw_Bool z;
-    switch (op) {
-        CMP_CASES(cmp, 0, z);
-    }
-    VM_SET_BOOL(2, z);
-    VM_POP(1);
-}
-
-void pawR_getfield(paw_Env *P, int index)
-{
-    Tuple *tup = V_TUPLE(*VM_TOP(1));
-    *VM_TOP(1) = tup->elems[index];
-}
-
-Tuple *pawR_literal_tuple(paw_Env *P, int n)
-{
-    Value *pv = VM_PUSH_0();
-    Tuple *tuple = pawV_new_tuple(P, n);
-    V_SET_OBJECT(pv, tuple);
-
-    Value *dst = tuple->elems + n;
-    const Value *src = VM_TOP(1);
-    for (int i = 0; i < n; ++i) {
-        *--dst = *--src;
-    }
-    VM_SHIFT(n);
+    Tuple *tuple = pawV_new_tuple(P, b);
+    V_SET_OBJECT(ra, tuple);
     return tuple;
 }
 
-List *pawR_literal_list(paw_Env *P, int n)
+List *pawR_new_list(paw_Env *P, CallFrame *cf, Value *ra, int b)
 {
-    List *list;
-    StackPtr sp;
-    VM_LIST_INIT(list, sp);
-    if (n > 0) {
-        pawV_list_resize(P, list, CAST_SIZE(n));
-        Value *pv = list->end;
-        do {
-            *--pv = *--sp;
-        } while (pv != list->begin);
-        // Replace contents with list itself.
-        VM_SHIFT(n);
-    }
+    List *list = VM_LIST_INIT(ra);
+    pawV_list_resize(P, list, CAST_SIZE(b));
     return list;
 }
 
-Map *pawR_literal_map(paw_Env *P, int n)
+Map *pawR_new_map(paw_Env *P, CallFrame *cf, Value *ra, int b)
 {
-    Map *map;
-    StackPtr sp;
-    VM_MAP_INIT(map, sp);
-    if (n > 0) {
-        for (int i = 0; i < n; ++i) {
-            const Value value = *--sp;
-            pawH_insert(P, map, *--sp, value);
-        }
-        // Replace contents with map itself.
-        VM_SHIFT(2 * n);
-    }
+    Map *map = VM_MAP_INIT(ra);
+    pawH_reserve(P, map, CAST_SIZE(b));
     return map;
 }
 
-static void new_variant(paw_Env *P, int k, int nfields)
-{
-    Value *pv = VM_PUSH_0();
-    Tuple *tuple = pawV_new_tuple(P, 1 + nfields);
-    V_SET_OBJECT(pv, tuple);
 
-    tuple->elems[0].i = k;
-    for (int i = 0; i < nfields; ++i) {
-        tuple->elems[1 + i] = *VM_TOP(i - nfields - 1);
+// Macros for generating arithmetic and bitwise operations
+
+#define INT_UNARY_OP(op) { \
+        const Value *rb = VM_RB(opcode); \
+        V_SET_INT(ra, I_UNOP(V_INT(*rb), op)); \
     }
-    VM_SHIFT(nfields);
-}
+
+#define FLOAT_UNARY_OP(op) { \
+        const Value *rb = VM_RB(opcode); \
+        V_SET_FLOAT(ra, op V_FLOAT(*rb)); \
+    }
+
+#define INT_COMPARISON(op) { \
+        const Value *rb = VM_RB(opcode); \
+        const Value *rc = VM_RC(opcode); \
+        V_SET_BOOL(ra, V_INT(*rb) op V_INT(*rc)); \
+    }
+
+#define INT_BINARY_OP(op) { \
+        const Value *rb = VM_RB(opcode); \
+        const Value *rc = VM_RC(opcode); \
+        V_SET_INT(ra, I_BINOP(V_INT(*rb), V_INT(*rc), op)); \
+    }
+
+#define FLOAT_COMPARISON(op) { \
+        const Value *rb = VM_RB(opcode); \
+        const Value *rc = VM_RC(opcode); \
+        V_SET_BOOL(ra, V_FLOAT(*rb) op V_FLOAT(*rc)); \
+    }
+
+#define FLOAT_BINARY_OP(op) { \
+        const Value *rb = VM_RB(opcode); \
+        const Value *rc = VM_RC(opcode); \
+        V_SET_FLOAT(ra, V_FLOAT(*rb) op V_FLOAT(*rc)); \
+    }
+
+#define STR_COMPARISON(op) { \
+        const Value *rb = VM_RB(opcode); \
+        const Value *rc = VM_RC(opcode); \
+        V_SET_BOOL(ra, pawS_cmp(V_STRING(*rb), V_STRING(*rc)) op 0); \
+    }
+
+// If x / y is undefined, then so too is x % y (see C11 section 6.5.5,
+// item 6). Both cases equal 0 in Paw (x / y wraps).
+#define DIVMOD_OVERFLOWS(x, y) ((x) == PAW_INT_MIN && (y) == -1)
+
+#define STOP_LOOP(a, b, c) \
+    (((c) < 0 && (a) <= (b)) || ((c) > 0 && (a) >= (b)))
+
 
 void pawR_execute(paw_Env *P, CallFrame *cf)
 {
@@ -855,302 +480,406 @@ top:
 
     for (;;) {
         const OpCode opcode = *pc++;
-        vm_switch(GET_OP(opcode))
+        const Op op = GET_OP(opcode);
+        Value *ra = VM_RA(opcode);
+
+        vm_switch(op)
         {
-            vm_case(NOOP) :
+            vm_case(NOOP):
             {
                 // do nothing
             }
 
-            vm_case(POP) :
+            vm_case(CLOSE):
             {
-                VM_POP(GET_U(opcode));
+                pawR_close_upvalues(P, ra);
             }
 
-            vm_case(CLOSE) :
+            vm_case(MOVE):
             {
-                const int u = GET_U(opcode);
-                pawR_close_upvalues(P, VM_TOP(u));
-                VM_POP(u);
+                *ra = *VM_RB(opcode);
             }
 
-            vm_case(COPY) :
+            vm_case(LOADSMI):
             {
-                const int u = GET_U(opcode);
-                const Value v = *VM_TOP(u + 1);
-                VM_PUSH(v);
+                V_SET_INT(ra, GET_sBx(opcode));
             }
 
-            vm_case(PUSHZERO) :
+            vm_case(LOADK):
             {
-                VM_PUSH_0();
+                *ra = K[GET_Bx(opcode)];
             }
 
-            vm_case(PUSHONE) :
+            vm_case(IEQ): INT_COMPARISON(==)
+            vm_case(INE): INT_COMPARISON(!=)
+            vm_case(ILT): INT_COMPARISON(<)
+            vm_case(ILE): INT_COMPARISON(<=)
+            vm_case(IGT): INT_COMPARISON(>)
+            vm_case(IGE): INT_COMPARISON(>=)
+
+            vm_case(NOT):  INT_UNARY_OP(!)
+            vm_case(INEG): INT_UNARY_OP(-)
+            vm_case(IADD): INT_BINARY_OP(+)
+            vm_case(ISUB): INT_BINARY_OP(-)
+            vm_case(IMUL): INT_BINARY_OP(*)
+
+            vm_case(IDIV):
             {
-                VM_PUSH_INT(1);
+                const paw_Int x = V_INT(*VM_RB(opcode));
+                const paw_Int y = V_INT(*VM_RC(opcode));
+                if (y == 0) DIVIDE_BY_0(P);
+                if (DIVMOD_OVERFLOWS(x, y)) {
+                    V_SET_INT(ra, 0);
+                } else {
+                    V_SET_INT(ra, x / y);
+                }
             }
 
-            vm_case(PUSHSMI) :
+            vm_case(IMOD):
             {
-                VM_PUSH_INT(GET_S(opcode));
+                const paw_Int x = V_INT(*VM_RB(opcode));
+                const paw_Int y = V_INT(*VM_RC(opcode));
+                if (y == 0) DIVIDE_BY_0(P);
+                if (DIVMOD_OVERFLOWS(x, y)) {
+                    V_SET_INT(ra, 0);
+                } else {
+                    V_SET_INT(ra, x % y);
+                }
             }
 
-            vm_case(PUSHCONST) :
+            vm_case(BNOT): INT_UNARY_OP(~)
+            vm_case(BAND): INT_BINARY_OP(&)
+            vm_case(BOR):  INT_BINARY_OP(|)
+            vm_case(BXOR): INT_BINARY_OP(^)
+
+            vm_case(SHL):
             {
-                VM_PUSH(K[GET_U(opcode)]);
+                paw_Int x = V_INT(*VM_RB(opcode));
+                paw_Int y = V_INT(*VM_RC(opcode));
+                if (y < 0) {
+                    pawR_error(P, PAW_ERUNTIME, "negative shift count");
+                } else if (y > 0) {
+                    y = PAW_MIN(y, U2I(sizeof(x) * 8 - 1));
+                    x = U2I(I2U(x) << y);
+                }
+                V_SET_INT(ra, x);
             }
 
-            vm_case(CMPI) :
+            vm_case(SHR):
             {
-                pawR_cmpi(P, GET_U(opcode));
+                paw_Int x = V_INT(*VM_RB(opcode));
+                paw_Int y = V_INT(*VM_RC(opcode));
+                if (y < 0) {
+                    pawR_error(P, PAW_ERUNTIME, "negative shift count");
+                } else if (y > 0) {
+                    // Right shift by >= width of 'x' is UB in C. Clamp the
+                    // shift count. If 'x' < 0, then the results of the
+                    // shift are implementation-defined (may or may not
+                    // preserve the sign).
+                    y = PAW_MIN(y, U2I(sizeof(x) * 8 - 1));
+                    x >>= y;
+                }
+                V_SET_INT(ra, x);
             }
 
-            vm_case(CMPF) :
+            vm_case(FEQ):  FLOAT_COMPARISON(==)
+            vm_case(FNE):  FLOAT_COMPARISON(!=)
+            vm_case(FLT):  FLOAT_COMPARISON(<)
+            vm_case(FLE):  FLOAT_COMPARISON(<=)
+            vm_case(FGT):  FLOAT_COMPARISON(>)
+            vm_case(FGE):  FLOAT_COMPARISON(>=)
+
+            vm_case(FNEG): FLOAT_UNARY_OP(-)
+            vm_case(FADD): FLOAT_BINARY_OP(+)
+            vm_case(FSUB): FLOAT_BINARY_OP(-)
+            vm_case(FMUL): FLOAT_BINARY_OP(*)
+
+            vm_case(FDIV):
             {
-                pawR_cmpf(P, GET_U(opcode));
+                const paw_Float x = V_FLOAT(*VM_RB(opcode));
+                const paw_Float y = V_FLOAT(*VM_RC(opcode));
+                if (y == 0.0) DIVIDE_BY_0(P);
+                V_SET_FLOAT(ra, x / y);
             }
 
-            vm_case(CMPS) :
+            vm_case(FMOD):
             {
-                pawR_cmps(P, GET_U(opcode));
+                const paw_Float x = V_FLOAT(*VM_RB(opcode));
+                const paw_Float y = V_FLOAT(*VM_RC(opcode));
+                if (y == 0.0) DIVIDE_BY_0(P);
+                V_SET_FLOAT(ra, fmod(x, y));
             }
 
-            vm_case(ARITHI1) :
+            vm_case(SLENGTH):
             {
-                pawR_arithi1(P, GET_U(opcode));
+                const Value *rb = VM_RB(opcode);
+                pawR_str_length(P, cf, ra, rb);
             }
 
-            vm_case(ARITHI2) :
-            {
-                pawR_arithi2(P, GET_U(opcode));
-            }
+            vm_case(SEQ): STR_COMPARISON(==)
+            vm_case(SNE): STR_COMPARISON(!=)
+            vm_case(SLT): STR_COMPARISON(<)
+            vm_case(SLE): STR_COMPARISON(<=)
+            vm_case(SGT): STR_COMPARISON(>)
+            vm_case(SGE): STR_COMPARISON(>=)
 
-            vm_case(ARITHF1) :
-            {
-                pawR_arithf1(P, GET_U(opcode));
-            }
-
-            vm_case(ARITHF2) :
-            {
-                pawR_arithf2(P, GET_U(opcode));
-            }
-
-            vm_case(BITW1) :
-            {
-                pawR_bitw1(P, GET_U(opcode));
-            }
-
-            vm_case(BITW2) :
-            {
-                pawR_bitw2(P, GET_U(opcode));
-            }
-
-            vm_case(NOT) :
-            {
-                const paw_Bool b = VM_INT(1);
-                VM_SET_INT(1, !b);
-            }
-
-            vm_case(SWITCHDISCR) :
-            {
-                const int k = GET_U(opcode);
-                Value *pv = VM_TOP(1);
-                V_SET_BOOL(pv, V_DISCR(*pv) == k);
-            }
-
-            vm_case(LENGTH) :
-            {
-                const int u = GET_U(opcode);
-                pawR_length(P, u);
-            }
-
-            vm_case(CONCAT) :
+            vm_case(SCONCAT):
             {
                 VM_SAVE_PC();
-                const int u = GET_U(opcode);
-                pawR_concat(P, u);
-            }
-
-            vm_case(GETELEM) :
-            {
-                VM_SAVE_PC();
-                const int u = GET_U(opcode);
-                pawR_getelem(P, u);
-            }
-
-            vm_case(SETELEM) :
-            {
-                VM_SAVE_PC();
-                const int u = GET_U(opcode);
-                pawR_setelem(P, u);
-            }
-
-            vm_case(GETRANGE) :
-            {
-                VM_SAVE_PC();
-                const int u = GET_U(opcode);
-                pawR_getrange(P, u);
-            }
-
-            vm_case(SETRANGE) :
-            {
-                VM_SAVE_PC();
-                const int u = GET_U(opcode);
-                pawR_setrange(P, u);
-            }
-
-            vm_case(NEWTUPLE) :
-            {
-                VM_SAVE_PC();
-                pawR_literal_tuple(P, GET_U(opcode));
+                const int b = GET_B(opcode);
+                P->top.p = ra + b;
+                pawR_str_concat(P, cf, b);
                 CHECK_GC(P);
             }
 
-            vm_case(NEWLIST) :
+            vm_case(LLENGTH):
+            {
+                const Value *rb = VM_RB(opcode);
+                pawR_list_length(P, cf, ra, rb);
+            }
+
+            vm_case(LCONCAT):
             {
                 VM_SAVE_PC();
-                pawR_literal_list(P, GET_U(opcode));
+                const int b = GET_B(opcode);
+                P->top.p = ra + b;
+                pawR_list_concat(P, cf, b);
                 CHECK_GC(P);
             }
 
-            vm_case(NEWMAP) :
+            vm_case(SGET):
             {
                 VM_SAVE_PC();
-                pawR_literal_map(P, GET_U(opcode));
+                const Value *rb = VM_RB(opcode);
+                const Value *rc = VM_RC(opcode);
+                pawR_str_get(P, cf, ra, rb, rc);
+            }
+
+
+            vm_case(SGETN):
+            {
+                VM_SAVE_PC();
+                const Value *rb = VM_RB(opcode);
+                Value *rc = VM_RC(opcode);
+                P->top.p = rc + 1;
+                pawR_str_getn(P, cf, ra, rb, rc);
+            }
+
+            vm_case(LGET):
+            {
+                VM_SAVE_PC();
+                const Value *rb = VM_RB(opcode);
+                const Value *rc = VM_RC(opcode);
+                pawR_list_get(P, cf, ra, rb, rc);
+            }
+
+            vm_case(LSET):
+            {
+                VM_SAVE_PC();
+                const Value *rb = VM_RB(opcode);
+                const Value *rc = VM_RC(opcode);
+                pawR_list_set(P, cf, ra, rb, rc);
+            }
+
+            vm_case(LGETN):
+            {
+                VM_SAVE_PC();
+                const Value *rb = VM_RB(opcode);
+                Value *rc = VM_RC(opcode);
+                P->top.p = rc + 1;
+                pawR_list_getn(P, cf, ra, rb, rc);
+            }
+
+            vm_case(LSETN):
+            {
+                VM_SAVE_PC();
+                const Value *rb = VM_RB(opcode);
+                Value *rc = VM_RC(opcode);
+                P->top.p = rc + 1;
+                pawR_list_setn(P, cf, ra, rb, rc);
+            }
+
+            vm_case(MLENGTH):
+            {
+                const Value *rb = VM_RB(opcode);
+                pawR_map_length(P, cf, ra, rb);
+            }
+
+            vm_case(MGET):
+            {
+                VM_SAVE_PC();
+                const Value *rb = VM_RB(opcode);
+                const Value *rc = VM_RC(opcode);
+                if (pawR_map_get(P, cf, ra, rb, rc)) {
+                    pawR_error(P, PAW_EKEY, "key does not exist");
+                }
+            }
+
+            vm_case(MSET):
+            {
+                VM_SAVE_PC();
+                const Value *rb = VM_RB(opcode);
+                const Value *rc = VM_RC(opcode);
+                pawR_map_set(P, cf, ra, rb, rc);
+            }
+
+            vm_case(NEWTUPLE):
+            {
+                VM_SAVE_PC();
+                P->top.p = ra + 1;
+                const int b = GET_B(opcode);
+                pawR_new_tuple(P, cf, ra, b);
                 CHECK_GC(P);
             }
 
-            vm_case(CAST) :
-            {
-                cast_primitive(P, GET_A(opcode), GET_B(opcode));
-            }
-
-            vm_case(GETDISCR) :
-            {
-                Value *pv = VM_TOP(1);
-                *pv = V_TUPLE(*pv)->elems[0];
-            }
-
-            vm_case(TESTINT) :
-            {
-                const int u = GET_U(opcode);
-                Value *pv = VM_TOP(1);
-                pv->i = V_INT(*pv) == u;
-            }
-
-            vm_case(NEWINSTANCE) :
+            vm_case(NEWLIST):
             {
                 VM_SAVE_PC();
-                Value *pv = VM_PUSH_0();
-                Tuple *tuple = pawV_new_tuple(P, GET_U(opcode));
-                V_SET_OBJECT(pv, tuple);
+                P->top.p = ra + 1;
+                const int b = GET_B(opcode);
+                pawR_new_list(P, cf, ra, b);
                 CHECK_GC(P);
             }
 
-            vm_case(INITFIELD) :
+            vm_case(NEWMAP):
             {
                 VM_SAVE_PC();
-                const int u = GET_U(opcode);
-                Tuple *tuple = V_TUPLE(*VM_TOP(2));
-                tuple->elems[u] = *VM_TOP(1);
-                VM_POP(1);
+                P->top.p = ra + 1;
+                const int b = GET_B(opcode);
+                pawR_new_map(P, cf, ra, b);
+                CHECK_GC(P);
             }
 
-            vm_case(GETLOCAL) :
+            vm_case(TESTK):
             {
-                const Value local = cf->base.p[GET_U(opcode)];
-                VM_PUSH(local);
+                const Value *ra = VM_RA(opcode);
+                const Value k = K[GET_B(opcode)];
+                const int c = GET_C(opcode);
+                if (ra->u != k.u) ++pc;
             }
 
-            vm_case(SETLOCAL) :
+            vm_case(SWITCHINT):
             {
-                Value *plocal = &cf->base.p[GET_U(opcode)];
-                *plocal = *VM_TOP(1);
+                const Value *ra = VM_RA(opcode);
+                const paw_Int b = GET_B(opcode);
+                if (V_INT(*ra) != b) ++pc;
             }
 
-            vm_case(GETUPVALUE) :
+            vm_case(BCAST):
             {
-                const int u = GET_U(opcode);
-                const Value upval = *VM_UPVALUE(u);
-                VM_PUSH(upval);
+                const Value *rb = VM_RB(opcode);
+                V_SET_BOOL(ra, V_INT(*rb) != 0);
             }
 
-            vm_case(SETUPVALUE) :
+            vm_case(ICAST):
             {
-                const int u = GET_U(opcode);
-                Value *pupval = VM_UPVALUE(u);
-                *pupval = *VM_TOP(1);
+                const Value *rb = VM_RB(opcode);
+                const paw_Type c = GET_C(opcode);
+                if (c == PAW_TFLOAT) {
+                    // NOTE: Other primitives have a value representation compatible
+                    //       with that of the 'int' type.
+                    const paw_Float f = V_FLOAT(*rb);
+                    float2int(P, f, ra);
+                } else {
+                    *ra = *rb;
+                }
             }
 
-            vm_case(GETGLOBAL) :
+            vm_case(FCAST):
             {
-                const int u = GET_U(opcode);
-                VM_PUSH(*Y_PVAL(P, u));
+                const Value *rb = VM_RB(opcode);
+                const paw_Type c = GET_C(opcode);
+                if (c != PAW_TFLOAT) {
+                    const paw_Int i = V_INT(*rb);
+                    V_SET_FLOAT(ra, CAST(paw_Float, i));
+                } else {
+                    *ra = *rb;
+                }
             }
 
-            vm_case(GETFIELD) :
+            vm_case(GETDISCR):
+            {
+                const Value *rb = VM_RB(opcode);
+                *ra = V_TUPLE(*rb)->elems[0];
+            }
+
+            vm_case(GETUPVALUE):
+            {
+                const int b = GET_B(opcode);
+                *ra = *VM_UPVALUE(b);
+            }
+
+            vm_case(SETUPVALUE):
+            {
+                const Value *rb = VM_RB(opcode);
+                *VM_UPVALUE(GET_A(opcode)) = *rb;
+            }
+
+            vm_case(GETGLOBAL):
+            {
+                const int bc = GET_Bx(opcode);
+                *ra = *Y_PVAL(P, bc);
+            }
+
+            vm_case(GETFIELD):
             {
                 VM_SAVE_PC();
-                pawR_getfield(P, GET_U(opcode));
+                const Value *rb = VM_RB(opcode);
+                const int c = GET_C(opcode);
+                pawR_tuple_get(cf, ra, rb, c);
             }
 
-            vm_case(SETFIELD) :
+            vm_case(SETFIELD):
             {
                 VM_SAVE_PC();
-                pawR_setfield(P, GET_U(opcode));
+                const int b = GET_B(opcode);
+                const Value *rc = VM_RC(opcode);
+                pawR_tuple_set(cf, ra, b, rc);
             }
 
-            vm_case(CLOSURE) :
+            vm_case(CLOSURE):
             {
+                const int bx = GET_Bx(opcode);
+
                 VM_SAVE_PC();
-                Value *pv = VM_PUSH_0();
-                Proto *proto = fn->p->p[GET_U(opcode)];
+                Proto *proto = fn->p->p[bx];
                 Closure *closure = pawV_new_closure(P, proto->nup);
-                V_SET_OBJECT(pv, closure);
+                V_SET_OBJECT(ra, closure);
                 closure->p = proto;
+                P->top.p = ra + 1;
 
                 // open upvalues
                 StackPtr base = cf->base.p;
                 for (int i = 0; i < closure->nup; ++i) {
                     const struct UpValueInfo u = proto->u[i];
                     closure->up[i] = u.is_local
-                                         ? capture_upvalue(P, base + u.index)
-                                         : fn->up[u.index];
+                        ? capture_upvalue(P, base + u.index)
+                        : fn->up[u.index];
                 }
                 CHECK_GC(P);
             }
 
-            vm_case(CALL) :
+            vm_case(CALL):
             {
-                const uint8_t argc = GET_U(opcode);
-                StackPtr ptr = VM_TOP(argc + 1);
+                const uint8_t b = GET_B(opcode);
                 VM_SAVE_PC();
 
-                CallFrame *callee = pawC_precall(P, ptr, V_OBJECT(*ptr), argc);
+                P->top.p = ra + b + 1;
+                CallFrame *callee = pawC_precall(P, ra, V_OBJECT(*ra), b);
                 if (callee) {
                     cf = callee;
                     goto top;
                 }
             }
 
-            vm_case(SHIFT) :
+            vm_case(RETURN0):
             {
-                const int u = GET_U(opcode);
-                pawR_close_upvalues(P, VM_TOP(u));
-                VM_SHIFT(u);
-            }
-
-            vm_case(RETURN) :
-            {
-                const Value result = *VM_TOP(1);
-                VM_POP(1);
-
                 P->top.p = CF_STACK_RETURN(cf);
                 VM_SAVE_PC();
 
-                pawR_close_upvalues(P, VM_TOP(1));
-                VM_PUSH(result);
+                pawR_close_upvalues(P, P->top.p);
+                V_SET_0(P->top.p++);
+
                 P->cf = cf->prev;
                 if (CF_IS_ENTRY(cf)) {
                     return;
@@ -1159,73 +888,104 @@ top:
                 goto top;
             }
 
-            vm_case(JUMP) :
+            vm_case(RETURN):
             {
-                pc += GET_S(opcode);
-            }
+                const Value result = *ra;
 
-            vm_case(JUMPNULL) :
-            {
-                const Value v = *VM_TOP(1);
-                if (V_DISCR(v) == 0) {
-                    // jump over the OP_RETURN and unpack the value
-                    *VM_TOP(1) = V_TUPLE(v)->elems[1];
-                    pc += GET_S(opcode);
-                }
-            }
-
-            vm_case(JUMPFALSE) :
-            {
-                if (!V_TRUE(*VM_TOP(1))) {
-                    pc += GET_S(opcode);
-                }
-            }
-
-            vm_case(JUMPFALSEPOP) :
-            {
-                if (!V_TRUE(*VM_TOP(1))) {
-                    pc += GET_S(opcode);
-                }
-                VM_POP(1);
-            }
-
-            vm_case(FORNUM0) :
-            {
+                P->top.p = CF_STACK_RETURN(cf);
                 VM_SAVE_PC();
-                if (fornum_init(P)) {
-                    pc += GET_S(opcode); // skip
+
+                pawR_close_upvalues(P, P->top.p);
+                *P->top.p++ = result;
+
+                P->cf = cf->prev;
+                if (CF_IS_ENTRY(cf)) {
+                    return;
                 }
+                cf = P->cf;
+                goto top;
             }
 
-            vm_case(FORNUM) :
+            vm_case(EXPLODE):
             {
-                if (fornum(P)) {
-                    pc += GET_S(opcode); // continue
+                Value *rb = VM_RB(opcode);
+                const int c = GET_C(opcode);
+                P->top.p = rb + c;
+
+                const Tuple *tuple = V_TUPLE(*rb);
+                for (int i = 0; i < c; ++i) {
+                    ra[i] = tuple->elems[i];
                 }
             }
 
-#define VM_FORIN0(t, T) \
-            vm_case(FOR##T##0) : \
-            { \
-                VM_SAVE_PC(); \
-                if (for##t##_init(P)) { \
-                    VM_PUSH_0(); \
-                    pc += GET_S(opcode); \
-                } \
+            vm_case(JUMP):
+            {
+                pc += GET_sBx(opcode);
             }
-#define VM_FORIN(t, T) \
-            vm_case(FOR##T) : \
-            { \
-                if (for##t(P)) { \
-                    pc += GET_S(opcode); \
-                } \
+
+            vm_case(JUMPT):
+            {
+                if (V_TRUE(*ra)) pc += GET_sBx(opcode);
             }
-            VM_FORIN0(list, LIST)
-            VM_FORIN0(map, MAP)
-            VM_FORIN(list, LIST)
-            VM_FORIN(map, MAP)
-#undef VM_FORIN0
-#undef VM_FORIN
+
+            vm_case(JUMPF):
+            {
+                if (!V_TRUE(*ra)) pc += GET_sBx(opcode);
+            }
+
+            vm_case(FORPREP):
+            {
+                const paw_Int step = V_INT(ra[0]);
+                const paw_Int end = V_INT(ra[1]);
+                const paw_Int iter = V_INT(ra[2]);
+                paw_Int *pvar = &V_INT(ra[3]);
+                if (step == 0) {
+                    pawR_error(P, PAW_ERUNTIME, "loop step equals 0");
+                }
+                if (STOP_LOOP(iter, end, step)) {
+                    // skip loop body
+                    pc += GET_sBx(opcode);
+                } else {
+                    *pvar = iter;
+                }
+            }
+
+            vm_case(FORLOOP):
+            {
+                const paw_Int step = V_INT(ra[0]);
+                const paw_Int end = V_INT(ra[1]);
+                paw_Int *piter = &V_INT(ra[2]);
+                paw_Int *pvar = &V_INT(ra[3]);
+                const paw_Int next = I_BINOP(*piter, step, +);
+                if (!STOP_LOOP(next, end, step)) {
+                    // update state and jump to loop body
+                    *pvar = *piter = next;
+                    pc += GET_sBx(opcode);
+                }
+            }
+
+//#define VM_FORIN0(t, T) \
+//            vm_case(FOR##T##0): \
+//            { \
+//                VM_SAVE_PC(); \
+//                if (for##t##_init(P)) { \
+//                    VM_PUSH_0(); \
+//                    pc += GET_sBx(opcode); \
+//                } \
+//            }
+//#define VM_FORIN(t, T) \
+//            vm_case(FOR##T): \
+//            { \
+//                if (for##t(P)) { \
+//                    pc += GET_sBx(opcode); \
+//                } \
+//            }
+//            VM_FORIN0(list, LIST)
+//            VM_FORIN0(map, MAP)
+//            VM_FORIN(list, LIST)
+//            VM_FORIN(map, MAP)
+//#undef VM_FORIN0
+//#undef VM_FORIN
 
             vm_default:
                 PAW_UNREACHABLE();

@@ -22,7 +22,9 @@ static inline Value *insert_aux(Map *m, Value key)
     MapCursor erased;
     paw_Bool found_erased = PAW_FALSE;
     MapCursor mc = h_cursor_init(m, key);
-    while (h_get_state(&mc) != MAP_ITEM_VACANT) {
+    for (size_t i = 0;
+            i < m->capacity && h_get_state(&mc) != MAP_ITEM_VACANT;
+            ++i, h_cursor_next(&mc)) {
         if (h_get_state(&mc) == MAP_ITEM_ERASED) {
             if (!found_erased) {
                 // new item replaces the first erased item, continue searching
@@ -34,7 +36,6 @@ static inline Value *insert_aux(Map *m, Value key)
             // found a duplicate: replace it
             return h_cursor_value(&mc);
         }
-        h_cursor_next(&mc);
     }
     ++m->length;
     mc = found_erased ? erased : mc;
@@ -69,33 +70,38 @@ static void free_buffer(paw_Env *P, void *buffer, size_t capacity)
     pawM_free_(P, buffer, capacity * MAP_ITEM_TOTAL);
 }
 
-static void grow_map(paw_Env *P, Map *m)
+static void resize_map(paw_Env *P, Map *m, size_t capacity)
 {
-    size_t n = PAW_ALIGNOF(Value);
-    while (n <= m->capacity) {
-        n *= 2;
-    }
-
+    paw_assert(capacity > 0 && (capacity & (capacity - 1)) == 0);
     // NOTE: Allocation might cause an emergency collection. Keys and values are
     //       still reachable until pawM_alloc() returns, so they won't be freed.
-    pawM_check_size(P, 0, n, MAP_ITEM_TOTAL);
-    const size_t new_size = n * MAP_ITEM_TOTAL;
+    pawM_check_size(P, 0, capacity, MAP_ITEM_TOTAL);
+    const size_t new_size = capacity * MAP_ITEM_TOTAL;
     void *buffer = pawM_alloc(P, NULL, 0, new_size);
     if (buffer == NULL) {
         pawE_error(P, PAW_EMEMORY, -1,
                    "cannot allocate map table (out of memory)");
     }
-    memset(buffer, MAP_ITEM_VACANT, n * sizeof(MapMeta));
+    memset(buffer, MAP_ITEM_VACANT, capacity * sizeof(MapMeta));
     const Map old_m = *m;
 
     m->data = buffer;
-    m->capacity = n;
+    m->capacity = capacity;
 
     if (old_m.capacity > 0) {
         rehash_map(old_m, m);
     }
     free_buffer(P, old_m.data, old_m.capacity);
     CHECK_GC(P);
+}
+
+static void grow_map(paw_Env *P, Map *m)
+{
+    size_t n = PAW_ALIGNOF(Value);
+    while (n <= m->capacity) {
+        n *= 2;
+    }
+    resize_map(P, m, n);
 }
 
 Map *pawH_new(paw_Env *P)
@@ -119,6 +125,18 @@ Value *pawH_create(paw_Env *P, Map *m, Value key)
         grow_map(P, m);
     }
     return insert_aux(m, key);
+}
+
+void pawH_reserve(paw_Env *P, Map *m, size_t capacity)
+{
+    if (m->capacity / FILL_FACTOR < capacity) {
+        size_t n = PAW_ALIGNOF(Value);
+        while (n <= capacity) {
+            n *= 2;
+        }
+
+        resize_map(P, m, n * FILL_FACTOR);
+    }
 }
 
 void pawH_extend(paw_Env *P, Map *dst, Map *src)

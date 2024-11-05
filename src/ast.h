@@ -52,7 +52,7 @@ struct Compiler;
         X(IfStmt,     if_) \
         X(ForStmt,    for_) \
         X(WhileStmt,  while_) \
-        X(LabelStmt,  label) \
+        X(JumpStmt,   jump) \
         X(ReturnStmt, result) \
         X(MatchArm,   arm) \
         X(MatchStmt,  match)
@@ -491,9 +491,9 @@ struct AstWhileStmt {
     struct AstBlock *block;
 };
 
-struct AstLabelStmt {
+struct AstJumpStmt {
     AST_STMT_HEADER;
-    enum LabelKind label;
+    enum JumpKind jump_kind;
 };
 
 struct AstForStmt {
@@ -516,7 +516,7 @@ struct AstForStmt {
 
 struct AstMatchArm {
     AST_STMT_HEADER;
-    struct AstPat *guard;
+    struct AstPat *pat;
     struct AstBlock *result;
 };
 
@@ -571,11 +571,11 @@ struct AstPat *pawAst_new_pat(struct Ast *ast, int line, enum AstPatKind kind);
 #define AST_CAST_STMT(x) CAST(struct AstStmt *, x)
 #define AST_CAST_PAT(x) CAST(struct AstPat *, x)
 
-DEFINE_LIST(struct Compiler, pawAst_decl_list_, AstDeclList, struct AstDecl)
-DEFINE_LIST(struct Compiler, pawAst_expr_list_, AstExprList, struct AstExpr)
-DEFINE_LIST(struct Compiler, pawAst_stmt_list_, AstStmtList, struct AstStmt)
-DEFINE_LIST(struct Compiler, pawAst_pat_list_, AstPatList, struct AstPat)
-DEFINE_LIST(struct Compiler, pawAst_path_, AstPath, struct AstSegment)
+DEFINE_LIST_V2(struct Compiler, pawAst_decl_list_, AstDeclList, struct AstDecl *)
+DEFINE_LIST_V2(struct Compiler, pawAst_expr_list_, AstExprList, struct AstExpr *)
+DEFINE_LIST_V2(struct Compiler, pawAst_stmt_list_, AstStmtList, struct AstStmt *)
+DEFINE_LIST_V2(struct Compiler, pawAst_pat_list_, AstPatList, struct AstPat *)
+DEFINE_LIST_V2(struct Compiler, pawAst_path_, AstPath, struct AstSegment *)
 
 struct Ast *pawAst_new(struct Compiler *C, String *name, int modno);
 void pawAst_free(struct Ast *ast);
@@ -587,7 +587,7 @@ static inline struct AstSegment *pawAst_path_add(struct Compiler *C, struct AstP
     struct AstSegment *ps = pawAst_segment_new(C);
     ps->name = name;
     ps->types = args;
-    pawAst_path_push(C, path, ps);
+    K_LIST_PUSH(C, path, ps);
     return ps;
 }
 

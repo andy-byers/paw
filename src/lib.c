@@ -31,7 +31,8 @@
 
 static int base_assert(paw_Env *P)
 {
-    if (V_FALSE(*CF_BASE(1))) {
+    if (!paw_bool(P, 1)) {
+        // TODO: pass source text of falsy expression as second argument, display here
         pawR_error(P, PAW_ERUNTIME, "assertion failed");
     }
     return 0;
@@ -39,8 +40,9 @@ static int base_assert(paw_Env *P)
 
 static int base_print(paw_Env *P)
 {
-    const String *s = V_STRING(P->top.p[-1]);
-    pawO_write_all(P, pawO_stdout(), s->text, s->length);
+    const char *string = paw_string(P, 1);
+    const size_t length = paw_str_rawlen(P, 1);
+    pawO_write_all(P, pawO_stdout(), string, length);
     pawO_flush(pawO_stdout());
     return 0;
 }
@@ -48,7 +50,7 @@ static int base_print(paw_Env *P)
 static int list_insert(paw_Env *P)
 {
     List *list = V_LIST(*CF_BASE(1));
-    const paw_Int index = V_INT(*CF_BASE(2));
+    const paw_Int index = paw_int(P, 2);
     pawV_list_insert(P, list, index, *CF_BASE(3));
     paw_pop(P, 2); // return 'self'
     return 1;
@@ -85,7 +87,7 @@ static int enum_unwrap_or(paw_Env *P)
 
 static int list_length(paw_Env *P)
 {
-    pawR_length(P, PAW_ADT_LIST);
+    pawR_list_length(P, P->cf, CF_BASE(1), CF_BASE(1));
     return 1;
 }
 
@@ -127,7 +129,7 @@ static int list_remove(paw_Env *P)
     if (length == 0) {
         pawR_error(P, PAW_EVALUE, "remove from empty List");
     }
-    const paw_Int index = V_INT(*CF_BASE(2));
+    const paw_Int index = paw_int(P, 2);
     P->top.p[-1] = *pawV_list_get(P, list, index);
     pawV_list_pop(P, list, index);
     return 1;
@@ -188,7 +190,7 @@ static int string_split(paw_Env *P)
      pawC_pushns(P, pstr, CAST_SIZE(end - pstr));
      ++npart;
 
-     pawR_literal_list(P, npart);
+     paw_new_list(P, npart);
      return 1;
  }
 
@@ -219,7 +221,7 @@ static int string_join(paw_Env *P)
 
 static int string_starts_with(paw_Env *P)
 {
-    String *s = V_STRING(*CF_BASE(1));
+    const String *s = V_STRING(*CF_BASE(1));
     const String *prefix = V_STRING(*CF_BASE(2));
     const size_t prelen = prefix->length;
     const paw_Bool b = s->length >= prelen &&
@@ -230,7 +232,7 @@ static int string_starts_with(paw_Env *P)
 
 static int string_ends_with(paw_Env *P)
 {
-    String *s = V_STRING(*CF_BASE(1));
+    const String *s = V_STRING(*CF_BASE(1));
     const String *suffix = V_STRING(*CF_BASE(2));
     const size_t suflen = suffix->length;
     paw_Bool b = PAW_FALSE;
@@ -266,7 +268,7 @@ static int float_to_string(paw_Env *P)
 static int string_parse_float(paw_Env *P)
 {
     paw_Float f;
-    const char *str = V_TEXT(*CF_BASE(1));
+    const char *str = paw_string(P, 1);
     const int status = pawV_parse_float(P, str, &f);
     if (status != PAW_OK) pawR_error(P, PAW_ESYNTAX, "invalid float '%s'", str);
     V_SET_FLOAT(CF_BASE(1), f);
@@ -275,8 +277,8 @@ static int string_parse_float(paw_Env *P)
 
 static int string_parse_int(paw_Env *P)
 {
-    const char *str = V_TEXT(*CF_BASE(1));
-    const paw_Int base = V_INT(*CF_BASE(2));
+    const char *str = paw_string(P, 1);
+    const paw_Int base = paw_int(P, 2);
     if (base > INT_MAX) {
         pawR_error(P, PAW_EOVERFLOW, "base '%I' is too large", base);
     }
@@ -294,7 +296,7 @@ static int string_parse_int(paw_Env *P)
 
 static int map_length(paw_Env *P)
 {
-    pawR_length(P, PAW_ADT_MAP);
+//    pawR_length(P, PAW_ADT_MAP);
     return 1;
 }
 
@@ -404,48 +406,42 @@ void pawL_new_func(paw_Env *P, paw_Function func, int nup)
 
 static void add_prelude_func(paw_Env *P, const char *name, paw_Function func)
 {
-    paw_push_value(P, -1);
     paw_mangle_start(P);
     paw_push_string(P, name);
     paw_mangle_add_name(P);
     pawL_new_func(P, func, 0);
-
-    pawR_setelem(P, PAW_ADT_MAP);
-    pawC_stkdec(P, 1);
+    paw_map_set(P, -3);
 }
 
 static void add_prelude_method(paw_Env *P, const char *self, const char *name, paw_Function func)
 {
-    paw_push_value(P, -1);
     paw_mangle_start(P);
     paw_push_string(P, self);
     paw_mangle_add_name(P);
     paw_push_string(P, name);
     paw_mangle_add_name(P);
     pawL_new_func(P, func, 0);
-
-    pawR_setelem(P, PAW_ADT_MAP);
-    pawC_stkdec(P, 1);
+    paw_map_set(P, -3);
 }
 
 void pawL_push_builtin_map(paw_Env *P)
 {
     pawE_push_cstr(P, CSTR_KBUILTIN);
-    paw_map_getelem(P, PAW_REGISTRY_INDEX);
+    paw_map_get(P, PAW_REGISTRY_INDEX);
 }
 
 void pawL_push_modules_map(paw_Env *P)
 {
     pawE_push_cstr(P, CSTR_KMODULES);
-    paw_map_getelem(P, PAW_REGISTRY_INDEX);
+    paw_map_get(P, PAW_REGISTRY_INDEX);
 }
 
 // Load function pointers for prelude functions
 // Expects the 'paw.builtin' map (from the registry) on top of the stack
 static void load_builtins(paw_Env *P)
 {
-    add_prelude_func(P, "assert", base_assert); // fn assert(bool)
-    add_prelude_func(P, "print", base_print); // fn print(string)
+    add_prelude_func(P, "assert", base_assert);
+    add_prelude_func(P, "print", base_print);
 
     add_prelude_method(P, "bool", "to_string", bool_to_string);
     add_prelude_method(P, "int", "to_string", int_to_string);
@@ -492,12 +488,7 @@ paw_Bool l_getenv(paw_Env *P)
 
 static paw_Bool matches_modname(paw_Env *P, const char *modname)
 {
-    paw_push_value(P, -1);
-    paw_push_string(P, modname);
-    paw_cmps(P, PAW_CMP_EQ);
-    const paw_Bool found = paw_bool(P, -1);
-    paw_pop(P, 1);
-    return found;
+    return strncmp(modname, paw_string(P, -1), paw_str_rawlen(P, -1)) == 0;
 }
 
 static struct FileReader *new_file_reader(paw_Env *P, const char *pathname)
@@ -565,7 +556,7 @@ use_current_dir:;
 static void push_prelude_method(paw_Env *P, const char *self, const char *name)
 {
     pawE_push_cstr(P, CSTR_KBUILTIN);
-    paw_map_getelem(P, PAW_REGISTRY_INDEX);
+    paw_map_get(P, PAW_REGISTRY_INDEX);
 
     paw_mangle_start(P);
     paw_push_string(P, self);
@@ -573,10 +564,10 @@ static void push_prelude_method(paw_Env *P, const char *self, const char *name)
     paw_push_string(P, name);
     paw_mangle_add_name(P);
 
-    paw_map_getelem(P, -2);
+    paw_map_get(P, -2);
     paw_shift(P, 1);
 }
-#include"stdio.h"
+
 static int searcher_env(paw_Env *P)
 {
     PAW_PUSH_LITERAL(P, PAW_PATH_VAR);
@@ -677,7 +668,7 @@ int pawL_register_func(paw_Env *P, const char *name, paw_Function func, int nup)
     paw_push_string(P, name);
     paw_mangle_add_name(P);
     paw_new_native(P, func, nup);
-    paw_map_setelem(P, -3);
+    paw_map_set(P, -3);
     return 0;
 }
 
@@ -694,21 +685,17 @@ void *pawL_chunk_reader(paw_Env *P, const char *text, size_t length)
 
 void pawL_add_extern_func(paw_Env *P, const char *modname, const char *name, paw_Function func)
 {
-    paw_push_value(P, -1);
     paw_mangle_start(P);
     paw_push_string(P, modname);
     paw_mangle_add_module(P);
     paw_push_string(P, name);
     paw_mangle_add_name(P);
     pawL_new_func(P, func, 0);
-
-    pawR_setelem(P, PAW_ADT_MAP);
-    pawC_stkdec(P, 1);
+    paw_map_set(P, -3);
 }
 
 void pawL_add_extern_method(paw_Env *P, const char *modname, const char *self, const char *name, paw_Function func)
 {
-    paw_push_value(P, -1);
     paw_mangle_start(P);
     paw_push_string(P, modname);
     paw_mangle_add_module(P);
@@ -717,9 +704,7 @@ void pawL_add_extern_method(paw_Env *P, const char *modname, const char *self, c
     paw_push_string(P, name);
     paw_mangle_add_name(P);
     pawL_new_func(P, func, 0);
-
-    pawR_setelem(P, PAW_ADT_MAP);
-    pawC_stkdec(P, 1);
+    paw_map_set(P, -3);
 }
 
 static const char *file_import_reader(paw_Env *P, void *ud, size_t *psize)
@@ -738,7 +723,7 @@ static const char *file_import_reader(paw_Env *P, void *ud, size_t *psize)
 struct LoaderState *pawL_start_import(paw_Env *P)
 {
     pawE_push_cstr(P, CSTR_KSEARCHERS);
-    paw_map_getelem(P, PAW_REGISTRY_INDEX);
+    paw_map_get(P, PAW_REGISTRY_INDEX);
 
     paw_push_int(P, PAW_ITER_INIT);
     // .. name searchers iter f

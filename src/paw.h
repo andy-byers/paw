@@ -66,9 +66,9 @@ size_t paw_bytes_used(const paw_Env *P);
 // Creates a function object containing the code and pushes it onto the stack.
 int paw_load(paw_Env *P, paw_Reader input, const char *name, void *ud);
 
-// Invoke the paw runtime on a function with 'argc' parameters
-// The function object should be on the stack followed the the parameters, with
-// the last parameter on top.
+// Call a function with 'argc' arguments
+// The function object should be on the stack followed by the arguments, with
+// the last argument on top.
 int paw_call(paw_Env *P, int argc);
 
 // Type kinds
@@ -86,7 +86,6 @@ int paw_call(paw_Env *P, int argc);
 #define PAW_TINT 2
 #define PAW_TFLOAT 3
 #define PAW_TSTR 4
-#define PAW_NTYPES 5
 
 void paw_push_value(paw_Env *P, int index);
 void paw_push_zero(paw_Env *P, int n);
@@ -124,53 +123,10 @@ void paw_pop(paw_Env *P, int n);
 // Return the number of values in the current stack frame
 int paw_get_count(paw_Env *P);
 
-
-enum paw_CmpOp {
-    PAW_CMP_EQ,
-    PAW_CMP_NE,
-    PAW_CMP_LT,
-    PAW_CMP_LE,
-    PAW_CMP_GT,
-    PAW_CMP_GE,
-};
-
-// Comparison operations
-// Returns an integer, the sign of which describes the relationship between
-// the left and right operands: negative if the left operand is less than the
-// right, positive  if the left operand is greater than the right, and 0 if
-// the operands are equal.
-void paw_cmpi(paw_Env *P, enum paw_CmpOp op);
-void paw_cmpf(paw_Env *P, enum paw_CmpOp op);
-void paw_cmps(paw_Env *P, enum paw_CmpOp op);
-
-enum paw_ArithOp {
-    PAW_ARITH_NEG,
-    PAW_ARITH_ADD,
-    PAW_ARITH_SUB,
-    PAW_ARITH_MUL,
-    PAW_ARITH_DIV,
-    PAW_ARITH_MOD,
-};
-
-void paw_arithi(paw_Env *P, enum paw_ArithOp op);
-void paw_arithf(paw_Env *P, enum paw_ArithOp op);
-
-enum paw_BitwOp {
-    PAW_BITW_NOT,
-    PAW_BITW_XOR,
-    PAW_BITW_AND,
-    PAW_BITW_OR,
-    PAW_BITW_SHL,
-    PAW_BITW_SHR,
-};
-
-void paw_bitw(paw_Env *P, enum paw_BitwOp op);
-
-
 void paw_str_length(paw_Env *P, int index);
 void paw_str_concat(paw_Env *P, int count);
-void paw_str_getelem(paw_Env *P, int index);
-void paw_str_getrange(paw_Env *P, int index);
+void paw_str_get(paw_Env *P, int index);
+void paw_str_getn(paw_Env *P, int index);
 
 
 // Initializer for iterator state variables
@@ -178,16 +134,16 @@ void paw_str_getrange(paw_Env *P, int index);
 
 void paw_list_length(paw_Env *P, int index);
 void paw_list_concat(paw_Env *P, int count);
-void paw_list_getelem(paw_Env *P, int index);
-void paw_list_setelem(paw_Env *P, int index);
-void paw_list_getrange(paw_Env *P, int index);
-void paw_list_setrange(paw_Env *P, int index);
+void paw_list_get(paw_Env *P, int index);
+void paw_list_set(paw_Env *P, int index);
+void paw_list_getn(paw_Env *P, int index);
+void paw_list_setn(paw_Env *P, int index);
 paw_Bool paw_list_next(paw_Env *P, int index);
 
 
 void paw_map_length(paw_Env *P, int index);
-void paw_map_getelem(paw_Env *P, int index);
-void paw_map_setelem(paw_Env *P, int index);
+int paw_map_get(paw_Env *P, int index);
+void paw_map_set(paw_Env *P, int index);
 paw_Bool paw_map_next(paw_Env *P, int index);
 
 
@@ -229,7 +185,7 @@ struct paw_Item {
 // Get information about a toplevel item in the loaded module
 // Expects a string on top of the stack (which is consumed), indicating the mangled
 // name of the item. Returns PAW_OK on success, an error code otherwise.
-int paw_lookup_item(paw_Env *P, struct paw_Item *pitem);
+int paw_lookup_item(paw_Env *P, int index, struct paw_Item *pitem);
 
 // Routines for working with toplevel types
 

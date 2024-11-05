@@ -12,15 +12,15 @@
 #endif
 
 #ifndef LOCAL_MAX
-#define LOCAL_MAX 1024
+#define LOCAL_MAX 250
 #endif
 
 #ifndef FIELD_MAX
-#define FIELD_MAX 4096
+#define FIELD_MAX 250
 #endif
 
 #ifndef PARAM_MAX
-#define PARAM_MAX 256
+#define PARAM_MAX 100
 #endif
 
 #ifndef CONSTANT_MAX
@@ -28,60 +28,68 @@
 #endif
 
 #ifndef ITEM_MAX
-#define ITEM_MAX A_MAX
+#define ITEM_MAX Bx_MAX
 #endif
 
 #ifndef JUMP_MAX
-#define JUMP_MAX S_MAX
+#define JUMP_MAX sBx_MAX
 #endif
 
-#define OP_WIDTH 6
-#define U_WIDTH 26
-#define S_WIDTH 26
-#define A_WIDTH 17
-#define B_WIDTH 9
+// 32-bit opcodes, format modified from Lua:
+//
+// +-----------------------+
+// |  B  |  C  |  A  | Op  |
+// +-----+-----+-----+-----+
+// |     Bx    |  A  | Op  |
+// +-----------+-----+-----+
+//  MSB                 LSB
+#define OP_WIDTH 8
+#define Bx_WIDTH 16
+#define A_WIDTH 8
+#define B_WIDTH 8
+#define C_WIDTH 8
 
-#define U_OFFSET OP_WIDTH
-#define S_OFFSET OP_WIDTH
-#define A_OFFSET (OP_WIDTH + B_WIDTH)
-#define B_OFFSET OP_WIDTH
+#define OP_OFFSET 0
+#define Bx_OFFSET (OP_WIDTH + A_WIDTH)
+#define A_OFFSET OP_WIDTH
+#define B_OFFSET (OP_WIDTH + A_WIDTH + C_WIDTH)
+#define C_OFFSET (OP_WIDTH + A_WIDTH)
 
 #define OP_MAX ((1 << OP_WIDTH) - 1)
-#define U_MAX ((1 << U_WIDTH) - 1)
-#define S_MAX (U_MAX >> 1)
+#define Bx_MAX ((1 << Bx_WIDTH) - 1)
+#define sBx_MAX (Bx_MAX >> 1)
 #define A_MAX ((1 << A_WIDTH) - 1)
 #define B_MAX ((1 << B_WIDTH) - 1)
+#define C_MAX ((1 << C_WIDTH) - 1)
 
 #define MASK1(n, p) ((~((~(OpCode)0) << n)) << p)
 #define MASK0(n, p) (~MASK1(n, p))
 
-#define CREATE_OP(o) ((OpCode)(o))
-#define GET_OP(v) ((v) & MASK1(OP_WIDTH, 0))
+#define GET_OP(v) (Op)((v) & MASK1(OP_WIDTH, 0))
 #define SET_OP(v, o) (*(v) = (*(v) & MASK0(OP_WIDTH, 0)) | (OpCode)(o))
-
-#define CREATE_U(o, u) ((OpCode)(o) | ((OpCode)(u) << U_OFFSET))
-#define GET_U(v) (((v) >> U_OFFSET) & MASK1(U_WIDTH, 0))
-#define SET_U(v, u) \
-    (*(v) = (*(v) & MASK0(U_WIDTH, U_OFFSET)) | ((OpCode)(u) << U_OFFSET))
-
-#define CREATE_S(o, s) CREATE_U(o, (int)(s) + S_MAX)
-#define GET_S(v) ((int)GET_U(v) - S_MAX)
-#define SET_S(v, s) SET_U(v, (int)(s) + S_MAX)
-
-#define CREATE_AB(o, a, b) \
-    ((OpCode)(op) | ((OpCode)(a) << A_OFFSET) | ((OpCode)(b) << B_OFFSET))
-#define GET_A(v) ((v) >> A_OFFSET)
+#define GET_A(v) (((v) >> A_OFFSET) & MASK1(A_WIDTH, 0))
 #define SET_A(v, a) \
     (*(v) = (*(v) & MASK0(A_WIDTH, A_OFFSET)) | ((OpCode)(a) << A_OFFSET))
 #define GET_B(v) (((v) >> B_OFFSET) & MASK1(B_WIDTH, 0))
 #define SET_B(v, b) \
     (*(v) = (*(v) & MASK0(B_WIDTH, B_OFFSET)) | ((OpCode)(b) << B_OFFSET))
+#define GET_C(v) (((v) >> C_OFFSET) & MASK1(C_WIDTH, 0))
+#define SET_C(v, b) \
+    (*(v) = (*(v) & MASK0(C_WIDTH, C_OFFSET)) | ((OpCode)(b) << C_OFFSET))
+#define GET_Bx(v) (((v) >> Bx_OFFSET) & MASK1(Bx_WIDTH, 0))
+#define SET_Bx(v, u) \
+    (*(v) = (*(v) & MASK0(Bx_WIDTH, Bx_OFFSET)) | ((OpCode)(u) << Bx_OFFSET))
+#define GET_sBx(v) ((int)GET_Bx(v) - sBx_MAX)
+#define SET_sBx(v, s) SET_Bx(v, (int)(s) + sBx_MAX)
 
-enum paw_AdtKind {
-    PAW_ADT_STR,
-    PAW_ADT_LIST,
-    PAW_ADT_MAP,
-};
+#define CREATE_ABC(o, a, b, c) ((CAST(OpCode, o) << OP_OFFSET) \
+    | (CAST(OpCode, a) << A_OFFSET) \
+    | (CAST(OpCode, b) << B_OFFSET) \
+    | (CAST(OpCode, c) << C_OFFSET))
+
+#define CREATE_ABx(o, a, bc) ((CAST(OpCode, o) << OP_OFFSET) \
+    | (CAST(OpCode, a) << A_OFFSET) \
+    | (CAST(OpCode, bc) << Bx_OFFSET))
 
 typedef uint32_t OpCode;
 
@@ -95,171 +103,131 @@ typedef uint32_t OpCode;
 //   P = function prototypes
 //
 // ORDER Op
-typedef enum Op { // operands    stack in       stack out     side effects
-OP_PUSHZERO,//       -           -              0             -
-OP_PUSHONE,//        -           -              1             -
-OP_PUSHSMI,//        U           -              u             -
-OP_PUSHCONST,//      U           -              K[u]          -
+typedef enum Op { // arguments    description
+//                  -------------------------------------------------------------------------------
+OP_LOADSMI,//        A sBx        R[A] := sBx
+OP_LOADK,//          A Bx        R[A] := K[Bx]
 
-OP_NOOP,//           -           -              -             -
-OP_COPY,//           -           v              v v           -
-OP_POP,//            U           vu..v1         -             -
-OP_CLOSE,//          U           vu..v1         -             close stack to vu
-OP_SHIFT,//          U           vu..v1         v1            closes stack to vu
-OP_RETURN,//         -           f..v           v             closes stack to f
-OP_CLOSURE,//        A B         vb..v1         f             captures vu..v1 in f = P[a]
-OP_CALL,//           U           f vu..v1       v             v = f(vu..v1)
+OP_NOOP,//           -            -
+OP_MOVE,//           A B          R[A] := R[B]
+OP_CLOSE,//          A            close(A)
+OP_RETURN,//         A            return R[A]
+OP_RETURN0,//        -            return
+OP_CLOSURE,//        A Bx         R[A] := closure(P[Bx], R[A]..R[A+n])
+OP_CALL,//           A B          R[A] := R[A](R[A+1]..R[A+B+1])
+OP_EXPLODE,//        A B          R[A]..R[A+B] := *R[A]
 
-OP_JUMP,//           S           -              -             pc += S
-OP_JUMPFALSEPOP,//   S           v              -             pc += S
-OP_JUMPFALSE,//      S           v              v             if !v, then pc += S
-// TODO: replace with GETDISCR + JUMPFALSE. JUMPFALSEPOP can also be removed once we have a register machine
-OP_JUMPNULL,//       S           v              v             if v == null, then pc += S
+OP_JUMP,//           sBx          pc += sBx
+OP_JUMPT,//          A sBx        if (R[A]) pc += sBx
+OP_JUMPF,//          A sBx        if (!R[A]) pc += sBx
 
-OP_GETGLOBAL,//      U           -              G[K[u]]       -
-OP_GETLOCAL,//       U           -              L[u]          -
-OP_SETLOCAL,//       U           v              -             L[u] = v
-OP_GETUPVALUE,//     U           -              Up[u]         -
-OP_SETUPVALUE,//     U           v              -             Up[u] = v
+OP_GETGLOBAL,//      A Bx         R[A] := G[K[Bx]]       -
+OP_GETUPVALUE,//     A B          R[A] := Up[B]
+OP_SETUPVALUE,//     A B          Up[A] := R[B]
 
-OP_NEWTUPLE,//       U           vu..v1         (vu..v1)      -
-OP_NEWINSTANCE,//    U           -              v             -
-OP_NEWLIST,//        U           vu..v1         [vu..v1]      -
-OP_NEWMAP,//         U           v_2u..v1       [v_2u..v1]    -
+OP_NEWTUPLE,//       A B          R[A] := (<B fields>)
+OP_NEWLIST,//        A B          R[A] := [<B elems>]
+OP_NEWMAP,//         A B          R[A] := [<B pairs>]
 
-OP_INITFIELD,//      U           i v            i             i.fields[u] = v
+OP_INITLIST,//       A B C        for (i=0; i<C; i++) R[A][B+i] := R[A+i+1]
+OP_INITMAP,//        A B C        for (i=0; i<C; i++) R[A][B+i] := R[A+i+1]
+OP_INITTUPLE,//      A B C        for (i=0; i<C; i++) R[A][B+i] := R[A+i+1]
 
-OP_FORNUM0,//        S           *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
-OP_FORNUM,//         S           *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
-OP_FORLIST0,//       S           *-*-*-*-*-*-*-*  see notes for  *-*-*-*-*-*-*
-OP_FORLIST,//        S           *-*-*-*-*-*-*-*   description   *-*-*-*-*-*-*
-OP_FORMAP0,//        S           *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
-OP_FORMAP,//         S           *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
+OP_FORLOOP,//        A Bx         *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
+OP_FORPREP,//        A Bx         *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
 
-OP_CMPI,//           U           x y            z             -
-OP_CMPF,//           U           x y            z             -
-OP_CMPS,//           U           x y            z             -
-OP_ARITHI1,//        U           x              y             -
-OP_ARITHF1,//        U           x              y             -
-OP_ARITHI2,//        U           x y            z             -
-OP_ARITHF2,//        U           x y            z             -
-OP_BITW1,//          U           x              y             -
-OP_BITW2,//          U           x y            z             -
+// TODO
+OP_FORLIST0,//       A sBx        *-*-*-*-*-*-*-*  see notes for  *-*-*-*-*-*-*
+OP_FORLIST,//        A sBx        *-*-*-*-*-*-*-*   description   *-*-*-*-*-*-*
+OP_FORMAP0,//        A sBx        *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
+OP_FORMAP,//         A sBx        *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
 
-OP_NOT,//            -           v              !v            -
-OP_LENGTH,//         U           v              #v            -
-OP_CONCAT,//         U           x y            x+y           -
-OP_GETELEM,//        U           v i            v[i]          -
-OP_SETELEM,//        U           v i x          v[i] = x      -
-OP_GETRANGE,//       U           v i j          v[i:j]        -
-OP_SETRANGE,//       U           v i j x        v[i:j] = x    -
-OP_GETFIELD,//       U           v              v.u           -
-OP_SETFIELD,//       U           v x            -             v.u=x
+OP_TESTK,//          A B C        if (R[A] != K[B]) pc++
+OP_SWITCHINT,//      A B          if (R[A] != B) pc++
 
-// TODO: remove, use GETDISCR followed by TESTINT
-OP_SWITCHDISCR,//    U           v              discr(k)==u   -
+OP_IEQ,//            A B C        R[A] := R[B] == R[C]
+OP_INE,//            A B C        R[A] := R[B] != R[C]
+OP_ILT,//            A B C        R[A] := R[B] < R[C]
+OP_ILE,//            A B C        R[A] := R[B] <= R[C]
+OP_IGT,//            A B C        R[A] := R[B] > R[C]
+OP_IGE,//            A B C        R[A] := R[B] >= R[C]
+OP_NOT,//            A B          R[A] := !R[B]
+OP_INEG,//           A B          R[A] := -R[B]
+OP_IADD,//           A B C        R[A] := R[B] + R[C]
+OP_ISUB,//           A B C        R[A] := R[B] - R[C]
+OP_IMUL,//           A B C        R[A] := R[B] * R[C]
+OP_IDIV,//           A B C        R[A] := R[B] / R[C]
+OP_IMOD,//           A B C        R[A] := R[B] % R[C]
+OP_BNOT,//           A B          R[A] := ~R[B]
+OP_BAND,//           A B C        R[A] := R[B] & R[C]
+OP_BOR,//            A B C        R[A] := R[B] | R[C]
+OP_BXOR,//           A B C        R[A] := R[B] ^ R[C]
+OP_SHL,//            A B C        R[A] := R[B] << R[C]
+OP_SHR,//            A B C        R[A] := R[B] >> R[C]
 
-OP_GETDISCR,//       U           v              discr(k)      -
-OP_TESTINT,//        U           k              k==u          -
+OP_FEQ,//            A B C        R[A] := R[B] == R[C]
+OP_FNE,//            A B C        R[A] := R[B] != R[C]
+OP_FLT,//            A B C        R[A] := R[B] < R[C]
+OP_FLE,//            A B C        R[A] := R[B] >= R[C]
+OP_FGT,//            A B C        R[A] := R[B] > R[C]
+OP_FGE,//            A B C        R[A] := R[B] >= R[C]
+OP_FNEG,//           A B          R[A] := -R[B]
+OP_FADD,//           A B C        R[A] := R[B] + R[C]
+OP_FSUB,//           A B C        R[A] := R[B] - R[C]
+OP_FMUL,//           A B C        R[A] := R[B] * R[C]
+OP_FDIV,//           A B C        R[A] := R[B] / R[C]
+OP_FMOD,//           A B C        R[A] := R[B] % R[C]
 
-OP_CAST,//           A B         v              v as type(b)  -
+OP_SEQ,//            A B C        R[A] := R[B] == R[C]
+OP_SNE,//            A B C        R[A] := R[B] != R[C]
+OP_SLT,//            A B C        R[A] := R[B] < R[C]
+OP_SLE,//            A B C        R[A] := R[B] <= R[C]
+OP_SGT,//            A B C        R[A] := R[B] > R[C]
+OP_SGE,//            A B C        R[A] := R[B] >= R[C]
+OP_SLENGTH,//        A B          R[A] := #R[B]
+OP_SCONCAT,//        A B C        R[A] := R[B] + R[C]
+OP_SGET,//           A B C        R[A] := R[B][R[C]]
+OP_SGETN,//          A B C        R[A] := R[B][R[C]:R[C+1]]
+
+OP_LLENGTH,//        A B          R[A] := #R[B]
+OP_LCONCAT,//        A B C        R[A] := R[B] + R[C]
+OP_LGET,//           A B C        R[A] := R[B][R[C]]
+OP_LSET,//           A B C        R[A][R[B]] := R[C]
+OP_LGETN,//          A B C        R[A] := R[B][R[C]:R[C+1]]
+OP_LSETN,//          A B C        R[A][R[B]:R[B+1]] := R[C]
+
+OP_MLENGTH,//        A B          R[A] := #R[B]
+OP_MGET,//           A B C        R[A] := R[B][R[C]]
+OP_MSET,//           A B C        R[A][R[B]] := R[C]
+
+OP_GETFIELD,//       A B C        R[A] := R[B][C]
+OP_SETFIELD,//       A B C        R[A][B] := R[C]
+OP_GETDISCR,//       A B          R[A] := discr(R[B])
+
+OP_BCAST,//          A B          R[A] := R[B] as bool
+OP_ICAST,//          A B          R[A] := R[B] as int
+OP_FCAST,//          A B          R[A] := R[B] as float
 
 NOPCODES
 } Op;
 
-enum CmpOp {
-    CMP_EQ,
-    CMP_NE,
-    CMP_LT,
-    CMP_LE,
-    CMP_GT,
-    CMP_GE,
-};
-
-enum ArithOp1 {
-    ARITH1_NEG,
-};
-
-enum ArithOp2 {
-    ARITH2_ADD,
-    ARITH2_SUB,
-    ARITH2_MUL,
-    ARITH2_DIV,
-    ARITH2_MOD,
-};
-
-enum BitwOp1 {
-    BITW1_NOT,
-};
-
-enum BitwOp2 {
-    BITW2_XOR,
-    BITW2_AND,
-    BITW2_OR,
-    BITW2_SHL,
-    BITW2_SHR,
-};
-
-enum BoolOp {
-    BOOL_NOT,
-};
-
-enum StrOp {
-    STR_LEN,
-    STR_CONCAT,
-    STR_GET,
-    STR_GETN,
-};
-
-enum ListOp {
-    LIST_LEN,
-    LIST_CONCAT,
-    LIST_GET,
-    LIST_SET,
-    LIST_GETN,
-    LIST_SETN,
-};
-
-enum MapOp {
-    MAP_LEN,
-    MAP_GET,
-    MAP_SET,
-};
-
-#define BINOP_IS_BOOL(op) ((op) <= BINARY_GE)
-#define UNOP_IS_BOOL(op) ((op) == UNARY_NOT)
-
-// Notes:
-// * For OP_*OP, argument 'B' determines the type of the operands. The operands are
-//   always the same type for OP_BINOP.
-// * For the conversion operators (OP_CAST*), argument 'U' indicates the type of 'v'.
-// * OP_RETURN returns from the enclosing function, moving the value on top of the
-//   stack into the slot that previously held the function being called, and closes
-//   the stack to that point.
-// * OP_FOR*0 prepare a for loop. The loop body is skipped if the condition is
-//   false. For OP_FORNUM0, the loop 'begin' is compared against the loop 'end' using
-//   the sign of the loop 'step'. For OP_FORLIST0 and OP_FORMAP0, the loop is skipped
-//   if the container is empty. Both instructions will push the loop control variable.
-// * OP_FOR* run a single for-loop step.
-
 _Static_assert(UPVALUE_MAX <= A_MAX, "UPVALUE_MAX is too large");
 _Static_assert(LOCAL_MAX <= A_MAX, "LOCAL_MAX is too large");
-_Static_assert(FIELD_MAX <= U_MAX, "FIELD_MAX is too large");
-_Static_assert(PARAM_MAX <= A_MAX, "PARAM_MAX is too large");
-_Static_assert(CONSTANT_MAX <= A_MAX, "CONSTANT_MAX is too large");
-_Static_assert(ITEM_MAX <= U_MAX, "ITEM_MAX is too large");
-_Static_assert(JUMP_MAX <= S_MAX, "JUMP_MAX is too large");
+_Static_assert(FIELD_MAX <= B_MAX, "FIELD_MAX is too large");
+_Static_assert(PARAM_MAX <= B_MAX, "PARAM_MAX is too large");
+_Static_assert(CONSTANT_MAX <= Bx_MAX, "CONSTANT_MAX is too large");
+_Static_assert(ITEM_MAX <= Bx_MAX, "ITEM_MAX is too large");
+_Static_assert(JUMP_MAX <= sBx_MAX, "JUMP_MAX is too large");
 _Static_assert(NOPCODES <= OP_MAX, "too many opcodes");
 
 // sanity check opcode format
-_Static_assert(OP_WIDTH + A_WIDTH + B_WIDTH == sizeof(OpCode) * 8 &&
-        OP_WIDTH + U_WIDTH == sizeof(OpCode) * 8 &&
-        OP_WIDTH + S_WIDTH == sizeof(OpCode) * 8 &&
-        0 /* OP_OFFSET */ + OP_WIDTH == U_OFFSET &&
-        0 /* OP_OFFSET */ + OP_WIDTH == S_OFFSET &&
-        0 /* OP_OFFSET */ + OP_WIDTH == B_OFFSET &&
-        B_OFFSET + B_WIDTH == A_OFFSET &&
-        A_OFFSET + A_WIDTH == sizeof(OpCode) * 8,
+_Static_assert(OP_WIDTH + A_WIDTH + B_WIDTH + C_WIDTH== sizeof(OpCode) * 8 &&
+        OP_WIDTH + A_WIDTH + Bx_WIDTH == sizeof(OpCode) * 8 &&
+        0 /* OP_OFFSET */ + OP_WIDTH == A_OFFSET &&
+        A_OFFSET + A_WIDTH == C_OFFSET &&
+        C_OFFSET + C_WIDTH == B_OFFSET &&
+        B_OFFSET + B_WIDTH == sizeof(OpCode) * 8 &&
+        Bx_OFFSET + Bx_WIDTH == sizeof(OpCode) * 8,
         "invalid opcode format");
 
 #endif // PAW_OPCODE_H

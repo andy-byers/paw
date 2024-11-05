@@ -6,9 +6,7 @@
 
 An expressive scripting language
 
-Paw is a high-level scripting language and runtime designed for embedding.
-Paw features static strong typing under a sound type system, generics, and bidirectional type checking.
-Paw is an interpreted language that runs on a stack-based virtual machine written in C.
+Paw is a high-level, statically-typed, embeddable scripting language.
 
 ## Language Overview
 
@@ -213,6 +211,27 @@ pub fn eval(num: Num) -> int {
         },
     }
 }
+
+pub fn describe(target: Option<(int, Num)>) -> str {
+    match target {
+        Option::None => {
+            return "a";
+        },
+        Option::Some(
+            (0, Num::Zero)
+            | (1, Num::Succ(Num::Zero))
+            | (2, Num::Succ(Num::Succ(Num::Zero)))
+        ) => {
+            return "b";
+        },
+        Option::Some((x, y)) => {
+            if x == eval(y) {
+                return "c";
+            }
+            return "d";
+        },
+    }
+}
 ```
 
 ### Strings
@@ -383,7 +402,7 @@ assert(status != 0);
 
 ## Roadmap
 + [x] static, strong typing
-+ [x] special-cased builtin containers (`[T]` and `[K: V]`)
++ [x] special syntax for builtin containers (`[T]` and `[K: V]`)
 + [x] type inference for polymorphic `fn` and `struct`
 + [x] sum types/discriminated unions (`enum`)
 + [x] product types (tuple)
@@ -404,7 +423,7 @@ assert(status != 0);
 + The C API has pretty much 0 type safety
     + It may be necessary to reduce the scope of the C API somewhat
 + Compiler will allow functions that don't return a value in all code paths
-    + Likely requires a CFG and some data flow analysis: it would be very difficult to get right otherwise
+    + Use MIR to ensure a value is returned in all paths
 + Need to prevent situations where 2 methods with the same name are accessible from the same type
     + Complicated by the fact that impl blocks can either target a polymorphic ADT, or an instantiation thereof
     + In the first case, methods are available to all instantiations of the ADT, while in the second case they are available only to that particular instance.
@@ -414,10 +433,3 @@ assert(status != 0);
 + Pattern matching:
     + Should be an expression, not a statement (it was easier to make it a statement initially)
     + Should make sure that if a variable is bound in an '|' pattern, the same variable is bound in every '|'d together term
-    + Doesn't work for structures
-
-## References
-+ [Lua](https://www.lua.org/)
-+ [MicroPython](https://micropython.org/)
-+ [Crafting Interpreters](https://craftinginterpreters.com/)
-

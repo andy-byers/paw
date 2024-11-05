@@ -4,15 +4,15 @@ pub fn test_expr_result() {
     let f = || 1;
     assert(f() == 1);
     assert(f() == 1);
-    let f = || 'two';
-    assert(f() == 'two');
+    let f = || 2.3;
+    assert(f() == 2.3);
 
     let f = |a| a + 1;
     assert(f(1) == 2);
     assert(f(2) == 3);
-    let f = |a| a + 'two';
-    assert(f('') == 'two');
-    assert(f('2') == '2two');
+    let f = |a| a + 1.0;
+    assert(f(0.0) == 1.0);
+    assert(f(2.0) == 3.0);
 
     let f = |a, b, c| [[[a]], [[b], [c]]];
     let v = f(0, 1, 2);
@@ -34,21 +34,21 @@ pub fn test_infer_empty_block() {
 pub fn test_infer_block_return() {
     let choose = |i| {
         if i == 0 {
-            return 'a';
+            return 1;
         } else if i == 1 {
-            return 'b';
+            return 2;
         } else if i == 2 {
-            return 'c';
+            return 3;
         } else {
-            return 'd';
-        };
+            return 4;
+        }
     };
 
-    assert('dabcd' == choose(-1) +
-                      choose(0) +
-                      choose(1) +
-                      choose(2) +
-                      choose(3));
+    assert(14 == choose(-1) +
+                 choose(0) +
+                 choose(1) +
+                 choose(2) +
+                 choose(3));
 
 }
 
@@ -81,9 +81,9 @@ pub fn test_infer_param_from_body() {
     assert(f(1, 2) == 3);
     assert(f(10, 20) == 30);
 
-    let f = |a: str, b| {return a + b;};
-    assert(f('a', 'b') == 'ab');
-    assert(f('cd', 'ef') == 'cdef');
+    let f = |a: float, b| {return a + b;};
+    assert(f(0.0, 1.0) == 1.0);
+    assert(f(2.0, 3.0) == 5.0);
 }
 
 pub fn test_infer_param_from_call() {
@@ -98,7 +98,8 @@ pub fn test_infer_param_from_call() {
 
 fn map<A, B>(f: fn(A) -> B, a: [A]) -> [B] {
     let b = [];
-    for x in a {
+    for i = 0, #a {
+        let x = a[i];
         let y = f(x);
         b.push(y);
     };
@@ -208,3 +209,4 @@ pub fn test_capture_separate_lists() {
     assert(#f() == 2);
     assert(#g() == 2);
 }
+

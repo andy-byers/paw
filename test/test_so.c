@@ -31,7 +31,7 @@ int main(void)
     paw_mangle_add_name(P);
 
     struct paw_Item item;
-    status = paw_lookup_item(P, &item);
+    status = paw_lookup_item(P, -1, &item);
     check(status == PAW_OK && item.global_id >= 0);
     paw_get_global(P, item.global_id);
 

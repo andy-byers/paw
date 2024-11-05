@@ -25,11 +25,11 @@
     X(struct) \
     X(tuple) \
     X(enum) \
-    X(list) \
-    X(map) \
     X(method) \
     X(match) \
     X(match_enum) \
+    X(list) \
+    X(map) \
     X(misc) \
     X(poly_function) \
     X(poly_struct) \
@@ -38,6 +38,8 @@
     X(unit_struct) \
     X(unit_variant) \
     X(infer_assoc_items) \
+    X(capture_upvalue) \
+    X(close_loop_variable) \
     X(enum_impl)
 
 #define check(x) \

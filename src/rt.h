@@ -9,40 +9,33 @@
 
 void pawR_init(paw_Env *P);
 
-void pawR_cmpi(paw_Env *P, enum CmpOp);
-void pawR_cmpf(paw_Env *P, enum CmpOp);
-void pawR_cmps(paw_Env *P, enum CmpOp);
-
-void pawR_arithi1(paw_Env *P, enum ArithOp1 op);
-void pawR_arithi2(paw_Env *P, enum ArithOp2 op);
-void pawR_arithf1(paw_Env *P, enum ArithOp1 op);
-void pawR_arithf2(paw_Env *P, enum ArithOp2 op);
-void pawR_bitw1(paw_Env *P, enum BitwOp1 op);
-void pawR_bitw2(paw_Env *P, enum BitwOp2 op);
-
-void pawR_length(paw_Env *P, enum paw_AdtKind kind);
-void pawR_concat(paw_Env *P, enum paw_AdtKind kind);
-void pawR_getelem(paw_Env *P, enum paw_AdtKind kind);
-void pawR_setelem(paw_Env *P, enum paw_AdtKind kind);
-void pawR_getrange(paw_Env *P, enum paw_AdtKind kind);
-void pawR_setrange(paw_Env *P, enum paw_AdtKind kind);
-
 void pawR_error(paw_Env *P, int status, const char *fmt, ...);
 void pawR_field_error(paw_Env *P, Value field);
 void pawR_name_error(paw_Env *P, Value name);
 
-void pawR_getfield(paw_Env *P, int index);
-void pawR_setfield(paw_Env *P, int index);
-
-void pawR_getelem_list(paw_Env *P);
-void pawR_setelem_list(paw_Env *P);
-void pawR_getelem_map(paw_Env *P);
-void pawR_setelem_map(paw_Env *P);
-
 void pawR_execute(paw_Env *P, CallFrame *cf);
-Tuple *pawR_literal_tuple(paw_Env *P, int n);
-List *pawR_literal_list(paw_Env *P, int n);
-Map *pawR_literal_map(paw_Env *P, int n);
+
+Tuple *pawR_new_tuple(paw_Env *P, CallFrame *cf, Value *ra, int b);
+void pawR_tuple_get(CallFrame *cf, Value *ra, const Value *rb, int index);
+void pawR_tuple_set(CallFrame *cf, Value *ra, int index, const Value *rb);
+
+void pawR_str_length(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb);
+void pawR_str_concat(paw_Env *P, CallFrame *cf, int n);
+void pawR_str_get(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc);
+void pawR_str_getn(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc);
+
+List *pawR_new_list(paw_Env *P, CallFrame *cf, Value *ra, int b);
+void pawR_list_length(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb);
+void pawR_list_concat(paw_Env *P, CallFrame *cf, int n);
+void pawR_list_get(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc);
+void pawR_list_getn(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc);
+void pawR_list_set(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc);
+void pawR_list_setn(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc);
+
+Map *pawR_new_map(paw_Env *P, CallFrame *cf, Value *ra, int b);
+void pawR_map_length(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb);
+int pawR_map_get(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc);
+void pawR_map_set(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc);
 
 void pawR_close_upvalues(paw_Env *P, const StackPtr top);
 

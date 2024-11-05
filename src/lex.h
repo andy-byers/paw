@@ -20,6 +20,7 @@ enum MultiChar {
     TK_END = 255,
 
     // Multi-byte tokens:
+    TK_PLUS2,
     TK_DOT3,
     TK_COLON2,
     TK_LESS2,

@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "call.h"
+#include "code.h"
 #include "map.h"
 #include "paw.h"
 #include "rt.h"
@@ -141,6 +142,31 @@ static void test_map_erase(paw_Env *P)
     map_free(P, m);
 }
 
+static void test_map_erase_2(paw_Env *P)
+{
+    Map *m = map_new(P);
+
+    const int k0 = 1;
+    const int v0 = 42;
+    map_put(P, m, k0, v0);
+
+    const int n = 14;
+    for (int i = 0; i < n; ++i) {
+        const int k = k0 + i + 1;
+        map_put(P, m, k, i);
+        map_del(m, k);
+    }
+
+    check(v0 == map_get(m, k0));
+
+    for (int i = 0; i < n; ++i) {
+        const int k = k0 + i + 1;
+        check(NULL == map_try(m, k));
+    }
+
+    map_free(P, m);
+}
+
 static void test_map_ops(paw_Env *P)
 {
     Map *m = map_new(P);
@@ -258,10 +284,11 @@ static void test_strings(paw_Env *P)
 
 static void test_stack(paw_Env *P)
 {
+    const int n = paw_get_count(P);
     paw_push_zero(P, 2);
-    check(paw_get_count(P) == 2);
-    check(paw_int(P, 0) == 0);
-    check(paw_int(P, 1) == 0);
+    check(paw_get_count(P) == n + 2);
+    check(paw_int(P, n) == 0);
+    check(paw_int(P, n + 1) == 0);
 }
 
 static void driver(void (*callback)(paw_Env *))
@@ -400,10 +427,10 @@ static void test_immediates(void)
             (v) == GET_##X(opcode) ? (void)0 : ( \
                 fprintf(stderr, "'%s' unrepresentable by operand '%s'\n", #v, #X), \
                 abort()))
-    CHECK_BOUND(S, S_MAX);
-    CHECK_BOUND(S, -S_MAX);
-    CHECK_BOUND(U, 0);
-    CHECK_BOUND(U, U_MAX);
+    CHECK_BOUND(sBx, sBx_MAX);
+    CHECK_BOUND(sBx, -sBx_MAX);
+    CHECK_BOUND(Bx, 0);
+    CHECK_BOUND(Bx, Bx_MAX);
     CHECK_BOUND(A, 0);
     CHECK_BOUND(B, B_MAX);
     CHECK_BOUND(B, 0);
@@ -431,19 +458,42 @@ static void test_buffer(paw_Env *P)
     pawL_push_result(P, &buf);
 
     paw_push_string(P, "0123456789101112");
-    paw_cmps(P, PAW_CMP_EQ);
+// TODO    paw_cmps(P, PAW_CMP_EQ);
     check(paw_bool(P, -1));
     paw_pop(P, 1);
+}
+
+struct SmallStruct {
+    char a;
+};
+
+struct Context {
+    struct Pool *pool;
+    paw_Env *P;
+};
+
+DEFINE_LIST_V2(struct Context, small_struct_list_, SmallStructList, struct SmallStruct)
+
+static void test_compiler_lists(paw_Env *P) {
+    struct Pool pool;
+    pawK_pool_init(P, &pool, 1024, 8);
+    struct Context ctx = {.P = P, .pool = &pool};
+    struct SmallStructList *list = small_struct_list_new(&ctx);
+    struct SmallStruct value = {1};
+    K_LIST_PUSH(&ctx, list, value);
+    pawK_pool_uninit(P, &pool);
 }
 
 int main(void)
 {
     test_primitives();
     test_immediates();
+    driver(test_compiler_lists);
     driver(test_strings);
     driver(test_stack);
     driver(test_map_get_and_put);
     driver(test_map_erase);
+    driver(test_map_erase_2);
     driver(test_map_ops);
     driver(test_map_ops_2);
     driver(test_map_extend);

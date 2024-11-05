@@ -46,11 +46,13 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/env.h
             ${PAW_SOURCE_DIR}/gc.h
             ${PAW_SOURCE_DIR}/hir.h
+            ${PAW_SOURCE_DIR}/ir_type.h
             ${PAW_SOURCE_DIR}/lex.h
             ${PAW_SOURCE_DIR}/lib.h
             ${PAW_SOURCE_DIR}/map.h
             ${PAW_SOURCE_DIR}/match.h
             ${PAW_SOURCE_DIR}/mem.h
+            ${PAW_SOURCE_DIR}/mir.h
             ${PAW_SOURCE_DIR}/opcode.h
             ${PAW_SOURCE_DIR}/os.h
             ${PAW_SOURCE_DIR}/parse.h
@@ -58,6 +60,7 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/rt.h
             ${PAW_SOURCE_DIR}/str.h
             ${PAW_SOURCE_DIR}/type.h
+            ${PAW_SOURCE_DIR}/type_folder.h
             ${PAW_SOURCE_DIR}/unify.h
             ${PAW_SOURCE_DIR}/util.h
             ${PAW_SOURCE_DIR}/value.h
@@ -71,6 +74,7 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/collect_items.c
             ${PAW_SOURCE_DIR}/compile.c
             ${PAW_SOURCE_DIR}/debug.c
+            ${PAW_SOURCE_DIR}/decision.c
             ${PAW_SOURCE_DIR}/env.c
             ${PAW_SOURCE_DIR}/exhaustiveness.c
             ${PAW_SOURCE_DIR}/gc.c
@@ -78,21 +82,27 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/import.c
             ${PAW_SOURCE_DIR}/instantiate.c
             ${PAW_SOURCE_DIR}/iomod.c
+            ${PAW_SOURCE_DIR}/ir_type.c
             ${PAW_SOURCE_DIR}/lex.c
             ${PAW_SOURCE_DIR}/list.c
             ${PAW_SOURCE_DIR}/lib.c
             ${PAW_SOURCE_DIR}/lookup.c
             ${PAW_SOURCE_DIR}/lower_ast.c
+            ${PAW_SOURCE_DIR}/lower_hir.c
+            ${PAW_SOURCE_DIR}/lower_type.c
             ${PAW_SOURCE_DIR}/map.c
-            ${PAW_SOURCE_DIR}/match.c
             ${PAW_SOURCE_DIR}/mathmod.c
             ${PAW_SOURCE_DIR}/mem.c
+            ${PAW_SOURCE_DIR}/mir.c
+            ${PAW_SOURCE_DIR}/monomorphize.c
             ${PAW_SOURCE_DIR}/os.c
             ${PAW_SOURCE_DIR}/parse.c
+            ${PAW_SOURCE_DIR}/regalloc.c
             ${PAW_SOURCE_DIR}/resolve.c
             ${PAW_SOURCE_DIR}/rt.c
             ${PAW_SOURCE_DIR}/str.c
             ${PAW_SOURCE_DIR}/type.c
+            ${PAW_SOURCE_DIR}/type_folder.c
             ${PAW_SOURCE_DIR}/unify.c
             ${PAW_SOURCE_DIR}/util.c
             ${PAW_SOURCE_DIR}/value.c)

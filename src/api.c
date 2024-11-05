@@ -151,11 +151,10 @@ void paw_mangle_add_args(paw_Env *P, paw_Type *types)
     paw_str_concat(P, 2);
 }
 
-int paw_lookup_item(paw_Env *P, struct paw_Item *pitem)
+int paw_lookup_item(paw_Env *P, int index, struct paw_Item *pitem)
 {
-    const String *name = V_STRING(P->top.p[-1]);
+    const String *name = V_STRING(*at(P, index));
     const int did = pawE_locate(P, name, PAW_TRUE);
-    paw_pop(P, 1);
 
     if (did < 0) return PAW_ENAME;
     if (pitem == NULL) return 0;
@@ -417,14 +416,45 @@ void paw_get_upvalue(paw_Env *P, int ifn, int index)
     API_INCR_TOP(P, 1);
 }
 
+void paw_new_tuple(paw_Env *P, int n)
+{
+    Value *ra = pawC_push0(P);
+    pawR_new_tuple(P, P->cf, ra, n);
+
+    const Value *pv = at(P, -n - 1);
+    for (int i = 0; i < n; ++i) {
+        const Value *rb = pv++;
+        pawR_tuple_set(P->cf, ra, i, rb);
+    }
+    paw_shift(P, n);
+}
+
 void paw_new_list(paw_Env *P, int n)
 {
-    pawR_literal_list(P, n);
+    Value *ra = pawC_push0(P);
+    pawR_new_list(P, P->cf, ra, n);
+
+    const Value *pv = at(P, -n - 1);
+    for (int i = 0; i < n; ++i) {
+        const Value rb = {.i = i};
+        const Value *rc = pv++;
+        pawR_list_set(P, P->cf, ra, &rb, rc);
+    }
+    paw_shift(P, n);
 }
 
 void paw_new_map(paw_Env *P, int n)
 {
-    pawR_literal_map(P, n);
+    Value *ra = pawC_push0(P);
+    pawR_new_map(P, P->cf, ra, n);
+
+    const Value *pv = at(P, -2 * n - 1);
+    for (int i = 0; i < n; ++i) {
+        const Value *rb = pv++;
+        const Value *rc = pv++;
+        pawR_map_set(P, P->cf, ra, rb, rc);
+    }
+    paw_shift(P, 2 * n);
 }
 
 void *paw_new_foreign(paw_Env *P, size_t size, int nfields)
@@ -475,72 +505,6 @@ void paw_shift(paw_Env *P, int n)
     paw_pop(P, n);
 }
 
-#define CAST_ARITH2(op) CAST(enum ArithOp2, op - PAW_ARITH_ADD)
-_Static_assert(ARITH2_ADD == 0, "CAST_ARITH2 is incorrect");
-
-void paw_arithi(paw_Env *P, enum paw_ArithOp op)
-{
-    switch (op) {
-        case PAW_ARITH_NEG:
-            pawR_arithi1(P, ARITH1_NEG);
-            break;
-        case PAW_ARITH_ADD:
-        case PAW_ARITH_SUB:
-        case PAW_ARITH_MUL:
-        case PAW_ARITH_DIV:
-        case PAW_ARITH_MOD:
-            pawR_arithi2(P, CAST_ARITH2(op));
-    }
-}
-
-void paw_arithf(paw_Env *P, enum paw_ArithOp op)
-{
-    switch (op) {
-        case PAW_ARITH_NEG:
-            pawR_arithf1(P, ARITH1_NEG);
-            break;
-        case PAW_ARITH_ADD:
-        case PAW_ARITH_SUB:
-        case PAW_ARITH_MUL:
-        case PAW_ARITH_DIV:
-        case PAW_ARITH_MOD:
-            pawR_arithf2(P, CAST_ARITH2(op));
-    }
-}
-
-void paw_cmpi(paw_Env *P, enum paw_CmpOp op)
-{
-     pawR_cmpi(P, CAST(enum CmpOp, op));
-}
-
-void paw_cmpf(paw_Env *P, enum paw_CmpOp op)
-{
-     pawR_cmpf(P, CAST(enum CmpOp, op));
-}
-
-void paw_cmps(paw_Env *P, enum paw_CmpOp op)
-{
-     pawR_cmps(P, CAST(enum CmpOp, op));
-}
-
-#define CAST_BITW2(op) CAST(enum BitwOp2, op - PAW_BITW_XOR)
-_Static_assert(BITW2_XOR == 0, "CAST_BITW2 is incorrect");
-
-void paw_bitw(paw_Env *P, enum paw_BitwOp op)
-{
-     switch (op) {
-        case PAW_BITW_NOT:
-            pawR_bitw1(P, BITW1_NOT);
-            break;
-        case PAW_BITW_XOR:
-        case PAW_BITW_AND:
-        case PAW_BITW_OR:
-        case PAW_BITW_SHL:
-        case PAW_BITW_SHR:
-            pawR_bitw2(P, CAST_BITW2(op));
-     }
-}
-
 const char *paw_to_string(paw_Env *P, int index, paw_Type type, size_t *plen)
 {
     Value *pv = at(P, index);
@@ -557,22 +521,22 @@ void paw_str_length(paw_Env *P, int index)
 
 void paw_str_concat(paw_Env *P, int count)
 {
-    while (count-- > 1) pawR_concat(P, PAW_ADT_STR);
+    pawR_str_concat(P, P->cf, count);
 }
 
-void paw_str_getelem(paw_Env *P, int index)
-{
-    paw_push_value(P, index);
-    paw_rotate(P, -2, 1);
-    pawR_getelem(P, PAW_ADT_STR);
-}
-
-void paw_str_getrange(paw_Env *P, int index)
-{
-    paw_push_value(P, index);
-    paw_rotate(P, -3, 1);
-    pawR_getrange(P, PAW_ADT_STR);
-}
+//void paw_str_getelem(paw_Env *P, int index)
+//{
+//    paw_push_value(P, index);
+//    paw_rotate(P, -2, 1);
+//    pawR_getelem(P, PAW_ADT_STR);
+//}
+//
+//void paw_str_getrange(paw_Env *P, int index)
+//{
+//    paw_push_value(P, index);
+//    paw_rotate(P, -3, 1);
+//    pawR_getrange(P, PAW_ADT_STR);
+//}
 
 void paw_list_length(paw_Env *P, int index)
 {
@@ -584,36 +548,36 @@ void paw_list_length(paw_Env *P, int index)
 
 void paw_list_concat(paw_Env *P, int count)
 {
-    while (count-- > 1) pawR_concat(P, PAW_ADT_LIST);
+    pawR_list_concat(P, P->cf, count);
 }
 
-void paw_list_getelem(paw_Env *P, int index)
-{
-    paw_push_value(P, index);
-    paw_rotate(P, -2, 1);
-    pawR_getelem(P, PAW_ADT_LIST);
-}
-
-void paw_list_setelem(paw_Env *P, int index)
-{
-    paw_push_value(P, index);
-    paw_rotate(P, -3, 1);
-    pawR_setelem(P, PAW_ADT_LIST);
-}
-
-void paw_list_getrange(paw_Env *P, int index)
-{
-    paw_push_value(P, index);
-    paw_rotate(P, -3, 1);
-    pawR_getrange(P, PAW_ADT_LIST);
-}
-
-void paw_list_setrange(paw_Env *P, int index)
-{
-    paw_push_value(P, index);
-    paw_rotate(P, -4, 1);
-    pawR_setrange(P, PAW_ADT_LIST);
-}
+//void paw_list_getelem(paw_Env *P, int index)
+//{
+//    paw_push_value(P, index);
+//    paw_rotate(P, -2, 1);
+//    pawR_getelem(P, PAW_ADT_LIST);
+//}
+//
+//void paw_list_setelem(paw_Env *P, int index)
+//{
+//    paw_push_value(P, index);
+//    paw_rotate(P, -3, 1);
+//    pawR_list_setelem(P);
+//}
+//
+//void paw_list_getrange(paw_Env *P, int index)
+//{
+//    paw_push_value(P, index);
+//    paw_rotate(P, -3, 1);
+//    pawR_list_getn(P);
+//}
+//
+//void paw_list_setrange(paw_Env *P, int index)
+//{
+//    paw_push_value(P, index);
+//    paw_rotate(P, -4, 1);
+//    pawR_list_setn(P);
+//}
 
 paw_Bool paw_list_next(paw_Env *P, int index)
 {
@@ -636,18 +600,20 @@ void paw_map_length(paw_Env *P, int index)
     paw_push_int(P, PAW_CAST_INT(len));
 }
 
-void paw_map_getelem(paw_Env *P, int index)
+int paw_map_get(paw_Env *P, int index)
 {
-    paw_push_value(P, index);
-    paw_rotate(P, -2, 1);
-    pawR_getelem(P, PAW_ADT_MAP);
+    Value *ra = at(P, -1);
+    const Value *rb = at(P, index);
+    return pawR_map_get(P, P->cf, ra, rb, ra);
 }
 
-void paw_map_setelem(paw_Env *P, int index)
+void paw_map_set(paw_Env *P, int index)
 {
-    paw_push_value(P, index);
-    paw_rotate(P, -3, 1);
-    pawR_setelem(P, PAW_ADT_MAP);
+    Value *ra = at(P, index);
+    const Value *rb = at(P, -2);
+    const Value *rc = at(P, -1);
+    pawR_map_set(P, P->cf, ra, rb, rc);
+    paw_pop(P, 2);
 }
 
 paw_Bool paw_map_next(paw_Env *P, int index)

@@ -5,79 +5,6 @@
 #include "code.h"
 #include "compile.h"
 
-static int stack_effect(OpCode opcode)
-{
-    const Op op = GET_OP(opcode);
-    switch (op) {
-        case OP_NEWTUPLE:
-        case OP_NEWLIST:
-            return 1 - GET_U(opcode);
-        case OP_NEWMAP:
-            return 1 - GET_U(opcode) * 2;
-        case OP_POP:
-        case OP_CLOSE:
-        case OP_SHIFT:
-        case OP_CALL:
-            return -GET_U(opcode);
-        case OP_SETRANGE:
-            return -4;
-        case OP_SETFIELD:
-        case OP_SETELEM:
-            return -3;
-        case OP_GETRANGE:
-            return -2;
-        case OP_JUMPFALSEPOP:
-        case OP_SETLOCAL:
-        case OP_SETUPVALUE:
-        case OP_INITFIELD:
-        case OP_CMPI:
-        case OP_CMPF:
-        case OP_CMPS:
-        case OP_ARITHI2:
-        case OP_ARITHF2:
-        case OP_BITW2:
-        case OP_GETFIELD:
-        case OP_GETELEM:
-        case OP_CONCAT:
-            return -1;
-        case OP_RETURN:
-        case OP_NOOP:
-        case OP_JUMP:
-        case OP_JUMPFALSE:
-        case OP_JUMPNULL:
-        case OP_ARITHI1:
-        case OP_ARITHF1:
-        case OP_BITW1:
-        case OP_CAST:
-        case OP_NOT:
-        case OP_LENGTH:
-        case OP_SWITCHDISCR:
-        case OP_GETDISCR:
-        case OP_TESTINT:
-            return 0;
-        case OP_PUSHZERO:
-        case OP_PUSHONE:
-        case OP_PUSHSMI:
-        case OP_PUSHCONST:
-        case OP_COPY:
-        case OP_NEWINSTANCE:
-        case OP_GETGLOBAL:
-        case OP_GETLOCAL:
-        case OP_GETUPVALUE:
-        case OP_FORNUM0:
-        case OP_FORNUM:
-        case OP_FORLIST:
-        case OP_FORMAP:
-        case OP_CLOSURE:
-            return 1;
-        case OP_FORLIST0:
-        case OP_FORMAP0:
-            return 2;
-        case NOPCODES:
-            PAW_UNREACHABLE();
-    }
-}
-
 static void add_line(struct FuncState *fs)
 {
     Proto *p = fs->proto;
@@ -87,12 +14,6 @@ static void add_line(struct FuncState *fs)
         .line = fs->line,
         .pc = fs->pc,
     };
-}
-
-void pawK_fix_line(struct FuncState *fs, int line)
-{
-    paw_assert(fs->nlines > 0);
-    fs->proto->lines[fs->nlines - 1].line = line;
 }
 
 static void add_opcode(struct FuncState *fs, OpCode code)
@@ -106,35 +27,31 @@ static void add_opcode(struct FuncState *fs, OpCode code)
     pawM_grow(P, p->source, fs->pc, p->length);
     p->source[fs->pc] = code;
     ++fs->pc;
-
-    fs->nstack += stack_effect(code);
-    if (p->max_stack < fs->nstack) {
-        p->max_stack = fs->nstack;
-    }
 }
 
 void pawK_code_0(struct FuncState *fs, Op op)
 {
     add_line(fs);
-    add_opcode(fs, CREATE_OP(op));
+    add_opcode(fs, op);
 }
 
-void pawK_code_S(struct FuncState *fs, Op op, int s)
+void pawK_code_ABx(struct FuncState *fs, Op op, int a, int bc)
 {
+    paw_assert(0 <= a && a <= A_MAX);
+    paw_assert(0 <= bc && bc <= Bx_MAX);
+
     add_line(fs);
-    add_opcode(fs, CREATE_S(op, s));
+    add_opcode(fs, CREATE_ABx(op, a, bc));
 }
 
-void pawK_code_U(struct FuncState *fs, Op op, int u)
+void pawK_code_ABC(struct FuncState *fs, Op op, int a, int b, int c)
 {
-    add_line(fs);
-    add_opcode(fs, CREATE_U(op, u));
-}
+    paw_assert(0 <= a && a < A_MAX);
+    paw_assert(0 <= b && b < B_MAX);
+    paw_assert(0 <= c && c < C_MAX);
 
-void pawK_code_AB(struct FuncState *fs, Op op, int a, int b)
-{
     add_line(fs);
-    add_opcode(fs, CREATE_AB(op, a, b));
+    add_opcode(fs, CREATE_ABC(op, a, b, c));
 }
 
 typedef struct Arena {
@@ -236,6 +153,22 @@ void pawK_pool_free(struct Pool *pool, void *ptr, size_t size)
 //    };
 //    memcpy(ptr, &prototype, sizeof(prototype));
 //    pool->free = ptr;
+}
+
+void *pawK_list_ensure_one_(paw_Env *P, struct Pool *pool, void *data, size_t zelem, int count, int *palloc)
+{
+    paw_assert(*palloc >= 0);
+    paw_assert(count >= 0);
+    paw_assert(zelem > 0);
+
+    if (count >= *palloc) {
+        if (*palloc > K_LIST_MAX / 2) pawM_error(P);
+        *palloc = *palloc != 0 ? CAST_SIZE(*palloc) * 2 : K_LIST_MIN;
+        void *next = pawK_pool_alloc(P, pool, CAST_SIZE(*palloc) * zelem);
+        memcpy(next, data, CAST_SIZE(count) * zelem);
+        return next;
+    }
+    return data;
 }
 
 void *pawK_list_ensure_one(struct Compiler *C, void *data, int count, int *palloc)

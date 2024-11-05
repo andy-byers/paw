@@ -7,17 +7,18 @@
 #include "compile.h"
 #include "env.h"
 #include "hir.h"
+#include "ir_type.h"
 #include "unify.h"
 
 #define ERROR(U, line, ...) pawE_error(ENV((U)->C), PAW_ETYPE, line, __VA_ARGS__)
 
 typedef struct InferenceVar {
     K_ALIGNAS_NODE struct InferenceVar *parent;
-    struct HirType *type;
+    struct IrType *type;
     int rank;
 } InferenceVar;
 
-DEFINE_LIST(struct Compiler, var_list_, VarList, struct InferenceVar)
+DEFINE_LIST_V2(struct Compiler, var_list_, VarList, struct InferenceVar *)
 
 typedef struct UnificationTable {
     K_ALIGNAS_NODE struct UnificationTable *outer;
@@ -25,7 +26,7 @@ typedef struct UnificationTable {
     int depth; // depth of binder
 } UnificationTable;
 
-static void overwrite_type(InferenceVar *ivar, const struct HirType *src)
+static void overwrite_type(InferenceVar *ivar, const struct IrType *src)
 {
     *ivar->type = *src;
 }
@@ -36,15 +37,15 @@ static InferenceVar *get_ivar(UnificationTable *table, int index)
     return table->ivars->data[index];
 }
 
-static void debug_log(struct Unifier *U, const char *what, struct HirType *a, struct HirType *b)
+static void debug_log(struct Unifier *U, const char *what, struct IrType *a, struct IrType *b)
 {
     paw_assert(a != NULL);
     paw_assert(b != NULL);
 
-#if defined(PAW_DEBUG_LOG)
+#if defined(PAW_LOG_UNIFY)
     paw_Env *P = ENV(U->C);
-    pawHir_print_type(U->C, a);
-    pawHir_print_type(U->C, b);
+    pawIr_print_type(U->C, a);
+    pawIr_print_type(U->C, b);
     DLOG(U->C, "(unify) %s: %s = %s",
             what, paw_string(P, -2), paw_string(P, -1));
     paw_pop(P, 2);
@@ -74,22 +75,22 @@ static void link_roots(InferenceVar *a, InferenceVar *b)
     }
 }
 
-static void check_occurs(struct Unifier *U, InferenceVar *ivar, struct HirType *type)
+static void check_occurs(struct Unifier *U, InferenceVar *ivar, struct IrType *type)
 {
     if (ivar->type == type) {
-        paw_assert(HirIsUnknown(type));
-        ERROR(U, type->hdr.line, "encountered cyclic type");
+        paw_assert(IrIsInfer(type));
+        ERROR(U, -1, "encountered cyclic type");
     }
-    if (!HirIsAdt(type)) return;
-    struct HirAdt *adt = HirGetAdt(type);
+    if (!IrIsAdt(type)) return;
+    struct IrAdt *adt = IrGetAdt(type);
     if (adt->types == NULL) return;
     for (int i = 0; i < adt->types->count; ++i) {
-        struct HirType *subtype = K_LIST_GET(adt->types, i);
+        struct IrType *subtype = K_LIST_GET(adt->types, i);
         check_occurs(U, ivar, subtype);
     }
 }
 
-static void unify_var_type(struct Unifier *U, InferenceVar *ivar, struct HirType *type)
+static void unify_var_type(struct Unifier *U, InferenceVar *ivar, struct IrType *type)
 {
     debug_log(U, "unify_var_type", ivar->type, type);
 
@@ -109,20 +110,20 @@ static void unify_var_var(struct Unifier *U, InferenceVar *a, InferenceVar *b)
     }
 }
 
-static struct HirType *normalize_unknown(UnificationTable *table, struct HirType *type)
+static struct IrType *normalize_unknown(UnificationTable *table, struct IrType *type)
 {
-    paw_assert(table->depth == type->unknown.depth);
-    const int index = type->unknown.index;
+    paw_assert(table->depth == IrGetInfer(type)->depth);
+    const int index = IrGetInfer(type)->index;
     InferenceVar *ivar = get_ivar(table, index);
     const InferenceVar *root = find_root(ivar);
-    if (!HirIsUnknown(root->type)) {
+    if (!IrIsInfer(root->type)) {
         paw_assert(ivar != root);
         overwrite_type(ivar, root->type);
     }
     return root->type;
 }
 
-static void normalize_list(UnificationTable *table, struct HirTypeList *list)
+static void normalize_list(UnificationTable *table, struct IrTypeList *list)
 {
     if (list == NULL) return;
     for (int i = 0; i < list->count; ++i) {
@@ -130,35 +131,32 @@ static void normalize_list(UnificationTable *table, struct HirTypeList *list)
     }
 }
 
-struct HirType *pawU_normalize(UnificationTable *table, struct HirType *type)
+struct IrType *pawU_normalize(UnificationTable *table, struct IrType *type)
 {
-    switch (HIR_KINDOF(type)) {
-        case kHirFuncDef:
-            normalize_list(table, HirGetFuncDef(type)->types);
+    switch (IR_KINDOF(type)) {
+        case kIrSignature:
+            normalize_list(table, IrGetSignature(type)->types);
             // fallthrough
-        case kHirFuncPtr:
-            normalize_list(table, HIR_FPTR(type)->params);
-            type->fdef.result = pawU_normalize(table, HIR_FPTR(type)->result);
+        case kIrFuncPtr:
+            normalize_list(table, IR_FPTR(type)->params);
+            IR_FPTR(type)->result = pawU_normalize(table, IR_FPTR(type)->result);
             break;
-        case kHirUnknown:
+        case kIrInfer:
             type = normalize_unknown(table, type);
             break;
-        case kHirTupleType:
-            normalize_list(table, HirGetTupleType(type)->elems);
+        case kIrTuple:
+            normalize_list(table, IrGetTuple(type)->elems);
             break;
-        case kHirAdt:
-            normalize_list(table, HirGetAdt(type)->types);
+        case kIrAdt:
+            normalize_list(table, IrGetAdt(type)->types);
             break;
-        case kHirGeneric:
+        case kIrGeneric:
             break;
-        case kHirPathType:
-            // paths are resolved
-            PAW_UNREACHABLE();
     }
     return type;
 }
 
-static int unify_lists(struct Unifier *U, struct HirTypeList *a, struct HirTypeList *b)
+static int unify_lists(struct Unifier *U, struct IrTypeList *a, struct IrTypeList *b)
 {
     paw_assert(a && b);
     if (a->count != b->count) return -1;
@@ -170,52 +168,52 @@ static int unify_lists(struct Unifier *U, struct HirTypeList *a, struct HirTypeL
     return 0;
 }
 
-static int unify_adt(struct Unifier *U, struct HirAdt *a, struct HirAdt *b)
+static int unify_adt(struct Unifier *U, struct IrAdt *a, struct IrAdt *b)
 {
-    if (a->did != b->did) return -1;
+    if (a->did.value != b->did.value) return -1;
     if (!a->types != !b->types) return -1;
     if (a->types == NULL) return 0;
     return unify_lists(U, a->types, b->types);
 }
 
-static int unify_tuple(struct Unifier *U, struct HirTupleType *a, struct HirTupleType *b)
+static int unify_tuple(struct Unifier *U, struct IrTuple *a, struct IrTuple *b)
 {
     return unify_lists(U, a->elems, b->elems);
 }
 
-static int unify_func(struct Unifier *U, struct HirFuncPtr *a, struct HirFuncPtr *b)
+static int unify_fptr(struct Unifier *U, struct IrFuncPtr *a, struct IrFuncPtr *b)
 {
     if (unify_lists(U, a->params, b->params)) return -1;
     return U->action(U, a->result, b->result);
 }
 
-static int unify_generic(struct Unifier *U, struct HirGeneric *a, struct HirGeneric *b)
+static int unify_generic(struct Unifier *U, struct IrGeneric *a, struct IrGeneric *b)
 {
-    return a->did == b->did ? 0 : -1;
+    return a->did.value == b->did.value ? 0 : -1;
 }
 
-static int unify_types(struct Unifier *U, struct HirType *a, struct HirType *b)
+static int unify_types(struct Unifier *U, struct IrType *a, struct IrType *b)
 {
     debug_log(U, "unify_types", a, b);
 
-    if (HirIsFuncType(a) && HirIsFuncType(b)) {
+    if (IR_IS_FUNC_TYPE(a) && IR_IS_FUNC_TYPE(b)) {
         // function pointer and definition types are compatible
-        return unify_func(U, HIR_FPTR(a), HIR_FPTR(b));
+        return unify_fptr(U, IR_FPTR(a), IR_FPTR(b));
     } else if (HIR_KINDOF(a) != HIR_KINDOF(b)) {
         return -1;
-    } else if (HirIsTupleType(a)) {
-        return unify_tuple(U, HirGetTupleType(a), HirGetTupleType(b));
-    } else if (HirIsAdt(a)) {
-        return unify_adt(U, HirGetAdt(a), HirGetAdt(b));
-    } else if (HirIsGeneric(a)) {
-        return unify_generic(U, HirGetGeneric(a), HirGetGeneric(b));
+    } else if (IrIsTuple(a)) {
+        return unify_tuple(U, IrGetTuple(a), IrGetTuple(b));
+    } else if (IrIsAdt(a)) {
+        return unify_adt(U, IrGetAdt(a), IrGetAdt(b));
+    } else if (IrIsGeneric(a)) {
+        return unify_generic(U, IrGetGeneric(a), IrGetGeneric(b));
     } else {
-        paw_assert(HirIsUnknown(a));
+        paw_assert(IrIsInfer(a));
         return a == b ? 0 : -1;
     }
 }
 
-static int unify(struct Unifier *U, struct HirType *a, struct HirType *b)
+static int unify(struct Unifier *U, struct IrType *a, struct IrType *b)
 {
     UnificationTable *ut = U->table;
 
@@ -223,16 +221,16 @@ static int unify(struct Unifier *U, struct HirType *a, struct HirType *b)
     // cannonical type.
     a = pawU_normalize(ut, a);
     b = pawU_normalize(ut, b);
-    if (HirIsUnknown(a)) {
-        InferenceVar *va = get_ivar(ut, HirGetUnknown(a)->index);
-        if (HirIsUnknown(b)) {
-            InferenceVar *vb = get_ivar(ut, HirGetUnknown(b)->index);
+    if (IrIsInfer(a)) {
+        InferenceVar *va = get_ivar(ut, IrGetInfer(a)->index);
+        if (IrIsInfer(b)) {
+            InferenceVar *vb = get_ivar(ut, IrGetInfer(b)->index);
             unify_var_var(U, va, vb);
         } else {
             unify_var_type(U, va, b);
         }
-    } else if (HirIsUnknown(b)) {
-        InferenceVar *vb = get_ivar(ut, HirGetUnknown(b)->index);
+    } else if (IrIsInfer(b)) {
+        InferenceVar *vb = get_ivar(ut, IrGetInfer(b)->index);
         unify_var_type(U, vb, a);
     } else {
         // Both types are known: make sure they are compatible. This is the
@@ -245,20 +243,20 @@ static int unify(struct Unifier *U, struct HirType *a, struct HirType *b)
 #define RUN_ACTION(U, a, b, f) ((U)->action = f)(U, a, b)
 
 // TODO: return 0 or -1 so caller can provide better error message? or just display the type names in the error message
-void pawU_unify(struct Unifier *U, struct HirType *a, struct HirType *b)
+void pawU_unify(struct Unifier *U, struct IrType *a, struct IrType *b)
 {
     const int rc = RUN_ACTION(U, a, b, unify);
     if (rc == 0) return;
 
-    pawHir_print_type(U->C, a);
-    pawHir_print_type(U->C, b);
-    ERROR(U, a->hdr.line,
+    pawIr_print_type(U->C, a);
+    pawIr_print_type(U->C, b);
+    ERROR(U, -1,
             "incompatible types '%s' and '%s'",
             paw_string(ENV(U->C), -2),
             paw_string(ENV(U->C), -1));
 }
 
-static int equate(struct Unifier *U, struct HirType *a, struct HirType *b)
+static int equate(struct Unifier *U, struct IrType *a, struct IrType *b)
 {
     UnificationTable *ut = U->table;
 
@@ -267,14 +265,14 @@ static int equate(struct Unifier *U, struct HirType *a, struct HirType *b)
     return unify_types(U, a, b);
 }
 
-paw_Bool pawU_equals(struct Unifier *U, struct HirType *a, struct HirType *b)
+paw_Bool pawU_equals(struct Unifier *U, struct IrType *a, struct IrType *b)
 {
     return RUN_ACTION(U, a, b, equate) == 0;
 }
 
 // TODO: consider accepting the line number, or the type (containing the line number)
 //       this unknown is being used to infer
-struct HirType *pawU_new_unknown(struct Unifier *U, int line)
+struct IrType *pawU_new_unknown(struct Unifier *U, int line)
 {
     paw_Env *P = ENV(U->C);
     UnificationTable *table = U->table;
@@ -282,11 +280,11 @@ struct HirType *pawU_new_unknown(struct Unifier *U, int line)
     // NOTE: inference variables require a stable address, since they point to each other
     InferenceVar *ivar = pawK_pool_alloc(P, U->C->pool, sizeof(InferenceVar));
     const int index = table->ivars->count;
-    var_list_push(U->C, table->ivars, ivar);
+    K_LIST_PUSH(U->C, table->ivars, ivar);
 
-    struct HirType *type = pawHir_new_type(U->C, line, kHirUnknown);
-    type->unknown.depth = table->depth;
-    type->unknown.index = index;
+    struct IrType *type = pawIr_new_type(U->C, kIrInfer);
+    IrGetInfer(type)->depth = table->depth;
+    IrGetInfer(type)->index = index;
 
     ivar->parent = ivar;
     ivar->type = type;
@@ -309,8 +307,8 @@ static void check_table(struct Unifier *U, UnificationTable *table)
     for (int i = 0; i < table->ivars->count; ++i) {
         const InferenceVar *var = get_ivar(table, i);
         pawU_normalize(table, var->type);
-        if (HirIsUnknown(var->type)) {
-            ERROR(U, var->type->hdr.line, "unable to infer type");
+        if (IrIsInfer(var->type)) {
+            ERROR(U, -1, "unable to infer type");
         }
     }
 }
@@ -320,4 +318,18 @@ void pawU_leave_binder(struct Unifier *U)
     check_table(U, U->table);
     U->table = U->table->outer;
     --U->depth;
+}
+
+paw_Bool pawU_list_equals(struct Unifier *U, struct IrTypeList *lhs, struct IrTypeList *rhs)
+{
+    paw_assert(!lhs == !rhs);
+    paw_assert(lhs == NULL || lhs->count == rhs->count);
+
+    if (lhs == NULL) return PAW_TRUE;
+    for (int i = 0; i < lhs->count; ++i) {
+        struct IrType *a = K_LIST_GET(lhs, i);
+        struct IrType *b = K_LIST_GET(rhs, i);
+        if (!pawU_equals(U, a, b)) return PAW_FALSE;
+    }
+    return PAW_TRUE;
 }

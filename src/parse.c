@@ -23,7 +23,7 @@ static String *unpack_name(const struct AstExpr *expr)
     }
     struct AstPath *path = expr->path.path;
     if (path->count == 1) {
-        struct AstSegment *ps = pawAst_path_get(path, 0);
+        struct AstSegment *ps = K_LIST_GET(path, 0);
         if (ps->types == NULL) {
             return ps->name;
         }
@@ -302,7 +302,7 @@ static struct AstDecl *variant_field_decl(struct Lex *lex)
     return r;
 }
 
-#define DEFINE_LIST_PARSER(name, a, b, limit, what, func, prefix, L) \
+#define DEFINE_LIST_PARSER(name, a, b, limit, what, func, L) \
     static void parse_##name##_list(struct Lex *lex, struct L *list, int line) \
     { \
         do { \
@@ -310,13 +310,13 @@ static struct AstDecl *variant_field_decl(struct Lex *lex)
             if ((list)->count == (limit)) { \
                 limit_error(lex, what, (limit)); \
             } \
-            prefix##push((lex)->C, list, (func)(lex)); \
+            K_LIST_PUSH((lex)->C, list, (func)(lex)); \
         } while (test_next(lex, ',')); \
         delim_next(lex, b, a, line); \
     }
-DEFINE_LIST_PARSER(arg, '(', ')', LOCAL_MAX, "arguments", expr0, pawAst_expr_list_, AstExprList)
-DEFINE_LIST_PARSER(variant_field, '(', ')', LOCAL_MAX, "variant fields", variant_field_decl, pawAst_decl_list_, AstDeclList)
-DEFINE_LIST_PARSER(type, '<', '>', LOCAL_MAX, "type arguments", type_expr, pawAst_expr_list_, AstExprList)
+DEFINE_LIST_PARSER(arg, '(', ')', LOCAL_MAX, "arguments", expr0, AstExprList)
+DEFINE_LIST_PARSER(variant_field, '(', ')', LOCAL_MAX, "variant fields", variant_field_decl, AstDeclList)
+DEFINE_LIST_PARSER(type, '<', '>', LOCAL_MAX, "type arguments", type_expr, AstExprList)
 
 static struct AstExprList *type_list(struct Lex *lex, int line)
 {
@@ -416,8 +416,8 @@ static struct AstPat *struct_field_pat(struct Lex *lex)
     return result;
 }
 
-DEFINE_LIST_PARSER(variant_field_pat, '(', ')', LOCAL_MAX, "variant fields", pattern, pawAst_pat_list_, AstPatList)
-DEFINE_LIST_PARSER(struct_field_pat, '{', '}', LOCAL_MAX, "struct fields", struct_field_pat, pawAst_pat_list_, AstPatList)
+DEFINE_LIST_PARSER(variant_field_pat, '(', ')', LOCAL_MAX, "variant fields", pattern, AstPatList)
+DEFINE_LIST_PARSER(struct_field_pat, '{', '}', LOCAL_MAX, "struct fields", struct_field_pat, AstPatList)
 
 static paw_Bool is_wildcard_path(const struct AstPath *path)
 {
@@ -551,65 +551,65 @@ static struct AstExpr *basic_expr(struct Lex *lex);
 
 static struct AstDeclList *variant_field_list(struct Lex *lex, int line)
 {
-++lex->expr_depth;
-struct AstDeclList *list = pawAst_decl_list_new(lex->C);
-parse_variant_field_list(lex, list, line);
-if (list->count == 0) {
-    pawX_error(lex, "expected at least 1 variant field between parenthesis "
-                    "(remove parenthesis for unit variant)");
-}
---lex->expr_depth;
-return list;
+    ++lex->expr_depth;
+    struct AstDeclList *list = pawAst_decl_list_new(lex->C);
+    parse_variant_field_list(lex, list, line);
+    if (list->count == 0) {
+        pawX_error(lex, "expected at least 1 variant field between parenthesis "
+                        "(remove parenthesis for unit variant)");
+    }
+    --lex->expr_depth;
+    return list;
 }
 
 static void set_unit(struct Lex *lex, struct AstExpr *pe)
 {
-pe->tuple.kind = kAstTupleType;
-pe->tuple.types = pawAst_expr_list_new(lex->C);
+    pe->tuple.kind = kAstTupleType;
+    pe->tuple.types = pawAst_expr_list_new(lex->C);
 }
 
 static struct AstExpr *unit_type(struct Lex *lex)
 {
-struct AstExpr *r = NEW_EXPR(lex, 0);
-set_unit(lex, r);
-return r;
+    struct AstExpr *r = NEW_EXPR(lex, 0);
+    set_unit(lex, r);
+    return r;
 }
-
-static struct AstExpr *type_expr(struct Lex *lex);
 
 static void parse_tuple_type(struct Lex *lex, struct AstExpr *pe, int line)
 {
-struct AstExpr *first = NEW_EXPR(lex, 0);
-*first = *pe;
+    struct AstExpr *first = NEW_EXPR(lex, 0);
+    *first = *pe;
 
-struct AstExprList *elems = pawAst_expr_list_new(lex->C);
-pawAst_expr_list_push(lex->C, elems, first);
+    struct AstExprList *elems = pawAst_expr_list_new(lex->C);
+    K_LIST_PUSH(lex->C, elems, first);
 
-do {
-    if (test(lex, ')')) break;
-    if (elems->count == FIELD_MAX) {
-        limit_error(lex, "tuple elements", FIELD_MAX);
-    }
-    struct AstExpr *type = type_expr(lex);
-    pawAst_expr_list_push(lex->C, elems, type);
-} while (test_next(lex, ','));
-delim_next(lex, ')', '(', line);
+    do {
+        if (test(lex, ')')) break;
+        if (elems->count == FIELD_MAX) {
+            limit_error(lex, "tuple elements", FIELD_MAX);
+        }
+        struct AstExpr *type = type_expr(lex);
+        K_LIST_PUSH(lex->C, elems, type);
+    } while (test_next(lex, ','));
+    delim_next(lex, ')', '(', line);
 
-pe->tuple.kind = kAstTupleType;
-pe->tuple.types = elems;
+    pe->tuple.kind = kAstTupleType;
+    pe->tuple.types = elems;
 }
 
 static struct AstExpr *parse_paren_type(struct Lex *lex)
 {
-const int line = lex->last_line;
-if (test_next(lex, ')')) {
-    return unit_type(lex);
-}
-struct AstExpr *e = type_expr(lex);
-if (test_next(lex, ',')) {
-    parse_tuple_type(lex, e, line);
-}
-return e;
+    const int line = lex->last_line;
+    if (test_next(lex, ')')) {
+        return unit_type(lex);
+    }
+    struct AstExpr *e = type_expr(lex);
+    if (test_next(lex, ',')) {
+        parse_tuple_type(lex, e, line);
+    } else {
+        delim_next(lex, ')', '(', line);
+    }
+    return e;
 }
 
 static struct AstExpr *parse_container_type(struct Lex *lex)
@@ -661,16 +661,6 @@ static struct AstExpr *expect_annotation(struct Lex *lex, const char *what,
                    name->text);
     }
     return type;
-}
-
-static struct AstExpr *sig_param_expr(struct Lex *lex)
-{
-    struct AstExpr *result = NEW_EXPR(lex, kAstPathExpr);
-    struct AstPathExpr *r = AstGetPathExpr(result);
-    struct AstSegment *base = pawAst_segment_new(lex->C);
-    r->path = pawAst_path_new(lex->C);
-    pawAst_path_add(lex->C, r->path, parse_name(lex), NULL);
-    return result;
 }
 
 static struct AstExpr *self_type(struct Lex *lex)
@@ -739,10 +729,10 @@ static struct AstDecl *generic_param(struct Lex *lex)
     return r;
 }
 
-DEFINE_LIST_PARSER(func_param, '(', ')', LOCAL_MAX, "function parameters", func_param_decl, pawAst_decl_list_, AstDeclList)
-DEFINE_LIST_PARSER(sig_param, '(', ')', LOCAL_MAX, "function parameters", sig_param_expr, pawAst_expr_list_, AstExprList)
-DEFINE_LIST_PARSER(clos_param, '|', '|', LOCAL_MAX, "closure parameters", clos_param_decl, pawAst_decl_list_, AstDeclList)
-DEFINE_LIST_PARSER(generic, '<', '>', LOCAL_MAX, "generics", generic_param, pawAst_decl_list_, AstDeclList)
+DEFINE_LIST_PARSER(func_param, '(', ')', LOCAL_MAX, "function parameters", func_param_decl,  AstDeclList)
+DEFINE_LIST_PARSER(sig_param, '(', ')', LOCAL_MAX, "function parameters", type_expr, AstExprList)
+DEFINE_LIST_PARSER(clos_param, '|', '|', LOCAL_MAX, "closure parameters", clos_param_decl, AstDeclList)
+DEFINE_LIST_PARSER(generic, '<', '>', LOCAL_MAX, "generics", generic_param, AstDeclList)
 
 static struct AstExpr *sitem_expr(struct Lex *lex)
 {
@@ -754,7 +744,7 @@ static struct AstExpr *sitem_expr(struct Lex *lex)
     return result;
 }
 
-DEFINE_LIST_PARSER(sitem, '{', '}', LOCAL_MAX, "struct items", sitem_expr, pawAst_expr_list_, AstExprList)
+DEFINE_LIST_PARSER(sitem, '{', '}', LOCAL_MAX, "struct items", sitem_expr, AstExprList)
 
 static struct AstExpr *unop_expr(struct Lex *lex, enum UnOp op)
 {
@@ -788,7 +778,7 @@ static struct AstExpr *paren_expr(struct Lex *lex)
     struct AstExpr *r = NEW_EXPR(lex, kAstLiteralExpr);
     check_next(lex, ',');
     struct AstExprList *elems = pawAst_expr_list_new(lex->C);
-    pawAst_expr_list_push(lex->C, elems, expr);
+    K_LIST_PUSH(lex->C, elems, expr);
     parse_arg_list(lex, elems, line);
     r->literal.lit_kind = kAstTupleLit;
     r->literal.tuple.elems = elems;
@@ -859,7 +849,7 @@ static paw_Type parse_container_items(struct Lex *lex, struct AstExprList **pite
             r->key = item;
             item = result;
         }
-        pawAst_expr_list_push(lex->C, items, item);
+        K_LIST_PUSH(lex->C, items, item);
     } while (test_next(lex, ','));
     *pitems = items;
     return code;
@@ -979,8 +969,8 @@ static struct AstBlock *block(struct Lex *lex)
     while (!end_of_block(lex)) {
         struct AstStmt *next = statement(lex);
         if (next != NULL) {
-            pawAst_stmt_list_push(lex->C, r->stmts, next);
-            if (AstIsReturnStmt(next) || AstIsLabelStmt(next)) {
+            K_LIST_PUSH(lex->C, r->stmts, next);
+            if (AstIsReturnStmt(next) || AstIsJumpStmt(next)) {
                 break; // must be last statement in block
             }
         }
@@ -1101,7 +1091,7 @@ static struct AstExpr *conversion_expr(struct Lex *lex, struct AstExpr *lhs)
         pawX_error(lex, "expected basic type name");
     }
     struct AstPath *path = rhs->path.path;
-    struct AstSegment *seg = pawAst_path_get(path, 0);
+    struct AstSegment *seg = K_LIST_GET(path, 0);
     if (equals_cstr(lex, seg->name, CSTR_BOOL)) {
         r->conv.to = PAW_TBOOL;
     } else if (equals_cstr(lex, seg->name, CSTR_INT)) {
@@ -1303,11 +1293,11 @@ static struct AstStmt *return_stmt(struct Lex *lex)
     return result;
 }
 
-static struct AstStmt *label_stmt(struct Lex *lex, enum LabelKind kind)
+static struct AstStmt *jump_stmt(struct Lex *lex, enum JumpKind kind)
 {
-    struct AstStmt *r = NEW_STMT(lex, kAstLabelStmt);
+    struct AstStmt *r = NEW_STMT(lex, kAstJumpStmt);
     skip(lex); // 'break' or 'continue' token
-    r->label.label = kind;
+    r->jump.jump_kind = kind;
     semicolon(lex);
     return r;
 }
@@ -1393,7 +1383,7 @@ static void parse_variant_list(struct Lex *lex, struct AstDeclList *list, int li
         // NOTE: 'variant_decl' requires a second argument, so 'DEFINE_LIST_PARSER'
         //       cannot be used as-is.
         struct AstDecl *next = variant_decl(lex, list->count);
-        pawAst_decl_list_push(lex->C, list, next);
+        K_LIST_PUSH(lex->C, list, next);
     } while (test_next(lex, ','));
     delim_next(lex, '}', '{', line);
 }
@@ -1438,7 +1428,7 @@ static struct AstDecl *field_decl(struct Lex *lex)
     return r;
 }
 
-DEFINE_LIST_PARSER(struct_field, '{', '}', LOCAL_MAX, "struct fields", field_decl, pawAst_decl_list_, AstDeclList)
+DEFINE_LIST_PARSER(struct_field, '{', '}', LOCAL_MAX, "struct fields", field_decl, AstDeclList)
 
 static struct AstDeclList *struct_field_list(struct Lex *lex, int line)
 {
@@ -1506,7 +1496,7 @@ static struct AstDecl *impl_decl(struct Lex *lex)
             limit_error(lex, "methods", LOCAL_MAX);
         }
         struct AstDecl *method = method_decl(lex);
-        pawAst_decl_list_push(lex->C, r->methods, method);
+        K_LIST_PUSH(lex->C, r->methods, method);
     }
     delim_next(lex, '}', '{', line);
     lex->in_impl = PAW_FALSE;
@@ -1554,7 +1544,7 @@ static struct AstStmt *match_arm(struct Lex *lex)
 {
     struct AstStmt *result = NEW_STMT(lex, kAstMatchArm);
     struct AstMatchArm *r = AstGetMatchArm(result);
-    r->guard = pattern(lex);
+    r->pat = pattern(lex);
     check_next(lex, TK_FAT_ARROW);
     r->result = block(lex);
     return result;
@@ -1574,7 +1564,7 @@ static struct AstStmt *match_stmt(struct Lex *lex)
             break;
         }
         struct AstStmt *arm = match_arm(lex);
-        pawAst_stmt_list_push(lex->C, r->arms, arm);
+        K_LIST_PUSH(lex->C, r->arms, arm);
     } while (test_next(lex, ','));
     delim_next(lex, '}', '{', line);
     return result;
@@ -1609,10 +1599,10 @@ static struct AstStmt *statement(struct Lex *lex)
             stmt = return_stmt(lex);
             break;
         case TK_BREAK:
-            stmt = label_stmt(lex, LBREAK);
+            stmt = jump_stmt(lex, JUMP_BREAK);
             break;
         case TK_CONTINUE:
-            stmt = label_stmt(lex, LCONTINUE);
+            stmt = jump_stmt(lex, JUMP_CONTINUE);
             break;
         case TK_LET:
         case TK_TYPE:
@@ -1657,7 +1647,7 @@ static struct AstDeclList *toplevel_items(struct Lex *lex, struct AstDeclList *l
     while (!test_next(lex, TK_END)) {
         const paw_Bool is_pub = test_next(lex, TK_PUB);
         struct AstDecl *item = toplevel_item(lex, is_pub);
-        pawAst_decl_list_push(lex->C, list, item);
+        K_LIST_PUSH(lex->C, list, item);
     }
     return list;
 }
@@ -1675,7 +1665,6 @@ static const char kPrelude[] =
     "    Ok(T),\n"
     "    Err(E),\n"
     "}\n"
-
     "pub fn print(message: str);\n"
     "pub fn assert(cond: bool);\n"
 

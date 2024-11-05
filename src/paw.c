@@ -105,9 +105,11 @@ static void parse_options(int *pargc, const char ***pargv)
                     if (state->flag != NULL) {
                         *state->flag = PAW_TRUE;
                         break; // no argument
-                    } else if (a[1] != '\0') { // in '-abc', only 'c' can take an argument
+                    }
+                    if (a[1] != '\0') { // in '-abc', only 'c' can take an argument
                         error(PAW_ERUNTIME, "option with argument ('%c') must be last\n", shr);
-                    } else if (*pargc == 0) {
+                    }
+                    if (*pargc == 0) {
                         error(PAW_ERUNTIME, "missing argument for option '%s'\n", *(*pargv - 1));
                     }
                     const char *arg = get_option(argc, argv);
@@ -192,7 +194,7 @@ static ValueId find_main(paw_Env *P)
     paw_mangle_add_name(P);
 
     struct paw_Item item;
-    const int status = paw_lookup_item(P, &item);
+    const int status = paw_lookup_item(P, -1, &item);
     if (status != PAW_OK) error(PAW_ERUNTIME, "unable to find entrypoint ('main' function)\n");
     if (item.global_id < 0) error(PAW_ERUNTIME, "'main' is not a function\n"); // TODO: check signature, exclude constants
     return item.global_id;
