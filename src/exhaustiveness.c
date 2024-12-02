@@ -192,7 +192,7 @@ static struct VariableList *variables_for_types(struct Usefulness *U, struct Hir
     return result;
 }
 
-//#if 0
+#if 0
 
 #include"stdio.h"
 
@@ -262,7 +262,7 @@ static void print_col(struct Compiler*C,struct Column *col)
     printf("\n");
 }
 
-//#endif // 0
+#endif // 0
 
 static void move_bindings_to_right(struct Usefulness *U, struct Row *row)
 {
