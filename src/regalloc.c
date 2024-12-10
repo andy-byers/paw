@@ -20,8 +20,8 @@ struct RegisterAllocator {
     int nlocals;
 };
 
-DEFINE_LIST_V2(struct Compiler, reginfo_list_, RegisterInfoList, struct RegisterInfo *)
-DEFINE_LIST_V2(struct Compiler, scope_stack_, ScopeStack, int)
+DEFINE_LIST(struct Compiler, reginfo_list_, RegisterInfoList, struct RegisterInfo *)
+DEFINE_LIST(struct Compiler, scope_stack_, ScopeStack, int)
 
 #if 0
 

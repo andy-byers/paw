@@ -1445,11 +1445,11 @@ static struct IrType *ResolveBindingPat(struct Resolver *R, struct HirBindingPat
 
 static struct IrType *convert_path_to_binding(struct Resolver *R, struct HirPathPat *path)
 {
-    struct HirSegment *ident = K_LIST_GET(path->path, 0);
+    struct HirSegment ident = K_LIST_FIRST(path->path);
     struct HirPat *pat = CAST(struct HirPat *, path);
     pat->hdr.kind = kHirBindingPat;
     struct HirBindingPat *p = HirGetBindingPat(pat);
-    p->name = ident->name;
+    p->name = ident.name;
 
     struct HirPatList *bindings = R->ms->bindings;
     for (int i = 0; i < bindings->count; ++i) {

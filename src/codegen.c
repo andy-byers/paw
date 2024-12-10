@@ -30,7 +30,7 @@ struct JumpTarget {
     int pc;
 };
 
-DEFINE_LIST_V2(struct Compiler, jumptab_, JumpTable, struct JumpTarget)
+DEFINE_LIST(struct Compiler, jumptab_, JumpTable, struct JumpTarget)
 
 static void add_jump_target(struct Generator *G, MirBlockId bid)
 {
@@ -53,7 +53,7 @@ static struct VisitBlock new_visit_block(struct Generator *G, struct MirBlock *b
     };
 }
 
-DEFINE_LIST_V2(struct Compiler, visit_stack_, VisitStack, struct VisitBlock)
+DEFINE_LIST(struct Compiler, visit_stack_, VisitStack, struct VisitBlock)
 
 static struct Def *get_def(struct Generator *G, DefId did)
 {
@@ -151,7 +151,7 @@ struct JumpSource {
     int from_pc;
 };
 
-DEFINE_LIST_V2(struct Compiler, patch_list_, PatchList, struct JumpSource)
+DEFINE_LIST(struct Compiler, patch_list_, PatchList, struct JumpSource)
 
 static void add_jump_source(struct Generator *G, int from_pc, MirBlockId to)
 {
@@ -618,8 +618,8 @@ static void prep_method_call(struct Generator *G, struct MirRegister *callable, 
 static void code_items(struct Generator *G)
 {
     for (int i = 0; i < G->items->count; ++i) {
-        const struct ItemSlot *item = K_LIST_GET(G->items, i);
-        G->mir = item->mir;
+        const struct ItemSlot item = K_LIST_GET(G->items, i);
+        G->mir = item.mir;
         if (G->mir->is_native) {
             code_c_function(G, G->mir, i);
         } else {
@@ -637,7 +637,7 @@ static void register_items(struct Generator *G)
     G->items = pawP_allocate_defs(G->C, mr.bodies, mr.types);
 
     for (int i = 0; i < G->items->count; ++i) {
-        struct ItemSlot *item = K_LIST_GET(G->items, i);
+        struct ItemSlot *item = &K_LIST_GET(G->items, i);
         struct IrType *type = item->mir->type;
 
         const String *modname = prefix_for_modno(G, IR_TYPE_DID(type).modno);

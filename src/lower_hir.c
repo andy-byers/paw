@@ -52,8 +52,8 @@ struct Label {
     enum JumpKind kind : 7;
 };
 
-DEFINE_LIST_V2(struct Compiler, var_stack_, VarStack, struct LocalVar)
-DEFINE_LIST_V2(struct Compiler, label_list_, LabelList, struct Label)
+DEFINE_LIST(struct Compiler, var_stack_, VarStack, struct LocalVar)
+DEFINE_LIST(struct Compiler, label_list_, LabelList, struct Label)
 
 struct LowerHir {
     struct HirVisitor V;
@@ -1115,7 +1115,7 @@ static paw_Bool visit_return_stmt(struct HirVisitor *V, struct HirReturnStmt *s)
     return PAW_FALSE;
 }
 
-static MirBlockId lower_match_body(struct HirVisitor *V, struct MatchBody *body);
+static MirBlockId lower_match_body(struct HirVisitor *V, struct MatchBody body);
 static void visit_decision(struct HirVisitor *V, struct Decision *d);
 
 static void visit_success(struct HirVisitor *V, struct Decision *d)
@@ -1140,14 +1140,13 @@ static void visit_guard(struct HirVisitor *V, struct Decision *d)
     if (then->term == NULL) then->term = pawMir_new_goto(L->C, after_bb->bid);
 }
 
-static struct MirRegister *get_test_reg(struct LowerHir *L, struct MatchVar *test)
+static struct MirRegister *get_test_reg(struct LowerHir *L, struct MatchVar test)
 {
     struct VariableList *vars = L->ms->vars;
+    struct MirRegisterList *regs = L->ms->regs;
     for (int i = 0; i < vars->count; ++i) {
-        struct MatchVar *var = K_LIST_GET(vars, i);
-        if (var != NULL && var->id == test->id) {
-            return K_LIST_GET(L->ms->regs, i);
-        }
+        struct MatchVar var = K_LIST_GET(vars, i);
+        if (var.id == test.id) return K_LIST_GET(regs, i);
     }
     PAW_UNREACHABLE();
 }
@@ -1155,20 +1154,20 @@ static struct MirRegister *get_test_reg(struct LowerHir *L, struct MatchVar *tes
 static void declare_match_bindings(struct LowerHir *L, struct BindingList *bindings)
 {
     for (int i = 0; i < bindings->count; ++i) {
-        struct Binding *b = K_LIST_GET(bindings, i);
-        struct MirRegister *r = get_test_reg(L, b->var);
+        struct Binding b = K_LIST_GET(bindings, i);
+        struct MirRegister *r = get_test_reg(L, b.var);
         move_to_top(L, r);
 
-        add_local(L, b->name, r, NO_DECL);
+        add_local(L, b.name, r, NO_DECL);
     }
 }
 
-static MirBlockId lower_match_body(struct HirVisitor *V, struct MatchBody *body)
+static MirBlockId lower_match_body(struct HirVisitor *V, struct MatchBody body)
 {
     struct LowerHir *L = V->ud;
     const MirBlockId bid = current_bb(L)->bid;
-    declare_match_bindings(L, body->bindings);
-    pawHir_visit_block(V, body->block);
+    declare_match_bindings(L, body.bindings);
+    pawHir_visit_block(V, body.block);
     return bid;
 }
 
@@ -1219,7 +1218,7 @@ static struct MirRegisterList *allocate_registers(struct LowerHir *L, struct IrT
 
 static struct MirRegister *emit_multiway_test(struct LowerHir *L, struct Decision *d)
 {
-    struct MirRegister *output = new_register(L, d->multi.test->type);
+    struct MirRegister *output = new_register(L, d->multi.test.type);
     struct MirInstruction *move = new_instruction(L, kMirLocal);
     add_local_literal(L, "(match discriminator)", output); // keep alive
     MirGetLocal(move)->target = get_test_reg(L, d->multi.test);
@@ -1227,22 +1226,22 @@ static struct MirRegister *emit_multiway_test(struct LowerHir *L, struct Decisio
     return output;
 }
 
-static struct MirRegisterList *allocate_match_vars(struct LowerHir *L, struct MirRegister *discr, struct MatchCase *mc, paw_Bool is_enum)
+static struct MirRegisterList *allocate_match_vars(struct LowerHir *L, struct MirRegister *discr, struct MatchCase mc, paw_Bool is_enum)
 {
     struct MirRegisterList *regs = pawMir_register_list_new(L->C);
-    if (mc->vars->count == 0) return regs;
+    if (mc.vars->count == 0) return regs;
     if (is_enum) {
         // NOTE: this causes the exploded discriminant to be ignored (OP_GETFIELD is invoked
         //       on the enumerator itself to extract the discriminant for checking)
         struct MirRegister *r = new_literal_register(L, PAW_TINT);
-        K_LIST_PUSH(L->C, L->ms->vars, NULL); // placeholder
+        K_LIST_PUSH(L->C, L->ms->vars, ((struct MatchVar){.id = -1})); // placeholder
         K_LIST_PUSH(L->C, L->ms->regs, r);
         K_LIST_PUSH(L->C, regs, r);
     }
-    const int first_var = mc->vars->count;
-    for (int i = 0; i < mc->vars->count; ++i) {
-        struct MatchVar *v = K_LIST_GET(mc->vars, i);
-        struct MirRegister *r = new_register(L, v->type);
+    const int first_var = mc.vars->count;
+    for (int i = 0; i < mc.vars->count; ++i) {
+        struct MatchVar v = K_LIST_GET(mc.vars, i);
+        struct MirRegister *r = new_register(L, v.type);
         K_LIST_PUSH(L->C, L->ms->vars, v);
         K_LIST_PUSH(L->C, L->ms->regs, r);
         K_LIST_PUSH(L->C, regs, r);
@@ -1285,14 +1284,14 @@ static void visit_sparse_cases(struct HirVisitor *V, struct Decision *d)
 
     struct MirBlockList *patch = pawMir_block_list_new(L->C);
     for (int i = 0; i < d->multi.cases->count; ++i) {
-        struct MatchCase *mc = K_LIST_GET(d->multi.cases, i);
+        struct MatchCase mc = K_LIST_GET(d->multi.cases, i);
         struct MirBlock *block = next_bb(L);
 
         struct BlockState bs;
         enter_block(L, &bs, PAW_FALSE);
 
-        struct MirSwitchArm *arm = add_switch_arm(L, switch_, mc->cons.value, block->bid);
-        visit_decision(V, mc->dec);
+        struct MirSwitchArm *arm = add_switch_arm(L, switch_, mc.cons.value, block->bid);
+        visit_decision(V, mc.dec);
         save_patch_source(L, patch);
 
         leave_block(L);
@@ -1322,16 +1321,16 @@ static void visit_variant_cases(struct HirVisitor *V, struct Decision *d)
     struct CaseList *cases = d->multi.cases;
     struct MirBlockList *patch = pawMir_block_list_new(L->C);
     for (int i = 0; i < cases->count; ++i) {
-        struct MatchCase *mc = K_LIST_GET(cases, i);
+        struct MatchCase mc = K_LIST_GET(cases, i);
         struct MirBlock *block = next_bb(L);
 
         struct BlockState bs;
         enter_block(L, &bs, PAW_FALSE);
 
         struct MirSwitchArm *arm = add_switch_arm(L, switch_, I2V(i), block->bid);
-        arm->value.i = mc->cons.variant.index;
+        arm->value.i = mc.cons.variant.index;
         allocate_match_vars(L, variant, mc, PAW_TRUE);
-        visit_decision(V, mc->dec);
+        visit_decision(V, mc.dec);
         save_patch_source(L, patch);
 
         leave_block(L);
@@ -1348,12 +1347,12 @@ static void visit_tuple_case(struct HirVisitor *V, struct Decision *d)
 
     paw_assert(d->multi.rest == NULL);
     paw_assert(d->multi.cases->count == 1);
-    struct MatchCase *mc = K_LIST_FIRST(d->multi.cases);
+    struct MatchCase mc = K_LIST_FIRST(d->multi.cases);
 
     struct BlockState bs;
     enter_block(L, &bs, PAW_FALSE);
     allocate_match_vars(L, discr, mc, PAW_FALSE);
-    visit_decision(V, mc->dec);
+    visit_decision(V, mc.dec);
     leave_block(L);
     advance_bb(L);
 }
@@ -1365,13 +1364,13 @@ static void visit_struct_case(struct HirVisitor *V, struct Decision *d)
 
     paw_assert(d->multi.rest == NULL);
     paw_assert(d->multi.cases->count == 1);
-    struct MatchCase *mc = K_LIST_FIRST(d->multi.cases);
+    struct MatchCase mc = K_LIST_FIRST(d->multi.cases);
     struct MirBlock *case_bb = advance_bb(L);
 
     struct BlockState bs;
     enter_block(L, &bs, PAW_FALSE);
     allocate_match_vars(L, discr, mc, PAW_FALSE);
-    visit_decision(V, mc->dec);
+    visit_decision(V, mc.dec);
     leave_block(L);
     advance_bb(L);
 }
@@ -1381,8 +1380,8 @@ static void visit_multiway(struct HirVisitor *V, struct Decision *d)
     struct LowerHir *L = V->ud;
 
     // there must exist at least 1 case; all cases have the same kind of constructor
-    struct MatchCase *first_case = K_LIST_FIRST(d->multi.cases);
-    switch (first_case->cons.kind) {
+    struct MatchCase first_case = K_LIST_FIRST(d->multi.cases);
+    switch (first_case.cons.kind) {
         case CONS_WILDCARD:
             break;
         case CONS_BOOL:

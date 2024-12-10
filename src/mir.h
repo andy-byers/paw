@@ -404,14 +404,13 @@ struct Mir {
 
 struct MirScope *pawMir_get_scope(struct Mir *mir, MirScopeId id);
 
-// TODO: registers and switch arms don't need stable addresses
-DEFINE_LIST_V2(struct Compiler, pawMir_upvalue_list_, MirUpvalueList, struct MirUpvalueInfo)
-DEFINE_LIST_V2(struct Compiler, pawMir_scope_list_, MirScopeList, struct MirScope)
-DEFINE_LIST_V2(struct Compiler, pawMir_switch_list_, MirSwitchArmList, struct MirSwitchArm)
-DEFINE_LIST_V2(struct Compiler, pawMir_register_list_, MirRegisterList, struct MirRegister *)
-DEFINE_LIST_V2(struct Compiler, pawMir_instruction_list_, MirInstructionList, struct MirInstruction *)
-DEFINE_LIST_V2(struct Compiler, pawMir_block_list_, MirBlockList, struct MirBlock *)
-DEFINE_LIST_V2(struct Compiler, pawMir_body_list_, MirBodyList, struct Mir *)
+DEFINE_LIST(struct Compiler, pawMir_upvalue_list_, MirUpvalueList, struct MirUpvalueInfo)
+DEFINE_LIST(struct Compiler, pawMir_scope_list_, MirScopeList, struct MirScope)
+DEFINE_LIST(struct Compiler, pawMir_switch_list_, MirSwitchArmList, struct MirSwitchArm)
+DEFINE_LIST(struct Compiler, pawMir_register_list_, MirRegisterList, struct MirRegister *)
+DEFINE_LIST(struct Compiler, pawMir_instruction_list_, MirInstructionList, struct MirInstruction *)
+DEFINE_LIST(struct Compiler, pawMir_block_list_, MirBlockList, struct MirBlock *)
+DEFINE_LIST(struct Compiler, pawMir_body_list_, MirBodyList, struct Mir *)
 
 struct Mir *pawMir_new(struct Compiler *C, String *name, struct IrType *type, struct IrType *self, enum FuncKind fn_kind, paw_Bool is_native, paw_Bool is_pub, paw_Bool is_poly);
 struct MirRegister *pawMir_new_register(struct Compiler *C, int value, struct IrType *type);

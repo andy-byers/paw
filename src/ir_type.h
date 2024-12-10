@@ -102,7 +102,7 @@ struct IrType {
 #define IR_IS_UNIT_T(x) (IrIsAdt(x) && IR_TYPE_DID(x).value == PAW_TUNIT)
 #define IR_IS_BASIC_T(x) (IrIsAdt(x) && IR_TYPE_DID(x).value <= PAW_TSTR)
 
-DEFINE_LIST_V2(struct Compiler, pawIr_type_list_, IrTypeList, struct IrType *)
+DEFINE_LIST(struct Compiler, pawIr_type_list_, IrTypeList, struct IrType *)
 
 struct IrType *pawIr_new_type(struct Compiler *C, enum IrTypeKind kind);
 
@@ -158,9 +158,9 @@ struct IrAdtDef {
     paw_Bool is_pub : 1;
 };
 
-DEFINE_LIST_V2(struct Compiler, pawIr_adt_list_, IrAdtList, struct IrAdtDef *)
-DEFINE_LIST_V2(struct Compiler, pawIr_field_list_, IrFieldList, struct IrFieldDef *)
-DEFINE_LIST_V2(struct Compiler, pawIr_variant_list_, IrVariantList, struct IrVariantDef *)
+DEFINE_LIST(struct Compiler, pawIr_adt_list_, IrAdtList, struct IrAdtDef *)
+DEFINE_LIST(struct Compiler, pawIr_field_list_, IrFieldList, struct IrFieldDef *)
+DEFINE_LIST(struct Compiler, pawIr_variant_list_, IrVariantList, struct IrVariantDef *)
 
 struct IrFieldDef *pawIr_new_field(struct Compiler *C, DeclId did, String *name, paw_Bool is_pub);
 struct IrVariantDef *pawIr_new_variant_def(struct Compiler *C, DeclId xdid, int discr, String *name, struct IrFieldList *fields);

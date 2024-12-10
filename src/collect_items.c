@@ -44,22 +44,8 @@ struct PartialMod {
     struct ModuleInfo *m;
 };
 
-DEFINE_LIST_V2(struct ItemCollector, pa_list_, PartialAdtList, struct PartialAdt *)
-DEFINE_LIST_V2(struct ItemCollector, pm_list_, PartialModList, struct PartialMod *)
-
-static struct PartialAdt *new_partial_adt(struct ItemCollector *X, struct HirAdtDecl *d, struct HirScope *scope)
-{
-    struct PartialAdt *pa = pawK_pool_alloc(ENV(X), X->pool, sizeof(struct PartialAdt));
-    *pa = (struct PartialAdt){.d = d, .scope = scope};
-    return pa;
-}
-
-static struct PartialMod *new_partial_mod(struct ItemCollector *X, struct ModuleInfo *m, struct PartialAdtList *pal)
-{
-    struct PartialMod *pm = pawK_pool_alloc(ENV(X), X->pool, sizeof(struct PartialMod));
-    *pm = (struct PartialMod){.pal = pal, .m = m};
-    return pm;
-}
+DEFINE_LIST(struct ItemCollector, pa_list_, PartialAdtList, struct PartialAdt)
+DEFINE_LIST(struct ItemCollector, pm_list_, PartialModList, struct PartialMod)
 
 static DeclId add_decl(struct ItemCollector *X, struct HirDecl *decl)
 {
@@ -415,10 +401,10 @@ static struct HirScope *register_adt_decl(struct ItemCollector *X, struct HirAdt
     return leave_block(X);
 }
 
-static void collect_adt_decl(struct ItemCollector *X, struct PartialAdt *lazy)
+static void collect_adt_decl(struct ItemCollector *X, struct PartialAdt lazy)
 {
-    struct HirAdtDecl *d = lazy->d;
-    enter_block(X, lazy->scope);
+    struct HirAdtDecl *d = lazy.d;
+    enter_block(X, lazy.scope);
     WITH_ADT_CONTEXT(X, GET_TYPE(X, d->hid),
             collect_fields(X, d->fields););
     leave_block(X);
@@ -491,7 +477,7 @@ static struct PartialAdtList *register_adts(struct ItemCollector *X, struct HirD
         if (!HirIsAdtDecl(item)) continue;
         struct HirAdtDecl *d = HirGetAdtDecl(item);
         struct HirScope *scope = register_adt_decl(X, d);
-        struct PartialAdt *pa = new_partial_adt(X, d, scope);
+        struct PartialAdt pa = {.d = d, .scope = scope};
         K_LIST_PUSH(X, list, pa);
     }
     return list;
@@ -500,7 +486,7 @@ static struct PartialAdtList *register_adts(struct ItemCollector *X, struct HirD
 static void collect_adts(struct ItemCollector *X, struct PartialAdtList *list)
 {
     for (int i = 0; i < list->count; ++i) {
-        struct PartialAdt *pa = K_LIST_GET(list, i);
+        struct PartialAdt pa = K_LIST_GET(list, i);
         collect_adt_decl(X, pa);
     }
 }
@@ -514,7 +500,7 @@ static struct PartialModList *collect_phase_1(struct ItemCollector *X, struct Mo
         struct ModuleInfo *m = use_module(X, K_LIST_GET(ml, i));
         paw_assert(m->globals->count == 0);
         struct PartialAdtList *pal = register_adts(X, m->hir->items);
-        struct PartialMod *pm = new_partial_mod(X, m, pal);
+        struct PartialMod pm = {.m = m, .pal = pal};
         K_LIST_PUSH(X, pml, pm);
         m->globals = X->m->globals;
         finish_module(X);
@@ -522,9 +508,9 @@ static struct PartialModList *collect_phase_1(struct ItemCollector *X, struct Mo
 
     // fill in toplevel ADT field types (may instantiate polymorphic ADTs)
     for (int i = 0; i < pml->count; ++i) {
-        struct PartialMod *pm = K_LIST_GET(pml, i);
-        use_module(X, pm->m);
-        collect_adts(X, pm->pal);
+        struct PartialMod pm = K_LIST_GET(pml, i);
+        use_module(X, pm.m);
+        collect_adts(X, pm.pal);
         finish_module(X);
     }
 
@@ -573,3 +559,4 @@ void pawP_collect_items(struct Compiler *C)
     struct PartialModList *pml = collect_phase_1(&X, dm->modules);
     collect_phase_2(&X, dm->modules, pml);
 }
+

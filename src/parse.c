@@ -18,15 +18,11 @@
 
 static String *unpack_name(const struct AstExpr *expr)
 {
-    if (!AstIsPathExpr(expr)) {
-        return NULL;
-    }
+    if (!AstIsPathExpr(expr)) return NULL;
     struct AstPath *path = expr->path.path;
     if (path->count == 1) {
-        struct AstSegment *ps = K_LIST_GET(path, 0);
-        if (ps->types == NULL) {
-            return ps->name;
-        }
+        struct AstSegment ps = K_LIST_GET(path, 0);
+        if (ps.types == NULL) return ps.name;
     }
     return NULL;
 }
@@ -423,9 +419,9 @@ static paw_Bool is_wildcard_path(const struct AstPath *path)
 {
     paw_assert(path->count > 0);
     if (path->count > 1) return PAW_FALSE;
-    struct AstSegment *seg = K_LIST_GET(path, 0);
-    return pawS_length(seg->name) == 1 &&
-        seg->name->text[0] == '_';
+    struct AstSegment seg = K_LIST_GET(path, 0);
+    return pawS_length(seg.name) == 1 &&
+        seg.name->text[0] == '_';
 }
 
 static struct AstPat *compound_pat(struct Lex *lex)
@@ -1091,12 +1087,12 @@ static struct AstExpr *conversion_expr(struct Lex *lex, struct AstExpr *lhs)
         pawX_error(lex, "expected basic type name");
     }
     struct AstPath *path = rhs->path.path;
-    struct AstSegment *seg = K_LIST_GET(path, 0);
-    if (equals_cstr(lex, seg->name, CSTR_BOOL)) {
+    struct AstSegment seg = K_LIST_GET(path, 0);
+    if (equals_cstr(lex, seg.name, CSTR_BOOL)) {
         r->conv.to = PAW_TBOOL;
-    } else if (equals_cstr(lex, seg->name, CSTR_INT)) {
+    } else if (equals_cstr(lex, seg.name, CSTR_INT)) {
         r->conv.to = PAW_TINT;
-    } else if (equals_cstr(lex, seg->name, CSTR_FLOAT)) {
+    } else if (equals_cstr(lex, seg.name, CSTR_FLOAT)) {
         r->conv.to = PAW_TFLOAT;
     } else {
         pawX_error(lex, "expected basic type");
@@ -1344,7 +1340,7 @@ static struct AstDecl *use_decl(struct Lex *lex, paw_Bool pub)
     r->is_pub = pub;
     r->line = line;
 
-    r->name = K_LIST_GET(r->path, r->path->count - 1)->name;
+    r->name = K_LIST_LAST(r->path).name;
     semicolon(lex);
     return result;
 }

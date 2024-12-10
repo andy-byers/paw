@@ -18,7 +18,7 @@ typedef struct InferenceVar {
     int rank;
 } InferenceVar;
 
-DEFINE_LIST_V2(struct Compiler, var_list_, VarList, struct InferenceVar *)
+DEFINE_LIST(struct Compiler, var_list_, VarList, struct InferenceVar *)
 
 typedef struct UnificationTable {
     K_ALIGNAS_NODE struct UnificationTable *outer;

@@ -729,14 +729,14 @@ struct HirExpr *pawHir_new_expr(struct Compiler *C, int line, enum HirExprKind k
 struct HirStmt *pawHir_new_stmt(struct Compiler *C, int line, enum HirStmtKind kind);
 struct HirPat *pawHir_new_pat(struct Compiler *C, int line, enum HirPatKind kind);
 
-DEFINE_LIST_V2(struct Compiler, pawHir_decl_list_, HirDeclList, struct HirDecl *)
-DEFINE_LIST_V2(struct Compiler, pawHir_expr_list_, HirExprList, struct HirExpr *)
-DEFINE_LIST_V2(struct Compiler, pawHir_stmt_list_, HirStmtList, struct HirStmt *)
-DEFINE_LIST_V2(struct Compiler, pawHir_type_list_, HirTypeList, struct HirType *)
-DEFINE_LIST_V2(struct Compiler, pawHir_pat_list_, HirPatList, struct HirPat *)
-DEFINE_LIST_V2(struct Compiler, pawHir_scope_, HirScope, struct HirSymbol *)
-DEFINE_LIST_V2(struct Compiler, pawHir_symtab_, HirSymtab, struct HirScope *)
-DEFINE_LIST_V2(struct Compiler, pawHir_path_, HirPath, struct HirSegment *)
+DEFINE_LIST(struct Compiler, pawHir_decl_list_, HirDeclList, struct HirDecl *)
+DEFINE_LIST(struct Compiler, pawHir_expr_list_, HirExprList, struct HirExpr *)
+DEFINE_LIST(struct Compiler, pawHir_stmt_list_, HirStmtList, struct HirStmt *)
+DEFINE_LIST(struct Compiler, pawHir_type_list_, HirTypeList, struct HirType *)
+DEFINE_LIST(struct Compiler, pawHir_pat_list_, HirPatList, struct HirPat *)
+DEFINE_LIST(struct Compiler, pawHir_scope_, HirScope, struct HirSymbol *)
+DEFINE_LIST(struct Compiler, pawHir_symtab_, HirSymtab, struct HirScope *)
+DEFINE_LIST(struct Compiler, pawHir_path_, HirPath, struct HirSegment)
 
 #define HIR_IS_UNIT_T(x) (HirIsAdt(x) && hir_adt_did(x) == PAW_TUNIT)
 #define HIR_IS_BASIC_T(x) (HirIsAdt(x) && hir_adt_did(x) <= PAW_TSTR)
@@ -745,7 +745,7 @@ DEFINE_LIST_V2(struct Compiler, pawHir_path_, HirPath, struct HirSegment *)
 #define HIR_IS_POLY_ADT(decl) (HirIsAdtDecl(decl) && HirGetAdtDecl(decl)->generics != NULL)
 #define HIR_IS_POLY_IMPL(decl) (HirIsImplDecl(decl) && HirGetImplDecl(decl)->generics != NULL)
 
-#define HIR_PATH_RESULT(path) ((path)->data[(path)->count - 1]->did)
+#define HIR_PATH_RESULT(path) ((path)->data[(path)->count - 1].did)
 #define HIR_TYPE_DID(type) (HirIsPathType(type) ? HIR_PATH_RESULT(HirGetPathType(type)->path) : \
         HirGetFuncDef(type)->did)
 
@@ -767,12 +767,12 @@ struct HirDecl *pawHir_get_decl(struct Compiler *C, DeclId id);
 static inline struct HirSegment *pawHir_path_add(struct Compiler *C, struct HirPath *path, String *name,
                                                  struct HirTypeList *args)
 {
-    struct HirSegment *ps = pawHir_segment_new(C);
-    ps->name = name;
-    ps->types = args;
-    ps->did = NO_DECL;
-    K_LIST_PUSH(C, path, ps);
-    return ps;
+    K_LIST_PUSH(C, path, ((struct HirSegment){
+                .did = NO_DECL,
+                .types = args,
+                .name = name,
+            }));
+    return &K_LIST_LAST(path);
 }
 
 /*TODO:remove*/struct IrTypeList *pawHir_collect_generics(struct Compiler *C, struct HirDeclList *generics);

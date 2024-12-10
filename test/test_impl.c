@@ -472,7 +472,7 @@ struct Context {
     paw_Env *P;
 };
 
-DEFINE_LIST_V2(struct Context, small_struct_list_, SmallStructList, struct SmallStruct)
+DEFINE_LIST(struct Context, small_struct_list_, SmallStructList, struct SmallStruct)
 
 static void test_compiler_lists(paw_Env *P) {
     struct Pool pool;

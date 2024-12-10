@@ -113,9 +113,9 @@ DEFINE_KIND_PRINTER(stmt, AstStmt)
 static void dump_path(Printer *P, struct AstPath *p)
 {
     for (int i = 0; i < p->count; ++i) {
-        struct AstSegment *seg = p->data[i];
-        DUMP_NAME(P, seg->name);
-        dump_expr_list(P, seg->types, "types");
+        struct AstSegment seg = K_LIST_GET(p, i);
+        DUMP_NAME(P, seg.name);
+        dump_expr_list(P, seg.types, "types");
     }
 }
 

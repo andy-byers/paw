@@ -191,11 +191,11 @@ static struct HirPath *lower_path(struct LowerAst *L, struct AstPath *path)
     paw_assert(path->count > 0);
     struct HirPath *r = pawHir_path_new(L->C);
     for (int i = 0; i < path->count; ++i) {
-        struct AstSegment *src = K_LIST_GET(path, i);
-        struct HirSegment *dst = pawHir_segment_new(L->C);
-        dst->types = lower_type_list(L, src->types);
-        dst->name = src->name;
-        K_LIST_PUSH(L->C, r, dst);
+        struct AstSegment src = K_LIST_GET(path, i);
+        K_LIST_PUSH(L->C, r, ((struct HirSegment){
+                        .types = lower_type_list(L, src.types),
+                        .name = src.name,
+                    }));
     }
     return r;
 }

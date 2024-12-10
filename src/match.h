@@ -7,32 +7,14 @@
 
 #include "compile.h"
 
-enum DecisionKind {
-    DECISION_GUARD,
-    DECISION_MULTIWAY,
-    DECISION_SUCCESS,
-    DECISION_FAILURE,
+struct MatchVar {
+    struct IrType *type;
+    int id;
 };
 
-struct Decision {
-    enum DecisionKind kind;
-    union {
-        struct {
-            struct HirExpr *cond;
-            struct MatchBody *body;
-            struct Decision *rest;
-        } guard;
-
-        struct {
-            struct MatchVar *test;
-            struct CaseList *cases;
-            struct Decision *rest;
-        } multi;
-
-        struct {
-            struct MatchBody *body;
-        } success;
-    };
+struct Binding {
+    struct MatchVar var;
+    String *name;
 };
 
 enum ConstructorKind {
@@ -67,16 +49,6 @@ struct Constructor {
     };
 };
 
-struct Binding {
-    struct MatchVar *var;
-    String *name;
-};
-
-struct MatchVar {
-    struct IrType *type;
-    int id;
-};
-
 struct MatchBody {
     struct BindingList *bindings;
     struct HirBlock *block;
@@ -88,9 +60,37 @@ struct MatchCase {
     struct Decision *dec;
 };
 
-DEFINE_LIST_V2(struct Compiler, binding_list_, BindingList, struct Binding *)
-DEFINE_LIST_V2(struct Compiler, variable_list_, VariableList, struct MatchVar *)
-DEFINE_LIST_V2(struct Compiler, case_list_, CaseList, struct MatchCase *)
+enum DecisionKind {
+    DECISION_GUARD,
+    DECISION_MULTIWAY,
+    DECISION_SUCCESS,
+    DECISION_FAILURE,
+};
+
+struct Decision {
+    enum DecisionKind kind;
+    union {
+        struct {
+            struct HirExpr *cond;
+            struct MatchBody body;
+            struct Decision *rest;
+        } guard;
+
+        struct {
+            struct MatchVar test;
+            struct CaseList *cases;
+            struct Decision *rest;
+        } multi;
+
+        struct {
+            struct MatchBody body;
+        } success;
+    };
+};
+
+DEFINE_LIST(struct Compiler, variable_list_, VariableList, struct MatchVar)
+DEFINE_LIST(struct Compiler, binding_list_, BindingList, struct Binding)
+DEFINE_LIST(struct Compiler, case_list_, CaseList, struct MatchCase)
 
 const char *pawP_print_decision(struct Compiler *C, struct Decision *dec);
 

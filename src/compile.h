@@ -177,7 +177,7 @@ struct ModuleInfo {
 
 struct ModuleInfo *pawP_mi_new(struct Compiler *C, struct Hir *hir);
 
-DEFINE_LIST_V2(struct Compiler, pawP_mod_list_, ModuleList, struct ModuleInfo *)
+DEFINE_LIST(struct Compiler, pawP_mod_list_, ModuleList, struct ModuleInfo *)
 
 // Keeps track of dynamic memory used by the compiler
 struct DynamicMem {
@@ -348,9 +348,7 @@ struct ItemSlot {
     String *name;
 };
 
-struct ItemSlot *pawP_new_item_slot(struct Compiler *C, struct Mir *mir, struct Type *type);
-
-DEFINE_LIST_V2(struct Compiler, pawP_item_list_, ItemList, struct ItemSlot *)
+DEFINE_LIST(struct Compiler, pawP_item_list_, ItemList, struct ItemSlot)
 
 Map *pawP_push_map(struct Compiler *C);
 List *pawP_push_list(struct Compiler *C);

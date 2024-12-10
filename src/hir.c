@@ -177,8 +177,8 @@ static void AcceptSegment(struct HirVisitor *V, struct HirSegment *seg)
 static void AcceptPath(struct HirVisitor *V, struct HirPath *path)
 {
     for (int i = 0; i < path->count; ++i) {
-        struct HirSegment *seg = K_LIST_GET(path, i);
-        AcceptSegment(V, seg);
+        struct HirSegment seg = K_LIST_GET(path, i);
+        AcceptSegment(V, &seg);
     }
     VISITOR_CALL(V, Path, path);
 }
@@ -372,8 +372,8 @@ static void AcceptTupleType(struct HirVisitor *V, struct HirTupleType *t)
 static void AcceptPathType(struct HirVisitor *V, struct HirPathType *t)
 {
     for (int i = 0; i < t->path->count; ++i) {
-        struct HirSegment *seg = K_LIST_GET(t->path, i);
-        accept_type_list(V, seg->types);
+        struct HirSegment seg = K_LIST_GET(t->path, i);
+        accept_type_list(V, seg.types);
     }
 }
 
@@ -618,11 +618,11 @@ static void print_path(struct Printer *P, struct HirPath *path)
 {
     for (int i = 0; i < path->count; ++i) {
         if (i > 0) PRINT_LITERAL(P, "::");
-        struct HirSegment *seg = K_LIST_GET(path, i);
-        PRINT_STRING(P, seg->name);
-        if (seg->types != NULL) {
+        struct HirSegment seg = K_LIST_GET(path, i);
+        PRINT_STRING(P, seg.name);
+        if (seg.types != NULL) {
             PRINT_CHAR(P, '<');
-            print_type_list(P, seg->types);
+            print_type_list(P, seg.types);
             PRINT_CHAR(P, '>');
         }
     }
@@ -758,14 +758,14 @@ DEFINE_LIST_PRINTER(stmt, HirStmt)
 DEFINE_LIST_PRINTER(type, HirType)
 DEFINE_LIST_PRINTER(pat, HirPat)
 
-static void dump_segment(struct Printer *P, struct HirSegment *seg)
+static void dump_segment(struct Printer *P, struct HirSegment seg)
 {
-    DUMP_STRING(P, seg->name->text);
-    if (seg->types != NULL) {
+    DUMP_STRING(P, seg.name->text);
+    if (seg.types != NULL) {
         DUMP_LITERAL(P, "<");
-        for (int j = 0; j < seg->types->count; ++j) {
-            print_type(P, seg->types->data[j]);
-            if (j < seg->types->count - 1) {
+        for (int j = 0; j < seg.types->count; ++j) {
+            print_type(P, seg.types->data[j]);
+            if (j < seg.types->count - 1) {
                 DUMP_LITERAL(P, ", ");
             }
         }
@@ -799,11 +799,11 @@ static void dump_type(struct Printer *P, struct HirType *t)
             break;
         case kHirPathType:
             for (int i = 0; i < t->path.path->count; ++i) {
-                struct HirSegment *seg = K_LIST_GET(t->path.path, i);
-                DUMP_FMT(P, "name: %s\n", seg->name->text);
-                DUMP_FMT(P, "did: %d\n", seg->did);
-                if (seg->types != NULL) {
-                    dump_type_list(P, seg->types, "types");
+                struct HirSegment seg = K_LIST_GET(t->path.path, i);
+                DUMP_FMT(P, "name: %s\n", seg.name->text);
+                DUMP_FMT(P, "did: %d\n", seg.did);
+                if (seg.types != NULL) {
+                    dump_type_list(P, seg.types, "types");
                 }
             }
     }

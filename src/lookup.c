@@ -65,7 +65,7 @@ static struct QueryBase locate_base_in(struct QueryState *Q, struct ModuleInfo *
     struct HirSegment *seg;
     struct HirSymbol *sym;
     for (Q->m = root, Q->index = 0; Q->index < path->count;) {
-        seg = K_LIST_GET(path, Q->index++);
+        seg = &K_LIST_GET(path, Q->index++);
         sym = resolve_symbol(Q, seg->name);
         if (sym == NULL) return (struct QueryBase){seg};
         base = sym->decl;
@@ -190,7 +190,7 @@ struct IrType *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct HirS
 
     if (Q.index < path->count) {
         // resolve method or enumerator
-        struct HirSegment *next = K_LIST_GET(path, Q.index);
+        struct HirSegment *next = &K_LIST_GET(path, Q.index);
         inst = locate_assoc_item(&Q, q.base, inst, next);
         q.is_type = PAW_FALSE;
     }

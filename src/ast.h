@@ -571,24 +571,22 @@ struct AstPat *pawAst_new_pat(struct Ast *ast, int line, enum AstPatKind kind);
 #define AST_CAST_STMT(x) CAST(struct AstStmt *, x)
 #define AST_CAST_PAT(x) CAST(struct AstPat *, x)
 
-DEFINE_LIST_V2(struct Compiler, pawAst_decl_list_, AstDeclList, struct AstDecl *)
-DEFINE_LIST_V2(struct Compiler, pawAst_expr_list_, AstExprList, struct AstExpr *)
-DEFINE_LIST_V2(struct Compiler, pawAst_stmt_list_, AstStmtList, struct AstStmt *)
-DEFINE_LIST_V2(struct Compiler, pawAst_pat_list_, AstPatList, struct AstPat *)
-DEFINE_LIST_V2(struct Compiler, pawAst_path_, AstPath, struct AstSegment *)
+DEFINE_LIST(struct Compiler, pawAst_decl_list_, AstDeclList, struct AstDecl *)
+DEFINE_LIST(struct Compiler, pawAst_expr_list_, AstExprList, struct AstExpr *)
+DEFINE_LIST(struct Compiler, pawAst_stmt_list_, AstStmtList, struct AstStmt *)
+DEFINE_LIST(struct Compiler, pawAst_pat_list_, AstPatList, struct AstPat *)
+DEFINE_LIST(struct Compiler, pawAst_path_, AstPath, struct AstSegment)
 
 struct Ast *pawAst_new(struct Compiler *C, String *name, int modno);
 void pawAst_free(struct Ast *ast);
 
-struct AstSegment *pawAst_segment_new(struct Compiler *C);
-
 static inline struct AstSegment *pawAst_path_add(struct Compiler *C, struct AstPath *path, String *name, struct AstExprList *args)
 {
-    struct AstSegment *ps = pawAst_segment_new(C);
-    ps->name = name;
-    ps->types = args;
-    K_LIST_PUSH(C, path, ps);
-    return ps;
+    K_LIST_PUSH(C, path, ((struct AstSegment){
+                .types = args,
+                .name = name,
+            }));
+    return &K_LIST_LAST(path);
 }
 
 #define AST_KINDOF(x) ((x)->hdr.kind)

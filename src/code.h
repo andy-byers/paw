@@ -36,7 +36,7 @@ void pawK_pool_free(struct Pool *pool, void *ptr, size_t size);
 
 // Generate a structure type and constructor for a list containing nodes of a
 // given type T. T can be any type, so long as it is "trivially copiable".
-#define DEFINE_LIST_V2(ctx, func, L, T) \
+#define DEFINE_LIST(ctx, func, L, T) \
     struct L { \
         T *data; \
         int count; \

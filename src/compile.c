@@ -392,7 +392,7 @@ static void allocate_types(struct DefGenerator *dg, struct IrTypeList *types)
     }
 }
 
-static struct ItemSlot *allocate_item(struct DefGenerator *dg, struct Mir *body)
+static struct ItemSlot allocate_item(struct DefGenerator *dg, struct Mir *body)
 {
     paw_Env *P = ENV(dg->C);
     struct IrSignature *t = IrGetSignature(body->type);
@@ -410,7 +410,10 @@ static struct ItemSlot *allocate_item(struct DefGenerator *dg, struct Mir *body)
 
     struct Type *ty = Y_TYPE(P, def->func.code);
     ty->sig.did = def->func.did;
-    return pawP_new_item_slot(dg->C, body, ty);
+    return (struct ItemSlot){
+        .mir = body,
+        .rtti = ty,
+    };
 }
 
 static void allocate_items(struct DefGenerator *dg, struct MirBodyList *bodies)
@@ -418,9 +421,9 @@ static void allocate_items(struct DefGenerator *dg, struct MirBodyList *bodies)
     for (int i = 0; i < bodies->count; ++i) {
         struct Mir *body = K_LIST_GET(bodies, i);
 
-        struct ItemSlot *item = allocate_item(dg, body);
+        struct ItemSlot item = allocate_item(dg, body);
         K_LIST_PUSH(dg->C, dg->items, item);
-        map_types(dg, body->type, item->rtti);
+        map_types(dg, body->type, item.rtti);
     }
 }
 
@@ -438,17 +441,6 @@ struct ItemList *pawP_allocate_defs(struct Compiler *C, struct MirBodyList *bodi
 
     pawP_pop_object(C, dg.adts);
     return dg.items;
-}
-
-struct ItemSlot *pawP_new_item_slot(struct Compiler *C, struct Mir *mir, struct Type *rtti)
-{
-    struct ItemSlot *slot = pawK_pool_alloc(ENV(C), C->pool, sizeof(struct ItemSlot));
-    *slot = (struct ItemSlot){
-        .name = mir->name,
-        .rtti = rtti,
-        .mir = mir,
-    };
-    return slot;
 }
 
 Map *pawP_push_map(struct Compiler *C)
