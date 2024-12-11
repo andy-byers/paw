@@ -529,6 +529,7 @@ struct HirForStmt {
 struct HirMatchArm {
     HIR_STMT_HEADER;
     struct HirPat *pat;
+    struct HirExpr *guard;
     struct HirBlock *result;
 };
 

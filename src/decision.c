@@ -137,7 +137,7 @@ static void print_decision(struct Printer *P, struct Decision *dec)
             PRINT_LITERAL(P, "Guard(\n");
             ++P->indent;
             print_indentation(P);
-            print_body(P, dec->success.body);
+            print_body(P, dec->guard.body);
             print_indentation(P);
             PRINT_LITERAL(P, "Rest => ");
             print_decision(P, dec->guard.rest);

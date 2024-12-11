@@ -155,6 +155,7 @@ static void AcceptAssignExpr(struct HirVisitor *V, struct HirAssignExpr *e)
 static void AcceptMatchArm(struct HirVisitor *V, struct HirMatchArm *e)
 {
     AcceptPat(V, e->pat);
+    if (e->guard != NULL) AcceptExpr(V, e->guard);
     AcceptBlock(V, e->result);
 }
 

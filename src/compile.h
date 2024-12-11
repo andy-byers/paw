@@ -69,6 +69,7 @@ enum IrTypeKind;
 
 struct MirBodyList;
 struct MirBlockList;
+struct VariableList;
 
 
 String *pawP_scan_nstring(paw_Env *P, Map *st, const char *s, size_t n);
@@ -239,7 +240,7 @@ struct IrType *pawP_instantiate_field(struct Compiler *C, struct IrType *self, s
 struct HirDecl *pawP_find_field(struct Compiler *C, struct IrType *self, String *name);
 struct IrType *pawP_find_method(struct Compiler *C, struct IrType *self, String *name);
 
-struct Decision *pawP_check_exhaustiveness(struct Compiler *C, struct HirMatchStmt *match);
+struct Decision *pawP_check_exhaustiveness(struct Compiler *C, struct HirMatchStmt *match, struct VariableList *vars);
 void pawP_lower_matches(struct Compiler *C);
 
 struct IrType *pawP_generalize(struct Compiler *C, struct IrType *type);

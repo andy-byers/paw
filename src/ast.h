@@ -517,6 +517,7 @@ struct AstForStmt {
 struct AstMatchArm {
     AST_STMT_HEADER;
     struct AstPat *pat;
+    struct AstExpr *guard;
     struct AstBlock *result;
 };
 

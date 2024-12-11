@@ -536,6 +536,16 @@ static void test_impl_error(void)
 //            "-> T ", "", "");
 }
 
+static void test_invalid_case(const char *name, int expect, const char *item, const char *target, const char *pat)
+{
+    const char fmt[] = "match %s {\n"
+                       "    %s => {},\n"
+                       "}\n";
+    char buffer[sizeof(fmt) + 1024];
+    snprintf(buffer, sizeof(buffer), fmt, target, pat);
+    test_compiler_status(expect, name, item, buffer);
+}
+
 static void test_variant_match_error(void)
 {
     const char *enumeration =
@@ -589,6 +599,22 @@ static void test_variant_match_error(void)
             "    Choice::Second(Choice::Second(Choice::First)) => {},"
             "    Choice::Second(Choice::Second(Choice::Second(_))) => {},"
             "}\n");
+
+    test_invalid_case("duplicate_binding", PAW_ENAME, "",
+            "(0, 0)", "(x, x)");
+    test_invalid_case("duplicate_binding_nested", PAW_ENAME, "",
+            "(((0,),), 0)", "(((x,),), x)");
+    test_invalid_case("or_binding_missing", PAW_ENAME, "",
+            "(0, 0)", "(x, 2) | (2, 3)");
+    test_invalid_case("or_binding_unrecognized", PAW_ENAME, "",
+            "(0, 0)", "(1, 2) | (x, 3)");
+    test_invalid_case("or_binding_unrecognized_int", PAW_ENAME, "",
+            "0", "0 | x");
+    test_invalid_case("or_binding_missing_int", PAW_ENAME, "",
+            "0", "x | 0");
+    // 'x' has a different type in each alternative
+    test_invalid_case("or_binding_type_mismatch", PAW_ETYPE, "",
+            "(0, '')", "(x, 'b') | (1, x)");
 }
 
 static void test_match_error(void)

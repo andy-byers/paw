@@ -39,9 +39,11 @@ struct BlockState {
 };
 
 struct MatchState {
+    Map *var_mapping;
     struct MatchState *outer;
     struct MirRegisterList *regs;
     struct VariableList *vars;
+    int offset;
 };
 
 struct Label {
@@ -69,9 +71,10 @@ struct LowerHir {
     struct VarStack *stack;
 };
 
-static void enter_match(struct LowerHir *L, struct MatchState *ms)
+static void enter_match(struct LowerHir *L, struct MatchState *ms, Map *var_mapping)
 {
     *ms = (struct MatchState){
+        .var_mapping = var_mapping,
         .regs = pawMir_register_list_new(L->C),
         .vars = variable_list_new(L->C),
         .outer = L->ms,
@@ -267,8 +270,7 @@ static paw_Bool resolve_local(struct LowerHir *L, struct FunctionState *fs, Decl
     for (int i = fs->nlocals - 1; i >= 0; --i) {
         struct LocalVar *item = get_local_slot(L, fs, i);
         if (item->did.value == did.value
-                || (item->did.value == NO_DECL.value // TODO: see resolve_nonglobal
-                    && pawS_eq(name, item->name))) {
+                || pawS_eq(name, item->name)) {
             *pinfo = (struct NonGlobal){
                 .r = item->reg,
                 .index = i,
@@ -1115,6 +1117,43 @@ static paw_Bool visit_return_stmt(struct HirVisitor *V, struct HirReturnStmt *s)
     return PAW_FALSE;
 }
 
+static struct MirBlock *patch_to_here(struct LowerHir *L, struct MirBlockList *sources)
+{
+    struct MirBlock *next_bb = advance_bb(L);
+    for (int i = 0; i < sources->count; ++i) {
+        struct MirBlock *bb = K_LIST_GET(sources, i);
+        MirGetGoto(bb->term)->target = next_bb->bid;
+    }
+    return next_bb;
+}
+
+static void save_patch_source(struct LowerHir *L, struct MirBlockList *sources)
+{
+    if (current_term(L) == NULL) {
+        struct MirBlock *bb = current_bb(L);
+        K_LIST_PUSH(L->C, sources, bb);
+        finish_goto(L, MIR_NO_BLOCK); // placeholder
+    }
+}
+
+static struct MirRegister *get_test_reg(struct LowerHir *L, struct MatchVar v)
+{
+    const Value *pval = pawH_get(L->ms->var_mapping, I2V(v.id));
+    paw_assert(pval != NULL);
+    return pval->p;
+}
+
+static void declare_match_bindings(struct LowerHir *L, struct BindingList *bindings)
+{
+    for (int i = 0; i < bindings->count; ++i) {
+        struct Binding b = K_LIST_GET(bindings, i);
+        struct MirRegister *r = get_test_reg(L, b.var);
+        move_to_top(L, r);
+
+        add_local(L, b.name, r, NO_DECL);
+    }
+}
+
 static MirBlockId lower_match_body(struct HirVisitor *V, struct MatchBody body);
 static void visit_decision(struct HirVisitor *V, struct Decision *d);
 
@@ -1127,39 +1166,26 @@ static void visit_success(struct HirVisitor *V, struct Decision *d)
 static void visit_guard(struct HirVisitor *V, struct Decision *d)
 {
     struct LowerHir *L = V->ud;
+
+    // steal bindings from the body of the guard, since they may be referenced in
+    // the conditional expression
+    struct BindingList *bindings = d->guard.body.bindings;
+    declare_match_bindings(L, bindings);
+    bindings->count = 0;
+
+    struct MirBlockList *patch = pawMir_block_list_new(L->C);
     struct MirRegister *cond = operand_to_any(V, d->guard.cond);
     struct MirTerminator *branch = finish_branch(L, cond);
 
-    MirGetBranch(branch)->then_arm = lower_match_body(V, d->guard.body);
-    struct MirBlock *then = current_bb(L);
+    MirGetBranch(branch)->then_arm = next_bb(L)->bid;
+    lower_match_body(V, d->guard.body);
+    save_patch_source(L, patch);
 
     MirGetBranch(branch)->else_arm = next_bb(L)->bid;
     visit_decision(V, d->guard.rest);
 
     struct MirBlock *after_bb = advance_bb(L);
-    if (then->term == NULL) then->term = pawMir_new_goto(L->C, after_bb->bid);
-}
-
-static struct MirRegister *get_test_reg(struct LowerHir *L, struct MatchVar test)
-{
-    struct VariableList *vars = L->ms->vars;
-    struct MirRegisterList *regs = L->ms->regs;
-    for (int i = 0; i < vars->count; ++i) {
-        struct MatchVar var = K_LIST_GET(vars, i);
-        if (var.id == test.id) return K_LIST_GET(regs, i);
-    }
-    PAW_UNREACHABLE();
-}
-
-static void declare_match_bindings(struct LowerHir *L, struct BindingList *bindings)
-{
-    for (int i = 0; i < bindings->count; ++i) {
-        struct Binding b = K_LIST_GET(bindings, i);
-        struct MirRegister *r = get_test_reg(L, b.var);
-        move_to_top(L, r);
-
-        add_local(L, b.name, r, NO_DECL);
-    }
+    patch_to_here(L, patch);
 }
 
 static MirBlockId lower_match_body(struct HirVisitor *V, struct MatchBody body)
@@ -1226,53 +1252,21 @@ static struct MirRegister *emit_multiway_test(struct LowerHir *L, struct Decisio
     return output;
 }
 
-static struct MirRegisterList *allocate_match_vars(struct LowerHir *L, struct MirRegister *discr, struct MatchCase mc, paw_Bool is_enum)
+static void map_var_to_reg(struct LowerHir *L, struct MatchVar var, struct MirRegister *reg)
 {
-    struct MirRegisterList *regs = pawMir_register_list_new(L->C);
-    if (mc.vars->count == 0) return regs;
-    if (is_enum) {
-        // NOTE: this causes the exploded discriminant to be ignored (OP_GETFIELD is invoked
-        //       on the enumerator itself to extract the discriminant for checking)
-        struct MirRegister *r = new_literal_register(L, PAW_TINT);
-        K_LIST_PUSH(L->C, L->ms->vars, ((struct MatchVar){.id = -1})); // placeholder
-        K_LIST_PUSH(L->C, L->ms->regs, r);
-        K_LIST_PUSH(L->C, regs, r);
-    }
-    const int first_var = mc.vars->count;
+    pawH_insert(ENV(L->C), L->ms->var_mapping, I2V(var.id), P2V(reg));
+}
+
+static void allocate_match_vars(struct LowerHir *L, struct MirRegister *discr, struct MatchCase mc, paw_Bool is_enum)
+{
+    if (mc.vars->count == 0) return;
+    struct MirRegisterList *regs = L->ms->regs;
     for (int i = 0; i < mc.vars->count; ++i) {
         struct MatchVar v = K_LIST_GET(mc.vars, i);
         struct MirRegister *r = new_register(L, v.type);
-        K_LIST_PUSH(L->C, L->ms->vars, v);
-        K_LIST_PUSH(L->C, L->ms->regs, r);
-        K_LIST_PUSH(L->C, regs, r);
-    }
-    struct MirInstruction *explode = new_instruction(L, kMirExplode);
-    MirGetExplode(explode)->outputs = regs;
-    MirGetExplode(explode)->input = discr;
-
-    for (int i = 0; i < regs->count; ++i) {
-        add_local(L, SCAN_STRING(L->C, "(match variable)"),
-                K_LIST_GET(regs, i), NO_DECL);
-    }
-    return regs;
-}
-
-static struct MirBlock *patch_to_here(struct LowerHir *L, struct MirBlockList *sources)
-{
-    struct MirBlock *next_bb = advance_bb(L);
-    for (int i = 0; i < sources->count; ++i) {
-        struct MirBlock *bb = K_LIST_GET(sources, i);
-        MirGetGoto(bb->term)->target = next_bb->bid;
-    }
-    return next_bb;
-}
-
-static void save_patch_source(struct LowerHir *L, struct MirBlockList *sources)
-{
-    if (current_term(L) == NULL) {
-        struct MirBlock *bb = current_bb(L);
-        K_LIST_PUSH(L->C, sources, bb);
-        finish_goto(L, MIR_NO_BLOCK); // placeholder
+        map_var_to_reg(L, v, r);
+        emit_get_field(L, discr, is_enum + i, r);
+        add_local_literal(L, "(match variable)", r);
     }
 }
 
@@ -1432,26 +1426,26 @@ static void visit_decision(struct HirVisitor *V, struct Decision *d)
 static paw_Bool visit_match_stmt(struct HirVisitor *V, struct HirMatchStmt *s)
 {
     struct LowerHir *L = V->ud;
+    Map *var_mapping = pawP_push_map(L->C);
+
     struct BlockState bs;
-    enter_block(L, &bs, PAW_FALSE);
-
-    struct MirRegister *discr = operand_to_any(V, s->target);
-    struct LocalVar *local = add_local_literal(L, "(match target)", discr);
-
     struct MatchState ms;
-    enter_match(L, &ms);
+    enter_block(L, &bs, PAW_FALSE);
+    enter_match(L, &ms, var_mapping);
 
-    struct Decision *d = pawP_check_exhaustiveness(L->C, s);
-
-    if (d->kind == DECISION_MULTIWAY) {
-        K_LIST_PUSH(L->C, ms.vars, d->multi.test);
-        K_LIST_PUSH(L->C, ms.regs, discr);
-    }
+    struct Decision *d = pawP_check_exhaustiveness(L->C, s, ms.vars);
+    paw_assert(ms.vars->count > 0);
+    struct MirRegister *discr = operand_to_any(V, s->target);
+    map_var_to_reg(L, K_LIST_FIRST(ms.vars), discr);
+    add_local_literal(L, "(match target)", discr);
+    K_LIST_PUSH(L->C, ms.regs, discr);
 
     visit_decision(V, d);
 
     leave_match(L);
     leave_block(L);
+
+    pawP_pop_object(L->C, var_mapping);
     return PAW_FALSE;
 }
 

@@ -223,27 +223,6 @@ pub fn test_exact_int() {
     assert(match_exact_int(10) == 100);
 }
 
-fn match_either_int(i: int) -> int {
-    match i {
-        0 | 2 => {return 1;},
-        1 | 3 => {return 2;},
-        4 | 6 => {return 3;},
-        _ => {return 4;},
-    };
-}
-
-pub fn test_either_int() {
-    assert(match_either_int(-1) == 4);
-    assert(match_either_int(0) == 1);
-    assert(match_either_int(1) == 2);
-    assert(match_either_int(2) == 1);
-    assert(match_either_int(3) == 2);
-    assert(match_either_int(4) == 3);
-    assert(match_either_int(5) == 4);
-    assert(match_either_int(6) == 3);
-    assert(match_either_int(7) == 4);
-}
-
 pub fn test_target_is_evaluated_once() {
     let value = 0;
     let f = || {
@@ -273,60 +252,102 @@ pub fn test_tuple() {
     assert(check_match_tuple((1, 'two', 4.0)) == 4);
 }
 
-fn match_either_variant(target: Nested) -> int {
+fn check_match_tuple_2(target: (int, int, int)) -> int {
     match target {
-        Nested::Zero => {return 1;},
-
-        Nested::One(Flat::A | Flat::B) => {return 2;},
-        Nested::One(Flat::C) => {return 3;},
-
-        Nested::Two(Flat::A, Flat::A)
-        | Nested::Two(Flat::A, Flat::B) => {return 4;},
-
-        Nested::Two(
-            Flat::B | Flat::C, 
-            Flat::B | Flat::C) 
-        | Nested::Two(
-            Flat::A | Flat::C, 
-            Flat::A | Flat::C) => {return 5;},
-
-        _ => {return 6;},
+        (1, b, 2) => {return b;},
+        (a, 3, 3) => {return a;},
+        (4, 4, c) => {return c;},
+        (a, b, c) => {return a + b + c;}
     };
 }
 
-pub fn test_either_variant() {
-    let check = match_either_variant;
-    assert(check(Nested::Zero) == 1);
-
-    assert(check(Nested::One(Flat::A)) == 2);
-    assert(check(Nested::One(Flat::B)) == 2);
-    assert(check(Nested::One(Flat::C)) == 3);
-
-    assert(check(Nested::Two(Flat::A, Flat::A)) == 4);
-    assert(check(Nested::Two(Flat::A, Flat::B)) == 4);
-
-    assert(check(Nested::Two(Flat::B, Flat::B)) == 5);
-    assert(check(Nested::Two(Flat::B, Flat::C)) == 5);
-    assert(check(Nested::Two(Flat::C, Flat::B)) == 5);
-    assert(check(Nested::Two(Flat::C, Flat::C)) == 5);
-    assert(check(Nested::Two(Flat::A, Flat::C)) == 5);
-    assert(check(Nested::Two(Flat::C, Flat::A)) == 5);
-
-    assert(check(Nested::Two(Flat::B, Flat::A)) == 6);
+pub fn test_tuple_2() {
+    assert(check_match_tuple_2((1, 1, 2)) == 1);
+    assert(check_match_tuple_2((2, 3, 3)) == 2);
+    assert(check_match_tuple_2((4, 4, 3)) == 3);
+    assert(check_match_tuple_2((1, 2, 1)) == 4);
 }
 
-//fn sign(value: int) -> int {
-//    match value {
-//        x if x < 0 => {return -1;},
-//        0 => {return 0;},
-//        _ => {return 1;},
-//    }
-//}
-//
-//pub fn test_guard() {
-//    assert(sign(-100) == -1);
-//    assert(sign(-1) == -1);
-//    assert(sign(0) == 0);
-//    assert(sign(1) == 1);
-//    assert(sign(1000) == 1);
-//}
+fn sign(value: int) -> int {
+    match value {
+        x if x < 0 => {return -1;},
+        0 => {return 0;},
+        _ => {return 1;},
+    }
+}
+
+pub fn test_guard() {
+    assert(sign(-100) == -1);
+    assert(sign(-1) == -1);
+    assert(sign(0) == 0);
+    assert(sign(1) == 1);
+    assert(sign(1000) == 1);
+}
+
+fn check_guard_2(value: Option<int>) -> int {
+    match value {
+        Option::Some(x) if x == 100 => {return 1;},
+        Option::Some(x) if x < -10 => {return 2;},
+        Option::Some(x) if x < 0 => {return 3;},
+        Option::Some(x) => {return 4;},
+        Option::None => {return 5;},
+    }
+}
+
+pub fn test_guard_2() {
+    let check = check_guard_2;
+    assert(check(Option::Some(100)) == 1);
+    assert(check(Option::Some(-11)) == 2);
+    assert(check(Option::Some(-10)) == 3);
+    assert(check(Option::Some(0)) == 4);
+    assert(check(Option::None) == 5);
+}
+
+fn check_guard_3(value: (int, int)) -> int {
+    match value {
+        (x, y) if x == y => {return x + y + 1;},
+        (x, y) => {return x + y + 2;},
+    }
+}
+
+pub fn test_guard_3() {
+    let check = check_guard_3;
+    assert(check((0, 0)) == 1);
+    assert(check((1, 1)) == 3);
+    assert(check((1, 0)) == 3);
+    assert(check((2, 2)) == 5);
+}
+
+
+fn check_match_tuple_3(target: (((int,), int), int)) -> int {
+    match target {
+        (((a,), 1), 1)
+        | (((2,), a), 2)
+        | (((3,), 3), a) => {
+            return a;
+        },
+        (((b,), 2)
+        | ((1,), b), c)
+        | (((3,), b), c) => {
+            return b + c;
+        },
+        _ => {
+            return -1;
+        }
+    };
+}
+
+pub fn test_match_tuple_3() {
+    let check = check_match_tuple_3;
+    assert(check((((1,), 1), 1)) == 1);
+    assert(check((((2,), 2), 2)) == 2);
+    assert(check((((3,), 3), 3)) == 3);
+    assert(check((((4,), 1), 1)) == 4);
+    assert(check((((2,), 5), 2)) == 5);
+    assert(check((((3,), 3), 6)) == 6);
+
+    assert(check((((1,), 2), 3)) == 1 + 3);
+    assert(check((((1,), 3), 2)) == 3 + 2);
+    assert(check((((3,), 1), 2)) == 1 + 2);
+}
+

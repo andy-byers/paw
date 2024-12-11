@@ -162,6 +162,7 @@ struct MirConstant {
 
 struct MirExplode {
     MIR_INSTRUCTION_HEADER;
+    int offset;
     struct MirRegister *input;
     struct MirRegisterList *outputs;
 };

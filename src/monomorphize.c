@@ -108,6 +108,7 @@ static void CopyAggregate(struct MonoCollector *M, struct MirAggregate *x, struc
 
 static void CopyExplode(struct MonoCollector *M, struct MirExplode *x, struct MirExplode *r)
 {
+    r->offset = x->offset;
     r->input = copy_register(M, x->input);
     r->outputs = copy_register_list(M, x->outputs);
 }

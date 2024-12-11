@@ -27,6 +27,7 @@
     X(enum) \
     X(method) \
     X(match) \
+    X(match_or) \
     X(match_enum) \
     X(list) \
     X(map) \

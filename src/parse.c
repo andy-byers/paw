@@ -1541,6 +1541,9 @@ static struct AstStmt *match_arm(struct Lex *lex)
     struct AstStmt *result = NEW_STMT(lex, kAstMatchArm);
     struct AstMatchArm *r = AstGetMatchArm(result);
     r->pat = pattern(lex);
+    if (test_next(lex, TK_IF)) {
+        r->guard = basic_expr(lex);
+    }
     check_next(lex, TK_FAT_ARROW);
     r->result = block(lex);
     return result;

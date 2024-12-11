@@ -12,6 +12,7 @@
 #include "match.h"
 
 struct Usefulness {
+    struct VariableList *vars;
     struct Compiler *C;
     struct Pool *pool;
     paw_Env *P;
@@ -26,6 +27,7 @@ struct Column {
 
 struct Row {
     struct ColumnList *columns;
+    struct HirExpr *guard;
     struct MatchBody body;
 };
 
@@ -87,10 +89,11 @@ static int constructor_index(struct Constructor cons)
 
 static struct MatchVar new_variable(struct Usefulness *U, struct IrType *type)
 {
-    return (struct MatchVar){
+    K_LIST_PUSH(U->C, U->vars, ((struct MatchVar){
         .id = U->var_id++,
         .type = type,
-    };
+    }));
+    return K_LIST_LAST(U->vars);
 }
 
 static struct MatchBody new_body(struct Usefulness *U, struct HirBlock *block)
@@ -108,14 +111,30 @@ static void extend_row_list(struct Usefulness *U, struct RowList *target, struct
     }
 }
 
+static struct MatchBody copy_body(struct Usefulness *U, struct MatchBody body)
+{
+    struct BindingList *bindings = binding_list_new(U->C);
+    for (int i = 0; i < body.bindings->count; ++i) {
+        struct Binding b = K_LIST_GET(body.bindings, i);
+        K_LIST_PUSH(U->C, bindings, b);
+    }
+    return (struct MatchBody){
+        .bindings = bindings,
+        .block = body.block,
+    };
+}
+
 static struct Row copy_row(struct Usefulness *U, struct Row row)
 {
     struct ColumnList *cols = column_list_new(U);
-    struct Row result = {.columns = cols, .body = row.body};
     for (int i = 0; i < row.columns->count; ++i) {
         K_LIST_PUSH(U->C, cols, K_LIST_GET(row.columns, i));
     }
-    return result;
+    return (struct Row){
+        .columns = cols,
+        .guard = row.guard,
+        .body = copy_body(U, row.body),
+    };
 }
 
 static struct HirPatList *join_lists(struct Usefulness *U, struct HirPatList *lhs, struct HirPatList *rhs)
@@ -132,6 +151,74 @@ static struct HirPatList *flatten_or(struct Usefulness *U, struct HirPat *pat)
     struct HirPatList *pats = pawHir_pat_list_new(U->C);
     K_LIST_PUSH(U->C, pats, pat);
     return pats;
+}
+
+static struct Row remove_first_row(struct Usefulness *U, struct RowList *rows)
+{
+    struct Row first_row = K_LIST_FIRST(rows);
+    memmove(rows->data, rows->data + 1, CAST_SIZE(rows->count - 1) * sizeof(rows->data[0]));
+    --rows->count;
+    return first_row;
+}
+
+static int find_or_pattern(struct Row row)
+{
+    for (int icol = 0; icol < row.columns->count; ++icol) {
+        struct Column col = K_LIST_GET(row.columns, icol);
+        if (HirIsOrPat(col.pat)) return icol;
+    }
+    return -1;
+}
+
+static paw_Bool contains_or_pattern(const struct RowList *rows)
+{
+    for (int irow = 0; irow < rows->count; ++irow) {
+        struct Row row = K_LIST_GET(rows, irow);
+        if (find_or_pattern(row) >= 0) return PAW_TRUE;
+    }
+    return PAW_FALSE;
+}
+
+// Translated from @yorickpeterse/pattern-matching-in-rust
+// OR patterns need to be expanded here, so that each alternative gets its own copy of the
+// row. Each alternative may bind variables in different positions in the pattern, so they
+// need to be handled separately.
+static void expand_or_patterns(struct Usefulness *U, struct RowList *rows) {
+    if (!contains_or_pattern(rows)) return;
+
+    struct RowList *new_rows = row_list_new(U);
+    paw_Bool found = PAW_TRUE;
+
+    while (found) {
+        found = PAW_FALSE;
+
+        while (rows->count > 0) {
+            struct Row row = remove_first_row(U, rows);
+            const int icol = find_or_pattern(row);
+            if (icol >= 0) {
+                found = PAW_TRUE;
+
+                struct Column col = K_LIST_GET(row.columns, icol);
+                struct HirOrPat *or = HirGetOrPat(col.pat);
+
+                for (int ipat = 0; ipat < or->pats->count; ++ipat) {
+                    struct HirPat *p = K_LIST_GET(or->pats, ipat);
+                    struct Row new_row = copy_row(U, row);
+                    K_LIST_SET(new_row.columns, icol, ((struct Column){
+                                    .var = col.var,
+                                    .pat = p,
+                                }));
+                    K_LIST_PUSH(U->C, new_rows, new_row);
+                }
+            } else {
+                K_LIST_PUSH(U->C, new_rows, row);
+            }
+        }
+
+        struct RowList temp = *rows;
+        *rows = *new_rows;
+        *new_rows = temp;
+    }
 }
 
 static struct VariableList *variables_for_types(struct Usefulness *U, struct IrTypeList *types)
@@ -316,33 +403,30 @@ static struct CaseList *compile_constructor_cases(struct Usefulness *U, struct R
             continue;
         }
 
-        struct HirPatList *pats = flatten_or(U, col.pat);
-        for (int i = 0; i < pats->count; ++i) {
-            struct HirPat *pat = K_LIST_GET(pats, i);
-            struct Row r = copy_row(U, row);
+        struct HirPat *pat = col.pat;
+        struct Row r = copy_row(U, row);
 
-            // pattern matrix specialization
-            int index = 0;
-            struct HirPatList *fields;
-            if (HirIsVariantPat(pat)) {
-                fields = HirGetVariantPat(pat)->fields;
-                index = HirGetVariantPat(pat)->index;
-            } else if (HirIsStructPat(pat)){
-                fields = struct_pat_fields(U, HirGetStructPat(pat));
-            } else {
-                fields = HirGetTuplePat(pat)->elems;
-            }
-
-            struct RawCase *rc = &K_LIST_GET(cases, index);
-            paw_assert(rc->vars->count == fields->count);
-            for (int i = 0; i < fields->count; ++i) {
-                K_LIST_PUSH(U, r.columns, ((struct Column){
-                                .var = K_LIST_GET(rc->vars, i),
-                                .pat = K_LIST_GET(fields, i),
-                            }));
-            }
-            K_LIST_PUSH(U, rc->rows, r);
+        // pattern matrix specialization
+        int index = 0;
+        struct HirPatList *fields;
+        if (HirIsVariantPat(pat)) {
+            fields = HirGetVariantPat(pat)->fields;
+            index = HirGetVariantPat(pat)->index;
+        } else if (HirIsStructPat(pat)){
+            fields = struct_pat_fields(U, HirGetStructPat(pat));
+        } else {
+            fields = HirGetTuplePat(pat)->elems;
         }
+
+        struct RawCase *rc = &K_LIST_GET(cases, index);
+        paw_assert(rc->vars->count == fields->count);
+        for (int i = 0; i < fields->count; ++i) {
+            K_LIST_PUSH(U, r.columns, ((struct Column){
+                            .var = K_LIST_GET(rc->vars, i),
+                            .pat = K_LIST_GET(fields, i),
+                        }));
+        }
+        K_LIST_PUSH(U, rc->rows, r);
     }
 
     return compile_cases(U, cases);
@@ -377,56 +461,53 @@ static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct R
             continue;
         }
 
-        struct HirPatList *pats = flatten_or(U, col.pat);
-        for (int i = 0; i < pats->count; ++i) {
-            struct HirPat *pat = K_LIST_GET(pats, i);
-            struct Row r = copy_row(U, row);
+        struct HirPat *pat = col.pat;
+        struct Row r = copy_row(U, row);
 
-            struct HirLiteralPat *p = HirGetLiteralPat(pat);
-            struct HirLiteralExpr *e = HirGetLiteralExpr(p->expr);
-            const Value key = e->basic.value;
-            struct Constructor cons = {0};
+        struct HirLiteralPat *p = HirGetLiteralPat(pat);
+        struct HirLiteralExpr *e = HirGetLiteralExpr(p->expr);
+        const Value key = e->basic.value;
+        struct Constructor cons = {0};
 
-            switch (e->basic.t) {
-                case PAW_TUNIT:
-                    cons.kind = CONS_TUPLE;
-                    cons.tuple.elems = pawIr_type_list_new(U->C);
-                    break;
-                case PAW_TBOOL:
-                    cons.kind = CONS_BOOL;
-                    cons.value = e->basic.value;
-                    break;
-                case PAW_TINT:
-                    cons.kind = CONS_INT;
-                    cons.value = e->basic.value;
-                    break;
-                case PAW_TFLOAT:
-                    cons.kind = CONS_FLOAT;
-                    cons.value = e->basic.value;
-                    break;
-                default:
-                    paw_assert(e->basic.t == PAW_TSTR);
-                    cons.kind = CONS_STR;
-                    cons.value = e->basic.value;
-                    break;
-            }
-
-            Value *pv = pawH_get(tested, key);
-            if (pv != NULL) {
-                struct RawCase rc = K_LIST_GET(raw_cases, pv->i);
-                K_LIST_PUSH(U, rc.rows, r);
-                continue;
-            }
-            pawH_insert(P, tested, key, I2V(raw_cases->count));
-            struct RowList *rows = row_list_new(U);
-            extend_row_list(U, rows, fallback);
-            K_LIST_PUSH(U, rows, r);
-            K_LIST_PUSH(U->C, raw_cases, ((struct RawCase){
-                            .vars = variable_list_new(U->C),
-                            .cons = cons,
-                            .rows = rows,
-                        }));
+        switch (e->basic.t) {
+            case PAW_TUNIT:
+                cons.kind = CONS_TUPLE;
+                cons.tuple.elems = pawIr_type_list_new(U->C);
+                break;
+            case PAW_TBOOL:
+                cons.kind = CONS_BOOL;
+                cons.value = e->basic.value;
+                break;
+            case PAW_TINT:
+                cons.kind = CONS_INT;
+                cons.value = e->basic.value;
+                break;
+            case PAW_TFLOAT:
+                cons.kind = CONS_FLOAT;
+                cons.value = e->basic.value;
+                break;
+            default:
+                paw_assert(e->basic.t == PAW_TSTR);
+                cons.kind = CONS_STR;
+                cons.value = e->basic.value;
+                break;
         }
+
+        Value *pv = pawH_get(tested, key);
+        if (pv != NULL) {
+            struct RawCase rc = K_LIST_GET(raw_cases, pv->i);
+            K_LIST_PUSH(U, rc.rows, r);
+            continue;
+        }
+        pawH_insert(P, tested, key, I2V(raw_cases->count));
+        struct RowList *rows = row_list_new(U);
+        extend_row_list(U, rows, fallback);
+        K_LIST_PUSH(U, rows, r);
+        K_LIST_PUSH(U->C, raw_cases, ((struct RawCase){
+                        .vars = variable_list_new(U->C),
+                        .cons = cons,
+                        .rows = rows,
+                    }));
     }
 
     pawC_pop(P); // pop 'tested'
@@ -542,14 +623,15 @@ static struct Decision *compile_rows(struct Usefulness *U, struct RowList *rows)
     if (rows->count == 0) {
         TYPE_ERROR(U, "non-exhaustive pattern match");
     }
+    expand_or_patterns(U, rows);
     for (int i = 0; i < rows->count; ++i) {
         move_bindings_to_right(U, &K_LIST_GET(rows, i));
     }
     struct Row first_row = K_LIST_GET(rows, 0);
     if (first_row.columns->count == 0) {
-        struct Decision *result = new_decision(U, DECISION_SUCCESS);
-        result->success.body = first_row.body;
-        return result;
+        remove_first_row(U, rows);
+        if (first_row.guard == NULL) return new_success(U, first_row.body);
+        return new_guard(U, first_row.guard, first_row.body, compile_rows(U, rows));
     }
 
     struct Column branch_col = find_branch_col(U, first_row.columns);
@@ -576,11 +658,12 @@ static struct Decision *compile_rows(struct Usefulness *U, struct RowList *rows)
     }
 }
 
-struct Decision *pawP_check_exhaustiveness(struct Compiler *C, struct HirMatchStmt *match)
+struct Decision *pawP_check_exhaustiveness(struct Compiler *C, struct HirMatchStmt *match, struct VariableList *vars)
 {
     paw_Env *P = ENV(C);
     struct Usefulness U = {
         .pool = C->pool,
+        .vars = vars,
         .P = P,
         .C = C,
     };
@@ -591,7 +674,11 @@ struct Decision *pawP_check_exhaustiveness(struct Compiler *C, struct HirMatchSt
         struct HirMatchArm *arm = HirGetMatchArm(K_LIST_GET(match->arms, i));
         struct ColumnList *cols = column_list_new(&U);
         K_LIST_PUSH(C, cols, ((struct Column){.var = var, .pat = arm->pat}));
-        K_LIST_PUSH(C, rows, ((struct Row){.columns = cols, .body = new_body(&U, arm->result)}));
+        K_LIST_PUSH(C, rows, ((struct Row){
+                        .body = new_body(&U, arm->result),
+                        .guard = arm->guard,
+                        .columns = cols,
+                    }));
     }
 
     return compile_rows(&U, rows);

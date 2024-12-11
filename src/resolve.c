@@ -2,8 +2,7 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 //
-// resolve.c: Implementation of the type checker. This code transforms an AST
-// from the parser into a type-annotated HIR tree.
+// resolve.c: Implementation of the type checker.
 
 #include "ast.h"
 #include "code.h"
@@ -29,10 +28,16 @@ struct ResultState {
     int count;
 };
 
+struct PatState {
+    struct PatState *outer;
+    Map *bound;
+    enum HirPatKind kind;
+};
+
 struct MatchState {
     struct MatchState *outer;
+    struct PatState *ps;
     struct IrType *target;
-    struct HirPatList *bindings;
 };
 
 // Common state for type-checking routines
@@ -376,6 +381,23 @@ static void enter_function(struct Resolver *R, struct HirFuncDecl *func)
     new_local(R, func->name, HIR_CAST_DECL(func), PAW_FALSE);
 }
 
+static void leave_pat(struct Resolver *R)
+{
+    struct PatState *ps = R->ms->ps;
+    pawP_pop_object(R->C, ps->bound);
+    R->ms->ps = ps->outer;
+}
+
+static void enter_pat(struct Resolver *R, struct PatState *ps, enum HirPatKind kind)
+{
+    *ps = (struct PatState){
+        .bound = pawP_push_map(R->C),
+        .outer = R->ms->ps,
+        .kind = kind,
+    };
+    R->ms->ps = ps;
+}
+
 static void ResolveBlock(struct Resolver *R, struct HirBlock *block)
 {
     enter_block(R, NULL);
@@ -522,10 +544,8 @@ struct HirDecl *pawP_find_field(struct Compiler *C, struct IrType *self, String 
     struct HirDecl *decl = pawHir_get_decl(C, t->did);
     struct HirAdtDecl *d = HirGetAdtDecl(decl);
     const int index = find_field(d->fields, name);
-    if (index >= 0) return K_LIST_GET(d->fields, index);
-    return NULL;
-//    struct IrType *type = pawP_find_method(C, self, name);
-//    return pawHir_get_decl(C, IR_TYPE_DID(type));
+    if (index < 0) return NULL;
+    return K_LIST_GET(d->fields, index);
 }
 
 static int expect_field(struct Resolver *R, struct HirAdtDecl *adt, struct IrType *type, String *name)
@@ -777,11 +797,12 @@ static void ResolveMatchStmt(struct Resolver *R, struct HirMatchStmt *s)
 static void ResolveMatchArm(struct Resolver *R, struct HirMatchArm *s)
 {
     enter_block(R, NULL);
-    struct MatchState *ms = R->ms;
-    ms->bindings = pawHir_pat_list_new(R->C);
+
     struct IrType *pat = resolve_pat(R, s->pat);
-    unify(R, pat, ms->target); // check target type
+    unify(R, pat, R->ms->target); // check target type
+    if (s->guard != NULL) expect_bool_expr(R, s->guard);
     ResolveBlock(R, s->result);
+
     leave_block(R);
 }
 
@@ -1323,9 +1344,6 @@ static struct IrType *resolve_selector(struct Resolver *R, struct HirSelector *e
     }
     ensure_accessible_field(R, field, HIR_CAST_DECL(adt), target);
     return result;
-//    struct IrType *base_type = pawIr_get_type(R->C, adt->hid);
-//    return subst_type(R, ir_adt_types(base_type),
-//            ir_adt_types(target), GET_NODE_TYPE(R->C, field));
 }
 
 static void ResolveJumpStmt(struct Resolver *R, struct HirJumpStmt *s)
@@ -1339,13 +1357,122 @@ static void ResolveDeclStmt(struct Resolver *R, struct HirDeclStmt *s)
     resolve_decl(R, s->decl);
 }
 
+struct BindingChecker {
+    struct HirVisitor *V;
+    struct Resolver *R;
+    Map *bound;
+    int iter;
+};
+
+static void init_binding_checker(struct BindingChecker *bc, struct Resolver *R, struct HirVisitor *V)
+{
+    *bc = (struct BindingChecker){
+        .bound = pawP_push_map(R->C),
+        .R = R,
+        .V = V,
+    };
+    pawHir_visitor_init(V, R->C, bc);
+}
+
+static void uninit_binding_checker(struct BindingChecker *bc)
+{
+    pawP_pop_object(bc->R->C, bc->bound);
+}
+
+struct BindingInfo {
+    struct IrType *type;
+    int uses;
+};
+
+// TODO: consider DEFINE_LIST'ing a list to store BindingInfo in, then store an index in the map
+// NOTE: separate allocation for storage in Map
+static struct BindingInfo *new_binding_info(struct Compiler *C, struct IrType *type)
+{
+    struct BindingInfo *bi = pawK_pool_alloc(ENV(C), C->pool, sizeof(struct BindingInfo));
+    *bi = (struct BindingInfo){
+        .type = type,
+    };
+    return bi;
+}
+
+static void account_for_binding(struct Resolver *R, const String *name, struct BindingInfo *bi)
+{
+    struct PatState *ps = R->ms->ps;
+    while (ps->outer != NULL) {
+        if (ps->outer->kind == kHirOrPat) break;
+        ps = ps->outer;
+    }
+    const Value *pval = pawH_get(ps->bound, P2V(name));
+    if (pval != NULL) NAME_ERROR(R, "duplicate binding '%s'", name->text);
+    pawH_insert(ENV(R), ps->bound, P2V(name), P2V(NULL));
+}
+
+static void locate_binding(struct HirVisitor *V, struct HirBindingPat *p)
+{
+    paw_Env *P = ENV(V->C);
+    struct BindingChecker *bc = V->ud;
+    // all bindings must be specified in the first alternative
+    struct IrType *type = pawIr_get_type(V->C, p->hid);
+    struct BindingInfo *bi = new_binding_info(V->C, type);
+    pawH_insert(P, bc->bound, P2V(p->name), P2V(bi));
+}
+
+static void check_binding(struct HirVisitor *V, struct HirBindingPat *p)
+{
+    paw_Env *P = ENV(V->C);
+    struct BindingChecker *bc = V->ud;
+    Value *pval = pawH_get(bc->bound, P2V(p->name));
+    if (pval == NULL) {
+        NAME_ERROR(bc->R, "binding '%s' must appear in all alternatives",
+                p->name->text);
+    }
+    struct IrType *type = pawIr_get_type(V->C, p->hid);
+    struct BindingInfo *bi = pval->p;
+    unify(bc->R, bi->type, type);
+    ++bi->uses;
+}
+
+static void ensure_all_bindings_created(struct BindingChecker *bc)
+{
+    paw_Int iter = PAW_ITER_INIT;
+    while (pawH_iter(bc->bound, &iter)) {
+        const Value val = *pawH_value(bc->bound, iter);
+        // each bi->uses should have been incremented exactly once
+        struct BindingInfo *bi = val.p;
+        if (bi->uses != bc->iter) {
+            const Value key = *pawH_key(bc->bound, iter);
+            NAME_ERROR(bc->R, "%s binding '%s' in pattern",
+                    bi->uses < bc->iter ? "missing" : "duplicate", V_TEXT(key));
+        }
+    }
+}
+
 static struct IrType *ResolveOrPat(struct Resolver *R, struct HirOrPat *p)
 {
-    struct IrType *type = new_unknown(R);
-    for (int i = 0; i < p->pats->count; ++i) {
-        struct HirPat *pat = K_LIST_GET(p->pats, i);
-        unify(R, type, resolve_pat(R, pat));
+    struct HirVisitor V;
+    struct BindingChecker bc;
+    init_binding_checker(&bc, R, &V);
+
+    paw_assert(p->pats->count > 1);
+    struct HirPat *first = K_LIST_GET(p->pats, 0);
+    struct IrType *type = resolve_pat(R, first);
+
+    // populate map with bindings from first pattern, checking for
+    // duplicates
+    V.PostVisitBindingPat = locate_binding;
+    pawHir_visit_pat(&V, first);
+
+    // rest of the patterns must bind variables of the same name and
+    // type as the first pattern (position can vary)
+    V.PostVisitBindingPat = check_binding;
+    for (bc.iter = 1; bc.iter < p->pats->count; ++bc.iter) {
+        struct HirPat *next = K_LIST_GET(p->pats, bc.iter);
+        unify(R, type, resolve_pat(R, next));
+
+        pawHir_visit_pat(&V, next);
+        ensure_all_bindings_created(&bc);
     }
+    uninit_binding_checker(&bc);
     return type;
 }
 
@@ -1400,7 +1527,7 @@ static struct IrType *ResolveStructPat(struct Resolver *R, struct HirStructPat *
     }
     p->fields = sorted;
 
-    pawC_pop(P);
+    pawP_pop_object(R->C, map);
     return type;
 }
 
@@ -1433,8 +1560,13 @@ static struct IrType *ResolveTuplePat(struct Resolver *R, struct HirTuplePat *p)
 
 static struct IrType *ResolveBindingPat(struct Resolver *R, struct HirBindingPat *p)
 {
+    // binding type is determined using unification
     struct IrType *type = new_unknown(R);
-    struct IrType *target = R->ms->target;
+
+    // make sure bindings are unique within each pattern (OR patterns are special-cased)
+    struct BindingInfo *bi = new_binding_info(R->C, type);
+    account_for_binding(R, p->name, bi);
+
     struct HirDecl *r = pawHir_new_decl(R->C, p->line, kHirVarDecl);
     HirGetVarDecl(r)->name = p->name;
     SET_NODE_TYPE(R->C, r, type);
@@ -1450,16 +1582,6 @@ static struct IrType *convert_path_to_binding(struct Resolver *R, struct HirPath
     pat->hdr.kind = kHirBindingPat;
     struct HirBindingPat *p = HirGetBindingPat(pat);
     p->name = ident.name;
-
-    struct HirPatList *bindings = R->ms->bindings;
-    for (int i = 0; i < bindings->count; ++i) {
-        struct HirPat *pat = K_LIST_GET(bindings, i);
-        if (pawS_eq(p->name, HirGetBindingPat(pat)->name)) {
-            NAME_ERROR(R, "duplicate binding '%s' in pattern",
-                    p->name->text);
-        }
-    }
-    K_LIST_PUSH(R->C, bindings, pat);
 
     // resolve again as binding
     return resolve_pat(R, pat);
@@ -1515,6 +1637,9 @@ static void resolve_decl(struct Resolver *R, struct HirDecl *decl)
 
 static struct IrType *resolve_pat(struct Resolver *R, struct HirPat *pat)
 {
+    struct PatState ps;
+    enter_pat(R, &ps, pat->hdr.kind);
+
     struct IrType *type;
     R->line = pat->hdr.line;
     switch (HIR_KINDOF(pat)) {
@@ -1528,6 +1653,8 @@ static struct IrType *resolve_pat(struct Resolver *R, struct HirPat *pat)
 
     type = normalize(R, type);
     SET_NODE_TYPE(R->C, pat, type);
+
+    leave_pat(R);
     return type;
 }
 

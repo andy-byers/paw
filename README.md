@@ -432,4 +432,6 @@ assert(status != 0);
     + Probably don't want to resolve/instantiate things while searching, which is what the code currently does
 + Pattern matching:
     + Should be an expression, not a statement (it was easier to make it a statement initially)
-    + Should make sure that if a variable is bound in an '|' pattern, the same variable is bound in every '|'d together term
+    + Produces a large number of local variables, may of which are only used once
+        + Causes register exhaustion very quickly
+        + Probably need to analyze live ranges and get rid of locals when possible

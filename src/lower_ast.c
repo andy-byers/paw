@@ -279,6 +279,7 @@ static struct HirStmt *LowerMatchArm(struct LowerAst *L, struct AstMatchArm *s)
     struct HirStmt *result = pawHir_new_stmt(L->C, s->line, kHirMatchArm);
     struct HirMatchArm *r = HirGetMatchArm(result);
     r->pat = lower_pat(L, s->pat);
+    if (s->guard != NULL) r->guard = lower_expr(L, s->guard);
     r->result = LOWER_BLOCK(L, s->result);
     return result;
 }

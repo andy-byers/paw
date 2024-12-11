@@ -26,7 +26,7 @@ static int handle_error(paw_Env *P, int status)
     return status;
 }
 
-// Run all toplevel functions with names starting with 'test_'
+// Run all toplevel functions with names starting with 'test'
 static void run_tests(const char *name, struct TestAlloc *a, const char *prefix)
 {
     ++s_counters.modules;
@@ -47,7 +47,7 @@ static void run_tests(const char *name, struct TestAlloc *a, const char *prefix)
         if (def->hdr.kind == DEF_FUNC &&
                 name->length >= length &&
                 memcmp(name->text, prefix, length) == 0) {
-            // toplevel functions prefixed with 'test_' must be public
+            // toplevel functions prefixed with 'test' must be public
             check(def->hdr.is_pub);
             fprintf(stderr, "    %s\n", def->func.name->text);
             paw_push_zero(P, 1);
@@ -67,11 +67,13 @@ abort();
 static void script(const char *name)
 {
     struct TestAlloc a = {0};
-    run_tests(name, &a, "test_");
+    run_tests(name, &a, "test");
 }
 
 int main(void)
 {
+    script("match_or");return -s_counters.compile_errors - s_counters.runtime_errors;
+
 #define RUN_SCRIPT(name) script(#name);
     TEST_SCRIPTS(RUN_SCRIPT)
 #undef RUN_SCRIPT

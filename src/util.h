@@ -43,6 +43,7 @@
 
 static inline int paw_raw_cmp(void *x, size_t nx, void *y, size_t ny)
 {
+    paw_assert(x != NULL && y != NULL);
     const size_t min = PAW_MIN(nx, ny);
     const int r = memcmp(x, y, min);
     if (r == 0) {
