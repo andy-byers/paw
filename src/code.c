@@ -108,27 +108,27 @@ void pawK_pool_uninit(paw_Env *P, struct Pool *pool)
 
 static void *find_free_block(struct Pool *pool, size_t size)
 {
+#if 0
     for (struct FreeBlock **p = &pool->free; *p; p = &(*p)->prev) {
-        if (size <= CAST_SIZE((*p)->size)) {
+        if (size == CAST_SIZE((*p)->size)) {
             paw_assert(0 == (CAST_UPTR(*p) & (K_ALIGNOF_NODE - 1)));
             struct FreeBlock *block = *p;
             *p = (*p)->prev;
             return block;
         }
-        p = &(*p)->prev;
     }
+#endif // 0
     return NULL;
 }
 
 void *pawK_pool_alloc(paw_Env *P, struct Pool *pool, size_t size)
 {
     paw_assert(size > 0);
-    // TODO: enable recycling
-//    void *ptr = find_free_block(pool, size);
-//    if (ptr != NULL) {
-//        memset(ptr, 0, size);
-//        return ptr;
-//    }
+    void *ptr = find_free_block(pool, size);
+    if (ptr != NULL) {
+        memset(ptr, 0, size);
+        return ptr;
+    }
 
     Arena *a = pool->arena;
     size_t base = (a->used + K_ALIGNOF_NODE - 1) & ~(K_ALIGNOF_NODE - 1);
@@ -145,14 +145,22 @@ void *pawK_pool_alloc(paw_Env *P, struct Pool *pool, size_t size)
 
 void pawK_pool_free(struct Pool *pool, void *ptr, size_t size)
 {
-//    paw_assert(0 == (CAST_UPTR(ptr) & _Alignof(struct FreeBlock)));
-//    paw_assert(size >= sizeof(struct FreeBlock));
-//    const struct FreeBlock prototype = {
-//        .prev = pool->free,
-//        .size = size,
-//    };
-//    memcpy(ptr, &prototype, sizeof(prototype));
-//    pool->free = ptr;
+    // TODO: Is it worth it to get this working? May be more effective to use
+    //       multiple pools: 1 for the AST, 1 for the HIR, etc.
+#if 0
+    if (ptr == NULL) {
+        paw_assert(size == 0);
+        return;
+    }
+    const struct FreeBlock prototype = {
+        .prev = pool->free,
+        .size = size,
+    };
+    paw_assert(PAW_IS_ALIGNED(ptr));
+    paw_assert(size >= sizeof(prototype));
+    memcpy(ptr, &prototype, sizeof(prototype));
+    pool->free = ptr;
+#endif // 0
 }
 
 void *pawK_list_ensure_one_(paw_Env *P, struct Pool *pool, void *data, size_t zelem, int count, int *palloc)
@@ -163,22 +171,11 @@ void *pawK_list_ensure_one_(paw_Env *P, struct Pool *pool, void *data, size_t ze
 
     if (count >= *palloc) {
         if (*palloc > K_LIST_MAX / 2) pawM_error(P);
-        *palloc = *palloc != 0 ? CAST_SIZE(*palloc) * 2 : K_LIST_MIN;
-        void *next = pawK_pool_alloc(P, pool, CAST_SIZE(*palloc) * zelem);
+        const size_t next_alloc = PAW_MAX(K_LIST_MIN, CAST_SIZE(*palloc) * 2);
+        void *next = pawK_pool_alloc(P, pool, next_alloc * zelem);
         memcpy(next, data, CAST_SIZE(count) * zelem);
-        return next;
-    }
-    return data;
-}
-
-void *pawK_list_ensure_one(struct Compiler *C, void *data, int count, int *palloc)
-{
-    if (count == *palloc) {
-        if (*palloc > K_LIST_MAX / 2) pawM_error(ENV(C));
-        const size_t nextcap = CAST_SIZE(*palloc) * 2;
-        void *next = pawK_pool_alloc(ENV(C), C->pool, nextcap * sizeof(void *));
-        memcpy(next, data, CAST_SIZE(count) * sizeof(void *));
-        *palloc = CAST(int, nextcap);
+        pawK_pool_free(pool, data, *palloc * zelem);
+        *palloc = CAST(int, next_alloc);
         return next;
     }
     return data;

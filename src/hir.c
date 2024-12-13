@@ -560,7 +560,6 @@ struct IrType *pawP_attach_type(struct Compiler *C, DeclId did, enum IrTypeKind 
         struct HirDecl *decl = pawHir_get_decl(C, did);
         SET_NODE_TYPE(C, decl, type);
     }
-    // TODO: what about path types? seems strange to require the caller to set when kind is kHirPathType only
     if (kind == kIrSignature) {
         IrGetSignature(type)->did = did;
     } else if (kind == kIrAdt) {

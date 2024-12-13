@@ -514,6 +514,13 @@ static struct PartialModList *collect_phase_1(struct ItemCollector *X, struct Mo
         finish_module(X);
     }
 
+    // clean up scratch memory
+    for (int i = 0; i < pml->count; ++i) {
+        struct PartialMod pm = K_LIST_GET(pml, i);
+        pa_list_delete(X, pm.pal);
+    }
+    pm_list_delete(X, pml);
+
     return pml;
 }
 static void collect_items(struct ItemCollector *X, struct Hir *hir)

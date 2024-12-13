@@ -663,7 +663,6 @@ static const char *kHirPatNames[] = {
 #undef DEFINE_ACCESS
 
 
-// Represents a single pass over an HIR
 struct HirVisitor {
     struct Compiler *C;
     void *ud;
@@ -776,8 +775,6 @@ static inline struct HirSegment *pawHir_path_add(struct Compiler *C, struct HirP
     return &K_LIST_LAST(path);
 }
 
-/*TODO:remove*/struct IrTypeList *pawHir_collect_generics(struct Compiler *C, struct HirDeclList *generics);
-/*TODO:remove*/struct IrTypeList *pawHir_collect_fields(struct Compiler *C, struct HirDeclList *fields);
 struct IrTypeList *pawHir_collect_decl_types(struct Compiler *C, struct HirDeclList *list);
 struct IrTypeList *pawHir_collect_expr_types(struct Compiler *C, struct HirExprList *list);
 

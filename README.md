@@ -412,11 +412,10 @@ assert(status != 0);
 + [x] type inference for polymorphic `enum`
 + [x] exhaustive pattern matching (`match` construct)
 + [ ] error handling (`try` needs to be an operator, or we need something like a 'parameter pack' for generics to implement the `try` function)
-+ [ ] accurate exhaustiveness check for types with many constructors (currently, the implementation forces use of a 'catch-all' binding or wildcard)
 + [ ] `let` bindings/destructuring
 + [ ] more featureful `use` declarations: `use mod::*`, `use mod::specific_symbol`, `use mod as alias`, etc.
 + [ ] generic constraints/bounds
-+ [ ] compiler optimization passes
++ [ ] constant folding pass, maybe inlining
 + [ ] refactor user-provided allocation interface to allow heap expansion
 
 ## Known problems
@@ -424,12 +423,6 @@ assert(status != 0);
     + It may be necessary to reduce the scope of the C API somewhat
 + Compiler will allow functions that don't return a value in all code paths
     + Use MIR to ensure a value is returned in all paths
-+ Need to prevent situations where 2 methods with the same name are accessible from the same type
-    + Complicated by the fact that impl blocks can either target a polymorphic ADT, or an instantiation thereof
-    + In the first case, methods are available to all instantiations of the ADT, while in the second case they are available only to that particular instance.
-    + The second case allows us to specialize the body of a method for each specific type of instance.
-    + Could rework the code that checks if a method can be called on a given type: just check to see if a method exists already before registering/resolving it
-    + Probably don't want to resolve/instantiate things while searching, which is what the code currently does
 + Pattern matching:
     + Should be an expression, not a statement (it was easier to make it a statement initially)
     + Produces a large number of local variables, may of which are only used once

@@ -13,7 +13,6 @@
 #include "hir.h"
 #include "ir_type.h"
 #include "map.h"
-#include "mem.h"
 #include "parse.h"
 #include "str.h"
 #include "type_folder.h"
@@ -467,22 +466,12 @@ static void ResolveReturnStmt(struct Resolver *R, struct HirReturnStmt *s)
 }
 
 static void resolve_item(struct Resolver *R, struct HirDecl *item);
-static void resolve_lazy(struct Resolver *R, struct HirDecl *decl)
-{
-    if (decl->hdr.flags == 0) {
-        decl->hdr.flags = 1;
-        resolve_item(R, decl);
-    }
-}
+static struct IrType *resolve_path(struct Resolver *R, struct HirPath *path, enum LookupKind kind);
 
 static void resolve_methods(struct Resolver *R, struct HirDeclList *items, struct IrAdt *self)
 {
-    for (int i = 0; i < items->count; ++i) {
-        resolve_lazy(R, items->data[i]);
-    }
+    for (int i = 0; i < items->count; ++i) resolve_item(R, K_LIST_GET(items, i));
 }
-
-static struct IrType *resolve_path(struct Resolver *R, struct HirPath *path, enum LookupKind kind);
 
 static void resolve_impl_methods(struct Resolver *R, struct HirImplDecl *d)
 {
@@ -496,10 +485,8 @@ static void resolve_impl_methods(struct Resolver *R, struct HirImplDecl *d)
     String *name = SCAN_STRING(R, "Self");
     struct HirDecl *result = pawHir_new_decl(R->C, d->line, kHirTypeDecl);
     struct HirTypeDecl *r = HirGetTypeDecl(result);
-    add_decl(R, result);
-
-    // TODO
     pawIr_set_type(R->C, r->hid, pawIr_get_type(R->C, d->hid));
+    add_decl(R, result);
 
     struct HirSymbol *symbol = new_local(R, name, result, PAW_TRUE);
     symbol->is_type = PAW_TRUE;
@@ -567,14 +554,6 @@ static void expect_int_expr(struct Resolver *R, struct HirExpr *e)
     struct IrType *type = resolve_operand(R, e);
     unify(R, type, get_type(R, PAW_TINT));
 }
-
-//static struct IrType *resolve_tuple_type(struct Resolver *R, struct HirTupleType *t)
-//{
-//    if (t->elems->count == 0) return get_type(R, PAW_TUNIT);
-//    struct IrType *r = pawIr_new_type(R->C, kIrTuple);
-//    IrGetTuple(r)->elems = resolve_type_list(R, t->elems);
-//    return r;
-//}
 
 static struct IrType *instantiate(struct Resolver *R, struct HirDecl *base, struct IrTypeList *types)
 {
@@ -969,8 +948,16 @@ static paw_Bool is_polymorphic(struct Resolver *R, struct IrType *type)
 {
     if (!IrIsSignature(type) && !IrIsAdt(type)) return PAW_FALSE;
     struct HirDecl *base = get_decl(R, IR_TYPE_DID(type));
-    return pawU_equals(R->U, GET_NODE_TYPE(R->C, base), IR_CAST_TYPE(type)) &&
-        (HIR_IS_POLY_ADT(base) || HIR_IS_POLY_FUNC(base));
+    struct IrType *base_type = GET_NODE_TYPE(R->C, base);
+    if (HIR_IS_POLY_ADT(base)) {
+         return pawU_equals(R->U, base_type, type);
+    } else if (HIR_IS_POLY_FUNC(base)) {
+         // NOTE: type arguments on signatures not checked by pawU_equals
+         return pawU_list_equals(R->U,
+                 ir_signature_types(base_type),
+                 ir_signature_types(type));
+    }
+    return PAW_FALSE;
 }
 
 // Resolve a function call or enumerator constructor
@@ -1395,7 +1382,6 @@ struct BindingInfo {
     int uses;
 };
 
-// TODO: consider DEFINE_LIST'ing a list to store BindingInfo in, then store an index in the map
 // NOTE: separate allocation for storage in Map
 static struct BindingInfo *new_binding_info(struct Compiler *C, struct IrType *type)
 {
@@ -1815,13 +1801,6 @@ void pawP_resolve(struct Compiler *C)
         .C = C,
     };
     pawHir_type_folder_init(&F, NULL, &R);
-
-    // transform AST -> HIR and add declarations for toplevel items
-    pawP_lower_ast(C);
-
-    // determine the type of each toplevel item in each module (allows pawP_lookup to
-    // resolve paths pointing between modules in the next pass)
-    pawP_collect_items(C);
 
     // run the type checker
     check_types(&R, dm);

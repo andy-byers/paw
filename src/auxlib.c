@@ -89,28 +89,20 @@ void pawL_add_nstring(paw_Env *P, Buffer *buf, const char *s, size_t n)
     add_nstring(P, buf, s, n);
 }
 
-void pawL_add_value(paw_Env *P, Buffer *buf, paw_Type type)
-{
-    size_t len;
-    const char *str = pawV_to_string(P, &P->top.p[-1], type, &len);
-    add_nstring(P, buf, str, len);
-    paw_pop(P, 1);
-}
-
-static void add_int(paw_Env *P, Buffer *buf, paw_Int i)
+void pawL_add_int(paw_Env *P, Buffer *buf, paw_Int i)
 {
     size_t len;
     paw_push_int(P, i);
-    const char *str = paw_to_string(P, -1, PAW_TINT, &len);
+    const char *str = paw_int_to_string(P, -1, &len);
     add_nstring(P, buf, str, len);
     paw_pop(P, 1);
 }
 
-static void add_float(paw_Env *P, Buffer *buf, paw_Float f)
+void pawL_add_float(paw_Env *P, Buffer *buf, paw_Float f)
 {
     size_t len;
     paw_push_float(P, f);
-    const char *str = paw_to_string(P, -1, PAW_TFLOAT, &len);
+    const char *str = paw_float_to_string(P, -1, &len);
     add_nstring(P, buf, str, len);
     paw_pop(P, 1);
 }
@@ -152,19 +144,19 @@ void pawL_add_vfstring(paw_Env *P, Buffer *buf, const char *fmt, va_list arg)
                 pawL_add_char(P, buf, '%');
                 break;
             case 'u':
-                add_int(P, buf, va_arg(arg, unsigned));
+                pawL_add_int(P, buf, va_arg(arg, unsigned));
                 break;
             case 'd':
-                add_int(P, buf, va_arg(arg, int));
+                pawL_add_int(P, buf, va_arg(arg, int));
                 break;
             case 'I':
-                add_int(P, buf, va_arg(arg, int64_t));
+                pawL_add_int(P, buf, va_arg(arg, int64_t));
                 break;
             case 'c':
                 pawL_add_char(P, buf, va_arg(arg, int));
                 break;
             case 'f':
-                add_float(P, buf, va_arg(arg, double));
+                pawL_add_float(P, buf, va_arg(arg, double));
                 break;
             case 'p':
                 add_pointer(P, buf, va_arg(arg, void *));

@@ -198,8 +198,7 @@ void pawY_print_type(paw_Env *P, Buffer *buf, paw_Type code)
 
 static void add_string_with_len(paw_Env *P, Buffer *buf, const String *str)
 {
-    paw_push_int(P, str->length);
-    pawL_add_value(P, buf, PAW_TINT);
+    pawL_add_int(P, buf, PAW_CAST_INT(str->length));
     pawL_add_nstring(P, buf, str->text, str->length);
 }
 

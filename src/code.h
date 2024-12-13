@@ -48,6 +48,11 @@ void pawK_pool_free(struct Pool *pool, void *ptr, size_t size);
     { \
         pawM_check_size(X->P, 0, K_LIST_MIN, sizeof(T)); \
         return pawK_pool_alloc(X->P, X->pool, sizeof(struct L)); \
+    } \
+    static inline void func##delete(ctx *X, struct L *list) \
+    { \
+        pawK_pool_free(X->pool, list->data, CAST_SIZE(list->alloc) * sizeof(list->data[0])); \
+        pawK_pool_free(X->pool, list, sizeof(struct L)); \
     }
 
 // Macros for working with a list
@@ -63,7 +68,6 @@ void pawK_pool_free(struct Pool *pool, void *ptr, size_t size);
                                    (L)->data[i] = (v))
 
 
-void *pawK_list_ensure_one(struct Compiler *C, void *data, int count, int *palloc); // TODO: remove
 void *pawK_list_ensure_one_(paw_Env *P, struct Pool *pool, void *data, size_t zelem, int count, int *palloc);
 
 enum FuncKind {

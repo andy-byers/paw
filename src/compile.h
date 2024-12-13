@@ -313,6 +313,13 @@ static inline void pawP_compile(struct Compiler *C, paw_Reader input, void *ud)
     struct Ast *ast = pawP_parse_module(C, C->modname, input, ud);
     pawP_collect_imports(C, ast);
 
+    // transform AST -> HIR
+    pawP_lower_ast(C);
+
+    // determine the type of each toplevel item in each module (allows the type checker to
+    // resolve paths between modules)
+    pawP_collect_items(C);
+
     // run the type checker, then codegen
     pawP_resolve(C);
     pawP_codegen(C);

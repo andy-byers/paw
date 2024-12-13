@@ -320,7 +320,7 @@ static void pac_int_aux(paw_Env *P, const char *text, paw_Int result)
 static void roundtrip_int(paw_Env *P, paw_Int i)
 {
     paw_push_int(P, i);
-    paw_to_string(P, -1, PAW_TINT, NULL);
+    paw_int_to_string(P, -1, NULL);
     const char *str = paw_string(P, -1);
     pac_int_aux(P, ERASE_TYPE(str), i);
     paw_pop(P, 1);
@@ -378,7 +378,7 @@ static void pac_float_aux(paw_Env *P, const char *text, paw_Float result)
 static void roundtrip_float(paw_Env *P, paw_Float f)
 {
     paw_push_float(P, f);
-    paw_to_string(P, -1, PAW_TFLOAT, NULL);
+    paw_float_to_string(P, -1, NULL);
     const char *str = paw_string(P, -1);
     pac_float_aux(P, ERASE_TYPE(str), f);
     paw_pop(P, 1);
@@ -451,15 +451,13 @@ static void test_buffer(paw_Env *P)
 
     pawL_init_buffer(P, &buf);
     for (int i = 0; i < 1234; ++i) {
-        paw_push_int(P, i);
-        pawL_add_value(P, &buf, PAW_TINT);
+        pawL_add_int(P, &buf, i);
     }
     pawL_buffer_resize(P, &buf, 16);
     pawL_push_result(P, &buf);
 
     paw_push_string(P, "0123456789101112");
-// TODO    paw_cmps(P, PAW_CMP_EQ);
-    check(paw_bool(P, -1));
+   // TODO check(paw_str_rawcmp(P, -1) == 0);
     paw_pop(P, 1);
 }
 

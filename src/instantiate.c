@@ -2,9 +2,18 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 //
-// instantiate.c: Code for instantiating polymorphic functions, ADTs, and
-//     impl blocks. HirInstanceDecl nodes are used to store the type of each
-//     instance for type checking.
+// instantiate.c: Code for instantiating polymorphic functions and ADTs.
+//     Polymorphic items must be instantiated each time they are referenced
+//     outside of their original definitions. There are 2 cases that need to
+//     be handled: explicit instantiation and type inference. Explicit
+//     instantiation occurs when type arguments are provided on the item.
+//     This is the simpler case: each generic type in the item's type
+//     signature is replaced with the corresponding type argument. If no
+//     type arguments are provided, then the type of each generic must be
+//     inferred from subsequent uses of the item (calling a function/method
+//     or accessing a struct field). To accomplish this, each generic in the
+//     is replaced with a unique type variable. The type variables are filled
+//     in as the instance type is unified with other types (see unify.c).
 
 #include "compile.h"
 #include "ir_type.h"

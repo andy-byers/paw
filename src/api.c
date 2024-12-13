@@ -487,9 +487,9 @@ void paw_rotate(paw_Env *P, int index, int n)
     StackPtr p = at(P, index);
     paw_assert((n >= 0 ? n : -n) <= t - p + 1);
     StackPtr m = n >= 0 ? t - n : p - n - 1;
-    reverse(p, m); // Reverse A to get A'
-    reverse(m + 1, t); // Reverse B to get B'
-    reverse(p, t); // Reverse A'B' to get BA
+    reverse(p, m); // reverse A to get A'
+    reverse(m + 1, t); // reverse B to get B'
+    reverse(p, t); // reverse A'B' to get BA
 }
 
 void paw_copy(paw_Env *P, int from, int to)
@@ -505,10 +505,16 @@ void paw_shift(paw_Env *P, int n)
     paw_pop(P, n);
 }
 
-const char *paw_to_string(paw_Env *P, int index, paw_Type type, size_t *plen)
+const char *paw_int_to_string(paw_Env *P, int index, size_t *plen)
 {
     Value *pv = at(P, index);
-    return pawV_to_string(P, pv, type, plen);
+    return pawV_to_string(P, pv, PAW_TINT, plen);
+}
+
+const char *paw_float_to_string(paw_Env *P, int index, size_t *plen)
+{
+    Value *pv = at(P, index);
+    return pawV_to_string(P, pv, PAW_TFLOAT, plen);
 }
 
 void paw_str_length(paw_Env *P, int index)

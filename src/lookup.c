@@ -21,7 +21,7 @@ struct QueryState {
 static struct ModuleInfo *get_module(struct QueryState *Q, int modno)
 {
     paw_assert(modno < Q->C->dm->modules->count);
-    return Q->C->dm->modules->data[modno];
+    return K_LIST_GET(Q->C->dm->modules, modno);
 }
 
 static struct HirSymbol *resolve_symbol(struct QueryState *Q, const String *name)

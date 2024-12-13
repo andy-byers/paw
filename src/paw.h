@@ -10,8 +10,7 @@
 // with an index of 0 representing the first value. Negative indices count
 // backward from the last value pushed onto the stack, with -1 representing the
 // most-recently-pushed value. When a function is called from paw, slot 0
-// contains the function itself. When a method is called, slot 0 contains the
-// implicit 'self' parameter.
+// contains the function object itself, followed by the arguments.
 //
 #ifndef PAW_PAW_H
 #define PAW_PAW_H
@@ -216,27 +215,32 @@ void paw_rotate(paw_Env *P, int index, int n);
 void paw_shift(paw_Env *P, int n);
 void paw_copy(paw_Env *P, int from, int to);
 
-// Move the top stack value to the given index
-// Shifts elements above the target index up by 1 slot.
+// Move the value on top of the stack to the given index
+// Shifts elements including and above the target index up by 1 slot, increasing
+// the size of the stack by 1.
 static inline void paw_insert(paw_Env *P, int index)
 {
     paw_rotate(P, index, 1);
 }
 
-// Remove the given slot value
+// Remove the given value
+// Shifts elements above the value down by 1 slot, reducing the size of the stack
+// by 1.
 static inline void paw_remove(paw_Env *P, int index)
 {
     paw_rotate(P, index, -1);
     paw_pop(P, 1);
 }
 
-// Replace the given slot value with the top
+// Replace the given value with the top
+// Reduces the size of the stack by 1.
 static inline void paw_replace(paw_Env *P, int index)
 {
     paw_copy(P, -1, index);
     paw_pop(P, 1);
 }
 
-const char *paw_to_string(paw_Env *P, int index, paw_Type type, size_t *plen);
+const char *paw_int_to_string(paw_Env *P, int index, size_t *plen);
+const char *paw_float_to_string(paw_Env *P, int index, size_t *plen);
 
 #endif // PAW_PAW_H
