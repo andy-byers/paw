@@ -501,14 +501,16 @@ static void test_impl_error(void)
             "pub fn f(self_) {}\n",
             "o.f();\n");
 
-    // TODO: check for duplicates between impl blocks: use the 'self' ADT and method
-    //       name to check if the method being registered or resolved is already accessible.
     // there are 2 versions of 'f' accessible by Object<int>, 1 from 'impl Object<int>'
     // and the other from the generic 'impl' block 'impl<T> Object<T>',
-//    check_impl_item("duplicate_methods_between_blocks", PAW_ENAME,
-//            "impl<T> Object<T> {pub fn f() {}}\n"
-//            "impl Object<int> {pub fn f() {}}\n",
-//            "o.f();\n");
+    check_impl_item("duplicate_methods_between_blocks", PAW_ENAME,
+            "impl<T> Object<T> {pub fn f(self) {}}\n"
+            "impl Object<int> {pub fn f(self) {}}\n",
+            "o.f();\n");
+    check_impl_item("duplicate_assoc_fns_between_blocks", PAW_ENAME,
+            "impl<T> Object<T> {pub fn f() {}}\n"
+            "impl Object<int> {pub fn f() {}}\n",
+            "Object::f();\n");
     check_impl_block("duplicate_method_within_block", PAW_ENAME,
             "pub fn f(self) {}\n"
             "pub fn f(self) {}\n",

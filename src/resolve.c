@@ -870,16 +870,15 @@ static struct IrType *resolve_closure_expr(struct Resolver *R, struct HirClosure
     return type;
 }
 
-static struct IrType *find_method_aux(struct Compiler *C, struct HirDecl *base, struct IrType *self, String *name)
+static struct HirDecl *find_method_aux(struct Compiler *C, struct HirDecl *base, struct IrType *self, String *name)
 {
     struct HirImplDecl *impl = HirGetImplDecl(base);
     struct IrType *impl_type = pawIr_get_type(C, impl->hid);
     if (!is_compat(C, impl_type, self)) return NULL;
+
     for (int i = 0; i < impl->methods->count; ++i) {
         struct HirDecl *method = K_LIST_GET(impl->methods, i);
-        if (!pawS_eq(name, method->hdr.name)) continue;
-        if (!HIR_IS_POLY_IMPL(base)) return GET_NODE_TYPE(C, method);
-        return pawP_instantiate_method(C, base, ir_adt_types(self), method);
+        if (pawS_eq(name, method->hdr.name)) return method;
     }
     return NULL;
 }
@@ -889,10 +888,22 @@ struct IrType *pawP_find_method(struct Compiler *C, struct IrType *adt, String *
     struct HirDeclList *impls = impls_for_adt(C, adt);
     if (impls == NULL) return NULL; // no impl blocks
 
+    struct HirDecl *last_impl;
+    struct HirDecl *last_method = NULL;
     for (int i = 0; i < impls->count; ++i) {
-        struct HirDecl *decl = K_LIST_GET(impls, i);
-        struct IrType *method = find_method_aux(C, decl, adt, name);
-        if (method != NULL) return method;
+        struct HirDecl *impl = K_LIST_GET(impls, i);
+        struct HirDecl *method = find_method_aux(C, impl, adt, name);
+        if (method == NULL) continue;
+        if (last_method != NULL) {
+            pawE_error(ENV(C), PAW_ENAME, impl->hdr.line,
+                    "found multiple applicable methods");
+        }
+        last_method = method;
+        last_impl = impl;
+    }
+    if (last_method != NULL) {
+        if (!HIR_IS_POLY_IMPL(last_impl)) return GET_NODE_TYPE(C, last_method);
+        return pawP_instantiate_method(C, last_impl, ir_adt_types(adt), last_method);
     }
     return NULL;
 }

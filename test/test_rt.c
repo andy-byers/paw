@@ -44,9 +44,10 @@ static void run_tests(const char *name, struct TestAlloc *a, const char *prefix)
     for (int i = 0; i < defs.count; ++i) {
         struct Def *def = defs.data[i];
         const String *name = def->hdr.name;
-        if (def->hdr.kind == DEF_FUNC &&
-                name->length >= length &&
-                memcmp(name->text, prefix, length) == 0) {
+        if (def->hdr.kind == DEF_FUNC
+                && def->func.self < 0
+                && name->length >= length
+                && memcmp(name->text, prefix, length) == 0) {
             // toplevel functions prefixed with 'test' must be public
             check(def->hdr.is_pub);
             fprintf(stderr, "    %s\n", def->func.name->text);
@@ -55,8 +56,6 @@ static void run_tests(const char *name, struct TestAlloc *a, const char *prefix)
             status = paw_call(P, 0);
             if (handle_error(P, status)) {
                 ++s_counters.runtime_errors;
-printf("\nFAILED\n\n\n");
-abort();
             }
             ++s_counters.tests;
         }
@@ -72,8 +71,7 @@ static void script(const char *name)
 
 int main(void)
 {
-    script("match_or");return -s_counters.compile_errors - s_counters.runtime_errors;
-
+script("method");return 42;
 #define RUN_SCRIPT(name) script(#name);
     TEST_SCRIPTS(RUN_SCRIPT)
 #undef RUN_SCRIPT
