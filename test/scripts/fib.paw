@@ -9,8 +9,8 @@ fn fib(n: int) -> int {
 
 pub fn main(args: [str]) {
     let n = 35;
-    if #args > 0 {
-        n = args[0].parse_int(10);
+    if #args > 1 {
+        n = args[1].parse_int(10);
     }
     let r = fib(n);
     print('fib(' + 

@@ -187,21 +187,6 @@ static void dupcheck(struct ItemCollector *X, Map *map, String *name, const char
     pawH_insert(ENV(X), map, P2V(name), P2V(name));
 }
 
-static Map *start_dupcheck(struct ItemCollector *X)
-{
-    paw_Env *P = ENV(X);
-    ENSURE_STACK(P, 1);
-    Value *pv = pawC_push0(P);
-    Map *map = pawH_new(P);
-    V_SET_OBJECT(pv, map);
-    return map;
-}
-
-static void finish_dupcheck(struct ItemCollector *X)
-{
-    pawC_pop(ENV(X));
-}
-
 static struct IrType *collect_type(struct ItemCollector *X, struct HirType *type)
 {
     X->line = type->hdr.line;
@@ -227,7 +212,7 @@ static void map_adt_to_impl(struct ItemCollector *X, struct HirDecl *adt, struct
 static struct IrType *collect_path(struct ItemCollector *X, struct HirPath *path)
 {
     struct IrType *type = pawP_lookup(X->C, X->m, X->symtab, path, LOOKUP_TYPE);
-    if (type == NULL) NAME_ERROR(X, "bad path");
+    if (type == NULL) NAME_ERROR(X, "invalid path '%s'", pawHir_print_path(X->C, path));
     return type;
 }
 
@@ -309,8 +294,8 @@ static void collect_variant_decl(struct ItemCollector *, struct HirVariantDecl *
 
 static void collect_fields(struct ItemCollector *X, struct HirDeclList *fields)
 {
-    Map *map = start_dupcheck(X);
     if (fields == NULL) return;
+    Map *map = pawP_push_map(X->C);
     for (int i = 0; i < fields->count; ++i) {
         struct HirDecl *decl = K_LIST_GET(fields, i);
         if (HirIsFieldDecl(decl)) {
@@ -323,7 +308,7 @@ static void collect_fields(struct ItemCollector *X, struct HirDeclList *fields)
             collect_variant_decl(X, d);
         }
     }
-    finish_dupcheck(X);
+    pawP_pop_object(X->C, map);
 }
 
 static void collect_variant_decl(struct ItemCollector *X, struct HirVariantDecl *d)
@@ -412,8 +397,7 @@ static void collect_adt_decl(struct ItemCollector *X, struct PartialAdt lazy)
 
 static void collect_methods(struct ItemCollector *X, struct HirDeclList *methods)
 {
-    // TODO: Need to prevent duplicates between different impl blocks on the same type
-    Map *map = start_dupcheck(X);
+    Map *map = pawP_push_map(X->C);
     for (int i = 0; i < methods->count; ++i) {
         struct HirDecl *decl = K_LIST_GET(methods, i);
         struct HirFuncDecl *d = HirGetFuncDecl(decl);
@@ -421,7 +405,7 @@ static void collect_methods(struct ItemCollector *X, struct HirDeclList *methods
         d->self = X->adt;
         collect_func(X, d);
     }
-    finish_dupcheck(X);
+    pawP_pop_object(X->C, map);
 }
 
 static struct IrType *collect_self(struct ItemCollector *X, struct HirImplDecl *d)
@@ -551,19 +535,18 @@ static void collect_phase_2(struct ItemCollector *X, struct ModuleList *ml, stru
 // Entrypoint to item collection
 void pawP_collect_items(struct Compiler *C)
 {
-    struct DynamicMem *dm = C->dm;
     struct ItemCollector X = {
         .symtab = pawHir_symtab_new(C),
-        .pool = &dm->pool,
+        .pool = &C->dm->pool,
         .impls = C->impls,
         .P = ENV(C),
-        .dm = dm,
+        .dm = C->dm,
         .C = C,
     };
 
-    DLOG(&X, "collecting %d module(s)", dm->modules->count);
+    DLOG(&X, "collecting %d module(s)", C->modules->count);
 
-    struct PartialModList *pml = collect_phase_1(&X, dm->modules);
-    collect_phase_2(&X, dm->modules, pml);
+    struct PartialModList *pml = collect_phase_1(&X, C->modules);
+    collect_phase_2(&X, C->modules, pml);
 }
 

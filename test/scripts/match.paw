@@ -318,7 +318,6 @@ pub fn test_guard_3() {
     assert(check((2, 2)) == 5);
 }
 
-
 fn check_match_tuple_3(target: (((int,), int), int)) -> int {
     match target {
         (((a,), 1), 1)

@@ -309,7 +309,7 @@ void pawR_str_getn(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const 
     const size_t zi = check_slice_bound(P, i, n, "start", "string");
     const size_t zj = check_slice_bound(P, j, n, "end", "string");
 
-    const size_t nbytes = zj - zi;
+    const size_t nbytes = zi < zj ? zj - zi : 0;
     String *slice = pawS_new_nstr(P, str->text + zi, nbytes);
     V_SET_OBJECT(ra, slice);
 }
@@ -325,7 +325,7 @@ void pawR_list_getn(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const
     const size_t zj = check_slice_bound(P, j, n, "end", "list");
     List *slice = VM_LIST_INIT(ra);
 
-    const size_t nelems = zj - zi;
+    const size_t nelems = zi < zj ? zj - zi : 0;
     pawV_list_resize(P, slice, nelems);
     memcpy(slice->begin, list->begin + zi,
             nelems * sizeof(list->begin[0]));
@@ -368,32 +368,6 @@ void pawR_list_setn(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const
     memcpy(gap, rhs->begin, nb * sizeof(lhs->begin[0]));
     pawV_list_resize(P, lhs, nelems);
 }
-
-//void pawR_init_tuple(paw_Env *P, Value *ra, int b, int c)
-//{
-//    Tuple *tuple = V_TUPLE(*ra);
-//    paw_assert(c <= tuple->nelems);
-//    for (int i = 0; i < c; ++i) {
-//        tuple->elems[b + i] = ra[1 + i];
-//    }
-//}
-//
-//void pawR_init_list(paw_Env *P, Value *ra, int b, int c)
-//{
-//    List *list = V_LIST(*ra);
-//    paw_assert(c <= pawV_list_length(list));
-//    while (c-- > 0) *list->begin++ = *++ra;
-//}
-//
-//void pawR_init_map(paw_Env *P, Value *ra, int b, int c)
-//{
-//    Map *map = V_MAP(*ra);
-//    paw_assert(c <= map->capacity);
-//    while (c-- > 0) {
-//        const Value key = *++ra;
-//        pawH_insert(P, map, key, *++ra);
-//    }
-//}
 
 Tuple *pawR_new_tuple(paw_Env *P, CallFrame *cf, Value *ra, int b)
 {
@@ -655,7 +629,6 @@ top:
                 pawR_str_get(P, cf, ra, rb, rc);
             }
 
-
             vm_case(SGETN):
             {
                 VM_SAVE_PC();
@@ -765,42 +738,24 @@ top:
                 if (V_INT(*ra) != b) ++pc;
             }
 
-            vm_case(BCAST):
+            vm_case(XCASTB):
             {
                 const Value *rb = VM_RB(opcode);
-                V_SET_BOOL(ra, V_INT(*rb) != 0);
+                V_SET_BOOL(ra, rb->u != 0);
             }
 
-            vm_case(ICAST):
+            vm_case(ICASTF):
             {
                 const Value *rb = VM_RB(opcode);
-                const paw_Type c = GET_C(opcode);
-                if (c == PAW_TFLOAT) {
-                    // NOTE: Other primitives have a value representation compatible
-                    //       with that of the 'int' type.
-                    const paw_Float f = V_FLOAT(*rb);
-                    float2int(P, f, ra);
-                } else {
-                    *ra = *rb;
-                }
+                const paw_Int i = V_INT(*rb);
+                V_SET_FLOAT(ra, CAST(paw_Float, i));
             }
 
-            vm_case(FCAST):
+            vm_case(FCASTI):
             {
                 const Value *rb = VM_RB(opcode);
-                const paw_Type c = GET_C(opcode);
-                if (c != PAW_TFLOAT) {
-                    const paw_Int i = V_INT(*rb);
-                    V_SET_FLOAT(ra, CAST(paw_Float, i));
-                } else {
-                    *ra = *rb;
-                }
-            }
-
-            vm_case(GETDISCR):
-            {
-                const Value *rb = VM_RB(opcode);
-                *ra = V_TUPLE(*rb)->elems[0];
+                const paw_Float f = V_FLOAT(*rb);
+                float2int(P, f, ra);
             }
 
             vm_case(GETUPVALUE):
@@ -963,29 +918,6 @@ top:
                     pc += GET_sBx(opcode);
                 }
             }
-
-//#define VM_FORIN0(t, T) \
-//            vm_case(FOR##T##0): \
-//            { \
-//                VM_SAVE_PC(); \
-//                if (for##t##_init(P)) { \
-//                    VM_PUSH_0(); \
-//                    pc += GET_sBx(opcode); \
-//                } \
-//            }
-//#define VM_FORIN(t, T) \
-//            vm_case(FOR##T): \
-//            { \
-//                if (for##t(P)) { \
-//                    pc += GET_sBx(opcode); \
-//                } \
-//            }
-//            VM_FORIN0(list, LIST)
-//            VM_FORIN0(map, MAP)
-//            VM_FORIN(list, LIST)
-//            VM_FORIN(map, MAP)
-//#undef VM_FORIN0
-//#undef VM_FORIN
 
             vm_default:
                 PAW_UNREACHABLE();

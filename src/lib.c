@@ -138,14 +138,13 @@ static int list_remove(paw_Env *P)
 static const char *find_substr(const char *str, size_t nstr, const char *sub, size_t nsub)
 {
     if (nsub == 0) return str;
-    const char *ptr = str;
     const char *end = str + nstr;
-    while ((ptr = strchr(ptr, sub[0]))) {
-        if (nsub <= CAST_SIZE(end - ptr) &&
-                0 == memcmp(ptr, sub, nsub)) {
-            return ptr;
+    while ((str = strchr(str, sub[0]))) {
+        if (nsub <= CAST_SIZE(end - str)
+                && memcmp(str, sub, nsub) == 0) {
+            return str;
         }
-        str = ptr + nsub;
+        str += nsub;
     }
     return NULL;
 }

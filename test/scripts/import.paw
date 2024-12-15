@@ -18,6 +18,10 @@ pub fn test_object() {
     assert(o.get_t());
 }
 
+pub fn test_indirect() {
+    let indirect: mod_a::use_indirect::Indirect = mod_a::use_indirect::indirect();
+}
+
 // TODO: should this be supported?
 //impl<Y> mod_a::Obj<Y> {
 //    pub fn f(y: Y) -> Y {

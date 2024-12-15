@@ -1664,7 +1664,7 @@ struct Mir *pawP_lower_hir_body(struct Compiler *C, struct HirFuncDecl *func)
 Map *pawP_lower_hir(struct Compiler *C)
 {
     Map *result = pawP_push_map(C);
-    struct HirDeclList *decls = C->dm->decls;
+    struct HirDeclList *decls = C->decls;
     for (int i = 0; i < decls->count; ++i) {
         struct HirDecl *decl = K_LIST_GET(decls, i);
         if (!HirIsFuncDecl(decl)) continue;

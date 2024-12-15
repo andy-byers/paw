@@ -129,3 +129,20 @@ pub fn test_string_concat() {
     };
     assert(s == 'cccbcccbadddddd');
 }
+
+fn concat_with_self(v: str, n: int) -> str {
+    for i = 0, n { v = v + v; }
+    return v;
+}
+
+pub fn test_getn() {
+    assert(('abcdefg')[1:-1][:-2] == 'bcd');
+
+    // NOTE: currently, out-of-bounds range indices are clamped
+    assert((' ')[1:-1] == ''); 
+
+    let s = concat_with_self('abcdefg', 8);
+    while #s > 1 {
+        s = s[1:-1];
+    }
+}

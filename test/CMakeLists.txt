@@ -1,5 +1,6 @@
 
 set(TEST_DIR "${PROJECT_SOURCE_DIR}/test")
+set(PAW_EXEC "${CMAKE_BINARY_DIR}/paw")
 function(build_test NAME) 
     set(TESTNAME "paw_${NAME}")
     add_executable(${TESTNAME} 
@@ -13,10 +14,9 @@ function(build_test NAME)
 endfunction()
 
 function(test_script NAME ARGS)
-    set(EXEC "${CMAKE_BINARY_DIR}/paw")
     set(SCRIPT "${TEST_DIR}/scripts/${NAME}.paw")
     add_test(NAME "test_${NAME}"
-        COMMAND ${EXEC} ${SCRIPT} ${ARGS})
+        COMMAND ${PAW_EXEC} ${SCRIPT} ${ARGS})
 endfunction()
 
 build_test(test_impl)
@@ -33,3 +33,4 @@ test_script(matmul "50")
 test_script(nqueen "8")
 test_script(mandelbrot "-2.1,0.9,80,-1.3,1.3,24")
 test_script(binary_trees "5")
+test_script(readme "${PROJECT_SOURCE_DIR}/README.md")

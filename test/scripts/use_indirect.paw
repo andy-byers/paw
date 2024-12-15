@@ -1,0 +1,8 @@
+// use_indirect.paw
+
+pub struct Indirect;
+
+pub fn indirect() -> Indirect {
+    return Indirect;
+}
+

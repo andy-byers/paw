@@ -205,10 +205,11 @@ static void setup_stack(paw_Env *P, int argc, const char **argv)
     const int gid = find_main(P);
     paw_get_global(P, gid);
 
+    paw_push_string(P, s_pathname);
     for (int i = 0; i < argc; ++i) {
         paw_push_string(P, argv[i]);
     }
-    paw_new_list(P, argc);
+    paw_new_list(P, 1 + argc);
 }
 
 int main(int argc, const char **argv)

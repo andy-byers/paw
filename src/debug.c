@@ -254,12 +254,12 @@ const char *paw_op_name(Op op)
             return "SETFIELD";
         case OP_GETDISCR:
             return "GETDISCR";
-        case OP_BCAST:
-            return "BCAST";
-        case OP_ICAST:
-            return "ICAST";
-        case OP_FCAST:
-            return "FCAST";
+        case OP_XCASTB:
+            return "XCASTB";
+        case OP_ICASTF:
+            return "ICASTF";
+        case OP_FCASTI:
+            return "FCASTI";
         case OP_TESTK:
             return "TESTK";
         case OP_SWITCHINT:
@@ -320,9 +320,9 @@ void paw_dump_opcode(OpCode opcode)
         case OP_SLENGTH:
         case OP_LLENGTH:
         case OP_MLENGTH:
-        case OP_BCAST:
-        case OP_ICAST:
-        case OP_FCAST:
+        case OP_XCASTB:
+        case OP_FCASTI:
+        case OP_ICASTF:
         case OP_GETDISCR:
         case OP_CALL:
         case OP_EXPLODE:
@@ -442,9 +442,9 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
             case OP_SLENGTH:
             case OP_LLENGTH:
             case OP_MLENGTH:
-            case OP_BCAST:
-            case OP_ICAST:
-            case OP_FCAST:
+            case OP_XCASTB:
+            case OP_FCASTI:
+            case OP_ICASTF:
             case OP_GETDISCR:
             case OP_GETUPVALUE:
             case OP_SETUPVALUE:

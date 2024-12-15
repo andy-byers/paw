@@ -852,7 +852,7 @@ static struct HirType *lower_type(struct LowerAst *L, struct AstExpr *expr)
 
 static struct Hir *lower_ast(struct LowerAst *L, struct Ast *ast)
 {
-    struct ModuleList *mods = L->dm->modules;
+    struct ModuleList *mods = L->C->modules;
     while (ast->modno >= mods->count) {
         K_LIST_PUSH(L->C, mods, NULL);
     }

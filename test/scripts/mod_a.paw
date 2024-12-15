@@ -1,6 +1,9 @@
 
 use mod_b;
 
+// items in 'use_indirect' should be accessed through 'mod_a::use_indirect'
+pub use use_indirect;
+
 pub fn test_external() {
     let e = mod_b::external('hello');
     assert(e.value == 'hello');

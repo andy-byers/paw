@@ -32,8 +32,8 @@ static struct IrType *lower_tuple_type(struct LowerType *L, struct HirTupleType 
 
 static struct IrType *lower_path_type(struct LowerType *L, struct HirPathType *t)
 {
-    struct IrType *result =  pawP_lookup(L->C, L->m, L->symtab, t->path, LOOKUP_TYPE);
-    if (result == NULL) pawE_error(ENV(L->C), PAW_ENAME, -1, "invalid path"); // TODO message
+    struct IrType *result = pawP_lookup(L->C, L->m, L->symtab, t->path, LOOKUP_TYPE);
+    if (result == NULL) NAME_ERROR(L->C, "invalid path '%s'", pawHir_print_path(L->C, t->path));
     return result;
 }
 

@@ -61,10 +61,10 @@ DeclId pawHir_add_decl(struct Compiler *C, struct HirDecl *decl, int modno)
     paw_Env *P = ENV(C);
     struct DynamicMem *dm = C->dm;
     const DeclId did = {
-        .value = dm->decls->count,
+        .value = C->decls->count,
         .modno = modno,
     };
-    K_LIST_PUSH(C, dm->decls, decl);
+    K_LIST_PUSH(C, C->decls, decl);
     decl->hdr.did = did;
     return did;
 }
@@ -72,8 +72,8 @@ DeclId pawHir_add_decl(struct Compiler *C, struct HirDecl *decl, int modno)
 struct HirDecl *pawHir_get_decl(struct Compiler *C, DeclId did)
 {
     struct DynamicMem *dm = C->dm;
-    paw_assert(did.value < dm->decls->count);
-    return dm->decls->data[did.value];
+    paw_assert(did.value < C->decls->count);
+    return C->decls->data[did.value];
 }
 
 struct HirSymbol *pawHir_new_symbol(struct Compiler *C)
@@ -705,12 +705,6 @@ static void indent_line(struct Printer *P)
 
 #define DUMP_FMT(P, ...) (indent_line(P), pawL_add_fstring(ENV(P), (P)->buf, __VA_ARGS__))
 #define DUMP_MSG(P, msg) (indent_line(P), pawL_add_string(ENV(P), (P)->buf, msg))
-
-static const char *get_typename(struct DynamicMem *dm, DeclId did)
-{
-    const struct HirDecl *decl = dm->decls->data[did.value];
-    return decl->hdr.name ? decl->hdr.name->text : "(null)";
-}
 
 #define DEFINE_KIND_PRINTER(name, T) \
     static int print_##name##_kind(struct Printer *P, void *node) \

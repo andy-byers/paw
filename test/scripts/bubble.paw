@@ -31,8 +31,8 @@ fn bubble(n: int) -> [int] {
 
 pub fn main(args: [str]) -> int {
     let n = 500;
-    if #args > 0 {
-        n = args[0].parse_int(10);
+    if #args > 1 {
+        n = args[1].parse_int(10);
     }
     bubble(n);
     return 0;

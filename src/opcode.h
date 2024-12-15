@@ -204,9 +204,9 @@ OP_GETFIELD,//       A B C        R[A] := R[B][C]
 OP_SETFIELD,//       A B C        R[A][B] := R[C]
 OP_GETDISCR,//       A B          R[A] := discr(R[B])
 
-OP_BCAST,//          A B          R[A] := R[B] as bool
-OP_ICAST,//          A B          R[A] := R[B] as int
-OP_FCAST,//          A B          R[A] := R[B] as float
+OP_ICASTF,//         A B          R[A] := R[B] as float
+OP_FCASTI,//         A B          R[A] := R[B] as int
+OP_XCASTB,//         A B          R[A] := R[B] as bool
 
 NOPCODES
 } Op;

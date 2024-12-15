@@ -133,6 +133,8 @@ struct Builtin {
 
 struct Compiler {
     struct Builtin builtins[NBUILTINS];
+    struct ModuleList *modules;
+    struct HirDeclList *decls;
     struct DynamicMem *dm;
     struct Pool *pool;
     struct Ast *prelude;
@@ -158,6 +160,7 @@ struct Compiler {
     paw_Env *P;
     int nbinders;
     int nnodes;
+    int line;
 };
 
 paw_Bool pawP_is_assoc_fn(struct Compiler *C, struct IrSignature *type);
@@ -192,13 +195,6 @@ struct DynamicMem {
     } scratch;
 
     struct Unifier unifier;
-
-    // NOTE: Backing storage for these fields are located in the compiler
-    //       memory pool, so they don't need to be freed separately. They
-    //       are kept here for convenience, since they are used during
-    //       multiple passes.
-    struct ModuleList *modules;
-    struct HirDeclList *decls;
 };
 
 typedef struct Generator {
@@ -336,19 +332,6 @@ static inline void pawP_pool_uninit(struct Compiler *C, struct Pool *pool)
 }
 
 paw_Type pawP_type2code(struct Compiler *C, struct IrType *type);
-
-enum VarKind {
-    VAR_GLOBAL,
-    VAR_UPVALUE,
-    VAR_LOCAL,
-    VAR_FIELD,
-    VAR_CFUNC,
-};
-
-struct VarInfo {
-    enum VarKind kind;
-    int index;
-};
 
 struct ItemSlot {
     struct Type *rtti;

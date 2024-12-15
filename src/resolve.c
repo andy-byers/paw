@@ -620,6 +620,7 @@ static struct IrType *resolve_path_expr(struct Resolver *R, struct HirPathExpr *
 
 static void check_map_key(struct Resolver *R, struct IrType *key)
 {
+    // TODO: if IrIsInfer(key), need to save the type and check it later
     if (!IrIsInfer(key) && !IR_IS_BASIC_T(key)) {
         TYPE_ERROR(R, "key is not hashable");
     }
@@ -652,16 +653,13 @@ static struct IrType *resolve_chain_expr(struct Resolver *R, struct HirChainExpr
         SYNTAX_ERROR(R, "invalid operand for '?' operator");
     }
     unify(R, R->rs->prev, type);
-    return K_LIST_GET(ir_adt_types(type), 0); // unwrap
+    return K_LIST_FIRST(ir_adt_types(type)); // unwrap
 }
 
 static struct IrType *get_value_type(struct Resolver *R, struct IrType *target)
 {
-    if (is_list_t(R, target)) {
-        return ir_list_elem(target);
-    } else if (is_map_t(R, target)) {
-        return ir_map_value(target);
-    }
+    if (is_list_t(R, target)) return ir_list_elem(target);
+    if (is_map_t(R, target)) return ir_map_value(target);
     return NULL;
 }
 
@@ -1003,9 +1001,9 @@ static struct IrType *resolve_call_expr(struct Resolver *R, struct HirCallExpr *
 static struct IrType *resolve_conversion_expr(struct Resolver *R, struct HirConversionExpr *e)
 {
     struct IrType *type = resolve_operand(R, e->arg);
-    if (!IrIsAdt(type) ||
-            IR_TYPE_DID(type).value == PAW_TUNIT ||
-            IR_TYPE_DID(type).value == PAW_TSTR) {
+    if (!IrIsAdt(type)
+            || pawP_type2code(R->C, type) == PAW_TUNIT
+            || pawP_type2code(R->C, type) == PAW_TSTR) {
         TYPE_ERROR(R, "argument to conversion must be scalar");
     }
     return get_type(R, e->to);
@@ -1776,11 +1774,12 @@ static void check_module_types(struct Resolver *R, struct ModuleInfo *mod)
     paw_assert(R->symtab->count == 0);
 }
 
-static void check_types(struct Resolver *R, struct DynamicMem *dm)
+static void check_types(struct Resolver *R)
 {
     enter_inference_ctx(R);
-    for (int i = 0; i < dm->modules->count; ++i) {
-        R->m = K_LIST_GET(dm->modules, i);
+    struct ModuleList *modules = R->C->modules;
+    for (int i = 0; i < modules->count; ++i) {
+        R->m = K_LIST_GET(modules, i);
         check_module_types(R, R->m);
     }
     leave_inference_ctx(R);
@@ -1803,5 +1802,5 @@ void pawP_resolve(struct Compiler *C)
     pawHir_type_folder_init(&F, NULL, &R);
 
     // run the type checker
-    check_types(&R, dm);
+    check_types(&R);
 }

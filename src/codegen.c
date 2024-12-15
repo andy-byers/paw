@@ -19,7 +19,7 @@
 #include "type.h"
 
 #define ERROR(G, code, ...) pawE_error(ENV(G), code, -1, __VA_ARGS__)
-#define PRELUDE(G) ((G)->C->dm->modules->data[0])
+#define PRELUDE(G) ((G)->C->modules->data[0])
 #define GET_DECL(G, id) pawHir_get_decl((G)->C, id)
 #define TYPE_CODE(G, type) (pawP_type2code((G)->C, type))
 #define REG(fs, r) ident2reg(fs, (r)->value)
@@ -426,7 +426,7 @@ static ValueId resolve_function(struct Generator *G, struct Type *rtti)
 
 static struct ModuleInfo *get_mod(struct Generator *G, int modno)
 {
-    return K_LIST_GET(G->C->dm->modules, modno);
+    return K_LIST_GET(G->C->modules, modno);
 }
 
 static const String *get_mod_prefix(struct Generator *G, struct ModuleInfo *m)
@@ -823,8 +823,6 @@ static void code_assign(struct MirVisitor *V, struct MirAssign *x)
     } else {
         pawK_code_AB(fs, OP_MOVE, ident2reg(fs, x->place), REG(fs, x->rhs));
     }
-
-    // TODO: upvalues must use OP_SETUPVALUE
 }
 
 static paw_Bool handle_special_calls(struct Generator *G, struct MirCall *x)
@@ -836,9 +834,6 @@ static paw_Bool handle_special_calls(struct Generator *G, struct MirCall *x)
             code_variant_constructor(G, callable, x->args, x->output);
             return PAW_TRUE;
         }
-//        if (HirGetFuncDecl(decl)->self != NULL) {
-//            prep_method_call(G, callable, K_LIST_FIRST(x->args));
-//        }
     }
     return PAW_FALSE;
 }
@@ -853,16 +848,28 @@ static void code_call(struct MirVisitor *V, struct MirCall *x)
     pawK_code_AB(fs, OP_CALL, REG(fs, x->target), x->args->count);
 }
 
-
 static void code_cast(struct MirVisitor *V, struct MirCast *x)
 {
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
-    const Op op = x->type == PAW_TBOOL ? OP_BCAST :
-        x->type == PAW_TINT ? OP_ICAST : OP_FCAST;
-    const paw_Type from = TYPE_CODE(G, x->target->type);
 
-    pawK_code_ABC(fs, op, REG(fs, x->output), REG(fs, x->target), from);
+    const paw_Type from = TYPE_CODE(G, x->target->type);
+    const paw_Type to = x->type;
+
+    Op op;
+    if (to == PAW_TBOOL) {
+        op = OP_XCASTB;
+    } else if (from <= PAW_TINT && to == PAW_TFLOAT) {
+        op = OP_ICASTF; // 'from' can be bool
+    } else if (from == PAW_TFLOAT && to == PAW_TINT) {
+        op = OP_FCASTI;
+    } else {
+        // TODO: remove casts that don't produce any instructions
+        pawK_code_AB(fs, OP_MOVE, REG(fs, x->output), REG(fs, x->target));
+        return; // NOOP
+    }
+
+    pawK_code_AB(fs, op, REG(fs, x->output), REG(fs, x->target));
 }
 
 static Op unop2op_bool(enum UnaryOp unop)
@@ -894,8 +901,6 @@ static Op binop2op_bool(enum BinaryOp binop)
             return OP_IEQ;
         case BINARY_NE:
             return OP_INE;
-        case BINARY_AS:
-            return OP_BCAST;
         default:
             PAW_UNREACHABLE();
     }
@@ -936,9 +941,7 @@ static Op binop2op_int(enum BinaryOp binop)
             return OP_SHL;
         case BINARY_SHR:
             return OP_SHR;
-        case BINARY_AS:
-            return OP_ICAST;
-        case NBINARYOPS:
+        default:
             PAW_UNREACHABLE();
     }
 }
@@ -978,8 +981,6 @@ static Op binop2op_float(enum BinaryOp binop)
             return OP_FDIV;
         case BINARY_MOD:
             return OP_FMOD;
-        case BINARY_AS:
-            return OP_FCAST;
         default:
             PAW_UNREACHABLE();
     }

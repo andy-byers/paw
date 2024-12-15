@@ -159,8 +159,8 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const c
     C->modname = P->modname = SCAN_STRING(C, modname);
     C->prelude = pawAst_new(C, SCAN_STRING(C, "prelude"), 0);
 
-    C->dm->decls = pawHir_decl_list_new(C);
-    C->dm->modules = pawP_mod_list_new(C);
+    C->decls = pawHir_decl_list_new(C);
+    C->modules = pawP_mod_list_new(C);
     C->dm->unifier.C = C;
 
     // builtin primitives
@@ -291,7 +291,7 @@ static struct Type *new_type(struct DefGenerator *dg, struct IrType *src, DefId 
 
 static String *get_modname(struct DefGenerator *dg, DeclId did)
 {
-    struct ModuleList *modules = dg->C->dm->modules;
+    struct ModuleList *modules = dg->C->modules;
     return K_LIST_GET(modules, did.modno)->hir->name;
 }
 
@@ -399,20 +399,22 @@ static struct ItemSlot allocate_item(struct DefGenerator *dg, struct Mir *body)
     const int ntypes = t->types != NULL ? t->types->count : 0;
     struct HirFuncDecl *d = HirGetFuncDecl(pawHir_get_decl(dg->C, t->did));
     struct Def *def = new_def(dg, t->did, body->type);
-    def->func.name = d->name;
-    def->func.is_pub = d->is_pub;
+    struct Type *self = lookup_type(dg, body->self);
+    def->func.self = self != NULL ? self->adt.code : -1;
     def->func.vid = dg->items->count;
+    def->func.is_pub = d->is_pub;
+    def->func.name = d->name;
 
     struct DefState ds;
     enter_def(dg, &ds, body->type, def);
     define_decl_list(dg, d->params);
     leave_def(dg);
 
-    struct Type *ty = Y_TYPE(P, def->func.code);
-    ty->sig.did = def->func.did;
+    struct Type *rtti = Y_TYPE(P, def->func.code);
+    rtti->sig.did = def->func.did;
     return (struct ItemSlot){
         .mir = body,
-        .rtti = ty,
+        .rtti = rtti,
     };
 }
 
