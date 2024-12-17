@@ -29,7 +29,6 @@ static const char *kKeywords[] = {
     "if",
     "else",
     "for",
-    "do",
     "while",
     "match",
     "break",
@@ -485,5 +484,80 @@ struct IrType *pawP_get_self(struct Compiler *C, struct IrSignature *method)
 {
     paw_assert(pawP_is_assoc_fn(C, method));
     return get_self(C, method);
+}
+
+#define CHUNKSZ(b) sizeof(K_LIST_FIRST(b))
+
+struct BitSet *pawP_bitset_new(struct Compiler *C, int count)
+{
+    paw_assert(count > 0);
+    struct BitSet *set = raw_bitset_new(C);
+    const int n = (count + CHUNKSZ(set) - 1) / CHUNKSZ(set);
+    K_LIST_RESERVE(C, set, n);
+    set->count = count;
+    return set;
+}
+
+#define BITSET_INDEX(set, i, pos, bit) \
+    paw_assert(0 <= (i) && (i) < (set)->count); \
+    const int pos = (i) / CHUNKSZ(set); \
+    const int bit = (i) % CHUNKSZ(set);
+
+void pawP_bitset_set(struct BitSet *set, int i)
+{
+    BITSET_INDEX(set, i, pos, bit);
+    BitChunk *bc = &K_LIST_GET(set, pos);
+    *bc = *bc | (1ULL << bit);
+}
+
+void pawP_bitset_set_range(struct BitSet *bs, int i, int j)
+{
+    while (i < j) pawP_bitset_set(bs, i++);
+}
+
+int pawP_bitset_count(const struct BitSet *set)
+{
+    return set->count;
+}
+
+paw_Bool pawP_bitset_get(const struct BitSet *set, int i)
+{
+    BITSET_INDEX(set, i, pos, bit);
+    BitChunk bc = K_LIST_GET(set, pos);
+    return (bc >> bit) & 1;
+}
+
+void pawP_bitset_clear(struct BitSet *set, int i)
+{
+    BITSET_INDEX(set, i, pos, bit);
+    BitChunk *bc = &K_LIST_GET(set, pos);
+    *bc = *bc & ~(1ULL << bit);
+}
+
+void pawP_bitset_clear_range(struct BitSet *bs, int i, int j)
+{
+    while (i < j) pawP_bitset_clear(bs, i++);
+}
+
+void pawP_bitset_and(struct BitSet *a, const struct BitSet *b)
+{
+    paw_assert(a->count == b->count);
+    const int n = a->count / CHUNKSZ(a);
+
+    for (int i = 0; i < n; ++i) {
+        BitChunk *bc = &K_LIST_GET(a, i);
+        *bc = *bc & K_LIST_GET(b, i);
+    }
+}
+
+void pawP_bitset_or(struct BitSet *a, const struct BitSet *b)
+{
+    paw_assert(a->count == b->count);
+    const int n = a->count / CHUNKSZ(a);
+
+    for (int i = 0; i < n; ++i) {
+        BitChunk *bc = &K_LIST_GET(a, i);
+        *bc = *bc | K_LIST_GET(b, i);
+    }
 }
 

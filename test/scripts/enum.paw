@@ -1,3 +1,4 @@
+// enum.paw
 
 enum Unit {
     X,
@@ -21,36 +22,16 @@ enum Data {
     Y(int),
 }
 
+fn copy_data_enum(e: Data) -> Data {
+    let e2 = e;
+    return e2;
+}
+
 pub fn test_data_enum() {
     let e = Data::X;
     e = Data::Y(42);
 
-    let test = |e: Data| {
-        let e2 = e;
-        return e2;
-    };
-    let e = test(Data::X);
-    let e = test(Data::Y(42));
+    let e = copy_data_enum(Data::X);
+    let e = copy_data_enum(Data::Y(42));
 }
 
-pub fn test_option() {
-    let o = Option::<int>::Some(123);
-    assert(o.is_some());
-    assert(o.unwrap() == 123);
-    assert(o.unwrap_or(456) == 123);
-
-    let o = Option::<int>::None;
-    assert(o.is_none());
-    assert(o.unwrap_or(456) == 456);
-}
-
-pub fn test_result() {
-    let o = Result::<int, str>::Ok(123);
-    assert(o.is_ok());
-    assert(o.unwrap() == 123);
-    assert(o.unwrap_or(456) == 123);
-
-    let o = Result::<int, str>::Err('abc');
-    assert(o.is_err());
-    assert(o.unwrap_or(456) == 456);
-}

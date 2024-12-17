@@ -964,12 +964,7 @@ static struct AstBlock *block(struct Lex *lex)
     r->stmts = pawAst_stmt_list_new(lex->C);
     while (!end_of_block(lex)) {
         struct AstStmt *next = statement(lex);
-        if (next != NULL) {
-            K_LIST_PUSH(lex->C, r->stmts, next);
-            if (AstIsReturnStmt(next) || AstIsJumpStmt(next)) {
-                break; // must be last statement in block
-            }
-        }
+        if (next != NULL) K_LIST_PUSH(lex->C, r->stmts, next);
     }
     delim_next(lex, '}', '{', line);
     return r;
@@ -1262,18 +1257,6 @@ static struct AstStmt *while_stmt(struct Lex *lex)
     skip(lex); // 'while' token
     r->while_.cond = basic_expr(lex);
     r->while_.block = block(lex);
-    return r;
-}
-
-static struct AstStmt *dowhile_stmt(struct Lex *lex)
-{
-    struct AstStmt *r = NEW_STMT(lex, kAstWhileStmt);
-    r->while_.is_dowhile = PAW_TRUE;
-    skip(lex); // 'do' token
-    r->while_.block = block(lex);
-    check_next(lex, TK_WHILE);
-    r->while_.cond = basic_expr(lex);
-    semicolon(lex);
     return r;
 }
 
@@ -1590,9 +1573,6 @@ static struct AstStmt *statement(struct Lex *lex)
             break;
         case TK_WHILE:
             stmt = while_stmt(lex);
-            break;
-        case TK_DO:
-            stmt = dowhile_stmt(lex);
             break;
         case TK_RETURN:
             stmt = return_stmt(lex);

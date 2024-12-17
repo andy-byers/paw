@@ -20,13 +20,13 @@ void pawR_tuple_get(CallFrame *cf, Value *ra, const Value *rb, int index);
 void pawR_tuple_set(CallFrame *cf, Value *ra, int index, const Value *rb);
 
 void pawR_str_length(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb);
-void pawR_str_concat(paw_Env *P, CallFrame *cf, int n);
+void pawR_str_concat(paw_Env *P, CallFrame *cf, int b);
 void pawR_str_get(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc);
 void pawR_str_getn(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc);
 
 List *pawR_new_list(paw_Env *P, CallFrame *cf, Value *ra, int b);
 void pawR_list_length(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb);
-void pawR_list_concat(paw_Env *P, CallFrame *cf, int n);
+void pawR_list_concat(paw_Env *P, CallFrame *cf, int b);
 void pawR_list_get(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc);
 void pawR_list_getn(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc);
 void pawR_list_set(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc);

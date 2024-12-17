@@ -224,17 +224,10 @@ static void dump_stmt(Printer *P, struct AstStmt *s)
             }
             break;
         case kAstWhileStmt:
-            if (s->while_.is_dowhile) {
-                DUMP_MSG(P, "block: ");
-                DUMP_BLOCK(P, s->while_.block);
-                DUMP_MSG(P, "cond: ");
-                dump_expr(P, s->while_.cond);
-            } else {
-                DUMP_MSG(P, "cond: ");
-                dump_expr(P, s->while_.cond);
-                DUMP_MSG(P, "block: ");
-                DUMP_BLOCK(P, s->while_.block);
-            }
+            DUMP_MSG(P, "cond: ");
+            dump_expr(P, s->while_.cond);
+            DUMP_MSG(P, "block: ");
+            DUMP_BLOCK(P, s->while_.block);
             break;
         case kAstReturnStmt:
             DUMP_MSG(P, "expr: ");

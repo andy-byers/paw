@@ -33,7 +33,6 @@ typedef struct HirId {
         X(BinOpExpr,      binop) \
         X(ClosureExpr,    clos) \
         X(ConversionExpr, conv) \
-        X(SwitchDiscr,    iswitch) \
         X(CallExpr,       call) \
         X(Index,          index) \
         X(Selector,       select) \
@@ -413,12 +412,6 @@ struct HirConversionExpr {
     struct HirExpr *arg;
 };
 
-struct HirSwitchDiscr {
-    HIR_EXPR_HEADER;
-    int expect;
-    struct HirExpr *target;
-};
-
 struct HirAssignExpr {
     HIR_EXPR_HEADER;
     struct HirExpr *lhs;
@@ -495,7 +488,6 @@ struct HirIfStmt {
 
 struct HirWhileStmt {
     HIR_STMT_HEADER;
-    paw_Bool is_dowhile : 1;
     struct HirExpr *cond;
     struct HirBlock *block;
 };

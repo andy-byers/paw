@@ -53,20 +53,12 @@ struct MirTypeFolder {
     struct MirVisitor V;
     struct Compiler *C;
     void *ud;
-    int line;
 };
 
-void pawMir_type_folder_init(struct MirTypeFolder *F, struct Compiler *C, void *ud);
+void pawMir_type_folder_init(struct MirTypeFolder *F, struct Compiler *C, struct Mir *mir, void *ud);
 
-// Type folder entrypoints for MIR nodes:
-void pawMir_fold_register(struct MirTypeFolder *F, struct MirRegister *node);
-void pawMir_fold_terminator(struct MirTypeFolder *F, struct MirTerminator *node);
-void pawMir_fold_instruction(struct MirTypeFolder *F, struct MirInstruction *node);
-void pawMir_fold_block(struct MirTypeFolder *F, struct MirBlock *node);
-void pawMir_fold_register_list(struct MirTypeFolder *F, struct MirRegisterList *list);
-void pawMir_fold_instruction_list(struct MirTypeFolder *F, struct MirInstructionList *list);
-void pawMir_fold_block_list(struct MirTypeFolder *F, struct MirBlockList *list);
-void pawMir_fold(struct MirTypeFolder *F, struct Mir *node);
+// Type folder entrypoint for MIR:
+void pawMir_fold(struct MirTypeFolder *F, struct Mir *mir);
 
 
 const char *pawIr_print_type(struct Compiler *C, struct IrType *type);

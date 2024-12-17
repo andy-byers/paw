@@ -1,3 +1,4 @@
+// function.paw
 
 fn f() {
     // implicit 'return'
@@ -92,4 +93,18 @@ pub fn test_mutual_recursion() {
 
 fn global_function(n: int) -> int {
     return n;
+}
+
+fn sum_args(a: int, b: int, c: int, d: int, e: int, f: int) -> int {
+    return a + b + c + d + e + f;
+}
+
+pub fn test_args() -> int {
+    let d = 4;
+    let f = 6;
+    let b = 2;
+    let c = 3;
+    let a = 1;
+    let e = 5;
+    assert(sum_args(a, b, c, d, e, f) == 1 + 2 + 3 + 4 + 5 + 6);
 }

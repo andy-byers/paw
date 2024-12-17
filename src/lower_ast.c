@@ -548,7 +548,6 @@ static struct HirStmt *LowerWhileStmt(struct LowerAst *L, struct AstWhileStmt *s
 {
     struct HirStmt *result = pawHir_new_stmt(L->C, s->line, kHirWhileStmt);
     struct HirWhileStmt *r = HirGetWhileStmt(result);
-    r->is_dowhile = s->is_dowhile;
 
     r->cond = lower_expr(L, s->cond);
     r->block = LOWER_BLOCK(L, s->block);

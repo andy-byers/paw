@@ -150,8 +150,30 @@ fn construct_option<Ty3>(t: Ty3, a: bool, b: bool) -> Option<Outer<Ty3>> {
     }
 }
 
-pub fn test_option() {
+pub fn test_option_construction() {
     construct_option(42, true, true);
     construct_option(42, true, false);
     construct_option(42, false, false);
+}
+
+pub fn test_option_methods() {
+    let o = Option::<int>::Some(123);
+    assert(o.is_some());
+    assert(o.unwrap() == 123);
+    assert(o.unwrap_or(456) == 123);
+
+    let o = Option::<int>::None;
+    assert(o.is_none());
+    assert(o.unwrap_or(456) == 456);
+}
+
+pub fn test_result_methods() {
+    let o = Result::<int, str>::Ok(123);
+    assert(o.is_ok());
+    assert(o.unwrap() == 123);
+    assert(o.unwrap_or(456) == 123);
+
+    let o = Result::<int, str>::Err('abc');
+    assert(o.is_err());
+    assert(o.unwrap_or(456) == 456);
 }

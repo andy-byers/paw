@@ -39,18 +39,24 @@ pub fn test_parse() {
 }
 
 fn apply<T>(f: fn(T), target: [T]) {
-    for i = 0, #target {
+    let i = 0;
+    while i < #target {
         f(target[i]);
-    };
+        i = i + 1;
+    }
 }
 
 fn combine<T>(lhs: [T], rhs: [T]) -> [(T, T)] {
     let out = [];
-    for i = 0, #lhs {
-        for j = 0, #rhs {
+    let i = 0;
+    while i < #lhs {
+        let j = 0;
+        while j < #rhs {
             out.push((lhs[i], rhs[j]));
-        };
-    };
+            j = j + 1;
+        }
+        i = i + 1;
+    }
     return out;
 }
 
@@ -95,7 +101,7 @@ pub fn test_boundary_values() {
             check(x >> 10000, -1);
         } else {
             check(x >> 10000, 0);
-        };
+        }
     };
 
     let test_arith = |a: (int, int)| {

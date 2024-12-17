@@ -39,13 +39,13 @@ struct PartialAdt {
     struct HirScope *scope;
 };
 
-struct PartialMod {
+struct PartialModule {
     struct PartialAdtList *pal;
     struct ModuleInfo *m;
 };
 
 DEFINE_LIST(struct ItemCollector, pa_list_, PartialAdtList, struct PartialAdt)
-DEFINE_LIST(struct ItemCollector, pm_list_, PartialModList, struct PartialMod)
+DEFINE_LIST(struct ItemCollector, pm_list_, PartialModList, struct PartialModule)
 
 static DeclId add_decl(struct ItemCollector *X, struct HirDecl *decl)
 {
@@ -484,7 +484,7 @@ static struct PartialModList *collect_phase_1(struct ItemCollector *X, struct Mo
         struct ModuleInfo *m = use_module(X, K_LIST_GET(ml, i));
         paw_assert(m->globals->count == 0);
         struct PartialAdtList *pal = register_adts(X, m->hir->items);
-        struct PartialMod pm = {.m = m, .pal = pal};
+        struct PartialModule pm = {.m = m, .pal = pal};
         K_LIST_PUSH(X, pml, pm);
         m->globals = X->m->globals;
         finish_module(X);
@@ -492,7 +492,7 @@ static struct PartialModList *collect_phase_1(struct ItemCollector *X, struct Mo
 
     // fill in toplevel ADT field types (may instantiate polymorphic ADTs)
     for (int i = 0; i < pml->count; ++i) {
-        struct PartialMod pm = K_LIST_GET(pml, i);
+        struct PartialModule pm = K_LIST_GET(pml, i);
         use_module(X, pm.m);
         collect_adts(X, pm.pal);
         finish_module(X);
@@ -500,7 +500,7 @@ static struct PartialModList *collect_phase_1(struct ItemCollector *X, struct Mo
 
     // clean up scratch memory
     for (int i = 0; i < pml->count; ++i) {
-        struct PartialMod pm = K_LIST_GET(pml, i);
+        struct PartialModule pm = K_LIST_GET(pml, i);
         pa_list_delete(X, pm.pal);
     }
     pm_list_delete(X, pml);

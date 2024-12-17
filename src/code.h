@@ -59,16 +59,21 @@ void pawK_pool_free(struct Pool *pool, void *ptr, size_t size);
 #define K_LIST_FIRST(L) (K_LIST_GET(L, 0))
 #define K_LIST_LAST(L) (K_LIST_GET(L, (L)->count - 1))
 #define K_LIST_GET(L, i) ((L)->data[i])
-#define K_LIST_SET(L, i, v) ((L)->data[i] = (v))
+#define K_LIST_SET(L, i, v) CHECK_EXP(0 <= (i) && (i) < (L)->count, (L)->data[i] = (v))
 #define K_LIST_POP(L) CHECK_EXP((L)->count > 0, --(L)->count)
-#define K_LIST_PUSH(C, L, v) ((L)->data = pawK_list_ensure_one_((C)->P, (C)->pool, (L)->data, sizeof((L)->data[0]), (L)->count, &(L)->alloc), \
+#define K_LIST_PUSH(C, L, v) ((L)->data = pawK_list_ensure_one((C)->P, (C)->pool, (L)->data, sizeof((L)->data[0]), (L)->count, &(L)->alloc), \
                               (L)->data[(L)->count++] = (v))
-#define K_LIST_INSERT(C, L, v, i) ((L)->data = pawK_list_ensure_one_((C)->P, (C)->pool, (L)->data, sizeof((L)->data[0]), (L)->count, &(L)->alloc), \
-                                   memmove((L)->data + (i) + 1, (L)->data + (i), ((L)->count - (i)) * sizeof((L)->data[0])), \
-                                   (L)->data[i] = (v))
+#define K_LIST_INSERT(C, L, v, i) CHECK_EXP(0 <= (i) && (i) <= (L)->count, \
+                                            (L)->data = pawK_list_ensure_one((C)->P, (C)->pool, (L)->data, sizeof((L)->data[0]), (L)->count, &(L)->alloc), \
+                                            memmove((L)->data + (i) + 1, (L)->data + (i), ((L)->count - (i)) * sizeof((L)->data[0])), \
+                                            (L)->data[i] = (v))
+#define K_LIST_RESERVE(C, L, n) ((L)->data = pawK_list_reserve((C)->P, (C)->pool, (L)->data, sizeof((L)->data[0]), (L)->count, &(L)->alloc, n))
 
+#define K_LIST_FOREACH(L, p) for (p = (L)->data; p && p < (L)->data + (L)->count; ++p)
+#define K_LIST_ENUMERATE(L, i, p) for (i = 0, p = (L)->data; i < (L)->count; p = &(L)->data[++i])
 
-void *pawK_list_ensure_one_(paw_Env *P, struct Pool *pool, void *data, size_t zelem, int count, int *palloc);
+void *pawK_list_reserve(paw_Env *P, struct Pool *pool, void *data, size_t zelem, int count, int *palloc, int target);
+void *pawK_list_ensure_one(paw_Env *P, struct Pool *pool, void *data, size_t zelem, int count, int *palloc);
 
 enum FuncKind {
     FUNC_MODULE,
@@ -87,7 +92,7 @@ struct FuncState {
     struct FuncState *outer; // enclosing function
     struct Generator *G; // codegen state
     struct KCache kcache;
-    struct MirBlock *bb;
+    int bb; // TODO: should be MirBlock, move stuff around
     Proto *proto; // prototype being built
     String *name; // name of the function
     int first_local; // index of function in DynamicMem array

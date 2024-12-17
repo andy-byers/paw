@@ -33,6 +33,7 @@ endif()
 
 set(PAW_SOURCE_DIR ${PROJECT_SOURCE_DIR}/src)
 
+# TODO: Paw really needs better organization. At least split off a "compiler" directory to hold the numerous compiler source files
 add_library(paw STATIC)
 target_sources(paw
     PUBLIC  ${PAW_SOURCE_DIR}/alloc.h
@@ -58,10 +59,12 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/parse.h
             ${PAW_SOURCE_DIR}/prefix.h
             ${PAW_SOURCE_DIR}/rt.h
+            ${PAW_SOURCE_DIR}/ssa.h
             ${PAW_SOURCE_DIR}/str.h
             ${PAW_SOURCE_DIR}/type.h
             ${PAW_SOURCE_DIR}/type_folder.h
             ${PAW_SOURCE_DIR}/unify.h
+            ${PAW_SOURCE_DIR}/utest.h
             ${PAW_SOURCE_DIR}/util.h
             ${PAW_SOURCE_DIR}/value.h
     PRIVATE ${PAW_SOURCE_DIR}/alloc.c
@@ -75,6 +78,7 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/compile.c
             ${PAW_SOURCE_DIR}/debug.c
             ${PAW_SOURCE_DIR}/decision.c
+            ${PAW_SOURCE_DIR}/dominance.c
             ${PAW_SOURCE_DIR}/env.c
             ${PAW_SOURCE_DIR}/exhaustiveness.c
             ${PAW_SOURCE_DIR}/gc.c
@@ -86,6 +90,7 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/lex.c
             ${PAW_SOURCE_DIR}/list.c
             ${PAW_SOURCE_DIR}/lib.c
+            ${PAW_SOURCE_DIR}/liveness.c
             ${PAW_SOURCE_DIR}/lookup.c
             ${PAW_SOURCE_DIR}/lower_ast.c
             ${PAW_SOURCE_DIR}/lower_hir.c
@@ -100,10 +105,12 @@ target_sources(paw
             ${PAW_SOURCE_DIR}/regalloc.c
             ${PAW_SOURCE_DIR}/resolve.c
             ${PAW_SOURCE_DIR}/rt.c
+            ${PAW_SOURCE_DIR}/ssa.c
             ${PAW_SOURCE_DIR}/str.c
             ${PAW_SOURCE_DIR}/type.c
             ${PAW_SOURCE_DIR}/type_folder.c
             ${PAW_SOURCE_DIR}/unify.c
+            ${PAW_SOURCE_DIR}/utest.c
             ${PAW_SOURCE_DIR}/util.c
             ${PAW_SOURCE_DIR}/value.c)
 target_include_directories(paw

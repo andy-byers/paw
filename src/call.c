@@ -175,17 +175,6 @@ static void handle_ccall(paw_Env *P, StackPtr base, Native *ccall)
     pawR_close_upvalues(P, base);
 }
 
-static void check_fixed_args(paw_Env *P, Proto *f, int argc)
-{
-    if (argc < f->argc) {
-        pawR_error(P, PAW_ERUNTIME, "not enough arguments (expected %s%d)",
-                   f->is_va ? "at least " : "", f->argc);
-    } else if (!f->is_va && argc > f->argc) {
-        pawR_error(P, PAW_ERUNTIME, "too many arguments (expected %d)",
-                   f->argc);
-    }
-}
-
 CallFrame *pawC_precall(paw_Env *P, StackPtr base, Object *callable, int argc)
 {
     Native *ccall;
@@ -201,6 +190,12 @@ CallFrame *pawC_precall(paw_Env *P, StackPtr base, Object *callable, int argc)
             pawR_error(P, PAW_ETYPE, "type is not callable");
     }
     Proto *p = fn->p;
+    if (argc < p->argc) {
+        pawR_error(P, PAW_ERUNTIME, "not enough arguments (expected %d)", p->argc);
+    } else if (argc > p->argc) {
+        pawR_error(P, PAW_ERUNTIME, "too many arguments (expected %d)", p->argc);
+    }
+
     const ptrdiff_t offset = SAVE_OFFSET(P, base);
     const int frame_size = p->max_stack + STACK_EXTRA;
     ENSURE_STACK(P, frame_size);
@@ -215,7 +210,6 @@ CallFrame *pawC_precall(paw_Env *P, StackPtr base, Object *callable, int argc)
     cf->top.p = base + frame_size;
 
     P->modname = p->modname;
-    check_fixed_args(P, p, argc);
     return cf;
 
 call_native:
@@ -227,7 +221,7 @@ void pawC_call(paw_Env *P, Object *f, int argc)
 {
     StackPtr base = P->top.p - argc - 1; // context
     CallFrame *cf = pawC_precall(P, base, f, argc);
-    if (cf) {
+    if (cf != NULL) {
         cf->flags |= CFF_ENTRY;
         pawR_execute(P, cf);
     }

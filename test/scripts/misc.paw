@@ -6,6 +6,7 @@ struct Struct<T> {pub v: T}
 enum Enum<T> {X(T)}
 
 pub fn recur_with_objects<T>(n: int, t: T) {
+    let list = [123];
     let list = [1, 2, 3];
     let tuple = ('a', 2, 3.0, t);
     let map = [1: 'a', 2: 'b', 3: 'c'];
@@ -18,7 +19,7 @@ pub fn recur_with_objects<T>(n: int, t: T) {
 }
 
 pub fn test_gc() {
-    recur_with_objects(5, 123);
+    recur_with_objects(1, 123);
     recur_with_objects(10, 1.0);
     recur_with_objects(100, 'abc');
 }

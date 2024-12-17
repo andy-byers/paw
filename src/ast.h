@@ -469,7 +469,6 @@ struct AstExprStmt {
 struct AstBlock {
     AST_STMT_HEADER;
     struct AstStmtList *stmts;
-    struct AstExpr *result;
 };
 
 struct AstReturnStmt {
@@ -486,7 +485,6 @@ struct AstIfStmt {
 
 struct AstWhileStmt {
     AST_STMT_HEADER;
-    paw_Bool is_dowhile : 1;
     struct AstExpr *cond;
     struct AstBlock *block;
 };

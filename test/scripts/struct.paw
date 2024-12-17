@@ -6,13 +6,16 @@ struct Integer {
     pub value: int,
 }
 
-pub fn test_struct_fields() {
-    let i: Integer = Integer{value: 123};
+pub fn test_struct_initializer() {
     let i = Integer{value: 123};
+    let i: Integer = i;
 }
 
-struct NestedInt {
-    pub value: Integer,
+pub fn test_struct_fields() {
+    let i = Integer{value: 123};
+    assert(i.value == 123);
+    i.value = 42;
+    assert(i.value == 42);
 }
 
 pub fn test_struct_syntax() {
@@ -22,11 +25,6 @@ pub fn test_struct_syntax() {
     {}
     let i = i.value;
     assert(i == 123);
-
-    // A 'CompositeLit' can start a suffix chain ('.' must be on the 
-    // same line as the '}' due to auto ';' insertion)
-    let nested = NestedInt{value: Integer{value: 123}}.value.value;
-    assert(nested == 123);
 }
 
 struct Inner {

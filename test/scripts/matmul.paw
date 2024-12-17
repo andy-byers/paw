@@ -47,6 +47,5 @@ pub fn main(args: [str]) {
     let c = matmul(n, a, b);
     let r = c[n / 2][n / 2];
 
-    print(r.to_string()); // TODO: concatenate
-    print('\n');
+    print(r.to_string() + '\n');
 }
