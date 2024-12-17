@@ -1,41 +1,454 @@
 // block.paw
 
-pub fn test_locals() {
-    let _0 = 0;
-    {
-        let _1 = 1;
-        let _2 = 2;
-        {
-            let _3 = 3;
-            let _4 = 4;
-            let _5 = 5;
-            assert(_0 + _1 + _2 + _3 + _4 + _5 == 15);
+////pub fn f1(b: bool) -> int {
+////    let r = -1;
+////    if b { r = 1; }
+////    return r;
+////}
+////
+////pub fn g1(b: bool) -> int {
+////    let r = -123;
+////    if b { r = 1; }
+////    else { r = -1; }
+////    return r;
+////}
+////
+////pub fn f2(b: bool) -> int {
+////    let r = -123;
+////    if b { return 1; }
+////    else { r = -1; }
+////    return r;
+////}
+////
+////pub fn g2(b: bool) -> int {
+////    let r = -123;
+////    if b { r = 1; }
+////    else { return -1; }
+////    return r;
+////}
+////
+////pub fn f2(b: bool) -> int {
+////    let r = -123;
+////    if b { return 1; }
+////    else { r = -1; }
+////    return r;
+////}
+////
+////pub fn test() {
+////    assert(f1(false) == -1);
+////    assert(f1(true) == 1);
+////    assert(g1(false) == -1);
+////    assert(g1(true) == 1);
+////    assert(f2(false) == -1);
+////    assert(f2(true) == 1);
+////    assert(g2(false) == -1);
+////    assert(g2(true) == 1);
+////}
+//
+////enum Choice {
+////    X,
+////    Y(Choice, Choice, Choice),
+////    Z(Choice, Choice, Choice),
+////}
+////
+//////pub fn test_closure_calls() {
+//////    let f = || 42;
+//////    assert(f() == 42);
+//////
+//////    let f = |a: int, b, c, d, e, f, g| a + b + c + d + e + f + g;
+//////    assert(f(1, 2, 3, 4, 5, 6, 7) == 28);
+//////}
+////
+////fn print_choice(c: Choice) -> str {
+//////    let f = |x, y, z| {
+//////        print("(");
+//////        print_choice(x);
+//////        print(", ");
+//////        print_choice(y);
+//////        print(", ");
+//////        print_choice(z);
+//////        print(")");
+//////    };
+////    match c {
+//////        Choice::X => {
+//////            print("X");
+//////        },
+////        Choice::Y(x, y, z) => {
+//////            print("Y");
+////print_choice(x);
+////        //    f(x, y, z);    
+////        },
+////_ => {},
+//////        Choice::Z(x, y, z) => {
+//////            print("Z");
+//////         //   f(x, y, z);    
+//////        },
+////    }
+////}
+////
+////
+////pub fn test_match_stmt() {
+////    let f = |x| { print_choice(x); print("\n"); };
+////    let x = Choice::X;
+////    let yxxx = Choice::Y(x, x, x);
+////    f(Choice::Y(x, x, yxxx));
+////}
+////
+////////pub fn test() {
+////////    for i = 0, 10, 2 {
+////////        for j = 0, 10 {
+////////            print(i.to_string()+j.to_string()+'hi\n');
+////////        }
+////////    }
+////////}
+//////
+//////pub fn test_short_circuiting() {
+//////    let counts = (0, 0, 0);
+//////    let check2 = |a: int, b: int, counts: (int, int, int)| {
+//////        assert(counts.0 == a);
+//////        assert(counts.1 == b);
+//////        counts.0 = 0;
+//////        counts.1 = 0;
+//////    };
+//////    let A = |value: int, counts: (int, int, int)| -> bool {
+//////        counts.0 = counts.0 + 1;
+//////        return value as bool;
+//////    };
+//////    let B = |value: int, counts: (int, int, int)| -> bool {
+//////        counts.1 = counts.1 + 1;
+//////        return value as bool;
+//////    };
+//////    let C = |value: int, counts: (int, int, int)| -> bool {
+//////        counts.2 = counts.2 + 1;
+//////        return value as bool;
+//////    };
+//////
+//////    let or = |a: int, b: int, 
+//////              A: fn(int, (int, int, int)) -> bool, 
+//////              B: fn(int, (int, int, int)) -> bool,
+//////              counts: (int, int, int)| -> bool {
+//////        return A(a, counts);// || B(b, counts);
+//////    };
+//////    assert(!or(0, 0, A, B, counts));
+////////    check2(1, 1, counts);
+////////    assert(or(0, 1, A, B, counts));
+////////    check2(1, 1, counts);
+////////    assert(or(1, 0, A, B, counts));
+////////    check2(1, 0, counts);
+////////    assert(or(1, 1, A, B, counts));
+////////    check2(1, 0, counts);
+//////
+////////    let and = |a: int, b: int| -> bool {
+////////        return A(a) && B(b);
+////////    };
+////////    assert(!and(0, 0));
+////////    check2(1, 0);
+////////    assert(!and(0, 1));
+////////    check2(1, 0);
+////////    assert(!and(1, 0));
+////////    check2(1, 1);
+////////    assert(and(1, 1));
+////////    check2(1, 1);
+////////
+////////    let check3 = |a: int, b: int, c: int| {
+////////        check2(a, b);
+////////        assert(counts.2 == c);
+////////        counts.2 = 0;
+////////    };
+////////
+////////    let and_or = |a: int, b: int, c: int| -> bool {
+////////        return A(a) && B(b) || C(c);
+////////    };
+////////    assert(!and_or(0, 0, 0));
+////////    check3(1, 0, 1);
+////////    assert(!and_or(1, 0, 0));
+////////    check3(1, 1, 1);
+////////    assert(!and_or(0, 1, 0));
+////////    check3(1, 0, 1);
+////////    assert(and_or(0, 0, 1));
+////////    check3(1, 0, 1);
+////////    assert(and_or(1, 1, 0));
+////////    check3(1, 1, 0);
+////////    assert(and_or(0, 1, 1));
+////////    check3(1, 0, 1);
+////////    assert(and_or(1, 0, 1));
+////////    check3(1, 1, 1);
+////////    assert(and_or(1, 1, 1));
+////////    check3(1, 1, 0);
+//////}
+//////
+////////// TODO: remove, uncomment block expr version
+////////fn callable_0() -> int { return 42; }
+////////fn callable_1(a: int) -> int { return a; }
+////////fn callable_2(a: int, b: int) -> int { return a + b; }
+////////fn callable_3(a: int, b: int, c: int) -> int { return a + b + c; }
+////////
+//////////fn callable_0() -> int { 42 }
+//////////fn callable_1(a: int) -> int { a }
+//////////fn callable_2(a: int, b: int) -> int { a + b }
+//////////fn callable_3(a: int, b: int, c: int) -> int { a + b + c }
+////////
+////////fn callable_return_0() -> int { return 42; }
+////////fn callable_return_1(a: int) -> int { return a; }
+////////fn callable_return_2(a: int, b: int) -> int { return a + b; }
+////////fn callable_return_3(a: int, b: int, c: int) -> int { return a + b + c; }
+////////
+////////pub fn test_functions() {
+////////    assert(callable_1(123) == 123);
+////////    assert(callable_return_1(2) == 2);
+////////    assert(callable_0() == callable_return_1(42));
+////////    assert(callable_3(40, 1, 1) == callable_return_0());
+////////    assert(callable_1(10) == callable_return_2(3, 7));
+////////    assert(callable_2(5, 10) == callable_return_3(5, 5, 5));
+////////}
+////////
+////////pub fn test_variables() {
+////////// TODO: eventually refactor into closures that accept registers as arguments and return the result
+//////////       avoids constant folding, once it is implemented
+////////    {
+////////        // # regs = 2          # r 1 2
+////////        let r1 = 1; //         3   *     
+////////        let r2 = r1 + r1; //   1   x *
+////////    }
+////////    {
+////////        // # regs = 1        # r 1 2 3
+////////        let r1 = 1; //       3   *       
+////////        let r2 = 2; //       2     *   
+////////        let r3 = r2; //      1     x *
+////////    }
+////////    {
+////////        // # regs = 2        # r 1 2 3
+////////        let r1 = 1; //       3   *       
+////////        let r2 = 2; //       2   * *   
+////////        let r3 = r1; //      1   x   *
+////////    }
+////////
+////////    {
+////////        // # regs = 2          # r 1 2 3
+////////        let r1 = 1; //         3   *     
+////////        let r2 = 2; //         2   * *   
+////////        let r3 = r1 + r2; //   1   x x *
+////////    }
+////////
+////////    {
+////////        // # regs = 2          # r 1 2 3 4
+////////        let r1 = 1; //         4   *     
+////////        let r2 = 2; //         3   * *   
+////////        let r3 = r1 + r2; //   2   * x *
+////////        let r4 = r1 + r3; //   1   x   x *
+////////    }
+////////    {
+////////        // # regs = 3          # r 1 2 3 4 5
+////////        let r1 = 1; //         4   *     
+////////        let r2 = 2; //         3   * *   
+////////        let r3 = r1 + r2; //   2   * * *
+////////        let r4 = r1 + r3; //   1   x * x *
+////////        let r5 = r2 + r4; //   1     x   x *
+////////    }
+////////    {
+////////        // # regs = 2        # r 1 2 3 4
+////////        let r1 = 0; //       4   *     
+////////        let r2 = 1; //       3   * *   
+////////        let r3 = r1 + r2; // 2   x * *
+////////        let r4 = r2 + r3; // 1     x x *
+////////    }
+////////
+////////    {
+////////        // # regs = 3        # r 1 2 3 4 5
+////////        let r1 = 0; //       5   *
+////////        let r2 = 1; //       4   * *
+////////        let r3 = r1 + r2; // 3   * * *
+////////        let r4 = r2 + r3; // 2   * x x *
+////////        let r5 = r1 + r4; // 1   x     x *
+////////    }
+////////}
+////////
+//////////pub fn test_closures() {
+//////////    let f = || 42;
+//////////    assert(f() == 42);
+//////////
+//////////    let f = |x: int| x;
+//////////    assert(f(1) == 1);
+//////////    assert(f(5) == 5);
+//////////
+//////////    let f = |x: int, y| x + y;
+//////////    assert(f(1, 2) == 3);
+//////////    assert(f(5, 10) == 15);
+//////////
+//////////    let f = |x: int, y, z| x + y + z;
+//////////    assert(f(1, 2, 3) == 6);
+//////////    assert(f(5, 10, 15) == 30);
+//////////}
+//////////
+//////////////pub fn test_expression_block() {
+//////////////    let value = {
+//////////////        let x = 1;
+//////////////        let y = 2;
+//////////////        x + y
+//////////////    } - 1 + {2} - {let x = 3; x};
+//////////////    assert(value == 1);
+//////////////
+//////////////    let value = {
+//////////////        3 + {
+//////////////            let a = 1;
+//////////////            2 + {
+//////////////                let b = 2;
+//////////////                1 + {
+//////////////                    let c = 3;
+//////////////                    c
+//////////////                } + b
+//////////////            } + a
+//////////////        }
+//////////////    };
+//////////////    assert(value == 12);
+//////////////}
+//////////////
+//////////////pub fn test_ifelse() {
+//////////////    let _: () = if true {};
+//////////////    let _: () = if true {} else {};
+//////////////    let _: int = if true {12345} else {67890};
+//////////////    let _: str = if true {"abc"} else {"def"};
+//////////////
+//////////////    let f = |x| {
+//////////////        if x == 0 {
+//////////////            0
+//////////////        } else if x == 1 {
+//////////////            1
+//////////////        } else {
+//////////////            x * 2
+//////////////        } * 2
+//////////////    };
+//////////////    assert(f(-1) == -4);
+//////////////    assert(f(0) == 0);
+//////////////    assert(f(1) == 1);
+//////////////    assert(f(2) == 8);
+//////////////    assert(f(3) == 12);
+//////////////}
+//////////
+//////////pub fn test_locals() {
+//////////    let _0 = 0;
+//////////    {
+//////////        let _1 = 1;
+//////////        let _2 = 2;
+//////////        {
+//////////            let _3 = 3;
+//////////            let _4 = 4;
+//////////            let _5 = 5;
+//////////            assert(_0 + _1 + _2 + _3 + _4 + _5 == 15);
+//////////
+//////////            let _1 = 123; // shadow
+//////////            let _1 = 123; // rebind
+//////////        };
+//////////        assert(_0 + _1 + _2 == 3);
+//////////
+//////////        _0 = 123; // assign
+//////////    }
+//////////    assert(_0 == 123);
+//////////}
+//////////
+//////////pub fn test_if_else() {
+//////////    let test = |n| {
+//////////        if n == 0 {
+//////////            return 'zero';
+//////////        } else if n == 1 {
+//////////            return 'one';
+//////////        } else if n == 2 {
+//////////            return 'two';
+//////////        } else {
+//////////            return 'other';
+//////////        }
+//////////    };
+//////////    assert(test(0) == 'zero');
+//////////    assert(test(1) == 'one');
+//////////    assert(test(2) == 'two');
+//////////    assert(test(3) == 'other');
+//////////    assert(test(-1) == 'other');
+//////////}
+////////
+////////fn check(o: Option<(int, int, int)>) -> int {
+////////    match o {
+////////        Option::None => { return -1; },
+////////        Option::Some((0, 1, 2)) => { return 0; },
+////////        Option::Some((a, b, c)) => { return a + b + c; },
+////////    }
+////////}
+////////
+////////pub fn test_list() {
+//////////    let a = [];
+//////////    a.push(1);
+//////////    a.push(2);
+//////////    a.push(3);
+//////////    assert(a[0] == 1);
+//////////    assert(a[1] == 2);
+//////////    assert(a[2] == 3);
+//////////    assert(a[-3] == 1);
+//////////    assert(a[-2] == 2);
+//////////    assert(a[-1] == 3);
+////////
+//////////    let o = Option::Some(123);
+//////////    assert(o.is_some());
+//////////    assert(o.unwrap() == 123);
+//////////    assert(o.is_some() && o.unwrap().unwrap() == 123);
+////////
+//////////    for i = 0, 10 {
+//////////        print('Hello\n');
+//////////    }
+////////
+////////
+////////}
 
-            let _1 = 123; // Shadow
-            let _1 = 123; // Rebind
-        };
-        assert(_0 + _1 + _2 == 3);
+//pub fn fib(n: int) -> int {
+//    let f0 = 0;
+//    let f1 = 1;
+//    if n <= 1 { 
+//        return n; 
+//    } else {
+//        let f2 = -1 /* dead store */;
+//        for i = 2, n + 1 {
+//            f2 = f0 + f1;
+//            f0 = f1;
+//            f1 = f2;
+//        }  
+//        return f2;
+//    }
+//}
+//pub fn test() {
+//    fib(10);
+//}
 
-        _0 = 123; // Assign
-    }
-    assert(_0 == 123);
+pub fn test() -> int {
+    let b = true;
+    let r = 0;
+
+    if b { r = 1; } 
+    else { r = 2; }
+
+
+//    while b {
+//        r = 1;
+//    }
+
+//    if true { 
+//        r = 1;
+//    } else {
+//        if true { 
+//            if true {
+//                r = 2;
+//            }
+//        } else { 
+//            if true {
+//                r = 3;
+//            } else {
+//                r = 4;
+//            }
+//        }
+//    }
+    return r;
 }
 
-pub fn test_if_else() {
-    let test = |n| {
-        if n == 0 {
-            return 'zero';
-        } else if n == 1 {
-            return 'one';
-        } else if n == 2 {
-            return 'two';
-        } else {
-            return 'other';
-        }
-    };
-    assert(test(0) == 'zero');
-    assert(test(1) == 'one');
-    assert(test(2) == 'two');
-    assert(test(3) == 'other');
-    assert(test(-1) == 'other');
-}
+
+
+
+
+
+

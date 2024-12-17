@@ -202,6 +202,7 @@ typedef struct Generator {
     struct ModuleInfo *m;
     struct FuncState *fs;
     struct MirVisitor *V;
+    struct RegisterTable *regtab;
     struct RttiList *temp_rtti;
     struct JumpTable *jumps;
     struct PatchList *patch;
@@ -209,15 +210,9 @@ typedef struct Generator {
     struct Pool *pool;
     struct Mir *mir;
     Map *builtin;
-    Map *regtab;
     paw_Env *P;
     int nvals;
 } Generator;
-
-struct RegisterInfo {
-    int ident;
-    int index;
-};
 
 void pawP_lower_ast(struct Compiler *C);
 void pawP_collect_items(struct Compiler *C);
@@ -225,7 +220,7 @@ void pawP_collect_items(struct Compiler *C);
 struct IrType *pawP_lower_type(struct Compiler *C, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirType *type);
 struct IrTypeList *pawP_lower_type_list(struct Compiler *C, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirTypeList *types);
 
-Map *pawP_allocate_registers(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, int *pmax_reg);
+void pawP_allocate_registers(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, int *pmax_reg);
 struct Mir *pawP_lower_hir_body(struct Compiler *C, struct HirFuncDecl *func);
 Map *pawP_lower_hir(struct Compiler *C);
 

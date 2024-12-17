@@ -2,8 +2,8 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
-#ifndef PAW_TEST_H
-#define PAW_TEST_H
+#ifndef PAW_TEST_TEST_H
+#define PAW_TEST_TEST_H
 
 #include "paw.h"
 #include "os.h"
@@ -90,4 +90,4 @@ void test_randstr(char *str, int len);
 #undef PAW_STACK_MAX
 #define PAW_STACK_MAX 10000
 
-#endif // PAW_TEST_H
+#endif // PAW_TEST_TEST_H

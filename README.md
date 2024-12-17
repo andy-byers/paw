@@ -4,6 +4,38 @@
 > See the [roadmap](#roadmap) to get an idea of where things are going.
 > Also see [known issues](#known-issues) for a list of known problems that will eventually be fixed.
 
+> This branch is being used to integrate a new register allocator.
+> Currently, Paw runs on a virtual machine similar to the one in Lua 5.
+> Each local variable gets its own register in the function's activation frame.
+> Locals stay in their registers until they go out of scope.
+> Also, locals always form a contiguous range of registers starting at the first register (for a function `f` we have `.. f args.. locals.. temps..`)
+> This simplifies compilation quite a bit, since live ranges do not need to be considered.
+> This doesn't work for Paw, however, since Paw supports pattern matching.
+> The pattern matching compiler sometimes needs to use a given variable more than once (testing the discriminant, then unpacking some fields, etc.).
+> Currently, if a variable is used more than once, it must become a local, otherwise the register allocator will "release" its register after the first use.
+> The register allocator has no live range info, so it must assume the register will no longer be used, unless it is marked as a local variable.
+> This causes a large number of locals to be created for match statements.
+> Since there are only 250 registers, large match statements become impossible.
+>
+> New register allocator: reverse linear scan w/o spills.
+> Instead of spilling registers to memory when there are no more registers, an error is thrown.
+> There are a lot of registers, so this shouldn't be a problem for the vast majority of programs.
+> The new register allocator makes a single pass over the postorder traversal of the basic blocks, in reverse.
+> Since there are no spills, the virtual register to physical register mapping can be represented by a single lookup table.
+> Now, the locals and temporaries in a given activation frame are potentially interleaved.
+> `OP_CLOSE` must close 1 variable at-a-time now, rather than a range, since the variables might not be in order.
+> Also, the MIR is now in static single assignment (SSA) form.
+
+## Timeline
++ [x] SSA conversion: dominance tree computation
++ [x] SSA conversion: dominance frontier computation
++ [x] SSA conversion: phi node placement
++ [ ] SSA conversion: variable renaming
++ [ ] Register allocation
++ [ ] Support ADTs
++ [ ] Support closures (handle upvalues, and flatten hierarchy of closures)
+
+
 An expressive scripting language
 
 Paw is a high-level, statically-typed, embeddable scripting language.

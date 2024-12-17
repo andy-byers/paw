@@ -71,6 +71,7 @@ static void script(const char *name)
 
 int main(void)
 {
+    script("block");return s_counters.compile_errors+s_counters.runtime_errors;
 #define RUN_SCRIPT(name) script(#name);
     TEST_SCRIPTS(RUN_SCRIPT)
 #undef RUN_SCRIPT

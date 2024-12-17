@@ -469,7 +469,6 @@ struct AstExprStmt {
 struct AstBlock {
     AST_STMT_HEADER;
     struct AstStmtList *stmts;
-    struct AstExpr *result;
 };
 
 struct AstReturnStmt {

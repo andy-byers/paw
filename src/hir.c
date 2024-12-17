@@ -294,11 +294,6 @@ static void AcceptConversionExpr(struct HirVisitor *V, struct HirConversionExpr 
     AcceptExpr(V, e->arg);
 }
 
-static void AcceptSwitchDiscr(struct HirVisitor *V, struct HirSwitchDiscr *e)
-{
-    AcceptExpr(V, e->target);
-}
-
 static void AcceptPathExpr(struct HirVisitor *V, struct HirPathExpr *e)
 {
     AcceptPath(V, e->path);
@@ -1056,11 +1051,6 @@ static void dump_expr(struct Printer *P, struct HirExpr *e)
         case kHirPathExpr:
             DUMP_MSG(P, "path: ");
             dump_path(P, e->path.path);
-            break;
-        case kHirSwitchDiscr:
-            DUMP_FMT(P, "expect: %d", e->iswitch.expect);
-            DUMP_MSG(P, "target: ");
-            dump_expr(P, e->iswitch.target);
             break;
         case kHirConversionExpr:
             DUMP_FMT(P, "to: %d\n", e->conv.to);
