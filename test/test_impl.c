@@ -14,6 +14,7 @@
 #include "paw.h"
 #include "rt.h"
 #include "test.h"
+#include "utest.h"
 #include "util.h"
 #include "value.h"
 
@@ -482,6 +483,15 @@ static void test_compiler_lists(paw_Env *P) {
     pawK_pool_uninit(P, &pool);
 }
 
+static void test_library(void)
+{
+    for (int i = 0; i < pawT_test_count(); ++i) {
+        struct paw_TestInfo info = pawT_test_registry()[i];
+        fprintf(stderr, "running %s...\n", info.name);
+        driver(info.test);
+    }
+}
+
 int main(void)
 {
     test_primitives();
@@ -498,5 +508,6 @@ int main(void)
     driver(test_parse_int);
     driver(test_parse_float);
     driver(test_buffer);
+    test_library();
     return 0;
 }

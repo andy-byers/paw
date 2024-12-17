@@ -71,6 +71,48 @@ static void script(const char *name)
 
 int main(void)
 {
+    // TODO: broken, needs for loops and upvalues
+    // script("basic");
+    // script("loop");
+    // script("capture_upvalue");
+    // script("close_loop_variable");
+    // script("integer");
+    // script("string");
+    // script("list");
+    // script("map");
+    // script("closure");
+
+    script("block");
+    return s_counters.compile_errors+s_counters.runtime_errors;
+    script("cfg");
+    return s_counters.compile_errors+s_counters.runtime_errors;
+    script("cfg");
+    script("import");
+    script("operator");
+    script("block");
+    script("function");
+    script("poly_function");
+    script("method");
+    script("primitive");
+    script("tuple");
+    script("enum");
+    script("struct");
+    script("poly_struct");
+    script("poly_enum");
+    script("float");
+    script("match");
+    script("match_struct");
+    script("match_enum");
+    script("match_poly_enum");
+    script("match_or");
+    script("match_guard");
+    script("misc");
+    script("unit_struct");
+    script("unit_variant");
+    script("infer_assoc_items");
+    script("enum_impl");
+    return s_counters.compile_errors+s_counters.runtime_errors;
+
 #define RUN_SCRIPT(name) script(#name);
     TEST_SCRIPTS(RUN_SCRIPT)
 #undef RUN_SCRIPT

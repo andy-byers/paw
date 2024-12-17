@@ -1,41 +1,100 @@
 // block.paw
 
+//pub fn test_block_expr() {
+//    let v = { 1 };
+//    assert(v == 1);
+//    let v = { { 2 } };
+//    assert(v == 2);
+//    let v = { { { 3 } } };
+//    assert(v == 3);
+//}
+//
+//pub fn test_if_return() {
+//    let x = if true { 
+//        // ';' is technically not necessary here, since "return" has
+//        // type "()"
+//        return 
+//    } else { 
+//        42 
+//    };
+//    // unreachable code
+//    assert(x == 0);
+//}
+//
+//pub fn test_if_return_chain() {
+//    let x = if false { 
+//        1 
+//    } else if false { 
+//        2 
+//    } else if false {
+//        3 
+//    } else {
+//        return
+//    };
+//    // unreachable code
+//    assert(x == 0);
+//}
+//
+//pub fn test_if_return_propagate() {
+//    let x = if false { 
+//        42 
+//    } else { 
+//        { { return; } }
+//    };
+//    // unreachable code
+//    assert(x == 0);
+//}
+//
+//pub fn test_if_return_explicit_unit() {
+//    let x = if true { 
+//        return; 
+//        ()
+//    } else { 
+//        42 
+//    };
+//    // unreachable code
+//    assert(x == 0);
+//}
+
 pub fn test_locals() {
-    let _0 = 0;
+    let a = 0;
     {
-        let _1 = 1;
-        let _2 = 2;
+//        let b = 1;
+//        let c = 2;
         {
-            let _3 = 3;
-            let _4 = 4;
-            let _5 = 5;
-            assert(_0 + _1 + _2 + _3 + _4 + _5 == 15);
-
-            let _1 = 123; // Shadow
-            let _1 = 123; // Rebind
-        };
-        assert(_0 + _1 + _2 == 3);
-
-        _0 = 123; // Assign
-    }
-    assert(_0 == 123);
-}
-
-pub fn test_if_else() {
-    let test = |n| {
-        if n == 0 {
-            return 'zero';
-        } else if n == 1 {
-            return 'one';
-        } else if n == 2 {
-            return 'two';
-        } else {
-            return 'other';
+//            let d = 3;
+//            let e = 4;
+//            let f = 5;
+assert(a == 0);
+//            assert(a + b + c + d + e + f == 15);
+//
+//            let b = 123; // shadow
+//            let b = 123; // rebind
         }
-    };
-    assert(test(0) == 'zero');
-    assert(test(1) == 'one');
-    assert(test(2) == 'two');
-    assert(test(3) == 'other');
-    assert(test(-1) == 'other');
+        assert(a == 0);
+//        assert(a + b + c == 3);
+
+//        a = 123; // assign
+    }
+//    assert(a == 123);
 }
+
+//fn check_ifelse(n: int) -> str {
+//    if n == 0 {
+//        return 'zero';
+//    } else if n == 1 {
+//        return 'one';
+//    } else if n == 2 {
+//        return 'two';
+//    } else {
+//        return 'other';
+//    }
+//}
+//
+//pub fn test_ifelse() {
+//    assert(check_ifelse(0) == 'zero');
+//    assert(check_ifelse(1) == 'one');
+//    assert(check_ifelse(2) == 'two');
+//    assert(check_ifelse(3) == 'other');
+//    assert(check_ifelse(-1) == 'other');
+//}

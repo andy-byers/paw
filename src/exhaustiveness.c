@@ -658,7 +658,7 @@ static struct Decision *compile_rows(struct Usefulness *U, struct RowList *rows)
     }
 }
 
-struct Decision *pawP_check_exhaustiveness(struct Compiler *C, struct HirMatchStmt *match, struct VariableList *vars)
+struct Decision *pawP_check_exhaustiveness(struct Compiler *C, struct HirMatchExpr *match, struct VariableList *vars)
 {
     paw_Env *P = ENV(C);
     struct Usefulness U = {

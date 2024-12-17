@@ -108,16 +108,12 @@ const char *paw_op_name(Op op)
             return "MOVE";
         case OP_CLOSE:
             return "CLOSE";
-        case OP_RETURN0:
-            return "RETURN0";
         case OP_RETURN:
             return "RETURN";
         case OP_CLOSURE:
             return "CLOSURE";
         case OP_CALL:
             return "CALL";
-        case OP_EXPLODE:
-            return "EXPLODE";
         case OP_JUMP:
             return "JUMP";
         case OP_JUMPT:
@@ -325,7 +321,6 @@ void paw_dump_opcode(OpCode opcode)
         case OP_ICASTF:
         case OP_GETDISCR:
         case OP_CALL:
-        case OP_EXPLODE:
         case OP_GETUPVALUE:
         case OP_SETUPVALUE:
             printf("%s %d %d\n", opname, GET_A(opcode), GET_B(opcode));
@@ -349,7 +344,7 @@ void paw_dump_opcode(OpCode opcode)
             printf("%s %d %d\n", opname, GET_A(opcode), GET_Bx(opcode));
             break;
         // op
-        case OP_RETURN0:
+        case OP_RETURN:
             printf("%s\n", opname);
             break;
         // op sBx
@@ -358,7 +353,6 @@ void paw_dump_opcode(OpCode opcode)
             break;
         // op A
         case OP_CLOSE:
-        case OP_RETURN:
             printf("%s %d\n", opname, GET_A(opcode));
             break;
         // op A B C
@@ -432,6 +426,9 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
             case NOPCODES:
                 PAW_UNREACHABLE();
             // op A B
+            case OP_NEWTUPLE:
+            case OP_NEWLIST:
+            case OP_NEWMAP:
             case OP_TESTK:
             case OP_SWITCHINT:
             case OP_MOVE:
@@ -448,7 +445,6 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
             case OP_GETDISCR:
             case OP_GETUPVALUE:
             case OP_SETUPVALUE:
-            case OP_EXPLODE:
                 pawL_add_fstring(P, print, " %d %d\n", GET_A(opcode), GET_B(opcode));
                 break;
             case OP_CALL:
@@ -480,13 +476,7 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
             case OP_CLOSE:
                 pawL_add_fstring(P, print, " %d\t; close(R[%d])\n", GET_A(opcode), GET_A(opcode));
                 break;
-            case OP_RETURN:
-                pawL_add_fstring(P, print, " %d\t; return R[%d]\n", GET_A(opcode), GET_A(opcode));
-                break;
             // op A B C
-            case OP_NEWTUPLE:
-            case OP_NEWLIST:
-            case OP_NEWMAP:
             case OP_IEQ:
             case OP_INE:
             case OP_ILT:
@@ -534,8 +524,9 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
             case OP_SETFIELD:
                 pawL_add_fstring(P, print, " %d %d %d\n", GET_A(opcode), GET_B(opcode), GET_C(opcode));
                 break;
-            case OP_RETURN0:
             case OP_NOOP:
+            case OP_RETURN:
+                pawL_add_char(P, print, '\n');
                 break;
         }
     }

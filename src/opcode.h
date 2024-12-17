@@ -7,6 +7,8 @@
 
 #include "paw.h"
 
+#define NREGISTERS (LOCAL_MAX + 1)
+
 #ifndef UPVALUE_MAX
 #define UPVALUE_MAX 64
 #endif
@@ -111,11 +113,9 @@ OP_LOADK,//          A Bx        R[A] := K[Bx]
 OP_NOOP,//           -            -
 OP_MOVE,//           A B          R[A] := R[B]
 OP_CLOSE,//          A            close(A)
-OP_RETURN,//         A            return R[A]
-OP_RETURN0,//        -            return
+OP_RETURN,//         A            return R[0]
 OP_CLOSURE,//        A Bx         R[A] := closure(P[Bx], R[A]..R[A+n])
 OP_CALL,//           A B          R[A] := R[A](R[A+1]..R[A+B+1])
-OP_EXPLODE,//        A B          R[A]..R[A+B] := *R[A]
 
 OP_JUMP,//           sBx          pc += sBx
 OP_JUMPT,//          A sBx        if (R[A]) pc += sBx

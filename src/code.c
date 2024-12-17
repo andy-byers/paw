@@ -163,21 +163,36 @@ void pawK_pool_free(struct Pool *pool, void *ptr, size_t size)
 #endif // 0
 }
 
-void *pawK_list_ensure_one_(paw_Env *P, struct Pool *pool, void *data, size_t zelem, int count, int *palloc)
+void *list_grow(paw_Env *P, struct Pool *pool, void *data, size_t zelem, int count, int *palloc, int target)
+ {
+    paw_assert(*palloc < target && target <= K_LIST_MAX);
+    void *p = pawK_pool_alloc(P, pool, CAST_SIZE(target) * zelem);
+    if (count > 0) memcpy(p, data, CAST_SIZE(count) * zelem);
+    pawK_pool_free(pool, data, CAST_SIZE(*palloc) * zelem);
+    *palloc = target;
+    return p;
+}
+
+void *pawK_list_reserve(paw_Env *P, struct Pool *pool, void *data, size_t zelem, int count, int *palloc, int target)
 {
-    paw_assert(*palloc >= 0);
-    paw_assert(count >= 0);
+    paw_assert(0 <= *palloc && *palloc <= K_LIST_MAX);
+    paw_assert(0 <= target && target <= K_LIST_MAX);
+    paw_assert(0 <= count && count <= K_LIST_MAX);
     paw_assert(zelem > 0);
 
-    if (count >= *palloc) {
-        if (*palloc > K_LIST_MAX / 2) pawM_error(P);
-        const size_t next_alloc = PAW_MAX(K_LIST_MIN, CAST_SIZE(*palloc) * 2);
-        void *next = pawK_pool_alloc(P, pool, next_alloc * zelem);
-        memcpy(next, data, CAST_SIZE(count) * zelem);
-        pawK_pool_free(pool, data, *palloc * zelem);
-        *palloc = CAST(int, next_alloc);
-        return next;
-    }
-    return data;
+    if (target <= *palloc) return data;
+    return list_grow(P, pool, data, zelem, count, palloc, target);
 }
+
+void *pawK_list_ensure_one(paw_Env *P, struct Pool *pool, void *data, size_t zelem, int count, int *palloc)
+{
+    paw_assert(0 <= *palloc && *palloc <= K_LIST_MAX);
+    paw_assert(0 <= count && count <= K_LIST_MAX);
+    paw_assert(zelem > 0);
+
+    if (*palloc > count) return data;
+    if (*palloc > K_LIST_MAX / 2) pawM_error(P);
+    const int n = PAW_MAX(*palloc * 2, K_LIST_MIN);
+    return list_grow(P, pool, data, zelem, count, palloc, n);
+ }
 

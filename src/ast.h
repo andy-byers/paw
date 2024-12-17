@@ -17,45 +17,45 @@ struct Ast;
 struct Compiler;
 
 #define AST_DECL_LIST(X) \
-        X(FieldDecl,   field) \
-        X(FuncDecl,    func) \
+        X(FieldDecl, field) \
+        X(FuncDecl, func) \
         X(GenericDecl, generic) \
-        X(AdtDecl,     adt) \
-        X(TypeDecl,    type) \
-        X(VarDecl,     var) \
-        X(ImplDecl,    impl) \
-        X(UseDecl,     use) \
+        X(AdtDecl, adt) \
+        X(TypeDecl, type) \
+        X(VarDecl, var) \
+        X(ImplDecl, impl) \
+        X(UseDecl, use) \
         X(VariantDecl, variant)
 
 #define AST_EXPR_LIST(X) \
-        X(LiteralExpr,    literal) \
-        X(LogicalExpr,    logical) \
-        X(PathExpr,       path) \
-        X(ChainExpr,      chain) \
-        X(UnOpExpr,       unop) \
-        X(BinOpExpr,      binop) \
-        X(ClosureExpr,    clos) \
+        X(LiteralExpr, literal) \
+        X(LogicalExpr, logical) \
+        X(PathExpr, path) \
+        X(ChainExpr, chain) \
+        X(UnOpExpr, unop) \
+        X(BinOpExpr, binop) \
+        X(ClosureExpr, clos) \
         X(ConversionExpr, conv) \
-        X(CallExpr,       call) \
-        X(Index,          index) \
-        X(Selector,       selector) \
-        X(TupleType,      tuple) \
-        X(FieldExpr,      field) \
-        X(Signature,      sig) \
-        X(ContainerType,  cont) \
-        X(AssignExpr,     assign)
+        X(CallExpr, call) \
+        X(Index, index) \
+        X(Selector, selector) \
+        X(TupleType, tuple) \
+        X(FieldExpr, field) \
+        X(Signature, sig) \
+        X(ContainerType, cont) \
+        X(AssignExpr,assign) \
+        X(Block, block) \
+        X(IfExpr, if_) \
+        X(ForExpr, for_) \
+        X(WhileExpr, while_) \
+        X(JumpExpr, jump) \
+        X(ReturnExpr, result) \
+        X(MatchArm, arm) \
+        X(MatchExpr, match)
 
 #define AST_STMT_LIST(X) \
-        X(Block,      block) \
-        X(ExprStmt,   expr) \
-        X(DeclStmt,   decl) \
-        X(IfStmt,     if_) \
-        X(ForStmt,    for_) \
-        X(WhileStmt,  while_) \
-        X(JumpStmt,   jump) \
-        X(ReturnStmt, result) \
-        X(MatchArm,   arm) \
-        X(MatchStmt,  match)
+        X(ExprStmt, expr) \
+        X(DeclStmt, decl)
 
 #define AST_PAT_LIST(X) \
         X(OrPat, or) \
@@ -342,6 +342,66 @@ struct AstAssignExpr {
     struct AstExpr *rhs;
 };
 
+struct AstBlock {
+    AST_EXPR_HEADER;
+    struct AstStmtList *stmts;
+    struct AstExpr *result;
+};
+
+struct AstReturnExpr {
+    AST_EXPR_HEADER;
+    struct AstExpr *expr;
+};
+
+struct AstIfExpr {
+    AST_EXPR_HEADER;
+    struct AstExpr *cond;
+    struct AstExpr *then_arm;
+    struct AstExpr *else_arm;
+};
+
+struct AstWhileExpr {
+    AST_EXPR_HEADER;
+    struct AstExpr *cond;
+    struct AstBlock *block;
+};
+
+struct AstJumpExpr {
+    AST_EXPR_HEADER;
+    enum JumpKind jump_kind;
+};
+
+struct AstForExpr {
+    AST_EXPR_HEADER;
+    paw_Bool is_fornum : 1;
+    String *name;
+    union {
+        struct AstForIn {
+            struct AstExpr *target;
+        } forin;
+
+        struct AstForNum {
+            struct AstExpr *begin;
+            struct AstExpr *end;
+            struct AstExpr *step;
+        } fornum;
+    };
+    struct AstBlock *block;
+};
+
+struct AstMatchArm {
+    AST_EXPR_HEADER;
+    struct AstPat *pat;
+    struct AstExpr *guard;
+    struct AstBlock *result;
+};
+
+struct AstMatchExpr {
+    AST_EXPR_HEADER;
+    struct AstExpr *target;
+    struct AstExprList *arms;
+};
+
 struct AstExpr {
     union {
         struct AstExprHeader hdr;
@@ -464,67 +524,6 @@ struct AstExprStmt {
     AST_STMT_HEADER;
     paw_Bool ends_block : 1;
     struct AstExpr *expr;
-};
-
-struct AstBlock {
-    AST_STMT_HEADER;
-    struct AstStmtList *stmts;
-    struct AstExpr *result;
-};
-
-struct AstReturnStmt {
-    AST_STMT_HEADER;
-    struct AstExpr *expr;
-};
-
-struct AstIfStmt {
-    AST_STMT_HEADER;
-    struct AstExpr *cond;
-    struct AstStmt *then_arm;
-    struct AstStmt *else_arm;
-};
-
-struct AstWhileStmt {
-    AST_STMT_HEADER;
-    paw_Bool is_dowhile : 1;
-    struct AstExpr *cond;
-    struct AstBlock *block;
-};
-
-struct AstJumpStmt {
-    AST_STMT_HEADER;
-    enum JumpKind jump_kind;
-};
-
-struct AstForStmt {
-    AST_STMT_HEADER;
-    paw_Bool is_fornum : 1;
-    String *name;
-    union {
-        struct AstForIn {
-            struct AstExpr *target;
-        } forin;
-
-        struct AstForNum {
-            struct AstExpr *begin;
-            struct AstExpr *end;
-            struct AstExpr *step;
-        } fornum;
-    };
-    struct AstBlock *block;
-};
-
-struct AstMatchArm {
-    AST_STMT_HEADER;
-    struct AstPat *pat;
-    struct AstExpr *guard;
-    struct AstBlock *result;
-};
-
-struct AstMatchStmt {
-    AST_STMT_HEADER;
-    struct AstExpr *target;
-    struct AstStmtList *arms;
 };
 
 struct AstStmt {

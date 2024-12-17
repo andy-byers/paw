@@ -33,12 +33,19 @@ typedef struct HirId {
         X(BinOpExpr,      binop) \
         X(ClosureExpr,    clos) \
         X(ConversionExpr, conv) \
-        X(SwitchDiscr,    iswitch) \
         X(CallExpr,       call) \
         X(Index,          index) \
         X(Selector,       select) \
         X(FieldExpr,      field) \
-        X(AssignExpr,     assign)
+        X(AssignExpr,     assign) \
+        X(Block,      block) \
+        X(IfExpr,     if_) \
+        X(ForExpr,    for_) \
+        X(WhileExpr,  while_) \
+        X(JumpExpr,   jump) \
+        X(ReturnExpr, result) \
+        X(MatchArm,   arm) \
+        X(MatchExpr,  match)
 
 #define HIR_TYPE_LIST(X) \
         X(FuncPtr, fptr) \
@@ -46,16 +53,8 @@ typedef struct HirId {
         X(PathType, path)
 
 #define HIR_STMT_LIST(X) \
-        X(Block,      block) \
         X(ExprStmt,   expr) \
-        X(DeclStmt,   decl) \
-        X(IfStmt,     if_) \
-        X(ForStmt,    for_) \
-        X(WhileStmt,  while_) \
-        X(JumpStmt,   jump) \
-        X(ReturnStmt, result) \
-        X(MatchArm,   arm) \
-        X(MatchStmt,  match)
+        X(DeclStmt,   decl)
 
 #define HIR_PAT_LIST(X) \
         X(OrPat, or) \
@@ -413,16 +412,82 @@ struct HirConversionExpr {
     struct HirExpr *arg;
 };
 
-struct HirSwitchDiscr {
-    HIR_EXPR_HEADER;
-    int expect;
-    struct HirExpr *target;
-};
-
 struct HirAssignExpr {
     HIR_EXPR_HEADER;
     struct HirExpr *lhs;
     struct HirExpr *rhs;
+};
+
+// If "never" is equal to true, then the block contains an unconditional
+// jump, either directly or transitively through 1 or more nested block
+// expressions (not including blocks that only execute conditionally,
+// such as an IfExpr or loop).
+struct HirBlock {
+    HIR_EXPR_HEADER;
+    paw_Bool never : 1;
+    struct HirStmtList *stmts;
+    struct HirExpr *result;
+};
+
+struct HirReturnExpr {
+    HIR_EXPR_HEADER;
+    struct HirExpr *expr;
+};
+
+// If "never" is equal to true, then both arms of the IfExpr contain
+// unconditional jumps. This means that regardless of which arm is
+// executed, control will jump before hitting the end of the expression.
+struct HirIfExpr {
+    HIR_EXPR_HEADER;
+    paw_Bool never : 1;
+    struct HirExpr *cond;
+    struct HirExpr *then_arm;
+    struct HirExpr *else_arm;
+};
+
+struct HirWhileExpr {
+    HIR_EXPR_HEADER;
+    struct HirExpr *cond;
+    struct HirBlock *block;
+};
+
+struct HirJumpExpr {
+    HIR_EXPR_HEADER;
+    enum JumpKind jump_kind;
+};
+
+struct HirForIn {
+    struct HirExpr *target;
+};
+
+struct HirForNum {
+    struct HirExpr *begin;
+    struct HirExpr *end;
+    struct HirExpr *step;
+};
+
+struct HirForExpr {
+    HIR_EXPR_HEADER;
+    paw_Bool is_fornum : 1;
+    struct HirDecl *control;
+    struct HirBlock *block;
+    union {
+        struct HirForIn forin;
+        struct HirForNum fornum;
+    };
+};
+
+struct HirMatchArm {
+    HIR_EXPR_HEADER;
+    struct HirPat *pat;
+    struct HirExpr *guard;
+    struct HirBlock *result;
+};
+
+struct HirMatchExpr {
+    HIR_EXPR_HEADER;
+    struct HirExpr *target;
+    struct HirExprList *arms;
 };
 
 struct HirExpr {
@@ -474,69 +539,6 @@ struct HirDeclStmt {
 struct HirExprStmt {
     HIR_STMT_HEADER;
     struct HirExpr *expr;
-};
-
-struct HirBlock {
-    HIR_STMT_HEADER;
-    struct HirStmtList *stmts;
-};
-
-struct HirReturnStmt {
-    HIR_STMT_HEADER;
-    struct HirExpr *expr;
-};
-
-struct HirIfStmt {
-    HIR_STMT_HEADER;
-    struct HirExpr *cond;
-    struct HirStmt *then_arm;
-    struct HirStmt *else_arm;
-};
-
-struct HirWhileStmt {
-    HIR_STMT_HEADER;
-    paw_Bool is_dowhile : 1;
-    struct HirExpr *cond;
-    struct HirBlock *block;
-};
-
-struct HirJumpStmt {
-    HIR_STMT_HEADER;
-    enum JumpKind jump_kind;
-};
-
-struct HirForIn {
-    struct HirExpr *target;
-};
-
-struct HirForNum {
-    struct HirExpr *begin;
-    struct HirExpr *end;
-    struct HirExpr *step;
-};
-
-struct HirForStmt {
-    HIR_STMT_HEADER;
-    paw_Bool is_fornum : 1;
-    struct HirDecl *control;
-    struct HirBlock *block;
-    union {
-        struct HirForIn forin;
-        struct HirForNum fornum;
-    };
-};
-
-struct HirMatchArm {
-    HIR_STMT_HEADER;
-    struct HirPat *pat;
-    struct HirExpr *guard;
-    struct HirBlock *result;
-};
-
-struct HirMatchStmt {
-    HIR_STMT_HEADER;
-    struct HirExpr *target;
-    struct HirStmtList *arms;
 };
 
 struct HirStmt {
@@ -709,7 +711,7 @@ void pawHir_visit_pat_list(struct HirVisitor *V, struct HirPatList *list);
 
 static inline void pawHir_visit_block(struct HirVisitor *V, struct HirBlock *node)
 {
-    pawHir_visit_stmt(V, HIR_CAST_STMT(node));
+    pawHir_visit_expr(V, HIR_CAST_EXPR(node));
 }
 
 struct Hir {

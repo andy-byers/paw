@@ -67,8 +67,8 @@ pub fn test_ends_with() {
 
 pub fn test_slices() {
     let s = 'abc';
-    assert(s[:] == 'abc')    ;
-    assert(s[0:#s] == 'abc')    ;
+    assert(s[:] == 'abc');
+    assert(s[0:#s] == 'abc');
 
     assert(s[:-1] == 'ab');
     assert(s[:#s-1] == 'ab');
@@ -100,7 +100,7 @@ pub fn test_split_and_join() {
         let a = s.split(sep);
         for i = 0, #a {
             assert(a[i] == parts[i]);
-        };
+        }
         assert(#a == #parts);
         let result = sep.join(a);
         assert(result == s);
@@ -124,9 +124,9 @@ pub fn test_string_concat() {
             s = 'b' + s;
             for c = 0, 3 {
                 s = 'c' + s + 'd';
-            };
-        };
-    };
+            }
+        }
+    }
     assert(s == 'cccbcccbadddddd');
 }
 

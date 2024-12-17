@@ -66,217 +66,205 @@ struct IrType *finalize_type(struct MonoCollector *M, struct IrType *type)
     return type;
 }
 
-static struct MirRegister *copy_register(struct MonoCollector *M, struct MirRegister *reg)
-{
-    struct IrType *type = finalize_type(M, reg->type);
-    return pawMir_new_register(M->C, reg->value, type);
-}
-
 static struct MirRegisterList *copy_register_list(struct MonoCollector *M, struct MirRegisterList *list)
 {
     struct MirRegisterList *result = pawMir_register_list_new(M->C);
     for (int i = 0; i < list->count; ++i) {
-        struct MirRegister *r = copy_register(M, K_LIST_GET(list, i));
+        const MirRegister r = K_LIST_GET(list, i);
         K_LIST_PUSH(M->C, result, r);
     }
     return result;
 }
 
-static void CopyLocal(struct MonoCollector *M, struct MirLocal *x, struct MirLocal *r)
+static void CopyPhi(struct MonoCollector *M, struct MirPhi *x, struct MirPhi *r)
 {
-    r->output = copy_register(M, x->output);
-    r->target = copy_register(M, x->target);
+    r->var_id = x->var_id;
+    r->output = x->output;
+    r->inputs = pawMir_register_list_new(M->C);
+
+    const MirRegister *pr;
+    K_LIST_RESERVE(M->C, r->inputs, x->inputs->count);
+    K_LIST_FOREACH(x->inputs, pr) {
+        K_LIST_PUSH(M->C, r->inputs, *pr);
+    }
+}
+
+static void CopyMove(struct MonoCollector *M, struct MirMove *x, struct MirMove *r)
+{
+    r->output = x->output;
+    r->target = x->target;
 }
 
 static void CopyGlobal(struct MonoCollector *M, struct MirGlobal *x, struct MirGlobal *r)
 {
-    r->output = copy_register(M, x->output);
+    r->output = x->output;
 }
 
 static void CopyConstant(struct MonoCollector *M, struct MirConstant *x, struct MirConstant *r)
 {
-    r->output = copy_register(M, x->output);
+    r->output = x->output;
     r->code = x->code;
     r->value = x->value;
 }
 
 static void CopyAggregate(struct MonoCollector *M, struct MirAggregate *x, struct MirAggregate *r)
 {
-    r->output = copy_register(M, x->output);
+    r->output = x->output;
     r->nfields = x->nfields;
-}
-
-static void CopyExplode(struct MonoCollector *M, struct MirExplode *x, struct MirExplode *r)
-{
-    r->offset = x->offset;
-    r->input = copy_register(M, x->input);
-    r->outputs = copy_register_list(M, x->outputs);
 }
 
 static void CopyContainer(struct MonoCollector *M, struct MirContainer *x, struct MirContainer *r)
 {
-    r->output = copy_register(M, x->output);
+    r->b_kind = x->b_kind;
+    r->output = x->output;
     r->nelems = x->nelems;
 }
 
 static void CopyUpvalue(struct MonoCollector *M, struct MirUpvalue *x, struct MirUpvalue *r)
 {
-    r->output = copy_register(M, x->output);
+    r->output = x->output;
     r->index = x->index;
+}
+
+static void CopySetLocal(struct MonoCollector *M, struct MirSetLocal *x, struct MirSetLocal *r)
+{
+    r->value = x->value;
+    r->target = x->target;
 }
 
 static void CopySetUpvalue(struct MonoCollector *M, struct MirSetUpvalue *x, struct MirSetUpvalue *r)
 {
-    r->value = copy_register(M, x->value);
+    r->value = x->value;
     r->index = x->index;
 }
 
 static void CopyAllocLocal(struct MonoCollector *M, struct MirAllocLocal *x, struct MirAllocLocal *r)
 {
-    r->output = copy_register(M, x->output);
+    r->output = x->output;
     r->name = x->name;
 }
 
 static void CopyFreeLocal(struct MonoCollector *M, struct MirFreeLocal *x, struct MirFreeLocal *r)
 {
-    r->reg = copy_register(M, x->reg);
-}
-
-static void CopyEnterScope(struct MonoCollector *M, struct MirEnterScope *x, struct MirEnterScope *r)
-{
-    r->scope_id = x->scope_id;
-}
-
-static void CopyLeaveScope(struct MonoCollector *M, struct MirLeaveScope *x, struct MirLeaveScope *r)
-{
-    r->scope_id = x->scope_id;
-}
-
-static void CopyAssign(struct MonoCollector *M, struct MirAssign *x, struct MirAssign *r)
-{
-    r->place = x->place;
-    r->is_upvalue = x->is_upvalue;
-    r->rhs = copy_register(M, x->rhs);
+    r->reg = x->reg;
 }
 
 static void CopyCall(struct MonoCollector *M, struct MirCall *x, struct MirCall *r)
 {
-// TODO: need to select the correct method at call sites inside polymorphic functions
-//       it is possible to select a method of the same name from a different impl block based on the 'self' type
-//       factor out method lookup logic and re-lookup methods at MirCall nodes
-//
-//       do the preceeding things right here!
-    r->output = copy_register(M, x->output);
-    r->target = copy_register(M, x->target);
+    r->output = x->output;
+    r->target = x->target;
     r->args = copy_register_list(M, x->args);
 }
 
 static void CopyCast(struct MonoCollector *M, struct MirCast *x, struct MirCast *r)
 {
-    r->output = copy_register(M, x->output);
-    x->type = x->type;
-    r->target = copy_register(M, x->target);
+    r->output = x->output;
+    r->target = x->target;
+    r->from = x->from;
+    r->to = x->to;
+}
+
+static void CopyClose(struct MonoCollector *M, struct MirClose *x, struct MirClose *r)
+{
+    r->target = x->target;
 }
 
 static void CopyClosure(struct MonoCollector *M, struct MirClosure *x, struct MirClosure *r)
 {
     r->child_id = x->child_id;
-    r->output = copy_register(M, x->output);
+    r->output = x->output;
 }
 
 static void CopyGetElement(struct MonoCollector *M, struct MirGetElement *x, struct MirGetElement *r)
 {
-    r->output = copy_register(M, x->output);
-    r->object = copy_register(M, x->object);
-    r->key = copy_register(M, x->key);
+    r->b_kind = x->b_kind;
+    r->output = x->output;
+    r->object = x->object;
+    r->key = x->key;
 }
 
 static void CopySetElement(struct MonoCollector *M, struct MirSetElement *x, struct MirSetElement *r)
 {
-    r->object = copy_register(M, x->object);
-    r->key = copy_register(M, x->key);
-    r->value = copy_register(M, x->value);
-    r->is_init = x->is_init;
+    r->b_kind = x->b_kind;
+    r->object = x->object;
+    r->key = x->key;
+    r->value = x->value;
 }
 
 static void CopyGetRange(struct MonoCollector *M, struct MirGetRange *x, struct MirGetRange *r)
 {
-    r->output = copy_register(M, x->output);
-    r->object = copy_register(M, x->object);
-    r->lower = copy_register(M, x->lower);
-    r->upper = copy_register(M, x->upper);
+    r->b_kind = x->b_kind;
+    r->output = x->output;
+    r->object = x->object;
+    r->lower = x->lower;
+    r->upper = x->upper;
 }
 
 static void CopySetRange(struct MonoCollector *M, struct MirSetRange *x, struct MirSetRange *r)
 {
-    r->object = copy_register(M, x->object);
-    r->lower = copy_register(M, x->lower);
-    r->upper = copy_register(M, x->upper);
-    r->value = copy_register(M, x->value);
+    r->b_kind = x->b_kind;
+    r->object = x->object;
+    r->lower = x->lower;
+    r->upper = x->upper;
+    r->value = x->value;
 }
 
 static void CopyGetField(struct MonoCollector *M, struct MirGetField *x, struct MirGetField *r)
 {
-    r->output = copy_register(M, x->output);
-    r->object = copy_register(M, x->object);
+    r->output = x->output;
+    r->object = x->object;
     r->index = x->index;
 }
 
 static void CopySetField(struct MonoCollector *M, struct MirSetField *x, struct MirSetField *r)
 {
-    r->object = copy_register(M, x->object);
+    r->object = x->object;
     r->index = x->index;
-    r->value = copy_register(M, x->value);
-    r->is_init = x->is_init;
+    r->value = x->value;
 }
 
 static void CopyUnaryOp(struct MonoCollector *M, struct MirUnaryOp *x, struct MirUnaryOp *r)
 {
-    r->output = copy_register(M, x->output);
+    r->output = x->output;
     r->op = x->op;
-    r->val = copy_register(M, x->val);
+    r->val = x->val;
 }
 
 static void CopyBinaryOp(struct MonoCollector *M, struct MirBinaryOp *x, struct MirBinaryOp *r)
 {
-    r->output = copy_register(M, x->output);
+    r->output = x->output;
     r->op = x->op;
-    r->lhs = copy_register(M, x->lhs);
-    r->rhs = copy_register(M, x->rhs);
-}
-
-static void CopyDiscard(struct MonoCollector *M, struct MirDiscard *t, struct MirDiscard *r)
-{
-    r->reg = copy_register(M, t->reg);
+    r->lhs = x->lhs;
+    r->rhs = x->rhs;
 }
 
 static void CopyReturn(struct MonoCollector *M, struct MirReturn *t, struct MirReturn *r)
 {
-    if (t->value != NULL) r->value = copy_register(M, t->value);
+    r->value = t->value;
+}
+
+static void CopyBranch(struct MonoCollector *M, struct MirBranch *t, struct MirBranch *r)
+{
+    r->cond = t->cond;
+    r->then_arm = t->then_arm;
+    r->else_arm = t->else_arm;
 }
 
 static void CopyForLoop(struct MonoCollector *M, struct MirForLoop *t, struct MirForLoop *r)
 {
     r->for_kind = t->for_kind;
-    r->var = copy_register(M, t->var);
-    r->iter = copy_register(M, t->iter);
-    r->end = copy_register(M, t->end);
-    r->step = copy_register(M, t->step);
     r->then_arm = t->then_arm;
     r->else_arm = t->else_arm;
-}
-
-static void CopyBranch(struct MonoCollector *M, struct MirBranch *t, struct MirBranch *r)
-{
-    r->cond = copy_register(M, t->cond);
-    r->then_arm = t->then_arm;
-    r->else_arm = t->else_arm;
+    switch (r->for_kind) {
+        case MIR_FORNUM_LOOP:
+        case MIR_FORNUM_PREP:
+            r->fornum = t->fornum;
+    }
 }
 
 static void CopySwitch(struct MonoCollector *M, struct MirSwitch *t, struct MirSwitch *r)
 {
-    r->discr = copy_register(M, t->discr);
-    r->has_otherwise = t->has_otherwise;
+    r->discr = t->discr;
     r->otherwise = t->otherwise;
     r->arms = pawMir_switch_list_new(M->C);
     for (int i = 0; i < t->arms->count; ++i) {
@@ -292,8 +280,10 @@ static void CopyGoto(struct MonoCollector *M, struct MirGoto *t, struct MirGoto 
 
 static struct MirInstruction *copy_instruction(struct MonoCollector *M, struct MirInstruction *instr)
 {
+    // TODO: most of the above functions can be eliminated by just copying the whole struct
+    //       most things are trivially copiable. handle lists in the switch below.
     struct MirInstruction *result = pawMir_new_instruction(M->C, instr->hdr.kind);
-    result->hdr.line = instr->hdr.line;
+    result->hdr = instr->hdr;
     switch (MIR_KINDOF(instr)) {
 #define DEFINE_COPY(X) case kMir##X: \
             Copy##X(M, MirGet##X(instr), MirGet##X(result)); \
@@ -304,27 +294,29 @@ static struct MirInstruction *copy_instruction(struct MonoCollector *M, struct M
     return result;
 }
 
-static struct MirTerminator *copy_terminator(struct MonoCollector *M, struct MirTerminator *term)
+static struct MirBlockData *copy_basic_block(struct MonoCollector *M, struct MirBlockData *block)
 {
-    struct MirTerminator *result = pawMir_new_terminator(M->C, term->hdr.kind);
-    switch (MIR_KINDOF(term)) {
-#define DEFINE_COPY(X) case kMir##X: \
-            Copy##X(M, MirGet##X(term), MirGet##X(result)); \
-            break;
-        MIR_TERMINATOR_LIST(DEFINE_COPY)
-#undef DEFINE_COPY
-    }
-    return result;
-}
+    struct MirBlockData *result = pawMir_new_block(M->C);
+    result->location = block->location;
+    result->loop_end = block->loop_end;
 
-static struct MirBlock *copy_basic_block(struct MonoCollector *M, struct MirBlock *block)
-{
-    struct MirBlock *result = pawMir_new_block(M->C, block->bid);
-    for (int i = 0; i < block->code->count; ++i) {
-        struct MirInstruction *r = copy_instruction(M, K_LIST_GET(block->code, i));
-        K_LIST_PUSH(M->C, result->code, r);
+    const MirBlock *pb;
+    K_LIST_FOREACH(block->predecessors, pb) {
+        K_LIST_PUSH(M->C, result->predecessors, *pb);
     }
-    result->term = copy_terminator(M, block->term);
+    K_LIST_FOREACH(block->successors, pb) {
+        K_LIST_PUSH(M->C, result->successors, *pb);
+    }
+
+    struct MirInstruction **pinstr;
+    K_LIST_FOREACH(block->joins, pinstr) {
+        struct MirInstruction *r = copy_instruction(M, *pinstr);
+        K_LIST_PUSH(M->C, result->joins, r);
+    }
+    K_LIST_FOREACH(block->instructions, pinstr) {
+        struct MirInstruction *r = copy_instruction(M, *pinstr);
+        K_LIST_PUSH(M->C, result->instructions, r);
+    }
     return result;
 }
 
@@ -348,12 +340,24 @@ static struct Mir *new_mir(struct MonoCollector *M, struct Mir *base, struct IrT
     return pawMir_new(M->C, base->name, type, self, base->fn_kind, base->is_native, base->is_pub, PAW_FALSE);
 }
 
+static struct MirRegisterData copy_register(struct MonoCollector *M, struct MirRegisterData reg)
+{
+    struct IrType *type = finalize_type(M, reg.type);
+    return (struct MirRegisterData){type};
+}
+
 static void do_monomorphize(struct MonoCollector *M, struct Mir *base, struct Mir *inst, struct IrType *self)
 {
+    for (int i = 0; i < base->registers->count; ++i) {
+        struct MirRegisterData from = K_LIST_GET(base->registers, i);
+        struct MirRegisterData to = copy_register(M, from);
+        K_LIST_PUSH(M->C, inst->registers, to);
+    }
+
     for (int i = 0; i < base->blocks->count; ++i) {
-        struct MirBlock *base_block = K_LIST_GET(base->blocks, i);
-        struct MirBlock *inst_block = copy_basic_block(M, base_block);
-        K_LIST_PUSH(M->C, inst->blocks, inst_block);
+        struct MirBlockData *from = K_LIST_GET(base->blocks, i);
+        struct MirBlockData *to = copy_basic_block(M, from);
+        K_LIST_PUSH(M->C, inst->blocks, to);
     }
 
     for (int i = 0; i < base->scopes->count; ++i) {
@@ -361,9 +365,14 @@ static void do_monomorphize(struct MonoCollector *M, struct Mir *base, struct Mi
         K_LIST_PUSH(M->C, inst->scopes, scope);
     }
 
+    for (int i = 0; i < base->captured->count; ++i) {
+        struct MirCaptureInfo ci = K_LIST_GET(base->captured, i);
+        K_LIST_PUSH(M->C, inst->captured, ci);
+    }
+
     for (int i = 0; i < base->upvalues->count; ++i) {
-        struct MirUpvalueInfo src = K_LIST_GET(base->upvalues, i);
-        K_LIST_PUSH(M->C, inst->upvalues, src);
+        struct MirUpvalueInfo up = K_LIST_GET(base->upvalues, i);
+        K_LIST_PUSH(M->C, inst->upvalues, up);
     }
 
     // monomorphize nested closures
@@ -569,7 +578,7 @@ struct MonoResult pawP_monomorphize(struct Compiler *C, Map *bodies)
     M.adts = pawP_push_map(C);
     pawU_enter_binder(C->U);
 
-    pawMir_type_folder_init(&F, C, &M);
+    pawMir_type_folder_init(&F, C, NULL, &M);
     F.F.FoldType = collect_type;
 
     add_builtin_adt(&F, PAW_TUNIT);
@@ -594,6 +603,7 @@ struct MonoResult pawP_monomorphize(struct Compiler *C, Map *bodies)
         K_LIST_POP(M.pending);
         struct Mir *body = monomorphize(&M, type);
         K_LIST_PUSH(C, M.globals, body);
+        M.F->V.mir = body; // TODO: figure out a better way to do this... always need Mir object to get basic block and register backing data
         pawMir_fold(M.F, body);
     }
 

@@ -113,6 +113,11 @@ static struct IrType *normalize(struct Resolver *R, struct IrType *type)
     return pawU_normalize(R->U->table, type);
 }
 
+static paw_Bool equals(struct Resolver *R, struct IrType *a, struct IrType *b)
+{
+    return pawU_equals(R->U, a, b);
+}
+
 static void unify(struct Resolver *R, struct IrType *a, struct IrType *b)
 {
     pawU_unify(R->U, a, b);
@@ -353,7 +358,7 @@ static struct HirSymbol *new_local(struct Resolver *R, String *name, struct HirD
     return symbol;
 }
 
-static struct HirScope *leave_block(struct Resolver *R)
+static struct HirScope *leave_scope(struct Resolver *R)
 {
     struct HirSymtab *st = R->symtab;
     struct HirScope *scope = enclosing_scope(st);
@@ -361,7 +366,7 @@ static struct HirScope *leave_block(struct Resolver *R)
     return scope;
 }
 
-static void enter_block(struct Resolver *R, struct HirScope *scope)
+static void enter_scope(struct Resolver *R, struct HirScope *scope)
 {
     if (scope == NULL) scope = pawHir_scope_new(R->C);
     K_LIST_PUSH(R->C, R->symtab, scope);
@@ -369,14 +374,14 @@ static void enter_block(struct Resolver *R, struct HirScope *scope)
 
 static struct HirScope *leave_function(struct Resolver *R)
 {
-    struct HirScope *scope = leave_block(R);
+    struct HirScope *scope = leave_scope(R);
     CHECK_GC(ENV(R));
     return scope;
 }
 
 static void enter_function(struct Resolver *R, struct HirFuncDecl *func)
 {
-    enter_block(R, NULL);
+    enter_scope(R, NULL);
     new_local(R, func->name, HIR_CAST_DECL(func), PAW_FALSE);
 }
 
@@ -397,11 +402,13 @@ static void enter_pat(struct Resolver *R, struct PatState *ps, enum HirPatKind k
     R->ms->ps = ps;
 }
 
-static void ResolveBlock(struct Resolver *R, struct HirBlock *block)
+static struct IrType *resolve_block(struct Resolver *R, struct HirBlock *block)
 {
-    enter_block(R, NULL);
+    enter_scope(R, NULL);
     resolve_stmt_list(R, block->stmts);
-    leave_block(R);
+    struct IrType *type = resolve_expr(R, block->result);
+    leave_scope(R);
+    return type;
 }
 
 static struct IrType *register_decl_type(struct Resolver *R, struct HirDecl *decl, enum IrTypeKind kind)
@@ -427,42 +434,41 @@ static struct IrType *ResolveFieldDecl(struct Resolver *R, struct HirFieldDecl *
     return resolve_type(R, d->tag);
 }
 
+static paw_Bool is_unit_type(struct IrType *type)
+{
+    return IrIsAdt(type) && IrGetAdt(type)->did.value == PAW_TUNIT;
+}
+
+static void unify_function_result(struct Resolver *R, struct HirBlock *body, struct IrType *result, struct IrType *expect)
+{
+    if (!body->never || !is_unit_type(result)) {
+        unify(R, result, expect);
+    }
+}
+
 static void resolve_func_item(struct Resolver *R, struct HirFuncDecl *d)
 {
     enter_function(R, d);
     allocate_decls(R, d->generics, PAW_TRUE);
     allocate_decls(R, d->params, PAW_FALSE);
-    struct IrType *result = resolve_type(R, d->result);
+    struct IrType *ret = resolve_type(R, d->result);
 
     if (d->body != NULL) {
         struct ResultState rs = {
             // named function has explicit return type
-            .prev = result,
             .outer = R->rs,
+            .prev = ret,
         };
         R->rs = &rs;
 
         enter_inference_ctx(R);
-        ResolveBlock(R, d->body);
+        struct IrType *result = resolve_block(R, d->body);
+        unify_function_result(R, d->body, result, ret);
         leave_inference_ctx(R);
 
         R->rs = rs.outer;
     }
     leave_function(R);
-}
-
-static void ResolveReturnStmt(struct Resolver *R, struct HirReturnStmt *s)
-{
-    struct IrType *want = R->rs->prev;
-    struct IrType *have = NULL;
-    if (s->expr != NULL) {
-        have = resolve_operand(R, s->expr);
-    } else {
-        have = get_type(R, PAW_TUNIT);
-    }
-
-    unify(R, have, want);
-    ++R->rs->count;
 }
 
 static void resolve_item(struct Resolver *R, struct HirDecl *item);
@@ -475,7 +481,7 @@ static void resolve_methods(struct Resolver *R, struct HirDeclList *items, struc
 
 static void resolve_impl_methods(struct Resolver *R, struct HirImplDecl *d)
 {
-    enter_block(R, NULL);
+    enter_scope(R, NULL);
 
     // Lookup the 'self' ADT. If the ADT is an instance of a polymorphic ADT, it
     // may need to be instantiated here. Either way, the LazyItem holding the ADT
@@ -494,7 +500,7 @@ static void resolve_impl_methods(struct Resolver *R, struct HirImplDecl *d)
     resolve_methods(R, d->methods, IrGetAdt(R->self));
     allocate_decls(R, d->methods, PAW_FALSE);
 
-    leave_block(R);
+    leave_scope(R);
 }
 
 struct IrType *pawP_instantiate_field(struct Compiler *C, struct IrType *inst_type, struct HirDecl *field)
@@ -541,6 +547,11 @@ static int expect_field(struct Resolver *R, struct HirAdtDecl *adt, struct IrTyp
     if (index < 0) NAME_ERROR(R, "field '%s' does not exist on type '%s'",
                               name->text, adt->name->text);
     return index;
+}
+
+static void unify_unit_type(struct Resolver *R, struct IrType *type)
+{
+    unify(R, type, get_type(R, PAW_TUNIT));
 }
 
 static void expect_bool_expr(struct Resolver *R, struct HirExpr *e)
@@ -761,26 +772,30 @@ static struct IrType *resolve_assign_expr(struct Resolver *R, struct HirAssignEx
     return get_type(R, PAW_TUNIT);
 }
 
-static void ResolveMatchStmt(struct Resolver *R, struct HirMatchStmt *s)
+static struct IrType *resolve_match_expr(struct Resolver *R, struct HirMatchExpr *s)
 {
     struct IrType *target = resolve_operand(R, s->target);
 
     struct MatchState ms;
     enter_match_ctx(R, &ms, target);
-    resolve_stmt_list(R, s->arms);
+    resolve_expr_list(R, s->arms);
     leave_match_ctx(R);
+
+    const struct HirExpr *first = K_LIST_FIRST(s->arms);
+    return GET_NODE_TYPE(R->C, first);
 }
 
-static void ResolveMatchArm(struct Resolver *R, struct HirMatchArm *s)
+static struct IrType *resolve_match_arm(struct Resolver *R, struct HirMatchArm *s)
 {
-    enter_block(R, NULL);
+    enter_scope(R, NULL);
 
     struct IrType *pat = resolve_pat(R, s->pat);
     unify(R, pat, R->ms->target); // check target type
     if (s->guard != NULL) expect_bool_expr(R, s->guard);
-    ResolveBlock(R, s->result);
+    struct IrType *result = resolve_block(R, s->result);
 
-    leave_block(R);
+    leave_scope(R);
+    return result;
 }
 
 static struct IrType *new_list_t(struct Resolver *R, struct IrType *elem_t)
@@ -816,7 +831,7 @@ static struct IrType *resolve_closure_expr(struct Resolver *R, struct HirClosure
 {
     struct ResultState rs = {R->rs};
     R->rs = &rs;
-    enter_block(R, NULL);
+    enter_scope(R, NULL);
 
     for (int i = 0; i < e->params->count; ++i) {
         struct HirDecl *decl = e->params->data[i];
@@ -833,16 +848,19 @@ static struct IrType *resolve_closure_expr(struct Resolver *R, struct HirClosure
     rs.prev = t->result = ret;
 
     if (e->has_body) {
-        ResolveBlock(R, e->body);
-        if (rs.count == 0) {
-            // implicit 'return ()'
-            unify(R, ret, get_type(R, PAW_TUNIT));
-        }
+        struct IrType *result = resolve_block(R, e->body);
+        unify_function_result(R, e->body, result, ret);
+//        if (rs.count == 0) {
+//            // implicit 'return ()'
+//            unify_unit_type(R, ret);
+//        } else {
+//            unify(R, result, ret); // TODO: not quite right...
+//        }
     } else {
         unify(R, ret, resolve_operand(R, e->expr));
     }
 
-    leave_block(R);
+    leave_scope(R);
     R->rs = rs.outer;
     return type;
 }
@@ -887,13 +905,13 @@ struct IrType *pawP_find_method(struct Compiler *C, struct IrType *adt, String *
 
 static void resolve_impl_item(struct Resolver *R, struct HirImplDecl *d)
 {
-    enter_block(R, NULL);
+    enter_scope(R, NULL);
 
     allocate_decls(R, d->generics, PAW_TRUE);
     R->self = resolve_path(R, d->self, LOOKUP_TYPE);
     resolve_impl_methods(R, d);
 
-    leave_block(R);
+    leave_scope(R);
     R->self = NULL;
 }
 
@@ -1203,69 +1221,57 @@ static struct IrType *resolve_literal_expr(struct Resolver *R, struct HirLiteral
     }
 }
 
-static void ResolveIfStmt(struct Resolver *R, struct HirIfStmt *s)
+static paw_Bool is_never_block(struct HirExpr *expr)
 {
-    expect_bool_expr(R, s->cond);
-    resolve_stmt(R, s->then_arm);
-    if (s->else_arm != NULL) {
-        resolve_stmt(R, s->else_arm);
+    if (HirIsBlock(expr)) {
+        return HirGetBlock(expr)->never;
     }
+    return PAW_FALSE;
+}
+
+static struct IrType *resolve_if_expr(struct Resolver *R, struct HirIfExpr *e)
+{
+    expect_bool_expr(R, e->cond);
+    struct IrType *first = resolve_expr(R, e->then_arm);
+    if (e->else_arm == NULL) {
+        unify(R, first, get_type(R, PAW_TUNIT));
+        return first;
+    }
+
+    struct IrType *second = resolve_expr(R, e->else_arm);
+    if (!equals(R, first, second)) {
+        // Forgive type errors when the result type is "()" and there is an
+        // unconditional jump. Control will never reach the end of such a block
+        // anyway.
+        if (is_unit_type(first) && is_never_block(e->then_arm)) {
+            first = second;
+        } else if (is_unit_type(second) && is_never_block(e->else_arm)) {
+            second = first;
+        }
+    }
+    unify(R, first, second);
+    return first;
 }
 
 static void ResolveExprStmt(struct Resolver *R, struct HirExprStmt *s)
 {
-    resolve_operand(R, s->expr);
-}
-
-static void ResolveWhileStmt(struct Resolver *R, struct HirWhileStmt *s)
-{
-    enter_block(R, NULL);
-    expect_bool_expr(R, s->cond);
-    ResolveBlock(R, s->block);
-    leave_block(R);
-}
-
-static void visit_forbody(struct Resolver *R, struct IrType *itype, struct HirBlock *b, struct HirForStmt *s)
-{
-    add_decl(R, s->control);
-    struct HirVarDecl *control = HirGetVarDecl(s->control);
-    pawIr_set_type(R->C, control->hid, itype);
-
-    enter_block(R, NULL);
-    new_local(R, control->name, s->control, PAW_FALSE);
-    resolve_stmt_list(R, b->stmts);
-    leave_block(R);
-}
-
-static void visit_fornum(struct Resolver *R, struct HirForStmt *s)
-{
-    struct HirForNum *fornum = &s->fornum;
-
-    expect_int_expr(R, fornum->begin);
-    expect_int_expr(R, fornum->end);
-    expect_int_expr(R, fornum->step);
-
-    visit_forbody(R, get_type(R, PAW_TINT), s->block, s);
-}
-
-static void visit_forin(struct Resolver *R, struct HirForStmt *s)
-{
-    struct IrType *iter_t = resolve_operand(R, s->forin.target);
-    struct IrType *elem_t = get_value_type(R, iter_t);
-
-    if (elem_t == NULL) TYPE_ERROR(R, "'for..in' not supported for type");
-    visit_forbody(R, elem_t, s->block, s);
-}
-
-static void ResolveForStmt(struct Resolver *R, struct HirForStmt *s)
-{
-    enter_block(R, NULL);
-    if (s->is_fornum) {
-        visit_fornum(R, s);
-    } else {
-        visit_forin(R, s);
+    struct IrType *type = resolve_operand(R, s->expr);
+    if (HirIsBlock(s->expr) || HirIsIfExpr(s->expr)) {
+        // Blocks and if expressions that are not the result of another block must
+        // evaluate to "()". Other types of expressions might evaluate to other
+        // types, but their results are unused here, so that is okay.
+        unify_unit_type(R, type);
     }
-    leave_block(R);
+}
+
+static struct IrType *resolve_while_expr(struct Resolver *R, struct HirWhileExpr *e)
+{
+    enter_scope(R, NULL);
+    expect_bool_expr(R, e->cond);
+    struct IrType *type = resolve_block(R, e->block);
+    unify_unit_type(R, type);
+    leave_scope(R);
+    return type;
 }
 
 static struct IrType *check_index(struct Resolver *R, struct HirIndex *e, struct IrType *target)
@@ -1340,12 +1346,6 @@ static struct IrType *resolve_selector(struct Resolver *R, struct HirSelector *e
     }
     ensure_accessible_field(R, field, HIR_CAST_DECL(adt), target);
     return result;
-}
-
-static void ResolveJumpStmt(struct Resolver *R, struct HirJumpStmt *s)
-{
-    PAW_UNUSED(R);
-    PAW_UNUSED(s);
 }
 
 static void ResolveDeclStmt(struct Resolver *R, struct HirDeclStmt *s)
@@ -1678,6 +1678,70 @@ static struct IrType *resolve_type(struct Resolver *R, struct HirType *type)
     return normalize(R, r);
 }
 
+static struct IrType *resolve_return_expr(struct Resolver *R, struct HirReturnExpr *s)
+{
+    struct IrType *want = R->rs->prev;
+    struct IrType *have = s->expr != NULL
+        ? resolve_operand(R, s->expr)
+        : get_type(R, PAW_TUNIT);
+    unify(R, have, want);
+    ++R->rs->count;
+    return have;
+}
+
+static struct IrType *resolve_jump_expr(struct Resolver *R, struct HirJumpExpr *s)
+{
+    return get_type(R, PAW_TUNIT);
+}
+
+static void visit_forbody(struct Resolver *R, struct IrType *itype, struct HirBlock *b, struct HirForExpr *s)
+{
+    add_decl(R, s->control);
+    struct HirVarDecl *control = HirGetVarDecl(s->control);
+    pawIr_set_type(R->C, control->hid, itype);
+
+    enter_scope(R, NULL);
+
+    new_local(R, control->name, s->control, PAW_FALSE);
+    resolve_stmt_list(R, b->stmts);
+    struct IrType *type = resolve_operand(R, b->result);
+    unify_unit_type(R, type);
+
+    leave_scope(R);
+}
+
+static void visit_fornum(struct Resolver *R, struct HirForExpr *s)
+{
+    struct HirForNum *fornum = &s->fornum;
+
+    expect_int_expr(R, fornum->begin);
+    expect_int_expr(R, fornum->end);
+    expect_int_expr(R, fornum->step);
+
+    visit_forbody(R, get_type(R, PAW_TINT), s->block, s);
+}
+
+static void visit_forin(struct Resolver *R, struct HirForExpr *s)
+{
+    struct IrType *iter_t = resolve_operand(R, s->forin.target);
+    struct IrType *elem_t = get_value_type(R, iter_t);
+
+    if (elem_t == NULL) TYPE_ERROR(R, "'for..in' not supported for type");
+    visit_forbody(R, elem_t, s->block, s);
+}
+
+static struct IrType *resolve_for_expr(struct Resolver *R, struct HirForExpr *s)
+{
+    enter_scope(R, NULL);
+    if (s->is_fornum) {
+        visit_fornum(R, s);
+    } else {
+        visit_forin(R, s);
+    }
+    leave_scope(R);
+    return get_type(R, PAW_TUNIT);
+}
+
 static struct IrType *resolve_expr(struct Resolver *R, struct HirExpr *expr)
 {
     struct IrType *type;
@@ -1719,8 +1783,33 @@ static struct IrType *resolve_expr(struct Resolver *R, struct HirExpr *expr)
         case kHirAssignExpr:
             type = resolve_assign_expr(R, HirGetAssignExpr(expr));
             break;
-        default:
+        case kHirFieldExpr:
             type = resolve_field_expr(R, HirGetFieldExpr(expr));
+            break;
+        case kHirIfExpr:
+            type = resolve_if_expr(R, HirGetIfExpr(expr));
+            break;
+        case kHirReturnExpr:
+            type = resolve_return_expr(R, HirGetReturnExpr(expr));
+            break;
+        case kHirJumpExpr:
+            type = resolve_jump_expr(R, HirGetJumpExpr(expr));
+            break;
+        case kHirForExpr:
+            type = resolve_for_expr(R, HirGetForExpr(expr));
+            break;
+        case kHirWhileExpr:
+            type = resolve_while_expr(R, HirGetWhileExpr(expr));
+            break;
+        case kHirMatchExpr:
+            type = resolve_match_expr(R, HirGetMatchExpr(expr));
+            break;
+        case kHirBlock:
+            type = resolve_block(R, HirGetBlock(expr));
+            break;
+        case kHirMatchArm:
+            type = resolve_match_arm(R, HirGetMatchArm(expr));
+            break;
     }
 
     type = normalize(R, type);
@@ -1733,13 +1822,13 @@ static void register_if_impl(struct Resolver *R, struct HirDecl *item)
     if (!HirIsImplDecl(item)) return;
     struct HirImplDecl *impl = HirGetImplDecl(item);
 
-    enter_block(R, NULL);
+    enter_scope(R, NULL);
 
     allocate_decls(R, impl->generics, PAW_TRUE);
     struct IrType *type = resolve_path(R, impl->self, LOOKUP_TYPE);
     pawIr_set_type(R->C, impl->hid, type);
 
-    leave_block(R);
+    leave_scope(R);
 }
 
 static void resolve_item(struct Resolver *R, struct HirDecl *item)
@@ -1766,9 +1855,9 @@ static void check_module_types(struct Resolver *R, struct ModuleInfo *mod)
     R->symtab = pawHir_symtab_new(R->C);
     R->m = mod;
 
-    enter_block(R, NULL);
+    enter_scope(R, NULL);
     resolve_items(R, hir->items);
-    leave_block(R);
+    leave_scope(R);
 
     // control should not be within a scope block
     paw_assert(R->symtab->count == 0);

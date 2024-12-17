@@ -451,7 +451,7 @@ top:
     pc = cf->pc;
     fn = cf->fn;
     K = fn->p->k;
-
+paw_dump_source(P,fn->p);
     for (;;) {
         const OpCode opcode = *pc++;
         const Op op = GET_OP(opcode);
@@ -827,50 +827,21 @@ top:
                 }
             }
 
-            vm_case(RETURN0):
-            {
-                P->top.p = CF_STACK_RETURN(cf);
-                VM_SAVE_PC();
-
-                pawR_close_upvalues(P, P->top.p);
-                V_SET_0(P->top.p++);
-
-                P->cf = cf->prev;
-                if (CF_IS_ENTRY(cf)) {
-                    return;
-                }
-                cf = P->cf;
-                goto top;
-            }
-
             vm_case(RETURN):
             {
-                const Value result = *ra;
-
                 P->top.p = CF_STACK_RETURN(cf);
                 VM_SAVE_PC();
 
                 pawR_close_upvalues(P, P->top.p);
-                *P->top.p++ = result;
+                ++P->top.p;
 
                 P->cf = cf->prev;
                 if (CF_IS_ENTRY(cf)) {
+                    // return from entrypoint function
                     return;
                 }
                 cf = P->cf;
                 goto top;
-            }
-
-            vm_case(EXPLODE):
-            {
-                Value *rb = VM_RB(opcode);
-                const int c = GET_C(opcode);
-                P->top.p = rb + c;
-
-                const Tuple *tuple = V_TUPLE(*rb);
-                for (int i = 0; i < c; ++i) {
-                    ra[i] = tuple->elems[i];
-                }
             }
 
             vm_case(JUMP):

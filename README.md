@@ -4,7 +4,14 @@
 > See the [roadmap](#roadmap) to get an idea of where things are going.
 > Also see [known issues](#known-issues) for a list of known problems that will eventually be fixed.
 
-An expressive scripting language
+> This branch is being used to integrate a new register allocator, and to convert the MIR to SSA form.
+> The new register allocator uses a linear scan over the live intervals generated in a previous step.
+
+## Timeline
++ [ ] For loops: the Lua-style for loops aren't working so well with the new register allocator, possibly transform into a while loop.
++ [ ] Upvalues
+
+A cute little scripting language
 
 Paw is a high-level, statically-typed, embeddable scripting language.
 
@@ -18,6 +25,9 @@ Nesting is not supported in block-style comments.
 
 /* block
    comment */
+for let i < 10 {
+
+}
 ```
 
 ### Modules
@@ -73,12 +83,10 @@ let s: str = v[0];
 ```
 
 ### Variables
-Any variable referenced in the runtime must first be declared (all variables are locals, see [Modules](#modules) above).
+Any variable referenced in the runtime must first be declared, either locally or in an enclosing function (see [closures](#closures)).
 Otherwise, a "name error" is raised (see the section on [error handling](#error-handling) below).
 Local variables can be shadowed and 'rebound', and a global item may be shadowed by a local.
-Locals can also be captured in the body of a closure (see [closures](#closures)).
 ```paw
-// initializer (' = 0') is required
 let x: int = 0;
 
 // rebind 'x' to a float (type is inferred from initializer)
@@ -103,9 +111,7 @@ Note that named functions can only be defined at the toplevel in Paw.
 [Closures](#closures), however, may be nested arbitrarily.
 ```paw
 fn fib(n: int) -> int {
-    if n < 2 {
-        return n;
-    }
+    if n < 2 { return n; }
     return fib(n - 2) + fib(n - 1);
 }
 ```
@@ -179,12 +185,6 @@ let i = 0;
 while i < 10 {
     i = i + 1;
 }
-
-// 'do...while' loop:
-let i = 10;
-do {
-    i = i - 1;
-} while i > 0;
 ```
 
 ### Pattern matching

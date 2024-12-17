@@ -7,16 +7,27 @@
 // The compiler converts source code into bytecode that can be run on Paw's
 // virtual machine. It performs the following passes:
 //
-//  Name           | Input  | Output   | Purpose
-// ----------------|--------|----------|----------------------------------------
-//  parse          | source | AST      | syntactical analysis
-//  lower_ast      | AST    | HIR      | convert AST into HIR
-//  collect_types  | HIR    | HIR      | collect ADTs and function types
-//  check_types    | HIR    | HIR      | type check function bodies
-//  exhaustiveness | HIR    | HIR      | ensure pattern matching exhaustiveness
-//  lower_hir      | HIR    | MIR      | convert HIR into MIR
-//  monomorphize   | MIR    | MIR      | monomorphize functions
-//  codegen        | MIR    | bytecode | generate code
+//    name           | input  | output   | purpose
+//   ----------------|--------|----------|----------------------------------------
+//    parse          | source | AST      | syntactical analysis
+//    lower_ast      | AST    | HIR      | convert AST into HIR
+//    collect_types  | HIR    | HIR      | collect ADTs and toplevel functions
+//    check_types    | HIR    | HIR      | type check function bodies
+//    exhaustiveness | HIR    | HIR      | ensure pattern matching exhaustiveness
+//    lower_hir      | HIR    | MIR      | convert HIR into MIR
+//    monomorphize   | MIR    | MIR      | monomorphize functions
+//    codegen        | MIR    | bytecode | generate code
+//
+// Activation frame layout (ranges are half-open):
+//
+//    start   | size | name      | purpose
+//   ---------|------|-----------|-------------------------------------
+//    0       | 1    | result    | storage for return value
+//    1       | a    | arguments | arguments passed to function
+//    1+a     | u    | upvalues  | upvalues captured in local closures
+//    1+a+u   | w    | workspace | space for locals and temporaries
+//    1+a+u+w | s    | scratch   | extra per-instruction temporaries
+//
 
 #ifndef PAW_COMPILE_H
 #define PAW_COMPILE_H
@@ -27,6 +38,9 @@
 #include "mem.h"
 #include "paw.h"
 #include "unify.h"
+
+#warning "TODO: remove me"
+#include"stdio.h"
 
 #define ENV(x) ((x)->P)
 #define DLOG(X, ...) PAWD_LOG(ENV(X), __VA_ARGS__)
@@ -55,7 +69,7 @@ struct HirDecl;
 struct HirAdtDecl;
 struct HirFuncDecl;
 struct HirInstanceDecl;
-struct HirMatchStmt;
+struct HirMatchExpr;
 struct HirTypeFolder;
 struct HirTypeList;
 struct HirSymtab;
@@ -67,6 +81,7 @@ struct IrTypeFolder;
 struct IrSignature;
 enum IrTypeKind;
 
+struct MirIntervalList;
 struct MirBodyList;
 struct MirBlockList;
 struct VariableList;
@@ -158,7 +173,6 @@ struct Compiler {
     Map *type2rtti;
 
     paw_Env *P;
-    int nbinders;
     int nnodes;
     int line;
 };
@@ -187,7 +201,7 @@ DEFINE_LIST(struct Compiler, pawP_mod_list_, ModuleList, struct ModuleInfo *)
 struct DynamicMem {
     struct Pool pool;
 
-    // Buffer for accumulating strings
+    // buffer for accumulating strings
     struct CharVec {
         char *data;
         int count;
@@ -199,25 +213,18 @@ struct DynamicMem {
 
 typedef struct Generator {
     struct Compiler *C;
-    struct ModuleInfo *m;
     struct FuncState *fs;
     struct MirVisitor *V;
-    struct RttiList *temp_rtti;
+    struct RegisterTable *regtab;
     struct JumpTable *jumps;
     struct PatchList *patch;
     struct ItemList *items;
     struct Pool *pool;
     struct Mir *mir;
     Map *builtin;
-    Map *regtab;
     paw_Env *P;
-    int nvals;
+    int nregs;
 } Generator;
-
-struct RegisterInfo {
-    int ident;
-    int index;
-};
 
 void pawP_lower_ast(struct Compiler *C);
 void pawP_collect_items(struct Compiler *C);
@@ -225,7 +232,27 @@ void pawP_collect_items(struct Compiler *C);
 struct IrType *pawP_lower_type(struct Compiler *C, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirType *type);
 struct IrTypeList *pawP_lower_type_list(struct Compiler *C, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirTypeList *types);
 
-Map *pawP_allocate_registers(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, int *pmax_reg);
+struct RegisterInfo {
+    int value;
+};
+
+DEFINE_LIST(struct Compiler, regtab_, RegisterTable, struct RegisterInfo)
+
+typedef unsigned long long BitChunk;
+DEFINE_LIST(struct Compiler, raw_bitset_, BitSet, BitChunk)
+
+struct BitSet *pawP_bitset_new(struct Compiler *C, int count);
+int pawP_bitset_count(const struct BitSet *bs);
+paw_Bool pawP_bitset_get(const struct BitSet *bs, int i);
+void pawP_bitset_set(struct BitSet *bs, int i);
+void pawP_bitset_set_range(struct BitSet *bs, int i, int j);
+void pawP_bitset_clear(struct BitSet *bs, int i);
+void pawP_bitset_clear_range(struct BitSet *bs, int i, int j);
+void pawP_bitset_and(struct BitSet *a, const struct BitSet *b);
+void pawP_bitset_or(struct BitSet *a, const struct BitSet *b);
+
+
+struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, struct MirIntervalList *intervals, int *pmax_reg);
 struct Mir *pawP_lower_hir_body(struct Compiler *C, struct HirFuncDecl *func);
 Map *pawP_lower_hir(struct Compiler *C);
 
@@ -236,7 +263,7 @@ struct IrType *pawP_instantiate_field(struct Compiler *C, struct IrType *self, s
 struct HirDecl *pawP_find_field(struct Compiler *C, struct IrType *self, String *name);
 struct IrType *pawP_find_method(struct Compiler *C, struct IrType *self, String *name);
 
-struct Decision *pawP_check_exhaustiveness(struct Compiler *C, struct HirMatchStmt *match, struct VariableList *vars);
+struct Decision *pawP_check_exhaustiveness(struct Compiler *C, struct HirMatchExpr *match, struct VariableList *vars);
 void pawP_lower_matches(struct Compiler *C);
 
 struct IrType *pawP_generalize(struct Compiler *C, struct IrType *type);
@@ -249,11 +276,6 @@ struct IrType *pawP_generalize(struct Compiler *C, struct IrType *type);
 // doing so might cause further instantiations due to the presence of recursion.
 // Function instance bodies are expanded in a separate pass.
 struct IrType *pawP_instantiate(
-        struct Compiler *C,
-        struct HirDecl *decl,
-        struct IrTypeList *types);
-
-struct HirDecl *pawP_instantiate_impl(
         struct Compiler *C,
         struct HirDecl *decl,
         struct IrTypeList *types);
@@ -271,8 +293,6 @@ void pawP_init_substitution_folder(struct IrTypeFolder *F, struct Compiler *C, s
 
 void pawP_collect_imports(struct Compiler *C, struct Ast *ast);
 void pawP_import(struct Compiler *C, void *state);
-
-struct ItemList *pawP_define_all(struct Compiler *C, struct ModuleList *modules, int *poffset);
 
 struct ItemList *pawP_allocate_defs(struct Compiler *C, struct MirBodyList *bodies, struct IrTypeList *types);
 
@@ -313,7 +333,7 @@ static inline void pawP_compile(struct Compiler *C, paw_Reader input, void *ud)
     pawP_lower_ast(C);
 
     // determine the type of each toplevel item in each module (allows the type checker to
-    // resolve paths between modules)
+    // resolve paths between modules immediately)
     pawP_collect_items(C);
 
     // run the type checker, then codegen

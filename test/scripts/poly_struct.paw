@@ -65,17 +65,40 @@ pub fn test_arguments() {
     touch_nested_empty(Empty::<Empty<Empty<float>>>);
 }
 
-pub fn test_field_access() {
-    let a = Singleton{value: 42};
-    let b = Singleton{value: a};
-    let c = Singleton{value: b};
-    let d = Singleton{value: c};
-    let e = d.value;
-    let f = e.value;
-    let g = f.value;
-    let h = g.value;
-    assert(h == 42);
+pub fn test_multiple_objects() {
+    let av = 1;
+    let a = Singleton{value: av};
+    let bv = 2;
+    let b = Singleton{value: bv};
+    let cv = 3;
+    let c = Singleton{value: cv};
+    let dv = 4;
+    let d = Singleton{value: dv};
+    let ev = 5;
+    let e = Singleton{value: ev};
+    let fv = 6;
+    let f = Singleton{value: fv};
+    assert(a.value == av);
+    assert(b.value == bv);
+    assert(c.value == cv);
+    assert(d.value == dv);
+    assert(e.value == ev);
+    assert(f.value == fv);
+    assert(av == 1);
+    assert(bv == 2);
+    assert(cv == 3);
+    assert(dv == 4);
+    assert(ev == 5);
+    assert(fv == 6);
 }
+
+//pub fn test_field_access() {
+//    let a = Singleton{value: 42};
+//    let b = Singleton{value: a};
+//    let c = b.value;
+//    let d = c.value;
+//    assert(d == 42);
+//}
 
 struct TypeShadowsName<TypeShadowsName> {
     pub value: TypeShadowsName,
@@ -200,18 +223,13 @@ fn toplevel_call<T>(a: TopLevelA<T>) -> TopLevelB<T> {
     return a.b;
 }
 
-pub fn test_recursion() {
-}
-pub fn test_recursion2() {
-}
-
 struct PolyRecur2<X, Y> {
     pub value: Option<PolyRecur2<X, Y>>,
     pub value2: Option<PolyRecur2<Empty<Y>, Y>>,
     pub value3: Option<PolyRecur2<bool, str>>,
 }
 
-pub fn test_recursion3() {
+pub fn test_recursion() {
     let pr = PolyRecur2{
         value: Option::<PolyRecur2<int, bool>>::None,
         value2: Option::<PolyRecur2<Empty<bool>, bool>>::None,
@@ -246,7 +264,7 @@ struct PolyRecur2B<X, Y, Z> {
     pub value3: Option<PolyRecur2A<str, float, X>>,
 }
 
-pub fn test_recursion4() {
+pub fn test_recursion2() {
     let pr = PolyRecur2A{
         value: Option::<PolyRecur2B<bool, int, float>>::None,
         value2: Option::<PolyRecur2B<bool, str, float>>::None,

@@ -138,52 +138,43 @@ DEFINE_FOLDERS(pat, Pat)
 #undef DEFINE_FOLDERS
 
 
-static void FoldRegister(struct MirVisitor *V, struct MirRegister *r)
+static void FoldRegister(struct MirVisitor *V, MirRegister r)
 {
     struct IrTypeFolder *F = V->ud;
-    r->type = pawIr_fold_type(F, r->type);
+    struct MirRegisterData *data = mir_reg_data(V->mir, r);
+    data->type = pawIr_fold_type(F, data->type);
 }
 
-void pawMir_type_folder_init(struct MirTypeFolder *F, struct Compiler *C, void *ud)
+void pawMir_type_folder_init(struct MirTypeFolder *F, struct Compiler *C, struct Mir *mir, void *ud)
 {
     *F = (struct MirTypeFolder){
         .ud = ud,
         .C = C,
     };
 
-    pawMir_visitor_init(&F->V, C, F);
+    pawMir_visitor_init(&F->V, C, mir, F);
     F->V.PostVisitRegister = FoldRegister;
 
     pawIr_type_folder_init(&F->F, C, F);
 }
 
-#define DEFINE_TYPE_FOLDERS(name, T) \
-    void pawMir_fold_##name(struct MirTypeFolder *F, struct Mir##T *node) { \
-        paw_assert(node != NULL); \
-        pawMir_visit_##name(&F->V, node); \
-    }
-DEFINE_TYPE_FOLDERS(terminator, Terminator)
-DEFINE_TYPE_FOLDERS(instruction, Instruction)
-DEFINE_TYPE_FOLDERS(block, Block)
-#undef DEFINE_TYPE_FOLDERS
-
-#define DEFINE_LIST_FOLDERS(name, T) \
-    void pawMir_fold_##name##_list(struct MirTypeFolder *F, struct Mir##T##List *list) { \
-        for (int i = 0; i < list->count; ++i) { \
-            pawMir_visit_##name(&F->V, K_LIST_GET(list, i)); \
-        } \
-    }
-DEFINE_LIST_FOLDERS(instruction, Instruction)
-DEFINE_LIST_FOLDERS(block, Block)
-#undef DEFINE_LIST_FOLDERS
-
-
-void pawMir_fold(struct MirTypeFolder *F, struct Mir *node)
+static void mir_fold_block(struct MirTypeFolder *F, MirBlock bb)
 {
-    node->self = pawIr_fold_type(&F->F, node->self);
-    node->type = pawIr_fold_type(&F->F, node->type);
-    pawMir_fold_block_list(F, node->blocks);
-    for (int i = 0; i < node->children->count; ++i) {
-        pawMir_fold(F, K_LIST_GET(node->children, i));
-    }
+    pawMir_visit_block(&F->V, bb);
 }
+
+void pawMir_fold(struct MirTypeFolder *F, struct Mir *mir)
+{
+    mir->self = pawIr_fold_type(&F->F, mir->self);
+    mir->type = pawIr_fold_type(&F->F, mir->type);
+    for (int i = 0; i < mir->blocks->count; ++i) {
+        mir_fold_block(F, MIR_BB(i));
+    }
+    struct Mir *outer = mir;
+    for (int i = 0; i < mir->children->count; ++i) {
+        F->V.mir = K_LIST_GET(mir->children, i);
+        pawMir_fold(F, F->V.mir);
+    }
+    F->V.mir = outer;
+}
+

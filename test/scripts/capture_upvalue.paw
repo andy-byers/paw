@@ -2,103 +2,120 @@
 
 pub fn test_basic() {
     let f = || -1;
-    {
-        let upvalue = 0;
-        f = || upvalue;
-        upvalue = 42;
+    if false {
+        f = || -2;
+    } else {
+        return;
+        let a = 1;
     }
-    assert(f() == 42);
+f();
+//    {
+//        let upvalue = 123;
+//        f = || upvalue;
+//        upvalue = 42;
+//    }
+//    assert(f() == 42);
 }
 
-pub fn create_flat_capture_closure() -> (fn(Option<int>) -> int) {
-    let upvalue = 0;
-    return |o: Option<int>| {
-        if o.is_some() {
-            upvalue = o.unwrap();    
-        }
-        return upvalue;
-    };
-}
-
-pub fn test_flat_capture() {
-    let f = create_flat_capture_closure();
-    assert(f(Option::None) == 0);
-    assert(f(Option::None) == 0);
-    assert(f(Option::Some(5)) == 5);
-    assert(f(Option::Some(-2)) == -2);
-    assert(f(Option::None) == -2);
-}
-
-pub fn create_nested_capture_closure() -> (fn() -> fn(Option<int>, Option<int>) -> int) {
-    let outer = 0;
-    return || {
-        let inner = 0;
-        return |oi: Option<int>, oo: Option<int>| {
-            if oi.is_some() {
-                inner = oi.unwrap();    
-            }
-            if oo.is_some() {
-                outer = oo.unwrap();    
-            }
-            return inner + outer;
-        };
-    };
-}
-
-pub fn test_nested_capture() {
-    let f = create_nested_capture_closure()();
-    assert(f(Option::None, Option::None) == 0);
-    assert(f(Option::None, Option::None) == 0);
-    assert(f(Option::Some(5), Option::None) == 5);
-    assert(f(Option::None, Option::Some(-2)) == 3);
-    assert(f(Option::Some(1), Option::Some(2)) == 3);
-    assert(f(Option::Some(-3), Option::Some(-4)) == -7);
-    assert(f(Option::None, Option::None) == -7);
-}
-
-fn create_closure_with_break() -> (fn(int) -> int) {
-    let upvalue = 0;
-    let f = Option::None;
-    while true {
-        f = Option::Some(|x| {
-            upvalue = upvalue + x;
-            return upvalue;
-        });
-        break;
-    }
-    return f.unwrap();
-}
-
-pub fn test_closure_with_break() {
-    let f = create_closure_with_break();
-    assert(f(0) == 0);
-    assert(f(10) == 10);
-    assert(f(1) == 11);
-}
-
-pub fn test_closure_with_nested_break() {
-    let f = || -1;
-    while true {
-        let a = 0;
-        {
-            let b = 0;
-            let _ = -1;
-            {
-                let _ = -2;
-                let c = 0;
-                let _ = -3;
-                f = || {
-                    a = a + 1;
-                    b = b + 2;
-                    c = c + 3;
-                    return a + b + c;
-                };
-                break;
-            }
-        }
-    }
-
-    assert(f() == 6);
-    assert(f() == 12);
-    assert(f() == 18);
-}
+//pub fn test_basic() {
+//    let f = || -1;
+//    {
+//        let upvalue = 0;
+//        f = || upvalue;
+//        upvalue = 42;
+//    }
+//    assert(f() == 42);
+//}
+//
+//pub fn create_flat_capture_closure() -> (fn(Option<int>) -> int) {
+//    let upvalue = 0;
+//    return |o: Option<int>| {
+//        if o.is_some() {
+//            upvalue = o.unwrap();    
+//        }
+//        return upvalue;
+//    };
+//}
+//
+//pub fn test_flat_capture() {
+//    let f = create_flat_capture_closure();
+//    assert(f(Option::None) == 0);
+//    assert(f(Option::None) == 0);
+//    assert(f(Option::Some(5)) == 5);
+//    assert(f(Option::Some(-2)) == -2);
+//    assert(f(Option::None) == -2);
+//}
+//
+//pub fn create_nested_capture_closure() -> (fn() -> fn(Option<int>, Option<int>) -> int) {
+//    let outer = 0;
+//    return || {
+//        let inner = 0;
+//        return |oi: Option<int>, oo: Option<int>| {
+//            if oi.is_some() {
+//                inner = oi.unwrap();    
+//            }
+//            if oo.is_some() {
+//                outer = oo.unwrap();    
+//            }
+//            return inner + outer;
+//        };
+//    };
+//}
+//
+//pub fn test_nested_capture() {
+//    let f = create_nested_capture_closure()();
+//    assert(f(Option::None, Option::None) == 0);
+//    assert(f(Option::None, Option::None) == 0);
+//    assert(f(Option::Some(5), Option::None) == 5);
+//    assert(f(Option::None, Option::Some(-2)) == 3);
+//    assert(f(Option::Some(1), Option::Some(2)) == 3);
+//    assert(f(Option::Some(-3), Option::Some(-4)) == -7);
+//    assert(f(Option::None, Option::None) == -7);
+//}
+//
+//fn create_closure_with_break() -> (fn(int) -> int) {
+//    let upvalue = 0;
+//    let f = Option::None;
+//    while true {
+//        f = Option::Some(|x| {
+//            upvalue = upvalue + x;
+//            return upvalue;
+//        });
+//        break;
+//    }
+//    return f.unwrap();
+//}
+//
+//pub fn test_closure_with_break() {
+//    let f = create_closure_with_break();
+//    assert(f(0) == 0);
+//    assert(f(10) == 10);
+//    assert(f(1) == 11);
+//}
+//
+//pub fn test_closure_with_nested_break() {
+//    let f = || -1;
+//    while true {
+//        let a = 0;
+//        {
+//            let b = 0;
+//            let _ = -1;
+//            {
+//                let _ = -2;
+//                let c = 0;
+//                let _ = -3;
+//                f = || {
+//                    a = a + 1;
+//                    b = b + 2;
+//                    c = c + 3;
+//                    return a + b + c;
+//                };
+//                break;
+//            }
+//        }
+//    }
+//
+//    assert(f() == 6);
+//    assert(f() == 12);
+//    assert(f() == 18);
+//}

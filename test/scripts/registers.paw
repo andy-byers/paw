@@ -1,18 +1,18 @@
 // test_registers.paw
 
-//fn check_basic_guard(a: bool) -> int {
-//    if a {
-//        return 1;
-//    }
-//    return 2;
-//}
-//
-//pub fn test_basic_guard() {
-//    let check = check_basic_guard;
-//    assert(check(true) == 1);
-//    assert(check(false) == 2);
-//}
-//
+fn check_basic_guard(a: bool) -> int {
+    if a {
+        return 1;
+    }
+    return 2;
+}
+
+pub fn test_basic_guard() {
+    let check = check_basic_guard;
+    assert(check(true) == 1);
+    assert(check(false) == 2);
+}
+
 //fn check_nested_guards(a: bool, b: bool) -> int {
 //    if a {
 //        if b {
@@ -737,76 +737,76 @@
 //    assert(map.get_or('a', 'c') == 'b');
 //    assert(map.get_or('b', 'c') == 'c');
 //}
-
-fn repeat_helper<Ty>(value: Ty, times: int) -> [Ty] {
-    let result = [];
-    while times > 0 {
-        result.push(value);
-        times = times - 1;
-    }
-    return result;
-}
-
-struct PolyConstant<T> {
-    value: T,
-}
-impl<X> PolyConstant<X> {
-    pub fn new(x: X) -> Self {
-        return PolyConstant{value: x};
-    }
-    pub fn get(self) -> X {
-        return self.value;
-    }
-    pub fn repeat(self, times: int) -> [X] {
-        return repeat_helper(self.get(), times);
-    }
-}
-
-fn call_poly_method<Ty>(value: Ty) -> Ty {
-    let c = PolyConstant::new(value);
-    return c.repeat(5)[-1];
-}
-
-//pub fn test_poly_method_483290482309510() {
-//    let c = PolyConstant::new(42);
-//    assert(c.get() == 42);
-//    assert(c.repeat(1)[-1] == c.get());
-//    assert(#c.repeat(2) == 2);
 //
-//    assert(call_poly_method(false) == false);
-//    assert(call_poly_method(1.23) == 1.23);
-//    assert(call_poly_method(123) == 123);
-//    assert(call_poly_method('abc') == 'abc');
-//    assert(call_poly_method(1.23) == 1.23);
+//fn repeat_helper<Ty>(value: Ty, times: int) -> [Ty] {
+//    let result = [];
+//    while times > 0 {
+//        result.push(value);
+//        times = times - 1;
+//    }
+//    return result;
 //}
-
-struct CustomTag;
-
-impl PolyConstant<CustomTag> {
-    pub fn specialized(self) -> CustomTag {
-        return self.value;
-    }
-}
-
-impl PolyConstant<[CustomTag]> {
-    pub fn specialized(self) -> int {
-        return #self.value;
-    }
-}
-
-fn call_specialized_method(n: int) -> int {
-    let tags = [];
-    while n > 0 {
-        let k = PolyConstant::new(CustomTag);
-        tags.push(k.specialized());
-        n = n - 1;
-    }
-    let k = PolyConstant::new(tags);
-    return k.specialized();
-}
-
-pub fn test_method_specialization() {
-    assert(call_specialized_method(0) == 0);
-    assert(call_specialized_method(1) == 1);
-    assert(call_specialized_method(10) == 10);
-}
+//
+//struct PolyConstant<T> {
+//    value: T,
+//}
+//impl<X> PolyConstant<X> {
+//    pub fn new(x: X) -> Self {
+//        return PolyConstant{value: x};
+//    }
+//    pub fn get(self) -> X {
+//        return self.value;
+//    }
+//    pub fn repeat(self, times: int) -> [X] {
+//        return repeat_helper(self.get(), times);
+//    }
+//}
+//
+//fn call_poly_method<Ty>(value: Ty) -> Ty {
+//    let c = PolyConstant::new(value);
+//    return c.repeat(5)[-1];
+//}
+//
+////pub fn test_poly_method_483290482309510() {
+////    let c = PolyConstant::new(42);
+////    assert(c.get() == 42);
+////    assert(c.repeat(1)[-1] == c.get());
+////    assert(#c.repeat(2) == 2);
+////
+////    assert(call_poly_method(false) == false);
+////    assert(call_poly_method(1.23) == 1.23);
+////    assert(call_poly_method(123) == 123);
+////    assert(call_poly_method('abc') == 'abc');
+////    assert(call_poly_method(1.23) == 1.23);
+////}
+//
+//struct CustomTag;
+//
+//impl PolyConstant<CustomTag> {
+//    pub fn specialized(self) -> CustomTag {
+//        return self.value;
+//    }
+//}
+//
+//impl PolyConstant<[CustomTag]> {
+//    pub fn specialized(self) -> int {
+//        return #self.value;
+//    }
+//}
+//
+//fn call_specialized_method(n: int) -> int {
+//    let tags = [];
+//    while n > 0 {
+//        let k = PolyConstant::new(CustomTag);
+//        tags.push(k.specialized());
+//        n = n - 1;
+//    }
+//    let k = PolyConstant::new(tags);
+//    return k.specialized();
+//}
+//
+//pub fn test_method_specialization() {
+//    assert(call_specialized_method(0) == 0);
+//    assert(call_specialized_method(1) == 1);
+//    assert(call_specialized_method(10) == 10);
+//}

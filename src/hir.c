@@ -132,6 +132,7 @@ DEFINE_LIST_ACCEPTOR(pat, Pat)
 static void AcceptBlock(struct HirVisitor *V, struct HirBlock *s)
 {
     accept_stmt_list(V, s->stmts);
+    AcceptExpr(V, s->result);
 }
 
 static void AcceptLogicalExpr(struct HirVisitor *V, struct HirLogicalExpr *e)
@@ -159,10 +160,10 @@ static void AcceptMatchArm(struct HirVisitor *V, struct HirMatchArm *e)
     AcceptBlock(V, e->result);
 }
 
-static void AcceptMatchStmt(struct HirVisitor *V, struct HirMatchStmt *e)
+static void AcceptMatchExpr(struct HirVisitor *V, struct HirMatchExpr *e)
 {
     AcceptExpr(V, e->target);
-    accept_stmt_list(V, e->arms);
+    accept_expr_list(V, e->arms);
 }
 
 static void AcceptSegment(struct HirVisitor *V, struct HirSegment *seg)
@@ -278,7 +279,7 @@ static void AcceptVarDecl(struct HirVisitor *V, struct HirVarDecl *d)
     if (d->init != NULL) AcceptExpr(V, d->init);
 }
 
-static void AcceptReturnStmt(struct HirVisitor *V, struct HirReturnStmt *s)
+static void AcceptReturnExpr(struct HirVisitor *V, struct HirReturnExpr *s)
 {
     if (s->expr != NULL) AcceptExpr(V, s->expr);
 }
@@ -294,11 +295,6 @@ static void AcceptConversionExpr(struct HirVisitor *V, struct HirConversionExpr 
     AcceptExpr(V, e->arg);
 }
 
-static void AcceptSwitchDiscr(struct HirVisitor *V, struct HirSwitchDiscr *e)
-{
-    AcceptExpr(V, e->target);
-}
-
 static void AcceptPathExpr(struct HirVisitor *V, struct HirPathExpr *e)
 {
     AcceptPath(V, e->path);
@@ -311,26 +307,26 @@ static void AcceptFuncDecl(struct HirVisitor *V, struct HirFuncDecl *d)
     if (d->body != NULL) AcceptBlock(V, d->body);
 }
 
-static void AcceptIfStmt(struct HirVisitor *V, struct HirIfStmt *s)
+static void AcceptIfExpr(struct HirVisitor *V, struct HirIfExpr *s)
 {
     AcceptExpr(V, s->cond);
-    AcceptStmt(V, s->then_arm);
-    if (s->else_arm != NULL) AcceptStmt(V, s->else_arm);
+    AcceptExpr(V, s->then_arm);
+    if (s->else_arm != NULL) AcceptExpr(V, s->else_arm);
 }
 
-static void AcceptWhileStmt(struct HirVisitor *V, struct HirWhileStmt *s)
+static void AcceptWhileExpr(struct HirVisitor *V, struct HirWhileExpr *s)
 {
     AcceptExpr(V, s->cond);
     AcceptBlock(V, s->block);
 }
 
-static void AcceptJumpStmt(struct HirVisitor *V, struct HirJumpStmt *s)
+static void AcceptJumpExpr(struct HirVisitor *V, struct HirJumpExpr *s)
 {
     PAW_UNUSED(V);
     PAW_UNUSED(s);
 }
 
-static void AcceptForStmt(struct HirVisitor *V, struct HirForStmt *s)
+static void AcceptForExpr(struct HirVisitor *V, struct HirForExpr *s)
 {
     if (s->is_fornum) {
         AcceptExpr(V, s->fornum.begin);
@@ -723,7 +719,7 @@ DEFINE_KIND_PRINTER(stmt, HirStmt)
 DEFINE_KIND_PRINTER(type, HirType)
 DEFINE_KIND_PRINTER(pat, HirPat)
 
-#define DUMP_BLOCK(P, b) CHECK_EXP(!(b) || HirIsBlock(HIR_CAST_STMT(b)), (b) ? dump_stmt(P, HIR_CAST_STMT(b)) : DUMP_LITERAL(P, "{}\n"))
+#define DUMP_BLOCK(P, b) CHECK_EXP(!(b) || HirIsBlock(HIR_CAST_EXPR(b)), (b) ? dump_expr(P, HIR_CAST_EXPR(b)) : DUMP_LITERAL(P, "{}\n"))
 #define DUMP_NAME(P, s) DUMP_FMT(P, "name: %s\n", s ? s->text : "(null)")
 
 static void dump_expr(struct Printer *, struct HirExpr *);
@@ -870,66 +866,14 @@ static void dump_stmt(struct Printer *P, struct HirStmt *s)
     ++P->indent;
     DUMP_FMT(P, "line: %d\n", s->hdr.line);
     switch (HIR_KINDOF(s)) {
-        case kHirMatchArm:
-            DUMP_MSG(P, "pat: ");
-            dump_pat(P, s->arm.pat);
-            DUMP_MSG(P, "result: ");
-            DUMP_BLOCK(P, s->arm.result);
-            break;
-        case kHirMatchStmt:
-            DUMP_MSG(P, "target: ");
-            dump_expr(P, s->match.target);
-            dump_stmt_list(P, s->match.arms, "arms");
-            break;
         case kHirExprStmt:
             DUMP_MSG(P, "expr: ");
             dump_expr(P, s->expr.expr);
-            break;
-        case kHirBlock:
-            dump_stmt_list(P, s->block.stmts, "stmts");
             break;
         case kHirDeclStmt:
             DUMP_MSG(P, "decl: ");
             dump_decl(P, s->decl.decl);
             break;
-        case kHirIfStmt:
-            DUMP_MSG(P, "cond: ");
-            dump_expr(P, s->if_.cond);
-            DUMP_MSG(P, "then_arm: ");
-            dump_stmt(P, s->if_.then_arm);
-            DUMP_MSG(P, "else_arm: ");
-            dump_stmt(P, s->if_.else_arm);
-            break;
-        case kHirForStmt:
-            if (s->for_.is_fornum) {
-                DUMP_MSG(P, "begin: ");
-                dump_expr(P, s->for_.fornum.begin);
-                DUMP_MSG(P, "end: ");
-                dump_expr(P, s->for_.fornum.end);
-                DUMP_MSG(P, "step: ");
-                dump_expr(P, s->for_.fornum.step);
-                DUMP_MSG(P, "block: ");
-                DUMP_BLOCK(P, s->for_.block);
-            } else {
-                DUMP_MSG(P, "target: ");
-                dump_expr(P, s->for_.forin.target);
-                DUMP_MSG(P, "block: ");
-                DUMP_BLOCK(P, s->for_.block);
-            }
-            break;
-        case kHirWhileStmt:
-            DUMP_FMT(P, "is_dowhile: %d\n", s->while_.is_dowhile);
-            DUMP_MSG(P, "cond: ");
-            dump_expr(P, s->while_.cond);
-            DUMP_MSG(P, "block: ");
-            DUMP_BLOCK(P, s->while_.block);
-            break;
-        case kHirReturnStmt:
-            DUMP_MSG(P, "expr: ");
-            dump_expr(P, s->result.expr);
-            break;
-        case kHirJumpStmt:
-            DUMP_FMT(P, "jump_kind: %s\n", s->jump.jump_kind == JUMP_BREAK ? "BREAK" : "CONTINUE");
     }
     --P->indent;
     DUMP_MSG(P, "}\n");
@@ -1057,11 +1001,6 @@ static void dump_expr(struct Printer *P, struct HirExpr *e)
             DUMP_MSG(P, "path: ");
             dump_path(P, e->path.path);
             break;
-        case kHirSwitchDiscr:
-            DUMP_FMT(P, "expect: %d", e->iswitch.expect);
-            DUMP_MSG(P, "target: ");
-            dump_expr(P, e->iswitch.target);
-            break;
         case kHirConversionExpr:
             DUMP_FMT(P, "to: %d\n", e->conv.to);
             DUMP_MSG(P, "arg: ");
@@ -1117,6 +1056,60 @@ static void dump_expr(struct Printer *P, struct HirExpr *e)
             dump_expr(P, e->assign.lhs);
             DUMP_MSG(P, "rhs: ");
             dump_expr(P, e->assign.rhs);
+            break;
+        case kHirMatchArm:
+            DUMP_MSG(P, "pat: ");
+            dump_pat(P, e->arm.pat);
+            DUMP_MSG(P, "result: ");
+            DUMP_BLOCK(P, e->arm.result);
+            break;
+        case kHirMatchExpr:
+            DUMP_MSG(P, "target: ");
+            dump_expr(P, e->match.target);
+            dump_expr_list(P, e->match.arms, "arms");
+            break;
+        case kHirIfExpr:
+            DUMP_MSG(P, "cond: ");
+            dump_expr(P, e->if_.cond);
+            DUMP_MSG(P, "then_arm: ");
+            dump_expr(P, e->if_.then_arm);
+            DUMP_MSG(P, "else_arm: ");
+            dump_expr(P, e->if_.else_arm);
+            break;
+        case kHirForExpr:
+            if (e->for_.is_fornum) {
+                DUMP_MSG(P, "begin: ");
+                dump_expr(P, e->for_.fornum.begin);
+                DUMP_MSG(P, "end: ");
+                dump_expr(P, e->for_.fornum.end);
+                DUMP_MSG(P, "step: ");
+                dump_expr(P, e->for_.fornum.step);
+                DUMP_MSG(P, "block: ");
+                DUMP_BLOCK(P, e->for_.block);
+            } else {
+                DUMP_MSG(P, "target: ");
+                dump_expr(P, e->for_.forin.target);
+                DUMP_MSG(P, "block: ");
+                DUMP_BLOCK(P, e->for_.block);
+            }
+            break;
+        case kHirWhileExpr:
+            DUMP_MSG(P, "cond: ");
+            dump_expr(P, e->while_.cond);
+            DUMP_MSG(P, "block: ");
+            DUMP_BLOCK(P, e->while_.block);
+            break;
+        case kHirReturnExpr:
+            DUMP_MSG(P, "expr: ");
+            dump_expr(P, e->result.expr);
+            break;
+        case kHirJumpExpr:
+            DUMP_FMT(P, "jump_kind: %e\n", e->jump.jump_kind == JUMP_BREAK ? "BREAK" : "CONTINUE");
+            break;
+        case kHirBlock:
+            dump_stmt_list(P, e->block.stmts, "stmts");
+            dump_expr(P, e->block.result);
+            break;
     }
     --P->indent;
     DUMP_MSG(P, "}\n");

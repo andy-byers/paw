@@ -3,7 +3,7 @@
 fn random(n: int) -> [int] {
     let a = [];
     let x = n;
-    for _ = 0, n {
+    while #a < n {
         x = (140671485 * x + 12820163) % 16777216;
         a.push(x);
     }
@@ -14,13 +14,15 @@ fn bubble(n: int) -> [int] {
     let a = random(n);
     while true {
         let swapped = false;
-        for i = 1, n {
+        let i = 1;
+        while i < n {
             if a[i] < a[i - 1] {
                 let t = a[i];
                 a[i] = a[i - 1];
                 a[i - 1] = t;
                 swapped = true;
             }
+            i = i + 1;
         }
         if !swapped {
             break;

@@ -70,7 +70,7 @@ static void indent_line(Printer *P)
 
 #define DUMP_FMT(P, ...) (indent_line(P), pawL_add_fstring(ENV(P), (P)->buf, __VA_ARGS__))
 #define DUMP_MSG(P, msg) (indent_line(P), pawL_add_string(ENV(P), (P)->buf, msg))
-#define DUMP_BLOCK(P, b) CHECK_EXP(AstIsBlock(AST_CAST_STMT(b)), dump_stmt(P, AST_CAST_STMT(b)))
+#define DUMP_BLOCK(P, b) CHECK_EXP(AstIsBlock(AST_CAST_EXPR(b)), dump_expr(P, AST_CAST_EXPR(b)))
 #define DUMP_NAME(P, s) DUMP_FMT(P, "name: %s\n", s ? s->text : "(null)")
 
 static void dump_expr(Printer *P, struct AstExpr *e);
@@ -189,56 +189,9 @@ static void dump_stmt(Printer *P, struct AstStmt *s)
             DUMP_MSG(P, "expr: ");
             dump_expr(P, s->expr.expr);
             break;
-        case kAstBlock:
-            dump_stmt_list(P, s->block.stmts, "stmts");
-            break;
         case kAstDeclStmt:
             DUMP_MSG(P, "decl: ");
             dump_decl(P, s->decl.decl);
-            break;
-        case kAstIfStmt:
-            DUMP_MSG(P, "cond: ");
-            dump_expr(P, s->if_.cond);
-            DUMP_MSG(P, "then_arm: ");
-            dump_stmt(P, s->if_.then_arm);
-            DUMP_MSG(P, "else_arm: ");
-            dump_stmt(P, s->if_.else_arm);
-            break;
-        case kAstForStmt:
-            if (s->for_.is_fornum) {
-                DUMP_NAME(P, s->for_.name);
-                DUMP_MSG(P, "begin: ");
-                dump_expr(P, s->for_.fornum.begin);
-                DUMP_MSG(P, "end: ");
-                dump_expr(P, s->for_.fornum.end);
-                DUMP_MSG(P, "step: ");
-                dump_expr(P, s->for_.fornum.step);
-                DUMP_MSG(P, "block: ");
-                DUMP_BLOCK(P, s->for_.block);
-            } else {
-                DUMP_NAME(P, s->for_.name);
-                DUMP_MSG(P, "target: ");
-                dump_expr(P, s->for_.forin.target);
-                DUMP_MSG(P, "block: ");
-                DUMP_BLOCK(P, s->for_.block);
-            }
-            break;
-        case kAstWhileStmt:
-            if (s->while_.is_dowhile) {
-                DUMP_MSG(P, "block: ");
-                DUMP_BLOCK(P, s->while_.block);
-                DUMP_MSG(P, "cond: ");
-                dump_expr(P, s->while_.cond);
-            } else {
-                DUMP_MSG(P, "cond: ");
-                dump_expr(P, s->while_.cond);
-                DUMP_MSG(P, "block: ");
-                DUMP_BLOCK(P, s->while_.block);
-            }
-            break;
-        case kAstReturnStmt:
-            DUMP_MSG(P, "expr: ");
-            dump_expr(P, s->result.expr);
             break;
         default:
             break;
@@ -355,6 +308,47 @@ static void dump_expr(Printer *P, struct AstExpr *e)
             dump_expr_list(P, e->sig.params, "params");
             DUMP_MSG(P, "result: ");
             dump_expr(P, e->sig.result);
+            break;
+        case kAstBlock:
+            dump_stmt_list(P, e->block.stmts, "stmts");
+            dump_expr(P, e->block.result);
+            break;
+        case kAstIfExpr:
+            DUMP_MSG(P, "cond: ");
+            dump_expr(P, e->if_.cond);
+            DUMP_MSG(P, "then_arm: ");
+            dump_expr(P, e->if_.then_arm);
+            DUMP_MSG(P, "else_arm: ");
+            dump_expr(P, e->if_.else_arm);
+            break;
+        case kAstForExpr:
+            if (e->for_.is_fornum) {
+                DUMP_NAME(P, e->for_.name);
+                DUMP_MSG(P, "begin: ");
+                dump_expr(P, e->for_.fornum.begin);
+                DUMP_MSG(P, "end: ");
+                dump_expr(P, e->for_.fornum.end);
+                DUMP_MSG(P, "step: ");
+                dump_expr(P, e->for_.fornum.step);
+                DUMP_MSG(P, "block: ");
+                DUMP_BLOCK(P, e->for_.block);
+            } else {
+                DUMP_NAME(P, e->for_.name);
+                DUMP_MSG(P, "target: ");
+                dump_expr(P, e->for_.forin.target);
+                DUMP_MSG(P, "block: ");
+                DUMP_BLOCK(P, e->for_.block);
+            }
+            break;
+        case kAstWhileExpr:
+            DUMP_MSG(P, "cond: ");
+            dump_expr(P, e->while_.cond);
+            DUMP_MSG(P, "block: ");
+            DUMP_BLOCK(P, e->while_.block);
+            break;
+        case kAstReturnExpr:
+            DUMP_MSG(P, "expr: ");
+            dump_expr(P, e->result.expr);
             break;
         default:
             break;

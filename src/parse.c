@@ -274,7 +274,12 @@ static struct AstExpr *new_basic_lit(struct Lex *lex, Value v, paw_Type code)
     return r;
 }
 
-static struct AstExpr *emit_unit(struct Lex *lex)
+static struct AstExpr *unit_lit(struct Lex *lex)
+{
+    return new_basic_lit(lex, (Value){0}, PAW_TUNIT);
+}
+
+static struct AstExpr *unit_type(struct Lex *lex)
 {
     struct AstExpr *r = NEW_EXPR(lex, kAstTupleType);
     r->tuple.types = pawAst_expr_list_new(lex->C);
@@ -558,19 +563,6 @@ static struct AstDeclList *variant_field_list(struct Lex *lex, int line)
     return list;
 }
 
-static void set_unit(struct Lex *lex, struct AstExpr *pe)
-{
-    pe->tuple.kind = kAstTupleType;
-    pe->tuple.types = pawAst_expr_list_new(lex->C);
-}
-
-static struct AstExpr *unit_type(struct Lex *lex)
-{
-    struct AstExpr *r = NEW_EXPR(lex, 0);
-    set_unit(lex, r);
-    return r;
-}
-
 static void parse_tuple_type(struct Lex *lex, struct AstExpr *pe, int line)
 {
     struct AstExpr *first = NEW_EXPR(lex, 0);
@@ -762,8 +754,7 @@ static struct AstExpr *paren_expr(struct Lex *lex)
     const int line = lex->line;
     skip(lex); // '(' token
     if (test_next(lex, ')')) {
-        const Value v = {.p = NULL};
-        return new_basic_lit(lex, v, PAW_TUNIT);
+        return unit_lit(lex);
     }
     ++lex->expr_depth;
     struct AstExpr *expr = expr0(lex);
@@ -793,7 +784,7 @@ static struct AstExpr *parse_signature(struct Lex *lex)
     if (test_next(lex, TK_ARROW)) {
         e->sig.result = type_expr(lex);
     } else {
-        e->sig.result = emit_unit(lex);
+        e->sig.result = unit_type(lex);
     }
     return e;
 }
@@ -955,21 +946,45 @@ static struct AstDeclList *clos_parameters(struct Lex *lex)
     return list;
 }
 
+static paw_Bool expects_semicolon(struct AstExpr *expr)
+{
+    switch (AST_KINDOF(expr)) {
+        default:
+            return PAW_TRUE;
+        case kAstIfExpr:
+        case kAstForExpr:
+        case kAstWhileExpr:
+        case kAstMatchExpr:
+        case kAstBlock:
+            return PAW_FALSE;
+    }
+}
+
 static struct AstBlock *block(struct Lex *lex)
 {
     const int line = lex->line;
-    struct AstStmt *result = NEW_STMT(lex, kAstBlock);
+    struct AstExpr *result = NEW_EXPR(lex, kAstBlock);
     struct AstBlock *r = &result->block;
     check_next(lex, '{');
     r->stmts = pawAst_stmt_list_new(lex->C);
     while (!end_of_block(lex)) {
         struct AstStmt *next = statement(lex);
-        if (next != NULL) {
-            K_LIST_PUSH(lex->C, r->stmts, next);
-            if (AstIsReturnStmt(next) || AstIsJumpStmt(next)) {
-                break; // must be last statement in block
+        if (next == NULL) continue; // extra ';'
+        K_LIST_PUSH(lex->C, r->stmts, next);
+        if (AstIsDeclStmt(next)) {
+            semicolon(lex);
+        } else if (!test_next(lex, ';')) {
+            struct AstExprStmt *s = AstGetExprStmt(next);
+            if (expects_semicolon(s->expr)
+                    || test(lex, '}')) {
+                K_LIST_POP(r->stmts);
+                r->result = s->expr;
+                break;
             }
         }
+    }
+    if (r->result == NULL) {
+        r->result = unit_lit(lex);
     }
     delim_next(lex, '}', '{', line);
     return r;
@@ -993,6 +1008,131 @@ static struct AstExpr *closure(struct Lex *lex)
     return r;
 }
 
+static struct AstExpr *if_expr(struct Lex *lex)
+{
+    skip(lex); // 'if' token
+    struct AstExpr *result = NEW_EXPR(lex, kAstIfExpr);
+    struct AstIfExpr *r = AstGetIfExpr(result);
+    r->cond = basic_expr(lex);
+    r->then_arm = AST_CAST_EXPR(block(lex));
+
+    if (test_next(lex, TK_ELSE)) {
+        if (test(lex, TK_IF)) {
+            // Put the rest of the chain in the else branch. This transformation
+            // looks like 'if a {} else if b {} else {}' => 'if a {} else {if b
+            // {} else {}}'.
+            r->else_arm = if_expr(lex);
+        } else {
+            r->else_arm = AST_CAST_EXPR(block(lex));
+        }
+    }
+    return result;
+}
+
+static struct AstExpr *fornum(struct Lex *lex, String *ivar)
+{
+    struct AstExpr *r = NEW_EXPR(lex, kAstForExpr);
+    struct AstForNum *fornum = &AstGetForExpr(r)->fornum;
+    r->for_.is_fornum = PAW_TRUE;
+    r->for_.name = ivar;
+
+    // Parse the loop bounds ('begin', 'end', and 'step' expressions).
+    fornum->begin = basic_expr(lex);
+    check_next(lex, ',');
+    fornum->end = basic_expr(lex);
+    if (test_next(lex, ',')) {
+        fornum->step = basic_expr(lex);
+    } else {
+        Value v;
+        V_SET_INT(&v, 1); // step defaults to 1
+        fornum->step = new_basic_lit(lex, v, PAW_TINT);
+    }
+
+    r->for_.block = block(lex);
+    return r;
+}
+
+static struct AstExpr *forin(struct Lex *lex, String *ivar)
+{
+    struct AstExpr *r = NEW_EXPR(lex, kAstForExpr);
+    r->for_.forin.target = basic_expr(lex);
+    r->for_.name = ivar;
+    r->for_.block = block(lex);
+    return r;
+}
+
+static struct AstExpr *for_expr(struct Lex *lex)
+{
+    skip(lex); // 'for' token
+    String *ivar = parse_name(lex);
+    if (test_next(lex, '=')) {
+        return fornum(lex, ivar);
+    } else if (!test_next(lex, TK_IN)) {
+        expected_symbol(lex, "'=' or 'in'"); // no return
+    }
+    struct AstExpr *expr = forin(lex, ivar);
+    return expr;
+}
+
+static struct AstExpr *while_expr(struct Lex *lex)
+{
+    struct AstExpr *r = NEW_EXPR(lex, kAstWhileExpr);
+    skip(lex); // 'while' token
+    r->while_.cond = basic_expr(lex);
+    r->while_.block = block(lex);
+    return r;
+}
+
+static struct AstExpr *return_expr(struct Lex *lex)
+{
+    struct AstExpr *result = NEW_EXPR(lex, kAstReturnExpr);
+    struct AstReturnExpr *r = AstGetReturnExpr(result);
+    skip(lex); // 'return' token
+    if (!test(lex, ';') && !test(lex, '}')) {
+        r->expr = expr0(lex);
+    }
+    return result;
+}
+
+static struct AstExpr *jump_expr(struct Lex *lex, enum JumpKind kind)
+{
+    struct AstExpr *r = NEW_EXPR(lex, kAstJumpExpr);
+    skip(lex); // 'break' or 'continue' token
+    r->jump.jump_kind = kind;
+    return r;
+}
+
+static struct AstExpr *match_arm(struct Lex *lex)
+{
+    struct AstExpr *result = NEW_EXPR(lex, kAstMatchArm);
+    struct AstMatchArm *r = AstGetMatchArm(result);
+    r->pat = pattern(lex);
+    if (test_next(lex, TK_IF)) {
+        r->guard = basic_expr(lex);
+    }
+    check_next(lex, TK_FAT_ARROW);
+    r->result = block(lex);
+    return result;
+}
+
+static struct AstExpr *match_expr(struct Lex *lex)
+{
+    const int line = lex->line;
+    struct AstExpr *result = NEW_EXPR(lex, kAstMatchExpr);
+    struct AstMatchExpr *r = AstGetMatchExpr(result);
+    skip(lex); // 'match' token
+    r->target = basic_expr(lex);
+    r->arms = pawAst_expr_list_new(lex->C);
+    check_next(lex, '{');
+    do {
+        if (test(lex, '}')) break;
+        struct AstExpr *arm = match_arm(lex);
+        K_LIST_PUSH(lex->C, r->arms, arm);
+    } while (test_next(lex, ','));
+    delim_next(lex, '}', '{', line);
+    return result;
+}
+
 static struct AstExpr *primary_expr(struct Lex *lex)
 {
     enter_nested(lex);
@@ -1006,6 +1146,30 @@ static struct AstExpr *primary_expr(struct Lex *lex)
             break;
         case TK_NAME:
             expr = path_expr(lex);
+            break;
+        case '{':
+            expr = AST_CAST_EXPR(block(lex));
+            break;
+        case TK_IF:
+            expr = if_expr(lex);
+            break;
+        case TK_FOR:
+            expr = for_expr(lex);
+            break;
+        case TK_WHILE:
+            expr = while_expr(lex);
+            break;
+        case TK_RETURN:
+            expr = return_expr(lex);
+            break;
+        case TK_BREAK:
+            expr = jump_expr(lex, JUMP_BREAK);
+            break;
+        case TK_CONTINUE:
+            expr = jump_expr(lex, JUMP_CONTINUE);
+            break;
+        case TK_MATCH:
+            expr = match_expr(lex);
             break;
         default:
             expr = NULL;
@@ -1181,121 +1345,12 @@ static struct AstExpr *basic_expr(struct Lex *lex)
     return expr;
 }
 
-static struct AstStmt *if_stmt(struct Lex *lex)
-{
-    skip(lex); // 'if' token
-    struct AstStmt *result = NEW_STMT(lex, kAstIfStmt);
-    struct AstIfStmt *r = AstGetIfStmt(result);
-    r->cond = basic_expr(lex);
-    r->then_arm = AST_CAST_STMT(block(lex));
-
-    if (test_next(lex, TK_ELSE)) {
-        if (test(lex, TK_IF)) {
-            // Put the rest of the chain in the else branch. This transformation
-            // looks like 'if a {} else if b {} else {}' => 'if a {} else {if b
-            // {} else {}}'.
-            r->else_arm = if_stmt(lex);
-        } else {
-            r->else_arm = AST_CAST_STMT(block(lex));
-        }
-    }
-    return result;
-}
-
 static struct AstStmt *expr_stmt(struct Lex *lex)
 {
     struct AstStmt *result = NEW_STMT(lex, kAstExprStmt);
     struct AstExprStmt *r = &result->expr;
     r->expr = expr0(lex);
-    semicolon(lex);
     return result;
-}
-
-static struct AstStmt *fornum(struct Lex *lex, String *ivar)
-{
-    struct AstStmt *r = NEW_STMT(lex, kAstForStmt);
-    struct AstForNum *fornum = &AstGetForStmt(r)->fornum;
-    r->for_.is_fornum = PAW_TRUE;
-    r->for_.name = ivar;
-
-    // Parse the loop bounds ('begin', 'end', and 'step' expressions).
-    fornum->begin = basic_expr(lex);
-    check_next(lex, ',');
-    fornum->end = basic_expr(lex);
-    if (test_next(lex, ',')) {
-        fornum->step = basic_expr(lex);
-    } else {
-        Value v;
-        V_SET_INT(&v, 1); // step defaults to 1
-        fornum->step = new_basic_lit(lex, v, PAW_TINT);
-    }
-
-    r->for_.block = block(lex);
-    return r;
-}
-
-static struct AstStmt *forin(struct Lex *lex, String *ivar)
-{
-    struct AstStmt *r = NEW_STMT(lex, kAstForStmt);
-    r->for_.forin.target = basic_expr(lex);
-    r->for_.name = ivar;
-    r->for_.block = block(lex);
-    return r;
-}
-
-static struct AstStmt *for_stmt(struct Lex *lex)
-{
-    skip(lex); // 'for' token
-    String *ivar = parse_name(lex);
-    if (test_next(lex, '=')) {
-        return fornum(lex, ivar);
-    } else if (!test_next(lex, TK_IN)) {
-        expected_symbol(lex, "'=' or 'in'"); // no return
-    }
-    struct AstStmt *stmt = forin(lex, ivar);
-    return stmt;
-}
-
-static struct AstStmt *while_stmt(struct Lex *lex)
-{
-    struct AstStmt *r = NEW_STMT(lex, kAstWhileStmt);
-    skip(lex); // 'while' token
-    r->while_.cond = basic_expr(lex);
-    r->while_.block = block(lex);
-    return r;
-}
-
-static struct AstStmt *dowhile_stmt(struct Lex *lex)
-{
-    struct AstStmt *r = NEW_STMT(lex, kAstWhileStmt);
-    r->while_.is_dowhile = PAW_TRUE;
-    skip(lex); // 'do' token
-    r->while_.block = block(lex);
-    check_next(lex, TK_WHILE);
-    r->while_.cond = basic_expr(lex);
-    semicolon(lex);
-    return r;
-}
-
-static struct AstStmt *return_stmt(struct Lex *lex)
-{
-    struct AstStmt *result = NEW_STMT(lex, kAstReturnStmt);
-    struct AstReturnStmt *r = AstGetReturnStmt(result);
-    skip(lex); // 'return' token
-    if (!test_next(lex, ';')) {
-        r->expr = expr0(lex);
-        semicolon(lex);
-    }
-    return result;
-}
-
-static struct AstStmt *jump_stmt(struct Lex *lex, enum JumpKind kind)
-{
-    struct AstStmt *r = NEW_STMT(lex, kAstJumpStmt);
-    skip(lex); // 'break' or 'continue' token
-    r->jump.jump_kind = kind;
-    semicolon(lex);
-    return r;
 }
 
 static struct AstDeclList *type_param(struct Lex *lex)
@@ -1532,43 +1587,8 @@ static struct AstStmt *decl_stmt(struct Lex *lex)
 {
     struct AstStmt *r = NEW_STMT(lex, kAstDeclStmt);
     r->decl.decl = decl(lex);
-    semicolon(lex);
     return r;
 }
-
-static struct AstStmt *match_arm(struct Lex *lex)
-{
-    struct AstStmt *result = NEW_STMT(lex, kAstMatchArm);
-    struct AstMatchArm *r = AstGetMatchArm(result);
-    r->pat = pattern(lex);
-    if (test_next(lex, TK_IF)) {
-        r->guard = basic_expr(lex);
-    }
-    check_next(lex, TK_FAT_ARROW);
-    r->result = block(lex);
-    return result;
-}
-
-static struct AstStmt *match_stmt(struct Lex *lex)
-{
-    const int line = lex->line;
-    struct AstStmt *result = NEW_STMT(lex, kAstMatchStmt);
-    struct AstMatchStmt *r = AstGetMatchStmt(result);
-    skip(lex); // 'match' token
-    r->target = basic_expr(lex);
-    r->arms = pawAst_stmt_list_new(lex->C);
-    check_next(lex, '{');
-    do {
-        if (test(lex, '}')) {
-            break;
-        }
-        struct AstStmt *arm = match_arm(lex);
-        K_LIST_PUSH(lex->C, r->arms, arm);
-    } while (test_next(lex, ','));
-    delim_next(lex, '}', '{', line);
-    return result;
-}
-
 
 static struct AstStmt *statement(struct Lex *lex)
 {
@@ -1579,36 +1599,9 @@ static struct AstStmt *statement(struct Lex *lex)
             skip(lex); // ';' token
             stmt = NULL;
             break;
-        case '{':
-            stmt = AST_CAST_STMT(block(lex));
-            break;
-        case TK_IF:
-            stmt = if_stmt(lex);
-            break;
-        case TK_FOR:
-            stmt = for_stmt(lex);
-            break;
-        case TK_WHILE:
-            stmt = while_stmt(lex);
-            break;
-        case TK_DO:
-            stmt = dowhile_stmt(lex);
-            break;
-        case TK_RETURN:
-            stmt = return_stmt(lex);
-            break;
-        case TK_BREAK:
-            stmt = jump_stmt(lex, JUMP_BREAK);
-            break;
-        case TK_CONTINUE:
-            stmt = jump_stmt(lex, JUMP_CONTINUE);
-            break;
         case TK_LET:
         case TK_TYPE:
             stmt = decl_stmt(lex);
-            break;
-        case TK_MATCH:
-            stmt = match_stmt(lex);
             break;
         default:
             stmt = expr_stmt(lex);

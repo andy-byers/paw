@@ -2,8 +2,8 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
-#ifndef PAW_TEST_H
-#define PAW_TEST_H
+#ifndef PAW_TEST_TEST_H
+#define PAW_TEST_TEST_H
 
 #include "paw.h"
 #include "os.h"
@@ -11,7 +11,7 @@
 #include <stdlib.h>
 
 #define TEST_SCRIPTS(X) \
-    X(import) \
+    X(cfg) \
     X(primitive) \
     X(operator) \
     X(block) \
@@ -27,15 +27,17 @@
     X(enum) \
     X(method) \
     X(match) \
-    X(match_or) \
     X(match_enum) \
+    X(match_poly_enum) \
+    X(match_or) \
+    X(match_guard) \
     X(list) \
     X(map) \
     X(misc) \
+    X(import) \
     X(poly_function) \
     X(poly_struct) \
     X(poly_enum) \
-    X(match_poly_enum) \
     X(unit_struct) \
     X(unit_variant) \
     X(infer_assoc_items) \
@@ -90,4 +92,4 @@ void test_randstr(char *str, int len);
 #undef PAW_STACK_MAX
 #define PAW_STACK_MAX 10000
 
-#endif // PAW_TEST_H
+#endif // PAW_TEST_TEST_H

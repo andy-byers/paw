@@ -52,7 +52,6 @@ enum MultiChar {
     TK_IF,
     TK_ELSE,
     TK_FOR,
-    TK_DO,
     TK_WHILE,
     TK_MATCH,
     TK_BREAK,
