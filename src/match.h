@@ -51,7 +51,7 @@ struct Constructor {
 
 struct MatchBody {
     struct BindingList *bindings;
-    struct HirBlock *block;
+    struct HirExpr *result;
 };
 
 struct MatchCase {

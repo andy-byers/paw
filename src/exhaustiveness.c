@@ -96,11 +96,11 @@ static struct MatchVar new_variable(struct Usefulness *U, struct IrType *type)
     return K_LIST_LAST(U->vars);
 }
 
-static struct MatchBody new_body(struct Usefulness *U, struct HirBlock *block)
+static struct MatchBody new_body(struct Usefulness *U, struct HirExpr *result)
 {
     return (struct MatchBody){
         .bindings = binding_list_new(U->C),
-        .block = block,
+        .result = result,
     };
 }
 
@@ -120,7 +120,7 @@ static struct MatchBody copy_body(struct Usefulness *U, struct MatchBody body)
     }
     return (struct MatchBody){
         .bindings = bindings,
-        .block = body.block,
+        .result = body.result,
     };
 }
 

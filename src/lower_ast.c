@@ -299,37 +299,56 @@ static struct HirExpr *LowerBinOpExpr(struct LowerAst *L, struct AstBinOpExpr *e
     return result;
 }
 
-static struct HirExpr *LowerAssignExpr(struct LowerAst *L, struct AstAssignExpr *s)
+static struct HirExpr *LowerAssignExpr(struct LowerAst *L, struct AstAssignExpr *e)
 {
-    struct HirExpr *result = pawHir_new_expr(L->C, s->line, kHirAssignExpr);
+    struct HirExpr *result = pawHir_new_expr(L->C, e->line, kHirAssignExpr);
     struct HirAssignExpr *r = HirGetAssignExpr(result);
 
-    r->lhs = lower_expr(L, s->lhs);
+    r->lhs = lower_expr(L, e->lhs);
     if (!HirIsPathExpr(r->lhs) &&
             !HirIsIndex(r->lhs) &&
             !HirIsSelector(r->lhs)) {
         SYNTAX_ERROR(L, "invalid place for assignment");
     }
-    r->rhs = lower_expr(L, s->rhs);
+    r->rhs = lower_expr(L, e->rhs);
     return result;
 }
 
-static struct HirExpr *LowerMatchExpr(struct LowerAst *L, struct AstMatchExpr *s)
+static struct HirExpr *LowerMatchExpr(struct LowerAst *L, struct AstMatchExpr *e)
 {
-    struct HirExpr *result = pawHir_new_expr(L->C, s->line, kHirMatchExpr);
+    struct HirExpr *result = pawHir_new_expr(L->C, e->line, kHirMatchExpr);
     struct HirMatchExpr *r = HirGetMatchExpr(result);
-    r->target = lower_expr(L, s->target);
-    r->arms = lower_expr_list(L, s->arms);
+    r->target = lower_expr(L, e->target);
+    r->arms = lower_expr_list(L, e->arms);
+    paw_assert(r->arms->count > 0);
+
+    // propagate "never" flag to enclosing block
+    r->never = PAW_TRUE;
+    struct HirExpr **parm;
+    K_LIST_FOREACH(r->arms, parm) {
+        struct HirMatchArm *arm = HirGetMatchArm(*parm);
+        r->never = arm->never;
+        if (!r->never) break;
+    }
+    if (r->never) indicate_jump(L);
     return result;
 }
 
-static struct HirExpr *LowerMatchArm(struct LowerAst *L, struct AstMatchArm *s)
+static struct HirExpr *LowerMatchArm(struct LowerAst *L, struct AstMatchArm *e)
 {
-    struct HirExpr *result = pawHir_new_expr(L->C, s->line, kHirMatchArm);
+    struct HirExpr *result = pawHir_new_expr(L->C, e->line, kHirMatchArm);
     struct HirMatchArm *r = HirGetMatchArm(result);
-    r->pat = lower_pat(L, s->pat);
-    if (s->guard != NULL) r->guard = lower_expr(L, s->guard);
-    r->result = LOWER_BLOCK(L, s->result);
+    r->pat = lower_pat(L, e->pat);
+    if (e->guard != NULL) r->guard = lower_expr(L, e->guard);
+
+    // wrap in a block to catch return or jump expressions not enclosed
+    // in curly brackets
+    struct BlockState bs;
+    enter_block(L, &bs, PAW_FALSE);
+    r->result = lower_expr(L, e->result);
+    leave_block(L);
+
+    r->never = bs.never;
     return result;
 }
 
@@ -959,9 +978,6 @@ static struct Hir *lower_ast(struct LowerAst *L, struct Ast *ast)
     struct ModuleInfo *mod = pawP_mi_new(L->C, hir);
     K_LIST_SET(mods, hir->modno, mod);
     hir->items = lower_decl_list(L, ast->items);
-
-pawHir_dump(hir);
-printf("%s\n", paw_string(ENV(L->C), -1));--ENV(L->C)->top.p;
 
     return hir;
 }

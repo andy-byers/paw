@@ -16,8 +16,7 @@ struct IrType;
     X(Signature) \
     X(Tuple) \
     X(Infer) \
-    X(Generic) \
-    X(Never)
+    X(Generic)
 
 enum IrTypeKind {
 #define DEFINE_ENUM(X) kIr##X,
@@ -64,10 +63,6 @@ struct IrInfer {
 struct IrGeneric {
     IR_TYPE_HEADER;
     DeclId did;
-};
-
-struct IrNever {
-    IR_TYPE_HEADER;
 };
 
 static const char *kIrTypeNames[] = {

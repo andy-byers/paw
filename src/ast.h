@@ -249,8 +249,8 @@ struct AstClosureExpr {
     struct AstDeclList *params;
     struct AstExpr *result;
     union {
-        struct AstExpr *expr;
         struct AstBlock *body;
+        struct AstExpr *expr;
     };
 };
 
@@ -393,7 +393,7 @@ struct AstMatchArm {
     AST_EXPR_HEADER;
     struct AstPat *pat;
     struct AstExpr *guard;
-    struct AstBlock *result;
+    struct AstExpr *result;
 };
 
 struct AstMatchExpr {

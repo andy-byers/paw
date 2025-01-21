@@ -157,7 +157,7 @@ static void AcceptMatchArm(struct HirVisitor *V, struct HirMatchArm *e)
 {
     AcceptPat(V, e->pat);
     if (e->guard != NULL) AcceptExpr(V, e->guard);
-    AcceptBlock(V, e->result);
+    AcceptExpr(V, e->result);
 }
 
 static void AcceptMatchExpr(struct HirVisitor *V, struct HirMatchExpr *e)
@@ -227,11 +227,7 @@ static void AcceptExprStmt(struct HirVisitor *V, struct HirExprStmt *s)
 static void AcceptClosureExpr(struct HirVisitor *V, struct HirClosureExpr *e)
 {
     accept_decl_list(V, e->params);
-    if (e->has_body) {
-        AcceptBlock(V, e->body);
-    } else {
-        AcceptExpr(V, e->expr);
-    }
+    AcceptExpr(V, e->expr);
 }
 
 static void AcceptFieldDecl(struct HirVisitor *V, struct HirFieldDecl *d)
@@ -304,7 +300,7 @@ static void AcceptFuncDecl(struct HirVisitor *V, struct HirFuncDecl *d)
 {
     accept_decl_list(V, d->generics);
     accept_decl_list(V, d->params);
-    if (d->body != NULL) AcceptBlock(V, d->body);
+    if (d->body != NULL) AcceptExpr(V, d->body);
 }
 
 static void AcceptIfExpr(struct HirVisitor *V, struct HirIfExpr *s)
@@ -816,7 +812,7 @@ static void dump_decl(struct Printer *P, struct HirDecl *d)
             dump_decl_list(P, d->func.generics, "generics");
             dump_decl_list(P, d->func.params, "params");
             DUMP_MSG(P, "body: ");
-            DUMP_BLOCK(P, d->func.body);
+            dump_expr(P, d->func.body);
             break;
         case kHirUseDecl:
             DUMP_NAME(P, d->use.name);
@@ -991,11 +987,7 @@ static void dump_expr(struct Printer *P, struct HirExpr *e)
             break;
         case kHirClosureExpr:
             dump_decl_list(P, e->clos.params, "params");
-            if (e->clos.has_body) {
-                DUMP_BLOCK(P, e->clos.body);
-            } else {
-                dump_expr(P, e->clos.expr);
-            }
+            dump_expr(P, e->clos.expr);
             break;
         case kHirPathExpr:
             DUMP_MSG(P, "path: ");
@@ -1061,7 +1053,7 @@ static void dump_expr(struct Printer *P, struct HirExpr *e)
             DUMP_MSG(P, "pat: ");
             dump_pat(P, e->arm.pat);
             DUMP_MSG(P, "result: ");
-            DUMP_BLOCK(P, e->arm.result);
+            dump_expr(P, e->arm.result);
             break;
         case kHirMatchExpr:
             DUMP_MSG(P, "target: ");
@@ -1104,7 +1096,7 @@ static void dump_expr(struct Printer *P, struct HirExpr *e)
             dump_expr(P, e->result.expr);
             break;
         case kHirJumpExpr:
-            DUMP_FMT(P, "jump_kind: %e\n", e->jump.jump_kind == JUMP_BREAK ? "BREAK" : "CONTINUE");
+            DUMP_FMT(P, "jump_kind: %s\n", e->jump.jump_kind == JUMP_BREAK ? "BREAK" : "CONTINUE");
             break;
         case kHirBlock:
             dump_stmt_list(P, e->block.stmts, "stmts");

@@ -549,8 +549,6 @@ static void dump_usedef(struct Compiler *C, Map *uses, Map *defs)
 
 void pawMir_remove_unreachable_blocks(struct Compiler *C, struct Mir *mir, Map *uses, Map *defs)
 {
-    printf("aaa %s\n", pawMir_dump(C, mir));--ENV(C)->top.p;
-
     // create a mapping from old to new basic block numbers
     Map *map = pawP_push_map(C);
     struct MirBlockList *order = pawMir_traverse_rpo(C, mir);
@@ -579,8 +577,6 @@ void pawMir_remove_unreachable_blocks(struct Compiler *C, struct Mir *mir, Map *
 
     mir->blocks = blocks;
     pawP_pop_object(C, map);
-
-    printf("%s\n", pawMir_dump(C, mir));--ENV(C)->top.p;
 }
 
 paw_Bool pawMir_check_load(struct Compiler *C, struct MirInstruction *instr, struct MirLoad *pload)

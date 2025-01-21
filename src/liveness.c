@@ -75,184 +75,28 @@ static void remove_live_reg(struct Liveness *L, struct MirRegisterList *set, Mir
 }
 
 // Indicate that register "r" is defined by instruction "x"
-#define OUTPUT(L, x, r) set_from(L, r, (x)->location, block); \
+#define OUTPUT(L, loc, r) set_from(L, r, loc, block); \
                         remove_live_reg(L, set, r);
 
 // Indicate that register "r" is used by instruction "x"
-#define INPUT(L, x, r) add_range(L, r, mir_bb_first(block), (x)->location); \
+#define INPUT(L, loc, r) add_range(L, r, mir_bb_first(block), loc); \
                        add_live_reg(L, set, r);
 
 static void step_instruction(struct Liveness *L, struct MirRegisterList *set, struct MirBlockData *block, struct MirInstruction *instr)
 {
-    switch (MIR_KINDOF(instr)) {
-        case kMirPhi:
-            PAW_UNREACHABLE();
+    const MirRegister **ppr;
+    struct MirStore store;
+    struct MirLoad load;
 
-       case kMirMove: {
-            struct MirMove *x = MirGetMove(instr);
-            OUTPUT(L, x, x->output);
-            INPUT(L, x, x->target);
-            break;
+    if (pawMir_check_store(L->C, instr, &store)) {
+        K_LIST_FOREACH(store.outputs, ppr) {
+            OUTPUT(L, instr->hdr.location, **ppr);
         }
-        case kMirUpvalue: {
-            struct MirUpvalue *x = MirGetUpvalue(instr);
-            OUTPUT(L, x, x->output);
-            break;
-        }
-        case kMirGlobal: {
-            struct MirGlobal *x = MirGetGlobal(instr);
-            OUTPUT(L, x, x->output);
-            break;
-        }
-        case kMirAllocLocal: {
-            struct MirAllocLocal *x = MirGetAllocLocal(instr);
-            OUTPUT(L, x, x->output);
-            break;
-        }
-        case kMirFreeLocal: {
-            struct MirFreeLocal *x = MirGetFreeLocal(instr);
-            INPUT(L, x, x->reg);
-            break;
-        }
-        case kMirSetLocal: {
-            struct MirSetLocal *x = MirGetSetLocal(instr);
-            OUTPUT(L, x, x->target);
-            INPUT(L, x, x->value);
-            break;
-        }
-        case kMirSetUpvalue: {
-            struct MirSetUpvalue *x = MirGetSetUpvalue(instr);
-            INPUT(L, x, x->value);
-            break;
-        }
-        case kMirConstant: {
-            struct MirConstant *x = MirGetConstant(instr);
-            OUTPUT(L, x, x->output);
-            break;
-        }
-        case kMirAggregate: {
-            struct MirAggregate *x = MirGetAggregate(instr);
-            OUTPUT(L, x, x->output);
-            break;
-        }
-        case kMirContainer: {
-            struct MirContainer *x = MirGetContainer(instr);
-            OUTPUT(L, x, x->output);
-            break;
-        }
-        case kMirCall: {
-            struct MirCall *x = MirGetCall(instr);
-            OUTPUT(L, x, x->output);
-            INPUT(L, x, x->target);
-            for (int i = 0; i < x->args->count; ++i) {
-                INPUT(L, x, K_LIST_GET(x->args, i));
-            }
-            break;
-        }
-        case kMirCast: {
-            struct MirCast *x = MirGetCast(instr);
-            OUTPUT(L, x, x->output);
-            INPUT(L, x, x->target);
-            break;
-        }
-        case kMirClose: {
-            struct MirClose *x = MirGetClose(instr);
-            INPUT(L, x, x->target);
-            break;
-        }
-        case kMirClosure: {
-            struct MirClosure *x = MirGetClosure(instr);
-            OUTPUT(L, x, x->output);
-            break;
-        }
-        case kMirSetElement: {
-            struct MirSetElement *x = MirGetSetElement(instr);
-            INPUT(L, x, x->object);
-            INPUT(L, x, x->key);
-            INPUT(L, x, x->value);
-            break;
-        }
-        case kMirGetElement: {
-            struct MirGetElement *x = MirGetGetElement(instr);
-            OUTPUT(L, x, x->output);
-            INPUT(L, x, x->object);
-            INPUT(L, x, x->key);
-            break;
-        }
-        case kMirSetRange: {
-            struct MirSetRange *x = MirGetSetRange(instr);
-            INPUT(L, x, x->object);
-            INPUT(L, x, x->lower);
-            INPUT(L, x, x->upper);
-            INPUT(L, x, x->value);
-            break;
-        }
-        case kMirGetRange: {
-            struct MirGetRange *x = MirGetGetRange(instr);
-            OUTPUT(L, x, x->output);
-            INPUT(L, x, x->object);
-            INPUT(L, x, x->lower);
-            INPUT(L, x, x->upper);
-            break;
-        }
-        case kMirSetField: {
-            struct MirSetField *x = MirGetSetField(instr);
-            INPUT(L, x, x->object);
-            INPUT(L, x, x->value);
-            break;
-        }
-        case kMirGetField: {
-            struct MirGetField *x = MirGetGetField(instr);
-            OUTPUT(L, x, x->output);
-            INPUT(L, x, x->object);
-            break;
-        }
-        case kMirUnaryOp: {
-            struct MirUnaryOp *x = MirGetUnaryOp(instr);
-            OUTPUT(L, x, x->output);
-            INPUT(L, x, x->val);
-            break;
-        }
-        case kMirBinaryOp: {
-            struct MirBinaryOp *x = MirGetBinaryOp(instr);
-            OUTPUT(L, x, x->output);
-            INPUT(L, x, x->lhs);
-            INPUT(L, x, x->rhs);
-            break;
-        }
-        case kMirGoto:
-            break;
-        case kMirReturn: {
-            struct MirReturn *x = MirGetReturn(instr);
-            INPUT(L, x, x->value);
-            break;
-        }
-        case kMirBranch: {
-            struct MirBranch *x = MirGetBranch(instr);
-            INPUT(L, x, x->cond);
-            break;
-        }
-        case kMirSwitch: {
-            struct MirSwitch *x = MirGetSwitch(instr);
-            INPUT(L, x, x->discr);
-            break;
-        }
-        case kMirForLoop: {
-            struct MirForLoop *x = MirGetForLoop(instr);
-            switch (x->for_kind) {
-                case MIR_FORNUM_PREP:
-                    INPUT(L, x, x->fornum.begin);
-                    INPUT(L, x, x->fornum.end);
-                    INPUT(L, x, x->fornum.step);
-                    OUTPUT(L, x, x->fornum.var);
-                    break;
-                case MIR_FORNUM_LOOP:
-                    INPUT(L, x, x->fornum.begin);
-                    INPUT(L, x, x->fornum.end);
-                    INPUT(L, x, x->fornum.step);
-                    INPUT(L, x, x->fornum.var);
-            }
-            break;
+    }
+
+    if (pawMir_check_load(L->C, instr, &load)) {
+        K_LIST_FOREACH(load.inputs, ppr) {
+            INPUT(L, instr->hdr.location, **ppr);
         }
     }
 }
@@ -340,7 +184,7 @@ static void compute_liveness(struct Liveness *L, struct Mir *mir, struct MirBloc
 
         MirBlock *ps;
         MirRegister *pr;
-        struct MirInstruction **instr;
+        struct MirInstruction **pinstr;
 
         // "live" is the union of the sets of live registers from the successors of "b"
         struct MirRegisterList *live = pawMir_register_list_new(L->C);
@@ -353,8 +197,8 @@ static void compute_liveness(struct Liveness *L, struct Mir *mir, struct MirBloc
         // where they are defined until the end of this block
         K_LIST_FOREACH(block->successors, ps) {
             struct MirBlockData *sblock = mir_bb_data(mir, *ps);
-            K_LIST_FOREACH(sblock->joins, instr) {
-                struct MirPhi *phi = MirGetPhi(*instr);
+            K_LIST_FOREACH(sblock->joins, pinstr) {
+                struct MirPhi *phi = MirGetPhi(*pinstr);
                 const int p = mir_which_pred(L->mir, *ps, b);
                 add_live_reg(L, live, K_LIST_GET(phi->inputs, p));
             }
@@ -375,8 +219,8 @@ static void compute_liveness(struct Liveness *L, struct Mir *mir, struct MirBloc
 
         // account for phi function outputs, which are live from the start of the current
         // block to the location they are last used
-        K_LIST_FOREACH(block->joins, instr) {
-            struct MirPhi *phi = MirGetPhi(*instr);
+        K_LIST_FOREACH(block->joins, pinstr) {
+            struct MirPhi *phi = MirGetPhi(*pinstr);
             remove_live_reg(L, live, phi->output);
         }
 
@@ -513,7 +357,6 @@ struct MirIntervalList *pawMir_compute_liveness(struct Compiler *C, struct Mir *
     const int nregisters = mir->registers->count;
     const int nblocks = mir->blocks->count;
 
-printf("%s\n", pawMir_dump(C, mir));--ENV(C)->top.p;
     init_live_intervals(&L, order, npositions);
 
     // initialize liveness sets
@@ -532,8 +375,6 @@ printf("%s\n", pawMir_dump(C, mir));--ENV(C)->top.p;
         struct MirCaptureInfo c = K_LIST_GET(mir->captured, i);
         add_range(&L, c.r, 0, npositions);
     }
-
-printf("%s\n", pawMir_dump(C, mir));--ENV(C)->top.p;
 
     // determine live intervals
     compute_liveness(&L, mir, order);

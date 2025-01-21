@@ -1111,7 +1111,7 @@ static struct AstExpr *match_arm(struct Lex *lex)
         r->guard = basic_expr(lex);
     }
     check_next(lex, TK_FAT_ARROW);
-    r->result = block(lex);
+    r->result = expr0(lex);
     return result;
 }
 
@@ -1146,30 +1146,6 @@ static struct AstExpr *primary_expr(struct Lex *lex)
             break;
         case TK_NAME:
             expr = path_expr(lex);
-            break;
-        case '{':
-            expr = AST_CAST_EXPR(block(lex));
-            break;
-        case TK_IF:
-            expr = if_expr(lex);
-            break;
-        case TK_FOR:
-            expr = for_expr(lex);
-            break;
-        case TK_WHILE:
-            expr = while_expr(lex);
-            break;
-        case TK_RETURN:
-            expr = return_expr(lex);
-            break;
-        case TK_BREAK:
-            expr = jump_expr(lex, JUMP_BREAK);
-            break;
-        case TK_CONTINUE:
-            expr = jump_expr(lex, JUMP_CONTINUE);
-            break;
-        case TK_MATCH:
-            expr = match_expr(lex);
             break;
         default:
             expr = NULL;
@@ -1234,6 +1210,22 @@ static struct AstExpr *simple_expr(struct Lex *lex)
             // (fallthrough)
         case '|':
             return closure(lex);
+        case '{':
+            return AST_CAST_EXPR(block(lex));
+        case TK_IF:
+            return if_expr(lex);
+        case TK_FOR:
+            return for_expr(lex);
+        case TK_WHILE:
+            return while_expr(lex);
+        case TK_RETURN:
+            return return_expr(lex);
+        case TK_BREAK:
+            return jump_expr(lex, JUMP_BREAK);
+        case TK_CONTINUE:
+            return jump_expr(lex, JUMP_CONTINUE);
+        case TK_MATCH:
+            return match_expr(lex);
         default:
             return suffixed_expr(lex);
     }

@@ -128,6 +128,9 @@ static void dump_decl(Printer *P, struct AstDecl *d)
     ++P->indent;
     DUMP_FMT(P, "line: %d\n", d->hdr.line);
     switch (AST_KINDOF(d)) {
+        case kAstImplDecl:
+        case kAstUseDecl:
+            PAW_UNREACHABLE(); // TODO: write this code!!!
         case kAstFuncDecl:
             DUMP_FMT(P, "receiver: %p\n", CAST(void *, d->func.receiver));
             DUMP_FMT(P, "name: %s\n", d->func.name->text);
@@ -169,8 +172,6 @@ static void dump_decl(Printer *P, struct AstDecl *d)
             dump_expr(P, d->type.rhs);
             dump_decl_list(P, d->type.generics, "generics");
             break;
-        default:
-            paw_assert(0);
     }
     --P->indent;
     DUMP_MSG(P, "}\n");
@@ -193,8 +194,6 @@ static void dump_stmt(Printer *P, struct AstStmt *s)
             DUMP_MSG(P, "decl: ");
             dump_decl(P, s->decl.decl);
             break;
-        default:
-            break;
     }
     --P->indent;
     DUMP_MSG(P, "}\n");
@@ -209,6 +208,17 @@ static void dump_expr(Printer *P, struct AstExpr *e)
     ++P->indent;
     DUMP_FMT(P, "line: %d\n", e->hdr.line);
     switch (AST_KINDOF(e)) {
+        case kAstLogicalExpr:
+        case kAstPathExpr:
+        case kAstChainExpr:
+        case kAstMatchExpr:
+        case kAstMatchArm:
+        case kAstClosureExpr:
+        case kAstConversionExpr:
+        case kAstFieldExpr:
+        case kAstJumpExpr:
+        case kAstTupleType:
+            PAW_UNREACHABLE(); // TODO: write this code!!!
         case kAstLiteralExpr:
             switch (e->literal.lit_kind) {
                 case kAstBasicLit:
@@ -349,8 +359,6 @@ static void dump_expr(Printer *P, struct AstExpr *e)
         case kAstReturnExpr:
             DUMP_MSG(P, "expr: ");
             dump_expr(P, e->result.expr);
-            break;
-        default:
             break;
     }
     --P->indent;

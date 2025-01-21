@@ -5,11 +5,20 @@
 > Also see [known issues](#known-issues) for a list of known problems that will eventually be fixed.
 
 > This branch is being used to integrate a new register allocator, and to convert the MIR to SSA form.
-> The new register allocator uses a linear scan over the live intervals generated in a previous step.
+> The new register allocator performs a linear scan over the live intervals generated in a previous step.
 
 ## Timeline
-+ [ ] For loops: the Lua-style for loops aren't working so well with the new register allocator, possibly transform into a while loop.
++ [ ] For loops 
+    + The Lua-style for loops aren't working so well with the new register allocator, possibly transform into a while loop.
 + [ ] Upvalues
+    + Each "version" of a variable captured in a closure must be placed in the same physical register
+    + The closure needs a stable address for all of its upvalues, until they are closed
+    + Even if there is a lifetime hole, this register cannot be reused, otherwise the closure will see the wrong value
+    + Currently, the runtime expects upvalues to be in order on the stack
+    + Idea 1: Extend the lifetime of the first "version" to cover all other versions, and fill in lifetime holes
+        + Not sure how to keep registers in order
+    + Idea 2: Put all captured variables in a special section, right after the arguments
+        + Wastes registers, but is simpler and variables stay in order
 
 A cute little scripting language
 
@@ -25,9 +34,6 @@ Nesting is not supported in block-style comments.
 
 /* block
    comment */
-for let i < 10 {
-
-}
 ```
 
 ### Modules
@@ -102,6 +108,15 @@ Explicit scoping blocks are also supported.
 {
     let x = 42;
 } // 'x' goes out of scope here
+
+// Block expressions: last "expression statement" without a semicolon is the result of
+// the block expression. This applies for all block constructs, including: if-else,
+// match, and loops. The type of a loop is always "()".
+let outer = {
+    let first = 123;
+    let second = 456;
+    first + second
+} + 789;
 ```
 
 ### Functions
@@ -112,7 +127,7 @@ Note that named functions can only be defined at the toplevel in Paw.
 ```paw
 fn fib(n: int) -> int {
     if n < 2 { return n; }
-    return fib(n - 2) + fib(n - 1);
+    fib(n - 2) + fib(n - 1)
 }
 ```
 
@@ -120,7 +135,7 @@ fn fib(n: int) -> int {
 ```paw
 fn make_fib(n: int) -> fn() -> int {
     // captures 'n'
-    return || fib(n);
+    || fib(n)
 }
 ```
 
@@ -154,21 +169,21 @@ let c = Choices::Second(123);
 ### Control flow
 Paw supports many common types of control flow.
 ```paw
-// 'if-else' statement:
-if i == 0 {
-
+// 'if-else' expression:
+let x = if i == 0 {
+    'first'
 } else if i == 1 {
-
+    'second'
 } else {
-
-}
+    'third'
+};
 
 // Null chaining operator: return immediately (with None/Err) if the operand is None/Err 
 // (must appear in a function that returns Option<T>/Result<T, E>), otherwise, unwraps
 // the Option/Result
 fn maybe() -> Option<int> {
     let i = maybe_none()?;
-    return fallible(i);
+    fallible(i)
 }
 
 // 'break'/'continue' (must appear in a loop):
@@ -198,37 +213,25 @@ pub enum Num {
 pub fn eval(num: Num) -> int {
     // it is an error if the match is not exhaustive
     match num {
-        Num::Zero => {
-            return 0;
-        },
-
-        Num::Succ(x) => {
-            return eval(x) + 1;
-        },
-
-        Num::Add(x, y) => {
-            return eval(x) + eval(y);
-        },
+        Num::Zero => 0,
+        Num::Succ(x) => eval(x) + 1,
+        Num::Add(x, y) => eval(x) + eval(y),
     }
 }
 
 pub fn describe(target: Option<(int, Num)>) -> str {
     match target {
-        Option::None => {
-            return "a";
-        },
+        Option::None => "a",
         Option::Some(
             (0, Num::Zero)
             | (1, Num::Succ(Num::Zero))
             | (2, Num::Succ(Num::Succ(Num::Zero)))
-        ) => {
-            return "b";
-        },
+        ) => "b",
         Option::Some((x, y)) => {
             if x == eval(y) {
                 return "c";
             }
-            return "d";
+            "d"
         },
     }
 }
@@ -258,7 +261,7 @@ fn map<A, B>(f: fn(A) -> B, list: [A]) -> [B] {
     for a in list {
         result.push(f(a));
     }
-    return result;
+    result
 }
 
 // infer A = float, B = int
@@ -276,9 +279,7 @@ impl<A, B> Object<A, B> {
 
     // methods without 'self', called associated functions, can be called
     // without an instance
-    pub fn get_constant() -> int {
-        return 42;
-    }
+    pub fn get_constant() -> int { 42 }
 }
 
 impl<T> Object<T, T> {
@@ -295,7 +296,7 @@ impl Object<int, str> {
     // methods for a specific type of Object...
 
     pub fn equals(self, a: int, b: str) -> bool {
-        return a == self.a && b == self.b;
+        a == self.a && b == self.b
     }
 }
 

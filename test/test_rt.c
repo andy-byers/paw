@@ -82,10 +82,6 @@ int main(void)
     // script("map");
     // script("closure");
 
-    script("block");
-    return s_counters.compile_errors+s_counters.runtime_errors;
-    script("cfg");
-    return s_counters.compile_errors+s_counters.runtime_errors;
     script("cfg");
     script("import");
     script("operator");

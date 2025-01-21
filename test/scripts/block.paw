@@ -1,100 +1,353 @@
 // block.paw
 
-//pub fn test_block_expr() {
-//    let v = { 1 };
-//    assert(v == 1);
-//    let v = { { 2 } };
-//    assert(v == 2);
-//    let v = { { { 3 } } };
-//    assert(v == 3);
-//}
-//
-//pub fn test_if_return() {
-//    let x = if true { 
-//        // ';' is technically not necessary here, since "return" has
-//        // type "()"
-//        return 
-//    } else { 
-//        42 
-//    };
-//    // unreachable code
-//    assert(x == 0);
-//}
-//
-//pub fn test_if_return_chain() {
-//    let x = if false { 
-//        1 
-//    } else if false { 
-//        2 
-//    } else if false {
-//        3 
-//    } else {
-//        return
-//    };
-//    // unreachable code
-//    assert(x == 0);
-//}
-//
-//pub fn test_if_return_propagate() {
-//    let x = if false { 
-//        42 
-//    } else { 
-//        { { return; } }
-//    };
-//    // unreachable code
-//    assert(x == 0);
-//}
-//
-//pub fn test_if_return_explicit_unit() {
-//    let x = if true { 
-//        return; 
-//        ()
-//    } else { 
-//        42 
-//    };
-//    // unreachable code
-//    assert(x == 0);
-//}
+fn check_block_expr_binary_op(a: int, b: int, c: int) -> int {
+    a + {
+        let x = 2;
+        let y = 3;
+        x + b * y
+    } * c
+}
+
+pub fn test_block_expr_binary_op() {
+    assert(check_block_expr_binary_op(1, 2, 3) == 1 + (2 + 2 * 3) * 3);
+    assert(check_block_expr_binary_op(4, 5, 6) == 4 + (2 + 5 * 3) * 6);
+}
+
+pub fn test_jump_expr_types() {
+    let _: () = while true {
+        let _: () = break;
+        // unreachable, but still type-checked
+        let _: () = continue;
+    };
+    let _: () = return;
+}
+
+fn check_function_block_with_return() -> int {
+    return 123; 
+
+    // unreachable code
+    321 
+}
+
+pub fn test_function_block_with_return() {
+    assert(check_function_block_with_return() == 123);
+}
+
+// TODO: See TODO below about unreachable unit results
+fn check_function_block_with_unit_result() -> int {
+    return 456; 
+
+    // unreachable code
+    () 
+}
+
+pub fn test_function_block_with_unit_result() {
+    assert(check_function_block_with_unit_result() == 456);
+}
+
+fn check_function_block_without_return() -> int {
+    789
+}
+
+pub fn test_function_block_without_return() {
+    assert(check_function_block_without_return() == 789);
+}
+
+pub fn test_closure_block_with_return() {
+    let f = || {
+        return 123;
+        
+        // unreachable code
+        321
+    };
+    
+    assert(f() == 123);
+}
+
+pub fn test_closure_block_with_unit_result() {
+    let f = || {
+        return 456;
+        
+        // unreachable code
+        ()
+    };
+    
+    assert(f() == 456);
+}
+
+pub fn test_closure_block_without_return() {
+    let f = || { 123 };
+    
+    assert(f() == 123);
+}
+
+fn check_early_return(b: bool) -> int {
+    if b { return 123; }
+    456
+}
+
+pub fn test_early_return() {
+    assert(check_early_return(true) == 123);
+    assert(check_early_return(false) == 456);
+}
+
+pub fn test_block_expr() {
+    let v = { 1 };
+    assert(v == 1);
+    let v = { { 2 } };
+    assert(v == 2);
+    let v = { { { 3 } } };
+    assert(v == 3);
+}
+
+pub fn test_if_return() {
+    let x = if true { 
+        // ';' is omitted here, since "return" has type "()"
+        return 
+    } else { 
+        42 
+    };
+    // unreachable code
+    assert(false);
+}
+
+pub fn test_if_return_chain() {
+    let x = if false { 
+        1 
+    } else if false { 
+        2 
+    } else if false {
+        3 
+    } else {
+        return
+    };
+    // unreachable code
+    assert(false);
+}
+
+pub fn test_if_return_propagate() {
+    let x = if false { 
+        42 
+    } else { 
+        { { return; } }
+    };
+    // unreachable code
+    assert(false);
+}
+
+// TODO: It would be better to have some indication of when there is no
+//       block result, rather than filling it in with a literal "()".
+//       Could unify result types only if one exists. The current behavior
+//       looks strange, but is probably okay since control never reaches
+//       the end of the block. This change would cause the following test
+//       to encounter a type error. Removing the "()" result should fix it.
+pub fn test_if_return_explicit_unit() {
+    let x = if true { 
+        return; 
+        ()
+    } else { 
+        42 
+    };
+    // unreachable code
+    assert(false);
+}
+
+pub fn test_guarded_return() {
+    // "if" without an "else" must have type "()"
+    let x: () = if true { 
+        return; 
+        ()
+    };
+    // unreachable code
+    assert(false);
+}
 
 pub fn test_locals() {
     let a = 0;
     {
-//        let b = 1;
-//        let c = 2;
+        let b = 1;
+        let c = 2;
         {
-//            let d = 3;
-//            let e = 4;
-//            let f = 5;
-assert(a == 0);
-//            assert(a + b + c + d + e + f == 15);
-//
-//            let b = 123; // shadow
-//            let b = 123; // rebind
+            let d = 3;
+            let e = 4;
+            let f = 5;
+            assert(a + b + c + d + e + f == 15);
+
+            let b = 123; // shadow
+            let b = 123; // rebind
         }
         assert(a == 0);
-//        assert(a + b + c == 3);
+        assert(a + b + c == 3);
 
-//        a = 123; // assign
+        a = 123; // assign
     }
-//    assert(a == 123);
+    assert(a == 123);
 }
 
-//fn check_ifelse(n: int) -> str {
-//    if n == 0 {
-//        return 'zero';
-//    } else if n == 1 {
-//        return 'one';
-//    } else if n == 2 {
-//        return 'two';
-//    } else {
-//        return 'other';
-//    }
-//}
-//
-//pub fn test_ifelse() {
-//    assert(check_ifelse(0) == 'zero');
-//    assert(check_ifelse(1) == 'one');
-//    assert(check_ifelse(2) == 'two');
-//    assert(check_ifelse(3) == 'other');
-//    assert(check_ifelse(-1) == 'other');
-//}
+fn check_if_expr(n: int) -> str {
+    return if n == 0 {
+        'zero'
+    } else if n == 1 {
+        return 'one';
+
+        'unreachable code'
+    } else if n == 2 {
+        'two'
+    } else {
+        return 'other';
+
+        // unreachable code
+        ()
+    };
+}
+
+pub fn test_if_expr() {
+    assert(check_if_expr(0) == 'zero');
+    assert(check_if_expr(1) == 'one');
+    assert(check_if_expr(2) == 'two');
+    assert(check_if_expr(3) == 'other');
+    assert(check_if_expr(-1) == 'other');
+}
+
+fn check_if_expr_binary_op(n: int) -> int {
+    1 + if n == 0 {
+        1
+    } else if n == 1 {
+        return 2 // no semicolon
+    } else if n == 2 {
+        return 3;
+    } else {
+        4
+    } + 2
+}
+
+pub fn test_if_expr_binary_op() {
+    assert(check_if_expr_binary_op(0) == 4);
+    assert(check_if_expr_binary_op(1) == 2);
+    assert(check_if_expr_binary_op(2) == 3);
+    assert(check_if_expr_binary_op(3) == 7);
+}
+
+fn check_if_expr_call(n: int) -> int {
+    (if n == 0 {
+        || 1
+    } else if n == 1 {
+        return 2
+    } else if n == 2 {
+        return 3;
+    } else {
+        || 4
+    })()
+}
+
+pub fn test_if_expr_call() {
+    assert(check_if_expr_call(0) == 1);
+    assert(check_if_expr_call(1) == 2);
+    assert(check_if_expr_call(2) == 3);
+    assert(check_if_expr_call(3) == 4);
+}
+
+fn check_match_expr_binary_op(n: int) -> int {
+    1 + match n {
+        0 => 1,
+        1 => 2,
+        2 => return 3,
+        _ => return 4,
+    } + 2
+}
+
+pub fn test_match_expr_binary_op() {
+    assert(check_match_expr_binary_op(0) == 4);
+    assert(check_match_expr_binary_op(1) == 5);
+    assert(check_match_expr_binary_op(2) == 3);
+    assert(check_match_expr_binary_op(3) == 4);
+}
+
+fn check_match_expr_call(n: int) -> int {
+    (match n {
+        0 => || 1,
+        1 => || 2,
+        2 => return 3,
+        _ => return 4,
+    })()
+}
+
+pub fn test_match_expr_call() {
+    assert(check_match_expr_call(0) == 1);
+    assert(check_match_expr_call(1) == 2);
+    assert(check_match_expr_call(2) == 3);
+    assert(check_match_expr_call(3) == 4);
+}
+
+pub fn check_if_result(n: int) -> str {
+    if n == 0 {
+        return 'zero';
+    } else if n == 1 {
+        return 'one';
+    } else if n == 2 {
+        return 'two';
+    } else {
+        'other'
+    }
+}
+
+pub fn test_if_result() {
+    assert(check_if_result(0) == 'zero');
+    assert(check_if_result(1) == 'one');
+    assert(check_if_result(2) == 'two');
+    assert(check_if_result(3) == 'other');
+}
+
+pub fn check_if_result_without_else(n: int) -> str {
+    if n == 0 {
+        return 'zero';
+    } else if n == 1 {
+        return 'one';
+    } else if (n == 2) {
+       return 'two';
+    }
+    'other'
+}
+
+pub fn test_if_result_without_else() {
+    assert(check_if_result_without_else(0) == 'zero');
+    assert(check_if_result_without_else(1) == 'one');
+    assert(check_if_result_without_else(2) == 'two');
+    assert(check_if_result_without_else(3) == 'other');
+}
+
+fn check_match_expr(o: Option<int>) -> str {
+    match o {
+        Option::None => {'none'}, 
+        Option::Some(x) if x < 0 => 'some < 0', 
+        Option::Some(x) if x > 0 => {return 'some > 0';}, 
+        Option::Some(x) => return 'some == 0',
+    }
+}
+
+pub fn test_match_expr() {
+    assert(check_match_expr(Option::None) == 'none');
+    assert(check_match_expr(Option::Some(-10)) == 'some < 0');
+    assert(check_match_expr(Option::Some(100)) == 'some > 0');
+    assert(check_match_expr(Option::Some(0)) == 'some == 0');
+}
+
+fn check_never_match_expr(o: Option<int>) -> str {
+    match o {
+        Option::None => return 'none', 
+        Option::Some(x) if x < 0 => return 'some < 0', 
+        Option::Some(x) if x > 0 => {return 'some > 0'; ()}, // "()" unreachable
+        Option::Some(x) => {return 'some == 0'; 'abc'}, // "abc" unreachable
+    }
+
+    // unreachable code: type error if "never" flag not propagated
+    ()
+}
+
+pub fn test_never_match_expr() {
+    assert(check_never_match_expr(Option::None) == 'none');
+    assert(check_never_match_expr(Option::Some(-10)) == 'some < 0');
+    assert(check_never_match_expr(Option::Some(100)) == 'some > 0');
+    assert(check_never_match_expr(Option::Some(0)) == 'some == 0');
+}
+

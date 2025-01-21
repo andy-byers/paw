@@ -479,13 +479,15 @@ struct HirForExpr {
 
 struct HirMatchArm {
     HIR_EXPR_HEADER;
+    paw_Bool never : 1;
     struct HirPat *pat;
     struct HirExpr *guard;
-    struct HirBlock *result;
+    struct HirExpr *result;
 };
 
 struct HirMatchExpr {
     HIR_EXPR_HEADER;
+    paw_Bool never : 1;
     struct HirExpr *target;
     struct HirExprList *arms;
 };

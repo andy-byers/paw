@@ -35,8 +35,9 @@ struct PatState {
 
 struct MatchState {
     struct MatchState *outer;
-    struct PatState *ps;
     struct IrType *target;
+    struct IrType *result;
+    struct PatState *ps;
 };
 
 // Common state for type-checking routines
@@ -263,8 +264,8 @@ static void leave_inference_ctx(struct Resolver *R)
 
 static void enter_match_ctx(struct Resolver *R, struct MatchState *ms, struct IrType *target)
 {
-    // TODO: Make match an expression: create a new inference variable for the match result, unify with '.result' in each HirMatchArm
     *ms = (struct MatchState){
+        .result = new_unknown(R),
         .target = target,
         .outer = R->ms,
     };
@@ -439,9 +440,9 @@ static paw_Bool is_unit_type(struct IrType *type)
     return IrIsAdt(type) && IrGetAdt(type)->did.value == PAW_TUNIT;
 }
 
-static void unify_function_result(struct Resolver *R, struct HirBlock *body, struct IrType *result, struct IrType *expect)
+static void unify_block_result(struct Resolver *R, paw_Bool never, struct IrType *result, struct IrType *expect)
 {
-    if (!body->never || !is_unit_type(result)) {
+    if (!never || !is_unit_type(result)) {
         unify(R, result, expect);
     }
 }
@@ -463,7 +464,7 @@ static void resolve_func_item(struct Resolver *R, struct HirFuncDecl *d)
 
         enter_inference_ctx(R);
         struct IrType *result = resolve_block(R, d->body);
-        unify_function_result(R, d->body, result, ret);
+        unify_block_result(R, d->body->never, result, ret);
         leave_inference_ctx(R);
 
         R->rs = rs.outer;
@@ -772,27 +773,32 @@ static struct IrType *resolve_assign_expr(struct Resolver *R, struct HirAssignEx
     return get_type(R, PAW_TUNIT);
 }
 
-static struct IrType *resolve_match_expr(struct Resolver *R, struct HirMatchExpr *s)
+static struct IrType *resolve_match_expr(struct Resolver *R, struct HirMatchExpr *e)
 {
-    struct IrType *target = resolve_operand(R, s->target);
+    struct IrType *target = resolve_operand(R, e->target);
 
     struct MatchState ms;
     enter_match_ctx(R, &ms, target);
-    resolve_expr_list(R, s->arms);
+    resolve_expr_list(R, e->arms);
     leave_match_ctx(R);
 
-    const struct HirExpr *first = K_LIST_FIRST(s->arms);
-    return GET_NODE_TYPE(R->C, first);
+    struct IrType *result = ms.result;
+    if (IrIsInfer(result) && e->never) {
+        unify_unit_type(R, result);
+    }
+
+    return result;
 }
 
-static struct IrType *resolve_match_arm(struct Resolver *R, struct HirMatchArm *s)
+static struct IrType *resolve_match_arm(struct Resolver *R, struct HirMatchArm *e)
 {
     enter_scope(R, NULL);
 
-    struct IrType *pat = resolve_pat(R, s->pat);
-    unify(R, pat, R->ms->target); // check target type
-    if (s->guard != NULL) expect_bool_expr(R, s->guard);
-    struct IrType *result = resolve_block(R, s->result);
+    struct IrType *pat = resolve_pat(R, e->pat);
+    unify(R, pat, R->ms->target);
+    if (e->guard != NULL) expect_bool_expr(R, e->guard);
+    struct IrType *result = resolve_expr(R, e->result);
+    unify_block_result(R, e->never, result, R->ms->result);
 
     leave_scope(R);
     return result;
@@ -849,13 +855,7 @@ static struct IrType *resolve_closure_expr(struct Resolver *R, struct HirClosure
 
     if (e->has_body) {
         struct IrType *result = resolve_block(R, e->body);
-        unify_function_result(R, e->body, result, ret);
-//        if (rs.count == 0) {
-//            // implicit 'return ()'
-//            unify_unit_type(R, ret);
-//        } else {
-//            unify(R, result, ret); // TODO: not quite right...
-//        }
+        unify_block_result(R, e->body->never, result, ret);
     } else {
         unify(R, ret, resolve_operand(R, e->expr));
     }
@@ -1241,8 +1241,7 @@ static struct IrType *resolve_if_expr(struct Resolver *R, struct HirIfExpr *e)
     struct IrType *second = resolve_expr(R, e->else_arm);
     if (!equals(R, first, second)) {
         // Forgive type errors when the result type is "()" and there is an
-        // unconditional jump. Control will never reach the end of such a block
-        // anyway.
+        // unconditional jump. Control will never reach the end of such a block.
         if (is_unit_type(first) && is_never_block(e->then_arm)) {
             first = second;
         } else if (is_unit_type(second) && is_never_block(e->else_arm)) {
@@ -1686,7 +1685,8 @@ static struct IrType *resolve_return_expr(struct Resolver *R, struct HirReturnEx
         : get_type(R, PAW_TUNIT);
     unify(R, have, want);
     ++R->rs->count;
-    return have;
+
+    return get_type(R, PAW_TUNIT);
 }
 
 static struct IrType *resolve_jump_expr(struct Resolver *R, struct HirJumpExpr *s)
