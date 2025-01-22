@@ -338,7 +338,7 @@ fn check_never_match_expr(o: Option<int>) -> str {
         Option::Some(x) if x < 0 => return 'some < 0', 
         Option::Some(x) if x > 0 => {return 'some > 0'; ()}, // "()" unreachable
         Option::Some(x) => {return 'some == 0'; 'abc'}, // "abc" unreachable
-    }
+    }; // TODO: ';' should not be required here!!!
 
     // unreachable code: type error if "never" flag not propagated
     ()

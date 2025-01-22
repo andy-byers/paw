@@ -71,23 +71,23 @@ static void script(const char *name)
 
 int main(void)
 {
-    // TODO: broken, needs for loops and upvalues
-    // script("basic");
+    // TODO: broken, needs for loops
     // script("loop");
-    // script("capture_upvalue");
     // script("close_loop_variable");
     // script("integer");
     // script("string");
     // script("list");
     // script("map");
-    //script("closure");
 
+    script("basic");
     script("cfg");
     script("import");
     script("operator");
     script("block");
     script("function");
     script("poly_function");
+    script("closure");
+    script("capture_upvalue");
     script("method");
     script("primitive");
     script("tuple");

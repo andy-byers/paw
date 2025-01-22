@@ -215,12 +215,10 @@ typedef struct Generator {
     struct Compiler *C;
     struct FuncState *fs;
     struct MirVisitor *V;
-    struct RegisterTable *regtab;
     struct JumpTable *jumps;
     struct PatchList *patch;
     struct ItemList *items;
     struct Pool *pool;
-    struct Mir *mir;
     Map *builtin;
     paw_Env *P;
     int nregs;

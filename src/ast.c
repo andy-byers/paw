@@ -139,7 +139,7 @@ static void dump_decl(Printer *P, struct AstDecl *d)
             DUMP_MSG(P, "result: ");
             dump_expr(P, d->func.result);
             DUMP_MSG(P, "body: ");
-            DUMP_BLOCK(P, d->func.body);
+            dump_expr(P, d->func.body);
             break;
         case kAstFieldDecl:
             DUMP_NAME(P, d->field.name);
@@ -336,13 +336,13 @@ static void dump_expr(Printer *P, struct AstExpr *e)
             DUMP_MSG(P, "target: ");
             dump_expr(P, e->for_.target);
             DUMP_MSG(P, "block: ");
-            DUMP_BLOCK(P, e->for_.block);
+            dump_expr(P, e->for_.block);
             break;
         case kAstWhileExpr:
             DUMP_MSG(P, "cond: ");
             dump_expr(P, e->while_.cond);
             DUMP_MSG(P, "block: ");
-            DUMP_BLOCK(P, e->while_.block);
+            dump_expr(P, e->while_.block);
             break;
         case kAstReturnExpr:
             DUMP_MSG(P, "expr: ");

@@ -960,7 +960,7 @@ static paw_Bool expects_semicolon(struct AstExpr *expr)
     }
 }
 
-static struct AstBlock *block(struct Lex *lex)
+static struct AstExpr *block(struct Lex *lex)
 {
     const int line = lex->line;
     struct AstExpr *result = NEW_EXPR(lex, kAstBlock);
@@ -987,24 +987,21 @@ static struct AstBlock *block(struct Lex *lex)
         r->result = unit_lit(lex);
     }
     delim_next(lex, '}', '{', line);
-    return r;
+    return result;
 }
 
 static struct AstExpr *closure(struct Lex *lex)
 {
-    paw_Bool has_body = PAW_FALSE;
+    paw_Bool needs_body = PAW_FALSE;
     struct AstExpr *r = NEW_EXPR(lex, kAstClosureExpr);
     r->clos.params = clos_parameters(lex);
     if (test_next(lex, TK_ARROW)) {
         r->clos.result = type_expr(lex);
-        has_body = PAW_TRUE;
+        needs_body = PAW_TRUE;
     }
-    if (test(lex, '{') || has_body) {
-        r->clos.body = block(lex);
-        r->clos.has_body = PAW_TRUE;
-    } else {
-        r->clos.expr = expr0(lex);
-    }
+    r->clos.expr = needs_body
+        ? block(lex)
+        : expr0(lex);
     return r;
 }
 
@@ -1014,7 +1011,7 @@ static struct AstExpr *if_expr(struct Lex *lex)
     struct AstExpr *result = NEW_EXPR(lex, kAstIfExpr);
     struct AstIfExpr *r = AstGetIfExpr(result);
     r->cond = basic_expr(lex);
-    r->then_arm = AST_CAST_EXPR(block(lex));
+    r->then_arm = block(lex);
 
     if (test_next(lex, TK_ELSE)) {
         if (test(lex, TK_IF)) {
@@ -1023,7 +1020,7 @@ static struct AstExpr *if_expr(struct Lex *lex)
             // {} else {}}'.
             r->else_arm = if_expr(lex);
         } else {
-            r->else_arm = AST_CAST_EXPR(block(lex));
+            r->else_arm = block(lex);
         }
     }
     return result;
@@ -1117,6 +1114,30 @@ static struct AstExpr *primary_expr(struct Lex *lex)
         case TK_NAME:
             expr = path_expr(lex);
             break;
+        case '{':
+            expr = block(lex);
+            break;
+        case TK_IF:
+            expr = if_expr(lex);
+            break;
+        case TK_FOR:
+            expr = for_expr(lex);
+            break;
+        case TK_WHILE:
+            expr = while_expr(lex);
+            break;
+        case TK_RETURN:
+            expr = return_expr(lex);
+            break;
+        case TK_BREAK:
+            expr = jump_expr(lex, JUMP_BREAK);
+            break;
+        case TK_CONTINUE:
+            expr = jump_expr(lex, JUMP_CONTINUE);
+            break;
+        case TK_MATCH:
+            expr = match_expr(lex);
+            break;
         default:
             expr = NULL;
     }
@@ -1180,22 +1201,6 @@ static struct AstExpr *simple_expr(struct Lex *lex)
             // (fallthrough)
         case '|':
             return closure(lex);
-        case '{':
-            return AST_CAST_EXPR(block(lex));
-        case TK_IF:
-            return if_expr(lex);
-        case TK_FOR:
-            return for_expr(lex);
-        case TK_WHILE:
-            return while_expr(lex);
-        case TK_RETURN:
-            return return_expr(lex);
-        case TK_BREAK:
-            return jump_expr(lex, JUMP_BREAK);
-        case TK_CONTINUE:
-            return jump_expr(lex, JUMP_CONTINUE);
-        case TK_MATCH:
-            return match_expr(lex);
         default:
             return suffixed_expr(lex);
     }

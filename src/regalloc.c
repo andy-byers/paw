@@ -254,6 +254,13 @@ static void try_allocate_free_reg(struct RegisterAllocator *R)
     const struct RegisterInfo result = get_result(R, current->r);
     if (result.value >= 0) return;
 
+    const struct MirRegisterData *data = mir_reg_data(R->mir, current->r);
+    if (data->is_captured) {
+        const struct RegisterInfo result = get_result(R, data->hint);
+        K_LIST_SET(R->result, current->r.value, result);
+        return;
+    }
+
     int free_until_pos[NREGISTERS];
     for (int i = 0; i < NREGISTERS; ++i) {
         free_until_pos[i] = R->max_position;
@@ -500,15 +507,39 @@ struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mi
     //       to avoid temp array. avoids weird placeholder thing and is more flexible
 
     {
-        // initialize fixed registers: result, parameters, and upvalues
+        // assign registers for result and arguments
         const int offset = 1 + nparameters;
         for (int i = 0; i < offset; ++i) {
             set_add(&R, R.active, K_LIST_GET(intervals, i));
             K_LIST_SET(R.result, i, REGINFO(i));
         }
+
+        // assign registers for captured variables
         for (int i = 0; i < ncaptured; ++i) {
             struct MirCaptureInfo c = K_LIST_GET(mir->captured, i);
-            K_LIST_SET(R.result, c.r.value, REGINFO(offset + i));
+            if (c.r.value >= offset) {
+                K_LIST_SET(R.result, c.r.value, REGINFO(offset + i));
+            }
+        }
+
+        // extend live ranges for captured variables
+        int rid = offset;
+        struct MirLiveInterval **pit;
+        K_LIST_FOREACH(intervals, pit) {
+            struct MirLiveInterval *it = *pit;
+            struct MirRegisterData *data = mir_reg_data(mir, it->r);
+            if (!data->is_captured) continue;
+            if (it->r.value < offset) continue;
+            if (MIR_REG_EQUALS(it->r, data->hint)) {
+                K_LIST_SET(R.result, it->r.value, REGINFO(rid++));
+            } else {
+                struct RegisterInfo result = get_result(&R, data->hint);
+                K_LIST_SET(R.result, it->r.value, result);
+            }
+            const int npositions = K_LIST_LAST(intervals)->last;
+            pawP_bitset_set_range(it->ranges, 0, npositions);
+            it->last = npositions;
+            it->first = 0;
         }
     }
 
@@ -525,6 +556,8 @@ struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mi
     pawP_pop_object(C, R.inactive);
     pawP_pop_object(C, R.active);
     pawP_pop_object(C, R.handled);
+
+dump_result(R.result);
     return R.result;
 }
 

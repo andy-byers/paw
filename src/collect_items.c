@@ -239,7 +239,6 @@ static void register_generics(struct ItemCollector *X, struct HirDeclList *gener
         struct IrType *type = register_decl_type(X, decl, kIrGeneric);
         struct IrGeneric *t = IrGetGeneric(type);
         struct HirSymbol *symbol = new_local(X, decl->hdr.name, decl);
-        symbol->is_generic = PAW_TRUE;
         symbol->is_type = PAW_TRUE;
     }
 }

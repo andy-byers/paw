@@ -129,10 +129,10 @@ DEFINE_LIST_ACCEPTOR(stmt, Stmt)
 DEFINE_LIST_ACCEPTOR(type, Type)
 DEFINE_LIST_ACCEPTOR(pat, Pat)
 
-static void AcceptBlock(struct HirVisitor *V, struct HirBlock *s)
+static void AcceptBlock(struct HirVisitor *V, struct HirBlock *e)
 {
-    accept_stmt_list(V, s->stmts);
-    AcceptExpr(V, s->result);
+    accept_stmt_list(V, e->stmts);
+    AcceptExpr(V, e->result);
 }
 
 static void AcceptLogicalExpr(struct HirVisitor *V, struct HirLogicalExpr *e)
@@ -313,7 +313,7 @@ static void AcceptIfExpr(struct HirVisitor *V, struct HirIfExpr *s)
 static void AcceptWhileExpr(struct HirVisitor *V, struct HirWhileExpr *s)
 {
     AcceptExpr(V, s->cond);
-    AcceptBlock(V, s->block);
+    AcceptExpr(V, s->block);
 }
 
 static void AcceptJumpExpr(struct HirVisitor *V, struct HirJumpExpr *s)
@@ -325,7 +325,7 @@ static void AcceptJumpExpr(struct HirVisitor *V, struct HirJumpExpr *s)
 static void AcceptForExpr(struct HirVisitor *V, struct HirForExpr *s)
 {
     AcceptExpr(V, s->target);
-    AcceptBlock(V, s->block);
+    AcceptExpr(V, s->block);
 }
 
 static void AcceptIndex(struct HirVisitor *V, struct HirIndex *e)
@@ -709,7 +709,6 @@ DEFINE_KIND_PRINTER(stmt, HirStmt)
 DEFINE_KIND_PRINTER(type, HirType)
 DEFINE_KIND_PRINTER(pat, HirPat)
 
-#define DUMP_BLOCK(P, b) CHECK_EXP(!(b) || HirIsBlock(HIR_CAST_EXPR(b)), (b) ? dump_expr(P, HIR_CAST_EXPR(b)) : DUMP_LITERAL(P, "{}\n"))
 #define DUMP_NAME(P, s) DUMP_FMT(P, "name: %s\n", s ? s->text : "(null)")
 
 static void dump_expr(struct Printer *, struct HirExpr *);
@@ -1066,13 +1065,13 @@ static void dump_expr(struct Printer *P, struct HirExpr *e)
             DUMP_MSG(P, "target: ");
             dump_expr(P, e->for_.target);
             DUMP_MSG(P, "block: ");
-            DUMP_BLOCK(P, e->for_.block);
+            dump_expr(P, e->for_.block);
             break;
         case kHirWhileExpr:
             DUMP_MSG(P, "cond: ");
             dump_expr(P, e->while_.cond);
             DUMP_MSG(P, "block: ");
-            DUMP_BLOCK(P, e->while_.block);
+            dump_expr(P, e->while_.block);
             break;
         case kHirReturnExpr:
             DUMP_MSG(P, "expr: ");

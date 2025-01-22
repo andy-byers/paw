@@ -121,10 +121,7 @@ static struct HirExpr *LowerBlock(struct LowerAst *L, struct AstBlock *block)
     return lower_block(L, block, PAW_TRUE);
 }
 
-#define LOWER_BLOCK(L, block) HirGetBlock(lower_block(L, block, PAW_FALSE))
-
-// TODO: make this less ugly. use Expr instead of Block for nodes other than IfExpr?
-#define LOWER_BLOCK_(L, block) HIR_CAST_EXPR(HirGetBlock(lower_block(L, AstGetBlock(block), PAW_FALSE)))
+#define LOWER_BLOCK(L, block) lower_block(L, AstGetBlock(block), PAW_FALSE)
 
 static struct HirDecl *lower_self_param(struct LowerAst *L, struct AstDecl *decl)
 {
@@ -405,13 +402,7 @@ static struct HirExpr *LowerClosureExpr(struct LowerAst *L, struct AstClosureExp
     r->result = e->result != NULL
         ? lower_type(L, e->result)
         : NULL;
-
-    if (e->has_body) {
-        r->body = LOWER_BLOCK(L, e->body);
-        r->has_body = PAW_TRUE;
-    } else {
-        r->expr = lower_expr(L, e->expr);
-    }
+    r->expr = lower_expr(L, e->expr);
     return result;
 }
 
@@ -594,18 +585,14 @@ static struct HirDecl *LowerFuncDecl(struct LowerAst *L, struct AstFuncDecl *d)
 
 static paw_Bool is_never_block(struct HirExpr *expr)
 {
-    if (HirIsBlock(expr)) {
-        return HirGetBlock(expr)->never;
-    }
+    if (HirIsBlock(expr)) return HirGetBlock(expr)->never;
     return HirGetIfExpr(expr)->never;
 }
 
 static void propagate_if_never(struct LowerAst *L, struct HirIfExpr *e)
 {
-    const paw_Bool lhs_jumps = HirGetBlock(e->then_arm)->never;
-    const paw_Bool rhs_jumps = (HirIsIfExpr(e->else_arm) && HirGetIfExpr(e->else_arm)->never)
-            || is_never_block(e->else_arm);
-    if (lhs_jumps && rhs_jumps) {
+    if (is_never_block(e->then_arm)
+            && is_never_block(e->else_arm)) {
         // all paths through this IfExpr execute a jump
         e->never = PAW_TRUE;
         indicate_jump(L);
@@ -618,17 +605,16 @@ static struct HirExpr *LowerIfExpr(struct LowerAst *L, struct AstIfExpr *e)
     struct HirIfExpr *r = HirGetIfExpr(result);
 
     r->cond = lower_expr(L, e->cond);
-    r->then_arm = LOWER_BLOCK_(L, e->then_arm);
+    r->then_arm = LOWER_BLOCK(L, e->then_arm);
 
     if (e->else_arm != NULL) {
-        if (AstIsBlock(e->else_arm)) {
-            r->else_arm = LOWER_BLOCK_(L, e->else_arm);
-        } else {
-            r->else_arm = lower_expr(L, e->else_arm);
-        }
+        r->else_arm = AstIsBlock(e->else_arm)
+            ? LOWER_BLOCK(L, e->else_arm)
+            : lower_expr(L, e->else_arm);
+
         // For "never" to be propagated here, the "then" and "else" blocks must contain
         // unconditional jumps, and there must be a catch-all "else" at the end of the chain.
-        // Basically, any path through the IfExpr must execute a jump.
+        // Basically, all paths through the IfExpr must execute a jump.
         propagate_if_never(L, r);
     }
     return result;
@@ -652,14 +638,15 @@ static struct HirExpr *LowerWhileExpr(struct LowerAst *L, struct AstWhileExpr *s
     return result;
 }
 
-static void visit_for_body(struct LowerAst *L, String *control_name, struct AstBlock *b, struct HirForExpr *r)
+static void visit_for_body(struct LowerAst *L, String *control_name, struct AstExpr *b, struct HirForExpr *r)
 {
-    r->control = new_decl(L, b->line, kHirVarDecl);
+    r->control = new_decl(L, b->hdr.line, kHirVarDecl);
     struct HirVarDecl *control = HirGetVarDecl(r->control);
     control->name = control_name;
 
-    r->block = new_block(L, b->line);
-    r->block->stmts = lower_stmt_list(L, b->stmts);
+    struct HirBlock *block = new_block(L, b->hdr.line);
+    block->stmts = lower_stmt_list(L, AstGetBlock(b)->stmts);
+    r->block = HIR_CAST_EXPR(block);
 }
 
 static struct HirExpr *LowerForExpr(struct LowerAst *L, struct AstForExpr *e)
@@ -808,6 +795,7 @@ static struct HirPat *LowerStructPat(struct LowerAst *L, struct AstStructPat *p)
     r->fields = lower_pat_list(L, p->fields);
     return result;
 }
+
 static struct HirPat *LowerVariantPat(struct LowerAst *L, struct AstVariantPat *p)
 {
     struct HirPat *result = pawHir_new_pat(L->C, p->line, kHirVariantPat);
@@ -816,6 +804,7 @@ static struct HirPat *LowerVariantPat(struct LowerAst *L, struct AstVariantPat *
     r->fields = lower_pat_list(L, p->fields);
     return result;
 }
+
 static struct HirPat *LowerTuplePat(struct LowerAst *L, struct AstTuplePat *p)
 {
     struct HirPat *result = pawHir_new_pat(L->C, p->line, kHirTuplePat);
@@ -823,6 +812,7 @@ static struct HirPat *LowerTuplePat(struct LowerAst *L, struct AstTuplePat *p)
     r->elems = lower_pat_list(L, p->elems);
     return result;
 }
+
 static struct HirPat *LowerPathPat(struct LowerAst *L, struct AstPathPat *p)
 {
     struct HirPat *result = pawHir_new_pat(L->C, p->line, kHirPathPat);
@@ -830,6 +820,7 @@ static struct HirPat *LowerPathPat(struct LowerAst *L, struct AstPathPat *p)
     r->path = lower_path(L, p->path);
     return result;
 }
+
 static struct HirPat *LowerLiteralPat(struct LowerAst *L, struct AstLiteralPat *p)
 {
     struct HirPat *result = pawHir_new_pat(L->C, p->line, kHirLiteralPat);

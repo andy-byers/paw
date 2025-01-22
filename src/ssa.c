@@ -24,6 +24,7 @@ struct SsaConverter {
     struct NameStackList *stacks;
     struct MirRegisterList *changes;
 
+    Map *capture; // MirRegister => MirRegister
     Map *rename; // MirRegister => MirRegister
     Map *uses; // MirRegister => [MirBlockList]
     Map *defs; // MirRegister => [MirBlockList]
@@ -76,16 +77,17 @@ static void rename_output(struct SsaConverter *S, MirRegister *pr)
     const MirRegister old = *pr;
     struct MirRegisterList *names = K_LIST_GET(S->stacks, old.value);
     struct MirRegisterData *data = mir_reg_data(S->mir, old);
-    if (data->is_captured) {
-        const Value *pval = pawH_get(S->rename, I2V(old.value));
-        if (pval != NULL) {
-            pr->value = CAST(int, pval->i);
-            return;
-        }
-    }
     K_LIST_PUSH(S->C, S->changes, old);
     *pr = new_register(S, data, old);
     K_LIST_PUSH(S->C, names, *pr);
+
+    if (data->is_captured) {
+        const Value *pval = pawH_get(S->capture, I2V(old.value));
+        if (pval != NULL) {
+            pawH_insert(ENV(S->C), S->capture, I2V(old.value), P2V(NULL));
+            K_LIST_GET(S->registers, pr->value).hint = *pr;
+        }
+    }
 }
 
 static void rename_join(struct SsaConverter *S, struct MirInstruction *instr)
@@ -210,6 +212,13 @@ static void rename_vars(struct SsaConverter *S, MirBlock x)
     struct MirInstruction **instr;
     MirBlock *y;
 
+    // location of phi nodes at the start of this block
+//    block->location = next_location(S);
+    K_LIST_FOREACH(block->joins, instr) {
+        struct MirPhi *phi = MirGetPhi(*instr);
+        phi->location = block->location;
+    }
+
     // fix references to the old name
     K_LIST_FOREACH(block->joins, instr) rename_join(S, *instr);
     K_LIST_FOREACH(block->instructions, instr) rename_instruction(S, *instr);
@@ -243,9 +252,13 @@ static void rename_vars(struct SsaConverter *S, MirBlock x)
     }
 }
 
-static void fix_info(struct SsaConverter *S)
+static void fix_aux_info(struct SsaConverter *S)
 {
-
+    MirRegister *pr;
+    K_LIST_FOREACH(S->mir->locals, pr) {
+        const Value *pval = pawH_get(S->rename, I2V(pr->value));
+        if (pval != NULL) pr->value = CAST(int, pval->i);
+    }
 }
 
 static void debug(struct Compiler *C, struct MirBlockList *idom, struct MirBucketList *df)
@@ -269,8 +282,10 @@ static void debug(struct Compiler *C, struct MirBlockList *idom, struct MirBucke
     printf("]\n");
 }
 
-void pawSsa_construct(struct Compiler *C, struct Mir *mir, Map *uses, Map *defs, struct MirRegisterList *locals)
+void pawSsa_construct(struct Compiler *C, struct Mir *mir, Map *uses, Map *defs)
 {
+printf("before rub %s\n", pawMir_dump(C, mir));--ENV(C)->top.p;
+
     pawMir_remove_unreachable_blocks(C, mir, uses, defs);
     struct MirBlockList *idom = pawMir_compute_dominance_tree(C, mir);
     struct MirBucketList *df = pawMir_compute_dominance_frontiers(C, mir, idom);
@@ -280,7 +295,7 @@ void pawSsa_construct(struct Compiler *C, struct Mir *mir, Map *uses, Map *defs,
         .registers = pawMir_register_data_list_new(C),
         .changes = pawMir_register_list_new(C),
         .stacks = name_stack_list_new(C),
-        .locals = locals,
+        .locals = mir->locals,
         .idom = idom,
         .uses = uses,
         .defs = defs,
@@ -290,14 +305,16 @@ void pawSsa_construct(struct Compiler *C, struct Mir *mir, Map *uses, Map *defs,
     };
 
     K_LIST_RESERVE(C, S.stacks, pawH_length(defs));
+    S.capture = pawP_push_map(C);
     S.rename = pawP_push_map(C);
 
     place_phi_nodes(&S);
     rename_vars(&S, MIR_ROOT_BB);
-    fix_info(&S);
+    fix_aux_info(&S);
 
     mir->registers = S.registers;
     pawP_pop_object(C, S.rename);
+    pawP_pop_object(C, S.capture);
 
     // write instruction numbers
     struct MirBlockData **pdata;
@@ -305,16 +322,10 @@ void pawSsa_construct(struct Compiler *C, struct Mir *mir, Map *uses, Map *defs,
         struct MirBlockData *data = *pdata;
         struct MirInstruction **pinstr;
         data->location = next_location(&S);
-        K_LIST_FOREACH(data->joins, pinstr) {
-            struct MirInstruction *instr = *pinstr;
-            instr->hdr.location = data->location;
-        }
         K_LIST_FOREACH(data->instructions, pinstr) {
             struct MirInstruction *instr = *pinstr;
             instr->hdr.location = next_location(&S);
         }
     }
-
-    printf("%s\n", pawMir_dump(C, mir));--ENV(C)->top.p;
 }
 

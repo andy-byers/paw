@@ -128,7 +128,7 @@ struct AstFuncDecl {
     struct AstDeclList *generics;
     struct AstDeclList *params;
     struct AstExpr *result;
-    struct AstBlock *body;
+    struct AstExpr *body;
 };
 
 struct AstAdtDecl {
@@ -245,13 +245,9 @@ struct AstLiteralExpr {
 
 struct AstClosureExpr {
     AST_EXPR_HEADER;
-    paw_Bool has_body : 1;
     struct AstDeclList *params;
     struct AstExpr *result;
-    union {
-        struct AstBlock *body;
-        struct AstExpr *expr;
-    };
+    struct AstExpr *expr;
 };
 
 struct AstFieldExpr {
@@ -363,7 +359,7 @@ struct AstIfExpr {
 struct AstWhileExpr {
     AST_EXPR_HEADER;
     struct AstExpr *cond;
-    struct AstBlock *block;
+    struct AstExpr *block;
 };
 
 struct AstJumpExpr {
@@ -375,7 +371,7 @@ struct AstForExpr {
     AST_EXPR_HEADER;
     String *name;
     struct AstExpr *target;
-    struct AstBlock *block;
+    struct AstExpr *block;
 };
 
 struct AstMatchArm {

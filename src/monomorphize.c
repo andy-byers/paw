@@ -340,7 +340,9 @@ static struct Mir *new_mir(struct MonoCollector *M, struct Mir *base, struct IrT
 static struct MirRegisterData copy_register(struct MonoCollector *M, struct MirRegisterData reg)
 {
     struct IrType *type = finalize_type(M, reg.type);
-    return (struct MirRegisterData){type};
+    struct MirRegisterData result = reg;
+    result.type = type;
+    return result;
 }
 
 static void do_monomorphize(struct MonoCollector *M, struct Mir *base, struct Mir *inst, struct IrType *self)
@@ -357,9 +359,11 @@ static void do_monomorphize(struct MonoCollector *M, struct Mir *base, struct Mi
         K_LIST_PUSH(M->C, inst->blocks, to);
     }
 
-    for (int i = 0; i < base->scopes->count; ++i) {
-        struct MirScope scope = K_LIST_GET(base->scopes, i);
-        K_LIST_PUSH(M->C, inst->scopes, scope);
+    {
+        const MirRegister *pr;
+        K_LIST_FOREACH(base->locals, pr) {
+            K_LIST_PUSH(M->C, inst->locals, *pr);
+        }
     }
 
     for (int i = 0; i < base->captured->count; ++i) {

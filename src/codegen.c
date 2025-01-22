@@ -21,10 +21,10 @@
 
 #define ERROR(G, code, ...) pawE_error(ENV(G), code, -1, __VA_ARGS__)
 #define GET_DECL(G, id) pawHir_get_decl((G)->C, id)
-#define GET_TYPE(G, r) K_LIST_GET((G)->mir->registers, (r).value).type
+#define GET_TYPE(G, r) K_LIST_GET((G)->fs->mir->registers, (r).value).type
 #define TYPE_CODE(G, type) pawP_type2code((G)->C, type)
-#define TYPEOF(G, r) K_LIST_GET((G)->mir->registers, (r).value).type
-#define REG(r) K_LIST_GET(fs->G->regtab, (r).value).value
+#define TYPEOF(G, r) K_LIST_GET((G)->fs->mir->registers, (r).value).type
+#define REG(r) K_LIST_GET(fs->regtab, (r).value).value
 
 struct JumpTarget {
     MirBlock bid;
@@ -344,6 +344,7 @@ static void enter_function(struct Generator *G, struct FuncState *fs, struct Mir
         .name = mir->name,
         .proto = proto,
         .outer = G->fs,
+        .mir = mir,
         .G = G,
     };
     G->fs = fs;
@@ -416,12 +417,20 @@ static void code_c_function(struct Generator *G, struct Mir *mir, int g)
 static void allocate_upvalue_info(struct Generator *G, Proto *proto, struct MirUpvalueList *upvalues)
 {
     paw_Env *P = ENV(G);
+    struct FuncState *fs = G->fs;
     proto->u = pawM_new_vec(P, upvalues->count, struct UpValueInfo);
     proto->nup = upvalues->count;
     for (int i = 0; i < upvalues->count; ++i) {
         struct MirUpvalueInfo info = K_LIST_GET(upvalues, i);
         proto->u[i].is_local = info.is_local;
-        proto->u[i].index = info.index;
+        if (info.is_local) {
+            struct FuncState *parent = G->fs->outer;
+            const MirRegister r = K_LIST_GET(parent->mir->locals, info.index);
+            struct RegisterInfo ri = K_LIST_GET(parent->regtab, r.value);
+            proto->u[i].index = ri.value;
+        } else {
+            proto->u[i].index = info.index;
+        }
     }
 }
 
@@ -431,11 +440,10 @@ static void code_proto(struct Generator *G, struct Mir *mir, Proto *proto, int i
     struct IrFuncPtr *func = IR_FPTR(type);
     proto->argc = func->params->count;
 
-    allocate_upvalue_info(G, proto, mir->upvalues);
-
     struct MirBlockList *rpo = pawMir_traverse_rpo(G->C, mir);
     struct MirIntervalList *intervals = pawMir_compute_liveness(G->C, mir, rpo);
-    G->regtab = pawP_allocate_registers(G->C, mir, rpo, intervals, &proto->max_stack);
+    G->fs->regtab = pawP_allocate_registers(G->C, mir, rpo, intervals, &proto->max_stack);
+    allocate_upvalue_info(G, proto, mir->upvalues);
     pawMir_visit_block_list(G->V, rpo);
 
     paw_assert(G->patch->count == 0);
@@ -448,8 +456,8 @@ static void code_children(struct Generator *G, Proto *parent, struct Mir *mir)
     const int nchildren = mir->children->count;
     parent->p = pawM_new_vec(ENV(G), nchildren, Proto *);
     for (int i = 0; i < nchildren; ++i) {
-        G->mir = K_LIST_GET(mir->children, i);
-        parent->p[i] = code_paw_function(G, G->mir, i);
+        struct Mir *child = K_LIST_GET(mir->children, i);
+        parent->p[i] = code_paw_function(G, child, i);
         ++parent->nproto;
     }
 }
@@ -525,11 +533,10 @@ static void code_items(struct Generator *G)
 {
     for (int i = 0; i < G->items->count; ++i) {
         const struct ItemSlot item = K_LIST_GET(G->items, i);
-        G->mir = item.mir;
-        if (G->mir->is_native) {
-            code_c_function(G, G->mir, i);
+        if (item.mir->is_native) {
+            code_c_function(G, item.mir, i);
         } else {
-            code_paw_function(G, G->mir, i);
+            code_paw_function(G, item.mir, i);
         }
     }
 }
@@ -1136,7 +1143,7 @@ static paw_Bool code_block(struct MirVisitor *V, MirBlock bb)
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
 
-    struct MirBlockData *block = mir_bb_data(G->mir, bb);
+    struct MirBlockData *block = mir_bb_data(G->fs->mir, bb);
     handle_jump_logic(G, bb);
     pawMir_visit_instruction_list(V, block->instructions);
     return PAW_FALSE;

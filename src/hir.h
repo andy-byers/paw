@@ -14,38 +14,38 @@ typedef struct HirId {
 } HirId;
 
 #define HIR_DECL_LIST(X) \
-        X(FieldDecl,   field) \
-        X(FuncDecl,    func) \
+        X(FieldDecl, field) \
+        X(FuncDecl, func) \
         X(GenericDecl, generic) \
-        X(AdtDecl,     adt) \
-        X(TypeDecl,    type) \
-        X(VarDecl,     var) \
-        X(ImplDecl,    impl) \
-        X(UseDecl,     use) \
+        X(AdtDecl, adt) \
+        X(TypeDecl, type) \
+        X(VarDecl, var) \
+        X(ImplDecl, impl) \
+        X(UseDecl, use) \
         X(VariantDecl, variant)
 
 #define HIR_EXPR_LIST(X) \
-        X(LiteralExpr,    literal) \
-        X(LogicalExpr,    logical) \
-        X(PathExpr,       path) \
-        X(ChainExpr,      chain) \
-        X(UnOpExpr,       unop) \
-        X(BinOpExpr,      binop) \
-        X(ClosureExpr,    clos) \
+        X(LiteralExpr, literal) \
+        X(LogicalExpr, logical) \
+        X(PathExpr, path) \
+        X(ChainExpr, chain) \
+        X(UnOpExpr, unop) \
+        X(BinOpExpr, binop) \
+        X(ClosureExpr, clos) \
         X(ConversionExpr, conv) \
-        X(CallExpr,       call) \
-        X(Index,          index) \
-        X(Selector,       select) \
-        X(FieldExpr,      field) \
-        X(AssignExpr,     assign) \
-        X(Block,      block) \
-        X(IfExpr,     if_) \
-        X(ForExpr,    for_) \
-        X(WhileExpr,  while_) \
-        X(JumpExpr,   jump) \
+        X(CallExpr, call) \
+        X(Index, index) \
+        X(Selector, select) \
+        X(FieldExpr, field) \
+        X(AssignExpr, assign) \
+        X(Block, block) \
+        X(IfExpr, if_) \
+        X(ForExpr, for_) \
+        X(WhileExpr, while_) \
+        X(JumpExpr, jump) \
         X(ReturnExpr, result) \
-        X(MatchArm,   arm) \
-        X(MatchExpr,  match)
+        X(MatchArm, arm) \
+        X(MatchExpr, match)
 
 #define HIR_TYPE_LIST(X) \
         X(FuncPtr, fptr) \
@@ -53,8 +53,8 @@ typedef struct HirId {
         X(PathType, path)
 
 #define HIR_STMT_LIST(X) \
-        X(ExprStmt,   expr) \
-        X(DeclStmt,   decl)
+        X(ExprStmt, expr) \
+        X(DeclStmt, decl)
 
 #define HIR_PAT_LIST(X) \
         X(OrPat, or) \
@@ -91,8 +91,6 @@ int pawHir_find_symbol(struct HirScope *scope, const String *name);
 struct HirSymbol {
     paw_Bool is_init : 1;
     paw_Bool is_type : 1;
-    paw_Bool is_const : 1;
-    paw_Bool is_generic : 1;
     String *name;
     struct HirDecl *decl;
 };
@@ -204,7 +202,7 @@ struct HirFuncDecl {
     struct HirDeclList *generics;
     struct HirDeclList *params;
     struct HirType *result;
-    struct HirBlock *body;
+    struct HirExpr *body;
 };
 
 // TODO: struct should be represented internally as an ADT with a single variant
@@ -335,13 +333,9 @@ struct HirLiteralExpr {
 
 struct HirClosureExpr {
     HIR_EXPR_HEADER;
-    paw_Bool has_body : 1;
     struct HirDeclList *params;
     struct HirType *result;
-    union {
-        struct HirExpr *expr;
-        struct HirBlock *body;
-    };
+    struct HirExpr *expr;
 };
 
 struct HirFieldExpr {
@@ -448,7 +442,7 @@ struct HirIfExpr {
 struct HirWhileExpr {
     HIR_EXPR_HEADER;
     struct HirExpr *cond;
-    struct HirBlock *block;
+    struct HirExpr *block;
 };
 
 struct HirJumpExpr {
@@ -459,8 +453,8 @@ struct HirJumpExpr {
 struct HirForExpr {
     HIR_EXPR_HEADER;
     struct HirDecl *control;
-    struct HirBlock *block;
     struct HirExpr *target;
+    struct HirExpr *block;
 };
 
 struct HirMatchArm {
@@ -696,11 +690,6 @@ void pawHir_visit_stmt_list(struct HirVisitor *V, struct HirStmtList *list);
 void pawHir_visit_decl_list(struct HirVisitor *V, struct HirDeclList *list);
 void pawHir_visit_type_list(struct HirVisitor *V, struct HirTypeList *list);
 void pawHir_visit_pat_list(struct HirVisitor *V, struct HirPatList *list);
-
-static inline void pawHir_visit_block(struct HirVisitor *V, struct HirBlock *node)
-{
-    pawHir_visit_expr(V, HIR_CAST_EXPR(node));
-}
 
 struct Hir {
     struct HirDeclList *items;

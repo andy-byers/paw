@@ -76,20 +76,6 @@ struct MirUpvalueInfo {
     unsigned short index;
 };
 
-#define MIR_NO_SCOPE (struct MirScopeId){-1}
-#define MIR_SCOPE_EQ(a, b) ((a).value == (b).value)
-typedef struct MirScopeId {
-    int value;
-} MirScopeId;
-
-struct MirScope {
-    paw_Bool is_loop : 1;
-    paw_Bool needs_close : 1;
-    MirScopeId outer;
-    MirScopeId id;
-    int nlocals;
-};
-
 enum MirInstructionKind {
 #define DEFINE_ENUM(X) kMir##X,
     MIR_INSTRUCTION_LIST(DEFINE_ENUM)
@@ -331,8 +317,9 @@ static const char *kMirInstructionNames[] = {
 };
 
 struct MirRegisterData {
+    paw_Bool is_captured : 1;
+    MirRegister hint;
     struct IrType *type;
-    paw_Bool is_captured;
 };
 
 struct MirBlockData {
@@ -348,8 +335,8 @@ struct MirBlockData {
 //       for a few reasons, namely upvalues, generics, and naming.
 struct Mir {
     struct MirRegisterDataList *registers;
+    struct MirRegisterList *locals;
     struct MirBlockDataList *blocks;
-    struct MirScopeList *scopes;
     struct MirUpvalueList *upvalues;
     struct MirCaptureList *captured;
     struct MirBodyList *children;
@@ -366,11 +353,8 @@ struct Mir {
 #define MIR_KINDOF(node) ((node)->hdr.kind)
 #define MIR_CAST_INSTRUCTION(p) CAST(struct MirInstruction *, p)
 
-struct MirScope *pawMir_get_scope(struct Mir *mir, MirScopeId id);
-
 DEFINE_LIST(struct Compiler, pawMir_capture_list_, MirCaptureList, struct MirCaptureInfo)
 DEFINE_LIST(struct Compiler, pawMir_upvalue_list_, MirUpvalueList, struct MirUpvalueInfo)
-DEFINE_LIST(struct Compiler, pawMir_scope_list_, MirScopeList, struct MirScope)
 DEFINE_LIST(struct Compiler, pawMir_switch_list_, MirSwitchArmList, struct MirSwitchArm)
 DEFINE_LIST(struct Compiler, pawMir_instruction_list_, MirInstructionList, struct MirInstruction *)
 DEFINE_LIST(struct Compiler, pawMir_register_list_, MirRegisterList, MirRegister)

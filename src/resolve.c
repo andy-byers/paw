@@ -463,8 +463,8 @@ static void resolve_func_item(struct Resolver *R, struct HirFuncDecl *d)
         R->rs = &rs;
 
         enter_inference_ctx(R);
-        struct IrType *result = resolve_block(R, d->body);
-        unify_block_result(R, d->body->never, result, ret);
+        struct IrType *result = resolve_expr(R, d->body);
+        unify_block_result(R, HirGetBlock(d->body)->never, result, ret);
         leave_inference_ctx(R);
 
         R->rs = rs.outer;
@@ -797,7 +797,7 @@ static struct IrType *resolve_match_arm(struct Resolver *R, struct HirMatchArm *
     struct IrType *pat = resolve_pat(R, e->pat);
     unify(R, pat, R->ms->target);
     if (e->guard != NULL) expect_bool_expr(R, e->guard);
-    struct IrType *result = resolve_expr(R, e->result);
+    struct IrType *result = resolve_operand(R, e->result);
     unify_block_result(R, e->never, result, R->ms->result);
 
     leave_scope(R);
@@ -853,9 +853,9 @@ static struct IrType *resolve_closure_expr(struct Resolver *R, struct HirClosure
     t->params = collect_decl_types(R, e->params);
     rs.prev = t->result = ret;
 
-    if (e->has_body) {
-        struct IrType *result = resolve_block(R, e->body);
-        unify_block_result(R, e->body->never, result, ret);
+    if (HirIsBlock(e->expr)) {
+        struct IrType *result = resolve_expr(R, e->expr);
+        unify_block_result(R, HirGetBlock(e->expr)->never, result, ret);
     } else {
         unify(R, ret, resolve_operand(R, e->expr));
     }
@@ -1267,7 +1267,7 @@ static struct IrType *resolve_while_expr(struct Resolver *R, struct HirWhileExpr
 {
     enter_scope(R, NULL);
     expect_bool_expr(R, e->cond);
-    struct IrType *type = resolve_block(R, e->block);
+    struct IrType *type = resolve_expr(R, e->block);
     unify_unit_type(R, type);
     leave_scope(R);
     return type;

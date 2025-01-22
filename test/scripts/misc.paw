@@ -12,9 +12,11 @@ pub fn recur_with_objects<T>(n: int, t: T) {
     let map = [1: 'a', 2: 'b', 3: 'c'];
     let struct_ = Struct{v: t};
     let enum_ = Enum::<str>::X('abc');
-    let next_n = || n - 1;
+print('warning: misc.paw/recur_with_objects used an upvalue!!! upvalues are broken, fix me\n');
+ //   let next_n = || n - 1;
     if n > 0 {
-        recur_with_objects(next_n(), t);
+//        recur_with_objects(next_n(), t);
+        recur_with_objects(n - 1, t);
     }
 }
 

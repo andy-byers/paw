@@ -6,19 +6,14 @@
 #include "map.h"
 #include "mir.h"
 
-struct MirScope *pawMir_get_scope(struct Mir *mir, MirScopeId id)
-{
-    return &K_LIST_GET(mir->scopes, id.value);
-}
-
 struct Mir *pawMir_new(struct Compiler *C, String *name, struct IrType *type, struct IrType *self, enum FuncKind fn_kind, paw_Bool is_native, paw_Bool is_pub, paw_Bool is_poly)
 {
     struct Mir *mir = pawK_pool_alloc(ENV(C), C->pool, sizeof(struct Mir));
     *mir = (struct Mir){
         .captured = pawMir_capture_list_new(C),
         .registers = pawMir_register_data_list_new(C),
+        .locals = pawMir_register_list_new(C),
         .blocks = pawMir_block_data_list_new(C),
-        .scopes = pawMir_scope_list_new(C),
         .upvalues = pawMir_upvalue_list_new(C),
         .children = pawMir_body_list_new(C),
         .is_native = is_native,

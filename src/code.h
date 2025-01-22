@@ -90,8 +90,10 @@ struct KCache {
 
 struct FuncState {
     struct FuncState *outer; // enclosing function
+    struct RegisterTable *regtab;
     struct Generator *G; // codegen state
     struct KCache kcache;
+    struct Mir *mir;
     int bb; // TODO: should be MirBlock, move stuff around
     Proto *proto; // prototype being built
     String *name; // name of the function
