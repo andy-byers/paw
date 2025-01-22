@@ -861,19 +861,17 @@ top:
 
             vm_case(FORPREP):
             {
-                const paw_Int step = V_INT(ra[0]);
-                const paw_Int end = V_INT(ra[1]);
-                const paw_Int iter = V_INT(ra[2]);
-                paw_Int *pvar = &V_INT(ra[3]);
-                if (step == 0) {
-                    pawR_error(P, PAW_ERUNTIME, "loop step equals 0");
-                }
-                if (STOP_LOOP(iter, end, step)) {
-                    // skip loop body
-                    pc += GET_sBx(opcode);
-                } else {
-                    *pvar = iter;
-                }
+                // iter, run = callable(target, iter)
+                const Value target = ra[0];
+                const Value callable = ra[1];
+//                const paw_Int iter = V_INT(ra[2]);
+//                paw_Int *pvar = &V_INT(ra[3]);
+//                if (STOP_LOOP(iter, end, step)) {
+//                    // skip loop body
+//                    pc += GET_sBx(opcode);
+//                } else {
+//                    *pvar = iter;
+//                }
             }
 
             vm_case(FORLOOP):

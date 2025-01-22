@@ -324,13 +324,7 @@ static void AcceptJumpExpr(struct HirVisitor *V, struct HirJumpExpr *s)
 
 static void AcceptForExpr(struct HirVisitor *V, struct HirForExpr *s)
 {
-    if (s->is_fornum) {
-        AcceptExpr(V, s->fornum.begin);
-        AcceptExpr(V, s->fornum.end);
-        AcceptExpr(V, s->fornum.step);
-    } else {
-        AcceptExpr(V, s->forin.target);
-    }
+    AcceptExpr(V, s->target);
     AcceptBlock(V, s->block);
 }
 
@@ -1069,21 +1063,10 @@ static void dump_expr(struct Printer *P, struct HirExpr *e)
             dump_expr(P, e->if_.else_arm);
             break;
         case kHirForExpr:
-            if (e->for_.is_fornum) {
-                DUMP_MSG(P, "begin: ");
-                dump_expr(P, e->for_.fornum.begin);
-                DUMP_MSG(P, "end: ");
-                dump_expr(P, e->for_.fornum.end);
-                DUMP_MSG(P, "step: ");
-                dump_expr(P, e->for_.fornum.step);
-                DUMP_MSG(P, "block: ");
-                DUMP_BLOCK(P, e->for_.block);
-            } else {
-                DUMP_MSG(P, "target: ");
-                dump_expr(P, e->for_.forin.target);
-                DUMP_MSG(P, "block: ");
-                DUMP_BLOCK(P, e->for_.block);
-            }
+            DUMP_MSG(P, "target: ");
+            dump_expr(P, e->for_.target);
+            DUMP_MSG(P, "block: ");
+            DUMP_BLOCK(P, e->for_.block);
             break;
         case kHirWhileExpr:
             DUMP_MSG(P, "cond: ");

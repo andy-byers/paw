@@ -332,23 +332,11 @@ static void dump_expr(Printer *P, struct AstExpr *e)
             dump_expr(P, e->if_.else_arm);
             break;
         case kAstForExpr:
-            if (e->for_.is_fornum) {
-                DUMP_NAME(P, e->for_.name);
-                DUMP_MSG(P, "begin: ");
-                dump_expr(P, e->for_.fornum.begin);
-                DUMP_MSG(P, "end: ");
-                dump_expr(P, e->for_.fornum.end);
-                DUMP_MSG(P, "step: ");
-                dump_expr(P, e->for_.fornum.step);
-                DUMP_MSG(P, "block: ");
-                DUMP_BLOCK(P, e->for_.block);
-            } else {
-                DUMP_NAME(P, e->for_.name);
-                DUMP_MSG(P, "target: ");
-                dump_expr(P, e->for_.forin.target);
-                DUMP_MSG(P, "block: ");
-                DUMP_BLOCK(P, e->for_.block);
-            }
+            DUMP_NAME(P, e->for_.name);
+            DUMP_MSG(P, "target: ");
+            dump_expr(P, e->for_.target);
+            DUMP_MSG(P, "block: ");
+            DUMP_BLOCK(P, e->for_.block);
             break;
         case kAstWhileExpr:
             DUMP_MSG(P, "cond: ");

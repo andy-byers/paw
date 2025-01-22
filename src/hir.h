@@ -456,25 +456,11 @@ struct HirJumpExpr {
     enum JumpKind jump_kind;
 };
 
-struct HirForIn {
-    struct HirExpr *target;
-};
-
-struct HirForNum {
-    struct HirExpr *begin;
-    struct HirExpr *end;
-    struct HirExpr *step;
-};
-
 struct HirForExpr {
     HIR_EXPR_HEADER;
-    paw_Bool is_fornum : 1;
     struct HirDecl *control;
     struct HirBlock *block;
-    union {
-        struct HirForIn forin;
-        struct HirForNum fornum;
-    };
+    struct HirExpr *target;
 };
 
 struct HirMatchArm {

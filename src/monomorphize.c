@@ -253,13 +253,10 @@ static void CopyBranch(struct MonoCollector *M, struct MirBranch *t, struct MirB
 static void CopyForLoop(struct MonoCollector *M, struct MirForLoop *t, struct MirForLoop *r)
 {
     r->for_kind = t->for_kind;
+    r->var = t->var;
+    r->end = t->end;
     r->then_arm = t->then_arm;
     r->else_arm = t->else_arm;
-    switch (r->for_kind) {
-        case MIR_FORNUM_LOOP:
-        case MIR_FORNUM_PREP:
-            r->fornum = t->fornum;
-    }
 }
 
 static void CopySwitch(struct MonoCollector *M, struct MirSwitch *t, struct MirSwitch *r)

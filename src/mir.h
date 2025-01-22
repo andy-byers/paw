@@ -281,21 +281,15 @@ struct MirSwitch {
 };
 
 enum MirForKind {
-    MIR_FORNUM_PREP,
-    MIR_FORNUM_LOOP,
+    MIR_FOR_PREP,
+    MIR_FOR_LOOP,
 };
 
 struct MirForLoop {
     MIR_INSTRUCTION_HEADER;
     enum MirForKind for_kind;
-    union {
-        struct {
-            MirRegister var;
-            MirRegister begin;
-            MirRegister end;
-            MirRegister step;
-        } fornum;
-    };
+    MirRegister var;
+    MirRegister end;
     MirBlock then_arm;
     MirBlock else_arm;
 };
@@ -338,7 +332,7 @@ static const char *kMirInstructionNames[] = {
 
 struct MirRegisterData {
     struct IrType *type;
-    MirRegister hint;
+    paw_Bool is_captured;
 };
 
 struct MirBlockData {

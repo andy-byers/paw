@@ -373,19 +373,8 @@ struct AstJumpExpr {
 
 struct AstForExpr {
     AST_EXPR_HEADER;
-    paw_Bool is_fornum : 1;
     String *name;
-    union {
-        struct AstForIn {
-            struct AstExpr *target;
-        } forin;
-
-        struct AstForNum {
-            struct AstExpr *begin;
-            struct AstExpr *end;
-            struct AstExpr *step;
-        } fornum;
-    };
+    struct AstExpr *target;
     struct AstBlock *block;
 };
 

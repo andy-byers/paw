@@ -368,9 +368,6 @@ struct MirIntervalList *pawMir_compute_liveness(struct Compiler *C, struct Mir *
     for (int i = 0; i < 1 + nparameters; ++i) {
         add_range(&L, MIR_REG(i), 0, npositions);
     }
-    // TODO: something like this, store captured variables in a single register
-    //       for the whole function. captured vars should be in order of capture time
-    //       so that OP_CLOSE can be used normally.
     for (int i = 0; i < ncaptured; ++i) {
         struct MirCaptureInfo c = K_LIST_GET(mir->captured, i);
         add_range(&L, c.r, 0, npositions);

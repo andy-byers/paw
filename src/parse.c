@@ -1029,49 +1029,19 @@ static struct AstExpr *if_expr(struct Lex *lex)
     return result;
 }
 
-static struct AstExpr *fornum(struct Lex *lex, String *ivar)
-{
-    struct AstExpr *r = NEW_EXPR(lex, kAstForExpr);
-    struct AstForNum *fornum = &AstGetForExpr(r)->fornum;
-    r->for_.is_fornum = PAW_TRUE;
-    r->for_.name = ivar;
-
-    // Parse the loop bounds ('begin', 'end', and 'step' expressions).
-    fornum->begin = basic_expr(lex);
-    check_next(lex, ',');
-    fornum->end = basic_expr(lex);
-    if (test_next(lex, ',')) {
-        fornum->step = basic_expr(lex);
-    } else {
-        Value v;
-        V_SET_INT(&v, 1); // step defaults to 1
-        fornum->step = new_basic_lit(lex, v, PAW_TINT);
-    }
-
-    r->for_.block = block(lex);
-    return r;
-}
-
-static struct AstExpr *forin(struct Lex *lex, String *ivar)
-{
-    struct AstExpr *r = NEW_EXPR(lex, kAstForExpr);
-    r->for_.forin.target = basic_expr(lex);
-    r->for_.name = ivar;
-    r->for_.block = block(lex);
-    return r;
-}
-
 static struct AstExpr *for_expr(struct Lex *lex)
 {
     skip(lex); // 'for' token
-    String *ivar = parse_name(lex);
-    if (test_next(lex, '=')) {
-        return fornum(lex, ivar);
-    } else if (!test_next(lex, TK_IN)) {
+    String *control = parse_name(lex);
+    if (!test_next(lex, TK_IN)) {
         expected_symbol(lex, "'=' or 'in'"); // no return
     }
-    struct AstExpr *expr = forin(lex, ivar);
-    return expr;
+    struct AstExpr *result = NEW_EXPR(lex, kAstForExpr);
+    struct AstForExpr *r = AstGetForExpr(result);
+    r->target = basic_expr(lex);
+    r->name = control;
+    r->block = block(lex);
+    return result;
 }
 
 static struct AstExpr *while_expr(struct Lex *lex)

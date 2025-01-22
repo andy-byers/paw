@@ -506,10 +506,10 @@ struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mi
             set_add(&R, R.active, K_LIST_GET(intervals, i));
             K_LIST_SET(R.result, i, REGINFO(i));
         }
-//        for (int i = 0; i < ncaptured; ++i) {
-//            struct MirCaptureInfo c = K_LIST_GET(mir->captured, i);
-//            K_LIST_SET(R.result, c.r.value, REGINFO(offset + i));
-//        }
+        for (int i = 0; i < ncaptured; ++i) {
+            struct MirCaptureInfo c = K_LIST_GET(mir->captured, i);
+            K_LIST_SET(R.result, c.r.value, REGINFO(offset + i));
+        }
     }
 
     // sort live intervals by start point

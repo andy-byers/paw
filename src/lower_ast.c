@@ -652,7 +652,7 @@ static struct HirExpr *LowerWhileExpr(struct LowerAst *L, struct AstWhileExpr *s
     return result;
 }
 
-static void visit_forbody(struct LowerAst *L, String *control_name, struct AstBlock *b, struct HirForExpr *r)
+static void visit_for_body(struct LowerAst *L, String *control_name, struct AstBlock *b, struct HirForExpr *r)
 {
     r->control = new_decl(L, b->line, kHirVarDecl);
     struct HirVarDecl *control = HirGetVarDecl(r->control);
@@ -662,32 +662,12 @@ static void visit_forbody(struct LowerAst *L, String *control_name, struct AstBl
     r->block->stmts = lower_stmt_list(L, b->stmts);
 }
 
-static void visit_fornum(struct LowerAst *L, struct AstForExpr *s, struct HirForExpr *r)
+static struct HirExpr *LowerForExpr(struct LowerAst *L, struct AstForExpr *e)
 {
-    struct AstForNum *fornum = &s->fornum;
-    r->fornum.begin = lower_expr(L, fornum->begin);
-    r->fornum.end = lower_expr(L, fornum->end);
-    r->fornum.step = lower_expr(L, fornum->step);
-    visit_forbody(L, s->name, s->block, r);
-}
-
-static void visit_forin(struct LowerAst *L, struct AstForExpr *s, struct HirForExpr *r)
-{
-    struct AstForIn *forin = &s->forin;
-    r->forin.target = lower_expr(L, forin->target);
-    visit_forbody(L, s->name, s->block, r);
-}
-
-static struct HirExpr *LowerForExpr(struct LowerAst *L, struct AstForExpr *s)
-{
-    struct HirExpr *result = pawHir_new_expr(L->C, s->line, kHirForExpr);
+    struct HirExpr *result = pawHir_new_expr(L->C, e->line, kHirForExpr);
     struct HirForExpr *r = HirGetForExpr(result);
-    r->is_fornum = s->is_fornum;
-    if (s->is_fornum) {
-        visit_fornum(L, s, r);
-    } else {
-        visit_forin(L, s, r);
-    }
+    r->target = lower_expr(L, e->target);
+    visit_for_body(L, e->name, e->block, r);
     return result;
 }
 

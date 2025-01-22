@@ -1710,34 +1710,13 @@ static void visit_forbody(struct Resolver *R, struct IrType *itype, struct HirBl
     leave_scope(R);
 }
 
-static void visit_fornum(struct Resolver *R, struct HirForExpr *s)
-{
-    struct HirForNum *fornum = &s->fornum;
-
-    expect_int_expr(R, fornum->begin);
-    expect_int_expr(R, fornum->end);
-    expect_int_expr(R, fornum->step);
-
-    visit_forbody(R, get_type(R, PAW_TINT), s->block, s);
-}
-
-static void visit_forin(struct Resolver *R, struct HirForExpr *s)
-{
-    struct IrType *iter_t = resolve_operand(R, s->forin.target);
-    struct IrType *elem_t = get_value_type(R, iter_t);
-
-    if (elem_t == NULL) TYPE_ERROR(R, "'for..in' not supported for type");
-    visit_forbody(R, elem_t, s->block, s);
-}
-
 static struct IrType *resolve_for_expr(struct Resolver *R, struct HirForExpr *s)
 {
     enter_scope(R, NULL);
-    if (s->is_fornum) {
-        visit_fornum(R, s);
-    } else {
-        visit_forin(R, s);
-    }
+    struct IrType *iter_t = resolve_operand(R, s->target);
+    struct IrType *elem_t = get_value_type(R, iter_t);
+    if (elem_t == NULL) TYPE_ERROR(R, "'for..in' not supported for type");
+
     leave_scope(R);
     return get_type(R, PAW_TUNIT);
 }

@@ -76,15 +76,16 @@ static void rename_output(struct SsaConverter *S, MirRegister *pr)
     const MirRegister old = *pr;
     struct MirRegisterList *names = K_LIST_GET(S->stacks, old.value);
     struct MirRegisterData *data = mir_reg_data(S->mir, old);
+    if (data->is_captured) {
+        const Value *pval = pawH_get(S->rename, I2V(old.value));
+        if (pval != NULL) {
+            pr->value = CAST(int, pval->i);
+            return;
+        }
+    }
     K_LIST_PUSH(S->C, S->changes, old);
     *pr = new_register(S, data, old);
     K_LIST_PUSH(S->C, names, *pr);
-
-    if (MIR_REG_EQUALS(old, data->hint)) {
-        // This variable was captured as an upvalue. Rename the hint and allow
-        // it to propagate through the different versions.
-        K_LIST_GET(S->registers, pr->value).hint = *pr;
-    }
 }
 
 static void rename_join(struct SsaConverter *S, struct MirInstruction *instr)
@@ -209,13 +210,6 @@ static void rename_vars(struct SsaConverter *S, MirBlock x)
     struct MirInstruction **instr;
     MirBlock *y;
 
-    // location of phi nodes at the start of this block
-//    block->location = next_location(S);
-    K_LIST_FOREACH(block->joins, instr) {
-        struct MirPhi *phi = MirGetPhi(*instr);
-        phi->location = block->location;
-    }
-
     // fix references to the old name
     K_LIST_FOREACH(block->joins, instr) rename_join(S, *instr);
     K_LIST_FOREACH(block->instructions, instr) rename_instruction(S, *instr);
@@ -311,10 +305,16 @@ void pawSsa_construct(struct Compiler *C, struct Mir *mir, Map *uses, Map *defs,
         struct MirBlockData *data = *pdata;
         struct MirInstruction **pinstr;
         data->location = next_location(&S);
+        K_LIST_FOREACH(data->joins, pinstr) {
+            struct MirInstruction *instr = *pinstr;
+            instr->hdr.location = data->location;
+        }
         K_LIST_FOREACH(data->instructions, pinstr) {
             struct MirInstruction *instr = *pinstr;
             instr->hdr.location = next_location(&S);
         }
     }
+
+    printf("%s\n", pawMir_dump(C, mir));--ENV(C)->top.p;
 }
 

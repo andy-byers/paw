@@ -1045,24 +1045,24 @@ static paw_Bool code_goto(struct MirVisitor *V, struct MirGoto *x)
     return PAW_FALSE;
 }
 
-//static paw_Bool code_for_loop(struct MirVisitor *V, struct MirForLoop *x)
-//{
-//    struct Generator *G = V->ud;
-//    struct FuncState *fs = G->fs;
-//
-//    if (x->for_kind == MIR_FOR_PREP) {
-//        const int else_jump = emit_cond_jump(fs, x->step, OP_FORPREP);
-//        const int then_jump = emit_jump(fs);
-//        add_edge(V, else_jump, x->else_arm);
-//        add_edge(V, then_jump, x->then_arm);
-//    } else {
-//        const int then_jump = emit_cond_jump(fs, x->step, OP_FORLOOP);
-//        const int else_jump = emit_jump(fs);
-//        add_edge(V, then_jump, x->then_arm);
-//        add_edge(V, else_jump, x->else_arm);
-//    }
-//    return PAW_FALSE;
-//}
+static paw_Bool code_for_loop(struct MirVisitor *V, struct MirForLoop *x)
+{
+    struct Generator *G = V->ud;
+    struct FuncState *fs = G->fs;
+
+    if (x->for_kind == MIR_FOR_PREP) {
+        const int else_jump = emit_cond_jump(fs, x->end, OP_FORPREP);
+        const int then_jump = emit_jump(fs);
+        add_edge(V, else_jump, x->else_arm);
+        add_edge(V, then_jump, x->then_arm);
+    } else {
+        const int then_jump = emit_cond_jump(fs, x->end, OP_FORLOOP);
+        const int else_jump = emit_jump(fs);
+        add_edge(V, then_jump, x->then_arm);
+        add_edge(V, else_jump, x->else_arm);
+    }
+    return PAW_FALSE;
+}
 
 static paw_Bool code_branch(struct MirVisitor *V, struct MirBranch *x)
 {

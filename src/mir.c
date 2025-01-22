@@ -233,14 +233,8 @@ static void AcceptSwitch(struct MirVisitor *V, struct MirSwitch *t)
 
 static void AcceptForLoop(struct MirVisitor *V, struct MirForLoop *t)
 {
-    switch (t->for_kind) {
-        case MIR_FORNUM_PREP:
-        case MIR_FORNUM_LOOP:
-            pawMir_visit_register(V, t->fornum.begin);
-            pawMir_visit_register(V, t->fornum.end);
-            pawMir_visit_register(V, t->fornum.step);
-            pawMir_visit_register(V, t->fornum.var);
-    }
+    pawMir_visit_register(V, t->end);
+    pawMir_visit_register(V, t->var);
 }
 
 #define VISITOR_CALL(V, name, x) ((V)->Visit##name != NULL ? (V)->Visit##name(V, x) : 1)
@@ -692,13 +686,11 @@ paw_Bool pawMir_check_load(struct Compiler *C, struct MirInstruction *instr, str
         case kMirForLoop: {
             struct MirForLoop *x = MirGetForLoop(instr);
             switch (x->for_kind) {
-                case MIR_FORNUM_LOOP:
-                    ADD_INPUT(x->fornum.var);
+                case MIR_FOR_LOOP:
+                    ADD_INPUT(x->var);
                     // fallthrough
-                case MIR_FORNUM_PREP:
-                    ADD_INPUT(x->fornum.begin);
-                    ADD_INPUT(x->fornum.end);
-                    ADD_INPUT(x->fornum.step);
+                case MIR_FOR_PREP:
+                    ADD_INPUT(x->end);
             }
             break;
         }
@@ -774,10 +766,10 @@ paw_Bool pawMir_check_store(struct Compiler *C, struct MirInstruction *instr, st
         case kMirForLoop: {
             struct MirForLoop *x = MirGetForLoop(instr);
             switch (x->for_kind) {
-                case MIR_FORNUM_PREP:
-                    ADD_OUTPUT(x->fornum.var);
+                case MIR_FOR_PREP:
+                    ADD_OUTPUT(x->var);
                     break;
-                case MIR_FORNUM_LOOP:
+                case MIR_FOR_LOOP:
                     break;
             }
             break;
@@ -1022,10 +1014,9 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
         case kMirForLoop: {
             struct MirForLoop *t = MirGetForLoop(instr);
             switch (t->for_kind) {
-                case MIR_FORNUM_PREP:
-                case MIR_FORNUM_LOOP:
-                    DUMP_FMT(P, "fornum _%d _%d _%d _%d", t->fornum.begin.value, t->fornum.end.value,
-                            t->fornum.step.value, t->fornum.var.value);
+                case MIR_FOR_PREP:
+                case MIR_FOR_LOOP:
+                    DUMP_FMT(P, "_%d _%d", t->end.value, t->var.value);
             }
             pawL_add_fstring(P->P, P->buf, " => [0: bb%d, 1: bb%d]\n", t->else_arm.value, t->then_arm.value);
             break;

@@ -80,7 +80,7 @@ int main(void)
     // script("string");
     // script("list");
     // script("map");
-    // script("closure");
+    //script("closure");
 
     script("cfg");
     script("import");
