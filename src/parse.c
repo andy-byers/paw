@@ -760,7 +760,9 @@ static struct AstExpr *paren_expr(struct Lex *lex)
     struct AstExpr *expr = expr0(lex);
     --lex->expr_depth;
     if (test_next(lex, ')')) {
-        return expr;
+        struct AstExpr *r = NEW_EXPR(lex, kAstParenExpr);
+        AstGetParenExpr(r)->expr = expr;
+        return r;
     }
     struct AstExpr *r = NEW_EXPR(lex, kAstLiteralExpr);
     check_next(lex, ',');
@@ -1149,6 +1151,12 @@ static struct AstExpr *suffixed_expr(struct Lex *lex)
 {
     struct AstExpr *e = primary_expr(lex);
     if (e == NULL) return NULL;
+    if (AstIsBlock(e)
+            || AstIsIfExpr(e)
+            || AstIsMatchExpr(e)
+            || AstIsWhileExpr(e)) {
+        return e;
+    }
     if (lex->t.kind == '{') {
         e = try_composite_lit(lex, e);
     }

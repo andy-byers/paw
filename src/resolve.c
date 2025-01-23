@@ -1255,12 +1255,7 @@ static struct IrType *resolve_if_expr(struct Resolver *R, struct HirIfExpr *e)
 static void ResolveExprStmt(struct Resolver *R, struct HirExprStmt *s)
 {
     struct IrType *type = resolve_operand(R, s->expr);
-    if (HirIsBlock(s->expr) || HirIsIfExpr(s->expr)) {
-        // Blocks and if expressions that are not the result of another block must
-        // evaluate to "()". Other types of expressions might evaluate to other
-        // types, but their results are unused here, so that is okay.
-        unify_unit_type(R, type);
-    }
+    PAW_UNUSED(type);
 }
 
 static struct IrType *resolve_while_expr(struct Resolver *R, struct HirWhileExpr *e)

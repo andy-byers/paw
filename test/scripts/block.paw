@@ -1,11 +1,11 @@
 // block.paw
 
 fn check_block_expr_binary_op(a: int, b: int, c: int) -> int {
-    a + {
+    a + ({
         let x = 2;
         let y = 3;
         x + b * y
-    } * c
+    }) * c
 }
 
 pub fn test_block_expr_binary_op() {
@@ -210,7 +210,7 @@ pub fn test_if_expr() {
 }
 
 fn check_if_expr_binary_op(n: int) -> int {
-    1 + if n == 0 {
+    1 + (if n == 0 {
         1
     } else if n == 1 {
         return 2 // no semicolon
@@ -218,7 +218,7 @@ fn check_if_expr_binary_op(n: int) -> int {
         return 3;
     } else {
         4
-    } + 2
+    }) + 2
 }
 
 pub fn test_if_expr_binary_op() {
@@ -248,12 +248,12 @@ pub fn test_if_expr_call() {
 }
 
 fn check_match_expr_binary_op(n: int) -> int {
-    1 + match n {
+    1 + (match n {
         0 => 1,
         1 => 2,
         2 => return 3,
         _ => return 4,
-    } + 2
+    }) + 2
 }
 
 pub fn test_match_expr_binary_op() {
@@ -338,7 +338,7 @@ fn check_never_match_expr(o: Option<int>) -> str {
         Option::Some(x) if x < 0 => return 'some < 0', 
         Option::Some(x) if x > 0 => {return 'some > 0'; ()}, // "()" unreachable
         Option::Some(x) => {return 'some == 0'; 'abc'}, // "abc" unreachable
-    }; // TODO: ';' should not be required here!!!
+    }
 
     // unreachable code: type error if "never" flag not propagated
     ()

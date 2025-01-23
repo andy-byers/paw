@@ -862,6 +862,8 @@ static struct HirExpr *lower_expr(struct LowerAst *L, struct AstExpr *expr)
 {
     L->line = expr->hdr.line;
     switch (AST_KINDOF(expr)) {
+        case kAstParenExpr:
+            return lower_expr(L, AstGetParenExpr(expr)->expr);
         case kAstLiteralExpr:
             return LowerLiteralExpr(L, AstGetLiteralExpr(expr));
         case kAstLogicalExpr:

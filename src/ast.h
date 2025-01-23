@@ -28,6 +28,7 @@ struct Compiler;
         X(VariantDecl, variant)
 
 #define AST_EXPR_LIST(X) \
+        X(ParenExpr, paren) \
         X(LiteralExpr, literal) \
         X(LogicalExpr, logical) \
         X(PathExpr, path) \
@@ -210,6 +211,11 @@ struct AstExprHeader {
 struct AstPathExpr {
     AST_EXPR_HEADER;
     struct AstPath *path;
+};
+
+struct AstParenExpr {
+    AST_EXPR_HEADER;
+    struct AstExpr *expr;
 };
 
 struct AstLiteralExpr {

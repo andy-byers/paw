@@ -208,6 +208,7 @@ static void dump_expr(Printer *P, struct AstExpr *e)
     ++P->indent;
     DUMP_FMT(P, "line: %d\n", e->hdr.line);
     switch (AST_KINDOF(e)) {
+        case kAstParenExpr:
         case kAstLogicalExpr:
         case kAstPathExpr:
         case kAstChainExpr:
