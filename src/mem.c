@@ -40,6 +40,7 @@ static void *m_alloc(paw_Env *P, void *ptr, size_t size0, size_t size)
         // run an emergency collection and try again
         ptr2 = try_again(P, ptr, size);
     }
+
     if (ptr2 != NULL) {
         P->gc_bytes += size - size0;
     }

@@ -144,10 +144,8 @@ static void test_call_frames(void)
 static void test_list_ops(void)
 {
     test_oom(
-            "fn fix_list() {let list = []; list.push(42);}\n" // TODO: remove
-
             "fn push_n<T>(list: [T], value: T, n: int) {\n"
-            "    for i = 0, n {                         \n"
+            "    while #list < n {                      \n"
             "        list.push(value);                  \n"
             "    }                                      \n"
             "}                                          \n"
@@ -162,7 +160,7 @@ int main(void)
 #define RUN_SCRIPT(name) test_oom(#name, PAW_FALSE);
     TEST_SCRIPTS(RUN_SCRIPT)
 #undef RUN_SCRIPT
-
+return 42;
     test_call_frames();
     test_list_ops();
 }

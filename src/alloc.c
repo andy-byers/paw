@@ -326,7 +326,7 @@ static void *z_malloc(struct Heap *H, size_t nbytes)
 size_t pawZ_sizeof(void *ptr)
 {
     paw_assert(ptr != NULL);
-    struct Chunk *b = ptr;
+    const struct Chunk *b = ptr;
     paw_assert((b[-1].hdr.size4x & 1) != 0);
     return (b[-1].hdr.size4x & ~3) * 2 - 4;
 }
@@ -422,29 +422,36 @@ int pawZ_init(paw_Env *P, void *heap, size_t heap_size, paw_Bool is_owned)
     return PAW_OK;
 }
 
+#if defined(PAW_DEBUG_EXTRA)
+#include <stdio.h>
 static void detect_leaks(paw_Env *P)
 {
-#if defined(PAW_DEBUG_EXTRA)
+    size_t count = 0;
+
     // ensure that all memory has been released
     const struct Heap *H = P->H;
-    for (uintptr_t u = H->bounds[0];
-            u < H->bounds[1];
-            u += sizeof(void *)) {
+    for (uintptr_t u = H->bounds[0]; u < H->bounds[1]; u += sizeof(void *)) {
         if (pawZ_get_flag(H, u) != 0) {
-            __builtin_trap();
+            fprintf(stderr, "leak at %p\n", ERASE_TYPE(u));
+            ++count;
         }
     }
-    if (P->gc_bytes > 0) {
+
+    if (count != 0) {
+        fprintf(stderr, "leaked %zu bytes in %zu allocations\n", P->gc_bytes, count);
         __builtin_trap();
     }
-#else
-    PAW_UNUSED(P);
-#endif
+
+// TODO: fix leak of 8 bytes...    paw_assert(P->gc_bytes == 0);
 }
+#else
+static void detect_leaks(paw_Env *P) {}
+#endif
 
 void pawZ_uninit(paw_Env *P)
 {
     detect_leaks(P);
+
     if (P->H->is_owned) {
         P->alloc(P->ud, P, P->heap_size, 0);
     }

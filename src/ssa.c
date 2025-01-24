@@ -261,6 +261,9 @@ static void fix_aux_info(struct SsaConverter *S)
     }
 }
 
+// TODO
+#include <stdio.h>
+
 static void debug(struct Compiler *C, struct MirBlockList *idom, struct MirBucketList *df)
 {
     int i;
@@ -284,8 +287,6 @@ static void debug(struct Compiler *C, struct MirBlockList *idom, struct MirBucke
 
 void pawSsa_construct(struct Compiler *C, struct Mir *mir, Map *uses, Map *defs)
 {
-printf("before rub %s\n", pawMir_dump(C, mir));--ENV(C)->top.p;
-
     pawMir_remove_unreachable_blocks(C, mir, uses, defs);
     struct MirBlockList *idom = pawMir_compute_dominance_tree(C, mir);
     struct MirBucketList *df = pawMir_compute_dominance_frontiers(C, mir, idom);

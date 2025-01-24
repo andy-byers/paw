@@ -406,8 +406,6 @@ static void add_upvalue(struct LowerHir *L, struct FunctionState *fs, struct Non
         pawE_error(ENV(L->C), PAW_ESYNTAX, -1, "too many upvalues");
     }
 
-printf("upvalue at local %d\n", info->index);
-printf("upvalue at _%d\n", fs->locals->data[info->index].value);
     K_LIST_PUSH(L->C, fs->up, ((struct MirUpvalueInfo){
         .index = info->index, // local or upvalue ID
         .is_local = is_local,

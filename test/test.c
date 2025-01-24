@@ -20,9 +20,7 @@
 static void trash_memory(void *ptr, size_t n)
 {
     volatile uint8_t *p = ptr;
-    for (size_t i = 0; i < n; ++i) {
-        *p++ = 0xAA; // 0b10101010
-    }
+    while (n-- > 0) *p++ = 0xAA; // 0b10101010
 }
 
 static void *safe_realloc(struct TestAlloc *a, void *ptr, size_t size0, size_t size)
@@ -126,12 +124,13 @@ static void check_ok(paw_Env *P, int status)
         test_recover(P, PAW_TRUE); // no return
     }
 }
-
+#include "gc.c"
 int test_open_file(paw_Env *P, const char *name)
 {
     const char *pathname = test_pathname(name);
     if (P == NULL) return PAW_EMEMORY;
 
+    const ptrdiff_t offset = SAVE_OFFSET(P, P->top.p);
     File *file = pawO_new_file(P);
     const int rc = pawO_open(file, pathname, "r");
     check(rc == 0);
@@ -140,7 +139,7 @@ int test_open_file(paw_Env *P, const char *name)
     check(file);
 
     const int status = paw_load(P, test_reader, pathname, &rd);
-    pawO_close(rd.file);
+    P->top.p = RESTORE_POINTER(P, offset);
     return status;
 }
 

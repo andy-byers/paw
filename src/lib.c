@@ -383,11 +383,10 @@ static const char *chunk_reader(paw_Env *P, void *ud, size_t *psize)
 
 void pawL_close_loader(paw_Env *P, void *state)
 {
-    PAW_UNUSED(P);
     if (state == NULL) return;
     struct FileReader *fr = state;
     pawO_close(fr->file);
-    pawO_free_file(P, fr->file);
+// TODO: freed in value.c, called by GC    pawO_free_file(P, fr->file);
 }
 
 void pawL_new_func(paw_Env *P, paw_Function func, int nup)
@@ -475,7 +474,7 @@ static void load_builtins(paw_Env *P)
     add_prelude_method(P, "Result", "unwrap_or", enum_unwrap_or);
 }
 
-paw_Bool l_getenv(paw_Env *P)
+static paw_Bool lib_getenv(paw_Env *P)
 {
     const char *env = getenv(paw_string(P, -1));
     paw_pop(P, 1);
@@ -570,7 +569,7 @@ static void push_prelude_method(paw_Env *P, const char *self, const char *name)
 static int searcher_env(paw_Env *P)
 {
     PAW_PUSH_LITERAL(P, PAW_PATH_VAR);
-    if (l_getenv(P)) {
+    if (lib_getenv(P)) {
         // split on the path separator
         push_prelude_method(P, "str", "split");
         paw_rotate(P, -2, 1);
@@ -623,6 +622,12 @@ void pawL_init(paw_Env *P)
     paw_new_map(P, 3);
     P->registry = P->top.p[-1];
     paw_pop(P, 1);
+}
+
+void pawL_uninit(paw_Env *P)
+{
+    // clear GC root
+    P->registry = (Value){0};
 }
 
 int pawL_load_file(paw_Env *P, const char *pathname)

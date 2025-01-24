@@ -94,6 +94,7 @@ paw_Env *paw_open(const struct paw_Options *o)
 
 void paw_close(paw_Env *P)
 {
+    pawL_uninit(P);
     pawE_uninit(P);
     pawC_uninit(P);
     pawG_uninit(P);

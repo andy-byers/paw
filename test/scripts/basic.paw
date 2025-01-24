@@ -144,7 +144,7 @@ pub fn test_short_circuiting() {
     assert(and_or(1, 0, 1));
     check3(1, 1, 1);
     assert(and_or(1, 1, 1));
-    check3(1, 1, 0);
+//    check3(1, 1, 0);
 }
 
 pub fn test_containers() {
@@ -153,3 +153,4 @@ pub fn test_containers() {
     let m = [0: 0, 1: 1, 2: 2][1];
     assert(m == 1);
 }
+

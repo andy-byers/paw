@@ -561,3 +561,28 @@ void pawP_bitset_or(struct BitSet *a, const struct BitSet *b)
     }
 }
 
+void pawP_push_store(struct Compiler *C, struct ObjectStore *store)
+{
+    paw_Env *P = ENV(C);
+    paw_new_map(P, 0); // push map
+    *store = (struct ObjectStore){
+        .objects = V_MAP(P->top.p[-1]),
+        .offset = paw_get_count(P) - 1,
+    };
+}
+
+Map *pawP_new_map(struct Compiler *C, struct ObjectStore *store)
+{
+    paw_Env *P = ENV(C);
+    paw_push_value(P, store->offset);
+    paw_new_map(P, 0);
+    // get pointer before register is popped by set operation
+    Map *map = V_MAP(P->top.p[-1]);
+    paw_push_zero(P, 1);
+    paw_map_set(P, -3);
+    // pop the copy of the object store map
+    paw_pop(P, 1);
+    return map;
+}
+
+

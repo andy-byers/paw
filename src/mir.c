@@ -68,7 +68,6 @@ struct MirBlockData *pawMir_new_block(struct Compiler *C)
     return block;
 }
 
-
 static void AcceptPhi(struct MirVisitor *V, struct MirPhi *t)
 {
     pawMir_visit_register(V, t->output);
@@ -506,6 +505,9 @@ static void rename_usedef_blocks(struct Compiler *C, Map *mapping, Map *usedef)
     }
 }
 
+// TODO
+#include <stdio.h>
+
 static void dump_usedef(struct Compiler *C, Map *uses, Map *defs)
 {
     paw_Int iter = PAW_ITER_INIT;
@@ -810,10 +812,6 @@ static void dump_instruction_list(struct Printer *P, struct MirInstructionList *
 
 static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
 {
-    // TODO: remove, just for debugging
-#warning "remove this"
-    if (!MirIsPhi(instr)) DUMP_FMT(P, "%d: ", instr->hdr.location);
-
     switch (MIR_KINDOF(instr)) {
         case kMirAllocLocal: {
             struct MirAllocLocal *t = MirGetAllocLocal(instr);
@@ -1026,7 +1024,7 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
 static void dump_block(struct Printer *P, MirBlock bb)
 {
     struct MirBlockData *block = mir_bb_data(P->mir, bb);
-    DUMP_FMT(P, "bb%d [%d, %d] {\n", bb.value, block->location, mir_bb_last(block));
+    DUMP_FMT(P, "bb%d {\n", bb.value);
     ++P->indent;
 
     dump_instruction_list(P, block->joins);

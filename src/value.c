@@ -205,7 +205,8 @@ Foreign *pawV_new_foreign(paw_Env *P, size_t size, int nfields, uint8_t flags, V
 void pawV_free_foreign(paw_Env *P, Foreign *f)
 {
     if (f->flags == VBOX_FILE) {
-        pawO_close(f->data);
+        File *file = f->data;
+        pawO_close(file);
     } else if (f->flags == VBOX_LOADER) {
         pawL_close_loader(P, f->data);
     }

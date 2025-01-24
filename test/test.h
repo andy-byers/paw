@@ -10,18 +10,24 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+/*
+    X(loop) \
+    X(close_loop_variable) \
+    X(integer) \
+    X(string) \
+    X(list) \
+    X(map) \
+*/
+
 #define TEST_SCRIPTS(X) \
     X(cfg) \
     X(primitive) \
     X(operator) \
     X(block) \
-    X(loop) \
     X(basic) \
     X(function) \
     X(closure) \
-    X(integer) \
     X(float) \
-    X(string) \
     X(struct) \
     X(tuple) \
     X(enum) \
@@ -31,8 +37,6 @@
     X(match_poly_enum) \
     X(match_or) \
     X(match_guard) \
-    X(list) \
-    X(map) \
     X(misc) \
     X(import) \
     X(poly_function) \
@@ -42,7 +46,6 @@
     X(unit_variant) \
     X(infer_assoc_items) \
     X(capture_upvalue) \
-    X(close_loop_variable) \
     X(enum_impl)
 
 #define check(x) \

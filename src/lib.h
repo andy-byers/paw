@@ -7,7 +7,6 @@
 //     declaration 'use modname;' imports the module named 'modname'. Symbols
 //     exported by 'modname' can be accessed using 'modname::symbol' syntax.
 // (2) Each module mentioned in a compilation unit is imported exactly once.
-// (3)
 
 #ifndef PAW_LIB_H
 #define PAW_LIB_H
@@ -20,6 +19,7 @@ struct LoaderState {
 
 // Load the base library
 void pawL_init(paw_Env *P);
+void pawL_uninit(paw_Env *P);
 
 // Functions for loading and compiling source code
 int pawL_load_file(paw_Env *P, const char *pathname);

@@ -39,9 +39,6 @@
 #include "paw.h"
 #include "unify.h"
 
-#warning "TODO: remove me"
-#include"stdio.h"
-
 #define ENV(x) ((x)->P)
 #define DLOG(X, ...) PAWD_LOG(ENV(X), __VA_ARGS__)
 #define SCAN_STRING(X, s) pawP_scan_string(ENV(X), (X)->strings, s)
@@ -358,6 +355,20 @@ struct ItemSlot {
 };
 
 DEFINE_LIST(struct Compiler, pawP_item_list_, ItemList, struct ItemSlot)
+
+struct ObjectStore {
+    Map *objects;
+    int offset;
+};
+
+void pawP_push_store(struct Compiler *C, struct ObjectStore *store);
+Map *pawP_new_map(struct Compiler *C, struct ObjectStore *store);
+
+#define MAP_INSERT(X, map, key, value) pawH_insert(ENV(X), map, key, value)
+#define MAP_REMOVE(map, key) pawH_erase(map, key)
+#define MAP_ERASE(map, index) pawH_erase_at(map, index)
+#define MAP_GET(map, key) pawH_get(map, index)
+#define MAP_CONTAINS(map, key) (MAP_GET(map, index) != NULL)
 
 Map *pawP_push_map(struct Compiler *C);
 List *pawP_push_list(struct Compiler *C);

@@ -40,10 +40,6 @@ static void set_from(struct Liveness *L, MirRegister opd, int from, struct MirBl
     pawP_bitset_clear_range(it->ranges, mir_bb_first(block), from);
     pawP_bitset_set(it->ranges, from);
     it->first = from;
-
-    if(opd.value==3) {
-printf("setfrom %d-%d\n", from, it->last);
-    }
 }
 
 static void add_range(struct Liveness *L, MirRegister opd, int from, int to)
@@ -52,10 +48,6 @@ static void add_range(struct Liveness *L, MirRegister opd, int from, int to)
     pawP_bitset_set_range(it->ranges, from, to);
     it->first = PAW_MIN(it->first, from);
     it->last = PAW_MAX(it->last, to);
-
-    if(opd.value==3) {
-printf("addrange %d-%d\n", from, to);
-    }
 }
 
 static void add_live_reg(struct Liveness *L, struct MirRegisterList *set, MirRegister r)
@@ -111,6 +103,9 @@ static void step_instruction(struct Liveness *L, struct MirRegisterList *set, st
 
 #undef INPUT
 #undef OUTPUT
+
+// TODO
+#include <stdio.h>
 
 static void dump_live_intervals(struct Liveness *L, struct MirIntervalList *intervals)
 {
@@ -404,8 +399,6 @@ struct MirIntervalList *pawMir_compute_liveness(struct Compiler *C, struct Mir *
     extend_captured_intervals(&L, mir);
 
     pawP_pop_object(C, L.mapping);
-
-printf("%s %d params:\n%s\n", mir->name->text, nparameters, dump_live_intervals_pretty(&L, L.intervals, npositions));--ENV(C)->top.p;
     return L.intervals;
 }
 

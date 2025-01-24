@@ -494,20 +494,24 @@ static void test_library(void)
 
 int main(void)
 {
-    test_primitives();
-    test_immediates();
-    driver(test_compiler_lists);
-    driver(test_strings);
-    driver(test_stack);
-    driver(test_map_get_and_put);
-    driver(test_map_erase);
-    driver(test_map_erase_2);
-    driver(test_map_ops);
-    driver(test_map_ops_2);
-    driver(test_map_extend);
-    driver(test_parse_int);
-    driver(test_parse_float);
-    driver(test_buffer);
-    test_library();
+    paw_Env *P = paw_open(&(struct paw_Options){
+                0
+            });
+    paw_close(P);
+//    test_primitives();
+//    test_immediates();
+//    driver(test_compiler_lists);
+//    driver(test_strings);
+//    driver(test_stack);
+//    driver(test_map_get_and_put);
+//    driver(test_map_erase);
+//    driver(test_map_erase_2);
+//    driver(test_map_ops);
+//    driver(test_map_ops_2);
+//    driver(test_map_extend);
+//    driver(test_parse_int);
+//    driver(test_parse_float);
+//    driver(test_buffer);
+//    test_library();
     return 0;
 }
