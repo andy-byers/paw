@@ -55,25 +55,28 @@ struct QueryBase {
 
 static struct QueryBase find_global_in(struct QueryState *Q, struct ModuleInfo *root, struct HirPath *path)
 {
-    struct HirDecl *base;
-    struct HirSegment *seg;
-    struct HirSymbol *sym;
-    paw_assert(path->count > 0); // TODO: move check to end of loop body, declare vars inside loop
-    for (Q->m = root, Q->index = 0; Q->index < path->count;) {
-        seg = &K_LIST_GET(path, Q->index++);
-        sym = resolve_symbol(Q, seg->name);
+    paw_assert(path->count > 0);
+
+    Q->m = root;
+    Q->index = 0;
+    do {
+        struct HirSegment *seg = &K_LIST_GET(path, Q->index++);
+        struct HirSymbol *sym = resolve_symbol(Q, seg->name);
         if (sym != NULL) {
-            base = sym->decl;
-            break;
+            return (struct QueryBase){
+                .is_type = sym->is_type,
+                .base = sym->decl,
+                .seg = seg,
+            };
         }
         struct ModuleInfo *m = find_import(Q, seg->name);
-        if (m == NULL) return (struct QueryBase){seg};
+        if (m == NULL) break;
         if (module_number(Q->m) != Q->base_modno) {
             pawE_error(ENV(Q), PAW_ESYNTAX, -1, "transitive imports are not supported");
         }
         Q->m = m;
-    }
-    return (struct QueryBase){seg, base, sym->is_type};
+    } while (Q->index < path->count);
+    return (struct QueryBase){0};
 }
 
 static struct QueryBase find_global(struct QueryState *Q, struct ModuleInfo *m, struct HirPath *path)
@@ -174,6 +177,23 @@ static struct QueryBase find_local(struct Compiler *C, struct HirSymtab *symtab,
     return (struct QueryBase){0};
 }
 
+#include "stdio.h"
+static struct IrType *resolve_alias(struct QueryState *Q, struct QueryBase q)
+{
+    struct HirSegment *seg = q.seg;
+    seg->name = q.base->hdr.name;
+
+    if (pawS_eq(seg->name, SCAN_STRING(Q->C, "A"))) {
+printf("alias %s\n", seg->name->text);
+int i = 0;
+
+    }
+    return GET_NODE_TYPE(Q->C, q.base);
+
+
+
+}
+
 struct IrType *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirPath *path, enum LookupKind kind)
 {
     struct QueryState Q = {
@@ -184,12 +204,13 @@ struct IrType *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct HirS
         .C = C,
     };
 
-
     struct IrType *inst;
     paw_assert(path->count > 0);
     struct QueryBase q = find_local(C, symtab, path);
     if (q.base != NULL) {
-        inst = GET_NODE_TYPE(C, q.base);
+        inst = HirIsTypeDecl(q.base)
+            ? resolve_alias(&Q, q)
+            : GET_NODE_TYPE(C, q.base);
         Q.index = 1;
         Q.m = m;
         goto found_local;
@@ -210,6 +231,7 @@ struct IrType *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct HirS
             // (fallthrough)
         case kHirFuncDecl:
         case kHirTypeDecl:
+       //     inst = resolve_alias(&Q, q);
             inst = pawP_instantiate(C, q.base, types);
             q.seg->did = IR_TYPE_DID(inst);
             break;

@@ -792,7 +792,8 @@ static void dump_decl(struct Printer *P, struct HirDecl *d)
         return;
     }
     ++P->indent;
-    DUMP_FMT(P, "did: %d\n", d->hdr.did);
+    DUMP_FMT(P, "did: DeclId(%d, mod=%d)\n",
+            d->hdr.did.value, d->hdr.did.modno);
     DUMP_FMT(P, "line: %d\n", d->hdr.line);
     switch (HIR_KINDOF(d)) {
         case kHirFuncDecl:

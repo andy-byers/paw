@@ -409,15 +409,15 @@ static void collect_methods(struct ItemCollector *X, struct HirDeclList *methods
 
 static struct IrType *collect_self(struct ItemCollector *X, struct HirImplDecl *d)
 {
-    String *selfname = SCAN_STRING(X->C, "Self");
     struct IrType *self = collect_path(X, d->self);
     struct HirDecl *result = pawHir_new_decl(X->C, d->line, kHirTypeDecl);
     struct HirTypeDecl *r = HirGetTypeDecl(result);
+    r->name = SCAN_STRING(X->C, "Self");
     add_decl(X, result);
     SET_TYPE(X, r->hid, self);
 
     map_adt_to_impl(X, get_decl(X, IR_TYPE_DID(self)), HIR_CAST_DECL(d));
-    struct HirSymbol *symbol = new_local(X, selfname, result);
+    struct HirSymbol *symbol = new_local(X, r->name, result);
     symbol->is_type = PAW_TRUE;
     return self;
 }

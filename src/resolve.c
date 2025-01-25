@@ -283,19 +283,20 @@ static struct HirScope *enclosing_scope(struct HirSymtab *st)
     return K_LIST_GET(st, st->count - 1);
 }
 
-static struct HirSymbol *add_symbol(struct Resolver *R, struct HirScope *scope, String *name, struct HirDecl *decl)
+static struct HirSymbol *add_symbol(struct Resolver *R, struct HirScope *scope, String *name, struct HirDecl *decl, paw_Bool is_type)
 {
     struct HirSymbol *symbol = pawHir_add_symbol(R->C, scope);
+    symbol->is_type = is_type;
     symbol->name = name;
     symbol->decl = decl;
     return symbol;
 }
 
-static struct HirSymbol *declare_local(struct Resolver *R, String *name, struct HirDecl *decl)
+static struct HirSymbol *declare_local(struct Resolver *R, String *name, struct HirDecl *decl, paw_Bool is_type)
 {
     if (IS_KEYWORD(name)) NAME_ERROR(R, "invalid identifier ('%s' is a language keyword)");
     if (IS_BUILTIN(name)) NAME_ERROR(R, "invalid identifier ('%s' is a builtin type name)");
-    return add_symbol(R, enclosing_scope(R->symtab), name, decl);
+    return add_symbol(R, enclosing_scope(R->symtab), name, decl, is_type);
 }
 
 // Allow a previously-declared variable to be accessed
@@ -355,8 +356,7 @@ static paw_Bool is_compat(struct Compiler *C, struct IrType *a, struct IrType *b
 
 static struct HirSymbol *new_local(struct Resolver *R, String *name, struct HirDecl *decl, paw_Bool is_type)
 {
-    struct HirSymbol *symbol = declare_local(R, name, decl);
-    symbol->is_type = is_type;
+    struct HirSymbol *symbol = declare_local(R, name, decl, is_type);
     define_local(symbol);
     return symbol;
 }
@@ -498,7 +498,7 @@ static void resolve_impl_methods(struct Resolver *R, struct HirImplDecl *d)
     add_decl(R, result);
 
     struct HirSymbol *symbol = new_local(R, name, result, PAW_TRUE);
-    symbol->is_type = PAW_TRUE;
+    symbol->is_type = PAW_TRUE; // TODO: already set
 
     resolve_methods(R, d->methods, IrGetAdt(R->self));
     allocate_decls(R, d->methods, PAW_FALSE);
@@ -922,7 +922,7 @@ static struct IrType *resolve_var_decl(struct Resolver *R, struct HirVarDecl *d)
     struct HirDecl *decl = HIR_CAST_DECL(d);
     add_decl(R, decl);
 
-    struct HirSymbol *symbol = declare_local(R, d->name, decl);
+    struct HirSymbol *symbol = declare_local(R, d->name, decl, PAW_FALSE);
     struct IrType *init = resolve_operand(R, d->init);
     define_local(symbol);
 
@@ -942,10 +942,13 @@ static struct IrType *resolve_field_decl(struct Resolver *R, struct HirFieldDecl
 
 static struct IrType *resolve_type_decl(struct Resolver *R, struct HirTypeDecl *d)
 {
-    d->generics = NULL; // TODO: generic parameters for aliases
+    struct HirSymbol *symbol = declare_local(R, d->name, HIR_CAST_DECL(d), PAW_TRUE);
 
-    struct HirSymbol *symbol = declare_local(R, d->name, HIR_CAST_DECL(d));
-    struct IrType *type = resolve_operand(R, d->rhs);
+    enter_scope(R, NULL);
+    allocate_decls(R, d->generics, PAW_TRUE);
+    struct IrType *type = resolve_type(R, d->rhs);
+    leave_scope(R);
+
     define_local(symbol);
     return type;
 }
@@ -1620,9 +1623,18 @@ static struct IrType *ResolveLiteralPat(struct Resolver *R, struct HirLiteralPat
 static void resolve_decl(struct Resolver *R, struct HirDecl *decl)
 {
     R->line = decl->hdr.line;
-    struct IrType *type = normalize(R, HirIsVarDecl(decl)
-        ? resolve_var_decl(R, HirGetVarDecl(decl))
-        : resolve_field_decl(R, HirGetFieldDecl(decl)));
+    struct IrType *type;
+    switch (HIR_KINDOF(decl)) {
+        case kHirVarDecl:
+            type = resolve_var_decl(R, HirGetVarDecl(decl));
+            break;
+        case kHirFieldDecl:
+            type = resolve_field_decl(R, HirGetFieldDecl(decl));
+            break;
+        default:
+            type = resolve_type_decl(R, HirGetTypeDecl(decl));
+    }
+    type = normalize(R, type);
     SET_NODE_TYPE(R->C, decl, type);
 }
 
@@ -1838,13 +1850,18 @@ static void check_module_types(struct Resolver *R, struct ModuleInfo *mod)
     // control should not be within a scope block
     paw_assert(R->symtab->count == 0);
 }
-
+#include"stdio.h"
+#include"hir.h"
 static void check_types(struct Resolver *R)
 {
     enter_inference_ctx(R);
     struct ModuleList *modules = R->C->modules;
     for (int i = 0; i < modules->count; ++i) {
         R->m = K_LIST_GET(modules, i);
+if (R->m->hir->modno > 0) {
+pawHir_dump(R->m->hir);
+printf("%s\n", paw_string(ENV(R->C),-1));--ENV(R->C)->top.p;
+}
         check_module_types(R, R->m);
     }
     leave_inference_ctx(R);

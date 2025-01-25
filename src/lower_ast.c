@@ -156,9 +156,7 @@ static void register_func(struct LowerAst *L, struct AstFuncDecl *d, struct HirF
     r->fn_kind = d->fn_kind;
     r->name = d->name;
 
-    if (d->generics != NULL) {
-        r->generics = lower_decl_list(L, d->generics);
-    }
+    r->generics = lower_decl_list(L, d->generics);
     r->params = lower_params(L, d, d->params);
     r->result = lower_type(L, d->result);
 }
@@ -459,9 +457,9 @@ static struct HirDecl *LowerTypeDecl(struct LowerAst *L, struct AstTypeDecl *d)
 {
     struct HirDecl *result = new_decl(L, d->line, kHirTypeDecl);
     struct HirTypeDecl *r = HirGetTypeDecl(result);
-    r->generics = NULL; // TODO: generic parameters for aliases
-
-    r->rhs = lower_expr(L, d->rhs);
+    r->name = d->name;
+    r->generics = lower_decl_list(L, d->generics);
+    r->rhs = lower_type(L, d->rhs);
     return result;
 }
 

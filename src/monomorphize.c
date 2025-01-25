@@ -449,8 +449,8 @@ static struct IrType *cannonicalize_method(struct MonoCollector *M, struct IrTyp
     for (int i = 0; i < monos->count; ++i) {
         struct IrType *inst = K_LIST_GET(monos, i);
         struct HirDecl *decl = pawHir_get_decl(M->C, IR_TYPE_DID(inst));
-        if (pawS_eq(name, decl->hdr.name) &&
-                test_types(M, type, inst)) {
+        if (pawS_eq(name, decl->hdr.name)
+                && test_types(M, type, inst)) {
             return inst;
         }
     }
@@ -489,6 +489,8 @@ static struct IrType *collect_adt(struct MonoCollector *M, struct IrAdt *t)
 
 static struct IrType *register_function(struct MonoCollector *M, struct IrSignature *t)
 {
+    struct HirDecl *decl = pawHir_get_decl(M->C, t->did);
+    if (HirIsVariantDecl(decl)) return collect_adt(M, IrGetAdt(t->result));
     struct IrTypeList *monos = get_mono_list(M, M->monos, I2V(t->did.value));
     return cannonicalize_func(M, monos, IR_CAST_TYPE(t));
 }

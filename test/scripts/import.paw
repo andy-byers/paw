@@ -38,18 +38,42 @@ pub fn test_star_import() {
 
 use mod_c::*;
 
-// TODO: WTF???
-//pub enum Choice {
-//    First,
-//    Second,
-//}
+//struct Aliased;
 //
-//// TODO: Use Self::First and Self::Second
-////       Doesn't work currently: type checker says it can't perform "::" access on a local 
-////       ("Self"). Should be allowed on a TypeDecl.
-//impl Choice {
-//    pub fn choose(b: bool) -> Self {
-//        if b { Choice::First }
-//        else { Choice::Second }
-//    }
+//pub fn test_alias() {
+////    type I = int;
+////    let i: I = 123;
+//
+//    type A = Aliased;
+////    let a: A = Aliased;
+////    let a: Aliased = A;
+////    let a: A = A;
+//    let a = A;
 //}
+
+pub enum Choice {
+    First,
+    Second,
+}
+
+// TODO: Use Self::First and Self::Second
+//       Doesn't work currently: type checker says it can't perform "::" access on a local 
+//       ("Self"). Should be allowed on a TypeDecl.
+impl Choice {
+    pub fn choose(b: bool) -> Self {
+        if b { Choice::First }
+        else { Choice::Second }
+    }
+}
+
+fn choice_to_int(c: Choice) -> int {
+    match c {
+        Choice::First => 1,
+        Choice::Second => 2,
+    }
+}
+
+pub fn test_choice() {
+    assert(choice_to_int(Choice::choose(true)) == 1);
+    assert(choice_to_int(Choice::choose(false)) == 2);
+}

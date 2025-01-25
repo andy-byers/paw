@@ -1793,7 +1793,7 @@ static void lower_hir_body(struct LowerHir *L, struct HirFuncDecl *func, Map *us
 
     leave_function(L);
 }
-
+#include"stdio.h"
 struct Mir *pawP_lower_hir_body(struct Compiler *C, struct HirFuncDecl *func)
 {
     struct IrType *type = pawIr_get_type(C, func->hid);
@@ -1823,6 +1823,8 @@ struct Mir *pawP_lower_hir_body(struct Compiler *C, struct HirFuncDecl *func)
 
     lower_hir_body(&L, func, uses, defs, result);
     pawSsa_construct(C, result, uses, defs);
+
+printf("%s\n", pawMir_dump(C, result));--ENV(C)->top.p;
 
     pawP_pop_object(C, defs);
     pawP_pop_object(C, uses);

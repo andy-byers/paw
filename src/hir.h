@@ -189,7 +189,7 @@ struct HirVarDecl {
 // Used for type aliases and builtin types.
 struct HirTypeDecl {
     HIR_DECL_HEADER;
-    struct HirExpr *rhs;
+    struct HirType *rhs;
     struct HirDeclList *generics;
 };
 
