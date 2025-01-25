@@ -53,7 +53,7 @@ static struct HirPat *lower_pat(struct LowerAst *, struct AstPat *);
         struct Hir##T2##List *r = pawHir_##name##_list_new(L->C); \
         for (int i = 0; i < list->count; ++i) { \
             struct Hir##T2 *node = lower_##name(L, list->data[i]); \
-            K_LIST_PUSH(L->C, r, node); \
+            if (node != NULL) K_LIST_PUSH(L->C, r, node); \
         } \
         return r; \
     }
@@ -408,13 +408,13 @@ static struct HirExpr *LowerClosureExpr(struct LowerAst *L, struct AstClosureExp
 
 static struct HirDecl *LowerUseDecl(struct LowerAst *L, struct AstUseDecl *d)
 {
-    struct HirDecl *result = new_decl(L, d->line, kHirUseDecl);
-    struct HirUseDecl *r = HirGetUseDecl(result);
-    r->is_pub = d->is_pub;
-    r->path = lower_path(L, d->path);
-    r->modno = d->modno;
-    r->name = d->name;
-    return result;
+    K_LIST_PUSH(L->C, L->hir->imports, ((struct HirImport){
+                    .item_name = d->item_name,
+                    .module_name = d->name,
+                    .has_star = d->has_star,
+                    .modno = d->modno,
+                }));
+    return NULL;
 }
 
 static struct HirDecl *LowerAdtDecl(struct LowerAst *L, struct AstAdtDecl *d)

@@ -62,7 +62,6 @@ static void FoldDecl(struct HirVisitor *V, struct HirDecl *node)
     paw_assert(node != NULL);
     struct IrTypeFolder *F = V->ud;
     struct IrType *type = GET_NODE_TYPE(F->C, node);
-    if (HirIsUseDecl(node)) return; // TODO: 'HirUseDecl' should not exist probably
     SET_NODE_TYPE(F->C, node, pawIr_fold_type(F, type));
 }
 

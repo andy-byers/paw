@@ -299,6 +299,8 @@ static struct HirSymbol *declare_local(struct Resolver *R, String *name, struct 
 }
 
 // Allow a previously-declared variable to be accessed
+// When this happens, the enclosing HirScope must be the same as when the variable was
+// declared. This will always be the case for well-formed code.
 static void define_local(struct HirSymbol *symbol)
 {
     symbol->is_init = PAW_TRUE;
@@ -463,7 +465,7 @@ static void resolve_func_item(struct Resolver *R, struct HirFuncDecl *d)
         R->rs = &rs;
 
         enter_inference_ctx(R);
-        struct IrType *result = resolve_expr(R, d->body);
+        struct IrType *result = resolve_operand(R, d->body);
         unify_block_result(R, HirGetBlock(d->body)->never, result, ret);
         leave_inference_ctx(R);
 
@@ -854,7 +856,7 @@ static struct IrType *resolve_closure_expr(struct Resolver *R, struct HirClosure
     rs.prev = t->result = ret;
 
     if (HirIsBlock(e->expr)) {
-        struct IrType *result = resolve_expr(R, e->expr);
+        struct IrType *result = resolve_operand(R, e->expr);
         unify_block_result(R, HirGetBlock(e->expr)->never, result, ret);
     } else {
         unify(R, ret, resolve_operand(R, e->expr));

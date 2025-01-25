@@ -19,6 +19,7 @@ struct Hir *pawHir_new(struct Compiler *C, String *name, int modno)
 {
     struct Hir *hir = NEW_NODE(C, struct Hir);
     *hir = (struct Hir){
+        .imports = pawHir_import_list_new(C),
         .items = pawHir_decl_list_new(C),
         .pool = &C->dm->pool,
         .modno = modno,
@@ -245,11 +246,6 @@ static void AcceptGenericDecl(struct HirVisitor *V, struct HirGenericDecl *d)
 {
     PAW_UNUSED(V);
     PAW_UNUSED(d);
-}
-
-static void AcceptUseDecl(struct HirVisitor *V, struct HirUseDecl *d)
-{
-    AcceptPath(V, d->path);
 }
 
 static void AcceptVariantDecl(struct HirVisitor *V, struct HirVariantDecl *d)
@@ -807,9 +803,6 @@ static void dump_decl(struct Printer *P, struct HirDecl *d)
             DUMP_MSG(P, "body: ");
             dump_expr(P, d->func.body);
             break;
-        case kHirUseDecl:
-            DUMP_NAME(P, d->use.name);
-            break;
         case kHirFieldDecl:
             DUMP_NAME(P, d->field.name);
             break;
@@ -1127,11 +1120,6 @@ void pawHir_dump_decls(struct Compiler *C, struct HirDeclList *decls)
         struct HirDecl *decl = pawHir_get_decl(C, (DeclId){.value = i});
         const char *name = decl->hdr.name != NULL
                 ? decl->hdr.name->text : "(null)";
-        if (HirIsUseDecl(decl)) {
-            paw_push_string(P, "(use)");
-        } else {
-// TODO            pawHir_print_type(C, decl->hdr.type);
-        }
         pawL_add_fstring(P, &buf, "%d\t%s\t%s\n", i, name, paw_string(P, -1));
         paw_pop(P, 1);
     }

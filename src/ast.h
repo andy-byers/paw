@@ -142,9 +142,9 @@ struct AstAdtDecl {
 
 struct AstUseDecl {
     AST_DECL_HEADER;
-    paw_Bool is_pub : 1;
-    struct AstPath *path;
+    paw_Bool has_star : 1;
     int modno;
+    String *item_name;
 };
 
 struct AstVariantDecl {

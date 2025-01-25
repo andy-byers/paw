@@ -1,7 +1,5 @@
 // import.paw
 
-use mod_a;
-
 fn call_test(k: str) {
     let f = mod_a::get_test(k);
     f();
@@ -14,34 +12,44 @@ pub fn test_import() {
     call_test('recursive');
 }
 
+// imported symbols are available anywhere in this module
+use mod_a;
+
 pub fn test_object() {
     let o = mod_a::Obj::new(true);
     assert(o.get_t());
 }
 
-pub fn test_indirect() {
-    let indirect: mod_a::use_indirect::Indirect = mod_a::use_indirect::indirect();
+use mod_a::poly_recursive;
+
+pub fn test_specific_import() {
+    let list = [];
+    let count = poly_recursive(5, 123, list);
+    assert(#list == 5);
+    assert(list[-1] == 123);
 }
 
-// TODO: should this be supported?
-//impl<Y> mod_a::Obj<Y> {
-//    pub fn f(y: Y) -> Y {
-//        return y;
-//    }
-//    
-//    pub fn g(self, y: Y) -> Y {
-//        self.t = y;
-//        return self.t;
-//    }
+pub fn test_star_import() {
+    let c = choose(true);   
+    assert(c == "abc");
+    let c = choose(false);   
+    assert(c == "def");
+}
+
+use mod_c::*;
+
+// TODO: WTF???
+//pub enum Choice {
+//    First,
+//    Second,
 //}
 //
-//pub fn test_external_impl() {
-//    let s = mod_a::Obj::<str>::f('abc');
-//    assert(s == 'abc');
-//
-//    let o = mod_a::Obj::<int>::new(123);
-//    assert(o.get_t() == 123 &&
-//        o.g(321) == 321 && 
-//        o.get_t() == 321);
+//// TODO: Use Self::First and Self::Second
+////       Doesn't work currently: type checker says it can't perform "::" access on a local 
+////       ("Self"). Should be allowed on a TypeDecl.
+//impl Choice {
+//    pub fn choose(b: bool) -> Self {
+//        if b { Choice::First }
+//        else { Choice::Second }
+//    }
 //}
-//

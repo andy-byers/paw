@@ -434,11 +434,6 @@ static void collect_impl_decl(struct ItemCollector *X, struct HirImplDecl *d)
     leave_block(X);
 }
 
-static void collect_use_decl(struct ItemCollector *X, struct HirUseDecl *d)
-{
-    new_global(X, HIR_CAST_DECL(d), PAW_FALSE);
-}
-
 static struct ModuleInfo *use_module(struct ItemCollector *X, struct ModuleInfo *m)
 {
     pawU_enter_binder(&X->dm->unifier);
@@ -506,6 +501,20 @@ static struct PartialModList *collect_phase_1(struct ItemCollector *X, struct Mo
 
     return pml;
 }
+
+static struct HirDecl *find_item_in(struct ItemCollector *X, int modno, String *name)
+{
+    struct ModuleInfo *m = K_LIST_GET(X->C->modules, modno);
+    struct HirDeclList *items = m->hir->items;
+
+    struct HirDecl **pitem;
+    K_LIST_FOREACH(items, pitem) {
+        const String *item_name = (*pitem)->hdr.name;
+        if (pawS_eq(item_name, name)) return *pitem;
+    }
+    return NULL;
+}
+
 static void collect_items(struct ItemCollector *X, struct Hir *hir)
 {
     X->symtab = pawHir_symtab_new(X->C);
@@ -515,8 +524,21 @@ static void collect_items(struct ItemCollector *X, struct Hir *hir)
             collect_func_decl(X, HirGetFuncDecl(item));
         } else if (HirIsImplDecl(item)) {
             collect_impl_decl(X, HirGetImplDecl(item));
-        } else if (HirIsUseDecl(item)) {
-            collect_use_decl(X, HirGetUseDecl(item));
+        }
+    }
+
+    int index;
+    struct HirImport *im;
+    K_LIST_ENUMERATE(hir->imports, index, im) {
+        if (im->item_name != NULL) {
+            // handle "use mod::item;": find the item declaration in the other
+            // module and add it to this module's global symbol table
+            struct HirDecl *item = find_item_in(X, im->modno, im->item_name);
+            new_global(X, item, !HirIsFuncDecl(item));
+
+            K_LIST_SET(hir->imports, index, K_LIST_LAST(hir->imports));
+            K_LIST_POP(hir->imports);
+            --index;
         }
     }
 }

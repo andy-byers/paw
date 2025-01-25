@@ -1360,17 +1360,18 @@ static struct AstDecl *function(struct Lex *lex, String *name, enum FuncKind kin
     return r;
 }
 
-static struct AstDecl *use_decl(struct Lex *lex, paw_Bool pub)
+static struct AstDecl *use_decl(struct Lex *lex)
 {
     const int line = lex->line;
     skip(lex); // 'use' token
     struct AstDecl *result = NEW_DECL(lex, kAstUseDecl);
     struct AstUseDecl *r = AstGetUseDecl(result);
-    r->path = parse_pathtype(lex);
-    r->is_pub = pub;
+    r->name = parse_name(lex);
+    if (test_next(lex, TK_COLON2)) {
+        if (test_next(lex, '*')) r->has_star = PAW_TRUE;
+        else r->item_name = parse_name(lex);
+    }
     r->line = line;
-
-    r->name = K_LIST_LAST(r->path).name;
     semicolon(lex);
     return result;
 }
@@ -1595,14 +1596,15 @@ static struct AstDecl *toplevel_item(struct Lex *lex, paw_Bool is_pub)
     switch (lex->t.kind) {
         default:
             pawX_error(lex, "expected toplevel item");
-        case TK_USE:
-            return use_decl(lex, is_pub);
         case TK_FN:
             return func_decl(lex, is_pub);
         case TK_ENUM:
             return enum_decl(lex, is_pub);
         case TK_STRUCT:
             return struct_decl(lex, is_pub);
+        case TK_USE:
+            ensure_not_pub(lex, is_pub);
+            return use_decl(lex);
         case TK_IMPL:
             ensure_not_pub(lex, is_pub);
             return impl_decl(lex);

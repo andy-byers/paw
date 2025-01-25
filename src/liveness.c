@@ -84,7 +84,7 @@ static void remove_live_reg(struct Liveness *L, struct MirRegisterList *set, Mir
 
 static void step_instruction(struct Liveness *L, struct MirRegisterList *set, struct MirBlockData *block, struct MirInstruction *instr)
 {
-    const MirRegister **ppr;
+    MirRegister *const *ppr;
     struct MirStore store;
     struct MirLoad load;
 

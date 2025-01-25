@@ -12,15 +12,31 @@ struct QueryState {
     struct ModuleInfo *m;
     struct HirAdtDecl *adt;
     paw_Env *P;
+    int base_modno;
     int target;
     int index;
     int line; // TODO: never set
 };
 
+static int module_number(struct ModuleInfo *m)
+{
+    return m->hir->modno;
+}
+
 static struct ModuleInfo *get_module(struct QueryState *Q, int modno)
 {
-    paw_assert(modno < Q->C->modules->count);
     return K_LIST_GET(Q->C->modules, modno);
+}
+
+static struct ModuleInfo *find_import(struct QueryState *Q, String *name)
+{
+    struct HirImport *im;
+    K_LIST_FOREACH(Q->m->hir->imports, im) {
+        if (!im->has_star && pawS_eq(im->module_name, name)) {
+            return get_module(Q, im->modno);
+        }
+    }
+    return NULL;
 }
 
 static struct HirSymbol *resolve_symbol(struct QueryState *Q, const String *name)
@@ -29,14 +45,6 @@ static struct HirSymbol *resolve_symbol(struct QueryState *Q, const String *name
     const int index = pawHir_find_symbol(Q->m->globals, name);
     if (index < 0) return NULL;
     return K_LIST_GET(Q->m->globals, index);
-}
-
-
-static paw_Bool should_admit(struct QueryState *Q, struct HirUseDecl *use)
-{
-    const int modno = Q->m->hir->modno;
-    if (modno == Q->target) return PAW_TRUE;
-    return use->is_pub;
 }
 
 struct QueryBase {
@@ -50,20 +58,20 @@ static struct QueryBase find_global_in(struct QueryState *Q, struct ModuleInfo *
     struct HirDecl *base;
     struct HirSegment *seg;
     struct HirSymbol *sym;
+    paw_assert(path->count > 0); // TODO: move check to end of loop body, declare vars inside loop
     for (Q->m = root, Q->index = 0; Q->index < path->count;) {
         seg = &K_LIST_GET(path, Q->index++);
         sym = resolve_symbol(Q, seg->name);
-        if (sym == NULL) return (struct QueryBase){seg};
-        base = sym->decl;
-
-        // NOTE: the caller will need to set '.did' to the DeclId of the instance, if seg->types is nonnull
-        seg->did = base->hdr.did;
-        if (!HirIsUseDecl(base)) break;
-        struct HirUseDecl *use = HirGetUseDecl(base);
-        if (!should_admit(Q, use)) {
-            NAME_ERROR(Q, "'%s' has private visibility", use->name->text);
+        if (sym != NULL) {
+            base = sym->decl;
+            break;
         }
-        Q->m = get_module(Q, use->modno);
+        struct ModuleInfo *m = find_import(Q, seg->name);
+        if (m == NULL) return (struct QueryBase){seg};
+        if (module_number(Q->m) != Q->base_modno) {
+            pawE_error(ENV(Q), PAW_ESYNTAX, -1, "transitive imports are not supported");
+        }
+        Q->m = m;
     }
     return (struct QueryBase){seg, base, sym->is_type};
 }
@@ -71,9 +79,18 @@ static struct QueryBase find_global_in(struct QueryState *Q, struct ModuleInfo *
 static struct QueryBase find_global(struct QueryState *Q, struct ModuleInfo *m, struct HirPath *path)
 {
     struct QueryBase q = find_global_in(Q, m, path);
-    if (q.base == NULL) {
-        struct ModuleInfo *prelude = Q->C->modules->data[0];
-        q = find_global_in(Q, prelude, path);
+    if (q.base != NULL) return q;
+
+    struct ModuleInfo *prelude = get_module(Q, 0);
+    q = find_global_in(Q, prelude, path);
+    if (q.base != NULL) return q;
+
+    struct HirImport *im;
+    K_LIST_FOREACH(m->hir->imports, im) {
+        if (!im->has_star) continue;
+        struct ModuleInfo *m = get_module(Q, im->modno);
+        q = find_global_in(Q, m, path);
+        if (q.base != NULL) break;
     }
     return q;
 }
@@ -160,10 +177,13 @@ static struct QueryBase find_local(struct Compiler *C, struct HirSymtab *symtab,
 struct IrType *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirPath *path, enum LookupKind kind)
 {
     struct QueryState Q = {
+        .base_modno = module_number(m),
         .target = m->hir->modno,
         .P = ENV(C),
+        .m = m,
         .C = C,
     };
+
 
     struct IrType *inst;
     paw_assert(path->count > 0);

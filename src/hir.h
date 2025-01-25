@@ -21,7 +21,6 @@ typedef struct HirId {
         X(TypeDecl, type) \
         X(VarDecl, var) \
         X(ImplDecl, impl) \
-        X(UseDecl, use) \
         X(VariantDecl, variant)
 
 #define HIR_EXPR_LIST(X) \
@@ -75,9 +74,6 @@ typedef struct HirId {
 
 struct Hir;
 
-struct HirSymbol *pawHir_add_symbol(struct Compiler *C, struct HirScope *table);
-int pawHir_find_symbol(struct HirScope *scope, const String *name);
-
 // Represents an entry in the symbol table
 //
 // During the type checking pass, a struct HirSymbol is created for each declaration that
@@ -94,6 +90,10 @@ struct HirSymbol {
     String *name;
     struct HirDecl *decl;
 };
+
+//void pawHir_add_symbol_(struct Compiler *C, struct HirScope *table, struct HirSymbol symbol);
+struct HirSymbol *pawHir_add_symbol(struct Compiler *C, struct HirScope *table);
+int pawHir_find_symbol(struct HirScope *scope, const String *name);
 
 struct HirSegment {
     String *name;
@@ -214,11 +214,10 @@ struct HirAdtDecl {
     struct HirDeclList *fields;
 };
 
-// TODO: store info about what modules are included elsewhere, no need for this node
-struct HirUseDecl {
-    HIR_DECL_HEADER;
-    paw_Bool is_pub : 1;
-    struct HirPath *path;
+struct HirImport {
+    String *module_name;
+    String *item_name;
+    paw_Bool has_star : 1;
     int modno;
 };
 
@@ -692,6 +691,7 @@ void pawHir_visit_type_list(struct HirVisitor *V, struct HirTypeList *list);
 void pawHir_visit_pat_list(struct HirVisitor *V, struct HirPatList *list);
 
 struct Hir {
+    struct HirImportList *imports;
     struct HirDeclList *items;
     struct Compiler *C;
     struct Pool *pool;
@@ -715,6 +715,7 @@ DEFINE_LIST(struct Compiler, pawHir_type_list_, HirTypeList, struct HirType *)
 DEFINE_LIST(struct Compiler, pawHir_pat_list_, HirPatList, struct HirPat *)
 DEFINE_LIST(struct Compiler, pawHir_scope_, HirScope, struct HirSymbol *)
 DEFINE_LIST(struct Compiler, pawHir_symtab_, HirSymtab, struct HirScope *)
+DEFINE_LIST(struct Compiler, pawHir_import_list_, HirImportList, struct HirImport)
 DEFINE_LIST(struct Compiler, pawHir_path_, HirPath, struct HirSegment)
 
 #define HIR_IS_UNIT_T(x) (HirIsAdt(x) && hir_adt_did(x) == PAW_TUNIT)

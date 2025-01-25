@@ -62,8 +62,7 @@ static void collect_imports_from(struct Importer *I, struct Ast *ast)
         struct AstDecl *item = K_LIST_GET(ast->items, i);
         if (!AstIsUseDecl(item)) continue;
         struct AstUseDecl *use = AstGetUseDecl(item);
-        struct AstSegment base = K_LIST_FIRST(use->path);
-        use->modno = import_module(I, base.name);
+        use->modno = import_module(I, use->name);
     }
 }
 
