@@ -1,0 +1,268 @@
+// alias.paw
+
+// TODO: Aliases only work for ADTs (same with impl blocks), because those are the 
+//       only types that are assigned DeclIds. Figure out how to get aliases to other
+//       types to work. Unit type works because it is considered an ADT.
+
+pub fn test_primitive() {
+    type I = int;
+    let i: I = 123;
+    assert(i == 123);
+
+    type S = str;
+    let s: S = "abc";
+    assert(s == "abc");
+}
+
+pub fn test_tuple() {
+    type U = ();
+    let u: U = ();
+
+    // TODO: see top of file
+//    type T = (int, str);
+//    let t: T = (123, "abc");
+//    assert(t.0 == 123);
+//    assert(t.1 == "abc");
+}
+
+pub fn test_container() {
+    type L = [int];
+    let l: L = [1, 2, 3];
+    assert(l[-1] == 3);
+
+    type M = [int: str];
+    let m: M = [1: "a", 2: "b", 3: "c"];
+    assert(m[3] == "c");
+}
+
+pub fn test_poly_container() {
+    type L<T> = [T];
+    let l: L<bool> = [true, false, true];
+    assert(l[-1] == true);
+    let l: L = [1, 2, 3];
+    assert(l[-1] == 3);
+
+    type M<K, V> = [K: V];
+    let m: M = [1: "a", 2: "b", 3: "c"];
+    assert(m[3] == "c");
+    let m: M<str, float> = ["a": 1.0, "b": 2.0, "c": 3.0];
+    assert(m["c"] == 3.0);
+}
+
+struct MonoUnit;
+
+fn check_mono_unit(m: MonoUnit) {}
+
+pub fn test_mono_unit() {
+    type M = MonoUnit;
+
+    let m: M = M;
+    check_mono_unit(m);
+
+    let m = M;
+    check_mono_unit(m);
+}
+
+struct Mono {
+    pub value: int,
+}
+
+fn check_mono(m: Mono, n: int) {
+    assert(m.value == n);
+}
+
+pub fn test_mono() {
+    type M = Mono;
+
+    let m: M = M{value: 123};
+    check_mono(m, 123);
+
+    let m = M{value: 456};
+    check_mono(m, 456);
+}
+
+struct PolyUnit<P>;
+
+fn check_instantiated_poly_unit(p: PolyUnit<int>) {}
+
+pub fn test_instantiated_poly_unit() {
+    type P = PolyUnit<int>;
+
+    let p: P = P;
+    check_instantiated_poly_unit(p);
+
+    let p = P;
+    check_instantiated_poly_unit(p);
+}
+
+fn accepts_poly_unit<T>(p: PolyUnit<T>) { }
+
+fn check_poly_unit<T2>(p: PolyUnit<T2>) {
+    accepts_poly_unit(p);
+}
+
+pub fn test_poly_unit() {
+    type P<X> = PolyUnit<X>;
+
+    let p: P<int> = P::<int>;
+    check_poly_unit(p);
+
+    let p = P::<int>;
+    check_poly_unit(p);
+}
+
+struct Poly<P> {
+    pub value: P,
+}
+
+fn accepts_poly<T>(p: Poly<T>) { }
+
+fn check_poly<T2>(p: Poly<T2>) {
+    accepts_poly(p);
+}
+
+pub fn test_poly() {
+    type P<X> = Poly<X>;
+
+    let p: P<int> = P{value: 123};
+    check_poly(p);
+
+    let p = P{value: 456};
+    check_poly(p);
+}
+
+struct Poly2<A, B> {
+    pub first: A,
+    pub second: B,
+}
+
+fn accepts_poly2<S, T>(p: Poly2<S, T>) { }
+
+fn check_poly2<S2, T2>(p: Poly2<S2, T2>) {
+    accepts_poly2(p);
+}
+
+pub fn test_poly2() {
+    type P<X, Y> = Poly2<X, Y>;
+
+    let p: P<int, str> = P{
+        first: 123,
+        second: "abc",
+    };
+    check_poly2(p);
+
+    let p = P{
+        first: 456,
+        second: "def",
+    };
+    check_poly2(p);
+}
+
+pub fn test_poly2_partial() {
+    type P1<X> = Poly2<X, str>;
+
+    let p: P1<int> = P1{
+        first: 123,
+        second: "abc",
+    };
+    check_poly2(p);
+
+    let p = P1{
+        first: 456,
+        second: "def",
+    };
+    check_poly2(p);
+
+    type P2<Y> = Poly2<int, Y>;
+
+    let p: P2<str> = P2{
+        first: 123,
+        second: "abc",
+    };
+    check_poly2(p);
+
+    let p = P2{
+        first: 456,
+        second: "def",
+    };
+    check_poly2(p);
+}
+
+fn check_nested_poly<T>(t: T) -> T {
+    type P = Poly2<T, T>;
+
+    let p = P{
+        first: t,
+        second: t,
+    };
+    check_poly2(p);
+
+    type P<X> = Poly2<X, T>;
+
+    let p = P{
+        first: 456,
+        second: t,
+    };
+    check_poly2(p);
+
+    return p.second;
+}
+
+pub fn test_nested_poly() {
+    assert(check_nested_poly("abc") == "abc");
+    assert(check_nested_poly(123) == 123);
+}
+
+pub fn test_dependent() {
+    type P<X> = Poly<X>;
+    type L<Y> = [P<Y>];
+    type M<Z> = [int: L<Z>];
+    let m: M<int> = [
+        123: [
+            P{value: 456}, 
+            P{value: 789},
+        ],
+    ];
+    assert(m[123][0].value == 456);
+    assert(m[123][1].value == 789);
+}
+
+pub fn test_global() {
+    let gi: GI = 123;
+    assert(gi == 123);
+
+    let gf: GF = 4.56;
+    assert(gf == 4.56);
+
+    let gp = GP{value: gf};
+    assert(gp.value == 4.56);
+
+    let gp2 = GP2{
+        first: gp,
+        second: gf,
+    };
+    assert(gp2.first.value == gf);
+    assert(gp2.second == gf);
+}
+
+type GI = int;
+type GF = float;
+type GP = Poly<GF>;
+type GP2<X> = Poly2<Poly<X>, X>;
+
+pub fn test_imported() {
+    type O<T> = Obj<T>;
+    let o = O::new(123);
+    assert(o.get_t() == 123);
+
+    type P<T> = PolyExternal<T>;
+    let p = P{value: 456};
+
+    type O<T> = mod_c::Obj<T>;
+    let o = O{value: 789};
+}
+
+use mod_a::Obj;
+use mod_b::*;
+use mod_c;
+

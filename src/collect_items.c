@@ -77,9 +77,8 @@ static void define_local(struct HirSymbol *symbol)
     symbol->is_init = PAW_TRUE;
 }
 
-static struct HirSymbol *new_global(struct ItemCollector *X, struct HirDecl *decl, paw_Bool is_type)
+static struct HirSymbol *new_global(struct ItemCollector *X, String *name, struct HirDecl *decl, paw_Bool is_type)
 {
-    String *name = decl->hdr.name;
     struct HirScope *scope = X->m->globals;
     for (int i = 0; i < scope->count; ++i) {
         struct HirSymbol *symbol = scope->data[i];
@@ -195,6 +194,7 @@ static struct IrType *collect_type(struct ItemCollector *X, struct HirType *type
         const char *type_name = pawHir_print_type(X->C, type);
         TYPE_ERROR(X, "unrecognized type '%s'", type_name);
     }
+    SET_NODE_TYPE(X->C, type, result);
     return result;
 }
 
@@ -254,15 +254,15 @@ static struct IrTypeList *collect_field_types(struct ItemCollector *X, struct Hi
     return pawHir_collect_decl_types(X->C, fields);
 }
 
-static struct IrType *register_func(struct ItemCollector *X, struct HirFuncDecl *d)
+static void register_func(struct ItemCollector *X, struct HirFuncDecl *d)
 {
     struct IrType *type = register_decl_type(X, HIR_CAST_DECL(d), kIrSignature);
+printf("%s: hid=%d\n", d->name->text, d->hid.value);
     struct IrSignature *t = IrGetSignature(type);
     t->types = collect_generic_types(X, d->generics);
     t->params = collect_field_types(X, d->params);
     t->result = collect_type(X, d->result);
     t->did = d->did;
-    return type;
 }
 
 static DeclId next_did(struct ItemCollector *X)
@@ -354,8 +354,20 @@ static void collect_func(struct ItemCollector *X, struct HirFuncDecl *d)
 
 static void collect_func_decl(struct ItemCollector *X, struct HirFuncDecl *d)
 {
-    new_global(X, HIR_CAST_DECL(d), PAW_FALSE);
+    new_global(X, d->name, HIR_CAST_DECL(d), PAW_FALSE);
     collect_func(X, d);
+}
+
+static void collect_type_decl(struct ItemCollector *X, struct HirTypeDecl *d)
+{
+    new_global(X, d->name, HIR_CAST_DECL(d), PAW_TRUE);
+
+    enter_block(X, NULL);
+    register_generics(X, d->generics);
+    struct IrType *type = collect_type(X, d->rhs);
+    SET_NODE_TYPE(X->C, HIR_CAST_DECL(d), type);
+    SET_NODE_TYPE(X->C, d->rhs, type);
+    leave_block(X);
 }
 
 static void maybe_fix_builtin(struct ItemCollector *X, String *name, DeclId did)
@@ -381,7 +393,7 @@ static struct HirScope *register_adt_decl(struct ItemCollector *X, struct HirAdt
     register_generics(X, d->generics);
     register_adt(X, d);
     maybe_fix_builtin(X, d->name, d->did);
-    new_global(X, HIR_CAST_DECL(d), PAW_TRUE);
+    new_global(X, d->name, HIR_CAST_DECL(d), PAW_TRUE);
     return leave_block(X);
 }
 
@@ -407,17 +419,26 @@ static void collect_methods(struct ItemCollector *X, struct HirDeclList *methods
     pawP_pop_object(X->C, map);
 }
 
+static struct HirType *rhs_for_self(struct ItemCollector *X, struct HirImplDecl *d, struct IrType *type)
+{
+    struct HirType *rhs = pawHir_new_type(X->C, d->line, kHirPathType);
+    HirGetPathType(rhs)->path = d->self;
+    SET_NODE_TYPE(X->C, rhs, type);
+    return rhs;
+}
+
 static struct IrType *collect_self(struct ItemCollector *X, struct HirImplDecl *d)
 {
     struct IrType *self = collect_path(X, d->self);
-    struct HirDecl *result = pawHir_new_decl(X->C, d->line, kHirTypeDecl);
-    struct HirTypeDecl *r = HirGetTypeDecl(result);
+    d->alias = pawHir_new_decl(X->C, d->line, kHirTypeDecl);
+    struct HirTypeDecl *r = HirGetTypeDecl(d->alias);
     r->name = SCAN_STRING(X->C, "Self");
-    add_decl(X, result);
+    r->rhs = rhs_for_self(X, d, self);
+    add_decl(X, d->alias);
     SET_TYPE(X, r->hid, self);
 
     map_adt_to_impl(X, get_decl(X, IR_TYPE_DID(self)), HIR_CAST_DECL(d));
-    struct HirSymbol *symbol = new_local(X, r->name, result);
+    struct HirSymbol *symbol = new_local(X, r->name, d->alias);
     symbol->is_type = PAW_TRUE;
     return self;
 }
@@ -524,17 +545,20 @@ static void collect_items(struct ItemCollector *X, struct Hir *hir)
             collect_func_decl(X, HirGetFuncDecl(item));
         } else if (HirIsImplDecl(item)) {
             collect_impl_decl(X, HirGetImplDecl(item));
+        } else if (HirIsTypeDecl(item)) {
+            collect_type_decl(X, HirGetTypeDecl(item));
         }
     }
 
     int index;
     struct HirImport *im;
     K_LIST_ENUMERATE(hir->imports, index, im) {
-        if (im->item_name != NULL) {
+        if (im->item != NULL) {
             // handle "use mod::item;": find the item declaration in the other
             // module and add it to this module's global symbol table
-            struct HirDecl *item = find_item_in(X, im->modno, im->item_name);
-            new_global(X, item, !HirIsFuncDecl(item));
+            struct HirDecl *item = find_item_in(X, im->modno, im->item);
+            String *name = im->as != NULL ? im->as : im->item;
+            new_global(X, name, item, !HirIsFuncDecl(item));
 
             K_LIST_SET(hir->imports, index, K_LIST_LAST(hir->imports));
             K_LIST_POP(hir->imports);

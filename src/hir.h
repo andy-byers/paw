@@ -215,8 +215,8 @@ struct HirAdtDecl {
 };
 
 struct HirImport {
-    String *module_name;
-    String *item_name;
+    String *item;
+    String *as;
     paw_Bool has_star : 1;
     int modno;
 };
@@ -243,6 +243,7 @@ struct HirFieldDecl {
 struct HirImplDecl {
     HIR_DECL_HEADER;
     struct HirPath *self;
+    struct HirDecl *alias;
     struct HirDeclList *generics;
     struct HirDeclList *methods;
     struct IrTypeList *subst;

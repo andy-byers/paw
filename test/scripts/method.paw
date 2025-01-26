@@ -572,3 +572,43 @@ pub fn test_multiple_applicable_methods() {
     let p = Single::<int>::new(42);
     p.f(123);
 }
+
+impl<X, Y, Z> Either<X, (Y, Z)> {
+    pub fn choose(b: bool, x: X, y: Y, z: Z) -> Self {
+        if b {
+            Self::First(x)
+        } else {
+            Self::Second((y, z))
+        }
+    }
+}
+
+impl<Y, Z> Either<bool, (Y, Z)> {
+    pub fn first(self) -> bool {
+        match self {
+            Self::First(b) => b,
+            Self::Second(_) => false,
+        }
+    }
+}
+
+impl<X> Either<X, (float, str)> {
+    pub fn second(self) -> str {
+        match self {
+            Self::First(_) => "",
+            Self::Second((f, s)) => s,
+        }
+    }
+}
+
+pub fn test_enum_methods() {
+    let e = Either::<int, (float, str)>::choose(true, 1, 2.0, "three");
+    assert(e.second() == "");
+    let e = Either::<float, (float, str)>::choose(false, 4.0, 5.0, "six");
+    assert(e.second() == "six");
+
+    let e = Either::choose(true, true, "two", 3);
+    assert(e.first() == true);
+    let e = Either::choose(false, true, 5.0, 6.0);
+    assert(e.first() == false);
+}

@@ -239,7 +239,7 @@ static void AcceptFieldDecl(struct HirVisitor *V, struct HirFieldDecl *d)
 static void AcceptTypeDecl(struct HirVisitor *V, struct HirTypeDecl *d)
 {
     accept_decl_list(V, d->generics);
-    AcceptExpr(V, d->rhs);
+    AcceptType(V, d->rhs);
 }
 
 static void AcceptGenericDecl(struct HirVisitor *V, struct HirGenericDecl *d)
@@ -776,7 +776,7 @@ static void dump_type(struct Printer *P, struct HirType *t)
             for (int i = 0; i < t->path.path->count; ++i) {
                 struct HirSegment seg = K_LIST_GET(t->path.path, i);
                 DUMP_FMT(P, "name: %s\n", seg.name->text);
-                DUMP_FMT(P, "did: %d\n", seg.did);
+                DUMP_FMT(P, "did: %d\n", seg.did.value);
                 if (seg.types != NULL) {
                     dump_type_list(P, seg.types, "types");
                 }
@@ -833,7 +833,7 @@ static void dump_decl(struct Printer *P, struct HirDecl *d)
         case kHirTypeDecl:
             DUMP_NAME(P, d->type.name);
             DUMP_MSG(P, "rhs: ");
-            dump_expr(P, d->type.rhs);
+            dump_type(P, d->type.rhs);
             dump_decl_list(P, d->type.generics, "generics");
             break;
     }
@@ -878,8 +878,7 @@ static void dump_pat(struct Printer *P, struct HirPat *p)
             dump_pat_list(P, p->or.pats, "pats");
             break;
         case kHirFieldPat:
-            DUMP_MSG(P, "target: ");
-            PRINT_STRING(P, p->field.name);
+            DUMP_FMT(P, "target: %s", p->field.name->text);
             DUMP_MSG(P, "pat: ");
             dump_pat(P, p->field.pat);
             break;
@@ -958,6 +957,7 @@ static void dump_expr(struct Printer *P, struct HirExpr *e)
                     DUMP_MSG(P, "lit_kind: COMPOSITE\n");
                     DUMP_MSG(P, "target: ");
                     dump_path(P, e->literal.comp.path);
+                    pawL_add_char(P->P, P->buf, '\n');
                     dump_expr_list(P, e->literal.comp.items, "items");
             }
             break;
@@ -979,6 +979,7 @@ static void dump_expr(struct Printer *P, struct HirExpr *e)
         case kHirPathExpr:
             DUMP_MSG(P, "path: ");
             dump_path(P, e->path.path);
+            pawL_add_char(P->P, P->buf, '\n');
             break;
         case kHirConversionExpr:
             DUMP_FMT(P, "to: %d\n", e->conv.to);

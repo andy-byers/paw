@@ -454,7 +454,7 @@ static void resolve_func_item(struct Resolver *R, struct HirFuncDecl *d)
     enter_function(R, d);
     allocate_decls(R, d->generics, PAW_TRUE);
     allocate_decls(R, d->params, PAW_FALSE);
-    struct IrType *ret = resolve_type(R, d->result);
+    struct IrType *ret = GET_NODE_TYPE(R->C, d->result);
 
     if (d->body != NULL) {
         struct ResultState rs = {
@@ -472,6 +472,8 @@ static void resolve_func_item(struct Resolver *R, struct HirFuncDecl *d)
         R->rs = rs.outer;
     }
     leave_function(R);
+
+printf("res %s: hid=%d, %p\n", d->name->text, d->hid.value, pawIr_get_type(R->C, d->hid));
 }
 
 static void resolve_item(struct Resolver *R, struct HirDecl *item);
@@ -491,13 +493,14 @@ static void resolve_impl_methods(struct Resolver *R, struct HirImplDecl *d)
     // will be resolved (this is fine, since impl blocks are resolved in a separate
     // pass, after all ADTs have been registered).
     // use the identifier 'Self' to refer to the 'self' ADT
-    String *name = SCAN_STRING(R, "Self");
-    struct HirDecl *result = pawHir_new_decl(R->C, d->line, kHirTypeDecl);
-    struct HirTypeDecl *r = HirGetTypeDecl(result);
-    pawIr_set_type(R->C, r->hid, pawIr_get_type(R->C, d->hid));
-    add_decl(R, result);
+//    String *name = SCAN_STRING(R, "Self");
+//    struct HirDecl *result = pawHir_new_decl(R->C, d->line, kHirTypeDecl);
+//    struct HirTypeDecl *r = HirGetTypeDecl(result);
+//    pawIr_set_type(R->C, r->hid, pawIr_get_type(R->C, d->hid));
+//    add_decl(R, result);
 
-    struct HirSymbol *symbol = new_local(R, name, result, PAW_TRUE);
+    struct HirSymbol *symbol = new_local(R, d->alias->hdr.name, d->alias, PAW_TRUE);
+//    struct HirSymbol *symbol = new_local(R, name, result, PAW_TRUE);
     symbol->is_type = PAW_TRUE; // TODO: already set
 
     resolve_methods(R, d->methods, IrGetAdt(R->self));
@@ -591,6 +594,10 @@ static struct IrType *resolve_path(struct Resolver *R, struct HirPath *path, enu
         const char *pathname = pawHir_print_path(R->C, path);
         NAME_ERROR(R, "path '%s' not recognized", pathname);
     }
+
+    printf("path type: %s\n", pawIr_print_type(R->C, type));
+    --ENV(R->C)->top.p;
+
     return type;
 }
 
@@ -601,8 +608,9 @@ static void maybe_fix_unit_struct(struct Resolver *R, struct IrType *type, struc
     paw_assert(IrIsAdt(type));
     struct HirDecl *decl = get_decl(R, IR_TYPE_DID(type));
     struct HirAdtDecl *adt = HirGetAdtDecl(decl);
-    if (adt->did.value <= PAW_TSTR) {
-        TYPE_ERROR(R, "expected operand but found primitive type '%s'", adt->name->text);
+    const paw_Type code = pawP_type2code(R->C, type);
+    if (code >= 0) {
+        TYPE_ERROR(R, "expected operand but found builtin type '%s'", adt->name->text);
     }
     if (!adt->is_struct) {
         SYNTAX_ERROR(R, "missing variant specifier on enum '%s'", adt->name->text);
@@ -940,13 +948,25 @@ static struct IrType *resolve_field_decl(struct Resolver *R, struct HirFieldDecl
     return resolve_type(R, d->tag);
 }
 
+static void register_generics(struct Resolver *R, struct HirDeclList *generics)
+{
+    if (generics == NULL) return;
+    for (int i = 0; i < generics->count; ++i) {
+        struct HirDecl *decl = K_LIST_GET(generics, i);
+        struct IrType *type = register_decl_type(R, decl, kIrGeneric);
+        struct IrGeneric *t = IrGetGeneric(type);
+    }
+}
+
 static struct IrType *resolve_type_decl(struct Resolver *R, struct HirTypeDecl *d)
 {
     struct HirSymbol *symbol = declare_local(R, d->name, HIR_CAST_DECL(d), PAW_TRUE);
 
     enter_scope(R, NULL);
+    register_generics(R, d->generics);
     allocate_decls(R, d->generics, PAW_TRUE);
     struct IrType *type = resolve_type(R, d->rhs);
+    SET_NODE_TYPE(R->C, d->rhs, type);
     leave_scope(R);
 
     define_local(symbol);
@@ -1805,20 +1825,6 @@ static struct IrType *resolve_expr(struct Resolver *R, struct HirExpr *expr)
     return type;
 }
 
-static void register_if_impl(struct Resolver *R, struct HirDecl *item)
-{
-    if (!HirIsImplDecl(item)) return;
-    struct HirImplDecl *impl = HirGetImplDecl(item);
-
-    enter_scope(R, NULL);
-
-    allocate_decls(R, impl->generics, PAW_TRUE);
-    struct IrType *type = resolve_path(R, impl->self, LOOKUP_TYPE);
-    pawIr_set_type(R->C, impl->hid, type);
-
-    leave_scope(R);
-}
-
 static void resolve_item(struct Resolver *R, struct HirDecl *item)
 {
     if (HirIsFuncDecl(item)) {
@@ -1850,18 +1856,13 @@ static void check_module_types(struct Resolver *R, struct ModuleInfo *mod)
     // control should not be within a scope block
     paw_assert(R->symtab->count == 0);
 }
-#include"stdio.h"
-#include"hir.h"
+
 static void check_types(struct Resolver *R)
 {
     enter_inference_ctx(R);
     struct ModuleList *modules = R->C->modules;
     for (int i = 0; i < modules->count; ++i) {
         R->m = K_LIST_GET(modules, i);
-if (R->m->hir->modno > 0) {
-pawHir_dump(R->m->hir);
-printf("%s\n", paw_string(ENV(R->C),-1));--ENV(R->C)->top.p;
-}
         check_module_types(R, R->m);
     }
     leave_inference_ctx(R);

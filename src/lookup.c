@@ -6,11 +6,13 @@
 
 #include "hir.h"
 #include "ir_type.h"
+#include "type_folder.h"
 
 struct QueryState {
     struct Compiler *C;
     struct ModuleInfo *m;
     struct HirAdtDecl *adt;
+    struct HirSymtab *symtab;
     paw_Env *P;
     int base_modno;
     int target;
@@ -32,9 +34,11 @@ static struct ModuleInfo *find_import(struct QueryState *Q, String *name)
 {
     struct HirImport *im;
     K_LIST_FOREACH(Q->m->hir->imports, im) {
-        if (!im->has_star && pawS_eq(im->module_name, name)) {
-            return get_module(Q, im->modno);
-        }
+        if (im->has_star) continue; // checked later
+        struct ModuleInfo *m = get_module(Q, im->modno);
+        // use alias, i.e. "use mod as alias", if it exists
+        const String *target = im->as == NULL ? m->hir->name : im->as;
+        if (pawS_eq(name, target)) return m;
     }
     return NULL;
 }
@@ -163,9 +167,11 @@ static struct QueryBase find_local(struct Compiler *C, struct HirSymtab *symtab,
         struct HirScope *scope = K_LIST_GET(symtab, depth);
         const int index = pawHir_find_symbol(scope, first->name);
         if (index >= 0) {
-            if (path->count > 1) NAME_ERROR(C, "'::' applied to value '%s'", first->name->text);
-            if (first->types != NULL) TYPE_ERROR(C, "type arguments applied to value '%s'", first->name->text);
             struct HirSymbol *symbol = K_LIST_GET(scope, index);
+            if (!HirIsTypeDecl(symbol->decl)) {
+                if (path->count > 1) NAME_ERROR(C, "'::' applied to value '%s'", first->name->text);
+                if (first->types != NULL) TYPE_ERROR(C, "type arguments applied to value '%s'", first->name->text);
+            }
             first->did = symbol->decl->hdr.did;
             return (struct QueryBase){
                 .base = symbol->decl,
@@ -177,21 +183,64 @@ static struct QueryBase find_local(struct Compiler *C, struct HirSymtab *symtab,
     return (struct QueryBase){0};
 }
 
-#include "stdio.h"
-static struct IrType *resolve_alias(struct QueryState *Q, struct QueryBase q)
+static struct IrTypeList *maybe_copy_subtypes(struct QueryState *Q, struct IrType *type)
 {
-    struct HirSegment *seg = q.seg;
-    seg->name = q.base->hdr.name;
+    struct IrTypeList *types = IR_TYPE_SUBTYPES(type);
+    if (types == NULL) return NULL;
 
-    if (pawS_eq(seg->name, SCAN_STRING(Q->C, "A"))) {
-printf("alias %s\n", seg->name->text);
-int i = 0;
-
+    struct IrType **ptype;
+    struct IrTypeList *result = pawIr_type_list_new(Q->C);
+    K_LIST_FOREACH(types, ptype) {
+        K_LIST_PUSH(Q->C, result, *ptype);
     }
-    return GET_NODE_TYPE(Q->C, q.base);
+    return result;
+}
 
+struct IrTypeList *pawP_instantiate_typelist(struct Compiler *C, struct IrTypeList *before,
+                                             struct IrTypeList *after, struct IrTypeList *target);
 
+static struct IrTypeList *new_unknowns(struct Compiler *C, int count)
+{
+    struct IrTypeList *list = pawIr_type_list_new(C);
+    for (int i = 0; i < count; ++i) {
+        struct IrType *unknown = pawU_new_unknown(C->U, -1);
+        K_LIST_PUSH(C, list, unknown);
+    }
+    return list;
+}
 
+// TODO: it seems strange to modify the name and decl ID of the path segment but not
+//       the type list. Shoudln't really matter since we SHOULD now depend only on
+//       the decl ID from this point on.
+#include "stdio.h"
+static struct IrType *resolve_alias(struct QueryState *Q, struct QueryBase *pq)
+{
+    paw_assert(HirIsTypeDecl(pq->base));
+    struct IrType *type = GET_NODE_TYPE(Q->C, pq->base);
+    struct HirTypeDecl *d = HirGetTypeDecl(pq->base);
+    struct HirSegment *seg = pq->seg;
+
+    seg->name = d->name;
+    seg->did = IR_TYPE_DID(type);
+    pq->base = pawHir_get_decl(Q->C, seg->did);
+
+    struct IrType *rhs = GET_NODE_TYPE(Q->C, d->rhs);
+    struct IrTypeList *types = IR_TYPE_SUBTYPES(rhs);
+    if (d->generics == NULL) return rhs;
+
+    struct IrTypeList *generics = pawHir_collect_decl_types(Q->C, d->generics);
+    struct IrTypeList *unknowns = new_unknowns(Q->C, generics->count);
+    struct IrTypeList *subst = pawP_instantiate_typelist(Q->C, generics, unknowns, types);
+    if (seg->types != NULL) {
+        struct IrType **punknown, **pknown;
+        struct IrTypeList *knowns = pawP_lower_type_list(Q->C, Q->m, Q->symtab, seg->types);
+        K_LIST_ZIP(unknowns, punknown, knowns, pknown) {
+            pawU_unify(Q->C->U, *punknown, *pknown);
+        }
+    }
+
+    struct HirDecl *aliased = pawHir_get_decl(Q->C, IR_TYPE_DID(rhs));
+    return pawP_instantiate(Q->C, aliased, subst);
 }
 
 struct IrType *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirPath *path, enum LookupKind kind)
@@ -199,6 +248,7 @@ struct IrType *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct HirS
     struct QueryState Q = {
         .base_modno = module_number(m),
         .target = m->hir->modno,
+        .symtab = symtab,
         .P = ENV(C),
         .m = m,
         .C = C,
@@ -209,7 +259,7 @@ struct IrType *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct HirS
     struct QueryBase q = find_local(C, symtab, path);
     if (q.base != NULL) {
         inst = HirIsTypeDecl(q.base)
-            ? resolve_alias(&Q, q)
+            ? resolve_alias(&Q, &q)
             : GET_NODE_TYPE(C, q.base);
         Q.index = 1;
         Q.m = m;
@@ -230,10 +280,11 @@ struct IrType *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct HirS
             types = maybe_generalize_adt(&Q, q.base, types);
             // (fallthrough)
         case kHirFuncDecl:
-        case kHirTypeDecl:
-       //     inst = resolve_alias(&Q, q);
             inst = pawP_instantiate(C, q.base, types);
             q.seg->did = IR_TYPE_DID(inst);
+            break;
+        case kHirTypeDecl:
+            inst = resolve_alias(&Q, &q);
             break;
         case kHirVarDecl:
         case kHirFieldDecl:

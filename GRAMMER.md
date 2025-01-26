@@ -1,12 +1,4 @@
 # Paw language grammer (EBNF)
-**TODO: get rid of requirement that "break" | "return" | "continue" is the last statement in the block**
-**      just don't emit unreachable code**
-**      use a tool to validate this EBNF...**
-
-## Module
-```ebnf
-Module = "mod" name {Item} .
-```
 
 ## Items
 An item defined in a given module can be accessed from anywhere in the module.
@@ -14,55 +6,50 @@ Items must be placed at the toplevel, and are fixed at compile time.
 ```ebnf
 Item     = ["pub"] ItemDecl .
 ItemDecl = ConstDecl | FunctionDecl | StructDecl | 
-           EnumDecl | TypeDecl .
+           EnumDecl | TypeDecl | UseDecl | ImplDecl .
 ```
 
 ### Functions
 ```ebnf
 FunctionDecl = "fn" Function .
 Function     = name [Generics] Signature Block .
-Signature    = "(" [{Field ","} Field] ")" ["->" Type] .
-Field        = name ":" Type .
+FParameters  = {FParam ","} FParam [","] .
+Signature    = "(" [FParameters] ")" ["->" Type] .
+FParam       = name ":" Type .
 ```
 
 ### Structures
 ```ebnf
-StructDecl = "struct" name [Generics] [StructBody] .
+StructDecl = "struct" name [Generics] (StructBody | ";") .
 StructBody = "{" {Field ","} Field [","] "}" .
+Field      = ["pub"] name ":" Type .
 ```
 
 ### Enumerations
 ```ebnf
-EnumDecl = "enum" name [Generics] EnumBody .
+EnumDecl = "enum" name [Generics] (EnumBody | ";") .
 EnumBody = "{" [{Variant ","} Variant] "}" .
-Variant  = name [Payload] .
-Payload  = "(" {Type ","} Type [","] ")" .
+Variant  = name ["(" TypeList ")"] .
+```
+
+### Implementations
+```ebnf
+ImplDecl = "impl" [Generics] name [Generics] ImplBody .
+ImplBody = ["pub"]  .
 ```
 
 ## Statements
 ```ebnf
-Stmt     = ExprStmt | WhileStmt | DoWhileStmt |
-           ForStmt | IfElse | Declaration | Block .
-Block    = "{" {Stmt ";"} "}" .
+Stmt     = ExprStmt | DeclStmt .
 ExprStmt = Expr .
-```
-
-### Control flow
-```ebnf
-IfElse      = "if" Expr Block [{"else" IfElse} | "else" Block] .
-WhileStmt   = "while" Expr Block .
-DoWhileStmt = "do" Block "while" Expr .
-ForStmt     = ForIn | ForNum .
-ForIn       = "for" name "in" Expr Block .
-ForNum      = "for" name "=" Expr "," Expr ["," Expr] Block .
+DeclStmt = Declaration .
 ```
 
 ## Pattern matching
 ```ebnf
 MatchExpr   = "match" Expr MatchBody .
-MatchBody   = "{" {MatchArm ","} MatchArm "}" .
-MatchClause = Pattern "=>" MatchArm .
-MatchArm    = Expr | Block .
+MatchBody   = "{" {MatchClause ","} MatchClause "}" .
+MatchClause = Pattern "=>" Expr .
 ```
 
 ## Paths
@@ -73,21 +60,22 @@ Segment = name [TypeArgs] .
 
 ## Patterns
 ```ebnf
-Pattern = LiteralPat | TuplePat | StructPat | 
-          VariantPat | PathPat | RangePat .
+Pattern    = LiteralPat | TuplePat | StructPat | 
+             VariantPat | PathPat | RangePat .
 LiteralPat = StrPat | IntPat | BoolPat .
-RangePat = Pattern RangeSep Pattern .
-RangeSep = ".." | "..=" .
-PatList = {Pattern ","} Pattern [","] .
-TuplePat = "(" [{Pattern ","} Pattern "," [Pattern]] ")".
+RangePat   = Pattern RangeSep Pattern .
+RangeSep   = ".." | "..=" .
+PatList    = {Pattern ","} Pattern [","] .
+TuplePat   = "(" [{Pattern ","} Pattern "," [Pattern]] ")".
 VariantPat = Path "(" PatList ")" .
-StructPat = Path "{" PatList "}" .
-PathPat = Path .
+StructPat  = Path "{" PatList "}" .
+PathPat    = Path .
 ```
 
 ## Declarations
 ```ebnf
-Declaration = VarDecl | TypeDecl .
+Declaration = UseDecl | VarDecl | TypeDecl .
+UseDecl     = "use" name ["::" name] as name
 VarDecl     = "let" name [":" Type] "=" Expr .
 TypeDecl    = "type" name [Generics] "=" Type .
 Generics    = "<" {name ","} name [","] ">" .
@@ -102,16 +90,6 @@ BinOp = "+" | "-" | "*" | "/" |
 UnOp  = "-" | "~" | "!" | "#" .
 ```
 
-## Expressions
-```ebnf
-Expr        = PrimaryExpr | Expr BinOp Expr | UnOp Expr . 
-PrimaryExpr = Operand | Call | "(" Expr ")" .
-Call        = PrimaryExpr "(" [ExprList] ")" .
-Index       = PrimaryExpr "[" ExprList "]" .
-Selector    = PrimaryExpr "." name .
-ExprList    = {Expr ","} Expr .
-```
-
 ## Types
 ```ebnf
 Type       = NamedType | TypeLit .
@@ -124,6 +102,28 @@ NamedType  = name [TypeArgs] .
 ListType = "[" Type "]" .
 MapType    = "[" Type ":" Type "]" .
 TupleType  = "(" [{Type ","} Type "," [Type]] ")".
+```
+
+## Expressions
+```ebnf
+Expr        = PrimaryExpr | Expr BinOp Expr | UnOp Expr | Closure |
+              Block | IfElse | ForLoop | WhileLoop . 
+PrimaryExpr = Operand | Call | "(" Expr ")" .
+Call        = PrimaryExpr "(" [ExprList] ")" .
+Index       = PrimaryExpr "[" Expr [":" Expr] "]" .
+Selector    = PrimaryExpr "." name .
+ExprList    = {Expr ","} Expr .
+Block       = "{" {Stmt ";"} [Expr] "}" .
+Closure     = "|" [CParameters] "|" (("->" Type Block) | Expr) .
+CParameters = {CParam ","} CParam [","] .
+CParam      = name [":" Type] .
+```
+
+### Control flow
+```ebnf
+IfElse    = "if" Expr Block [{"else" IfElse} | "else" Block] .
+WhileLoop = "while" Expr Block .
+ForLoop   = "for" name "in" Expr Block .
 ```
 
 ## Operands
@@ -152,11 +152,11 @@ StructField  = name ":" Expr .
 
 ### Integer literals
 ```ebnf
-int_lit        = decimal_lit | binary_lit | octal_lit | hex_lit .
-decimal_lit    = "0" | ("1" … "9") [decimal_digits] .
-binary_lit     = "0" ("b" | "B") binary_digits .
-octal_lit      = "0" ("o" | "O") octal_digits .
-hex_lit        = "0" ("x" | "X") hex_digits .
+int_lit     = decimal_lit | binary_lit | octal_lit | hex_lit .
+decimal_lit = "0" | ("1" … "9") [decimal_digits] .
+binary_lit  = "0" ("b" | "B") binary_digits .
+octal_lit   = "0" ("o" | "O") octal_digits .
+hex_lit     = "0" ("x" | "X") hex_digits .
 ```
 
 ### Float literals
@@ -180,27 +180,3 @@ binary_digits  = binary_digit {binary_digit} .
 octal_digits   = octal_digit {octal_digit} .
 hex_digits     = hex_digit {hex_digit} .
 ```
-
-## Imports
-TODO: support something like this for modules
-mod Mod
-pub fn a() {...}
-pub struct B {...}
-pub enum C {...}
-
-Import statement:
-(a) use Mod
-(b) use Mod::a
-(c) use Mod::{a, B}
-(d) use Mod::a as x
-(e) use Mod::{a as x, B as Y}
-(f) use Mod::*
-
-Symbols added to public/local items:
-(a) Mod::a, Mod::B, Mod::C
-(b) Mod::a
-(c) Mod::a, Mod::B
-(d) x
-(e) x, Y
-(d) a, B, C
-

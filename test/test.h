@@ -39,6 +39,7 @@
     X(match_guard) \
     X(misc) \
     X(import) \
+    X(alias) \
     X(poly_function) \
     X(poly_struct) \
     X(poly_enum) \

@@ -144,7 +144,8 @@ struct AstUseDecl {
     AST_DECL_HEADER;
     paw_Bool has_star : 1;
     int modno;
-    String *item_name;
+    String *item;
+    String *as;
 };
 
 struct AstVariantDecl {

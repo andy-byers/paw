@@ -253,18 +253,18 @@ pub fn test_tuple_2() {
     assert(check_match_tuple_2((4, 4)) == 8);
 }
 
-fn check_match_tuple_3(target: (int, int, int)) -> int {
+fn check_match_tuple_3(target: (((int,), int), int)) -> int {
     match target {
-        (1, b, 2) => {return b;},
-        (a, 3, 3) => {return a;},
-        (4, 4, c) => {return c;},
-        (a, b, c) => {return a + b + c;},
+        (((1,), b), 2) => {return b;},
+        (((a,), 3), 3) => {return a;},
+        (((4,), 4), c) => {return c;},
+        (((a,), b), c) => {return a + b + c;},
     };
 }
 
 pub fn test_tuple_3() {
-    assert(check_match_tuple_3((1, 1, 2)) == 1);
-    assert(check_match_tuple_3((2, 3, 3)) == 2);
-    assert(check_match_tuple_3((4, 4, 3)) == 3);
-    assert(check_match_tuple_3((1, 2, 1)) == 4);
+    assert(check_match_tuple_3((((1,), 1), 2)) == 1);
+    assert(check_match_tuple_3((((2,), 3), 3)) == 2);
+    assert(check_match_tuple_3((((4,), 4), 3)) == 3);
+    assert(check_match_tuple_3((((1,), 2), 1)) == 4);
 }

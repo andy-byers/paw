@@ -368,7 +368,7 @@ static struct Token consume_number(struct Lex *x)
         // Make sure not to consume byte sequences like "e+" or "E-" if we have
         // already encountered a non-decimal integer prefix. This allows expressions
         // like "0x1e+1" to be parsed like "0x1e + 1" instead of raising a syntax
-        // error, which seems to be what some major C and C++ compilers do.
+        // error.
         if (!likely_int && test_next2(x, "eE")) {
             likely_float = PAW_TRUE;
             test_next2(x, "+-");

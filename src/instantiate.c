@@ -53,12 +53,12 @@ static struct IrTypeList *new_unknowns(struct InstanceState *I, int count)
     return list;
 }
 
-static struct IrTypeList *instantiate_typelist(struct InstanceState *I, struct IrTypeList *before,
-                                               struct IrTypeList *after, struct IrTypeList *target)
+struct IrTypeList *pawP_instantiate_typelist(struct Compiler *C, struct IrTypeList *before,
+                                             struct IrTypeList *after, struct IrTypeList *target)
 {
     struct IrTypeFolder F;
     struct Substitution subst;
-    pawP_init_substitution_folder(&F, I->C, &subst, before, after);
+    pawP_init_substitution_folder(&F, C, &subst, before, after);
     return pawIr_fold_type_list(&F, target);
 }
 
@@ -157,7 +157,7 @@ static struct IrType *instantiate_method(struct InstanceState *I, struct HirImpl
     //     impl<X, Y> A<int, Y, X> => impl<?0, ?1> A<int, ?1, ?0>
     // where unknowns = [?0, ?1] and subst = [int, ?1, ?0]. Unifying with the given ADTs
     // type arguments yields a concrete type for each of the impl block's generics.
-    struct IrTypeList *subst = instantiate_typelist(I, generics, unknowns, ir_adt_types(adt));
+    struct IrTypeList *subst = pawP_instantiate_typelist(I->C, generics, unknowns, ir_adt_types(adt));
     for (int i = 0; i < subst->count; ++i) {
         pawU_unify(I->U, K_LIST_GET(subst, i), K_LIST_GET(types, i));
     }

@@ -7,3 +7,7 @@ pub fn choose(b: bool) -> str {
     if b { "abc" }
     else { "def" }
 }
+
+pub struct Obj<T> {
+    pub value: T,
+}

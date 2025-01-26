@@ -71,6 +71,7 @@ void pawK_pool_free(struct Pool *pool, void *ptr, size_t size);
 
 #define K_LIST_FOREACH(L, p) for (p = (L)->data; p && p < (L)->data + (L)->count; ++p)
 #define K_LIST_ENUMERATE(L, i, p) for (i = 0, p = (L)->data; i < (L)->count; p = &(L)->data[++i])
+#define K_LIST_ZIP(A, a, B, b) for (a = (A)->data, b = (B)->data; a && b && a < (A)->data + (A)->count && b < (B)->data + (B)->count; ++a, ++b)
 
 void *pawK_list_reserve(paw_Env *P, struct Pool *pool, void *data, size_t zelem, int count, int *palloc, int target);
 void *pawK_list_ensure_one(paw_Env *P, struct Pool *pool, void *data, size_t zelem, int count, int *palloc);

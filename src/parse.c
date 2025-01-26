@@ -226,19 +226,6 @@ static void skip(struct Lex *lex)
      pawX_next(lex);
 }
 
-static void check(struct Lex *lex, TokenKind want)
-{
-    if (lex->t.kind != want) {
-        pawX_error(lex, "unexpected symbol");
-    }
-}
-
-static void check_next(struct Lex *lex, TokenKind want)
-{
-    check(lex, want);
-    skip(lex);
-}
-
 static paw_Bool test(struct Lex *lex, TokenKind kind)
 {
     return lex->t.kind == kind;
@@ -251,6 +238,19 @@ static paw_Bool test_next(struct Lex *lex, TokenKind kind)
         return PAW_TRUE;
     }
     return PAW_FALSE;
+}
+
+static void check(struct Lex *lex, TokenKind want)
+{
+    if (!test(lex, want)) {
+        pawX_error(lex, "unexpected symbol");
+    }
+}
+
+static void check_next(struct Lex *lex, TokenKind want)
+{
+    check(lex, want);
+    skip(lex);
 }
 
 static void semicolon(struct Lex *lex)
@@ -276,7 +276,7 @@ static struct AstExpr *new_basic_lit(struct Lex *lex, Value v, paw_Type code)
 
 static struct AstExpr *unit_lit(struct Lex *lex)
 {
-    return new_basic_lit(lex, (Value){0}, PAW_TUNIT);
+    return new_basic_lit(lex, I2V(0), PAW_TUNIT);
 }
 
 static struct AstExpr *unit_type(struct Lex *lex)
@@ -345,7 +345,7 @@ static struct AstPath *parse_pathexpr(struct Lex *lex)
 {
     struct AstPath *p = pawAst_path_new(lex->C);
     do {
-    next_segment:
+next_segment:
         if (p->count == LOCAL_MAX) {
             limit_error(lex, "path segments", LOCAL_MAX);
         }
@@ -707,6 +707,7 @@ static struct AstDecl *let_decl(struct Lex *lex, int line, paw_Bool pub)
     }
     r->var.init = expr0(lex);
     r->var.is_pub = pub;
+    semicolon(lex);
     return r;
 }
 
@@ -727,8 +728,16 @@ static struct AstExpr *sitem_expr(struct Lex *lex)
     struct AstExpr *result = NEW_EXPR(lex, kAstFieldExpr);
     struct AstFieldExpr *r = AstGetFieldExpr(result);
     r->name = parse_name(lex);
-    check_next(lex, ':');
-    r->value = expr0(lex);
+    if (test_next(lex, ':')) {
+        r->value = expr0(lex);
+    } else {
+        // "name" by itself is shorthand for "name: name"
+        struct AstExpr *e = NEW_EXPR(lex, kAstPathExpr);
+        struct AstPath *path = pawAst_path_new(lex->C);
+        pawAst_path_add(lex->C, path, r->name, NULL);
+        AstGetPathExpr(e)->path = path;
+        r->value = e;
+    }
     return result;
 }
 
@@ -973,12 +982,9 @@ static struct AstExpr *block(struct Lex *lex)
         struct AstStmt *next = statement(lex);
         if (next == NULL) continue; // extra ';'
         K_LIST_PUSH(lex->C, r->stmts, next);
-        if (AstIsDeclStmt(next)) {
-            semicolon(lex);
-        } else if (!test_next(lex, ';')) {
+        if (AstIsExprStmt(next) && !test_next(lex, ';')) {
             struct AstExprStmt *s = AstGetExprStmt(next);
-            if (expects_semicolon(s->expr)
-                    || test(lex, '}')) {
+            if (expects_semicolon(s->expr) || test(lex, '}')) {
                 K_LIST_POP(r->stmts);
                 r->result = s->expr;
                 break;
@@ -994,16 +1000,14 @@ static struct AstExpr *block(struct Lex *lex)
 
 static struct AstExpr *closure(struct Lex *lex)
 {
-    paw_Bool needs_body = PAW_FALSE;
     struct AstExpr *r = NEW_EXPR(lex, kAstClosureExpr);
     r->clos.params = clos_parameters(lex);
     if (test_next(lex, TK_ARROW)) {
         r->clos.result = type_expr(lex);
-        needs_body = PAW_TRUE;
+        r->clos.expr = block(lex);
+    } else {
+        r->clos.expr = expr0(lex);
     }
-    r->clos.expr = needs_body
-        ? block(lex)
-        : expr0(lex);
     return r;
 }
 
@@ -1016,58 +1020,51 @@ static struct AstExpr *if_expr(struct Lex *lex)
     r->then_arm = block(lex);
 
     if (test_next(lex, TK_ELSE)) {
-        if (test(lex, TK_IF)) {
-            // Put the rest of the chain in the else branch. This transformation
-            // looks like 'if a {} else if b {} else {}' => 'if a {} else {if b
-            // {} else {}}'.
-            r->else_arm = if_expr(lex);
-        } else {
-            r->else_arm = block(lex);
-        }
+        // transform "else if" construct:
+        //     (!) "if a {A} else if b {B} else {C}"
+        //     (2) "if a {A} else {if b {B} else {C}}"
+        r->else_arm = test(lex, TK_IF)
+            ? if_expr(lex)
+            : block(lex);
     }
     return result;
 }
 
 static struct AstExpr *for_expr(struct Lex *lex)
 {
+    struct AstExpr *r = NEW_EXPR(lex, kAstForExpr);
     skip(lex); // 'for' token
-    String *control = parse_name(lex);
-    if (!test_next(lex, TK_IN)) {
-        expected_symbol(lex, "'=' or 'in'"); // no return
-    }
-    struct AstExpr *result = NEW_EXPR(lex, kAstForExpr);
-    struct AstForExpr *r = AstGetForExpr(result);
-    r->target = basic_expr(lex);
-    r->name = control;
-    r->block = block(lex);
-    return result;
+    AstGetForExpr(r)->name = parse_name(lex);
+    check_next(lex, TK_IN);
+    AstGetForExpr(r)->target = basic_expr(lex);
+    AstGetForExpr(r)->block = block(lex);
+    return r;
 }
 
 static struct AstExpr *while_expr(struct Lex *lex)
 {
     struct AstExpr *r = NEW_EXPR(lex, kAstWhileExpr);
     skip(lex); // 'while' token
-    r->while_.cond = basic_expr(lex);
-    r->while_.block = block(lex);
+    AstGetWhileExpr(r)->cond = basic_expr(lex);
+    AstGetWhileExpr(r)->block = block(lex);
     return r;
 }
 
 static struct AstExpr *return_expr(struct Lex *lex)
 {
-    struct AstExpr *result = NEW_EXPR(lex, kAstReturnExpr);
-    struct AstReturnExpr *r = AstGetReturnExpr(result);
+    struct AstExpr *r = NEW_EXPR(lex, kAstReturnExpr);
     skip(lex); // 'return' token
     if (!test(lex, ';') && !test(lex, '}')) {
-        r->expr = expr0(lex);
+        AstGetReturnExpr(r)->expr = expr0(lex);
     }
-    return result;
+    return r;
 }
 
 static struct AstExpr *jump_expr(struct Lex *lex, enum JumpKind kind)
 {
     struct AstExpr *r = NEW_EXPR(lex, kAstJumpExpr);
     skip(lex); // 'break' or 'continue' token
-    r->jump.jump_kind = kind;
+    AstGetJumpExpr(r)->jump_kind = kind;
     return r;
 }
 
@@ -1157,7 +1154,7 @@ static struct AstExpr *suffixed_expr(struct Lex *lex)
             || AstIsWhileExpr(e)) {
         return e;
     }
-    if (lex->t.kind == '{') {
+    if (test(lex, '{')) {
         e = try_composite_lit(lex, e);
     }
     for (int n = 1;; ++n) {
@@ -1369,7 +1366,10 @@ static struct AstDecl *use_decl(struct Lex *lex)
     r->name = parse_name(lex);
     if (test_next(lex, TK_COLON2)) {
         if (test_next(lex, '*')) r->has_star = PAW_TRUE;
-        else r->item_name = parse_name(lex);
+        else r->item = parse_name(lex);
+    }
+    if (test_next(lex, TK_AS)) {
+        r->as = parse_name(lex);
     }
     r->line = line;
     semicolon(lex);
@@ -1484,10 +1484,10 @@ static struct AstDecl *struct_decl(struct Lex *lex, paw_Bool pub)
 {
     skip(lex); // 'struct' token
     struct AstDecl *r = NEW_DECL(lex, kAstAdtDecl);
-    r->adt.is_pub = pub;
-    r->adt.is_struct = PAW_TRUE;
-    r->adt.name = parse_name(lex);
-    r->adt.generics = type_param(lex);
+    AstGetAdtDecl(r)->is_pub = pub;
+    AstGetAdtDecl(r)->is_struct = PAW_TRUE;
+    AstGetAdtDecl(r)->name = parse_name(lex);
+    AstGetAdtDecl(r)->generics = type_param(lex);
     struct_body(lex, &r->adt);
     return r;
 }
@@ -1499,8 +1499,8 @@ static struct AstDecl *method_decl(struct Lex *lex)
     check_next(lex, TK_FN);
     String *name = parse_name(lex);
     struct AstDecl *r = function(lex, name, FUNC_METHOD);
-    r->func.is_pub = is_pub;
-    r->func.line = line;
+    AstGetFuncDecl(r)->is_pub = is_pub;
+    AstGetFuncDecl(r)->line = line;
     return r;
 }
 
@@ -1535,8 +1535,8 @@ static struct AstDecl *type_decl(struct Lex *lex)
     struct AstDecl *r = NEW_DECL(lex, kAstTypeDecl);
     skip(lex); // 'type' token
 
-    r->type.name = parse_name(lex);
-    r->type.generics = type_param(lex);
+    AstGetTypeDecl(r)->name = parse_name(lex);
+    AstGetTypeDecl(r)->generics = type_param(lex);
 
     check_next(lex, '=');
 
@@ -1544,15 +1544,16 @@ static struct AstDecl *type_decl(struct Lex *lex)
     // on the RHS of a type expression. This should be caught during
     // type checking, since we also need to make sure the RHS is not
     // referring to an uninstantiated template.
-    r->type.rhs = type_expr(lex);
+    AstGetTypeDecl(r)->rhs = type_expr(lex);
+    semicolon(lex);
     return r;
 }
 
 static struct AstDecl *decl(struct Lex *lex)
 {
-    if (lex->t.kind == TK_LET) {
+    if (test(lex, TK_LET)) {
         return let_decl(lex, lex->line, PAW_FALSE);
-    } else if (lex->t.kind == TK_TYPE) {
+    } else if (test(lex, TK_TYPE)) {
         return type_decl(lex);
     } else {
         pawX_error(lex, "expected 'let' or 'type' declaration");
@@ -1608,6 +1609,9 @@ static struct AstDecl *toplevel_item(struct Lex *lex, paw_Bool is_pub)
         case TK_IMPL:
             ensure_not_pub(lex, is_pub);
             return impl_decl(lex);
+        case TK_TYPE:
+            ensure_not_pub(lex, is_pub);
+            return type_decl(lex);
     }
 }
 
@@ -1634,6 +1638,7 @@ static const char kPrelude[] =
     "    Ok(T),\n"
     "    Err(E),\n"
     "}\n"
+
     "pub fn print(message: str);\n"
     "pub fn assert(cond: bool);\n"
 

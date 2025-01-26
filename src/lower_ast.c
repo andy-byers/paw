@@ -319,9 +319,9 @@ static struct HirExpr *LowerMatchExpr(struct LowerAst *L, struct AstMatchExpr *e
 
     // propagate "never" flag to enclosing block
     r->never = PAW_TRUE;
-    struct HirExpr **parm;
-    K_LIST_FOREACH(r->arms, parm) {
-        struct HirMatchArm *arm = HirGetMatchArm(*parm);
+    struct HirExpr **pexpr;
+    K_LIST_FOREACH(r->arms, pexpr) {
+        struct HirMatchArm *arm = HirGetMatchArm(*pexpr);
         r->never = arm->never;
         if (!r->never) break;
     }
@@ -407,10 +407,10 @@ static struct HirExpr *LowerClosureExpr(struct LowerAst *L, struct AstClosureExp
 static struct HirDecl *LowerUseDecl(struct LowerAst *L, struct AstUseDecl *d)
 {
     K_LIST_PUSH(L->C, L->hir->imports, ((struct HirImport){
-                    .item_name = d->item_name,
-                    .module_name = d->name,
                     .has_star = d->has_star,
                     .modno = d->modno,
+                    .item = d->item,
+                    .as = d->as,
                 }));
     return NULL;
 }
@@ -991,7 +991,7 @@ void pawP_lower_ast(struct Compiler *C)
 
     paw_Int itr = PAW_ITER_INIT;
     while (pawH_iter(C->imports, &itr)) {
-        Value *pv = pawH_value(C->imports, itr);
+        const Value *pv = pawH_value(C->imports, itr);
         lower_ast(&L, pv->p);
     }
 }
