@@ -58,73 +58,28 @@ static struct HirScope *enclosing_scope(struct HirSymtab *st)
     return K_LIST_GET(st, st->count - 1);
 }
 
-static struct HirSymbol *add_symbol(struct ItemCollector *X, struct HirScope *scope, String *name, struct HirDecl *decl)
+static void add_symbol(struct ItemCollector *X, struct HirScope *scope, String *name, struct HirDecl *decl)
 {
-    struct HirSymbol *symbol = pawHir_add_symbol(X->C, scope);
-    symbol->name = name;
-    symbol->decl = decl;
-    return symbol;
+    const int index = pawHir_declare_symbol(X->C, scope, decl, name);
+    pawHir_define_symbol(scope, index);
 }
 
-static struct HirSymbol *declare_local(struct ItemCollector *X, String *name, struct HirDecl *decl)
+static void new_global(struct ItemCollector *X, String *name, struct HirDecl *decl)
 {
-    return add_symbol(X, enclosing_scope(X->symtab), name, decl);
-}
-
-// Allow a previously-declared variable to be accessed
-static void define_local(struct HirSymbol *symbol)
-{
-    symbol->is_init = PAW_TRUE;
-}
-
-static struct HirSymbol *new_global(struct ItemCollector *X, String *name, struct HirDecl *decl, paw_Bool is_type)
-{
+    struct HirSymbol *psymbol;
     struct HirScope *scope = X->m->globals;
-    for (int i = 0; i < scope->count; ++i) {
-        struct HirSymbol *symbol = scope->data[i];
-        if (pawS_eq(symbol->name, name)) {
+    K_LIST_FOREACH(scope, psymbol) {
+        if (pawS_eq(psymbol->name, name)) {
             NAME_ERROR(X, "duplicate global '%s' (declared previously on line %d)",
-                       name->text, symbol->decl->hdr.line);
+                       name->text, psymbol->decl->hdr.line);
         }
     }
-    struct HirSymbol *symbol = add_symbol(X, scope, name, decl);
-    symbol->is_init = PAW_TRUE;
-    symbol->is_type = is_type;
-    return symbol;
+    add_symbol(X, scope, name, decl);
 }
 
-static struct HirSymbol *try_resolve_symbol(struct ItemCollector *X, const String *name)
+static void new_local(struct ItemCollector *X, String *name, struct HirDecl *decl)
 {
-    // search the scoped symbols
-    struct HirSymtab *scopes = X->symtab;
-    const int nscopes = scopes->count;
-    for (int depth = nscopes - 1; depth >= 0; --depth) {
-        struct HirScope *scope = scopes->data[depth];
-        const int index = pawHir_find_symbol(scope, name);
-        if (index >= 0) {
-            struct HirSymbol *symbol = scope->data[index];
-            return scope->data[index];
-        }
-    }
-
-    // search the global symbols
-    const int index = pawHir_find_symbol(X->m->globals, name);
-    if (index < 0) return NULL;
-    return X->m->globals->data[index];
-}
-
-static struct HirSymbol *resolve_symbol(struct ItemCollector *X, const String *name)
-{
-    struct HirSymbol *symbol = try_resolve_symbol(X, name);
-    if (symbol == NULL) NAME_ERROR(X, "undefined symbol '%s'", name->text);
-    return symbol;
-}
-
-static struct HirSymbol *new_local(struct ItemCollector *X, String *name, struct HirDecl *decl)
-{
-    struct HirSymbol *symbol = declare_local(X, name, decl);
-    define_local(symbol);
-    return symbol;
+    add_symbol(X, enclosing_scope(X->symtab), name, decl);
 }
 
 static struct HirScope *leave_block(struct ItemCollector *X)
@@ -238,8 +193,7 @@ static void register_generics(struct ItemCollector *X, struct HirDeclList *gener
         struct HirDecl *decl = K_LIST_GET(generics, i);
         struct IrType *type = register_decl_type(X, decl, kIrGeneric);
         struct IrGeneric *t = IrGetGeneric(type);
-        struct HirSymbol *symbol = new_local(X, decl->hdr.name, decl);
-        symbol->is_type = PAW_TRUE;
+        new_local(X, decl->hdr.name, decl);
     }
 }
 
@@ -257,7 +211,6 @@ static struct IrTypeList *collect_field_types(struct ItemCollector *X, struct Hi
 static void register_func(struct ItemCollector *X, struct HirFuncDecl *d)
 {
     struct IrType *type = register_decl_type(X, HIR_CAST_DECL(d), kIrSignature);
-printf("%s: hid=%d\n", d->name->text, d->hid.value);
     struct IrSignature *t = IrGetSignature(type);
     t->types = collect_generic_types(X, d->generics);
     t->params = collect_field_types(X, d->params);
@@ -354,13 +307,13 @@ static void collect_func(struct ItemCollector *X, struct HirFuncDecl *d)
 
 static void collect_func_decl(struct ItemCollector *X, struct HirFuncDecl *d)
 {
-    new_global(X, d->name, HIR_CAST_DECL(d), PAW_FALSE);
+    new_global(X, d->name, HIR_CAST_DECL(d));
     collect_func(X, d);
 }
 
 static void collect_type_decl(struct ItemCollector *X, struct HirTypeDecl *d)
 {
-    new_global(X, d->name, HIR_CAST_DECL(d), PAW_TRUE);
+    new_global(X, d->name, HIR_CAST_DECL(d));
 
     enter_block(X, NULL);
     register_generics(X, d->generics);
@@ -393,7 +346,7 @@ static struct HirScope *register_adt_decl(struct ItemCollector *X, struct HirAdt
     register_generics(X, d->generics);
     register_adt(X, d);
     maybe_fix_builtin(X, d->name, d->did);
-    new_global(X, d->name, HIR_CAST_DECL(d), PAW_TRUE);
+    new_global(X, d->name, HIR_CAST_DECL(d));
     return leave_block(X);
 }
 
@@ -438,8 +391,7 @@ static struct IrType *collect_self(struct ItemCollector *X, struct HirImplDecl *
     SET_TYPE(X, r->hid, self);
 
     map_adt_to_impl(X, get_decl(X, IR_TYPE_DID(self)), HIR_CAST_DECL(d));
-    struct HirSymbol *symbol = new_local(X, r->name, d->alias);
-    symbol->is_type = PAW_TRUE;
+    new_local(X, r->name, d->alias);
     return self;
 }
 
@@ -558,7 +510,7 @@ static void collect_items(struct ItemCollector *X, struct Hir *hir)
             // module and add it to this module's global symbol table
             struct HirDecl *item = find_item_in(X, im->modno, im->item);
             String *name = im->as != NULL ? im->as : im->item;
-            new_global(X, name, item, !HirIsFuncDecl(item));
+            new_global(X, name, item);
 
             K_LIST_SET(hir->imports, index, K_LIST_LAST(hir->imports));
             K_LIST_POP(hir->imports);

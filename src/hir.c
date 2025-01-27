@@ -88,21 +88,29 @@ void pawHir_add_scope(struct Compiler *C, struct HirSymtab *table, struct HirSco
     K_LIST_PUSH(C, table, scope);
 }
 
-struct HirSymbol *pawHir_add_symbol(struct Compiler *C, struct HirScope *table)
+int pawHir_declare_symbol(struct Compiler *C, struct HirScope *scope, struct HirDecl *decl, String *name)
 {
-    struct HirSymbol *symbol = pawHir_new_symbol(C);
-    K_LIST_PUSH(C, table, symbol);
-    return symbol;
+    K_LIST_PUSH(C, scope, ((struct HirSymbol){
+                    .is_type = HirIsAdtDecl(decl)
+                        || HirIsTypeDecl(decl)
+                        || HirIsGenericDecl(decl),
+                    .decl = decl,
+                    .name = name,
+                }));
+    return scope->count - 1;
+}
+
+void pawHir_define_symbol(struct HirScope *scope, int index)
+{
+    K_LIST_GET(scope, index).is_init = PAW_TRUE;
 }
 
 int pawHir_find_symbol(struct HirScope *scope, const String *name)
 {
     for (int i = scope->count - 1; i >= 0; --i) {
-        const struct HirSymbol *symbol = scope->data[i];
-        if (pawS_eq(name, symbol->name)) {
-            if (symbol->is_init) {
-                return i;
-            }
+        const struct HirSymbol symbol = K_LIST_GET(scope, i);
+        if (pawS_eq(name, symbol.name)) {
+            if (symbol.is_init) return i;
         }
     }
     return -1;

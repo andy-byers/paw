@@ -148,17 +148,6 @@ static struct IrType *get_type(struct Resolver *R, paw_Type code)
     return GET_NODE_TYPE(R->C, get_decl(R, (DeclId){.value = code}));
 }
 
-static struct HirSymbol *new_symbol(struct Resolver *R, struct HirDecl *decl)
-{
-    struct HirSymbol *symbol = pawHir_new_symbol(R->C);
-    *symbol = (struct HirSymbol){
-        .is_init = PAW_TRUE,
-        .name = decl->hdr.name,
-        .decl = decl,
-    };
-    return symbol;
-}
-
 static paw_Bool is_unit_variant(struct Resolver *R, struct IrType *type)
 {
     if (IrIsSignature(type)) {
@@ -283,28 +272,19 @@ static struct HirScope *enclosing_scope(struct HirSymtab *st)
     return K_LIST_GET(st, st->count - 1);
 }
 
-static struct HirSymbol *add_symbol(struct Resolver *R, struct HirScope *scope, String *name, struct HirDecl *decl, paw_Bool is_type)
-{
-    struct HirSymbol *symbol = pawHir_add_symbol(R->C, scope);
-    symbol->is_type = is_type;
-    symbol->name = name;
-    symbol->decl = decl;
-    return symbol;
-}
-
-static struct HirSymbol *declare_local(struct Resolver *R, String *name, struct HirDecl *decl, paw_Bool is_type)
+static int declare_local(struct Resolver *R, String *name, struct HirDecl *decl)
 {
     if (IS_KEYWORD(name)) NAME_ERROR(R, "invalid identifier ('%s' is a language keyword)");
     if (IS_BUILTIN(name)) NAME_ERROR(R, "invalid identifier ('%s' is a builtin type name)");
-    return add_symbol(R, enclosing_scope(R->symtab), name, decl, is_type);
+    return pawHir_declare_symbol(R->C, enclosing_scope(R->symtab), decl, name);
 }
 
 // Allow a previously-declared variable to be accessed
 // When this happens, the enclosing HirScope must be the same as when the variable was
 // declared. This will always be the case for well-formed code.
-static void define_local(struct HirSymbol *symbol)
+static void define_local(struct Resolver *R, int index)
 {
-    symbol->is_init = PAW_TRUE;
+    pawHir_define_symbol(enclosing_scope(R->symtab), index);
 }
 
 static int find_field(struct HirDeclList *fields, String *name)
@@ -354,11 +334,10 @@ static paw_Bool is_compat(struct Compiler *C, struct IrType *a, struct IrType *b
     return PAW_FALSE;
 }
 
-static struct HirSymbol *new_local(struct Resolver *R, String *name, struct HirDecl *decl, paw_Bool is_type)
+static void new_local(struct Resolver *R, String *name, struct HirDecl *decl)
 {
-    struct HirSymbol *symbol = declare_local(R, name, decl, is_type);
-    define_local(symbol);
-    return symbol;
+    const int index = declare_local(R, name, decl);
+    define_local(R, index);
 }
 
 static struct HirScope *leave_scope(struct Resolver *R)
@@ -385,7 +364,7 @@ static struct HirScope *leave_function(struct Resolver *R)
 static void enter_function(struct Resolver *R, struct HirFuncDecl *func)
 {
     enter_scope(R, NULL);
-    new_local(R, func->name, HIR_CAST_DECL(func), PAW_FALSE);
+    new_local(R, func->name, HIR_CAST_DECL(func));
 }
 
 static void leave_pat(struct Resolver *R)
@@ -422,12 +401,12 @@ static struct IrType *register_decl_type(struct Resolver *R, struct HirDecl *dec
     return type;
 }
 
-static void allocate_decls(struct Resolver *R, struct HirDeclList *decls, paw_Bool is_type)
+static void allocate_decls(struct Resolver *R, struct HirDeclList *decls)
 {
     if (decls == NULL) return;
     for (int i = 0; i < decls->count; ++i) {
         struct HirDecl *decl = decls->data[i];
-        new_local(R, decl->hdr.name, decl, is_type);
+        new_local(R, decl->hdr.name, decl);
     }
 }
 
@@ -452,8 +431,8 @@ static void unify_block_result(struct Resolver *R, paw_Bool never, struct IrType
 static void resolve_func_item(struct Resolver *R, struct HirFuncDecl *d)
 {
     enter_function(R, d);
-    allocate_decls(R, d->generics, PAW_TRUE);
-    allocate_decls(R, d->params, PAW_FALSE);
+    allocate_decls(R, d->generics);
+    allocate_decls(R, d->params);
     struct IrType *ret = GET_NODE_TYPE(R->C, d->result);
 
     if (d->body != NULL) {
@@ -488,23 +467,9 @@ static void resolve_impl_methods(struct Resolver *R, struct HirImplDecl *d)
 {
     enter_scope(R, NULL);
 
-    // Lookup the 'self' ADT. If the ADT is an instance of a polymorphic ADT, it
-    // may need to be instantiated here. Either way, the LazyItem holding the ADT
-    // will be resolved (this is fine, since impl blocks are resolved in a separate
-    // pass, after all ADTs have been registered).
-    // use the identifier 'Self' to refer to the 'self' ADT
-//    String *name = SCAN_STRING(R, "Self");
-//    struct HirDecl *result = pawHir_new_decl(R->C, d->line, kHirTypeDecl);
-//    struct HirTypeDecl *r = HirGetTypeDecl(result);
-//    pawIr_set_type(R->C, r->hid, pawIr_get_type(R->C, d->hid));
-//    add_decl(R, result);
-
-    struct HirSymbol *symbol = new_local(R, d->alias->hdr.name, d->alias, PAW_TRUE);
-//    struct HirSymbol *symbol = new_local(R, name, result, PAW_TRUE);
-    symbol->is_type = PAW_TRUE; // TODO: already set
-
+    new_local(R, d->alias->hdr.name, d->alias);
     resolve_methods(R, d->methods, IrGetAdt(R->self));
-    allocate_decls(R, d->methods, PAW_FALSE);
+    allocate_decls(R, d->methods);
 
     leave_scope(R);
 }
@@ -839,7 +804,7 @@ static void resolve_closure_param(struct Resolver *R, struct HirFieldDecl *d)
     struct IrType *type = d->tag != NULL
         ? resolve_type(R, d->tag)
         : new_unknown(R);
-    new_local(R, d->name, decl, PAW_FALSE);
+    new_local(R, d->name, decl);
     SET_NODE_TYPE(R->C, decl, type);
 }
 
@@ -917,7 +882,7 @@ static void resolve_impl_item(struct Resolver *R, struct HirImplDecl *d)
 {
     enter_scope(R, NULL);
 
-    allocate_decls(R, d->generics, PAW_TRUE);
+    allocate_decls(R, d->generics);
     R->self = resolve_path(R, d->self, LOOKUP_TYPE);
     resolve_impl_methods(R, d);
 
@@ -930,9 +895,9 @@ static struct IrType *resolve_var_decl(struct Resolver *R, struct HirVarDecl *d)
     struct HirDecl *decl = HIR_CAST_DECL(d);
     add_decl(R, decl);
 
-    struct HirSymbol *symbol = declare_local(R, d->name, decl, PAW_FALSE);
+    const int index = declare_local(R, d->name, decl);
     struct IrType *init = resolve_operand(R, d->init);
-    define_local(symbol);
+    define_local(R, index);
 
     if (d->tag != NULL) {
         struct IrType *tag = resolve_type(R, d->tag);
@@ -960,16 +925,16 @@ static void register_generics(struct Resolver *R, struct HirDeclList *generics)
 
 static struct IrType *resolve_type_decl(struct Resolver *R, struct HirTypeDecl *d)
 {
-    struct HirSymbol *symbol = declare_local(R, d->name, HIR_CAST_DECL(d), PAW_TRUE);
+    const int index = declare_local(R, d->name, HIR_CAST_DECL(d));
 
     enter_scope(R, NULL);
     register_generics(R, d->generics);
-    allocate_decls(R, d->generics, PAW_TRUE);
+    allocate_decls(R, d->generics);
     struct IrType *type = resolve_type(R, d->rhs);
     SET_NODE_TYPE(R->C, d->rhs, type);
     leave_scope(R);
 
-    define_local(symbol);
+    define_local(R, index);
     return type;
 }
 
@@ -1584,7 +1549,7 @@ static struct IrType *ResolveBindingPat(struct Resolver *R, struct HirBindingPat
     struct HirDecl *r = pawHir_new_decl(R->C, p->line, kHirVarDecl);
     HirGetVarDecl(r)->name = p->name;
     SET_NODE_TYPE(R->C, r, type);
-    new_local(R, p->name, r, PAW_FALSE);
+    new_local(R, p->name, r);
     add_decl(R, r);
     return type;
 }
@@ -1731,7 +1696,7 @@ static void visit_forbody(struct Resolver *R, struct IrType *itype, struct HirBl
 
     enter_scope(R, NULL);
 
-    new_local(R, control->name, s->control, PAW_FALSE);
+    new_local(R, control->name, s->control);
     resolve_stmt_list(R, b->stmts);
     struct IrType *type = resolve_operand(R, b->result);
     unify_unit_type(R, type);

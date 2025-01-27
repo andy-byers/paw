@@ -91,9 +91,9 @@ struct HirSymbol {
     struct HirDecl *decl;
 };
 
-//void pawHir_add_symbol_(struct Compiler *C, struct HirScope *table, struct HirSymbol symbol);
-struct HirSymbol *pawHir_add_symbol(struct Compiler *C, struct HirScope *table);
 int pawHir_find_symbol(struct HirScope *scope, const String *name);
+int pawHir_declare_symbol(struct Compiler *C, struct HirScope *scope, struct HirDecl *decl, String *name);
+void pawHir_define_symbol(struct HirScope *scope, int index);
 
 struct HirSegment {
     String *name;
@@ -701,7 +701,6 @@ struct Hir {
     int modno;
 };
 
-struct HirSymbol *pawHir_new_symbol(struct Compiler *C);
 struct HirPath *pawHir_new_path(struct Compiler *C);
 struct HirType *pawHir_new_type(struct Compiler *C, int line, enum HirTypeKind kind);
 struct HirDecl *pawHir_new_decl(struct Compiler *C, int line, enum HirDeclKind kind);
@@ -714,8 +713,8 @@ DEFINE_LIST(struct Compiler, pawHir_expr_list_, HirExprList, struct HirExpr *)
 DEFINE_LIST(struct Compiler, pawHir_stmt_list_, HirStmtList, struct HirStmt *)
 DEFINE_LIST(struct Compiler, pawHir_type_list_, HirTypeList, struct HirType *)
 DEFINE_LIST(struct Compiler, pawHir_pat_list_, HirPatList, struct HirPat *)
-DEFINE_LIST(struct Compiler, pawHir_scope_, HirScope, struct HirSymbol *)
 DEFINE_LIST(struct Compiler, pawHir_symtab_, HirSymtab, struct HirScope *)
+DEFINE_LIST(struct Compiler, pawHir_scope_, HirScope, struct HirSymbol)
 DEFINE_LIST(struct Compiler, pawHir_import_list_, HirImportList, struct HirImport)
 DEFINE_LIST(struct Compiler, pawHir_path_, HirPath, struct HirSegment)
 

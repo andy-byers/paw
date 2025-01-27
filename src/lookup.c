@@ -48,7 +48,7 @@ static struct HirSymbol *resolve_symbol(struct QueryState *Q, const String *name
     // search the global symbols
     const int index = pawHir_find_symbol(Q->m->globals, name);
     if (index < 0) return NULL;
-    return K_LIST_GET(Q->m->globals, index);
+    return &K_LIST_GET(Q->m->globals, index);
 }
 
 struct QueryBase {
@@ -167,15 +167,15 @@ static struct QueryBase find_local(struct Compiler *C, struct HirSymtab *symtab,
         struct HirScope *scope = K_LIST_GET(symtab, depth);
         const int index = pawHir_find_symbol(scope, first->name);
         if (index >= 0) {
-            struct HirSymbol *symbol = K_LIST_GET(scope, index);
-            if (!HirIsTypeDecl(symbol->decl)) {
+            struct HirSymbol symbol = K_LIST_GET(scope, index);
+            if (!HirIsTypeDecl(symbol.decl)) {
                 if (path->count > 1) NAME_ERROR(C, "'::' applied to value '%s'", first->name->text);
                 if (first->types != NULL) TYPE_ERROR(C, "type arguments applied to value '%s'", first->name->text);
             }
-            first->did = symbol->decl->hdr.did;
+            first->did = symbol.decl->hdr.did;
             return (struct QueryBase){
-                .base = symbol->decl,
-                .is_type = symbol->is_type,
+                .is_type = symbol.is_type,
+                .base = symbol.decl,
                 .seg = first,
             };
         }
