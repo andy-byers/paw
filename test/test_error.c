@@ -201,6 +201,10 @@ static void test_type_error(void)
     test_compiler_status(PAW_ETYPE, "wrong_constructor_args", "enum E {X(int)}", "let x = E::X(1.0);");
     test_compiler_status(PAW_ETYPE, "selector_on_function", "fn func() {}", "let a = func.field;");
     test_compiler_status(PAW_ETYPE, "selector_on_module", "use io;", "let s = io.abc;");
+    test_compiler_status(PAW_ETYPE, "extraneous_method_access",
+            "struct S; impl S {pub fn f() {}}", "S::f::f(); ");
+    test_compiler_status(PAW_ETYPE, "extraneous_variant_access",
+            "enum E {A}", "let e = E::A::A; ");
 }
 
 static void test_syntax_error(void)
@@ -357,16 +361,15 @@ static void test_map_error(void)
     test_compiler_status(PAW_ETYPE, "map_incompatible_types_2", "", "let a = [:]; if true {a = [0: 0];} else {a = [1: true];}");
     test_compiler_status(PAW_ETYPE, "map_mixed_types", "", "let a = [1: 2, 3: 4, 5: '6'];");
     test_compiler_status(PAW_ETYPE, "map_mixed_nesting", "", "let a = [1: [1: 1], 2: [2: 2], 3: [3: [3: 3]]];");
-// TODO    test_compiler_status(PAW_ETYPE, "map_nonhashable_literal_key", "", "let map = [[1]: 1];");
-// TODO    test_compiler_status(PAW_ETYPE, "map_nonhashable_type_key", "", "let map: [[int]: int] = [:];");
+// TODO    test_compiler_status(PAW_ETYPE, "map_unhashable_literal_key", "", "let map = [[1]: 1];");
+// TODO    test_compiler_status(PAW_ETYPE, "map_unhashable_type_key", "", "let map: [[int]: int] = [:];");
     test_compiler_status(PAW_ETYPE, "map_slice", "", "let map = [:]; let val = map[0:10];");
 }
 
 static void test_import_error(void)
 {
     test_compiler_status(PAW_ENAME, "missing_import", "use import_not_found;", "");
-    test_compiler_status(PAW_ENAME, "missing_import_adt", "use io;", "let t = io::TypeNotFound;");
-    test_compiler_status(PAW_ENAME, "missing_import_func", "use io;", "let t = io::func_not_found();");
+    test_compiler_status(PAW_ENAME, "missing_import_item", "use io;", "let t = io::NotFound;");
 
 }
 
@@ -535,9 +538,8 @@ static void test_impl_error(void)
             "", "", "o.method2();");
     check_impl_body("unexpected_return", PAW_ETYPE,
             "", "return self.value;", "");
-// TODO: checks for missing return type
-//    check_impl_body("expected_return", PAW_ETYPE,
-//            "-> T ", "", "");
+    check_impl_body("expected_return", PAW_ETYPE,
+            "-> T ", "", "");
 }
 
 static void test_invalid_case(const char *name, int expect, const char *item, const char *target, const char *pat)

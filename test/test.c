@@ -17,16 +17,21 @@
 #include <stdlib.h>
 #include <string.h>
 
-static void trash_memory(void *ptr, size_t n)
+static void trash_memory(void *ptr, size_t o, size_t n)
 {
-    volatile uint8_t *p = ptr;
-    while (n-- > 0) *p++ = 0xAA; // 0b10101010
+    // TODO: does this actually help performance? probably slow due to the huge
+    //       number of cache misses anyway
+    volatile unsigned long long *ll = (unsigned long long *)((unsigned char *)ptr + o);
+    for (; n >= 8; n -= 8) *ll++ = 0xAAAAAAAAAAAAAAAA;
+
+    volatile unsigned char *c = (unsigned char *)ll;
+   // volatile unsigned char *c = (unsigned char *)ptr + o;
+    while (n-- > 0) *c++ = 0xAA; // 0b10101010
 }
 
 static void *safe_realloc(struct TestAlloc *a, void *ptr, size_t size0, size_t size)
 {
     check((size0 == 0) == (ptr == NULL));
-    check(a->nbytes >= size0);
     void *ptr2 = size ? malloc(size) : NULL;
     check(size == 0 || ptr2 != NULL); // assume success
     if (ptr2 != NULL) {
@@ -36,15 +41,14 @@ static void *safe_realloc(struct TestAlloc *a, void *ptr, size_t size0, size_t s
         }
         if (size0 < size) {
             // grow: fill uninitialized memory
-            trash_memory((char *)ptr2 + size0, size - size0);
+            trash_memory(ptr2, size0, size - size0);
         }
     }
     if (ptr != NULL) {
         // Trash the old allocation in an attempt to mess up any code
         // that still depends on it.
-        trash_memory(ptr, size0);
+        trash_memory(ptr, 0, size0);
     }
-    a->nbytes += size - size0;
     free(ptr);
     return ptr2;
 }
@@ -55,11 +59,11 @@ void *test_alloc(void *ud, void *ptr, size_t size0, size_t size)
     return safe_realloc(a, ptr, size0, size);
 }
 
-static void next_chunk(paw_Env *P, struct TestReader *rd)
+static void next_chunk(struct TestReader *rd)
 {
     rd->index = 0;
     if (rd->file) {
-        rd->length = pawO_read(P, rd->file, rd->buf, sizeof(rd->buf));
+        rd->length = fread(rd->buf, 1, sizeof(rd->buf), rd->file);
         return;
     }
     const size_t n = PAW_MIN(rd->ndata, READ_MAX);
@@ -75,7 +79,7 @@ const char *test_reader(paw_Env *P, void *ud, size_t *size)
     PAW_UNUSED(P);
     struct TestReader *rd = ud;
     if (!rd->length) {
-        next_chunk(P, rd);
+        next_chunk(rd);
         if (!rd->length) {
             return NULL;
         }
@@ -91,7 +95,7 @@ const char *test_reader(paw_Env *P, void *ud, size_t *size)
 const char *test_pathname(const char *name)
 {
     static char s_buf[PAW_LENGTHOF(TEST_PREFIX) + 64];
-    s_buf[0] = '\0'; // Reset length
+    s_buf[0] = '\0'; // reset length
     strcat(s_buf, TEST_PREFIX);
     strcat(s_buf, "scripts/");
     strcat(s_buf, name);
@@ -99,12 +103,67 @@ const char *test_pathname(const char *name)
     return s_buf;
 }
 
-paw_Env *test_open(paw_Alloc alloc, struct TestAlloc *state, size_t heap_size)
+#ifdef ENABLE_PTR_TRACKER
+static size_t find_ptr(struct TestAlloc *a, void *ptr)
 {
+    for (size_t i = 0; i < a->count; ++i) {
+        if (a->ptrs[i] == ptr) return i;
+    }
+    PAW_UNREACHABLE();
+}
+
+static void remove_ptr(struct TestAlloc *a, void *ptr, size_t size)
+{
+    const size_t i = find_ptr(a, ptr);
+    check(a->sizes[i] == size);
+    a->sizes[i] = a->sizes[a->count - 1];
+    a->ptrs[i] = a->ptrs[a->count - 1];
+    --a->count;
+}
+
+static void add_ptr(struct TestAlloc *a, void *ptr, size_t size)
+{
+    check(a->count < PTR_TRACKER_LIMIT);
+    a->sizes[a->count] = size;
+    a->ptrs[a->count] = ptr;
+    ++a->count;
+}
+
+static void modify_size(struct TestAlloc *a, void *ptr, size_t size)
+{
+    const size_t i = find_ptr(a, ptr);
+    a->sizes[i] = size;
+}
+#endif // ENABLE_PTR_TRACKER
+
+void test_mem_hook(void *ud, void *ptr, size_t size0, size_t size)
+{
+    struct TestAlloc *a = ud;
+    if (ptr != NULL) {
+        const size_t lower = PAW_MIN(size0, size);
+        const size_t upper = PAW_MAX(size0, size);
+        trash_memory(ptr, lower, upper - lower);
+    }
+
+#ifdef ENABLE_PTR_TRACKER
+    if (size0 == 0 && size != 0) add_ptr(a, ptr, size);
+    if (size0 != 0 && size == 0) remove_ptr(a, ptr, size0);
+    if (size0 != 0 && size != 0) modify_size(a, ptr, size);
+#endif
+}
+
+paw_Env *test_open(paw_MemHook mem_hook, struct TestAlloc *a, size_t heap_size)
+{
+#ifdef ENABLE_PTR_TRACKER
+    a->ptrs = malloc(PTR_TRACKER_LIMIT * sizeof(a->ptrs[0]));
+    a->sizes = malloc(PTR_TRACKER_LIMIT * sizeof(a->sizes[0]));
+    a->count = 0;
+#endif
+
     return paw_open(&(struct paw_Options){
                 .heap_size = heap_size,
-                .alloc = alloc,
-                .ud = state,
+                .mem_hook = mem_hook,
+                .ud = a,
             });
 }
 
@@ -112,10 +171,14 @@ void test_close(paw_Env *P, struct TestAlloc *a)
 {
     paw_close(P);
 
-    if (a->nbytes > 0) {
-        fprintf(stderr, "error: leaked %zu bytes\n", a->nbytes);
+#ifdef ENABLE_PTR_TRACKER
+    for (size_t i = 0; i < a->count; ++i) {
+        fprintf(stderr, "error: leaked %zu bytes at address %p\n",
+                a->sizes[i], a->ptrs[i]);
         abort();
     }
+    check(a->count == 0);
+#endif
 }
 
 static void check_ok(paw_Env *P, int status)
@@ -130,14 +193,14 @@ int test_open_file(paw_Env *P, const char *name)
     const char *pathname = test_pathname(name);
     if (P == NULL) return PAW_EMEMORY;
 
-    File *file = pawO_new_file(P);
-    const int rc = pawO_open(file, pathname, "r");
-    check(rc == 0);
+    FILE *file = fopen(pathname, "r");
+    check(file);
     struct TestReader rd = {.file = file};
     rd.data = rd.buf;
-    check(file);
 
-    return paw_load(P, test_reader, pathname, &rd);
+    const int rc = paw_load(P, test_reader, pathname, &rd);
+    fclose(file);
+    return rc;
 }
 
 int test_open_string(paw_Env *P, const char *source)
@@ -161,7 +224,7 @@ void test_recover(paw_Env *P, paw_Bool fatal)
 
 void test_script(const char *name, struct TestAlloc *a)
 {
-    paw_Env *P = test_open(test_alloc, a, 0);
+    paw_Env *P = test_open(test_mem_hook, a, 0);
     check_ok(P, test_open_file(P, name));
     check_ok(P, paw_call(P, 0));
     test_close(P, a);

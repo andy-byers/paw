@@ -587,16 +587,6 @@ static paw_Bool is_never_block(struct HirExpr *expr)
     return HirGetIfExpr(expr)->never;
 }
 
-static void propagate_if_never(struct LowerAst *L, struct HirIfExpr *e)
-{
-    if (is_never_block(e->then_arm)
-            && is_never_block(e->else_arm)) {
-        // all paths through this IfExpr execute a jump
-        e->never = PAW_TRUE;
-        indicate_jump(L);
-    }
-}
-
 static struct HirExpr *LowerIfExpr(struct LowerAst *L, struct AstIfExpr *e)
 {
     struct HirExpr *result = pawHir_new_expr(L->C, e->line, kHirIfExpr);
@@ -610,10 +600,12 @@ static struct HirExpr *LowerIfExpr(struct LowerAst *L, struct AstIfExpr *e)
             ? LOWER_BLOCK(L, e->else_arm)
             : lower_expr(L, e->else_arm);
 
-        // For "never" to be propagated here, the "then" and "else" blocks must contain
-        // unconditional jumps, and there must be a catch-all "else" at the end of the chain.
-        // Basically, all paths through the IfExpr must execute a jump.
-        propagate_if_never(L, r);
+        if (is_never_block(r->then_arm)
+                && is_never_block(r->else_arm)) {
+            // all paths through this IfExpr execute a jump
+            r->never = PAW_TRUE;
+            indicate_jump(L);
+        }
     }
     return result;
 }
@@ -636,23 +628,14 @@ static struct HirExpr *LowerWhileExpr(struct LowerAst *L, struct AstWhileExpr *s
     return result;
 }
 
-static void visit_for_body(struct LowerAst *L, String *control_name, struct AstExpr *b, struct HirForExpr *r)
-{
-    r->control = new_decl(L, b->hdr.line, kHirVarDecl);
-    struct HirVarDecl *control = HirGetVarDecl(r->control);
-    control->name = control_name;
-
-    struct HirBlock *block = new_block(L, b->hdr.line);
-    block->stmts = lower_stmt_list(L, AstGetBlock(b)->stmts);
-    r->block = HIR_CAST_EXPR(block);
-}
-
 static struct HirExpr *LowerForExpr(struct LowerAst *L, struct AstForExpr *e)
 {
     struct HirExpr *result = pawHir_new_expr(L->C, e->line, kHirForExpr);
     struct HirForExpr *r = HirGetForExpr(result);
+    r->control = new_decl(L, e->line, kHirVarDecl);
+    HirGetVarDecl(r->control)->name = e->name;
     r->target = lower_expr(L, e->target);
-    visit_for_body(L, e->name, e->block, r);
+    r->block = lower_expr(L, e->block);
     return result;
 }
 

@@ -320,7 +320,9 @@ static void *unsafe_malloc(struct Heap *H, size_t nbytes)
 static void *z_malloc(struct Heap *H, size_t nbytes)
 {
     // TODO: lock/unlock mutex
-    return unsafe_malloc(H, nbytes);
+    void *ptr = unsafe_malloc(H, nbytes);
+    if (ptr != NULL) H->mem_hook(H->ud, ptr, 0, nbytes);
+    return ptr;
 }
 
 size_t pawZ_sizeof(void *ptr)
@@ -369,9 +371,10 @@ static void unsafe_free(struct Heap *H, void *ptr)
     }
 }
 
-static void z_free(struct Heap *H, void *ptr)
+static void z_free(struct Heap *H, void *ptr, size_t size)
 {
     // TODO: lock/unlock mutex
+    H->mem_hook(H->ud, ptr, size, 0);
     unsafe_free(H, ptr);
 }
 
@@ -386,7 +389,7 @@ static size_t compute_flag_count(size_t h)
     return F * (h - m) / (F * p + 1);
 }
 
-int pawZ_init(paw_Env *P, void *heap, size_t heap_size, paw_Bool is_owned)
+int pawZ_init(paw_Env *P, void *heap, size_t heap_size, paw_Bool is_owned, paw_MemHook mem_hook, void *ud)
 {
     paw_assert(heap != NULL);
     paw_assert(PAW_IS_ALIGNED(heap));
@@ -402,7 +405,9 @@ int pawZ_init(paw_Env *P, void *heap, size_t heap_size, paw_Bool is_owned)
         P->H = H;
         *H = (struct Heap){
             .is_owned = is_owned,
+            .mem_hook = mem_hook,
             .nflags = nf,
+            .ud = ud,
             .P = P,
         };
         const size_t flag_zone = (nf + FLAGS_PER_BYTE - 1) / FLAGS_PER_BYTE;
@@ -422,72 +427,45 @@ int pawZ_init(paw_Env *P, void *heap, size_t heap_size, paw_Bool is_owned)
     return PAW_OK;
 }
 
-#if defined(PAW_DEBUG_EXTRA)
-#include <stdio.h>
-static void detect_leaks(paw_Env *P)
-{
-    size_t count = 0;
-
-    // ensure that all memory has been released
-    const struct Heap *H = P->H;
-    for (uintptr_t u = H->bounds[0]; u < H->bounds[1]; u += sizeof(void *)) {
-        if (pawZ_get_flag(H, u) != 0) {
-            fprintf(stderr, "leak at %p\n", ERASE_TYPE(u));
-            ++count;
-        }
-    }
-
-    if (count != 0) {
-        fprintf(stderr, "leaked %zu bytes in %zu allocations\n", P->gc_bytes, count);
-        __builtin_trap();
-    }
-
-// TODO: fix leak of 8 bytes...    paw_assert(P->gc_bytes == 0);
-}
-#else
-static void detect_leaks(paw_Env *P) {}
-#endif
-
 void pawZ_uninit(paw_Env *P)
 {
-    detect_leaks(P);
-
-    if (P->H->is_owned) {
-        P->alloc(P->ud, P, P->heap_size, 0);
-    }
+    if (P->H->is_owned) P->alloc(P->ud, P, P->heap_size, 0);
 }
 
 #define CHECK_UNUSED(H, ptr) paw_assert(!pawZ_get_flag(H, CAST_UPTR(ptr)))
 
-static void *z_realloc(struct Heap *H, void *old_ptr, size_t new_size)
+static void *z_realloc(struct Heap *H, void *ptr, size_t size0, size_t size)
 {
-    if (old_ptr == NULL) {
-        return z_malloc(H, new_size);
+    if (ptr == NULL) {
+        return z_malloc(H, size);
     }
-    if (new_size == 0) {
-        z_free(H, old_ptr);
-        return 0;
+    if (size == 0) {
+        z_free(H, ptr, size0);
+        return NULL;
     }
-    const size_t old_size = pawZ_sizeof(old_ptr);
-    if (new_size <= old_size && new_size >= old_size - 128) {
-        return old_ptr;
+    const size_t old_size = pawZ_sizeof(ptr);
+    if (size <= old_size && size >= old_size - 128) {
+        H->mem_hook(H->ud, ptr, old_size, size);
+        return ptr;
     }
-    void *new_ptr = unsafe_malloc(H, new_size);
-    if (new_ptr != NULL) {
-        memcpy(new_ptr, old_ptr, PAW_MIN(old_size, new_size));
-        unsafe_free(H, old_ptr);
+    void *ptr2 = unsafe_malloc(H, size);
+    if (ptr2 != NULL) {
+        H->mem_hook(H->ud, ptr2, 0, size);
+        memcpy(ptr2, ptr, PAW_MIN(old_size, size));
+        H->mem_hook(H->ud, ptr, size0, 0);
+        unsafe_free(H, ptr);
     }
-    return new_ptr;
+    return ptr2;
 }
 
-void *pawZ_alloc(paw_Env *P, void *ptr, size_t size)
+void *pawZ_alloc(paw_Env *P, void *ptr, size_t size0, size_t size)
 {
     struct Heap *H = P->H;
     if (size == 0) {
-        z_free(H, ptr);
+        z_free(H, ptr, size0);
         return NULL;
     }
     if (ptr == NULL) return z_malloc(H, size);
-    return z_realloc(H, ptr, size);
+    return z_realloc(H, ptr, size0, size);
 }
 

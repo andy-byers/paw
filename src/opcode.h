@@ -125,22 +125,13 @@ OP_GETGLOBAL,//      A Bx         R[A] := G[K[Bx]]       -
 OP_GETUPVALUE,//     A B          R[A] := Up[B]
 OP_SETUPVALUE,//     A B          Up[A] := R[B]
 
-OP_NEWTUPLE,//       A B          R[A] := (<B fields>)
-OP_NEWLIST,//        A B          R[A] := [<B elems>]
-OP_NEWMAP,//         A B          R[A] := [<B pairs>]
+OP_NEWTUPLE,//       A B          R[A] := (e1...eB)
+OP_NEWLIST,//        A B          R[A] := [e1...eB]
+OP_NEWMAP,//         A B          R[A] := [k1:v1...kB:vB]
 
-OP_INITLIST,//       A B C        for (i=0; i<C; i++) R[A][B+i] := R[A+i+1]
-OP_INITMAP,//        A B C        for (i=0; i<C; i++) R[A][B+i] := R[A+i+1]
-OP_INITTUPLE,//      A B C        for (i=0; i<C; i++) R[A][B+i] := R[A+i+1]
-
-OP_FORLOOP,//        A Bx         *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
-OP_FORPREP,//        A Bx         *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
-
-// TODO
-OP_FORLIST0,//       A sBx        *-*-*-*-*-*-*-*  see notes for  *-*-*-*-*-*-*
-OP_FORLIST,//        A sBx        *-*-*-*-*-*-*-*   description   *-*-*-*-*-*-*
-OP_FORMAP0,//        A sBx        *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
-OP_FORMAP,//         A sBx        *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
+OP_INITLIST,//       A B C        R[A][0...C] := R[(A+1)...(A+C+1)]
+OP_INITMAP,//        A B C        R[A][0...C] := R[(A+1)...(A+C*2+1)]
+OP_INITTUPLE,//      A B C        R[A][0...C] := R[(A+1)...(A+C+1)]
 
 OP_TESTK,//          A B C        if (R[A] != K[B]) pc++
 OP_SWITCHINT,//      A B          if (R[A] != B) pc++

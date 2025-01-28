@@ -326,23 +326,6 @@ static void allocate_registers(struct RegisterAllocator *R)
     }
 }
 
-// TODO: determine live-in set for each basic block in liveness.c. use that instead of
-//       this silly function
-static void filter_live_intervals(struct RegisterAllocator *R, struct MirIntervalList *scratch, MirBlock b)
-{
-    struct MirBlockData *block = mir_bb_data(R->mir, b);
-    const int location = mir_bb_first(block);
-    scratch->count = 0;
-
-    struct MirLiveInterval **pit;
-    K_LIST_FOREACH(R->intervals, pit) {
-        struct MirLiveInterval *it = *pit;
-        if (pawP_bitset_get(it->ranges, location)) {
-            K_LIST_PUSH(R->C, scratch, it);
-        }
-    }
-}
-
 struct Copy {
     MirRegister from;
     MirRegister to;
@@ -510,11 +493,17 @@ struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mi
     //       to avoid temp array. avoids weird placeholder thing and is more flexible
 
     {
+        const int npositions = R.max_position + 1;
+
         // assign registers for result and arguments
         const int offset = 1 + nparameters;
         for (int i = 0; i < offset; ++i) {
-            set_add(&R, R.active, K_LIST_GET(intervals, i));
+            struct MirLiveInterval *it = K_LIST_GET(intervals, i);
+            set_add(&R, R.active, it);
             K_LIST_SET(R.result, i, REGINFO(i));
+            pawP_bitset_set_range(it->ranges, 0, npositions);
+            it->last = npositions;
+            it->first = 0;
         }
 
         // assign registers for captured variables
@@ -539,12 +528,13 @@ struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mi
                 struct RegisterInfo result = get_result(&R, data->hint);
                 K_LIST_SET(R.result, it->r.value, result);
             }
-            const int npositions = K_LIST_LAST(intervals)->last;
             pawP_bitset_set_range(it->ranges, 0, npositions);
             it->last = npositions;
             it->first = 0;
         }
     }
+
+printf("%s\n", pawP_print_live_intervals_pretty(C, mir, intervals));--ENV(C)->top.p;
 
     // sort live intervals by start point
     qsort(intervals->data, CAST_SIZE(intervals->count),
@@ -555,6 +545,8 @@ struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mi
     allocate_registers(&R);
     resolve_registers(&R, order);
     *pmax_reg = R.max_reg;
+
+dump_result(R.result);
 
     pawP_pop_object(C, R.inactive);
     pawP_pop_object(C, R.active);

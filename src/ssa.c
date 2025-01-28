@@ -40,6 +40,26 @@ static MirRegister new_register(struct SsaConverter *S, struct MirRegisterData *
     return MIR_REG(reg_id);
 }
 
+static void add_captured_reg(struct SsaConverter *S, MirRegister r1, MirRegister r2)
+{
+    paw_assert(!MAP_CONTAINS(S->capture, I2V(r1.value)));
+    MAP_INSERT(S->C, S->capture, I2V(r1.value), I2V(r2.value));
+}
+
+static MirRegister captured_reg(struct SsaConverter *S, MirRegister r)
+{
+    const Value *pval = pawH_get(S->capture, I2V(r.value));
+    return pval != NULL ? MIR_REG(CAST(int, pval->i)) : MIR_INVALID_REG;
+}
+
+static MirRegister last_reg_name(struct SsaConverter *S, MirRegister r)
+{
+    // NOTE: if a register is not in "S->rename", then all of its uses/defs are in
+    //       unreachable basic blocks
+    const Value *pval = pawH_get(S->rename, I2V(r.value));
+    return pval != NULL ? MIR_REG(CAST(int, pval->i)) : MIR_INVALID_REG;
+}
+
 static struct MirPhi *add_phi_node(struct SsaConverter *S, MirBlock b, MirRegister r)
 {
     struct MirBlockData *bb = mir_bb_data(S->mir, b);
@@ -82,10 +102,13 @@ static void rename_output(struct SsaConverter *S, MirRegister *pr)
     K_LIST_PUSH(S->C, names, *pr);
 
     if (data->is_captured) {
-        const Value *pval = pawH_get(S->capture, I2V(old.value));
-        if (pval != NULL) {
-            pawH_insert(ENV(S->C), S->capture, I2V(old.value), P2V(NULL));
-            K_LIST_GET(S->registers, pr->value).hint = *pr;
+        struct MirRegisterData *reg = &K_LIST_GET(S->registers, pr->value);
+        const MirRegister capture = captured_reg(S, old);
+        if (!MIR_REG_EXISTS(capture)) {
+            add_captured_reg(S, old, *pr);
+            reg->hint = *pr;
+        } else {
+            reg->hint = capture;
         }
     }
 }
@@ -213,7 +236,6 @@ static void rename_vars(struct SsaConverter *S, MirBlock x)
     MirBlock *y;
 
     // location of phi nodes at the start of this block
-//    block->location = next_location(S);
     K_LIST_FOREACH(block->joins, instr) {
         struct MirPhi *phi = MirGetPhi(*instr);
         phi->location = block->location;
@@ -252,13 +274,24 @@ static void rename_vars(struct SsaConverter *S, MirBlock x)
     }
 }
 
-static void fix_aux_info(struct SsaConverter *S)
+static void fix_aux_info(struct SsaConverter *S, struct Mir *mir)
 {
-    MirRegister *pr;
-    K_LIST_FOREACH(S->mir->locals, pr) {
-        const Value *pval = pawH_get(S->rename, I2V(pr->value));
-        if (pval != NULL) pr->value = CAST(int, pval->i);
+    // write instruction numbers
+    struct MirBlockData **pdata;
+    K_LIST_FOREACH(mir->blocks, pdata) {
+        struct MirBlockData *data = *pdata;
+        struct MirInstruction **pinstr;
+        data->location = next_location(S);
+        K_LIST_FOREACH(data->instructions, pinstr) {
+            struct MirInstruction *instr = *pinstr;
+            instr->hdr.location = next_location(S);
+        }
     }
+
+    MirRegister *pr;
+    struct MirCaptureInfo *pci;
+    K_LIST_FOREACH(mir->locals, pr) *pr = last_reg_name(S, *pr);
+    K_LIST_FOREACH(mir->captured, pci) pci->r = captured_reg(S, pci->r);
 }
 
 // TODO
@@ -311,22 +344,10 @@ void pawSsa_construct(struct Compiler *C, struct Mir *mir, Map *uses, Map *defs)
 
     place_phi_nodes(&S);
     rename_vars(&S, MIR_ROOT_BB);
-    fix_aux_info(&S);
-
     mir->registers = S.registers;
+    fix_aux_info(&S, mir);
+
     pawP_pop_object(C, S.rename);
     pawP_pop_object(C, S.capture);
-
-    // write instruction numbers
-    struct MirBlockData **pdata;
-    K_LIST_FOREACH(mir->blocks, pdata) {
-        struct MirBlockData *data = *pdata;
-        struct MirInstruction **pinstr;
-        data->location = next_location(&S);
-        K_LIST_FOREACH(data->instructions, pinstr) {
-            struct MirInstruction *instr = *pinstr;
-            instr->hdr.location = next_location(&S);
-        }
-    }
 }
 

@@ -43,7 +43,6 @@ struct Mir;
     X(Return) \
     X(Branch) \
     X(Switch) \
-    X(ForLoop) \
     X(Goto)
 
  // TODO: MirBlock and MirRegister should start at 1 rather than 0 so that zero initialization can be used
@@ -271,15 +270,6 @@ enum MirForKind {
     MIR_FOR_LOOP,
 };
 
-struct MirForLoop {
-    MIR_INSTRUCTION_HEADER;
-    enum MirForKind for_kind;
-    MirRegister var;
-    MirRegister end;
-    MirBlock then_arm;
-    MirBlock else_arm;
-};
-
 struct MirGoto {
     MIR_INSTRUCTION_HEADER;
     MirBlock target;
@@ -481,6 +471,8 @@ DEFINE_LIST(struct Compiler, pawMir_interval_list_, MirIntervalList, struct MirL
 
 struct MirBlockList *pawMir_compute_live_in(struct Compiler *C, struct Mir *mir, struct MirBlockList *uses, struct MirBlockList *defs, MirRegister r);
 struct MirIntervalList *pawMir_compute_liveness(struct Compiler *C, struct Mir *mir, struct MirBlockList *order);
+
+const char *pawP_print_live_intervals_pretty(struct Compiler *C, struct Mir *mir, struct MirIntervalList *intervals);
 
 // Push a human-readable representation of the MIR on to the stack
 // Returns a pointer to the buffer containing null-terminated text.

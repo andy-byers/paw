@@ -9,6 +9,7 @@ enum Either<A, B> {
     Second(B),
 }
 
+
 impl<X, Y> Adt<(X, Y)> {
     pub fn get(self, b: bool) -> Either<X, Y> {
         if b { return Either::Second(self.value.1); }
@@ -21,12 +22,12 @@ pub fn test_either() {
         value: (123, 4.56),
     };
     match adt.get(false) {
-        Either::First(a) => {assert(a == 123);},
-        Either::Second(b) => {assert(false);},
+        Either::First(a) => assert(a == 123),
+        Either::Second(b) => assert(false),
     }
     match adt.get(true) {
-        Either::First(a) => {assert(false);},
-        Either::Second(b) => {assert(b == 4.56);},
+        Either::First(a) => assert(false),
+        Either::Second(b) => assert(b == 4.56),
     }
 }
 

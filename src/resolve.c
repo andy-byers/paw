@@ -388,7 +388,7 @@ static struct IrType *resolve_block(struct Resolver *R, struct HirBlock *block)
 {
     enter_scope(R, NULL);
     resolve_stmt_list(R, block->stmts);
-    struct IrType *type = resolve_expr(R, block->result);
+    struct IrType *type = resolve_operand(R, block->result);
     leave_scope(R);
     return type;
 }
@@ -451,8 +451,6 @@ static void resolve_func_item(struct Resolver *R, struct HirFuncDecl *d)
         R->rs = rs.outer;
     }
     leave_function(R);
-
-printf("res %s: hid=%d, %p\n", d->name->text, d->hid.value, pawIr_get_type(R->C, d->hid));
 }
 
 static void resolve_item(struct Resolver *R, struct HirDecl *item);
@@ -559,10 +557,6 @@ static struct IrType *resolve_path(struct Resolver *R, struct HirPath *path, enu
         const char *pathname = pawHir_print_path(R->C, path);
         NAME_ERROR(R, "path '%s' not recognized", pathname);
     }
-
-    printf("path type: %s\n", pawIr_print_type(R->C, type));
-    --ENV(R->C)->top.p;
-
     return type;
 }
 
@@ -618,6 +612,13 @@ static struct IrType *resolve_logical_expr(struct Resolver *R, struct HirLogical
     expect_bool_expr(R, e->lhs);
     expect_bool_expr(R, e->rhs);
     return get_type(R, PAW_TBOOL);
+}
+
+static struct IrType *fresh_option(struct Resolver *R)
+{
+    struct HirDecl *decl = pawHir_get_decl(R->C, R->C->builtins[BUILTIN_OPTION].did);
+    struct IrType *type = GET_NODE_TYPE(R->C, decl);
+    return pawP_generalize(R->C, type);
 }
 
 static paw_Bool is_option_t(struct Resolver *R, struct IrType *type)
@@ -1688,31 +1689,28 @@ static struct IrType *resolve_jump_expr(struct Resolver *R, struct HirJumpExpr *
     return get_type(R, PAW_TUNIT);
 }
 
-static void visit_forbody(struct Resolver *R, struct IrType *itype, struct HirBlock *b, struct HirForExpr *s)
-{
-    add_decl(R, s->control);
-    struct HirVarDecl *control = HirGetVarDecl(s->control);
-    pawIr_set_type(R->C, control->hid, itype);
-
-    enter_scope(R, NULL);
-
-    new_local(R, control->name, s->control);
-    resolve_stmt_list(R, b->stmts);
-    struct IrType *type = resolve_operand(R, b->result);
-    unify_unit_type(R, type);
-
-    leave_scope(R);
-}
-
 static struct IrType *resolve_for_expr(struct Resolver *R, struct HirForExpr *s)
 {
     enter_scope(R, NULL);
-    struct IrType *iter_t = resolve_operand(R, s->target);
-    struct IrType *elem_t = get_value_type(R, iter_t);
-    if (elem_t == NULL) TYPE_ERROR(R, "'for..in' not supported for type");
+    struct IrType *target = resolve_operand(R, s->target);
+    struct HirDecl *var = s->control;
+    new_local(R, var->hdr.name, var);
+
+    if (!IR_IS_FUNC_TYPE(target)){
+        TYPE_ERROR(R, "'for..in' not supported for type");
+    }
+    struct IrType *have = IR_FPTR(target)->result;
+    struct IrType *want = fresh_option(R);
+    unify(R, have, want);
+
+    struct IrType *inner = K_LIST_FIRST(ir_adt_types(have));
+    SET_NODE_TYPE(R->C, var, inner);
+
+    struct IrType *result = resolve_expr(R, s->block);
+    unify_unit_type(R, result);
 
     leave_scope(R);
-    return get_type(R, PAW_TUNIT);
+    return result;
 }
 
 static struct IrType *resolve_expr(struct Resolver *R, struct HirExpr *expr)

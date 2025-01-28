@@ -6,7 +6,7 @@
 #include "alloc.h"
 #include "gc.h"
 
-static void *first_try(paw_Env *P, void *ptr, size_t size)
+static void *first_try(paw_Env *P, void *ptr, size_t size0, size_t size)
 {
 #if PAW_STRESS > 0
     if (size > 0 && !P->gc_noem) {
@@ -18,13 +18,13 @@ static void *first_try(paw_Env *P, void *ptr, size_t size)
         return NULL;
     }
 #endif
-    return pawZ_alloc(P, ptr, size);
+    return pawZ_alloc(P, ptr, size0, size);
 }
 
-static void *try_again(paw_Env *P, void *ptr, size_t size)
+static void *try_again(paw_Env *P, void *ptr, size_t size0, size_t size)
 {
     pawG_collect(P); // emergency collection
-    return pawZ_alloc(P, ptr, size);
+    return pawZ_alloc(P, ptr, size0, size);
 }
 
 static void *m_alloc(paw_Env *P, void *ptr, size_t size0, size_t size)
@@ -32,13 +32,13 @@ static void *m_alloc(paw_Env *P, void *ptr, size_t size0, size_t size)
     if (size == 0) {
         if (ptr == NULL) return NULL;
         P->gc_bytes -= size0; // 'free' never fails
-        return pawZ_alloc(P, ptr, 0);
+        return pawZ_alloc(P, ptr, size0, 0);
     }
     // (re)allocate memory
-    void *ptr2 = first_try(P, ptr, size);
+    void *ptr2 = first_try(P, ptr, size0, size);
     if (ptr2 == NULL && !P->gc_noem) {
         // run an emergency collection and try again
-        ptr2 = try_again(P, ptr, size);
+        ptr2 = try_again(P, ptr, size0, size);
     }
 
     if (ptr2 != NULL) {

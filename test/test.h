@@ -10,7 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-/*
+/* TODO: need "for" loops
     X(loop) \
     X(close_loop_variable) \
     X(integer) \
@@ -20,11 +20,11 @@
 */
 
 #define TEST_SCRIPTS(X) \
+    X(basic) \
     X(cfg) \
     X(primitive) \
     X(operator) \
     X(block) \
-    X(basic) \
     X(function) \
     X(closure) \
     X(float) \
@@ -57,18 +57,25 @@
         } \
     } while (0)
 
-struct TestAlloc {
-    size_t nbytes;
-    size_t extra;
+#define ENABLE_PTR_TRACKER
+#ifdef ENABLE_PTR_TRACKER
 
-#define BLOCK_LIMIT 1024
-    unsigned blocks[2 * BLOCK_LIMIT + 1];
+// max number of outstanding allocations
+# define PTR_TRACKER_LIMIT (1 << 14)
+
+# warning "pointer tracking is enabled, perforamnce will be impacted"
+#endif // ENABLE_PTR_TRACKER
+
+struct TestAlloc {
+    size_t count;
+    size_t *sizes;
+    void **ptrs;
 };
 
 #define READ_MAX 16
 
 struct TestReader {
-    File *file;
+    FILE *file;
     const char *data;
     char buf[READ_MAX];
     size_t ndata;
@@ -76,11 +83,12 @@ struct TestReader {
     size_t index;
 };
 
+void test_mem_hook(void *ud, void *ptr, size_t size0, size_t size);
 void *test_alloc(void *ud, void *ptr, size_t size0, size_t size);
 const char *test_reader(paw_Env *X, void *ud, size_t *size);
 const char *test_pathname(const char *name);
 
-paw_Env *test_open(paw_Alloc alloc, struct TestAlloc *state, size_t heap_size);
+paw_Env *test_open(paw_MemHook mem_hook, struct TestAlloc *state, size_t heap_size);
 void test_close(paw_Env *P, struct TestAlloc *a);
 int test_open_file(paw_Env *P, const char *pathname);
 int test_open_string(paw_Env *P, const char *source);

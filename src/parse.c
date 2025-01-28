@@ -1641,6 +1641,7 @@ static const char kPrelude[] =
 
     "pub fn print(message: str);\n"
     "pub fn assert(cond: bool);\n"
+    "pub fn range(begin: int, end: int, step: int) -> (fn() -> Option<int>);\n"
 
     "impl bool {\n"
     "    pub fn to_string(self) -> str;\n"

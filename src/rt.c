@@ -437,9 +437,6 @@ Map *pawR_new_map(paw_Env *P, CallFrame *cf, Value *ra, int b)
 // item 6). Both cases equal 0 in Paw (x / y wraps).
 #define DIVMOD_OVERFLOWS(x, y) ((x) == PAW_INT_MIN && (y) == -1)
 
-#define STOP_LOOP(a, b, c) \
-    (((c) < 0 && (a) <= (b)) || ((c) > 0 && (a) >= (b)))
-
 
 void pawR_execute(paw_Env *P, CallFrame *cf)
 {
@@ -797,11 +794,11 @@ top:
                 const int bx = GET_Bx(opcode);
 
                 VM_SAVE_PC();
+                P->top.p = ra + 1;
                 Proto *proto = fn->p->p[bx];
                 Closure *closure = pawV_new_closure(P, proto->nup);
                 V_SET_OBJECT(ra, closure);
                 closure->p = proto;
-                P->top.p = ra + 1;
 
                 // open upvalues
                 StackPtr base = cf->base.p;
@@ -857,35 +854,6 @@ top:
             vm_case(JUMPF):
             {
                 if (!V_TRUE(*ra)) pc += GET_sBx(opcode);
-            }
-
-            vm_case(FORPREP):
-            {
-                // iter, run = callable(target, iter)
-                const Value target = ra[0];
-                const Value callable = ra[1];
-//                const paw_Int iter = V_INT(ra[2]);
-//                paw_Int *pvar = &V_INT(ra[3]);
-//                if (STOP_LOOP(iter, end, step)) {
-//                    // skip loop body
-//                    pc += GET_sBx(opcode);
-//                } else {
-//                    *pvar = iter;
-//                }
-            }
-
-            vm_case(FORLOOP):
-            {
-                const paw_Int step = V_INT(ra[0]);
-                const paw_Int end = V_INT(ra[1]);
-                paw_Int *piter = &V_INT(ra[2]);
-                paw_Int *pvar = &V_INT(ra[3]);
-                const paw_Int next = I_BINOP(*piter, step, +);
-                if (!STOP_LOOP(next, end, step)) {
-                    // update state and jump to loop body
-                    *pvar = *piter = next;
-                    pc += GET_sBx(opcode);
-                }
             }
 
             vm_default:

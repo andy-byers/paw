@@ -250,15 +250,6 @@ static void CopyBranch(struct MonoCollector *M, struct MirBranch *t, struct MirB
     r->else_arm = t->else_arm;
 }
 
-static void CopyForLoop(struct MonoCollector *M, struct MirForLoop *t, struct MirForLoop *r)
-{
-    r->for_kind = t->for_kind;
-    r->var = t->var;
-    r->end = t->end;
-    r->then_arm = t->then_arm;
-    r->else_arm = t->else_arm;
-}
-
 static void CopySwitch(struct MonoCollector *M, struct MirSwitch *t, struct MirSwitch *r)
 {
     r->discr = t->discr;

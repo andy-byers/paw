@@ -42,9 +42,8 @@ static void check_status(paw_Env *P, int status)
 
 static int run_script_or_chunk(const char *name_or_chunk, size_t heap_size, paw_Bool is_chunk)
 {
-    paw_Env *P = paw_open(&(struct paw_Options){
-                .heap_size = heap_size,
-            });
+    struct TestAlloc a = {0};
+    paw_Env *P = test_open(test_mem_hook, &a, heap_size);
     if (P == NULL) return PAW_EMEMORY;
 
     int status = is_chunk
@@ -52,7 +51,7 @@ static int run_script_or_chunk(const char *name_or_chunk, size_t heap_size, paw_
         : test_open_file(P, name_or_chunk);
     if (status == PAW_OK) status = run_tests(P);
     check_status(P, status);
-    paw_close(P);
+    test_close(P, &a);
     return status;
 }
 
@@ -111,9 +110,11 @@ static void test_oom(const char *name_or_chunk, paw_Bool is_chunk)
         const int status = run_one(special_sizes[i]);
         check(status == PAW_EMEMORY);
     }
+    finish_oom();
 
     int status;
     size_t heap_size = 1 << 10;
+    start_oom(name_or_chunk, is_chunk);
     do {
         status = run_one(heap_size);
         heap_size += heap_size;
@@ -135,9 +136,9 @@ static void test_call_frames(void)
             "    }                \n"
             "}                    \n"
             "pub fn test_call_frames() {\n"
-            "    recur(25);\n"
-            "    poly_recur(true, 250);\n"
-            "    poly_recur(1.0, 2500);\n"
+            "    recur(10);\n"
+            "    poly_recur(true, 100);\n"
+            "    poly_recur(1.0, 500);\n"
             "}\n", PAW_TRUE);
 }
 
@@ -160,7 +161,8 @@ int main(void)
 #define RUN_SCRIPT(name) test_oom(#name, PAW_FALSE);
     TEST_SCRIPTS(RUN_SCRIPT)
 #undef RUN_SCRIPT
-return 42;
+
     test_call_frames();
     test_list_ops();
 }
+

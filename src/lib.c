@@ -47,6 +47,54 @@ static int base_print(paw_Env *P)
     return 0;
 }
 
+#define STOP_LOOP(a, b, c) \
+    (((c) < 0 && (a) <= (b)) || ((c) > 0 && (a) >= (b)))
+
+static int range_iterator(paw_Env *P)
+{
+    paw_get_upvalue(P, 0, 0);
+    paw_get_upvalue(P, 0, 1);
+    paw_get_upvalue(P, 0, 2);
+    const paw_Int begin = paw_int(P, 1);
+    const paw_Int end = paw_int(P, 2);
+    const paw_Int step = paw_int(P, 3);
+    Value *pval = P->top.p++;
+    if (!STOP_LOOP(begin, end, step)) {
+        paw_push_int(P, begin + step);
+        paw_set_upvalue(P, 0, 0);
+        pawR_new_tuple(P, P->cf, pval, 2);
+        V_TUPLE(*pval)->elems[0].i = 0;
+        V_TUPLE(*pval)->elems[1].i = begin;
+    } else {
+        pawR_new_tuple(P, P->cf, pval, 1);
+        V_TUPLE(*pval)->elems[0].i = 1;
+    }
+    return 1;
+}
+
+static int base_range(paw_Env *P)
+{
+    const paw_Int begin = paw_int(P, 1);
+    const paw_Int end = paw_int(P, 2);
+    const paw_Int step = paw_int(P, 3);
+    if (step == 0) pawR_error(P, PAW_EVALUE, "step cannot be 0");
+    paw_new_native(P, range_iterator, 3);
+    return 1;
+}
+
+static void new_option_some(paw_Env *P, Value *pval, Value value)
+{
+    pawR_new_tuple(P, P->cf, pval, 2);
+    V_TUPLE(*pval)->elems[0].i = 0;
+    V_TUPLE(*pval)->elems[1] = value;
+}
+
+static void new_option_none(paw_Env *P, Value *pval)
+{
+    pawR_new_tuple(P, P->cf, pval, 1);
+    V_TUPLE(*pval)->elems[0].i = 1;
+}
+
 static int list_insert(paw_Env *P)
 {
     List *list = V_LIST(*CF_BASE(1));
@@ -386,7 +434,7 @@ void pawL_close_loader(paw_Env *P, void *state)
     if (state == NULL) return;
     struct FileReader *fr = state;
     pawO_close(fr->file);
-// TODO: freed in value.c, called by GC    pawO_free_file(P, fr->file);
+    pawO_free_file(P, fr->file);
 }
 
 void pawL_new_func(paw_Env *P, paw_Function func, int nup)
@@ -440,6 +488,7 @@ static void load_builtins(paw_Env *P)
 {
     add_prelude_func(P, "assert", base_assert);
     add_prelude_func(P, "print", base_print);
+    add_prelude_func(P, "range", base_range);
 
     add_prelude_method(P, "bool", "to_string", bool_to_string);
     add_prelude_method(P, "int", "to_string", int_to_string);

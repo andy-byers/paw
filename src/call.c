@@ -272,7 +272,7 @@ void pawC_init(paw_Env *P)
     const size_t stack_size = frame_size * sizeof(Value);
     // allocate manually since normal error handling code requires the stack (this is the
     // stack allocation itself)
-    Value *ptr = pawZ_alloc(P, NULL, stack_size);
+    Value *ptr = pawZ_alloc(P, NULL, 0, stack_size);
     if (ptr == NULL) pawC_throw(P, PAW_EMEMORY);
     P->gc_bytes += stack_size; // account for memory
     P->bound.p = ptr + frame_size;

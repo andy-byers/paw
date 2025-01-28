@@ -225,12 +225,6 @@ static void AcceptSwitch(struct MirVisitor *V, struct MirSwitch *t)
     pawMir_visit_register(V, t->discr);
 }
 
-static void AcceptForLoop(struct MirVisitor *V, struct MirForLoop *t)
-{
-    pawMir_visit_register(V, t->end);
-    pawMir_visit_register(V, t->var);
-}
-
 #define VISITOR_CALL(V, name, x) ((V)->Visit##name != NULL ? (V)->Visit##name(V, x) : 1)
 
 #define VISITOR_POSTCALL(V, name, x) ((V)->PostVisit##name != NULL ? (V)->PostVisit##name(V, x) : (void)0)
@@ -469,12 +463,6 @@ static void renumber_block_refs(struct Compiler *C, Map *map, struct MirBlockDat
             }
             break;
         }
-        case kMirForLoop: {
-            struct MirForLoop *t = MirGetForLoop(terminator);
-            renumber_ref(map, &t->then_arm);
-            renumber_ref(map, &t->else_arm);
-            break;
-        }
         case kMirGoto: {
             struct MirGoto *t = MirGetGoto(terminator);
             renumber_ref(map, &t->target);
@@ -680,17 +668,6 @@ paw_Bool pawMir_check_load(struct Compiler *C, struct MirInstruction *instr, str
             ADD_INPUT(x->discr);
             break;
         }
-        case kMirForLoop: {
-            struct MirForLoop *x = MirGetForLoop(instr);
-            switch (x->for_kind) {
-                case MIR_FOR_LOOP:
-                    ADD_INPUT(x->var);
-                    // fallthrough
-                case MIR_FOR_PREP:
-                    ADD_INPUT(x->end);
-            }
-            break;
-        }
         default:
             return PAW_FALSE;
     }
@@ -760,17 +737,6 @@ paw_Bool pawMir_check_store(struct Compiler *C, struct MirInstruction *instr, st
         case kMirBinaryOp:
             ADD_OUTPUT(MirGetBinaryOp(instr)->output);
             break;
-        case kMirForLoop: {
-            struct MirForLoop *x = MirGetForLoop(instr);
-            switch (x->for_kind) {
-                case MIR_FOR_PREP:
-                    ADD_OUTPUT(x->var);
-                    break;
-                case MIR_FOR_LOOP:
-                    break;
-            }
-            break;
-        }
         default:
             return PAW_FALSE;
     }
@@ -812,6 +778,7 @@ static void dump_instruction_list(struct Printer *P, struct MirInstructionList *
 
 static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
 {
+    pawL_add_fstring(P->P, P->buf, "%d: ", instr->hdr.location);
     switch (MIR_KINDOF(instr)) {
         case kMirAllocLocal: {
             struct MirAllocLocal *t = MirGetAllocLocal(instr);
@@ -1002,16 +969,6 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
                 pawL_add_fstring(P->P, P->buf, "_: bb%d", t->otherwise.value);
             }
             L_ADD_LITERAL(P->P, P->buf, "]\n");
-            break;
-        }
-        case kMirForLoop: {
-            struct MirForLoop *t = MirGetForLoop(instr);
-            switch (t->for_kind) {
-                case MIR_FOR_PREP:
-                case MIR_FOR_LOOP:
-                    DUMP_FMT(P, "_%d _%d", t->end.value, t->var.value);
-            }
-            pawL_add_fstring(P->P, P->buf, " => [0: bb%d, 1: bb%d]\n", t->else_arm.value, t->then_arm.value);
             break;
         }
         case kMirGoto: {

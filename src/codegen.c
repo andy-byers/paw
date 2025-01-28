@@ -35,7 +35,7 @@ DEFINE_LIST(struct Compiler, jumptab_, JumpTable, struct JumpTarget)
 
 static void add_jump_target(struct Generator *G, MirBlock bid)
 {
-    K_LIST_PUSH(G->C, G->jumps, ((struct JumpTarget){
+    K_LIST_PUSH(G->C, G->fs->jumps, ((struct JumpTarget){
                     .pc = G->fs->pc,
                     .bid = bid,
                 }));
@@ -44,11 +44,6 @@ static void add_jump_target(struct Generator *G, MirBlock bid)
 static struct Def *get_def(struct Generator *G, DefId did)
 {
     return Y_DEF(ENV(G), did);
-}
-
-static int ident2reg(struct FuncState *fs, int ident)
-{
-    return ident; // TODO: real register numbers are set inplace
 }
 
 static struct Type *lookup_type(struct Generator *G, struct IrType *type)
@@ -73,7 +68,7 @@ DEFINE_LIST(struct Compiler, patch_list_, PatchList, struct JumpSource)
 
 static void add_jump_source(struct Generator *G, int from_pc, MirBlock to)
 {
-    K_LIST_PUSH(G->C, G->patch, ((struct JumpSource){
+    K_LIST_PUSH(G->C, G->fs->patch, ((struct JumpSource){
         .from_pc = from_pc,
         .to = to,
     }));
@@ -109,7 +104,7 @@ static void patch_jump(struct FuncState *fs, int from, int to)
 static void patch_jumps_to_here(struct Generator *G, MirBlock bid)
 {
     struct FuncState *fs = G->fs;
-    struct PatchList *pl = G->patch;
+    struct PatchList *pl = fs->patch;
     for (int i = 0; i < pl->count;) {
         struct JumpSource js = K_LIST_GET(pl, i);
         if (js.to.value == bid.value) {
@@ -127,6 +122,7 @@ static int temporary_reg(struct FuncState *fs, int offset)
 {
     const int temp = fs->proto->max_stack + offset + 1;
     if (temp >= NREGISTERS) ERROR(fs->G, PAW_EOVERFLOW, "not enough registers");
+    fs->max_reg = PAW_MAX(fs->max_reg, temp);
     return temp;
 }
 
@@ -277,9 +273,9 @@ static void new_local(struct FuncState *fs, String *name, struct IrType *type)
 
 #define JUMP_PLACEHOLDER (-1)
 
-static int emit_cond_jump(struct FuncState *fs, MirRegister cond, Op op)
+static int emit_cond_jump(struct FuncState *fs, int cond, Op op)
 {
-    pawK_code_AsBx(fs, op, REG(cond), JUMP_PLACEHOLDER);
+    pawK_code_AsBx(fs, op, cond, JUMP_PLACEHOLDER);
     return fs->pc - 1;
 }
 
@@ -317,6 +313,7 @@ static void leave_function(struct Generator *G)
 
     // module itself has no prototype
     if (fs->kind == FUNC_MODULE) return;
+    p->max_stack = fs->max_reg;
 
     pawM_shrink(P, p->source, p->length, fs->pc);
     p->length = fs->pc;
@@ -334,12 +331,9 @@ static void leave_function(struct Generator *G)
 static void enter_function(struct Generator *G, struct FuncState *fs, struct Mir *mir, Proto *proto)
 {
     G->V->mir = mir;
-
-    // TODO: should be stored in G->fs, since they are per-function objects
-    G->patch = patch_list_new(G->C);
-    G->jumps = jumptab_new(G->C);
-
     *fs = (struct FuncState){
+        .patch = patch_list_new(G->C),
+        .jumps = jumptab_new(G->C),
         .kind = mir->fn_kind,
         .name = mir->name,
         .proto = proto,
@@ -446,7 +440,7 @@ static void code_proto(struct Generator *G, struct Mir *mir, Proto *proto, int i
     allocate_upvalue_info(G, proto, mir->upvalues);
     pawMir_visit_block_list(G->V, rpo);
 
-    paw_assert(G->patch->count == 0);
+    paw_assert(G->fs->patch->count == 0);
 }
 
 static Proto *code_paw_function(struct Generator *G, struct Mir *mir, int index);
@@ -455,10 +449,10 @@ static void code_children(struct Generator *G, Proto *parent, struct Mir *mir)
 {
     const int nchildren = mir->children->count;
     parent->p = pawM_new_vec(ENV(G), nchildren, Proto *);
+    parent->nproto = nchildren;
     for (int i = 0; i < nchildren; ++i) {
         struct Mir *child = K_LIST_GET(mir->children, i);
         parent->p[i] = code_paw_function(G, child, i);
-        ++parent->nproto;
     }
 }
 
@@ -680,7 +674,9 @@ static void code_closure(struct MirVisitor *V, struct MirClosure *x)
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
 
-    pawK_code_ABx(G->fs, OP_CLOSURE, REG(x->output), x->child_id);
+    const int temp = temporary_reg(fs, 0);
+    pawK_code_ABx(G->fs, OP_CLOSURE, temp, x->child_id);
+    move_to_reg(fs, temp, REG(x->output));
 }
 
 static void code_get_element(struct MirVisitor *V, struct MirGetElement *x)
@@ -1033,9 +1029,10 @@ static void add_edge(struct MirVisitor *V, int from_pc, MirBlock to)
 {
     struct JumpTarget *pjump;
     struct Generator *G = V->ud;
-    K_LIST_FOREACH(G->jumps, pjump) {
+    struct FuncState *fs = G->fs;
+    K_LIST_FOREACH(fs->jumps, pjump) {
         if (MIR_BB_EQUALS(pjump->bid, to)) {
-            patch_jump(G->fs, from_pc, pjump->pc);
+            patch_jump(fs, from_pc, pjump->pc);
             return;
         }
     }
@@ -1052,31 +1049,12 @@ static paw_Bool code_goto(struct MirVisitor *V, struct MirGoto *x)
     return PAW_FALSE;
 }
 
-static paw_Bool code_for_loop(struct MirVisitor *V, struct MirForLoop *x)
-{
-    struct Generator *G = V->ud;
-    struct FuncState *fs = G->fs;
-
-    if (x->for_kind == MIR_FOR_PREP) {
-        const int else_jump = emit_cond_jump(fs, x->end, OP_FORPREP);
-        const int then_jump = emit_jump(fs);
-        add_edge(V, else_jump, x->else_arm);
-        add_edge(V, then_jump, x->then_arm);
-    } else {
-        const int then_jump = emit_cond_jump(fs, x->end, OP_FORLOOP);
-        const int else_jump = emit_jump(fs);
-        add_edge(V, then_jump, x->then_arm);
-        add_edge(V, else_jump, x->else_arm);
-    }
-    return PAW_FALSE;
-}
-
 static paw_Bool code_branch(struct MirVisitor *V, struct MirBranch *x)
 {
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
 
-    const int else_jump = emit_cond_jump(fs, x->cond, OP_JUMPF);
+    const int else_jump = emit_cond_jump(fs, REG(x->cond), OP_JUMPF);
     add_edge(V, else_jump, x->else_arm);
     add_edge(V, emit_jump(fs), x->then_arm);
     return PAW_FALSE;
@@ -1179,7 +1157,6 @@ static void setup_codegen(struct Generator *G)
 
     V->VisitReturn = code_return;
     V->VisitSwitch = code_switch;
-//    V->VisitForLoop = code_for_loop;
     V->VisitBranch = code_branch;
     V->VisitGoto = code_goto;
     V->VisitBlock = code_block;

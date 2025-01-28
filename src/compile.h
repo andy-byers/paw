@@ -212,8 +212,6 @@ typedef struct Generator {
     struct Compiler *C;
     struct FuncState *fs;
     struct MirVisitor *V;
-    struct JumpTable *jumps;
-    struct PatchList *patch;
     struct ItemList *items;
     struct Pool *pool;
     Map *builtin;
@@ -253,7 +251,7 @@ Map *pawP_lower_hir(struct Compiler *C);
 
 struct IrType *pawP_attach_type(struct Compiler *C, DeclId did, enum IrTypeKind kind, int line);
 
-struct IrTypeList *pawP_instantiate_impl_types(struct Compiler *C, struct IrType *self, struct IrTypeList *generics, struct IrTypeList *types);
+struct IrTypeList *pawP_instantiate_typelist(struct Compiler *C, struct IrTypeList *before, struct IrTypeList *after, struct IrTypeList *target);
 struct IrType *pawP_instantiate_field(struct Compiler *C, struct IrType *self, struct HirDecl *field);
 struct HirDecl *pawP_find_field(struct Compiler *C, struct IrType *self, String *name);
 struct IrType *pawP_find_method(struct Compiler *C, struct IrType *self, String *name);
@@ -367,8 +365,8 @@ Map *pawP_new_map(struct Compiler *C, struct ObjectStore *store);
 #define MAP_INSERT(X, map, key, value) pawH_insert(ENV(X), map, key, value)
 #define MAP_REMOVE(map, key) pawH_erase(map, key)
 #define MAP_ERASE(map, index) pawH_erase_at(map, index)
-#define MAP_GET(map, key) pawH_get(map, index)
-#define MAP_CONTAINS(map, key) (MAP_GET(map, index) != NULL)
+#define MAP_GET(map, key) pawH_get(map, key)
+#define MAP_CONTAINS(map, key) (MAP_GET(map, key) != NULL)
 
 Map *pawP_push_map(struct Compiler *C);
 List *pawP_push_list(struct Compiler *C);

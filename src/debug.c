@@ -132,18 +132,6 @@ const char *paw_op_name(Op op)
             return "NEWLIST";
         case OP_NEWMAP:
             return "NEWMAP";
-        case OP_FORPREP:
-            return "FORPREP";
-        case OP_FORLOOP:
-            return "FORLOOP";
-        case OP_FORLIST0:
-            return "FORLIST0";
-        case OP_FORLIST:
-            return "FORLIST";
-        case OP_FORMAP0:
-            return "FORMAP0";
-        case OP_FORMAP:
-            return "FORMAP";
         case OP_IEQ:
             return "IEQ";
         case OP_INE:
@@ -329,12 +317,6 @@ void paw_dump_opcode(OpCode opcode)
         case OP_LOADSMI:
         case OP_JUMPT:
         case OP_JUMPF:
-        case OP_FORPREP:
-        case OP_FORLOOP:
-        case OP_FORLIST0:
-        case OP_FORLIST:
-        case OP_FORMAP0:
-        case OP_FORMAP:
             printf("%s %d %d\n", opname, GET_A(opcode), GET_sBx(opcode));
             break;
         // op A sBx
@@ -454,12 +436,6 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
             case OP_LOADSMI:
             case OP_JUMPT:
             case OP_JUMPF:
-            case OP_FORPREP:
-            case OP_FORLOOP:
-            case OP_FORLIST0:
-            case OP_FORLIST:
-            case OP_FORMAP0:
-            case OP_FORMAP:
                 pawL_add_fstring(P, print, " %d %d\n", GET_A(opcode), GET_sBx(opcode));
                 break;
             // op A Bx

@@ -32,11 +32,13 @@ typedef _Bool paw_Bool;
 typedef struct paw_Env paw_Env;
 
 typedef void *(*paw_Alloc)(void *ud, void *ptr, size_t size0, size_t size);
+typedef void (*paw_MemHook)(void *ud, void *ptr, size_t size0, size_t size);
 typedef const char *(*paw_Reader)(paw_Env *P, void *ud, size_t *size);
 typedef int (*paw_Function)(paw_Env *P);
 
 struct paw_Options {
     paw_Alloc alloc;
+    paw_MemHook mem_hook;
     size_t heap_size;
     void *heap;
     void *ud;

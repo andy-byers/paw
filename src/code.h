@@ -93,6 +93,8 @@ struct FuncState {
     struct FuncState *outer; // enclosing function
     struct RegisterTable *regtab;
     struct Generator *G; // codegen state
+    struct PatchList *patch;
+    struct JumpTable *jumps;
     struct KCache kcache;
     struct Mir *mir;
     int bb; // TODO: should be MirBlock, move stuff around
@@ -105,7 +107,7 @@ struct FuncState {
     int nlines; // number of source lines
     int pc; // number of instructions
     int line;
-    int free_reg;
+    int max_reg;
     enum FuncKind kind; // type of function
 };
 

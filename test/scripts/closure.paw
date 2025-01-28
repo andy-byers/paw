@@ -274,6 +274,15 @@ pub fn test_capture_multiple() {
 }
 
 pub fn test_nested_closures() {
+    let make_closure = || {
+        let c = 5;
+        || || c
+    };
+    let t = make_closure()()();
+    assert(t == 5);
+}
+
+pub fn test_nested_closures_1() {
     let make_closure = |a: int| {
         let b = 2;
         let c = 1;
@@ -283,7 +292,9 @@ pub fn test_nested_closures() {
     assert(t.0 == 1);
     assert(t.1 == 2);
     assert(t.2 == 3);
+}
 
+pub fn test_nested_closures_2() {
     let make_closure = || {
         let c = 5;
         |a| {

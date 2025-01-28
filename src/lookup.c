@@ -15,7 +15,6 @@ struct QueryState {
     struct HirSymtab *symtab;
     paw_Env *P;
     int base_modno;
-    int target;
     int index;
     int line; // TODO: never set
 };
@@ -75,6 +74,9 @@ static struct QueryBase find_global_in(struct QueryState *Q, struct ModuleInfo *
         }
         struct ModuleInfo *m = find_import(Q, seg->name);
         if (m == NULL) break;
+        if (Q->index >= path->count) {
+            pawE_error(ENV(Q), PAW_ETYPE, -1, "unexpected module name");
+        }
         if (module_number(Q->m) != Q->base_modno) {
             pawE_error(ENV(Q), PAW_ESYNTAX, -1, "transitive imports are not supported");
         }
@@ -139,8 +141,7 @@ static struct IrType *find_enumerator(struct QueryState *Q, struct IrType *type,
 static struct IrType *find_assoc_item(struct QueryState *Q, struct HirDecl *prev, struct IrType *type, struct HirSegment *next)
 {
     struct HirDecl *decl = pawHir_get_decl(Q->C, prev->hdr.did);
-    struct HirAdtDecl *d = HirGetAdtDecl(decl);
-    if (!d->is_struct) {
+    if (!HirGetAdtDecl(decl)->is_struct) {
         struct IrType *result = find_enumerator(Q, type, next);
         if (result != NULL) return result;
     }
@@ -160,44 +161,29 @@ static struct IrTypeList *maybe_generalize_adt(struct QueryState *Q, struct HirD
     return result;
 }
 
-static struct QueryBase find_local(struct Compiler *C, struct HirSymtab *symtab, struct HirPath *path)
+static struct QueryBase find_local(struct QueryState *Q, struct HirSymtab *symtab, struct HirPath *path)
 {
-    struct HirSegment *first = &K_LIST_FIRST(path);
+    struct HirSegment *seg = &K_LIST_FIRST(path);
     for (int depth = symtab->count - 1; depth >= 0; --depth) {
         struct HirScope *scope = K_LIST_GET(symtab, depth);
-        const int index = pawHir_find_symbol(scope, first->name);
+        const int index = pawHir_find_symbol(scope, seg->name);
         if (index >= 0) {
             struct HirSymbol symbol = K_LIST_GET(scope, index);
             if (!HirIsTypeDecl(symbol.decl)) {
-                if (path->count > 1) NAME_ERROR(C, "'::' applied to value '%s'", first->name->text);
-                if (first->types != NULL) TYPE_ERROR(C, "type arguments applied to value '%s'", first->name->text);
+                if (path->count > 1) NAME_ERROR(Q->C, "'::' applied to value '%s'", seg->name->text);
+                if (seg->types != NULL) TYPE_ERROR(Q->C, "type arguments applied to value '%s'", seg->name->text);
             }
-            first->did = symbol.decl->hdr.did;
+            Q->index = 1;
+            seg->did = symbol.decl->hdr.did;
             return (struct QueryBase){
                 .is_type = symbol.is_type,
                 .base = symbol.decl,
-                .seg = first,
+                .seg = seg,
             };
         }
     }
     return (struct QueryBase){0};
 }
-
-static struct IrTypeList *maybe_copy_subtypes(struct QueryState *Q, struct IrType *type)
-{
-    struct IrTypeList *types = IR_TYPE_SUBTYPES(type);
-    if (types == NULL) return NULL;
-
-    struct IrType **ptype;
-    struct IrTypeList *result = pawIr_type_list_new(Q->C);
-    K_LIST_FOREACH(types, ptype) {
-        K_LIST_PUSH(Q->C, result, *ptype);
-    }
-    return result;
-}
-
-struct IrTypeList *pawP_instantiate_typelist(struct Compiler *C, struct IrTypeList *before,
-                                             struct IrTypeList *after, struct IrTypeList *target);
 
 static struct IrTypeList *new_unknowns(struct Compiler *C, int count)
 {
@@ -209,10 +195,6 @@ static struct IrTypeList *new_unknowns(struct Compiler *C, int count)
     return list;
 }
 
-// TODO: it seems strange to modify the name and decl ID of the path segment but not
-//       the type list. Shoudln't really matter since we SHOULD now depend only on
-//       the decl ID from this point on.
-#include "stdio.h"
 static struct IrType *resolve_alias(struct QueryState *Q, struct QueryBase *pq)
 {
     paw_assert(HirIsTypeDecl(pq->base));
@@ -220,7 +202,6 @@ static struct IrType *resolve_alias(struct QueryState *Q, struct QueryBase *pq)
     struct HirTypeDecl *d = HirGetTypeDecl(pq->base);
     struct HirSegment *seg = pq->seg;
 
-    seg->name = d->name;
     seg->did = IR_TYPE_DID(type);
     pq->base = pawHir_get_decl(Q->C, seg->did);
 
@@ -232,85 +213,79 @@ static struct IrType *resolve_alias(struct QueryState *Q, struct QueryBase *pq)
     struct IrTypeList *unknowns = new_unknowns(Q->C, generics->count);
     struct IrTypeList *subst = pawP_instantiate_typelist(Q->C, generics, unknowns, types);
     if (seg->types != NULL) {
-        struct IrType **punknown, **pknown;
+        struct IrType **pu, **pk;
         struct IrTypeList *knowns = pawP_lower_type_list(Q->C, Q->m, Q->symtab, seg->types);
-        K_LIST_ZIP(unknowns, punknown, knowns, pknown) {
-            pawU_unify(Q->C->U, *punknown, *pknown);
-        }
+        K_LIST_ZIP(unknowns, pu, knowns, pk) pawU_unify(Q->C->U, *pu, *pk);
     }
 
     struct HirDecl *aliased = pawHir_get_decl(Q->C, IR_TYPE_DID(rhs));
     return pawP_instantiate(Q->C, aliased, subst);
 }
 
+struct IrType *lookup(struct QueryState *Q, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirPath *path, enum LookupKind kind)
+{
+    struct IrType *inst;
+    paw_assert(path->count > 0);
+    struct QueryBase q = find_local(Q, symtab, path);
+    if (q.base == NULL) {
+        q = find_global(Q, m, path);
+        if (q.base == NULL) return NULL;
+    }
+    struct IrTypeList *types = q.seg->types == NULL ? NULL
+        : pawP_lower_type_list(Q->C, m, symtab, q.seg->types);
+
+    switch (HIR_KINDOF(q.base)) {
+        case kHirAdtDecl:
+            types = maybe_generalize_adt(Q, q.base, types);
+            // (fallthrough)
+        case kHirFuncDecl:
+            inst = pawP_instantiate(Q->C, q.base, types);
+            q.seg->did = IR_TYPE_DID(inst);
+            break;
+        case kHirTypeDecl:
+            inst = resolve_alias(Q, &q);
+            break;
+        case kHirVarDecl:
+        case kHirFieldDecl:
+        case kHirGenericDecl:
+            inst = GET_NODE_TYPE(Q->C, q.base);
+            q.seg->did = q.base->hdr.did;
+            break;
+        case kHirImplDecl:
+        case kHirVariantDecl:
+            PAW_UNREACHABLE();
+    }
+
+    if (Q->index < path->count) {
+        // resolve method or enumerator
+        struct HirSegment *next = &K_LIST_GET(path, Q->index);
+        inst = find_assoc_item(Q, q.base, inst, next);
+        q.is_type = PAW_FALSE;
+        ++Q->index;
+    }
+    if (Q->index < path->count) {
+        TYPE_ERROR(Q, "extraneous '::%s'", K_LIST_GET(path, Q->index).name->text);
+    }
+
+    // TODO: check Q->index < path->count?, also bump index in guard above
+    if (kind != LOOKUP_EITHER && q.is_type != (kind == LOOKUP_TYPE)) {
+        TYPE_ERROR(Q, "expected %s but found %s",
+                kind == LOOKUP_VALUE ? "value" : "type",
+                q.is_type ? "value" : "type");
+    }
+    return inst;
+}
+
 struct IrType *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirPath *path, enum LookupKind kind)
 {
     struct QueryState Q = {
         .base_modno = module_number(m),
-        .target = m->hir->modno,
         .symtab = symtab,
         .P = ENV(C),
         .m = m,
         .C = C,
     };
 
-    struct IrType *inst;
-    paw_assert(path->count > 0);
-    struct QueryBase q = find_local(C, symtab, path);
-    if (q.base != NULL) {
-        inst = HirIsTypeDecl(q.base)
-            ? resolve_alias(&Q, &q)
-            : GET_NODE_TYPE(C, q.base);
-        Q.index = 1;
-        Q.m = m;
-        goto found_local;
-    }
-
-    // sets 'Q.m' to the module containing the target declaration, and sets
-    // 'Q.index' to the index of the following segment
-    q = find_global(&Q, m, path);
-    if (q.base == NULL) return NULL;
-
-    struct IrTypeList *types = q.seg->types != NULL
-        ? pawP_lower_type_list(C, m, symtab, q.seg->types)
-        : NULL;
-
-    switch (HIR_KINDOF(q.base)) {
-        case kHirAdtDecl:
-            types = maybe_generalize_adt(&Q, q.base, types);
-            // (fallthrough)
-        case kHirFuncDecl:
-            inst = pawP_instantiate(C, q.base, types);
-            q.seg->did = IR_TYPE_DID(inst);
-            break;
-        case kHirTypeDecl:
-            inst = resolve_alias(&Q, &q);
-            break;
-        case kHirVarDecl:
-        case kHirFieldDecl:
-        case kHirGenericDecl:
-            inst = GET_NODE_TYPE(C, q.base);
-            q.seg->did = q.base->hdr.did;
-            break;
-        default:
-            goto invalid_path;
-    }
-
-found_local:
-    if (Q.index < path->count) {
-        // resolve method or enumerator
-        struct HirSegment *next = &K_LIST_GET(path, Q.index);
-        inst = find_assoc_item(&Q, q.base, inst, next);
-        q.is_type = PAW_FALSE;
-    }
-
-    if ((kind == LOOKUP_VALUE && q.is_type)
-            || (kind == LOOKUP_TYPE && !q.is_type)) {
-invalid_path:
-        TYPE_ERROR(&Q, "expected %s but found %s",
-                kind == LOOKUP_VALUE ? "value" : "type",
-                q.is_type ? "value" : "type");
-    }
-    return inst;
+    return lookup(&Q, m, symtab, path, kind);
 }
 

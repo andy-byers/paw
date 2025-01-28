@@ -25,6 +25,9 @@ struct Heap {
     uintptr_t bounds[2];
     paw_Env *P;
 
+    paw_MemHook mem_hook;
+    void *ud;
+
     paw_Bool is_owned;
 
     size_t nflags;
@@ -33,11 +36,11 @@ struct Heap {
 
 #define Z_IN_BOUNDS(H, u) ((H)->bounds[0] <= (u) && (u) < (H)->bounds[1])
 
-int pawZ_init(paw_Env *P, void *heap, size_t heap_size, paw_Bool is_owned);
+int pawZ_init(paw_Env *P, void *heap, size_t heap_size, paw_Bool is_owned, paw_MemHook mem_hook, void *ud);
 void pawZ_uninit(paw_Env *P);
 
 size_t pawZ_sizeof(void *ptr);
-void *pawZ_alloc(paw_Env *P, void *ptr, size_t size);
+void *pawZ_alloc(paw_Env *P, void *ptr, size_t size0, size_t size);
 
 void pawZ_set_flag(struct Heap *H, uintptr_t ptr);
 void pawZ_clear_flag(struct Heap *H, uintptr_t ptr);

@@ -30,7 +30,7 @@ static int handle_error(paw_Env *P, int status)
 static void run_tests(const char *name, struct TestAlloc *a, const char *prefix)
 {
     ++s_counters.modules;
-    paw_Env *P = test_open(test_alloc, a, 0);
+    paw_Env *P = test_open(test_mem_hook, a, 0);
     int status = test_open_file(P, name);
     if (handle_error(P, status)) {
         ++s_counters.compile_errors;
@@ -71,6 +71,9 @@ static void script(const char *name)
 
 int main(void)
 {
+    script("loop");
+    return s_counters.failures;
+
 #define RUN_SCRIPT(name) script(#name);
     TEST_SCRIPTS(RUN_SCRIPT)
 #undef RUN_SCRIPT

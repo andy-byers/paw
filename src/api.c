@@ -27,6 +27,15 @@ static void *default_alloc(void *ud, void *ptr, size_t old_size, size_t new_size
     return realloc(ptr, new_size);
 }
 
+static void default_mem_hook(void *ud, void *old_ptr, size_t old_size, void *new_ptr, size_t new_size)
+{
+    PAW_UNUSED(ud);
+    PAW_UNUSED(old_ptr);
+    PAW_UNUSED(new_ptr);
+    PAW_UNUSED(old_size);
+    PAW_UNUSED(new_size);
+}
+
 static StackPtr at(paw_Env *P, int index)
 {
     if (index == PAW_REGISTRY_INDEX) {
@@ -65,6 +74,7 @@ paw_Env *paw_open(const struct paw_Options *o)
 
     void *ud = OR_DEFAULT(o->ud, NULL);
     paw_Alloc alloc = OR_DEFAULT(o->alloc, default_alloc);
+    paw_MemHook mem_hook = OR_DEFAULT(o->mem_hook, default_mem_hook);
     void *heap = OR_DEFAULT(o->heap, alloc(ud, NULL, 0, heap_size));
     const paw_Bool owns_heap = o->heap == NULL;
     if (heap == NULL) return NULL;
@@ -81,7 +91,7 @@ paw_Env *paw_open(const struct paw_Options *o)
     heap = BUMP_PTR(heap, PAW_ROUND_UP(sizeof(*P)));
     heap_size -= PAW_ROUND_UP(sizeof(*P));
 
-    if (pawZ_init(P, heap, heap_size, owns_heap)) {
+    if (pawZ_init(P, heap, heap_size, owns_heap, mem_hook, ud)) {
         if (owns_heap) alloc(ud, ph, zh, 0);
         return NULL;
     }
@@ -415,6 +425,27 @@ void paw_get_upvalue(paw_Env *P, int ifn, int index)
             pawR_error(P, PAW_ETYPE, "type of object has no upvalues");
     }
     API_INCR_TOP(P, 1);
+}
+
+void paw_set_upvalue(paw_Env *P, int ifn, int index)
+{
+    Object *o = at(P, ifn)->o;
+    switch (o->gc_kind) {
+        case VNATIVE: {
+            Native *f = O_NATIVE(o);
+            f->up[upvalue_index(f->nup, index)] = P->top.p[-1];
+            break;
+        }
+        case VCLOSURE: {
+            Closure *f = O_CLOSURE(o);
+            UpValue *u = f->up[upvalue_index(f->nup, index)];
+            *u->p.p = P->top.p[-1];
+            break;
+        }
+        default:
+            pawR_error(P, PAW_ETYPE, "type of object has no upvalues");
+    }
+    --P->top.p;
 }
 
 void paw_new_tuple(paw_Env *P, int n)

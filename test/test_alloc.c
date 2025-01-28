@@ -10,7 +10,7 @@
 static void driver(void (*test_callback)(paw_Env *P))
 {
     struct TestAlloc a = {0};
-    paw_Env *P = test_open(test_alloc, &a, 1024 * 1024 * 8);
+    paw_Env *P = test_open(test_mem_hook, &a, 1024 * 1024 * 8);
     test_callback(P);
     test_close(P, &a);
 }
@@ -33,8 +33,9 @@ static void test_utils(void)
 
 static void alloc_and_free(paw_Env *P, size_t size)
 {
-    void *ptr = pawZ_alloc(P, NULL, size);
-    pawZ_alloc(P, ptr, 0);
+    void *ptr = pawZ_alloc(P, NULL, 0, size);
+    check(ptr != NULL);
+    pawZ_alloc(P, ptr, size, 0);
 }
 
 #define MAX_DEFER 32768
@@ -61,7 +62,7 @@ static void check_defer_data(const void *ptr, size_t size)
 static void alloc_and_defer(paw_Env *P, size_t size)
 {
     check(s_ndefer < MAX_DEFER);
-    void *ptr = pawZ_alloc(P, NULL, size);
+    void *ptr = pawZ_alloc(P, NULL, 0, size);
     const int index = s_ndefer++;
     s_zdefer += size;
     s_defer[index] = (struct DeferredAlloc){
@@ -76,9 +77,10 @@ static void realloc_deferred_ptrs(paw_Env *P)
     for (int i = 0; i < s_ndefer; ++i) {
         struct DeferredAlloc *defer = &s_defer[i];
         const size_t size = CAST_SIZE(rand() % 500 + 10);
+        const size_t size0 = defer->size;
         s_zdefer += size - defer->size;
         defer->size = size;
-        defer->ptr = pawZ_alloc(P, defer->ptr, defer->size);
+        defer->ptr = pawZ_alloc(P, defer->ptr, size0, defer->size);
         set_defer_data(defer->ptr, defer->size);
     }
 }
@@ -88,7 +90,7 @@ static void free_deferred_ptrs(paw_Env *P)
     while (s_ndefer > 0) {
         struct DeferredAlloc defer = s_defer[--s_ndefer];
         check_defer_data(defer.ptr, defer.size);
-        pawZ_alloc(P, defer.ptr, 0);
+        pawZ_alloc(P, defer.ptr, defer.size, 0);
         s_zdefer -= defer.size;
     }
     check(s_zdefer == 0);
@@ -119,14 +121,14 @@ static void alloc_pattern(paw_Env *P, size_t size)
 
 static void test_basic(paw_Env *P)
 {
-    check(NULL == pawZ_alloc(P, NULL, 0));
+    check(NULL == pawZ_alloc(P, NULL, 0, 0));
 
     enum {N = 100};
     void *ptrs[N];
 
-    for (int i = 0; i < N; ++i) check((ptrs[i] = pawZ_alloc(P, NULL, CAST_SIZE((i + 1) * N))));
-    for (int i = 0; i < N; ++i) check((ptrs[i] = pawZ_alloc(P, ptrs[i], CAST_SIZE((N - i) * N))));
-    for (int i = 0; i < N; ++i) check(NULL == pawZ_alloc(P, ptrs[i], 0));
+    for (int i = 0; i < N; ++i) check((ptrs[i] = pawZ_alloc(P, NULL, 0, CAST_SIZE((i + 1) * N))));
+    for (int i = 0; i < N; ++i) check((ptrs[i] = pawZ_alloc(P, ptrs[i], CAST_SIZE((i + 1) * N), CAST_SIZE((N - i) * N))));
+    for (int i = 0; i < N; ++i) check(NULL == pawZ_alloc(P, ptrs[i], CAST_SIZE((N - i) * N), 0));
 }
 
 static void test_small_allocations(paw_Env *P)
@@ -174,17 +176,17 @@ static void test_lots_of_allocations(paw_Env *P)
 
 static void test_oom(paw_Env *P)
 {
-    void *a = pawZ_alloc(P, NULL, P->heap_size / 8);
+    void *a = pawZ_alloc(P, NULL, 0, P->heap_size / 8);
     check(a != NULL);
-    void *b = pawZ_alloc(P, NULL, P->heap_size / 4);
+    void *b = pawZ_alloc(P, NULL, 0, P->heap_size / 4);
     check(b != NULL);
-    a = pawZ_alloc(P, a, P->heap_size / 2);
+    a = pawZ_alloc(P, a, P->heap_size / 8, P->heap_size / 2);
     check(a != NULL);
-    void *c = pawZ_alloc(P, 0, P->heap_size / 2); // OOM
+    void *c = pawZ_alloc(P, NULL, 0, P->heap_size / 2); // OOM
     check(c == NULL);
-    a = pawZ_alloc(P, a, 0);
+    a = pawZ_alloc(P, a, P->heap_size / 2, 0);
     check(a == NULL);
-    b = pawZ_alloc(P, b, 0);
+    b = pawZ_alloc(P, b, P->heap_size / 4, 0);
     check(b == NULL);
 }
 
