@@ -71,9 +71,6 @@ static void script(const char *name)
 
 int main(void)
 {
-    script("loop");
-    return s_counters.failures;
-
 #define RUN_SCRIPT(name) script(#name);
     TEST_SCRIPTS(RUN_SCRIPT)
 #undef RUN_SCRIPT

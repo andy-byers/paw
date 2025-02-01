@@ -32,16 +32,13 @@ void pawAst_free(struct Ast *ast)
 }
 
 #define DEFINE_NODE_CONSTRUCTOR(name, T) \
-    struct T *pawAst_new_##name(struct Ast *ast, int line, enum T##Kind kind) \
+    struct T *pawAst_new_##name(struct Ast *ast) \
     { \
-        struct T *r = pawK_pool_alloc(ENV(ast), (ast)->pool, sizeof(struct T)); \
-        r->hdr.line = line; \
-        r->hdr.kind = kind; \
-        return r; \
+        return pawK_pool_alloc(ENV(ast), (ast)->pool, sizeof(struct T)); \
     }
-DEFINE_NODE_CONSTRUCTOR(expr, AstExpr)
 DEFINE_NODE_CONSTRUCTOR(decl, AstDecl)
 DEFINE_NODE_CONSTRUCTOR(stmt, AstStmt)
+DEFINE_NODE_CONSTRUCTOR(expr, AstExpr)
 DEFINE_NODE_CONSTRUCTOR(pat, AstPat)
 
 struct AstSegment *pawAst_segment_new(struct Compiler *C)
@@ -119,236 +116,309 @@ static void dump_path(Printer *P, struct AstPath *p)
     }
 }
 
-static void dump_decl(Printer *P, struct AstDecl *d)
+static void dump_decl(Printer *P, struct AstDecl *decl)
 {
-    if (print_decl_kind(P, d)) {
+    if (print_decl_kind(P, decl)) {
         DUMP_LITERAL(P, "(null)\n");
         return;
     }
     ++P->indent;
-    DUMP_FMT(P, "line: %d\n", d->hdr.line);
-    switch (AST_KINDOF(d)) {
+    DUMP_FMT(P, "line: %d\n", decl->hdr.line);
+    switch (AST_KINDOF(decl)) {
         case kAstImplDecl:
         case kAstUseDecl:
             PAW_UNREACHABLE(); // TODO: write this code!!!
-        case kAstFuncDecl:
-            DUMP_FMT(P, "receiver: %p\n", CAST(void *, d->func.receiver));
-            DUMP_FMT(P, "name: %s\n", d->func.name->text);
-            dump_decl_list(P, d->func.generics, "generics");
-            dump_decl_list(P, d->func.params, "params");
+        case kAstFuncDecl: {
+            struct AstFuncDecl *d = AstGetFuncDecl(decl);
+            DUMP_FMT(P, "receiver: %p\n", CAST(void *, d->receiver));
+            DUMP_FMT(P, "name: %s\n", d->name->text);
+            dump_decl_list(P, d->generics, "generics");
+            dump_decl_list(P, d->params, "params");
             DUMP_MSG(P, "result: ");
-            dump_expr(P, d->func.result);
+            dump_expr(P, d->result);
             DUMP_MSG(P, "body: ");
-            dump_expr(P, d->func.body);
+            dump_expr(P, d->body);
             break;
-        case kAstFieldDecl:
-            DUMP_NAME(P, d->field.name);
+        }
+        case kAstFieldDecl: {
+            struct AstFieldDecl *d = AstGetFieldDecl(decl);
+            DUMP_NAME(P, d->name);
             DUMP_MSG(P, "tag: ");
-            dump_expr(P, d->field.tag);
+            dump_expr(P, d->tag);
             break;
-        case kAstVarDecl:
-            DUMP_NAME(P, d->var.name);
+        }
+        case kAstVarDecl: {
+            struct AstVarDecl *d = AstGetVarDecl(decl);
+            DUMP_NAME(P, d->name);
             DUMP_MSG(P, "tag: ");
-            dump_expr(P, d->var.tag);
+            dump_expr(P, d->tag);
             DUMP_MSG(P, "init: ");
-            dump_expr(P, d->var.init);
+            dump_expr(P, d->init);
             break;
-        case kAstVariantDecl:
-            DUMP_NAME(P, d->variant.name);
-            dump_decl_list(P, d->variant.fields, "fields");
+        }
+        case kAstVariantDecl: {
+            struct AstVariantDecl *d = AstGetVariantDecl(decl);
+            DUMP_NAME(P, d->name);
+            dump_decl_list(P, d->fields, "fields");
             break;
-        case kAstAdtDecl:
-            DUMP_NAME(P, d->adt.name);
-            DUMP_FMT(P, "is_struct: %d\n", d->adt.is_struct);
-            dump_decl_list(P, d->adt.generics, "generics");
-            dump_decl_list(P, d->adt.fields, "fields");
+        }
+        case kAstAdtDecl: {
+            struct AstAdtDecl *d = AstGetAdtDecl(decl);
+            DUMP_NAME(P, d->name);
+            DUMP_FMT(P, "is_struct: %d\n", d->is_struct);
+            dump_decl_list(P, d->generics, "generics");
+            dump_decl_list(P, d->fields, "fields");
             break;
-        case kAstGenericDecl:
-            DUMP_NAME(P, d->generic.name);
+        }
+        case kAstGenericDecl: {
+            struct AstGenericDecl *d = AstGetGenericDecl(decl);
+            DUMP_NAME(P, d->name);
             break;
-        case kAstTypeDecl:
-            DUMP_NAME(P, d->type.name);
+        }
+        case kAstTypeDecl: {
+            struct AstTypeDecl *d = AstGetTypeDecl(decl);
+            DUMP_NAME(P, d->name);
             DUMP_MSG(P, "rhs: ");
-            dump_expr(P, d->type.rhs);
-            dump_decl_list(P, d->type.generics, "generics");
+            dump_expr(P, d->rhs);
+            dump_decl_list(P, d->generics, "generics");
             break;
+        }
     }
     --P->indent;
     DUMP_MSG(P, "}\n");
 }
 
-static void dump_stmt(Printer *P, struct AstStmt *s)
+static void dump_stmt(Printer *P, struct AstStmt *stmt)
 {
-    if (print_stmt_kind(P, s)) {
+    if (print_stmt_kind(P, stmt)) {
         DUMP_LITERAL(P, "(null)\n");
         return;
     }
     ++P->indent;
-    DUMP_FMT(P, "line: %d\n", s->hdr.line);
-    switch (AST_KINDOF(s)) {
-        case kAstExprStmt:
+    DUMP_FMT(P, "line: %d\n", stmt->hdr.line);
+    switch (AST_KINDOF(stmt)) {
+        case kAstExprStmt: {
+            struct AstExprStmt *s = AstGetExprStmt(stmt);
             DUMP_MSG(P, "expr: ");
-            dump_expr(P, s->expr.expr);
+            dump_expr(P, s->expr);
             break;
-        case kAstDeclStmt:
+        }
+        case kAstDeclStmt: {
+            struct AstDeclStmt *s = AstGetDeclStmt(stmt);
             DUMP_MSG(P, "decl: ");
-            dump_decl(P, s->decl.decl);
+            dump_decl(P, s->decl);
             break;
+        }
     }
     --P->indent;
     DUMP_MSG(P, "}\n");
 }
 
-static void dump_expr(Printer *P, struct AstExpr *e)
+static void dump_expr(Printer *P, struct AstExpr *expr)
 {
-    if (print_expr_kind(P, e)) {
+    if (print_expr_kind(P, expr)) {
         DUMP_LITERAL(P, "(null)\n");
         return;
     }
     ++P->indent;
-    DUMP_FMT(P, "line: %d\n", e->hdr.line);
-    switch (AST_KINDOF(e)) {
-        case kAstParenExpr:
-        case kAstLogicalExpr:
-        case kAstPathExpr:
-        case kAstChainExpr:
-        case kAstMatchExpr:
-        case kAstMatchArm:
-        case kAstClosureExpr:
-        case kAstConversionExpr:
-        case kAstFieldExpr:
-        case kAstJumpExpr:
-        case kAstTupleType:
-            PAW_UNREACHABLE(); // TODO: write this code!!!
-        case kAstLiteralExpr:
-            switch (e->literal.lit_kind) {
+    DUMP_FMT(P, "line: %d\n", expr->hdr.line);
+    switch (AST_KINDOF(expr)) {
+        case kAstParenExpr: {
+            struct AstParenExpr *e = AstGetParenExpr(expr);
+            break;
+        }
+        case kAstLogicalExpr: {
+            struct AstLogicalExpr *e = AstGetLogicalExpr(expr);
+            break;
+        }
+        case kAstPathExpr: {
+            struct AstPathExpr *e = AstGetPathExpr(expr);
+            break;
+        }
+        case kAstChainExpr: {
+            struct AstChainExpr *e = AstGetChainExpr(expr);
+            break;
+        }
+        case kAstMatchExpr: {
+            struct AstMatchExpr *e = AstGetMatchExpr(expr);
+            break;
+        }
+        case kAstMatchArm: {
+            struct AstMatchArm *e = AstGetMatchArm(expr);
+            break;
+        }
+        case kAstClosureExpr: {
+            struct AstClosureExpr *e = AstGetClosureExpr(expr);
+            break;
+        }
+        case kAstConversionExpr: {
+            struct AstConversionExpr *e = AstGetConversionExpr(expr);
+            break;
+        }
+        case kAstFieldExpr: {
+            struct AstFieldExpr *e = AstGetFieldExpr(expr);
+            break;
+        }
+        case kAstJumpExpr: {
+            struct AstJumpExpr *e = AstGetJumpExpr(expr);
+            break;
+        }
+        case kAstTupleType: {
+            struct AstTupleType *e = AstGetTupleType(expr);
+            break;
+        }
+        case kAstLiteralExpr: {
+            struct AstLiteralExpr *e = AstGetLiteralExpr(expr);
+            switch (e->lit_kind) {
                 case kAstBasicLit:
                     DUMP_MSG(P, "lit_kind: BASIC\n");
-                    switch (e->literal.basic.t) {
+                    switch (e->basic.code) {
                         case PAW_TUNIT:
                             DUMP_MSG(P, "type: ()\n");
                             break;
                         case PAW_TBOOL:
                             DUMP_MSG(P, "type: bool\n");
-                            DUMP_FMT(P, "value: %s\n",
-                                     V_TRUE(e->literal.basic.value) ? "true"
-                                                                    : "false");
+                            DUMP_FMT(P, "value: %s\n", V_TRUE(e->basic.value) ? "true" : "false");
                             break;
                         case PAW_TINT:
                             DUMP_MSG(P, "type: int\n");
-                            DUMP_FMT(P, "value: %I\n",
-                                     V_INT(e->literal.basic.value));
+                            DUMP_FMT(P, "value: %I\n", V_INT(e->basic.value));
                             break;
                         case PAW_TFLOAT:
                             DUMP_MSG(P, "type: float\n");
-                            DUMP_FMT(P, "value: %f\n",
-                                     V_FLOAT(e->literal.basic.value));
+                            DUMP_FMT(P, "value: %f\n", V_FLOAT(e->basic.value));
                             break;
                         default:
-                            paw_assert(e->literal.basic.t == PAW_TSTR);
+                            paw_assert(e->basic.code == PAW_TSTR);
                             DUMP_MSG(P, "type: string\n");
-                            DUMP_FMT(P, "value: %s\n",
-                                     V_STRING(e->literal.basic.value)->text);
+                            DUMP_FMT(P, "value: %s\n", V_STRING(e->basic.value)->text);
                             break;
                     }
                     break;
                 case kAstTupleLit:
                     DUMP_MSG(P, "lit_kind: TUPLE\n");
-                    dump_expr_list(P, e->literal.tuple.elems, "elems");
+                    dump_expr_list(P, e->tuple.elems, "elems");
                     break;
                 case kAstContainerLit:
                     DUMP_MSG(P, "lit_kind: CONTAINER\n");
-                    dump_expr_list(P, e->literal.cont.items, "items");
+                    dump_expr_list(P, e->cont.items, "items");
                     break;
                 default:
-                    paw_assert(e->literal.lit_kind == kAstCompositeLit);
+                    paw_assert(e->lit_kind == kAstCompositeLit);
                     DUMP_MSG(P, "lit_kind: COMPOSITE\n");
                     DUMP_MSG(P, "target: ");
-                    dump_path(P, e->literal.comp.path);
-                    dump_expr_list(P, e->literal.comp.items, "items");
+                    dump_path(P, e->comp.path);
+                    dump_expr_list(P, e->comp.items, "items");
             }
             break;
-        case kAstUnOpExpr:
-            DUMP_FMT(P, "op: %d\n", e->unop.op);
+        }
+        case kAstUnOpExpr: {
+            struct AstUnOpExpr *e = AstGetUnOpExpr(expr);
+            DUMP_FMT(P, "op: %d\n", e->op);
             DUMP_MSG(P, "target: ");
-            dump_expr(P, e->unop.target);
+            dump_expr(P, e->target);
             break;
-        case kAstAssignExpr:
+        }
+        case kAstAssignExpr: {
+            struct AstAssignExpr *e = AstGetAssignExpr(expr);
             DUMP_MSG(P, "lhs: ");
-            dump_expr(P, e->assign.lhs);
+            dump_expr(P, e->lhs);
             DUMP_MSG(P, "rhs: ");
-            dump_expr(P, e->assign.rhs);
+            dump_expr(P, e->rhs);
             break;
-        case kAstBinOpExpr:
-            DUMP_FMT(P, "op: %d\n", e->binop.op);
+        }
+        case kAstBinOpExpr: {
+            struct AstBinOpExpr *e = AstGetBinOpExpr(expr);
+            DUMP_FMT(P, "op: %d\n", e->op);
             DUMP_MSG(P, "lhs: ");
-            dump_expr(P, e->binop.lhs);
+            dump_expr(P, e->lhs);
             DUMP_MSG(P, "rhs: ");
-            dump_expr(P, e->binop.rhs);
+            dump_expr(P, e->rhs);
             break;
-        case kAstCallExpr:
+        }
+        case kAstCallExpr: {
+            struct AstCallExpr *e = AstGetCallExpr(expr);
             DUMP_MSG(P, "target: ");
-            dump_expr(P, e->call.target);
-            dump_expr_list(P, e->call.args, "args");
+            dump_expr(P, e->target);
+            dump_expr_list(P, e->args, "args");
             break;
-        case kAstIndex:
-            DUMP_FMT(P, "is_slice: %d\n", e->index.is_slice);
+        }
+        case kAstIndex: {
+            struct AstIndex *e = AstGetIndex(expr);
+            DUMP_FMT(P, "is_slice: %d\n", e->is_slice);
             DUMP_MSG(P, "target: ");
-            dump_expr(P, e->index.target);
+            dump_expr(P, e->target);
             DUMP_MSG(P, "first: ");
-            dump_expr(P, e->index.first);
+            dump_expr(P, e->first);
             DUMP_MSG(P, "second: ");
-            dump_expr(P, e->index.second);
+            dump_expr(P, e->second);
             break;
-        case kAstSelector:
+        }
+        case kAstSelector: {
+            struct AstSelector *e = AstGetSelector(expr);
             DUMP_MSG(P, "target: ");
-            dump_expr(P, e->selector.target);
-            if (e->selector.is_index) {
-                DUMP_FMT(P, "index: %I\n", e->selector.index);
+            dump_expr(P, e->target);
+            if (e->is_index) {
+                DUMP_FMT(P, "index: %I\n", e->index);
             } else {
-                DUMP_NAME(P, e->selector.name);
+                DUMP_NAME(P, e->name);
             }
             break;
-        case kAstContainerType:
+        }
+        case kAstContainerType: {
+            struct AstContainerType *e = AstGetContainerType(expr);
             DUMP_MSG(P, "first: ");
-            dump_expr(P, e->cont.first);
+            dump_expr(P, e->first);
             DUMP_MSG(P, "second: ");
-            dump_expr(P, e->cont.second);
+            dump_expr(P, e->second);
             break;
-        case kAstSignature:
-            dump_expr_list(P, e->sig.params, "params");
+        }
+        case kAstSignature: {
+            struct AstSignature *e = AstGetSignature(expr);
+            dump_expr_list(P, e->params, "params");
             DUMP_MSG(P, "result: ");
-            dump_expr(P, e->sig.result);
+            dump_expr(P, e->result);
             break;
-        case kAstBlock:
-            dump_stmt_list(P, e->block.stmts, "stmts");
-            dump_expr(P, e->block.result);
+        }
+        case kAstBlock: {
+            struct AstBlock *e = AstGetBlock(expr);
+            dump_stmt_list(P, e->stmts, "stmts");
+            dump_expr(P, e->result);
             break;
-        case kAstIfExpr:
+        }
+        case kAstIfExpr: {
+            struct AstIfExpr *e = AstGetIfExpr(expr);
             DUMP_MSG(P, "cond: ");
-            dump_expr(P, e->if_.cond);
+            dump_expr(P, e->cond);
             DUMP_MSG(P, "then_arm: ");
-            dump_expr(P, e->if_.then_arm);
+            dump_expr(P, e->then_arm);
             DUMP_MSG(P, "else_arm: ");
-            dump_expr(P, e->if_.else_arm);
+            dump_expr(P, e->else_arm);
             break;
-        case kAstForExpr:
-            DUMP_NAME(P, e->for_.name);
+        }
+        case kAstForExpr: {
+            struct AstForExpr *e = AstGetForExpr(expr);
+            DUMP_NAME(P, e->name);
             DUMP_MSG(P, "target: ");
-            dump_expr(P, e->for_.target);
+            dump_expr(P, e->target);
             DUMP_MSG(P, "block: ");
-            dump_expr(P, e->for_.block);
+            dump_expr(P, e->block);
             break;
-        case kAstWhileExpr:
+        }
+        case kAstWhileExpr: {
+            struct AstWhileExpr *e = AstGetWhileExpr(expr);
             DUMP_MSG(P, "cond: ");
-            dump_expr(P, e->while_.cond);
+            dump_expr(P, e->cond);
             DUMP_MSG(P, "block: ");
-            dump_expr(P, e->while_.block);
+            dump_expr(P, e->block);
             break;
-        case kAstReturnExpr:
+        }
+        case kAstReturnExpr: {
+            struct AstReturnExpr *e = AstGetReturnExpr(expr);
             DUMP_MSG(P, "expr: ");
-            dump_expr(P, e->result.expr);
+            dump_expr(P, e->expr);
             break;
+        }
     }
     --P->indent;
     DUMP_MSG(P, "}\n");

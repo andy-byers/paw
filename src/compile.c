@@ -111,14 +111,11 @@ String *pawP_scan_nstring(paw_Env *P, Map *st, const char *s, size_t n)
 static void define_prelude_adt(struct Compiler *C, const char *name, enum BuiltinKind kind)
 {
     struct Ast *ast = C->prelude;
-    struct AstDecl *decl = pawAst_new_decl(ast, 0, kAstAdtDecl);
-    struct AstAdtDecl *r = AstGetAdtDecl(decl);
-    r->name = SCAN_STRING(C, name);
-    r->is_pub = PAW_TRUE;
-    r->is_struct = PAW_TRUE;
-    K_LIST_PUSH(C, ast->items, decl);
+    struct AstDecl *d = pawAst_new_adt_decl(ast, 0, SCAN_STRING(C, name),
+            NULL, NULL, PAW_TRUE, PAW_TRUE);
+    K_LIST_PUSH(C, ast->items, d);
     C->builtins[kind] = (struct Builtin){
-        .name = r->name,
+        .name = d->hdr.name,
         .did = NO_DECL,
     };
 }

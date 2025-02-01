@@ -485,7 +485,7 @@ static struct HirExpr *LowerConversionExpr(struct LowerAst *L, struct AstConvers
 
 static void lower_basic_lit(struct LowerAst *L, struct AstBasicLit *e, struct HirBasicLit *r)
 {
-    r->t = e->t;
+    r->t = e->code;
     r->value = e->value;
 }
 
@@ -819,9 +819,9 @@ static struct HirDecl *lower_decl(struct LowerAst *L, struct AstDecl *decl)
 {
     L->line = decl->hdr.line;
     switch (AST_KINDOF(decl)) {
-#define DEFINE_CASE(a, b) \
-        case kAst##a: \
-            return Lower##a(L, AstGet##a(decl));
+#define DEFINE_CASE(X) \
+        case kAst##X: \
+            return Lower##X(L, AstGet##X(decl));
         AST_DECL_LIST(DEFINE_CASE)
 #undef DEFINE_CASE
     }
@@ -831,9 +831,9 @@ static struct HirStmt *lower_stmt(struct LowerAst *L, struct AstStmt *stmt)
 {
     L->line = stmt->hdr.line;
     switch (AST_KINDOF(stmt)) {
-#define DEFINE_CASE(a, b) \
-        case kAst##a: \
-            return Lower##a(L, AstGet##a(stmt));
+#define DEFINE_CASE(X) \
+        case kAst##X: \
+            return Lower##X(L, AstGet##X(stmt));
         AST_STMT_LIST(DEFINE_CASE)
 #undef DEFINE_CASE
     }
@@ -896,8 +896,8 @@ static struct HirPat *lower_pat(struct LowerAst *L, struct AstPat *pat)
 {
     L->line = pat->hdr.line;
     switch (AST_KINDOF(pat)) {
-#define DEFINE_CASE(a, b) case kAst##a: \
-            return Lower##a(L, AstGet##a(pat));
+#define DEFINE_CASE(X) case kAst##X: \
+            return Lower##X(L, AstGet##X(pat));
         AST_PAT_LIST(DEFINE_CASE)
 #undef DEFINE_CASE
     }
