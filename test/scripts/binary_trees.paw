@@ -64,10 +64,10 @@ pub fn main(args: [str]) {
 
     let longlivedtree = bottom_up_tree(maxdepth);
 
-    for depth = mindepth, maxdepth, 2 {
+    for depth in range(mindepth, maxdepth, 2) {
         let iterations = 1 << (maxdepth - depth + mindepth);
         let check = 0;
-        for i = 0, iterations {
+        for i in range(0, iterations, 1) {
             check = check + item_check(bottom_up_tree(depth));
         }
         print(iterations.to_string() + '\t trees of depth ' + depth.to_string() +

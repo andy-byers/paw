@@ -454,7 +454,7 @@ struct MirBucketList *pawMir_compute_dominance_frontiers(struct Compiler *C, str
 struct MirBlockList *pawMir_traverse_rpo(struct Compiler *C, struct Mir *mir);
 
 // Remove all basic blocks that cannot be reached from the entry
-void pawMir_remove_unreachable_blocks(struct Compiler *C, struct Mir *mir, Map *uses, Map *defs);
+void pawMir_remove_unreachable_blocks(struct Compiler *C, struct Mir *mir);
 
 // Approximation of the live range of a variable
 // The variable corresponding to a given MirLiveInterval is live between instruction

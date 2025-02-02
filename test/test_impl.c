@@ -14,7 +14,6 @@
 #include "paw.h"
 #include "rt.h"
 #include "test.h"
-#include "utest.h"
 #include "util.h"
 #include "value.h"
 
@@ -295,10 +294,7 @@ static void test_stack(paw_Env *P)
 static void driver(void (*callback)(paw_Env *))
 {
     struct TestAlloc a = {0};
-    paw_Env *P = paw_open(&(struct paw_Options){
-                .alloc = test_alloc,
-                .ud = &a,
-            });
+    paw_Env *P = test_open(test_mem_hook, &a, 0);
     callback(P);
     test_close(P, &a);
 }
@@ -462,56 +458,20 @@ static void test_buffer(paw_Env *P)
     paw_pop(P, 1);
 }
 
-struct SmallStruct {
-    char a;
-};
-
-struct Context {
-    struct Pool *pool;
-    paw_Env *P;
-};
-
-DEFINE_LIST(struct Context, small_struct_list_, SmallStructList, struct SmallStruct)
-
-static void test_compiler_lists(paw_Env *P) {
-    struct Pool pool;
-    pawK_pool_init(P, &pool, 1024, 8);
-    struct Context ctx = {.P = P, .pool = &pool};
-    struct SmallStructList *list = small_struct_list_new(&ctx);
-    struct SmallStruct value = {1};
-    K_LIST_PUSH(&ctx, list, value);
-    pawK_pool_uninit(P, &pool);
-}
-
-static void test_library(void)
-{
-    for (int i = 0; i < pawT_test_count(); ++i) {
-        struct paw_TestInfo info = pawT_test_registry()[i];
-        fprintf(stderr, "running %s...\n", info.name);
-        driver(info.test);
-    }
-}
-
 int main(void)
 {
-    paw_Env *P = paw_open(&(struct paw_Options){
-                0
-            });
-    paw_close(P);
-//    test_primitives();
-//    test_immediates();
-//    driver(test_compiler_lists);
-//    driver(test_strings);
-//    driver(test_stack);
-//    driver(test_map_get_and_put);
-//    driver(test_map_erase);
-//    driver(test_map_erase_2);
-//    driver(test_map_ops);
-//    driver(test_map_ops_2);
-//    driver(test_map_extend);
-//    driver(test_parse_int);
-//    driver(test_parse_float);
-//    driver(test_buffer);
-//    test_library();
+    test_primitives();
+    test_immediates();
+    driver(test_strings);
+    driver(test_stack);
+    driver(test_map_get_and_put);
+    driver(test_map_erase);
+    driver(test_map_erase_2);
+    driver(test_map_ops);
+    driver(test_map_ops_2);
+    driver(test_map_extend);
+    driver(test_parse_int);
+    driver(test_parse_float);
+    driver(test_buffer);
     return 0;
 }

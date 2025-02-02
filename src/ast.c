@@ -38,6 +38,7 @@ void pawAst_free(struct Ast *ast)
     }
 DEFINE_NODE_CONSTRUCTOR(decl, AstDecl)
 DEFINE_NODE_CONSTRUCTOR(stmt, AstStmt)
+DEFINE_NODE_CONSTRUCTOR(type, AstType)
 DEFINE_NODE_CONSTRUCTOR(expr, AstExpr)
 DEFINE_NODE_CONSTRUCTOR(pat, AstPat)
 
@@ -70,6 +71,7 @@ static void indent_line(Printer *P)
 #define DUMP_BLOCK(P, b) CHECK_EXP(AstIsBlock(AST_CAST_EXPR(b)), dump_expr(P, AST_CAST_EXPR(b)))
 #define DUMP_NAME(P, s) DUMP_FMT(P, "name: %s\n", s ? s->text : "(null)")
 
+static void dump_type(Printer *P, struct AstType *t);
 static void dump_expr(Printer *P, struct AstExpr *e);
 static void dump_decl(Printer *P, struct AstDecl *d);
 static void dump_stmt(Printer *P, struct AstStmt *s);
@@ -90,6 +92,7 @@ static void dump_stmt(Printer *P, struct AstStmt *s);
         DUMP_MSG(P, "}\n"); \
     }
 DEFINE_LIST_PRINTER(expr, AstExpr)
+DEFINE_LIST_PRINTER(type, AstType)
 DEFINE_LIST_PRINTER(decl, AstDecl)
 DEFINE_LIST_PRINTER(stmt, AstStmt)
 
@@ -104,6 +107,7 @@ DEFINE_LIST_PRINTER(stmt, AstStmt)
         return -1; \
     }
 DEFINE_KIND_PRINTER(expr, AstExpr)
+DEFINE_KIND_PRINTER(type, AstType)
 DEFINE_KIND_PRINTER(decl, AstDecl)
 DEFINE_KIND_PRINTER(stmt, AstStmt)
 
@@ -112,7 +116,7 @@ static void dump_path(Printer *P, struct AstPath *p)
     for (int i = 0; i < p->count; ++i) {
         struct AstSegment seg = K_LIST_GET(p, i);
         DUMP_NAME(P, seg.name);
-        dump_expr_list(P, seg.types, "types");
+        dump_type_list(P, seg.types, "types");
     }
 }
 
@@ -135,7 +139,7 @@ static void dump_decl(Printer *P, struct AstDecl *decl)
             dump_decl_list(P, d->generics, "generics");
             dump_decl_list(P, d->params, "params");
             DUMP_MSG(P, "result: ");
-            dump_expr(P, d->result);
+            dump_type(P, d->result);
             DUMP_MSG(P, "body: ");
             dump_expr(P, d->body);
             break;
@@ -144,14 +148,14 @@ static void dump_decl(Printer *P, struct AstDecl *decl)
             struct AstFieldDecl *d = AstGetFieldDecl(decl);
             DUMP_NAME(P, d->name);
             DUMP_MSG(P, "tag: ");
-            dump_expr(P, d->tag);
+            dump_type(P, d->tag);
             break;
         }
         case kAstVarDecl: {
             struct AstVarDecl *d = AstGetVarDecl(decl);
             DUMP_NAME(P, d->name);
             DUMP_MSG(P, "tag: ");
-            dump_expr(P, d->tag);
+            dump_type(P, d->tag);
             DUMP_MSG(P, "init: ");
             dump_expr(P, d->init);
             break;
@@ -179,7 +183,7 @@ static void dump_decl(Printer *P, struct AstDecl *decl)
             struct AstTypeDecl *d = AstGetTypeDecl(decl);
             DUMP_NAME(P, d->name);
             DUMP_MSG(P, "rhs: ");
-            dump_expr(P, d->rhs);
+            dump_type(P, d->rhs);
             dump_decl_list(P, d->generics, "generics");
             break;
         }
@@ -207,6 +211,44 @@ static void dump_stmt(Printer *P, struct AstStmt *stmt)
             struct AstDeclStmt *s = AstGetDeclStmt(stmt);
             DUMP_MSG(P, "decl: ");
             dump_decl(P, s->decl);
+            break;
+        }
+    }
+    --P->indent;
+    DUMP_MSG(P, "}\n");
+}
+
+static void dump_type(Printer *P, struct AstType *type)
+{
+    if (print_type_kind(P, type)) {
+        DUMP_LITERAL(P, "(null)\n");
+        return;
+    }
+    ++P->indent;
+    DUMP_FMT(P, "line: %d\n", type->hdr.line);
+    switch (AST_KINDOF(type)) {
+        case kAstPathType: {
+            struct AstPathType *t = AstGetPathType(type);
+            dump_path(P, t->path);
+            break;
+        }
+        case kAstTupleType: {
+            struct AstTupleType *t = AstGetTupleType(type);
+            break;
+        }
+        case kAstContainerType: {
+            struct AstContainerType *t = AstGetContainerType(type);
+            DUMP_MSG(P, "first: ");
+            dump_type(P, t->first);
+            DUMP_MSG(P, "second: ");
+            dump_type(P, t->second);
+            break;
+        }
+        case kAstFuncType: {
+            struct AstFuncType *t = AstGetFuncType(type);
+            dump_type_list(P, t->params, "params");
+            DUMP_MSG(P, "result: ");
+            dump_type(P, t->result);
             break;
         }
     }
@@ -261,10 +303,6 @@ static void dump_expr(Printer *P, struct AstExpr *expr)
         }
         case kAstJumpExpr: {
             struct AstJumpExpr *e = AstGetJumpExpr(expr);
-            break;
-        }
-        case kAstTupleType: {
-            struct AstTupleType *e = AstGetTupleType(expr);
             break;
         }
         case kAstLiteralExpr: {
@@ -363,21 +401,6 @@ static void dump_expr(Printer *P, struct AstExpr *expr)
             } else {
                 DUMP_NAME(P, e->name);
             }
-            break;
-        }
-        case kAstContainerType: {
-            struct AstContainerType *e = AstGetContainerType(expr);
-            DUMP_MSG(P, "first: ");
-            dump_expr(P, e->first);
-            DUMP_MSG(P, "second: ");
-            dump_expr(P, e->second);
-            break;
-        }
-        case kAstSignature: {
-            struct AstSignature *e = AstGetSignature(expr);
-            dump_expr_list(P, e->params, "params");
-            DUMP_MSG(P, "result: ");
-            dump_expr(P, e->result);
             break;
         }
         case kAstBlock: {

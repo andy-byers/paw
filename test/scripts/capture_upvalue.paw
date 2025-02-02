@@ -166,4 +166,3 @@ pub fn test_capture_list() {
     let i = 0;
     while #x < 10 { x.push(#x); }
 }
-

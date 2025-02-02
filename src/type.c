@@ -52,18 +52,18 @@ static struct Type *add_type(paw_Env *P, struct Type *type)
 #define NEW_TYPE(P, n) \
     pawM_new_flex(P, struct Type, n, sizeof(paw_Type))
 
-struct Type *pawY_new_adt(paw_Env *P,  DefId did, int ntypes)
+struct Type *pawY_new_adt(paw_Env *P,  ItemId iid, int ntypes)
 {
     struct Type *type = NEW_TYPE(P, ntypes);
     *type = (struct Type){
         .adt.kind = TYPE_ADT,
-        .adt.did = did,
+        .adt.iid = iid,
         .nsubtypes = ntypes,
     };
     return add_type(P, type);
 }
 
-struct Type *pawY_new_signature(paw_Env *P, DefId did, int nparams)
+struct Type *pawY_new_signature(paw_Env *P, ItemId iid, int nparams)
 {
     struct Type *type = NEW_TYPE(P, nparams);
     *type = (struct Type){
@@ -96,7 +96,7 @@ static struct Def *new_def(paw_Env *P, enum DefKind kind)
     pawM_grow(P, P->defs.data, P->defs.count, P->defs.alloc);
     struct Def *def = pawM_new(P, struct Def);
     *def = (struct Def){
-        .hdr.did = P->defs.count,
+        .hdr.iid = P->defs.count,
         .hdr.kind = kind,
     };
     P->defs.data[P->defs.count++] = def;
@@ -106,7 +106,7 @@ static struct Def *new_def(paw_Env *P, enum DefKind kind)
 struct Def *pawY_new_adt_def(paw_Env *P, int nfields)
 {
     struct Def *def = new_def(P, DEF_ADT);
-    def->adt.fields = pawM_new_vec(P, nfields, DefId);
+    def->adt.fields = pawM_new_vec(P, nfields, ItemId);
     def->adt.nfields = nfields;
     return def;
 }
@@ -114,7 +114,7 @@ struct Def *pawY_new_adt_def(paw_Env *P, int nfields)
 struct Def *pawY_new_variant_def(paw_Env *P, int nfields)
 {
     struct Def *def = new_def(P, DEF_VARIANT);
-    def->variant.fields = pawM_new_vec(P, nfields, DefId);
+    def->variant.fields = pawM_new_vec(P, nfields, ItemId);
     def->variant.nfields = nfields;
     return def;
 }
@@ -169,7 +169,7 @@ static void print_tuple_type(paw_Env *P, Buffer *buf, struct TupleType *type)
 
 static void print_adt(paw_Env *P, Buffer *buf, struct Adt *type)
 {
-    struct Def *def = Y_DEF(P, type->did);
+    struct Def *def = Y_DEF(P, type->iid);
     const String *name = def->hdr.name;
     struct Type *base = Y_CAST_TYPE(type);
     pawL_add_nstring(P, buf, name->text, name->length);
@@ -250,7 +250,7 @@ void pawY_mangle_add_arg(paw_Env *P, Buffer *buf, paw_Type code)
                     pawL_add_char(P, buf, 's');
                     break;
                 default: {
-                    const struct Def *def = Y_DEF(P, type->adt.did);
+                    const struct Def *def = Y_DEF(P, type->adt.iid);
                     add_string_with_len(P, buf, def->hdr.name);
                     if (type->nsubtypes > 0) {
                         pawY_mangle_start_generic_args(P, buf);
@@ -271,8 +271,8 @@ void pawY_mangle_add_arg(paw_Env *P, Buffer *buf, paw_Type code)
             }
             pawL_add_char(P, buf, 'E');
             const struct Type *result = Y_TYPE(P, func.result);
-            if (result->hdr.kind != TYPE_ADT ||
-                    result->adt.code != PAW_TUNIT) {
+            if (result->hdr.kind != TYPE_ADT
+                    || result->adt.code != PAW_TUNIT) {
                 pawY_mangle_add_arg(P, buf, func.result);
             }
             break;

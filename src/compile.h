@@ -49,6 +49,11 @@
 #define GET_NODE_TYPE(C, p) pawIr_get_type(C, (p)->hdr.hid)
 #define SET_NODE_TYPE(C, p, t) pawIr_set_type(C, (p)->hdr.hid, t)
 
+typedef struct DefId {
+    unsigned short modno;
+    unsigned short value;
+} DefId;
+
 typedef struct DeclId {
     unsigned short modno;
     unsigned short value;
@@ -89,6 +94,22 @@ static inline String *pawP_scan_string(paw_Env *P, Map *st, const char *s)
 {
     return pawP_scan_nstring(P, st, s, strlen(s));
 }
+
+struct ObjectStore {
+    Map *objects;
+    int offset;
+};
+
+void pawP_push_store(struct Compiler *C, struct ObjectStore *store);
+Map *pawP_new_map(struct Compiler *C, struct ObjectStore *store);
+
+#define MAP_KEY(map, index) pawH_key(map, index)
+#define MAP_VALUE(map, index) pawH_value(map, index)
+#define MAP_INSERT(X, map, key, value) pawH_insert(ENV(X), map, key, value)
+#define MAP_REMOVE(map, key) pawH_erase(map, key)
+#define MAP_ERASE(map, index) pawH_erase_at(map, index)
+#define MAP_GET(map, key) pawH_get(map, key)
+#define MAP_CONTAINS(map, key) (MAP_GET(map, key) != NULL)
 
 // ORDER UnaryOp
 enum UnaryOp {
@@ -145,6 +166,7 @@ struct Builtin {
 
 struct Compiler {
     struct Builtin builtins[NBUILTINS];
+    struct ObjectStore store;
     struct ModuleList *modules;
     struct HirDeclList *decls;
     struct DynamicMem *dm;
@@ -166,11 +188,14 @@ struct Compiler {
 
     Map *method_contexts; // IrType * => IrType *
     Map *method_binders; // DeclId => IrTypeList *
-    Map *ir_types; // HirId => IrType *
     Map *type2rtti;
 
+    Map *ir_types; // HirId => IrType *
+    Map *ir_defs; // DefId => IrDef *
+
     paw_Env *P;
-    int nnodes;
+    int hir_count;
+    int def_count;
     int line;
 };
 
@@ -353,20 +378,6 @@ struct ItemSlot {
 };
 
 DEFINE_LIST(struct Compiler, pawP_item_list_, ItemList, struct ItemSlot)
-
-struct ObjectStore {
-    Map *objects;
-    int offset;
-};
-
-void pawP_push_store(struct Compiler *C, struct ObjectStore *store);
-Map *pawP_new_map(struct Compiler *C, struct ObjectStore *store);
-
-#define MAP_INSERT(X, map, key, value) pawH_insert(ENV(X), map, key, value)
-#define MAP_REMOVE(map, key) pawH_erase(map, key)
-#define MAP_ERASE(map, index) pawH_erase_at(map, index)
-#define MAP_GET(map, key) pawH_get(map, key)
-#define MAP_CONTAINS(map, key) (MAP_GET(map, key) != NULL)
 
 Map *pawP_push_map(struct Compiler *C);
 List *pawP_push_list(struct Compiler *C);

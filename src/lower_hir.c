@@ -139,48 +139,13 @@ static struct MirBlockData *current_bb_data(struct LowerHir *L)
     return K_LIST_GET(bb_list(L), current_bb(L).value);
 }
 
-static void add_unique_block(struct LowerHir *L, struct MirBlockList *bucket, MirBlock where)
-{
-    for (int i = 0; i < bucket->count; ++i) {
-        const MirBlock b = K_LIST_GET(bucket, i);
-        if (MIR_BB_EQUALS(b, where)) return;
-    }
-    K_LIST_PUSH(L->C, bucket, where);
-}
-
-// Indicate that the given variable was read from in this basic block
-static void indicate_use(struct LowerHir *L, MirRegister r)
-{
-    const Value *pval = pawH_get(L->fs->uses, I2V(r.value));
-    paw_assert(pval != NULL);
-    add_unique_block(L, pval->p, current_bb(L));
-}
-
-// Indicate that the given variable was written to in this basic block
-static void indicate_def(struct LowerHir *L, MirRegister r)
-{
-    struct MirBlockList *defs;
-    const Value *pval = pawH_get(L->fs->defs, I2V(r.value));
-    if (pval == NULL) {
-        defs = pawMir_block_list_new(L->C);
-        pawH_insert(ENV(L), L->fs->defs, I2V(r.value), P2V(defs));
-        struct MirBlockList *uses = pawMir_block_list_new(L->C);
-        pawH_insert(ENV(L), L->fs->uses, I2V(r.value), P2V(uses));
-    } else {
-        defs = pval->p;
-    }
-    add_unique_block(L, defs, current_bb(L));
-}
-
 static MirRegister new_register(struct LowerHir *L, struct IrType *type)
 {
     struct MirRegisterDataList *regs = L->fs->mir->registers;
     K_LIST_PUSH(L->C, regs, ((struct MirRegisterData){
                     .type = type,
                 }));
-    const MirRegister r = MIR_REG(regs->count - 1);
-    indicate_def(L, r);
-    return r;
+    return MIR_REG(regs->count - 1);
 }
 
 static MirRegister new_literal_reg(struct LowerHir *L, paw_Type code)
@@ -275,10 +240,8 @@ static void adjust_labels(struct LowerHir *L, struct BlockState *bs)
 static void remove_label(struct LabelList *ll, int index)
 {
     paw_assert(ll->count > 0);
-    for (int i = index; i < ll->count - 1; ++i) {
-        ll->data[i] = ll->data[i + 1];
-    }
-    --ll->count;
+    K_LIST_SET(ll, index, K_LIST_LAST(ll));
+    K_LIST_POP(ll);
 }
 
 static void set_goto(struct LowerHir *L, MirBlock from, MirBlock to)
@@ -328,8 +291,6 @@ static struct MirInstruction *move_to(struct LowerHir *L, MirRegister target, Mi
     struct MirInstruction *r = new_instruction(L, kMirMove);
     MirGetMove(r)->output = output;
     MirGetMove(r)->target = target;
-    // use already indicated
-    indicate_def(L, output);
     return r;
 }
 
@@ -372,32 +333,18 @@ static paw_Bool resolve_local(struct LowerHir *L, struct FunctionState *fs, Decl
 }
 
 // Mark a block as containing an upvalue
-static void mark_upvalue(struct FunctionState *fs, int target)
+static void mark_upvalue(struct FunctionState *fs, int target, MirRegister r)
 {
     struct BlockState *bs = fs->bs;
     while (bs->nvars > target) bs = bs->outer;
     bs->has_upvalue = PAW_TRUE;
-}
-
-static paw_Bool is_captured(struct FunctionState *fs, MirRegister r)
-{
-    // TODO: use flag in MirRegisterData
-    struct MirCaptureInfo *pci;
-    K_LIST_FOREACH(fs->captured, pci) {
-        if (MIR_REG_EQUALS(pci->r, r)) return PAW_TRUE;
-    }
-    return PAW_FALSE;
-}
-
-static void mark_captured(struct FunctionState *fs, MirRegister r)
-{
-    if (is_captured(fs, r)) return;
-    K_LIST_PUSH(fs->L->C, fs->captured,
-            ((struct MirCaptureInfo){r}));
 
     struct MirRegisterData *data = mir_reg_data(fs->mir, r);
-    data->is_captured = PAW_TRUE;
-    data->hint = r;
+    if (!data->is_captured) {
+        K_LIST_PUSH(fs->L->C, fs->captured, ((struct MirCaptureInfo){r}));
+        data->is_captured = PAW_TRUE;
+        data->hint = r;
+    }
 }
 
 static void add_upvalue(struct LowerHir *L, struct FunctionState *fs, struct NonGlobal *info, paw_Bool is_local)
@@ -412,17 +359,10 @@ static void add_upvalue(struct LowerHir *L, struct FunctionState *fs, struct Non
             return;
         }
         if (!is_local && up.index == info->index) {
-            info->index = i; // TODO: should this be "i"???
+            info->index = i;
             info->vid = -1;
             return;
         }
-//        if ((is_local && up.is_local && up.index == info->vid)
-//                || (!is_local && !up.is_local && up.index == info->index)) {
-////        if (up.index == info->vid && up.is_local == is_local) {
-//            info->index = up.index;
-//            info->vid = up.index;
-//            return;
-//        }
     }
     if (fs->up->count == UPVALUE_MAX) {
         pawE_error(ENV(L->C), PAW_ESYNTAX, -1, "too many upvalues");
@@ -441,8 +381,7 @@ static paw_Bool resolve_upvalue(struct LowerHir *L, struct FunctionState *fs, De
     struct FunctionState *caller = fs->outer;
     if (caller == NULL) return PAW_FALSE;
     if (resolve_local(L, caller, did, name, pinfo)) {
-        mark_upvalue(caller, pinfo->index);
-        mark_captured(caller, pinfo->r);
+        mark_upvalue(caller, pinfo->index, pinfo->r);
         add_upvalue(L, fs, pinfo, PAW_TRUE);
         return PAW_TRUE;
     }
@@ -467,10 +406,11 @@ static void enter_block(struct LowerHir *L, struct BlockState *bs, paw_Bool is_l
 
 static void maybe_close(struct LowerHir *L, MirRegister r)
 {
-    if (!is_captured(L->fs, r)) return;
-    struct MirInstruction *close = new_instruction(L, kMirClose);
-    MirGetClose(close)->target = r;
-    indicate_use(L, r);
+    struct MirRegisterData *data = mir_reg_data(L->fs->mir, r);
+    if (data->is_captured) {
+        struct MirInstruction *close = new_instruction(L, kMirClose);
+        MirGetClose(close)->target = r;
+    }
 }
 
 static void close_variables(struct LowerHir *L, int nvars)
@@ -537,7 +477,6 @@ struct MirInstruction *terminate_return(struct LowerHir *L, const MirRegister *p
         value = new_literal_reg(L, PAW_TUNIT);
         MirGetConstant(k)->output = value;
         MirGetConstant(k)->code = PAW_TUNIT;
-        indicate_use(L, value);
     } else {
         value = *pvalue;
     }
@@ -614,9 +553,7 @@ static MirRegister lower_operand_(struct HirVisitor *V, struct HirExpr *expr);
 
 static MirRegister lower_operand(struct HirVisitor *V, struct HirExpr *expr)
 {
-    const MirRegister r = lower_operand_(V, expr);
-    indicate_use(V->ud, r);
-    return r;
+    return lower_operand_(V, expr);
 }
 
 #define LOWER_BLOCK(L, b) lower_operand(&(L)->V, HIR_CAST_EXPR(b))
@@ -853,10 +790,8 @@ static MirRegister lower_path_expr(struct HirVisitor *V, struct HirPathExpr *e)
             struct MirInstruction *r = new_instruction(L, kMirUpvalue);
             MirGetUpvalue(r)->output = target;
             MirGetUpvalue(r)->index = ng.index;
-printf("_%d ABC\n", ng.index);
             return target;
         } else {
-            indicate_use(L, ng.r);
             return ng.r;
         }
     }
@@ -877,8 +812,6 @@ static void emit_get_field(struct LowerHir *L, MirRegister object, int index, Mi
     MirGetGetField(r)->output = output;
     MirGetGetField(r)->object = object;
     MirGetGetField(r)->index = index;
-    indicate_def(L, output);
-    indicate_use(L, object);
 }
 
 static struct MirSwitchArmList *allocate_switch_arms(struct LowerHir *L, MirBlock discr_bb, int count)
@@ -978,6 +911,58 @@ static void lower_function_block(struct LowerHir *L, struct HirExpr *block)
     if (!HirGetBlock(block)->never) terminate_return(L, &result);
 }
 
+static void indicate_usedef(struct LowerHir *L, Map *map, MirRegister r, MirBlock where)
+{
+    struct MirBlockList *usedef = pawH_get(map, I2V(r.value))->p;
+    for (int i = 0; i < usedef->count; ++i) {
+        const MirBlock b = K_LIST_GET(usedef, i);
+        if (MIR_BB_EQUALS(b, where)) return;
+    }
+    K_LIST_PUSH(L->C, usedef, where);
+}
+
+static void account_for_usedefs(struct LowerHir *L, struct MirInstruction *instr, Map *uses, Map *defs, MirBlock where)
+{
+    struct MirLoad load;
+    struct MirStore store;
+    MirRegister *const *ppr;
+
+    if (pawMir_check_store(L->C, instr, &store)) {
+        K_LIST_FOREACH(store.outputs, ppr) {
+            indicate_usedef(L, defs, **ppr, where);
+        }
+    }
+    if (pawMir_check_load(L->C, instr, &load)) {
+        K_LIST_FOREACH(load.inputs, ppr) {
+            indicate_usedef(L, uses, **ppr, where);
+        }
+    }
+}
+
+static void collect_uses_and_defs(struct LowerHir *L, struct Mir *mir, Map *uses, Map *defs)
+{
+    int index;
+    struct MirRegisterData *pdata;
+    K_LIST_ENUMERATE(mir->registers, index, pdata) {
+        MAP_INSERT(L, uses, I2V(index), P2V(pawMir_block_list_new(L->C)));
+        MAP_INSERT(L, defs, I2V(index), P2V(pawMir_block_list_new(L->C)));
+    }
+
+    struct MirBlockData **pblock;
+    K_LIST_ENUMERATE(mir->blocks, index, pblock) {
+        struct MirBlockData *block = *pblock;
+        const MirBlock b = MIR_BB(index);
+
+        struct MirInstruction **pinstr;
+        K_LIST_FOREACH(block->joins, pinstr) {
+            account_for_usedefs(L, *pinstr, uses, defs, b);
+        }
+        K_LIST_FOREACH(block->instructions, pinstr) {
+            account_for_usedefs(L, *pinstr, uses, defs, b);
+        }
+    }
+}
+
 static MirRegister lower_closure_expr(struct HirVisitor *V, struct HirClosureExpr *e)
 {
     struct LowerHir *L = V->ud;
@@ -1005,9 +990,9 @@ static MirRegister lower_closure_expr(struct HirVisitor *V, struct HirClosureExp
     result->upvalues = L->fs->up;
     leave_function(L);
 
-printf("before %s: %s\n",result->name->text, pawMir_dump(L->C, result));--ENV(L->C)->top.p;
+    pawMir_remove_unreachable_blocks(L->C, result);
+    collect_uses_and_defs(L, result, uses, defs);
     pawSsa_construct(L->C, result, uses, defs);
-printf("after %s: %s\n",result->name->text, pawMir_dump(L->C, result));--ENV(L->C)->top.p;
 
     const MirRegister output = new_register(L, type);
     struct MirInstruction *r = new_instruction(L, kMirClosure);
@@ -1070,10 +1055,8 @@ static MirRegister lower_callee_and_args(struct HirVisitor *V, struct HirExpr *c
         // method call: place function object before 'self'
         struct MirInstruction *r = new_instruction(L, kMirGlobal);
         MirGetGlobal(r)->output = result;
-        indicate_def(L, result);
         const MirRegister self = lower_operand(V, select->target);
         K_LIST_PUSH(L->C, args_out, self);
-        indicate_use(L, self);
     } else {
         result = lower_operand(V, callee);
     }
@@ -1146,7 +1129,6 @@ static MirRegister lower_assign_expr(struct HirVisitor *V, struct HirAssignExpr 
             struct MirInstruction *r = new_instruction(L, kMirSetLocal);
             MirGetSetLocal(r)->target = ng.r;
             MirGetSetLocal(r)->value = value;
-            indicate_def(L, ng.r);
         }
     } else if (HirIsSelector(e->lhs)) {
         struct HirSelector *x = HirGetSelector(e->lhs);
@@ -1279,8 +1261,6 @@ static void emit_call0(struct LowerHir *L, MirRegister target, MirRegister outpu
     MirGetCall(r)->args = pawMir_register_list_new(L->C);
     MirGetCall(r)->target = target;
     MirGetCall(r)->output = output;
-    indicate_use(L, target);
-    indicate_def(L, output);
 }
 
 static void emit_call1(struct LowerHir *L, MirRegister target, MirRegister arg, MirRegister output)
@@ -1291,105 +1271,15 @@ static void emit_call1(struct LowerHir *L, MirRegister target, MirRegister arg, 
     MirGetCall(r)->args = args;
     MirGetCall(r)->target = target;
     MirGetCall(r)->output = output;
-    indicate_use(L, target);
-    indicate_use(L, arg);
-    indicate_def(L, output);
 }
 
-// Performs the following desugaring transformation:
-//
-//     for var in target {
-//        ...
-//     }
-//              |
-//              V
-//     {
-//         let _var = target();
-//     top:
-//         match _var {
-//             Option::Some(_) => {
-//                 let var = _var;
-//                 ...
-//                 _var = target();
-//                 goto top;
-//             },
-//             Option::None => {
-//                 goto after;
-//             },
-//         }
-//     after:
-//     }
-//
-// Also note that an OP_CLOSE is added for "var" at the end of the loop body if
-// it is captured by a closure defined in the "...".
-//
-static void lower_for_body(struct HirVisitor *V, struct HirForExpr *e, struct HirVarDecl *control)
-{
-    struct LowerHir *L = V->ud;
-    struct FunctionState *fs = L->fs;
-    struct Mir *mir = fs->mir;
-
-    const MirRegister target = lower_operand(V, e->target);
-    const MirRegister var = register_for_node(L, control->hid);
-    emit_call0(L, target, var);
-
-    const MirRegister expect = unit_literal(L);
-    const MirBlock before_bb = current_bb(L);
-    const MirBlock header_bb = new_bb(L);
-    const MirBlock loop_bb = new_bb(L);
-    const MirBlock after_bb = new_bb(L);
-    add_edge(L, before_bb, header_bb);
-    terminate_goto(L, header_bb);
-
-    struct BlockState outer;
-    enter_block(L, &outer, PAW_TRUE);
-
-    set_current_bb(L, header_bb);
-    const MirRegister discr = new_literal_reg(L, PAW_TINT);
-    emit_get_field(L, var, 0, discr);
-    struct MirSwitchArmList *arms = allocate_switch_arms(L, header_bb, 1);
-    struct MirInstruction *switch_ = terminate_switch(L, discr, arms, after_bb);
-    add_edge(L, current_bb(L), after_bb);
-
-    set_current_bb(L, K_LIST_FIRST(arms).bid);
-
-    struct BlockState inner;
-    enter_block(L, &inner, PAW_FALSE);
-    const MirRegister temp = register_for_node(L, control->hid);
-    emit_get_field(L, var, 1, temp);
-    struct LocalVar *local = add_local(L, control->name, temp, control->did);
-    pawHir_visit_stmt_list(V, HirGetBlock(e->block)->stmts);
-    lower_operand(V, HirGetBlock(e->block)->result);
-    maybe_goto(L, loop_bb);
-
-    set_current_bb(L, loop_bb);
-    emit_call0(L, target, var);
-    mark_loop_end(fs, header_bb, current_bb(L));
-    leave_block(L); // inner
-    maybe_goto(L, header_bb);
-
-    adjust_to(L, JUMP_CONTINUE, loop_bb);
-    set_current_bb(L, after_bb);
-    leave_block(L); // outer
-}
-
-static MirRegister lower_for_expr(struct HirVisitor *V, struct HirForExpr *e)
-{
-    struct LowerHir *L = V->ud;
-    const MirRegister output = unit_literal(L);
-    struct HirVarDecl *var = HirGetVarDecl(e->control);
-    lower_for_body(V, e, var);
-    return output;
-}
-
-static MirRegister lower_while_expr(struct HirVisitor *V, struct HirWhileExpr *e)
+static MirRegister lower_loop_expr(struct HirVisitor *V, struct HirLoopExpr *e)
 {
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
     const MirRegister result = unit_literal(L);
     const MirBlock before_bb = current_bb(L);
     const MirBlock header_bb = new_bb(L);
-    const MirBlock body_bb = new_bb(L);
     const MirBlock after_bb = new_bb(L);
     add_edge(L, before_bb, header_bb);
     terminate_goto(L, header_bb);
@@ -1398,14 +1288,10 @@ static MirRegister lower_while_expr(struct HirVisitor *V, struct HirWhileExpr *e
     enter_block(L, &bs, PAW_TRUE);
 
     set_current_bb(L, header_bb);
-    const MirRegister cond = lower_operand(V, e->cond);
-    struct MirInstruction *branch = terminate_branch(L, cond, body_bb, after_bb);
-    add_edge(L, current_bb(L), body_bb);
-    add_edge(L, current_bb(L), after_bb);
-
-    set_current_bb(L, body_bb);
     lower_operand(V, e->block);
-    mark_loop_end(fs, header_bb, current_bb(L));
+
+    const MirBlock loop_bb = current_bb(L);
+    mark_loop_end(fs, header_bb, loop_bb);
     maybe_goto(L, header_bb);
 
     adjust_to(L, JUMP_CONTINUE, header_bb);
@@ -1493,10 +1379,8 @@ static MirRegister lower_operand_(struct HirVisitor *V, struct HirExpr *expr)
             return lower_return_expr(V, HirGetReturnExpr(expr));
         case kHirJumpExpr:
             return lower_jump_expr(V, HirGetJumpExpr(expr));
-        case kHirForExpr:
-            return lower_for_expr(V, HirGetForExpr(expr));
-        case kHirWhileExpr:
-            return lower_while_expr(V, HirGetWhileExpr(expr));
+        case kHirLoopExpr:
+            return lower_loop_expr(V, HirGetLoopExpr(expr));
         case kHirMatchExpr:
             return lower_match_expr(V, HirGetMatchExpr(expr));
         case kHirBlock:
@@ -1892,14 +1776,9 @@ struct Mir *pawP_lower_hir_body(struct Compiler *C, struct HirFuncDecl *func)
     Map *defs = pawP_push_map(C);
 
     lower_hir_body(&L, func, uses, defs, result);
-
-printf("before %s: %s\n",result->name->text, pawMir_dump(C, result));--ENV(C)->top.p;
-
+    pawMir_remove_unreachable_blocks(C, result);
+    collect_uses_and_defs(&L, result, uses, defs);
     pawSsa_construct(C, result, uses, defs);
-
-printf("%s: %s\n",result->name->text, pawMir_dump(C, result));--ENV(C)->top.p;
-printf("%s: %s\n",result->name->text, pawMir_dump_graph(C, result));--ENV(C)->top.p;
-
 
     pawP_pop_object(C, defs);
     pawP_pop_object(C, uses);

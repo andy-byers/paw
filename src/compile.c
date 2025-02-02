@@ -144,10 +144,14 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const c
         .P = P,
     };
 
+    pawP_push_store(C, &C->store);
+    C->ir_defs = pawP_new_map(C, &C->store);
+    C->ir_types = pawP_new_map(C, &C->store);
+
     C->strings = pawP_push_map(C);
     C->method_contexts = pawP_push_map(C);
     C->method_binders = pawP_push_map(C);
-    C->ir_types = pawP_push_map(C);
+//    C->ir_types = pawP_push_map(C);
     C->type2rtti = pawP_push_map(C);
     C->imports = pawP_push_map(C);
     C->impls = pawP_push_map(C);
@@ -236,20 +240,20 @@ static void map_types(struct DefGenerator *dg, struct IrType *type, struct Type 
     pawH_insert(P, dg->C->type2rtti, P2V(type), P2V(rtti));
 }
 
-static struct Type *new_type(struct DefGenerator *, struct IrType *, DefId);
+static struct Type *new_type(struct DefGenerator *, struct IrType *, ItemId);
 #define MAKE_TYPE(dg, t, did) new_type(dg, IR_CAST_TYPE(t), did)->hdr.code
 
-static void init_type_list(struct DefGenerator *dg, struct IrTypeList *x, paw_Type *y, DefId did)
+static void init_type_list(struct DefGenerator *dg, struct IrTypeList *x, paw_Type *y, ItemId iid)
 {
     if (x == NULL) return;
     for (int i = 0; i < x->count; ++i) {
-        y[i] = MAKE_TYPE(dg, x->data[i], did);
+        y[i] = MAKE_TYPE(dg, x->data[i], iid);
     }
 }
 
 #define LEN(L) ((L) != NULL ? (L)->count : 0)
 
-static struct Type *new_type(struct DefGenerator *dg, struct IrType *src, DefId did)
+static struct Type *new_type(struct DefGenerator *dg, struct IrType *src, ItemId iid)
 {
     struct Type *dst = lookup_type(dg, src);
     if (dst != NULL) return dst;
@@ -258,15 +262,15 @@ static struct Type *new_type(struct DefGenerator *dg, struct IrType *src, DefId 
     switch (IR_KINDOF(src)) {
         case kIrAdt: {
             struct IrAdt *adt = IrGetAdt(src);
-            dst = pawY_new_adt(P, did, LEN(adt->types));
-            init_type_list(dg, adt->types, dst->subtypes, did);
+            dst = pawY_new_adt(P, iid, LEN(adt->types));
+            init_type_list(dg, adt->types, dst->subtypes, iid);
             break;
         }
         case kIrSignature: {
             struct IrSignature *fsig = IrGetSignature(src);
-            dst = pawY_new_signature(P, did, fsig->params->count);
-            init_type_list(dg, fsig->params, dst->subtypes, did);
-            dst->sig.result = MAKE_TYPE(dg, fsig->result, did);
+            dst = pawY_new_signature(P, iid, fsig->params->count);
+            init_type_list(dg, fsig->params, dst->subtypes, iid);
+            dst->sig.result = MAKE_TYPE(dg, fsig->result, iid);
             break;
         }
         case kIrFuncPtr: {
@@ -315,7 +319,7 @@ static struct Def *new_def(struct DefGenerator *dg, DeclId did, struct IrType *t
             def = pawY_new_func_def(P, LEN(HirGetVariantDecl(decl)->fields));
     }
 
-    struct Type *ty = new_type(dg, type, def->hdr.did);
+    struct Type *ty = new_type(dg, type, def->hdr.iid);
     def->hdr.name = decl->hdr.name;
     def->hdr.code = ty->hdr.code;
     def->hdr.modname = get_modname(dg, did);
@@ -370,7 +374,7 @@ static void connect_adt_def(struct DefGenerator *dg, struct IrType *mono)
     //struct HirDecl *decl = pawHir_get_decl(dg->C, IR_TYPE_DID(mono));
     //struct HirAdtDecl *d = HirGetAdtDecl(decl);
     //struct Type *ty = lookup_type(dg, mono);
-    //struct Def *def = Y_DEF(P, ty->adt.did);
+    //struct Def *def = Y_DEF(P, ty->adt.iid);
 
     //struct DefState ds;
     //enter_def(dg, &ds, mono, def);
@@ -407,7 +411,7 @@ static struct ItemSlot allocate_item(struct DefGenerator *dg, struct Mir *body)
     leave_def(dg);
 
     struct Type *rtti = Y_TYPE(P, def->func.code);
-    rtti->sig.did = def->func.did;
+    rtti->sig.iid = def->func.iid;
     return (struct ItemSlot){
         .mir = body,
         .rtti = rtti,

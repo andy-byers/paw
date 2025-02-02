@@ -28,7 +28,7 @@ struct TypeHeader {
 
 struct Adt {
     TYPE_HEADER;
-    DefId did;
+    ItemId iid;
     int size;
 };
 
@@ -40,7 +40,7 @@ struct FuncPtr {
 
 struct Signature {
     FUNCTION_HEADER;
-    DefId did;
+    ItemId iid;
 };
 
 struct TupleType {
@@ -71,7 +71,7 @@ enum DefKind {
 // TODO: use these instead, don't need to be part of a union though, keep them separate like in ir_type.h
 //struct FieldDef {
 //    String *name;
-//    DefId did;
+//    ItemId iid;
 //    paw_Bool is_pub : 1;
 //};
 //
@@ -79,13 +79,13 @@ enum DefKind {
 //    struct FieldList *fields;
 //    String *name;
 //    int discr;
-//    DefId xdid;
+//    ItemId xdid;
 //};
 //
 //struct AdtDef {
 //    struct VariantList *variants;
 //    String *name;
-//    DefId did;
+//    ItemId iid;
 //    paw_Bool is_struct : 1;
 //    paw_Bool is_pub : 1;
 //};
@@ -93,7 +93,7 @@ enum DefKind {
 #define DEF_HEADER String *name; \
                    String *modname; \
                    paw_Type code; \
-                   DefId did; \
+                   ItemId iid; \
                    enum DefKind kind : 7; \
                    paw_Bool is_pub : 1
 struct DefHeader {
@@ -104,14 +104,14 @@ struct VariantDef {
     DEF_HEADER;
     uint8_t k;
     int nfields;
-    DefId *fields;
+    ItemId *fields;
 };
 
 struct AdtDef {
     DEF_HEADER;
     paw_Bool is_struct : 1;
     int nfields;
-    DefId *fields;
+    ItemId *fields;
     String *mangled_name;
 };
 
@@ -150,8 +150,8 @@ struct Def {
 #define Y_TYPE(P, i) CHECK_EXP(0 <= (i) && (i) < (P)->types.count, (P)->types.data[i])
 #define Y_PVAL(P, i) CHECK_EXP(0 <= (i) && (i) < (P)->vals.count, &(P)->vals.data[i])
 
-struct Type *pawY_new_adt(paw_Env *P, DefId did, int ntypes);
-struct Type *pawY_new_signature(paw_Env *P, DefId did, int nparams);
+struct Type *pawY_new_adt(paw_Env *P, ItemId iid, int ntypes);
+struct Type *pawY_new_signature(paw_Env *P, ItemId iid, int nparams);
 struct Type *pawY_new_func_ptr(paw_Env *P, int nparams);
 struct Type *pawY_new_tuple(paw_Env *P, int nelems);
 struct Def *pawY_new_adt_def(paw_Env *P, int nfields);

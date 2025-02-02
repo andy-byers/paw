@@ -199,17 +199,14 @@ static DeclId add_decl(struct Resolver *R, struct HirDecl *decl)
     return pawHir_add_decl(R->C, decl, R->m->hir->modno);
 }
 
-static struct IrType *new_type(struct Resolver *R, DeclId did, enum IrTypeKind kind, int line)
-{
-    return pawP_attach_type(R->C, did, kind, line);
-}
-
 static struct IrTypeList *resolve_exprs(struct Resolver *R, struct HirExprList *list)
 {
     if (list == NULL) return NULL;
+
+    struct HirExpr **pexpr;
     struct IrTypeList *new_list = pawIr_type_list_new(R->C);
-    for (int i = 0; i < list->count; ++i) {
-        struct IrType *type = resolve_operand(R, list->data[i]);
+    K_LIST_FOREACH(list, pexpr) {
+        struct IrType *type = resolve_operand(R, *pexpr);
         K_LIST_PUSH(R->C, new_list, type);
     }
     return new_list;
@@ -390,14 +387,6 @@ static struct IrType *resolve_block(struct Resolver *R, struct HirBlock *block)
     resolve_stmt_list(R, block->stmts);
     struct IrType *type = resolve_operand(R, block->result);
     leave_scope(R);
-    return type;
-}
-
-static struct IrType *register_decl_type(struct Resolver *R, struct HirDecl *decl, enum IrTypeKind kind)
-{
-    const DeclId did = add_decl(R, decl);
-    struct IrType *type = new_type(R, did, kind, decl->hdr.line);
-    SET_NODE_TYPE(R->C, decl, type);
     return type;
 }
 
@@ -824,10 +813,8 @@ static struct IrType *resolve_closure_expr(struct Resolver *R, struct HirClosure
         ? new_unknown(R)
         : resolve_type(R, e->result);
 
-    struct IrType *type = new_type(R, NO_DECL, kIrFuncPtr, e->line);
-    struct IrFuncPtr *t = IrGetFuncPtr(type);
-    t->params = collect_decl_types(R, e->params);
-    rs.prev = t->result = ret;
+    struct IrTypeList *params = collect_decl_types(R, e->params);
+    rs.prev = ret;
 
     if (HirIsBlock(e->expr)) {
         struct IrType *result = resolve_operand(R, e->expr);
@@ -838,7 +825,7 @@ static struct IrType *resolve_closure_expr(struct Resolver *R, struct HirClosure
 
     leave_scope(R);
     R->rs = rs.outer;
-    return type;
+    return pawIr_new_func_ptr(R->C, params, ret);
 }
 
 static struct HirDecl *find_method_aux(struct Compiler *C, struct HirDecl *base, struct IrType *self, String *name)
@@ -917,10 +904,12 @@ static struct IrType *resolve_field_decl(struct Resolver *R, struct HirFieldDecl
 static void register_generics(struct Resolver *R, struct HirDeclList *generics)
 {
     if (generics == NULL) return;
-    for (int i = 0; i < generics->count; ++i) {
-        struct HirDecl *decl = K_LIST_GET(generics, i);
-        struct IrType *type = register_decl_type(R, decl, kIrGeneric);
-        struct IrGeneric *t = IrGetGeneric(type);
+
+    struct HirDecl **pdecl;
+    K_LIST_FOREACH(generics, pdecl) {
+        struct HirGenericDecl *d = HirGetGenericDecl(*pdecl);
+        struct IrType *type = pawIr_new_generic(R->C, d->did);
+        SET_NODE_TYPE(R->C, *pdecl, type);
     }
 }
 
@@ -1036,9 +1025,8 @@ static struct IrTypeList *resolve_operand_list(struct Resolver *R, struct HirExp
 
 static struct IrType *resolve_tuple_lit(struct Resolver *R, struct HirTupleLit *e, int line)
 {
-    struct IrType *type = new_type(R, NO_DECL, kIrTuple, line);
-    IrGetTuple(type)->elems = resolve_operand_list(R, e->elems);
-    return type;
+    struct IrTypeList *elems = resolve_operand_list(R, e->elems);
+    return pawIr_new_tuple(R->C, elems);
 }
 
 static struct IrType *resolve_list_lit(struct Resolver *R, struct HirContainerLit *e)
@@ -1087,20 +1075,17 @@ static struct IrType *resolve_field_expr(struct Resolver *R, struct HirFieldExpr
 
 static struct HirExprList *collect_field_exprs(struct Resolver *R, struct HirExprList *items, Map *map, const String *adt)
 {
-    Value key;
-    paw_Env *P = ENV(R);
+    int index;
+    struct HirExpr *const *pexpr;
     struct HirExprList *order = pawHir_expr_list_new(R->C);
-    for (int i = 0; i < items->count; ++i) {
-        struct HirExpr *expr = items->data[i];
-        struct HirFieldExpr *item = HirGetFieldExpr(expr);
-        V_SET_OBJECT(&key, item->name);
-        if (pawH_contains(map, key)) {
+    K_LIST_ENUMERATE(items, index, pexpr) {
+        struct HirFieldExpr *item = HirGetFieldExpr(*pexpr);
+        if (MAP_CONTAINS(map, P2V(item->name))) {
             NAME_ERROR(R, "duplicate field '%s' in initializer for struct '%s'",
                        item->name->text, adt->text);
         }
-        Value *value = pawH_create(P, map, key);
-        V_SET_INT(value, i);
-        K_LIST_PUSH(R->C, order, expr);
+        MAP_INSERT(R, map, P2V(item->name), I2V(index));
+        K_LIST_PUSH(R->C, order, *pexpr);
     }
     return order;
 }
@@ -1183,7 +1168,8 @@ static struct IrType *resolve_composite_lit(struct Resolver *R, struct HirCompos
         struct HirExpr *item = order->data[V_INT(*value)];
         unify(R, type, resolve_operand(R, item));
         pawH_erase(map, key);
-        item->field.fid = i;
+
+        HirGetFieldExpr(item)->fid = i;
     }
     paw_Int iter = PAW_ITER_INIT;
     if (pawH_iter(map, &iter)) {
@@ -1217,7 +1203,7 @@ static paw_Bool is_never_block(struct HirExpr *expr)
     if (HirIsBlock(expr)) {
         return HirGetBlock(expr)->never;
     }
-    return PAW_FALSE;
+    return HirIsJumpExpr(expr);
 }
 
 static struct IrType *resolve_if_expr(struct Resolver *R, struct HirIfExpr *e)
@@ -1249,10 +1235,9 @@ static void ResolveExprStmt(struct Resolver *R, struct HirExprStmt *s)
     PAW_UNUSED(type);
 }
 
-static struct IrType *resolve_while_expr(struct Resolver *R, struct HirWhileExpr *e)
+static struct IrType *resolve_loop_expr(struct Resolver *R, struct HirLoopExpr *e)
 {
     enter_scope(R, NULL);
-    expect_bool_expr(R, e->cond);
     struct IrType *type = resolve_expr(R, e->block);
     unify_unit_type(R, type);
     leave_scope(R);
@@ -1533,9 +1518,8 @@ static struct IrType *ResolveVariantPat(struct Resolver *R, struct HirVariantPat
 
 static struct IrType *ResolveTuplePat(struct Resolver *R, struct HirTuplePat *p)
 {
-    struct IrType *r = pawIr_new_type(R->C, kIrTuple);
-    IrGetTuple(r)->elems = resolve_pat_list(R, p->elems);
-    return r;
+    struct IrTypeList *elems = resolve_pat_list(R, p->elems);
+    return pawIr_new_tuple(R->C, elems);
 }
 
 static struct IrType *ResolveBindingPat(struct Resolver *R, struct HirBindingPat *p)
@@ -1547,18 +1531,16 @@ static struct IrType *ResolveBindingPat(struct Resolver *R, struct HirBindingPat
     struct BindingInfo *bi = new_binding_info(R->C, type);
     account_for_binding(R, p->name, bi);
 
-    struct HirDecl *r = pawHir_new_decl(R->C, p->line, kHirVarDecl);
-    HirGetVarDecl(r)->name = p->name;
+    struct HirDecl *r = pawHir_new_var_decl(R->m->hir, p->line, p->name, NULL, NULL);
     SET_NODE_TYPE(R->C, r, type);
     new_local(R, p->name, r);
-    add_decl(R, r);
     return type;
 }
 
 static struct IrType *convert_path_to_binding(struct Resolver *R, struct HirPathPat *path)
 {
     struct HirSegment ident = K_LIST_FIRST(path->path);
-    struct HirPat *pat = CAST(struct HirPat *, path);
+    struct HirPat *pat = HIR_CAST_PAT(path);
     pat->hdr.kind = kHirBindingPat;
     struct HirBindingPat *p = HirGetBindingPat(pat);
     p->name = ident.name;
@@ -1578,21 +1560,20 @@ static struct IrType *ResolvePathPat(struct Resolver *R, struct HirPathPat *p)
     }
 
     // convert to a more specific type of pattern, now that it is known that
-    // the path refers to a struct or enumerator
-    struct HirPath *path = p->path;
-    struct HirPat *pat = CAST(struct HirPat *, p);
+    // the path refers to a unit struct/enumerator
+    struct HirPat *pat;
+    struct HirPatList *empty = pawHir_pat_list_new(R->C);
     if (HirIsAdtDecl(decl)) {
-        paw_assert(!HirGetAdtDecl(decl)->is_struct); // TODO: handle this case
-        pat->hdr.kind = kHirStructPat;
-        HirGetStructPat(pat)->fields = pawHir_pat_list_new(R->C);
-        HirGetStructPat(pat)->path = path;
+        paw_assert(!HirGetAdtDecl(decl)->is_struct);
+        pat = pawHir_new_struct_pat(R->m->hir, p->line, p->path, empty);
     } else {
-        pat->hdr.kind = kHirVariantPat;
+        const int index = HirGetVariantDecl(decl)->index;
+        pat = pawHir_new_variant_pat(R->m->hir, p->line, p->path, empty, index);
         type = maybe_unit_variant(R, type);
-        HirGetVariantPat(pat)->index = HirGetVariantDecl(decl)->index;
-        HirGetVariantPat(pat)->fields = pawHir_pat_list_new(R->C);
-        HirGetVariantPat(pat)->path = path;
     }
+
+    // overwrite old pattern
+    *HIR_CAST_PAT(p) = *pat;
     return type;
 }
 
@@ -1632,9 +1613,9 @@ static struct IrType *resolve_pat(struct Resolver *R, struct HirPat *pat)
     struct IrType *type;
     R->line = pat->hdr.line;
     switch (HIR_KINDOF(pat)) {
-#define DEFINE_CASE(a, b) \
-        case kHir##a: \
-            type = Resolve##a(R, HirGet##a(pat)); \
+#define DEFINE_CASE(X) \
+        case kHir##X: \
+            type = Resolve##X(R, HirGet##X(pat)); \
             break;
         HIR_PAT_LIST(DEFINE_CASE)
 #undef DEFINE_CASE
@@ -1651,9 +1632,9 @@ static void resolve_stmt(struct Resolver *R, struct HirStmt *stmt)
 {
     R->line = stmt->hdr.line;
     switch (HIR_KINDOF(stmt)) {
-#define DEFINE_CASE(a, b) \
-        case kHir##a: \
-            Resolve##a(R, HirGet##a(stmt)); \
+#define DEFINE_CASE(X) \
+        case kHir##X: \
+            Resolve##X(R, HirGet##X(stmt)); \
             break;
         HIR_STMT_LIST(DEFINE_CASE)
 #undef DEFINE_CASE
@@ -1687,30 +1668,6 @@ static struct IrType *resolve_return_expr(struct Resolver *R, struct HirReturnEx
 static struct IrType *resolve_jump_expr(struct Resolver *R, struct HirJumpExpr *s)
 {
     return get_type(R, PAW_TUNIT);
-}
-
-static struct IrType *resolve_for_expr(struct Resolver *R, struct HirForExpr *s)
-{
-    enter_scope(R, NULL);
-    struct IrType *target = resolve_operand(R, s->target);
-    struct HirDecl *var = s->control;
-    new_local(R, var->hdr.name, var);
-
-    if (!IR_IS_FUNC_TYPE(target)){
-        TYPE_ERROR(R, "'for..in' not supported for type");
-    }
-    struct IrType *have = IR_FPTR(target)->result;
-    struct IrType *want = fresh_option(R);
-    unify(R, have, want);
-
-    struct IrType *inner = K_LIST_FIRST(ir_adt_types(have));
-    SET_NODE_TYPE(R->C, var, inner);
-
-    struct IrType *result = resolve_expr(R, s->block);
-    unify_unit_type(R, result);
-
-    leave_scope(R);
-    return result;
 }
 
 static struct IrType *resolve_expr(struct Resolver *R, struct HirExpr *expr)
@@ -1766,11 +1723,8 @@ static struct IrType *resolve_expr(struct Resolver *R, struct HirExpr *expr)
         case kHirJumpExpr:
             type = resolve_jump_expr(R, HirGetJumpExpr(expr));
             break;
-        case kHirForExpr:
-            type = resolve_for_expr(R, HirGetForExpr(expr));
-            break;
-        case kHirWhileExpr:
-            type = resolve_while_expr(R, HirGetWhileExpr(expr));
+        case kHirLoopExpr:
+            type = resolve_loop_expr(R, HirGetLoopExpr(expr));
             break;
         case kHirMatchExpr:
             type = resolve_match_expr(R, HirGetMatchExpr(expr));

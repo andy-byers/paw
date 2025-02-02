@@ -17,17 +17,15 @@ static struct IrTypeList *lower_type_list(struct LowerType *L, struct HirTypeLis
 
 static struct IrType *lower_func_ptr(struct LowerType *L, struct HirFuncPtr *t)
 {
-    struct IrType *r = pawIr_new_type(L->C, kIrFuncPtr);
-    IrGetFuncPtr(r)->params = lower_type_list(L, t->params);
-    IrGetFuncPtr(r)->result = lower_type(L, t->result);
-    return r;
+    struct IrTypeList *params = lower_type_list(L, t->params);
+    struct IrType *result = lower_type(L, t->result);
+    return pawIr_new_func_ptr(L->C, params, result);
 }
 
 static struct IrType *lower_tuple_type(struct LowerType *L, struct HirTupleType *t)
 {
-    struct IrType *r = pawIr_new_type(L->C, kIrTuple);
-    IrGetTuple(r)->elems = lower_type_list(L, t->elems);
-    return r;
+    struct IrTypeList *elems = lower_type_list(L, t->elems);
+    return pawIr_new_tuple(L->C, elems);
 }
 
 static struct IrType *lower_path_type(struct LowerType *L, struct HirPathType *t)

@@ -16,6 +16,7 @@
 #include "ir_type.h"
 #include "map.h"
 
+#define MOD(X) (X)->m->hir->modno
 #define CSTR(X, i) CACHED_STRING(ENV(X), CAST_SIZE(i))
 #define GET_TYPE(X, hid) pawIr_get_type((X)->C, hid)
 #define SET_TYPE(X, hid, t) pawIr_set_type((X)->C, hid, t)
@@ -46,11 +47,6 @@ struct PartialModule {
 
 DEFINE_LIST(struct ItemCollector, pa_list_, PartialAdtList, struct PartialAdt)
 DEFINE_LIST(struct ItemCollector, pm_list_, PartialModList, struct PartialModule)
-
-static DeclId add_decl(struct ItemCollector *X, struct HirDecl *decl)
-{
-    return pawHir_add_decl(X->C, decl, X->m->hir->modno);
-}
 
 static struct HirScope *enclosing_scope(struct HirSymtab *st)
 {
@@ -107,13 +103,9 @@ static struct HirScope *leave_function(struct ItemCollector *X)
 static void create_context(struct ItemCollector *X, struct IrType *type, int line)
 {
     String *self = CSTR(X, CSTR_SELF); // 'self'
-    struct HirDecl *decl = pawHir_get_decl(X->C, IR_TYPE_DID(type));
-    struct HirDecl *result = pawHir_new_decl(X->C, line, kHirVarDecl);
-    HirGetVarDecl(result)->name = self;
+    struct HirDecl *result = pawHir_new_var_decl(X->m->hir, line, self, NULL, NULL);
     SET_NODE_TYPE(X->C, result, type);
-
     new_local(X, self, result);
-    add_decl(X, result);
 }
 
 static struct HirAdtDecl *get_adt(struct ItemCollector *X, struct IrType *type)
@@ -176,24 +168,16 @@ static struct HirDecl *get_decl(struct ItemCollector *X, DeclId did)
     return pawHir_get_decl(X->C, did);
 }
 
-static struct IrType *new_type(struct ItemCollector *X, DeclId did, enum IrTypeKind kind, int line)
-{
-    return pawP_attach_type(X->C, did, kind, line);
-}
-
-static struct IrType *register_decl_type(struct ItemCollector *X, struct HirDecl *decl, enum IrTypeKind kind)
-{
-    return new_type(X, decl->hdr.did, kind, decl->hdr.line);
-}
-
 static void register_generics(struct ItemCollector *X, struct HirDeclList *generics)
 {
     if (generics == NULL) return;
-    for (int i = 0; i < generics->count; ++i) {
-        struct HirDecl *decl = K_LIST_GET(generics, i);
-        struct IrType *type = register_decl_type(X, decl, kIrGeneric);
-        struct IrGeneric *t = IrGetGeneric(type);
-        new_local(X, decl->hdr.name, decl);
+
+    struct HirDecl **pdecl;
+    K_LIST_FOREACH(generics, pdecl) {
+        struct HirGenericDecl *d = HirGetGenericDecl(*pdecl);
+        struct IrType *type = pawIr_new_generic(X->C, d->did);
+        SET_NODE_TYPE(X->C, *pdecl, type);
+        new_local(X, d->name, *pdecl);
     }
 }
 
@@ -203,37 +187,78 @@ static struct IrTypeList *collect_generic_types(struct ItemCollector *X, struct 
     return pawHir_collect_decl_types(X->C, generics);
 }
 
-static struct IrTypeList *collect_field_types(struct ItemCollector *X, struct HirDeclList *fields)
+static struct IrGenericList *collect_generics(struct ItemCollector *X, struct HirDeclList *generics)
 {
-    return pawHir_collect_decl_types(X->C, fields);
+    struct HirDecl **pdecl;
+    if (generics == NULL) return NULL;
+    struct IrGenericList *result = pawIr_generic_list_new(X->C);
+    K_LIST_FOREACH(generics, pdecl) {
+        const DeclId did = pawIr_next_did(X->C, MOD(X));
+        struct HirGenericDecl *d = HirGetGenericDecl(*pdecl);
+        struct IrType *type = pawIr_new_generic(X->C, did);
+        struct IrDef *r = pawIr_new_generic_def(X->C, did, d->name, type);
+        K_LIST_PUSH(X->C, result, IrGetGenericDef(r));
+        pawIr_set_def(X->C, did, r);
+    }
+    return result;
+}
+
+static struct IrFieldList *collect_fields(struct ItemCollector *X, struct HirDeclList *fields)
+{
+    struct HirDecl **pdecl;
+    struct IrFieldList *result = pawIr_field_list_new(X->C);
+    K_LIST_FOREACH(fields, pdecl) {
+        struct HirFieldDecl *d = HirGetFieldDecl(*pdecl);
+        struct IrType *type = collect_type(X, d->tag);
+        const DeclId did = pawIr_next_did(X->C, MOD(X));
+        struct IrDef *r = pawIr_new_field_def(X->C, did, d->name, type, d->is_pub);
+        K_LIST_PUSH(X->C, result, IrGetFieldDef(r));
+        pawIr_set_def(X->C, did, r);
+    }
+    return result;
+}
+
+static struct IrParamList *collect_parameters(struct ItemCollector *X, struct HirDeclList *params)
+{
+    struct HirDecl **pdecl;
+    struct IrParamList *result = pawIr_param_list_new(X->C);
+    K_LIST_FOREACH(params, pdecl) {
+        struct HirFieldDecl *d = HirGetFieldDecl(*pdecl);
+        struct IrType *type = collect_type(X, d->tag);
+        const DeclId did = pawIr_next_did(X->C, MOD(X));
+        struct IrDef *r = pawIr_new_param_def(X->C, did, d->name, type);
+        K_LIST_PUSH(X->C, result, IrGetParamDef(r));
+        pawIr_set_def(X->C, did, r);
+    }
+    return result;
 }
 
 static void register_func(struct ItemCollector *X, struct HirFuncDecl *d)
 {
-    struct IrType *type = register_decl_type(X, HIR_CAST_DECL(d), kIrSignature);
-    struct IrSignature *t = IrGetSignature(type);
-    t->types = collect_generic_types(X, d->generics);
-    t->params = collect_field_types(X, d->params);
-    t->result = collect_type(X, d->result);
-    t->did = d->did;
-}
+    struct IrTypeList *types = collect_generic_types(X, d->generics);
+    struct IrTypeList *params_ = pawHir_collect_decl_types(X->C, d->params);
+    struct IrType *result = collect_type(X, d->result);
+    struct IrType *sig = pawIr_new_signature(X->C, d->did, types, params_, result);
+    SET_TYPE(X, d->hid, sig);
 
-static DeclId next_did(struct ItemCollector *X)
-{
-    return (DeclId){
-        .modno = X->m->hir->modno,
-        .value = X->ndefs++,
-    };
+  //  const DeclId did = pawIr_next_did(X->C, MOD(X));
+  //  struct IrGenericList *generics = collect_generics(X, d->generics);
+  //  struct IrParamList *params = collect_parameters(X, d->params);
+  //  struct IrDef *r = pawIr_new_func_def(X->C, did, d->name, generics, params, d->is_pub);
+  //  pawIr_set_def(X->C, did, r);
 }
 
 static struct IrType *register_adt(struct ItemCollector *X, struct HirAdtDecl *d)
 {
-    struct IrAdtDef *def = pawIr_new_adt_def(X->C, next_did(X), d->name, d->is_pub, d->is_struct);
-    struct IrType *type = register_decl_type(X, HIR_CAST_DECL(d), kIrAdt);
-    struct IrAdt *t = IrGetAdt(type);
+  //  const DeclId did = pawIr_next_did(X->C, MOD(X));
+  //  struct IrGenericList *generics = collect_generics(X, d->generics);
+  //  struct IrVariantList *variants = pawIr_variant_list_new(X->C); // TODO collect_variants(X, d->fields);
+  //  struct IrDef *r = pawIr_new_adt_def(X->C, did, d->name, generics, variants, d->is_pub, d->is_struct);
+  //  pawIr_set_def(X->C, did, r);
 
-    t->types = collect_generic_types(X, d->generics);
-    t->did = d->did;
+    struct IrTypeList *types = collect_generic_types(X, d->generics);
+    struct IrType *type = pawIr_new_adt(X->C, d->did, types);
+    SET_TYPE(X, d->hid, type);
     return type;
 }
 
@@ -244,7 +269,7 @@ static void collect_field_decl(struct ItemCollector *X, struct HirFieldDecl *d)
 
 static void collect_variant_decl(struct ItemCollector *, struct HirVariantDecl *);
 
-static void collect_fields(struct ItemCollector *X, struct HirDeclList *fields)
+static void collect_field_types(struct ItemCollector *X, struct HirDeclList *fields)
 {
     if (fields == NULL) return;
     Map *map = pawP_push_map(X->C);
@@ -265,21 +290,20 @@ static void collect_fields(struct ItemCollector *X, struct HirDeclList *fields)
 
 static void collect_variant_decl(struct ItemCollector *X, struct HirVariantDecl *d)
 {
-    collect_fields(X, d->fields);
+    // TODO: either remove this, or the collect_field_types below, make sure to perform duplicates check somewhere
+    collect_field_types(X, d->fields);
 
     // An enum variant name can be thought of as a function from the type of the
     // variant's fields to the type of the enumeration. For example, given 'enum
     // E {X(str)}', E::X has type 'fn(str) -> E'.
-    struct IrType *type = register_decl_type(X, HIR_CAST_DECL(d), kIrSignature);
-    struct IrSignature *t = IrGetSignature(type);
-    t->params = d->fields != NULL
-        ? collect_field_types(X, d->fields)
+    struct IrTypeList *params = d->fields != NULL
+        ? pawHir_collect_decl_types(X->C, d->fields)
         : pawIr_type_list_new(X->C);
-    t->result = X->adt;
+    struct IrType *type = pawIr_new_signature(X->C, d->did, NULL, params, X->adt);
     SET_TYPE(X, d->hid, type);
 }
 
-static paw_Bool check_static_method(struct ItemCollector *X, struct IrType *self, struct HirDeclList *params)
+static paw_Bool check_assoc_function(struct ItemCollector *X, struct IrType *self, struct HirDeclList *params)
 {
     if (self == NULL) return PAW_FALSE; // not a method
     if (params->count == 0) return PAW_TRUE;
@@ -291,13 +315,13 @@ static void collect_func(struct ItemCollector *X, struct HirFuncDecl *d)
 {
     enter_function(X, d);
     register_generics(X, d->generics);
-    collect_fields(X, d->params);
+    collect_field_types(X, d->params);
     register_func(X, d);
     leave_function(X);
 
-    d->is_assoc = check_static_method(X, X->adt, d->params);
+    d->is_assoc = check_assoc_function(X, X->adt, d->params);
     if (d->self != NULL) {
-        struct IrType *type = pawIr_get_type(X->C, d->hid);
+        struct IrType *type = GET_TYPE(X, d->hid);
         pawP_set_self(X->C, IrGetSignature(type), d->self);
         if (X->impl_binder != NULL) {
             pawP_set_binder(X->C, d->did, X->impl_binder);
@@ -355,7 +379,7 @@ static void collect_adt_decl(struct ItemCollector *X, struct PartialAdt lazy)
     struct HirAdtDecl *d = lazy.d;
     enter_block(X, lazy.scope);
     WITH_ADT_CONTEXT(X, GET_TYPE(X, d->hid),
-            collect_fields(X, d->fields););
+            collect_field_types(X, d->fields););
     leave_block(X);
 }
 
@@ -374,24 +398,21 @@ static void collect_methods(struct ItemCollector *X, struct HirDeclList *methods
 
 static struct HirType *rhs_for_self(struct ItemCollector *X, struct HirImplDecl *d, struct IrType *type)
 {
-    struct HirType *rhs = pawHir_new_type(X->C, d->line, kHirPathType);
-    HirGetPathType(rhs)->path = d->self;
+    struct HirType *rhs = pawHir_new_path_type(X->m->hir, d->line, d->self);
     SET_NODE_TYPE(X->C, rhs, type);
     return rhs;
 }
 
 static struct IrType *collect_self(struct ItemCollector *X, struct HirImplDecl *d)
 {
+    String *name = SCAN_STRING(X->C, "Self");
     struct IrType *self = collect_path(X, d->self);
-    d->alias = pawHir_new_decl(X->C, d->line, kHirTypeDecl);
-    struct HirTypeDecl *r = HirGetTypeDecl(d->alias);
-    r->name = SCAN_STRING(X->C, "Self");
-    r->rhs = rhs_for_self(X, d, self);
-    add_decl(X, d->alias);
-    SET_TYPE(X, r->hid, self);
+    struct HirType *rhs = rhs_for_self(X, d, self);
+    d->alias = pawHir_new_type_decl(X->m->hir, d->line, name, NULL, rhs);
+    SET_TYPE(X, d->alias->hdr.hid, self);
 
     map_adt_to_impl(X, get_decl(X, IR_TYPE_DID(self)), HIR_CAST_DECL(d));
-    new_local(X, r->name, d->alias);
+    new_local(X, name, d->alias);
     return self;
 }
 

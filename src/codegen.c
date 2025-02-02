@@ -41,9 +41,9 @@ static void add_jump_target(struct Generator *G, MirBlock bid)
                 }));
 }
 
-static struct Def *get_def(struct Generator *G, DefId did)
+static struct Def *get_def(struct Generator *G, ItemId iid)
 {
-    return Y_DEF(ENV(G), did);
+    return Y_DEF(ENV(G), iid);
 }
 
 static struct Type *lookup_type(struct Generator *G, struct IrType *type)
@@ -52,11 +52,11 @@ static struct Type *lookup_type(struct Generator *G, struct IrType *type)
     return pv != NULL ? pv->p : NULL;
 }
 
-static DefId type2def(struct Generator *G, struct IrType *type)
+static ItemId type2def(struct Generator *G, struct IrType *type)
 {
     struct Type *ty = lookup_type(G, type);
     paw_assert(ty != NULL && "undefined type");
-    return IrIsAdt(type) ? ty->adt.did : ty->sig.did;
+    return IrIsAdt(type) ? ty->adt.iid : ty->sig.iid;
 }
 
 struct JumpSource {
@@ -128,8 +128,8 @@ static int temporary_reg(struct FuncState *fs, int offset)
 
 static ValueId type2global(struct Generator *G, struct IrType *type)
 {
-    const DefId def_id = type2def(G, type);
-    const struct Def *def = Y_DEF(ENV(G), def_id);
+    const ItemId iid = type2def(G, type);
+    const struct Def *def = Y_DEF(ENV(G), iid);
     paw_assert(def->hdr.kind == DEF_FUNC);
     return def->func.vid;
 }
@@ -350,7 +350,7 @@ static ValueId resolve_function(struct Generator *G, struct Type *rtti)
 {
     paw_Env *P = ENV(G);
     paw_assert(rtti->hdr.kind == TYPE_SIGNATURE);
-    struct Def *def = Y_DEF(P, rtti->sig.did);
+    struct Def *def = Y_DEF(P, rtti->sig.iid);
     return def->func.vid;
 }
 
@@ -549,7 +549,7 @@ static void register_items(struct Generator *G)
 
         const String *modname = prefix_for_modno(G, IR_TYPE_DID(type).modno);
         const struct Type *ty = lookup_type(G, type);
-        struct FuncDef *fdef = &get_def(G, ty->sig.did)->func;
+        struct FuncDef *fdef = &get_def(G, ty->sig.iid)->func;
         paw_assert(fdef->kind == DEF_FUNC);
         item->name = fdef->mangled_name = func_name(G, modname, type);
     }
@@ -1002,8 +1002,16 @@ static void code_binop(struct MirVisitor *V, struct MirBinaryOp *x)
     struct FuncState *fs = G->fs;
     const paw_Type code = TYPE_CODE(G, TYPEOF(G, x->lhs));
     if (x->op == BINARY_ADD && (code == BUILTIN_STR || code == BUILTIN_LIST)) {
+        // TODO: Find a good place to squish adjacent BinaryOp nodes into a single
+        //       Concat node. Needs to happen after type checking, unless we introduce
+        //       a special operator for concat (like "a..b" or "a ++ b").
         const Op op = code == BUILTIN_STR ? OP_SCONCAT : OP_LCONCAT;
-        pawK_code_AB(G->fs, op, REG(x->output), 2);
+        const int first = temporary_reg(fs, 0);
+        const int second = temporary_reg(fs, 1);
+        move_to_reg(fs, REG(x->lhs), first);
+        move_to_reg(fs, REG(x->rhs), second);
+        pawK_code_AB(G->fs, op, first, 2);
+        move_to_reg(fs, first, REG(x->output));
         return;
     }
     const Op op = code == PAW_TINT ? binop2op_int(x->op) :

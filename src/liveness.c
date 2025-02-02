@@ -37,9 +37,6 @@ static struct MirLiveInterval *interval_for_reg(struct Liveness *L, MirRegister 
 static void set_from(struct Liveness *L, MirRegister opd, int from, struct MirBlockData *block)
 {
     struct MirLiveInterval *it = interval_for_reg(L, opd);
-if (opd.value==26){
-printf("from for %d = %d -> %d\n",opd.value, it->first,from);
-}
     pawP_bitset_clear_range(it->ranges, mir_bb_first(block), from);
     pawP_bitset_set(it->ranges, from);
     it->last = PAW_MAX(it->last, from);
@@ -49,9 +46,6 @@ printf("from for %d = %d -> %d\n",opd.value, it->first,from);
 static void add_range(struct Liveness *L, MirRegister opd, int from, int to)
 {
     struct MirLiveInterval *it = interval_for_reg(L, opd);
-if (opd.value==26){
-printf("rfrom for %d = %d -> %d\n",opd.value, it->first,from);
-}
     pawP_bitset_set_range(it->ranges, from, to);
     it->first = PAW_MIN(it->first, from);
     it->last = PAW_MAX(it->last, to);
@@ -94,14 +88,12 @@ static void step_instruction(struct Liveness *L, struct MirRegisterList *set, st
 
     if (pawMir_check_store(L->C, instr, &store)) {
         K_LIST_FOREACH(store.outputs, ppr) {
-printf("OUTPUT %d\n", ppr[0]->value);
             OUTPUT(L, instr->hdr.location, **ppr);
         }
     }
 
     if (pawMir_check_load(L->C, instr, &load)) {
         K_LIST_FOREACH(load.inputs, ppr) {
-printf("INPUT %d\n", ppr[0]->value);
             INPUT(L, instr->hdr.location, **ppr);
         }
     }
@@ -211,7 +203,6 @@ static void compute_liveness(struct Liveness *L, struct Mir *mir, struct MirBloc
             struct MirBlockData *sblock = mir_bb_data(mir, *ps);
             K_LIST_FOREACH(sblock->joins, pinstr) {
                 struct MirPhi *phi = MirGetPhi(*pinstr);
-printf("_%d = phi(_%d, _%d)\n",phi->output.value,phi->inputs->data[0].value, phi->inputs->data[1].value);
                 const int p = mir_which_pred(L->mir, *ps, b);
                 add_live_reg(L, live, K_LIST_GET(phi->inputs, p));
             }
@@ -325,6 +316,18 @@ struct MirBlockList *pawMir_compute_live_in(struct Compiler *C, struct Mir *mir,
 
         struct MirInstruction **pinstr;
         K_LIST_FOREACH(bb->instructions, pinstr) {
+            // If there is a store or "r" before a load in basic block "b", then "r"
+            // is not live-in to "b". The load/store checks are performed in reverse
+            // compared to the LLVM algorithm, because some instructions both load
+            // and store a particular variable. Instructions read their operands
+            // before writing their output, so loads must be checked before stores.
+            // e.g. "x = x + 1" loads "x" before writing to it.
+            struct MirLoad load;
+            if (pawMir_check_load(C, *pinstr, &load)) {
+                const int index = reglist_find(load.inputs, r);
+                if (index >= 0) goto found_use;
+            }
+
             struct MirStore store;
             if (pawMir_check_store(C, *pinstr, &store)) {
                 const int index = reglist_find(store.outputs, r);
@@ -333,12 +336,6 @@ struct MirBlockList *pawMir_compute_live_in(struct Compiler *C, struct Mir *mir,
                 K_LIST_POP(W);
                 --i;
                 break;
-            }
-
-            struct MirLoad load;
-            if (pawMir_check_load(C, *pinstr, &load)) {
-                const int index = reglist_find(load.inputs, r);
-                if (index >= 0) goto found_use;
             }
         }
 found_use:;

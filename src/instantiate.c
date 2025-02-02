@@ -75,23 +75,12 @@ static void prep_func_instance(struct InstanceState *I, struct IrTypeList *befor
 
 static struct IrType *instantiate_func_aux(struct InstanceState *I, struct HirFuncDecl *base, struct IrTypeList *types)
 {
-    struct IrType *result = pawIr_new_type(I->C, kIrSignature);
-    struct IrSignature *r = IrGetSignature(result);
-    r->params = collect_field_types(I, base->params);
-    r->result = func_result(I, base);
-    r->did = base->did;
-    r->types = types;
-
-    struct IrType *base_fdef = pawIr_get_type(I->C, base->hid);
-    prep_func_instance(I, IR_TYPE_SUBTYPES(base_fdef), types, r);
-    return result;
-}
-
-static void instantiate_adt_aux(struct InstanceState *I, struct HirAdtDecl *base,
-                                struct IrAdt *inst, struct IrTypeList *types)
-{
-    inst->did = base->did;
-    inst->types = types;
+    struct IrTypeList *params = collect_field_types(I, base->params);
+    struct IrType *result = func_result(I, base);
+    struct IrType *inst = pawIr_new_signature(I->C, base->did, types, params, result);
+    struct IrType *base_type = pawIr_get_type(I->C, base->hid);
+    prep_func_instance(I, IR_TYPE_SUBTYPES(base_type), types, IrGetSignature(inst));
+    return inst;
 }
 
 static void check_type_param(struct InstanceState *I, struct IrTypeList *params, struct IrTypeList *args)
@@ -115,10 +104,7 @@ static struct IrType *instantiate_adt(struct InstanceState *I, struct HirAdtDecl
     struct IrType *base_type = pawIr_get_type(I->C, base->hid);
     check_type_param(I, ir_adt_types(base_type), types);
     normalize_type_list(I, types);
-
-    struct IrType *inst = pawIr_new_type(I->C, kIrAdt);
-    instantiate_adt_aux(I, base, IrGetAdt(inst), types);
-    return inst;
+    return pawIr_new_adt(I->C, base->did, types);
 }
 
 static struct IrType *instantiate_func(struct InstanceState *I, struct HirFuncDecl *base, struct IrTypeList *types)
@@ -133,16 +119,15 @@ static struct IrType *instantiate_func(struct InstanceState *I, struct HirFuncDe
 static struct IrType *instantiate_method_aux(struct InstanceState *I, struct IrTypeList *generics, struct IrTypeList *types, struct IrType *self, struct HirDecl *method)
 {
     struct HirFuncDecl *func = HirGetFuncDecl(method);
-    struct IrType *result = pawIr_new_type(I->C, kIrSignature);
-    struct IrSignature *r = IrGetSignature(result);
-    r->did = method->hdr.did;
-    r->types = collect_generic_types(I, func->generics);
-    r->params = collect_field_types(I, func->params);
-    r->result = func_result(I, func);
+    struct IrTypeList *func_types = collect_generic_types(I, func->generics);
+    struct IrTypeList *params = collect_field_types(I, func->params);
+    struct IrType *result = func_result(I, func);
+    struct IrType *inst = pawIr_new_signature(I->C, method->hdr.did, func_types, params, result);
+    struct IrSignature *r = IrGetSignature(inst);
     prep_func_instance(I, generics, types, r);
 
-    pawH_insert(ENV(I), I->C->method_binders, I2V(method->hdr.did.value), P2V(generics));
-    return result;
+    pawP_set_binder(I->C, method->hdr.did, generics);
+    return inst;
 }
 
 static struct IrType *instantiate_method(struct InstanceState *I, struct HirImplDecl *impl, struct IrTypeList *types, struct HirDecl *method)
@@ -178,14 +163,14 @@ struct IrType *pawP_instantiate_method(struct Compiler *C, struct HirDecl *base,
     };
 
     if (types == NULL) return GET_NODE_TYPE(C, base);
-    return instantiate_method(&I, &base->impl, types, method);
+    return instantiate_method(&I, HirGetImplDecl(base), types, method);
 }
 
 
 struct IrType *pawP_instantiate(struct Compiler *C, struct HirDecl *base, struct IrTypeList *types)
 {
     paw_assert(!HirIsImplDecl(base));
-    if (types == NULL) goto instantiated;
+    if (types == NULL) return GET_NODE_TYPE(C, base);
 
     struct InstanceState I = {
         .U = &C->dm->unifier,
@@ -194,11 +179,10 @@ struct IrType *pawP_instantiate(struct Compiler *C, struct HirDecl *base, struct
     };
 
     if (HIR_IS_POLY_ADT(base)) {
-        return instantiate_adt(&I, &base->adt, types);
+        return instantiate_adt(&I, HirGetAdtDecl(base), types);
     } else if (HIR_IS_POLY_FUNC(base)) {
-        return instantiate_func(&I, &base->func, types);
+        return instantiate_func(&I, HirGetFuncDecl(base), types);
     }
-instantiated:
     return GET_NODE_TYPE(C, base);
 }
 
@@ -265,9 +249,10 @@ static struct IrTypeList *substitute_list(struct IrTypeFolder *F, struct IrTypeL
     struct Substitution *subst = F->ud;
     struct Compiler *C = subst->C;
 
+    struct IrType **ptype;
     struct IrTypeList *copy = pawIr_type_list_new(C);
-    for (int i = 0; i < list->count; ++i) {
-        struct IrType *type = pawIr_fold_type(F, list->data[i]);
+    K_LIST_FOREACH(list, ptype) {
+        struct IrType *type = pawIr_fold_type(F, *ptype);
         K_LIST_PUSH(C, copy, type);
     }
     return copy;
@@ -275,63 +260,45 @@ static struct IrTypeList *substitute_list(struct IrTypeFolder *F, struct IrTypeL
 
 static struct IrType *substitute_func_ptr(struct IrTypeFolder *F, struct IrFuncPtr *t)
 {
-    struct Substitution *subst = F->ud;
-    struct Compiler *C = subst->C;
-
-    struct IrType *r = pawIr_new_type(C, kIrFuncPtr);
-    IrGetFuncPtr(r)->params = pawIr_fold_type_list(F, t->params);
-    IrGetFuncPtr(r)->result = pawIr_fold_type(F, t->result);
-    return r;
+    struct IrTypeList *params = pawIr_fold_type_list(F, t->params);
+    struct IrType *result = pawIr_fold_type(F, t->result);
+    return pawIr_new_func_ptr(F->C, params, result);
 }
 
 static struct IrType *substitute_signature(struct IrTypeFolder *F, struct IrSignature *t)
 {
-    struct Substitution *subst = F->ud;
-    struct Compiler *C = subst->C;
-
     if (t->types == NULL) {
-        struct IrType *result = pawIr_new_type(C, kIrSignature);
-        struct IrSignature *r = IrGetSignature(result);
-        r->params = pawIr_fold_type_list(F, t->params);
-        r->result = pawIr_fold_type(F, t->result);
-        r->did = t->did;
-        return result;
+        struct IrTypeList *params = pawIr_fold_type_list(F, t->params);
+        struct IrType *result = pawIr_fold_type(F, t->result);
+        return pawIr_new_signature(F->C, t->did, NULL, params, result);
     }
     struct IrTypeList *types = pawIr_fold_type_list(F, t->types);
-    struct HirDecl *base = pawHir_get_decl(C, t->did);
-    return pawP_instantiate(C, base, types);
+    struct HirDecl *base = pawHir_get_decl(F->C, t->did);
+    return pawP_instantiate(F->C, base, types);
 }
 
 static struct IrType *substitute_adt(struct IrTypeFolder *F, struct IrAdt *t)
 {
-    struct Substitution *subst = F->ud;
-    struct Compiler *C = subst->C;
-
     if (t->types == NULL) return IR_CAST_TYPE(t);
-    struct HirDecl *base = pawHir_get_decl(C, t->did);
+    struct HirDecl *base = pawHir_get_decl(F->C, t->did);
     struct IrTypeList *types = pawIr_fold_type_list(F, t->types);
-    return pawP_instantiate(C, base, types);
+    return pawP_instantiate(F->C, base, types);
 }
 
 static struct IrType *substitute_tuple(struct IrTypeFolder *F, struct IrTuple *t)
 {
-    struct Substitution *subst = F->ud;
-    struct Compiler *C = subst->C;
-
-    struct IrType *result = pawIr_new_type(C, kIrTuple);
-    struct IrTuple *r = IrGetTuple(result);
-    r->elems = pawIr_fold_type_list(F, t->elems);
-    return result;
+    struct IrTypeList *elems = pawIr_fold_type_list(F, t->elems);
+    return pawIr_new_tuple(F->C, elems);
 }
 
 static struct IrType *substitute_generic(struct IrTypeFolder *F, struct IrGeneric *t)
 {
     struct Substitution *subst = F->ud;
-    struct Compiler *C = subst->C;
 
-    for (int i = 0; i < subst->generics->count; ++i) {
-        struct IrGeneric *g = IrGetGeneric(K_LIST_GET(subst->generics, i));
-        if (t->did.value == g->did.value) return K_LIST_GET(subst->types, i);
+    struct IrType **pg, **pt;
+    K_LIST_ZIP(subst->generics, pg, subst->types, pt) {
+        struct IrGeneric *g = IrGetGeneric(*pg);
+        if (t->did.value == g->did.value) return *pt;
     }
     return IR_CAST_TYPE(t);
 }

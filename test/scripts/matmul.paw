@@ -5,9 +5,9 @@ fn matgen(n: int) -> [[float]] {
               n as float /
               n as float;
 	let a = [];
-	for i = 0, n {
+	for i in range(0, n, 1) {
         let b = [];
-		for j = 0, n {
+		for j in range(0, n, 1) {
             let x = tmp
                   * (i - j) as float
                   * (i + j) as float;
@@ -20,15 +20,15 @@ fn matgen(n: int) -> [[float]] {
 
 fn matmul(n: int, a: [[float]], b: [[float]]) -> [[float]] {
 	let c = [];
-	for i = 0, n {
+	for i in range(0, n, 1) {
 		let ci = [];
-		for j = 0, n {
+		for j in range(0, n, 1) {
             ci.push(0.0);
         }
-		for k = 0, n {
+		for k in range(0, n, 1) {
             let aik = a[i][k];
             let bk = b[k];
-			for j = 0, n {
+			for j in range(0, n, 1) {
 				ci[j] = ci[j] + aik * bk[j];
 			}
 		}
@@ -47,5 +47,6 @@ pub fn main(args: [str]) {
     let c = matmul(n, a, b);
     let r = c[n / 2][n / 2];
 
-    print(r.to_string() + '\n');
+    print(r.to_string());
+    print('\n');
 }

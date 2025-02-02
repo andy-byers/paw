@@ -17,46 +17,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Fill memory with alternating bits (each byte has value 0b10101010)
 static void trash_memory(void *ptr, size_t o, size_t n)
 {
-    // TODO: does this actually help performance? probably slow due to the huge
-    //       number of cache misses anyway
     volatile unsigned long long *ll = (unsigned long long *)((unsigned char *)ptr + o);
-    for (; n >= 8; n -= 8) *ll++ = 0xAAAAAAAAAAAAAAAA;
+    for (; n >= sizeof(*ll); n -= sizeof(*ll)) *ll++ = 0xAAAAAAAAAAAAAAAA;
 
     volatile unsigned char *c = (unsigned char *)ll;
-   // volatile unsigned char *c = (unsigned char *)ptr + o;
-    while (n-- > 0) *c++ = 0xAA; // 0b10101010
-}
-
-static void *safe_realloc(struct TestAlloc *a, void *ptr, size_t size0, size_t size)
-{
-    check((size0 == 0) == (ptr == NULL));
-    void *ptr2 = size ? malloc(size) : NULL;
-    check(size == 0 || ptr2 != NULL); // assume success
-    if (ptr2 != NULL) {
-        if (ptr != NULL) {
-            // resize: copy old contents
-            memcpy(ptr2, ptr, PAW_MIN(size0, size));
-        }
-        if (size0 < size) {
-            // grow: fill uninitialized memory
-            trash_memory(ptr2, size0, size - size0);
-        }
-    }
-    if (ptr != NULL) {
-        // Trash the old allocation in an attempt to mess up any code
-        // that still depends on it.
-        trash_memory(ptr, 0, size0);
-    }
-    free(ptr);
-    return ptr2;
-}
-
-void *test_alloc(void *ud, void *ptr, size_t size0, size_t size)
-{
-    struct TestAlloc *a = ud;
-    return safe_realloc(a, ptr, size0, size);
+    while (n-- > 0) *c++ = 0xAA;
 }
 
 static void next_chunk(struct TestReader *rd)
@@ -140,6 +108,7 @@ void test_mem_hook(void *ud, void *ptr, size_t size0, size_t size)
 {
     struct TestAlloc *a = ud;
     if (ptr != NULL) {
+        // trash newly-allocated memory, as well as memory about to be released
         const size_t lower = PAW_MIN(size0, size);
         const size_t upper = PAW_MAX(size0, size);
         trash_memory(ptr, lower, upper - lower);

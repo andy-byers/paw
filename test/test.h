@@ -84,7 +84,6 @@ struct TestReader {
 };
 
 void test_mem_hook(void *ud, void *ptr, size_t size0, size_t size);
-void *test_alloc(void *ud, void *ptr, size_t size0, size_t size);
 const char *test_reader(paw_Env *X, void *ud, size_t *size);
 const char *test_pathname(const char *name);
 

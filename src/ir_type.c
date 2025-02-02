@@ -7,62 +7,55 @@
 
 #define NEW_NODE(C, T) (T *)pawK_pool_alloc(ENV(C), (C)->pool, sizeof(T))
 
-struct IrFieldDef *pawIr_new_field(struct Compiler *C, DeclId did, String *name, paw_Bool is_pub)
+DeclId pawIr_next_did(struct Compiler *C, int mod)
 {
-    struct IrFieldDef *def = NEW_NODE(C, struct IrFieldDef);
-    *def = (struct IrFieldDef){
-        .is_pub = is_pub,
-        .name = name,
-        .did = did,
+    return (DeclId){
+        .value = C->def_count++,
+        .modno = mod,
     };
-    return def;
 }
 
-struct IrVariantDef *pawIr_new_variant_def(struct Compiler *C, DeclId xdid, int discr, String *name, struct IrFieldList *fields)
+IrDef *pawIr_new_def(struct Compiler *C)
 {
-    struct IrVariantDef *def = NEW_NODE(C, struct IrVariantDef);
-    *def = (struct IrVariantDef){
-        .fields = fields,
-        .discr = discr,
-        .name = name,
-        .xdid = xdid,
-    };
-    return def;
+    return NEW_NODE(C, IrDef);
 }
 
-struct IrAdtDef *pawIr_new_adt_def(struct Compiler *C, DeclId did, String *name, paw_Bool is_pub, paw_Bool is_struct)
+IrType *pawIr_new_type_(struct Compiler *C)
 {
-    struct IrAdtDef *def = NEW_NODE(C, struct IrAdtDef);
-    *def = (struct IrAdtDef){
-        .variants = pawIr_variant_list_new(C),
-        .is_struct = is_struct,
-        .is_pub = is_pub,
-        .name = name,
-        .did = did,
-    };
-    return def;
+    return NEW_NODE(C, IrType);
 }
 
-
-struct IrType *pawIr_new_type(struct Compiler *C, enum IrTypeKind kind)
+IrType *pawIr_new_type(struct Compiler *C, enum IrTypeKind kind)
 {
-    struct IrType *type = NEW_NODE(C, struct IrType);
-    *type = (struct IrType){
+    IrType *type = NEW_NODE(C, IrType);
+    *type = (IrType){
         .hdr.kind = kind,
     };
     return type;
 }
 
-struct IrType *pawIr_get_type(struct Compiler *C, HirId hid)
+IrType *pawIr_get_type(struct Compiler *C, HirId hid)
 {
-    const Value *pv = pawH_get(C->ir_types, I2V(hid.value));
+    const Value *pv = MAP_GET(C->ir_types, I2V(hid.value));
     return pv != NULL ? pv->p : NULL;
 }
 
-void pawIr_set_type(struct Compiler *C, HirId hid, struct IrType *type)
+IrDef *pawIr_get_def(struct Compiler *C, DeclId did)
+{
+    const Value *pv = MAP_GET(C->ir_types, I2V(did.value));
+    return pv != NULL ? pv->p : NULL;
+}
+
+void pawIr_set_type(struct Compiler *C, HirId hid, IrType *type)
 {
     paw_assert(type != NULL);
-    pawH_insert(ENV(C), C->ir_types, I2V(hid.value), P2V(type));
+    MAP_INSERT(C, C->ir_types, I2V(hid.value), P2V(type));
+}
+
+void pawIr_set_def(struct Compiler *C, DeclId did, IrDef *def)
+{
+    paw_assert(def != NULL);
+    MAP_INSERT(C, C->ir_types, I2V(did.value), P2V(def));
 }
 
 struct Printer {
@@ -77,7 +70,7 @@ struct Printer {
 #define PRINT_FORMAT(P, ...) pawL_add_fstring(ENV(P), (P)->buf, __VA_ARGS__)
 #define PRINT_CHAR(P, c) pawL_add_char(ENV(P), (P)->buf, c)
 
-static void print_type(struct Printer *, struct IrType *);
+static void print_type(struct Printer *, IrType *);
 static void print_type_list(struct Printer *P, struct IrTypeList *list)
 {
     for (int i = 0; i < list->count; ++i) {
@@ -86,7 +79,7 @@ static void print_type_list(struct Printer *P, struct IrTypeList *list)
     }
 }
 
-static void print_type(struct Printer *P, struct IrType *type)
+static void print_type(struct Printer *P, IrType *type)
 {
     switch (IR_KINDOF(type)) {
         case kIrTuple: {
@@ -150,7 +143,7 @@ static void print_type(struct Printer *P, struct IrType *type)
     }
 }
 
-const char *pawIr_print_type(struct Compiler *C, struct IrType *type)
+const char *pawIr_print_type(struct Compiler *C, IrType *type)
 {
     Buffer buf;
     paw_Env *P = ENV(C);

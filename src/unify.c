@@ -282,10 +282,7 @@ struct IrType *pawU_new_unknown(struct Unifier *U, int line)
     const int index = table->ivars->count;
     K_LIST_PUSH(U->C, table->ivars, ivar);
 
-    struct IrType *type = pawIr_new_type(U->C, kIrInfer);
-    IrGetInfer(type)->depth = table->depth;
-    IrGetInfer(type)->index = index;
-
+    struct IrType *type = pawIr_new_infer(U->C, table->depth, index);
     ivar->parent = ivar;
     ivar->type = type;
     return type;

@@ -27,13 +27,12 @@ static void *default_alloc(void *ud, void *ptr, size_t old_size, size_t new_size
     return realloc(ptr, new_size);
 }
 
-static void default_mem_hook(void *ud, void *old_ptr, size_t old_size, void *new_ptr, size_t new_size)
+static void default_mem_hook(void *ud, void *ptr, size_t size0, size_t size)
 {
     PAW_UNUSED(ud);
-    PAW_UNUSED(old_ptr);
-    PAW_UNUSED(new_ptr);
-    PAW_UNUSED(old_size);
-    PAW_UNUSED(new_size);
+    PAW_UNUSED(ptr);
+    PAW_UNUSED(size0);
+    PAW_UNUSED(size);
 }
 
 static StackPtr at(paw_Env *P, int index)
@@ -165,11 +164,11 @@ void paw_mangle_add_args(paw_Env *P, paw_Type *types)
 int paw_lookup_item(paw_Env *P, int index, struct paw_Item *pitem)
 {
     const String *name = V_STRING(*at(P, index));
-    const int did = pawE_locate(P, name, PAW_TRUE);
+    const ItemId iid = pawE_locate(P, name, PAW_TRUE);
 
-    if (did < 0) return PAW_ENAME;
+    if (iid < 0) return PAW_ENAME;
     if (pitem == NULL) return 0;
-    const struct Def *def = P->defs.data[did];
+    const struct Def *def = P->defs.data[iid];
     *pitem = (struct paw_Item){
         .global_id = def->hdr.kind == DEF_FUNC ? def->func.vid :
             def->hdr.kind == DEF_VAR ? def->var.vid : -1,

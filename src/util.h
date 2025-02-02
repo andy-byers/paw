@@ -10,9 +10,6 @@
 #include <string.h>
 #include <limits.h>
 
-#warning "remove me"
-#include"stdio.h"
-
 #define paw_assert assert
 
 #define PAW_UNUSED(x) ((void)(x))

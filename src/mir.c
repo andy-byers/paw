@@ -473,26 +473,6 @@ static void renumber_block_refs(struct Compiler *C, Map *map, struct MirBlockDat
     }
 }
 
-static void rename_usedef_blocks(struct Compiler *C, Map *mapping, Map *usedef)
-{
-    int index;
-    MirBlock *pb;
-    paw_Int iter = PAW_ITER_INIT;
-    while (pawH_iter(usedef, &iter)) {
-        struct MirBlockList *blocks = pawH_value(usedef, iter)->p;
-        K_LIST_ENUMERATE(blocks, index, pb) {
-            const Value *pval = pawH_get(mapping, I2V(pb->value));
-            if (pval != NULL) {
-                *pb = MIR_BB(pval->i);
-            } else {
-                *pb = K_LIST_LAST(blocks);
-                K_LIST_POP(blocks);
-                --index;
-            }
-        }
-    }
-}
-
 // TODO
 #include <stdio.h>
 
@@ -526,7 +506,7 @@ static void dump_usedef(struct Compiler *C, Map *uses, Map *defs)
     }
 }
 
-void pawMir_remove_unreachable_blocks(struct Compiler *C, struct Mir *mir, Map *uses, Map *defs)
+void pawMir_remove_unreachable_blocks(struct Compiler *C, struct Mir *mir)
 {
     // create a mapping from old to new basic block numbers
     Map *map = pawP_push_map(C);
@@ -550,9 +530,6 @@ void pawMir_remove_unreachable_blocks(struct Compiler *C, struct Mir *mir, Map *
         renumber_block_refs(C, map, bb);
         K_LIST_PUSH(C, blocks, bb);
     }
-
-    rename_usedef_blocks(C, map, uses);
-    rename_usedef_blocks(C, map, defs);
 
     mir->blocks = blocks;
     pawP_pop_object(C, map);

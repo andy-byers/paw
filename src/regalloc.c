@@ -534,8 +534,6 @@ struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mi
         }
     }
 
-printf("%s\n", pawP_print_live_intervals_pretty(C, mir, intervals));--ENV(C)->top.p;
-
     // sort live intervals by start point
     qsort(intervals->data, CAST_SIZE(intervals->count),
             sizeof(struct MirLiveInterval *), compare_first);
@@ -545,8 +543,6 @@ printf("%s\n", pawP_print_live_intervals_pretty(C, mir, intervals));--ENV(C)->to
     allocate_registers(&R);
     resolve_registers(&R, order);
     *pmax_reg = R.max_reg;
-
-dump_result(R.result);
 
     pawP_pop_object(C, R.inactive);
     pawP_pop_object(C, R.active);
