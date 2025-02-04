@@ -145,8 +145,8 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const c
     };
 
     pawP_push_store(C, &C->store);
-    C->ir_defs = pawP_new_map(C, &C->store);
     C->ir_types = pawP_new_map(C, &C->store);
+    C->ir_defs = pawP_new_map(C, &C->store);
 
     C->strings = pawP_push_map(C);
     C->method_contexts = pawP_push_map(C);

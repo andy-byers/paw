@@ -397,22 +397,19 @@ static int next_conflicting_int(paw_Env *P)
 
 static void test_gc_conflict(void)
 {
-    printf("WARNING: test_gc_conflict needs for loops\n");
-    return;
-
     const char source[] =
         "pub fn conflicting_int<T>(t: T) -> int;\n"
         "pub fn main() {\n"
         "    let N = 500;\n"
         // create a bunch of dynamically-allocated objects
         "    let objects = [];\n"
-        "    for i = 0, N {objects.push([i, i + 1, i + 2]);}\n"
+        "    for i in range(0, N, 1) {objects.push([i, i + 1, i + 2]);}\n"
         // fill a list with integers that conflict with the object addresses
         "    let conflicts = [];\n"
-        "    for i = 0, N {conflicts.push(conflicting_int(objects[i]));}\n"
+        "    for i in range(0, N, 1) {conflicts.push(conflicting_int(objects[i]));}\n"
         // use a lot of memory to cause garbage collections
         "    let memory = [];\n"
-        "    for i = 0, N {memory.push([[i], [i + 1], [i + 2]]);}\n"
+        "    for i in range(0, N, 1) {memory.push([[i], [i + 1], [i + 2]]);}\n"
         "}\n";
 
     paw_Env *P = paw_open(&(struct paw_Options){0});

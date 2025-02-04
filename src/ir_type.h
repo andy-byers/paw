@@ -99,70 +99,70 @@ struct IrType {
     IR_TYPE_LIST(DEFINE_ACCESS)
 #undef DEFINE_ACCESS
 
-IrType *pawIr_new_type_(struct Compiler *C);
+IrType *pawIr_new_type(struct Compiler *C);
 
 static inline IrType *pawIr_new_adt(struct Compiler *C, DeclId did, struct IrTypeList *types)
 {
-    IrType *t = pawIr_new_type_(C);
-    *t = (IrType){
-        .Adt_.kind = kIrAdt,
-        .Adt_.did = did,
-        .Adt_.types = types,
+    IrType *t = pawIr_new_type(C);
+    t->Adt_ = (struct IrAdt){
+        .kind = kIrAdt,
+        .did = did,
+        .types = types,
     };
     return t;
 }
 
 static inline IrType *pawIr_new_func_ptr(struct Compiler *C, struct IrTypeList *params, IrType *result)
 {
-    IrType *t = pawIr_new_type_(C);
-    *t = (IrType){
-        .FuncPtr_.kind = kIrFuncPtr,
-        .FuncPtr_.params = params,
-        .FuncPtr_.result = result,
+    IrType *t = pawIr_new_type(C);
+    t->FuncPtr_ = (struct IrFuncPtr){
+        .kind = kIrFuncPtr,
+        .params = params,
+        .result = result,
     };
     return t;
 }
 
 static inline IrType *pawIr_new_signature(struct Compiler *C, DeclId did, struct IrTypeList *types, struct IrTypeList *params, IrType *result)
 {
-    IrType *t = pawIr_new_type_(C);
-    *t = (IrType){
-        .Signature_.kind = kIrSignature,
-        .Signature_.did = did,
-        .Signature_.params = params,
-        .Signature_.result = result,
-        .Signature_.types = types,
+    IrType *t = pawIr_new_type(C);
+    t->Signature_ = (struct IrSignature){
+        .kind = kIrSignature,
+        .did = did,
+        .params = params,
+        .result = result,
+        .types = types,
     };
     return t;
 }
 
 static inline IrType *pawIr_new_tuple(struct Compiler *C, struct IrTypeList *elems)
 {
-    IrType *t = pawIr_new_type_(C);
-    *t = (IrType){
-        .Tuple_.kind = kIrTuple,
-        .Tuple_.elems = elems,
+    IrType *t = pawIr_new_type(C);
+    t->Tuple_ = (struct IrTuple){
+        .kind = kIrTuple,
+        .elems = elems,
     };
     return t;
 }
 
 static inline IrType *pawIr_new_infer(struct Compiler *C, int depth, int index)
 {
-    IrType *t = pawIr_new_type_(C);
-    *t = (IrType){
-        .Infer_.kind = kIrInfer,
-        .Infer_.depth = depth,
-        .Infer_.index = index,
+    IrType *t = pawIr_new_type(C);
+    t->Infer_ = (struct IrInfer){
+        .kind = kIrInfer,
+        .depth = depth,
+        .index = index,
     };
     return t;
 }
 
 static inline IrType *pawIr_new_generic(struct Compiler *C, DeclId did)
 {
-    IrType *t = pawIr_new_type_(C);
-    *t = (IrType){
-        .Generic_.kind = kIrGeneric,
-        .Generic_.did = did,
+    IrType *t = pawIr_new_type(C);
+    t->Generic_ = (struct IrGeneric){
+        .kind = kIrGeneric,
+        .did = did,
     };
     return t;
 }
@@ -177,7 +177,7 @@ enum IrDefKind {
 
 #define IR_DEF_HEADER enum IrDefKind kind : 8; \
                       DeclId did; \
-                      String *name;
+                      String *name
 struct IrDefHeader {
     IR_DEF_HEADER;
     IrType *type;
@@ -252,11 +252,11 @@ IrDef *pawIr_new_def(struct Compiler *C);
 static inline IrDef *pawIr_new_generic_def(struct Compiler *C, DeclId did, String *name, IrType *type)
 {
     IrDef *def = pawIr_new_def(C);
-    *def = (IrDef){
-        .GenericDef_.kind = kIrGenericDef,
-        .GenericDef_.did = did,
-        .GenericDef_.name = name,
-        .GenericDef_.type = type,
+    def->GenericDef_ = (struct IrGenericDef){
+        .kind = kIrGenericDef,
+        .did = did,
+        .name = name,
+        .type = type,
     };
     return def;
 }
@@ -264,11 +264,11 @@ static inline IrDef *pawIr_new_generic_def(struct Compiler *C, DeclId did, Strin
 static inline IrDef *pawIr_new_param_def(struct Compiler *C, DeclId did, String *name, IrType *type)
 {
     IrDef *def = pawIr_new_def(C);
-    *def = (IrDef){
-        .ParamDef_.kind = kIrParamDef,
-        .ParamDef_.did = did,
-        .ParamDef_.name = name,
-        .ParamDef_.type = type,
+    def->ParamDef_ = (struct IrParamDef){
+        .kind = kIrParamDef,
+        .did = did,
+        .name = name,
+        .type = type,
     };
     return def;
 }
@@ -276,12 +276,12 @@ static inline IrDef *pawIr_new_param_def(struct Compiler *C, DeclId did, String 
 static inline IrDef *pawIr_new_field_def(struct Compiler *C, DeclId did, String *name, IrType *type, paw_Bool is_pub)
 {
     IrDef *def = pawIr_new_def(C);
-    *def = (IrDef){
-        .FieldDef_.kind = kIrFieldDef,
-        .FieldDef_.did = did,
-        .FieldDef_.is_pub = is_pub,
-        .FieldDef_.name = name,
-        .FieldDef_.type = type,
+    def->FieldDef_ = (struct IrFieldDef){
+        .kind = kIrFieldDef,
+        .did = did,
+        .is_pub = is_pub,
+        .name = name,
+        .type = type,
     };
     return def;
 }
@@ -289,12 +289,12 @@ static inline IrDef *pawIr_new_field_def(struct Compiler *C, DeclId did, String 
 static inline IrDef *pawIr_new_variant_def(struct Compiler *C, DeclId did, int discr, String *name, struct IrFieldList *fields)
 {
     IrDef *def = pawIr_new_def(C);
-    *def = (IrDef){
-        .VariantDef_.kind = kIrVariantDef,
-        .VariantDef_.did = did,
-        .VariantDef_.fields = fields,
-        .VariantDef_.discr = discr,
-        .VariantDef_.name = name,
+    def->VariantDef_ = (struct IrVariantDef){
+        .kind = kIrVariantDef,
+        .did = did,
+        .fields = fields,
+        .discr = discr,
+        .name = name,
     };
     return def;
 }
@@ -302,13 +302,13 @@ static inline IrDef *pawIr_new_variant_def(struct Compiler *C, DeclId did, int d
 static inline IrDef *pawIr_new_func_def(struct Compiler *C, DeclId did, String *name, struct IrGenericList *generics, struct IrParamList *params, paw_Bool is_pub)
 {
     IrDef *def = pawIr_new_def(C);
-    *def = (IrDef){
-        .FuncDef_.kind = kIrFuncDef,
-        .FuncDef_.did = did,
-        .FuncDef_.generics = generics,
-        .FuncDef_.params = params,
-        .FuncDef_.is_pub = is_pub,
-        .FuncDef_.name = name,
+    def->FuncDef_ = (struct IrFuncDef){
+        .kind = kIrFuncDef,
+        .did = did,
+        .generics = generics,
+        .params = params,
+        .is_pub = is_pub,
+        .name = name,
     };
     return def;
 }
@@ -316,14 +316,14 @@ static inline IrDef *pawIr_new_func_def(struct Compiler *C, DeclId did, String *
 static inline IrDef *pawIr_new_adt_def(struct Compiler *C, DeclId did, String *name, struct IrGenericList *generics, struct IrVariantList *variants, paw_Bool is_pub, paw_Bool is_struct)
 {
     IrDef *def = pawIr_new_def(C);
-    *def = (IrDef){
-        .AdtDef_.kind = kIrAdtDef,
-        .AdtDef_.did = did,
-        .AdtDef_.generics = generics,
-        .AdtDef_.variants = variants,
-        .AdtDef_.is_struct = is_struct,
-        .AdtDef_.is_pub = is_pub,
-        .AdtDef_.name = name,
+    def->AdtDef_ = (struct IrAdtDef){
+        .kind = kIrAdtDef,
+        .did = did,
+        .generics = generics,
+        .variants = variants,
+        .is_struct = is_struct,
+        .is_pub = is_pub,
+        .name = name,
     };
     return def;
 }
@@ -340,6 +340,7 @@ static inline IrDef *pawIr_new_adt_def(struct Compiler *C, DeclId did, String *n
 #define IR_IS_UNIT_T(x) (IrIsAdt(x) && IR_TYPE_DID(x).value == PAW_TUNIT)
 #define IR_IS_BASIC_T(x) (IrIsAdt(x) && IR_TYPE_DID(x).value <= PAW_TSTR)
 
+DEFINE_LIST(struct Compiler, pawIr_def_list_, IrDefList, IrDef *)
 DEFINE_LIST(struct Compiler, pawIr_type_list_, IrTypeList, IrType *)
 DEFINE_LIST(struct Compiler, pawIr_adt_list_, IrAdtList, struct IrAdtDef *)
 DEFINE_LIST(struct Compiler, pawIr_field_list_, IrFieldList, struct IrFieldDef *)

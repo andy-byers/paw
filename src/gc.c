@@ -74,9 +74,12 @@ static void link_gray_(Object *o, Object **pnext, Object **list)
 #define LINK_GRAY(o, L) link_gray_(o, get_gc_list(o), &(L))
 
 static void mark_value(paw_Env *P, Value v);
-
+#include"stdio.h"
 static void mark_object(paw_Env *P, Object *o)
 {
+    if ((uintptr_t)o == 0x0000000105ae2ec8){
+    printf("hi");
+    }
     if (o == NULL) return;
     if (!IS_WHITE(o)) return;
     gc_trace_object("mark", o);

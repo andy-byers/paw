@@ -704,8 +704,13 @@ static void code_get_range(struct MirVisitor *V, struct MirGetRange *x)
     const int upper = temporary_reg(fs, 1);
     move_to_reg(fs, REG(x->lower), lower);
     move_to_reg(fs, REG(x->upper), upper);
-    const Op op = x->b_kind == BUILTIN_LIST ? OP_LGETN : OP_SGETN;
-    pawK_code_ABC(fs, op, REG(x->output), REG(x->object), lower);
+    if (x->b_kind == BUILTIN_LIST) {
+        // extra temporary register needed at runtime
+        temporary_reg(fs, 2);
+        pawK_code_ABC(fs, OP_LGETN, REG(x->output), REG(x->object), lower);
+    } else {
+        pawK_code_ABC(fs, OP_SGETN, REG(x->output), REG(x->object), lower);
+    }
 }
 
 static void code_set_range(struct MirVisitor *V, struct MirSetRange *x)

@@ -10,27 +10,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-/* TODO: need "for" loops
-    X(loop) \
-    X(close_loop_variable) \
-    X(integer) \
-    X(string) \
-    X(list) \
-    X(map) \
-*/
-
 #define TEST_SCRIPTS(X) \
     X(basic) \
     X(cfg) \
     X(primitive) \
     X(operator) \
     X(block) \
+    X(loop) \
     X(function) \
     X(closure) \
     X(float) \
+    X(integer) \
+    X(string) \
     X(struct) \
     X(tuple) \
     X(enum) \
+    X(list) \
+    X(map) \
     X(method) \
     X(match) \
     X(match_enum) \
@@ -47,6 +43,7 @@
     X(unit_variant) \
     X(infer_assoc_items) \
     X(capture_upvalue) \
+    X(close_loop_variable) \
     X(enum_impl)
 
 #define check(x) \
@@ -57,13 +54,11 @@
         } \
     } while (0)
 
-#define ENABLE_PTR_TRACKER
 #ifdef ENABLE_PTR_TRACKER
 
 // max number of outstanding allocations
 # define PTR_TRACKER_LIMIT (1 << 14)
 
-# warning "pointer tracking is enabled, perforamnce will be impacted"
 #endif // ENABLE_PTR_TRACKER
 
 struct TestAlloc {
@@ -99,8 +94,5 @@ paw_Int test_randint(paw_Int min, paw_Int max);
 
 // Fill 'str' with 'len' printable chars
 void test_randstr(char *str, int len);
-
-#undef PAW_STACK_MAX
-#define PAW_STACK_MAX 10000
 
 #endif // PAW_TEST_TEST_H

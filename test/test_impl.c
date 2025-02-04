@@ -291,13 +291,15 @@ static void test_stack(paw_Env *P)
     check(paw_int(P, n + 1) == 0);
 }
 
-static void driver(void (*callback)(paw_Env *))
+static void driver(const char *name, void (*callback)(paw_Env *))
 {
     struct TestAlloc a = {0};
+    fprintf(stderr, "running %s...\n", name);
     paw_Env *P = test_open(test_mem_hook, &a, 0);
     callback(P);
     test_close(P, &a);
 }
+#define DRIVER(callback) driver(#callback, callback)
 
 static int parse_int(paw_Env *P, const char *text)
 {
@@ -462,16 +464,16 @@ int main(void)
 {
     test_primitives();
     test_immediates();
-    driver(test_strings);
-    driver(test_stack);
-    driver(test_map_get_and_put);
-    driver(test_map_erase);
-    driver(test_map_erase_2);
-    driver(test_map_ops);
-    driver(test_map_ops_2);
-    driver(test_map_extend);
-    driver(test_parse_int);
-    driver(test_parse_float);
-    driver(test_buffer);
+    DRIVER(test_strings);
+    DRIVER(test_stack);
+    DRIVER(test_map_get_and_put);
+    DRIVER(test_map_erase);
+    DRIVER(test_map_erase_2);
+    DRIVER(test_map_ops);
+    DRIVER(test_map_ops_2);
+    DRIVER(test_map_extend);
+    DRIVER(test_parse_int);
+    DRIVER(test_parse_float);
+    DRIVER(test_buffer);
     return 0;
 }

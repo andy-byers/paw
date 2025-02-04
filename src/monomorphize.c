@@ -286,7 +286,6 @@ static struct MirBlockData *copy_basic_block(struct MonoCollector *M, struct Mir
 {
     struct MirBlockData *result = pawMir_new_block(M->C);
     result->location = block->location;
-    result->loop_end = block->loop_end;
 
     const MirBlock *pb;
     K_LIST_FOREACH(block->predecessors, pb) {

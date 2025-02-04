@@ -595,11 +595,11 @@ static struct AstType *parse_type(struct Lex *lex)
 static struct AstType *type_annotation(struct Lex *lex)
 {
     if (test_next(lex, ':')) {
-        struct AstType *tn = parse_type(lex);
-        if (tn == NULL) {
+        struct AstType *t = parse_type(lex);
+        if (t == NULL) {
             pawX_error(lex, "invalid type annotation");
         }
-        return tn;
+        return t;
     }
     return NULL; // needs inference
 }
@@ -622,12 +622,6 @@ static struct AstType *self_type(struct Lex *lex)
     return pawAst_new_path_type(lex->ast, line, path);
 }
 
-static void expect_self(struct Lex *lex, const String *name)
-{
-    if (pawS_eq(name, SELF_VARNAME(lex))) return;
-    pawX_error(lex, "expected parameter named 'self' but found '%s'", name->text);
-}
-
 static struct AstDecl *func_param_decl(struct Lex *lex)
 {
     const int line = lex->line;
@@ -641,14 +635,16 @@ static struct AstDecl *func_param_decl(struct Lex *lex)
         // first parameter to method: 'self' means 'self: Self'
         tag = type_annotation(lex);
         if (tag == NULL) {
+            if (!pawS_eq(name, SELF_VARNAME(lex))) {
+                pawX_error(lex, "expected parameter named 'self' but found '%s'", name->text);
+            }
             tag = self_type(lex);
-            expect_self(lex, name);
         }
     }
     return pawAst_new_field_decl(lex->ast, line, name, tag, PAW_FALSE);
 }
 
-static struct AstDecl *clos_param_decl(struct Lex *lex)
+static struct AstDecl *closure_param_decl(struct Lex *lex)
 {
     const int line = lex->line;
     String *name = parse_name(lex);
@@ -678,7 +674,7 @@ static struct AstDecl *generic_param(struct Lex *lex)
 
 DEFINE_LIST_PARSER(func_param, '(', ')', LOCAL_MAX, "function parameters", func_param_decl,  AstDeclList)
 DEFINE_LIST_PARSER(sig_param, '(', ')', LOCAL_MAX, "function parameters", parse_type, AstTypeList)
-DEFINE_LIST_PARSER(clos_param, '|', '|', LOCAL_MAX, "closure parameters", clos_param_decl, AstDeclList)
+DEFINE_LIST_PARSER(closure_param, '|', '|', LOCAL_MAX, "closure parameters", closure_param_decl, AstDeclList)
 DEFINE_LIST_PARSER(generic, '<', '>', LOCAL_MAX, "generics", generic_param, AstDeclList)
 
 static struct AstExpr *sitem_expr(struct Lex *lex)
@@ -889,12 +885,12 @@ static struct AstDeclList *func_parameters(struct Lex *lex)
     return list;
 }
 
-static struct AstDeclList *clos_parameters(struct Lex *lex)
+static struct AstDeclList *closure_params(struct Lex *lex)
 {
     const int line = lex->line;
     check_next(lex, '|');
     struct AstDeclList *list = pawAst_decl_list_new(lex->C);
-    parse_clos_param_list(lex, list, line);
+    parse_closure_param_list(lex, list, line);
     return list;
 }
 
@@ -939,7 +935,7 @@ static struct AstExpr *block_expr(struct Lex *lex)
 static struct AstExpr *closure(struct Lex *lex)
 {
     const int line = lex->line;
-    struct AstDeclList *params = clos_parameters(lex);
+    struct AstDeclList *params = closure_params(lex);
     struct AstType *result = NULL;
     struct AstExpr *expr;
     if (test_next(lex, TK_ARROW)) {
@@ -1355,8 +1351,8 @@ static struct AstDecl *enum_decl(struct Lex *lex, paw_Bool is_pub)
     const int line = lex->line;
     String *name = parse_name(lex);
     struct AstDeclList *generics = type_param(lex);
-    struct AstDeclList *fields = enum_body(lex, line);
-    return pawAst_new_adt_decl(lex->ast, line, name, generics, fields, is_pub, PAW_FALSE);
+    struct AstDeclList *variants = enum_body(lex, line);
+    return pawAst_new_adt_decl(lex->ast, line, name, generics, variants, is_pub, PAW_FALSE);
 }
 
 static struct AstDecl *field_decl(struct Lex *lex)

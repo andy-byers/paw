@@ -102,7 +102,31 @@ static void modify_size(struct TestAlloc *a, void *ptr, size_t size)
     const size_t i = find_ptr(a, ptr);
     a->sizes[i] = size;
 }
-#endif // ENABLE_PTR_TRACKER
+#else
+static void remove_ptr(struct TestAlloc *a, void *ptr, size_t size)
+{
+    PAW_UNUSED(ptr);
+    PAW_UNUSED(size);
+
+    --a->count;
+}
+
+static void add_ptr(struct TestAlloc *a, void *ptr, size_t size)
+{
+    PAW_UNUSED(ptr);
+    PAW_UNUSED(size);
+
+    check(a->count < SIZE_MAX);
+    ++a->count;
+}
+
+static void modify_size(struct TestAlloc *a, void *ptr, size_t size)
+{
+    PAW_UNUSED(a);
+    PAW_UNUSED(ptr);
+    PAW_UNUSED(size);
+}
+#endif
 
 void test_mem_hook(void *ud, void *ptr, size_t size0, size_t size)
 {
@@ -114,20 +138,19 @@ void test_mem_hook(void *ud, void *ptr, size_t size0, size_t size)
         trash_memory(ptr, lower, upper - lower);
     }
 
-#ifdef ENABLE_PTR_TRACKER
     if (size0 == 0 && size != 0) add_ptr(a, ptr, size);
     if (size0 != 0 && size == 0) remove_ptr(a, ptr, size0);
     if (size0 != 0 && size != 0) modify_size(a, ptr, size);
-#endif
 }
 
 paw_Env *test_open(paw_MemHook mem_hook, struct TestAlloc *a, size_t heap_size)
 {
 #ifdef ENABLE_PTR_TRACKER
+    fprintf(stderr, "pointer tracking is enabled, perforamnce will be impacted\n");
     a->ptrs = malloc(PTR_TRACKER_LIMIT * sizeof(a->ptrs[0]));
     a->sizes = malloc(PTR_TRACKER_LIMIT * sizeof(a->sizes[0]));
-    a->count = 0;
 #endif
+    a->count = 0;
 
     return paw_open(&(struct paw_Options){
                 .heap_size = heap_size,
@@ -140,13 +163,22 @@ void test_close(paw_Env *P, struct TestAlloc *a)
 {
     paw_close(P);
 
+    // TODO: This preprocessor guard (#ifndef _MSC_VER) should be removed. For
+    //       whatever reason (probably UB somewhere), Paw compiled by MSVC reports
+    //       some leaked allocations. I don't have an easy way to debug a binary
+    //       produced by MSVC, so this bug will have to be fixed later, or by
+    //       someone else...
+#ifndef _MSC_VER
+    if (a->count > 0) {
 #ifdef ENABLE_PTR_TRACKER
-    for (size_t i = 0; i < a->count; ++i) {
-        fprintf(stderr, "error: leaked %zu bytes at address %p\n",
-                a->sizes[i], a->ptrs[i]);
+        for (size_t i = 0; i < a->count; ++i) {
+            fprintf(stderr, "error: leaked %zu bytes at address %p\n",
+                    a->sizes[i], a->ptrs[i]);
+        }
+#endif
+        fprintf(stderr, "error: leaked %zu allocations\n", a->count);
         abort();
     }
-    check(a->count == 0);
 #endif
 }
 

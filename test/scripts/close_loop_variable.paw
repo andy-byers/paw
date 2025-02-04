@@ -1,4 +1,4 @@
-// close_loop_variable.paw: Ensure that for loops close over the loop variable
+// close_loop_variable.paw: Ensure that "for" loops close over the loop variable
 //     at the end of each iteration. This causes the captured upvalue to retain
 //     the value it had when it was captured, rather than the value taken during 
 //     the last iteration.
@@ -10,13 +10,13 @@ pub fn default_closure() -> (fn() -> int) {
 pub fn run_close_test(f: fn(int) -> (fn() -> int), lower: int, upper: int) {
     assert(f(-1)() == lower);
     assert(f(10)() == upper);
-    for i = 0, 10 {
+    for i in range(0, 10, 1) {
         assert(f(i)() == i);
     }
 }
 
 pub fn check_close_by_return(n: int) -> (fn() -> int) {
-    for i = 0, 10 {
+    for i in range(0, 10, 1) {
         if i == n {
             return || i;
         }        
@@ -24,9 +24,13 @@ pub fn check_close_by_return(n: int) -> (fn() -> int) {
     return default_closure();
 }
 
+pub fn test_close_by_return() {
+    run_close_test(check_close_by_return, -1, -1);
+}
+
 pub fn check_close_by_scope_exit(n: int) -> (fn() -> int) {
     let f = default_closure();
-    for i = 0, 10 {
+    for i in range(0, 10, 1) {
         if i == n {
             f = || i;
         }        
@@ -34,9 +38,13 @@ pub fn check_close_by_scope_exit(n: int) -> (fn() -> int) {
     return f;
 }
 
+pub fn test_close_by_scope_exit() {
+    run_close_test(check_close_by_scope_exit, -1, -1);
+}
+
 pub fn check_close_by_break(n: int) -> (fn() -> int) {
     let f = default_closure();
-    for i = 0, 10 {
+    for i in range(0, 10, 1) {
         // NOTE: ">=" instead of ">", to test that "break" exits the loop
         if i >= n {
             f = || i;
@@ -46,9 +54,13 @@ pub fn check_close_by_break(n: int) -> (fn() -> int) {
     return f;
 }
 
+pub fn test_close_by_break() {
+    run_close_test(check_close_by_break, 0, -1);
+}
+
 pub fn check_close_by_continue(n: int) -> (fn() -> int) {
     let f = default_closure();
-    for i = 0, 10 {
+    for i in range(0, 10, 1) {
         if i == n {
             f = || i;
             continue;
@@ -57,18 +69,29 @@ pub fn check_close_by_continue(n: int) -> (fn() -> int) {
     return f;
 }
 
-pub fn test_close_by_return() {
-    run_close_test(check_close_by_return, -1, -1);
-}
-
-pub fn test_close_by_scope_exit() {
-    run_close_test(check_close_by_scope_exit, -1, -1);
-}
-
-pub fn test_close_by_break() {
-    run_close_test(check_close_by_break, 0, -1);
-}
-
 pub fn test_close_by_continue() {
     run_close_test(check_close_by_continue, -1, -1);
+}
+
+pub fn test_close_by_continue_multiple_scopes() {
+    let f = || (-1, -1, -1, -1);
+    for i in range(0, 10, 1) {
+        let a = i + 1;
+        if i == 5 {
+            {
+                let not_captured = 42;
+            }
+            let b = a + 1;
+            {
+                let c = b + 1;
+                f = || (i, a, b, c);
+                continue;
+            }
+        } 
+    }
+    let t = f();
+    assert(t.0 == 5);
+    assert(t.1 == 6);
+    assert(t.2 == 7);
+    assert(t.3 == 8);
 }

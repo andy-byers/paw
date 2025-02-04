@@ -159,3 +159,6 @@ pub fn main() {
 ## Known problems
 + The C API has pretty much 0 type safety
     + It may be necessary to reduce the scope of the C API somewhat
++ Pointer tracking (test only) feature is broken on MSVC
+    + Might also indicate a problem somewhere in the library
+    + Need a machine that can run Windows for debugging

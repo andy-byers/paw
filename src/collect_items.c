@@ -248,13 +248,39 @@ static void register_func(struct ItemCollector *X, struct HirFuncDecl *d)
   //  pawIr_set_def(X->C, did, r);
 }
 
+static struct IrVariantList *create_struct_variant(struct ItemCollector *X, String *name, struct HirDeclList *decls, DeclId did)
+{
+    struct IrFieldList *fields = collect_fields(X, decls);
+    struct IrDef *r = pawIr_new_variant_def(X->C, did, 0, name, fields);
+    struct IrVariantList *variants = pawIr_variant_list_new(X->C);
+    K_LIST_PUSH(X->C, variants, IrGetVariantDef(r));
+    return variants;
+}
+
+static struct IrVariantList *collect_variants(struct ItemCollector *X, struct HirAdtDecl *d, DeclId base_did)
+{
+    if (d->is_struct) return create_struct_variant(X, d->name, d->fields, base_did);
+    struct IrVariantList *variants = pawIr_variant_list_new(X->C);
+
+    struct HirDecl **pdecl;
+    K_LIST_FOREACH(d->fields, pdecl) {
+        const DeclId did = pawIr_next_did(X->C, MOD(X));
+        struct HirVariantDecl *d = HirGetVariantDecl(*pdecl);
+        struct IrFieldList *fields = collect_fields(X, d->fields);
+        struct IrDef *r = pawIr_new_variant_def(X->C, did, d->index, d->name, fields);
+        K_LIST_PUSH(X->C, variants, IrGetVariantDef(r));
+        pawIr_set_def(X->C, did, r);
+    }
+    return variants;
+}
+
 static struct IrType *register_adt(struct ItemCollector *X, struct HirAdtDecl *d)
 {
-  //  const DeclId did = pawIr_next_did(X->C, MOD(X));
-  //  struct IrGenericList *generics = collect_generics(X, d->generics);
-  //  struct IrVariantList *variants = pawIr_variant_list_new(X->C); // TODO collect_variants(X, d->fields);
-  //  struct IrDef *r = pawIr_new_adt_def(X->C, did, d->name, generics, variants, d->is_pub, d->is_struct);
-  //  pawIr_set_def(X->C, did, r);
+//    const DeclId did = pawIr_next_did(X->C, MOD(X));
+//    struct IrGenericList *generics = collect_generics(X, d->generics);
+//    struct IrVariantList *variants = collect_variants(X, d, did);
+//    struct IrDef *r = pawIr_new_adt_def(X->C, did, d->name, generics, variants, d->is_pub, d->is_struct);
+//    pawIr_set_def(X->C, did, r);
 
     struct IrTypeList *types = collect_generic_types(X, d->generics);
     struct IrType *type = pawIr_new_adt(X->C, d->did, types);

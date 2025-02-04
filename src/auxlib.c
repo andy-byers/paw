@@ -16,10 +16,10 @@ static void grow_buffer(paw_Env *P, Buffer *buf)
     const size_t alloc = buf->alloc * 2;
     StackPtr pbox = RESTORE_POINTER(P, buf->boxloc);
     if (L_IS_BOXED(buf)) {
-        Foreign *ud = V_FOREIGN(*pbox);
+        Foreign *f = V_FOREIGN(*pbox);
         pawM_resize(P, buf->data, buf->alloc, alloc);
-        ud->data = buf->data;
-        ud->size = alloc;
+        f->data = buf->data;
+        f->size = alloc;
     } else {
         // Add a new Foreign 'box' to contain the buffer. Prevents a memory leak
         // if an error is thrown before the buffer is freed.

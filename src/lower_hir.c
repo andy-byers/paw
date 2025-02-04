@@ -47,11 +47,13 @@ struct LocalVar {
     MirRegister reg;
     String *name;
     DeclId did;
+    int depth;
     int vid;
 };
 
 struct BlockState {
     struct BlockState *outer;
+    int depth;
     int label0;
     int nvars;
     paw_Bool has_upvalue : 1;
@@ -176,12 +178,17 @@ static paw_Bool is_unterminated(struct MirBlockData *block)
     }
 }
 
+static void add_instruction(struct LowerHir *L, struct MirInstruction *instr)
+{
+    struct MirBlockData *block = current_bb_data(L);
+    K_LIST_PUSH(L->C, block->instructions, instr);
+}
+
 static struct MirInstruction *new_instruction(struct LowerHir *L, enum MirInstructionKind kind)
 {
-    struct MirInstruction *r = pawMir_new_instruction(L->C, kind);
-    struct MirBlockData *block = current_bb_data(L);
-    K_LIST_PUSH(L->C, block->instructions, r);
-    return r;
+    struct MirInstruction *instr = pawMir_new_instruction(L->C, kind);
+    add_instruction(L, instr);
+    return instr;
 }
 
 static struct MirInstruction *terminate_goto(struct LowerHir *L, MirBlock target)
@@ -213,8 +220,42 @@ static MirBlock new_bb(struct LowerHir *L)
     return (MirBlock){id};
 }
 
+static struct LocalVar *get_local_slot(struct FunctionState *fs, int index)
+{
+    return &K_LIST_GET(fs->L->stack, fs->level + index);
+}
+
+static void close_until_loop(struct FunctionState *fs)
+{
+    MirRegister lowest_upvalue;
+    paw_Bool needs_close = PAW_FALSE;
+    struct VarStack *stack = fs->L->stack;
+    int index = stack->count - 1;
+    struct BlockState *bs = fs->bs;
+    while (bs != NULL) {
+        needs_close |= bs->has_upvalue;
+        if (bs->has_upvalue) {
+            // find the upvalue with the smallest index in block "bs"
+            for (; index >= bs->nvars; --index) {
+                struct LocalVar var = K_LIST_GET(stack, index);
+                struct MirRegisterData *data = mir_reg_data(fs->mir, var.reg);
+                if (data->is_captured) lowest_upvalue = var.reg;
+            }
+        }
+        if (bs->is_loop) break;
+        bs = bs->outer;
+    }
+    if (needs_close) {
+        struct MirInstruction *close = pawMir_new_close(fs->mir, -1, lowest_upvalue);
+        add_instruction(fs->L, close);
+    }
+}
+
 static void add_label(struct LowerHir *L, enum JumpKind kind)
 {
+    // MirClose must be added here if "continue" causes control to leave a scope containing
+    // a captured variable, since the MirClose at the end of the loop body will not be reached.
+    if (kind == JUMP_CONTINUE) close_until_loop(L->fs);
     struct MirBlockData *block = current_bb_data(L);
     terminate_goto(L, MIR_INVALID_BB);
 
@@ -309,11 +350,6 @@ struct NonGlobal {
     paw_Bool is_upvalue : 1;
 };
 
-static struct LocalVar *get_local_slot(struct FunctionState *fs, int index)
-{
-    return &K_LIST_GET(fs->L->stack, fs->level + index);
-}
-
 static paw_Bool resolve_local(struct LowerHir *L, struct FunctionState *fs, DeclId did, const String *name, struct NonGlobal *pinfo)
 {
     // condition is "i > 0" to cause the result register to be ignored
@@ -396,6 +432,7 @@ static void enter_block(struct LowerHir *L, struct BlockState *bs, paw_Bool is_l
 {
     struct FunctionState *fs = L->fs;
     *bs = (struct BlockState){
+        .depth = fs->bs == NULL ? 0 : fs->bs->depth + 1,
         .label0 = L->labels->count,
         .nvars = fs->nlocals,
         .is_loop = is_loop,
@@ -408,8 +445,8 @@ static void maybe_close(struct LowerHir *L, MirRegister r)
 {
     struct MirRegisterData *data = mir_reg_data(L->fs->mir, r);
     if (data->is_captured) {
-        struct MirInstruction *close = new_instruction(L, kMirClose);
-        MirGetClose(close)->target = r;
+        struct MirInstruction *close = pawMir_new_close(L->fs->mir, -1, r);
+        add_instruction(L, close);
     }
 }
 
@@ -440,6 +477,7 @@ static struct LocalVar *add_local(struct LowerHir *L, String *name, MirRegister 
 {
     K_LIST_PUSH(L->C, L->stack, ((struct LocalVar){
                 .vid = L->fs->locals->count,
+                .depth = L->fs->bs->depth,
                 .name = name,
                 .did = did,
                 .reg = r,
@@ -1249,12 +1287,6 @@ static MirRegister lower_if_expr(struct HirVisitor *V, struct HirIfExpr *e)
     return result;
 }
 
-static void mark_loop_end(struct FunctionState *fs, MirBlock header, MirBlock end)
-{
-    struct MirBlockData *data = mir_bb_data(fs->mir, header);
-    data->loop_end = end;
-}
-
 static void emit_call0(struct LowerHir *L, MirRegister target, MirRegister output)
 {
     struct MirInstruction *r = new_instruction(L, kMirCall);
@@ -1291,7 +1323,6 @@ static MirRegister lower_loop_expr(struct HirVisitor *V, struct HirLoopExpr *e)
     lower_operand(V, e->block);
 
     const MirBlock loop_bb = current_bb(L);
-    mark_loop_end(fs, header_bb, loop_bb);
     maybe_goto(L, header_bb);
 
     adjust_to(L, JUMP_CONTINUE, header_bb);

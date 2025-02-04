@@ -306,6 +306,21 @@ static const char *kMirInstructionNames[] = {
 #undef DEFINE_NAME
 };
 
+struct MirInstruction *pawMir_new_instruction_(struct Mir *mir);
+
+static inline struct MirInstruction *pawMir_new_close(struct Mir *mir, int line, MirRegister target)
+{
+    struct MirInstruction *instr = pawMir_new_instruction_(mir);
+    instr->Close_ = (struct MirClose){
+        .kind = kMirClose,
+        .line = line,
+        .location = -1,
+        .target = target,
+    };
+    return instr;
+}
+
+
 struct MirRegisterData {
     paw_Bool is_captured : 1;
     MirRegister hint;
@@ -317,7 +332,6 @@ struct MirBlockData {
     struct MirBlockList *successors;
     struct MirInstructionList *joins;
     struct MirInstructionList *instructions;
-    MirBlock loop_end;
     int location;
 };
 
@@ -332,8 +346,8 @@ struct Mir {
     struct MirBodyList *children;
     struct IrType *type;
     struct IrType *self;
+    struct Compiler *C;
     String *name;
-    int ncaptured;
     enum FuncKind fn_kind : 8;
     paw_Bool is_native : 1;
     paw_Bool is_poly : 1;

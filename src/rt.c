@@ -314,7 +314,7 @@ void pawR_str_getn(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const 
     V_SET_OBJECT(ra, slice);
 }
 
-void pawR_list_getn(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc)
+void pawR_list_getn(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc, Value *temp)
 {
     const List *list = V_LIST(*rb);
     const paw_Int i = V_INT(rc[0]);
@@ -323,12 +323,13 @@ void pawR_list_getn(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const
     const size_t n = pawV_list_length(list);
     const size_t zi = check_slice_bound(P, i, n, "start", "list");
     const size_t zj = check_slice_bound(P, j, n, "end", "list");
-    List *slice = VM_LIST_INIT(ra);
+    List *slice = VM_LIST_INIT(temp);
 
     const size_t nelems = zi < zj ? zj - zi : 0;
     pawV_list_resize(P, slice, nelems);
     memcpy(slice->begin, list->begin + zi,
             nelems * sizeof(list->begin[0]));
+    *ra = *temp;
 }
 
 static List *list_copy(paw_Env *P, CallFrame *cf, Value *pv, const List *list)
@@ -655,9 +656,10 @@ top:
             {
                 VM_SAVE_PC();
                 const Value *rb = VM_RB(opcode);
-                Value *rc = VM_RC(opcode);
-                P->top.p = rc + 1;
-                pawR_list_getn(P, cf, ra, rb, rc);
+                const Value *rc = VM_RC(opcode);
+                Value *temp = VM_RC(opcode) + 1;
+                P->top.p = temp + 1;
+                pawR_list_getn(P, cf, ra, rb, rc, temp);
             }
 
             vm_case(LSETN):

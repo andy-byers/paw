@@ -19,6 +19,7 @@
 // (1) Wimmer, C., & Moessenboeck, H. (). Optimized Interval Splitting in a Linear
 //     Scan Register Allocator.
 
+#include <stdlib.h>
 #include "compile.h"
 #include "map.h"
 #include "mir.h"
