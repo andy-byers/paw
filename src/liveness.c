@@ -180,6 +180,21 @@ const char *pawP_print_live_intervals_pretty(struct Compiler *C, struct Mir *mir
     return paw_string(P, -1);
 }
 
+// Return a list of all blocks containing back edges to a loop header
+static struct MirBlockList *determine_loop_ends(struct Liveness *L, MirBlock header)
+{
+    struct MirBlockData *data = mir_bb_data(L->mir, header);
+    struct MirBlockList *loop_ends = pawMir_block_list_new(L->C);
+
+    const MirBlock *pb;
+    K_LIST_FOREACH(data->predecessors, pb) {
+        if (pb->value >= header.value) {
+            K_LIST_PUSH(L->C, loop_ends, *pb);
+        }
+    }
+    return loop_ends;
+}
+
 static void compute_liveness(struct Liveness *L, struct Mir *mir, struct MirBlockList *order)
 {
     for (int ib = order->count - 1; ib >= 0; --ib) {
@@ -230,9 +245,11 @@ static void compute_liveness(struct Liveness *L, struct Mir *mir, struct MirBloc
 
         // Special handling for loop headers. Variables live at the loop header must be
         // live until the end of the loop, since they are needed in subsequent iterations.
-        if (MIR_BB_EXISTS(block->loop_end)) {
-            struct MirBlockData *loop_end = mir_bb_data(mir, block->loop_end);
-            K_LIST_FOREACH(live, pr) add_range(L, *pr, from, mir_bb_last(loop_end));
+        const MirBlock *pb;
+        struct MirBlockList *loop_ends = determine_loop_ends(L, b);
+        K_LIST_FOREACH(loop_ends, pb) {
+            struct MirBlockData *end = mir_bb_data(mir, *pb);
+            K_LIST_FOREACH(live, pr) add_range(L, *pr, from, mir_bb_last(end));
         }
         K_LIST_SET(L->live, b.value, live);
     }

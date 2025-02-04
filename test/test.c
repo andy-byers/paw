@@ -102,7 +102,31 @@ static void modify_size(struct TestAlloc *a, void *ptr, size_t size)
     const size_t i = find_ptr(a, ptr);
     a->sizes[i] = size;
 }
-#endif // ENABLE_PTR_TRACKER
+#else
+static void remove_ptr(struct TestAlloc *a, void *ptr, size_t size)
+{
+    PAW_UNUSED(ptr);
+    PAW_UNUSED(size);
+
+    --a->count;
+}
+
+static void add_ptr(struct TestAlloc *a, void *ptr, size_t size)
+{
+    PAW_UNUSED(ptr);
+    PAW_UNUSED(size);
+
+    check(a->count < SIZE_MAX);
+    ++a->count;
+}
+
+static void modify_size(struct TestAlloc *a, void *ptr, size_t size)
+{
+    PAW_UNUSED(a);
+    PAW_UNUSED(ptr);
+    PAW_UNUSED(size);
+}
+#endif
 
 void test_mem_hook(void *ud, void *ptr, size_t size0, size_t size)
 {
@@ -114,11 +138,9 @@ void test_mem_hook(void *ud, void *ptr, size_t size0, size_t size)
         trash_memory(ptr, lower, upper - lower);
     }
 
-#ifdef ENABLE_PTR_TRACKER
     if (size0 == 0 && size != 0) add_ptr(a, ptr, size);
     if (size0 != 0 && size == 0) remove_ptr(a, ptr, size0);
     if (size0 != 0 && size != 0) modify_size(a, ptr, size);
-#endif
 }
 
 paw_Env *test_open(paw_MemHook mem_hook, struct TestAlloc *a, size_t heap_size)
@@ -126,8 +148,8 @@ paw_Env *test_open(paw_MemHook mem_hook, struct TestAlloc *a, size_t heap_size)
 #ifdef ENABLE_PTR_TRACKER
     a->ptrs = malloc(PTR_TRACKER_LIMIT * sizeof(a->ptrs[0]));
     a->sizes = malloc(PTR_TRACKER_LIMIT * sizeof(a->sizes[0]));
-    a->count = 0;
 #endif
+    a->count = 0;
 
     return paw_open(&(struct paw_Options){
                 .heap_size = heap_size,
@@ -146,8 +168,9 @@ void test_close(paw_Env *P, struct TestAlloc *a)
                 a->sizes[i], a->ptrs[i]);
         abort();
     }
-    check(a->count == 0);
 #endif
+
+    check(a->count == 0);
 }
 
 static void check_ok(paw_Env *P, int status)

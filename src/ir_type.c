@@ -55,7 +55,7 @@ void pawIr_set_type(struct Compiler *C, HirId hid, IrType *type)
 void pawIr_set_def(struct Compiler *C, DeclId did, IrDef *def)
 {
     paw_assert(def != NULL);
-    MAP_INSERT(C, C->ir_types, I2V(did.value), P2V(def));
+    MAP_INSERT(C, C->ir_defs, I2V(did.value), P2V(def));
 }
 
 struct Printer {

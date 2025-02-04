@@ -98,7 +98,7 @@ pub fn test_find() {
 pub fn test_split_and_join() {
     let check = |s: str, sep, parts: [str]| {
         let a = s.split(sep);
-        for i = 0, #a {
+        for i in range(0, #a, 1) {
             assert(a[i] == parts[i]);
         }
         assert(#a == #parts);
@@ -118,11 +118,11 @@ pub fn test_split_and_join() {
 
 pub fn test_string_concat() {
     let s = '';
-    for a = 0, 1 {
+    for a in range(0, 1, 1) {
         s = s + 'a';
-        for b = 0, 2 {
+        for b in range(0, 2, 1) {
             s = 'b' + s;
-            for c = 0, 3 {
+            for c in range(0, 3, 1) {
                 s = 'c' + s + 'd';
             }
         }
@@ -131,7 +131,7 @@ pub fn test_string_concat() {
 }
 
 fn concat_with_self(v: str, n: int) -> str {
-    for i = 0, n { v = v + v; }
+    for i in range(0, n, 1) { v = v + v; }
     return v;
 }
 

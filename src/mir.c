@@ -23,6 +23,7 @@ struct Mir *pawMir_new(struct Compiler *C, String *name, struct IrType *type, st
         .name = name,
         .type = type,
         .self = self,
+        .C = C,
     };
     return mir;
 }
@@ -46,6 +47,11 @@ struct MirRegisterData *pawMir_new_register(struct Compiler *C, int value, struc
     return r;
 }
 
+struct MirInstruction *pawMir_new_instruction_(struct Mir *mir)
+{
+    return pawK_pool_alloc(ENV(mir->C), mir->C->pool, sizeof(struct MirInstruction));
+}
+
 struct MirInstruction *pawMir_new_instruction(struct Compiler *C, enum MirInstructionKind kind)
 {
     struct MirInstruction *instr = pawK_pool_alloc(ENV(C), C->pool, sizeof(struct MirInstruction));
@@ -63,7 +69,6 @@ struct MirBlockData *pawMir_new_block(struct Compiler *C)
         .successors = pawMir_block_list_new(C),
         .joins = pawMir_instruction_list_new(C),
         .instructions = pawMir_instruction_list_new(C),
-        .loop_end = MIR_INVALID_BB,
     };
     return block;
 }
@@ -521,12 +526,6 @@ void pawMir_remove_unreachable_blocks(struct Compiler *C, struct Mir *mir)
     K_LIST_RESERVE(C, blocks, order->count);
     K_LIST_FOREACH(order, pb) {
         struct MirBlockData *bb = mir_bb_data(mir, *pb);
-        if (MIR_BB_EXISTS(bb->loop_end)) {
-            // The "loop_end" is unreachable if there is an unconditional break in the loop.
-            // There are no additional iterations where loop header variables need to be
-            // preserved, so the "loop_end" can be ignored (used for SSA construction).
-            renumber_or_clear_ref(map, &bb->loop_end);
-        }
         renumber_block_refs(C, map, bb);
         K_LIST_PUSH(C, blocks, bb);
     }
