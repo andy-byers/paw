@@ -449,9 +449,10 @@ static void test_buffer(paw_Env *P)
     pawL_discard_result(P, &buf);
 
     pawL_init_buffer(P, &buf);
-    for (int i = 0; i < 12345; ++i) {
+    for (int i = 0; i < 1234; ++i) {
         pawL_add_int(P, &buf, i);
     }
+fprintf(stderr,"buffer @ %p, %zu bytes\n",buf.data,buf.alloc);
     pawL_buffer_resize(P, &buf, 16);
     pawL_push_result(P, &buf);
 

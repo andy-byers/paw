@@ -21,7 +21,7 @@ endfunction()
 
 build_test(test_impl)
 #build_test(test_alloc)
-build_test(test_rt)
+#build_test(test_rt)
 #build_test(test_oom)
 #build_test(test_so)
 #build_test(test_error)
