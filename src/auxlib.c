@@ -19,7 +19,6 @@ static void grow_buffer(paw_Env *P, Buffer *buf)
         Foreign *f = V_FOREIGN(*pbox);
         pawM_resize(P, buf->data, buf->alloc, alloc);
         f->data = buf->data;
-fprintf(stderr,"resize box @ %p, %zu => %zu bytes\n", f->data, f->size, alloc);
         f->size = alloc;
     } else {
         // Add a new Foreign 'box' to contain the buffer. Prevents a memory leak
@@ -27,7 +26,6 @@ fprintf(stderr,"resize box @ %p, %zu => %zu bytes\n", f->data, f->size, alloc);
         Foreign *f = pawV_new_foreign(P, alloc, 0, 0, pbox);
         memcpy(f->data, buf->stack, buf->size);
         buf->data = f->data;
-fprintf(stderr,"new box @ %p, %zu bytes\n", f->data, alloc);
     }
     buf->alloc = alloc;
 }

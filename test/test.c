@@ -82,6 +82,7 @@ static size_t find_ptr(struct TestAlloc *a, void *ptr)
 
 static void remove_ptr(struct TestAlloc *a, void *ptr, size_t size)
 {
+fprintf(stderr,"free ptr @ %p, %zu bytes\n", ptr, size);
     const size_t i = find_ptr(a, ptr);
     check(a->sizes[i] == size);
     a->sizes[i] = a->sizes[a->count - 1];
@@ -91,6 +92,7 @@ static void remove_ptr(struct TestAlloc *a, void *ptr, size_t size)
 
 static void add_ptr(struct TestAlloc *a, void *ptr, size_t size)
 {
+fprintf(stderr,"new ptr @ %p, %zu bytes\n", ptr, size);
     check(a->count < PTR_TRACKER_LIMIT);
     a->sizes[a->count] = size;
     a->ptrs[a->count] = ptr;
@@ -100,6 +102,7 @@ static void add_ptr(struct TestAlloc *a, void *ptr, size_t size)
 static void modify_size(struct TestAlloc *a, void *ptr, size_t size)
 {
     const size_t i = find_ptr(a, ptr);
+fprintf(stderr,"resize ptr @ %p, %zu => %zu bytes\n", ptr, a->sizes[i], size);
     a->sizes[i] = size;
 }
 #else
