@@ -54,6 +54,7 @@
         } \
     } while (0)
 
+#define ENABLE_PTR_TRACKER
 #ifdef ENABLE_PTR_TRACKER
 
 // max number of outstanding allocations
