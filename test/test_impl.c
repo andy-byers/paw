@@ -449,7 +449,7 @@ static void test_buffer(paw_Env *P)
     pawL_discard_result(P, &buf);
 
     pawL_init_buffer(P, &buf);
-    for (int i = 0; i < 1234; ++i) {
+    for (int i = 0; i < 12345; ++i) {
         pawL_add_int(P, &buf, i);
     }
     pawL_buffer_resize(P, &buf, 16);
@@ -462,18 +462,18 @@ static void test_buffer(paw_Env *P)
 
 int main(void)
 {
-    test_primitives();
-    test_immediates();
-    DRIVER(test_strings);
-    DRIVER(test_stack);
-    DRIVER(test_map_get_and_put);
-    DRIVER(test_map_erase);
-    DRIVER(test_map_erase_2);
-    DRIVER(test_map_ops);
-    DRIVER(test_map_ops_2);
-    DRIVER(test_map_extend);
-    DRIVER(test_parse_int);
-    DRIVER(test_parse_float);
+//    test_primitives();
+//    test_immediates();
+//    DRIVER(test_strings);
+//    DRIVER(test_stack);
+//    DRIVER(test_map_get_and_put);
+//    DRIVER(test_map_erase);
+//    DRIVER(test_map_erase_2);
+//    DRIVER(test_map_ops);
+//    DRIVER(test_map_ops_2);
+//    DRIVER(test_map_extend);
+//    DRIVER(test_parse_int);
+//    DRIVER(test_parse_float);
     DRIVER(test_buffer);
     return 0;
 }

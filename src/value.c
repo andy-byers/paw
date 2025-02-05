@@ -210,6 +210,7 @@ void pawV_free_foreign(paw_Env *P, Foreign *f)
     } else if (f->flags == VBOX_LOADER) {
         pawL_close_loader(P, f->data);
     }
+printf("free box @ %p, %zu bytes\n", f->data, f->size);
     pawM_free_vec(P, f->data, f->size);
     pawM_free_flex(P, f, CAST_SIZE(f->nfields), sizeof(f->fields[0]));
 }
