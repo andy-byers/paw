@@ -20,18 +20,9 @@ IrDef *pawIr_new_def(struct Compiler *C)
     return NEW_NODE(C, IrDef);
 }
 
-IrType *pawIr_new_type_(struct Compiler *C)
+IrType *pawIr_new_type(struct Compiler *C)
 {
     return NEW_NODE(C, IrType);
-}
-
-IrType *pawIr_new_type(struct Compiler *C, enum IrTypeKind kind)
-{
-    IrType *type = NEW_NODE(C, IrType);
-    *type = (IrType){
-        .hdr.kind = kind,
-    };
-    return type;
 }
 
 IrType *pawIr_get_type(struct Compiler *C, HirId hid)

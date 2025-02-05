@@ -33,18 +33,17 @@ enum IrTypeKind {
 #undef DEFINE_ENUM
 };
 
-#define IR_TYPE_HEADER enum IrTypeKind kind : 8
 struct IrTypeHeader {
-    IR_TYPE_HEADER;
+    enum IrTypeKind kind;
 };
 
 struct IrAdt {
-    IR_TYPE_HEADER;
+    enum IrTypeKind kind;
     DeclId did;
     struct IrTypeList *types;
 };
 
-#define IR_FUNC_HEADER IR_TYPE_HEADER; \
+#define IR_FUNC_HEADER enum IrTypeKind kind; \
                struct IrTypeList *params; \
                IrType *result
 struct IrFuncPtr {
@@ -58,18 +57,18 @@ struct IrSignature {
 };
 
 struct IrTuple {
-    IR_TYPE_HEADER;
+    enum IrTypeKind kind;
     struct IrTypeList *elems;
 };
 
 struct IrInfer {
-    IR_TYPE_HEADER;
+    enum IrTypeKind kind;
     int depth;
     int index;
 };
 
 struct IrGeneric {
-    IR_TYPE_HEADER;
+    enum IrTypeKind kind;
     DeclId did;
 };
 
@@ -99,11 +98,11 @@ struct IrType {
     IR_TYPE_LIST(DEFINE_ACCESS)
 #undef DEFINE_ACCESS
 
-IrType *pawIr_new_type_(struct Compiler *C);
+IrType *pawIr_new_type(struct Compiler *C);
 
 static inline IrType *pawIr_new_adt(struct Compiler *C, DeclId did, struct IrTypeList *types)
 {
-    IrType *t = pawIr_new_type_(C);
+    IrType *t = pawIr_new_type(C);
     t->Adt_ = (struct IrAdt){
         .kind = kIrAdt,
         .did = did,
@@ -114,7 +113,7 @@ static inline IrType *pawIr_new_adt(struct Compiler *C, DeclId did, struct IrTyp
 
 static inline IrType *pawIr_new_func_ptr(struct Compiler *C, struct IrTypeList *params, IrType *result)
 {
-    IrType *t = pawIr_new_type_(C);
+    IrType *t = pawIr_new_type(C);
     t->FuncPtr_ = (struct IrFuncPtr){
         .kind = kIrFuncPtr,
         .params = params,
@@ -125,7 +124,7 @@ static inline IrType *pawIr_new_func_ptr(struct Compiler *C, struct IrTypeList *
 
 static inline IrType *pawIr_new_signature(struct Compiler *C, DeclId did, struct IrTypeList *types, struct IrTypeList *params, IrType *result)
 {
-    IrType *t = pawIr_new_type_(C);
+    IrType *t = pawIr_new_type(C);
     t->Signature_ = (struct IrSignature){
         .kind = kIrSignature,
         .did = did,
@@ -138,7 +137,7 @@ static inline IrType *pawIr_new_signature(struct Compiler *C, DeclId did, struct
 
 static inline IrType *pawIr_new_tuple(struct Compiler *C, struct IrTypeList *elems)
 {
-    IrType *t = pawIr_new_type_(C);
+    IrType *t = pawIr_new_type(C);
     t->Tuple_ = (struct IrTuple){
         .kind = kIrTuple,
         .elems = elems,
@@ -148,7 +147,7 @@ static inline IrType *pawIr_new_tuple(struct Compiler *C, struct IrTypeList *ele
 
 static inline IrType *pawIr_new_infer(struct Compiler *C, int depth, int index)
 {
-    IrType *t = pawIr_new_type_(C);
+    IrType *t = pawIr_new_type(C);
     t->Infer_ = (struct IrInfer){
         .kind = kIrInfer,
         .depth = depth,
@@ -159,7 +158,7 @@ static inline IrType *pawIr_new_infer(struct Compiler *C, int depth, int index)
 
 static inline IrType *pawIr_new_generic(struct Compiler *C, DeclId did)
 {
-    IrType *t = pawIr_new_type_(C);
+    IrType *t = pawIr_new_type(C);
     t->Generic_ = (struct IrGeneric){
         .kind = kIrGeneric,
         .did = did,
