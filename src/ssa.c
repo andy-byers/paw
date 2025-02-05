@@ -31,14 +31,6 @@ struct SsaConverter {
     int N;
 };
 
-static MirRegister new_register(struct SsaConverter *S, struct MirRegisterData *data, MirRegister old)
-{
-    const int reg_id = S->registers->count;
-    K_LIST_PUSH(S->C, S->registers, *data);
-    pawH_insert(ENV(S->C), S->rename, I2V(old.value), I2V(reg_id));
-    return MIR_REG(reg_id);
-}
-
 static void add_captured_reg(struct SsaConverter *S, MirRegister r1, MirRegister r2)
 {
     paw_assert(!MAP_CONTAINS(S->capture, I2V(r1.value)));
@@ -87,20 +79,34 @@ DEFINE_LIST(struct Compiler, integer_list_, IntegerList, int)
 static void rename_input(struct SsaConverter *S, MirRegister *pr)
 {
     struct MirRegisterList *names = K_LIST_GET(S->stacks, pr->value);
-    paw_assert(names->count > 0);
+    if (names->count <= 0) {
+        pawE_error(ENV(S->C), PAW_EVALUE, -1, "use before initialization");
+    }
+//    paw_assert(names->count > 0);
     *pr = K_LIST_LAST(names);
 }
 
-static void rename_output(struct SsaConverter *S, MirRegister *pr)
+static void rename_output(struct SsaConverter *S, MirRegister *pr, paw_Bool is_alloc)
 {
     const MirRegister old = *pr;
     struct MirRegisterList *names = K_LIST_GET(S->stacks, old.value);
-    struct MirRegisterData *data = mir_reg_data(S->mir, old);
+    struct MirRegisterData *old_data = mir_reg_data(S->mir, old);
     K_LIST_PUSH(S->C, S->changes, old);
-    *pr = new_register(S, data, old);
-    K_LIST_PUSH(S->C, names, *pr);
 
-    if (data->is_captured) {
+    const int reg_id = S->registers->count;
+    struct MirRegisterData data = *old_data;
+    // If the instruction that generated this register is an AllocLocal, and the
+    // "MirRegisterData::is_uninit" flag is set, then the instruction refers to a local
+    // variable declaration without an initializer. Propagate the flag so that fix_aux_info()
+    // can check for "use before initialization" errors.
+    data.is_uninit = is_alloc ? data.is_uninit : PAW_FALSE;
+    K_LIST_PUSH(S->C, S->registers, data);
+    *pr = MIR_REG(reg_id);
+
+    K_LIST_PUSH(S->C, names, *pr);
+    MAP_INSERT(S->C, S->rename, I2V(old.value), I2V(reg_id));
+
+    if (old_data->is_captured) {
         struct MirRegisterData *reg = &K_LIST_GET(S->registers, pr->value);
         const MirRegister capture = captured_reg(S, old);
         if (!MIR_REG_EXISTS(capture)) {
@@ -115,7 +121,7 @@ static void rename_output(struct SsaConverter *S, MirRegister *pr)
 static void rename_join(struct SsaConverter *S, struct MirInstruction *instr)
 {
     struct MirPhi *x = MirGetPhi(instr);
-    rename_output(S, &x->output);
+    rename_output(S, &x->output, PAW_FALSE);
 }
 
 static int next_location(struct SsaConverter *S)
@@ -125,8 +131,6 @@ static int next_location(struct SsaConverter *S)
 
 static void rename_instruction(struct SsaConverter *S, struct MirInstruction *instr)
 {
-//    instr->hdr.location = next_location(S);
-
     MirRegister **ppr;
     struct MirLoad load;
     if (pawMir_check_load(S->C, instr, &load)) {
@@ -135,7 +139,7 @@ static void rename_instruction(struct SsaConverter *S, struct MirInstruction *in
 
     struct MirStore store;
     if (pawMir_check_store(S->C, instr, &store)) {
-        K_LIST_FOREACH(store.outputs, ppr) rename_output(S, *ppr);
+        K_LIST_FOREACH(store.outputs, ppr) rename_output(S, *ppr, MirIsAllocLocal(instr));
     }
 }
 
@@ -253,7 +257,8 @@ static void rename_vars(struct SsaConverter *S, MirBlock x)
             const struct MirRegisterList *stack = K_LIST_GET(S->stacks, phi->var_id);
             if (stack->count > 0) {
                 const int index = mir_which_pred(S->mir, *y, x);
-                K_LIST_SET(phi->inputs, index, K_LIST_LAST(stack));
+                const MirRegister input = K_LIST_LAST(stack);
+                K_LIST_SET(phi->inputs, index, input);
             }
         }
     }
@@ -273,6 +278,21 @@ static void rename_vars(struct SsaConverter *S, MirBlock x)
     }
 }
 
+// Ensure that the instruction does not use any variables before they are initialized
+static void ensure_init(struct SsaConverter *S, struct MirInstruction *instr)
+{
+    struct MirLoad load;
+    if (!pawMir_check_load(S->C, instr, &load)) return;
+
+    MirRegister *const *ppr;
+    K_LIST_FOREACH(load.inputs, ppr) {
+        struct MirRegisterData *data = mir_reg_data(S->mir, **ppr);
+        if (data->is_uninit) {
+            pawE_error(ENV(S->C), PAW_EVALUE, -1, "use before initialization");
+        }
+    }
+}
+
 static void fix_aux_info(struct SsaConverter *S, struct Mir *mir)
 {
     // write instruction numbers
@@ -281,9 +301,13 @@ static void fix_aux_info(struct SsaConverter *S, struct Mir *mir)
         struct MirBlockData *data = *pdata;
         struct MirInstruction **pinstr;
         data->location = next_location(S);
+        K_LIST_FOREACH(data->joins, pinstr) {
+            ensure_init(S, *pinstr);
+        }
         K_LIST_FOREACH(data->instructions, pinstr) {
             struct MirInstruction *instr = *pinstr;
             instr->hdr.location = next_location(S);
+            ensure_init(S, *pinstr);
         }
     }
 
@@ -344,6 +368,7 @@ void pawSsa_construct(struct Compiler *C, struct Mir *mir, Map *uses, Map *defs)
     rename_vars(&S, MIR_ROOT_BB);
     mir->registers = S.registers;
     fix_aux_info(&S, mir);
+printf("%s\n", pawMir_dump(C, mir));--ENV(C)->top.p;
 
     pawP_pop_object(C, S.rename);
     pawP_pop_object(C, S.capture);

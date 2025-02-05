@@ -268,7 +268,7 @@ static void test_syntax_error(void)
     test_compiler_status(PAW_ETYPE, "generic_type_is_not_a_value", "fn f<T>() {let t = T;}", "");
     test_compiler_status(PAW_ETYPE, "function_is_not_a_type", "fn test() {}", "let a: test = test;");
     test_compiler_status(PAW_ETYPE, "variable_is_not_a_type", "", "let a = 1; let b: a = a;");
-    test_compiler_status(PAW_ETYPE, "own_name_is_not_a_type", "", "let a: a = 1;");
+    test_compiler_status(PAW_ENAME, "own_name_is_not_a_type", "", "let a: a = 1;");
 
     test_compiler_status(PAW_ENAME, "duplicate_global", "struct A; struct A;", "");
     test_compiler_status(PAW_ESYNTAX, "return_outside_function", "return;", "");
@@ -625,9 +625,38 @@ static void test_match_error(void)
     test_variant_match_error();
 }
 
+static void test_uninit_local(void)
+{
+    test_compiler_status(PAW_EVALUE, "uninit_if_without_else", "", "let x; if true {x = 1;} x;");
+    test_compiler_status(PAW_EVALUE, "uninit_ifelse", "", "let x; if true {x = 1;} else {} x;");
+    test_compiler_status(PAW_EVALUE, "uninit_ifelse_chain", "", "let x; if true {x = 1;} else if true {} else {x = 3;} x;");
+    test_compiler_status(PAW_EVALUE, "uninit_ifelse_return", "", "let x; if true {return;} else if true {x = 2;} else {} x;");
+    test_compiler_status(PAW_EVALUE, "uninit_match", "",
+            "let x;\n"
+            "match 123 {\n"
+            "    123 => x = 1,\n"
+            "    _ => {},\n"
+            "}\n"
+            "x;");
+    test_compiler_status(PAW_EVALUE, "uninit_match_nested", "",
+            "let x;\n"
+            "match 123 {\n"
+            "    1 => x = 1,\n"
+            "    2 => x = 2,\n"
+            "    3 => {\n"
+            "        if true {\n"
+            "            if true { x = 3; }\n"
+            "        } else {\n"
+            "            x = 4;\n"
+            "        }\n"
+            "    },\n"
+            "    _ => x = 5,\n"
+            "}\n"
+            "x;");
+}
+
 int main(void)
 {
-    test_match_error();
     test_gc_conflict();
     test_impl_error();
     test_enum_error();
@@ -641,4 +670,6 @@ int main(void)
     test_list_error();
     test_map_error();
     test_import_error();
+    test_uninit_local();
+    test_match_error();
 }

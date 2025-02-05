@@ -1,0 +1,210 @@
+// deferred_init.paw
+
+fn check_deferred_init_ifelse(b: bool) -> int {
+    let r;
+    if b {
+        r = 1; 
+    } else {
+        r = 2;
+    }
+    return r;
+}
+
+pub fn test_deferred_init_ifelse() {
+    let check = check_deferred_init_ifelse;
+    assert(check(true) == 1);
+    assert(check(false) == 2);
+}
+
+fn check_deferred_init_ifelse_chain(b1: bool, b2: bool, b3: bool) -> int {
+    let r;
+    if b1 {
+        r = 1; 
+    } else if b2 {
+        r = 2;
+    } else if b3 {
+        r = 3;
+    } else {
+        r = 4;
+    }
+    return r;
+}
+
+pub fn test_deferred_init_ifelse_chain() {
+    let check = check_deferred_init_ifelse_chain;
+    assert(check(true, true, true) == 1);
+    assert(check(true, true, false) == 1);
+    assert(check(true, false, false) == 1);
+    assert(check(false, true, true) == 2);
+    assert(check(false, true, false) == 2);
+    assert(check(false, false, true) == 3);
+    assert(check(false, false, false) == 4);
+}
+
+fn check_deferred_init_ifelse_nested(b1: bool, b2: bool, b3: bool) -> int {
+    let r;
+    if b1 {
+        if b2 {
+            r = 1; 
+        } else {
+            if b3 {
+                r = 2;
+            } else {
+                r = 3;
+            }
+        }
+    } else {
+        r = 4;
+    }
+    return r;
+}
+
+pub fn test_deferred_init_ifelse_nested() {
+    let check = check_deferred_init_ifelse_nested;
+    assert(check(true, true, true) == 1);
+    assert(check(true, false, true) == 2);
+    assert(check(true, false, false) == 3);
+    assert(check(false, true, true) == 4);
+    assert(check(false, true, false) == 4);
+    assert(check(false, false, true) == 4);
+    assert(check(false, false, false) == 4);
+}
+
+fn check_deferred_init_ifelse_return(b1: bool, b2: bool) -> int {
+    let r;
+    if b1 {
+        if b2 {
+            r = 1; 
+        } else {
+            return -1;
+        }
+    } else {
+        return -2;
+    }
+    return r;
+}
+
+pub fn test_deferred_init_ifelse_return() {
+    let check = check_deferred_init_ifelse_return;
+    assert(check(true, true) == 1);
+    assert(check(true, false) == -1);
+    assert(check(false, true) == -2);
+    assert(check(false, false) == -2);
+}
+
+fn check_deferred_init_match(i: int) -> int {
+    let r;
+    match i {
+        0 => r = 1,
+        1 => r = 2,
+        _ => r = 3,
+    }
+    return r;
+}
+
+pub fn test_deferred_init_match() {
+    let check = check_deferred_init_match;
+    assert(check(0) == 1);
+    assert(check(1) == 2);
+    assert(check(2) == 3);
+}
+
+fn check_deferred_init_match_nested(i: int, j: int) -> int {
+    let r;
+    match i {
+        0 => r = 1,
+        1 => {
+            match j {
+                0 => r = 2,
+                1 => r = 3,
+                _ => r = 4,
+            }
+        },
+        _ => r = 5,
+    }
+    return r;
+}
+
+pub fn test_deferred_init_match_nested() {
+    let check = check_deferred_init_match_nested;
+    assert(check(0, 0) == 1);
+    assert(check(1, 0) == 2);
+    assert(check(1, 1) == 3);
+    assert(check(1, 2) == 4);
+    assert(check(2, 0) == 5);
+}
+
+fn check_deferred_init_match_return(i: int, j: int) -> int {
+    let r;
+    match i {
+        0 => r = 1,
+        1 => {
+            match j {
+                0 => r = 2,
+                1 => return -3,
+                _ => r = 4,
+            }
+        },
+        _ => return -5,
+    }
+    return r;
+}
+
+pub fn test_deferred_init_match_return() {
+    let check = check_deferred_init_match_return;
+    assert(check(0, 0) == 1);
+    assert(check(1, 0) == 2);
+    assert(check(1, 1) == -3);
+    assert(check(1, 2) == 4);
+    assert(check(2, 0) == -5);
+}
+
+pub fn test_unused_uninit_local() {
+    let f = |b1, b2| {
+        let var;
+        if b1 {
+            var = 1;
+        } else if b2 {
+            var = 2;
+        } else {
+            // "var" uninitialized if this branch is taken
+        }
+    };
+    f(false, false);
+    f(false, true);
+    f(true, false);
+    f(true, true);
+
+    let f = |discr| {
+        let var;
+        match discr {
+            0 => var = 1,
+            1 => var = 2,
+            d if d == 2 => return,
+            d => {
+                if d == 3 {
+                    var = -1;                    
+                } else {
+                    // "var" uninitialized if this branch is taken
+                }
+            },
+        }
+    };
+    f(0);
+    f(1);
+    f(2);
+    f(3);
+    f(4);
+
+    let f = |n| {
+        let var;
+        for i in range(0, 10, 1) {
+            if i == n {
+                var = 42;
+            }
+        }
+    };
+    f(1);
+    f(10);
+}
+

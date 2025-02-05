@@ -320,8 +320,21 @@ static inline struct MirInstruction *pawMir_new_close(struct Mir *mir, int line,
     return instr;
 }
 
+static inline struct MirInstruction *pawMir_new_goto(struct Mir *mir, int line, MirBlock b)
+{
+    struct MirInstruction *instr = pawMir_new_instruction_(mir);
+    instr->Goto_ = (struct MirGoto){
+        .kind = kMirGoto,
+        .line = line,
+        .location = -1,
+        .target = b,
+    };
+    return instr;
+}
+
 
 struct MirRegisterData {
+    paw_Bool is_uninit : 1;
     paw_Bool is_captured : 1;
     MirRegister hint;
     struct IrType *type;
@@ -373,8 +386,6 @@ struct Mir *pawMir_new(struct Compiler *C, String *name, struct IrType *type, st
 struct MirLiveInterval *pawMir_new_interval(struct Compiler *C, MirRegister r, int npositions);
 struct MirRegisterData *pawMir_new_register(struct Compiler *C, int value, struct IrType *type);
 struct MirInstruction *pawMir_new_instruction(struct Compiler *C, enum MirInstructionKind kind);
-struct MirTerminator *pawMir_new_return(struct Compiler *C, MirRegister value);
-struct MirTerminator *pawMir_new_goto(struct Compiler *C, MirBlock bid);
 struct MirBlockData *pawMir_new_block(struct Compiler *C);
 
 struct MirLoad {
@@ -429,12 +440,10 @@ struct MirVisitor {
     struct Mir *mir;
     void *ud;
 
-    paw_Bool (*VisitTerminator)(struct MirVisitor *V, struct MirTerminator *node);
     paw_Bool (*VisitInstruction)(struct MirVisitor *V, struct MirInstruction *node);
     paw_Bool (*VisitBlock)(struct MirVisitor *V, MirBlock node);
     paw_Bool (*VisitRegister)(struct MirVisitor *V, MirRegister node);
 
-    void (*PostVisitTerminator)(struct MirVisitor *V, struct MirTerminator *node);
     void (*PostVisitInstruction)(struct MirVisitor *V, struct MirInstruction *node);
     void (*PostVisitBlock)(struct MirVisitor *V, MirBlock node);
     void (*PostVisitRegister)(struct MirVisitor *V, MirRegister node);

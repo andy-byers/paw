@@ -193,8 +193,8 @@ static struct MirInstruction *new_instruction(struct LowerHir *L, enum MirInstru
 
 static struct MirInstruction *terminate_goto(struct LowerHir *L, MirBlock target)
 {
-    struct MirInstruction *r = new_instruction(L, kMirGoto);
-    MirGetGoto(r)->target = target;
+    struct MirInstruction *r = pawMir_new_goto(L->fs->mir, -1, target);
+    add_instruction(L, r);
     return r;
 }
 
@@ -654,8 +654,17 @@ static paw_Bool visit_var_decl(struct HirVisitor *V, struct HirVarDecl *d)
 {
     struct LowerHir *L = V->ud;
     struct IrType *type = pawIr_get_type(L->C, d->hid);
-    const MirRegister r = operand_to_reg(V, d->init);
-    add_local(V->ud, d->name, r, d->did);
+
+    MirRegister r;
+    if (d->init != NULL) {
+        r = lower_operand(V, d->init);
+        add_local(V->ud, d->name, r, d->did);
+    } else {
+        struct LocalVar *var = alloc_local(L, d->name, type, d->did);
+        struct MirRegisterData *data = mir_reg_data(L->fs->mir, var->reg);
+        data->is_uninit = PAW_TRUE;
+        r = var->reg;
+    }
     return PAW_FALSE;
 }
 
@@ -823,15 +832,15 @@ static MirRegister lower_path_expr(struct HirVisitor *V, struct HirPathExpr *e)
     //       to find it in "declare_match_bindings". Consider finding a way to smuggle the
     //       DeclId in the match binding.
     if (resolve_nonglobal(L, did, decl->hdr.name, &ng)) {
+        const MirRegister output = register_for_node(L, e->hid);
         if (ng.is_upvalue) {
-            const MirRegister target = register_for_node(L, e->hid);
             struct MirInstruction *r = new_instruction(L, kMirUpvalue);
-            MirGetUpvalue(r)->output = target;
+            MirGetUpvalue(r)->output = output;
             MirGetUpvalue(r)->index = ng.index;
-            return target;
         } else {
-            return ng.r;
+            move_to(L, ng.r, output);
         }
+        return output;
     }
     const MirRegister output = register_for_node(L, e->hid);
     if (HirIsVariantDecl(decl)) {
@@ -911,9 +920,8 @@ static MirRegister lower_unop_expr(struct HirVisitor *V, struct HirUnOpExpr *e)
 static MirRegister lower_concat_expr(struct HirVisitor *V, struct HirBinOpExpr *e)
 {
     struct LowerHir *L = V->ud;
-    // TODO: in regalloc.c, detect this case and make sure registers are on top of register stack
-    const MirRegister lhs = operand_to_reg(V, e->lhs);
-    const MirRegister rhs = operand_to_reg(V, e->rhs);
+    const MirRegister lhs = lower_operand(V, e->lhs);
+    const MirRegister rhs = lower_operand(V, e->rhs);
     struct MirInstruction *r = new_instruction(L, kMirBinaryOp);
     const MirRegister output = register_for_node(L, e->hid);
     MirGetBinaryOp(r)->output = output;
@@ -1130,7 +1138,7 @@ static MirRegister lower_field_expr(struct HirVisitor *V, struct HirFieldExpr *e
 
 static MirRegister first_slice_index(struct HirVisitor *V, struct HirExpr *e)
 {
-    if (e != NULL) return operand_to_reg(V, e);
+    if (e != NULL) return lower_operand(V, e);
     struct LowerHir *L = V->ud; // default to integer 0
     struct MirInstruction *r = add_constant(V->ud, I2V(0), PAW_TINT);
     return MirGetConstant(r)->output;
@@ -1138,7 +1146,7 @@ static MirRegister first_slice_index(struct HirVisitor *V, struct HirExpr *e)
 
 static MirRegister second_slice_index(struct HirVisitor *V, struct HirExpr *e, MirRegister object)
 {
-    if (e != NULL) return operand_to_reg(V, e);
+    if (e != NULL) return lower_operand(V, e);
     struct LowerHir *L = V->ud; // default to the number of elements
     struct MirInstruction *r = new_instruction(L, kMirUnaryOp);
     const MirRegister output = new_literal_reg(L, PAW_TINT);
@@ -1191,7 +1199,7 @@ static MirRegister lower_assign_expr(struct HirVisitor *V, struct HirAssignExpr 
         const MirRegister target = lower_operand(V, x->target);
         const MirRegister lower = first_slice_index(V, x->first);
         const MirRegister upper = second_slice_index(V, x->second, target);
-        const MirRegister rhs = operand_to_reg(V, e->rhs);
+        const MirRegister rhs = lower_operand(V, e->rhs);
         struct MirInstruction *r = new_instruction(L, kMirSetRange);
         MirGetSetRange(r)->b_kind = kind_of_builtin(L, x->target);
         MirGetSetRange(r)->object = target;
@@ -1427,26 +1435,6 @@ static paw_Bool visit_expr_stmt(struct HirVisitor *V, struct HirExprStmt *s)
     return PAW_FALSE;
 }
 
-static void patch_to_here(struct LowerHir *L, struct MirBlockList *sources)
-{
-    const MirBlock before = current_bb(L);
-    const MirBlock to = new_bb(L);
-    for (int i = 0; i < sources->count; ++i) {
-        const MirBlock from = K_LIST_GET(sources, i);
-        add_edge(L, from, to);
-    }
-}
-
-static void save_patch_source(struct LowerHir *L, struct MirBlockList *sources)
-{
-    struct MirBlockData *block = current_bb_data(L);
-    if (is_unterminated(block)) {
-        const MirBlock bb = current_bb(L);
-        terminate_goto(L, MIR_INVALID_BB);
-        K_LIST_PUSH(L->C, sources, bb);
-    }
-}
-
 static MirRegister get_test_reg(struct LowerHir *L, struct MatchVar v)
 {
     const Value *pval = pawH_get(L->ms->var_mapping, I2V(v.id));
@@ -1484,7 +1472,6 @@ static void visit_guard(struct HirVisitor *V, struct Decision *d, MirRegister re
     declare_match_bindings(L, bindings);
     bindings->count = 0;
 
-    struct MirBlockList *patch = pawMir_block_list_new(L->C);
     const MirRegister cond = lower_operand(V, d->guard.cond);
     const MirBlock before_bb = current_bb(L);
     const MirBlock then_bb = new_bb(L);
@@ -1591,7 +1578,6 @@ static void visit_sparse_cases(struct HirVisitor *V, struct Decision *d, MirRegi
     struct MirSwitchArmList *arms = allocate_switch_arms(L, discr_bb, cases->count);
     struct MirInstruction *switch_ = terminate_switch(L, test, arms, otherwise_bb);
 
-    struct MirBlockList *patch = pawMir_block_list_new(L->C);
     for (int i = 0; i < cases->count; ++i) {
         struct MatchCase mc = K_LIST_GET(cases, i);
         struct MirSwitchArm *arm = &K_LIST_GET(arms, i);
@@ -1612,7 +1598,6 @@ static void visit_sparse_cases(struct HirVisitor *V, struct Decision *d, MirRegi
     paw_assert(d->multi.rest != NULL);
     set_current_bb(L, otherwise_bb);
     visit_decision(V, d->multi.rest, result);
-    save_patch_source(L, patch);
     maybe_goto(L, join_bb);
 
     set_current_bb(L, join_bb);
@@ -1633,7 +1618,6 @@ static void visit_variant_cases(struct HirVisitor *V, struct Decision *d, MirReg
     struct MirSwitchArmList *arms = allocate_switch_arms(L, discr_bb, cases->count);
     struct MirInstruction *switch_ = terminate_switch(L, test, arms, MIR_INVALID_BB);
 
-    struct MirBlockList *patch = pawMir_block_list_new(L->C);
     for (int i = 0; i < cases->count; ++i) {
         struct MatchCase mc = K_LIST_GET(cases, i);
         struct MirSwitchArm *arm = &K_LIST_GET(arms, i);

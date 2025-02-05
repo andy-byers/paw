@@ -657,10 +657,7 @@ static struct AstDecl *let_decl(struct Lex *lex, int line)
     skip(lex); // 'let' token
     String *name = parse_name(lex);
     struct AstType *tag = type_annotation(lex);
-    if (!test_next(lex, '=')) {
-        pawX_error(lex, "missing initializer");
-    }
-    struct AstExpr *init = expr0(lex);
+    struct AstExpr *init = test_next(lex, '=') ? expr0(lex) : NULL;
     semicolon(lex);
     return pawAst_new_var_decl(lex->ast, line, name, tag, init);
 }
@@ -988,7 +985,9 @@ static struct AstExpr *return_expr(struct Lex *lex)
     const int line = lex->line;
     skip(lex); // 'return' token
     struct AstExpr *expr = NULL;
-    if (!test(lex, ';') && !test(lex, '}')) {
+    if (!test(lex, '}')
+            && !test(lex, ';')
+            && !test(lex, ',')) {
         expr = expr0(lex);
     }
     return pawAst_new_return_expr(lex->ast, line, expr);

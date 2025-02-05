@@ -336,8 +336,8 @@ static struct HirDecl *LowerImplDecl(struct LowerAst *L, struct AstImplDecl *d)
 
 static struct HirDecl *LowerVarDecl(struct LowerAst *L, struct AstVarDecl *d)
 {
-    struct HirExpr *init = lower_expr(L, d->init);
     struct HirType *tag = d->tag != NULL ? lower_type(L, d->tag) : NULL;
+    struct HirExpr *init = d->init != NULL ? lower_expr(L, d->init) : NULL;
     return pawHir_new_var_decl(L->hir, d->line, d->name, tag, init);
 }
 

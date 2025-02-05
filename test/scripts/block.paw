@@ -351,3 +351,28 @@ pub fn test_never_match_expr() {
     assert(check_never_match_expr(Option::Some(0)) == 'some == 0');
 }
 
+fn check_nested_ifelse(b1: bool, b2: bool, b3: bool) -> int {
+    if b1 {
+       if b2 {
+           1
+        } else {
+            if b3 {
+                2
+            } else {
+                return 3;
+            }
+        } 
+    } else {
+        4
+    }
+}
+
+pub fn test_nested_ifelse() {
+    let check = check_nested_ifelse;
+    assert(check(true, true, false) == 1);
+    assert(check(true, true, true) == 1);
+    assert(check(true, false, true) == 2);
+    assert(check(true, false, false) == 3);
+    assert(check(false, false, false) == 4);
+}
+

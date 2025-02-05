@@ -791,9 +791,7 @@ static void resolve_closure_param(struct Resolver *R, struct HirFieldDecl *d)
 {
     struct HirDecl *decl = HIR_CAST_DECL(d);
     add_decl(R, decl);
-    struct IrType *type = d->tag != NULL
-        ? resolve_type(R, d->tag)
-        : new_unknown(R);
+    struct IrType *type = resolve_type(R, d->tag);
     new_local(R, d->name, decl);
     SET_NODE_TYPE(R->C, decl, type);
 }
@@ -809,9 +807,7 @@ static struct IrType *resolve_closure_expr(struct Resolver *R, struct HirClosure
         struct HirFieldDecl *d = HirGetFieldDecl(decl);
         resolve_closure_param(R, d);
     }
-    struct IrType *ret = e->result == NULL
-        ? new_unknown(R)
-        : resolve_type(R, e->result);
+    struct IrType *ret = resolve_type(R, e->result);
 
     struct IrTypeList *params = collect_decl_types(R, e->params);
     rs.prev = ret;
@@ -883,14 +879,14 @@ static struct IrType *resolve_var_decl(struct Resolver *R, struct HirVarDecl *d)
     struct HirDecl *decl = HIR_CAST_DECL(d);
     add_decl(R, decl);
 
+    struct IrType *tag = resolve_type(R, d->tag);
     const int index = declare_local(R, d->name, decl);
-    struct IrType *init = resolve_operand(R, d->init);
+    struct IrType *init = d->init != NULL
+        ? resolve_operand(R, d->init)
+        : new_unknown(R);
     define_local(R, index);
 
-    if (d->tag != NULL) {
-        struct IrType *tag = resolve_type(R, d->tag);
-        unify(R, init, tag);
-    }
+    unify(R, init, tag);
     return init;
 }
 
@@ -1647,7 +1643,7 @@ static void resolve_stmt(struct Resolver *R, struct HirStmt *stmt)
 
 static struct IrType *resolve_type(struct Resolver *R, struct HirType *type)
 {
-    if (type == NULL) return NULL;
+    if (type == NULL) return new_unknown(R);
     R->line = type->hdr.line;
     struct IrType *r = pawP_lower_type(R->C, R->m, R->symtab, type);
     return normalize(R, r);
