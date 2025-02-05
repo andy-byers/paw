@@ -33,6 +33,7 @@
     X(match_poly_enum) \
     X(match_or) \
     X(match_guard) \
+    X(misc) \
     X(import) \
     X(alias) \
     X(poly_function) \
