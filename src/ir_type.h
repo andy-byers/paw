@@ -174,46 +174,43 @@ enum IrDefKind {
 };
 
 
-#define IR_DEF_HEADER enum IrDefKind kind : 8; \
-                      DeclId did; \
-                      String *name;
 struct IrDefHeader {
-    IR_DEF_HEADER;
+    enum IrDefKind kind;DeclId did;String*name;
     IrType *type;
 };
 
 struct IrGenericDef {
-    IR_DEF_HEADER;
+    enum IrDefKind kind;DeclId did;String*name;
     IrType *type;
 };
 
 struct IrParamDef {
-    IR_DEF_HEADER;
+    enum IrDefKind kind;DeclId did;String*name;
     IrType *type;
 };
 
 struct IrFieldDef {
-    IR_DEF_HEADER;
+    enum IrDefKind kind;DeclId did;String*name;
     paw_Bool is_pub : 1;
     IrType *type;
 };
 
 struct IrVariantDef {
-    IR_DEF_HEADER;
+    enum IrDefKind kind;DeclId did;String*name;
     DeclId cons;
     int discr;
     struct IrFieldList *fields;
 };
 
 struct IrFuncDef {
-    IR_DEF_HEADER;
+    enum IrDefKind kind;DeclId did;String*name;
     paw_Bool is_pub : 1;
     struct IrGenericList *generics;
     struct IrParamList *params;
 };
 
 struct IrAdtDef {
-    IR_DEF_HEADER;
+    enum IrDefKind kind;DeclId did;String*name;
     paw_Bool is_pub : 1;
     paw_Bool is_struct : 1;
     struct IrGenericList *generics;
