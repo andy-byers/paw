@@ -146,6 +146,7 @@ void test_mem_hook(void *ud, void *ptr, size_t size0, size_t size)
 paw_Env *test_open(paw_MemHook mem_hook, struct TestAlloc *a, size_t heap_size)
 {
 #ifdef ENABLE_PTR_TRACKER
+    fprintf(stderr, "pointer tracking is enabled, perforamnce will be impacted\n");
     a->ptrs = malloc(PTR_TRACKER_LIMIT * sizeof(a->ptrs[0]));
     a->sizes = malloc(PTR_TRACKER_LIMIT * sizeof(a->sizes[0]));
 #endif

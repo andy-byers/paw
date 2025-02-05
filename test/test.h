@@ -60,8 +60,6 @@
 // max number of outstanding allocations
 # define PTR_TRACKER_LIMIT (1 << 14)
 
-# warning "pointer tracking is enabled, perforamnce will be impacted"
-
 #endif // ENABLE_PTR_TRACKER
 
 struct TestAlloc {
