@@ -33,17 +33,6 @@
     X(match_poly_enum) \
     X(match_or) \
     X(match_guard) \
-    X(misc) \
-    X(import) \
-    X(alias) \
-    X(poly_function) \
-    X(poly_struct) \
-    X(poly_enum) \
-    X(unit_struct) \
-    X(unit_variant) \
-    X(infer_assoc_items) \
-    X(capture_upvalue) \
-    X(close_loop_variable) \
     X(enum_impl)
 
 #define check(x) \

@@ -294,6 +294,7 @@ static void test_stack(paw_Env *P)
 static void driver(const char *name, void (*callback)(paw_Env *))
 {
     struct TestAlloc a = {0};
+    fprintf(stderr, "running %s...\n", name);
     paw_Env *P = test_open(test_mem_hook, &a, 0);
     callback(P);
     test_close(P, &a);
