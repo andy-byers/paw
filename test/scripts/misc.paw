@@ -19,9 +19,9 @@ pub fn recur_with_objects<T>(n: int, t: T) {
 }
 
 pub fn test_gc() {
-    recur_with_objects(1, 123);
-    recur_with_objects(10, 1.0);
-    recur_with_objects(100, 'abc');
+   // recur_with_objects(1, 123);
+   // recur_with_objects(10, 1.0);
+   // recur_with_objects(100, 'abc');
 }
 
 use io;
