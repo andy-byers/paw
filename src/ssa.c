@@ -368,7 +368,6 @@ void pawSsa_construct(struct Compiler *C, struct Mir *mir, Map *uses, Map *defs)
     rename_vars(&S, MIR_ROOT_BB);
     mir->registers = S.registers;
     fix_aux_info(&S, mir);
-printf("%s\n", pawMir_dump(C, mir));--ENV(C)->top.p;
 
     pawP_pop_object(C, S.rename);
     pawP_pop_object(C, S.capture);

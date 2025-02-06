@@ -1,5 +1,16 @@
 // deferred_init.paw
 
+pub fn test_deferred_init() {
+    let a;
+    a = 1;
+    assert(a == 1);
+
+    let b;
+    b = [];
+    b.push(2);
+    assert(b[0] == 2);
+}
+
 fn check_deferred_init_ifelse(b: bool) -> int {
     let r;
     if b {

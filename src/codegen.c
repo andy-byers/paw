@@ -595,9 +595,9 @@ static void code_constant(struct MirVisitor *V, struct MirConstant *x)
 {
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
-    const int bc = add_constant(G, x->value, x->code);
-    if (x->code <= PAW_TBOOL
-            || (x->code == PAW_TINT && is_smi(x->value.i))) {
+    const int bc = add_constant(G, x->value, x->b_kind);
+    if (x->b_kind == BUILTIN_UNIT || x->b_kind == BUILTIN_BOOL
+            || (x->b_kind == PAW_TINT && is_smi(x->value.i))) {
         code_smi(fs, x->output, x->value.i);
     } else {
         pawK_code_ABx(G->fs, OP_LOADK, REG(x->output), bc);

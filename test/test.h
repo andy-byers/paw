@@ -42,6 +42,7 @@
     X(unit_struct) \
     X(unit_variant) \
     X(infer_assoc_items) \
+    X(deferred_init) \
     X(capture_upvalue) \
     X(close_loop_variable) \
     X(enum_impl)

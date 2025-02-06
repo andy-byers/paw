@@ -797,20 +797,20 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
         case kMirConstant: {
             struct MirConstant *t = MirGetConstant(instr);
             DUMP_FMT(P, "_%d = const ", t->output.value);
-            switch (t->code) {
-                case PAW_TUNIT:
+            switch (t->b_kind) {
+                case BUILTIN_UNIT:
                     L_ADD_LITERAL(P->P, P->buf, "()\n");
                     break;
-                case PAW_TBOOL:
+                case BUILTIN_BOOL:
                     pawL_add_fstring(P->P, P->buf, "%s\n", V_TRUE(t->value) ? "true" : "false");
                     break;
-                case PAW_TINT:
+                case BUILTIN_INT:
                     pawL_add_fstring(P->P, P->buf, "%I\n", V_INT(t->value));
                     break;
-                case PAW_TFLOAT:
+                case BUILTIN_FLOAT:
                     pawL_add_fstring(P->P, P->buf, "%f\n", V_FLOAT(t->value));
                     break;
-                case PAW_TSTR:
+                case BUILTIN_STR:
                     pawL_add_fstring(P->P, P->buf, "\"%s\"\n", V_TEXT(t->value));
                     break;
                 default:
@@ -852,16 +852,16 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
             struct MirCast *t = MirGetCast(instr);
             DUMP_FMT(P, "_%d = ", t->output.value);
             switch (t->to) {
-                case PAW_TBOOL:
+                case BUILTIN_BOOL:
                     L_ADD_LITERAL(P->P, P->buf, "(bool)");
                     break;
-                case PAW_TINT:
+                case BUILTIN_INT:
                     L_ADD_LITERAL(P->P, P->buf, "(int)");
                     break;
-                case PAW_TFLOAT:
+                case BUILTIN_FLOAT:
                     L_ADD_LITERAL(P->P, P->buf, "(float)");
                     break;
-                case PAW_TSTR:
+                case BUILTIN_STR:
                     L_ADD_LITERAL(P->P, P->buf, "(str)");
                     break;
                 default:

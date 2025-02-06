@@ -627,6 +627,8 @@ static void test_match_error(void)
 
 static void test_uninit_local(void)
 {
+    test_compiler_status(PAW_ETYPE, "uninit_var", "", "let x; x;"); // type of "x" cannot be inferred
+    test_compiler_status(PAW_EVALUE, "uninit_int", "", "let x: int; x;");
     test_compiler_status(PAW_EVALUE, "uninit_if_without_else", "", "let x; if true {x = 1;} x;");
     test_compiler_status(PAW_EVALUE, "uninit_ifelse", "", "let x; if true {x = 1;} else {} x;");
     test_compiler_status(PAW_EVALUE, "uninit_ifelse_chain", "", "let x; if true {x = 1;} else if true {} else {x = 3;} x;");

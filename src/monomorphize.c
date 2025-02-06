@@ -103,7 +103,7 @@ static void CopyGlobal(struct MonoCollector *M, struct MirGlobal *x, struct MirG
 static void CopyConstant(struct MonoCollector *M, struct MirConstant *x, struct MirConstant *r)
 {
     r->output = x->output;
-    r->code = x->code;
+    r->b_kind = x->b_kind;
     r->value = x->value;
 }
 
@@ -540,7 +540,7 @@ static struct IrType *collect_type(struct IrTypeFolder *F, struct IrType *type)
     return collect_other(M, type);
 }
 
-static void add_builtin_adt(struct MirTypeFolder *F, paw_Type code)
+static void add_builtin_adt(struct MirTypeFolder *F, enum BuiltinKind code)
 {
     struct MonoCollector *M = F->ud;
     struct IrType *type = pawIr_get_type(M->C, (HirId){code});
