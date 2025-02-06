@@ -435,8 +435,9 @@ static void code_proto(struct Generator *G, struct Mir *mir, Proto *proto, int i
     proto->argc = func->params->count;
 
     struct MirBlockList *rpo = pawMir_traverse_rpo(G->C, mir);
-    struct MirIntervalList *intervals = pawMir_compute_liveness(G->C, mir, rpo);
-    G->fs->regtab = pawP_allocate_registers(G->C, mir, rpo, intervals, &proto->max_stack);
+    struct MirLocationList *locations = pawMir_compute_locations(mir);
+    struct MirIntervalList *intervals = pawMir_compute_liveness(G->C, mir, rpo, locations);
+    G->fs->regtab = pawP_allocate_registers(G->C, mir, rpo, intervals, locations, &proto->max_stack);
     allocate_upvalue_info(G, proto, mir->upvalues);
     pawMir_visit_block_list(G->V, rpo);
 

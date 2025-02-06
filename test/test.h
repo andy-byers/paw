@@ -13,6 +13,7 @@
 #define TEST_SCRIPTS(X) \
     X(basic) \
     X(cfg) \
+    X(kprop) \
     X(primitive) \
     X(operator) \
     X(block) \

@@ -344,7 +344,7 @@ static List *list_copy(paw_Env *P, CallFrame *cf, Value *pv, const List *list)
 }
 
 // setn([a1..an], i, j, [b1..bn]) => [a1..ai b1..bn aj..an]
-void pawR_list_setn(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc)
+void pawR_list_setn(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc, Value *temp)
 {
     List *lhs = V_LIST(*ra);
     const paw_Int i = V_INT(rb[0]);
@@ -358,7 +358,7 @@ void pawR_list_setn(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const
 
     if (lhs == rhs) {
         // handles "list[i:j] = list"
-        rhs = list_copy(P, cf, (Value *)rc, rhs);
+        rhs = list_copy(P, cf, temp, rhs);
     }
 
     const size_t nelems = na - zj + zi + nb;
@@ -437,7 +437,6 @@ Map *pawR_new_map(paw_Env *P, CallFrame *cf, Value *ra, int b)
 // If x / y is undefined, then so too is x % y (see C11 section 6.5.5,
 // item 6). Both cases equal 0 in Paw (x / y wraps).
 #define DIVMOD_OVERFLOWS(x, y) ((x) == PAW_INT_MIN && (y) == -1)
-
 
 void pawR_execute(paw_Env *P, CallFrame *cf)
 {
@@ -666,9 +665,10 @@ top:
             {
                 VM_SAVE_PC();
                 const Value *rb = VM_RB(opcode);
-                Value *rc = VM_RC(opcode);
-                P->top.p = rc + 1;
-                pawR_list_setn(P, cf, ra, rb, rc);
+                const Value *rc = VM_RC(opcode);
+                Value *temp = VM_RC(opcode) + 1;
+                P->top.p = temp + 1;
+                pawR_list_setn(P, cf, ra, rb, rc, temp);
             }
 
             vm_case(MLENGTH):

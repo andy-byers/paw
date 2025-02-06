@@ -13,7 +13,7 @@ struct Compiler;
 #define K_ALIGNAS_NODE _Alignas(void *)
 
 struct FreeBlock {
-    K_ALIGNAS_NODE struct FreeBlock *prev;
+    struct FreeBlock *prev;
     int size;
     char data[];
 };
@@ -63,10 +63,14 @@ void pawK_pool_free(struct Pool *pool, void *ptr, size_t size);
 #define K_LIST_POP(L) CHECK_EXP((L)->count > 0, --(L)->count)
 #define K_LIST_PUSH(C, L, v) ((L)->data = pawK_list_ensure_one((C)->P, (C)->pool, (L)->data, sizeof((L)->data[0]), (L)->count, &(L)->alloc), \
                               (L)->data[(L)->count++] = (v))
-#define K_LIST_INSERT(C, L, v, i) CHECK_EXP(0 <= (i) && (i) <= (L)->count, \
-                                            (L)->data = pawK_list_ensure_one((C)->P, (C)->pool, (L)->data, sizeof((L)->data[0]), (L)->count, &(L)->alloc), \
-                                            memmove((L)->data + (i) + 1, (L)->data + (i), ((L)->count - (i)) * sizeof((L)->data[0])), \
-                                            (L)->data[i] = (v))
+#define K_LIST_INSERT(C, L, i, v) CHECK_EXP(0 <= (i) && (i) <= (L)->count, \
+                                            ((L)->data = pawK_list_ensure_one((C)->P, (C)->pool, (L)->data, sizeof((L)->data[0]), (L)->count, &(L)->alloc), \
+                                             memmove((L)->data + (i) + 1, (L)->data + (i), ((L)->count - (i)) * sizeof((L)->data[0])), \
+                                             ++(L)->count, \
+                                             (L)->data[i] = (v)))
+#define K_LIST_REMOVE(L, i) CHECK_EXP(0 <= (i) && (i) < (L)->count, \
+                                         (memmove((L)->data + (i), (L)->data + (i) + 1, ((L)->count - (i) - 1) * sizeof((L)->data[0])), \
+                                          --(L)->count))
 #define K_LIST_RESERVE(C, L, n) ((L)->data = pawK_list_reserve((C)->P, (C)->pool, (L)->data, sizeof((L)->data[0]), (L)->count, &(L)->alloc, n))
 
 #define K_LIST_FOREACH(L, p) for (p = (L)->data; p && p < (L)->data + (L)->count; ++p)
@@ -97,7 +101,6 @@ struct FuncState {
     struct JumpTable *jumps;
     struct KCache kcache;
     struct Mir *mir;
-    int bb; // TODO: should be MirBlock, move stuff around
     Proto *proto; // prototype being built
     String *name; // name of the function
     int first_local; // index of function in DynamicMem array

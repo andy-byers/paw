@@ -84,6 +84,7 @@ struct IrSignature;
 enum IrTypeKind;
 
 struct MirIntervalList;
+struct MirLocationList;
 struct MirBodyList;
 struct MirBlockList;
 struct VariableList;
@@ -95,30 +96,12 @@ static inline String *pawP_scan_string(paw_Env *P, Map *st, const char *s)
     return pawP_scan_nstring(P, st, s, strlen(s));
 }
 
-struct ObjectStore {
-    Map *objects;
-    int offset;
-};
-
-void pawP_push_store(struct Compiler *C, struct ObjectStore *store);
-Map *pawP_new_map(struct Compiler *C, struct ObjectStore *store);
-
-#define MAP_KEY(map, index) pawH_key(map, index)
-#define MAP_VALUE(map, index) pawH_value(map, index)
-#define MAP_INSERT(X, map, key, value) pawH_insert(ENV(X), map, key, value)
-#define MAP_REMOVE(map, key) pawH_erase(map, key)
-#define MAP_ERASE(map, index) pawH_erase_at(map, index)
-#define MAP_GET(map, key) pawH_get(map, key)
-#define MAP_CONTAINS(map, key) (MAP_GET(map, key) != NULL)
-
 // ORDER UnaryOp
 enum UnaryOp {
     UNARY_LEN,
     UNARY_NEG,
     UNARY_NOT,
     UNARY_BNOT,
-
-    NUNARYOPS
 };
 
 // ORDER BinaryOp
@@ -140,8 +123,6 @@ enum BinaryOp {
     BINARY_BOR,
     BINARY_SHL,
     BINARY_SHR,
-
-    NBINARYOPS
 };
 
 // ORDER BuiltinKind
@@ -162,6 +143,11 @@ enum BuiltinKind {
 struct Builtin {
     String *name;
     DeclId did;
+};
+
+struct ObjectStore {
+    Map *objects;
+    int offset;
 };
 
 struct Compiler {
@@ -270,7 +256,7 @@ void pawP_bitset_and(struct BitSet *a, const struct BitSet *b);
 void pawP_bitset_or(struct BitSet *a, const struct BitSet *b);
 
 
-struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, struct MirIntervalList *intervals, int *pmax_reg);
+struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, struct MirIntervalList *intervals, struct MirLocationList *locations, int *pmax_reg);
 struct Mir *pawP_lower_hir_body(struct Compiler *C, struct HirFuncDecl *func);
 Map *pawP_lower_hir(struct Compiler *C);
 
@@ -379,6 +365,28 @@ struct ItemSlot {
 
 DEFINE_LIST(struct Compiler, pawP_item_list_, ItemList, struct ItemSlot)
 
+void pawP_push_store(struct Compiler *C, struct ObjectStore *store);
+
+static inline void pawP_pop_store(struct Compiler *C, struct ObjectStore *store)
+{
+    // make sure nothing else was left on the stack
+    paw_assert(ENV(C)->top.p[-1].p == store->objects);
+    PAW_UNUSED(store);
+
+    --ENV(C)->top.p;
+}
+
+Map *pawP_new_map(struct Compiler *C, struct ObjectStore *store);
+
+#define MAP_KEY(map, index) pawH_key(map, index)
+#define MAP_VALUE(map, index) pawH_value(map, index)
+#define MAP_INSERT(X, map, key, value) pawH_insert(ENV(X), map, key, value)
+#define MAP_REMOVE(map, key) pawH_erase(map, key)
+#define MAP_ERASE(map, index) pawH_erase_at(map, index)
+#define MAP_GET(map, key) pawH_get(map, key)
+#define MAP_CONTAINS(map, key) (MAP_GET(map, key) != NULL)
+
+// TODO: remove, use ObjectStore interface
 Map *pawP_push_map(struct Compiler *C);
 List *pawP_push_list(struct Compiler *C);
 

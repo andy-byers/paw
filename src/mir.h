@@ -66,6 +66,12 @@ typedef struct MirRegister {
     int value;
 } MirRegister;
 
+typedef struct MirId {
+    int value;
+} MirId;
+
+static inline MirId pawMir_next_id(struct Mir *mir);
+
 struct MirCaptureInfo {
     MirRegister r;
 };
@@ -82,7 +88,7 @@ enum MirInstructionKind {
 };
 
 #define MIR_INSTRUCTION_HEADER K_ALIGNAS_NODE int line; \
-                               int location; \
+                               MirId mid; \
                                enum MirInstructionKind kind : 8
 
 struct MirInstructionHeader {
@@ -305,15 +311,15 @@ static const char *kMirInstructionNames[] = {
 #undef DEFINE_NAME
 };
 
-struct MirInstruction *pawMir_new_instruction_(struct Mir *mir);
+struct MirInstruction *pawMir_new_instruction(struct Mir *mir);
 
 static inline struct MirInstruction *pawMir_new_move(struct Mir *mir, int line, MirRegister output, MirRegister target)
 {
-    struct MirInstruction *instr = pawMir_new_instruction_(mir);
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->Move_ = (struct MirMove){
+        .mid = pawMir_next_id(mir),
         .kind = kMirMove,
         .line = line,
-        .location = -1,
         .output = output,
         .target = target,
     };
@@ -322,11 +328,11 @@ static inline struct MirInstruction *pawMir_new_move(struct Mir *mir, int line, 
 
 static inline struct MirInstruction *pawMir_new_upvalue(struct Mir *mir, int line, MirRegister output, int index)
 {
-    struct MirInstruction *instr = pawMir_new_instruction_(mir);
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->Upvalue_ = (struct MirUpvalue){
+        .mid = pawMir_next_id(mir),
         .kind = kMirUpvalue,
         .line = line,
-        .location = -1,
         .index = index,
         .output = output,
     };
@@ -335,11 +341,11 @@ static inline struct MirInstruction *pawMir_new_upvalue(struct Mir *mir, int lin
 
 static inline struct MirInstruction *pawMir_new_global(struct Mir *mir, int line, MirRegister output)
 {
-    struct MirInstruction *instr = pawMir_new_instruction_(mir);
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->Global_ = (struct MirGlobal){
+        .mid = pawMir_next_id(mir),
         .kind = kMirGlobal,
         .line = line,
-        .location = -1,
         .output = output,
     };
     return instr;
@@ -347,11 +353,12 @@ static inline struct MirInstruction *pawMir_new_global(struct Mir *mir, int line
 
 static inline struct MirInstruction *pawMir_new_phi(struct Mir *mir, int line, struct MirRegisterList *inputs, MirRegister output, int var_id)
 {
-    struct MirInstruction *instr = pawMir_new_instruction_(mir);
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->Phi_ = (struct MirPhi){
+        .mid = pawMir_next_id(mir),
         .kind = kMirPhi,
         .line = line,
-        .location = -1,
+        .inputs = inputs,
         .output = output,
         .var_id = var_id,
     };
@@ -360,11 +367,11 @@ static inline struct MirInstruction *pawMir_new_phi(struct Mir *mir, int line, s
 
 static inline struct MirInstruction *pawMir_new_alloc_local(struct Mir *mir, int line, String *name, MirRegister output)
 {
-    struct MirInstruction *instr = pawMir_new_instruction_(mir);
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->AllocLocal_ = (struct MirAllocLocal){
+        .mid = pawMir_next_id(mir),
         .kind = kMirAllocLocal,
         .line = line,
-        .location = -1,
         .output = output,
         .name = name,
     };
@@ -373,11 +380,11 @@ static inline struct MirInstruction *pawMir_new_alloc_local(struct Mir *mir, int
 
 static inline struct MirInstruction *pawMir_new_free_local(struct Mir *mir, int line, MirRegister reg)
 {
-    struct MirInstruction *instr = pawMir_new_instruction_(mir);
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->FreeLocal_ = (struct MirFreeLocal){
+        .mid = pawMir_next_id(mir),
         .kind = kMirFreeLocal,
         .line = line,
-        .location = -1,
         .reg = reg,
     };
     return instr;
@@ -385,11 +392,11 @@ static inline struct MirInstruction *pawMir_new_free_local(struct Mir *mir, int 
 
 static inline struct MirInstruction *pawMir_new_set_local(struct Mir *mir, int line, MirRegister target, MirRegister value)
 {
-    struct MirInstruction *instr = pawMir_new_instruction_(mir);
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->SetLocal_ = (struct MirSetLocal){
+        .mid = pawMir_next_id(mir),
         .kind = kMirSetLocal,
         .line = line,
-        .location = -1,
         .target = target,
         .value = value,
     };
@@ -398,11 +405,11 @@ static inline struct MirInstruction *pawMir_new_set_local(struct Mir *mir, int l
 
 static inline struct MirInstruction *pawMir_new_set_upvalue(struct Mir *mir, int line, int index, MirRegister value)
 {
-    struct MirInstruction *instr = pawMir_new_instruction_(mir);
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->SetUpvalue_ = (struct MirSetUpvalue){
+        .mid = pawMir_next_id(mir),
         .kind = kMirSetUpvalue,
         .line = line,
-        .location = -1,
         .index = index,
         .value = value,
     };
@@ -411,11 +418,11 @@ static inline struct MirInstruction *pawMir_new_set_upvalue(struct Mir *mir, int
 
 static inline struct MirInstruction *pawMir_new_constant(struct Mir *mir, int line, enum BuiltinKind b_kind, Value value, MirRegister output)
 {
-    struct MirInstruction *instr = pawMir_new_instruction_(mir);
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->Constant_ = (struct MirConstant){
+        .mid = pawMir_next_id(mir),
         .kind = kMirConstant,
         .line = line,
-        .location = -1,
         .b_kind = b_kind,
         .value = value,
         .output = output,
@@ -425,11 +432,11 @@ static inline struct MirInstruction *pawMir_new_constant(struct Mir *mir, int li
 
 static inline struct MirInstruction *pawMir_new_container(struct Mir *mir, int line, enum BuiltinKind b_kind, int nelems, MirRegister output)
 {
-    struct MirInstruction *instr = pawMir_new_instruction_(mir);
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->Container_ = (struct MirContainer){
+        .mid = pawMir_next_id(mir),
         .kind = kMirContainer,
         .line = line,
-        .location = -1,
         .b_kind = b_kind,
         .nelems = nelems,
         .output = output,
@@ -439,11 +446,11 @@ static inline struct MirInstruction *pawMir_new_container(struct Mir *mir, int l
 
 static inline struct MirInstruction *pawMir_new_aggregate(struct Mir *mir, int line, int nfields, MirRegister output)
 {
-    struct MirInstruction *instr = pawMir_new_instruction_(mir);
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->Aggregate_ = (struct MirAggregate){
+        .mid = pawMir_next_id(mir),
         .kind = kMirAggregate,
         .line = line,
-        .location = -1,
         .nfields = nfields,
         .output = output,
     };
@@ -452,11 +459,11 @@ static inline struct MirInstruction *pawMir_new_aggregate(struct Mir *mir, int l
 
 static inline struct MirInstruction *pawMir_new_close(struct Mir *mir, int line, MirRegister target)
 {
-    struct MirInstruction *instr = pawMir_new_instruction_(mir);
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->Close_ = (struct MirClose){
+        .mid = pawMir_next_id(mir),
         .kind = kMirClose,
         .line = line,
-        .location = -1,
         .target = target,
     };
     return instr;
@@ -464,11 +471,11 @@ static inline struct MirInstruction *pawMir_new_close(struct Mir *mir, int line,
 
 static inline struct MirInstruction *pawMir_new_closure(struct Mir *mir, int line, int child_id, MirRegister output)
 {
-    struct MirInstruction *instr = pawMir_new_instruction_(mir);
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->Closure_ = (struct MirClosure){
+        .mid = pawMir_next_id(mir),
         .kind = kMirClosure,
         .line = line,
-        .location = -1,
         .child_id = child_id,
         .output = output,
     };
@@ -477,11 +484,11 @@ static inline struct MirInstruction *pawMir_new_closure(struct Mir *mir, int lin
 
 static inline struct MirInstruction *pawMir_new_get_element(struct Mir *mir, int line, enum BuiltinKind b_kind, MirRegister output, MirRegister object, MirRegister key)
 {
-    struct MirInstruction *instr = pawMir_new_instruction_(mir);
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->GetElement_ = (struct MirGetElement){
+        .mid = pawMir_next_id(mir),
         .kind = kMirGetElement,
         .line = line,
-        .location = -1,
         .b_kind = b_kind,
         .output = output,
         .object = object,
@@ -492,11 +499,11 @@ static inline struct MirInstruction *pawMir_new_get_element(struct Mir *mir, int
 
 static inline struct MirInstruction *pawMir_new_set_element(struct Mir *mir, int line, enum BuiltinKind b_kind, MirRegister object, MirRegister key, MirRegister value)
 {
-    struct MirInstruction *instr = pawMir_new_instruction_(mir);
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->SetElement_ = (struct MirSetElement){
+        .mid = pawMir_next_id(mir),
         .kind = kMirSetElement,
         .line = line,
-        .location = -1,
         .b_kind = b_kind,
         .object = object,
         .key = key,
@@ -507,11 +514,11 @@ static inline struct MirInstruction *pawMir_new_set_element(struct Mir *mir, int
 
 static inline struct MirInstruction *pawMir_new_get_range(struct Mir *mir, int line, enum BuiltinKind b_kind, MirRegister output, MirRegister object, MirRegister lower, MirRegister upper)
 {
-    struct MirInstruction *instr = pawMir_new_instruction_(mir);
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->GetRange_ = (struct MirGetRange){
+        .mid = pawMir_next_id(mir),
         .kind = kMirGetRange,
         .line = line,
-        .location = -1,
         .b_kind = b_kind,
         .output = output,
         .object = object,
@@ -523,11 +530,11 @@ static inline struct MirInstruction *pawMir_new_get_range(struct Mir *mir, int l
 
 static inline struct MirInstruction *pawMir_new_set_range(struct Mir *mir, int line, enum BuiltinKind b_kind, MirRegister object, MirRegister lower, MirRegister upper, MirRegister value)
 {
-    struct MirInstruction *instr = pawMir_new_instruction_(mir);
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->SetRange_ = (struct MirSetRange){
+        .mid = pawMir_next_id(mir),
         .kind = kMirSetRange,
         .line = line,
-        .location = -1,
         .b_kind = b_kind,
         .object = object,
         .lower = lower,
@@ -539,11 +546,11 @@ static inline struct MirInstruction *pawMir_new_set_range(struct Mir *mir, int l
 
 static inline struct MirInstruction *pawMir_new_get_field(struct Mir *mir, int line, int index, MirRegister output, MirRegister object)
 {
-    struct MirInstruction *instr = pawMir_new_instruction_(mir);
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->GetField_ = (struct MirGetField){
+        .mid = pawMir_next_id(mir),
         .kind = kMirGetField,
         .line = line,
-        .location = -1,
         .index = index,
         .output = output,
         .object = object,
@@ -553,11 +560,11 @@ static inline struct MirInstruction *pawMir_new_get_field(struct Mir *mir, int l
 
 static inline struct MirInstruction *pawMir_new_set_field(struct Mir *mir, int line, int index, MirRegister object, MirRegister value)
 {
-    struct MirInstruction *instr = pawMir_new_instruction_(mir);
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->SetField_ = (struct MirSetField){
+        .mid = pawMir_next_id(mir),
         .kind = kMirSetField,
         .line = line,
-        .location = -1,
         .index = index,
         .object = object,
         .value = value,
@@ -567,11 +574,11 @@ static inline struct MirInstruction *pawMir_new_set_field(struct Mir *mir, int l
 
 static inline struct MirInstruction *pawMir_new_unary_op(struct Mir *mir, int line, enum UnaryOp op, MirRegister val, MirRegister output)
 {
-    struct MirInstruction *instr = pawMir_new_instruction_(mir);
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->UnaryOp_ = (struct MirUnaryOp){
+        .mid = pawMir_next_id(mir),
         .kind = kMirUnaryOp,
         .line = line,
-        .location = -1,
         .op = op,
         .val = val,
         .output = output,
@@ -581,11 +588,11 @@ static inline struct MirInstruction *pawMir_new_unary_op(struct Mir *mir, int li
 
 static inline struct MirInstruction *pawMir_new_binary_op(struct Mir *mir, int line, enum BinaryOp op, MirRegister lhs, MirRegister rhs, MirRegister output)
 {
-    struct MirInstruction *instr = pawMir_new_instruction_(mir);
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->BinaryOp_ = (struct MirBinaryOp){
+        .mid = pawMir_next_id(mir),
         .kind = kMirBinaryOp,
         .line = line,
-        .location = -1,
         .op = op,
         .lhs = lhs,
         .rhs = rhs,
@@ -596,11 +603,11 @@ static inline struct MirInstruction *pawMir_new_binary_op(struct Mir *mir, int l
 
 static inline struct MirInstruction *pawMir_new_cast(struct Mir *mir, int line, MirRegister target, MirRegister output, enum BuiltinKind from, enum BuiltinKind to)
 {
-    struct MirInstruction *instr = pawMir_new_instruction_(mir);
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->Cast_ = (struct MirCast){
+        .mid = pawMir_next_id(mir),
         .kind = kMirCast,
         .line = line,
-        .location = -1,
         .target = target,
         .output = output,
         .from = from,
@@ -611,11 +618,11 @@ static inline struct MirInstruction *pawMir_new_cast(struct Mir *mir, int line, 
 
 static inline struct MirInstruction *pawMir_new_call(struct Mir *mir, int line, MirRegister target, struct MirRegisterList *args, MirRegister output)
 {
-    struct MirInstruction *instr = pawMir_new_instruction_(mir);
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->Call_ = (struct MirCall){
+        .mid = pawMir_next_id(mir),
         .kind = kMirCall,
         .line = line,
-        .location = -1,
         .target = target,
         .args = args,
         .output = output,
@@ -625,11 +632,11 @@ static inline struct MirInstruction *pawMir_new_call(struct Mir *mir, int line, 
 
 static inline struct MirInstruction *pawMir_new_goto(struct Mir *mir, int line, MirBlock b)
 {
-    struct MirInstruction *instr = pawMir_new_instruction_(mir);
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->Goto_ = (struct MirGoto){
+        .mid = pawMir_next_id(mir),
         .kind = kMirGoto,
         .line = line,
-        .location = -1,
         .target = b,
     };
     return instr;
@@ -637,11 +644,11 @@ static inline struct MirInstruction *pawMir_new_goto(struct Mir *mir, int line, 
 
 static inline struct MirInstruction *pawMir_new_branch(struct Mir *mir, int line, MirRegister cond, MirBlock then_arm, MirBlock else_arm)
 {
-    struct MirInstruction *instr = pawMir_new_instruction_(mir);
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->Branch_ = (struct MirBranch){
+        .mid = pawMir_next_id(mir),
         .kind = kMirBranch,
         .line = line,
-        .location = -1,
         .cond = cond,
         .then_arm = then_arm,
         .else_arm = else_arm,
@@ -651,11 +658,11 @@ static inline struct MirInstruction *pawMir_new_branch(struct Mir *mir, int line
 
 static inline struct MirInstruction *pawMir_new_switch(struct Mir *mir, int line, MirRegister discr, struct MirSwitchArmList *arms, MirBlock otherwise)
 {
-    struct MirInstruction *instr = pawMir_new_instruction_(mir);
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->Switch_ = (struct MirSwitch){
+        .mid = pawMir_next_id(mir),
         .kind = kMirSwitch,
         .line = line,
-        .location = -1,
         .discr = discr,
         .arms = arms,
         .otherwise = otherwise,
@@ -665,11 +672,11 @@ static inline struct MirInstruction *pawMir_new_switch(struct Mir *mir, int line
 
 static inline struct MirInstruction *pawMir_new_return(struct Mir *mir, int line, MirRegister value)
 {
-    struct MirInstruction *instr = pawMir_new_instruction_(mir);
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->Return_ = (struct MirReturn){
+        .mid = pawMir_next_id(mir),
         .kind = kMirReturn,
         .line = line,
-        .location = -1,
         .value = value,
     };
     return instr;
@@ -688,7 +695,7 @@ struct MirBlockData {
     struct MirBlockList *successors;
     struct MirInstructionList *joins;
     struct MirInstructionList *instructions;
-    int location;
+    MirId mid;
 };
 
 // TODO: nested closures should be hoisted out into separate Mir objects, but this is complicated
@@ -704,6 +711,7 @@ struct Mir {
     struct IrType *self;
     struct Compiler *C;
     String *name;
+    int mir_count;
     enum FuncKind fn_kind : 8;
     paw_Bool is_native : 1;
     paw_Bool is_poly : 1;
@@ -728,30 +736,26 @@ DEFINE_LIST(struct Compiler, pawMir_body_list_, MirBodyList, struct Mir *)
 struct Mir *pawMir_new(struct Compiler *C, String *name, struct IrType *type, struct IrType *self, enum FuncKind fn_kind, paw_Bool is_native, paw_Bool is_pub, paw_Bool is_poly);
 struct MirLiveInterval *pawMir_new_interval(struct Compiler *C, MirRegister r, int npositions);
 struct MirRegisterData *pawMir_new_register(struct Compiler *C, int value, struct IrType *type);
-struct MirInstruction *pawMir_new_instruction(struct Compiler *C, enum MirInstructionKind kind);
-struct MirBlockData *pawMir_new_block(struct Compiler *C);
-
-struct MirLoad {
-    struct MirRegisterPtrList *inputs;
-};
-
-struct MirStore {
-    struct MirRegisterPtrList *outputs;
-};
+struct MirBlockData *pawMir_new_block(struct Mir *mir);
 
 // Get a pointer to each variable read or written by a given instruction
-paw_Bool pawMir_check_load(struct Compiler *C, struct MirInstruction *instr, struct MirLoad *pload);
-paw_Bool pawMir_check_store(struct Compiler *C, struct MirInstruction *instr, struct MirStore *pstore);
+struct MirRegisterPtrList *pawMir_get_loads(struct Compiler *C, struct MirInstruction *instr);
+MirRegister *pawMir_get_store(struct Compiler *C, struct MirInstruction *instr);
 
-static inline int mir_bb_first(const struct MirBlockData *block)
+static inline MirId pawMir_next_id(struct Mir *mir)
 {
-    return block->location;
+    return (MirId){mir->mir_count++};
 }
 
-static inline int mir_bb_last(const struct MirBlockData *block)
+static inline MirId mir_bb_first(const struct MirBlockData *block)
 {
-    if (block->instructions->count <= 0) return block->location + 2;
-    return K_LIST_LAST(block->instructions)->hdr.location + 2;
+    return block->mid;
+}
+
+static inline MirId mir_bb_last(const struct MirBlockData *block)
+{
+    if (block->instructions->count <= 0) return block->mid;
+    return K_LIST_LAST(block->instructions)->hdr.mid;
 }
 
 static inline struct MirBlockData *mir_bb_data(struct Mir *mir, MirBlock bb)
@@ -767,10 +771,23 @@ static inline struct MirRegisterData *mir_reg_data(struct Mir *mir, MirRegister 
 // Determine the index of "x" in the predecessor list of "y"
 static int mir_which_pred(struct Mir *mir, MirBlock y, MirBlock x)
 {
+    int index;
+    const MirBlock *pb;
     const struct MirBlockData *data = mir_bb_data(mir, y);
-    for (int i = 0; i < data->predecessors->count; ++i) {
-        const MirBlock p = K_LIST_GET(data->predecessors, i);
-        if (MIR_BB_EQUALS(x, p)) return i;
+    K_LIST_ENUMERATE(data->predecessors, index, pb) {
+        if (MIR_BB_EQUALS(x, *pb)) return index;
+    }
+
+    PAW_UNREACHABLE();
+}
+
+static int mir_which_succ(struct Mir *mir, MirBlock x, MirBlock y)
+{
+    int index;
+    const MirBlock *pb;
+    const struct MirBlockData *data = mir_bb_data(mir, x);
+    K_LIST_ENUMERATE(data->successors, index, pb) {
+        if (MIR_BB_EQUALS(y, *pb)) return index;
     }
 
     PAW_UNREACHABLE();
@@ -820,7 +837,21 @@ struct MirBucketList *pawMir_compute_dominance_frontiers(struct Compiler *C, str
 struct MirBlockList *pawMir_traverse_rpo(struct Compiler *C, struct Mir *mir);
 
 // Remove all basic blocks that cannot be reached from the entry
-void pawMir_remove_unreachable_blocks(struct Compiler *C, struct Mir *mir);
+void pawMir_remove_unreachable_blocks(struct Mir *mir);
+
+struct MirAccess {
+    struct MirInstruction *instr;
+    MirBlock b;
+};
+
+DEFINE_LIST(struct Compiler, pawMir_access_list_, MirAccessList, struct MirAccess)
+
+void pawMir_collect_per_instr_uses(struct Mir *mir, Map *uses);
+void pawMir_collect_per_instr_defs(struct Mir *mir, Map *defs);
+
+void pawMir_collect_per_block_usedefs(struct Mir *mir, Map *uses, Map *defs);
+
+void pawMir_propagate_constants(struct Mir *mir);
 
 // Approximation of the live range of a variable
 // The variable corresponding to a given MirLiveInterval is live between instruction
@@ -834,9 +865,17 @@ struct MirLiveInterval {
 };
 
 DEFINE_LIST(struct Compiler, pawMir_interval_list_, MirIntervalList, struct MirLiveInterval *)
+DEFINE_LIST(struct Compiler, pawMir_location_list_, MirLocationList, int)
 
-struct MirBlockList *pawMir_compute_live_in(struct Compiler *C, struct Mir *mir, struct MirBlockList *uses, struct MirBlockList *defs, MirRegister r);
-struct MirIntervalList *pawMir_compute_liveness(struct Compiler *C, struct Mir *mir, struct MirBlockList *order);
+struct MirLocationList *pawMir_compute_locations(struct Mir *mir);
+void pawMir_set_location(struct Mir *mir, struct MirLocationList *locations, MirId mid, int location);
+static inline int pawMir_get_location(struct MirLocationList *locations, MirId mid)
+{
+    return K_LIST_GET(locations, mid.value);
+}
+
+struct MirBlockList *pawMir_compute_live_in(struct Mir *mir, struct MirBlockList *uses, struct MirBlockList *defs, MirRegister r);
+struct MirIntervalList *pawMir_compute_liveness(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, struct MirLocationList *locations);
 
 const char *pawP_print_live_intervals_pretty(struct Compiler *C, struct Mir *mir, struct MirIntervalList *intervals);
 

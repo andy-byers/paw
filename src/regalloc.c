@@ -35,6 +35,7 @@ enum AllocationKind {
 
 struct RegisterAllocator {
     struct MirIntervalList *intervals;
+    struct MirLocationList *locations;
     struct MirInstructionList *code;
     struct Compiler *C;
     struct Mir *mir;
@@ -189,13 +190,14 @@ static void split_current(struct RegisterAllocator *R, int pos)
     struct MirLiveInterval *it = R->current;
     const int n = it->ranges->count;
     struct MirLiveInterval *split = pawMir_new_interval(R->C, it->r, n);
-    split->instr = pawMir_new_instruction(R->C, 0);
+    split->instr = pawMir_new_instruction(R->mir);
     split->last = it->last;
 
     pawP_bitset_or(split->ranges, it->ranges);
     pawP_bitset_clear_range(it->ranges, 0, pos);
     pawP_bitset_clear_range(split->ranges, pos, n);
     *split->instr = *it->instr;
+    split->instr->hdr.mid = pawMir_next_id(R->mir);
 
     for (int i = pos - 1; i >= 0; --i) {
         if (pawP_bitset_get(it->ranges, i)) {
@@ -212,8 +214,9 @@ static void split_current(struct RegisterAllocator *R, int pos)
 
     // preserve the interval ordering by start position (odd positions are skipped
     // during MIR creation)
-    const int new_pos = it->instr->hdr.location + 1;
-    split->instr->hdr.location = new_pos;
+    const int new_pos = pawMir_get_location(R->locations, it->instr->hdr.mid) + 1;
+    pawMir_set_location(R->mir, R->locations, split->instr->hdr.mid, new_pos);
+//    split->instr->hdr.location = new_pos;
     K_LIST_SET(R->unhandled, new_pos, split);
 }
 
@@ -386,10 +389,8 @@ static void order_and_insert_copies(struct RegisterAllocator *R, struct MirBlock
     K_LIST_POP(block->instructions);
 
     K_LIST_FOREACH(seq, pcopy) {
-        struct MirInstruction *move = pawMir_new_instruction(R->C, kMirMove);
-        MirGetMove(move)->location = pcopy->location;
-        MirGetMove(move)->target = pcopy->from;
-        MirGetMove(move)->output = pcopy->to;
+        struct MirInstruction *move = pawMir_new_move(R->mir, -1, pcopy->to, pcopy->from);
+        pawMir_set_location(R->mir, R->locations, move->hdr.mid, pcopy->location);
         K_LIST_PUSH(R->C, block->instructions, move);
     }
     K_LIST_PUSH(R->C, block->instructions, terminator);
@@ -417,8 +418,10 @@ static void resolve_registers(struct RegisterAllocator *R, struct MirBlockList *
                 const int index = mir_which_pred(R->mir, *s, *b);
                 const MirRegister opd = K_LIST_GET(phi->inputs, index);
 
+                const int location = pawMir_get_location(R->locations, mir_bb_last(bb));
                 K_LIST_PUSH(R->C, resolved, ((struct Copy){
-                                .location = mir_bb_last(bb),
+                                .location = location + 2,
+//                                .location = mir_bb_last(bb),
                                 .to = phi->output,
                                 .from = opd,
                             }));
@@ -465,12 +468,13 @@ static struct MirIntervalList *expand_with_placeholders(struct RegisterAllocator
     return result;
 }
 
-struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, struct MirIntervalList *intervals, int *pmax_reg)
+struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, struct MirIntervalList *intervals, struct MirLocationList *locations, int *pmax_reg)
 {
     struct MirBlockData *last = K_LIST_LAST(mir->blocks);
     struct RegisterAllocator R = {
         .code = pawMir_instruction_list_new(C),
-        .max_position = mir_bb_last(last),
+        .max_position = pawMir_get_location(locations, mir_bb_last(last)) + 2,
+        .locations = locations,
         .intervals = intervals,
         .result = regtab_new(C),
         .mir = mir,

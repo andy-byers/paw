@@ -102,6 +102,7 @@ set(PAW_SOURCE_FILES
     ${PAW_SOURCE_DIR}/monomorphize.c
     ${PAW_SOURCE_DIR}/os.c
     ${PAW_SOURCE_DIR}/parse.c
+    ${PAW_SOURCE_DIR}/propagate.c
     ${PAW_SOURCE_DIR}/regalloc.c
     ${PAW_SOURCE_DIR}/resolve.c
     ${PAW_SOURCE_DIR}/rt.c

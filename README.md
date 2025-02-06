@@ -148,7 +148,7 @@ pub fn main() {
 + [x] type inference for polymorphic `enum`
 + [x] exhaustive pattern matching (`match` construct)
 + [ ] traits
-+ [ ] for loops: use `Iterate<T>` trait
++ [ ] for loops should use `Iterate<T>` trait, or similar
 + [ ] error handling (`try` needs to be an operator, or we need something like a 'parameter pack' for generics to implement the `try` function)
 + [ ] `let` bindings/destructuring
 + [x] more featureful `use` declarations: `use mod::*`, `use mod::specific_symbol`, `use mod as alias`, etc.

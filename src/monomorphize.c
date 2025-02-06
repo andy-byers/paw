@@ -27,6 +27,7 @@ struct MonoCollector {
     struct GenericsState *gs;
     struct MirTypeFolder *F;
     struct Compiler *C;
+    struct Mir *mir;
     Map *bodies;
     Map *monos;
     Map *methods;
@@ -270,7 +271,7 @@ static struct MirInstruction *copy_instruction(struct MonoCollector *M, struct M
 {
     // TODO: most of the above functions can be eliminated by just copying the whole struct
     //       most things are trivially copiable. handle lists in the switch below.
-    struct MirInstruction *result = pawMir_new_instruction(M->C, instr->hdr.kind);
+    struct MirInstruction *result = pawMir_new_instruction(M->mir);
     result->hdr = instr->hdr;
     switch (MIR_KINDOF(instr)) {
 #define DEFINE_COPY(X) case kMir##X: \
@@ -284,8 +285,8 @@ static struct MirInstruction *copy_instruction(struct MonoCollector *M, struct M
 
 static struct MirBlockData *copy_basic_block(struct MonoCollector *M, struct MirBlockData *block)
 {
-    struct MirBlockData *result = pawMir_new_block(M->C);
-    result->location = block->location;
+    struct MirBlockData *result = pawMir_new_block(M->mir);
+    result->mid = block->mid;
 
     const MirBlock *pb;
     K_LIST_FOREACH(block->predecessors, pb) {
@@ -324,7 +325,8 @@ static void leave_generics_context(struct MonoCollector *M)
 
 static struct Mir *new_mir(struct MonoCollector *M, struct Mir *base, struct IrType *type, struct IrType *self)
 {
-    return pawMir_new(M->C, base->name, type, self, base->fn_kind, base->is_native, base->is_pub, PAW_FALSE);
+    M->mir = pawMir_new(M->C, base->name, type, self, base->fn_kind, base->is_native, base->is_pub, PAW_FALSE);
+    return M->mir;
 }
 
 static struct MirRegisterData copy_register(struct MonoCollector *M, struct MirRegisterData reg)

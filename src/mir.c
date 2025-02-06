@@ -47,28 +47,21 @@ struct MirRegisterData *pawMir_new_register(struct Compiler *C, int value, struc
     return r;
 }
 
-struct MirInstruction *pawMir_new_instruction_(struct Mir *mir)
+struct MirInstruction *pawMir_new_instruction(struct Mir *mir)
 {
     return pawK_pool_alloc(ENV(mir->C), mir->C->pool, sizeof(struct MirInstruction));
 }
 
-struct MirInstruction *pawMir_new_instruction(struct Compiler *C, enum MirInstructionKind kind)
+struct MirBlockData *pawMir_new_block(struct Mir *mir)
 {
-    struct MirInstruction *instr = pawK_pool_alloc(ENV(C), C->pool, sizeof(struct MirInstruction));
-    *instr = (struct MirInstruction){
-        .hdr.kind = kind,
-    };
-    return instr;
-}
-
-struct MirBlockData *pawMir_new_block(struct Compiler *C)
-{
+    struct Compiler *C = mir->C;
     struct MirBlockData *block = pawK_pool_alloc(ENV(C), C->pool, sizeof(struct MirBlockData));
     *block = (struct MirBlockData){
         .predecessors = pawMir_block_list_new(C),
         .successors = pawMir_block_list_new(C),
         .joins = pawMir_instruction_list_new(C),
         .instructions = pawMir_instruction_list_new(C),
+        .mid = pawMir_next_id(mir),
     };
     return block;
 }
@@ -338,7 +331,7 @@ struct Traversal {
 
 static paw_Bool check_visited(struct Traversal *X, Map *visited, MirBlock bb)
 {
-    if (pawH_get(visited, I2V(bb.value)) != NULL) return PAW_TRUE;
+    if (MAP_GET(visited, I2V(bb.value)) != NULL) return PAW_TRUE;
     pawH_insert(ENV(X->C), visited, I2V(bb.value), P2V(NULL));
     return PAW_FALSE;
 }
@@ -414,39 +407,75 @@ struct MirBlockList *pawMir_traverse_rpo(struct Compiler *C, struct Mir *mir)
 static void renumber_ref(Map *map, MirBlock *pb)
 {
     paw_assert(MIR_BB_EXISTS(*pb));
-    const Value *pval = pawH_get(map, I2V(pb->value));
+    const Value *pval = MAP_GET(map, I2V(pb->value));
     *pb = MIR_BB(pval->i);
 }
 
 static void renumber_or_clear_ref(Map *map, MirBlock *pb)
 {
     paw_assert(MIR_BB_EXISTS(*pb));
-    const Value *pval = pawH_get(map, I2V(pb->value));
+    const Value *pval = MAP_GET(map, I2V(pb->value));
     if (pval != NULL) *pb = MIR_BB(pval->i);
     else *pb = MIR_INVALID_BB;
 }
 
-static void rename_and_filter(struct Compiler *C, Map *map, struct MirBlockList *blocks)
+static void remove_join(struct Mir *mir, struct MirInstructionList *joins, struct MirInstructionList *instrs, int index)
 {
-    int i;
-    int removed = 0;
-    const MirBlock *b;
-    K_LIST_ENUMERATE(blocks, i, b) {
-        const Value *pval = pawH_get(map, I2V(b->value));
-        if (pval != NULL) {
-            K_LIST_SET(blocks, i - removed, MIR_BB(pval->i));
-        } else {
-            ++removed;
+    if (joins == NULL) return;
+
+    // TODO: instead of transforming into MirMove, remove the phi node and somehow indicate that
+    //       uses of the phi's output register should be replaced with the single input register
+    //       (more or less copy prop).
+    int ijoin;
+    struct MirInstruction **pinstr;
+    K_LIST_ENUMERATE(joins, ijoin, pinstr) {
+        struct MirPhi *phi = MirGetPhi(*pinstr);
+        paw_assert(phi->inputs->count > 1);
+        // remove phi node input corresponding to unreachable basic block,
+        // maintaining the 1-to-1 correspondence between phi node inputs and
+        // predecessor basic blocks
+        for (int i = index + 1; i < phi->inputs->count; ++i) {
+            const MirRegister input = K_LIST_GET(phi->inputs, i);
+            K_LIST_SET(phi->inputs, i - 1, input);
         }
+        --phi->inputs->count;
+        if (phi->inputs->count == 1) {
+            // a phi node with a single input is really just a move: transfer
+            // to the ".instructions" list
+            *pinstr = pawMir_new_move(mir, phi->line,
+                    phi->output, K_LIST_FIRST(phi->inputs));
+            K_LIST_INSERT(mir->C, instrs, 0, *pinstr);
+            K_LIST_SET(joins, ijoin, K_LIST_LAST(joins));
+            K_LIST_POP(joins);
+            --ijoin;
+        }
+    }
+}
+
+static void rename_and_filter(struct Mir *mir, Map *map, struct MirBlockList *blocks, struct MirBlockData *bb)
+{
+    struct Compiler *C = mir->C;
+
+    int index;
+    int removed = 0;
+    const MirBlock *pb;
+    K_LIST_ENUMERATE(blocks, index, pb) {
+        const Value *pval = MAP_GET(map, I2V(pb->value));
+        if (pval == NULL) {
+            remove_join(mir, bb->joins, bb->instructions, index);
+            ++removed;
+            continue;
+        }
+        K_LIST_SET(blocks, index - removed, MIR_BB(pval->i));
     }
     blocks->count -= removed;
 }
 
 // Renumber basic blocks so that "mir_bb_data" continues to work
-static void renumber_block_refs(struct Compiler *C, Map *map, struct MirBlockData *data)
+static void renumber_block_refs(struct Mir *mir, Map *map, struct MirBlockData *data)
 {
-    rename_and_filter(C, map, data->predecessors);
-    rename_and_filter(C, map, data->successors);
+    rename_and_filter(mir, map, data->predecessors, data);
+    rename_and_filter(mir, map, data->successors, NULL);
 
     struct MirInstruction *terminator = K_LIST_LAST(data->instructions);
     switch (MIR_KINDOF(terminator)) {
@@ -511,8 +540,9 @@ static void dump_usedef(struct Compiler *C, Map *uses, Map *defs)
     }
 }
 
-void pawMir_remove_unreachable_blocks(struct Compiler *C, struct Mir *mir)
+void pawMir_remove_unreachable_blocks(struct Mir *mir)
 {
+    struct Compiler *C = mir->C;
     // create a mapping from old to new basic block numbers
     Map *map = pawP_push_map(C);
     struct MirBlockList *order = pawMir_traverse_rpo(C, mir);
@@ -526,7 +556,7 @@ void pawMir_remove_unreachable_blocks(struct Compiler *C, struct Mir *mir)
     K_LIST_RESERVE(C, blocks, order->count);
     K_LIST_FOREACH(order, pb) {
         struct MirBlockData *bb = mir_bb_data(mir, *pb);
-        renumber_block_refs(C, map, bb);
+        renumber_block_refs(mir, map, bb);
         K_LIST_PUSH(C, blocks, bb);
     }
 
@@ -534,13 +564,13 @@ void pawMir_remove_unreachable_blocks(struct Compiler *C, struct Mir *mir)
     pawP_pop_object(C, map);
 }
 
-paw_Bool pawMir_check_load(struct Compiler *C, struct MirInstruction *instr, struct MirLoad *pload)
+struct MirRegisterPtrList *pawMir_get_loads(struct Compiler *C, struct MirInstruction *instr)
 {
-#define ADD_INPUT(x) K_LIST_PUSH(C, pload->inputs, &(x))
+#define ADD_INPUT(x) K_LIST_PUSH(C, inputs, &(x))
 #define ADD_INPUTS(xs) K_LIST_FOREACH(xs, pr) ADD_INPUT(*pr)
 
     MirRegister *pr;
-    pload->inputs = pawMir_register_ptr_list_new(C);
+    struct MirRegisterPtrList *inputs = pawMir_register_ptr_list_new(C);
 
     switch (MIR_KINDOF(instr)) {
         case kMirPhi: {
@@ -645,79 +675,196 @@ paw_Bool pawMir_check_load(struct Compiler *C, struct MirInstruction *instr, str
             break;
         }
         default:
-            return PAW_FALSE;
+            break;
     }
-    return PAW_TRUE;
+    return inputs;
 
 #undef ADD_INPUTS
 #undef ADD_INPUT
 }
 
-paw_Bool pawMir_check_store(struct Compiler *C, struct MirInstruction *instr, struct MirStore *pstore)
+MirRegister *pawMir_get_store(struct Compiler *C, struct MirInstruction *instr)
 {
-#define ADD_OUTPUT(x) K_LIST_PUSH(C, pstore->outputs, &(x))
-#define ADD_OUTPUTS(xs) K_LIST_FOREACH(xs, pr) ADD_OUTPUT(*pr)
-
-    const MirRegister *pr;
-    pstore->outputs = pawMir_register_ptr_list_new(C);
-
     switch (MIR_KINDOF(instr)) {
         case kMirPhi:
-            ADD_OUTPUT(MirGetPhi(instr)->output);
-            break;
+            return &MirGetPhi(instr)->output;
         case kMirMove:
-            ADD_OUTPUT(MirGetMove(instr)->output);
-            break;
+            return &MirGetMove(instr)->output;
         case kMirUpvalue:
-            ADD_OUTPUT(MirGetUpvalue(instr)->output);
-            break;
+            return &MirGetUpvalue(instr)->output;
         case kMirGlobal:
-            ADD_OUTPUT(MirGetGlobal(instr)->output);
-            break;
+            return &MirGetGlobal(instr)->output;
         case kMirAllocLocal:
-            ADD_OUTPUT(MirGetAllocLocal(instr)->output);
-            break;
+            return &MirGetAllocLocal(instr)->output;
         case kMirSetLocal:
-            ADD_OUTPUT(MirGetSetLocal(instr)->target);
-            break;
+            return &MirGetSetLocal(instr)->target;
         case kMirConstant:
-            ADD_OUTPUT(MirGetConstant(instr)->output);
-            break;
+            return &MirGetConstant(instr)->output;
         case kMirAggregate:
-            ADD_OUTPUT(MirGetAggregate(instr)->output);
-            break;
+            return &MirGetAggregate(instr)->output;
         case kMirContainer:
-            ADD_OUTPUT(MirGetContainer(instr)->output);
-            break;
+            return &MirGetContainer(instr)->output;
         case kMirCall:
-            ADD_OUTPUT(MirGetCall(instr)->output);
-            break;
+            return &MirGetCall(instr)->output;
         case kMirCast:
-            ADD_OUTPUT(MirGetCast(instr)->output);
-            break;
+            return &MirGetCast(instr)->output;
         case kMirClosure:
-            ADD_OUTPUT(MirGetClosure(instr)->output);
-            break;
+            return &MirGetClosure(instr)->output;
         case kMirGetElement:
-            ADD_OUTPUT(MirGetGetElement(instr)->output);
-            break;
+            return &MirGetGetElement(instr)->output;
         case kMirGetRange:
-            ADD_OUTPUT(MirGetGetRange(instr)->output);
-            break;
+            return &MirGetGetRange(instr)->output;
         case kMirGetField:
-            ADD_OUTPUT(MirGetGetField(instr)->output);
-            break;
+            return &MirGetGetField(instr)->output;
         case kMirUnaryOp:
-            ADD_OUTPUT(MirGetUnaryOp(instr)->output);
-            break;
+            return &MirGetUnaryOp(instr)->output;
         case kMirBinaryOp:
-            ADD_OUTPUT(MirGetBinaryOp(instr)->output);
-            break;
+            return &MirGetBinaryOp(instr)->output;
         default:
-            return PAW_FALSE;
+            return NULL;
     }
-    return PAW_TRUE;
 }
+
+static void indicate_access(struct Compiler *C, Map *map, struct MirInstruction *instr, MirRegister r, MirBlock where)
+{
+    struct MirAccessList *accesses = MAP_GET(map, I2V(r.value))->p;
+    K_LIST_PUSH(C, accesses, ((struct MirAccess){
+                    .instr = instr,
+                    .b = where,
+                }));
+}
+
+static void account_for_uses(struct Compiler *C, struct MirInstruction *instr, Map *uses, MirBlock where)
+{
+    MirRegister *const *ppr;
+    struct MirRegisterPtrList *loads = pawMir_get_loads(C, instr);
+    K_LIST_FOREACH(loads, ppr) {
+        indicate_access(C, uses, instr, **ppr, where);
+    }
+}
+
+static void account_for_defs(struct Compiler *C, struct MirInstruction *instr, Map *defs, MirBlock where)
+{
+    const MirRegister *store = pawMir_get_store(C, instr);
+    if (store != NULL) {
+        indicate_access(C, defs, instr, *store, where);
+    }
+}
+
+typedef void (*AccountForAccesses)(struct Compiler *, struct MirInstruction *, Map *, MirBlock);
+
+static void collect_accesses(struct Mir *mir, Map *map, AccountForAccesses cb)
+{
+    struct Compiler *C = mir->C;
+
+    int index;
+    struct MirRegisterData *pdata;
+    K_LIST_ENUMERATE(mir->registers, index, pdata) {
+        MAP_INSERT(C, map, I2V(index), P2V(pawMir_access_list_new(C)));
+    }
+
+    struct MirBlockData **pblock;
+    K_LIST_ENUMERATE(mir->blocks, index, pblock) {
+        struct MirBlockData *block = *pblock;
+        const MirBlock b = MIR_BB(index);
+
+        struct MirInstruction **pinstr;
+        K_LIST_FOREACH(block->joins, pinstr) cb(C, *pinstr, map, b);
+        K_LIST_FOREACH(block->instructions, pinstr) cb(C, *pinstr, map, b);
+    }
+}
+
+void pawMir_collect_per_instr_uses(struct Mir *mir, Map *uses)
+{
+    collect_accesses(mir, uses, account_for_uses);
+}
+
+void pawMir_collect_per_instr_defs(struct Mir *mir, Map *defs)
+{
+    collect_accesses(mir, defs, account_for_defs);
+}
+
+static void indicate_usedef(struct Compiler *C, Map *map, MirRegister r, MirBlock where)
+{
+    struct MirBlockList *blocks = MAP_GET(map, I2V(r.value))->p;
+
+    const MirBlock *pb;
+    K_LIST_FOREACH(blocks, pb) {
+        if (MIR_BB_EQUALS(*pb, where)) return;
+    }
+    K_LIST_PUSH(C, blocks, where);
+}
+
+static void indicate_usedefs(struct Compiler *C, struct MirInstruction *instr, Map *uses, Map *defs, MirBlock where)
+{
+    MirRegister *const *ppr;
+    struct MirRegisterPtrList *ploads = pawMir_get_loads(C, instr);
+    K_LIST_FOREACH(ploads, ppr) indicate_usedef(C, uses, **ppr, where);
+
+    const MirRegister *pstore = pawMir_get_store(C, instr);
+    if (pstore != NULL) indicate_usedef(C, defs, *pstore, where);
+
+}
+
+void pawMir_collect_per_block_usedefs(struct Mir *mir, Map *uses, Map *defs)
+{
+    struct Compiler *C = mir->C;
+
+    int index;
+    struct MirRegisterData *pdata;
+    K_LIST_ENUMERATE(mir->registers, index, pdata) {
+        MAP_INSERT(C, uses, I2V(index), P2V(pawMir_block_list_new(C)));
+        MAP_INSERT(C, defs, I2V(index), P2V(pawMir_block_list_new(C)));
+    }
+
+    struct MirBlockData **pblock;
+    K_LIST_ENUMERATE(mir->blocks, index, pblock) {
+        struct MirBlockData *block = *pblock;
+        const MirBlock b = MIR_BB(index);
+
+        struct MirInstruction **pinstr;
+        K_LIST_FOREACH(block->joins, pinstr) indicate_usedefs(C, *pinstr, uses, defs, b);
+        K_LIST_FOREACH(block->instructions, pinstr) indicate_usedefs(C, *pinstr, uses, defs, b);
+    }
+}
+
+void pawMir_set_location(struct Mir *mir, struct MirLocationList *locations, MirId mid, int location)
+{
+    while (mid.value >= locations->count) {
+        K_LIST_PUSH(mir->C, locations, -1);
+    }
+    K_LIST_SET(locations, mid.value, location);
+}
+
+struct MirLocationList *pawMir_compute_locations(struct Mir *mir)
+{
+    int location = 0;
+    struct MirLocationList *locations = pawMir_location_list_new(mir->C);
+
+    struct MirBlockData **pblock;
+    struct MirInstruction **pinstr;
+    K_LIST_FOREACH(mir->blocks, pblock) {
+        struct MirBlockData *block = *pblock;
+        pawMir_set_location(mir, locations, block->mid, location);
+
+        // phi functions have the same location as the containing block
+        K_LIST_FOREACH(block->joins, pinstr) {
+            struct MirInstruction *instr = *pinstr;
+            pawMir_set_location(mir, locations, instr->hdr.mid, location);
+        }
+
+        // each instruction bumps the location by 2 to allow insertion of new instructions
+        // without breaking the ordering
+        K_LIST_FOREACH(block->instructions, pinstr) {
+            struct MirInstruction *instr = *pinstr;
+            location += 2;
+            pawMir_set_location(mir, locations, instr->hdr.mid, location);
+        }
+        location += 2;
+    }
+    return locations;
+}
+
 
 struct Printer {
     struct Compiler *C;
@@ -733,7 +880,6 @@ struct Printer {
 #define PRINT_CHAR(P, c) pawL_add_char(ENV(P), (P)->buf, c)
 
 static void dump_instruction(struct Printer *, struct MirInstruction *);
-static void dump_terminator(struct Printer *, struct MirTerminator *);
 
 static void indentation(struct Printer *P)
 {
@@ -754,7 +900,6 @@ static void dump_instruction_list(struct Printer *P, struct MirInstructionList *
 
 static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
 {
-    pawL_add_fstring(P->P, P->buf, "%d: ", instr->hdr.location);
     switch (MIR_KINDOF(instr)) {
         case kMirAllocLocal: {
             struct MirAllocLocal *t = MirGetAllocLocal(instr);

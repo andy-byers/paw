@@ -12,6 +12,7 @@
 #define V_FALSE(v) ((v).u == 0)
 #define V_TRUE(v) ((v).u != 0)
 #define V_INT(v) ((v).i)
+#define V_UINT(v) ((v).u)
 #define V_FLOAT(v) ((v).f)
 
 #define V_OBJECT(v) ((v).o)

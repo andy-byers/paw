@@ -1,0 +1,116 @@
+//// kprop.paw
+//
+//pub fn test_comparisons() {
+//    let b1 = false;
+//    let b2 = true;
+//    let i1 = 123;
+//    let i2 = 321;
+//    let f1 = 1.23;
+//    let f2 = 3.21;
+//    let s1 = "abc";
+//    let s2 = "cba";
+//
+//    assert(b1 == b1);
+//    assert(b2 == b2);
+//
+//    assert(i1 == i1);
+//    assert(f1 == f1);
+//    assert(s1 == s1);
+//
+//    assert(i1 < i2);
+//    assert(f1 < f2);
+//    assert(s1 < s2);
+//
+//    assert(i2 > i1);
+//    assert(f2 > f1);
+//    assert(s2 > s1);
+//
+//    assert(i1 >= i1);
+//    assert(f1 >= f1);
+//    assert(s1 >= s1);
+//    assert(i2 >= i1);
+//    assert(f2 >= f1);
+//    assert(s2 >= s1);
+//
+//    assert(i1 <= i1);
+//    assert(f1 <= f1);
+//    assert(s1 <= s1);
+//    assert(i1 <= i2);
+//    assert(f1 <= f2);
+//    assert(s1 <= s2);
+//}
+//
+//pub fn test_unary_op() {
+//    assert(!false == true);
+//    assert(!true == false);
+//    assert(~0 == -1);
+//    assert(~100 == -101);
+//    assert(#"abc" == 3);
+//}
+//
+//pub fn test_binary_op() {
+//    assert(1 + 2 == 3);
+//    assert(2 - 3 == -1);
+//    assert(3 * 4 == 12);
+//    assert(4 / 5 == 0);
+//    assert(5 % 6 == 5);
+//
+//    assert(1 ^ 2 == 3);
+//    assert(2 & 3 == 2);
+//    assert(3 | 4 == 7);
+//
+//    assert(1 << 0 == 1);
+//    assert(1 << 10 == 1024);
+//    assert(2048 >> 0 == 2048);
+//    assert(2048 >> 10 == 2);
+//
+//    // shift amount is clamped to number of bits less 1
+//    assert(1 << 100 == 1 << 200);
+//    assert(2048 >> 100 == 2048 >> 200);
+//}
+//
+//pub fn test_branch() {
+//    let x = if true { 1 } else { 2 };
+//    assert(x == 1);
+//
+//    let x = if false { 1 } else { 2 };
+//    assert(x == 2);
+//}
+//
+//pub fn test_switch() {
+//    let x = match 123 {
+//        0 => 1,
+//        123 => 2,
+//        _ => 3,
+//    };
+//    assert(x == 2);
+//}
+//
+//pub fn test_switch_guard() {
+//    let x = match 123 {
+//        0 => 1,
+//        123 if false => 2,
+//        123 if true => 3,
+//        _ => 4,
+//    };
+//    assert(x == 3);
+//}
+
+pub fn test_nested_branch() {
+    let cond1 = true;
+    let cond2 = false;
+    let x = if cond1 {
+        let y;
+        if cond2 {
+            y = 1;
+        } else {
+            y = 2;
+        }
+        y + 1
+    } else if cond2 {
+        -1
+    } else {
+        -1
+    };
+    assert(x == 3);
+}

@@ -667,7 +667,7 @@ static paw_Bool is_bool_binop(enum BinaryOp op)
 
 static struct IrType *resolve_unop_expr(struct Resolver *R, struct HirUnOpExpr *e)
 {
-    static const uint8_t kValidOps[NUNARYOPS][NBUILTINS] = {
+    static const uint8_t kValidOps[][NBUILTINS] = {
         //     type  =  0, b, i, f, s, l, m
         [UNARY_LEN]  = {0, 0, 0, 0, 1, 1, 1},
         [UNARY_NEG]  = {0, 0, 1, 1, 0, 0, 0},
@@ -690,7 +690,7 @@ static struct IrType *resolve_unop_expr(struct Resolver *R, struct HirUnOpExpr *
 
 static struct IrType *resolve_binop_expr(struct Resolver *R, struct HirBinOpExpr *e)
 {
-    static const uint8_t kValidOps[NBINARYOPS][NBUILTINS] = {
+    static const uint8_t kValidOps[][NBUILTINS] = {
         //     type   =  0, b, i, f, s, l, m
         [BINARY_EQ]   = {0, 1, 1, 1, 1, 0, 0},
         [BINARY_NE]   = {0, 1, 1, 1, 1, 0, 0},

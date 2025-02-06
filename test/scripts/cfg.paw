@@ -238,7 +238,7 @@ pub fn test_unconditional_break() {
     while true { break; }
 
     let r = 0;
-    while r <  10 {
+    while r < 10 {
         r = r + 1;
         break;
     }

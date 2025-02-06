@@ -8,6 +8,6 @@
 #include "mir.h"
 
 // Convert the CFG to static single assignment (SSA) form
-void pawSsa_construct(struct Compiler *C, struct Mir *mir, Map *uses, Map *defs);
+void pawSsa_construct(struct Mir *mir);
 
 #endif // PAW_SSA_H
