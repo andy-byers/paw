@@ -129,10 +129,6 @@ OP_NEWTUPLE,//       A B          R[A] := (e1...eB)
 OP_NEWLIST,//        A B          R[A] := [e1...eB]
 OP_NEWMAP,//         A B          R[A] := [k1:v1...kB:vB]
 
-OP_INITLIST,//       A B C        R[A][0...C] := R[(A+1)...(A+C+1)]
-OP_INITMAP,//        A B C        R[A][0...C] := R[(A+1)...(A+C*2+1)]
-OP_INITTUPLE,//      A B C        R[A][0...C] := R[(A+1)...(A+C+1)]
-
 OP_TESTK,//          A B C        if (R[A] != K[B]) pc++
 OP_SWITCHINT,//      A B          if (R[A] != B) pc++
 

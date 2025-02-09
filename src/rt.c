@@ -448,7 +448,7 @@ top:
     pc = cf->pc;
     fn = cf->fn;
     K = fn->p->k;
-
+paw_dump_source(P,fn->p);
     for (;;) {
         const OpCode opcode = *pc++;
         const Op op = GET_OP(opcode);
@@ -456,16 +456,6 @@ top:
 
         vm_switch(op)
         {
-            vm_case(NOOP):
-            {
-                // do nothing
-            }
-
-            vm_case(CLOSE):
-            {
-                pawR_close_upvalues(P, ra);
-            }
-
             vm_case(MOVE):
             {
                 *ra = *VM_RB(opcode);
@@ -722,6 +712,11 @@ top:
                 CHECK_GC(P);
             }
 
+            vm_case(CLOSE):
+            {
+                pawR_close_upvalues(P, ra);
+            }
+
             vm_case(TESTK):
             {
                 const Value *ra = VM_RA(opcode);
@@ -856,6 +851,11 @@ top:
             vm_case(JUMPF):
             {
                 if (!V_TRUE(*ra)) pc += GET_sBx(opcode);
+            }
+
+            vm_case(NOOP):
+            {
+                // do nothing
             }
 
             vm_default:

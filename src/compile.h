@@ -83,6 +83,7 @@ struct IrTypeFolder;
 struct IrSignature;
 enum IrTypeKind;
 
+struct Mir;
 struct MirIntervalList;
 struct MirLocationList;
 struct MirBodyList;
@@ -218,17 +219,6 @@ struct DynamicMem {
 
     struct Unifier unifier;
 };
-
-typedef struct Generator {
-    struct Compiler *C;
-    struct FuncState *fs;
-    struct MirVisitor *V;
-    struct ItemList *items;
-    struct Pool *pool;
-    Map *builtin;
-    paw_Env *P;
-    int nregs;
-} Generator;
 
 void pawP_lower_ast(struct Compiler *C);
 void pawP_collect_items(struct Compiler *C);
@@ -386,7 +376,6 @@ Map *pawP_new_map(struct Compiler *C, struct ObjectStore *store);
 #define MAP_GET(map, key) pawH_get(map, key)
 #define MAP_CONTAINS(map, key) (MAP_GET(map, key) != NULL)
 
-// TODO: remove, use ObjectStore interface
 Map *pawP_push_map(struct Compiler *C);
 List *pawP_push_list(struct Compiler *C);
 

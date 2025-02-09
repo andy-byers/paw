@@ -125,7 +125,7 @@ static void enter_function(struct ItemCollector *X, struct HirFuncDecl *func)
     }
 }
 
-static void dupcheck(struct ItemCollector *X, Map *map, String *name, const char *what)
+static void ensure_unique(struct ItemCollector *X, Map *map, String *name, const char *what)
 {
     if (name == NULL) return;
     Value *pv = pawH_get(map, P2V(name));
@@ -196,7 +196,7 @@ static struct IrGenericList *collect_generics(struct ItemCollector *X, struct Hi
         const DeclId did = pawIr_next_did(X->C, MOD(X));
         struct HirGenericDecl *d = HirGetGenericDecl(*pdecl);
         struct IrType *type = pawIr_new_generic(X->C, did);
-        struct IrDef *r = pawIr_new_generic_def(X->C, did, d->name, type);
+        struct IrDef *r = pawIr_new_generic_def(X->C, did, d->name);
         K_LIST_PUSH(X->C, result, IrGetGenericDef(r));
         pawIr_set_def(X->C, did, r);
     }
@@ -211,7 +211,7 @@ static struct IrFieldList *collect_fields(struct ItemCollector *X, struct HirDec
         struct HirFieldDecl *d = HirGetFieldDecl(*pdecl);
         struct IrType *type = collect_type(X, d->tag);
         const DeclId did = pawIr_next_did(X->C, MOD(X));
-        struct IrDef *r = pawIr_new_field_def(X->C, did, d->name, type, d->is_pub);
+        struct IrDef *r = pawIr_new_field_def(X->C, did, d->name, d->is_pub);
         K_LIST_PUSH(X->C, result, IrGetFieldDef(r));
         pawIr_set_def(X->C, did, r);
     }
@@ -226,7 +226,7 @@ static struct IrParamList *collect_parameters(struct ItemCollector *X, struct Hi
         struct HirFieldDecl *d = HirGetFieldDecl(*pdecl);
         struct IrType *type = collect_type(X, d->tag);
         const DeclId did = pawIr_next_did(X->C, MOD(X));
-        struct IrDef *r = pawIr_new_param_def(X->C, did, d->name, type);
+        struct IrDef *r = pawIr_new_param_def(X->C, did, d->name);
         K_LIST_PUSH(X->C, result, IrGetParamDef(r));
         pawIr_set_def(X->C, did, r);
     }
@@ -303,11 +303,11 @@ static void collect_field_types(struct ItemCollector *X, struct HirDeclList *fie
         struct HirDecl *decl = K_LIST_GET(fields, i);
         if (HirIsFieldDecl(decl)) {
             struct HirFieldDecl *d = HirGetFieldDecl(decl);
-            dupcheck(X, map, d->name, "struct field");
+            ensure_unique(X, map, d->name, "struct field");
             collect_field_decl(X, d);
         } else {
             struct HirVariantDecl *d = HirGetVariantDecl(decl);
-            dupcheck(X, map, d->name, "enum variant");
+            ensure_unique(X, map, d->name, "enum variant");
             collect_variant_decl(X, d);
         }
     }
@@ -415,7 +415,7 @@ static void collect_methods(struct ItemCollector *X, struct HirDeclList *methods
     for (int i = 0; i < methods->count; ++i) {
         struct HirDecl *decl = K_LIST_GET(methods, i);
         struct HirFuncDecl *d = HirGetFuncDecl(decl);
-        dupcheck(X, map, d->name, "method");
+        ensure_unique(X, map, d->name, "method");
         d->self = X->adt;
         collect_func(X, d);
     }

@@ -311,6 +311,7 @@ void paw_dump_opcode(OpCode opcode)
         case OP_CALL:
         case OP_GETUPVALUE:
         case OP_SETUPVALUE:
+        case OP_SWITCHINT:
             printf("%s %d %d\n", opname, GET_A(opcode), GET_B(opcode));
             break;
         // op A sBx
@@ -383,6 +384,7 @@ void paw_dump_opcode(OpCode opcode)
         case OP_MSET:
         case OP_GETFIELD:
         case OP_SETFIELD:
+        case OP_TESTK:
             printf("%s %d %d %d\n", opname, GET_A(opcode), GET_B(opcode), GET_C(opcode));
             break;
         case OP_NOOP:

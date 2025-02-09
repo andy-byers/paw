@@ -5,55 +5,6 @@
 #include "code.h"
 #include "compile.h"
 
-static void add_line(struct FuncState *fs)
-{
-    Proto *p = fs->proto;
-    paw_Env *P = ENV(fs->G);
-    pawM_grow(P, p->lines, fs->nlines, p->nlines);
-    p->lines[fs->nlines++] = (struct LineInfo){
-        .line = fs->line,
-        .pc = fs->pc,
-    };
-}
-
-static void add_opcode(struct FuncState *fs, OpCode code)
-{
-    paw_Env *P = ENV(fs->G);
-    Proto *p = fs->proto;
-
-    // While code is being generated, the 'pc' is used to track the number of
-    // instructions, while the 'length' holds the capacity. The 'length' is set to the
-    // final 'pc' before execution.
-    pawM_grow(P, p->source, fs->pc, p->length);
-    p->source[fs->pc] = code;
-    ++fs->pc;
-}
-
-void pawK_code_0(struct FuncState *fs, Op op)
-{
-    add_line(fs);
-    add_opcode(fs, op);
-}
-
-void pawK_code_ABx(struct FuncState *fs, Op op, int a, int bc)
-{
-    paw_assert(0 <= a && a <= A_MAX);
-    paw_assert(0 <= bc && bc <= Bx_MAX);
-
-    add_line(fs);
-    add_opcode(fs, CREATE_ABx(op, a, bc));
-}
-
-void pawK_code_ABC(struct FuncState *fs, Op op, int a, int b, int c)
-{
-    paw_assert(0 <= a && a < A_MAX);
-    paw_assert(0 <= b && b < B_MAX);
-    paw_assert(0 <= c && c < C_MAX);
-
-    add_line(fs);
-    add_opcode(fs, CREATE_ABC(op, a, b, c));
-}
-
 typedef struct Arena {
     struct Arena *prev;
     size_t used;

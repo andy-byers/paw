@@ -34,11 +34,6 @@ struct FunctionState {
     struct LowerHir *L;
     struct Mir *mir;
     MirBlock current;
-    Map *uses;
-    Map *defs;
-    Map *vars;
-    paw_Bool sequential;
-    int reg_level;
     int nlocals;
     int level;
 };
@@ -199,13 +194,10 @@ static struct MirInstruction *terminate_goto(struct LowerHir *L, int line, MirBl
     return NEW_INSTR(L->fs, goto, -1, target);
 }
 
-static void maybe_goto(struct LowerHir *L, int line, MirBlock to)
+static void set_goto_edge(struct LowerHir *L, int line, MirBlock to)
 {
-    struct MirBlockData *block = current_bb_data(L);
-    if (is_unterminated(block)) {
-        add_edge(L, current_bb(L), to);
-        terminate_goto(L, line, to);
-    }
+    add_edge(L, current_bb(L), to);
+    terminate_goto(L, line, to);
 }
 
 static void set_current_bb(struct LowerHir *L, MirBlock b)
@@ -537,14 +529,12 @@ static MirRegister register_for_node(struct LowerHir *L, HirId hid)
     return new_register(L, pawIr_get_type(L->C, hid));
 }
 
-static void enter_function(struct LowerHir *L, struct FunctionState *fs, struct BlockState *bs, int line,
-        struct Mir *mir, DeclId did)
+static void enter_function(struct LowerHir *L, struct FunctionState *fs, struct BlockState *bs, int line, struct Mir *mir)
 {
     *fs = (struct FunctionState){
         .captured = mir->captured,
         .registers = mir->registers,
         .up = pawMir_upvalue_list_new(L->C),
-        .reg_level = mir->registers->count,
         .level = L->stack->count,
         .locals = mir->locals,
         .outer = L->fs,
@@ -562,15 +552,14 @@ static void enter_function(struct LowerHir *L, struct FunctionState *fs, struct 
     set_current_bb(L, first);
     enter_block(L, bs, PAW_FALSE);
 
-    // register 0 is used for the return value TODO: "did" should be "NO_DECL", this is not the function object anymore, recursion uses the global function object
     alloc_local(L, SCAN_STRING(L->C, "(result)"),
-            IR_FPTR(mir->type)->result, did);
+            IR_FPTR(mir->type)->result, NO_DECL);
 }
 
 static void leave_function(struct LowerHir *L)
 {
     struct MirBlockData *block = current_bb_data(L);
-    if (is_unterminated(block)) terminate_return(L, NULL);
+    terminate_return(L, NULL);
     L->stack->count = L->fs->level;
     L->fs = L->fs->outer;
 }
@@ -580,12 +569,7 @@ static MirRegister last_register(struct LowerHir *L)
     return (MirRegister){L->fs->registers->count - 1};
 }
 
-static MirRegister lower_operand_(struct HirVisitor *V, struct HirExpr *expr);
-
-static MirRegister lower_operand(struct HirVisitor *V, struct HirExpr *expr)
-{
-    return lower_operand_(V, expr);
-}
+static MirRegister lower_operand(struct HirVisitor *V, struct HirExpr *expr);
 
 #define LOWER_BLOCK(L, b) lower_operand(&(L)->V, HIR_CAST_EXPR(b))
 
@@ -604,11 +588,6 @@ static void lower_operand_list(struct HirVisitor *V, struct HirExprList *exprs, 
         const MirRegister r = lower_operand(V, *pexpr);
         K_LIST_PUSH(L->C, result, r);
     }
-}
-
-static MirRegister result_reg(struct FunctionState *fs)
-{
-    return (MirRegister){fs->reg_level};
 }
 
 static paw_Bool visit_field_decl(struct HirVisitor *V, struct HirFieldDecl *d)
@@ -739,12 +718,12 @@ static MirRegister lower_logical_expr(struct HirVisitor *V, struct HirLogicalExp
 
     set_current_bb(L, lhs_bb);
     move_to(L, first, result);
-    maybe_goto(L, e->line, after_bb);
+    set_goto_edge(L, e->line, after_bb);
 
     set_current_bb(L, rhs_bb);
     const MirRegister second = lower_operand(V, e->rhs);
     move_to(L, second, result);
-    maybe_goto(L, e->line, after_bb);
+    set_goto_edge(L, e->line, after_bb);
 
     set_current_bb(L, after_bb);
     return result;
@@ -843,7 +822,7 @@ static MirRegister lower_chain_expr(struct HirVisitor *V, struct HirChainExpr *e
     set_current_bb(L, arm->bid);
     const MirRegister value = register_for_node(L, e->hid);
     emit_get_field(L, e->line, object, 1, value);
-    maybe_goto(L, e->line, after_bb);
+    set_goto_edge(L, e->line, after_bb);
 
     set_current_bb(L, none_bb);
     terminate_return(L, &object);
@@ -908,7 +887,7 @@ static MirRegister lower_closure_expr(struct HirVisitor *V, struct HirClosureExp
 
     struct BlockState bs;
     struct FunctionState fs;
-    enter_function(L, &fs, &bs, e->line, result, NO_DECL);
+    enter_function(L, &fs, &bs, e->line, result);
 
     pawHir_visit_decl_list(&L->V, e->params);
     if (HirIsBlock(e->expr)) {
@@ -937,9 +916,13 @@ static MirRegister lower_conversion_expr(struct HirVisitor *V, struct HirConvers
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
     enum BuiltinKind from = kind_of_builtin(L, e->arg);
-    const MirRegister target = lower_operand(V, e->arg);
     const MirRegister output = register_for_node(L, e->hid);
-    NEW_INSTR(fs, cast, e->line, target, output, from, e->to);
+    const MirRegister target = lower_operand(V, e->arg);
+    if (from != e->to) {
+        NEW_INSTR(fs, cast, e->line, target, output, from, e->to);
+    } else {
+        move_to(L, target, output);
+    }
     return output;
 }
 
@@ -1122,7 +1105,7 @@ static MirRegister lower_if_expr(struct HirVisitor *V, struct HirIfExpr *e)
     set_current_bb(L, then_bb);
     const MirRegister first = lower_operand(V, e->then_arm);
     move_to(L, first, result);
-    maybe_goto(L, e->line, join_bb);
+    set_goto_edge(L, e->line, join_bb);
 
     set_current_bb(L, else_bb);
     if (e->else_arm == NULL) {
@@ -1132,7 +1115,7 @@ static MirRegister lower_if_expr(struct HirVisitor *V, struct HirIfExpr *e)
         const MirRegister second = lower_operand(V, e->else_arm);
         move_to(L, second, result);
     }
-    maybe_goto(L, e->line, join_bb);
+    set_goto_edge(L, e->line, join_bb);
 
     set_current_bb(L, join_bb);
     return result;
@@ -1156,7 +1139,7 @@ static MirRegister lower_loop_expr(struct HirVisitor *V, struct HirLoopExpr *e)
     lower_operand(V, e->block);
 
     const MirBlock loop_bb = current_bb(L);
-    maybe_goto(L, e->line, header_bb);
+    set_goto_edge(L, e->line, header_bb);
 
     adjust_to(L, JUMP_CONTINUE, header_bb);
     set_current_bb(L, after_bb);
@@ -1208,7 +1191,7 @@ static MirRegister lower_return_expr(struct HirVisitor *V, struct HirReturnExpr 
 
 static MirRegister lower_match_expr(struct HirVisitor *V, struct HirMatchExpr *e);
 
-static MirRegister lower_operand_(struct HirVisitor *V, struct HirExpr *expr)
+static MirRegister lower_operand(struct HirVisitor *V, struct HirExpr *expr)
 {
     switch (HIR_KINDOF(expr)) {
         case kHirLiteralExpr:
@@ -1308,11 +1291,11 @@ static void visit_guard(struct HirVisitor *V, struct Decision *d, MirRegister re
     struct MirInstruction *branch = terminate_branch(L, cond, then_bb, else_bb);
     set_current_bb(L, then_bb);
     lower_match_body(V, d->guard.body, result);
-    maybe_goto(L, -1, join_bb);
+    set_goto_edge(L, -1, join_bb);
 
     set_current_bb(L, else_bb);
     visit_decision(V, d->guard.rest, result);
-    maybe_goto(L, -1, join_bb);
+    set_goto_edge(L, -1, join_bb);
 
     set_current_bb(L, join_bb);
 }
@@ -1415,7 +1398,7 @@ static void visit_sparse_cases(struct HirVisitor *V, struct Decision *d, MirRegi
         visit_decision(V, mc.dec, result);
         leave_block(L);
 
-        maybe_goto(L, -1, join_bb);
+        set_goto_edge(L, -1, join_bb);
     }
 
     // this implementation requires an "otherwise" case (binding or wildcard) to ensure
@@ -1423,7 +1406,7 @@ static void visit_sparse_cases(struct HirVisitor *V, struct Decision *d, MirRegi
     paw_assert(d->multi.rest != NULL);
     set_current_bb(L, otherwise_bb);
     visit_decision(V, d->multi.rest, result);
-    maybe_goto(L, -1, join_bb);
+    set_goto_edge(L, -1, join_bb);
 
     set_current_bb(L, join_bb);
 }
@@ -1456,7 +1439,7 @@ static void visit_variant_cases(struct HirVisitor *V, struct Decision *d, MirReg
         visit_decision(V, mc.dec, result);
         leave_block(L);
 
-        maybe_goto(L, -1, join_bb);
+        set_goto_edge(L, -1, join_bb);
     }
     paw_assert(d->multi.rest == NULL);
 
@@ -1532,9 +1515,6 @@ static void visit_decision(struct HirVisitor *V, struct Decision *d, MirRegister
     enter_block(L, &bs, PAW_FALSE);
 
     switch (d->kind) {
-        case DECISION_FAILURE:
-            paw_assert(0);
-            return;
         case DECISION_SUCCESS:
             visit_success(V, d, result);
             break;
@@ -1544,6 +1524,8 @@ static void visit_decision(struct HirVisitor *V, struct Decision *d, MirRegister
         case DECISION_MULTIWAY:
             visit_multiway(V, d, result);
             break;
+        case DECISION_FAILURE:
+            PAW_UNREACHABLE();
     }
 
     leave_block(L);
@@ -1580,7 +1562,7 @@ static void lower_hir_body(struct LowerHir *L, struct HirFuncDecl *func, struct 
 {
     struct BlockState bs;
     struct FunctionState fs;
-    enter_function(L, &fs, &bs, func->line, mir, func->did);
+    enter_function(L, &fs, &bs, func->line, mir);
 
     pawHir_visit_decl_list(&L->V, func->params);
     lower_function_block(L, func->body);

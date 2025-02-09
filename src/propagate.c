@@ -755,6 +755,7 @@ static paw_Bool is_pure(struct MirInstruction *instr)
         case kMirMove:
         case kMirConstant:
         case kMirCast:
+        case kMirUpvalue:
         case kMirAggregate:
         case kMirContainer:
         case kMirSetLocal:
@@ -764,22 +765,7 @@ static paw_Bool is_pure(struct MirInstruction *instr)
         case kMirUnaryOp:
         case kMirBinaryOp:
             return PAW_TRUE;
-            // TODO: once this is figured out, squish the below cases into "default"
-        case kMirUpvalue:
-        case kMirGlobal:
-        case kMirAllocLocal:
-        case kMirFreeLocal:
-        case kMirSetUpvalue:
-        case kMirCall:
-        case kMirClose:
-        case kMirClosure:
-        case kMirSetElement:
-        case kMirSetRange:
-        case kMirSetField:
-        case kMirReturn:
-        case kMirBranch:
-        case kMirSwitch:
-        case kMirGoto:
+        default:
             return PAW_FALSE;
     }
 }
@@ -907,14 +893,6 @@ static void propagate_copy(struct KProp *K, struct MirMove *move)
             }
         }
     }
-}
-
-static paw_Bool can_propagate_copy(struct KProp *K, struct MirInstruction *instr)
-{
-    if (!MirIsMove(instr)) return PAW_FALSE;
-    const MirRegister output = MirGetMove(instr)->output;
-    const struct MirRegisterData *data = mir_reg_data(K->mir, output);
-    return !data->is_captured;
 }
 
 static void propagate_copies(struct KProp *K)

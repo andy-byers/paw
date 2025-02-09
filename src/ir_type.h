@@ -185,18 +185,15 @@ struct IrDefHeader {
 
 struct IrGenericDef {
     IR_DEF_HEADER;
-    IrType *type;
 };
 
 struct IrParamDef {
     IR_DEF_HEADER;
-    IrType *type;
 };
 
 struct IrFieldDef {
     IR_DEF_HEADER;
     paw_Bool is_pub : 1;
-    IrType *type;
 };
 
 struct IrVariantDef {
@@ -249,31 +246,29 @@ struct IrDef {
 
 IrDef *pawIr_new_def(struct Compiler *C);
 
-static inline IrDef *pawIr_new_generic_def(struct Compiler *C, DeclId did, String *name, IrType *type)
+static inline IrDef *pawIr_new_generic_def(struct Compiler *C, DeclId did, String *name)
 {
     IrDef *def = pawIr_new_def(C);
     def->GenericDef_ = (struct IrGenericDef){
         .kind = kIrGenericDef,
         .did = did,
         .name = name,
-        .type = type,
     };
     return def;
 }
 
-static inline IrDef *pawIr_new_param_def(struct Compiler *C, DeclId did, String *name, IrType *type)
+static inline IrDef *pawIr_new_param_def(struct Compiler *C, DeclId did, String *name)
 {
     IrDef *def = pawIr_new_def(C);
     def->ParamDef_ = (struct IrParamDef){
         .kind = kIrParamDef,
         .did = did,
         .name = name,
-        .type = type,
     };
     return def;
 }
 
-static inline IrDef *pawIr_new_field_def(struct Compiler *C, DeclId did, String *name, IrType *type, paw_Bool is_pub)
+static inline IrDef *pawIr_new_field_def(struct Compiler *C, DeclId did, String *name, paw_Bool is_pub)
 {
     IrDef *def = pawIr_new_def(C);
     def->FieldDef_ = (struct IrFieldDef){
@@ -281,7 +276,6 @@ static inline IrDef *pawIr_new_field_def(struct Compiler *C, DeclId did, String 
         .did = did,
         .is_pub = is_pub,
         .name = name,
-        .type = type,
     };
     return def;
 }
