@@ -51,3 +51,8 @@ pub fn test_nested_struct() {
     assert(o.b.b == 'two');
 }
 
+struct NoComma {
+    // comma only needed to separate fields
+    pub value: int 
+}
+

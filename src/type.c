@@ -52,13 +52,23 @@ static struct Type *add_type(paw_Env *P, struct Type *type)
 #define NEW_TYPE(P, n) \
     pawM_new_flex(P, struct Type, n, sizeof(paw_Type))
 
-struct Type *pawY_new_adt(paw_Env *P,  ItemId iid, int ntypes)
+struct Type *pawY_new_adt(paw_Env *P, ItemId iid, int ntypes)
 {
     struct Type *type = NEW_TYPE(P, ntypes);
     *type = (struct Type){
         .adt.kind = TYPE_ADT,
         .adt.iid = iid,
         .nsubtypes = ntypes,
+    };
+    return add_type(P, type);
+}
+
+struct Type *pawY_new_trait_obj(paw_Env *P)
+{
+    struct Type *type = NEW_TYPE(P, 0);
+    *type = (struct Type){
+        .trait.kind = TYPE_TRAIT_OBJ,
+        .nsubtypes = 0,
     };
     return add_type(P, type);
 }
@@ -109,6 +119,11 @@ struct Def *pawY_new_adt_def(paw_Env *P, int nfields)
     def->adt.fields = pawM_new_vec(P, nfields, ItemId);
     def->adt.nfields = nfields;
     return def;
+}
+
+struct Def *pawY_new_trait_def(paw_Env *P)
+{
+    return new_def(P, DEF_TRAIT);
 }
 
 struct Def *pawY_new_variant_def(paw_Env *P, int nfields)

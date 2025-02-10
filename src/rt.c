@@ -448,7 +448,7 @@ top:
     pc = cf->pc;
     fn = cf->fn;
     K = fn->p->k;
-paw_dump_source(P,fn->p);
+
     for (;;) {
         const OpCode opcode = *pc++;
         const Op op = GET_OP(opcode);

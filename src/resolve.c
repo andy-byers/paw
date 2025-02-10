@@ -145,7 +145,8 @@ static struct HirDecl *get_decl(struct Resolver *R, DeclId did)
 
 static struct IrType *get_type(struct Resolver *R, paw_Type code)
 {
-    return GET_NODE_TYPE(R->C, get_decl(R, (DeclId){.value = code}));
+    const DeclId did = R->C->builtins[code].did;
+    return GET_NODE_TYPE(R->C, get_decl(R, did));
 }
 
 static paw_Bool is_unit_variant(struct Resolver *R, struct IrType *type)
@@ -196,7 +197,8 @@ static struct IrType *resolve_operand(struct Resolver *R, struct HirExpr *expr)
 
 static DeclId add_decl(struct Resolver *R, struct HirDecl *decl)
 {
-    return pawHir_add_decl(R->C, decl, R->m->hir->modno);
+    return decl->hdr.did;
+//    return pawHir_register_decl(R->m->hir, decl);
 }
 
 static struct IrTypeList *resolve_exprs(struct Resolver *R, struct HirExprList *list)
@@ -225,7 +227,7 @@ static struct IrTypeList *collect_decl_types(struct Resolver *R, struct HirDeclL
 
 static struct IrType *new_unknown(struct Resolver *R)
 {
-    return pawU_new_unknown(R->U, R->line);
+    return pawU_new_unknown(R->U, R->line, NULL);
 }
 
 static struct IrTypeList *new_unknowns(struct Resolver *R, int count)
@@ -292,43 +294,6 @@ static int find_field(struct HirDeclList *fields, String *name)
         if (pawS_eq(name, decl->hdr.name)) return i;
     }
     return -1;
-}
-
-// Return true if 'a' is more generic than or equal to 'b', false otherwise
-static paw_Bool is_compat(struct Compiler *C, struct IrType *a, struct IrType *b);
-
-static paw_Bool are_lists_compat(struct Compiler *C, struct IrTypeList *a, struct IrTypeList *b)
-{
-    paw_assert(a->count == b->count);
-    for (int i = 0; i < a->count; ++i) {
-        struct IrType *x = K_LIST_GET(a, i);
-        struct IrType *y = K_LIST_GET(b, i);
-        if (!is_compat(C, x, y)) return PAW_FALSE;
-    }
-    return PAW_TRUE;
-}
-
-static paw_Bool is_compat(struct Compiler *C, struct IrType *a, struct IrType *b)
-{
-    if (pawU_equals(&C->dm->unifier, a, b)) return PAW_TRUE;
-    if (IrIsGeneric(a) || IrIsInfer(b)) return PAW_TRUE;
-    if (IR_KINDOF(a) != IR_KINDOF(b)) return PAW_FALSE;
-
-    switch (IR_KINDOF(a)) {
-        case kIrTuple:
-            if (!IrIsTuple(b)) return PAW_FALSE;
-            return are_lists_compat(C, IrGetTuple(a)->elems, IrGetTuple(b)->elems);
-        case kIrFuncPtr:
-        case kIrSignature:
-            return is_compat(C, IR_FPTR(a)->result, IR_FPTR(b)->result) &&
-                are_lists_compat(C, IR_FPTR(a)->params, IR_FPTR(b)->params);
-        case kIrAdt:
-            return IrGetAdt(a)->did.value == IrGetAdt(b)->did.value &&
-                are_lists_compat(C, IrGetAdt(a)->types, IrGetAdt(b)->types);
-        default:
-            return a == b;
-    }
-    return PAW_FALSE;
 }
 
 static void new_local(struct Resolver *R, String *name, struct HirDecl *decl)
@@ -450,11 +415,12 @@ static void resolve_methods(struct Resolver *R, struct HirDeclList *items, struc
     for (int i = 0; i < items->count; ++i) resolve_item(R, K_LIST_GET(items, i));
 }
 
-static void resolve_impl_methods(struct Resolver *R, struct HirImplDecl *d)
+static void resolve_adt_methods(struct Resolver *R, struct HirAdtDecl *d)
 {
     enter_scope(R, NULL);
 
-    new_local(R, d->alias->hdr.name, d->alias);
+    String *self = SCAN_STRING(R->C, "Self");
+    new_local(R, self, d->self);
     resolve_methods(R, d->methods, IrGetAdt(R->self));
     allocate_decls(R, d->methods);
 
@@ -556,14 +522,14 @@ static void maybe_fix_unit_struct(struct Resolver *R, struct IrType *type, struc
     paw_assert(IrIsAdt(type));
     struct HirDecl *decl = get_decl(R, IR_TYPE_DID(type));
     struct HirAdtDecl *adt = HirGetAdtDecl(decl);
-    const paw_Type code = pawP_type2code(R->C, type);
+    const paw_Type code = TYPE2CODE(R, type);
     if (code >= 0) {
         TYPE_ERROR(R, "expected operand but found builtin type '%s'", adt->name->text);
     }
     if (!adt->is_struct) {
         SYNTAX_ERROR(R, "missing variant specifier on enum '%s'", adt->name->text);
     }
-    if (adt->fields != NULL) {
+    if (adt->fields->count > 0) {
         SYNTAX_ERROR(R, "missing fields on initializer for struct '%s'", adt->name->text);
     }
     struct HirPath *path = HirGetPathExpr(expr)->path;
@@ -591,7 +557,7 @@ static struct IrType *resolve_path_expr(struct Resolver *R, struct HirPathExpr *
 static void check_map_key(struct Resolver *R, struct IrType *key)
 {
     // TODO: if IrIsInfer(key), need to save the type and check it later
-    if (!IrIsInfer(key) && !IR_IS_BASIC_T(key)) {
+    if (!IrIsInfer(key) && !IS_BASIC_TYPE(R->C, key)) {
         TYPE_ERROR(R, "key is not hashable");
     }
 }
@@ -824,51 +790,33 @@ static struct IrType *resolve_closure_expr(struct Resolver *R, struct HirClosure
     return pawIr_new_func_ptr(R->C, params, ret);
 }
 
-static struct HirDecl *find_method_aux(struct Compiler *C, struct HirDecl *base, struct IrType *self, String *name)
+static struct HirDecl *find_method_aux(struct Compiler *C, struct HirDecl *base, String *name)
 {
-    struct HirImplDecl *impl = HirGetImplDecl(base);
-    struct IrType *impl_type = pawIr_get_type(C, impl->hid);
-    if (!is_compat(C, impl_type, self)) return NULL;
-
-    for (int i = 0; i < impl->methods->count; ++i) {
-        struct HirDecl *method = K_LIST_GET(impl->methods, i);
-        if (pawS_eq(name, method->hdr.name)) return method;
+    struct HirDecl **pdecl;
+    struct HirAdtDecl *adt = HirGetAdtDecl(base);
+    K_LIST_FOREACH(adt->methods, pdecl) {
+        struct HirFuncDecl *method = HirGetFuncDecl(*pdecl);
+        if (pawS_eq(name, method->name)) return *pdecl;
     }
     return NULL;
 }
 
-struct IrType *pawP_find_method(struct Compiler *C, struct IrType *adt, String *name)
+struct IrType *pawP_find_method(struct Compiler *C, struct IrType *base, String *name)
 {
-    struct HirDeclList *impls = impls_for_adt(C, adt);
-    if (impls == NULL) return NULL; // no impl blocks
-
-    struct HirDecl *last_impl;
-    struct HirDecl *last_method = NULL;
-    for (int i = 0; i < impls->count; ++i) {
-        struct HirDecl *impl = K_LIST_GET(impls, i);
-        struct HirDecl *method = find_method_aux(C, impl, adt, name);
-        if (method == NULL) continue;
-        if (last_method != NULL) {
-            pawE_error(ENV(C), PAW_ENAME, impl->hdr.line,
-                    "found multiple applicable methods");
-        }
-        last_method = method;
-        last_impl = impl;
-    }
-    if (last_method != NULL) {
-        if (!HIR_IS_POLY_IMPL(last_impl)) return GET_NODE_TYPE(C, last_method);
-        return pawP_instantiate_method(C, last_impl, ir_adt_types(adt), last_method);
-    }
-    return NULL;
+    struct HirDecl *decl = pawHir_get_decl(C, IR_TYPE_DID(base));
+    struct HirDecl *method = find_method_aux(C, decl, name);
+    if (method == NULL) return NULL;
+    if (!HIR_IS_POLY_ADT(decl)) return GET_NODE_TYPE(C, method);
+    return pawP_instantiate_method(C, decl, IR_TYPE_SUBTYPES(base), method);
 }
 
-static void resolve_impl_item(struct Resolver *R, struct HirImplDecl *d)
+static void resolve_adt_item(struct Resolver *R, struct HirAdtDecl *d)
 {
     enter_scope(R, NULL);
 
     allocate_decls(R, d->generics);
-    R->self = resolve_path(R, d->self, LOOKUP_TYPE);
-    resolve_impl_methods(R, d);
+    R->self = pawIr_get_type(R->C, d->hid);
+    resolve_adt_methods(R, d);
 
     leave_scope(R);
     R->self = NULL;
@@ -904,7 +852,7 @@ static void register_generics(struct Resolver *R, struct HirDeclList *generics)
     struct HirDecl **pdecl;
     K_LIST_FOREACH(generics, pdecl) {
         struct HirGenericDecl *d = HirGetGenericDecl(*pdecl);
-        struct IrType *type = pawIr_new_generic(R->C, d->did);
+        struct IrType *type = pawIr_new_generic(R->C, d->did, NULL);
         SET_NODE_TYPE(R->C, *pdecl, type);
     }
 }
@@ -924,16 +872,26 @@ static struct IrType *resolve_type_decl(struct Resolver *R, struct HirTypeDecl *
     return type;
 }
 
-static struct IrType *method_ctx(struct Resolver *R, struct HirExpr *target)
+static int trait_param_offset(struct Resolver *R, struct IrGeneric *self, struct HirSelector *e)
 {
-    if (!HirIsSelector(target)) return NULL; // normal function call
+    struct IrType *type = pawIr_resolve_trait_method(R->C, self, e->name);
+    return type != NULL;
+}
+
+static int param_offset(struct Resolver *R, struct HirExpr *target)
+{
+    if (!HirIsSelector(target)) return 0; // normal function call
     struct HirSelector *select = HirGetSelector(target);
     struct IrType *self = GET_NODE_TYPE(R->C, select->target);
     self = maybe_unit_variant(R, self); // operand => type
-    if (!IrIsAdt(self)) return NULL;
+    if (IrIsGeneric(self)) {
+        return trait_param_offset(R, IrGetGeneric(self), select);
+    } else if (!IrIsAdt(self)) return 0;
     struct IrType *method = pawP_find_method(R->C, self, select->name);
+    // TODO: may not be necessary, happened when "select" was resolved
+    //       probably still need to call pawP_find_method to make sure this thing is a method
     pawIr_set_type(R->C, select->hid, method);
-    return self;
+    return 1;
 }
 
 static paw_Bool is_polymorphic(struct Resolver *R, struct IrType *type)
@@ -959,8 +917,8 @@ static struct IrType *resolve_call_expr(struct Resolver *R, struct HirCallExpr *
     if (!IR_IS_FUNC_TYPE(target)) TYPE_ERROR(R, "type is not callable");
 
     const struct IrFuncPtr *fptr = IR_FPTR(target);
-    const int param_offset = method_ctx(R, e->target) != NULL;
-    const int nparams = fptr->params->count - param_offset;
+    const int offset = param_offset(R, e->target);
+    const int nparams = fptr->params->count - offset;
     if (e->args->count < nparams) {
         SYNTAX_ERROR(R, "not enough arguments");
     } else if (e->args->count > nparams) {
@@ -984,7 +942,7 @@ static struct IrType *resolve_call_expr(struct Resolver *R, struct HirCallExpr *
     }
 
     for (int i = 0; i < nparams; ++i) {
-        struct IrType *param = K_LIST_GET(params, i + param_offset);
+        struct IrType *param = K_LIST_GET(params, i + offset);
         struct HirExpr *arg = K_LIST_GET(e->args, i);
         unify(R, param, resolve_operand(R, arg));
     }
@@ -996,8 +954,8 @@ static struct IrType *resolve_conversion_expr(struct Resolver *R, struct HirConv
 {
     struct IrType *type = resolve_operand(R, e->arg);
     if (!IrIsAdt(type)
-            || pawP_type2code(R->C, type) == PAW_TUNIT
-            || pawP_type2code(R->C, type) == PAW_TSTR) {
+            || TYPE2CODE(R, type) == PAW_TUNIT
+            || TYPE2CODE(R, type) == PAW_TSTR) {
         TYPE_ERROR(R, "argument to conversion must be scalar");
     }
     return get_type(R, e->to);
@@ -1089,7 +1047,7 @@ static struct HirExprList *collect_field_exprs(struct Resolver *R, struct HirExp
 static paw_Bool is_adt_self(struct Resolver *R, struct IrType *adt)
 {
     return R->self != NULL
-        ? is_compat(R->C, R->self, adt)
+        ? pawU_is_compat(R->C->U, R->self, adt)
         : PAW_FALSE;
 }
 
@@ -1138,7 +1096,7 @@ static struct IrType *resolve_composite_lit(struct Resolver *R, struct HirCompos
     struct IrTypeList *field_types = pawHir_collect_decl_types(R->C, adt->fields);
     if (!adt->is_struct) {
         TYPE_ERROR(R, "expected structure but found enumeration '%s'", adt->name->text);
-    } else if (adt->fields == NULL) {
+    } else if (adt->fields->count == 0) {
         SYNTAX_ERROR(R, "unexpected curly braces on initializer for unit structure '%s'"
                         "(use name without '{}' to create unit struct)", adt->name->text);
     } else if (is_polymorphic(R, type)) {
@@ -1254,8 +1212,7 @@ static struct IrType *check_index(struct Resolver *R, struct HirIndex *e, struct
         }
         expect = ir_map_key(target);
         result = ir_map_value(target);
-    } else if (IrIsAdt(target) &&
-            IR_TYPE_DID(target).value == PAW_TSTR) {
+    } else if (TYPE2CODE(R, target) == BUILTIN_STR) {
         expect = get_type(R, PAW_TINT);
         result = get_type(R, PAW_TSTR);
     } else {
@@ -1272,7 +1229,7 @@ static struct IrType *resolve_index(struct Resolver *R, struct HirIndex *e)
     struct IrType *target = resolve_operand(R, e->target);
     return check_index(R, e, target);
 }
-
+#include"stdio.h"
 static struct IrType *resolve_selector(struct Resolver *R, struct HirSelector *e)
 {
     struct IrType *target = resolve_operand(R, e->target);
@@ -1287,7 +1244,14 @@ static struct IrType *resolve_selector(struct Resolver *R, struct HirSelector *e
         }
         return K_LIST_GET(types, e->index);
     }
-    if (!IrIsAdt(target)) TYPE_ERROR(R, "type has no fields");
+    if (IrIsGeneric(target)) {
+        struct IrType *type = pawIr_resolve_trait_method(R->C, IrGetGeneric(target), e->name);
+
+printf("%s\n", pawIr_print_type(R->C,type));--ENV(R)->top.p;
+
+        if (type == NULL) TYPE_ERROR(R, "generic bound missing method");
+        return type;
+    } else if (!IrIsAdt(target)) TYPE_ERROR(R, "type has no fields");
     if (e->is_index) TYPE_ERROR(R, "expected field name (integer indices can "
                                    "only be used with tuples)");
     struct HirAdtDecl *adt = get_adt(R, target);
@@ -1548,20 +1512,22 @@ static struct IrType *convert_path_to_binding(struct Resolver *R, struct HirPath
 static struct IrType *ResolvePathPat(struct Resolver *R, struct HirPathPat *p)
 {
     struct IrType *type = lookup_path(R, p->path, LOOKUP_VALUE);
-    struct HirDecl *decl = get_decl(R, HIR_PATH_RESULT(p->path));
-    if (type == NULL || (!HirIsAdtDecl(decl) && !HirIsVariantDecl(decl))) {
+    if (type == NULL) {
         // identifier is unbound, or it refers to a variable declaration
         if (p->path->count > 1) NAME_ERROR(R, "invalid path");
+bindit: // TODO: hacky solution! needed because OR patterns declare bindings in the first pattern to check for duplicates
         return convert_path_to_binding(R, p);
     }
-
     // convert to a more specific type of pattern, now that it is known that
     // the path refers to a unit struct/enumerator
     struct HirPat *pat;
     struct HirPatList *empty = pawHir_pat_list_new(R->C);
+    struct HirDecl *decl = get_decl(R, HIR_PATH_RESULT(p->path));
     if (HirIsAdtDecl(decl)) {
         paw_assert(!HirGetAdtDecl(decl)->is_struct);
         pat = pawHir_new_struct_pat(R->m->hir, p->line, p->path, empty);
+    } else if (HirIsVarDecl(decl)) {
+        goto bindit;
     } else {
         const int index = HirGetVariantDecl(decl)->index;
         pat = pawHir_new_variant_pat(R->m->hir, p->line, p->path, empty, index);
@@ -1742,8 +1708,8 @@ static void resolve_item(struct Resolver *R, struct HirDecl *item)
 {
     if (HirIsFuncDecl(item)) {
         resolve_func_item(R, HirGetFuncDecl(item));
-    } else if (HirIsImplDecl(item)) {
-        resolve_impl_item(R, HirGetImplDecl(item));
+    } else if (HirIsAdtDecl(item)) {
+        resolve_adt_item(R, HirGetAdtDecl(item));
     }
 }
 
@@ -1789,7 +1755,7 @@ void pawP_resolve(struct Compiler *C)
     struct Resolver R = {
         .strings = C->strings,
         .impls = C->impls,
-        .U = &dm->unifier,
+        .U = C->U,
         .P = ENV(C),
         .dm = dm,
         .F = &F,

@@ -59,6 +59,7 @@ set(PAW_HEADER_FILES
     ${PAW_SOURCE_DIR}/rt.h
     ${PAW_SOURCE_DIR}/ssa.h
     ${PAW_SOURCE_DIR}/str.h
+    ${PAW_SOURCE_DIR}/trait.h
     ${PAW_SOURCE_DIR}/type.h
     ${PAW_SOURCE_DIR}/type_folder.h
     ${PAW_SOURCE_DIR}/unify.h
@@ -108,6 +109,7 @@ set(PAW_SOURCE_FILES
     ${PAW_SOURCE_DIR}/rt.c
     ${PAW_SOURCE_DIR}/ssa.c
     ${PAW_SOURCE_DIR}/str.c
+    ${PAW_SOURCE_DIR}/trait.c
     ${PAW_SOURCE_DIR}/type.c
     ${PAW_SOURCE_DIR}/type_folder.c
     ${PAW_SOURCE_DIR}/unify.c

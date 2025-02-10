@@ -68,14 +68,12 @@ pub fn return_42() -> int {
 
 pub struct Obj<T> {
     t: T,
-}
 
-impl<X> Obj<X> {
-    pub fn new(x: X) -> Self {
+    pub fn new(x: T) -> Self {
         return Self{t: x};
     }
     
-    pub fn get_t(self) -> X {
+    pub fn get_t(self) -> T {
         return self.t;
     }
 }

@@ -662,11 +662,24 @@ static struct AstDecl *let_decl(struct Lex *lex, int line)
     return pawAst_new_var_decl(lex->ast, line, name, tag, init);
 }
 
+static struct AstBoundList *parse_generic_bounds(struct Lex *lex)
+{
+    if (!test_next(lex, ':')) return NULL;
+    struct AstBoundList *bounds = pawAst_bound_list_new(lex->C);
+    do {
+        struct AstGenericBound bound;
+        bound.path = parse_pathtype(lex);
+        K_LIST_PUSH(lex->C, bounds, bound);
+    } while (test_next(lex, '+'));
+    return bounds;
+}
+
 static struct AstDecl *generic_param(struct Lex *lex)
 {
     const int line = lex->line;
     String *name = parse_name(lex);
-    return pawAst_new_generic_decl(lex->ast, line, name);
+    struct AstBoundList *bounds = parse_generic_bounds(lex);
+    return pawAst_new_generic_decl(lex->ast, line, name, bounds);
 }
 
 DEFINE_LIST_PARSER(func_param, '(', ')', LOCAL_MAX, "function parameters", func_param_decl,  AstDeclList)
@@ -1299,6 +1312,27 @@ static struct AstDecl *func_decl(struct Lex *lex, paw_Bool is_pub)
     return function(lex, line, name, FUNC_FUNCTION, is_pub);
 }
 
+static struct AstDecl *method_decl(struct Lex *lex)
+{
+    const int line = lex->line;
+    const paw_Bool is_pub = test_next(lex, TK_PUB);
+    check_next(lex, TK_FN);
+    String *name = parse_name(lex);
+    return function(lex, line, name, FUNC_METHOD, is_pub);
+}
+
+static struct AstDecl *parse_method(struct Lex *lex, paw_Bool is_pub)
+{
+    const int line = lex->line;
+    check_next(lex, TK_FN);
+    // indicate that 'self' has special meaning
+    lex->in_impl = PAW_TRUE;
+    String *name = parse_name(lex);
+    struct AstDecl *method = function(lex, line, name, FUNC_METHOD, is_pub);
+    lex->in_impl = PAW_FALSE;
+    return method;
+}
+
 static struct AstDecl *variant_decl(struct Lex *lex, int index)
 {
     const int line = lex->line;
@@ -1310,38 +1344,33 @@ static struct AstDecl *variant_decl(struct Lex *lex, int index)
     return pawAst_new_variant_decl(lex->ast, line, name, fields, index);
 }
 
-static void parse_variant_list(struct Lex *lex, struct AstDeclList *list, int line)
+static void enum_body(struct Lex *lex, int line, struct AstDeclList *variants, struct AstDeclList *methods)
 {
-    do {
-        if (test(lex, '}')) break;
-        if (list->count == LOCAL_MAX) {
-            limit_error(lex, "variants", LOCAL_MAX);
+    check_next(lex, '{');
+    while (!end_of_block(lex)) {
+        if (test(lex, TK_NAME)) {
+            if (variants->count == LOCAL_MAX) {
+                limit_error(lex, "variants in enum body", LOCAL_MAX);
+            }
+            struct AstDecl *variant = variant_decl(lex, variants->count);
+            K_LIST_PUSH(lex->C, variants, variant);
+            if (!test_next(lex, ',') && !test(lex, '}')) {
+                SYNTAX_ERROR(lex->C, "',' required to separate enum variants from "
+                                     "other items");
+            }
+        } else if (methods->count == LOCAL_MAX) {
+            limit_error(lex, "methods in enum body", LOCAL_MAX);
+        } else {
+            const paw_Bool is_pub = test_next(lex, TK_PUB);
+            struct AstDecl *method = parse_method(lex, is_pub);
+            K_LIST_PUSH(lex->C, methods, method);
         }
-        // NOTE: 'variant_decl' requires a second argument, so 'DEFINE_LIST_PARSER'
-        //       cannot be used as-is.
-        struct AstDecl *next = variant_decl(lex, list->count);
-        K_LIST_PUSH(lex->C, list, next);
-    } while (test_next(lex, ','));
+    }
     delim_next(lex, '}', '{', line);
-}
 
-static struct AstDeclList *enum_body(struct Lex *lex, int line)
-{
-    if (!test(lex, '{')) {
-        semicolon(lex);
-        return NULL;
+    if (variants->count == 0) {
+        pawX_error(lex, "expected at least 1 enum variant");
     }
-    skip(lex);
-
-    ++lex->expr_depth;
-    struct AstDeclList *fields = pawAst_decl_list_new(lex->C);
-    parse_variant_list(lex, fields, line);
-    if (fields->count == 0) {
-        pawX_error(lex, "expected at least 1 enum variant between curly braces "
-                        "(remove curly braces for unit enumeration)");
-    }
-    --lex->expr_depth;
-    return fields;
 }
 
 static struct AstDecl *enum_decl(struct Lex *lex, paw_Bool is_pub)
@@ -1350,41 +1379,53 @@ static struct AstDecl *enum_decl(struct Lex *lex, paw_Bool is_pub)
     const int line = lex->line;
     String *name = parse_name(lex);
     struct AstDeclList *generics = type_param(lex);
-    struct AstDeclList *variants = enum_body(lex, line);
-    return pawAst_new_adt_decl(lex->ast, line, name, generics, variants, is_pub, PAW_FALSE);
+    struct AstDeclList *variants = pawAst_decl_list_new(lex->C);
+    struct AstDeclList *methods = pawAst_decl_list_new(lex->C);
+    enum_body(lex, line, variants, methods);
+    return pawAst_new_adt_decl(lex->ast, line, name, generics,
+            variants, methods, is_pub, PAW_FALSE);
 }
 
-static struct AstDecl *field_decl(struct Lex *lex)
+static struct AstDecl *struct_field(struct Lex *lex, paw_Bool is_pub)
 {
     const int line = lex->line;
-    const paw_Bool is_pub = test_next(lex, TK_PUB);
     String *name = parse_name(lex);
     struct AstType *tag = expect_annotation(lex, "field", name);
     return pawAst_new_field_decl(lex->ast, line, name, tag, is_pub);
 }
 
-DEFINE_LIST_PARSER(struct_field, '{', '}', LOCAL_MAX, "struct fields", field_decl, AstDeclList)
-
-static struct AstDeclList *struct_field_list(struct Lex *lex, int line)
-{
-    ++lex->expr_depth;
-    struct AstDeclList *list = pawAst_decl_list_new(lex->C);
-    parse_struct_field_list(lex, list, line);
-    if (list->count == 0) {
-        pawX_error(lex, "expected at least 1 struct field between curly braces "
-                        "(remove curly braces for unit structure)");
-    }
-    --lex->expr_depth;
-    return list;
-}
-
-static void struct_body(struct Lex *lex, struct AstAdtDecl *adt)
+static void struct_body(struct Lex *lex, struct AstDeclList *fields, struct AstDeclList *methods)
 {
     const int line = lex->line;
-    if (test_next(lex, '{')) {
-        adt->fields = struct_field_list(lex, line);
-    } else {
+    if (!test_next(lex, '{')) {
         semicolon(lex);
+        return;
+    }
+
+    while (!end_of_block(lex)) {
+        const paw_Bool is_pub = test_next(lex, TK_PUB);
+        if (test(lex, TK_NAME)) {
+            if (fields->count == LOCAL_MAX) {
+                limit_error(lex, "fields in struct body", LOCAL_MAX);
+            }
+            struct AstDecl *field = struct_field(lex, is_pub);
+            K_LIST_PUSH(lex->C, fields, field);
+            if (!test_next(lex, ',') && !test(lex, '}')) {
+                SYNTAX_ERROR(lex->C, "',' required to separate struct fields from "
+                                     "other items");
+            }
+        } else if (methods->count == LOCAL_MAX) {
+            limit_error(lex, "methods in struct body", LOCAL_MAX);
+        } else {
+            struct AstDecl *method = parse_method(lex, is_pub);
+            K_LIST_PUSH(lex->C, methods, method);
+        }
+    }
+    delim_next(lex, '}', '{', line);
+
+    if (fields->count == 0 && methods->count == 0) {
+        pawX_error(lex, "expected at least 1 struct field or method between "
+                        "curly braces (remove curly braces for unit structure)");
     }
 }
 
@@ -1394,34 +1435,20 @@ static struct AstDecl *struct_decl(struct Lex *lex, paw_Bool is_pub)
     skip(lex); // 'struct' token
     String *name = parse_name(lex);
     struct AstDeclList *generics = type_param(lex);
-    struct AstDeclList *fields = NULL;
-    if (test_next(lex, '{')) {
-        fields = struct_field_list(lex, line);
-    } else {
-        semicolon(lex);
-    }
-    return pawAst_new_adt_decl(lex->ast, line, name, generics, fields, is_pub, PAW_TRUE);
+    struct AstDeclList *fields = pawAst_decl_list_new(lex->C);
+    struct AstDeclList *methods = pawAst_decl_list_new(lex->C);
+    struct_body(lex, fields, methods);
+    return pawAst_new_adt_decl(lex->ast, line, name, generics,
+            fields, methods, is_pub, PAW_TRUE);
 }
 
-static struct AstDecl *method_decl(struct Lex *lex)
+static struct AstDecl *trait_decl(struct Lex *lex, paw_Bool is_pub)
 {
     const int line = lex->line;
-    const paw_Bool is_pub = test_next(lex, TK_PUB);
-    check_next(lex, TK_FN);
+    skip(lex); // 'trait' token
     String *name = parse_name(lex);
-    return function(lex, line, name, FUNC_METHOD, is_pub);
-}
-
-static struct AstDecl *impl_decl(struct Lex *lex)
-{
-    skip(lex); // 'impl' token
-    String *name = SCAN_STRING(lex, "(impl)");
     struct AstDeclList *generics = type_param(lex);
-    struct AstPath *self = parse_pathtype(lex);
 
-    const int line = lex->line;
-    // indicate that 'self' has special meaning
-    lex->in_impl = PAW_TRUE;
     check_next(lex, '{');
     struct AstDeclList *methods = pawAst_decl_list_new(lex->C);
     while (!end_of_block(lex)) {
@@ -1432,8 +1459,7 @@ static struct AstDecl *impl_decl(struct Lex *lex)
         K_LIST_PUSH(lex->C, methods, method);
     }
     delim_next(lex, '}', '{', line);
-    lex->in_impl = PAW_FALSE;
-    return pawAst_new_impl_decl(lex->ast, line, name, self, generics, methods);
+    return pawAst_new_trait_decl(lex->ast, line, name, generics, methods, is_pub);
 }
 
 static struct AstDecl *type_decl(struct Lex *lex)
@@ -1504,12 +1530,11 @@ static struct AstDecl *toplevel_item(struct Lex *lex, paw_Bool is_pub)
             return enum_decl(lex, is_pub);
         case TK_STRUCT:
             return struct_decl(lex, is_pub);
+        case TK_TRAIT:
+            return trait_decl(lex, is_pub);
         case TK_USE:
             ensure_not_pub(lex, is_pub);
             return use_decl(lex);
-        case TK_IMPL:
-            ensure_not_pub(lex, is_pub);
-            return impl_decl(lex);
         case TK_TYPE:
             ensure_not_pub(lex, is_pub);
             return type_decl(lex);
@@ -1527,36 +1552,21 @@ static struct AstDeclList *toplevel_items(struct Lex *lex, struct AstDeclList *l
 }
 
 static const char kPrelude[] =
-    "pub struct _List<T>;\n"
-    "pub struct _Map<K, V>;\n"
+    "pub struct unit;\n"
 
-    "pub enum Option<T> {\n"
-    "    Some(T),\n"
-    "    None,\n"
-    "}\n"
-
-    "pub enum Result<T, E> {\n"
-    "    Ok(T),\n"
-    "    Err(E),\n"
-    "}\n"
-
-    "pub fn print(message: str);\n"
-    "pub fn assert(cond: bool);\n"
-    "pub fn range(begin: int, end: int, step: int) -> (fn() -> Option<int>);\n"
-
-    "impl bool {\n"
+    "pub struct bool {\n"
     "    pub fn to_string(self) -> str;\n"
     "}\n"
 
-    "impl int {\n"
+    "pub struct int {\n"
     "    pub fn to_string(self) -> str;\n"
     "}\n"
 
-    "impl float {\n"
+    "pub struct float {\n"
     "    pub fn to_string(self) -> str;\n"
     "}\n"
 
-    "impl str {\n"
+    "pub struct str {\n"
     "    pub fn parse_int(self, base: int) -> int;\n"
     "    pub fn parse_float(self) -> float;\n"
     "    pub fn split(self, sep: str) -> [str];\n"
@@ -1566,7 +1576,7 @@ static const char kPrelude[] =
     "    pub fn ends_with(self, suffix: str) -> bool;\n"
     "}\n"
 
-    "impl<T> _List<T> {\n"
+    "pub struct List<T> {\n"
     "    pub fn length(self) -> int;\n"
     "    pub fn push(self, value: T) -> Self;\n"
     "    pub fn insert(self, i: int, value: T) -> Self;\n"
@@ -1574,25 +1584,36 @@ static const char kPrelude[] =
     "    pub fn pop(self) -> T;\n"
     "}\n"
 
-    "impl<K, V> _Map<K, V> {\n"
+    "pub struct Map<K, V> {\n"
     "    pub fn length(self) -> int;\n"
     "    pub fn get_or(self, key: K, default: V) -> V;\n"
     "    pub fn erase(self, key: K) -> Self;\n"
     "}\n"
 
-    "impl<T> Option<T> {\n"
+    "pub enum Option<T> {\n"
+    "    Some(T),\n"
+    "    None,\n"
+
     "    pub fn is_some(self) -> bool;\n"
     "    pub fn is_none(self) -> bool;\n"
     "    pub fn unwrap(self) -> T;\n"
     "    pub fn unwrap_or(self, value: T) -> T;\n"
     "}\n"
 
-    "impl<T, E> Result<T, E> {\n"
+    "pub enum Result<T, E> {\n"
+    "    Ok(T),\n"
+    "    Err(E),\n"
+
     "    pub fn is_ok(self) -> bool;\n"
     "    pub fn is_err(self) -> bool;\n"
     "    pub fn unwrap(self) -> T;\n"
+    "    pub fn unwrap_err(self) -> E;\n"
     "    pub fn unwrap_or(self, value: T) -> T;\n"
-    "}\n";
+    "}\n"
+
+    "pub fn print(message: str);\n"
+    "pub fn assert(cond: bool);\n"
+    "pub fn range(begin: int, end: int, step: int) -> (fn() -> Option<int>);\n";
 
 struct PreludeReader {
     size_t size;

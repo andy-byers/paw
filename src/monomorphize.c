@@ -6,6 +6,7 @@
 #include "map.h"
 #include "mir.h"
 #include "type_folder.h"
+#include "unify.h"
 
 struct GenericsState {
     struct GenericsState *outer;
@@ -51,8 +52,7 @@ struct IrType *finalize_type(struct MonoCollector *M, struct IrType *type)
     struct GenericsState *gs = M->gs;
     while (gs != NULL) {
         if (gs->before != NULL) {
-            pawP_init_substitution_folder(&F, M->C, &subst,
-                    gs->before, gs->after);
+            pawP_init_substitution_folder(&F, M->C, &subst, gs->before, gs->after);
             type = pawIr_fold_type(&F, type);
         }
         gs = gs->outer;
@@ -331,7 +331,15 @@ static struct Mir *new_mir(struct MonoCollector *M, struct Mir *base, struct IrT
 
 static struct MirRegisterData copy_register(struct MonoCollector *M, struct MirRegisterData reg)
 {
-    struct IrType *type = finalize_type(M, reg.type);
+    struct IrType *type = reg.type;
+    if (reg.self != NULL) {
+        // determine the "Self" type and look up the concrete method
+        struct IrType *self = finalize_type(M, reg.self);
+        struct HirDecl *decl = pawHir_get_decl(M->C, IR_TYPE_DID(reg.type));
+        type = pawP_find_method(M->C, self, decl->hdr.name);
+        if (type == NULL) NAME_ERROR(M->C, "cannot find trait method");
+    }
+    type = finalize_type(M, type);
     struct MirRegisterData result = reg;
     result.type = type;
     return result;
@@ -380,7 +388,7 @@ static void do_monomorphize(struct MonoCollector *M, struct Mir *base, struct Mi
 
 static paw_Bool is_monomorphic(const struct Mir *mir)
 {
-    return (mir->self == NULL || ir_adt_types(mir->self) == NULL)
+    return (mir->self == NULL || IR_TYPE_SUBTYPES(mir->self) == NULL)
         && ir_signature_types(mir->type) == NULL;
 }
 
@@ -398,9 +406,6 @@ static struct Mir *monomorphize_function_aux(struct MonoCollector *M, struct Mir
     leave_generics_context(M);
     return inst;
 }
-
-// TODO: put in header
-struct IrType *pawP_generalize_self(struct Compiler *C, struct IrType *self, struct IrTypeList *base_binder, struct IrTypeList **pinst_binder);
 
 static struct Mir *monomorphize_method_aux(struct MonoCollector *M, struct Mir *base, struct IrSignature *sig, struct IrType *self)
 {
@@ -493,7 +498,7 @@ static struct IrType *register_method(struct MonoCollector *M, struct IrSignatur
     // method was defined on, so that associated functions using generic parameters
     // from the impl block binder can be specialized properly
     struct IrType *self = pawP_get_self(M->C, t);
-    self = collect_adt(M, IrGetAdt(self));
+    self = IrIsAdt(self) ? collect_adt(M, IrGetAdt(self)) : self;
     pawP_set_self(M->C, t, self);
 
     struct IrTypeList *monos = get_mono_list(M, M->methods, P2V(self));
@@ -553,7 +558,7 @@ static void add_builtin_adt(struct MirTypeFolder *F, enum BuiltinKind code)
 static paw_Bool is_entrypoint(const struct Mir *mir)
 {
     return mir->is_pub && !mir->is_poly
-        && (mir->self == NULL || ir_adt_types(mir->self) == NULL);
+        && (mir->self == NULL || IR_TYPE_SUBTYPES(mir->self) == NULL);
 }
 
 struct MonoResult pawP_monomorphize(struct Compiler *C, Map *bodies)
@@ -598,7 +603,7 @@ struct MonoResult pawP_monomorphize(struct Compiler *C, Map *bodies)
         K_LIST_POP(M.pending);
         struct Mir *body = monomorphize(&M, type);
         K_LIST_PUSH(C, M.globals, body);
-        M.F->V.mir = body; // TODO: figure out a better way to do this... always need Mir object to get basic block and register backing data
+        M.mir = M.F->V.mir = body; // TODO: figure out a better way to do this... always need Mir object to get basic block and register backing data
         pawMir_fold(M.F, body);
     }
 

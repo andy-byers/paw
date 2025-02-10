@@ -41,6 +41,12 @@ static struct IrType *FoldTuple(struct IrTypeFolder *F, struct IrTuple *t)
     return IR_CAST_TYPE(t);
 }
 
+static struct IrType *FoldTraitObj(struct IrTypeFolder *F, struct IrTraitObj *t)
+{
+    t->types = F->FoldTypeList(F, t->types);
+    return IR_CAST_TYPE(t);
+}
+
 static void FoldPat(struct HirVisitor *V, struct HirPat *node)
 {
     paw_assert(node != NULL);
@@ -91,6 +97,7 @@ void pawIr_type_folder_init(struct IrTypeFolder *F, struct Compiler *C, void *ud
         .FoldSignature = FoldSignature,
         .FoldFuncPtr = FoldFuncPtr,
         .FoldTuple = FoldTuple,
+        .FoldTraitObj = FoldTraitObj,
     };
 }
 

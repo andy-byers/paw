@@ -150,7 +150,7 @@ static struct Def *get_def(struct Generator *G, ItemId iid)
 
 static struct Type *lookup_type(struct Generator *G, struct IrType *type)
 {
-    Value *pv = pawH_get(G->C->type2rtti, P2V(type));
+    Value *pv = MAP_GET(G->C->type2rtti, P2V(type));
     return pv != NULL ? pv->p : NULL;
 }
 
@@ -267,7 +267,7 @@ static String *mangle_finish(paw_Env *P, Buffer *buf, struct Generator *G)
 
     // anchor in compiler string table
     String *str = V_STRING(P->top.p[-1]);
-    pawH_insert(P, G->C->strings, P2V(str), P2V(str));
+    MAP_INSERT(G, G->C->strings, P2V(str), P2V(str));
     pawC_pop(P);
     return str;
 }
@@ -303,9 +303,9 @@ static String *func_name(struct Generator *G, const String *modname, struct IrTy
     struct IrTypeList *fd_types = fd->body ? fsig->types : NULL;
     if (fd->self == NULL) return mangle_name(G, modname, fd->name, fd_types);
     struct IrType *self = pawP_get_self(G->C, fsig);
-    const struct HirAdtDecl *ad = HirGetAdtDecl(GET_DECL(G, IR_TYPE_DID(self)));
-    const struct IrTypeList *ad_types = fd->body ? ir_adt_types(self) : NULL;
-    return mangle_attr(G, modname, ad->name, ad_types, fd->name, fd_types);
+    const struct HirDecl *ad = GET_DECL(G, IR_TYPE_DID(self));
+    const struct IrTypeList *ad_types = fd->body ? IR_TYPE_SUBTYPES(self) : NULL;
+    return mangle_attr(G, modname, ad->hdr.name, ad_types, fd->name, fd_types);
 }
 
 static String *adt_name(struct Generator *G, const String *modname, struct IrType *type)
@@ -335,7 +335,7 @@ static int add_constant(struct Generator *G, Value v, enum BuiltinKind code)
 
     // share constant values within each function
     Map *kmap = kcache_map(fs, code);
-    Value *pk = pawH_get(kmap, v);
+    const Value *pk = MAP_GET(kmap, v);
     if (pk != NULL) return CAST(int, pk->i);
 
     if (fs->nk == CONSTANT_MAX) {
@@ -344,8 +344,7 @@ static int add_constant(struct Generator *G, Value v, enum BuiltinKind code)
     pawM_grow(ENV(G), p->k, fs->nk, p->nk);
     p->k[fs->nk] = v;
 
-    const Value id = {.i = fs->nk};
-    pawH_insert(ENV(G), kmap, v, id);
+    MAP_INSERT(G, kmap, v, I2V(fs->nk));
     return fs->nk++;
 }
 
@@ -505,7 +504,7 @@ static void code_c_function(struct Generator *G, struct Mir *mir, int g)
     struct IrType *type = mir->type;
     const String *modname = prefix_for_modno(G, IR_TYPE_DID(type).modno);
     const String *mangled = func_name(G, modname, type);
-    const Value *pv = pawH_get(G->builtin, P2V(mangled));
+    const Value *pv = MAP_GET(G->builtin, P2V(mangled));
     if (pv == NULL) ERROR(G, PAW_ENAME, "C function '%s' not loaded", mir->name->text);
     *pval = *pv;
 }

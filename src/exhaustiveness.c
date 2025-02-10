@@ -612,9 +612,9 @@ static enum BranchMode branch_mode(struct Usefulness *U, struct MatchVar var)
         paw_assert(IrIsTuple(var.type));
         return BRANCH_TUPLE;
     }
+    if (IS_BASIC_TYPE(U->C, var.type)) return BRANCH_LITERAL;
     struct HirDecl *decl = pawHir_get_decl(U->C, IR_TYPE_DID(var.type));
     if (!HirGetAdtDecl(decl)->is_struct) return BRANCH_VARIANT;
-    if (HirGetAdtDecl(decl)->did.value <= PAW_TSTR) return BRANCH_LITERAL;
     return BRANCH_STRUCT;
 }
 

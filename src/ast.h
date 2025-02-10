@@ -18,7 +18,7 @@
         X(AdtDecl) \
         X(TypeDecl) \
         X(VarDecl) \
-        X(ImplDecl) \
+        X(TraitDecl) \
         X(UseDecl) \
         X(VariantDecl)
 
@@ -71,6 +71,10 @@ struct AstSegment {
     struct AstTypeList *types;
 };
 
+struct AstGenericBound {
+    struct AstPath *path;
+};
+
 
 enum AstDeclKind {
 #define DEFINE_ENUM(X) kAst##X,
@@ -118,6 +122,7 @@ struct AstAdtDecl {
     paw_Bool is_struct : 1;
     struct AstDeclList *generics;
     struct AstDeclList *fields;
+    struct AstDeclList *methods;
 };
 
 struct AstUseDecl {
@@ -136,6 +141,7 @@ struct AstVariantDecl {
 
 struct AstGenericDecl {
     AST_DECL_HEADER;
+    struct AstBoundList *bounds;
 };
 
 struct AstFieldDecl {
@@ -144,9 +150,9 @@ struct AstFieldDecl {
     struct AstType *tag;
 };
 
-struct AstImplDecl {
+struct AstTraitDecl {
     AST_DECL_HEADER;
-    struct AstPath *self;
+    paw_Bool is_pub : 1;
     struct AstDeclList *generics;
     struct AstDeclList *methods;
 };
@@ -210,28 +216,30 @@ static inline struct AstDecl *pawAst_new_func_decl(struct Ast *ast, int line, en
     return d;
 }
 
-static inline struct AstDecl *pawAst_new_generic_decl(struct Ast *ast, int line, String *name)
+static inline struct AstDecl *pawAst_new_generic_decl(struct Ast *ast, int line, String *name, struct AstBoundList *bounds)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->GenericDecl_ = (struct AstGenericDecl){
         .line = line,
         .kind = kAstGenericDecl,
         .name = name,
+        .bounds = bounds,
     };
     return d;
 }
 
-static inline struct AstDecl *pawAst_new_adt_decl(struct Ast *ast, int line, String *name, struct AstDeclList *generics, struct AstDeclList *fields, paw_Bool is_pub, paw_Bool is_struct)
+static inline struct AstDecl *pawAst_new_adt_decl(struct Ast *ast, int line, String *name, struct AstDeclList *generics, struct AstDeclList *fields, struct AstDeclList *methods, paw_Bool is_pub, paw_Bool is_struct)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->AdtDecl_ = (struct AstAdtDecl){
         .line = line,
         .kind = kAstAdtDecl,
         .name = name,
-        .is_pub = is_pub,
-        .is_struct = is_struct,
         .generics = generics,
         .fields = fields,
+        .methods = methods,
+        .is_struct = is_struct,
+        .is_pub = is_pub,
     };
     return d;
 }
@@ -262,16 +270,16 @@ static inline struct AstDecl *pawAst_new_var_decl(struct Ast *ast, int line, Str
     return d;
 }
 
-static inline struct AstDecl *pawAst_new_impl_decl(struct Ast *ast, int line, String *name, struct AstPath *self, struct AstDeclList *generics, struct AstDeclList *methods)
+static inline struct AstDecl *pawAst_new_trait_decl(struct Ast *ast, int line, String *name, struct AstDeclList *generics, struct AstDeclList *methods, paw_Bool is_pub)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
-    d->ImplDecl_ = (struct AstImplDecl){
+    d->TraitDecl_ = (struct AstTraitDecl){
         .line = line,
-        .kind = kAstImplDecl,
+        .kind = kAstTraitDecl,
         .name = name,
-        .self = self,
         .generics = generics,
         .methods = methods,
+        .is_pub = is_pub,
 
     };
     return d;
@@ -1239,6 +1247,7 @@ DEFINE_LIST(struct Compiler, pawAst_type_list_, AstTypeList, struct AstType *)
 DEFINE_LIST(struct Compiler, pawAst_stmt_list_, AstStmtList, struct AstStmt *)
 DEFINE_LIST(struct Compiler, pawAst_pat_list_, AstPatList, struct AstPat *)
 DEFINE_LIST(struct Compiler, pawAst_path_, AstPath, struct AstSegment)
+DEFINE_LIST(struct Compiler, pawAst_bound_list_, AstBoundList, struct AstGenericBound)
 
 struct Ast *pawAst_new(struct Compiler *C, String *name, int modno);
 void pawAst_free(struct Ast *ast);

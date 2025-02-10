@@ -86,7 +86,7 @@ static void leave_block(struct LowerAst *L)
 static struct HirPath *new_unary_path(struct LowerAst *L, String *name)
 {
     struct HirPath *path = pawHir_path_new(L->C);
-    pawHir_path_add(L->C, path, name, NULL);
+    pawHir_path_add(L->hir, path, name, NULL);
     return path;
 }
 
@@ -178,10 +178,11 @@ static struct HirPath *lower_path(struct LowerAst *L, struct AstPath *path)
     struct HirPath *r = pawHir_path_new(L->C);
     for (int i = 0; i < path->count; ++i) {
         struct AstSegment src = K_LIST_GET(path, i);
-        K_LIST_PUSH(L->C, r, ((struct HirSegment){
-                        .types = lower_type_list(L, src.types),
-                        .name = src.name,
-                    }));
+        struct HirTypeList *types = lower_type_list(L, src.types);
+
+        struct HirSegment dst;
+        pawHir_init_segment(L->hir, &dst, src.name, types, NO_DECL);
+        K_LIST_PUSH(L->C, r, dst);
     }
     return r;
 }
@@ -274,7 +275,7 @@ static struct HirType *new_list_t(struct LowerAst *L, struct HirType *elem_t)
     K_LIST_PUSH(L->C, types, elem_t);
 
     struct HirPath *path = pawHir_path_new(L->C);
-    pawHir_path_add(L->C, path, CSTR(L, CSTR_LIST), types);
+    pawHir_path_add(L->hir, path, CSTR(L, CSTR_LIST), types);
     return pawHir_new_path_type(L->hir, elem_t->hdr.line, path);
 }
 
@@ -285,7 +286,7 @@ static struct HirType *new_map_t(struct LowerAst *L, struct HirType *key_t, stru
     K_LIST_PUSH(L->C, types, value_t);
 
     struct HirPath *path = pawHir_path_new(L->C);
-    pawHir_path_add(L->C, path, CSTR(L, CSTR_MAP), types);
+    pawHir_path_add(L->hir, path, CSTR(L, CSTR_MAP), types);
     return pawHir_new_path_type(L->hir, key_t->hdr.line, path);
 }
 
@@ -322,16 +323,18 @@ static struct HirDecl *LowerUseDecl(struct LowerAst *L, struct AstUseDecl *d)
 static struct HirDecl *LowerAdtDecl(struct LowerAst *L, struct AstAdtDecl *d)
 {
     struct HirDeclList *generics = generics = lower_decl_list(L, d->generics);
-    struct HirDeclList *fields = d->fields != NULL ? lower_fields(L, d->fields, d->name) : NULL;
-    return pawHir_new_adt_decl(L->hir, d->line, d->name, generics, fields, d->is_pub, d->is_struct);
+    struct HirDeclList *fields = lower_fields(L, d->fields, d->name);
+    struct HirDeclList *methods = lower_methods(L, d->methods);
+    return pawHir_new_adt_decl(L->hir, d->line, d->name, NULL, generics,
+            fields, methods, d->is_pub, d->is_struct);
 }
 
-static struct HirDecl *LowerImplDecl(struct LowerAst *L, struct AstImplDecl *d)
+static struct HirDecl *LowerTraitDecl(struct LowerAst *L, struct AstTraitDecl *d)
 {
     struct HirDeclList *generics = lower_decl_list(L, d->generics);
-    struct HirPath *self = lower_path(L, d->self);
     struct HirDeclList *methods = lower_methods(L, d->methods);
-    return pawHir_new_impl_decl(L->hir, d->line, d->name, self, NULL, generics, methods, NULL);
+    return pawHir_new_trait_decl(L->hir, d->line, d->name, NULL,
+            generics, methods, d->is_pub);
 }
 
 static struct HirDecl *LowerVarDecl(struct LowerAst *L, struct AstVarDecl *d)
@@ -517,8 +520,8 @@ static struct HirExpr *LowerWhileExpr(struct LowerAst *L, struct AstWhileExpr *e
 static struct HirPat *new_none_pat(struct LowerAst *L, int line)
 {
     struct HirPath *path = pawHir_path_new(L->C);
-    pawHir_path_add(L->C, path, SCAN_STRING(L->C, "Option"), NULL);
-    pawHir_path_add(L->C, path, SCAN_STRING(L->C, "None"), NULL);
+    pawHir_path_add(L->hir, path, SCAN_STRING(L->C, "Option"), NULL);
+    pawHir_path_add(L->hir, path, SCAN_STRING(L->C, "None"), NULL);
     struct HirPatList *fields = pawHir_pat_list_new(L->C);
     return pawHir_new_variant_pat(L->hir, line, path, fields, 1);
 }
@@ -526,8 +529,8 @@ static struct HirPat *new_none_pat(struct LowerAst *L, int line)
 static struct HirPat *new_some_pat(struct LowerAst *L, String *var, int line)
 {
     struct HirPath *path = pawHir_path_new(L->C);
-    pawHir_path_add(L->C, path, SCAN_STRING(L->C, "Option"), NULL);
-    pawHir_path_add(L->C, path, SCAN_STRING(L->C, "Some"), NULL);
+    pawHir_path_add(L->hir, path, SCAN_STRING(L->C, "Option"), NULL);
+    pawHir_path_add(L->hir, path, SCAN_STRING(L->C, "Some"), NULL);
     struct HirPatList *fields = pawHir_pat_list_new(L->C);
     struct HirPat *variant= pawHir_new_variant_pat(L->hir, line, path, fields, 0);
     struct HirPat *binding = pawHir_new_binding_pat(L->hir, line, var);
@@ -649,9 +652,24 @@ static struct HirStmt *LowerDeclStmt(struct LowerAst *L, struct AstDeclStmt *s)
     return pawHir_new_decl_stmt(L->hir, s->line, decl);
 }
 
+static struct HirBoundList *lower_bounds(struct LowerAst *L, struct AstBoundList *bounds)
+{
+    if (bounds == NULL) return NULL;
+    struct HirBoundList *result = pawHir_bound_list_new(L->C);
+
+    struct AstGenericBound *pbound;
+    K_LIST_FOREACH(bounds, pbound) {
+        struct HirGenericBound r;
+        r.path = lower_path(L, pbound->path);
+        K_LIST_PUSH(L->C, result, r);
+    }
+    return result;
+}
+
 static struct HirDecl *LowerGenericDecl(struct LowerAst *L, struct AstGenericDecl *d)
 {
-    return pawHir_new_generic_decl(L->hir, d->line, d->name);
+    struct HirBoundList *bounds = lower_bounds(L, d->bounds);
+    return pawHir_new_generic_decl(L->hir, d->line, d->name, bounds);
 }
 
 static struct HirType *LowerPathType(struct LowerAst *L, struct AstPathType *t)
@@ -671,7 +689,7 @@ static struct HirType *LowerContainerType(struct LowerAst *L, struct AstContaine
 static struct HirType *unit_type(struct LowerAst *L, int line)
 {
     struct HirPath *path = pawHir_path_new(L->C);
-    pawHir_path_add(L->C, path, SCAN_STRING(L->C, "(unit)"), NULL);
+    pawHir_path_add(L->hir, path, SCAN_STRING(L->C, "unit"), NULL);
     return pawHir_new_path_type(L->hir, line, path);
 }
 

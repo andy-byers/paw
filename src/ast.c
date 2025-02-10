@@ -129,7 +129,7 @@ static void dump_decl(Printer *P, struct AstDecl *decl)
     ++P->indent;
     DUMP_FMT(P, "line: %d\n", decl->hdr.line);
     switch (AST_KINDOF(decl)) {
-        case kAstImplDecl:
+        case kAstTraitDecl:
         case kAstUseDecl:
             PAW_UNREACHABLE(); // TODO: write this code!!!
         case kAstFuncDecl: {

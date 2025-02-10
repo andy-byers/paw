@@ -30,14 +30,14 @@ pub fn test_result() {
     o = Result::Ok(Result::Err(false));
 }
 
-struct Obj<T> {inner: T}
+struct Obj<T> {
+    inner: T,
 
-impl<X> Obj<X> {
-    pub fn new(x: X) -> Self {
+    pub fn new(x: T) -> Self {
         return Obj{inner: x};
     }
 
-    pub fn get(self) -> X {
+    pub fn get(self) -> T {
         return self.inner;
     }
 }

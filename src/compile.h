@@ -37,7 +37,7 @@
 #include "env.h"
 #include "mem.h"
 #include "paw.h"
-#include "unify.h"
+#include "trait.h"
 
 #define ENV(x) ((x)->P)
 #define DLOG(X, ...) PAWD_LOG(ENV(X), __VA_ARGS__)
@@ -141,6 +141,9 @@ enum BuiltinKind {
     NBUILTINS,
 };
 
+// NOTE: cast causes -1 to wrap so that it is larger than BUILTIN_STR
+#define IS_BASIC_TYPE(C, type) (CAST(unsigned, pawP_type2code(C, type)) <= BUILTIN_STR)
+
 struct Builtin {
     String *name;
     DeclId did;
@@ -153,6 +156,7 @@ struct ObjectStore {
 
 struct Compiler {
     struct Builtin builtins[NBUILTINS];
+    struct TODO_TraitList *traits;
     struct ObjectStore store;
     struct ModuleList *modules;
     struct HirDeclList *decls;
@@ -186,6 +190,12 @@ struct Compiler {
     int line;
 };
 
+// TODO: should be a map, but need to have a custom hash and eq. comparison function
+//       store as function pointers in the map?
+//       should map IrType to IrTypeList to represent all traits implemented by a
+//       given type
+DEFINE_LIST(struct Compiler, pawP_trait_list_, TODO_TraitList, struct TODO_Implements)
+
 paw_Bool pawP_is_assoc_fn(struct Compiler *C, struct IrSignature *type);
 struct IrTypeList *pawP_get_binder(struct Compiler *C, DeclId did);
 void pawP_set_binder(struct Compiler *C, DeclId did, struct IrTypeList *binder);
@@ -216,8 +226,6 @@ struct DynamicMem {
         int count;
         int alloc;
     } scratch;
-
-    struct Unifier unifier;
 };
 
 void pawP_lower_ast(struct Compiler *C);
@@ -261,6 +269,7 @@ struct Decision *pawP_check_exhaustiveness(struct Compiler *C, struct HirMatchEx
 void pawP_lower_matches(struct Compiler *C);
 
 struct IrType *pawP_generalize(struct Compiler *C, struct IrType *type);
+struct IrType *pawP_generalize_self(struct Compiler *C, struct IrType *self, struct IrTypeList *base_binder, struct IrTypeList **pinst_binder);
 
 // Instantiate a polymorphic function or type
 // Expects that 'decl' is already resolved, meaning the type of each symbol has been
@@ -296,8 +305,8 @@ enum LookupKind {
     LOOKUP_EITHER,
 };
 
-// Determine which type the 'path' refers to, relative to the current module 'm'
 struct IrType *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirPath *path, enum LookupKind kind);
+struct IrType *pawP_lookup_trait(struct Compiler *C, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirPath *path);
 
 void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const char *modname);
 void pawP_teardown(paw_Env *P, struct DynamicMem *dm);

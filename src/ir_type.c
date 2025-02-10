@@ -4,6 +4,7 @@
 
 #include "ir_type.h"
 #include "map.h"
+#include "unify.h"
 
 #define NEW_NODE(C, T) (T *)pawK_pool_alloc(ENV(C), (C)->pool, sizeof(T))
 
@@ -40,6 +41,9 @@ IrDef *pawIr_get_def(struct Compiler *C, DeclId did)
 void pawIr_set_type(struct Compiler *C, HirId hid, IrType *type)
 {
     paw_assert(type != NULL);
+    // TODO: this check could be removed with more confidence if 1 is used as the default ID (HirId, DefId, etc.) instead of 0
+    //       since 0 is a valid ID, we get confused when an ID is not properly initialized (zero init produces a valid ID, which is bad)
+    paw_assert(hid.value > 0 || !IrIsAdt(type) || IrGetAdt(type)->did.value == 0);
     MAP_INSERT(C, C->ir_types, I2V(hid.value), P2V(type));
 }
 
@@ -47,6 +51,40 @@ void pawIr_set_def(struct Compiler *C, DeclId did, IrDef *def)
 {
     paw_assert(def != NULL);
     MAP_INSERT(C, C->ir_defs, I2V(did.value), P2V(def));
+}
+
+struct IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *target, String *name)
+{
+    if (target->bounds == NULL) {
+        TYPE_ERROR(C, "generic type missing trait bounds");
+    }
+    struct IrType **pbound;
+    K_LIST_FOREACH(target->bounds, pbound) {
+        struct IrTraitObj *bound = IrGetTraitObj(*pbound);
+        struct HirDecl *trait_decl = pawHir_get_decl(C, bound->did);
+        struct HirTraitDecl *trait = HirGetTraitDecl(trait_decl);
+
+        struct HirDecl **pmethod;
+        struct HirDecl *result = NULL;
+        struct HirDecl *last_method = NULL;
+        struct HirTraitDecl *last_trait = NULL;
+        K_LIST_FOREACH(trait->methods, pmethod) {
+            struct HirFuncDecl *method = HirGetFuncDecl(*pmethod);
+            if (pawS_eq(method->name, name)) result = *pmethod;
+            else continue;
+
+            if (last_method != NULL) {
+                NAME_ERROR(C, "found multiple applicable methods");
+            }
+            last_method = result;
+            last_trait = trait;
+        }
+        if (last_method != NULL) {
+            if (last_trait->generics == NULL) return GET_NODE_TYPE(C, last_method);
+            return pawP_instantiate_method(C, trait_decl, bound->types, last_method);
+        }
+    }
+    return NULL;
 }
 
 struct Printer {
@@ -81,7 +119,26 @@ static void print_type(struct Printer *P, IrType *type)
             PRINT_CHAR(P, ')');
             break;
         }
-        case kIrSignature:
+        case kIrSignature: {
+            struct IrSignature *fsig = IrGetSignature(type);
+            struct HirDecl *decl = pawHir_get_decl(P->C, fsig->did);
+            PRINT_LITERAL(P, "fn ");
+            PRINT_STRING(P, decl->hdr.name);
+            if (fsig->types != NULL) {
+                PRINT_CHAR(P, '<');
+                print_type_list(P, fsig->types);
+                PRINT_CHAR(P, '>');
+            }
+            PRINT_LITERAL(P, "(");
+            print_type_list(P, fsig->params);
+            PRINT_CHAR(P, ')');
+            if (!IrIsAdt(fsig->result)
+                    || IrGetAdt(fsig->result)->did.value != PAW_TUNIT) {
+                PRINT_LITERAL(P, " -> ");
+                print_type(P, fsig->result);
+            }
+            break;
+        }
         case kIrFuncPtr: {
             struct IrFuncPtr *fptr = IR_FPTR(type);
             PRINT_LITERAL(P, "fn(");
@@ -98,11 +155,31 @@ static void print_type(struct Printer *P, IrType *type)
             struct IrGeneric *gen = IrGetGeneric(type);
             struct HirDecl *decl = pawHir_get_decl(P->C, gen->did);
             PRINT_STRING(P, decl->hdr.name);
+            if (gen->bounds != NULL) {
+                PRINT_LITERAL(P, ": ");
+                int index;
+                struct IrType **ptype;
+                K_LIST_ENUMERATE(gen->bounds, index, ptype) {
+                    if (index > 0) PRINT_LITERAL(P, " + ");
+                    print_type(P, *ptype);
+                }
+            }
             break;
         }
         case kIrInfer: {
             struct IrInfer *infer = IrGetInfer(type);
             PRINT_FORMAT(P, "?%d", infer->index);
+            break;
+        }
+        case kIrTraitObj: {
+            struct IrTraitObj *t = IrGetTraitObj(type);
+            struct HirDecl *decl = pawHir_get_decl(P->C, t->did);
+            PRINT_STRING(P, decl->hdr.name);
+            if (t->types != NULL) {
+                PRINT_CHAR(P, '<');
+                print_type_list(P, t->types);
+                PRINT_CHAR(P, '>');
+            }
             break;
         }
         default: {

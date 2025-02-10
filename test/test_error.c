@@ -202,7 +202,7 @@ static void test_type_error(void)
     test_compiler_status(PAW_ETYPE, "selector_on_function", "fn func() {}", "let a = func.field;");
     test_compiler_status(PAW_ETYPE, "selector_on_module", "use io;", "let s = io.abc;");
     test_compiler_status(PAW_ETYPE, "extraneous_method_access",
-            "struct S; impl S {pub fn f() {}}", "S::f::f(); ");
+            "struct S {pub fn f() {}}", "S::f::f(); ");
     test_compiler_status(PAW_ETYPE, "extraneous_variant_access",
             "enum E {A}", "let e = E::A::A; ");
 }
@@ -321,18 +321,15 @@ static void test_struct_error(void)
     test_compiler_status(PAW_ETYPE, "struct_too_many_types", "struct S<A, B>;", "let x = S::<int, float, bool>;");
 
     test_compiler_status(PAW_ENAME, "struct_select_private_field",
-            "struct S {pub a: int, b: int} impl S {pub fn new() -> S {return S{a: 1, b: 2};}}",
+            "struct S {pub a: int, b: int, pub fn new() -> S {return S{a: 1, b: 2};}}",
             "let x = S::new(); let a = x.a; let b = x.b;");
     test_compiler_status(PAW_ENAME, "struct_literal_private_field", "struct S {pub a: int, b: int}", "let x = S{a: 1, b: 2};");
-    test_compiler_status(PAW_ENAME, "struct_call_private_method", "struct S; impl S {fn private() {}}", "let x = S; x.private();");
+    test_compiler_status(PAW_ENAME, "struct_call_private_method", "struct S {fn private() {}}", "let x = S; x.private();");
 }
 
 static void test_enum_error(void)
 {
-    test_compiler_status(PAW_ESYNTAX, "enum_unit_with_braces_on_def", "enum A {}", "let a = A;");
-    test_compiler_status(PAW_ETYPE, "enum_unit_with_braces_on_init", "enum A;",
-                                    "let a = A{}; // looks like struct literal");
-    test_compiler_status(PAW_ESYNTAX, "enum_unit_without_semicolon", "enum A", "");
+    test_compiler_status(PAW_ESYNTAX, "enum_without_variants", "enum A {pub fn f() {}};", "");
     test_compiler_status(PAW_ESYNTAX, "enum_missing_variant", "enum A {X}", "let a = A;");
     test_compiler_status(PAW_ENAME, "enum_duplicate_variant", "enum A {X, X}", "");
     test_compiler_status(PAW_ENAME, "enum_nonexistent_variant", "enum A {X}", "let a = A::Y;");
@@ -427,121 +424,6 @@ static void test_gc_conflict(void)
     check_status(P, status, PAW_OK);
 
     paw_close(P);
-}
-
-static void check_impl_item(const char *name, int expect, const char *impl, const char *main)
-{
-    const char item_fmt[] =
-            "pub struct Object<T> {\n"
-            "    pub value: T\n"
-            "}\n"
-            "%s\n";
-
-    char item_buf[4096];
-    int rc = snprintf(item_buf, sizeof(item_buf), item_fmt, impl);
-    check(rc >= 0 && CAST_SIZE(rc) < sizeof(item_buf));
-
-    const char main_fmt[] =
-            "let o = Object{value: 42};\n%s";
-
-    char main_buf[4096];
-    rc = snprintf(main_buf, sizeof(main_buf), main_fmt, main);
-    check(rc >= 0 && CAST_SIZE(rc) < sizeof(main_buf));
-
-    test_compiler_status(expect, name, item_buf, main_buf);
-}
-
-static void check_impl_block(const char *name, int expect, const char *impl, const char *main)
-{
-    const char impl_fmt[] =
-            "impl<T> Object<T> {\n"
-            "%s\n"
-            "}\n";
-
-    char item_buf[4096];
-    int rc = snprintf(item_buf, sizeof(item_buf), impl_fmt, impl);
-    check(rc >= 0 && CAST_SIZE(rc) < sizeof(item_buf));
-
-    check_impl_item(name, expect, item_buf, main);
-}
-
-static void check_impl_body(const char *name, int expect, const char *ret, const char *impl, const char *main)
-{
-    const char item_fmt[] =
-            "pub fn method(self, value: T) %s{%s}\n";
-
-    char item_buf[4096];
-    int rc = snprintf(item_buf, sizeof(item_buf), item_fmt, ret, impl);
-    check(rc >= 0 && CAST_SIZE(rc) < sizeof(item_buf));
-
-    check_impl_block(name, expect, item_buf, main);
-}
-
-static void check_poly_impl_ABC(const char *name, int expect, const char *impl_binder, const char *obj_args, const char *extra, const char *main)
-{
-    const char fmt[] =
-            "struct Obj<A, B> {a: A, b: B}\n"
-            "impl%s Obj%s {pub fn test() {}}%s";
-
-    char buf[4096];
-    int rc = snprintf(buf, sizeof(buf), fmt, impl_binder, obj_args, extra);
-    check(rc >= 0 && CAST_SIZE(rc) < sizeof(buf));
-
-    test_compiler_status(expect, name, buf, main);
-}
-
-static void test_impl_error(void)
-{
-    check_poly_impl_ABC("", PAW_ENAME, "<X>", "<X, int>",
-            // second type must be int to access 'test' but it is generic here
-            "pub fn call<T>(t: T) {\n"
-            "    let o = Obj{a: 1, b: t};\n"
-            "    o.test();\n"
-            "}\n",
-            "call(42);");
-
-    check_impl_block("call_private_method", PAW_ENAME,
-            "fn f(self) {}\n",
-            "o.f();\n");
-
-    check_impl_block("self_misspelling", PAW_ESYNTAX,
-            "pub fn f(self_) {}\n",
-            "o.f();\n");
-
-    // there are 2 versions of 'f' accessible by Object<int>, 1 from 'impl Object<int>'
-    // and the other from the generic 'impl' block 'impl<T> Object<T>',
-    check_impl_item("duplicate_methods_between_blocks", PAW_ENAME,
-            "impl<T> Object<T> {pub fn f(self) {}}\n"
-            "impl Object<int> {pub fn f(self) {}}\n",
-            "o.f();\n");
-    check_impl_item("duplicate_assoc_fns_between_blocks", PAW_ENAME,
-            "impl<T> Object<T> {pub fn f() {}}\n"
-            "impl Object<int> {pub fn f() {}}\n",
-            "Object::f();\n");
-    check_impl_block("duplicate_method_within_block", PAW_ENAME,
-            "pub fn f(self) {}\n"
-            "pub fn f(self) {}\n",
-            "o.f();\n");
-
-    check_impl_item("unbound_generic", PAW_ETYPE,
-            "impl<A, B> Object<B> {\n"
-            "    pub fn f(self) -> A {}\n"
-            "}\n",
-            "o.f();\n"); // 'A' cannot be determined
-
-    check_impl_body("body_sanity_check", PAW_OK,
-            "-> T ",
-            "return self.value;",
-            "assert(o.method(123) == 42);");
-
-    check_impl_body("bad_return_type", PAW_ETYPE,
-            "-> bool", "return self.value;", "");
-    check_impl_body("nonexistent_method", PAW_ENAME,
-            "", "", "o.method2();");
-    check_impl_body("unexpected_return", PAW_ETYPE,
-            "", "return self.value;", "");
-    check_impl_body("expected_return", PAW_ETYPE,
-            "-> T ", "", "");
 }
 
 static void test_invalid_case(const char *name, int expect, const char *item, const char *target, const char *pat)
@@ -665,7 +547,6 @@ static void test_uninit_local(void)
 int main(void)
 {
     test_gc_conflict();
-    test_impl_error();
     test_enum_error();
     test_name_error();
     test_syntax_error();

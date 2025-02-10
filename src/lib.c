@@ -133,6 +133,14 @@ static int enum_unwrap_or(paw_Env *P)
     return 1;
 }
 
+static int result_unwrap_err(paw_Env *P)
+{
+    const Value v = *CF_BASE(1);
+    if (V_DISCR(v) == 0) pawR_error(P, PAW_ERUNTIME, "failed to unwrap error");
+    *CF_BASE(1) = V_TUPLE(v)->elems[1];
+    return 1;
+}
+
 static int list_length(paw_Env *P)
 {
     pawR_list_length(P, P->cf, CF_BASE(1), CF_BASE(1));
@@ -502,15 +510,15 @@ static void load_builtins(paw_Env *P)
     add_prelude_method(P, "str", "starts_with", string_starts_with);
     add_prelude_method(P, "str", "ends_with", string_ends_with);
 
-    add_prelude_method(P, "_List", "length", list_length);
-    add_prelude_method(P, "_List", "push", list_push);
-    add_prelude_method(P, "_List", "insert", list_insert);
-    add_prelude_method(P, "_List", "remove", list_remove);
-    add_prelude_method(P, "_List", "pop", list_pop);
+    add_prelude_method(P, "List", "length", list_length);
+    add_prelude_method(P, "List", "push", list_push);
+    add_prelude_method(P, "List", "insert", list_insert);
+    add_prelude_method(P, "List", "remove", list_remove);
+    add_prelude_method(P, "List", "pop", list_pop);
 
-    add_prelude_method(P, "_Map", "length", map_length);
-    add_prelude_method(P, "_Map", "get_or", map_get_or);
-    add_prelude_method(P, "_Map", "erase", map_erase);
+    add_prelude_method(P, "Map", "length", map_length);
+    add_prelude_method(P, "Map", "get_or", map_get_or);
+    add_prelude_method(P, "Map", "erase", map_erase);
 
     add_prelude_method(P, "Option", "is_some", enum_is_zero);
     add_prelude_method(P, "Option", "is_none", enum_is_one);
@@ -520,6 +528,7 @@ static void load_builtins(paw_Env *P)
     add_prelude_method(P, "Result", "is_ok", enum_is_zero);
     add_prelude_method(P, "Result", "is_err", enum_is_one);
     add_prelude_method(P, "Result", "unwrap", enum_unwrap);
+    add_prelude_method(P, "Result", "unwrap_err", result_unwrap_err);
     add_prelude_method(P, "Result", "unwrap_or", enum_unwrap_or);
 }
 

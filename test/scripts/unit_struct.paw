@@ -1,6 +1,9 @@
 // unit_struct.paw
 
-struct Unit;
+struct Unit {
+    pub fn method(self) {}
+    pub fn assoc_function() {}
+}
 
 pub fn test_init() {
     let u = Unit;
@@ -21,11 +24,6 @@ pub fn test_as_argument() {
 
     f(u);
     f(Unit);
-}
-
-impl Unit {
-    pub fn method(self) {}
-    pub fn assoc_function() {}
 }
 
 pub fn test_call_method() {

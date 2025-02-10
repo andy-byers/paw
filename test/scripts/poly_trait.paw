@@ -1,0 +1,64 @@
+//// poly_trait.paw
+//
+//pub trait InstanceGet<Type> {
+//   fn get(self) -> Type;
+//}
+//
+////struct Int {
+////    pub value: int,
+////}
+////
+////impl InstanceGet<int> for Int {
+////    fn get(self) -> int {
+////        self.value
+////    }
+////}
+////
+////fn call_int_method<Ty: InstanceGet<int>>(t: Ty) -> int {
+////    t.get()
+////}
+////
+////pub fn test_call_method_indirect() {
+////    let i = Int{value: 123};
+////    assert(call_int_method(i) == 123);
+////}
+//
+//struct Value<T> {
+//    pub value: T,
+//}
+//
+//impl<Ty> InstanceGet<Ty> for Value<Ty> {
+//    fn get(self) -> Ty {
+//        self.value
+//    }
+//}
+//
+////pub fn test_call_method() {
+////    let v = Value{value: 123};
+////    assert(v.get() == 123);
+////}
+////
+////fn call_int_method_2<Ty: InstanceGet<int>>(t: Ty) -> int {
+////    t.get()
+////}
+////
+////pub fn test_call_method_indirect_2() {
+////    let v = Value{value: 123};
+////    assert(call_int_method_2(v) == 123);
+////}
+//
+//struct Wrapper<X> {
+//    pub value: X,
+//}
+//
+//impl<X, Y: InstanceGet<X>> InstanceGet<Y> for Wrapper<Y> {
+//    fn get(self) -> X {
+//        self.value.get()
+//    }
+//}
+//
+//pub fn test_call_method_3() {
+//    let v = Value{value: 123};
+//    let w = Wrapper{value: v};
+//    assert(w.get() == 123);
+//}

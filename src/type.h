@@ -18,6 +18,7 @@ enum TypeKind {
     TYPE_FUNC_PTR,
     TYPE_SIGNATURE,
     TYPE_TUPLE,
+    TYPE_TRAIT_OBJ,
 };
 
 #define TYPE_HEADER paw_Type code; \
@@ -30,6 +31,10 @@ struct Adt {
     TYPE_HEADER;
     ItemId iid;
     int size;
+};
+
+struct TraitObj {
+    TYPE_HEADER;
 };
 
 #define FUNCTION_HEADER TYPE_HEADER; \
@@ -55,6 +60,7 @@ struct Type {
         struct Signature sig;
         struct FuncPtr fptr;
         struct TupleType tuple;
+        struct TraitObj trait;
     };
     int nsubtypes;
     paw_Type subtypes[];
@@ -66,6 +72,7 @@ enum DefKind {
     DEF_VAR,
     DEF_FIELD,
     DEF_VARIANT,
+    DEF_TRAIT,
 };
 
 // TODO: use these instead, don't need to be part of a union though, keep them separate like in ir_type.h
@@ -115,6 +122,10 @@ struct AdtDef {
     String *mangled_name;
 };
 
+struct TraitDef {
+    DEF_HEADER;
+};
+
 struct FuncDef {
     DEF_HEADER;
     ValueId vid;
@@ -140,6 +151,7 @@ struct Def {
         struct VariantDef variant;
         struct FuncDef func;
         struct VarDef var;
+        struct TraitDef trait;
     };
 };
 
@@ -154,7 +166,9 @@ struct Type *pawY_new_adt(paw_Env *P, ItemId iid, int ntypes);
 struct Type *pawY_new_signature(paw_Env *P, ItemId iid, int nparams);
 struct Type *pawY_new_func_ptr(paw_Env *P, int nparams);
 struct Type *pawY_new_tuple(paw_Env *P, int nelems);
+struct Type *pawY_new_trait_obj(paw_Env *P);
 struct Def *pawY_new_adt_def(paw_Env *P, int nfields);
+struct Def *pawY_new_trait_def(paw_Env *P);
 struct Def *pawY_new_variant_def(paw_Env *P, int nfields);
 struct Def *pawY_new_func_def(paw_Env *P, int ntypes);
 struct Def *pawY_new_field_def(paw_Env *P);

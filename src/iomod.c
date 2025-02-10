@@ -93,20 +93,18 @@ void l_import_io(paw_Env *P)
     static const char s_io[] =
         "struct File {\n"
         "    inner: (),\n"
+
+        "    pub fn open(pathname: str, mode: str) -> Self;\n"
+        "    pub fn seek(self, offset: int, whence: Seek);\n"
+        "    pub fn tell(self) -> int;\n"
+        "    pub fn read(self, size: int) -> str;\n"
+        "    pub fn write(self, data: str) -> int;\n"
         "}\n"
 
         "enum Seek {\n"
         "    Begin,\n"
         "    Current,\n"
         "    End,\n"
-        "}\n"
-
-        "impl File {\n"
-        "    pub fn open(pathname: str, mode: str) -> Self;\n"
-        "    pub fn seek(self, offset: int, whence: Seek);\n"
-        "    pub fn tell(self) -> int;\n"
-        "    pub fn read(self, size: int) -> str;\n"
-        "    pub fn write(self, data: str) -> int;\n"
         "}\n";
 
     pawE_push_cstr(P, CSTR_KBUILTIN);

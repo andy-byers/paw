@@ -688,6 +688,7 @@ struct MirRegisterData {
     paw_Bool is_captured : 1;
     MirRegister hint;
     struct IrType *type;
+    struct IrType *self;
 };
 
 struct MirBlockData {

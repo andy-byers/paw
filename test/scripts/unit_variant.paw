@@ -1,6 +1,12 @@
 // unit_variant.paw
 
-enum Unit {U}
+enum Unit {
+    U,
+
+    pub fn method(self) {}
+    pub fn assoc_function() {}
+}
+
 
 pub fn test_init() {
     let u = Unit::U;
@@ -21,11 +27,6 @@ pub fn test_as_argument() {
 
     f(u);
     f(Unit::U);
-}
-
-impl Unit {
-    pub fn method(self) {}
-    pub fn assoc_function() {}
 }
 
 pub fn test_call_method() {

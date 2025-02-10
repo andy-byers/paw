@@ -10,9 +10,11 @@
 #include "hir.h"
 #include "ir_type.h"
 #include "ir_type.h"
+#include "lex.h"
 #include "map.h"
 #include "type.h"
 #include "type_folder.h"
+#include "unify.h"
 
 // All paw language keywords
 //
@@ -24,6 +26,7 @@ static const char *kKeywords[] = {
     "type",
     "enum",
     "struct",
+    "trait",
     "impl",
     "let",
     "if",
@@ -63,8 +66,8 @@ void pawP_init(paw_Env *P)
     P->string_cache[CSTR_INT] = basic_type_name(P, "int", PAW_TINT);
     P->string_cache[CSTR_FLOAT] = basic_type_name(P, "float", PAW_TFLOAT);
     P->string_cache[CSTR_STR] = basic_type_name(P, "str", PAW_TSTR);
-    P->string_cache[CSTR_LIST] = pawS_new_fixed(P, "_List");
-    P->string_cache[CSTR_MAP] = pawS_new_fixed(P, "_Map");
+    P->string_cache[CSTR_LIST] = pawS_new_fixed(P, "List");
+    P->string_cache[CSTR_MAP] = pawS_new_fixed(P, "Map");
     P->string_cache[CSTR_OPTION] = pawS_new_fixed(P, "Option");
     P->string_cache[CSTR_RESULT] = pawS_new_fixed(P, "Result");
     P->string_cache[CSTR_SELF] = pawS_new_fixed(P, "self");
@@ -111,11 +114,8 @@ String *pawP_scan_nstring(paw_Env *P, Map *st, const char *s, size_t n)
 static void define_prelude_adt(struct Compiler *C, const char *name, enum BuiltinKind kind)
 {
     struct Ast *ast = C->prelude;
-    struct AstDecl *d = pawAst_new_adt_decl(ast, 0, SCAN_STRING(C, name),
-            NULL, NULL, PAW_TRUE, PAW_TRUE);
-    K_LIST_PUSH(C, ast->items, d);
     C->builtins[kind] = (struct Builtin){
-        .name = d->hdr.name,
+        .name = SCAN_STRING(C, name),
         .did = NO_DECL,
     };
 }
@@ -139,7 +139,6 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const c
 
     *C = (struct Compiler){
         .pool = &dm->pool,
-        .U = &dm->unifier,
         .dm = dm,
         .P = P,
     };
@@ -160,20 +159,23 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const c
     C->prelude = pawAst_new(C, SCAN_STRING(C, "prelude"), 0);
 
     C->decls = pawHir_decl_list_new(C);
+    C->traits = pawP_trait_list_new(C);
     C->modules = pawP_mod_list_new(C);
-    C->dm->unifier.C = C;
+
+    C->U = pawK_pool_alloc(P, &dm->pool, sizeof(struct Unifier));
+    C->U->C = C;
 
     // builtin primitives
-    define_prelude_adt(C, "(unit)", BUILTIN_UNIT);
+    define_prelude_adt(C, "unit", BUILTIN_UNIT);
     define_prelude_adt(C, "bool", BUILTIN_BOOL);
     define_prelude_adt(C, "int", BUILTIN_INT);
     define_prelude_adt(C, "float", BUILTIN_FLOAT);
     define_prelude_adt(C, "str", BUILTIN_STR);
 
-    // builtin containers (in Paw code, _List<T> can be written as [T], and
-    // _Map<K, V> as [K: V])
-    define_prelude_poly_adt(C, "_List", BUILTIN_LIST);
-    define_prelude_poly_adt(C, "_Map", BUILTIN_MAP);
+    // builtin containers (in Paw code, List<T> can be written as [T], and
+    // Map<K, V> as [K: V])
+    define_prelude_poly_adt(C, "List", BUILTIN_LIST);
+    define_prelude_poly_adt(C, "Map", BUILTIN_MAP);
 
     // builtin enumerations
     define_prelude_poly_adt(C, "Option", BUILTIN_OPTION);
@@ -280,6 +282,11 @@ static struct Type *new_type(struct DefGenerator *dg, struct IrType *src, ItemId
             dst->sig.result = MAKE_TYPE(dg, fptr->result, -1);
             break;
         }
+        case kIrTraitObj: {
+            struct IrTraitObj *trait = IrGetTraitObj(src);
+            dst = pawY_new_trait_obj(P);
+            break;
+        }
         default: { // kIrTuple
             struct IrTuple *tuple = IrGetTuple(src);
             dst = pawY_new_tuple(P, tuple->elems->count);
@@ -315,6 +322,8 @@ static struct Def *new_def(struct DefGenerator *dg, DeclId did, struct IrType *t
             def->adt.is_struct = HirGetAdtDecl(decl)->is_struct;
             def->adt.is_pub = HirGetAdtDecl(decl)->is_pub;
             break;
+        case kHirTraitDecl:
+            return NULL;
         default: // kHirVariantDecl
             def = pawY_new_func_def(P, LEN(HirGetVariantDecl(decl)->fields));
     }
@@ -422,10 +431,11 @@ static void allocate_items(struct DefGenerator *dg, struct MirBodyList *bodies)
 {
     for (int i = 0; i < bodies->count; ++i) {
         struct Mir *body = K_LIST_GET(bodies, i);
-
-        struct ItemSlot item = allocate_item(dg, body);
-        K_LIST_PUSH(dg->C, dg->items, item);
-        map_types(dg, body->type, item.rtti);
+        if (body->self == NULL || !IrIsTraitObj(body->self)) {
+            struct ItemSlot item = allocate_item(dg, body);
+            K_LIST_PUSH(dg->C, dg->items, item);
+            map_types(dg, body->type, item.rtti);
+        }
     }
 }
 

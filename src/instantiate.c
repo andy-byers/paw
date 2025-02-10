@@ -19,6 +19,7 @@
 #include "ir_type.h"
 #include "map.h"
 #include "type_folder.h"
+#include "unify.h"
 
 struct InstanceState {
     struct Compiler *C;
@@ -43,11 +44,14 @@ static struct IrType *func_result(struct InstanceState *I, struct HirFuncDecl *d
     return IR_FPTR(pawIr_get_type(I->C, d->hid))->result;
 }
 
-static struct IrTypeList *new_unknowns(struct InstanceState *I, int count)
+static struct IrTypeList *new_unknowns(struct InstanceState *I, struct IrTypeList *types)
 {
+    struct IrType **ptype;
     struct IrTypeList *list = pawIr_type_list_new(I->C);
-    for (int i = 0; i < count; ++i) {
-        struct IrType *unknown = pawU_new_unknown(I->U, I->line);
+    K_LIST_FOREACH(types, ptype) {
+        struct IrTypeList *bounds = IrIsGeneric(*ptype)
+            ? IrGetGeneric(*ptype)->bounds : NULL;
+        struct IrType *unknown = pawU_new_unknown(I->U, I->line, bounds);
         K_LIST_PUSH(I->C, list, unknown);
     }
     return list;
@@ -99,6 +103,14 @@ static void normalize_type_list(struct InstanceState *I, struct IrTypeList *type
     }
 }
 
+static struct IrType *instantiate_trait(struct InstanceState *I, struct HirTraitDecl *base, struct IrTypeList *types)
+{
+    struct IrType *base_type = pawIr_get_type(I->C, base->hid);
+    check_type_param(I, IR_TYPE_SUBTYPES(base_type), types);
+    normalize_type_list(I, types);
+    return pawIr_new_trait_obj(I->C, base->did, types);
+}
+
 static struct IrType *instantiate_adt(struct InstanceState *I, struct HirAdtDecl *base, struct IrTypeList *types)
 {
     struct IrType *base_type = pawIr_get_type(I->C, base->hid);
@@ -130,24 +142,23 @@ static struct IrType *instantiate_method_aux(struct InstanceState *I, struct IrT
     return inst;
 }
 
-static struct IrType *instantiate_method(struct InstanceState *I, struct HirImplDecl *impl, struct IrTypeList *types, struct HirDecl *method)
+static struct IrType *instantiate_method(struct InstanceState *I, struct IrType *obj, struct HirDeclList *generics_, struct IrTypeList *types, struct HirDecl *method)
 {
-    struct IrType *adt = pawIr_get_type(I->C, impl->hid);
-    paw_assert(types->count == ir_adt_types(adt)->count);
-    struct IrTypeList *generics = collect_generic_types(I, impl->generics);
-    struct IrTypeList *unknowns = new_unknowns(I, generics->count);
+    paw_assert(types->count == IR_TYPE_SUBTYPES(obj)->count);
+    struct IrTypeList *generics = collect_generic_types(I, generics_);
+    struct IrTypeList *unknowns = new_unknowns(I, generics);
 
     // Substitute the polymorphic impl block's generics for inference variables (unknowns)
     // in the context of its 'self' ADT. For example:
     //     impl<X, Y> A<int, Y, X> => impl<?0, ?1> A<int, ?1, ?0>
     // where unknowns = [?0, ?1] and subst = [int, ?1, ?0]. Unifying with the given ADTs
     // type arguments yields a concrete type for each of the impl block's generics.
-    struct IrTypeList *subst = pawP_instantiate_typelist(I->C, generics, unknowns, ir_adt_types(adt));
+    struct IrTypeList *subst = pawP_instantiate_typelist(I->C, generics, unknowns, IR_TYPE_SUBTYPES(obj));
     for (int i = 0; i < subst->count; ++i) {
         pawU_unify(I->U, K_LIST_GET(subst, i), K_LIST_GET(types, i));
     }
 
-    struct HirDecl *base = pawHir_get_decl(I->C, IR_TYPE_DID(adt));
+    struct HirDecl *base = pawHir_get_decl(I->C, IR_TYPE_DID(obj));
     struct IrType *inst = pawP_instantiate(I->C, base, subst);
     struct IrType *r = instantiate_method_aux(I, generics, unknowns, inst, method);
     pawP_set_self(I->C, IrGetSignature(r), inst);
@@ -157,23 +168,29 @@ static struct IrType *instantiate_method(struct InstanceState *I, struct HirImpl
 struct IrType *pawP_instantiate_method(struct Compiler *C, struct HirDecl *base, struct IrTypeList *types, struct HirDecl *method)
 {
     struct InstanceState I = {
-        .U = &C->dm->unifier,
+        .U = C->U,
         .P = ENV(C),
         .C = C,
     };
 
     if (types == NULL) return GET_NODE_TYPE(C, base);
-    return instantiate_method(&I, HirGetImplDecl(base), types, method);
+    if (HirIsAdtDecl(base)) {
+        struct HirAdtDecl *adt = HirGetAdtDecl(base);
+        struct IrType *type = pawIr_get_type(C, adt->hid);
+        return instantiate_method(&I, type, adt->generics, types, method);
+    } else {
+        struct HirTraitDecl *trait = HirGetTraitDecl(base);
+        struct IrType *type = pawIr_get_type(C, trait->hid);
+        return instantiate_method(&I, type, trait->generics, types, method);
+    }
 }
-
 
 struct IrType *pawP_instantiate(struct Compiler *C, struct HirDecl *base, struct IrTypeList *types)
 {
-    paw_assert(!HirIsImplDecl(base));
     if (types == NULL) return GET_NODE_TYPE(C, base);
 
     struct InstanceState I = {
-        .U = &C->dm->unifier,
+        .U = C->U,
         .P = ENV(C),
         .C = C,
     };
@@ -183,7 +200,8 @@ struct IrType *pawP_instantiate(struct Compiler *C, struct HirDecl *base, struct
     } else if (HIR_IS_POLY_FUNC(base)) {
         return instantiate_func(&I, HirGetFuncDecl(base), types);
     }
-    return GET_NODE_TYPE(C, base);
+    return instantiate_trait(&I, HirGetTraitDecl(base), types);
+// TODO:     return GET_NODE_TYPE(C, base);
 }
 
 static struct IrType *generalize_adt(struct Compiler *C, struct IrAdt *t)
@@ -191,12 +209,12 @@ static struct IrType *generalize_adt(struct Compiler *C, struct IrAdt *t)
     if (t->types == NULL) return IR_CAST_TYPE(t);
 
     struct InstanceState I = {
-        .U = &C->dm->unifier,
+        .U = C->U,
         .P = ENV(C),
         .C = C,
     };
 
-    struct IrTypeList *unknowns = new_unknowns(&I, t->types->count);
+    struct IrTypeList *unknowns = new_unknowns(&I, t->types);
     struct HirDecl *base = pawHir_get_decl(C, t->did);
     return pawP_instantiate(C, base, unknowns);
 }
@@ -206,12 +224,12 @@ static struct IrType *generalize_func(struct Compiler *C, struct IrSignature *t)
     if (t->types == NULL) return IR_CAST_TYPE(t);
 
     struct InstanceState I = {
-        .U = &C->dm->unifier,
+        .U = C->U,
         .P = ENV(C),
         .C = C,
     };
 
-    struct IrTypeList *unknowns = new_unknowns(&I, t->types->count);
+    struct IrTypeList *unknowns = new_unknowns(&I, t->types);
     struct HirDecl *base = pawHir_get_decl(C, t->did);
     return pawP_instantiate(C, base, unknowns);
 }
@@ -225,15 +243,26 @@ struct IrType *pawP_generalize(struct Compiler *C, struct IrType *type)
         IrIsSignature(type) ? generalize_func(C, IrGetSignature(type)) : type;
 }
 
+static struct IrTypeList *generalize_list(struct Compiler *C, struct IrTypeList *types)
+{
+    struct IrType **ptype;
+    struct IrTypeList *result = pawIr_type_list_new(C);
+    K_LIST_FOREACH(types, ptype) {
+        struct IrType *r = pawP_generalize(C, *ptype);
+        K_LIST_PUSH(C, result, r);
+    }
+    return result;
+}
+
 struct IrType *pawP_generalize_self(struct Compiler *C, struct IrType *self, struct IrTypeList *base_binder, struct IrTypeList **pinst_binder)
 {
     struct InstanceState I = {
-        .U = &C->dm->unifier,
+        .U = C->U,
         .P = ENV(C),
         .C = C,
     };
 
-    struct IrTypeList *unknowns = new_unknowns(&I, base_binder->count);
+    struct IrTypeList *unknowns = new_unknowns(&I, base_binder);
     struct HirDecl *base = pawHir_get_decl(C, IR_TYPE_DID(self));
 
     struct IrTypeFolder F;
@@ -306,6 +335,17 @@ static struct IrType *substitute_generic(struct IrTypeFolder *F, struct IrGeneri
 void pawP_init_substitution_folder(struct IrTypeFolder *F, struct Compiler *C, struct Substitution *subst,
                                    struct IrTypeList *generics, struct IrTypeList *types)
 {
+    // TODO: consider replacing generic with inference vars and unifying instead of doing this
+    //       generic bounds are checked in pawU_unify
+    //       likely could get rid of this function and subsequent call to pawIr_fold*()
+    struct IrType **pa, **pb;
+    K_LIST_ZIP(generics, pa, types, pb) {
+        struct IrTypeList *bounds = IrGetGeneric(*pa)->bounds;
+        if (!pawP_satisfies_bounds(C, *pb, bounds)) {
+            TYPE_ERROR(C, "trait bounds not satisfied");
+        }
+    }
+
     *subst = (struct Substitution){
         .generics = generics,
         .types = types,

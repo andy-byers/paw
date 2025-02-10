@@ -36,17 +36,18 @@
     X(match_guard) \
     X(misc) \
     X(import) \
+    X(trait) \
     X(alias) \
     X(poly_function) \
     X(poly_struct) \
     X(poly_enum) \
+    X(poly_trait) \
     X(unit_struct) \
     X(unit_variant) \
     X(infer_assoc_items) \
     X(deferred_init) \
     X(capture_upvalue) \
-    X(close_loop_variable) \
-    X(enum_impl)
+    X(close_loop_variable)
 
 #define check(x) \
     do { \

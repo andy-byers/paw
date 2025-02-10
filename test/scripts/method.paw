@@ -1,615 +1,119 @@
 // method.paw
 
-struct Adt<Ty> {
-    pub value: Ty,
-}
+struct Struct {
+    value: int,
 
-enum Either<A, B> {
-    First(A),
-    Second(B),
-}
-
-
-impl<X, Y> Adt<(X, Y)> {
-    pub fn get(self, b: bool) -> Either<X, Y> {
-        if b { return Either::Second(self.value.1); }
-        return Either::First(self.value.0);
-    } 
-}
-
-pub fn test_either() {
-    let adt = Adt{
-        value: (123, 4.56),
-    };
-    match adt.get(false) {
-        Either::First(a) => assert(a == 123),
-        Either::Second(b) => assert(false),
+    pub fn new(value: int) -> Self {
+        Self{value}
     }
-    match adt.get(true) {
-        Either::First(a) => assert(false),
-        Either::Second(b) => assert(b == 4.56),
+
+    pub fn get(self) -> int {
+        self.value
     }
 }
 
-fn get_either<U, V>(value: (U, V), b: bool) -> Either<U, V> {
-    let adt = Adt{value: value};
-    return adt.get(b);
+pub fn test_struct_methods() {
+    let x = Struct::new(123);
+    assert(x.get() == 123);
 }
 
-pub fn test_either_indirect() {
-    match get_either(('456', 789), false) {
-        Either::First(a) => {assert(a == '456');},
-        Either::Second(b) => {assert(false);},
-    };
-    match get_either(('456', 789), true) {
-        Either::First(a) => {assert(false);},
-        Either::Second(b) => {assert(b == 789);},
-    };
-}
-
-struct Object {
-    a: int,
-    b: int,
-    pub x: str,
-}
-
-impl Object {
-    // associated function
-    pub fn new(a: int, b: int) -> Self {
-        return Object{
-            a: a,
-            b: b,
-            x: 'public',
-        };
-    }
-
-    // method with context parameter 'self'
-    pub fn get_a(self: Self) -> int {
-        return self.a;
-    }
-
-    // 'self: Self' is implied
-    pub fn get_b(self) -> int {
-        return self.b;
-    }
-
-    pub fn set_a(self, a: int) {
-        self.a = a;
-    }
-
-    pub fn set_b(self, b: int) {
-        self.b = b;
-    }
-}
-
-pub fn test_visibility() {
-    let o = Object::new(1, 2);
-    assert(o.get_a() == 1);
-    assert(o.get_b() == 2);
-
-    o.set_a(11);
-    assert(o.get_a() == 11);
-    assert(o.get_b() == 2);
-
-    o.set_b(22);
-    assert(o.get_a() == 11);
-    assert(o.get_b() == 22);
-
-    assert(o.x == 'public');
-}
-
-struct PolyObject<T> {
-    t: T,
-    pub x: str,
-}
-
-impl<X> PolyObject<X> {
-    pub fn new(x: X) -> Self {
-        return Self{t: x, x: 'public'};
-    }
-    pub fn get_t(self) -> X {
-        return self.t;
-    }
-    pub fn set_t(self, t: X) {
-        self.t = t;
-    }
-}
-
-struct Dispatch<Ty> {
-    pub t: Ty,
-}
-
-impl Dispatch<bool> {
-    pub fn is_bool(self) -> bool {
-        return true;
-    }
-}
-
-impl Dispatch<int> {
-    // NOTE: cannot implement for Dispatch<T>, since there would be 2 versions of 'is_bool' 
-    //       callable from the same object
-    pub fn is_bool(self) -> bool {
-        return false;
-    }
-}
-
-pub fn test_dispatch() {
-    assert(Dispatch{t: false}.is_bool());
-    assert(!Dispatch{t: 0}.is_bool());
-}
-
-fn indirect_dispatch<T>(_: T) {
-    // TODO: Unfortunately, there isn't a way to make .is_bool() callable from Dispatch<T> unless
-    //       we have traits. This test doesn't really do much more than 'test_dispatch'. Eventually
-    //       create an IsBool trait and implement it on Dispatch<bool> and Dispatch<int>, have this
-    //       function take a 'b: B' where 'B: IsBool' and return 'b.is_bool()' for the caller to 
-    //       assert on.
-    assert(Dispatch{t: false}.is_bool());
-    assert(!Dispatch{t: 0}.is_bool());
-}
-
-pub fn test_indirect_dispatch() {
-    indirect_dispatch(());
-}
-
-pub fn test_poly_visibility() {
-    // TODO: infer generic parameter on object using args passed to method
-    let o = PolyObject::<int>::new(1);
-    assert(o.get_t() == 1);
-
-    o.set_t(11);
-    assert(o.get_t() == 11);
-
-    assert(o.x == 'public');
-}
-
-pub fn test_list_methods() {
-    let list = [1, 3, 5, -20, -10];
-    assert(list.length() == 5);
-
-    list.insert(2, 4);
-    list.insert(1, 2);
-    assert(list.remove(-2) == -20); 
-    assert(list.remove(-1) == -10); 
-    list.push(6);
-
-    let n = 6;
-    while n > 0 {
-        assert(list.pop() == n);
-        n = n - 1;
-    }
-    assert(list.length() == 0);
-}
-
-struct Stack<T> {
-    pub ts: [T]
-}
-
-impl<X> Stack<X> {
-    pub fn new() -> Self {
-        return Self{ts: []};
-    }
-
-    pub fn push(self, t: X) {
-        self.ts.push(t);
-    }
-
-    pub fn pop(self) -> X {
-        return self.ts.pop();
-    }
-
-    pub fn is_empty(self) -> bool {
-        return self.ts.length() == 0;
-    }
-}
-
-pub fn test_calls() {
-    let outer = Stack::<Stack<int>>{ts: []};
-
-    let i = 0;
-    let N = 100;
-    while i < N {
-        let inner = Stack::<int>{ts: []};
-        outer.push(inner);
-        let j = 0;
-        while j < N {
-            inner.push(i * N + j);
-            j = j + 1;
-        }
-        i = i + 1;
-    }
-    assert(outer.ts[0].ts[0] == 0 * N + 0);
-    assert(outer.ts[11].ts[11] == 11 * N + 11);
-    assert(outer.ts[99].ts[99] == 99 * N + 99);
-
-    while !outer.is_empty() {
-        let inner = outer.ts[-1];
-        while !inner.is_empty() {
-            inner.pop();
-        }
-        outer.pop();
-    }
-}
-
-pub fn test_infer_self_later() {
-    let s = Stack::new();
-    s.push(42);
-
-    assert(s.pop() == 42);
-}
-
-struct Mono {
-    pub value: int
-}
-
-impl Mono {
-    pub fn noop(self) {}
-
-    pub fn access_field(self) -> int {
-        return self.value;
-    }
-
-    pub fn call_method(self) -> int {
-        return self.access_field();
-    }
-
-    pub fn recursion(self, count: int) -> int {
-        if self.value > 0 {
-            self.value = self.value - 1;
-            return self.recursion(count + 1);
-        }
-        return count;
-    }
-
-    pub fn mutual_recursion(self, count: int) -> int {
-        if self.value > 0 {
-            return self.mutual_recursion_2(count);
-        }
-        return count;
-    }
-
-    pub fn mutual_recursion_2(self, count: int) -> int {
-        self.value = self.value - 1;
-        return self.mutual_recursion(count + 1);
-    }
-}
-
-// same name as method
-fn noop() {
-    assert(false);
-}
-
-pub fn test_mono_impl() {
-    let m = Mono{value: 42};
-
-    m.noop();
-    assert(m.access_field() == 42);
-    assert(m.call_method() == 42);
-
-    m.value = 10;
-    assert(m.recursion(0) == 10);
-    assert(m.recursion(1) == 1);
-
-    m.value = 100;
-    assert(m.mutual_recursion(0) == 100);
-    assert(m.mutual_recursion(1) == 1);
-}
-
-struct Poly<T> {
-    pub value: T
-}
-
-impl<T> Poly<T> { 
-    pub fn method(self) -> T {
-        return self.value;
-    }
-}
-
-impl Poly<str> {
-    pub fn str_only(self) -> str {
-        return self.value;
-    }
-}
-
-impl Poly<int> {
-    // signatures differ between Poly<int> and Poly<float>
-    pub fn different_signatures(self) -> int {
-        return self.value;
-    }
-
-    // Poly<int> and Poly<float> have idential signatures
-    pub fn same_signatures(self) -> int {
-        return self.different_signatures();
-    }
-}
-
-impl Poly<float> {
-    pub fn different_signatures(self) -> float {
-        return self.value;
-    }
-
-    pub fn same_signatures(self) -> int {
-        let p = Poly{value: 42};
-        return p.different_signatures();
-    }
-}
-
-pub fn test_poly_impl() {
-    let e = Poly{value: 42};
-    e.method();
-
-    let e = Poly{value: 'abc'};
-    e.str_only();
-
-    let e = Poly{value: 42};
-    assert(e.different_signatures() == 42);
-    assert(e.same_signatures() == 42);
-
-    let e = Poly{value: 1.0};
-    assert(e.different_signatures() == 1.0);
-    assert(e.same_signatures() == 42);
-}
-
-struct Poly2<A, B> {
-    pub a: A,
-    pub b: B,
-}
-
-impl<X, Y> Poly2<Y, X> {
-    pub fn f(self, a: X) -> Y {
-        self.b = a;
-        return self.a;
-    }
-}
-
-impl Poly2<int, int> {
-    pub fn to_str(self) -> str {
-        return 'Poly2{' + self.a.to_string() + ', ' +
-                          self.b.to_string() + '}';
-    }
-}
-impl Poly2<bool, str> {
-    pub fn to_str(self) -> str {
-        return 'Poly2{' + self.a.to_string() + ', "' +
-                          self.b + '"}';
-    }
-}
-
-impl<T> Poly2<T, T> {
-    pub fn swap(self) {
-        let t = self.a;
-        self.a = self.b;
-        self.b = t;
-    }
-}
-
-impl<T> Poly2<Aux<T>, Aux<int>> {
-    pub fn g(self, a: Aux<T>, scale: int) -> int {
-        self.a = a;
-        return self.b.value * scale;
-    }
-}
-
-struct Aux<T> {
-    pub value: T
-}
-
-pub fn test_poly_impl_2() {
-    // A = bool, B = int
-    let p = Poly2{
-        a: true,
-        b: 42,
-    };
-    // Unifies 'p' (Poly2<A, B>) with the instantiation of Poly2 (Poly2<Y, X>)
-    // created by substituting the generic parameters from the impl block.
-    // This yields the following concrete types:
-    //     Y = A = bool
-    //     X = B = int
-    assert(p.f(123) == true &&
-           p.b == 123);
-
-    let p = Poly2{a: 1, b: 2};
-    assert(p.to_str() == 'Poly2{1, 2}');
-    p.swap();
-    assert(p.to_str() == 'Poly2{2, 1}');
-
-    let p = Poly2{a: true, b: 'two'};
-    assert(p.to_str() == 'Poly2{true, "two"}');
-
-    let p = Poly2{
-        a: Aux{value: 1},
-        b: Aux{value: 2},
-    };
-    assert(p.g(Aux{value: 3}, 10) == 20);
-    assert(p.a.value == 3);
-    p.swap();
-    assert(p.a.value == 2);
-}
-
-impl int {
-    pub fn user_defined(self) -> int {
-        return self;
-    }
-}
-
-impl<T> Poly<T> { 
-    pub fn method2(self) -> [T] {
-        return [self.value];
-    }
-}
-
-pub fn test_multiple_impl_blocks() {
-    let i = 42;
-    assert(i.user_defined() == 42);
-    assert(i.to_string() == '42');
-
-    let p = Poly{value: 1.0};
-    assert(p.method() == 1.0);
-    assert(p.method2()[0] == 1.0);
-}
-
-struct Obj<A> {
-    pub a: A,
-}
-
-impl<X> Obj<X> {
-    pub fn test(self) -> X {
-        return self.a;
-    }
-}
-
-struct Obj2<A, B> {
-    pub a: A,
-    pub b: B,
-}
-
-// ?B must be int to call test()
-impl<X> Obj2<X, int> {
-    pub fn test(self) -> X {
-        return self.a;
-    }
-}
-
-fn availability_aux<T>(t: T) -> T {
-    let o = Obj{a: t};
-    o.test();
-
-    let o = Obj{a: [t]};
-    let L = o.test();
-    assert(#L == 1);
-    return L[-1];
-}
-
-fn availability_aux2<T>(t: T) -> T {
-    let o = Obj2{a: t, b: 2};
-    o.test();
-
-    let o = Obj2{a: [t], b: 3};
-    let L = o.test();
-    assert(#L == 1);
-    return L[-1];
-}
-
-pub fn test_method_availability() {
-    assert(availability_aux(false) == false);
-    assert(availability_aux(1) == 1);
-    assert(availability_aux2(2.0) == 2.0);
-    assert(availability_aux2('three') == 'three');
-
-    let o = Obj{a: 1};
-    o.test();
-
-    let o = Obj2{a: true, b: 2};
-    o.test();
-}
-
-struct Select<Ty> {
-    pub float_version_called: bool,
+struct PolyStruct<Ty> {
     value: Ty,
-}
 
-impl<T> Select<T> {
-    pub fn new(value: T) -> Self {
-        return Self{float_version_called: false, value: value};
+    pub fn new(value: Ty) -> Self {
+        Self{value}
+    }
+
+    pub fn get(self) -> Ty {
+        self.value
     }
 }
 
-impl Select<int> {
-    pub fn get(self, x: int) -> int {
-        return self.value * x;
+pub fn test_poly_struct_methods() {
+    let x = PolyStruct::new(1.23);
+    assert(x.get() == 1.23);
+}
+
+fn call_poly_struct_methods<T>(value: T) -> T {
+    PolyStruct::new(value).get()
+}
+
+pub fn test_poly_struct_methods_indirect() {
+    assert(call_poly_struct_methods("abc") == "abc");
+}
+
+enum Enum {
+    A(int),
+    B(str),
+
+    pub fn new_a(value: int) -> Self {
+        Self::A(value)
     }
-}
 
-impl Select<float> {
-    pub fn get(self, x: float) -> float {
-        self.float_version_called = true;
-        return self.value * x;
+    pub fn new_b(value: str) -> Self {
+        Self::B(value)
     }
-}
 
-pub fn test_select_impl() {
-    let num = Select::new(123);
-    assert(num.get(2) == 246);
-    assert(!num.float_version_called);
-
-    let num = Select::new(5.0);
-    assert(num.get(0.0) == 0.0);
-    assert(num.float_version_called);
-}
-
-struct Single<X> {
-    x: X,
-}
-
-impl<A> Single<(A,)> {
-    pub fn new(a: A) -> Self {
-        return Single{
-            x: (a,),
-        };
-    }
-    pub fn f(self, a: A) {
-        self.x.0 = a;
-    }
-}
-
-impl Single<int> {
-    pub fn new(x: int) -> Self {
-        return Single{
-            x: x,
-        };
-    }
-    pub fn f(self, x: int) {
-        self.x = x;
-    }
-}
-
-pub fn test_multiple_applicable_assoc_fn() {
-    // requires explicit instantiation, since there are multiple applicable methods
-    // for Single<?>
-    let p = Single::<int>::new(42);
-}
-
-pub fn test_multiple_applicable_methods() {
-    let p = Single::<int>::new(42);
-    p.f(123);
-}
-
-impl<X, Y, Z> Either<X, (Y, Z)> {
-    pub fn choose(b: bool, x: X, y: Y, z: Z) -> Self {
-        if b {
-            Self::First(x)
-        } else {
-            Self::Second((y, z))
-        }
-    }
-}
-
-impl<Y, Z> Either<bool, (Y, Z)> {
-    pub fn first(self) -> bool {
+    pub fn debug(self) -> str {
         match self {
-            Self::First(b) => b,
-            Self::Second(_) => false,
-        }
-    }
-}
-
-impl<X> Either<X, (float, str)> {
-    pub fn second(self) -> str {
-        match self {
-            Self::First(_) => "",
-            Self::Second((f, s)) => s,
+            Self::A(a) => "A(" + a.to_string() + ")",
+            Self::B(b) => "B(" + b + ")",
         }
     }
 }
 
 pub fn test_enum_methods() {
-    let e = Either::<int, (float, str)>::choose(true, 1, 2.0, "three");
-    assert(e.second() == "");
-    let e = Either::<float, (float, str)>::choose(false, 4.0, 5.0, "six");
-    assert(e.second() == "six");
+    let x = Enum::new_a(123);
+    assert(x.debug() == "A(123)");
 
-    let e = Either::choose(true, true, "two", 3);
-    assert(e.first() == true);
-    let e = Either::choose(false, true, 5.0, 6.0);
-    assert(e.first() == false);
+    let x = Enum::new_b("abc");
+    assert(x.debug() == "B(abc)");
+}
+
+enum PolyEnum<A, B> {
+    A(A),
+    B(B),
+
+    pub fn new_a(value: A) -> Self {
+        Self::A(value)
+    }
+
+    pub fn new_b(value: B) -> Self {
+        Self::B(value)
+    }
+
+    pub fn get_a(self, b: B) -> Result<A, B> {
+        match self {
+            Self::A(a) => Result::Ok(a),
+            Self::B(_) => Result::Err(b),
+        }
+    }
+
+    pub fn get_b(self, a: A) -> Result<B, A> {
+        match self {
+            Self::A(_) => Result::Err(a),
+            Self::B(b) => Result::Ok(b),
+        }
+    }
+}
+
+pub fn test_poly_enum_methods() {
+    // type of B inferred from default provided to "get_a" below
+    let x = PolyEnum::new_a(1.23);
+    assert(x.get_a(456).unwrap() == 1.23);
+    assert(x.get_b(4.56).unwrap_err() == 4.56);
+
+    // type of A inferred from default provided to "get_b" below
+    let x = PolyEnum::new_b(true);
+    assert(x.get_b("abc").unwrap());
+    assert(!x.get_a(false).unwrap_err());
+}
+
+fn call_poly_enum_methods<A, B>(a: A, b: B) -> A {
+    let x = PolyEnum::new_a(a);
+    x.get_a(b).unwrap()
+}
+
+pub fn test_poly_enum_methods_indirect() {
+    assert(call_poly_enum_methods(123, "abc") == 123);
 }

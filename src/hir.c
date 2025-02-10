@@ -49,9 +49,14 @@ DEFINE_NODE_CONSTRUCTOR(pat, HirPat)
 
 #define LIST_MIN_ALLOC 8
 
-struct HirSegment *pawHir_segment_new(struct Compiler *C)
+void pawHir_init_segment(struct Hir *hir, struct HirSegment *r, String *name, struct HirTypeList *types, DeclId did)
 {
-    return NEW_NODE(C, struct HirSegment);
+    *r = (struct HirSegment){
+        .hid = pawHir_next_id(hir),
+        .did = did,
+        .name = name,
+        .types = types,
+    };
 }
 
 DeclId pawHir_register_decl(struct Hir *hir, struct HirDecl *decl)
@@ -61,20 +66,6 @@ DeclId pawHir_register_decl(struct Hir *hir, struct HirDecl *decl)
     const DeclId did = {
         .value = C->decls->count,
         .modno = hir->modno,
-    };
-    K_LIST_PUSH(C, C->decls, decl);
-    decl->hdr.did = did;
-    return did;
-}
-
-// TODO: remove, use pawHir_register_decl
-DeclId pawHir_add_decl(struct Compiler *C, struct HirDecl *decl, int modno)
-{
-    paw_Env *P = ENV(C);
-    struct DynamicMem *dm = C->dm;
-    const DeclId did = {
-        .value = C->decls->count,
-        .modno = modno,
     };
     K_LIST_PUSH(C, C->decls, decl);
     decl->hdr.did = did;
@@ -276,9 +267,10 @@ static void AcceptAdtDecl(struct HirVisitor *V, struct HirAdtDecl *d)
 {
     accept_decl_list(V, d->generics);
     accept_decl_list(V, d->fields);
+    accept_decl_list(V, d->methods);
 }
 
-static void AcceptImplDecl(struct HirVisitor *V, struct HirImplDecl *d)
+static void AcceptTraitDecl(struct HirVisitor *V, struct HirTraitDecl *d)
 {
     accept_decl_list(V, d->generics);
     accept_decl_list(V, d->methods);
@@ -742,12 +734,14 @@ static void dump_segment(struct Printer *P, struct HirSegment seg)
     }
 }
 
-static void dump_path(struct Printer *P, struct HirPath *p)
+static void dump_path(struct Printer *P, struct HirPath *p, const char *name)
 {
+    DUMP_FMT(P, "%s: ", name);
     for (int i = 0; i < p->count; ++i) {
         if (i != 0) DUMP_LITERAL(P, "::");
         dump_segment(P, p->data[i]);
     }
+    pawL_add_char(P->P, P->buf, '\n');
 }
 
 static void dump_type(struct Printer *P, struct HirType *type)
@@ -830,10 +824,11 @@ static void dump_decl(struct Printer *P, struct HirDecl *decl)
             DUMP_FMT(P, "is_struct: %d\n", d->is_struct);
             dump_decl_list(P, d->generics, "generics");
             dump_decl_list(P, d->fields, "fields");
+            dump_decl_list(P, d->methods, "methods");
             break;
         }
-        case kHirImplDecl: {
-            struct HirImplDecl *d = HirGetImplDecl(decl);
+        case kHirTraitDecl: {
+            struct HirTraitDecl *d = HirGetTraitDecl(decl);
             DUMP_NAME(P, d->name);
             dump_decl_list(P, d->generics, "generics");
             dump_decl_list(P, d->methods, "methods");
@@ -910,16 +905,14 @@ static void dump_pat(struct Printer *P, struct HirPat *pat)
         }
         case kHirStructPat: {
             struct HirStructPat *p = HirGetStructPat(pat);
-            DUMP_MSG(P, "path: ");
-            dump_path(P, p->path);
+            dump_path(P, p->path, "path");
             dump_pat_list(P, p->fields, "fields");
             break;
         }
         case kHirVariantPat: {
             struct HirVariantPat *p = HirGetVariantPat(pat);
             DUMP_FMT(P, "index: %d", p->index);
-            DUMP_MSG(P, "path: ");
-            dump_path(P, p->path);
+            dump_path(P, p->path, "path");
             dump_pat_list(P, p->fields, "fields");
             break;
         }
@@ -930,8 +923,7 @@ static void dump_pat(struct Printer *P, struct HirPat *pat)
         }
         case kHirPathPat: {
             struct HirPathPat *p = HirGetPathPat(pat);
-            DUMP_MSG(P, "path: ");
-            dump_path(P, p->path);
+            dump_path(P, p->path, "path");
             break;
         }
         case kHirWildcardPat: {
@@ -995,8 +987,7 @@ static void dump_expr(struct Printer *P, struct HirExpr *expr)
                     break;
                 case kHirLitComposite:
                     DUMP_MSG(P, "lit_kind: COMPOSITE\n");
-                    DUMP_MSG(P, "target: ");
-                    dump_path(P, e->comp.path);
+                    dump_path(P, e->comp.path, "target");
                     pawL_add_char(P->P, P->buf, '\n');
                     dump_expr_list(P, e->comp.items, "items");
             }
@@ -1025,8 +1016,7 @@ static void dump_expr(struct Printer *P, struct HirExpr *expr)
         }
         case kHirPathExpr: {
             struct HirPathExpr *e = HirGetPathExpr(expr);
-            DUMP_MSG(P, "path: ");
-            dump_path(P, e->path);
+            dump_path(P, e->path, "path");
             pawL_add_char(P->P, P->buf, '\n');
             break;
         }
@@ -1159,11 +1149,15 @@ void pawHir_dump_path(struct Compiler *C, struct HirPath *path)
 {
     Buffer buf;
     pawL_init_buffer(ENV(C), &buf);
-    dump_path(&(struct Printer){
-                .P = ENV(C),
-                .buf = &buf,
-                .C = C,
-            }, path);
+    struct Printer P = {
+        .P = ENV(C),
+        .buf = &buf,
+        .C = C,
+    };
+    for (int i = 0; i < path->count; ++i) {
+        if (i != 0) DUMP_LITERAL(&P, "::");
+        dump_segment(&P, path->data[i]);
+    }
     pawL_push_result(ENV(C), &buf);
 }
 
@@ -1193,6 +1187,7 @@ void pawHir_dump_decls(struct Compiler *C, struct HirDeclList *decls)
         struct HirDecl *decl = pawHir_get_decl(C, (DeclId){.value = i});
         const char *name = decl->hdr.name != NULL
                 ? decl->hdr.name->text : "(null)";
+        // TODO: broken, maybe just remove the whole thing
         pawL_add_fstring(P, &buf, "%d\t%s\t%s\n", i, name, paw_string(P, -1));
         paw_pop(P, 1);
     }

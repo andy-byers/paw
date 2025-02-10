@@ -104,13 +104,8 @@ static void leave_match(struct LowerHir *L)
 
 static struct IrType *get_type(struct LowerHir *L, paw_Type code)
 {
-    return GET_NODE_TYPE(L->C, pawHir_get_decl(L->C, (DeclId){.value = code}));
-}
-
-static struct IrType *basic_type(struct LowerHir *L, paw_Type code)
-{
-    // paw_Type == HirId for primitives only
-    return pawIr_get_type(L->C, (HirId){code});
+    const DeclId did = L->C->builtins[code].did;
+    return GET_NODE_TYPE(L->C, pawHir_get_decl(L->C, did));
 }
 
 static struct MirBlockDataList *bb_list(struct LowerHir *L)
@@ -952,15 +947,33 @@ static MirRegister lower_callee_and_args(struct HirVisitor *V, struct HirExpr *c
 {
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
+    struct IrType *recv = NULL; // receiver or owner of associated fn
     MirRegister result = register_for_node(L, callee->hdr.hid);
     if (HirIsSelector(callee) && !HirGetSelector(callee)->is_index) {
-        struct HirSelector *select = HirGetSelector(callee);
         // method call: place function object before 'self'
-        NEW_INSTR(fs, global, callee->hdr.line, result);
+        struct HirSelector *select = HirGetSelector(callee);
+        struct MirInstruction *instr = NEW_INSTR(fs, global, callee->hdr.line, result);
+        struct MirGlobal *global = MirGetGlobal(instr);
+
         const MirRegister self = lower_operand(V, select->target);
         K_LIST_PUSH(L->C, args_out, self);
+
+        recv = GET_NODE_TYPE(L->C, select->target);
     } else {
         result = lower_operand(V, callee);
+        if (HirIsPathExpr(callee)) {
+            struct HirPath *path = HirGetPathExpr(callee)->path;
+            if (path->count > 1) {
+                // "seg" is the owner of the associated function
+                struct HirSegment seg = K_LIST_GET(path, path->count - 2);
+                recv = pawIr_get_type(L->C, seg.hid);
+            }
+        }
+    }
+    if (recv != NULL && IrIsGeneric(recv)) {
+        // determine actual receiver during monomorphization: need to look up
+        // the method on the type that the generic is replaced with
+        mir_reg_data(fs->mir, result)->self = recv;
     }
     lower_operand_list(V, args_in, args_out);
     return result;
@@ -1327,9 +1340,8 @@ static struct IrTypeList *collect_field_types(struct LowerHir *L, struct IrType 
     if (IrIsTuple(type)) {
         struct IrTuple *tuple = IrGetTuple(type);
         return tuple->elems;
-    } else if (IR_IS_BASIC_T(type)) {
-        return NULL;
     }
+    if (IS_BASIC_TYPE(L->C, type)) return NULL;
     struct HirDecl *decl = pawHir_get_decl(L->C, IR_TYPE_DID(type));
     struct HirAdtDecl *d = HirGetAdtDecl(decl);
     struct IrTypeList *result = pawIr_type_list_new(L->C);
@@ -1574,7 +1586,7 @@ struct Mir *pawP_lower_hir_body(struct Compiler *C, struct HirFuncDecl *func)
 {
     struct IrType *type = pawIr_get_type(C, func->hid);
     const paw_Bool is_polymorphic = func->generics != NULL
-        || (func->self != NULL && ir_adt_types(func->self) != NULL);
+        || (func->self != NULL && IR_TYPE_SUBTYPES(func->self) != NULL);
     struct Mir *result = pawMir_new(C, func->name, type,
             func->self, func->fn_kind, func->body == NULL,
             func->is_pub, is_polymorphic);
@@ -1613,8 +1625,10 @@ Map *pawP_lower_hir(struct Compiler *C)
         struct HirDecl *decl = K_LIST_GET(decls, i);
         if (HirIsFuncDecl(decl)) {
             struct HirFuncDecl *d = HirGetFuncDecl(decl);
-            struct Mir *r = pawP_lower_hir_body(C, d);
-            pawH_insert(ENV(C), result, I2V(d->did.value), P2V(r));
+            if (d->self == NULL || IrIsAdt(d->self)) {
+                struct Mir *r = pawP_lower_hir_body(C, d);
+                pawH_insert(ENV(C), result, I2V(d->did.value), P2V(r));
+            }
         }
     }
     // 'result' should be on top of the stack
