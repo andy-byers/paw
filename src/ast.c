@@ -170,6 +170,7 @@ static void dump_decl(Printer *P, struct AstDecl *decl)
             struct AstAdtDecl *d = AstGetAdtDecl(decl);
             DUMP_NAME(P, d->name);
             DUMP_FMT(P, "is_struct: %d\n", d->is_struct);
+            dump_type_list(P, d->traits, "traits");
             dump_decl_list(P, d->generics, "generics");
             dump_decl_list(P, d->fields, "fields");
             break;

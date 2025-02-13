@@ -309,6 +309,19 @@ struct IrType *pawU_new_unknown(struct Unifier *U, int line, struct IrTypeList *
     return type;
 }
 
+struct IrTypeList *pawU_new_unknowns(struct Unifier *U, struct IrTypeList *types)
+{
+    struct IrType **ptype;
+    struct IrTypeList *result = pawIr_type_list_new(U->C);
+    K_LIST_FOREACH(types, ptype) {
+        struct IrTypeList *bounds = IrIsGeneric(*ptype)
+            ? IrGetGeneric(*ptype)->bounds : NULL;
+        struct IrType *unknown = pawU_new_unknown(U, -1, bounds);
+        K_LIST_PUSH(U->C, result, unknown);
+    }
+    return result;
+}
+
 void pawU_enter_binder(struct Unifier *U)
 {
     paw_Env *P = ENV(U->C);

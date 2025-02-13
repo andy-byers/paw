@@ -283,6 +283,7 @@ struct HirAdtDecl {
     paw_Bool is_pub : 1;
     paw_Bool is_struct : 1;
     struct HirDecl *self;
+    struct HirTypeList *traits;
     struct HirDeclList *generics;
     struct HirDeclList *fields;
     struct HirDeclList *methods;
@@ -395,7 +396,7 @@ static struct HirDecl *pawHir_new_func_decl(struct Hir *hir, int line, String *n
     return d;
 }
 
-static struct HirDecl *pawHir_new_adt_decl(struct Hir *hir, int line, String *name, struct HirDecl *self, struct HirDeclList *generics, struct HirDeclList *fields, struct HirDeclList *methods, paw_Bool is_pub, paw_Bool is_struct)
+static struct HirDecl *pawHir_new_adt_decl(struct Hir *hir, int line, String *name, struct HirDecl *self, struct HirTypeList *traits, struct HirDeclList *generics, struct HirDeclList *fields, struct HirDeclList *methods, paw_Bool is_pub, paw_Bool is_struct)
 {
     struct HirDecl *d = pawHir_new_decl(hir);
     d->AdtDecl_ = (struct HirAdtDecl){
@@ -404,6 +405,7 @@ static struct HirDecl *pawHir_new_adt_decl(struct Hir *hir, int line, String *na
         .kind = kHirAdtDecl,
         .name = name,
         .self = self,
+        .traits = traits,
         .generics = generics,
         .fields = fields,
         .methods = methods,

@@ -1,35 +1,27 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
-//
-// TODO:
-// (1) each bound must be unique in "bounds"
-// (2) if a trait is implemented for a type, the impl block must contain all non-defaulted
-//     methods listed in the trait def. Copy defaulted trait methods into the impl block so
-//     they can be handled identically to provided methods later on. Then all that has to
-//     be checked is that the type implements the trait.
-// (3) need "is non-proper subset of" query added to unification module
 
 #include "unify.h"
+#include "map.h"
+#include "type_folder.h"
 
 static struct IrTypeList *query_traits(struct Compiler *C, struct IrType *type, paw_Bool create_if_missing)
 {
     if (IrIsGeneric(type)) return IrGetGeneric(type)->bounds;
     if (IrIsInfer(type)) return IrGetInfer(type)->bounds;
+    if (!IrIsAdt(type)) return NULL;
 
-    struct TODO_Implements *pimpl;
-    K_LIST_FOREACH(C->traits, pimpl) {
-        if (pawU_is_compat(C->U, pimpl->type, type)) return pimpl->traits;
+    struct IrTypeList *traits = NULL;
+    struct IrAdt *t = IrGetAdt(type);
+    const Value *pval = MAP_GET(C->traits, I2V(t->did.value));
+    if (pval != NULL) {
+        traits = pval->p;
+    } else if (create_if_missing) {
+        traits = pawIr_type_list_new(C);
+        MAP_INSERT(C, C->traits, I2V(t->did.value), P2V(traits));
     }
-    if (create_if_missing) {
-        struct IrTypeList *traits = pawIr_type_list_new(C);
-        K_LIST_PUSH(C, C->traits, ((struct TODO_Implements){
-                        .traits = traits,
-                        .type = type,
-                    }));
-        return traits;
-    }
-    return NULL;
+    return traits;
 }
 
 struct IrTypeList *pawP_query_traits(struct Compiler *C, struct IrType *type)
@@ -40,36 +32,141 @@ struct IrTypeList *pawP_query_traits(struct Compiler *C, struct IrType *type)
 void pawP_add_trait_impl(struct Compiler *C, struct IrType *type, struct IrType *trait)
 {
     struct IrTypeList *traits = query_traits(C, type, PAW_TRUE);
-    K_LIST_PUSH(C, traits, trait); // TODO: assuming type/trait pair is unique
+    K_LIST_PUSH(C, traits, trait);
 }
 
-static paw_Bool implements_trait(struct Compiler *C, struct IrType *type, struct IrType *trait)
+static paw_Bool traits_match(struct Compiler *C, struct IrType *a, struct IrType *b)
 {
-    struct IrType **ptrait;
-    struct IrTypeList *traits = query_traits(C, type, PAW_TRUE);
-    K_LIST_FOREACH(traits, ptrait) {
-        if (pawU_is_compat(C->U, *ptrait, trait)) return PAW_TRUE;
+    if (IR_TYPE_DID(a).value == IR_TYPE_DID(b).value) {
+        pawU_unify(C->U, a, b);
+        return PAW_TRUE;
     }
     return PAW_FALSE;
 }
 
-// trait Debug {}
-// impl Debug for int {}
-// impl Debug for [int] {}
-//
-// [int]: Debug
-// int: Debug
+static paw_Bool implements_trait(struct Compiler *C, struct IrType *type, struct IrType *trait)
+{
+    struct IrType **pt;
+    struct IrTypeList *traits = pawP_query_traits(C, type);
+    if (traits == NULL) return PAW_FALSE;
+    K_LIST_FOREACH(traits, pt) {
+        struct IrType *t = *pt;
+        if (IrIsAdt(type)) {
+            struct HirDecl *base_decl = pawHir_get_decl(C, IR_TYPE_DID(type));
+            struct IrType *base_type = GET_NODE_TYPE(C, base_decl);
+            struct IrTypeList *types = pawP_instantiate_typelist(C, IR_TYPE_SUBTYPES(base_type),
+                    IR_TYPE_SUBTYPES(type), IR_TYPE_SUBTYPES(t));
+            t = pawIr_new_trait_obj(C, IR_TYPE_DID(t), types);
+        }
+        if (traits_match(C, t, trait)) return PAW_TRUE;
+    }
+    return PAW_FALSE;
+}
 
-// Return 1 if the given "type" satisfies the given trait "bounds", 0 otherwise
-// Trait bounds on "type" must be a (non-proper) superset of "bounds".
 paw_Bool pawP_satisfies_bounds(struct Compiler *C, struct IrType *type, struct IrTypeList *bounds)
 {
     if (bounds == NULL) return PAW_TRUE;
 
     struct IrType **pbound;
     K_LIST_FOREACH(bounds, pbound) {
-        if (!implements_trait(C, type, *pbound)) return PAW_FALSE;
+        if (!implements_trait(C, type, *pbound)) {
+            return PAW_FALSE;
+        }
     }
     return PAW_TRUE;
+}
+
+struct TraitSubstitution {
+    struct IrType *trait;
+    struct IrType *adt;
+};
+
+static struct IrType *subst_trait_obj(struct IrTypeFolder *F, struct IrTraitObj *t)
+{
+    struct Compiler *C = F->C;
+    struct TraitSubstitution *subst = F->ud;
+    struct IrType *type = IR_CAST_TYPE(t);
+    if (pawU_equals(C->U, type, subst->trait)) {
+        return subst->adt;
+    }
+    return type;
+}
+
+static struct IrType *substitute_self(struct Compiler *C, struct IrType *trait, struct IrType *adt, struct IrType *method)
+{
+    struct IrTypeFolder F;
+    struct TraitSubstitution subst = {
+        .trait = trait,
+        .adt = adt,
+    };
+    pawIr_type_folder_init(&F, C, &subst);
+    F.FoldTraitObj = subst_trait_obj;
+
+    struct IrSignature *fsig = IrGetSignature(method);
+    struct IrTypeList *types = pawIr_fold_type_list(&F, fsig->types);
+    struct IrTypeList *params = pawIr_fold_type_list(&F, fsig->params);
+    struct IrType *result = pawIr_fold_type(&F, fsig->result);
+    return pawIr_new_signature(C, fsig->did, types, params, result);
+}
+
+static void ensure_methods_match(struct Compiler *C, struct IrType *adt, struct HirFuncDecl *adt_method, struct IrType *trait, struct HirTraitDecl *trait_decl, struct HirFuncDecl *trait_method)
+{
+    if (adt_method->is_pub != trait_method->is_pub) {
+        TYPE_ERROR(C, "visibility mismatch (expected %s visibility on method '%s')",
+                trait_method->is_pub ? "public" : "private", adt_method->name->text);
+    }
+    struct IrType *a = pawIr_get_type(C, adt_method->hid);
+    struct IrType *b = pawIr_get_type(C, trait_method->hid);
+    if (trait_decl->generics != NULL) {
+        b = pawP_instantiate_method(C, HIR_CAST_DECL(trait_decl),
+                IR_TYPE_SUBTYPES(trait), HIR_CAST_DECL(trait_method));
+    }
+    b = substitute_self(C, trait, adt, b);
+    if (!pawU_equals(C->U, a, b)) {
+        TYPE_ERROR(C, "trait method incompatible with implementation");
+    }
+}
+
+static void ensure_trait_implemented(struct Compiler *C, struct HirTraitDecl *trait_decl, Map *methods, struct IrType *adt, struct IrType *trait)
+{
+    struct HirDecl **pdecl;
+    K_LIST_FOREACH(trait_decl->methods, pdecl) {
+        struct HirFuncDecl *trait_method = HirGetFuncDecl(*pdecl);
+        const Value *pval = MAP_GET(methods, P2V(trait_method->name));
+        if (pval == NULL) {
+            if (trait_method->body != NULL) {
+                // TODO: handle defaulted trait methods
+                SYNTAX_ERROR(C, "TODO: handle default trait methods");
+            } else {
+                NAME_ERROR(C, "trait method '%s' not implemented",
+                        trait_method->name->text);
+            }
+        }
+        struct HirFuncDecl *adt_method = HirGetFuncDecl(pval->p);
+        ensure_methods_match(C, adt, adt_method, trait, trait_decl, trait_method);
+    }
+}
+
+void pawP_validate_adt_traits(struct Compiler *C, struct HirAdtDecl *d)
+{
+    struct IrType *adt = pawIr_get_type(C, d->hid);
+    struct IrTypeList *traits = pawP_query_traits(C, adt);
+    if (traits == NULL) return;
+    Map *map = pawP_push_map(C);
+
+    struct HirDecl **pdecl;
+    K_LIST_FOREACH(d->methods, pdecl) {
+        struct HirFuncDecl *method = HirGetFuncDecl(*pdecl);
+        MAP_INSERT(C, map, P2V(method->name), P2V(method));
+    }
+
+    struct IrType **ptype;
+    K_LIST_FOREACH(traits, ptype) {
+        struct HirTraitDecl *trait = HirGetTraitDecl(
+                pawHir_get_decl(C, IR_TYPE_DID(*ptype)));
+        ensure_trait_implemented(C, trait, map, adt, *ptype);
+    }
+
+    pawP_pop_object(C, map);
 }
 

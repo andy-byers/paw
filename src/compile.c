@@ -27,7 +27,6 @@ static const char *kKeywords[] = {
     "enum",
     "struct",
     "trait",
-    "impl",
     "let",
     "if",
     "else",
@@ -150,16 +149,14 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const c
     C->strings = pawP_push_map(C);
     C->method_contexts = pawP_push_map(C);
     C->method_binders = pawP_push_map(C);
-//    C->ir_types = pawP_push_map(C);
     C->type2rtti = pawP_push_map(C);
     C->imports = pawP_push_map(C);
-    C->impls = pawP_push_map(C);
+    C->traits = pawP_push_map(C);
 
     C->modname = P->modname = SCAN_STRING(C, modname);
     C->prelude = pawAst_new(C, SCAN_STRING(C, "prelude"), 0);
 
     C->decls = pawHir_decl_list_new(C);
-    C->traits = pawP_trait_list_new(C);
     C->modules = pawP_mod_list_new(C);
 
     C->U = pawK_pool_alloc(P, &dm->pool, sizeof(struct Unifier));

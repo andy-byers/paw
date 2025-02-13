@@ -54,7 +54,7 @@ struct Resolver {
     struct HirSymtab *symtab;
     struct HirTypeFolder *F;
     struct Substitution subst;
-    Map *impls; // '.impls' from Compiler
+    Map *traits; // '.traits' from Compiler
     int func_depth; // number of nested functions
     int line;
     paw_Bool in_closure; // 1 if the enclosing function is a closure, else 0
@@ -165,12 +165,11 @@ static struct HirAdtDecl *get_adt(struct Resolver *R, struct IrType *type)
     return HirGetAdtDecl(decl);
 }
 
-static struct HirDeclList *impls_for_adt(struct Compiler *C, struct IrType *adt)
+static struct HirDeclList *traits_for_adt(struct Compiler *C, struct IrType *adt)
 {
-    struct HirDecl *k = pawHir_get_decl(C, IR_TYPE_DID(adt));
-    const Value *pv = pawH_get(C->impls, P2V(k));
-    if (pv == NULL) return NULL;
-    return pv->p;
+    const DeclId did = IR_TYPE_DID(adt);
+    const Value *pv = pawH_get(C->traits, I2V(did.value));
+    return pv != NULL ? pv->p : NULL;
 }
 
 static struct IrType *maybe_unit_variant(struct Resolver *R, struct IrType *type)
@@ -872,12 +871,6 @@ static struct IrType *resolve_type_decl(struct Resolver *R, struct HirTypeDecl *
     return type;
 }
 
-static int trait_param_offset(struct Resolver *R, struct IrGeneric *self, struct HirSelector *e)
-{
-    struct IrType *type = pawIr_resolve_trait_method(R->C, self, e->name);
-    return type != NULL;
-}
-
 static int param_offset(struct Resolver *R, struct HirExpr *target)
 {
     if (!HirIsSelector(target)) return 0; // normal function call
@@ -885,8 +878,11 @@ static int param_offset(struct Resolver *R, struct HirExpr *target)
     struct IrType *self = GET_NODE_TYPE(R->C, select->target);
     self = maybe_unit_variant(R, self); // operand => type
     if (IrIsGeneric(self)) {
-        return trait_param_offset(R, IrGetGeneric(self), select);
-    } else if (!IrIsAdt(self)) return 0;
+        struct IrGeneric *g = IrGetGeneric(self);
+        struct IrType *type = pawIr_resolve_trait_method(R->C, g, select->name);
+        return type != NULL;
+    }
+    if (!IrIsAdt(self)) return 0;
     struct IrType *method = pawP_find_method(R->C, self, select->name);
     // TODO: may not be necessary, happened when "select" was resolved
     //       probably still need to call pawP_find_method to make sure this thing is a method
@@ -925,9 +921,8 @@ static struct IrType *resolve_call_expr(struct Resolver *R, struct HirCallExpr *
         SYNTAX_ERROR(R, "too many arguments");
     }
 
-    struct IrTypeList *params = IR_FPTR(target)->params;
-    struct IrType *type = IR_FPTR(target)->result;
-
+    struct IrType *type;
+    struct IrTypeList *params;
     if (is_polymorphic(R, target)) {
         struct HirDecl *decl = get_decl(R, IR_TYPE_DID(target));
         paw_assert(HIR_IS_POLY_FUNC(decl));
@@ -935,6 +930,9 @@ static struct IrType *resolve_call_expr(struct Resolver *R, struct HirCallExpr *
         params = IR_FPTR(target)->params;
         type = IR_FPTR(target)->result;
         SET_NODE_TYPE(R->C, e->target, target);
+    } else {
+        params = IR_FPTR(target)->params;
+        type = IR_FPTR(target)->result;
     }
 
     if (is_unit_variant(R, target)) {
@@ -1061,16 +1059,6 @@ static void ensure_accessible_field(struct Resolver *R, struct HirDecl *field, s
     NAME_ERROR(R, "'%s.%s' is not a public field", HirGetAdtDecl(base)->name->text, name->text);
 }
 
-static struct IrType *subst_type(struct Resolver *R, struct IrTypeList *before, struct IrTypeList *after, struct IrType *target)
-{
-    if (before == NULL) return target;
-    paw_assert(before->count == after->count);
-
-    struct IrTypeFolder F;
-    pawP_init_substitution_folder(&F, R->C, &R->subst, before, after);
-    return pawIr_fold_type(&F, target);
-}
-
 static struct IrTypeList *subst_types(struct Resolver *R, struct IrTypeList *before, struct IrTypeList *after, struct IrTypeList *target)
 {
     if (before == NULL) return target;
@@ -1099,8 +1087,6 @@ static struct IrType *resolve_composite_lit(struct Resolver *R, struct HirCompos
     } else if (adt->fields->count == 0) {
         SYNTAX_ERROR(R, "unexpected curly braces on initializer for unit structure '%s'"
                         "(use name without '{}' to create unit struct)", adt->name->text);
-    } else if (is_polymorphic(R, type)) {
-        type = pawP_generalize(R->C, type);
     }
 
     struct IrType *base_type = pawIr_get_type(R->C, adt->hid);
@@ -1229,7 +1215,7 @@ static struct IrType *resolve_index(struct Resolver *R, struct HirIndex *e)
     struct IrType *target = resolve_operand(R, e->target);
     return check_index(R, e, target);
 }
-#include"stdio.h"
+
 static struct IrType *resolve_selector(struct Resolver *R, struct HirSelector *e)
 {
     struct IrType *target = resolve_operand(R, e->target);
@@ -1246,33 +1232,29 @@ static struct IrType *resolve_selector(struct Resolver *R, struct HirSelector *e
     }
     if (IrIsGeneric(target)) {
         struct IrType *type = pawIr_resolve_trait_method(R->C, IrGetGeneric(target), e->name);
-
-printf("%s\n", pawIr_print_type(R->C,type));--ENV(R)->top.p;
-
         if (type == NULL) TYPE_ERROR(R, "generic bound missing method");
         return type;
-    } else if (!IrIsAdt(target)) TYPE_ERROR(R, "type has no fields");
+    }
+    if (!IrIsAdt(target)) TYPE_ERROR(R, "type has no fields");
     if (e->is_index) TYPE_ERROR(R, "expected field name (integer indices can "
                                    "only be used with tuples)");
-    struct HirAdtDecl *adt = get_adt(R, target);
     struct HirDecl *field;
     struct IrType *result;
-    {
-        const int index = find_field(adt->fields, e->name);
-        if (index < 0) {
-            result = pawP_find_method(R->C, target, e->name);
-            if (result == NULL) {
-                NAME_ERROR(R, "field '%s' does not exist in struct '%s'",
-                        e->name->text, adt->name->text);
-            }
-            field = get_decl(R, IR_TYPE_DID(result));
-        } else {
-            // refer to the field using its index
-            field = K_LIST_GET(adt->fields, index);
-            result = pawP_instantiate_field(R->C, target, field);
-            e->is_index = PAW_TRUE;
-            e->index = index;
+    struct HirAdtDecl *adt = get_adt(R, target);
+    const int index = find_field(adt->fields, e->name);
+    if (index < 0) {
+        result = pawP_find_method(R->C, target, e->name);
+        if (result == NULL) {
+            NAME_ERROR(R, "field '%s' does not exist in struct '%s'",
+                    e->name->text, adt->name->text);
         }
+        field = get_decl(R, IR_TYPE_DID(result));
+    } else {
+        // refer to the field using its index
+        field = K_LIST_GET(adt->fields, index);
+        result = pawP_instantiate_field(R->C, target, field);
+        e->is_index = PAW_TRUE;
+        e->index = index;
     }
     ensure_accessible_field(R, field, HIR_CAST_DECL(adt), target);
     return result;
@@ -1754,7 +1736,7 @@ void pawP_resolve(struct Compiler *C)
 
     struct Resolver R = {
         .strings = C->strings,
-        .impls = C->impls,
+        .traits = C->traits,
         .U = C->U,
         .P = ENV(C),
         .dm = dm,

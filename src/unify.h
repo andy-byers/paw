@@ -35,6 +35,7 @@ static void pawU_unify_lists(struct Unifier *U, struct IrTypeList *a, struct IrT
 
 // Create a new type variable
 struct IrType *pawU_new_unknown(struct Unifier *U, int line, struct IrTypeList *bounds);
+struct IrTypeList *pawU_new_unknowns(struct Unifier *U, struct IrTypeList *types);
 
 // Inference context handling
 void pawU_enter_binder(struct Unifier *U);

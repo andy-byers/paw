@@ -322,11 +322,12 @@ static struct HirDecl *LowerUseDecl(struct LowerAst *L, struct AstUseDecl *d)
 
 static struct HirDecl *LowerAdtDecl(struct LowerAst *L, struct AstAdtDecl *d)
 {
-    struct HirDeclList *generics = generics = lower_decl_list(L, d->generics);
+    struct HirTypeList *traits = lower_type_list(L, d->traits);
+    struct HirDeclList *generics = lower_decl_list(L, d->generics);
     struct HirDeclList *fields = lower_fields(L, d->fields, d->name);
     struct HirDeclList *methods = lower_methods(L, d->methods);
-    return pawHir_new_adt_decl(L->hir, d->line, d->name, NULL, generics,
-            fields, methods, d->is_pub, d->is_struct);
+    return pawHir_new_adt_decl(L->hir, d->line, d->name, NULL, traits,
+            generics, fields, methods, d->is_pub, d->is_struct);
 }
 
 static struct HirDecl *LowerTraitDecl(struct LowerAst *L, struct AstTraitDecl *d)

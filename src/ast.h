@@ -120,6 +120,7 @@ struct AstAdtDecl {
     AST_DECL_HEADER;
     paw_Bool is_pub : 1;
     paw_Bool is_struct : 1;
+    struct AstTypeList *traits;
     struct AstDeclList *generics;
     struct AstDeclList *fields;
     struct AstDeclList *methods;
@@ -228,13 +229,14 @@ static inline struct AstDecl *pawAst_new_generic_decl(struct Ast *ast, int line,
     return d;
 }
 
-static inline struct AstDecl *pawAst_new_adt_decl(struct Ast *ast, int line, String *name, struct AstDeclList *generics, struct AstDeclList *fields, struct AstDeclList *methods, paw_Bool is_pub, paw_Bool is_struct)
+static inline struct AstDecl *pawAst_new_adt_decl(struct Ast *ast, int line, String *name, struct AstTypeList *traits, struct AstDeclList *generics, struct AstDeclList *fields, struct AstDeclList *methods, paw_Bool is_pub, paw_Bool is_struct)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->AdtDecl_ = (struct AstAdtDecl){
         .line = line,
         .kind = kAstAdtDecl,
         .name = name,
+        .traits = traits,
         .generics = generics,
         .fields = fields,
         .methods = methods,

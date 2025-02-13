@@ -1,64 +1,170 @@
-//// poly_trait.paw
-//
-//pub trait InstanceGet<Type> {
-//   fn get(self) -> Type;
-//}
-//
-////struct Int {
-////    pub value: int,
-////}
-////
-////impl InstanceGet<int> for Int {
-////    fn get(self) -> int {
-////        self.value
-////    }
-////}
-////
-////fn call_int_method<Ty: InstanceGet<int>>(t: Ty) -> int {
-////    t.get()
-////}
-////
-////pub fn test_call_method_indirect() {
-////    let i = Int{value: 123};
-////    assert(call_int_method(i) == 123);
-////}
-//
-//struct Value<T> {
-//    pub value: T,
-//}
-//
-//impl<Ty> InstanceGet<Ty> for Value<Ty> {
-//    fn get(self) -> Ty {
-//        self.value
-//    }
-//}
-//
-////pub fn test_call_method() {
-////    let v = Value{value: 123};
-////    assert(v.get() == 123);
-////}
-////
-////fn call_int_method_2<Ty: InstanceGet<int>>(t: Ty) -> int {
-////    t.get()
-////}
-////
-////pub fn test_call_method_indirect_2() {
-////    let v = Value{value: 123};
-////    assert(call_int_method_2(v) == 123);
-////}
-//
-//struct Wrapper<X> {
-//    pub value: X,
-//}
-//
-//impl<X, Y: InstanceGet<X>> InstanceGet<Y> for Wrapper<Y> {
-//    fn get(self) -> X {
-//        self.value.get()
-//    }
-//}
-//
-//pub fn test_call_method_3() {
-//    let v = Value{value: 123};
-//    let w = Wrapper{value: v};
-//    assert(w.get() == 123);
-//}
+// poly_trait.paw
+
+pub trait InstanceGet<Type> {
+   fn get(self) -> Type;
+}
+
+struct Int: InstanceGet<int> {
+    pub value: int,
+
+    pub fn get(self) -> int {
+        self.value
+    }
+}
+
+fn call_int_method<Ty: InstanceGet<int>>(t: Ty) -> int {
+    t.get()
+}
+
+pub fn test_call_int_method_indirect() {
+    let i = Int{value: 123};
+    assert(call_int_method(i) == 123);
+}
+
+struct Value<T>: InstanceGet<T> {
+    pub value: T,
+
+    pub fn get(self) -> T {
+        self.value
+    }
+}
+
+pub fn test_call_method() {
+    let v = Value{value: 123};
+    assert(v.get() == 123);
+}
+
+fn call_method<T, Get: InstanceGet<T>>(g: Get) -> T {
+    g.get()
+}
+
+fn call_call_method<Get: InstanceGet<T>, T>(g: Get) -> T {
+    call_method(g)
+}
+
+pub fn test_call_method_indirect() {
+    let v = Value{value: 123};
+
+    assert(call_method::<int, Value>(v) == 123);
+    assert(call_call_method::<Value, int>(v) == 123);
+
+    assert(call_method(v) == 123);
+    assert(call_call_method(v) == 123);
+}
+
+struct BoundedValue<X: InstanceGet<Y>, Y> {
+    pub value: X,
+
+    pub fn get_inner(self) -> Y {
+        self.value.get()
+    }
+}
+
+pub fn test_call_bounded_value_method() {
+    let v = Value{value: 123};
+    let bv = BoundedValue{value: v};
+    assert(bv.get_inner() == 123);
+}
+
+fn call_bounded_method<T, Get: InstanceGet<T>>(bv: BoundedValue<Get, T>) -> T {
+    bv.get_inner()
+}
+
+fn call_call_bounded_method<Get: InstanceGet<T>, T>(bv: BoundedValue<Get, T>) -> T {
+    call_bounded_method(bv)
+}
+
+pub fn test_call_bounded_method_indirect() {
+    let v = Value{value: 123};
+    let bv = BoundedValue{value: v};
+
+    assert(call_bounded_method::<int, Value>(bv) == 123);
+    assert(call_call_bounded_method::<Value, int>(bv) == 123);
+
+    assert(call_bounded_method(bv) == 123);
+    assert(call_call_bounded_method(bv) == 123);
+}
+
+struct Wrapper<X: InstanceGet<Y>, Y>: InstanceGet<Y> {
+    pub value: X,
+
+    pub fn get(self) -> Y {
+        self.value.get()
+    }
+}
+
+pub fn test_call_wrapper_method() {
+    let v = Value{value: 123};
+    let w = Wrapper{value: v};
+    assert(w.get() == 123);
+}
+
+pub fn test_call_wrapper_method_indirect() {
+    let v = Value{value: 123};
+    let w = Wrapper{value: v};
+
+    assert(call_method::<int, Wrapper<Value, int>>(w) == 123);
+    assert(call_call_method::<Wrapper<Value, int>, int>(w) == 123);
+
+    assert(call_method(w) == 123);
+    assert(call_call_method(w) == 123);
+}
+
+pub trait ToString {
+    fn to_string(self) -> str;
+}
+
+struct IntWrapper: ToString {
+    pub value: int,
+    
+    pub fn to_string(self) -> str {
+        self.value.to_string()
+    }
+}
+
+pub trait CustomIterator<T> {
+    fn next(self) -> Option<T>;
+}
+
+struct Iterable<T>: CustomIterator<T> {
+    list: [T],
+    iter: int,
+
+    pub fn new(list: [T]) -> Self {
+        Self{list, iter: 0}
+    }
+
+    pub fn next(self) -> Option<T> {
+        if self.iter < #self.list {
+            let i = self.iter;
+            self.iter = self.iter + 1;
+            Option::Some(self.list[i])    
+        } else {
+            Option::None
+        }
+    }
+}
+
+fn next_value<V: ToString, I: CustomIterator<V>>(iter: I) -> str {
+    match iter.next() {
+        Option::Some(v) => "Some(" + v.to_string() + ")",
+        Option::None => "None",
+    }
+}
+
+pub fn test_iterable() {
+    let iterator = Iterable::new([
+        IntWrapper{value: 1},
+        IntWrapper{value: 2},
+        IntWrapper{value: 3},
+    ]);
+
+    let s = "[";
+    s = s + next_value(iterator) + ", ";
+    s = s + next_value(iterator) + ", ";
+    s = s + next_value(iterator) + ", ";
+    s = s + next_value(iterator) + "]";
+
+    assert(s == "[Some(1), Some(2), Some(3), None]");
+}
+

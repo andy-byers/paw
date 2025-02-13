@@ -170,15 +170,21 @@ static struct IrTypeList *maybe_generalize_adt(struct QueryState *Q, struct HirD
     if (types != NULL) return types;
     struct HirAdtDecl *d = HirGetAdtDecl(decl);
     if (d->generics == NULL) return types;
-    struct IrTypeList *result = pawIr_type_list_new(Q->C);
-    struct HirDecl **pgeneric;
-    K_LIST_FOREACH(d->generics, pgeneric) {
-        struct IrType *generic = GET_NODE_TYPE(Q->C, *pgeneric);
-        struct IrTypeList *bounds = IrGetGeneric(generic)->bounds;
-        struct IrType *var = pawU_new_unknown(Q->C->U, Q->line, bounds);
-        K_LIST_PUSH(Q->C, result, var);
-    }
-    return result;
+//    struct IrTypeList *result = pawIr_type_list_new(Q->C);
+//    struct HirDecl **pgeneric;
+//    K_LIST_FOREACH(d->generics, pgeneric) {
+//        struct IrType *generic = GET_NODE_TYPE(Q->C, *pgeneric);
+//        struct IrTypeList *bounds = IrGetGeneric(generic)->bounds;
+//        struct IrType *var = pawU_new_unknown(Q->C->U, Q->line, bounds);
+//        K_LIST_PUSH(Q->C, result, var);
+//    }
+    struct IrTypeList *generics = pawHir_collect_decl_types(Q->C, d->generics);
+    struct IrTypeList *unknowns = pawU_new_unknowns(Q->C->U, generics);
+    return pawP_instantiate_typelist(Q->C, generics, unknowns, generics);
+//    for (int i = 0; i < subst->count; ++i) {
+//        pawU_unify(I->U, K_LIST_GET(subst, i), K_LIST_GET(types, i));
+//    }
+//    return result;
 }
 
 static struct QueryBase find_local(struct QueryState *Q, struct HirSymtab *symtab, struct HirPath *path)

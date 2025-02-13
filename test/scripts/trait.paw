@@ -1,102 +1,72 @@
-//// trait.paw
-////
-//// Traits can appear in the following places:
-////
-////     trait Trait {}
-////
-////     struct S<T: Trait> {...}
-////     enum E<T: Trait> {...}
-////     fn f<T: Trait>() {...}
-////
-////     struct Object<T> {...}
-////     impl<T: Trait> Object<T> {...}
-////     impl<T: Trait> Trait for Object<T> {...}
-//
-//struct Int {
-//    value: int,
-//}
-//
-//impl Int {
-//    pub fn new(value: int) -> Self {
-//        Self{value}
-//    }
-//}
-//
-//pub trait InstanceGet {
-//    fn get(self) -> int;
-//}
-//
-//impl InstanceGet for Int {
-//    fn get(self) -> int {
-//        self.value
-//    }
-//}
-//
-//pub fn test_call_method() {
-//    let i = Int::new(123);
-//    assert(i.get() == 123);
-//}
-//
-//fn call_method<Ty: InstanceGet>(t: Ty) -> int {
-//    t.get()
-//}
-//
-//fn call_call_method<Ty: InstanceGet>(t: Ty) -> int {
-//    call_method(t)
-//}
-//
-//pub fn test_indirect_call_method() {
-//    let i = Int::new(42);
-//    assert(call_method(i) == 42);
-//    assert(call_call_method(i) == 42);
-//}
-//
-//pub trait AssociatedGet {
-//    fn get_default() -> int;
-//}
-//
-//impl AssociatedGet for Int {
-//    fn get_default() -> int {
-//        42
-//    }
-//}
-//
-//pub fn test_call_associated_fn() {
-//    assert(Int::get_default() == 42);
-//}
-//
-//// During type checking:
-//// (1) check that "get_default" is a method from "AssociatedGet" trait
-//// (2) use signature to unify result of "get_default" with function return type "int"
-//// (3) ensure that the type substituted for Ty implements "AssociatedGet"
-////     if that type is itself generic, ensure that the bounds are compatible
-////
-//// During monomorphization:
-//// (1) find concrete "get_default" in the substituted type's impl set
-//fn call_associated_fn<Ty: AssociatedGet>() -> int {
-//    Ty::get_default()
-//}
-//
-//fn call_call_associated_fn<Ty: AssociatedGet>() -> int {
-//    call_associated_fn::<Ty>()
-//}
-//
-//pub fn test_indirect_call_associated() {
-//    assert(call_associated_fn::<Int>() == 42);
-//    assert(call_call_associated_fn::<Int>() == 42);
-//}
-//
-//fn call_both_functions<Ty: InstanceGet + AssociatedGet>(t: Ty) -> int {
-//    t.get() + Ty::get_default()
-//}
-//
-//fn call_call_both_functions<Ty: AssociatedGet + InstanceGet>(t: Ty) -> int {
-//    call_both_functions::<Ty>(t)
-//}
-//
-//pub fn test_indirect_call_both_functions() {
-//    let i = Int::new(123);
-//    assert(call_both_functions(i) == 123 + 42);
-//    assert(call_call_both_functions(i) == 123 + 42);
-//}
-//
+// trait.paw
+
+pub trait InstanceGet {
+    fn get(self) -> int;
+}
+
+pub trait AssociatedGet {
+    fn get_default() -> int;
+}
+
+struct Int: InstanceGet + AssociatedGet {
+    pub value: int,
+
+    pub fn get(self) -> int {
+        self.value
+    }
+
+    pub fn get_default() -> int {
+        42
+    }
+}
+
+pub fn test_call_method() {
+    let i = Int{value: 123};
+    assert(i.get() == 123);
+}
+
+fn call_method<Ty: InstanceGet>(t: Ty) -> int {
+    t.get()
+}
+
+fn call_call_method<Ty: InstanceGet>(t: Ty) -> int {
+    call_method(t)
+}
+
+pub fn test_indirect_call_method() {
+    let i = Int{value: 42};
+    assert(call_method(i) == 42);
+    assert(call_call_method(i) == 42);
+}
+
+pub fn test_call_associated_fn() {
+    assert(Int::get_default() == 42);
+}
+
+fn call_associated_fn<Ty: AssociatedGet>() -> int {
+    Ty::get_default()
+}
+
+fn call_call_associated_fn<Ty: AssociatedGet>() -> int {
+    call_associated_fn::<Ty>()
+}
+
+pub fn test_indirect_call_associated() {
+    assert(call_associated_fn::<Int>() == 42);
+    assert(call_call_associated_fn::<Int>() == 42);
+}
+
+fn call_both_functions<Ty: InstanceGet + AssociatedGet>(t: Ty) -> int {
+    t.get() + Ty::get_default()
+}
+
+fn call_call_both_functions<Ty: AssociatedGet + InstanceGet>(t: Ty) -> int {
+    call_both_functions::<Ty>(t)
+}
+
+pub fn test_indirect_call_both_functions() {
+    let i = Int{value: 123};
+    assert(call_both_functions(i) == 123 + 42);
+    assert(call_call_both_functions(i) == 123 + 42);
+}
+

@@ -205,6 +205,14 @@ static void test_type_error(void)
             "struct S {pub fn f() {}}", "S::f::f(); ");
     test_compiler_status(PAW_ETYPE, "extraneous_variant_access",
             "enum E {A}", "let e = E::A::A; ");
+
+    test_compiler_status(PAW_ETYPE, "missing_return_type", "pub fn f() {123}", "");
+    test_compiler_status(PAW_ETYPE, "missing_return_value", "pub fn f() -> int {}", "");
+    test_compiler_status(PAW_ETYPE, "non_exhaustive_branch",
+            "pub fn f(x: bool) -> int {if x {} else {123}}", "");
+    test_compiler_status(PAW_ETYPE, "non_exhaustive_return",
+            "pub fn f(x: bool) -> int {if x {return 123;}}", "");
+    test_compiler_status(PAW_ETYPE, "non_unit_guard", "pub fn f(x: bool) {if x {123}}", "");
 }
 
 static void test_syntax_error(void)
@@ -544,6 +552,39 @@ static void test_uninit_local(void)
             "x;");
 }
 
+static void test_trait_error(void)
+{
+#define TRAIT_DECL \
+    "pub trait Trait {\n" \
+    "    fn f(self);\n" \
+    "}\n"
+
+    test_compiler_status(PAW_ENAME, "trait_missing_method",
+            TRAIT_DECL "struct S: Trait {v: int}", "");
+    test_compiler_status(PAW_ETYPE, "trait_wrong_type",
+            TRAIT_DECL "struct S: Trait {pub fn f(self) -> int {123}}", "");
+    test_compiler_status(PAW_ETYPE, "trait_mismatched_visibility",
+            TRAIT_DECL "struct S: Trait {fn f(self) {}}", "");
+    test_compiler_status(PAW_ETYPE, "generic_missing_bound",
+            TRAIT_DECL "struct S: Trait {pub fn f(self) {}}\n"
+            "pub fn call_f<T>(t: T) {t.f();}", "let x = S; call_f(x);");
+    test_compiler_status(PAW_ETYPE, "trait_generic_mismatch",
+            TRAIT_DECL "struct S<T>: Trait<T> {pub fn f(self) {}}\n", "");
+
+#undef TRAIT_DECL
+
+#define POLY_TRAIT_DECL \
+    "pub trait Trait<T> {\n" \
+    "    fn f(self) -> T;\n" \
+    "}\n"
+
+    test_compiler_status(PAW_ETYPE, "trait_generic_mismatch",
+            POLY_TRAIT_DECL "struct S<T>: Trait<T> {pub v: T, pub fn f(self) -> T {self.v}}\n"
+            "pub fn call_f<T: Trait<int>>(t: T) -> int {t.f()}", "let x = S{v: true}; call_f(x);");
+
+#undef POLY_TRAIT_DECL
+}
+
 int main(void)
 {
     test_gc_conflict();
@@ -560,4 +601,5 @@ int main(void)
     test_import_error();
     test_uninit_local();
     test_match_error();
+    test_trait_error();
 }

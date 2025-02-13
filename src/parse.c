@@ -1304,21 +1304,23 @@ static struct AstDecl *use_decl(struct Lex *lex)
     return pawAst_new_use_decl(lex->ast, line, name, star, item, as);
 }
 
+static void parse_trait_list(struct Lex *lex, struct AstTypeList *traits)
+{
+    do {
+        if (test(lex, '{')) break;
+        const int line = lex->line;
+        struct AstPath *path = parse_pathtype(lex);
+        struct AstType *trait = pawAst_new_path_type(lex->ast, line, path);
+        K_LIST_PUSH(lex->C, traits, trait);
+    } while (test_next(lex, '+'));
+}
+
 static struct AstDecl *func_decl(struct Lex *lex, paw_Bool is_pub)
 {
     const int line = lex->line;
     skip(lex); // 'fn' token
     String *name = parse_name(lex);
     return function(lex, line, name, FUNC_FUNCTION, is_pub);
-}
-
-static struct AstDecl *method_decl(struct Lex *lex)
-{
-    const int line = lex->line;
-    const paw_Bool is_pub = test_next(lex, TK_PUB);
-    check_next(lex, TK_FN);
-    String *name = parse_name(lex);
-    return function(lex, line, name, FUNC_METHOD, is_pub);
 }
 
 static struct AstDecl *parse_method(struct Lex *lex, paw_Bool is_pub)
@@ -1344,8 +1346,11 @@ static struct AstDecl *variant_decl(struct Lex *lex, int index)
     return pawAst_new_variant_decl(lex->ast, line, name, fields, index);
 }
 
-static void enum_body(struct Lex *lex, int line, struct AstDeclList *variants, struct AstDeclList *methods)
+static void enum_body(struct Lex *lex, int line, struct AstTypeList *traits, struct AstDeclList *variants, struct AstDeclList *methods)
 {
+    if (test_next(lex, ':')) {
+        parse_trait_list(lex, traits);
+    }
     check_next(lex, '{');
     while (!end_of_block(lex)) {
         if (test(lex, TK_NAME)) {
@@ -1379,11 +1384,12 @@ static struct AstDecl *enum_decl(struct Lex *lex, paw_Bool is_pub)
     const int line = lex->line;
     String *name = parse_name(lex);
     struct AstDeclList *generics = type_param(lex);
+    struct AstTypeList *traits = pawAst_type_list_new(lex->C);
     struct AstDeclList *variants = pawAst_decl_list_new(lex->C);
     struct AstDeclList *methods = pawAst_decl_list_new(lex->C);
-    enum_body(lex, line, variants, methods);
-    return pawAst_new_adt_decl(lex->ast, line, name, generics,
-            variants, methods, is_pub, PAW_FALSE);
+    enum_body(lex, line, traits, variants, methods);
+    return pawAst_new_adt_decl(lex->ast, line, name, traits,
+            generics, variants, methods, is_pub, PAW_FALSE);
 }
 
 static struct AstDecl *struct_field(struct Lex *lex, paw_Bool is_pub)
@@ -1394,9 +1400,12 @@ static struct AstDecl *struct_field(struct Lex *lex, paw_Bool is_pub)
     return pawAst_new_field_decl(lex->ast, line, name, tag, is_pub);
 }
 
-static void struct_body(struct Lex *lex, struct AstDeclList *fields, struct AstDeclList *methods)
+static void struct_body(struct Lex *lex, struct AstTypeList *traits, struct AstDeclList *fields, struct AstDeclList *methods)
 {
     const int line = lex->line;
+    if (test_next(lex, ':')) {
+        parse_trait_list(lex, traits);
+    }
     if (!test_next(lex, '{')) {
         semicolon(lex);
         return;
@@ -1435,11 +1444,12 @@ static struct AstDecl *struct_decl(struct Lex *lex, paw_Bool is_pub)
     skip(lex); // 'struct' token
     String *name = parse_name(lex);
     struct AstDeclList *generics = type_param(lex);
+    struct AstTypeList *traits = pawAst_type_list_new(lex->C);
     struct AstDeclList *fields = pawAst_decl_list_new(lex->C);
     struct AstDeclList *methods = pawAst_decl_list_new(lex->C);
-    struct_body(lex, fields, methods);
-    return pawAst_new_adt_decl(lex->ast, line, name, generics,
-            fields, methods, is_pub, PAW_TRUE);
+    struct_body(lex, traits, fields, methods);
+    return pawAst_new_adt_decl(lex->ast, line, name, traits,
+            generics, fields, methods, is_pub, PAW_TRUE);
 }
 
 static struct AstDecl *trait_decl(struct Lex *lex, paw_Bool is_pub)
@@ -1453,9 +1463,9 @@ static struct AstDecl *trait_decl(struct Lex *lex, paw_Bool is_pub)
     struct AstDeclList *methods = pawAst_decl_list_new(lex->C);
     while (!end_of_block(lex)) {
         if (methods->count == LOCAL_MAX) {
-            limit_error(lex, "methods", LOCAL_MAX);
+            limit_error(lex, "methods in trait body", LOCAL_MAX);
         }
-        struct AstDecl *method = method_decl(lex);
+        struct AstDecl *method = parse_method(lex, is_pub);
         K_LIST_PUSH(lex->C, methods, method);
     }
     delim_next(lex, '}', '{', line);
@@ -1551,6 +1561,7 @@ static struct AstDeclList *toplevel_items(struct Lex *lex, struct AstDeclList *l
     return list;
 }
 
+// TODO: someday, #embed should be used for this... once C23 support is better
 static const char kPrelude[] =
     "pub struct unit;\n"
 

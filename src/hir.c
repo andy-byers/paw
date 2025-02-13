@@ -265,6 +265,7 @@ static void AcceptVariantDecl(struct HirVisitor *V, struct HirVariantDecl *d)
 
 static void AcceptAdtDecl(struct HirVisitor *V, struct HirAdtDecl *d)
 {
+    accept_type_list(V, d->traits);
     accept_decl_list(V, d->generics);
     accept_decl_list(V, d->fields);
     accept_decl_list(V, d->methods);
@@ -822,6 +823,7 @@ static void dump_decl(struct Printer *P, struct HirDecl *decl)
             struct HirAdtDecl *d = HirGetAdtDecl(decl);
             DUMP_NAME(P, d->name);
             DUMP_FMT(P, "is_struct: %d\n", d->is_struct);
+            dump_type_list(P, d->traits, "traits");
             dump_decl_list(P, d->generics, "generics");
             dump_decl_list(P, d->fields, "fields");
             dump_decl_list(P, d->methods, "methods");

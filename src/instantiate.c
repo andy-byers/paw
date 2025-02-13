@@ -44,19 +44,6 @@ static struct IrType *func_result(struct InstanceState *I, struct HirFuncDecl *d
     return IR_FPTR(pawIr_get_type(I->C, d->hid))->result;
 }
 
-static struct IrTypeList *new_unknowns(struct InstanceState *I, struct IrTypeList *types)
-{
-    struct IrType **ptype;
-    struct IrTypeList *list = pawIr_type_list_new(I->C);
-    K_LIST_FOREACH(types, ptype) {
-        struct IrTypeList *bounds = IrIsGeneric(*ptype)
-            ? IrGetGeneric(*ptype)->bounds : NULL;
-        struct IrType *unknown = pawU_new_unknown(I->U, I->line, bounds);
-        K_LIST_PUSH(I->C, list, unknown);
-    }
-    return list;
-}
-
 struct IrTypeList *pawP_instantiate_typelist(struct Compiler *C, struct IrTypeList *before,
                                              struct IrTypeList *after, struct IrTypeList *target)
 {
@@ -106,7 +93,9 @@ static void normalize_type_list(struct InstanceState *I, struct IrTypeList *type
 static struct IrType *instantiate_trait(struct InstanceState *I, struct HirTraitDecl *base, struct IrTypeList *types)
 {
     struct IrType *base_type = pawIr_get_type(I->C, base->hid);
-    check_type_param(I, IR_TYPE_SUBTYPES(base_type), types);
+    struct IrTypeList *generics = IR_TYPE_SUBTYPES(base_type);
+    if (generics == NULL) TYPE_ERROR(I, "trait is not polymorphic");
+    check_type_param(I, generics, types);
     normalize_type_list(I, types);
     return pawIr_new_trait_obj(I->C, base->did, types);
 }
@@ -146,7 +135,7 @@ static struct IrType *instantiate_method(struct InstanceState *I, struct IrType 
 {
     paw_assert(types->count == IR_TYPE_SUBTYPES(obj)->count);
     struct IrTypeList *generics = collect_generic_types(I, generics_);
-    struct IrTypeList *unknowns = new_unknowns(I, generics);
+    struct IrTypeList *unknowns = pawU_new_unknowns(I->U, generics);
 
     // Substitute the polymorphic impl block's generics for inference variables (unknowns)
     // in the context of its 'self' ADT. For example:
@@ -214,7 +203,7 @@ static struct IrType *generalize_adt(struct Compiler *C, struct IrAdt *t)
         .C = C,
     };
 
-    struct IrTypeList *unknowns = new_unknowns(&I, t->types);
+    struct IrTypeList *unknowns = pawU_new_unknowns(I.U, t->types);
     struct HirDecl *base = pawHir_get_decl(C, t->did);
     return pawP_instantiate(C, base, unknowns);
 }
@@ -229,7 +218,7 @@ static struct IrType *generalize_func(struct Compiler *C, struct IrSignature *t)
         .C = C,
     };
 
-    struct IrTypeList *unknowns = new_unknowns(&I, t->types);
+    struct IrTypeList *unknowns = pawU_new_unknowns(I.U, t->types);
     struct HirDecl *base = pawHir_get_decl(C, t->did);
     return pawP_instantiate(C, base, unknowns);
 }
@@ -262,7 +251,7 @@ struct IrType *pawP_generalize_self(struct Compiler *C, struct IrType *self, str
         .C = C,
     };
 
-    struct IrTypeList *unknowns = new_unknowns(&I, base_binder);
+    struct IrTypeList *unknowns = pawU_new_unknowns(I.U, base_binder);
     struct HirDecl *base = pawHir_get_decl(C, IR_TYPE_DID(self));
 
     struct IrTypeFolder F;
@@ -277,6 +266,7 @@ static struct IrTypeList *substitute_list(struct IrTypeFolder *F, struct IrTypeL
 {
     struct Substitution *subst = F->ud;
     struct Compiler *C = subst->C;
+    if (list == NULL) return NULL;
 
     struct IrType **ptype;
     struct IrTypeList *copy = pawIr_type_list_new(C);
@@ -327,7 +317,16 @@ static struct IrType *substitute_generic(struct IrTypeFolder *F, struct IrGeneri
     struct IrType **pg, **pt;
     K_LIST_ZIP(subst->generics, pg, subst->types, pt) {
         struct IrGeneric *g = IrGetGeneric(*pg);
-        if (t->did.value == g->did.value) return *pt;
+        if (t->did.value == g->did.value) {
+            if (IrIsGeneric(*pt)) {
+                struct IrGeneric *g = IrGetGeneric(*pt);
+                g->bounds = pawIr_fold_type_list(F, g->bounds);
+            } else if (IrIsInfer(*pt)) {
+                struct IrInfer *i = IrGetInfer(*pt);
+                i->bounds = pawIr_fold_type_list(F, i->bounds);
+            }
+            return *pt;
+        }
     }
     return IR_CAST_TYPE(t);
 }
@@ -335,16 +334,16 @@ static struct IrType *substitute_generic(struct IrTypeFolder *F, struct IrGeneri
 void pawP_init_substitution_folder(struct IrTypeFolder *F, struct Compiler *C, struct Substitution *subst,
                                    struct IrTypeList *generics, struct IrTypeList *types)
 {
-    // TODO: consider replacing generic with inference vars and unifying instead of doing this
-    //       generic bounds are checked in pawU_unify
-    //       likely could get rid of this function and subsequent call to pawIr_fold*()
-    struct IrType **pa, **pb;
-    K_LIST_ZIP(generics, pa, types, pb) {
-        struct IrTypeList *bounds = IrGetGeneric(*pa)->bounds;
-        if (!pawP_satisfies_bounds(C, *pb, bounds)) {
-            TYPE_ERROR(C, "trait bounds not satisfied");
-        }
-    }
+//    // TODO: consider replacing generic with inference vars and unifying instead of doing this
+//    //       generic bounds are checked in pawU_unify
+//    //       likely could get rid of this function and subsequent call to pawIr_fold*()
+//    struct IrType **pa, **pb;
+//    K_LIST_ZIP(generics, pa, types, pb) {
+//        struct IrTypeList *bounds = IrGetGeneric(*pa)->bounds;
+//        if (!pawP_satisfies_bounds(C, *pb, bounds)) {
+//            TYPE_ERROR(C, "trait bounds not satisfied");
+//        }
+//    }
 
     *subst = (struct Substitution){
         .generics = generics,

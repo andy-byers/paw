@@ -1,5 +1,15 @@
+// Copyright (c) 2024, The paw Authors. All rights reserved.
+// This source code is licensed under the MIT License, which can be found in
+// LICENSE.md. See AUTHORS.md for a list of contributor names.
+
+// TODO (a): always make a copy of the type being folded, fold the copy (already copying type lists)
+// TODO (b): broken b/c a pointer to the cannonicalized type is used in codegen
+// TODO (c): there may be a place where a type was folded and the code relies on the type being mutated
+// TODO (d): either way, this should be possible. it simplifies handling traits a bit
+// TODO (e): note that trait objects are already copied in FoldTraitObj below
 
 #include "type_folder.h"
+#include "ir_type.h"
 
 static struct IrType *FoldType(struct IrTypeFolder *, struct IrType *);
 
@@ -7,11 +17,12 @@ static struct IrTypeList *fold_type_list(struct IrTypeFolder *F, struct IrTypeLi
 {
     if (list == NULL) return NULL;
     struct Compiler *C = F->C;
+    struct IrTypeList *result = pawIr_type_list_new(C);
     for (int i = 0; i < list->count; ++i) {
         struct IrType *type = FoldType(F, K_LIST_GET(list, i));
-        K_LIST_SET(list, i, type);
+        K_LIST_PUSH(C, result, type);
     }
-    return list;
+    return result;
 }
 
 static struct IrType *FoldAdt(struct IrTypeFolder *F, struct IrAdt *t)
@@ -43,8 +54,8 @@ static struct IrType *FoldTuple(struct IrTypeFolder *F, struct IrTuple *t)
 
 static struct IrType *FoldTraitObj(struct IrTypeFolder *F, struct IrTraitObj *t)
 {
-    t->types = F->FoldTypeList(F, t->types);
-    return IR_CAST_TYPE(t);
+    struct IrTypeList *types = F->FoldTypeList(F, t->types);
+    return pawIr_new_trait_obj(F->C, t->did, types);
 }
 
 static void FoldPat(struct HirVisitor *V, struct HirPat *node)

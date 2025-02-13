@@ -156,7 +156,6 @@ struct ObjectStore {
 
 struct Compiler {
     struct Builtin builtins[NBUILTINS];
-    struct TODO_TraitList *traits;
     struct ObjectStore store;
     struct ModuleList *modules;
     struct HirDeclList *decls;
@@ -166,12 +165,12 @@ struct Compiler {
     struct Unifier *U;
     String *modname;
 
-    // '.impls' maps each ADT to a list containing all of their 'impl' blocks.
-    // Includes ADTs from all modules being compiled.
-    Map *impls;
+    // '.traits' maps each ADT to a list of implemented traits. Includes ADTs
+    // from all modules being compiled.
+    Map *traits; // DeclId => IrTypeList *
 
     // '.imports' maps modules names to ASTs for each module being compiled.
-    Map *imports;
+    Map *imports; // String * => Ast
 
     // '.strings' anchors all strings used during compilation so they are not
     // collected by the GC.
@@ -313,6 +312,8 @@ void pawP_teardown(paw_Env *P, struct DynamicMem *dm);
 
 struct Ast *pawP_parse_prelude(struct Compiler *C);
 struct Ast *pawP_parse_module(struct Compiler *C, String *modname, paw_Reader input, void *ud);
+
+void pawP_validate_adt_traits(struct Compiler *C, struct HirAdtDecl *d);
 
 struct MonoResult {
     struct IrTypeList *types;

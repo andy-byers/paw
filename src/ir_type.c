@@ -108,6 +108,19 @@ static void print_type_list(struct Printer *P, struct IrTypeList *list)
     }
 }
 
+static void print_bounds(struct Printer *P, struct IrTypeList *bounds)
+{
+    if (bounds != NULL) {
+        PRINT_LITERAL(P, ": ");
+        int index;
+        struct IrType **ptype;
+        K_LIST_ENUMERATE(bounds, index, ptype) {
+            if (index > 0) PRINT_LITERAL(P, " + ");
+            print_type(P, *ptype);
+        }
+    }
+}
+
 static void print_type(struct Printer *P, IrType *type)
 {
     switch (IR_KINDOF(type)) {
@@ -155,20 +168,13 @@ static void print_type(struct Printer *P, IrType *type)
             struct IrGeneric *gen = IrGetGeneric(type);
             struct HirDecl *decl = pawHir_get_decl(P->C, gen->did);
             PRINT_STRING(P, decl->hdr.name);
-            if (gen->bounds != NULL) {
-                PRINT_LITERAL(P, ": ");
-                int index;
-                struct IrType **ptype;
-                K_LIST_ENUMERATE(gen->bounds, index, ptype) {
-                    if (index > 0) PRINT_LITERAL(P, " + ");
-                    print_type(P, *ptype);
-                }
-            }
+            print_bounds(P, gen->bounds);
             break;
         }
         case kIrInfer: {
             struct IrInfer *infer = IrGetInfer(type);
             PRINT_FORMAT(P, "?%d", infer->index);
+            print_bounds(P, infer->bounds);
             break;
         }
         case kIrTraitObj: {

@@ -19,6 +19,7 @@ static void free_def(paw_Env *P, struct Def *def)
             break;
         case DEF_VAR:
         case DEF_FIELD:
+        case DEF_TRAIT:
             break;
     }
     pawM_free(P, def);
@@ -195,6 +196,12 @@ static void print_adt(paw_Env *P, Buffer *buf, struct Adt *type)
     }
 }
 
+static void print_trait_obj(paw_Env *P, Buffer *buf, struct TraitObj *type)
+{
+    // TODO
+    pawL_add_fstring(P, buf, "TODO: type.c:print_trait_obj");
+}
+
 void pawY_print_type(paw_Env *P, Buffer *buf, paw_Type code)
 {
     struct Type *type = Y_TYPE(P, code);
@@ -208,6 +215,9 @@ void pawY_print_type(paw_Env *P, Buffer *buf, paw_Type code)
             break;
         case TYPE_ADT:
             print_adt(P, buf, &type->adt);
+            break;
+        case TYPE_TRAIT_OBJ:
+            break;
     }
 }
 
