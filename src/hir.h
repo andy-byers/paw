@@ -48,7 +48,8 @@ typedef struct HirId {
 #define HIR_TYPE_LIST(X) \
         X(FuncPtr) \
         X(TupleType) \
-        X(PathType)
+        X(PathType) \
+        X(InferType)
 
 #define HIR_STMT_LIST(X) \
         X(ExprStmt) \
@@ -168,6 +169,10 @@ struct HirTupleType {
     struct HirTypeList *elems;
 };
 
+struct HirInferType {
+    HIR_TYPE_HEADER;
+};
+
 struct HirType {
     union {
         struct HirTypeHeader hdr;
@@ -195,6 +200,17 @@ static const char *kHirTypeNames[] = {
 #undef DEFINE_ACCESS
 
 struct HirType *pawHir_new_type(struct Hir *hir);
+
+static struct HirType *pawHir_new_infer_type(struct Hir *hir, int line)
+{
+    struct HirType *t = pawHir_new_type(hir);
+    t->InferType_ = (struct HirInferType){
+        .hid = pawHir_next_id(hir),
+        .line = line,
+        .kind = kHirInferType,
+    };
+    return t;
+}
 
 static struct HirType *pawHir_new_path_type(struct Hir *hir, int line, struct HirPath *path)
 {

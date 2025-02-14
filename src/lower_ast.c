@@ -708,6 +708,11 @@ static struct HirType *LowerFuncType(struct LowerAst *L, struct AstFuncType *t)
     return pawHir_new_func_ptr(L->hir, t->line, params, result);
 }
 
+static struct HirType *LowerInferType(struct LowerAst *L, struct AstInferType *t)
+{
+    return pawHir_new_infer_type(L->hir, t->line);
+}
+
 static void combine_or_parts(struct LowerAst *L, struct HirPatList *pats, struct HirPat *part)
 {
     if (!HirIsOrPat(part)) {

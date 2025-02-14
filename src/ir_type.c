@@ -204,13 +204,11 @@ static void print_type(struct Printer *P, IrType *type)
             struct IrGeneric *gen = IrGetGeneric(type);
             struct HirDecl *decl = pawHir_get_decl(P->C, gen->did);
             PRINT_STRING(P, decl->hdr.name);
-            print_bounds(P, gen->bounds);
             break;
         }
         case kIrInfer: {
             struct IrInfer *infer = IrGetInfer(type);
-            PRINT_FORMAT(P, "?%d", infer->index);
-            print_bounds(P, infer->bounds);
+            PRINT_CHAR(P, '_');
             break;
         }
         case kIrTraitObj: {

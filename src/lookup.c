@@ -58,8 +58,8 @@ static void validate_type_args(struct Compiler *C, struct HirDecl *decl, struct 
     const int m = seg->types == NULL ? 0 : seg->types->count;
     const int n = generics == NULL ? 0 : generics->count;
     if (m != n) {
-            TYPE_ERROR(C, "%s type arguments (expected %d but found %d)",
-                    m < n ? "not enough" : "too many", n, m);
+        TYPE_ERROR(C, "%s type arguments (expected %d but found %d)",
+                m < n ? "not enough" : "too many", n, m);
     }
 }
 

@@ -9,6 +9,17 @@ A cute little scripting language
 Paw is a high-level, statically-typed, embeddable scripting language.
 It is designed to run on a virtual machine written in C.
 
+## Features
++ No dependencies
++ Static strong typing
++ Bidirectional type checking
++ Block expressions
++ Module system
++ Exhaustive pattern matching and sum types
++ Traits (interfaces checked at compile time)
++ Generics and generic bounds
++ Container literals (`[T]` and `[K: V]`)
+
 ## Examples
 
 ### Hello world
@@ -36,7 +47,7 @@ pub fn main() {
     };
 
     // Call the closure for each integer 1 to 100, exclusive.
-    for i in 1..100 {
+    for i in range(1, 100, 1) {
         print(fizzbuzz(i) + "\n");
     }
 }
@@ -70,50 +81,65 @@ pub fn three() -> int {
 ### Generics
 
 ```paw
-struct Pair<First, Second> {
-    first: First,
-    second: Second,
-    pub name: str,
+struct Pair<X, Y> {
+    pub first: X,
+    pub second: Y,
 }
 
-impl<X, Y> Pair<X, Y> {
-    pub fn new(first: X, second: Y) -> Self {
-        // shorthand for "Self{first: first, second: second}"
-        Self{first, second, name: "public field"}
-    }
-}
+type Vec2<Ty> = Pair<Ty, Ty>;
 
-impl<T> Pair<T, T> {
-    pub fn swap(self) {
-        let temp = self.first;
-        self.first = self.second;
-        self.second = temp;
-    }
-}
-
-impl Pair<int, int> {
-    pub fn scale(self, n: int) {
-        self.first = self.first * n;
-        self.second = self.second * n;
-    }
-}
-
-type SwappablePair<Ty> = Pair<Ty, Ty>;
-
-pub fn swap<Ty>(p: SwappablePair<Ty>) {
-    p.swap();    
+pub fn swap<Ty>(v: Vec2<Ty>) {
+    let temp = v.first;
+    v.first = v.second;
+    v.second = temp;
 }
 
 pub fn main() {
-    let p = SwappablePair::new(1, 23);
+    let v = Vec2{
+        first: 123,
+        second: 456,
+    };
 
-    // transform "(1, 23)" into "(230, 10)"
-    p.scale(10);
-    swap(p);
+    swap(v);
 
-    // fields marked "pub" can be set outside of methods/associated
-    // functions defined on Pair
-    p.name = "MyPair";
+    print(v.first.to_string() + "\n"); // 456
+    print(v.second.to_string() + "\n"); // 123
+}
+```
+
+### Traits
+
+```paw
+pub trait Get<T> {
+    fn get(self) -> T;
+}
+
+struct Inner<X>: Get<X> {
+    pub value: X,
+
+    pub fn get(self) -> X {
+        self.value
+    }
+}
+
+struct Outer<X: Get<Y>, Y>: Get<Y> {
+    pub value: X,
+
+    pub fn get(self) -> Y {
+        self.value.get()
+    }
+}
+
+fn get<X: Get<Y>, Y>(x: X) -> Y {
+    x.get()
+}
+
+pub fn main() {
+    let inner = Inner{value: 123};
+    let outer = Outer{value: inner};
+    let value = get(outer);
+
+    print(value.to_string() + "\n"); // 123
 }
 ```
 
@@ -143,22 +169,26 @@ pub fn main() {
 + [x] sum types/discriminated unions (`enum`)
 + [x] product types (tuple)
 + [x] custom garbage collector (using Boehm GC for now)
-+ [x] methods using `impl` blocks
++ [x] methods
 + [x] module system and `use` keyword
 + [x] type inference for polymorphic `enum`
 + [x] exhaustive pattern matching (`match` construct)
-+ [ ] traits
-+ [ ] for loops should use `Iterate<T>` trait, or similar
++ [x] more featureful `use` declarations: `use mod::*`, `use mod::specific_symbol`, `use mod as alias`, etc.
++ [x] generic constraints/bounds
++ [x] constant folding, constant propagation
++ [x] traits (more like Swift protocols, maybe needs a different name)
++ [ ] integrate traits into stdlib (iterators, hash map keys, etc.)
 + [ ] error handling (`try` needs to be an operator, or we need something like a 'parameter pack' for generics to implement the `try` function)
 + [ ] `let` bindings/destructuring
-+ [x] more featureful `use` declarations: `use mod::*`, `use mod::specific_symbol`, `use mod as alias`, etc.
-+ [ ] generic constraints/bounds
-+ [ ] constant folding, constant propagation, maybe inlining
++ [ ] function inlining
 + [ ] refactor user-provided allocation interface to allow heap expansion
 
 ## Known problems
++ Either need to support or report an error on generic bounds like `X: Trait<X>`
+    + Causes a stack overflow due to infinite recursion
++ Generic bounds should not be allowed on type aliases
 + The C API has pretty much 0 type safety
     + It may be necessary to reduce the scope of the C API somewhat
 + Pointer tracking (test only) feature is broken on MSVC
-    + Might also indicate a problem somewhere in the library
+    + Might indicate a problem somewhere in the library
     + Need a machine that can run Windows for debugging

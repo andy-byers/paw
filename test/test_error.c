@@ -610,8 +610,31 @@ static void test_trait_error(void)
             "let x = S{v: 123}; call_f(x);");
 }
 
+void test_underscore(void)
+{
+    test_compiler_status(PAW_ESYNTAX, "underscore_as_generic", "fn f<_>() {}", "");
+    test_compiler_status(PAW_ESYNTAX, "underscore_as_adt_name", "struct _;", "");
+    test_compiler_status(PAW_ESYNTAX, "underscore_as_type_name", "type _ = int", "");
+    test_compiler_status(PAW_ESYNTAX, "underscore_as_return_type", "fn f() -> _ {}", "");
+    test_compiler_status(PAW_ESYNTAX, "underscore_as_function_name", "fn _() {}", "");
+    test_compiler_status(PAW_ESYNTAX, "underscore_as_method_name", "struct S {fn _() {}}", "");
+    test_compiler_status(PAW_ESYNTAX, "underscore_as_parameter_type", "fn f(v: _) {}", "");
+    test_compiler_status(PAW_ESYNTAX, "underscore_as_field_name", "struct S {_: int}", "");
+    test_compiler_status(PAW_ESYNTAX, "underscore_as_field_type", "struct S {value: _}", "");
+    test_compiler_status(PAW_ESYNTAX, "underscore_as_bound", "fn f<T: _>(t: T) {}", "");
+    test_compiler_status(PAW_ESYNTAX, "underscore_in_parameter", "fn f(v: [_]) {}", "");
+    test_compiler_status(PAW_ESYNTAX, "underscore_in_bound", "fn f<T: Trait<_>>(t: T) {}", "");
+    test_compiler_status(PAW_ESYNTAX, "underscore_in_field_type", "struct S {value: [_]}", "");
+
+    test_compiler_status(PAW_ETYPE, "underscore_bad_scalar_inference",
+            "fn f(b: bool) {let v: _ = if b {1} else {'a'};}", "");
+    test_compiler_status(PAW_ETYPE, "underscore_bad_container_inference",
+            "fn f(b: bool) {let v: [_]; if b {v = [1]} else {v = ['a']};}", "");
+}
+
 int main(void)
 {
+    test_underscore();
     test_gc_conflict();
     test_enum_error();
     test_name_error();

@@ -35,6 +35,11 @@ static struct IrType *lower_path_type(struct LowerType *L, struct HirPathType *t
     return result;
 }
 
+static struct IrType *lower_infer_type(struct LowerType *L, struct HirInferType *t)
+{
+    return pawU_new_unknown(L->C->U, t->line, NULL);
+}
+
 static struct IrType *lower_type(struct LowerType *L, struct HirType *type)
 {
     switch (HIR_KINDOF(type)) {
@@ -44,6 +49,8 @@ static struct IrType *lower_type(struct LowerType *L, struct HirType *type)
             return lower_tuple_type(L, HirGetTupleType(type));
         case kHirPathType:
             return lower_path_type(L, HirGetPathType(type));
+        case kHirInferType:
+            return lower_infer_type(L, HirGetInferType(type));
     }
 }
 

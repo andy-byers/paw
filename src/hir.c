@@ -357,6 +357,12 @@ static void AcceptTupleType(struct HirVisitor *V, struct HirTupleType *t)
     accept_type_list(V, t->elems);
 }
 
+static void AcceptInferType(struct HirVisitor *V, struct HirInferType *t)
+{
+    PAW_UNUSED(V);
+    PAW_UNUSED(t);
+}
+
 static void AcceptPathType(struct HirVisitor *V, struct HirPathType *t)
 {
     for (int i = 0; i < t->path->count; ++i) {
@@ -608,6 +614,9 @@ static void print_type(struct Printer *P, struct HirType *type)
             PRINT_CHAR(P, ')');
             break;
         }
+        case kHirInferType:
+            PRINT_CHAR(P, '_');
+            break;
         case kHirFuncPtr: {
             struct HirFuncPtr *fptr = HirGetFuncPtr(type);
             PRINT_LITERAL(P, "fn(");
@@ -765,6 +774,8 @@ static void dump_type(struct Printer *P, struct HirType *type)
             dump_type(P, t->result);
             break;
         }
+        case kHirInferType:
+             break;
         case kHirPathType: {
             struct HirPathType *t = HirGetPathType(type);
             for (int i = 0; i < t->path->count; ++i) {

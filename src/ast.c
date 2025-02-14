@@ -245,6 +245,8 @@ static void dump_type(Printer *P, struct AstType *type)
             dump_type(P, t->second);
             break;
         }
+        case kAstInferType:
+            break;
         case kAstFuncType: {
             struct AstFuncType *t = AstGetFuncType(type);
             dump_type_list(P, t->params, "params");

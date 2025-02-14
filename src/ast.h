@@ -26,7 +26,8 @@
         X(PathType) \
         X(TupleType) \
         X(ContainerType) \
-        X(FuncType)
+        X(FuncType) \
+        X(InferType)
 
 #define AST_EXPR_LIST(X) \
         X(ParenExpr) \
@@ -351,6 +352,10 @@ struct AstFuncType {
     struct AstTypeList *params;
 };
 
+struct AstInferType {
+    AST_TYPE_HEADER;
+};
+
 struct AstType {
     union {
         struct AstTypeHeader hdr;
@@ -409,6 +414,16 @@ static inline struct AstType *pawAst_new_func_type(struct Ast *ast, int line, st
         .kind = kAstFuncType,
         .params = params,
         .result = result,
+    };
+    return t;
+}
+
+static inline struct AstType *pawAst_new_infer_type(struct Ast *ast, int line)
+{
+    struct AstType *t = pawAst_new_type(ast);
+    t->InferType_ = (struct AstInferType){
+        .line = line,
+        .kind = kAstInferType,
     };
     return t;
 }

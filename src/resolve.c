@@ -821,6 +821,7 @@ static struct IrType *resolve_var_decl(struct Resolver *R, struct HirVarDecl *d)
     struct IrType *init = d->init != NULL
         ? resolve_operand(R, d->init)
         : new_unknown(R);
+
     define_local(R, index);
 
     unify(R, init, tag);
