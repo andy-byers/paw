@@ -304,7 +304,7 @@ enum LookupKind {
     LOOKUP_EITHER,
 };
 
-struct IrType *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirPath *path, enum LookupKind kind);
+struct IrType *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirPath *path, enum LookupKind kind, paw_Bool is_annotation);
 struct IrType *pawP_lookup_trait(struct Compiler *C, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirPath *path);
 
 void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const char *modname);

@@ -142,6 +142,7 @@ static struct IrType *collect_type(struct ItemCollector *X, struct HirType *type
         const char *type_name = pawHir_print_type(X->C, type);
         TYPE_ERROR(X, "unrecognized type '%s'", type_name);
     }
+    pawIr_validate_type(X->C, result);
     SET_NODE_TYPE(X->C, type, result);
     return result;
 }
@@ -158,13 +159,6 @@ static void map_adt_to_trait(struct ItemCollector *X, struct HirDecl *adt, struc
     K_LIST_PUSH(X->C, traits, trait);
 }
 
-static struct IrType *collect_path(struct ItemCollector *X, struct HirPath *path)
-{
-    struct IrType *type = pawP_lookup(X->C, X->m, X->symtab, path, LOOKUP_TYPE);
-    if (type == NULL) NAME_ERROR(X, "invalid path '%s'", pawHir_print_path(X->C, path));
-    return type;
-}
-
 static struct IrType *collect_trait_path(struct ItemCollector *X, struct HirPath *path)
 {
     struct IrType *trait = pawP_lookup_trait(X->C, X->m, X->symtab, path);
@@ -172,6 +166,7 @@ static struct IrType *collect_trait_path(struct ItemCollector *X, struct HirPath
         const char *trait_name = pawHir_print_path(X->C, path);
         NAME_ERROR(X, "unknown trait '%s'", trait_name);
     }
+    pawIr_validate_type(X->C, trait);
     return trait;
 }
 
@@ -216,14 +211,6 @@ static void register_generics(struct ItemCollector *X, struct HirDeclList *gener
         struct IrGeneric *g = IrGetGeneric(*ptype);
         g->bounds = collect_bounds(X, d->bounds);
     }
-
-//    K_LIST_FOREACH(generics, pdecl) {
-//        struct HirGenericDecl *d = HirGetGenericDecl(*pdecl);
-//        struct IrTypeList *bounds = collect_bounds(X, d->bounds);
-//        struct IrType *type = pawIr_new_generic(X->C, d->did, bounds);
-//        SET_NODE_TYPE(X->C, *pdecl, type);
-//        new_local(X, d->name, *pdecl);
-//    }
 }
 
 static struct IrTypeList *collect_generic_types(struct ItemCollector *X, struct HirDeclList *generics)
@@ -361,7 +348,6 @@ static void collect_field_types(struct ItemCollector *X, struct HirDeclList *fie
 
 static void collect_variant_decl(struct ItemCollector *X, struct HirVariantDecl *d)
 {
-    // TODO: either remove this, or the collect_field_types below, make sure to perform duplicates check somewhere
     collect_field_types(X, d->fields);
 
     // An enum variant name can be thought of as a function from the type of the
@@ -631,8 +617,6 @@ static void collect_phase_2(struct ItemCollector *X, struct ModuleList *ml, stru
         finish_module(X);
     }
 }
-
-#include"stdio.h"
 
 // Entrypoint to item collection
 void pawP_collect_items(struct Compiler *C)

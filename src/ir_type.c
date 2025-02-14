@@ -87,6 +87,42 @@ struct IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *
     return NULL;
 }
 
+void pawIr_validate_type(struct Compiler *C, struct IrType *type)
+{
+    if (IrIsGeneric(type)) {
+        struct IrGeneric *t = IrGetGeneric(type);
+        if (t->bounds != NULL) {
+            struct IrType **pt;
+            K_LIST_FOREACH(t->bounds, pt) {
+                pawIr_validate_type(C, *pt);
+            }
+        }
+    }
+
+    {
+        struct HirDeclList *generics;
+        struct IrTypeList *types = NULL;
+        if (IrIsTraitObj(type)) {
+            struct HirDecl *decl = pawHir_get_decl(C, IR_TYPE_DID(type));
+            generics = HirGetTraitDecl(decl)->generics;
+            types = IrGetTraitObj(type)->types;
+        } else if (IrIsSignature(type)) {
+            struct HirDecl *decl = pawHir_get_decl(C, IR_TYPE_DID(type));
+            generics = HirGetFuncDecl(decl)->generics;
+            types = IrGetSignature(type)->types;
+        } else if (IrIsAdt(type)) {
+            struct HirDecl *decl = pawHir_get_decl(C, IR_TYPE_DID(type));
+            generics = HirGetAdtDecl(decl)->generics;
+            types = IrGetAdt(type)->types;
+        }
+        if (types != NULL && types->count != generics->count) {
+                TYPE_ERROR(C, "%s type arguments (expected %d but found %d)",
+                        types->count < generics->count ? "not enough" : "too many",
+                        types->count, generics->count);
+        }
+    }
+}
+
 struct Printer {
     struct Compiler *C;
     Buffer *buf;

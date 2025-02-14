@@ -43,6 +43,26 @@ static struct ModuleInfo *find_import(struct QueryState *Q, String *name)
     return NULL;
 }
 
+static void validate_type_args(struct Compiler *C, struct HirDecl *decl, struct HirSegment *seg)
+{
+    struct HirDeclList *generics = NULL;
+    if (HirIsTraitDecl(decl)) {
+        generics = HirGetTraitDecl(decl)->generics;
+    } else if (HirIsFuncDecl(decl)) {
+        generics = HirGetFuncDecl(decl)->generics;
+    } else if (HirIsAdtDecl(decl)) {
+        generics = HirGetAdtDecl(decl)->generics;
+    } else if (HirIsTypeDecl(decl)) {
+        generics = HirGetTypeDecl(decl)->generics;
+    }
+    const int m = seg->types == NULL ? 0 : seg->types->count;
+    const int n = generics == NULL ? 0 : generics->count;
+    if (m != n) {
+            TYPE_ERROR(C, "%s type arguments (expected %d but found %d)",
+                    m < n ? "not enough" : "too many", n, m);
+    }
+}
+
 static struct HirSymbol *resolve_symbol(struct QueryState *Q, const String *name)
 {
     // search the global symbols
@@ -151,13 +171,6 @@ static struct IrType *find_assoc_item(struct QueryState *Q, struct HirDecl *prev
         pawIr_set_type(Q->C, next->hid, method);
         next->did = IR_TYPE_DID(method);
         return method;
-
-  // TODO
-  // } else if (HirIsAdtDecl(decl)) {
-  //    pub check for struct vs enum in here
-  // } else {
-  //     ERROR
-  // }
     } else if (!HirGetAdtDecl(decl)->is_struct) {
         struct IrType *result = find_enumerator(Q, type, next);
         if (result != NULL) return result;
@@ -170,21 +183,9 @@ static struct IrTypeList *maybe_generalize_adt(struct QueryState *Q, struct HirD
     if (types != NULL) return types;
     struct HirAdtDecl *d = HirGetAdtDecl(decl);
     if (d->generics == NULL) return types;
-//    struct IrTypeList *result = pawIr_type_list_new(Q->C);
-//    struct HirDecl **pgeneric;
-//    K_LIST_FOREACH(d->generics, pgeneric) {
-//        struct IrType *generic = GET_NODE_TYPE(Q->C, *pgeneric);
-//        struct IrTypeList *bounds = IrGetGeneric(generic)->bounds;
-//        struct IrType *var = pawU_new_unknown(Q->C->U, Q->line, bounds);
-//        K_LIST_PUSH(Q->C, result, var);
-//    }
     struct IrTypeList *generics = pawHir_collect_decl_types(Q->C, d->generics);
     struct IrTypeList *unknowns = pawU_new_unknowns(Q->C->U, generics);
     return pawP_instantiate_typelist(Q->C, generics, unknowns, generics);
-//    for (int i = 0; i < subst->count; ++i) {
-//        pawU_unify(I->U, K_LIST_GET(subst, i), K_LIST_GET(types, i));
-//    }
-//    return result;
 }
 
 static struct QueryBase find_local(struct QueryState *Q, struct HirSymtab *symtab, struct HirPath *path)
@@ -232,7 +233,8 @@ static struct IrType *resolve_alias(struct QueryState *Q, struct QueryBase *pq)
     struct HirTypeDecl *d = HirGetTypeDecl(pq->base);
     struct HirSegment *seg = pq->seg;
 
-    pawIr_set_type(Q->C, seg->hid, type); // TODO: is this correct? prob. needs to be instantiated, "seg" likely not used later so it seems to work
+    // TODO: is this correct? prob. needs to be instantiated, "seg" likely not used later so it seems to work
+    pawIr_set_type(Q->C, seg->hid, type);
     seg->did = IR_TYPE_DID(type);
     pq->base = pawHir_get_decl(Q->C, seg->did);
 
@@ -254,7 +256,7 @@ static struct IrType *resolve_alias(struct QueryState *Q, struct QueryBase *pq)
     return pawP_instantiate(Q->C, aliased, subst);
 }
 
-struct IrType *lookup(struct QueryState *Q, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirPath *path, enum LookupKind kind)
+struct IrType *lookup(struct QueryState *Q, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirPath *path, enum LookupKind kind, paw_Bool is_annotation)
 {
     struct IrType *inst;
     paw_assert(path->count > 0);
@@ -262,6 +264,10 @@ struct IrType *lookup(struct QueryState *Q, struct ModuleInfo *m, struct HirSymt
     if (q.base == NULL) {
         q = find_global(Q, m, path);
         if (q.base == NULL) return NULL;
+    }
+    if (is_annotation) {
+        // a type argument must be provided for each type parameter
+        validate_type_args(Q->C, q.base, q.seg);
     }
     struct IrTypeList *types = q.seg->types == NULL ? NULL
         : pawP_lower_type_list(Q->C, m, symtab, q.seg->types);
@@ -275,7 +281,6 @@ struct IrType *lookup(struct QueryState *Q, struct ModuleInfo *m, struct HirSymt
         case kHirFuncDecl:
             inst = pawP_instantiate(Q->C, q.base, types);
             pawIr_set_type(Q->C, q.seg->hid, inst);
-          //  q.seg->did = IR_TYPE_DID(inst);
             break;
         case kHirTypeDecl:
             inst = resolve_alias(Q, &q);
@@ -285,7 +290,6 @@ struct IrType *lookup(struct QueryState *Q, struct ModuleInfo *m, struct HirSymt
         case kHirGenericDecl:
             inst = GET_NODE_TYPE(Q->C, q.base);
             pawIr_set_type(Q->C, q.seg->hid, inst);
-          //  q.seg->did = q.base->hdr.did;
             break;
         case kHirVariantDecl:
             PAW_UNREACHABLE();
@@ -301,8 +305,6 @@ struct IrType *lookup(struct QueryState *Q, struct ModuleInfo *m, struct HirSymt
     if (Q->index < path->count) {
         TYPE_ERROR(Q, "extraneous '::%s'", K_LIST_GET(path, Q->index).name->text);
     }
-
-    // TODO: check Q->index < path->count?, also bump index in guard above
     if (kind != LOOKUP_EITHER && q.is_type != (kind == LOOKUP_TYPE)) {
         TYPE_ERROR(Q, "expected %s but found %s",
                 kind == LOOKUP_VALUE ? "value" : "type",
@@ -311,7 +313,7 @@ struct IrType *lookup(struct QueryState *Q, struct ModuleInfo *m, struct HirSymt
     return inst;
 }
 
-struct IrType *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirPath *path, enum LookupKind kind)
+struct IrType *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirPath *path, enum LookupKind kind, paw_Bool is_annotation)
 {
     struct QueryState Q = {
         .base_modno = module_number(m),
@@ -321,7 +323,7 @@ struct IrType *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct HirS
         .C = C,
     };
 
-    return lookup(&Q, m, symtab, path, kind);
+    return lookup(&Q, m, symtab, path, kind, is_annotation);
 }
 
 struct IrType *lookup_trait(struct QueryState *Q, struct ModuleInfo *m, struct HirPath *path)
@@ -337,6 +339,7 @@ struct IrType *lookup_trait(struct QueryState *Q, struct ModuleInfo *m, struct H
     if (Q->index < path->count) {
         TYPE_ERROR(Q, "extraneous '::%s'", K_LIST_GET(path, Q->index).name->text);
     }
+    validate_type_args(Q->C, q.base, q.seg);
     if (q.seg->types == NULL) return GET_NODE_TYPE(Q->C, q.base);
     struct IrTypeList *types = pawP_lower_type_list(Q->C, Q->m, Q->symtab, q.seg->types);
     return pawP_instantiate(Q->C, q.base, types);

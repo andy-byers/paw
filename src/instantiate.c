@@ -190,7 +190,6 @@ struct IrType *pawP_instantiate(struct Compiler *C, struct HirDecl *base, struct
         return instantiate_func(&I, HirGetFuncDecl(base), types);
     }
     return instantiate_trait(&I, HirGetTraitDecl(base), types);
-// TODO:     return GET_NODE_TYPE(C, base);
 }
 
 static struct IrType *generalize_adt(struct Compiler *C, struct IrAdt *t)
@@ -334,17 +333,6 @@ static struct IrType *substitute_generic(struct IrTypeFolder *F, struct IrGeneri
 void pawP_init_substitution_folder(struct IrTypeFolder *F, struct Compiler *C, struct Substitution *subst,
                                    struct IrTypeList *generics, struct IrTypeList *types)
 {
-//    // TODO: consider replacing generic with inference vars and unifying instead of doing this
-//    //       generic bounds are checked in pawU_unify
-//    //       likely could get rid of this function and subsequent call to pawIr_fold*()
-//    struct IrType **pa, **pb;
-//    K_LIST_ZIP(generics, pa, types, pb) {
-//        struct IrTypeList *bounds = IrGetGeneric(*pa)->bounds;
-//        if (!pawP_satisfies_bounds(C, *pb, bounds)) {
-//            TYPE_ERROR(C, "trait bounds not satisfied");
-//        }
-//    }
-
     *subst = (struct Substitution){
         .generics = generics,
         .types = types,

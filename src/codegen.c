@@ -38,7 +38,6 @@ struct FuncState {
     Proto *proto; // prototype being built
     String *name; // name of the function
     int first_local; // index of function in DynamicMem array
-    int nlocals; // number of locals
     int nk; // number of constants
     int nproto; // number of nested functions
     int nlines; // number of source lines
@@ -56,7 +55,6 @@ typedef struct Generator {
     struct Pool *pool;
     Map *builtin;
     paw_Env *P;
-    int nregs;
 } Generator;
 
 struct JumpTarget {
@@ -176,25 +174,10 @@ static void add_jump_source(struct Generator *G, int from_pc, MirBlock to)
     }));
 }
 
-static void remove_jump_source(struct PatchList *pl, int index)
-{
-    paw_assert(pl->count > 0);
-    for (int i = index; i < pl->count - 1; ++i) {
-        K_LIST_SET(pl, i, K_LIST_GET(pl, i + 1));
-    }
-    --pl->count;
-}
-
 static void patch_jump(struct FuncState *fs, int from, int to)
 {
     Proto *p = fs->proto;
     const int dist = to - (from + 1);
-    // TODO: figure out how to get rid of NOOP jumps, at worst could save
-    //       "jump labels" in the OP_JUMP* and make another pass to resolve
-//    if (dist == 0 && to == fs->pc) {
-//        --fs->pc;
-//        return;
-//    } else
     if (dist > JUMP_MAX) {
         ERROR(fs->G, PAW_ESYNTAX, "too many instructions to jump");
     }
@@ -206,14 +189,15 @@ static void patch_jump(struct FuncState *fs, int from, int to)
 static void patch_jumps_to_here(struct Generator *G, MirBlock bid)
 {
     struct FuncState *fs = G->fs;
-    struct PatchList *pl = fs->patch;
-    for (int i = 0; i < pl->count;) {
-        struct JumpSource js = K_LIST_GET(pl, i);
-        if (js.to.value == bid.value) {
-            patch_jump(fs, js.from_pc, fs->pc);
-            remove_jump_source(pl, i);
-        } else {
-            ++i;
+
+    int index;
+    struct JumpSource *pjump;
+    K_LIST_ENUMERATE(fs->patch, index, pjump) {
+        if (pjump->to.value == bid.value) {
+            patch_jump(fs, pjump->from_pc, fs->pc);
+            K_LIST_SET(fs->patch, index, K_LIST_LAST(fs->patch));
+            K_LIST_POP(fs->patch);
+            --index;
         }
     }
 }
@@ -248,9 +232,10 @@ static void mangle_types(struct Generator *G, Buffer *buf, const struct IrTypeLi
 {
     if (types == NULL) return;
     pawY_mangle_start_generic_args(ENV(G), buf);
-    for (int i = 0; i < types->count; ++i) {
-        mangle_type(G, buf, types->data[i]);
-    }
+
+    struct IrType **pt;
+    K_LIST_FOREACH(types, pt) mangle_type(G, buf, *pt);
+
     pawY_mangle_finish_generic_args(ENV(G), buf);
 }
 
@@ -364,12 +349,6 @@ static void pop_proto(struct Generator *G)
 {
     paw_assert(O_IS_PROTO(ENV(G)->top.p[-1].o));
     --ENV(G)->top.p;
-}
-
-static void new_local(struct FuncState *fs, String *name, struct IrType *type)
-{
-    struct Generator *G = fs->G;
-    ++fs->nlocals;
 }
 
 #define JUMP_PLACEHOLDER (-1)
@@ -515,16 +494,18 @@ static void allocate_upvalue_info(struct Generator *G, Proto *proto, struct MirU
     struct FuncState *fs = G->fs;
     proto->u = pawM_new_vec(P, upvalues->count, struct UpValueInfo);
     proto->nup = upvalues->count;
-    for (int i = 0; i < upvalues->count; ++i) {
-        struct MirUpvalueInfo info = K_LIST_GET(upvalues, i);
-        proto->u[i].is_local = info.is_local;
-        if (info.is_local) {
+
+    int index;
+    struct MirUpvalueInfo *pinfo;
+    K_LIST_ENUMERATE(upvalues, index, pinfo) {
+        proto->u[index].is_local = pinfo->is_local;
+        if (pinfo->is_local) {
             struct FuncState *parent = fs->outer;
-            const MirRegister r = K_LIST_GET(parent->mir->locals, info.index);
+            const MirRegister r = K_LIST_GET(parent->mir->locals, pinfo->index);
             struct RegisterInfo ri = K_LIST_GET(parent->regtab, r.value);
-            proto->u[i].index = ri.value;
+            proto->u[index].index = ri.value;
         } else {
-            proto->u[i].index = info.index;
+            proto->u[index].index = pinfo->index;
         }
     }
 }
@@ -553,9 +534,11 @@ static void code_children(struct Generator *G, Proto *parent, struct Mir *mir)
     const int nchildren = mir->children->count;
     parent->p = pawM_new_vec(ENV(G), nchildren, Proto *);
     parent->nproto = nchildren;
-    for (int i = 0; i < nchildren; ++i) {
-        struct Mir *child = K_LIST_GET(mir->children, i);
-        parent->p[i] = code_paw_function(G, child, i);
+
+    int index;
+    struct Mir **pchild;
+    K_LIST_ENUMERATE(mir->children, index, pchild) {
+        parent->p[index] = code_paw_function(G, *pchild, index);
     }
 }
 
@@ -628,12 +611,13 @@ static void prep_method_call(struct Generator *G, MirRegister callable, MirRegis
 
 static void code_items(struct Generator *G)
 {
-    for (int i = 0; i < G->items->count; ++i) {
-        const struct ItemSlot item = K_LIST_GET(G->items, i);
-        if (item.mir->is_native) {
-            code_c_function(G, item.mir, i);
+    int index;
+    struct ItemSlot *pitem;
+    K_LIST_ENUMERATE(G->items, index, pitem) {
+        if (pitem->mir->is_native) {
+            code_c_function(G, pitem->mir, index);
         } else {
-            code_paw_function(G, item.mir, i);
+            code_paw_function(G, pitem->mir, index);
         }
     }
 }
@@ -646,15 +630,15 @@ static void register_items(struct Generator *G)
 
     G->items = pawP_allocate_defs(G->C, mr.bodies, mr.types);
 
-    for (int i = 0; i < G->items->count; ++i) {
-        struct ItemSlot *item = &K_LIST_GET(G->items, i);
-        struct IrType *type = item->mir->type;
+    struct ItemSlot *pitem;
+    K_LIST_FOREACH(G->items, pitem) {
+        struct IrType *type = pitem->mir->type;
 
         const String *modname = prefix_for_modno(G, IR_TYPE_DID(type).modno);
         const struct Type *ty = lookup_type(G, type);
         struct FuncDef *fdef = &get_def(G, ty->sig.iid)->func;
         paw_assert(fdef->kind == DEF_FUNC);
-        item->name = fdef->mangled_name = func_name(G, modname, type);
+        pitem->name = fdef->mangled_name = func_name(G, modname, type);
     }
 
     paw_Env *P = ENV(G);
@@ -721,20 +705,6 @@ static void code_set_local(struct MirVisitor *V, struct MirSetLocal *x)
     struct FuncState *fs = G->fs;
 
     move_to_reg(fs, REG(x->value), REG(x->target));
-}
-
-static void code_alloc_local(struct MirVisitor *V, struct MirAllocLocal *x)
-{
-    struct Generator *G = V->ud;
-    struct IrType *type = GET_TYPE(G, x->output);
-    new_local(G->fs, x->name, type);
-}
-
-static void code_free_local(struct MirVisitor *V, struct MirFreeLocal *x)
-{
-    struct Generator *G = V->ud;
-    struct FuncState *fs = G->fs;
-    // TODO: NOOP for now, using MirLeaveScope to close upvalues
 }
 
 static void code_aggregate(struct MirVisitor *V, struct MirAggregate *x)
@@ -1184,11 +1154,12 @@ static paw_Bool code_sparse_switch(struct MirVisitor *V, struct MirSwitch *x)
 {
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
+
+    struct MirSwitchArm *parm;
     const MirRegister d = x->discr;
-    for (int i = 0; i < x->arms->count; ++i) {
-        const struct MirSwitchArm arm = K_LIST_GET(x->arms, i);
-        const int next_jump = code_testk(fs, d, arm.value, GET_TYPE(G, d));
-        add_edge(G, next_jump, arm.bid);
+    K_LIST_FOREACH(x->arms, parm) {
+        const int next_jump = code_testk(fs, d, parm->value, GET_TYPE(G, d));
+        add_edge(G, next_jump, parm->bid);
     }
     if (MIR_BB_EXISTS(x->otherwise)) {
         add_edge_from_here(G, x->otherwise);
@@ -1198,17 +1169,18 @@ static paw_Bool code_sparse_switch(struct MirVisitor *V, struct MirSwitch *x)
 
 static paw_Bool code_switch(struct MirVisitor *V, struct MirSwitch *x)
 {
-    const MirRegister d = x->discr;
     if (MIR_BB_EXISTS(x->otherwise)) {
         return code_sparse_switch(V, x);
     }
 
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
-    for (int i = 0; i < x->arms->count; ++i) {
-        const struct MirSwitchArm arm = K_LIST_GET(x->arms, i);
-        const int next_jump = code_switch_int(fs, d, CAST(int, arm.value.i));
-        add_edge(G, next_jump, arm.bid);
+
+    struct MirSwitchArm *parm;
+    const MirRegister d = x->discr;
+    K_LIST_FOREACH(x->arms, parm) {
+        const int next_jump = code_switch_int(fs, d, CAST(int, V_INT(parm->value)));
+        add_edge(G, next_jump, parm->bid);
     }
     return PAW_FALSE;
 }
@@ -1244,8 +1216,6 @@ static void setup_codegen(struct Generator *G)
     V->PostVisitConstant = code_constant;
     V->PostVisitSetUpvalue = code_set_upvalue;
     V->PostVisitSetLocal = code_set_local;
-    V->PostVisitAllocLocal = code_alloc_local;
-    V->PostVisitFreeLocal = code_free_local;
     V->PostVisitAggregate = code_aggregate;
     V->PostVisitContainer = code_container;
     V->PostVisitCall = code_call;

@@ -3,10 +3,9 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
 // TODO (a): always make a copy of the type being folded, fold the copy (already copying type lists)
-// TODO (b): broken b/c a pointer to the cannonicalized type is used in codegen
-// TODO (c): there may be a place where a type was folded and the code relies on the type being mutated
-// TODO (d): either way, this should be possible. it simplifies handling traits a bit
-// TODO (e): note that trait objects are already copied in FoldTraitObj below
+// TODO (b): broken b/c some code relies on types having stable pointers (method receiver map, etc.)
+// TODO (c): could be solved using custom hash and equality comparison functions so that IrType can be
+// TODO (d): used as a map key. note that trait objects are already copied in FoldTraitObj below
 
 #include "type_folder.h"
 #include "ir_type.h"

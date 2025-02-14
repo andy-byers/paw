@@ -3,7 +3,7 @@
 struct Unit;
 
 pub fn test_option() {
-    let o: Option = Option::Some(123);
+    let o: Option<int> = Option::Some(123);
 
     // Option<?0> := Option<int>
     //         ?0 := int

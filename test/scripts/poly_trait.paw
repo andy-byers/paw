@@ -45,8 +45,8 @@ fn call_call_method<Get: InstanceGet<T>, T>(g: Get) -> T {
 pub fn test_call_method_indirect() {
     let v = Value{value: 123};
 
-    assert(call_method::<int, Value>(v) == 123);
-    assert(call_call_method::<Value, int>(v) == 123);
+    assert(call_method::<int, Value<int>>(v) == 123);
+    assert(call_call_method::<Value<int>, int>(v) == 123);
 
     assert(call_method(v) == 123);
     assert(call_call_method(v) == 123);
@@ -78,8 +78,8 @@ pub fn test_call_bounded_method_indirect() {
     let v = Value{value: 123};
     let bv = BoundedValue{value: v};
 
-    assert(call_bounded_method::<int, Value>(bv) == 123);
-    assert(call_call_bounded_method::<Value, int>(bv) == 123);
+    assert(call_bounded_method::<int, Value<int>>(bv) == 123);
+    assert(call_call_bounded_method::<Value<int>, int>(bv) == 123);
 
     assert(call_bounded_method(bv) == 123);
     assert(call_call_bounded_method(bv) == 123);
@@ -103,8 +103,8 @@ pub fn test_call_wrapper_method_indirect() {
     let v = Value{value: 123};
     let w = Wrapper{value: v};
 
-    assert(call_method::<int, Wrapper<Value, int>>(w) == 123);
-    assert(call_call_method::<Wrapper<Value, int>, int>(w) == 123);
+    assert(call_method::<int, Wrapper<Value<int>, int>>(w) == 123);
+    assert(call_call_method::<Wrapper<Value<int>, int>, int>(w) == 123);
 
     assert(call_method(w) == 123);
     assert(call_call_method(w) == 123);
@@ -168,3 +168,51 @@ pub fn test_iterable() {
     assert(s == "[Some(1), Some(2), Some(3), None]");
 }
 
+pub trait PairToString<A: ToString, B: ToString> {
+    fn get(self, a: A, b: B) -> str;
+}
+
+enum Either<A: ToString, B: ToString>: PairToString<A, B> {
+    A(A),
+    B(B),
+    
+    pub fn get(self, default_a: A, default_b: B) -> str {
+        match self {
+            Self::A(a) => a.to_string() + "/" + default_b.to_string(),
+            Self::B(b) => default_a.to_string() + "/" + b.to_string(),
+        }
+    }
+}
+
+fn call_bounds_on_trait_generics<
+        T: PairToString<A, B>, 
+        A: ToString, 
+        B: ToString>(t: T, a: A, b: B) -> str 
+{
+    t.get(a, b)
+}
+
+pub fn test_bounds_on_trait_generics() {
+    let x = IntWrapper{value: 123};
+    let y = IntWrapper{value: 456};
+    let z = IntWrapper{value: 789};
+    assert(call_bounds_on_trait_generics(Either::A(x), y, z)  == "123/789");        
+    assert(call_bounds_on_trait_generics(Either::B(x), y, z)  == "456/123");        
+}
+
+//// TODO: Causes a stack overflow. Should this be supported?
+//pub trait GetSelf<X> {
+//    fn get(self) -> X;
+//}
+//
+//struct TestSelf<X>: GetSelf<X> {
+//    pub value: X,
+//
+//    pub fn get(self) -> X {
+//        self.value
+//    }    
+//}
+//
+//fn call_get_self<X: GetSelf<X>>(x: X) -> X {
+//    x.get()
+//}

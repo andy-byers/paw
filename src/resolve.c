@@ -194,12 +194,6 @@ static struct IrType *resolve_operand(struct Resolver *R, struct HirExpr *expr)
     return type;
 }
 
-static DeclId add_decl(struct Resolver *R, struct HirDecl *decl)
-{
-    return decl->hdr.did;
-//    return pawHir_register_decl(R->m->hir, decl);
-}
-
 static struct IrTypeList *resolve_exprs(struct Resolver *R, struct HirExprList *list)
 {
     if (list == NULL) return NULL;
@@ -365,7 +359,6 @@ static void allocate_decls(struct Resolver *R, struct HirDeclList *decls)
 
 static struct IrType *ResolveFieldDecl(struct Resolver *R, struct HirFieldDecl *d)
 {
-    add_decl(R, HIR_CAST_DECL(d));
     return resolve_type(R, d->tag);
 }
 
@@ -501,7 +494,7 @@ static paw_Bool is_enum_decl(struct HirDecl *decl)
 
 static struct IrType *lookup_path(struct Resolver *R, struct HirPath *path, enum LookupKind kind)
 {
-    return pawP_lookup(R->C, R->m, R->symtab, path, kind);
+    return pawP_lookup(R->C, R->m, R->symtab, path, kind, PAW_FALSE);
 }
 
 static struct IrType *resolve_path(struct Resolver *R, struct HirPath *path, enum LookupKind kind)
@@ -755,7 +748,6 @@ static struct IrType *new_map_t(struct Resolver *R, struct IrType *key_t, struct
 static void resolve_closure_param(struct Resolver *R, struct HirFieldDecl *d)
 {
     struct HirDecl *decl = HIR_CAST_DECL(d);
-    add_decl(R, decl);
     struct IrType *type = resolve_type(R, d->tag);
     new_local(R, d->name, decl);
     SET_NODE_TYPE(R->C, decl, type);
@@ -824,8 +816,6 @@ static void resolve_adt_item(struct Resolver *R, struct HirAdtDecl *d)
 static struct IrType *resolve_var_decl(struct Resolver *R, struct HirVarDecl *d)
 {
     struct HirDecl *decl = HIR_CAST_DECL(d);
-    add_decl(R, decl);
-
     struct IrType *tag = resolve_type(R, d->tag);
     const int index = declare_local(R, d->name, decl);
     struct IrType *init = d->init != NULL
@@ -839,8 +829,6 @@ static struct IrType *resolve_var_decl(struct Resolver *R, struct HirVarDecl *d)
 
 static struct IrType *resolve_field_decl(struct Resolver *R, struct HirFieldDecl *d)
 {
-    struct HirDecl *decl = HIR_CAST_DECL(d);
-    add_decl(R, decl);
     return resolve_type(R, d->tag);
 }
 
@@ -1495,9 +1483,9 @@ static struct IrType *ResolvePathPat(struct Resolver *R, struct HirPathPat *p)
 {
     struct IrType *type = lookup_path(R, p->path, LOOKUP_VALUE);
     if (type == NULL) {
+into_binding:
         // identifier is unbound, or it refers to a variable declaration
         if (p->path->count > 1) NAME_ERROR(R, "invalid path");
-bindit: // TODO: hacky solution! needed because OR patterns declare bindings in the first pattern to check for duplicates
         return convert_path_to_binding(R, p);
     }
     // convert to a more specific type of pattern, now that it is known that
@@ -1509,7 +1497,9 @@ bindit: // TODO: hacky solution! needed because OR patterns declare bindings in 
         paw_assert(!HirGetAdtDecl(decl)->is_struct);
         pat = pawHir_new_struct_pat(R->m->hir, p->line, p->path, empty);
     } else if (HirIsVarDecl(decl)) {
-        goto bindit;
+        // goto needed because OR patterns declare bindings in the first pattern
+        // to check for duplicates
+        goto into_binding;
     } else {
         const int index = HirGetVariantDecl(decl)->index;
         pat = pawHir_new_variant_pat(R->m->hir, p->line, p->path, empty, index);

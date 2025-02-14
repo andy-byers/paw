@@ -202,6 +202,7 @@ pub fn test_int_binding() {
 }
 
 pub fn test_target_is_evaluated_once() {
+    print('TODO: this test needs working upvalues!!!\n');
 /* TODO: get upvalues to work!!!
     let value = 0;
     let f = || {

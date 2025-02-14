@@ -554,35 +554,60 @@ static void test_uninit_local(void)
 
 static void test_trait_error(void)
 {
-#define TRAIT_DECL \
+#define TRAIT \
     "pub trait Trait {\n" \
     "    fn f(self);\n" \
     "}\n"
 
     test_compiler_status(PAW_ENAME, "trait_missing_method",
-            TRAIT_DECL "struct S: Trait {v: int}", "");
+            TRAIT "struct S: Trait {v: int}", "");
     test_compiler_status(PAW_ETYPE, "trait_wrong_type",
-            TRAIT_DECL "struct S: Trait {pub fn f(self) -> int {123}}", "");
+            TRAIT "struct S: Trait {pub fn f(self) -> int {123}}", "");
     test_compiler_status(PAW_ETYPE, "trait_mismatched_visibility",
-            TRAIT_DECL "struct S: Trait {fn f(self) {}}", "");
+            TRAIT "struct S: Trait {fn f(self) {}}", "");
     test_compiler_status(PAW_ETYPE, "generic_missing_bound",
-            TRAIT_DECL "struct S: Trait {pub fn f(self) {}}\n"
+            TRAIT "struct S: Trait {pub fn f(self) {}}\n"
             "pub fn call_f<T>(t: T) {t.f();}", "let x = S; call_f(x);");
     test_compiler_status(PAW_ETYPE, "trait_generic_mismatch",
-            TRAIT_DECL "struct S<T>: Trait<T> {pub fn f(self) {}}\n", "");
+            TRAIT "struct S<T>: Trait<T> {pub fn f(self) {}}\n", "");
 
-#undef TRAIT_DECL
-
-#define POLY_TRAIT_DECL \
+#define POLY_TRAIT \
     "pub trait Trait<T> {\n" \
     "    fn f(self) -> T;\n" \
     "}\n"
+#define POLY_STRUCT \
+    "struct S<T>: Trait<T> {\n" \
+    "    pub v: T,\n" \
+    "    pub fn f(self) -> T {\n" \
+    "        self.v\n" \
+    "    }\n" \
+    "}\n"
+#define POLY_FUNCTION(g, rest) \
+    "pub fn call_f<T: Trait<" g ">" rest ">(t: T) {\n" \
+    "    t.f();\n" \
+    "}"
 
+    test_compiler_status(PAW_ETYPE, "trait_not_implemented",
+            POLY_TRAIT "struct S;" POLY_FUNCTION("int",),
+            "let x = S; call_f(x);");
     test_compiler_status(PAW_ETYPE, "trait_generic_mismatch",
-            POLY_TRAIT_DECL "struct S<T>: Trait<T> {pub v: T, pub fn f(self) -> T {self.v}}\n"
-            "pub fn call_f<T: Trait<int>>(t: T) -> int {t.f()}", "let x = S{v: true}; call_f(x);");
-
-#undef POLY_TRAIT_DECL
+            POLY_TRAIT POLY_STRUCT POLY_FUNCTION("int",),
+            "let x = S{v: true}; call_f(x);");
+    test_compiler_status(PAW_ETYPE, "trait_type_as_trait",
+            "struct Type; struct S: Type;", "");
+    test_compiler_status(PAW_ENAME, "trait_missing_function_bound",
+            "struct S: Trait;", "");
+    test_compiler_status(PAW_ENAME, "trait_missing_function_bound",
+            "fn f<T: Trait>(t: T) {}", "");
+    test_compiler_status(PAW_ENAME, "trait_missing_function_bound",
+            "struct S: Trait;", "");
+    test_compiler_status(PAW_ENAME, "trait_missing_generic_in_bounds",
+            POLY_TRAIT POLY_STRUCT POLY_FUNCTION("X",), "");
+    test_compiler_status(PAW_ENAME, "trait_missing_generic_in_bounds",
+            POLY_TRAIT POLY_STRUCT POLY_FUNCTION("X",), "");
+    test_compiler_status(PAW_ETYPE, "trait_cannot_infer_generic",
+            POLY_TRAIT POLY_STRUCT "fn call_f<T: Trait>(t: T) {t.f();}",
+            "let x = S{v: 123}; call_f(x);");
 }
 
 int main(void)

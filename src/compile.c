@@ -509,7 +509,7 @@ struct BitSet *pawP_bitset_new(struct Compiler *C, int count)
 #define BITSET_INDEX(set, i, pos, bit) \
     paw_assert(0 <= (i) && (i) < (set)->count); \
     const int pos = (i) / CHUNKSZ(set); \
-    const int bit = (i) % CHUNKSZ(set);
+    const int bit = (i) % CHUNKSZ(set)
 
 void pawP_bitset_set(struct BitSet *set, int i)
 {
@@ -592,5 +592,3 @@ Map *pawP_new_map(struct Compiler *C, struct ObjectStore *store)
     paw_pop(P, 1);
     return map;
 }
-
-
