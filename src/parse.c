@@ -1622,6 +1622,17 @@ static struct AstDeclList *toplevel_items(struct Lex *lex, struct AstDeclList *l
 
 // TODO: someday, #embed should be used for this... once C23 support is better
 static const char kPrelude[] =
+//    "trait Hash {\n"
+//    "    pub fn hash(self) -> int;\n"
+//    "}\n"
+//
+//    "trait Equals {\n"
+//    "    pub fn eq(self, rhs: Self) -> bool;\n"
+//    "    pub fn ne(self, rhs: Self) -> bool {\n"
+//    "        !self.eq(rhs)\n"
+//    "    }\n"
+//    "}\n"
+
     "pub struct unit;\n"
 
     "pub struct bool {\n"

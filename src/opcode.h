@@ -208,13 +208,12 @@ _Static_assert(JUMP_MAX <= sBx_MAX, "JUMP_MAX is too large");
 _Static_assert(NOPCODES <= OP_MAX, "too many opcodes");
 
 // sanity check opcode format
-_Static_assert(OP_WIDTH + A_WIDTH + B_WIDTH + C_WIDTH== sizeof(OpCode) * 8 &&
-        OP_WIDTH + A_WIDTH + Bx_WIDTH == sizeof(OpCode) * 8 &&
-        0 /* OP_OFFSET */ + OP_WIDTH == A_OFFSET &&
-        A_OFFSET + A_WIDTH == C_OFFSET &&
-        C_OFFSET + C_WIDTH == B_OFFSET &&
-        B_OFFSET + B_WIDTH == sizeof(OpCode) * 8 &&
-        Bx_OFFSET + Bx_WIDTH == sizeof(OpCode) * 8,
-        "invalid opcode format");
+_Static_assert(OP_WIDTH + A_WIDTH + B_WIDTH + C_WIDTH == sizeof(OpCode) * 8, "invalid opcode format");
+_Static_assert(B_WIDTH + C_WIDTH == Bx_WIDTH, "invalid opcode format");
+_Static_assert(OP_OFFSET + OP_WIDTH == A_OFFSET, "invalid opcode format");
+_Static_assert(A_OFFSET + A_WIDTH == C_OFFSET, "invalid opcode format");
+_Static_assert(C_OFFSET + C_WIDTH == B_OFFSET, "invalid opcode format");
+_Static_assert(B_OFFSET + B_WIDTH == sizeof(OpCode) * 8, "invalid opcode format");
+_Static_assert(Bx_OFFSET + Bx_WIDTH == sizeof(OpCode) * 8, "invalid opcode format");
 
 #endif // PAW_OPCODE_H

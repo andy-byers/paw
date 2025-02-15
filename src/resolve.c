@@ -860,25 +860,6 @@ static struct IrType *resolve_type_decl(struct Resolver *R, struct HirTypeDecl *
     return type;
 }
 
-static int param_offset(struct Resolver *R, struct HirExpr *target)
-{
-    if (!HirIsSelector(target)) return 0; // normal function call
-    struct HirSelector *select = HirGetSelector(target);
-    struct IrType *self = GET_NODE_TYPE(R->C, select->target);
-    self = maybe_unit_variant(R, self); // operand => type
-    if (IrIsGeneric(self)) {
-        struct IrGeneric *g = IrGetGeneric(self);
-        struct IrType *type = pawIr_resolve_trait_method(R->C, g, select->name);
-        return type != NULL;
-    }
-    if (!IrIsAdt(self)) return 0;
-    struct IrType *method = pawP_find_method(R->C, self, select->name);
-    // TODO: may not be necessary, happened when "select" was resolved
-    //       probably still need to call pawP_find_method to make sure this thing is a method
-    pawIr_set_type(R->C, select->hid, method);
-    return 1;
-}
-
 static paw_Bool is_polymorphic(struct Resolver *R, struct IrType *type)
 {
     if (!IrIsSignature(type) && !IrIsAdt(type)) return PAW_FALSE;
@@ -895,15 +876,90 @@ static paw_Bool is_polymorphic(struct Resolver *R, struct IrType *type)
     return PAW_FALSE;
 }
 
+static paw_Bool is_adt_self(struct Resolver *R, struct IrType *adt)
+{
+    return R->self != NULL
+        ? pawU_is_compat(R->C->U, R->self, adt)
+        : PAW_FALSE;
+}
+
+static void ensure_accessible_field(struct Resolver *R, struct HirDecl *field, struct HirDecl *base, struct IrType *type)
+{
+    const String *name = field->hdr.name;
+    const paw_Bool is_pub = HirIsFieldDecl(field)
+        ? HirGetFieldDecl(field)->is_pub
+        : HirGetFuncDecl(field)->is_pub;
+    if (is_pub || is_adt_self(R, type)) return; // field is public or control is inside own impl block
+    NAME_ERROR(R, "'%s.%s' is not a public field", HirGetAdtDecl(base)->name->text, name->text);
+}
+
+static struct IrType *select_field(struct Resolver *R, struct IrType *target, struct HirSelector *e)
+{
+    if (IrIsTuple(target)) {
+        // tuples are indexed with "Expr" "." "int_lit"
+        struct IrTypeList *types = IrGetTuple(target)->elems;
+        if (!e->is_index) {
+            TYPE_ERROR(R, "expected index of tuple element");
+        } else if (e->index >= types->count) {
+            TYPE_ERROR(R, "element index %d out of range of %d-tuple",
+                       e->index, types->count);
+        }
+        return K_LIST_GET(types, e->index);
+    }
+    if (!IrIsAdt(target)) TYPE_ERROR(R, "type has no fields");
+    if (e->is_index) TYPE_ERROR(R, "expected field name (integer indices can "
+                                   "only be used with tuples)");
+    struct HirAdtDecl *adt = get_adt(R, target);
+    const int index = find_field(adt->fields, e->name);
+    if (index < 0) {
+        NAME_ERROR(R, "field '%s' does not exist in struct '%s'",
+                e->name->text, adt->name->text);
+    }
+    // refer to the field using its index from now on
+    struct HirDecl *field = K_LIST_GET(adt->fields, index);
+    struct IrType *result = pawP_instantiate_field(R->C, target, field);
+    e->is_index = PAW_TRUE;
+    e->index = index;
+
+    ensure_accessible_field(R, field, HIR_CAST_DECL(adt), target);
+    return result;
+}
+
+static struct IrType *resolve_call_target(struct Resolver *R, struct HirExpr *target, int *pparam_offset)
+{
+    *pparam_offset = 0;
+    if (!HirIsSelector(target)) {
+         // normal function call
+        return resolve_expr(R, target);
+    }
+    struct HirSelector *select = HirGetSelector(target);
+    struct IrType *self = resolve_operand(R, select->target);
+
+    struct IrType *method;
+    if (IrIsGeneric(self)) {
+        struct IrGeneric *g = IrGetGeneric(self);
+        method = pawIr_resolve_trait_method(R->C, g, select->name);
+    } else if (IrIsAdt(self)) {
+        method = pawP_find_method(R->C, self, select->name);
+    } else {
+        return select_field(R, self, select);
+    }
+    ensure_accessible_field(R, get_decl(R, IR_TYPE_DID(method)),
+            get_decl(R, IR_TYPE_DID(self)), method);
+    *pparam_offset = 1;
+    return method;
+}
+
 // Resolve a function call or enumerator constructor
 static struct IrType *resolve_call_expr(struct Resolver *R, struct HirCallExpr *e)
 {
-    struct IrType *target = resolve_expr(R, e->target);
+    int param_offset; // offset of first non-receiver parameter
+    struct IrType *target = resolve_call_target(R, e->target, &param_offset);
     if (!IR_IS_FUNC_TYPE(target)) TYPE_ERROR(R, "type is not callable");
+    SET_NODE_TYPE(R->C, e->target, target);
 
     const struct IrFuncPtr *fptr = IR_FPTR(target);
-    const int offset = param_offset(R, e->target);
-    const int nparams = fptr->params->count - offset;
+    const int nparams = fptr->params->count - param_offset;
     if (e->args->count < nparams) {
         SYNTAX_ERROR(R, "not enough arguments");
     } else if (e->args->count > nparams) {
@@ -929,7 +985,7 @@ static struct IrType *resolve_call_expr(struct Resolver *R, struct HirCallExpr *
     }
 
     for (int i = 0; i < nparams; ++i) {
-        struct IrType *param = K_LIST_GET(params, i + offset);
+        struct IrType *param = K_LIST_GET(params, i + param_offset);
         struct HirExpr *arg = K_LIST_GET(e->args, i);
         unify(R, param, resolve_operand(R, arg));
     }
@@ -1029,23 +1085,6 @@ static struct HirExprList *collect_field_exprs(struct Resolver *R, struct HirExp
         K_LIST_PUSH(R->C, order, *pexpr);
     }
     return order;
-}
-
-static paw_Bool is_adt_self(struct Resolver *R, struct IrType *adt)
-{
-    return R->self != NULL
-        ? pawU_is_compat(R->C->U, R->self, adt)
-        : PAW_FALSE;
-}
-
-static void ensure_accessible_field(struct Resolver *R, struct HirDecl *field, struct HirDecl *base, struct IrType *type)
-{
-    const String *name = field->hdr.name;
-    const paw_Bool is_pub = HirIsFieldDecl(field)
-        ? HirGetFieldDecl(field)->is_pub
-        : HirGetFuncDecl(field)->is_pub;
-    if (is_pub || is_adt_self(R, type)) return; // field is public or control is inside own impl block
-    NAME_ERROR(R, "'%s.%s' is not a public field", HirGetAdtDecl(base)->name->text, name->text);
 }
 
 static struct IrTypeList *subst_types(struct Resolver *R, struct IrTypeList *before, struct IrTypeList *after, struct IrTypeList *target)
@@ -1208,45 +1247,7 @@ static struct IrType *resolve_index(struct Resolver *R, struct HirIndex *e)
 static struct IrType *resolve_selector(struct Resolver *R, struct HirSelector *e)
 {
     struct IrType *target = resolve_operand(R, e->target);
-    if (IrIsTuple(target)) {
-        // tuples are indexed with "Expr" "." "int_lit"
-        struct IrTypeList *types = IrGetTuple(target)->elems;
-        if (!e->is_index) {
-            TYPE_ERROR(R, "expected index of tuple element");
-        } else if (e->index >= types->count) {
-            TYPE_ERROR(R, "element index %d out of range of %d-tuple",
-                       e->index, types->count);
-        }
-        return K_LIST_GET(types, e->index);
-    }
-    if (IrIsGeneric(target)) {
-        struct IrType *type = pawIr_resolve_trait_method(R->C, IrGetGeneric(target), e->name);
-        if (type == NULL) TYPE_ERROR(R, "generic bound missing method");
-        return type;
-    }
-    if (!IrIsAdt(target)) TYPE_ERROR(R, "type has no fields");
-    if (e->is_index) TYPE_ERROR(R, "expected field name (integer indices can "
-                                   "only be used with tuples)");
-    struct HirDecl *field;
-    struct IrType *result;
-    struct HirAdtDecl *adt = get_adt(R, target);
-    const int index = find_field(adt->fields, e->name);
-    if (index < 0) {
-        result = pawP_find_method(R->C, target, e->name);
-        if (result == NULL) {
-            NAME_ERROR(R, "field '%s' does not exist in struct '%s'",
-                    e->name->text, adt->name->text);
-        }
-        field = get_decl(R, IR_TYPE_DID(result));
-    } else {
-        // refer to the field using its index
-        field = K_LIST_GET(adt->fields, index);
-        result = pawP_instantiate_field(R->C, target, field);
-        e->is_index = PAW_TRUE;
-        e->index = index;
-    }
-    ensure_accessible_field(R, field, HIR_CAST_DECL(adt), target);
-    return result;
+    return select_field(R, target, e);
 }
 
 static void ResolveDeclStmt(struct Resolver *R, struct HirDeclStmt *s)

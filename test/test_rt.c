@@ -71,8 +71,6 @@ static void script(const char *name)
 
 int main(void)
 {
-    script("underscore");return s_counters.failures;
-
 #define RUN_SCRIPT(name) script(#name);
     TEST_SCRIPTS(RUN_SCRIPT)
 #undef RUN_SCRIPT

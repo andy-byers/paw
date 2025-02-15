@@ -327,28 +327,26 @@ static void collect_field_decl(struct ItemCollector *X, struct HirFieldDecl *d)
 
 static void collect_variant_decl(struct ItemCollector *, struct HirVariantDecl *);
 
-static void collect_field_types(struct ItemCollector *X, struct HirDeclList *fields)
+static void collect_field_types(struct ItemCollector *X, struct HirDeclList *fields, Map *names)
 {
     if (fields == NULL) return;
-    Map *map = pawP_push_map(X->C);
     for (int i = 0; i < fields->count; ++i) {
         struct HirDecl *decl = K_LIST_GET(fields, i);
         if (HirIsFieldDecl(decl)) {
             struct HirFieldDecl *d = HirGetFieldDecl(decl);
-            ensure_unique(X, map, d->name, "struct field");
+            ensure_unique(X, names, d->name, "struct field");
             collect_field_decl(X, d);
         } else {
             struct HirVariantDecl *d = HirGetVariantDecl(decl);
-            ensure_unique(X, map, d->name, "enum variant");
+            ensure_unique(X, names, d->name, "enum variant");
             collect_variant_decl(X, d);
         }
     }
-    pawP_pop_object(X->C, map);
 }
 
 static void collect_variant_decl(struct ItemCollector *X, struct HirVariantDecl *d)
 {
-    collect_field_types(X, d->fields);
+    collect_field_types(X, d->fields, NULL);
 
     // An enum variant name can be thought of as a function from the type of the
     // variant's fields to the type of the enumeration. For example, given 'enum
@@ -373,7 +371,11 @@ static void collect_func(struct ItemCollector *X, struct HirFuncDecl *d)
 {
     enter_function(X, d);
     register_generics(X, d->generics);
-    collect_field_types(X, d->params);
+
+    Map *names = pawP_push_map(X->C);
+    collect_field_types(X, d->params, names);
+    pawP_pop_object(X->C, names);
+
     register_func(X, d);
     leave_function(X);
 
@@ -432,18 +434,16 @@ static struct HirScope *register_adt_decl(struct ItemCollector *X, struct HirAdt
     return leave_block(X);
 }
 
-static void collect_methods(struct ItemCollector *X, struct HirDeclList *methods, paw_Bool force_pub)
+static void collect_methods(struct ItemCollector *X, struct HirDeclList *methods, Map *names, paw_Bool force_pub)
 {
     struct HirDecl **pdecl;
-    Map *map = pawP_push_map(X->C);
     K_LIST_FOREACH(methods, pdecl) {
         struct HirFuncDecl *d = HirGetFuncDecl(*pdecl);
-        ensure_unique(X, map, d->name, "method");
+        ensure_unique(X, names, d->name, "method");
         if (force_pub) d->is_pub = PAW_TRUE;
         d->self = X->adt;
         collect_func(X, d);
     }
-    pawP_pop_object(X->C, map);
 }
 
 static struct HirDecl *declare_self(struct ItemCollector *X, int line, struct IrType *type)
@@ -471,10 +471,13 @@ static void collect_adt_decl(struct ItemCollector *X, struct PartialAdt lazy)
     }
 
     WITH_CONTEXT(X, type,
+        Map *names = pawP_push_map(X->C);
         d->self = declare_self(X, d->line, type);
-        collect_field_types(X, d->fields);
-        collect_methods(X, d->methods, PAW_FALSE);
+        collect_field_types(X, d->fields, names);
+        collect_methods(X, d->methods, names, PAW_FALSE);
+        pawP_pop_object(X->C, names);
     );
+
     pawP_validate_adt_traits(X->C, d);
     leave_block(X);
 }
@@ -502,8 +505,10 @@ static void register_trait(struct ItemCollector *X, struct HirTraitDecl *d)
     SET_TYPE(X, d->hid, type);
 
     WITH_CONTEXT(X, type,
+        Map *names = pawP_push_map(X->C);
         d->self = declare_self(X, d->line, type);
-        collect_methods(X, d->methods, d->is_pub);
+        collect_methods(X, d->methods, names, d->is_pub);
+        pawP_pop_object(X->C, names);
     );
     leave_block(X);
 }

@@ -323,6 +323,7 @@ static void test_struct_error(void)
     test_compiler_status(PAW_ENAME, "struct_missing_field", "struct A {pub a: int, pub b: float}", "let a = A{a: 1};");
     test_compiler_status(PAW_ENAME, "struct_extra_field", "struct A {pub a: int}", "let a = A{a: 1, b: 2};");
     test_compiler_status(PAW_ENAME, "struct_duplicate_field", "struct A {pub a: int}", "let a = A{a: 1, a: 1};");
+    test_compiler_status(PAW_ENAME, "struct_field_conflicts_with_method", "struct A {pub a: int, fn a() {}}", "");
     test_compiler_status(PAW_ENAME, "struct_wrong_field", "struct A {pub a: int}", "let a = A{b: 2};");
     test_compiler_status(PAW_ETYPE, "struct_access_by_index", "struct S{pub x: int}", "let x = S{x: 1}; let y = x.0;");
     test_compiler_status(PAW_ETYPE, "struct_not_enough_types", "struct S<A, B, C>;", "let x = S::<int, float>;");
@@ -332,7 +333,7 @@ static void test_struct_error(void)
             "struct S {pub a: int, b: int, pub fn new() -> S {return S{a: 1, b: 2};}}",
             "let x = S::new(); let a = x.a; let b = x.b;");
     test_compiler_status(PAW_ENAME, "struct_literal_private_field", "struct S {pub a: int, b: int}", "let x = S{a: 1, b: 2};");
-    test_compiler_status(PAW_ENAME, "struct_call_private_method", "struct S {fn private() {}}", "let x = S; x.private();");
+    test_compiler_status(PAW_ENAME, "struct_call_private_method", "struct S {fn private(self) {}}", "let x = S; x.private();");
 }
 
 static void test_enum_error(void)

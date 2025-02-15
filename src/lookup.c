@@ -226,7 +226,7 @@ static struct IrTypeList *new_unknowns(struct Compiler *C, struct IrTypeList *ge
     return list;
 }
 
-static struct IrType *resolve_alias(struct QueryState *Q, struct QueryBase *pq)
+static struct IrType *resolve_alias(struct QueryState *Q, struct QueryBase *pq, struct IrTypeList *knowns)
 {
     paw_assert(HirIsTypeDecl(pq->base));
     struct IrType *type = GET_NODE_TYPE(Q->C, pq->base);
@@ -246,9 +246,8 @@ static struct IrType *resolve_alias(struct QueryState *Q, struct QueryBase *pq)
     struct IrTypeList *generics = pawHir_collect_decl_types(Q->C, d->generics);
     struct IrTypeList *unknowns = new_unknowns(Q->C, generics);
     struct IrTypeList *subst = pawP_instantiate_typelist(Q->C, generics, unknowns, types);
-    if (seg->types != NULL) {
+    if (knowns != NULL) {
         struct IrType **pu, **pk;
-        struct IrTypeList *knowns = pawP_lower_type_list(Q->C, Q->m, Q->symtab, seg->types);
         K_LIST_ZIP(unknowns, pu, knowns, pk) pawU_unify(Q->C->U, *pu, *pk);
     }
 
@@ -283,7 +282,7 @@ struct IrType *lookup(struct QueryState *Q, struct ModuleInfo *m, struct HirSymt
             pawIr_set_type(Q->C, q.seg->hid, inst);
             break;
         case kHirTypeDecl:
-            inst = resolve_alias(Q, &q);
+            inst = resolve_alias(Q, &q, types);
             break;
         case kHirVarDecl:
         case kHirFieldDecl:

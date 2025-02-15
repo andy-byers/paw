@@ -83,3 +83,13 @@ pub fn test_unit_struct() {
     let v = Unit::<_>;
     v.f("abc");
 }
+
+pub fn test_type_alias() {
+    type L<T> = [T];
+    let l: L<_> = [1, 2, 3];
+    assert(l[-1] == 3);
+
+    type M<K, V> = [K: V];
+    let m: M<_, _> = [1: "a", 2: "b", 3: "c"];
+    assert(m[3] == "c");
+}

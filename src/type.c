@@ -257,6 +257,8 @@ void pawY_mangle_add_arg(paw_Env *P, Buffer *buf, paw_Type code)
 {
     struct Type *type = Y_TYPE(P, code);
     switch (type->hdr.kind) {
+        case TYPE_TRAIT_OBJ:
+            PAW_UNREACHABLE();
         case TYPE_ADT:
             switch (type->adt.code) {
                 case PAW_TUNIT:
