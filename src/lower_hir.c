@@ -1341,7 +1341,7 @@ static struct IrTypeList *collect_field_types(struct LowerHir *L, struct IrType 
         struct IrTuple *tuple = IrGetTuple(type);
         return tuple->elems;
     }
-    if (IS_BASIC_TYPE(L->C, type)) return NULL;
+    if (IS_BASIC_TYPE(pawP_type2code(L->C, type))) return NULL;
     struct HirDecl *decl = pawHir_get_decl(L->C, IR_TYPE_DID(type));
     struct HirAdtDecl *d = HirGetAdtDecl(decl);
     struct IrTypeList *result = pawIr_type_list_new(L->C);

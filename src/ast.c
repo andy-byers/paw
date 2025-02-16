@@ -314,23 +314,23 @@ static void dump_expr(Printer *P, struct AstExpr *expr)
                 case kAstBasicLit:
                     DUMP_MSG(P, "lit_kind: BASIC\n");
                     switch (e->basic.code) {
-                        case PAW_TUNIT:
+                        case BUILTIN_UNIT:
                             DUMP_MSG(P, "type: ()\n");
                             break;
-                        case PAW_TBOOL:
+                        case BUILTIN_BOOL:
                             DUMP_MSG(P, "type: bool\n");
                             DUMP_FMT(P, "value: %s\n", V_TRUE(e->basic.value) ? "true" : "false");
                             break;
-                        case PAW_TINT:
+                        case BUILTIN_INT:
                             DUMP_MSG(P, "type: int\n");
                             DUMP_FMT(P, "value: %I\n", V_INT(e->basic.value));
                             break;
-                        case PAW_TFLOAT:
+                        case BUILTIN_FLOAT:
                             DUMP_MSG(P, "type: float\n");
                             DUMP_FMT(P, "value: %f\n", V_FLOAT(e->basic.value));
                             break;
                         default:
-                            paw_assert(e->basic.code == PAW_TSTR);
+                            paw_assert(e->basic.code == BUILTIN_STR);
                             DUMP_MSG(P, "type: string\n");
                             DUMP_FMT(P, "value: %s\n", V_STRING(e->basic.value)->text);
                             break;

@@ -10,6 +10,7 @@
 #include "env.h"
 #include "gc.h"
 #include "lib.h"
+#include "list.h"
 #include "map.h"
 #include "parse.h"
 #include "paw.h"
@@ -578,8 +579,8 @@ void paw_str_concat(paw_Env *P, int count)
 void paw_list_length(paw_Env *P, int index)
 {
     Value *pv = at(P, index);
-    const List *list = V_LIST(*pv);
-    const size_t len = pawV_list_length(list);
+    const Tuple *list = V_TUPLE(*pv);
+    const size_t len = pawList_length(list);
     paw_push_int(P, PAW_CAST_INT(len));
 }
 
@@ -619,10 +620,10 @@ void paw_list_concat(paw_Env *P, int count)
 paw_Bool paw_list_next(paw_Env *P, int index)
 {
     API_CHECK_PUSH(P, 1);
-    List *list = V_LIST(*at(P, index));
+    Tuple *list = V_TUPLE(*at(P, index));
     paw_Int *piter = &P->top.p[-1].i;
-    if (pawV_list_iter(list, piter)) {
-        P->top.p[0] = *pawV_list_get(P, list, *piter);
+    if (pawList_iter(list, piter)) {
+        P->top.p[0] = *pawList_get(P, list, *piter);
         API_INCR_TOP(P, 1);
         return PAW_TRUE;
     }

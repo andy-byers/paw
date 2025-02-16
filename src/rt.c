@@ -10,6 +10,7 @@
 #include "env.h"
 #include "call.h"
 #include "gc.h"
+#include "list.h"
 #include "map.h"
 #include "type.h"
 #include "value.h"
@@ -38,8 +39,8 @@
 #define VM_REG(r) (&cf->base.p[r])
 
 // Generate code for creating common builtin objects
-#define VM_LIST_INIT(r) \
-    (List *)V_SET_OBJECT(r, pawV_list_new(P));
+#define VM_LIST_INIT(r, n) \
+    (Tuple *)pawList_new(P, n, r);
 #define VM_MAP_INIT(r) \
     (Map *)V_SET_OBJECT(r, pawH_new(P));
 
@@ -220,38 +221,22 @@ void pawR_str_length(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb)
 
 void pawR_list_length(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb)
 {
-    const size_t length = pawV_list_length(V_LIST(*rb));
+    const size_t length = pawList_length(V_TUPLE(*rb));
     V_SET_INT(ra, PAW_CAST_INT(length));
 }
 
-// TODO: operation needs an extra register since lists need 2 allocations...
-//       the compiler needs to make sure this register exists
 void pawR_list_concat(paw_Env *P, CallFrame *cf, int n)
 {
+    // TODO: convert to binary operation in the compiler, maybe do the "concatenate n things on top of the stack" later
+
     StackPtr ra = P->top.p - n;
-    paw_assert(n >= 1);
-    if (n <= 1) return;
+    const Tuple *a = V_TUPLE(ra[0]);
+    const Tuple *b = V_TUPLE(ra[1]);
+    Value *rout = P->top.p++;
+    pawList_concat(P, a, b, rout);
 
-    size_t total_size = 0;
-    for (int i = 0; i < n; ++i) {
-        total_size += pawV_list_length(V_LIST(ra[i]));
-    }
-
-    StackPtr temp = P->top.p++;
-    List *r = VM_LIST_INIT(temp);
-    if (total_size > 0) {
-        pawV_list_reserve(P, r, total_size);
-
-        for (int i = 0; i < n; ++i) {
-            const List *list = V_LIST(ra[i]);
-            const size_t length = pawV_list_length(list);
-            memcpy(r->end, list->begin, length * sizeof(list->begin[0]));
-            r->end += length;
-        }
-    }
-
-    V_SET_OBJECT(ra, r);
     P->top.p = ra + 1;
+    *ra = *rout;
 }
 
 void pawR_str_get(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc)
@@ -266,16 +251,16 @@ void pawR_str_get(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const V
 
 void pawR_list_get(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc)
 {
-    List *list = V_LIST(*rb);
+    Tuple *list = V_TUPLE(*rb);
     const paw_Int idx = V_INT(*rc);
-    *ra = *pawV_list_get(P, list, idx);
+    *ra = *pawList_get(P, list, idx);
 }
 
 void pawR_list_set(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc)
 {
-    List *list = V_LIST(*ra);
+    Tuple *list = V_TUPLE(*ra);
     const paw_Int idx = V_INT(*rb);
-    Value *pval = pawV_list_get(P, list, idx);
+    Value *pval = pawList_get(P, list, idx);
     *pval = *rc;
 }
 
@@ -314,60 +299,24 @@ void pawR_str_getn(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const 
     V_SET_OBJECT(ra, slice);
 }
 
-void pawR_list_getn(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc, Value *temp)
+void pawR_list_getn(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc, Value *rout)
 {
-    const List *list = V_LIST(*rb);
+    const Tuple *t = V_TUPLE(*rb);
     const paw_Int i = V_INT(rc[0]);
     const paw_Int j = V_INT(rc[1]);
-
-    const size_t n = pawV_list_length(list);
-    const size_t zi = check_slice_bound(P, i, n, "start", "list");
-    const size_t zj = check_slice_bound(P, j, n, "end", "list");
-    List *slice = VM_LIST_INIT(temp);
-
-    const size_t nelems = zi < zj ? zj - zi : 0;
-    pawV_list_resize(P, slice, nelems);
-    memcpy(slice->begin, list->begin + zi,
-            nelems * sizeof(list->begin[0]));
-    *ra = *temp;
-}
-
-static List *list_copy(paw_Env *P, CallFrame *cf, Value *pv, const List *list)
-{
-    List *copy = pawV_list_new(P);
-    V_SET_OBJECT(pv, copy); // anchor
-    if (pawV_list_length(list) > 0) {
-        pawV_list_resize(P, copy, pawV_list_length(list));
-        memcpy(copy->begin, list->begin, sizeof(list->begin[0]) * pawV_list_length(list));
-    }
-    return copy;
+    Tuple *out = VM_LIST_INIT(rout, 0);
+    pawList_get_range(P, t, i, j, out);
+    V_SET_OBJECT(ra, out);
 }
 
 // setn([a1..an], i, j, [b1..bn]) => [a1..ai b1..bn aj..an]
-void pawR_list_setn(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc, Value *temp)
+void pawR_list_setn(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc, Value *rtemp)
 {
-    List *lhs = V_LIST(*ra);
+    Tuple *a = V_TUPLE(*ra);
     const paw_Int i = V_INT(rb[0]);
     const paw_Int j = V_INT(rb[1]);
-    const List *rhs = V_LIST(*rc);
-
-    const size_t na = pawV_list_length(lhs);
-    const size_t nb = pawV_list_length(rhs);
-    const size_t zi = check_slice_bound(P, i, na, "start", "list");
-    const size_t zj = check_slice_bound(P, j, na, "end", "list");
-
-    if (lhs == rhs) {
-        // handles "list[i:j] = list"
-        rhs = list_copy(P, cf, temp, rhs);
-    }
-
-    const size_t nelems = na - zj + zi + nb;
-    pawV_list_reserve(P, lhs, nelems);
-
-    Value *gap = lhs->begin + zi;
-    memmove(gap + nb, lhs->begin + zj, (na - zj) * sizeof(lhs->begin[0]));
-    memcpy(gap, rhs->begin, nb * sizeof(lhs->begin[0]));
-    pawV_list_resize(P, lhs, nelems);
+    const Tuple *b = V_TUPLE(*rc);
+    pawList_set_range(P, a, i, j, b, rtemp);
 }
 
 Tuple *pawR_new_tuple(paw_Env *P, CallFrame *cf, Value *ra, int b)
@@ -377,10 +326,10 @@ Tuple *pawR_new_tuple(paw_Env *P, CallFrame *cf, Value *ra, int b)
     return tuple;
 }
 
-List *pawR_new_list(paw_Env *P, CallFrame *cf, Value *ra, int b)
+Tuple *pawR_new_list(paw_Env *P, CallFrame *cf, Value *ra, int b)
 {
-    List *list = VM_LIST_INIT(ra);
-    pawV_list_resize(P, list, CAST_SIZE(b));
+    Tuple *list = VM_LIST_INIT(ra, b);
+    pawList_resize(P, list, CAST_SIZE(b));
     return list;
 }
 

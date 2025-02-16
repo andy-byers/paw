@@ -8,6 +8,7 @@
 #include "value.h"
 #include "gc.h"
 #include "lib.h"
+#include "list.h"
 #include "map.h"
 #include "mem.h"
 #include "os.h"
@@ -152,7 +153,11 @@ Tuple *pawV_new_tuple(paw_Env *P, int nelems)
 
 void pawV_free_tuple(paw_Env *P, Tuple *t)
 {
-    pawM_free_flex(P, t, t->nelems, sizeof(t->elems[0]));
+    if (t->gc_flag == GC_LIST_FLAG) {
+        pawList_free(P, t);
+    } else {
+        pawM_free_flex(P, t, t->nelems, sizeof(t->elems[0]));
+    }
 }
 
 Closure *pawV_new_closure(paw_Env *P, int nup)
@@ -212,23 +217,6 @@ void pawV_free_foreign(paw_Env *P, Foreign *f)
     }
     pawM_free_vec(P, f->data, f->size);
     pawM_free_flex(P, f, CAST_SIZE(f->nfields), sizeof(f->fields[0]));
-}
-
-// from https://gist.github.com/badboy/6267743
-static uint32_t hash_u64(uint64_t u)
-{
-    u = ~u + (u << 18);
-    u = u ^ (u >> 31);
-    u = u * 21;
-    u = u ^ (u >> 11);
-    u = u + (u << 6);
-    u = u ^ (u >> 22);
-    return (uint32_t)u;
-}
-
-uint32_t pawV_hash(Value v)
-{
-    return hash_u64(v.u);
 }
 
 static int char2base(char c)

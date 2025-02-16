@@ -477,7 +477,7 @@ struct AstLiteralExpr {
     union {
         struct AstBasicLit {
             Value value;
-            paw_Type code;
+            enum BuiltinKind code;
         } basic;
 
         struct AstCompositeLit {
@@ -487,7 +487,7 @@ struct AstLiteralExpr {
 
         struct AstContainerLit {
             struct AstExprList *items;
-            paw_Type code;
+            enum BuiltinKind code;
         } cont;
 
         struct AstTupleLit {
@@ -569,7 +569,7 @@ struct AstIndex {
 
 struct AstConversionExpr {
     AST_EXPR_HEADER;
-    paw_Type to;
+    enum BuiltinKind to;
     struct AstExpr *arg;
 };
 
@@ -667,7 +667,7 @@ static inline struct AstExpr *pawAst_new_paren_expr(struct Ast *ast, int line, s
     return e;
 }
 
-static inline struct AstExpr *pawAst_new_basic_lit(struct Ast *ast, int line, Value value, paw_Type code)
+static inline struct AstExpr *pawAst_new_basic_lit(struct Ast *ast, int line, Value value, enum BuiltinKind code)
 {
     struct AstExpr *e = pawAst_new_expr(ast);
     e->LiteralExpr_ = (struct AstLiteralExpr){
@@ -693,7 +693,7 @@ static inline struct AstExpr *pawAst_new_composite_lit(struct Ast *ast, int line
     return e;
 }
 
-static inline struct AstExpr *pawAst_new_container_lit(struct Ast *ast, int line, struct AstExprList *items, paw_Type code)
+static inline struct AstExpr *pawAst_new_container_lit(struct Ast *ast, int line, struct AstExprList *items, enum BuiltinKind code)
 {
     struct AstExpr *e = pawAst_new_expr(ast);
     e->LiteralExpr_ = (struct AstLiteralExpr){
@@ -791,7 +791,7 @@ static inline struct AstExpr *pawAst_new_closure_expr(struct Ast *ast, int line,
     return e;
 }
 
-static inline struct AstExpr *pawAst_new_conversion_expr(struct Ast *ast, int line, struct AstExpr *arg, paw_Type to)
+static inline struct AstExpr *pawAst_new_conversion_expr(struct Ast *ast, int line, struct AstExpr *arg, enum BuiltinKind to)
 {
     struct AstExpr *e = pawAst_new_expr(ast);
     e->ConversionExpr_ = (struct AstConversionExpr){

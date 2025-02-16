@@ -22,7 +22,8 @@
 #define PAW_REGISTRY_INDEX (-PAW_STACK_MAX - 1000)
 
 typedef int paw_Type;
-typedef int64_t paw_Int;
+typedef long long paw_Int;
+typedef unsigned long long paw_Uint;
 typedef double paw_Float;
 typedef _Bool paw_Bool;
 

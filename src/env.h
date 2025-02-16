@@ -49,6 +49,8 @@ enum {
     NCSTR,
 };
 
+typedef struct MapPolicy MapPolicy;
+
 typedef struct paw_Env {
     StringTable strings;
 
@@ -95,6 +97,12 @@ typedef struct paw_Env {
     struct Heap *H;
     paw_Alloc alloc;
     void *ud;
+
+    struct MapPolicyList {
+        MapPolicy **data;
+        int count;
+        int alloc;
+    } map_policies;
 
     Object *gc_all;
     Object *gc_gray;

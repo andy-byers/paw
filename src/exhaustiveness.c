@@ -282,7 +282,7 @@ static void print_pat(struct Compiler*C,struct HirPat *pat)
         case kHirLiteralPat:
             if (HirIsLiteralExpr(pat->lit.expr)) {
                 struct HirLiteralExpr *e = HirGetLiteralExpr(pat->lit.expr);
-                if (e->lit_kind == kHirLitBasic && e->basic.t == PAW_TINT) {
+                if (e->lit_kind == kHirLitBasic && e->basic.t == BUILTIN_INT) {
                     printf("%lld", (long long)e->basic.value.i);
                     break;
                 }
@@ -470,24 +470,24 @@ static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct R
         struct Constructor cons = {0};
 
         switch (e->basic.t) {
-            case PAW_TUNIT:
+            case BUILTIN_UNIT:
                 cons.kind = CONS_TUPLE;
                 cons.tuple.elems = pawIr_type_list_new(U->C);
                 break;
-            case PAW_TBOOL:
+            case BUILTIN_BOOL:
                 cons.kind = CONS_BOOL;
                 cons.value = e->basic.value;
                 break;
-            case PAW_TINT:
+            case BUILTIN_INT:
                 cons.kind = CONS_INT;
                 cons.value = e->basic.value;
                 break;
-            case PAW_TFLOAT:
+            case BUILTIN_FLOAT:
                 cons.kind = CONS_FLOAT;
                 cons.value = e->basic.value;
                 break;
             default:
-                paw_assert(e->basic.t == PAW_TSTR);
+                paw_assert(e->basic.t == BUILTIN_STR);
                 cons.kind = CONS_STR;
                 cons.value = e->basic.value;
                 break;
@@ -612,7 +612,8 @@ static enum BranchMode branch_mode(struct Usefulness *U, struct MatchVar var)
         paw_assert(IrIsTuple(var.type));
         return BRANCH_TUPLE;
     }
-    if (IS_BASIC_TYPE(U->C, var.type)) return BRANCH_LITERAL;
+    enum BuiltinKind code = pawP_type2code(U->C, var.type);
+    if (IS_BASIC_TYPE(code)) return BRANCH_LITERAL;
     struct HirDecl *decl = pawHir_get_decl(U->C, IR_TYPE_DID(var.type));
     if (!HirGetAdtDecl(decl)->is_struct) return BRANCH_VARIANT;
     return BRANCH_STRUCT;

@@ -8,6 +8,18 @@
 #include "util.h"
 #include "value.h"
 
+typedef paw_Bool (*MapEquals)(void *ctx, Value lhs, Value rhs);
+typedef paw_Uint (*MapHash)(void *ctx, Value v);
+
+#define MAP_EQUALS(m, a, b) (m)->policy->equals((m)->policy->ctx, a, b)
+#define MAP_HASH(m, k) (m)->policy->hash((m)->policy->ctx, k)
+
+typedef struct MapPolicy {
+    MapEquals equals;
+    MapHash hash;
+    void *ctx;
+} MapPolicy;
+
 typedef struct MapCursor {
     Map *map;
     size_t index;
@@ -54,7 +66,7 @@ static void h_cursor_next(MapCursor *mc)
 
 static inline MapCursor h_cursor_init(Map *m, Value key)
 {
-    return (MapCursor){m, pawV_hash(key) & (m->capacity - 1)};
+    return (MapCursor){m, MAP_HASH(m, key) & (m->capacity - 1)};
 }
 
 static inline paw_Bool h_cursor_lookup(Map *m, Value key, MapCursor *pmc)
@@ -64,7 +76,7 @@ static inline paw_Bool h_cursor_lookup(Map *m, Value key, MapCursor *pmc)
             i < m->capacity && h_get_state(pmc) != MAP_ITEM_VACANT;
             ++i, h_cursor_next(pmc)) {
         if (h_get_state(pmc) == MAP_ITEM_OCCUPIED
-                && h_cursor_key(pmc)->u == key.u) {
+                && MAP_EQUALS(m, *h_cursor_key(pmc), key)) {
             return PAW_TRUE;
         }
     }
@@ -72,6 +84,7 @@ static inline paw_Bool h_cursor_lookup(Map *m, Value key, MapCursor *pmc)
 }
 
 Map *pawH_new(paw_Env *P);
+Map *pawH_new_with_policy(paw_Env *P, const MapPolicy *policy);
 void pawH_free(paw_Env *P, Map *m);
 void pawH_extend(paw_Env *P, Map *dst, Map *src);
 void pawH_reserve(paw_Env *P, Map *dst, size_t n);

@@ -35,6 +35,7 @@
 #include "code.h"
 #include "debug.h"
 #include "env.h"
+#include "map.h"
 #include "mem.h"
 #include "paw.h"
 #include "trait.h"
@@ -90,6 +91,7 @@ struct MirBodyList;
 struct MirBlockList;
 struct VariableList;
 
+void *pawP_pool_alloc(paw_Env *P, struct Pool *pool, size_t size);
 
 String *pawP_scan_nstring(paw_Env *P, Map *st, const char *s, size_t n);
 static inline String *pawP_scan_string(paw_Env *P, Map *st, const char *s)
@@ -141,8 +143,8 @@ enum BuiltinKind {
     NBUILTINS,
 };
 
-// NOTE: cast causes -1 to wrap so that it is larger than BUILTIN_STR
-#define IS_BASIC_TYPE(C, type) (CAST(unsigned, pawP_type2code(C, type)) <= BUILTIN_STR)
+#define IS_BASIC_TYPE(code) ((code) <= BUILTIN_STR)
+#define IS_BUILTIN_TYPE(code) ((code) < NBUILTINS)
 
 struct Builtin {
     String *name;
@@ -164,6 +166,8 @@ struct Compiler {
     struct Ast *prelude;
     struct Unifier *U;
     String *modname;
+
+    MapPolicy type_policy;
 
     // '.traits' maps each ADT to a list of implemented traits. Includes ADTs
     // from all modules being compiled.
@@ -188,12 +192,6 @@ struct Compiler {
     int def_count;
     int line;
 };
-
-// TODO: should be a map, but need to have a custom hash and eq. comparison function
-//       store as function pointers in the map?
-//       should map IrType to IrTypeList to represent all traits implemented by a
-//       given type
-DEFINE_LIST(struct Compiler, pawP_trait_list_, TODO_TraitList, struct TODO_Implements)
 
 paw_Bool pawP_is_assoc_fn(struct Compiler *C, struct IrSignature *type);
 struct IrTypeList *pawP_get_binder(struct Compiler *C, DeclId did);
@@ -355,7 +353,7 @@ static inline void pawP_pool_uninit(struct Compiler *C, struct Pool *pool)
     pawK_pool_uninit(ENV(C), pool);
 }
 
-paw_Type pawP_type2code(struct Compiler *C, struct IrType *type);
+enum BuiltinKind pawP_type2code(struct Compiler *C, struct IrType *type);
 
 struct ItemSlot {
     struct Type *rtti;
@@ -387,7 +385,6 @@ Map *pawP_new_map(struct Compiler *C, struct ObjectStore *store);
 #define MAP_CONTAINS(map, key) (MAP_GET(map, key) != NULL)
 
 Map *pawP_push_map(struct Compiler *C);
-List *pawP_push_list(struct Compiler *C);
 
 static inline void pawP_pop_object(struct Compiler *C, void *ptr)
 {

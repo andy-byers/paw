@@ -36,17 +36,17 @@ struct ItemCollector {
     int line;
 };
 
-struct PartialAdt {
-    struct HirAdtDecl *d;
+struct PartialDecl {
+    struct HirDecl *decl;
     struct HirScope *scope;
 };
 
 struct PartialModule {
-    struct PartialAdtList *pal;
+    struct PartialDeclList *pal;
     struct ModuleInfo *m;
 };
 
-DEFINE_LIST(struct ItemCollector, pa_list_, PartialAdtList, struct PartialAdt)
+DEFINE_LIST(struct ItemCollector, pa_list_, PartialDeclList, struct PartialDecl)
 DEFINE_LIST(struct ItemCollector, pm_list_, PartialModList, struct PartialModule)
 
 static struct HirScope *enclosing_scope(struct HirSymtab *st)
@@ -455,19 +455,50 @@ static struct HirDecl *declare_self(struct ItemCollector *X, int line, struct Ir
     return self;
 }
 
+static struct HirDecl *copy_and_collect_method(struct ItemCollector *X, struct HirFuncDecl *d)
+{
+    struct HirDecl *copy = pawHir_new_func_decl(X->m->hir, d->line, d->name, X->adt, d->generics,
+            d->params, d->result, d->body, d->fn_kind, d->is_pub, d->is_assoc);
+    collect_func(X, HirGetFuncDecl(copy));
+    return copy;
+}
+
+static void collect_default_methods(struct ItemCollector *X, Map *names, struct HirTypeList *traits, struct HirDeclList *methods)
+{
+    struct HirType **ptype;
+    K_LIST_FOREACH(traits, ptype) {
+        struct IrType *type = GET_NODE_TYPE(X->C, *ptype);
+        struct HirTraitDecl *trait = HirGetTraitDecl(
+                pawHir_get_decl(X->C, IR_TYPE_DID(type)));
+        struct HirDecl **pmethod;
+        K_LIST_FOREACH(trait->methods, pmethod) {
+            struct HirFuncDecl *method = HirGetFuncDecl(*pmethod);
+            if (method->body == NULL) continue; // not defaulted
+            const Value *pval = MAP_GET(names, P2V(method->name));
+            if (pval == NULL) { // implementation not provided
+                struct HirDecl *copy = copy_and_collect_method(X, method);
+                K_LIST_PUSH(X->C, methods, copy);
+            }
+        }
+    }
+}
+
 // TODO: methods + fields should probably be unique, pass map to collect_*() from this function
 //       ambiguity between method call and calling function pointer field, both are in value namespace
-static void collect_adt_decl(struct ItemCollector *X, struct PartialAdt lazy)
+static void collect_adt_decl(struct ItemCollector *X, struct PartialDecl lazy)
 {
-    struct HirAdtDecl *d = lazy.d;
+    struct HirAdtDecl *d = HirGetAdtDecl(lazy.decl);
     enter_block(X, lazy.scope);
     struct IrType *type = GET_TYPE(X, d->hid);
+// TODO: was previously set by impl block decls, why isn't this necessary for ADTs???
+//    X->impl_binder = collect_generic_types(X, d->generics);
 
     struct HirType **ptype;
     K_LIST_FOREACH(d->traits, ptype) {
         struct HirPathType *path = HirGetPathType(*ptype);
         struct IrType *trait = collect_trait_path(X, path->path);
         pawP_add_trait_impl(X->C, type, trait);
+        SET_NODE_TYPE(X->C, *ptype, trait);
     }
 
     WITH_CONTEXT(X, type,
@@ -475,6 +506,7 @@ static void collect_adt_decl(struct ItemCollector *X, struct PartialAdt lazy)
         d->self = declare_self(X, d->line, type);
         collect_field_types(X, d->fields, names);
         collect_methods(X, d->methods, names, PAW_FALSE);
+        collect_default_methods(X, names, d->traits, d->methods);
         pawP_pop_object(X->C, names);
     );
 
@@ -495,7 +527,7 @@ static void finish_module(struct ItemCollector *X)
     X->m = NULL;
 }
 
-static void register_trait(struct ItemCollector *X, struct HirTraitDecl *d)
+static struct HirScope *register_trait_decl(struct ItemCollector *X, struct HirTraitDecl *d)
 {
     enter_block(X, NULL);
     register_generics(X, d->generics);
@@ -503,6 +535,15 @@ static void register_trait(struct ItemCollector *X, struct HirTraitDecl *d)
     struct IrType *type = pawIr_new_trait_obj(X->C, d->did, X->impl_binder);
     new_global(X, d->name, HIR_CAST_DECL(d));
     SET_TYPE(X, d->hid, type);
+    return leave_block(X);
+}
+
+static void collect_trait_decl(struct ItemCollector *X, struct PartialDecl lazy)
+{
+    enter_block(X, lazy.scope);
+    struct HirTraitDecl *d = HirGetTraitDecl(lazy.decl);
+    X->impl_binder = collect_generic_types(X, d->generics);
+    struct IrType *type = GET_NODE_TYPE(X->C, lazy.decl);
 
     WITH_CONTEXT(X, type,
         Map *names = pawP_push_map(X->C);
@@ -513,28 +554,35 @@ static void register_trait(struct ItemCollector *X, struct HirTraitDecl *d)
     leave_block(X);
 }
 
-static struct PartialAdtList *register_adts(struct ItemCollector *X, struct HirDeclList *items)
+static struct PartialDeclList *register_adts(struct ItemCollector *X, struct HirDeclList *items)
 {
-    struct PartialAdtList *list = pa_list_new(X);
+    struct PartialDeclList *list = pa_list_new(X);
     for (int i = 0; i < items->count; ++i) {
         struct HirDecl *item = K_LIST_GET(items, i);
         if (HirIsTraitDecl(item)) {
-            register_trait(X, HirGetTraitDecl(item));
+            struct HirTraitDecl *d = HirGetTraitDecl(item);
+            struct HirScope *scope = register_trait_decl(X, d);
+            struct PartialDecl pd = {.decl = item, .scope = scope};
+            K_LIST_PUSH(X, list, pd);
         } else if (HirIsAdtDecl(item)) {
             struct HirAdtDecl *d = HirGetAdtDecl(item);
             struct HirScope *scope = register_adt_decl(X, d);
-            struct PartialAdt pa = {.d = d, .scope = scope};
-            K_LIST_PUSH(X, list, pa);
+            struct PartialDecl pd = {.decl = item, .scope = scope};
+            K_LIST_PUSH(X, list, pd);
         }
     }
     return list;
 }
 
-static void collect_adts(struct ItemCollector *X, struct PartialAdtList *list)
+static void collect_adts(struct ItemCollector *X, struct PartialDeclList *list)
 {
     for (int i = 0; i < list->count; ++i) {
-        struct PartialAdt pa = K_LIST_GET(list, i);
-        collect_adt_decl(X, pa);
+        struct PartialDecl pd = K_LIST_GET(list, i);
+        if (HirIsAdtDecl(pd.decl)) {
+            collect_adt_decl(X, pd);
+        } else {
+            collect_trait_decl(X, pd);
+        }
     }
 }
 
@@ -546,7 +594,7 @@ static struct PartialModList *collect_phase_1(struct ItemCollector *X, struct Mo
     for (int i = 0; i < ml->count; ++i) {
         struct ModuleInfo *m = use_module(X, K_LIST_GET(ml, i));
         paw_assert(m->globals->count == 0);
-        struct PartialAdtList *pal = register_adts(X, m->hir->items);
+        struct PartialDeclList *pal = register_adts(X, m->hir->items);
         struct PartialModule pm = {.m = m, .pal = pal};
         K_LIST_PUSH(X, pml, pm);
         m->globals = X->m->globals;

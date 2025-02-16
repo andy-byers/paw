@@ -134,13 +134,8 @@ static void ensure_trait_implemented(struct Compiler *C, struct HirTraitDecl *tr
         struct HirFuncDecl *trait_method = HirGetFuncDecl(*pdecl);
         const Value *pval = MAP_GET(methods, P2V(trait_method->name));
         if (pval == NULL) {
-            if (trait_method->body != NULL) {
-                // TODO: handle defaulted trait methods
-                SYNTAX_ERROR(C, "TODO: handle default trait methods");
-            } else {
-                NAME_ERROR(C, "trait method '%s' not implemented",
-                        trait_method->name->text);
-            }
+            NAME_ERROR(C, "trait method '%s' not implemented",
+                    trait_method->name->text);
         }
         struct HirFuncDecl *adt_method = HirGetFuncDecl(pval->p);
         ensure_methods_match(C, adt, adt_method, trait, trait_decl, trait_method);
