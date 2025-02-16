@@ -293,7 +293,7 @@ static struct AstExpr *new_basic_lit(struct Lex *lex, Value value, paw_Type code
 
 static struct AstExpr *unit_lit(struct Lex *lex)
 {
-    return new_basic_lit(lex, I2V(0), PAW_TUNIT);
+    return new_basic_lit(lex, I2V(0), BUILTIN_UNIT);
 }
 
 static struct AstType *unit_type(struct Lex *lex)
@@ -306,7 +306,7 @@ static struct AstExpr *emit_bool(struct Lex *lex, paw_Bool b)
 {
     Value v;
     V_SET_BOOL(&v, b);
-    return new_basic_lit(lex, v, PAW_TBOOL);
+    return new_basic_lit(lex, v, BUILTIN_BOOL);
 }
 
 static struct AstType *parse_type(struct Lex *lex, paw_Bool is_strict);
@@ -502,14 +502,14 @@ static struct AstExpr *literal_expr(struct Lex *lex)
             expr = emit_bool(lex, PAW_FALSE);
             break;
         case TK_INTEGER:
-            expr = new_basic_lit(lex, lex->t.value, PAW_TINT);
+            expr = new_basic_lit(lex, lex->t.value, BUILTIN_INT);
             break;
         case TK_FLOAT:
-            expr = new_basic_lit(lex, lex->t.value, PAW_TFLOAT);
+            expr = new_basic_lit(lex, lex->t.value, BUILTIN_FLOAT);
             break;
         case TK_STRING: {
             const Value v = lex->t.value;
-            expr = new_basic_lit(lex, v, PAW_TSTR);
+            expr = new_basic_lit(lex, v, BUILTIN_STR);
             break;
         }
         default:
@@ -519,12 +519,12 @@ static struct AstExpr *literal_expr(struct Lex *lex)
 
     if (negative) {
         struct AstLiteralExpr *e = AstGetLiteralExpr(expr);
-        if (e->basic.code == PAW_TINT) {
+        if (e->basic.code == BUILTIN_INT) {
             if (e->basic.value.i == PAW_INT_MIN) {
                 pawX_error(lex, "signed integer overflow ('-' applied to %I)", PAW_INT_MIN);
             }
             e->basic.value.i = -e->basic.value.i;
-        } else if (e->basic.code == PAW_TFLOAT) {
+        } else if (e->basic.code == BUILTIN_FLOAT) {
             e->basic.value.f = -e->basic.value.f;
         } else {
             pawX_error(lex, "operator '-' applied to non-numeric value");
@@ -1192,14 +1192,14 @@ static struct AstExpr *simple_expr(struct Lex *lex)
             expr = emit_bool(lex, PAW_FALSE);
             break;
         case TK_INTEGER:
-            expr = new_basic_lit(lex, lex->t.value, PAW_TINT);
+            expr = new_basic_lit(lex, lex->t.value, BUILTIN_INT);
             break;
         case TK_FLOAT:
-            expr = new_basic_lit(lex, lex->t.value, PAW_TFLOAT);
+            expr = new_basic_lit(lex, lex->t.value, BUILTIN_FLOAT);
             break;
         case TK_STRING: {
             const Value v = lex->t.value;
-            expr = new_basic_lit(lex, v, PAW_TSTR);
+            expr = new_basic_lit(lex, v, BUILTIN_STR);
             break;
         }
         case TK_PIPE2:
@@ -1226,11 +1226,11 @@ static struct AstExpr *conversion_expr(struct Lex *lex, struct AstExpr *lhs)
     enum BuiltinKind to;
     struct AstSegment seg = K_LIST_GET(path, 0);
     if (equals_cstr(lex, seg.name, CSTR_BOOL)) {
-        to = PAW_TBOOL;
+        to = BUILTIN_BOOL;
     } else if (equals_cstr(lex, seg.name, CSTR_INT)) {
-        to = PAW_TINT;
+        to = BUILTIN_INT;
     } else if (equals_cstr(lex, seg.name, CSTR_FLOAT)) {
-        to = PAW_TFLOAT;
+        to = BUILTIN_FLOAT;
     } else {
         pawX_error(lex, "expected basic type");
     }
@@ -1622,17 +1622,6 @@ static struct AstDeclList *toplevel_items(struct Lex *lex, struct AstDeclList *l
 
 // TODO: someday, #embed should be used for this... once C23 support is better
 static const char kPrelude[] =
-//    "trait Hash {\n"
-//    "    pub fn hash(self) -> int;\n"
-//    "}\n"
-//
-//    "trait Equals {\n"
-//    "    pub fn eq(self, rhs: Self) -> bool;\n"
-//    "    pub fn ne(self, rhs: Self) -> bool {\n"
-//    "        !self.eq(rhs)\n"
-//    "    }\n"
-//    "}\n"
-
     "pub struct unit;\n"
 
     "pub struct bool {\n"

@@ -1068,6 +1068,7 @@ static void code_binop(struct MirVisitor *V, struct MirBinaryOp *x)
         const Op op = code == BUILTIN_STR ? OP_SCONCAT : OP_LCONCAT;
         const int first = temporary_reg(fs, 0);
         const int second = temporary_reg(fs, 1);
+        if (code == BUILTIN_LIST) temporary_reg(fs, 2);
         move_to_reg(fs, REG(x->lhs), first);
         move_to_reg(fs, REG(x->rhs), second);
         code_AB(fs, op, first, 2);

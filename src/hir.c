@@ -622,8 +622,7 @@ static void print_type(struct Printer *P, struct HirType *type)
             PRINT_LITERAL(P, "fn(");
             print_type_list(P, fptr->params);
             PRINT_CHAR(P, ')');
-            if (!HirIsPathType(fptr->result)
-                    || HIR_PATH_RESULT(HirGetPathType(fptr->result)->path).value != PAW_TUNIT) {
+            if (pawP_type2code(P->C, GET_NODE_TYPE(P->C, fptr->result)) != BUILTIN_UNIT) {
                 PRINT_LITERAL(P, " -> ");
                 print_type(P, fptr->result);
             }
@@ -968,23 +967,23 @@ static void dump_expr(struct Printer *P, struct HirExpr *expr)
                 case kHirLitBasic:
                     DUMP_MSG(P, "lit_kind: BASIC\n");
                     switch (e->basic.t) {
-                        case PAW_TUNIT:
+                        case BUILTIN_UNIT:
                             break;
-                        case PAW_TBOOL:
+                        case BUILTIN_BOOL:
                             DUMP_FMT(P, "value: %s\n",
                                      V_TRUE(e->basic.value) ? "true"
                                                                     : "false");
                             break;
-                        case PAW_TINT:
+                        case BUILTIN_INT:
                             DUMP_FMT(P, "value: %I\n",
                                      V_INT(e->basic.value));
                             break;
-                        case PAW_TFLOAT:
+                        case BUILTIN_FLOAT:
                             DUMP_FMT(P, "value: %f\n",
                                      V_FLOAT(e->basic.value));
                             break;
                         default:
-                            paw_assert(e->basic.t == PAW_TSTR);
+                            paw_assert(e->basic.t == BUILTIN_STR);
                             DUMP_FMT(P, "value: %s\n",
                                      V_STRING(e->basic.value)->text);
                             break;

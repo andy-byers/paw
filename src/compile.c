@@ -61,10 +61,10 @@ void pawP_init(paw_Env *P)
     // note that keywords are already fixed
     P->string_cache[CSTR_TRUE] = pawS_new_str(P, "true");
     P->string_cache[CSTR_FALSE] = pawS_new_str(P, "false");
-    P->string_cache[CSTR_BOOL] = basic_type_name(P, "bool", PAW_TBOOL);
-    P->string_cache[CSTR_INT] = basic_type_name(P, "int", PAW_TINT);
-    P->string_cache[CSTR_FLOAT] = basic_type_name(P, "float", PAW_TFLOAT);
-    P->string_cache[CSTR_STR] = basic_type_name(P, "str", PAW_TSTR);
+    P->string_cache[CSTR_BOOL] = basic_type_name(P, "bool", BUILTIN_BOOL);
+    P->string_cache[CSTR_INT] = basic_type_name(P, "int", BUILTIN_INT);
+    P->string_cache[CSTR_FLOAT] = basic_type_name(P, "float", BUILTIN_FLOAT);
+    P->string_cache[CSTR_STR] = basic_type_name(P, "str", BUILTIN_STR);
     P->string_cache[CSTR_LIST] = pawS_new_fixed(P, "List");
     P->string_cache[CSTR_MAP] = pawS_new_fixed(P, "Map");
     P->string_cache[CSTR_OPTION] = pawS_new_fixed(P, "Option");
@@ -77,27 +77,27 @@ void pawP_init(paw_Env *P)
     P->string_cache[CSTR_KSEARCHERS] = pawS_new_fixed(P, "paw.searchers");
 }
 
-paw_Type pawP_type2code(struct Compiler *C, struct IrType *type)
+enum BuiltinKind pawP_type2code(struct Compiler *C, struct IrType *type)
 {
     if (IrIsAdt(type)) {
         const DeclId base = IR_TYPE_DID(type);
         if (base.value == C->builtins[BUILTIN_UNIT].did.value) {
-            return PAW_TUNIT;
+            return BUILTIN_UNIT;
         } else if (base.value == C->builtins[BUILTIN_BOOL].did.value) {
-            return PAW_TBOOL;
+            return BUILTIN_BOOL;
         } else if (base.value == C->builtins[BUILTIN_INT].did.value) {
-            return PAW_TINT;
+            return BUILTIN_INT;
         } else if (base.value == C->builtins[BUILTIN_FLOAT].did.value) {
-            return PAW_TFLOAT;
+            return BUILTIN_FLOAT;
         } else if (base.value == C->builtins[BUILTIN_STR].did.value) {
-            return PAW_TSTR;
+            return BUILTIN_STR;
         } else if (base.value == C->builtins[BUILTIN_LIST].did.value) {
             return BUILTIN_LIST;
         } else if (base.value == C->builtins[BUILTIN_MAP].did.value) {
             return BUILTIN_MAP;
         }
     }
-    return -1;
+    return NBUILTINS;
 }
 
 String *pawP_scan_nstring(paw_Env *P, Map *st, const char *s, size_t n)
@@ -138,6 +138,11 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const c
     pawK_pool_init(P, &dm->pool, FIRST_ARENA_SIZE, LARGE_ARENA_MIN);
 
     *C = (struct Compiler){
+        .type_policy = {
+            .equals = pawIr_type_equals,
+            .hash = pawIr_type_hash,
+            .ctx = C,
+        },
         .pool = &dm->pool,
         .dm = dm,
         .P = P,
@@ -147,9 +152,9 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const c
     C->ir_types = pawP_new_map(C, &C->store);
     C->ir_defs = pawP_new_map(C, &C->store);
 
-    C->strings = pawP_push_map(C);
     C->method_contexts = pawP_push_map(C);
     C->method_binders = pawP_push_map(C);
+    C->strings = pawP_push_map(C);
     C->type2rtti = pawP_push_map(C);
     C->imports = pawP_push_map(C);
     C->traits = pawP_push_map(C);

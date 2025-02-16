@@ -581,11 +581,11 @@ struct MonoResult pawP_monomorphize(struct Compiler *C, Map *bodies)
     pawMir_type_folder_init(&F, C, NULL, &M);
     F.F.FoldType = collect_type;
 
-    add_builtin_adt(&F, PAW_TUNIT);
-    add_builtin_adt(&F, PAW_TBOOL);
-    add_builtin_adt(&F, PAW_TINT);
-    add_builtin_adt(&F, PAW_TFLOAT);
-    add_builtin_adt(&F, PAW_TSTR);
+    add_builtin_adt(&F, BUILTIN_UNIT);
+    add_builtin_adt(&F, BUILTIN_BOOL);
+    add_builtin_adt(&F, BUILTIN_INT);
+    add_builtin_adt(&F, BUILTIN_FLOAT);
+    add_builtin_adt(&F, BUILTIN_STR);
 
     // discover functions reachable from the toplevel
     paw_Int iter = PAW_ITER_INIT;

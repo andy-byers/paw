@@ -1,0 +1,66 @@
+// trait_default.paw
+
+pub trait Trait {
+    fn get_string(self) -> str;
+
+    fn get_string_concat(self, rhs: str) -> str {
+        self.get_string() + rhs
+    }
+}
+
+struct Struct: Trait {
+    pub value: str,
+
+    pub fn get_string(self) -> str {
+        self.value
+    }
+}
+
+pub fn test_call_default_method() {
+    let s = Struct{value: "Hello"};
+    assert(s.get_string_concat(", world!") == "Hello, world!");
+}
+
+fn call_default_method(s: Struct, rhs: str) -> str {
+    s.get_string_concat(rhs)
+}
+
+pub fn test_call_default_method_indirect() {
+    let s = Struct{value: "Hello"};
+    assert(call_default_method(s, ", world!") == "Hello, world!");
+}
+
+pub trait PolyTrait<T> {
+    fn get_value(self) -> T;
+
+    fn get_both_values(self, rhs: Self) -> (T, T) {
+        (self.get_value(), rhs.get_value())
+    }
+}
+
+struct PolyStruct<T>: PolyTrait<T> {
+    pub value: T,
+
+    pub fn get_value(self) -> T {
+        self.value
+    }
+}
+
+pub fn test_call_poly_default_method() {
+    let s = PolyStruct{value: "abc"};
+    let t = PolyStruct{value: "def"};
+    assert(s.get_both_values(t).0 == "abc");
+    assert(s.get_both_values(t).1 == "def");
+}
+
+fn call_poly_default_method<T>(s: PolyStruct<T>, t: PolyStruct<T>) -> (T, T) {
+    s.get_both_values(t)
+}
+
+pub fn test_call_poly_default_method_indirect() {
+    let s = PolyStruct{value: "abc"};
+    let t = PolyStruct{value: "def"};
+    assert(call_poly_default_method(s, t).0 == "abc");
+    assert(call_poly_default_method(s, t).1 == "def");
+}
+

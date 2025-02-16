@@ -123,6 +123,106 @@ void pawIr_validate_type(struct Compiler *C, struct IrType *type)
     }
 }
 
+// TODO: get this stuff to work. requires custom hash for IrType so that pointers in C.method_contexts
+//       can be changed without breaking everything (semantic equality on types instead of pointer comparison)
+//       then, type folder code can make copies of types
+
+// From https://stackoverflow.com/questions/8513911
+static paw_Uint hash_combine(paw_Uint seed, paw_Uint v)
+{
+    // TODO: versions for other sizes of paw_Uint
+    const paw_Uint mul = 0x9DDFEA08EB382D69ULL;
+    paw_Uint a = (v ^ seed) * mul;
+    a ^= (a >> 47);
+    paw_Uint b = (seed ^ a) * mul;
+    b ^= (b >> 47);
+    return b * mul;
+}
+
+static paw_Uint hash_type(struct IrType *type);
+
+static paw_Uint hash_type_list(struct IrTypeList *types)
+{
+    paw_Uint hash = 0;
+    struct IrType **ptype;
+    if (types != NULL) {
+        K_LIST_FOREACH(types, ptype) {
+            hash = hash_combine(hash, hash_type(*ptype));
+        }
+    }
+    return hash;
+}
+
+static paw_Uint hash_type(struct IrType *type)
+{
+    paw_Uint hash = type->hdr.kind;
+    switch (IR_KINDOF(type)) {
+        case kIrAdt: {
+            struct IrAdt *t = IrGetAdt(type);
+            hash = hash_combine(hash, t->did.value);
+            hash = hash_combine(hash, hash_type_list(t->types));
+            break;
+        }
+        case kIrFuncPtr: {
+            struct IrFuncPtr *t = IrGetFuncPtr(type);
+            hash = hash_combine(hash, hash_type_list(t->params));
+            hash = hash_combine(hash, hash_type(t->result));
+            break;
+        }
+        case kIrSignature: {
+            struct IrSignature *t = IrGetSignature(type);
+            hash = hash_combine(hash, t->did.value);
+            hash = hash_combine(hash, hash_type_list(t->types));
+            hash = hash_combine(hash, hash_type_list(t->params));
+            hash = hash_combine(hash, hash_type(t->result));
+            break;
+        }
+        case kIrTuple: {
+            struct IrTuple *t = IrGetTuple(type);
+            hash = hash_combine(hash, hash_type_list(t->elems));
+            break;
+        }
+        case kIrInfer: {
+            struct IrInfer *t = IrGetInfer(type);
+            hash = hash_combine(hash, t->depth);
+            hash = hash_combine(hash, t->index);
+            hash = hash_combine(hash, hash_type_list(t->bounds));
+            break;
+        }
+        case kIrGeneric: {
+            struct IrGeneric *t = IrGetGeneric(type);
+            hash = hash_combine(hash, t->did.value);
+            hash = hash_combine(hash, hash_type_list(t->bounds));
+            break;
+        }
+        case kIrTraitObj: {
+            struct IrTraitObj *t = IrGetTraitObj(type);
+            hash = hash_combine(hash, t->did.value);
+            hash = hash_combine(hash, hash_type_list(t->types));
+            break;
+        }
+    }
+    return hash;
+}
+
+paw_Bool pawIr_type_equals(void *ctx, Value lhs, Value rhs)
+{
+    struct Compiler *C = ctx;
+    return pawU_equals(C->U, lhs.p, rhs.p);
+}
+
+paw_Uint pawIr_type_hash(void *ctx, Value v)
+{
+    // TODO: consider combining w/ hash of "self" type
+    PAW_UNUSED(ctx);
+    return hash_type(v.p);
+}
+
+Map *pawIr_new_type_map(struct Compiler *C)
+{
+    return pawH_new_with_policy(ENV(C), &C->type_policy);
+}
+
 struct Printer {
     struct Compiler *C;
     Buffer *buf;
@@ -182,7 +282,7 @@ static void print_type(struct Printer *P, IrType *type)
             print_type_list(P, fsig->params);
             PRINT_CHAR(P, ')');
             if (!IrIsAdt(fsig->result)
-                    || IrGetAdt(fsig->result)->did.value != PAW_TUNIT) {
+                    || pawP_type2code(P->C, fsig->result) != BUILTIN_UNIT) {
                 PRINT_LITERAL(P, " -> ");
                 print_type(P, fsig->result);
             }
@@ -194,7 +294,7 @@ static void print_type(struct Printer *P, IrType *type)
             print_type_list(P, fptr->params);
             PRINT_CHAR(P, ')');
             if (!IrIsAdt(fptr->result)
-                    || IrGetAdt(fptr->result)->did.value != PAW_TUNIT) {
+                    || pawP_type2code(P->C, fptr->result) != BUILTIN_UNIT) {
                 PRINT_LITERAL(P, " -> ");
                 print_type(P, fptr->result);
             }
@@ -224,8 +324,8 @@ static void print_type(struct Printer *P, IrType *type)
         }
         default: {
             struct IrAdt *adt = IrGetAdt(type);
-            const paw_Type code = pawP_type2code(P->C, type);
-            if (code == PAW_TUNIT) {
+            const enum BuiltinKind code = pawP_type2code(P->C, type);
+            if (code == BUILTIN_UNIT) {
                 PRINT_LITERAL(P, "()");
             } else if (code == BUILTIN_LIST) {
                 PRINT_CHAR(P, '[');

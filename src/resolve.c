@@ -143,7 +143,7 @@ static struct HirDecl *get_decl(struct Resolver *R, DeclId did)
     return pawHir_get_decl(R->C, did);
 }
 
-static struct IrType *get_type(struct Resolver *R, paw_Type code)
+static struct IrType *get_type(struct Resolver *R, enum BuiltinKind code)
 {
     const DeclId did = R->C->builtins[code].did;
     return GET_NODE_TYPE(R->C, get_decl(R, did));
@@ -362,14 +362,14 @@ static struct IrType *ResolveFieldDecl(struct Resolver *R, struct HirFieldDecl *
     return resolve_type(R, d->tag);
 }
 
-static paw_Bool is_unit_type(struct IrType *type)
+static paw_Bool is_unit_type(struct Resolver *R, struct IrType *type)
 {
-    return IrIsAdt(type) && IrGetAdt(type)->did.value == PAW_TUNIT;
+    return pawP_type2code(R->C, type) == BUILTIN_UNIT;
 }
 
 static void unify_block_result(struct Resolver *R, paw_Bool never, struct IrType *result, struct IrType *expect)
 {
-    if (!never || !is_unit_type(result)) {
+    if (!never || !is_unit_type(R, result)) {
         unify(R, result, expect);
     }
 }
@@ -467,19 +467,19 @@ static int expect_field(struct Resolver *R, struct HirAdtDecl *adt, struct IrTyp
 
 static void unify_unit_type(struct Resolver *R, struct IrType *type)
 {
-    unify(R, type, get_type(R, PAW_TUNIT));
+    unify(R, type, get_type(R, BUILTIN_UNIT));
 }
 
 static void expect_bool_expr(struct Resolver *R, struct HirExpr *e)
 {
     struct IrType *type = resolve_operand(R, e);
-    unify(R, type, get_type(R, PAW_TBOOL));
+    unify(R, type, get_type(R, BUILTIN_BOOL));
 }
 
 static void expect_int_expr(struct Resolver *R, struct HirExpr *e)
 {
     struct IrType *type = resolve_operand(R, e);
-    unify(R, type, get_type(R, PAW_TINT));
+    unify(R, type, get_type(R, BUILTIN_INT));
 }
 
 static struct IrType *instantiate(struct Resolver *R, struct HirDecl *base, struct IrTypeList *types)
@@ -514,8 +514,8 @@ static void maybe_fix_unit_struct(struct Resolver *R, struct IrType *type, struc
     paw_assert(IrIsAdt(type));
     struct HirDecl *decl = get_decl(R, IR_TYPE_DID(type));
     struct HirAdtDecl *adt = HirGetAdtDecl(decl);
-    const paw_Type code = TYPE2CODE(R, type);
-    if (code >= 0) {
+    const enum BuiltinKind code = TYPE2CODE(R, type);
+    if (IS_BUILTIN_TYPE(code)) {
         TYPE_ERROR(R, "expected operand but found builtin type '%s'", adt->name->text);
     }
     if (!adt->is_struct) {
@@ -548,8 +548,8 @@ static struct IrType *resolve_path_expr(struct Resolver *R, struct HirPathExpr *
 
 static void check_map_key(struct Resolver *R, struct IrType *key)
 {
-    // TODO: if IrIsInfer(key), need to save the type and check it later
-    if (!IrIsInfer(key) && !IS_BASIC_TYPE(R->C, key)) {
+    // TODO: check for Hash trait
+    if (!IrIsInfer(key) && !IS_BASIC_TYPE(TYPE2CODE(R, key))) {
         TYPE_ERROR(R, "key is not hashable");
     }
 }
@@ -558,7 +558,7 @@ static struct IrType *resolve_logical_expr(struct Resolver *R, struct HirLogical
 {
     expect_bool_expr(R, e->lhs);
     expect_bool_expr(R, e->rhs);
-    return get_type(R, PAW_TBOOL);
+    return get_type(R, BUILTIN_BOOL);
 }
 
 static struct IrType *fresh_option(struct Resolver *R)
@@ -634,13 +634,13 @@ static struct IrType *resolve_unop_expr(struct Resolver *R, struct HirUnOpExpr *
     };
 
     struct IrType *type = resolve_operand(R, e->target);
-    const paw_Type code = TYPE2CODE(R, type);
-    if (code < 0 || !kValidOps[e->op][code]) {
+    const enum BuiltinKind code = TYPE2CODE(R, type);
+    if (!IS_BUILTIN_TYPE(code) || !kValidOps[e->op][code]) {
         TYPE_ERROR(R, "unsupported operand type for unary operator");
     } else if (is_bool_unop(e->op)) {
-        return get_type(R, PAW_TBOOL);
+        return get_type(R, BUILTIN_BOOL);
     } else if (e->op == UNARY_LEN) {
-        return get_type(R, PAW_TINT);
+        return get_type(R, BUILTIN_INT);
     } else {
         return type;
     }
@@ -672,12 +672,12 @@ static struct IrType *resolve_binop_expr(struct Resolver *R, struct HirBinOpExpr
     struct IrType *rhs = resolve_operand(R, e->rhs);
     unify(R, lhs, rhs);
 
-    const paw_Type code = TYPE2CODE(R, lhs);
+    const enum BuiltinKind code = TYPE2CODE(R, lhs);
     paw_assert(code == TYPE2CODE(R, rhs));
-    if (code < 0 || !kValidOps[e->op][code]) {
+    if (!IS_BUILTIN_TYPE(code) || !kValidOps[e->op][code]) {
         TYPE_ERROR(R, "unsupported operand types for binary operator");
     } else if (is_bool_binop(e->op)) {
-        return get_type(R, PAW_TBOOL);
+        return get_type(R, BUILTIN_BOOL);
     } else {
         return lhs;
     }
@@ -693,7 +693,7 @@ static struct IrType *resolve_assign_expr(struct Resolver *R, struct HirAssignEx
     struct IrType *lhs = resolve_operand(R, e->lhs);
     struct IrType *rhs = resolve_operand(R, e->rhs);
     unify(R, lhs, rhs);
-    return get_type(R, PAW_TUNIT);
+    return get_type(R, BUILTIN_UNIT);
 }
 
 static struct IrType *resolve_match_expr(struct Resolver *R, struct HirMatchExpr *e)
@@ -997,8 +997,8 @@ static struct IrType *resolve_conversion_expr(struct Resolver *R, struct HirConv
 {
     struct IrType *type = resolve_operand(R, e->arg);
     if (!IrIsAdt(type)
-            || TYPE2CODE(R, type) == PAW_TUNIT
-            || TYPE2CODE(R, type) == PAW_TSTR) {
+            || TYPE2CODE(R, type) == BUILTIN_UNIT
+            || TYPE2CODE(R, type) == BUILTIN_STR) {
         TYPE_ERROR(R, "argument to conversion must be scalar");
     }
     return get_type(R, e->to);
@@ -1179,7 +1179,7 @@ static struct IrType *resolve_if_expr(struct Resolver *R, struct HirIfExpr *e)
     expect_bool_expr(R, e->cond);
     struct IrType *first = resolve_expr(R, e->then_arm);
     if (e->else_arm == NULL) {
-        unify(R, first, get_type(R, PAW_TUNIT));
+        unify(R, first, get_type(R, BUILTIN_UNIT));
         return first;
     }
 
@@ -1187,9 +1187,9 @@ static struct IrType *resolve_if_expr(struct Resolver *R, struct HirIfExpr *e)
     if (!equals(R, first, second)) {
         // Forgive type errors when the result type is "()" and there is an
         // unconditional jump. Control will never reach the end of such a block.
-        if (is_unit_type(first) && is_never_block(e->then_arm)) {
+        if (is_unit_type(R, first) && is_never_block(e->then_arm)) {
             first = second;
-        } else if (is_unit_type(second) && is_never_block(e->else_arm)) {
+        } else if (is_unit_type(R, second) && is_never_block(e->else_arm)) {
             second = first;
         }
     }
@@ -1217,7 +1217,7 @@ static struct IrType *check_index(struct Resolver *R, struct HirIndex *e, struct
     struct IrType *result;
     struct IrType *expect = NULL;
     if (is_list_t(R, target)) {
-        expect = get_type(R, PAW_TINT);
+        expect = get_type(R, BUILTIN_INT);
         result = e->is_slice ? target : ir_list_elem(target);
     } else if (is_map_t(R, target)) {
         if (e->is_slice) {
@@ -1227,8 +1227,8 @@ static struct IrType *check_index(struct Resolver *R, struct HirIndex *e, struct
         expect = ir_map_key(target);
         result = ir_map_value(target);
     } else if (TYPE2CODE(R, target) == BUILTIN_STR) {
-        expect = get_type(R, PAW_TINT);
-        result = get_type(R, PAW_TSTR);
+        expect = get_type(R, BUILTIN_INT);
+        result = get_type(R, BUILTIN_STR);
     } else {
         TYPE_ERROR(R, "type cannot be indexed (not a container)");
     }
@@ -1594,16 +1594,16 @@ static struct IrType *resolve_return_expr(struct Resolver *R, struct HirReturnEx
     struct IrType *want = R->rs->prev;
     struct IrType *have = s->expr != NULL
         ? resolve_operand(R, s->expr)
-        : get_type(R, PAW_TUNIT);
+        : get_type(R, BUILTIN_UNIT);
     unify(R, have, want);
     ++R->rs->count;
 
-    return get_type(R, PAW_TUNIT);
+    return get_type(R, BUILTIN_UNIT);
 }
 
 static struct IrType *resolve_jump_expr(struct Resolver *R, struct HirJumpExpr *s)
 {
-    return get_type(R, PAW_TUNIT);
+    return get_type(R, BUILTIN_UNIT);
 }
 
 static struct IrType *resolve_expr(struct Resolver *R, struct HirExpr *expr)

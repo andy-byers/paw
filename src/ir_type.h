@@ -379,6 +379,10 @@ struct IrAdtDef *pawIr_get_adt_def(struct Compiler *C, DeclId did);
 struct IrParamDef *pawIr_get_param_def(struct Compiler *C, DeclId did);
 struct IrFieldDef *pawIr_get_field_def(struct Compiler *C, DeclId did);
 
+paw_Uint pawIr_type_hash(void *ctx, Value v);
+paw_Bool pawIr_type_equals(void *ctx, Value lhs, Value rhs);
+Map *pawIr_new_type_map(struct Compiler *C);
+
 void pawIr_validate_type(struct Compiler *C, struct IrType *type);
 
 static struct IrTypeList *ir_signature_types(IrType *type)

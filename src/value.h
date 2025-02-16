@@ -22,7 +22,6 @@
 #define V_UPVALUE(v) (O_UPVALUE(V_OBJECT(v)))
 #define V_STRING(v) (O_STRING(V_OBJECT(v)))
 #define V_MAP(v) (O_MAP(V_OBJECT(v)))
-#define V_LIST(v) (O_LIST(V_OBJECT(v)))
 #define V_TUPLE(v) (O_TUPLE(V_OBJECT(v)))
 #define V_FOREIGN(v) (O_FOREIGN(V_OBJECT(v)))
 
@@ -42,9 +41,7 @@
 #define O_IS_CLOSURE(o) (O_KIND(o) == VCLOSURE)
 #define O_IS_UPVALUE(o) (O_KIND(o) == VUPVALUE)
 #define O_IS_MAP(o) (O_KIND(o) == VMAP)
-#define O_IS_LIST(o) (O_KIND(o) == VLIST)
 #define O_IS_TUPLE(o) (O_KIND(o) == VTUPLE)
-#define O_IS_VARIANT(o) (O_KIND(o) == VVARIANT)
 #define O_IS_FOREIGN(o) (O_KIND(o) == VFOREIGN)
 
 #define O_STRING(o) CHECK_EXP(O_IS_STRING(o), (String *)(o))
@@ -53,7 +50,6 @@
 #define O_CLOSURE(o) CHECK_EXP(O_IS_CLOSURE(o), (Closure *)(o))
 #define O_UPVALUE(o) CHECK_EXP(O_IS_UPVALUE(o), (UpValue *)(o))
 #define O_MAP(o) CHECK_EXP(O_IS_MAP(o), (Map *)(o))
-#define O_LIST(o) CHECK_EXP(O_IS_LIST(o), (List *)(o))
 #define O_TUPLE(o) CHECK_EXP(O_IS_TUPLE(o), (Tuple *)(o))
 #define O_FOREIGN(o) CHECK_EXP(O_IS_FOREIGN(o), (Foreign *)(o))
 
@@ -67,12 +63,9 @@ typedef enum ValueKind {
 
     // object types
     VSTRING,
-    VLIST,
     VMAP,
     VTUPLE,
-    VVARIANT,
     VFOREIGN,
-    VTYPE,
 
     // function types
     VNATIVE,
@@ -85,16 +78,19 @@ typedef enum ValueKind {
     NVTYPES
 } ValueKind;
 
+#define GC_LIST_FLAG 1
+
 #define GC_HEADER \
     struct Object *gc_next; \
-    uint8_t gc_mark : 2; \
-    ValueKind gc_kind : 6
+    unsigned char gc_mark : 2; \
+    unsigned char gc_flag : 6; \
+    ValueKind gc_kind : 8
 typedef struct Object {
     GC_HEADER;
 } Object;
 
 typedef union Value {
-    uint64_t u;
+    paw_Uint u;
     paw_Int i;
     paw_Float f;
     Object *o;
@@ -114,7 +110,11 @@ typedef union StackRel {
 #define I2V(x) (Value){.i = (paw_Int)(x)}
 
 void pawV_index_error(paw_Env *P, paw_Int index, size_t length, const char *what);
-uint32_t pawV_hash(Value v);
+
+static inline paw_Uint pawV_hash(Value v)
+{
+    return v.u;
+}
 
 static paw_Int pawV_abs_index(paw_Int index, size_t length)
 {
@@ -144,8 +144,8 @@ int pawV_parse_float(paw_Env *P, const char *text, paw_Float *out);
 
 typedef struct String {
     GC_HEADER;
-    int16_t flag;
-    uint32_t hash;
+    short flag;
+    unsigned hash;
     struct String *next;
     size_t length;
     char text[];
@@ -155,16 +155,16 @@ const char *pawV_to_string(paw_Env *P, Value *pv, paw_Type type, size_t *nout);
 
 typedef struct Proto {
     GC_HEADER;
-    uint8_t is_va;
+    unsigned char is_va;
 
     Object *gc_list;
     String *name;
     String *modname;
-    uint32_t *source;
+    unsigned *source;
     int length;
 
     struct UpValueInfo {
-        uint16_t index;
+        short index;
         paw_Bool is_local;
     } *u;
 
@@ -209,7 +209,7 @@ void pawV_unlink_upvalue(UpValue *u);
 
 typedef struct Closure {
     GC_HEADER;
-    uint16_t nup;
+    short nup;
     Proto *p;
     Object *gc_list;
     UpValue *up[];
@@ -220,7 +220,7 @@ void pawV_free_closure(paw_Env *P, Closure *c);
 
 typedef struct Native {
     GC_HEADER;
-    uint16_t nup;
+    short nup;
     Object *gc_list;
     paw_Function func;
     Value up[];
@@ -239,42 +239,6 @@ typedef struct Tuple {
 Tuple *pawV_new_tuple(paw_Env *P, int nelems);
 void pawV_free_tuple(paw_Env *P, Tuple *t);
 
-#define VLIST_MIN_CAPACITY 4
-#define VLIST_MAX_CAPACITY (PAW_SIZE_MAX / sizeof(Value))
-
-typedef struct List {
-    GC_HEADER;
-    Object *gc_list;
-    Value *begin;
-    Value *end;
-    Value *upper;
-} List;
-
-List *pawV_list_new(paw_Env *P);
-void pawV_list_free(paw_Env *P, List *vec);
-void pawV_list_reserve(paw_Env *P, List *vec, size_t length);
-void pawV_list_resize(paw_Env *P, List *vec, size_t length);
-void pawV_list_insert(paw_Env *P, List *vec, paw_Int index, Value v);
-void pawV_list_push(paw_Env *P, List *vec, Value v);
-void pawV_list_pop(paw_Env *P, List *vec, paw_Int index);
-
-static inline size_t pawV_list_length(const List *vec)
-{
-    return CAST_SIZE(vec->end - vec->begin);
-}
-
-static inline Value *pawV_list_get(paw_Env *P, List *vec, paw_Int index)
-{
-    const paw_Int abs = pawV_abs_index(index, CAST_SIZE(vec->end - vec->begin));
-    const size_t i = pawV_check_abs(P, abs, pawV_list_length(vec), "vector");
-    return &vec->begin[i];
-}
-
-static inline paw_Bool pawV_list_iter(const List *vec, paw_Int *itr)
-{
-    return ++(*itr) < PAW_CAST_INT(pawV_list_length(vec));
-}
-
 typedef enum MapState {
     MAP_ITEM_VACANT,
     MAP_ITEM_ERASED,
@@ -282,12 +246,15 @@ typedef enum MapState {
 } MapState;
 
 typedef struct MapMeta {
-    uint8_t state : 2;
+    unsigned char state : 2;
 } MapMeta;
+
+typedef struct MapPolicy MapPolicy;
 
 typedef struct Map {
     GC_HEADER;
     Object *gc_list;
+    const MapPolicy *policy;
     void *data;
     size_t length;
     size_t capacity;
@@ -300,7 +267,7 @@ enum {
 
 typedef struct Foreign {
     GC_HEADER;
-    uint8_t flags;
+    unsigned char flags;
     int nfields;
     Object *gc_list;
     void *data;
@@ -308,7 +275,7 @@ typedef struct Foreign {
     Value fields[];
 } Foreign;
 
-Foreign *pawV_new_foreign(paw_Env *P, size_t size, int nfields, uint8_t flags, Value *out);
+Foreign *pawV_new_foreign(paw_Env *P, size_t size, int nfields, unsigned char flags, Value *out);
 void pawV_free_foreign(paw_Env *P, Foreign *ud);
 
 #endif // PAW_VALUE_H

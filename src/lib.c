@@ -13,6 +13,7 @@
 #include "auxlib.h"
 #include "call.h"
 #include "gc.h"
+#include "list.h"
 #include "os.h"
 #include "map.h"
 #include "mem.h"
@@ -97,9 +98,9 @@ static void new_option_none(paw_Env *P, Value *pval)
 
 static int list_insert(paw_Env *P)
 {
-    List *list = V_LIST(*CF_BASE(1));
+    Tuple *list = V_TUPLE(*CF_BASE(1));
     const paw_Int index = paw_int(P, 2);
-    pawV_list_insert(P, list, index, *CF_BASE(3));
+    pawList_insert(P, list, index, *CF_BASE(3));
     paw_pop(P, 2); // return 'self'
     return 1;
 }
@@ -143,27 +144,29 @@ static int result_unwrap_err(paw_Env *P)
 
 static int list_length(paw_Env *P)
 {
-    pawR_list_length(P, P->cf, CF_BASE(1), CF_BASE(1));
+    paw_list_length(P, 1);
     return 1;
 }
 
 static int list_push(paw_Env *P)
 {
-    List *list = V_LIST(*CF_BASE(1));
-    pawV_list_push(P, list, *CF_BASE(2));
+    Tuple *list = V_TUPLE(*CF_BASE(1));
+    pawList_push(P, list, *CF_BASE(2));
     paw_pop(P, 1); // return 'self'
     return 1;
 }
 
 static int list_pop(paw_Env *P)
 {
-    List *list = V_LIST(*CF_BASE(1));
-    const paw_Int length = PAW_CAST_INT(pawV_list_length(list));
+    Tuple *list = V_TUPLE(*CF_BASE(1));
+    const paw_Int length = pawList_length(list);
     if (length == 0) {
         pawR_error(P, PAW_EVALUE, "pop from empty List");
     }
-    P->top.p[-1] = *pawV_list_get(P, list, length - 1);
-    pawV_list_pop(P, list, length - 1);
+    // overwrites the register containing the list, which is fine because
+    // pawList_pop doesn't allocate
+    *CF_BASE(1) = *pawList_get(P, list, length - 1);
+    pawList_pop(P, list, length - 1);
     return 1;
 }
 
@@ -180,14 +183,13 @@ static paw_Int clamped_index(paw_Env *P, int loc, paw_Int n)
 //       equality between user-defined types right now.
 static int list_remove(paw_Env *P)
 {
-    List *list = V_LIST(*CF_BASE(1));
-    const paw_Int length = PAW_CAST_INT(pawV_list_length(list));
-    if (length == 0) {
+    Tuple *list = V_TUPLE(*CF_BASE(1));
+    if (pawList_length(list) == 0) {
         pawR_error(P, PAW_EVALUE, "remove from empty List");
     }
     const paw_Int index = paw_int(P, 2);
-    P->top.p[-1] = *pawV_list_get(P, list, index);
-    pawV_list_pop(P, list, index);
+    P->top.p[-1] = *pawList_get(P, list, index);
+    pawList_pop(P, list, index);
     return 1;
 }
 

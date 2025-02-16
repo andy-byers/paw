@@ -9,6 +9,21 @@
 #include "util.h"
 #include <string.h>
 
+static paw_Uint v_hash(void *ctx, Value v)
+{
+    return v.u;
+}
+
+static paw_Bool v_equals(void *ctx, Value a, Value b)
+{
+    return a.u == b.u;
+}
+
+static struct MapPolicy s_default_policy = {
+    .equals = v_equals,
+    .hash = v_hash,
+};
+
 // Total number of bytes needed for each map slot
 // The map's internal buffer is divided into 3 sections: the first is an array
 // of MapMeta, and the last 2 are arrays of Value. Each array has the same
@@ -32,7 +47,7 @@ static inline Value *insert_aux(Map *m, Value key)
                 found_erased = PAW_TRUE;
                 erased = mc;
             }
-        } else if (h_cursor_key(&mc)->u == key.u) {
+        } else if (MAP_EQUALS(m, *h_cursor_key(&mc), key)) {
             // found a duplicate: replace it
             return h_cursor_value(&mc);
         }
@@ -106,8 +121,14 @@ static void grow_map(paw_Env *P, Map *m)
 
 Map *pawH_new(paw_Env *P)
 {
+    return pawH_new_with_policy(P, &s_default_policy);
+}
+
+Map *pawH_new_with_policy(paw_Env *P, const MapPolicy *policy)
+{
     Map *m = pawM_new(P, Map);
     pawG_add_object(P, CAST_OBJECT(m), VMAP);
+    m->policy = policy;
     return m;
 }
 

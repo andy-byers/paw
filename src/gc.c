@@ -5,6 +5,7 @@
 #include "gc.h"
 #include "alloc.h"
 #include "env.h"
+#include "list.h"
 #include "map.h"
 #include "mem.h"
 #include "type.h"
@@ -46,8 +47,6 @@ static Object **get_gc_list(Object *o)
     switch (o->gc_kind) {
         case VFOREIGN:
             return &O_FOREIGN(o)->gc_list;
-        case VLIST:
-            return &O_LIST(o)->gc_list;
         case VMAP:
             return &O_MAP(o)->gc_list;
         case VCLOSURE:
@@ -136,16 +135,23 @@ static void traverse_fields(paw_Env *P, Value *pv, int n)
     }
 }
 
-static void traverse_tuple(paw_Env *P, Tuple *t)
+static void traverse_list(paw_Env *P, Tuple *a)
 {
-    traverse_fields(P, t->elems, t->nelems);
+    // emergency collection while allocating the backing buffer
+    if (a->elems[0].p == NULL) return;
+
+    paw_Int itr = PAW_ITER_INIT;
+    while (pawList_iter(a, &itr)) {
+        mark_value(P, *pawList_get(P, a, itr));
+    }
 }
 
-static void traverse_list(paw_Env *P, List *a)
+static void traverse_tuple(paw_Env *P, Tuple *t)
 {
-    paw_Int itr = PAW_ITER_INIT;
-    while (pawV_list_iter(a, &itr)) {
-        mark_value(P, *pawV_list_get(P, a, itr));
+    if (t->gc_flag == GC_LIST_FLAG) {
+        traverse_list(P, t);
+    } else {
+        traverse_fields(P, t->elems, t->nelems);
     }
 }
 
@@ -207,9 +213,6 @@ static void traverse_objects(paw_Env *P)
                 break;
             case VTUPLE:
                 traverse_tuple(P, O_TUPLE(o));
-                break;
-            case VLIST:
-                traverse_list(P, O_LIST(o));
                 break;
             case VMAP:
                 traverse_map(P, O_MAP(o));
@@ -323,9 +326,6 @@ void pawG_free_object(paw_Env *P, Object *o)
             break;
         case VMAP:
             pawH_free(P, O_MAP(o));
-            break;
-        case VLIST:
-            pawV_list_free(P, O_LIST(o));
             break;
         case VPROTO:
             pawV_free_proto(P, O_PROTO(o));
