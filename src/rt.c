@@ -40,9 +40,9 @@
 
 // Generate code for creating common builtin objects
 #define VM_LIST_INIT(r, n) \
-    (Tuple *)pawList_new(P, n, r);
-#define VM_MAP_INIT(r) \
-    (Map *)V_SET_OBJECT(r, pawH_new(P));
+    pawList_new(P, n, r);
+#define VM_MAP_INIT(p, r, n) \
+    pawMap_new(P, p, n, r);
 
 static void add_location(paw_Env *P, Buffer *buf)
 {
@@ -266,14 +266,14 @@ void pawR_list_set(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const 
 
 void pawR_map_length(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb)
 {
-    const size_t length = pawH_length(V_MAP(*rb));
+    const size_t length = pawMap_length(V_TUPLE(*rb));
     V_SET_INT(ra, PAW_CAST_INT(length));
 }
 
 int pawR_map_get(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc)
 {
-    Map *map = V_MAP(*rb);
-    const Value *pval = pawH_get(map, *rc);
+    Tuple *map = V_TUPLE(*rb);
+    const Value *pval = pawMap_get(P, map, *rc);
     if (pval == NULL) return -1;
     *ra = *pval;
     return 0;
@@ -281,7 +281,7 @@ int pawR_map_get(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Va
 
 void pawR_map_set(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc)
 {
-    pawH_insert(P, V_MAP(*ra), *rb, *rc);
+    pawMap_insert(P, V_TUPLE(*ra), *rb, *rc);
 }
 
 void pawR_str_getn(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc)
@@ -333,11 +333,10 @@ Tuple *pawR_new_list(paw_Env *P, CallFrame *cf, Value *ra, int b)
     return list;
 }
 
-Map *pawR_new_map(paw_Env *P, CallFrame *cf, Value *ra, int b)
+Tuple *pawR_new_map(paw_Env *P, CallFrame *cf, Value *ra, int b, int c)
 {
-    Map *map = VM_MAP_INIT(ra);
-    pawH_reserve(P, map, CAST_SIZE(b));
-    return map;
+    MapPolicy *policy = P->map_policies.data[c];
+    return VM_MAP_INIT(policy, ra, b);
 }
 
 
@@ -657,7 +656,8 @@ top:
                 VM_SAVE_PC();
                 P->top.p = ra + 1;
                 const int b = GET_B(opcode);
-                pawR_new_map(P, cf, ra, b);
+                const int c = GET_C(opcode);
+                pawR_new_map(P, cf, ra, b, c);
                 CHECK_GC(P);
             }
 

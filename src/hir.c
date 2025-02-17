@@ -13,7 +13,7 @@
 
 #define LIST_MIN 8
 
-#define NEW_NODE(C, T) pawK_pool_alloc(ENV(C), (C)->pool, sizeof(T))
+#define NEW_NODE(C, T) pawP_alloc(C, NULL, 0, sizeof(T))
 
 struct Hir *pawHir_new(struct Compiler *C, String *name, int modno)
 {

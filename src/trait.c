@@ -12,14 +12,14 @@ static struct IrTypeList *query_traits(struct Compiler *C, struct IrType *type, 
     if (IrIsInfer(type)) return IrGetInfer(type)->bounds;
     if (!IrIsAdt(type)) return NULL;
 
-    struct IrTypeList *traits = NULL;
     struct IrAdt *t = IrGetAdt(type);
-    const Value *pval = MAP_GET(C->traits, I2V(t->did.value));
-    if (pval != NULL) {
-        traits = pval->p;
-    } else if (create_if_missing) {
+    struct IrTypeList *const *ptraits = TraitMap_get(C, C->traits, t->did);
+    if (ptraits != NULL) return*ptraits;
+
+    struct IrTypeList *traits = NULL;
+    if (create_if_missing) {
         traits = pawIr_type_list_new(C);
-        MAP_INSERT(C, C->traits, I2V(t->did.value), P2V(traits));
+        TraitMap_insert(C, C->traits, t->did, traits);
     }
     return traits;
 }
@@ -127,18 +127,19 @@ static void ensure_methods_match(struct Compiler *C, struct IrType *adt, struct 
     }
 }
 
-static void ensure_trait_implemented(struct Compiler *C, struct HirTraitDecl *trait_decl, Map *methods, struct IrType *adt, struct IrType *trait)
+DEFINE_MAP(struct Compiler, MethodMap, pawP_alloc, p_hash_ptr, p_equals_ptr, String *, struct HirFuncDecl *)
+
+static void ensure_trait_implemented(struct Compiler *C, struct HirTraitDecl *trait_decl, MethodMap *methods, struct IrType *adt, struct IrType *trait)
 {
     struct HirDecl **pdecl;
     K_LIST_FOREACH(trait_decl->methods, pdecl) {
         struct HirFuncDecl *trait_method = HirGetFuncDecl(*pdecl);
-        const Value *pval = MAP_GET(methods, P2V(trait_method->name));
-        if (pval == NULL) {
+        struct HirFuncDecl **pmethod = MethodMap_get(C, methods, trait_method->name);
+        if (pmethod == NULL) {
             NAME_ERROR(C, "trait method '%s' not implemented",
                     trait_method->name->text);
         }
-        struct HirFuncDecl *adt_method = HirGetFuncDecl(pval->p);
-        ensure_methods_match(C, adt, adt_method, trait, trait_decl, trait_method);
+        ensure_methods_match(C, adt, *pmethod, trait, trait_decl, trait_method);
     }
 }
 
@@ -147,12 +148,12 @@ void pawP_validate_adt_traits(struct Compiler *C, struct HirAdtDecl *d)
     struct IrType *adt = pawIr_get_type(C, d->hid);
     struct IrTypeList *traits = pawP_query_traits(C, adt);
     if (traits == NULL) return;
-    Map *map = pawP_push_map(C);
+    MethodMap *map = MethodMap_new(C);
 
     struct HirDecl **pdecl;
     K_LIST_FOREACH(d->methods, pdecl) {
         struct HirFuncDecl *method = HirGetFuncDecl(*pdecl);
-        MAP_INSERT(C, map, P2V(method->name), P2V(method));
+        MethodMap_insert(C, map, method->name, method);
     }
 
     struct IrType **ptype;
@@ -162,6 +163,6 @@ void pawP_validate_adt_traits(struct Compiler *C, struct HirAdtDecl *d)
         ensure_trait_implemented(C, trait, map, adt, *ptype);
     }
 
-    pawP_pop_object(C, map);
+    MethodMap_delete(C, map);
 }
 

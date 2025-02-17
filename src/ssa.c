@@ -23,30 +23,32 @@ struct SsaConverter {
     struct NameStackList *stacks;
     struct MirRegisterList *changes;
 
-    Map *capture; // MirRegister => MirRegister
-    Map *rename; // MirRegister => MirRegister
-    Map *uses; // MirRegister => [MirBlockList]
-    Map *defs; // MirRegister => [MirBlockList]
+    struct RegisterMap *capture; // MirRegister => MirRegister
+    struct RegisterMap *rename; // MirRegister => MirRegister
+    UseDefMap *uses; // MirRegister => [MirBlockList]
+    UseDefMap *defs; // MirRegister => [MirBlockList]
 };
+
+DEFINE_MAP(struct Compiler, RegisterMap, pawP_alloc, mir_register_hash, mir_register_equals, MirRegister, MirRegister)
 
 static void add_captured_reg(struct SsaConverter *S, MirRegister r1, MirRegister r2)
 {
-    paw_assert(!MAP_CONTAINS(S->capture, I2V(r1.value)));
-    MAP_INSERT(S->C, S->capture, I2V(r1.value), I2V(r2.value));
+    paw_assert(RegisterMap_get(S->C, S->capture, r1) == NULL);
+    RegisterMap_insert(S->C, S->capture, r1, r2);
 }
 
 static MirRegister captured_reg(struct SsaConverter *S, MirRegister r)
 {
-    const Value *pval = pawH_get(S->capture, I2V(r.value));
-    return pval != NULL ? MIR_REG(CAST(int, pval->i)) : MIR_INVALID_REG;
+    const MirRegister *pr = RegisterMap_get(S->C, S->capture, r);
+    return pr != NULL ? *pr : MIR_INVALID_REG;
 }
 
 static MirRegister last_reg_name(struct SsaConverter *S, MirRegister r)
 {
     // NOTE: if a register is not in "S->rename", then all of its uses/defs are in
     //       unreachable basic blocks
-    const Value *pval = pawH_get(S->rename, I2V(r.value));
-    return pval != NULL ? MIR_REG(CAST(int, pval->i)) : MIR_INVALID_REG;
+    const MirRegister *pr = RegisterMap_get(S->C, S->rename, r);
+    return pr != NULL ? *pr : MIR_INVALID_REG;
 }
 
 static struct MirPhi *add_phi_node(struct SsaConverter *S, MirBlock b, MirRegister r)
@@ -95,7 +97,7 @@ static void rename_output(struct SsaConverter *S, MirRegister *pr, paw_Bool is_a
     *pr = MIR_REG(reg_id);
 
     K_LIST_PUSH(S->C, names, *pr);
-    MAP_INSERT(S->C, S->rename, I2V(old.value), I2V(reg_id));
+    RegisterMap_insert(S->C, S->rename, old, MIR_REG(reg_id));
 
     if (old_data->is_captured) {
         struct MirRegisterData *reg = &K_LIST_GET(S->registers, pr->value);
@@ -136,7 +138,7 @@ static paw_Bool list_includes_block(const struct MirBlockList *blocks, MirBlock 
 
 static struct MirBlockList *compute_live_in(struct SsaConverter *S, struct MirBlockList *defs, MirRegister r)
 {
-    struct MirBlockList *uses = pawH_get(S->uses, I2V(r.value))->p;
+    struct MirBlockList *uses = *UseDefMap_get(S->C, S->uses, r);
     return pawMir_compute_live_in(S->mir, uses, defs, r);
 }
 
@@ -158,15 +160,17 @@ static void place_phi_nodes(struct SsaConverter *S)
     }
 
     int nstacks = 0;
-    Map *definitions = S->defs;
-    paw_Int iter = PAW_ITER_INIT;
+    UseDefMap *definitions = S->defs;
+    UseDefMapIterator iter;
+    UseDefMapIterator_init(S->defs, &iter);
     // "W" is the worklist of nodes to be processed
     struct MirBlockList *W = pawMir_block_list_new(S->C);
-    for (int iterations = 1; pawH_iter(definitions, &iter); ++iterations) {
-        const MirRegister r = {pawH_key(definitions, iter)->i};
+    for (int iterations = 1; UseDefMapIterator_is_valid(&iter);
+            ++iterations, UseDefMapIterator_next(&iter)) {
+        const MirRegister r = UseDefMapIterator_key(&iter);
         nstacks = PAW_MAX(nstacks, r.value + 1);
         // consider each assignment of the variable
-        struct MirBlockList *defs = MAP_VALUE(definitions, iter)->p;
+        struct MirBlockList *defs = *UseDefMapIterator_valuep(&iter);
         if (defs->count < 2) continue; // variable has single version
 
         const MirBlock *pb;
@@ -340,21 +344,22 @@ void pawSsa_construct(struct Mir *mir)
         .C = C,
     };
 
-    struct ObjectStore store;
-    pawP_push_store(C, &store);
-    S.defs = pawP_new_map(C, &store);
-    S.uses = pawP_new_map(C, &store);
-    S.capture = pawP_new_map(C, &store);
-    S.rename = pawP_new_map(C, &store);
+    S.defs = UseDefMap_new(C);
+    S.uses = UseDefMap_new(C);
+    S.capture = RegisterMap_new(C);
+    S.rename = RegisterMap_new(C);
 
     pawMir_collect_per_block_usedefs(mir, S.uses, S.defs);
-    K_LIST_RESERVE(C, S.stacks, pawH_length(S.defs));
+    K_LIST_RESERVE(C, S.stacks, UseDefMap_length(S.defs));
 
     place_phi_nodes(&S);
     rename_vars(&S, MIR_ROOT_BB);
     mir->registers = S.registers;
     fix_aux_info(&S, mir);
 
-    pawP_pop_store(C, &store);
+    RegisterMap_delete(C, S.rename);
+    RegisterMap_delete(C, S.capture);
+    UseDefMap_delete(C, S.uses);
+    UseDefMap_delete(C, S.defs);
 }
 

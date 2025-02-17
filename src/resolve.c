@@ -29,7 +29,7 @@ struct ResultState {
 
 struct PatState {
     struct PatState *outer;
-    Map *bound;
+    StringMap *bound;
     enum HirPatKind kind;
 };
 
@@ -43,7 +43,6 @@ struct MatchState {
 // Common state for type-checking routines
 struct Resolver {
     paw_Env *P;
-    Map *strings;
     struct ModuleInfo *m;
     struct Unifier *U; // unification tables
     struct Compiler *C; // compiler state
@@ -54,12 +53,16 @@ struct Resolver {
     struct HirSymtab *symtab;
     struct HirTypeFolder *F;
     struct Substitution subst;
-    Map *traits; // '.traits' from Compiler
+    TraitMap *traits; // '.traits' from Compiler
     int func_depth; // number of nested functions
     int line;
     paw_Bool in_closure; // 1 if the enclosing function is a closure, else 0
     paw_Bool in_impl;
 };
+
+DEFINE_MAP(struct Compiler, FieldMap, pawP_alloc, p_hash_ptr, p_equals_ptr, String *, int)
+DEFINE_MAP(struct Compiler, PatFieldMap, pawP_alloc, p_hash_ptr, p_equals_ptr, String *, struct HirPat *)
+DEFINE_MAP_ITERATOR(FieldMap, String *, int)
 
 _Noreturn static void not_a_type(struct Resolver *R, struct IrType *type)
 {
@@ -163,13 +166,6 @@ static struct HirAdtDecl *get_adt(struct Resolver *R, struct IrType *type)
 {
     struct HirDecl *decl = get_decl(R, IR_TYPE_DID(type));
     return HirGetAdtDecl(decl);
-}
-
-static struct HirDeclList *traits_for_adt(struct Compiler *C, struct IrType *adt)
-{
-    const DeclId did = IR_TYPE_DID(adt);
-    const Value *pv = pawH_get(C->traits, I2V(did.value));
-    return pv != NULL ? pv->p : NULL;
 }
 
 static struct IrType *maybe_unit_variant(struct Resolver *R, struct IrType *type)
@@ -325,14 +321,14 @@ static void enter_function(struct Resolver *R, struct HirFuncDecl *func)
 static void leave_pat(struct Resolver *R)
 {
     struct PatState *ps = R->ms->ps;
-    pawP_pop_object(R->C, ps->bound);
+    StringMap_delete(R->C, ps->bound);
     R->ms->ps = ps->outer;
 }
 
 static void enter_pat(struct Resolver *R, struct PatState *ps, enum HirPatKind kind)
 {
     *ps = (struct PatState){
-        .bound = pawP_push_map(R->C),
+        .bound = StringMap_new(R->C),
         .outer = R->ms->ps,
         .kind = kind,
     };
@@ -1070,18 +1066,18 @@ static struct IrType *resolve_field_expr(struct Resolver *R, struct HirFieldExpr
     return resolve_operand(R, e->value);
 }
 
-static struct HirExprList *collect_field_exprs(struct Resolver *R, struct HirExprList *items, Map *map, const String *adt)
+static struct HirExprList *collect_field_exprs(struct Resolver *R, struct HirExprList *items, FieldMap *map, const String *adt)
 {
     int index;
     struct HirExpr *const *pexpr;
     struct HirExprList *order = pawHir_expr_list_new(R->C);
     K_LIST_ENUMERATE(items, index, pexpr) {
         struct HirFieldExpr *item = HirGetFieldExpr(*pexpr);
-        if (MAP_CONTAINS(map, P2V(item->name))) {
+        if (FieldMap_get(R->C, map, item->name) != NULL) {
             NAME_ERROR(R, "duplicate field '%s' in initializer for struct '%s'",
                        item->name->text, adt->text);
         }
-        MAP_INSERT(R, map, P2V(item->name), I2V(index));
+        FieldMap_insert(R->C, map, item->name, index);
         K_LIST_PUSH(R->C, order, *pexpr);
     }
     return order;
@@ -1103,9 +1099,8 @@ static struct IrType *resolve_composite_lit(struct Resolver *R, struct HirCompos
     if (!IrIsAdt(type)) TYPE_ERROR(R, "expected structure type");
     struct HirDecl *decl = get_decl(R, IR_TYPE_DID(type));
 
-    // Use a temporary Map to avoid searching repeatedly through the list of
-    // fields.
-    Map *map = pawP_push_map(R->C);
+    // Use a temporary Map to avoid searching repeatedly through the list of fields.
+    FieldMap *map = FieldMap_new(R->C);
 
     Value key;
     struct HirAdtDecl *adt = HirGetAdtDecl(decl);
@@ -1126,27 +1121,27 @@ static struct IrType *resolve_composite_lit(struct Resolver *R, struct HirCompos
         struct HirDecl *field_decl = K_LIST_GET(adt->fields, i);
         struct HirFieldDecl *field = HirGetFieldDecl(field_decl);
         ensure_accessible_field(R, field_decl, decl, type);
-        V_SET_OBJECT(&key, field->name);
-        Value *value = pawH_get(map, key);
-        if (value == NULL) {
+        const int *pindex = FieldMap_get(R->C, map, field->name);
+        if (pindex == NULL) {
             NAME_ERROR(R, "missing initializer for field '%s' in struct '%s'",
                        field->name->text, adt->name->text);
         }
         struct IrType *type = field_types->data[i];
-        struct HirExpr *item = order->data[V_INT(*value)];
+        struct HirExpr *item = order->data[*pindex];
         unify(R, type, resolve_operand(R, item));
-        pawH_erase(map, key);
+        FieldMap_remove(R->C, map, field->name);
 
         HirGetFieldExpr(item)->fid = i;
     }
-    paw_Int iter = PAW_ITER_INIT;
-    if (pawH_iter(map, &iter)) {
-        const Value *pkey = pawH_key(map, CAST_SIZE(iter));
+    FieldMapIterator iter;
+    FieldMapIterator_init(map, &iter);
+    if (FieldMapIterator_is_valid(&iter)) {
+        const String *key = FieldMapIterator_key(&iter);
         NAME_ERROR(R, "unexpected field '%s' in initializer for struct '%s'",
-                   V_STRING(*pkey), adt->name->text);
+                   key->text, adt->name->text);
     }
     paw_assert(adt->fields->count == e->items->count);
-    --ENV(R)->top.p; // pop 'map'
+    FieldMap_delete(R->C, map);
 
     e->items = order;
     return type;
@@ -1258,14 +1253,18 @@ static void ResolveDeclStmt(struct Resolver *R, struct HirDeclStmt *s)
 struct BindingChecker {
     struct HirVisitor *V;
     struct Resolver *R;
-    Map *bound;
+    struct BindingMap *bound;
     int iter;
 };
+
+// TODO: store BindingInfo directly
+DEFINE_MAP(struct Compiler, BindingMap, pawP_alloc, p_hash_ptr, p_equals_ptr, String *, struct BindingInfo *)
+DEFINE_MAP_ITERATOR(BindingMap, String *, struct BindingInfo *)
 
 static void init_binding_checker(struct BindingChecker *bc, struct Resolver *R, struct HirVisitor *V)
 {
     *bc = (struct BindingChecker){
-        .bound = pawP_push_map(R->C),
+        .bound = BindingMap_new(R->C),
         .R = R,
         .V = V,
     };
@@ -1274,7 +1273,7 @@ static void init_binding_checker(struct BindingChecker *bc, struct Resolver *R, 
 
 static void uninit_binding_checker(struct BindingChecker *bc)
 {
-    pawP_pop_object(bc->R->C, bc->bound);
+    BindingMap_delete(bc->R->C, bc->bound);
 }
 
 struct BindingInfo {
@@ -1283,64 +1282,64 @@ struct BindingInfo {
 };
 
 // NOTE: separate allocation for storage in Map
+// TODO: probably not necessary, store directly in BindingMap, see TODO above
 static struct BindingInfo *new_binding_info(struct Compiler *C, struct IrType *type)
 {
-    struct BindingInfo *bi = pawK_pool_alloc(ENV(C), C->pool, sizeof(struct BindingInfo));
+    struct BindingInfo *bi = pawP_alloc(C, NULL, 0, sizeof(struct BindingInfo));
     *bi = (struct BindingInfo){
         .type = type,
     };
     return bi;
 }
 
-static void account_for_binding(struct Resolver *R, const String *name, struct BindingInfo *bi)
+static void account_for_binding(struct Resolver *R, String *name, struct BindingInfo *bi)
 {
     struct PatState *ps = R->ms->ps;
     while (ps->outer != NULL) {
         if (ps->outer->kind == kHirOrPat) break;
         ps = ps->outer;
     }
-    const Value *pval = pawH_get(ps->bound, P2V(name));
-    if (pval != NULL) NAME_ERROR(R, "duplicate binding '%s'", name->text);
-    pawH_insert(ENV(R), ps->bound, P2V(name), P2V(NULL));
+    String *const *pname = StringMap_get(R->C, ps->bound, name);
+    if (pname != NULL) NAME_ERROR(R, "duplicate binding '%s'", name->text);
+    StringMap_insert(R->C, ps->bound, name, name);
 }
 
 static void locate_binding(struct HirVisitor *V, struct HirBindingPat *p)
 {
-    paw_Env *P = ENV(V->C);
     struct BindingChecker *bc = V->ud;
     // all bindings must be specified in the first alternative
     struct IrType *type = pawIr_get_type(V->C, p->hid);
     struct BindingInfo *bi = new_binding_info(V->C, type);
-    pawH_insert(P, bc->bound, P2V(p->name), P2V(bi));
+    BindingMap_insert(V->C, bc->bound, p->name, bi);
 }
 
 static void check_binding(struct HirVisitor *V, struct HirBindingPat *p)
 {
     paw_Env *P = ENV(V->C);
     struct BindingChecker *bc = V->ud;
-    Value *pval = pawH_get(bc->bound, P2V(p->name));
-    if (pval == NULL) {
+    struct BindingInfo **pbi = BindingMap_get(V->C, bc->bound, p->name);
+    if (pbi == NULL) {
         NAME_ERROR(bc->R, "binding '%s' must appear in all alternatives",
                 p->name->text);
     }
     struct IrType *type = pawIr_get_type(V->C, p->hid);
-    struct BindingInfo *bi = pval->p;
-    unify(bc->R, bi->type, type);
-    ++bi->uses;
+    unify(bc->R, (*pbi)->type, type);
+    ++(*pbi)->uses;
 }
 
 static void ensure_all_bindings_created(struct BindingChecker *bc)
 {
-    paw_Int iter = PAW_ITER_INIT;
-    while (pawH_iter(bc->bound, &iter)) {
-        const Value val = *pawH_value(bc->bound, iter);
+    BindingMapIterator iter;
+    BindingMapIterator_init(bc->bound, &iter);
+    while (BindingMapIterator_is_valid(&iter)) {
+        struct BindingInfo *bi = *BindingMapIterator_valuep(&iter);
         // each bi->uses should have been incremented exactly once
-        struct BindingInfo *bi = val.p;
         if (bi->uses != bc->iter) {
-            const Value key = *pawH_key(bc->bound, iter);
+            const String *key = BindingMapIterator_key(&iter);
             NAME_ERROR(bc->R, "%s binding '%s' in pattern",
-                    bi->uses < bc->iter ? "missing" : "duplicate", V_TEXT(key));
+                    bi->uses < bc->iter ? "missing" : "duplicate", key->text);
         }
+        BindingMapIterator_next(&iter);
     }
 }
 
@@ -1399,32 +1398,31 @@ static struct IrType *ResolveStructPat(struct Resolver *R, struct HirStructPat *
         TYPE_ERROR(R, "too many fields in struct pattern");
     }
 
-    paw_Env *P = ENV(R);
-    Map *map = pawP_push_map(R->C);
+    PatFieldMap *map = PatFieldMap_new(R->C);
 
     for (int i = 0; i < p->fields->count; ++i) {
         struct HirPat *pat = K_LIST_GET(p->fields, i);
         resolve_pat(R, pat);
-        const String *field_name = HirGetFieldPat(pat)->name;
-        const Value *pv = pawH_get(map, P2V(field_name));
-        if (pv != NULL) NAME_ERROR(R, "duplicate field '%s' in struct pattern", field_name->text);
-        pawH_insert(P, map, P2V(field_name), P2V(pat));
+        String *field_name = HirGetFieldPat(pat)->name;
+        struct HirPat **ppat = PatFieldMap_get(R->C, map, field_name);
+        if (ppat != NULL) NAME_ERROR(R, "duplicate field '%s' in struct pattern", field_name->text);
+        PatFieldMap_insert(R->C, map, field_name, pat);
     }
 
     struct HirPatList *sorted = pawHir_pat_list_new(R->C);
     for (int i = 0; i < adt_fields->count; ++i) {
         struct HirFieldDecl *adt_field_decl = HirGetFieldDecl(K_LIST_GET(adt->fields, i));
         struct IrType *adt_field_type = K_LIST_GET(adt_fields, i);
-        const Value *pv = pawH_get(map, P2V(adt_field_decl->name));
-        if (pv == NULL) NAME_ERROR(R, "missing field '%s' in struct pattern", adt_field_decl->name->text);
-        struct HirFieldPat *field_pat = HirGetFieldPat(pv->p);
+        struct HirPat **ppat = PatFieldMap_get(R->C, map, adt_field_decl->name);
+        if (ppat == NULL) NAME_ERROR(R, "missing field '%s' in struct pattern", adt_field_decl->name->text);
+        struct HirFieldPat *field_pat = HirGetFieldPat(*ppat);
         unify(R, pawIr_get_type(R->C, field_pat->hid), adt_field_type);
-        K_LIST_PUSH(R->C, sorted, pv->p);
+        K_LIST_PUSH(R->C, sorted, *ppat);
         field_pat->index = i;
     }
     p->fields = sorted;
 
-    pawP_pop_object(R->C, map);
+    PatFieldMap_delete(R->C, map);
     return type;
 }
 
@@ -1727,7 +1725,6 @@ void pawP_resolve(struct Compiler *C)
     struct HirTypeFolder F;
 
     struct Resolver R = {
-        .strings = C->strings,
         .traits = C->traits,
         .U = C->U,
         .P = ENV(C),

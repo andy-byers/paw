@@ -100,15 +100,14 @@ enum BuiltinKind pawP_type2code(struct Compiler *C, struct IrType *type)
     return NBUILTINS;
 }
 
-String *pawP_scan_nstring(paw_Env *P, Map *st, const char *s, size_t n)
+String *pawP_scan_nstring(struct Compiler *C, Tuple *map, const char *s, size_t n)
 {
+    paw_Env *P = ENV(C);
     const Value *pv = pawC_pushns(P, s, n);
-    Value *value = pawH_create(P, st, *pv);
-    *value = *pv; // anchor in map
+    pawMap_insert(P, map, *pv, *pv);
     pawC_pop(P);
     CHECK_GC(P);
-
-    return V_STRING(*value);
+    return V_STRING(*pv);
 }
 
 static void define_prelude_adt(struct Compiler *C, const char *name, enum BuiltinKind kind)
@@ -128,6 +127,11 @@ static void define_prelude_poly_adt(struct Compiler *C, const char *name, enum B
     };
 }
 
+void *pawP_alloc(struct Compiler *C, void *ptr, size_t size0, size_t size)
+{
+    return pawK_pool_alloc(ENV(C), C->pool, ptr, size0, size);
+}
+
 #define FIRST_ARENA_SIZE 4096
 #define LARGE_ARENA_MIN (32 * sizeof(void *))
 
@@ -138,26 +142,22 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const c
     pawK_pool_init(P, &dm->pool, FIRST_ARENA_SIZE, LARGE_ARENA_MIN);
 
     *C = (struct Compiler){
-        .type_policy = {
-            .equals = pawIr_type_equals,
-            .hash = pawIr_type_hash,
-            .ctx = C,
-        },
         .pool = &dm->pool,
         .dm = dm,
         .P = P,
     };
 
-    pawP_push_store(C, &C->store);
-    C->ir_types = pawP_new_map(C, &C->store);
-    C->ir_defs = pawP_new_map(C, &C->store);
+    paw_new_map(P, 0, PAW_TSTR);
+    C->strings = V_TUPLE(P->top.p[-1]);
 
-    C->method_contexts = pawP_push_map(C);
-    C->method_binders = pawP_push_map(C);
-    C->strings = pawP_push_map(C);
-    C->type2rtti = pawP_push_map(C);
-    C->imports = pawP_push_map(C);
-    C->traits = pawP_push_map(C);
+    C->ir_types = TypeMap_new(C);
+    C->ir_defs = DefMap_new(C);
+
+    C->method_contexts = MethodContextMap_new(C);
+    C->method_binders = MethodBinderMap_new(C);
+    C->type2rtti = RttiMap_new(C);
+    C->imports = ImportMap_new(C);
+    C->traits = TraitMap_new(C);
 
     C->modname = P->modname = SCAN_STRING(C, modname);
     C->prelude = pawAst_new(C, SCAN_STRING(C, "prelude"), 0);
@@ -165,7 +165,7 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const c
     C->decls = pawHir_decl_list_new(C);
     C->modules = pawP_mod_list_new(C);
 
-    C->U = pawK_pool_alloc(P, &dm->pool, sizeof(struct Unifier));
+    C->U = pawP_alloc(C, NULL, 0, sizeof(struct Unifier));
     C->U->C = C;
 
     // builtin primitives
@@ -193,7 +193,7 @@ void pawP_teardown(paw_Env *P, struct DynamicMem *dm)
 
 struct ModuleInfo *pawP_mi_new(struct Compiler *C, struct Hir *hir)
 {
-    struct ModuleInfo *mi = pawK_pool_alloc(ENV(C), C->pool, sizeof(*mi));
+    struct ModuleInfo *mi = pawP_alloc(C, NULL, 0, sizeof(*mi));
     *mi = (struct ModuleInfo){
         .globals = pawHir_scope_new(C),
         .hir = hir,
@@ -215,7 +215,6 @@ struct DefGenerator {
     struct ModuleInfo *m;
     struct ItemList *items;
     struct Compiler *C;
-    Map *adts;
 };
 
 static void enter_def(struct DefGenerator *dg, struct DefState *ds, struct IrType *type, struct Def *def)
@@ -235,14 +234,14 @@ static void leave_def(struct DefGenerator *dg)
 
 static struct Type *lookup_type(struct DefGenerator *dg, struct IrType *type)
 {
-    Value *pv = pawH_get(dg->C->type2rtti, P2V(type));
-    return pv != NULL ? pv->p : NULL;
+    struct Type *const *ptype = RttiMap_get(dg->C, dg->C->type2rtti, type);
+    return ptype != NULL ? *ptype : NULL;
 }
 
 static void map_types(struct DefGenerator *dg, struct IrType *type, struct Type *rtti)
 {
     paw_Env *P = ENV(dg->C);
-    pawH_insert(P, dg->C->type2rtti, P2V(type), P2V(rtti));
+    RttiMap_insert(dg->C, dg->C->type2rtti, type, rtti);
 }
 
 static struct Type *new_type(struct DefGenerator *, struct IrType *, ItemId);
@@ -362,19 +361,6 @@ static void allocate_adt_def(struct DefGenerator *dg, struct IrType *type)
     map_types(dg, type, rtti);
 }
 
-static struct IrTypeList *get_mono_list(struct DefGenerator *dg, Map *lists, DeclId did)
-{
-    paw_Env *P = ENV(dg->C);
-    struct IrTypeList *monos;
-    const Value *pval = pawH_get(lists, I2V(did.value));
-    if (pval == NULL) {
-        struct IrTypeList *monos = pawIr_type_list_new(dg->C);
-        pawH_insert(P, lists, I2V(did.value), P2V(monos));
-        return monos;
-    }
-    return pval->p;
-}
-
 static void define_decl_list(struct DefGenerator *dg, struct HirDeclList *decls)
 {
     // TODO: define fields for RTTI
@@ -448,29 +434,15 @@ struct ItemList *pawP_allocate_defs(struct Compiler *C, struct MirBodyList *bodi
         .items = pawP_item_list_new(C),
         .C = C,
     };
-    // DeclId => [struct IrType]
-    dg.adts = pawP_push_map(C),
-
     allocate_types(&dg, types);
     allocate_items(&dg, bodies);
-
-    pawP_pop_object(C, dg.adts);
     return dg.items;
-}
-
-Map *pawP_push_map(struct Compiler *C)
-{
-    paw_Env *P = ENV(C);
-    ENSURE_STACK(P, 1);
-    Map *result = pawH_new(P);
-    V_SET_OBJECT(P->top.p++, result);
-    return result;
 }
 
 static struct IrType *get_self(struct Compiler *C, struct IrSignature *method)
 {
-    const Value *pval = pawH_get(C->method_contexts, P2V(method));
-    return pval != NULL ? pval->p : NULL;
+    struct IrType *const *ptype = MethodContextMap_get(C, C->method_contexts, IR_CAST_TYPE(method));
+    return ptype != NULL ? *ptype : NULL;
 }
 
 paw_Bool pawP_is_assoc_fn(struct Compiler *C, struct IrSignature *t)
@@ -480,18 +452,18 @@ paw_Bool pawP_is_assoc_fn(struct Compiler *C, struct IrSignature *t)
 
 struct IrTypeList *pawP_get_binder(struct Compiler *C, DeclId did)
 {
-    const Value *pval = pawH_get(C->method_binders, I2V(did.value));
-    return pval != NULL ? pval->p : NULL;
+    struct IrTypeList *const *pbinder = MethodBinderMap_get(C, C->method_binders, did);
+    return pbinder != NULL ? *pbinder : NULL;
 }
 
 void pawP_set_binder(struct Compiler *C, DeclId did, struct IrTypeList *binder)
 {
-    pawH_insert(ENV(C), C->method_binders, I2V(did.value), P2V(binder));
+    MethodBinderMap_insert(C, C->method_binders, did, binder);
 }
 
 void pawP_set_self(struct Compiler *C, struct IrSignature *method, struct IrType *self)
 {
-    pawH_insert(ENV(C), C->method_contexts, P2V(method), P2V(self));
+    MethodContextMap_insert(C, C->method_contexts, IR_CAST_TYPE(method), self);
 }
 
 struct IrType *pawP_get_self(struct Compiler *C, struct IrSignature *method)
@@ -575,26 +547,3 @@ void pawP_bitset_or(struct BitSet *a, const struct BitSet *b)
     }
 }
 
-void pawP_push_store(struct Compiler *C, struct ObjectStore *store)
-{
-    paw_Env *P = ENV(C);
-    paw_new_map(P, 0); // push map
-    *store = (struct ObjectStore){
-        .objects = V_MAP(P->top.p[-1]),
-        .offset = paw_get_count(P) - 1,
-    };
-}
-
-Map *pawP_new_map(struct Compiler *C, struct ObjectStore *store)
-{
-    paw_Env *P = ENV(C);
-    paw_push_value(P, store->offset);
-    paw_new_map(P, 0);
-    // get pointer before register is popped by set operation
-    Map *map = V_MAP(P->top.p[-1]);
-    paw_push_zero(P, 1);
-    paw_map_set(P, -3);
-    // pop the copy of the object store map
-    paw_pop(P, 1);
-    return map;
-}

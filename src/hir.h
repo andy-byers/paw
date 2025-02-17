@@ -6,8 +6,7 @@
 
 #include "compile.h"
 
-struct Compiler;
-struct Resolver;
+struct HirScope;
 
 typedef struct HirId {
     unsigned short value;
@@ -1410,9 +1409,6 @@ DEFINE_LIST(struct Compiler, pawHir_import_list_, HirImportList, struct HirImpor
 DEFINE_LIST(struct Compiler, pawHir_path_, HirPath, struct HirSegment)
 DEFINE_LIST(struct Compiler, pawHir_bound_list_, HirBoundList, struct HirGenericBound)
 
-#define HIR_IS_UNIT_T(x) (HirIsAdt(x) && hir_adt_did(x) == PAW_TUNIT)
-#define HIR_IS_BASIC_T(x) (HirIsAdt(x) && hir_adt_did(x) <= PAW_TSTR)
-
 #define HIR_IS_POLY_FUNC(decl) (HirIsFuncDecl(decl) && HirGetFuncDecl(decl)->generics != NULL)
 #define HIR_IS_POLY_ADT(decl) (HirIsAdtDecl(decl) && HirGetAdtDecl(decl)->generics != NULL)
 
@@ -1452,5 +1448,20 @@ const char *pawHir_print_path(struct Compiler *C, struct HirPath *path);
 void pawHir_dump(struct Hir *hir);
 void pawHir_dump_path(struct Compiler *C, struct HirPath *path);
 void pawHir_dump_decls(struct Compiler *C, struct HirDeclList *decls);
+
+static inline paw_Uint hir_id_hash(struct Compiler *C, HirId hid)
+{
+    PAW_UNUSED(C);
+    return hid.value;
+}
+
+static inline paw_Bool hir_id_equals(struct Compiler *C, HirId a, HirId b)
+{
+    PAW_UNUSED(C);
+    return a.value == b.value;
+}
+
+DEFINE_MAP(struct Compiler, TypeMap, pawP_alloc, hir_id_hash, hir_id_equals, HirId, struct IrType *)
+DEFINE_MAP_ITERATOR(TypeMap, HirId, struct IrType *)
 
 #endif // PAW_HIR_H

@@ -44,7 +44,7 @@ DEFINE_LIST(struct Usefulness, row_list_, RowList, struct Row)
 
 static struct Decision *new_decision(struct Usefulness *U, enum DecisionKind kind)
 {
-    struct Decision *result = pawK_pool_alloc(ENV(U), U->pool, sizeof(struct Decision));
+    struct Decision *result = pawP_alloc(U->C, NULL, 0, sizeof(struct Decision));
     *result = (struct Decision){
         .kind = kind,
     };
@@ -437,12 +437,11 @@ struct LiteralResult {
     struct Decision *fallback;
 };
 
+DEFINE_MAP(struct Compiler, CaseMap, pawP_alloc, p_value_hash, p_value_equals, Value, int)
+
 static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct RowList *rows, struct MatchVar branch_var)
 {
-    paw_Env *P = ENV(U);
-    paw_new_map(P, 0);
-
-    Map *tested = V_MAP(P->top.p[-1]);
+    CaseMap *tested = CaseMap_new(U->C);
     struct RawCaseList *raw_cases = raw_case_list_new(U);
     struct RowList *fallback = row_list_new(U);
 
@@ -466,7 +465,6 @@ static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct R
 
         struct HirLiteralPat *p = HirGetLiteralPat(pat);
         struct HirLiteralExpr *e = HirGetLiteralExpr(p->expr);
-        const Value key = e->basic.value;
         struct Constructor cons = {0};
 
         switch (e->basic.t) {
@@ -483,6 +481,10 @@ static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct R
                 cons.value = e->basic.value;
                 break;
             case BUILTIN_FLOAT:
+                // normalize float keys
+                if (V_FLOAT(e->basic.value) == 0.0) {
+                    V_SET_FLOAT(&e->basic.value, 0.0);
+                }
                 cons.kind = CONS_FLOAT;
                 cons.value = e->basic.value;
                 break;
@@ -493,13 +495,14 @@ static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct R
                 break;
         }
 
-        Value *pv = pawH_get(tested, key);
-        if (pv != NULL) {
-            struct RawCase rc = K_LIST_GET(raw_cases, pv->i);
+        const Value key = e->basic.value;
+        int *pindex = CaseMap_get(U->C, tested, key);
+        if (pindex != NULL) {
+            struct RawCase rc = K_LIST_GET(raw_cases, *pindex);
             K_LIST_PUSH(U, rc.rows, r);
             continue;
         }
-        pawH_insert(P, tested, key, I2V(raw_cases->count));
+        CaseMap_insert(U->C, tested, key, raw_cases->count);
         struct RowList *rows = row_list_new(U);
         extend_row_list(U, rows, fallback);
         K_LIST_PUSH(U, rows, r);
@@ -510,8 +513,7 @@ static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct R
                     }));
     }
 
-    pawC_pop(P); // pop 'tested'
-
+    CaseMap_delete(U->C, tested);
     return (struct LiteralResult){
         .cases = compile_cases(U, raw_cases),
         .fallback = compile_rows(U, fallback),

@@ -32,7 +32,7 @@ void pawR_list_getn(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const
 void pawR_list_set(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc);
 void pawR_list_setn(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc, Value *temp);
 
-Map *pawR_new_map(paw_Env *P, CallFrame *cf, Value *ra, int b);
+Tuple *pawR_new_map(paw_Env *P, CallFrame *cf, Value *ra, int b, int c);
 void pawR_map_length(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb);
 int pawR_map_get(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc);
 void pawR_map_set(paw_Env *P, CallFrame *cf, Value *ra, const Value *rb, const Value *rc);

@@ -5,16 +5,9 @@
 #ifndef PAW_MIR_H
 #define PAW_MIR_H
 
-#include "code.h"
 #include "compile.h"
 
 struct Mir;
-
-// TODO: consider adopting rustc's Statement MIR node, could remove MirDiscard node
-//       MirAllocLocal, MirFreeLocal should be statements
-//       it would also be nice to be able to use constants directly, rather than
-//       having to use OP_LOADK to put them in registers before they can be used
-//       see Lua's RK[..] thing
 
 #define MIR_INSTRUCTION_LIST(X) \
     X(Phi) \
@@ -847,10 +840,13 @@ struct MirAccess {
 
 DEFINE_LIST(struct Compiler, pawMir_access_list_, MirAccessList, struct MirAccess)
 
-void pawMir_collect_per_instr_uses(struct Mir *mir, Map *uses);
-void pawMir_collect_per_instr_defs(struct Mir *mir, Map *defs);
+struct AccessMap;
+struct UseDefMap;
 
-void pawMir_collect_per_block_usedefs(struct Mir *mir, Map *uses, Map *defs);
+void pawMir_collect_per_instr_uses(struct Mir *mir, struct AccessMap *uses);
+void pawMir_collect_per_instr_defs(struct Mir *mir, struct AccessMap *defs);
+
+void pawMir_collect_per_block_usedefs(struct Mir *mir, struct UseDefMap *uses, struct UseDefMap *defs);
 
 void pawMir_propagate_constants(struct Mir *mir);
 
@@ -877,6 +873,35 @@ static inline int pawMir_get_location(struct MirLocationList *locations, MirId m
 
 struct MirBlockList *pawMir_compute_live_in(struct Mir *mir, struct MirBlockList *uses, struct MirBlockList *defs, MirRegister r);
 struct MirIntervalList *pawMir_compute_liveness(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, struct MirLocationList *locations);
+
+static paw_Uint mir_register_hash(struct Compiler *C, MirRegister r)
+{
+    PAW_UNUSED(C);
+    return r.value;
+}
+
+static paw_Uint mir_register_equals(struct Compiler *C, MirRegister a, MirRegister b)
+{
+    PAW_UNUSED(C);
+    return a.value == b.value;
+}
+
+static inline paw_Uint mir_bb_hash(struct Compiler *C, MirBlock v)
+{
+    PAW_UNUSED(C);
+    return v.value;
+}
+
+static inline paw_Bool mir_bb_equals(struct Compiler *C, MirBlock a, MirBlock b)
+{
+    PAW_UNUSED(C);
+    return a.value == b.value;
+}
+
+DEFINE_MAP(struct Compiler, AccessMap, pawP_alloc, mir_register_hash, mir_register_equals, MirRegister, struct MirAccessList *)
+DEFINE_MAP(struct Compiler, UseDefMap, pawP_alloc, mir_register_hash, mir_register_equals, MirRegister, struct MirBlockList *)
+DEFINE_MAP_ITERATOR(UseDefMap, MirRegister, struct MirBlockList *)
+DEFINE_MAP_ITERATOR(BodyMap, DeclId, struct Mir *)
 
 const char *pawP_print_live_intervals_pretty(struct Compiler *C, struct Mir *mir, struct MirIntervalList *intervals);
 

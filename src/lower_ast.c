@@ -33,6 +33,8 @@ struct LowerAst {
     int line;
 };
 
+DEFINE_MAP_ITERATOR(ImportMap, String *, struct Ast *)
+
 static struct HirStmt *lower_stmt(struct LowerAst *, struct AstStmt *);
 static struct HirExpr *lower_expr(struct LowerAst *, struct AstExpr *);
 static struct HirDecl *lower_decl(struct LowerAst *, struct AstDecl *);
@@ -889,9 +891,11 @@ void pawP_lower_ast(struct Compiler *C)
     struct Hir *prelude = lower_ast(&L, C->prelude);
     set_builtin_adts(&L, prelude->items);
 
-    paw_Int itr = PAW_ITER_INIT;
-    while (pawH_iter(C->imports, &itr)) {
-        const Value *pv = pawH_value(C->imports, itr);
-        lower_ast(&L, pv->p);
+    ImportMapIterator iter;
+    ImportMapIterator_init(C->imports, &iter);
+    while (ImportMapIterator_is_valid(&iter)) {
+        struct Ast *const *past = ImportMapIterator_valuep(&iter);
+        lower_ast(&L, *past);
+        ImportMapIterator_next(&iter);
     }
 }

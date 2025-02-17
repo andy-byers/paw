@@ -47,8 +47,6 @@ static Object **get_gc_list(Object *o)
     switch (o->gc_kind) {
         case VFOREIGN:
             return &O_FOREIGN(o)->gc_list;
-        case VMAP:
-            return &O_MAP(o)->gc_list;
         case VCLOSURE:
             return &O_CLOSURE(o)->gc_list;
         case VPROTO:
@@ -146,21 +144,24 @@ static void traverse_list(paw_Env *P, Tuple *a)
     }
 }
 
-static void traverse_tuple(paw_Env *P, Tuple *t)
+static void traverse_map(paw_Env *P, Tuple *m)
 {
-    if (t->gc_flag == GC_LIST_FLAG) {
-        traverse_list(P, t);
-    } else {
-        traverse_fields(P, t->elems, t->nelems);
+    paw_Int itr = PAW_ITER_INIT;
+    while (pawMap_iter(m, &itr)) {
+        mark_value(P, *pawMap_key(m, CAST_SIZE(itr)));
+        mark_value(P, *pawMap_value(m, CAST_SIZE(itr)));
     }
 }
 
-static void traverse_map(paw_Env *P, Map *m)
+static void traverse_tuple(paw_Env *P, Tuple *t)
 {
-    paw_Int itr = PAW_ITER_INIT;
-    while (pawH_iter(m, &itr)) {
-        mark_value(P, *pawH_key(m, CAST_SIZE(itr)));
-        mark_value(P, *pawH_value(m, CAST_SIZE(itr)));
+    if (t->kind == TUPLE_LIST) {
+        traverse_list(P, t);
+    } else if (t->kind == TUPLE_MAP) {
+        traverse_map(P, t);
+    } else {
+        paw_assert(t->kind == TUPLE_OTHER);
+        traverse_fields(P, t->elems, t->nelems);
     }
 }
 
@@ -186,6 +187,11 @@ static void mark_roots(paw_Env *P)
     for (int i = 0; i < P->defs.count; ++i) {
         struct Def *def = P->defs.data[i];
         mark_object(P, CAST_OBJECT(def->hdr.name));
+    }
+    for (int i = 0; i < P->map_policies.count; ++i) {
+        MapPolicy *policy = P->map_policies.data[i];
+        mark_value(P, policy->equals);
+        mark_value(P, policy->hash);
     }
     mark_value(P, P->registry);
 }
@@ -213,9 +219,6 @@ static void traverse_objects(paw_Env *P)
                 break;
             case VTUPLE:
                 traverse_tuple(P, O_TUPLE(o));
-                break;
-            case VMAP:
-                traverse_map(P, O_MAP(o));
                 break;
             default:
                 traverse_foreign(P, O_FOREIGN(o));
@@ -323,9 +326,6 @@ void pawG_free_object(paw_Env *P, Object *o)
             break;
         case VSTRING:
             pawS_free_str(P, O_STRING(o));
-            break;
-        case VMAP:
-            pawH_free(P, O_MAP(o));
             break;
         case VPROTO:
             pawV_free_proto(P, O_PROTO(o));

@@ -8,7 +8,7 @@
 
 struct Mir *pawMir_new(struct Compiler *C, String *name, struct IrType *type, struct IrType *self, enum FuncKind fn_kind, paw_Bool is_native, paw_Bool is_pub, paw_Bool is_poly)
 {
-    struct Mir *mir = pawK_pool_alloc(ENV(C), C->pool, sizeof(struct Mir));
+    struct Mir *mir = pawP_alloc(C, NULL, 0, sizeof(*mir));
     *mir = (struct Mir){
         .captured = pawMir_capture_list_new(C),
         .registers = pawMir_register_data_list_new(C),
@@ -30,7 +30,7 @@ struct Mir *pawMir_new(struct Compiler *C, String *name, struct IrType *type, st
 
 struct MirLiveInterval *pawMir_new_interval(struct Compiler *C, MirRegister r, int npositions)
 {
-    struct MirLiveInterval *it = pawK_pool_alloc(ENV(C), C->pool, sizeof(struct MirLiveInterval));
+    struct MirLiveInterval *it = pawP_alloc(C, NULL, 0, sizeof(struct MirLiveInterval));
     *it = (struct MirLiveInterval){
         .ranges = pawP_bitset_new(C, npositions),
         .r = r,
@@ -40,7 +40,7 @@ struct MirLiveInterval *pawMir_new_interval(struct Compiler *C, MirRegister r, i
 
 struct MirRegisterData *pawMir_new_register(struct Compiler *C, int value, struct IrType *type)
 {
-    struct MirRegisterData *r = pawK_pool_alloc(ENV(C), C->pool, sizeof(struct MirRegisterData));
+    struct MirRegisterData *r = pawP_alloc(C, NULL, 0, sizeof(struct MirRegisterData));
     *r = (struct MirRegisterData){
         .type = type,
     };
@@ -49,13 +49,13 @@ struct MirRegisterData *pawMir_new_register(struct Compiler *C, int value, struc
 
 struct MirInstruction *pawMir_new_instruction(struct Mir *mir)
 {
-    return pawK_pool_alloc(ENV(mir->C), mir->C->pool, sizeof(struct MirInstruction));
+    return pawP_alloc(mir->C, NULL, 0, sizeof(struct MirInstruction));
 }
 
 struct MirBlockData *pawMir_new_block(struct Mir *mir)
 {
     struct Compiler *C = mir->C;
-    struct MirBlockData *block = pawK_pool_alloc(ENV(C), C->pool, sizeof(struct MirBlockData));
+    struct MirBlockData *block = pawP_alloc(C, NULL, 0, sizeof(struct MirBlockData));
     *block = (struct MirBlockData){
         .predecessors = pawMir_block_list_new(C),
         .successors = pawMir_block_list_new(C),
@@ -326,13 +326,16 @@ DEFINE_LIST(struct Compiler, visit_stack_, VisitStack, struct Successors)
 struct Traversal {
     struct Compiler *C;
     struct Mir *mir;
-    Map *visited;
+    struct VisitedMap *visited;
 };
 
-static paw_Bool check_visited(struct Traversal *X, Map *visited, MirBlock bb)
+DEFINE_MAP(struct Compiler, VisitedMap, pawP_alloc, mir_bb_hash, mir_bb_equals, MirBlock, void *)
+DEFINE_MAP(struct Compiler, BlockMap, pawP_alloc, mir_bb_hash, mir_bb_equals, MirBlock, MirBlock)
+
+static paw_Bool check_visited(struct Traversal *X, VisitedMap *visited, MirBlock bb)
 {
-    if (MAP_GET(visited, I2V(bb.value)) != NULL) return PAW_TRUE;
-    pawH_insert(ENV(X->C), visited, I2V(bb.value), P2V(NULL));
+    if (VisitedMap_get(X->C, visited, bb) != NULL) return PAW_TRUE;
+    VisitedMap_insert(X->C, visited, bb, NULL);
     return PAW_FALSE;
 }
 
@@ -357,7 +360,7 @@ static struct MirBlockList *copy_blocks(struct Traversal *X, struct MirBlockList
     return result;
 }
 
-static void visit_postorder(struct Traversal *X, Map *visited, struct VisitStack *stack, MirBlock bb)
+static void visit_postorder(struct Traversal *X, VisitedMap *visited, struct VisitStack *stack, MirBlock bb)
 {
     if (check_visited(X, visited, bb)) return;
     struct MirBlockData *data = mir_bb_data(X->mir, bb);
@@ -367,7 +370,7 @@ static void visit_postorder(struct Traversal *X, Map *visited, struct VisitStack
                 }));
 }
 
-static void traverse_postorder(struct Traversal *X, Map *visited, struct VisitStack *stack)
+static void traverse_postorder(struct Traversal *X, VisitedMap *visited, struct VisitStack *stack)
 {
     while (stack->count > 0) {
         struct Successors *top = &K_LIST_LAST(stack);
@@ -381,7 +384,7 @@ static void traverse_postorder(struct Traversal *X, Map *visited, struct VisitSt
 struct MirBlockList *pawMir_traverse_rpo(struct Compiler *C, struct Mir *mir)
 {
     struct VisitStack *stack = visit_stack_new(C);
-    Map *visited = pawP_push_map(C); // push 'visited'
+    VisitedMap *visited = VisitedMap_new(C);
     struct Traversal X = {
         .visited = visited,
         .mir = mir,
@@ -398,25 +401,24 @@ struct MirBlockList *pawMir_traverse_rpo(struct Compiler *C, struct Mir *mir)
         traverse_postorder(&X, visited, stack);
         K_LIST_PUSH(C, order, s.block);
     }
-    pawP_pop_object(C, visited);
+    VisitedMap_delete(C, visited);
     reverse_blocks(order);
 
     return order;
 }
 
-static void renumber_ref(Map *map, MirBlock *pb)
+static void renumber_ref(struct Compiler *C, BlockMap *map, MirBlock *pfrom)
 {
-    paw_assert(MIR_BB_EXISTS(*pb));
-    const Value *pval = MAP_GET(map, I2V(pb->value));
-    *pb = MIR_BB(pval->i);
+    paw_assert(MIR_BB_EXISTS(*pfrom));
+    *pfrom = *BlockMap_get(C, map, *pfrom);
 }
 
-static void renumber_or_clear_ref(Map *map, MirBlock *pb)
+static void renumber_or_clear_ref(struct Compiler *C, BlockMap *map, MirBlock *pfrom)
 {
-    paw_assert(MIR_BB_EXISTS(*pb));
-    const Value *pval = MAP_GET(map, I2V(pb->value));
-    if (pval != NULL) *pb = MIR_BB(pval->i);
-    else *pb = MIR_INVALID_BB;
+    paw_assert(MIR_BB_EXISTS(*pfrom));
+    const MirBlock *pto = BlockMap_get(C, map, *pfrom);
+    if (pto != NULL) *pfrom = *pto;
+    else *pfrom = MIR_INVALID_BB;
 }
 
 static void remove_join(struct Mir *mir, struct MirInstructionList *joins, struct MirInstructionList *instrs, int index)
@@ -452,27 +454,27 @@ static void remove_join(struct Mir *mir, struct MirInstructionList *joins, struc
     }
 }
 
-static void rename_and_filter(struct Mir *mir, Map *map, struct MirBlockList *blocks, struct MirBlockData *bb)
+static void rename_and_filter(struct Mir *mir, BlockMap *map, struct MirBlockList *blocks, struct MirBlockData *bb)
 {
     struct Compiler *C = mir->C;
 
     int index;
     int removed = 0;
-    const MirBlock *pb;
-    K_LIST_ENUMERATE(blocks, index, pb) {
-        const Value *pval = MAP_GET(map, I2V(pb->value));
-        if (pval == NULL) {
+    const MirBlock *pfrom;
+    K_LIST_ENUMERATE(blocks, index, pfrom) {
+        const MirBlock *pto = BlockMap_get(C, map, *pfrom);
+        if (pto == NULL) {
             remove_join(mir, bb->joins, bb->instructions, index);
             ++removed;
             continue;
         }
-        K_LIST_SET(blocks, index - removed, MIR_BB(pval->i));
+        K_LIST_SET(blocks, index - removed, *pto);
     }
     blocks->count -= removed;
 }
 
 // Renumber basic blocks so that "mir_bb_data" continues to work
-static void renumber_block_refs(struct Mir *mir, Map *map, struct MirBlockData *data)
+static void renumber_block_refs(struct Mir *mir, BlockMap *map, struct MirBlockData *data)
 {
     rename_and_filter(mir, map, data->predecessors, data);
     rename_and_filter(mir, map, data->successors, NULL);
@@ -483,23 +485,23 @@ static void renumber_block_refs(struct Mir *mir, Map *map, struct MirBlockData *
             break;
         case kMirBranch: {
             struct MirBranch *t = MirGetBranch(terminator);
-            renumber_ref(map, &t->then_arm);
-            renumber_ref(map, &t->else_arm);
+            renumber_ref(mir->C, map, &t->then_arm);
+            renumber_ref(mir->C, map, &t->else_arm);
             break;
         }
         case kMirSwitch: {
             struct MirSwitch *t = MirGetSwitch(terminator);
             for (int i = 0; i < t->arms->count; ++i) {
-                renumber_ref(map, &K_LIST_GET(t->arms, i).bid);
+                renumber_ref(mir->C, map, &K_LIST_GET(t->arms, i).bid);
             }
             if (MIR_BB_EXISTS(t->otherwise)) {
-                renumber_ref(map, &t->otherwise);
+                renumber_ref(mir->C, map, &t->otherwise);
             }
             break;
         }
         case kMirGoto: {
             struct MirGoto *t = MirGetGoto(terminator);
-            renumber_ref(map, &t->target);
+            renumber_ref(mir->C, map, &t->target);
             break;
         }
         default:
@@ -507,48 +509,48 @@ static void renumber_block_refs(struct Mir *mir, Map *map, struct MirBlockData *
     }
 }
 
-// TODO
-#include <stdio.h>
-
-static void dump_usedef(struct Compiler *C, Map *uses, Map *defs)
-{
-    paw_Int iter = PAW_ITER_INIT;
-    printf("uses = {\n");
-    while (pawH_iter(uses, &iter)) {
-        printf("  _%lld: [", pawH_key(uses, iter)->i);
-        struct MirBlockList *bl = pawH_value(uses, iter)->p;
-        int i;
-        const MirBlock *pb;
-        K_LIST_ENUMERATE(bl, i, pb) {
-            if (i > 0) printf(", ");
-            printf("bb%d", pb->value);
-        }
-        printf("]\n");
-    }
-    iter = PAW_ITER_INIT;
-    printf("}\ndefs = {\n");
-    while (pawH_iter(uses, &iter)) {
-        printf("  _%lld: [", pawH_key(defs, iter)->i);
-        struct MirBlockList *bl = pawH_value(defs, iter)->p;
-        int i;
-        const MirBlock *pb;
-        K_LIST_ENUMERATE(bl, i, pb) {
-            if (i > 0) printf(", ");
-            printf("bb%d", pb->value);
-        }
-        printf("]\n");
-    }
-}
+//// TODO
+//#include <stdio.h>
+//
+//static void dump_usedef(struct Compiler *C, Map *uses, Map *defs)
+//{
+//    paw_Int iter = PAW_ITER_INIT;
+//    printf("uses = {\n");
+//    while (pawH_iter(uses, &iter)) {
+//        printf("  _%lld: [", pawH_key(uses, iter)->i);
+//        struct MirBlockList *bl = pawH_value(uses, iter)->p;
+//        int i;
+//        const MirBlock *pb;
+//        K_LIST_ENUMERATE(bl, i, pb) {
+//            if (i > 0) printf(", ");
+//            printf("bb%d", pb->value);
+//        }
+//        printf("]\n");
+//    }
+//    iter = PAW_ITER_INIT;
+//    printf("}\ndefs = {\n");
+//    while (pawH_iter(uses, &iter)) {
+//        printf("  _%lld: [", pawH_key(defs, iter)->i);
+//        struct MirBlockList *bl = pawH_value(defs, iter)->p;
+//        int i;
+//        const MirBlock *pb;
+//        K_LIST_ENUMERATE(bl, i, pb) {
+//            if (i > 0) printf(", ");
+//            printf("bb%d", pb->value);
+//        }
+//        printf("]\n");
+//    }
+//}
 
 void pawMir_remove_unreachable_blocks(struct Mir *mir)
 {
     struct Compiler *C = mir->C;
     // create a mapping from old to new basic block numbers
-    Map *map = pawP_push_map(C);
+    BlockMap *map = BlockMap_new(C);
     struct MirBlockList *order = pawMir_traverse_rpo(C, mir);
     for (int i = 0; i < order->count; ++i) {
         const MirBlock old_bb = K_LIST_GET(order, i);
-        pawH_insert(ENV(C), map, I2V(old_bb.value), I2V(i));
+        BlockMap_insert(C, map, old_bb, MIR_BB(i));
     }
 
     const MirBlock *pb;
@@ -561,7 +563,7 @@ void pawMir_remove_unreachable_blocks(struct Mir *mir)
     }
 
     mir->blocks = blocks;
-    pawP_pop_object(C, map);
+    BlockMap_delete(C, map);
 }
 
 struct MirRegisterPtrList *pawMir_get_loads(struct Compiler *C, struct MirInstruction *instr)
@@ -725,16 +727,16 @@ MirRegister *pawMir_get_store(struct Compiler *C, struct MirInstruction *instr)
     }
 }
 
-static void indicate_access(struct Compiler *C, Map *map, struct MirInstruction *instr, MirRegister r, MirBlock where)
+static void indicate_access(struct Compiler *C, AccessMap *map, struct MirInstruction *instr, MirRegister r, MirBlock where)
 {
-    struct MirAccessList *accesses = MAP_GET(map, I2V(r.value))->p;
+    struct MirAccessList *accesses = *AccessMap_get(C, map, r);
     K_LIST_PUSH(C, accesses, ((struct MirAccess){
                     .instr = instr,
                     .b = where,
                 }));
 }
 
-static void account_for_uses(struct Compiler *C, struct MirInstruction *instr, Map *uses, MirBlock where)
+static void account_for_uses(struct Compiler *C, struct MirInstruction *instr, AccessMap *uses, MirBlock where)
 {
     MirRegister *const *ppr;
     struct MirRegisterPtrList *loads = pawMir_get_loads(C, instr);
@@ -743,7 +745,7 @@ static void account_for_uses(struct Compiler *C, struct MirInstruction *instr, M
     }
 }
 
-static void account_for_defs(struct Compiler *C, struct MirInstruction *instr, Map *defs, MirBlock where)
+static void account_for_defs(struct Compiler *C, struct MirInstruction *instr, AccessMap *defs, MirBlock where)
 {
     const MirRegister *store = pawMir_get_store(C, instr);
     if (store != NULL) {
@@ -751,16 +753,16 @@ static void account_for_defs(struct Compiler *C, struct MirInstruction *instr, M
     }
 }
 
-typedef void (*AccountForAccesses)(struct Compiler *, struct MirInstruction *, Map *, MirBlock);
+typedef void (*AccountForAccesses)(struct Compiler *, struct MirInstruction *, AccessMap *, MirBlock);
 
-static void collect_accesses(struct Mir *mir, Map *map, AccountForAccesses cb)
+static void collect_accesses(struct Mir *mir, AccessMap *map, AccountForAccesses cb)
 {
     struct Compiler *C = mir->C;
 
     int index;
     struct MirRegisterData *pdata;
     K_LIST_ENUMERATE(mir->registers, index, pdata) {
-        MAP_INSERT(C, map, I2V(index), P2V(pawMir_access_list_new(C)));
+        AccessMap_insert(C, map, MIR_REG(index), pawMir_access_list_new(C));
     }
 
     struct MirBlockData **pblock;
@@ -774,19 +776,19 @@ static void collect_accesses(struct Mir *mir, Map *map, AccountForAccesses cb)
     }
 }
 
-void pawMir_collect_per_instr_uses(struct Mir *mir, Map *uses)
+void pawMir_collect_per_instr_uses(struct Mir *mir, AccessMap *uses)
 {
     collect_accesses(mir, uses, account_for_uses);
 }
 
-void pawMir_collect_per_instr_defs(struct Mir *mir, Map *defs)
+void pawMir_collect_per_instr_defs(struct Mir *mir, AccessMap *defs)
 {
     collect_accesses(mir, defs, account_for_defs);
 }
 
-static void indicate_usedef(struct Compiler *C, Map *map, MirRegister r, MirBlock where)
+static void indicate_usedef(struct Compiler *C, UseDefMap *map, MirRegister r, MirBlock where)
 {
-    struct MirBlockList *blocks = MAP_GET(map, I2V(r.value))->p;
+    struct MirBlockList *blocks = *UseDefMap_get(C, map, r);
 
     const MirBlock *pb;
     K_LIST_FOREACH(blocks, pb) {
@@ -795,7 +797,7 @@ static void indicate_usedef(struct Compiler *C, Map *map, MirRegister r, MirBloc
     K_LIST_PUSH(C, blocks, where);
 }
 
-static void indicate_usedefs(struct Compiler *C, struct MirInstruction *instr, Map *uses, Map *defs, MirBlock where)
+static void indicate_usedefs(struct Compiler *C, struct MirInstruction *instr, UseDefMap *uses, UseDefMap *defs, MirBlock where)
 {
     MirRegister *const *ppr;
     struct MirRegisterPtrList *ploads = pawMir_get_loads(C, instr);
@@ -806,15 +808,15 @@ static void indicate_usedefs(struct Compiler *C, struct MirInstruction *instr, M
 
 }
 
-void pawMir_collect_per_block_usedefs(struct Mir *mir, Map *uses, Map *defs)
+void pawMir_collect_per_block_usedefs(struct Mir *mir, UseDefMap *uses, UseDefMap *defs)
 {
     struct Compiler *C = mir->C;
 
     int index;
     struct MirRegisterData *pdata;
     K_LIST_ENUMERATE(mir->registers, index, pdata) {
-        MAP_INSERT(C, uses, I2V(index), P2V(pawMir_block_list_new(C)));
-        MAP_INSERT(C, defs, I2V(index), P2V(pawMir_block_list_new(C)));
+        UseDefMap_insert(C, uses, MIR_REG(index), pawMir_block_list_new(C));
+        UseDefMap_insert(C, defs, MIR_REG(index), pawMir_block_list_new(C));
     }
 
     struct MirBlockData **pblock;

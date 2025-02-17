@@ -8,7 +8,7 @@
 #include "compile.h"
 #include "map.h"
 
-#define SELF_TYPENAME(lex) SCAN_STRING(lex, "Self")
+#define SELF_TYPENAME(lex) SCAN_STRING((lex)->C, "Self")
 #define SELF_VARNAME(lex) CACHED_STRING(ENV(lex), CSTR_SELF)
 
 static String *unpack_name(struct AstExpr *expr)
@@ -1744,9 +1744,9 @@ static void init_lexer(struct Compiler *C, struct Ast *ast, struct Lex *lex)
 
 static struct Ast *new_ast(struct Compiler *C, String *name)
 {
-    const int modno = CAST(int, pawH_length(C->imports)) + 1 /* skip prelude */;
+    const int modno = ImportMap_length(C->imports) + 1 /* skip prelude */;
     struct Ast *ast = pawAst_new(C, name, modno);
-    pawH_insert(ENV(C), C->imports, P2V(name), P2V(ast));
+    ImportMap_insert(C, C->imports, name, ast);
     return ast;
 }
 

@@ -575,18 +575,6 @@ void paw_stacktrace(paw_Env *P)
     pawL_push_result(P, &buf);
 }
 
-void paw_dump_map_binary(Map *m)
-{
-    printf("Map {\n");
-    paw_Int iter = PAW_ITER_INIT;
-    while (pawH_iter(m, &iter)) {
-        const Value k = *pawH_key(m, iter);
-        const Value v = *pawH_value(m, iter);
-        printf("  %" PRId64 ": %" PRIu64 " => %" PRIu64 "\n", iter, k.u, v.u);
-    }
-    printf("}\n");
-}
-
 void paw_dump_value(Value value, paw_Type type)
 {
     switch (type) {
@@ -608,22 +596,6 @@ void paw_dump_value(Value value, paw_Type type)
         default:
             printf("0x%" PRIx64, value.u);
     }
-}
-
-void paw_dump_map(Map *m, paw_Type ktype, paw_Type vtype)
-{
-    printf("Map {\n");
-    paw_Int iter = PAW_ITER_INIT;
-    while (pawH_iter(m, &iter)) {
-        const Value k = *pawH_key(m, iter);
-        const Value v = *pawH_value(m, iter);
-        printf("  %" PRId64 ": ", iter);
-        paw_dump_value(k, ktype);
-        printf(" => ");
-        paw_dump_value(v, vtype);
-        printf("\n");
-    }
-    printf("}\n");
 }
 
 #endif // defined(PAW_DEBUG_EXTRA)

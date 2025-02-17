@@ -14,7 +14,7 @@
 struct Ast *pawAst_new(struct Compiler *C, String *name, int modno)
 {
     paw_Env *P = ENV(C);
-    struct Ast *ast = pawK_pool_alloc(P, C->pool, sizeof(struct Ast));
+    struct Ast *ast = pawP_alloc(C, NULL, 0, sizeof(struct Ast));
     *ast = (struct Ast){
         .modno = modno,
         .pool = C->pool,
@@ -34,7 +34,7 @@ void pawAst_free(struct Ast *ast)
 #define DEFINE_NODE_CONSTRUCTOR(name, T) \
     struct T *pawAst_new_##name(struct Ast *ast) \
     { \
-        return pawK_pool_alloc(ENV(ast), (ast)->pool, sizeof(struct T)); \
+        return pawP_alloc(ast->C, NULL, 0, sizeof(struct T)); \
     }
 DEFINE_NODE_CONSTRUCTOR(decl, AstDecl)
 DEFINE_NODE_CONSTRUCTOR(stmt, AstStmt)
@@ -44,7 +44,7 @@ DEFINE_NODE_CONSTRUCTOR(pat, AstPat)
 
 struct AstSegment *pawAst_segment_new(struct Compiler *C)
 {
-    return pawK_pool_alloc(ENV(C), C->pool, sizeof(struct AstSegment));
+    return pawP_alloc(C, NULL, 0, sizeof(struct AstSegment));
 }
 
 #if defined(PAW_DEBUG_EXTRA)

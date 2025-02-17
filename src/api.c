@@ -274,6 +274,11 @@ paw_Int paw_int(paw_Env *P, int index)
     return V_INT(*at(P, index));
 }
 
+paw_Uint paw_uint(paw_Env *P, int index)
+{
+    return V_UINT(*at(P, index));
+}
+
 paw_Float paw_float(paw_Env *P, int index)
 {
     return V_FLOAT(*at(P, index));
@@ -475,10 +480,10 @@ void paw_new_list(paw_Env *P, int n)
     paw_shift(P, n);
 }
 
-void paw_new_map(paw_Env *P, int n)
+void paw_new_map(paw_Env *P, int n, paw_Type k)
 {
     Value *ra = pawC_push0(P);
-    pawR_new_map(P, P->cf, ra, n);
+    pawR_new_map(P, P->cf, ra, n, k);
 
     const Value *pv = at(P, -2 * n - 1);
     for (int i = 0; i < n; ++i) {
@@ -633,8 +638,8 @@ paw_Bool paw_list_next(paw_Env *P, int index)
 void paw_map_length(paw_Env *P, int index)
 {
     Value *pv = at(P, index);
-    const Map *map = V_MAP(*pv);
-    const size_t len = pawH_length(map);
+    const Tuple *map = V_TUPLE(*pv);
+    const size_t len = pawMap_length(map);
     paw_push_int(P, PAW_CAST_INT(len));
 }
 
@@ -657,11 +662,11 @@ void paw_map_set(paw_Env *P, int index)
 paw_Bool paw_map_next(paw_Env *P, int index)
 {
     API_CHECK_PUSH(P, 2);
-    Map *map = V_MAP(*at(P, index));
+    Tuple *map = V_TUPLE(*at(P, index));
     paw_Int *piter = &P->top.p[-1].i;
-    if (pawH_iter(map, piter)) {
-        P->top.p[0] = *pawH_key(map, *piter);
-        P->top.p[1] = *pawH_value(map, *piter);
+    if (pawMap_iter(map, piter)) {
+        P->top.p[0] = *pawMap_key(map, *piter);
+        P->top.p[1] = *pawMap_value(map, *piter);
         API_INCR_TOP(P, 2);
         return PAW_TRUE;
     }

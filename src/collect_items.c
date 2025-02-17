@@ -30,7 +30,7 @@ struct ItemCollector {
     struct ModuleInfo *m;
     struct IrTypeList *impl_binder;
     struct IrType *adt;
-    Map *traits;
+    TraitMap *traits;
     paw_Env *P;
     int ndefs;
     int line;
@@ -126,12 +126,12 @@ static void enter_function(struct ItemCollector *X, struct HirFuncDecl *func)
     }
 }
 
-static void ensure_unique(struct ItemCollector *X, Map *map, String *name, const char *what)
+static void ensure_unique(struct ItemCollector *X, StringMap *map, String *name, const char *what)
 {
     if (name == NULL) return;
-    Value *pv = pawH_get(map, P2V(name));
-    if (pv != NULL) NAME_ERROR(X, "duplicate %s '%s'", what, name->text);
-    pawH_insert(ENV(X), map, P2V(name), P2V(name));
+    String *const *pname = StringMap_get(X->C, map, name);
+    if (pname != NULL) NAME_ERROR(X, "duplicate %s '%s'", what, name->text);
+    StringMap_insert(X->C, map, name, NULL);
 }
 
 static struct IrType *collect_type(struct ItemCollector *X, struct HirType *type)
@@ -151,10 +151,12 @@ static void map_adt_to_trait(struct ItemCollector *X, struct HirDecl *adt, struc
 {
     struct IrTypeList *traits;
     const DeclId did = adt->hdr.did;
-    Value *pv = MAP_GET(X->traits, I2V(did.value));
-    if (pv == NULL) {
+    struct IrTypeList **ptraits = TraitMap_get(X->C, X->traits, did);
+    if (ptraits == NULL) {
         traits = pawIr_type_list_new(X->C);
-        pv = MAP_INSERT(X, X->traits, I2V(did.value), P2V(traits));
+        TraitMap_insert(X->C, X->traits, did, traits);
+    } else {
+        traits = *ptraits;
     }
     K_LIST_PUSH(X->C, traits, trait);
 }
@@ -327,7 +329,7 @@ static void collect_field_decl(struct ItemCollector *X, struct HirFieldDecl *d)
 
 static void collect_variant_decl(struct ItemCollector *, struct HirVariantDecl *);
 
-static void collect_field_types(struct ItemCollector *X, struct HirDeclList *fields, Map *names)
+static void collect_field_types(struct ItemCollector *X, struct HirDeclList *fields, StringMap *names)
 {
     if (fields == NULL) return;
     for (int i = 0; i < fields->count; ++i) {
@@ -372,9 +374,9 @@ static void collect_func(struct ItemCollector *X, struct HirFuncDecl *d)
     enter_function(X, d);
     register_generics(X, d->generics);
 
-    Map *names = pawP_push_map(X->C);
+    StringMap *names = StringMap_new(X->C);
     collect_field_types(X, d->params, names);
-    pawP_pop_object(X->C, names);
+    StringMap_delete(X->C, names);
 
     register_func(X, d);
     leave_function(X);
@@ -434,7 +436,7 @@ static struct HirScope *register_adt_decl(struct ItemCollector *X, struct HirAdt
     return leave_block(X);
 }
 
-static void collect_methods(struct ItemCollector *X, struct HirDeclList *methods, Map *names, paw_Bool force_pub)
+static void collect_methods(struct ItemCollector *X, struct HirDeclList *methods, StringMap *names, paw_Bool force_pub)
 {
     struct HirDecl **pdecl;
     K_LIST_FOREACH(methods, pdecl) {
@@ -463,7 +465,7 @@ static struct HirDecl *copy_and_collect_method(struct ItemCollector *X, struct H
     return copy;
 }
 
-static void collect_default_methods(struct ItemCollector *X, Map *names, struct HirTypeList *traits, struct HirDeclList *methods)
+static void collect_default_methods(struct ItemCollector *X, StringMap *names, struct HirTypeList *traits, struct HirDeclList *methods)
 {
     struct HirType **ptype;
     K_LIST_FOREACH(traits, ptype) {
@@ -474,8 +476,8 @@ static void collect_default_methods(struct ItemCollector *X, Map *names, struct 
         K_LIST_FOREACH(trait->methods, pmethod) {
             struct HirFuncDecl *method = HirGetFuncDecl(*pmethod);
             if (method->body == NULL) continue; // not defaulted
-            const Value *pval = MAP_GET(names, P2V(method->name));
-            if (pval == NULL) { // implementation not provided
+            String *const *pname = StringMap_get(X->C, names, method->name);
+            if (pname == NULL) { // implementation not provided
                 struct HirDecl *copy = copy_and_collect_method(X, method);
                 K_LIST_PUSH(X->C, methods, copy);
             }
@@ -502,12 +504,12 @@ static void collect_adt_decl(struct ItemCollector *X, struct PartialDecl lazy)
     }
 
     WITH_CONTEXT(X, type,
-        Map *names = pawP_push_map(X->C);
+        StringMap *names = StringMap_new(X->C);
         d->self = declare_self(X, d->line, type);
         collect_field_types(X, d->fields, names);
         collect_methods(X, d->methods, names, PAW_FALSE);
         collect_default_methods(X, names, d->traits, d->methods);
-        pawP_pop_object(X->C, names);
+        StringMap_delete(X->C, names);
     );
 
     pawP_validate_adt_traits(X->C, d);
@@ -546,10 +548,10 @@ static void collect_trait_decl(struct ItemCollector *X, struct PartialDecl lazy)
     struct IrType *type = GET_NODE_TYPE(X->C, lazy.decl);
 
     WITH_CONTEXT(X, type,
-        Map *names = pawP_push_map(X->C);
+        StringMap *names = StringMap_new(X->C);
         d->self = declare_self(X, d->line, type);
         collect_methods(X, d->methods, names, d->is_pub);
-        pawP_pop_object(X->C, names);
+        StringMap_delete(X->C, names);
     );
     leave_block(X);
 }

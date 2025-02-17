@@ -6,7 +6,7 @@
 #include "map.h"
 #include "unify.h"
 
-#define NEW_NODE(C, T) (T *)pawK_pool_alloc(ENV(C), (C)->pool, sizeof(T))
+#define NEW_NODE(C, T) (T *)pawP_alloc(C, NULL, 0, sizeof(T))
 
 DeclId pawIr_next_did(struct Compiler *C, int mod)
 {
@@ -28,14 +28,14 @@ IrType *pawIr_new_type(struct Compiler *C)
 
 IrType *pawIr_get_type(struct Compiler *C, HirId hid)
 {
-    const Value *pv = MAP_GET(C->ir_types, I2V(hid.value));
-    return pv != NULL ? pv->p : NULL;
+    IrType *const * ptype = TypeMap_get(C, C->ir_types, hid);
+    return ptype != NULL ? *ptype : NULL;
 }
 
-IrDef *pawIr_get_def(struct Compiler *C, DeclId did)
+IrDef *pawIr_get_def(struct Compiler *C, DefId did)
 {
-    const Value *pv = MAP_GET(C->ir_types, I2V(did.value));
-    return pv != NULL ? pv->p : NULL;
+    IrDef *const *pdef = DefMap_get(C, C->ir_defs, did);
+    return pdef != NULL ? *pdef : NULL;
 }
 
 void pawIr_set_type(struct Compiler *C, HirId hid, IrType *type)
@@ -44,13 +44,13 @@ void pawIr_set_type(struct Compiler *C, HirId hid, IrType *type)
     // TODO: this check could be removed with more confidence if 1 is used as the default ID (HirId, DefId, etc.) instead of 0
     //       since 0 is a valid ID, we get confused when an ID is not properly initialized (zero init produces a valid ID, which is bad)
     paw_assert(hid.value > 0 || !IrIsAdt(type) || IrGetAdt(type)->did.value == 0);
-    MAP_INSERT(C, C->ir_types, I2V(hid.value), P2V(type));
+    TypeMap_insert(C, C->ir_types, hid, type);
 }
 
-void pawIr_set_def(struct Compiler *C, DeclId did, IrDef *def)
+void pawIr_set_def(struct Compiler *C, DefId did, IrDef *def)
 {
     paw_assert(def != NULL);
-    MAP_INSERT(C, C->ir_defs, I2V(did.value), P2V(def));
+    DefMap_insert(C, C->ir_defs, did, def);
 }
 
 struct IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *target, String *name)
@@ -205,22 +205,21 @@ static paw_Uint hash_type(struct IrType *type)
     return hash;
 }
 
-paw_Bool pawIr_type_equals(void *ctx, Value lhs, Value rhs)
+paw_Bool pawIr_type_equals(struct Compiler *C, IrType *a, IrType *b)
 {
-    struct Compiler *C = ctx;
-    return pawU_equals(C->U, lhs.p, rhs.p);
+    return pawU_equals(C->U, a, b);
 }
 
-paw_Uint pawIr_type_hash(void *ctx, Value v)
+paw_Uint pawIr_type_hash(struct Compiler *C, IrType *t)
 {
     // TODO: consider combining w/ hash of "self" type
-    PAW_UNUSED(ctx);
-    return hash_type(v.p);
+    PAW_UNUSED(C);
+    return hash_type(t);
 }
 
-Map *pawIr_new_type_map(struct Compiler *C)
+TypeMap *pawIr_new_type_map(struct Compiler *C)
 {
-    return pawH_new_with_policy(ENV(C), &C->type_policy);
+    return TypeMap_new(C);
 }
 
 struct Printer {

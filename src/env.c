@@ -4,6 +4,7 @@
 
 #include "env.h"
 #include "api.h"
+#include "map.h"
 #include "mem.h"
 #include "rt.h"
 #include "type.h"

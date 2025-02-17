@@ -153,9 +153,12 @@ Tuple *pawV_new_tuple(paw_Env *P, int nelems)
 
 void pawV_free_tuple(paw_Env *P, Tuple *t)
 {
-    if (t->gc_flag == GC_LIST_FLAG) {
+    if (t->kind == TUPLE_LIST) {
         pawList_free(P, t);
+    } else if (t->kind == TUPLE_MAP) {
+        pawMap_free(P, t);
     } else {
+        paw_assert(t->kind == TUPLE_OTHER);
         pawM_free_flex(P, t, t->nelems, sizeof(t->elems[0]));
     }
 }

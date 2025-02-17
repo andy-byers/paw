@@ -102,6 +102,7 @@ static struct IrType *instantiate_trait(struct InstanceState *I, struct HirTrait
 
 static struct IrType *instantiate_adt(struct InstanceState *I, struct HirAdtDecl *base, struct IrTypeList *types)
 {
+    paw_assert(base->generics != NULL);
     struct IrType *base_type = pawIr_get_type(I->C, base->hid);
     check_type_param(I, ir_adt_types(base_type), types);
     normalize_type_list(I, types);
@@ -110,6 +111,7 @@ static struct IrType *instantiate_adt(struct InstanceState *I, struct HirAdtDecl
 
 static struct IrType *instantiate_func(struct InstanceState *I, struct HirFuncDecl *base, struct IrTypeList *types)
 {
+    paw_assert(base->generics != NULL);
     struct IrSignature *func = IrGetSignature(
             pawIr_get_type(I->C, base->hid));
     check_type_param(I, func->types, types);
@@ -184,9 +186,9 @@ struct IrType *pawP_instantiate(struct Compiler *C, struct HirDecl *base, struct
         .C = C,
     };
 
-    if (HIR_IS_POLY_ADT(base)) {
+    if (HirIsAdtDecl(base)) {
         return instantiate_adt(&I, HirGetAdtDecl(base), types);
-    } else if (HIR_IS_POLY_FUNC(base)) {
+    } else if (HirIsFuncDecl(base)) {
         return instantiate_func(&I, HirGetFuncDecl(base), types);
     }
     return instantiate_trait(&I, HirGetTraitDecl(base), types);

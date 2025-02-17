@@ -29,11 +29,14 @@ struct MonoCollector {
     struct MirTypeFolder *F;
     struct Compiler *C;
     struct Mir *mir;
-    Map *bodies;
-    Map *monos;
-    Map *methods;
-    Map *adts;
+    struct TypeMonoMap *methods;
+    struct DeclMonoMap *monos;
+    struct DeclMonoMap *adts;
+    BodyMap *bodies;
 };
+
+DEFINE_MAP(struct Compiler, DeclMonoMap, pawP_alloc, p_hash_decl_id, p_equals_decl_id, DeclId, struct IrTypeList *)
+DEFINE_MAP(struct Compiler, TypeMonoMap, pawP_alloc, pawIr_type_hash, pawIr_type_equals, struct IrType *, struct IrTypeList *)
 
 static void log_instance(struct MonoCollector *M, const char *kind, const String *name, struct IrType *type)
 {
@@ -457,13 +460,23 @@ static struct IrType *cannonicalize_method(struct MonoCollector *M, struct IrTyp
     return type;
 }
 
-static struct IrTypeList *get_mono_list(struct MonoCollector *M, Map *lists, Value key)
+static struct IrTypeList *mono_list_for_type(struct MonoCollector *M, TypeMonoMap *lists, struct IrType *type)
 {
-    const Value *pval = pawH_get(lists, key);
-    if (pval != NULL) return pval->p;
+    struct IrTypeList **plist = TypeMonoMap_get(M->C, lists, type);
+    if (plist != NULL) return *plist;
 
     struct IrTypeList *monos = pawIr_type_list_new(M->C);
-    pawH_insert(ENV(M->C), lists, key, P2V(monos));
+    TypeMonoMap_insert(M->C, lists, type, monos);
+    return monos;
+}
+
+static struct IrTypeList *mono_list_for_decl(struct MonoCollector *M, DeclMonoMap *lists, DeclId did)
+{
+    struct IrTypeList **plist = DeclMonoMap_get(M->C, lists, did);
+    if (plist != NULL) return *plist;
+
+    struct IrTypeList *monos = pawIr_type_list_new(M->C);
+    DeclMonoMap_insert(M->C, lists, did, monos);
     return monos;
 }
 
@@ -480,7 +493,7 @@ static struct IrType *cannonicalize_adt(struct MonoCollector *M, struct IrTypeLi
 
 static struct IrType *collect_adt(struct MonoCollector *M, struct IrAdt *t)
 {
-    struct IrTypeList *monos = get_mono_list(M, M->adts, I2V(t->did.value));
+    struct IrTypeList *monos = mono_list_for_decl(M, M->adts, t->did);
     return cannonicalize_adt(M, monos, IR_CAST_TYPE(t));
 }
 
@@ -488,7 +501,7 @@ static struct IrType *register_function(struct MonoCollector *M, struct IrSignat
 {
     struct HirDecl *decl = pawHir_get_decl(M->C, t->did);
     if (HirIsVariantDecl(decl)) return collect_adt(M, IrGetAdt(t->result));
-    struct IrTypeList *monos = get_mono_list(M, M->monos, I2V(t->did.value));
+    struct IrTypeList *monos = mono_list_for_decl(M, M->monos, t->did);
     return cannonicalize_func(M, monos, IR_CAST_TYPE(t));
 }
 
@@ -501,8 +514,8 @@ static struct IrType *register_method(struct MonoCollector *M, struct IrSignatur
     self = IrIsAdt(self) ? collect_adt(M, IrGetAdt(self)) : self;
     pawP_set_self(M->C, t, self);
 
-    struct IrTypeList *monos = get_mono_list(M, M->methods, P2V(self));
-    struct Mir *base = pawH_get(M->bodies, I2V(t->did.value))->p;
+    struct IrTypeList *monos = mono_list_for_type(M, M->methods, self);
+    struct Mir *base = *BodyMap_get(M->C, M->bodies, t->did); // must exist
     return cannonicalize_method(M, self, monos, base->name, IR_CAST_TYPE(t));
 }
 
@@ -517,7 +530,7 @@ static struct IrType *collect_signature(struct MonoCollector *M, struct IrSignat
 static struct Mir *monomorphize(struct MonoCollector *M, struct IrType *type)
 {
     struct IrSignature *t = IrGetSignature(type);
-    struct Mir *base = pawH_get(M->bodies, I2V(t->did.value))->p;
+    struct Mir *base = *BodyMap_get(M->C, M->bodies, t->did); // must exist
     if (!base->is_poly) return base;
     if (pawP_is_assoc_fn(M->C, t)) {
         struct IrType *self = pawP_get_self(M->C, t);
@@ -550,8 +563,10 @@ static struct IrType *collect_type(struct IrTypeFolder *F, struct IrType *type)
 static void add_builtin_adt(struct MirTypeFolder *F, enum BuiltinKind code)
 {
     struct MonoCollector *M = F->ud;
-    struct IrType *type = pawIr_get_type(M->C, (HirId){code});
-    struct IrTypeList *monos = get_mono_list(M, M->adts, I2V(code));
+    const DeclId did = M->C->builtins[code].did;
+    struct HirDecl *decl = pawHir_get_decl(F->C, did);
+    struct IrType *type = GET_NODE_TYPE(F->C, decl);
+    struct IrTypeList *monos = mono_list_for_decl(M, M->adts, did);
     K_LIST_PUSH(M->C, M->types, type);
 }
 
@@ -561,7 +576,7 @@ static paw_Bool is_entrypoint(const struct Mir *mir)
         && (mir->self == NULL || IR_TYPE_SUBTYPES(mir->self) == NULL);
 }
 
-struct MonoResult pawP_monomorphize(struct Compiler *C, Map *bodies)
+struct MonoResult pawP_monomorphize(struct Compiler *C, BodyMap *bodies)
 {
     struct MirTypeFolder F;
     struct MonoCollector M = {
@@ -573,9 +588,9 @@ struct MonoResult pawP_monomorphize(struct Compiler *C, Map *bodies)
         .F = &F,
         .C = C,
     };
-    M.methods = pawP_push_map(C);
-    M.monos = pawP_push_map(C);
-    M.adts = pawP_push_map(C);
+    M.methods = TypeMonoMap_new(C);
+    M.monos = DeclMonoMap_new(C);
+    M.adts = DeclMonoMap_new(C);
     pawU_enter_binder(C->U);
 
     pawMir_type_folder_init(&F, C, NULL, &M);
@@ -588,12 +603,14 @@ struct MonoResult pawP_monomorphize(struct Compiler *C, Map *bodies)
     add_builtin_adt(&F, BUILTIN_STR);
 
     // discover functions reachable from the toplevel
-    paw_Int iter = PAW_ITER_INIT;
-    while (pawH_iter(bodies, &iter)) {
-        struct Mir *mir = pawH_value(bodies, iter)->p;
+    BodyMapIterator iter;
+    BodyMapIterator_init(bodies, &iter);
+    while (BodyMapIterator_is_valid(&iter)) {
+        struct Mir *mir = *BodyMapIterator_valuep(&iter);
         if (is_entrypoint(mir)) {
             mir->type = collect_type(&M.F->F, mir->type);
         }
+        BodyMapIterator_next(&iter);
     }
 
     // iterate until monomorphization is complete (every function signature in the codegen
@@ -608,9 +625,9 @@ struct MonoResult pawP_monomorphize(struct Compiler *C, Map *bodies)
     }
 
     pawU_leave_binder(C->U);
-    pawP_pop_object(C, M.adts);
-    pawP_pop_object(C, M.monos);
-    pawP_pop_object(C, M.methods);
+    DeclMonoMap_delete(C, M.adts);
+    DeclMonoMap_delete(C, M.monos);
+    TypeMonoMap_delete(C, M.methods);
 
     for (int i = 0; i < M.other->count; ++i) {
         K_LIST_PUSH(C, M.types, K_LIST_GET(M.other, i));

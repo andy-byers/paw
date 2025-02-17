@@ -45,7 +45,7 @@ struct RegisterAllocator {
     // unhandled: intervals starting after "position"
     // active: intervals assigned to registers
     // inactive: intervals with a hole at "position"
-    Map *handled, *active, *inactive; // struct MirLiveRange * => NULL
+    struct IntervalMap *handled, *active, *inactive;
     struct MirIntervalList *unhandled;
     struct MirLiveInterval *current;
     struct RegisterTable *result;
@@ -60,25 +60,37 @@ struct RegisterAllocator {
     int max_reg;
 };
 
-#define SET_FOREACH(S, iter, it, code) do { \
-        paw_Int iter = PAW_ITER_INIT; \
-        while (pawH_iter(S, &iter)) { \
-            const Value *pk_ = pawH_key(S, iter); \
-            struct MirLiveInterval *it = pk_->p; \
+DEFINE_MAP(struct Compiler, IntervalMap, pawP_alloc, p_hash_ptr, p_equals_ptr, struct MirLiveInterval *, void *)
+DEFINE_MAP_ITERATOR(IntervalMap, struct MirLiveInterval *, void *)
+
+#define SET_ITER(S, iter, it, code) do { \
+        IntervalMapIterator iter; \
+        IntervalMapIterator_init(S, &iter); \
+        while (IntervalMapIterator_is_valid(&iter)) { \
+            struct MirLiveInterval *it = IntervalMapIterator_key(&iter); \
             code; \
         } \
     } while (0)
 
-#define SET_ENUMERATE(S, iter, i, it, code) do { \
-        int i = 0; \
-        paw_Int iter = PAW_ITER_INIT; \
-        while (pawH_iter(S, &iter)) { \
-            const Value *pk_ = pawH_key(S, iter); \
-            struct MirLiveInterval *it = pk_->p; \
-            code; \
-            ++i; \
-        } \
-    } while (0)
+static paw_Bool set_contains(struct RegisterAllocator *R, IntervalMap *set, struct MirLiveInterval *it)
+{
+    return IntervalMap_get(R->C, set, it) != NULL;
+}
+
+static void set_add(struct RegisterAllocator *R, IntervalMap *set, struct MirLiveInterval *it)
+{
+    IntervalMap_insert(R->C, set, it, NULL);
+}
+
+static void iset_erase(IntervalMapIterator *iter)
+{
+    IntervalMapIterator_erase(iter);
+}
+
+static void iset_next(IntervalMapIterator *iter)
+{
+    IntervalMapIterator_next(iter);
+}
 
 #define REG(R, it) (K_LIST_GET((R)->result, (it)->r.value).value)
 #define REG_EQUALS(a, b) ((a).value == (b).value)
@@ -113,12 +125,15 @@ static void dump_interval(struct MirLiveInterval *it, int start, int indent)
     printf("\n");
 }
 
-static void dump_set(Map *set, const char *name)
+static void dump_set(IntervalMap *set, const char *name)
 {
     printf("%s = [", name);
-    SET_ENUMERATE(set, _, i, it, {
+
+    int i = 0;
+    SET_ITER(set, iter, it, {
         if (i > 0) printf(", ");
         printf("_%d", it->r.value);
+        iset_next(&iter);
     });
     printf("]\n");
 }
@@ -167,21 +182,6 @@ static void debug_registers(struct RegisterAllocator *R, MirRegister *regs, int 
         if (MIR_REG_EXISTS(r)) fputc('*', stderr);
         else fputc('.', stderr);
     }
-}
-
-static paw_Bool set_contains(struct RegisterAllocator *R, Map *set, struct MirLiveInterval *it)
-{
-    return pawH_get(set, P2V(it)) != NULL;
-}
-
-static void set_add(struct RegisterAllocator *R, Map *set, struct MirLiveInterval *it)
-{
-    pawH_insert(ENV(R->C), set, P2V(it), P2V(NULL));
-}
-
-static void set_erase(Map *set, paw_Int index)
-{
-    pawH_erase_at(set, index);
 }
 
 static void split_current(struct RegisterAllocator *R, int pos)
@@ -272,19 +272,20 @@ static void try_allocate_free_reg(struct RegisterAllocator *R)
     for (int i = 0; i < NREGISTERS; ++i) {
         free_until_pos[i] = R->max_position;
     }
-
     // ignore registers already containing variables
-    SET_FOREACH(R->active, _, it, {
+    SET_ITER(R->active, iter, it, {
         free_until_pos[REG(R, it)] = 0;
+        iset_next(&iter);
     });
 
     // TODO: this loop can be skipped if "it" was not split off of another
     //       interval, per the Wimmer SSA paper
     // determine where lifetime holes end, i.e. the next position where the
     // variable is expected to be in a register
-    SET_FOREACH(R->inactive, _, it, {
+    SET_ITER(R->inactive, iter, it, {
         const int p = next_intersection(it, current);
         if (p >= 0) free_until_pos[REG(R, it)] = p;
+        IntervalMapIterator_next(&iter);
     });
 
     int pos; // "reg" is free until this instruction
@@ -304,23 +305,27 @@ static void allocate_registers(struct RegisterAllocator *R)
         R->position = R->current->first;
         if (!MIR_REG_EXISTS(R->current->r)) continue;
 
-        SET_FOREACH(R->active, iter, it, {
+        SET_ITER(R->active, iter, it, {
             if (it->last < R->position) {
                 set_add(R, R->handled, it);
-                set_erase(R->active, iter);
+                iset_erase(&iter);
             } else if (!is_covered(it, R->position)) {
                 set_add(R, R->inactive, it);
-                set_erase(R->active, iter);
+                iset_erase(&iter);
+            } else {
+                iset_next(&iter);
             }
         });
 
-        SET_FOREACH(R->inactive, iter, it, {
+        SET_ITER(R->inactive, iter, it, {
             if (it->last < R->position) {
                 set_add(R, R->handled, it);
-                set_erase(R->inactive, iter);
+                iset_erase(&iter);
             } else if (is_covered(it, R->position)) {
                 set_add(R, R->active, it);
-                set_erase(R->inactive, iter);
+                iset_erase(&iter);
+            } else {
+                iset_next(&iter);
             }
         });
 
@@ -481,9 +486,9 @@ struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mi
         .C = C,
     };
 
-    R.handled = pawP_push_map(C);
-    R.active = pawP_push_map(C);
-    R.inactive = pawP_push_map(C);
+    R.handled = IntervalMap_new(C);
+    R.active = IntervalMap_new(C);
+    R.inactive = IntervalMap_new(C);
 
     K_LIST_RESERVE(C, R.result, mir->registers->count);
     for (int i = 0; i < mir->registers->count; ++i) {
@@ -549,9 +554,9 @@ struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mi
     resolve_registers(&R, order);
     *pmax_reg = R.max_reg;
 
-    pawP_pop_object(C, R.inactive);
-    pawP_pop_object(C, R.active);
-    pawP_pop_object(C, R.handled);
+    IntervalMap_delete(C, R.inactive);
+    IntervalMap_delete(C, R.active);
+    IntervalMap_delete(C, R.handled);
     return R.result;
 }
 

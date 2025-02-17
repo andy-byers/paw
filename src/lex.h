@@ -76,7 +76,7 @@ struct Lex {
     struct Compiler *C;
     paw_Env *P;
 
-    Map *strings;
+    Tuple *strings;
     String *modname;
     Closure *main;
     struct Ast *ast;

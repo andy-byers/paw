@@ -110,6 +110,7 @@ const char *paw_push_vfstring(paw_Env *P, const char *fmt, va_list arg);
 
 paw_Bool paw_bool(paw_Env *P, int index);
 paw_Int paw_int(paw_Env *P, int index);
+paw_Uint paw_uint(paw_Env *P, int index);
 paw_Float paw_float(paw_Env *P, int index);
 const char *paw_string(paw_Env *P, int index);
 paw_Function paw_native(paw_Env *P, int index);
@@ -211,7 +212,7 @@ void paw_set_field(paw_Env *P, int index, int ifield);
 void *paw_new_foreign(paw_Env *P, size_t size, int nfields);
 void paw_new_native(paw_Env *P, paw_Function f, int nup);
 void paw_new_list(paw_Env *P, int n);
-void paw_new_map(paw_Env *P, int n);
+void paw_new_map(paw_Env *P, int n, paw_Type k);
 
 int paw_abs_index(paw_Env *P, int index);
 void paw_rotate(paw_Env *P, int index, int n);

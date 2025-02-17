@@ -295,11 +295,10 @@ paw_Bool pawU_equals(struct Unifier *U, struct IrType *a, struct IrType *b)
 //       this unknown is being used to infer
 struct IrType *pawU_new_unknown(struct Unifier *U, int line, struct IrTypeList *bounds)
 {
-    paw_Env *P = ENV(U->C);
     UnificationTable *table = U->table;
 
     // NOTE: inference variables require a stable address, since they point to each other
-    InferenceVar *ivar = pawK_pool_alloc(P, U->C->pool, sizeof(InferenceVar));
+    InferenceVar *ivar = pawP_alloc(U->C, NULL, 0, sizeof(InferenceVar));
     const int index = table->ivars->count;
     K_LIST_PUSH(U->C, table->ivars, ivar);
 
@@ -324,8 +323,7 @@ struct IrTypeList *pawU_new_unknowns(struct Unifier *U, struct IrTypeList *types
 
 void pawU_enter_binder(struct Unifier *U)
 {
-    paw_Env *P = ENV(U->C);
-    UnificationTable *table = pawK_pool_alloc(P, U->C->pool, sizeof(UnificationTable));
+    UnificationTable *table = pawP_alloc(U->C, NULL, 0, sizeof(UnificationTable));
     table->ivars = var_list_new(U->C);
     table->depth = U->depth;
     table->outer = U->table;

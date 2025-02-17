@@ -53,7 +53,7 @@ typedef struct Generator {
     struct MirVisitor *V;
     struct ItemList *items;
     struct Pool *pool;
-    Map *builtin;
+    Tuple *builtin;
     paw_Env *P;
 } Generator;
 
@@ -148,8 +148,8 @@ static struct Def *get_def(struct Generator *G, ItemId iid)
 
 static struct Type *lookup_type(struct Generator *G, struct IrType *type)
 {
-    Value *pv = MAP_GET(G->C->type2rtti, P2V(type));
-    return pv != NULL ? pv->p : NULL;
+    struct Type **prtti = RttiMap_get(G->C, G->C->type2rtti, type);
+    return prtti != NULL ? *prtti : NULL;
 }
 
 static ItemId type2def(struct Generator *G, struct IrType *type)
@@ -252,7 +252,7 @@ static String *mangle_finish(paw_Env *P, Buffer *buf, struct Generator *G)
 
     // anchor in compiler string table
     String *str = V_STRING(P->top.p[-1]);
-    MAP_INSERT(G, G->C->strings, P2V(str), P2V(str));
+    pawMap_insert(P, G->C->strings, P2V(str), P2V(str));
     pawC_pop(P);
     return str;
 }
@@ -299,7 +299,7 @@ static String *adt_name(struct Generator *G, const String *modname, struct IrTyp
     return mangle_name(G, modname, d->name, ir_adt_types(type));
 }
 
-static Map *kcache_map(struct FuncState *fs, enum BuiltinKind code)
+static ValueMap *kcache_map(struct FuncState *fs, enum BuiltinKind code)
 {
     if (code == BUILTIN_INT) {
         return fs->kcache.ints;
@@ -319,8 +319,8 @@ static int add_constant(struct Generator *G, Value v, enum BuiltinKind code)
     if (code <= BUILTIN_BOOL) code = BUILTIN_INT;
 
     // share constant values within each function
-    Map *kmap = kcache_map(fs, code);
-    const Value *pk = MAP_GET(kmap, v);
+    ValueMap *kmap = kcache_map(fs, code);
+    const Value *pk = ValueMap_get(G->C, kmap, v);
     if (pk != NULL) return CAST(int, pk->i);
 
     if (fs->nk == CONSTANT_MAX) {
@@ -329,7 +329,7 @@ static int add_constant(struct Generator *G, Value v, enum BuiltinKind code)
     pawM_grow(ENV(G), p->k, fs->nk, p->nk);
     p->k[fs->nk] = v;
 
-    MAP_INSERT(G, kmap, v, I2V(fs->nk));
+    ValueMap_insert(G->C, kmap, v, I2V(fs->nk));
     return fs->nk++;
 }
 
@@ -373,16 +373,18 @@ static int code_switch_int(struct FuncState *fs, MirRegister discr, int k)
     return emit_jump(fs);
 }
 
-static void enter_kcache(struct FuncState *fs)
+static void enter_kcache(struct Generator *G, struct KCache *cache)
 {
-    fs->kcache.ints = pawP_push_map(fs->G->C);
-    fs->kcache.strs = pawP_push_map(fs->G->C);
-    fs->kcache.flts = pawP_push_map(fs->G->C);
+    cache->ints = ValueMap_new(G->C);
+    cache->strs = ValueMap_new(G->C);
+    cache->flts = ValueMap_new(G->C);
 }
 
-static void leave_kcache(struct FuncState *fs)
+static void leave_kcache(struct Generator *G, struct KCache *cache)
 {
-    ENV(fs->G)->top.p -= 3;
+     ValueMap_delete(G->C, cache->ints);
+     ValueMap_delete(G->C, cache->strs);
+     ValueMap_delete(G->C, cache->flts);
 }
 
 static void leave_function(struct Generator *G)
@@ -402,7 +404,7 @@ static void leave_function(struct Generator *G)
     pawM_shrink(P, p->k, p->nk, fs->nk);
     p->nk = fs->nk;
 
-    leave_kcache(fs);
+    leave_kcache(G, &fs->kcache);
 
     G->fs = fs->outer;
     CHECK_GC(P);
@@ -423,7 +425,7 @@ static void enter_function(struct Generator *G, struct FuncState *fs, struct Mir
     };
     G->fs = fs;
 
-    enter_kcache(fs);
+    enter_kcache(G, &fs->kcache);
 }
 
 static ValueId resolve_function(struct Generator *G, struct Type *rtti)
@@ -483,7 +485,7 @@ static void code_c_function(struct Generator *G, struct Mir *mir, int g)
     struct IrType *type = mir->type;
     const String *modname = prefix_for_modno(G, IR_TYPE_DID(type).modno);
     const String *mangled = func_name(G, modname, type);
-    const Value *pv = MAP_GET(G->builtin, P2V(mangled));
+    const Value *pv = pawMap_get(ENV(G), G->builtin, P2V(mangled));
     if (pv == NULL) ERROR(G, PAW_ENAME, "C function '%s' not loaded", mir->name->text);
     *pval = *pv;
 }
@@ -624,9 +626,9 @@ static void code_items(struct Generator *G)
 
 static void register_items(struct Generator *G)
 {
-    Map *bodies = pawP_lower_hir(G->C);
+    BodyMap *bodies = pawP_lower_hir(G->C);
     struct MonoResult mr = pawP_monomorphize(G->C, bodies);
-    pawP_pop_object(G->C, bodies);
+    BodyMap_delete(G->C, bodies);
 
     G->items = pawP_allocate_defs(G->C, mr.bodies, mr.types);
 
@@ -798,8 +800,13 @@ static void code_container(struct MirVisitor *V, struct MirContainer *x)
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
     const int temp = temporary_reg(fs, 0);
-    code_AB(fs, x->b_kind == BUILTIN_LIST ? OP_NEWLIST : OP_NEWMAP,
-            temp, x->nelems);
+    if (x->b_kind == BUILTIN_LIST) {
+        code_AB(fs, OP_NEWLIST, temp, x->nelems);
+    } else {
+        struct IrType *key_type = ir_map_key(TYPEOF(G, x->output));
+        enum BuiltinKind key_kind = TYPE_CODE(G, key_type);
+        code_ABC(fs, OP_NEWMAP, temp, x->nelems, key_kind);
+    }
     move_to_reg(fs, temp, REG(x->output));
 }
 
@@ -1254,12 +1261,12 @@ void pawP_codegen(struct Compiler *C)
     };
 
     pawL_push_builtin_map(P);
-    G.builtin = V_MAP(P->top.p[-1]);
+    G.builtin = V_TUPLE(P->top.p[-1]);
 
     setup_codegen(&G);
     register_items(&G);
     code_items(&G);
 
-    pawP_pop_object(C, G.builtin);
+    paw_pop(ENV(C), 1);
 }
 

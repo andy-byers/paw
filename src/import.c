@@ -11,13 +11,13 @@
 
 struct ImportContext {
     struct ImportContext *outer;
-    Map *aliases;
+    StringMap *aliases;
 };
 
 struct Importer {
     struct ImportContext *ctx;
     struct Compiler *C;
-    Map *imports;
+    ImportMap *imports;
     paw_Env *P;
     int line; // TODO: never set
 };
@@ -25,7 +25,7 @@ struct Importer {
 static void enter_context(struct Importer *I, struct ImportContext *ctx)
 {
     *ctx = (struct ImportContext){
-        .aliases = pawP_push_map(I->C),
+        .aliases = StringMap_new(I->C),
         .outer = I->ctx,
     };
     I->ctx = ctx;
@@ -33,30 +33,30 @@ static void enter_context(struct Importer *I, struct ImportContext *ctx)
 
 static void leave_context(struct Importer *I)
 {
-    pawP_pop_object(I->C, I->ctx->aliases);
+    StringMap_delete(I->C, I->ctx->aliases);
     I->ctx = I->ctx->outer;
 }
 
 static int next_modno(struct Importer *I)
 {
-    return CAST(int, pawH_length(I->imports));
+    return CAST(int, ImportMap_length(I->imports));
 }
 
 static String *module_name(struct Importer *I, String *name)
 {
-    const Value *pv = pawH_get(I->ctx->aliases, P2V(name));
-    return pv == NULL ? name : pv->p;
+    String *const *palias = StringMap_get(I->C, I->ctx->aliases, name);
+    return palias == NULL ? name : *palias;
 }
 
-static struct Ast *get_import(struct Importer *I, const String *name)
+static struct Ast *get_import(struct Importer *I, String *name)
 {
-    const Value *pv = pawH_get(I->imports, P2V(name));
-    return pv == NULL ? NULL : pv->p;
+    struct Ast *const *past = ImportMap_get(I->C, I->imports, name);
+    return past == NULL ? NULL : *past;
 }
 
-static void add_import(struct Importer *I, const String *name, struct Ast *ast)
+static void add_import(struct Importer *I, String *name, struct Ast *ast)
 {
-    MAP_INSERT(I, I->imports, P2V(name), P2V(ast));
+    ImportMap_insert(I->C, I->imports, name, ast);
 }
 
 static void collect_imports_from(struct Importer *I, struct Ast *ast);
@@ -96,7 +96,7 @@ static void collect_imports_from(struct Importer *I, struct Ast *ast)
         if (!AstIsUseDecl(item)) continue;
         struct AstUseDecl *use = AstGetUseDecl(item);
         if (use->item == NULL && use->as != NULL) {
-            MAP_INSERT(I, ctx.aliases, P2V(use->as), P2V(use->name));
+            StringMap_insert(I->C, ctx.aliases, use->as, use->name);
         }
     }
 

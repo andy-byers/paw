@@ -20,7 +20,6 @@
 #include "match.h"
 #include "hir.h"
 #include "ir_type.h"
-#include "map.h"
 #include "mir.h"
 #include "ssa.h"
 
@@ -56,7 +55,7 @@ struct BlockState {
 };
 
 struct MatchState {
-    Map *var_mapping;
+    struct VarMap *var_mapping;
     struct MatchState *outer;
     struct MirRegisterList *regs;
     struct VariableList *vars;
@@ -70,14 +69,9 @@ struct Label {
     enum JumpKind kind : 7;
 };
 
-DEFINE_LIST(struct Compiler, var_stack_, VarStack, struct LocalVar)
-DEFINE_LIST(struct Compiler, label_list_, LabelList, struct Label)
-
 struct LowerHir {
     struct HirVisitor V;
     struct Compiler *C;
-    Map *match_vars;
-    Map *upvalues;
     paw_Env *P;
 
     struct MatchState *ms;
@@ -86,7 +80,23 @@ struct LowerHir {
     struct VarStack *stack;
 };
 
-static void enter_match(struct LowerHir *L, struct MatchState *ms, Map *var_mapping)
+static paw_Uint var_hash(struct Compiler *C, struct MatchVar v)
+{
+    PAW_UNUSED(C);
+    return v.id;
+}
+
+static paw_Bool var_equals(struct Compiler *C, struct MatchVar a, struct MatchVar b)
+{
+    PAW_UNUSED(C);
+    return a.id == b.id;
+}
+
+DEFINE_LIST(struct Compiler, var_stack_, VarStack, struct LocalVar)
+DEFINE_LIST(struct Compiler, label_list_, LabelList, struct Label)
+DEFINE_MAP(struct Compiler, VarMap, pawP_alloc, var_hash, var_equals, struct MatchVar, MirRegister)
+
+static void enter_match(struct LowerHir *L, struct MatchState *ms, VarMap *var_mapping)
 {
     *ms = (struct MatchState){
         .var_mapping = var_mapping,
@@ -1258,9 +1268,9 @@ static paw_Bool visit_expr_stmt(struct HirVisitor *V, struct HirExprStmt *s)
 
 static MirRegister get_test_reg(struct LowerHir *L, struct MatchVar v)
 {
-    const Value *pval = pawH_get(L->ms->var_mapping, I2V(v.id));
-    paw_assert(pval != NULL);
-    return (MirRegister){CAST(int, pval->i)};
+    const MirRegister *pr = VarMap_get(L->C, L->ms->var_mapping, v);
+    paw_assert(pr != NULL);
+    return *pr;
 }
 
 static void declare_match_bindings(struct LowerHir *L, struct BindingList *bindings)
@@ -1369,7 +1379,7 @@ static struct MirRegisterList *allocate_registers(struct LowerHir *L, struct IrT
 
 static void map_var_to_reg(struct LowerHir *L, struct MatchVar var, MirRegister reg)
 {
-    pawH_insert(ENV(L->C), L->ms->var_mapping, I2V(var.id), I2V(reg.value));
+    VarMap_insert(L->C, L->ms->var_mapping, var, reg);
 }
 
 static void allocate_match_vars(struct LowerHir *L, MirRegister discr, struct MatchCase mc, paw_Bool is_enum)
@@ -1546,7 +1556,7 @@ static void visit_decision(struct HirVisitor *V, struct Decision *d, MirRegister
 static MirRegister lower_match_expr(struct HirVisitor *V, struct HirMatchExpr *e)
 {
     struct LowerHir *L = V->ud;
-    Map *var_mapping = pawP_push_map(L->C);
+    VarMap *var_mapping = VarMap_new(L->C);
 
     struct BlockState bs;
     struct MatchState ms;
@@ -1566,7 +1576,7 @@ static MirRegister lower_match_expr(struct HirVisitor *V, struct HirMatchExpr *e
     leave_match(L);
     leave_block(L);
 
-    pawP_pop_object(L->C, var_mapping);
+    VarMap_delete(L->C, var_mapping);
     return result;
 }
 
@@ -1604,22 +1614,16 @@ struct Mir *pawP_lower_hir_body(struct Compiler *C, struct HirFuncDecl *func)
     L.V.VisitVarDecl = visit_var_decl;
     L.V.VisitExprStmt = visit_expr_stmt;
 
-    L.match_vars = pawP_push_map(C);
-    L.upvalues = pawP_push_map(C);
-
     lower_hir_body(&L, func, result);
     pawMir_remove_unreachable_blocks(result);
     pawSsa_construct(result);
     pawMir_propagate_constants(result);
-
-    pawP_pop_object(C, L.upvalues);
-    pawP_pop_object(C, L.match_vars);
     return result;
 }
 
-Map *pawP_lower_hir(struct Compiler *C)
+BodyMap *pawP_lower_hir(struct Compiler *C)
 {
-    Map *result = pawP_push_map(C);
+    BodyMap *result = BodyMap_new(C);
     struct HirDeclList *decls = C->decls;
     for (int i = 0; i < decls->count; ++i) {
         struct HirDecl *decl = K_LIST_GET(decls, i);
@@ -1627,12 +1631,10 @@ Map *pawP_lower_hir(struct Compiler *C)
             struct HirFuncDecl *d = HirGetFuncDecl(decl);
             if (d->self == NULL || IrIsAdt(d->self)) {
                 struct Mir *r = pawP_lower_hir_body(C, d);
-                pawH_insert(ENV(C), result, I2V(d->did.value), P2V(r));
+                BodyMap_insert(C, result, d->did, r);
             }
         }
     }
-    // 'result' should be on top of the stack
-    paw_assert(ENV(C)->top.p[-1].p == result);
     return result;
 }
 

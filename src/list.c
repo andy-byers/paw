@@ -11,10 +11,12 @@
 
 Tuple *pawList_new(paw_Env *P, paw_Int capacity, Value *out)
 {
+    if (capacity > LIST_MAX_CAPACITY) pawM_error(P);
+
     Tuple *t = pawV_new_tuple(P, 3);
     // clear list components so the GC knows not to read them
     LIST_BEGIN(t) = LIST_END(t) = LIST_BOUND(t) = NULL;
-    t->gc_flag = GC_LIST_FLAG;
+    t->kind = TUPLE_LIST;
     V_SET_OBJECT(out, t);
 
     capacity = PAW_MAX(capacity, LIST_MIN_CAPACITY);

@@ -353,23 +353,23 @@ static int string_parse_int(paw_Env *P)
 
 static int map_length(paw_Env *P)
 {
-//    pawR_length(P, PAW_ADT_MAP);
+    pawR_map_length(P, P->cf, CF_BASE(1), CF_BASE(1));
     return 1;
 }
 
 static int map_get_or(paw_Env *P)
 {
-    Map *m = V_MAP(*CF_BASE(1));
+    Tuple *m = V_TUPLE(*CF_BASE(1));
     const Value key = *CF_BASE(2);
-    const Value *pv = pawH_get(m, key);
+    const Value *pv = pawMap_get(P, m, key);
     if (pv != NULL) P->top.p[-1] = *pv;
     return 1;
 }
 
 static int map_erase(paw_Env *P)
 {
-    Map *m = V_MAP(*CF_BASE(1));
-    pawH_erase(m, *CF_BASE(2));
+    Tuple *m = V_TUPLE(*CF_BASE(1));
+    pawMap_remove(P, m, *CF_BASE(2));
     paw_pop(P, 1); // return 'self'
     return 1;
 }
@@ -669,24 +669,39 @@ static int init_searchers(paw_Env *P)
 
 void pawL_init(paw_Env *P)
 {
+    static MapPolicy s_base_policy = {0};
+    static MapPolicy s_float_policy = {.fp = PAW_TRUE};
+
+    P->map_policies.alloc = 32;
+    P->map_policies.data = pawM_new_vec(P, 32, MapPolicy *);
+    P->map_policies.data[PAW_TUNIT] = &s_base_policy;
+    P->map_policies.data[PAW_TBOOL] = &s_base_policy;
+    P->map_policies.data[PAW_TINT] = &s_base_policy;
+    P->map_policies.data[PAW_TFLOAT] = &s_float_policy;
+    P->map_policies.data[PAW_TSTR] = &s_base_policy;
+    P->map_policies.count = 5;
+
     // create system registry objects
     pawE_push_cstr(P, CSTR_KSEARCHERS);
     paw_new_list(P, init_searchers(P));
     pawE_push_cstr(P, CSTR_KMODULES);
-    paw_new_map(P, 0);
+    paw_new_map(P, 0, PAW_TSTR);
     pawE_push_cstr(P, CSTR_KBUILTIN);
-    paw_new_map(P, 0);
+    paw_new_map(P, 0, PAW_TSTR);
     load_builtins(P);
 
     // create the registry itself
-    paw_new_map(P, 3);
+    paw_new_map(P, 3, PAW_TSTR);
     P->registry = P->top.p[-1];
     paw_pop(P, 1);
 }
 
 void pawL_uninit(paw_Env *P)
 {
-    // clear GC root
+    pawM_free_vec(P, P->map_policies.data, P->map_policies.alloc);
+
+    // clear GC roots
+    P->map_policies = (struct MapPolicyList){0};
     P->registry = (Value){0};
 }
 

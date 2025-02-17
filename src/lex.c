@@ -124,7 +124,7 @@ static struct Token make_string(struct Lex *x, TokenKind kind)
     struct DynamicMem *dm = x->dm;
     struct CharVec *cv = &dm->scratch;
     struct Token t = make_token(kind);
-    String *s = pawP_scan_nstring(ENV(x), x->strings, cv->data, CAST_SIZE(cv->count));
+    String *s = pawP_scan_nstring(x->C, x->strings, cv->data, CAST_SIZE(cv->count));
     V_SET_OBJECT(&t.value, s);
     cv->count = 0;
     return t;

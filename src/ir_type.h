@@ -344,7 +344,6 @@ static inline IrDef *pawIr_new_adt_def(struct Compiler *C, DeclId did, String *n
     return def;
 }
 
-
 #define IR_KINDOF(node) ((node)->hdr.kind)
 #define IR_CAST_TYPE(p) CAST(IrType *, p)
 #define IR_TYPE_DID(type) (IrIsAdt(type) ? IrGetAdt(type)->did : \
@@ -368,9 +367,9 @@ struct IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *
 DeclId pawIr_next_did(struct Compiler *C, int mod);
 
 IrType *pawIr_get_type(struct Compiler *C, HirId hid);
-IrDef *pawIr_get_def(struct Compiler *C, DeclId did);
+IrDef *pawIr_get_def(struct Compiler *C, DefId did);
 void pawIr_set_type(struct Compiler *C, HirId hid, IrType *type);
-void pawIr_set_def(struct Compiler *C, DeclId did, IrDef *def);
+void pawIr_set_def(struct Compiler *C, DefId did, IrDef *def);
 
 struct IrFuncDef *pawIr_get_func_def(struct Compiler *C, DeclId did);
 struct IrVariantDef *pawIr_get_variant_def(struct Compiler *C, DeclId did);
@@ -379,9 +378,9 @@ struct IrAdtDef *pawIr_get_adt_def(struct Compiler *C, DeclId did);
 struct IrParamDef *pawIr_get_param_def(struct Compiler *C, DeclId did);
 struct IrFieldDef *pawIr_get_field_def(struct Compiler *C, DeclId did);
 
-paw_Uint pawIr_type_hash(void *ctx, Value v);
-paw_Bool pawIr_type_equals(void *ctx, Value lhs, Value rhs);
-Map *pawIr_new_type_map(struct Compiler *C);
+paw_Uint pawIr_type_hash(struct Compiler *C, IrType *t);
+paw_Bool pawIr_type_equals(struct Compiler *C, IrType *a, IrType *b);
+TypeMap *pawIr_new_type_map(struct Compiler *C);
 
 void pawIr_validate_type(struct Compiler *C, struct IrType *type);
 

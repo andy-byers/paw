@@ -21,7 +21,6 @@
 #define V_CLOSURE(v) (O_CLOSURE(V_OBJECT(v)))
 #define V_UPVALUE(v) (O_UPVALUE(V_OBJECT(v)))
 #define V_STRING(v) (O_STRING(V_OBJECT(v)))
-#define V_MAP(v) (O_MAP(V_OBJECT(v)))
 #define V_TUPLE(v) (O_TUPLE(V_OBJECT(v)))
 #define V_FOREIGN(v) (O_FOREIGN(V_OBJECT(v)))
 
@@ -40,7 +39,6 @@
 #define O_IS_PROTO(o) (O_KIND(o) == VPROTO)
 #define O_IS_CLOSURE(o) (O_KIND(o) == VCLOSURE)
 #define O_IS_UPVALUE(o) (O_KIND(o) == VUPVALUE)
-#define O_IS_MAP(o) (O_KIND(o) == VMAP)
 #define O_IS_TUPLE(o) (O_KIND(o) == VTUPLE)
 #define O_IS_FOREIGN(o) (O_KIND(o) == VFOREIGN)
 
@@ -49,7 +47,6 @@
 #define O_PROTO(o) CHECK_EXP(O_IS_PROTO(o), (Proto *)(o))
 #define O_CLOSURE(o) CHECK_EXP(O_IS_CLOSURE(o), (Closure *)(o))
 #define O_UPVALUE(o) CHECK_EXP(O_IS_UPVALUE(o), (UpValue *)(o))
-#define O_MAP(o) CHECK_EXP(O_IS_MAP(o), (Map *)(o))
 #define O_TUPLE(o) CHECK_EXP(O_IS_TUPLE(o), (Tuple *)(o))
 #define O_FOREIGN(o) CHECK_EXP(O_IS_FOREIGN(o), (Foreign *)(o))
 
@@ -63,7 +60,6 @@ typedef enum ValueKind {
 
     // object types
     VSTRING,
-    VMAP,
     VTUPLE,
     VFOREIGN,
 
@@ -78,12 +74,9 @@ typedef enum ValueKind {
     NVTYPES
 } ValueKind;
 
-#define GC_LIST_FLAG 1
-
 #define GC_HEADER \
     struct Object *gc_next; \
     unsigned char gc_mark : 2; \
-    unsigned char gc_flag : 6; \
     ValueKind gc_kind : 8
 typedef struct Object {
     GC_HEADER;
@@ -229,36 +222,22 @@ typedef struct Native {
 Native *pawV_new_native(paw_Env *P, paw_Function func, int nup);
 void pawV_free_native(paw_Env *P, Native *f);
 
+#define TUPLE_OTHER 0
+#define TUPLE_LIST 1
+#define TUPLE_MAP 2
+
 typedef struct Tuple {
     GC_HEADER;
+    unsigned char kind : 2;
     int nelems;
     Object *gc_list;
     Value elems[];
 } Tuple;
 
+_Static_assert(sizeof(Tuple) == 3*sizeof(void*), "");
+
 Tuple *pawV_new_tuple(paw_Env *P, int nelems);
 void pawV_free_tuple(paw_Env *P, Tuple *t);
-
-typedef enum MapState {
-    MAP_ITEM_VACANT,
-    MAP_ITEM_ERASED,
-    MAP_ITEM_OCCUPIED,
-} MapState;
-
-typedef struct MapMeta {
-    unsigned char state : 2;
-} MapMeta;
-
-typedef struct MapPolicy MapPolicy;
-
-typedef struct Map {
-    GC_HEADER;
-    Object *gc_list;
-    const MapPolicy *policy;
-    void *data;
-    size_t length;
-    size_t capacity;
-} Map;
 
 enum {
     VBOX_FILE = 1,

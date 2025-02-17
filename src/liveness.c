@@ -17,22 +17,24 @@ struct Liveness {
     struct MirIntervalList *intervals;
     struct MirLocationList *locations;
     struct RegisterSetList *live;
+    struct IntervalMap *mapping;
     struct Compiler *C;
     struct Mir *mir;
-    Map *mapping;
     int index;
 };
 
 DEFINE_LIST(struct Compiler, regset_list_, RegisterSetList, struct MirRegisterList *)
+DEFINE_MAP(struct Compiler, IntervalMap, pawP_alloc, mir_register_hash, mir_register_equals, MirRegister, struct MirLiveInterval *)
 
 static void map_reg_to_interval(struct Liveness *L, MirRegister r, struct MirLiveInterval *it)
 {
-    pawH_insert(ENV(L->C), L->mapping, I2V(r.value), P2V(it));
+    IntervalMap_insert(L->C, L->mapping, r, it);
 }
 
 static struct MirLiveInterval *interval_for_reg(struct Liveness *L, MirRegister r)
 {
-    return pawH_get(L->mapping, I2V(r.value))->p;
+    struct MirLiveInterval *const *pit = IntervalMap_get(L->C, L->mapping, r);
+    return pit != NULL ? *pit : NULL;
 }
 
 static int bb_first_loc(struct Liveness *L, struct MirBlockData *block)
@@ -399,7 +401,7 @@ struct MirIntervalList *pawMir_compute_liveness(struct Compiler *C, struct Mir *
         .mir = mir,
         .C = C,
     };
-    L.mapping = pawP_push_map(C);
+    L.mapping = IntervalMap_new(C);
 
     struct MirBlockData *last = mir_bb_data(mir, K_LIST_LAST(order));
     const int nparameters = IR_FPTR(mir->type)->params->count;
@@ -432,7 +434,7 @@ struct MirIntervalList *pawMir_compute_liveness(struct Compiler *C, struct Mir *
     compute_liveness(&L, mir, order);
     extend_captured_intervals(&L, mir);
 
-    pawP_pop_object(C, L.mapping);
+    IntervalMap_delete(C, L.mapping);
     return L.intervals;
 }
 

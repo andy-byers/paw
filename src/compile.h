@@ -42,23 +42,13 @@
 
 #define ENV(x) ((x)->P)
 #define DLOG(X, ...) PAWD_LOG(ENV(X), __VA_ARGS__)
-#define SCAN_STRING(X, s) pawP_scan_string(ENV(X), (X)->strings, s)
+#define SCAN_STRING(X, s) pawP_scan_string(X, (X)->strings, s)
 #define NAME_ERROR(X, ...) pawE_error(ENV(X), PAW_ENAME, (X)->line, __VA_ARGS__)
 #define SYNTAX_ERROR(X, ...) pawE_error(ENV(X), PAW_ESYNTAX, (X)->line, __VA_ARGS__)
 #define TYPE_ERROR(X, ...) pawE_error(ENV(X), PAW_ETYPE, (X)->line, __VA_ARGS__)
 
 #define GET_NODE_TYPE(C, p) pawIr_get_type(C, (p)->hdr.hid)
 #define SET_NODE_TYPE(C, p, t) pawIr_set_type(C, (p)->hdr.hid, t)
-
-typedef struct DefId {
-    unsigned short modno;
-    unsigned short value;
-} DefId;
-
-typedef struct DeclId {
-    unsigned short modno;
-    unsigned short value;
-} DeclId;
 
 #define MAX_MODULES 256
 #define MAX_DECLS 10000
@@ -82,7 +72,6 @@ struct IrType;
 struct IrTypeList;
 struct IrTypeFolder;
 struct IrSignature;
-enum IrTypeKind;
 
 struct Mir;
 struct MirIntervalList;
@@ -91,57 +80,16 @@ struct MirBodyList;
 struct MirBlockList;
 struct VariableList;
 
+struct StringMap;
+
 void *pawP_pool_alloc(paw_Env *P, struct Pool *pool, size_t size);
+void *pawP_alloc(struct Compiler *C, void *ptr, size_t size0, size_t size);
 
-String *pawP_scan_nstring(paw_Env *P, Map *st, const char *s, size_t n);
-static inline String *pawP_scan_string(paw_Env *P, Map *st, const char *s)
+String *pawP_scan_nstring(struct Compiler *C, Tuple *map, const char *s, size_t n);
+static inline String *pawP_scan_string(struct Compiler *C, Tuple *map, const char *s)
 {
-    return pawP_scan_nstring(P, st, s, strlen(s));
+    return pawP_scan_nstring(C, map, s, strlen(s));
 }
-
-// ORDER UnaryOp
-enum UnaryOp {
-    UNARY_LEN,
-    UNARY_NEG,
-    UNARY_NOT,
-    UNARY_BNOT,
-};
-
-// ORDER BinaryOp
-enum BinaryOp {
-    BINARY_EQ,
-    BINARY_NE,
-    BINARY_LT,
-    BINARY_LE,
-    BINARY_GT,
-    BINARY_GE,
-    BINARY_AS,
-    BINARY_ADD,
-    BINARY_SUB,
-    BINARY_MUL,
-    BINARY_DIV,
-    BINARY_MOD,
-    BINARY_BXOR,
-    BINARY_BAND,
-    BINARY_BOR,
-    BINARY_SHL,
-    BINARY_SHR,
-};
-
-// ORDER BuiltinKind
-enum BuiltinKind {
-    BUILTIN_UNIT,
-    BUILTIN_BOOL,
-    BUILTIN_INT,
-    BUILTIN_FLOAT,
-    BUILTIN_STR,
-    BUILTIN_LIST,
-    BUILTIN_MAP,
-    BUILTIN_OPTION,
-    BUILTIN_RESULT,
-
-    NBUILTINS,
-};
 
 #define IS_BASIC_TYPE(code) ((code) <= BUILTIN_STR)
 #define IS_BUILTIN_TYPE(code) ((code) < NBUILTINS)
@@ -151,14 +99,10 @@ struct Builtin {
     DeclId did;
 };
 
-struct ObjectStore {
-    Map *objects;
-    int offset;
-};
+typedef struct Map Map;
 
 struct Compiler {
     struct Builtin builtins[NBUILTINS];
-    struct ObjectStore store;
     struct ModuleList *modules;
     struct HirDeclList *decls;
     struct DynamicMem *dm;
@@ -167,25 +111,23 @@ struct Compiler {
     struct Unifier *U;
     String *modname;
 
-    MapPolicy type_policy;
+    // '.strings' anchors all strings used during compilation so they are not
+    // collected by the GC.
+    Tuple *strings;
 
     // '.traits' maps each ADT to a list of implemented traits. Includes ADTs
     // from all modules being compiled.
-    Map *traits; // DeclId => IrTypeList *
+    struct TraitMap *traits; // DeclId => HirDeclList *
 
     // '.imports' maps modules names to ASTs for each module being compiled.
-    Map *imports; // String * => Ast
+    struct ImportMap *imports; // String * => Ast
 
-    // '.strings' anchors all strings used during compilation so they are not
-    // collected by the GC.
-    Map *strings;
+    struct MethodContextMap *method_contexts; // IrType * => IrType *
+    struct MethodBinderMap *method_binders; // DeclId => IrTypeList *
+    struct RttiMap *type2rtti;
 
-    Map *method_contexts; // IrType * => IrType *
-    Map *method_binders; // DeclId => IrTypeList *
-    Map *type2rtti;
-
-    Map *ir_types; // HirId => IrType *
-    Map *ir_defs; // DefId => IrDef *
+    struct TypeMap *ir_types; // HirId => IrType *
+    struct DefMap *ir_defs; // DefId => IrDef *
 
     paw_Env *P;
     int hir_count;
@@ -198,11 +140,6 @@ struct IrTypeList *pawP_get_binder(struct Compiler *C, DeclId did);
 void pawP_set_binder(struct Compiler *C, DeclId did, struct IrTypeList *binder);
 void pawP_set_self(struct Compiler *C, struct IrSignature *method, struct IrType *self);
 struct IrType *pawP_get_self(struct Compiler *C, struct IrSignature *method);
-
-enum JumpKind {
-    JUMP_BREAK,
-    JUMP_CONTINUE,
-};
 
 struct ModuleInfo {
     struct HirScope *globals;
@@ -253,9 +190,7 @@ void pawP_bitset_or(struct BitSet *a, const struct BitSet *b);
 
 struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, struct MirIntervalList *intervals, struct MirLocationList *locations, int *pmax_reg);
 struct Mir *pawP_lower_hir_body(struct Compiler *C, struct HirFuncDecl *func);
-Map *pawP_lower_hir(struct Compiler *C);
-
-struct IrType *pawP_attach_type(struct Compiler *C, DeclId did, enum IrTypeKind kind, int line);
+struct BodyMap *pawP_lower_hir(struct Compiler *C);
 
 struct IrTypeList *pawP_instantiate_typelist(struct Compiler *C, struct IrTypeList *before, struct IrTypeList *after, struct IrTypeList *target);
 struct IrType *pawP_instantiate_field(struct Compiler *C, struct IrType *self, struct HirDecl *field);
@@ -318,7 +253,7 @@ struct MonoResult {
     struct MirBodyList *bodies;
 };
 
-struct MonoResult pawP_monomorphize(struct Compiler *C, Map *bodies);
+struct MonoResult pawP_monomorphize(struct Compiler *C, struct BodyMap *bodies);
 
 void pawP_resolve(struct Compiler *C);
 void pawP_codegen(struct Compiler *C);
@@ -363,36 +298,65 @@ struct ItemSlot {
 
 DEFINE_LIST(struct Compiler, pawP_item_list_, ItemList, struct ItemSlot)
 
-void pawP_push_store(struct Compiler *C, struct ObjectStore *store);
+// Generated code for data structures used during compilation
 
-static inline void pawP_pop_store(struct Compiler *C, struct ObjectStore *store)
+static inline paw_Uint p_hash_def_id(struct Compiler *C, DefId did)
 {
-    // make sure nothing else was left on the stack
-    paw_assert(ENV(C)->top.p[-1].p == store->objects);
-    PAW_UNUSED(store);
-
-    --ENV(C)->top.p;
+    PAW_UNUSED(C);
+    return did.value;
 }
 
-Map *pawP_new_map(struct Compiler *C, struct ObjectStore *store);
-
-#define MAP_KEY(map, index) pawH_key(map, index)
-#define MAP_VALUE(map, index) pawH_value(map, index)
-#define MAP_INSERT(X, map, key, value) pawH_insert(ENV(X), map, key, value)
-#define MAP_REMOVE(map, key) pawH_erase(map, key)
-#define MAP_ERASE(map, index) pawH_erase_at(map, index)
-#define MAP_GET(map, key) pawH_get(map, key)
-#define MAP_CONTAINS(map, key) (MAP_GET(map, key) != NULL)
-
-Map *pawP_push_map(struct Compiler *C);
-
-static inline void pawP_pop_object(struct Compiler *C, void *ptr)
+static inline paw_Bool p_equals_def_id(struct Compiler *C, DefId a, DefId b)
 {
-    // make sure nothing else was left on the stack
-    paw_assert(ENV(C)->top.p[-1].p == ptr);
-    PAW_UNUSED(ptr);
-
-    --ENV(C)->top.p;
+    PAW_UNUSED(C);
+    return a.value == b.value;
 }
+
+static inline paw_Uint p_hash_decl_id(struct Compiler *C, DeclId did)
+{
+    PAW_UNUSED(C);
+    return did.value;
+}
+
+static inline paw_Bool p_equals_decl_id(struct Compiler *C, DeclId a, DeclId b)
+{
+    PAW_UNUSED(C);
+    return a.value == b.value;
+}
+
+static inline paw_Uint p_hash_ptr(struct Compiler *C, const void *p)
+{
+    PAW_UNUSED(C);
+    return CAST(paw_Uint, p);
+}
+
+static inline paw_Bool p_equals_ptr(struct Compiler *C, const void *a, const void *b)
+{
+    PAW_UNUSED(C);
+    return a == b;
+}
+
+static inline paw_Uint p_value_hash(struct Compiler *C, Value v)
+{
+    PAW_UNUSED(C);
+    return V_UINT(v);
+}
+
+static inline paw_Bool p_value_equals(struct Compiler *C, Value a, Value b)
+{
+    PAW_UNUSED(C);
+    return V_UINT(a) == V_UINT(b);
+}
+
+// TODO: semantic hash for types, and pawU_equals for eq. comp.
+DEFINE_MAP(struct Compiler, DefMap, pawP_alloc, p_hash_def_id, p_equals_def_id, DefId, struct IrDef *)
+DEFINE_MAP(struct Compiler, RttiMap, pawP_alloc, p_hash_ptr, p_equals_ptr, struct IrType *, struct Type *)
+DEFINE_MAP(struct Compiler, TraitMap, pawP_alloc, p_hash_decl_id, p_equals_decl_id, DeclId, struct IrTypeList *)
+DEFINE_MAP(struct Compiler, MethodContextMap, pawP_alloc, p_hash_ptr, p_equals_ptr, struct IrType *, struct IrType *)
+DEFINE_MAP(struct Compiler, MethodBinderMap, pawP_alloc, p_hash_decl_id, p_equals_decl_id, DeclId, struct IrTypeList *)
+DEFINE_MAP(struct Compiler, StringMap, pawP_alloc, p_hash_ptr, p_equals_ptr, String *, String *)
+DEFINE_MAP(struct Compiler, ImportMap, pawP_alloc, p_hash_ptr, p_equals_ptr, String *, struct Ast *)
+DEFINE_MAP(struct Compiler, ValueMap, pawP_alloc, p_value_hash, p_value_equals, Value, Value)
+DEFINE_MAP(struct Compiler, BodyMap, pawP_alloc, p_hash_decl_id, p_equals_decl_id, DeclId, struct Mir *)
 
 #endif // PAW_COMPILE_H

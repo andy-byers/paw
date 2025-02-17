@@ -58,12 +58,18 @@ DEFINE_LIST(struct Compiler, ssa_worklist_, SsaWorklist, struct SsaEdge)
 DEFINE_LIST(struct Compiler, exec_list_, ExecList, struct ExecFlag)
 DEFINE_LIST(struct Compiler, lattice_, Lattice, struct Cell)
 
+DEFINE_MAP(struct Compiler, UseCountMap, pawP_alloc, mir_register_hash, mir_register_equals, MirRegister, int)
+DEFINE_MAP(struct Compiler, GotoMap, pawP_alloc, p_hash_ptr, p_equals_ptr, struct MirInstruction *, MirBlock)
+DEFINE_MAP(struct Compiler, ExecMap, pawP_alloc, mir_bb_hash, mir_bb_equals, MirBlock, struct ExecList *)
+
 struct KProp {
     struct FlowWorklist *flow;
     struct SsaWorklist *ssa;
     struct Lattice *lattice;
     struct KCache kcache;
-    Map *exec, *uses, *gotos;
+    AccessMap *uses;
+    GotoMap *gotos;
+    ExecMap *exec;
     int nk;
 
     struct Mir *mir;
@@ -116,7 +122,7 @@ static void dump_lattice(struct KProp *K)
 static struct MirAccessList *get_uses(struct KProp *K, MirRegister r)
 {
     paw_assert(MIR_REG_EXISTS(r));
-    return MAP_GET(K->uses, I2V(r.value))->p;
+    return *AccessMap_get(K->C, K->uses, r);
 }
 
 static struct Cell *get_cell(struct KProp *K, MirRegister r)
@@ -127,20 +133,16 @@ static struct Cell *get_cell(struct KProp *K, MirRegister r)
 
 static void save_goto(struct KProp *K, struct MirInstruction *instr, MirBlock to)
 {
-    MAP_INSERT(K->C, K->gotos, P2V(instr), I2V(to.value));
+    GotoMap_insert(K->C, K->gotos, instr, to);
 }
 
 static struct ExecList *get_exec_list(struct KProp *K, MirBlock to)
 {
     paw_assert(MIR_BB_EXISTS(to));
-    const Value *pval = MAP_GET(K->exec, I2V(to.value));
-    struct ExecList *list;
-    if (pval == NULL) {
-        list = exec_list_new(K->C);
-        MAP_INSERT(K, K->exec, I2V(to.value), P2V(list));
-    } else {
-        list = pval->p;
-    }
+    struct ExecList *const *plist = ExecMap_get(K->C, K->exec, to);
+    if (plist != NULL) return *plist;
+    struct ExecList *list = exec_list_new(K->C);
+    ExecMap_insert(K->C, K->exec, to, list);
     return list;
 }
 
@@ -204,7 +206,7 @@ static void apply_meet_rules(struct KProp *K, struct Cell *output, struct MirReg
 }
 
 // TODO: share this code with codegen.c
-static Map *kcache_map(struct KProp *K, enum BuiltinKind kind)
+static ValueMap *kcache_map(struct KProp *K, enum BuiltinKind kind)
 {
     if (kind == BUILTIN_INT) {
         return K->kcache.ints;
@@ -219,10 +221,10 @@ static Map *kcache_map(struct KProp *K, enum BuiltinKind kind)
 static int add_constant(struct KProp *K, Value v, enum BuiltinKind kind)
 {
     if (kind <= BUILTIN_BOOL) kind = BUILTIN_INT;
-    Map *map = kcache_map(K, kind);
-    const Value *pk = MAP_GET(map, v);
+    ValueMap *map = kcache_map(K, kind);
+    const Value *pk = ValueMap_get(K->C, map, v);
     if (pk != NULL) return CAST(int, V_INT(*pk));
-    MAP_INSERT(K, map, v, I2V(K->nk));
+    ValueMap_insert(K->C, map, v, I2V(K->nk));
     return K->nk++;
 }
 
@@ -707,17 +709,17 @@ static void init_lattice(struct KProp *K)
     }
 }
 
-static void account_for_uses(struct Compiler *C, struct MirInstruction *instr, Map *uses)
+static void account_for_uses(struct Compiler *C, struct MirInstruction *instr, UseCountMap *uses)
 {
     MirRegister *const *ppr;
     struct MirRegisterPtrList *loads = pawMir_get_loads(C, instr);
     K_LIST_FOREACH(loads, ppr) {
-        Value *pval = MAP_GET(uses, I2V((*ppr)->value));
-        ++V_INT(*pval);
+        int *pcount = UseCountMap_get(C, uses, **ppr);
+        ++*pcount;
     }
 }
 
-static void count_uses(struct Mir *mir, Map *uses)
+static void count_uses(struct Mir *mir, UseCountMap *uses)
 {
     struct Compiler *C = mir->C;
 
@@ -725,7 +727,7 @@ static void count_uses(struct Mir *mir, Map *uses)
     struct MirRegisterData *pdata;
     K_LIST_ENUMERATE(mir->registers, index, pdata) {
         // being captured in 1 or more closures counts as a single usage
-        MAP_INSERT(C, uses, I2V(index), I2V(pdata->is_captured));
+        UseCountMap_insert(C, uses, MIR_REG(index), pdata->is_captured);
     }
 
     struct MirBlockData **pblock;
@@ -737,14 +739,14 @@ static void count_uses(struct Mir *mir, Map *uses)
     }
 }
 
-static void remove_operand_uses(struct KProp *K, Map *counts, struct MirInstruction *instr)
+static void remove_operand_uses(struct KProp *K, UseCountMap *counts, struct MirInstruction *instr)
 {
     MirRegister *const *ppr;
     struct MirRegisterPtrList *loads = pawMir_get_loads(K->C, instr);
     K_LIST_FOREACH(loads, ppr) {
-        Value *pval = MAP_GET(counts, I2V((*ppr)->value));
-        paw_assert(V_INT(*pval) > 0);
-        --V_INT(*pval);
+        int *pcount = UseCountMap_get(K->C, counts, **ppr);
+        paw_assert(*pcount > 0);
+        --*pcount;
     }
 }
 
@@ -813,12 +815,11 @@ static void transform_code(struct KProp *K)
         }
         K_LIST_FOREACH(block->instructions, pinstr) {
             struct MirInstruction *instr = *pinstr;
-            const Value *pval = MAP_GET(K->gotos, P2V(instr));
-            if (pval != NULL) {
+            const MirBlock *pto = GotoMap_get(K->C, K->gotos, instr);
+            if (pto != NULL) {
                 // instruction is a branch/switch controlled by a constant
-                const MirBlock to = MIR_BB(pval->i);
-                prune_dead_successors(K, from, to);
-                into_goto(K, instr, to);
+                prune_dead_successors(K, from, *pto);
+                into_goto(K, instr, *pto);
             } else {
                 transform_instr(K, instr);
             }
@@ -826,7 +827,7 @@ static void transform_code(struct KProp *K)
     }
 }
 
-static paw_Bool filter_code(struct KProp *K, Map *counts, struct MirInstructionList *code)
+static paw_Bool filter_code(struct KProp *K, UseCountMap *counts, struct MirInstructionList *code)
 {
     int index;
     int removed = 0;
@@ -837,8 +838,8 @@ static paw_Bool filter_code(struct KProp *K, Map *counts, struct MirInstructionL
         if (is_pure(instr)) {
             const MirRegister *pstore = pawMir_get_store(K->C, instr);
             if (pstore != NULL) {
-                const Value *pval = MAP_GET(counts, I2V(pstore->value));
-                if (V_INT(*pval) == 0) {
+                const int *pcount = UseCountMap_get(K->C, counts, *pstore);
+                if (*pcount == 0) {
                     remove_operand_uses(K, counts, instr);
                     ++removed;
                     continue;
@@ -853,7 +854,7 @@ static paw_Bool filter_code(struct KProp *K, Map *counts, struct MirInstructionL
     return removed_any;
 }
 
-static paw_Bool remove_dead_code(struct KProp *K, Map *counts)
+static paw_Bool remove_dead_code(struct KProp *K, UseCountMap *counts)
 {
     paw_Bool removed_any = PAW_FALSE;
     struct MirBlockDataList *blocks = K->mir->blocks;
@@ -865,11 +866,11 @@ static paw_Bool remove_dead_code(struct KProp *K, Map *counts)
     return removed_any;
 }
 
-static void clean_up_code(struct KProp *K, struct ObjectStore *store)
+static void clean_up_code(struct KProp *K)
 {
     pawMir_remove_unreachable_blocks(K->mir);
 
-    Map *counts = pawP_new_map(K->C, store);
+    UseCountMap *counts = UseCountMap_new(K->C);
     count_uses(K->mir, counts);
 
     paw_Bool removed_code;
@@ -937,21 +938,17 @@ void pawMir_propagate_constants(struct Mir *mir)
     K_LIST_RESERVE(C, K.lattice, mir->registers->count);
     K.lattice->count = mir->registers->count;
 
-    struct ObjectStore store;
-    pawP_push_store(C, &store);
-    K.exec = pawP_new_map(C, &store);
-    K.uses = pawP_new_map(C, &store);
-    K.gotos = pawP_new_map(C, &store);
-    K.kcache.ints = pawP_new_map(C, &store);
-    K.kcache.strs = pawP_new_map(C, &store);
-    K.kcache.flts = pawP_new_map(C, &store);
+    K.exec = ExecMap_new(C);
+    K.uses = AccessMap_new(C);
+    K.gotos = GotoMap_new(C);
+    K.kcache.ints = ValueMap_new(C);
+    K.kcache.strs = ValueMap_new(C);
+    K.kcache.flts = ValueMap_new(C);
     pawMir_collect_per_instr_uses(mir, K.uses);
 
     init_lattice(&K);
     propagate_copies(&K);
     propagate_constants(&K);
     transform_code(&K);
-    clean_up_code(&K, &store);
-
-    --ENV(C)->top.p; // pop "store" map
+    clean_up_code(&K);
 }
