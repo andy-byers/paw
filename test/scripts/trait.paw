@@ -70,3 +70,56 @@ pub fn test_indirect_call_both_functions() {
     assert(call_call_both_functions(i) == 123 + 42);
 }
 
+
+pub trait TestDefault {
+    fn default(list: [str]) -> Self;
+}
+
+struct DefaultedA: TestDefault {
+    pub list: [str],
+    pub fn default(list: [str]) -> Self {
+        list.push("a");
+        Self{list}
+    }
+}
+
+struct DefaultedB: TestDefault {
+    pub list: [str],
+    pub fn default(list: [str]) -> Self {
+        list.push("b");
+        Self{list}
+    }
+}
+
+struct DefaultedOuter<T: TestDefault> {
+    pub fn call_default(list: [str]) {
+        // this associated function doesn't mention T in its signature, but uses T
+        // inside its body
+        let _: T = T::default(list);
+    }
+}
+
+pub fn test_call_defaulted() {
+    let list = [];
+    DefaultedOuter::<DefaultedA>::call_default(list);
+    DefaultedOuter::<DefaultedB>::call_default(list);
+    assert(list[0] == "a");
+    assert(list[1] == "b");
+}
+
+pub fn test_emit_warning() {
+    print("TODO: See trait.paw: monomorphization problem...\n");
+}
+//// TODO: doesn't work: calls call_defaulted::<DefaultedA>() twice, meaning monomorphization
+////       involving trait method calls is likely broken 
+//fn call_defaulted<X: TestDefault>(list: [str]) {
+//    DefaultedOuter::<X>::call_default(list);
+//}
+//
+//pub fn test_indirect_call_defaulted() {
+//    let list = [];
+//    call_defaulted::<DefaultedA>(list);
+//    call_defaulted::<DefaultedB>(list);
+//    assert(list[0] == "a");
+//    assert(list[1] == "b");
+//}

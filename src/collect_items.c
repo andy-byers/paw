@@ -28,7 +28,7 @@ struct ItemCollector {
     struct DynamicMem *dm;
     struct Compiler *C;
     struct ModuleInfo *m;
-    struct IrTypeList *impl_binder;
+    struct IrTypeList *binder;
     struct IrType *adt;
     TraitMap *traits;
     paw_Env *P;
@@ -382,12 +382,16 @@ static void collect_func(struct ItemCollector *X, struct HirFuncDecl *d)
     leave_function(X);
 
     d->is_assoc = check_assoc_function(X, X->adt, d->params);
+// TODO: use X->adt directly, set d->self inside guard
     if (d->self != NULL) {
         struct IrType *type = GET_TYPE(X, d->hid);
-        pawP_set_self(X->C, IrGetSignature(type), d->self);
-        if (X->impl_binder != NULL) {
-            pawP_set_binder(X->C, d->did, X->impl_binder);
-        }
+        IrGetSignature(type)->self = d->self;
+
+//        struct IrType *type = GET_TYPE(X, d->hid);
+//        pawP_set_self(X->C, IrGetSignature(type), d->self);
+//        if (X->binder != NULL) {
+//            pawP_set_binder(X->C, d->did, X->binder);
+//        }
     }
 }
 
@@ -492,8 +496,7 @@ static void collect_adt_decl(struct ItemCollector *X, struct PartialDecl lazy)
     struct HirAdtDecl *d = HirGetAdtDecl(lazy.decl);
     enter_block(X, lazy.scope);
     struct IrType *type = GET_TYPE(X, d->hid);
-// TODO: was previously set by impl block decls, why isn't this necessary for ADTs???
-//    X->impl_binder = collect_generic_types(X, d->generics);
+    X->binder = collect_generic_types(X, d->generics);
 
     struct HirType **ptype;
     K_LIST_FOREACH(d->traits, ptype) {
@@ -533,8 +536,8 @@ static struct HirScope *register_trait_decl(struct ItemCollector *X, struct HirT
 {
     enter_block(X, NULL);
     register_generics(X, d->generics);
-    X->impl_binder = collect_generic_types(X, d->generics);
-    struct IrType *type = pawIr_new_trait_obj(X->C, d->did, X->impl_binder);
+    X->binder = collect_generic_types(X, d->generics);
+    struct IrType *type = pawIr_new_trait_obj(X->C, d->did, X->binder);
     new_global(X, d->name, HIR_CAST_DECL(d));
     SET_TYPE(X, d->hid, type);
     return leave_block(X);
@@ -544,7 +547,7 @@ static void collect_trait_decl(struct ItemCollector *X, struct PartialDecl lazy)
 {
     enter_block(X, lazy.scope);
     struct HirTraitDecl *d = HirGetTraitDecl(lazy.decl);
-    X->impl_binder = collect_generic_types(X, d->generics);
+    X->binder = collect_generic_types(X, d->generics);
     struct IrType *type = GET_NODE_TYPE(X->C, lazy.decl);
 
     WITH_CONTEXT(X, type,

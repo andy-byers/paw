@@ -480,7 +480,7 @@ static void expect_int_expr(struct Resolver *R, struct HirExpr *e)
 
 static struct IrType *instantiate(struct Resolver *R, struct HirDecl *base, struct IrTypeList *types)
 {
-    return pawP_instantiate(R->C, base, types);
+    return pawP_instantiate(R->C, GET_NODE_TYPE(R->C, base), types);
 }
 
 static paw_Bool is_enum_decl(struct HirDecl *decl)
@@ -939,6 +939,9 @@ static struct IrType *resolve_call_target(struct Resolver *R, struct HirExpr *ta
         method = pawP_find_method(R->C, self, select->name);
     } else {
         return select_field(R, self, select);
+    }
+    if (method == NULL) {
+        NAME_ERROR(R, "method '%s' does not exist", select->name->text);
     }
     ensure_accessible_field(R, get_decl(R, IR_TYPE_DID(method)),
             get_decl(R, IR_TYPE_DID(self)), method);

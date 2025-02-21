@@ -47,26 +47,52 @@ static void log_instance(struct MonoCollector *M, const char *kind, const String
 #endif
 }
 
+static struct IrType *subst_generic(struct IrTypeFolder *F, struct IrGeneric *t)
+{
+    struct IrType **pa, **pb;
+    struct Substitution *subst = F->ud;
+    K_LIST_ZIP(subst->generics, pa, subst->types, pb) {
+        if (!IrIsGeneric(*pa)) continue;
+        struct IrGeneric *g = IrGetGeneric(*pa);
+        if (g->did.value == t->did.value) return *pb;
+    }
+
+    return IR_CAST_TYPE(t);
+//    PAW_UNREACHABLE();
+}
+
+static struct IrType *copy_type(struct Compiler *C, struct IrType *type)
+{
+    struct IrType *copy = pawIr_new_type(C);
+    *copy = *type;
+    return copy;
+}
+#include"stdio.h"
 struct IrType *finalize_type(struct MonoCollector *M, struct IrType *type)
 {
     struct IrType *old_type = type;
-    struct IrTypeFolder F;
-    struct Substitution subst;
     struct GenericsState *gs = M->gs;
     while (gs != NULL) {
         if (gs->before != NULL) {
-            pawP_init_substitution_folder(&F, M->C, &subst, gs->before, gs->after);
+            struct Substitution subst = {
+                .generics = gs->before,
+                .types = gs->after,
+                .C = M->C,
+            };
+            struct IrTypeFolder F;
+            pawIr_type_folder_init(&F, M->C, &subst);
+            F.FoldGeneric = subst_generic;
+//            pawP_init_substitution_folder(&F, M->C, &subst, gs->before, gs->after);
+type = copy_type(M->C, type);
             type = pawIr_fold_type(&F, type);
         }
         gs = gs->outer;
     }
     if (!IrIsSignature(old_type)) return type;
     struct IrSignature *old = IrGetSignature(old_type);
-    if (!pawP_is_assoc_fn(M->C, old)) return type;
-    struct IrType *self = pawP_get_self(M->C, old);
-    if (self == NULL) return type;
-    pawP_set_self(M->C, IrGetSignature(type),
-            finalize_type(M, self));
+    if (old->self == NULL) return type;
+    struct IrSignature *t = IrGetSignature(type);
+    t->self = finalize_type(M, old->self);
     return type;
 }
 
@@ -328,7 +354,8 @@ static void leave_generics_context(struct MonoCollector *M)
 
 static struct Mir *new_mir(struct MonoCollector *M, struct Mir *base, struct IrType *type, struct IrType *self)
 {
-    M->mir = pawMir_new(M->C, base->name, type, self, base->fn_kind, base->is_native, base->is_pub, PAW_FALSE);
+    M->mir = pawMir_new(M->C, base->name, type, self, base->fn_kind,
+            base->is_native, base->is_pub, PAW_FALSE);
     return M->mir;
 }
 
@@ -413,12 +440,22 @@ static struct Mir *monomorphize_function_aux(struct MonoCollector *M, struct Mir
 static struct Mir *monomorphize_method_aux(struct MonoCollector *M, struct Mir *base, struct IrSignature *sig, struct IrType *self)
 {
     struct IrTypeList *inst_binder;
-    struct IrTypeList *base_binder = pawP_get_binder(M->C, sig->did);
+
+    struct HirDecl *base_decl = pawHir_get_decl(M->C, IR_TYPE_DID(sig->self));
+    struct IrType *base_type = GET_NODE_TYPE(M->C, base_decl);
+    struct IrTypeList *base_binder = IR_TYPE_SUBTYPES(base_type);
+
+//    struct IrTypeList *base_binder = IR_TYPE_SUBTYPES(base->type);
+
+//    struct IrTypeList *base_binder = pawP_get_binder(M->C, sig->did);
     // TODO: check earlier, so non-poly methods are not added to 'pending' at all? Happens when
     //       the the impl block has no binder, but the ADT does
-    if (base_binder == NULL) return base;
-    struct IrType *base_self = pawP_generalize_self(M->C, base->self, base_binder, &inst_binder);
-    pawU_unify(M->C->U, base_self, self); // populate "inst_binder"
+    if (base_binder == NULL) {
+        return monomorphize_function_aux(M, base, sig, self);
+    }
+//    struct IrType *base_self = pawP_generalize_self(M->C, base->self, base_binder, &inst_binder);
+//    pawU_unify(M->C->U, base_self, self); // populate "inst_binder"
+    inst_binder = IR_TYPE_SUBTYPES(sig->self);
 
     struct GenericsState gs;
     enter_generics_context(M, &gs, base_binder, inst_binder);
@@ -510,20 +547,19 @@ static struct IrType *register_method(struct MonoCollector *M, struct IrSignatur
     // 'mono' list is associated with the ADT that the impl block containing this
     // method was defined on, so that associated functions using generic parameters
     // from the impl block binder can be specialized properly
-    struct IrType *self = pawP_get_self(M->C, t);
-    self = IrIsAdt(self) ? collect_adt(M, IrGetAdt(self)) : self;
-    pawP_set_self(M->C, t, self);
+//    struct IrType *self = pawP_get_self(M->C, t);
+//    t->self = IrIsAdt(self) ? collect_adt(M, IrGetAdt(self)) : self;
+//    pawP_set_self(M->C, t, self);
 
-    struct IrTypeList *monos = mono_list_for_type(M, M->methods, self);
+    t->self = IrIsAdt(t->self) ? collect_adt(M, IrGetAdt(t->self)) : t->self;
+    struct IrTypeList *monos = mono_list_for_type(M, M->methods, t->self);
     struct Mir *base = *BodyMap_get(M->C, M->bodies, t->did); // must exist
-    return cannonicalize_method(M, self, monos, base->name, IR_CAST_TYPE(t));
+    return cannonicalize_method(M, t->self, monos, base->name, IR_CAST_TYPE(t));
 }
 
 static struct IrType *collect_signature(struct MonoCollector *M, struct IrSignature *t)
 {
-    if (pawP_is_assoc_fn(M->C, t)) {
-        return register_method(M, t);
-    }
+    if (t->self != NULL) return register_method(M, t);
     return register_function(M, t);
 }
 
@@ -532,9 +568,10 @@ static struct Mir *monomorphize(struct MonoCollector *M, struct IrType *type)
     struct IrSignature *t = IrGetSignature(type);
     struct Mir *base = *BodyMap_get(M->C, M->bodies, t->did); // must exist
     if (!base->is_poly) return base;
-    if (pawP_is_assoc_fn(M->C, t)) {
-        struct IrType *self = pawP_get_self(M->C, t);
-        return monomorphize_method_aux(M, base, t, self);
+    if (t->self != NULL) {
+//    if (pawP_is_assoc_fn(M->C, t)) {
+//        struct IrType *self = pawP_get_self(M->C, t);
+        return monomorphize_method_aux(M, base, t, t->self);
     }
     return monomorphize_function_aux(M, base, t, NULL);
 }
@@ -576,6 +613,7 @@ static paw_Bool is_entrypoint(const struct Mir *mir)
         && (mir->self == NULL || IR_TYPE_SUBTYPES(mir->self) == NULL);
 }
 
+#include"stdio.h"
 struct MonoResult pawP_monomorphize(struct Compiler *C, BodyMap *bodies)
 {
     struct MirTypeFolder F;
@@ -620,7 +658,7 @@ struct MonoResult pawP_monomorphize(struct Compiler *C, BodyMap *bodies)
         K_LIST_POP(M.pending);
         struct Mir *body = monomorphize(&M, type);
         K_LIST_PUSH(C, M.globals, body);
-        M.mir = M.F->V.mir = body; // TODO: figure out a better way to do this... always need Mir object to get basic block and register backing data
+        M.mir = M.F->V.mir = body;
         pawMir_fold(M.F, body);
     }
 

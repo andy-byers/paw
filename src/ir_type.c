@@ -28,7 +28,7 @@ IrType *pawIr_new_type(struct Compiler *C)
 
 IrType *pawIr_get_type(struct Compiler *C, HirId hid)
 {
-    IrType *const * ptype = TypeMap_get(C, C->ir_types, hid);
+    IrType *const * ptype = HirTypes_get(C, C->ir_types, hid);
     return ptype != NULL ? *ptype : NULL;
 }
 
@@ -44,7 +44,7 @@ void pawIr_set_type(struct Compiler *C, HirId hid, IrType *type)
     // TODO: this check could be removed with more confidence if 1 is used as the default ID (HirId, DefId, etc.) instead of 0
     //       since 0 is a valid ID, we get confused when an ID is not properly initialized (zero init produces a valid ID, which is bad)
     paw_assert(hid.value > 0 || !IrIsAdt(type) || IrGetAdt(type)->did.value == 0);
-    TypeMap_insert(C, C->ir_types, hid, type);
+    HirTypes_insert(C, C->ir_types, hid, type);
 }
 
 void pawIr_set_def(struct Compiler *C, DefId did, IrDef *def)
@@ -80,8 +80,9 @@ struct IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *
             last_trait = trait;
         }
         if (last_method != NULL) {
-            if (last_trait->generics == NULL) return GET_NODE_TYPE(C, last_method);
-            return pawP_instantiate_method(C, trait_decl, bound->types, last_method);
+            struct IrType *result = last_trait->generics == NULL ? GET_NODE_TYPE(C, last_method)
+                : pawP_instantiate_method(C, trait_decl, bound->types, last_method);
+            return pawIr_substitute_self(C, GET_NODE_TYPE(C, trait_decl), IR_CAST_TYPE(target), result);
         }
     }
     return NULL;
@@ -155,6 +156,8 @@ static paw_Uint hash_type_list(struct IrTypeList *types)
 
 static paw_Uint hash_type(struct IrType *type)
 {
+    return CAST(paw_Uint, type);
+
     paw_Uint hash = type->hdr.kind;
     switch (IR_KINDOF(type)) {
         case kIrAdt: {
@@ -207,19 +210,21 @@ static paw_Uint hash_type(struct IrType *type)
 
 paw_Bool pawIr_type_equals(struct Compiler *C, IrType *a, IrType *b)
 {
+    if (IR_KINDOF(a) != IR_KINDOF(b)) return PAW_FALSE;
+
+    if (IrIsSignature(a)) {
+        struct IrSignature *sa = IrGetSignature(a);
+        struct IrSignature *sb = IrGetSignature(b);
+        if (sa->did.value != sb->did.value) return PAW_FALSE;
+    }
+
     return pawU_equals(C->U, a, b);
 }
 
 paw_Uint pawIr_type_hash(struct Compiler *C, IrType *t)
 {
-    // TODO: consider combining w/ hash of "self" type
     PAW_UNUSED(C);
     return hash_type(t);
-}
-
-TypeMap *pawIr_new_type_map(struct Compiler *C)
-{
-    return TypeMap_new(C);
 }
 
 struct Printer {
@@ -271,6 +276,10 @@ static void print_type(struct Printer *P, IrType *type)
             struct IrSignature *fsig = IrGetSignature(type);
             struct HirDecl *decl = pawHir_get_decl(P->C, fsig->did);
             PRINT_LITERAL(P, "fn ");
+            if (fsig->self != NULL) {
+                print_type(P, fsig->self);
+                PRINT_LITERAL(P, "::");
+            }
             PRINT_STRING(P, decl->hdr.name);
             if (fsig->types != NULL) {
                 PRINT_CHAR(P, '<');

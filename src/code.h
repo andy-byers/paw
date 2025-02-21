@@ -15,6 +15,10 @@ typedef struct DefId {
     unsigned short value;
 } DefId;
 
+typedef struct HirId {
+    unsigned short value;
+} HirId;
+
 typedef struct DeclId {
     unsigned short modno;
     unsigned short value;

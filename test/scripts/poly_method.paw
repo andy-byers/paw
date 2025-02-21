@@ -1,0 +1,86 @@
+// poly_method.paw
+
+struct Adt {
+    pub value: int,
+
+    pub fn method<T>(self, t: T) -> (int, T) {
+        (self.value, t)
+    }
+
+    pub fn assoc_fn<T>(t: T) -> (int, T) {
+        (42, t)
+    }
+}
+
+pub fn test_call() {
+    let adt = Adt{value: 123};
+    let t = adt.method("abc");
+    assert(t.0 == 123);
+    assert(t.1 == "abc");
+
+    let t = Adt::assoc_fn("def");
+    assert(t.0 == 42);
+    assert(t.1 == "def");
+}
+
+pub fn call_indirect_method<T>(t: T) -> (int, T) {
+    let adt = Adt{value: 123};
+    return adt.method(t);
+}
+
+pub fn call_indirect_assoc_fn<T>(t: T) -> (int, T) {
+    return Adt::assoc_fn(t);
+}
+
+pub fn test_call_indirect() {
+    let t = call_indirect_method("abc");
+    assert(t.0 == 123);
+    assert(t.1 == "abc");
+
+    let t = call_indirect_assoc_fn("def");
+    assert(t.0 == 42);
+    assert(t.1 == "def");
+}
+
+struct PolyAdt<S> {
+    pub value: S,
+
+    pub fn method<T>(self, t: T) -> (S, T) {
+        (self.value, t)
+    }
+
+    pub fn assoc_fn<T>(x: S, t: T) -> (S, T) {
+        (x, t)
+    }
+}
+
+pub fn test_call_poly() {
+    let adt = PolyAdt{value: 123};
+    let t = adt.method("abc");
+    assert(t.0 == 123);
+    assert(t.1 == "abc");
+
+    let t = PolyAdt::assoc_fn(456, "def");
+    assert(t.0 == 456);
+    assert(t.1 == "def");
+}
+
+pub fn call_indirect_method_poly<X, T>(x: X, t: T) -> (X, T) {
+    let adt = PolyAdt{value: x};
+    return adt.method(t);
+}
+
+pub fn call_indirect_assoc_fn_poly<X, T>(x: X, t: T) -> (X, T) {
+    return PolyAdt::assoc_fn(x, t);
+}
+
+pub fn test_call_indirect_poly() {
+    let t = call_indirect_method_poly(123, "abc");
+    assert(t.0 == 123);
+    assert(t.1 == "abc");
+
+    let t = call_indirect_assoc_fn_poly(456, "def");
+    assert(t.0 == 456);
+    assert(t.1 == "def");
+}
+

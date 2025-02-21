@@ -148,7 +148,7 @@ static struct Def *get_def(struct Generator *G, ItemId iid)
 
 static struct Type *lookup_type(struct Generator *G, struct IrType *type)
 {
-    struct Type **prtti = RttiMap_get(G->C, G->C->type2rtti, type);
+    struct Type **prtti = RttiMap_get(G->C, G->C->rtti, type);
     return prtti != NULL ? *prtti : NULL;
 }
 
@@ -281,13 +281,12 @@ static String *mangle_attr(struct Generator *G, const String *modname, const Str
     return mangle_finish(P, &buf, G);
 }
 
-static String *func_name(struct Generator *G, const String *modname, struct IrType *type)
+static String *func_name(struct Generator *G, const String *modname, struct IrType *type, struct IrType *self)
 {
     struct IrSignature *fsig = IrGetSignature(type);
     const struct HirFuncDecl *fd = HirGetFuncDecl(GET_DECL(G, fsig->did));
     struct IrTypeList *fd_types = fd->body ? fsig->types : NULL;
     if (fd->self == NULL) return mangle_name(G, modname, fd->name, fd_types);
-    struct IrType *self = pawP_get_self(G->C, fsig);
     const struct HirDecl *ad = GET_DECL(G, IR_TYPE_DID(self));
     const struct IrTypeList *ad_types = fd->body ? IR_TYPE_SUBTYPES(self) : NULL;
     return mangle_attr(G, modname, ad->hdr.name, ad_types, fd->name, fd_types);
@@ -484,7 +483,7 @@ static void code_c_function(struct Generator *G, struct Mir *mir, int g)
 
     struct IrType *type = mir->type;
     const String *modname = prefix_for_modno(G, IR_TYPE_DID(type).modno);
-    const String *mangled = func_name(G, modname, type);
+    const String *mangled = func_name(G, modname, type, mir->self);
     const Value *pv = pawMap_get(ENV(G), G->builtin, P2V(mangled));
     if (pv == NULL) ERROR(G, PAW_ENAME, "C function '%s' not loaded", mir->name->text);
     *pval = *pv;
@@ -634,13 +633,14 @@ static void register_items(struct Generator *G)
 
     struct ItemSlot *pitem;
     K_LIST_FOREACH(G->items, pitem) {
-        struct IrType *type = pitem->mir->type;
+        struct Mir *mir = pitem->mir;
+        struct IrType *type = mir->type;
 
         const String *modname = prefix_for_modno(G, IR_TYPE_DID(type).modno);
         const struct Type *ty = lookup_type(G, type);
         struct FuncDef *fdef = &get_def(G, ty->sig.iid)->func;
         paw_assert(fdef->kind == DEF_FUNC);
-        pitem->name = fdef->mangled_name = func_name(G, modname, type);
+        pitem->name = fdef->mangled_name = func_name(G, modname, type, mir->self);
     }
 
     paw_Env *P = ENV(G);

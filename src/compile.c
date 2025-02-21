@@ -150,12 +150,12 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const c
     paw_new_map(P, 0, PAW_TSTR);
     C->strings = V_TUPLE(P->top.p[-1]);
 
-    C->ir_types = TypeMap_new(C);
+    C->ir_types = HirTypes_new(C);
     C->ir_defs = DefMap_new(C);
 
-    C->method_contexts = MethodContextMap_new(C);
-    C->method_binders = MethodBinderMap_new(C);
-    C->type2rtti = RttiMap_new(C);
+//    C->method_contexts = MethodContextMap_new(C);
+//    C->method_binders = MethodBinderMap_new(C);
+    C->rtti = RttiMap_new(C);
     C->imports = ImportMap_new(C);
     C->traits = TraitMap_new(C);
 
@@ -234,14 +234,14 @@ static void leave_def(struct DefGenerator *dg)
 
 static struct Type *lookup_type(struct DefGenerator *dg, struct IrType *type)
 {
-    struct Type *const *ptype = RttiMap_get(dg->C, dg->C->type2rtti, type);
+    struct Type *const *ptype = RttiMap_get(dg->C, dg->C->rtti, type);
     return ptype != NULL ? *ptype : NULL;
 }
 
 static void map_types(struct DefGenerator *dg, struct IrType *type, struct Type *rtti)
 {
     paw_Env *P = ENV(dg->C);
-    RttiMap_insert(dg->C, dg->C->type2rtti, type, rtti);
+    RttiMap_insert(dg->C, dg->C->rtti, type, rtti);
 }
 
 static struct Type *new_type(struct DefGenerator *, struct IrType *, ItemId);
@@ -437,39 +437,6 @@ struct ItemList *pawP_allocate_defs(struct Compiler *C, struct MirBodyList *bodi
     allocate_types(&dg, types);
     allocate_items(&dg, bodies);
     return dg.items;
-}
-
-static struct IrType *get_self(struct Compiler *C, struct IrSignature *method)
-{
-    struct IrType *const *ptype = MethodContextMap_get(C, C->method_contexts, IR_CAST_TYPE(method));
-    return ptype != NULL ? *ptype : NULL;
-}
-
-paw_Bool pawP_is_assoc_fn(struct Compiler *C, struct IrSignature *t)
-{
-    return get_self(C, t) != NULL;
-}
-
-struct IrTypeList *pawP_get_binder(struct Compiler *C, DeclId did)
-{
-    struct IrTypeList *const *pbinder = MethodBinderMap_get(C, C->method_binders, did);
-    return pbinder != NULL ? *pbinder : NULL;
-}
-
-void pawP_set_binder(struct Compiler *C, DeclId did, struct IrTypeList *binder)
-{
-    MethodBinderMap_insert(C, C->method_binders, did, binder);
-}
-
-void pawP_set_self(struct Compiler *C, struct IrSignature *method, struct IrType *self)
-{
-    MethodContextMap_insert(C, C->method_contexts, IR_CAST_TYPE(method), self);
-}
-
-struct IrType *pawP_get_self(struct Compiler *C, struct IrSignature *method)
-{
-    paw_assert(pawP_is_assoc_fn(C, method));
-    return get_self(C, method);
 }
 
 #define CHUNKSZ(b) sizeof(K_LIST_FIRST(b))

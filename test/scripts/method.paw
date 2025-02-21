@@ -117,3 +117,20 @@ fn call_poly_enum_methods<A, B>(a: A, b: B) -> A {
 pub fn test_poly_enum_methods_indirect() {
     assert(call_poly_enum_methods(123, "abc") == 123);
 }
+
+struct TestA<T, T2> {
+    pub fn f() -> int { 1 }
+}
+
+struct TestB<T, T2> {
+    pub fn f() -> int { 2 }
+}
+
+pub fn test_ab() {
+    let a = TestA::<int, float>::f();
+    let b = TestB::<float, int>::f();
+    let c = TestA::<int, int>::f();
+    let d = TestB::<float, float>::f();
+    assert(a == b - 1);
+    assert(c == d - 1);
+}

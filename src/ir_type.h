@@ -56,6 +56,7 @@ struct IrSignature {
     IR_FUNC_HEADER;
     DeclId did;
     struct IrTypeList *types;
+    struct IrType *self;
 };
 
 struct IrTuple {
@@ -380,9 +381,13 @@ struct IrFieldDef *pawIr_get_field_def(struct Compiler *C, DeclId did);
 
 paw_Uint pawIr_type_hash(struct Compiler *C, IrType *t);
 paw_Bool pawIr_type_equals(struct Compiler *C, IrType *a, IrType *b);
-TypeMap *pawIr_new_type_map(struct Compiler *C);
+
+DEFINE_MAP(struct Compiler, MethodContextMap, pawP_alloc, pawIr_type_hash, pawIr_type_equals, struct IrType *, struct IrType *)
+DEFINE_MAP(struct Compiler, MethodBinderMap, pawP_alloc, p_hash_decl_id, p_equals_decl_id, DeclId, struct IrTypeList *)
+DEFINE_MAP(struct Compiler, RttiMap, pawP_alloc, p_hash_ptr, p_equals_ptr, struct IrType *, struct Type *)
 
 void pawIr_validate_type(struct Compiler *C, struct IrType *type);
+struct IrType *pawIr_substitute_self(struct Compiler *C, struct IrType *trait, struct IrType *adt, struct IrType *method);
 
 static struct IrTypeList *ir_signature_types(IrType *type)
 {

@@ -35,6 +35,7 @@ static struct IrType *FoldSignature(struct IrTypeFolder *F, struct IrSignature *
     t->types = F->FoldTypeList(F, t->types);
     t->params = F->FoldTypeList(F, t->params);
     t->result = FoldType(F, t->result);
+//    t->self = FoldType(F, t->self);
     return IR_CAST_TYPE(t);
 }
 

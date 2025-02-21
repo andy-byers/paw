@@ -8,10 +8,6 @@
 
 struct HirScope;
 
-typedef struct HirId {
-    unsigned short value;
-} HirId;
-
 #define HIR_DECL_LIST(X) \
         X(FieldDecl) \
         X(FuncDecl) \
@@ -1461,7 +1457,7 @@ static inline paw_Bool hir_id_equals(struct Compiler *C, HirId a, HirId b)
     return a.value == b.value;
 }
 
-DEFINE_MAP(struct Compiler, TypeMap, pawP_alloc, hir_id_hash, hir_id_equals, HirId, struct IrType *)
-DEFINE_MAP_ITERATOR(TypeMap, HirId, struct IrType *)
+DEFINE_MAP(struct Compiler, HirTypes, pawP_alloc, hir_id_hash, hir_id_equals, HirId, struct IrType *)
+DEFINE_MAP_ITERATOR(HirTypes, HirId, struct IrType *)
 
 #endif // PAW_HIR_H

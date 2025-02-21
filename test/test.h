@@ -41,6 +41,7 @@
     X(poly_function) \
     X(poly_struct) \
     X(poly_enum) \
+    X(poly_method) \
     X(poly_trait) \
     X(unit_struct) \
     X(unit_variant) \

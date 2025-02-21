@@ -92,7 +92,7 @@ static struct IrType *subst_trait_obj(struct IrTypeFolder *F, struct IrTraitObj 
     return type;
 }
 
-static struct IrType *substitute_self(struct Compiler *C, struct IrType *trait, struct IrType *adt, struct IrType *method)
+struct IrType *pawIr_substitute_self(struct Compiler *C, struct IrType *trait, struct IrType *adt, struct IrType *method)
 {
     struct IrTypeFolder F;
     struct TraitSubstitution subst = {
@@ -121,7 +121,7 @@ static void ensure_methods_match(struct Compiler *C, struct IrType *adt, struct 
         b = pawP_instantiate_method(C, HIR_CAST_DECL(trait_decl),
                 IR_TYPE_SUBTYPES(trait), HIR_CAST_DECL(trait_method));
     }
-    b = substitute_self(C, trait, adt, b);
+    b = pawIr_substitute_self(C, trait, adt, b);
     if (!pawU_equals(C->U, a, b)) {
         TYPE_ERROR(C, "trait method incompatible with implementation");
     }

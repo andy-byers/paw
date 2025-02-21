@@ -81,6 +81,7 @@ struct MirBlockList;
 struct VariableList;
 
 struct StringMap;
+struct BodyMap;
 
 void *pawP_pool_alloc(paw_Env *P, struct Pool *pool, size_t size);
 void *pawP_alloc(struct Compiler *C, void *ptr, size_t size0, size_t size);
@@ -121,12 +122,9 @@ struct Compiler {
 
     // '.imports' maps modules names to ASTs for each module being compiled.
     struct ImportMap *imports; // String * => Ast
+    struct RttiMap *rtti;
 
-    struct MethodContextMap *method_contexts; // IrType * => IrType *
-    struct MethodBinderMap *method_binders; // DeclId => IrTypeList *
-    struct RttiMap *type2rtti;
-
-    struct TypeMap *ir_types; // HirId => IrType *
+    struct HirTypes *ir_types; // HirId => IrType *
     struct DefMap *ir_defs; // DefId => IrDef *
 
     paw_Env *P;
@@ -210,10 +208,7 @@ struct IrType *pawP_generalize_self(struct Compiler *C, struct IrType *self, str
 // and 'decl' otherwise. We avoid recursively visiting the function body here, since
 // doing so might cause further instantiations due to the presence of recursion.
 // Function instance bodies are expanded in a separate pass.
-struct IrType *pawP_instantiate(
-        struct Compiler *C,
-        struct HirDecl *decl,
-        struct IrTypeList *types);
+struct IrType *pawP_instantiate( struct Compiler *C, struct IrType *base, struct IrTypeList *types);
 
 struct IrType *pawP_instantiate_method(struct Compiler *C, struct HirDecl *base, struct IrTypeList *types, struct HirDecl *method);
 
@@ -348,12 +343,8 @@ static inline paw_Bool p_value_equals(struct Compiler *C, Value a, Value b)
     return V_UINT(a) == V_UINT(b);
 }
 
-// TODO: semantic hash for types, and pawU_equals for eq. comp.
 DEFINE_MAP(struct Compiler, DefMap, pawP_alloc, p_hash_def_id, p_equals_def_id, DefId, struct IrDef *)
-DEFINE_MAP(struct Compiler, RttiMap, pawP_alloc, p_hash_ptr, p_equals_ptr, struct IrType *, struct Type *)
 DEFINE_MAP(struct Compiler, TraitMap, pawP_alloc, p_hash_decl_id, p_equals_decl_id, DeclId, struct IrTypeList *)
-DEFINE_MAP(struct Compiler, MethodContextMap, pawP_alloc, p_hash_ptr, p_equals_ptr, struct IrType *, struct IrType *)
-DEFINE_MAP(struct Compiler, MethodBinderMap, pawP_alloc, p_hash_decl_id, p_equals_decl_id, DeclId, struct IrTypeList *)
 DEFINE_MAP(struct Compiler, StringMap, pawP_alloc, p_hash_ptr, p_equals_ptr, String *, String *)
 DEFINE_MAP(struct Compiler, ImportMap, pawP_alloc, p_hash_ptr, p_equals_ptr, String *, struct Ast *)
 DEFINE_MAP(struct Compiler, ValueMap, pawP_alloc, p_value_hash, p_value_equals, Value, Value)

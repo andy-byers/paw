@@ -251,8 +251,7 @@ static struct IrType *resolve_alias(struct QueryState *Q, struct QueryBase *pq, 
         K_LIST_ZIP(unknowns, pu, knowns, pk) pawU_unify(Q->C->U, *pu, *pk);
     }
 
-    struct HirDecl *aliased = pawHir_get_decl(Q->C, IR_TYPE_DID(rhs));
-    return pawP_instantiate(Q->C, aliased, subst);
+    return pawP_instantiate(Q->C, rhs, subst);
 }
 
 struct IrType *lookup(struct QueryState *Q, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirPath *path, enum LookupKind kind, paw_Bool is_annotation)
@@ -278,7 +277,7 @@ struct IrType *lookup(struct QueryState *Q, struct ModuleInfo *m, struct HirSymt
             types = maybe_generalize_adt(Q, q.base, types);
             // (fallthrough)
         case kHirFuncDecl:
-            inst = pawP_instantiate(Q->C, q.base, types);
+            inst = pawP_instantiate(Q->C, GET_NODE_TYPE(Q->C, q.base), types);
             pawIr_set_type(Q->C, q.seg->hid, inst);
             break;
         case kHirTypeDecl:
@@ -327,7 +326,6 @@ struct IrType *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct HirS
 
 struct IrType *lookup_trait(struct QueryState *Q, struct ModuleInfo *m, struct HirPath *path)
 {
-    struct IrType *inst;
     paw_assert(path->count > 0);
     struct QueryBase q = find_global(Q, m, path);
     if (q.base == NULL) return NULL;
@@ -341,7 +339,7 @@ struct IrType *lookup_trait(struct QueryState *Q, struct ModuleInfo *m, struct H
     validate_type_args(Q->C, q.base, q.seg);
     if (q.seg->types == NULL) return GET_NODE_TYPE(Q->C, q.base);
     struct IrTypeList *types = pawP_lower_type_list(Q->C, Q->m, Q->symtab, q.seg->types);
-    return pawP_instantiate(Q->C, q.base, types);
+    return pawP_instantiate(Q->C, GET_NODE_TYPE(Q->C, q.base), types);
 }
 
 struct IrType *pawP_lookup_trait(struct Compiler *C, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirPath *path)
