@@ -156,8 +156,6 @@ static paw_Uint hash_type_list(struct IrTypeList *types)
 
 static paw_Uint hash_type(struct IrType *type)
 {
-    return CAST(paw_Uint, type);
-
     paw_Uint hash = type->hdr.kind;
     switch (IR_KINDOF(type)) {
         case kIrAdt: {
@@ -213,9 +211,14 @@ paw_Bool pawIr_type_equals(struct Compiler *C, IrType *a, IrType *b)
     if (IR_KINDOF(a) != IR_KINDOF(b)) return PAW_FALSE;
 
     if (IrIsSignature(a)) {
+        // distinguish between different type signatures that happen to have the
+        // same parameters and result
         struct IrSignature *sa = IrGetSignature(a);
         struct IrSignature *sb = IrGetSignature(b);
-        if (sa->did.value != sb->did.value) return PAW_FALSE;
+        if (sa->did.value != sb->did.value || !sa->self != !sb->self
+                || (sa->self != NULL && !pawU_equals(C->U, sa->self, sb->self))) {
+            return PAW_FALSE;
+        }
     }
 
     return pawU_equals(C->U, a, b);

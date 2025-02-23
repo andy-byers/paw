@@ -76,6 +76,11 @@ enum JumpKind {
     JUMP_CONTINUE,
 };
 
+enum PreludeTraitKind {
+    PRELUDE_TRAIT_HASH,
+    PRELUDE_TRAIT_EQUALS,
+};
+
 // ORDER BuiltinKind
 enum BuiltinKind {
     BUILTIN_UNIT,

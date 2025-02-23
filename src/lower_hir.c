@@ -163,21 +163,6 @@ static void add_edge(struct LowerHir *L, MirBlock from, MirBlock to)
     K_LIST_PUSH(L->C, target->predecessors, from);
 }
 
-// TODO: kinda pointless, since a new block is immediately entered after "return", "break", or "continue"
-static paw_Bool is_unterminated(struct MirBlockData *block)
-{
-    if (block->instructions->count == 0) return PAW_TRUE;
-    switch (MIR_KINDOF(K_LIST_LAST(block->instructions))) {
-        case kMirReturn:
-        case kMirBranch:
-        case kMirSwitch:
-        case kMirGoto:
-            return PAW_FALSE;
-        default:
-            return PAW_TRUE;
-    }
-}
-
 static struct MirInstruction *add_instruction_(struct LowerHir *L, struct MirInstruction *instr)
 {
     struct MirBlockData *block = current_bb_data(L);
@@ -344,13 +329,12 @@ struct NonGlobal {
     paw_Bool is_upvalue : 1;
 };
 
-static paw_Bool resolve_local(struct LowerHir *L, struct FunctionState *fs, DeclId did, const String *name, struct NonGlobal *pinfo)
+static paw_Bool resolve_local(struct LowerHir *L, struct FunctionState *fs, const String *name, struct NonGlobal *pinfo)
 {
     // condition is "i > 0" to cause the result register to be ignored
     for (int i = fs->nlocals - 1; i > 0; --i) {
         struct LocalVar *item = get_local_slot(fs, i);
-        if (item->did.value == did.value
-                || pawS_eq(name, item->name)) {
+        if (pawS_eq(name, item->name)) {
             *pinfo = (struct NonGlobal){
                 .r = item->reg,
                 .vid = item->vid,
@@ -406,16 +390,16 @@ static void add_upvalue(struct LowerHir *L, struct FunctionState *fs, struct Non
     info->index = fs->up->count - 1;
 }
 
-static paw_Bool resolve_upvalue(struct LowerHir *L, struct FunctionState *fs, DeclId did, String *name, struct NonGlobal *pinfo)
+static paw_Bool resolve_upvalue(struct LowerHir *L, struct FunctionState *fs, String *name, struct NonGlobal *pinfo)
 {
     struct FunctionState *caller = fs->outer;
     if (caller == NULL) return PAW_FALSE;
-    if (resolve_local(L, caller, did, name, pinfo)) {
+    if (resolve_local(L, caller, name, pinfo)) {
         mark_upvalue(caller, pinfo->index, pinfo->r);
         add_upvalue(L, fs, pinfo, PAW_TRUE);
         return PAW_TRUE;
     }
-    if (resolve_upvalue(L, caller, did, name, pinfo)) {
+    if (resolve_upvalue(L, caller, name, pinfo)) {
         add_upvalue(L, fs, pinfo, PAW_FALSE);
         return PAW_TRUE;
     }
@@ -492,8 +476,8 @@ static struct LocalVar *alloc_local(struct LowerHir *L, String *name, struct IrT
 
 static paw_Bool resolve_nonglobal(struct LowerHir *L, DeclId did, String *name, struct NonGlobal *png)
 {
-    if (resolve_local(L, L->fs, did, name, png)) return PAW_TRUE;
-    return resolve_upvalue(L, L->fs, did, name, png);
+    if (resolve_local(L, L->fs, name, png)) return PAW_TRUE;
+    return resolve_upvalue(L, L->fs, name, png);
 }
 
 static MirRegister add_constant(struct LowerHir *L, Value value, enum BuiltinKind b_kind)
@@ -762,11 +746,6 @@ static MirRegister lower_path_expr(struct HirVisitor *V, struct HirPathExpr *e)
     const DeclId did = HIR_PATH_RESULT(e->path);
     struct HirDecl *decl = pawHir_get_decl(L->C, did);
     struct NonGlobal ng;
-    // TODO: The code that adds bindings to the locals stack doesn't know about DeclIds,
-    //       so we have to provide the name for those cases. Figure out a better way: this
-    //       is too hacky. There is a HirVarDecl for the binding, we just don't know where
-    //       to find it in "declare_match_bindings". Consider finding a way to smuggle the
-    //       DeclId in the match binding.
     if (resolve_nonglobal(L, did, decl->hdr.name, &ng)) {
         const MirRegister output = register_for_node(L, e->hid);
         if (ng.is_upvalue) {
@@ -1037,7 +1016,7 @@ static MirRegister lower_assign_expr(struct HirVisitor *V, struct HirAssignExpr 
     if (HirIsPathExpr(e->lhs)) {
         struct NonGlobal ng;
         struct HirPathExpr *x = HirGetPathExpr(e->lhs);
-        const paw_Bool expect_found = resolve_nonglobal(L, HIR_PATH_RESULT(x->path), NULL, &ng);
+        const paw_Bool expect_found = resolve_nonglobal(L, NO_DECL, K_LIST_LAST(x->path).name, &ng);
         paw_assert(expect_found); PAW_UNUSED(expect_found); // must be local or upvalue
         if (ng.is_upvalue) {
             const MirRegister rhs = lower_operand(V, e->rhs);
@@ -1195,8 +1174,6 @@ static MirRegister lower_jump_expr(struct HirVisitor *V, struct HirJumpExpr *e)
 
 static MirRegister lower_return_expr(struct HirVisitor *V, struct HirReturnExpr *e)
 {
-    // TODO: save blocks ending with return, use a goto to jump control to the
-    //       end of the function, place a single return there
     struct LowerHir *L = V->ud;
     if (e->expr != NULL) {
         const MirRegister value = lower_operand(V, e->expr);
@@ -1205,8 +1182,6 @@ static MirRegister lower_return_expr(struct HirVisitor *V, struct HirReturnExpr 
         // creates a dummy register for a value of type "()"
         terminate_return(L, NULL);
     }
-    // NOTE: This block is needed if there is unreachable code after the "return".
-    //       It will be eliminated in a later pass.
     const MirBlock next_bb = new_bb(L);
     set_current_bb(L, next_bb);
     return unit_literal(L);

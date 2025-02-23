@@ -69,6 +69,8 @@ void pawP_init(paw_Env *P)
     P->string_cache[CSTR_MAP] = pawS_new_fixed(P, "Map");
     P->string_cache[CSTR_OPTION] = pawS_new_fixed(P, "Option");
     P->string_cache[CSTR_RESULT] = pawS_new_fixed(P, "Result");
+    P->string_cache[CSTR_HASH] = pawS_new_fixed(P, "Hash");
+    P->string_cache[CSTR_EQUALS] = pawS_new_fixed(P, "Equals");
     P->string_cache[CSTR_UNDERSCORE] = pawS_new_fixed(P, "_");
     P->string_cache[CSTR_SELF] = pawS_new_fixed(P, "self");
 
@@ -153,8 +155,6 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const c
     C->ir_types = HirTypes_new(C);
     C->ir_defs = DefMap_new(C);
 
-//    C->method_contexts = MethodContextMap_new(C);
-//    C->method_binders = MethodBinderMap_new(C);
     C->rtti = RttiMap_new(C);
     C->imports = ImportMap_new(C);
     C->traits = TraitMap_new(C);
@@ -234,6 +234,7 @@ static void leave_def(struct DefGenerator *dg)
 
 static struct Type *lookup_type(struct DefGenerator *dg, struct IrType *type)
 {
+    if (type == NULL) return NULL;
     struct Type *const *ptype = RttiMap_get(dg->C, dg->C->rtti, type);
     return ptype != NULL ? *ptype : NULL;
 }

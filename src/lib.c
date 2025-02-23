@@ -315,10 +315,24 @@ static int int_to_string(paw_Env *P)
     return 1;
 }
 
+static int float_hash(paw_Env *P)
+{
+    // reinterpret as integer
+    PAW_UNUSED(P);
+    return 1;
+}
+
 static int float_to_string(paw_Env *P)
 {
     Value *pv = CF_BASE(1);
     pawV_to_string(P, pv, PAW_TFLOAT, NULL);
+    return 1;
+}
+
+static int string_hash(paw_Env *P)
+{
+    // reinterpret pointer to interned string as integer
+    PAW_UNUSED(P);
     return 1;
 }
 
@@ -502,8 +516,10 @@ static void load_builtins(paw_Env *P)
 
     add_prelude_method(P, "bool", "to_string", bool_to_string);
     add_prelude_method(P, "int", "to_string", int_to_string);
+    add_prelude_method(P, "float", "hash", float_hash);
     add_prelude_method(P, "float", "to_string", float_to_string);
 
+    add_prelude_method(P, "str", "hash", string_hash);
     add_prelude_method(P, "str", "parse_int", string_parse_int);
     add_prelude_method(P, "str", "parse_float", string_parse_float);
     add_prelude_method(P, "str", "split", string_split);

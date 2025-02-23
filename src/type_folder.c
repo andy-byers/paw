@@ -16,9 +16,10 @@ static struct IrTypeList *fold_type_list(struct IrTypeFolder *F, struct IrTypeLi
 {
     if (list == NULL) return NULL;
     struct Compiler *C = F->C;
+    struct IrType *const *ptype;
     struct IrTypeList *result = pawIr_type_list_new(C);
-    for (int i = 0; i < list->count; ++i) {
-        struct IrType *type = FoldType(F, K_LIST_GET(list, i));
+    K_LIST_FOREACH(list, ptype) {
+        struct IrType *type = FoldType(F, *ptype);
         K_LIST_PUSH(C, result, type);
     }
     return result;
@@ -26,30 +27,32 @@ static struct IrTypeList *fold_type_list(struct IrTypeFolder *F, struct IrTypeLi
 
 static struct IrType *FoldAdt(struct IrTypeFolder *F, struct IrAdt *t)
 {
-    t->types = F->FoldTypeList(F, t->types);
-    return IR_CAST_TYPE(t);
+    struct IrTypeList *types = F->FoldTypeList(F, t->types);
+    return pawIr_new_adt(F->C, t->did, types);
 }
 
 static struct IrType *FoldSignature(struct IrTypeFolder *F, struct IrSignature *t)
 {
-    t->types = F->FoldTypeList(F, t->types);
-    t->params = F->FoldTypeList(F, t->params);
-    t->result = FoldType(F, t->result);
-    t->self = FoldType(F, t->self);
-    return IR_CAST_TYPE(t);
+    struct IrTypeList *types = F->FoldTypeList(F, t->types);
+    struct IrTypeList *params = F->FoldTypeList(F, t->params);
+    struct IrType *result = FoldType(F, t->result);
+    struct IrType *self = FoldType(F, t->self);
+    struct IrType *r = pawIr_new_signature(F->C, t->did, types, params, result);
+    IrGetSignature(r)->self = self; // TODO: maybe should store separately
+    return r;
 }
 
 static struct IrType *FoldFuncPtr(struct IrTypeFolder *F, struct IrFuncPtr *t)
 {
-    t->params = F->FoldTypeList(F, t->params);
-    t->result = FoldType(F, t->result);
-    return IR_CAST_TYPE(t);
+    struct IrTypeList *params = F->FoldTypeList(F, t->params);
+    struct IrType *result = FoldType(F, t->result);
+    return pawIr_new_func_ptr(F->C, params, result);
 }
 
 static struct IrType *FoldTuple(struct IrTypeFolder *F, struct IrTuple *t)
 {
-    t->elems = F->FoldTypeList(F, t->elems);
-    return IR_CAST_TYPE(t);
+    struct IrTypeList *elems = F->FoldTypeList(F, t->elems);
+    return pawIr_new_tuple(F->C, elems);
 }
 
 static struct IrType *FoldTraitObj(struct IrTypeFolder *F, struct IrTraitObj *t)

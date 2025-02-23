@@ -60,15 +60,6 @@ static struct IrType *substitute_generic(struct IrTypeFolder *F, struct IrGeneri
     return IR_CAST_TYPE(t);
 }
 
-// TODO: This function is a workaround. type should always be copied in pawIr_fold_type, i.e.
-// TODO: in the Fold* functions in type_folder.c. Don't want to modify the original type.
-static struct IrType *copy_type(struct Compiler *C, struct IrType *type)
-{
-    struct IrType *copy = pawIr_new_type(C);
-    *copy = *type;
-    return copy;
-}
-
 struct IrType *finalize_type(struct MonoCollector *M, struct IrType *type)
 {
     struct IrType *old_type = type;
@@ -83,16 +74,9 @@ struct IrType *finalize_type(struct MonoCollector *M, struct IrType *type)
             struct IrTypeFolder F;
             pawIr_type_folder_init(&F, M->C, &subst);
             F.FoldGeneric = substitute_generic;
-            type = copy_type(M->C, type);
             type = pawIr_fold_type(&F, type);
         }
         gs = gs->outer;
-    }
-    if (!IrIsSignature(old_type)) return type;
-    struct IrSignature *old = IrGetSignature(old_type);
-    if (old->self != NULL) {
-        struct IrSignature *t = IrGetSignature(type);
-        t->self = finalize_type(M, old->self);
     }
     return type;
 }

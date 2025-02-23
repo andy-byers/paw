@@ -1622,21 +1622,41 @@ static struct AstDeclList *toplevel_items(struct Lex *lex, struct AstDeclList *l
 
 // TODO: someday, #embed should be used for this... once C23 support is better
 static const char kPrelude[] =
-    "pub struct unit;\n"
-
-    "pub struct bool {\n"
-    "    pub fn to_string(self) -> str;\n"
+    "pub trait Hash {\n"
+    "    fn hash(self) -> int;"
     "}\n"
 
-    "pub struct int {\n"
-    "    pub fn to_string(self) -> str;\n"
+    "pub trait Equals {\n"
+    "    fn eq(self, rhs: Self) -> bool;"
+    "    fn ne(self, rhs: Self) -> bool {\n"
+    "        !self.eq(rhs)\n"
+    "    }\n"
     "}\n"
 
-    "pub struct float {\n"
-    "    pub fn to_string(self) -> str;\n"
+    "pub struct unit: Hash + Equals {\n"
+    "    pub fn hash(self) -> int { 0 }\n"
+    "    pub fn eq(self, rhs: Self) -> bool { true }\n"
     "}\n"
 
-    "pub struct str {\n"
+    "pub struct bool: Hash + Equals {\n"
+    "    pub fn to_string(self) -> str;\n"
+    "    pub fn hash(self) -> int { self as int }\n"
+    "    pub fn eq(self, rhs: Self) -> bool { self == rhs }\n"
+    "}\n"
+
+    "pub struct int: Hash + Equals {\n"
+    "    pub fn to_string(self) -> str;\n"
+    "    pub fn hash(self) -> int { self }\n"
+    "    pub fn eq(self, rhs: Self) -> bool { self == rhs }\n"
+    "}\n"
+
+    "pub struct float: Hash + Equals {\n"
+    "    pub fn to_string(self) -> str;\n"
+    "    pub fn hash(self) -> int;\n"
+    "    pub fn eq(self, rhs: Self) -> bool { self == rhs }\n"
+    "}\n"
+
+    "pub struct str: Hash + Equals {\n"
     "    pub fn parse_int(self, base: int) -> int;\n"
     "    pub fn parse_float(self) -> float;\n"
     "    pub fn split(self, sep: str) -> [str];\n"
@@ -1644,17 +1664,19 @@ static const char kPrelude[] =
     "    pub fn find(self, target: str) -> int;\n"
     "    pub fn starts_with(self, prefix: str) -> bool;\n"
     "    pub fn ends_with(self, suffix: str) -> bool;\n"
+    "    pub fn hash(self) -> int;\n"
+    "    pub fn eq(self, rhs: Self) -> bool { self == rhs }\n"
     "}\n"
 
     "pub struct List<T> {\n"
     "    pub fn length(self) -> int;\n"
     "    pub fn push(self, value: T) -> Self;\n"
-    "    pub fn insert(self, i: int, value: T) -> Self;\n"
-    "    pub fn remove(self, i: int) -> T;\n"
+    "    pub fn insert(self, index: int, value: T) -> Self;\n"
+    "    pub fn remove(self, index: int) -> T;\n"
     "    pub fn pop(self) -> T;\n"
     "}\n"
 
-    "pub struct Map<K, V> {\n"
+    "pub struct Map<K: Hash + Equals, V> {\n"
     "    pub fn length(self) -> int;\n"
     "    pub fn get_or(self, key: K, default: V) -> V;\n"
     "    pub fn erase(self, key: K) -> Self;\n"
