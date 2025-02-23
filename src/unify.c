@@ -228,7 +228,6 @@ static int unify_types(struct Unifier *U, struct IrType *a, struct IrType *b)
     } else if (IrIsGeneric(a)) {
         return unify_generic(U, IrGetGeneric(a), IrGetGeneric(b));
     } else {
-        // TODO: probably only necessary if we allow trait objects, i.e. "let a: Trait = ..."
         paw_assert(IrIsTraitObj(a));
         return unify_trait_obj(U, IrGetTraitObj(a), IrGetTraitObj(b));
     }
@@ -263,7 +262,6 @@ static int unify(struct Unifier *U, struct IrType *a, struct IrType *b)
 
 #define RUN_ACTION(U, a, b, f) ((U)->action = f)(U, a, b)
 
-// TODO: return 0 or -1 so caller can provide better error message? or just display the type names in the error message
 void pawU_unify(struct Unifier *U, struct IrType *a, struct IrType *b)
 {
     const int rc = RUN_ACTION(U, a, b, unify);
@@ -291,8 +289,6 @@ paw_Bool pawU_equals(struct Unifier *U, struct IrType *a, struct IrType *b)
     return RUN_ACTION(U, a, b, equate) == 0;
 }
 
-// TODO: consider accepting the line number, or the type (containing the line number)
-//       this unknown is being used to infer
 struct IrType *pawU_new_unknown(struct Unifier *U, int line, struct IrTypeList *bounds)
 {
     UnificationTable *table = U->table;
@@ -377,7 +373,6 @@ static paw_Bool are_lists_compat(struct Unifier *U, struct IrTypeList *a, struct
 paw_Bool pawU_is_compat(struct Unifier *U, struct IrType *a, struct IrType *b)
 {
     if (pawU_equals(U, a, b)) return PAW_TRUE;
-    // TODO: probably wrong
     if (IrIsGeneric(a)) {
         struct IrTypeList *bounds = IrGetGeneric(a)->bounds;
         return pawP_satisfies_bounds(U->C, b, bounds);
@@ -385,7 +380,6 @@ paw_Bool pawU_is_compat(struct Unifier *U, struct IrType *a, struct IrType *b)
         struct IrTypeList *bounds = IrGetInfer(b)->bounds;
         return pawP_satisfies_bounds(U->C, a, bounds);
     }
-//    if (IrIsGeneric(a) || IrIsInfer(b)) return PAW_TRUE;
     if (IR_KINDOF(a) != IR_KINDOF(b)) return PAW_FALSE;
 
     switch (IR_KINDOF(a)) {

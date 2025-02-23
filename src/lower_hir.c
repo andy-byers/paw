@@ -163,21 +163,6 @@ static void add_edge(struct LowerHir *L, MirBlock from, MirBlock to)
     K_LIST_PUSH(L->C, target->predecessors, from);
 }
 
-// TODO: kinda pointless, since a new block is immediately entered after "return", "break", or "continue"
-static paw_Bool is_unterminated(struct MirBlockData *block)
-{
-    if (block->instructions->count == 0) return PAW_TRUE;
-    switch (MIR_KINDOF(K_LIST_LAST(block->instructions))) {
-        case kMirReturn:
-        case kMirBranch:
-        case kMirSwitch:
-        case kMirGoto:
-            return PAW_FALSE;
-        default:
-            return PAW_TRUE;
-    }
-}
-
 static struct MirInstruction *add_instruction_(struct LowerHir *L, struct MirInstruction *instr)
 {
     struct MirBlockData *block = current_bb_data(L);
