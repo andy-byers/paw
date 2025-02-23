@@ -107,17 +107,17 @@ static struct MirRegisterList *copy_register_list(struct MonoCollector *M, struc
     return result;
 }
 
-static void CopyPhi(struct MonoCollector *M, struct MirPhi *x, struct MirPhi *r)
+static void copy_phi(struct MonoCollector *M, struct MirPhi *x, struct MirPhi *r)
 {
     r->inputs = copy_register_list(M, x->inputs);
 }
 
-static void CopyCall(struct MonoCollector *M, struct MirCall *x, struct MirCall *r)
+static void copy_call(struct MonoCollector *M, struct MirCall *x, struct MirCall *r)
 {
     r->args = copy_register_list(M, x->args);
 }
 
-static void CopySwitch(struct MonoCollector *M, struct MirSwitch *t, struct MirSwitch *r)
+static void copy_switch(struct MonoCollector *M, struct MirSwitch *t, struct MirSwitch *r)
 {
     struct MirSwitchArm *parm;
     r->arms = pawMir_switch_list_new(M->C);
@@ -133,13 +133,13 @@ static struct MirInstruction *copy_instruction(struct MonoCollector *M, struct M
 
     switch (MIR_KINDOF(instr)) {
         case kMirPhi:
-            CopyPhi(M, MirGetPhi(instr), MirGetPhi(r));
+            copy_phi(M, MirGetPhi(instr), MirGetPhi(r));
             break;
         case kMirCall:
-            CopyCall(M, MirGetCall(instr), MirGetCall(r));
+            copy_call(M, MirGetCall(instr), MirGetCall(r));
             break;
         case kMirSwitch:
-            CopySwitch(M, MirGetSwitch(instr), MirGetSwitch(r));
+            copy_switch(M, MirGetSwitch(instr), MirGetSwitch(r));
             break;
         default:
             break;
@@ -301,9 +301,9 @@ static struct Mir *monomorphize_method_aux(struct MonoCollector *M, struct Mir *
     return inst;
 }
 
-static paw_Bool test_types(struct MonoCollector *M, struct IrType *lhs, struct IrType *rhs)
+static paw_Bool test_types(struct MonoCollector *M, struct IrType *a, struct IrType *b)
 {
-    return pawU_equals(M->C->U, lhs, rhs);
+    return pawU_equals(M->C->U, a, b);
 }
 
 static struct IrType *cannonicalize_func(struct MonoCollector *M, struct IrTypeList *monos, struct IrType *type)

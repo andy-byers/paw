@@ -202,9 +202,8 @@ struct IrType *pawP_generalize(struct Compiler *C, struct IrType *type);
 struct IrType *pawP_generalize_self(struct Compiler *C, struct IrType *self, struct IrTypeList *base_binder, struct IrTypeList **pinst_binder);
 
 // Instantiate a polymorphic function or type
-// Expects that 'decl' is already resolved, meaning the type of each symbol has been
-// filled in. Works by replacing each generic type with the corresponding concrete
-// type from the given 'types'. Returns a HirInstanceDecl if 'decl' is a function,
+// Works by replacing each generic type with the corresponding concrete type from
+// the given list of 'types'. Returns a HirInstanceDecl if 'decl' is a function,
 // and 'decl' otherwise. We avoid recursively visiting the function body here, since
 // doing so might cause further instantiations due to the presence of recursion.
 // Function instance bodies are expanded in a separate pass.
@@ -292,6 +291,7 @@ struct ItemSlot {
 };
 
 DEFINE_LIST(struct Compiler, pawP_item_list_, ItemList, struct ItemSlot)
+
 
 // Generated code for data structures used during compilation
 

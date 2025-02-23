@@ -15,6 +15,7 @@
 #include "gc.h"
 #include "ir_type.h"
 #include "map.h"
+#include "type_folder.h"
 #include "unify.h"
 
 #define MOD(X) (X)->m->hir->modno
@@ -100,15 +101,6 @@ static struct HirScope *leave_function(struct ItemCollector *X)
     return scope;
 }
 
-// TODO: what about first parameter 'self', can we just rely on that? This may be from before that change was made.
-static void create_context(struct ItemCollector *X, struct IrType *type, int line)
-{
-    String *self = CSTR(X, CSTR_SELF); // 'self'
-    struct HirDecl *result = pawHir_new_var_decl(X->m->hir, line, self, NULL, NULL);
-    SET_NODE_TYPE(X->C, result, type);
-    new_local(X, self, result);
-}
-
 static struct HirAdtDecl *get_adt(struct ItemCollector *X, struct IrType *type)
 {
     const DeclId did = IR_TYPE_DID(type);
@@ -120,10 +112,6 @@ static void enter_function(struct ItemCollector *X, struct HirFuncDecl *func)
 {
     enter_block(X, NULL);
     new_local(X, func->name, HIR_CAST_DECL(func));
-    if (func->fn_kind == FUNC_METHOD) {
-        // methods use local slot 1 for 'self'
-        create_context(X, func->self, func->line);
-    }
 }
 
 static void ensure_unique(struct ItemCollector *X, StringMap *map, String *name, const char *what)
@@ -267,12 +255,51 @@ static struct IrTypeList *collect_generic_types(struct ItemCollector *X, struct 
 //    return result;
 //}
 
+static struct IrType *check_generic(struct IrTypeFolder *F, struct IrGeneric *t)
+{
+    struct IrType **ptype;
+    struct IrTypeList *generics = F->ud;
+    K_LIST_FOREACH(generics, ptype) {
+        if (*ptype == NULL) continue;
+        struct IrGeneric *g = IrGetGeneric(*ptype);
+        if (g->did.value == t->did.value) {
+            *ptype = NULL;
+            break;
+        }
+    }
+    return IR_CAST_TYPE(t);
+}
+
+static void ensure_generics_in_signature(struct ItemCollector *X, struct HirDeclList *generics, struct IrType *sig)
+{
+    if (generics == NULL) return;
+    struct IrTypeList *generic_types = collect_generic_types(X, generics);
+
+    struct IrTypeFolder F;
+    struct IrSignature *s = IrGetSignature(sig);
+    pawIr_type_folder_init(&F, X->C, generic_types);
+    F.FoldGeneric = check_generic;
+    pawIr_fold_type_list(&F, s->params);
+    pawIr_fold_type(&F, s->result);
+
+    struct IrType *const *ptype;
+    K_LIST_FOREACH(generic_types, ptype) {
+        if (*ptype != NULL) {
+            struct HirDecl *generic_decl = pawHir_get_decl(X->C, IR_TYPE_DID(*ptype));
+            struct HirDecl *function_decl = pawHir_get_decl(X->C, IR_TYPE_DID(sig));
+            TYPE_ERROR(X, "generic '%s' missing from signature of '%s'",
+                    generic_decl->hdr.name->text, function_decl->hdr.name->text);
+        }
+    }
+}
+
 static void register_func(struct ItemCollector *X, struct HirFuncDecl *d)
 {
     struct IrTypeList *types = collect_generic_types(X, d->generics);
     struct IrTypeList *params_ = pawHir_collect_decl_types(X->C, d->params);
     struct IrType *result = collect_type(X, d->result);
     struct IrType *sig = pawIr_new_signature(X->C, d->did, types, params_, result);
+    ensure_generics_in_signature(X, d->generics, sig);
     SET_TYPE(X, d->hid, sig);
 
   //  const DeclId did = pawIr_next_did(X->C, MOD(X));

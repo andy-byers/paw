@@ -82,7 +82,7 @@ struct IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *
         if (last_method != NULL) {
             struct IrType *result = last_trait->generics == NULL ? GET_NODE_TYPE(C, last_method)
                 : pawP_instantiate_method(C, trait_decl, bound->types, last_method);
-            return pawIr_substitute_self(C, GET_NODE_TYPE(C, trait_decl), IR_CAST_TYPE(target), result);
+            return pawIr_substitute_self(C, *pbound, IR_CAST_TYPE(target), result);
         }
     }
     return NULL;

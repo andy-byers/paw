@@ -145,7 +145,7 @@ struct Iterable<T>: CustomIterator<T> {
     }
 }
 
-fn next_value<V: ToString, I: CustomIterator<V>>(iter: I) -> str {
+fn next_value<I: CustomIterator<IntWrapper>>(iter: I) -> str {
     match iter.next() {
         Option::Some(v) => "Some(" + v.to_string() + ")",
         Option::None => "None",
@@ -198,6 +198,53 @@ pub fn test_bounds_on_trait_generics() {
     let z = IntWrapper{value: 789};
     assert(call_bounds_on_trait_generics(Either::A(x), y, z)  == "123/789");        
     assert(call_bounds_on_trait_generics(Either::B(x), y, z)  == "456/123");        
+}
+
+pub trait TestPush<T> {
+    fn push(t: T, list: [T]) -> Self;
+}
+
+struct PushA<T>: TestPush<T> {
+    pub fn push(t: T, list: [T]) -> Self {
+        list.push(t);
+        Self
+    }
+}
+
+struct PushB<T>: TestPush<T> {
+    pub fn push(t: T, list: [T]) -> Self {
+        list.push(t);
+        Self
+    }
+}
+
+struct PushOuter<X, D: TestPush<X>> {
+    pub fn call_push(t: X, list: [X], d: D) -> Self {
+        let d: D = D::push(t, list);
+        Self
+    }
+}
+
+pub fn test_call_push() {
+    let list = [];
+    PushOuter::call_push(1, list, PushA);
+    PushOuter::call_push(2, list, PushB);
+    assert(list[0] == 1);
+    assert(list[1] == 2);
+}
+
+fn call_push<T, D: TestPush<T>>(t: T, list: [T], d: D) {
+    PushOuter::call_push(t, list, d);
+}
+
+pub fn test_indirect_call_push() {
+    let list = [];
+    call_push("a", list, PushA);
+    call_push("b", list, PushB);
+    print(list[0]);
+    print(list[1]);
+    assert(list[0] == "a");
+    assert(list[1] == "b");
 }
 
 //// TODO: Causes a stack overflow. Should this be supported?

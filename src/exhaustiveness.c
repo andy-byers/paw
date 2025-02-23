@@ -235,7 +235,7 @@ static struct VariableList *variables_for_types(struct Usefulness *U, struct IrT
 
 #if 0
 
-#include"stdio.h"
+#include <stdio.h>
 
 static void print_path(struct Compiler*C,struct HirPath *path)
 {
