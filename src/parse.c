@@ -1649,8 +1649,8 @@ static const char kPrelude[] =
     "pub struct List<T> {\n"
     "    pub fn length(self) -> int;\n"
     "    pub fn push(self, value: T) -> Self;\n"
-    "    pub fn insert(self, i: int, value: T) -> Self;\n"
-    "    pub fn remove(self, i: int) -> T;\n"
+    "    pub fn insert(self, index: int, value: T) -> Self;\n"
+    "    pub fn remove(self, index: int) -> T;\n"
     "    pub fn pop(self) -> T;\n"
     "}\n"
 

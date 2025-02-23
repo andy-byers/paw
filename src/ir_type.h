@@ -382,7 +382,7 @@ struct IrFieldDef *pawIr_get_field_def(struct Compiler *C, DeclId did);
 paw_Uint pawIr_type_hash(struct Compiler *C, IrType *t);
 paw_Bool pawIr_type_equals(struct Compiler *C, IrType *a, IrType *b);
 
-DEFINE_MAP(struct Compiler, RttiMap, pawP_alloc, p_hash_ptr, p_equals_ptr, struct IrType *, struct Type *)
+DEFINE_MAP(struct Compiler, RttiMap, pawP_alloc, pawIr_type_hash, pawIr_type_equals, struct IrType *, struct Type *)
 
 void pawIr_validate_type(struct Compiler *C, struct IrType *type);
 struct IrType *pawIr_substitute_self(struct Compiler *C, struct IrType *trait, struct IrType *adt, struct IrType *method);
