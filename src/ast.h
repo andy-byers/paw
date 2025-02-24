@@ -95,7 +95,6 @@ struct AstDeclHeader {
 struct AstVarDecl {
     AST_DECL_HEADER;
     paw_Bool is_pub : 1;
-    paw_Bool is_const : 1;
     struct AstType *tag;
     struct AstExpr *init;
 };

@@ -241,8 +241,6 @@ pub fn test_indirect_call_push() {
     let list = [];
     call_push("a", list, PushA);
     call_push("b", list, PushB);
-    print(list[0]);
-    print(list[1]);
     assert(list[0] == "a");
     assert(list[1] == "b");
 }

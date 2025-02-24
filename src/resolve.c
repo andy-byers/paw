@@ -984,8 +984,13 @@ static struct IrType *resolve_call_target(struct Resolver *R, struct HirExpr *ta
     if (method == NULL) {
         NAME_ERROR(R, "method '%s' does not exist", select->name->text);
     }
-    ensure_accessible_field(R, get_decl(R, IR_TYPE_DID(method)),
-            get_decl(R, IR_TYPE_DID(self)), method);
+    struct HirDecl *func_decl = get_decl(R, IR_TYPE_DID(method));
+    struct HirDecl *self_decl = get_decl(R, IR_TYPE_DID(self));
+    if (HirGetFuncDecl(func_decl)->is_assoc) {
+        TYPE_ERROR(R, "'%s::%s' is not a method",
+                self_decl->hdr.name->text, func_decl->hdr.name->text);
+    }
+    ensure_accessible_field(R, func_decl, self_decl, method);
     *pparam_offset = 1;
     return method;
 }

@@ -334,6 +334,10 @@ static void test_struct_error(void)
             "let x = S::new(); let a = x.a; let b = x.b;");
     test_compiler_status(PAW_ENAME, "struct_literal_private_field", "struct S {pub a: int, b: int}", "let x = S{a: 1, b: 2};");
     test_compiler_status(PAW_ENAME, "struct_call_private_method", "struct S {fn private(self) {}}", "let x = S; x.private();");
+
+    test_compiler_status(PAW_ETYPE, "struct_not_a_method", "struct S {pub fn f(s: Self) {}}", "let x = S; x.f();");
+    test_compiler_status(PAW_ETYPE, "struct_invalid_self", "struct S {pub fn f(self: int) {}}", "");
+    test_compiler_status(PAW_ETYPE, "struct_invalid_self_poly", "struct S<A, B> {fn f(self: S<B, A>) {}}", "");
 }
 
 static void test_enum_error(void)

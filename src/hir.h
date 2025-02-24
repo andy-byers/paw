@@ -264,7 +264,6 @@ struct HirDeclHeader {
 struct HirVarDecl {
     HIR_DECL_HEADER;
     paw_Bool is_pub : 1;
-    paw_Bool is_const : 1;
     struct HirExpr *init;
     struct HirType *tag;
 };
