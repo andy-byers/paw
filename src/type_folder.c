@@ -2,11 +2,6 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
-// TODO (a): always make a copy of the type being folded, fold the copy (already copying type lists)
-// TODO (b): broken b/c some code relies on types having stable pointers (method receiver map, etc.)
-// TODO (c): could be solved using custom hash and equality comparison functions so that IrType can be
-// TODO (d): used as a map key. note that trait objects are already copied in FoldTraitObj below
-
 #include "type_folder.h"
 #include "ir_type.h"
 

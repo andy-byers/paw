@@ -125,7 +125,7 @@ void *pawK_pool_alloc(paw_Env *P, struct Pool *pool, void *ptr, size_t size0, si
         memcpy(ptr2, ptr, PAW_MIN(size0, size));
     }
     if (size0 < size) {
-        memset(ptr2 + size0, 0, size - size0);
+        memset(BUMP_PTR(ptr2, size0), 0, size - size0);
     }
     return ptr2;
 }

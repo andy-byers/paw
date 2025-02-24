@@ -234,8 +234,6 @@ typedef struct Tuple {
     Value elems[];
 } Tuple;
 
-_Static_assert(sizeof(Tuple) == 3*sizeof(void*), "");
-
 Tuple *pawV_new_tuple(paw_Env *P, int nelems);
 void pawV_free_tuple(paw_Env *P, Tuple *t);
 

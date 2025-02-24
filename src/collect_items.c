@@ -439,14 +439,12 @@ static void collect_type_decl(struct ItemCollector *X, struct HirTypeDecl *d)
     leave_block(X);
 }
 
-static void maybe_fix_builtin(struct ItemCollector *X, String *name, DeclId did)
+static void maybe_store_builtin(struct ItemCollector *X, String *name, DeclId did)
 {
-    struct Builtin *b = X->C->builtins;
-    for (enum BuiltinKind k = 0; k < NBUILTINS; ++k) {
-        if (pawS_eq(b[k].name, name)) {
-            b[k].did = did;
-            break;
-        }
+    struct Builtin **pb = BuiltinMap_get(X->C, X->C->builtin_lookup, name);
+    if (pb != NULL) {
+        paw_assert(X->m->hir->modno == 0);
+        (*pb)->did = did;
     }
 }
 
@@ -461,8 +459,8 @@ static struct HirScope *register_adt_decl(struct ItemCollector *X, struct HirAdt
     enter_block(X, NULL);
     register_generics(X, d->generics);
     register_adt(X, d);
-    maybe_fix_builtin(X, d->name, d->did);
     new_global(X, d->name, HIR_CAST_DECL(d));
+    maybe_store_builtin(X, d->name, d->did);
     return leave_block(X);
 }
 
@@ -560,8 +558,9 @@ static struct HirScope *register_trait_decl(struct ItemCollector *X, struct HirT
     enter_block(X, NULL);
     register_generics(X, d->generics);
     X->binder = collect_generic_types(X, d->generics);
-    struct IrType *type = pawIr_new_trait_obj(X->C, d->did, X->binder);
     new_global(X, d->name, HIR_CAST_DECL(d));
+    maybe_store_builtin(X, d->name, d->did);
+    struct IrType *type = pawIr_new_trait_obj(X->C, d->did, X->binder);
     SET_TYPE(X, d->hid, type);
     return leave_block(X);
 }

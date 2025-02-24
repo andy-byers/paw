@@ -51,6 +51,7 @@ typedef struct Generator {
     struct Compiler *C;
     struct FuncState *fs;
     struct MirVisitor *V;
+    struct PolicyMap *policies;
     struct ItemList *items;
     struct Pool *pool;
     Tuple *builtin;
@@ -63,6 +64,7 @@ struct JumpTarget {
 };
 
 DEFINE_LIST(struct Compiler, jumptab_, JumpTable, struct JumpTarget)
+DEFINE_MAP(struct Compiler, PolicyMap, pawP_alloc, pawIr_type_hash, pawIr_type_equals, struct IrType *, int)
 
 static void add_jump_target(struct Generator *G, MirBlock bid)
 {

@@ -104,6 +104,8 @@ typedef struct Map Map;
 
 struct Compiler {
     struct Builtin builtins[NBUILTINS];
+    struct BuiltinMap *builtin_lookup;
+
     struct ModuleList *modules;
     struct HirDeclList *decls;
     struct DynamicMem *dm;
@@ -126,6 +128,10 @@ struct Compiler {
 
     struct HirTypes *ir_types; // HirId => IrType *
     struct DefMap *ir_defs; // DefId => IrDef *
+
+    // map for quickly determining the methods implementing a given builtlin
+    // trait for a given type
+    struct BuiltinTraitOwners *builtin_trait_owners;
 
     paw_Env *P;
     int hir_count;
@@ -293,7 +299,19 @@ struct ItemSlot {
 DEFINE_LIST(struct Compiler, pawP_item_list_, ItemList, struct ItemSlot)
 
 
-// Generated code for data structures used during compilation
+// Generate code for data structures used during compilation
+
+// From https://stackoverflow.com/questions/8513911
+static paw_Uint p_hash_combine(paw_Uint seed, paw_Uint v)
+{
+    // TODO: versions for other sizes of paw_Uint
+    const paw_Uint mul = 0x9DDFEA08EB382D69ULL;
+    paw_Uint a = (v ^ seed) * mul;
+    a ^= (a >> 47);
+    paw_Uint b = (seed ^ a) * mul;
+    b ^= (b >> 47);
+    return b * mul;
+}
 
 static inline paw_Uint p_hash_def_id(struct Compiler *C, DefId did)
 {
@@ -343,11 +361,31 @@ static inline paw_Bool p_value_equals(struct Compiler *C, Value a, Value b)
     return V_UINT(a) == V_UINT(b);
 }
 
+struct BuiltinTraitKey {
+    enum BuiltinTraitKind kind;
+    DeclId did;
+};
+
+static inline paw_Uint p_hash_trait_key(struct Compiler *C, struct BuiltinTraitKey v)
+{
+    PAW_UNUSED(C);
+    return p_hash_combine(v.kind, v.did.value);
+}
+
+static inline paw_Bool p_equals_trait_key(struct Compiler *C, struct BuiltinTraitKey a, struct BuiltinTraitKey b)
+{
+    PAW_UNUSED(C);
+    return a.did.value == b.did.value
+        && a.kind == b.kind;
+}
+
 DEFINE_MAP(struct Compiler, DefMap, pawP_alloc, p_hash_def_id, p_equals_def_id, DefId, struct IrDef *)
 DEFINE_MAP(struct Compiler, TraitMap, pawP_alloc, p_hash_decl_id, p_equals_decl_id, DeclId, struct IrTypeList *)
 DEFINE_MAP(struct Compiler, StringMap, pawP_alloc, p_hash_ptr, p_equals_ptr, String *, String *)
 DEFINE_MAP(struct Compiler, ImportMap, pawP_alloc, p_hash_ptr, p_equals_ptr, String *, struct Ast *)
 DEFINE_MAP(struct Compiler, ValueMap, pawP_alloc, p_value_hash, p_value_equals, Value, Value)
 DEFINE_MAP(struct Compiler, BodyMap, pawP_alloc, p_hash_decl_id, p_equals_decl_id, DeclId, struct Mir *)
+DEFINE_MAP(struct Compiler, BuiltinMap, pawP_alloc, p_hash_ptr, p_equals_ptr, String *, struct Builtin *)
+DEFINE_MAP(struct Compiler, BuiltinTraitOwners, pawP_alloc, p_hash_trait_key, p_equals_trait_key, struct BuiltinTraitKey, struct IrTypeList *)
 
 #endif // PAW_COMPILE_H

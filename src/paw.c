@@ -220,7 +220,7 @@ int main(int argc, const char **argv)
         return 0;
     }
     paw_Env *P = load_source(s_opt.H
-            ? 1 << s_opt.H
+            ? 1ULL << s_opt.H
             : 0 /* use default */);
     setup_stack(P, argc, argv);
     const int status = paw_call(P, 1);

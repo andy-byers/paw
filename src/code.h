@@ -76,11 +76,6 @@ enum JumpKind {
     JUMP_CONTINUE,
 };
 
-enum PreludeTraitKind {
-    PRELUDE_TRAIT_HASH,
-    PRELUDE_TRAIT_EQUALS,
-};
-
 // ORDER BuiltinKind
 enum BuiltinKind {
     BUILTIN_UNIT,
@@ -92,9 +87,17 @@ enum BuiltinKind {
     BUILTIN_MAP,
     BUILTIN_OPTION,
     BUILTIN_RESULT,
+    BUILTIN_HASH,
+    BUILTIN_EQUALS,
 
     NBUILTINS,
 };
+
+enum BuiltinTraitKind {
+    BUILTIN_TRAIT_HASH,
+    BUILTIN_TRAIT_EQUALS,
+};
+
 
 #define K_LIST_MIN (1 << 3)
 #define K_LIST_MAX (1 << 15)

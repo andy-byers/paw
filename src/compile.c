@@ -97,6 +97,10 @@ enum BuiltinKind pawP_type2code(struct Compiler *C, struct IrType *type)
             return BUILTIN_LIST;
         } else if (base.value == C->builtins[BUILTIN_MAP].did.value) {
             return BUILTIN_MAP;
+        } else if (base.value == C->builtins[BUILTIN_HASH].did.value) {
+            return BUILTIN_HASH;
+        } else if (base.value == C->builtins[BUILTIN_EQUALS].did.value) {
+            return BUILTIN_EQUALS;
         }
     }
     return NBUILTINS;
@@ -114,19 +118,12 @@ String *pawP_scan_nstring(struct Compiler *C, Tuple *map, const char *s, size_t 
 
 static void define_prelude_adt(struct Compiler *C, const char *name, enum BuiltinKind kind)
 {
-    struct Ast *ast = C->prelude;
+    String *s = SCAN_STRING(C, name);
     C->builtins[kind] = (struct Builtin){
-        .name = SCAN_STRING(C, name),
         .did = NO_DECL,
+        .name = s,
     };
-}
-
-static void define_prelude_poly_adt(struct Compiler *C, const char *name, enum BuiltinKind kind)
-{
-    C->builtins[kind] = (struct Builtin){
-        .name = SCAN_STRING(C, name),
-        .did = NO_DECL,
-    };
+    BuiltinMap_insert(C, C->builtin_lookup, s, &C->builtins[kind]);
 }
 
 void *pawP_alloc(struct Compiler *C, void *ptr, size_t size0, size_t size)
@@ -152,6 +149,7 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const c
     paw_new_map(P, 0, PAW_TSTR);
     C->strings = V_TUPLE(P->top.p[-1]);
 
+    C->builtin_lookup = BuiltinMap_new(C);
     C->ir_types = HirTypes_new(C);
     C->ir_defs = DefMap_new(C);
 
@@ -177,12 +175,16 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const c
 
     // builtin containers (in Paw code, List<T> can be written as [T], and
     // Map<K, V> as [K: V])
-    define_prelude_poly_adt(C, "List", BUILTIN_LIST);
-    define_prelude_poly_adt(C, "Map", BUILTIN_MAP);
+    define_prelude_adt(C, "List", BUILTIN_LIST);
+    define_prelude_adt(C, "Map", BUILTIN_MAP);
 
     // builtin enumerations
-    define_prelude_poly_adt(C, "Option", BUILTIN_OPTION);
-    define_prelude_poly_adt(C, "Result", BUILTIN_RESULT);
+    define_prelude_adt(C, "Option", BUILTIN_OPTION);
+    define_prelude_adt(C, "Result", BUILTIN_RESULT);
+
+    // builtin traits
+    define_prelude_adt(C, "Hash", BUILTIN_HASH);
+    define_prelude_adt(C, "Equals", BUILTIN_EQUALS);
 }
 
 void pawP_teardown(paw_Env *P, struct DynamicMem *dm)

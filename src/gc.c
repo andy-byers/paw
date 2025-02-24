@@ -148,8 +148,8 @@ static void traverse_map(paw_Env *P, Tuple *m)
 {
     paw_Int itr = PAW_ITER_INIT;
     while (pawMap_iter(m, &itr)) {
-        mark_value(P, *pawMap_key(m, CAST_SIZE(itr)));
-        mark_value(P, *pawMap_value(m, CAST_SIZE(itr)));
+        mark_value(P, *pawMap_key(m, itr));
+        mark_value(P, *pawMap_value(m, itr));
     }
 }
 
