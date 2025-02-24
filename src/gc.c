@@ -255,10 +255,12 @@ void pawG_collect(paw_Env *P)
     mark_phase(P);
     sweep_phase(P);
 
-#define HEAP_GROWTH_PERCENT 50
-    P->gc_limit = PAW_MIN(P->gc_bytes +
-        (P->gc_bytes * HEAP_GROWTH_PERCENT / 100),
-        P->heap_size);
+#define GROWTH_PERCENT 50
+
+    if (P->gc_bytes > PAW_SIZE_MAX / GROWTH_PERCENT) pawM_error(P);
+    const size_t extra = P->gc_bytes * GROWTH_PERCENT / 100;
+    if (P->gc_bytes > PAW_SIZE_MAX - extra) pawM_error(P);
+    P->gc_limit = PAW_MIN(P->gc_bytes + extra, P->heap_size);
 }
 
 void pawG_add_object(paw_Env *P, Object *o, ValueKind kind)
