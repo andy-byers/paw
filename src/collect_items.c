@@ -30,7 +30,7 @@ struct ItemCollector {
     struct Compiler *C;
     struct ModuleInfo *m;
     struct IrTypeList *binder;
-    struct IrType *adt;
+    struct IrType *ctx;
     TraitMap *traits;
     paw_Env *P;
     int ndefs;
@@ -383,17 +383,22 @@ static void collect_variant_decl(struct ItemCollector *X, struct HirVariantDecl 
     struct IrTypeList *params = d->fields != NULL
         ? pawHir_collect_decl_types(X->C, d->fields)
         : pawIr_type_list_new(X->C);
-    struct IrType *type = pawIr_new_signature(X->C, d->did, NULL, params, X->adt);
+    struct IrType *type = pawIr_new_signature(X->C, d->did, NULL, params, X->ctx);
     SET_TYPE(X, d->hid, type);
 }
 
 static paw_Bool check_assoc_function(struct ItemCollector *X, struct IrType *self, struct HirDeclList *params)
 {
-    if (self == NULL) return PAW_FALSE; // not a method
+    paw_assert(self != NULL);
     if (params->count == 0) return PAW_TRUE;
     struct HirDecl *first = K_LIST_GET(params, 0);
-    // TODO: check for "self" or "self: Self" to determine if method
-    return GET_NODE_TYPE(X->C, first) != self;
+    if (pawS_eq(first->hdr.name, CSTR(X, CSTR_SELF))) {
+        // parameter is named "self": make sure the type is compatible with "Self" alias
+        struct IrType *type = GET_NODE_TYPE(X->C, first);
+        pawU_unify(X->C->U, type, self);
+        return PAW_FALSE;
+    }
+    return PAW_TRUE;
 }
 
 static void collect_func(struct ItemCollector *X, struct HirFuncDecl *d)
@@ -408,17 +413,11 @@ static void collect_func(struct ItemCollector *X, struct HirFuncDecl *d)
     register_func(X, d);
     leave_function(X);
 
-    d->is_assoc = check_assoc_function(X, X->adt, d->params);
-// TODO: use X->adt directly, set d->self inside guard
-    if (d->self != NULL) {
+    if (X->ctx != NULL) {
+        d->is_assoc = check_assoc_function(X, X->ctx, d->params);
         struct IrType *type = GET_TYPE(X, d->hid);
-        IrGetSignature(type)->self = d->self;
-
-//        struct IrType *type = GET_TYPE(X, d->hid);
-//        pawP_set_self(X->C, IrGetSignature(type), d->self);
-//        if (X->binder != NULL) {
-//            pawP_set_binder(X->C, d->did, X->binder);
-//        }
+        IrGetSignature(type)->self = X->ctx;
+        d->self = X->ctx;
     }
 }
 
@@ -452,9 +451,9 @@ static void maybe_fix_builtin(struct ItemCollector *X, String *name, DeclId did)
 }
 
 #define WITH_CONTEXT(X, type, code) do { \
-        (X)->adt = (type); \
+        (X)->ctx = (type); \
         code \
-        (X)->adt = NULL; \
+        (X)->ctx = NULL; \
     } while (0)
 
 static struct HirScope *register_adt_decl(struct ItemCollector *X, struct HirAdtDecl *d)
@@ -474,7 +473,6 @@ static void collect_methods(struct ItemCollector *X, struct HirDeclList *methods
         struct HirFuncDecl *d = HirGetFuncDecl(*pdecl);
         ensure_unique(X, names, d->name, "method");
         if (force_pub) d->is_pub = PAW_TRUE;
-        d->self = X->adt;
         collect_func(X, d);
     }
 }
@@ -490,7 +488,7 @@ static struct HirDecl *declare_self(struct ItemCollector *X, int line, struct Ir
 
 static struct HirDecl *copy_and_collect_method(struct ItemCollector *X, struct HirFuncDecl *d)
 {
-    struct HirDecl *copy = pawHir_new_func_decl(X->m->hir, d->line, d->name, X->adt, d->generics,
+    struct HirDecl *copy = pawHir_new_func_decl(X->m->hir, d->line, d->name, X->ctx, d->generics,
             d->params, d->result, d->body, d->fn_kind, d->is_pub, d->is_assoc);
     collect_func(X, HirGetFuncDecl(copy));
     return copy;
@@ -516,8 +514,6 @@ static void collect_default_methods(struct ItemCollector *X, StringMap *names, s
     }
 }
 
-// TODO: methods + fields should probably be unique, pass map to collect_*() from this function
-//       ambiguity between method call and calling function pointer field, both are in value namespace
 static void collect_adt_decl(struct ItemCollector *X, struct PartialDecl lazy)
 {
     struct HirAdtDecl *d = HirGetAdtDecl(lazy.decl);

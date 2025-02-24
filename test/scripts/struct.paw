@@ -56,3 +56,20 @@ struct NoComma {
     pub value: int 
 }
 
+struct TestSelf {
+    pub fn not_method(s: TestSelf) {}
+    pub fn not_method2(s: Self) {}
+    pub fn method(self: TestSelf) {}
+}
+
+pub fn test_self() {
+    let ts = TestSelf;
+    ts.method();
+
+    TestSelf::not_method(ts);
+    TestSelf::not_method2(ts);
+
+    // call method like an associated function
+    TestSelf::method(ts);
+}
+

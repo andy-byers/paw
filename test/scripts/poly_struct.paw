@@ -286,3 +286,20 @@ pub fn test_recursion2() {
         value3: Option::<PolyRecur2A<str, float, bool>>::None,
     });
 }
+
+struct TestSelfPoly<A, B> {
+    pub fn not_method(s: TestSelfPoly<A, B>) {}
+    pub fn not_method2(s: Self) {}
+    pub fn method(self: TestSelfPoly<A, B>) {}
+}
+
+pub fn test_self_poly() {
+    let ts = TestSelfPoly::<int, float>;
+    ts.method();
+
+    TestSelfPoly::not_method(ts);
+    TestSelfPoly::not_method2(ts);
+
+    TestSelfPoly::method(ts);
+}
+
