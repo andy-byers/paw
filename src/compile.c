@@ -156,6 +156,7 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const c
     C->rtti = RttiMap_new(C);
     C->imports = ImportMap_new(C);
     C->traits = TraitMap_new(C);
+    C->trait_owners = TraitOwners_new(C);
 
     C->modname = P->modname = SCAN_STRING(C, modname);
     C->prelude = pawAst_new(C, SCAN_STRING(C, "prelude"), 0);

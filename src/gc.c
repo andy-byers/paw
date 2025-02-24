@@ -189,9 +189,9 @@ static void mark_roots(paw_Env *P)
         mark_object(P, CAST_OBJECT(def->hdr.name));
     }
     for (int i = 0; i < P->map_policies.count; ++i) {
-        MapPolicy *policy = P->map_policies.data[i];
-        mark_value(P, policy->equals);
-        mark_value(P, policy->hash);
+        const MapPolicy policy = P->map_policies.data[i];
+        mark_value(P, policy.equals);
+        mark_value(P, policy.hash);
     }
     mark_value(P, P->registry);
 }

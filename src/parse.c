@@ -1628,9 +1628,10 @@ static const char kPrelude[] =
 
     "pub trait Equals {\n"
     "    fn eq(self, rhs: Self) -> bool;"
-    "    fn ne(self, rhs: Self) -> bool {\n"
-    "        !self.eq(rhs)\n"
-    "    }\n"
+// TODO: need to copy the HIR method body and replace trait obj. with ADT
+//    "    fn ne(self, rhs: Self) -> bool {\n"
+//    "        !self.eq(rhs)\n"
+//    "    }\n"
     "}\n"
 
     "pub struct unit: Hash + Equals {\n"

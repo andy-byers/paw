@@ -414,4 +414,7 @@ static IrType *ir_map_value(IrType *type)
 
 const char *pawIr_print_type(struct Compiler *C, IrType *type);
 
+DEFINE_LIST(struct Compiler, TraitOwnerList_, TraitOwnerList, struct IrTypeList *)
+DEFINE_MAP(struct Compiler, TraitOwners, pawP_alloc, pawIr_type_hash, pawIr_type_equals, struct IrType *, struct TraitOwnerList *)
+
 #endif // PAW_IR_TYPE_H

@@ -93,11 +93,13 @@ enum BuiltinKind {
     NBUILTINS,
 };
 
-enum BuiltinTraitKind {
-    BUILTIN_TRAIT_HASH,
-    BUILTIN_TRAIT_EQUALS,
+enum TraitKind {
+    TRAIT_HASH, // Hash trait
+    TRAIT_EQUALS, // Equals trait
+    TRAIT_USER, // user-defined trait
 };
 
+#define NBUILTIN_TRAITS TRAIT_USER
 
 #define K_LIST_MIN (1 << 3)
 #define K_LIST_MAX (1 << 15)

@@ -18,7 +18,6 @@
 #include "type_folder.h"
 #include "unify.h"
 
-#define CSTR(R, i) CACHED_STRING(ENV(R), CAST_SIZE(i))
 #define TYPE2CODE(R, type) (pawP_type2code((R)->C, type))
 
 struct ResultState {
@@ -188,7 +187,7 @@ static struct IrTypeList *get_trait_bounds(struct Resolver *R, struct IrType *ty
     }
 }
 
-static paw_Bool implements_trait(struct Resolver *R, struct IrType *type, enum BuiltinTraitKind kind)
+static paw_Bool implements_trait(struct Resolver *R, struct IrType *type, enum TraitKind kind)
 {
     struct IrType *const *pbound;
     struct IrTypeList *bounds = get_trait_bounds(R, type);
@@ -196,8 +195,8 @@ static paw_Bool implements_trait(struct Resolver *R, struct IrType *type, enum B
     K_LIST_FOREACH(bounds, pbound) {
         struct HirDecl *decl = pawHir_get_decl(R->C, IR_TYPE_DID(*pbound));
         struct HirTraitDecl *trait = HirGetTraitDecl(decl);
-        if ((kind == BUILTIN_TRAIT_HASH && pawS_eq(trait->name, CSTR(R, CSTR_HASH)))
-                || (kind == BUILTIN_TRAIT_EQUALS && pawS_eq(trait->name, CSTR(R, CSTR_EQUALS)))) {
+        if ((kind == TRAIT_HASH && pawS_eq(trait->name, CSTR(R, CSTR_HASH)))
+                || (kind == TRAIT_EQUALS && pawS_eq(trait->name, CSTR(R, CSTR_EQUALS)))) {
             return PAW_TRUE;
         }
     }
@@ -205,11 +204,11 @@ static paw_Bool implements_trait(struct Resolver *R, struct IrType *type, enum B
 }
 
 // TODO: won't work for polymorphic traits
-static void require_trait(struct Resolver *R, struct IrType *type, enum BuiltinTraitKind kind)
+static void require_trait(struct Resolver *R, struct IrType *type, enum TraitKind kind)
 {
     struct IrInfer *t = IrGetInfer(type);
     if (t->bounds == NULL) t->bounds = pawIr_type_list_new(R->C);
-    enum BuiltinKind k = kind == BUILTIN_TRAIT_HASH ? BUILTIN_HASH : BUILTIN_EQUALS;
+    enum BuiltinKind k = kind == TRAIT_HASH ? BUILTIN_HASH : BUILTIN_EQUALS;
     struct HirDecl *decl = get_decl(R, R->C->builtins[k].did);
     struct IrType *trait = GET_NODE_TYPE(R->C, decl);
     K_LIST_PUSH(R->C, t->bounds, trait);
@@ -592,10 +591,10 @@ static struct IrType *resolve_path_expr(struct Resolver *R, struct HirPathExpr *
 static void check_map_key(struct Resolver *R, struct IrType *key)
 {
     // requires "Hash + Equals" to be implemented
-    enum BuiltinTraitKind requires[] = {BUILTIN_TRAIT_HASH, BUILTIN_TRAIT_EQUALS};
+    enum TraitKind requires[] = {TRAIT_HASH, TRAIT_EQUALS};
     for (int i = 0; i < PAW_COUNTOF(requires); ++i) {
         if (!implements_trait(R, key, requires[i])) {
-            const String *trait_name = requires[i] == BUILTIN_TRAIT_HASH
+            const String *trait_name = requires[i] == TRAIT_HASH
                 ? CSTR(R, CSTR_HASH) : CSTR(R, CSTR_EQUALS);
             TYPE_ERROR(R, "type '%s' cannot be used as a map key: '%s' trait not implemented",
                     pawIr_print_type(R->C, key), trait_name->text);
@@ -1098,8 +1097,8 @@ static struct IrType *resolve_map_lit(struct Resolver *R, struct HirContainerLit
 {
     struct IrType *key_t = new_unknown(R);
     struct IrType *value_t = new_unknown(R);
-    require_trait(R, key_t, BUILTIN_TRAIT_HASH);
-    require_trait(R, key_t, BUILTIN_TRAIT_EQUALS);
+    require_trait(R, key_t, TRAIT_HASH);
+    require_trait(R, key_t, TRAIT_EQUALS);
     for (int i = 0; i < e->items->count; ++i) {
         struct HirExpr *expr = K_LIST_GET(e->items, i);
         struct HirFieldExpr *field = HirGetFieldExpr(expr);

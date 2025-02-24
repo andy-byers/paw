@@ -37,6 +37,7 @@ struct MonoCollector {
 
 DEFINE_MAP(struct Compiler, DeclMonoMap, pawP_alloc, p_hash_decl_id, p_equals_decl_id, DeclId, struct IrTypeList *)
 DEFINE_MAP(struct Compiler, TypeMonoMap, pawP_alloc, pawIr_type_hash, pawIr_type_equals, struct IrType *, struct IrTypeList *)
+DEFINE_MAP_ITERATOR(DeclMonoMap, DeclId, struct IrTypeList *);
 
 static void log_instance(struct MonoCollector *M, const char *kind, const String *name, struct IrType *type)
 {
@@ -178,6 +179,36 @@ static struct Mir *new_mir(struct MonoCollector *M, struct Mir *base, struct IrT
     return M->mir;
 }
 
+//static void copy_trait_owners(struct MonoCollector *M, struct IrType *base, struct IrType *inst, struct IrType *method, String *method_name)
+//{
+//    paw_assert(method != NULL);
+//    struct TraitOwners *trait_owners = M->C->trait_owners;
+//    struct TraitOwnerList **pbase_owners = TraitOwners_get(M->C, trait_owners, base);
+//    if (pbase_owners == NULL) return; // no builtin traits implemented
+//
+//    struct TraitOwnerList *base_owners = *pbase_owners;
+//    struct TraitOwnerList *owners = pawP_get_trait_owners(M->C, inst);
+//    struct IrType *base_type = pawP_find_method(M->C, base, method_name);
+//}
+
+// Replace generics on a polymorphic method with generics from an instantiation so they
+// can be replaced in "finalize_type"
+struct IrType *instantiate_method(struct Compiler *C, struct IrType *method, struct IrTypeList *generics)
+{
+    if (generics == NULL) return method;
+
+    struct IrTypeFolder F;
+    struct Substitution subst = {
+        .generics = IR_TYPE_SUBTYPES(method),
+        .types = generics,
+        .C = C,
+    };
+
+    pawIr_type_folder_init(&F, C, &subst);
+    F.FoldGeneric = substitute_generic;
+    return pawIr_fold_type(&F, method);
+}
+
 static struct MirRegisterData copy_register(struct MonoCollector *M, struct MirRegisterData reg)
 {
     struct IrType *type = reg.type;
@@ -186,7 +217,7 @@ static struct MirRegisterData copy_register(struct MonoCollector *M, struct MirR
         struct IrType *self = finalize_type(M, reg.self);
         struct HirDecl *decl = pawHir_get_decl(M->C, IR_TYPE_DID(reg.type));
         type = pawP_find_method(M->C, self, decl->hdr.name);
-        if (type == NULL) NAME_ERROR(M->C, "cannot find trait method");
+        type = instantiate_method(M->C, type, IR_TYPE_SUBTYPES(reg.type));
     }
     type = finalize_type(M, type);
     struct MirRegisterData result = reg;
@@ -408,6 +439,38 @@ static struct IrType *collect_type(struct IrTypeFolder *F, struct IrType *type)
     return collect_other(M, type);
 }
 
+// TODO: not finished
+static void copy_trait_owners(struct MonoCollector *M)
+{
+    DeclMonoMapIterator iter;
+    DeclMonoMapIterator_init(M->adts, &iter);
+    while (DeclMonoMapIterator_is_valid(&iter)) {
+        const DeclId did = DeclMonoMapIterator_key(&iter);
+        struct HirDecl *base_decl = pawHir_get_decl(M->C, did);
+        struct IrType *base = GET_NODE_TYPE(M->C, base_decl);
+        if (IR_TYPE_SUBTYPES(base) == NULL) goto next_adt;
+
+        struct TraitOwnerList **pbase_owners = TraitOwners_get(M->C, M->C->trait_owners, base);
+        if (pbase_owners == NULL) goto next_adt;
+        struct IrType **pinst, **pmethod;
+        // iterate over instantiations of the polymorphic ADT
+        struct IrTypeList *insts = *DeclMonoMapIterator_valuep(&iter);
+        K_LIST_FOREACH(insts, pinst) {
+            struct IrType *inst = *pinst;
+            // TODO: hash and eq may not be in this list, since they are often only called by
+            // TODO: at runtime by code in map.c. use as a map key should cause hash + eq to be used
+            // TODO: maybe when visiting map constructors, put hash and eq for that type into pending stack
+            struct IrTypeList *methods = mono_list_for_type(M, M->methods, inst);
+            K_LIST_FOREACH(methods, pmethod) {
+                struct IrType *inst = *pmethod;
+            }
+        }
+
+next_adt:
+        DeclMonoMapIterator_next(&iter);
+    }
+}
+
 static paw_Bool is_entrypoint(const struct Mir *mir)
 {
     return mir->is_pub && !mir->is_poly
@@ -455,6 +518,7 @@ struct MonoResult pawP_monomorphize(struct Compiler *C, BodyMap *bodies)
         M.mir = M.F->V.mir = body;
         pawMir_fold(M.F, body);
     }
+    copy_trait_owners(&M);
 
     pawU_leave_binder(C->U);
     DeclMonoMap_delete(C, M.adts);

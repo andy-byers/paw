@@ -25,14 +25,16 @@ typedef enum MapState {
 #define MAP_MIN_CAPACITY PAW_ALIGNOF(Value)
 #define MAP_MAX_CAPACITY (PAW_SIZE_MAX / MAP_ITEM_SIZE)
 
+#define GET_POLICY(P, m) P->map_policies.data[MAP_POLICY(m)]
+
 static paw_Uint map_hash(paw_Env *P, Tuple *m, Value k)
 {
-    const MapPolicy *p = MAP_POLICY(m);
-    if (p->hash.p == NULL) return V_UINT(k);
+    const MapPolicy p = GET_POLICY(P, m);
+    if (p.hash.p == NULL) return V_UINT(k);
 
     // call the custom hash function
     ENSURE_STACK(P, 2);
-    *P->top.p++ = p->hash;
+    *P->top.p++ = p.hash;
     *P->top.p++ = k;
     paw_call(P, 1);
 
@@ -43,17 +45,17 @@ static paw_Uint map_hash(paw_Env *P, Tuple *m, Value k)
 
 static paw_Bool map_equals(paw_Env *P, Tuple *m, Value a, Value b)
 {
-    const MapPolicy *p = MAP_POLICY(m);
-    if (p->fp) {
+    const MapPolicy p = GET_POLICY(P, m);
+    if (p.fp) {
         // special case that handles "-0.0 == 0.0"
         return V_FLOAT(a) == V_FLOAT(b);
-    } else if (p->equals.p == NULL) {
+    } else if (p.equals.p == NULL) {
         return V_UINT(a) == V_UINT(b);
     }
 
     // call the custom equality comparison function
     ENSURE_STACK(P, 3);
-    *P->top.p++ = p->equals;
+    *P->top.p++ = p.equals;
     *P->top.p++ = a;
     *P->top.p++ = b;
     paw_call(P, 2);
@@ -190,7 +192,7 @@ static void grow_map(paw_Env *P, Tuple *m)
     resize_map(P, m, n);
 }
 
-Tuple *pawMap_new(paw_Env *P, MapPolicy *policy, paw_Int capacity, Value *out)
+Tuple *pawMap_new(paw_Env *P, int policy, paw_Int capacity, Value *out)
 {
     if (capacity > MAP_MAX_CAPACITY) pawM_error(P);
 

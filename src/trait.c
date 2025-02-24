@@ -101,12 +101,40 @@ struct IrType *pawIr_substitute_self(struct Compiler *C, struct IrType *trait, s
     };
     pawIr_type_folder_init(&F, C, &subst);
     F.FoldTraitObj = subst_trait_obj;
-
     struct IrSignature *fsig = IrGetSignature(method);
     struct IrTypeList *types = pawIr_fold_type_list(&F, fsig->types);
     struct IrTypeList *params = pawIr_fold_type_list(&F, fsig->params);
     struct IrType *result = pawIr_fold_type(&F, fsig->result);
     return pawIr_new_signature(C, fsig->did, types, params, result);
+}
+
+struct TraitOwnerList *pawP_get_trait_owners(struct Compiler *C, struct IrType *adt)
+{
+    struct TraitOwnerList *owners;
+    struct TraitOwnerList **pinfo = TraitOwners_get(C, C->trait_owners, adt);
+    if (pinfo == NULL) {
+        owners = TraitOwnerList_new(C);
+        TraitOwners_insert(C, C->trait_owners, adt, owners);
+        K_LIST_RESERVE(C, owners, NBUILTIN_TRAITS);
+        while (owners->count < NBUILTIN_TRAITS) {
+            K_LIST_PUSH(C, owners, NULL);
+        }
+    } else {
+        owners = *pinfo;
+    }
+    return owners;
+}
+
+static void register_builtin_trait_method(struct Compiler *C, struct IrType *adt, struct IrType *method, enum TraitKind tk)
+{
+    struct HirFuncDecl *adt_method = HirGetFuncDecl(pawHir_get_decl(C, IR_TYPE_DID(method)));
+    if (tk == TRAIT_EQUALS && adt_method->name->text[0] != 'e') {
+        return; // special case: only care about "eq" method
+    }
+    struct TraitOwnerList *owners = pawP_get_trait_owners(C, adt);
+    struct IrTypeList **pmethods = &K_LIST_GET(owners, tk);
+    if (*pmethods == NULL) *pmethods = pawIr_type_list_new(C);
+    K_LIST_PUSH(C, *pmethods, method);
 }
 
 static void ensure_methods_match(struct Compiler *C, struct IrType *adt, struct HirFuncDecl *adt_method, struct IrType *trait, struct HirTraitDecl *trait_decl, struct HirFuncDecl *trait_method)
@@ -121,10 +149,13 @@ static void ensure_methods_match(struct Compiler *C, struct IrType *adt, struct 
         b = pawP_instantiate_method(C, HIR_CAST_DECL(trait_decl),
                 IR_TYPE_SUBTYPES(trait), HIR_CAST_DECL(trait_method));
     }
+    // substitute all instances of the trait object type for the type of the implementor
     b = pawIr_substitute_self(C, trait, adt, b);
-    if (!pawU_equals(C->U, a, b)) {
-        TYPE_ERROR(C, "trait method incompatible with implementation");
-    }
+    b = pawP_generalize(C, b);
+    pawU_unify(C->U, a, b);
+
+    enum TraitKind tk = pawHir_kindof_trait(C, trait_decl);
+    if (tk != TRAIT_USER) register_builtin_trait_method(C, adt, a, tk);
 }
 
 DEFINE_MAP(struct Compiler, MethodMap, pawP_alloc, p_hash_ptr, p_equals_ptr, String *, struct HirFuncDecl *)

@@ -245,6 +245,44 @@ pub fn test_indirect_call_push() {
     assert(list[1] == "b");
 }
 
+// Polymorphic trait with polymorphic method/associated function
+pub trait Trait<S> {
+    fn method<T>(self, t: T) -> (S, T);
+    fn assoc_fn<T>(s: S, t: T) -> (S, T);
+}
+
+struct Struct<X>: Trait<X> {
+    pub value: X,
+    pub fn method<Y>(self, y: Y) -> (X, Y) {
+        (self.value, y)
+    }
+    pub fn assoc_fn<Y>(x: X, y: Y) -> (X, Y) {
+        (x, y)
+    }
+}
+
+struct Marker<T>;
+
+fn call_method2<A, B, C: Trait<A>>(b: B, c: C) -> (A, B) {
+    c.method(b)
+}
+
+fn call_assoc_fn<A, B, C: Trait<A>>(a: A, b: B, _: Marker<C>) -> (A, B) {
+    C::assoc_fn(a, b)
+}
+
+pub fn test_call_method2() {
+    let t = call_method2(true, Struct{value: "abc"});
+    assert(t.0 == "abc");
+    assert(t.1 == true);
+}
+
+pub fn test_call_assoc_fn() {
+    let t = call_assoc_fn(1, 2.0, Marker::<Struct<int>>);
+    assert(t.0 == 1);
+    assert(t.1 == 2.0);
+}
+
 //// TODO: Causes a stack overflow. Should this be supported?
 //pub trait GetSelf<X> {
 //    fn get(self) -> X;
@@ -261,3 +299,4 @@ pub fn test_indirect_call_push() {
 //fn call_get_self<X: GetSelf<X>>(x: X) -> X {
 //    x.get()
 //}
+

@@ -51,11 +51,14 @@ typedef struct Generator {
     struct Compiler *C;
     struct FuncState *fs;
     struct MirVisitor *V;
-    struct PolicyMap *policies;
+    struct ToplevelMap *toplevel;
+    struct ToplevelMap *policy_cache;
+    struct PolicyList *policies;
     struct ItemList *items;
     struct Pool *pool;
     Tuple *builtin;
     paw_Env *P;
+    int ipolicy;
 } Generator;
 
 struct JumpTarget {
@@ -63,8 +66,14 @@ struct JumpTarget {
     int pc;
 };
 
+struct PolicyInfo {
+    int equals_vid;
+    int hash_vid;
+};
+
 DEFINE_LIST(struct Compiler, jumptab_, JumpTable, struct JumpTarget)
-DEFINE_MAP(struct Compiler, PolicyMap, pawP_alloc, pawIr_type_hash, pawIr_type_equals, struct IrType *, int)
+DEFINE_LIST(struct Compiler, PolicyList_, PolicyList, struct PolicyInfo)
+DEFINE_MAP(struct Compiler, ToplevelMap, pawP_alloc, pawIr_type_hash, pawIr_type_equals, struct IrType *, int)
 
 static void add_jump_target(struct Generator *G, MirBlock bid)
 {
@@ -625,6 +634,27 @@ static void code_items(struct Generator *G)
     }
 }
 
+// Create policies for custom map keys
+static void init_policies(struct Generator *G)
+{
+    paw_Env *P = ENV(G);
+    struct MapPolicyList *policies = &P->map_policies;
+
+    struct PolicyInfo *pinfo;
+    K_LIST_FOREACH(G->policies, pinfo) {
+        pawM_grow(P, policies->data, policies->count, policies->alloc);
+        policies->data[policies->count++] = (MapPolicy){
+            .equals = P->vals.data[pinfo->equals_vid],
+            .hash = P->vals.data[pinfo->hash_vid],
+        };
+    }
+}
+
+static void register_toplevel_function(struct Generator *G, struct IrType *type, int iid)
+{
+    ToplevelMap_insert(G->C, G->toplevel, type, iid);
+}
+
 static void register_items(struct Generator *G)
 {
     BodyMap *bodies = pawP_lower_hir(G->C);
@@ -633,10 +663,12 @@ static void register_items(struct Generator *G)
 
     G->items = pawP_allocate_defs(G->C, mr.bodies, mr.types);
 
+    int iid;
     struct ItemSlot *pitem;
-    K_LIST_FOREACH(G->items, pitem) {
+    K_LIST_ENUMERATE(G->items, iid, pitem) {
         struct Mir *mir = pitem->mir;
         struct IrType *type = mir->type;
+        register_toplevel_function(G, type, iid);
 
         const String *modname = prefix_for_modno(G, IR_TYPE_DID(type).modno);
         const struct Type *ty = lookup_type(G, type);
@@ -797,6 +829,27 @@ static void code_set_field(struct MirVisitor *V, struct MirSetField *x)
     code_ABC(fs, OP_SETFIELD, REG(x->object), x->index, REG(x->value));
 }
 
+// Determine the unique policy number for the given type of "key"
+static unsigned determine_map_policy(struct Generator *G, struct IrType *key)
+{
+    enum BuiltinKind kind = TYPE_CODE(G, key);
+    if (kind != NBUILTINS) return kind;
+    const int *ppolicy = ToplevelMap_get(G->C, G->policy_cache, key);
+    if (ppolicy != NULL) return *ppolicy;
+
+    struct TraitOwnerList *const *powners = TraitOwners_get(G->C, G->C->trait_owners, key);
+    struct IrType *equals = K_LIST_FIRST(K_LIST_GET(*powners, TRAIT_EQUALS));
+    struct IrType *hash = K_LIST_FIRST(K_LIST_GET(*powners, TRAIT_HASH));
+    K_LIST_PUSH(G->C, G->policies, ((struct PolicyInfo){
+        .equals_vid = *ToplevelMap_get(G->C, G->toplevel, equals),
+        .hash_vid = *ToplevelMap_get(G->C, G->toplevel, hash),
+    }));
+
+    const int ipolicy = G->ipolicy++;
+    ToplevelMap_insert(G->C, G->policy_cache, key, ipolicy);
+    return ipolicy;
+}
+
 static void code_container(struct MirVisitor *V, struct MirContainer *x)
 {
     struct Generator *G = V->ud;
@@ -805,9 +858,9 @@ static void code_container(struct MirVisitor *V, struct MirContainer *x)
     if (x->b_kind == BUILTIN_LIST) {
         code_AB(fs, OP_NEWLIST, temp, x->nelems);
     } else {
-        struct IrType *key_type = ir_map_key(TYPEOF(G, x->output));
-        enum BuiltinKind key_kind = TYPE_CODE(G, key_type);
-        code_ABC(fs, OP_NEWMAP, temp, x->nelems, key_kind);
+        struct IrType *key = ir_map_key(TYPEOF(G, x->output));
+        const int policy = determine_map_policy(G, key);
+        code_ABC(fs, OP_NEWMAP, temp, x->nelems, policy);
     }
     move_to_reg(fs, temp, REG(x->output));
 }
@@ -1246,8 +1299,6 @@ static void setup_codegen(struct Generator *G)
     V->VisitBranch = code_branch;
     V->VisitGoto = code_goto;
     V->VisitBlock = code_block;
-
-    G->items = pawP_item_list_new(G->C);
 }
 
 void pawP_codegen(struct Compiler *C)
@@ -1256,6 +1307,11 @@ void pawP_codegen(struct Compiler *C)
 
     struct MirVisitor V;
     struct Generator G = {
+        .ipolicy = P->map_policies.count,
+        .policies = PolicyList_new(C),
+        .policy_cache = ToplevelMap_new(C),
+        .toplevel = ToplevelMap_new(C),
+        .items = pawP_item_list_new(C),
         .pool = C->pool,
         .V = &V,
         .P = P,
@@ -1268,6 +1324,7 @@ void pawP_codegen(struct Compiler *C)
     setup_codegen(&G);
     register_items(&G);
     code_items(&G);
+    init_policies(&G);
 
     paw_pop(ENV(C), 1);
 }

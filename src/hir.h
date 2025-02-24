@@ -1435,6 +1435,8 @@ static inline struct HirSegment *pawHir_path_add(struct Hir *hir, struct HirPath
 struct IrTypeList *pawHir_collect_decl_types(struct Compiler *C, struct HirDeclList *list);
 struct IrTypeList *pawHir_collect_expr_types(struct Compiler *C, struct HirExprList *list);
 
+enum TraitKind pawHir_kindof_trait(struct Compiler *C, struct HirTraitDecl *d);
+
 const char *pawHir_print_type(struct Compiler *C, struct HirType *type);
 const char *pawHir_print_path(struct Compiler *C, struct HirPath *path);
 

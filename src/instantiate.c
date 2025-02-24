@@ -120,8 +120,7 @@ static struct IrType *instantiate_method_aux(struct InstanceState *I, struct IrT
     struct IrTypeList *params = collect_field_types(I, func->params);
     struct IrType *result = func_result(I, func);
     struct IrType *inst = pawIr_new_signature(I->C, method->hdr.did, func_types, params, result);
-    struct IrSignature *r = IrGetSignature(inst);
-    prep_func_instance(I, generics, types, r);
+    prep_func_instance(I, generics, types, IrGetSignature(inst));
     return inst;
 }
 

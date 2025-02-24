@@ -683,19 +683,21 @@ static int init_searchers(paw_Env *P)
     return PAW_COUNTOF(fs);
 }
 
+#define NBUILTIN_POLICIES 5
+
 void pawL_init(paw_Env *P)
 {
-    static MapPolicy s_base_policy = {0};
-    static MapPolicy s_float_policy = {.fp = PAW_TRUE};
+    const MapPolicy base_policy = {0};
+    const MapPolicy float_policy = {.fp = PAW_TRUE};
 
     P->map_policies.alloc = 32;
-    P->map_policies.data = pawM_new_vec(P, 32, MapPolicy *);
-    P->map_policies.data[PAW_TUNIT] = &s_base_policy;
-    P->map_policies.data[PAW_TBOOL] = &s_base_policy;
-    P->map_policies.data[PAW_TINT] = &s_base_policy;
-    P->map_policies.data[PAW_TFLOAT] = &s_float_policy;
-    P->map_policies.data[PAW_TSTR] = &s_base_policy;
-    P->map_policies.count = 5;
+    P->map_policies.data = pawM_new_vec(P, 32, MapPolicy);
+    P->map_policies.data[PAW_TUNIT] = base_policy;
+    P->map_policies.data[PAW_TBOOL] = base_policy;
+    P->map_policies.data[PAW_TINT] = base_policy;
+    P->map_policies.data[PAW_TFLOAT] = float_policy;
+    P->map_policies.data[PAW_TSTR] = base_policy;
+    P->map_policies.count = NBUILTIN_POLICIES;
 
     // create system registry objects
     pawE_push_cstr(P, CSTR_KSEARCHERS);

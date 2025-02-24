@@ -567,6 +567,17 @@ struct IrTypeList *pawHir_collect_expr_types(struct Compiler *C, struct HirExprL
     return types;
 }
 
+enum TraitKind pawHir_kindof_trait(struct Compiler *C, struct HirTraitDecl *d)
+{
+    if (pawS_eq(d->name, CSTR(C, CSTR_HASH))) {
+        return TRAIT_HASH;
+    } else if (pawS_eq(d->name, CSTR(C, CSTR_EQUALS))) {
+        return TRAIT_EQUALS;
+    } else {
+        return TRAIT_USER;
+    }
+}
+
 
 struct Printer {
     struct Compiler *C;

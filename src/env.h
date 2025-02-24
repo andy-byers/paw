@@ -101,7 +101,7 @@ typedef struct paw_Env {
     void *ud;
 
     struct MapPolicyList {
-        MapPolicy **data;
+        MapPolicy *data;
         int count;
         int alloc;
     } map_policies;

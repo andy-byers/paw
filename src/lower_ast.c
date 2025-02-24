@@ -16,8 +16,6 @@
 #include "str.h"
 #include "unify.h"
 
-#define CSTR(L, i) CACHED_STRING(ENV(L), CAST_SIZE(i))
-
 struct BlockState {
     struct BlockState *outer;
     paw_Bool propagate;

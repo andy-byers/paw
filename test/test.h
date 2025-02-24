@@ -43,6 +43,7 @@
     X(poly_enum) \
     X(poly_method) \
     X(poly_trait) \
+    X(builtin_trait) \
     X(unit_struct) \
     X(unit_variant) \
     X(infer_assoc_items) \

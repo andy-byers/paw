@@ -335,8 +335,7 @@ Tuple *pawR_new_list(paw_Env *P, CallFrame *cf, Value *ra, int b)
 
 Tuple *pawR_new_map(paw_Env *P, CallFrame *cf, Value *ra, int b, int c)
 {
-    MapPolicy *policy = P->map_policies.data[c];
-    return VM_MAP_INIT(policy, ra, b);
+    return VM_MAP_INIT(c, ra, b);
 }
 
 
