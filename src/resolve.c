@@ -542,11 +542,52 @@ static struct IrType *resolve_path_expr(struct Resolver *R, struct HirPathExpr *
     return type;
 }
 
+static struct IrTypeList *get_trait_bounds(struct Resolver *R, struct IrType *type)
+{
+    if (IrIsGeneric(type)) {
+        return IrGetGeneric(type)->bounds;
+    } else if (IrIsInfer(type)) {
+        return IrGetInfer(type)->bounds;
+    } else if (IrIsAdt(type)) {
+        struct HirAdtDecl *d = HirGetAdtDecl(
+                pawHir_get_decl(R->C, IR_TYPE_DID(type)));
+        struct HirType *const *ptype;
+        struct IrTypeList *bounds = pawIr_type_list_new(R->C);
+        K_LIST_FOREACH(d->traits, ptype) {
+            K_LIST_PUSH(R->C, bounds, GET_NODE_TYPE(R->C, *ptype));
+        }
+        return bounds;
+    } else {
+        TYPE_ERROR(R->C, "type has no trait bounds");
+    }
+}
+
+static paw_Bool implements_trait(struct Resolver *R, struct IrType *type, enum PreludeTraitKind kind)
+{
+    struct IrType *const *pbound;
+    struct IrTypeList *bounds = get_trait_bounds(R, type);
+    K_LIST_FOREACH(bounds, pbound) {
+        struct HirDecl *decl = pawHir_get_decl(R->C, IR_TYPE_DID(*pbound));
+        struct HirTraitDecl *trait = HirGetTraitDecl(decl);
+        if ((kind == PRELUDE_TRAIT_HASH && pawS_eq(trait->name, CSTR(R, CSTR_HASH)))
+                || (kind == PRELUDE_TRAIT_EQUALS && pawS_eq(trait->name, CSTR(R, CSTR_EQUALS)))) {
+            return PAW_TRUE;
+        }
+    }
+    return PAW_FALSE;
+}
+
 static void check_map_key(struct Resolver *R, struct IrType *key)
 {
-    // TODO: check for Hash trait
-    if (!IrIsInfer(key) && !IS_BASIC_TYPE(TYPE2CODE(R, key))) {
-        TYPE_ERROR(R, "key is not hashable");
+    // requires "Hash + Equals" to be implemented
+    enum PreludeTraitKind requires[] = {PRELUDE_TRAIT_HASH, PRELUDE_TRAIT_EQUALS};
+    for (int i = 0; i < PAW_COUNTOF(requires); ++i) {
+        if (!implements_trait(R, key, requires[i])) {
+            const String *trait_name = requires[i] == PRELUDE_TRAIT_HASH
+                ? CSTR(R, CSTR_HASH) : CSTR(R, CSTR_EQUALS);
+            TYPE_ERROR(R, "type '%s' cannot be used as a map key: '%s' trait not implemented",
+                    pawIr_print_type(R->C, key), trait_name->text);
+        }
     }
 }
 

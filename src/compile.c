@@ -69,6 +69,8 @@ void pawP_init(paw_Env *P)
     P->string_cache[CSTR_MAP] = pawS_new_fixed(P, "Map");
     P->string_cache[CSTR_OPTION] = pawS_new_fixed(P, "Option");
     P->string_cache[CSTR_RESULT] = pawS_new_fixed(P, "Result");
+    P->string_cache[CSTR_HASH] = pawS_new_fixed(P, "Hash");
+    P->string_cache[CSTR_EQUALS] = pawS_new_fixed(P, "Equals");
     P->string_cache[CSTR_UNDERSCORE] = pawS_new_fixed(P, "_");
     P->string_cache[CSTR_SELF] = pawS_new_fixed(P, "self");
 
