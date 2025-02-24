@@ -6,8 +6,6 @@
 
 #include "compile.h"
 
-struct HirScope;
-
 #define HIR_DECL_LIST(X) \
         X(FieldDecl) \
         X(FuncDecl) \
