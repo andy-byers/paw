@@ -129,6 +129,18 @@ void pawIr_validate_type(struct Compiler *C, struct IrType *type)
     }
 }
 
+// From https://stackoverflow.com/questions/8513911
+static paw_Uint hash_combine(paw_Uint seed, paw_Uint v)
+{
+    // TODO: versions for other sizes of paw_Uint
+    paw_Uint const mul = 0x9DDFEA08EB382D69ULL;
+    paw_Uint a = (v ^ seed) * mul;
+    a ^= (a >> 47);
+    paw_Uint b = (seed ^ a) * mul;
+    b ^= (b >> 47);
+    return b * mul;
+}
+
 static paw_Uint hash_type(struct IrType *type);
 
 static paw_Uint hash_type_list(struct IrTypeList *types)
@@ -138,7 +150,7 @@ static paw_Uint hash_type_list(struct IrTypeList *types)
     if (types != NULL) {
         K_LIST_FOREACH(types, ptype)
         {
-            hash = p_hash_combine(hash, hash_type(*ptype));
+            hash = hash_combine(hash, hash_type(*ptype));
         }
     }
     return hash;
@@ -150,46 +162,46 @@ static paw_Uint hash_type(struct IrType *type)
     switch (IR_KINDOF(type)) {
         case kIrAdt: {
             struct IrAdt *t = IrGetAdt(type);
-            hash = p_hash_combine(hash, t->did.value);
-            hash = p_hash_combine(hash, hash_type_list(t->types));
+            hash = hash_combine(hash, t->did.value);
+            hash = hash_combine(hash, hash_type_list(t->types));
             break;
         }
         case kIrFuncPtr: {
             struct IrFuncPtr *t = IrGetFuncPtr(type);
-            hash = p_hash_combine(hash, hash_type_list(t->params));
-            hash = p_hash_combine(hash, hash_type(t->result));
+            hash = hash_combine(hash, hash_type_list(t->params));
+            hash = hash_combine(hash, hash_type(t->result));
             break;
         }
         case kIrSignature: {
             struct IrSignature *t = IrGetSignature(type);
-            hash = p_hash_combine(hash, t->did.value);
-            hash = p_hash_combine(hash, hash_type_list(t->types));
-            hash = p_hash_combine(hash, hash_type_list(t->params));
-            hash = p_hash_combine(hash, hash_type(t->result));
+            hash = hash_combine(hash, t->did.value);
+            hash = hash_combine(hash, hash_type_list(t->types));
+            hash = hash_combine(hash, hash_type_list(t->params));
+            hash = hash_combine(hash, hash_type(t->result));
             break;
         }
         case kIrTuple: {
             struct IrTuple *t = IrGetTuple(type);
-            hash = p_hash_combine(hash, hash_type_list(t->elems));
+            hash = hash_combine(hash, hash_type_list(t->elems));
             break;
         }
         case kIrInfer: {
             struct IrInfer *t = IrGetInfer(type);
-            hash = p_hash_combine(hash, t->depth);
-            hash = p_hash_combine(hash, t->index);
-            hash = p_hash_combine(hash, hash_type_list(t->bounds));
+            hash = hash_combine(hash, t->depth);
+            hash = hash_combine(hash, t->index);
+            hash = hash_combine(hash, hash_type_list(t->bounds));
             break;
         }
         case kIrGeneric: {
             struct IrGeneric *t = IrGetGeneric(type);
-            hash = p_hash_combine(hash, t->did.value);
-            hash = p_hash_combine(hash, hash_type_list(t->bounds));
+            hash = hash_combine(hash, t->did.value);
+            hash = hash_combine(hash, hash_type_list(t->bounds));
             break;
         }
         case kIrTraitObj: {
             struct IrTraitObj *t = IrGetTraitObj(type);
-            hash = p_hash_combine(hash, t->did.value);
-            hash = p_hash_combine(hash, hash_type_list(t->types));
+            hash = hash_combine(hash, t->did.value);
+            hash = hash_combine(hash, hash_type_list(t->types));
             break;
         }
     }

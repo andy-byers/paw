@@ -117,7 +117,8 @@ static void enter_function(struct ItemCollector *X, struct HirFuncDecl *func)
 
 static void ensure_unique(struct ItemCollector *X, StringMap *map, String *name, char const *what)
 {
-    if (name == NULL) return;
+    if (name == NULL)
+        return;
     String *const *pname = StringMap_get(X->C, map, name);
     if (pname != NULL)
         NAME_ERROR(X, "duplicate %s '%s'", what, name->text);
@@ -169,7 +170,8 @@ static struct HirDecl *get_decl(struct ItemCollector *X, DeclId did)
 
 static struct IrTypeList *collect_bounds(struct ItemCollector *X, struct HirBoundList *bounds)
 {
-    if (bounds == NULL) return NULL;
+    if (bounds == NULL)
+        return NULL;
     struct IrTypeList *result = pawIr_type_list_new(X->C);
 
     struct HirGenericBound *pbound;
@@ -183,7 +185,8 @@ static struct IrTypeList *collect_bounds(struct ItemCollector *X, struct HirBoun
 
 static void register_generics(struct ItemCollector *X, struct HirDeclList *generics)
 {
-    if (generics == NULL) return;
+    if (generics == NULL)
+        return;
 
     // first pass creates a local symbol for each generic
     struct HirDecl **pdecl;
@@ -210,7 +213,8 @@ static void register_generics(struct ItemCollector *X, struct HirDeclList *gener
 
 static struct IrTypeList *collect_generic_types(struct ItemCollector *X, struct HirDeclList *generics)
 {
-    if (generics == NULL) return NULL;
+    if (generics == NULL)
+        return NULL;
     return pawHir_collect_decl_types(X->C, generics);
 }
 
@@ -266,7 +270,8 @@ static struct IrType *check_generic(struct IrTypeFolder *F, struct IrGeneric *t)
     struct IrTypeList *generics = F->ud;
     K_LIST_FOREACH(generics, ptype)
     {
-        if (*ptype == NULL) continue;
+        if (*ptype == NULL)
+            continue;
         struct IrGeneric *g = IrGetGeneric(*ptype);
         if (g->did.value == t->did.value) {
             *ptype = NULL;
@@ -278,7 +283,8 @@ static struct IrType *check_generic(struct IrTypeFolder *F, struct IrGeneric *t)
 
 static void ensure_generics_in_signature(struct ItemCollector *X, struct HirDeclList *generics, struct IrType *sig)
 {
-    if (generics == NULL) return;
+    if (generics == NULL)
+        return;
     struct IrTypeList *generic_types = collect_generic_types(X, generics);
 
     struct IrTypeFolder F;
@@ -365,7 +371,8 @@ static void collect_variant_decl(struct ItemCollector *, struct HirVariantDecl *
 
 static void collect_field_types(struct ItemCollector *X, struct HirDeclList *fields, StringMap *names)
 {
-    if (fields == NULL) return;
+    if (fields == NULL)
+        return;
     for (int i = 0; i < fields->count; ++i) {
         struct HirDecl *decl = K_LIST_GET(fields, i);
         if (HirIsFieldDecl(decl)) {
@@ -397,7 +404,8 @@ static void collect_variant_decl(struct ItemCollector *X, struct HirVariantDecl 
 static paw_Bool check_assoc_function(struct ItemCollector *X, struct IrType *self, struct HirDeclList *params)
 {
     paw_assert(self != NULL);
-    if (params->count == 0) return PAW_TRUE;
+    if (params->count == 0)
+        return PAW_TRUE;
     struct HirDecl *first = K_LIST_GET(params, 0);
     if (pawS_eq(first->hdr.name, CSTR(X, CSTR_SELF))) {
         // parameter is named "self": make sure the type is compatible with "Self" alias
@@ -478,7 +486,8 @@ static void collect_methods(struct ItemCollector *X, struct HirDeclList *methods
     {
         struct HirFuncDecl *d = HirGetFuncDecl(*pdecl);
         ensure_unique(X, names, d->name, "method");
-        if (force_pub) d->is_pub = PAW_TRUE;
+        if (force_pub)
+            d->is_pub = PAW_TRUE;
         collect_func(X, d);
     }
 }
@@ -512,7 +521,8 @@ static void collect_default_methods(struct ItemCollector *X, StringMap *names, s
         K_LIST_FOREACH(trait->methods, pmethod)
         {
             struct HirFuncDecl *method = HirGetFuncDecl(*pmethod);
-            if (method->body == NULL) continue; // not defaulted
+            if (method->body == NULL)
+                continue; // not defaulted
             String *const *pname = StringMap_get(X->C, names, method->name);
             if (pname == NULL) { // implementation not provided
                 struct HirDecl *copy = copy_and_collect_method(X, method);
@@ -664,7 +674,8 @@ static struct HirDecl *find_item_in(struct ItemCollector *X, int modno, String *
     K_LIST_FOREACH(items, pitem)
     {
         String const *item_name = (*pitem)->hdr.name;
-        if (pawS_eq(item_name, name)) return *pitem;
+        if (pawS_eq(item_name, name))
+            return *pitem;
     }
     return NULL;
 }

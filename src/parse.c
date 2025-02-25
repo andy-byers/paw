@@ -1637,15 +1637,11 @@ static struct AstDeclList *toplevel_items(struct Lex *lex, struct AstDeclList *l
 // TODO: someday, #embed should be used for this... once C23 support is better
 static char const kPrelude[] =
     "pub trait Hash {\n"
-    "    fn hash(self) -> int;"
+    "    fn hash(self) -> int;\n"
     "}\n"
 
     "pub trait Equals {\n"
-    "    fn eq(self, rhs: Self) -> bool;"
-    // TODO: need to copy the HIR method body and replace trait obj. with ADT
-    //    "    fn ne(self, rhs: Self) -> bool {\n"
-    //    "        !self.eq(rhs)\n"
-    //    "    }\n"
+    "    fn eq(self, rhs: Self) -> bool;\n"
     "}\n"
 
     "pub struct unit: Hash + Equals {\n"

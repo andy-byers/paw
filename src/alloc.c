@@ -388,7 +388,8 @@ static size_t compute_flag_count(size_t h)
     size_t const F = FLAGS_PER_BYTE;
     size_t const m = HEAP_META_SIZE;
     size_t const p = sizeof(void *);
-    if (h < m) return 0; // too small
+    if (h < m)
+        return 0; // too small
     return F * (h - m) / (F * p + 1);
 }
 
@@ -470,6 +471,7 @@ void *pawZ_alloc(paw_Env *P, void *ptr, size_t size0, size_t size)
         z_free(H, ptr, size0);
         return NULL;
     }
-    if (ptr == NULL) return z_malloc(H, size);
+    if (ptr == NULL)
+        return z_malloc(H, size);
     return z_realloc(H, ptr, size0, size);
 }

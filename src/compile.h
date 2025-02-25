@@ -303,18 +303,6 @@ struct TraitOwnerList *pawP_get_trait_owners(struct Compiler *C, struct IrType *
 
 // Generate code for data structures used during compilation
 
-// From https://stackoverflow.com/questions/8513911
-static paw_Uint p_hash_combine(paw_Uint seed, paw_Uint v)
-{
-    // TODO: versions for other sizes of paw_Uint
-    paw_Uint const mul = 0x9DDFEA08EB382D69ULL;
-    paw_Uint a = (v ^ seed) * mul;
-    a ^= (a >> 47);
-    paw_Uint b = (seed ^ a) * mul;
-    b ^= (b >> 47);
-    return b * mul;
-}
-
 inline static paw_Uint p_hash_def_id(struct Compiler *C, DefId did)
 {
     PAW_UNUSED(C);

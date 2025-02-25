@@ -12,7 +12,8 @@
 
 static void grow_buffer(paw_Env *P, Buffer *buf)
 {
-    if (buf->alloc > SIZE_MAX / 2) pawM_error(P);
+    if (buf->alloc > SIZE_MAX / 2)
+        pawM_error(P);
     size_t const alloc = buf->alloc * 2;
     StackPtr pbox = RESTORE_POINTER(P, buf->boxloc);
     if (L_IS_BOXED(buf)) {
@@ -131,7 +132,8 @@ void pawL_add_vfstring(paw_Env *P, Buffer *buf, char const *fmt, va_list arg)
 {
     for (;; ++fmt) {
         fmt = add_non_fmt(P, buf, fmt);
-        if (*fmt == '\0') break;
+        if (*fmt == '\0')
+            break;
         ++fmt; // skip '%'
 
         switch (*fmt) {

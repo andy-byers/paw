@@ -219,7 +219,8 @@ static void patch_jumps_to_here(struct Generator *G, MirBlock bid)
 static int temporary_reg(struct FuncState *fs, int offset)
 {
     int const temp = fs->proto->max_stack + offset + 1;
-    if (temp >= NREGISTERS) ERROR(fs->G, PAW_EOVERFLOW, "not enough registers");
+    if (temp >= NREGISTERS)
+        ERROR(fs->G, PAW_EOVERFLOW, "not enough registers");
     fs->max_reg = PAW_MAX(fs->max_reg, temp);
     return temp;
 }
@@ -242,7 +243,8 @@ static void mangle_type(struct Generator *G, Buffer *buf, struct IrType *type)
 
 static void mangle_types(struct Generator *G, Buffer *buf, struct IrTypeList const *types)
 {
-    if (types == NULL) return;
+    if (types == NULL)
+        return;
     pawY_mangle_start_generic_args(ENV(G), buf);
 
     struct IrType **pt;
@@ -275,7 +277,8 @@ static String *mangle_name(struct Generator *G, String const *modname, String co
     Buffer buf;
     paw_Env *P = ENV(G);
     mangle_start(P, &buf, G);
-    if (modname != NULL) pawY_mangle_add_module(P, &buf, modname);
+    if (modname != NULL)
+        pawY_mangle_add_module(P, &buf, modname);
     pawY_mangle_add_name(P, &buf, name);
     mangle_types(G, &buf, types);
     return mangle_finish(P, &buf, G);
@@ -286,7 +289,8 @@ static String *mangle_attr(struct Generator *G, String const *modname, String co
     Buffer buf;
     paw_Env *P = ENV(G);
     mangle_start(P, &buf, G);
-    if (modname != NULL) pawY_mangle_add_module(P, &buf, modname);
+    if (modname != NULL)
+        pawY_mangle_add_module(P, &buf, modname);
     pawY_mangle_add_name(P, &buf, base);
     mangle_types(G, &buf, base_types);
     pawY_mangle_add_name(P, &buf, attr);
@@ -299,7 +303,8 @@ static String *func_name(struct Generator *G, String const *modname, struct IrTy
     struct IrSignature *fsig = IrGetSignature(type);
     struct HirFuncDecl const *fd = HirGetFuncDecl(GET_DECL(G, fsig->did));
     struct IrTypeList *fd_types = fd->body ? fsig->types : NULL;
-    if (fd->self == NULL) return mangle_name(G, modname, fd->name, fd_types);
+    if (fd->self == NULL)
+        return mangle_name(G, modname, fd->name, fd_types);
     struct HirDecl const *ad = GET_DECL(G, IR_TYPE_DID(self));
     struct IrTypeList const *ad_types = fd->body ? IR_TYPE_SUBTYPES(self) : NULL;
     return mangle_attr(G, modname, ad->hdr.name, ad_types, fd->name, fd_types);
@@ -334,7 +339,8 @@ static int add_constant(struct Generator *G, Value v, enum BuiltinKind code)
     // share constant values within each function
     ValueMap *kmap = kcache_map(fs, code);
     Value const *pk = ValueMap_get(G->C, kmap, v);
-    if (pk != NULL) return CAST(int, pk->i);
+    if (pk != NULL)
+        return CAST(int, pk->i);
 
     if (fs->nk == CONSTANT_MAX) {
         ERROR(G, PAW_ESYNTAX, "too many constants");
@@ -407,7 +413,8 @@ static void leave_function(struct Generator *G)
     Proto *p = fs->proto;
 
     // module itself has no prototype
-    if (fs->kind == FUNC_MODULE) return;
+    if (fs->kind == FUNC_MODULE)
+        return;
     p->max_stack = fs->max_reg;
 
     pawM_shrink(P, p->source, p->length, fs->pc);
@@ -457,8 +464,10 @@ static struct ModuleInfo *get_mod(struct Generator *G, int modno)
 static String const *get_mod_prefix(struct Generator *G, struct ModuleInfo *m)
 {
     // omit module prefix for target and prelude modules
-    if (pawS_eq(m->hir->name, G->C->modname)) return NULL;
-    if (m->hir->modno == 0) return NULL;
+    if (pawS_eq(m->hir->name, G->C->modname))
+        return NULL;
+    if (m->hir->modno == 0)
+        return NULL;
     return m->hir->name;
 }
 
@@ -499,7 +508,8 @@ static void code_c_function(struct Generator *G, struct Mir *mir, int g)
     String const *modname = prefix_for_modno(G, IR_TYPE_DID(type).modno);
     String const *mangled = func_name(G, modname, type, mir->self);
     Value const *pv = pawMap_get(ENV(G), G->builtin, P2V(mangled));
-    if (pv == NULL) ERROR(G, PAW_ENAME, "C function '%s' not loaded", mir->name->text);
+    if (pv == NULL)
+        ERROR(G, PAW_ENAME, "C function '%s' not loaded", mir->name->text);
     *pval = *pv;
 }
 
@@ -611,7 +621,8 @@ static void code_variant_constructor(struct Generator *G, MirRegister discr, str
 
 static paw_Bool is_method_call(struct Generator *G, struct IrType *type)
 {
-    if (!IrIsSignature(type)) return PAW_FALSE;
+    if (!IrIsSignature(type))
+        return PAW_FALSE;
     struct HirDecl *decl = GET_DECL(G, IR_TYPE_DID(type));
     return HirGetFuncDecl(decl)->self != NULL;
 }
@@ -694,7 +705,8 @@ static void register_items(struct Generator *G)
 
 static void move_to_reg(struct FuncState *fs, int from, int to)
 {
-    if (to != from) code_AB(fs, OP_MOVE, to, from);
+    if (to != from)
+        code_AB(fs, OP_MOVE, to, from);
 }
 
 static void code_move(struct MirVisitor *V, struct MirMove *x)
@@ -840,9 +852,11 @@ static void code_set_field(struct MirVisitor *V, struct MirSetField *x)
 static unsigned determine_map_policy(struct Generator *G, struct IrType *key)
 {
     enum BuiltinKind kind = TYPE_CODE(G, key);
-    if (kind != NBUILTINS) return kind;
+    if (kind != NBUILTINS)
+        return kind;
     int const *ppolicy = ToplevelMap_get(G->C, G->policy_cache, key);
-    if (ppolicy != NULL) return *ppolicy;
+    if (ppolicy != NULL)
+        return *ppolicy;
 
     struct TraitOwnerList *const *powners = TraitOwners_get(G->C, G->C->trait_owners, key);
     struct IrType *equals = K_LIST_FIRST(K_LIST_GET(*powners, TRAIT_EQUALS));
@@ -905,7 +919,8 @@ static void code_call(struct MirVisitor *V, struct MirCall *x)
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
 
-    if (handle_special_calls(G, x)) return;
+    if (handle_special_calls(G, x))
+        return;
     int const target = enforce_call_constraints(fs, x);
     code_AB(fs, OP_CALL, target, x->args->count);
 
@@ -1137,7 +1152,8 @@ static void code_binop(struct MirVisitor *V, struct MirBinaryOp *x)
         Op const op = code == BUILTIN_STR ? OP_SCONCAT : OP_LCONCAT;
         int const first = temporary_reg(fs, 0);
         int const second = temporary_reg(fs, 1);
-        if (code == BUILTIN_LIST) temporary_reg(fs, 2);
+        if (code == BUILTIN_LIST)
+            temporary_reg(fs, 2);
         move_to_reg(fs, REG(x->lhs), first);
         move_to_reg(fs, REG(x->rhs), second);
         code_AB(fs, op, first, 2);
@@ -1207,7 +1223,8 @@ static paw_Bool code_branch(struct MirVisitor *V, struct MirBranch *x)
 static paw_Bool is_enumerator(struct Generator *G, MirRegister test)
 {
     struct IrType *type = GET_TYPE(G, test);
-    if (!IrIsAdt(type)) return PAW_FALSE;
+    if (!IrIsAdt(type))
+        return PAW_FALSE;
     struct HirDecl *decl = pawHir_get_decl(G->C, IR_TYPE_DID(type));
     return !HirGetAdtDecl(decl)->is_struct;
 }
