@@ -65,8 +65,7 @@ void pawC_stack_realloc(paw_Env *P, int n)
     paw_assert(n >= pawC_stklen(P)); // don't lose live values
 
     size_t const alloc = PAW_MAX(CAST_SIZE(n), CFRAME_SIZE);
-    if (alloc > PAW_STACK_MAX)
-        pawM_error(P);
+    if (alloc > PAW_STACK_MAX) pawM_error(P);
 
     // Turn off emergency GC and convert pointers into the stack into offsets
     // from P->stack.p.
@@ -265,8 +264,7 @@ int pawC_try(paw_Env *P, Call call, void *arg)
 
 _Noreturn void pawC_throw(paw_Env *P, int error)
 {
-    if (P->jmp == NULL)
-        abort();
+    if (P->jmp == NULL) abort();
     P->jmp->status = error;
     THROW(P, P->jmp);
 }
@@ -278,8 +276,7 @@ void pawC_init(paw_Env *P)
     // allocate manually since normal error handling code requires the stack (this is the
     // stack allocation itself)
     Value *ptr = pawZ_alloc(P, NULL, 0, stack_size);
-    if (ptr == NULL)
-        pawC_throw(P, PAW_EMEMORY);
+    if (ptr == NULL) pawC_throw(P, PAW_EMEMORY);
     P->gc_bytes += stack_size; // account for memory
     P->bound.p = ptr + frame_size;
     P->stack.p = ptr;

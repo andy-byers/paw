@@ -37,55 +37,57 @@ pub fn test_custom_key() {
     assert(m[mik(2, 2)] == 22);
 }
 
-// TODO: doesn't work!!! need to determine hash and eq for monomorphized ADTs
-//struct Key: Hash + Equals {
-//    pub value: int,
-//
-//    pub fn hash(self) -> int {
-//        self.value
-//    }
-//
-//    pub fn eq(self, rhs: Self) -> bool {
-//        self.value == rhs.value
-//    }
-//}
-//
-//struct MultiKey<T: Hash + Equals>: Hash + Equals {
-//    value: (T, T),
-//
-//    pub fn new(a: T, b: T) -> Self {
-//        Self{value: (a, b)}
-//    }
-//
-//    pub fn hash(self) -> int {
-//        bad_hash_combine(self.value.0, self.value.1)
-//    }
-//
-//    pub fn eq(self, rhs: Self) -> bool {
-//        self.value.0.eq(rhs.value.0)
-//            && self.value.1.eq(rhs.value.1)
-//    }
-//}
-//
-//fn mk(a: int, b: int) -> MultiKey<Key> {
-//    let a = Key{value: a};
-//    let b = Key{value: b};
-//    MultiKey::new(a, b)
-//}
-//
-//pub fn test_custom_key() {
-//    let m = [:];
-//
-//    m[mk(1, 1)] = 11;
-//    m[mk(2, 2)] = 22;
-//
-//    for i in range(1, 100, 2) {
-//        m[mk(i, i + 1)] = i;
-//    }
-//    for i in range(1, 100, 2) {
-//        assert(m[mk(i, i + 1)] == i);
-//    }
-//
-//    assert(m[mk(1, 1)] == 11);
-//    assert(m[mk(2, 2)] == 22);
-//}
+struct Key: Hash + Equals {
+    pub value: int,
+
+    pub fn hash(self) -> int {
+        self.value
+    }
+
+    pub fn eq(self, rhs: Self) -> bool {
+        self.value == rhs.value
+    }
+}
+
+// NOTE: Make sure not to call MultiKey<T>::hash or MultiKey<T>::equals directly.
+//       This causes a special case where both functions must be added manually
+//       during monomorphization.
+struct MultiKey<T: Hash + Equals>: Hash + Equals {
+    value: (T, T),
+
+    pub fn new(a: T, b: T) -> Self {
+        Self{value: (a, b)}
+    }
+
+    pub fn hash(self) -> int {
+        bad_hash_combine(self.value.0, self.value.1)
+    }
+
+    pub fn eq(self, rhs: Self) -> bool {
+        self.value.0.eq(rhs.value.0)
+            && self.value.1.eq(rhs.value.1)
+    }
+}
+
+fn mk(a: int, b: int) -> MultiKey<Key> {
+    let a = Key{value: a};
+    let b = Key{value: b};
+    MultiKey::new(a, b)
+}
+
+pub fn test_custom_key2() {
+    let m = [:];
+
+    m[mk(1, 1)] = 11;
+    m[mk(2, 2)] = 22;
+
+    for i in range(1, 100, 2) {
+        m[mk(i, i + 1)] = i;
+    }
+    for i in range(1, 100, 2) {
+        assert(m[mk(i, i + 1)] == i);
+    }
+
+    assert(m[mk(1, 1)] == 11);
+    assert(m[mk(2, 2)] == 22);
+}

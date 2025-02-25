@@ -17,15 +17,13 @@
 
 int pawD_line_number(CallFrame const *cf, OpCode const *pc)
 {
-    if (!CF_IS_PAW(cf))
-        return -1;
+    if (!CF_IS_PAW(cf)) return -1;
 
     int i = 0;
     Proto *p = cf->fn->p;
     int const r = PC_REL(p, pc);
     for (; i < p->nlines - 1; ++i) {
-        if (p->lines[i].pc >= r)
-            break;
+        if (p->lines[i].pc >= r) break;
     }
     return p->lines[i].line;
 }
@@ -266,8 +264,7 @@ void pawD_dump_defs(paw_Env *P)
     size_t mxname = 0;
     for (int i = 0; i < P->defs.count; ++i) {
         struct Def *def = Y_DEF(P, i);
-        if (def->hdr.name == NULL)
-            continue;
+        if (def->hdr.name == NULL) continue;
         mxname = PAW_MAX(mxname, def->hdr.name->length);
     }
     for (int i = 0; i < P->defs.count; ++i) {

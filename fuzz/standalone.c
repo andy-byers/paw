@@ -10,9 +10,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-extern int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size);
+extern int LLVMFuzzerTestOneInput(uint8_t const *data, size_t size);
 
-static void run_input(const char *pathname)
+static void run_input(char const *pathname)
 {
     printf("Running: %s\n", pathname);
 
@@ -20,23 +20,23 @@ static void run_input(const char *pathname)
     assert(file);
 
     fseek(file, 0, SEEK_END);
-    const long rc = ftell(file);
+    long const rc = ftell(file);
     assert(0 <= rc);
-    const size_t nbytes = rc;
+    size_t const nbytes = rc;
     fseek(file, 0, SEEK_SET);
 
     char *buf = malloc(nbytes);
-    const size_t read_size = fread(buf, 1, nbytes, file);
+    size_t const read_size = fread(buf, 1, nbytes, file);
     assert(read_size == nbytes);
 
     fclose(file);
 
-    LLVMFuzzerTestOneInput((const uint8_t *)buf, nbytes);
+    LLVMFuzzerTestOneInput((uint8_t const *)buf, nbytes);
     printf("Done:    %s: (%zu bytes)\n", pathname, nbytes);
     free(buf);
 };
 
-int main(int argc, const char *argv[])
+int main(int argc, char const *argv[])
 {
     printf("main: running %d inputs\n", argc - 1);
     for (int i = 1; i < argc; ++i) {

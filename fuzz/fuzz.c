@@ -5,10 +5,10 @@
 #include "fuzz.h"
 #include "lib.h"
 
-extern int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
+extern int LLVMFuzzerTestOneInput(uint8_t const *data, size_t size)
 {
     struct FuzzState fs = fuzz_open(PAW_HEAP_DEFAULT);
-    pawL_load_nchunk(fs.P, "fuzz", (const char *)data, size);
+    pawL_load_nchunk(fs.P, "fuzz", (char const *)data, size);
     fuzz_close(fs);
     return 0;
 }
