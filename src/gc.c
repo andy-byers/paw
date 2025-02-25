@@ -11,14 +11,14 @@
 #include "type.h"
 
 #ifdef PAW_TRACE_GC
-# include <stdio.h>
+#include <stdio.h>
 #endif
 
 #ifndef PAW_GC_LIMIT
-# define PAW_GC_LIMIT (1024 * 1024)
+#define PAW_GC_LIMIT (1024 * 1024)
 #endif
 
-static void gc_trace_object(const char *msg, void *ptr)
+static void gc_trace_object(char const *msg, void *ptr)
 {
 #ifdef PAW_TRACE_GC
     fprintf(stdout, "(gc) %s: %p\n", msg, ptr);
@@ -74,8 +74,10 @@ static void mark_value(paw_Env *P, Value v);
 
 static void mark_object(paw_Env *P, Object *o)
 {
-    if (o == NULL) return;
-    if (!IS_WHITE(o)) return;
+    if (o == NULL)
+        return;
+    if (!IS_WHITE(o))
+        return;
     gc_trace_object("mark", o);
     switch (o->gc_kind) {
         case VUPVALUE: {
@@ -136,7 +138,8 @@ static void traverse_fields(paw_Env *P, Value *pv, int n)
 static void traverse_list(paw_Env *P, Tuple *a)
 {
     // emergency collection while allocating the backing buffer
-    if (a->elems[0].p == NULL) return;
+    if (a->elems[0].p == NULL)
+        return;
 
     paw_Int itr = PAW_ITER_INIT;
     while (pawList_iter(a, &itr)) {
@@ -189,7 +192,7 @@ static void mark_roots(paw_Env *P)
         mark_object(P, CAST_OBJECT(def->hdr.name));
     }
     for (int i = 0; i < P->map_policies.count; ++i) {
-        const MapPolicy policy = P->map_policies.data[i];
+        MapPolicy const policy = P->map_policies.data[i];
         mark_value(P, policy.equals);
         mark_value(P, policy.hash);
     }
@@ -257,9 +260,11 @@ void pawG_collect(paw_Env *P)
 
 #define GROWTH_PERCENT 50
 
-    if (P->gc_bytes > PAW_SIZE_MAX / GROWTH_PERCENT) pawM_error(P);
-    const size_t extra = P->gc_bytes * GROWTH_PERCENT / 100;
-    if (P->gc_bytes > PAW_SIZE_MAX - extra) pawM_error(P);
+    if (P->gc_bytes > PAW_SIZE_MAX / GROWTH_PERCENT)
+        pawM_error(P);
+    size_t const extra = P->gc_bytes * GROWTH_PERCENT / 100;
+    if (P->gc_bytes > PAW_SIZE_MAX - extra)
+        pawM_error(P);
     P->gc_limit = PAW_MIN(P->gc_bytes + extra, P->heap_size);
 }
 
@@ -339,4 +344,3 @@ void pawG_free_object(paw_Env *P, Object *o)
             pawV_free_tuple(P, O_TUPLE(o));
     }
 }
-

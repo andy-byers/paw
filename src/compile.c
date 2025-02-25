@@ -9,7 +9,6 @@
 #include "gc.h"
 #include "hir.h"
 #include "ir_type.h"
-#include "ir_type.h"
 #include "lex.h"
 #include "map.h"
 #include "type.h"
@@ -19,7 +18,7 @@
 // All paw language keywords
 //
 // ORDER TokenKind
-static const char *kKeywords[] = {
+static char const *kKeywords[] = {
     "pub",
     "use",
     "fn",
@@ -42,7 +41,7 @@ static const char *kKeywords[] = {
     "false",
 };
 
-static String *basic_type_name(paw_Env *P, const char *name, paw_Type code)
+static String *basic_type_name(paw_Env *P, char const *name, paw_Type code)
 {
     String *s = pawS_new_fixed(P, name);
     s->flag = FLAG2CODE(code); // works either direction
@@ -54,7 +53,7 @@ void pawP_init(paw_Env *P)
     // Add all keywords to the interned strings table. Fix them so they are
     // never collected. Also added to the lexer string map.
     for (uint16_t i = 0; i < PAW_COUNTOF(kKeywords); ++i) {
-        const char *kw = kKeywords[i];
+        char const *kw = kKeywords[i];
         String *str = pawS_new_fixed(P, kw);
         str->flag = i + FIRST_KEYWORD;
     }
@@ -82,7 +81,7 @@ void pawP_init(paw_Env *P)
 enum BuiltinKind pawP_type2code(struct Compiler *C, struct IrType *type)
 {
     if (IrIsAdt(type)) {
-        const DeclId base = IR_TYPE_DID(type);
+        DeclId const base = IR_TYPE_DID(type);
         if (base.value == C->builtins[BUILTIN_UNIT].did.value) {
             return BUILTIN_UNIT;
         } else if (base.value == C->builtins[BUILTIN_BOOL].did.value) {
@@ -106,17 +105,17 @@ enum BuiltinKind pawP_type2code(struct Compiler *C, struct IrType *type)
     return NBUILTINS;
 }
 
-String *pawP_scan_nstring(struct Compiler *C, Tuple *map, const char *s, size_t n)
+String *pawP_scan_nstring(struct Compiler *C, Tuple *map, char const *s, size_t n)
 {
     paw_Env *P = ENV(C);
-    const Value *pv = pawC_pushns(P, s, n);
+    Value const *pv = pawC_pushns(P, s, n);
     pawMap_insert(P, map, *pv, *pv);
     pawC_pop(P);
     CHECK_GC(P);
     return V_STRING(*pv);
 }
 
-static void define_prelude_adt(struct Compiler *C, const char *name, enum BuiltinKind kind)
+static void define_prelude_adt(struct Compiler *C, char const *name, enum BuiltinKind kind)
 {
     String *s = SCAN_STRING(C, name);
     C->builtins[kind] = (struct Builtin){
@@ -134,7 +133,7 @@ void *pawP_alloc(struct Compiler *C, void *ptr, size_t size0, size_t size)
 #define FIRST_ARENA_SIZE 4096
 #define LARGE_ARENA_MIN (32 * sizeof(void *))
 
-void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const char *modname)
+void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, char const *modname)
 {
     pawY_uninit(P);
 
@@ -237,7 +236,8 @@ static void leave_def(struct DefGenerator *dg)
 
 static struct Type *lookup_type(struct DefGenerator *dg, struct IrType *type)
 {
-    if (type == NULL) return NULL;
+    if (type == NULL)
+        return NULL;
     struct Type *const *ptype = RttiMap_get(dg->C, dg->C->rtti, type);
     return ptype != NULL ? *ptype : NULL;
 }
@@ -253,7 +253,8 @@ static struct Type *new_type(struct DefGenerator *, struct IrType *, ItemId);
 
 static void init_type_list(struct DefGenerator *dg, struct IrTypeList *x, paw_Type *y, ItemId iid)
 {
-    if (x == NULL) return;
+    if (x == NULL)
+        return;
     for (int i = 0; i < x->count; ++i) {
         y[i] = MAKE_TYPE(dg, x->data[i], iid);
     }
@@ -264,7 +265,8 @@ static void init_type_list(struct DefGenerator *dg, struct IrTypeList *x, paw_Ty
 static struct Type *new_type(struct DefGenerator *dg, struct IrType *src, ItemId iid)
 {
     struct Type *dst = lookup_type(dg, src);
-    if (dst != NULL) return dst;
+    if (dst != NULL)
+        return dst;
 
     paw_Env *P = ENV(dg->C);
     switch (IR_KINDOF(src)) {
@@ -372,16 +374,16 @@ static void define_decl_list(struct DefGenerator *dg, struct HirDeclList *decls)
 
 static void connect_adt_def(struct DefGenerator *dg, struct IrType *mono)
 {
-    //paw_Env *P = ENV(dg->C);
-    //struct HirDecl *decl = pawHir_get_decl(dg->C, IR_TYPE_DID(mono));
-    //struct HirAdtDecl *d = HirGetAdtDecl(decl);
-    //struct Type *ty = lookup_type(dg, mono);
-    //struct Def *def = Y_DEF(P, ty->adt.iid);
+    // paw_Env *P = ENV(dg->C);
+    // struct HirDecl *decl = pawHir_get_decl(dg->C, IR_TYPE_DID(mono));
+    // struct HirAdtDecl *d = HirGetAdtDecl(decl);
+    // struct Type *ty = lookup_type(dg, mono);
+    // struct Def *def = Y_DEF(P, ty->adt.iid);
 
-    //struct DefState ds;
-    //enter_def(dg, &ds, mono, def);
-    //define_decl_list(dg, d->fields);
-    //leave_def(dg);
+    // struct DefState ds;
+    // enter_def(dg, &ds, mono, def);
+    // define_decl_list(dg, d->fields);
+    // leave_def(dg);
 }
 
 static void allocate_types(struct DefGenerator *dg, struct IrTypeList *types)
@@ -398,7 +400,7 @@ static struct ItemSlot allocate_item(struct DefGenerator *dg, struct Mir *body)
 {
     paw_Env *P = ENV(dg->C);
     struct IrSignature *t = IrGetSignature(body->type);
-    const int ntypes = t->types != NULL ? t->types->count : 0;
+    int const ntypes = t->types != NULL ? t->types->count : 0;
     struct HirFuncDecl *d = HirGetFuncDecl(pawHir_get_decl(dg->C, t->did));
     struct Def *def = new_def(dg, t->did, body->type);
     struct Type *self = lookup_type(dg, body->self);
@@ -449,15 +451,15 @@ struct BitSet *pawP_bitset_new(struct Compiler *C, int count)
 {
     paw_assert(count > 0);
     struct BitSet *set = raw_bitset_new(C);
-    const int n = (count + CHUNKSZ(set) - 1) / CHUNKSZ(set);
+    int const n = (count + CHUNKSZ(set) - 1) / CHUNKSZ(set);
     K_LIST_RESERVE(C, set, n);
     set->count = count;
     return set;
 }
 
-#define BITSET_INDEX(set, i, pos, bit) \
+#define BITSET_INDEX(set, i, pos, bit)          \
     paw_assert(0 <= (i) && (i) < (set)->count); \
-    const int pos = (i) / CHUNKSZ(set); \
+    const int pos = (i) / CHUNKSZ(set);         \
     const int bit = (i) % CHUNKSZ(set)
 
 void pawP_bitset_set(struct BitSet *set, int i)
@@ -469,15 +471,16 @@ void pawP_bitset_set(struct BitSet *set, int i)
 
 void pawP_bitset_set_range(struct BitSet *bs, int i, int j)
 {
-    while (i < j) pawP_bitset_set(bs, i++);
+    while (i < j)
+        pawP_bitset_set(bs, i++);
 }
 
-int pawP_bitset_count(const struct BitSet *set)
+int pawP_bitset_count(struct BitSet const *set)
 {
     return set->count;
 }
 
-paw_Bool pawP_bitset_get(const struct BitSet *set, int i)
+paw_Bool pawP_bitset_get(struct BitSet const *set, int i)
 {
     BITSET_INDEX(set, i, pos, bit);
     BitChunk bc = K_LIST_GET(set, pos);
@@ -493,13 +496,14 @@ void pawP_bitset_clear(struct BitSet *set, int i)
 
 void pawP_bitset_clear_range(struct BitSet *bs, int i, int j)
 {
-    while (i < j) pawP_bitset_clear(bs, i++);
+    while (i < j)
+        pawP_bitset_clear(bs, i++);
 }
 
-void pawP_bitset_and(struct BitSet *a, const struct BitSet *b)
+void pawP_bitset_and(struct BitSet *a, struct BitSet const *b)
 {
     paw_assert(a->count == b->count);
-    const int n = a->count / CHUNKSZ(a);
+    int const n = a->count / CHUNKSZ(a);
 
     for (int i = 0; i < n; ++i) {
         BitChunk *bc = &K_LIST_GET(a, i);
@@ -507,14 +511,13 @@ void pawP_bitset_and(struct BitSet *a, const struct BitSet *b)
     }
 }
 
-void pawP_bitset_or(struct BitSet *a, const struct BitSet *b)
+void pawP_bitset_or(struct BitSet *a, struct BitSet const *b)
 {
     paw_assert(a->count == b->count);
-    const int n = a->count / CHUNKSZ(a);
+    int const n = a->count / CHUNKSZ(a);
 
     for (int i = 0; i < n; ++i) {
         BitChunk *bc = &K_LIST_GET(a, i);
         *bc = *bc | K_LIST_GET(b, i);
     }
 }
-

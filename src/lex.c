@@ -10,14 +10,13 @@
 #define IS_EOF(x) (CAST(uint8_t, (x)->c) == TK_END)
 #define IS_NEWLINE(x) ((x)->c == '\r' || (x)->c == '\n')
 
-static void add_location(paw_Env *P, Buffer *print, const String *s, int line)
+static void add_location(paw_Env *P, Buffer *print, String const *s, int line)
 {
     pawL_add_nstring(P, print, s->text, s->length);
     pawL_add_fstring(P, print, ":%d: ", line);
 }
 
-_Noreturn
-void pawX_error(struct Lex *x, const char *fmt, ...)
+_Noreturn void pawX_error(struct Lex *x, char const *fmt, ...)
 {
     Buffer print;
     paw_Env *P = ENV(x);
@@ -83,7 +82,7 @@ static paw_Bool test_next(struct Lex *x, char c)
     return PAW_FALSE;
 }
 
-static paw_Bool test_next2(struct Lex *x, const char *c2)
+static paw_Bool test_next2(struct Lex *x, char const *c2)
 {
     if (x->c == c2[0] || x->c == c2[1]) {
         SAVE_AND_NEXT(x);
@@ -102,7 +101,7 @@ static struct Token make_token(TokenKind kind)
 static struct Token make_int(struct Lex *x)
 {
     paw_Env *P = ENV(x);
-    const Value v = P->top.p[-1];
+    Value const v = P->top.p[-1];
     return (struct Token){
         .kind = TK_INTEGER,
         .value = v,
@@ -112,7 +111,7 @@ static struct Token make_int(struct Lex *x)
 static struct Token make_float(struct Lex *x)
 {
     paw_Env *P = ENV(x);
-    const Value v = P->top.p[-1];
+    Value const v = P->top.p[-1];
     return (struct Token){
         .kind = TK_FLOAT,
         .value = v,
@@ -137,7 +136,7 @@ static struct Token consume_name(struct Lex *x)
         SAVE_AND_NEXT(x);
     }
     struct Token t = make_string(x, TK_NAME);
-    const String *s = V_STRING(t.value);
+    String const *s = V_STRING(t.value);
     if (IS_KEYWORD(s)) {
         t.kind = CAST(TokenKind, s->flag);
     } else if (s->length > PAW_NAME_MAX) {
@@ -183,7 +182,7 @@ static int consume_utf8(struct Lex *x)
 
     uint32_t state = 0;
     do {
-        const uint8_t c = CAST(uint8_t, x->c);
+        uint8_t const c = CAST(uint8_t, x->c);
         state = kLookup1[c] + state * 12;
         state = kLookup2[state];
         SAVE_AND_NEXT(x);
@@ -194,26 +193,30 @@ static int consume_utf8(struct Lex *x)
 static int get_codepoint(struct Lex *x)
 {
     char c[4];
-    c[0] = x->c; next(x);
-    c[1] = x->c; next(x);
-    c[2] = x->c; next(x);
-    c[3] = x->c; next(x);
+    c[0] = x->c;
+    next(x);
+    c[1] = x->c;
+    next(x);
+    c[2] = x->c;
+    next(x);
+    c[3] = x->c;
+    next(x);
 
     if (!ISHEX(c[0]) ||
-            !ISHEX(c[1]) ||
-            !ISHEX(c[2]) ||
-            !ISHEX(c[3])) {
+        !ISHEX(c[1]) ||
+        !ISHEX(c[2]) ||
+        !ISHEX(c[3])) {
         return -1;
     }
     return HEXVAL(c[0]) << 12 |
-        HEXVAL(c[1]) << 8 |
-        HEXVAL(c[2]) << 4 |
-        HEXVAL(c[3]);
+           HEXVAL(c[1]) << 8 |
+           HEXVAL(c[2]) << 4 |
+           HEXVAL(c[3]);
 }
 
 static struct Token consume_string(struct Lex *x)
 {
-    const char quote = x->c;
+    char const quote = x->c;
     next(x);
 
     for (;;) {
@@ -225,7 +228,7 @@ static struct Token consume_string(struct Lex *x)
     }
 
     if (test_next(x, '\\')) {
-        const char c = x->c;
+        char const c = x->c;
         next(x);
         switch (c) {
             case '"':
@@ -257,7 +260,8 @@ static struct Token consume_string(struct Lex *x)
                 break;
             case 'u': {
                 int codepoint = get_codepoint(x);
-                if (codepoint < 0) LEX_ERROR(x);
+                if (codepoint < 0)
+                    LEX_ERROR(x);
                 if (0xD800 <= codepoint && codepoint <= 0xDFFF) {
                     // Codepoint is part of a surrogate pair. Expect a high
                     // surrogate (U+D800–U+DBFF) followed by a low surrogate
@@ -266,12 +270,13 @@ static struct Token consume_string(struct Lex *x)
                         if (!test_next(x, '\\') || !test_next(x, 'u')) {
                             LEX_ERROR(x);
                         }
-                        const int codepoint2 = get_codepoint(x);
+                        int const codepoint2 = get_codepoint(x);
                         if (codepoint2 < 0xDC00 || codepoint2 > 0xDFFF) {
                             LEX_ERROR(x);
                         }
                         codepoint = (((codepoint - 0xD800) << 10) |
-                                     (codepoint2 - 0xDC00)) + 0x10000;
+                                     (codepoint2 - 0xDC00)) +
+                                    0x10000;
                     } else {
                         LEX_ERROR(x);
                     }
@@ -316,11 +321,11 @@ static struct Token consume_int(struct Lex *x)
     struct DynamicMem *dm = x->dm;
     paw_Int i;
 
-    const int rc = pawV_parse_int(P, dm->scratch.data, 0, &i);
+    int const rc = pawV_parse_int(P, dm->scratch.data, 0, &i);
     if (rc == PAW_EOVERFLOW) {
-         pawX_error(x, "integer '%s' is out of range for 'int' type", dm->scratch.data);
+        pawX_error(x, "integer '%s' is out of range for 'int' type", dm->scratch.data);
     } else if (rc == PAW_ESYNTAX) {
-         pawX_error(x, "invalid integer '%s'", dm->scratch.data);
+        pawX_error(x, "invalid integer '%s'", dm->scratch.data);
     }
     return (struct Token){
         .kind = TK_INTEGER,
@@ -334,8 +339,9 @@ static struct Token consume_float(struct Lex *x)
     struct DynamicMem *dm = x->dm;
     paw_Float f;
 
-    const int rc = pawV_parse_float(ENV(x), dm->scratch.data, &f);
-    if (rc != PAW_OK) pawX_error(x, "invalid number '%s'", dm->scratch.data);
+    int const rc = pawV_parse_float(ENV(x), dm->scratch.data, &f);
+    if (rc != PAW_OK)
+        pawX_error(x, "invalid number '%s'", dm->scratch.data);
     return (struct Token){
         .kind = TK_FLOAT,
         .value.f = f,
@@ -346,15 +352,15 @@ static struct Token consume_number(struct Lex *x)
 {
     // Save source text in a buffer until a byte is reached that cannot possibly
     // be part of a number.
-    const char first = x->c;
+    char const first = x->c;
     SAVE_AND_NEXT(x);
 
     paw_Bool likely_float = PAW_FALSE;
     paw_Bool likely_int = first == '0' &&
-            (test_next2(x, "bB") ||
-             test_next2(x, "oO") ||
-             test_next2(x, "xX"));
-    const paw_Bool dot_selector = x->t.kind == '.';
+                          (test_next2(x, "bB") ||
+                           test_next2(x, "oO") ||
+                           test_next2(x, "xX"));
+    paw_Bool const dot_selector = x->t.kind == '.';
     if (dot_selector) {
         if (likely_int) {
             pawX_error(x, "'.' selector must be a base-10 integer");
@@ -377,7 +383,8 @@ static struct Token consume_number(struct Lex *x)
         if (ISHEX(x->c)) {
             // save digits below
         } else if (x->c == '.') {
-            if (dot_selector) break;
+            if (dot_selector)
+                break;
             likely_float = PAW_TRUE;
         } else {
             break;
@@ -421,10 +428,10 @@ static void skip_line_comment(struct Lex *x)
 static void skip_whitespace(struct Lex *x)
 {
     while (x->c == ' ' ||
-            x->c == '\t' ||
-            x->c == '\f' ||
-            x->c == '\v' ||
-            IS_NEWLINE(x)) {
+           x->c == '\t' ||
+           x->c == '\f' ||
+           x->c == '\v' ||
+           IS_NEWLINE(x)) {
         next(x);
     }
 }
@@ -543,7 +550,7 @@ try_again:
 TokenKind pawX_next(struct Lex *x)
 {
     x->last_line = x->line;
-    const TokenKind kind = pawX_peek(x);
+    TokenKind const kind = pawX_peek(x);
     x->t = x->t2;
     x->t2.kind = TK_NONE;
     return kind;
@@ -576,4 +583,3 @@ void pawX_set_source(struct Lex *x, paw_Reader input, void *ud)
     next(x); // load first chunk of text
     pawX_next(x); // load first token
 }
-

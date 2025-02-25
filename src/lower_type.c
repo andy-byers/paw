@@ -31,7 +31,8 @@ static struct IrType *lower_tuple_type(struct LowerType *L, struct HirTupleType 
 static struct IrType *lower_path_type(struct LowerType *L, struct HirPathType *t)
 {
     struct IrType *result = pawP_lookup(L->C, L->m, L->symtab, t->path, LOOKUP_TYPE, PAW_TRUE);
-    if (result == NULL) NAME_ERROR(L->C, "invalid path '%s'", pawHir_print_path(L->C, t->path));
+    if (result == NULL)
+        NAME_ERROR(L->C, "invalid path '%s'", pawHir_print_path(L->C, t->path));
     return result;
 }
 
@@ -57,10 +58,11 @@ static struct IrType *lower_type(struct LowerType *L, struct HirType *type)
 struct IrType *pawP_lower_type(struct Compiler *C, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirType *type)
 {
     return lower_type(&(struct LowerType){
-        .symtab = symtab,
-        .C = C,
-        .m = m,
-    }, type);
+                          .symtab = symtab,
+                          .C = C,
+                          .m = m,
+                      },
+                      type);
 }
 
 static struct IrTypeList *lower_type_list(struct LowerType *L, struct HirTypeList *types)
@@ -76,9 +78,9 @@ static struct IrTypeList *lower_type_list(struct LowerType *L, struct HirTypeLis
 struct IrTypeList *pawP_lower_type_list(struct Compiler *C, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirTypeList *types)
 {
     return lower_type_list(&(struct LowerType){
-        .symtab = symtab,
-        .C = C,
-        .m = m,
-    }, types);
+                               .symtab = symtab,
+                               .C = C,
+                               .m = m,
+                           },
+                           types);
 }
-

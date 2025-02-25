@@ -65,17 +65,19 @@ static int import_module(struct Importer *I, String *name, String *as)
 {
     name = module_name(I, name);
     struct Ast *ast = get_import(I, name);
-    if (ast != NULL) return ast->modno;
+    if (ast != NULL)
+        return ast->modno;
     as = as != NULL ? as : name;
 
     DLOG(I, "importing '%s' as '%s'", name->text, as->text);
 
     paw_Env *P = ENV(I->C);
-    const ptrdiff_t saved = SAVE_OFFSET(P, P->top.p);
+    ptrdiff_t const saved = SAVE_OFFSET(P, P->top.p);
     V_SET_OBJECT(P->top.p++, name);
 
     struct LoaderState *state = pawL_start_import(P);
-    if (state == NULL) NAME_ERROR(I, "module '%s' not found", name->text);
+    if (state == NULL)
+        NAME_ERROR(I, "module '%s' not found", name->text);
     ast = pawP_parse_module(I->C, name, state->f, state);
     pawL_finish_import(P);
 
@@ -91,21 +93,25 @@ static void collect_imports_from(struct Importer *I, struct Ast *ast)
     struct ImportContext ctx;
     enter_context(I, &ctx);
 
-    K_LIST_FOREACH(ast->items, pitem) {
+    K_LIST_FOREACH(ast->items, pitem)
+    {
         struct AstDecl *item = *pitem;
-        if (!AstIsUseDecl(item)) continue;
+        if (!AstIsUseDecl(item))
+            continue;
         struct AstUseDecl *use = AstGetUseDecl(item);
         if (use->item == NULL && use->as != NULL) {
             StringMap_insert(I->C, ctx.aliases, use->as, use->name);
         }
     }
 
-    K_LIST_FOREACH(ast->items, pitem) {
+    K_LIST_FOREACH(ast->items, pitem)
+    {
         struct AstDecl *item = *pitem;
-        if (!AstIsUseDecl(item)) continue;
+        if (!AstIsUseDecl(item))
+            continue;
         struct AstUseDecl *use = AstGetUseDecl(item);
         use->modno = import_module(I, use->name,
-                use->item == NULL ? use->as : NULL);
+                                   use->item == NULL ? use->as : NULL);
     }
 
     leave_context(I);
@@ -122,4 +128,3 @@ void pawP_collect_imports(struct Compiler *C, struct Ast *ast)
     ENSURE_STACK(ENV(C), 1); // space for modname
     collect_imports_from(&I, ast);
 }
-

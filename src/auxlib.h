@@ -32,11 +32,11 @@ void pawL_buffer_resize(paw_Env *P, Buffer *buf, size_t n);
 #define L_ADD_STRING(P, buf, s) pawL_add_nstring(P, buf, (s)->text, pawS_length(s))
 
 void pawL_add_char(paw_Env *P, Buffer *buf, char c);
-void pawL_add_string(paw_Env *P, Buffer *buf, const char *s);
-void pawL_add_nstring(paw_Env *P, Buffer *buf, const char *s, size_t n);
+void pawL_add_string(paw_Env *P, Buffer *buf, char const *s);
+void pawL_add_nstring(paw_Env *P, Buffer *buf, char const *s, size_t n);
 void pawL_add_int(paw_Env *P, Buffer *buf, paw_Int i);
 void pawL_add_float(paw_Env *P, Buffer *buf, paw_Float f);
-void pawL_add_vfstring(paw_Env *P, Buffer *buf, const char *fmt, va_list arg);
-void pawL_add_fstring(paw_Env *P, Buffer *buf, const char *fmt, ...);
+void pawL_add_vfstring(paw_Env *P, Buffer *buf, char const *fmt, va_list arg);
+void pawL_add_fstring(paw_Env *P, Buffer *buf, char const *fmt, ...);
 
 #endif // PAW_AUX_H

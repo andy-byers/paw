@@ -22,22 +22,22 @@ void pawL_init(paw_Env *P);
 void pawL_uninit(paw_Env *P);
 
 // Functions for loading and compiling source code
-int pawL_load_file(paw_Env *P, const char *pathname);
-int pawL_load_nchunk(paw_Env *P, const char *name, const char *source, size_t length);
-int pawL_load_chunk(paw_Env *P, const char *name, const char *source);
+int pawL_load_file(paw_Env *P, char const *pathname);
+int pawL_load_nchunk(paw_Env *P, char const *name, char const *source, size_t length);
+int pawL_load_chunk(paw_Env *P, char const *name, char const *source);
 
 void pawL_push_builtin_map(paw_Env *P);
 void pawL_push_modules_map(paw_Env *P);
 
 void pawL_new_func(paw_Env *P, paw_Function func, int nup);
-int pawL_register_func(paw_Env *P, const char *name, paw_Function func, int nup);
+int pawL_register_func(paw_Env *P, char const *name, paw_Function func, int nup);
 
 struct LoaderState *pawL_start_import(paw_Env *P);
 void pawL_finish_import(paw_Env *P);
 
 void pawL_close_loader(paw_Env *P, void *state);
-void *pawL_chunk_reader(paw_Env *P, const char *text, size_t length);
-void pawL_add_extern_func(paw_Env *P, const char *modname, const char *name, paw_Function func);
-void pawL_add_extern_method(paw_Env *P, const char *modname, const char *self, const char *name, paw_Function func);
+void *pawL_chunk_reader(paw_Env *P, char const *text, size_t length);
+void pawL_add_extern_func(paw_Env *P, char const *modname, char const *name, paw_Function func);
+void pawL_add_extern_method(paw_Env *P, char const *modname, char const *self, char const *name, paw_Function func);
 
 #endif // PAW_LIB_H

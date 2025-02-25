@@ -30,7 +30,8 @@ struct InstanceState {
 
 static struct IrTypeList *collect_generic_types(struct InstanceState *I, struct HirDeclList *generics)
 {
-    if (generics == NULL) return NULL;
+    if (generics == NULL)
+        return NULL;
     return pawHir_collect_decl_types(I->C, generics);
 }
 
@@ -91,7 +92,8 @@ static void normalize_type_list(struct InstanceState *I, struct IrTypeList *type
 static struct IrType *instantiate_trait(struct InstanceState *I, struct IrTraitObj *base, struct IrTypeList *types)
 {
     struct IrTypeList *generics = base->types;
-    if (generics == NULL) TYPE_ERROR(I, "trait is not polymorphic");
+    if (generics == NULL)
+        TYPE_ERROR(I, "trait is not polymorphic");
     check_type_param(I, generics, types);
     normalize_type_list(I, types);
     return pawIr_new_trait_obj(I->C, base->did, types);
@@ -149,7 +151,8 @@ struct IrType *pawP_instantiate_method(struct Compiler *C, struct HirDecl *base,
         .C = C,
     };
 
-    if (types == NULL) return GET_NODE_TYPE(C, base);
+    if (types == NULL)
+        return GET_NODE_TYPE(C, base);
     if (HirIsAdtDecl(base)) {
         struct HirAdtDecl *adt = HirGetAdtDecl(base);
         struct IrType *type = pawIr_get_type(C, adt->hid);
@@ -163,7 +166,8 @@ struct IrType *pawP_instantiate_method(struct Compiler *C, struct HirDecl *base,
 
 struct IrType *pawP_instantiate(struct Compiler *C, struct IrType *base, struct IrTypeList *types)
 {
-    if (types == NULL) return base;
+    if (types == NULL)
+        return base;
 
     struct InstanceState I = {
         .U = C->U,
@@ -181,7 +185,8 @@ struct IrType *pawP_instantiate(struct Compiler *C, struct IrType *base, struct 
 
 static struct IrType *generalize_adt(struct Compiler *C, struct IrAdt *t)
 {
-    if (t->types == NULL) return IR_CAST_TYPE(t);
+    if (t->types == NULL)
+        return IR_CAST_TYPE(t);
 
     struct InstanceState I = {
         .U = C->U,
@@ -195,7 +200,8 @@ static struct IrType *generalize_adt(struct Compiler *C, struct IrAdt *t)
 
 static struct IrType *generalize_func(struct Compiler *C, struct IrSignature *t)
 {
-    if (t->types == NULL) return IR_CAST_TYPE(t);
+    if (t->types == NULL)
+        return IR_CAST_TYPE(t);
     struct IrTypeList *unknowns = pawU_new_unknowns(C->U, t->types);
     return pawP_instantiate(C, IR_CAST_TYPE(t), unknowns);
 }
@@ -205,15 +211,16 @@ static struct IrType *generalize_func(struct Compiler *C, struct IrSignature *t)
 // for each inference variable.
 struct IrType *pawP_generalize(struct Compiler *C, struct IrType *type)
 {
-    return IrIsAdt(type) ? generalize_adt(C, IrGetAdt(type)) :
-        IrIsSignature(type) ? generalize_func(C, IrGetSignature(type)) : type;
+    return IrIsAdt(type) ? generalize_adt(C, IrGetAdt(type)) : IrIsSignature(type) ? generalize_func(C, IrGetSignature(type))
+                                                                                   : type;
 }
 
 static struct IrTypeList *generalize_list(struct Compiler *C, struct IrTypeList *types)
 {
     struct IrType **ptype;
     struct IrTypeList *result = pawIr_type_list_new(C);
-    K_LIST_FOREACH(types, ptype) {
+    K_LIST_FOREACH(types, ptype)
+    {
         struct IrType *r = pawP_generalize(C, *ptype);
         K_LIST_PUSH(C, result, r);
     }
@@ -243,11 +250,13 @@ static struct IrTypeList *substitute_list(struct IrTypeFolder *F, struct IrTypeL
 {
     struct Substitution *subst = F->ud;
     struct Compiler *C = subst->C;
-    if (list == NULL) return NULL;
+    if (list == NULL)
+        return NULL;
 
     struct IrType **ptype;
     struct IrTypeList *copy = pawIr_type_list_new(C);
-    K_LIST_FOREACH(list, ptype) {
+    K_LIST_FOREACH(list, ptype)
+    {
         struct IrType *type = pawIr_fold_type(F, *ptype);
         K_LIST_PUSH(C, copy, type);
     }
@@ -274,7 +283,8 @@ static struct IrType *substitute_signature(struct IrTypeFolder *F, struct IrSign
 
 static struct IrType *substitute_adt(struct IrTypeFolder *F, struct IrAdt *t)
 {
-    if (t->types == NULL) return IR_CAST_TYPE(t);
+    if (t->types == NULL)
+        return IR_CAST_TYPE(t);
     struct IrTypeList *types = pawIr_fold_type_list(F, t->types);
     return pawP_instantiate(F->C, IR_CAST_TYPE(t), types);
 }
@@ -290,7 +300,8 @@ static struct IrType *substitute_generic(struct IrTypeFolder *F, struct IrGeneri
     struct Substitution *subst = F->ud;
 
     struct IrType **pg, **pt;
-    K_LIST_ZIP(subst->generics, pg, subst->types, pt) {
+    K_LIST_ZIP(subst->generics, pg, subst->types, pt)
+    {
         struct IrGeneric *g = IrGetGeneric(*pg);
         if (t->did.value == g->did.value) {
             if (IrIsGeneric(*pt)) {

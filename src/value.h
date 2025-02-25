@@ -74,8 +74,8 @@ typedef enum ValueKind {
     NVTYPES
 } ValueKind;
 
-#define GC_HEADER \
-    struct Object *gc_next; \
+#define GC_HEADER              \
+    struct Object *gc_next;    \
     unsigned char gc_mark : 2; \
     ValueKind gc_kind : 8
 typedef struct Object {
@@ -99,12 +99,14 @@ typedef union StackRel {
 
 #define VOBJECT0 VSTRING
 #define NOBJECTS (int)(NVTYPES - VOBJECT0)
-#define P2V(x) (Value){.p = (void *)(x)}
-#define I2V(x) (Value){.i = (paw_Int)(x)}
+#define P2V(x) \
+    (Value) { .p = (void *)(x) }
+#define I2V(x) \
+    (Value) { .i = (paw_Int)(x) }
 
-void pawV_index_error(paw_Env *P, paw_Int index, size_t length, const char *what);
+void pawV_index_error(paw_Env *P, paw_Int index, size_t length, char const *what);
 
-static inline paw_Uint pawV_hash(Value v)
+inline static paw_Uint pawV_hash(Value v)
 {
     return v.u;
 }
@@ -114,7 +116,7 @@ static paw_Int pawV_abs_index(paw_Int index, size_t length)
     return index + (index < 0 ? PAW_CAST_INT(length) : 0);
 }
 
-static inline size_t pawV_check_abs(paw_Env *P, paw_Int index, size_t length, const char *what)
+inline static size_t pawV_check_abs(paw_Env *P, paw_Int index, size_t length, char const *what)
 {
     index = pawV_abs_index(index, length);
     if (index < 0 || CAST_SIZE(index) >= length) {
@@ -127,13 +129,13 @@ static inline size_t pawV_check_abs(paw_Env *P, paw_Int index, size_t length, co
 // Understands non-decimal base prefixes '0b', '0o', '0x', and their uppercase
 // counterparts. Returns PAW_ESYNTAX if the integer is malformed,
 // PAW_EOVERFLOW if it is too large to fit in a uint64_t, and PAW_OK otherwise.
-int pawV_parse_uint64(paw_Env *P, const char *text, int base, uint64_t *out);
+int pawV_parse_uint64(paw_Env *P, char const *text, int base, uint64_t *out);
 
-int pawV_parse_int(paw_Env *P, const char *text, int base, paw_Int *out);
+int pawV_parse_int(paw_Env *P, char const *text, int base, paw_Int *out);
 
 // Convert a null-terminated string into a float
 // Returns 0 on success, -1 otherwise.
-int pawV_parse_float(paw_Env *P, const char *text, paw_Float *out);
+int pawV_parse_float(paw_Env *P, char const *text, paw_Float *out);
 
 typedef struct String {
     GC_HEADER;
@@ -144,7 +146,7 @@ typedef struct String {
     char text[];
 } String;
 
-const char *pawV_to_string(paw_Env *P, Value *pv, paw_Type type, size_t *nout);
+char const *pawV_to_string(paw_Env *P, Value *pv, paw_Type type, size_t *nout);
 
 typedef struct Proto {
     GC_HEADER;

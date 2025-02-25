@@ -24,8 +24,10 @@ static MirBlock intersect(struct DominanceState *D, MirBlock x, MirBlock y)
 {
     // Walk up the dominator tree until a common parent is found.
     while (!MIR_BB_EQUALS(x, y)) {
-        while (x.value > y.value) x = *IDOM(D, x);
-        while (y.value > x.value) y = *IDOM(D, y);
+        while (x.value > y.value)
+            x = *IDOM(D, x);
+        while (y.value > x.value)
+            y = *IDOM(D, y);
     }
     return x;
 }
@@ -42,10 +44,13 @@ static void compute_dominance(struct DominanceState *D, MirBlock r)
             struct MirBlockList *pred = data->predecessors;
             MirBlock idom = MIR_INVALID_BB;
             for (int i = 0; i < pred->count; ++i) {
-                const MirBlock p = K_LIST_GET(pred, i);
-                if (!MIR_BB_EXISTS(*IDOM(D, p))) continue;
-                if (!MIR_BB_EXISTS(idom)) idom = p;
-                else idom = intersect(D, idom, p);
+                MirBlock const p = K_LIST_GET(pred, i);
+                if (!MIR_BB_EXISTS(*IDOM(D, p)))
+                    continue;
+                if (!MIR_BB_EXISTS(idom))
+                    idom = p;
+                else
+                    idom = intersect(D, idom, p);
             }
             if (!MIR_BB_EQUALS(*IDOM(D, b), idom)) {
                 changed = PAW_TRUE;
@@ -78,14 +83,15 @@ struct MirBlockList *pawMir_compute_dominance_tree(struct Compiler *C, struct Mi
 static void push_unique_bb(struct Compiler *C, struct MirBlockList *df, MirBlock b)
 {
     for (int i = 0; i < df->count; ++i) {
-        if (MIR_BB_EQUALS(b, K_LIST_GET(df, i))) return;
+        if (MIR_BB_EQUALS(b, K_LIST_GET(df, i)))
+            return;
     }
     K_LIST_PUSH(C, df, b);
 }
 
 struct MirBucketList *pawMir_compute_dominance_frontiers(struct Compiler *C, struct Mir *mir, struct MirBlockList *idom)
 {
-    const int N = idom->count;
+    int const N = idom->count;
     struct MirBucketList *result = pawMir_bucket_list_new(C);
     K_LIST_RESERVE(C, result, N);
     for (int i = 0; i < N; ++i) {
@@ -94,12 +100,13 @@ struct MirBucketList *pawMir_compute_dominance_frontiers(struct Compiler *C, str
     }
 
     for (MirBlock b = MIR_ROOT_BB; b.value < N; ++b.value) {
-        const MirBlock target = K_LIST_GET(idom, b.value);
+        MirBlock const target = K_LIST_GET(idom, b.value);
         struct MirBlockData *data = mir_bb_data(mir, b);
         struct MirBlockList *pred = data->predecessors;
-        if (pred->count < 2) continue;
+        if (pred->count < 2)
+            continue;
         for (int i = 0; i < pred->count; ++i) {
-            const MirBlock p = K_LIST_GET(pred, i);
+            MirBlock const p = K_LIST_GET(pred, i);
             MirBlock runner = p;
             while (!MIR_BB_EQUALS(runner, target)) {
                 struct MirBlockList *df = K_LIST_GET(result, runner.value);
@@ -118,7 +125,7 @@ static void debug_idom(struct DominanceState *D, struct MirBlockList *result)
 {
     printf("idom = [\n");
     for (int i = 0; i < result->count; ++i) {
-        const MirBlock b = K_LIST_GET(result, i);
+        MirBlock const b = K_LIST_GET(result, i);
         printf("  bb%d: bb%d\n", i, b.value);
     }
     printf("]\n");
@@ -131,12 +138,12 @@ static void debug_df(struct DominanceState *D, struct MirBucketList *result)
         struct MirBlockList *df = K_LIST_GET(result, i);
         printf("  bb%d: [", i);
         for (int j = 0; j < df->count; ++j) {
-            const MirBlock b = K_LIST_GET(df, j);
-            if (j > 0) printf(", ");
+            MirBlock const b = K_LIST_GET(df, j);
+            if (j > 0)
+                printf(", ");
             printf("bb%d", b.value);
         }
         printf("]\n");
     }
     printf("}\n");
-
 }

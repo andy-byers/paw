@@ -12,9 +12,9 @@
 #define STACK_EXTRA 25 /* slots for error handling */
 #define SAVE_OFFSET(P, ptr) ((ptr) - (P)->stack.p)
 #define RESTORE_POINTER(P, ofs) ((P)->stack.p + (ofs))
-#define ENSURE_STACK(P, n) \
+#define ENSURE_STACK(P, n)                         \
     ((P)->bound.p - (P)->top.p < (n) + STACK_EXTRA \
-         ? pawC_stack_grow(P, n + STACK_EXTRA) \
+         ? pawC_stack_grow(P, n + STACK_EXTRA)     \
          : (void)0)
 
 typedef void (*Call)(paw_Env *P, void *arg);
@@ -31,7 +31,7 @@ void pawC_stack_grow(paw_Env *P, int count);
 void pawC_stack_realloc(paw_Env *P, int n);
 void pawC_stack_overflow(paw_Env *P);
 
-static inline int pawC_stklen(paw_Env *P)
+inline static int pawC_stklen(paw_Env *P)
 {
     return CAST(int, P->top.p - P->stack.p);
 }
@@ -39,30 +39,30 @@ static inline int pawC_stklen(paw_Env *P)
 // Increase the stack size
 // New slots have unspecified values and must be set before the next
 // collection runs.
-static inline StackPtr pawC_stkinc(paw_Env *P, int n)
+inline static StackPtr pawC_stkinc(paw_Env *P, int n)
 {
     paw_assert(n <= CAST(int, P->bound.p - P->top.p));
     return (P->top.p += n) - n;
 }
 
 // Decrease the stack size
-static inline void pawC_stkdec(paw_Env *P, int n)
+inline static void pawC_stkdec(paw_Env *P, int n)
 {
     paw_assert(n <= pawC_stklen(P));
     P->top.p -= n;
 }
 
-static inline Value *pawC_push0(paw_Env *P)
+inline static Value *pawC_push0(paw_Env *P)
 {
     StackPtr sp = pawC_stkinc(P, 1);
     V_SET_0(sp);
     return sp;
 }
 
-Value *pawC_pushns(paw_Env *P, const char *s, size_t n);
-Value *pawC_pushs(paw_Env *P, const char *s);
+Value *pawC_pushns(paw_Env *P, char const *s, size_t n);
+Value *pawC_pushs(paw_Env *P, char const *s);
 
-static inline void pawC_pop(paw_Env *P)
+inline static void pawC_pop(paw_Env *P)
 {
     pawC_stkdec(P, 1);
 }

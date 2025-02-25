@@ -23,7 +23,7 @@ typedef uint16_t ValueId;
 typedef struct CallFrame {
     struct CallFrame *prev;
     struct CallFrame *next;
-    const OpCode *pc;
+    OpCode const *pc;
     StackRel base;
     StackRel top;
     Closure *fn;
@@ -115,9 +115,9 @@ typedef struct paw_Env {
 } paw_Env;
 
 void pawE_uninit(paw_Env *P);
-_Noreturn void pawE_error(paw_Env *P, int code, int line, const char *fmt, ...);
+_Noreturn void pawE_error(paw_Env *P, int code, int line, char const *fmt, ...);
 CallFrame *pawE_extend_cf(paw_Env *P, StackPtr top);
-int pawE_locate(paw_Env *P, const String *name, paw_Bool only_pub);
+int pawE_locate(paw_Env *P, String const *name, paw_Bool only_pub);
 
 #define CACHED_STRING(P, k) CHECK_EXP((k) < NCSTR, (P)->string_cache[k])
 void pawE_push_cstr(paw_Env *P, unsigned kind);

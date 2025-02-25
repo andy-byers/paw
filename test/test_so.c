@@ -2,9 +2,9 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
+#include "env.h"
 #include "paw.h"
 #include "test.h"
-#include "env.h"
 
 static void handle_error(paw_Env *P, int status, paw_Bool fatal)
 {
@@ -15,7 +15,7 @@ static void handle_error(paw_Env *P, int status, paw_Bool fatal)
 
 int main(void)
 {
-    const char *source =
+    char const *source =
         "pub fn f(n: int) { \n"
         "    if n > 0 {     \n"
         "        f(n - 1);  \n"

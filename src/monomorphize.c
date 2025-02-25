@@ -39,10 +39,10 @@ DEFINE_MAP(struct Compiler, DeclMonoMap, pawP_alloc, p_hash_decl_id, p_equals_de
 DEFINE_MAP(struct Compiler, TypeMonoMap, pawP_alloc, pawIr_type_hash, pawIr_type_equals, struct IrType *, struct IrTypeList *)
 DEFINE_MAP_ITERATOR(DeclMonoMap, DeclId, struct IrTypeList *);
 
-static void log_instance(struct MonoCollector *M, const char *kind, const String *name, struct IrType *type)
+static void log_instance(struct MonoCollector *M, char const *kind, String const *name, struct IrType *type)
 {
 #if defined(PAW_DEBUG_LOG)
-    const char *type_string = pawIr_print_type(M->C, type);
+    char const *type_string = pawIr_print_type(M->C, type);
     pawD_debug_log(ENV(M->C), "[paw.compiler.monomorphize.%s] %s @ %p: %s", kind, name->text, (void *)type, type_string);
     --ENV(M->C)->top.p;
 #endif
@@ -52,10 +52,13 @@ static struct IrType *substitute_generic(struct IrTypeFolder *F, struct IrGeneri
 {
     struct IrType **pa, **pb;
     struct Substitution *subst = F->ud;
-    K_LIST_ZIP(subst->generics, pa, subst->types, pb) {
-        if (!IrIsGeneric(*pa)) continue;
+    K_LIST_ZIP(subst->generics, pa, subst->types, pb)
+    {
+        if (!IrIsGeneric(*pa))
+            continue;
         struct IrGeneric *g = IrGetGeneric(*pa);
-        if (g->did.value == t->did.value) return *pb;
+        if (g->did.value == t->did.value)
+            return *pb;
     }
 
     return IR_CAST_TYPE(t);
@@ -84,9 +87,10 @@ struct IrType *finalize_type(struct MonoCollector *M, struct IrType *type)
 
 static struct MirRegisterList *copy_register_list(struct MonoCollector *M, struct MirRegisterList *list)
 {
-    const MirRegister *pr;
+    MirRegister const *pr;
     struct MirRegisterList *result = pawMir_register_list_new(M->C);
-    K_LIST_FOREACH(list, pr) {
+    K_LIST_FOREACH(list, pr)
+    {
         K_LIST_PUSH(M->C, result, *pr);
     }
     return result;
@@ -106,7 +110,8 @@ static void copy_switch(struct MonoCollector *M, struct MirSwitch *t, struct Mir
 {
     struct MirSwitchArm *parm;
     r->arms = pawMir_switch_list_new(M->C);
-    K_LIST_FOREACH(t->arms, parm) {
+    K_LIST_FOREACH(t->arms, parm)
+    {
         K_LIST_PUSH(M->C, r->arms, *parm);
     }
 }
@@ -137,20 +142,24 @@ static struct MirBlockData *copy_basic_block(struct MonoCollector *M, struct Mir
     struct MirBlockData *result = pawMir_new_block(M->mir);
     result->mid = block->mid;
 
-    const MirBlock *pb;
-    K_LIST_FOREACH(block->predecessors, pb) {
+    MirBlock const *pb;
+    K_LIST_FOREACH(block->predecessors, pb)
+    {
         K_LIST_PUSH(M->C, result->predecessors, *pb);
     }
-    K_LIST_FOREACH(block->successors, pb) {
+    K_LIST_FOREACH(block->successors, pb)
+    {
         K_LIST_PUSH(M->C, result->successors, *pb);
     }
 
     struct MirInstruction **pinstr;
-    K_LIST_FOREACH(block->joins, pinstr) {
+    K_LIST_FOREACH(block->joins, pinstr)
+    {
         struct MirInstruction *r = copy_instruction(M, *pinstr);
         K_LIST_PUSH(M->C, result->joins, r);
     }
-    K_LIST_FOREACH(block->instructions, pinstr) {
+    K_LIST_FOREACH(block->instructions, pinstr)
+    {
         struct MirInstruction *r = copy_instruction(M, *pinstr);
         K_LIST_PUSH(M->C, result->instructions, r);
     }
@@ -175,27 +184,28 @@ static void leave_generics_context(struct MonoCollector *M)
 static struct Mir *new_mir(struct MonoCollector *M, struct Mir *base, struct IrType *type, struct IrType *self)
 {
     M->mir = pawMir_new(M->C, base->name, type, self, base->fn_kind,
-            base->is_native, base->is_pub, PAW_FALSE);
+                        base->is_native, base->is_pub, PAW_FALSE);
     return M->mir;
 }
 
-//static void copy_trait_owners(struct MonoCollector *M, struct IrType *base, struct IrType *inst, struct IrType *method, String *method_name)
+// static void copy_trait_owners(struct MonoCollector *M, struct IrType *base, struct IrType *inst, struct IrType *method, String *method_name)
 //{
-//    paw_assert(method != NULL);
-//    struct TraitOwners *trait_owners = M->C->trait_owners;
-//    struct TraitOwnerList **pbase_owners = TraitOwners_get(M->C, trait_owners, base);
-//    if (pbase_owners == NULL) return; // no builtin traits implemented
+//     paw_assert(method != NULL);
+//     struct TraitOwners *trait_owners = M->C->trait_owners;
+//     struct TraitOwnerList **pbase_owners = TraitOwners_get(M->C, trait_owners, base);
+//     if (pbase_owners == NULL) return; // no builtin traits implemented
 //
-//    struct TraitOwnerList *base_owners = *pbase_owners;
-//    struct TraitOwnerList *owners = pawP_get_trait_owners(M->C, inst);
-//    struct IrType *base_type = pawP_find_method(M->C, base, method_name);
-//}
+//     struct TraitOwnerList *base_owners = *pbase_owners;
+//     struct TraitOwnerList *owners = pawP_get_trait_owners(M->C, inst);
+//     struct IrType *base_type = pawP_find_method(M->C, base, method_name);
+// }
 
 // Replace generics on a polymorphic method with generics from an instantiation so they
 // can be replaced in "finalize_type"
 struct IrType *instantiate_method(struct Compiler *C, struct IrType *method, struct IrTypeList *generics)
 {
-    if (generics == NULL) return method;
+    if (generics == NULL)
+        return method;
 
     struct IrTypeFolder F;
     struct Substitution subst = {
@@ -229,7 +239,8 @@ static void do_monomorphize(struct MonoCollector *M, struct Mir *base, struct Mi
 {
     {
         struct MirRegisterData *pfrom;
-        K_LIST_FOREACH(base->registers, pfrom) {
+        K_LIST_FOREACH(base->registers, pfrom)
+        {
             struct MirRegisterData to = copy_register(M, *pfrom);
             K_LIST_PUSH(M->C, inst->registers, to);
         }
@@ -237,29 +248,33 @@ static void do_monomorphize(struct MonoCollector *M, struct Mir *base, struct Mi
 
     {
         struct MirBlockData *const *pfrom;
-        K_LIST_FOREACH(base->blocks, pfrom) {
+        K_LIST_FOREACH(base->blocks, pfrom)
+        {
             struct MirBlockData *to = copy_basic_block(M, *pfrom);
             K_LIST_PUSH(M->C, inst->blocks, to);
         }
     }
 
     {
-        const MirRegister *pr;
-        K_LIST_FOREACH(base->locals, pr) {
+        MirRegister const *pr;
+        K_LIST_FOREACH(base->locals, pr)
+        {
             K_LIST_PUSH(M->C, inst->locals, *pr);
         }
     }
 
     {
-        const struct MirCaptureInfo *pci;
-        K_LIST_FOREACH(base->captured, pci) {
+        struct MirCaptureInfo const *pci;
+        K_LIST_FOREACH(base->captured, pci)
+        {
             K_LIST_PUSH(M->C, inst->captured, *pci);
         }
     }
 
     {
-        const struct MirUpvalueInfo *pup;
-        K_LIST_FOREACH(base->upvalues, pup) {
+        struct MirUpvalueInfo const *pup;
+        K_LIST_FOREACH(base->upvalues, pup)
+        {
             K_LIST_PUSH(M->C, inst->upvalues, *pup);
         }
     }
@@ -267,7 +282,8 @@ static void do_monomorphize(struct MonoCollector *M, struct Mir *base, struct Mi
     {
         // monomorphize nested closures
         struct Mir *const *pchild;
-        K_LIST_FOREACH(base->children, pchild) {
+        K_LIST_FOREACH(base->children, pchild)
+        {
             struct Mir *base_child = *pchild;
             struct IrType *inst_type = finalize_type(M, base_child->type);
             struct Mir *inst_child = new_mir(M, base_child, inst_type, NULL);
@@ -277,15 +293,15 @@ static void do_monomorphize(struct MonoCollector *M, struct Mir *base, struct Mi
     }
 }
 
-static paw_Bool is_monomorphic(const struct Mir *mir)
+static paw_Bool is_monomorphic(struct Mir const *mir)
 {
-    return (mir->self == NULL || IR_TYPE_SUBTYPES(mir->self) == NULL)
-        && ir_signature_types(mir->type) == NULL;
+    return (mir->self == NULL || IR_TYPE_SUBTYPES(mir->self) == NULL) && ir_signature_types(mir->type) == NULL;
 }
 
 static struct Mir *monomorphize_function_aux(struct MonoCollector *M, struct Mir *base, struct IrSignature *sig, struct IrType *self)
 {
-    if (is_monomorphic(base)) return base;
+    if (is_monomorphic(base))
+        return base;
 
     struct GenericsState gs;
     enter_generics_context(M, &gs, ir_signature_types(base->type), sig->types);
@@ -324,8 +340,10 @@ static paw_Bool test_types(struct MonoCollector *M, struct IrType *a, struct IrT
 static struct IrType *cannonicalize_func(struct MonoCollector *M, struct IrTypeList *monos, struct IrType *type)
 {
     struct IrType *const *pmono;
-    K_LIST_FOREACH(monos, pmono) {
-        if (test_types(M, type, *pmono)) return *pmono;
+    K_LIST_FOREACH(monos, pmono)
+    {
+        if (test_types(M, type, *pmono))
+            return *pmono;
     }
 
     K_LIST_PUSH(M->C, M->pending, type);
@@ -333,10 +351,11 @@ static struct IrType *cannonicalize_func(struct MonoCollector *M, struct IrTypeL
     return type;
 }
 
-static struct IrType *cannonicalize_method(struct MonoCollector *M, struct IrType *self, struct IrTypeList *monos, const String *name, struct IrType *type)
+static struct IrType *cannonicalize_method(struct MonoCollector *M, struct IrType *self, struct IrTypeList *monos, String const *name, struct IrType *type)
 {
     struct IrType *const *pmono;
-    K_LIST_FOREACH(monos, pmono) {
+    K_LIST_FOREACH(monos, pmono)
+    {
         struct HirDecl *decl = pawHir_get_decl(M->C, IR_TYPE_DID(*pmono));
         if (pawS_eq(name, decl->hdr.name) && test_types(M, type, *pmono)) {
             return *pmono;
@@ -351,7 +370,8 @@ static struct IrType *cannonicalize_method(struct MonoCollector *M, struct IrTyp
 static struct IrTypeList *mono_list_for_type(struct MonoCollector *M, TypeMonoMap *lists, struct IrType *type)
 {
     struct IrTypeList **plist = TypeMonoMap_get(M->C, lists, type);
-    if (plist != NULL) return *plist;
+    if (plist != NULL)
+        return *plist;
 
     struct IrTypeList *monos = pawIr_type_list_new(M->C);
     TypeMonoMap_insert(M->C, lists, type, monos);
@@ -361,7 +381,8 @@ static struct IrTypeList *mono_list_for_type(struct MonoCollector *M, TypeMonoMa
 static struct IrTypeList *mono_list_for_decl(struct MonoCollector *M, DeclMonoMap *lists, DeclId did)
 {
     struct IrTypeList **plist = DeclMonoMap_get(M->C, lists, did);
-    if (plist != NULL) return *plist;
+    if (plist != NULL)
+        return *plist;
 
     struct IrTypeList *monos = pawIr_type_list_new(M->C);
     DeclMonoMap_insert(M->C, lists, did, monos);
@@ -371,8 +392,10 @@ static struct IrTypeList *mono_list_for_decl(struct MonoCollector *M, DeclMonoMa
 static struct IrType *cannonicalize_adt(struct MonoCollector *M, struct IrTypeList *monos, struct IrType *type)
 {
     struct IrType *const *pmono;
-    K_LIST_FOREACH(monos, pmono) {
-        if (test_types(M, type, *pmono)) return *pmono;
+    K_LIST_FOREACH(monos, pmono)
+    {
+        if (test_types(M, type, *pmono))
+            return *pmono;
     }
     K_LIST_PUSH(M->C, M->types, type);
     K_LIST_PUSH(M->C, monos, type);
@@ -388,7 +411,8 @@ static struct IrType *collect_adt(struct MonoCollector *M, struct IrAdt *t)
 static struct IrType *register_function(struct MonoCollector *M, struct IrSignature *t)
 {
     struct HirDecl *decl = pawHir_get_decl(M->C, t->did);
-    if (HirIsVariantDecl(decl)) return collect_adt(M, IrGetAdt(t->result));
+    if (HirIsVariantDecl(decl))
+        return collect_adt(M, IrGetAdt(t->result));
     struct IrTypeList *monos = mono_list_for_decl(M, M->monos, t->did);
     return cannonicalize_func(M, monos, IR_CAST_TYPE(t));
 }
@@ -403,7 +427,8 @@ static struct IrType *register_method(struct MonoCollector *M, struct IrSignatur
 
 static struct IrType *collect_signature(struct MonoCollector *M, struct IrSignature *t)
 {
-    if (t->self != NULL) return register_method(M, t);
+    if (t->self != NULL)
+        return register_method(M, t);
     return register_function(M, t);
 }
 
@@ -411,18 +436,21 @@ static struct Mir *monomorphize(struct MonoCollector *M, struct IrType *type)
 {
     struct IrSignature *t = IrGetSignature(type);
     struct Mir *base = *BodyMap_get(M->C, M->bodies, t->did); // must exist
-    if (!base->is_poly) return base;
+    if (!base->is_poly)
+        return base;
 
     return t->self != NULL
-        ? monomorphize_method_aux(M, base, t, t->self)
-        : monomorphize_function_aux(M, base, t, NULL);
+               ? monomorphize_method_aux(M, base, t, t->self)
+               : monomorphize_function_aux(M, base, t, NULL);
 }
 
 static struct IrType *collect_other(struct MonoCollector *M, struct IrType *type)
 {
     struct IrType *const *ptarget;
-    K_LIST_FOREACH(M->other, ptarget) {
-        if (pawU_equals(M->C->U, *ptarget, type)) return *ptarget;
+    K_LIST_FOREACH(M->other, ptarget)
+    {
+        if (pawU_equals(M->C->U, *ptarget, type))
+            return *ptarget;
     }
     K_LIST_PUSH(M->C, M->other, type);
     return type;
@@ -434,8 +462,10 @@ static struct IrType *collect_type(struct IrTypeFolder *F, struct IrType *type)
     struct MonoCollector *M = outer->ud;
 
     paw_assert(!IrIsGeneric(type) && !IrIsInfer(type));
-    if (IrIsAdt(type)) return collect_adt(M, IrGetAdt(type));
-    if (IrIsSignature(type)) return collect_signature(M, IrGetSignature(type));
+    if (IrIsAdt(type))
+        return collect_adt(M, IrGetAdt(type));
+    if (IrIsSignature(type))
+        return collect_signature(M, IrGetSignature(type));
     return collect_other(M, type);
 }
 
@@ -445,36 +475,39 @@ static void copy_trait_owners(struct MonoCollector *M)
     DeclMonoMapIterator iter;
     DeclMonoMapIterator_init(M->adts, &iter);
     while (DeclMonoMapIterator_is_valid(&iter)) {
-        const DeclId did = DeclMonoMapIterator_key(&iter);
+        DeclId const did = DeclMonoMapIterator_key(&iter);
         struct HirDecl *base_decl = pawHir_get_decl(M->C, did);
         struct IrType *base = GET_NODE_TYPE(M->C, base_decl);
-        if (IR_TYPE_SUBTYPES(base) == NULL) goto next_adt;
+        if (IR_TYPE_SUBTYPES(base) == NULL)
+            goto next_adt;
 
         struct TraitOwnerList **pbase_owners = TraitOwners_get(M->C, M->C->trait_owners, base);
-        if (pbase_owners == NULL) goto next_adt;
+        if (pbase_owners == NULL)
+            goto next_adt;
         struct IrType **pinst, **pmethod;
         // iterate over instantiations of the polymorphic ADT
         struct IrTypeList *insts = *DeclMonoMapIterator_valuep(&iter);
-        K_LIST_FOREACH(insts, pinst) {
+        K_LIST_FOREACH(insts, pinst)
+        {
             struct IrType *inst = *pinst;
             // TODO: hash and eq may not be in this list, since they are often only called by
             // TODO: at runtime by code in map.c. use as a map key should cause hash + eq to be used
             // TODO: maybe when visiting map constructors, put hash and eq for that type into pending stack
             struct IrTypeList *methods = mono_list_for_type(M, M->methods, inst);
-            K_LIST_FOREACH(methods, pmethod) {
+            K_LIST_FOREACH(methods, pmethod)
+            {
                 struct IrType *inst = *pmethod;
             }
         }
 
-next_adt:
+    next_adt:
         DeclMonoMapIterator_next(&iter);
     }
 }
 
-static paw_Bool is_entrypoint(const struct Mir *mir)
+static paw_Bool is_entrypoint(struct Mir const *mir)
 {
-    return mir->is_pub && !mir->is_poly
-        && (mir->self == NULL || IR_TYPE_SUBTYPES(mir->self) == NULL);
+    return mir->is_pub && !mir->is_poly && (mir->self == NULL || IR_TYPE_SUBTYPES(mir->self) == NULL);
 }
 
 struct MonoResult pawP_monomorphize(struct Compiler *C, BodyMap *bodies)
@@ -526,7 +559,8 @@ struct MonoResult pawP_monomorphize(struct Compiler *C, BodyMap *bodies)
     TypeMonoMap_delete(C, M.methods);
 
     struct IrType *const *pother;
-    K_LIST_FOREACH(M.other, pother) {
+    K_LIST_FOREACH(M.other, pother)
+    {
         K_LIST_PUSH(C, M.types, *pother);
     }
 
@@ -535,4 +569,3 @@ struct MonoResult pawP_monomorphize(struct Compiler *C, BodyMap *bodies)
         .types = M.types,
     };
 }
-

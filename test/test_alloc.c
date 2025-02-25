@@ -51,9 +51,9 @@ static void set_defer_data(void *ptr, size_t size)
     memset(ptr, size & 255, size);
 }
 
-static void check_defer_data(const void *ptr, size_t size)
+static void check_defer_data(void const *ptr, size_t size)
 {
-    const uint8_t *data = ptr;
+    uint8_t const *data = ptr;
     for (size_t i = 0; i < size; ++i) {
         check(data[i] == (uint8_t)(size & 255));
     }
@@ -63,7 +63,7 @@ static void alloc_and_defer(paw_Env *P, size_t size)
 {
     check(s_ndefer < MAX_DEFER);
     void *ptr = pawZ_alloc(P, NULL, 0, size);
-    const int index = s_ndefer++;
+    int const index = s_ndefer++;
     s_zdefer += size;
     s_defer[index] = (struct DeferredAlloc){
         .size = size,
@@ -76,8 +76,8 @@ static void realloc_deferred_ptrs(paw_Env *P)
 {
     for (int i = 0; i < s_ndefer; ++i) {
         struct DeferredAlloc *defer = &s_defer[i];
-        const size_t size = CAST_SIZE(rand() % 500 + 10);
-        const size_t size0 = defer->size;
+        size_t const size = CAST_SIZE(rand() % 500 + 10);
+        size_t const size0 = defer->size;
         s_zdefer += size - defer->size;
         defer->size = size;
         defer->ptr = pawZ_alloc(P, defer->ptr, size0, defer->size);
@@ -123,17 +123,20 @@ static void test_basic(paw_Env *P)
 {
     check(NULL == pawZ_alloc(P, NULL, 0, 0));
 
-    enum {N = 100};
+    enum { N = 100 };
     void *ptrs[N];
 
-    for (int i = 0; i < N; ++i) check((ptrs[i] = pawZ_alloc(P, NULL, 0, CAST_SIZE((i + 1) * N))));
-    for (int i = 0; i < N; ++i) check((ptrs[i] = pawZ_alloc(P, ptrs[i], CAST_SIZE((i + 1) * N), CAST_SIZE((N - i) * N))));
-    for (int i = 0; i < N; ++i) check(NULL == pawZ_alloc(P, ptrs[i], CAST_SIZE((N - i) * N), 0));
+    for (int i = 0; i < N; ++i)
+        check((ptrs[i] = pawZ_alloc(P, NULL, 0, CAST_SIZE((i + 1) * N))));
+    for (int i = 0; i < N; ++i)
+        check((ptrs[i] = pawZ_alloc(P, ptrs[i], CAST_SIZE((i + 1) * N), CAST_SIZE((N - i) * N))));
+    for (int i = 0; i < N; ++i)
+        check(NULL == pawZ_alloc(P, ptrs[i], CAST_SIZE((N - i) * N), 0));
 }
 
 static void test_small_allocations(paw_Env *P)
 {
-    const size_t sizes[] = {0, 10, 11, 100, 101, 102};
+    size_t const sizes[] = {0, 10, 11, 100, 101, 102};
     for (size_t i = 0; i < PAW_COUNTOF(sizes); ++i) {
         alloc_pattern(P, sizes[i]);
         alloc_pattern(P, sizes[i]);
@@ -144,7 +147,7 @@ static void test_small_allocations(paw_Env *P)
 
 static void test_large_allocations(paw_Env *P)
 {
-    const size_t sizes[] = {
+    size_t const sizes[] = {
         P->heap_size >> 11,
         P->heap_size >> 10,
         P->heap_size >> 9,

@@ -11,8 +11,8 @@
 #define IS_BUILTIN(s) ((s)->flag < 0)
 #define FLAG2CODE(x) (-(x) - 1)
 
-void pawX_read_integer(paw_Env *P, const char *data, int base);
-void pawX_read_float(paw_Env *P, const char *data);
+void pawX_read_integer(paw_Env *P, char const *data, int base);
+void pawX_read_float(paw_Env *P, char const *data);
 
 enum MultiChar {
     // Control tokens:
@@ -82,7 +82,7 @@ struct Lex {
     struct Ast *ast;
 
     paw_Reader input;
-    const char *chunk;
+    char const *chunk;
     size_t nchunk;
     char c;
 
@@ -105,11 +105,11 @@ struct Lex {
     paw_Bool in_impl;
 };
 
-String *pawX_scan_string(struct Lex *lex, const char *s, size_t n);
+String *pawX_scan_string(struct Lex *lex, char const *s, size_t n);
 void pawX_set_source(struct Lex *lex, paw_Reader input, void *ud);
 TokenKind pawX_next(struct Lex *lex);
 TokenKind pawX_peek(struct Lex *lex);
 
-_Noreturn void pawX_error(struct Lex *lex, const char *fmt, ...);
+_Noreturn void pawX_error(struct Lex *lex, char const *fmt, ...);
 
 #endif // PAW_LEX_H

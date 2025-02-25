@@ -15,20 +15,22 @@
 
 #define PC_REL(p, pc) CAST(int, (pc) - (p)->source - 1)
 
-int pawD_line_number(const CallFrame *cf, const OpCode *pc)
+int pawD_line_number(CallFrame const *cf, OpCode const *pc)
 {
-    if (!CF_IS_PAW(cf)) return -1;
+    if (!CF_IS_PAW(cf))
+        return -1;
 
     int i = 0;
     Proto *p = cf->fn->p;
-    const int r = PC_REL(p, pc);
+    int const r = PC_REL(p, pc);
     for (; i < p->nlines - 1; ++i) {
-        if (p->lines[i].pc >= r) break;
+        if (p->lines[i].pc >= r)
+            break;
     }
     return p->lines[i].line;
 }
 
-void pawD_debug_log(paw_Env *P, const char *fmt, ...)
+void pawD_debug_log(paw_Env *P, char const *fmt, ...)
 {
     va_list arg;
     va_start(arg, fmt);
@@ -39,7 +41,7 @@ void pawD_debug_log(paw_Env *P, const char *fmt, ...)
     fflush(stderr);
 }
 
-const char *paw_unop_name(enum UnaryOp unop)
+char const *paw_unop_name(enum UnaryOp unop)
 {
     switch (unop) {
         case UNARY_LEN:
@@ -55,7 +57,7 @@ const char *paw_unop_name(enum UnaryOp unop)
     }
 }
 
-const char *paw_binop_name(enum BinaryOp binop)
+char const *paw_binop_name(enum BinaryOp binop)
 {
     switch (binop) {
         case BINARY_ADD:
@@ -95,7 +97,7 @@ const char *paw_binop_name(enum BinaryOp binop)
     }
 }
 
-const char *paw_op_name(Op op)
+char const *paw_op_name(Op op)
 {
     switch (op) {
         case OP_LOADSMI:
@@ -264,13 +266,15 @@ void pawD_dump_defs(paw_Env *P)
     size_t mxname = 0;
     for (int i = 0; i < P->defs.count; ++i) {
         struct Def *def = Y_DEF(P, i);
-        if (def->hdr.name == NULL) continue;
+        if (def->hdr.name == NULL)
+            continue;
         mxname = PAW_MAX(mxname, def->hdr.name->length);
     }
     for (int i = 0; i < P->defs.count; ++i) {
         struct Def *def = Y_DEF(P, i);
-        const char *name = def->hdr.name != NULL
-                ? def->hdr.name->text : "(null)";
+        char const *name = def->hdr.name != NULL
+                               ? def->hdr.name->text
+                               : "(null)";
         pawL_add_fstring(P, &buf, "%d\t", i);
         if (def->hdr.kind == DEF_FUNC) {
             pawL_add_fstring(P, &buf, "%d\t", def->func.vid);
@@ -288,7 +292,7 @@ void pawD_dump_defs(paw_Env *P)
 
 void paw_dump_opcode(OpCode opcode)
 {
-    const char *opname = paw_op_name(GET_OP(opcode));
+    char const *opname = paw_op_name(GET_OP(opcode));
     switch (GET_OP(opcode)) {
         case NOPCODES:
             PAW_UNREACHABLE();
@@ -394,8 +398,8 @@ void paw_dump_opcode(OpCode opcode)
 
 void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
 {
-    const OpCode *pc = proto->source;
-    const OpCode *end = pc + proto->length;
+    OpCode const *pc = proto->source;
+    OpCode const *end = pc + proto->length;
 
     pawL_add_string(P, print, "function '");
     pawL_add_nstring(P, print, proto->name->text, proto->name->length);
@@ -403,8 +407,8 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
     pawL_add_fstring(P, print, "constant(s) = %d, upvalue(s) = %d, arg(s) = %d\n",
                      proto->nk, proto->nup, proto->argc);
     for (int i = 0; pc != end; ++i, ++pc) {
-        const OpCode opcode = *pc;
-        const char *opname = paw_op_name(GET_OP(opcode));
+        OpCode const opcode = *pc;
+        char const *opname = paw_op_name(GET_OP(opcode));
         pawL_add_fstring(P, print, "%d  %s", i, opname);
         switch (GET_OP(opcode)) {
             case NOPCODES:
@@ -520,7 +524,7 @@ void paw_dump_stack(paw_Env *P)
 {
     StackPtr sp = P->stack.p;
     for (int i = 0; sp != P->top.p; ++sp, ++i) {
-        const Value v = *sp;
+        Value const v = *sp;
         printf("%d: %" PRIx64 "\n", i, v.u);
     }
 }
@@ -538,7 +542,7 @@ void paw_dump_source(paw_Env *P, Proto *proto)
 static int current_line(CallFrame *cf)
 {
     Proto *p = cf->fn->p;
-    const int pc = cf->pc - p->source;
+    int const pc = cf->pc - p->source;
 
     int i = 0;
     for (; i + 1 < p->nlines; ++i) {
@@ -554,7 +558,7 @@ void paw_stacktrace(paw_Env *P)
     Buffer buf;
     pawL_init_buffer(P, &buf);
 
-    const String *modname = P->main.fn->p->name;
+    String const *modname = P->main.fn->p->name;
 
     int i = 0;
     CallFrame *cf = P->cf;
@@ -564,7 +568,7 @@ void paw_stacktrace(paw_Env *P)
         pawL_add_fstring(P, &buf, ", line %d, in ", current_line(cf));
         if (CF_IS_PAW(cf)) {
             Proto *p = cf->fn->p;
-            const String *name = p->name;
+            String const *name = p->name;
             pawL_add_nstring(P, &buf, name->text, name->length);
         } else {
             pawL_add_fstring(P, &buf, "<native>");

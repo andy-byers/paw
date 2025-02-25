@@ -13,20 +13,20 @@
 #define OS_FREE(P, ptr, size) ((P)->alloc((P)->ud, ptr, size, 0))
 
 #if defined(__has_feature)
-# if __has_feature(address_sanitizer) && !defined(__SANITIZE_ADDRESS__)
-#  define __SANITIZE_ADDRESS__
-# endif
+#if __has_feature(address_sanitizer) && !defined(__SANITIZE_ADDRESS__)
+#define __SANITIZE_ADDRESS__
+#endif
 #endif
 
 #if defined(__SANITIZE_ADDRESS__)
 int __asan_address_is_poisoned(void const volatile *addr);
-void __asan_poison_memory_region(const volatile void *ptr, size_t size);
-void __asan_unpoison_memory_region(const volatile void *ptr, size_t size);
-# define POISON_MEMORY_REGION(p, z) __asan_poison_memory_region(p, z)
-# define UNPOISON_MEMORY_REGION(p, z) __asan_unpoison_memory_region(p, z)
+void __asan_poison_memory_region(void const volatile *ptr, size_t size);
+void __asan_unpoison_memory_region(void const volatile *ptr, size_t size);
+#define POISON_MEMORY_REGION(p, z) __asan_poison_memory_region(p, z)
+#define UNPOISON_MEMORY_REGION(p, z) __asan_unpoison_memory_region(p, z)
 #else
-# define POISON_MEMORY_REGION(p, z)
-# define UNPOISON_MEMORY_REGION(p, z)
+#define POISON_MEMORY_REGION(p, z)
+#define UNPOISON_MEMORY_REGION(p, z)
 #endif
 
 #define FLAGS_PER_BYTE 8
@@ -75,16 +75,16 @@ struct Allocator {
     uint32_t key_min;
 };
 
-uint8_t pawZ_get_flag(const struct Heap *H, uintptr_t uptr)
+uint8_t pawZ_get_flag(struct Heap const *H, uintptr_t uptr)
 {
-    const size_t id = FLAG_BASE(H, uptr);
-    const uint8_t flag = H->flags[FLAG_ID(id)];
+    size_t const id = FLAG_BASE(H, uptr);
+    uint8_t const flag = H->flags[FLAG_ID(id)];
     return (flag >> FLAG_BIT(id)) & 1;
 }
 
 void pawZ_set_flag(struct Heap *H, uintptr_t uptr)
 {
-    const size_t id = FLAG_BASE(H, uptr);
+    size_t const id = FLAG_BASE(H, uptr);
     uint8_t *pflag = &H->flags[FLAG_ID(id)];
     paw_assert(0 == (*pflag & (1 << FLAG_BIT(id))));
     *pflag = *pflag | (1 << FLAG_BIT(id));
@@ -92,7 +92,7 @@ void pawZ_set_flag(struct Heap *H, uintptr_t uptr)
 
 void pawZ_clear_flag(struct Heap *H, uintptr_t uptr)
 {
-    const size_t id = FLAG_BASE(H, uptr);
+    size_t const id = FLAG_BASE(H, uptr);
     uint8_t *pflag = &H->flags[FLAG_ID(id)];
     paw_assert(0 != (*pflag & (1 << FLAG_BIT(id))));
     *pflag = *pflag & ~(1 << FLAG_BIT(id));
@@ -125,8 +125,8 @@ static struct Chunk *chunk_at(struct Allocator *a, struct ChunkId id)
 static void unlink_from_list(struct Allocator *a, struct ChunkId id, struct ChunkId *proot)
 {
     struct Chunk *b = chunk_at(a, id);
-    const struct ChunkId prev = b->list.prev;
-    const struct ChunkId next = b->list.next;
+    struct ChunkId const prev = b->list.prev;
+    struct ChunkId const next = b->list.next;
     if (prev.v != BAD_CHUNK) {
         struct Chunk *prev_chunk = chunk_at(a, prev);
         prev_chunk->list.next = next;
@@ -145,13 +145,13 @@ static void unlink_chunk(struct Allocator *a, struct ChunkId id)
 {
     paw_assert((CHUNK_HDR(a, id.v)->size4x & 1) == 0);
     paw_assert(id.v >= 1);
-    const uint32_t size = CHUNK_HDR(a, id.v)->size4x / 4;
+    uint32_t const size = CHUNK_HDR(a, id.v)->size4x / 4;
     paw_assert(size == CHUNK_HDR(a, id.v + size)->prev_size);
     paw_assert(size >= 2);
     if (size <= MAX_SMALL) {
         unlink_from_list(a, id, &a->small[size - 2]);
     } else {
-        const uint32_t hash = size % NUM_HASH;
+        uint32_t const hash = size % NUM_HASH;
         unlink_from_list(a, id, &a->hash[hash]);
     }
 }
@@ -170,13 +170,13 @@ static void link_chunk(struct Allocator *a, struct ChunkId id)
 {
     paw_assert(id.v >= 1);
     paw_assert((CHUNK_HDR(a, id.v)->size4x & 1) == 0);
-    const uint32_t size = CHUNK_HDR(a, id.v)->size4x / 4;
+    uint32_t const size = CHUNK_HDR(a, id.v)->size4x / 4;
     paw_assert(size == CHUNK_HDR(a, id.v + size)->prev_size);
     paw_assert(size >= 2);
     if (size <= MAX_SMALL) {
         link_into_list(a, id, &a->small[size - 2]);
     } else {
-        const uint32_t hash = size % NUM_HASH;
+        uint32_t const hash = size % NUM_HASH;
         link_into_list(a, id, &a->hash[hash]);
     }
 }
@@ -185,7 +185,7 @@ static void fix_chunk_list(struct Allocator *a, struct ChunkId *proot)
 {
     struct ChunkId next;
 
-    for (struct ChunkId i = *proot; i.v != BAD_CHUNK; i = next){
+    for (struct ChunkId i = *proot; i.v != BAD_CHUNK; i = next) {
         next = CHUNK_LIST(a, i.v)->next;
         uint32_t size = CHUNK_HDR(a, i.v)->size4x;
         paw_assert((size & 1) == 0);
@@ -198,7 +198,7 @@ static void fix_chunk_list(struct Allocator *a, struct ChunkId *proot)
             }
             unlink_chunk(a, prev);
             size = i.v + size / 4 - prev.v;
-            const uint32_t x = CHUNK_HDR(a, prev.v)->size4x & 2;
+            uint32_t const x = CHUNK_HDR(a, prev.v)->size4x & 2;
             CHUNK_HDR(a, prev.v)->size4x = size * 4 | x;
             CHUNK_HDR(a, prev.v + size)->prev_size = size;
             link_chunk(a, prev);
@@ -218,7 +218,7 @@ static void *checkout_chunk(struct Allocator *a, struct ChunkId i, uint32_t nchu
     paw_assert(i.v >= 1);
     paw_assert(CHUNK_HDR(a, i.v)->size4x / 4 == nchunks);
     paw_assert(CHUNK_HDR(a, i.v + nchunks)->prev_size == nchunks);
-    const uint32_t x = CHUNK_HDR(a, i.v)->size4x;
+    uint32_t const x = CHUNK_HDR(a, i.v)->size4x;
     CHUNK_HDR(a, i.v)->size4x = nchunks * 4 | 1 | (x & 2);
     CHUNK_HDR(a, i.v + nchunks)->prev_size = nchunks;
     CHUNK_HDR(a, i.v + nchunks)->size4x |= 2;
@@ -242,7 +242,7 @@ static void *key_chunk_alloc(struct Allocator *a, uint32_t nchunks)
         CHUNK_HDR(a, newi.v)->size4x = nchunks * 4 + 1;
         a->key_size -= nchunks;
         CHUNK_HDR(a, newi.v)->prev_size = a->key_size;
-        const uint32_t x = CHUNK_HDR(a, a->key.v)->size4x & 2;
+        uint32_t const x = CHUNK_HDR(a, a->key.v)->size4x & 2;
         CHUNK_HDR(a, a->key.v)->size4x = a->key_size * 4 | x;
         if (a->key_size < a->key_min) {
             a->key_min = a->key_size;
@@ -257,7 +257,7 @@ static void *key_chunk_alloc(struct Allocator *a, uint32_t nchunks)
 _Static_assert(CHUNK_SIZE == 8, "failed allocator precondition");
 #define COMPUTE_NUM_CHUNKS(nbytes) \
     ((nbytes) > 12 ? (CAST(uint32_t, nbytes) + 11) / 8 : 2)
-#define TOO_MANY_CHUNKS(nbytes) \
+#define TOO_MANY_CHUNKS(nbytes)  \
     ((nbytes) > SIZE_MAX - 11 || \
      ((nbytes) + 11) / CHUNK_SIZE > UINT32_MAX)
 
@@ -266,8 +266,9 @@ static void *unsafe_malloc(struct Heap *H, size_t nbytes)
 {
     struct Allocator *a = H->a;
     nbytes = PAW_ROUND_UP(nbytes);
-    if (TOO_MANY_CHUNKS(nbytes)) return NULL;
-    const uint32_t nchunks = COMPUTE_NUM_CHUNKS(nbytes);
+    if (TOO_MANY_CHUNKS(nbytes))
+        return NULL;
+    uint32_t const nchunks = COMPUTE_NUM_CHUNKS(nbytes);
     paw_assert(nchunks >= 2);
 
     // search for an exact fit
@@ -278,10 +279,10 @@ static void *unsafe_malloc(struct Heap *H, size_t nbytes)
             return checkout_chunk(a, id, nchunks);
         }
     } else {
-        const uint32_t hash = nchunks % NUM_HASH;
+        uint32_t const hash = nchunks % NUM_HASH;
         for (struct ChunkId id = a->hash[hash];
-                id.v != BAD_CHUNK;
-                id = CHUNK_LIST(a, id.v)->next) {
+             id.v != BAD_CHUNK;
+             id = CHUNK_LIST(a, id.v)->next) {
             if (CHUNK_HDR(a, id.v)->size4x / 4 == nchunks) {
                 unlink_from_list(a, id, &a->hash[hash]);
                 return checkout_chunk(a, id, nchunks);
@@ -294,8 +295,8 @@ static void *unsafe_malloc(struct Heap *H, size_t nbytes)
     }
 
     for (uint32_t to_free = nchunks * 16;
-            to_free < a->nchunks * 16;
-            to_free *= 2) {
+         to_free < a->nchunks * 16;
+         to_free *= 2) {
         if (a->key.v != BAD_CHUNK) {
             link_chunk(a, a->key);
             a->key.v = BAD_CHUNK;
@@ -321,14 +322,15 @@ static void *z_malloc(struct Heap *H, size_t nbytes)
 {
     // TODO: lock/unlock mutex
     void *ptr = unsafe_malloc(H, nbytes);
-    if (ptr != NULL) H->mem_hook(H->ud, ptr, 0, nbytes);
+    if (ptr != NULL)
+        H->mem_hook(H->ud, ptr, 0, nbytes);
     return ptr;
 }
 
 size_t pawZ_sizeof(void *ptr)
 {
     paw_assert(ptr != NULL);
-    const struct Chunk *b = ptr;
+    struct Chunk const *b = ptr;
     paw_assert((b[-1].hdr.size4x & 1) != 0);
     return (b[-1].hdr.size4x & ~3) * 2 - 4;
 }
@@ -337,11 +339,12 @@ size_t pawZ_sizeof(void *ptr)
 static void unsafe_free(struct Heap *H, void *ptr)
 {
     struct Chunk *b = ptr;
-    if (b == NULL) return;
+    if (b == NULL)
+        return;
 
     struct Allocator *a = H->a;
     paw_assert(b > a->chunks && b < &a->chunks[a->nchunks]);
-    const struct ChunkId i = {CAST(uint32_t, b - a->chunks)};
+    struct ChunkId const i = {CAST(uint32_t, b - a->chunks)};
     uint32_t nchunks = CHUNK_HDR(a, i.v)->size4x / 4;
     paw_assert((CHUNK_HDR(a, i.v)->size4x & 1) == 1);
     paw_assert(nchunks == CHUNK_HDR(a, i.v)->size4x / 4);
@@ -357,11 +360,11 @@ static void unsafe_free(struct Heap *H, void *ptr)
             a->key.v -= nchunks;
             a->key_size += nchunks;
             unlink_chunk(a, a->key);
-            const uint32_t x = CHUNK_HDR(a, a->key.v)->size4x & 2;
+            uint32_t const x = CHUNK_HDR(a, a->key.v)->size4x & 2;
             CHUNK_HDR(a, a->key.v)->size4x = a->key_size * 4 | x;
-            a->chunks[a->key.v + a->key_size-1].hdr.prev_size = a->key_size;
+            a->chunks[a->key.v + a->key_size - 1].hdr.prev_size = a->key_size;
         }
-        const uint32_t x = CHUNK_HDR(a, a->key.v)->size4x & 2;
+        uint32_t const x = CHUNK_HDR(a, a->key.v)->size4x & 2;
         while ((CHUNK_HDR(a, a->key.v + a->key_size)->size4x & 1) == 0) {
             unlink_chunk(a, (struct ChunkId){a->key.v + a->key_size});
             a->key_size += CHUNK_HDR(a, a->key.v + a->key_size)->size4x / 4;
@@ -382,10 +385,11 @@ static void z_free(struct Heap *H, void *ptr, size_t size)
 //       HEAP_META_SIZE
 static size_t compute_flag_count(size_t h)
 {
-    const size_t F = FLAGS_PER_BYTE;
-    const size_t m = HEAP_META_SIZE;
-    const size_t p = sizeof(void *);
-    if (h < m) return 0; // too small
+    size_t const F = FLAGS_PER_BYTE;
+    size_t const m = HEAP_META_SIZE;
+    size_t const p = sizeof(void *);
+    if (h < m)
+        return 0; // too small
     return F * (h - m) / (F * p + 1);
 }
 
@@ -394,8 +398,9 @@ int pawZ_init(paw_Env *P, void *heap, size_t heap_size, paw_Bool is_owned, paw_M
     paw_assert(heap != NULL);
     paw_assert(PAW_IS_ALIGNED(heap));
     paw_assert(PAW_IS_ALIGNED(heap_size));
-    const size_t nf = compute_flag_count(heap_size);
-    if (nf == 0) return PAW_EMEMORY;
+    size_t const nf = compute_flag_count(heap_size);
+    if (nf == 0)
+        return PAW_EMEMORY;
 
     // initialize heap manager
     struct Heap *H = heap;
@@ -410,7 +415,7 @@ int pawZ_init(paw_Env *P, void *heap, size_t heap_size, paw_Bool is_owned, paw_M
             .ud = ud,
             .P = P,
         };
-        const size_t flag_zone = (nf + FLAGS_PER_BYTE - 1) / FLAGS_PER_BYTE;
+        size_t const flag_zone = (nf + FLAGS_PER_BYTE - 1) / FLAGS_PER_BYTE;
         memset(H->flags, 0, flag_zone);
         SKIP_CHUNK(sizeof(struct Heap));
         SKIP_CHUNK(flag_zone);
@@ -420,7 +425,7 @@ int pawZ_init(paw_Env *P, void *heap, size_t heap_size, paw_Bool is_owned, paw_M
 #undef SKIP_CHUNK
     }
 
-    const size_t zf = nf * sizeof(void *);
+    size_t const zf = nf * sizeof(void *);
     paw_assert(heap_size >= zf);
     H->bounds[0] = CAST_UPTR(heap);
     H->bounds[1] = H->bounds[0] + zf;
@@ -429,7 +434,8 @@ int pawZ_init(paw_Env *P, void *heap, size_t heap_size, paw_Bool is_owned, paw_M
 
 void pawZ_uninit(paw_Env *P)
 {
-    if (P->H->is_owned) P->alloc(P->ud, P, P->heap_size, 0);
+    if (P->H->is_owned)
+        P->alloc(P->ud, P, P->heap_size, 0);
 }
 
 #define CHECK_UNUSED(H, ptr) paw_assert(!pawZ_get_flag(H, CAST_UPTR(ptr)))
@@ -443,7 +449,7 @@ static void *z_realloc(struct Heap *H, void *ptr, size_t size0, size_t size)
         z_free(H, ptr, size0);
         return NULL;
     }
-    const size_t old_size = pawZ_sizeof(ptr);
+    size_t const old_size = pawZ_sizeof(ptr);
     if (size <= old_size && size >= old_size - 128) {
         H->mem_hook(H->ud, ptr, old_size, size);
         return ptr;
@@ -465,7 +471,7 @@ void *pawZ_alloc(paw_Env *P, void *ptr, size_t size0, size_t size)
         z_free(H, ptr, size0);
         return NULL;
     }
-    if (ptr == NULL) return z_malloc(H, size);
+    if (ptr == NULL)
+        return z_malloc(H, size);
     return z_realloc(H, ptr, size0, size);
 }
-

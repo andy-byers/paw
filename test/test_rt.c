@@ -4,8 +4,8 @@
 
 #include "call.h"
 #include "env.h"
-#include "type.h"
 #include "test.h"
+#include "type.h"
 
 static struct {
     int tests;
@@ -18,7 +18,7 @@ static struct {
 static int handle_error(paw_Env *P, int status)
 {
     if (status != PAW_OK) {
-        const char *errmsg = paw_string(P, -1);
+        char const *errmsg = paw_string(P, -1);
         fprintf(stderr, "error: %s\n", errmsg);
         paw_pop(P, 1); // pop error message
         ++s_counters.failures;
@@ -27,7 +27,7 @@ static int handle_error(paw_Env *P, int status)
 }
 
 // Run all toplevel functions with names starting with 'test'
-static void run_tests(const char *name, struct TestAlloc *a, const char *prefix)
+static void run_tests(char const *name, struct TestAlloc *a, char const *prefix)
 {
     ++s_counters.modules;
     paw_Env *P = test_open(test_mem_hook, a, 0);
@@ -39,15 +39,12 @@ static void run_tests(const char *name, struct TestAlloc *a, const char *prefix)
 
     fprintf(stderr, "running %s.paw...\n", name);
 
-    const size_t length = strlen(prefix);
+    size_t const length = strlen(prefix);
     struct DefList defs = P->defs;
     for (int i = 0; i < defs.count; ++i) {
         struct Def *def = defs.data[i];
-        const String *name = def->hdr.name;
-        if (def->hdr.kind == DEF_FUNC
-                && def->func.self < 0
-                && name->length >= length
-                && memcmp(name->text, prefix, length) == 0) {
+        String const *name = def->hdr.name;
+        if (def->hdr.kind == DEF_FUNC && def->func.self < 0 && name->length >= length && memcmp(name->text, prefix, length) == 0) {
             // toplevel functions prefixed with 'test' must be public
             check(def->hdr.is_pub);
             fprintf(stderr, "    %s\n", def->func.name->text);
@@ -63,7 +60,7 @@ static void run_tests(const char *name, struct TestAlloc *a, const char *prefix)
     test_close(P, a);
 }
 
-static void script(const char *name)
+static void script(char const *name)
 {
     struct TestAlloc a = {0};
     run_tests(name, &a, "test");

@@ -32,8 +32,10 @@ static void free_type(paw_Env *P, struct Type *type)
 
 void pawY_uninit(paw_Env *P)
 {
-    for (int i = 0; i < P->types.count; ++i) free_type(P, Y_TYPE(P, i));
-    for (int i = 0; i < P->defs.count; ++i) free_def(P, Y_DEF(P, i));
+    for (int i = 0; i < P->types.count; ++i)
+        free_type(P, Y_TYPE(P, i));
+    for (int i = 0; i < P->defs.count; ++i)
+        free_def(P, Y_DEF(P, i));
     pawM_free_vec(P, P->types.data, P->types.alloc);
     pawM_free_vec(P, P->defs.data, P->defs.alloc);
     pawM_free_vec(P, P->vals.data, P->vals.alloc);
@@ -157,7 +159,8 @@ static int print_subtypes_(paw_Env *P, Buffer *buf, struct Type *type)
 {
     for (int i = 0; i < type->nsubtypes; ++i) {
         pawY_print_type(P, buf, type->subtypes[i]);
-        if (i == type->nsubtypes - 1) break;
+        if (i == type->nsubtypes - 1)
+            break;
         pawL_add_string(P, buf, ", ");
     }
     return type->nsubtypes;
@@ -178,15 +181,16 @@ static void print_func_type(paw_Env *P, Buffer *buf, struct FuncPtr *type)
 static void print_tuple_type(paw_Env *P, Buffer *buf, struct TupleType *type)
 {
     pawL_add_char(P, buf, '(');
-    const int n = PRINT_SUBTYPES(P, buf, type);
-    if (n == 1) pawL_add_char(P, buf, ',');
+    int const n = PRINT_SUBTYPES(P, buf, type);
+    if (n == 1)
+        pawL_add_char(P, buf, ',');
     pawL_add_char(P, buf, ')');
 }
 
 static void print_adt(paw_Env *P, Buffer *buf, struct Adt *type)
 {
     struct Def *def = Y_DEF(P, type->iid);
-    const String *name = def->hdr.name;
+    String const *name = def->hdr.name;
     struct Type *base = Y_CAST_TYPE(type);
     pawL_add_nstring(P, buf, name->text, name->length);
     if (base->nsubtypes > 0) {
@@ -221,7 +225,7 @@ void pawY_print_type(paw_Env *P, Buffer *buf, paw_Type code)
     }
 }
 
-static void add_string_with_len(paw_Env *P, Buffer *buf, const String *str)
+static void add_string_with_len(paw_Env *P, Buffer *buf, String const *str)
 {
     pawL_add_int(P, buf, PAW_CAST_INT(str->length));
     pawL_add_nstring(P, buf, str->text, str->length);
@@ -242,13 +246,13 @@ void pawY_mangle_finish_generic_args(paw_Env *P, Buffer *buf)
     pawL_add_char(P, buf, 'E');
 }
 
-void pawY_mangle_add_module(paw_Env *P, Buffer *buf, const String *name)
+void pawY_mangle_add_module(paw_Env *P, Buffer *buf, String const *name)
 {
     pawL_add_char(P, buf, 'N');
     add_string_with_len(P, buf, name);
 }
 
-void pawY_mangle_add_name(paw_Env *P, Buffer *buf, const String *name)
+void pawY_mangle_add_name(paw_Env *P, Buffer *buf, String const *name)
 {
     add_string_with_len(P, buf, name);
 }
@@ -277,7 +281,7 @@ void pawY_mangle_add_arg(paw_Env *P, Buffer *buf, paw_Type code)
                     pawL_add_char(P, buf, 's');
                     break;
                 default: {
-                    const struct Def *def = Y_DEF(P, type->adt.iid);
+                    struct Def const *def = Y_DEF(P, type->adt.iid);
                     add_string_with_len(P, buf, def->hdr.name);
                     if (type->nsubtypes > 0) {
                         pawY_mangle_start_generic_args(P, buf);
@@ -291,15 +295,14 @@ void pawY_mangle_add_arg(paw_Env *P, Buffer *buf, paw_Type code)
             break;
         case TYPE_FUNC_PTR:
         case TYPE_SIGNATURE: {
-            const struct FuncPtr func = type->fptr;
+            struct FuncPtr const func = type->fptr;
             pawL_add_char(P, buf, 'F');
             for (int i = 0; i < type->nsubtypes; ++i) {
                 pawY_mangle_add_arg(P, buf, type->subtypes[i]);
             }
             pawL_add_char(P, buf, 'E');
-            const struct Type *result = Y_TYPE(P, func.result);
-            if (result->hdr.kind != TYPE_ADT
-                    || result->adt.code != PAW_TUNIT) {
+            struct Type const *result = Y_TYPE(P, func.result);
+            if (result->hdr.kind != TYPE_ADT || result->adt.code != PAW_TUNIT) {
                 pawY_mangle_add_arg(P, buf, func.result);
             }
             break;
@@ -313,4 +316,3 @@ void pawY_mangle_add_arg(paw_Env *P, Buffer *buf, paw_Type code)
         }
     }
 }
-

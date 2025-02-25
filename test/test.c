@@ -20,11 +20,13 @@
 // Fill memory with alternating bits (each byte has value 0b10101010)
 static void trash_memory(void *ptr, size_t o, size_t n)
 {
-    volatile unsigned long long *ll = (unsigned long long *)((unsigned char *)ptr + o);
-    for (; n >= sizeof(*ll); n -= sizeof(*ll)) *ll++ = 0xAAAAAAAAAAAAAAAA;
+    unsigned long long volatile *ll = (unsigned long long *)((unsigned char *)ptr + o);
+    for (; n >= sizeof(*ll); n -= sizeof(*ll))
+        *ll++ = 0xAAAAAAAAAAAAAAAA;
 
-    volatile unsigned char *c = (unsigned char *)ll;
-    while (n-- > 0) *c++ = 0xAA;
+    unsigned char volatile *c = (unsigned char *)ll;
+    while (n-- > 0)
+        *c++ = 0xAA;
 }
 
 static void next_chunk(struct TestReader *rd)
@@ -34,7 +36,7 @@ static void next_chunk(struct TestReader *rd)
         rd->length = fread(rd->buf, 1, sizeof(rd->buf), rd->file);
         return;
     }
-    const size_t n = PAW_MIN(rd->ndata, READ_MAX);
+    size_t const n = PAW_MIN(rd->ndata, READ_MAX);
     memcpy(rd->buf, rd->data, n);
     rd->data += n;
     rd->ndata -= n;
@@ -42,7 +44,7 @@ static void next_chunk(struct TestReader *rd)
 }
 
 // Read a source file in small chunks to make sure the parser can work incrementally
-const char *test_reader(paw_Env *P, void *ud, size_t *size)
+char const *test_reader(paw_Env *P, void *ud, size_t *size)
 {
     PAW_UNUSED(P);
     struct TestReader *rd = ud;
@@ -52,15 +54,15 @@ const char *test_reader(paw_Env *P, void *ud, size_t *size)
             return NULL;
         }
     }
-    const size_t r = (size_t)rand();
+    size_t const r = (size_t)rand();
     *size = PAW_MAX(1, r % rd->length);
-    const char *ptr = rd->buf + rd->index;
+    char const *ptr = rd->buf + rd->index;
     rd->length -= *size;
     rd->index += *size;
     return ptr;
 }
 
-const char *test_pathname(const char *name)
+char const *test_pathname(char const *name)
 {
     static char s_buf[PAW_LENGTHOF(TEST_PREFIX) + 64];
     s_buf[0] = '\0'; // reset length
@@ -75,14 +77,15 @@ const char *test_pathname(const char *name)
 static size_t find_ptr(struct TestAlloc *a, void *ptr)
 {
     for (size_t i = 0; i < a->count; ++i) {
-        if (a->ptrs[i] == ptr) return i;
+        if (a->ptrs[i] == ptr)
+            return i;
     }
     PAW_UNREACHABLE();
 }
 
 static void remove_ptr(struct TestAlloc *a, void *ptr, size_t size)
 {
-    const size_t i = find_ptr(a, ptr);
+    size_t const i = find_ptr(a, ptr);
     check(a->sizes[i] == size);
     a->sizes[i] = a->sizes[a->count - 1];
     a->ptrs[i] = a->ptrs[a->count - 1];
@@ -99,7 +102,7 @@ static void add_ptr(struct TestAlloc *a, void *ptr, size_t size)
 
 static void modify_size(struct TestAlloc *a, void *ptr, size_t size)
 {
-    const size_t i = find_ptr(a, ptr);
+    size_t const i = find_ptr(a, ptr);
     a->sizes[i] = size;
 }
 #else
@@ -133,14 +136,17 @@ void test_mem_hook(void *ud, void *ptr, size_t size0, size_t size)
     struct TestAlloc *a = ud;
     if (ptr != NULL) {
         // trash newly-allocated memory, as well as memory about to be released
-        const size_t lower = PAW_MIN(size0, size);
-        const size_t upper = PAW_MAX(size0, size);
+        size_t const lower = PAW_MIN(size0, size);
+        size_t const upper = PAW_MAX(size0, size);
         trash_memory(ptr, lower, upper - lower);
     }
 
-    if (size0 == 0 && size != 0) add_ptr(a, ptr, size);
-    if (size0 != 0 && size == 0) remove_ptr(a, ptr, size0);
-    if (size0 != 0 && size != 0) modify_size(a, ptr, size);
+    if (size0 == 0 && size != 0)
+        add_ptr(a, ptr, size);
+    if (size0 != 0 && size == 0)
+        remove_ptr(a, ptr, size0);
+    if (size0 != 0 && size != 0)
+        modify_size(a, ptr, size);
 }
 
 paw_Env *test_open(paw_MemHook mem_hook, struct TestAlloc *a, size_t heap_size)
@@ -153,10 +159,10 @@ paw_Env *test_open(paw_MemHook mem_hook, struct TestAlloc *a, size_t heap_size)
     a->count = 0;
 
     return paw_open(&(struct paw_Options){
-                .heap_size = heap_size,
-                .mem_hook = mem_hook,
-                .ud = a,
-            });
+        .heap_size = heap_size,
+        .mem_hook = mem_hook,
+        .ud = a,
+    });
 }
 
 void test_close(paw_Env *P, struct TestAlloc *a)
@@ -189,22 +195,23 @@ static void check_ok(paw_Env *P, int status)
     }
 }
 
-int test_open_file(paw_Env *P, const char *name)
+int test_open_file(paw_Env *P, char const *name)
 {
-    const char *pathname = test_pathname(name);
-    if (P == NULL) return PAW_EMEMORY;
+    char const *pathname = test_pathname(name);
+    if (P == NULL)
+        return PAW_EMEMORY;
 
     FILE *file = fopen(pathname, "r");
     check(file);
     struct TestReader rd = {.file = file};
     rd.data = rd.buf;
 
-    const int rc = paw_load(P, test_reader, pathname, &rd);
+    int const rc = paw_load(P, test_reader, pathname, &rd);
     fclose(file);
     return rc;
 }
 
-int test_open_string(paw_Env *P, const char *source)
+int test_open_string(paw_Env *P, char const *source)
 {
     struct TestReader rd = {.data = source, .ndata = strlen(source)};
     return paw_load(P, test_reader, "<string>", &rd);
@@ -216,14 +223,14 @@ void test_recover(paw_Env *P, paw_Bool fatal)
     check(paw_get_count(P) >= 1);
 
     if (fatal) {
-        const char *s = paw_string(P, -1);
+        char const *s = paw_string(P, -1);
         fprintf(stderr, "%s\n", s);
         abort();
     }
     paw_pop(P, 1);
 }
 
-void test_script(const char *name, struct TestAlloc *a)
+void test_script(char const *name, struct TestAlloc *a)
 {
     paw_Env *P = test_open(test_mem_hook, a, 0);
     check_ok(P, test_open_file(P, name));
@@ -239,7 +246,7 @@ paw_Int test_randint(paw_Int min, paw_Int max)
 
 void test_randstr(char *str, int len)
 {
-    static const char kChars[] =
+    static char const kChars[] =
         "0123456789"
         "abcdefghijklmnopqrstuvwxyz"
         "ABCDEFGHIJKLMNOPQRSTUVWXYZ"

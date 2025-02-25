@@ -54,7 +54,7 @@ static struct Option {
 };
 // clang-format on
 
-static void info(const char *fmt, ...)
+static void info(char const *fmt, ...)
 {
     if (!s_opt.q) {
         va_list arg;
@@ -64,7 +64,7 @@ static void info(const char *fmt, ...)
     }
 }
 
-_Noreturn static void error(int status, const char *fmt, ...)
+_Noreturn static void error(int status, char const *fmt, ...)
 {
     if (!s_opt.q) {
         va_list arg;
@@ -80,15 +80,15 @@ _Noreturn static void error(int status, const char *fmt, ...)
 // Parse commandline options
 // Adjusts 'argv' to point to the first argument to the paw script, and
 // sets 'argc' to the number of such arguments.
-static void parse_options(int *pargc, const char ***pargv)
+static void parse_options(int *pargc, char const ***pargv)
 {
     int argc = *pargc;
-    const char **argv = *pargv;
+    char const **argv = *pargv;
     s_program_name = get_option(argc, argv);
     while (argc) {
         struct Option *state;
-        const char *option = get_option(argc, argv);
-        const char *a = option;
+        char const *option = get_option(argc, argv);
+        char const *a = option;
         if (a[0] != '-') {
             // Found a script pathname (the only non-option argument).
             s_pathname = option;
@@ -98,7 +98,7 @@ static void parse_options(int *pargc, const char ***pargv)
             break;
         }
         for (++a; *a; ++a) {
-            const char shr = *a;
+            char const shr = *a;
             for (size_t i = 0; i < PAW_COUNTOF(s_opt_info); ++i) {
                 state = &s_opt_info[i];
                 if (shr == state->name[0]) {
@@ -112,11 +112,11 @@ static void parse_options(int *pargc, const char ***pargv)
                     if (*pargc == 0) {
                         error(PAW_ERUNTIME, "missing argument for option '%s'\n", *(*pargv - 1));
                     }
-                    const char *arg = get_option(argc, argv);
+                    char const *arg = get_option(argc, argv);
                     if (state->integer != NULL) {
                         int value = 0;
-                        for (const char *p = arg; *p; ++p) {
-                            const int v = *p - '0';
+                        for (char const *p = arg; *p; ++p) {
+                            int const v = *p - '0';
                             if (v < 0 || 9 < v) {
                                 error(PAW_ERUNTIME, "invalid integer argument (%s)\n", arg);
                             }
@@ -164,8 +164,8 @@ static void handle_error(paw_Env *P, int status)
 static paw_Env *load_source(size_t heap_size)
 {
     paw_Env *P = paw_open(&(struct paw_Options){
-                .heap_size = heap_size,
-            });
+        .heap_size = heap_size,
+    });
     if (P == NULL) {
         error(PAW_EMEMORY, "not enough memory\n");
     }
@@ -194,15 +194,17 @@ static ValueId find_main(paw_Env *P)
     paw_mangle_add_name(P);
 
     struct paw_Item item;
-    const int status = paw_lookup_item(P, -1, &item);
-    if (status != PAW_OK) error(PAW_ERUNTIME, "unable to find entrypoint ('main' function)\n");
-    if (item.global_id < 0) error(PAW_ERUNTIME, "'main' is not a function\n"); // TODO: check signature, exclude constants
+    int const status = paw_lookup_item(P, -1, &item);
+    if (status != PAW_OK)
+        error(PAW_ERUNTIME, "unable to find entrypoint ('main' function)\n");
+    if (item.global_id < 0)
+        error(PAW_ERUNTIME, "'main' is not a function\n"); // TODO: check signature, exclude constants
     return item.global_id;
 }
 
-static void setup_stack(paw_Env *P, int argc, const char **argv)
+static void setup_stack(paw_Env *P, int argc, char const **argv)
 {
-    const int gid = find_main(P);
+    int const gid = find_main(P);
     paw_get_global(P, gid);
 
     paw_push_string(P, s_pathname);
@@ -212,7 +214,7 @@ static void setup_stack(paw_Env *P, int argc, const char **argv)
     paw_new_list(P, 1 + argc);
 }
 
-int main(int argc, const char **argv)
+int main(int argc, char const **argv)
 {
     parse_options(&argc, &argv);
     if (s_opt.h) {
@@ -220,14 +222,12 @@ int main(int argc, const char **argv)
         return 0;
     }
     paw_Env *P = load_source(s_opt.H
-            ? 1ULL << s_opt.H
-            : 0 /* use default */);
+                                 ? 1ULL << s_opt.H
+                                 : 0 /* use default */);
     setup_stack(P, argc, argv);
-    const int status = paw_call(P, 1);
+    int const status = paw_call(P, 1);
     handle_error(P, status);
 
     paw_close(P);
     return 0;
 }
-
-

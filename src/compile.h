@@ -55,7 +55,8 @@
 #define MAX_DECLS 10000
 
 // TODO: make 1 the first ID, let 0 be uninit. remove this and use {0} initialization
-#define NO_DECL (DeclId){MAX_MODULES, MAX_DECLS}
+#define NO_DECL \
+    (DeclId) { MAX_MODULES, MAX_DECLS }
 
 struct Hir;
 struct HirPath;
@@ -87,8 +88,8 @@ struct BodyMap;
 void *pawP_pool_alloc(paw_Env *P, struct Pool *pool, size_t size);
 void *pawP_alloc(struct Compiler *C, void *ptr, size_t size0, size_t size);
 
-String *pawP_scan_nstring(struct Compiler *C, Tuple *map, const char *s, size_t n);
-static inline String *pawP_scan_string(struct Compiler *C, Tuple *map, const char *s)
+String *pawP_scan_nstring(struct Compiler *C, Tuple *map, char const *s, size_t n);
+inline static String *pawP_scan_string(struct Compiler *C, Tuple *map, char const *s)
 {
     return pawP_scan_nstring(C, map, s, strlen(s));
 }
@@ -183,15 +184,14 @@ typedef unsigned long long BitChunk;
 DEFINE_LIST(struct Compiler, raw_bitset_, BitSet, BitChunk)
 
 struct BitSet *pawP_bitset_new(struct Compiler *C, int count);
-int pawP_bitset_count(const struct BitSet *bs);
-paw_Bool pawP_bitset_get(const struct BitSet *bs, int i);
+int pawP_bitset_count(struct BitSet const *bs);
+paw_Bool pawP_bitset_get(struct BitSet const *bs, int i);
 void pawP_bitset_set(struct BitSet *bs, int i);
 void pawP_bitset_set_range(struct BitSet *bs, int i, int j);
 void pawP_bitset_clear(struct BitSet *bs, int i);
 void pawP_bitset_clear_range(struct BitSet *bs, int i, int j);
-void pawP_bitset_and(struct BitSet *a, const struct BitSet *b);
-void pawP_bitset_or(struct BitSet *a, const struct BitSet *b);
-
+void pawP_bitset_and(struct BitSet *a, struct BitSet const *b);
+void pawP_bitset_or(struct BitSet *a, struct BitSet const *b);
 
 struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, struct MirIntervalList *intervals, struct MirLocationList *locations, int *pmax_reg);
 struct Mir *pawP_lower_hir_body(struct Compiler *C, struct HirFuncDecl *func);
@@ -214,7 +214,7 @@ struct IrType *pawP_generalize_self(struct Compiler *C, struct IrType *self, str
 // and 'decl' otherwise. We avoid recursively visiting the function body here, since
 // doing so might cause further instantiations due to the presence of recursion.
 // Function instance bodies are expanded in a separate pass.
-struct IrType *pawP_instantiate( struct Compiler *C, struct IrType *base, struct IrTypeList *types);
+struct IrType *pawP_instantiate(struct Compiler *C, struct IrType *base, struct IrTypeList *types);
 
 struct IrType *pawP_instantiate_method(struct Compiler *C, struct HirDecl *base, struct IrTypeList *types, struct HirDecl *method);
 
@@ -241,7 +241,7 @@ enum LookupKind {
 struct IrType *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirPath *path, enum LookupKind kind, paw_Bool is_annotation);
 struct IrType *pawP_lookup_trait(struct Compiler *C, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirPath *path);
 
-void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, const char *modname);
+void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, char const *modname);
 void pawP_teardown(paw_Env *P, struct DynamicMem *dm);
 
 struct Ast *pawP_parse_prelude(struct Compiler *C);
@@ -259,7 +259,7 @@ struct MonoResult pawP_monomorphize(struct Compiler *C, struct BodyMap *bodies);
 void pawP_resolve(struct Compiler *C);
 void pawP_codegen(struct Compiler *C);
 
-static inline void pawP_compile(struct Compiler *C, paw_Reader input, void *ud)
+inline static void pawP_compile(struct Compiler *C, paw_Reader input, void *ud)
 {
     pawP_parse_prelude(C);
 
@@ -279,12 +279,12 @@ static inline void pawP_compile(struct Compiler *C, paw_Reader input, void *ud)
     pawP_codegen(C);
 }
 
-static inline void pawP_pool_init(struct Compiler *C, struct Pool *pool)
+inline static void pawP_pool_init(struct Compiler *C, struct Pool *pool)
 {
     pawK_pool_init(ENV(C), pool, 512, 8);
 }
 
-static inline void pawP_pool_uninit(struct Compiler *C, struct Pool *pool)
+inline static void pawP_pool_uninit(struct Compiler *C, struct Pool *pool)
 {
     pawK_pool_uninit(ENV(C), pool);
 }
@@ -301,14 +301,13 @@ DEFINE_LIST(struct Compiler, pawP_item_list_, ItemList, struct ItemSlot)
 
 struct TraitOwnerList *pawP_get_trait_owners(struct Compiler *C, struct IrType *adt);
 
-
 // Generate code for data structures used during compilation
 
 // From https://stackoverflow.com/questions/8513911
 static paw_Uint p_hash_combine(paw_Uint seed, paw_Uint v)
 {
     // TODO: versions for other sizes of paw_Uint
-    const paw_Uint mul = 0x9DDFEA08EB382D69ULL;
+    paw_Uint const mul = 0x9DDFEA08EB382D69ULL;
     paw_Uint a = (v ^ seed) * mul;
     a ^= (a >> 47);
     paw_Uint b = (seed ^ a) * mul;
@@ -316,49 +315,49 @@ static paw_Uint p_hash_combine(paw_Uint seed, paw_Uint v)
     return b * mul;
 }
 
-static inline paw_Uint p_hash_def_id(struct Compiler *C, DefId did)
+inline static paw_Uint p_hash_def_id(struct Compiler *C, DefId did)
 {
     PAW_UNUSED(C);
     return did.value;
 }
 
-static inline paw_Bool p_equals_def_id(struct Compiler *C, DefId a, DefId b)
+inline static paw_Bool p_equals_def_id(struct Compiler *C, DefId a, DefId b)
 {
     PAW_UNUSED(C);
     return a.value == b.value;
 }
 
-static inline paw_Uint p_hash_decl_id(struct Compiler *C, DeclId did)
+inline static paw_Uint p_hash_decl_id(struct Compiler *C, DeclId did)
 {
     PAW_UNUSED(C);
     return did.value;
 }
 
-static inline paw_Bool p_equals_decl_id(struct Compiler *C, DeclId a, DeclId b)
+inline static paw_Bool p_equals_decl_id(struct Compiler *C, DeclId a, DeclId b)
 {
     PAW_UNUSED(C);
     return a.value == b.value;
 }
 
-static inline paw_Uint p_hash_ptr(struct Compiler *C, const void *p)
+inline static paw_Uint p_hash_ptr(struct Compiler *C, void const *p)
 {
     PAW_UNUSED(C);
     return CAST(paw_Uint, p);
 }
 
-static inline paw_Bool p_equals_ptr(struct Compiler *C, const void *a, const void *b)
+inline static paw_Bool p_equals_ptr(struct Compiler *C, void const *a, void const *b)
 {
     PAW_UNUSED(C);
     return a == b;
 }
 
-static inline paw_Uint p_value_hash(struct Compiler *C, Value v)
+inline static paw_Uint p_value_hash(struct Compiler *C, Value v)
 {
     PAW_UNUSED(C);
     return V_UINT(v);
 }
 
-static inline paw_Bool p_value_equals(struct Compiler *C, Value a, Value b)
+inline static paw_Bool p_value_equals(struct Compiler *C, Value a, Value b)
 {
     PAW_UNUSED(C);
     return V_UINT(a) == V_UINT(b);

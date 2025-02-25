@@ -9,11 +9,13 @@ static struct IrType *FoldType(struct IrTypeFolder *, struct IrType *);
 
 static struct IrTypeList *fold_type_list(struct IrTypeFolder *F, struct IrTypeList *list)
 {
-    if (list == NULL) return NULL;
+    if (list == NULL)
+        return NULL;
     struct Compiler *C = F->C;
     struct IrType *const *ptype;
     struct IrTypeList *result = pawIr_type_list_new(C);
-    K_LIST_FOREACH(list, ptype) {
+    K_LIST_FOREACH(list, ptype)
+    {
         struct IrType *type = FoldType(F, *ptype);
         K_LIST_PUSH(C, result, type);
     }
@@ -82,13 +84,17 @@ static void FoldDecl(struct HirVisitor *V, struct HirDecl *node)
 
 static struct IrType *FoldType(struct IrTypeFolder *F, struct IrType *node)
 {
-    if (node == NULL) return NULL;
-    if (F->FoldType != NULL) node = F->FoldType(F, node);
+    if (node == NULL)
+        return NULL;
+    if (F->FoldType != NULL)
+        node = F->FoldType(F, node);
 
     switch (IR_KINDOF(node)) {
-#define DEFINE_ACCEPT(X) case kIr##X: \
-            if (F->Fold##X == NULL) return node; \
-            return F->Fold##X(F, IrGet##X(node));
+#define DEFINE_ACCEPT(X)        \
+    case kIr##X:                \
+        if (F->Fold##X == NULL) \
+            return node;        \
+        return F->Fold##X(F, IrGet##X(node));
         IR_TYPE_LIST(DEFINE_ACCEPT)
 #undef DEFINE_ACCEPT
     }
@@ -135,23 +141,24 @@ void pawHir_type_folder_init(struct HirTypeFolder *F, struct Compiler *C, void *
     pawIr_type_folder_init(&F->F, C, F);
 }
 
-#define DEFINE_FOLDERS(name, T) \
-    void pawHir_fold_##name(struct HirTypeFolder *F, struct Hir##T *node) { \
-        paw_assert(node != NULL); \
-        F->line = node->hdr.line; \
-        pawHir_visit_##name(&F->V, node); \
-    } \
-    void pawHir_fold_##name##_list(struct HirTypeFolder *F, struct Hir##T##List *list) { \
-        for (int i = 0; i < list->count; ++i) { \
-            pawHir_visit_##name(&F->V, K_LIST_GET(list, i)); \
-        } \
+#define DEFINE_FOLDERS(name, T)                                                        \
+    void pawHir_fold_##name(struct HirTypeFolder *F, struct Hir##T *node)              \
+    {                                                                                  \
+        paw_assert(node != NULL);                                                      \
+        F->line = node->hdr.line;                                                      \
+        pawHir_visit_##name(&F->V, node);                                              \
+    }                                                                                  \
+    void pawHir_fold_##name##_list(struct HirTypeFolder *F, struct Hir##T##List *list) \
+    {                                                                                  \
+        for (int i = 0; i < list->count; ++i) {                                        \
+            pawHir_visit_##name(&F->V, K_LIST_GET(list, i));                           \
+        }                                                                              \
     }
 DEFINE_FOLDERS(expr, Expr)
 DEFINE_FOLDERS(decl, Decl)
 DEFINE_FOLDERS(stmt, Stmt)
 DEFINE_FOLDERS(pat, Pat)
 #undef DEFINE_FOLDERS
-
 
 static void FoldRegister(struct MirVisitor *V, MirRegister r)
 {
@@ -192,4 +199,3 @@ void pawMir_fold(struct MirTypeFolder *F, struct Mir *mir)
     }
     F->V.mir = outer;
 }
-

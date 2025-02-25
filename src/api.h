@@ -11,17 +11,17 @@
 // Public API checks based off those in Lua
 
 #if defined(PAW_USE_API_CHECK)
-# include <assert.h>
-# define API_CHECK(P, e, msg) assert(e)
+#include <assert.h>
+#define API_CHECK(P, e, msg) assert(e)
 #else
-# define API_CHECK(P, e, msg) ((void)(P), paw_assert((e) && msg))
+#define API_CHECK(P, e, msg) ((void)(P), paw_assert((e) && msg))
 #endif
 
 #define API_INCR_TOP(P, n) \
     ((P)->top.p += (n), API_CHECK(P, (P)->top.p <= (P)->cf->top.p, "stack overflow"))
 
 #define API_CHECK_PUSH(P, n) \
-       API_CHECK(P, (n) <= ((P)->cf->top.p - (P)->top.p), "stack is too large for push")
+    API_CHECK(P, (n) <= ((P)->cf->top.p - (P)->top.p), "stack is too large for push")
 
 #define API_CHECK_POP(P, n) \
     API_CHECK(P, (n) < (P)->top.p - (P)->cf->base.p, "stack is not large enough for pop")

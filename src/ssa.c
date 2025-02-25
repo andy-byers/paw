@@ -2,10 +2,10 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
+#include "ssa.h"
 #include "ir_type.h"
 #include "map.h"
 #include "mir.h"
-#include "ssa.h"
 
 struct SsaConverter {
     struct Compiler *C;
@@ -39,7 +39,7 @@ static void add_captured_reg(struct SsaConverter *S, MirRegister r1, MirRegister
 
 static MirRegister captured_reg(struct SsaConverter *S, MirRegister r)
 {
-    const MirRegister *pr = RegisterMap_get(S->C, S->capture, r);
+    MirRegister const *pr = RegisterMap_get(S->C, S->capture, r);
     return pr != NULL ? *pr : MIR_INVALID_REG;
 }
 
@@ -47,7 +47,7 @@ static MirRegister last_reg_name(struct SsaConverter *S, MirRegister r)
 {
     // NOTE: if a register is not in "S->rename", then all of its uses/defs are in
     //       unreachable basic blocks
-    const MirRegister *pr = RegisterMap_get(S->C, S->rename, r);
+    MirRegister const *pr = RegisterMap_get(S->C, S->rename, r);
     return pr != NULL ? *pr : MIR_INVALID_REG;
 }
 
@@ -56,7 +56,8 @@ static struct MirPhi *add_phi_node(struct SsaConverter *S, MirBlock b, MirRegist
     struct MirBlockData *bb = mir_bb_data(S->mir, b);
     for (int i = 0; i < bb->joins->count; ++i) {
         struct MirPhi *phi = MirGetPhi(K_LIST_GET(bb->joins, i));
-        if (MIR_REG_EQUALS(phi->output, r)) return phi; // already exists
+        if (MIR_REG_EQUALS(phi->output, r))
+            return phi; // already exists
     }
     struct IrType *type = mir_reg_data(S->mir, r)->type;
     struct MirRegisterList *inputs = pawMir_register_list_new(S->C);
@@ -65,7 +66,8 @@ static struct MirPhi *add_phi_node(struct SsaConverter *S, MirBlock b, MirRegist
 
     int ninputs = bb->predecessors->count;
     K_LIST_RESERVE(S->C, inputs, ninputs);
-    while (ninputs-- > 0) K_LIST_PUSH(S->C, inputs, MIR_INVALID_REG);
+    while (ninputs-- > 0)
+        K_LIST_PUSH(S->C, inputs, MIR_INVALID_REG);
 
     return MirGetPhi(phi);
 }
@@ -81,12 +83,12 @@ static void rename_input(struct SsaConverter *S, MirRegister *pr)
 
 static void rename_output(struct SsaConverter *S, MirRegister *pr, paw_Bool is_alloc)
 {
-    const MirRegister old = *pr;
+    MirRegister const old = *pr;
     struct MirRegisterList *names = K_LIST_GET(S->stacks, old.value);
     struct MirRegisterData *old_data = mir_reg_data(S->mir, old);
     K_LIST_PUSH(S->C, S->changes, old);
 
-    const int reg_id = S->registers->count;
+    int const reg_id = S->registers->count;
     struct MirRegisterData data = *old_data;
     // If the instruction that generated this register is an AllocLocal, and the
     // "MirRegisterData::is_uninit" flag is set, then the instruction refers to a local
@@ -101,7 +103,7 @@ static void rename_output(struct SsaConverter *S, MirRegister *pr, paw_Bool is_a
 
     if (old_data->is_captured) {
         struct MirRegisterData *reg = &K_LIST_GET(S->registers, pr->value);
-        const MirRegister capture = captured_reg(S, old);
+        MirRegister const capture = captured_reg(S, old);
         if (!MIR_REG_EXISTS(capture)) {
             add_captured_reg(S, old, *pr);
             reg->hint = *pr;
@@ -121,17 +123,21 @@ static void rename_instruction(struct SsaConverter *S, struct MirInstruction *in
 {
     MirRegister **ppr;
     struct MirRegisterPtrList *loads = pawMir_get_loads(S->C, instr);
-    K_LIST_FOREACH(loads, ppr) rename_input(S, *ppr);
+    K_LIST_FOREACH(loads, ppr)
+    rename_input(S, *ppr);
 
     MirRegister *pstore = pawMir_get_store(S->C, instr);
-    if (pstore != NULL) rename_output(S, pstore, MirIsAllocLocal(instr));
+    if (pstore != NULL)
+        rename_output(S, pstore, MirIsAllocLocal(instr));
 }
 
-static paw_Bool list_includes_block(const struct MirBlockList *blocks, MirBlock b)
+static paw_Bool list_includes_block(struct MirBlockList const *blocks, MirBlock b)
 {
-    const MirBlock *pb;
-    K_LIST_FOREACH(blocks, pb) {
-        if (MIR_BB_EQUALS(b, *pb)) return PAW_TRUE;
+    MirBlock const *pb;
+    K_LIST_FOREACH(blocks, pb)
+    {
+        if (MIR_BB_EQUALS(b, *pb))
+            return PAW_TRUE;
     }
     return PAW_FALSE;
 }
@@ -144,7 +150,7 @@ static struct MirBlockList *compute_live_in(struct SsaConverter *S, struct MirBl
 
 static void place_phi_nodes(struct SsaConverter *S)
 {
-    const int nblocks = S->mir->blocks->count;
+    int const nblocks = S->mir->blocks->count;
     // "has" indicates the last time a phi function was inserted for each
     // node, and "work" indicates the last time each block was added to
     // the worklist "W". Values are compared with the iteration count to
@@ -166,38 +172,43 @@ static void place_phi_nodes(struct SsaConverter *S)
     // "W" is the worklist of nodes to be processed
     struct MirBlockList *W = pawMir_block_list_new(S->C);
     for (int iterations = 1; UseDefMapIterator_is_valid(&iter);
-            ++iterations, UseDefMapIterator_next(&iter)) {
-        const MirRegister r = UseDefMapIterator_key(&iter);
+         ++iterations, UseDefMapIterator_next(&iter)) {
+        MirRegister const r = UseDefMapIterator_key(&iter);
         nstacks = PAW_MAX(nstacks, r.value + 1);
         // consider each assignment of the variable
         struct MirBlockList *defs = *UseDefMapIterator_valuep(&iter);
-        if (defs->count < 2) continue; // variable has single version
+        if (defs->count < 2)
+            continue; // variable has single version
 
-        const MirBlock *pb;
-        K_LIST_FOREACH(defs, pb) {
+        MirBlock const *pb;
+        K_LIST_FOREACH(defs, pb)
+        {
             K_LIST_SET(work, pb->value, iterations);
             K_LIST_PUSH(S->C, W, *pb);
         }
 
         // use the live in set for "r" to avoid adding dead phi functions, i.e. phi functions
         // for variables that are not live in at the join node
-        const struct MirBlockList *live_in = compute_live_in(S, defs, r);
+        struct MirBlockList const *live_in = compute_live_in(S, defs, r);
 
         while (W->count > 0) {
             // variable "r" has a definition in basic block "x"
-            const MirBlock x = K_LIST_LAST(W);
+            MirBlock const x = K_LIST_LAST(W);
             K_LIST_POP(W);
 
-            const struct MirBlockList *df = K_LIST_GET(S->df, x.value);
+            struct MirBlockList const *df = K_LIST_GET(S->df, x.value);
 
-            const MirBlock *y;
-            K_LIST_FOREACH(df, y) {
+            MirBlock const *y;
+            K_LIST_FOREACH(df, y)
+            {
                 // Each node "y" in the dominance frontier of "x" has a predecessor dominated
                 // by "x" (possibly "x" itself) but are not themselves dominated by "x", meaning
                 // there is a path to "y" that avoids "x". "y" requires a phi function to join
                 // the multiple flows of control.
-                if (K_LIST_GET(has, y->value) >= iterations) continue;
-                if (!list_includes_block(live_in, *y)) continue;
+                if (K_LIST_GET(has, y->value) >= iterations)
+                    continue;
+                if (!list_includes_block(live_in, *y))
+                    continue;
                 // place a trivial phi node "r = phi(NULL, .., NULL)" in basic block "y"
                 struct MirPhi *phi = add_phi_node(S, *y, r);
                 K_LIST_SET(has, y->value, iterations);
@@ -220,24 +231,28 @@ static void place_phi_nodes(struct SsaConverter *S)
 static void rename_vars(struct SsaConverter *S, MirBlock x)
 {
     struct MirBlockData *block = mir_bb_data(S->mir, x);
-    const int first_change = S->changes->count;
+    int const first_change = S->changes->count;
     struct MirInstruction **instr;
     MirBlock *y;
 
     // fix references to the old name
-    K_LIST_FOREACH(block->joins, instr) rename_join(S, *instr);
-    K_LIST_FOREACH(block->instructions, instr) rename_instruction(S, *instr);
+    K_LIST_FOREACH(block->joins, instr)
+    rename_join(S, *instr);
+    K_LIST_FOREACH(block->instructions, instr)
+    rename_instruction(S, *instr);
 
     // determine inputs to phi nodes
-    K_LIST_FOREACH(block->successors, y) {
-        const struct MirBlockData *data = mir_bb_data(S->mir, *y);
-        K_LIST_FOREACH(data->joins, instr) {
+    K_LIST_FOREACH(block->successors, y)
+    {
+        struct MirBlockData const *data = mir_bb_data(S->mir, *y);
+        K_LIST_FOREACH(data->joins, instr)
+        {
             // for each phi node in each successor of the current basic block
             struct MirPhi *phi = MirGetPhi(*instr);
-            const struct MirRegisterList *stack = K_LIST_GET(S->stacks, phi->var_id);
+            struct MirRegisterList const *stack = K_LIST_GET(S->stacks, phi->var_id);
             if (stack->count > 0) {
-                const int index = mir_which_pred(S->mir, *y, x);
-                const MirRegister input = K_LIST_LAST(stack);
+                int const index = mir_which_pred(S->mir, *y, x);
+                MirRegister const input = K_LIST_LAST(stack);
                 K_LIST_SET(phi->inputs, index, input);
             }
         }
@@ -245,13 +260,15 @@ static void rename_vars(struct SsaConverter *S, MirBlock x)
 
     int b;
     // recur on nodes immediately dominated by the current node
-    K_LIST_ENUMERATE(S->idom, b, y) {
-        if (MIR_BB_EQUALS(x, *y)) rename_vars(S, MIR_BB(b));
+    K_LIST_ENUMERATE(S->idom, b, y)
+    {
+        if (MIR_BB_EQUALS(x, *y))
+            rename_vars(S, MIR_BB(b));
     }
 
     // undo changes to the name stacks
     while (S->changes->count > first_change) {
-        const MirRegister r = K_LIST_LAST(S->changes);
+        MirRegister const r = K_LIST_LAST(S->changes);
         struct MirRegisterList *names = K_LIST_GET(S->stacks, r.value);
         K_LIST_POP(S->changes);
         K_LIST_POP(names);
@@ -264,7 +281,8 @@ static void ensure_init(struct SsaConverter *S, struct MirInstruction *instr)
     struct MirRegisterPtrList *ploads = pawMir_get_loads(S->C, instr);
 
     MirRegister *const *ppr;
-    K_LIST_FOREACH(ploads, ppr) {
+    K_LIST_FOREACH(ploads, ppr)
+    {
         struct MirRegisterData *data = mir_reg_data(S->mir, **ppr);
         if (data->is_uninit) {
             pawE_error(ENV(S->C), PAW_EVALUE, -1, "use before initialization");
@@ -276,13 +294,16 @@ static void fix_aux_info(struct SsaConverter *S, struct Mir *mir)
 {
     // check for use before initialization
     struct MirBlockData **pdata;
-    K_LIST_FOREACH(mir->blocks, pdata) {
+    K_LIST_FOREACH(mir->blocks, pdata)
+    {
         struct MirBlockData *data = *pdata;
         struct MirInstruction **pinstr;
-        K_LIST_FOREACH(data->joins, pinstr) {
+        K_LIST_FOREACH(data->joins, pinstr)
+        {
             ensure_init(S, *pinstr);
         }
-        K_LIST_FOREACH(data->instructions, pinstr) {
+        K_LIST_FOREACH(data->instructions, pinstr)
+        {
             struct MirInstruction *instr = *pinstr;
             ensure_init(S, *pinstr);
         }
@@ -300,7 +321,8 @@ static void fix_aux_info(struct SsaConverter *S, struct Mir *mir)
     // register as the first version, since closures expect their captures to remain
     // stationary until they are closed.
     K_LIST_FOREACH(mir->locals, pr) *pr = last_reg_name(S, *pr);
-    K_LIST_FOREACH(mir->captured, pci) pci->r = captured_reg(S, pci->r);
+    K_LIST_FOREACH(mir->captured, pci)
+    pci->r = captured_reg(S, pci->r);
 }
 
 // TODO
@@ -311,15 +333,18 @@ static void debug(struct Compiler *C, struct MirBlockList *idom, struct MirBucke
     int i;
     MirBlock *b;
     printf("idom = [\n");
-    K_LIST_ENUMERATE(idom, i, b) {
+    K_LIST_ENUMERATE(idom, i, b)
+    {
         printf("%d,\n", b->value);
     }
     printf("]\n");
     printf("df = [\n");
     struct MirBlockList **bl;
-    K_LIST_ENUMERATE(df, i, bl) {
+    K_LIST_ENUMERATE(df, i, bl)
+    {
         printf("[");
-        K_LIST_FOREACH(*bl, b) {
+        K_LIST_FOREACH(*bl, b)
+        {
             printf("%d, ", b->value);
         }
         printf("]\n");
@@ -362,4 +387,3 @@ void pawSsa_construct(struct Mir *mir)
     UseDefMap_delete(C, S.uses);
     UseDefMap_delete(C, S.defs);
 }
-

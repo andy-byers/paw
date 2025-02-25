@@ -6,9 +6,9 @@
 
 #include "paw.h"
 #include <assert.h>
+#include <limits.h>
 #include <stdarg.h>
 #include <string.h>
-#include <limits.h>
 
 #define paw_assert assert
 
@@ -41,11 +41,11 @@
 // Get the integer representation of a hex digit
 #define HEXVAL(c) (kHexValueTable[(uint8_t)(c)])
 
-static inline int paw_raw_cmp(void *x, size_t nx, void *y, size_t ny)
+inline static int paw_raw_cmp(void *x, size_t nx, void *y, size_t ny)
 {
     paw_assert(x != NULL && y != NULL);
-    const size_t min = PAW_MIN(nx, ny);
-    const int r = memcmp(x, y, min);
+    size_t const min = PAW_MIN(nx, ny);
+    int const r = memcmp(x, y, min);
     if (r == 0) {
         if (nx < ny) {
             return -1;
@@ -56,7 +56,7 @@ static inline int paw_raw_cmp(void *x, size_t nx, void *y, size_t ny)
     return r;
 }
 
-extern const uint8_t kCharClassTable[256];
-extern const uint8_t kHexValueTable[256];
+extern uint8_t const kCharClassTable[256];
+extern uint8_t const kHexValueTable[256];
 
 #endif // PAW_UTIL_H

@@ -2,10 +2,9 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 #include "prefix.h"
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 
-#include "value.h"
 #include "gc.h"
 #include "lib.h"
 #include "list.h"
@@ -14,40 +13,43 @@
 #include "os.h"
 #include "rt.h"
 #include "str.h"
+#include "value.h"
 
 #define ERROR(P, kind, ...) pawE_error(P, kind, -1, __VA_ARGS__)
 
-void pawV_index_error(paw_Env *P, paw_Int index, size_t length, const char *what)
+void pawV_index_error(paw_Env *P, paw_Int index, size_t length, char const *what)
 {
     pawR_error(P, PAW_EINDEX,
                "index %I is out of bounds for %s of length %I",
                index, what, PAW_CAST_INT(length));
 }
 
-static int check_suffix(const char *p, const char *base)
+static int check_suffix(char const *p, char const *base)
 {
     while (*p != '\0') {
-        if (!ISSPACE(*p++)) return -1;
+        if (!ISSPACE(*p++))
+            return -1;
     }
     // If one of the pawV_parse_* functions are called on a string like " ",
     // then all of the checks will pass, despite " " not being a valid number.
     // Make sure that doesn't happen.
-    if (p == base) return -1;
+    if (p == base)
+        return -1;
     return 0;
 }
 
 static void int_to_string(paw_Env *P, paw_Int i, Value *out)
 {
     char temp[32];
-    const paw_Bool negative = i < 0;
+    paw_Bool const negative = i < 0;
     char *end = temp + PAW_COUNTOF(temp);
     char *ptr = end - 1;
 
     // Don't call llabs(INT64_MIN). The result is undefined on 2s complement
     // systems.
     uint64_t u = i == INT64_MIN
-        ? UINT64_C(1) << 63
-        : CAST(uint64_t, llabs(i));
+                     ? UINT64_C(1) << 63
+                     : CAST(uint64_t, llabs(i));
     do {
         *ptr-- = CAST(char, u % 10 + '0');
         u /= 10;
@@ -64,12 +66,12 @@ static void int_to_string(paw_Env *P, paw_Int i, Value *out)
 static void float_to_string(paw_Env *P, paw_Float f, Value *out)
 {
     char temp[32];
-    const int n = snprintf(temp, PAW_COUNTOF(temp), "%.*g", 17, f);
+    int const n = snprintf(temp, PAW_COUNTOF(temp), "%.*g", 17, f);
     String *str = pawS_new_nstr(P, temp, CAST_SIZE(n));
     V_SET_OBJECT(out, str);
 }
 
-const char *pawV_to_string(paw_Env *P, Value *pv, paw_Type type, size_t *plength)
+char const *pawV_to_string(paw_Env *P, Value *pv, paw_Type type, size_t *plength)
 {
     switch (type) {
         case PAW_TSTR:
@@ -84,8 +86,9 @@ const char *pawV_to_string(paw_Env *P, Value *pv, paw_Type type, size_t *plength
             paw_assert(type == PAW_TBOOL);
             V_SET_OBJECT(pv, CACHED_STRING(P, V_TRUE(*pv) ? CSTR_TRUE : CSTR_FALSE));
     }
-    const String *s = V_STRING(*pv);
-    if (plength != NULL) *plength = s->length;
+    String const *s = V_STRING(*pv);
+    if (plength != NULL)
+        *plength = s->length;
     return s->text;
 }
 
@@ -139,8 +142,10 @@ void pawV_unlink_upvalue(UpValue *u)
 {
     UpValue *prev = u->open.prev;
     UpValue *next = u->open.next;
-    if (prev != NULL) prev->open.next = next;
-    if (next != NULL) next->open.prev = prev;
+    if (prev != NULL)
+        prev->open.next = next;
+    if (next != NULL)
+        next->open.prev = prev;
 }
 
 Tuple *pawV_new_tuple(paw_Env *P, int nelems)
@@ -195,7 +200,8 @@ void pawV_free_native(paw_Env *P, Native *f)
 
 Foreign *pawV_new_foreign(paw_Env *P, size_t size, int nfields, uint8_t flags, Value *out)
 {
-    if (size > PAW_SIZE_MAX) pawM_error(P);
+    if (size > PAW_SIZE_MAX)
+        pawM_error(P);
     Foreign *f = pawM_new_flex(P, Foreign, nfields, sizeof(f->fields[0]));
     pawG_add_object(P, CAST_OBJECT(f), VFOREIGN);
     V_SET_OBJECT(out, f); // anchor
@@ -237,14 +243,15 @@ static int char2base(char c)
 
 #define is_fp(c) (c == 'e' || c == 'E' || c == '.')
 
-#define SKIP_SPACES(p) \
-    while (ISSPACE(*(p))) ++(p);
+#define SKIP_SPACES(p)    \
+    while (ISSPACE(*(p))) \
+        ++(p);
 
-int pawV_parse_uint64(paw_Env *P, const char *text, int base, uint64_t *out)
+int pawV_parse_uint64(paw_Env *P, char const *text, int base, uint64_t *out)
 {
     int b = 10;
     SKIP_SPACES(text);
-    const char *p = text;
+    char const *p = text;
     if (p[0] == '0') {
         if ((b = char2base(p[1])) > 0) {
             if (base != 0 && b != base) {
@@ -261,7 +268,7 @@ int pawV_parse_uint64(paw_Env *P, const char *text, int base, uint64_t *out)
     base = b;
     uint64_t value = 0;
     for (; ISHEX(*p); ++p) {
-        const unsigned v = HEXVAL(*p);
+        unsigned const v = HEXVAL(*p);
         if (v >= CAST(unsigned, base)) {
             return PAW_ESYNTAX;
         } else if (value > (UINT64_MAX - v) / base) {
@@ -276,7 +283,7 @@ int pawV_parse_uint64(paw_Env *P, const char *text, int base, uint64_t *out)
     return PAW_OK;
 }
 
-static paw_Bool parse_negative(const char **ptext)
+static paw_Bool parse_negative(char const **ptext)
 {
     if (**ptext == '-') {
         ++*ptext;
@@ -286,38 +293,40 @@ static paw_Bool parse_negative(const char **ptext)
     return PAW_FALSE;
 }
 
-int pawV_parse_int(paw_Env *P, const char *text, int base, paw_Int *out)
+int pawV_parse_int(paw_Env *P, char const *text, int base, paw_Int *out)
 {
-    const char *original = text;
+    char const *original = text;
     SKIP_SPACES(text);
-    const paw_Bool negative = parse_negative(&text);
-    if (!ISHEX(*text)) return PAW_ESYNTAX;
+    paw_Bool const negative = parse_negative(&text);
+    if (!ISHEX(*text))
+        return PAW_ESYNTAX;
 
     uint64_t u;
-    const int status = pawV_parse_uint64(P, text, base, &u);
-    if (status != PAW_OK) return status;
+    int const status = pawV_parse_uint64(P, text, base, &u);
+    if (status != PAW_OK)
+        return status;
     if (u > CAST(uint64_t, PAW_INT_MAX) + negative) {
         return PAW_EOVERFLOW;
     }
     *out = negative
-        ? PAW_CAST_INT(-u)
-        : PAW_CAST_INT(u);
+               ? PAW_CAST_INT(-u)
+               : PAW_CAST_INT(u);
     return PAW_OK;
 }
 
-#define SKIP_DIGITS(p) \
+#define SKIP_DIGITS(p)      \
     while (ISDIGIT(*(p))) { \
-        ++(p); \
+        ++(p);              \
     }
 
-int pawV_parse_float(paw_Env *P, const char *text, paw_Float *out)
+int pawV_parse_float(paw_Env *P, char const *text, paw_Float *out)
 {
-    const char *original = text;
+    char const *original = text;
     SKIP_SPACES(text);
-    const paw_Bool negative = parse_negative(&text);
+    paw_Bool const negative = parse_negative(&text);
 
     // First, validate the number format.
-    const char *p = text;
+    char const *p = text;
     if (p[0] == '0' && p[1] != '\0' && !is_fp(p[1])) {
         return PAW_ESYNTAX;
     }
@@ -329,14 +338,14 @@ int pawV_parse_float(paw_Env *P, const char *text, paw_Float *out)
     }
     if (*p == 'e' || *p == 'E') {
         p += 1 + (p[1] == '+' || p[1] == '-');
-        if (!ISDIGIT(*p)) return PAW_ESYNTAX;
+        if (!ISDIGIT(*p))
+            return PAW_ESYNTAX;
         SKIP_DIGITS(p)
     }
     if (check_suffix(p, text)) {
         return PAW_ESYNTAX;
     }
-    const paw_Float f = strtod(text, NULL);
+    paw_Float const f = strtod(text, NULL);
     *out = negative ? -f : f;
     return PAW_OK;
 }
-

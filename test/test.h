@@ -5,64 +5,64 @@
 #ifndef PAW_TEST_TEST_H
 #define PAW_TEST_TEST_H
 
-#include "paw.h"
 #include "os.h"
+#include "paw.h"
 #include <stdio.h>
 #include <stdlib.h>
 
-#define TEST_SCRIPTS(X) \
-    X(basic) \
-    X(cfg) \
-    X(kprop) \
-    X(primitive) \
-    X(operator) \
-    X(block) \
-    X(loop) \
-    X(function) \
-    X(closure) \
-    X(float) \
-    X(integer) \
-    X(string) \
-    X(struct) \
-    X(tuple) \
-    X(enum) \
-    X(list) \
-    X(map) \
-    X(method) \
-    X(match) \
-    X(match_enum) \
-    X(match_poly_enum) \
-    X(match_or) \
-    X(match_guard) \
-    X(misc) \
-    X(import) \
-    X(trait) \
-    X(alias) \
-    X(poly_function) \
-    X(poly_struct) \
-    X(poly_enum) \
-    X(poly_method) \
-    X(poly_trait) \
-    X(builtin_trait) \
-    X(unit_struct) \
-    X(unit_variant) \
+#define TEST_SCRIPTS(X)  \
+    X(basic)             \
+    X(cfg)               \
+    X(kprop)             \
+    X(primitive)         \
+    X(operator)          \
+    X(block)             \
+    X(loop)              \
+    X(function)          \
+    X(closure)           \
+    X(float)             \
+    X(integer)           \
+    X(string)            \
+    X(struct)            \
+    X(tuple)             \
+    X(enum)              \
+    X(list)              \
+    X(map)               \
+    X(method)            \
+    X(match)             \
+    X(match_enum)        \
+    X(match_poly_enum)   \
+    X(match_or)          \
+    X(match_guard)       \
+    X(misc)              \
+    X(import)            \
+    X(trait)             \
+    X(alias)             \
+    X(poly_function)     \
+    X(poly_struct)       \
+    X(poly_enum)         \
+    X(poly_method)       \
+    X(poly_trait)        \
+    X(builtin_trait)     \
+    X(unit_struct)       \
+    X(unit_variant)      \
     X(infer_assoc_items) \
-    X(deferred_init) \
-    X(capture_upvalue) \
+    X(deferred_init)     \
+    X(capture_upvalue)   \
     X(close_loop_variable)
 
-#define check(x) \
-    do { \
-        if (!(x)) { \
+#define check(x)                                       \
+    do {                                               \
+        if (!(x)) {                                    \
             fprintf(stderr, "check failed: %s\n", #x); \
-            abort(); \
-        } \
+            abort();                                   \
+        }                                              \
     } while (0)
 
 #ifdef ENABLE_PTR_TRACKER
 
 // max number of outstanding allocations
-# define PTR_TRACKER_LIMIT (1 << 14)
+#define PTR_TRACKER_LIMIT (1 << 14)
 
 #endif // ENABLE_PTR_TRACKER
 
@@ -76,7 +76,7 @@ struct TestAlloc {
 
 struct TestReader {
     FILE *file;
-    const char *data;
+    char const *data;
     char buf[READ_MAX];
     size_t ndata;
     size_t length;
@@ -84,14 +84,14 @@ struct TestReader {
 };
 
 void test_mem_hook(void *ud, void *ptr, size_t size0, size_t size);
-const char *test_reader(paw_Env *X, void *ud, size_t *size);
-const char *test_pathname(const char *name);
+char const *test_reader(paw_Env *X, void *ud, size_t *size);
+char const *test_pathname(char const *name);
 
 paw_Env *test_open(paw_MemHook mem_hook, struct TestAlloc *state, size_t heap_size);
 void test_close(paw_Env *P, struct TestAlloc *a);
-int test_open_file(paw_Env *P, const char *pathname);
-int test_open_string(paw_Env *P, const char *source);
-void test_script(const char *name, struct TestAlloc *a);
+int test_open_file(paw_Env *P, char const *pathname);
+int test_open_string(paw_Env *P, char const *source);
+void test_script(char const *name, struct TestAlloc *a);
 void test_recover(paw_Env *X, paw_Bool fatal);
 
 // Return an integer in [min, max) (upper bound is exclusive)

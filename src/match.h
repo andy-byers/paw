@@ -92,6 +92,6 @@ DEFINE_LIST(struct Compiler, variable_list_, VariableList, struct MatchVar)
 DEFINE_LIST(struct Compiler, binding_list_, BindingList, struct Binding)
 DEFINE_LIST(struct Compiler, case_list_, CaseList, struct MatchCase)
 
-const char *pawP_print_decision(struct Compiler *C, struct Decision *dec);
+char const *pawP_print_decision(struct Compiler *C, struct Decision *dec);
 
 #endif // PAW_MATCH_H

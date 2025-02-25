@@ -6,11 +6,17 @@
 #include "env.h"
 
 #if __GNUC__
-# define CHECK(expr) if (!(expr)) __builtin_trap()
+#define CHECK(expr) \
+    if (!(expr))    \
+    __builtin_trap()
 #elif _MSC_VER
-# define CHECK(expr) if (!(expr)) __debugbreak()
+#define CHECK(expr) \
+    if (!(expr))    \
+    __debugbreak()
 #else
-# define CHECK(expr) if (!(expr)) *(volatile int *)NULL = 0
+#define CHECK(expr) \
+    if (!(expr))    \
+    *(volatile int *)NULL = 0
 #endif
 
 static struct TestSuite s_suites[MAX_TEST_SUITES];
@@ -22,7 +28,7 @@ struct TestSuite *pawT_list_suites(int *pcount)
     return s_suites;
 }
 
-void pawT_add_case(struct TestSuite *suite, const char *name, paw_Function test)
+void pawT_add_case(struct TestSuite *suite, char const *name, paw_Function test)
 {
     CHECK(s_count < MAX_TEST_CASES);
     suite->cases[suite->count++] = (struct TestCase){
@@ -31,7 +37,7 @@ void pawT_add_case(struct TestSuite *suite, const char *name, paw_Function test)
     };
 }
 
-struct TestSuite *pawT_add_suite(const char *name, paw_Function startup, paw_Function teardown)
+struct TestSuite *pawT_add_suite(char const *name, paw_Function startup, paw_Function teardown)
 {
     CHECK(s_count < MAX_TEST_SUITES);
     struct TestSuite *suite = &s_suites[s_count++];
@@ -43,4 +49,3 @@ struct TestSuite *pawT_add_suite(const char *name, paw_Function startup, paw_Fun
     };
     return suite;
 }
-

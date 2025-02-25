@@ -21,8 +21,9 @@ enum TypeKind {
     TYPE_TRAIT_OBJ,
 };
 
-#define TYPE_HEADER paw_Type code; \
-                    enum TypeKind kind : 8
+#define TYPE_HEADER \
+    paw_Type code;  \
+    enum TypeKind kind : 8
 struct TypeHeader {
     TYPE_HEADER;
 };
@@ -37,8 +38,9 @@ struct TraitObj {
     TYPE_HEADER;
 };
 
-#define FUNCTION_HEADER TYPE_HEADER; \
-                        paw_Type result
+#define FUNCTION_HEADER \
+    TYPE_HEADER;        \
+    paw_Type result
 struct FuncPtr {
     FUNCTION_HEADER;
 };
@@ -76,20 +78,20 @@ enum DefKind {
 };
 
 // TODO: use these instead, don't need to be part of a union though, keep them separate like in ir_type.h
-//struct FieldDef {
+// struct FieldDef {
 //    String *name;
 //    ItemId iid;
 //    paw_Bool is_pub : 1;
 //};
 //
-//struct VariantDef {
+// struct VariantDef {
 //    struct FieldList *fields;
 //    String *name;
 //    int discr;
 //    ItemId xdid;
 //};
 //
-//struct AdtDef {
+// struct AdtDef {
 //    struct VariantList *variants;
 //    String *name;
 //    ItemId iid;
@@ -97,12 +99,13 @@ enum DefKind {
 //    paw_Bool is_pub : 1;
 //};
 
-#define DEF_HEADER String *name; \
-                   String *modname; \
-                   paw_Type code; \
-                   ItemId iid; \
-                   enum DefKind kind : 7; \
-                   paw_Bool is_pub : 1
+#define DEF_HEADER         \
+    String *name;          \
+    String *modname;       \
+    paw_Type code;         \
+    ItemId iid;            \
+    enum DefKind kind : 7; \
+    paw_Bool is_pub : 1
 struct DefHeader {
     DEF_HEADER;
 };
@@ -176,8 +179,8 @@ struct Def *pawY_new_var_def(paw_Env *P);
 void pawY_uninit(paw_Env *P);
 
 void pawY_mangle_start(paw_Env *P, Buffer *buf);
-void pawY_mangle_add_module(paw_Env *P, Buffer *buf, const String *name);
-void pawY_mangle_add_name(paw_Env *P, Buffer *buf, const String *name);
+void pawY_mangle_add_module(paw_Env *P, Buffer *buf, String const *name);
+void pawY_mangle_add_name(paw_Env *P, Buffer *buf, String const *name);
 void pawY_mangle_start_generic_args(paw_Env *P, Buffer *buf);
 void pawY_mangle_finish_generic_args(paw_Env *P, Buffer *buf);
 void pawY_mangle_add_arg(paw_Env *P, Buffer *buf, paw_Type code);

@@ -6,8 +6,8 @@
 #include <setjmp.h>
 #include <stdlib.h>
 
-#include "call.h"
 #include "alloc.h"
+#include "call.h"
 #include "env.h"
 #include "gc.h"
 #include "map.h"
@@ -19,14 +19,17 @@
 
 // Lua-style error handling
 #define THROW(P, c) longjmp((c)->jmp, 1)
-#define TRY(P, c, a) if (!setjmp((c)->jmp)) {a}
+#define TRY(P, c, a)         \
+    if (!setjmp((c)->jmp)) { \
+        a                    \
+    }
 
 #define CFRAME_SIZE 512
 
 struct Jump {
     struct Jump *prev;
     jmp_buf jmp;
-    volatile int status;
+    int volatile status;
 };
 
 static void start_resize(paw_Env *P)
@@ -61,8 +64,9 @@ void pawC_stack_realloc(paw_Env *P, int n)
     _Static_assert(PAW_STACK_MAX <= INT_MAX, "stack limit is too large");
     paw_assert(n >= pawC_stklen(P)); // don't lose live values
 
-    const size_t alloc = PAW_MAX(CAST_SIZE(n), CFRAME_SIZE);
-    if (alloc > PAW_STACK_MAX) pawM_error(P);
+    size_t const alloc = PAW_MAX(CAST_SIZE(n), CFRAME_SIZE);
+    if (alloc > PAW_STACK_MAX)
+        pawM_error(P);
 
     // Turn off emergency GC and convert pointers into the stack into offsets
     // from P->stack.p.
@@ -87,7 +91,7 @@ void pawC_stack_realloc(paw_Env *P, int n)
 
 void pawC_stack_overflow(paw_Env *P)
 {
-     pawR_error(P, PAW_ERUNTIME, "stack overflow");
+    pawR_error(P, PAW_ERUNTIME, "stack overflow");
 }
 
 // When testing with PAW_STRESS > 1, allocate the exact amount of
@@ -95,20 +99,20 @@ void pawC_stack_overflow(paw_Env *P)
 // the stack to be reallocated. This option also causes pawC_stkdec
 // to trim the stack each time it is called.
 #if PAW_STRESS > 1
-# define NEXT_ALLOC(n0, dn) ((n0) + (dn))
+#define NEXT_ALLOC(n0, dn) ((n0) + (dn))
 #else
-# define NEXT_ALLOC(n0, dn) PAW_MAX((n0) + (dn), (n0) * 2)
+#define NEXT_ALLOC(n0, dn) PAW_MAX((n0) + (dn), (n0) * 2)
 #endif
 
 void pawC_stack_grow(paw_Env *P, int n)
 {
     paw_assert(n > 0);
     paw_assert(P->bound.p >= P->stack.p);
-    const int alloc = CAST(int, P->bound.p - P->stack.p);
+    int const alloc = CAST(int, P->bound.p - P->stack.p);
     pawC_stack_realloc(P, NEXT_ALLOC(alloc, n));
 }
 
-Value *pawC_pushns(paw_Env *P, const char *s, size_t n)
+Value *pawC_pushns(paw_Env *P, char const *s, size_t n)
 {
     Value *pv = pawC_push0(P);
     String *str = pawS_new_nstr(P, s, n);
@@ -116,7 +120,7 @@ Value *pawC_pushns(paw_Env *P, const char *s, size_t n)
     return pv;
 }
 
-Value *pawC_pushs(paw_Env *P, const char *s)
+Value *pawC_pushs(paw_Env *P, char const *s)
 {
     return pawC_pushns(P, s, strlen(s));
 }
@@ -156,7 +160,7 @@ static void call_return(paw_Env *P, StackPtr base, int nreturn)
 
 static void handle_ccall(paw_Env *P, StackPtr base, Native *ccall)
 {
-    const ptrdiff_t offset = SAVE_OFFSET(P, base);
+    ptrdiff_t const offset = SAVE_OFFSET(P, base);
     ENSURE_STACK(P, CFRAME_SIZE + STACK_EXTRA);
     base = RESTORE_POINTER(P, offset);
 
@@ -170,7 +174,7 @@ static void handle_ccall(paw_Env *P, StackPtr base, Native *ccall)
     cf->fn = NULL;
 
     // call the C function
-    const int nret = ccall->func(P);
+    int const nret = ccall->func(P);
     call_return(P, base, nret);
     pawR_close_upvalues(P, base);
 }
@@ -196,8 +200,8 @@ CallFrame *pawC_precall(paw_Env *P, StackPtr base, Object *callable, int argc)
         pawR_error(P, PAW_ERUNTIME, "too many arguments (expected %d)", p->argc);
     }
 
-    const ptrdiff_t offset = SAVE_OFFSET(P, base);
-    const int frame_size = p->max_stack + STACK_EXTRA;
+    ptrdiff_t const offset = SAVE_OFFSET(P, base);
+    int const frame_size = p->max_stack + STACK_EXTRA;
     ENSURE_STACK(P, frame_size);
     base = RESTORE_POINTER(P, offset);
 
@@ -242,8 +246,8 @@ int pawC_raw_try(paw_Env *P, Call call, void *arg)
 int pawC_try(paw_Env *P, Call call, void *arg)
 {
     CallFrame *cf = P->cf;
-    const ptrdiff_t top = SAVE_OFFSET(P, P->top.p);
-    const int status = pawC_raw_try(P, call, arg);
+    ptrdiff_t const top = SAVE_OFFSET(P, P->top.p);
+    int const status = pawC_raw_try(P, call, arg);
     if (status != PAW_OK) {
         paw_assert(top <= SAVE_OFFSET(P, P->top.p));
         StackPtr ptr = RESTORE_POINTER(P, top);
@@ -261,19 +265,21 @@ int pawC_try(paw_Env *P, Call call, void *arg)
 
 _Noreturn void pawC_throw(paw_Env *P, int error)
 {
-    if (P->jmp == NULL) abort();
+    if (P->jmp == NULL)
+        abort();
     P->jmp->status = error;
     THROW(P, P->jmp);
 }
 
 void pawC_init(paw_Env *P)
 {
-    const size_t frame_size = CFRAME_SIZE + STACK_EXTRA;
-    const size_t stack_size = frame_size * sizeof(Value);
+    size_t const frame_size = CFRAME_SIZE + STACK_EXTRA;
+    size_t const stack_size = frame_size * sizeof(Value);
     // allocate manually since normal error handling code requires the stack (this is the
     // stack allocation itself)
     Value *ptr = pawZ_alloc(P, NULL, 0, stack_size);
-    if (ptr == NULL) pawC_throw(P, PAW_EMEMORY);
+    if (ptr == NULL)
+        pawC_throw(P, PAW_EMEMORY);
     P->gc_bytes += stack_size; // account for memory
     P->bound.p = ptr + frame_size;
     P->stack.p = ptr;
@@ -292,4 +298,3 @@ void pawC_uninit(paw_Env *P)
     pawM_free_vec(P, P->stack.p, P->bound.p - P->stack.p);
     P->bound.p = P->top.p = P->stack.p = NULL; // clear GC root
 }
-

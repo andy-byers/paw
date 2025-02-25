@@ -34,7 +34,7 @@ static void print_bindings(struct Printer *P, struct BindingList *bindings)
         struct Binding b = K_LIST_GET(bindings, i);
         pawIr_print_type(P->C, b.var.type);
         PRINT_FORMAT(P, "Binding(#%d, %s: %s),\n", b.var.id,
-                b.name->text, paw_string(P->P, -1));
+                     b.name->text, paw_string(P->P, -1));
         paw_pop(P->P, 1);
     }
 }
@@ -118,7 +118,8 @@ static void print_cases(struct Printer *P, struct CaseList *cases)
 
 static void print_decision(struct Printer *P, struct Decision *dec)
 {
-    if (dec == NULL) return;
+    if (dec == NULL)
+        return;
     switch (dec->kind) {
         case DECISION_FAILURE:
             PRINT_LITERAL(P, "Failure");
@@ -162,7 +163,7 @@ static void print_decision(struct Printer *P, struct Decision *dec)
     }
 }
 
-const char *pawP_print_decision(struct Compiler *C, struct Decision *dec)
+char const *pawP_print_decision(struct Compiler *C, struct Decision *dec)
 {
     Buffer buf;
     paw_Env *P = ENV(C);

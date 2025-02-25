@@ -4,23 +4,24 @@
 //
 // test_oom.c: Heap exhaustion tests
 
-#include "test.h"
 #include "alloc.h"
 #include "call.h"
 #include "env.h"
+#include "test.h"
 #include "type.h"
 
 static int run_tests(paw_Env *P)
 {
     struct DefList defs = P->defs;
     for (int i = 0; i < defs.count; ++i) {
-        static const char kPrefix[] = "test_";
-        static const size_t kLength = PAW_LENGTHOF(kPrefix);
+        static char const kPrefix[] = "test_";
+        static size_t const kLength = PAW_LENGTHOF(kPrefix);
         struct Def *def = defs.data[i];
-        if (!def->hdr.is_pub) continue;
-        const String *name = def->hdr.name;
+        if (!def->hdr.is_pub)
+            continue;
+        String const *name = def->hdr.name;
         if (name->length >= kLength &&
-                memcmp(name->text, kPrefix, kLength) == 0) {
+            memcmp(name->text, kPrefix, kLength) == 0) {
             check(def->hdr.kind == DEF_FUNC);
             paw_push_zero(P, 1);
             P->top.p[-1] = *Y_PVAL(P, def->func.vid);
@@ -34,33 +35,35 @@ static void check_status(paw_Env *P, int status)
 {
     if (status != PAW_OK && status != PAW_EMEMORY) {
         check(paw_get_count(P) >= 1);
-        const char *s = paw_string(P, -1);
+        char const *s = paw_string(P, -1);
         fprintf(stderr, "%s\n", s);
         abort();
     }
 }
 
-static int run_script_or_chunk(const char *name_or_chunk, size_t heap_size, paw_Bool is_chunk)
+static int run_script_or_chunk(char const *name_or_chunk, size_t heap_size, paw_Bool is_chunk)
 {
     struct TestAlloc a = {0};
     paw_Env *P = test_open(test_mem_hook, &a, heap_size);
-    if (P == NULL) return PAW_EMEMORY;
+    if (P == NULL)
+        return PAW_EMEMORY;
 
     int status = is_chunk
-        ? test_open_string(P, name_or_chunk)
-        : test_open_file(P, name_or_chunk);
-    if (status == PAW_OK) status = run_tests(P);
+                     ? test_open_string(P, name_or_chunk)
+                     : test_open_file(P, name_or_chunk);
+    if (status == PAW_OK)
+        status = run_tests(P);
     check_status(P, status);
     test_close(P, &a);
     return status;
 }
 
 static size_t s_passing_heap_size;
-static const char *s_name_or_chunk;
+static char const *s_name_or_chunk;
 static paw_Bool s_is_chunk;
 static int s_count;
 
-static void start_oom(const char *name_or_chunk, paw_Bool is_chunk)
+static void start_oom(char const *name_or_chunk, paw_Bool is_chunk)
 {
     s_count = 0;
     s_passing_heap_size = 0;
@@ -70,7 +73,7 @@ static void start_oom(const char *name_or_chunk, paw_Bool is_chunk)
 
 static int run_one(size_t heap_size)
 {
-    const int status = run_script_or_chunk(s_name_or_chunk, heap_size, s_is_chunk);
+    int const status = run_script_or_chunk(s_name_or_chunk, heap_size, s_is_chunk);
     if (status != PAW_EMEMORY) {
         check(status == PAW_OK);
         s_passing_heap_size = heap_size;
@@ -85,14 +88,14 @@ static void finish_oom(void)
     check(s_count > 0);
 
     printf("[PASS] %s: passing_heap_size=%zu, oom_count=%d\n",
-            s_is_chunk ? "(chunk)" : s_name_or_chunk,
-            s_passing_heap_size, s_count);
+           s_is_chunk ? "(chunk)" : s_name_or_chunk,
+           s_passing_heap_size, s_count);
 }
 
-static void test_oom(const char *name_or_chunk, paw_Bool is_chunk)
+static void test_oom(char const *name_or_chunk, paw_Bool is_chunk)
 {
     // list of heap sizes that are too small
-    const size_t special_sizes[] = {
+    size_t const special_sizes[] = {
         1,
         sizeof(paw_Env),
         sizeof(struct Heap),
@@ -107,7 +110,7 @@ static void test_oom(const char *name_or_chunk, paw_Bool is_chunk)
     };
     start_oom(name_or_chunk, is_chunk);
     for (size_t i = 0; i < PAW_COUNTOF(special_sizes); ++i) {
-        const int status = run_one(special_sizes[i]);
+        int const status = run_one(special_sizes[i]);
         check(status == PAW_EMEMORY);
     }
     finish_oom();
@@ -125,35 +128,37 @@ static void test_oom(const char *name_or_chunk, paw_Bool is_chunk)
 static void test_call_frames(void)
 {
     test_oom(
-            "fn poly_recur<T>(_: T, n: int) {\n"
-            "    if n > 0 {                  \n"
-            "        poly_recur(_, n - 1);   \n"
-            "    }                           \n"
-            "}                               \n"
-            "fn recur(n: int) {   \n"
-            "    if n > 0 {       \n"
-            "        recur(n - 1);\n"
-            "    }                \n"
-            "}                    \n"
-            "pub fn test_call_frames() {\n"
-            "    recur(10);\n"
-            "    poly_recur(true, 100);\n"
-            "    poly_recur(1.0, 500);\n"
-            "}\n", PAW_TRUE);
+        "fn poly_recur<T>(_: T, n: int) {\n"
+        "    if n > 0 {                  \n"
+        "        poly_recur(_, n - 1);   \n"
+        "    }                           \n"
+        "}                               \n"
+        "fn recur(n: int) {   \n"
+        "    if n > 0 {       \n"
+        "        recur(n - 1);\n"
+        "    }                \n"
+        "}                    \n"
+        "pub fn test_call_frames() {\n"
+        "    recur(10);\n"
+        "    poly_recur(true, 100);\n"
+        "    poly_recur(1.0, 500);\n"
+        "}\n",
+        PAW_TRUE);
 }
 
 static void test_list_ops(void)
 {
     test_oom(
-            "fn push_n<T>(list: [T], value: T, n: int) {\n"
-            "    while #list < n {                      \n"
-            "        list.push(value);                  \n"
-            "    }                                      \n"
-            "}                                          \n"
-            "pub fn test_lists() {       \n"
-            "    let list = [];          \n"
-            "    push_n(list, 42, 10000);\n"
-            "}\n", PAW_TRUE);
+        "fn push_n<T>(list: [T], value: T, n: int) {\n"
+        "    while #list < n {                      \n"
+        "        list.push(value);                  \n"
+        "    }                                      \n"
+        "}                                          \n"
+        "pub fn test_lists() {       \n"
+        "    let list = [];          \n"
+        "    push_n(list, 42, 10000);\n"
+        "}\n",
+        PAW_TRUE);
 }
 
 int main(void)
@@ -165,4 +170,3 @@ int main(void)
     test_call_frames();
     test_list_ops();
 }
-

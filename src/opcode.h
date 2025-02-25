@@ -84,14 +84,9 @@
 #define GET_sBx(v) ((int)GET_Bx(v) - sBx_MAX)
 #define SET_sBx(v, s) SET_Bx(v, (int)(s) + sBx_MAX)
 
-#define CREATE_ABC(o, a, b, c) ((CAST(OpCode, o) << OP_OFFSET) \
-    | (CAST(OpCode, a) << A_OFFSET) \
-    | (CAST(OpCode, b) << B_OFFSET) \
-    | (CAST(OpCode, c) << C_OFFSET))
+#define CREATE_ABC(o, a, b, c) ((CAST(OpCode, o) << OP_OFFSET) | (CAST(OpCode, a) << A_OFFSET) | (CAST(OpCode, b) << B_OFFSET) | (CAST(OpCode, c) << C_OFFSET))
 
-#define CREATE_ABx(o, a, bc) ((CAST(OpCode, o) << OP_OFFSET) \
-    | (CAST(OpCode, a) << A_OFFSET) \
-    | (CAST(OpCode, bc) << Bx_OFFSET))
+#define CREATE_ABx(o, a, bc) ((CAST(OpCode, o) << OP_OFFSET) | (CAST(OpCode, a) << A_OFFSET) | (CAST(OpCode, bc) << Bx_OFFSET))
 
 typedef uint32_t OpCode;
 
@@ -106,96 +101,96 @@ typedef uint32_t OpCode;
 //
 // ORDER Op
 typedef enum Op { // arguments    description
-//                  -------------------------------------------------------------------------------
-OP_LOADSMI,//        A sBx        R[A] := sBx
-OP_LOADK,//          A Bx        R[A] := K[Bx]
+    //                  -------------------------------------------------------------------------------
+    OP_LOADSMI, //        A sBx        R[A] := sBx
+    OP_LOADK, //          A Bx        R[A] := K[Bx]
 
-OP_NOOP,//           -            -
-OP_MOVE,//           A B          R[A] := R[B]
-OP_CLOSE,//          A            close(A)
-OP_RETURN,//         A            return R[0]
-OP_CLOSURE,//        A Bx         R[A] := closure(P[Bx], R[A]..R[A+n])
-OP_CALL,//           A B          R[A] := R[A](R[A+1]..R[A+B+1])
+    OP_NOOP, //           -            -
+    OP_MOVE, //           A B          R[A] := R[B]
+    OP_CLOSE, //          A            close(A)
+    OP_RETURN, //         A            return R[0]
+    OP_CLOSURE, //        A Bx         R[A] := closure(P[Bx], R[A]..R[A+n])
+    OP_CALL, //           A B          R[A] := R[A](R[A+1]..R[A+B+1])
 
-OP_JUMP,//           sBx          pc += sBx
-OP_JUMPT,//          A sBx        if (R[A]) pc += sBx
-OP_JUMPF,//          A sBx        if (!R[A]) pc += sBx
+    OP_JUMP, //           sBx          pc += sBx
+    OP_JUMPT, //          A sBx        if (R[A]) pc += sBx
+    OP_JUMPF, //          A sBx        if (!R[A]) pc += sBx
 
-OP_GETGLOBAL,//      A Bx         R[A] := G[K[Bx]]       -
-OP_GETUPVALUE,//     A B          R[A] := Up[B]
-OP_SETUPVALUE,//     A B          Up[A] := R[B]
+    OP_GETGLOBAL, //      A Bx         R[A] := G[K[Bx]]       -
+    OP_GETUPVALUE, //     A B          R[A] := Up[B]
+    OP_SETUPVALUE, //     A B          Up[A] := R[B]
 
-OP_NEWTUPLE,//       A B          R[A] := (e1...eB)
-OP_NEWLIST,//        A B          R[A] := [e1...eB]
-OP_NEWMAP,//         A B          R[A] := [k1:v1...kB:vB]
+    OP_NEWTUPLE, //       A B          R[A] := (e1...eB)
+    OP_NEWLIST, //        A B          R[A] := [e1...eB]
+    OP_NEWMAP, //         A B          R[A] := [k1:v1...kB:vB]
 
-OP_TESTK,//          A B C        if (R[A] != K[B]) pc++
-OP_SWITCHINT,//      A B          if (R[A] != B) pc++
+    OP_TESTK, //          A B C        if (R[A] != K[B]) pc++
+    OP_SWITCHINT, //      A B          if (R[A] != B) pc++
 
-OP_IEQ,//            A B C        R[A] := R[B] == R[C]
-OP_INE,//            A B C        R[A] := R[B] != R[C]
-OP_ILT,//            A B C        R[A] := R[B] < R[C]
-OP_ILE,//            A B C        R[A] := R[B] <= R[C]
-OP_IGT,//            A B C        R[A] := R[B] > R[C]
-OP_IGE,//            A B C        R[A] := R[B] >= R[C]
-OP_NOT,//            A B          R[A] := !R[B]
-OP_INEG,//           A B          R[A] := -R[B]
-OP_IADD,//           A B C        R[A] := R[B] + R[C]
-OP_ISUB,//           A B C        R[A] := R[B] - R[C]
-OP_IMUL,//           A B C        R[A] := R[B] * R[C]
-OP_IDIV,//           A B C        R[A] := R[B] / R[C]
-OP_IMOD,//           A B C        R[A] := R[B] % R[C]
-OP_BNOT,//           A B          R[A] := ~R[B]
-OP_BAND,//           A B C        R[A] := R[B] & R[C]
-OP_BOR,//            A B C        R[A] := R[B] | R[C]
-OP_BXOR,//           A B C        R[A] := R[B] ^ R[C]
-OP_SHL,//            A B C        R[A] := R[B] << R[C]
-OP_SHR,//            A B C        R[A] := R[B] >> R[C]
+    OP_IEQ, //            A B C        R[A] := R[B] == R[C]
+    OP_INE, //            A B C        R[A] := R[B] != R[C]
+    OP_ILT, //            A B C        R[A] := R[B] < R[C]
+    OP_ILE, //            A B C        R[A] := R[B] <= R[C]
+    OP_IGT, //            A B C        R[A] := R[B] > R[C]
+    OP_IGE, //            A B C        R[A] := R[B] >= R[C]
+    OP_NOT, //            A B          R[A] := !R[B]
+    OP_INEG, //           A B          R[A] := -R[B]
+    OP_IADD, //           A B C        R[A] := R[B] + R[C]
+    OP_ISUB, //           A B C        R[A] := R[B] - R[C]
+    OP_IMUL, //           A B C        R[A] := R[B] * R[C]
+    OP_IDIV, //           A B C        R[A] := R[B] / R[C]
+    OP_IMOD, //           A B C        R[A] := R[B] % R[C]
+    OP_BNOT, //           A B          R[A] := ~R[B]
+    OP_BAND, //           A B C        R[A] := R[B] & R[C]
+    OP_BOR, //            A B C        R[A] := R[B] | R[C]
+    OP_BXOR, //           A B C        R[A] := R[B] ^ R[C]
+    OP_SHL, //            A B C        R[A] := R[B] << R[C]
+    OP_SHR, //            A B C        R[A] := R[B] >> R[C]
 
-OP_FEQ,//            A B C        R[A] := R[B] == R[C]
-OP_FNE,//            A B C        R[A] := R[B] != R[C]
-OP_FLT,//            A B C        R[A] := R[B] < R[C]
-OP_FLE,//            A B C        R[A] := R[B] >= R[C]
-OP_FGT,//            A B C        R[A] := R[B] > R[C]
-OP_FGE,//            A B C        R[A] := R[B] >= R[C]
-OP_FNEG,//           A B          R[A] := -R[B]
-OP_FADD,//           A B C        R[A] := R[B] + R[C]
-OP_FSUB,//           A B C        R[A] := R[B] - R[C]
-OP_FMUL,//           A B C        R[A] := R[B] * R[C]
-OP_FDIV,//           A B C        R[A] := R[B] / R[C]
-OP_FMOD,//           A B C        R[A] := R[B] % R[C]
+    OP_FEQ, //            A B C        R[A] := R[B] == R[C]
+    OP_FNE, //            A B C        R[A] := R[B] != R[C]
+    OP_FLT, //            A B C        R[A] := R[B] < R[C]
+    OP_FLE, //            A B C        R[A] := R[B] >= R[C]
+    OP_FGT, //            A B C        R[A] := R[B] > R[C]
+    OP_FGE, //            A B C        R[A] := R[B] >= R[C]
+    OP_FNEG, //           A B          R[A] := -R[B]
+    OP_FADD, //           A B C        R[A] := R[B] + R[C]
+    OP_FSUB, //           A B C        R[A] := R[B] - R[C]
+    OP_FMUL, //           A B C        R[A] := R[B] * R[C]
+    OP_FDIV, //           A B C        R[A] := R[B] / R[C]
+    OP_FMOD, //           A B C        R[A] := R[B] % R[C]
 
-OP_SEQ,//            A B C        R[A] := R[B] == R[C]
-OP_SNE,//            A B C        R[A] := R[B] != R[C]
-OP_SLT,//            A B C        R[A] := R[B] < R[C]
-OP_SLE,//            A B C        R[A] := R[B] <= R[C]
-OP_SGT,//            A B C        R[A] := R[B] > R[C]
-OP_SGE,//            A B C        R[A] := R[B] >= R[C]
-OP_SLENGTH,//        A B          R[A] := #R[B]
-OP_SCONCAT,//        A B C        R[A] := R[B] + R[C]
-OP_SGET,//           A B C        R[A] := R[B][R[C]]
-OP_SGETN,//          A B C        R[A] := R[B][R[C]:R[C+1]]
+    OP_SEQ, //            A B C        R[A] := R[B] == R[C]
+    OP_SNE, //            A B C        R[A] := R[B] != R[C]
+    OP_SLT, //            A B C        R[A] := R[B] < R[C]
+    OP_SLE, //            A B C        R[A] := R[B] <= R[C]
+    OP_SGT, //            A B C        R[A] := R[B] > R[C]
+    OP_SGE, //            A B C        R[A] := R[B] >= R[C]
+    OP_SLENGTH, //        A B          R[A] := #R[B]
+    OP_SCONCAT, //        A B C        R[A] := R[B] + R[C]
+    OP_SGET, //           A B C        R[A] := R[B][R[C]]
+    OP_SGETN, //          A B C        R[A] := R[B][R[C]:R[C+1]]
 
-OP_LLENGTH,//        A B          R[A] := #R[B]
-OP_LCONCAT,//        A B C        R[A] := R[B] + R[C]
-OP_LGET,//           A B C        R[A] := R[B][R[C]]
-OP_LSET,//           A B C        R[A][R[B]] := R[C]
-OP_LGETN,//          A B C        R[A] := R[B][R[C]:R[C+1]]
-OP_LSETN,//          A B C        R[A][R[B]:R[B+1]] := R[C]
+    OP_LLENGTH, //        A B          R[A] := #R[B]
+    OP_LCONCAT, //        A B C        R[A] := R[B] + R[C]
+    OP_LGET, //           A B C        R[A] := R[B][R[C]]
+    OP_LSET, //           A B C        R[A][R[B]] := R[C]
+    OP_LGETN, //          A B C        R[A] := R[B][R[C]:R[C+1]]
+    OP_LSETN, //          A B C        R[A][R[B]:R[B+1]] := R[C]
 
-OP_MLENGTH,//        A B          R[A] := #R[B]
-OP_MGET,//           A B C        R[A] := R[B][R[C]]
-OP_MSET,//           A B C        R[A][R[B]] := R[C]
+    OP_MLENGTH, //        A B          R[A] := #R[B]
+    OP_MGET, //           A B C        R[A] := R[B][R[C]]
+    OP_MSET, //           A B C        R[A][R[B]] := R[C]
 
-OP_GETFIELD,//       A B C        R[A] := R[B][C]
-OP_SETFIELD,//       A B C        R[A][B] := R[C]
-OP_GETDISCR,//       A B          R[A] := discr(R[B])
+    OP_GETFIELD, //       A B C        R[A] := R[B][C]
+    OP_SETFIELD, //       A B C        R[A][B] := R[C]
+    OP_GETDISCR, //       A B          R[A] := discr(R[B])
 
-OP_ICASTF,//         A B          R[A] := R[B] as float
-OP_FCASTI,//         A B          R[A] := R[B] as int
-OP_XCASTB,//         A B          R[A] := R[B] as bool
+    OP_ICASTF, //         A B          R[A] := R[B] as float
+    OP_FCASTI, //         A B          R[A] := R[B] as int
+    OP_XCASTB, //         A B          R[A] := R[B] as bool
 
-NOPCODES
+    NOPCODES
 } Op;
 
 _Static_assert(UPVALUE_MAX <= A_MAX, "UPVALUE_MAX is too large");

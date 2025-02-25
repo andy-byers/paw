@@ -17,7 +17,7 @@ void pawE_push_cstr(paw_Env *P, unsigned kind)
     API_INCR_TOP(P, 1);
 }
 
-_Noreturn void pawE_error(paw_Env *P, int code, int line, const char *fmt, ...)
+_Noreturn void pawE_error(paw_Env *P, int code, int line, char const *fmt, ...)
 {
     Buffer print;
     pawL_init_buffer(P, &print);
@@ -54,18 +54,17 @@ CallFrame *pawE_extend_cf(paw_Env *P, StackPtr top)
     return cf;
 }
 
-int pawE_locate(paw_Env *P, const String *name, paw_Bool only_pub)
+int pawE_locate(paw_Env *P, String const *name, paw_Bool only_pub)
 {
     paw_assert(name != NULL);
-    const struct DefList defs = P->defs;
+    struct DefList const defs = P->defs;
     for (int i = 0; i < defs.count; ++i) {
-        const struct Def *def = P->defs.data[i];
-        const String *query = def->hdr.kind == DEF_FUNC ? def->func.mangled_name :
-            def->hdr.kind == DEF_ADT ? def->adt.mangled_name : NULL;
+        struct Def const *def = P->defs.data[i];
+        String const *query = def->hdr.kind == DEF_FUNC ? def->func.mangled_name : def->hdr.kind == DEF_ADT ? def->adt.mangled_name
+                                                                                                            : NULL;
         if (pawS_eq(name, query) && def->hdr.is_pub >= only_pub) {
             return i;
         }
     }
     return -1;
 }
-

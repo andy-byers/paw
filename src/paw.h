@@ -34,7 +34,7 @@ typedef struct paw_Env paw_Env;
 
 typedef void *(*paw_Alloc)(void *ud, void *ptr, size_t size0, size_t size);
 typedef void (*paw_MemHook)(void *ud, void *ptr, size_t size0, size_t size);
-typedef const char *(*paw_Reader)(paw_Env *P, void *ud, size_t *size);
+typedef char const *(*paw_Reader)(paw_Env *P, void *ud, size_t *size);
 typedef int (*paw_Function)(paw_Env *P);
 
 struct paw_Options {
@@ -44,12 +44,12 @@ struct paw_Options {
     void *heap;
     void *ud;
 };
-paw_Env *paw_open(const struct paw_Options *o);
+paw_Env *paw_open(struct paw_Options const *o);
 void paw_close(paw_Env *P);
 
 paw_Alloc paw_get_allocator(paw_Env *P);
 void paw_set_allocator(paw_Env *P, paw_Alloc alloc, void *ud);
-size_t paw_bytes_used(const paw_Env *P);
+size_t paw_bytes_used(paw_Env const *P);
 
 #define PAW_OK 0
 #define PAW_EMEMORY 1
@@ -66,7 +66,7 @@ size_t paw_bytes_used(const paw_Env *P);
 
 // Load paw source code from the given 'input' source
 // Creates a function object containing the code and pushes it onto the stack.
-int paw_load(paw_Env *P, paw_Reader input, const char *name, void *ud);
+int paw_load(paw_Env *P, paw_Reader input, char const *name, void *ud);
 
 // Call a function with 'argc' arguments
 // The function object should be on the stack followed by the arguments, with
@@ -96,13 +96,12 @@ void paw_push_int(paw_Env *P, paw_Int i);
 void paw_push_float(paw_Env *P, paw_Float f);
 void paw_push_function(paw_Env *P, paw_Function fn, int n);
 void paw_push_rawptr(paw_Env *P, void *ptr);
-const char *paw_push_string(paw_Env *P, const char *s);
-const char *paw_push_nstring(paw_Env *P, const char *s, size_t n);
-const char *paw_push_fstring(paw_Env *P, const char *fmt, ...);
-const char *paw_push_vfstring(paw_Env *P, const char *fmt, va_list arg);
+char const *paw_push_string(paw_Env *P, char const *s);
+char const *paw_push_nstring(paw_Env *P, char const *s, size_t n);
+char const *paw_push_fstring(paw_Env *P, char const *fmt, ...);
+char const *paw_push_vfstring(paw_Env *P, char const *fmt, va_list arg);
 
 #define PAW_PUSH_LITERAL(P, s) paw_push_nstring(P, "" s, sizeof(s) - 1)
-
 
 //
 // Getters (stack -> C):
@@ -112,7 +111,7 @@ paw_Bool paw_bool(paw_Env *P, int index);
 paw_Int paw_int(paw_Env *P, int index);
 paw_Uint paw_uint(paw_Env *P, int index);
 paw_Float paw_float(paw_Env *P, int index);
-const char *paw_string(paw_Env *P, int index);
+char const *paw_string(paw_Env *P, int index);
 paw_Function paw_native(paw_Env *P, int index);
 void *paw_userdata(paw_Env *P, int index);
 void *paw_rawptr(paw_Env *P, int index);
@@ -131,7 +130,6 @@ void paw_str_concat(paw_Env *P, int count);
 void paw_str_get(paw_Env *P, int index);
 void paw_str_getn(paw_Env *P, int index);
 
-
 // Initializer for iterator state variables
 #define PAW_ITER_INIT PAW_CAST_INT(-1)
 
@@ -143,37 +141,34 @@ void paw_list_getn(paw_Env *P, int index);
 void paw_list_setn(paw_Env *P, int index);
 paw_Bool paw_list_next(paw_Env *P, int index);
 
-
 void paw_map_length(paw_Env *P, int index);
 int paw_map_get(paw_Env *P, int index);
 void paw_map_set(paw_Env *P, int index);
 paw_Bool paw_map_next(paw_Env *P, int index);
 
-
-static inline paw_Int paw_str_rawlen(paw_Env *P, int index)
+inline static paw_Int paw_str_rawlen(paw_Env *P, int index)
 {
     paw_str_length(P, index);
-    const paw_Int n = paw_int(P, -1);
+    paw_Int const n = paw_int(P, -1);
     paw_pop(P, 1);
     return n;
 }
 
-static inline paw_Int paw_list_rawlen(paw_Env *P, int index)
+inline static paw_Int paw_list_rawlen(paw_Env *P, int index)
 {
     paw_list_length(P, index);
-    const paw_Int n = paw_int(P, -1);
+    paw_Int const n = paw_int(P, -1);
     paw_pop(P, 1);
     return n;
 }
 
-static inline paw_Int paw_map_rawlen(paw_Env *P, int index)
+inline static paw_Int paw_map_rawlen(paw_Env *P, int index)
 {
     paw_map_length(P, index);
-    const paw_Int n = paw_int(P, -1);
+    paw_Int const n = paw_int(P, -1);
     paw_pop(P, 1);
     return n;
 }
-
 
 void paw_mangle_start(paw_Env *P);
 void paw_mangle_add_module(paw_Env *P);
@@ -222,7 +217,7 @@ void paw_copy(paw_Env *P, int from, int to);
 // Move the value on top of the stack to the given index
 // Shifts elements including and above the target index up by 1 slot, increasing
 // the size of the stack by 1.
-static inline void paw_insert(paw_Env *P, int index)
+inline static void paw_insert(paw_Env *P, int index)
 {
     paw_rotate(P, index, 1);
 }
@@ -230,7 +225,7 @@ static inline void paw_insert(paw_Env *P, int index)
 // Remove the given value
 // Shifts elements above the value down by 1 slot, reducing the size of the stack
 // by 1.
-static inline void paw_remove(paw_Env *P, int index)
+inline static void paw_remove(paw_Env *P, int index)
 {
     paw_rotate(P, index, -1);
     paw_pop(P, 1);
@@ -238,13 +233,13 @@ static inline void paw_remove(paw_Env *P, int index)
 
 // Replace the given value with the top
 // Reduces the size of the stack by 1.
-static inline void paw_replace(paw_Env *P, int index)
+inline static void paw_replace(paw_Env *P, int index)
 {
     paw_copy(P, -1, index);
     paw_pop(P, 1);
 }
 
-const char *paw_int_to_string(paw_Env *P, int index, size_t *plen);
-const char *paw_float_to_string(paw_Env *P, int index, size_t *plen);
+char const *paw_int_to_string(paw_Env *P, int index, size_t *plen);
+char const *paw_float_to_string(paw_Env *P, int index, size_t *plen);
 
 #endif // PAW_PAW_H

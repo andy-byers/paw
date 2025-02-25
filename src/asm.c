@@ -36,7 +36,7 @@ static void dump_instruction_list(struct Printer *P, struct AsmList *list)
     }
 }
 
-static void dump_register(struct Printer *P, const char *name, struct AsmRegister r)
+static void dump_register(struct Printer *P, char const *name, struct AsmRegister r)
 {
     DUMP_FMT(P, "%s: r%d (%s)\n", name, r.id);
 }
@@ -173,12 +173,11 @@ static void dump_op(struct Printer *P, struct AsmOp *op)
     ++P->indent;
 }
 
-const char *pawP_dump_asm(struct Compiler *C, struct AsmList *ops)
+char const *pawP_dump_asm(struct Compiler *C, struct AsmList *ops)
 {
     Buffer buf;
     paw_Env *P = ENV(C);
     pawL_init_buffer(P, &buf);
-
 
     for (int i = 0; i < ops->count; ++i) {
         struct AsmOp op = K_LIST_GET(ops, i);
@@ -186,7 +185,8 @@ const char *pawP_dump_asm(struct Compiler *C, struct AsmList *ops)
                     .P = ENV(C),
                     .buf = &buf,
                     .C = C,
-                }, &op);
+                },
+                &op);
     }
 
     pawL_push_result(P, &buf);

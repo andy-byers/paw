@@ -31,9 +31,9 @@ void pawAst_free(struct Ast *ast)
     PAW_UNUSED(ast);
 }
 
-#define DEFINE_NODE_CONSTRUCTOR(name, T) \
-    struct T *pawAst_new_##name(struct Ast *ast) \
-    { \
+#define DEFINE_NODE_CONSTRUCTOR(name, T)                      \
+    struct T *pawAst_new_##name(struct Ast *ast)              \
+    {                                                         \
         return pawP_alloc(ast->C, NULL, 0, sizeof(struct T)); \
     }
 DEFINE_NODE_CONSTRUCTOR(decl, AstDecl)
@@ -76,35 +76,35 @@ static void dump_expr(Printer *P, struct AstExpr *e);
 static void dump_decl(Printer *P, struct AstDecl *d);
 static void dump_stmt(Printer *P, struct AstStmt *s);
 
-#define DEFINE_LIST_PRINTER(name, T) \
+#define DEFINE_LIST_PRINTER(name, T)                                 \
     static void dump_##name##_list(Printer *P, struct T##List *list, \
-                                   const char *name) \
-    { \
-        DUMP_FMT(P, "%s: {\n", name); \
-        ++P->indent; \
-        if (list != NULL) { \
-            DUMP_MSG(P, "" /* indent */); \
-            for (int i = 0; i < list->count; ++i) { \
-                dump_##name(P, list->data[i]); \
-            } \
-        } \
-        --P->indent; \
-        DUMP_MSG(P, "}\n"); \
+                                   const char *name)                 \
+    {                                                                \
+        DUMP_FMT(P, "%s: {\n", name);                                \
+        ++P->indent;                                                 \
+        if (list != NULL) {                                          \
+            DUMP_MSG(P, "" /* indent */);                            \
+            for (int i = 0; i < list->count; ++i) {                  \
+                dump_##name(P, list->data[i]);                       \
+            }                                                        \
+        }                                                            \
+        --P->indent;                                                 \
+        DUMP_MSG(P, "}\n");                                          \
     }
 DEFINE_LIST_PRINTER(expr, AstExpr)
 DEFINE_LIST_PRINTER(type, AstType)
 DEFINE_LIST_PRINTER(decl, AstDecl)
 DEFINE_LIST_PRINTER(stmt, AstStmt)
 
-#define DEFINE_KIND_PRINTER(name, T) \
-    static int print_##name##_kind(Printer *P, void *node) \
-    { \
-        if (node != NULL) { \
-            struct T *typed = node; \
+#define DEFINE_KIND_PRINTER(name, T)                                   \
+    static int print_##name##_kind(Printer *P, void *node)             \
+    {                                                                  \
+        if (node != NULL) {                                            \
+            struct T *typed = node;                                    \
             DUMP_FSTRING(P, "%s {\n", k##T##Names[AST_KINDOF(typed)]); \
-            return 0; \
-        } \
-        return -1; \
+            return 0;                                                  \
+        }                                                              \
+        return -1;                                                     \
     }
 DEFINE_KIND_PRINTER(expr, AstExpr)
 DEFINE_KIND_PRINTER(type, AstType)

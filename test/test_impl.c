@@ -2,12 +2,6 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
-#include <assert.h>
-#include <float.h>
-#include <inttypes.h>
-#include <math.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include "call.h"
 #include "code.h"
 #include "compile.h"
@@ -17,6 +11,12 @@
 #include "test.h"
 #include "util.h"
 #include "value.h"
+#include <assert.h>
+#include <float.h>
+#include <inttypes.h>
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 // Test the primitive value representations
 static void test_primitives(void)
@@ -76,29 +76,29 @@ static void map_free(paw_Env *P, Tuple *map)
 
 static paw_Int map_get(paw_Env *P, Tuple *map, paw_Int k)
 {
-    const Value key = {.i = k};
-    const Value *pvalue = pawMap_get(P, map, key);
+    Value const key = {.i = k};
+    Value const *pvalue = pawMap_get(P, map, key);
     paw_assert(pvalue != NULL);
     return pvalue->i;
 }
 
-static const paw_Int *map_try(paw_Env *P, Tuple *map, paw_Int k)
+static paw_Int const *map_try(paw_Env *P, Tuple *map, paw_Int k)
 {
-    const Value key = {.i = k};
-    const Value *pvalue = pawMap_get(P, map, key);
+    Value const key = {.i = k};
+    Value const *pvalue = pawMap_get(P, map, key);
     return pvalue ? &pvalue->i : NULL;
 }
 
 static void map_put(paw_Env *P, Tuple *map, paw_Int k, paw_Int v)
 {
-    const Value key = {.i = k};
-    const Value value = {.i = v};
+    Value const key = {.i = k};
+    Value const value = {.i = v};
     pawMap_insert(P, map, key, value);
 }
 
 static void map_del(paw_Env *P, Tuple *map, paw_Int k)
 {
-    const Value key = {.i = k};
+    Value const key = {.i = k};
     pawMap_remove(P, map, key);
 }
 
@@ -145,13 +145,13 @@ static void test_map_erase_2(paw_Env *P)
 {
     Tuple *m = map_new(P);
 
-    const int k0 = 1;
-    const int v0 = 42;
+    int const k0 = 1;
+    int const v0 = 42;
     map_put(P, m, k0, v0);
 
-    const int n = 14;
+    int const n = 14;
     for (int i = 0; i < n; ++i) {
-        const int k = k0 + i + 1;
+        int const k = k0 + i + 1;
         map_put(P, m, k, i);
         map_del(P, m, k);
     }
@@ -159,7 +159,7 @@ static void test_map_erase_2(paw_Env *P)
     check(v0 == map_get(P, m, k0));
 
     for (int i = 0; i < n; ++i) {
-        const int k = k0 + i + 1;
+        int const k = k0 + i + 1;
         check(NULL == map_try(P, m, k));
     }
 
@@ -171,16 +171,16 @@ static void test_map_ops(paw_Env *P)
     Tuple *m = map_new(P);
 
     // Add known integers for validation.
-    const paw_Int known[] = {-1, -2, -10, -20, -100, -200};
+    paw_Int const known[] = {-1, -2, -10, -20, -100, -200};
     for (size_t i = 0; i < PAW_COUNTOF(known); ++i) {
         map_put(P, m, known[i], known[i]);
     }
 
-    check(pawMap_length(m)  == PAW_COUNTOF(known));
+    check(pawMap_length(m) == PAW_COUNTOF(known));
 
     // Fill the map with nonnegative integers (may have repeats).
     for (int i = 0; i < N; ++i) {
-        const paw_Int ival = test_randint(0, 10000);
+        paw_Int const ival = test_randint(0, 10000);
         map_put(P, m, ival, ival);
     }
 
@@ -189,15 +189,16 @@ static void test_map_ops(paw_Env *P)
     // Erase all nonnegative integers.
     paw_Int itr = PAW_ITER_INIT;
     while (pawMap_iter(m, &itr)) {
-        const Value key = *pawMap_key(m, itr);
-        if (V_INT(key) >= 0) map_del(P, m, key.i);
+        Value const key = *pawMap_key(m, itr);
+        if (V_INT(key) >= 0)
+            map_del(P, m, key.i);
     }
 
     check(CAST_SIZE(pawMap_length(m)) <= PAW_COUNTOF(known));
 
     // Check known items.
     for (size_t i = 0; i < PAW_COUNTOF(known); ++i) {
-        const paw_Int value = map_get(P, m, known[i]);
+        paw_Int const value = map_get(P, m, known[i]);
         check(value == known[i]);
     }
 
@@ -206,20 +207,24 @@ static void test_map_ops(paw_Env *P)
 
 static void test_map_ops_2(paw_Env *P)
 {
-    const int nrounds = 10;
+    int const nrounds = 10;
     Tuple *m = map_new(P);
 
     for (int iter = 0; iter < nrounds; ++iter) {
-        const int start = iter * N;
-        for (int i = start; i < start + N; i += 1) map_put(P, m, i, i);
-        for (int i = start; i < start + N; i += 2) map_del(P, m, i);
+        int const start = iter * N;
+        for (int i = start; i < start + N; i += 1)
+            map_put(P, m, i, i);
+        for (int i = start; i < start + N; i += 2)
+            map_del(P, m, i);
     }
-    for (int i = 0; i < N; i += 1) map_put(P, m, i, i * 2);
-    for (int i = 0; i < N; i += 2) map_del(P, m, i);
+    for (int i = 0; i < N; i += 1)
+        map_put(P, m, i, i * 2);
+    for (int i = 0; i < N; i += 2)
+        map_del(P, m, i);
 
     for (int i = 0; i < nrounds * N; ++i) {
         if (i & 1) {
-            const int scale = i < N ? 2 : 1;
+            int const scale = i < N ? 2 : 1;
             check(map_get(P, m, i) == i * scale);
         } else {
             check(map_try(P, m, i) == NULL);
@@ -259,20 +264,20 @@ static void test_map_extend(paw_Env *P)
 static void test_strings(paw_Env *P)
 {
     paw_push_nstring(P, "fixed\0\1", 7);
-    const void *fixed = P->top.p[-1].p;
+    void const *fixed = P->top.p[-1].p;
 
     int total_words = 0;
-    const char data[] =
+    char const data[] =
         "abcdefghijklmnopqrstuvwxyz"
         "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     for (size_t wordlen = 1; wordlen < 26; ++wordlen) {
-        const size_t nwords = PAW_LENGTHOF(data) - wordlen;
+        size_t const nwords = PAW_LENGTHOF(data) - wordlen;
         for (size_t i = 0; i < nwords; ++i) {
             paw_push_nstring(P, data + i, wordlen);
             ++total_words;
         }
         if (total_words > 50) {
-            const int npop = total_words / 3;
+            int const npop = total_words / 3;
             total_words -= npop;
             paw_pop(P, npop);
         }
@@ -283,14 +288,14 @@ static void test_strings(paw_Env *P)
 
 static void test_stack(paw_Env *P)
 {
-    const int n = paw_get_count(P);
+    int const n = paw_get_count(P);
     paw_push_zero(P, 2);
     check(paw_get_count(P) == n + 2);
     check(paw_int(P, n) == 0);
     check(paw_int(P, n + 1) == 0);
 }
 
-static void driver(const char *name, void (*callback)(paw_Env *))
+static void driver(char const *name, void (*callback)(paw_Env *))
 {
     struct TestAlloc a = {0};
     fprintf(stderr, "running %s...\n", name);
@@ -300,7 +305,7 @@ static void driver(const char *name, void (*callback)(paw_Env *))
 }
 #define DRIVER(callback) driver(#callback, callback)
 
-static int parse_int(paw_Env *P, const char *text)
+static int parse_int(paw_Env *P, char const *text)
 {
     paw_Int i;
     return pawV_parse_int(P, text, 0, &i);
@@ -308,7 +313,7 @@ static int parse_int(paw_Env *P, const char *text)
 
 static void roundtrip_int(paw_Env *P, paw_Int i);
 
-static void pac_int_aux(paw_Env *P, const char *text, paw_Int result)
+static void pac_int_aux(paw_Env *P, char const *text, paw_Int result)
 {
     paw_Int i;
     check(PAW_OK == pawV_parse_int(P, text, 0, &i));
@@ -319,12 +324,12 @@ static void roundtrip_int(paw_Env *P, paw_Int i)
 {
     paw_push_int(P, i);
     paw_int_to_string(P, -1, NULL);
-    const char *str = paw_string(P, -1);
+    char const *str = paw_string(P, -1);
     pac_int_aux(P, ERASE_TYPE(str), i);
     paw_pop(P, 1);
 }
 
-static void parse_and_check_int(paw_Env *P, const char *text, paw_Int result)
+static void parse_and_check_int(paw_Env *P, char const *text, paw_Int result)
 {
     pac_int_aux(P, text, result);
     roundtrip_int(P, result);
@@ -360,13 +365,13 @@ static void test_parse_int(paw_Env *P)
     check(PAW_EVALUE == pawV_parse_int(P, "0x0", 10 /* wrong base */, &i));
 }
 
-static int parse_float(paw_Env *P, const char *text)
+static int parse_float(paw_Env *P, char const *text)
 {
     paw_Float f;
     return pawV_parse_float(P, text, &f);
 }
 
-static void pac_float_aux(paw_Env *P, const char *text, paw_Float result)
+static void pac_float_aux(paw_Env *P, char const *text, paw_Float result)
 {
     paw_Float f;
     check(PAW_OK == pawV_parse_float(P, text, &f));
@@ -377,12 +382,12 @@ static void roundtrip_float(paw_Env *P, paw_Float f)
 {
     paw_push_float(P, f);
     paw_float_to_string(P, -1, NULL);
-    const char *str = paw_string(P, -1);
+    char const *str = paw_string(P, -1);
     pac_float_aux(P, ERASE_TYPE(str), f);
     paw_pop(P, 1);
 }
 
-static void parse_and_check_float(paw_Env *P, const char *text, paw_Float result)
+static void parse_and_check_float(paw_Env *P, char const *text, paw_Float result)
 {
     pac_float_aux(P, text, result);
     roundtrip_float(P, result);
@@ -418,13 +423,11 @@ static void test_parse_float(paw_Env *P)
 static void test_immediates(void)
 {
     OpCode opcode;
-#define CHECK_BOUND(X, v) ( \
-            opcode = 0, \
-            SET_##X(&opcode, v) /* set immediate */, \
-            SET_OP(&opcode, 0) /* corrupt */, \
-            (v) == GET_##X(opcode) ? (void)0 : ( \
-                fprintf(stderr, "'%s' unrepresentable by operand '%s'\n", #v, #X), \
-                abort()))
+#define CHECK_BOUND(X, v) (                  \
+    opcode = 0,                              \
+    SET_##X(&opcode, v) /* set immediate */, \
+    SET_OP(&opcode, 0) /* corrupt */,        \
+    (v) == GET_##X(opcode) ? (void)0 : (fprintf(stderr, "'%s' unrepresentable by operand '%s'\n", #v, #X), abort()))
     CHECK_BOUND(sBx, sBx_MAX);
     CHECK_BOUND(sBx, -sBx_MAX);
     CHECK_BOUND(Bx, 0);
@@ -455,11 +458,9 @@ static void test_buffer(paw_Env *P)
     pawL_push_result(P, &buf);
 
     paw_push_string(P, "0123456789101112");
-   // TODO check(paw_str_rawcmp(P, -1) == 0);
+    // TODO check(paw_str_rawcmp(P, -1) == 0);
     paw_pop(P, 1);
 }
-
-
 
 paw_Bool int_equals(struct Compiler *C, paw_Int a, paw_Int b)
 {
@@ -470,11 +471,10 @@ paw_Bool int_equals(struct Compiler *C, paw_Int a, paw_Int b)
 paw_Uint int_hash(struct Compiler *C, paw_Int i)
 {
     PAW_UNUSED(C);
-    const paw_Uint u = CAST(paw_Uint, i);
+    paw_Uint const u = CAST(paw_Uint, i);
     return u;
 
     return u << 5 | u >> 5;
-
 }
 
 DEFINE_MAP(struct Compiler, TestMap, pawP_alloc, int_hash, int_equals, int, int)
@@ -482,7 +482,7 @@ DEFINE_MAP(struct Compiler, TestMap, pawP_alloc, int_hash, int_equals, int, int)
 void test_compiler_map(struct Compiler *C)
 {
     TestMap *map = TestMap_new(C);
-    const int n = 1024;
+    int const n = 1024;
 
     for (int i = 0; i < n; ++i) {
         TestMap_insert(C, map, i, i);
@@ -494,12 +494,15 @@ void test_compiler_map(struct Compiler *C)
     check(TestMap_length(map) == n);
 
     for (int i = 0; i < n; ++i) {
-        if (i % 2 == 0) TestMap_remove(C, map, i);
+        if (i % 2 == 0)
+            TestMap_remove(C, map, i);
     }
 
     for (int i = 0; i < n; ++i) {
-        if (i % 2 == 0) check(TestMap_get(C, map, i) == NULL);
-        else check(*TestMap_get(C, map, i) == i);
+        if (i % 2 == 0)
+            check(TestMap_get(C, map, i) == NULL);
+        else
+            check(*TestMap_get(C, map, i) == i);
     }
     check(TestMap_length(map) == n / 2);
 
@@ -516,7 +519,7 @@ DEFINE_MAP_ITERATOR(TestMap, int, int)
 void test_compiler_map_iterator(struct Compiler *C)
 {
     TestMap *map = TestMap_new(C);
-    const int n = 256;
+    int const n = 256;
 
     for (int i = 0; i < n; ++i) {
         TestMap_insert(C, map, i, i);
@@ -526,7 +529,7 @@ void test_compiler_map_iterator(struct Compiler *C)
 
     TestMapIterator_init(map, &iter);
     while (TestMapIterator_is_valid(&iter)) {
-        const int key = TestMapIterator_key(&iter);
+        int const key = TestMapIterator_key(&iter);
         int *pvalue = TestMapIterator_valuep(&iter);
         if (key % 2 == 0) {
             TestMapIterator_erase(&iter);
@@ -538,8 +541,8 @@ void test_compiler_map_iterator(struct Compiler *C)
 
     TestMapIterator_init(map, &iter);
     while (TestMapIterator_is_valid(&iter)) {
-        const int key = TestMapIterator_key(&iter);
-        const int value = *TestMapIterator_valuep(&iter);
+        int const key = TestMapIterator_key(&iter);
+        int const value = *TestMapIterator_valuep(&iter);
         check(key % 2 == 1);
         check(value == key * 2);
         TestMapIterator_next(&iter);
@@ -549,7 +552,7 @@ void test_compiler_map_iterator(struct Compiler *C)
     TestMap_delete(C, map);
 }
 
-void compiler_driver(const char *name, void (*callback)(struct Compiler *))
+void compiler_driver(char const *name, void (*callback)(struct Compiler *))
 {
     struct TestAlloc a = {0};
     fprintf(stderr, "running %s...\n", name);
@@ -564,7 +567,6 @@ void compiler_driver(const char *name, void (*callback)(struct Compiler *))
     test_close(P, &a);
 }
 #define COMPILER_DRIVER(callback) compiler_driver(#callback, callback)
-
 
 int main(void)
 {
@@ -587,5 +589,3 @@ int main(void)
     COMPILER_DRIVER(test_compiler_map_iterator);
     return 0;
 }
-
-

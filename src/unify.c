@@ -4,11 +4,11 @@
 //
 // unify.c: type unification module
 
+#include "unify.h"
 #include "compile.h"
 #include "env.h"
 #include "hir.h"
 #include "ir_type.h"
-#include "unify.h"
 
 #define ERROR(U, line, ...) pawE_error(ENV((U)->C), PAW_ETYPE, line, __VA_ARGS__)
 
@@ -26,7 +26,7 @@ typedef struct UnificationTable {
     int depth; // depth of binder
 } UnificationTable;
 
-static void overwrite_type(InferenceVar *ivar, const struct IrType *src)
+static void overwrite_type(InferenceVar *ivar, struct IrType const *src)
 {
     *ivar->type = *src;
 }
@@ -37,7 +37,7 @@ static InferenceVar *get_ivar(UnificationTable *table, int index)
     return table->ivars->data[index];
 }
 
-static void debug_log(struct Unifier *U, const char *what, struct IrType *a, struct IrType *b)
+static void debug_log(struct Unifier *U, char const *what, struct IrType *a, struct IrType *b)
 {
     paw_assert(a != NULL);
     paw_assert(b != NULL);
@@ -47,7 +47,7 @@ static void debug_log(struct Unifier *U, const char *what, struct IrType *a, str
     pawIr_print_type(U->C, a);
     pawIr_print_type(U->C, b);
     DLOG(U->C, "(unify) %s: %s = %s",
-            what, paw_string(P, -2), paw_string(P, -1));
+         what, paw_string(P, -2), paw_string(P, -1));
     paw_pop(P, 2);
 #else
     PAW_UNUSED(U);
@@ -81,9 +81,11 @@ static void check_occurs(struct Unifier *U, InferenceVar *ivar, struct IrType *t
         paw_assert(IrIsInfer(type));
         ERROR(U, -1, "encountered cyclic type");
     }
-    if (!IrIsAdt(type)) return;
+    if (!IrIsAdt(type))
+        return;
     struct IrAdt *adt = IrGetAdt(type);
-    if (adt->types == NULL) return;
+    if (adt->types == NULL)
+        return;
     for (int i = 0; i < adt->types->count; ++i) {
         struct IrType *subtype = K_LIST_GET(adt->types, i);
         check_occurs(U, ivar, subtype);
@@ -115,15 +117,16 @@ static void unify_var_var(struct Unifier *U, InferenceVar *a, InferenceVar *b)
         TYPE_ERROR(U->C, "trait bounds not satisfied");
     }
 
-    if (a != b) link_roots(a, b);
+    if (a != b)
+        link_roots(a, b);
 }
 
 static struct IrType *normalize_unknown(UnificationTable *table, struct IrType *type)
 {
     paw_assert(table->depth == IrGetInfer(type)->depth);
-    const int index = IrGetInfer(type)->index;
+    int const index = IrGetInfer(type)->index;
     InferenceVar *ivar = get_ivar(table, index);
-    const InferenceVar *root = find_root(ivar);
+    InferenceVar const *root = find_root(ivar);
     if (!IrIsInfer(root->type)) {
         paw_assert(ivar != root);
         overwrite_type(ivar, root->type);
@@ -133,7 +136,8 @@ static struct IrType *normalize_unknown(UnificationTable *table, struct IrType *
 
 static void normalize_list(UnificationTable *table, struct IrTypeList *list)
 {
-    if (list == NULL) return;
+    if (list == NULL)
+        return;
     for (int i = 0; i < list->count; ++i) {
         list->data[i] = pawU_normalize(table, list->data[i]);
     }
@@ -168,7 +172,8 @@ struct IrType *pawU_normalize(UnificationTable *table, struct IrType *type)
 static int unify_lists(struct Unifier *U, struct IrTypeList *a, struct IrTypeList *b)
 {
     paw_assert(a && b);
-    if (a->count != b->count) return -1;
+    if (a->count != b->count)
+        return -1;
     for (int i = 0; i < a->count; ++i) {
         if (U->action(U, a->data[i], b->data[i])) {
             return -1;
@@ -179,9 +184,12 @@ static int unify_lists(struct Unifier *U, struct IrTypeList *a, struct IrTypeLis
 
 static int unify_adt(struct Unifier *U, struct IrAdt *a, struct IrAdt *b)
 {
-    if (a->did.value != b->did.value) return -1;
-    if (!a->types != !b->types) return -1;
-    if (a->types == NULL) return 0;
+    if (a->did.value != b->did.value)
+        return -1;
+    if (!a->types != !b->types)
+        return -1;
+    if (a->types == NULL)
+        return 0;
     return unify_lists(U, a->types, b->types);
 }
 
@@ -192,23 +200,30 @@ static int unify_tuple(struct Unifier *U, struct IrTuple *a, struct IrTuple *b)
 
 static int unify_fptr(struct Unifier *U, struct IrFuncPtr *a, struct IrFuncPtr *b)
 {
-    if (unify_lists(U, a->params, b->params)) return -1;
+    if (unify_lists(U, a->params, b->params))
+        return -1;
     return U->action(U, a->result, b->result);
 }
 
 static int unify_generic(struct Unifier *U, struct IrGeneric *a, struct IrGeneric *b)
 {
-    if (a->did.value != b->did.value) return -1;
-    if (!a->bounds != !b->bounds) return -1;
-    if (a->bounds == NULL) return 0;
+    if (a->did.value != b->did.value)
+        return -1;
+    if (!a->bounds != !b->bounds)
+        return -1;
+    if (a->bounds == NULL)
+        return 0;
     return unify_lists(U, a->bounds, b->bounds);
 }
 
 static int unify_trait_obj(struct Unifier *U, struct IrTraitObj *a, struct IrTraitObj *b)
 {
-    if (a->did.value != b->did.value) return -1;
-    if (!a->types != !b->types) return -1;
-    if (a->types == NULL) return 0;
+    if (a->did.value != b->did.value)
+        return -1;
+    if (!a->types != !b->types)
+        return -1;
+    if (a->types == NULL)
+        return 0;
     return unify_lists(U, a->types, b->types);
 }
 
@@ -264,15 +279,16 @@ static int unify(struct Unifier *U, struct IrType *a, struct IrType *b)
 
 void pawU_unify(struct Unifier *U, struct IrType *a, struct IrType *b)
 {
-    const int rc = RUN_ACTION(U, a, b, unify);
-    if (rc == 0) return;
+    int const rc = RUN_ACTION(U, a, b, unify);
+    if (rc == 0)
+        return;
 
     pawIr_print_type(U->C, a);
     pawIr_print_type(U->C, b);
     ERROR(U, -1,
-            "incompatible types '%s' and '%s'",
-            paw_string(ENV(U->C), -2),
-            paw_string(ENV(U->C), -1));
+          "incompatible types '%s' and '%s'",
+          paw_string(ENV(U->C), -2),
+          paw_string(ENV(U->C), -1));
 }
 
 static int equate(struct Unifier *U, struct IrType *a, struct IrType *b)
@@ -295,7 +311,7 @@ struct IrType *pawU_new_unknown(struct Unifier *U, int line, struct IrTypeList *
 
     // NOTE: inference variables require a stable address, since they point to each other
     InferenceVar *ivar = pawP_alloc(U->C, NULL, 0, sizeof(InferenceVar));
-    const int index = table->ivars->count;
+    int const index = table->ivars->count;
     K_LIST_PUSH(U->C, table->ivars, ivar);
 
     struct IrType *type = pawIr_new_infer(U->C, table->depth, index, bounds);
@@ -308,9 +324,11 @@ struct IrTypeList *pawU_new_unknowns(struct Unifier *U, struct IrTypeList *types
 {
     struct IrType **ptype;
     struct IrTypeList *result = pawIr_type_list_new(U->C);
-    K_LIST_FOREACH(types, ptype) {
+    K_LIST_FOREACH(types, ptype)
+    {
         struct IrTypeList *bounds = IrIsGeneric(*ptype)
-            ? IrGetGeneric(*ptype)->bounds : NULL;
+                                        ? IrGetGeneric(*ptype)->bounds
+                                        : NULL;
         struct IrType *unknown = pawU_new_unknown(U, -1, bounds);
         K_LIST_PUSH(U->C, result, unknown);
     }
@@ -330,7 +348,7 @@ void pawU_enter_binder(struct Unifier *U)
 static void check_table(struct Unifier *U, UnificationTable *table)
 {
     for (int i = 0; i < table->ivars->count; ++i) {
-        const InferenceVar *var = get_ivar(table, i);
+        InferenceVar const *var = get_ivar(table, i);
         pawU_normalize(table, var->type);
         if (IrIsInfer(var->type)) {
             ERROR(U, -1, "unable to infer type");
@@ -350,11 +368,13 @@ paw_Bool pawU_list_equals(struct Unifier *U, struct IrTypeList *lhs, struct IrTy
     paw_assert(!lhs == !rhs);
     paw_assert(lhs == NULL || lhs->count == rhs->count);
 
-    if (lhs == NULL) return PAW_TRUE;
+    if (lhs == NULL)
+        return PAW_TRUE;
     for (int i = 0; i < lhs->count; ++i) {
         struct IrType *a = K_LIST_GET(lhs, i);
         struct IrType *b = K_LIST_GET(rhs, i);
-        if (!pawU_equals(U, a, b)) return PAW_FALSE;
+        if (!pawU_equals(U, a, b))
+            return PAW_FALSE;
     }
     return PAW_TRUE;
 }
@@ -365,14 +385,16 @@ static paw_Bool are_lists_compat(struct Unifier *U, struct IrTypeList *a, struct
     for (int i = 0; i < a->count; ++i) {
         struct IrType *x = K_LIST_GET(a, i);
         struct IrType *y = K_LIST_GET(b, i);
-        if (!pawU_is_compat(U, x, y)) return PAW_FALSE;
+        if (!pawU_is_compat(U, x, y))
+            return PAW_FALSE;
     }
     return PAW_TRUE;
 }
 
 paw_Bool pawU_is_compat(struct Unifier *U, struct IrType *a, struct IrType *b)
 {
-    if (pawU_equals(U, a, b)) return PAW_TRUE;
+    if (pawU_equals(U, a, b))
+        return PAW_TRUE;
     if (IrIsGeneric(a)) {
         struct IrTypeList *bounds = IrGetGeneric(a)->bounds;
         return pawP_satisfies_bounds(U->C, b, bounds);
@@ -380,22 +402,24 @@ paw_Bool pawU_is_compat(struct Unifier *U, struct IrType *a, struct IrType *b)
         struct IrTypeList *bounds = IrGetInfer(b)->bounds;
         return pawP_satisfies_bounds(U->C, a, bounds);
     }
-    if (IR_KINDOF(a) != IR_KINDOF(b)) return PAW_FALSE;
+    if (IR_KINDOF(a) != IR_KINDOF(b))
+        return PAW_FALSE;
 
     switch (IR_KINDOF(a)) {
         case kIrTuple:
-            if (!IrIsTuple(b)) return PAW_FALSE;
+            if (!IrIsTuple(b))
+                return PAW_FALSE;
             return are_lists_compat(U, IrGetTuple(a)->elems, IrGetTuple(b)->elems);
         case kIrFuncPtr:
         case kIrSignature:
             return pawU_is_compat(U, IR_FPTR(a)->result, IR_FPTR(b)->result) &&
-                are_lists_compat(U, IR_FPTR(a)->params, IR_FPTR(b)->params);
+                   are_lists_compat(U, IR_FPTR(a)->params, IR_FPTR(b)->params);
         case kIrAdt:
             return IrGetAdt(a)->did.value == IrGetAdt(b)->did.value &&
-                are_lists_compat(U, IrGetAdt(a)->types, IrGetAdt(b)->types);
+                   are_lists_compat(U, IrGetAdt(a)->types, IrGetAdt(b)->types);
         case kIrTraitObj:
             return IrGetTraitObj(a)->did.value == IrGetTraitObj(b)->did.value &&
-                are_lists_compat(U, IrGetTraitObj(a)->types, IrGetTraitObj(b)->types);
+                   are_lists_compat(U, IrGetTraitObj(a)->types, IrGetTraitObj(b)->types);
         default:
             return a == b;
     }

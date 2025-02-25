@@ -16,24 +16,24 @@ typedef struct AsmJumpId {
 } AsmJumpId;
 
 #define ASM_OP_LIST(X) \
-    X(Move) \
-    X(Upvalue) \
-    X(Global) \
-    X(SetUpvalue) \
-    X(Constant) \
-    X(Aggregate) \
-    X(Container) \
-    X(Call) \
-    X(Cast) \
-    X(Closure) \
-    X(GetElement) \
-    X(SetElement) \
-    X(GetField) \
-    X(SetField) \
-    X(UnaryOp) \
-    X(BinaryOp) \
-    X(Return) \
-    X(JumpCond) \
+    X(Move)            \
+    X(Upvalue)         \
+    X(Global)          \
+    X(SetUpvalue)      \
+    X(Constant)        \
+    X(Aggregate)       \
+    X(Container)       \
+    X(Call)            \
+    X(Cast)            \
+    X(Closure)         \
+    X(GetElement)      \
+    X(SetElement)      \
+    X(GetField)        \
+    X(SetField)        \
+    X(UnaryOp)         \
+    X(BinaryOp)        \
+    X(Return)          \
+    X(JumpCond)        \
     X(Jump)
 
 enum AsmOpKind {
@@ -180,25 +180,27 @@ struct AsmOp {
     union {
         struct AsmOpHeader hdr;
 #define DEFINE_OP(X) struct Asm##X X##_;
-    ASM_OP_LIST(DEFINE_OP)
+        ASM_OP_LIST(DEFINE_OP)
 #undef DEFINE_ENUM
     };
 };
 
 #define ASM_KINDOF(op) (op)->hdr.kind
 
-#define DEFINE_ACCESSORS(X) \
-    static inline paw_Bool AsmIs##X(const struct AsmOp *op) { \
-        return op->hdr.kind == kAsm##X; \
-    } \
-    static inline struct Asm##X *AsmGet##X(struct AsmOp *op) { \
-        paw_assert(AsmIs##X(op)); \
-        return &op->X##_; \
+#define DEFINE_ACCESSORS(X)                                  \
+    static inline paw_Bool AsmIs##X(struct AsmOp const *op)  \
+    {                                                        \
+        return op->hdr.kind == kAsm##X;                      \
+    }                                                        \
+    static inline struct Asm##X *AsmGet##X(struct AsmOp *op) \
+    {                                                        \
+        paw_assert(AsmIs##X(op));                            \
+        return &op->X##_;                                    \
     }
-    ASM_OP_LIST(DEFINE_ACCESSORS)
+ASM_OP_LIST(DEFINE_ACCESSORS)
 #undef DEFINE_ACCESSORS
 
-static const char *kAsmOpNames[] = {
+static char const *kAsmOpNames[] = {
 #define DEFINE_NAME(X) "Asm" #X,
     ASM_OP_LIST(DEFINE_NAME)
 #undef DEFINE_NAME
@@ -207,7 +209,6 @@ static const char *kAsmOpNames[] = {
 DEFINE_LIST(struct Compiler, pawP_asm_list_, AsmList, struct AsmOp)
 
 struct AsmList *pawP_lower_mir(struct Compiler *C, struct Mir *mir);
-const char *pawP_dump_asm(struct Compiler *C, struct AsmList *ops);
+char const *pawP_dump_asm(struct Compiler *C, struct AsmList *ops);
 
 #endif // PAW_ASM_H
-

@@ -4,8 +4,8 @@
 #include "prefix.h"
 #include <stdlib.h>
 
-#include "api.h"
 #include "alloc.h"
+#include "api.h"
 #include "compile.h"
 #include "env.h"
 #include "gc.h"
@@ -24,7 +24,8 @@ static void *default_alloc(void *ud, void *ptr, size_t old_size, size_t new_size
         free(ptr);
         return NULL;
     }
-    if (old_size == 0) return malloc(new_size);
+    if (old_size == 0)
+        return malloc(new_size);
     return realloc(ptr, new_size);
 }
 
@@ -41,12 +42,12 @@ static StackPtr at(paw_Env *P, int index)
     if (index == PAW_REGISTRY_INDEX) {
         return &P->registry;
     }
-    const int i = paw_abs_index(P, index);
+    int const i = paw_abs_index(P, index);
     API_CHECK(P, 0 <= i && i < paw_get_count(P), "index out of range");
     return &P->cf->base.p[i];
 }
 
-size_t paw_bytes_used(const paw_Env *P)
+size_t paw_bytes_used(paw_Env const *P)
 {
     return P->gc_bytes;
 }
@@ -66,20 +67,22 @@ static void open_aux(paw_Env *P, void *arg)
 #define OR_DEFAULT(a, b) ((a) ? (a) : (b))
 #define HEAP_MIN (PAW_ROUND_UP(sizeof(paw_Env)))
 
-paw_Env *paw_open(const struct paw_Options *o)
+paw_Env *paw_open(struct paw_Options const *o)
 {
     size_t heap_size = OR_DEFAULT(o->heap_size, PAW_HEAP_DEFAULT);
     heap_size &= ~(PAW_ALIGN - 1); // round down
-    if (heap_size < HEAP_MIN) return NULL;
+    if (heap_size < HEAP_MIN)
+        return NULL;
 
     void *ud = OR_DEFAULT(o->ud, NULL);
     paw_Alloc alloc = OR_DEFAULT(o->alloc, default_alloc);
     paw_MemHook mem_hook = OR_DEFAULT(o->mem_hook, default_mem_hook);
     void *heap = OR_DEFAULT(o->heap, alloc(ud, NULL, 0, heap_size));
-    const paw_Bool owns_heap = o->heap == NULL;
-    if (heap == NULL) return NULL;
+    paw_Bool const owns_heap = o->heap == NULL;
+    if (heap == NULL)
+        return NULL;
     paw_assert(PAW_IS_ALIGNED(heap));
-    const size_t zh = heap_size;
+    size_t const zh = heap_size;
     void *ph = heap;
 
     paw_Env *P = heap;
@@ -92,7 +95,8 @@ paw_Env *paw_open(const struct paw_Options *o)
     heap_size -= PAW_ROUND_UP(sizeof(*P));
 
     if (pawZ_init(P, heap, heap_size, owns_heap, mem_hook, ud)) {
-        if (owns_heap) alloc(ud, ph, zh, 0);
+        if (owns_heap)
+            alloc(ud, ph, zh, 0);
         return NULL;
     }
     if (pawC_raw_try(P, open_aux, NULL)) {
@@ -114,7 +118,7 @@ void paw_close(paw_Env *P)
 
 static void mangle_arg(paw_Env *P, Buffer *buf, paw_Type code)
 {
-    const struct Type *type = Y_TYPE(P, code);
+    struct Type const *type = Y_TYPE(P, code);
     pawY_mangle_add_arg(P, buf, type->hdr.code);
 }
 
@@ -134,12 +138,13 @@ void paw_mangle_start(paw_Env *P)
     PAW_PUSH_LITERAL(P, "_P");
 }
 
-#define MANGLE_ADD_NAME(P, prefix) do { \
-        paw_push_fstring(P, prefix "%I%s", \
-                paw_str_rawlen(P, -1), \
-                paw_string(P, -1)); \
-        paw_shift(P, 1); \
-        paw_str_concat(P, 2); \
+#define MANGLE_ADD_NAME(P, prefix)              \
+    do {                                        \
+        paw_push_fstring(P, prefix "%I%s",      \
+                         paw_str_rawlen(P, -1), \
+                         paw_string(P, -1));    \
+        paw_shift(P, 1);                        \
+        paw_str_concat(P, 2);                   \
     } while (0)
 
 void paw_mangle_add_module(paw_Env *P)
@@ -164,15 +169,17 @@ void paw_mangle_add_args(paw_Env *P, paw_Type *types)
 
 int paw_lookup_item(paw_Env *P, int index, struct paw_Item *pitem)
 {
-    const String *name = V_STRING(*at(P, index));
-    const ItemId iid = pawE_locate(P, name, PAW_TRUE);
+    String const *name = V_STRING(*at(P, index));
+    ItemId const iid = pawE_locate(P, name, PAW_TRUE);
 
-    if (iid < 0) return PAW_ENAME;
-    if (pitem == NULL) return 0;
-    const struct Def *def = P->defs.data[iid];
+    if (iid < 0)
+        return PAW_ENAME;
+    if (pitem == NULL)
+        return 0;
+    struct Def const *def = P->defs.data[iid];
     *pitem = (struct paw_Item){
-        .global_id = def->hdr.kind == DEF_FUNC ? def->func.vid :
-            def->hdr.kind == DEF_VAR ? def->var.vid : -1,
+        .global_id = def->hdr.kind == DEF_FUNC ? def->func.vid : def->hdr.kind == DEF_VAR ? def->var.vid
+                                                                                          : -1,
         .type = def->hdr.code,
     };
     return 0;
@@ -180,7 +187,7 @@ int paw_lookup_item(paw_Env *P, int index, struct paw_Item *pitem)
 
 void paw_push_value(paw_Env *P, int index)
 {
-    const Value v = *at(P, index);
+    Value const v = *at(P, index);
     *P->top.p = v;
     API_INCR_TOP(P, 1);
 }
@@ -218,7 +225,7 @@ void paw_new_native(paw_Env *P, paw_Function fn, int nup)
     API_INCR_TOP(P, 1);
 
     StackPtr top = P->top.p;
-    const StackPtr base = top - nup - 1;
+    StackPtr const base = top - nup - 1;
     for (int i = 0; i < nup; ++i) {
         o->up[i] = base[i];
     }
@@ -227,12 +234,12 @@ void paw_new_native(paw_Env *P, paw_Function fn, int nup)
     P->top.p = base + 1;
 }
 
-const char *paw_push_string(paw_Env *P, const char *s)
+char const *paw_push_string(paw_Env *P, char const *s)
 {
     return paw_push_nstring(P, s, strlen(s));
 }
 
-const char *paw_push_nstring(paw_Env *P, const char *s, size_t n)
+char const *paw_push_nstring(paw_Env *P, char const *s, size_t n)
 {
     String *str = pawS_new_nstr(P, s, n);
     V_SET_OBJECT(P->top.p, str);
@@ -240,7 +247,7 @@ const char *paw_push_nstring(paw_Env *P, const char *s, size_t n)
     return str->text;
 }
 
-const char *paw_push_vfstring(paw_Env *P, const char *fmt, va_list arg)
+char const *paw_push_vfstring(paw_Env *P, char const *fmt, va_list arg)
 {
     Buffer buf;
     pawL_init_buffer(P, &buf);
@@ -249,11 +256,11 @@ const char *paw_push_vfstring(paw_Env *P, const char *fmt, va_list arg)
     return paw_string(P, -1);
 }
 
-const char *paw_push_fstring(paw_Env *P, const char *fmt, ...)
+char const *paw_push_fstring(paw_Env *P, char const *fmt, ...)
 {
     va_list arg;
     va_start(arg, fmt);
-    const char *s = paw_push_vfstring(P, fmt, arg);
+    char const *s = paw_push_vfstring(P, fmt, arg);
     va_end(arg);
     return s;
 }
@@ -284,21 +291,21 @@ paw_Float paw_float(paw_Env *P, int index)
     return V_FLOAT(*at(P, index));
 }
 
-const char *paw_string(paw_Env *P, int index)
+char const *paw_string(paw_Env *P, int index)
 {
-    const String *s = V_STRING(*at(P, index));
+    String const *s = V_STRING(*at(P, index));
     return s->text;
 }
 
 paw_Function paw_native(paw_Env *P, int index)
 {
-    const Native *f = V_NATIVE(*at(P, index));
+    Native const *f = V_NATIVE(*at(P, index));
     return f->func;
 }
 
 void *paw_userdata(paw_Env *P, int index)
 {
-    const Value v = *at(P, index);
+    Value const v = *at(P, index);
     return V_FOREIGN(v)->data;
 }
 
@@ -329,7 +336,7 @@ void paw_pop(paw_Env *P, int n)
 struct CompileState {
     paw_Reader input;
     struct DynamicMem dm;
-    const char *name;
+    char const *name;
     void *ud;
 };
 
@@ -341,14 +348,14 @@ static void compile_aux(paw_Env *P, void *arg)
     pawP_compile(&C, p->input, p->ud);
 }
 
-int paw_load(paw_Env *P, paw_Reader input, const char *name, void *ud)
+int paw_load(paw_Env *P, paw_Reader input, char const *name, void *ud)
 {
     struct CompileState p = {
         .input = input,
         .name = name,
         .ud = ud,
     };
-    const int status = pawC_try(P, compile_aux, &p);
+    int const status = pawC_try(P, compile_aux, &p);
     pawP_teardown(P, &p.dm);
     return status;
 }
@@ -360,7 +367,7 @@ struct CallState {
 
 void eval_aux(paw_Env *P, void *arg)
 {
-    const struct CallState *ctx = arg;
+    struct CallState const *ctx = arg;
     pawC_call(P, V_OBJECT(*ctx->fn), ctx->argc);
 }
 
@@ -369,7 +376,7 @@ int paw_call(paw_Env *P, int argc)
     StackPtr top = P->top.p;
     StackPtr fn = &top[-argc - 1];
     struct CallState c = {.fn = fn, .argc = argc};
-    const int status = pawC_try(P, eval_aux, &c);
+    int const status = pawC_try(P, eval_aux, &c);
     return status;
 }
 
@@ -458,9 +465,9 @@ void paw_new_tuple(paw_Env *P, int n)
     Value *ra = pawC_push0(P);
     pawR_new_tuple(P, P->cf, ra, n);
 
-    const Value *pv = at(P, -n - 1);
+    Value const *pv = at(P, -n - 1);
     for (int i = 0; i < n; ++i) {
-        const Value *rb = pv++;
+        Value const *rb = pv++;
         pawR_tuple_set(P->cf, ra, i, rb);
     }
     paw_shift(P, n);
@@ -471,10 +478,10 @@ void paw_new_list(paw_Env *P, int n)
     Value *ra = pawC_push0(P);
     pawR_new_list(P, P->cf, ra, n);
 
-    const Value *pv = at(P, -n - 1);
+    Value const *pv = at(P, -n - 1);
     for (int i = 0; i < n; ++i) {
-        const Value rb = {.i = i};
-        const Value *rc = pv++;
+        Value const rb = {.i = i};
+        Value const *rc = pv++;
         pawR_list_set(P, P->cf, ra, &rb, rc);
     }
     paw_shift(P, n);
@@ -485,10 +492,10 @@ void paw_new_map(paw_Env *P, int n, paw_Type k)
     Value *ra = pawC_push0(P);
     pawR_new_map(P, P->cf, ra, n, k);
 
-    const Value *pv = at(P, -2 * n - 1);
+    Value const *pv = at(P, -2 * n - 1);
     for (int i = 0; i < n; ++i) {
-        const Value *rb = pv++;
-        const Value *rc = pv++;
+        Value const *rb = pv++;
+        Value const *rc = pv++;
         pawR_map_set(P, P->cf, ra, rb, rc);
     }
     paw_shift(P, 2 * n);
@@ -542,13 +549,13 @@ void paw_shift(paw_Env *P, int n)
     paw_pop(P, n);
 }
 
-const char *paw_int_to_string(paw_Env *P, int index, size_t *plen)
+char const *paw_int_to_string(paw_Env *P, int index, size_t *plen)
 {
     Value *pv = at(P, index);
     return pawV_to_string(P, pv, PAW_TINT, plen);
 }
 
-const char *paw_float_to_string(paw_Env *P, int index, size_t *plen)
+char const *paw_float_to_string(paw_Env *P, int index, size_t *plen)
 {
     Value *pv = at(P, index);
     return pawV_to_string(P, pv, PAW_TFLOAT, plen);
@@ -557,8 +564,8 @@ const char *paw_float_to_string(paw_Env *P, int index, size_t *plen)
 void paw_str_length(paw_Env *P, int index)
 {
     Value *pv = at(P, index);
-    const String *str = V_STRING(*pv);
-    const size_t len = pawS_length(str);
+    String const *str = V_STRING(*pv);
+    size_t const len = pawS_length(str);
     paw_push_int(P, PAW_CAST_INT(len));
 }
 
@@ -567,25 +574,25 @@ void paw_str_concat(paw_Env *P, int count)
     pawR_str_concat(P, P->cf, count);
 }
 
-//void paw_str_getelem(paw_Env *P, int index)
+// void paw_str_getelem(paw_Env *P, int index)
 //{
-//    paw_push_value(P, index);
-//    paw_rotate(P, -2, 1);
-//    pawR_getelem(P, PAW_ADT_STR);
-//}
+//     paw_push_value(P, index);
+//     paw_rotate(P, -2, 1);
+//     pawR_getelem(P, PAW_ADT_STR);
+// }
 //
-//void paw_str_getrange(paw_Env *P, int index)
+// void paw_str_getrange(paw_Env *P, int index)
 //{
-//    paw_push_value(P, index);
-//    paw_rotate(P, -3, 1);
-//    pawR_getrange(P, PAW_ADT_STR);
-//}
+//     paw_push_value(P, index);
+//     paw_rotate(P, -3, 1);
+//     pawR_getrange(P, PAW_ADT_STR);
+// }
 
 void paw_list_length(paw_Env *P, int index)
 {
     Value *pv = at(P, index);
-    const Tuple *list = V_TUPLE(*pv);
-    const size_t len = pawList_length(list);
+    Tuple const *list = V_TUPLE(*pv);
+    size_t const len = pawList_length(list);
     paw_push_int(P, PAW_CAST_INT(len));
 }
 
@@ -594,33 +601,33 @@ void paw_list_concat(paw_Env *P, int count)
     pawR_list_concat(P, P->cf, count);
 }
 
-//void paw_list_getelem(paw_Env *P, int index)
+// void paw_list_getelem(paw_Env *P, int index)
 //{
-//    paw_push_value(P, index);
-//    paw_rotate(P, -2, 1);
-//    pawR_getelem(P, PAW_ADT_LIST);
-//}
+//     paw_push_value(P, index);
+//     paw_rotate(P, -2, 1);
+//     pawR_getelem(P, PAW_ADT_LIST);
+// }
 //
-//void paw_list_setelem(paw_Env *P, int index)
+// void paw_list_setelem(paw_Env *P, int index)
 //{
-//    paw_push_value(P, index);
-//    paw_rotate(P, -3, 1);
-//    pawR_list_setelem(P);
-//}
+//     paw_push_value(P, index);
+//     paw_rotate(P, -3, 1);
+//     pawR_list_setelem(P);
+// }
 //
-//void paw_list_getrange(paw_Env *P, int index)
+// void paw_list_getrange(paw_Env *P, int index)
 //{
-//    paw_push_value(P, index);
-//    paw_rotate(P, -3, 1);
-//    pawR_list_getn(P);
-//}
+//     paw_push_value(P, index);
+//     paw_rotate(P, -3, 1);
+//     pawR_list_getn(P);
+// }
 //
-//void paw_list_setrange(paw_Env *P, int index)
+// void paw_list_setrange(paw_Env *P, int index)
 //{
-//    paw_push_value(P, index);
-//    paw_rotate(P, -4, 1);
-//    pawR_list_setn(P);
-//}
+//     paw_push_value(P, index);
+//     paw_rotate(P, -4, 1);
+//     pawR_list_setn(P);
+// }
 
 paw_Bool paw_list_next(paw_Env *P, int index)
 {
@@ -638,23 +645,23 @@ paw_Bool paw_list_next(paw_Env *P, int index)
 void paw_map_length(paw_Env *P, int index)
 {
     Value *pv = at(P, index);
-    const Tuple *map = V_TUPLE(*pv);
-    const size_t len = pawMap_length(map);
+    Tuple const *map = V_TUPLE(*pv);
+    size_t const len = pawMap_length(map);
     paw_push_int(P, PAW_CAST_INT(len));
 }
 
 int paw_map_get(paw_Env *P, int index)
 {
     Value *ra = at(P, -1);
-    const Value *rb = at(P, index);
+    Value const *rb = at(P, index);
     return pawR_map_get(P, P->cf, ra, rb, ra);
 }
 
 void paw_map_set(paw_Env *P, int index)
 {
     Value *ra = at(P, index);
-    const Value *rb = at(P, -2);
-    const Value *rc = at(P, -1);
+    Value const *rb = at(P, -2);
+    Value const *rc = at(P, -1);
     pawR_map_set(P, P->cf, ra, rb, rc);
     paw_pop(P, 2);
 }

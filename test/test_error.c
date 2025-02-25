@@ -10,12 +10,12 @@
 
 typedef uint64_t TypeSet;
 
-static void write_main(char *out, const char *items, const char *text)
+static void write_main(char *out, char const *items, char const *text)
 {
-#define ADD_CHUNK(o, p) \
-        memcpy(o, p, strlen(p)); \
-        (o) += strlen(p); \
-        *(o)++ = '\n'
+#define ADD_CHUNK(o, p)      \
+    memcpy(o, p, strlen(p)); \
+    (o) += strlen(p);        \
+    *(o)++ = '\n'
     ADD_CHUNK(out, items);
     ADD_CHUNK(out, "pub fn main() {\n");
     ADD_CHUNK(out, text);
@@ -33,7 +33,7 @@ static void check_status(paw_Env *P, int have, int want)
     }
 }
 
-static void test_compiler_status(int expect, const char *name, const char *item, const char *text)
+static void test_compiler_status(int expect, char const *name, char const *item, char const *text)
 {
     char buffer[4096];
     write_main(buffer, item, text);
@@ -45,7 +45,7 @@ static void test_compiler_status(int expect, const char *name, const char *item,
     paw_close(P);
 }
 
-static void test_runtime_status(int expect, const char *name, const char *item, const char *text)
+static void test_runtime_status(int expect, char const *name, char const *item, char const *text)
 {
     char buffer[4096];
     write_main(buffer, item, text);
@@ -77,7 +77,7 @@ static void test_name_error(void)
     test_compiler_status(PAW_ENAME, "undef_field", "struct A;", "let a = A.value;");
 }
 
-static const char *get_literal(int kind)
+static char const *get_literal(int kind)
 {
     switch (kind) {
         case PAW_TUNIT:
@@ -96,7 +96,7 @@ static const char *get_literal(int kind)
     }
 }
 
-static void check_unop_error(int expect, const char *op, paw_Type k)
+static void check_unop_error(int expect, char const *op, paw_Type k)
 {
     char name_buf[256] = {0};
     snprintf(name_buf, sizeof(name_buf), "unop_type_error('%s', %s)",
@@ -109,7 +109,7 @@ static void check_unop_error(int expect, const char *op, paw_Type k)
     test_compiler_status(expect, name_buf, "", text_buf);
 }
 
-static void check_unop_type_error(const char *op, paw_Type k)
+static void check_unop_type_error(char const *op, paw_Type k)
 {
     check_unop_error(PAW_ETYPE, op, k);
 }
@@ -134,7 +134,7 @@ static void check_unification_errors(void)
     }
 }
 
-static void check_binop_type_error(const char *op, paw_Type k, paw_Type k2)
+static void check_binop_type_error(char const *op, paw_Type k, paw_Type k2)
 {
     char name_buf[256] = {0};
     snprintf(name_buf, sizeof(name_buf), "binop_type_error('%s', %s, %s)",
@@ -147,7 +147,7 @@ static void check_binop_type_error(const char *op, paw_Type k, paw_Type k2)
     test_compiler_status(PAW_ETYPE, name_buf, "", text_buf);
 }
 
-static void check_binop_type_errors(const char *op, paw_Type *types)
+static void check_binop_type_errors(char const *op, paw_Type *types)
 {
     for (int k = PAW_TUNIT; k <= PAW_TSTR; ++k) {
         for (int k2 = PAW_TUNIT; k2 <= PAW_TSTR; ++k2) {
@@ -158,7 +158,7 @@ static void check_binop_type_errors(const char *op, paw_Type *types)
                 }
             }
             check_binop_type_error(op, k, k2);
-next_round: /* combination of types is valid, skip check */;
+        next_round: /* combination of types is valid, skip check */;
         }
     }
 }
@@ -181,7 +181,7 @@ static void test_type_error(void)
     check_unop_type_error("-", PAW_TSTR);
 
 #define MAKE_LIST(...) \
-    (paw_Type[]) { __VA_ARGS__, -1 }
+    (paw_Type[]){__VA_ARGS__, -1}
     check_binop_type_errors("+", MAKE_LIST(PAW_TINT, PAW_TFLOAT, PAW_TSTR));
     check_binop_type_errors("-", MAKE_LIST(PAW_TINT, PAW_TFLOAT));
     check_binop_type_errors("*", MAKE_LIST(PAW_TINT, PAW_TFLOAT));
@@ -202,16 +202,16 @@ static void test_type_error(void)
     test_compiler_status(PAW_ETYPE, "selector_on_function", "fn func() {}", "let a = func.field;");
     test_compiler_status(PAW_ETYPE, "selector_on_module", "use io;", "let s = io.abc;");
     test_compiler_status(PAW_ETYPE, "extraneous_method_access",
-            "struct S {pub fn f() {}}", "S::f::f(); ");
+                         "struct S {pub fn f() {}}", "S::f::f(); ");
     test_compiler_status(PAW_ETYPE, "extraneous_variant_access",
-            "enum E {A}", "let e = E::A::A; ");
+                         "enum E {A}", "let e = E::A::A; ");
 
     test_compiler_status(PAW_ETYPE, "missing_return_type", "pub fn f() {123}", "");
     test_compiler_status(PAW_ETYPE, "missing_return_value", "pub fn f() -> int {}", "");
     test_compiler_status(PAW_ETYPE, "non_exhaustive_branch",
-            "pub fn f(x: bool) -> int {if x {} else {123}}", "");
+                         "pub fn f(x: bool) -> int {if x {} else {123}}", "");
     test_compiler_status(PAW_ETYPE, "non_exhaustive_return",
-            "pub fn f(x: bool) -> int {if x {return 123;}}", "");
+                         "pub fn f(x: bool) -> int {if x {return 123;}}", "");
     test_compiler_status(PAW_ETYPE, "non_unit_guard", "pub fn f(x: bool) {if x {123}}", "");
 }
 
@@ -302,7 +302,7 @@ static void test_arithmetic_error(void)
 
     test_runtime_status(PAW_ERUNTIME, "division_by_0_int", "fn f(x: int) -> int {x / 0}", "f(1);");
     test_runtime_status(PAW_ERUNTIME, "division_by_0_float", "fn f(x: float) -> float {x / 0.0}", "f(1.0);");
-    test_runtime_status(PAW_ERUNTIME, "negative_left_shift",  "fn f(x: int) -> int {x << -2}", "f(1);");
+    test_runtime_status(PAW_ERUNTIME, "negative_left_shift", "fn f(x: int) -> int {x << -2}", "f(1);");
     test_runtime_status(PAW_ERUNTIME, "negative_right_shift", "fn f(x: int) -> int {x >> -2}", "f(1);");
 }
 
@@ -330,8 +330,8 @@ static void test_struct_error(void)
     test_compiler_status(PAW_ETYPE, "struct_too_many_types", "struct S<A, B>;", "let x = S::<int, float, bool>;");
 
     test_compiler_status(PAW_ENAME, "struct_select_private_field",
-            "struct S {pub a: int, b: int, pub fn new() -> S {return S{a: 1, b: 2};}}",
-            "let x = S::new(); let a = x.a; let b = x.b;");
+                         "struct S {pub a: int, b: int, pub fn new() -> S {return S{a: 1, b: 2};}}",
+                         "let x = S::new(); let a = x.a; let b = x.b;");
     test_compiler_status(PAW_ENAME, "struct_literal_private_field", "struct S {pub a: int, b: int}", "let x = S{a: 1, b: 2};");
     test_compiler_status(PAW_ENAME, "struct_call_private_method", "struct S {fn private(self) {}}", "let x = S; x.private();");
 
@@ -376,8 +376,8 @@ static void test_map_error(void)
     test_compiler_status(PAW_ETYPE, "map_incompatible_types_2", "", "let a = [:]; if true {a = [0: 0];} else {a = [1: true];}");
     test_compiler_status(PAW_ETYPE, "map_mixed_types", "", "let a = [1: 2, 3: 4, 5: '6'];");
     test_compiler_status(PAW_ETYPE, "map_mixed_nesting", "", "let a = [1: [1: 1], 2: [2: 2], 3: [3: [3: 3]]];");
-// TODO    test_compiler_status(PAW_ETYPE, "map_unhashable_literal_key", "", "let map = [[1]: 1];");
-// TODO    test_compiler_status(PAW_ETYPE, "map_unhashable_type_key", "", "let map: [[int]: int] = [:];");
+    // TODO    test_compiler_status(PAW_ETYPE, "map_unhashable_literal_key", "", "let map = [[1]: 1];");
+    // TODO    test_compiler_status(PAW_ETYPE, "map_unhashable_type_key", "", "let map: [[int]: int] = [:];");
     test_compiler_status(PAW_ETYPE, "map_slice", "", "let map = [:]; let val = map[0:10];");
 }
 
@@ -385,7 +385,6 @@ static void test_import_error(void)
 {
     test_compiler_status(PAW_ENAME, "missing_import", "use import_not_found;", "");
     test_compiler_status(PAW_ENAME, "missing_import_item", "use io;", "let t = io::NotFound;");
-
 }
 
 static int run_main(paw_Env *P, int nargs)
@@ -395,7 +394,7 @@ static int run_main(paw_Env *P, int nargs)
     paw_mangle_add_name(P);
 
     struct paw_Item info;
-    const int status = paw_lookup_item(P, -1, &info);
+    int const status = paw_lookup_item(P, -1, &info);
     check_status(P, status, PAW_OK);
     check(info.global_id >= 0);
     paw_get_global(P, info.global_id);
@@ -412,7 +411,7 @@ static int next_conflicting_int(paw_Env *P)
 
 static void test_gc_conflict(void)
 {
-    const char source[] =
+    char const source[] =
         "pub fn conflicting_int<T>(t: T) -> int;\n"
         "pub fn main() {\n"
         "    let N = 500;\n"
@@ -439,9 +438,9 @@ static void test_gc_conflict(void)
     paw_close(P);
 }
 
-static void test_invalid_case(const char *name, int expect, const char *item, const char *target, const char *pat)
+static void test_invalid_case(char const *name, int expect, char const *item, char const *target, char const *pat)
 {
-    const char fmt[] = "match %s {\n"
+    char const fmt[] = "match %s {\n"
                        "    %s => {},\n"
                        "}\n";
     char buffer[sizeof(fmt) + 1024];
@@ -451,73 +450,73 @@ static void test_invalid_case(const char *name, int expect, const char *item, co
 
 static void test_variant_match_error(void)
 {
-    const char *enumeration =
+    char const *enumeration =
         "enum Choice {\n"
         "    First,\n"
         "    Second(Choice),\n"
         "}\n";
 
     test_compiler_status(PAW_ETYPE, "match_int_non_exhaustive", enumeration,
-            "match 123 {\n"
-            "    123 => {},\n"
-            "}\n");
+                         "match 123 {\n"
+                         "    123 => {},\n"
+                         "}\n");
     test_compiler_status(PAW_ETYPE, "match_variant_non_exhaustive", enumeration,
-            "match Choice::First {\n"
-            "    Choice::First => {},\n"
-            "}\n");
+                         "match Choice::First {\n"
+                         "    Choice::First => {},\n"
+                         "}\n");
 
     test_compiler_status(PAW_ETYPE, "match_variant_non_exhaustive_2", enumeration,
-            "match Choice::First {\n"
-            "    Choice::First => {},\n"
-            "    Choice::Second(Choice::First) => {},"
-            "}\n");
+                         "match Choice::First {\n"
+                         "    Choice::First => {},\n"
+                         "    Choice::Second(Choice::First) => {},"
+                         "}\n");
 
     test_compiler_status(PAW_ETYPE, "match_variant_non_exhaustive_3", enumeration,
-            "match Choice::First {\n"
-            "    Choice::First => {},\n"
-            "    Choice::Second(Choice::First) => {},"
-            "    Choice::Second(Choice::Second(Choice::First)) => {},"
-            "}\n");
+                         "match Choice::First {\n"
+                         "    Choice::First => {},\n"
+                         "    Choice::Second(Choice::First) => {},"
+                         "    Choice::Second(Choice::Second(Choice::First)) => {},"
+                         "}\n");
 
     // sanity check: exhaustive versions
     test_compiler_status(PAW_OK, "sanity_check_match_wildcard", enumeration,
-            "match Choice::First {\n"
-            "    _ => {},\n"
-            "}\n");
+                         "match Choice::First {\n"
+                         "    _ => {},\n"
+                         "}\n");
     test_compiler_status(PAW_OK, "sanity_check_match_variant_exhaustive", enumeration,
-            "match Choice::First {\n"
-            "    Choice::First => {},\n"
-            "    Choice::Second(_) => {},\n"
-            "}\n");
+                         "match Choice::First {\n"
+                         "    Choice::First => {},\n"
+                         "    Choice::Second(_) => {},\n"
+                         "}\n");
     test_compiler_status(PAW_OK, "sanity_check_match_variant_exhaustive_2", enumeration,
-            "match Choice::First {\n"
-            "    Choice::First => {},\n"
-            "    Choice::Second(Choice::First) => {},"
-            "    Choice::Second(Choice::Second(_)) => {},"
-            "}\n");
+                         "match Choice::First {\n"
+                         "    Choice::First => {},\n"
+                         "    Choice::Second(Choice::First) => {},"
+                         "    Choice::Second(Choice::Second(_)) => {},"
+                         "}\n");
     test_compiler_status(PAW_OK, "sanity_check_match_variant_exhaustive_3", enumeration,
-            "match Choice::First {\n"
-            "    Choice::First => {},\n"
-            "    Choice::Second(Choice::First) => {},"
-            "    Choice::Second(Choice::Second(Choice::First)) => {},"
-            "    Choice::Second(Choice::Second(Choice::Second(_))) => {},"
-            "}\n");
+                         "match Choice::First {\n"
+                         "    Choice::First => {},\n"
+                         "    Choice::Second(Choice::First) => {},"
+                         "    Choice::Second(Choice::Second(Choice::First)) => {},"
+                         "    Choice::Second(Choice::Second(Choice::Second(_))) => {},"
+                         "}\n");
 
     test_invalid_case("duplicate_binding", PAW_ENAME, "",
-            "(0, 0)", "(x, x)");
+                      "(0, 0)", "(x, x)");
     test_invalid_case("duplicate_binding_nested", PAW_ENAME, "",
-            "(((0,),), 0)", "(((x,),), x)");
+                      "(((0,),), 0)", "(((x,),), x)");
     test_invalid_case("or_binding_missing", PAW_ENAME, "",
-            "(0, 0)", "(x, 2) | (2, 3)");
+                      "(0, 0)", "(x, 2) | (2, 3)");
     test_invalid_case("or_binding_unrecognized", PAW_ENAME, "",
-            "(0, 0)", "(1, 2) | (x, 3)");
+                      "(0, 0)", "(1, 2) | (x, 3)");
     test_invalid_case("or_binding_unrecognized_int", PAW_ENAME, "",
-            "0", "0 | x");
+                      "0", "0 | x");
     test_invalid_case("or_binding_missing_int", PAW_ENAME, "",
-            "0", "x | 0");
+                      "0", "x | 0");
     // 'x' has a different type in each alternative
     test_invalid_case("or_binding_type_mismatch", PAW_ETYPE, "",
-            "(0, '')", "(x, 'b') | (1, x)");
+                      "(0, '')", "(x, 'b') | (1, x)");
 }
 
 static void test_match_error(void)
@@ -534,85 +533,86 @@ static void test_uninit_local(void)
     test_compiler_status(PAW_EVALUE, "uninit_ifelse_chain", "", "let x; if true {x = 1;} else if true {} else {x = 3;} x;");
     test_compiler_status(PAW_EVALUE, "uninit_ifelse_return", "", "let x; if true {return;} else if true {x = 2;} else {} x;");
     test_compiler_status(PAW_EVALUE, "uninit_match", "",
-            "let x;\n"
-            "match 123 {\n"
-            "    123 => x = 1,\n"
-            "    _ => {},\n"
-            "}\n"
-            "x;");
+                         "let x;\n"
+                         "match 123 {\n"
+                         "    123 => x = 1,\n"
+                         "    _ => {},\n"
+                         "}\n"
+                         "x;");
     test_compiler_status(PAW_EVALUE, "uninit_match_nested", "",
-            "let x;\n"
-            "match 123 {\n"
-            "    1 => x = 1,\n"
-            "    2 => x = 2,\n"
-            "    3 => {\n"
-            "        if true {\n"
-            "            if true { x = 3; }\n"
-            "        } else {\n"
-            "            x = 4;\n"
-            "        }\n"
-            "    },\n"
-            "    _ => x = 5,\n"
-            "}\n"
-            "x;");
+                         "let x;\n"
+                         "match 123 {\n"
+                         "    1 => x = 1,\n"
+                         "    2 => x = 2,\n"
+                         "    3 => {\n"
+                         "        if true {\n"
+                         "            if true { x = 3; }\n"
+                         "        } else {\n"
+                         "            x = 4;\n"
+                         "        }\n"
+                         "    },\n"
+                         "    _ => x = 5,\n"
+                         "}\n"
+                         "x;");
 }
 
 static void test_trait_error(void)
 {
-#define TRAIT \
+#define TRAIT             \
     "pub trait Trait {\n" \
-    "    fn f(self);\n" \
+    "    fn f(self);\n"   \
     "}\n"
 
     test_compiler_status(PAW_ENAME, "trait_missing_method",
-            TRAIT "struct S: Trait {v: int}", "");
+                         TRAIT "struct S: Trait {v: int}", "");
     test_compiler_status(PAW_ETYPE, "trait_wrong_type",
-            TRAIT "struct S: Trait {pub fn f(self) -> int {123}}", "");
+                         TRAIT "struct S: Trait {pub fn f(self) -> int {123}}", "");
     test_compiler_status(PAW_ETYPE, "trait_mismatched_visibility",
-            TRAIT "struct S: Trait {fn f(self) {}}", "");
+                         TRAIT "struct S: Trait {fn f(self) {}}", "");
     test_compiler_status(PAW_ETYPE, "generic_missing_bound",
-            TRAIT "struct S: Trait {pub fn f(self) {}}\n"
-            "pub fn call_f<T>(t: T) {t.f();}", "let x = S; call_f(x);");
+                         TRAIT "struct S: Trait {pub fn f(self) {}}\n"
+                               "pub fn call_f<T>(t: T) {t.f();}",
+                         "let x = S; call_f(x);");
     test_compiler_status(PAW_ETYPE, "trait_generic_mismatch",
-            TRAIT "struct S<T>: Trait<T> {pub fn f(self) {}}\n", "");
+                         TRAIT "struct S<T>: Trait<T> {pub fn f(self) {}}\n", "");
 
-#define POLY_TRAIT \
+#define POLY_TRAIT           \
     "pub trait Trait<T> {\n" \
     "    fn f(self) -> T;\n" \
     "}\n"
-#define POLY_STRUCT \
-    "struct S<T>: Trait<T> {\n" \
-    "    pub v: T,\n" \
+#define POLY_STRUCT               \
+    "struct S<T>: Trait<T> {\n"   \
+    "    pub v: T,\n"             \
     "    pub fn f(self) -> T {\n" \
-    "        self.v\n" \
-    "    }\n" \
+    "        self.v\n"            \
+    "    }\n"                     \
     "}\n"
-#define POLY_FUNCTION(g, rest) \
+#define POLY_FUNCTION(g, rest)                         \
     "pub fn call_f<T: Trait<" g ">" rest ">(t: T) {\n" \
-    "    t.f();\n" \
+    "    t.f();\n"                                     \
     "}"
 
     test_compiler_status(PAW_ETYPE, "trait_not_implemented",
-            POLY_TRAIT "struct S;" POLY_FUNCTION("int",),
-            "let x = S; call_f(x);");
+                         POLY_TRAIT "struct S;" POLY_FUNCTION("int", ),
+                         "let x = S; call_f(x);");
     test_compiler_status(PAW_ETYPE, "trait_generic_mismatch",
-            POLY_TRAIT POLY_STRUCT POLY_FUNCTION("int",),
-            "let x = S{v: true}; call_f(x);");
+                         POLY_TRAIT POLY_STRUCT POLY_FUNCTION("int", ),
+                         "let x = S{v: true}; call_f(x);");
     test_compiler_status(PAW_ETYPE, "trait_type_as_trait",
-            "struct Type; struct S: Type;", "");
+                         "struct Type; struct S: Type;", "");
     test_compiler_status(PAW_ENAME, "trait_missing_function_bound",
-            "struct S: Trait;", "");
+                         "struct S: Trait;", "");
     test_compiler_status(PAW_ENAME, "trait_missing_function_bound",
-            "fn f<T: Trait>(t: T) {}", "");
+                         "fn f<T: Trait>(t: T) {}", "");
     test_compiler_status(PAW_ENAME, "trait_missing_function_bound",
-            "struct S: Trait;", "");
+                         "struct S: Trait;", "");
     test_compiler_status(PAW_ENAME, "trait_missing_generic_in_bounds",
-            POLY_TRAIT POLY_STRUCT POLY_FUNCTION("X",), "");
+                         POLY_TRAIT POLY_STRUCT POLY_FUNCTION("X", ), "");
     test_compiler_status(PAW_ENAME, "trait_missing_generic_in_bounds",
-            POLY_TRAIT POLY_STRUCT POLY_FUNCTION("X",), "");
+                         POLY_TRAIT POLY_STRUCT POLY_FUNCTION("X", ), "");
     test_compiler_status(PAW_ETYPE, "trait_cannot_infer_generic",
-            POLY_TRAIT POLY_STRUCT "fn call_f<T: Trait>(t: T) {t.f();}",
-            "let x = S{v: 123}; call_f(x);");
+                         POLY_TRAIT POLY_STRUCT "fn call_f<T: Trait>(t: T) {t.f();}",
+                         "let x = S{v: 123}; call_f(x);");
 }
 
 void test_underscore(void)
@@ -632,9 +632,9 @@ void test_underscore(void)
     test_compiler_status(PAW_ESYNTAX, "underscore_in_field_type", "struct S {value: [_]}", "");
 
     test_compiler_status(PAW_ETYPE, "underscore_bad_scalar_inference",
-            "fn f(b: bool) {let v: _ = if b {1} else {'a'};}", "");
+                         "fn f(b: bool) {let v: _ = if b {1} else {'a'};}", "");
     test_compiler_status(PAW_ETYPE, "underscore_bad_container_inference",
-            "fn f(b: bool) {let v: [_]; if b {v = [1]} else {v = ['a']};}", "");
+                         "fn f(b: bool) {let v: [_]; if b {v = [1]} else {v = ['a']};}", "");
 }
 
 int main(void)

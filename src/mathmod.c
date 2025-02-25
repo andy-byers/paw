@@ -4,66 +4,65 @@
 
 #include "prefix.h"
 
-#include <math.h>
 #include "api.h"
 #include "env.h"
 #include "lib.h"
 #include "util.h"
+#include <math.h>
 
 static int math_sin(paw_Env *P)
 {
-    const paw_Float f = paw_float(P, 1);
+    paw_Float const f = paw_float(P, 1);
     paw_push_float(P, sin(f));
     return 1;
 }
 
 static int math_cos(paw_Env *P)
 {
-    const paw_Float f = paw_float(P, 1);
+    paw_Float const f = paw_float(P, 1);
     paw_push_float(P, cos(f));
     return 1;
 }
 
 static int math_tan(paw_Env *P)
 {
-    const paw_Float f = paw_float(P, 1);
+    paw_Float const f = paw_float(P, 1);
     paw_push_float(P, tan(f));
     return 1;
 }
 
 static int math_asin(paw_Env *P)
 {
-    const paw_Float f = paw_float(P, 1);
+    paw_Float const f = paw_float(P, 1);
     paw_push_float(P, asin(f));
     return 1;
 }
 
 static int math_acos(paw_Env *P)
 {
-    const paw_Float f = paw_float(P, 1);
+    paw_Float const f = paw_float(P, 1);
     paw_push_float(P, acos(f));
     return 1;
 }
 
 static int math_atan(paw_Env *P)
 {
-    const paw_Float f = paw_float(P, 1);
+    paw_Float const f = paw_float(P, 1);
     paw_push_float(P, atan(f));
     return 1;
 }
 
 static int math_atan2(paw_Env *P)
 {
-    const paw_Float a = paw_float(P, 1);
-    const paw_Float b = paw_float(P, 2);
+    paw_Float const a = paw_float(P, 1);
+    paw_Float const b = paw_float(P, 2);
     paw_push_float(P, atan2(a, b));
     return 1;
 }
 
-
 void l_import_math(paw_Env *P)
 {
-    static const char s_math[] =
+    static char const s_math[] =
         "pub fn sin(f: float) -> float;\n"
         "pub fn cos(f: float) -> float;\n"
         "pub fn tan(f: float) -> float;\n"
@@ -86,4 +85,3 @@ void l_import_math(paw_Env *P)
 
     pawL_chunk_reader(P, s_math, PAW_LENGTHOF(s_math));
 }
-

@@ -12,8 +12,9 @@
 
 static void grow_buffer(paw_Env *P, Buffer *buf)
 {
-    if (buf->alloc > SIZE_MAX / 2) pawM_error(P);
-    const size_t alloc = buf->alloc * 2;
+    if (buf->alloc > SIZE_MAX / 2)
+        pawM_error(P);
+    size_t const alloc = buf->alloc * 2;
     StackPtr pbox = RESTORE_POINTER(P, buf->boxloc);
     if (L_IS_BOXED(buf)) {
         Foreign *f = V_FOREIGN(*pbox);
@@ -67,7 +68,7 @@ void pawL_buffer_resize(paw_Env *P, Buffer *buf, size_t n)
     buf->size = n;
 }
 
-static void add_nstring(paw_Env *P, Buffer *buf, const char *str, size_t len)
+static void add_nstring(paw_Env *P, Buffer *buf, char const *str, size_t len)
 {
     char *ptr = reserve_memory(P, buf, len);
     memcpy(ptr, str, len);
@@ -79,12 +80,12 @@ void pawL_add_char(paw_Env *P, Buffer *buf, char c)
     ptr[0] = c;
 }
 
-void pawL_add_string(paw_Env *P, Buffer *buf, const char *s)
+void pawL_add_string(paw_Env *P, Buffer *buf, char const *s)
 {
     pawL_add_nstring(P, buf, s, strlen(s));
 }
 
-void pawL_add_nstring(paw_Env *P, Buffer *buf, const char *s, size_t n)
+void pawL_add_nstring(paw_Env *P, Buffer *buf, char const *s, size_t n)
 {
     add_nstring(P, buf, s, n);
 }
@@ -93,7 +94,7 @@ void pawL_add_int(paw_Env *P, Buffer *buf, paw_Int i)
 {
     size_t len;
     paw_push_int(P, i);
-    const char *str = paw_int_to_string(P, -1, &len);
+    char const *str = paw_int_to_string(P, -1, &len);
     add_nstring(P, buf, str, len);
     paw_pop(P, 1);
 }
@@ -102,7 +103,7 @@ void pawL_add_float(paw_Env *P, Buffer *buf, paw_Float f)
 {
     size_t len;
     paw_push_float(P, f);
-    const char *str = paw_float_to_string(P, -1, &len);
+    char const *str = paw_float_to_string(P, -1, &len);
     add_nstring(P, buf, str, len);
     paw_pop(P, 1);
 }
@@ -110,13 +111,13 @@ void pawL_add_float(paw_Env *P, Buffer *buf, paw_Float f)
 static void add_pointer(paw_Env *P, Buffer *buf, void *p)
 {
     char temp[32];
-    const int n = snprintf(temp, sizeof(temp), "%p", p);
+    int const n = snprintf(temp, sizeof(temp), "%p", p);
     pawL_add_nstring(P, buf, temp, CAST_SIZE(n));
 }
 
-static const char *add_non_fmt(paw_Env *P, Buffer *buf, const char *ptr)
+static char const *add_non_fmt(paw_Env *P, Buffer *buf, char const *ptr)
 {
-    const char *p = ptr;
+    char const *p = ptr;
     while (*p && *p != '%') {
         ++p;
     }
@@ -127,16 +128,17 @@ static const char *add_non_fmt(paw_Env *P, Buffer *buf, const char *ptr)
     return ptr;
 }
 
-void pawL_add_vfstring(paw_Env *P, Buffer *buf, const char *fmt, va_list arg)
+void pawL_add_vfstring(paw_Env *P, Buffer *buf, char const *fmt, va_list arg)
 {
     for (;; ++fmt) {
         fmt = add_non_fmt(P, buf, fmt);
-        if (*fmt == '\0') break;
+        if (*fmt == '\0')
+            break;
         ++fmt; // skip '%'
 
         switch (*fmt) {
             case 's': {
-                const char *s = va_arg(arg, char *);
+                char const *s = va_arg(arg, char *);
                 pawL_add_nstring(P, buf, s, strlen(s));
                 break;
             }
@@ -167,7 +169,7 @@ void pawL_add_vfstring(paw_Env *P, Buffer *buf, const char *fmt, va_list arg)
     }
 }
 
-void pawL_add_fstring(paw_Env *P, Buffer *buf, const char *fmt, ...)
+void pawL_add_fstring(paw_Env *P, Buffer *buf, char const *fmt, ...)
 {
     va_list arg;
     va_start(arg, fmt);
