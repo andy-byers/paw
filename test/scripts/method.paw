@@ -134,3 +134,15 @@ pub fn test_ab() {
     assert(a == b - 1);
     assert(c == d - 1);
 }
+
+pub fn test_primitive_methods() {
+    assert(false.to_string() == "false");
+    assert(true.to_string() == "true");
+    assert(1.to_string() == "1");
+    assert(0b10.to_string() == "2");
+    assert(0o10.to_string() == "8");
+    assert(0x10.to_string() == "16");
+    assert(1.0.to_string() != "");
+    assert(1.0e+1.to_string() != "");
+    assert(1e-1.to_string() != "");
+}

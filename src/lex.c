@@ -48,22 +48,29 @@ static void save(struct Lex *x, char c)
     dm->scratch.data[dm->scratch.count++] = c;
 }
 
+static void next(struct Lex *x)
+{
+    ++x->ptr;
+}
+
+static paw_Bool test(struct Lex *x, char c)
+{
+    return *x->ptr == c;
+}
+
 static paw_Bool test_next(struct Lex *x, char c)
 {
-    if (*x->ptr == c) {
-        ++x->ptr;
-        return PAW_TRUE;
-    }
-    return PAW_FALSE;
+    return test(x, c) ? (next(x), PAW_TRUE) : PAW_FALSE;
+}
+
+static paw_Bool test2(struct Lex *x, char const *c2)
+{
+    return *x->ptr == c2[0] || *x->ptr == c2[1];
 }
 
 static paw_Bool test_next2(struct Lex *x, char const *c2)
 {
-    if (*x->ptr == c2[0] || *x->ptr == c2[1]) {
-        SAVE_AND_NEXT(x);
-        return PAW_TRUE;
-    }
-    return PAW_FALSE;
+    return test2(x, c2) ? (next(x), PAW_TRUE) : PAW_FALSE;
 }
 
 static struct Token make_token(TokenKind kind)
@@ -287,7 +294,7 @@ static struct Token consume_string(struct Lex *x)
     goto handle_ascii;
 }
 
-static struct Token consume_int(struct Lex *x)
+static struct Token consume_int_aux(struct Lex *x)
 {
     paw_Env *P = ENV(x);
     struct DynamicMem *dm = x->dm;
@@ -304,9 +311,80 @@ static struct Token consume_int(struct Lex *x)
         .value.i = i,
     };
 }
-
-static struct Token consume_float(struct Lex *x)
+static struct Token consume_bin_int(struct Lex *x, const char *begin)
 {
+    save(x, begin[0]);
+    save(x, begin[1]);
+
+    while (ISNAME(*x->ptr) || ISDIGIT(*x->ptr)) {
+        if (!test2(x, "01"))
+            pawX_error(x, "malformed binary integer");
+        SAVE_AND_NEXT(x);
+    }
+
+    save(x, '\0');
+    return consume_int_aux(x);
+}
+
+static struct Token consume_oct_int(struct Lex *x, const char *begin)
+{
+    save(x, begin[0]);
+    save(x, begin[1]);
+
+    while (ISNAME(*x->ptr) || ISDIGIT(*x->ptr)) {
+        if (*x->ptr < '0' || *x->ptr > '7')
+            pawX_error(x, "malformed octal integer");
+        SAVE_AND_NEXT(x);
+    }
+
+    save(x, '\0');
+    return consume_int_aux(x);
+}
+
+static struct Token consume_hex_int(struct Lex *x, const char *begin)
+{
+    save(x, begin[0]);
+    save(x, begin[1]);
+
+    while (ISNAME(*x->ptr) || ISDIGIT(*x->ptr)) {
+        if (!ISHEX(*x->ptr))
+            pawX_error(x, "malformed hexadecimal integer");
+        SAVE_AND_NEXT(x);
+    }
+
+    save(x, '\0');
+    return consume_int_aux(x);
+}
+
+static struct Token consume_int(struct Lex *x, const char *begin)
+{
+    for (; begin < x->ptr; ++begin) {
+        save(x, *begin);
+    }
+    save(x, '\0');
+
+    paw_Env *P = ENV(x);
+    struct DynamicMem *dm = x->dm;
+    paw_Int i;
+
+    int const rc = pawV_parse_int(P, dm->scratch.data, 0, &i);
+    if (rc == PAW_EOVERFLOW)
+        pawX_error(x, "integer '%s' is out of range for 'int' type", dm->scratch.data);
+    if (rc == PAW_ESYNTAX)
+        pawX_error(x, "invalid integer '%s'", dm->scratch.data);
+    return (struct Token){
+        .kind = TK_INTEGER,
+        .value.i = i,
+    };
+}
+
+static struct Token consume_float(struct Lex *x, const char *begin)
+{
+    for (; begin < x->ptr; ++begin) {
+        save(x, *begin);
+    }
+    save(x, '\0');
+
     paw_Env *P = ENV(x);
     struct DynamicMem *dm = x->dm;
     paw_Float f;
@@ -322,60 +400,95 @@ static struct Token consume_float(struct Lex *x)
 
 static struct Token consume_number(struct Lex *x)
 {
-    // Save source text in a buffer until a byte is reached that cannot possibly
-    // be part of a number.
-    char const first = *x->ptr;
-    SAVE_AND_NEXT(x);
+    const char *begin = x->ptr++;
+    paw_assert(ISDIGIT(*begin));
 
-    paw_Bool likely_float = PAW_FALSE;
-    paw_Bool likely_int = first == '0' &&
-                          (test_next2(x, "bB") ||
-                           test_next2(x, "oO") ||
-                           test_next2(x, "xX"));
-    paw_Bool const dot_selector = x->t.kind == '.';
-    if (dot_selector) {
-        if (likely_int) {
-            pawX_error(x, "'.' selector must be a base-10 integer");
-        }
-        likely_int = PAW_TRUE;
+    if (*begin == '0' && test_next2(x, "bB"))
+        return consume_bin_int(x, begin);
+    if (*begin == '0' && test_next2(x, "oO"))
+        return consume_oct_int(x, begin);
+    if (*begin == '0' && test_next2(x, "xX"))
+        return consume_hex_int(x, begin);
+
+    while (ISDIGIT(*x->ptr))
+        next(x);
+
+    if (test(x, '.')) {
+        if (!ISDIGIT(x->ptr[1]) || x->t.kind == '.')
+            return consume_int(x, begin);
+    } else if (!test2(x, "eE")) {
+        return consume_int(x, begin);
     }
 
-    // Consume adjacent floating-point indicators, exponents, and fractional
-    // parts.
-    for (;;) {
-        // Make sure not to consume byte sequences like "e+" or "E-" if we have
-        // already encountered a non-decimal integer prefix. This allows expressions
-        // like "0x1e+1" to be parsed like "0x1e + 1" instead of raising a syntax
-        // error.
-        if (!likely_int && test_next2(x, "eE")) {
-            likely_float = PAW_TRUE;
-            test_next2(x, "+-");
-            continue;
-        }
-        if (ISHEX(*x->ptr)) {
-            // save digits below
-        } else if (*x->ptr == '.') {
-            if (dot_selector)
-                break;
-            likely_float = PAW_TRUE;
-        } else {
-            break;
-        }
-        SAVE_AND_NEXT(x);
+    if (test_next(x, '.')) {
+        while (ISDIGIT(*x->ptr))
+            next(x);
     }
-    if (ISNAME(*x->ptr)) {
-        // cause pawV_to_number() to fail
-        SAVE_AND_NEXT(x);
-    }
-    save(x, '\0');
 
-    if (likely_int && likely_float) {
-        pawX_error(x, "malformed number '%s'", x->dm->scratch.data);
-    } else if (likely_float) {
-        return consume_float(x);
-    } else {
-        return consume_int(x);
+    if (test_next2(x, "eE")) {
+        test_next2(x, "+-");
+        if (!ISDIGIT(*x->ptr))
+            pawX_error(x, "malformed float");
     }
+
+    while (ISDIGIT(*x->ptr))
+        next(x);
+    return consume_float(x, begin);
+
+//    // Save source text in a buffer until a byte is reached that cannot possibly
+//    // be part of a number.
+//    char const first = *x->ptr;
+//    SAVE_AND_NEXT(x);
+//
+//    paw_Bool likely_float = PAW_FALSE;
+//    paw_Bool likely_int = first == '0' &&
+//                          (test_next2(x, "bB") ||
+//                           test_next2(x, "oO") ||
+//                           test_next2(x, "xX"));
+//    paw_Bool const dot_selector = x->t.kind == '.';
+//    if (dot_selector) {
+//        if (likely_int) {
+//            pawX_error(x, "'.' selector must be a base-10 integer");
+//        }
+//        likely_int = PAW_TRUE;
+//    }
+//
+//    // Consume adjacent floating-point indicators, exponents, and fractional
+//    // parts.
+//    for (;;) {
+//        // Make sure not to consume byte sequences like "e+" or "E-" if we have
+//        // already encountered a non-decimal integer prefix. This allows expressions
+//        // like "0x1e+1" to be parsed like "0x1e + 1" instead of raising a syntax
+//        // error.
+//        if (!likely_int && test_next2(x, "eE")) {
+//            likely_float = PAW_TRUE;
+//            test_next2(x, "+-");
+//            continue;
+//        }
+//        if (ISHEX(*x->ptr)) {
+//            // save digits below
+//        } else if (*x->ptr == '.') {
+//            if (dot_selector)
+//                break;
+//            likely_float = PAW_TRUE;
+//        } else {
+//            break;
+//        }
+//        SAVE_AND_NEXT(x);
+//    }
+//    if (ISNAME(*x->ptr)) {
+//        // cause pawV_to_number() to fail
+//        SAVE_AND_NEXT(x);
+//    }
+//    save(x, '\0');
+//
+//    if (likely_int && likely_float) {
+//        pawX_error(x, "malformed number '%s'", x->dm->scratch.data);
+//    } else if (likely_float) {
+//        return consume_float(x);
+//    } else {
+//        return consume_int(x, begin);
+//    }
 }
 
 static void skip_block_comment(struct Lex *x)
@@ -386,14 +499,14 @@ static void skip_block_comment(struct Lex *x)
         } else if (IS_EOF(x)) {
             pawX_error(x, "missing end of block comment");
         }
-        ++x->ptr;
+        next(x);
     }
 }
 
 static void skip_line_comment(struct Lex *x)
 {
     while (!IS_EOF(x) && !ISNEWLINE(*x->ptr)) {
-        ++x->ptr;
+        next(x);
     }
 }
 
@@ -404,7 +517,7 @@ static void skip_whitespace(struct Lex *x)
             || *x->ptr == '\f'
             || *x->ptr == '\v'
             || IS_NEWLINE(x)) {
-        ++x->ptr;
+        next(x);
     }
 }
 
@@ -427,10 +540,10 @@ try_again:
         case ')':
         case ']':
         case '}':
-            ++x->ptr;
+            next(x);
             break;
         case '=':
-            ++x->ptr;
+            next(x);
             if (test_next(x, '=')) {
                 token = T(TK_EQUALS2);
             } else if (test_next(x, '>')) {
@@ -438,37 +551,37 @@ try_again:
             }
             break;
         case '&':
-            ++x->ptr;
+            next(x);
             if (test_next(x, '&')) {
                 token = T(TK_AMPER2);
             }
             break;
         case '|':
-            ++x->ptr;
+            next(x);
             if (test_next(x, '|')) {
                 token = T(TK_PIPE2);
             }
             break;
         case '-':
-            ++x->ptr;
+            next(x);
             if (test_next(x, '>')) {
                 token = T(TK_ARROW);
             }
             break;
         case ':':
-            ++x->ptr;
+            next(x);
             if (test_next(x, ':')) {
                 token = T(TK_COLON2);
             }
             break;
         case '!':
-            ++x->ptr;
+            next(x);
             if (test_next(x, '=')) {
                 token = T(TK_BANG_EQ);
             }
             break;
         case '<':
-            ++x->ptr;
+            next(x);
             if (test_next(x, '<')) {
                 token = T(TK_LESS2);
             } else if (test_next(x, '=')) {
@@ -476,7 +589,7 @@ try_again:
             }
             break;
         case '>':
-            ++x->ptr;
+            next(x);
             if (test_next(x, '>')) {
                 token = T(TK_GREATER2);
             } else if (test_next(x, '=')) {
@@ -484,13 +597,13 @@ try_again:
             }
             break;
         case '+':
-            ++x->ptr;
+            next(x);
             if (test_next(x, '+')) {
                 token = T(TK_PLUS2);
             }
             break;
         case '.':
-            ++x->ptr;
+            next(x);
             if (test_next(x, '.')) {
                 if (test_next(x, '.')) {
                     token = T(TK_DOT3);
@@ -499,7 +612,7 @@ try_again:
             }
             break;
         case '/':
-            ++x->ptr;
+            next(x);
             if (test_next(x, '/')) {
                 skip_line_comment(x);
                 goto try_again;
@@ -518,7 +631,7 @@ try_again:
             } else if (ISNAME(*x->ptr)) {
                 token = consume_name(x);
             } else {
-                ++x->ptr;
+                next(x);
             }
     }
     return token;

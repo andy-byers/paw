@@ -1128,6 +1128,28 @@ static struct AstExpr *primary_expr(struct Lex *lex)
         case '{':
             expr = block_expr(lex);
             break;
+        case TK_TRUE:
+            expr = emit_bool(lex, PAW_TRUE);
+            skip(lex);
+            break;
+        case TK_FALSE:
+            expr = emit_bool(lex, PAW_FALSE);
+            skip(lex);
+            break;
+        case TK_INTEGER:
+            expr = new_basic_lit(lex, lex->t.value, BUILTIN_INT);
+            skip(lex);
+            break;
+        case TK_FLOAT:
+            expr = new_basic_lit(lex, lex->t.value, BUILTIN_FLOAT);
+            skip(lex);
+            break;
+        case TK_STRING: {
+            Value const v = lex->t.value;
+            expr = new_basic_lit(lex, v, BUILTIN_STR);
+            skip(lex);
+            break;
+        }
         case TK_IF:
             expr = if_expr(lex);
             break;
@@ -1193,23 +1215,6 @@ static struct AstExpr *simple_expr(struct Lex *lex)
 {
     struct AstExpr *expr;
     switch (lex->t.kind) {
-        case TK_TRUE:
-            expr = emit_bool(lex, PAW_TRUE);
-            break;
-        case TK_FALSE:
-            expr = emit_bool(lex, PAW_FALSE);
-            break;
-        case TK_INTEGER:
-            expr = new_basic_lit(lex, lex->t.value, BUILTIN_INT);
-            break;
-        case TK_FLOAT:
-            expr = new_basic_lit(lex, lex->t.value, BUILTIN_FLOAT);
-            break;
-        case TK_STRING: {
-            Value const v = lex->t.value;
-            expr = new_basic_lit(lex, v, BUILTIN_STR);
-            break;
-        }
         case TK_PIPE2:
             lex->t.kind = '|';
             lex->t2.kind = '|';
@@ -1219,7 +1224,6 @@ static struct AstExpr *simple_expr(struct Lex *lex)
         default:
             return suffixed_expr(lex);
     }
-    skip(lex); // skip literal
     return expr;
 }
 

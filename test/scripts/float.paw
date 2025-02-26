@@ -3,7 +3,6 @@
 pub fn test_zeros() {
     assert(0.0 == 0.0);
     assert(0.00 == 0.0);
-    assert(0. == 0.0);
     assert(0.0e0 == 0.0);
     assert(0.0e1 == 0.0);
 }
@@ -33,9 +32,12 @@ pub fn test_parse() {
     check('  -1.0', -1.0);
     check('-1.0  ', -1.0);
     check(' -1.0 ', -1.0);
-    check('.0', 0.0);
-    check('0.', 0.0);
     check('0', 0.0);
     check('1', 1.0);
     check('100', 100.0);
+
+    // "str::parse_float" allows some syntax that isn't allowed directly
+    // in Paw code
+    check('0.', 0.0);
+    check('.0', 0.0);
 }
