@@ -41,3 +41,9 @@ pub fn test_parse() {
     check('0.', 0.0);
     check('.0', 0.0);
 }
+
+pub fn test_digit_separators() {
+    assert(10_e1_0_0_ == 10e100);
+    assert(1_0_.0_0e100 == 10e100);
+}
+

@@ -145,4 +145,5 @@ pub fn test_primitive_methods() {
     assert(1.0.to_string() != "");
     assert(1.0e+1.to_string() != "");
     assert(1e-1.to_string() != "");
+    assert(','.join(['a', 'b']) == "a,b");
 }

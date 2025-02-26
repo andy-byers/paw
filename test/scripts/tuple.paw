@@ -1,4 +1,4 @@
-// TODO: nested tuple selectors look like floats...
+// tuple.paw
 
 pub fn test_empty_is_unit() {
     let empty = ();
@@ -81,3 +81,9 @@ pub fn test_dot_selectors_4() {
     let tuple = ([((|| || (42, ),),)],);
     assert(tuple.0[0].0.0()().0 == 42);
 }
+
+pub fn test_multidigit_selector() {
+    let t = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, (10,));
+    assert(t.10.0 == 10);
+}
+

@@ -2,9 +2,6 @@
 // usage: paw mandelbrot.paw x0,x1,nx,y0,y1,ny
 // translated from https://rosettacode.org/wiki/Mandelbrot_set#ASCII_2 (Lua).
 
-//mod mandelbrot
-//use io
-
 pub fn main(args: [str]) -> int {
     let charmap = [
         ' ', '.', ':', '-', '=',

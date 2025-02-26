@@ -4,7 +4,7 @@ fn random(n: int) -> [int] {
     let a = [];
     let x = n;
     while #a < n {
-        x = (140671485 * x + 12820163) % 16777216;
+        x = (140_671_485 * x + 12_820_163) % 16_777_216;
         a.push(x);
     }
     return a;

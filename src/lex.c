@@ -48,9 +48,9 @@ static void save(struct Lex *x, char c)
     dm->scratch.data[dm->scratch.count++] = c;
 }
 
-static void next(struct Lex *x)
+static char next(struct Lex *x)
 {
-    ++x->ptr;
+    return *x->ptr++;
 }
 
 static paw_Bool test(struct Lex *x, char c)
@@ -177,10 +177,10 @@ static int get_codepoint(struct Lex *x)
     if (x->end - x->ptr < 4)
         return -1;
     const char c[4] = {
-        *x->ptr++,
-        *x->ptr++,
-        *x->ptr++,
-        *x->ptr++,
+        next(x),
+        next(x),
+        next(x),
+        next(x),
     };
 
     if (!ISHEX(c[0])
@@ -197,7 +197,7 @@ static int get_codepoint(struct Lex *x)
 
 static struct Token consume_string(struct Lex *x)
 {
-    char const quote = *x->ptr++;
+    char const quote = next(x);
 
     for (;;) {
     handle_ascii:
@@ -208,7 +208,7 @@ static struct Token consume_string(struct Lex *x)
     }
 
     if (test_next(x, '\\')) {
-        char const c = *x->ptr++;
+        char const c = next(x);
         switch (c) {
             case '"':
                 save(x, '"');
@@ -311,15 +311,23 @@ static struct Token consume_int_aux(struct Lex *x)
         .value.i = i,
     };
 }
+
 static struct Token consume_bin_int(struct Lex *x, const char *begin)
 {
+    if (!test2(x, "01"))
+        pawX_error(x, "expected at least 1 binary digit");
+
     save(x, begin[0]);
     save(x, begin[1]);
 
     while (ISNAME(*x->ptr) || ISDIGIT(*x->ptr)) {
-        if (!test2(x, "01"))
-            pawX_error(x, "malformed binary integer");
-        SAVE_AND_NEXT(x);
+        if (test_next(x, '_')) {
+            // ignore digit separators
+        } else if (!test2(x, "01")) {
+            pawX_error(x, "unexpected '%c' in binary integer", *x->ptr);
+        } else {
+            SAVE_AND_NEXT(x);
+        }
     }
 
     save(x, '\0');
@@ -328,13 +336,20 @@ static struct Token consume_bin_int(struct Lex *x, const char *begin)
 
 static struct Token consume_oct_int(struct Lex *x, const char *begin)
 {
+    if (*x->ptr < '0' || *x->ptr > '7')
+        pawX_error(x, "expected at least 1 octal digit");
+
     save(x, begin[0]);
     save(x, begin[1]);
 
     while (ISNAME(*x->ptr) || ISDIGIT(*x->ptr)) {
-        if (*x->ptr < '0' || *x->ptr > '7')
-            pawX_error(x, "malformed octal integer");
-        SAVE_AND_NEXT(x);
+        if (test_next(x, '_')) {
+            // ignore digit separators
+        } else if (*x->ptr < '0' || *x->ptr > '7') {
+            pawX_error(x, "unexpected '%c' in octal integer", *x->ptr);
+        } else {
+            SAVE_AND_NEXT(x);
+        }
     }
 
     save(x, '\0');
@@ -343,25 +358,37 @@ static struct Token consume_oct_int(struct Lex *x, const char *begin)
 
 static struct Token consume_hex_int(struct Lex *x, const char *begin)
 {
+    if (!ISHEX(*x->ptr))
+        pawX_error(x, "expected at least 1 hexadecimal digit");
+
     save(x, begin[0]);
     save(x, begin[1]);
 
     while (ISNAME(*x->ptr) || ISDIGIT(*x->ptr)) {
-        if (!ISHEX(*x->ptr))
-            pawX_error(x, "malformed hexadecimal integer");
-        SAVE_AND_NEXT(x);
+        if (test_next(x, '_')) {
+            // ignore digit separators
+        } else if (!ISHEX(*x->ptr)) {
+            pawX_error(x, "unexpected '%c' in hexadecimal integer", *x->ptr);
+        } else {
+            SAVE_AND_NEXT(x);
+        }
     }
 
     save(x, '\0');
     return consume_int_aux(x);
 }
 
-static struct Token consume_int(struct Lex *x, const char *begin)
+static void save_parsed_digits(struct Lex *x, const char *begin)
 {
     for (; begin < x->ptr; ++begin) {
-        save(x, *begin);
+        if (*begin != '_') save(x, *begin);
     }
     save(x, '\0');
+}
+
+static struct Token consume_decimal_int(struct Lex *x, const char *begin)
+{
+    save_parsed_digits(x, begin);
 
     paw_Env *P = ENV(x);
     struct DynamicMem *dm = x->dm;
@@ -380,10 +407,7 @@ static struct Token consume_int(struct Lex *x, const char *begin)
 
 static struct Token consume_float(struct Lex *x, const char *begin)
 {
-    for (; begin < x->ptr; ++begin) {
-        save(x, *begin);
-    }
-    save(x, '\0');
+    save_parsed_digits(x, begin);
 
     paw_Env *P = ENV(x);
     struct DynamicMem *dm = x->dm;
@@ -410,18 +434,21 @@ static struct Token consume_number(struct Lex *x)
     if (*begin == '0' && test_next2(x, "xX"))
         return consume_hex_int(x, begin);
 
-    while (ISDIGIT(*x->ptr))
+    while (ISDIGIT(*x->ptr) || test(x, '_'))
         next(x);
 
     if (test(x, '.')) {
+        // Allow accessing fields directly on an int or float (without parenthesis),
+        // as well as chained tuple selectors. "x->ptr[1]" works because the source
+        // buffer ends with a '\0'.
         if (!ISDIGIT(x->ptr[1]) || x->t.kind == '.')
-            return consume_int(x, begin);
+            return consume_decimal_int(x, begin);
     } else if (!test2(x, "eE")) {
-        return consume_int(x, begin);
+        return consume_decimal_int(x, begin);
     }
 
     if (test_next(x, '.')) {
-        while (ISDIGIT(*x->ptr))
+        while (ISDIGIT(*x->ptr) || test(x, '_'))
             next(x);
     }
 
@@ -431,7 +458,7 @@ static struct Token consume_number(struct Lex *x)
             pawX_error(x, "malformed float");
     }
 
-    while (ISDIGIT(*x->ptr))
+    while (ISDIGIT(*x->ptr) || test(x, '_'))
         next(x);
     return consume_float(x, begin);
 

@@ -184,3 +184,20 @@ pub fn test_limits() {
     assert(imax == 9223372036854775807);
 }
 
+pub fn test_digit_separators() {
+    assert(1_23 == 123);
+    assert(12_3 == 123);
+    assert(123_ == 123);
+
+    assert(0b1_01 == 0b101);
+    assert(0b10_1 == 0b101);
+    assert(0b101_ == 0b101);
+
+    assert(0o5_67 == 0o567);
+    assert(0o56_7 == 0o567);
+    assert(0o567_ == 0o567);
+
+    assert(0xD_EF == 0xDEF);
+    assert(0xDE_F == 0xDEF);
+    assert(0xDEF_ == 0xDEF);
+}

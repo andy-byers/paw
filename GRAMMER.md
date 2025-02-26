@@ -161,10 +161,9 @@ hex_lit     = "0" ("x" | "X") hex_digits .
 
 ### Float literals
 ```ebnf
-float_lit        = decimal_digits "." [decimal_digits] [decimal_exponent] |
-                   decimal_digits decimal_exponent |
-                   "." decimal_digits [decimal_exponent] .
-decimal_exponent = ("e" | "E") ["+" | "-"] decimal_digits .
+float_lit = decimal_digits "." [decimal_digits] [exponent] |
+            decimal_digits exponent .
+exponent  = ("e" | "E") ["+" | "-"] decimal_digits .
 ```
 
 ## Miscellaneous
@@ -175,8 +174,8 @@ decimal_digit  = "0" … "9" .
 binary_digit   = "0" | "1" .
 octal_digit    = "0" … "7" .
 hex_digit      = "0" … "9" | "A" … "F" | "a" … "f" .
-decimal_digits = decimal_digit {decimal_digit} .
-binary_digits  = binary_digit {binary_digit} .
-octal_digits   = octal_digit {octal_digit} .
-hex_digits     = hex_digit {hex_digit} .
+decimal_digits = decimal_digit {decimal_digit | "_"} .
+binary_digits  = binary_digit {binary_digit | "_"} .
+octal_digits   = octal_digit {octal_digit | "_"} .
+hex_digits     = hex_digit {hex_digit | "_"} .
 ```

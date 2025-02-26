@@ -235,6 +235,12 @@ static void test_syntax_error(void)
     test_compiler_status(PAW_ESYNTAX, "malformed_binary", "", "let b = 0b00$101;");
     test_compiler_status(PAW_ESYNTAX, "malformed_octal", "", "let o = 0o37=273;");
     test_compiler_status(PAW_ESYNTAX, "malformed_hex", "", "let x = 0y5A2CF3;");
+    test_compiler_status(PAW_ESYNTAX, "int_digit_sep_before_bin_digits", "", "let x = 0b_01;");
+    test_compiler_status(PAW_ESYNTAX, "int_digit_sep_before_oct_digits", "", "let x = 0o_23;");
+    test_compiler_status(PAW_ESYNTAX, "int_digit_sep_before_hex_digits", "", "let x = 0x_45;");
+    test_compiler_status(PAW_ESYNTAX, "int_digit_sep_before_b", "", "let x = 0_b01;");
+    test_compiler_status(PAW_ESYNTAX, "int_digit_sep_before_o", "", "let x = 0_o23;");
+    test_compiler_status(PAW_ESYNTAX, "int_digit_sep_before_x", "", "let x = 0_x45;");
     test_compiler_status(PAW_ESYNTAX, "missing_right_paren", "fn f(a: int, b: int, c: int -> int {return (a + b + c);}", "");
     test_compiler_status(PAW_ESYNTAX, "missing_left_paren", "fn fa: int, b: int, c: int) -> int {return (a + b + c);}", "");
     test_compiler_status(PAW_ESYNTAX, "missing_right_curly", "fn f(a: int, b: int, c: int) -> int {return (a + b + c);", "");
@@ -254,12 +260,20 @@ static void test_syntax_error(void)
     test_compiler_status(PAW_ESYNTAX, "bad_float_2", "", "let f = 1-.0-;");
     test_compiler_status(PAW_ESYNTAX, "bad_float_3", "", "let f = 1e--1;");
     test_compiler_status(PAW_ESYNTAX, "bad_float_4", "", "let f = 1e++1;");
-    test_compiler_status(PAW_ESYNTAX, "bad_float_5", "", "let f = 1e-1.0;");
-    test_compiler_status(PAW_ESYNTAX, "bad_float_6", "", "let f = 1e+1.0;");
+    // NOTE: type error is becuase the follwing is parsed as a tuple selector on a
+    //       float (accessing element 0 on "1e-1")
+    test_compiler_status(PAW_ETYPE, "bad_float_5", "", "let f = 1e-1.0;");
+    test_compiler_status(PAW_ETYPE, "bad_float_6", "", "let f = 1e+1.0;");
     test_compiler_status(PAW_ESYNTAX, "bad_float_7", "", "let f = 1e-1e1;");
     test_compiler_status(PAW_ESYNTAX, "bad_float_8", "", "let f = 1e+1e1;");
-    test_compiler_status(PAW_ESYNTAX, "bad_float_9", "", "let f = 1.0.0;");
-    test_compiler_status(PAW_ESYNTAX, "float_with_base_prefix", "", "let f = 0x1.0;");
+    test_compiler_status(PAW_ETYPE, "bad_float_9", "", "let f = 1.0.0;");
+    // NOTE: name error is because the following is parsed as a field access on an
+    //       integer (accessing field "_0" on "1")
+    test_compiler_status(PAW_ENAME, "float_digit_sep_after_dot", "", "let f = 1._0;");
+    test_compiler_status(PAW_ESYNTAX, "float_digit_sep_after_e", "", "let f = 1e_0;");
+    test_compiler_status(PAW_ESYNTAX, "float_digit_sep_after_-", "", "let f = 1e-_0;");
+    test_compiler_status(PAW_ESYNTAX, "float_digit_sep_after_+", "", "let f = 1e+_0;");
+    test_compiler_status(PAW_ETYPE, "float_with_base_prefix", "", "let f = 0x1.0;");
 
     test_compiler_status(PAW_ESYNTAX, "missing_semicolon_after_stmt", "", "let a = 1");
     test_compiler_status(PAW_ESYNTAX, "missing_semicolon_between_stmts", "", "let a = 2\nlet b = 3;");
