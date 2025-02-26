@@ -576,18 +576,6 @@ struct IrTypeList *pawHir_collect_decl_types(struct Compiler *C, struct HirDeclL
     return types;
 }
 
-struct IrTypeList *pawHir_collect_expr_types(struct Compiler *C, struct HirExprList *list)
-{
-    if (list == NULL)
-        return NULL;
-    struct IrTypeList *types = pawIr_type_list_new(C);
-    for (int i = 0; i < list->count; ++i) {
-        struct HirExpr *expr = K_LIST_GET(list, i);
-        K_LIST_PUSH(C, types, GET_NODE_TYPE(C, expr));
-    }
-    return types;
-}
-
 enum TraitKind pawHir_kindof_trait(struct Compiler *C, struct HirTraitDecl *d)
 {
     if (pawS_eq(d->name, CSTR(C, CSTR_HASH))) {

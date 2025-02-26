@@ -6,9 +6,9 @@
 #include "compile.h"
 
 #define LEX_ERROR(x) pawX_error(x, "syntax error")
-#define SAVE_AND_NEXT(x) (save(x, (x)->c), next(x))
-#define IS_EOF(x) (CAST(uint8_t, (x)->c) == TK_END)
-#define IS_NEWLINE(x) ((x)->c == '\r' || (x)->c == '\n')
+#define SAVE_AND_NEXT(x) (save(x, *(x)->ptr), ++x->ptr)
+#define IS_EOF(x) (CAST(uint8_t, *(x)->ptr) == TK_END)
+#define IS_NEWLINE(x) (*(x)->ptr == '\r' || *(x)->ptr == '\n')
 
 static void add_location(paw_Env *P, Buffer *print, String const *s, int line)
 {
@@ -32,38 +32,13 @@ _Noreturn void pawX_error(struct Lex *x, char const *fmt, ...)
     pawC_throw(P, PAW_ESYNTAX);
 }
 
-static char next_raw(struct Lex *x)
-{
-    paw_Env *P = ENV(x);
-    if (x->nchunk == 0) {
-        x->chunk = x->input(P, x->ud, &x->nchunk);
-    }
-    if (x->nchunk > 0) {
-        x->c = x->chunk[0];
-        --x->nchunk;
-        ++x->chunk;
-    } else {
-        x->c = CAST(char, TK_END);
-    }
-    return x->c;
-}
-
 static void increment_line(struct Lex *x)
 {
-    paw_assert(ISNEWLINE(x->c));
+    paw_assert(ISNEWLINE(*x->ptr));
     if (x->line == INT_MAX) {
         pawX_error(x, "too many lines in module");
     }
     ++x->line;
-}
-
-static char next(struct Lex *x)
-{
-    char c = next_raw(x);
-    if (ISNEWLINE(c)) {
-        increment_line(x);
-    }
-    return c;
 }
 
 static void save(struct Lex *x, char c)
@@ -75,8 +50,8 @@ static void save(struct Lex *x, char c)
 
 static paw_Bool test_next(struct Lex *x, char c)
 {
-    if (x->c == c) {
-        next(x);
+    if (*x->ptr == c) {
+        ++x->ptr;
         return PAW_TRUE;
     }
     return PAW_FALSE;
@@ -84,7 +59,7 @@ static paw_Bool test_next(struct Lex *x, char c)
 
 static paw_Bool test_next2(struct Lex *x, char const *c2)
 {
-    if (x->c == c2[0] || x->c == c2[1]) {
+    if (*x->ptr == c2[0] || *x->ptr == c2[1]) {
         SAVE_AND_NEXT(x);
         return PAW_TRUE;
     }
@@ -121,18 +96,18 @@ static struct Token make_float(struct Lex *x)
 static struct Token make_string(struct Lex *x, TokenKind kind)
 {
     struct DynamicMem *dm = x->dm;
-    struct CharVec *cv = &dm->scratch;
+    struct StringBuffer *b = &dm->scratch;
     struct Token t = make_token(kind);
-    String *s = pawP_scan_nstring(x->C, x->strings, cv->data, CAST_SIZE(cv->count));
+    String *s = pawP_scan_nstring(x->C, x->strings, b->data, CAST_SIZE(b->count));
     V_SET_OBJECT(&t.value, s);
-    cv->count = 0;
+    b->count = 0;
     return t;
 }
 
 static struct Token consume_name(struct Lex *x)
 {
     SAVE_AND_NEXT(x);
-    while (ISNAME(x->c) || ISDIGIT(x->c)) {
+    while (ISNAME(*x->ptr) || ISDIGIT(*x->ptr)) {
         SAVE_AND_NEXT(x);
     }
     struct Token t = make_string(x, TK_NAME);
@@ -182,7 +157,7 @@ static int consume_utf8(struct Lex *x)
 
     uint32_t state = 0;
     do {
-        uint8_t const c = CAST(uint8_t, x->c);
+        uint8_t const c = CAST(uint8_t, *x->ptr);
         state = kLookup1[c] + state * 12;
         state = kLookup2[state];
         SAVE_AND_NEXT(x);
@@ -192,44 +167,41 @@ static int consume_utf8(struct Lex *x)
 
 static int get_codepoint(struct Lex *x)
 {
-    char c[4];
-    c[0] = x->c;
-    next(x);
-    c[1] = x->c;
-    next(x);
-    c[2] = x->c;
-    next(x);
-    c[3] = x->c;
-    next(x);
+    if (x->end - x->ptr < 4)
+        return -1;
+    const char c[4] = {
+        *x->ptr++,
+        *x->ptr++,
+        *x->ptr++,
+        *x->ptr++,
+    };
 
-    if (!ISHEX(c[0]) ||
-        !ISHEX(c[1]) ||
-        !ISHEX(c[2]) ||
-        !ISHEX(c[3])) {
+    if (!ISHEX(c[0])
+            || !ISHEX(c[1])
+            || !ISHEX(c[2])
+            || !ISHEX(c[3])) {
         return -1;
     }
-    return HEXVAL(c[0]) << 12 |
-           HEXVAL(c[1]) << 8 |
-           HEXVAL(c[2]) << 4 |
-           HEXVAL(c[3]);
+    return HEXVAL(c[0]) << 12
+        | HEXVAL(c[1]) << 8
+        | HEXVAL(c[2]) << 4
+        | HEXVAL(c[3]);
 }
 
 static struct Token consume_string(struct Lex *x)
 {
-    char const quote = x->c;
-    next(x);
+    char const quote = *x->ptr++;
 
     for (;;) {
     handle_ascii:
-        if (ISASCIIEND(x->c)) {
+        if (ISASCIIEND(*x->ptr)) {
             break;
         }
         SAVE_AND_NEXT(x);
     }
 
     if (test_next(x, '\\')) {
-        char const c = x->c;
-        next(x);
+        char const c = *x->ptr++;
         switch (c) {
             case '"':
                 save(x, '"');
@@ -306,7 +278,7 @@ static struct Token consume_string(struct Lex *x)
         }
     } else if (test_next(x, quote)) {
         return make_string(x, TK_STRING);
-    } else if (ISNEWLINE(x->c)) {
+    } else if (ISNEWLINE(*x->ptr)) {
         // unescaped newlines allowed in string literals
         SAVE_AND_NEXT(x);
     } else if (consume_utf8(x)) {
@@ -352,7 +324,7 @@ static struct Token consume_number(struct Lex *x)
 {
     // Save source text in a buffer until a byte is reached that cannot possibly
     // be part of a number.
-    char const first = x->c;
+    char const first = *x->ptr;
     SAVE_AND_NEXT(x);
 
     paw_Bool likely_float = PAW_FALSE;
@@ -380,9 +352,9 @@ static struct Token consume_number(struct Lex *x)
             test_next2(x, "+-");
             continue;
         }
-        if (ISHEX(x->c)) {
+        if (ISHEX(*x->ptr)) {
             // save digits below
-        } else if (x->c == '.') {
+        } else if (*x->ptr == '.') {
             if (dot_selector)
                 break;
             likely_float = PAW_TRUE;
@@ -391,7 +363,7 @@ static struct Token consume_number(struct Lex *x)
         }
         SAVE_AND_NEXT(x);
     }
-    if (ISNAME(x->c)) {
+    if (ISNAME(*x->ptr)) {
         // cause pawV_to_number() to fail
         SAVE_AND_NEXT(x);
     }
@@ -414,36 +386,38 @@ static void skip_block_comment(struct Lex *x)
         } else if (IS_EOF(x)) {
             pawX_error(x, "missing end of block comment");
         }
-        next(x);
+        ++x->ptr;
     }
 }
 
 static void skip_line_comment(struct Lex *x)
 {
-    while (!IS_EOF(x) && !ISNEWLINE(x->c)) {
-        next(x);
+    while (!IS_EOF(x) && !ISNEWLINE(*x->ptr)) {
+        ++x->ptr;
     }
 }
 
 static void skip_whitespace(struct Lex *x)
 {
-    while (x->c == ' ' ||
-           x->c == '\t' ||
-           x->c == '\f' ||
-           x->c == '\v' ||
-           IS_NEWLINE(x)) {
-        next(x);
+    while (*x->ptr == ' '
+            || *x->ptr == '\t'
+            || *x->ptr == '\f'
+            || *x->ptr == '\v'
+            || IS_NEWLINE(x)) {
+        ++x->ptr;
     }
 }
 
 static struct Token advance(struct Lex *x)
 {
-try_again:
 #define T(kind) make_token(CAST(TokenKind, kind))
+
+try_again:
+    paw_assert(x->ptr < x->end);
     skip_whitespace(x);
 
     // cast to avoid sign extension
-    struct Token token = T(CAST(uint8_t, x->c));
+    struct Token token = T(CAST(uint8_t, *x->ptr));
     x->dm->scratch.count = 0;
     switch (token.kind) {
         case '\'':
@@ -453,10 +427,10 @@ try_again:
         case ')':
         case ']':
         case '}':
-            next(x);
+            ++x->ptr;
             break;
         case '=':
-            next(x);
+            ++x->ptr;
             if (test_next(x, '=')) {
                 token = T(TK_EQUALS2);
             } else if (test_next(x, '>')) {
@@ -464,37 +438,37 @@ try_again:
             }
             break;
         case '&':
-            next(x);
+            ++x->ptr;
             if (test_next(x, '&')) {
                 token = T(TK_AMPER2);
             }
             break;
         case '|':
-            next(x);
+            ++x->ptr;
             if (test_next(x, '|')) {
                 token = T(TK_PIPE2);
             }
             break;
         case '-':
-            next(x);
+            ++x->ptr;
             if (test_next(x, '>')) {
                 token = T(TK_ARROW);
             }
             break;
         case ':':
-            next(x);
+            ++x->ptr;
             if (test_next(x, ':')) {
                 token = T(TK_COLON2);
             }
             break;
         case '!':
-            next(x);
+            ++x->ptr;
             if (test_next(x, '=')) {
                 token = T(TK_BANG_EQ);
             }
             break;
         case '<':
-            next(x);
+            ++x->ptr;
             if (test_next(x, '<')) {
                 token = T(TK_LESS2);
             } else if (test_next(x, '=')) {
@@ -502,7 +476,7 @@ try_again:
             }
             break;
         case '>':
-            next(x);
+            ++x->ptr;
             if (test_next(x, '>')) {
                 token = T(TK_GREATER2);
             } else if (test_next(x, '=')) {
@@ -510,13 +484,13 @@ try_again:
             }
             break;
         case '+':
-            next(x);
+            ++x->ptr;
             if (test_next(x, '+')) {
                 token = T(TK_PLUS2);
             }
             break;
         case '.':
-            next(x);
+            ++x->ptr;
             if (test_next(x, '.')) {
                 if (test_next(x, '.')) {
                     token = T(TK_DOT3);
@@ -525,7 +499,7 @@ try_again:
             }
             break;
         case '/':
-            next(x);
+            ++x->ptr;
             if (test_next(x, '/')) {
                 skip_line_comment(x);
                 goto try_again;
@@ -534,17 +508,52 @@ try_again:
                 goto try_again;
             }
             break;
+        case '\r':
+        case '\n':
+            increment_line(x);
+            goto try_again;
         default:
-            if (ISDIGIT(x->c)) {
+            if (ISDIGIT(*x->ptr)) {
                 token = consume_number(x);
-            } else if (ISNAME(x->c)) {
+            } else if (ISNAME(*x->ptr)) {
                 token = consume_name(x);
             } else {
-                next(x);
+                ++x->ptr;
             }
     }
     return token;
 #undef T
+}
+
+// Read the source code into a buffer
+static void read_source(struct Lex *x)
+{
+    paw_Env *P = ENV(x);
+    struct SourceBuffer *b = &x->dm->source;
+    size_t next, size = 0;
+
+    for (;;) {
+        const char *chunk = x->input(P, x->ud, &next);
+        if (next == 0) break;
+
+        if (next > b->size - size) {
+            size_t alloc = PAW_MAX(b->size, 1);
+            while (alloc < size + next) alloc *= 2;
+            pawM_resize(P, b->data, b->size, alloc);
+            b->size = alloc;
+        }
+
+        memcpy(b->data + size, chunk, next);
+        size += next;
+    }
+
+    // shrink buffer to fit (or add space for '\0')
+    pawM_resize(P, b->data, b->size, size + 1);
+    b->size = size + 1;
+
+    b->data[size] = '\0';
+    x->ptr = b->data;
+    x->end = b->data + size;
 }
 
 TokenKind pawX_next(struct Lex *x)
@@ -579,7 +588,8 @@ void pawX_set_source(struct Lex *x, paw_Reader input, void *ud)
     x->ud = ud;
     x->input = input;
     x->line = 1;
+    x->t2.kind = TK_NONE;
 
-    next(x); // load first chunk of text
+    read_source(x);
     pawX_next(x); // load first token
 }

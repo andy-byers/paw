@@ -190,6 +190,7 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, char co
 void pawP_teardown(paw_Env *P, struct DynamicMem *dm)
 {
     pawK_pool_uninit(P, &dm->pool);
+    pawM_free_vec(P, dm->source.data, dm->source.size);
     pawM_free_vec(P, dm->scratch.data, dm->scratch.alloc);
 }
 

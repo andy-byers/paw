@@ -450,7 +450,7 @@ static void dump_expr(Printer *P, struct AstExpr *expr)
     DUMP_MSG(P, "}\n");
 }
 
-void pawAst_dump(struct Ast *ast)
+char const *pawAst_dump(struct Ast *ast)
 {
     Buffer buf;
     paw_Env *P = ENV(ast);
@@ -459,10 +459,13 @@ void pawAst_dump(struct Ast *ast)
         .buf = &buf,
         .P = P,
     };
-    for (int i = 0; i < ast->items->count; ++i) {
-        dump_decl(&print, ast->items->data[i]);
+    struct AstDecl *const *pdecl;
+    K_LIST_FOREACH(ast->items, pdecl) {
+        dump_decl(&print, *pdecl);
     }
     pawL_push_result(P, &buf);
+    return paw_string(P, -1);
 }
 
-#endif
+#endif // PAW_DEBUG_EXTRA
+

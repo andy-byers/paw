@@ -1283,6 +1283,6 @@ inline static struct AstSegment *pawAst_path_add(struct Compiler *C, struct AstP
 
 #define AST_KINDOF(x) ((x)->hdr.kind)
 
-void pawAst_dump(struct Ast *ast);
+char const *pawAst_dump(struct Ast *ast);
 
 #endif // PAW_AST_H

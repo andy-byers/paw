@@ -161,11 +161,17 @@ struct DynamicMem {
     struct Pool pool;
 
     // buffer for accumulating strings
-    struct CharVec {
+    struct StringBuffer {
         char *data;
         int count;
         int alloc;
     } scratch;
+
+    // buffer for storing source text
+    struct SourceBuffer {
+        char *data;
+        size_t size;
+    } source;
 };
 
 void pawP_lower_ast(struct Compiler *C);

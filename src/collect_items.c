@@ -213,8 +213,6 @@ static void register_generics(struct ItemCollector *X, struct HirDeclList *gener
 
 static struct IrTypeList *collect_generic_types(struct ItemCollector *X, struct HirDeclList *generics)
 {
-    if (generics == NULL)
-        return NULL;
     return pawHir_collect_decl_types(X->C, generics);
 }
 

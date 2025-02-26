@@ -4,6 +4,7 @@
 #ifndef PAW_LEX_H
 #define PAW_LEX_H
 
+#include "compile.h"
 #include "value.h"
 
 #define FIRST_KEYWORD TK_PUB
@@ -16,8 +17,8 @@ void pawX_read_float(paw_Env *P, char const *data);
 
 enum MultiChar {
     // Control tokens:
-    TK_NONE = 0,
-    TK_END = 255,
+    TK_END = 0,
+    TK_NONE = 255,
 
     // Multi-byte tokens:
     TK_PLUS2,
@@ -82,13 +83,11 @@ struct Lex {
     struct Ast *ast;
 
     paw_Reader input;
-    char const *chunk;
-    size_t nchunk;
-    char c;
+    char const *ptr;
+    char const *end;
 
     struct DynamicMem *dm;
 
-    // Current token and 1 lookahead
     struct Token t;
     struct Token t2;
 

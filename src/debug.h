@@ -9,7 +9,6 @@
 #include "env.h"
 #include "paw.h"
 
-#define PAW_DEBUG_EXTRA
 #if defined(PAW_DEBUG_LOG)
 #define PAWD_LOG(P, ...) pawD_debug_log(P, __VA_ARGS__)
 #else
@@ -29,5 +28,7 @@ void paw_dump_value(Value v, paw_Type type);
 
 char const *paw_unop_name(enum UnaryOp unop);
 char const *paw_binop_name(enum BinaryOp binop);
+char const *paw_unop_symbol(enum UnaryOp unop);
+char const *paw_binop_symbol(enum BinaryOp binop);
 
 #endif // PAW_DEBUG_H

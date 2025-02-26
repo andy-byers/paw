@@ -48,9 +48,10 @@ char const *test_reader(paw_Env *P, void *ud, size_t *size)
 {
     PAW_UNUSED(P);
     struct TestReader *rd = ud;
-    if (!rd->length) {
+    if (rd->length == 0) {
         next_chunk(rd);
-        if (!rd->length) {
+        if (rd->length == 0) {
+            *size = 0;
             return NULL;
         }
     }

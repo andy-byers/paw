@@ -898,6 +898,9 @@ struct MirLocationList *pawMir_compute_locations(struct Mir *mir)
     return locations;
 }
 
+
+#if defined(PAW_DEBUG_EXTRA)
+
 struct Printer {
     struct Compiler *C;
     struct Mir *mir;
@@ -1282,3 +1285,5 @@ char const *pawMir_dump_info(struct Compiler *C, struct Mir *mir)
     pawL_push_result(P, &buf);
     return paw_string(P, -1);
 }
+
+#endif // PAW_DEBUG_EXTRA

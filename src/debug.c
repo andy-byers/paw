@@ -52,14 +52,28 @@ char const *paw_unop_name(enum UnaryOp unop)
             return "NOT";
         case UNARY_BNOT:
             return "BNOT";
-        default:
-            return "?";
+    }
+}
+
+char const *paw_unop_symbol(enum UnaryOp unop)
+{
+    switch (unop) {
+        case UNARY_LEN:
+            return "#";
+        case UNARY_NEG:
+            return "-";
+        case UNARY_NOT:
+            return "!";
+        case UNARY_BNOT:
+            return "~";
     }
 }
 
 char const *paw_binop_name(enum BinaryOp binop)
 {
     switch (binop) {
+        case BINARY_AS:
+            return "AS";
         case BINARY_ADD:
             return "ADD";
         case BINARY_SUB:
@@ -92,8 +106,46 @@ char const *paw_binop_name(enum BinaryOp binop)
             return "GT";
         case BINARY_GE:
             return "GE";
-        default:
-            return "?";
+    }
+}
+
+char const *paw_binop_symbol(enum BinaryOp binop)
+{
+    switch (binop) {
+        case BINARY_AS:
+            return "as";
+        case BINARY_ADD:
+            return "+";
+        case BINARY_SUB:
+            return "-";
+        case BINARY_MUL:
+            return "*";
+        case BINARY_DIV:
+            return "/";
+        case BINARY_MOD:
+            return "%";
+        case BINARY_BXOR:
+            return "^";
+        case BINARY_BAND:
+            return "&";
+        case BINARY_BOR:
+            return "|";
+        case BINARY_SHL:
+            return "<<";
+        case BINARY_SHR:
+            return ">>";
+        case BINARY_EQ:
+            return "==";
+        case BINARY_NE:
+            return "!=";
+        case BINARY_LT:
+            return "<";
+        case BINARY_LE:
+            return "<=";
+        case BINARY_GT:
+            return ">";
+        case BINARY_GE:
+            return ">=";
     }
 }
 

@@ -319,7 +319,7 @@ static struct AstDecl *variant_field_decl(struct Lex *lex)
 {
     int const line = lex->line;
     struct AstType *tag = parse_type(lex, PAW_TRUE);
-    return pawAst_new_field_decl(lex->ast, line, NULL, tag, PAW_TRUE);
+    return pawAst_new_field_decl(lex->ast, line, NULL, tag, PAW_FALSE);
 }
 
 #define DEFINE_LIST_PARSER(name, a, b, limit, what, func, L)                   \
@@ -720,7 +720,7 @@ static struct AstDecl *closure_param_decl(struct Lex *lex)
     int const line = lex->line;
     String *name = parse_name(lex);
     struct AstType *tag = type_annotation(lex, PAW_FALSE);
-    return pawAst_new_field_decl(lex->ast, line, name, tag, PAW_TRUE);
+    return pawAst_new_field_decl(lex->ast, line, name, tag, PAW_FALSE);
 }
 
 static struct AstDecl *let_decl(struct Lex *lex, int line)
@@ -1626,7 +1626,7 @@ static struct AstDecl *toplevel_item(struct Lex *lex, paw_Bool is_pub)
 
 static struct AstDeclList *toplevel_items(struct Lex *lex, struct AstDeclList *list)
 {
-    while (!test_next(lex, TK_END)) {
+    while (!test(lex, TK_END)) {
         paw_Bool const is_pub = test_next(lex, TK_PUB);
         struct AstDecl *item = toplevel_item(lex, is_pub);
         K_LIST_PUSH(lex->C, list, item);
@@ -1744,7 +1744,7 @@ static void skip_hashbang(struct Lex *lex)
 {
     if (test_next(lex, '#') && test_next(lex, '!')) {
         while (!test(lex, TK_END)) {
-            char const c = lex->c;
+            char const c = *lex->ptr;
             skip(lex); // skip line
             if (ISNEWLINE(c))
                 break;

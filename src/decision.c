@@ -8,6 +8,8 @@
 #include "ir_type.h"
 #include "match.h"
 
+#if defined(PAW_DEBUG_EXTRA)
+
 struct Printer {
     struct Compiler *C;
     Buffer *buf;
@@ -180,3 +182,5 @@ char const *pawP_print_decision(struct Compiler *C, struct Decision *dec)
     pawL_push_result(P, &buf);
     return paw_string(P, -1);
 }
+
+#endif // PAW_DEBUG_EXTRA
