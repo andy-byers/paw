@@ -20,8 +20,7 @@ static int run_tests(paw_Env *P)
         if (!def->hdr.is_pub)
             continue;
         String const *name = def->hdr.name;
-        if (name->length >= kLength &&
-            memcmp(name->text, kPrefix, kLength) == 0) {
+        if (name->length >= kLength && memcmp(name->text, kPrefix, kLength) == 0) {
             check(def->hdr.kind == DEF_FUNC);
             paw_push_zero(P, 1);
             P->top.p[-1] = *Y_PVAL(P, def->func.vid);

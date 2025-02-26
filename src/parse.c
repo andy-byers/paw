@@ -461,8 +461,7 @@ static paw_Bool is_wildcard_path(struct AstPath const *path)
     if (path->count > 1)
         return PAW_FALSE;
     struct AstSegment seg = K_LIST_GET(path, 0);
-    return pawS_length(seg.name) == 1 &&
-           seg.name->text[0] == '_';
+    return pawS_length(seg.name) == 1 && seg.name->text[0] == '_';
 }
 
 static struct AstPat *compound_pat(struct Lex *lex)

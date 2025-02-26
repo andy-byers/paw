@@ -898,7 +898,6 @@ struct MirLocationList *pawMir_compute_locations(struct Mir *mir)
     return locations;
 }
 
-
 #if defined(PAW_DEBUG_EXTRA)
 
 struct Printer {

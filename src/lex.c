@@ -184,15 +184,15 @@ static int get_codepoint(struct Lex *x)
     };
 
     if (!ISHEX(c[0])
-            || !ISHEX(c[1])
-            || !ISHEX(c[2])
-            || !ISHEX(c[3])) {
+        || !ISHEX(c[1])
+        || !ISHEX(c[2])
+        || !ISHEX(c[3])) {
         return -1;
     }
     return HEXVAL(c[0]) << 12
-        | HEXVAL(c[1]) << 8
-        | HEXVAL(c[2]) << 4
-        | HEXVAL(c[3]);
+           | HEXVAL(c[1]) << 8
+           | HEXVAL(c[2]) << 4
+           | HEXVAL(c[3]);
 }
 
 static struct Token consume_string(struct Lex *x)
@@ -253,9 +253,7 @@ static struct Token consume_string(struct Lex *x)
                         if (codepoint2 < 0xDC00 || codepoint2 > 0xDFFF) {
                             LEX_ERROR(x);
                         }
-                        codepoint = (((codepoint - 0xD800) << 10) |
-                                     (codepoint2 - 0xDC00)) +
-                                    0x10000;
+                        codepoint = (((codepoint - 0xD800) << 10) | (codepoint2 - 0xDC00)) + 0x10000;
                     } else {
                         LEX_ERROR(x);
                     }
@@ -381,7 +379,8 @@ static struct Token consume_hex_int(struct Lex *x, const char *begin)
 static void save_parsed_digits(struct Lex *x, const char *begin)
 {
     for (; begin < x->ptr; ++begin) {
-        if (*begin != '_') save(x, *begin);
+        if (*begin != '_')
+            save(x, *begin);
     }
     save(x, '\0');
 }
@@ -443,13 +442,12 @@ static struct Token consume_number(struct Lex *x)
         // buffer ends with a '\0'.
         if (!ISDIGIT(x->ptr[1]) || x->t.kind == '.')
             return consume_decimal_int(x, begin);
-    } else if (!test2(x, "eE")) {
-        return consume_decimal_int(x, begin);
-    }
 
-    if (test_next(x, '.')) {
+        next(x); // skip '.'
         while (ISDIGIT(*x->ptr) || test(x, '_'))
             next(x);
+    } else if (!test2(x, "eE")) {
+        return consume_decimal_int(x, begin);
     }
 
     if (test_next2(x, "eE")) {
@@ -461,61 +459,6 @@ static struct Token consume_number(struct Lex *x)
     while (ISDIGIT(*x->ptr) || test(x, '_'))
         next(x);
     return consume_float(x, begin);
-
-//    // Save source text in a buffer until a byte is reached that cannot possibly
-//    // be part of a number.
-//    char const first = *x->ptr;
-//    SAVE_AND_NEXT(x);
-//
-//    paw_Bool likely_float = PAW_FALSE;
-//    paw_Bool likely_int = first == '0' &&
-//                          (test_next2(x, "bB") ||
-//                           test_next2(x, "oO") ||
-//                           test_next2(x, "xX"));
-//    paw_Bool const dot_selector = x->t.kind == '.';
-//    if (dot_selector) {
-//        if (likely_int) {
-//            pawX_error(x, "'.' selector must be a base-10 integer");
-//        }
-//        likely_int = PAW_TRUE;
-//    }
-//
-//    // Consume adjacent floating-point indicators, exponents, and fractional
-//    // parts.
-//    for (;;) {
-//        // Make sure not to consume byte sequences like "e+" or "E-" if we have
-//        // already encountered a non-decimal integer prefix. This allows expressions
-//        // like "0x1e+1" to be parsed like "0x1e + 1" instead of raising a syntax
-//        // error.
-//        if (!likely_int && test_next2(x, "eE")) {
-//            likely_float = PAW_TRUE;
-//            test_next2(x, "+-");
-//            continue;
-//        }
-//        if (ISHEX(*x->ptr)) {
-//            // save digits below
-//        } else if (*x->ptr == '.') {
-//            if (dot_selector)
-//                break;
-//            likely_float = PAW_TRUE;
-//        } else {
-//            break;
-//        }
-//        SAVE_AND_NEXT(x);
-//    }
-//    if (ISNAME(*x->ptr)) {
-//        // cause pawV_to_number() to fail
-//        SAVE_AND_NEXT(x);
-//    }
-//    save(x, '\0');
-//
-//    if (likely_int && likely_float) {
-//        pawX_error(x, "malformed number '%s'", x->dm->scratch.data);
-//    } else if (likely_float) {
-//        return consume_float(x);
-//    } else {
-//        return consume_int(x, begin);
-//    }
 }
 
 static void skip_block_comment(struct Lex *x)
@@ -540,10 +483,10 @@ static void skip_line_comment(struct Lex *x)
 static void skip_whitespace(struct Lex *x)
 {
     while (*x->ptr == ' '
-            || *x->ptr == '\t'
-            || *x->ptr == '\f'
-            || *x->ptr == '\v'
-            || IS_NEWLINE(x)) {
+           || *x->ptr == '\t'
+           || *x->ptr == '\f'
+           || *x->ptr == '\v'
+           || IS_NEWLINE(x)) {
         next(x);
     }
 }
@@ -674,11 +617,13 @@ static void read_source(struct Lex *x)
 
     for (;;) {
         const char *chunk = x->input(P, x->ud, &next);
-        if (next == 0) break;
+        if (next == 0)
+            break;
 
         if (next > b->size - size) {
             size_t alloc = PAW_MAX(b->size, 1);
-            while (alloc < size + next) alloc *= 2;
+            while (alloc < size + next)
+                alloc *= 2;
             pawM_resize(P, b->data, b->size, alloc);
             b->size = alloc;
         }

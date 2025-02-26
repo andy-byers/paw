@@ -460,7 +460,8 @@ char const *pawAst_dump(struct Ast *ast)
         .P = P,
     };
     struct AstDecl *const *pdecl;
-    K_LIST_FOREACH(ast->items, pdecl) {
+    K_LIST_FOREACH(ast->items, pdecl)
+    {
         dump_decl(&print, *pdecl);
     }
     pawL_push_result(P, &buf);
@@ -468,4 +469,3 @@ char const *pawAst_dump(struct Ast *ast)
 }
 
 #endif // PAW_DEBUG_EXTRA
-

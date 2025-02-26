@@ -88,3 +88,45 @@ pub fn test_negative_zero() {
     m[0.0] = "zero";
     assert(m[-0.0] == "zero");
 }
+
+struct BadKey: Hash + Equals {
+    pub value: int,
+    // cause a collision on each insertion
+    pub fn hash(self) -> int { 0 }
+    pub fn eq(self, rhs: Self) -> bool {
+        self.value == rhs.value
+    }
+}
+
+pub fn bk(value: int) -> BadKey {
+    BadKey{value}
+}
+
+pub fn test_addressing_stress() {
+    let m = [:];
+    m[bk(-1)] = -1;
+    m[bk(-2)] = -2;
+    m[bk(-3)] = -3;
+
+    let i = 0;
+    while i < 500 {
+        m[bk(i)] = i;
+        i = i + 1;
+    }
+
+    i = 0;
+    while i < 500 {
+        assert(m[bk(i)] == i);
+        i = i + 1;
+    }
+
+    i = 0;
+    while i < 500 {
+        m.erase(bk(i));
+        i = i + 1;
+    }
+
+    assert(m[bk(-1)] == -1);
+    assert(m[bk(-2)] == -2);
+    assert(m[bk(-3)] == -3);
+}

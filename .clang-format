@@ -5,5 +5,6 @@ BreakBeforeBraces: Linux
 ColumnLimit: 0
 IndentCaseLabels: true
 IndentWidth: 4
+BreakBeforeBinaryOperators: NonAssignment
 SpaceBeforeCaseColon: false
 AlignTrailingComments: false

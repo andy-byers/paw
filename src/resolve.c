@@ -159,8 +159,7 @@ static paw_Bool is_unit_variant(struct Resolver *R, struct IrType *type)
 {
     if (IrIsSignature(type)) {
         struct HirDecl *decl = get_decl(R, IrGetSignature(type)->did);
-        return HirIsVariantDecl(decl) &&
-               HirGetVariantDecl(decl)->fields == NULL;
+        return HirIsVariantDecl(decl) && HirGetVariantDecl(decl)->fields == NULL;
     }
     return PAW_FALSE;
 }
@@ -617,7 +616,8 @@ static void check_map_key(struct Resolver *R, struct IrType *key)
         if (!implements_trait(R, key, requires[i])) {
             String const *trait_name =
                 requires[
-                                i] == TRAIT_HASH
+                                i]
+                            == TRAIT_HASH
                             ? CSTR(R, CSTR_HASH)
                             : CSTR(R, CSTR_EQUALS);
             TYPE_ERROR(R, "type '%s' cannot be used as a map key: '%s' trait not implemented",
@@ -759,9 +759,7 @@ static struct IrType *resolve_binop_expr(struct Resolver *R, struct HirBinOpExpr
 
 static struct IrType *resolve_assign_expr(struct Resolver *R, struct HirAssignExpr *e)
 {
-    if (!HirIsPathExpr(e->lhs) &&
-        !HirIsIndex(e->lhs) &&
-        !HirIsSelector(e->lhs)) {
+    if (!HirIsPathExpr(e->lhs) && !HirIsIndex(e->lhs) && !HirIsSelector(e->lhs)) {
         SYNTAX_ERROR(R, "invalid place for assignment");
     }
     struct IrType *lhs = resolve_operand(R, e->lhs);

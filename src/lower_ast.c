@@ -229,9 +229,7 @@ static struct HirExpr *LowerBinOpExpr(struct LowerAst *L, struct AstBinOpExpr *e
 static struct HirExpr *LowerAssignExpr(struct LowerAst *L, struct AstAssignExpr *e)
 {
     struct HirExpr *lhs = lower_expr(L, e->lhs);
-    if (!HirIsPathExpr(lhs) &&
-        !HirIsIndex(lhs) &&
-        !HirIsSelector(lhs)) {
+    if (!HirIsPathExpr(lhs) && !HirIsIndex(lhs) && !HirIsSelector(lhs)) {
         SYNTAX_ERROR(L, "invalid place for assignment");
     }
     struct HirExpr *rhs = lower_expr(L, e->rhs);

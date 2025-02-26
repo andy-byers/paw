@@ -178,8 +178,8 @@ int paw_lookup_item(paw_Env *P, int index, struct paw_Item *pitem)
         return 0;
     struct Def const *def = P->defs.data[iid];
     *pitem = (struct paw_Item){
-        .global_id = def->hdr.kind == DEF_FUNC ? def->func.vid :
-            def->hdr.kind == DEF_VAR ? def->var.vid : -1,
+        .global_id = def->hdr.kind == DEF_FUNC ? def->func.vid : def->hdr.kind == DEF_VAR ? def->var.vid
+                                                                                          : -1,
         .type = def->hdr.code,
     };
     return 0;

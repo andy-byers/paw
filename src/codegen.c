@@ -479,8 +479,7 @@ static String const *prefix_for_modno(struct Generator *G, int modno)
 
 static paw_Bool is_smi(paw_Int i)
 {
-    return (i < 0 && i >= -sBx_MAX) ||
-           (i >= 0 && i <= sBx_MAX);
+    return (i < 0 && i >= -sBx_MAX) || (i >= 0 && i <= sBx_MAX);
 }
 
 static void code_smi(struct FuncState *fs, MirRegister r, paw_Int i)

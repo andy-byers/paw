@@ -106,10 +106,8 @@ void pawR_error(paw_Env *P, int error, char const *fmt, ...)
 // Convert a paw_Float to a paw_Int (from Lua)
 // Assumes 2's complement, which means PAW_INT_MIN is a power-of-2 with
 // an exact paw_Float representation.
-#define FLOAT2INT_AUX(f, pv)                \
-    ((f) >= CAST(paw_Float, PAW_INT_MIN) && \
-     (f) < -CAST(paw_Float, PAW_INT_MIN) && \
-     (V_SET_INT(pv, PAW_CAST_INT(f)), 1))
+#define FLOAT2INT_AUX(f, pv) \
+    ((f) >= CAST(paw_Float, PAW_INT_MIN) && (f) < -CAST(paw_Float, PAW_INT_MIN) && (V_SET_INT(pv, PAW_CAST_INT(f)), 1))
 
 static void float2int(paw_Env *P, paw_Float f, Value *pv)
 {

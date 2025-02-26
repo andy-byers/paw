@@ -286,8 +286,7 @@ static int string_starts_with(paw_Env *P)
     String const *s = V_STRING(*CF_BASE(1));
     String const *prefix = V_STRING(*CF_BASE(2));
     size_t const prelen = prefix->length;
-    paw_Bool const b = s->length >= prelen &&
-                       0 == memcmp(prefix->text, s->text, prelen);
+    paw_Bool const b = s->length >= prelen && 0 == memcmp(prefix->text, s->text, prelen);
     V_SET_BOOL(P->top.p - 1, b);
     return 1;
 }

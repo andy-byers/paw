@@ -412,14 +412,11 @@ paw_Bool pawU_is_compat(struct Unifier *U, struct IrType *a, struct IrType *b)
             return are_lists_compat(U, IrGetTuple(a)->elems, IrGetTuple(b)->elems);
         case kIrFuncPtr:
         case kIrSignature:
-            return pawU_is_compat(U, IR_FPTR(a)->result, IR_FPTR(b)->result) &&
-                   are_lists_compat(U, IR_FPTR(a)->params, IR_FPTR(b)->params);
+            return pawU_is_compat(U, IR_FPTR(a)->result, IR_FPTR(b)->result) && are_lists_compat(U, IR_FPTR(a)->params, IR_FPTR(b)->params);
         case kIrAdt:
-            return IrGetAdt(a)->did.value == IrGetAdt(b)->did.value &&
-                   are_lists_compat(U, IrGetAdt(a)->types, IrGetAdt(b)->types);
+            return IrGetAdt(a)->did.value == IrGetAdt(b)->did.value && are_lists_compat(U, IrGetAdt(a)->types, IrGetAdt(b)->types);
         case kIrTraitObj:
-            return IrGetTraitObj(a)->did.value == IrGetTraitObj(b)->did.value &&
-                   are_lists_compat(U, IrGetTraitObj(a)->types, IrGetTraitObj(b)->types);
+            return IrGetTraitObj(a)->did.value == IrGetTraitObj(b)->did.value && are_lists_compat(U, IrGetTraitObj(a)->types, IrGetTraitObj(b)->types);
         default:
             return a == b;
     }

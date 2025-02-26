@@ -6,8 +6,7 @@
 #include "env.h"
 #include "mem.h"
 
-#define HEAP_META_SIZE (PAW_ROUND_UP(sizeof(struct Heap)) + \
-                        PAW_ROUND_UP(sizeof(struct Allocator)))
+#define HEAP_META_SIZE (PAW_ROUND_UP(sizeof(struct Heap)) + PAW_ROUND_UP(sizeof(struct Allocator)))
 
 #define OS_MALLOC(P, size) ((P)->alloc((P)->ud, NULL, 0, size))
 #define OS_FREE(P, ptr, size) ((P)->alloc((P)->ud, ptr, size, 0))
@@ -257,9 +256,8 @@ static void *key_chunk_alloc(struct Allocator *a, uint32_t nchunks)
 _Static_assert(CHUNK_SIZE == 8, "failed allocator precondition");
 #define COMPUTE_NUM_CHUNKS(nbytes) \
     ((nbytes) > 12 ? (CAST(uint32_t, nbytes) + 11) / 8 : 2)
-#define TOO_MANY_CHUNKS(nbytes)  \
-    ((nbytes) > SIZE_MAX - 11 || \
-     ((nbytes) + 11) / CHUNK_SIZE > UINT32_MAX)
+#define TOO_MANY_CHUNKS(nbytes) \
+    ((nbytes) > SIZE_MAX - 11 || ((nbytes) + 11) / CHUNK_SIZE > UINT32_MAX)
 
 // Modified from SQLite (mem3.c)
 static void *unsafe_malloc(struct Heap *H, size_t nbytes)

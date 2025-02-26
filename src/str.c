@@ -137,9 +137,7 @@ void pawS_register(paw_Env *P, String **pinit)
     str->hash = pawS_hash(str->text, str->length, 0);
     String **const plist = &st->strings[ST_INDEX(st, str->hash)];
     for (String *p = *plist; p; p = p->next) {
-        if (p->hash == str->hash &&
-            p->length == str->length &&
-            memcmp(p->text, str->text, str->length) == 0) {
+        if (p->hash == str->hash && p->length == str->length && memcmp(p->text, str->text, str->length) == 0) {
             *pinit = p;
             return;
         }
