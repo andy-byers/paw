@@ -78,7 +78,7 @@ static void dump_stmt(Printer *P, struct AstStmt *s);
 
 #define DEFINE_LIST_PRINTER(name, T)                                 \
     static void dump_##name##_list(Printer *P, struct T##List *list, \
-                                   const char *name)                 \
+        const char *name)                                            \
     {                                                                \
         DUMP_FMT(P, "%s: {\n", name);                                \
         ++P->indent;                                                 \

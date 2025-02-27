@@ -36,7 +36,7 @@ static void print_bindings(struct Printer *P, struct BindingList *bindings)
         struct Binding b = K_LIST_GET(bindings, i);
         pawIr_print_type(P->C, b.var.type);
         PRINT_FORMAT(P, "Binding(#%d, %s: %s),\n", b.var.id,
-                     b.name->text, paw_string(P->P, -1));
+            b.name->text, paw_string(P->P, -1));
         paw_pop(P->P, 1);
     }
 }

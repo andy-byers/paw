@@ -14,8 +14,8 @@
 #define RESTORE_POINTER(P, ofs) ((P)->stack.p + (ofs))
 #define ENSURE_STACK(P, n)                         \
     ((P)->bound.p - (P)->top.p < (n) + STACK_EXTRA \
-         ? pawC_stack_grow(P, n + STACK_EXTRA)     \
-         : (void)0)
+            ? pawC_stack_grow(P, n + STACK_EXTRA)  \
+            : (void)0)
 
 typedef void (*Call)(paw_Env *P, void *arg);
 

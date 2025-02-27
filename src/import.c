@@ -111,7 +111,7 @@ static void collect_imports_from(struct Importer *I, struct Ast *ast)
             continue;
         struct AstUseDecl *use = AstGetUseDecl(item);
         use->modno = import_module(I, use->name,
-                                   use->item == NULL ? use->as : NULL);
+            use->item == NULL ? use->as : NULL);
     }
 
     leave_context(I);

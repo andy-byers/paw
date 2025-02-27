@@ -20,8 +20,8 @@
 void pawV_index_error(paw_Env *P, paw_Int index, size_t length, char const *what)
 {
     pawR_error(P, PAW_EINDEX,
-               "index %I is out of bounds for %s of length %I",
-               index, what, PAW_CAST_INT(length));
+        "index %I is out of bounds for %s of length %I",
+        index, what, PAW_CAST_INT(length));
 }
 
 static int check_suffix(char const *p, char const *base)

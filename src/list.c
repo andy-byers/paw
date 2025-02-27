@@ -135,8 +135,8 @@ static paw_Int check_slice_bound(paw_Env *P, paw_Int index, paw_Int length, char
     index = pawV_abs_index(index, length);
     if (index < 0 || index > n) {
         pawE_error(P, PAW_ERUNTIME, -1,
-                   "slice %s index %I is out of bounds for list of length %I",
-                   what, index, PAW_CAST_INT(length));
+            "slice %s index %I is out of bounds for list of length %I",
+            what, index, PAW_CAST_INT(length));
     }
     return index;
 }

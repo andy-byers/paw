@@ -46,6 +46,21 @@ struct PolyStruct<T>: PolyTrait<T> {
     }
 }
 
+pub fn test_emit_warning() {
+    print("WARNING: need to handle the following\n");
+}
+
+//struct PolyStruct2<X>: PolyTrait<X> {
+//    pub value: X,
+//    pub fn get_value(self) -> X { 
+//        self.value 
+//    }
+//}
+
+//struct NonPolyStruct: PolyTrait<int> {
+//    pub fn get_value(self) -> int { 42 }
+//}
+
 pub fn test_call_poly_default_method() {
     let s = PolyStruct{value: "abc"};
     let t = PolyStruct{value: "def"};

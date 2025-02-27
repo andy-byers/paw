@@ -1375,6 +1375,63 @@ void pawHir_visit_decl_list(struct HirVisitor *V, struct HirDeclList *list);
 void pawHir_visit_type_list(struct HirVisitor *V, struct HirTypeList *list);
 void pawHir_visit_pat_list(struct HirVisitor *V, struct HirPatList *list);
 
+
+struct HirFolder {
+    struct Compiler *C;
+    struct Hir *hir;
+    void *ud;
+    int line;
+
+    struct HirPath *(*FoldPath)(struct HirFolder *F, struct HirPath *path);
+    struct HirSegment (*FoldSegment)(struct HirFolder *F, struct HirSegment *seg);
+
+     struct HirExpr *(*FoldExpr)(struct HirFolder *F, struct HirExpr *node);
+     struct HirStmt *(*FoldStmt)(struct HirFolder *F, struct HirStmt *node);
+     struct HirDecl *(*FoldDecl)(struct HirFolder *F, struct HirDecl *node);
+     struct HirType *(*FoldType)(struct HirFolder *F, struct HirType *node);
+     struct HirPat *(*FoldPat)(struct HirFolder *F, struct HirPat *node);
+
+#define DEFINE_CALLBACK(X)  \
+    struct HirExpr *(*Fold##X)(struct HirFolder * F, struct Hir##X * node);
+    HIR_EXPR_LIST(DEFINE_CALLBACK)
+#undef DEFINE_CALLBACK
+
+#define DEFINE_CALLBACK(X)  \
+    struct HirDecl *(*Fold##X)(struct HirFolder * F, struct Hir##X * node);
+    HIR_DECL_LIST(DEFINE_CALLBACK)
+#undef DEFINE_CALLBACK
+
+#define DEFINE_CALLBACK(X)  \
+    struct HirStmt *(*Fold##X)(struct HirFolder * F, struct Hir##X * node);
+    HIR_STMT_LIST(DEFINE_CALLBACK)
+#undef DEFINE_CALLBACK
+
+#define DEFINE_CALLBACK(X)  \
+    struct HirType *(*Fold##X)(struct HirFolder * F, struct Hir##X * node);
+    HIR_TYPE_LIST(DEFINE_CALLBACK)
+#undef DEFINE_CALLBACK
+
+#define DEFINE_CALLBACK(X)  \
+    struct HirPat *(*Fold##X)(struct HirFolder * F, struct Hir##X * node);
+    HIR_PAT_LIST(DEFINE_CALLBACK)
+#undef DEFINE_CALLBACK
+};
+
+void pawHir_folder_init(struct HirFolder *F, struct Hir *hir, void *ud);
+
+// Folder entrypoints for each kind of HIR node:
+struct HirExpr *pawHir_fold_expr(struct HirFolder *F, struct HirExpr *node);
+struct HirStmt *pawHir_fold_stmt(struct HirFolder *F, struct HirStmt *node);
+struct HirDecl *pawHir_fold_decl(struct HirFolder *F, struct HirDecl *node);
+struct HirType *pawHir_fold_type(struct HirFolder *F, struct HirType *node);
+struct HirPat *pawHir_fold_pat(struct HirFolder *F, struct HirPat *node);
+struct HirExprList *pawHir_fold_exprs(struct HirFolder *F, struct HirExprList *list);
+struct HirStmtList *pawHir_fold_stmts(struct HirFolder *F, struct HirStmtList *list);
+struct HirDeclList *pawHir_fold_decls(struct HirFolder *F, struct HirDeclList *list);
+struct HirTypeList *pawHir_fold_types(struct HirFolder *F, struct HirTypeList *list);
+struct HirPatList *pawHir_fold_pats(struct HirFolder *F, struct HirPatList *list);
+
+
 struct Hir {
     struct HirImportList *imports;
     struct HirDeclList *items;
@@ -1428,7 +1485,7 @@ struct HirDecl *pawHir_get_decl(struct Compiler *C, DeclId id);
 #define HIR_FPTR(t) CHECK_EXP(HirIsFuncType(t), &(t)->fptr)
 
 inline static struct HirSegment *pawHir_path_add(struct Hir *hir, struct HirPath *path, String *name,
-                                                 struct HirTypeList *args)
+    struct HirTypeList *args)
 {
     struct HirSegment seg;
     pawHir_init_segment(hir, &seg, name, args, NO_DECL);

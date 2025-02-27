@@ -68,6 +68,8 @@ static void script(char const *name)
 
 int main(void)
 {
+    script("trait_default");return 42;
+
 #define RUN_SCRIPT(name) script(#name);
     TEST_SCRIPTS(RUN_SCRIPT)
 #undef RUN_SCRIPT

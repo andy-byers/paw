@@ -186,7 +186,7 @@ char const *pawP_dump_asm(struct Compiler *C, struct AsmList *ops)
                     .buf = &buf,
                     .C = C,
                 },
-                &op);
+            &op);
     }
 
     pawL_push_result(P, &buf);

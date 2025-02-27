@@ -62,7 +62,7 @@ struct IrType *pawP_lower_type(struct Compiler *C, struct ModuleInfo *m, struct 
                           .C = C,
                           .m = m,
                       },
-                      type);
+        type);
 }
 
 static struct IrTypeList *lower_type_list(struct LowerType *L, struct HirTypeList *types)
@@ -82,5 +82,5 @@ struct IrTypeList *pawP_lower_type_list(struct Compiler *C, struct ModuleInfo *m
                                .C = C,
                                .m = m,
                            },
-                           types);
+        types);
 }

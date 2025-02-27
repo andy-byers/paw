@@ -496,7 +496,7 @@ static struct MirIntervalList *expand_with_placeholders(struct RegisterAllocator
 
         // add empty interval to make splitting easier
         struct MirLiveInterval *empty = pawMir_new_interval(R->C,
-                                                            MIR_INVALID_REG, npositions);
+            MIR_INVALID_REG, npositions);
         K_LIST_PUSH(R->C, result, empty);
     }
 
@@ -581,9 +581,9 @@ struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mi
 
     // sort live intervals by start point
     qsort(intervals->data, CAST_SIZE(intervals->count),
-          sizeof(struct MirLiveInterval *), compare_first);
+        sizeof(struct MirLiveInterval *), compare_first);
     R.unhandled = expand_with_placeholders(&R, intervals,
-                                           nparameters + ncaptured);
+        nparameters + ncaptured);
 
     allocate_registers(&R);
     resolve_registers(&R, order);

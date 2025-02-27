@@ -116,7 +116,7 @@ enum TraitKind {
         int alloc;                                                                                    \
     };                                                                                                \
     _Static_assert(K_LIST_MAX < PAW_SIZE_MAX / sizeof(T),                                             \
-                   "maximum list is too large");                                                      \
+        "maximum list is too large");                                                                 \
     static inline struct L *func##new (ctx * X)                                                       \
     {                                                                                                 \
         return pawK_pool_alloc(X->P, X->pool, NULL, 0, sizeof(struct L));                             \
@@ -134,15 +134,15 @@ enum TraitKind {
 #define K_LIST_SET(L, i, v) CHECK_EXP(0 <= (i) && (i) < (L)->count, (L)->data[i] = (v))
 #define K_LIST_POP(L) CHECK_EXP((L)->count > 0, --(L)->count)
 #define K_LIST_PUSH(C, L, v) ((L)->data = pawK_list_ensure_one((C)->P, (C)->pool, (L)->data, sizeof((L)->data[0]), (L)->count, &(L)->alloc), \
-                              (L)->data[(L)->count++] = (v))
-#define K_LIST_INSERT(C, L, i, v) CHECK_EXP(0 <= (i) && (i) <= (L)->count,                                                                                  \
-                                            ((L)->data = pawK_list_ensure_one((C)->P, (C)->pool, (L)->data, sizeof((L)->data[0]), (L)->count, &(L)->alloc), \
-                                             memmove((L)->data + (i) + 1, (L)->data + (i), ((L)->count - (i)) * sizeof((L)->data[0])),                      \
-                                             ++(L)->count,                                                                                                  \
-                                             (L)->data[i] = (v)))
-#define K_LIST_REMOVE(L, i) CHECK_EXP(0 <= (i) && (i) < (L)->count,                                                                  \
-                                      (memmove((L)->data + (i), (L)->data + (i) + 1, ((L)->count - (i) - 1) * sizeof((L)->data[0])), \
-                                       --(L)->count))
+    (L)->data[(L)->count++] = (v))
+#define K_LIST_INSERT(C, L, i, v) CHECK_EXP(0 <= (i) && (i) <= (L)->count,                                          \
+    ((L)->data = pawK_list_ensure_one((C)->P, (C)->pool, (L)->data, sizeof((L)->data[0]), (L)->count, &(L)->alloc), \
+        memmove((L)->data + (i) + 1, (L)->data + (i), ((L)->count - (i)) * sizeof((L)->data[0])),                   \
+        ++(L)->count,                                                                                               \
+        (L)->data[i] = (v)))
+#define K_LIST_REMOVE(L, i) CHECK_EXP(0 <= (i) && (i) < (L)->count,                                \
+    (memmove((L)->data + (i), (L)->data + (i) + 1, ((L)->count - (i) - 1) * sizeof((L)->data[0])), \
+        --(L)->count))
 #define K_LIST_RESERVE(C, L, n) ((L)->data = pawK_list_reserve((C)->P, (C)->pool, (L)->data, sizeof((L)->data[0]), (L)->count, &(L)->alloc, n))
 
 #define K_LIST_FOREACH(L, p) for (p = (L)->data; p && p < (L)->data + (L)->count; ++p)
@@ -165,7 +165,7 @@ enum TraitKind {
         int alloc;                                                                                   \
     } Name_;                                                                                         \
     _Static_assert(K_MAP_MAX < PAW_SIZE_MAX / sizeof(struct Name_##Node),                            \
-                   "maximum map is too large");                                                      \
+        "maximum map is too large");                                                                 \
     static inline struct Name_ *Name_##_new(Context_ *ctx)                                           \
     {                                                                                                \
         Name_ *map = Alloc_(ctx, NULL, 0, sizeof(struct Name_));                                     \

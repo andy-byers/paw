@@ -62,7 +62,7 @@ static void validate_type_args(struct Compiler *C, struct HirDecl *decl, struct 
     int const n = generics == NULL ? 0 : generics->count;
     if (m != n) {
         TYPE_ERROR(C, "%s type arguments (expected %d but found %d)",
-                   m < n ? "not enough" : "too many", n, m);
+            m < n ? "not enough" : "too many", n, m);
     }
 }
 
@@ -142,7 +142,7 @@ static struct IrType *expect_field(struct QueryState *Q, struct IrType *adt, Str
     if (field == NULL) {
         struct HirDecl *decl = pawHir_get_decl(Q->C, IrGetAdt(adt)->did);
         NAME_ERROR(Q, "field '%s' does not exist on type '%d'",
-                   name->text, decl->hdr.name->text);
+            name->text, decl->hdr.name->text);
     }
     return pawP_instantiate_field(Q->C, adt, field);
 }
@@ -154,7 +154,7 @@ static struct IrType *find_method(struct QueryState *Q, struct IrType *type, str
         struct HirDecl *decl = pawHir_get_decl(Q->C, IR_TYPE_DID(type));
         char const *base_repr = pawIr_print_type(Q->C, type);
         NAME_ERROR(Q, "field '%s' does not exist on type '%s'",
-                   seg->name->text, base_repr);
+            seg->name->text, base_repr);
     }
     pawIr_set_type(Q->C, seg->hid, method);
     seg->did = IR_TYPE_DID(method);
@@ -327,8 +327,8 @@ struct IrType *lookup(struct QueryState *Q, struct ModuleInfo *m, struct HirSymt
     }
     if (kind != LOOKUP_EITHER && q.is_type != (kind == LOOKUP_TYPE)) {
         TYPE_ERROR(Q, "expected %s but found %s",
-                   kind == LOOKUP_VALUE ? "value" : "type",
-                   q.is_type ? "value" : "type");
+            kind == LOOKUP_VALUE ? "value" : "type",
+            q.is_type ? "value" : "type");
     }
     return inst;
 }

@@ -67,7 +67,7 @@ static void add_location(paw_Env *P, Buffer *buf)
 }
 
 static void add_3_parts(paw_Env *P, char const *before, char const *value,
-                        char const *after)
+    char const *after)
 {
     Buffer buf;
     pawL_init_buffer(P, &buf);
@@ -183,8 +183,8 @@ static size_t check_slice_bound(paw_Env *P, paw_Int index, size_t length, char c
     index = pawV_abs_index(index, length);
     if (index < 0 || index > n) {
         pawE_error(P, PAW_ERUNTIME, -1,
-                   "slice %s index %I is out of bounds for %s of length %I",
-                   what, index, cont, PAW_CAST_INT(length));
+            "slice %s index %I is out of bounds for %s of length %I",
+            what, index, cont, PAW_CAST_INT(length));
     }
     return CAST_SIZE(index);
 }

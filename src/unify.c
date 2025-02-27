@@ -47,7 +47,7 @@ static void debug_log(struct Unifier *U, char const *what, struct IrType *a, str
     pawIr_print_type(U->C, a);
     pawIr_print_type(U->C, b);
     DLOG(U->C, "(unify) %s: %s = %s",
-         what, paw_string(P, -2), paw_string(P, -1));
+        what, paw_string(P, -2), paw_string(P, -1));
     paw_pop(P, 2);
 #else
     PAW_UNUSED(U);
@@ -286,9 +286,9 @@ void pawU_unify(struct Unifier *U, struct IrType *a, struct IrType *b)
     pawIr_print_type(U->C, a);
     pawIr_print_type(U->C, b);
     ERROR(U, -1,
-          "incompatible types '%s' and '%s'",
-          paw_string(ENV(U->C), -2),
-          paw_string(ENV(U->C), -1));
+        "incompatible types '%s' and '%s'",
+        paw_string(ENV(U->C), -2),
+        paw_string(ENV(U->C), -1));
 }
 
 static int equate(struct Unifier *U, struct IrType *a, struct IrType *b)

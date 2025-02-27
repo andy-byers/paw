@@ -330,7 +330,7 @@ static struct HirDecl *LowerAdtDecl(struct LowerAst *L, struct AstAdtDecl *d)
     struct HirDeclList *fields = lower_fields(L, d->fields, d->name);
     struct HirDeclList *methods = lower_methods(L, d->methods);
     return pawHir_new_adt_decl(L->hir, d->line, d->name, NULL, traits,
-                               generics, fields, methods, d->is_pub, d->is_struct);
+        generics, fields, methods, d->is_pub, d->is_struct);
 }
 
 static struct HirDecl *LowerTraitDecl(struct LowerAst *L, struct AstTraitDecl *d)
@@ -338,7 +338,7 @@ static struct HirDecl *LowerTraitDecl(struct LowerAst *L, struct AstTraitDecl *d
     struct HirDeclList *generics = lower_decl_list(L, d->generics);
     struct HirDeclList *methods = lower_methods(L, d->methods);
     return pawHir_new_trait_decl(L->hir, d->line, d->name, NULL,
-                                 generics, methods, d->is_pub);
+        generics, methods, d->is_pub);
 }
 
 static struct HirDecl *LowerVarDecl(struct LowerAst *L, struct AstVarDecl *d)
@@ -466,7 +466,7 @@ static struct HirDecl *LowerFuncDecl(struct LowerAst *L, struct AstFuncDecl *d)
     struct HirType *result = lower_type(L, d->result);
     struct HirExpr *body = d->body != NULL ? LOWER_BLOCK(L, d->body) : NULL;
     return pawHir_new_func_decl(L->hir, d->line, d->name, NULL, generics,
-                                params, result, body, d->fn_kind, d->is_pub, PAW_FALSE);
+        params, result, body, d->fn_kind, d->is_pub, PAW_FALSE);
 }
 
 static paw_Bool is_never_block(struct HirExpr *expr)

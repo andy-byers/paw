@@ -340,7 +340,7 @@ static paw_Bool remove_column(struct Usefulness *U, struct Row row, struct Match
             *pcol = col; // memmove trashes memory
             size_t const rest = CAST_SIZE(cols->count - i - 1);
             memmove(cols->data + i, cols->data + i + 1,
-                    rest * sizeof(cols->data[0]));
+                rest * sizeof(cols->data[0]));
             --cols->count;
             return PAW_FALSE;
         }

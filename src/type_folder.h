@@ -37,14 +37,14 @@ struct HirTypeFolder {
 void pawHir_type_folder_init(struct HirTypeFolder *F, struct Compiler *C, void *ud);
 
 // Type folder entrypoints for HIR nodes:
-void pawHir_fold_expr(struct HirTypeFolder *F, struct HirExpr *node);
-void pawHir_fold_decl(struct HirTypeFolder *F, struct HirDecl *node);
-void pawHir_fold_stmt(struct HirTypeFolder *F, struct HirStmt *node);
-void pawHir_fold_pat(struct HirTypeFolder *F, struct HirPat *node);
-void pawHir_fold_expr_list(struct HirTypeFolder *F, struct HirExprList *list);
-void pawHir_fold_stmt_list(struct HirTypeFolder *F, struct HirStmtList *list);
-void pawHir_fold_decl_list(struct HirTypeFolder *F, struct HirDeclList *list);
-void pawHir_fold_pat_list(struct HirTypeFolder *F, struct HirPatList *list);
+void pawHir_fold_expr_type(struct HirTypeFolder *F, struct HirExpr *node);
+void pawHir_fold_decl_type(struct HirTypeFolder *F, struct HirDecl *node);
+void pawHir_fold_stmt_type(struct HirTypeFolder *F, struct HirStmt *node);
+void pawHir_fold_pat_type(struct HirTypeFolder *F, struct HirPat *node);
+void pawHir_fold_expr_types(struct HirTypeFolder *F, struct HirExprList *list);
+void pawHir_fold_stmt_types(struct HirTypeFolder *F, struct HirStmtList *list);
+void pawHir_fold_decl_types(struct HirTypeFolder *F, struct HirDeclList *list);
+void pawHir_fold_pat_types(struct HirTypeFolder *F, struct HirPatList *list);
 
 struct MirTypeFolder {
     struct IrTypeFolder F;

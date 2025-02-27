@@ -180,7 +180,7 @@ void test_close(paw_Env *P, struct TestAlloc *a)
 #ifdef ENABLE_PTR_TRACKER
         for (size_t i = 0; i < a->count; ++i) {
             fprintf(stderr, "error: leaked %zu bytes at address %p\n",
-                    a->sizes[i], a->ptrs[i]);
+                a->sizes[i], a->ptrs[i]);
         }
 #endif
         fprintf(stderr, "error: leaked %zu allocations\n", a->count);

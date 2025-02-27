@@ -241,6 +241,7 @@ static void AcceptExprStmt(struct HirVisitor *V, struct HirExprStmt *s)
 static void AcceptClosureExpr(struct HirVisitor *V, struct HirClosureExpr *e)
 {
     accept_decl_list(V, e->params);
+    AcceptType(V, e->result);
     AcceptExpr(V, e->expr);
 }
 
@@ -258,8 +259,10 @@ static void AcceptTypeDecl(struct HirVisitor *V, struct HirTypeDecl *d)
 
 static void AcceptGenericDecl(struct HirVisitor *V, struct HirGenericDecl *d)
 {
-    PAW_UNUSED(V);
-    PAW_UNUSED(d);
+    struct HirGenericBound const *pbound;
+    K_LIST_FOREACH(d->bounds, pbound) {
+        AcceptPath(V, pbound->path);
+    }
 }
 
 static void AcceptVariantDecl(struct HirVisitor *V, struct HirVariantDecl *d)
@@ -564,6 +567,470 @@ DEFINE_VISITORS(type, Type)
 DEFINE_VISITORS(pat, Pat)
 #undef DEFINE_VISITORS
 
+
+static struct HirType *FoldType(struct HirFolder *F, struct HirType *node);
+static struct HirExpr *FoldExpr(struct HirFolder *F, struct HirExpr *node);
+static struct HirDecl *FoldDecl(struct HirFolder *F, struct HirDecl *node);
+static struct HirStmt *FoldStmt(struct HirFolder *F, struct HirStmt *node);
+static struct HirPat *FoldPat(struct HirFolder *F, struct HirPat *node);
+
+#define DEFINE_LIST_FOLDER(name, T)                                                 \
+    static struct Hir##T##List *fold_##name##s(struct HirFolder *F, struct Hir##T##List *list) \
+    {                                                                                 \
+        if (list == NULL)                                                             \
+            return NULL;                                                                   \
+        struct Hir##T##List *r = pawHir_##name##_list_new(F->C); \
+        for (int i = 0; i < list->count; ++i) {                                       \
+            K_LIST_PUSH(F->C, r, Fold##T(F, list->data[i]));                                              \
+        }                                                                             \
+        return r; \
+    }
+DEFINE_LIST_FOLDER(decl, Decl)
+DEFINE_LIST_FOLDER(expr, Expr)
+DEFINE_LIST_FOLDER(stmt, Stmt)
+DEFINE_LIST_FOLDER(type, Type)
+DEFINE_LIST_FOLDER(pat, Pat)
+
+static struct HirSegment FoldSegment(struct HirFolder *F, struct HirSegment *seg)
+{
+    struct HirSegment r;
+    struct HirTypeList *types = NULL;
+    if (seg->types != NULL) {
+        types = pawHir_type_list_new(F->C);
+        struct HirType *const *ptype;
+        K_LIST_FOREACH(seg->types, ptype) {
+            struct HirType *type = FoldType(F, *ptype);
+            K_LIST_PUSH(F->C, r.types, type);
+        }
+    }
+    pawHir_init_segment(F->hir, &r, seg->name, types, seg->did);
+    return r;
+}
+
+static struct HirPath *FoldPath(struct HirFolder *F, struct HirPath *path)
+{
+    struct HirSegment *pseg;
+    struct HirPath *r = pawHir_path_new(F->C);
+    K_LIST_FOREACH(path, pseg) {
+        K_LIST_PUSH(F->C, r, FoldSegment(F, pseg));
+    }
+    return r;
+}
+
+static struct HirExpr *FoldBlock(struct HirFolder *F, struct HirBlock *e)
+{
+    struct HirStmtList *stmts = fold_stmts(F, e->stmts);
+    struct HirExpr *result = FoldExpr(F, e->result);
+    return pawHir_new_block(F->hir, e->line, stmts, result, e->never);
+}
+
+static struct HirExpr *FoldLogicalExpr(struct HirFolder *F, struct HirLogicalExpr *e)
+{
+    struct HirExpr *lhs = FoldExpr(F, e->lhs);
+    struct HirExpr *rhs = FoldExpr(F, e->rhs);
+    return pawHir_new_logical_expr(F->hir, e->line, lhs, rhs, e->is_and);
+}
+
+static struct HirExpr *FoldFieldExpr(struct HirFolder *F, struct HirFieldExpr *e)
+{
+    struct HirExpr *value = FoldExpr(F, e->value);
+    if (e->fid < 0) {
+        struct HirExpr *key = FoldExpr(F, e->key);
+        return pawHir_new_keyed_field_expr(F->hir, e->line, key, value);
+    } else {
+        return pawHir_new_named_field_expr(F->hir, e->line, e->name, value, e->fid);
+    }
+}
+
+static struct HirExpr *FoldAssignExpr(struct HirFolder *F, struct HirAssignExpr *e)
+{
+    struct HirExpr *lhs = FoldExpr(F, e->lhs);
+    struct HirExpr *rhs = FoldExpr(F, e->rhs);
+    return pawHir_new_assign_expr(F->hir, e->line, lhs, rhs);
+}
+
+static struct HirExpr *FoldMatchArm(struct HirFolder *F, struct HirMatchArm *e)
+{
+    struct HirPat *pat = FoldPat(F, e->pat);
+    struct HirExpr *guard = e->guard != NULL ? FoldExpr(F, e->guard) : NULL;
+    struct HirExpr *result = FoldExpr(F, e->result);
+    return pawHir_new_match_arm(F->hir, e->line, pat, guard, result, e->never);
+}
+
+static struct HirExpr *FoldMatchExpr(struct HirFolder *F, struct HirMatchExpr *e)
+{
+    struct HirExpr *target = FoldExpr(F, e->target);
+    struct HirExprList *arms = fold_exprs(F, e->arms);
+    return pawHir_new_match_expr(F->hir, e->line, target, arms, e->never);
+}
+
+static struct HirExpr *FoldLiteralExpr(struct HirFolder *F, struct HirLiteralExpr *e)
+{
+    switch (e->lit_kind) {
+        case kHirLitComposite: {
+            struct HirPath *path = FoldPath(F, e->comp.path);
+            struct HirExprList *items = fold_exprs(F, e->comp.items);
+            return pawHir_new_composite_lit(F->hir, e->line, path, items);
+        }
+        case kHirLitContainer: {
+            struct HirExprList *items = fold_exprs(F, e->cont.items);
+            return pawHir_new_container_lit(F->hir, e->line, items, e->cont.code);
+        }
+        case kHirLitTuple: {
+            struct HirExprList *elems = fold_exprs(F, e->tuple.elems);
+            return pawHir_new_tuple_lit(F->hir, e->line, elems);
+        }
+        case kHirLitBasic: {
+            return pawHir_new_basic_lit(F->hir, e->line, e->basic.value, e->basic.code);
+        }
+    }
+}
+
+static struct HirExpr *FoldChainExpr(struct HirFolder *F, struct HirChainExpr *e)
+{
+    struct HirExpr *target = FoldExpr(F, e->target);
+    return pawHir_new_chain_expr(F->hir, e->line, target);
+}
+
+static struct HirExpr *FoldUnOpExpr(struct HirFolder *F, struct HirUnOpExpr *e)
+{
+    struct HirExpr *target = FoldExpr(F, e->target);
+    return pawHir_new_unop_expr(F->hir, e->line, target, e->op);
+}
+
+static struct HirExpr *FoldBinOpExpr(struct HirFolder *F, struct HirBinOpExpr *e)
+{
+    struct HirExpr *lhs = FoldExpr(F, e->lhs);
+    struct HirExpr *rhs = FoldExpr(F, e->rhs);
+    return pawHir_new_binop_expr(F->hir, e->line, lhs, rhs, e->op);
+}
+
+static struct HirExpr *FoldClosureExpr(struct HirFolder *F, struct HirClosureExpr *e)
+{
+    struct HirDeclList *params = fold_decls(F, e->params);
+    struct HirType *result = FoldType(F, e->result);
+    struct HirExpr *expr = FoldExpr(F, e->expr);
+    return pawHir_new_closure_expr(F->hir, e->line, params, result, expr);
+}
+
+static struct HirExpr *FoldReturnExpr(struct HirFolder *F, struct HirReturnExpr *e)
+{
+    struct HirExpr *expr = e->expr != NULL ? FoldExpr(F, e->expr) : NULL;
+    return pawHir_new_return_expr(F->hir, e->line, expr);
+}
+
+static struct HirExpr *FoldCallExpr(struct HirFolder *F, struct HirCallExpr *e)
+{
+    struct HirExpr *target = FoldExpr(F, e->target);
+    struct HirExprList *args = fold_exprs(F, e->args);
+    return pawHir_new_call_expr(F->hir, e->line, target, args);
+}
+
+static struct HirExpr *FoldConversionExpr(struct HirFolder *F, struct HirConversionExpr *e)
+{
+    struct HirExpr *arg = FoldExpr(F, e->arg);
+    return pawHir_new_conversion_expr(F->hir, e->line, arg, e->to);
+}
+
+static struct HirExpr *FoldPathExpr(struct HirFolder *F, struct HirPathExpr *e)
+{
+    struct HirPath *path = FoldPath(F, e->path);
+    return pawHir_new_path_expr(F->hir, e->line, path);
+}
+
+static struct HirExpr *FoldIfExpr(struct HirFolder *F, struct HirIfExpr *e)
+{
+    struct HirExpr *cond = FoldExpr(F, e->cond);
+    struct HirExpr *then_arm = FoldExpr(F, e->then_arm);
+    struct HirExpr *else_arm = e->else_arm != NULL ?  FoldExpr(F, e->else_arm) : NULL;
+    return pawHir_new_if_expr(F->hir, e->line, cond, then_arm, else_arm, e->never);
+}
+
+static struct HirExpr *FoldLoopExpr(struct HirFolder *F, struct HirLoopExpr *e)
+{
+    struct HirExpr *block = FoldExpr(F, e->block);
+    return pawHir_new_loop_expr(F->hir, e->line, block);
+}
+
+static struct HirExpr *FoldJumpExpr(struct HirFolder *F, struct HirJumpExpr *e)
+{
+    return pawHir_new_jump_expr(F->hir, e->line, e->jump_kind);
+}
+
+static struct HirExpr *FoldIndex(struct HirFolder *F, struct HirIndex *e)
+{
+    struct HirExpr *target = FoldExpr(F, e->target);
+    struct HirExpr *first = e->first != NULL ? FoldExpr(F, e->first) : NULL;
+    struct HirExpr *second = e->second != NULL ? FoldExpr(F, e->second) : NULL;
+    return pawHir_new_index_expr(F->hir, e->line, target, first, second, e->is_slice);
+}
+
+static struct HirExpr *FoldSelector(struct HirFolder *F, struct HirSelector *e)
+{
+    struct HirExpr *target = FoldExpr(F, e->target);
+    if (e->is_index) {
+        return pawHir_new_name_selector(F->hir, e->line, target, e->name);
+    } else {
+        return pawHir_new_index_selector(F->hir, e->line, target, e->index);
+    }
+}
+
+static struct HirDecl *FoldFieldDecl(struct HirFolder *F, struct HirFieldDecl *d)
+{
+    struct HirType *tag = d->tag != NULL ?  FoldType(F, d->tag) : NULL;
+    return pawHir_new_field_decl(F->hir, d->line, d->name, tag, d->is_pub);
+}
+
+static struct HirDecl *FoldTypeDecl(struct HirFolder *F, struct HirTypeDecl *d)
+{
+    struct HirDeclList *generics = fold_decls(F, d->generics);
+    struct HirType *rhs = FoldType(F, d->rhs);
+    return pawHir_new_type_decl(F->hir, d->line, d->name, generics, rhs);
+}
+
+static struct HirDecl *FoldGenericDecl(struct HirFolder *F, struct HirGenericDecl *d)
+{
+    struct HirBoundList *bounds = pawHir_bound_list_new(F->C);
+    struct HirGenericBound const *pbound;
+    K_LIST_FOREACH(d->bounds, pbound) {
+        struct HirGenericBound bound = {.path = FoldPath(F, pbound->path)};
+        K_LIST_PUSH(F->C, bounds, bound);
+    }
+    return pawHir_new_generic_decl(F->hir, d->line, d->name, bounds);
+}
+
+static struct HirDecl *FoldVariantDecl(struct HirFolder *F, struct HirVariantDecl *d)
+{
+    struct HirDeclList *fields = fold_decls(F, d->fields);
+    return pawHir_new_variant_decl(F->hir, d->line, d->name, fields, d->index);
+}
+
+static struct HirDecl *FoldAdtDecl(struct HirFolder *F, struct HirAdtDecl *d)
+{
+    struct HirDecl *self = FoldDecl(F, d->self);
+    struct HirTypeList *traits = fold_types(F, d->traits);
+    struct HirDeclList *generics = fold_decls(F, d->generics);
+    struct HirDeclList *fields = fold_decls(F, d->fields);
+    struct HirDeclList *methods = fold_decls(F, d->methods);
+    return pawHir_new_adt_decl(F->hir, d->line, d->name, self, traits,
+            generics, fields, methods, d->is_pub, d->is_struct);
+}
+
+static struct HirDecl *FoldTraitDecl(struct HirFolder *F, struct HirTraitDecl *d)
+{
+    struct HirDecl *self = FoldDecl(F, d->self);
+    struct HirDeclList *generics = fold_decls(F, d->generics);
+    struct HirDeclList *methods = fold_decls(F, d->methods);
+    return pawHir_new_trait_decl(F->hir, d->line, d->name, self, generics, methods, d->is_pub);
+}
+
+static struct HirDecl *FoldFuncDecl(struct HirFolder *F, struct HirFuncDecl *d)
+{
+    struct HirDeclList *generics = fold_decls(F, d->generics);
+    struct HirDeclList *params = fold_decls(F, d->params);
+    struct HirType *result = FoldType(F, d->result);
+    struct HirExpr *body = d->body != NULL ? FoldExpr(F, d->body) : NULL;
+    return pawHir_new_func_decl(F->hir, d->line, d->name, NULL/*TODO: remove from struct*/,
+            generics, params, result, body, d->fn_kind, d->is_pub, d->is_assoc);
+}
+
+static struct HirDecl *FoldVarDecl(struct HirFolder *F, struct HirVarDecl *d)
+{
+    struct HirType *tag = d->tag != NULL ? FoldType(F, d->tag) : NULL;
+    struct HirExpr *init = d->init != NULL ? FoldExpr(F, d->init) : NULL;
+    return pawHir_new_var_decl(F->hir, d->line, d->name, tag, init);
+}
+
+static struct HirStmt *FoldExprStmt(struct HirFolder *F, struct HirExprStmt *s)
+{
+    struct HirExpr *expr = FoldExpr(F, s->expr);
+    return pawHir_new_expr_stmt(F->hir, s->line, expr);
+}
+
+static struct HirStmt *FoldDeclStmt(struct HirFolder *F, struct HirDeclStmt *s)
+{
+    struct HirDecl *decl = FoldDecl(F, s->decl);
+    return pawHir_new_decl_stmt(F->hir, s->line, decl);
+}
+
+static struct HirType *FoldFuncPtr(struct HirFolder *F, struct HirFuncPtr *t)
+{
+    struct HirTypeList *params = fold_types(F, t->params);
+    struct HirType *result = FoldType(F, t->result);
+    return pawHir_new_func_ptr(F->hir, t->line, params, result);
+}
+
+static struct HirType *FoldTupleType(struct HirFolder *F, struct HirTupleType *t)
+{
+    struct HirTypeList *elems = fold_types(F, t->elems);
+    return pawHir_new_tuple_type(F->hir, t->line, elems);
+}
+
+static struct HirType *FoldInferType(struct HirFolder *F, struct HirInferType *t)
+{
+    return pawHir_new_infer_type(F->hir, t->line);
+}
+
+static struct HirType *FoldPathType(struct HirFolder *F, struct HirPathType *t)
+{
+    struct HirSegment *pseg;
+    struct HirPath *path = pawHir_path_new(F->C);
+    K_LIST_FOREACH(t->path, pseg)
+        K_LIST_PUSH(F->C, path, F->FoldSegment(F, pseg));
+    return pawHir_new_path_type(F->hir, t->line, path);
+}
+
+static struct HirPat *FoldOrPat(struct HirFolder *F, struct HirOrPat *e)
+{
+    struct HirPatList *pats = fold_pats(F, e->pats);
+    return pawHir_new_or_pat(F->hir, e->line, pats);
+}
+
+static struct HirPat *FoldFieldPat(struct HirFolder *F, struct HirFieldPat *p)
+{
+    struct HirPat *pat = FoldPat(F, p->pat);
+    return pawHir_new_field_pat(F->hir, p->line, p->name, pat, p->index);
+}
+
+static struct HirPat *FoldStructPat(struct HirFolder *F, struct HirStructPat *p)
+{
+    struct HirPath *path = FoldPath(F, p->path);
+    struct HirPatList *fields = fold_pats(F, p->fields);
+    return pawHir_new_struct_pat(F->hir, p->line, path, fields);
+}
+
+static struct HirPat *FoldVariantPat(struct HirFolder *F, struct HirVariantPat *p)
+{
+    struct HirPath *path = FoldPath(F, p->path);
+    struct HirPatList *fields = fold_pats(F, p->fields);
+    return pawHir_new_variant_pat(F->hir, p->line, path, fields, p->index);
+}
+
+static struct HirPat *FoldTuplePat(struct HirFolder *F, struct HirTuplePat *p)
+{
+    struct HirPatList *elems = fold_pats(F, p->elems);
+    return pawHir_new_tuple_pat(F->hir, p->line, elems);
+}
+
+static struct HirPat *FoldBindingPat(struct HirFolder *F, struct HirBindingPat *p)
+{
+    return pawHir_new_binding_pat(F->hir, p->line, p->name);
+}
+
+static struct HirPat *FoldPathPat(struct HirFolder *F, struct HirPathPat *p)
+{
+    struct HirPath *path = FoldPath(F, p->path);
+    return pawHir_new_path_pat(F->hir, p->line, path);
+}
+
+static struct HirPat *FoldLiteralPat(struct HirFolder *F, struct HirLiteralPat *p)
+{
+    struct HirExpr *expr = FoldExpr(F, p->expr);
+    return pawHir_new_literal_pat(F->hir, p->line, expr);
+}
+
+static struct HirPat *FoldWildcardPat(struct HirFolder *F, struct HirWildcardPat *p)
+{
+    return pawHir_new_wildcard_pat(F->hir, p->line);
+}
+
+#define DEFINE_FOLDER_CASES(X)                 \
+    case kHir##X: {                            \
+        return F->Fold##X(F, HirGet##X(node)); \
+    }
+
+static struct HirExpr *FoldExpr(struct HirFolder *F, struct HirExpr *node)
+{
+    paw_assert(node != NULL);
+    switch (HIR_KINDOF(node)) {
+        HIR_EXPR_LIST(DEFINE_FOLDER_CASES)
+    }
+}
+
+static struct HirDecl *FoldDecl(struct HirFolder *F, struct HirDecl *node)
+{
+    paw_assert(node != NULL);
+    switch (HIR_KINDOF(node)) {
+        HIR_DECL_LIST(DEFINE_FOLDER_CASES)
+    }
+}
+
+static struct HirStmt *FoldStmt(struct HirFolder *F, struct HirStmt *node)
+{
+    paw_assert(node != NULL);
+    switch (HIR_KINDOF(node)) {
+        HIR_STMT_LIST(DEFINE_FOLDER_CASES)
+    }
+}
+
+static struct HirType *FoldType(struct HirFolder *F, struct HirType *node)
+{
+    paw_assert(node != NULL);
+    switch (HIR_KINDOF(node)) {
+        HIR_TYPE_LIST(DEFINE_FOLDER_CASES)
+    }
+}
+
+static struct HirPat *FoldPat(struct HirFolder *F, struct HirPat *node)
+{
+    paw_assert(node != NULL);
+    switch (HIR_KINDOF(node)) {
+        HIR_PAT_LIST(DEFINE_FOLDER_CASES)
+    }
+}
+
+#undef DEFINE_FOLDER_CASES
+
+void pawHir_folder_init(struct HirFolder *F, struct Hir *hir, void *ud)
+{
+    *F = (struct HirFolder){
+        .ud = ud,
+        .C = hir->C,
+        .hir = hir,
+
+        .FoldExpr = FoldExpr,
+        .FoldDecl = FoldDecl,
+        .FoldStmt = FoldStmt,
+        .FoldType = FoldType,
+        .FoldPat = FoldPat,
+
+        .FoldSegment = FoldSegment,
+        .FoldPath = FoldPath,
+
+#define SET_DEFAULT_FOLDERS(X) .Fold##X = Fold##X,
+        HIR_STMT_LIST(SET_DEFAULT_FOLDERS)
+        HIR_EXPR_LIST(SET_DEFAULT_FOLDERS)
+        HIR_DECL_LIST(SET_DEFAULT_FOLDERS)
+        HIR_TYPE_LIST(SET_DEFAULT_FOLDERS)
+        HIR_PAT_LIST(SET_DEFAULT_FOLDERS)
+#undef SET_DEFAULT_FOLDERS
+    };
+}
+
+#define DEFINE_FOLDERS(name, T)                                                     \
+    struct Hir##T *pawHir_fold_##name(struct HirFolder *F, struct Hir##T *node)              \
+    {                                                                                \
+        paw_assert(node != NULL);                                                    \
+        F->line = node->hdr.line;                                                    \
+        return F->Fold##T(F, node);                                                          \
+    }                                                                                \
+    struct Hir##T##List *pawHir_fold_##name##s(struct HirFolder *F, struct Hir##T##List *list) \
+    {                                                                                \
+        if (list == NULL) return NULL;                                               \
+        struct Hir##T *const *pnode; \
+        struct Hir##T##List *r = pawHir_##name##_list_new(F->C); \
+        K_LIST_FOREACH(list, pnode) { \
+            K_LIST_PUSH(F->C, r, pawHir_fold_##name(F, *pnode));                             \
+        }                                                                            \
+    }
+DEFINE_FOLDERS(expr, Expr)
+DEFINE_FOLDERS(decl, Decl)
+DEFINE_FOLDERS(stmt, Stmt)
+DEFINE_FOLDERS(type, Type)
+DEFINE_FOLDERS(pat, Pat)
+#undef DEFINE_FOLDERS
+
+
 struct IrTypeList *pawHir_collect_decl_types(struct Compiler *C, struct HirDeclList *list)
 {
     if (list == NULL)
@@ -668,7 +1135,7 @@ char const *pawHir_print_type(struct Compiler *C, struct HirType *type)
                    .buf = &buf,
                    .C = C,
                },
-               type);
+        type);
 
     pawL_push_result(P, &buf);
     return paw_string(P, -1);
@@ -685,7 +1152,7 @@ char const *pawHir_print_path(struct Compiler *C, struct HirPath *path)
                    .buf = &buf,
                    .C = C,
                },
-               path);
+        path);
 
     pawL_push_result(P, &buf);
     return paw_string(P, -1);
@@ -823,7 +1290,7 @@ static void dump_decl(struct Printer *P, struct HirDecl *decl)
     }
     ++P->indent;
     DUMP_FMT(P, "did: DeclId(%d, mod=%d)\n",
-             decl->hdr.did.value, decl->hdr.did.modno);
+        decl->hdr.did.value, decl->hdr.did.modno);
     DUMP_FMT(P, "line: %d\n", decl->hdr.line);
     switch (HIR_KINDOF(decl)) {
         case kHirFuncDecl: {
@@ -996,21 +1463,21 @@ static void dump_expr(struct Printer *P, struct HirExpr *expr)
                             break;
                         case BUILTIN_BOOL:
                             DUMP_FMT(P, "value: %s\n",
-                                     V_TRUE(e->basic.value) ? "true"
-                                                            : "false");
+                                V_TRUE(e->basic.value) ? "true"
+                                                       : "false");
                             break;
                         case BUILTIN_INT:
                             DUMP_FMT(P, "value: %I\n",
-                                     V_INT(e->basic.value));
+                                V_INT(e->basic.value));
                             break;
                         case BUILTIN_FLOAT:
                             DUMP_FMT(P, "value: %f\n",
-                                     V_FLOAT(e->basic.value));
+                                V_FLOAT(e->basic.value));
                             break;
                         default:
                             paw_assert(e->basic.t == BUILTIN_STR);
                             DUMP_FMT(P, "value: %s\n",
-                                     V_STRING(e->basic.value)->text);
+                                V_STRING(e->basic.value)->text);
                             break;
                     }
                     break;

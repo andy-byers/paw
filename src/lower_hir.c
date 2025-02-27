@@ -9,8 +9,7 @@
 // in static single assignment (SSA) form.
 //
 // TODO: Implementation would be a bit nicer if closures were hoisted out of
-//       their enclosing functions. Could keep a list of MIR bodies: functions,
-//       methods, and closures. Closures also need to store the ".child_id" so
+//       their enclosing functions. Closures also need to store the ".child_id" so
 //       they can be placed in their enclosing Proto (so they can be found at
 //       runtime).
 
@@ -554,7 +553,7 @@ static void enter_function(struct LowerHir *L, struct FunctionState *fs, struct 
     enter_block(L, bs, PAW_FALSE);
 
     alloc_local(L, SCAN_STRING(L->C, "(result)"),
-                IR_FPTR(mir->type)->result, NO_DECL);
+        IR_FPTR(mir->type)->result, NO_DECL);
 }
 
 static void leave_function(struct LowerHir *L)
@@ -884,7 +883,7 @@ static MirRegister lower_closure_expr(struct HirVisitor *V, struct HirClosureExp
 
     String *name = SCAN_STRING(L->C, "(closure)");
     struct Mir *result = pawMir_new(L->C, name, type, NULL,
-                                    FUNC_CLOSURE, PAW_FALSE, PAW_FALSE, PAW_FALSE);
+        FUNC_CLOSURE, PAW_FALSE, PAW_FALSE, PAW_FALSE);
 
     struct BlockState bs;
     struct FunctionState fs;
@@ -1189,7 +1188,7 @@ static MirRegister lower_jump_expr(struct HirVisitor *V, struct HirJumpExpr *e)
     struct LowerHir *L = V->ud;
     if (!is_within_loop(L)) {
         pawE_error(ENV(L->C), PAW_ESYNTAX, e->line, "%s outside loop",
-                   e->jump_kind == JUMP_BREAK ? "break" : "continue");
+            e->jump_kind == JUMP_BREAK ? "break" : "continue");
     }
     add_label(L, e->line, e->jump_kind);
     set_current_bb(L, new_bb(L));
@@ -1598,8 +1597,8 @@ struct Mir *pawP_lower_hir_body(struct Compiler *C, struct HirFuncDecl *func)
     struct IrType *type = pawIr_get_type(C, func->hid);
     paw_Bool const is_polymorphic = func->generics != NULL || (func->self != NULL && IR_TYPE_SUBTYPES(func->self) != NULL);
     struct Mir *result = pawMir_new(C, func->name, type,
-                                    func->self, func->fn_kind, func->body == NULL,
-                                    func->is_pub, is_polymorphic);
+        func->self, func->fn_kind, func->body == NULL,
+        func->is_pub, is_polymorphic);
     if (func->body == NULL)
         return result;
 
@@ -1632,10 +1631,10 @@ BodyMap *pawP_lower_hir(struct Compiler *C)
             struct HirFuncDecl *d = HirGetFuncDecl(decl);
             if (d->self == NULL || IrIsAdt(d->self)) {
 #warning "remove comments!!!"
-// TODO                pawU_enter_binder(C->U);
+                // TODO                pawU_enter_binder(C->U);
                 struct Mir *r = pawP_lower_hir_body(C, d);
                 BodyMap_insert(C, result, d->did, r);
-// TODO                pawU_leave_binder(C->U);
+                // TODO                pawU_leave_binder(C->U);
             }
         }
     }

@@ -142,13 +142,13 @@ void pawHir_type_folder_init(struct HirTypeFolder *F, struct Compiler *C, void *
 }
 
 #define DEFINE_FOLDERS(name, T)                                                        \
-    void pawHir_fold_##name(struct HirTypeFolder *F, struct Hir##T *node)              \
+    void pawHir_fold_##name##_type(struct HirTypeFolder *F, struct Hir##T *node)              \
     {                                                                                  \
         paw_assert(node != NULL);                                                      \
         F->line = node->hdr.line;                                                      \
         pawHir_visit_##name(&F->V, node);                                              \
     }                                                                                  \
-    void pawHir_fold_##name##_list(struct HirTypeFolder *F, struct Hir##T##List *list) \
+    void pawHir_fold_##name##_types(struct HirTypeFolder *F, struct Hir##T##List *list) \
     {                                                                                  \
         for (int i = 0; i < list->count; ++i) {                                        \
             pawHir_visit_##name(&F->V, K_LIST_GET(list, i));                           \

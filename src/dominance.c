@@ -11,7 +11,7 @@
 
 #define PRED(D, v) (mir_bb_data((D)->mir, v)->predecessors)
 #define IDOM(D, v) CHECK_EXP(0 <= (v).value && (v).value < (D)->idom->count, \
-                             &K_LIST_GET((D)->idom, (v).value))
+    &K_LIST_GET((D)->idom, (v).value))
 
 struct DominanceState {
     struct Compiler *C;

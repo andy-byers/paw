@@ -87,8 +87,8 @@ static void finish_oom(void)
     check(s_count > 0);
 
     printf("[PASS] %s: passing_heap_size=%zu, oom_count=%d\n",
-           s_is_chunk ? "(chunk)" : s_name_or_chunk,
-           s_passing_heap_size, s_count);
+        s_is_chunk ? "(chunk)" : s_name_or_chunk,
+        s_passing_heap_size, s_count);
 }
 
 static void test_oom(char const *name_or_chunk, paw_Bool is_chunk)

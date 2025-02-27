@@ -459,7 +459,7 @@ static void remove_join(struct Mir *mir, struct MirInstructionList *joins, struc
             // a phi node with a single input is really just a move: transfer
             // to the ".instructions" list
             *pinstr = pawMir_new_move(mir, phi->line,
-                                      phi->output, K_LIST_FIRST(phi->inputs));
+                phi->output, K_LIST_FIRST(phi->inputs));
             K_LIST_INSERT(mir->C, instrs, 0, *pinstr);
             K_LIST_SET(joins, ijoin, K_LIST_LAST(joins));
             K_LIST_POP(joins);
@@ -1175,7 +1175,7 @@ char const *pawMir_dump(struct Compiler *C, struct Mir *mir)
                  .buf = &buf,
                  .C = C,
              },
-             mir);
+        mir);
 
     for (int i = 0; i < mir->children->count; ++i) {
         struct Mir *child = K_LIST_GET(mir->children, i);
@@ -1185,7 +1185,7 @@ char const *pawMir_dump(struct Compiler *C, struct Mir *mir)
                      .buf = &buf,
                      .C = C,
                  },
-                 child);
+            child);
     }
 
     pawL_push_result(P, &buf);
@@ -1236,7 +1236,7 @@ char const *pawMir_dump_graph(struct Compiler *C, struct Mir *mir)
                    .buf = &buf,
                    .C = C,
                },
-               mir);
+        mir);
 
     for (int i = 0; i < mir->children->count; ++i) {
         struct Mir *child = K_LIST_GET(mir->children, i);
@@ -1246,7 +1246,7 @@ char const *pawMir_dump_graph(struct Compiler *C, struct Mir *mir)
                        .buf = &buf,
                        .C = C,
                    },
-                   child);
+            child);
     }
 
     pawL_push_result(P, &buf);
@@ -1279,7 +1279,7 @@ char const *pawMir_dump_info(struct Compiler *C, struct Mir *mir)
                   .buf = &buf,
                   .C = C,
               },
-              mir);
+        mir);
 
     pawL_push_result(P, &buf);
     return paw_string(P, -1);

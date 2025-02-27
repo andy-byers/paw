@@ -46,7 +46,7 @@ static struct IrType *func_result(struct InstanceState *I, struct HirFuncDecl *d
 }
 
 struct IrTypeList *pawP_instantiate_typelist(struct Compiler *C, struct IrTypeList *before,
-                                             struct IrTypeList *after, struct IrTypeList *target)
+    struct IrTypeList *after, struct IrTypeList *target)
 {
     struct IrTypeFolder F;
     struct Substitution subst;
@@ -55,7 +55,7 @@ struct IrTypeList *pawP_instantiate_typelist(struct Compiler *C, struct IrTypeLi
 }
 
 static void prep_func_instance(struct InstanceState *I, struct IrTypeList *before, struct IrTypeList *after,
-                               struct IrSignature *t)
+    struct IrSignature *t)
 {
     struct IrTypeFolder F;
     struct Substitution subst;
@@ -318,7 +318,7 @@ static struct IrType *substitute_generic(struct IrTypeFolder *F, struct IrGeneri
 }
 
 void pawP_init_substitution_folder(struct IrTypeFolder *F, struct Compiler *C, struct Substitution *subst,
-                                   struct IrTypeList *generics, struct IrTypeList *types)
+    struct IrTypeList *generics, struct IrTypeList *types)
 {
     *subst = (struct Substitution){
         .generics = generics,

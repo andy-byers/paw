@@ -1356,7 +1356,7 @@ static struct AstDecl *function(struct Lex *lex, int line, String *name, enum Fu
     struct AstType *result = test_next(lex, TK_ARROW) ? parse_type(lex, PAW_TRUE) : unit_type(lex);
     struct AstExpr *body = !test_next(lex, ';') ? block_expr(lex) : NULL;
     return pawAst_new_func_decl(lex->ast, line, kind, name, generics,
-                                params, NULL, result, body, is_pub);
+        params, NULL, result, body, is_pub);
 }
 
 static struct AstDecl *use_decl(struct Lex *lex)
@@ -1466,7 +1466,7 @@ static struct AstDecl *enum_decl(struct Lex *lex, paw_Bool is_pub)
     struct AstDeclList *methods = pawAst_decl_list_new(lex->C);
     enum_body(lex, line, traits, variants, methods);
     return pawAst_new_adt_decl(lex->ast, line, name, traits,
-                               generics, variants, methods, is_pub, PAW_FALSE);
+        generics, variants, methods, is_pub, PAW_FALSE);
 }
 
 static struct AstDecl *struct_field(struct Lex *lex, paw_Bool is_pub)
@@ -1526,7 +1526,7 @@ static struct AstDecl *struct_decl(struct Lex *lex, paw_Bool is_pub)
     struct AstDeclList *methods = pawAst_decl_list_new(lex->C);
     struct_body(lex, traits, fields, methods);
     return pawAst_new_adt_decl(lex->ast, line, name, traits,
-                               generics, fields, methods, is_pub, PAW_TRUE);
+        generics, fields, methods, is_pub, PAW_TRUE);
 }
 
 static struct AstDecl *trait_decl(struct Lex *lex, paw_Bool is_pub)
@@ -1649,6 +1649,9 @@ static char const kPrelude[] =
 
     "pub trait Equals {\n"
     "    fn eq(self, rhs: Self) -> bool;\n"
+    "    fn ne(self, rhs: Self) -> bool {\n"
+    "        !self.eq(rhs)\n"
+    "    }\n"
     "}\n"
 
     "pub trait Compare {\n"

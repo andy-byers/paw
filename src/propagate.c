@@ -492,14 +492,13 @@ static struct CellInfo visit_binary_op(struct KProp *K, struct Cell *lhs, struct
             break;
         case BINARY_RANGE:
             return BOTTOM_INFO();
-
     }
     int const k = add_constant(K, r, kind);
     return CONST_INFO(k, r);
 }
 
 #define LIST_SWAP_REMOVE(list, i) (K_LIST_SET(list, i, K_LIST_LAST(list)), \
-                                   K_LIST_POP(list))
+    K_LIST_POP(list))
 
 // Remove the control flow edge between "from" and "to"
 static void remove_edge(struct KProp *K, MirBlock from, MirBlock to)

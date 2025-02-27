@@ -27,7 +27,7 @@ inline static uint32_t pawS_hash(void const *data, size_t size, uint32_t hash)
 inline static int pawS_cmp(String const *lhs, String const *rhs)
 {
     return paw_raw_cmp((void *)lhs->text, lhs->length, (void *)rhs->text,
-                       rhs->length);
+        rhs->length);
 }
 
 inline static size_t pawS_length(String const *s) { return s->length; }

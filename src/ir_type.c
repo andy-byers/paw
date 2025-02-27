@@ -123,8 +123,8 @@ void pawIr_validate_type(struct Compiler *C, struct IrType *type)
         }
         if (types != NULL && types->count != generics->count) {
             TYPE_ERROR(C, "%s type arguments (expected %d but found %d)",
-                       types->count < generics->count ? "not enough" : "too many",
-                       types->count, generics->count);
+                types->count < generics->count ? "not enough" : "too many",
+                types->count, generics->count);
         }
     }
 }
@@ -377,7 +377,7 @@ char const *pawIr_print_type(struct Compiler *C, IrType *type)
                    .buf = &buf,
                    .C = C,
                },
-               type);
+        type);
 
     pawL_push_result(P, &buf);
     return paw_string(P, -1);

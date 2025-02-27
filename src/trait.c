@@ -61,7 +61,7 @@ static paw_Bool implements_trait(struct Compiler *C, struct IrType *type, struct
             struct HirDecl *base_decl = pawHir_get_decl(C, IR_TYPE_DID(type));
             struct IrType *base_type = GET_NODE_TYPE(C, base_decl);
             struct IrTypeList *types = pawP_instantiate_typelist(C, IR_TYPE_SUBTYPES(base_type),
-                                                                 IR_TYPE_SUBTYPES(type), IR_TYPE_SUBTYPES(t));
+                IR_TYPE_SUBTYPES(type), IR_TYPE_SUBTYPES(t));
             t = pawIr_new_trait_obj(C, IR_TYPE_DID(t), types);
         }
         if (traits_match(C, t, trait))
@@ -151,13 +151,13 @@ static void ensure_methods_match(struct Compiler *C, struct IrType *adt, struct 
 {
     if (adt_method->is_pub != trait_method->is_pub) {
         TYPE_ERROR(C, "visibility mismatch (expected %s visibility on method '%s')",
-                   trait_method->is_pub ? "public" : "private", adt_method->name->text);
+            trait_method->is_pub ? "public" : "private", adt_method->name->text);
     }
     struct IrType *a = pawIr_get_type(C, adt_method->hid);
     struct IrType *b = pawIr_get_type(C, trait_method->hid);
     if (trait_decl->generics != NULL) {
         b = pawP_instantiate_method(C, HIR_CAST_DECL(trait_decl),
-                                    IR_TYPE_SUBTYPES(trait), HIR_CAST_DECL(trait_method));
+            IR_TYPE_SUBTYPES(trait), HIR_CAST_DECL(trait_method));
     }
     // substitute all instances of the trait object type for the type of the implementor
     b = pawIr_substitute_self(C, trait, adt, b);
@@ -180,7 +180,7 @@ static void ensure_trait_implemented(struct Compiler *C, struct HirTraitDecl *tr
         struct HirFuncDecl **pmethod = MethodMap_get(C, methods, trait_method->name);
         if (pmethod == NULL) {
             NAME_ERROR(C, "trait method '%s' not implemented",
-                       trait_method->name->text);
+                trait_method->name->text);
         }
         ensure_methods_match(C, adt, *pmethod, trait, trait_decl, trait_method);
     }

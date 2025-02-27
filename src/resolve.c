@@ -201,7 +201,8 @@ static paw_Bool implements_trait(struct Resolver *R, struct IrType *type, enum T
     {
         struct HirDecl *decl = pawHir_get_decl(R->C, IR_TYPE_DID(*pbound));
         struct HirTraitDecl *trait = HirGetTraitDecl(decl);
-        if ((kind == TRAIT_HASH && pawS_eq(trait->name, CSTR(R, CSTR_HASH))) || (kind == TRAIT_EQUALS && pawS_eq(trait->name, CSTR(R, CSTR_EQUALS)))) {
+        if ((kind == TRAIT_HASH && pawS_eq(trait->name, CSTR(R, CSTR_HASH)))
+                || (kind == TRAIT_EQUALS && pawS_eq(trait->name, CSTR(R, CSTR_EQUALS)))) {
             return PAW_TRUE;
         }
     }
@@ -489,7 +490,7 @@ struct IrType *pawP_instantiate_field(struct Compiler *C, struct IrType *inst_ty
     }
     struct IrType *base_type = GET_NODE_TYPE(C, decl);
     pawP_init_substitution_folder(&F, C, &subst,
-                                  ir_adt_types(base_type), t->types);
+        ir_adt_types(base_type), t->types);
     return pawIr_fold_type(&F, GET_NODE_TYPE(C, field));
 }
 
@@ -501,7 +502,7 @@ static struct IrTypeList *instantiate_fields(struct Compiler *C, struct IrType *
     struct HirDecl *decl = pawHir_get_decl(C, t->did);
     struct IrType *type = GET_NODE_TYPE(C, decl);
     pawP_init_substitution_folder(&F, C, &subst,
-                                  ir_adt_types(type), IrGetAdt(self)->types);
+        ir_adt_types(type), IrGetAdt(self)->types);
     struct IrTypeList *field_types = pawHir_collect_decl_types(C, fields);
     return pawIr_fold_type_list(&F, field_types);
 }
@@ -522,7 +523,7 @@ static int expect_field(struct Resolver *R, struct HirAdtDecl *adt, struct IrTyp
     int const index = find_field(adt->fields, name);
     if (index < 0)
         NAME_ERROR(R, "field '%s' does not exist on type '%s'",
-                   name->text, adt->name->text);
+            name->text, adt->name->text);
     return index;
 }
 
@@ -570,9 +571,6 @@ static struct IrType *resolve_path(struct Resolver *R, struct HirPath *path, enu
 
 static void maybe_fix_unit_struct(struct Resolver *R, struct IrType *type, struct HirExpr *expr)
 {
-    if (IrIsInfer(type))
-        return; // TODO
-
     paw_assert(IrIsAdt(type));
     struct HirDecl *decl = get_decl(R, IR_TYPE_DID(type));
     struct HirAdtDecl *adt = HirGetAdtDecl(decl);
@@ -614,14 +612,11 @@ static void check_map_key(struct Resolver *R, struct IrType *key)
     enum TraitKind requires[] = {TRAIT_HASH, TRAIT_EQUALS};
     for (int i = 0; i < PAW_COUNTOF(requires); ++i) {
         if (!implements_trait(R, key, requires[i])) {
-            String const *trait_name =
-                requires[
-                                i]
-                            == TRAIT_HASH
+            String const *trait_name = requires[i] == TRAIT_HASH
                             ? CSTR(R, CSTR_HASH)
                             : CSTR(R, CSTR_EQUALS);
             TYPE_ERROR(R, "type '%s' cannot be used as a map key: '%s' trait not implemented",
-                       pawIr_print_type(R->C, key), trait_name->text);
+                pawIr_print_type(R->C, key), trait_name->text);
         }
     }
 }
@@ -700,7 +695,7 @@ static paw_Bool is_bool_binop(enum BinaryOp op)
 static struct HirExpr *new_literal_field(struct Resolver *R, const char *name, struct HirExpr *expr, int fid)
 {
     return pawHir_new_named_field_expr(R->m->hir, expr->hdr.line,
-            SCAN_STRING(R->C, name), expr, fid);
+        SCAN_STRING(R->C, name), expr, fid);
 }
 
 static struct IrType *transform_range(struct Resolver *R, struct HirBinOpExpr *e, struct IrType *inner)
@@ -981,8 +976,8 @@ static paw_Bool is_polymorphic(struct Resolver *R, struct IrType *type)
     } else if (HIR_IS_POLY_FUNC(base)) {
         // NOTE: type arguments on signatures not checked by pawU_equals
         return pawU_list_equals(R->U,
-                                ir_signature_types(base_type),
-                                ir_signature_types(type));
+            ir_signature_types(base_type),
+            ir_signature_types(type));
     }
     return PAW_FALSE;
 }
@@ -1014,7 +1009,7 @@ static struct IrType *select_field(struct Resolver *R, struct IrType *target, st
             TYPE_ERROR(R, "expected index of tuple element");
         } else if (e->index >= types->count) {
             TYPE_ERROR(R, "element index %d out of range of %d-tuple",
-                       e->index, types->count);
+                e->index, types->count);
         }
         return K_LIST_GET(types, e->index);
     }
@@ -1027,7 +1022,7 @@ static struct IrType *select_field(struct Resolver *R, struct IrType *target, st
     int const index = find_field(adt->fields, e->name);
     if (index < 0) {
         NAME_ERROR(R, "field '%s' does not exist in struct '%s'",
-                   e->name->text, adt->name->text);
+            e->name->text, adt->name->text);
     }
     // refer to the field using its index from now on
     struct HirDecl *field = K_LIST_GET(adt->fields, index);
@@ -1065,7 +1060,7 @@ static struct IrType *resolve_call_target(struct Resolver *R, struct HirExpr *ta
     struct HirDecl *self_decl = get_decl(R, IR_TYPE_DID(self));
     if (HirGetFuncDecl(func_decl)->is_assoc) {
         TYPE_ERROR(R, "'%s::%s' is not a method",
-                   self_decl->hdr.name->text, func_decl->hdr.name->text);
+            self_decl->hdr.name->text, func_decl->hdr.name->text);
     }
     ensure_accessible_field(R, func_decl, self_decl, method);
     *pparam_offset = 1;
@@ -1205,7 +1200,7 @@ static struct HirExprList *collect_field_exprs(struct Resolver *R, struct HirExp
         struct HirFieldExpr *item = HirGetFieldExpr(*pexpr);
         if (FieldMap_get(R->C, map, item->name) != NULL) {
             NAME_ERROR(R, "duplicate field '%s' in initializer for struct '%s'",
-                       item->name->text, adt->text);
+                item->name->text, adt->text);
         }
         FieldMap_insert(R->C, map, item->name, index);
         K_LIST_PUSH(R->C, order, *pexpr);
@@ -1242,12 +1237,12 @@ static struct IrType *resolve_composite_lit(struct Resolver *R, struct HirCompos
     } else if (adt->fields->count == 0) {
         SYNTAX_ERROR(R, "unexpected curly braces on initializer for unit structure '%s'"
                         "(use name without '{}' to create unit struct)",
-                     adt->name->text);
+            adt->name->text);
     }
 
     struct IrType *base_type = pawIr_get_type(R->C, adt->hid);
     field_types = subst_types(R, ir_adt_types(base_type),
-                              ir_adt_types(type), field_types);
+        ir_adt_types(type), field_types);
 
     struct HirExprList *order = collect_field_exprs(R, e->items, map, adt->name);
     for (int i = 0; i < adt->fields->count; ++i) {
@@ -1257,7 +1252,7 @@ static struct IrType *resolve_composite_lit(struct Resolver *R, struct HirCompos
         int const *pindex = FieldMap_get(R->C, map, field->name);
         if (pindex == NULL) {
             NAME_ERROR(R, "missing initializer for field '%s' in struct '%s'",
-                       field->name->text, adt->name->text);
+                field->name->text, adt->name->text);
         }
         struct IrType *type = field_types->data[i];
         struct HirExpr *item = order->data[*pindex];
@@ -1271,7 +1266,7 @@ static struct IrType *resolve_composite_lit(struct Resolver *R, struct HirCompos
     if (FieldMapIterator_is_valid(&iter)) {
         String const *key = FieldMapIterator_key(&iter);
         NAME_ERROR(R, "unexpected field '%s' in initializer for struct '%s'",
-                   key->text, adt->name->text);
+            key->text, adt->name->text);
     }
     paw_assert(adt->fields->count == e->items->count);
     FieldMap_delete(R->C, map);
@@ -1457,7 +1452,7 @@ static void check_binding(struct HirVisitor *V, struct HirBindingPat *p)
     struct BindingInfo **pbi = BindingMap_get(V->C, bc->bound, p->name);
     if (pbi == NULL) {
         NAME_ERROR(bc->R, "binding '%s' must appear in all alternatives",
-                   p->name->text);
+            p->name->text);
     }
     struct IrType *type = pawIr_get_type(V->C, p->hid);
     unify(bc->R, (*pbi)->type, type);
@@ -1474,7 +1469,7 @@ static void ensure_all_bindings_created(struct BindingChecker *bc)
         if (bi->uses != bc->iter) {
             String const *key = BindingMapIterator_key(&iter);
             NAME_ERROR(bc->R, "%s binding '%s' in pattern",
-                       bi->uses < bc->iter ? "missing" : "duplicate", key->text);
+                bi->uses < bc->iter ? "missing" : "duplicate", key->text);
         }
         BindingMapIterator_next(&iter);
     }

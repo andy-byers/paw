@@ -231,7 +231,7 @@ struct Substitution {
 };
 
 void pawP_init_substitution_folder(struct IrTypeFolder *F, struct Compiler *C, struct Substitution *subst,
-                                   struct IrTypeList *generics, struct IrTypeList *types);
+    struct IrTypeList *generics, struct IrTypeList *types);
 
 void pawP_collect_imports(struct Compiler *C, struct Ast *ast);
 void pawP_import(struct Compiler *C, void *state);

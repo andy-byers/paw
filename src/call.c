@@ -76,8 +76,8 @@ void pawC_stack_realloc(paw_Env *P, int n)
     // doesn't throw an error. Stack references must be corrected, even if the
     // allocation fails.
     StackPtr stack = pawM_alloc(P, P->stack.p,
-                                sizeof(P->stack.p[0]) * CAST_SIZE(P->bound.d),
-                                sizeof(P->stack.p[0]) * alloc);
+        sizeof(P->stack.p[0]) * CAST_SIZE(P->bound.d),
+        sizeof(P->stack.p[0]) * alloc);
     P->gc_noem = PAW_FALSE; // allow emergency GC
     if (stack == NULL) {
         finish_resize(P); // fix pointers

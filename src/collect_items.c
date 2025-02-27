@@ -70,7 +70,7 @@ static void new_global(struct ItemCollector *X, String *name, struct HirDecl *de
     {
         if (pawS_eq(psymbol->name, name)) {
             NAME_ERROR(X, "duplicate global '%s' (declared previously on line %d)",
-                       name->text, psymbol->decl->hdr.line);
+                name->text, psymbol->decl->hdr.line);
         }
     }
     add_symbol(X, scope, name, decl);
@@ -299,7 +299,7 @@ static void ensure_generics_in_signature(struct ItemCollector *X, struct HirDecl
             struct HirDecl *generic_decl = pawHir_get_decl(X->C, IR_TYPE_DID(*ptype));
             struct HirDecl *function_decl = pawHir_get_decl(X->C, IR_TYPE_DID(sig));
             TYPE_ERROR(X, "generic '%s' missing from signature of '%s'",
-                       generic_decl->hdr.name->text, function_decl->hdr.name->text);
+                generic_decl->hdr.name->text, function_decl->hdr.name->text);
         }
     }
 }
@@ -499,16 +499,20 @@ static struct HirDecl *declare_self(struct ItemCollector *X, int line, struct Ir
     return self;
 }
 
-static struct HirDecl *copy_and_collect_method(struct ItemCollector *X, struct HirFuncDecl *d)
+static struct HirDecl *copy_and_collect_method(struct ItemCollector *X, struct HirFolder *F, struct HirDecl *decl)
 {
-    struct HirDecl *copy = pawHir_new_func_decl(X->m->hir, d->line, d->name, X->ctx, d->generics,
-                                                d->params, d->result, d->body, d->fn_kind, d->is_pub, d->is_assoc);
+    struct HirDecl *copy = pawHir_fold_decl(F, decl);
     collect_func(X, HirGetFuncDecl(copy));
     return copy;
 }
 
+// TODO: Not a good place to do this. Include trait defaulted methods in the lookup, and substitute
+//       types at the point of use. Copy over as MIR.
 static void collect_default_methods(struct ItemCollector *X, StringMap *names, struct HirTypeList *traits, struct HirDeclList *methods)
 {
+    struct HirFolder F;
+    pawHir_folder_init(&F, X->m->hir, NULL);
+
     struct HirType **ptype;
     K_LIST_FOREACH(traits, ptype)
     {
@@ -523,7 +527,7 @@ static void collect_default_methods(struct ItemCollector *X, StringMap *names, s
                 continue; // not defaulted
             String *const *pname = StringMap_get(X->C, names, method->name);
             if (pname == NULL) { // implementation not provided
-                struct HirDecl *copy = copy_and_collect_method(X, method);
+                struct HirDecl *copy = copy_and_collect_method(X, &F, *pmethod);
                 K_LIST_PUSH(X->C, methods, copy);
             }
         }
