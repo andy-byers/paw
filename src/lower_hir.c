@@ -1595,10 +1595,12 @@ static void lower_hir_body(struct LowerHir *L, struct HirFuncDecl *func, struct 
 struct Mir *pawP_lower_hir_body(struct Compiler *C, struct HirFuncDecl *func)
 {
     struct IrType *type = pawIr_get_type(C, func->hid);
-    paw_Bool const is_polymorphic = func->generics != NULL || (func->self != NULL && IR_TYPE_SUBTYPES(func->self) != NULL);
+    struct IrSignature *fsig = IrGetSignature(type);
+    paw_Bool const is_polymorphic = func->generics != NULL
+        || (fsig->self != NULL && IR_TYPE_SUBTYPES(fsig->self) != NULL);
     struct Mir *result = pawMir_new(C, func->name, type,
-        func->self, func->fn_kind, func->body == NULL,
-        func->is_pub, is_polymorphic);
+                                    fsig->self, func->fn_kind, func->body == NULL,
+                                    func->is_pub, is_polymorphic);
     if (func->body == NULL)
         return result;
 
@@ -1628,13 +1630,12 @@ BodyMap *pawP_lower_hir(struct Compiler *C)
     for (int i = 0; i < decls->count; ++i) {
         struct HirDecl *decl = K_LIST_GET(decls, i);
         if (HirIsFuncDecl(decl)) {
-            struct HirFuncDecl *d = HirGetFuncDecl(decl);
-            if (d->self == NULL || IrIsAdt(d->self)) {
-#warning "remove comments!!!"
-                // TODO                pawU_enter_binder(C->U);
+            struct IrType *type = GET_NODE_TYPE(C, decl);
+            struct IrSignature *fsig = IrGetSignature(type);
+            if (fsig->self == NULL || IrIsAdt(fsig->self)) {
+                struct HirFuncDecl *d = HirGetFuncDecl(decl);
                 struct Mir *r = pawP_lower_hir_body(C, d);
                 BodyMap_insert(C, result, d->did, r);
-                // TODO                pawU_leave_binder(C->U);
             }
         }
     }

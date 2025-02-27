@@ -430,7 +430,6 @@ static void collect_func(struct ItemCollector *X, struct HirFuncDecl *d)
         d->is_assoc = check_assoc_function(X, X->ctx, d->params);
         struct IrType *type = GET_TYPE(X, d->hid);
         IrGetSignature(type)->self = X->ctx;
-        d->self = X->ctx;
     }
 }
 
@@ -502,6 +501,8 @@ static struct HirDecl *declare_self(struct ItemCollector *X, int line, struct Ir
 static struct HirDecl *copy_and_collect_method(struct ItemCollector *X, struct HirFolder *F, struct HirDecl *decl)
 {
     struct HirDecl *copy = pawHir_fold_decl(F, decl);
+    struct HirDecl *copy = pawHir_new_func_decl(X->m->hir, d->line, d->name, d->generics,
+            d->params, d->result, d->body, d->fn_kind, d->is_pub, d->is_assoc);
     collect_func(X, HirGetFuncDecl(copy));
     return copy;
 }

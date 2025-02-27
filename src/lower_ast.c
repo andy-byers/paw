@@ -465,8 +465,8 @@ static struct HirDecl *LowerFuncDecl(struct LowerAst *L, struct AstFuncDecl *d)
     struct HirDeclList *params = lower_params(L, d, d->params);
     struct HirType *result = lower_type(L, d->result);
     struct HirExpr *body = d->body != NULL ? LOWER_BLOCK(L, d->body) : NULL;
-    return pawHir_new_func_decl(L->hir, d->line, d->name, NULL, generics,
-        params, result, body, d->fn_kind, d->is_pub, PAW_FALSE);
+    return pawHir_new_func_decl(L->hir, d->line, d->name, generics,
+            params, result, body, d->fn_kind, d->is_pub, PAW_FALSE);
 }
 
 static paw_Bool is_never_block(struct HirExpr *expr)
@@ -528,7 +528,7 @@ static struct HirExpr *LowerWhileExpr(struct LowerAst *L, struct AstWhileExpr *e
 static struct HirPat *new_none_pat(struct LowerAst *L, int line)
 {
     struct HirPath *path = pawHir_path_new(L->C);
-    pawHir_path_add(L->hir, path, SCAN_STRING(L->C, "Option"), NULL);
+    pawHir_path_add(L->hir, path, CSTR(L->C, CSTR_OPTION), NULL);
     pawHir_path_add(L->hir, path, SCAN_STRING(L->C, "None"), NULL);
     struct HirPatList *fields = pawHir_pat_list_new(L->C);
     return pawHir_new_variant_pat(L->hir, line, path, fields, 1);
@@ -537,7 +537,7 @@ static struct HirPat *new_none_pat(struct LowerAst *L, int line)
 static struct HirPat *new_some_pat(struct LowerAst *L, String *var, int line)
 {
     struct HirPath *path = pawHir_path_new(L->C);
-    pawHir_path_add(L->hir, path, SCAN_STRING(L->C, "Option"), NULL);
+    pawHir_path_add(L->hir, path, CSTR(L->C, CSTR_OPTION), NULL);
     pawHir_path_add(L->hir, path, SCAN_STRING(L->C, "Some"), NULL);
     struct HirPatList *fields = pawHir_pat_list_new(L->C);
     struct HirPat *variant = pawHir_new_variant_pat(L->hir, line, path, fields, 0);
@@ -644,9 +644,8 @@ static struct HirExpr *LowerIndex(struct LowerAst *L, struct AstIndex *e)
 static struct HirExpr *LowerSelector(struct LowerAst *L, struct AstSelector *e)
 {
     struct HirExpr *target = lower_expr(L, e->target);
-    if (e->is_index) {
+    if (e->is_index)
         return pawHir_new_index_selector(L->hir, e->line, target, e->index);
-    }
     return pawHir_new_name_selector(L->hir, e->line, target, e->name);
 }
 
@@ -736,9 +735,7 @@ static void combine_or_parts(struct LowerAst *L, struct HirPatList *pats, struct
     struct HirPat *const *ppat;
     struct HirOrPat *other = HirGetOrPat(part);
     K_LIST_FOREACH(other->pats, ppat)
-    {
         K_LIST_PUSH(L->C, pats, *ppat);
-    }
 }
 
 static struct HirPat *LowerOrPat(struct LowerAst *L, struct AstOrPat *p)
@@ -868,34 +865,6 @@ static struct Hir *lower_ast(struct LowerAst *L, struct Ast *ast)
     return hir;
 }
 
-static struct HirDecl *find_builtin(struct HirDeclList *items, String const *name)
-{
-    struct HirDecl **pitem;
-    K_LIST_FOREACH(items, pitem)
-    {
-        struct HirDecl *item = *pitem;
-        if (pawS_eq(name, item->hdr.name))
-            return item;
-    }
-    PAW_UNREACHABLE();
-}
-
-static void set_builtin_adts(struct LowerAst *L, struct HirDeclList *items)
-{
-    struct Builtin *builtins = L->C->builtins;
-
-    // builtin primitives always come first, and there are no intervening decls.
-    builtins[BUILTIN_UNIT].did = K_LIST_GET(items, BUILTIN_UNIT)->hdr.did;
-    builtins[BUILTIN_BOOL].did = K_LIST_GET(items, BUILTIN_BOOL)->hdr.did;
-    builtins[BUILTIN_INT].did = K_LIST_GET(items, BUILTIN_INT)->hdr.did;
-    builtins[BUILTIN_FLOAT].did = K_LIST_GET(items, BUILTIN_FLOAT)->hdr.did;
-    builtins[BUILTIN_STR].did = K_LIST_GET(items, BUILTIN_STR)->hdr.did;
-
-    // builtin objects may declare generics or fields, so they need to be searched for
-    builtins[BUILTIN_LIST].did = find_builtin(items, CSTR(L, CSTR_LIST))->hdr.did;
-    builtins[BUILTIN_MAP].did = find_builtin(items, CSTR(L, CSTR_MAP))->hdr.did;
-}
-
 void pawP_lower_ast(struct Compiler *C)
 {
     struct LowerAst L = {
@@ -905,7 +874,6 @@ void pawP_lower_ast(struct Compiler *C)
     };
 
     struct Hir *prelude = lower_ast(&L, C->prelude);
-    set_builtin_adts(&L, prelude->items);
 
     ImportMapIterator iter;
     ImportMapIterator_init(C->imports, &iter);

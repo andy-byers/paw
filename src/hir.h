@@ -279,7 +279,7 @@ struct HirFuncDecl {
     paw_Bool is_pub : 1;
     paw_Bool is_assoc : 1;
     enum FuncKind fn_kind : 6;
-    struct IrType *self;
+//    struct IrType *self;
     struct HirDeclList *generics;
     struct HirDeclList *params;
     struct HirType *result;
@@ -385,7 +385,7 @@ static struct HirDecl *pawHir_new_type_decl(struct Hir *hir, int line, String *n
     return d;
 }
 
-static struct HirDecl *pawHir_new_func_decl(struct Hir *hir, int line, String *name, struct IrType *self, struct HirDeclList *generics, struct HirDeclList *params, struct HirType *result, struct HirExpr *body, enum FuncKind fn_kind, paw_Bool is_pub, paw_Bool is_assoc)
+static struct HirDecl *pawHir_new_func_decl(struct Hir *hir, int line, String *name, struct HirDeclList *generics, struct HirDeclList *params, struct HirType *result, struct HirExpr *body, enum FuncKind fn_kind, paw_Bool is_pub, paw_Bool is_assoc)
 {
     struct HirDecl *d = pawHir_new_decl(hir);
     d->FuncDecl_ = (struct HirFuncDecl){
@@ -393,7 +393,6 @@ static struct HirDecl *pawHir_new_func_decl(struct Hir *hir, int line, String *n
         .line = line,
         .kind = kHirFuncDecl,
         .name = name,
-        .self = self,
         .generics = generics,
         .params = params,
         .result = result,

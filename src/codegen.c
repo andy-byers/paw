@@ -303,7 +303,7 @@ static String *func_name(struct Generator *G, String const *modname, struct IrTy
     struct IrSignature *fsig = IrGetSignature(type);
     struct HirFuncDecl const *fd = HirGetFuncDecl(GET_DECL(G, fsig->did));
     struct IrTypeList *fd_types = fd->body ? fsig->types : NULL;
-    if (fd->self == NULL)
+    if (fsig->self == NULL)
         return mangle_name(G, modname, fd->name, fd_types);
     struct HirDecl const *ad = GET_DECL(G, IR_TYPE_DID(self));
     struct IrTypeList const *ad_types = fd->body ? IR_TYPE_SUBTYPES(self) : NULL;
@@ -622,8 +622,9 @@ static paw_Bool is_method_call(struct Generator *G, struct IrType *type)
 {
     if (!IrIsSignature(type))
         return PAW_FALSE;
-    struct HirDecl *decl = GET_DECL(G, IR_TYPE_DID(type));
-    return HirGetFuncDecl(decl)->self != NULL;
+    return IrGetSignature(type)->self != NULL;
+   // struct HirDecl *decl = GET_DECL(G, IR_TYPE_DID(type));
+   // return HirGetFuncDecl(decl)->self != NULL;
 }
 
 static void prep_method_call(struct Generator *G, MirRegister callable, MirRegister self)
