@@ -22,6 +22,7 @@
 #include "match.h"
 #include "mir.h"
 #include "ssa.h"
+#include "unify.h"
 
 struct FunctionState {
     struct FunctionState *outer;
@@ -492,6 +493,7 @@ static paw_Bool resolve_nonglobal(struct LowerHir *L, DeclId did, String *name, 
 
 static MirRegister add_constant(struct LowerHir *L, Value value, enum BuiltinKind b_kind)
 {
+    paw_assert(b_kind != NBUILTINS);
     struct FunctionState *fs = L->fs;
     MirRegister const target = new_register(L, get_type(L, b_kind));
     NEW_INSTR(fs, constant, -1, b_kind, value, target);
@@ -621,7 +623,7 @@ static paw_Bool visit_var_decl(struct HirVisitor *V, struct HirVarDecl *d)
 static MirRegister lower_basic_lit(struct HirVisitor *V, struct HirLiteralExpr *e)
 {
     struct LowerHir *L = V->ud;
-    return add_constant(L, e->basic.value, e->basic.t);
+    return add_constant(L, e->basic.value, e->basic.code);
 }
 
 static MirRegister lower_tuple_lit(struct HirVisitor *V, struct HirLiteralExpr *e)
@@ -1629,8 +1631,11 @@ BodyMap *pawP_lower_hir(struct Compiler *C)
         if (HirIsFuncDecl(decl)) {
             struct HirFuncDecl *d = HirGetFuncDecl(decl);
             if (d->self == NULL || IrIsAdt(d->self)) {
+#warning "remove comments!!!"
+// TODO                pawU_enter_binder(C->U);
                 struct Mir *r = pawP_lower_hir_body(C, d);
                 BodyMap_insert(C, result, d->did, r);
+// TODO                pawU_leave_binder(C->U);
             }
         }
     }

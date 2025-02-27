@@ -515,12 +515,12 @@ enum HirLitKind {
 
 struct HirBasicLit {
     Value value;
-    paw_Type t;
+    enum BuiltinKind code;
 };
 
 struct HirContainerLit {
     struct HirExprList *items;
-    paw_Type code;
+    enum BuiltinKind code;
 };
 
 struct HirTupleLit {
@@ -614,7 +614,7 @@ struct HirIndex {
 
 struct HirConversionExpr {
     HIR_EXPR_HEADER;
-    paw_Type to;
+    enum BuiltinKind to;
     struct HirExpr *arg;
 };
 
@@ -728,7 +728,7 @@ static struct HirExpr *pawHir_new_basic_lit(struct Hir *hir, int line, Value val
         .kind = kHirLiteralExpr,
         .lit_kind = kHirLitBasic,
         .basic.value = value,
-        .basic.t = code,
+        .basic.code = code,
     };
     return e;
 }
@@ -912,7 +912,7 @@ static struct HirExpr *pawHir_new_index_expr(struct Hir *hir, int line, struct H
     return e;
 }
 
-static struct HirExpr *pawHir_new_conversion_expr(struct Hir *hir, int line, struct HirExpr *from, paw_Type to)
+static struct HirExpr *pawHir_new_conversion_expr(struct Hir *hir, int line, struct HirExpr *from, enum BuiltinKind to)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->ConversionExpr_ = (struct HirConversionExpr){

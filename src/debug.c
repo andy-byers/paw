@@ -106,6 +106,8 @@ char const *paw_binop_name(enum BinaryOp binop)
             return "GT";
         case BINARY_GE:
             return "GE";
+        case BINARY_RANGE:
+            return "RANGE";
     }
 }
 
@@ -146,6 +148,8 @@ char const *paw_binop_symbol(enum BinaryOp binop)
             return ">";
         case BINARY_GE:
             return ">=";
+        case BINARY_RANGE:
+            return "..";
     }
 }
 

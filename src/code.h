@@ -69,6 +69,7 @@ enum BinaryOp {
     BINARY_BOR,
     BINARY_SHL,
     BINARY_SHR,
+    BINARY_RANGE,
 };
 
 enum JumpKind {
@@ -87,8 +88,10 @@ enum BuiltinKind {
     BUILTIN_MAP,
     BUILTIN_OPTION,
     BUILTIN_RESULT,
+    BUILTIN_RANGE,
     BUILTIN_HASH,
     BUILTIN_EQUALS,
+    BUILTIN_COMPARE,
 
     NBUILTINS,
 };

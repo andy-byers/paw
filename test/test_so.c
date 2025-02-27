@@ -22,7 +22,7 @@ int main(void)
         "    }              \n"
         "}                  \n";
     struct TestAlloc a = {0};
-    paw_Env *P = test_open(NULL, &a, 1 << 20);
+    paw_Env *P = test_open(NULL, &a, 1 << 24);
     int status = test_open_string(P, source);
     handle_error(P, status, PAW_TRUE);
 

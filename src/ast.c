@@ -344,12 +344,15 @@ static void dump_expr(Printer *P, struct AstExpr *expr)
                     DUMP_MSG(P, "lit_kind: CONTAINER\n");
                     dump_expr_list(P, e->cont.items, "items");
                     break;
-                default:
-                    paw_assert(e->lit_kind == kAstCompositeLit);
+                case kAstCompositeLit:
                     DUMP_MSG(P, "lit_kind: COMPOSITE\n");
                     DUMP_MSG(P, "target: ");
                     dump_path(P, e->comp.path);
                     dump_expr_list(P, e->comp.items, "items");
+                    break;
+                case kAstRangeLit:
+                    DUMP_MSG(P, "lit_kind: RANGE\n");
+                    break;
             }
             break;
         }

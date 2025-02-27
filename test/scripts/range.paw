@@ -1,0 +1,42 @@
+// range.paw
+
+pub fn test_in_range() {
+    assert((1..10).contains(1));
+    assert((1..10).contains(9));
+
+    assert((1..2).contains(1));
+}
+
+pub fn test_not_in_range() {
+    assert(!(1..10).contains(0));
+    assert(!(1..10).contains(10));
+
+    assert(!(2..1).contains(1));
+    assert(!(2..1).contains(2));
+    assert(!(1..1).contains(1));
+    assert(!(1..2).contains(2));
+}
+
+pub fn test_precedence() {
+    assert((1|1..1+1).contains(1));
+}
+
+pub fn test_variables() {
+    let a = 1;
+    let b = 2;
+    assert((a..b).contains(1));
+}
+
+pub fn test_other_types() {
+    assert((false..true).contains(false));
+    assert(!(true..true).contains(true));
+    assert(!(true..false).contains(false));
+
+    assert((0.5..1.0).contains(0.5));
+    assert(!(1.0..1.0).contains(1.0));
+    assert(!(1.0..0.5).contains(0.5));
+
+    assert(("a".."z").contains("a"));
+    assert(!("z".."z").contains("z"));
+    assert(!("z".."a").contains("a"));
+}

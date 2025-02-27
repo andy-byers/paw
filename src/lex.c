@@ -577,8 +577,9 @@ try_again:
             if (test_next(x, '.')) {
                 if (test_next(x, '.')) {
                     token = T(TK_DOT3);
+                } else {
+                    token = T(TK_DOT2);
                 }
-                LEX_ERROR(x); // '..' not allowed
             }
             break;
         case '/':

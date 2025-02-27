@@ -229,6 +229,7 @@ static ValueMap *kcache_map(struct KProp *K, enum BuiltinKind kind)
 
 static int add_constant(struct KProp *K, Value v, enum BuiltinKind kind)
 {
+    paw_assert(kind != NBUILTINS);
     if (kind <= BUILTIN_BOOL)
         kind = BUILTIN_INT;
     ValueMap *map = kcache_map(K, kind);
@@ -489,6 +490,9 @@ static struct CellInfo visit_binary_op(struct KProp *K, struct Cell *lhs, struct
                 r = x;
             }
             break;
+        case BINARY_RANGE:
+            return BOTTOM_INFO();
+
     }
     int const k = add_constant(K, r, kind);
     return CONST_INFO(k, r);

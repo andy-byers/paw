@@ -101,7 +101,7 @@ enum InfixOp {
     INFIX_LE, // <=
     INFIX_GT, // >
     INFIX_GE, // >=
-    INFIX_IN, // in
+    INFIX_AS, // as
     INFIX_ADD, // +
     INFIX_SUB, // -
     INFIX_MUL, // *
@@ -112,10 +112,11 @@ enum InfixOp {
     INFIX_BOR, // |
     INFIX_SHL, // <<
     INFIX_SHR, // >>
+    INFIX_RANGE, // ..
+
     INFIX_AND, // &&
     INFIX_OR, // ||
     INFIX_ASSIGN, // =
-    INFIX_AS, // as
 
     NINFIX
 };
@@ -127,26 +128,26 @@ static const struct {
     uint8_t left;
     uint8_t right;
 } kInfixPrec[NINFIX] = {
-    [INFIX_AS] = {12, 12},
-    [INFIX_MUL] = {11, 11},
-    [INFIX_DIV] = {11, 11},
-    [INFIX_MOD] = {11, 11},
-    [INFIX_ADD] = {10, 10},
-    [INFIX_SUB] = {10, 10},
-    [INFIX_SHL] = {9, 9},
-    [INFIX_SHR] = {9, 9},
-    [INFIX_BAND] = {8, 8},
-    [INFIX_BXOR] = {7, 7},
-    [INFIX_BOR] = {6, 6},
-    [INFIX_IN] = {5, 5},
-    [INFIX_LT] = {5, 5},
-    [INFIX_LE] = {5, 5},
-    [INFIX_GT] = {5, 5},
-    [INFIX_GE] = {5, 5},
-    [INFIX_EQ] = {4, 4},
-    [INFIX_NE] = {4, 4},
-    [INFIX_AND] = {3, 3},
-    [INFIX_OR] = {2, 2},
+    [INFIX_AS] = {13, 13},
+    [INFIX_MUL] = {12, 12},
+    [INFIX_DIV] = {12, 12},
+    [INFIX_MOD] = {12, 12},
+    [INFIX_ADD] = {11, 11},
+    [INFIX_SUB] = {11, 11},
+    [INFIX_SHL] = {10, 10},
+    [INFIX_SHR] = {10, 10},
+    [INFIX_BAND] = {9, 9},
+    [INFIX_BXOR] = {8, 8},
+    [INFIX_BOR] = {7, 7},
+    [INFIX_LT] = {6, 6},
+    [INFIX_LE] = {6, 6},
+    [INFIX_GT] = {6, 6},
+    [INFIX_GE] = {6, 6},
+    [INFIX_EQ] = {5, 5},
+    [INFIX_NE] = {5, 5},
+    [INFIX_AND] = {4, 4},
+    [INFIX_OR] = {3, 3},
+    [INFIX_RANGE] = {2, 2},
     [INFIX_ASSIGN] = {1, 1},
 };
 
@@ -203,8 +204,6 @@ static enum InfixOp get_infixop(TokenKind kind)
             return INFIX_BAND;
         case '|':
             return INFIX_BOR;
-        case TK_IN:
-            return INFIX_IN;
         case TK_AS:
             return INFIX_AS;
         case TK_EQUALS2:
@@ -223,6 +222,8 @@ static enum InfixOp get_infixop(TokenKind kind)
             return INFIX_LE;
         case TK_GREATER_EQ:
             return INFIX_GE;
+        case TK_DOT2:
+            return INFIX_RANGE;
         default:
             return NOT_INFIX;
     }
@@ -492,6 +493,7 @@ static struct AstPat *tuple_pat(struct Lex *lex)
     return pawAst_new_tuple_pat(lex->ast, line, elems);
 }
 
+// TODO: handle range patterns
 static struct AstExpr *literal_expr(struct Lex *lex)
 {
     paw_Bool const negative = test_next(lex, '-');
@@ -782,7 +784,7 @@ static struct AstExpr *unop_expr(struct Lex *lex, enum UnOp op)
     int const line = lex->line;
     enter_nested(lex);
     skip(lex); // unary operator token
-    enum UnaryOp unop = CAST(enum UnaryOp, op); // same order
+    enum UnaryOp const unop = CAST(enum UnaryOp, op); // same order
     struct AstExpr *target = expression(lex, kUnOpPrecedence);
     leave_nested(lex);
     return pawAst_new_unop_expr(lex->ast, line, unop, target);
@@ -1260,7 +1262,7 @@ static struct AstExpr *binop_expr(struct Lex *lex, enum InfixOp op, struct AstEx
     enter_nested(lex);
     int const line = lex->line;
     struct AstExpr *rhs = expression(lex, right_prec(op));
-    enum BinaryOp binop = CAST(enum BinaryOp, op); // same order
+    enum BinaryOp const binop = CAST(enum BinaryOp, op); // same order
     leave_nested(lex);
     return pawAst_new_binop_expr(lex->ast, line, binop, lhs, rhs);
 }
@@ -1638,6 +1640,8 @@ static struct AstDeclList *toplevel_items(struct Lex *lex, struct AstDeclList *l
 }
 
 // TODO: someday, #embed should be used for this... once C23 support is better
+// TODO: defaulted trait methods: Equals::ne, Compare::gt, and Compare::ge
+// TODO: should Equals and Compare be generic?
 static char const kPrelude[] =
     "pub trait Hash {\n"
     "    fn hash(self) -> int;\n"
@@ -1647,30 +1651,41 @@ static char const kPrelude[] =
     "    fn eq(self, rhs: Self) -> bool;\n"
     "}\n"
 
+    "pub trait Compare {\n"
+    "    fn lt(self, rhs: Self) -> bool;\n"
+    "    fn le(self, rhs: Self) -> bool;\n"
+    "}\n"
+
     "pub struct unit: Hash + Equals {\n"
     "    pub fn hash(self) -> int { 0 }\n"
     "    pub fn eq(self, rhs: Self) -> bool { true }\n"
     "}\n"
 
-    "pub struct bool: Hash + Equals {\n"
+    "pub struct bool: Hash + Equals + Compare {\n"
     "    pub fn to_string(self) -> str;\n"
     "    pub fn hash(self) -> int { self as int }\n"
     "    pub fn eq(self, rhs: Self) -> bool { self == rhs }\n"
+    "    pub fn lt(self, rhs: Self) -> bool { self as int < rhs as int }\n"
+    "    pub fn le(self, rhs: Self) -> bool { self as int <= rhs as int }\n"
     "}\n"
 
-    "pub struct int: Hash + Equals {\n"
+    "pub struct int: Hash + Equals + Compare {\n"
     "    pub fn to_string(self) -> str;\n"
     "    pub fn hash(self) -> int { self }\n"
     "    pub fn eq(self, rhs: Self) -> bool { self == rhs }\n"
+    "    pub fn lt(self, rhs: Self) -> bool { self < rhs }\n"
+    "    pub fn le(self, rhs: Self) -> bool { self <= rhs }\n"
     "}\n"
 
-    "pub struct float: Hash + Equals {\n"
+    "pub struct float: Hash + Equals + Compare {\n"
     "    pub fn to_string(self) -> str;\n"
     "    pub fn hash(self) -> int;\n"
     "    pub fn eq(self, rhs: Self) -> bool { self == rhs }\n"
+    "    pub fn lt(self, rhs: Self) -> bool { self < rhs }\n"
+    "    pub fn le(self, rhs: Self) -> bool { self <= rhs }\n"
     "}\n"
 
-    "pub struct str: Hash + Equals {\n"
+    "pub struct str: Hash + Equals + Compare {\n"
     "    pub fn parse_int(self, base: int) -> int;\n"
     "    pub fn parse_float(self) -> float;\n"
     "    pub fn split(self, sep: str) -> [str];\n"
@@ -1680,6 +1695,8 @@ static char const kPrelude[] =
     "    pub fn ends_with(self, suffix: str) -> bool;\n"
     "    pub fn hash(self) -> int;\n"
     "    pub fn eq(self, rhs: Self) -> bool { self == rhs }\n"
+    "    pub fn lt(self, rhs: Self) -> bool { self < rhs }\n"
+    "    pub fn le(self, rhs: Self) -> bool { self <= rhs }\n"
     "}\n"
 
     "pub struct List<T> {\n"
@@ -1715,6 +1732,17 @@ static char const kPrelude[] =
     "    pub fn unwrap(self) -> T;\n"
     "    pub fn unwrap_err(self) -> E;\n"
     "    pub fn unwrap_or(self, value: T) -> T;\n"
+    "}\n"
+
+    "pub struct Range<T: Compare> {\n"
+    "    first: T,\n"
+    "    second: T,\n"
+    "    pub fn new(first: T, second: T) -> Self {\n"
+    "        Self{first, second}\n"
+    "    }\n"
+    "    pub fn contains(self, value: T) -> bool {\n"
+    "        self.first.le(value) && value.lt(self.second)\n"
+    "    }\n"
     "}\n"
 
     "pub fn print(message: str);\n"

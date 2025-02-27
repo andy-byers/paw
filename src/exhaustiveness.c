@@ -474,7 +474,7 @@ static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct R
         struct HirLiteralExpr *e = HirGetLiteralExpr(p->expr);
         struct Constructor cons = {0};
 
-        switch (e->basic.t) {
+        switch (e->basic.code) {
             case BUILTIN_UNIT:
                 cons.kind = CONS_TUPLE;
                 cons.tuple.elems = pawIr_type_list_new(U->C);
@@ -496,7 +496,7 @@ static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct R
                 cons.value = e->basic.value;
                 break;
             default:
-                paw_assert(e->basic.t == BUILTIN_STR);
+                paw_assert(e->basic.code == BUILTIN_STR);
                 cons.kind = CONS_STR;
                 cons.value = e->basic.value;
                 break;

@@ -57,9 +57,8 @@ void pawP_init(paw_Env *P)
         String *str = pawS_new_fixed(P, kw);
         str->flag = i + FIRST_KEYWORD;
     }
-    // note that keywords are already fixed
-    P->string_cache[CSTR_TRUE] = pawS_new_str(P, "true");
-    P->string_cache[CSTR_FALSE] = pawS_new_str(P, "false");
+
+    P->string_cache[CSTR_UNIT] = basic_type_name(P, "unit", BUILTIN_UNIT);
     P->string_cache[CSTR_BOOL] = basic_type_name(P, "bool", BUILTIN_BOOL);
     P->string_cache[CSTR_INT] = basic_type_name(P, "int", BUILTIN_INT);
     P->string_cache[CSTR_FLOAT] = basic_type_name(P, "float", BUILTIN_FLOAT);
@@ -68,10 +67,15 @@ void pawP_init(paw_Env *P)
     P->string_cache[CSTR_MAP] = pawS_new_fixed(P, "Map");
     P->string_cache[CSTR_OPTION] = pawS_new_fixed(P, "Option");
     P->string_cache[CSTR_RESULT] = pawS_new_fixed(P, "Result");
+    P->string_cache[CSTR_RANGE] = pawS_new_fixed(P, "Range");
     P->string_cache[CSTR_HASH] = pawS_new_fixed(P, "Hash");
     P->string_cache[CSTR_EQUALS] = pawS_new_fixed(P, "Equals");
+    P->string_cache[CSTR_COMPARE] = pawS_new_fixed(P, "Compare");
+    P->string_cache[CSTR_TRUE] = pawS_new_fixed(P, "true");
+    P->string_cache[CSTR_FALSE] = pawS_new_fixed(P, "false");
     P->string_cache[CSTR_UNDERSCORE] = pawS_new_fixed(P, "_");
     P->string_cache[CSTR_SELF] = pawS_new_fixed(P, "self");
+    P->string_cache[CSTR_NEW] = pawS_new_fixed(P, "new");
 
     P->string_cache[CSTR_KBUILTIN] = pawS_new_fixed(P, "paw.builtin");
     P->string_cache[CSTR_KMODULES] = pawS_new_fixed(P, "paw.modules");
@@ -115,9 +119,9 @@ String *pawP_scan_nstring(struct Compiler *C, Tuple *map, char const *s, size_t 
     return V_STRING(*pv);
 }
 
-static void define_prelude_adt(struct Compiler *C, char const *name, enum BuiltinKind kind)
+static void define_prelude_adt(struct Compiler *C, unsigned cstr, enum BuiltinKind kind)
 {
-    String *s = SCAN_STRING(C, name);
+    String *s = CACHED_STRING(ENV(C), cstr);
     C->builtins[kind] = (struct Builtin){
         .did = NO_DECL,
         .name = s,
@@ -167,24 +171,26 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, char co
     C->U->C = C;
 
     // builtin primitives
-    define_prelude_adt(C, "unit", BUILTIN_UNIT);
-    define_prelude_adt(C, "bool", BUILTIN_BOOL);
-    define_prelude_adt(C, "int", BUILTIN_INT);
-    define_prelude_adt(C, "float", BUILTIN_FLOAT);
-    define_prelude_adt(C, "str", BUILTIN_STR);
+    define_prelude_adt(C, CSTR_UNIT, BUILTIN_UNIT);
+    define_prelude_adt(C, CSTR_BOOL, BUILTIN_BOOL);
+    define_prelude_adt(C, CSTR_INT, BUILTIN_INT);
+    define_prelude_adt(C, CSTR_FLOAT, BUILTIN_FLOAT);
+    define_prelude_adt(C, CSTR_STR, BUILTIN_STR);
 
     // builtin containers (in Paw code, List<T> can be written as [T], and
     // Map<K, V> as [K: V])
-    define_prelude_adt(C, "List", BUILTIN_LIST);
-    define_prelude_adt(C, "Map", BUILTIN_MAP);
+    define_prelude_adt(C, CSTR_LIST, BUILTIN_LIST);
+    define_prelude_adt(C, CSTR_MAP, BUILTIN_MAP);
 
-    // builtin enumerations
-    define_prelude_adt(C, "Option", BUILTIN_OPTION);
-    define_prelude_adt(C, "Result", BUILTIN_RESULT);
+    // builtin ADTs
+    define_prelude_adt(C, CSTR_OPTION, BUILTIN_OPTION);
+    define_prelude_adt(C, CSTR_RESULT, BUILTIN_RESULT);
+    define_prelude_adt(C, CSTR_RANGE, BUILTIN_RANGE);
 
     // builtin traits
-    define_prelude_adt(C, "Hash", BUILTIN_HASH);
-    define_prelude_adt(C, "Equals", BUILTIN_EQUALS);
+    define_prelude_adt(C, CSTR_HASH, BUILTIN_HASH);
+    define_prelude_adt(C, CSTR_EQUALS, BUILTIN_EQUALS);
+    define_prelude_adt(C, CSTR_COMPARE, BUILTIN_COMPARE);
 }
 
 void pawP_teardown(paw_Env *P, struct DynamicMem *dm)

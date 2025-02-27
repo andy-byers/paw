@@ -32,6 +32,8 @@ typedef struct CallFrame {
 
 enum {
     CSTR_SELF,
+    CSTR_NEW,
+    CSTR_UNIT,
     CSTR_TRUE,
     CSTR_FALSE,
     CSTR_BOOL,
@@ -40,10 +42,12 @@ enum {
     CSTR_STR,
     CSTR_LIST,
     CSTR_MAP,
-    CSTR_RESULT,
     CSTR_OPTION,
+    CSTR_RESULT,
+    CSTR_RANGE,
     CSTR_HASH,
     CSTR_EQUALS,
+    CSTR_COMPARE,
     CSTR_UNDERSCORE,
     CSTR_KMODULES,
     CSTR_KBUILTIN,

@@ -991,7 +991,7 @@ static void dump_expr(struct Printer *P, struct HirExpr *expr)
             switch (e->lit_kind) {
                 case kHirLitBasic:
                     DUMP_MSG(P, "lit_kind: BASIC\n");
-                    switch (e->basic.t) {
+                    switch (e->basic.code) {
                         case BUILTIN_UNIT:
                             break;
                         case BUILTIN_BOOL:
@@ -1027,6 +1027,7 @@ static void dump_expr(struct Printer *P, struct HirExpr *expr)
                     dump_path(P, e->comp.path, "target");
                     pawL_add_char(P->P, P->buf, '\n');
                     dump_expr_list(P, e->comp.items, "items");
+                    break;
             }
             break;
         }

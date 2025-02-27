@@ -697,10 +697,38 @@ static paw_Bool is_bool_binop(enum BinaryOp op)
     }
 }
 
+static struct HirExpr *new_literal_field(struct Resolver *R, const char *name, struct HirExpr *expr, int fid)
+{
+    return pawHir_new_named_field_expr(R->m->hir, expr->hdr.line,
+            SCAN_STRING(R->C, name), expr, fid);
+}
+
+static struct IrType *transform_range(struct Resolver *R, struct HirBinOpExpr *e, struct IrType *inner)
+{
+    struct Hir *hir = R->m->hir;
+    struct HirPath *path = pawHir_path_new(R->C);
+    pawHir_path_add(hir, path, CSTR(R, CSTR_RANGE), NULL);
+    struct HirExprList *items = pawHir_expr_list_new(R->C);
+    K_LIST_PUSH(R->C, items, new_literal_field(R, "first", e->lhs, 0));
+    K_LIST_PUSH(R->C, items, new_literal_field(R, "second", e->rhs, 1));
+
+    e->kind = kHirLiteralExpr; // transform to composite literal
+    struct HirLiteralExpr *lit = HirGetLiteralExpr(HIR_CAST_EXPR(e));
+    lit->lit_kind = kHirLitComposite;
+    lit->comp.items = items;
+    lit->comp.path = path;
+
+    struct IrTypeList *types = pawIr_type_list_new(R->C);
+    K_LIST_PUSH(R->C, types, inner);
+
+    DeclId const did = R->C->builtins[BUILTIN_RANGE].did;
+    return pawIr_new_adt(R->C, did, types);
+}
+
 static struct IrType *resolve_unop_expr(struct Resolver *R, struct HirUnOpExpr *e)
 {
     static uint8_t const kValidOps[][NBUILTINS] = {
-        //     type  =  0, b, i, f, s, l, m
+        //     type = {0, b, i, f, s, l, m}
         [UNARY_LEN] = {0, 0, 0, 0, 1, 1, 1},
         [UNARY_NEG] = {0, 0, 1, 1, 0, 0, 0},
         [UNARY_NOT] = {0, 1, 1, 1, 0, 0, 0},
@@ -723,7 +751,7 @@ static struct IrType *resolve_unop_expr(struct Resolver *R, struct HirUnOpExpr *
 static struct IrType *resolve_binop_expr(struct Resolver *R, struct HirBinOpExpr *e)
 {
     static uint8_t const kValidOps[][NBUILTINS] = {
-        //     type   =  0, b, i, f, s, l, m
+        //     type = {0, b, i, f, s, l, m}
         [BINARY_EQ] = {0, 1, 1, 1, 1, 0, 0},
         [BINARY_NE] = {0, 1, 1, 1, 1, 0, 0},
         [BINARY_LT] = {0, 0, 1, 1, 1, 0, 0},
@@ -740,6 +768,7 @@ static struct IrType *resolve_binop_expr(struct Resolver *R, struct HirBinOpExpr
         [BINARY_BOR] = {0, 0, 1, 0, 0, 0, 0},
         [BINARY_SHL] = {0, 0, 1, 0, 0, 0, 0},
         [BINARY_SHR] = {0, 0, 1, 0, 0, 0, 0},
+        [BINARY_RANGE] = {0, 1, 1, 1, 1, 0, 0},
     };
 
     struct IrType *lhs = resolve_operand(R, e->lhs);
@@ -752,6 +781,8 @@ static struct IrType *resolve_binop_expr(struct Resolver *R, struct HirBinOpExpr
         TYPE_ERROR(R, "unsupported operand types for binary operator");
     } else if (is_bool_binop(e->op)) {
         return get_type(R, BUILTIN_BOOL);
+    } else if (e->op == BINARY_RANGE) {
+        return transform_range(R, e, lhs);
     } else {
         return lhs;
     }
@@ -1096,7 +1127,7 @@ static struct IrType *resolve_conversion_expr(struct Resolver *R, struct HirConv
 
 static struct IrType *resolve_basic_lit(struct Resolver *R, struct HirBasicLit *e)
 {
-    return get_type(R, e->t);
+    return get_type(R, e->code);
 }
 
 static struct IrTypeList *resolve_operand_list(struct Resolver *R, struct HirExprList *list)
