@@ -93,6 +93,7 @@ static void collect_imports_from(struct Importer *I, struct Ast *ast)
     struct ImportContext ctx;
     enter_context(I, &ctx);
 
+    // register aliases
     K_LIST_FOREACH(ast->items, pitem)
     {
         struct AstDecl *item = *pitem;
@@ -104,6 +105,7 @@ static void collect_imports_from(struct Importer *I, struct Ast *ast)
         }
     }
 
+    // import modules
     K_LIST_FOREACH(ast->items, pitem)
     {
         struct AstDecl *item = *pitem;

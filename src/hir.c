@@ -787,7 +787,7 @@ static struct HirDecl *FoldTypeDecl(struct HirFolder *F, struct HirTypeDecl *d)
 {
     struct HirDeclList *generics = fold_decls(F, d->generics);
     struct HirType *rhs = FoldType(F, d->rhs);
-    return pawHir_new_type_decl(F->hir, d->line, d->name, generics, rhs);
+    return pawHir_new_type_decl(F->hir, d->line, d->name, generics, rhs, d->is_pub);
 }
 
 static struct HirDecl *FoldGenericDecl(struct HirFolder *F, struct HirGenericDecl *d)
@@ -1056,6 +1056,31 @@ enum TraitKind pawHir_kindof_trait(struct Compiler *C, struct HirTraitDecl *d)
         return TRAIT_USER;
     }
 }
+
+paw_Bool pawHir_is_pub_decl(struct HirDecl *decl)
+{
+    switch (HIR_KINDOF(decl)) {
+        case kHirTraitDecl:
+            return HirGetTraitDecl(decl)->is_pub;
+            break;
+        case kHirAdtDecl:
+            return HirGetAdtDecl(decl)->is_pub;
+            break;
+        case kHirFuncDecl:
+            return HirGetFuncDecl(decl)->is_pub;
+            break;
+        case kHirTypeDecl:
+            return HirGetTypeDecl(decl)->is_pub;
+        case kHirVarDecl:
+            return HirGetVarDecl(decl)->is_pub;
+            break;
+        case kHirFieldDecl:
+        case kHirGenericDecl:
+        case kHirVariantDecl:
+            PAW_UNREACHABLE();
+    }
+}
+
 
 struct Printer {
     struct Compiler *C;

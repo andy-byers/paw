@@ -492,7 +492,7 @@ static void collect_methods(struct ItemCollector *X, struct HirDeclList *methods
 static struct HirDecl *declare_self(struct ItemCollector *X, int line, struct IrType *type)
 {
     String *name = SCAN_STRING(X->C, "Self");
-    struct HirDecl *self = pawHir_new_type_decl(X->m->hir, line, name, NULL, NULL);
+    struct HirDecl *self = pawHir_new_type_decl(X->m->hir, line, name, NULL, NULL, PAW_FALSE);
     SET_TYPE(X, self->hdr.hid, type);
     new_local(X, name, self);
     return self;
@@ -686,6 +686,10 @@ static void collect_items(struct ItemCollector *X, struct Hir *hir)
             // handle "use mod::item;": find the item declaration in the other
             // module and add it to this module's global symbol table
             struct HirDecl *item = find_item_in(X, im->modno, im->item);
+            if (!pawHir_is_pub_decl(item)) {
+                pawE_error(ENV(X), PAW_EVALUE, -1, "item '%s' cannot be accessed from the current module",
+                        item->hdr.name->text);
+            }
             String *name = im->as != NULL ? im->as : im->item;
             new_global(X, name, item);
 

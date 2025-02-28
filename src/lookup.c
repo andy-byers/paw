@@ -81,6 +81,14 @@ struct QueryBase {
     paw_Bool is_type;
 };
 
+static void ensure_accessible(struct QueryState *Q, struct HirDecl *decl)
+{
+    if (!pawHir_is_pub_decl(decl) && module_number(Q->m) != Q->base_modno) {
+        pawE_error(ENV(Q), PAW_EVALUE, -1, "item '%s' cannot be accessed from the current module",
+                decl->hdr.name->text);
+    }
+}
+
 static struct QueryBase find_global_in(struct QueryState *Q, struct ModuleInfo *root, struct HirPath *path)
 {
     paw_assert(path->count > 0);
@@ -91,6 +99,7 @@ static struct QueryBase find_global_in(struct QueryState *Q, struct ModuleInfo *
         struct HirSegment *seg = &K_LIST_GET(path, Q->index++);
         struct HirSymbol *sym = resolve_symbol(Q, seg->name);
         if (sym != NULL) {
+            ensure_accessible(Q, sym->decl);
             seg->did = sym->decl->hdr.did;
             return (struct QueryBase){
                 .is_type = sym->is_type,

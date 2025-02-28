@@ -93,7 +93,7 @@ static int file_write(paw_Env *P)
 void l_import_io(paw_Env *P)
 {
     static char const s_io[] =
-        "struct File {\n"
+        "pub struct File {\n"
         "    inner: (),\n"
 
         "    pub fn open(pathname: str, mode: str) -> Self;\n"
@@ -103,7 +103,7 @@ void l_import_io(paw_Env *P)
         "    pub fn write(self, data: str) -> int;\n"
         "}\n"
 
-        "enum Seek {\n"
+        "pub enum Seek {\n"
         "    Begin,\n"
         "    Current,\n"
         "    End,\n"

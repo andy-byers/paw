@@ -352,7 +352,7 @@ static struct HirDecl *LowerTypeDecl(struct LowerAst *L, struct AstTypeDecl *d)
 {
     struct HirDeclList *generics = lower_decl_list(L, d->generics);
     struct HirType *rhs = lower_type(L, d->rhs);
-    return pawHir_new_type_decl(L->hir, d->line, d->name, generics, rhs);
+    return pawHir_new_type_decl(L->hir, d->line, d->name, generics, rhs, d->is_pub);
 }
 
 // Lower a function call or enumerator constructor

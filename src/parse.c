@@ -1549,7 +1549,7 @@ static struct AstDecl *trait_decl(struct Lex *lex, paw_Bool is_pub)
     return pawAst_new_trait_decl(lex->ast, line, name, generics, methods, is_pub);
 }
 
-static struct AstDecl *type_decl(struct Lex *lex)
+static struct AstDecl *type_decl(struct Lex *lex, paw_Bool is_pub)
 {
     int const line = lex->line;
     skip(lex); // 'type' token
@@ -1564,7 +1564,7 @@ static struct AstDecl *type_decl(struct Lex *lex)
         pawX_error(lex, "function type cannot appear in a type declaration");
     }
     semicolon(lex);
-    return pawAst_new_type_decl(lex->ast, line, name, generics, rhs);
+    return pawAst_new_type_decl(lex->ast, line, name, generics, rhs, is_pub);
 }
 
 static struct AstStmt *decl_stmt(struct Lex *lex)
@@ -1574,7 +1574,7 @@ static struct AstStmt *decl_stmt(struct Lex *lex)
     if (test(lex, TK_LET)) {
         decl = let_decl(lex, lex->line);
     } else if (test(lex, TK_TYPE)) {
-        decl = type_decl(lex);
+        decl = type_decl(lex, PAW_FALSE);
     } else {
         pawX_error(lex, "expected 'let' or 'type' declaration");
     }
@@ -1633,12 +1633,11 @@ static struct AstDecl *toplevel_item(struct Lex *lex, paw_Bool is_pub)
             return trait_decl(lex, is_pub);
         case TK_CONST:
             return const_decl(lex, is_pub);
+        case TK_TYPE:
+            return type_decl(lex, is_pub);
         case TK_USE:
             ensure_not_pub(lex, is_pub);
             return use_decl(lex);
-        case TK_TYPE:
-            ensure_not_pub(lex, is_pub);
-            return type_decl(lex);
     }
 }
 

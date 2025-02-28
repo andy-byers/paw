@@ -45,4 +45,3 @@ pub fn test_import_as() {
     MATH::sin(1.09);
     SIN(1.09);
 }
-

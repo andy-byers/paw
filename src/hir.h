@@ -271,6 +271,7 @@ struct HirVarDecl {
 // Used for type aliases and builtin types.
 struct HirTypeDecl {
     HIR_DECL_HEADER;
+    paw_Bool is_pub : 1;
     struct HirType *rhs;
     struct HirDeclList *generics;
 };
@@ -370,7 +371,7 @@ static struct HirDecl *pawHir_new_var_decl(struct Hir *hir, int line, String *na
     return d;
 }
 
-static struct HirDecl *pawHir_new_type_decl(struct Hir *hir, int line, String *name, struct HirDeclList *generics, struct HirType *rhs)
+static struct HirDecl *pawHir_new_type_decl(struct Hir *hir, int line, String *name, struct HirDeclList *generics, struct HirType *rhs, paw_Bool is_pub)
 {
     struct HirDecl *d = pawHir_new_decl(hir);
     d->TypeDecl_ = (struct HirTypeDecl){
@@ -380,6 +381,7 @@ static struct HirDecl *pawHir_new_type_decl(struct Hir *hir, int line, String *n
         .name = name,
         .generics = generics,
         .rhs = rhs,
+        .is_pub = is_pub,
     };
     pawHir_register_decl(hir, d);
     return d;
@@ -1492,6 +1494,7 @@ inline static struct HirSegment *pawHir_path_add(struct Hir *hir, struct HirPath
     return &K_LIST_LAST(path);
 }
 
+paw_Bool pawHir_is_pub_decl(struct HirDecl *decl);
 struct IrTypeList *pawHir_collect_decl_types(struct Compiler *C, struct HirDeclList *list);
 
 enum TraitKind pawHir_kindof_trait(struct Compiler *C, struct HirTraitDecl *d);

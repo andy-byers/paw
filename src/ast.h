@@ -100,6 +100,7 @@ struct AstVarDecl {
 
 struct AstTypeDecl {
     AST_DECL_HEADER;
+    paw_Bool is_pub : 1;
     struct AstType *rhs;
     struct AstDeclList *generics;
 };
@@ -247,7 +248,7 @@ inline static struct AstDecl *pawAst_new_adt_decl(struct Ast *ast, int line, Str
     return d;
 }
 
-inline static struct AstDecl *pawAst_new_type_decl(struct Ast *ast, int line, String *name, struct AstDeclList *generics, struct AstType *rhs)
+inline static struct AstDecl *pawAst_new_type_decl(struct Ast *ast, int line, String *name, struct AstDeclList *generics, struct AstType *rhs, paw_Bool is_pub)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->TypeDecl_ = (struct AstTypeDecl){
@@ -256,6 +257,7 @@ inline static struct AstDecl *pawAst_new_type_decl(struct Ast *ast, int line, St
         .name = name,
         .generics = generics,
         .rhs = rhs,
+        .is_pub = is_pub,
     };
     return d;
 }
