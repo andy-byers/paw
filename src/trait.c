@@ -78,9 +78,8 @@ paw_Bool pawP_satisfies_bounds(struct Compiler *C, struct IrType *type, struct I
     struct IrType **pbound;
     K_LIST_FOREACH(bounds, pbound)
     {
-        if (!implements_trait(C, type, *pbound)) {
+        if (!implements_trait(C, type, *pbound))
             return PAW_FALSE;
-        }
     }
     return PAW_TRUE;
 }
@@ -194,22 +193,6 @@ static void ensure_trait_implemented(struct Compiler *C, struct HirTraitDecl *tr
     }
 }
 
-static void add_defaulted_methods(struct Compiler *C, struct HirTraitDecl *trait, struct IrType *adt, MethodMap *map)
-{
-    struct IrType *trait_obj = pawIr_get_type(C, trait->hid);
-
-    struct HirDecl *const *pdecl;
-    K_LIST_FOREACH(trait->methods, pdecl)
-    {
-        struct HirFuncDecl *method = HirGetFuncDecl(*pdecl);
-        if (method->body != NULL) {
-            struct IrType *type = GET_NODE_TYPE(C, *pdecl);
-            type = pawIr_substitute_self(C, trait_obj, adt, type);
-            MethodMap_insert(C, map, method->name, type);
-        }
-    }
-}
-
 void pawP_validate_adt_traits(struct Compiler *C, struct HirAdtDecl *d)
 {
     struct IrType *adt = pawIr_get_type(C, d->hid);
@@ -230,7 +213,6 @@ void pawP_validate_adt_traits(struct Compiler *C, struct HirAdtDecl *d)
     {
         struct HirTraitDecl *trait = HirGetTraitDecl(
             pawHir_get_decl(C, IR_TYPE_DID(*ptype)));
-        add_defaulted_methods(C, trait, adt, map);
         ensure_trait_implemented(C, trait, map, adt, *ptype);
     }
 

@@ -231,7 +231,6 @@ static struct MirRegisterData copy_register(struct MonoCollector *M, struct MirR
         type = instantiate_method(M->C, type, IR_TYPE_SUBTYPES(reg.type));
     }
     type = finalize_type(M, type);
-    //    copy_trait_owners(M, reg.type, type, );
     struct MirRegisterData result = reg;
     result.type = type;
     return result;
