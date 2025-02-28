@@ -147,13 +147,9 @@ static void register_builtin_trait_method(struct Compiler *C, struct IrType *adt
     K_LIST_PUSH(C, *pmethods, method);
 }
 
-static void ensure_methods_match(struct Compiler *C, struct IrType *adt, struct HirFuncDecl *adt_method, struct IrType *trait, struct HirTraitDecl *trait_decl, struct HirFuncDecl *trait_method)
+static void ensure_methods_match(struct Compiler *C, struct IrType *adt, struct IrType *adt_method, struct IrType *trait, struct HirTraitDecl *trait_decl, struct HirFuncDecl *trait_method)
 {
-    if (adt_method->is_pub != trait_method->is_pub) {
-        TYPE_ERROR(C, "visibility mismatch (expected %s visibility on method '%s')",
-            trait_method->is_pub ? "public" : "private", adt_method->name->text);
-    }
-    struct IrType *a = pawIr_get_type(C, adt_method->hid);
+    struct IrType *a = adt_method;
     struct IrType *b = pawIr_get_type(C, trait_method->hid);
     if (trait_decl->generics != NULL) {
         b = pawP_instantiate_method(C, HIR_CAST_DECL(trait_decl),
@@ -169,7 +165,7 @@ static void ensure_methods_match(struct Compiler *C, struct IrType *adt, struct 
         register_builtin_trait_method(C, adt, a, tk);
 }
 
-DEFINE_MAP(struct Compiler, MethodMap, pawP_alloc, p_hash_ptr, p_equals_ptr, String *, struct HirFuncDecl *)
+DEFINE_MAP(struct Compiler, MethodMap, pawP_alloc, p_hash_ptr, p_equals_ptr, String *, struct IrType *)
 
 static void ensure_trait_implemented(struct Compiler *C, struct HirTraitDecl *trait_decl, MethodMap *methods, struct IrType *adt, struct IrType *trait)
 {
@@ -177,12 +173,40 @@ static void ensure_trait_implemented(struct Compiler *C, struct HirTraitDecl *tr
     K_LIST_FOREACH(trait_decl->methods, pdecl)
     {
         struct HirFuncDecl *trait_method = HirGetFuncDecl(*pdecl);
-        struct HirFuncDecl **pmethod = MethodMap_get(C, methods, trait_method->name);
+        struct IrType *const *pmethod = MethodMap_get(C, methods, trait_method->name);
         if (pmethod == NULL) {
             NAME_ERROR(C, "trait method '%s' not implemented",
                 trait_method->name->text);
         }
+        struct HirFuncDecl *adt_method = HirGetFuncDecl(
+                pawHir_get_decl(C, IR_TYPE_DID(*pmethod)));
+        if (adt_method->is_pub != trait_method->is_pub) {
+            TYPE_ERROR(C, "visibility mismatch (expected %s visibility on method '%s')",
+                       trait_method->is_pub ? "public" : "private", adt_method->name->text);
+        }
+        struct HirFuncDecl *adt_method = HirGetFuncDecl(
+                pawHir_get_decl(C, IR_TYPE_DID(*pmethod)));
+        if (adt_method->is_pub != trait_method->is_pub) {
+            TYPE_ERROR(C, "visibility mismatch (expected %s visibility on method '%s')",
+                       trait_method->is_pub ? "public" : "private", adt_method->name->text);
+        }
         ensure_methods_match(C, adt, *pmethod, trait, trait_decl, trait_method);
+    }
+}
+
+static void add_defaulted_methods(struct Compiler *C, struct HirTraitDecl *trait, struct IrType *adt, MethodMap *map)
+{
+    struct IrType *trait_obj = pawIr_get_type(C, trait->hid);
+
+    struct HirDecl *const *pdecl;
+    K_LIST_FOREACH(trait->methods, pdecl)
+    {
+        struct HirFuncDecl *method = HirGetFuncDecl(*pdecl);
+        if (method->body != NULL) {
+            struct IrType *type = GET_NODE_TYPE(C, *pdecl);
+            type = pawIr_substitute_self(C, trait_obj, adt, type);
+            MethodMap_insert(C, map, method->name, type);
+        }
     }
 }
 
@@ -194,11 +218,11 @@ void pawP_validate_adt_traits(struct Compiler *C, struct HirAdtDecl *d)
         return;
     MethodMap *map = MethodMap_new(C);
 
-    struct HirDecl **pdecl;
+    struct HirDecl *const *pdecl;
     K_LIST_FOREACH(d->methods, pdecl)
     {
-        struct HirFuncDecl *method = HirGetFuncDecl(*pdecl);
-        MethodMap_insert(C, map, method->name, method);
+        struct IrType *method = GET_NODE_TYPE(C, *pdecl);
+        MethodMap_insert(C, map, (*pdecl)->hdr.name, method);
     }
 
     struct IrType **ptype;
@@ -206,6 +230,7 @@ void pawP_validate_adt_traits(struct Compiler *C, struct HirAdtDecl *d)
     {
         struct HirTraitDecl *trait = HirGetTraitDecl(
             pawHir_get_decl(C, IR_TYPE_DID(*ptype)));
+        add_defaulted_methods(C, trait, adt, map);
         ensure_trait_implemented(C, trait, map, adt, *ptype);
     }
 

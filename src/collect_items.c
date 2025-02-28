@@ -43,7 +43,7 @@ struct PartialDecl {
 };
 
 struct PartialModule {
-    struct PartialDeclList *pal;
+    struct PartialDeclList *pds;
     struct ModuleInfo *m;
 };
 
@@ -498,43 +498,6 @@ static struct HirDecl *declare_self(struct ItemCollector *X, int line, struct Ir
     return self;
 }
 
-static struct HirDecl *copy_and_collect_method(struct ItemCollector *X, struct HirFolder *F, struct HirDecl *decl)
-{
-    struct HirDecl *copy = pawHir_fold_decl(F, decl);
-    struct HirDecl *copy = pawHir_new_func_decl(X->m->hir, d->line, d->name, d->generics,
-            d->params, d->result, d->body, d->fn_kind, d->is_pub, d->is_assoc);
-    collect_func(X, HirGetFuncDecl(copy));
-    return copy;
-}
-
-// TODO: Not a good place to do this. Include trait defaulted methods in the lookup, and substitute
-//       types at the point of use. Copy over as MIR.
-static void collect_default_methods(struct ItemCollector *X, StringMap *names, struct HirTypeList *traits, struct HirDeclList *methods)
-{
-    struct HirFolder F;
-    pawHir_folder_init(&F, X->m->hir, NULL);
-
-    struct HirType **ptype;
-    K_LIST_FOREACH(traits, ptype)
-    {
-        struct IrType *type = GET_NODE_TYPE(X->C, *ptype);
-        struct HirTraitDecl *trait = HirGetTraitDecl(
-            pawHir_get_decl(X->C, IR_TYPE_DID(type)));
-        struct HirDecl **pmethod;
-        K_LIST_FOREACH(trait->methods, pmethod)
-        {
-            struct HirFuncDecl *method = HirGetFuncDecl(*pmethod);
-            if (method->body == NULL)
-                continue; // not defaulted
-            String *const *pname = StringMap_get(X->C, names, method->name);
-            if (pname == NULL) { // implementation not provided
-                struct HirDecl *copy = copy_and_collect_method(X, &F, *pmethod);
-                K_LIST_PUSH(X->C, methods, copy);
-            }
-        }
-    }
-}
-
 static void collect_adt_decl(struct ItemCollector *X, struct PartialDecl lazy)
 {
     struct HirAdtDecl *d = HirGetAdtDecl(lazy.decl);
@@ -556,11 +519,17 @@ static void collect_adt_decl(struct ItemCollector *X, struct PartialDecl lazy)
                  d->self = declare_self(X, d->line, type);
                  collect_field_types(X, d->fields, names);
                  collect_methods(X, d->methods, names, PAW_FALSE);
-                 collect_default_methods(X, names, d->traits, d->methods);
                  StringMap_delete(X->C, names););
 
     pawP_validate_adt_traits(X->C, d);
     leave_block(X);
+}
+
+static void collect_const_decl(struct ItemCollector *X, struct PartialDecl lazy)
+{
+    struct HirVarDecl *d = HirGetVarDecl(lazy.decl);
+    struct IrType *type = collect_type(X, d->tag);
+    pawIr_set_type(X->C, d->hid, type);
 }
 
 static struct ModuleInfo *use_module(struct ItemCollector *X, struct ModuleInfo *m)
@@ -618,6 +587,10 @@ static struct PartialDeclList *register_adts(struct ItemCollector *X, struct Hir
             struct HirScope *scope = register_adt_decl(X, d);
             struct PartialDecl pd = {.decl = item, .scope = scope};
             K_LIST_PUSH(X, list, pd);
+        } else if (HirIsVarDecl(item)) {
+            new_global(X, item->hdr.name, item);
+            struct PartialDecl pd = {.decl = item};
+            K_LIST_PUSH(X, list, pd);
         }
     }
     return list;
@@ -629,6 +602,8 @@ static void collect_adts(struct ItemCollector *X, struct PartialDeclList *list)
         struct PartialDecl pd = K_LIST_GET(list, i);
         if (HirIsAdtDecl(pd.decl)) {
             collect_adt_decl(X, pd);
+        } else if (HirIsVarDecl(pd.decl)) {
+            collect_const_decl(X, pd);
         } else {
             collect_trait_decl(X, pd);
         }
@@ -643,8 +618,8 @@ static struct PartialModList *collect_phase_1(struct ItemCollector *X, struct Mo
     for (int i = 0; i < ml->count; ++i) {
         struct ModuleInfo *m = use_module(X, K_LIST_GET(ml, i));
         paw_assert(m->globals->count == 0);
-        struct PartialDeclList *pal = register_adts(X, m->hir->items);
-        struct PartialModule pm = {.m = m, .pal = pal};
+        struct PartialDeclList *pds = register_adts(X, m->hir->items);
+        struct PartialModule pm = {.m = m, .pds = pds};
         K_LIST_PUSH(X, pml, pm);
         m->globals = X->m->globals;
         finish_module(X);
@@ -654,14 +629,14 @@ static struct PartialModList *collect_phase_1(struct ItemCollector *X, struct Mo
     for (int i = 0; i < pml->count; ++i) {
         struct PartialModule pm = K_LIST_GET(pml, i);
         use_module(X, pm.m);
-        collect_adts(X, pm.pal);
+        collect_adts(X, pm.pds);
         finish_module(X);
     }
 
     // clean up scratch memory
     for (int i = 0; i < pml->count; ++i) {
         struct PartialModule pm = K_LIST_GET(pml, i);
-        pa_list_delete(X, pm.pal);
+        pa_list_delete(X, pm.pds);
     }
     pm_list_delete(X, pml);
 

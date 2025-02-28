@@ -8,9 +8,6 @@
 #include "type_folder.h"
 #include "unify.h"
 
-#warning "remove"
-#include "stdio.h"
-
 struct GenericsState {
     struct GenericsState *outer;
     struct IrTypeList *before;

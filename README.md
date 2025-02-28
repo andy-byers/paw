@@ -184,8 +184,6 @@ pub fn main() {
 + [ ] refactor user-provided allocation interface to allow heap expansion
 
 ## Known problems
-+ Either need to support or report an error on generic bounds like `X: Trait<X>`
-    + Causes a stack overflow due to infinite recursion
 + Generic bounds should not be allowed on type aliases
 + The C API has pretty much 0 type safety
     + It may be necessary to reduce the scope of the C API somewhat

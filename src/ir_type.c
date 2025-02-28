@@ -55,9 +55,9 @@ void pawIr_set_def(struct Compiler *C, DefId did, IrDef *def)
 
 struct IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *target, String *name)
 {
-    if (target->bounds == NULL) {
+    if (target->bounds == NULL)
         TYPE_ERROR(C, "generic type missing trait bounds");
-    }
+
     struct IrType **pbound;
     K_LIST_FOREACH(target->bounds, pbound)
     {
@@ -66,11 +66,11 @@ struct IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *
         struct HirTraitDecl *trait = HirGetTraitDecl(trait_decl);
 
         struct HirDecl **pmethod;
-        struct HirDecl *result = NULL;
         struct HirDecl *last_method = NULL;
         struct HirTraitDecl *last_trait = NULL;
         K_LIST_FOREACH(trait->methods, pmethod)
         {
+            struct HirDecl *result;
             struct HirFuncDecl *method = HirGetFuncDecl(*pmethod);
             if (pawS_eq(method->name, name))
                 result = *pmethod;
@@ -84,9 +84,9 @@ struct IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *
             last_trait = trait;
         }
         if (last_method != NULL) {
-            struct IrType *result = last_trait->generics == NULL ? GET_NODE_TYPE(C, last_method)
-                                                                 : pawP_instantiate_method(C, trait_decl, bound->types, last_method);
-            return pawIr_substitute_self(C, *pbound, IR_CAST_TYPE(target), result);
+            struct IrType *type = last_trait->generics == NULL ? GET_NODE_TYPE(C, last_method)
+                                                               : pawP_instantiate_method(C, trait_decl, bound->types, last_method);
+            return pawIr_substitute_self(C, *pbound, IR_CAST_TYPE(target), type);
         }
     }
     return NULL;
@@ -149,9 +149,7 @@ static paw_Uint hash_type_list(struct IrTypeList *types)
     struct IrType **ptype;
     if (types != NULL) {
         K_LIST_FOREACH(types, ptype)
-        {
             hash = hash_combine(hash, hash_type(*ptype));
-        }
     }
     return hash;
 }
@@ -218,7 +216,8 @@ paw_Bool pawIr_type_equals(struct Compiler *C, IrType *a, IrType *b)
         // same parameters and result
         struct IrSignature *sa = IrGetSignature(a);
         struct IrSignature *sb = IrGetSignature(b);
-        if (sa->did.value != sb->did.value || !sa->self != !sb->self || (sa->self != NULL && !pawU_equals(C->U, sa->self, sb->self))) {
+        if (sa->did.value != sb->did.value || !sa->self != !sb->self //
+                || (sa->self != NULL && !pawU_equals(C->U, sa->self, sb->self))) {
             return PAW_FALSE;
         }
     }

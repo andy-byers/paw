@@ -685,15 +685,19 @@ static void register_items(struct Generator *G)
     struct ItemSlot *pitem;
     K_LIST_ENUMERATE(G->items, iid, pitem)
     {
-        struct Mir *mir = pitem->mir;
-        struct IrType *type = mir->type;
-        register_toplevel_function(G, type, iid);
+        if (pitem->rtti->hdr.kind == DEF_FUNC) {
+            struct Mir *mir = pitem->mir;
+            struct IrType *type = mir->type;
+            register_toplevel_function(G, type, iid);
 
-        String const *modname = prefix_for_modno(G, IR_TYPE_DID(type).modno);
-        struct Type const *ty = lookup_type(G, type);
-        struct FuncDef *fdef = &get_def(G, ty->sig.iid)->func;
-        paw_assert(fdef->kind == DEF_FUNC);
-        pitem->name = fdef->mangled_name = func_name(G, modname, type, mir->self);
+            String const *modname = prefix_for_modno(G, IR_TYPE_DID(type).modno);
+            struct Type const *ty = lookup_type(G, type);
+            struct FuncDef *fdef = &get_def(G, ty->sig.iid)->func;
+            paw_assert(fdef->kind == DEF_FUNC);
+            pitem->name = fdef->mangled_name = func_name(G, modname, type, mir->self);
+        } else {
+
+        }
     }
 
     paw_Env *P = ENV(G);

@@ -879,7 +879,7 @@ static struct IrType *resolve_closure_expr(struct Resolver *R, struct HirClosure
     R->rs = rs.outer;
     return pawIr_new_func_ptr(R->C, params, ret);
 }
-
+#include"stdio.h"
 static struct HirDecl *find_method_aux(struct Compiler *C, struct HirDecl *base, String *name)
 {
     struct HirDecl **pdecl;
@@ -890,6 +890,20 @@ static struct HirDecl *find_method_aux(struct Compiler *C, struct HirDecl *base,
         if (pawS_eq(name, method->name))
             return *pdecl;
     }
+//    struct IrType *type = pawIr_get_type(C, adt->hid);
+//    struct IrTypeList *traits = pawP_query_traits(C, type);
+//    struct IrType *const *ptrait;
+//    K_LIST_FOREACH(traits, ptrait) {
+//        struct HirTraitDecl *d = HirGetTraitDecl(pawHir_get_decl(C, IR_TYPE_DID(*ptrait)));
+//        struct HirDecl *const *pmethod;
+//        K_LIST_FOREACH(d->methods, pmethod) {
+//            struct HirFuncDecl *method = HirGetFuncDecl(*pmethod);
+//            if (pawS_eq(method->name, name))
+//                return *pmethod;
+//            struct IrType *t = pawIr_substitute_self(C, *ptrait, type, GET_NODE_TYPE(C, *pmethod));
+//            printf("method %s %s\n", pawIr_print_type(C, type), method->name->text);
+//        }
+//    }
     return NULL;
 }
 
@@ -929,6 +943,14 @@ static struct IrType *resolve_var_decl(struct Resolver *R, struct HirVarDecl *d)
 
     unify(R, init, tag);
     return init;
+}
+
+static void resolve_const_item(struct Resolver *R, struct HirVarDecl *d)
+{
+    struct HirDecl *decl = HIR_CAST_DECL(d);
+    struct IrType *tag = GET_NODE_TYPE(R->C, d->tag);
+    struct IrType *init = resolve_operand(R, d->init);
+    unify(R, init, tag);
 }
 
 static struct IrType *resolve_field_decl(struct Resolver *R, struct HirFieldDecl *d)
@@ -1818,6 +1840,8 @@ static void resolve_item(struct Resolver *R, struct HirDecl *item)
         resolve_func_item(R, HirGetFuncDecl(item));
     } else if (HirIsAdtDecl(item)) {
         resolve_adt_item(R, HirGetAdtDecl(item));
+    } else if (HirIsVarDecl(item)) {
+        resolve_const_item(R, HirGetVarDecl(item));
     }
 }
 

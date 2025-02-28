@@ -283,20 +283,30 @@ pub fn test_call_assoc_fn() {
     assert(t.1 == 2.0);
 }
 
-//// TODO: Causes a stack overflow. Should this be supported?
-//pub trait GetSelf<X> {
-//    fn get(self) -> X;
-//}
-//
-//struct TestSelf<X>: GetSelf<X> {
-//    pub value: X,
-//
-//    pub fn get(self) -> X {
-//        self.value
-//    }    
-//}
-//
-//fn call_get_self<X: GetSelf<X>>(x: X) -> X {
-//    x.get()
-//}
+pub trait TestConcat<X> {
+    fn concat(self, rhs: X) -> Self;
+}
+
+struct Sequence<X>: TestConcat<Sequence<X>> {
+    pub value: [X],
+
+    pub fn concat(self, rhs: Self) -> Self {
+        let value = self.value + rhs.value;
+        Self{value}
+    }    
+}
+
+fn concat<X: TestConcat<X>>(x: X, y: X) -> X {
+    x.concat(y)
+}
+
+pub fn test_concat() {
+    let a = Sequence{value: ["a", "b"]};
+    let b = Sequence{value: ["c", "d"]};
+    let c = a.concat(b);
+
+    let lhs = ",".join(a.value + b.value);
+    let rhs = ",".join(a.concat(b).value);
+    assert(lhs == rhs);
+}
 

@@ -1601,6 +1601,17 @@ static struct AstStmt *statement(struct Lex *lex)
     return stmt;
 }
 
+static struct AstDecl *const_decl(struct Lex *lex, int line)
+{
+    skip(lex); // 'const' token
+    String *name = parse_toplevel_name(lex);
+    struct AstType *tag = expect_annotation(lex, "constant", name, PAW_TRUE);
+    check_next(lex, '=');
+    struct AstExpr *init = expr0(lex);
+    semicolon(lex);
+    return pawAst_new_var_decl(lex->ast, line, name, tag, init);
+}
+
 static void ensure_not_pub(struct Lex *lex, paw_Bool has_qualifier)
 {
     if (has_qualifier)
@@ -1620,6 +1631,8 @@ static struct AstDecl *toplevel_item(struct Lex *lex, paw_Bool is_pub)
             return struct_decl(lex, is_pub);
         case TK_TRAIT:
             return trait_decl(lex, is_pub);
+        case TK_CONST:
+            return const_decl(lex, is_pub);
         case TK_USE:
             ensure_not_pub(lex, is_pub);
             return use_decl(lex);
@@ -1649,9 +1662,6 @@ static char const kPrelude[] =
 
     "pub trait Equals {\n"
     "    fn eq(self, rhs: Self) -> bool;\n"
-    "    fn ne(self, rhs: Self) -> bool {\n"
-    "        !self.eq(rhs)\n"
-    "    }\n"
     "}\n"
 
     "pub trait Compare {\n"

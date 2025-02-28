@@ -207,13 +207,7 @@ static int unify_fptr(struct Unifier *U, struct IrFuncPtr *a, struct IrFuncPtr *
 
 static int unify_generic(struct Unifier *U, struct IrGeneric *a, struct IrGeneric *b)
 {
-    if (a->did.value != b->did.value)
-        return -1;
-    if (!a->bounds != !b->bounds)
-        return -1;
-    if (a->bounds == NULL)
-        return 0;
-    return unify_lists(U, a->bounds, b->bounds);
+    return a->did.value != b->did.value ? -1 : 0;
 }
 
 static int unify_trait_obj(struct Unifier *U, struct IrTraitObj *a, struct IrTraitObj *b)

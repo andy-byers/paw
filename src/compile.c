@@ -26,6 +26,7 @@ static char const *kKeywords[] = {
     "enum",
     "struct",
     "trait",
+    "const",
     "let",
     "if",
     "else",
@@ -339,8 +340,11 @@ static struct Def *new_def(struct DefGenerator *dg, DeclId did, struct IrType *t
             break;
         case kHirTraitDecl:
             return NULL;
-        default: // kHirVariantDecl
+        case kHirVariantDecl:
             def = pawY_new_func_def(P, LEN(HirGetVariantDecl(decl)->fields));
+            break;
+        default:
+            PAW_UNREACHABLE();
     }
 
     struct Type *ty = new_type(dg, type, def->hdr.iid);

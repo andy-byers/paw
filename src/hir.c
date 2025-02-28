@@ -259,9 +259,11 @@ static void AcceptTypeDecl(struct HirVisitor *V, struct HirTypeDecl *d)
 
 static void AcceptGenericDecl(struct HirVisitor *V, struct HirGenericDecl *d)
 {
-    struct HirGenericBound const *pbound;
-    K_LIST_FOREACH(d->bounds, pbound) {
-        AcceptPath(V, pbound->path);
+    if (d->bounds != NULL) {
+        struct HirGenericBound const *pbound;
+        K_LIST_FOREACH(d->bounds, pbound) {
+            AcceptPath(V, pbound->path);
+        }
     }
 }
 
@@ -830,8 +832,8 @@ static struct HirDecl *FoldFuncDecl(struct HirFolder *F, struct HirFuncDecl *d)
     struct HirDeclList *params = fold_decls(F, d->params);
     struct HirType *result = FoldType(F, d->result);
     struct HirExpr *body = d->body != NULL ? FoldExpr(F, d->body) : NULL;
-    return pawHir_new_func_decl(F->hir, d->line, d->name, NULL/*TODO: remove from struct*/,
-            generics, params, result, body, d->fn_kind, d->is_pub, d->is_assoc);
+    return pawHir_new_func_decl(F->hir, d->line, d->name, generics,
+            params, result, body, d->fn_kind, d->is_pub, d->is_assoc);
 }
 
 static struct HirDecl *FoldVarDecl(struct HirFolder *F, struct HirVarDecl *d)
@@ -1022,6 +1024,7 @@ void pawHir_folder_init(struct HirFolder *F, struct Hir *hir, void *ud)
         K_LIST_FOREACH(list, pnode) { \
             K_LIST_PUSH(F->C, r, pawHir_fold_##name(F, *pnode));                             \
         }                                                                            \
+        return r; \
     }
 DEFINE_FOLDERS(expr, Expr)
 DEFINE_FOLDERS(decl, Decl)
