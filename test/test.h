@@ -38,6 +38,7 @@
     X(import)            \
     X(trait)             \
     X(alias)             \
+    X(global_const)      \
     X(poly_function)     \
     X(poly_struct)       \
     X(poly_enum)         \

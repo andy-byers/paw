@@ -78,6 +78,7 @@ struct LowerHir {
     struct FunctionState *fs;
     struct LabelList *labels;
     struct VarStack *stack;
+    struct GlobalMap *globals;
 };
 
 static paw_Uint var_hash(struct Compiler *C, struct MatchVar v)
@@ -94,6 +95,7 @@ static paw_Bool var_equals(struct Compiler *C, struct MatchVar a, struct MatchVa
 
 DEFINE_LIST(struct Compiler, var_stack_, VarStack, struct LocalVar)
 DEFINE_LIST(struct Compiler, label_list_, LabelList, struct Label)
+DEFINE_MAP(struct Compiler, GlobalMap, pawP_alloc, p_hash_decl_id, p_equals_decl_id, DeclId, int)
 DEFINE_MAP(struct Compiler, VarMap, pawP_alloc, var_hash, var_equals, struct MatchVar, MirRegister)
 
 static void enter_match(struct LowerHir *L, struct MatchState *ms, VarMap *var_mapping)
@@ -776,7 +778,8 @@ static MirRegister lower_path_expr(struct HirVisitor *V, struct HirPathExpr *e)
     } else if (HirIsAdtDecl(decl)) {
         return lower_unit_struct(V, e, HirGetAdtDecl(decl));
     }
-    NEW_INSTR(fs, global, e->line, output);
+    int const *pid = GlobalMap_get(L->C, L->globals, did);
+    NEW_INSTR(fs, global, e->line, output, pid != NULL ? *pid : -1);
     return output;
 }
 
@@ -958,7 +961,7 @@ static MirRegister lower_callee_and_args(struct HirVisitor *V, struct HirExpr *c
     if (HirIsSelector(callee) && !HirGetSelector(callee)->is_index) {
         // method call: place function object before 'self'
         struct HirSelector *select = HirGetSelector(callee);
-        struct MirInstruction *instr = NEW_INSTR(fs, global, callee->hdr.line, result);
+        struct MirInstruction *instr = NEW_INSTR(fs, global, callee->hdr.line, result, -1);
         struct MirGlobal *global = MirGetGlobal(instr);
 
         MirRegister const self = lower_operand(V, select->target);
@@ -1580,7 +1583,7 @@ static MirRegister lower_match_expr(struct HirVisitor *V, struct HirMatchExpr *e
     return result;
 }
 
-static void lower_hir_body(struct LowerHir *L, struct HirFuncDecl *func, struct Mir *mir)
+static void lower_hir_body_aux(struct LowerHir *L, struct HirFuncDecl *func, struct Mir *mir)
 {
     struct BlockState bs;
     struct FunctionState fs;
@@ -1592,7 +1595,7 @@ static void lower_hir_body(struct LowerHir *L, struct HirFuncDecl *func, struct 
     leave_function(L);
 }
 
-struct Mir *pawP_lower_hir_body(struct Compiler *C, struct HirFuncDecl *func)
+static struct Mir *lower_hir_body(struct Compiler *C, struct HirFuncDecl *func, GlobalMap *globals)
 {
     struct IrType *type = pawIr_get_type(C, func->hid);
     struct IrSignature *fsig = IrGetSignature(type);
@@ -1605,6 +1608,7 @@ struct Mir *pawP_lower_hir_body(struct Compiler *C, struct HirFuncDecl *func)
         return result;
 
     struct LowerHir L = {
+        .globals = globals,
         .labels = label_list_new(C),
         .stack = var_stack_new(C),
         .P = ENV(C),
@@ -1616,25 +1620,45 @@ struct Mir *pawP_lower_hir_body(struct Compiler *C, struct HirFuncDecl *func)
     L.V.VisitVarDecl = visit_var_decl;
     L.V.VisitExprStmt = visit_expr_stmt;
 
-    lower_hir_body(&L, func, result);
+    lower_hir_body_aux(&L, func, result);
     pawMir_remove_unreachable_blocks(result);
     pawSsa_construct(result);
     pawMir_propagate_constants(result);
     return result;
 }
 
+static void lower_constant(struct Compiler *C, struct HirVarDecl *d, struct GlobalMap *lookup)
+{
+    struct HirLiteralExpr *e = HirGetLiteralExpr(d->init);
+    struct GlobalInfo info = {
+        .b_kind = e->basic.code,
+        .value = e->basic.value,
+        .index = C->globals->count,
+    };
+    GlobalMap_insert(C, lookup, d->did, info.index);
+    K_LIST_PUSH(C, C->globals, info);
+}
+
 BodyMap *pawP_lower_hir(struct Compiler *C)
 {
+    GlobalMap *globals = GlobalMap_new(C);
     BodyMap *result = BodyMap_new(C);
-    struct HirDeclList *decls = C->decls;
-    for (int i = 0; i < decls->count; ++i) {
-        struct HirDecl *decl = K_LIST_GET(decls, i);
-        if (HirIsFuncDecl(decl)) {
-            struct IrType *type = GET_NODE_TYPE(C, decl);
+
+    struct HirDecl *const *pdecl;
+    K_LIST_FOREACH(C->decls, pdecl) {
+        if (HirIsVarDecl(*pdecl)) {
+            struct HirVarDecl *d = HirGetVarDecl(*pdecl);
+            if (d->is_global)
+                lower_constant(C, d, globals);
+        }
+    }
+    K_LIST_FOREACH(C->decls, pdecl) {
+        if (HirIsFuncDecl(*pdecl)) {
+            struct IrType *type = GET_NODE_TYPE(C, *pdecl);
             struct IrSignature *fsig = IrGetSignature(type);
             if (fsig->self == NULL || IrIsAdt(fsig->self)) {
-                struct HirFuncDecl *d = HirGetFuncDecl(decl);
-                struct Mir *r = pawP_lower_hir_body(C, d);
+                struct HirFuncDecl *d = HirGetFuncDecl(*pdecl);
+                struct Mir *r = lower_hir_body(C, d, globals);
                 BodyMap_insert(C, result, d->did, r);
             }
         }

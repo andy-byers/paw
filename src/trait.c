@@ -183,12 +183,6 @@ static void ensure_trait_implemented(struct Compiler *C, struct HirTraitDecl *tr
             TYPE_ERROR(C, "visibility mismatch (expected %s visibility on method '%s')",
                        trait_method->is_pub ? "public" : "private", adt_method->name->text);
         }
-        struct HirFuncDecl *adt_method = HirGetFuncDecl(
-                pawHir_get_decl(C, IR_TYPE_DID(*pmethod)));
-        if (adt_method->is_pub != trait_method->is_pub) {
-            TYPE_ERROR(C, "visibility mismatch (expected %s visibility on method '%s')",
-                       trait_method->is_pub ? "public" : "private", adt_method->name->text);
-        }
         ensure_methods_match(C, adt, *pmethod, trait, trait_decl, trait_method);
     }
 }

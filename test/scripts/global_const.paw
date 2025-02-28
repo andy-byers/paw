@@ -1,0 +1,11 @@
+// global_const.paw
+
+pub const INT: int = 42;
+pub const FLOAT: float = 1.23;
+pub const STR: str = "abc";
+
+pub fn test_primitive() {
+    assert(INT == 42);
+    assert(FLOAT == 1.23);
+    assert(STR == "abc");
+}

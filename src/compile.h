@@ -102,6 +102,12 @@ struct Builtin {
     DeclId did;
 };
 
+struct GlobalInfo {
+    enum BuiltinKind b_kind : 8;
+    Value value;
+    int index;
+};
+
 typedef struct Map Map;
 
 struct Compiler {
@@ -134,6 +140,8 @@ struct Compiler {
     // map for quickly determining the methods implementing a given builtin
     // trait for a given type
     struct TraitOwners *trait_owners;
+
+    struct GlobalList *globals;
 
     paw_Env *P;
     int hir_count;
@@ -364,5 +372,6 @@ DEFINE_MAP(struct Compiler, ImportMap, pawP_alloc, p_hash_ptr, p_equals_ptr, Str
 DEFINE_MAP(struct Compiler, ValueMap, pawP_alloc, p_value_hash, p_value_equals, Value, Value)
 DEFINE_MAP(struct Compiler, BodyMap, pawP_alloc, p_hash_decl_id, p_equals_decl_id, DeclId, struct Mir *)
 DEFINE_MAP(struct Compiler, BuiltinMap, pawP_alloc, p_hash_ptr, p_equals_ptr, String *, struct Builtin *)
+DEFINE_LIST(struct Compiler, GlobalList_, GlobalList, struct GlobalInfo)
 
 #endif // PAW_COMPILE_H

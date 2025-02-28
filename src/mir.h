@@ -104,6 +104,7 @@ struct MirUpvalue {
 struct MirGlobal {
     MIR_INSTRUCTION_HEADER;
     MirRegister output;
+    int global_id;
 };
 
 struct MirPhi {
@@ -335,7 +336,7 @@ inline static struct MirInstruction *pawMir_new_upvalue(struct Mir *mir, int lin
     return instr;
 }
 
-inline static struct MirInstruction *pawMir_new_global(struct Mir *mir, int line, MirRegister output)
+inline static struct MirInstruction *pawMir_new_global(struct Mir *mir, int line, MirRegister output, int global_id)
 {
     struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->Global_ = (struct MirGlobal){
@@ -343,6 +344,7 @@ inline static struct MirInstruction *pawMir_new_global(struct Mir *mir, int line
         .kind = kMirGlobal,
         .line = line,
         .output = output,
+        .global_id = global_id,
     };
     return instr;
 }
@@ -901,6 +903,18 @@ inline static paw_Uint mir_bb_hash(struct Compiler *C, MirBlock v)
 }
 
 inline static paw_Bool mir_bb_equals(struct Compiler *C, MirBlock a, MirBlock b)
+{
+    PAW_UNUSED(C);
+    return a.value == b.value;
+}
+
+inline static paw_Uint mir_id_hash(struct Compiler *C, MirId v)
+{
+    PAW_UNUSED(C);
+    return v.value;
+}
+
+inline static paw_Bool mir_id_equals(struct Compiler *C, MirId a, MirId b)
 {
     PAW_UNUSED(C);
     return a.value == b.value;

@@ -643,10 +643,11 @@ static void code_items(struct Generator *G)
     struct ItemSlot *pitem;
     K_LIST_ENUMERATE(G->items, index, pitem)
     {
+        const int vid = G->C->globals->count + index;
         if (pitem->mir->is_native) {
-            code_c_function(G, pitem->mir, index);
+            code_c_function(G, pitem->mir, vid);
         } else {
-            code_paw_function(G, pitem->mir, index);
+            code_paw_function(G, pitem->mir, vid);
         }
     }
 }
@@ -675,36 +676,41 @@ static void register_toplevel_function(struct Generator *G, struct IrType *type,
 
 static void register_items(struct Generator *G)
 {
+    paw_Env *P = ENV(G);
+    struct ValList *vals = &P->vals;
+    struct GlobalList *globals = G->C->globals;
+
     BodyMap *bodies = pawP_lower_hir(G->C);
     struct MonoResult mr = pawP_monomorphize(G->C, bodies);
     BodyMap_delete(G->C, bodies);
 
     G->items = pawP_allocate_defs(G->C, mr.bodies, mr.types);
 
+    paw_assert(P->vals.data == NULL);
+    int const nvalues = globals->count + G->items->count;
+    P->vals.data = pawM_new_vec(P, nvalues, Value);
+    P->vals.count = P->vals.alloc = nvalues;
+
+    struct GlobalInfo const *pinfo;
+    K_LIST_FOREACH(globals, pinfo) {
+        pawM_grow(P, vals->data, vals->count, vals->alloc);
+        vals->data[pinfo->index] = pinfo->value;
+    }
+
     int iid;
     struct ItemSlot *pitem;
     K_LIST_ENUMERATE(G->items, iid, pitem)
     {
-        if (pitem->rtti->hdr.kind == DEF_FUNC) {
-            struct Mir *mir = pitem->mir;
-            struct IrType *type = mir->type;
-            register_toplevel_function(G, type, iid);
+        struct Mir *mir = pitem->mir;
+        struct IrType *type = mir->type;
+        register_toplevel_function(G, type, iid);
 
-            String const *modname = prefix_for_modno(G, IR_TYPE_DID(type).modno);
-            struct Type const *ty = lookup_type(G, type);
-            struct FuncDef *fdef = &get_def(G, ty->sig.iid)->func;
-            paw_assert(fdef->kind == DEF_FUNC);
-            pitem->name = fdef->mangled_name = func_name(G, modname, type, mir->self);
-        } else {
-
-        }
+        String const *modname = prefix_for_modno(G, IR_TYPE_DID(type).modno);
+        struct Type const *ty = lookup_type(G, type);
+        struct FuncDef *fdef = &get_def(G, ty->sig.iid)->func;
+        paw_assert(fdef->kind == DEF_FUNC);
+        pitem->name = fdef->mangled_name = func_name(G, modname, type, mir->self);
     }
-
-    paw_Env *P = ENV(G);
-    paw_assert(P->vals.data == NULL);
-    int const nvalues = G->items->count;
-    P->vals.data = pawM_new_vec(P, nvalues, Value);
-    P->vals.count = P->vals.alloc = nvalues;
 }
 
 static void move_to_reg(struct FuncState *fs, int from, int to)
@@ -734,7 +740,9 @@ static void code_global(struct MirVisitor *V, struct MirGlobal *x)
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
 
-    ValueId const value_id = type2global(G, TYPEOF(G, x->output));
+    ValueId const value_id = x->global_id < 0
+        ? type2global(G, TYPEOF(G, x->output))
+        : (ValueId){x->global_id};
     code_ABx(fs, OP_GETGLOBAL, REG(x->output), value_id);
 }
 

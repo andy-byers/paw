@@ -262,6 +262,7 @@ struct HirDeclHeader {
 struct HirVarDecl {
     HIR_DECL_HEADER;
     paw_Bool is_pub : 1;
+    paw_Bool is_global : 1;
     struct HirExpr *init;
     struct HirType *tag;
 };
@@ -279,7 +280,6 @@ struct HirFuncDecl {
     paw_Bool is_pub : 1;
     paw_Bool is_assoc : 1;
     enum FuncKind fn_kind : 6;
-//    struct IrType *self;
     struct HirDeclList *generics;
     struct HirDeclList *params;
     struct HirType *result;

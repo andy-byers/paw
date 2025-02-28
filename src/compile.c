@@ -153,6 +153,7 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, char co
     paw_new_map(P, 0, PAW_TSTR);
     C->strings = V_TUPLE(P->top.p[-1]);
 
+    C->globals = GlobalList_new(C);
     C->builtin_lookup = BuiltinMap_new(C);
     C->ir_types = HirTypes_new(C);
     C->ir_defs = DefMap_new(C);
@@ -416,7 +417,9 @@ static struct ItemSlot allocate_item(struct DefGenerator *dg, struct Mir *body)
     struct Def *def = new_def(dg, t->did, body->type);
     struct Type *self = lookup_type(dg, body->self);
     def->func.self = self != NULL ? self->adt.code : -1;
-    def->func.vid = dg->items->count;
+    // ".vid" is the index of the Value slot where this function will live
+    // at runtime. Functions are placed after the global constants section.
+    def->func.vid = dg->items->count + dg->C->globals->count;
     def->func.is_pub = d->is_pub;
     def->func.name = d->name;
 
@@ -435,13 +438,19 @@ static struct ItemSlot allocate_item(struct DefGenerator *dg, struct Mir *body)
 
 static void allocate_items(struct DefGenerator *dg, struct MirBodyList *bodies)
 {
-    for (int i = 0; i < bodies->count; ++i) {
-        struct Mir *body = K_LIST_GET(bodies, i);
+    struct Mir *const *pbody;
+    K_LIST_FOREACH(bodies, pbody) {
+        struct Mir *body = *pbody;
         if (body->self == NULL || !IrIsTraitObj(body->self)) {
             struct ItemSlot item = allocate_item(dg, body);
             K_LIST_PUSH(dg->C, dg->items, item);
             map_types(dg, body->type, item.rtti);
         }
+    }
+
+    struct GlobalInfo const *pinfo;
+    K_LIST_FOREACH(dg->C->globals, pinfo) {
+
     }
 }
 

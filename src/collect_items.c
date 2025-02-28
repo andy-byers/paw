@@ -530,6 +530,14 @@ static void collect_const_decl(struct ItemCollector *X, struct PartialDecl lazy)
     struct HirVarDecl *d = HirGetVarDecl(lazy.decl);
     struct IrType *type = collect_type(X, d->tag);
     pawIr_set_type(X->C, d->hid, type);
+    d->is_global = PAW_TRUE;
+
+    // TODO: allow things that can be computed at compile time, perform constant folding on
+    //       d->init expression
+    if (!HirIsLiteralExpr(d->init)
+            || HirGetLiteralExpr(d->init)->lit_kind != kHirLitBasic) {
+        TYPE_ERROR(X, "initializer must be a literal");
+    }
 }
 
 static struct ModuleInfo *use_module(struct ItemCollector *X, struct ModuleInfo *m)
