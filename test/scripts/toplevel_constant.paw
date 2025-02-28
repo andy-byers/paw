@@ -1,0 +1,7 @@
+// toplevel_constant.paw
+
+const INTEGER: int = 123;
+
+pub fn test_primitive() {
+    assert(INTEGER == 123);
+}

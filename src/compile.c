@@ -438,6 +438,7 @@ static struct ItemSlot allocate_item(struct DefGenerator *dg, struct Mir *body)
     struct Type *rtti = Y_TYPE(P, def->func.code);
     rtti->sig.iid = def->func.iid;
     return (struct ItemSlot){
+        .name = body->name,
         .mir = body,
         .rtti = rtti,
         .did = d->did,

@@ -594,7 +594,7 @@ static void code_items(struct Generator *G)
     struct ItemSlot *pitem;
     K_LIST_ENUMERATE(G->items, index, pitem)
     {
-        Value value;;
+        Value value;
         const int vid = G->C->globals->count + index;
         if (check_extern_function(G, *pitem, &value)) {
             code_extern_function(G, value, vid);
@@ -649,7 +649,6 @@ static void register_items(struct Generator *G)
         vals->data[pinfo->index] = pinfo->value;
         String const *modname = prefix_for_modno(G, pinfo->modno);
         pinfo->name = pawP_mangle_name(G->C, modname, pinfo->name, NULL);
-// TODO        pawMap_insert(P, V_TUPLE(P->constants), P2V(pinfo->name), I2V(pinfo->index));
     }
 
     int iid;
