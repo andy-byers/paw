@@ -39,4 +39,34 @@ void pawR_map_set(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value c
 
 void pawR_close_upvalues(paw_Env *P, StackPtr const top);
 
+#define I2U(i) (CAST(uint64_t, i))
+#define U2I(u) PAW_CAST_INT(u)
+
+// Generate code for int operators
+// Casts to unsigned to avoid UB (signed integer overflow). Requires
+// 2's complement integer representation to work properly.
+#define I_UNOP(a, op) U2I(op I2U(a))
+#define I_BINOP(a, b, op) U2I(I2U(a) op I2U(b))
+
+#define INT_UNARY_OP(r, val, op) \
+    V_SET_INT(r, I_UNOP(V_INT(val), op))
+
+#define FLOAT_UNARY_OP(r, val, op) \
+    V_SET_FLOAT(r, op V_FLOAT(val))
+
+#define INT_COMPARISON(r, x, y, op) \
+    V_SET_BOOL(r, V_INT(x) op V_INT(y))
+
+#define INT_BINARY_OP(r, x, y, op) \
+    V_SET_INT(r, I_BINOP(V_INT(x), V_INT(y), op))
+
+#define FLOAT_COMPARISON(r, x, y, op) \
+    V_SET_BOOL(r, V_FLOAT(x) op V_FLOAT(y))
+
+#define FLOAT_BINARY_OP(r, x, y, op) \
+    V_SET_FLOAT(r, V_FLOAT(x) op V_FLOAT(y))
+
+#define STR_COMPARISON(r, x, y, op) \
+    V_SET_BOOL(r, pawS_cmp(V_STRING(x), V_STRING(y)) op 0)
+
 #endif // PAW_RT_H

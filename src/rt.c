@@ -345,57 +345,58 @@ Tuple *pawR_new_map(paw_Env *P, CallFrame *cf, Value *ra, int b, int c)
 
 // Macros for generating arithmetic and bitwise operations
 
-#define INT_UNARY_OP(op)                       \
-    {                                          \
-        const Value *rb = VM_RB(opcode);       \
-        V_SET_INT(ra, I_UNOP(V_INT(*rb), op)); \
+#define VM_INT_UNARY_OP(op)              \
+    {                                    \
+        const Value *rb = VM_RB(opcode); \
+        INT_UNARY_OP(ra, *rb, op);       \
     }
 
-#define FLOAT_UNARY_OP(op)                \
+#define VM_FLOAT_UNARY_OP(op)            \
+    {                                    \
+        const Value *rb = VM_RB(opcode); \
+        FLOAT_UNARY_OP(ra, *rb, op);     \
+    }
+
+#define VM_INT_COMPARISON(op)             \
     {                                     \
         const Value *rb = VM_RB(opcode);  \
-        V_SET_FLOAT(ra, op V_FLOAT(*rb)); \
+        const Value *rc = VM_RC(opcode);  \
+        INT_COMPARISON(ra, *rb, *rc, op); \
     }
 
-#define INT_COMPARISON(op)                        \
-    {                                             \
-        const Value *rb = VM_RB(opcode);          \
-        const Value *rc = VM_RC(opcode);          \
-        V_SET_BOOL(ra, V_INT(*rb) op V_INT(*rc)); \
+#define VM_INT_BINARY_OP(op)             \
+    {                                    \
+        const Value *rb = VM_RB(opcode); \
+        const Value *rc = VM_RC(opcode); \
+        INT_BINARY_OP(ra, *rb, *rc, op); \
     }
 
-#define INT_BINARY_OP(op)                                   \
-    {                                                       \
-        const Value *rb = VM_RB(opcode);                    \
-        const Value *rc = VM_RC(opcode);                    \
-        V_SET_INT(ra, I_BINOP(V_INT(*rb), V_INT(*rc), op)); \
+#define VM_FLOAT_COMPARISON(op)             \
+    {                                       \
+        const Value *rb = VM_RB(opcode);    \
+        const Value *rc = VM_RC(opcode);    \
+        FLOAT_COMPARISON(ra, *rb, *rc, op); \
     }
 
-#define FLOAT_COMPARISON(op)                          \
-    {                                                 \
-        const Value *rb = VM_RB(opcode);              \
-        const Value *rc = VM_RC(opcode);              \
-        V_SET_BOOL(ra, V_FLOAT(*rb) op V_FLOAT(*rc)); \
+#define VM_FLOAT_BINARY_OP(op)             \
+    {                                      \
+        const Value *rb = VM_RB(opcode);   \
+        const Value *rc = VM_RC(opcode);   \
+        FLOAT_BINARY_OP(ra, *rb, *rc, op); \
     }
 
-#define FLOAT_BINARY_OP(op)                            \
-    {                                                  \
-        const Value *rb = VM_RB(opcode);               \
-        const Value *rc = VM_RC(opcode);               \
-        V_SET_FLOAT(ra, V_FLOAT(*rb) op V_FLOAT(*rc)); \
-    }
-
-#define STR_COMPARISON(op)                                           \
-    {                                                                \
-        const Value *rb = VM_RB(opcode);                             \
-        const Value *rc = VM_RC(opcode);                             \
-        V_SET_BOOL(ra, pawS_cmp(V_STRING(*rb), V_STRING(*rc)) op 0); \
+#define VM_STR_COMPARISON(op)             \
+    {                                     \
+        const Value *rb = VM_RB(opcode);  \
+        const Value *rc = VM_RC(opcode);  \
+        STR_COMPARISON(ra, *rb, *rc, op); \
     }
 
 // If x / y is undefined, then so too is x % y (see C11 section 6.5.5,
 // item 6). Both cases equal 0 in Paw (x / y wraps).
 #define DIVMOD_OVERFLOWS(x, y) ((x) == PAW_INT_MIN && (y) == -1)
 
+// clang-format off
 void pawR_execute(paw_Env *P, CallFrame *cf)
 {
     Value const *K;
@@ -429,20 +430,20 @@ top:
                 *ra = K[GET_Bx(opcode)];
             }
 
-            vm_case(IEQ) : INT_COMPARISON(==)
-                               vm_case(INE) : INT_COMPARISON(!=)
-                                                  vm_case(ILT) : INT_COMPARISON(<)
-                                                                     vm_case(ILE) : INT_COMPARISON(<=)
-                                                                                        vm_case(IGT) : INT_COMPARISON(>)
-                                                                                                           vm_case(IGE) : INT_COMPARISON(>=)
+            vm_case(IEQ) : VM_INT_COMPARISON(==)
+            vm_case(INE) : VM_INT_COMPARISON(!=)
+            vm_case(ILT) : VM_INT_COMPARISON(<)
+            vm_case(ILE) : VM_INT_COMPARISON(<=)
+            vm_case(IGT) : VM_INT_COMPARISON(>)
+            vm_case(IGE) : VM_INT_COMPARISON(>=)
 
-                                                                                                                              vm_case(NOT) : INT_UNARY_OP(!)
-                                                                                                                                                 vm_case(INEG) : INT_UNARY_OP(-)
-                                                                                                                                                                     vm_case(IADD) : INT_BINARY_OP(+)
-                                                                                                                                                                                         vm_case(ISUB) : INT_BINARY_OP(-)
-                                                                                                                                                                                                             vm_case(IMUL) : INT_BINARY_OP(*)
+            vm_case(NOT) : VM_INT_UNARY_OP(!)
+            vm_case(INEG) : VM_INT_UNARY_OP(-)
+            vm_case(IADD) : VM_INT_BINARY_OP(+)
+            vm_case(ISUB) : VM_INT_BINARY_OP(-)
+            vm_case(IMUL) : VM_INT_BINARY_OP(*)
 
-                                                                                                                                                                                                                                 vm_case(IDIV) :
+            vm_case(IDIV) :
             {
                 paw_Int const x = V_INT(*VM_RB(opcode));
                 paw_Int const y = V_INT(*VM_RC(opcode));
@@ -468,12 +469,12 @@ top:
                 }
             }
 
-            vm_case(BNOT) : INT_UNARY_OP(~)
-                                vm_case(BAND) : INT_BINARY_OP(&)
-                                                    vm_case(BOR) : INT_BINARY_OP(|)
-                                                                       vm_case(BXOR) : INT_BINARY_OP(^)
+            vm_case(BNOT) : VM_INT_UNARY_OP(~)
+            vm_case(BAND) : VM_INT_BINARY_OP(&)
+            vm_case(BOR) : VM_INT_BINARY_OP(|)
+            vm_case(BXOR) : VM_INT_BINARY_OP(^)
 
-                                                                                           vm_case(SHL) :
+            vm_case(SHL) :
             {
                 paw_Int x = V_INT(*VM_RB(opcode));
                 paw_Int y = V_INT(*VM_RC(opcode));
@@ -503,19 +504,19 @@ top:
                 V_SET_INT(ra, x);
             }
 
-            vm_case(FEQ) : FLOAT_COMPARISON(==)
-                               vm_case(FNE) : FLOAT_COMPARISON(!=)
-                                                  vm_case(FLT) : FLOAT_COMPARISON(<)
-                                                                     vm_case(FLE) : FLOAT_COMPARISON(<=)
-                                                                                        vm_case(FGT) : FLOAT_COMPARISON(>)
-                                                                                                           vm_case(FGE) : FLOAT_COMPARISON(>=)
+            vm_case(FEQ) : VM_FLOAT_COMPARISON(==)
+            vm_case(FNE) : VM_FLOAT_COMPARISON(!=)
+            vm_case(FLT) : VM_FLOAT_COMPARISON(<)
+            vm_case(FLE) : VM_FLOAT_COMPARISON(<=)
+            vm_case(FGT) : VM_FLOAT_COMPARISON(>)
+            vm_case(FGE) : VM_FLOAT_COMPARISON(>=)
 
-                                                                                                                              vm_case(FNEG) : FLOAT_UNARY_OP(-)
-                                                                                                                                                  vm_case(FADD) : FLOAT_BINARY_OP(+)
-                                                                                                                                                                      vm_case(FSUB) : FLOAT_BINARY_OP(-)
-                                                                                                                                                                                          vm_case(FMUL) : FLOAT_BINARY_OP(*)
+            vm_case(FNEG) : VM_FLOAT_UNARY_OP(-)
+            vm_case(FADD) : VM_FLOAT_BINARY_OP(+)
+            vm_case(FSUB) : VM_FLOAT_BINARY_OP(-)
+            vm_case(FMUL) : VM_FLOAT_BINARY_OP(*)
 
-                                                                                                                                                                                                              vm_case(FDIV) :
+            vm_case(FDIV) :
             {
                 paw_Float const x = V_FLOAT(*VM_RB(opcode));
                 paw_Float const y = V_FLOAT(*VM_RC(opcode));
@@ -539,14 +540,14 @@ top:
                 pawR_str_length(P, cf, ra, rb);
             }
 
-            vm_case(SEQ) : STR_COMPARISON(==)
-                               vm_case(SNE) : STR_COMPARISON(!=)
-                                                  vm_case(SLT) : STR_COMPARISON(<)
-                                                                     vm_case(SLE) : STR_COMPARISON(<=)
-                                                                                        vm_case(SGT) : STR_COMPARISON(>)
-                                                                                                           vm_case(SGE) : STR_COMPARISON(>=)
+            vm_case(SEQ) : VM_STR_COMPARISON(==)
+            vm_case(SNE) : VM_STR_COMPARISON(!=)
+            vm_case(SLT) : VM_STR_COMPARISON(<)
+            vm_case(SLE) : VM_STR_COMPARISON(<=)
+            vm_case(SGT) : VM_STR_COMPARISON(>)
+            vm_case(SGE) : VM_STR_COMPARISON(>=)
 
-                                                                                                                              vm_case(SCONCAT) :
+            vm_case(SCONCAT) :
             {
                 VM_SAVE_PC();
                 int const b = GET_B(opcode);
@@ -830,3 +831,4 @@ top:
         }
     }
 }
+// clang-format on

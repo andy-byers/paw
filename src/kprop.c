@@ -2,7 +2,7 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 //
-// propagate.c: Perform constant and copy propagation
+// kprop.c: Perform constant and copy propagation
 //
 // Uses the sparse conditional constant (SCC) algorithm from (1) for constant
 // propagation.
@@ -154,9 +154,8 @@ static struct ExecFlag *check_exec(struct KProp *K, MirBlock from, MirBlock to)
     struct ExecList *list = get_exec_list(K, to);
     K_LIST_FOREACH(list, pflag)
     {
-        if (MIR_BB_EQUALS(pflag->from, from)) {
+        if (MIR_BB_EQUALS(pflag->from, from))
             return pflag;
-        }
     }
 
     K_LIST_PUSH(K->C, list, EXEC_FLAG(from, PAW_FALSE));
@@ -190,18 +189,6 @@ static struct CellInfo meet(struct Cell *a, struct Cell *b)
     if (a->info.k == b->info.k)
         return a->info;
     return (struct CellInfo){.kind = CELL_BOTTOM};
-}
-
-char const *cellkind(struct Cell const *pcell)
-{
-    if (pcell->info.kind == CELL_BOTTOM)
-        return "B";
-    else if (pcell->info.kind == CELL_TOP)
-        return "T";
-    paw_assert(pcell->info.kind == CELL_CONSTANT);
-    static char buffer[64];
-    snprintf(buffer, sizeof(buffer), "%d", pcell->info.k);
-    return buffer;
 }
 
 static void apply_meet_rules(struct KProp *K, struct Cell *output, struct MirRegisterPtrList *inputs)
@@ -244,120 +231,17 @@ static int add_constant(struct KProp *K, Value v, enum BuiltinKind kind)
 #define TOP_INFO() ((struct CellInfo){.kind = CELL_TOP})
 #define CONST_INFO(num, val) ((struct CellInfo){.kind = CELL_CONSTANT, .k = (num), .v = (val)})
 
-// TODO: move these macros somewhere they can be included here and in rt.c
-//       in rt.c, define VM_*() operations that adapt the ones below to the VM
-
-#define I2U(i) (CAST(uint64_t, i))
-#define U2I(u) PAW_CAST_INT(u)
-
-// Generate code for int operators
-// Casts to unsigned to avoid UB (signed integer overflow). Requires
-// 2's complement integer representation to work properly.
-#define I_UNOP(a, op) U2I(op I2U(a))
-#define I_BINOP(a, b, op) U2I(I2U(a) op I2U(b))
-
-#define INT_UNARY_OP(r, val, op) \
-    V_SET_INT(r, I_UNOP(V_INT(val), op))
-
-#define FLOAT_UNARY_OP(r, val, op) \
-    V_SET_FLOAT(r, op V_FLOAT(val))
-
-#define INT_COMPARISON(r, x, y, op) \
-    V_SET_BOOL(r, V_INT(x) op V_INT(y))
-
-#define INT_BINARY_OP(r, x, y, op) \
-    V_SET_INT(r, I_BINOP(V_INT(x), V_INT(y), op))
-
-#define FLOAT_COMPARISON(r, x, y, op) \
-    V_SET_BOOL(r, V_FLOAT(x) op V_FLOAT(y))
-
-#define FLOAT_BINARY_OP(r, x, y, op) \
-    V_SET_FLOAT(r, V_FLOAT(x) op V_FLOAT(y))
-
-#define STR_COMPARISON(r, x, y, op) \
-    V_SET_BOOL(r, pawS_cmp(V_STRING(x), V_STRING(y)) op 0)
-
 static struct CellInfo visit_unary_op(struct KProp *K, struct Cell *val, enum UnaryOp op)
 {
     enum BuiltinKind kind = pawP_type2code(K->C, val->type);
     Value const v = val->info.v;
     Value r;
 
-    switch (op) {
-        case UNARY_LEN:
-            if (kind == BUILTIN_STR) {
-                String const *x = V_STRING(v);
-                V_SET_INT(&r, x->length);
-                break;
-            }
-            return BOTTOM_INFO();
-        case UNARY_NEG:
-            if (kind == BUILTIN_INT) {
-                INT_UNARY_OP(&r, v, -);
-            } else {
-                paw_assert(kind == BUILTIN_FLOAT);
-                FLOAT_UNARY_OP(&r, v, -);
-            }
-            break;
-        case UNARY_NOT:
-            paw_assert(kind == BUILTIN_BOOL);
-            INT_UNARY_OP(&r, v, !);
-            break;
-        case UNARY_BNOT:
-            paw_assert(kind == BUILTIN_INT);
-            INT_UNARY_OP(&r, v, ~);
-            break;
+    if (pawP_fold_unary_op(K->C, op, v, &r, kind)) {
+        int const k = add_constant(K, r, kind);
+        return CONST_INFO(k, r);
     }
-    int const k = add_constant(K, r, kind);
-    return CONST_INFO(k, r);
-}
-
-static void constant_mul(Value *pr, Value x, Value y, enum BuiltinKind kind)
-{
-    if (kind == BUILTIN_FLOAT) {
-        // need to use float comparison to handle -0.0
-        if (V_FLOAT(x) == 0.0 || V_FLOAT(y) == 0.0)
-            V_SET_0(pr);
-        else
-            FLOAT_BINARY_OP(pr, x, y, *);
-    } else {
-        if (V_INT(x) == 0 || V_INT(y) == 0)
-            V_SET_0(pr);
-        else
-            INT_BINARY_OP(pr, x, y, *);
-    }
-}
-
-#define DIVIDE_BY_0(K) pawE_error(ENV(K), PAW_EVALUE, -1, "divide by 0");
-
-static void constant_div(struct KProp *K, Value *pr, Value x, Value y, enum BuiltinKind kind)
-{
-
-    if (kind == BUILTIN_FLOAT) {
-        if (V_FLOAT(y) == 0.0)
-            DIVIDE_BY_0(K);
-        FLOAT_BINARY_OP(pr, x, y, /);
-    } else {
-        paw_assert(kind == BUILTIN_INT);
-        if (V_INT(y) == 0)
-            DIVIDE_BY_0(K);
-        INT_BINARY_OP(pr, x, y, /);
-    }
-}
-
-static void constant_mod(struct KProp *K, Value *pr, Value x, Value y, enum BuiltinKind kind)
-{
-
-    if (kind == BUILTIN_FLOAT) {
-        if (V_FLOAT(y) == 0.0)
-            DIVIDE_BY_0(K);
-        V_SET_FLOAT(pr, fmod(V_FLOAT(x), V_FLOAT(y)));
-    } else {
-        paw_assert(kind == BUILTIN_INT);
-        if (V_INT(y) == 0)
-            DIVIDE_BY_0(K);
-        INT_BINARY_OP(pr, x, y, %);
-    }
+    return BOTTOM_INFO();
 }
 
 static struct CellInfo visit_binary_op(struct KProp *K, struct Cell *lhs, struct Cell *rhs, enum BinaryOp op)
@@ -367,134 +251,11 @@ static struct CellInfo visit_binary_op(struct KProp *K, struct Cell *lhs, struct
     Value const y = rhs->info.v;
     Value r;
 
-    switch (op) {
-        case BINARY_EQ: {
-            if (kind == BUILTIN_FLOAT)
-                FLOAT_COMPARISON(&r, x, y, ==);
-            else if (kind == BUILTIN_STR)
-                STR_COMPARISON(&r, x, y, ==);
-            else if (kind == BUILTIN_BOOL)
-                INT_COMPARISON(&r, x, y, ==);
-            else if (kind == BUILTIN_INT)
-                INT_COMPARISON(&r, x, y, ==);
-            else
-                return BOTTOM_INFO();
-            break;
-        }
-        case BINARY_NE:
-            if (kind == BUILTIN_FLOAT)
-                FLOAT_COMPARISON(&r, x, y, !=);
-            else if (kind == BUILTIN_STR)
-                STR_COMPARISON(&r, x, y, !=);
-            else if (kind == BUILTIN_BOOL)
-                INT_COMPARISON(&r, x, y, !=);
-            else if (kind == BUILTIN_INT)
-                INT_COMPARISON(&r, x, y, !=);
-            else
-                return BOTTOM_INFO();
-            break;
-        case BINARY_LT:
-            if (kind == BUILTIN_FLOAT)
-                FLOAT_COMPARISON(&r, x, y, <);
-            else if (kind == BUILTIN_STR)
-                STR_COMPARISON(&r, x, y, <);
-            else
-                INT_COMPARISON(&r, x, y, <);
-            break;
-        case BINARY_LE:
-            if (kind == BUILTIN_FLOAT)
-                FLOAT_COMPARISON(&r, x, y, <=);
-            else if (kind == BUILTIN_STR)
-                STR_COMPARISON(&r, x, y, <=);
-            else
-                INT_COMPARISON(&r, x, y, <=);
-            break;
-        case BINARY_GT:
-            if (kind == BUILTIN_FLOAT)
-                FLOAT_COMPARISON(&r, x, y, >);
-            else if (kind == BUILTIN_STR)
-                STR_COMPARISON(&r, x, y, >);
-            else
-                INT_COMPARISON(&r, x, y, >);
-            break;
-        case BINARY_GE:
-            if (kind == BUILTIN_FLOAT)
-                FLOAT_COMPARISON(&r, x, y, >=);
-            else if (kind == BUILTIN_STR)
-                STR_COMPARISON(&r, x, y, >=);
-            else
-                INT_COMPARISON(&r, x, y, >=);
-            break;
-        case BINARY_AS:
-            return BOTTOM_INFO();
-        case BINARY_ADD:
-            // TODO: concatenation should use a different operator, it's annoying do deal with the binary operator special case
-            if (kind == BUILTIN_FLOAT)
-                FLOAT_BINARY_OP(&r, x, y, +);
-            else if (kind == BUILTIN_STR)
-                return BOTTOM_INFO();
-            else if (kind == BUILTIN_LIST)
-                return BOTTOM_INFO();
-            else
-                INT_BINARY_OP(&r, x, y, +);
-            break;
-        case BINARY_SUB:
-            if (kind == BUILTIN_FLOAT)
-                FLOAT_BINARY_OP(&r, x, y, -);
-            else
-                INT_BINARY_OP(&r, x, y, -);
-            break;
-        case BINARY_MUL:
-            constant_mul(&r, x, y, kind);
-            break;
-        case BINARY_DIV:
-            constant_div(K, &r, x, y, kind);
-            break;
-        case BINARY_MOD:
-            constant_mod(K, &r, x, y, kind);
-            break;
-        case BINARY_BXOR:
-            paw_assert(kind == BUILTIN_INT);
-            INT_BINARY_OP(&r, x, y, ^);
-            break;
-        case BINARY_BAND:
-            paw_assert(kind == BUILTIN_INT);
-            INT_BINARY_OP(&r, x, y, &);
-            break;
-        case BINARY_BOR:
-            paw_assert(kind == BUILTIN_INT);
-            INT_BINARY_OP(&r, x, y, |);
-            break;
-        case BINARY_SHL: {
-            paw_assert(kind == BUILTIN_INT);
-            paw_Int n = V_INT(y);
-            if (n < 0) {
-                pawE_error(ENV(K), PAW_EVALUE, -1, "negative shift count");
-            } else if (n > 0) {
-                n = PAW_MIN(n, U2I(sizeof(x) * 8 - 1));
-                V_SET_INT(&r, U2I(V_UINT(x) << n));
-            } else {
-                r = x;
-            }
-            break;
-        }
-        case BINARY_SHR:
-            paw_assert(kind == BUILTIN_INT);
-            paw_Int n = V_INT(y);
-            if (n < 0) {
-                pawE_error(ENV(K), PAW_EVALUE, -1, "negative shift count");
-            } else if (n > 0) {
-                n = PAW_MIN(n, U2I(sizeof(x) * 8 - 1));
-                V_SET_INT(&r, V_INT(x) >> n);
-            } else {
-                r = x;
-            }
-            break;
-        case BINARY_RANGE:
-            return BOTTOM_INFO();
+    if (pawP_fold_binary_op(K->C, op, x, y, &r, kind)) {
+        int const k = add_constant(K, r, kind);
+        return CONST_INFO(k, r);
     }
-    int const k = add_constant(K, r, kind);
-    return CONST_INFO(k, r);
+    return BOTTOM_INFO();
 }
 
 #define LIST_SWAP_REMOVE(list, i) (K_LIST_SET(list, i, K_LIST_LAST(list)), \

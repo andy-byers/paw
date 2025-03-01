@@ -263,6 +263,9 @@ struct Ast *pawP_parse_module(struct Compiler *C, String *modname, paw_Reader in
 
 void pawP_validate_adt_traits(struct Compiler *C, struct HirAdtDecl *d);
 
+paw_Bool pawP_fold_unary_op(struct Compiler *C, enum UnaryOp op, Value v, Value *pr, enum BuiltinKind kind);
+paw_Bool pawP_fold_binary_op(struct Compiler *C, enum BinaryOp op, Value x, Value y, Value *pr, enum BuiltinKind kind);
+
 struct MonoResult {
     struct IrTypeList *types;
     struct MirBodyList *bodies;
