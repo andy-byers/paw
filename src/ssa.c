@@ -237,9 +237,13 @@ static void rename_vars(struct SsaConverter *S, MirBlock x)
 
     // fix references to the old name
     K_LIST_FOREACH(block->joins, instr)
-    rename_join(S, *instr);
+    {
+        rename_join(S, *instr);
+    }
     K_LIST_FOREACH(block->instructions, instr)
-    rename_instruction(S, *instr);
+    {
+        rename_instruction(S, *instr);
+    }
 
     // determine inputs to phi nodes
     K_LIST_FOREACH(block->successors, y)

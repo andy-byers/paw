@@ -350,9 +350,6 @@ static void dump_expr(Printer *P, struct AstExpr *expr)
                     dump_path(P, e->comp.path);
                     dump_expr_list(P, e->comp.items, "items");
                     break;
-                case kAstRangeLit:
-                    DUMP_MSG(P, "lit_kind: RANGE\n");
-                    break;
             }
             break;
         }

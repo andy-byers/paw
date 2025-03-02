@@ -1499,6 +1499,9 @@ struct IrTypeList *pawHir_collect_decl_types(struct Compiler *C, struct HirDeclL
 
 enum TraitKind pawHir_kindof_trait(struct Compiler *C, struct HirTraitDecl *d);
 
+// Return true if the expression can be evaluated at compile time, false otherwise
+paw_Bool pawHir_check_const(struct Hir *hir, struct HirExpr *expr);
+
 char const *pawHir_print_type(struct Compiler *C, struct HirType *type);
 char const *pawHir_print_path(struct Compiler *C, struct HirPath *path);
 

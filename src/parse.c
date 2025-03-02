@@ -951,6 +951,10 @@ static struct AstExpr *chain_expr(struct Lex *lex, struct AstExpr *target)
 {
     int const line = lex->line;
     skip(lex); // '?' token
+
+    if (lex->func_depth == 0)
+        SYNTAX_ERROR(lex, "'?' outside function body");
+
     return pawAst_new_chain_expr(lex->ast, line, target);
 }
 
@@ -1044,6 +1048,14 @@ static struct AstExpr *if_expr(struct Lex *lex)
     return pawAst_new_if_expr(lex->ast, line, cond, then_arm, else_arm);
 }
 
+static struct AstExpr *loop_block(struct Lex *lex)
+{
+    ++lex->loop_depth;
+    struct AstExpr *block = block_expr(lex);
+    --lex->loop_depth;
+    return block;
+}
+
 static struct AstExpr *for_expr(struct Lex *lex)
 {
     int const line = lex->line;
@@ -1051,7 +1063,7 @@ static struct AstExpr *for_expr(struct Lex *lex)
     String *name = parse_name(lex);
     check_next(lex, TK_IN);
     struct AstExpr *target = basic_expr(lex);
-    struct AstExpr *block = block_expr(lex);
+    struct AstExpr *block = loop_block(lex);
     return pawAst_new_for_expr(lex->ast, line, name, target, block);
 }
 
@@ -1060,7 +1072,7 @@ static struct AstExpr *while_expr(struct Lex *lex)
     int const line = lex->line;
     skip(lex); // 'while' token
     struct AstExpr *cond = basic_expr(lex);
-    struct AstExpr *block = block_expr(lex);
+    struct AstExpr *block = loop_block(lex);
     return pawAst_new_while_expr(lex->ast, line, cond, block);
 }
 
@@ -1068,8 +1080,14 @@ static struct AstExpr *return_expr(struct Lex *lex)
 {
     int const line = lex->line;
     skip(lex); // 'return' token
+
+    if (lex->func_depth == 0)
+        SYNTAX_ERROR(lex, "'return' outside function body");
+
     struct AstExpr *expr = NULL;
-    if (!test(lex, '}') && !test(lex, ';') && !test(lex, ',')) {
+    if (!test(lex, '}')
+            && !test(lex, ';')
+            && !test(lex, ',')) {
         expr = expr0(lex);
     }
     return pawAst_new_return_expr(lex->ast, line, expr);
@@ -1079,6 +1097,11 @@ static struct AstExpr *jump_expr(struct Lex *lex, enum JumpKind kind)
 {
     int const line = lex->line;
     skip(lex); // 'break' or 'continue' token
+
+    if (lex->loop_depth == 0)
+        SYNTAX_ERROR(lex, "'%s' outside loop body",
+                kind == JUMP_BREAK ? "break" : "continue");
+
     return pawAst_new_jump_expr(lex->ast, line, kind);
 }
 
@@ -1349,12 +1372,21 @@ static struct AstDeclList *type_param(struct Lex *lex)
     return NULL;
 }
 
+static struct AstExpr *function_body(struct Lex *lex)
+{
+    ++lex->func_depth;
+    struct AstExpr *body = block_expr(lex);
+    --lex->func_depth;
+    return body;
+}
+
 static struct AstDecl *function(struct Lex *lex, int line, String *name, enum FuncKind kind, paw_Bool is_pub)
 {
     struct AstDeclList *generics = type_param(lex);
     struct AstDeclList *params = func_parameters(lex);
     struct AstType *result = test_next(lex, TK_ARROW) ? parse_type(lex, PAW_TRUE) : unit_type(lex);
-    struct AstExpr *body = !test_next(lex, ';') ? block_expr(lex) : NULL;
+    struct AstExpr *body = !test_next(lex, ';') ? function_body(lex) : NULL;
+
     return pawAst_new_func_decl(lex->ast, line, kind, name, generics,
         params, NULL, result, body, is_pub);
 }

@@ -47,6 +47,7 @@
 #define NAME_ERROR(X, ...) pawE_error(ENV(X), PAW_ENAME, (X)->line, __VA_ARGS__)
 #define SYNTAX_ERROR(X, ...) pawE_error(ENV(X), PAW_ESYNTAX, (X)->line, __VA_ARGS__)
 #define TYPE_ERROR(X, ...) pawE_error(ENV(X), PAW_ETYPE, (X)->line, __VA_ARGS__)
+#define VALUE_ERROR(X, line, ...) pawE_error(ENV(X), PAW_EVALUE, line, __VA_ARGS__)
 
 #define GET_NODE_TYPE(C, p) pawIr_get_type(C, (p)->hdr.hid)
 #define SET_NODE_TYPE(C, p, t) pawIr_set_type(C, (p)->hdr.hid, t)

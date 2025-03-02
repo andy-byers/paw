@@ -97,6 +97,15 @@ DEFINE_LIST(struct Compiler, var_stack_, VarStack, struct LocalVar)
 DEFINE_LIST(struct Compiler, label_list_, LabelList, struct Label)
 DEFINE_MAP(struct Compiler, GlobalMap, pawP_alloc, p_hash_decl_id, p_equals_decl_id, DeclId, int)
 DEFINE_MAP(struct Compiler, VarMap, pawP_alloc, var_hash, var_equals, struct MatchVar, MirRegister)
+DEFINE_MAP(struct Compiler, PendingMap, pawP_alloc, p_hash_decl_id, p_equals_decl_id, DeclId, struct HirVarDecl *)
+DEFINE_MAP_ITERATOR(PendingMap, DeclId, struct HirVarDecl *)
+
+static void postprocess(struct LowerHir *L, struct Mir *mir)
+{
+    pawMir_remove_unreachable_blocks(mir);
+    pawSsa_construct(mir);
+    pawMir_propagate_constants(mir);
+}
 
 static void enter_match(struct LowerHir *L, struct MatchState *ms, VarMap *var_mapping)
 {
@@ -756,6 +765,20 @@ static MirRegister lower_unit_variant(struct HirVisitor *V, struct HirPathExpr *
     return object;
 }
 
+// Routine for lowering a global constant
+static void lower_global_constant(struct LowerHir *L, struct HirVarDecl *d);
+
+static MirRegister lookup_global_constant(struct LowerHir *L, struct HirVarDecl *d)
+{
+    int const *pid = GlobalMap_get(L->C, L->globals, d->did);
+    if (pid != NULL) {
+        struct GlobalInfo info = K_LIST_GET(L->C->globals, *pid);
+        return add_constant(L, info.value, info.b_kind);
+    }
+    lower_global_constant(L, d);
+    return lookup_global_constant(L, d);
+}
+
 static MirRegister lower_path_expr(struct HirVisitor *V, struct HirPathExpr *e)
 {
     struct LowerHir *L = V->ud;
@@ -777,6 +800,8 @@ static MirRegister lower_path_expr(struct HirVisitor *V, struct HirPathExpr *e)
         return lower_unit_variant(V, e, HirGetVariantDecl(decl));
     } else if (HirIsAdtDecl(decl)) {
         return lower_unit_struct(V, e, HirGetAdtDecl(decl));
+    } else if (HirIsVarDecl(decl)) {
+        return lookup_global_constant(L, HirGetVarDecl(decl));
     }
     int const *pid = GlobalMap_get(L->C, L->globals, did);
     NEW_INSTR(fs, global, e->line, output, pid != NULL ? *pid : -1);
@@ -903,9 +928,7 @@ static MirRegister lower_closure_expr(struct HirVisitor *V, struct HirClosureExp
     result->upvalues = L->fs->up;
     leave_function(L);
 
-    pawMir_remove_unreachable_blocks(result);
-    pawSsa_construct(result);
-    pawMir_propagate_constants(result);
+    postprocess(L, result);
 
     MirRegister const output = new_register(L, type);
     struct MirBodyList *children = outer->mir->children;
@@ -1595,20 +1618,115 @@ static void lower_hir_body_aux(struct LowerHir *L, struct HirFuncDecl *func, str
     leave_function(L);
 }
 
-static struct Mir *lower_hir_body(struct Compiler *C, struct HirFuncDecl *func, GlobalMap *globals)
+static struct Mir *lower_hir_body(struct LowerHir *L, struct HirFuncDecl *func)
 {
-    struct IrType *type = pawIr_get_type(C, func->hid);
+    struct IrType *type = pawIr_get_type(L->C, func->hid);
     struct IrSignature *fsig = IrGetSignature(type);
     paw_Bool const is_polymorphic = func->generics != NULL
         || (fsig->self != NULL && IR_TYPE_SUBTYPES(fsig->self) != NULL);
-    struct Mir *result = pawMir_new(C, func->name, type,
+    struct Mir *result = pawMir_new(L->C, func->name, type,
                                     fsig->self, func->fn_kind, func->body == NULL,
                                     func->is_pub, is_polymorphic);
     if (func->body == NULL)
         return result;
 
+    lower_hir_body_aux(L, func, result);
+    postprocess(L, result);
+    return result;
+}
+
+static void register_global_constant(struct LowerHir *L, DeclId did, struct MirConstant *k, struct Mir *dummy)
+{
+    const int global_id = L->globals->count;
+    GlobalMap_insert(L->C, L->globals, did, global_id);
+    K_LIST_PUSH(L->C, L->C->globals, ((struct GlobalInfo){
+        .index = global_id,
+        .b_kind = k->b_kind,
+        .value = k->value,
+    }));
+
+    // Reset the dummy MIR body, keeping the entry block as well as the second block
+    // (first block where instructions are added). Also keep the result register and
+    // the instruction that allocates it.
+    struct MirBlockData *bb = K_LIST_GET(dummy->blocks, 1);
+    dummy->blocks->count = 2;
+    dummy->registers->count = 1;
+    bb->instructions->count = 1;
+    bb->joins->count = 0;
+    bb->successors->count = 0;
+    L->fs->current = MIR_BB(1);
+}
+
+// TODO: move AllocLocal for parameters and return slot to entry basic block
+static void lower_global_constant(struct LowerHir *L, struct HirVarDecl *d)
+{
+    // dummy MIR body so that toplevel constants can be lowered normally, i.e. using
+    // "lower_operand" routine
+    struct IrTypeList *dummy_params = pawIr_type_list_new(L->C);
+    struct IrType *dummy_result = pawIr_get_type(L->C, (HirId){0});
+    struct IrType *dummy_type = pawIr_new_func_ptr(L->C, dummy_params, dummy_result);
+    struct Mir *dummy = pawMir_new(L->C, SCAN_STRING(L->C, "(toplevel)"), dummy_type,
+            NULL, FUNC_MODULE, PAW_FALSE, PAW_FALSE, PAW_FALSE);
+
+    struct BlockState bs;
+    struct FunctionState fs;
+    enter_function(L, &fs, &bs, 0, dummy);
+
+    MirRegister const result = lower_operand(&L->V, d->init);
+    terminate_return(L, &result); // use variable to avoid DCE
+    postprocess(L, dummy);
+
+    // TODO: This should not be necessary, but is needed because the constant folding/
+    //       propagation routine sometimes leaves extra basic blocks and/or moves.
+    //       It should be possible to squash an extra basic block, given that it is
+    //       not targeted by a jump.
+    struct MirBlockData *const *pbb;
+    K_LIST_FOREACH(dummy->blocks, pbb) {
+        struct MirInstruction *const *pinstr;
+        K_LIST_FOREACH((*pbb)->instructions, pinstr) {
+            if (MirIsConstant(*pinstr)) {
+                struct MirConstant *k = MirGetConstant(*pinstr);
+                register_global_constant(L, d->did, k, dummy);
+                leave_function(L);
+                return;
+            }
+        }
+    }
+
+    PAW_UNREACHABLE();
+}
+
+static void lower_global_constants(struct LowerHir *L)
+{
+    // collect all global constants in a hash map
+    PendingMap *pending = PendingMap_new(L->C);
+    struct HirDecl *const *pdecl;
+    K_LIST_FOREACH(L->C->decls, pdecl) {
+        if (HirIsVarDecl(*pdecl)) {
+            struct HirVarDecl *d = HirGetVarDecl(*pdecl);
+            if (d->is_global)
+                PendingMap_insert(L->C, pending, d->did, d);
+        }
+    }
+
+    // resolve constants, making sure there are no cyclic dependencies
+    while (pending->count > 0) {
+        PendingMapIterator iter;
+        PendingMapIterator_init(pending, &iter);
+        while (PendingMapIterator_is_valid(&iter)) {
+            struct HirVarDecl **pd = PendingMapIterator_valuep(&iter);
+            PendingMapIterator_erase(&iter);
+            lower_global_constant(L, *pd);
+        }
+    }
+}
+
+BodyMap *pawP_lower_hir(struct Compiler *C)
+{
+    BodyMap *result = BodyMap_new(C);
+
     struct LowerHir L = {
-        .globals = globals,
+        .globals = GlobalMap_new(C),
         .labels = label_list_new(C),
         .stack = var_stack_new(C),
         .P = ENV(C),
@@ -1620,45 +1738,16 @@ static struct Mir *lower_hir_body(struct Compiler *C, struct HirFuncDecl *func, 
     L.V.VisitVarDecl = visit_var_decl;
     L.V.VisitExprStmt = visit_expr_stmt;
 
-    lower_hir_body_aux(&L, func, result);
-    pawMir_remove_unreachable_blocks(result);
-    pawSsa_construct(result);
-    pawMir_propagate_constants(result);
-    return result;
-}
-
-static void lower_constant(struct Compiler *C, struct HirVarDecl *d, struct GlobalMap *lookup)
-{
-    struct HirLiteralExpr *e = HirGetLiteralExpr(d->init);
-    struct GlobalInfo info = {
-        .b_kind = e->basic.code,
-        .value = e->basic.value,
-        .index = C->globals->count,
-    };
-    GlobalMap_insert(C, lookup, d->did, info.index);
-    K_LIST_PUSH(C, C->globals, info);
-}
-
-BodyMap *pawP_lower_hir(struct Compiler *C)
-{
-    GlobalMap *globals = GlobalMap_new(C);
-    BodyMap *result = BodyMap_new(C);
+    lower_global_constants(&L);
 
     struct HirDecl *const *pdecl;
-    K_LIST_FOREACH(C->decls, pdecl) {
-        if (HirIsVarDecl(*pdecl)) {
-            struct HirVarDecl *d = HirGetVarDecl(*pdecl);
-            if (d->is_global)
-                lower_constant(C, d, globals);
-        }
-    }
     K_LIST_FOREACH(C->decls, pdecl) {
         if (HirIsFuncDecl(*pdecl)) {
             struct IrType *type = GET_NODE_TYPE(C, *pdecl);
             struct IrSignature *fsig = IrGetSignature(type);
             if (fsig->self == NULL || IrIsAdt(fsig->self)) {
                 struct HirFuncDecl *d = HirGetFuncDecl(*pdecl);
-                struct Mir *r = lower_hir_body(C, d, globals);
+                struct Mir *r = lower_hir_body(&L, d);
                 BodyMap_insert(C, result, d->did, r);
             }
         }

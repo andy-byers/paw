@@ -761,6 +761,7 @@ static void propagate_copies(struct KProp *K)
 
 void pawMir_propagate_constants(struct Mir *mir)
 {
+    // TODO: "force" flag to force propagation for global constants
 #ifdef PAW_KPROP_OFF
     return;
 #endif

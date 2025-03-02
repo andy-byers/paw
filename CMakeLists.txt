@@ -88,6 +88,8 @@ set(PAW_SOURCE_FILES
     ${PAW_SOURCE_DIR}/instantiate.c
     ${PAW_SOURCE_DIR}/iomod.c
     ${PAW_SOURCE_DIR}/ir_type.c
+    ${PAW_SOURCE_DIR}/kfold.c
+    ${PAW_SOURCE_DIR}/kprop.c
     ${PAW_SOURCE_DIR}/lex.c
     ${PAW_SOURCE_DIR}/list.c
     ${PAW_SOURCE_DIR}/lib.c
@@ -103,7 +105,6 @@ set(PAW_SOURCE_FILES
     ${PAW_SOURCE_DIR}/monomorphize.c
     ${PAW_SOURCE_DIR}/os.c
     ${PAW_SOURCE_DIR}/parse.c
-    ${PAW_SOURCE_DIR}/propagate.c
     ${PAW_SOURCE_DIR}/regalloc.c
     ${PAW_SOURCE_DIR}/resolve.c
     ${PAW_SOURCE_DIR}/rt.c

@@ -945,12 +945,93 @@ static struct IrType *resolve_var_decl(struct Resolver *R, struct HirVarDecl *d)
     return init;
 }
 
+struct ConstChecker {
+    struct Resolver *R;
+    paw_Bool is_const;
+};
+
+static paw_Bool const_check_path(struct HirVisitor *V, struct HirPathExpr *e)
+{
+    struct ConstChecker *cc = V->ud;
+    struct Resolver *R = cc->R;
+
+    struct IrType *type = pawP_lookup(V->C, R->m, R->symtab, e->path, LOOKUP_EITHER, PAW_FALSE);
+    enum BuiltinKind kind = TYPE2CODE(R, type);
+    if (!IS_BASIC_TYPE(kind))
+        VALUE_ERROR(R->C, e->line, "compile time constant must be a primitive");
+
+    return PAW_TRUE;
+}
+
+static paw_Bool const_check_unop(struct HirVisitor *V, struct HirUnOpExpr *e)
+{
+    return PAW_TRUE;
+}
+
+static paw_Bool const_check_binop(struct HirVisitor *V, struct HirBinOpExpr *e)
+{
+    return PAW_TRUE;
+}
+
+static paw_Bool const_check_closure(struct HirVisitor *V, struct HirClosureExpr *e)
+{
+    VALUE_ERROR(V->C, e->line, "closures cannot be constant evaluated");
+}
+
+static paw_Bool const_check_call(struct HirVisitor *V, struct HirCallExpr *e)
+{
+    VALUE_ERROR(V->C, e->line, "function calls cannot be constant evaluated");
+}
+
+static paw_Bool const_check_index(struct HirVisitor *V, struct HirIndex *e)
+{
+    VALUE_ERROR(V->C, e->line, "index expressions cannot be constant evaluated");
+}
+
+static paw_Bool const_check_selector(struct HirVisitor *V, struct HirSelector *e)
+{
+    VALUE_ERROR(V->C, e->line, "selector expressions cannot be constant evaluated");
+}
+
+static paw_Bool const_check_field(struct HirVisitor *V, struct HirFieldExpr *e)
+{
+    VALUE_ERROR(V->C, e->line, "fields cannot be constant evaluated");
+}
+
+static paw_Bool const_check_loop(struct HirVisitor *V, struct HirLoopExpr *e)
+{
+    VALUE_ERROR(V->C, e->line, "loops cannot be constant evaluated");
+}
+
+// Make sure the initializer of a global constant can be computed at compile time
+static void check_const(struct Resolver *R, struct HirExpr *expr, struct IrType *type)
+{
+    struct HirVisitor V;
+    pawHir_visitor_init(&V, R->C, R);
+    V.VisitUnOpExpr = const_check_unop;
+    V.VisitBinOpExpr = const_check_binop;
+    V.VisitClosureExpr = const_check_closure;
+    V.VisitCallExpr = const_check_call;
+    V.VisitIndex = const_check_index;
+    V.VisitSelector = const_check_selector;
+    V.VisitFieldExpr = const_check_field;
+    V.VisitLoopExpr = const_check_loop;
+    pawHir_visit_expr(&V, expr);
+
+    enum BuiltinKind kind = TYPE2CODE(R, type);
+    if (!IS_BASIC_TYPE(kind))
+        VALUE_ERROR(R->C, expr->hdr.line, "compile time constant must be a primitive");
+}
+
 static void resolve_const_item(struct Resolver *R, struct HirVarDecl *d)
 {
     struct HirDecl *decl = HIR_CAST_DECL(d);
     struct IrType *tag = GET_NODE_TYPE(R->C, d->tag);
     struct IrType *init = resolve_operand(R, d->init);
     unify(R, init, tag);
+
+    check_const(R, d->init, tag);
+    pawIr_set_type(R->C, d->hid, tag);
 }
 
 static struct IrType *resolve_field_decl(struct Resolver *R, struct HirFieldDecl *d)

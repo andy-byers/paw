@@ -9,3 +9,80 @@ pub fn test_primitive() {
     assert(FLOAT == 1.23);
     assert(STR == "abc");
 }
+
+const BNOT: int = ~0;
+const NEG: int = --1;
+
+pub fn test_unary_op() {
+   assert(BNOT == ~0); 
+   assert(NEG == 1); 
+}
+
+const ADD: int = 1 + 2 + 3;
+const ADD_MUL: int = (((1 + 2) * 3 * (4 + 5 * 6) * 7) + 8) * (9);
+
+pub fn test_binary_op() {
+   assert(ADD == 6); 
+   assert(ADD_MUL == 19350);
+}
+
+pub fn test_dependency() {
+    assert(INT2 == 84);
+}
+
+pub const INT2: int = INT + INT;
+
+const BLOCK: int = {
+    let a = 1;
+    let b = 2;
+    {
+        let c = 3;
+        a + b * c
+    }
+};
+
+pub fn test_block() {
+   assert(BLOCK == 7);
+}
+
+const CONDITIONAL: str = if true {
+    THEN_ARM
+} else {
+    "error"
+};
+
+const CONDITION: bool = true;
+const THEN_ARM: str = "ok";
+
+const BLOCK_COND: int = {
+    let a = 1;
+    let b = 2;
+    if !CONDITION {
+        -1
+    } else if CONDITION {
+        if CONDITION {
+            let c = 3;
+            a + b + c
+        } else {
+            -2
+        }
+    } else {
+        -3
+    }
+};
+
+pub fn test_conditional() {
+   assert(CONDITIONAL == "ok");
+   assert(BLOCK_COND == 6);
+}
+
+// TODO: for some reason I can't remember right now, logicals seem to inhibit constant propagation
+//const LOGICAL: int = if true && false {
+//    -1
+//} else {
+//    42
+//};
+//
+//pub fn test_logical() {
+//    assert(LOGICAL == 42);
+//}

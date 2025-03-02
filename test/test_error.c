@@ -651,6 +651,23 @@ void test_underscore(void)
         "fn f(b: bool) {let v: [_]; if b {v = [1]} else {v = ['a']};}", "");
 }
 
+void test_global_const(void)
+{
+    // TODO: not currently supported, but should be eventually
+    // TODO: call will need to be a "const fn"
+    test_compiler_status(PAW_EVALUE, "const_list", "const C: [int] = [];", "");
+    test_compiler_status(PAW_EVALUE, "const_map", "const C: [int: int] = [:];", "");
+    test_compiler_status(PAW_EVALUE, "const_struct", "struct X; const C: X = X;", "");
+    test_compiler_status(PAW_EVALUE, "const_enum", "enum X {E} const C: X = X::E;", "");
+    test_compiler_status(PAW_EVALUE, "const_call", "fn f() {} const C: () = f();", "");
+    test_compiler_status(PAW_EVALUE, "const_function", "fn f() {} const C: fn() = f;", "");
+
+    test_compiler_status(PAW_ESYNTAX, "const_return", "const C: () = return;", "");
+    test_compiler_status(PAW_ESYNTAX, "const_break", "const C: () = break;", "");
+    test_compiler_status(PAW_ESYNTAX, "const_continue", "const C: () = break;", "");
+    test_compiler_status(PAW_ESYNTAX, "const_chain", "const C: Option<int> = Option::Some(123)?;", "");
+}
+
 int main(void)
 {
     test_underscore();
@@ -667,6 +684,7 @@ int main(void)
     test_map_error();
     test_import_error();
     test_uninit_local();
+    test_global_const();
     test_match_error();
     test_trait_error();
 }

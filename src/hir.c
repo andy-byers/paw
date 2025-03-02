@@ -94,7 +94,9 @@ void pawHir_add_scope(struct Compiler *C, struct HirSymtab *table, struct HirSco
 int pawHir_declare_symbol(struct Compiler *C, struct HirScope *scope, struct HirDecl *decl, String *name)
 {
     K_LIST_PUSH(C, scope, ((struct HirSymbol){
-                              .is_type = HirIsAdtDecl(decl) || HirIsTypeDecl(decl) || HirIsGenericDecl(decl),
+                              .is_type = HirIsAdtDecl(decl)
+                                  || HirIsTypeDecl(decl)
+                                  || HirIsGenericDecl(decl),
                               .decl = decl,
                               .name = name,
                           }));
@@ -576,16 +578,17 @@ static struct HirDecl *FoldDecl(struct HirFolder *F, struct HirDecl *node);
 static struct HirStmt *FoldStmt(struct HirFolder *F, struct HirStmt *node);
 static struct HirPat *FoldPat(struct HirFolder *F, struct HirPat *node);
 
-#define DEFINE_LIST_FOLDER(name, T)                                                 \
+#define DEFINE_LIST_FOLDER(name, T)                                                            \
     static struct Hir##T##List *fold_##name##s(struct HirFolder *F, struct Hir##T##List *list) \
-    {                                                                                 \
-        if (list == NULL)                                                             \
-            return NULL;                                                                   \
-        struct Hir##T##List *r = pawHir_##name##_list_new(F->C); \
-        for (int i = 0; i < list->count; ++i) {                                       \
-            K_LIST_PUSH(F->C, r, Fold##T(F, list->data[i]));                                              \
-        }                                                                             \
-        return r; \
+    {                                                                                          \
+        if (list == NULL)                                                                      \
+            return NULL;                                                                       \
+        struct Hir##T##List *r = pawHir_##name##_list_new(F->C);                               \
+        struct Hir##T *const *pnode;                                                           \
+        K_LIST_FOREACH(list, pnode) {                                                          \
+            K_LIST_PUSH(F->C, r, Fold##T(F, *pnode));                                          \
+        }                                                                                      \
+        return r;                                                                              \
     }
 DEFINE_LIST_FOLDER(decl, Decl)
 DEFINE_LIST_FOLDER(expr, Expr)
@@ -1009,22 +1012,22 @@ void pawHir_folder_init(struct HirFolder *F, struct Hir *hir, void *ud)
     };
 }
 
-#define DEFINE_FOLDERS(name, T)                                                     \
-    struct Hir##T *pawHir_fold_##name(struct HirFolder *F, struct Hir##T *node)              \
-    {                                                                                \
-        paw_assert(node != NULL);                                                    \
-        F->line = node->hdr.line;                                                    \
-        return F->Fold##T(F, node);                                                          \
-    }                                                                                \
+#define DEFINE_FOLDERS(name, T)                                                 \
+    struct Hir##T *pawHir_fold_##name(struct HirFolder *F, struct Hir##T *node) \
+    {                                                                           \
+        paw_assert(node != NULL);                                               \
+        F->line = node->hdr.line;                                               \
+        return F->Fold##T(F, node);                                             \
+    }                                                                           \
     struct Hir##T##List *pawHir_fold_##name##s(struct HirFolder *F, struct Hir##T##List *list) \
-    {                                                                                \
-        if (list == NULL) return NULL;                                               \
-        struct Hir##T *const *pnode; \
-        struct Hir##T##List *r = pawHir_##name##_list_new(F->C); \
-        K_LIST_FOREACH(list, pnode) { \
-            K_LIST_PUSH(F->C, r, pawHir_fold_##name(F, *pnode));                             \
-        }                                                                            \
-        return r; \
+    {                                                                                          \
+        if (list == NULL) return NULL;                                                         \
+        struct Hir##T *const *pnode;                                                           \
+        struct Hir##T##List *r = pawHir_##name##_list_new(F->C);                               \
+        K_LIST_FOREACH(list, pnode) {                                                          \
+            K_LIST_PUSH(F->C, r, pawHir_fold_##name(F, *pnode));                               \
+        }                                                                                      \
+        return r;                                                                              \
     }
 DEFINE_FOLDERS(expr, Expr)
 DEFINE_FOLDERS(decl, Decl)
@@ -1079,6 +1082,101 @@ paw_Bool pawHir_is_pub_decl(struct HirDecl *decl)
         case kHirVariantDecl:
             PAW_UNREACHABLE();
     }
+}
+
+static paw_Bool const_check_literal(struct HirVisitor *V, struct HirLiteralExpr *e)
+{
+    if (e->lit_kind != kHirLitBasic) {
+        VALUE_ERROR(V->C, e->line, "constant literal must be primitive type");
+    }
+    return PAW_TRUE;
+}
+
+static paw_Bool const_check_path(struct HirVisitor *V, struct HirPathExpr *e)
+{
+    return PAW_TRUE;
+}
+
+static paw_Bool const_check_chain(struct HirVisitor *V, struct HirChainExpr *e)
+{
+    VALUE_ERROR(V->C, e->line, "'?' outside function body");
+}
+
+static paw_Bool const_check_unop(struct HirVisitor *V, struct HirUnOpExpr *e)
+{
+    return PAW_TRUE;
+}
+
+static paw_Bool const_check_binop(struct HirVisitor *V, struct HirBinOpExpr *e)
+{
+    return PAW_TRUE;
+}
+
+static paw_Bool const_check_closure(struct HirVisitor *V, struct HirClosureExpr *e)
+{
+    VALUE_ERROR(V->C, e->line, "closures cannot be constant evaluated");
+}
+
+static paw_Bool const_check_call(struct HirVisitor *V, struct HirCallExpr *e)
+{
+    VALUE_ERROR(V->C, e->line, "function calls cannot be constant evaluated");
+}
+
+static paw_Bool const_check_index(struct HirVisitor *V, struct HirIndex *e)
+{
+    VALUE_ERROR(V->C, e->line, "index expressions cannot be constant evaluated");
+}
+
+static paw_Bool const_check_selector(struct HirVisitor *V, struct HirSelector *e)
+{
+    VALUE_ERROR(V->C, e->line, "selector expressions cannot be constant evaluated");
+}
+
+static paw_Bool const_check_field(struct HirVisitor *V, struct HirFieldExpr *e)
+{
+    VALUE_ERROR(V->C, e->line, "fields cannot be constant evaluated");
+}
+
+static paw_Bool const_check_loop(struct HirVisitor *V, struct HirLoopExpr *e)
+{
+    VALUE_ERROR(V->C, e->line, "loops cannot be constant evaluated");
+}
+
+static paw_Bool const_check_jump(struct HirVisitor *V, struct HirJumpExpr *e)
+{
+    VALUE_ERROR(V->C, e->line, "'%s' outside loop body",
+            e->jump_kind == JUMP_BREAK ? "break" : "continue");
+    return PAW_TRUE;
+}
+
+static paw_Bool const_check_return(struct HirVisitor *V, struct HirReturnExpr *e)
+{
+    VALUE_ERROR(V->C, e->line, "'return' outside function body");
+    return PAW_TRUE;
+}
+
+paw_Bool pawHir_check_const(struct Hir *hir, struct HirExpr *expr)
+{
+    struct HirVisitor V;
+    paw_Bool is_const = PAW_TRUE;
+    pawHir_visitor_init(&V, hir->C, &is_const);
+
+    V.VisitLiteralExpr = const_check_literal;
+    V.VisitPathExpr = const_check_path;
+    V.VisitChainExpr = const_check_chain;
+    V.VisitUnOpExpr = const_check_unop;
+    V.VisitBinOpExpr = const_check_binop;
+    V.VisitClosureExpr = const_check_closure;
+    V.VisitCallExpr = const_check_call;
+    V.VisitIndex = const_check_index;
+    V.VisitSelector = const_check_selector;
+    V.VisitFieldExpr = const_check_field;
+    V.VisitLoopExpr = const_check_loop;
+    V.VisitJumpExpr = const_check_jump;
+    V.VisitReturnExpr = const_check_return;
+
+    pawHir_visit_expr(&V, expr);
+    return is_const;
 }
 
 
@@ -1323,7 +1421,6 @@ static void dump_decl(struct Printer *P, struct HirDecl *decl)
     switch (HIR_KINDOF(decl)) {
         case kHirFuncDecl: {
             struct HirFuncDecl *d = HirGetFuncDecl(decl);
-            DUMP_FMT(P, "self: %p\n", (void *)d->self);
             DUMP_FMT(P, "name: %s\n", d->name->text);
             dump_decl_list(P, d->generics, "generics");
             dump_decl_list(P, d->params, "params");
@@ -1503,7 +1600,7 @@ static void dump_expr(struct Printer *P, struct HirExpr *expr)
                                 V_FLOAT(e->basic.value));
                             break;
                         default:
-                            paw_assert(e->basic.t == BUILTIN_STR);
+                            paw_assert(e->basic.code == BUILTIN_STR);
                             DUMP_FMT(P, "value: %s\n",
                                 V_STRING(e->basic.value)->text);
                             break;

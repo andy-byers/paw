@@ -97,6 +97,8 @@ struct Lex {
 
     int line;
     int last_line;
+    int func_depth;
+    int loop_depth;
     int expr_depth;
     int nest_depth;
 
