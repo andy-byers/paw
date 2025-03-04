@@ -835,7 +835,7 @@ static struct HirDecl *FoldFuncDecl(struct HirFolder *F, struct HirFuncDecl *d)
     struct HirDeclList *params = fold_decls(F, d->params);
     struct HirType *result = FoldType(F, d->result);
     struct HirExpr *body = d->body != NULL ? FoldExpr(F, d->body) : NULL;
-    return pawHir_new_func_decl(F->hir, d->line, d->name, generics,
+    return pawHir_new_func_decl(F->hir, d->line, d->name, d->annos, generics,
             params, result, body, d->fn_kind, d->is_pub, d->is_assoc);
 }
 
@@ -843,7 +843,7 @@ static struct HirDecl *FoldVarDecl(struct HirFolder *F, struct HirVarDecl *d)
 {
     struct HirType *tag = d->tag != NULL ? FoldType(F, d->tag) : NULL;
     struct HirExpr *init = d->init != NULL ? FoldExpr(F, d->init) : NULL;
-    return pawHir_new_var_decl(F->hir, d->line, d->name, tag, init);
+    return pawHir_new_var_decl(F->hir, d->line, d->name, d->annos, tag, init, d->is_pub);
 }
 
 static struct HirStmt *FoldExprStmt(struct HirFolder *F, struct HirExprStmt *s)
@@ -1076,7 +1076,6 @@ paw_Bool pawHir_is_pub_decl(struct HirDecl *decl)
             return HirGetTypeDecl(decl)->is_pub;
         case kHirVarDecl:
             return HirGetVarDecl(decl)->is_pub;
-            break;
         case kHirFieldDecl:
         case kHirGenericDecl:
         case kHirVariantDecl:

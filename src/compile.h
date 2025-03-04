@@ -105,7 +105,9 @@ struct Builtin {
 
 struct GlobalInfo {
     enum BuiltinKind b_kind : 8;
+    String *name;
     Value value;
+    int modno;
     int index;
 };
 
@@ -313,9 +315,31 @@ struct ItemSlot {
     struct Type *rtti;
     struct Mir *mir;
     String *name;
+    DeclId did;
 };
 
 DEFINE_LIST(struct Compiler, pawP_item_list_, ItemList, struct ItemSlot)
+
+struct Annotation {
+    enum BuiltinKind kind : 7;
+    paw_Bool has_value : 1;
+    String *name;
+    Value value;
+};
+
+DEFINE_LIST(struct Compiler, Annotations_, Annotations, struct Annotation)
+
+paw_Bool pawP_check_extern(struct Compiler *C, struct Annotations *annos, struct Annotation *panno);
+Value pawP_get_extern_value(struct Compiler *C, String *name, struct Annotation anno);
+void pawP_mangle_start(paw_Env *P, Buffer *buf, struct Compiler *G);
+String *pawP_mangle_finish(paw_Env *P, Buffer *buf, struct Compiler *G);
+String *pawP_mangle_name(struct Compiler *G, String const *modname, String const *name, struct IrTypeList *types);
+String *pawP_mangle_attr(struct Compiler *C, String const *modname, String const *base, struct IrTypeList const *base_types, String const *attr, struct IrTypeList const *attr_types);
+
+struct ExternInfo {
+    String *name;
+    Value value;
+};
 
 struct TraitOwnerList *pawP_get_trait_owners(struct Compiler *C, struct IrType *adt);
 

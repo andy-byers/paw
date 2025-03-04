@@ -96,11 +96,11 @@ void l_import_io(paw_Env *P)
         "pub struct File {\n"
         "    inner: (),\n"
 
-        "    pub fn open(pathname: str, mode: str) -> Self;\n"
-        "    pub fn seek(self, offset: int, whence: Seek);\n"
-        "    pub fn tell(self) -> int;\n"
-        "    pub fn read(self, size: int) -> str;\n"
-        "    pub fn write(self, data: str) -> int;\n"
+        "    #[extern] pub fn open(pathname: str, mode: str) -> Self;\n"
+        "    #[extern] pub fn seek(self, offset: int, whence: Seek);\n"
+        "    #[extern] pub fn tell(self) -> int;\n"
+        "    #[extern] pub fn read(self, size: int) -> str;\n"
+        "    #[extern] pub fn write(self, data: str) -> int;\n"
         "}\n"
 
         "pub enum Seek {\n"
@@ -109,7 +109,7 @@ void l_import_io(paw_Env *P)
         "    End,\n"
         "}\n";
 
-    pawE_push_cstr(P, CSTR_KBUILTIN);
+    pawE_push_cstr(P, CSTR_KSYMBOLS);
     paw_map_get(P, PAW_REGISTRY_INDEX);
 
     pawL_add_extern_method(P, "io", "File", "open", io_open);

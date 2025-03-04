@@ -1027,10 +1027,11 @@ static void resolve_const_item(struct Resolver *R, struct HirVarDecl *d)
 {
     struct HirDecl *decl = HIR_CAST_DECL(d);
     struct IrType *tag = GET_NODE_TYPE(R->C, d->tag);
-    struct IrType *init = resolve_operand(R, d->init);
-    unify(R, init, tag);
-
-    check_const(R, d->init, tag);
+    if (d->init != NULL) {
+        struct IrType *init = resolve_operand(R, d->init);
+        unify(R, init, tag);
+        check_const(R, d->init, tag);
+    }
     pawIr_set_type(R->C, d->hid, tag);
 }
 
@@ -1698,7 +1699,8 @@ static struct IrType *ResolveBindingPat(struct Resolver *R, struct HirBindingPat
     struct BindingInfo *bi = new_binding_info(R->C, type);
     account_for_binding(R, p->name, bi);
 
-    struct HirDecl *r = pawHir_new_var_decl(R->m->hir, p->line, p->name, NULL, NULL);
+    struct HirDecl *r = pawHir_new_var_decl(R->m->hir, p->line, p->name,
+            NULL, NULL, NULL, PAW_FALSE);
     SET_NODE_TYPE(R->C, r, type);
     new_local(R, p->name, r);
     return type;

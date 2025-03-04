@@ -9,24 +9,6 @@
 #include "compile.h"
 #include "rt.h"
 
-static void constant_mul(Value *pr, Value x, Value y, enum BuiltinKind kind)
-{
-    if (kind == BUILTIN_FLOAT) {
-        // need to use float comparison to handle -0.0
-        if (V_FLOAT(x) == 0.0 || V_FLOAT(y) == 0.0) {
-            V_SET_0(pr);
-        } else {
-            FLOAT_BINARY_OP(pr, x, y, *);
-        }
-    } else {
-        if (V_INT(x) == 0 || V_INT(y) == 0) {
-            V_SET_0(pr);
-        } else {
-            INT_BINARY_OP(pr, x, y, *);
-        }
-    }
-}
-
 #define DIVIDE_BY_0(C) pawE_error(ENV(C), PAW_EVALUE, -1, "divide by 0");
 
 static void constant_div(struct Compiler *C, Value *pr, Value x, Value y, enum BuiltinKind kind)
@@ -55,6 +37,20 @@ static void constant_mod(struct Compiler *C, Value *pr, Value x, Value y, enum B
             DIVIDE_BY_0(C);
         INT_BINARY_OP(pr, x, y, %);
     }
+}
+
+static void str_concat(struct Compiler *C, String const *x, String const *y, Value *pr)
+{
+    paw_Env *P = ENV(C);
+
+    Buffer b;
+    pawL_init_buffer(P, &b);
+    pawL_add_nstring(P, &b, x->text, x->length);
+    pawL_add_nstring(P, &b, y->text, y->length);
+    String *r = pawP_scan_nstring(C, C->strings, b.data, b.size);
+    pawL_discard_result(P, &b);
+
+    V_SET_OBJECT(pr, r);
 }
 
 paw_Bool pawP_fold_unary_op(struct Compiler *C, enum UnaryOp op, Value v, Value *pr, enum BuiltinKind kind)
@@ -157,7 +153,7 @@ paw_Bool pawP_fold_binary_op(struct Compiler *C, enum BinaryOp op, Value x, Valu
             if (kind == BUILTIN_FLOAT) {
                 FLOAT_BINARY_OP(pr, x, y, +);
             } else if (kind == BUILTIN_STR) {
-                return PAW_FALSE;
+                str_concat(C, V_STRING(x), V_STRING(y), pr);
             } else if (kind == BUILTIN_LIST) {
                 return PAW_FALSE;
             } else {
@@ -172,7 +168,11 @@ paw_Bool pawP_fold_binary_op(struct Compiler *C, enum BinaryOp op, Value x, Valu
             }
             break;
         case BINARY_MUL:
-            constant_mul(pr, x, y, kind);
+            if (kind == BUILTIN_FLOAT) {
+                FLOAT_BINARY_OP(pr, x, y, *);
+            } else {
+                INT_BINARY_OP(pr, x, y, *);
+            }
             break;
         case BINARY_DIV:
             constant_div(C, pr, x, y, kind);

@@ -32,7 +32,7 @@
 static int base_assert(paw_Env *P)
 {
     if (!paw_bool(P, 1)) {
-        // TODO: pass source text of falsy expression as second argument, display here
+        // TODO: pass source text of false expression as second argument, display here
         pawR_error(P, PAW_ERUNTIME, "assertion failed");
     }
     return 0;
@@ -505,9 +505,9 @@ static void add_prelude_method(paw_Env *P, char const *self, char const *name, p
     paw_map_set(P, -3);
 }
 
-void pawL_push_builtin_map(paw_Env *P)
+void pawL_push_symbols_map(paw_Env *P)
 {
-    pawE_push_cstr(P, CSTR_KBUILTIN);
+    pawE_push_cstr(P, CSTR_KSYMBOLS);
     paw_map_get(P, PAW_REGISTRY_INDEX);
 }
 
@@ -643,7 +643,7 @@ static int searcher_cwd(paw_Env *P)
 
 static void push_prelude_method(paw_Env *P, char const *self, char const *name)
 {
-    pawE_push_cstr(P, CSTR_KBUILTIN);
+    pawE_push_cstr(P, CSTR_KSYMBOLS);
     paw_map_get(P, PAW_REGISTRY_INDEX);
 
     paw_mangle_start(P);
@@ -719,7 +719,7 @@ void pawL_init(paw_Env *P)
     paw_new_list(P, init_searchers(P));
     pawE_push_cstr(P, CSTR_KMODULES);
     paw_new_map(P, 0, PAW_TSTR);
-    pawE_push_cstr(P, CSTR_KBUILTIN);
+    pawE_push_cstr(P, CSTR_KSYMBOLS);
     paw_new_map(P, 0, PAW_TSTR);
     load_builtins(P);
 
@@ -773,10 +773,26 @@ int pawL_load_chunk(paw_Env *P, char const *name, char const *source)
     return pawL_load_nchunk(P, name, source, strlen(source));
 }
 
+void pawL_load_symbols(paw_Env *P)
+{
+    pawE_push_cstr(P, CSTR_KSYMBOLS);
+    paw_map_get(P, PAW_REGISTRY_INDEX);
+
+    paw_push_int(P, PAW_ITER_INIT);
+    // at the top of the loop body the stack looks like:
+    //     .. symbols paw.symbols i key value
+    while (paw_map_next(P, -3)) {
+        // paw.symbols[key] = value
+        paw_map_set(P, -4);
+        paw_pop(P, 2);
+    }
+    paw_pop(P, 3);
+}
+
 int pawL_register_func(paw_Env *P, char const *name, paw_Function func, int nup)
 {
-    // map[mangle(name)] = func
-    pawL_push_builtin_map(P);
+    // paw.symbols[mangle(name)] = func
+    pawL_push_symbols_map(P);
     paw_mangle_start(P);
     paw_push_string(P, name);
     paw_mangle_add_name(P);
@@ -794,6 +810,17 @@ void *pawL_chunk_reader(paw_Env *P, char const *text, size_t length)
         .data = text,
     };
     return r;
+}
+
+void pawL_add_extern_value(paw_Env *P, char const *modname, char const *name)
+{
+    paw_mangle_start(P);
+    paw_push_string(P, modname);
+    paw_mangle_add_module(P);
+    paw_push_string(P, name);
+    paw_mangle_add_name(P);
+    paw_rotate(P, -2, 1);
+    paw_map_set(P, -3);
 }
 
 void pawL_add_extern_func(paw_Env *P, char const *modname, char const *name, paw_Function func)

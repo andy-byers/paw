@@ -76,13 +76,22 @@ pub fn test_conditional() {
    assert(BLOCK_COND == 6);
 }
 
-// TODO: for some reason I can't remember right now, logicals seem to inhibit constant propagation
-//const LOGICAL: int = if true && false {
-//    -1
-//} else {
-//    42
-//};
-//
-//pub fn test_logical() {
-//    assert(LOGICAL == 42);
-//}
+const LOGICAL: int = if CONDITION && !CONDITION {
+    -1
+} else if !CONDITION || true {
+    INT
+} else {
+    -2
+};
+
+pub fn test_logical() {
+    assert(LOGICAL == 42);
+}
+
+const STR_CONCAT: str = "abc" + "def";
+
+pub fn test_str_concat() {
+    assert(STR_CONCAT == "abcdef");
+}
+
+

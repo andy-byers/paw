@@ -72,10 +72,14 @@ struct KProp {
     ExecMap *exec;
     int nk;
 
+    paw_Bool altered;
+
     struct Mir *mir;
     struct Compiler *C;
     paw_Env *P;
 };
+
+#if defined(PAW_DEBUG_EXTRA)
 
 #include <stdio.h>
 static void dump_lattice(struct KProp *K)
@@ -118,6 +122,8 @@ static void dump_lattice(struct KProp *K)
     }
     printf("}\n");
 }
+
+#endif  // PAW_DEBUG_EXTRA
 
 static struct MirAccessList *get_uses(struct KProp *K, MirRegister r)
 {
@@ -618,6 +624,7 @@ static void prune_dead_successors(struct KProp *K, MirBlock from, MirBlock targe
     }
     K_LIST_SET(bfrom->successors, 0, target);
     bfrom->successors->count = 1;
+    K->altered = PAW_TRUE;
 }
 
 static void transform_instr(struct KProp *K, struct MirInstruction *instr)
@@ -627,6 +634,7 @@ static void transform_instr(struct KProp *K, struct MirInstruction *instr)
         return;
     struct Cell *cell = get_cell(K, *pstore);
     if (cell->info.kind == CELL_CONSTANT) {
+        K->altered = !MirIsConstant(instr);
         // all operands to this instruction are constant
         into_constant(K, instr, *cell);
     }
@@ -704,6 +712,7 @@ static paw_Bool remove_dead_code(struct KProp *K, UseCountMap *counts)
 static void clean_up_code(struct KProp *K)
 {
     pawMir_remove_unreachable_blocks(K->mir);
+    pawMir_merge_redundant_blocks(K->mir);
 
     UseCountMap *counts = UseCountMap_new(K->C);
     count_uses(K->mir, counts);
@@ -711,6 +720,7 @@ static void clean_up_code(struct KProp *K)
     paw_Bool removed_code;
     do {
         removed_code = remove_dead_code(K, counts);
+        K->altered |= removed_code;
     } while (removed_code);
 }
 
@@ -725,6 +735,7 @@ static void propagate_copy(struct KProp *K, struct MirMove *move)
         K_LIST_FOREACH(loads, ppr)
         {
             if (MIR_REG_EQUALS(**ppr, move->output)) {
+                K->altered = PAW_TRUE;
                 // replace output with operand
                 **ppr = move->target;
                 break;
@@ -759,7 +770,7 @@ static void propagate_copies(struct KProp *K)
     }
 }
 
-void pawMir_propagate_constants(struct Mir *mir)
+paw_Bool pawMir_propagate_constants(struct Mir *mir)
 {
     // TODO: "force" flag to force propagation for global constants
 #ifdef PAW_KPROP_OFF
@@ -791,4 +802,7 @@ void pawMir_propagate_constants(struct Mir *mir)
     propagate_constants(&K);
     transform_code(&K);
     clean_up_code(&K);
+
+    return K.altered;
+
 }

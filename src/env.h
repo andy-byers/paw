@@ -48,9 +48,10 @@ enum {
     CSTR_HASH,
     CSTR_EQUALS,
     CSTR_COMPARE,
+    CSTR_EXTERN,
     CSTR_UNDERSCORE,
     CSTR_KMODULES,
-    CSTR_KBUILTIN,
+    CSTR_KSYMBOLS,
     CSTR_KSEARCHERS,
     NCSTR,
 };
@@ -98,6 +99,9 @@ typedef struct paw_Env {
         int count;
         int alloc;
     } defs;
+
+    Value constants;
+    Value functions;
 
     size_t heap_size;
     struct Heap *H;

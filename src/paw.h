@@ -175,6 +175,8 @@ void paw_mangle_add_module(paw_Env *P);
 void paw_mangle_add_name(paw_Env *P);
 void paw_mangle_add_args(paw_Env *P, paw_Type *types);
 
+void paw_load_symbols(paw_Env *P, int index);
+
 struct paw_Item {
     int global_id;
     paw_Type type;

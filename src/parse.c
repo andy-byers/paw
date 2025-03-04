@@ -669,15 +669,14 @@ static struct AstType *type_annotation(struct Lex *lex, paw_Bool is_strict)
 {
     if (test_next(lex, ':')) {
         struct AstType *t = parse_type(lex, is_strict);
-        if (t == NULL) {
+        if (t == NULL)
             pawX_error(lex, "invalid type annotation");
-        }
         return t;
     }
     return NULL; // needs inference
 }
 
-static struct AstType *expect_annotation(struct Lex *lex, char const *what, String const *name, paw_Bool is_strict)
+static struct AstType *expect_type_annotation(struct Lex *lex, char const *what, String const *name, paw_Bool is_strict)
 {
     struct AstType *type = type_annotation(lex, is_strict);
     if (type == NULL) {
@@ -702,7 +701,7 @@ static struct AstDecl *func_param_decl(struct Lex *lex)
     struct AstType *tag;
     if (!lex->in_impl || param_index != 0) {
         // usual case: expect a type annotation on each parameter
-        tag = expect_annotation(lex, "parameter", name, PAW_TRUE);
+        tag = expect_type_annotation(lex, "parameter", name, PAW_TRUE);
     } else {
         // first parameter to method: 'self' means 'self: Self'
         tag = type_annotation(lex, PAW_TRUE);
@@ -731,7 +730,7 @@ static struct AstDecl *let_decl(struct Lex *lex, int line)
     struct AstType *tag = type_annotation(lex, PAW_FALSE);
     struct AstExpr *init = test_next(lex, '=') ? expr0(lex) : NULL;
     semicolon(lex);
-    return pawAst_new_var_decl(lex->ast, line, name, tag, init);
+    return pawAst_new_var_decl(lex->ast, line, name, NULL, tag, init, PAW_FALSE);
 }
 
 static struct AstBoundList *parse_generic_bounds(struct Lex *lex)
@@ -1380,15 +1379,15 @@ static struct AstExpr *function_body(struct Lex *lex)
     return body;
 }
 
-static struct AstDecl *function(struct Lex *lex, int line, String *name, enum FuncKind kind, paw_Bool is_pub)
+static struct AstDecl *function(struct Lex *lex, int line, String *name, struct Annotations *annos, enum FuncKind kind, paw_Bool is_pub)
 {
     struct AstDeclList *generics = type_param(lex);
     struct AstDeclList *params = func_parameters(lex);
     struct AstType *result = test_next(lex, TK_ARROW) ? parse_type(lex, PAW_TRUE) : unit_type(lex);
     struct AstExpr *body = !test_next(lex, ';') ? function_body(lex) : NULL;
 
-    return pawAst_new_func_decl(lex->ast, line, kind, name, generics,
-        params, NULL, result, body, is_pub);
+    return pawAst_new_func_decl(lex->ast, line, kind, name, annos,
+            generics, params, NULL, result, body, is_pub);
 }
 
 static struct AstDecl *use_decl(struct Lex *lex)
@@ -1424,22 +1423,60 @@ static void parse_trait_list(struct Lex *lex, struct AstTypeList *traits)
     } while (test_next(lex, '+'));
 }
 
-static struct AstDecl *func_decl(struct Lex *lex, paw_Bool is_pub)
+static struct Annotations *annotations(struct Lex *lex)
+{
+    struct Compiler *C = lex->C;
+    int const line = lex->line;
+    if (!test_next(lex, '#'))
+        return NULL;
+
+    StringMap *names = StringMap_new(C);
+    struct Annotations *annos = Annotations_new(C);
+    check_next(lex, '[');
+    do {
+        if (test(lex, ']'))
+            break;
+        struct Annotation anno = {
+            .name = parse_name(lex),
+        };
+        if (StringMap_insert(C, names, anno.name, NULL))
+            NAME_ERROR(C, "duplicate annotation '%s'", anno.name->text);
+
+        if (test_next(lex, '=')) {
+            anno.has_value = PAW_TRUE;
+            struct AstExpr *expr = expr0(lex);
+            if (!AstIsLiteralExpr(expr))
+                SYNTAX_ERROR(lex, "annotation value must be a literal");
+            struct AstLiteralExpr *e = AstGetLiteralExpr(expr);
+            if (e->lit_kind != kAstBasicLit)
+                SYNTAX_ERROR(lex, "annotation value must be primitive");
+            anno.value = e->basic.value;
+            anno.kind = e->basic.code;
+        }
+        K_LIST_PUSH(C, annos, anno);
+    } while (test_next(lex, ','));
+    delim_next(lex, ']', '[', line);
+    StringMap_delete(C, names);
+
+    return annos;
+}
+
+static struct AstDecl *func_decl(struct Lex *lex, struct Annotations *annos, paw_Bool is_pub)
 {
     int const line = lex->line;
     skip(lex); // 'fn' token
     String *name = parse_toplevel_name(lex);
-    return function(lex, line, name, FUNC_FUNCTION, is_pub);
+    return function(lex, line, name, annos, FUNC_FUNCTION, is_pub);
 }
 
-static struct AstDecl *parse_method(struct Lex *lex, paw_Bool is_pub)
+static struct AstDecl *parse_method(struct Lex *lex, struct Annotations *annos, paw_Bool is_pub)
 {
     int const line = lex->line;
     check_next(lex, TK_FN);
     // indicate that 'self' has special meaning
     lex->in_impl = PAW_TRUE;
     String *name = parse_toplevel_name(lex);
-    struct AstDecl *method = function(lex, line, name, FUNC_METHOD, is_pub);
+    struct AstDecl *method = function(lex, line, name, annos, FUNC_METHOD, is_pub);
     lex->in_impl = PAW_FALSE;
     return method;
 }
@@ -1475,8 +1512,9 @@ static void enum_body(struct Lex *lex, int line, struct AstTypeList *traits, str
         } else if (methods->count == LOCAL_MAX) {
             limit_error(lex, "methods in enum body", LOCAL_MAX);
         } else {
+            struct Annotations *annos = annotations(lex);
             paw_Bool const is_pub = test_next(lex, TK_PUB);
-            struct AstDecl *method = parse_method(lex, is_pub);
+            struct AstDecl *method = parse_method(lex, annos, is_pub);
             K_LIST_PUSH(lex->C, methods, method);
         }
     }
@@ -1505,7 +1543,7 @@ static struct AstDecl *struct_field(struct Lex *lex, paw_Bool is_pub)
 {
     int const line = lex->line;
     String *name = parse_toplevel_name(lex);
-    struct AstType *tag = expect_annotation(lex, "field", name, PAW_TRUE);
+    struct AstType *tag = expect_type_annotation(lex, "field", name, PAW_TRUE);
     return pawAst_new_field_decl(lex->ast, line, name, tag, is_pub);
 }
 
@@ -1521,8 +1559,11 @@ static void struct_body(struct Lex *lex, struct AstTypeList *traits, struct AstD
     }
 
     while (!end_of_block(lex)) {
+        struct Annotations *annos = annotations(lex);
         paw_Bool const is_pub = test_next(lex, TK_PUB);
         if (test(lex, TK_NAME)) {
+            if (annos != NULL)
+                SYNTAX_ERROR(lex, "annotation not allowed here");
             if (fields->count == LOCAL_MAX) {
                 limit_error(lex, "fields in struct body", LOCAL_MAX);
             }
@@ -1535,7 +1576,7 @@ static void struct_body(struct Lex *lex, struct AstTypeList *traits, struct AstD
         } else if (methods->count == LOCAL_MAX) {
             limit_error(lex, "methods in struct body", LOCAL_MAX);
         } else {
-            struct AstDecl *method = parse_method(lex, is_pub);
+            struct AstDecl *method = parse_method(lex, annos, is_pub);
             K_LIST_PUSH(lex->C, methods, method);
         }
     }
@@ -1571,10 +1612,9 @@ static struct AstDecl *trait_decl(struct Lex *lex, paw_Bool is_pub)
     check_next(lex, '{');
     struct AstDeclList *methods = pawAst_decl_list_new(lex->C);
     while (!end_of_block(lex)) {
-        if (methods->count == LOCAL_MAX) {
+        if (methods->count == LOCAL_MAX)
             limit_error(lex, "methods in trait body", LOCAL_MAX);
-        }
-        struct AstDecl *method = parse_method(lex, is_pub);
+        struct AstDecl *method = parse_method(lex, NULL, is_pub);
         K_LIST_PUSH(lex->C, methods, method);
     }
     delim_next(lex, '}', '{', line);
@@ -1633,15 +1673,15 @@ static struct AstStmt *statement(struct Lex *lex)
     return stmt;
 }
 
-static struct AstDecl *const_decl(struct Lex *lex, int line)
+static struct AstDecl *const_decl(struct Lex *lex, struct Annotations *annos, paw_Bool is_pub)
 {
+    const int line = lex->line;
     skip(lex); // 'const' token
     String *name = parse_toplevel_name(lex);
-    struct AstType *tag = expect_annotation(lex, "constant", name, PAW_TRUE);
-    check_next(lex, '=');
-    struct AstExpr *init = expr0(lex);
+    struct AstType *tag = expect_type_annotation(lex, "constant", name, PAW_TRUE);
+    struct AstExpr *init = test_next(lex, '=') ? expr0(lex) : NULL;
     semicolon(lex);
-    return pawAst_new_var_decl(lex->ast, line, name, tag, init);
+    return pawAst_new_var_decl(lex->ast, line, name, annos, tag, init, is_pub);
 }
 
 static void ensure_not_pub(struct Lex *lex, paw_Bool has_qualifier)
@@ -1650,25 +1690,36 @@ static void ensure_not_pub(struct Lex *lex, paw_Bool has_qualifier)
         pawX_error(lex, "visibility qualifier not allowed here");
 }
 
-static struct AstDecl *toplevel_item(struct Lex *lex, paw_Bool is_pub)
+static void ensure_not_annotated(struct Lex *lex, paw_Bool has_annotation)
+{
+    if (has_annotation)
+        pawX_error(lex, "annotation not allowed here");
+}
+
+static struct AstDecl *toplevel_item(struct Lex *lex, struct Annotations *annos, paw_Bool is_pub)
 {
     switch (lex->t.kind) {
         default:
             pawX_error(lex, "expected toplevel item");
         case TK_FN:
-            return func_decl(lex, is_pub);
+            return func_decl(lex, annos, is_pub);
+        case TK_CONST:
+            return const_decl(lex, annos, is_pub);
         case TK_ENUM:
+            ensure_not_annotated(lex, annos);
             return enum_decl(lex, is_pub);
         case TK_STRUCT:
+            ensure_not_annotated(lex, annos);
             return struct_decl(lex, is_pub);
         case TK_TRAIT:
+            ensure_not_annotated(lex, annos);
             return trait_decl(lex, is_pub);
-        case TK_CONST:
-            return const_decl(lex, is_pub);
         case TK_TYPE:
+            ensure_not_annotated(lex, annos);
             return type_decl(lex, is_pub);
         case TK_USE:
             ensure_not_pub(lex, is_pub);
+            ensure_not_annotated(lex, annos);
             return use_decl(lex);
     }
 }
@@ -1676,8 +1727,9 @@ static struct AstDecl *toplevel_item(struct Lex *lex, paw_Bool is_pub)
 static struct AstDeclList *toplevel_items(struct Lex *lex, struct AstDeclList *list)
 {
     while (!test(lex, TK_END)) {
+        struct Annotations *annos = annotations(lex);
         paw_Bool const is_pub = test_next(lex, TK_PUB);
-        struct AstDecl *item = toplevel_item(lex, is_pub);
+        struct AstDecl *item = toplevel_item(lex, annos, is_pub);
         K_LIST_PUSH(lex->C, list, item);
     }
     return list;
@@ -1706,7 +1758,7 @@ static char const kPrelude[] =
     "}\n"
 
     "pub struct bool: Hash + Equals + Compare {\n"
-    "    pub fn to_string(self) -> str;\n"
+    "    #[extern] pub fn to_string(self) -> str;\n"
     "    pub fn hash(self) -> int { self as int }\n"
     "    pub fn eq(self, rhs: Self) -> bool { self == rhs }\n"
     "    pub fn lt(self, rhs: Self) -> bool { self as int < rhs as int }\n"
@@ -1714,7 +1766,7 @@ static char const kPrelude[] =
     "}\n"
 
     "pub struct int: Hash + Equals + Compare {\n"
-    "    pub fn to_string(self) -> str;\n"
+    "    #[extern] pub fn to_string(self) -> str;\n"
     "    pub fn hash(self) -> int { self }\n"
     "    pub fn eq(self, rhs: Self) -> bool { self == rhs }\n"
     "    pub fn lt(self, rhs: Self) -> bool { self < rhs }\n"
@@ -1722,60 +1774,60 @@ static char const kPrelude[] =
     "}\n"
 
     "pub struct float: Hash + Equals + Compare {\n"
-    "    pub fn to_string(self) -> str;\n"
-    "    pub fn hash(self) -> int;\n"
+    "    #[extern] pub fn to_string(self) -> str;\n"
+    "    #[extern] pub fn hash(self) -> int;\n"
     "    pub fn eq(self, rhs: Self) -> bool { self == rhs }\n"
     "    pub fn lt(self, rhs: Self) -> bool { self < rhs }\n"
     "    pub fn le(self, rhs: Self) -> bool { self <= rhs }\n"
     "}\n"
 
     "pub struct str: Hash + Equals + Compare {\n"
-    "    pub fn parse_int(self, base: int) -> int;\n"
-    "    pub fn parse_float(self) -> float;\n"
-    "    pub fn split(self, sep: str) -> [str];\n"
-    "    pub fn join(self, seq: [str]) -> str;\n"
-    "    pub fn find(self, target: str) -> int;\n"
-    "    pub fn starts_with(self, prefix: str) -> bool;\n"
-    "    pub fn ends_with(self, suffix: str) -> bool;\n"
-    "    pub fn hash(self) -> int;\n"
+    "    #[extern] pub fn parse_int(self, base: int) -> int;\n"
+    "    #[extern] pub fn parse_float(self) -> float;\n"
+    "    #[extern] pub fn split(self, sep: str) -> [str];\n"
+    "    #[extern] pub fn join(self, seq: [str]) -> str;\n"
+    "    #[extern] pub fn find(self, target: str) -> int;\n"
+    "    #[extern] pub fn starts_with(self, prefix: str) -> bool;\n"
+    "    #[extern] pub fn ends_with(self, suffix: str) -> bool;\n"
+    "    #[extern] pub fn hash(self) -> int;\n"
     "    pub fn eq(self, rhs: Self) -> bool { self == rhs }\n"
     "    pub fn lt(self, rhs: Self) -> bool { self < rhs }\n"
     "    pub fn le(self, rhs: Self) -> bool { self <= rhs }\n"
     "}\n"
 
     "pub struct List<T> {\n"
-    "    pub fn length(self) -> int;\n"
-    "    pub fn push(self, value: T) -> Self;\n"
-    "    pub fn insert(self, index: int, value: T) -> Self;\n"
-    "    pub fn remove(self, index: int) -> T;\n"
-    "    pub fn pop(self) -> T;\n"
+    "    #[extern] pub fn length(self) -> int;\n"
+    "    #[extern] pub fn push(self, value: T) -> Self;\n"
+    "    #[extern] pub fn insert(self, index: int, value: T) -> Self;\n"
+    "    #[extern] pub fn remove(self, index: int) -> T;\n"
+    "    #[extern] pub fn pop(self) -> T;\n"
     "}\n"
 
     "pub struct Map<K: Hash + Equals, V> {\n"
-    "    pub fn length(self) -> int;\n"
-    "    pub fn get_or(self, key: K, default: V) -> V;\n"
-    "    pub fn erase(self, key: K) -> Self;\n"
+    "    #[extern] pub fn length(self) -> int;\n"
+    "    #[extern] pub fn get_or(self, key: K, default: V) -> V;\n"
+    "    #[extern] pub fn erase(self, key: K) -> Self;\n"
     "}\n"
 
     "pub enum Option<T> {\n"
     "    Some(T),\n"
     "    None,\n"
 
-    "    pub fn is_some(self) -> bool;\n"
-    "    pub fn is_none(self) -> bool;\n"
-    "    pub fn unwrap(self) -> T;\n"
-    "    pub fn unwrap_or(self, value: T) -> T;\n"
+    "    #[extern] pub fn is_some(self) -> bool;\n"
+    "    #[extern] pub fn is_none(self) -> bool;\n"
+    "    #[extern] pub fn unwrap(self) -> T;\n"
+    "    #[extern] pub fn unwrap_or(self, value: T) -> T;\n"
     "}\n"
 
     "pub enum Result<T, E> {\n"
     "    Ok(T),\n"
     "    Err(E),\n"
 
-    "    pub fn is_ok(self) -> bool;\n"
-    "    pub fn is_err(self) -> bool;\n"
-    "    pub fn unwrap(self) -> T;\n"
-    "    pub fn unwrap_err(self) -> E;\n"
-    "    pub fn unwrap_or(self, value: T) -> T;\n"
+    "    #[extern] pub fn is_ok(self) -> bool;\n"
+    "    #[extern] pub fn is_err(self) -> bool;\n"
+    "    #[extern] pub fn unwrap(self) -> T;\n"
+    "    #[extern] pub fn unwrap_err(self) -> E;\n"
+    "    #[extern] pub fn unwrap_or(self, value: T) -> T;\n"
     "}\n"
 
     "pub struct Range<T: Compare> {\n"
@@ -1789,9 +1841,9 @@ static char const kPrelude[] =
     "    }\n"
     "}\n"
 
-    "pub fn print(message: str);\n"
-    "pub fn assert(cond: bool);\n"
-    "pub fn range(begin: int, end: int, step: int) -> (fn() -> Option<int>);\n";
+    "#[extern] pub fn print(message: str);\n"
+    "#[extern] pub fn assert(cond: bool);\n"
+    "#[extern] pub fn range(begin: int, end: int, step: int) -> (fn() -> Option<int>);\n";
 
 struct PreludeReader {
     size_t size;
@@ -1817,7 +1869,12 @@ static void parse_prelude(struct Lex *lex)
 
 static void skip_hashbang(struct Lex *lex)
 {
-    if (test_next(lex, '#') && test_next(lex, '!')) {
+    // Special case: don't advance past the '#', since it might be the start of
+    // an annotation. If the first char is not '\0', then there is guaranteed to
+    // be another char, possibly '\0' itself.
+    if (lex->ptr[0] == '#' && lex->ptr[1] == '!') {
+        skip(lex); // skip '#' token
+        skip(lex); // skip '!' token
         while (!test(lex, TK_END)) {
             char const c = *lex->ptr;
             skip(lex); // skip line

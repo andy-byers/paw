@@ -115,6 +115,61 @@ static void enter_function(struct ItemCollector *X, struct HirFuncDecl *func)
     new_local(X, func->name, HIR_CAST_DECL(func));
 }
 
+//static void register_extern(struct Compiler *C, struct Annotation anno, struct HirDecl *decl)
+//{
+//    paw_Env *P = ENV(C);
+//    pawE_push_cstr(P, CSTR_KSYMBOLS);
+//    paw_map_get(P, PAW_REGISTRY_INDEX);
+//    Tuple *symbols = V_TUPLE(P->top.p[-1]);
+//
+//    String *name;
+//    if (!anno.has_value) {
+//        name = decl->hdr.name;
+//    } else if (anno.kind == BUILTIN_STR) {
+//        name = anno.name;
+//    } else {
+//        TYPE_ERROR(C, "value of 'extern' annotation must be of type 'str'");
+//    }
+//
+//    Value const *pval = pawMap_get(P, symbols, P2V(name));
+//    if (pval == NULL)
+//        NAME_ERROR(C, "missing value for symbol '%s'", name->text);
+//    paw_pop(P, 1); // pop 'symbols'
+//
+//    struct ExternInfo info = {
+//        .name = name,
+//        .value = *pval,
+//    };
+//    ExternMap_insert(C, C->externs, decl->hdr.did, info);
+//}
+//
+//static void register_annotations(struct ItemCollector *X, struct HirDecl *decl, struct Annotations *annos, paw_Bool needs_body)
+//{
+//    char const *body_or_init = HirIsFuncDecl(decl) ? "body" : "initializer";
+//    char const *func_or_const = HirIsFuncDecl(decl) ? "function" : "constant";
+//
+//    struct Compiler *C = X->C;
+//    if (annos != NULL) {
+//        AnnotationMap_insert(C, C->annos, decl->hdr.did, annos);
+//
+//        struct Annotation *panno;
+//        K_LIST_FOREACH(annos, panno) {
+//            if (pawS_eq(panno->name, CSTR(C, CSTR_EXTERN))) {
+//                if (!needs_body)
+//                    VALUE_ERROR(C, decl->hdr.line, "unexpected %s for extern %s '%s'",
+//                            body_or_init, func_or_const, decl->hdr.name->text);
+//
+//                register_extern(C, *panno, decl);
+//                return;
+//            }
+//        }
+//    }
+//
+//    if (needs_body)
+//        VALUE_ERROR(C, decl->hdr.line, "missing %s for %s '%s'",
+//                body_or_init, func_or_const, decl->hdr.name->text);
+//}
+
 static void ensure_unique(struct ItemCollector *X, StringMap *map, String *name, char const *what)
 {
     if (name == NULL)

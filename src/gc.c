@@ -197,6 +197,7 @@ static void mark_roots(paw_Env *P)
         mark_value(P, policy.hash);
     }
     mark_value(P, P->registry);
+    mark_value(P, P->functions);
 }
 
 static void traverse_objects(paw_Env *P)
@@ -285,6 +286,8 @@ void pawG_init(paw_Env *P)
 void pawG_uninit(paw_Env *P)
 {
     // clear GC roots
+    P->constants.u = 0;
+    P->functions.u = 0;
     P->registry.u = 0;
     P->up_list = NULL;
 

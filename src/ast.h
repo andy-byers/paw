@@ -94,6 +94,7 @@ struct AstDeclHeader {
 struct AstVarDecl {
     AST_DECL_HEADER;
     paw_Bool is_pub : 1;
+    struct Annotations *annos;
     struct AstType *tag;
     struct AstExpr *init;
 };
@@ -109,6 +110,7 @@ struct AstFuncDecl {
     AST_DECL_HEADER;
     paw_Bool is_pub : 1;
     enum FuncKind fn_kind : 7;
+    struct Annotations *annos;
     struct AstDecl *receiver;
     struct AstDeclList *generics;
     struct AstDeclList *params;
@@ -201,13 +203,14 @@ static struct AstDecl *pawAst_new_field_decl(struct Ast *ast, int line, String *
     return d;
 }
 
-inline static struct AstDecl *pawAst_new_func_decl(struct Ast *ast, int line, enum FuncKind fn_kind, String *name, struct AstDeclList *generics, struct AstDeclList *params, struct AstDecl *receiver, struct AstType *result, struct AstExpr *body, paw_Bool is_pub)
+inline static struct AstDecl *pawAst_new_func_decl(struct Ast *ast, int line, enum FuncKind fn_kind, String *name, struct Annotations *annos, struct AstDeclList *generics, struct AstDeclList *params, struct AstDecl *receiver, struct AstType *result, struct AstExpr *body, paw_Bool is_pub)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->FuncDecl_ = (struct AstFuncDecl){
         .line = line,
         .kind = kAstFuncDecl,
         .fn_kind = fn_kind,
+        .annos = annos,
         .name = name,
         .is_pub = is_pub,
         .generics = generics,
@@ -262,15 +265,17 @@ inline static struct AstDecl *pawAst_new_type_decl(struct Ast *ast, int line, St
     return d;
 }
 
-inline static struct AstDecl *pawAst_new_var_decl(struct Ast *ast, int line, String *name, struct AstType *tag, struct AstExpr *init)
+inline static struct AstDecl *pawAst_new_var_decl(struct Ast *ast, int line, String *name, struct Annotations *annos, struct AstType *tag, struct AstExpr *init, paw_Bool is_pub)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->VarDecl_ = (struct AstVarDecl){
         .line = line,
         .kind = kAstVarDecl,
+        .annos = annos,
         .name = name,
         .tag = tag,
         .init = init,
+        .is_pub = is_pub,
     };
     return d;
 }

@@ -426,7 +426,7 @@ static int next_conflicting_int(paw_Env *P)
 static void test_gc_conflict(void)
 {
     char const source[] =
-        "pub fn conflicting_int<T>(t: T) -> int;\n"
+        "#[extern] pub fn conflicting_int<T>(t: T) -> int;\n"
         "pub fn main() {\n"
         "    let N = 500;\n"
         // create a bunch of dynamically-allocated objects
@@ -629,7 +629,7 @@ static void test_trait_error(void)
         "let x = S{v: 123}; call_f(x);");
 }
 
-void test_underscore(void)
+static void test_underscore(void)
 {
     test_compiler_status(PAW_ESYNTAX, "underscore_as_generic", "fn f<_>() {}", "");
     test_compiler_status(PAW_ESYNTAX, "underscore_as_adt_name", "struct _;", "");
@@ -651,7 +651,7 @@ void test_underscore(void)
         "fn f(b: bool) {let v: [_]; if b {v = [1]} else {v = ['a']};}", "");
 }
 
-void test_global_const(void)
+static void test_global_const(void)
 {
     // TODO: not currently supported, but should be eventually
     // TODO: call will need to be a "const fn"
@@ -666,11 +666,32 @@ void test_global_const(void)
     test_compiler_status(PAW_ESYNTAX, "const_break", "const C: () = break;", "");
     test_compiler_status(PAW_ESYNTAX, "const_continue", "const C: () = break;", "");
     test_compiler_status(PAW_ESYNTAX, "const_chain", "const C: Option<int> = Option::Some(123)?;", "");
+
+    test_compiler_status(PAW_EVALUE, "const_cycle_1",
+            "const C: int = C;", "");
+    test_compiler_status(PAW_EVALUE, "const_cycle_2",
+            "const C1: int = C2 + 1;"
+            "const C2: int = 1 + C1;", "");
+    test_compiler_status(PAW_EVALUE, "const_cycle_3",
+            "const C1: int = C2 + 1;"
+            "const C2: int = 1 + C3;"
+            "const C3: int = C1 + 1;", "");
+}
+
+static void test_annotations(void)
+{
+    test_compiler_status(PAW_EVALUE, "const_unexpected_initializer", "#[extern] const C: int = 42;", "");
+    test_compiler_status(PAW_EVALUE, "function_unexpected_body", "#[extern] pub fn f() {}", "");
+    // NOTE: "not_extern" annotation doesn't do anything
+    test_compiler_status(PAW_EVALUE, "const_expected_initializer", "#[not_extern] const C: int;", "");
+    test_compiler_status(PAW_EVALUE, "function_expected_body", "#[not_extern] pub fn f();", "");
+
 }
 
 int main(void)
 {
     test_underscore();
+    test_annotations();
     test_gc_conflict();
     test_enum_error();
     test_name_error();

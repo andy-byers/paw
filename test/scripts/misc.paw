@@ -1,5 +1,11 @@
 // misc.paw
 
+use math::PI as M_PI;
+
+pub fn test_constants() {
+    assert(3.13 < M_PI && math::PI < 3.15);
+}
+
 use math;
 
 struct Struct<T> {pub v: T}

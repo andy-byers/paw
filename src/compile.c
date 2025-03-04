@@ -77,9 +77,10 @@ void pawP_init(paw_Env *P)
     P->string_cache[CSTR_UNDERSCORE] = pawS_new_fixed(P, "_");
     P->string_cache[CSTR_SELF] = pawS_new_fixed(P, "self");
     P->string_cache[CSTR_NEW] = pawS_new_fixed(P, "new");
+    P->string_cache[CSTR_EXTERN] = pawS_new_fixed(P, "extern");
 
-    P->string_cache[CSTR_KBUILTIN] = pawS_new_fixed(P, "paw.builtin");
     P->string_cache[CSTR_KMODULES] = pawS_new_fixed(P, "paw.modules");
+    P->string_cache[CSTR_KSYMBOLS] = pawS_new_fixed(P, "paw.symbols");
     P->string_cache[CSTR_KSEARCHERS] = pawS_new_fixed(P, "paw.searchers");
 }
 
@@ -152,6 +153,12 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, char co
 
     paw_new_map(P, 0, PAW_TSTR);
     C->strings = V_TUPLE(P->top.p[-1]);
+
+    paw_new_map(P, 0, PAW_TSTR);
+    P->constants = P->top.p[-1];
+    paw_new_map(P, 0, PAW_TSTR);
+    P->functions = P->top.p[-1];
+    paw_pop(P, 2);
 
     C->globals = GlobalList_new(C);
     C->builtin_lookup = BuiltinMap_new(C);
@@ -433,6 +440,7 @@ static struct ItemSlot allocate_item(struct DefGenerator *dg, struct Mir *body)
     return (struct ItemSlot){
         .mir = body,
         .rtti = rtti,
+        .did = d->did,
     };
 }
 
@@ -541,3 +549,105 @@ void pawP_bitset_or(struct BitSet *a, struct BitSet const *b)
         *bc = *bc | K_LIST_GET(b, i);
     }
 }
+
+paw_Bool pawP_check_extern(struct Compiler *C, struct Annotations *annos, struct Annotation *panno)
+{
+    if (annos == NULL)
+        return PAW_FALSE;
+    struct Annotation *pa;
+    K_LIST_FOREACH(annos, pa) {
+        if (pawS_eq(pa->name, CSTR(C, CSTR_EXTERN))) {
+            if (pa->has_value)
+                VALUE_ERROR(C, -1/*TODO*/, "value not supported for 'extern' annotation");
+            *panno = *pa;
+            return PAW_TRUE;
+        }
+    }
+    return PAW_FALSE;
+}
+
+Value pawP_get_extern_value(struct Compiler *C, String *name, struct Annotation anno)
+{
+    paw_Env *P = ENV(C);
+    pawE_push_cstr(P, CSTR_KSYMBOLS);
+    paw_map_get(P, PAW_REGISTRY_INDEX);
+    Tuple *symbols = V_TUPLE(P->top.p[-1]);
+
+    Value const *pval = pawMap_get(P, symbols, P2V(name));
+    if (pval == NULL)
+        NAME_ERROR(C, "missing value for symbol '%s'", name->text);
+    paw_pop(P, 1); // pop 'symbols'
+    return *pval;
+}
+
+static struct Type *lookup_rtti(struct Compiler *C, struct IrType *type)
+{
+    struct Type **prtti = RttiMap_get(C, C->rtti, type);
+    return prtti != NULL ? *prtti : NULL;
+}
+
+static void mangle_type(struct Compiler *C, Buffer *buf, struct IrType *type)
+{
+    struct Type *t = lookup_rtti(C, type);
+    paw_assert(t != NULL);
+
+    pawY_mangle_add_arg(ENV(C), buf, t->hdr.code);
+}
+
+static void mangle_types(struct Compiler *C, Buffer *buf, struct IrTypeList const *types)
+{
+    if (types == NULL)
+        return;
+    pawY_mangle_start_generic_args(ENV(C), buf);
+
+    struct IrType **pt;
+    K_LIST_FOREACH(types, pt)
+    mangle_type(C, buf, *pt);
+
+    pawY_mangle_finish_generic_args(ENV(C), buf);
+}
+
+void pawP_mangle_start(paw_Env *P, Buffer *buf, struct Compiler *C)
+{
+    ENSURE_STACK(P, 1);
+    pawL_init_buffer(P, buf);
+    pawY_mangle_start(P, buf);
+}
+
+String *pawP_mangle_finish(paw_Env *P, Buffer *buf, struct Compiler *C)
+{
+    pawL_push_result(P, buf);
+
+    // anchor in compiler string table
+    String *str = V_STRING(P->top.p[-1]);
+    pawMap_insert(P, C->strings, P2V(str), P2V(str));
+    pawC_pop(P);
+    return str;
+}
+
+String *pawP_mangle_name(struct Compiler *C, String const *modname, String const *name, struct IrTypeList *types)
+{
+    Buffer buf;
+    paw_Env *P = ENV(C);
+    pawP_mangle_start(P, &buf, C);
+    if (modname != NULL)
+        pawY_mangle_add_module(P, &buf, modname);
+    pawY_mangle_add_name(P, &buf, name);
+    mangle_types(C, &buf, types);
+    return pawP_mangle_finish(P, &buf, C);
+}
+
+String *pawP_mangle_attr(struct Compiler *C, String const *modname, String const *base, struct IrTypeList const *base_types, String const *attr, struct IrTypeList const *attr_types)
+{
+    Buffer buf;
+    paw_Env *P = ENV(C);
+    pawP_mangle_start(P, &buf, C);
+    if (modname != NULL)
+        pawY_mangle_add_module(P, &buf, modname);
+    pawY_mangle_add_name(P, &buf, base);
+    mangle_types(C, &buf, base_types);
+    pawY_mangle_add_name(P, &buf, attr);
+    mangle_types(C, &buf, attr_types);
+    return pawP_mangle_finish(P, &buf, C);
+}
+

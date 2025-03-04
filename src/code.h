@@ -216,7 +216,7 @@ enum TraitKind {
         }                                                                                            \
         Alloc_(ctx, old.data, (size_t)old.alloc * sizeof(*map->data[0]), 0);                         \
     }                                                                                                \
-    static inline void Name_##_insert(Context_ *ctx, struct Name_ *map, Key_ key, Value_ value)      \
+    static inline paw_Bool Name_##_insert(Context_ *ctx, struct Name_ *map, Key_ key, Value_ value)  \
     {                                                                                                \
         if (map->count > map->alloc / K_MAP_FILL_FACTOR) {                                           \
             Name_##_grow(ctx, map);                                                                  \
@@ -226,7 +226,7 @@ enum TraitKind {
         for (; *ptr != NULL; ptr = &(*ptr)->next) {                                                  \
             if (Equals_(ctx, key, (*ptr)->key)) {                                                    \
                 (*ptr)->value = value;                                                               \
-                return;                                                                              \
+                return PAW_TRUE;                                                                     \
             }                                                                                        \
         }                                                                                            \
         struct Name_##Node *node = Alloc_(ctx, NULL, 0, sizeof(**ptr));                              \
@@ -237,6 +237,7 @@ enum TraitKind {
         };                                                                                           \
         *bucket = node;                                                                              \
         ++map->count;                                                                                \
+        return PAW_FALSE;                                                                            \
     }                                                                                                \
     static inline struct Name_##Node **Name_##_find_node(Context_ *ctx, struct Name_ *map, Key_ key) \
     {                                                                                                \

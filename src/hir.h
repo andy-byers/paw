@@ -263,6 +263,7 @@ struct HirVarDecl {
     HIR_DECL_HEADER;
     paw_Bool is_pub : 1;
     paw_Bool is_global : 1;
+    struct Annotations *annos;
     struct HirExpr *init;
     struct HirType *tag;
 };
@@ -281,6 +282,7 @@ struct HirFuncDecl {
     paw_Bool is_pub : 1;
     paw_Bool is_assoc : 1;
     enum FuncKind fn_kind : 6;
+    struct Annotations *annos;
     struct HirDeclList *generics;
     struct HirDeclList *params;
     struct HirType *result;
@@ -356,7 +358,7 @@ HIR_DECL_LIST(DEFINE_ACCESS)
 struct HirDecl *pawHir_new_decl(struct Hir *hir);
 DeclId pawHir_register_decl(struct Hir *hir, struct HirDecl *decl);
 
-static struct HirDecl *pawHir_new_var_decl(struct Hir *hir, int line, String *name, struct HirType *tag, struct HirExpr *init)
+static struct HirDecl *pawHir_new_var_decl(struct Hir *hir, int line, String *name, struct Annotations *annos, struct HirType *tag, struct HirExpr *init, paw_Bool is_pub)
 {
     struct HirDecl *d = pawHir_new_decl(hir);
     d->VarDecl_ = (struct HirVarDecl){
@@ -364,8 +366,10 @@ static struct HirDecl *pawHir_new_var_decl(struct Hir *hir, int line, String *na
         .line = line,
         .kind = kHirVarDecl,
         .name = name,
+        .annos = annos,
         .tag = tag,
         .init = init,
+        .is_pub = is_pub,
     };
     pawHir_register_decl(hir, d);
     return d;
@@ -387,7 +391,7 @@ static struct HirDecl *pawHir_new_type_decl(struct Hir *hir, int line, String *n
     return d;
 }
 
-static struct HirDecl *pawHir_new_func_decl(struct Hir *hir, int line, String *name, struct HirDeclList *generics, struct HirDeclList *params, struct HirType *result, struct HirExpr *body, enum FuncKind fn_kind, paw_Bool is_pub, paw_Bool is_assoc)
+static struct HirDecl *pawHir_new_func_decl(struct Hir *hir, int line, String *name, struct Annotations *annos, struct HirDeclList *generics, struct HirDeclList *params, struct HirType *result, struct HirExpr *body, enum FuncKind fn_kind, paw_Bool is_pub, paw_Bool is_assoc)
 {
     struct HirDecl *d = pawHir_new_decl(hir);
     d->FuncDecl_ = (struct HirFuncDecl){
@@ -395,6 +399,7 @@ static struct HirDecl *pawHir_new_func_decl(struct Hir *hir, int line, String *n
         .line = line,
         .kind = kHirFuncDecl,
         .name = name,
+        .annos = annos,
         .generics = generics,
         .params = params,
         .result = result,

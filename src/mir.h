@@ -711,7 +711,6 @@ struct Mir {
     String *name;
     int mir_count;
     enum FuncKind fn_kind : 8;
-    paw_Bool is_native : 1;
     paw_Bool is_poly : 1;
     paw_Bool is_pub : 1;
 };
@@ -731,7 +730,7 @@ DEFINE_LIST(struct Compiler, pawMir_register_ptr_list_, MirRegisterPtrList, MirR
 DEFINE_LIST(struct Compiler, pawMir_block_data_list_, MirBlockDataList, struct MirBlockData *)
 DEFINE_LIST(struct Compiler, pawMir_body_list_, MirBodyList, struct Mir *)
 
-struct Mir *pawMir_new(struct Compiler *C, String *name, struct IrType *type, struct IrType *self, enum FuncKind fn_kind, paw_Bool is_native, paw_Bool is_pub, paw_Bool is_poly);
+struct Mir *pawMir_new(struct Compiler *C, String *name, struct IrType *type, struct IrType *self, enum FuncKind fn_kind, paw_Bool is_pub, paw_Bool is_poly);
 struct MirLiveInterval *pawMir_new_interval(struct Compiler *C, MirRegister r, int npositions);
 struct MirRegisterData *pawMir_new_register(struct Compiler *C, int value, struct IrType *type);
 struct MirBlockData *pawMir_new_block(struct Mir *mir);
@@ -858,7 +857,8 @@ void pawMir_collect_per_instr_defs(struct Mir *mir, struct AccessMap *defs);
 
 void pawMir_collect_per_block_usedefs(struct Mir *mir, struct UseDefMap *uses, struct UseDefMap *defs);
 
-void pawMir_propagate_constants(struct Mir *mir);
+paw_Bool pawMir_propagate_constants(struct Mir *mir);
+void pawMir_merge_redundant_blocks(struct Mir *mir);
 
 // Approximation of the live range of a variable
 // The variable corresponding to a given MirLiveInterval is live between instruction

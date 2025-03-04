@@ -360,6 +360,12 @@ int paw_load(paw_Env *P, paw_Reader input, char const *name, void *ud)
     return status;
 }
 
+void paw_load_symbols(paw_Env *P, int index)
+{
+    paw_push_value(P, index);
+    pawL_load_symbols(P);
+}
+
 struct CallState {
     StackPtr fn;
     int argc;

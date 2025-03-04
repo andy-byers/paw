@@ -345,7 +345,7 @@ static struct HirDecl *LowerVarDecl(struct LowerAst *L, struct AstVarDecl *d)
 {
     struct HirType *tag = d->tag != NULL ? lower_type(L, d->tag) : NULL;
     struct HirExpr *init = d->init != NULL ? lower_expr(L, d->init) : NULL;
-    return pawHir_new_var_decl(L->hir, d->line, d->name, tag, init);
+    return pawHir_new_var_decl(L->hir, d->line, d->name, d->annos, tag, init, d->is_pub);
 }
 
 static struct HirDecl *LowerTypeDecl(struct LowerAst *L, struct AstTypeDecl *d)
@@ -465,7 +465,7 @@ static struct HirDecl *LowerFuncDecl(struct LowerAst *L, struct AstFuncDecl *d)
     struct HirDeclList *params = lower_params(L, d, d->params);
     struct HirType *result = lower_type(L, d->result);
     struct HirExpr *body = d->body != NULL ? LOWER_BLOCK(L, d->body) : NULL;
-    return pawHir_new_func_decl(L->hir, d->line, d->name, generics,
+    return pawHir_new_func_decl(L->hir, d->line, d->name, d->annos, generics,
             params, result, body, d->fn_kind, d->is_pub, PAW_FALSE);
 }
 
@@ -574,7 +574,7 @@ static struct HirExpr *LowerForExpr(struct LowerAst *L, struct AstForExpr *e)
     {
         // evaluate "iter" and store in a local "_iter"
         struct HirExpr *init = lower_expr(L, e->target);
-        struct HirDecl *decl = pawHir_new_var_decl(L->hir, e->line, iter_name, NULL, init);
+        struct HirDecl *decl = pawHir_new_var_decl(L->hir, e->line, iter_name, NULL, NULL, init, PAW_FALSE);
         struct HirStmt *stmt = pawHir_new_decl_stmt(L->hir, e->line, decl);
         K_LIST_PUSH(L->C, outer_stmts, stmt);
     }
@@ -615,9 +615,9 @@ static struct HirExpr *LowerForExpr(struct LowerAst *L, struct AstForExpr *e)
         // ".never" flag must be false: "None" arm jumps but "Some" arm does not
         struct HirExpr *match = pawHir_new_match_expr(L->hir, e->line, call, arms, PAW_FALSE);
         String *temp_name = SCAN_STRING(L->C, "(temp)");
-        struct HirDecl *temp = pawHir_new_var_decl(L->hir, e->line, temp_name, NULL, match);
+        struct HirDecl *temp = pawHir_new_var_decl(L->hir, e->line, temp_name, NULL, NULL, match, PAW_FALSE);
         struct HirExpr *move = new_unary_path_expr(L, e->line, temp_name);
-        struct HirDecl *var = pawHir_new_var_decl(L->hir, e->line, e->name, NULL, move);
+        struct HirDecl *var = pawHir_new_var_decl(L->hir, e->line, e->name, NULL, NULL, move, PAW_FALSE);
         K_LIST_PUSH(L->C, inner_stmts, pawHir_new_decl_stmt(L->hir, e->line, temp));
         K_LIST_PUSH(L->C, inner_stmts, pawHir_new_decl_stmt(L->hir, e->line, var));
     }

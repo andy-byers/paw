@@ -6,7 +6,7 @@
 #include "ir_type.h"
 #include "map.h"
 
-struct Mir *pawMir_new(struct Compiler *C, String *name, struct IrType *type, struct IrType *self, enum FuncKind fn_kind, paw_Bool is_native, paw_Bool is_pub, paw_Bool is_poly)
+struct Mir *pawMir_new(struct Compiler *C, String *name, struct IrType *type, struct IrType *self, enum FuncKind fn_kind, paw_Bool is_pub, paw_Bool is_poly)
 {
     struct Mir *mir = pawP_alloc(C, NULL, 0, sizeof(*mir));
     *mir = (struct Mir){
@@ -16,7 +16,6 @@ struct Mir *pawMir_new(struct Compiler *C, String *name, struct IrType *type, st
         .blocks = pawMir_block_data_list_new(C),
         .upvalues = pawMir_upvalue_list_new(C),
         .children = pawMir_body_list_new(C),
-        .is_native = is_native,
         .is_poly = is_poly,
         .is_pub = is_pub,
         .fn_kind = fn_kind,
@@ -897,6 +896,48 @@ struct MirLocationList *pawMir_compute_locations(struct Mir *mir)
     }
     return locations;
 }
+
+void pawMir_merge_redundant_blocks(struct Mir *mir)
+{
+    struct Compiler *C = mir->C;
+
+    int index;
+    struct MirBlockData *const *pbb;
+    K_LIST_ENUMERATE(mir->blocks, index, pbb) {
+        if (index < 2) continue; // keep entry block
+        MirBlock const bto = MIR_BB(index);
+        struct MirBlockData *to = *pbb;
+        if (to->predecessors->count != 1)
+            continue;
+        MirBlock const bfrom = K_LIST_FIRST(to->predecessors);
+        struct MirBlockData *from = mir_bb_data(mir, bfrom);
+        if (from->successors->count != 1)
+            continue;
+        // remove goto and merge instruction lists
+        --from->instructions->count;
+        paw_assert(to->joins->count == 0);
+        struct MirInstruction *const *pinstr;
+        K_LIST_FOREACH(to->instructions, pinstr) {
+            K_LIST_PUSH(C, from->instructions, *pinstr);
+        }
+        // fix back references of removed block's successors
+        MirBlock *pp;
+        MirBlock const *ps;
+        K_LIST_FOREACH(to->successors, ps) {
+            struct MirBlockData *s = mir_bb_data(mir, *ps);
+            K_LIST_FOREACH(s->predecessors, pp) {
+                if (MIR_BB_EQUALS(*pp, bto))
+                    *pp = bfrom;
+            }
+        }
+        from->successors = to->successors;
+        to->successors = pawMir_block_list_new(C);
+        to->predecessors->count = 0;
+    }
+
+    pawMir_remove_unreachable_blocks(mir);
+}
+
 
 #if defined(PAW_DEBUG_EXTRA)
 

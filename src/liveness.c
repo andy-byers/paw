@@ -121,7 +121,8 @@ static void step_instruction(struct Liveness *L, struct MirRegisterList *set, st
 #undef INPUT
 #undef OUTPUT
 
-// TODO
+#if defined(PAW_DEBUG_EXTRA)
+
 #include <stdio.h>
 
 static void dump_live_intervals(struct Liveness *L, struct MirIntervalList *intervals)
@@ -201,6 +202,8 @@ char const *pawP_print_live_intervals_pretty(struct Compiler *C, struct Mir *mir
     //    free(buffer);
     //    return paw_string(P, -1);
 }
+
+#endif  // PAW_DEBUG_EXTRA
 
 // Return a list of all blocks containing back edges to a loop header
 static struct MirBlockList *determine_loop_ends(struct Liveness *L, MirBlock header)

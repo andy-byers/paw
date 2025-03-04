@@ -56,7 +56,6 @@ typedef struct Generator {
     struct PolicyList *policies;
     struct ItemList *items;
     struct Pool *pool;
-    Tuple *builtin;
     paw_Env *P;
     int ipolicy;
 } Generator;
@@ -233,87 +232,22 @@ static ValueId type2global(struct Generator *G, struct IrType *type)
     return def->func.vid;
 }
 
-static void mangle_type(struct Generator *G, Buffer *buf, struct IrType *type)
-{
-    struct Type *t = lookup_type(G, type);
-    paw_assert(t != NULL);
-
-    pawY_mangle_add_arg(ENV(G), buf, t->hdr.code);
-}
-
-static void mangle_types(struct Generator *G, Buffer *buf, struct IrTypeList const *types)
-{
-    if (types == NULL)
-        return;
-    pawY_mangle_start_generic_args(ENV(G), buf);
-
-    struct IrType **pt;
-    K_LIST_FOREACH(types, pt)
-    mangle_type(G, buf, *pt);
-
-    pawY_mangle_finish_generic_args(ENV(G), buf);
-}
-
-static void mangle_start(paw_Env *P, Buffer *buf, struct Generator *G)
-{
-    ENSURE_STACK(P, 1);
-    pawL_init_buffer(P, buf);
-    pawY_mangle_start(P, buf);
-}
-
-static String *mangle_finish(paw_Env *P, Buffer *buf, struct Generator *G)
-{
-    pawL_push_result(P, buf);
-
-    // anchor in compiler string table
-    String *str = V_STRING(P->top.p[-1]);
-    pawMap_insert(P, G->C->strings, P2V(str), P2V(str));
-    pawC_pop(P);
-    return str;
-}
-
-static String *mangle_name(struct Generator *G, String const *modname, String const *name, struct IrTypeList *types)
-{
-    Buffer buf;
-    paw_Env *P = ENV(G);
-    mangle_start(P, &buf, G);
-    if (modname != NULL)
-        pawY_mangle_add_module(P, &buf, modname);
-    pawY_mangle_add_name(P, &buf, name);
-    mangle_types(G, &buf, types);
-    return mangle_finish(P, &buf, G);
-}
-
-static String *mangle_attr(struct Generator *G, String const *modname, String const *base, struct IrTypeList const *base_types, String const *attr, struct IrTypeList const *attr_types)
-{
-    Buffer buf;
-    paw_Env *P = ENV(G);
-    mangle_start(P, &buf, G);
-    if (modname != NULL)
-        pawY_mangle_add_module(P, &buf, modname);
-    pawY_mangle_add_name(P, &buf, base);
-    mangle_types(G, &buf, base_types);
-    pawY_mangle_add_name(P, &buf, attr);
-    mangle_types(G, &buf, attr_types);
-    return mangle_finish(P, &buf, G);
-}
-
 static String *func_name(struct Generator *G, String const *modname, struct IrType *type, struct IrType *self)
 {
     struct IrSignature *fsig = IrGetSignature(type);
     struct HirFuncDecl const *fd = HirGetFuncDecl(GET_DECL(G, fsig->did));
     struct IrTypeList *fd_types = fd->body ? fsig->types : NULL;
     if (fsig->self == NULL)
-        return mangle_name(G, modname, fd->name, fd_types);
+        return pawP_mangle_name(G->C, modname, fd->name, fd_types);
     struct HirDecl const *ad = GET_DECL(G, IR_TYPE_DID(self));
     struct IrTypeList const *ad_types = fd->body ? IR_TYPE_SUBTYPES(self) : NULL;
-    return mangle_attr(G, modname, ad->hdr.name, ad_types, fd->name, fd_types);
+    return pawP_mangle_attr(G->C, modname, ad->hdr.name, ad_types, fd->name, fd_types);
 }
 
 static String *adt_name(struct Generator *G, String const *modname, struct IrType *type)
 {
     struct HirAdtDecl *d = HirGetAdtDecl(GET_DECL(G, IR_TYPE_DID(type)));
-    return mangle_name(G, modname, d->name, ir_adt_types(type));
+    return pawP_mangle_name(G->C, modname, d->name, ir_adt_types(type));
 }
 
 static ValueMap *kcache_map(struct FuncState *fs, enum BuiltinKind code)
@@ -498,18 +432,35 @@ static void set_entrypoint(struct Generator *G, Proto *proto, int g)
     closure->p = proto;
 }
 
-static void code_c_function(struct Generator *G, struct Mir *mir, int g)
+static paw_Bool check_extern_function(struct Generator *G, struct ItemSlot item, Value *pvalue)
 {
-    paw_Env *P = ENV(G);
-    Value *pval = Y_PVAL(P, g);
+    struct HirFuncDecl *d = HirGetFuncDecl(pawHir_get_decl(G->C, item.did));
+    struct Annotations *annos = d->annos;
 
-    struct IrType *type = mir->type;
-    String const *modname = prefix_for_modno(G, IR_TYPE_DID(type).modno);
-    String const *mangled = func_name(G, modname, type, mir->self);
-    Value const *pv = pawMap_get(ENV(G), G->builtin, P2V(mangled));
-    if (pv == NULL)
-        ERROR(G, PAW_ENAME, "C function '%s' not loaded", mir->name->text);
-    *pval = *pv;
+    struct Compiler *C = G->C;
+    if (annos != NULL) {
+        struct Annotation *panno;
+        K_LIST_FOREACH(annos, panno) {
+            if (pawS_eq(panno->name, CSTR(C, CSTR_EXTERN))) {
+                if (d->body != NULL)
+                    VALUE_ERROR(C, d->line, "unexpected body for extern function '%s'",
+                            d->name->text);
+
+                *pvalue = pawP_get_extern_value(G->C, item.name, *panno);
+                return PAW_TRUE;
+            }
+        }
+    }
+
+    if (d->body == NULL)
+        VALUE_ERROR(C, d->line, "missing body for function '%s'", d->name->text);
+    return PAW_FALSE;
+}
+
+static void code_extern_function(struct Generator *G, Value value, int g)
+{
+    Value *pval = Y_PVAL(ENV(G), g);
+    *pval = value;
 }
 
 static void allocate_upvalue_info(struct Generator *G, Proto *proto, struct MirUpvalueList *upvalues)
@@ -643,9 +594,10 @@ static void code_items(struct Generator *G)
     struct ItemSlot *pitem;
     K_LIST_ENUMERATE(G->items, index, pitem)
     {
+        Value value;;
         const int vid = G->C->globals->count + index;
-        if (pitem->mir->is_native) {
-            code_c_function(G, pitem->mir, vid);
+        if (check_extern_function(G, *pitem, &value)) {
+            code_extern_function(G, value, vid);
         } else {
             code_paw_function(G, pitem->mir, vid);
         }
@@ -691,10 +643,13 @@ static void register_items(struct Generator *G)
     P->vals.data = pawM_new_vec(P, nvalues, Value);
     P->vals.count = P->vals.alloc = nvalues;
 
-    struct GlobalInfo const *pinfo;
+    struct GlobalInfo *pinfo;
     K_LIST_FOREACH(globals, pinfo) {
         pawM_grow(P, vals->data, vals->count, vals->alloc);
         vals->data[pinfo->index] = pinfo->value;
+        String const *modname = prefix_for_modno(G, pinfo->modno);
+        pinfo->name = pawP_mangle_name(G->C, modname, pinfo->name, NULL);
+// TODO        pawMap_insert(P, V_TUPLE(P->constants), P2V(pinfo->name), I2V(pinfo->index));
     }
 
     int iid;
@@ -710,6 +665,7 @@ static void register_items(struct Generator *G)
         struct FuncDef *fdef = &get_def(G, ty->sig.iid)->func;
         paw_assert(fdef->kind == DEF_FUNC);
         pitem->name = fdef->mangled_name = func_name(G, modname, type, mir->self);
+        pawMap_insert(P, V_TUPLE(P->functions), P2V(pitem->name), I2V(fdef->vid));
     }
 }
 
@@ -1355,9 +1311,6 @@ void pawP_codegen(struct Compiler *C)
         .P = P,
         .C = C,
     };
-
-    pawL_push_builtin_map(P);
-    G.builtin = V_TUPLE(P->top.p[-1]);
 
     setup_codegen(&G);
     register_items(&G);

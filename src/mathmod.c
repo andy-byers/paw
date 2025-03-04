@@ -63,16 +63,20 @@ static int math_atan2(paw_Env *P)
 void l_import_math(paw_Env *P)
 {
     static char const s_math[] =
-        "pub fn sin(f: float) -> float;\n"
-        "pub fn cos(f: float) -> float;\n"
-        "pub fn tan(f: float) -> float;\n"
-        "pub fn asin(f: float) -> float;\n"
-        "pub fn acos(f: float) -> float;\n"
-        "pub fn atan(f: float) -> float;\n"
-        "pub fn atan2(a: float, b: float) -> float;\n";
+        "#[extern] pub const PI: float;"
+        "#[extern] pub fn sin(f: float) -> float;\n"
+        "#[extern] pub fn cos(f: float) -> float;\n"
+        "#[extern] pub fn tan(f: float) -> float;\n"
+        "#[extern] pub fn asin(f: float) -> float;\n"
+        "#[extern] pub fn acos(f: float) -> float;\n"
+        "#[extern] pub fn atan(f: float) -> float;\n"
+        "#[extern] pub fn atan2(a: float, b: float) -> float;\n";
 
-    pawE_push_cstr(P, CSTR_KBUILTIN);
+    pawE_push_cstr(P, CSTR_KSYMBOLS);
     paw_map_get(P, PAW_REGISTRY_INDEX);
+
+    paw_push_float(P, M_PI);
+    pawL_add_extern_value(P, "math", "PI");
 
     pawL_add_extern_func(P, "math", "sin", math_sin);
     pawL_add_extern_func(P, "math", "cos", math_cos);
