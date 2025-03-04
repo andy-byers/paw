@@ -38,6 +38,8 @@
     X(import)            \
     X(trait)             \
     X(alias)             \
+    X(constants)         \
+    X(nan_infinity)      \
     X(global_const)      \
     X(poly_function)     \
     X(poly_struct)       \

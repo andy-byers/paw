@@ -314,10 +314,15 @@ static void test_arithmetic_error(void)
     test_compiler_status(PAW_EVALUE, "constant_negative_left_shift", "", "let x = 1 << -2;");
     test_compiler_status(PAW_EVALUE, "constant_negative_right_shift", "", "let x = 1 >> -2;");
 
-    test_runtime_status(PAW_ERUNTIME, "division_by_0_int", "fn f(x: int) -> int {x / 0}", "f(1);");
-    test_runtime_status(PAW_ERUNTIME, "division_by_0_float", "fn f(x: float) -> float {x / 0.0}", "f(1.0);");
-    test_runtime_status(PAW_ERUNTIME, "negative_left_shift", "fn f(x: int) -> int {x << -2}", "f(1);");
-    test_runtime_status(PAW_ERUNTIME, "negative_right_shift", "fn f(x: int) -> int {x >> -2}", "f(1);");
+    test_compiler_status(PAW_EVALUE, "special_division_by_0_int", "fn f(x: int) -> int {x / 0}", "f(1);");
+    test_compiler_status(PAW_EVALUE, "special_division_by_0_float", "fn f(x: float) -> float {x / 0.0}", "f(1.0);");
+    test_compiler_status(PAW_EVALUE, "special_negative_left_shift", "fn f(x: int) -> int {x << -2}", "f(1);");
+    test_compiler_status(PAW_EVALUE, "special_negative_right_shift", "fn f(x: int) -> int {x >> -2}", "f(1);");
+
+    test_runtime_status(PAW_ERUNTIME, "division_by_0_int", "fn f(x: int) -> int {42 / x}", "f(0);");
+    test_runtime_status(PAW_ERUNTIME, "division_by_0_float", "fn f(x: float) -> float {4.2 / x}", "f(0.0);");
+    test_runtime_status(PAW_ERUNTIME, "negative_left_shift", "fn f(x: int) -> int {2 << x}", "f(-1);");
+    test_runtime_status(PAW_ERUNTIME, "negative_right_shift", "fn f(x: int) -> int {2 >> x}", "f(-1);");
 }
 
 static void test_tuple_error(void)
@@ -390,8 +395,8 @@ static void test_map_error(void)
     test_compiler_status(PAW_ETYPE, "map_incompatible_types_2", "", "let a = [:]; if true {a = [0: 0];} else {a = [1: true];}");
     test_compiler_status(PAW_ETYPE, "map_mixed_types", "", "let a = [1: 2, 3: 4, 5: '6'];");
     test_compiler_status(PAW_ETYPE, "map_mixed_nesting", "", "let a = [1: [1: 1], 2: [2: 2], 3: [3: [3: 3]]];");
-    // TODO    test_compiler_status(PAW_ETYPE, "map_unhashable_literal_key", "", "let map = [[1]: 1];");
-    // TODO    test_compiler_status(PAW_ETYPE, "map_unhashable_type_key", "", "let map: [[int]: int] = [:];");
+    test_compiler_status(PAW_ETYPE, "map_unhashable_literal_key", "", "let map = [[1]: 1];");
+    test_compiler_status(PAW_ETYPE, "map_unhashable_type_key", "", "let map: [[int]: int] = [:];");
     test_compiler_status(PAW_ETYPE, "map_slice", "", "let map = [:]; let val = map[0:10];");
 }
 
@@ -654,7 +659,7 @@ static void test_underscore(void)
 static void test_global_const(void)
 {
     // TODO: not currently supported, but should be eventually
-    // TODO: call will need to be a "const fn"
+    // TODO: call will need to be a "const fn" to indicate that it must be evaluated at compile time
     test_compiler_status(PAW_EVALUE, "const_list", "const C: [int] = [];", "");
     test_compiler_status(PAW_EVALUE, "const_map", "const C: [int: int] = [:];", "");
     test_compiler_status(PAW_EVALUE, "const_struct", "struct X; const C: X = X;", "");
@@ -685,7 +690,6 @@ static void test_annotations(void)
     // NOTE: "not_extern" annotation doesn't do anything
     test_compiler_status(PAW_EVALUE, "const_expected_initializer", "#[not_extern] const C: int;", "");
     test_compiler_status(PAW_EVALUE, "function_expected_body", "#[not_extern] pub fn f();", "");
-
 }
 
 int main(void)

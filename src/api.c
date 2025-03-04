@@ -200,7 +200,7 @@ void paw_push_zero(paw_Env *P, int n)
     API_INCR_TOP(P, n);
 }
 
-void paw_push_boolean(paw_Env *P, paw_Bool b)
+void paw_push_bool(paw_Env *P, paw_Bool b)
 {
     V_SET_BOOL(P->top.p, b);
     API_INCR_TOP(P, 1);

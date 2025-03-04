@@ -1,0 +1,40 @@
+// nan_infinity.paw
+
+use math::*;
+
+pub fn test_nan() {
+    assert(is_nan(NAN));
+    assert(!is_nan(1.23));
+    assert(!is_nan(INFINITY));
+}
+
+pub fn test_infinity() {
+    assert(is_negative(-INFINITY));
+    assert(!is_negative(INFINITY));
+    assert(!is_finite(INFINITY));
+    assert(!is_finite(-INFINITY));
+    assert(is_finite(1.23));
+    assert(!is_nan(INFINITY));
+    assert(!is_nan(-INFINITY));
+}
+
+pub fn nan_propagation(f: float) {
+    assert(is_nan(f + NAN));
+    assert(is_nan(NAN + f));
+    assert(is_nan(f - NAN));
+    assert(is_nan(NAN - f));
+    assert(is_nan(f * NAN));
+    assert(is_nan(NAN * f));
+    assert(is_nan(f / NAN));
+    assert(is_nan(NAN / f));
+    assert(is_nan(f % NAN));
+    assert(is_nan(NAN % f));
+}
+
+pub fn test_nan_propagation() {
+    nan_propagation(1.23);
+    nan_propagation(-4.56);
+    nan_propagation(INFINITY);
+    nan_propagation(-INFINITY);
+    nan_propagation(NAN);
+}

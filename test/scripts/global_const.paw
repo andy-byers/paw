@@ -94,4 +94,3 @@ pub fn test_str_concat() {
     assert(STR_CONCAT == "abcdef");
 }
 
-
