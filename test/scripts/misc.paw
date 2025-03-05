@@ -31,15 +31,16 @@ pub fn test_gc() {
 }
 
 use io;
+use io::File;
 
-fn file_size(f: io::File) -> int {
+fn file_size(f: File) -> int {
     f.seek(0, io::Seek::End);
     return f.tell();
 }
 
 pub fn test_io() {
     let test = 'test string';
-    let file = io::File::open('abc.txt', 'w+');
+    let file = File::open('abc.txt', 'w+');
     assert(file_size(file) == 0);
     let n = file.write(test);
     assert(n == #test);

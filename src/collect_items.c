@@ -716,16 +716,6 @@ static struct HirDecl *find_item_in(struct ItemCollector *X, int modno, String *
 
 static void collect_items(struct ItemCollector *X, struct Hir *hir)
 {
-    X->symtab = pawHir_symtab_new(X->C);
-    for (int i = 0; i < hir->items->count; ++i) {
-        struct HirDecl *item = K_LIST_GET(hir->items, i);
-        if (HirIsFuncDecl(item)) {
-            collect_func_decl(X, HirGetFuncDecl(item));
-        } else if (HirIsTypeDecl(item)) {
-            collect_type_decl(X, HirGetTypeDecl(item));
-        }
-    }
-
     int index;
     struct HirImport *im;
     K_LIST_ENUMERATE(hir->imports, index, im)
@@ -744,6 +734,16 @@ static void collect_items(struct ItemCollector *X, struct Hir *hir)
             K_LIST_SET(hir->imports, index, K_LIST_LAST(hir->imports));
             K_LIST_POP(hir->imports);
             --index;
+        }
+    }
+
+    X->symtab = pawHir_symtab_new(X->C);
+    for (int i = 0; i < hir->items->count; ++i) {
+        struct HirDecl *item = K_LIST_GET(hir->items, i);
+        if (HirIsFuncDecl(item)) {
+            collect_func_decl(X, HirGetFuncDecl(item));
+        } else if (HirIsTypeDecl(item)) {
+            collect_type_decl(X, HirGetTypeDecl(item));
         }
     }
 }
