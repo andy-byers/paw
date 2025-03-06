@@ -57,20 +57,23 @@ static struct IrType *lower_type(struct LowerType *L, struct HirType *type)
 
 struct IrType *pawP_lower_type(struct Compiler *C, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirType *type)
 {
-    return lower_type(&(struct LowerType){
-                          .symtab = symtab,
-                          .C = C,
-                          .m = m,
-                      },
-        type);
+    struct LowerType L = {
+        .symtab = symtab,
+        .C = C,
+        .m = m,
+    };
+    return lower_type(&L, type);
 }
 
 static struct IrTypeList *lower_type_list(struct LowerType *L, struct HirTypeList *types)
 {
-    struct IrTypeList *result = pawIr_type_list_new(L->C);
-    for (int i = 0; i < types->count; ++i) {
-        struct IrType *type = lower_type(L, K_LIST_GET(types, i));
-        K_LIST_PUSH(L->C, result, type);
+    struct IrTypeList *result = IrTypeList_new(L->C);
+    IrTypeList_reserve(L->C, result, types->count);
+
+    struct HirType *const *ptype;
+    K_LIST_FOREACH (types, ptype) {
+        struct IrType *type = lower_type(L, *ptype);
+        IrTypeList_push(L->C, result, type);
     }
     return result;
 }
@@ -82,5 +85,5 @@ struct IrTypeList *pawP_lower_type_list(struct Compiler *C, struct ModuleInfo *m
                                .C = C,
                                .m = m,
                            },
-        types);
+                           types);
 }

@@ -11,13 +11,13 @@ static struct IrTypeList *fold_type_list(struct IrTypeFolder *F, struct IrTypeLi
 {
     if (list == NULL)
         return NULL;
-    struct Compiler *C = F->C;
+    struct IrTypeList *result = IrTypeList_new(F->C);
+    IrTypeList_reserve(F->C, result, list->count);
+
     struct IrType *const *ptype;
-    struct IrTypeList *result = pawIr_type_list_new(C);
-    K_LIST_FOREACH(list, ptype)
-    {
+    K_LIST_FOREACH (list, ptype) {
         struct IrType *type = FoldType(F, *ptype);
-        K_LIST_PUSH(C, result, type);
+        IrTypeList_push(F->C, result, type);
     }
     return result;
 }
@@ -141,18 +141,18 @@ void pawHir_type_folder_init(struct HirTypeFolder *F, struct Compiler *C, void *
     pawIr_type_folder_init(&F->F, C, F);
 }
 
-#define DEFINE_FOLDERS(name, T)                                                        \
-    void pawHir_fold_##name##_type(struct HirTypeFolder *F, struct Hir##T *node)              \
-    {                                                                                  \
-        paw_assert(node != NULL);                                                      \
-        F->line = node->hdr.line;                                                      \
-        pawHir_visit_##name(&F->V, node);                                              \
-    }                                                                                  \
+#define DEFINE_FOLDERS(name, T)                                                         \
+    void pawHir_fold_##name##_type(struct HirTypeFolder *F, struct Hir##T *node)        \
+    {                                                                                   \
+        paw_assert(node != NULL);                                                       \
+        F->line = node->hdr.line;                                                       \
+        pawHir_visit_##name(&F->V, node);                                               \
+    }                                                                                   \
     void pawHir_fold_##name##_types(struct HirTypeFolder *F, struct Hir##T##List *list) \
-    {                                                                                  \
-        for (int i = 0; i < list->count; ++i) {                                        \
-            pawHir_visit_##name(&F->V, K_LIST_GET(list, i));                           \
-        }                                                                              \
+    {                                                                                   \
+        for (int i = 0; i < list->count; ++i) {                                         \
+            pawHir_visit_##name(&F->V, Hir##T##List_get(list, i));                      \
+        }                                                                               \
     }
 DEFINE_FOLDERS(expr, Expr)
 DEFINE_FOLDERS(decl, Decl)
@@ -193,8 +193,9 @@ void pawMir_fold(struct MirTypeFolder *F, struct Mir *mir)
         mir_fold_block(F, MIR_BB(i));
     }
     struct Mir *outer = mir;
-    for (int i = 0; i < mir->children->count; ++i) {
-        F->V.mir = K_LIST_GET(mir->children, i);
+    struct Mir *const *pchild;
+    K_LIST_FOREACH (mir->children, pchild) {
+        F->V.mir = *pchild;
         pawMir_fold(F, F->V.mir);
     }
     F->V.mir = outer;

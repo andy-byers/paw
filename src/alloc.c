@@ -404,7 +404,7 @@ int pawZ_init(paw_Env *P, void *heap, size_t heap_size, paw_Bool is_owned, paw_M
     struct Heap *H = heap;
     {
 #define SKIP_CHUNK(z) (heap = BUMP_PTR(heap, PAW_ROUND_UP(z)), \
-    heap_size -= PAW_ROUND_UP(z))
+                       heap_size -= PAW_ROUND_UP(z))
         P->H = H;
         *H = (struct Heap){
             .is_owned = is_owned,

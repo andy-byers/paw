@@ -88,9 +88,9 @@ struct Decision {
     };
 };
 
-DEFINE_LIST(struct Compiler, variable_list_, VariableList, struct MatchVar)
-DEFINE_LIST(struct Compiler, binding_list_, BindingList, struct Binding)
-DEFINE_LIST(struct Compiler, case_list_, CaseList, struct MatchCase)
+DEFINE_LIST(struct Compiler, VariableList, struct MatchVar)
+DEFINE_LIST(struct Compiler, BindingList, struct Binding)
+DEFINE_LIST(struct Compiler, CaseList, struct MatchCase)
 
 char const *pawP_print_decision(struct Compiler *C, struct Decision *dec);
 

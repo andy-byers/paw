@@ -1381,7 +1381,6 @@ void pawHir_visit_decl_list(struct HirVisitor *V, struct HirDeclList *list);
 void pawHir_visit_type_list(struct HirVisitor *V, struct HirTypeList *list);
 void pawHir_visit_pat_list(struct HirVisitor *V, struct HirPatList *list);
 
-
 struct HirFolder {
     struct Compiler *C;
     struct Hir *hir;
@@ -1391,33 +1390,33 @@ struct HirFolder {
     struct HirPath *(*FoldPath)(struct HirFolder *F, struct HirPath *path);
     struct HirSegment (*FoldSegment)(struct HirFolder *F, struct HirSegment *seg);
 
-     struct HirExpr *(*FoldExpr)(struct HirFolder *F, struct HirExpr *node);
-     struct HirStmt *(*FoldStmt)(struct HirFolder *F, struct HirStmt *node);
-     struct HirDecl *(*FoldDecl)(struct HirFolder *F, struct HirDecl *node);
-     struct HirType *(*FoldType)(struct HirFolder *F, struct HirType *node);
-     struct HirPat *(*FoldPat)(struct HirFolder *F, struct HirPat *node);
+    struct HirExpr *(*FoldExpr)(struct HirFolder *F, struct HirExpr *node);
+    struct HirStmt *(*FoldStmt)(struct HirFolder *F, struct HirStmt *node);
+    struct HirDecl *(*FoldDecl)(struct HirFolder *F, struct HirDecl *node);
+    struct HirType *(*FoldType)(struct HirFolder *F, struct HirType *node);
+    struct HirPat *(*FoldPat)(struct HirFolder *F, struct HirPat *node);
 
-#define DEFINE_CALLBACK(X)  \
+#define DEFINE_CALLBACK(X) \
     struct HirExpr *(*Fold##X)(struct HirFolder * F, struct Hir##X * node);
     HIR_EXPR_LIST(DEFINE_CALLBACK)
 #undef DEFINE_CALLBACK
 
-#define DEFINE_CALLBACK(X)  \
+#define DEFINE_CALLBACK(X) \
     struct HirDecl *(*Fold##X)(struct HirFolder * F, struct Hir##X * node);
     HIR_DECL_LIST(DEFINE_CALLBACK)
 #undef DEFINE_CALLBACK
 
-#define DEFINE_CALLBACK(X)  \
+#define DEFINE_CALLBACK(X) \
     struct HirStmt *(*Fold##X)(struct HirFolder * F, struct Hir##X * node);
     HIR_STMT_LIST(DEFINE_CALLBACK)
 #undef DEFINE_CALLBACK
 
-#define DEFINE_CALLBACK(X)  \
+#define DEFINE_CALLBACK(X) \
     struct HirType *(*Fold##X)(struct HirFolder * F, struct Hir##X * node);
     HIR_TYPE_LIST(DEFINE_CALLBACK)
 #undef DEFINE_CALLBACK
 
-#define DEFINE_CALLBACK(X)  \
+#define DEFINE_CALLBACK(X) \
     struct HirPat *(*Fold##X)(struct HirFolder * F, struct Hir##X * node);
     HIR_PAT_LIST(DEFINE_CALLBACK)
 #undef DEFINE_CALLBACK
@@ -1437,7 +1436,6 @@ struct HirDeclList *pawHir_fold_decls(struct HirFolder *F, struct HirDeclList *l
 struct HirTypeList *pawHir_fold_types(struct HirFolder *F, struct HirTypeList *list);
 struct HirPatList *pawHir_fold_pats(struct HirFolder *F, struct HirPatList *list);
 
-
 struct Hir {
     struct HirImportList *imports;
     struct HirDeclList *items;
@@ -1455,20 +1453,20 @@ inline static HirId pawHir_next_id(struct Hir *hir)
 
 struct HirPath *pawHir_new_path(struct Compiler *C);
 
-DEFINE_LIST(struct Compiler, pawHir_decl_list_, HirDeclList, struct HirDecl *)
-DEFINE_LIST(struct Compiler, pawHir_expr_list_, HirExprList, struct HirExpr *)
-DEFINE_LIST(struct Compiler, pawHir_stmt_list_, HirStmtList, struct HirStmt *)
-DEFINE_LIST(struct Compiler, pawHir_type_list_, HirTypeList, struct HirType *)
-DEFINE_LIST(struct Compiler, pawHir_pat_list_, HirPatList, struct HirPat *)
-DEFINE_LIST(struct Compiler, pawHir_generic_list_, HirGenericList, struct HirGeneric *)
-DEFINE_LIST(struct Compiler, pawHir_field_list_, HirFieldList, struct HirField *)
-DEFINE_LIST(struct Compiler, pawHir_param_list_, HirParamList, struct HirParam *)
-DEFINE_LIST(struct Compiler, pawHir_variant_list_, HirVariantList, struct HirVariant *)
-DEFINE_LIST(struct Compiler, pawHir_symtab_, HirSymtab, struct HirScope *)
-DEFINE_LIST(struct Compiler, pawHir_scope_, HirScope, struct HirSymbol)
-DEFINE_LIST(struct Compiler, pawHir_import_list_, HirImportList, struct HirImport)
-DEFINE_LIST(struct Compiler, pawHir_path_, HirPath, struct HirSegment)
-DEFINE_LIST(struct Compiler, pawHir_bound_list_, HirBoundList, struct HirGenericBound)
+DEFINE_LIST(struct Compiler, HirDeclList, struct HirDecl *)
+DEFINE_LIST(struct Compiler, HirExprList, struct HirExpr *)
+DEFINE_LIST(struct Compiler, HirStmtList, struct HirStmt *)
+DEFINE_LIST(struct Compiler, HirTypeList, struct HirType *)
+DEFINE_LIST(struct Compiler, HirPatList, struct HirPat *)
+DEFINE_LIST(struct Compiler, HirGenericList, struct HirGeneric *)
+DEFINE_LIST(struct Compiler, HirFieldList, struct HirField *)
+DEFINE_LIST(struct Compiler, HirParamList, struct HirParam *)
+DEFINE_LIST(struct Compiler, HirVariantList, struct HirVariant *)
+DEFINE_LIST(struct Compiler, HirSymtab, struct HirScope *)
+DEFINE_LIST(struct Compiler, HirScope, struct HirSymbol)
+DEFINE_LIST(struct Compiler, HirImportList, struct HirImport)
+DEFINE_LIST(struct Compiler, HirPath, struct HirSegment)
+DEFINE_LIST(struct Compiler, HirBoundList, struct HirGenericBound)
 
 #define HIR_IS_POLY_FUNC(decl) (HirIsFuncDecl(decl) && HirGetFuncDecl(decl)->generics != NULL)
 #define HIR_IS_POLY_ADT(decl) (HirIsAdtDecl(decl) && HirGetAdtDecl(decl)->generics != NULL)
@@ -1490,12 +1488,12 @@ struct HirDecl *pawHir_get_decl(struct Compiler *C, DeclId id);
 // NOTE: HirFuncPtr is a prefix of HirFuncDef
 #define HIR_FPTR(t) CHECK_EXP(HirIsFuncType(t), &(t)->fptr)
 
-inline static struct HirSegment *pawHir_path_add(struct Hir *hir, struct HirPath *path, String *name,
-    struct HirTypeList *args)
+inline static struct HirSegment *HirPath_add(struct Hir *hir, struct HirPath *path, String *name,
+                                             struct HirTypeList *args)
 {
     struct HirSegment seg;
     pawHir_init_segment(hir, &seg, name, args, NO_DECL);
-    K_LIST_PUSH(hir->C, path, seg);
+    HirPath_push(hir->C, path, seg);
     return &K_LIST_LAST(path);
 }
 

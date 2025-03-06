@@ -5,9 +5,9 @@
 // kfold.c: Perform constant folding
 //
 
-#include <math.h>
 #include "compile.h"
 #include "rt.h"
+#include <math.h>
 
 #define DIVIDE_BY_0(C) pawE_error(ENV(C), PAW_EVALUE, -1, "divide by 0");
 
@@ -224,4 +224,3 @@ paw_Bool pawP_fold_binary_op(struct Compiler *C, enum BinaryOp op, Value x, Valu
     }
     return PAW_TRUE;
 }
-

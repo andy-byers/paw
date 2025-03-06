@@ -359,13 +359,13 @@ inline static IrDef *pawIr_new_adt_def(struct Compiler *C, DeclId did, String *n
 #define IR_IS_FUNC_TYPE(p) (IrIsFuncPtr(p) || IrIsSignature(p))
 #define IR_FPTR(p) CHECK_EXP(IR_IS_FUNC_TYPE(p), &(p)->FuncPtr_)
 
-DEFINE_LIST(struct Compiler, pawIr_def_list_, IrDefList, IrDef *)
-DEFINE_LIST(struct Compiler, pawIr_type_list_, IrTypeList, IrType *)
-DEFINE_LIST(struct Compiler, pawIr_adt_list_, IrAdtList, struct IrAdtDef *)
-DEFINE_LIST(struct Compiler, pawIr_field_list_, IrFieldList, struct IrFieldDef *)
-DEFINE_LIST(struct Compiler, pawIr_variant_list_, IrVariantList, struct IrVariantDef *)
-DEFINE_LIST(struct Compiler, pawIr_generic_list_, IrGenericList, struct IrGenericDef *)
-DEFINE_LIST(struct Compiler, pawIr_param_list_, IrParamList, struct IrParamDef *)
+DEFINE_LIST(struct Compiler, IrDefList, IrDef *)
+DEFINE_LIST(struct Compiler, IrTypeList, IrType *)
+DEFINE_LIST(struct Compiler, IrAdtList, struct IrAdtDef *)
+DEFINE_LIST(struct Compiler, IrFieldList, struct IrFieldDef *)
+DEFINE_LIST(struct Compiler, IrVariantList, struct IrVariantDef *)
+DEFINE_LIST(struct Compiler, IrGenericList, struct IrGenericDef *)
+DEFINE_LIST(struct Compiler, IrParamList, struct IrParamDef *)
 
 struct IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *target, String *name);
 
@@ -385,6 +385,8 @@ struct IrFieldDef *pawIr_get_field_def(struct Compiler *C, DeclId did);
 
 paw_Uint pawIr_type_hash(struct Compiler *C, IrType *t);
 paw_Bool pawIr_type_equals(struct Compiler *C, IrType *a, IrType *b);
+#define IR_TYPE_HASH(Ctx_, Type_) pawIr_type_hash((Ctx_)->C, Type_)
+#define IR_TYPE_EQUALS(Ctx_, A_, B_) pawIr_type_equals((Ctx_)->C, A_, B_)
 
 DEFINE_MAP(struct Compiler, RttiMap, pawP_alloc, pawIr_type_hash, pawIr_type_equals, struct IrType *, struct Type *)
 
@@ -403,22 +405,22 @@ static struct IrTypeList *ir_adt_types(IrType *type)
 
 static IrType *ir_list_elem(IrType *type)
 {
-    return K_LIST_GET(IrGetAdt(type)->types, 0);
+    return IrTypeList_get(IrGetAdt(type)->types, 0);
 }
 
 static IrType *ir_map_key(IrType *type)
 {
-    return K_LIST_GET(IrGetAdt(type)->types, 0);
+    return IrTypeList_get(IrGetAdt(type)->types, 0);
 }
 
 static IrType *ir_map_value(IrType *type)
 {
-    return K_LIST_GET(IrGetAdt(type)->types, 1);
+    return IrTypeList_get(IrGetAdt(type)->types, 1);
 }
 
 char const *pawIr_print_type(struct Compiler *C, IrType *type);
 
-DEFINE_LIST(struct Compiler, TraitOwnerList_, TraitOwnerList, struct IrTypeList *)
+DEFINE_LIST(struct Compiler, TraitOwnerList, struct IrTypeList *)
 DEFINE_MAP(struct Compiler, TraitOwners, pawP_alloc, pawIr_type_hash, pawIr_type_equals, struct IrType *, struct TraitOwnerList *)
 
 #endif // PAW_IR_TYPE_H

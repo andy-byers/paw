@@ -481,7 +481,7 @@ DEFINE_MAP(struct Compiler, TestMap, pawP_alloc, int_hash, int_equals, int, int)
 
 void test_compiler_map(struct Compiler *C)
 {
-    TestMap *map = TestMap_new(C);
+    TestMap *map = TestMap_new(C, C->pool);
     int const n = 1024;
 
     for (int i = 0; i < n; ++i) {
@@ -518,7 +518,7 @@ DEFINE_MAP_ITERATOR(TestMap, int, int)
 
 void test_compiler_map_iterator(struct Compiler *C)
 {
-    TestMap *map = TestMap_new(C);
+    TestMap *map = TestMap_new(C, C->pool);
     int const n = 256;
 
     for (int i = 0; i < n; ++i) {

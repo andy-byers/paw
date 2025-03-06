@@ -41,7 +41,7 @@
 // not overflow
 #define pawM_resize_aux(P, p, n0, n)                         \
     ((n) > (n0) && pawM_check_size(P, 0, n, sizeof((p)[0])), \
-        pawM_resize_(P, p, n0, n, sizeof((p)[0])))
+     pawM_resize_(P, p, n0, n, sizeof((p)[0])))
 
 // Low-level memory allocation routine
 void *pawM_alloc(paw_Env *P, void *ptr, size_t size0, size_t size);
@@ -49,10 +49,10 @@ void *pawM_alloc(paw_Env *P, void *ptr, size_t size0, size_t size);
 void *pawM_new_vec_(paw_Env *P, size_t n, size_t elem_sz);
 void *pawM_new_flex_(paw_Env *P, size_t obj_sz, size_t n, size_t elem_sz);
 void *pawM_resize_(paw_Env *P, void *ptr, size_t alloc0, size_t alloc,
-    size_t elem_sz);
+                   size_t elem_sz);
 void *pawM_grow_(paw_Env *P, void *ptr, int size, int *p_alloc, size_t elem_sz);
 void *pawM_shrink_(paw_Env *P, void *ptr, int *p_alloc, int alloc,
-    size_t elem_sz);
+                   size_t elem_sz);
 void pawM_free_(paw_Env *P, void *ptr, size_t size);
 
 #endif // PAW_MEM_H

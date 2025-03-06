@@ -53,31 +53,32 @@ struct ExecFlag {
 #define FLOW_EDGE(from, to) ((struct FlowEdge){from, to})
 #define EXEC_FLAG(from, exec) ((struct ExecFlag){from, exec})
 
-DEFINE_LIST(struct Compiler, flow_worklist_, FlowWorklist, struct FlowEdge)
-DEFINE_LIST(struct Compiler, ssa_worklist_, SsaWorklist, struct SsaEdge)
-DEFINE_LIST(struct Compiler, exec_list_, ExecList, struct ExecFlag)
-DEFINE_LIST(struct Compiler, lattice_, Lattice, struct Cell)
-
-DEFINE_MAP(struct Compiler, UseCountMap, pawP_alloc, mir_register_hash, mir_register_equals, MirRegister, int)
-DEFINE_MAP(struct Compiler, GotoMap, pawP_alloc, p_hash_ptr, p_equals_ptr, struct MirInstruction *, MirBlock)
-DEFINE_MAP(struct Compiler, ExecMap, pawP_alloc, mir_bb_hash, mir_bb_equals, MirBlock, struct ExecList *)
-
 struct KProp {
     struct FlowWorklist *flow;
     struct SsaWorklist *ssa;
     struct Lattice *lattice;
     struct KCache kcache;
+    struct GotoMap *gotos;
+    struct ExecMap *exec;
     AccessMap *uses;
-    GotoMap *gotos;
-    ExecMap *exec;
     int nk;
 
     paw_Bool altered;
 
+    struct Pool *pool;
     struct Mir *mir;
     struct Compiler *C;
     paw_Env *P;
 };
+
+DEFINE_LIST(struct KProp, FlowWorklist, struct FlowEdge)
+DEFINE_LIST(struct KProp, SsaWorklist, struct SsaEdge)
+DEFINE_LIST(struct KProp, ExecList, struct ExecFlag)
+DEFINE_LIST(struct KProp, Lattice, struct Cell)
+
+DEFINE_MAP(struct KProp, UseCountMap, pawP_alloc, MIR_ID_HASH, MIR_ID_EQUALS, MirRegister, int)
+DEFINE_MAP(struct KProp, GotoMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, struct MirInstruction *, MirBlock)
+DEFINE_MAP(struct KProp, ExecMap, pawP_alloc, MIR_ID_HASH, MIR_ID_EQUALS, MirBlock, struct ExecList *)
 
 #if defined(PAW_DEBUG_EXTRA)
 
@@ -87,8 +88,7 @@ static void dump_lattice(struct KProp *K)
     int index;
     struct Cell *pcell;
     printf("lattice = {\n");
-    K_LIST_ENUMERATE(K->lattice, index, pcell)
-    {
+    K_LIST_ENUMERATE (K->lattice, index, pcell) {
         printf("_%d: ", index);
         if (pcell->info.kind == CELL_TOP) {
             printf("⊤");
@@ -123,7 +123,7 @@ static void dump_lattice(struct KProp *K)
     printf("}\n");
 }
 
-#endif  // PAW_DEBUG_EXTRA
+#endif // PAW_DEBUG_EXTRA
 
 static struct MirAccessList *get_uses(struct KProp *K, MirRegister r)
 {
@@ -134,22 +134,22 @@ static struct MirAccessList *get_uses(struct KProp *K, MirRegister r)
 static struct Cell *get_cell(struct KProp *K, MirRegister r)
 {
     paw_assert(MIR_REG_EXISTS(r));
-    return &K_LIST_GET(K->lattice, r.value);
+    return &K_LIST_AT(K->lattice, r.value);
 }
 
 static void save_goto(struct KProp *K, struct MirInstruction *instr, MirBlock to)
 {
-    GotoMap_insert(K->C, K->gotos, instr, to);
+    GotoMap_insert(K, K->gotos, instr, to);
 }
 
 static struct ExecList *get_exec_list(struct KProp *K, MirBlock to)
 {
     paw_assert(MIR_BB_EXISTS(to));
-    struct ExecList *const *plist = ExecMap_get(K->C, K->exec, to);
+    struct ExecList *const *plist = ExecMap_get(K, K->exec, to);
     if (plist != NULL)
         return *plist;
-    struct ExecList *list = exec_list_new(K->C);
-    ExecMap_insert(K->C, K->exec, to, list);
+    struct ExecList *list = ExecList_new(K);
+    ExecMap_insert(K, K->exec, to, list);
     return list;
 }
 
@@ -158,27 +158,25 @@ static struct ExecFlag *check_exec(struct KProp *K, MirBlock from, MirBlock to)
 {
     struct ExecFlag *pflag;
     struct ExecList *list = get_exec_list(K, to);
-    K_LIST_FOREACH(list, pflag)
-    {
+    K_LIST_FOREACH (list, pflag) {
         if (MIR_BB_EQUALS(pflag->from, from))
             return pflag;
     }
 
-    K_LIST_PUSH(K->C, list, EXEC_FLAG(from, PAW_FALSE));
+    ExecList_push(K, list, EXEC_FLAG(from, PAW_FALSE));
     return &K_LIST_LAST(list);
 }
 
 static void visit_phi(struct KProp *K, struct MirPhi *phi, MirBlock to)
 {
     struct MirBlockData *data = mir_bb_data(K->mir, to);
-    struct Cell def = K_LIST_GET(K->lattice, phi->output.value);
+    struct Cell def = Lattice_get(K->lattice, phi->output.value);
 
     MirBlock const *pfrom;
     MirRegister const *pinput;
-    K_LIST_ZIP(phi->inputs, pinput, data->predecessors, pfrom)
-    {
+    K_LIST_ZIP (phi->inputs, pinput, data->predecessors, pfrom) {
         struct ExecFlag *pflag = check_exec(K, *pfrom, to);
-        struct Cell *pcell = &K_LIST_GET(K->lattice, phi->output.value);
+        struct Cell *pcell = &K_LIST_AT(K->lattice, phi->output.value);
         pcell->info.kind = pflag->exec ? def.info.kind : CELL_TOP;
     }
 }
@@ -200,8 +198,7 @@ static struct CellInfo meet(struct Cell *a, struct Cell *b)
 static void apply_meet_rules(struct KProp *K, struct Cell *output, struct MirRegisterPtrList *inputs)
 {
     MirRegister *const *ppr;
-    K_LIST_FOREACH(inputs, ppr)
-    {
+    K_LIST_FOREACH (inputs, ppr) {
         struct Cell *input = get_cell(K, **ppr);
         output->info = meet(input, output);
     }
@@ -485,9 +482,6 @@ static struct CellInfo self_binary_op(struct KProp *K, struct Cell *lhs, struct 
     }
 }
 
-#define LIST_SWAP_REMOVE(list, i) (K_LIST_SET(list, i, K_LIST_LAST(list)), \
-    K_LIST_POP(list))
-
 // Remove the control flow edge between "from" and "to"
 static void remove_edge(struct KProp *K, MirBlock from, MirBlock to)
 {
@@ -495,8 +489,8 @@ static void remove_edge(struct KProp *K, MirBlock from, MirBlock to)
     struct MirBlockData *bto = mir_bb_data(K->mir, to);
     int const ipred = mir_which_pred(K->mir, to, from);
     int const isucc = mir_which_succ(K->mir, from, to);
-    LIST_SWAP_REMOVE(bfrom->successors, isucc);
-    LIST_SWAP_REMOVE(bto->predecessors, ipred);
+    MirBlockList_swap_remove(bfrom->successors, isucc);
+    MirBlockList_swap_remove(bto->predecessors, ipred);
 }
 
 static MirBlock single_branch_target(struct KProp *K, struct MirBranch *b, struct Cell *pcell, MirBlock from)
@@ -513,10 +507,9 @@ static MirBlock single_switch_target(struct KProp *K, struct MirSwitch *s, struc
     MirBlock result;
 
     struct MirSwitchArm *parm;
-    K_LIST_FOREACH(s->arms, parm)
-    {
+    K_LIST_FOREACH (s->arms, parm) {
         if ((kind != BUILTIN_FLOAT && V_UINT(parm->value) == V_UINT(target)) //
-                || (kind == BUILTIN_FLOAT && V_FLOAT(parm->value) == V_FLOAT(target)))
+            || (kind == BUILTIN_FLOAT && V_FLOAT(parm->value) == V_FLOAT(target)))
             return parm->bid;
     }
     if (MIR_BB_EXISTS(s->otherwise))
@@ -530,10 +523,9 @@ static void add_use_edges(struct KProp *K, MirRegister def)
 {
     struct MirAccess *puse;
     struct MirAccessList *uses = get_uses(K, def);
-    K_LIST_FOREACH(uses, puse)
-    {
+    K_LIST_FOREACH (uses, puse) {
         struct SsaEdge edge = SSA_EDGE(def, puse->instr, puse->b);
-        K_LIST_PUSH(K->C, K->ssa, edge);
+        SsaWorklist_push(K, K->ssa, edge);
     }
 }
 
@@ -627,7 +619,7 @@ static void visit_expr(struct KProp *K, struct MirInstruction *instr, MirBlock b
             struct Cell *cond = get_cell(K, x->cond);
             if (cond->info.kind == CELL_CONSTANT) {
                 MirBlock const s = single_branch_target(K, x, cond, b);
-                K_LIST_PUSH(K->C, K->flow, FLOW_EDGE(b, s));
+                FlowWorklist_push(K, K->flow, FLOW_EDGE(b, s));
                 save_goto(K, instr, s);
             }
             break;
@@ -637,7 +629,7 @@ static void visit_expr(struct KProp *K, struct MirInstruction *instr, MirBlock b
             struct Cell *discr = get_cell(K, x->discr);
             if (discr->info.kind == CELL_CONSTANT) {
                 MirBlock const s = single_switch_target(K, x, discr, b);
-                K_LIST_PUSH(K->C, K->flow, FLOW_EDGE(b, s));
+                FlowWorklist_push(K, K->flow, FLOW_EDGE(b, s));
                 save_goto(K, instr, s);
             }
             break;
@@ -663,8 +655,8 @@ static void visit_expr(struct KProp *K, struct MirInstruction *instr, MirBlock b
 
 static void process_ssa_edge(struct KProp *K)
 {
-    struct SsaEdge edge = K_LIST_LAST(K->ssa);
-    K_LIST_POP(K->ssa);
+    struct SsaEdge edge = SsaWorklist_last(K->ssa);
+    SsaWorklist_pop(K->ssa);
     if (MirIsPhi(edge.use)) {
         visit_phi(K, MirGetPhi(edge.use), edge.b);
         return;
@@ -672,8 +664,7 @@ static void process_ssa_edge(struct KProp *K)
 
     struct ExecFlag const *pflag;
     struct ExecList *exec = get_exec_list(K, edge.b);
-    K_LIST_FOREACH(exec, pflag)
-    {
+    K_LIST_FOREACH (exec, pflag) {
         if (pflag->exec) {
             visit_expr(K, edge.use, edge.b);
             break;
@@ -686,8 +677,7 @@ static paw_Bool has_single_incoming_edge(struct KProp *K, MirBlock b)
     int found = 0;
     MirBlock const *pb;
     struct MirBlockData *block = mir_bb_data(K->mir, b);
-    K_LIST_FOREACH(block->predecessors, pb)
-    {
+    K_LIST_FOREACH (block->predecessors, pb) {
         struct ExecFlag *flag = check_exec(K, *pb, b);
         if (flag->exec && ++found > 1)
             return PAW_FALSE;
@@ -697,9 +687,9 @@ static paw_Bool has_single_incoming_edge(struct KProp *K, MirBlock b)
 
 static void process_flow_edge(struct KProp *K)
 {
-    struct FlowEdge edge = K_LIST_LAST(K->flow);
+    struct FlowEdge edge = FlowWorklist_last(K->flow);
     struct MirBlockData *target = mir_bb_data(K->mir, edge.to);
-    K_LIST_POP(K->flow);
+    FlowWorklist_pop(K->flow);
 
     struct ExecFlag *flag = check_exec(K, edge.from, edge.to);
     if (flag->exec)
@@ -707,23 +697,21 @@ static void process_flow_edge(struct KProp *K)
     flag->exec = PAW_TRUE;
 
     struct MirInstruction *const *pjoin;
-    K_LIST_FOREACH(target->joins, pjoin)
-    {
+    K_LIST_FOREACH (target->joins, pjoin) {
         visit_phi(K, MirGetPhi(*pjoin), edge.to);
     }
 
     if (has_single_incoming_edge(K, edge.to)) {
         struct MirInstruction *const *pinstr;
         struct MirBlockData *block = mir_bb_data(K->mir, edge.to);
-        K_LIST_FOREACH(block->instructions, pinstr)
-        {
+        K_LIST_FOREACH (block->instructions, pinstr) {
             visit_expr(K, *pinstr, edge.to);
         }
     }
 
     if (target->successors->count == 1) {
         MirBlock const s = K_LIST_FIRST(target->successors);
-        K_LIST_PUSH(K->C, K->flow, FLOW_EDGE(edge.to, s));
+        FlowWorklist_push(K, K->flow, FLOW_EDGE(edge.to, s));
     }
 }
 
@@ -733,9 +721,8 @@ static void propagate_constants(struct KProp *K)
         // initialize the flow worklist with edges leading out of the start node
         MirBlock const *pb;
         struct MirBlockData *start = K_LIST_FIRST(K->mir->blocks);
-        K_LIST_FOREACH(start->successors, pb)
-        {
-            K_LIST_PUSH(K->C, K->flow, FLOW_EDGE(MIR_ROOT_BB, *pb));
+        K_LIST_FOREACH (start->successors, pb) {
+            FlowWorklist_push(K, K->flow, FLOW_EDGE(MIR_ROOT_BB, *pb));
         }
     }
 
@@ -751,49 +738,45 @@ static void init_lattice(struct KProp *K)
 {
     int rid;
     struct MirRegisterData *pdata;
-    K_LIST_ENUMERATE(K->mir->registers, rid, pdata)
-    {
+    K_LIST_ENUMERATE (K->mir->registers, rid, pdata) {
         MirRegister const r = MIR_REG(rid);
-        K_LIST_SET(K->lattice, r.value, ((struct Cell){
-                                            .info.kind = CELL_TOP,
-                                            .type = pdata->type,
-                                            .r = r,
-                                        }));
+        Lattice_set(K->lattice, r.value, ((struct Cell){
+                                             .info.kind = CELL_TOP,
+                                             .type = pdata->type,
+                                             .r = r,
+                                         }));
     }
 }
 
-static void account_for_uses(struct Compiler *C, struct MirInstruction *instr, UseCountMap *uses)
+static void account_for_uses(struct KProp *K, struct MirInstruction *instr, UseCountMap *uses)
 {
     MirRegister *const *ppr;
-    struct MirRegisterPtrList *loads = pawMir_get_loads(C, instr);
-    K_LIST_FOREACH(loads, ppr)
-    {
-        int *pcount = UseCountMap_get(C, uses, **ppr);
+    struct MirRegisterPtrList *loads = pawMir_get_loads(K->C, instr);
+    K_LIST_FOREACH (loads, ppr) {
+        int *pcount = UseCountMap_get(K, uses, **ppr);
         ++*pcount;
     }
 }
 
-static void count_uses(struct Mir *mir, UseCountMap *uses)
+static void count_uses(struct KProp *K, UseCountMap *uses)
 {
-    struct Compiler *C = mir->C;
+    struct Mir *mir = K->mir;
 
     int index;
     struct MirRegisterData *pdata;
-    K_LIST_ENUMERATE(mir->registers, index, pdata)
-    {
+    K_LIST_ENUMERATE (mir->registers, index, pdata) {
         // being captured in 1 or more closures counts as a single usage
-        UseCountMap_insert(C, uses, MIR_REG(index), pdata->is_captured);
+        UseCountMap_insert(K, uses, MIR_REG(index), pdata->is_captured);
     }
 
     struct MirBlockData **pblock;
-    K_LIST_FOREACH(mir->blocks, pblock)
-    {
+    K_LIST_FOREACH (mir->blocks, pblock) {
         struct MirBlockData *block = *pblock;
         struct MirInstruction **pinstr;
-        K_LIST_FOREACH(block->joins, pinstr)
-        account_for_uses(C, *pinstr, uses);
-        K_LIST_FOREACH(block->instructions, pinstr)
-        account_for_uses(C, *pinstr, uses);
+        K_LIST_FOREACH (block->joins, pinstr)
+            account_for_uses(K, *pinstr, uses);
+        K_LIST_FOREACH (block->instructions, pinstr)
+            account_for_uses(K, *pinstr, uses);
     }
 }
 
@@ -801,9 +784,8 @@ static void remove_operand_uses(struct KProp *K, UseCountMap *counts, struct Mir
 {
     MirRegister *const *ppr;
     struct MirRegisterPtrList *loads = pawMir_get_loads(K->C, instr);
-    K_LIST_FOREACH(loads, ppr)
-    {
-        int *pcount = UseCountMap_get(K->C, counts, **ppr);
+    K_LIST_FOREACH (loads, ppr) {
+        int *pcount = UseCountMap_get(K, counts, **ppr);
         paw_assert(*pcount > 0);
         --*pcount;
     }
@@ -836,17 +818,16 @@ static void prune_dead_successors(struct KProp *K, MirBlock from, MirBlock targe
     int index, itarget;
     MirBlock const *pto;
     struct MirBlockData *bfrom = mir_bb_data(K->mir, from);
-    K_LIST_ENUMERATE(bfrom->successors, index, pto)
-    {
+    K_LIST_ENUMERATE (bfrom->successors, index, pto) {
         if (!MIR_REG_EQUALS(*pto, target)) {
             int const ipred = mir_which_pred(K->mir, *pto, from);
             struct MirBlockData *bto = mir_bb_data(K->mir, *pto);
-            K_LIST_REMOVE(bto->predecessors, ipred);
+            MirBlockList_remove(bto->predecessors, ipred);
         } else {
             itarget = index;
         }
     }
-    K_LIST_SET(bfrom->successors, 0, target);
+    MirBlockList_set(bfrom->successors, 0, target);
     bfrom->successors->count = 1;
     K->altered = PAW_TRUE;
 }
@@ -870,18 +851,15 @@ static void transform_code(struct KProp *K)
     struct MirBlockData **pblock;
     struct MirInstruction **pinstr;
     struct MirBlockDataList *blocks = K->mir->blocks;
-    K_LIST_ENUMERATE(blocks, index, pblock)
-    {
+    K_LIST_ENUMERATE (blocks, index, pblock) {
         MirBlock const from = MIR_BB(index);
         struct MirBlockData *block = *pblock;
-        K_LIST_FOREACH(block->joins, pinstr)
-        {
+        K_LIST_FOREACH (block->joins, pinstr) {
             transform_instr(K, *pinstr);
         }
-        K_LIST_FOREACH(block->instructions, pinstr)
-        {
+        K_LIST_FOREACH (block->instructions, pinstr) {
             struct MirInstruction *instr = *pinstr;
-            MirBlock const *pto = GotoMap_get(K->C, K->gotos, instr);
+            MirBlock const *pto = GotoMap_get(K, K->gotos, instr);
             if (pto != NULL) {
                 // instruction is a branch/switch controlled by a constant
                 prune_dead_successors(K, from, *pto);
@@ -899,13 +877,12 @@ static paw_Bool filter_code(struct KProp *K, UseCountMap *counts, struct MirInst
     int removed = 0;
     paw_Bool removed_any = PAW_FALSE;
     struct MirInstruction **pinstr;
-    K_LIST_ENUMERATE(code, index, pinstr)
-    {
+    K_LIST_ENUMERATE (code, index, pinstr) {
         struct MirInstruction *instr = *pinstr;
         if (is_pure(instr)) {
             MirRegister const *pstore = pawMir_get_store(K->C, instr);
             if (pstore != NULL) {
-                int const *pcount = UseCountMap_get(K->C, counts, *pstore);
+                int const *pcount = UseCountMap_get(K, counts, *pstore);
                 if (*pcount == 0) {
                     remove_operand_uses(K, counts, instr);
                     ++removed;
@@ -913,8 +890,8 @@ static paw_Bool filter_code(struct KProp *K, UseCountMap *counts, struct MirInst
                 }
             }
         }
-        struct MirInstruction *keep = K_LIST_GET(code, index);
-        K_LIST_SET(code, index - removed, keep);
+        struct MirInstruction *keep = MirInstructionList_get(code, index);
+        MirInstructionList_set(code, index - removed, keep);
         removed_any |= removed > 0;
     }
     code->count -= removed;
@@ -926,7 +903,7 @@ static paw_Bool remove_dead_code(struct KProp *K, UseCountMap *counts)
     paw_Bool removed_any = PAW_FALSE;
     struct MirBlockDataList *blocks = K->mir->blocks;
     for (int i = blocks->count - 1; i >= 0; --i) {
-        struct MirBlockData *block = K_LIST_GET(blocks, i);
+        struct MirBlockData *block = MirBlockDataList_get(blocks, i);
         removed_any |= filter_code(K, counts, block->joins);
         removed_any |= filter_code(K, counts, block->instructions);
     }
@@ -938,8 +915,8 @@ static void clean_up_code(struct KProp *K)
     pawMir_remove_unreachable_blocks(K->mir);
     pawMir_merge_redundant_blocks(K->mir);
 
-    UseCountMap *counts = UseCountMap_new(K->C);
-    count_uses(K->mir, counts);
+    UseCountMap *counts = UseCountMap_new(K, K->pool);
+    count_uses(K, counts);
 
     paw_Bool removed_code;
     do {
@@ -953,11 +930,9 @@ static void propagate_copy(struct KProp *K, struct MirMove *move)
     struct MirAccess *puse;
     MirRegister *const *ppr;
     struct MirAccessList *uses = get_uses(K, move->output);
-    K_LIST_FOREACH(uses, puse)
-    {
+    K_LIST_FOREACH (uses, puse) {
         struct MirRegisterPtrList *loads = pawMir_get_loads(K->C, puse->instr);
-        K_LIST_FOREACH(loads, ppr)
-        {
+        K_LIST_FOREACH (loads, ppr) {
             if (MIR_REG_EQUALS(**ppr, move->output)) {
                 K->altered = PAW_TRUE;
                 // replace output with operand
@@ -972,13 +947,11 @@ static void propagate_copies(struct KProp *K)
 {
     struct MirBlockData **pblock;
     struct MirInstruction **pinstr;
-    K_LIST_FOREACH(K->mir->blocks, pblock)
-    {
+    K_LIST_FOREACH (K->mir->blocks, pblock) {
         struct MirBlockData *block = *pblock;
-        struct MirInstructionList *instrs = pawMir_instruction_list_new(K->C);
-        K_LIST_RESERVE(K->C, instrs, block->instructions->count);
-        K_LIST_FOREACH(block->instructions, pinstr)
-        {
+        struct MirInstructionList *instrs = MirInstructionList_new(K->C);
+        MirInstructionList_reserve(K->C, instrs, block->instructions->count);
+        K_LIST_FOREACH (block->instructions, pinstr) {
             struct MirInstruction *instr = *pinstr;
             if (MirIsMove(instr)) {
                 struct MirMove *move = MirGetMove(instr);
@@ -988,7 +961,7 @@ static void propagate_copies(struct KProp *K)
                     continue;
                 }
             }
-            K_LIST_PUSH(K->C, instrs, instr);
+            MirInstructionList_push(K->C, instrs, instr);
         }
         block->instructions = instrs;
     }
@@ -1003,22 +976,24 @@ paw_Bool pawMir_propagate_constants(struct Mir *mir)
 
     struct Compiler *C = mir->C;
     struct KProp K = {
-        .lattice = lattice_new(C),
-        .flow = flow_worklist_new(C),
-        .ssa = ssa_worklist_new(C),
+        .pool = pawP_pool_new(C),
         .mir = mir,
         .P = ENV(C),
         .C = C,
     };
-    K_LIST_RESERVE(C, K.lattice, mir->registers->count);
+    K.uses = AccessMap_new(C, K.pool);
+    K.lattice = Lattice_new(&K);
+    K.flow = FlowWorklist_new(&K);
+    K.ssa = SsaWorklist_new(&K);
+    K.exec = ExecMap_new(&K, K.pool);
+    K.gotos = GotoMap_new(&K, K.pool);
+
+    Lattice_reserve(&K, K.lattice, mir->registers->count);
     K.lattice->count = mir->registers->count;
 
-    K.exec = ExecMap_new(C);
-    K.uses = AccessMap_new(C);
-    K.gotos = GotoMap_new(C);
-    K.kcache.ints = ValueMap_new(C);
-    K.kcache.strs = ValueMap_new(C);
-    K.kcache.flts = ValueMap_new(C);
+    K.kcache.ints = ValueMap_new(C, K.pool);
+    K.kcache.strs = ValueMap_new(C, K.pool);
+    K.kcache.flts = ValueMap_new(C, K.pool);
     pawMir_collect_per_instr_uses(mir, K.uses);
 
     init_lattice(&K);
@@ -1027,6 +1002,6 @@ paw_Bool pawMir_propagate_constants(struct Mir *mir)
     transform_code(&K);
     clean_up_code(&K);
 
+    pawP_pool_free(C, K.pool);
     return K.altered;
-
 }

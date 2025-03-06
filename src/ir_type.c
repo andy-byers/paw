@@ -6,7 +6,7 @@
 #include "map.h"
 #include "unify.h"
 
-#define NEW_NODE(C, T) (T *)pawP_alloc(C, NULL, 0, sizeof(T))
+#define NEW_NODE(C, T) (T *)P_ALLOC(C, NULL, 0, sizeof(T))
 
 DeclId pawIr_next_did(struct Compiler *C, int mod)
 {
@@ -59,8 +59,7 @@ struct IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *
         TYPE_ERROR(C, "generic type missing trait bounds");
 
     struct IrType **pbound;
-    K_LIST_FOREACH(target->bounds, pbound)
-    {
+    K_LIST_FOREACH (target->bounds, pbound) {
         struct IrTraitObj *bound = IrGetTraitObj(*pbound);
         struct HirDecl *trait_decl = pawHir_get_decl(C, bound->did);
         struct HirTraitDecl *trait = HirGetTraitDecl(trait_decl);
@@ -68,8 +67,7 @@ struct IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *
         struct HirDecl **pmethod;
         struct HirDecl *last_method = NULL;
         struct HirTraitDecl *last_trait = NULL;
-        K_LIST_FOREACH(trait->methods, pmethod)
-        {
+        K_LIST_FOREACH (trait->methods, pmethod) {
             struct HirDecl *result;
             struct HirFuncDecl *method = HirGetFuncDecl(*pmethod);
             if (pawS_eq(method->name, name))
@@ -98,8 +96,7 @@ void pawIr_validate_type(struct Compiler *C, struct IrType *type)
         struct IrGeneric *t = IrGetGeneric(type);
         if (t->bounds != NULL) {
             struct IrType **pt;
-            K_LIST_FOREACH(t->bounds, pt)
-            {
+            K_LIST_FOREACH (t->bounds, pt) {
                 pawIr_validate_type(C, *pt);
             }
         }
@@ -123,8 +120,8 @@ void pawIr_validate_type(struct Compiler *C, struct IrType *type)
         }
         if (types != NULL && types->count != generics->count) {
             TYPE_ERROR(C, "%s type arguments (expected %d but found %d)",
-                types->count < generics->count ? "not enough" : "too many",
-                types->count, generics->count);
+                       types->count < generics->count ? "not enough" : "too many",
+                       types->count, generics->count);
         }
     }
 }
@@ -148,7 +145,7 @@ static paw_Uint hash_type_list(struct IrTypeList *types)
     paw_Uint hash = 0;
     struct IrType **ptype;
     if (types != NULL) {
-        K_LIST_FOREACH(types, ptype)
+        K_LIST_FOREACH (types, ptype)
             hash = hash_combine(hash, hash_type(*ptype));
     }
     return hash;
@@ -217,7 +214,7 @@ paw_Bool pawIr_type_equals(struct Compiler *C, IrType *a, IrType *b)
         struct IrSignature *sa = IrGetSignature(a);
         struct IrSignature *sb = IrGetSignature(b);
         if (sa->did.value != sb->did.value || !sa->self != !sb->self //
-                || (sa->self != NULL && !pawU_equals(C->U, sa->self, sb->self))) {
+            || (sa->self != NULL && !pawU_equals(C->U, sa->self, sb->self))) {
             return PAW_FALSE;
         }
     }
@@ -259,8 +256,7 @@ static void print_bounds(struct Printer *P, struct IrTypeList *bounds)
         PRINT_LITERAL(P, ": ");
         int index;
         struct IrType **ptype;
-        K_LIST_ENUMERATE(bounds, index, ptype)
-        {
+        K_LIST_ENUMERATE (bounds, index, ptype) {
             if (index > 0)
                 PRINT_LITERAL(P, " + ");
             print_type(P, *ptype);
@@ -343,13 +339,13 @@ static void print_type(struct Printer *P, IrType *type)
                 PRINT_LITERAL(P, "()");
             } else if (code == BUILTIN_LIST) {
                 PRINT_CHAR(P, '[');
-                print_type(P, K_LIST_GET(adt->types, 0));
+                print_type(P, IrTypeList_get(adt->types, 0));
                 PRINT_CHAR(P, ']');
             } else if (code == BUILTIN_MAP) {
                 PRINT_CHAR(P, '[');
-                print_type(P, K_LIST_GET(adt->types, 0));
+                print_type(P, IrTypeList_get(adt->types, 0));
                 PRINT_LITERAL(P, ": ");
-                print_type(P, K_LIST_GET(adt->types, 1));
+                print_type(P, IrTypeList_get(adt->types, 1));
                 PRINT_CHAR(P, ']');
             } else {
                 struct HirDecl *decl = pawHir_get_decl(P->C, adt->did);
@@ -376,7 +372,7 @@ char const *pawIr_print_type(struct Compiler *C, IrType *type)
                    .buf = &buf,
                    .C = C,
                },
-        type);
+               type);
 
     pawL_push_result(P, &buf);
     return paw_string(P, -1);

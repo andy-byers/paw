@@ -77,6 +77,7 @@ struct Label {
 struct LowerHir {
     struct HirVisitor V;
     struct Compiler *C;
+    struct Pool *pool;
     paw_Env *P;
 
     struct ConstantContext *cctx;
@@ -87,24 +88,22 @@ struct LowerHir {
     struct GlobalMap *globals;
 };
 
-static paw_Uint var_hash(struct Compiler *C, struct MatchVar v)
+static paw_Uint var_hash(struct LowerHir *L, struct MatchVar v)
 {
-    PAW_UNUSED(C);
+    PAW_UNUSED(L);
     return v.id;
 }
 
-static paw_Bool var_equals(struct Compiler *C, struct MatchVar a, struct MatchVar b)
+static paw_Bool var_equals(struct LowerHir *L, struct MatchVar a, struct MatchVar b)
 {
-    PAW_UNUSED(C);
+    PAW_UNUSED(L);
     return a.id == b.id;
 }
 
-DEFINE_LIST(struct Compiler, var_stack_, VarStack, struct LocalVar)
-DEFINE_LIST(struct Compiler, label_list_, LabelList, struct Label)
-DEFINE_MAP(struct Compiler, GlobalMap, pawP_alloc, p_hash_decl_id, p_equals_decl_id, DeclId, int)
-DEFINE_MAP(struct Compiler, VarMap, pawP_alloc, var_hash, var_equals, struct MatchVar, MirRegister)
-DEFINE_MAP(struct Compiler, PendingMap, pawP_alloc, p_hash_decl_id, p_equals_decl_id, DeclId, struct HirVarDecl *)
-DEFINE_MAP_ITERATOR(PendingMap, DeclId, struct HirVarDecl *)
+DEFINE_LIST(struct LowerHir, VarStack, struct LocalVar)
+DEFINE_LIST(struct LowerHir, LabelList, struct Label)
+DEFINE_MAP(struct LowerHir, GlobalMap, pawP_alloc, P_DECL_ID_HASH, P_DECL_ID_EQUALS, DeclId, int)
+DEFINE_MAP(struct LowerHir, VarMap, pawP_alloc, var_hash, var_equals, struct MatchVar, MirRegister)
 
 static void postprocess(struct LowerHir *L, struct Mir *mir)
 {
@@ -143,8 +142,8 @@ static void enter_match(struct LowerHir *L, struct MatchState *ms, VarMap *var_m
 {
     *ms = (struct MatchState){
         .var_mapping = var_mapping,
-        .regs = pawMir_register_list_new(L->C),
-        .vars = variable_list_new(L->C),
+        .regs = MirRegisterList_new(L->C),
+        .vars = VariableList_new(L->C),
         .outer = L->ms,
     };
     L->ms = ms;
@@ -169,7 +168,7 @@ static struct MirBlockDataList *bb_list(struct LowerHir *L)
 
 static struct MirBlockData *get_bb(struct LowerHir *L, MirBlock bb)
 {
-    return K_LIST_GET(bb_list(L), bb.value);
+    return MirBlockDataList_get(bb_list(L), bb.value);
 }
 
 static MirBlock current_bb(struct LowerHir *L)
@@ -181,15 +180,15 @@ static MirBlock current_bb(struct LowerHir *L)
 static struct MirBlockData *current_bb_data(struct LowerHir *L)
 {
     paw_assert(bb_list(L)->count > 0);
-    return K_LIST_GET(bb_list(L), current_bb(L).value);
+    return MirBlockDataList_get(bb_list(L), current_bb(L).value);
 }
 
 static MirRegister new_register(struct LowerHir *L, struct IrType *type)
 {
     struct MirRegisterDataList *regs = L->fs->mir->registers;
-    K_LIST_PUSH(L->C, regs, ((struct MirRegisterData){
-                                .type = type,
-                            }));
+    MirRegisterDataList_push(L->C, regs, ((struct MirRegisterData){
+                                             .type = type,
+                                         }));
     return MIR_REG(regs->count - 1);
 }
 
@@ -202,21 +201,14 @@ static void add_edge(struct LowerHir *L, MirBlock from, MirBlock to)
 {
     struct MirBlockData *source = get_bb(L, from);
     struct MirBlockData *target = get_bb(L, to);
-    K_LIST_PUSH(L->C, source->successors, to);
-    K_LIST_PUSH(L->C, target->predecessors, from);
-}
-
-static struct MirInstruction *add_instruction_(struct LowerHir *L, struct MirInstruction *instr)
-{
-    struct MirBlockData *block = current_bb_data(L);
-    K_LIST_PUSH(L->C, block->instructions, instr);
-    return instr;
+    MirBlockList_push(L->C, source->successors, to);
+    MirBlockList_push(L->C, target->predecessors, from);
 }
 
 static struct MirInstruction *add_instruction(struct FunctionState *fs, struct MirInstruction *instr)
 {
     struct MirBlockData *block = current_bb_data(fs->L);
-    K_LIST_PUSH(fs->L->C, block->instructions, instr);
+    MirInstructionList_push(fs->L->C, block->instructions, instr);
     return instr;
 }
 
@@ -242,13 +234,13 @@ static MirBlock new_bb(struct LowerHir *L)
 {
     int const id = bb_list(L)->count;
     struct MirBlockData *bb = pawMir_new_block(L->fs->mir);
-    K_LIST_PUSH(L->C, bb_list(L), bb);
+    MirBlockDataList_push(L->C, bb_list(L), bb);
     return (MirBlock){id};
 }
 
 static struct LocalVar *get_local_slot(struct FunctionState *fs, int index)
 {
-    return &K_LIST_GET(fs->L->stack, fs->level + index);
+    return &K_LIST_AT(fs->L->stack, fs->level + index);
 }
 
 static void close_until_loop(struct FunctionState *fs)
@@ -263,7 +255,7 @@ static void close_until_loop(struct FunctionState *fs)
         if (bs->has_upvalue) {
             // find the upvalue with the smallest index in block "bs"
             for (; index >= bs->nvars; --index) {
-                struct LocalVar var = K_LIST_GET(stack, index);
+                struct LocalVar var = VarStack_get(stack, index);
                 struct MirRegisterData *data = mir_reg_data(fs->mir, var.reg);
                 if (data->is_captured)
                     lowest_upvalue = var.reg;
@@ -287,7 +279,7 @@ static void add_label(struct LowerHir *L, int line, enum JumpKind kind)
     struct MirBlockData *block = current_bb_data(L);
     terminate_goto(L, line, MIR_INVALID_BB);
 
-    K_LIST_PUSH(L->C, L->labels, ((struct Label){
+    LabelList_push(L, L->labels, ((struct Label){
                                      .nvars = L->fs->nlocals,
                                      .from = current_bb(L),
                                      .kind = kind,
@@ -298,7 +290,7 @@ static void adjust_labels(struct LowerHir *L, struct BlockState *bs)
 {
     struct LabelList *ll = L->labels;
     for (int i = bs->label0; i < ll->count; ++i) {
-        struct Label *lb = &K_LIST_GET(ll, i);
+        struct Label *lb = &K_LIST_AT(ll, i);
         if (lb->nvars > bs->nvars) {
             lb->needs_close |= bs->has_upvalue;
         }
@@ -308,9 +300,7 @@ static void adjust_labels(struct LowerHir *L, struct BlockState *bs)
 
 static void remove_label(struct LabelList *ll, int index)
 {
-    paw_assert(ll->count > 0);
-    K_LIST_SET(ll, index, K_LIST_LAST(ll));
-    K_LIST_POP(ll);
+    LabelList_swap_remove(ll, index);
 }
 
 static void set_goto(struct LowerHir *L, MirBlock from, MirBlock to)
@@ -326,7 +316,7 @@ static paw_Bool adjust_from(struct LowerHir *L, enum JumpKind kind)
     struct BlockState *bs = L->fs->bs;
     struct LabelList *ll = L->labels;
     for (int i = bs->label0; i < ll->count;) {
-        struct Label lb = K_LIST_GET(ll, i);
+        struct Label lb = LabelList_get(ll, i);
         if (lb.kind == kind) {
             needs_close |= lb.needs_close;
             set_goto(L, lb.from, current_bb(L));
@@ -344,7 +334,7 @@ static void adjust_to(struct LowerHir *L, enum JumpKind kind, MirBlock to)
     struct BlockState *bs = L->fs->bs;
     struct LabelList *ll = L->labels;
     for (int i = bs->label0; i < ll->count;) {
-        struct Label lb = K_LIST_GET(ll, i);
+        struct Label lb = LabelList_get(ll, i);
         if (lb.kind == kind) {
             set_goto(L, lb.from, to);
             add_edge(L, lb.from, to);
@@ -402,7 +392,7 @@ static void mark_upvalue(struct FunctionState *fs, int target, MirRegister r)
 
     struct MirRegisterData *data = mir_reg_data(fs->mir, r);
     if (!data->is_captured) {
-        K_LIST_PUSH(fs->L->C, fs->captured, ((struct MirCaptureInfo){r}));
+        MirCaptureList_push(fs->L->C, fs->captured, ((struct MirCaptureInfo){r}));
         data->is_captured = PAW_TRUE;
         data->hint = r;
     }
@@ -411,17 +401,19 @@ static void mark_upvalue(struct FunctionState *fs, int target, MirRegister r)
 static void add_upvalue(struct LowerHir *L, struct FunctionState *fs, struct NonGlobal *info, paw_Bool is_local)
 {
     info->is_upvalue = PAW_TRUE;
-    for (int i = 0; i < fs->up->count; ++i) {
-        struct MirUpvalueInfo up = K_LIST_GET(fs->up, i);
-        if (is_local != up.is_local)
+
+    int index;
+    struct MirUpvalueInfo *pup;
+    K_LIST_ENUMERATE (fs->up, index, pup) {
+        if (is_local != pup->is_local)
             continue;
-        if (is_local && up.index == info->vid) {
-            info->vid = up.index;
-            info->index = i;
+        if (is_local && pup->index == info->vid) {
+            info->vid = pup->index;
+            info->index = index;
             return;
         }
-        if (!is_local && up.index == info->index) {
-            info->index = i;
+        if (!is_local && pup->index == info->index) {
+            info->index = index;
             info->vid = -1;
             return;
         }
@@ -430,10 +422,10 @@ static void add_upvalue(struct LowerHir *L, struct FunctionState *fs, struct Non
         pawE_error(ENV(L->C), PAW_ESYNTAX, -1, "too many upvalues");
     }
 
-    K_LIST_PUSH(L->C, fs->up, ((struct MirUpvalueInfo){
-                                  .index = is_local ? info->vid : info->index,
-                                  .is_local = is_local,
-                              }));
+    MirUpvalueList_push(L->C, fs->up, ((struct MirUpvalueInfo){
+                                          .index = is_local ? info->vid : info->index,
+                                          .is_local = is_local,
+                                      }));
     // indicate new upvalue index
     info->index = fs->up->count - 1;
 }
@@ -478,7 +470,7 @@ static void maybe_close(struct LowerHir *L, MirRegister r)
 static void close_variables(struct LowerHir *L, int nvars)
 {
     for (int i = L->fs->nlocals - 1; i >= nvars; --i) {
-        struct LocalVar const local = K_LIST_GET(L->stack, L->fs->level + i);
+        struct LocalVar const local = VarStack_get(L->stack, L->fs->level + i);
         maybe_close(L, local.reg);
     }
 }
@@ -502,14 +494,14 @@ static void leave_block(struct LowerHir *L)
 
 static struct LocalVar *add_local(struct LowerHir *L, String *name, MirRegister r, DeclId did)
 {
-    K_LIST_PUSH(L->C, L->stack, ((struct LocalVar){
-                                    .vid = L->fs->locals->count,
-                                    .depth = L->fs->bs->depth,
-                                    .name = name,
-                                    .did = did,
-                                    .reg = r,
-                                }));
-    K_LIST_PUSH(L->C, L->fs->locals, r);
+    VarStack_push(L, L->stack, ((struct LocalVar){
+                                   .vid = L->fs->locals->count,
+                                   .depth = L->fs->bs->depth,
+                                   .name = name,
+                                   .did = did,
+                                   .reg = r,
+                               }));
+    MirRegisterList_push(L->C, L->fs->locals, r);
     ++L->fs->nlocals;
     return &K_LIST_LAST(L->stack);
 }
@@ -551,7 +543,8 @@ struct MirInstruction *terminate_return(struct LowerHir *L, MirRegister const *p
 {
     struct FunctionState *fs = L->fs;
     MirRegister const value = pvalue != NULL
-        ? *pvalue : add_constant(L, P2V(NULL), BUILTIN_UNIT);
+                                  ? *pvalue
+                                  : add_constant(L, P2V(NULL), BUILTIN_UNIT);
     return NEW_INSTR(fs, return, -1, value);
 }
 
@@ -577,7 +570,7 @@ static void enter_function(struct LowerHir *L, struct FunctionState *fs, struct 
     *fs = (struct FunctionState){
         .captured = mir->captured,
         .registers = mir->registers,
-        .up = pawMir_upvalue_list_new(L->C),
+        .up = MirUpvalueList_new(L->C),
         .level = L->stack->count,
         .locals = mir->locals,
         .outer = L->fs,
@@ -596,14 +589,14 @@ static void enter_function(struct LowerHir *L, struct FunctionState *fs, struct 
     enter_block(L, bs, PAW_FALSE);
 
     alloc_local(L, SCAN_STRING(L->C, "(result)"),
-        IR_FPTR(mir->type)->result, NO_DECL);
+                IR_FPTR(mir->type)->result, NO_DECL);
 }
 
 static void leave_function(struct LowerHir *L)
 {
     struct MirBlockData *block = current_bb_data(L);
     if (block->instructions->count == 0
-            || !MirIsReturn(K_LIST_LAST(block->instructions)))
+        || !MirIsReturn(K_LIST_LAST(block->instructions)))
         terminate_return(L, NULL);
     L->stack->count = L->fs->level;
     L->fs = L->fs->outer;
@@ -620,7 +613,7 @@ static MirRegister lower_operand(struct HirVisitor *V, struct HirExpr *expr);
 
 static struct MirInstruction *into_fresh_reg(struct LowerHir *L, MirRegister source)
 {
-    struct MirRegisterData data = K_LIST_GET(L->fs->mir->registers, source.value);
+    struct MirRegisterData data = MirRegisterDataList_get(L->fs->mir->registers, source.value);
     MirRegister const target = new_register(L, data.type);
     return move_to(L, source, target);
 }
@@ -629,10 +622,9 @@ static void lower_operand_list(struct HirVisitor *V, struct HirExprList *exprs, 
 {
     struct HirExpr **pexpr;
     struct LowerHir *L = V->ud;
-    K_LIST_FOREACH(exprs, pexpr)
-    {
+    K_LIST_FOREACH (exprs, pexpr) {
         MirRegister const r = lower_operand(V, *pexpr);
-        K_LIST_PUSH(L->C, result, r);
+        MirRegisterList_push(L->C, result, r);
     }
 }
 
@@ -679,8 +671,7 @@ static MirRegister lower_tuple_lit(struct HirVisitor *V, struct HirLiteralExpr *
 
     int index;
     struct HirExpr **pexpr;
-    K_LIST_ENUMERATE(e->tuple.elems, index, pexpr)
-    {
+    K_LIST_ENUMERATE (e->tuple.elems, index, pexpr) {
         MirRegister const field = lower_operand(V, *pexpr);
         NEW_INSTR(fs, set_field, -1, index, output, field);
     }
@@ -695,8 +686,7 @@ static MirRegister lower_composite_lit(struct HirVisitor *V, struct HirLiteralEx
     NEW_INSTR(fs, aggregate, e->line, e->comp.items->count, output);
 
     struct HirExpr **pexpr;
-    K_LIST_FOREACH(e->comp.items, pexpr)
-    {
+    K_LIST_FOREACH (e->comp.items, pexpr) {
         int const index = HirGetFieldExpr(*pexpr)->fid;
         MirRegister const field = lower_operand(V, *pexpr);
         NEW_INSTR(fs, set_field, -1, index, output, field);
@@ -714,8 +704,7 @@ static MirRegister lower_container_lit(struct HirVisitor *V, struct HirLiteralEx
 
     int index;
     struct HirExpr **pexpr;
-    K_LIST_ENUMERATE(e->cont.items, index, pexpr)
-    {
+    K_LIST_ENUMERATE (e->cont.items, index, pexpr) {
         MirRegister mir_key, mir_value;
         if (HirIsFieldExpr(*pexpr)) {
             struct HirFieldExpr *elem = HirGetFieldExpr(*pexpr);
@@ -804,9 +793,9 @@ static void lower_global_constant(struct LowerHir *L, struct HirVarDecl *d);
 
 static MirRegister lookup_global_constant(struct LowerHir *L, struct HirVarDecl *d)
 {
-    int const *pid = GlobalMap_get(L->C, L->globals, d->did);
+    int const *pid = GlobalMap_get(L, L->globals, d->did);
     if (pid != NULL) {
-        struct GlobalInfo info = K_LIST_GET(L->C->globals, *pid);
+        struct GlobalInfo info = GlobalList_get(L->C->globals, *pid);
         return add_constant(L, info.value, info.b_kind);
     }
     lower_global_constant(L, d);
@@ -837,7 +826,7 @@ static MirRegister lower_path_expr(struct HirVisitor *V, struct HirPathExpr *e)
     } else if (HirIsVarDecl(decl)) {
         return lookup_global_constant(L, HirGetVarDecl(decl));
     }
-    int const *pid = GlobalMap_get(L->C, L->globals, did);
+    int const *pid = GlobalMap_get(L, L->globals, did);
     NEW_INSTR(fs, global, e->line, output, pid != NULL ? *pid : -1);
     return output;
 }
@@ -850,14 +839,14 @@ static void emit_get_field(struct LowerHir *L, int line, MirRegister object, int
 
 static struct MirSwitchArmList *allocate_switch_arms(struct LowerHir *L, MirBlock discr_bb, int count)
 {
-    struct MirSwitchArmList *arms = pawMir_switch_list_new(L->C);
-    K_LIST_RESERVE(L->C, arms, count);
+    struct MirSwitchArmList *arms = MirSwitchArmList_new(L->C);
+    MirSwitchArmList_reserve(L->C, arms, count);
     for (int i = 0; i < count; ++i) {
         MirBlock const case_bb = new_bb(L);
         add_edge(L, discr_bb, case_bb);
-        K_LIST_PUSH(L->C, arms, ((struct MirSwitchArm){
-                                    .bid = case_bb,
-                                }));
+        MirSwitchArmList_push(L->C, arms, ((struct MirSwitchArm){
+                                              .bid = case_bb,
+                                          }));
     }
     return arms;
 }
@@ -878,7 +867,7 @@ static MirRegister lower_chain_expr(struct HirVisitor *V, struct HirChainExpr *e
 
     struct MirSwitchArmList *arms = allocate_switch_arms(L, input_bb, 1);
     struct MirInstruction *switch_ = terminate_switch(L, discr, arms, none_bb);
-    struct MirSwitchArm *arm = &K_LIST_GET(arms, 0);
+    struct MirSwitchArm *arm = &K_LIST_AT(arms, 0);
 
     set_current_bb(L, arm->bid);
     MirRegister const value = register_for_node(L, e->hid);
@@ -966,7 +955,7 @@ static MirRegister lower_closure_expr(struct HirVisitor *V, struct HirClosureExp
     MirRegister const output = new_register(L, type);
     struct MirBodyList *children = outer->mir->children;
     NEW_INSTR(outer, closure, e->line, children->count, output);
-    K_LIST_PUSH(L->C, children, result);
+    MirBodyList_push(L->C, children, result);
     return output;
 }
 
@@ -999,8 +988,7 @@ static MirRegister lower_variant_constructor(struct HirVisitor *V, struct HirCal
 
     int index;
     struct HirExpr **pexpr;
-    K_LIST_ENUMERATE(e->args, index, pexpr)
-    {
+    K_LIST_ENUMERATE (e->args, index, pexpr) {
         MirRegister const field = lower_operand(V, *pexpr);
         NEW_INSTR(fs, set_field, e->line, 1 + index, object, field);
     }
@@ -1021,7 +1009,7 @@ static MirRegister lower_callee_and_args(struct HirVisitor *V, struct HirExpr *c
         struct MirGlobal *global = MirGetGlobal(instr);
 
         MirRegister const self = lower_operand(V, select->target);
-        K_LIST_PUSH(L->C, args_out, self);
+        MirRegisterList_push(L->C, args_out, self);
 
         recv = GET_NODE_TYPE(L->C, select->target);
     } else {
@@ -1030,7 +1018,7 @@ static MirRegister lower_callee_and_args(struct HirVisitor *V, struct HirExpr *c
             struct HirPath *path = HirGetPathExpr(callee)->path;
             if (path->count > 1) {
                 // "seg" is the owner of the associated function
-                struct HirSegment seg = K_LIST_GET(path, path->count - 2);
+                struct HirSegment seg = HirPath_get(path, path->count - 2);
                 recv = pawIr_get_type(L->C, seg.hid);
             }
         }
@@ -1055,7 +1043,7 @@ static MirRegister lower_call_expr(struct HirVisitor *V, struct HirCallExpr *e)
             return lower_variant_constructor(V, e, HirGetVariantDecl(decl));
     }
 
-    struct MirRegisterList *args = pawMir_register_list_new(L->C);
+    struct MirRegisterList *args = MirRegisterList_new(L->C);
     MirRegister const target = lower_callee_and_args(V, e->target, e->args, args);
     MirRegister const result = register_for_node(L, e->hid);
     NEW_INSTR(fs, call, e->line, target, args, result);
@@ -1247,7 +1235,7 @@ static MirRegister lower_jump_expr(struct HirVisitor *V, struct HirJumpExpr *e)
     struct LowerHir *L = V->ud;
     if (!is_within_loop(L)) {
         pawE_error(ENV(L->C), PAW_ESYNTAX, e->line, "%s outside loop",
-            e->jump_kind == JUMP_BREAK ? "break" : "continue");
+                   e->jump_kind == JUMP_BREAK ? "break" : "continue");
     }
     add_label(L, e->line, e->jump_kind);
     set_current_bb(L, new_bb(L));
@@ -1325,7 +1313,7 @@ static paw_Bool visit_expr_stmt(struct HirVisitor *V, struct HirExprStmt *s)
 
 static MirRegister get_test_reg(struct LowerHir *L, struct MatchVar v)
 {
-    MirRegister const *pr = VarMap_get(L->C, L->ms->var_mapping, v);
+    MirRegister const *pr = VarMap_get(L, L->ms->var_mapping, v);
     paw_assert(pr != NULL);
     return *pr;
 }
@@ -1333,7 +1321,7 @@ static MirRegister get_test_reg(struct LowerHir *L, struct MatchVar v)
 static void declare_match_bindings(struct LowerHir *L, struct BindingList *bindings)
 {
     for (int i = 0; i < bindings->count; ++i) {
-        struct Binding b = K_LIST_GET(bindings, i);
+        struct Binding b = BindingList_get(bindings, i);
         MirRegister const r = get_test_reg(L, b.var);
         into_fresh_reg(L, r);
 
@@ -1394,11 +1382,11 @@ static struct IrType *get_field_type(struct LowerHir *L, struct IrType *type, in
 {
     if (IrIsTuple(type)) {
         struct IrTuple *tuple = IrGetTuple(type);
-        return K_LIST_GET(tuple->elems, index);
+        return IrTypeList_get(tuple->elems, index);
     }
     struct HirDecl *decl = pawHir_get_decl(L->C, IR_TYPE_DID(type));
     struct HirAdtDecl *d = HirGetAdtDecl(decl);
-    struct HirDecl *field = K_LIST_GET(d->fields, index);
+    struct HirDecl *field = HirDeclList_get(d->fields, index);
     return GET_NODE_TYPE(L->C, field);
 }
 
@@ -1410,46 +1398,52 @@ static struct IrTypeList *collect_field_types(struct LowerHir *L, struct IrType 
     }
     if (IS_BASIC_TYPE(pawP_type2code(L->C, type)))
         return NULL;
-    struct HirDecl *decl = pawHir_get_decl(L->C, IR_TYPE_DID(type));
-    struct HirAdtDecl *d = HirGetAdtDecl(decl);
-    struct IrTypeList *result = pawIr_type_list_new(L->C);
+    struct HirAdtDecl *d = HirGetAdtDecl(pawHir_get_decl(L->C, IR_TYPE_DID(type)));
+    struct IrTypeList *result = IrTypeList_new(L->C);
+    IrTypeList_reserve(L->C, result, !d->is_struct + d->fields->count);
+
     if (!d->is_struct) {
         // first field of an enumerator is the integer discriminant
-        K_LIST_PUSH(L->C, result, get_type(L, BUILTIN_INT));
+        IrTypeList_push(L->C, result, get_type(L, BUILTIN_INT));
     }
-    for (int i = 0; i < d->fields->count; ++i) {
-        struct HirDecl *field_decl = K_LIST_GET(d->fields, i);
-        struct IrType *field_type = pawP_instantiate_field(L->C, type, field_decl);
-        K_LIST_PUSH(L->C, result, field_type);
+    struct HirDecl *const *pfield_decl;
+    K_LIST_FOREACH (d->fields, pfield_decl) {
+        struct IrType *field_type = pawP_instantiate_field(L->C, type, *pfield_decl);
+        IrTypeList_push(L->C, result, field_type);
     }
     return result;
 }
 
 static struct MirRegisterList *allocate_registers(struct LowerHir *L, struct IrTypeList *types)
 {
-    struct MirRegisterList *result = pawMir_register_list_new(L->C);
-    for (int i = 0; i < types->count; ++i) {
-        MirRegister const r = new_register(L, K_LIST_GET(types, i));
-        K_LIST_PUSH(L->C, result, r);
+    struct MirRegisterList *result = MirRegisterList_new(L->C);
+    MirRegisterList_reserve(L->C, result, types->count);
+
+    struct IrType *const *ptype;
+    K_LIST_FOREACH (types, ptype) {
+        MirRegister const r = new_register(L, *ptype);
+        MirRegisterList_push(L->C, result, r);
     }
     return result;
 }
 
 static void map_var_to_reg(struct LowerHir *L, struct MatchVar var, MirRegister reg)
 {
-    VarMap_insert(L->C, L->ms->var_mapping, var, reg);
+    VarMap_insert(L, L->ms->var_mapping, var, reg);
 }
 
 static void allocate_match_vars(struct LowerHir *L, MirRegister discr, struct MatchCase mc, paw_Bool is_enum)
 {
     if (mc.vars->count == 0)
         return;
+
+    int index;
+    struct MatchVar const *pv;
     struct MirRegisterList *regs = L->ms->regs;
-    for (int i = 0; i < mc.vars->count; ++i) {
-        struct MatchVar v = K_LIST_GET(mc.vars, i);
-        MirRegister const r = new_register(L, v.type);
-        map_var_to_reg(L, v, r);
-        emit_get_field(L, -1, discr, is_enum + i, r);
+    K_LIST_ENUMERATE (mc.vars, index, pv) {
+        MirRegister const r = new_register(L, pv->type);
+        map_var_to_reg(L, *pv, r);
+        emit_get_field(L, -1, discr, is_enum + index, r);
         add_local_literal(L, "(match variable)", r);
     }
 }
@@ -1467,16 +1461,16 @@ static void visit_sparse_cases(struct HirVisitor *V, struct Decision *d, MirRegi
     struct MirSwitchArmList *arms = allocate_switch_arms(L, discr_bb, cases->count);
     struct MirInstruction *switch_ = terminate_switch(L, test, arms, otherwise_bb);
 
-    for (int i = 0; i < cases->count; ++i) {
-        struct MatchCase mc = K_LIST_GET(cases, i);
-        struct MirSwitchArm *arm = &K_LIST_GET(arms, i);
-        set_current_bb(L, arm->bid);
-        arm->value = mc.cons.value;
+    struct MatchCase const *pmc;
+    struct MirSwitchArm *parm;
+    K_LIST_ZIP (cases, pmc, arms, parm) {
+        set_current_bb(L, parm->bid);
+        parm->value = pmc->cons.value;
 
         struct BlockState bs;
         enter_block(L, &bs, PAW_FALSE);
 
-        visit_decision(V, mc.dec, result);
+        visit_decision(V, pmc->dec, result);
         leave_block(L);
 
         set_goto_edge(L, -1, join_bb);
@@ -1507,17 +1501,17 @@ static void visit_variant_cases(struct HirVisitor *V, struct Decision *d, MirReg
     struct MirSwitchArmList *arms = allocate_switch_arms(L, discr_bb, cases->count);
     struct MirInstruction *switch_ = terminate_switch(L, test, arms, MIR_INVALID_BB);
 
-    for (int i = 0; i < cases->count; ++i) {
-        struct MatchCase mc = K_LIST_GET(cases, i);
-        struct MirSwitchArm *arm = &K_LIST_GET(arms, i);
-        arm->value.i = mc.cons.variant.index;
-        set_current_bb(L, arm->bid);
+    struct MatchCase const *pmc;
+    struct MirSwitchArm *parm;
+    K_LIST_ZIP (cases, pmc, arms, parm) {
+        parm->value.i = pmc->cons.variant.index;
+        set_current_bb(L, parm->bid);
 
         struct BlockState bs;
         enter_block(L, &bs, PAW_FALSE);
 
-        allocate_match_vars(L, variant, mc, PAW_TRUE);
-        visit_decision(V, mc.dec, result);
+        allocate_match_vars(L, variant, *pmc, PAW_TRUE);
+        visit_decision(V, pmc->dec, result);
         leave_block(L);
 
         set_goto_edge(L, -1, join_bb);
@@ -1615,7 +1609,7 @@ static void visit_decision(struct HirVisitor *V, struct Decision *d, MirRegister
 static MirRegister lower_match_expr(struct HirVisitor *V, struct HirMatchExpr *e)
 {
     struct LowerHir *L = V->ud;
-    VarMap *var_mapping = VarMap_new(L->C);
+    VarMap *var_mapping = VarMap_new(L, L->pool);
 
     struct BlockState bs;
     struct MatchState ms;
@@ -1628,14 +1622,14 @@ static MirRegister lower_match_expr(struct HirVisitor *V, struct HirMatchExpr *e
     MirRegister const result = register_for_node(L, e->hid);
     map_var_to_reg(L, K_LIST_FIRST(ms.vars), discr);
     add_local_literal(L, "(match target)", discr);
-    K_LIST_PUSH(L->C, ms.regs, discr);
+    MirRegisterList_push(L->C, ms.regs, discr);
 
     visit_decision(V, d, result);
 
     leave_match(L);
     leave_block(L);
 
-    VarMap_delete(L->C, var_mapping);
+    VarMap_delete(L, var_mapping);
     return result;
 }
 
@@ -1656,9 +1650,9 @@ static struct Mir *lower_hir_body(struct LowerHir *L, struct HirFuncDecl *func)
     struct IrType *type = pawIr_get_type(L->C, func->hid);
     struct IrSignature *fsig = IrGetSignature(type);
     paw_Bool const is_polymorphic = func->generics != NULL
-        || (fsig->self != NULL && IR_TYPE_SUBTYPES(fsig->self) != NULL);
+                                    || (fsig->self != NULL && IR_TYPE_SUBTYPES(fsig->self) != NULL);
     struct Mir *result = pawMir_new(L->C, func->name, type, fsig->self, func->fn_kind,
-            func->is_pub, is_polymorphic);
+                                    func->is_pub, is_polymorphic);
     if (func->body == NULL)
         return result;
 
@@ -1670,14 +1664,14 @@ static struct Mir *lower_hir_body(struct LowerHir *L, struct HirFuncDecl *func)
 static void register_global_constant(struct LowerHir *L, struct HirVarDecl *d, Value value, enum BuiltinKind b_kind)
 {
     const int global_id = L->globals->count;
-    GlobalMap_insert(L->C, L->globals, d->did, global_id);
-    K_LIST_PUSH(L->C, L->C->globals, ((struct GlobalInfo){
-        .name = d->name,
-        .index = global_id,
-        .modno = d->did.modno,
-        .b_kind = b_kind,
-        .value = value,
-    }));
+    GlobalMap_insert(L, L->globals, d->did, global_id);
+    GlobalList_push(L->C, L->C->globals, ((struct GlobalInfo){
+                                             .name = d->name,
+                                             .index = global_id,
+                                             .modno = d->did.modno,
+                                             .b_kind = b_kind,
+                                             .value = value,
+                                         }));
 }
 
 // TODO: move AllocLocal for parameters and return slot to entry basic block, then constant result will be at index 0 in basic block 1.
@@ -1688,7 +1682,7 @@ static void lower_global_constant(struct LowerHir *L, struct HirVarDecl *d)
     // not be part of a cycle. Evaluating any constant participating in a cycle will cause the
     // other constants in the cycle to be evaluated immediately, which will cause the call to
     // enter_constant_ctx to fail below.
-    if (GlobalMap_get(L->C, L->globals, d->did) != NULL)
+    if (GlobalMap_get(L, L->globals, d->did) != NULL)
         return;
 
     // attempt to find the constant in the pre-registered symbol table
@@ -1697,7 +1691,7 @@ static void lower_global_constant(struct LowerHir *L, struct HirVarDecl *d)
         if (d->init != NULL)
             VALUE_ERROR(L, d->line, "unexpected initializer for extern constant '%s'", d->name->text);
 
-        struct ModuleInfo *m = K_LIST_GET(L->C->modules, d->did.modno);
+        struct ModuleInfo *m = ModuleList_get(L->C->modules, d->did.modno);
         String *modname = d->did.modno <= 1 ? NULL : m->hir->name;
         String *name = pawP_mangle_name(L->C, modname, d->name, NULL);
         Value const value = pawP_get_extern_value(L->C, name, anno);
@@ -1715,11 +1709,11 @@ static void lower_global_constant(struct LowerHir *L, struct HirVarDecl *d)
 
     // artificial MIR body so that toplevel constants can be lowered normally, i.e. using
     // "lower_operand" routine
-    struct IrTypeList *artificial_params = pawIr_type_list_new(L->C);
+    struct IrTypeList *artificial_params = IrTypeList_new(L->C);
     struct IrType *artificial_result = pawIr_get_type(L->C, (HirId){0});
     struct IrType *artificial_type = pawIr_new_func_ptr(L->C, artificial_params, artificial_result);
     struct Mir *artificial = pawMir_new(L->C, SCAN_STRING(L->C, "(toplevel)"), artificial_type,
-            NULL, FUNC_MODULE, PAW_FALSE, PAW_FALSE);
+                                        NULL, FUNC_MODULE, PAW_FALSE, PAW_FALSE);
 
     // prevent cycles between global constants
     struct ConstantContext cctx;
@@ -1735,9 +1729,9 @@ static void lower_global_constant(struct LowerHir *L, struct HirVarDecl *d)
 
     // after SCCP and DCE, the constant result will be in the following position
     paw_assert(artificial->blocks->count == 2); // entry and constant-containing blocks
-    struct MirBlockData *bb = K_LIST_GET(artificial->blocks, 1);
+    struct MirBlockData *bb = MirBlockDataList_get(artificial->blocks, 1);
     paw_assert(bb->instructions->count == 3); // AllocLocal, Constant, and, Return
-    struct MirConstant *k = MirGetConstant(K_LIST_GET(bb->instructions, 1));
+    struct MirConstant *k = MirGetConstant(MirInstructionList_get(bb->instructions, 1));
 
     register_global_constant(L, d, k->value, k->b_kind);
 
@@ -1757,40 +1751,31 @@ static void lower_global_constant(struct LowerHir *L, struct HirVarDecl *d)
 
 static void lower_global_constants(struct LowerHir *L)
 {
-    // collect all global constants in a hash map
-    PendingMap *pending = PendingMap_new(L->C);
+    // resolve constants, making sure there are no cyclic dependencies
     struct HirDecl *const *pdecl;
-    K_LIST_FOREACH(L->C->decls, pdecl) {
+    K_LIST_FOREACH (L->C->decls, pdecl) {
         if (HirIsVarDecl(*pdecl)) {
             struct HirVarDecl *d = HirGetVarDecl(*pdecl);
             if (d->is_global)
-                PendingMap_insert(L->C, pending, d->did, d);
+                lower_global_constant(L, d);
         }
-    }
-
-    // resolve constants, making sure there are no cyclic dependencies
-    PendingMapIterator iter;
-    PendingMapIterator_init(pending, &iter);
-    while (PendingMapIterator_is_valid(&iter)) {
-        struct HirVarDecl **pd = PendingMapIterator_valuep(&iter);
-        lower_global_constant(L, *pd);
-        PendingMapIterator_next(&iter);
     }
 }
 
 BodyMap *pawP_lower_hir(struct Compiler *C)
 {
-    BodyMap *result = BodyMap_new(C);
+    BodyMap *result = BodyMap_new(C, C->pool);
 
     struct LowerHir L = {
-        .globals = GlobalMap_new(C),
-        .labels = label_list_new(C),
-        .stack = var_stack_new(C),
+        .pool = pawP_pool_new(C),
         .P = ENV(C),
         .C = C,
     };
-    pawHir_visitor_init(&L.V, C, &L);
+    L.globals = GlobalMap_new(&L, L.pool);
+    L.labels = LabelList_new(&L);
+    L.stack = VarStack_new(&L);
 
+    pawHir_visitor_init(&L.V, C, &L);
     L.V.VisitFieldDecl = visit_field_decl;
     L.V.VisitVarDecl = visit_var_decl;
     L.V.VisitExprStmt = visit_expr_stmt;
@@ -1798,7 +1783,7 @@ BodyMap *pawP_lower_hir(struct Compiler *C)
     lower_global_constants(&L);
 
     struct HirDecl *const *pdecl;
-    K_LIST_FOREACH(C->decls, pdecl) {
+    K_LIST_FOREACH (C->decls, pdecl) {
         if (HirIsFuncDecl(*pdecl)) {
             struct IrType *type = GET_NODE_TYPE(C, *pdecl);
             struct IrSignature *fsig = IrGetSignature(type);
@@ -1809,5 +1794,6 @@ BodyMap *pawP_lower_hir(struct Compiler *C)
             }
         }
     }
+    pawP_pool_free(C, L.pool);
     return result;
 }

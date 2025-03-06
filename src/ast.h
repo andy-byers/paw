@@ -1268,24 +1268,24 @@ struct Ast {
 #define AST_CAST_STMT(x) CAST(struct AstStmt *, x)
 #define AST_CAST_PAT(x) CAST(struct AstPat *, x)
 
-DEFINE_LIST(struct Compiler, pawAst_decl_list_, AstDeclList, struct AstDecl *)
-DEFINE_LIST(struct Compiler, pawAst_expr_list_, AstExprList, struct AstExpr *)
-DEFINE_LIST(struct Compiler, pawAst_type_list_, AstTypeList, struct AstType *)
-DEFINE_LIST(struct Compiler, pawAst_stmt_list_, AstStmtList, struct AstStmt *)
-DEFINE_LIST(struct Compiler, pawAst_pat_list_, AstPatList, struct AstPat *)
-DEFINE_LIST(struct Compiler, pawAst_path_, AstPath, struct AstSegment)
-DEFINE_LIST(struct Compiler, pawAst_bound_list_, AstBoundList, struct AstGenericBound)
+DEFINE_LIST(struct Ast, AstDeclList, struct AstDecl *)
+DEFINE_LIST(struct Ast, AstExprList, struct AstExpr *)
+DEFINE_LIST(struct Ast, AstTypeList, struct AstType *)
+DEFINE_LIST(struct Ast, AstStmtList, struct AstStmt *)
+DEFINE_LIST(struct Ast, AstPatList, struct AstPat *)
+DEFINE_LIST(struct Ast, AstPath, struct AstSegment)
+DEFINE_LIST(struct Ast, AstBoundList, struct AstGenericBound)
 
 struct Ast *pawAst_new(struct Compiler *C, String *name, int modno);
 void pawAst_free(struct Ast *ast);
 
-inline static struct AstSegment *pawAst_path_add(struct Compiler *C, struct AstPath *path, String *name, struct AstTypeList *args)
+inline static struct AstSegment *AstPath_add(struct Ast *ast, struct AstPath *path, String *name, struct AstTypeList *args)
 {
-    K_LIST_PUSH(C, path, ((struct AstSegment){
-                             .types = args,
-                             .name = name,
-                         }));
-    return &K_LIST_LAST(path);
+    AstPath_push(ast, path, (struct AstSegment){
+                                .types = args,
+                                .name = name,
+                            });
+    return &K_LIST_AT(path, path->count - 1);
 }
 
 #define AST_KINDOF(x) ((x)->hdr.kind)

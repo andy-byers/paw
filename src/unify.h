@@ -28,8 +28,7 @@ void pawU_unify(struct Unifier *U, struct IrType *a, struct IrType *b);
 static void pawU_unify_lists(struct Unifier *U, struct IrTypeList *a, struct IrTypeList *b)
 {
     struct IrType **pa, **pb;
-    K_LIST_ZIP(a, pa, b, pb)
-    {
+    K_LIST_ZIP (a, pa, b, pb) {
         pawU_unify(U, *pa, *pb);
     }
 }

@@ -60,8 +60,7 @@ int pawE_locate(paw_Env *P, String const *name, paw_Bool only_pub)
     struct DefList const defs = P->defs;
     for (int i = 0; i < defs.count; ++i) {
         struct Def const *def = P->defs.data[i];
-        String const *query = def->hdr.kind == DEF_FUNC ? def->func.mangled_name :
-            def->hdr.kind == DEF_ADT ? def->adt.mangled_name
+        String const *query = def->hdr.kind == DEF_FUNC ? def->func.mangled_name : def->hdr.kind == DEF_ADT ? def->adt.mangled_name
                                                                                                             : NULL;
         if (pawS_eq(name, query) && def->hdr.is_pub >= only_pub) {
             return i;

@@ -46,7 +46,7 @@ static struct IrType *func_result(struct InstanceState *I, struct HirFuncDecl *d
 }
 
 struct IrTypeList *pawP_instantiate_typelist(struct Compiler *C, struct IrTypeList *before,
-    struct IrTypeList *after, struct IrTypeList *target)
+                                             struct IrTypeList *after, struct IrTypeList *target)
 {
     struct IrTypeFolder F;
     struct Substitution subst;
@@ -55,7 +55,7 @@ struct IrTypeList *pawP_instantiate_typelist(struct Compiler *C, struct IrTypeLi
 }
 
 static void prep_func_instance(struct InstanceState *I, struct IrTypeList *before, struct IrTypeList *after,
-    struct IrSignature *t)
+                               struct IrSignature *t)
 {
     struct IrTypeFolder F;
     struct Substitution subst;
@@ -133,8 +133,10 @@ static struct IrType *instantiate_method(struct InstanceState *I, struct IrType 
     struct IrTypeList *unknowns = pawU_new_unknowns(I->U, generics);
 
     struct IrTypeList *subst = pawP_instantiate_typelist(I->C, generics, unknowns, IR_TYPE_SUBTYPES(obj));
-    for (int i = 0; i < subst->count; ++i) {
-        pawU_unify(I->U, K_LIST_GET(subst, i), K_LIST_GET(types, i));
+
+    struct IrType *const *pa, *const *pb;
+    K_LIST_ZIP (subst, pa, types, pb) {
+        pawU_unify(I->U, *pa, *pb);
     }
 
     struct IrType *inst = pawP_instantiate(I->C, obj, subst);
@@ -217,12 +219,13 @@ struct IrType *pawP_generalize(struct Compiler *C, struct IrType *type)
 
 static struct IrTypeList *generalize_list(struct Compiler *C, struct IrTypeList *types)
 {
+    struct IrTypeList *result = IrTypeList_new(C);
+    IrTypeList_reserve(C, result, types->count);
+
     struct IrType **ptype;
-    struct IrTypeList *result = pawIr_type_list_new(C);
-    K_LIST_FOREACH(types, ptype)
-    {
+    K_LIST_FOREACH (types, ptype) {
         struct IrType *r = pawP_generalize(C, *ptype);
-        K_LIST_PUSH(C, result, r);
+        IrTypeList_push(C, result, r);
     }
     return result;
 }
@@ -253,12 +256,13 @@ static struct IrTypeList *substitute_list(struct IrTypeFolder *F, struct IrTypeL
     if (list == NULL)
         return NULL;
 
+    struct IrTypeList *copy = IrTypeList_new(C);
+    IrTypeList_reserve(C, copy, list->count);
+
     struct IrType **ptype;
-    struct IrTypeList *copy = pawIr_type_list_new(C);
-    K_LIST_FOREACH(list, ptype)
-    {
+    K_LIST_FOREACH (list, ptype) {
         struct IrType *type = pawIr_fold_type(F, *ptype);
-        K_LIST_PUSH(C, copy, type);
+        IrTypeList_push(C, copy, type);
     }
     return copy;
 }
@@ -300,8 +304,7 @@ static struct IrType *substitute_generic(struct IrTypeFolder *F, struct IrGeneri
     struct Substitution *subst = F->ud;
 
     struct IrType **pg, **pt;
-    K_LIST_ZIP(subst->generics, pg, subst->types, pt)
-    {
+    K_LIST_ZIP (subst->generics, pg, subst->types, pt) {
         struct IrGeneric *g = IrGetGeneric(*pg);
         if (t->did.value == g->did.value) {
             if (IrIsGeneric(*pt)) {
@@ -318,7 +321,7 @@ static struct IrType *substitute_generic(struct IrTypeFolder *F, struct IrGeneri
 }
 
 void pawP_init_substitution_folder(struct IrTypeFolder *F, struct Compiler *C, struct Substitution *subst,
-    struct IrTypeList *generics, struct IrTypeList *types)
+                                   struct IrTypeList *generics, struct IrTypeList *types)
 {
     *subst = (struct Substitution){
         .generics = generics,

@@ -18,7 +18,7 @@ typedef struct InferenceVar {
     int rank;
 } InferenceVar;
 
-DEFINE_LIST(struct Compiler, var_list_, VarList, struct InferenceVar *)
+DEFINE_LIST(struct Compiler, VarList, struct InferenceVar *)
 
 typedef struct UnificationTable {
     K_ALIGNAS_NODE struct UnificationTable *outer;
@@ -47,7 +47,7 @@ static void debug_log(struct Unifier *U, char const *what, struct IrType *a, str
     pawIr_print_type(U->C, a);
     pawIr_print_type(U->C, b);
     DLOG(U->C, "(unify) %s: %s = %s",
-        what, paw_string(P, -2), paw_string(P, -1));
+         what, paw_string(P, -2), paw_string(P, -1));
     paw_pop(P, 2);
 #else
     PAW_UNUSED(U);
@@ -86,9 +86,10 @@ static void check_occurs(struct Unifier *U, InferenceVar *ivar, struct IrType *t
     struct IrAdt *adt = IrGetAdt(type);
     if (adt->types == NULL)
         return;
-    for (int i = 0; i < adt->types->count; ++i) {
-        struct IrType *subtype = K_LIST_GET(adt->types, i);
-        check_occurs(U, ivar, subtype);
+
+    struct IrType *const *ptype;
+    K_LIST_FOREACH (adt->types, ptype) {
+        check_occurs(U, ivar, *ptype);
     }
 }
 
@@ -280,9 +281,9 @@ void pawU_unify(struct Unifier *U, struct IrType *a, struct IrType *b)
     pawIr_print_type(U->C, a);
     pawIr_print_type(U->C, b);
     ERROR(U, -1,
-        "incompatible types '%s' and '%s'",
-        paw_string(ENV(U->C), -2),
-        paw_string(ENV(U->C), -1));
+          "incompatible types '%s' and '%s'",
+          paw_string(ENV(U->C), -2),
+          paw_string(ENV(U->C), -1));
 }
 
 static int equate(struct Unifier *U, struct IrType *a, struct IrType *b)
@@ -304,9 +305,9 @@ struct IrType *pawU_new_unknown(struct Unifier *U, int line, struct IrTypeList *
     UnificationTable *table = U->table;
 
     // NOTE: inference variables require a stable address, since they point to each other
-    InferenceVar *ivar = pawP_alloc(U->C, NULL, 0, sizeof(InferenceVar));
+    InferenceVar *ivar = P_ALLOC(U->C, NULL, 0, sizeof(InferenceVar));
     int const index = table->ivars->count;
-    K_LIST_PUSH(U->C, table->ivars, ivar);
+    VarList_push(U->C, table->ivars, ivar);
 
     struct IrType *type = pawIr_new_infer(U->C, table->depth, index, bounds);
     ivar->parent = ivar;
@@ -317,22 +318,21 @@ struct IrType *pawU_new_unknown(struct Unifier *U, int line, struct IrTypeList *
 struct IrTypeList *pawU_new_unknowns(struct Unifier *U, struct IrTypeList *types)
 {
     struct IrType **ptype;
-    struct IrTypeList *result = pawIr_type_list_new(U->C);
-    K_LIST_FOREACH(types, ptype)
-    {
+    struct IrTypeList *result = IrTypeList_new(U->C);
+    K_LIST_FOREACH (types, ptype) {
         struct IrTypeList *bounds = IrIsGeneric(*ptype)
                                         ? IrGetGeneric(*ptype)->bounds
                                         : NULL;
         struct IrType *unknown = pawU_new_unknown(U, -1, bounds);
-        K_LIST_PUSH(U->C, result, unknown);
+        IrTypeList_push(U->C, result, unknown);
     }
     return result;
 }
 
 void pawU_enter_binder(struct Unifier *U)
 {
-    UnificationTable *table = pawP_alloc(U->C, NULL, 0, sizeof(UnificationTable));
-    table->ivars = var_list_new(U->C);
+    UnificationTable *table = P_ALLOC(U->C, NULL, 0, sizeof(UnificationTable));
+    table->ivars = VarList_new(U->C);
     table->depth = U->depth;
     table->outer = U->table;
     U->table = table;
@@ -364,22 +364,20 @@ paw_Bool pawU_list_equals(struct Unifier *U, struct IrTypeList *lhs, struct IrTy
 
     if (lhs == NULL)
         return PAW_TRUE;
-    for (int i = 0; i < lhs->count; ++i) {
-        struct IrType *a = K_LIST_GET(lhs, i);
-        struct IrType *b = K_LIST_GET(rhs, i);
-        if (!pawU_equals(U, a, b))
+    struct IrType *const *pa, *const *pb;
+    K_LIST_ZIP (lhs, pa, rhs, pb) {
+        if (!pawU_equals(U, *pa, *pb))
             return PAW_FALSE;
     }
     return PAW_TRUE;
 }
 
-static paw_Bool are_lists_compat(struct Unifier *U, struct IrTypeList *a, struct IrTypeList *b)
+static paw_Bool are_lists_compat(struct Unifier *U, struct IrTypeList *lhs, struct IrTypeList *rhs)
 {
-    paw_assert(a->count == b->count);
-    for (int i = 0; i < a->count; ++i) {
-        struct IrType *x = K_LIST_GET(a, i);
-        struct IrType *y = K_LIST_GET(b, i);
-        if (!pawU_is_compat(U, x, y))
+    paw_assert(lhs->count == rhs->count);
+    struct IrType *const *pa, *const *pb;
+    K_LIST_ZIP (lhs, pa, rhs, pb) {
+        if (!pawU_is_compat(U, *pa, *pb))
             return PAW_FALSE;
     }
     return PAW_TRUE;

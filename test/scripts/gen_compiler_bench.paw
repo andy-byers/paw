@@ -1,0 +1,37 @@
+
+use io::File;
+
+fn writeln(f: File, s: str) {
+    f.write(s + '\n');
+}
+
+fn generate(f: File, n: int) {
+    writeln(f, 'pub fn g' + n.to_string() + '(i: int) -> int {');
+    writeln(f, '  i * 2 + 353452');
+    writeln(f, '}');
+    writeln(f, 'pub fn f' + n.to_string() + '(i: int) -> int {');
+    writeln(f, '  g' + n.to_string() + '(i) + 2395723');
+    writeln(f, '}');
+}
+
+pub fn main(args: [str]) -> int {
+    let n = if #args > 1 {
+        args[1].parse_int(10)
+    } else {
+        500
+    };
+
+    let f = File::open('generated.paw', 'w');
+
+    for i in range(0, n, 1) {
+        generate(f, i);
+    }
+
+    writeln(f, 'pub fn main(args: [str]) -> int {');
+    for i in range(0, n, 1) {
+        writeln(f, '  f' + i.to_string() + '(' + i.to_string() + ');');
+    }
+    writeln(f, '  0');
+    writeln(f, '}');
+    0
+}

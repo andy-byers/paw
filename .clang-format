@@ -8,3 +8,8 @@ IndentWidth: 4
 BreakBeforeBinaryOperators: NonAssignment
 SpaceBeforeCaseColon: false
 AlignTrailingComments: false
+ForEachMacros: [
+  K_LIST_FOREACH, 
+  K_LIST_ENUMERATE, 
+  K_LIST_ZIP,
+]

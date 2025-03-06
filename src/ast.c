@@ -14,38 +14,33 @@
 struct Ast *pawAst_new(struct Compiler *C, String *name, int modno)
 {
     paw_Env *P = ENV(C);
-    struct Ast *ast = pawP_alloc(C, NULL, 0, sizeof(struct Ast));
+    struct Ast *ast = P_ALLOC(C, NULL, 0, sizeof(struct Ast));
     *ast = (struct Ast){
+        .pool = C->ast_pool,
         .modno = modno,
-        .pool = C->pool,
         .name = name,
         .C = C,
         .P = P,
     };
-    ast->items = pawAst_decl_list_new(C);
+    ast->items = AstDeclList_new(ast);
     return ast;
 }
 
 void pawAst_free(struct Ast *ast)
 {
-    PAW_UNUSED(ast);
+    P_ALLOC(ast->C, ast, sizeof(*ast), 0);
 }
 
-#define DEFINE_NODE_CONSTRUCTOR(name, T)                      \
-    struct T *pawAst_new_##name(struct Ast *ast)              \
-    {                                                         \
-        return pawP_alloc(ast->C, NULL, 0, sizeof(struct T)); \
+#define DEFINE_NODE_CONSTRUCTOR(name, T)                   \
+    struct T *pawAst_new_##name(struct Ast *ast)           \
+    {                                                      \
+        return P_ALLOC(ast->C, NULL, 0, sizeof(struct T)); \
     }
 DEFINE_NODE_CONSTRUCTOR(decl, AstDecl)
 DEFINE_NODE_CONSTRUCTOR(stmt, AstStmt)
 DEFINE_NODE_CONSTRUCTOR(type, AstType)
 DEFINE_NODE_CONSTRUCTOR(expr, AstExpr)
 DEFINE_NODE_CONSTRUCTOR(pat, AstPat)
-
-struct AstSegment *pawAst_segment_new(struct Compiler *C)
-{
-    return pawP_alloc(C, NULL, 0, sizeof(struct AstSegment));
-}
 
 #if defined(PAW_DEBUG_EXTRA)
 
@@ -78,7 +73,7 @@ static void dump_stmt(Printer *P, struct AstStmt *s);
 
 #define DEFINE_LIST_PRINTER(name, T)                                 \
     static void dump_##name##_list(Printer *P, struct T##List *list, \
-        const char *name)                                            \
+                                   const char *name)                 \
     {                                                                \
         DUMP_FMT(P, "%s: {\n", name);                                \
         ++P->indent;                                                 \
@@ -114,7 +109,7 @@ DEFINE_KIND_PRINTER(stmt, AstStmt)
 static void dump_path(Printer *P, struct AstPath *p)
 {
     for (int i = 0; i < p->count; ++i) {
-        struct AstSegment seg = K_LIST_GET(p, i);
+        struct AstSegment seg = AstPath_get(p, i);
         DUMP_NAME(P, seg.name);
         dump_type_list(P, seg.types, "types");
     }
@@ -460,8 +455,7 @@ char const *pawAst_dump(struct Ast *ast)
         .P = P,
     };
     struct AstDecl *const *pdecl;
-    K_LIST_FOREACH(ast->items, pdecl)
-    {
+    K_LIST_FOREACH (ast->items, pdecl) {
         dump_decl(&print, *pdecl);
     }
     pawL_push_result(P, &buf);

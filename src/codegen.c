@@ -21,10 +21,10 @@
 
 #define ERROR(G, code, ...) pawE_error(ENV(G), code, -1, __VA_ARGS__)
 #define GET_DECL(G, id) pawHir_get_decl((G)->C, id)
-#define GET_TYPE(G, r) K_LIST_GET((G)->fs->mir->registers, (r).value).type
+#define GET_TYPE(G, r) MirRegisterDataList_get((G)->fs->mir->registers, (r).value).type
 #define TYPE_CODE(G, type) pawP_type2code((G)->C, type)
-#define TYPEOF(G, r) K_LIST_GET((G)->fs->mir->registers, (r).value).type
-#define REG(r) K_LIST_GET(fs->regtab, (r).value).value
+#define TYPEOF(G, r) MirRegisterDataList_get((G)->fs->mir->registers, (r).value).type
+#define REG(r) RegisterTable_get(fs->regtab, (r).value).value
 
 struct FuncState {
     struct FuncState *outer; // enclosing function
@@ -70,13 +70,13 @@ struct PolicyInfo {
     int hash_vid;
 };
 
-DEFINE_LIST(struct Compiler, jumptab_, JumpTable, struct JumpTarget)
-DEFINE_LIST(struct Compiler, PolicyList_, PolicyList, struct PolicyInfo)
-DEFINE_MAP(struct Compiler, ToplevelMap, pawP_alloc, pawIr_type_hash, pawIr_type_equals, struct IrType *, int)
+DEFINE_LIST(struct Generator, JumpTable, struct JumpTarget)
+DEFINE_LIST(struct Generator, PolicyList, struct PolicyInfo)
+DEFINE_MAP(struct Generator, ToplevelMap, pawP_alloc, IR_TYPE_HASH, IR_TYPE_EQUALS, struct IrType *, int)
 
 static void add_jump_target(struct Generator *G, MirBlock bid)
 {
-    K_LIST_PUSH(G->C, G->fs->jumps, ((struct JumpTarget){
+    JumpTable_push(G, G->fs->jumps, ((struct JumpTarget){
                                         .pc = G->fs->pc,
                                         .bid = bid,
                                     }));
@@ -174,11 +174,11 @@ struct JumpSource {
     int from_pc;
 };
 
-DEFINE_LIST(struct Compiler, patch_list_, PatchList, struct JumpSource)
+DEFINE_LIST(struct Generator, PatchList, struct JumpSource)
 
 static void add_jump_source(struct Generator *G, int from_pc, MirBlock to)
 {
-    K_LIST_PUSH(G->C, G->fs->patch, ((struct JumpSource){
+    PatchList_push(G, G->fs->patch, ((struct JumpSource){
                                         .from_pc = from_pc,
                                         .to = to,
                                     }));
@@ -202,12 +202,10 @@ static void patch_jumps_to_here(struct Generator *G, MirBlock bid)
 
     int index;
     struct JumpSource *pjump;
-    K_LIST_ENUMERATE(fs->patch, index, pjump)
-    {
+    K_LIST_ENUMERATE (fs->patch, index, pjump) {
         if (pjump->to.value == bid.value) {
             patch_jump(fs, pjump->from_pc, fs->pc);
-            K_LIST_SET(fs->patch, index, K_LIST_LAST(fs->patch));
-            K_LIST_POP(fs->patch);
+            PatchList_swap_remove(fs->patch, index);
             --index;
         }
     }
@@ -328,9 +326,9 @@ static int code_switch_int(struct FuncState *fs, MirRegister discr, int k)
 
 static void enter_kcache(struct Generator *G, struct KCache *cache)
 {
-    cache->ints = ValueMap_new(G->C);
-    cache->strs = ValueMap_new(G->C);
-    cache->flts = ValueMap_new(G->C);
+    cache->ints = ValueMap_new(G->C, G->pool);
+    cache->strs = ValueMap_new(G->C, G->pool);
+    cache->flts = ValueMap_new(G->C, G->pool);
 }
 
 static void leave_kcache(struct Generator *G, struct KCache *cache)
@@ -368,8 +366,6 @@ static void enter_function(struct Generator *G, struct FuncState *fs, struct Mir
 {
     G->V->mir = mir;
     *fs = (struct FuncState){
-        .patch = patch_list_new(G->C),
-        .jumps = jumptab_new(G->C),
         .kind = mir->fn_kind,
         .name = mir->name,
         .proto = proto,
@@ -377,6 +373,8 @@ static void enter_function(struct Generator *G, struct FuncState *fs, struct Mir
         .mir = mir,
         .G = G,
     };
+    fs->patch = PatchList_new(G);
+    fs->jumps = JumpTable_new(G),
     G->fs = fs;
 
     enter_kcache(G, &fs->kcache);
@@ -392,7 +390,7 @@ static ValueId resolve_function(struct Generator *G, struct Type *rtti)
 
 static struct ModuleInfo *get_mod(struct Generator *G, int modno)
 {
-    return K_LIST_GET(G->C->modules, modno);
+    return ModuleList_get(G->C->modules, modno);
 }
 
 static String const *get_mod_prefix(struct Generator *G, struct ModuleInfo *m)
@@ -440,11 +438,11 @@ static paw_Bool check_extern_function(struct Generator *G, struct ItemSlot item,
     struct Compiler *C = G->C;
     if (annos != NULL) {
         struct Annotation *panno;
-        K_LIST_FOREACH(annos, panno) {
+        K_LIST_FOREACH (annos, panno) {
             if (pawS_eq(panno->name, CSTR(C, CSTR_EXTERN))) {
                 if (d->body != NULL)
                     VALUE_ERROR(C, d->line, "unexpected body for extern function '%s'",
-                            d->name->text);
+                                d->name->text);
 
                 *pvalue = pawP_get_extern_value(G->C, item.name, *panno);
                 return PAW_TRUE;
@@ -472,13 +470,12 @@ static void allocate_upvalue_info(struct Generator *G, Proto *proto, struct MirU
 
     int index;
     struct MirUpvalueInfo *pinfo;
-    K_LIST_ENUMERATE(upvalues, index, pinfo)
-    {
+    K_LIST_ENUMERATE (upvalues, index, pinfo) {
         proto->u[index].is_local = pinfo->is_local;
         if (pinfo->is_local) {
             struct FuncState *parent = fs->outer;
-            MirRegister const r = K_LIST_GET(parent->mir->locals, pinfo->index);
-            struct RegisterInfo ri = K_LIST_GET(parent->regtab, r.value);
+            MirRegister const r = MirRegisterList_get(parent->mir->locals, pinfo->index);
+            struct RegisterInfo ri = RegisterTable_get(parent->regtab, r.value);
             proto->u[index].index = ri.value;
         } else {
             proto->u[index].index = pinfo->index;
@@ -513,8 +510,7 @@ static void code_children(struct Generator *G, Proto *parent, struct Mir *mir)
 
     int index;
     struct Mir **pchild;
-    K_LIST_ENUMERATE(mir->children, index, pchild)
-    {
+    K_LIST_ENUMERATE (mir->children, index, pchild) {
         parent->p[index] = code_paw_function(G, *pchild, index);
     }
 }
@@ -574,8 +570,8 @@ static paw_Bool is_method_call(struct Generator *G, struct IrType *type)
     if (!IrIsSignature(type))
         return PAW_FALSE;
     return IrGetSignature(type)->self != NULL;
-   // struct HirDecl *decl = GET_DECL(G, IR_TYPE_DID(type));
-   // return HirGetFuncDecl(decl)->self != NULL;
+    // struct HirDecl *decl = GET_DECL(G, IR_TYPE_DID(type));
+    // return HirGetFuncDecl(decl)->self != NULL;
 }
 
 static void prep_method_call(struct Generator *G, MirRegister callable, MirRegister self)
@@ -592,8 +588,7 @@ static void code_items(struct Generator *G)
 {
     int index;
     struct ItemSlot *pitem;
-    K_LIST_ENUMERATE(G->items, index, pitem)
-    {
+    K_LIST_ENUMERATE (G->items, index, pitem) {
         Value value;
         const int vid = G->C->globals->count + index;
         if (check_extern_function(G, *pitem, &value)) {
@@ -611,8 +606,7 @@ static void init_policies(struct Generator *G)
     struct MapPolicyList *policies = &P->map_policies;
 
     struct PolicyInfo *pinfo;
-    K_LIST_FOREACH(G->policies, pinfo)
-    {
+    K_LIST_FOREACH (G->policies, pinfo) {
         pawM_grow(P, policies->data, policies->count, policies->alloc);
         policies->data[policies->count++] = (MapPolicy){
             .equals = P->vals.data[pinfo->equals_vid],
@@ -623,7 +617,7 @@ static void init_policies(struct Generator *G)
 
 static void register_toplevel_function(struct Generator *G, struct IrType *type, int iid)
 {
-    ToplevelMap_insert(G->C, G->toplevel, type, iid);
+    ToplevelMap_insert(G, G->toplevel, type, iid);
 }
 
 static void register_items(struct Generator *G)
@@ -644,7 +638,7 @@ static void register_items(struct Generator *G)
     P->vals.count = P->vals.alloc = nvalues;
 
     struct GlobalInfo *pinfo;
-    K_LIST_FOREACH(globals, pinfo) {
+    K_LIST_FOREACH (globals, pinfo) {
         pawM_grow(P, vals->data, vals->count, vals->alloc);
         vals->data[pinfo->index] = pinfo->value;
         String const *modname = prefix_for_modno(G, pinfo->modno);
@@ -653,8 +647,7 @@ static void register_items(struct Generator *G)
 
     int iid;
     struct ItemSlot *pitem;
-    K_LIST_ENUMERATE(G->items, iid, pitem)
-    {
+    K_LIST_ENUMERATE (G->items, iid, pitem) {
         struct Mir *mir = pitem->mir;
         struct IrType *type = mir->type;
         register_toplevel_function(G, type, iid);
@@ -696,8 +689,8 @@ static void code_global(struct MirVisitor *V, struct MirGlobal *x)
     struct FuncState *fs = G->fs;
 
     ValueId const value_id = x->global_id < 0
-        ? type2global(G, TYPEOF(G, x->output))
-        : (ValueId){x->global_id};
+                                 ? type2global(G, TYPEOF(G, x->output))
+                                 : (ValueId){x->global_id};
     code_ABx(fs, OP_GETGLOBAL, REG(x->output), value_id);
 }
 
@@ -705,10 +698,12 @@ static void code_constant(struct MirVisitor *V, struct MirConstant *x)
 {
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
-    int const bc = add_constant(G, x->value, x->b_kind);
-    if (x->b_kind == BUILTIN_UNIT || x->b_kind == BUILTIN_BOOL || (x->b_kind == BUILTIN_INT && is_smi(x->value.i))) {
+    if (x->b_kind == BUILTIN_UNIT || // (): 0
+        x->b_kind == BUILTIN_BOOL || // bool: 0 | 1
+        (x->b_kind == BUILTIN_INT && is_smi(x->value.i))) {
         code_smi(fs, x->output, x->value.i);
     } else {
+        int const bc = add_constant(G, x->value, x->b_kind);
         code_ABx(fs, OP_LOADK, REG(x->output), bc);
     }
 }
@@ -821,20 +816,20 @@ static unsigned determine_map_policy(struct Generator *G, struct IrType *key)
     enum BuiltinKind kind = TYPE_CODE(G, key);
     if (kind != NBUILTINS)
         return kind;
-    int const *ppolicy = ToplevelMap_get(G->C, G->policy_cache, key);
+    int const *ppolicy = ToplevelMap_get(G, G->policy_cache, key);
     if (ppolicy != NULL)
         return *ppolicy;
 
     struct TraitOwnerList *const *powners = TraitOwners_get(G->C, G->C->trait_owners, key);
-    struct IrType *equals = K_LIST_FIRST(K_LIST_GET(*powners, TRAIT_EQUALS));
-    struct IrType *hash = K_LIST_FIRST(K_LIST_GET(*powners, TRAIT_HASH));
-    K_LIST_PUSH(G->C, G->policies, ((struct PolicyInfo){
-                                       .equals_vid = *ToplevelMap_get(G->C, G->toplevel, equals),
-                                       .hash_vid = *ToplevelMap_get(G->C, G->toplevel, hash),
-                                   }));
+    struct IrType *equals = IrTypeList_first(TraitOwnerList_get(*powners, TRAIT_EQUALS));
+    struct IrType *hash = IrTypeList_first(TraitOwnerList_get(*powners, TRAIT_HASH));
+    PolicyList_push(G, G->policies, ((struct PolicyInfo){
+                                        .equals_vid = *ToplevelMap_get(G, G->toplevel, equals),
+                                        .hash_vid = *ToplevelMap_get(G, G->toplevel, hash),
+                                    }));
 
     int const ipolicy = G->ipolicy++;
-    ToplevelMap_insert(G->C, G->policy_cache, key, ipolicy);
+    ToplevelMap_insert(G, G->policy_cache, key, ipolicy);
     return ipolicy;
 }
 
@@ -874,8 +869,7 @@ static int enforce_call_constraints(struct FuncState *fs, struct MirCall *x)
 
     MirRegister const *pr;
     move_to_reg(fs, REG(x->target), next++);
-    K_LIST_FOREACH(x->args, pr)
-    {
+    K_LIST_FOREACH (x->args, pr) {
         move_to_reg(fs, REG(*pr), next++);
     }
     return target;
@@ -1149,8 +1143,7 @@ static void add_edge(struct Generator *G, int from_pc, MirBlock to)
 {
     struct JumpTarget *pjump;
     struct FuncState *fs = G->fs;
-    K_LIST_FOREACH(fs->jumps, pjump)
-    {
+    K_LIST_FOREACH (fs->jumps, pjump) {
         if (MIR_BB_EQUALS(pjump->bid, to)) {
             patch_jump(fs, from_pc, pjump->pc);
             return;
@@ -1211,8 +1204,7 @@ static paw_Bool code_sparse_switch(struct MirVisitor *V, struct MirSwitch *x)
 
     struct MirSwitchArm *parm;
     MirRegister const d = x->discr;
-    K_LIST_FOREACH(x->arms, parm)
-    {
+    K_LIST_FOREACH (x->arms, parm) {
         int const next_jump = code_testk(fs, d, parm->value, GET_TYPE(G, d));
         add_edge(G, next_jump, parm->bid);
     }
@@ -1233,8 +1225,7 @@ static paw_Bool code_switch(struct MirVisitor *V, struct MirSwitch *x)
 
     struct MirSwitchArm *parm;
     MirRegister const d = x->discr;
-    K_LIST_FOREACH(x->arms, parm)
-    {
+    K_LIST_FOREACH (x->arms, parm) {
         int const next_jump = code_switch_int(fs, d, CAST(int, V_INT(parm->value)));
         add_edge(G, next_jump, parm->bid);
     }
@@ -1300,21 +1291,21 @@ void pawP_codegen(struct Compiler *C)
 
     struct MirVisitor V;
     struct Generator G = {
+        .pool = pawP_pool_new(C),
         .ipolicy = P->map_policies.count,
-        .policies = PolicyList_new(C),
-        .policy_cache = ToplevelMap_new(C),
-        .toplevel = ToplevelMap_new(C),
-        .items = pawP_item_list_new(C),
-        .pool = C->pool,
+        .items = ItemList_new(C),
         .V = &V,
         .P = P,
         .C = C,
     };
+    G.policies = PolicyList_new(&G);
+    G.policy_cache = ToplevelMap_new(&G, G.pool);
+    G.toplevel = ToplevelMap_new(&G, G.pool);
 
     setup_codegen(&G);
     register_items(&G);
     code_items(&G);
     init_policies(&G);
 
-    paw_pop(ENV(C), 1);
+    pawP_pool_free(C, G.pool);
 }

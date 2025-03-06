@@ -86,8 +86,8 @@ struct VariableList;
 struct StringMap;
 struct BodyMap;
 
-void *pawP_pool_alloc(paw_Env *P, struct Pool *pool, size_t size);
-void *pawP_alloc(struct Compiler *C, void *ptr, size_t size0, size_t size);
+void *pawP_alloc(paw_Env *P, struct Pool *pool, void *ptr, size_t size0, size_t size);
+#define P_ALLOC(C, ptr, size0, size) pawP_alloc(ENV(C), (C)->pool, ptr, size0, size)
 
 String *pawP_scan_nstring(struct Compiler *C, Tuple *map, char const *s, size_t n);
 inline static String *pawP_scan_string(struct Compiler *C, Tuple *map, char const *s)
@@ -120,10 +120,14 @@ struct Compiler {
     struct ModuleList *modules;
     struct HirDeclList *decls;
     struct DynamicMem *dm;
-    struct Pool *pool;
     struct Ast *prelude;
     struct Unifier *U;
     String *modname;
+
+    struct Pool *pool;
+    struct Pool *ast_pool;
+    struct Pool *hir_pool;
+    struct Pool *mir_pool;
 
     // '.strings' anchors all strings used during compilation so they are not
     // collected by the GC.
@@ -165,7 +169,7 @@ struct ModuleInfo {
 
 struct ModuleInfo *pawP_mi_new(struct Compiler *C, struct Hir *hir);
 
-DEFINE_LIST(struct Compiler, pawP_mod_list_, ModuleList, struct ModuleInfo *)
+DEFINE_LIST(struct Compiler, ModuleList, struct ModuleInfo *)
 
 // Keeps track of dynamic memory used by the compiler
 struct DynamicMem {
@@ -195,10 +199,10 @@ struct RegisterInfo {
     int value;
 };
 
-DEFINE_LIST(struct Compiler, regtab_, RegisterTable, struct RegisterInfo)
+DEFINE_LIST(struct Compiler, RegisterTable, struct RegisterInfo)
 
 typedef unsigned long long BitChunk;
-DEFINE_LIST(struct Compiler, raw_bitset_, BitSet, BitChunk)
+DEFINE_LIST(struct Compiler, BitSet, BitChunk)
 
 struct BitSet *pawP_bitset_new(struct Compiler *C, int count);
 int pawP_bitset_count(struct BitSet const *bs);
@@ -242,7 +246,7 @@ struct Substitution {
 };
 
 void pawP_init_substitution_folder(struct IrTypeFolder *F, struct Compiler *C, struct Substitution *subst,
-    struct IrTypeList *generics, struct IrTypeList *types);
+                                   struct IrTypeList *generics, struct IrTypeList *types);
 
 void pawP_collect_imports(struct Compiler *C, struct Ast *ast);
 void pawP_import(struct Compiler *C, void *state);
@@ -299,15 +303,8 @@ inline static void pawP_compile(struct Compiler *C, paw_Reader input, void *ud)
     pawP_codegen(C);
 }
 
-inline static void pawP_pool_init(struct Compiler *C, struct Pool *pool)
-{
-    pawK_pool_init(ENV(C), pool, 512, 8);
-}
-
-inline static void pawP_pool_uninit(struct Compiler *C, struct Pool *pool)
-{
-    pawK_pool_uninit(ENV(C), pool);
-}
+struct Pool *pawP_pool_new(struct Compiler *C);
+void pawP_pool_free(struct Compiler *C, struct Pool *pool);
 
 enum BuiltinKind pawP_type2code(struct Compiler *C, struct IrType *type);
 
@@ -318,7 +315,7 @@ struct ItemSlot {
     DeclId did;
 };
 
-DEFINE_LIST(struct Compiler, pawP_item_list_, ItemList, struct ItemSlot)
+DEFINE_LIST(struct Compiler, ItemList, struct ItemSlot)
 
 struct Annotation {
     enum BuiltinKind kind : 7;
@@ -327,7 +324,7 @@ struct Annotation {
     Value value;
 };
 
-DEFINE_LIST(struct Compiler, Annotations_, Annotations, struct Annotation)
+DEFINE_LIST(struct Compiler, Annotations, struct Annotation)
 
 paw_Bool pawP_check_extern(struct Compiler *C, struct Annotations *annos, struct Annotation *panno);
 Value pawP_get_extern_value(struct Compiler *C, String *name, struct Annotation anno);
@@ -357,6 +354,12 @@ inline static paw_Bool p_equals_def_id(struct Compiler *C, DefId a, DefId b)
     return a.value == b.value;
 }
 
+#define P_DECL_ID_HASH(Ctx_, Did_) (Did_).value
+#define P_DECL_ID_EQUALS(Ctx_, A_, B_) ((A_).value == (B_).value)
+#define P_PTR_HASH(Ctx_, Ptr_) CAST(paw_Uint, Ptr_)
+#define P_PTR_EQUALS(Ctx_, A_, B_) ((A_) == (B_))
+#define P_VALUE_HASH(Ctx_, Value_) V_UINT(Value_)
+#define P_VALUE_EQUALS(Ctx_, A_, B_) (V_UINT(A_) == V_UINT(B_))
 inline static paw_Uint p_hash_decl_id(struct Compiler *C, DeclId did)
 {
     PAW_UNUSED(C);
@@ -400,6 +403,6 @@ DEFINE_MAP(struct Compiler, ImportMap, pawP_alloc, p_hash_ptr, p_equals_ptr, Str
 DEFINE_MAP(struct Compiler, ValueMap, pawP_alloc, p_value_hash, p_value_equals, Value, Value)
 DEFINE_MAP(struct Compiler, BodyMap, pawP_alloc, p_hash_decl_id, p_equals_decl_id, DeclId, struct Mir *)
 DEFINE_MAP(struct Compiler, BuiltinMap, pawP_alloc, p_hash_ptr, p_equals_ptr, String *, struct Builtin *)
-DEFINE_LIST(struct Compiler, GlobalList_, GlobalList, struct GlobalInfo)
+DEFINE_LIST(struct Compiler, GlobalList, struct GlobalInfo)
 
 #endif // PAW_COMPILE_H

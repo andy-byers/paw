@@ -15,6 +15,7 @@ struct ImportContext {
 };
 
 struct Importer {
+    struct Pool *pool;
     struct ImportContext *ctx;
     struct Compiler *C;
     ImportMap *imports;
@@ -25,7 +26,7 @@ struct Importer {
 static void enter_context(struct Importer *I, struct ImportContext *ctx)
 {
     *ctx = (struct ImportContext){
-        .aliases = StringMap_new(I->C),
+        .aliases = StringMap_new(I->C, I->pool),
         .outer = I->ctx,
     };
     I->ctx = ctx;
@@ -94,8 +95,7 @@ static void collect_imports_from(struct Importer *I, struct Ast *ast)
     enter_context(I, &ctx);
 
     // register aliases
-    K_LIST_FOREACH(ast->items, pitem)
-    {
+    K_LIST_FOREACH (ast->items, pitem) {
         struct AstDecl *item = *pitem;
         if (!AstIsUseDecl(item))
             continue;
@@ -106,14 +106,13 @@ static void collect_imports_from(struct Importer *I, struct Ast *ast)
     }
 
     // import modules
-    K_LIST_FOREACH(ast->items, pitem)
-    {
+    K_LIST_FOREACH (ast->items, pitem) {
         struct AstDecl *item = *pitem;
         if (!AstIsUseDecl(item))
             continue;
         struct AstUseDecl *use = AstGetUseDecl(item);
         use->modno = import_module(I, use->name,
-            use->item == NULL ? use->as : NULL);
+                                   use->item == NULL ? use->as : NULL);
     }
 
     leave_context(I);
@@ -122,6 +121,7 @@ static void collect_imports_from(struct Importer *I, struct Ast *ast)
 void pawP_collect_imports(struct Compiler *C, struct Ast *ast)
 {
     struct Importer I = {
+        .pool = pawP_pool_new(C),
         .imports = C->imports,
         .P = ENV(C),
         .C = C,
@@ -129,4 +129,5 @@ void pawP_collect_imports(struct Compiler *C, struct Ast *ast)
 
     ENSURE_STACK(ENV(C), 1); // space for modname
     collect_imports_from(&I, ast);
+    pawP_pool_free(C, I.pool);
 }

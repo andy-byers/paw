@@ -76,6 +76,7 @@ struct Token {
 };
 
 struct Lex {
+    struct Pool *pool;
     struct Compiler *C;
     paw_Env *P;
 

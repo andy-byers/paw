@@ -138,13 +138,13 @@ void paw_mangle_start(paw_Env *P)
     PAW_PUSH_LITERAL(P, "_P");
 }
 
-#define MANGLE_ADD_NAME(P, prefix)         \
-    do {                                   \
-        paw_push_fstring(P, prefix "%I%s", \
-            paw_str_rawlen(P, -1),         \
-            paw_string(P, -1));            \
-        paw_shift(P, 1);                   \
-        paw_str_concat(P, 2);              \
+#define MANGLE_ADD_NAME(P, prefix)              \
+    do {                                        \
+        paw_push_fstring(P, prefix "%I%s",      \
+                         paw_str_rawlen(P, -1), \
+                         paw_string(P, -1));    \
+        paw_shift(P, 1);                        \
+        paw_str_concat(P, 2);                   \
     } while (0)
 
 void paw_mangle_add_module(paw_Env *P)

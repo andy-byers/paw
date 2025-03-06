@@ -699,6 +699,7 @@ struct MirBlockData {
 // TODO: nested closures should be hoisted out into separate Mir objects, but this is complicated
 //       for a few reasons, namely upvalues, generics, and naming.
 struct Mir {
+    struct Pool *pool;
     struct MirRegisterDataList *registers;
     struct MirRegisterList *locals;
     struct MirBlockDataList *blocks;
@@ -708,6 +709,7 @@ struct Mir {
     struct IrType *type;
     struct IrType *self;
     struct Compiler *C;
+    paw_Env *P;
     String *name;
     int mir_count;
     enum FuncKind fn_kind : 8;
@@ -718,17 +720,17 @@ struct Mir {
 #define MIR_KINDOF(node) ((node)->hdr.kind)
 #define MIR_CAST_INSTRUCTION(p) CAST(struct MirInstruction *, p)
 
-DEFINE_LIST(struct Compiler, pawMir_capture_list_, MirCaptureList, struct MirCaptureInfo)
-DEFINE_LIST(struct Compiler, pawMir_upvalue_list_, MirUpvalueList, struct MirUpvalueInfo)
-DEFINE_LIST(struct Compiler, pawMir_switch_list_, MirSwitchArmList, struct MirSwitchArm)
-DEFINE_LIST(struct Compiler, pawMir_instruction_list_, MirInstructionList, struct MirInstruction *)
-DEFINE_LIST(struct Compiler, pawMir_register_list_, MirRegisterList, MirRegister)
-DEFINE_LIST(struct Compiler, pawMir_block_list_, MirBlockList, MirBlock)
-DEFINE_LIST(struct Compiler, pawMir_bucket_list_, MirBucketList, struct MirBlockList *)
-DEFINE_LIST(struct Compiler, pawMir_register_data_list_, MirRegisterDataList, struct MirRegisterData)
-DEFINE_LIST(struct Compiler, pawMir_register_ptr_list_, MirRegisterPtrList, MirRegister *)
-DEFINE_LIST(struct Compiler, pawMir_block_data_list_, MirBlockDataList, struct MirBlockData *)
-DEFINE_LIST(struct Compiler, pawMir_body_list_, MirBodyList, struct Mir *)
+DEFINE_LIST(struct Compiler, MirCaptureList, struct MirCaptureInfo)
+DEFINE_LIST(struct Compiler, MirUpvalueList, struct MirUpvalueInfo)
+DEFINE_LIST(struct Compiler, MirSwitchArmList, struct MirSwitchArm)
+DEFINE_LIST(struct Compiler, MirInstructionList, struct MirInstruction *)
+DEFINE_LIST(struct Compiler, MirRegisterList, MirRegister)
+DEFINE_LIST(struct Compiler, MirBlockList, MirBlock)
+DEFINE_LIST(struct Compiler, MirBucketList, struct MirBlockList *)
+DEFINE_LIST(struct Compiler, MirRegisterDataList, struct MirRegisterData)
+DEFINE_LIST(struct Compiler, MirRegisterPtrList, MirRegister *)
+DEFINE_LIST(struct Compiler, MirBlockDataList, struct MirBlockData *)
+DEFINE_LIST(struct Compiler, MirBodyList, struct Mir *)
 
 struct Mir *pawMir_new(struct Compiler *C, String *name, struct IrType *type, struct IrType *self, enum FuncKind fn_kind, paw_Bool is_pub, paw_Bool is_poly);
 struct MirLiveInterval *pawMir_new_interval(struct Compiler *C, MirRegister r, int npositions);
@@ -753,17 +755,17 @@ inline static MirId mir_bb_last(struct MirBlockData const *block)
 {
     if (block->instructions->count <= 0)
         return block->mid;
-    return K_LIST_LAST(block->instructions)->hdr.mid;
+    return MirInstructionList_last(block->instructions)->hdr.mid;
 }
 
 inline static struct MirBlockData *mir_bb_data(struct Mir *mir, MirBlock bb)
 {
-    return K_LIST_GET(mir->blocks, bb.value);
+    return MirBlockDataList_get(mir->blocks, bb.value);
 }
 
 inline static struct MirRegisterData *mir_reg_data(struct Mir *mir, MirRegister r)
 {
-    return &K_LIST_GET(mir->registers, r.value);
+    return &K_LIST_AT(mir->registers, r.value);
 }
 
 // Determine the index of "x" in the predecessor list of "y"
@@ -772,8 +774,7 @@ static int mir_which_pred(struct Mir *mir, MirBlock y, MirBlock x)
     int index;
     MirBlock const *pb;
     struct MirBlockData const *data = mir_bb_data(mir, y);
-    K_LIST_ENUMERATE(data->predecessors, index, pb)
-    {
+    K_LIST_ENUMERATE (data->predecessors, index, pb) {
         if (MIR_BB_EQUALS(x, *pb))
             return index;
     }
@@ -786,8 +787,7 @@ static int mir_which_succ(struct Mir *mir, MirBlock x, MirBlock y)
     int index;
     MirBlock const *pb;
     struct MirBlockData const *data = mir_bb_data(mir, x);
-    K_LIST_ENUMERATE(data->successors, index, pb)
-    {
+    K_LIST_ENUMERATE (data->successors, index, pb) {
         if (MIR_BB_EQUALS(y, *pb))
             return index;
     }
@@ -847,7 +847,7 @@ struct MirAccess {
     MirBlock b;
 };
 
-DEFINE_LIST(struct Compiler, pawMir_access_list_, MirAccessList, struct MirAccess)
+DEFINE_LIST(struct Compiler, MirAccessList, struct MirAccess)
 
 struct AccessMap;
 struct UseDefMap;
@@ -871,14 +871,14 @@ struct MirLiveInterval {
     MirRegister r;
 };
 
-DEFINE_LIST(struct Compiler, pawMir_interval_list_, MirIntervalList, struct MirLiveInterval *)
-DEFINE_LIST(struct Compiler, pawMir_location_list_, MirLocationList, int)
+DEFINE_LIST(struct Compiler, MirIntervalList, struct MirLiveInterval *)
+DEFINE_LIST(struct Compiler, MirLocationList, int)
 
 struct MirLocationList *pawMir_compute_locations(struct Mir *mir);
 void pawMir_set_location(struct Mir *mir, struct MirLocationList *locations, MirId mid, int location);
 inline static int pawMir_get_location(struct MirLocationList *locations, MirId mid)
 {
-    return K_LIST_GET(locations, mid.value);
+    return MirLocationList_get(locations, mid.value);
 }
 
 struct MirBlockList *pawMir_compute_live_in(struct Mir *mir, struct MirBlockList *uses, struct MirBlockList *defs, MirRegister r);
@@ -919,6 +919,9 @@ inline static paw_Bool mir_id_equals(struct Compiler *C, MirId a, MirId b)
     PAW_UNUSED(C);
     return a.value == b.value;
 }
+
+#define MIR_ID_HASH(Ctx_, Bb_) (Bb_).value
+#define MIR_ID_EQUALS(Ctx_, A_, B_) ((A_).value == (B_).value)
 
 DEFINE_MAP(struct Compiler, AccessMap, pawP_alloc, mir_register_hash, mir_register_equals, MirRegister, struct MirAccessList *)
 DEFINE_MAP(struct Compiler, UseDefMap, pawP_alloc, mir_register_hash, mir_register_equals, MirRegister, struct MirBlockList *)
