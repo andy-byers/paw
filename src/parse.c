@@ -1430,7 +1430,7 @@ static struct Annotations *annotations(struct Lex *lex)
     if (!test_next(lex, '#'))
         return NULL;
 
-    StringMap *names = StringMap_new(C, lex->pool);
+    StringMap *names = StringMap_new_from(C, lex->pool);
     struct Annotations *annos = Annotations_new(C);
     check_next(lex, '[');
     do {
@@ -1899,7 +1899,7 @@ static struct Ast *parse_module(struct Lex *lex, paw_Reader input, void *ud)
 static void init_lexer(struct Compiler *C, struct Ast *ast, struct Lex *lex)
 {
     *lex = (struct Lex){
-        .pool = pawP_pool_new(C),
+        .pool = pawP_pool_new(C, C->pool_stats),
         .modname = ast->name,
         .strings = C->strings,
         .ast = ast,
@@ -1917,6 +1917,15 @@ static struct Ast *new_ast(struct Compiler *C, String *name)
     return ast;
 }
 
+static void ast_callback(struct Compiler *C, struct Ast *ast)
+{
+    if (pawP_push_callback(C, "paw.on_build_ast")) {
+        paw_Env *P = ENV(C);
+        paw_push_rawptr(P, ast);
+        paw_call(P, 1);
+    }
+}
+
 struct Ast *pawP_parse_module(struct Compiler *C, String *modname, paw_Reader input, void *ud)
 {
     struct Ast *ast = new_ast(C, modname);
@@ -1926,15 +1935,17 @@ struct Ast *pawP_parse_module(struct Compiler *C, String *modname, paw_Reader in
 
     parse_module(&lex, input, ud);
     pawP_pool_free(C, lex.pool);
+    ast_callback(C, ast);
     return ast;
 }
 
 struct Ast *pawP_parse_prelude(struct Compiler *C)
 {
     struct Lex lex;
-    init_lexer(C, C->prelude, &lex);
+    init_lexer(C, C->ast_prelude, &lex);
 
     parse_prelude(&lex);
     pawP_pool_free(C, lex.pool);
+    ast_callback(C, lex.ast);
     return lex.ast;
 }

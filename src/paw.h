@@ -94,7 +94,6 @@ void paw_push_zero(paw_Env *P, int n);
 void paw_push_bool(paw_Env *P, paw_Bool b);
 void paw_push_int(paw_Env *P, paw_Int i);
 void paw_push_float(paw_Env *P, paw_Float f);
-void paw_push_function(paw_Env *P, paw_Function fn, int n);
 void paw_push_rawptr(paw_Env *P, void *ptr);
 char const *paw_push_string(paw_Env *P, char const *s);
 char const *paw_push_nstring(paw_Env *P, char const *s, size_t n);

@@ -326,9 +326,9 @@ static int code_switch_int(struct FuncState *fs, MirRegister discr, int k)
 
 static void enter_kcache(struct Generator *G, struct KCache *cache)
 {
-    cache->ints = ValueMap_new(G->C, G->pool);
-    cache->strs = ValueMap_new(G->C, G->pool);
-    cache->flts = ValueMap_new(G->C, G->pool);
+    cache->ints = ValueMap_new_from(G->C, G->pool);
+    cache->strs = ValueMap_new_from(G->C, G->pool);
+    cache->flts = ValueMap_new_from(G->C, G->pool);
 }
 
 static void leave_kcache(struct Generator *G, struct KCache *cache)
@@ -1291,7 +1291,7 @@ void pawP_codegen(struct Compiler *C)
 
     struct MirVisitor V;
     struct Generator G = {
-        .pool = pawP_pool_new(C),
+        .pool = pawP_pool_new(C, C->pool_stats),
         .ipolicy = P->map_policies.count,
         .items = ItemList_new(C),
         .V = &V,
@@ -1299,8 +1299,8 @@ void pawP_codegen(struct Compiler *C)
         .C = C,
     };
     G.policies = PolicyList_new(&G);
-    G.policy_cache = ToplevelMap_new(&G, G.pool);
-    G.toplevel = ToplevelMap_new(&G, G.pool);
+    G.policy_cache = ToplevelMap_new(&G);
+    G.toplevel = ToplevelMap_new(&G);
 
     setup_codegen(&G);
     register_items(&G);
@@ -1308,4 +1308,11 @@ void pawP_codegen(struct Compiler *C)
     init_policies(&G);
 
     pawP_pool_free(C, G.pool);
+
+    // report compilation statistics
+    if (pawP_push_callback(C, "paw.stats_reporter")) {
+        paw_push_rawptr(P, C->stats->data);
+        paw_push_int(P, C->stats->count);
+        paw_call(P, 2);
+    }
 }

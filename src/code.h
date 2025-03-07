@@ -36,9 +36,16 @@ struct Pool {
     struct FreeBlock *free;
     struct Arena *arena;
     struct Arena *full;
+
+    // memory usage statistics
+    struct PoolStats {
+        struct Statistic *num_alloc;
+        struct Statistic *bytes_alloc;
+        struct Statistic *bytes_used;
+    } st;
 };
 
-void pawK_pool_init(paw_Env *P, struct Pool *pool, size_t base_size);
+void pawK_pool_init(paw_Env *P, struct Pool *pool, size_t base_size, struct PoolStats st);
 void pawK_pool_uninit(paw_Env *P, struct Pool *pool);
 void *pawK_pool_alloc(paw_Env *P, struct Pool *pool, void *ptr, size_t size0, size_t size);
 
@@ -118,7 +125,7 @@ enum TraitKind {
     } List_;                                                                                                                       \
     _Static_assert(K_LIST_MAX < PAW_SIZE_MAX / sizeof(Value_),                                                                     \
                    "maximum list is too large");                                                                                   \
-    static inline List_ *List_##_new_from_pool(Context_ *ctx, struct Pool *pool)                                                   \
+    static inline List_ *List_##_new_from(Context_ *ctx, struct Pool *pool)                                                   \
     {                                                                                                                              \
         List_ *list = pawP_alloc(ENV(ctx), pool, NULL, 0, sizeof(List_));                                                          \
         *list = (List_){                                                                                                           \
@@ -128,7 +135,7 @@ enum TraitKind {
     }                                                                                                                              \
     static inline List_ *List_##_new(Context_ *ctx)                                                                                \
     {                                                                                                                              \
-        return List_##_new_from_pool(ctx, ctx->pool);                                                                              \
+        return List_##_new_from(ctx, ctx->pool);                                                                              \
     }                                                                                                                              \
     static inline void List_##_delete(Context_ *ctx, List_ *list)                                                                  \
     {                                                                                                                              \
@@ -220,7 +227,7 @@ enum TraitKind {
     } Name_;                                                                                         \
     _Static_assert(K_MAP_MAX < PAW_SIZE_MAX / sizeof(struct Name_##Node),                            \
                    "maximum map is too large");                                                      \
-    static inline struct Name_ *Name_##_new(Context_ *ctx, struct Pool *pool)                        \
+    static inline struct Name_ *Name_##_new_from(Context_ *ctx, struct Pool *pool)                        \
     {                                                                                                \
         Name_ *map = Alloc_(ENV(ctx), pool, NULL, 0, sizeof(struct Name_));                          \
         *map = (Name_){                                                                              \
@@ -230,6 +237,10 @@ enum TraitKind {
         };                                                                                           \
         memset(map->data, 0, K_MAP_MIN * sizeof(map->data[0]));                                      \
         return map;                                                                                  \
+    }                                                                                                \
+    static inline struct Name_ *Name_##_new(Context_ *ctx)                        \
+    {                                                                                                \
+        return Name_##_new_from(ctx, ctx->pool);                                                                                  \
     }                                                                                                \
     static inline void Name_##_delete(Context_ *ctx, struct Name_ *map)                              \
     {                                                                                                \

@@ -67,37 +67,38 @@ struct MirBlockList *pawMir_compute_dominance_tree(struct Compiler *C, struct Mi
 {
     struct DominanceState D = {
         .N = mir->blocks->count,
-        .idom = MirBlockList_new(C),
+        .idom = MirBlockList_new(mir),
         .mir = mir,
         .C = C,
     };
 
-    MirBlockList_reserve(C, D.idom, D.N);
+    MirBlockList_reserve(mir, D.idom, D.N);
     for (int i = 0; i < D.N; ++i) {
-        MirBlockList_push(C, D.idom, MIR_INVALID_BB);
+        MirBlockList_push(mir, D.idom, MIR_INVALID_BB);
     }
 
     compute_dominance(&D, MIR_ROOT_BB);
     return D.idom;
 }
 
-static void push_unique_bb(struct Compiler *C, struct MirBlockList *df, MirBlock b)
+static void push_unique_bb(struct Mir *mir, struct MirBlockList *df, MirBlock b)
 {
-    for (int i = 0; i < df->count; ++i) {
-        if (MIR_BB_EQUALS(b, MirBlockList_get(df, i)))
+    MirBlock const *pb;
+    K_LIST_FOREACH(df, pb) {
+        if (MIR_BB_EQUALS(b, *pb))
             return;
     }
-    MirBlockList_push(C, df, b);
+    MirBlockList_push(mir, df, b);
 }
 
 struct MirBucketList *pawMir_compute_dominance_frontiers(struct Compiler *C, struct Mir *mir, struct MirBlockList *idom)
 {
     int const N = idom->count;
-    struct MirBucketList *result = MirBucketList_new(C);
-    MirBucketList_reserve(C, result, N);
+    struct MirBucketList *result = MirBucketList_new(mir);
+    MirBucketList_reserve(mir, result, N);
     for (int i = 0; i < N; ++i) {
-        struct MirBlockList *df = MirBlockList_new(C);
-        MirBucketList_push(C, result, df);
+        struct MirBlockList *df = MirBlockList_new(mir);
+        MirBucketList_push(mir, result, df);
     }
 
     for (MirBlock b = MIR_ROOT_BB; b.value < N; ++b.value) {
@@ -111,7 +112,7 @@ struct MirBucketList *pawMir_compute_dominance_frontiers(struct Compiler *C, str
             MirBlock runner = *pp;
             while (!MIR_BB_EQUALS(runner, target)) {
                 struct MirBlockList *df = MirBucketList_get(result, runner.value);
-                push_unique_bb(C, df, b);
+                push_unique_bb(mir, df, b);
                 runner = MirBlockList_get(idom, runner.value);
             }
         }

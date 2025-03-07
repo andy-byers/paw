@@ -2,7 +2,7 @@
 set(TEST_DIR "${PROJECT_SOURCE_DIR}/test")
 set(PAW_EXEC "${CMAKE_BINARY_DIR}/paw")
 function(build_test NAME) 
-    set(TESTNAME "paw_${NAME}")
+    set(TESTNAME "${NAME}")
     add_executable(${TESTNAME} 
         ${NAME}.c test.c test.h)
     target_link_libraries(${TESTNAME}
@@ -17,6 +17,8 @@ function(test_script NAME ARGS)
     set(SCRIPT "${TEST_DIR}/scripts/${NAME}.paw")
     add_test(NAME "test_${NAME}"
         COMMAND ${PAW_EXEC} ${SCRIPT} ${ARGS})
+    add_test(NAME "test_debug_${NAME}"
+        COMMAND ${PAW_EXEC} "-cd" "ast,hir,mir,stats" ${SCRIPT})
 endfunction()
 
 build_test(test_impl)

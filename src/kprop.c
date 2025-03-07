@@ -128,7 +128,7 @@ static void dump_lattice(struct KProp *K)
 static struct MirAccessList *get_uses(struct KProp *K, MirRegister r)
 {
     paw_assert(MIR_REG_EXISTS(r));
-    return *AccessMap_get(K->C, K->uses, r);
+    return *AccessMap_get(K->mir, K->uses, r);
 }
 
 static struct Cell *get_cell(struct KProp *K, MirRegister r)
@@ -643,7 +643,7 @@ static void visit_expr(struct KProp *K, struct MirInstruction *instr, MirBlock b
         case kMirGoto:
             return; // no output
         default: {
-            MirRegister const *pstore = pawMir_get_store(K->C, instr);
+            MirRegister const *pstore = pawMir_get_store(K->mir, instr);
             if (pstore != NULL) {
                 struct Cell *output = get_cell(K, *pstore);
                 output->info = BOTTOM_INFO();
@@ -751,7 +751,7 @@ static void init_lattice(struct KProp *K)
 static void account_for_uses(struct KProp *K, struct MirInstruction *instr, UseCountMap *uses)
 {
     MirRegister *const *ppr;
-    struct MirRegisterPtrList *loads = pawMir_get_loads(K->C, instr);
+    struct MirRegisterPtrList *loads = pawMir_get_loads(K->mir, instr);
     K_LIST_FOREACH (loads, ppr) {
         int *pcount = UseCountMap_get(K, uses, **ppr);
         ++*pcount;
@@ -783,7 +783,7 @@ static void count_uses(struct KProp *K, UseCountMap *uses)
 static void remove_operand_uses(struct KProp *K, UseCountMap *counts, struct MirInstruction *instr)
 {
     MirRegister *const *ppr;
-    struct MirRegisterPtrList *loads = pawMir_get_loads(K->C, instr);
+    struct MirRegisterPtrList *loads = pawMir_get_loads(K->mir, instr);
     K_LIST_FOREACH (loads, ppr) {
         int *pcount = UseCountMap_get(K, counts, **ppr);
         paw_assert(*pcount > 0);
@@ -834,7 +834,7 @@ static void prune_dead_successors(struct KProp *K, MirBlock from, MirBlock targe
 
 static void transform_instr(struct KProp *K, struct MirInstruction *instr)
 {
-    MirRegister const *pstore = pawMir_get_store(K->C, instr);
+    MirRegister const *pstore = pawMir_get_store(K->mir, instr);
     if (pstore == NULL)
         return;
     struct Cell *cell = get_cell(K, *pstore);
@@ -880,7 +880,7 @@ static paw_Bool filter_code(struct KProp *K, UseCountMap *counts, struct MirInst
     K_LIST_ENUMERATE (code, index, pinstr) {
         struct MirInstruction *instr = *pinstr;
         if (is_pure(instr)) {
-            MirRegister const *pstore = pawMir_get_store(K->C, instr);
+            MirRegister const *pstore = pawMir_get_store(K->mir, instr);
             if (pstore != NULL) {
                 int const *pcount = UseCountMap_get(K, counts, *pstore);
                 if (*pcount == 0) {
@@ -915,7 +915,7 @@ static void clean_up_code(struct KProp *K)
     pawMir_remove_unreachable_blocks(K->mir);
     pawMir_merge_redundant_blocks(K->mir);
 
-    UseCountMap *counts = UseCountMap_new(K, K->pool);
+    UseCountMap *counts = UseCountMap_new(K);
     count_uses(K, counts);
 
     paw_Bool removed_code;
@@ -931,7 +931,7 @@ static void propagate_copy(struct KProp *K, struct MirMove *move)
     MirRegister *const *ppr;
     struct MirAccessList *uses = get_uses(K, move->output);
     K_LIST_FOREACH (uses, puse) {
-        struct MirRegisterPtrList *loads = pawMir_get_loads(K->C, puse->instr);
+        struct MirRegisterPtrList *loads = pawMir_get_loads(K->mir, puse->instr);
         K_LIST_FOREACH (loads, ppr) {
             if (MIR_REG_EQUALS(**ppr, move->output)) {
                 K->altered = PAW_TRUE;
@@ -949,8 +949,8 @@ static void propagate_copies(struct KProp *K)
     struct MirInstruction **pinstr;
     K_LIST_FOREACH (K->mir->blocks, pblock) {
         struct MirBlockData *block = *pblock;
-        struct MirInstructionList *instrs = MirInstructionList_new(K->C);
-        MirInstructionList_reserve(K->C, instrs, block->instructions->count);
+        struct MirInstructionList *instrs = MirInstructionList_new(K->mir);
+        MirInstructionList_reserve(K->mir, instrs, block->instructions->count);
         K_LIST_FOREACH (block->instructions, pinstr) {
             struct MirInstruction *instr = *pinstr;
             if (MirIsMove(instr)) {
@@ -961,7 +961,7 @@ static void propagate_copies(struct KProp *K)
                     continue;
                 }
             }
-            MirInstructionList_push(K->C, instrs, instr);
+            MirInstructionList_push(K->mir, instrs, instr);
         }
         block->instructions = instrs;
     }
@@ -976,24 +976,24 @@ paw_Bool pawMir_propagate_constants(struct Mir *mir)
 
     struct Compiler *C = mir->C;
     struct KProp K = {
-        .pool = pawP_pool_new(C),
+        .pool = pawP_pool_new(C, C->pool_stats),
         .mir = mir,
         .P = ENV(C),
         .C = C,
     };
-    K.uses = AccessMap_new(C, K.pool);
+    K.uses = AccessMap_new_from(mir, K.pool);
     K.lattice = Lattice_new(&K);
     K.flow = FlowWorklist_new(&K);
     K.ssa = SsaWorklist_new(&K);
-    K.exec = ExecMap_new(&K, K.pool);
-    K.gotos = GotoMap_new(&K, K.pool);
+    K.exec = ExecMap_new(&K);
+    K.gotos = GotoMap_new(&K);
 
     Lattice_reserve(&K, K.lattice, mir->registers->count);
     K.lattice->count = mir->registers->count;
 
-    K.kcache.ints = ValueMap_new(C, K.pool);
-    K.kcache.strs = ValueMap_new(C, K.pool);
-    K.kcache.flts = ValueMap_new(C, K.pool);
+    K.kcache.ints = ValueMap_new_from(C, K.pool);
+    K.kcache.strs = ValueMap_new_from(C, K.pool);
+    K.kcache.flts = ValueMap_new_from(C, K.pool);
     pawMir_collect_per_instr_uses(mir, K.uses);
 
     init_lattice(&K);

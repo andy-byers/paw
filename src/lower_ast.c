@@ -44,11 +44,11 @@ static struct HirPat *lower_pat(struct LowerAst *, struct AstPat *);
     {                                                                                              \
         if (list == NULL)                                                                          \
             return NULL;                                                                           \
-        struct Hir##T##List *r = Hir##T##List_new(L->C);                                           \
+        struct Hir##T##List *r = Hir##T##List_new(L->hir);                                           \
         for (int i = 0; i < list->count; ++i) {                                                    \
             struct Hir##T *node = lower_##name(L, list->data[i]);                                  \
             if (node != NULL)                                                                      \
-                Hir##T##List_push(L->C, r, node);                                                  \
+                Hir##T##List_push(L->hir, r, node);                                                  \
         }                                                                                          \
         return r;                                                                                  \
     }
@@ -87,7 +87,7 @@ static void leave_block(struct LowerAst *L)
 
 static struct HirPath *new_unary_path(struct LowerAst *L, String *name)
 {
-    struct HirPath *path = HirPath_new(L->C);
+    struct HirPath *path = HirPath_new(L->hir);
     HirPath_add(L->hir, path, name, NULL);
     return path;
 }
@@ -120,11 +120,11 @@ static struct HirExpr *LowerBlock(struct LowerAst *L, struct AstBlock *block)
 
 static struct HirDeclList *lower_params(struct LowerAst *L, struct AstFuncDecl *d, struct AstDeclList *params)
 {
-    struct HirDeclList *out = HirDeclList_new(L->C);
+    struct HirDeclList *out = HirDeclList_new(L->hir);
     for (int i = 0; i < params->count; ++i) {
         struct AstDecl *ast_param = AstDeclList_get(params, i);
         struct HirDecl *hir_param = lower_decl(L, ast_param);
-        HirDeclList_push(L->C, out, hir_param);
+        HirDeclList_push(L->hir, out, hir_param);
     }
     return out;
 }
@@ -143,10 +143,10 @@ static struct HirDecl *LowerVariantDecl(struct LowerAst *L, struct AstVariantDec
 
 static struct HirDeclList *lower_fields(struct LowerAst *L, struct AstDeclList *src, String *parent)
 {
-    struct HirDeclList *dst = HirDeclList_new(L->C);
+    struct HirDeclList *dst = HirDeclList_new(L->hir);
     for (int i = 0; i < src->count; ++i) {
         struct HirDecl *decl = lower_decl(L, AstDeclList_get(src, i));
-        HirDeclList_push(L->C, dst, decl);
+        HirDeclList_push(L->hir, dst, decl);
     }
     return dst;
 }
@@ -163,13 +163,13 @@ static struct HirDecl *LowerFuncDecl(struct LowerAst *L, struct AstFuncDecl *d);
 static struct HirDeclList *lower_methods(struct LowerAst *L, struct AstDeclList *src)
 {
     paw_Env *P = ENV(L);
-    struct HirDeclList *dst = HirDeclList_new(L->C);
+    struct HirDeclList *dst = HirDeclList_new(L->hir);
     for (int i = 0; i < src->count; ++i) {
         struct AstDecl *decl = AstDeclList_get(src, i);
         struct AstFuncDecl *d = AstGetFuncDecl(decl);
         struct HirDecl *result = LowerFuncDecl(L, d);
         struct HirFuncDecl *r = HirGetFuncDecl(result);
-        HirDeclList_push(L->C, dst, result);
+        HirDeclList_push(L->hir, dst, result);
     }
     return dst;
 }
@@ -177,14 +177,14 @@ static struct HirDeclList *lower_methods(struct LowerAst *L, struct AstDeclList 
 static struct HirPath *lower_path(struct LowerAst *L, struct AstPath *path)
 {
     paw_assert(path->count > 0);
-    struct HirPath *r = HirPath_new(L->C);
+    struct HirPath *r = HirPath_new(L->hir);
     for (int i = 0; i < path->count; ++i) {
         struct AstSegment src = AstPath_get(path, i);
         struct HirTypeList *types = lower_type_list(L, src.types);
 
         struct HirSegment dst;
         pawHir_init_segment(L->hir, &dst, src.name, types, NO_DECL);
-        HirPath_push(L->C, r, dst);
+        HirPath_push(L->hir, r, dst);
     }
     return r;
 }
@@ -273,21 +273,21 @@ static struct HirExpr *LowerMatchArm(struct LowerAst *L, struct AstMatchArm *e)
 
 static struct HirType *new_list_t(struct LowerAst *L, struct HirType *elem_t)
 {
-    struct HirTypeList *types = HirTypeList_new(L->C);
-    HirTypeList_push(L->C, types, elem_t);
+    struct HirTypeList *types = HirTypeList_new(L->hir);
+    HirTypeList_push(L->hir, types, elem_t);
 
-    struct HirPath *path = HirPath_new(L->C);
+    struct HirPath *path = HirPath_new(L->hir);
     HirPath_add(L->hir, path, CSTR(L, CSTR_LIST), types);
     return pawHir_new_path_type(L->hir, elem_t->hdr.line, path);
 }
 
 static struct HirType *new_map_t(struct LowerAst *L, struct HirType *key_t, struct HirType *value_t)
 {
-    struct HirTypeList *types = HirTypeList_new(L->C);
-    HirTypeList_push(L->C, types, key_t);
-    HirTypeList_push(L->C, types, value_t);
+    struct HirTypeList *types = HirTypeList_new(L->hir);
+    HirTypeList_push(L->hir, types, key_t);
+    HirTypeList_push(L->hir, types, value_t);
 
-    struct HirPath *path = HirPath_new(L->C);
+    struct HirPath *path = HirPath_new(L->hir);
     HirPath_add(L->hir, path, CSTR(L, CSTR_MAP), types);
     return pawHir_new_path_type(L->hir, key_t->hdr.line, path);
 }
@@ -300,11 +300,11 @@ static struct HirDecl *lower_closure_param(struct LowerAst *L, struct AstFieldDe
 
 static struct HirExpr *LowerClosureExpr(struct LowerAst *L, struct AstClosureExpr *e)
 {
-    struct HirDeclList *params = HirDeclList_new(L->C);
+    struct HirDeclList *params = HirDeclList_new(L->hir);
     for (int i = 0; i < e->params->count; ++i) {
         struct AstFieldDecl *src = AstGetFieldDecl(e->params->data[i]);
         struct HirDecl *dst = lower_closure_param(L, src);
-        HirDeclList_push(L->C, params, dst);
+        HirDeclList_push(L->hir, params, dst);
     }
     struct HirType *result = e->result != NULL ? lower_type(L, e->result) : NULL;
     struct HirExpr *expr = lower_expr(L, e->expr);
@@ -313,7 +313,7 @@ static struct HirExpr *LowerClosureExpr(struct LowerAst *L, struct AstClosureExp
 
 static struct HirDecl *LowerUseDecl(struct LowerAst *L, struct AstUseDecl *d)
 {
-    HirImportList_push(L->C, L->hir->imports, ((struct HirImport){
+    HirImportList_push(L->hir, L->hir->imports, ((struct HirImport){
                                                   .has_star = d->has_star,
                                                   .modno = d->modno,
                                                   .item = d->item,
@@ -384,10 +384,10 @@ static struct HirExpr *lower_list_lit(struct LowerAst *L, struct AstContainerLit
     paw_assert(e->code == BUILTIN_LIST);
 
     struct AstExpr **psrc;
-    struct HirExprList *items = HirExprList_new(L->C);
+    struct HirExprList *items = HirExprList_new(L->hir);
     K_LIST_FOREACH (e->items, psrc) {
         struct HirExpr *dst = lower_expr(L, *psrc);
-        HirExprList_push(L->C, items, dst);
+        HirExprList_push(L->hir, items, dst);
     }
     return pawHir_new_container_lit(L->hir, line, items, BUILTIN_LIST);
 }
@@ -397,11 +397,11 @@ static struct HirExpr *lower_map_lit(struct LowerAst *L, struct AstContainerLit 
     paw_assert(e->code == BUILTIN_MAP);
 
     struct AstExpr **psrc;
-    struct HirExprList *items = HirExprList_new(L->C);
+    struct HirExprList *items = HirExprList_new(L->hir);
     K_LIST_FOREACH (e->items, psrc) {
         struct HirExpr *dst = lower_expr(L, *psrc);
         paw_assert(HirGetFieldExpr(dst)->fid == -1);
-        HirExprList_push(L->C, items, dst);
+        HirExprList_push(L->hir, items, dst);
     }
     return pawHir_new_container_lit(L->hir, line, items, BUILTIN_MAP);
 }
@@ -428,9 +428,9 @@ static struct HirExpr *lower_composite_lit(struct LowerAst *L, struct AstComposi
     struct HirPath *path = lower_path(L, e->path);
 
     struct AstExpr **psrc;
-    struct HirExprList *items = HirExprList_new(L->C);
+    struct HirExprList *items = HirExprList_new(L->hir);
     K_LIST_FOREACH (e->items, psrc)
-        HirExprList_push(L->C, items, lower_expr(L, *psrc));
+        HirExprList_push(L->hir, items, lower_expr(L, *psrc));
     return pawHir_new_composite_lit(L->hir, line, path, items);
 }
 
@@ -506,7 +506,7 @@ static struct HirExpr *unit_lit(struct LowerAst *L, int line)
 
 static struct HirExpr *LowerWhileExpr(struct LowerAst *L, struct AstWhileExpr *e)
 {
-    struct HirStmtList *stmts = HirStmtList_new(L->C);
+    struct HirStmtList *stmts = HirStmtList_new(L->hir);
 
     {
         struct HirExpr *cond = lower_expr(L, e->cond);
@@ -514,7 +514,7 @@ static struct HirExpr *LowerWhileExpr(struct LowerAst *L, struct AstWhileExpr *e
         struct HirExpr *else_arm = pawHir_new_jump_expr(L->hir, e->line, JUMP_BREAK);
         struct HirExpr *check = pawHir_new_if_expr(L->hir, e->line, cond, then_arm, else_arm, PAW_FALSE);
         struct HirStmt *stmt = pawHir_new_expr_stmt(L->hir, e->line, check);
-        HirStmtList_push(L->C, stmts, stmt);
+        HirStmtList_push(L->hir, stmts, stmt);
     }
 
     struct HirExpr *result = unit_lit(L, e->line);
@@ -524,22 +524,22 @@ static struct HirExpr *LowerWhileExpr(struct LowerAst *L, struct AstWhileExpr *e
 
 static struct HirPat *new_none_pat(struct LowerAst *L, int line)
 {
-    struct HirPath *path = HirPath_new(L->C);
+    struct HirPath *path = HirPath_new(L->hir);
     HirPath_add(L->hir, path, CSTR(L->C, CSTR_OPTION), NULL);
     HirPath_add(L->hir, path, SCAN_STRING(L->C, "None"), NULL);
-    struct HirPatList *fields = HirPatList_new(L->C);
+    struct HirPatList *fields = HirPatList_new(L->hir);
     return pawHir_new_variant_pat(L->hir, line, path, fields, 1);
 }
 
 static struct HirPat *new_some_pat(struct LowerAst *L, String *var, int line)
 {
-    struct HirPath *path = HirPath_new(L->C);
+    struct HirPath *path = HirPath_new(L->hir);
     HirPath_add(L->hir, path, CSTR(L->C, CSTR_OPTION), NULL);
     HirPath_add(L->hir, path, SCAN_STRING(L->C, "Some"), NULL);
-    struct HirPatList *fields = HirPatList_new(L->C);
+    struct HirPatList *fields = HirPatList_new(L->hir);
     struct HirPat *variant = pawHir_new_variant_pat(L->hir, line, path, fields, 0);
     struct HirPat *binding = pawHir_new_binding_pat(L->hir, line, var);
-    HirPatList_push(L->C, fields, binding);
+    HirPatList_push(L->hir, fields, binding);
     return variant;
 }
 
@@ -566,24 +566,24 @@ static struct HirPat *new_some_pat(struct LowerAst *L, String *var, int line)
 //
 static struct HirExpr *LowerForExpr(struct LowerAst *L, struct AstForExpr *e)
 {
-    struct HirStmtList *outer_stmts = HirStmtList_new(L->C);
+    struct HirStmtList *outer_stmts = HirStmtList_new(L->hir);
     String *iter_name = SCAN_STRING(L->C, "(iter)");
     {
         // evaluate "iter" and store in a local "_iter"
         struct HirExpr *init = lower_expr(L, e->target);
         struct HirDecl *decl = pawHir_new_var_decl(L->hir, e->line, iter_name, NULL, NULL, init, PAW_FALSE);
         struct HirStmt *stmt = pawHir_new_decl_stmt(L->hir, e->line, decl);
-        HirStmtList_push(L->C, outer_stmts, stmt);
+        HirStmtList_push(L->hir, outer_stmts, stmt);
     }
 
-    struct HirExprList *arms = HirExprList_new(L->C);
+    struct HirExprList *arms = HirExprList_new(L->hir);
     {
         // add the "Some(x) => x" arm
         String *field_name = SCAN_STRING(L->C, "(field)");
         struct HirPat *pat = new_some_pat(L, field_name, e->line);
         struct HirExpr *rhs = new_unary_path_expr(L, e->line, field_name);
         struct HirExpr *arm = pawHir_new_match_arm(L->hir, e->line, pat, NULL, rhs, PAW_FALSE);
-        HirExprList_push(L->C, arms, arm);
+        HirExprList_push(L->hir, arms, arm);
     }
 
     {
@@ -591,11 +591,11 @@ static struct HirExpr *LowerForExpr(struct LowerAst *L, struct AstForExpr *e)
         struct HirPat *pat = new_none_pat(L, e->line);
         struct HirExpr *rhs = pawHir_new_jump_expr(L->hir, e->line, JUMP_BREAK);
         struct HirExpr *arm = pawHir_new_match_arm(L->hir, e->line, pat, NULL, rhs, PAW_TRUE);
-        HirExprList_push(L->C, arms, arm);
+        HirExprList_push(L->hir, arms, arm);
     }
 
     struct HirExpr *result = lower_expr(L, e->block);
-    struct HirStmtList *inner_stmts = HirStmtList_new(L->C);
+    struct HirStmtList *inner_stmts = HirStmtList_new(L->hir);
     struct HirExpr *body = pawHir_new_block(L->hir, e->line, inner_stmts, result, PAW_FALSE);
     struct HirExpr *loop = pawHir_new_loop_expr(L->hir, e->line, body);
     struct HirExpr *outer = pawHir_new_block(L->hir, e->line, outer_stmts, loop, PAW_FALSE);
@@ -604,7 +604,7 @@ static struct HirExpr *LowerForExpr(struct LowerAst *L, struct AstForExpr *e)
     {
         // call the temporary (result of evaluating "e->target") created earlier
         struct HirExpr *target = new_unary_path_expr(L, e->line, iter_name);
-        struct HirExprList *args = HirExprList_new(L->C);
+        struct HirExprList *args = HirExprList_new(L->hir);
         call = pawHir_new_call_expr(L->hir, e->line, target, args);
     }
 
@@ -615,8 +615,8 @@ static struct HirExpr *LowerForExpr(struct LowerAst *L, struct AstForExpr *e)
         struct HirDecl *temp = pawHir_new_var_decl(L->hir, e->line, temp_name, NULL, NULL, match, PAW_FALSE);
         struct HirExpr *move = new_unary_path_expr(L, e->line, temp_name);
         struct HirDecl *var = pawHir_new_var_decl(L->hir, e->line, e->name, NULL, NULL, move, PAW_FALSE);
-        HirStmtList_push(L->C, inner_stmts, pawHir_new_decl_stmt(L->hir, e->line, temp));
-        HirStmtList_push(L->C, inner_stmts, pawHir_new_decl_stmt(L->hir, e->line, var));
+        HirStmtList_push(L->hir, inner_stmts, pawHir_new_decl_stmt(L->hir, e->line, temp));
+        HirStmtList_push(L->hir, inner_stmts, pawHir_new_decl_stmt(L->hir, e->line, var));
     }
 
     return outer;
@@ -662,13 +662,13 @@ static struct HirBoundList *lower_bounds(struct LowerAst *L, struct AstBoundList
 {
     if (bounds == NULL)
         return NULL;
-    struct HirBoundList *result = HirBoundList_new(L->C);
+    struct HirBoundList *result = HirBoundList_new(L->hir);
 
     struct AstGenericBound *pbound;
     K_LIST_FOREACH (bounds, pbound) {
         struct HirGenericBound r;
         r.path = lower_path(L, pbound->path);
-        HirBoundList_push(L->C, result, r);
+        HirBoundList_push(L->hir, result, r);
     }
     return result;
 }
@@ -696,7 +696,7 @@ static struct HirType *LowerContainerType(struct LowerAst *L, struct AstContaine
 
 static struct HirType *unit_type(struct LowerAst *L, int line)
 {
-    struct HirPath *path = HirPath_new(L->C);
+    struct HirPath *path = HirPath_new(L->hir);
     HirPath_add(L->hir, path, SCAN_STRING(L->C, "unit"), NULL);
     return pawHir_new_path_type(L->hir, line, path);
 }
@@ -724,19 +724,19 @@ static struct HirType *LowerInferType(struct LowerAst *L, struct AstInferType *t
 static void combine_or_parts(struct LowerAst *L, struct HirPatList *pats, struct HirPat *part)
 {
     if (!HirIsOrPat(part)) {
-        HirPatList_push(L->C, pats, part);
+        HirPatList_push(L->hir, pats, part);
         return;
     }
 
     struct HirPat *const *ppat;
     struct HirOrPat *other = HirGetOrPat(part);
     K_LIST_FOREACH (other->pats, ppat)
-        HirPatList_push(L->C, pats, *ppat);
+        HirPatList_push(L->hir, pats, *ppat);
 }
 
 static struct HirPat *LowerOrPat(struct LowerAst *L, struct AstOrPat *p)
 {
-    struct HirPatList *pats = HirPatList_new(L->C);
+    struct HirPatList *pats = HirPatList_new(L->hir);
     combine_or_parts(L, pats, lower_pat(L, p->lhs));
     combine_or_parts(L, pats, lower_pat(L, p->rhs));
     return pawHir_new_or_pat(L->hir, p->line, pats);
@@ -857,8 +857,13 @@ static struct Hir *lower_ast(struct LowerAst *L, struct Ast *ast)
     struct ModuleInfo *mod = pawP_mi_new(L->C, hir);
     ModuleList_set(mods, hir->modno, mod);
     hir->items = lower_decl_list(L, ast->items);
-
     pawAst_free(ast);
+
+    if (pawP_push_callback(L->C, "paw.on_build_hir")) {
+        paw_Env *P = ENV(L);
+        paw_push_rawptr(P, hir);
+        paw_call(P, 1);
+    }
     return hir;
 }
 
@@ -870,7 +875,8 @@ void pawP_lower_ast(struct Compiler *C)
         .C = C,
     };
 
-    struct Hir *prelude = lower_ast(&L, C->prelude);
+    struct Hir *prelude = lower_ast(&L, C->ast_prelude);
+    C->hir_prelude = prelude;
 
     ImportMapIterator iter;
     ImportMapIterator_init(C->imports, &iter);

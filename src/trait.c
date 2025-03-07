@@ -161,7 +161,7 @@ static void ensure_methods_match(struct Compiler *C, struct IrType *adt, struct 
         register_builtin_trait_method(C, adt, a, tk);
 }
 
-DEFINE_MAP(struct Compiler, MethodMap, pawP_alloc, p_hash_ptr, p_equals_ptr, String *, struct IrType *)
+DEFINE_MAP(struct Compiler, MethodMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, String *, struct IrType *)
 
 static void ensure_trait_implemented(struct Compiler *C, struct HirTraitDecl *trait_decl, MethodMap *methods, struct IrType *adt, struct IrType *trait)
 {
@@ -204,7 +204,7 @@ void pawP_validate_adt_traits(struct Compiler *C, struct HirAdtDecl *d)
     struct IrTypeList *traits = pawP_query_traits(C, adt);
     if (traits == NULL)
         return;
-    MethodMap *map = MethodMap_new(C, C->pool);
+    MethodMap *map = MethodMap_new(C);
 
     struct HirDecl *const *pdecl;
     K_LIST_FOREACH (d->methods, pdecl) {

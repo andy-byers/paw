@@ -26,7 +26,7 @@ struct Importer {
 static void enter_context(struct Importer *I, struct ImportContext *ctx)
 {
     *ctx = (struct ImportContext){
-        .aliases = StringMap_new(I->C, I->pool),
+        .aliases = StringMap_new_from(I->C, I->pool),
         .outer = I->ctx,
     };
     I->ctx = ctx;
@@ -121,7 +121,7 @@ static void collect_imports_from(struct Importer *I, struct Ast *ast)
 void pawP_collect_imports(struct Compiler *C, struct Ast *ast)
 {
     struct Importer I = {
-        .pool = pawP_pool_new(C),
+        .pool = pawP_pool_new(C, C->pool_stats),
         .imports = C->imports,
         .P = ENV(C),
         .C = C,

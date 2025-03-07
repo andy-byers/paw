@@ -366,7 +366,7 @@ static MirRegister scratch_register(struct RegisterAllocator *R, MirRegister old
     if (R->max_reg >= NREGISTERS)
         not_enough_registers(R);
     MirRegister const temp = MIR_REG(R->mir->registers->count);
-    MirRegisterDataList_push(R->C, R->mir->registers, *mir_reg_data(R->mir, old));
+    MirRegisterDataList_push(R->mir, R->mir->registers, *mir_reg_data(R->mir, old));
     RegisterTable_push(R->C, R->result, REGINFO(++R->max_reg));
     return temp;
 }
@@ -415,9 +415,9 @@ static void order_and_insert_copies(struct RegisterAllocator *R, struct MirBlock
     K_LIST_FOREACH (seq, pcopy) {
         struct MirInstruction *move = pawMir_new_move(R->mir, -1, pcopy->to, pcopy->from);
         pawMir_set_location(R->mir, R->locations, move->hdr.mid, pcopy->location);
-        MirInstructionList_push(R->C, block->instructions, move);
+        MirInstructionList_push(R->mir, block->instructions, move);
     }
-    MirInstructionList_push(R->C, block->instructions, terminator);
+    MirInstructionList_push(R->mir, block->instructions, terminator);
 
     // temporary registers only used for this batch of moves
     R->max_reg -= nscratch;
@@ -426,7 +426,7 @@ static void order_and_insert_copies(struct RegisterAllocator *R, struct MirBlock
 
 static void resolve_registers(struct RegisterAllocator *R, struct MirBlockList *order)
 {
-    struct MirIntervalList *scratch = MirIntervalList_new(R->C);
+    struct MirIntervalList *scratch = MirIntervalList_new(R->mir);
     struct CopyList *resolved = CopyList_new(R->C);
 
     MirBlock const *b, *s;
@@ -475,18 +475,18 @@ static int compare_first(void const *lhs, void const *rhs)
 static struct MirIntervalList *expand_with_placeholders(struct RegisterAllocator *R, struct MirIntervalList *intervals, int nskip)
 {
     int const npositions = intervals->count * 2;
-    struct MirIntervalList *result = MirIntervalList_new(R->C);
-    MirIntervalList_reserve(R->C, result, npositions);
+    struct MirIntervalList *result = MirIntervalList_new(R->mir);
+    MirIntervalList_reserve(R->mir, result, npositions);
 
     int i;
     struct MirLiveInterval **pit;
     K_LIST_ENUMERATE (intervals, i, pit) {
-        MirIntervalList_push(R->C, result, *pit);
+        MirIntervalList_push(R->mir, result, *pit);
 
         // add empty interval to make splitting easier
         struct MirLiveInterval *empty = pawMir_new_interval(R->C,
                                                             MIR_INVALID_REG, npositions);
-        MirIntervalList_push(R->C, result, empty);
+        MirIntervalList_push(R->mir, result, empty);
     }
 
 #undef PUSH_PLACEHOLDER
@@ -498,8 +498,8 @@ struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mi
 {
     struct MirBlockData *last = MirBlockDataList_last(mir->blocks);
     struct RegisterAllocator R = {
-        .pool = pawP_pool_new(C),
-        .code = MirInstructionList_new(C),
+        .pool = pawP_pool_new(C, C->pool_stats),
+        .code = MirInstructionList_new(mir),
         .max_position = pawMir_get_location(locations, mir_bb_last(last)) + 2,
         .locations = locations,
         .intervals = intervals,
@@ -509,9 +509,9 @@ struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mi
         .C = C,
     };
 
-    R.handled = IntervalMap_new(&R, R.pool);
-    R.active = IntervalMap_new(&R, R.pool);
-    R.inactive = IntervalMap_new(&R, R.pool);
+    R.handled = IntervalMap_new(&R);
+    R.active = IntervalMap_new(&R);
+    R.inactive = IntervalMap_new(&R);
 
     RegisterTable_reserve(C, R.result, mir->registers->count);
     for (int i = 0; i < mir->registers->count; ++i) {

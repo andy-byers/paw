@@ -152,7 +152,7 @@ void pawP_pool_free(struct Compiler *C, struct Pool *pool)
     pool_free(ENV(C), pool);
 }
 
-struct Pool *pawP_pool_new(struct Compiler *C)
+struct Pool *pawP_pool_new(struct Compiler *C, struct PoolStats st)
 {
     paw_Env *P = ENV(C);
     struct Pool *pool = pawM_new(P, struct Pool);
@@ -163,7 +163,7 @@ struct Pool *pawP_pool_new(struct Compiler *C)
     pool->next = head;
     head->prev = pool;
 
-    pawK_pool_init(P, pool, 512);
+    pawK_pool_init(P, pool, 512, st);
     return pool;
 }
 
@@ -173,7 +173,7 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, char co
 {
     pawY_uninit(P);
 
-    pawK_pool_init(P, &dm->pool, FIRST_ARENA_SIZE);
+    pawK_pool_init(P, &dm->pool, FIRST_ARENA_SIZE, (struct PoolStats){0});
     dm->pool.prev = dm->pool.next = &dm->pool;
 
     *C = (struct Compiler){
@@ -181,9 +181,32 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, char co
         .dm = dm,
         .P = P,
     };
-    C->ast_pool = pawP_pool_new(C);
-    C->hir_pool = pawP_pool_new(C);
-    C->mir_pool = pawP_pool_new(C);
+    C->stats = Statistics_new(C);
+
+    // Create statistics for tracking compiler memory usage. Main pool statistics
+    // must be added after-the-fact, since the main pool itself is used to allocate
+    // the "struct Statistic" objects. Also note that ".num_alloc" is tested to
+    // determine if any statistics exist, so make sure to set it last on the main
+    // pool.
+    C->pool_stats.bytes_alloc = pawStats_new(C, "memory.main.bytes_allocated");
+    C->pool_stats.bytes_used = pawStats_new(C, "memory.main.bytes_used");
+    C->pool_stats.num_alloc = pawStats_new(C, "memory.main.num_allocations");
+    C->pool->st = C->pool_stats;
+    C->ast_pool = pawP_pool_new(C, (struct PoolStats){
+                .num_alloc = pawStats_new(C, "memory.ast.num_allocations"),
+                .bytes_alloc = pawStats_new(C, "memory.ast.bytes_allocated"),
+                .bytes_used = pawStats_new(C, "memory.ast.bytes_used"),
+            });
+    C->hir_pool = pawP_pool_new(C, (struct PoolStats){
+                .num_alloc = pawStats_new(C, "memory.hir.num_allocations"),
+                .bytes_alloc = pawStats_new(C, "memory.hir.bytes_allocated"),
+                .bytes_used = pawStats_new(C, "memory.hir.bytes_used"),
+            });
+    C->mir_pool = pawP_pool_new(C, (struct PoolStats){
+                .num_alloc = pawStats_new(C, "memory.mir.num_allocations"),
+                .bytes_alloc = pawStats_new(C, "memory.mir.bytes_allocated"),
+                .bytes_used = pawStats_new(C, "memory.mir.bytes_used"),
+            });
 
     paw_new_map(P, 0, PAW_TSTR);
     C->strings = V_TUPLE(P->top.p[-1]);
@@ -195,19 +218,18 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, char co
     paw_pop(P, 2);
 
     C->globals = GlobalList_new(C);
-    C->builtin_lookup = BuiltinMap_new(C, C->pool);
-    C->ir_types = HirTypes_new(C, C->pool);
-    C->ir_defs = DefMap_new(C, C->pool);
+    C->builtin_lookup = BuiltinMap_new(C);
+    C->ir_types = HirTypes_new(C);
+    C->ir_defs = DefMap_new(C);
 
-    C->rtti = RttiMap_new(C, C->pool);
-    C->imports = ImportMap_new(C, C->pool);
-    C->traits = TraitMap_new(C, C->pool);
-    C->trait_owners = TraitOwners_new(C, C->pool);
+    C->rtti = RttiMap_new(C);
+    C->imports = ImportMap_new(C);
+    C->traits = TraitMap_new(C);
+    C->trait_owners = TraitOwners_new(C);
 
     C->modname = P->modname = SCAN_STRING(C, modname);
-    C->prelude = pawAst_new(C, SCAN_STRING(C, "prelude"), 0);
+    C->ast_prelude = pawAst_new(C, SCAN_STRING(C, "prelude"), 0);
 
-    C->decls = HirDeclList_new(C);
     C->modules = ModuleList_new(C);
 
     C->U = P_ALLOC(C, NULL, 0, sizeof(struct Unifier));
@@ -236,11 +258,8 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, char co
     define_prelude_adt(C, CSTR_COMPARE, BUILTIN_COMPARE);
 }
 
-#include "stdio.h"
 void pawP_teardown(paw_Env *P, struct DynamicMem *dm)
 {
-    printf("%zu\n", P->gc_bytes);
-
     struct Pool *pool = dm->pool.next;
     while (pool != &dm->pool) {
         struct Pool *next = pool->next;
@@ -257,7 +276,7 @@ struct ModuleInfo *pawP_mi_new(struct Compiler *C, struct Hir *hir)
 {
     struct ModuleInfo *mi = P_ALLOC(C, NULL, 0, sizeof(*mi));
     *mi = (struct ModuleInfo){
-        .globals = HirScope_new(C),
+        .globals = HirScope_new_from(hir, C->pool),
         .hir = hir,
     };
     return mi;
@@ -488,7 +507,7 @@ static struct ItemSlot allocate_item(struct DefGenerator *dg, struct Mir *body)
     };
 }
 
-static void allocate_items(struct DefGenerator *dg, struct MirBodyList *bodies)
+static void allocate_items(struct DefGenerator *dg, struct BodyList *bodies)
 {
     struct Mir *const *pbody;
     K_LIST_FOREACH (bodies, pbody) {
@@ -505,7 +524,7 @@ static void allocate_items(struct DefGenerator *dg, struct MirBodyList *bodies)
     }
 }
 
-struct ItemList *pawP_allocate_defs(struct Compiler *C, struct MirBodyList *bodies, struct IrTypeList *types)
+struct ItemList *pawP_allocate_defs(struct Compiler *C, struct BodyList *bodies, struct IrTypeList *types)
 {
     struct DefGenerator dg = {
         .items = ItemList_new(C),
@@ -692,4 +711,11 @@ String *pawP_mangle_attr(struct Compiler *C, String const *modname, String const
     pawY_mangle_add_name(P, &buf, attr);
     mangle_types(C, &buf, attr_types);
     return pawP_mangle_finish(P, &buf, C);
+}
+
+paw_Bool pawP_push_callback(struct Compiler *C, char const *name)
+{
+    paw_Env *P = ENV(C);
+    paw_push_string(P, name);
+    return paw_map_get(P, PAW_REGISTRY_INDEX) == 0;
 }

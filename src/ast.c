@@ -42,7 +42,6 @@ DEFINE_NODE_CONSTRUCTOR(type, AstType)
 DEFINE_NODE_CONSTRUCTOR(expr, AstExpr)
 DEFINE_NODE_CONSTRUCTOR(pat, AstPat)
 
-#if defined(PAW_DEBUG_EXTRA)
 
 typedef struct Printer {
     Buffer *buf;
@@ -57,7 +56,7 @@ typedef struct Printer {
 static void indent_line(Printer *P)
 {
     for (int i = 0; i < P->indent; ++i) {
-        DUMP_LITERAL(P, "    ");
+        DUMP_LITERAL(P, "  ");
     }
 }
 
@@ -124,13 +123,29 @@ static void dump_decl(Printer *P, struct AstDecl *decl)
     ++P->indent;
     DUMP_FMT(P, "line: %d\n", decl->hdr.line);
     switch (AST_KINDOF(decl)) {
-        case kAstTraitDecl:
-        case kAstUseDecl:
-            PAW_UNREACHABLE(); // TODO: write this code!!!
+        case kAstTraitDecl: {
+            struct AstTraitDecl *d = AstGetTraitDecl(decl);
+            DUMP_FMT(P, "name: %s\n", d->name->text);
+            DUMP_FMT(P, "is_pub: %d\n", d->is_pub);
+            dump_decl_list(P, d->generics, "generics");
+            dump_decl_list(P, d->methods, "methods");
+            break;
+        }
+        case kAstUseDecl: {
+            struct AstUseDecl *d = AstGetUseDecl(decl);
+            DUMP_FMT(P, "name: %s\n", d->name->text);
+            if (d->as != NULL)
+                DUMP_FMT(P, "as: %s\n", d->as->text);
+            if (d->item != NULL)
+                DUMP_FMT(P, "item: %s\n", d->item->text);
+            DUMP_FMT(P, "has_star: %d\n", d->has_star);
+            break;
+        }
         case kAstFuncDecl: {
             struct AstFuncDecl *d = AstGetFuncDecl(decl);
             DUMP_FMT(P, "receiver: %p\n", CAST(void *, d->receiver));
             DUMP_FMT(P, "name: %s\n", d->name->text);
+            DUMP_FMT(P, "is_pub: %d\n", d->is_pub);
             dump_decl_list(P, d->generics, "generics");
             dump_decl_list(P, d->params, "params");
             DUMP_MSG(P, "result: ");
@@ -144,6 +159,7 @@ static void dump_decl(Printer *P, struct AstDecl *decl)
             DUMP_NAME(P, d->name);
             DUMP_MSG(P, "tag: ");
             dump_type(P, d->tag);
+            DUMP_FMT(P, "is_pub: %d\n", d->is_pub);
             break;
         }
         case kAstVarDecl: {
@@ -153,6 +169,7 @@ static void dump_decl(Printer *P, struct AstDecl *decl)
             dump_type(P, d->tag);
             DUMP_MSG(P, "init: ");
             dump_expr(P, d->init);
+            DUMP_FMT(P, "is_pub: %d\n", d->is_pub);
             break;
         }
         case kAstVariantDecl: {
@@ -165,6 +182,7 @@ static void dump_decl(Printer *P, struct AstDecl *decl)
             struct AstAdtDecl *d = AstGetAdtDecl(decl);
             DUMP_NAME(P, d->name);
             DUMP_FMT(P, "is_struct: %d\n", d->is_struct);
+            DUMP_FMT(P, "is_pub: %d\n", d->is_pub);
             dump_type_list(P, d->traits, "traits");
             dump_decl_list(P, d->generics, "generics");
             dump_decl_list(P, d->fields, "fields");
@@ -181,6 +199,7 @@ static void dump_decl(Printer *P, struct AstDecl *decl)
             DUMP_MSG(P, "rhs: ");
             dump_type(P, d->rhs);
             dump_decl_list(P, d->generics, "generics");
+            DUMP_FMT(P, "is_pub: %d\n", d->is_pub);
             break;
         }
     }
@@ -462,4 +481,3 @@ char const *pawAst_dump(struct Ast *ast)
     return paw_string(P, -1);
 }
 
-#endif // PAW_DEBUG_EXTRA

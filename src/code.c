@@ -38,10 +38,11 @@ static Arena *new_arena(paw_Env *P, struct Pool *pool, size_t required_size)
     return a;
 }
 
-void pawK_pool_init(paw_Env *P, struct Pool *pool, size_t base_size)
+void pawK_pool_init(paw_Env *P, struct Pool *pool, size_t base_size, struct PoolStats st)
 {
     pool->arena = new_arena(P, pool, base_size);
     pool->full = NULL;
+    pool->st = st;
 }
 
 static void free_arena_list(paw_Env *P, Arena *a)
@@ -72,10 +73,18 @@ static void *find_free_block(struct Pool *pool, size_t size)
     return NULL;
 }
 
+#define STATS_ENABLED(Pool_) ((Pool_)->st.num_alloc != NULL)
+
 static void *pool_malloc(paw_Env *P, struct Pool *pool, size_t size)
 {
     paw_assert(size > 0);
     size = ROUND_SIZE(size);
+
+    if (STATS_ENABLED(pool)) {
+        ++pool->st.num_alloc->value;
+        pool->st.bytes_alloc->value += size;
+        pool->st.bytes_used->value += size;
+    }
 
     void *const ptr = find_free_block(pool, size);
     if (ptr != NULL)
@@ -112,6 +121,11 @@ static void pool_free(struct Pool *pool, void *ptr, size_t size)
     if (ptr == NULL) {
         paw_assert(size == 0);
         return;
+    }
+
+    if (STATS_ENABLED(pool)) {
+        paw_assert(pool->st.bytes_used->value >= size);
+        pool->st.bytes_used->value -= size;
     }
 
     paw_assert(PAW_IS_ALIGNED(ptr));

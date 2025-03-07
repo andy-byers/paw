@@ -31,6 +31,7 @@ struct ItemCollector {
     struct ModuleInfo *m;
     struct IrTypeList *binder;
     struct IrType *ctx;
+    struct Hir *hir;
     TraitMap *traits;
     paw_Env *P;
     int ndefs;
@@ -58,7 +59,7 @@ static struct HirScope *enclosing_scope(struct HirSymtab *st)
 
 static void add_symbol(struct ItemCollector *X, struct HirScope *scope, String *name, struct HirDecl *decl)
 {
-    int const index = pawHir_declare_symbol(X->C, scope, decl, name);
+    int const index = pawHir_declare_symbol(X->hir, scope, decl, name);
     pawHir_define_symbol(scope, index);
 }
 
@@ -90,8 +91,8 @@ static struct HirScope *leave_block(struct ItemCollector *X)
 
 static void enter_block(struct ItemCollector *X, struct HirScope *scope)
 {
-    scope = scope != NULL ? scope : HirScope_new(X->C);
-    HirSymtab_push(X->C, X->symtab, scope);
+    scope = scope != NULL ? scope : HirScope_new(X->hir);
+    HirSymtab_push(X->hir, X->symtab, scope);
 }
 
 static struct HirScope *leave_function(struct ItemCollector *X)
@@ -468,7 +469,7 @@ static void collect_func(struct ItemCollector *X, struct HirFuncDecl *d)
     enter_function(X, d);
     register_generics(X, d->generics);
 
-    StringMap *names = StringMap_new(X->C, X->pool);
+    StringMap *names = StringMap_new_from(X->C, X->pool);
     collect_field_types(X, d->params, names);
     StringMap_delete(X->C, names);
 
@@ -562,7 +563,7 @@ static void collect_adt_decl(struct ItemCollector *X, struct PartialDecl lazy)
     }
 
     WITH_CONTEXT(X, type,
-                 StringMap *names = StringMap_new(X->C, X->pool);
+                 StringMap *names = StringMap_new_from(X->C, X->pool);
                  d->self = declare_self(X, d->line, type);
                  collect_field_types(X, d->fields, names);
                  collect_methods(X, d->methods, names, PAW_FALSE);
@@ -583,6 +584,7 @@ static void collect_const_decl(struct ItemCollector *X, struct PartialDecl lazy)
 static struct ModuleInfo *use_module(struct ItemCollector *X, struct ModuleInfo *m)
 {
     pawU_enter_binder(X->C->U);
+    X->hir = m->hir;
     X->m = m;
     return m;
 }
@@ -613,7 +615,7 @@ static void collect_trait_decl(struct ItemCollector *X, struct PartialDecl lazy)
     struct IrType *type = GET_NODE_TYPE(X->C, lazy.decl);
 
     WITH_CONTEXT(X, type,
-                 StringMap *names = StringMap_new(X->C, X->pool);
+                 StringMap *names = StringMap_new_from(X->C, X->pool);
                  d->self = declare_self(X, d->line, type);
                  collect_methods(X, d->methods, names, d->is_pub);
                  StringMap_delete(X->C, names););
@@ -720,7 +722,7 @@ static void collect_items(struct ItemCollector *X, struct Hir *hir)
         }
     }
 
-    X->symtab = HirSymtab_new(X->C);
+    X->symtab = HirSymtab_new(X->hir);
 
     struct HirDecl *const *pitem;
     K_LIST_FOREACH (hir->items, pitem) {
@@ -747,13 +749,13 @@ static void collect_phase_2(struct ItemCollector *X, struct ModuleList *ml, stru
 void pawP_collect_items(struct Compiler *C)
 {
     struct ItemCollector X = {
-        .pool = pawP_pool_new(C),
+        .pool = pawP_pool_new(C, C->pool_stats),
         .traits = C->traits,
         .P = ENV(C),
         .dm = C->dm,
         .C = C,
     };
-    X.symtab = HirSymtab_new_from_pool(C, X.pool);
+    X.symtab = HirSymtab_new(C->hir_prelude);
 
     DLOG(&X, "collecting %d module(s)", C->modules->count);
 

@@ -39,9 +39,9 @@ static void default_mem_hook(void *ud, void *ptr, size_t size0, size_t size)
 
 static StackPtr at(paw_Env *P, int index)
 {
-    if (index == PAW_REGISTRY_INDEX) {
+    if (index == PAW_REGISTRY_INDEX)
         return &P->registry;
-    }
+
     int const i = paw_abs_index(P, index);
     API_CHECK(P, 0 <= i && i < paw_get_count(P), "index out of range");
     return &P->cf->base.p[i];
@@ -658,9 +658,14 @@ void paw_map_length(paw_Env *P, int index)
 
 int paw_map_get(paw_Env *P, int index)
 {
-    Value *ra = at(P, -1);
-    Value const *rb = at(P, index);
-    return pawR_map_get(P, P->cf, ra, rb, ra);
+    Value *ra = at(P, -1); // key/output
+    Value const *rb = at(P, index); // map
+    if (pawR_map_get(P, P->cf, ra, rb, ra)) {
+        paw_pop(P, 1);
+        return -1;
+    }
+    // output register contains value
+    return 0;
 }
 
 void paw_map_set(paw_Env *P, int index)

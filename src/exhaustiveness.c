@@ -15,6 +15,7 @@ struct Usefulness {
     struct VariableList *vars;
     struct Compiler *C;
     struct Pool *pool;
+    struct Hir *hir;
     paw_Env *P;
     int var_id;
     int line;
@@ -150,7 +151,7 @@ static struct HirPatList *join_lists(struct Usefulness *U, struct HirPatList *lh
 {
     struct HirPat *const *ppat;
     K_LIST_FOREACH (rhs, ppat) {
-        HirPatList_push(U->C, lhs, *ppat);
+        HirPatList_push(U->hir, lhs, *ppat);
     }
     return lhs;
 }
@@ -159,8 +160,8 @@ static struct HirPatList *flatten_or(struct Usefulness *U, struct HirPat *pat)
 {
     if (HirIsOrPat(pat))
         return HirGetOrPat(pat)->pats;
-    struct HirPatList *pats = HirPatList_new(U->C);
-    HirPatList_push(U->C, pats, pat);
+    struct HirPatList *pats = HirPatList_new(U->hir);
+    HirPatList_push(U->hir, pats, pat);
     return pats;
 }
 
@@ -394,10 +395,10 @@ static struct CaseList *compile_cases(struct Usefulness *U, struct RawCaseList *
 
 static struct HirPatList *struct_pat_fields(struct Usefulness *U, struct HirStructPat *p)
 {
-    struct HirPatList *fields = HirPatList_new(U->C);
+    struct HirPatList *fields = HirPatList_new(U->hir);
     for (int i = 0; i < p->fields->count; ++i) {
         struct HirFieldPat *field = HirGetFieldPat(HirPatList_get(p->fields, i));
-        HirPatList_push(U->C, fields, field->pat);
+        HirPatList_push(U->hir, fields, field->pat);
     }
     return fields;
 }
@@ -455,7 +456,7 @@ DEFINE_MAP(struct Usefulness, CaseMap, pawP_alloc, P_VALUE_HASH, P_VALUE_EQUALS,
 
 static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct RowList *rows, struct MatchVar branch_var)
 {
-    CaseMap *tested = CaseMap_new(U, U->pool);
+    CaseMap *tested = CaseMap_new(U);
     struct RawCaseList *raw_cases = RawCaseList_new(U);
     struct RowList *fallback = RowList_new(U);
 
@@ -683,13 +684,15 @@ static struct Decision *compile_rows(struct Usefulness *U, struct RowList *rows)
     }
 }
 
-struct Decision *pawP_check_exhaustiveness(struct Compiler *C, struct HirMatchExpr *match, struct VariableList *vars)
+struct Decision *pawP_check_exhaustiveness(struct Hir *hir, struct HirMatchExpr *match, struct VariableList *vars)
 {
-    paw_Env *P = ENV(C);
+    struct Compiler *C = hir->C;
+
     struct Usefulness U = {
-        .pool = pawP_pool_new(C),
+        .pool = pawP_pool_new(C, C->pool_stats),
         .vars = vars,
-        .P = P,
+        .hir = hir,
+        .P = ENV(C),
         .C = C,
     };
 
@@ -698,12 +701,12 @@ struct Decision *pawP_check_exhaustiveness(struct Compiler *C, struct HirMatchEx
     for (int i = 0; i < match->arms->count; ++i) {
         struct HirMatchArm *arm = HirGetMatchArm(HirExprList_get(match->arms, i));
         struct ColumnList *cols = ColumnList_new(&U);
-        ColumnList_push(&U, cols, ((struct Column){.var = var, .pat = arm->pat}));
-        RowList_push(&U, rows, ((struct Row){
+        ColumnList_push(&U, cols, (struct Column){.var = var, .pat = arm->pat});
+        RowList_push(&U, rows, (struct Row){
                                    .body = new_body(&U, arm->result),
                                    .guard = arm->guard,
                                    .columns = cols,
-                               }));
+                               });
     }
 
     struct Decision *d = compile_rows(&U, rows);

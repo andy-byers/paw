@@ -58,6 +58,7 @@ set(PAW_HEADER_FILES
     ${PAW_SOURCE_DIR}/prefix.h
     ${PAW_SOURCE_DIR}/rt.h
     ${PAW_SOURCE_DIR}/ssa.h
+    ${PAW_SOURCE_DIR}/stats.h
     ${PAW_SOURCE_DIR}/str.h
     ${PAW_SOURCE_DIR}/trait.h
     ${PAW_SOURCE_DIR}/type.h
@@ -109,6 +110,7 @@ set(PAW_SOURCE_FILES
     ${PAW_SOURCE_DIR}/resolve.c
     ${PAW_SOURCE_DIR}/rt.c
     ${PAW_SOURCE_DIR}/ssa.c
+    ${PAW_SOURCE_DIR}/stats.c
     ${PAW_SOURCE_DIR}/str.c
     ${PAW_SOURCE_DIR}/trait.c
     ${PAW_SOURCE_DIR}/type.c
@@ -138,7 +140,7 @@ set_property(TARGET pawc
 if(PAW_BuildTests)
     # Speed up stack overflow test
     target_compile_definitions(paw
-        PRIVATE PAW_STACK_MAX=10000) 
+        PUBLIC PAW_STACK_MAX=10000) 
     include(CTest)
     enable_testing()
     add_subdirectory(test)

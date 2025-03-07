@@ -38,6 +38,7 @@
 #include "map.h"
 #include "mem.h"
 #include "paw.h"
+#include "stats.h"
 #include "trait.h"
 
 #define ENV(x) ((x)->P)
@@ -84,6 +85,7 @@ struct MirBlockList;
 struct VariableList;
 
 struct StringMap;
+struct BodyList;
 struct BodyMap;
 
 void *pawP_alloc(paw_Env *P, struct Pool *pool, void *ptr, size_t size0, size_t size);
@@ -117,10 +119,19 @@ struct Compiler {
     struct Builtin builtins[NBUILTINS];
     struct BuiltinMap *builtin_lookup;
 
+    // callbacks for debugging
+    Value on_build_ast;
+    Value on_build_hir;
+    Value on_build_mir;
+    Value report_stats;
+
+    struct Statistics *stats;
+    struct PoolStats pool_stats;
     struct ModuleList *modules;
     struct HirDeclList *decls;
     struct DynamicMem *dm;
-    struct Ast *prelude;
+    struct Ast *ast_prelude;
+    struct Hir *hir_prelude;
     struct Unifier *U;
     String *modname;
 
@@ -155,6 +166,8 @@ struct Compiler {
     int def_count;
     int line;
 };
+
+paw_Bool pawP_push_callback(struct Compiler *C, char const *name);
 
 paw_Bool pawP_is_assoc_fn(struct Compiler *C, struct IrSignature *type);
 struct IrTypeList *pawP_get_binder(struct Compiler *C, DeclId did);
@@ -223,7 +236,7 @@ struct IrType *pawP_instantiate_field(struct Compiler *C, struct IrType *self, s
 struct HirDecl *pawP_find_field(struct Compiler *C, struct IrType *self, String *name);
 struct IrType *pawP_find_method(struct Compiler *C, struct IrType *self, String *name);
 
-struct Decision *pawP_check_exhaustiveness(struct Compiler *C, struct HirMatchExpr *match, struct VariableList *vars);
+struct Decision *pawP_check_exhaustiveness(struct Hir *hir, struct HirMatchExpr *match, struct VariableList *vars);
 void pawP_lower_matches(struct Compiler *C);
 
 struct IrType *pawP_generalize(struct Compiler *C, struct IrType *type);
@@ -251,7 +264,7 @@ void pawP_init_substitution_folder(struct IrTypeFolder *F, struct Compiler *C, s
 void pawP_collect_imports(struct Compiler *C, struct Ast *ast);
 void pawP_import(struct Compiler *C, void *state);
 
-struct ItemList *pawP_allocate_defs(struct Compiler *C, struct MirBodyList *bodies, struct IrTypeList *types);
+struct ItemList *pawP_allocate_defs(struct Compiler *C, struct BodyList *bodies, struct IrTypeList *types);
 
 enum LookupKind {
     LOOKUP_TYPE,
@@ -275,7 +288,7 @@ paw_Bool pawP_fold_binary_op(struct Compiler *C, enum BinaryOp op, Value x, Valu
 
 struct MonoResult {
     struct IrTypeList *types;
-    struct MirBodyList *bodies;
+    struct BodyList *bodies;
 };
 
 struct MonoResult pawP_monomorphize(struct Compiler *C, struct BodyMap *bodies);
@@ -303,7 +316,7 @@ inline static void pawP_compile(struct Compiler *C, paw_Reader input, void *ud)
     pawP_codegen(C);
 }
 
-struct Pool *pawP_pool_new(struct Compiler *C);
+struct Pool *pawP_pool_new(struct Compiler *C, struct PoolStats st);
 void pawP_pool_free(struct Compiler *C, struct Pool *pool);
 
 enum BuiltinKind pawP_type2code(struct Compiler *C, struct IrType *type);
@@ -342,67 +355,22 @@ struct TraitOwnerList *pawP_get_trait_owners(struct Compiler *C, struct IrType *
 
 // Generate code for data structures used during compilation
 
-inline static paw_Uint p_hash_def_id(struct Compiler *C, DefId did)
-{
-    PAW_UNUSED(C);
-    return did.value;
-}
+#define P_ID_HASH(Ctx_, Did_) ((void)Ctx_, (Did_).value)
+#define P_ID_EQUALS(Ctx_, A_, B_) ((void)Ctx_, ((A_).value == (B_).value))
+#define P_PTR_HASH(Ctx_, Ptr_) ((void)Ctx_, (paw_Uint)(Ptr_))
+#define P_PTR_EQUALS(Ctx_, A_, B_) ((void)Ctx_, ((A_) == (B_)))
+#define P_VALUE_HASH(Ctx_, Value_) ((void)Ctx_, V_UINT(Value_))
+#define P_VALUE_EQUALS(Ctx_, A_, B_) ((void)Ctx_, V_UINT(A_) == V_UINT(B_))
 
-inline static paw_Bool p_equals_def_id(struct Compiler *C, DefId a, DefId b)
-{
-    PAW_UNUSED(C);
-    return a.value == b.value;
-}
-
-#define P_DECL_ID_HASH(Ctx_, Did_) (Did_).value
-#define P_DECL_ID_EQUALS(Ctx_, A_, B_) ((A_).value == (B_).value)
-#define P_PTR_HASH(Ctx_, Ptr_) CAST(paw_Uint, Ptr_)
-#define P_PTR_EQUALS(Ctx_, A_, B_) ((A_) == (B_))
-#define P_VALUE_HASH(Ctx_, Value_) V_UINT(Value_)
-#define P_VALUE_EQUALS(Ctx_, A_, B_) (V_UINT(A_) == V_UINT(B_))
-inline static paw_Uint p_hash_decl_id(struct Compiler *C, DeclId did)
-{
-    PAW_UNUSED(C);
-    return did.value;
-}
-
-inline static paw_Bool p_equals_decl_id(struct Compiler *C, DeclId a, DeclId b)
-{
-    PAW_UNUSED(C);
-    return a.value == b.value;
-}
-
-inline static paw_Uint p_hash_ptr(struct Compiler *C, void const *p)
-{
-    PAW_UNUSED(C);
-    return CAST(paw_Uint, p);
-}
-
-inline static paw_Bool p_equals_ptr(struct Compiler *C, void const *a, void const *b)
-{
-    PAW_UNUSED(C);
-    return a == b;
-}
-
-inline static paw_Uint p_value_hash(struct Compiler *C, Value v)
-{
-    PAW_UNUSED(C);
-    return V_UINT(v);
-}
-
-inline static paw_Bool p_value_equals(struct Compiler *C, Value a, Value b)
-{
-    PAW_UNUSED(C);
-    return V_UINT(a) == V_UINT(b);
-}
-
-DEFINE_MAP(struct Compiler, DefMap, pawP_alloc, p_hash_def_id, p_equals_def_id, DefId, struct IrDef *)
-DEFINE_MAP(struct Compiler, TraitMap, pawP_alloc, p_hash_decl_id, p_equals_decl_id, DeclId, struct IrTypeList *)
-DEFINE_MAP(struct Compiler, StringMap, pawP_alloc, p_hash_ptr, p_equals_ptr, String *, String *)
-DEFINE_MAP(struct Compiler, ImportMap, pawP_alloc, p_hash_ptr, p_equals_ptr, String *, struct Ast *)
-DEFINE_MAP(struct Compiler, ValueMap, pawP_alloc, p_value_hash, p_value_equals, Value, Value)
-DEFINE_MAP(struct Compiler, BodyMap, pawP_alloc, p_hash_decl_id, p_equals_decl_id, DeclId, struct Mir *)
-DEFINE_MAP(struct Compiler, BuiltinMap, pawP_alloc, p_hash_ptr, p_equals_ptr, String *, struct Builtin *)
+DEFINE_MAP(struct Compiler, DefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DefId, struct IrDef *)
+DEFINE_MAP(struct Compiler, TraitMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrTypeList *)
+DEFINE_MAP(struct Compiler, StringMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, String *, String *)
+DEFINE_MAP(struct Compiler, ImportMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, String *, struct Ast *)
+DEFINE_MAP(struct Compiler, ValueMap, pawP_alloc, P_VALUE_HASH, P_VALUE_EQUALS, Value, Value)
+DEFINE_MAP(struct Compiler, BodyMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct Mir *)
+DEFINE_MAP(struct Compiler, BuiltinMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, String *, struct Builtin *)
 DEFINE_LIST(struct Compiler, GlobalList, struct GlobalInfo)
+DEFINE_LIST(struct Compiler, Statistics, struct Statistic *)
+DEFINE_LIST(struct Compiler, BodyList, struct Mir *)
 
 #endif // PAW_COMPILE_H

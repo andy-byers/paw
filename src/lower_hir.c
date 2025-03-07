@@ -78,6 +78,7 @@ struct LowerHir {
     struct HirVisitor V;
     struct Compiler *C;
     struct Pool *pool;
+    struct Hir *hir;
     paw_Env *P;
 
     struct ConstantContext *cctx;
@@ -102,7 +103,7 @@ static paw_Bool var_equals(struct LowerHir *L, struct MatchVar a, struct MatchVa
 
 DEFINE_LIST(struct LowerHir, VarStack, struct LocalVar)
 DEFINE_LIST(struct LowerHir, LabelList, struct Label)
-DEFINE_MAP(struct LowerHir, GlobalMap, pawP_alloc, P_DECL_ID_HASH, P_DECL_ID_EQUALS, DeclId, int)
+DEFINE_MAP(struct LowerHir, GlobalMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, int)
 DEFINE_MAP(struct LowerHir, VarMap, pawP_alloc, var_hash, var_equals, struct MatchVar, MirRegister)
 
 static void postprocess(struct LowerHir *L, struct Mir *mir)
@@ -142,7 +143,7 @@ static void enter_match(struct LowerHir *L, struct MatchState *ms, VarMap *var_m
 {
     *ms = (struct MatchState){
         .var_mapping = var_mapping,
-        .regs = MirRegisterList_new(L->C),
+        .regs = MirRegisterList_new(L->fs->mir),
         .vars = VariableList_new(L->C),
         .outer = L->ms,
     };
@@ -185,8 +186,9 @@ static struct MirBlockData *current_bb_data(struct LowerHir *L)
 
 static MirRegister new_register(struct LowerHir *L, struct IrType *type)
 {
-    struct MirRegisterDataList *regs = L->fs->mir->registers;
-    MirRegisterDataList_push(L->C, regs, ((struct MirRegisterData){
+    struct FunctionState *fs = L->fs;
+    struct MirRegisterDataList *regs = fs->mir->registers;
+    MirRegisterDataList_push(fs->mir, regs, ((struct MirRegisterData){
                                              .type = type,
                                          }));
     return MIR_REG(regs->count - 1);
@@ -201,14 +203,14 @@ static void add_edge(struct LowerHir *L, MirBlock from, MirBlock to)
 {
     struct MirBlockData *source = get_bb(L, from);
     struct MirBlockData *target = get_bb(L, to);
-    MirBlockList_push(L->C, source->successors, to);
-    MirBlockList_push(L->C, target->predecessors, from);
+    MirBlockList_push(L->fs->mir, source->successors, to);
+    MirBlockList_push(L->fs->mir, target->predecessors, from);
 }
 
 static struct MirInstruction *add_instruction(struct FunctionState *fs, struct MirInstruction *instr)
 {
     struct MirBlockData *block = current_bb_data(fs->L);
-    MirInstructionList_push(fs->L->C, block->instructions, instr);
+    MirInstructionList_push(fs->mir, block->instructions, instr);
     return instr;
 }
 
@@ -233,9 +235,10 @@ static void set_current_bb(struct LowerHir *L, MirBlock b)
 static MirBlock new_bb(struct LowerHir *L)
 {
     int const id = bb_list(L)->count;
-    struct MirBlockData *bb = pawMir_new_block(L->fs->mir);
-    MirBlockDataList_push(L->C, bb_list(L), bb);
-    return (MirBlock){id};
+    struct FunctionState *fs = L->fs;
+    struct MirBlockData *bb = pawMir_new_block(fs->mir);
+    MirBlockDataList_push(fs->mir, bb_list(L), bb);
+    return MIR_BB(id);
 }
 
 static struct LocalVar *get_local_slot(struct FunctionState *fs, int index)
@@ -392,7 +395,7 @@ static void mark_upvalue(struct FunctionState *fs, int target, MirRegister r)
 
     struct MirRegisterData *data = mir_reg_data(fs->mir, r);
     if (!data->is_captured) {
-        MirCaptureList_push(fs->L->C, fs->captured, ((struct MirCaptureInfo){r}));
+        MirCaptureList_push(fs->mir, fs->captured, ((struct MirCaptureInfo){r}));
         data->is_captured = PAW_TRUE;
         data->hint = r;
     }
@@ -422,7 +425,7 @@ static void add_upvalue(struct LowerHir *L, struct FunctionState *fs, struct Non
         pawE_error(ENV(L->C), PAW_ESYNTAX, -1, "too many upvalues");
     }
 
-    MirUpvalueList_push(L->C, fs->up, ((struct MirUpvalueInfo){
+    MirUpvalueList_push(fs->mir, fs->up, ((struct MirUpvalueInfo){
                                           .index = is_local ? info->vid : info->index,
                                           .is_local = is_local,
                                       }));
@@ -501,7 +504,7 @@ static struct LocalVar *add_local(struct LowerHir *L, String *name, MirRegister 
                                    .did = did,
                                    .reg = r,
                                }));
-    MirRegisterList_push(L->C, L->fs->locals, r);
+    MirRegisterList_push(L->fs->mir, L->fs->locals, r);
     ++L->fs->nlocals;
     return &K_LIST_LAST(L->stack);
 }
@@ -570,7 +573,7 @@ static void enter_function(struct LowerHir *L, struct FunctionState *fs, struct 
     *fs = (struct FunctionState){
         .captured = mir->captured,
         .registers = mir->registers,
-        .up = MirUpvalueList_new(L->C),
+        .up = MirUpvalueList_new(mir),
         .level = L->stack->count,
         .locals = mir->locals,
         .outer = L->fs,
@@ -624,7 +627,7 @@ static void lower_operand_list(struct HirVisitor *V, struct HirExprList *exprs, 
     struct LowerHir *L = V->ud;
     K_LIST_FOREACH (exprs, pexpr) {
         MirRegister const r = lower_operand(V, *pexpr);
-        MirRegisterList_push(L->C, result, r);
+        MirRegisterList_push(L->fs->mir, result, r);
     }
 }
 
@@ -839,12 +842,13 @@ static void emit_get_field(struct LowerHir *L, int line, MirRegister object, int
 
 static struct MirSwitchArmList *allocate_switch_arms(struct LowerHir *L, MirBlock discr_bb, int count)
 {
-    struct MirSwitchArmList *arms = MirSwitchArmList_new(L->C);
-    MirSwitchArmList_reserve(L->C, arms, count);
+    struct FunctionState *fs = L->fs;
+    struct MirSwitchArmList *arms = MirSwitchArmList_new(fs->mir);
+    MirSwitchArmList_reserve(fs->mir, arms, count);
     for (int i = 0; i < count; ++i) {
         MirBlock const case_bb = new_bb(L);
         add_edge(L, discr_bb, case_bb);
-        MirSwitchArmList_push(L->C, arms, ((struct MirSwitchArm){
+        MirSwitchArmList_push(fs->mir, arms, ((struct MirSwitchArm){
                                               .bid = case_bb,
                                           }));
     }
@@ -955,7 +959,7 @@ static MirRegister lower_closure_expr(struct HirVisitor *V, struct HirClosureExp
     MirRegister const output = new_register(L, type);
     struct MirBodyList *children = outer->mir->children;
     NEW_INSTR(outer, closure, e->line, children->count, output);
-    MirBodyList_push(L->C, children, result);
+    MirBodyList_push(outer->mir, children, result);
     return output;
 }
 
@@ -1009,7 +1013,7 @@ static MirRegister lower_callee_and_args(struct HirVisitor *V, struct HirExpr *c
         struct MirGlobal *global = MirGetGlobal(instr);
 
         MirRegister const self = lower_operand(V, select->target);
-        MirRegisterList_push(L->C, args_out, self);
+        MirRegisterList_push(fs->mir, args_out, self);
 
         recv = GET_NODE_TYPE(L->C, select->target);
     } else {
@@ -1043,7 +1047,7 @@ static MirRegister lower_call_expr(struct HirVisitor *V, struct HirCallExpr *e)
             return lower_variant_constructor(V, e, HirGetVariantDecl(decl));
     }
 
-    struct MirRegisterList *args = MirRegisterList_new(L->C);
+    struct MirRegisterList *args = MirRegisterList_new(fs->mir);
     MirRegister const target = lower_callee_and_args(V, e->target, e->args, args);
     MirRegister const result = register_for_node(L, e->hid);
     NEW_INSTR(fs, call, e->line, target, args, result);
@@ -1416,13 +1420,14 @@ static struct IrTypeList *collect_field_types(struct LowerHir *L, struct IrType 
 
 static struct MirRegisterList *allocate_registers(struct LowerHir *L, struct IrTypeList *types)
 {
-    struct MirRegisterList *result = MirRegisterList_new(L->C);
-    MirRegisterList_reserve(L->C, result, types->count);
+    struct FunctionState *fs = L->fs;
+    struct MirRegisterList *result = MirRegisterList_new(fs->mir);
+    MirRegisterList_reserve(fs->mir, result, types->count);
 
     struct IrType *const *ptype;
     K_LIST_FOREACH (types, ptype) {
         MirRegister const r = new_register(L, *ptype);
-        MirRegisterList_push(L->C, result, r);
+        MirRegisterList_push(fs->mir, result, r);
     }
     return result;
 }
@@ -1609,20 +1614,20 @@ static void visit_decision(struct HirVisitor *V, struct Decision *d, MirRegister
 static MirRegister lower_match_expr(struct HirVisitor *V, struct HirMatchExpr *e)
 {
     struct LowerHir *L = V->ud;
-    VarMap *var_mapping = VarMap_new(L, L->pool);
+    VarMap *var_mapping = VarMap_new(L);
 
     struct BlockState bs;
     struct MatchState ms;
     enter_block(L, &bs, PAW_FALSE);
     enter_match(L, &ms, var_mapping);
 
-    struct Decision *d = pawP_check_exhaustiveness(L->C, e, ms.vars);
+    struct Decision *d = pawP_check_exhaustiveness(L->hir, e, ms.vars);
     paw_assert(ms.vars->count > 0);
     MirRegister const discr = lower_operand(V, e->target);
     MirRegister const result = register_for_node(L, e->hid);
     map_var_to_reg(L, K_LIST_FIRST(ms.vars), discr);
     add_local_literal(L, "(match target)", discr);
-    MirRegisterList_push(L->C, ms.regs, discr);
+    MirRegisterList_push(L->fs->mir, ms.regs, discr);
 
     visit_decision(V, d, result);
 
@@ -1645,8 +1650,10 @@ static void lower_hir_body_aux(struct LowerHir *L, struct HirFuncDecl *func, str
     leave_function(L);
 }
 
-static struct Mir *lower_hir_body(struct LowerHir *L, struct HirFuncDecl *func)
+static struct Mir *lower_hir_body(struct LowerHir *L, struct Hir *hir, struct HirFuncDecl *func)
 {
+    L->hir = hir;
+
     struct IrType *type = pawIr_get_type(L->C, func->hid);
     struct IrSignature *fsig = IrGetSignature(type);
     paw_Bool const is_polymorphic = func->generics != NULL
@@ -1658,6 +1665,12 @@ static struct Mir *lower_hir_body(struct LowerHir *L, struct HirFuncDecl *func)
 
     lower_hir_body_aux(L, func, result);
     postprocess(L, result);
+
+    if (pawP_push_callback(L->C, "paw.on_build_mir")) {
+        paw_Env *P = ENV(L);
+        paw_push_rawptr(P, result);
+        paw_call(P, 1);
+    }
     return result;
 }
 
@@ -1764,14 +1777,14 @@ static void lower_global_constants(struct LowerHir *L)
 
 BodyMap *pawP_lower_hir(struct Compiler *C)
 {
-    BodyMap *result = BodyMap_new(C, C->pool);
+    BodyMap *result = BodyMap_new(C);
 
     struct LowerHir L = {
-        .pool = pawP_pool_new(C),
+        .pool = pawP_pool_new(C, C->pool_stats),
         .P = ENV(C),
         .C = C,
     };
-    L.globals = GlobalMap_new(&L, L.pool);
+    L.globals = GlobalMap_new(&L);
     L.labels = LabelList_new(&L);
     L.stack = VarStack_new(&L);
 
@@ -1789,7 +1802,8 @@ BodyMap *pawP_lower_hir(struct Compiler *C)
             struct IrSignature *fsig = IrGetSignature(type);
             if (fsig->self == NULL || IrIsAdt(fsig->self)) {
                 struct HirFuncDecl *d = HirGetFuncDecl(*pdecl);
-                struct Mir *r = lower_hir_body(&L, d);
+                struct ModuleInfo *m = ModuleList_get(C->modules, d->did.modno);
+                struct Mir *r = lower_hir_body(&L, m->hir, d);
                 BodyMap_insert(C, result, d->did, r);
             }
         }
