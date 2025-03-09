@@ -749,7 +749,7 @@ static void collect_phase_2(struct ItemCollector *X, struct ModuleList *ml, stru
 void pawP_collect_items(struct Compiler *C)
 {
     struct ItemCollector X = {
-        .pool = pawP_pool_new(C, C->pool_stats),
+        .pool = pawP_pool_new(C, C->aux_stats),
         .traits = C->traits,
         .P = ENV(C),
         .dm = C->dm,

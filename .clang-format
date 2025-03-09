@@ -6,7 +6,7 @@ ColumnLimit: 0
 IndentCaseLabels: true
 IndentWidth: 4
 AlignAfterOpenBracket: DontAlign
-ContinuationIndentWidth: 8
+ContinuationIndentWidth: 4
 BreakBeforeBinaryOperators: NonAssignment
 SpaceBeforeCaseColon: false
 AlignTrailingComments: false

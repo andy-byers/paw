@@ -976,7 +976,7 @@ paw_Bool pawMir_propagate_constants(struct Mir *mir)
 
     struct Compiler *C = mir->C;
     struct KProp K = {
-        .pool = pawP_pool_new(C, C->pool_stats),
+        .pool = pawP_pool_new(C, C->aux_stats),
         .mir = mir,
         .P = ENV(C),
         .C = C,

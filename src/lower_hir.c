@@ -1621,7 +1621,7 @@ static MirRegister lower_match_expr(struct HirVisitor *V, struct HirMatchExpr *e
     enter_block(L, &bs, PAW_FALSE);
     enter_match(L, &ms, var_mapping);
 
-    struct Decision *d = pawP_check_exhaustiveness(L->hir, e, ms.vars);
+    struct Decision *d = pawP_check_exhaustiveness(L->hir, L->pool, e, ms.vars);
     paw_assert(ms.vars->count > 0);
     MirRegister const discr = lower_operand(V, e->target);
     MirRegister const result = register_for_node(L, e->hid);
@@ -1780,7 +1780,7 @@ BodyMap *pawP_lower_hir(struct Compiler *C)
     BodyMap *result = BodyMap_new(C);
 
     struct LowerHir L = {
-        .pool = pawP_pool_new(C, C->pool_stats),
+        .pool = pawP_pool_new(C, C->aux_stats),
         .P = ENV(C),
         .C = C,
     };

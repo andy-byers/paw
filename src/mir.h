@@ -884,42 +884,6 @@ inline static int pawMir_get_location(struct MirLocationList *locations, MirId m
 struct MirBlockList *pawMir_compute_live_in(struct Mir *mir, struct MirBlockList *uses, struct MirBlockList *defs, MirRegister r);
 struct MirIntervalList *pawMir_compute_liveness(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, struct MirLocationList *locations);
 
-static paw_Uint mir_register_hash(struct Compiler *C, MirRegister r)
-{
-    PAW_UNUSED(C);
-    return r.value;
-}
-
-static paw_Uint mir_register_equals(struct Compiler *C, MirRegister a, MirRegister b)
-{
-    PAW_UNUSED(C);
-    return a.value == b.value;
-}
-
-inline static paw_Uint mir_bb_hash(struct Compiler *C, MirBlock v)
-{
-    PAW_UNUSED(C);
-    return v.value;
-}
-
-inline static paw_Bool mir_bb_equals(struct Compiler *C, MirBlock a, MirBlock b)
-{
-    PAW_UNUSED(C);
-    return a.value == b.value;
-}
-
-inline static paw_Uint mir_id_hash(struct Compiler *C, MirId v)
-{
-    PAW_UNUSED(C);
-    return v.value;
-}
-
-inline static paw_Bool mir_id_equals(struct Compiler *C, MirId a, MirId b)
-{
-    PAW_UNUSED(C);
-    return a.value == b.value;
-}
-
 #define MIR_ID_HASH(Ctx_, Bb_) (Bb_).value
 #define MIR_ID_EQUALS(Ctx_, A_, B_) ((A_).value == (B_).value)
 

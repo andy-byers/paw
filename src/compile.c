@@ -185,13 +185,17 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, char co
 
     // Create statistics for tracking compiler memory usage. Main pool statistics
     // must be added after-the-fact, since the main pool itself is used to allocate
-    // the "struct Statistic" objects. Also note that ".num_alloc" is tested to
-    // determine if any statistics exist, so make sure to set it last on the main
-    // pool.
-    C->pool_stats.bytes_alloc = pawStats_new(C, "memory.main.bytes_allocated");
-    C->pool_stats.bytes_used = pawStats_new(C, "memory.main.bytes_used");
-    C->pool_stats.num_alloc = pawStats_new(C, "memory.main.num_allocations");
-    C->pool->st = C->pool_stats;
+    // the "struct Statistic" objects.
+    C->pool->st = (struct PoolStats){
+        .bytes_alloc = pawStats_new(C, "memory.main.bytes_allocated"),
+        .bytes_used = pawStats_new(C, "memory.main.bytes_used"),
+        .num_alloc = pawStats_new(C, "memory.main.num_allocations"),
+    };
+    C->aux_stats = (struct PoolStats){
+        .bytes_alloc = pawStats_new(C, "memory.aux.bytes_allocated"),
+        .bytes_used = pawStats_new(C, "memory.aux.bytes_used"),
+        .num_alloc = pawStats_new(C, "memory.aux.num_allocations"),
+    };
     C->ast_pool = pawP_pool_new(C, (struct PoolStats){
                 .num_alloc = pawStats_new(C, "memory.ast.num_allocations"),
                 .bytes_alloc = pawStats_new(C, "memory.ast.bytes_allocated"),

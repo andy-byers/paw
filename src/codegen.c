@@ -1291,7 +1291,7 @@ void pawP_codegen(struct Compiler *C)
 
     struct MirVisitor V;
     struct Generator G = {
-        .pool = pawP_pool_new(C, C->pool_stats),
+        .pool = pawP_pool_new(C, C->aux_stats),
         .ipolicy = P->map_policies.count,
         .items = ItemList_new(C),
         .V = &V,

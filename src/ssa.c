@@ -171,7 +171,7 @@ static void place_phi_nodes(struct SsaConverter *S)
     UseDefMapIterator iter;
     UseDefMapIterator_init(S->defs, &iter);
     // "W" is the worklist of nodes to be processed
-    struct MirBlockList *W = MirBlockList_new(S->mir);
+    struct MirBlockList *W = MirBlockList_new_from(S->mir, S->pool);
     for (int iterations = 1; UseDefMapIterator_is_valid(&iter);
          ++iterations, UseDefMapIterator_next(&iter)) {
         MirRegister const r = UseDefMapIterator_key(&iter);
@@ -222,7 +222,7 @@ static void place_phi_nodes(struct SsaConverter *S)
 
     // allocate stacks for renaming pass
     while (S->stacks->count < nstacks) {
-        struct MirRegisterList *names = MirRegisterList_new(S->mir);
+        struct MirRegisterList *names = MirRegisterList_new_from(S->mir, S->pool);
         NameStackList_push(S, S->stacks, names);
     }
 }
@@ -350,9 +350,8 @@ void pawSsa_construct(struct Mir *mir)
     struct MirBucketList *df = pawMir_compute_dominance_frontiers(C, mir, idom);
 
     struct SsaConverter S = {
-        .pool = pawP_pool_new(C, C->pool_stats),
+        .pool = pawP_pool_new(C, C->aux_stats),
         .registers = MirRegisterDataList_new(mir),
-        .changes = MirRegisterList_new(mir),
         .locals = mir->locals,
         .idom = idom,
         .mir = mir,
@@ -361,6 +360,7 @@ void pawSsa_construct(struct Mir *mir)
         .P = ENV(C),
     };
 
+    S.changes = MirRegisterList_new_from(mir, S.pool);
     S.defs = UseDefMap_new_from(mir, S.pool);
     S.uses = UseDefMap_new_from(mir, S.pool);
     S.capture = RegisterMap_new(&S);

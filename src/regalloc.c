@@ -359,7 +359,7 @@ struct Copy {
     int location;
 };
 
-DEFINE_LIST(struct Compiler, CopyList, struct Copy)
+DEFINE_LIST(struct RegisterAllocator, CopyList, struct Copy)
 
 static MirRegister scratch_register(struct RegisterAllocator *R, MirRegister old)
 {
@@ -389,7 +389,7 @@ static paw_Bool check_copy_conflict(struct RegisterAllocator *R, struct CopyList
 
 static void order_and_insert_copies(struct RegisterAllocator *R, struct MirBlockData *block, struct CopyList *pcopies)
 {
-    struct CopyList *seq = CopyList_new(R->C);
+    struct CopyList *seq = CopyList_new(R);
     int nscratch = 0;
     struct Copy *pcopy;
     int index;
@@ -398,11 +398,11 @@ static void order_and_insert_copies(struct RegisterAllocator *R, struct MirBlock
         K_LIST_ENUMERATE (pcopies, index, pcopy) {
             if (check_copy_conflict(R, pcopies, *pcopy, index)) {
                 MirRegister const scratch = scratch_register(R, pcopy->to);
-                CopyList_push(R->C, seq, ((struct Copy){pcopy->from, scratch}));
+                CopyList_push(R, seq, ((struct Copy){pcopy->from, scratch}));
                 pcopy->from = scratch;
                 ++nscratch;
             } else {
-                CopyList_push(R->C, seq, *pcopy);
+                CopyList_push(R, seq, *pcopy);
                 CopyList_swap_remove(pcopies, index);
             }
         }
@@ -426,8 +426,7 @@ static void order_and_insert_copies(struct RegisterAllocator *R, struct MirBlock
 
 static void resolve_registers(struct RegisterAllocator *R, struct MirBlockList *order)
 {
-    struct MirIntervalList *scratch = MirIntervalList_new(R->mir);
-    struct CopyList *resolved = CopyList_new(R->C);
+    struct CopyList *resolved = CopyList_new(R);
 
     MirBlock const *b, *s;
     K_LIST_FOREACH (order, b) {
@@ -443,7 +442,7 @@ static void resolve_registers(struct RegisterAllocator *R, struct MirBlockList *
                 MirRegister const opd = MirRegisterList_get(phi->inputs, index);
 
                 int const location = pawMir_get_location(R->locations, mir_bb_last(bb));
-                CopyList_push(R->C, resolved, ((struct Copy){
+                CopyList_push(R, resolved, ((struct Copy){
                                                   .location = location + 2,
                                                   //                                .location = mir_bb_last(bb),
                                                   .to = phi->output,
@@ -475,7 +474,7 @@ static int compare_first(void const *lhs, void const *rhs)
 static struct MirIntervalList *expand_with_placeholders(struct RegisterAllocator *R, struct MirIntervalList *intervals, int nskip)
 {
     int const npositions = intervals->count * 2;
-    struct MirIntervalList *result = MirIntervalList_new(R->mir);
+    struct MirIntervalList *result = MirIntervalList_new_from(R->mir, R->pool);
     MirIntervalList_reserve(R->mir, result, npositions);
 
     int i;
@@ -498,7 +497,7 @@ struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mi
 {
     struct MirBlockData *last = MirBlockDataList_last(mir->blocks);
     struct RegisterAllocator R = {
-        .pool = pawP_pool_new(C, C->pool_stats),
+        .pool = pawP_pool_new(C, C->aux_stats),
         .code = MirInstructionList_new(mir),
         .max_position = pawMir_get_location(locations, mir_bb_last(last)) + 2,
         .locations = locations,

@@ -121,7 +121,7 @@ static void collect_imports_from(struct Importer *I, struct Ast *ast)
 void pawP_collect_imports(struct Compiler *C, struct Ast *ast)
 {
     struct Importer I = {
-        .pool = pawP_pool_new(C, C->pool_stats),
+        .pool = pawP_pool_new(C, C->aux_stats),
         .imports = C->imports,
         .P = ENV(C),
         .C = C,

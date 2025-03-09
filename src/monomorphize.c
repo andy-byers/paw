@@ -516,7 +516,7 @@ struct MonoResult pawP_monomorphize(struct Compiler *C, BodyMap *bodies)
 {
     struct MirTypeFolder F;
     struct MonoCollector M = {
-        .pool = pawP_pool_new(C, C->pool_stats),
+        .pool = pawP_pool_new(C, C->aux_stats),
         .pending = IrTypeList_new(C),
         .globals = BodyList_new(C),
         .types = IrTypeList_new(C),

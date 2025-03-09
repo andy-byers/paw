@@ -209,7 +209,7 @@ char const *pawP_print_live_intervals_pretty(struct Compiler *C, struct Mir *mir
 static struct MirBlockList *determine_loop_ends(struct Liveness *L, MirBlock header)
 {
     struct MirBlockData *data = mir_bb_data(L->mir, header);
-    struct MirBlockList *loop_ends = MirBlockList_new(L->mir);
+    struct MirBlockList *loop_ends = MirBlockList_new_from(L->mir, L->pool);
 
     MirBlock const *pb;
     K_LIST_FOREACH (data->predecessors, pb) {
@@ -231,7 +231,7 @@ static void compute_liveness(struct Liveness *L, struct Mir *mir, struct MirBloc
         struct MirInstruction **pinstr;
 
         // "live" is the union of the sets of live registers from the successors of "b"
-        struct MirRegisterList *live = MirRegisterList_new(L->mir);
+        struct MirRegisterList *live = MirRegisterList_new_from(L->mir, L->pool);
         K_LIST_FOREACH (block->successors, ps) {
             struct MirRegisterList *set = RegisterSetList_get(L->live, ps->value);
             K_LIST_FOREACH (set, pr) {
@@ -354,11 +354,11 @@ struct MirBlockList *pawMir_compute_live_in(struct Mir *mir, struct MirBlockList
         MirBlockList_push(mir, W, *pb);
     }
 
-    for (int i = 0; i < W->count; ++i) {
-        MirBlock const b = MirBlockList_get(W, i);
-        if (!block_set_contains(defs, b))
+    int index;
+    K_LIST_ENUMERATE (W, index, pb) {
+        if (!block_set_contains(defs, *pb))
             continue;
-        struct MirBlockData *bb = mir_bb_data(mir, b);
+        struct MirBlockData *bb = mir_bb_data(mir, *pb);
 
         struct MirInstruction **pinstr;
         K_LIST_FOREACH (bb->instructions, pinstr) {
@@ -370,13 +370,12 @@ struct MirBlockList *pawMir_compute_live_in(struct Mir *mir, struct MirBlockList
             // output, so loads must be checked before stores. e.g. "x = x + 1"
             // loads "x" before writing to it.
             struct MirRegisterPtrList *ploads = pawMir_get_loads(mir, *pinstr);
-            int const index = reglist_find(ploads, r);
-            if (index >= 0)
+            if (reglist_find(ploads, r) >= 0)
                 goto found_use;
 
             MirRegister const *pstore = pawMir_get_store(mir, *pinstr);
             if (pstore != NULL && MIR_REG_EQUALS(*pstore, r)) {
-                MirBlockList_swap_remove(W, i);
+                MirBlockList_swap_remove(W, index);
                 break;
             }
         }
@@ -416,7 +415,7 @@ static void extend_captured_intervals(struct Liveness *L, struct Mir *mir)
 struct MirIntervalList *pawMir_compute_liveness(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, struct MirLocationList *locations)
 {
     struct Liveness L = {
-        .pool = pawP_pool_new(C, C->pool_stats),
+        .pool = pawP_pool_new(C, C->aux_stats),
         .intervals = MirIntervalList_new(mir),
         .locations = locations,
         .mir = mir,
@@ -437,8 +436,8 @@ struct MirIntervalList *pawMir_compute_liveness(struct Compiler *C, struct Mir *
 
     // initialize liveness sets
     RegisterSetList_reserve(&L, L.live, nblocks);
-    for (int i = 0; i < nblocks; ++i)
-        RegisterSetList_push(&L, L.live, MirRegisterList_new(mir));
+    while (L.live->count < nblocks)
+        RegisterSetList_push(&L, L.live, MirRegisterList_new_from(mir, L.pool));
 
     // arguments and captured variables get dedicated registers
     {

@@ -1993,7 +1993,7 @@ void pawP_resolve(struct Compiler *C)
     struct HirTypeFolder F;
 
     struct Resolver R = {
-        .pool = pawP_pool_new(C, C->pool_stats),
+        .pool = pawP_pool_new(C, C->aux_stats),
         .traits = C->traits,
         .U = C->U,
         .P = ENV(C),

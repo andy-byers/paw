@@ -126,7 +126,7 @@ struct Compiler {
     Value report_stats;
 
     struct Statistics *stats;
-    struct PoolStats pool_stats;
+    struct PoolStats aux_stats;
     struct ModuleList *modules;
     struct HirDeclList *decls;
     struct DynamicMem *dm;
@@ -236,7 +236,7 @@ struct IrType *pawP_instantiate_field(struct Compiler *C, struct IrType *self, s
 struct HirDecl *pawP_find_field(struct Compiler *C, struct IrType *self, String *name);
 struct IrType *pawP_find_method(struct Compiler *C, struct IrType *self, String *name);
 
-struct Decision *pawP_check_exhaustiveness(struct Hir *hir, struct HirMatchExpr *match, struct VariableList *vars);
+struct Decision *pawP_check_exhaustiveness(struct Hir *hir, struct Pool *pool, struct HirMatchExpr *match, struct VariableList *vars);
 void pawP_lower_matches(struct Compiler *C);
 
 struct IrType *pawP_generalize(struct Compiler *C, struct IrType *type);

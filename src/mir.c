@@ -397,7 +397,7 @@ static void traverse_postorder(struct Traversal *X, VisitedMap *visited, struct 
 struct MirBlockList *pawMir_traverse_rpo(struct Compiler *C, struct Mir *mir)
 {
     struct Traversal X = {
-        .pool = pawP_pool_new(C, C->pool_stats),
+        .pool = pawP_pool_new(C, C->aux_stats),
         .mir = mir,
         .P = ENV(C),
         .C = C,
@@ -555,7 +555,7 @@ void pawMir_remove_unreachable_blocks(struct Mir *mir)
 {
     struct Compiler *C = mir->C;
     struct Traversal X = {
-        .pool = pawP_pool_new(C, C->pool_stats),
+        .pool = pawP_pool_new(C, C->aux_stats),
         .mir = mir,
         .P = ENV(C),
         .C = C,

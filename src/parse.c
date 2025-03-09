@@ -1899,7 +1899,7 @@ static struct Ast *parse_module(struct Lex *lex, paw_Reader input, void *ud)
 static void init_lexer(struct Compiler *C, struct Ast *ast, struct Lex *lex)
 {
     *lex = (struct Lex){
-        .pool = pawP_pool_new(C, C->pool_stats),
+        .pool = pawP_pool_new(C, C->aux_stats),
         .modname = ast->name,
         .strings = C->strings,
         .ast = ast,
