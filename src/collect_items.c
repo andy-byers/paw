@@ -182,12 +182,26 @@ static struct IrTypeList *collect_bounds(struct ItemCollector *X, struct HirBoun
     return result;
 }
 
+static void register_generic_bounds(struct ItemCollector *X, struct HirDeclList *generics, struct IrTypeList *types)
+{
+    if (generics == NULL) return;
+
+    struct IrType **ptype;
+    struct HirDecl **pdecl;
+    K_LIST_ZIP (generics, pdecl, types, ptype) {
+        struct HirGenericDecl *d = HirGetGenericDecl(*pdecl);
+        struct IrGeneric *g = IrGetGeneric(*ptype);
+        g->bounds = collect_bounds(X, d->bounds);
+    }
+}
+
 static void register_generics(struct ItemCollector *X, struct HirDeclList *generics)
 {
     if (generics == NULL)
         return;
 
-    // first pass creates a local symbol for each generic
+    // Create a local symbol for each generic. Generic bounds are registered
+    // in a later pass.
     struct HirDecl **pdecl;
     struct IrTypeList *types = IrTypeList_new(X->C);
     K_LIST_FOREACH (generics, pdecl) {
@@ -196,15 +210,6 @@ static void register_generics(struct ItemCollector *X, struct HirDeclList *gener
         SET_NODE_TYPE(X->C, *pdecl, type);
         new_local(X, d->name, *pdecl);
         IrTypeList_push(X->C, types, type);
-    }
-
-    // second pass resolves generic bounds, which might mention other generics
-    // in the same binder
-    struct IrType **ptype;
-    K_LIST_ZIP (generics, pdecl, types, ptype) {
-        struct HirGenericDecl *d = HirGetGenericDecl(*pdecl);
-        struct IrGeneric *g = IrGetGeneric(*ptype);
-        g->bounds = collect_bounds(X, d->bounds);
     }
 }
 
@@ -302,6 +307,7 @@ static void ensure_generics_in_signature(struct ItemCollector *X, struct HirDecl
 static void register_func(struct ItemCollector *X, struct HirFuncDecl *d)
 {
     struct IrTypeList *types = collect_generic_types(X, d->generics);
+    register_generic_bounds(X, d->generics, types);
     struct IrTypeList *params_ = pawHir_collect_decl_types(X->C, d->params);
     struct IrType *result = collect_type(X, d->result);
     struct IrType *sig = pawIr_new_signature(X->C, d->did, types, params_, result);
@@ -498,6 +504,7 @@ static void collect_adt_decl(struct ItemCollector *X, struct PartialDecl lazy)
     enter_block(X, lazy.scope);
     struct IrType *type = GET_TYPE(X, d->hid);
     X->binder = collect_generic_types(X, d->generics);
+    register_generic_bounds(X, d->generics, X->binder);
 
     struct HirType **ptype;
     K_LIST_FOREACH (d->traits, ptype) {
@@ -557,6 +564,7 @@ static void collect_trait_decl(struct ItemCollector *X, struct PartialDecl lazy)
     enter_block(X, lazy.scope);
     struct HirTraitDecl *d = HirGetTraitDecl(lazy.decl);
     X->binder = collect_generic_types(X, d->generics);
+    register_generic_bounds(X, d->generics, X->binder);
     struct IrType *type = GET_NODE_TYPE(X->C, lazy.decl);
 
     WITH_CONTEXT(X, type,
@@ -583,10 +591,11 @@ static struct HirDecl *find_item_in(struct ItemCollector *X, int modno, String *
 
 static struct PartialDeclList *register_decls(struct ItemCollector *X, struct ModuleInfo *m)
 {
+    struct HirDecl *const *pitem;
     HirDeclList *items = m->hir->items;
     struct PartialDeclList *list = PartialDeclList_new(X);
-    for (int i = 0; i < items->count; ++i) {
-        struct HirDecl *item = HirDeclList_get(items, i);
+    K_LIST_FOREACH(items, pitem) {
+        struct HirDecl *item = *pitem;
         if (HirIsTraitDecl(item)) {
             struct HirTraitDecl *d = HirGetTraitDecl(item);
             struct HirScope *scope = register_trait_decl(X, d);
@@ -644,7 +653,7 @@ static struct PartialModList *collect_phase_1(struct ItemCollector *X, struct Mo
 {
     struct PartialModList *pml = PartialModList_new(X);
 
-    // collect toplevel ADT names and type parameters
+    // collect toplevel names and type parameters
     struct ModuleInfo *const *pmi;
     K_LIST_FOREACH (ml, pmi) {
         struct ModuleInfo *m = use_module(X, *pmi);
@@ -656,7 +665,8 @@ static struct PartialModList *collect_phase_1(struct ItemCollector *X, struct Mo
         finish_module(X);
     }
 
-    // fill in toplevel ADT field and method types (may instantiate polymorphic ADTs)
+    // fill in toplevel ADT field and method types, as well as generic bounds (may
+    // instantiate polymorphic ADTs and/or traits)
     struct PartialModule *ppm;
     K_LIST_FOREACH (pml, ppm) {
         use_module(X, ppm->m);

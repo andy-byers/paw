@@ -567,7 +567,7 @@ static struct HirPat *new_some_pat(struct LowerAst *L, String *var, int line)
 static struct HirExpr *LowerForExpr(struct LowerAst *L, struct AstForExpr *e)
 {
     struct HirStmtList *outer_stmts = HirStmtList_new(L->hir);
-    String *iter_name = SCAN_STRING(L->C, "(iter)");
+    String *iter_name = SCAN_STRING(L->C, PRIVATE("iter"));
     {
         // evaluate "iter" and store in a local "_iter"
         struct HirExpr *init = lower_expr(L, e->target);
@@ -579,7 +579,7 @@ static struct HirExpr *LowerForExpr(struct LowerAst *L, struct AstForExpr *e)
     struct HirExprList *arms = HirExprList_new(L->hir);
     {
         // add the "Some(x) => x" arm
-        String *field_name = SCAN_STRING(L->C, "(field)");
+        String *field_name = SCAN_STRING(L->C, PRIVATE("field"));
         struct HirPat *pat = new_some_pat(L, field_name, e->line);
         struct HirExpr *rhs = new_unary_path_expr(L, e->line, field_name);
         struct HirExpr *arm = pawHir_new_match_arm(L->hir, e->line, pat, NULL, rhs, PAW_FALSE);
@@ -611,7 +611,7 @@ static struct HirExpr *LowerForExpr(struct LowerAst *L, struct AstForExpr *e)
     {
         // ".never" flag must be false: "None" arm jumps but "Some" arm does not
         struct HirExpr *match = pawHir_new_match_expr(L->hir, e->line, call, arms, PAW_FALSE);
-        String *temp_name = SCAN_STRING(L->C, "(temp)");
+        String *temp_name = SCAN_STRING(L->C, PRIVATE("temp"));
         struct HirDecl *temp = pawHir_new_var_decl(L->hir, e->line, temp_name, NULL, NULL, match, PAW_FALSE);
         struct HirExpr *move = new_unary_path_expr(L, e->line, temp_name);
         struct HirDecl *var = pawHir_new_var_decl(L->hir, e->line, e->name, NULL, NULL, move, PAW_FALSE);

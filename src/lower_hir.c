@@ -591,7 +591,7 @@ static void enter_function(struct LowerHir *L, struct FunctionState *fs, struct 
     set_current_bb(L, first);
     enter_block(L, bs, PAW_FALSE);
 
-    alloc_local(L, SCAN_STRING(L->C, "(result)"),
+    alloc_local(L, SCAN_STRING(L->C, PRIVATE("result")),
                 IR_FPTR(mir->type)->result, NO_DECL);
 }
 
@@ -936,7 +936,7 @@ static MirRegister lower_closure_expr(struct HirVisitor *V, struct HirClosureExp
     struct FunctionState *outer = L->fs;
     struct IrType *type = pawIr_get_type(L->C, e->hid);
 
-    String *name = SCAN_STRING(L->C, "(closure)");
+    String *name = SCAN_STRING(L->C, PRIVATE("closure"));
     struct Mir *result = pawMir_new(L->C, name, type, NULL, FUNC_CLOSURE, PAW_FALSE, PAW_FALSE);
 
     struct BlockState bs;
@@ -1725,7 +1725,7 @@ static void lower_global_constant(struct LowerHir *L, struct HirVarDecl *d)
     struct IrTypeList *artificial_params = IrTypeList_new(L->C);
     struct IrType *artificial_result = pawIr_get_type(L->C, (HirId){0});
     struct IrType *artificial_type = pawIr_new_func_ptr(L->C, artificial_params, artificial_result);
-    struct Mir *artificial = pawMir_new(L->C, SCAN_STRING(L->C, "(toplevel)"), artificial_type,
+    struct Mir *artificial = pawMir_new(L->C, SCAN_STRING(L->C, PRIVATE("toplevel")), artificial_type,
                                         NULL, FUNC_MODULE, PAW_FALSE, PAW_FALSE);
 
     // prevent cycles between global constants

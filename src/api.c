@@ -555,6 +555,21 @@ void paw_shift(paw_Env *P, int n)
     paw_pop(P, n);
 }
 
+void paw_get_field(paw_Env *P, int index, int ifield)
+{
+    paw_push_value(P, index);
+    StackPtr ra = at(P, -1);
+    pawR_tuple_get(P->cf, ra, ra, ifield);
+}
+
+void paw_set_field(paw_Env *P, int index, int ifield)
+{
+    paw_push_value(P, index);
+    StackPtr ra = at(P, -1);
+    StackPtr rb = at(P, -2);
+    pawR_tuple_set(P->cf, ra, ifield, rb);
+}
+
 char const *paw_int_to_string(paw_Env *P, int index, size_t *plen)
 {
     Value *pv = at(P, index);

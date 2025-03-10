@@ -91,3 +91,44 @@ pub fn test_custom_key2() {
     assert(m[mk(1, 1)] == 11);
     assert(m[mk(2, 2)] == 22);
 }
+
+pub fn iterate_list<T: Equals>(L: [T], iter: ListIterator<T>) {
+    assert(iter.next().unwrap().eq(L[0]));
+    assert(iter.next().unwrap().eq(L[1]));
+    assert(iter.next().unwrap().eq(L[2]));
+    assert(iter.next().is_none());
+    assert(iter.next().is_none());
+}
+
+pub fn test_iterate_list() {
+    let L = [1, 2, 3];
+    iterate_list(L, ListIterator::new(L));
+    iterate_list(L, L.iterator());
+}
+
+fn iterate_map<K: Hash + Equals, V>(m: [K: V], iter: MapIterator<K, V>) {
+    m.erase(iter.next().unwrap());
+    m.erase(iter.next().unwrap());
+    m.erase(iter.next().unwrap());
+    assert(#m == 0);
+    assert(iter.next().is_none());
+    assert(iter.next().is_none());
+}
+
+pub fn test_iterate_map() {
+    let m = ["a": 1, "b": 2, "c": 3];
+    iterate_map(m, MapIterator::new(m));
+
+    let m = ["d": 4, "e": 5, "f": 6];
+    iterate_map(m, m.iterator());
+}
+
+//pub fn test_iterate_range() {
+//    let r = Range{start: 0, end: 3};
+//    let iter = r.iterator();
+//    assert(iter.next().unwrap() == 0);
+//    assert(iter.next().unwrap() == 1);
+//    assert(iter.next().unwrap() == 2);
+//    assert(iter.next().is_none());
+//}
+//

@@ -197,6 +197,48 @@ static int list_remove(paw_Env *P)
     return 1;
 }
 
+static int list_iter_next(paw_Env *P)
+{
+    paw_get_field(P, 1, 0); // 2: list
+    paw_get_field(P, 1, 1); // 3: index
+
+    StackPtr ra = CF_BASE(2);
+    StackPtr rb = CF_BASE(3);
+    Tuple *list = V_TUPLE(*ra);
+    paw_Int index = V_INT(*rb);
+    if (pawList_iter(list, &index)) {
+        V_SET_INT(rb, index);
+        paw_set_field(P, 1, 1);
+
+        *P->top.p++ = *pawList_get(P, list, index);
+        new_option_some(P, &P->top.p[-1], P->top.p[-1]);
+    } else {
+        new_option_none(P, &P->top.p[-1]);
+    }
+    return 1;
+}
+
+static int map_iter_next(paw_Env *P)
+{
+    paw_get_field(P, 1, 0); // 2: map
+    paw_get_field(P, 1, 1); // 3: index
+
+    StackPtr ra = CF_BASE(2);
+    StackPtr rb = CF_BASE(3);
+    Tuple *list = V_TUPLE(*ra);
+    paw_Int index = V_INT(*rb);
+    if (pawMap_iter(list, &index)) {
+        V_SET_INT(rb, index);
+        paw_set_field(P, 1, 1);
+
+        *P->top.p++ = *pawMap_key(list, index);
+        new_option_some(P, &P->top.p[-1], P->top.p[-1]);
+    } else {
+        new_option_none(P, &P->top.p[-1]);
+    }
+    return 1;
+}
+
 static char const *find_substr(char const *str, size_t nstr, char const *sub, size_t nsub)
 {
     if (nsub == 0)
@@ -559,6 +601,9 @@ static void load_builtins(paw_Env *P)
     add_prelude_method(P, "Result", "unwrap", enum_unwrap);
     add_prelude_method(P, "Result", "unwrap_err", result_unwrap_err);
     add_prelude_method(P, "Result", "unwrap_or", enum_unwrap_or);
+
+    add_prelude_method(P, "ListIterator", "next", list_iter_next);
+    add_prelude_method(P, "MapIterator", "next", map_iter_next);
 }
 
 static paw_Bool lib_getenv(paw_Env *P)

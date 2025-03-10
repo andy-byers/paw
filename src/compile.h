@@ -53,6 +53,8 @@
 #define GET_NODE_TYPE(C, p) pawIr_get_type(C, (p)->hdr.hid)
 #define SET_NODE_TYPE(C, p, t) pawIr_set_type(C, (p)->hdr.hid, t)
 
+#define PRIVATE(Name_) ("(" Name_ ")")
+
 #define MAX_MODULES 256
 #define MAX_DECLS 10000
 
