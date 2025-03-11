@@ -18,7 +18,7 @@
 #include "type_folder.h"
 #include "unify.h"
 
-#define TYPE2CODE(R, type) (pawP_type2code((R)->C, type))
+#define TYPE2CODE(R, type) pawP_type2code((R)->C, type)
 
 struct ResultState {
     struct ResultState *outer;
@@ -51,7 +51,6 @@ struct Resolver {
     struct ResultState *rs;
     struct MatchState *ms;
     struct HirSymtab *symtab;
-    struct HirTypeFolder *F;
     struct Substitution subst;
     struct Hir *hir;
     TraitMap *traits; // '.traits' from Compiler
@@ -207,7 +206,7 @@ static paw_Bool implements_trait(struct Resolver *R, struct IrType *type, enum T
     if (bounds == NULL)
         return PAW_FALSE;
     K_LIST_FOREACH (bounds, pbound) {
-        struct HirDecl *decl = pawHir_get_decl(R->C, IR_TYPE_DID(*pbound));
+        struct HirDecl *decl = get_decl(R, IR_TYPE_DID(*pbound));
         struct HirTraitDecl *trait = HirGetTraitDecl(decl);
         if ((kind == TRAIT_HASH && pawS_eq(trait->name, CSTR(R, CSTR_HASH)))
             || (kind == TRAIT_EQUALS && pawS_eq(trait->name, CSTR(R, CSTR_EQUALS)))) {
@@ -323,10 +322,10 @@ static void leave_match_ctx(struct Resolver *R)
     R->ms = R->ms->outer;
 }
 
-static struct HirScope *enclosing_scope(struct HirSymtab *st)
+static struct HirScope *enclosing_scope(struct Resolver *R)
 {
-    paw_assert(st->count > 0);
-    return K_LIST_LAST(st);
+    paw_assert(R->symtab->count > 0);
+    return K_LIST_LAST(R->symtab);
 }
 
 static int declare_local(struct Resolver *R, String *name, struct HirDecl *decl)
@@ -335,7 +334,7 @@ static int declare_local(struct Resolver *R, String *name, struct HirDecl *decl)
         NAME_ERROR(R, "invalid identifier ('%s' is a language keyword)");
     if (IS_BUILTIN(name))
         NAME_ERROR(R, "invalid identifier ('%s' is a builtin type name)");
-    return pawHir_declare_symbol(R->hir, enclosing_scope(R->symtab), decl, name);
+    return pawHir_declare_symbol(R->hir, enclosing_scope(R), decl, name);
 }
 
 // Allow a previously-declared variable to be accessed
@@ -343,7 +342,7 @@ static int declare_local(struct Resolver *R, String *name, struct HirDecl *decl)
 // declared. This will always be the case for well-formed code.
 static void define_local(struct Resolver *R, int index)
 {
-    pawHir_define_symbol(enclosing_scope(R->symtab), index);
+    pawHir_define_symbol(enclosing_scope(R), index);
 }
 
 static int find_field(struct HirDeclList *fields, String *name)
@@ -366,12 +365,10 @@ static void new_local(struct Resolver *R, String *name, struct HirDecl *decl)
     define_local(R, index);
 }
 
-static struct HirScope *leave_scope(struct Resolver *R)
+static void leave_scope(struct Resolver *R)
 {
-    struct HirSymtab *st = R->symtab;
-    struct HirScope *scope = enclosing_scope(st);
-    --st->count;
-    return scope;
+    HirScope_delete(R->hir, enclosing_scope(R));
+    HirSymtab_pop(R->symtab);
 }
 
 static void enter_scope(struct Resolver *R, struct HirScope *scope)
@@ -381,11 +378,10 @@ static void enter_scope(struct Resolver *R, struct HirScope *scope)
     HirSymtab_push(R->hir, R->symtab, scope);
 }
 
-static struct HirScope *leave_function(struct Resolver *R)
+static void leave_function(struct Resolver *R)
 {
-    struct HirScope *scope = leave_scope(R);
+    leave_scope(R);
     CHECK_GC(ENV(R));
-    return scope;
 }
 
 static void enter_function(struct Resolver *R, struct HirFuncDecl *func)
@@ -424,9 +420,10 @@ static void allocate_decls(struct Resolver *R, struct HirDeclList *decls)
 {
     if (decls == NULL)
         return;
-    for (int i = 0; i < decls->count; ++i) {
-        struct HirDecl *decl = decls->data[i];
-        new_local(R, decl->hdr.name, decl);
+
+    struct HirDecl *const *pdecl;
+    K_LIST_FOREACH(decls, pdecl) {
+        new_local(R, (*pdecl)->hdr.name, *pdecl);
     }
 }
 
@@ -588,18 +585,18 @@ static struct IrType *resolve_path(struct Resolver *R, struct HirPath *path, enu
 static void maybe_fix_unit_struct(struct Resolver *R, struct IrType *type, struct HirExpr *expr)
 {
     paw_assert(IrIsAdt(type));
-    struct HirDecl *decl = get_decl(R, IR_TYPE_DID(type));
-    struct HirAdtDecl *adt = HirGetAdtDecl(decl);
+    struct IrAdtDef const *adt = pawIr_get_adt_def(R->C, IR_TYPE_DID(type));
     const enum BuiltinKind code = TYPE2CODE(R, type);
-    if (IS_BUILTIN_TYPE(code)) {
+    if (IS_BUILTIN_TYPE(code))
         TYPE_ERROR(R, "expected operand but found builtin type '%s'", adt->name->text);
-    }
-    if (!adt->is_struct) {
+    if (!adt->is_struct)
         SYNTAX_ERROR(R, "missing variant specifier on enum '%s'", adt->name->text);
-    }
-    if (adt->fields->count > 0) {
+
+    paw_assert(adt->variants->count == 1);
+    struct IrVariantDef *variant = IrVariantDefs_get(adt->variants, 0);
+    if (variant->fields->count > 0)
         SYNTAX_ERROR(R, "missing fields on initializer for struct '%s'", adt->name->text);
-    }
+
     struct HirPath *path = HirGetPathExpr(expr)->path;
     expr->hdr.kind = kHirLiteralExpr;
     struct HirLiteralExpr *r = HirGetLiteralExpr(expr);
@@ -1158,10 +1155,10 @@ static struct IrType *select_field(struct Resolver *R, struct IrType *target, st
 static struct IrType *resolve_call_target(struct Resolver *R, struct HirExpr *target, int *pparam_offset)
 {
     *pparam_offset = 0;
-    if (!HirIsSelector(target)) {
-        // normal function call
+    if (!HirIsSelector(target))
+        // normal function call (no receiver)
         return resolve_expr(R, target);
-    }
+
     struct HirSelector *select = HirGetSelector(target);
     struct IrType *self = resolve_operand(R, select->target);
 
@@ -1174,15 +1171,15 @@ static struct IrType *resolve_call_target(struct Resolver *R, struct HirExpr *ta
     } else {
         return select_field(R, self, select);
     }
-    if (method == NULL) {
+    if (method == NULL)
         NAME_ERROR(R, "method '%s' does not exist", select->name->text);
-    }
+
     struct HirDecl *func_decl = get_decl(R, IR_TYPE_DID(method));
     struct HirDecl *self_decl = get_decl(R, IR_TYPE_DID(self));
-    if (HirGetFuncDecl(func_decl)->is_assoc) {
+    if (HirGetFuncDecl(func_decl)->is_assoc)
         TYPE_ERROR(R, "'%s::%s' is not a method",
                    self_decl->hdr.name->text, func_decl->hdr.name->text);
-    }
+
     ensure_accessible_field(R, func_decl, self_decl, method);
     *pparam_offset = 1;
     return method;
@@ -1964,8 +1961,6 @@ static void check_module_types(struct Resolver *R, struct ModuleInfo *m)
 {
     struct Hir *hir = m->hir;
     DLOG(R, "resolving '%s'", hir->name->text);
-
-    R->symtab = HirSymtab_new(R->hir);
     use_module(R, m);
 
     enter_scope(R, NULL);
@@ -1989,22 +1984,24 @@ static void check_types(struct Resolver *R)
 
 void pawP_resolve(struct Compiler *C)
 {
-    struct DynamicMem *dm = C->dm;
-    struct HirTypeFolder F;
+    struct Pool *pool = pawP_pool_new(C, C->aux_stats);
+
+    // determine the type of each toplevel item in each module (allows the type checker
+    // to resolve paths between modules immediately)
+    pawP_collect_items(C, pool);
 
     struct Resolver R = {
-        .pool = pawP_pool_new(C, C->aux_stats),
+        .symtab = HirSymtab_new(C->hir_prelude),
         .traits = C->traits,
+        .pool = pool,
         .U = C->U,
         .P = ENV(C),
-        .dm = dm,
-        .F = &F,
+        .dm = C->dm,
         .C = C,
     };
-    pawHir_type_folder_init(&F, NULL, &R);
 
     // run the type checker
     check_types(&R);
 
-    pawP_pool_free(C, R.pool);
+    pawP_pool_free(C, pool);
 }

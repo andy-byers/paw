@@ -10,8 +10,8 @@
 #include "value.h"
 
 struct Jump; // call.c
-typedef uint16_t ItemId;
-typedef uint16_t ValueId;
+typedef int ItemId;
+typedef int ValueId;
 
 #define CFF_C 1
 #define CFF_ENTRY 2

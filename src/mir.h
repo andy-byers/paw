@@ -884,8 +884,8 @@ inline static int pawMir_get_location(struct MirLocationList *locations, MirId m
 struct MirBlockList *pawMir_compute_live_in(struct Mir *mir, struct MirBlockList *uses, struct MirBlockList *defs, MirRegister r);
 struct MirIntervalList *pawMir_compute_liveness(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, struct MirLocationList *locations);
 
-#define MIR_ID_HASH(Ctx_, Bb_) (Bb_).value
-#define MIR_ID_EQUALS(Ctx_, A_, B_) ((A_).value == (B_).value)
+#define MIR_ID_HASH(Ctx_, Bb_) ((void)(Ctx_), (unsigned)(Bb_).value)
+#define MIR_ID_EQUALS(Ctx_, A_, B_) ((void)(Ctx_), (A_).value == (B_).value)
 
 DEFINE_MAP(struct Mir, AccessMap, pawP_alloc, MIR_ID_HASH, MIR_ID_EQUALS, MirRegister, struct MirAccessList *)
 DEFINE_MAP(struct Mir, UseDefMap, pawP_alloc, MIR_ID_HASH, MIR_ID_EQUALS, MirRegister, struct MirBlockList *)

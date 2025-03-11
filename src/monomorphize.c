@@ -229,8 +229,8 @@ static struct MirRegisterData copy_register(struct MonoCollector *M, struct MirR
     if (reg.self != NULL) {
         // determine the "Self" type and look up the concrete method
         struct IrType *self = finalize_type(M, reg.self);
-        struct HirDecl *decl = pawHir_get_decl(M->C, IR_TYPE_DID(reg.type));
-        type = pawP_find_method(M->C, self, decl->hdr.name);
+        struct IrFnDef *def = pawIr_get_fn_def(M->C, IR_TYPE_DID(reg.type));
+        type = pawP_find_method(M->C, self, def->name);
         type = instantiate_method(M->C, type, IR_TYPE_SUBTYPES(reg.type));
     }
     type = finalize_type(M, type);
@@ -321,13 +321,12 @@ static struct Mir *monomorphize_function_aux(struct MonoCollector *M, struct Mir
 
 static struct Mir *monomorphize_method_aux(struct MonoCollector *M, struct Mir *base, struct IrSignature *sig, struct IrType *self)
 {
-    struct HirDecl *base_decl = pawHir_get_decl(M->C, IR_TYPE_DID(sig->self));
-    struct IrType *base_type = GET_NODE_TYPE(M->C, base_decl);
+    struct IrType *base_type = pawIr_get_def_type(M->C, IR_TYPE_DID(sig->self));
     struct IrTypeList *base_binder = IR_TYPE_SUBTYPES(base_type);
 
-    if (base_binder == NULL) {
+    if (base_binder == NULL)
         return monomorphize_function_aux(M, base, sig, self);
-    }
+
     struct IrTypeList *inst_binder = IR_TYPE_SUBTYPES(sig->self);
 
     struct GenericsState gs;
@@ -355,14 +354,17 @@ static struct IrType *cannonicalize_func(struct MonoCollector *M, struct IrTypeL
     return type;
 }
 
+static paw_Bool test_fns(struct MonoCollector *M, IrType *a, IrType *b)
+{
+    return IR_TYPE_DID(a).value == IR_TYPE_DID(b).value && test_types(M, a, b);
+}
+
 static struct IrType *cannonicalize_method(struct MonoCollector *M, struct IrType *self, struct IrTypeList *monos, String const *name, struct IrType *type)
 {
     struct IrType *const *pmono;
     K_LIST_FOREACH (monos, pmono) {
-        struct HirDecl *decl = pawHir_get_decl(M->C, IR_TYPE_DID(*pmono));
-        if (pawS_eq(name, decl->hdr.name) && test_types(M, type, *pmono)) {
+        if (test_fns(M, type, *pmono))
             return *pmono;
-        }
     }
 
     IrTypeList_push(M->C, M->pending, type);
@@ -449,9 +451,6 @@ static struct IrType *collect_adt(struct MonoCollector *M, struct IrAdt *t)
 
 static struct IrType *register_function(struct MonoCollector *M, struct IrSignature *t)
 {
-    struct HirDecl *decl = pawHir_get_decl(M->C, t->did);
-    if (HirIsVariantDecl(decl))
-        return collect_adt(M, IrGetAdt(t->result));
     struct IrTypeList *monos = mono_list_for_decl(M, M->monos, t->did);
     return cannonicalize_func(M, monos, IR_CAST_TYPE(t));
 }
@@ -563,6 +562,12 @@ struct MonoResult pawP_monomorphize(struct Compiler *C, BodyMap *bodies)
     K_LIST_FOREACH (M.other, pother) {
         IrTypeList_push(C, M.types, *pother);
     }
+
+    // TODO: do this at the end of lower_hir.c. find methods a diferent way. already
+    //       know they exist, just need to find and substitute types.
+    // free memory used for HIR
+    pawP_pool_free(C, C->hir_pool);
+    C->hir_pool = NULL;
 
     pawP_pool_free(C, M.pool);
     return (struct MonoResult){

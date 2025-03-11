@@ -1756,10 +1756,6 @@ static char const kPrelude[] =
     "    fn increment(self);\n"
     "}\n"
 
-    "pub trait Stride<T> {\n"
-    "    fn advanced(self, by: T) -> Option<Self>;\n"
-    "}\n"
-
     "pub trait Iterate<I: Advance<T>, T> {\n"
     "    fn iterator(self) -> I;\n"
     "}\n"

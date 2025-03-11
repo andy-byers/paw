@@ -496,7 +496,8 @@ static struct Token advance(struct Lex *x)
 #define T(kind) make_token(CAST(TokenKind, kind))
 
 try_again:
-    paw_assert(x->ptr < x->end);
+    if (x->ptr == x->end)
+        return T(TK_END);
     skip_whitespace(x);
 
     // cast to avoid sign extension

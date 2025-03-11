@@ -1394,7 +1394,7 @@ struct Hir {
 
 inline static HirId pawHir_next_id(struct Hir *hir)
 {
-    return (HirId){hir->C->hir_count++};
+    return (HirId){(unsigned)hir->C->hir_count++};
 }
 
 struct HirPath *pawHir_new_path(struct Compiler *C);
@@ -1467,8 +1467,5 @@ inline static paw_Bool hir_id_equals(struct Compiler *C, HirId a, HirId b)
     PAW_UNUSED(C);
     return a.value == b.value;
 }
-
-DEFINE_MAP(struct Compiler, HirTypes, pawP_alloc, hir_id_hash, hir_id_equals, HirId, struct IrType *)
-DEFINE_MAP_ITERATOR(HirTypes, HirId, struct IrType *)
 
 #endif // PAW_HIR_H

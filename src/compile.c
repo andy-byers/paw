@@ -173,8 +173,8 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, char co
 {
     pawY_uninit(P);
 
-    pawK_pool_init(P, &dm->pool, FIRST_ARENA_SIZE, (struct PoolStats){0});
     dm->pool.prev = dm->pool.next = &dm->pool;
+    pawK_pool_init(P, &dm->pool, FIRST_ARENA_SIZE, (struct PoolStats){0});
 
     *C = (struct Compiler){
         .pool = &dm->pool,
@@ -187,15 +187,15 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, char co
     // must be added after-the-fact, since the main pool itself is used to allocate
     // the "struct Statistic" objects.
     C->pool->st = (struct PoolStats){
-        .bytes_alloc = pawStats_new(C, "memory.main.bytes_allocated"),
-        .bytes_used = pawStats_new(C, "memory.main.bytes_used"),
-        .num_alloc = pawStats_new(C, "memory.main.num_allocations"),
-    };
+                .bytes_alloc = pawStats_new(C, "memory.main.bytes_allocated"),
+                .bytes_used = pawStats_new(C, "memory.main.bytes_used"),
+                .num_alloc = pawStats_new(C, "memory.main.num_allocations"),
+            };
     C->aux_stats = (struct PoolStats){
-        .bytes_alloc = pawStats_new(C, "memory.aux.bytes_allocated"),
-        .bytes_used = pawStats_new(C, "memory.aux.bytes_used"),
-        .num_alloc = pawStats_new(C, "memory.aux.num_allocations"),
-    };
+                .bytes_alloc = pawStats_new(C, "memory.aux.bytes_allocated"),
+                .bytes_used = pawStats_new(C, "memory.aux.bytes_used"),
+                .num_alloc = pawStats_new(C, "memory.aux.num_allocations"),
+            };
     C->ast_pool = pawP_pool_new(C, (struct PoolStats){
                 .num_alloc = pawStats_new(C, "memory.ast.num_allocations"),
                 .bytes_alloc = pawStats_new(C, "memory.ast.bytes_allocated"),
@@ -223,8 +223,11 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, char co
 
     C->globals = GlobalList_new(C);
     C->builtin_lookup = BuiltinMap_new(C);
-    C->ir_types = HirTypes_new(C);
-    C->ir_defs = DefMap_new(C);
+    C->hir_types = HirTypeMap_new(C);
+    C->def_types = DefTypeMap_new(C);
+    C->variant_defs = VariantDefMap_new(C);
+    C->adt_defs = AdtDefMap_new(C);
+    C->fn_defs = FnDefMap_new(C);
 
     C->rtti = RttiMap_new(C);
     C->imports = ImportMap_new(C);
@@ -278,12 +281,21 @@ void pawP_teardown(paw_Env *P, struct DynamicMem *dm)
 
 struct ModuleInfo *pawP_mi_new(struct Compiler *C, struct Hir *hir)
 {
-    struct ModuleInfo *mi = P_ALLOC(C, NULL, 0, sizeof(*mi));
-    *mi = (struct ModuleInfo){
+    struct ModuleInfo *m = P_ALLOC(C, NULL, 0, sizeof(*m));
+    *m = (struct ModuleInfo){
         .globals = HirScope_new_from(hir, C->pool),
+        .modno = hir->modno,
+        .name = hir->name,
         .hir = hir,
     };
-    return mi;
+    return m;
+}
+
+void pawP_mi_delete(struct Compiler *C, struct ModuleInfo *m)
+{
+    HirScope_delete(C->hir_prelude, m->globals);
+    pawHir_free(m->hir);
+    P_ALLOC(C, m, 0, sizeof(*m));
 }
 
 #define LOG(dg, ...) PAWD_LOG(ENV((dg)->C), __VA_ARGS__)
@@ -390,42 +402,38 @@ static struct Type *new_type(struct DefGenerator *dg, struct IrType *src, ItemId
 static String *get_modname(struct DefGenerator *dg, DeclId did)
 {
     struct ModuleList *modules = dg->C->modules;
-    return ModuleList_get(modules, did.modno)->hir->name;
+    return ModuleList_get(modules, did.modno)->name;
 }
 
-static struct Def *new_def(struct DefGenerator *dg, DeclId did, struct IrType *type)
+static struct Def *new_adt_def(struct DefGenerator *dg, struct IrAdtDef *d, struct IrType *type)
 {
-    struct HirDecl *decl = pawHir_get_decl(dg->C, did);
-
-    struct Def *def;
     paw_Env *P = ENV(dg->C);
-
-    switch (HIR_KINDOF(decl)) {
-        case kHirVarDecl:
-        case kHirFieldDecl:
-            def = pawY_new_var_def(P);
-            break;
-        case kHirFuncDecl:
-            def = pawY_new_func_def(P, LEN(HirGetFuncDecl(decl)->params));
-            break;
-        case kHirAdtDecl:
-            def = pawY_new_adt_def(P, LEN(HirGetAdtDecl(decl)->fields));
-            def->adt.is_struct = HirGetAdtDecl(decl)->is_struct;
-            def->adt.is_pub = HirGetAdtDecl(decl)->is_pub;
-            break;
-        case kHirTraitDecl:
-            return NULL;
-        case kHirVariantDecl:
-            def = pawY_new_func_def(P, LEN(HirGetVariantDecl(decl)->fields));
-            break;
-        default:
-            PAW_UNREACHABLE();
-    }
-
+    int const n = d->is_struct
+        ? LEN(K_LIST_FIRST(d->variants)->fields)
+        : LEN(d->variants);
+    struct Def *def = pawY_new_adt_def(P, n);
     struct Type *ty = new_type(dg, type, def->hdr.iid);
-    def->hdr.name = decl->hdr.name;
-    def->hdr.code = ty->hdr.code;
-    def->hdr.modname = get_modname(dg, did);
+    def->adt.kind = DEF_ADT;
+    def->adt.modname = get_modname(dg, d->did);
+    def->adt.code = ty->hdr.code;
+    def->adt.name = d->name;
+    def->adt.is_struct = d->is_struct;
+    def->adt.is_pub = d->is_pub;
+    return def;
+}
+
+static struct Def *new_fn_def(struct DefGenerator *dg, struct IrFnDef *d, struct IrType *type)
+{
+    paw_Env *P = ENV(dg->C);
+    struct Def *def = pawY_new_func_def(P, LEN(d->params));
+    struct Type *ty = new_type(dg, type, def->hdr.iid);
+    def->func.kind = DEF_FUNC;
+    def->func.ntypes = LEN(d->params);
+    def->func.iid = def->hdr.iid;
+    def->func.modname = get_modname(dg, d->did);
+    def->func.code = ty->hdr.code;
+    def->func.name = d->name;
+    def->func.is_pub = d->is_pub;
     return def;
 }
 
@@ -435,6 +443,7 @@ static void allocate_other_type(struct DefGenerator *dg, struct IrType *type)
     map_types(dg, type, rtti);
 }
 
+#include"stdio.h"
 static void allocate_adt_def(struct DefGenerator *dg, struct IrType *type)
 {
     if (!IrIsAdt(type)) {
@@ -442,18 +451,14 @@ static void allocate_adt_def(struct DefGenerator *dg, struct IrType *type)
         return;
     }
     struct IrAdt *t = IrGetAdt(type);
-    struct HirDecl *decl = pawHir_get_decl(dg->C, t->did);
-    struct HirAdtDecl *d = HirGetAdtDecl(decl);
-
-    struct Def *def = new_def(dg, t->did, type);
-    def->adt.is_struct = d->is_struct;
-    def->adt.is_pub = d->is_pub;
-
+    struct IrAdtDef *d = pawIr_get_adt_def(dg->C, t->did);
+    struct Def *def = new_adt_def(dg, d, type);
     struct Type *rtti = Y_TYPE(ENV(dg->C), def->func.code);
     map_types(dg, type, rtti);
+printf("%d\n", def->hdr.iid);
 }
 
-static void define_decl_list(struct DefGenerator *dg, struct HirDeclList *decls)
+static void define_params(struct DefGenerator *dg, struct IrParams *params)
 {
     // TODO: define fields for RTTI
 }
@@ -486,19 +491,18 @@ static struct ItemSlot allocate_item(struct DefGenerator *dg, struct Mir *body)
     paw_Env *P = ENV(dg->C);
     struct IrSignature *t = IrGetSignature(body->type);
     int const ntypes = t->types != NULL ? t->types->count : 0;
-    struct HirFuncDecl *d = HirGetFuncDecl(pawHir_get_decl(dg->C, t->did));
-    struct Def *def = new_def(dg, t->did, body->type);
+    struct IrFnDef *d = pawIr_get_fn_def(dg->C, t->did);
+    struct Def *def = new_fn_def(dg, d, body->type);
+printf("%d\n", def->hdr.iid);
     struct Type *self = lookup_type(dg, body->self);
     def->func.self = self != NULL ? self->adt.code : -1;
     // ".vid" is the index of the Value slot where this function will live
     // at runtime. Functions are placed after the global constants section.
     def->func.vid = dg->items->count + dg->C->globals->count;
-    def->func.is_pub = d->is_pub;
-    def->func.name = d->name;
 
     struct DefState ds;
     enter_def(dg, &ds, body->type, def);
-    define_decl_list(dg, d->params);
+    define_params(dg, d->params);
     leave_def(dg);
 
     struct Type *rtti = Y_TYPE(P, def->func.code);
@@ -632,7 +636,7 @@ paw_Bool pawP_check_extern(struct Compiler *C, struct Annotations *annos, struct
     return PAW_FALSE;
 }
 
-Value pawP_get_extern_value(struct Compiler *C, String *name, struct Annotation anno)
+Value pawP_get_extern_value(struct Compiler *C, String *name)
 {
     paw_Env *P = ENV(C);
     pawE_push_cstr(P, CSTR_KSYMBOLS);

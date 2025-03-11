@@ -154,8 +154,11 @@ struct Compiler {
     struct ImportMap *imports; // String * => Ast
     struct RttiMap *rtti;
 
-    struct HirTypes *ir_types; // HirId => IrType *
-    struct DefMap *ir_defs; // DefId => IrDef *
+    struct HirTypeMap *hir_types; // HirId => IrType *
+    struct DefTypeMap *def_types; // DefId => IrType *
+    struct VariantDefMap *variant_defs; // DefId => IrVariantDef *
+    struct AdtDefMap *adt_defs; // DefId => IrAdtDef *
+    struct FnDefMap *fn_defs; // DefId => IrFnDef *
 
     // map for quickly determining the methods implementing a given builtin
     // trait for a given type
@@ -180,9 +183,12 @@ struct IrType *pawP_get_self(struct Compiler *C, struct IrSignature *method);
 struct ModuleInfo {
     struct HirScope *globals;
     struct Hir *hir;
+    String *name;
+    int modno;
 };
 
 struct ModuleInfo *pawP_mi_new(struct Compiler *C, struct Hir *hir);
+void pawP_mi_delete(struct Compiler *C, struct ModuleInfo *m);
 
 DEFINE_LIST(struct Compiler, ModuleList, struct ModuleInfo *)
 
@@ -205,7 +211,7 @@ struct DynamicMem {
 };
 
 void pawP_lower_ast(struct Compiler *C);
-void pawP_collect_items(struct Compiler *C);
+void pawP_collect_items(struct Compiler *C, struct Pool *pool);
 
 struct IrType *pawP_lower_type(struct Compiler *C, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirType *type);
 struct IrTypeList *pawP_lower_type_list(struct Compiler *C, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirTypeList *types);
@@ -309,10 +315,6 @@ inline static void pawP_compile(struct Compiler *C, paw_Reader input, void *ud)
     // transform AST -> HIR
     pawP_lower_ast(C);
 
-    // determine the type of each toplevel item in each module (allows the type checker to
-    // resolve paths between modules immediately)
-    pawP_collect_items(C);
-
     // run the type checker, then codegen
     pawP_resolve(C);
     pawP_codegen(C);
@@ -342,7 +344,7 @@ struct Annotation {
 DEFINE_LIST(struct Compiler, Annotations, struct Annotation)
 
 paw_Bool pawP_check_extern(struct Compiler *C, struct Annotations *annos, struct Annotation *panno);
-Value pawP_get_extern_value(struct Compiler *C, String *name, struct Annotation anno);
+Value pawP_get_extern_value(struct Compiler *C, String *name);
 void pawP_mangle_start(paw_Env *P, Buffer *buf, struct Compiler *G);
 String *pawP_mangle_finish(paw_Env *P, Buffer *buf, struct Compiler *G);
 String *pawP_mangle_name(struct Compiler *G, String const *modname, String const *name, struct IrTypeList *types);
@@ -364,13 +366,19 @@ struct TraitOwnerList *pawP_get_trait_owners(struct Compiler *C, struct IrType *
 #define P_VALUE_HASH(Ctx_, Value_) ((void)Ctx_, V_UINT(Value_))
 #define P_VALUE_EQUALS(Ctx_, A_, B_) ((void)Ctx_, V_UINT(A_) == V_UINT(B_))
 
-DEFINE_MAP(struct Compiler, DefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DefId, struct IrDef *)
+DEFINE_MAP(struct Compiler, FnDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrFnDef *)
+DEFINE_MAP(struct Compiler, AdtDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrAdtDef *)
+DEFINE_MAP(struct Compiler, VariantDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrVariantDef *)
+DEFINE_MAP(struct Compiler, HirTypeMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, HirId, struct IrType *)
+DEFINE_MAP(struct Compiler, DefTypeMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrType *)
 DEFINE_MAP(struct Compiler, TraitMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrTypeList *)
 DEFINE_MAP(struct Compiler, StringMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, String *, String *)
 DEFINE_MAP(struct Compiler, ImportMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, String *, struct Ast *)
 DEFINE_MAP(struct Compiler, ValueMap, pawP_alloc, P_VALUE_HASH, P_VALUE_EQUALS, Value, Value)
 DEFINE_MAP(struct Compiler, BodyMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct Mir *)
 DEFINE_MAP(struct Compiler, BuiltinMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, String *, struct Builtin *)
+DEFINE_MAP_ITERATOR(HirTypeMap, HirId, struct IrType *)
+
 DEFINE_LIST(struct Compiler, GlobalList, struct GlobalInfo)
 DEFINE_LIST(struct Compiler, Statistics, struct Statistic *)
 DEFINE_LIST(struct Compiler, BodyList, struct Mir *)

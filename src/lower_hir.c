@@ -1707,7 +1707,7 @@ static void lower_global_constant(struct LowerHir *L, struct HirVarDecl *d)
         struct ModuleInfo *m = ModuleList_get(L->C->modules, d->did.modno);
         String *modname = d->did.modno <= 1 ? NULL : m->hir->name;
         String *name = pawP_mangle_name(L->C, modname, d->name, NULL);
-        Value const value = pawP_get_extern_value(L->C, name, anno);
+        Value const value = pawP_get_extern_value(L->C, name);
         struct IrType *type = pawIr_get_type(L->C, d->hid);
         enum BuiltinKind const kind = pawP_type2code(L->C, type);
         register_global_constant(L, d, value, kind);
@@ -1808,6 +1808,7 @@ BodyMap *pawP_lower_hir(struct Compiler *C)
             }
         }
     }
+
     pawP_pool_free(C, L.pool);
     return result;
 }

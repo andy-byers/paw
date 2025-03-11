@@ -65,7 +65,7 @@ static void validate_type_args(struct Compiler *C, struct HirDecl *decl, struct 
     }
 }
 
-static struct HirSymbol *resolve_symbol(struct QueryState *Q, String const *name)
+static struct HirSymbol *resolve_global(struct QueryState *Q, String const *name)
 {
     // search the global symbols
     int const index = pawHir_find_symbol(Q->m->globals, name);
@@ -96,7 +96,7 @@ static struct QueryBase find_global_in(struct QueryState *Q, struct ModuleInfo *
     Q->index = 0;
     do {
         struct HirSegment *seg = &K_LIST_AT(path, Q->index++);
-        struct HirSymbol *sym = resolve_symbol(Q, seg->name);
+        struct HirSymbol *sym = resolve_global(Q, seg->name);
         if (sym != NULL) {
             ensure_accessible(Q, sym->decl);
             seg->did = sym->decl->hdr.did;
@@ -109,12 +109,10 @@ static struct QueryBase find_global_in(struct QueryState *Q, struct ModuleInfo *
         struct ModuleInfo *m = find_import(Q, seg->name);
         if (m == NULL)
             break;
-        if (Q->index >= path->count) {
+        if (Q->index >= path->count)
             pawE_error(ENV(Q), PAW_ETYPE, -1, "unexpected module name");
-        }
-        if (module_number(Q->m) != Q->base_modno) {
+        if (module_number(Q->m) != Q->base_modno)
             pawE_error(ENV(Q), PAW_ESYNTAX, -1, "transitive imports are not supported");
-        }
         Q->m = m;
     } while (Q->index < path->count);
     return (struct QueryBase){0};

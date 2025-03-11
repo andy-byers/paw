@@ -16,11 +16,6 @@ DeclId pawIr_next_did(struct Compiler *C, int mod)
     };
 }
 
-IrDef *pawIr_new_def(struct Compiler *C)
-{
-    return NEW_NODE(C, IrDef);
-}
-
 IrType *pawIr_new_type(struct Compiler *C)
 {
     return NEW_NODE(C, IrType);
@@ -28,14 +23,8 @@ IrType *pawIr_new_type(struct Compiler *C)
 
 IrType *pawIr_get_type(struct Compiler *C, HirId hid)
 {
-    IrType *const *ptype = HirTypes_get(C, C->ir_types, hid);
+    IrType *const *ptype = HirTypeMap_get(C, C->hir_types, hid);
     return ptype != NULL ? *ptype : NULL;
-}
-
-IrDef *pawIr_get_def(struct Compiler *C, DefId did)
-{
-    IrDef *const *pdef = DefMap_get(C, C->ir_defs, did);
-    return pdef != NULL ? *pdef : NULL;
 }
 
 void pawIr_set_type(struct Compiler *C, HirId hid, IrType *type)
@@ -44,13 +33,27 @@ void pawIr_set_type(struct Compiler *C, HirId hid, IrType *type)
     // TODO: this check could be removed with more confidence if 1 is used as the default ID (HirId, DefId, etc.) instead of 0
     //       since 0 is a valid ID, we get confused when an ID is not properly initialized (zero init produces a valid ID, which is bad)
     paw_assert(hid.value > 0 || !IrIsAdt(type) || IrGetAdt(type)->did.value == 0);
-    HirTypes_insert(C, C->ir_types, hid, type);
+    HirTypeMap_insert(C, C->hir_types, hid, type);
 }
 
-void pawIr_set_def(struct Compiler *C, DefId did, IrDef *def)
+struct IrFnDef *pawIr_get_fn_def(struct Compiler *C, DeclId did)
 {
-    paw_assert(def != NULL);
-    DefMap_insert(C, C->ir_defs, did, def);
+    return *FnDefMap_get(C, C->fn_defs, did);
+}
+
+struct IrVariantDef *pawIr_get_variant_def(struct Compiler *C, DeclId did)
+{
+    return *VariantDefMap_get(C, C->variant_defs, did);
+}
+
+struct IrAdtDef *pawIr_get_adt_def(struct Compiler *C, DeclId did)
+{
+    return *AdtDefMap_get(C, C->adt_defs, did);
+}
+
+struct IrType *pawIr_get_def_type(struct Compiler *C, DeclId did)
+{
+    return *DefTypeMap_get(C, C->def_types, did);
 }
 
 struct IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *target, String *name)
