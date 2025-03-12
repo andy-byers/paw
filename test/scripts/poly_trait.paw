@@ -1,312 +1,364 @@
-// poly_trait.paw
+//// poly_trait.paw
+//
+//pub trait InstanceGet<Type> {
+//   fn get(self) -> Type;
+//}
+//
+//struct Int: InstanceGet<int> {
+//    pub value: int,
+//
+//    pub fn get(self) -> int {
+//        self.value
+//    }
+//}
+//
+//fn call_int_method<Ty: InstanceGet<int>>(t: Ty) -> int {
+//    t.get()
+//}
+//
+//pub fn test_call_int_method_indirect() {
+//    let i = Int{value: 123};
+//    assert(call_int_method(i) == 123);
+//}
+//
+//struct Value<T>: InstanceGet<T> {
+//    pub value: T,
+//
+//    pub fn get(self) -> T {
+//        self.value
+//    }
+//}
+//
+//pub fn test_call_method() {
+//    let v = Value{value: 123};
+//    assert(v.get() == 123);
+//}
+//
+//fn call_method<T, Get: InstanceGet<T>>(g: Get) -> T {
+//    g.get()
+//}
+//
+//fn call_call_method<Get: InstanceGet<T>, T>(g: Get) -> T {
+//    call_method(g)
+//}
+//
+//pub fn test_call_method_indirect() {
+//    let v = Value{value: 123};
+//
+//    assert(call_method::<int, Value<int>>(v) == 123);
+//    assert(call_call_method::<Value<int>, int>(v) == 123);
+//
+//    assert(call_method(v) == 123);
+//    assert(call_call_method(v) == 123);
+//}
+//
+//struct BoundedValue<X: InstanceGet<Y>, Y> {
+//    pub value: X,
+//
+//    pub fn get_inner(self) -> Y {
+//        self.value.get()
+//    }
+//}
+//
+//pub fn test_call_bounded_value_method() {
+//    let v = Value{value: 123};
+//    let bv = BoundedValue{value: v};
+//    assert(bv.get_inner() == 123);
+//}
+//
+//fn call_bounded_method<T, Get: InstanceGet<T>>(bv: BoundedValue<Get, T>) -> T {
+//    bv.get_inner()
+//}
+//
+//fn call_call_bounded_method<Get: InstanceGet<T>, T>(bv: BoundedValue<Get, T>) -> T {
+//    call_bounded_method(bv)
+//}
+//
+//pub fn test_call_bounded_method_indirect() {
+//    let v = Value{value: 123};
+//    let bv = BoundedValue{value: v};
+//
+//    assert(call_bounded_method::<int, Value<int>>(bv) == 123);
+//    assert(call_call_bounded_method::<Value<int>, int>(bv) == 123);
+//
+//    assert(call_bounded_method(bv) == 123);
+//    assert(call_call_bounded_method(bv) == 123);
+//}
+//
+//struct Wrapper<X: InstanceGet<Y>, Y>: InstanceGet<Y> {
+//    pub value: X,
+//
+//    pub fn get(self) -> Y {
+//        self.value.get()
+//    }
+//}
+//
+//pub fn test_call_wrapper_method() {
+//    let v = Value{value: 123};
+//    let w = Wrapper{value: v};
+//    assert(w.get() == 123);
+//}
+//
+//pub fn test_call_wrapper_method_indirect() {
+//    let v = Value{value: 123};
+//    let w = Wrapper{value: v};
+//
+//    assert(call_method::<int, Wrapper<Value<int>, int>>(w) == 123);
+//    assert(call_call_method::<Wrapper<Value<int>, int>, int>(w) == 123);
+//
+//    assert(call_method(w) == 123);
+//    assert(call_call_method(w) == 123);
+//}
+//
+//pub trait ToString {
+//    fn to_string(self) -> str;
+//}
+//
+//struct IntWrapper: ToString {
+//    pub value: int,
+//    
+//    pub fn to_string(self) -> str {
+//        self.value.to_string()
+//    }
+//}
+//
+//pub trait CustomIterator<T> {
+//    fn next(self) -> Option<T>;
+//}
+//
+//struct Iterable<T>: CustomIterator<T> {
+//    list: [T],
+//    iter: int,
+//
+//    pub fn new(list: [T]) -> Self {
+//        Self{list, iter: 0}
+//    }
+//
+//    pub fn next(self) -> Option<T> {
+//        if self.iter < #self.list {
+//            let i = self.iter;
+//            self.iter = self.iter + 1;
+//            Option::Some(self.list[i])    
+//        } else {
+//            Option::None
+//        }
+//    }
+//}
+//
+//fn next_value<I: CustomIterator<IntWrapper>>(iter: I) -> str {
+//    match iter.next() {
+//        Option::Some(v) => "Some(" + v.to_string() + ")",
+//        Option::None => "None",
+//    }
+//}
+//
+//pub fn test_iterable() {
+//    let iterator = Iterable::new([
+//        IntWrapper{value: 1},
+//        IntWrapper{value: 2},
+//        IntWrapper{value: 3},
+//    ]);
+//
+//    let s = "[";
+//    s = s + next_value(iterator) + ", ";
+//    s = s + next_value(iterator) + ", ";
+//    s = s + next_value(iterator) + ", ";
+//    s = s + next_value(iterator) + "]";
+//
+//    assert(s == "[Some(1), Some(2), Some(3), None]");
+//}
+//
+//pub trait PairToString<A: ToString, B: ToString> {
+//    fn get(self, a: A, b: B) -> str;
+//}
+//
+//enum Either<A: ToString, B: ToString>: PairToString<A, B> {
+//    A(A),
+//    B(B),
+//    
+//    pub fn get(self, default_a: A, default_b: B) -> str {
+//        match self {
+//            Self::A(a) => a.to_string() + "/" + default_b.to_string(),
+//            Self::B(b) => default_a.to_string() + "/" + b.to_string(),
+//        }
+//    }
+//}
+//
+//fn call_bounds_on_trait_generics<
+//        T: PairToString<A, B>, 
+//        A: ToString, 
+//        B: ToString>(t: T, a: A, b: B) -> str 
+//{
+//    t.get(a, b)
+//}
+//
+//pub fn test_bounds_on_trait_generics() {
+//    let x = IntWrapper{value: 123};
+//    let y = IntWrapper{value: 456};
+//    let z = IntWrapper{value: 789};
+//    assert(call_bounds_on_trait_generics(Either::A(x), y, z)  == "123/789");        
+//    assert(call_bounds_on_trait_generics(Either::B(x), y, z)  == "456/123");        
+//}
+//
+//pub trait TestPush<T> {
+//    fn push(t: T, list: [T]) -> Self;
+//}
+//
+//struct PushA<T>: TestPush<T> {
+//    pub fn push(t: T, list: [T]) -> Self {
+//        list.push(t);
+//        Self
+//    }
+//}
+//
+//struct PushB<T>: TestPush<T> {
+//    pub fn push(t: T, list: [T]) -> Self {
+//        list.push(t);
+//        Self
+//    }
+//}
+//
+//struct PushOuter<X, D: TestPush<X>> {
+//    pub fn call_push(t: X, list: [X], d: D) -> Self {
+//        let d: D = D::push(t, list);
+//        Self
+//    }
+//}
+//
+//pub fn test_call_push() {
+//    let list = [];
+//    PushOuter::call_push(1, list, PushA);
+//    PushOuter::call_push(2, list, PushB);
+//    assert(list[0] == 1);
+//    assert(list[1] == 2);
+//}
+//
+//fn call_push<T, D: TestPush<T>>(t: T, list: [T], d: D) {
+//    PushOuter::call_push(t, list, d);
+//}
+//
+//pub fn test_indirect_call_push() {
+//    let list = [];
+//    call_push("a", list, PushA);
+//    call_push("b", list, PushB);
+//    assert(list[0] == "a");
+//    assert(list[1] == "b");
+//}
+//
+//// Polymorphic trait with polymorphic method/associated function
+//pub trait Trait<S> {
+//    fn method<T>(self, t: T) -> (S, T);
+//    fn assoc_fn<T>(s: S, t: T) -> (S, T);
+//}
+//
+//struct Struct<X>: Trait<X> {
+//    pub value: X,
+//    pub fn method<Y>(self, y: Y) -> (X, Y) {
+//        (self.value, y)
+//    }
+//    pub fn assoc_fn<Y>(x: X, y: Y) -> (X, Y) {
+//        (x, y)
+//    }
+//}
+//
+//struct Marker<T>;
+//
+//fn call_method2<A, B, C: Trait<A>>(b: B, c: C) -> (A, B) {
+//    c.method(b)
+//}
+//
+//fn call_assoc_fn<A, B, C: Trait<A>>(a: A, b: B, _: Marker<C>) -> (A, B) {
+//    C::assoc_fn(a, b)
+//}
+//
+//pub fn test_call_method2() {
+//    let t = call_method2(true, Struct{value: "abc"});
+//    assert(t.0 == "abc");
+//    assert(t.1 == true);
+//}
+//
+//pub fn test_call_assoc_fn() {
+//    let t = call_assoc_fn(1, 2.0, Marker::<Struct<int>>);
+//    assert(t.0 == 1);
+//    assert(t.1 == 2.0);
+//}
+//
+//pub trait TestConcat<X> {
+//    fn concat(self, rhs: X) -> Self;
+//}
+//
+//struct Sequence<X>: TestConcat<Sequence<X>> {
+//    pub value: [X],
+//
+//    pub fn concat(self, rhs: Self) -> Self {
+//        let value = self.value + rhs.value;
+//        Self{value}
+//    }    
+//}
+//
+//fn concat<X: TestConcat<X>>(x: X, y: X) -> X {
+//    x.concat(y)
+//}
+//
+//pub fn test_concat() {
+//    let a = Sequence{value: ["a", "b"]};
+//    let b = Sequence{value: ["c", "d"]};
+//    let c = a.concat(b);
+//
+//    let lhs = ",".join(a.value + b.value);
+//    let rhs = ",".join(a.concat(b).value);
+//    assert(lhs == rhs);
+//}
 
-pub trait InstanceGet<Type> {
-   fn get(self) -> Type;
+pub trait TestDefaultConcrete {
+    fn default() -> Self;
 }
 
-struct Int: InstanceGet<int> {
-    pub value: int,
+pub trait TestDefault<T> {
+    fn default() -> Self;
+    fn get(self) -> T;
+}
 
-    pub fn get(self) -> int {
-        self.value
+struct TestDefaultStructInnerA: TestDefaultConcrete {
+    pub value: str,    
+    pub fn default() -> Self {
+        Self{value: "A"}
     }
 }
 
-fn call_int_method<Ty: InstanceGet<int>>(t: Ty) -> int {
-    t.get()
+struct TestDefaultStructInnerB: TestDefaultConcrete {
+    pub value: str,    
+    pub fn default() -> Self {
+        Self{value: "B"}
+    }
 }
 
-pub fn test_call_int_method_indirect() {
-    let i = Int{value: 123};
-    assert(call_int_method(i) == 123);
-}
-
-struct Value<T>: InstanceGet<T> {
-    pub value: T,
-
+struct TestDefaultStructA<T: TestDefaultConcrete>: TestDefault<T> {
+    pub value: T,    
+    pub fn default() -> Self {
+        Self{value: T::default()}
+    }
     pub fn get(self) -> T {
         self.value
     }
 }
 
-pub fn test_call_method() {
-    let v = Value{value: 123};
-    assert(v.get() == 123);
-}
-
-fn call_method<T, Get: InstanceGet<T>>(g: Get) -> T {
-    g.get()
-}
-
-fn call_call_method<Get: InstanceGet<T>, T>(g: Get) -> T {
-    call_method(g)
-}
-
-pub fn test_call_method_indirect() {
-    let v = Value{value: 123};
-
-    assert(call_method::<int, Value<int>>(v) == 123);
-    assert(call_call_method::<Value<int>, int>(v) == 123);
-
-    assert(call_method(v) == 123);
-    assert(call_call_method(v) == 123);
-}
-
-struct BoundedValue<X: InstanceGet<Y>, Y> {
-    pub value: X,
-
-    pub fn get_inner(self) -> Y {
-        self.value.get()
+struct TestDefaultStructB<T: TestDefaultConcrete>: TestDefault<T> {
+    pub value: T,    
+    pub fn default() -> Self {
+        Self{value: T::default()}
+    }
+    pub fn get(self) -> T {
+        self.value
     }
 }
 
-pub fn test_call_bounded_value_method() {
-    let v = Value{value: 123};
-    let bv = BoundedValue{value: v};
-    assert(bv.get_inner() == 123);
+// Type parameter "T" appears in the function body, but not the signature
+fn generics_not_in_signature<X: TestDefaultConcrete, T: TestDefault<X>>() -> X {
+    T::default().get()
 }
 
-fn call_bounded_method<T, Get: InstanceGet<T>>(bv: BoundedValue<Get, T>) -> T {
-    bv.get_inner()
+pub fn test_generics_not_in_signature() {
+    assert(generics_not_in_signature::<TestDefaultStructInnerA, TestDefaultStructA<TestDefaultStructInnerA>>().value == "A");
+    assert(generics_not_in_signature::<TestDefaultStructInnerB, TestDefaultStructB<TestDefaultStructInnerB>>().value == "B");
 }
-
-fn call_call_bounded_method<Get: InstanceGet<T>, T>(bv: BoundedValue<Get, T>) -> T {
-    call_bounded_method(bv)
-}
-
-pub fn test_call_bounded_method_indirect() {
-    let v = Value{value: 123};
-    let bv = BoundedValue{value: v};
-
-    assert(call_bounded_method::<int, Value<int>>(bv) == 123);
-    assert(call_call_bounded_method::<Value<int>, int>(bv) == 123);
-
-    assert(call_bounded_method(bv) == 123);
-    assert(call_call_bounded_method(bv) == 123);
-}
-
-struct Wrapper<X: InstanceGet<Y>, Y>: InstanceGet<Y> {
-    pub value: X,
-
-    pub fn get(self) -> Y {
-        self.value.get()
-    }
-}
-
-pub fn test_call_wrapper_method() {
-    let v = Value{value: 123};
-    let w = Wrapper{value: v};
-    assert(w.get() == 123);
-}
-
-pub fn test_call_wrapper_method_indirect() {
-    let v = Value{value: 123};
-    let w = Wrapper{value: v};
-
-    assert(call_method::<int, Wrapper<Value<int>, int>>(w) == 123);
-    assert(call_call_method::<Wrapper<Value<int>, int>, int>(w) == 123);
-
-    assert(call_method(w) == 123);
-    assert(call_call_method(w) == 123);
-}
-
-pub trait ToString {
-    fn to_string(self) -> str;
-}
-
-struct IntWrapper: ToString {
-    pub value: int,
-    
-    pub fn to_string(self) -> str {
-        self.value.to_string()
-    }
-}
-
-pub trait CustomIterator<T> {
-    fn next(self) -> Option<T>;
-}
-
-struct Iterable<T>: CustomIterator<T> {
-    list: [T],
-    iter: int,
-
-    pub fn new(list: [T]) -> Self {
-        Self{list, iter: 0}
-    }
-
-    pub fn next(self) -> Option<T> {
-        if self.iter < #self.list {
-            let i = self.iter;
-            self.iter = self.iter + 1;
-            Option::Some(self.list[i])    
-        } else {
-            Option::None
-        }
-    }
-}
-
-fn next_value<I: CustomIterator<IntWrapper>>(iter: I) -> str {
-    match iter.next() {
-        Option::Some(v) => "Some(" + v.to_string() + ")",
-        Option::None => "None",
-    }
-}
-
-pub fn test_iterable() {
-    let iterator = Iterable::new([
-        IntWrapper{value: 1},
-        IntWrapper{value: 2},
-        IntWrapper{value: 3},
-    ]);
-
-    let s = "[";
-    s = s + next_value(iterator) + ", ";
-    s = s + next_value(iterator) + ", ";
-    s = s + next_value(iterator) + ", ";
-    s = s + next_value(iterator) + "]";
-
-    assert(s == "[Some(1), Some(2), Some(3), None]");
-}
-
-pub trait PairToString<A: ToString, B: ToString> {
-    fn get(self, a: A, b: B) -> str;
-}
-
-enum Either<A: ToString, B: ToString>: PairToString<A, B> {
-    A(A),
-    B(B),
-    
-    pub fn get(self, default_a: A, default_b: B) -> str {
-        match self {
-            Self::A(a) => a.to_string() + "/" + default_b.to_string(),
-            Self::B(b) => default_a.to_string() + "/" + b.to_string(),
-        }
-    }
-}
-
-fn call_bounds_on_trait_generics<
-        T: PairToString<A, B>, 
-        A: ToString, 
-        B: ToString>(t: T, a: A, b: B) -> str 
-{
-    t.get(a, b)
-}
-
-pub fn test_bounds_on_trait_generics() {
-    let x = IntWrapper{value: 123};
-    let y = IntWrapper{value: 456};
-    let z = IntWrapper{value: 789};
-    assert(call_bounds_on_trait_generics(Either::A(x), y, z)  == "123/789");        
-    assert(call_bounds_on_trait_generics(Either::B(x), y, z)  == "456/123");        
-}
-
-pub trait TestPush<T> {
-    fn push(t: T, list: [T]) -> Self;
-}
-
-struct PushA<T>: TestPush<T> {
-    pub fn push(t: T, list: [T]) -> Self {
-        list.push(t);
-        Self
-    }
-}
-
-struct PushB<T>: TestPush<T> {
-    pub fn push(t: T, list: [T]) -> Self {
-        list.push(t);
-        Self
-    }
-}
-
-struct PushOuter<X, D: TestPush<X>> {
-    pub fn call_push(t: X, list: [X], d: D) -> Self {
-        let d: D = D::push(t, list);
-        Self
-    }
-}
-
-pub fn test_call_push() {
-    let list = [];
-    PushOuter::call_push(1, list, PushA);
-    PushOuter::call_push(2, list, PushB);
-    assert(list[0] == 1);
-    assert(list[1] == 2);
-}
-
-fn call_push<T, D: TestPush<T>>(t: T, list: [T], d: D) {
-    PushOuter::call_push(t, list, d);
-}
-
-pub fn test_indirect_call_push() {
-    let list = [];
-    call_push("a", list, PushA);
-    call_push("b", list, PushB);
-    assert(list[0] == "a");
-    assert(list[1] == "b");
-}
-
-// Polymorphic trait with polymorphic method/associated function
-pub trait Trait<S> {
-    fn method<T>(self, t: T) -> (S, T);
-    fn assoc_fn<T>(s: S, t: T) -> (S, T);
-}
-
-struct Struct<X>: Trait<X> {
-    pub value: X,
-    pub fn method<Y>(self, y: Y) -> (X, Y) {
-        (self.value, y)
-    }
-    pub fn assoc_fn<Y>(x: X, y: Y) -> (X, Y) {
-        (x, y)
-    }
-}
-
-struct Marker<T>;
-
-fn call_method2<A, B, C: Trait<A>>(b: B, c: C) -> (A, B) {
-    c.method(b)
-}
-
-fn call_assoc_fn<A, B, C: Trait<A>>(a: A, b: B, _: Marker<C>) -> (A, B) {
-    C::assoc_fn(a, b)
-}
-
-pub fn test_call_method2() {
-    let t = call_method2(true, Struct{value: "abc"});
-    assert(t.0 == "abc");
-    assert(t.1 == true);
-}
-
-pub fn test_call_assoc_fn() {
-    let t = call_assoc_fn(1, 2.0, Marker::<Struct<int>>);
-    assert(t.0 == 1);
-    assert(t.1 == 2.0);
-}
-
-pub trait TestConcat<X> {
-    fn concat(self, rhs: X) -> Self;
-}
-
-struct Sequence<X>: TestConcat<Sequence<X>> {
-    pub value: [X],
-
-    pub fn concat(self, rhs: Self) -> Self {
-        let value = self.value + rhs.value;
-        Self{value}
-    }    
-}
-
-fn concat<X: TestConcat<X>>(x: X, y: X) -> X {
-    x.concat(y)
-}
-
-pub fn test_concat() {
-    let a = Sequence{value: ["a", "b"]};
-    let b = Sequence{value: ["c", "d"]};
-    let c = a.concat(b);
-
-    let lhs = ",".join(a.value + b.value);
-    let rhs = ",".join(a.concat(b).value);
-    assert(lhs == rhs);
-}
-

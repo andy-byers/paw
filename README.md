@@ -47,7 +47,7 @@ pub fn main() {
     };
 
     // Call the closure for each integer 1 to 100, exclusive.
-    for i in range(1, 100, 1) {
+    for i in 1..100 {
         print(fizzbuzz(i) + "\n");
     }
 }

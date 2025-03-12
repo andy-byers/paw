@@ -56,3 +56,38 @@ pub fn test_indirect_call_both_functions() {
     assert(call_both_functions(i) == 123 + 42);
     assert(call_call_both_functions(i) == 123 + 42);
 }
+
+pub trait TestDefault {
+    fn default() -> Self;
+    fn get(self) -> str;
+}
+
+struct TestDefaultStructA: TestDefault {
+    pub value: str,    
+    pub fn default() -> Self {
+        Self{value: "A"}
+    }
+    pub fn get(self) -> str {
+        self.value
+    }
+}
+
+struct TestDefaultStructB: TestDefault {
+    pub value: str,    
+    pub fn default() -> Self {
+        Self{value: "B"}
+    }
+    pub fn get(self) -> str {
+        self.value
+    }
+}
+
+// Type parameter "T" appears in the function body, but not the signature
+fn generics_not_in_signature<T: TestDefault>() -> str {
+    T::default().get()
+}
+
+pub fn test_generics_not_in_signature() {
+    assert(generics_not_in_signature::<TestDefaultStructA>() == "A");
+    assert(generics_not_in_signature::<TestDefaultStructB>() == "B");
+}

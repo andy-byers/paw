@@ -206,21 +206,22 @@ static paw_Uint hash_type(struct IrType *type)
     return hash;
 }
 
+static paw_Bool sig_equals_extra(struct Compiler *C, IrType *a, IrType *b)
+{
+    // distinguish between different function signatures that happen to have the
+    // same parameters and result
+    struct IrSignature *sa = IrGetSignature(a);
+    struct IrSignature *sb = IrGetSignature(b);
+    return sa->did.value == sb->did.value;
+}
+
 paw_Bool pawIr_type_equals(struct Compiler *C, IrType *a, IrType *b)
 {
     if (IR_KINDOF(a) != IR_KINDOF(b))
         return PAW_FALSE;
 
-    if (IrIsSignature(a)) {
-        // distinguish between different type signatures that happen to have the
-        // same parameters and result
-        struct IrSignature *sa = IrGetSignature(a);
-        struct IrSignature *sb = IrGetSignature(b);
-        if (sa->did.value != sb->did.value || !sa->self != !sb->self //
-            || (sa->self != NULL && !pawU_equals(C->U, sa->self, sb->self))) {
-            return PAW_FALSE;
-        }
-    }
+    if (IrIsSignature(a) && !sig_equals_extra(C, a, b))
+        return PAW_FALSE;
 
     return pawU_equals(C->U, a, b);
 }

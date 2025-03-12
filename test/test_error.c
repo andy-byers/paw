@@ -627,8 +627,6 @@ static void test_trait_error(void)
         "struct S: Trait;", "");
     test_compiler_status(PAW_ENAME, "trait_missing_generic_in_bounds",
         POLY_TRAIT POLY_STRUCT POLY_FUNCTION("X", ), "");
-    test_compiler_status(PAW_ENAME, "trait_missing_generic_in_bounds",
-        POLY_TRAIT POLY_STRUCT POLY_FUNCTION("X", ), "");
     test_compiler_status(PAW_ETYPE, "trait_cannot_infer_generic",
         POLY_TRAIT POLY_STRUCT "fn call_f<T: Trait>(t: T) {t.f();}",
         "let x = S{v: 123}; call_f(x);");

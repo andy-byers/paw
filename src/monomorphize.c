@@ -338,7 +338,33 @@ static struct Mir *monomorphize_method_aux(struct MonoCollector *M, struct Mir *
 
 static paw_Bool test_types(struct MonoCollector *M, struct IrType *a, struct IrType *b)
 {
-    return pawU_equals(M->C->U, a, b);
+    struct Compiler *C = M->C;
+    if (!pawIr_type_equals(C, a, b))
+        return PAW_FALSE;
+
+    if (IrIsSignature(a)) {
+        struct IrSignature *sa = IrGetSignature(a);
+        struct IrSignature *sb = IrGetSignature(b);
+
+        if (!sa->self != !sb->self
+                || (sa->self != NULL && !test_types(M, sa->self, sb->self))
+                || !sa->types != !sb->types)
+            return PAW_FALSE;
+
+        if (sa->types != NULL) {
+            // Type arguments must be checked on functions. Though they are not required
+            // to appear in the function signature, generics might still be used to
+            // specify different behavior. This happens, for example, when a polymorphic
+            // function has a generic parameter with a trait bound that allows an
+            // associated function to be called.
+            IrType *const *pa, *const *pb;
+            K_LIST_ZIP(sa->types, pa, sb->types, pb) {
+                if (!test_types(M, *pa, *pb))
+                    return PAW_FALSE;
+            }
+        }
+    }
+    return PAW_TRUE;
 }
 
 static struct IrType *cannonicalize_func(struct MonoCollector *M, struct IrTypeList *monos, struct IrType *type)

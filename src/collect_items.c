@@ -219,48 +219,6 @@ static struct IrParams *collect_parameters(struct ItemCollector *X, struct HirDe
     return result;
 }
 
-static struct IrType *check_generic(struct IrTypeFolder *F, struct IrGeneric *t)
-{
-    struct IrType **ptype;
-    struct IrTypeList *generics = F->ud;
-    K_LIST_FOREACH (generics, ptype) {
-        if (*ptype == NULL)
-            continue;
-        struct IrGeneric *g = IrGetGeneric(*ptype);
-        if (g->did.value == t->did.value) {
-            *ptype = NULL;
-            break;
-        }
-    }
-    return IR_CAST_TYPE(t);
-}
-
-static void ensure_generics_in_signature(struct ItemCollector *X, struct HirDeclList *generics, struct IrType *sig)
-{
-    if (generics == NULL)
-        return;
-    // need a copy of the generics list to mutate
-    struct IrTypeList *generic_types = pawHir_collect_decl_types(X->C, generics);
-
-    struct IrTypeFolder F;
-    pawIr_type_folder_init(&F, X->C, generic_types);
-    F.FoldGeneric = check_generic;
-
-    struct IrSignature *s = IrGetSignature(sig);
-    pawIr_fold_type_list(&F, s->params);
-    pawIr_fold_type(&F, s->result);
-
-    struct IrType *const *ptype;
-    K_LIST_FOREACH (generic_types, ptype) {
-        if (*ptype != NULL) {
-            struct HirDecl *generic_decl = pawHir_get_decl(X->C, IR_TYPE_DID(*ptype));
-            struct HirDecl *function_decl = pawHir_get_decl(X->C, IR_TYPE_DID(sig));
-            TYPE_ERROR(X, "generic '%s' missing from signature of '%s'",
-                       generic_decl->hdr.name->text, function_decl->hdr.name->text);
-        }
-    }
-}
-
 static void transfer_fn_annotations(struct ItemCollector *X, struct HirFuncDecl *d, struct IrFnDef *def)
 {
     struct Compiler *C = X->C;
@@ -405,6 +363,7 @@ static struct ModuleInfo *use_module(struct ItemCollector *X, struct ModuleInfo 
 static void finish_module(struct ItemCollector *X)
 {
     pawU_leave_binder(X->C->U);
+    X->hir = NULL;
     X->m = NULL;
 }
 
@@ -552,7 +511,6 @@ static void collect_func_decl(struct ItemCollector *X, struct HirFuncDecl *d)
     struct IrTypeList *params_ = pawHir_collect_decl_types(X->C, d->params);
     struct IrType *result = collect_type(X, d->result);
     struct IrType *sig = pawIr_new_signature(X->C, d->did, types, params_, result);
-    ensure_generics_in_signature(X, d->generics, sig);
     collect_generic_bounds(X, d->generics, sig);
     SET_TYPE(X, d->hid, sig);
 
