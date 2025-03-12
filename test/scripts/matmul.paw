@@ -8,7 +8,7 @@ fn matgen(n: int) -> [[float]] {
     let i = 0;
     while i < n {
         let b = [];
-		for j in range(0, n, 1) {
+		for j in 0..n {
             let x = tmp
                   * (i - j) as float
                   * (i + j) as float;

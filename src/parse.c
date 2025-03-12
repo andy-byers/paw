@@ -1753,7 +1753,7 @@ static char const kPrelude[] =
     "}\n"
 
     "pub trait Increment {\n"
-    "    fn increment(self);\n"
+    "    fn incremented(self) -> Self;\n"
     "}\n"
 
     "pub trait Iterate<I: Advance<T>, T> {\n"
@@ -1783,7 +1783,7 @@ static char const kPrelude[] =
     "    pub fn eq(self, rhs: Self) -> bool { self == rhs }\n"
     "    pub fn lt(self, rhs: Self) -> bool { self < rhs }\n"
     "    pub fn le(self, rhs: Self) -> bool { self <= rhs }\n"
-    "    pub fn increment(self) { self = self + 1; }\n"
+    "    pub fn incremented(self) -> Self { self + 1 }\n"
     "}\n"
 
     "pub struct float: Hash + Equals + Compare {\n"
@@ -1876,7 +1876,7 @@ static char const kPrelude[] =
     "    pub fn next(self) -> Option<T> {\n"
     "        let iter = self.iter;\n"
     "        if iter.lt(self.end) {\n"
-    "            self.iter.increment();\n"
+    "            self.iter = self.iter.incremented();\n"
     "            Option::Some(iter)\n"
     "        } else {\n"
     "            Option::None\n"
@@ -1884,21 +1884,23 @@ static char const kPrelude[] =
     "    }\n"
     "}\n"
 
-    "pub struct Range<T: Compare> {\n"
+    // TODO: "T: Increment" requirement is overly restrictive. Exists so that
+    //       "Range<int>" can be used in "for..in" loops. Should figure out a
+    //       way to do "conditional conformances" (Swift parlance) so that
+    //       "Iterate" can be implemented only for "T"s that are incrementable.
+    "pub struct Range<T: Compare + Increment>: Iterate<RangeIterator<T>, T> {\n"
     "    pub start: T,\n"
     "    pub end: T,\n"
     "    pub fn contains(self, value: T) -> bool {\n"
     "        self.start.le(value) && value.lt(self.end)\n"
     "    }\n"
-    // COMPILER_MAGIC: "iterator" can be called to get a "RangeIterator<T>" when
-    //     "T: Compare + Increment". This cannot currently be expressed in the
-    //     type system. Would need something like conditional conformances (see
-    //     Swift 4.1).
+    "    pub fn iterator(self) -> RangeIterator<T> {\n"
+    "        RangeIterator::new(self)\n"
+    "    }\n"
     "}\n"
 
     "#[extern] pub fn print(message: str);\n"
-    "#[extern] pub fn assert(cond: bool);\n"
-    "#[extern] pub fn range(begin: int, end: int, step: int) -> (fn() -> Option<int>);\n";
+    "#[extern] pub fn assert(cond: bool);\n";
 
 struct PreludeReader {
     size_t size;

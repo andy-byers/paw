@@ -209,7 +209,7 @@ pub fn test_unused_uninit_local() {
 
     let f = |n| {
         let var;
-        for i in range(0, 10, 1) {
+        for i in 0..10 {
             if i == n {
                 var = 42;
             }

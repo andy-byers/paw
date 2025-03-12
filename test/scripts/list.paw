@@ -15,7 +15,7 @@ pub fn test_push_and_pop() {
 
 fn are_lists_eq(a: [int], b: [int]) -> bool {
     if #a != #b { return false; }
-    for i in range(0, #a, 1) {
+    for i in 0..#a {
         if a[i] != b[i] {
             return false;
         }
@@ -348,7 +348,7 @@ pub fn test_set_slice() {
 }
 
 fn map_inplace<T>(f: fn(T) -> T, list: [T]) {
-    for i in range(0, #list, 1) {
+    for i in 0..#list {
         list[i] = f(list[i]);
     }
 }
@@ -366,19 +366,19 @@ pub fn test_infer_poly_function() {
 
 pub fn test_misc() {
     let list: [int] = [];
-    for i in range(0, 100, 1) {
+    for i in 0..100 {
         list.push(i);
     }
     assert(#list == 100);
     let copy = [];
-    for i in range(0, #list, 1) {
+    for i in 0..#list {
         copy.push(list[i]);
     }
-    for i in range(0, 50, 1) {
+    for i in 0..50 {
         list.remove(i);
     }
-    for i in range(0, 100, 2) {
-        list.insert(i, i);
+    for i in 0..50 {
+        list.insert(i * 2, i * 2);
     }
     check_eq(list, copy);
 }
@@ -548,7 +548,7 @@ pub fn test_slice_equality() {
 
 fn map2<T>(list: [T], f: fn(T) -> T) -> [T] {
     let result = [];
-    for i in range(0, #list, 1) {
+    for i in 0..#list {
         result.push(f(list[i]));
     }
     return result;
@@ -563,7 +563,7 @@ pub fn test_infer_l() {
         return val + val;
     });
     let result = '';
-    for i in range(0, #list, 1) {
+    for i in 0..#list {
         result = result + list[i];
     }
     assert(result == 'abcabcdefdefghighi');
@@ -579,8 +579,8 @@ pub fn test_infer_l() {
         });
     });
     let result = '';
-    for i in range(0, #list, 1) {
-        for j in range(0, #list[i], 1) {
+    for i in 0..#list {
+        for j in 0..#list[i] {
             result = result + list[i][j];
         }
     }
@@ -598,7 +598,7 @@ enum ComplexEnum<T> {
 
 pub fn test_complex_elem() {
     let list = [];
-    for i in range(0, 1000, 1) {
+    for i in 0..1000 {
         if i < 500 {
             list.push(ComplexStruct{
                 value: ComplexEnum::<int>::JustT(i),

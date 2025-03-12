@@ -190,3 +190,7 @@ pub fn main() {
 + Pointer tracking (test only) feature is broken on MSVC
     + Might indicate a problem somewhere in the library
     + Need a machine that can run Windows for debugging
++ Methods on primitives are unable to modify "self"
+    + Results in "int::incremented(self) -> int" hack in prelude (would be nicer as "int::increment(self)")
+    + Need to use a pointer to "self" in this case
+

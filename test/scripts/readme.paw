@@ -57,7 +57,7 @@ fn split_into_sources(contents: str) -> Option<[str]> {
     let lines = contents.split('\n');
     let result = [];
     let source = '';
-    for i in range(0, #lines, 1) {
+    for i in 0..#lines {
         let line = stripped(lines[i]);
         if in_source {
             if contains(line, '```') {
@@ -100,7 +100,7 @@ pub fn main(args: [str]) -> int {
     let contents = read_file_to_string(args[1]);
     match split_into_sources(contents) {
         Option::Some(sources) => {
-            for i in range(0, #sources, 1) {
+            for i in 0..#sources {
                 let filename = 'source_' + i.to_string() + '.paw';
                 dump_source_file(filename, sources[i]);
             }

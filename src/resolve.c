@@ -18,7 +18,8 @@
 #include "type_folder.h"
 #include "unify.h"
 
-#define TYPE2CODE(R, type) pawP_type2code((R)->C, type)
+#define STRING_LIT(R_, Str_) SCAN_STRING((R_)->C, Str_)
+#define TYPE2CODE(R_, Type_) pawP_type2code((R_)->C, Type_)
 
 struct ResultState {
     struct ResultState *outer;
@@ -484,7 +485,7 @@ static void resolve_adt_methods(struct Resolver *R, struct HirAdtDecl *d)
 {
     enter_scope(R, NULL);
 
-    String *self = SCAN_STRING(R->C, "Self");
+    String *self = STRING_LIT(R, "Self");
     new_local(R, self, d->self);
     resolve_methods(R, d->methods, IrGetAdt(R->self));
     allocate_decls(R, d->methods);
@@ -711,7 +712,7 @@ static paw_Bool is_bool_binop(enum BinaryOp op)
 static struct HirExpr *new_literal_field(struct Resolver *R, const char *name, struct HirExpr *expr, int fid)
 {
     return pawHir_new_named_field_expr(R->m->hir, expr->hdr.line,
-                                       SCAN_STRING(R->C, name), expr, fid);
+                                       STRING_LIT(R, name), expr, fid);
 }
 
 static struct IrType *transform_range(struct Resolver *R, struct HirBinOpExpr *e, struct IrType *inner)

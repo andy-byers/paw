@@ -78,7 +78,7 @@ pub fn main(args: [str]) {
 
     let int_functions = [];
     let generic_functions = [];
-    for i in range(0, n, 1) {
+    for i in 0..n {
         let name = generate_int_function(x, i);
         int_functions.push(name);
         let name = generate_generic_function(x, i);
@@ -86,7 +86,7 @@ pub fn main(args: [str]) {
     }
 
     x.writeln('pub fn main(args: [str]) -> int {');
-    for i in range(0, n, 1) {
+    for i in 0..n {
         let name = int_functions[i];
         x.writeln('  ' + name + '(' + i2s(i) + ');');
         let name = generic_functions[i];

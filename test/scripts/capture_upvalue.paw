@@ -112,7 +112,7 @@ pub fn test_modify_upvalue_in_loop_2() {
 
 fn create_closure_in_loop_3(n: int) -> (fn() -> int) {
     let f = Option::None;
-    for i in range(0, 10, 1) {
+    for i in 0..10 {
         if i == n {
             f = Option::Some(|| {
                 i = i + 1;

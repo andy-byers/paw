@@ -25,9 +25,9 @@ pub fn main(args: [str]) -> int {
     let dy = (y1 - y0) / (ny - 1) as float;
     let dx = (x1 - x0) / (nx - 1) as float;
 
-    for i in range(0, ny, 1) {
+    for i in 0..ny {
         let y = y0 + i as float * dy;
-        for j in range(0, nx, 1) {
+        for j in 0..nx {
             let x = x0 + j as float * dx;
             let zi = 0.0;
             let zr = 0.0;

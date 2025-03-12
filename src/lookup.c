@@ -118,9 +118,9 @@ static struct QueryBase find_global_in(struct QueryState *Q, struct ModuleInfo *
     return (struct QueryBase){0};
 }
 
-static struct QueryBase find_global(struct QueryState *Q, struct ModuleInfo *m, struct HirPath *path)
+static struct QueryBase find_global(struct QueryState *Q, struct ModuleInfo *root, struct HirPath *path)
 {
-    struct QueryBase q = find_global_in(Q, m, path);
+    struct QueryBase q = find_global_in(Q, root, path);
     if (q.base != NULL)
         return q;
 
@@ -130,7 +130,7 @@ static struct QueryBase find_global(struct QueryState *Q, struct ModuleInfo *m, 
         return q;
 
     struct HirImport *im;
-    K_LIST_FOREACH (m->hir->imports, im) {
+    K_LIST_FOREACH (root->hir->imports, im) {
         if (!im->has_star)
             continue;
         struct ModuleInfo *m = get_module(Q, im->modno);
@@ -296,8 +296,8 @@ struct IrType *lookup(struct QueryState *Q, struct ModuleInfo *m, struct HirSymt
         // a type argument must be provided for each type parameter
         validate_type_args(Q->C, q.base, q.seg);
     }
-    struct IrTypeList *types = q.seg->types == NULL ? NULL
-                                                    : pawP_lower_type_list(Q->C, m, symtab, q.seg->types);
+    struct IrTypeList *types = q.seg->types == NULL //
+        ? NULL : pawP_lower_type_list(Q->C, m, symtab, q.seg->types);
 
     switch (HIR_KINDOF(q.base)) {
         case kHirTraitDecl:
@@ -353,10 +353,10 @@ struct IrType *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct HirS
     return lookup(&Q, m, symtab, path, kind, is_annotation);
 }
 
-struct IrType *lookup_trait(struct QueryState *Q, struct ModuleInfo *m, struct HirPath *path)
+struct IrType *lookup_trait(struct QueryState *Q, struct ModuleInfo *root, struct HirPath *path)
 {
     paw_assert(path->count > 0);
-    struct QueryBase q = find_global(Q, m, path);
+    struct QueryBase q = find_global(Q, root, path);
     if (q.base == NULL)
         return NULL;
 
@@ -369,7 +369,7 @@ struct IrType *lookup_trait(struct QueryState *Q, struct ModuleInfo *m, struct H
     validate_type_args(Q->C, q.base, q.seg);
     if (q.seg->types == NULL)
         return GET_NODE_TYPE(Q->C, q.base);
-    struct IrTypeList *types = pawP_lower_type_list(Q->C, Q->m, Q->symtab, q.seg->types);
+    struct IrTypeList *types = pawP_lower_type_list(Q->C, root, Q->symtab, q.seg->types);
     return pawP_instantiate(Q->C, GET_NODE_TYPE(Q->C, q.base), types);
 }
 

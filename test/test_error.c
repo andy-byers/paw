@@ -436,13 +436,13 @@ static void test_gc_conflict(void)
         "    let N = 500;\n"
         // create a bunch of dynamically-allocated objects
         "    let objects = [];\n"
-        "    for i in range(0, N, 1) {objects.push([i, i + 1, i + 2]);}\n"
+        "    for i in 0..N {objects.push([i, i + 1, i + 2]);}\n"
         // fill a list with integers that conflict with the object addresses
         "    let conflicts = [];\n"
-        "    for i in range(0, N, 1) {conflicts.push(conflicting_int(objects[i]));}\n"
+        "    for i in 0..N {conflicts.push(conflicting_int(objects[i]));}\n"
         // use a lot of memory to cause garbage collections
         "    let memory = [];\n"
-        "    for i in range(0, N, 1) {memory.push([[i], [i + 1], [i + 2]]);}\n"
+        "    for i in 0..N {memory.push([[i], [i + 1], [i + 2]]);}\n"
         "}\n";
 
     paw_Env *P = paw_open(&(struct paw_Options){0});

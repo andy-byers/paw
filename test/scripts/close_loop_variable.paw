@@ -10,13 +10,13 @@ pub fn default_closure() -> (fn() -> int) {
 pub fn run_close_test(f: fn(int) -> (fn() -> int), lower: int, upper: int) {
     assert(f(-1)() == lower);
     assert(f(10)() == upper);
-    for i in range(0, 10, 1) {
+    for i in 0..10 {
         assert(f(i)() == i);
     }
 }
 
 pub fn check_close_by_return(n: int) -> (fn() -> int) {
-    for i in range(0, 10, 1) {
+    for i in 0..10 {
         if i == n {
             return || i;
         }        
@@ -30,7 +30,7 @@ pub fn test_close_by_return() {
 
 pub fn check_close_by_scope_exit(n: int) -> (fn() -> int) {
     let f = default_closure();
-    for i in range(0, 10, 1) {
+    for i in 0..10 {
         if i == n {
             f = || i;
         }        
@@ -44,7 +44,7 @@ pub fn test_close_by_scope_exit() {
 
 pub fn check_close_by_break(n: int) -> (fn() -> int) {
     let f = default_closure();
-    for i in range(0, 10, 1) {
+    for i in 0..10 {
         // NOTE: ">=" instead of ">", to test that "break" exits the loop
         if i >= n {
             f = || i;
@@ -60,7 +60,7 @@ pub fn test_close_by_break() {
 
 pub fn check_close_by_continue(n: int) -> (fn() -> int) {
     let f = default_closure();
-    for i in range(0, 10, 1) {
+    for i in 0..10 {
         if i == n {
             f = || i;
             continue;
@@ -75,7 +75,7 @@ pub fn test_close_by_continue() {
 
 pub fn test_close_by_continue_multiple_scopes() {
     let f = || (-1, -1, -1, -1);
-    for i in range(0, 10, 1) {
+    for i in 0..10 {
         let a = i + 1;
         if i == 5 {
             {

@@ -2,7 +2,7 @@
 
 pub fn test_basic_loop() {
     let n = 0;
-    for i in range(0, 3, 1) { 
+    for i in 0..3 { 
         n = n + i;
     }
     assert(n == 3);
@@ -10,13 +10,13 @@ pub fn test_basic_loop() {
 
 pub fn test_basic_loop_2() {
     let one = 1;
-    for i in range(0, 8, 1) {
+    for i in 0..8 {
         let a = -1;
         let b = -1;
     }
     let two = 2;
-    for i in range(1, 8, 1) {
-        for j in range(1, i, 1) {}
+    for i in 1..8 {
+        for j in 1..i {}
     }
     let test = || -> int {
         return one + two;
@@ -25,40 +25,23 @@ pub fn test_basic_loop_2() {
 }
 
 pub fn test_numeric_for_loop() {
-    let test = |start: int, end: int, step: int| -> int {
+    let test = |start: int, end: int| -> int {
         let n = 0;
-        for i in range(start, end, step) {
+        for i in start..end {
             n = n + 1;
         }
         return n;
     };
-    assert(test(0, 0, 1) == 0);
-    assert(test(0, 0, -1) == 0);
-    assert(test(0, -1, 1) == 0);
-    assert(test(0, 1, -1) == 0);
-    assert(test(0, 0, 10) == 0);
-    assert(test(0, 0, -10) == 0);
-    assert(test(0, -1, 10) == 0);
-    assert(test(0, 1, -10) == 0);
-
-    assert(test(-1, 1, 1) == 2);
-    assert(test(-10, 10, 1) == 20);
-    assert(test(1, -1, -1) == 2);
-    assert(test(10, -10, -1) == 20);
-    assert(test(-1, 1, 2) == 1);
-    assert(test(-10, 10, 2) == 10);
-    assert(test(1, -1, -2) == 1);
-    assert(test(10, -10, -2) == 10);
-    assert(test(-1, 1, 4) == 1);
-    assert(test(-10, 10, 4) == 5);
-    assert(test(1, -1, -4) == 1);
-    assert(test(10, -10, -4) == 5);
+    assert(test(0, 0) == 0);
+    assert(test(0, -1) == 0);
+    assert(test(-1, 1) == 2);
+    assert(test(-10, 10) == 20);
 
     // Loop bounds are copied onto the stack when the loop starts. Changing them
     // during the loop has no effect.
     let n = 0;
     let N = 10;
-    for i in range(0, N, 1) {
+    for i in 0..N {
         n = n + 1;
         N = 0;
     }
@@ -66,7 +49,7 @@ pub fn test_numeric_for_loop() {
 
     let test = |n| {
         let f = || -1;
-        for i in range(0, 100, 1) {
+        for i in 0..100 {
             if i == n {
                 // Capture 'i', the loop variable, when it is equal to 'n'. It should
                 // retain this value in the closure, since 'i' is closed over at the
@@ -83,9 +66,9 @@ pub fn test_numeric_for_loop() {
 }
 
 pub fn test_nested_loops() {
-    for i in range(0, 8, 1) {
-        for j in range(0, i, 1) {
-            for k in range(j, 8, 1) {
+    for i in 0..8 {
+        for j in 0..i {
+            for k in j..8 {
                 assert(j < i);
                 assert(j <= k);
             }
@@ -96,7 +79,7 @@ pub fn test_nested_loops() {
 pub fn test_capture_loop_var_0() {
     let test = |n| {
         let f = || -1;
-        for i in range(0, 100, 1){
+        for i in 0..100{
             if i == n {
                 f = || i;
             }
@@ -117,7 +100,7 @@ pub fn test_capture_loop_var_0() {
 pub fn test_capture_loop_var_1() {
     let test = |n| {
         let f = || -1;
-        for i in range(0, 100, 1) {
+        for i in 0..100 {
             if i == n {
                 let a = [i];
                 f = || -> int {
@@ -144,7 +127,7 @@ pub fn test_capture_loop_var_1() {
 fn check_capture_loop_var_2(b: bool) -> int {
     let f = || -1;
     let n = 0;
-    for i in range(0, 8, 1) {
+    for i in 0..8 {
         let _0 = -1;
         let _1 = -1;
         {
@@ -193,7 +176,7 @@ pub fn test_while_loop() {
 pub fn test_break_continue_0() {
     let a = 'A';
     let b = 'B';
-    for i in range(0, 100, 1) {
+    for i in 0..100 {
         let b = 'C';
         let c = 'C';
         let d = 'D';
@@ -214,7 +197,7 @@ pub fn test_break_continue_0() {
 pub fn test_break_continue_1() {
     let a = 'A';
     let b = 'B';
-    for i in range(0, 100, 1) {
+    for i in 0..100 {
         let b = 'C';
         let c = 'C';
         let d = 'D';
@@ -234,7 +217,7 @@ pub fn test_break_continue_1() {
 
 pub fn test_break_continue_2() {
     let n = -1;
-    for i in range(0, 3, 1) {
+    for i in 0..3 {
         if i == 2 {
             break;
         }
@@ -243,7 +226,7 @@ pub fn test_break_continue_2() {
     assert(n == 1);
 
     let n = -1;
-    for i in range(0, 3, 1) {
+    for i in 0..3 {
         if i == 2 {
             continue;
         }
@@ -254,7 +237,7 @@ pub fn test_break_continue_2() {
     // Capture loop variable 'i' as an upvalue.
     let test = |n| {
         let f = || -1;
-        for i in range(0, 100, 1) {
+        for i in 0..100 {
             if i == n {
                 let u = i;
                 f = || -> int {
@@ -331,7 +314,7 @@ pub fn test_break_continue_2() {
 pub fn test_loop_bounds_are_constant() {
     let n = 0;
     let N = 10;
-    for i in range(0, N, 1) {
+    for i in 0..N {
         n = n + 1;
         N = 0;
     }
@@ -340,7 +323,7 @@ pub fn test_loop_bounds_are_constant() {
 
 pub fn test_break_continue_3() {
     let n = 0;
-    for i in range(0, 8, 1) {
+    for i in 0..8 {
         n = n + 1;
         break;
     }
@@ -348,7 +331,7 @@ pub fn test_break_continue_3() {
 
     let test = |n: int| -> int {
         let count = 0;
-        for i in range(0, 100, 1) {
+        for i in 0..100 {
             if i == n {
                 break;
             }
@@ -367,7 +350,7 @@ pub fn test_shadowed_by_loop_var() {
     let i = -1;
 
     // 'i' shadowed by loop variable.
-    for i in range(0, 8, 1) {}
+    for i in 0..8 {}
     assert(i == -1);
 }
 
@@ -378,5 +361,81 @@ pub fn test_load_and_store_instruction() {
         if i == 10 { 
             break; 
         }
+    }
+}
+
+pub fn test_list() {
+    let list = [1, 2, 3, 4, 5];
+    let list2 = [];
+    for x in list {
+        list2.push(x);
+    }
+    for i in 0..#list {
+        assert(list2[i] == i + 1);
+    }
+}
+
+pub fn test_map() {
+    let map = [0: 1, 1: 2, 2: 3, 3: 4];
+    let map2 = [:];
+    for x in map {
+        map2[x] = map[x];
+    }
+    for i in 0..#map {
+        assert(map2[i] == i + 1);
+    }
+}
+
+pub struct CustomRangeElement: Compare + Increment {
+    pub value: int,
+    pub fn lt(self, rhs: Self) -> bool {
+        self.value < rhs.value    
+    }
+    pub fn le(self, rhs: Self) -> bool {
+        self.value <= rhs.value    
+    }
+    pub fn incremented(self) -> Self {
+        Self{value: self.value + 1}
+    }
+}
+
+// TODO: support custom values in range literal, i.e. "start..end"
+pub fn test_custom_range() {
+    let start = CustomRangeElement{value: 1};
+    let end = CustomRangeElement{value: 10};
+    let range = Range{start, end};
+    let index = start.value;
+    for i in range {
+        assert(i.value == index);
+        index = index + 1;
+    }
+}
+
+pub struct CustomIterator<T>: Advance<(int, T)> {
+    pub self: CustomIterable<T>,
+    pub iter: int,
+    pub fn next(self) -> Option<(int, T)> {
+        let iter = self.iter;
+        if iter < #self.self.elems {
+            self.iter = self.iter + 1;
+            Option::Some((iter, self.self.elems[iter]))
+        } else {
+            Option::None
+        }
+    }
+}
+
+pub struct CustomIterable<T>: Iterate<CustomIterator<T>, (int, T)> {
+    pub elems: [T],
+    pub fn iterator(self) -> CustomIterator<T> {
+        CustomIterator{self, iter: 0}
+    }
+}
+
+pub fn test_custom_iterator() {
+    let c = CustomIterable{elems: [1, 2, 3, 4, 5]};
+    let index = 0;
+    for x in c {
+        assert(x.0 == x.1 - 1);
     }
 }

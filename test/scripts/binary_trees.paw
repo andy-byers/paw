@@ -8,11 +8,8 @@ struct Tree {
     pub right: Option<Tree>,
 }
 
-fn new_tree(lt: Option<Tree>, rt: Option<Tree>) -> Option<Tree> {
-    return Option::Some(Tree{
-        left: lt,
-        right: rt,
-    });
+fn new_tree(left: Option<Tree>, right: Option<Tree>) -> Option<Tree> {
+    return Option::Some(Tree{left, right});
 }
 
 fn empty_tree() -> Option<Tree> {
@@ -33,9 +30,9 @@ fn bottom_up_tree(depth: int) -> Option<Tree> {
 
 fn item_check_aux(tree: Tree) -> int {
     if tree.left.is_some() {
-        return 1 + 
-            item_check_aux(tree.left.unwrap()) + 
-            item_check_aux(tree.right.unwrap());
+        return 1
+            + item_check_aux(tree.left.unwrap())
+            + item_check_aux(tree.right.unwrap());
     }
     return 1;
 }
@@ -64,14 +61,16 @@ pub fn main(args: [str]) {
 
     let longlivedtree = bottom_up_tree(maxdepth);
 
-    for depth in range(mindepth, maxdepth, 2) {
+    let depth = mindepth;
+    while depth < maxdepth {
         let iterations = 1 << (maxdepth - depth + mindepth);
         let check = 0;
-        for i in range(0, iterations, 1) {
+        for i in 0..iterations {
             check = check + item_check(bottom_up_tree(depth));
         }
         print(iterations.to_string() + '\t trees of depth ' + depth.to_string() +
               '\t check: ' + check.to_string() + '\n');
+        depth = depth + 2;
     }
 
     print('long lived tree of depth ' + maxdepth.to_string() + 

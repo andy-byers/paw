@@ -106,6 +106,10 @@ enum BuiltinKind pawP_type2code(struct Compiler *C, struct IrType *type)
             return BUILTIN_HASH;
         } else if (base.value == C->builtins[BUILTIN_EQUALS].did.value) {
             return BUILTIN_EQUALS;
+        } else if (base.value == C->builtins[BUILTIN_COMPARE].did.value) {
+            return BUILTIN_COMPARE;
+        } else if (base.value == C->builtins[BUILTIN_RANGE].did.value) {
+            return BUILTIN_RANGE;
         }
     }
     return NBUILTINS;
