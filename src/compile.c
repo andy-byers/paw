@@ -443,7 +443,6 @@ static void allocate_other_type(struct DefGenerator *dg, struct IrType *type)
     map_types(dg, type, rtti);
 }
 
-#include"stdio.h"
 static void allocate_adt_def(struct DefGenerator *dg, struct IrType *type)
 {
     if (!IrIsAdt(type)) {
@@ -455,7 +454,6 @@ static void allocate_adt_def(struct DefGenerator *dg, struct IrType *type)
     struct Def *def = new_adt_def(dg, d, type);
     struct Type *rtti = Y_TYPE(ENV(dg->C), def->func.code);
     map_types(dg, type, rtti);
-printf("%d\n", def->hdr.iid);
 }
 
 static void define_params(struct DefGenerator *dg, struct IrParams *params)
@@ -493,7 +491,6 @@ static struct ItemSlot allocate_item(struct DefGenerator *dg, struct Mir *body)
     int const ntypes = t->types != NULL ? t->types->count : 0;
     struct IrFnDef *d = pawIr_get_fn_def(dg->C, t->did);
     struct Def *def = new_fn_def(dg, d, body->type);
-printf("%d\n", def->hdr.iid);
     struct Type *self = lookup_type(dg, body->self);
     def->func.self = self != NULL ? self->adt.code : -1;
     // ".vid" is the index of the Value slot where this function will live

@@ -606,7 +606,7 @@ struct RawCaseList *cases_for_variant(struct Usefulness *U, struct MatchVar var)
     K_LIST_ENUMERATE (fields, index, pfield) {
         struct IrType *type = pawP_instantiate_field(U->C, var.type, *pfield);
         struct VariableList *subvars = variables_for_types(U, IR_FPTR(type)->params);
-        struct Constructor cons = {
+        struct Constructor const cons = {
             .kind = CONS_VARIANT,
             .variant.type = type,
             .variant.index = index,

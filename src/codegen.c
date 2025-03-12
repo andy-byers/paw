@@ -570,7 +570,6 @@ static void register_toplevel_function(struct Generator *G, struct IrType *type,
     ToplevelMap_insert(G, G->toplevel, type, iid);
 }
 
-#include"stdio.h"
 static void register_items(struct Generator *G)
 {
     paw_Env *P = ENV(G);
@@ -595,7 +594,6 @@ static void register_items(struct Generator *G)
         vals->data[pinfo->index] = pinfo->value;
         String const *modname = module_prefix(G, pinfo->modno);
         pinfo->name = pawP_mangle_name(C, modname, pinfo->name, NULL);
-printf("global %s\n", pinfo->name->text);
     }
 
     int iid;
@@ -611,7 +609,6 @@ printf("global %s\n", pinfo->name->text);
         paw_assert(fdef->kind == DEF_FUNC);
         pitem->name = fdef->mangled_name = func_name(G, modname, type, mir->self);
         pawMap_insert(P, V_TUPLE(P->functions), P2V(pitem->name), I2V(fdef->vid));
-printf("global %s\n", pitem->name->text);
     }
 }
 

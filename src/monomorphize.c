@@ -539,9 +539,8 @@ struct MonoResult pawP_monomorphize(struct Compiler *C, BodyMap *bodies)
     BodyMapIterator_init(bodies, &iter);
     while (BodyMapIterator_is_valid(&iter)) {
         struct Mir *mir = *BodyMapIterator_valuep(&iter);
-        if (is_entrypoint(mir)) {
-            mir->type = collect_type(&M.F->F, mir->type);
-        }
+        if (is_entrypoint(mir))
+            collect_type(&M.F->F, mir->type);
         BodyMapIterator_next(&iter);
     }
 

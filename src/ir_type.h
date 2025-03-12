@@ -248,11 +248,12 @@ inline static struct IrFieldDef *pawIr_new_field_def(struct Compiler *C, DeclId 
     return def;
 }
 
-inline static struct IrVariantDef *pawIr_new_variant_def(struct Compiler *C, DeclId did, int discr, String *name, struct IrFieldDefs *fields)
+inline static struct IrVariantDef *pawIr_new_variant_def(struct Compiler *C, DeclId did, DeclId cons, int discr, String *name, struct IrFieldDefs *fields)
 {
     struct IrVariantDef *def = P_ALLOC(C, NULL, 0, sizeof(*def));
     *def = (struct IrVariantDef){
         .did = did,
+        .cons = cons,
         .fields = fields,
         .discr = discr,
         .name = name,
