@@ -76,6 +76,19 @@ struct HirImport {
 
 inline static HirId pawHir_next_id(struct Hir *hir);
 
+enum HirResultKind {
+    HIR_RESULT_LOCAL,
+    HIR_RESULT_DECL,
+};
+
+struct HirResult {
+    enum HirResultKind kind;
+    union {
+        DeclId did;
+        HirId hid;
+    };
+};
+
 // Represents an entry in the symbol table
 //
 // During the type checking pass, a struct HirSymbol is created for each declaration that
@@ -87,23 +100,23 @@ inline static HirId pawHir_next_id(struct Hir *hir);
 // In particular, symbols with 'is_type' equal to 1 only exist in the compiler.
 struct HirSymbol {
     paw_Bool is_init : 1;
-    paw_Bool is_type : 1;
+    paw_Bool is_pub : 1;
+    struct HirResult res;
     String *name;
-    struct HirDecl *decl;
 };
 
 int pawHir_find_symbol(struct HirScope *scope, String const *name);
-int pawHir_declare_symbol(struct Hir *hir, struct HirScope *scope, struct HirDecl *decl, String *name);
+int pawHir_declare_symbol(struct Hir *hir, struct HirScope *scope, String *name, struct HirResult res);
 void pawHir_define_symbol(struct HirScope *scope, int index);
 
 struct HirSegment {
     String *name;
     struct HirTypeList *types;
-    DeclId did;
+    struct HirResult res;
     HirId hid;
 };
 
-void pawHir_init_segment(struct Hir *hir, struct HirSegment *r, String *name, struct HirTypeList *types, DeclId target);
+void pawHir_init_segment(struct Hir *hir, struct HirSegment *r, String *name, struct HirTypeList *types);
 
 struct HirVariant {
     int discr;
@@ -1417,8 +1430,8 @@ DEFINE_LIST(struct Hir, HirBoundList, struct HirGenericBound)
 #define HIR_IS_POLY_FUNC(decl) (HirIsFuncDecl(decl) && HirGetFuncDecl(decl)->generics != NULL)
 #define HIR_IS_POLY_ADT(decl) (HirIsAdtDecl(decl) && HirGetAdtDecl(decl)->generics != NULL)
 
-#define HIR_PATH_RESULT(path) ((path)->data[(path)->count - 1].did)
-#define HIR_TYPE_DID(type) (HirIsPathType(type) ? HIR_PATH_RESULT(HirGetPathType(type)->path) : HirGetFuncDef(type)->did)
+#define HIR_PATH_RESULT(Path_) (K_LIST_LAST(Path_).res)
+#define HIR_TYPE_DID(Type_) (HirIsPathType(Type_) ? HIR_PATH_RESULT(HirGetPathType(Type_)->path) : HirGetFuncDef(Type_)->did)
 
 struct Hir *pawHir_new(struct Compiler *C, String *name, int modno);
 void pawHir_free(struct Hir *hir);
@@ -1427,6 +1440,19 @@ int pawHir_expand_bodies(struct Hir *hir);
 void pawHir_define(struct ModuleInfo *m, struct HirDeclList *out, int *poffset);
 
 struct HirDecl *pawHir_get_decl(struct Compiler *C, DeclId id);
+struct IrType *pawHir_result_type(struct Compiler *C, struct HirResult res);
+
+static paw_Bool hir_is_type(struct Compiler *C, struct HirResult res)
+{
+    if (res.kind != HIR_RESULT_DECL)
+        return PAW_FALSE;
+
+    struct HirDecl *decl = pawHir_get_decl(C, res.did);
+    return HirIsAdtDecl(decl) //
+        || HirIsTypeDecl(decl) //
+        || HirIsTraitDecl(decl) //
+        || HirIsGenericDecl(decl);
+}
 
 #define HIR_TYPEOF(x) ((x)->hdr.type)
 #define HIR_KINDOF(x) ((x)->hdr.kind)
@@ -1438,7 +1464,7 @@ inline static struct HirSegment *HirPath_add(struct Hir *hir, struct HirPath *pa
                                              struct HirTypeList *args)
 {
     struct HirSegment seg;
-    pawHir_init_segment(hir, &seg, name, args, NO_DECL);
+    pawHir_init_segment(hir, &seg, name, args);
     HirPath_push(hir, path, seg);
     return &K_LIST_LAST(path);
 }

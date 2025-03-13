@@ -15,6 +15,7 @@ struct MatchVar {
 struct Binding {
     struct MatchVar var;
     String *name;
+    HirId hid;
 };
 
 enum ConstructorKind {

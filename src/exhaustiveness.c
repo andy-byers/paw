@@ -213,7 +213,7 @@ static void expand_or_patterns(struct Usefulness *U, struct RowList *rows)
                 found = PAW_TRUE;
 
                 struct Column col = ColumnList_get(row.columns, icol);
-                struct HirOrPat * or = HirGetOrPat(col.pat);
+                struct HirOrPat *or = HirGetOrPat(col.pat);
 
                 struct HirPat *const *ppat;
                 K_LIST_FOREACH (or->pats, ppat) {
@@ -332,6 +332,7 @@ static void move_bindings_to_right(struct Usefulness *U, struct Row *row)
             BindingList_push(U->C, row->body.bindings, (struct Binding){
                                                            .name = p->name,
                                                            .var = pcol->var,
+                                                           .hid = p->hid,
                                                        });
         } else if (!HirIsWildcardPat(pcol->pat)) {
             ColumnList_push(U, columns, *pcol);

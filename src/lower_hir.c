@@ -45,7 +45,8 @@ struct ConstantContext {
 struct LocalVar {
     MirRegister reg;
     String *name;
-    DeclId did;
+    HirId hid;
+//    DeclId did;
     int depth;
     int vid;
 };
@@ -368,7 +369,7 @@ struct NonGlobal {
     paw_Bool is_upvalue : 1;
 };
 
-static paw_Bool resolve_local(struct LowerHir *L, struct FunctionState *fs, String const *name, struct NonGlobal *pinfo)
+static paw_Bool resolve_local(struct LowerHir *L, struct FunctionState *fs, String *name, struct NonGlobal *pinfo)
 {
     // condition is "i > 0" to cause the result register to be ignored
     for (int i = fs->nlocals - 1; i > 0; --i) {
@@ -495,13 +496,13 @@ static void leave_block(struct LowerHir *L)
     L->fs->bs = bs->outer;
 }
 
-static struct LocalVar *add_local(struct LowerHir *L, String *name, MirRegister r, DeclId did)
+static struct LocalVar *add_local(struct LowerHir *L, String *name, MirRegister r, HirId hid)
 {
     VarStack_push(L, L->stack, ((struct LocalVar){
                                    .vid = L->fs->locals->count,
                                    .depth = L->fs->bs->depth,
                                    .name = name,
-                                   .did = did,
+                                   .hid = hid,
                                    .reg = r,
                                }));
     MirRegisterList_push(L->fs->mir, L->fs->locals, r);
@@ -511,21 +512,23 @@ static struct LocalVar *add_local(struct LowerHir *L, String *name, MirRegister 
 
 static struct LocalVar *add_local_literal(struct LowerHir *L, char const *name, MirRegister r)
 {
-    return add_local(L, SCAN_STRING(L->C, name), r, NO_DECL);
+    return add_local(L, SCAN_STRING(L->C, name), r, (HirId){-1});
 }
 
-static struct LocalVar *alloc_local(struct LowerHir *L, String *name, struct IrType *type, DeclId did)
+static struct LocalVar *alloc_local(struct LowerHir *L, String *name, struct IrType *type, HirId hid)
 {
     MirRegister const output = new_register(L, type);
     NEW_INSTR(L->fs, alloc_local, -1, name, output);
-    return add_local(L, name, output, did);
+    return add_local(L, name, output, hid);
 }
 
+// NOTE: It is easier to use the name when searching for locals and upvalues, due to the
+//       way bindings in OR patterns are implemented.
 static paw_Bool resolve_nonglobal(struct LowerHir *L, String *name, struct NonGlobal *png)
 {
-    if (resolve_local(L, L->fs, name, png))
-        return PAW_TRUE;
-    return resolve_upvalue(L, L->fs, name, png);
+    if (!resolve_local(L, L->fs, name, png))
+        return resolve_upvalue(L, L->fs, name, png);
+    return PAW_TRUE;
 }
 
 static MirRegister add_constant(struct LowerHir *L, Value value, enum BuiltinKind b_kind)
@@ -592,7 +595,7 @@ static void enter_function(struct LowerHir *L, struct FunctionState *fs, struct 
     enter_block(L, bs, PAW_FALSE);
 
     alloc_local(L, SCAN_STRING(L->C, PRIVATE("result")),
-                IR_FPTR(mir->type)->result, NO_DECL);
+                IR_FPTR(mir->type)->result, (HirId){-1});
 }
 
 static void leave_function(struct LowerHir *L)
@@ -635,7 +638,7 @@ static paw_Bool visit_field_decl(struct HirVisitor *V, struct HirFieldDecl *d)
 {
     struct LowerHir *L = V->ud;
     struct IrType *type = pawIr_get_type(L->C, d->hid);
-    alloc_local(V->ud, d->name, type, d->did);
+    alloc_local(V->ud, d->name, type, d->hid);
     return PAW_FALSE;
 }
 
@@ -648,10 +651,10 @@ static paw_Bool visit_var_decl(struct HirVisitor *V, struct HirVarDecl *d)
     if (d->init != NULL) {
         MirRegister const r = register_for_node(V->ud, d->init->hdr.hid);
         MirRegister const init = lower_operand(V, d->init);
-        add_local(L, d->name, r, d->did);
+        add_local(L, d->name, r, d->hid);
         move_to(L, init, r);
     } else {
-        struct LocalVar *var = alloc_local(L, d->name, type, d->did);
+        struct LocalVar *var = alloc_local(L, d->name, type, d->hid);
         struct MirRegisterData *data = mir_reg_data(L->fs->mir, var->reg);
         data->is_uninit = PAW_TRUE;
         r = var->reg;
@@ -809,10 +812,8 @@ static MirRegister lower_path_expr(struct HirVisitor *V, struct HirPathExpr *e)
 {
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
-    DeclId const did = HIR_PATH_RESULT(e->path);
-    struct HirDecl *decl = pawHir_get_decl(L->C, did);
     struct NonGlobal ng;
-    if (resolve_nonglobal(L, decl->hdr.name, &ng)) {
+    if (resolve_nonglobal(L, K_LIST_LAST(e->path).name, &ng)) {
         MirRegister const output = register_for_node(L, e->hid);
         if (ng.is_upvalue) {
             NEW_INSTR(fs, upvalue, e->line, output, ng.index);
@@ -821,7 +822,11 @@ static MirRegister lower_path_expr(struct HirVisitor *V, struct HirPathExpr *e)
         }
         return output;
     }
+    struct HirResult const res = HIR_PATH_RESULT(e->path);
+    paw_assert(res.kind == HIR_RESULT_DECL);
+    struct HirDecl *decl = pawHir_get_decl(L->C, res.did);
     MirRegister const output = register_for_node(L, e->hid);
+
     if (HirIsVariantDecl(decl)) {
         return lower_unit_variant(V, e, HirGetVariantDecl(decl));
     } else if (HirIsAdtDecl(decl)) {
@@ -829,7 +834,7 @@ static MirRegister lower_path_expr(struct HirVisitor *V, struct HirPathExpr *e)
     } else if (HirIsVarDecl(decl)) {
         return lookup_global_constant(L, HirGetVarDecl(decl));
     }
-    int const *pid = GlobalMap_get(L, L->globals, did);
+    int const *pid = GlobalMap_get(L, L->globals, res.did);
     NEW_INSTR(fs, global, e->line, output, pid != NULL ? *pid : -1);
     return output;
 }
@@ -1088,9 +1093,8 @@ static MirRegister lower_assign_expr(struct HirVisitor *V, struct HirAssignExpr 
     if (HirIsPathExpr(e->lhs)) {
         struct NonGlobal ng;
         struct HirPathExpr *x = HirGetPathExpr(e->lhs);
-        paw_Bool const expect_found = resolve_nonglobal(L, K_LIST_LAST(x->path).name, &ng);
-        paw_assert(expect_found);
-        PAW_UNUSED(expect_found); // must be local or upvalue
+        paw_Bool const found = resolve_nonglobal(L, K_LIST_LAST(x->path).name, &ng);
+        paw_assert(((void)found, found)); // only locals can be assigned
         if (ng.is_upvalue) {
             MirRegister const rhs = lower_operand(V, e->rhs);
             NEW_INSTR(fs, set_upvalue, e->line, ng.index, rhs);
@@ -1329,7 +1333,7 @@ static void declare_match_bindings(struct LowerHir *L, struct BindingList *bindi
         MirRegister const r = get_test_reg(L, b.var);
         into_fresh_reg(L, r);
 
-        add_local(L, b.name, r, NO_DECL);
+        add_local(L, b.name, r, b.hid);
     }
 }
 

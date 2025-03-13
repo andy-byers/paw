@@ -183,7 +183,7 @@ static struct HirPath *lower_path(struct LowerAst *L, struct AstPath *path)
         struct HirTypeList *types = lower_type_list(L, src.types);
 
         struct HirSegment dst;
-        pawHir_init_segment(L->hir, &dst, src.name, types, NO_DECL);
+        pawHir_init_segment(L->hir, &dst, src.name, types);
         HirPath_push(L->hir, r, dst);
     }
     return r;

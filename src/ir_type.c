@@ -282,13 +282,13 @@ static void print_type(struct Printer *P, IrType *type)
         }
         case kIrSignature: {
             struct IrSignature *fsig = IrGetSignature(type);
-            struct HirDecl *decl = pawHir_get_decl(P->C, fsig->did);
+            struct IrFnDef *def = pawIr_get_fn_def(P->C, fsig->did);
             PRINT_LITERAL(P, "fn ");
             if (fsig->self != NULL) {
                 print_type(P, fsig->self);
                 PRINT_LITERAL(P, "::");
             }
-            PRINT_STRING(P, decl->hdr.name);
+            PRINT_STRING(P, def->name);
             if (fsig->types != NULL) {
                 PRINT_CHAR(P, '<');
                 print_type_list(P, fsig->types);
@@ -315,6 +315,7 @@ static void print_type(struct Printer *P, IrType *type)
             break;
         }
         case kIrGeneric: {
+            // TODO: get IR generic def, not HIR decl, which may not exist anymore
             struct IrGeneric *gen = IrGetGeneric(type);
             struct HirDecl *decl = pawHir_get_decl(P->C, gen->did);
             PRINT_STRING(P, decl->hdr.name);
@@ -326,6 +327,7 @@ static void print_type(struct Printer *P, IrType *type)
             break;
         }
         case kIrTraitObj: {
+            // TODO: create an IR trait object and use that
             struct IrTraitObj *t = IrGetTraitObj(type);
             struct HirDecl *decl = pawHir_get_decl(P->C, t->did);
             PRINT_STRING(P, decl->hdr.name);
@@ -352,8 +354,8 @@ static void print_type(struct Printer *P, IrType *type)
                 print_type(P, IrTypeList_get(adt->types, 1));
                 PRINT_CHAR(P, ']');
             } else {
-                struct HirDecl *decl = pawHir_get_decl(P->C, adt->did);
-                PRINT_STRING(P, decl->hdr.name);
+                struct IrAdtDef *def = pawIr_get_adt_def(P->C, adt->did);
+                PRINT_STRING(P, def->name);
                 if (adt->types != NULL) {
                     PRINT_CHAR(P, '<');
                     print_type_list(P, adt->types);

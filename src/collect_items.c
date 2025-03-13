@@ -54,7 +54,10 @@ static struct HirScope *enclosing_scope(struct ItemCollector *X)
 
 static void add_symbol(struct ItemCollector *X, struct HirScope *scope, String *name, struct HirDecl *decl)
 {
-    int const index = pawHir_declare_symbol(X->hir, scope, decl, name);
+    int const index = pawHir_declare_symbol(X->hir, scope, name, (struct HirResult){
+                .kind = HIR_RESULT_DECL,
+                .did = decl->hdr.did,
+            });
     pawHir_define_symbol(scope, index);
 }
 

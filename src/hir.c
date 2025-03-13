@@ -50,11 +50,10 @@ DEFINE_NODE_CONSTRUCTOR(type, HirType)
 DEFINE_NODE_CONSTRUCTOR(pat, HirPat)
 #undef DEFINE_NODE_CONSTRUCTOR
 
-void pawHir_init_segment(struct Hir *hir, struct HirSegment *r, String *name, struct HirTypeList *types, DeclId did)
+void pawHir_init_segment(struct Hir *hir, struct HirSegment *r, String *name, struct HirTypeList *types)
 {
     *r = (struct HirSegment){
         .hid = pawHir_next_id(hir),
-        .did = did,
         .name = name,
         .types = types,
     };
@@ -85,14 +84,12 @@ struct HirSymbol *pawHir_new_symbol(struct Compiler *C)
     return NEW_NODE(C, struct HirSymbol);
 }
 
-int pawHir_declare_symbol(struct Hir *hir, struct HirScope *scope, struct HirDecl *decl, String *name)
+int pawHir_declare_symbol(struct Hir *hir, struct HirScope *scope, String *name, struct HirResult res)
 {
     HirScope_push(hir, scope, ((struct HirSymbol){
-                                .is_type = HirIsAdtDecl(decl) //
-                                    || HirIsTypeDecl(decl) //
-                                    || HirIsGenericDecl(decl),
-                                .decl = decl,
+                                .is_init = PAW_FALSE,
                                 .name = name,
+                                .res = res,
                             }));
     return scope->count - 1;
 }
@@ -100,6 +97,11 @@ int pawHir_declare_symbol(struct Hir *hir, struct HirScope *scope, struct HirDec
 void pawHir_define_symbol(struct HirScope *scope, int index)
 {
     K_LIST_AT(scope, index).is_init = PAW_TRUE;
+}
+
+struct IrType *pawHir_result_type(struct Compiler *C, struct HirResult res)
+{
+    return pawIr_get_type(C, res.hid);
 }
 
 int pawHir_find_symbol(struct HirScope *scope, String const *name)

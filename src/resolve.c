@@ -329,13 +329,13 @@ static struct HirScope *enclosing_scope(struct Resolver *R)
     return K_LIST_LAST(R->symtab);
 }
 
-static int declare_local(struct Resolver *R, String *name, struct HirDecl *decl)
+static int declare_local(struct Resolver *R, String *name, struct HirResult res)
 {
     if (IS_KEYWORD(name))
         NAME_ERROR(R, "invalid identifier ('%s' is a language keyword)");
     if (IS_BUILTIN(name))
         NAME_ERROR(R, "invalid identifier ('%s' is a builtin type name)");
-    return pawHir_declare_symbol(R->hir, enclosing_scope(R), decl, name);
+    return pawHir_declare_symbol(R->hir, enclosing_scope(R), name, res);
 }
 
 // Allow a previously-declared variable to be accessed
@@ -360,9 +360,9 @@ static int find_field(struct HirDeclList *fields, String *name)
     return -1;
 }
 
-static void new_local(struct Resolver *R, String *name, struct HirDecl *decl)
+static void new_local(struct Resolver *R, String *name, struct HirResult res)
 {
-    int const index = declare_local(R, name, decl);
+    int const index = declare_local(R, name, res);
     define_local(R, index);
 }
 
@@ -388,7 +388,10 @@ static void leave_function(struct Resolver *R)
 static void enter_function(struct Resolver *R, struct HirFuncDecl *func)
 {
     enter_scope(R, NULL);
-    new_local(R, func->name, HIR_CAST_DECL(func));
+    new_local(R, func->name, (struct HirResult){
+                .kind = HIR_RESULT_DECL,
+                .did = func->did
+            });
 }
 
 static void leave_pat(struct Resolver *R)
@@ -417,6 +420,18 @@ static struct IrType *resolve_block(struct Resolver *R, struct HirBlock *block)
     return type;
 }
 
+static void allocate_locals(struct Resolver *R, struct HirDeclList *decls)
+{
+    struct HirDecl *const *pdecl;
+    K_LIST_FOREACH(decls, pdecl) {
+        struct HirDecl *decl = *pdecl;
+        new_local(R, decl->hdr.name, (struct HirResult){
+                .kind = HIR_RESULT_LOCAL,
+                .hid = decl->hdr.hid
+            });
+    }
+}
+
 static void allocate_decls(struct Resolver *R, struct HirDeclList *decls)
 {
     if (decls == NULL)
@@ -424,7 +439,11 @@ static void allocate_decls(struct Resolver *R, struct HirDeclList *decls)
 
     struct HirDecl *const *pdecl;
     K_LIST_FOREACH(decls, pdecl) {
-        new_local(R, (*pdecl)->hdr.name, *pdecl);
+        struct HirDecl *decl = *pdecl;
+        new_local(R, decl->hdr.name, (struct HirResult){
+                .kind = HIR_RESULT_DECL,
+                .did = decl->hdr.did
+            });
     }
 }
 
@@ -449,7 +468,7 @@ static void resolve_func_item(struct Resolver *R, struct HirFuncDecl *d)
 {
     enter_function(R, d);
     allocate_decls(R, d->generics);
-    allocate_decls(R, d->params);
+    allocate_locals(R, d->params);
     struct IrType *ret = GET_NODE_TYPE(R->C, d->result);
 
     if (d->body != NULL) {
@@ -486,7 +505,10 @@ static void resolve_adt_methods(struct Resolver *R, struct HirAdtDecl *d)
     enter_scope(R, NULL);
 
     String *self = STRING_LIT(R, "Self");
-    new_local(R, self, d->self);
+    new_local(R, self, (struct HirResult){
+                .kind = HIR_RESULT_DECL,
+                .did = d->self->hdr.did,
+            });
     resolve_methods(R, d->methods, IrGetAdt(R->self));
     allocate_decls(R, d->methods);
 
@@ -610,8 +632,11 @@ static struct IrType *resolve_path_expr(struct Resolver *R, struct HirPathExpr *
 {
     // path might refer to a unit ADT, so we have to use LOOKUP_EITHER
     struct IrType *type = resolve_path(R, e->path, LOOKUP_EITHER);
+    struct HirResult const res = HIR_PATH_RESULT(e->path);
+    if (res.kind == HIR_RESULT_LOCAL)
+        return type;
 
-    struct HirDecl *result = get_decl(R, HIR_PATH_RESULT(e->path));
+    struct HirDecl *result = get_decl(R, res.did);
     if (HirIsAdtDecl(result)) {
         maybe_fix_unit_struct(R, type, HIR_CAST_EXPR(e));
     } else if (HirIsGenericDecl(result)) {
@@ -865,7 +890,10 @@ static void resolve_closure_param(struct Resolver *R, struct HirFieldDecl *d)
 {
     struct HirDecl *decl = HIR_CAST_DECL(d);
     struct IrType *type = resolve_type(R, d->tag);
-    new_local(R, d->name, decl);
+    new_local(R, d->name, (struct HirResult){
+                .kind = HIR_RESULT_LOCAL,
+                .hid = d->hid,
+            });
     SET_NODE_TYPE(R->C, decl, type);
 }
 
@@ -896,7 +924,7 @@ static struct IrType *resolve_closure_expr(struct Resolver *R, struct HirClosure
     R->rs = rs.outer;
     return pawIr_new_func_ptr(R->C, params, ret);
 }
-#include "stdio.h"
+
 static struct HirDecl *find_method_aux(struct Compiler *C, struct HirDecl *base, String *name)
 {
     struct HirDecl **pdecl;
@@ -906,20 +934,6 @@ static struct HirDecl *find_method_aux(struct Compiler *C, struct HirDecl *base,
         if (pawS_eq(name, method->name))
             return *pdecl;
     }
-    //    struct IrType *type = pawIr_get_type(C, adt->hid);
-    //    struct IrTypeList *traits = pawP_query_traits(C, type);
-    //    struct IrType *const *ptrait;
-    //    K_LIST_FOREACH(traits, ptrait) {
-    //        struct HirTraitDecl *d = HirGetTraitDecl(pawHir_get_decl(C, IR_TYPE_DID(*ptrait)));
-    //        struct HirDecl *const *pmethod;
-    //        K_LIST_FOREACH(d->methods, pmethod) {
-    //            struct HirFuncDecl *method = HirGetFuncDecl(*pmethod);
-    //            if (pawS_eq(method->name, name))
-    //                return *pmethod;
-    //            struct IrType *t = pawIr_substitute_self(C, *ptrait, type, GET_NODE_TYPE(C, *pmethod));
-    //            printf("method %s %s\n", pawIr_print_type(C, type), method->name->text);
-    //        }
-    //    }
     return NULL;
 }
 
@@ -948,9 +962,11 @@ static void resolve_adt_item(struct Resolver *R, struct HirAdtDecl *d)
 
 static struct IrType *resolve_var_decl(struct Resolver *R, struct HirVarDecl *d)
 {
-    struct HirDecl *decl = HIR_CAST_DECL(d);
     struct IrType *tag = resolve_type(R, d->tag);
-    int const index = declare_local(R, d->name, decl);
+    int const index = declare_local(R, d->name, (struct HirResult){
+                .kind = HIR_RESULT_LOCAL,
+                .hid = d->hid,
+            });
     struct IrType *init = d->init != NULL
                               ? resolve_operand(R, d->init)
                               : new_unknown(R);
@@ -1071,7 +1087,10 @@ static void register_generics(struct Resolver *R, struct HirDeclList *generics)
 
 static struct IrType *resolve_type_decl(struct Resolver *R, struct HirTypeDecl *d)
 {
-    int const index = declare_local(R, d->name, HIR_CAST_DECL(d));
+    int const index = declare_local(R, d->name, (struct HirResult){
+                .kind = HIR_RESULT_DECL,
+                .did = d->did,
+            });
 
     enter_scope(R, NULL);
     register_generics(R, d->generics);
@@ -1716,10 +1735,10 @@ static struct IrType *ResolveBindingPat(struct Resolver *R, struct HirBindingPat
     // make sure bindings are unique within each pattern (OR patterns are special-cased)
     account_for_binding(R, p->name);
 
-    struct HirDecl *r = pawHir_new_var_decl(R->m->hir, p->line, p->name,
-                                            NULL, NULL, NULL, PAW_FALSE);
-    SET_NODE_TYPE(R->C, r, type);
-    new_local(R, p->name, r);
+    new_local(R, p->name, (struct HirResult){
+                .kind = HIR_RESULT_LOCAL,
+                .hid = p->hid,
+            });
     return type;
 }
 
@@ -1738,7 +1757,8 @@ static struct IrType *convert_path_to_binding(struct Resolver *R, struct HirPath
 static struct IrType *ResolvePathPat(struct Resolver *R, struct HirPathPat *p)
 {
     struct IrType *type = lookup_path(R, p->path, LOOKUP_VALUE);
-    if (type == NULL) {
+    struct HirResult const res = HIR_PATH_RESULT(p->path);
+    if (type == NULL || res.kind == HIR_RESULT_LOCAL) {
     into_binding:
         // identifier is unbound, or it refers to a variable declaration
         if (p->path->count > 1)
@@ -1749,14 +1769,14 @@ static struct IrType *ResolvePathPat(struct Resolver *R, struct HirPathPat *p)
     // the path refers to a unit struct/enumerator
     struct HirPat *pat;
     struct HirPatList *empty = HirPatList_new(R->hir);
-    struct HirDecl *decl = get_decl(R, HIR_PATH_RESULT(p->path));
+    struct HirDecl *decl = get_decl(R, res.did);
     if (HirIsAdtDecl(decl)) {
         paw_assert(!HirGetAdtDecl(decl)->is_struct);
         pat = pawHir_new_struct_pat(R->m->hir, p->line, p->path, empty);
-    } else if (HirIsVarDecl(decl)) {
-        // goto needed because OR patterns declare bindings in the first pattern
-        // to check for duplicates
-        goto into_binding;
+//    } else if (HirIsVarDecl(decl)) {
+//        // goto needed because OR patterns declare bindings in the first pattern
+//        // to check for duplicates
+//        goto into_binding;
     } else {
         int const index = HirGetVariantDecl(decl)->index;
         pat = pawHir_new_variant_pat(R->m->hir, p->line, p->path, empty, index);

@@ -588,11 +588,11 @@ struct MonoResult pawP_monomorphize(struct Compiler *C, BodyMap *bodies)
         IrTypeList_push(C, M.types, *pother);
     }
 
-    // TODO: do this at the end of lower_hir.c. find methods a diferent way. already
-    //       know they exist, just need to find and substitute types.
-    // free memory used for HIR
-    pawP_pool_free(C, C->hir_pool);
-    C->hir_pool = NULL;
+//    // TODO: do this at the end of lower_hir.c. find methods a diferent way. already
+//    //       know they exist, just need to find and substitute types.
+//    // free memory used for HIR
+//    pawP_pool_free(C, C->hir_pool);
+//    C->hir_pool = NULL;
 
     pawP_pool_free(C, M.pool);
     return (struct MonoResult){
