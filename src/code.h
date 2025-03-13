@@ -11,12 +11,12 @@
 #define K_ALIGNAS_NODE _Alignas(void *)
 
 typedef struct DefId {
-    unsigned modno;
-    unsigned value;
+    int modno;
+    int value;
 } DefId;
 
 typedef struct HirId {
-    unsigned value;
+    int value;
 } HirId;
 
 typedef struct DeclId {

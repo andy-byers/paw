@@ -89,8 +89,8 @@ int pawHir_declare_symbol(struct Hir *hir, struct HirScope *scope, struct HirDec
 {
     HirScope_push(hir, scope, ((struct HirSymbol){
                                 .is_type = HirIsAdtDecl(decl) //
-                                || HirIsTypeDecl(decl) //
-                                || HirIsGenericDecl(decl),
+                                    || HirIsTypeDecl(decl) //
+                                    || HirIsGenericDecl(decl),
                                 .decl = decl,
                                 .name = name,
                             }));

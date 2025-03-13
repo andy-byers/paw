@@ -521,7 +521,7 @@ static struct LocalVar *alloc_local(struct LowerHir *L, String *name, struct IrT
     return add_local(L, name, output, did);
 }
 
-static paw_Bool resolve_nonglobal(struct LowerHir *L, DeclId did, String *name, struct NonGlobal *png)
+static paw_Bool resolve_nonglobal(struct LowerHir *L, String *name, struct NonGlobal *png)
 {
     if (resolve_local(L, L->fs, name, png))
         return PAW_TRUE;
@@ -812,7 +812,7 @@ static MirRegister lower_path_expr(struct HirVisitor *V, struct HirPathExpr *e)
     DeclId const did = HIR_PATH_RESULT(e->path);
     struct HirDecl *decl = pawHir_get_decl(L->C, did);
     struct NonGlobal ng;
-    if (resolve_nonglobal(L, did, decl->hdr.name, &ng)) {
+    if (resolve_nonglobal(L, decl->hdr.name, &ng)) {
         MirRegister const output = register_for_node(L, e->hid);
         if (ng.is_upvalue) {
             NEW_INSTR(fs, upvalue, e->line, output, ng.index);
@@ -1088,7 +1088,7 @@ static MirRegister lower_assign_expr(struct HirVisitor *V, struct HirAssignExpr 
     if (HirIsPathExpr(e->lhs)) {
         struct NonGlobal ng;
         struct HirPathExpr *x = HirGetPathExpr(e->lhs);
-        paw_Bool const expect_found = resolve_nonglobal(L, NO_DECL, K_LIST_LAST(x->path).name, &ng);
+        paw_Bool const expect_found = resolve_nonglobal(L, K_LIST_LAST(x->path).name, &ng);
         paw_assert(expect_found);
         PAW_UNUSED(expect_found); // must be local or upvalue
         if (ng.is_upvalue) {

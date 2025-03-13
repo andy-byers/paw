@@ -103,7 +103,7 @@ struct HirSegment {
     HirId hid;
 };
 
-void pawHir_init_segment(struct Hir *hir, struct HirSegment *r, String *name, struct HirTypeList *types, DeclId did);
+void pawHir_init_segment(struct Hir *hir, struct HirSegment *r, String *name, struct HirTypeList *types, DeclId target);
 
 struct HirVariant {
     int discr;
@@ -1394,7 +1394,7 @@ struct Hir {
 
 inline static HirId pawHir_next_id(struct Hir *hir)
 {
-    return (HirId){(unsigned)hir->C->hir_count++};
+    return (HirId){hir->C->hir_count++};
 }
 
 struct HirPath *pawHir_new_path(struct Compiler *C);

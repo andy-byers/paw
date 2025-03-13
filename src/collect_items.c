@@ -64,8 +64,7 @@ static void new_global(struct ItemCollector *X, String *name, struct HirDecl *de
     struct HirScope *scope = X->m->globals;
     K_LIST_FOREACH (scope, psymbol) {
         if (pawS_eq(psymbol->name, name))
-            NAME_ERROR(X, "duplicate global '%s' (declared previously on line %d)",
-                       name->text, psymbol->decl->hdr.line);
+            NAME_ERROR(X, "duplicate global '%s'", name->text);
     }
     add_symbol(X, scope, name, decl);
 }
