@@ -52,13 +52,12 @@ static struct HirScope *enclosing_scope(struct ItemCollector *X)
     return HirSymtab_last(X->symtab);
 }
 
-static void add_symbol(struct ItemCollector *X, struct HirScope *scope, String *name, struct HirDecl *decl)
+static int add_symbol(struct ItemCollector *X, struct HirScope *scope, String *name, struct HirDecl *decl)
 {
-    int const index = pawHir_declare_symbol(X->hir, scope, name, (struct HirResult){
+    return pawHir_declare_symbol(X->hir, scope, name, (struct HirResult){
                 .kind = HIR_RESULT_DECL,
                 .did = decl->hdr.did,
             });
-    pawHir_define_symbol(scope, index);
 }
 
 static void new_global(struct ItemCollector *X, String *name, struct HirDecl *decl)
@@ -612,11 +611,10 @@ static void collect_type_decl(struct ItemCollector *X, struct HirTypeDecl *d)
     leave_block(X);
 }
 
-static void collect_const_decl(struct ItemCollector *X, struct HirVarDecl *d)
+static void collect_const_decl(struct ItemCollector *X, struct HirConstDecl *d)
 {
     SET_TYPE(X, d->hid, collect_type(X, d->tag));
     new_global(X, d->name, HIR_CAST_DECL(d));
-    d->is_global = PAW_TRUE;
 }
 
 static void collect_other_types(struct ItemCollector *X, struct Hir *hir)
@@ -636,8 +634,8 @@ static void collect_other_types(struct ItemCollector *X, struct Hir *hir)
             case kHirTypeDecl:
                 collect_type_decl(X, HirGetTypeDecl(*pdecl));
                 break;
-            case kHirVarDecl:
-                collect_const_decl(X, HirGetVarDecl(*pdecl));
+            case kHirConstDecl:
+                collect_const_decl(X, HirGetConstDecl(*pdecl));
                 break;
             default:
                 PAW_UNREACHABLE();

@@ -104,12 +104,6 @@ static void AcceptUpvalue(struct MirVisitor *V, struct MirUpvalue *t)
     pawMir_visit_register(V, t->output);
 }
 
-static void AcceptSetLocal(struct MirVisitor *V, struct MirSetLocal *t)
-{
-    pawMir_visit_register(V, t->target);
-    pawMir_visit_register(V, t->value);
-}
-
 static void AcceptSetUpvalue(struct MirVisitor *V, struct MirSetUpvalue *t)
 {
     pawMir_visit_register(V, t->value);
@@ -442,9 +436,6 @@ static void remove_join(struct Mir *mir, struct MirInstructionList *joins, struc
     if (joins == NULL)
         return;
 
-    // TODO: instead of transforming into MirMove, remove the phi node and somehow indicate that
-    //       uses of the phi's output register should be replaced with the single input register
-    //       (more or less copy prop).
     int ijoin;
     struct MirInstruction **pinstr;
     K_LIST_ENUMERATE (joins, ijoin, pinstr) {
@@ -475,7 +466,8 @@ static void rename_and_filter(struct Traversal *X, BlockMap *map, struct MirBloc
     K_LIST_ENUMERATE (blocks, index, pfrom) {
         MirBlock const *pto = BlockMap_get(X, map, *pfrom);
         if (pto == NULL) {
-            remove_join(mir, bb->joins, bb->instructions, index);
+            if (bb != NULL)
+                remove_join(mir, bb->joins, bb->instructions, index - removed);
             ++removed;
             continue;
         }
@@ -603,11 +595,6 @@ struct MirRegisterPtrList *pawMir_get_loads(struct Mir *mir, struct MirInstructi
             ADD_INPUT(x->target);
             break;
         }
-        case kMirSetLocal: {
-            struct MirSetLocal *x = MirGetSetLocal(instr);
-            ADD_INPUT(x->value);
-            break;
-        }
         case kMirCall: {
             struct MirCall *x = MirGetCall(instr);
             ADD_INPUT(x->target);
@@ -716,8 +703,6 @@ MirRegister *pawMir_get_store(struct Mir *mir, struct MirInstruction *instr)
             return &MirGetGlobal(instr)->output;
         case kMirAllocLocal:
             return &MirGetAllocLocal(instr)->output;
-        case kMirSetLocal:
-            return &MirGetSetLocal(instr)->target;
         case kMirConstant:
             return &MirGetConstant(instr)->output;
         case kMirAggregate:
@@ -1032,11 +1017,6 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
             }
             break;
         }
-        case kMirSetLocal: {
-            struct MirSetLocal *t = MirGetSetLocal(instr);
-            DUMP_FMT(P, "_%d = _%d\n", t->target.value, t->value.value);
-            break;
-        }
         case kMirSetUpvalue: {
             struct MirSetUpvalue *t = MirGetSetUpvalue(instr);
             DUMP_FMT(P, "up%d = _%d\n", t->index, t->value.value);
@@ -1227,7 +1207,6 @@ char const *pawMir_dump(struct Mir *mir)
     pawL_push_result(P, &buf);
     return paw_string(P, -1);
 }
-
 
 #ifdef PAW_DEBUG_EXTRA
 

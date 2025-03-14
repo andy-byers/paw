@@ -311,6 +311,7 @@ static IrType *result_type(struct QueryState *Q, struct HirSegment *seg, IrTypeL
             inst = resolve_alias(Q, seg, decl, types);
             break;
         case kHirVarDecl:
+        case kHirConstDecl:
         case kHirGenericDecl:
             inst = GET_NODE_TYPE(Q->C, decl);
             pawIr_set_type(Q->C, seg->hid, inst);
@@ -348,7 +349,7 @@ struct IrType *lookup(struct QueryState *Q, struct ModuleInfo *m, struct HirSymt
     if (kind != LOOKUP_EITHER && is_type != (kind == LOOKUP_TYPE))
         TYPE_ERROR(Q, "expected %s but found %s",
                    kind == LOOKUP_VALUE ? "value" : "type",
-                   is_type ? "value" : "type");
+                   is_type ? "type" : "value");
 
     return inst;
 }

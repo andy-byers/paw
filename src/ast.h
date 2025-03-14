@@ -18,6 +18,7 @@
     X(AdtDecl)           \
     X(TypeDecl)          \
     X(VarDecl)           \
+    X(ConstDecl)         \
     X(TraitDecl)         \
     X(UseDecl)           \
     X(VariantDecl)
@@ -92,6 +93,13 @@ struct AstDeclHeader {
 };
 
 struct AstVarDecl {
+    AST_DECL_HEADER;
+    struct AstPat *pat;
+    struct AstType *tag;
+    struct AstExpr *init;
+};
+
+struct AstConstDecl {
     AST_DECL_HEADER;
     paw_Bool is_pub : 1;
     struct Annotations *annos;
@@ -265,12 +273,26 @@ inline static struct AstDecl *pawAst_new_type_decl(struct Ast *ast, int line, St
     return d;
 }
 
-inline static struct AstDecl *pawAst_new_var_decl(struct Ast *ast, int line, String *name, struct Annotations *annos, struct AstType *tag, struct AstExpr *init, paw_Bool is_pub)
+inline static struct AstDecl *pawAst_new_var_decl(struct Ast *ast, int line, String *name, struct AstPat *pat, struct AstType *tag, struct AstExpr *init)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->VarDecl_ = (struct AstVarDecl){
         .line = line,
         .kind = kAstVarDecl,
+        .name = name,
+        .pat = pat,
+        .tag = tag,
+        .init = init,
+    };
+    return d;
+}
+
+inline static struct AstDecl *pawAst_new_const_decl(struct Ast *ast, int line, String *name, struct Annotations *annos, struct AstType *tag, struct AstExpr *init, paw_Bool is_pub)
+{
+    struct AstDecl *d = pawAst_new_decl(ast);
+    d->ConstDecl_ = (struct AstConstDecl){
+        .line = line,
+        .kind = kAstConstDecl,
         .annos = annos,
         .name = name,
         .tag = tag,
@@ -617,7 +639,7 @@ struct AstJumpExpr {
 
 struct AstForExpr {
     AST_EXPR_HEADER;
-    String *name;
+    struct AstPat *pat;
     struct AstExpr *target;
     struct AstExpr *block;
 };
@@ -927,13 +949,13 @@ inline static struct AstExpr *pawAst_new_if_expr(struct Ast *ast, int line, stru
     return e;
 }
 
-inline static struct AstExpr *pawAst_new_for_expr(struct Ast *ast, int line, String *name, struct AstExpr *target, struct AstExpr *block)
+inline static struct AstExpr *pawAst_new_for_expr(struct Ast *ast, int line, struct AstPat *pat, struct AstExpr *target, struct AstExpr *block)
 {
     struct AstExpr *e = pawAst_new_expr(ast);
     e->ForExpr_ = (struct AstForExpr){
         .line = line,
         .kind = kAstForExpr,
-        .name = name,
+        .pat = pat,
         .target = target,
         .block = block,
     };

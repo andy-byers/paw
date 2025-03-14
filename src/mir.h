@@ -16,7 +16,6 @@ struct Mir;
     X(Global)                   \
     X(AllocLocal)               \
     X(FreeLocal)                \
-    X(SetLocal)                 \
     X(SetUpvalue)               \
     X(Constant)                 \
     X(Aggregate)                \
@@ -123,12 +122,6 @@ struct MirAllocLocal {
 struct MirFreeLocal {
     MIR_INSTRUCTION_HEADER;
     MirRegister reg;
-};
-
-struct MirSetLocal {
-    MIR_INSTRUCTION_HEADER;
-    MirRegister target;
-    MirRegister value;
 };
 
 struct MirSetUpvalue {
@@ -384,19 +377,6 @@ inline static struct MirInstruction *pawMir_new_free_local(struct Mir *mir, int 
         .kind = kMirFreeLocal,
         .line = line,
         .reg = reg,
-    };
-    return instr;
-}
-
-inline static struct MirInstruction *pawMir_new_set_local(struct Mir *mir, int line, MirRegister target, MirRegister value)
-{
-    struct MirInstruction *instr = pawMir_new_instruction(mir);
-    instr->SetLocal_ = (struct MirSetLocal){
-        .mid = pawMir_next_id(mir),
-        .kind = kMirSetLocal,
-        .line = line,
-        .target = target,
-        .value = value,
     };
     return instr;
 }

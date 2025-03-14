@@ -667,14 +667,6 @@ static void code_set_upvalue(struct MirVisitor *V, struct MirSetUpvalue *x)
     code_AB(fs, OP_SETUPVALUE, x->index, REG(x->value));
 }
 
-static void code_set_local(struct MirVisitor *V, struct MirSetLocal *x)
-{
-    struct Generator *G = V->ud;
-    struct FuncState *fs = G->fs;
-
-    move_to_reg(fs, REG(x->value), REG(x->target));
-}
-
 static void code_aggregate(struct MirVisitor *V, struct MirAggregate *x)
 {
     struct Generator *G = V->ud;
@@ -1184,7 +1176,6 @@ static void setup_codegen(struct Generator *G)
     V->PostVisitGlobal = code_global;
     V->PostVisitConstant = code_constant;
     V->PostVisitSetUpvalue = code_set_upvalue;
-    V->PostVisitSetLocal = code_set_local;
     V->PostVisitAggregate = code_aggregate;
     V->PostVisitContainer = code_container;
     V->PostVisitCall = code_call;

@@ -690,6 +690,22 @@ static void test_annotations(void)
     test_compiler_status(PAW_EVALUE, "function_expected_body", "#[not_extern] pub fn f();", "");
 }
 
+static void test_destructuring(void)
+{
+    char const *structure = "struct Fields {pub a: int, pub b: int}";
+    test_compiler_status(PAW_ENAME, "destructure_duplicate_binding", "", "let (x, (x,)) = (1, (2,));");
+    test_compiler_status(PAW_ETYPE, "destructure_wrong_type", "", "let (a, (b,)) = (1, 2);");
+    test_compiler_status(PAW_ETYPE, "destructure_too_many_elems", "", "let (a, b) = (1, 2, 3);");
+    test_compiler_status(PAW_ETYPE, "destructure_not_enough_elems", "", "let (a, b, c) = (1, 2);");
+    test_compiler_status(PAW_ETYPE, "destructure_missing_field", structure,
+            "let Fields{a} = Fields{a: 1, b: 2};");
+    test_compiler_status(PAW_ETYPE, "destructure_extra_field", structure,
+            "let Fields{a, b, c} = Fields{a: 1, b: 2};");
+    test_compiler_status(PAW_ETYPE, "destructure_non_exhaustive", "", "let Option::Some(x) = Option::Some(1);");
+    test_compiler_status(PAW_ENAME, "destructure_wildcard_name", "", "let _ = 123; let x = _;");
+    test_compiler_status(PAW_ENAME, "destructure_or", "", "let a | 2 = 123;");
+}
+
 int main(void)
 {
     test_underscore();
@@ -710,4 +726,5 @@ int main(void)
     test_global_const();
     test_match_error();
     test_trait_error();
+    test_destructuring();
 }

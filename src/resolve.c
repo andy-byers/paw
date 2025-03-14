@@ -338,14 +338,6 @@ static int declare_local(struct Resolver *R, String *name, struct HirResult res)
     return pawHir_declare_symbol(R->hir, enclosing_scope(R), name, res);
 }
 
-// Allow a previously-declared variable to be accessed
-// When this happens, the enclosing HirScope must be the same as when the variable was
-// declared. This will always be the case for well-formed code.
-static void define_local(struct Resolver *R, int index)
-{
-    pawHir_define_symbol(enclosing_scope(R), index);
-}
-
 static int find_field(struct HirDeclList *fields, String *name)
 {
     if (fields == NULL)
@@ -360,10 +352,9 @@ static int find_field(struct HirDeclList *fields, String *name)
     return -1;
 }
 
-static void new_local(struct Resolver *R, String *name, struct HirResult res)
+static int new_local(struct Resolver *R, String *name, struct HirResult res)
 {
-    int const index = declare_local(R, name, res);
-    define_local(R, index);
+    return declare_local(R, name, res);
 }
 
 static void leave_scope(struct Resolver *R)
@@ -963,18 +954,18 @@ static void resolve_adt_item(struct Resolver *R, struct HirAdtDecl *d)
 static struct IrType *resolve_var_decl(struct Resolver *R, struct HirVarDecl *d)
 {
     struct IrType *tag = resolve_type(R, d->tag);
-    int const index = declare_local(R, d->name, (struct HirResult){
-                .kind = HIR_RESULT_LOCAL,
-                .hid = d->hid,
-            });
-    struct IrType *init = d->init != NULL
+    struct IrType *rhs = d->init != NULL
                               ? resolve_operand(R, d->init)
                               : new_unknown(R);
+    struct MatchState ms;
+    enter_match_ctx(R, &ms, tag);
+    struct IrType *lhs = resolve_pat(R, d->pat);
+    unify(R, ms.result, tag);
+    leave_match_ctx(R);
 
-    define_local(R, index);
-
-    unify(R, init, tag);
-    return init;
+    unify(R, lhs, tag);
+    unify(R, tag, rhs);
+    return rhs;
 }
 
 struct ConstChecker {
@@ -1055,7 +1046,7 @@ static void check_const(struct Resolver *R, struct HirExpr *expr, struct IrType 
         VALUE_ERROR(R->C, expr->hdr.line, "compile time constant must be a primitive");
 }
 
-static void resolve_const_item(struct Resolver *R, struct HirVarDecl *d)
+static void resolve_const_item(struct Resolver *R, struct HirConstDecl *d)
 {
     struct HirDecl *decl = HIR_CAST_DECL(d);
     struct IrType *tag = GET_NODE_TYPE(R->C, d->tag);
@@ -1087,11 +1078,6 @@ static void register_generics(struct Resolver *R, struct HirDeclList *generics)
 
 static struct IrType *resolve_type_decl(struct Resolver *R, struct HirTypeDecl *d)
 {
-    int const index = declare_local(R, d->name, (struct HirResult){
-                .kind = HIR_RESULT_DECL,
-                .did = d->did,
-            });
-
     enter_scope(R, NULL);
     register_generics(R, d->generics);
     allocate_decls(R, d->generics);
@@ -1099,7 +1085,10 @@ static struct IrType *resolve_type_decl(struct Resolver *R, struct HirTypeDecl *
     SET_NODE_TYPE(R->C, d->rhs, type);
     leave_scope(R);
 
-    define_local(R, index);
+    new_local(R, d->name, (struct HirResult){
+                .kind = HIR_RESULT_DECL,
+                .did = d->did,
+            });
     return type;
 }
 
@@ -1282,6 +1271,8 @@ static struct IrTypeList *resolve_operand_list(struct Resolver *R, struct HirExp
 static struct IrType *resolve_tuple_lit(struct Resolver *R, struct HirTupleLit *e, int line)
 {
     struct IrTypeList *elems = resolve_operand_list(R, e->elems);
+    if (elems->count == 0)
+        return get_type(R, BUILTIN_UNIT);
     return pawIr_new_tuple(R->C, elems);
 }
 
@@ -1724,6 +1715,8 @@ static struct IrType *ResolveVariantPat(struct Resolver *R, struct HirVariantPat
 static struct IrType *ResolveTuplePat(struct Resolver *R, struct HirTuplePat *p)
 {
     struct IrTypeList *elems = resolve_pat_list(R, p->elems);
+    if (elems->count == 0)
+        return get_type(R, BUILTIN_UNIT);
     return pawIr_new_tuple(R->C, elems);
 }
 
@@ -1756,10 +1749,10 @@ static struct IrType *convert_path_to_binding(struct Resolver *R, struct HirPath
 
 static struct IrType *ResolvePathPat(struct Resolver *R, struct HirPathPat *p)
 {
-    struct IrType *type = lookup_path(R, p->path, LOOKUP_VALUE);
+    struct IrType *type = lookup_path(R, p->path, LOOKUP_EITHER);
     struct HirResult const res = HIR_PATH_RESULT(p->path);
     if (type == NULL || res.kind == HIR_RESULT_LOCAL) {
-    into_binding:
+into_binding:
         // identifier is unbound, or it refers to a variable declaration
         if (p->path->count > 1)
             NAME_ERROR(R, "invalid path");
@@ -1770,17 +1763,14 @@ static struct IrType *ResolvePathPat(struct Resolver *R, struct HirPathPat *p)
     struct HirPat *pat;
     struct HirPatList *empty = HirPatList_new(R->hir);
     struct HirDecl *decl = get_decl(R, res.did);
-    if (HirIsAdtDecl(decl)) {
-        paw_assert(!HirGetAdtDecl(decl)->is_struct);
+    if (HirIsAdtDecl(decl) && HirGetAdtDecl(decl)->is_struct) {
         pat = pawHir_new_struct_pat(R->m->hir, p->line, p->path, empty);
-//    } else if (HirIsVarDecl(decl)) {
-//        // goto needed because OR patterns declare bindings in the first pattern
-//        // to check for duplicates
-//        goto into_binding;
-    } else {
+    } else if (HirIsVariantDecl(decl)) {
         int const index = HirGetVariantDecl(decl)->index;
         pat = pawHir_new_variant_pat(R->m->hir, p->line, p->path, empty, index);
         type = maybe_unit_variant(R, type);
+    } else {
+        goto into_binding;
     }
 
     // overwrite old pattern
@@ -1960,16 +1950,16 @@ static void resolve_item(struct Resolver *R, struct HirDecl *item)
         resolve_func_item(R, HirGetFuncDecl(item));
     } else if (HirIsAdtDecl(item)) {
         resolve_adt_item(R, HirGetAdtDecl(item));
-    } else if (HirIsVarDecl(item)) {
-        resolve_const_item(R, HirGetVarDecl(item));
+    } else if (HirIsConstDecl(item)) {
+        resolve_const_item(R, HirGetConstDecl(item));
     }
 }
 
 static void resolve_items(struct Resolver *R, struct HirDeclList *items)
 {
-    for (int i = 0; i < items->count; ++i) {
-        resolve_item(R, items->data[i]);
-    }
+    struct HirDecl *const *pitem;
+    K_LIST_FOREACH (items, pitem)
+        resolve_item(R, *pitem);
 }
 
 static void use_module(struct Resolver *R, struct ModuleInfo *m)

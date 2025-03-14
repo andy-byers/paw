@@ -79,32 +79,39 @@ pub fn three() -> int {
 ```
 
 ### Generics
-
 ```paw
-struct Pair<X, Y> {
-    pub first: X,
-    pub second: Y,
-}
 
-type Vec2<Ty> = Pair<Ty, Ty>;
+// type aliases can accept type arguments
+type VecList2<T> = [(T, T)];
 
-pub fn swap<Ty>(v: Vec2<Ty>) {
-    let temp = v.first;
-    v.first = v.second;
-    v.second = temp;
+fn map2<X, Y>(f: fn(X, X) -> Y, xs: VecList2<X>) -> [Y] {
+    let ys = [];
+    // destructuring is supported in "for" loops and "let" declarations
+    for (a, b) in xs {
+        ys.push(f(a, b));
+    }
+    ys
 }
 
 pub fn main() {
-    let v = Vec2{
-        first: 123,
-        second: 456,
-    };
+    let data = [
+        (1, 2),
+        (2, 3),
+        (3, 4),
+        (4, 5),
+        (5, 6),
+    ];
 
-    swap(v);
+    let data = map2(|x: int, y| x + y, data);
 
-    print(v.first.to_string() + "\n"); // 456
-    print(v.second.to_string() + "\n"); // 123
+    let total = 0;
+    for value in data {
+        total = total + value;
+    }
+
+    print(total.to_string() + "\n"); // 35
 }
+
 ```
 
 ### Traits
@@ -177,9 +184,9 @@ pub fn main() {
 + [x] generic constraints/bounds
 + [x] constant folding, constant propagation
 + [x] traits (more like Swift protocols, maybe needs a different name)
-+ [ ] integrate traits into stdlib (iterators, hash map keys, etc.)
++ [x] integrate traits into stdlib (iterators, hash map keys, etc.)
++ [x] `let` bindings/destructuring
 + [ ] error handling (`try` needs to be an operator, or we need something like a 'parameter pack' for generics to implement the `try` function)
-+ [ ] `let` bindings/destructuring
 + [ ] function inlining
 + [ ] refactor user-provided allocation interface to allow heap expansion
 
@@ -192,5 +199,5 @@ pub fn main() {
     + Need a machine that can run Windows for debugging
 + Methods on primitives are unable to modify "self"
     + Results in "int::incremented(self) -> int" hack in prelude (would be nicer as "int::increment(self)")
-    + Need to use a pointer to "self" in this case
+    + Need to use a pointer to "self" in this case, but paw has no concept of pointers right now
 

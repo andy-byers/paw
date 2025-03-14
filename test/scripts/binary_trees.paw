@@ -29,10 +29,11 @@ fn bottom_up_tree(depth: int) -> Option<Tree> {
 }
 
 fn item_check_aux(tree: Tree) -> int {
-    if tree.left.is_some() {
+    let Tree{left, right} = tree;
+    if left.is_some() {
         return 1
-            + item_check_aux(tree.left.unwrap())
-            + item_check_aux(tree.right.unwrap());
+            + item_check_aux(left.unwrap())
+            + item_check_aux(right.unwrap());
     }
     return 1;
 }

@@ -13,6 +13,7 @@
     X(AdtDecl)           \
     X(TypeDecl)          \
     X(VarDecl)           \
+    X(ConstDecl)         \
     X(TraitDecl)         \
     X(VariantDecl)
 
@@ -99,7 +100,6 @@ struct HirResult {
 // The symbol table is used for all symbols, but not every symbol will end up in a register.
 // In particular, symbols with 'is_type' equal to 1 only exist in the compiler.
 struct HirSymbol {
-    paw_Bool is_init : 1;
     paw_Bool is_pub : 1;
     struct HirResult res;
     String *name;
@@ -107,7 +107,6 @@ struct HirSymbol {
 
 int pawHir_find_symbol(struct HirScope *scope, String const *name);
 int pawHir_declare_symbol(struct Hir *hir, struct HirScope *scope, String *name, struct HirResult res);
-void pawHir_define_symbol(struct HirScope *scope, int index);
 
 struct HirSegment {
     String *name;
@@ -274,8 +273,14 @@ struct HirDeclHeader {
 
 struct HirVarDecl {
     HIR_DECL_HEADER;
+    struct HirPat *pat;
+    struct HirExpr *init;
+    struct HirType *tag;
+};
+
+struct HirConstDecl {
+    HIR_DECL_HEADER;
     paw_Bool is_pub : 1;
-    paw_Bool is_global : 1;
     struct Annotations *annos;
     struct HirExpr *init;
     struct HirType *tag;
@@ -371,13 +376,29 @@ HIR_DECL_LIST(DEFINE_ACCESS)
 struct HirDecl *pawHir_new_decl(struct Hir *hir);
 DeclId pawHir_register_decl(struct Hir *hir, struct HirDecl *decl);
 
-static struct HirDecl *pawHir_new_var_decl(struct Hir *hir, int line, String *name, struct Annotations *annos, struct HirType *tag, struct HirExpr *init, paw_Bool is_pub)
+static struct HirDecl *pawHir_new_var_decl(struct Hir *hir, int line, String *name, struct HirPat *pat, struct HirType *tag, struct HirExpr *init)
 {
     struct HirDecl *d = pawHir_new_decl(hir);
     d->VarDecl_ = (struct HirVarDecl){
         .hid = pawHir_next_id(hir),
         .line = line,
         .kind = kHirVarDecl,
+        .name = name,
+        .pat = pat,
+        .tag = tag,
+        .init = init,
+    };
+    pawHir_register_decl(hir, d);
+    return d;
+}
+
+static struct HirDecl *pawHir_new_const_decl(struct Hir *hir, int line, String *name, struct Annotations *annos, struct HirType *tag, struct HirExpr *init, paw_Bool is_pub)
+{
+    struct HirDecl *d = pawHir_new_decl(hir);
+    d->ConstDecl_ = (struct HirConstDecl){
+        .hid = pawHir_next_id(hir),
+        .line = line,
+        .kind = kHirConstDecl,
         .name = name,
         .annos = annos,
         .tag = tag,

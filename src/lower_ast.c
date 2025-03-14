@@ -342,9 +342,17 @@ static struct HirDecl *LowerTraitDecl(struct LowerAst *L, struct AstTraitDecl *d
 
 static struct HirDecl *LowerVarDecl(struct LowerAst *L, struct AstVarDecl *d)
 {
+    struct HirPat *pat = lower_pat(L, d->pat);
     struct HirType *tag = d->tag != NULL ? lower_type(L, d->tag) : NULL;
     struct HirExpr *init = d->init != NULL ? lower_expr(L, d->init) : NULL;
-    return pawHir_new_var_decl(L->hir, d->line, d->name, d->annos, tag, init, d->is_pub);
+    return pawHir_new_var_decl(L->hir, d->line, d->name, pat, tag, init);
+}
+
+static struct HirDecl *LowerConstDecl(struct LowerAst *L, struct AstConstDecl *d)
+{
+    struct HirType *tag = lower_type(L, d->tag);
+    struct HirExpr *init = d->init != NULL ? lower_expr(L, d->init) : NULL;
+    return pawHir_new_const_decl(L->hir, d->line, d->name, d->annos, tag, init, d->is_pub);
 }
 
 static struct HirDecl *LowerTypeDecl(struct LowerAst *L, struct AstTypeDecl *d)
@@ -531,16 +539,20 @@ static struct HirPat *new_none_pat(struct LowerAst *L, int line)
     return pawHir_new_variant_pat(L->hir, line, path, fields, 1);
 }
 
-static struct HirPat *new_some_pat(struct LowerAst *L, String *var, int line)
+static struct HirPat *new_some_pat(struct LowerAst *L, struct HirPat *pat, int line)
 {
     struct HirPath *path = HirPath_new(L->hir);
     HirPath_add(L->hir, path, CSTR(L->C, CSTR_OPTION), NULL);
     HirPath_add(L->hir, path, SCAN_STRING(L->C, "Some"), NULL);
     struct HirPatList *fields = HirPatList_new(L->hir);
     struct HirPat *variant = pawHir_new_variant_pat(L->hir, line, path, fields, 0);
-    struct HirPat *binding = pawHir_new_binding_pat(L->hir, line, var);
-    HirPatList_push(L->hir, fields, binding);
+    HirPatList_push(L->hir, fields, pat);
     return variant;
+}
+
+static struct HirPat *binding_pat(struct LowerAst *L, int line, String *name)
+{
+    return pawHir_new_binding_pat(L->hir, line, name);
 }
 
 // Lower a ForExpr construct
@@ -555,71 +567,67 @@ static struct HirPat *new_some_pat(struct LowerAst *L, String *var, int line)
 //     {
 //         let _iterator = iterable.iterator();
 //         loop {
-//             let _i = match _iterator.next() {
-//                 Option::Some(x) => x,
+//             match _iterator.next() {
+//                 Option::Some(i) => {
+//                     ...
+//                 },
 //                 Option::None => break,
-//             };
-//             let i = _i;
-//             ...
+//             }
 //         }
 //     }
 //
 static struct HirExpr *LowerForExpr(struct LowerAst *L, struct AstForExpr *e)
 {
-    struct HirStmtList *outer_stmts = HirStmtList_new(L->hir);
+    struct Hir *hir = L->hir;
+    struct HirStmtList *outer_stmts = HirStmtList_new(hir);
     String *iter_name = SCAN_STRING(L->C, PRIVATE("iterator"));
     {
         // evaluate "iterable.iterator()" and store the result in a local variable
         struct HirExpr *iterable = lower_expr(L, e->target);
-        struct HirExpr *target = pawHir_new_name_selector(L->hir, e->line, iterable, SCAN_STRING(L->C, "iterator"));
-        struct HirExpr *iterator = pawHir_new_call_expr(L->hir, e->line, target, HirExprList_new(L->hir));
-        struct HirDecl *decl = pawHir_new_var_decl(L->hir, e->line, iter_name, NULL, NULL, iterator, PAW_FALSE);
-        struct HirStmt *stmt = pawHir_new_decl_stmt(L->hir, e->line, decl);
-        HirStmtList_push(L->hir, outer_stmts, stmt);
+        struct HirExpr *target = pawHir_new_name_selector(hir, e->line, iterable, SCAN_STRING(L->C, "iterator"));
+        struct HirExpr *iterator = pawHir_new_call_expr(hir, e->line, target, HirExprList_new(hir));
+        struct HirDecl *decl = pawHir_new_var_decl(hir, e->line, iter_name,
+                binding_pat(L, e->line, iter_name), NULL, iterator);
+        struct HirStmt *stmt = pawHir_new_decl_stmt(hir, e->line, decl);
+        HirStmtList_push(hir, outer_stmts, stmt);
     }
 
-    struct HirExprList *arms = HirExprList_new(L->hir);
+    struct HirExprList *arms = HirExprList_new(hir);
     {
-        // create the "Some(x) => x" arm
-        String *field_name = SCAN_STRING(L->C, PRIVATE("x"));
-        struct HirPat *pat = new_some_pat(L, field_name, e->line);
-        struct HirExpr *rhs = new_unary_path_expr(L, e->line, field_name);
-        struct HirExpr *arm = pawHir_new_match_arm(L->hir, e->line, pat, NULL, rhs, PAW_FALSE);
-        HirExprList_push(L->hir, arms, arm);
+        // create the "Some(i) => {...}" arm
+        struct HirPat *pat = new_some_pat(L, lower_pat(L, e->pat), e->line);
+        struct HirExpr *arm = pawHir_new_match_arm(hir, e->line, pat,
+                NULL, LOWER_BLOCK(L, e->block), PAW_FALSE);
+        HirExprList_push(hir, arms, arm);
     }
 
     {
         // create the "None => break" arm
         struct HirPat *pat = new_none_pat(L, e->line);
-        struct HirExpr *rhs = pawHir_new_jump_expr(L->hir, e->line, JUMP_BREAK);
-        struct HirExpr *arm = pawHir_new_match_arm(L->hir, e->line, pat, NULL, rhs, PAW_TRUE);
-        HirExprList_push(L->hir, arms, arm);
+        struct HirExpr *rhs = pawHir_new_jump_expr(hir, e->line, JUMP_BREAK);
+        struct HirExpr *arm = pawHir_new_match_arm(hir, e->line, pat, NULL, rhs, PAW_TRUE);
+        HirExprList_push(hir, arms, arm);
     }
 
-    struct HirExpr *result = lower_expr(L, e->block);
-    struct HirStmtList *inner_stmts = HirStmtList_new(L->hir);
-    struct HirExpr *body = pawHir_new_block(L->hir, e->line, inner_stmts, result, PAW_FALSE);
-    struct HirExpr *loop = pawHir_new_loop_expr(L->hir, e->line, body);
-    struct HirExpr *outer = pawHir_new_block(L->hir, e->line, outer_stmts, loop, PAW_FALSE);
+    struct HirStmtList *inner_stmts = HirStmtList_new(hir);
+    struct HirExpr *unit = pawHir_new_basic_lit(hir, e->line, I2V(0), BUILTIN_UNIT);
+    struct HirExpr *body = pawHir_new_block(hir, e->line, inner_stmts, unit, PAW_FALSE);
+    struct HirExpr *loop = pawHir_new_loop_expr(hir, e->line, body);
+    struct HirExpr *outer = pawHir_new_block(hir, e->line, outer_stmts, loop, PAW_FALSE);
 
     struct HirExpr *next;
     {
         // call "next" on the iterator created earlier (result of evaluating "e->target")
         struct HirExpr *iterator = new_unary_path_expr(L, e->line, iter_name);
-        struct HirExpr *target = pawHir_new_name_selector(L->hir, e->line, iterator, SCAN_STRING(L->C, "next"));
-        next = pawHir_new_call_expr(L->hir, e->line, target, HirExprList_new(L->hir));
+        struct HirExpr *target = pawHir_new_name_selector(hir, e->line, iterator, SCAN_STRING(L->C, "next"));
+        next = pawHir_new_call_expr(hir, e->line, target, HirExprList_new(hir));
     }
 
     {
         // match on the "Option<T>" returned by "_iterator.next()"
-        struct HirExpr *match = pawHir_new_match_expr(L->hir, e->line, next, arms, //
+        struct HirExpr *match = pawHir_new_match_expr(hir, e->line, next, arms, //
                 PAW_FALSE /* "None" arm jumps but "Some" arm does not */);
-        String *temp_name = SCAN_STRING(L->C, PRIVATE("temp"));
-        struct HirDecl *temp = pawHir_new_var_decl(L->hir, e->line, temp_name, NULL, NULL, match, PAW_FALSE);
-        struct HirExpr *move = new_unary_path_expr(L, e->line, temp_name);
-        struct HirDecl *var = pawHir_new_var_decl(L->hir, e->line, e->name, NULL, NULL, move, PAW_FALSE);
-        HirStmtList_push(L->hir, inner_stmts, pawHir_new_decl_stmt(L->hir, e->line, temp));
-        HirStmtList_push(L->hir, inner_stmts, pawHir_new_decl_stmt(L->hir, e->line, var));
+        HirStmtList_push(hir, inner_stmts, pawHir_new_expr_stmt(hir, e->line, match));
     }
 
     return outer;

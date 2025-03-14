@@ -577,14 +577,16 @@ struct RawCaseList *cases_for_struct(struct Usefulness *U, struct MatchVar var)
 
 struct RawCaseList *cases_for_tuple(struct Usefulness *U, struct MatchVar var)
 {
-    struct IrTypeList *elems = IrGetTuple(var.type)->elems;
+    struct RawCaseList *result = RawCaseList_new(U);
+    struct IrTypeList *elems = IrIsTuple(var.type)
+        ? IrGetTuple(var.type)->elems // tuple
+        : IrTypeList_new(U->C); // unit
     struct VariableList *subvars = variables_for_types(U, elems);
     struct Constructor cons = {
         .kind = CONS_TUPLE,
         .tuple.elems = elems,
     };
 
-    struct RawCaseList *result = RawCaseList_new(U);
     RawCaseList_push(U, result, (struct RawCase){
                                     .rows = RowList_new(U),
                                     .vars = subvars,
@@ -631,11 +633,9 @@ enum BranchMode {
 
 static enum BranchMode branch_mode(struct Usefulness *U, struct MatchVar var)
 {
-    if (!IrIsAdt(var.type)) {
-        paw_assert(IrIsTuple(var.type));
-        return BRANCH_TUPLE;
-    }
     enum BuiltinKind code = pawP_type2code(U->C, var.type);
+    if (!IrIsAdt(var.type) || code == BUILTIN_UNIT)
+        return BRANCH_TUPLE;
     if (IS_BASIC_TYPE(code))
         return BRANCH_LITERAL;
     struct HirDecl *decl = pawHir_get_decl(U->C, IR_TYPE_DID(var.type));

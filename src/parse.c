@@ -726,11 +726,12 @@ static struct AstDecl *closure_param_decl(struct Lex *lex)
 static struct AstDecl *let_decl(struct Lex *lex, int line)
 {
     skip(lex); // 'let' token
-    String *name = parse_name(lex);
+    String *name = SCAN_STRING(lex->C, "(variable)");
+    struct AstPat *pat = pattern(lex);
     struct AstType *tag = type_annotation(lex, PAW_FALSE);
     struct AstExpr *init = test_next(lex, '=') ? expr0(lex) : NULL;
     semicolon(lex);
-    return pawAst_new_var_decl(lex->ast, line, name, NULL, tag, init, PAW_FALSE);
+    return pawAst_new_var_decl(lex->ast, line, name, pat, tag, init);
 }
 
 static struct AstBoundList *parse_generic_bounds(struct Lex *lex)
@@ -1059,11 +1060,11 @@ static struct AstExpr *for_expr(struct Lex *lex)
 {
     int const line = lex->line;
     skip(lex); // 'for' token
-    String *name = parse_name(lex);
+    struct AstPat *pat = pattern(lex);
     check_next(lex, TK_IN);
     struct AstExpr *target = basic_expr(lex);
     struct AstExpr *block = loop_block(lex);
-    return pawAst_new_for_expr(lex->ast, line, name, target, block);
+    return pawAst_new_for_expr(lex->ast, line, pat, target, block);
 }
 
 static struct AstExpr *while_expr(struct Lex *lex)
@@ -1681,7 +1682,7 @@ static struct AstDecl *const_decl(struct Lex *lex, struct Annotations *annos, pa
     struct AstType *tag = expect_type_annotation(lex, "constant", name, PAW_TRUE);
     struct AstExpr *init = test_next(lex, '=') ? expr0(lex) : NULL;
     semicolon(lex);
-    return pawAst_new_var_decl(lex->ast, line, name, annos, tag, init, is_pub);
+    return pawAst_new_const_decl(lex->ast, line, name, annos, tag, init, is_pub);
 }
 
 static void ensure_not_pub(struct Lex *lex, paw_Bool has_qualifier)

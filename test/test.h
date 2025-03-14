@@ -39,6 +39,7 @@
     X(trait)             \
     X(alias)             \
     X(constants)         \
+    X(destructure)       \
     X(nan_infinity)      \
     X(global_const)      \
     X(poly_function)     \

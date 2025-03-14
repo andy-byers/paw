@@ -87,16 +87,10 @@ struct HirSymbol *pawHir_new_symbol(struct Compiler *C)
 int pawHir_declare_symbol(struct Hir *hir, struct HirScope *scope, String *name, struct HirResult res)
 {
     HirScope_push(hir, scope, ((struct HirSymbol){
-                                .is_init = PAW_FALSE,
                                 .name = name,
                                 .res = res,
                             }));
     return scope->count - 1;
-}
-
-void pawHir_define_symbol(struct HirScope *scope, int index)
-{
-    K_LIST_AT(scope, index).is_init = PAW_TRUE;
 }
 
 struct IrType *pawHir_result_type(struct Compiler *C, struct HirResult res)
@@ -108,10 +102,8 @@ int pawHir_find_symbol(struct HirScope *scope, String const *name)
 {
     for (int i = scope->count - 1; i >= 0; --i) {
         struct HirSymbol const symbol = HirScope_get(scope, i);
-        if (pawS_eq(name, symbol.name)) {
-            if (symbol.is_init)
-                return i;
-        }
+        if (pawS_eq(name, symbol.name))
+            return i;
     }
     return -1;
 }
@@ -287,10 +279,18 @@ static void AcceptTraitDecl(struct HirVisitor *V, struct HirTraitDecl *d)
 
 static void AcceptVarDecl(struct HirVisitor *V, struct HirVarDecl *d)
 {
+    if (d->pat != NULL)
+        AcceptPat(V, d->pat);
     if (d->tag != NULL)
         AcceptType(V, d->tag);
     if (d->init != NULL)
         AcceptExpr(V, d->init);
+}
+
+static void AcceptConstDecl(struct HirVisitor *V, struct HirConstDecl *d)
+{
+    AcceptType(V, d->tag);
+    AcceptExpr(V, d->init);
 }
 
 static void AcceptReturnExpr(struct HirVisitor *V, struct HirReturnExpr *s)
@@ -609,8 +609,9 @@ paw_Bool pawHir_is_pub_decl(struct HirDecl *decl)
             break;
         case kHirTypeDecl:
             return HirGetTypeDecl(decl)->is_pub;
+        case kHirConstDecl:
+            return HirGetConstDecl(decl)->is_pub;
         case kHirVarDecl:
-            return HirGetVarDecl(decl)->is_pub;
         case kHirFieldDecl:
         case kHirGenericDecl:
         case kHirVariantDecl:
@@ -971,7 +972,11 @@ static void dump_pat(struct Printer *P, struct HirPat *pat)
         case kHirVariantPat: {
             struct HirVariantPat *p = HirGetVariantPat(pat);
             dump_path(P, p->path, PAW_FALSE);
-            dump_pats(P, p->fields);
+            if (p->fields->count > 0) {
+                DUMP_CHAR(P, '(');
+                dump_pats(P, p->fields);
+                DUMP_CHAR(P, ')');
+            }
             break;
         }
         case kHirTuplePat: {
@@ -1000,6 +1005,16 @@ static void dump_pat(struct Printer *P, struct HirPat *pat)
 static void dump_decl(struct Printer *P, struct HirDecl *decl)
 {
     switch (HIR_KINDOF(decl)) {
+        case kHirConstDecl: {
+            struct HirConstDecl *d = HirGetConstDecl(decl);
+            DUMP_CSTR(P, "let ");
+            DUMP_STR(P, d->name);
+            DUMP_CSTR(P, ": ");
+            dump_type(P, d->tag);
+            DUMP_CSTR(P, " = ");
+            dump_expr(P, d->init);
+            break;
+        }
         case kHirTraitDecl: {
             struct HirTraitDecl *d = HirGetTraitDecl(decl);
             DUMP_CSTR(P, "trait ");
@@ -1050,7 +1065,7 @@ static void dump_decl(struct Printer *P, struct HirDecl *decl)
         case kHirVarDecl: {
             struct HirVarDecl *d = HirGetVarDecl(decl);
             DUMP_CSTR(P, "let ");
-            DUMP_STR(P, d->name);
+            dump_pat(P, d->pat);
             if (d->tag != NULL) {
                 DUMP_CSTR(P, ": ");
                 dump_type(P, d->tag);

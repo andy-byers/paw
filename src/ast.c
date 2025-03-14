@@ -164,6 +164,16 @@ static void dump_decl(Printer *P, struct AstDecl *decl)
         }
         case kAstVarDecl: {
             struct AstVarDecl *d = AstGetVarDecl(decl);
+            DUMP_MSG(P, "pat: ");
+//            dump_pat(P, d->pat);
+            DUMP_MSG(P, "tag: ");
+            dump_type(P, d->tag);
+            DUMP_MSG(P, "init: ");
+            dump_expr(P, d->init);
+            break;
+        }
+        case kAstConstDecl: {
+            struct AstConstDecl *d = AstGetConstDecl(decl);
             DUMP_NAME(P, d->name);
             DUMP_MSG(P, "tag: ");
             dump_type(P, d->tag);
@@ -438,7 +448,8 @@ static void dump_expr(Printer *P, struct AstExpr *expr)
         }
         case kAstForExpr: {
             struct AstForExpr *e = AstGetForExpr(expr);
-            DUMP_NAME(P, e->name);
+            DUMP_MSG(P, "pat: ");
+//            dump_pat(P, e->pat);
             DUMP_MSG(P, "target: ");
             dump_expr(P, e->target);
             DUMP_MSG(P, "block: ");

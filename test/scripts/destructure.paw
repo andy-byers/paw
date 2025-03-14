@@ -1,0 +1,73 @@
+// destructure.paw
+
+pub fn test_tuple() {
+    let () = ();
+    let (a,) = (1,);
+    let (b, c) = (2, 3);
+
+    assert(a == 1);
+    assert(b == 2);
+    assert(c == 3);
+
+    let (a, (b, (c,))) = ((1, 2, 3), ((4, 5), ((6,),)));
+
+    assert(a.0 == 1);
+    assert(a.1 == 2);
+    assert(a.2 == 3);
+    assert(b.0 == 4);
+    assert(b.1 == 5);
+    assert(c.0 == 6);
+}
+
+struct Unit;
+struct Fields {
+    pub first: int,
+    pub second: str,
+    pub third: (int, Unit),
+}
+
+pub fn test_struct() {
+    let Unit = Unit; // no binding created
+    let Fields{first, second: sec, third: (x, y)} = Fields{
+        first: 123, 
+        second: "abc", 
+        third: (42, Unit),
+    };
+    assert(first == 123);
+    assert(sec == "abc");
+    assert(x == 42);
+}
+
+pub fn test_for_loop_tuple() {
+    let data = [(123, 456)];
+
+    for (x, y) in data {
+        assert(x == 123);
+        assert(y == 456);
+    } 
+}
+
+pub fn test_for_loop_struct() {
+    let data = [Fields{first: 123, second: "abc", third: (456, Unit)}];
+
+    for Fields{first, second, third} in data {
+        assert(first == 123);
+        assert(second == "abc");
+        assert(third.0 == 456);
+    }
+}
+
+// only the first arm of the OR pattern is reachable
+pub fn test_or() {
+    let a | a = 1;
+    assert(a == 1);
+
+    let (a, b | b) = (2, 3);
+    assert(a == 2);
+    assert(b == 3);
+
+    let (a, b) | (b, a) = (4, 5);
+    assert(a == 4);
+    assert(b == 5);
+}
+

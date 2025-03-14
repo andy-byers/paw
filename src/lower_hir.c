@@ -642,6 +642,142 @@ static paw_Bool visit_field_decl(struct HirVisitor *V, struct HirFieldDecl *d)
     return PAW_FALSE;
 }
 
+struct Unpacking {
+    struct UnpackingList *info;
+    struct LowerHir *L;
+    int line;
+};
+
+struct UnpackingInfo {
+    struct HirBindingPat *p;
+    String *name, *temp;
+};
+
+DEFINE_LIST(struct LowerHir, UnpackingList, struct UnpackingInfo)
+
+static MirRegister lower_match_expr(struct HirVisitor *V, struct HirMatchExpr *e);
+
+static String *unpack_temp_name(struct LowerHir *L, HirId hid)
+{
+    struct Buffer b;
+    paw_Env *P = ENV(L);
+    pawL_init_buffer(P, &b);
+
+    pawL_add_char(P, &b, '(');
+    pawL_add_fstring(P, &b, "%d", hid.value);
+    pawL_add_char(P, &b, ')');
+
+    String *name = SCAN_STRING(L->C, b.data);
+    pawL_discard_result(P, &b);
+    return name;
+}
+
+static void collect_binding(struct HirVisitor *V, struct HirBindingPat *p)
+{
+    struct Unpacking *ctx = V->ud;
+    struct LowerHir *L = ctx->L;
+
+    MirRegister const r = register_for_node(L, p->hid);
+    String *temp = unpack_temp_name(L, p->hid);
+    add_local(L, temp, r, p->hid);
+
+    UnpackingList_push(L, ctx->info, (struct UnpackingInfo){
+                .name = p->name,
+                .temp = temp,
+                .p = p,
+            });
+}
+
+static struct HirExpr *new_local_path(struct LowerHir *L, int line, String *name)
+{
+    struct HirPath *path = HirPath_new(L->hir);
+    HirPath_add(L->hir, path, name, NULL);
+    return pawHir_new_path_expr(L->hir, line, path);
+}
+
+static struct HirStmtList *create_unpackers(struct Unpacking *ctx, paw_Bool set_temporaries)
+{
+    struct LowerHir *L = ctx->L;
+    struct Hir *hir = L->hir;
+
+    struct UnpackingInfo *pinfo;
+    struct HirStmtList *setters = HirStmtList_new(hir);
+    K_LIST_FOREACH(ctx->info, pinfo) {
+        String *src = set_temporaries ? pinfo->temp : pinfo->name;
+        String *dst = set_temporaries ? pinfo->name : pinfo->temp;
+        struct HirExpr *lhs = new_local_path(L, ctx->line, src);
+        struct HirExpr *rhs = new_local_path(L, ctx->line, dst);
+        struct HirExpr *setter = pawHir_new_assign_expr(hir, ctx->line, lhs, rhs);
+        HirStmtList_push(hir, setters, pawHir_new_expr_stmt(hir, ctx->line, setter));
+    }
+    return setters;
+}
+
+// Performs the following transformation, the result of which is passed to the pattern
+// matching compiler. As usual, the resulting match expression must be exhaustive. The
+// extra temporary variables ("_a" and "_b") are required due to the fact that variable
+// names are used to find registers containing locals. If "a" and "b" were assigned
+// directly, then shadowing/rebinding variables would not work properly (if "rhs"
+// mentioned "a" or "b", it would find uninitialized variables, rather than versions of
+// "a" or "b" defined in earlier code, not to mention the fact that the bindings inside
+// the match arm would need to be renamed. The code that searches for locals should use
+// HirIds instead of names, however, the code that expands OR patterns would need to
+// be changed to account for the fact that bindings with the same name in different
+// OR clauses refer to the same variable.
+//
+// let (a, Adt{b}) = rhs;
+// ...
+//
+// let _a;
+// let _b;
+// match rhs {
+//     (a, Adt{b}) => {
+//         _a = a;
+//         _b = b;
+//     }
+// }
+// let a = _a;
+// let b = _b;
+//
+static void unpack_bindings(struct HirVisitor *V, struct HirPat *lhs, struct HirExpr *rhs)
+{
+    struct LowerHir *L = V->ud;
+    struct Unpacking ctx = {
+        .info = UnpackingList_new(L),
+        .line = lhs->hdr.line,
+        .L = L,
+    };
+
+    // declare temporaries for each binding that appear in the pattern
+    struct HirVisitor collector;
+    pawHir_visitor_init(&collector, L->C, &ctx);
+    collector.PostVisitBindingPat = collect_binding;
+    pawHir_visit_pat(&collector, lhs);
+
+    // create the match expression containing an assignment to each binding
+    struct Hir *hir = L->hir;
+    paw_Bool const IGNORE = PAW_FALSE;
+    struct HirStmtList *setters = create_unpackers(&ctx, PAW_TRUE);
+    struct HirExpr *unit = pawHir_new_basic_lit(hir, ctx.line, I2V(0), BUILTIN_UNIT);
+    struct HirExpr *block = pawHir_new_block(hir, ctx.line, setters, unit, IGNORE);
+    struct HirExprList *arms = HirExprList_new(hir);
+    struct HirExpr *arm = pawHir_new_match_arm(hir, ctx.line, lhs, NULL, block, IGNORE);
+    HirExprList_push(hir, arms, arm);
+    struct HirExpr *match = pawHir_new_match_expr(hir, ctx.line, rhs, arms, IGNORE);
+
+    lower_match_expr(V, HirGetMatchExpr(match));
+
+    struct UnpackingInfo *pinfo;
+    K_LIST_FOREACH(ctx.info, pinfo) {
+        struct HirBindingPat *p = pinfo->p;
+        MirRegister const r = register_for_node(L, p->hid);
+        add_local(L, p->name, r, p->hid);
+    }
+
+    struct HirStmtList *finalizers = create_unpackers(&ctx, PAW_FALSE);
+    pawHir_visit_stmt_list(V, finalizers);
+}
+
 static paw_Bool visit_var_decl(struct HirVisitor *V, struct HirVarDecl *d)
 {
     struct LowerHir *L = V->ud;
@@ -649,15 +785,15 @@ static paw_Bool visit_var_decl(struct HirVisitor *V, struct HirVarDecl *d)
 
     MirRegister r;
     if (d->init != NULL) {
-        MirRegister const r = register_for_node(V->ud, d->init->hdr.hid);
-        MirRegister const init = lower_operand(V, d->init);
-        add_local(L, d->name, r, d->hid);
-        move_to(L, init, r);
-    } else {
-        struct LocalVar *var = alloc_local(L, d->name, type, d->hid);
+        unpack_bindings(V, d->pat, d->init);
+    } else if (HirIsBindingPat(d->pat)) {
+        String *const name = HirGetBindingPat(d->pat)->name;
+        struct LocalVar *var = alloc_local(L, name, type, d->hid);
         struct MirRegisterData *data = mir_reg_data(L->fs->mir, var->reg);
         data->is_uninit = PAW_TRUE;
         r = var->reg;
+    } else {
+        VALUE_ERROR(L, d->line, "variables using deferred initialization cannot use destructuring");
     }
     return PAW_FALSE;
 }
@@ -795,9 +931,9 @@ static MirRegister lower_unit_variant(struct HirVisitor *V, struct HirPathExpr *
 }
 
 // Routine for lowering a global constant
-static void lower_global_constant(struct LowerHir *L, struct HirVarDecl *d);
+static void lower_global_constant(struct LowerHir *L, struct HirConstDecl *d);
 
-static MirRegister lookup_global_constant(struct LowerHir *L, struct HirVarDecl *d)
+static MirRegister lookup_global_constant(struct LowerHir *L, struct HirConstDecl *d)
 {
     int const *pid = GlobalMap_get(L, L->globals, d->did);
     if (pid != NULL) {
@@ -831,8 +967,8 @@ static MirRegister lower_path_expr(struct HirVisitor *V, struct HirPathExpr *e)
         return lower_unit_variant(V, e, HirGetVariantDecl(decl));
     } else if (HirIsAdtDecl(decl)) {
         return lower_unit_struct(V, e, HirGetAdtDecl(decl));
-    } else if (HirIsVarDecl(decl)) {
-        return lookup_global_constant(L, HirGetVarDecl(decl));
+    } else if (HirIsConstDecl(decl)) {
+        return lookup_global_constant(L, HirGetConstDecl(decl));
     }
     int const *pid = GlobalMap_get(L, L->globals, res.did);
     NEW_INSTR(fs, global, e->line, output, pid != NULL ? *pid : -1);
@@ -1100,7 +1236,7 @@ static MirRegister lower_assign_expr(struct HirVisitor *V, struct HirAssignExpr 
             NEW_INSTR(fs, set_upvalue, e->line, ng.index, rhs);
         } else {
             MirRegister const value = lower_operand(V, e->rhs);
-            NEW_INSTR(fs, set_local, e->line, ng.r, value);
+            NEW_INSTR(fs, move, e->line, ng.r, value);
         }
     } else if (HirIsSelector(e->lhs)) {
         struct HirSelector *x = HirGetSelector(e->lhs);
@@ -1264,8 +1400,6 @@ static MirRegister lower_return_expr(struct HirVisitor *V, struct HirReturnExpr 
     set_current_bb(L, next_bb);
     return unit_literal(L);
 }
-
-static MirRegister lower_match_expr(struct HirVisitor *V, struct HirMatchExpr *e);
 
 static MirRegister lower_operand(struct HirVisitor *V, struct HirExpr *expr)
 {
@@ -1678,7 +1812,7 @@ static struct Mir *lower_hir_body(struct LowerHir *L, struct Hir *hir, struct Hi
     return result;
 }
 
-static void register_global_constant(struct LowerHir *L, struct HirVarDecl *d, Value value, enum BuiltinKind b_kind)
+static void register_global_constant(struct LowerHir *L, struct HirConstDecl *d, Value value, enum BuiltinKind b_kind)
 {
     const int global_id = L->globals->count;
     GlobalMap_insert(L, L->globals, d->did, global_id);
@@ -1692,7 +1826,7 @@ static void register_global_constant(struct LowerHir *L, struct HirVarDecl *d, V
 }
 
 // TODO: move AllocLocal for parameters and return slot to entry basic block, then constant result will be at index 0 in basic block 1.
-static void lower_global_constant(struct LowerHir *L, struct HirVarDecl *d)
+static void lower_global_constant(struct LowerHir *L, struct HirConstDecl *d)
 {
     // Make sure this constant hasn't already been lowered. Note that this is okay to do before
     // the cycle detection logic. If a constant has been fully evaluated already, then it must
@@ -1771,11 +1905,8 @@ static void lower_global_constants(struct LowerHir *L)
     // resolve constants, making sure there are no cyclic dependencies
     struct HirDecl *const *pdecl;
     K_LIST_FOREACH (L->C->decls, pdecl) {
-        if (HirIsVarDecl(*pdecl)) {
-            struct HirVarDecl *d = HirGetVarDecl(*pdecl);
-            if (d->is_global)
-                lower_global_constant(L, d);
-        }
+        if (HirIsConstDecl(*pdecl))
+            lower_global_constant(L, HirGetConstDecl(*pdecl));
     }
 }
 
@@ -1785,6 +1916,7 @@ BodyMap *pawP_lower_hir(struct Compiler *C)
 
     struct LowerHir L = {
         .pool = pawP_pool_new(C, C->aux_stats),
+        .hir = C->hir_prelude,
         .P = ENV(C),
         .C = C,
     };
