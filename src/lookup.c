@@ -310,12 +310,12 @@ static IrType *result_type(struct QueryState *Q, struct HirSegment *seg, IrTypeL
         case kHirTypeDecl:
             inst = resolve_alias(Q, seg, decl, types);
             break;
-        case kHirVarDecl:
         case kHirConstDecl:
         case kHirGenericDecl:
             inst = GET_NODE_TYPE(Q->C, decl);
             pawIr_set_type(Q->C, seg->hid, inst);
             break;
+        case kHirVarDecl:
         case kHirFieldDecl:
         case kHirVariantDecl:
             PAW_UNREACHABLE();
