@@ -1230,7 +1230,8 @@ static MirRegister lower_assign_expr(struct HirVisitor *V, struct HirAssignExpr 
         struct NonGlobal ng;
         struct HirPathExpr *x = HirGetPathExpr(e->lhs);
         paw_Bool const found = resolve_nonglobal(L, K_LIST_LAST(x->path).name, &ng);
-        paw_assert(((void)found, found)); // only locals can be assigned
+        if (!found) // must be a global constant
+            VALUE_ERROR(L, e->line, "assignment to 'const' item");
         if (ng.is_upvalue) {
             MirRegister const rhs = lower_operand(V, e->rhs);
             NEW_INSTR(fs, set_upvalue, e->line, ng.index, rhs);

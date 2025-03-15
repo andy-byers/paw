@@ -679,6 +679,8 @@ static void test_global_const(void)
             "const C1: int = C2 + 1;"
             "const C2: int = 1 + C3;"
             "const C3: int = C1 + 1;", "");
+
+    test_compiler_status(PAW_EVALUE, "const_assignment", "const C: int = 1;", "C = 2;");
 }
 
 static void test_annotations(void)
