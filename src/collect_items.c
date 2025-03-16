@@ -368,12 +368,10 @@ static void finish_module(struct ItemCollector *X)
     X->m = NULL;
 }
 
-static struct HirDecl *find_item_in(struct ItemCollector *X, int modno, String *name)
+static struct HirDecl *find_item_in(struct ItemCollector *X, struct ModuleInfo *m, String *name)
 {
-    struct ModuleInfo *m = ModuleList_get(X->C->modules, modno);
-    struct HirDeclList *items = m->hir->items;
-
     struct HirDecl **pitem;
+    struct HirDeclList *items = m->hir->items;
     K_LIST_FOREACH (items, pitem) {
         String const *item_name = (*pitem)->hdr.name;
         if (pawS_eq(item_name, name))
@@ -421,7 +419,6 @@ static DeclId collect_trait_type(struct ItemCollector *X, struct HirTraitDecl *d
     enter_block(X, scope);
 
     DeclId const did = d->did;
-//    DeclId const did = pawIr_next_did(X->C, MOD(X));
     IrTypeList *generics = collect_generic_types(X, d->generics);
     struct IrType *type = pawIr_new_trait_obj(X->C, did, generics);
     SET_TYPE(X, d->hid, type);
@@ -434,10 +431,14 @@ static void collect_import(struct ItemCollector *X, struct HirImport im)
 {
     // handle "use mod::item;": find the item declaration in the other
     // module and add it to this module's global symbol table
-    struct HirDecl *item = find_item_in(X, im.modno, im.item);
+    struct ModuleInfo *m = ModuleList_get(X->C->modules, im.modno);
+    struct HirDecl *item = find_item_in(X, m, im.item);
+    if (item == NULL)
+        NAME_ERROR(X, "unrecognized item '%s::%s'", m->name->text, im.item->text);
+
     if (!pawHir_is_pub_decl(item))
-        pawE_error(ENV(X), PAW_EVALUE, -1, "item '%s' cannot be accessed from the current module",
-                   item->hdr.name->text);
+        VALUE_ERROR(X, -1, "item '%s::%s' cannot be accessed from the current module",
+                m->name->text, im.item->text);
 
     String *name = im.as != NULL ? im.as : im.item;
     new_global(X, name, item);

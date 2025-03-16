@@ -1254,18 +1254,14 @@ static struct AstExpr *simple_expr(struct Lex *lex)
 static struct AstExpr *conversion_expr(struct Lex *lex, struct AstExpr *lhs)
 {
     int const line = lex->line;
-    struct AstExpr *rhs = expression(lex, right_prec(INFIX_AS));
-    struct AstPath *path = AstGetPathExpr(rhs)->path;
-    if (!AstIsPathExpr(rhs) || path->count != 1) {
-        pawX_error(lex, "expected basic type name");
-    }
+    String *const name = parse_name(lex);
+
     enum BuiltinKind to;
-    struct AstSegment seg = K_LIST_FIRST(path);
-    if (equals_cstr(lex, seg.name, CSTR_BOOL)) {
+    if (equals_cstr(lex, name, CSTR_BOOL)) {
         to = BUILTIN_BOOL;
-    } else if (equals_cstr(lex, seg.name, CSTR_INT)) {
+    } else if (equals_cstr(lex, name, CSTR_INT)) {
         to = BUILTIN_INT;
-    } else if (equals_cstr(lex, seg.name, CSTR_FLOAT)) {
+    } else if (equals_cstr(lex, name, CSTR_FLOAT)) {
         to = BUILTIN_FLOAT;
     } else {
         pawX_error(lex, "expected basic type");

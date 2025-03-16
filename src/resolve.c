@@ -759,7 +759,7 @@ static struct IrType *resolve_unop_expr(struct Resolver *R, struct HirUnOpExpr *
         //     type = {0, b, i, f, s, l, m}
         [UNARY_LEN] = {0, 0, 0, 0, 1, 1, 1},
         [UNARY_NEG] = {0, 0, 1, 1, 0, 0, 0},
-        [UNARY_NOT] = {0, 1, 1, 1, 0, 0, 0},
+        [UNARY_NOT] = {0, 1, 0, 0, 0, 0, 0},
         [UNARY_BNOT] = {0, 0, 1, 0, 0, 0, 0},
     };
 

@@ -713,6 +713,8 @@ DEFINE_LIST(struct Mir, MirBlockDataList, struct MirBlockData *)
 DEFINE_LIST(struct Mir, MirBodyList, struct Mir *)
 
 struct Mir *pawMir_new(struct Compiler *C, String *name, struct IrType *type, struct IrType *self, enum FuncKind fn_kind, paw_Bool is_pub, paw_Bool is_poly);
+void pawMir_free(struct Mir *mir);
+
 struct MirLiveInterval *pawMir_new_interval(struct Compiler *C, MirRegister r, int npositions);
 struct MirRegisterData *pawMir_new_register(struct Compiler *C, int value, struct IrType *type);
 struct MirBlockData *pawMir_new_block(struct Mir *mir);

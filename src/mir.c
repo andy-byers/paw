@@ -29,6 +29,18 @@ struct Mir *pawMir_new(struct Compiler *C, String *name, struct IrType *type, st
     return mir;
 }
 
+void pawMir_free(struct Mir *mir)
+{
+    // reclaim some of the memory used by the MIR
+    MirCaptureList_delete(mir, mir->captured);
+    MirRegisterDataList_delete(mir, mir->registers);
+    MirRegisterList_delete(mir, mir->locals);
+    MirBlockDataList_delete(mir, mir->blocks);
+    MirUpvalueList_delete(mir, mir->upvalues);
+    MirBodyList_delete(mir, mir->children);
+    P_ALLOC(mir->C, mir, sizeof(*mir), 0);
+}
+
 struct MirLiveInterval *pawMir_new_interval(struct Compiler *C, MirRegister r, int npositions)
 {
     struct MirLiveInterval *it = P_ALLOC(C, NULL, 0, sizeof(struct MirLiveInterval));
