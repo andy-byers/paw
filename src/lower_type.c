@@ -30,15 +30,17 @@ static struct IrType *lower_tuple_type(struct LowerType *L, struct HirTupleType 
 
 static struct IrType *lower_path_type(struct LowerType *L, struct HirPathType *t)
 {
-    struct IrType *result = pawP_lookup(L->C, L->m, L->symtab, t->path, LOOKUP_TYPE, PAW_TRUE);
+    struct IrType *result = pawP_lookup(L->C, L->m, L->symtab, &t->path, LOOKUP_TYPE, PAW_TRUE);
     if (result == NULL)
-        NAME_ERROR(L->C, "invalid path '%s'", pawHir_print_path(L->C, t->path));
+        NAME_ERROR_(L->C, L->m->name, t->span.start, "invalid path '%s'",
+                pawHir_print_path(L->C, &t->path));
     return result;
 }
 
 static struct IrType *lower_infer_type(struct LowerType *L, struct HirInferType *t)
 {
-    return pawU_new_unknown(L->C->U, t->line, NULL);
+#warning "pawU_new_unknown requires span arg"
+    return pawU_new_unknown(L->C->U, t->span.start.line, NULL);
 }
 
 static struct IrType *lower_type(struct LowerType *L, struct HirType *type)

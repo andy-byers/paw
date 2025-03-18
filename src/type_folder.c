@@ -126,26 +126,25 @@ struct IrTypeList *pawIr_fold_type_list(struct IrTypeFolder *F, struct IrTypeLis
     return list != NULL ? F->FoldTypeList(F, list) : NULL;
 }
 
-void pawHir_type_folder_init(struct HirTypeFolder *F, struct Compiler *C, void *ud)
+void pawHir_type_folder_init(struct HirTypeFolder *F, struct Hir *hir, void *ud)
 {
     *F = (struct HirTypeFolder){
+        .hir = hir,
         .ud = ud,
-        .C = C,
     };
 
-    pawHir_visitor_init(&F->V, C, F);
+    pawHir_visitor_init(&F->V, hir, F);
     F->V.PostVisitExpr = FoldExpr;
     F->V.PostVisitDecl = FoldDecl;
     F->V.PostVisitPat = FoldPat;
 
-    pawIr_type_folder_init(&F->F, C, F);
+    pawIr_type_folder_init(&F->F, hir->C, F);
 }
 
 #define DEFINE_FOLDERS(name, T)                                                         \
     void pawHir_fold_##name##_type(struct HirTypeFolder *F, struct Hir##T *node)        \
     {                                                                                   \
         paw_assert(node != NULL);                                                       \
-        F->line = node->hdr.line;                                                       \
         pawHir_visit_##name(&F->V, node);                                               \
     }                                                                                   \
     void pawHir_fold_##name##_types(struct HirTypeFolder *F, struct Hir##T##List *list) \

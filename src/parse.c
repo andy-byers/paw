@@ -8,20 +8,45 @@
 #include "env.h"
 #include "map.h"
 
-#define SELF_TYPENAME(lex) SCAN_STRING((lex)->C, "Self")
-#define SELF_VARNAME(lex) CACHED_STRING(ENV(lex), CSTR_SELF)
-
-static String *unpack_name(struct AstExpr *expr)
+static void add_location(paw_Env *P, Buffer *print, String const *s, struct SourceLoc loc)
 {
-    if (!AstIsPathExpr(expr))
-        return NULL;
-    struct AstPath *path = AstGetPathExpr(expr)->path;
-    if (path->count == 1) {
-        struct AstSegment ps = K_LIST_FIRST(path);
-        if (ps.types == NULL)
-            return ps.name;
-    }
-    return NULL;
+    pawL_add_nstring(P, print, s->text, s->length);
+    pawL_add_char(P, print, ':');
+    pawSrc_add_location(P, print, loc);
+    pawL_add_string(P, print, ": ");
+}
+
+_Noreturn void parse_error(struct Lex *x, struct SourceLoc loc, char const *fmt, ...)
+{
+    Buffer print;
+    paw_Env *P = ENV(x);
+    pawL_init_buffer(P, &print);
+    add_location(P, &print, x->modname, loc);
+
+    va_list arg;
+    va_start(arg, fmt);
+    pawL_add_vfstring(P, &print, fmt, arg);
+    va_end(arg);
+
+    pawL_push_result(P, &print);
+    pawC_throw(P, PAW_ESYNTAX);
+}
+
+
+#define SELF_TYPENAME(Lex_) SCAN_STRING((Lex_)->C, "Self")
+#define SELF_VARNAME(Lex_) CACHED_STRING(ENV(Lex_), CSTR_SELF)
+
+#define NEW_NODE_0(Lex_, Kind_, Start_) \
+    pawAst_new_##Kind_((Lex_)->ast, span_from(Lex_, Start_));
+#define NEW_NODE(Lex_, Kind_, Start_, ...) \
+    pawAst_new_##Kind_((Lex_)->ast, span_from(Lex_, Start_), __VA_ARGS__);
+
+static struct SourceSpan span_from(struct Lex *lex, struct SourceLoc start)
+{
+    return (struct SourceSpan){
+        .start = start,
+        .end = lex->loc,
+    };
 }
 
 // recursive non-terminals
@@ -39,12 +64,12 @@ static void expected_symbol(struct Lex *lex, char const *want)
     pawX_error(lex, "expected %s", want);
 }
 
-static void missing_delim(struct Lex *lex, TokenKind want, TokenKind open, int open_line)
+static void missing_delim(struct Lex *lex, TokenKind want, TokenKind open, struct SourceLoc start)
 {
-    pawX_error(lex, "expected '%c' to match '%c' on line %d", want, open, open_line);
+    pawX_error(lex, "expected '%c' to match '%c' at %d:%d", want, open, start.line, start.column);
 }
 
-static void delim_next(struct Lex *lex, TokenKind want, TokenKind open, int open_line)
+static void delim_next(struct Lex *lex, TokenKind want, TokenKind open, struct SourceLoc start)
 {
     TokenKind const have = lex->t.kind;
     if (have != want) {
@@ -53,18 +78,17 @@ static void delim_next(struct Lex *lex, TokenKind want, TokenKind open, int open
             lex->t.kind = '>';
             return;
         }
-        missing_delim(lex, want, open, open_line);
+        missing_delim(lex, want, open, start);
     }
     pawX_next(lex);
 }
 
 static void enter_nested(struct Lex *lex)
 {
-    ++lex->nest_depth;
     int const max_nesting = 1000;
-    if (lex->nest_depth > max_nesting) {
+    if (lex->nest_depth >= max_nesting)
         pawX_error(lex, "exceeded maximum nesting depth");
-    }
+    ++lex->nest_depth;
 }
 
 static void leave_nested(struct Lex *lex)
@@ -250,9 +274,8 @@ static paw_Bool test_next(struct Lex *lex, TokenKind kind)
 
 static void check(struct Lex *lex, TokenKind want)
 {
-    if (!test(lex, want)) {
+    if (!test(lex, want))
         pawX_error(lex, "unexpected symbol");
-    }
 }
 
 static void check_next(struct Lex *lex, TokenKind want)
@@ -261,37 +284,45 @@ static void check_next(struct Lex *lex, TokenKind want)
     skip(lex);
 }
 
-static void semicolon(struct Lex *lex)
+static void semicolon(struct Lex *lex, char const *where)
 {
-    check_next(lex, ';');
+    if (!test_next(lex, ';')) {
+        // error occurs right after the previous token
+        struct SourceLoc const loc = lex->t0.span.end;
+        parse_error(lex, loc, "missing semicolon after %s", where);
+    }
 }
 
-static String *parse_name(struct Lex *lex)
+static struct AstIdent parse_ident(struct Lex *lex)
 {
     check(lex, TK_NAME);
+    struct SourceLoc start = lex->loc;
     String *name = V_STRING(lex->t.value);
     skip(lex);
-    return name;
+
+    return (struct AstIdent){
+        .span = span_from(lex, start),
+        .name = name,
+    };
 }
 
 static void ensure_not_reserved(struct Lex *lex, String const *name)
 {
-    if (is_underscore(lex, name)) {
+    if (is_underscore(lex, name))
         SYNTAX_ERROR(lex->C, "'%s' is a reserved identifier", name->text);
-    }
 }
 
-static String *parse_toplevel_name(struct Lex *lex)
+static struct AstIdent parse_toplevel_ident(struct Lex *lex)
 {
-    String *name = parse_name(lex);
-    ensure_not_reserved(lex, name);
-    return name;
+    struct AstIdent ident = parse_ident(lex);
+    ensure_not_reserved(lex, ident.name);
+    return ident;
 }
 
 static struct AstExpr *new_basic_lit(struct Lex *lex, Value value, paw_Type code)
 {
-    int const line = lex->line;
-    return pawAst_new_basic_lit(lex->ast, line, value, code);
+    struct SourceLoc start = lex->loc;
+    return NEW_NODE(lex, basic_lit, start, value, code);
 }
 
 static struct AstExpr *unit_lit(struct Lex *lex)
@@ -302,7 +333,7 @@ static struct AstExpr *unit_lit(struct Lex *lex)
 static struct AstType *unit_type(struct Lex *lex)
 {
     struct AstTypeList *types = AstTypeList_new(lex->ast);
-    return pawAst_new_tuple_type(lex->ast, lex->line, types);
+    return NEW_NODE(lex, tuple_type, lex->loc, types);
 }
 
 static struct AstExpr *emit_bool(struct Lex *lex, paw_Bool b)
@@ -318,179 +349,200 @@ static struct AstType *parse_relaxed_type(struct Lex *lex);
 
 static struct AstDecl *variant_field_decl(struct Lex *lex)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     struct AstType *tag = parse_type(lex, PAW_TRUE);
-    return pawAst_new_field_decl(lex->ast, line, NULL, tag, PAW_FALSE);
+    return NEW_NODE(lex, field_decl, start, (struct AstIdent){0}, tag, PAW_FALSE);
 }
 
-#define DEFINE_LIST_PARSER(name, a, b, limit, what, func, L)                   \
-    static void parse_##name##_list(struct Lex *lex, struct L *list, int line) \
-    {                                                                          \
-        do {                                                                   \
-            if (test(lex, b))                                                  \
-                break;                                                         \
-            if ((list)->count == (limit)) {                                    \
-                limit_error(lex, what, (limit));                               \
-            }                                                                  \
-            L##_push((lex)->ast, list, (func)(lex));                           \
-        } while (test_next(lex, ','));                                         \
-        delim_next(lex, b, a, line);                                           \
+#define DEFINE_LIST_PARSER(Name_, A_, B_, Limit_, What_, Func_, List_)                            \
+    static void parse_##Name_##_list(struct Lex *lex, struct List_ *list, struct SourceLoc start) \
+    {                                                                                             \
+        do {                                                                                      \
+            if (test(lex, B_))                                                                    \
+                break;                                                                            \
+            if (list->count == (Limit_))                                                          \
+                limit_error(lex, What_, (Limit_));                                                \
+            List_##_push((lex)->ast, list, (Func_)(lex));                                         \
+        } while (test_next(lex, ','));                                                            \
+        delim_next(lex, B_, A_, start);                                                           \
     }
 DEFINE_LIST_PARSER(arg, '(', ')', LOCAL_MAX, "arguments", expr0, AstExprList)
 DEFINE_LIST_PARSER(variant_field, '(', ')', LOCAL_MAX, "variant fields", variant_field_decl, AstDeclList)
 DEFINE_LIST_PARSER(strict_type, '<', '>', LOCAL_MAX, "type arguments", parse_strict_type, AstTypeList)
 DEFINE_LIST_PARSER(relaxed_type, '<', '>', LOCAL_MAX, "type arguments", parse_relaxed_type, AstTypeList)
 
-static struct AstTypeList *strict_type_list(struct Lex *lex, int line)
+static struct AstTypeList *strict_type_list(struct Lex *lex, struct SourceLoc start)
 {
     ++lex->expr_depth;
     struct AstTypeList *list = AstTypeList_new(lex->ast);
-    parse_strict_type_list(lex, list, line);
-    if (list->count == 0) {
+    parse_strict_type_list(lex, list, start);
+    if (list->count == 0)
         pawX_error(lex, "expected at least 1 type");
-    }
+
     --lex->expr_depth;
     return list;
 }
 
-static struct AstTypeList *relaxed_type_list(struct Lex *lex, int line)
+static struct AstTypeList *relaxed_type_list(struct Lex *lex, struct SourceLoc start)
 {
     ++lex->expr_depth;
     struct AstTypeList *list = AstTypeList_new(lex->ast);
-    parse_relaxed_type_list(lex, list, line);
-    if (list->count == 0) {
+    parse_relaxed_type_list(lex, list, start);
+    if (list->count == 0)
         pawX_error(lex, "expected at least 1 type");
-    }
+
     --lex->expr_depth;
     return list;
 }
 
 static struct AstTypeList *maybe_strict_type_args(struct Lex *lex)
 {
-    return test_next(lex, '<') ? strict_type_list(lex, lex->line) : NULL;
+    return test_next(lex, '<') ? strict_type_list(lex, lex->loc) : NULL;
 }
 
 static struct AstTypeList *maybe_relaxed_type_args(struct Lex *lex)
 {
-    return test_next(lex, '<') ? relaxed_type_list(lex, lex->line) : NULL;
+    return test_next(lex, '<') ? relaxed_type_list(lex, lex->loc) : NULL;
 }
 
-static struct AstPath *parse_pathexpr(struct Lex *lex)
+static struct AstPath parse_pathexpr(struct Lex *lex)
 {
-    struct AstPath *p = AstPath_new(lex->ast);
+    struct AstSegments *s = AstSegments_new(lex->ast);
+    struct SourceLoc loc = lex->loc;
+
     do {
     next_segment:
-        if (p->count == LOCAL_MAX) {
+        if (s->count == LOCAL_MAX)
             limit_error(lex, "path segments", LOCAL_MAX);
-        }
-        String *name = parse_name(lex);
+
+        struct AstIdent ident = parse_ident(lex);
         struct AstTypeList *args = NULL;
         // permit "::<types..>" between segments
         if (test_next(lex, TK_COLON2)) {
-            ensure_not_reserved(lex, name);
+            ensure_not_reserved(lex, ident.name);
             args = maybe_relaxed_type_args(lex);
             if (args == NULL) {
-                AstPath_add(lex->ast, p, name, NULL);
+                AstSegments_push(lex->ast, s, (struct AstSegment){
+                            .ident = ident,
+                        });
                 goto next_segment;
             }
         }
-        AstPath_add(lex->ast, p, name, args);
+        AstSegments_push(lex->ast, s, (struct AstSegment){
+                    .ident = ident,
+                    .types = args,
+                });
     } while (test_next(lex, TK_COLON2));
-    return p;
+
+    return (struct AstPath){
+        .span = span_from(lex, loc),
+        .segments = s,
+    };
 }
 
-static struct AstPath *parse_pathtype(struct Lex *lex, paw_Bool is_strict)
+static struct AstPath parse_pathtype(struct Lex *lex, paw_Bool is_strict)
 {
-    struct AstPath *p = AstPath_new(lex->ast);
+    struct AstSegments *s = AstSegments_new(lex->ast);
+    struct SourceLoc loc = lex->loc;
+
     do {
-        if (p->count == LOCAL_MAX) {
+        if (s->count == LOCAL_MAX)
             limit_error(lex, "path segments", LOCAL_MAX);
-        }
-        String *name = parse_name(lex);
-        if (is_strict) {
-            ensure_not_reserved(lex, name);
-        }
-        int const line = lex->line;
+
+        struct AstIdent ident = parse_ident(lex);
+        if (is_strict)
+            ensure_not_reserved(lex, ident.name);
+
+        struct SourceLoc start = lex->loc;
         struct AstTypeList *args = NULL;
         if (test_next(lex, '<')) {
             // _<types..> is not allowed
-            ensure_not_reserved(lex, name);
+            ensure_not_reserved(lex, ident.name);
             args = is_strict
-                       ? strict_type_list(lex, line)
-                       : relaxed_type_list(lex, line);
+                       ? strict_type_list(lex, start)
+                       : relaxed_type_list(lex, start);
         }
-        AstPath_add(lex->ast, p, name, args);
+        AstSegments_push(lex->ast, s, (struct AstSegment){
+                    .ident = ident,
+                    .types = args,
+                });
     } while (test_next(lex, TK_COLON2));
-    return p;
+
+    return (struct AstPath){
+        .span = span_from(lex, loc),
+        .segments = s,
+    };
 }
 
 static struct AstExpr *path_expr(struct Lex *lex)
 {
-    int const line = lex->line;
-    struct AstPath *path = parse_pathexpr(lex);
-    return pawAst_new_path_expr(lex->ast, line, path);
+    struct SourceLoc start = lex->loc;
+    struct AstPath path = parse_pathexpr(lex);
+    return NEW_NODE(lex, path_expr, start, path);
 }
 
-static struct AstPat *new_path_pat(struct Lex *lex, String *name)
+static struct AstPat *new_path_pat(struct Lex *lex, struct AstIdent ident)
 {
-    int const line = lex->line;
-    struct AstPath *path = AstPath_new(lex->ast);
-    AstPath_add(lex->ast, path, name, NULL);
-    return pawAst_new_path_pat(lex->ast, line, path);
+    struct AstPath path;
+    pawAst_path_init(lex->ast, &path, ident.span);
+    pawAst_path_add(lex->ast, &path, ident, NULL);
+    return NEW_NODE(lex, path_pat, ident.span.start, path);
 }
 
 static struct AstPat *struct_field_pat(struct Lex *lex)
 {
-    int const line = lex->line;
-    String *name = parse_toplevel_name(lex);
+    struct SourceLoc start = lex->loc;
+    struct AstIdent ident = parse_toplevel_ident(lex);
     struct AstPat *pat;
     if (test_next(lex, ':')) {
         pat = pattern(lex);
     } else {
         // binds field to variable of same name
-        pat = new_path_pat(lex, name);
+        pat = new_path_pat(lex, ident);
     }
-    return pawAst_new_field_pat(lex->ast, line, name, pat);
+    return NEW_NODE(lex, field_pat, start, ident, pat);
 }
 
 DEFINE_LIST_PARSER(variant_field_pat, '(', ')', LOCAL_MAX, "variant fields", pattern, AstPatList)
 DEFINE_LIST_PARSER(struct_field_pat, '{', '}', LOCAL_MAX, "struct fields", struct_field_pat, AstPatList)
 
-static paw_Bool is_wildcard_path(struct AstPath const *path)
+static paw_Bool is_wildcard_path(struct AstPath path)
 {
-    paw_assert(path->count > 0);
-    if (path->count > 1)
+    struct AstSegments *segments = path.segments;
+    paw_assert(segments->count > 0);
+    if (segments->count > 1)
         return PAW_FALSE;
-    struct AstSegment seg = K_LIST_FIRST(path);
-    return pawS_length(seg.name) == 1 && seg.name->text[0] == '_';
+    struct AstSegment seg = K_LIST_FIRST(segments);
+    String const *name = seg.ident.name;
+    return pawS_length(name) == 1 && name->text[0] == '_';
 }
 
 static struct AstPat *compound_pat(struct Lex *lex)
 {
-    int const line = lex->line;
-    struct AstPath *path = parse_pathexpr(lex);
+    struct SourceLoc start = lex->loc;
+    struct AstPath path = parse_pathexpr(lex);
     if (test_next(lex, '(')) {
         struct AstPatList *fields = AstPatList_new(lex->ast);
-        parse_variant_field_pat_list(lex, fields, line);
-        return pawAst_new_variant_pat(lex->ast, line, path, fields);
+        parse_variant_field_pat_list(lex, fields, start);
+        return NEW_NODE(lex, variant_pat, start, path, fields);
     } else if (test_next(lex, '{')) {
         struct AstPatList *fields = AstPatList_new(lex->ast);
-        parse_struct_field_pat_list(lex, fields, line);
-        return pawAst_new_struct_pat(lex->ast, line, path, fields);
+        parse_struct_field_pat_list(lex, fields, start);
+        return NEW_NODE(lex, struct_pat, start, path, fields);
     } else if (is_wildcard_path(path)) {
-        return pawAst_new_wildcard_pat(lex->ast, line);
+        return NEW_NODE_0(lex, wildcard_pat, start);
     } else {
-        return pawAst_new_path_pat(lex->ast, line, path);
+        return NEW_NODE(lex, path_pat, start, path);
     }
 }
 
 static struct AstPat *tuple_pat(struct Lex *lex)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     skip(lex); // '(' token
     struct AstPatList *elems = AstPatList_new(lex->ast);
-    parse_variant_field_pat_list(lex, elems, line);
-    return pawAst_new_tuple_pat(lex->ast, line, elems);
+    parse_variant_field_pat_list(lex, elems, start);
+    return NEW_NODE(lex, tuple_pat, start, elems);
 }
 
 // TODO: handle range patterns
@@ -525,9 +577,8 @@ static struct AstExpr *literal_expr(struct Lex *lex)
     if (negative) {
         struct AstLiteralExpr *e = AstGetLiteralExpr(expr);
         if (e->basic.code == BUILTIN_INT) {
-            if (e->basic.value.i == PAW_INT_MIN) {
+            if (e->basic.value.i == PAW_INT_MIN)
                 pawX_error(lex, "signed integer overflow ('-' applied to %I)", PAW_INT_MIN);
-            }
             e->basic.value.i = -e->basic.value.i;
         } else if (e->basic.code == BUILTIN_FLOAT) {
             e->basic.value.f = -e->basic.value.f;
@@ -540,20 +591,20 @@ static struct AstExpr *literal_expr(struct Lex *lex)
 
 static struct AstPat *literal_pat(struct Lex *lex)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     struct AstExpr *expr = literal_expr(lex);
 
-    if (!AstIsLiteralExpr(expr)) {
+    if (!AstIsLiteralExpr(expr))
         pawX_error(lex, "expected literal pattern");
-    }
-    return pawAst_new_literal_pat(lex->ast, line, expr);
+
+    return NEW_NODE(lex, literal_pat, start, expr);
 }
 
 static struct AstPat *or_pat(struct Lex *lex, struct AstPat *lhs)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     struct AstPat *rhs = pattern(lex);
-    return pawAst_new_or_pat(lex->ast, line, lhs, rhs);
+    return NEW_NODE(lex, or_pat, start, lhs, rhs);
 }
 
 static struct AstPat *pattern(struct Lex *lex)
@@ -576,20 +627,20 @@ static struct AstPat *pattern(struct Lex *lex)
 
 static struct AstExpr *basic_expr(struct Lex *lex);
 
-static struct AstDeclList *variant_field_list(struct Lex *lex, int line)
+static struct AstDeclList *variant_field_list(struct Lex *lex, struct SourceLoc start)
 {
     ++lex->expr_depth;
     struct AstDeclList *list = AstDeclList_new(lex->ast);
-    parse_variant_field_list(lex, list, line);
-    if (list->count == 0) {
+    parse_variant_field_list(lex, list, start);
+    if (list->count == 0)
         pawX_error(lex, "expected at least 1 variant field between parenthesis "
                         "(remove parenthesis for unit variant)");
-    }
+
     --lex->expr_depth;
     return list;
 }
 
-static struct AstType *parse_tuple_type(struct Lex *lex, struct AstType *first, int line, paw_Bool is_strict)
+static struct AstType *parse_tuple_type(struct Lex *lex, struct AstType *first, struct SourceLoc start, paw_Bool is_strict)
 {
     struct AstTypeList *elems = AstTypeList_new(lex->ast);
     AstTypeList_push(lex->ast, elems, first);
@@ -597,41 +648,41 @@ static struct AstType *parse_tuple_type(struct Lex *lex, struct AstType *first, 
     do {
         if (test(lex, ')'))
             break;
-        if (elems->count == FIELD_MAX) {
+        if (elems->count == FIELD_MAX)
             limit_error(lex, "tuple elements", FIELD_MAX);
-        }
+
         struct AstType *type = parse_type(lex, is_strict);
         AstTypeList_push(lex->ast, elems, type);
     } while (test_next(lex, ','));
-    delim_next(lex, ')', '(', line);
+    delim_next(lex, ')', '(', start);
 
-    return pawAst_new_tuple_type(lex->ast, line, elems);
+    return NEW_NODE(lex, tuple_type, start, elems);
 }
 
 static struct AstType *parse_paren_type(struct Lex *lex, paw_Bool is_strict)
 {
-    int const line = lex->last_line;
-    if (test_next(lex, ')')) {
+    struct SourceLoc const start = lex->loc;
+    if (test_next(lex, ')'))
         return unit_type(lex);
-    }
+
     struct AstType *t = parse_type(lex, is_strict);
-    if (test_next(lex, ',')) {
-        return parse_tuple_type(lex, t, line, is_strict);
-    }
-    delim_next(lex, ')', '(', line);
+    if (test_next(lex, ','))
+        return parse_tuple_type(lex, t, start, is_strict);
+
+    delim_next(lex, ')', '(', start);
     return t;
 }
 
 static struct AstType *parse_container_type(struct Lex *lex, paw_Bool is_strict)
 {
-    int const line = lex->last_line;
+    struct SourceLoc const start = lex->loc;
     struct AstType *first = parse_type(lex, is_strict);
     struct AstType *second = NULL;
-    if (test_next(lex, ':')) {
+    if (test_next(lex, ':'))
         second = parse_type(lex, is_strict);
-    }
-    delim_next(lex, ']', '[', line);
-    return pawAst_new_container_type(lex->ast, line, first, second);
+
+    delim_next(lex, ']', '[', start);
+    return NEW_NODE(lex, container_type, start, first, second);
 }
 
 static struct AstType *parse_signature(struct Lex *lex);
@@ -655,14 +706,14 @@ static struct AstType *parse_type(struct Lex *lex, paw_Bool is_strict)
     } else if (test_next(lex, TK_FN)) {
         return parse_signature(lex);
     }
-    int const line = lex->line;
-    struct AstPath *path = parse_pathtype(lex, is_strict);
-    if (is_underscore(lex, K_LIST_FIRST(path).name)) {
-        if (path->count > 1)
+    struct SourceLoc start = lex->loc;
+    struct AstPath path = parse_pathtype(lex, is_strict);
+    if (is_underscore(lex, K_LIST_FIRST(path.segments).ident.name)) {
+        if (path.segments->count > 1)
             SYNTAX_ERROR(lex, "unexpected '::' after '_'");
-        return pawAst_new_infer_type(lex->ast, line);
+        return NEW_NODE_0(lex, infer_type, start);
     }
-    return pawAst_new_path_type(lex->ast, line, path);
+    return NEW_NODE(lex, path_type, start, path);
 }
 
 static struct AstType *type_annotation(struct Lex *lex, paw_Bool is_strict)
@@ -676,62 +727,66 @@ static struct AstType *type_annotation(struct Lex *lex, paw_Bool is_strict)
     return NULL; // needs inference
 }
 
-static struct AstType *expect_type_annotation(struct Lex *lex, char const *what, String const *name, paw_Bool is_strict)
+static struct AstType *expect_type_annotation(struct Lex *lex, char const *what, struct AstIdent ident, paw_Bool is_strict)
 {
     struct AstType *type = type_annotation(lex, is_strict);
-    if (type == NULL) {
-        pawX_error(lex, "expected type annotation on %s '%s'", what, name->text);
-    }
+    if (type == NULL)
+        parse_error(lex, ident.span.start, "expected type annotation on %s '%s'",
+                what, ident.name->text);
     return type;
 }
 
-static struct AstType *self_type(struct Lex *lex)
+static struct AstType *self_type(struct Lex *lex, struct SourceSpan span)
 {
-    int const line = lex->line;
-    struct AstPath *path = AstPath_new(lex->ast);
-    AstPath_add(lex->ast, path, SELF_TYPENAME(lex), NULL);
-    return pawAst_new_path_type(lex->ast, line, path);
+    struct AstPath path;
+    struct AstIdent ident = {
+        .name = SELF_TYPENAME(lex),
+        .span = span,
+    };
+    pawAst_path_init(lex->ast, &path, span);
+    pawAst_path_add(lex->ast, &path, ident, NULL);
+    return NEW_NODE(lex, path_type, span.start, path);
 }
 
 static struct AstDecl *func_param_decl(struct Lex *lex)
 {
-    int const line = lex->line;
-    String *name = parse_name(lex);
+    struct SourceLoc start = lex->loc;
+    struct AstIdent ident = parse_ident(lex);
     int const param_index = lex->param_index++;
     struct AstType *tag;
     if (!lex->in_impl || param_index != 0) {
         // usual case: expect a type annotation on each parameter
-        tag = expect_type_annotation(lex, "parameter", name, PAW_TRUE);
+        tag = expect_type_annotation(lex, "parameter", ident, PAW_TRUE);
     } else {
         // first parameter to method: 'self' means 'self: Self'
         tag = type_annotation(lex, PAW_TRUE);
         if (tag == NULL) {
-            if (!pawS_eq(name, SELF_VARNAME(lex))) {
-                pawX_error(lex, "expected parameter named 'self' but found '%s'", name->text);
-            }
-            tag = self_type(lex);
+            if (!pawS_eq(ident.name, SELF_VARNAME(lex)))
+                parse_error(lex, ident.span.start,
+                        "expected parameter named 'self' but found '%s'",
+                        ident.name->text);
+            tag = self_type(lex, ident.span);
         }
     }
-    return pawAst_new_field_decl(lex->ast, line, name, tag, PAW_FALSE);
+    return NEW_NODE(lex, field_decl, start, ident, tag, PAW_FALSE);
 }
 
 static struct AstDecl *closure_param_decl(struct Lex *lex)
 {
-    int const line = lex->line;
-    String *name = parse_name(lex);
+    struct SourceLoc start = lex->loc;
+    struct AstIdent ident = parse_ident(lex);
     struct AstType *tag = type_annotation(lex, PAW_FALSE);
-    return pawAst_new_field_decl(lex->ast, line, name, tag, PAW_FALSE);
+    return NEW_NODE(lex, field_decl, start, ident, tag, PAW_FALSE);
 }
 
-static struct AstDecl *let_decl(struct Lex *lex, int line)
+static struct AstDecl *let_decl(struct Lex *lex, struct SourceLoc start)
 {
     skip(lex); // 'let' token
-    String *name = SCAN_STRING(lex->C, "(variable)");
     struct AstPat *pat = pattern(lex);
     struct AstType *tag = type_annotation(lex, PAW_FALSE);
     struct AstExpr *init = test_next(lex, '=') ? expr0(lex) : NULL;
-    semicolon(lex);
-    return pawAst_new_var_decl(lex->ast, line, name, pat, tag, init);
+    semicolon(lex, "'let' declaration");
+    return NEW_NODE(lex, var_decl, start, pat, tag, init);
 }
 
 static struct AstBoundList *parse_generic_bounds(struct Lex *lex)
@@ -749,10 +804,10 @@ static struct AstBoundList *parse_generic_bounds(struct Lex *lex)
 
 static struct AstDecl *generic_param(struct Lex *lex)
 {
-    int const line = lex->line;
-    String *name = parse_toplevel_name(lex);
+    struct SourceLoc start = lex->loc;
+    struct AstIdent ident = parse_toplevel_ident(lex);
     struct AstBoundList *bounds = parse_generic_bounds(lex);
-    return pawAst_new_generic_decl(lex->ast, line, name, bounds);
+    return NEW_NODE(lex, generic_decl, start, ident, bounds);
 }
 
 DEFINE_LIST_PARSER(func_param, '(', ')', LOCAL_MAX, "function parameters", func_param_decl, AstDeclList)
@@ -762,32 +817,33 @@ DEFINE_LIST_PARSER(generic, '<', '>', LOCAL_MAX, "generics", generic_param, AstD
 
 static struct AstExpr *sitem_expr(struct Lex *lex)
 {
-    int const line = lex->line;
-    String *name = parse_toplevel_name(lex);
+    struct SourceLoc start = lex->loc;
+    struct AstIdent ident = parse_toplevel_ident(lex);
     struct AstExpr *value;
     if (test_next(lex, ':')) {
         value = expr0(lex);
     } else {
         // "name" by itself is shorthand for "name: name"
-        struct AstPath *path = AstPath_new(lex->ast);
-        AstPath_add(lex->ast, path, name, NULL);
-        value = pawAst_new_path_expr(lex->ast, line, path);
+        struct AstPath path;
+        pawAst_path_init(lex->ast, &path, ident.span);
+        pawAst_path_add(lex->ast, &path, ident, NULL);
+        value = NEW_NODE(lex, path_expr, start, path);
     }
     int const fid = INT_MAX; // nonnegative means determine later
-    return pawAst_new_named_field_expr(lex->ast, line, name, value, fid);
+    return NEW_NODE(lex, named_field_expr, start, ident, value, fid);
 }
 
 DEFINE_LIST_PARSER(sitem, '{', '}', LOCAL_MAX, "struct items", sitem_expr, AstExprList)
 
 static struct AstExpr *unop_expr(struct Lex *lex, enum UnOp op)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     enter_nested(lex);
     skip(lex); // unary operator token
     enum UnaryOp const unop = CAST(enum UnaryOp, op); // same order
     struct AstExpr *target = expression(lex, kUnOpPrecedence);
     leave_nested(lex);
-    return pawAst_new_unop_expr(lex->ast, line, unop, target);
+    return NEW_NODE(lex, unop_expr, start, unop, target);
 }
 
 // Parse either a parenthsized expression or a tuple
@@ -795,39 +851,36 @@ static struct AstExpr *paren_expr(struct Lex *lex)
 {
     // Just parse and return the expression contained within the parenthesis.
     // There is no need for an extra node type.
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     skip(lex); // '(' token
-    if (test_next(lex, ')')) {
+    if (test_next(lex, ')'))
         return unit_lit(lex);
-    }
+
     ++lex->expr_depth;
     struct AstExpr *expr = expr0(lex);
     --lex->expr_depth;
-    if (test_next(lex, ')')) {
-        return pawAst_new_paren_expr(lex->ast, line, expr);
-    }
+    if (test_next(lex, ')'))
+        return NEW_NODE(lex, paren_expr, start, expr);
+
     check_next(lex, ',');
     struct AstExprList *elems = AstExprList_new(lex->ast);
     AstExprList_push(lex->ast, elems, expr);
-    parse_arg_list(lex, elems, line);
-    return pawAst_new_tuple_lit(lex->ast, line, elems);
+    parse_arg_list(lex, elems, start);
+    return NEW_NODE(lex, tuple_lit, start, elems);
 }
 
 static struct AstType *parse_signature(struct Lex *lex)
 {
-    int const line = lex->last_line;
+    struct SourceLoc const start = lex->loc;
     check_next(lex, '(');
     struct AstTypeList *params = AstTypeList_new(lex->ast);
-    if (!test_next(lex, ')')) {
-        parse_sig_param_list(lex, params, line);
-    }
-    struct AstType *result;
-    if (test_next(lex, TK_ARROW)) {
-        result = parse_type(lex, PAW_TRUE);
-    } else {
-        result = unit_type(lex);
-    }
-    return pawAst_new_func_type(lex->ast, line, params, result);
+    if (!test_next(lex, ')'))
+        parse_sig_param_list(lex, params, start);
+
+    struct AstType *result = test_next(lex, TK_ARROW)
+        ? parse_type(lex, PAW_TRUE)
+        : unit_type(lex);
+    return NEW_NODE(lex, func_type, start, params, result);
 }
 
 static paw_Bool end_of_block(struct Lex *lex)
@@ -838,46 +891,44 @@ static paw_Bool end_of_block(struct Lex *lex)
 
 static struct AstExpr *index_expr(struct Lex *lex, struct AstExpr *target)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     skip(lex); // '[' token
     struct AstExpr *first = NULL;
-    if (!test(lex, ':')) {
+    if (!test(lex, ':'))
         first = expr0(lex);
-    }
+
     paw_Bool is_slice = PAW_FALSE;
     struct AstExpr *second = NULL;
     if (test_next(lex, ':')) {
         is_slice = PAW_TRUE;
-        if (!test(lex, ']')) {
+        if (!test(lex, ']'))
             second = expr0(lex);
-        }
     }
-    delim_next(lex, ']', '[', line);
-    return pawAst_new_index(lex->ast, line, target, first, second, is_slice);
+    delim_next(lex, ']', '[', start);
+    return NEW_NODE(lex, index, start, target, first, second, is_slice);
 }
 
 static paw_Type parse_container_items(struct Lex *lex, struct AstExprList *items)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     enum BuiltinKind code = BUILTIN_UNIT;
     do {
         if (test(lex, ']'))
             break;
-        if (items->count == LOCAL_MAX) {
+        if (items->count == LOCAL_MAX)
             limit_error(lex, "container literal items", LOCAL_MAX);
-        }
+
         struct AstExpr *item = expr0(lex);
         if (!test_next(lex, ':')) {
-            if (code == BUILTIN_MAP) {
+            if (code == BUILTIN_MAP)
                 pawX_error(lex, "expected ':' after map key");
-            }
             code = BUILTIN_LIST;
         } else if (code == BUILTIN_LIST) {
             pawX_error(lex, "unexpected ':' in list literal");
         } else {
             code = BUILTIN_MAP;
             struct AstExpr *value = expr0(lex);
-            item = pawAst_new_keyed_field_expr(lex->ast, line, item, value);
+            item = NEW_NODE(lex, keyed_field_expr, start, item, value);
         }
         AstExprList_push(lex->ast, items, item);
     } while (test_next(lex, ','));
@@ -888,7 +939,7 @@ static paw_Type parse_container_items(struct Lex *lex, struct AstExprList *items
 
 static struct AstExpr *container_lit(struct Lex *lex)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     skip(lex); // '[' token
     struct AstExprList *items = AstExprList_new(lex->ast);
     enum BuiltinKind b_kind;
@@ -899,8 +950,8 @@ static struct AstExpr *container_lit(struct Lex *lex)
     } else {
         b_kind = parse_container_items(lex, items);
     }
-    delim_next(lex, ']', '[', line);
-    return pawAst_new_container_lit(lex->ast, line, items, b_kind);
+    delim_next(lex, ']', '[', start);
+    return NEW_NODE(lex, container_lit, start, items, b_kind);
 }
 
 // Parse a composite literal expression
@@ -908,31 +959,31 @@ static struct AstExpr *composite_lit(struct Lex *lex, struct AstPathExpr *path)
 {
     skip(lex); // '{' token
     struct AstExprList *items = AstExprList_new(lex->ast);
-    parse_sitem_list(lex, items, path->line);
-    return pawAst_new_composite_lit(lex->ast, path->line, path->path, items);
+    parse_sitem_list(lex, items, path->span.start);
+    return pawAst_new_composite_lit(lex->ast, path->span, path->path, items);
 }
 
 static struct AstExpr *try_composite_lit(struct Lex *lex, struct AstExpr *expr)
 {
     enter_nested(lex);
-    if (AstIsPathExpr(expr) && lex->expr_depth >= 0) {
+    if (AstIsPathExpr(expr) && lex->expr_depth >= 0)
         expr = composite_lit(lex, AstGetPathExpr(expr));
-    }
+
     leave_nested(lex);
     return expr;
 }
 
 static struct AstExpr *selector_expr(struct Lex *lex, struct AstExpr *target)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     skip(lex); // '.' token
     if (test(lex, TK_NAME)) {
-        String *name = parse_toplevel_name(lex);
-        return pawAst_new_name_selector(lex->ast, line, target, name);
+        struct AstIdent ident = parse_toplevel_ident(lex);
+        return NEW_NODE(lex, name_selector, start, target, ident);
     } else if (test(lex, TK_INTEGER)) {
         int const index = V_INT(lex->t.value);
         skip(lex); // integer token
-        return pawAst_new_index_selector(lex->ast, line, target, index);
+        return NEW_NODE(lex, index_selector, start, target, index);
     }
 
     pawX_error(lex, "expected identifier or integer after '.'");
@@ -940,40 +991,40 @@ static struct AstExpr *selector_expr(struct Lex *lex, struct AstExpr *target)
 
 static struct AstExpr *call_expr(struct Lex *lex, struct AstExpr *target)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     skip(lex); // '(' token
     struct AstExprList *args = AstExprList_new(lex->ast);
-    parse_arg_list(lex, args, line);
-    return pawAst_new_call_expr(lex->ast, line, target, args);
+    parse_arg_list(lex, args, start);
+    return NEW_NODE(lex, call_expr, start, target, args);
 }
 
 static struct AstExpr *chain_expr(struct Lex *lex, struct AstExpr *target)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     skip(lex); // '?' token
 
     if (lex->func_depth == 0)
         SYNTAX_ERROR(lex, "'?' outside function body");
 
-    return pawAst_new_chain_expr(lex->ast, line, target);
+    return NEW_NODE(lex, chain_expr, start, target);
 }
 
 static struct AstDeclList *func_parameters(struct Lex *lex)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     check_next(lex, '(');
     struct AstDeclList *list = AstDeclList_new(lex->ast);
     lex->param_index = 0; // 'self' allowed if '.in_impl'
-    parse_func_param_list(lex, list, line);
+    parse_func_param_list(lex, list, start);
     return list;
 }
 
 static struct AstDeclList *closure_params(struct Lex *lex)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     check_next(lex, '|');
     struct AstDeclList *list = AstDeclList_new(lex->ast);
-    parse_closure_param_list(lex, list, line);
+    parse_closure_param_list(lex, list, start);
     return list;
 }
 
@@ -993,7 +1044,7 @@ static paw_Bool expects_semicolon(struct AstExpr *expr)
 
 static struct AstExpr *block_expr(struct Lex *lex)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     check_next(lex, '{');
     struct AstStmtList *stmts = AstStmtList_new(lex->ast);
     struct AstExpr *result = NULL;
@@ -1013,13 +1064,13 @@ static struct AstExpr *block_expr(struct Lex *lex)
     }
     if (result == NULL)
         result = unit_lit(lex);
-    delim_next(lex, '}', '{', line);
-    return pawAst_new_block(lex->ast, line, stmts, result);
+    delim_next(lex, '}', '{', start);
+    return NEW_NODE(lex, block, start, stmts, result);
 }
 
 static struct AstExpr *closure(struct Lex *lex)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     struct AstDeclList *params = closure_params(lex);
     struct AstType *result = NULL;
     struct AstExpr *expr;
@@ -1029,12 +1080,12 @@ static struct AstExpr *closure(struct Lex *lex)
     } else {
         expr = expr0(lex);
     }
-    return pawAst_new_closure_expr(lex->ast, line, params, result, expr);
+    return NEW_NODE(lex, closure_expr, start, params, result, expr);
 }
 
 static struct AstExpr *if_expr(struct Lex *lex)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     skip(lex); // 'if' token
     struct AstExpr *cond = basic_expr(lex);
     struct AstExpr *then_arm = block_expr(lex);
@@ -1045,7 +1096,7 @@ static struct AstExpr *if_expr(struct Lex *lex)
         //    after: "if a {A} else {if b {B} else {C}}"
         else_arm = test(lex, TK_IF) ? if_expr(lex) : block_expr(lex);
     }
-    return pawAst_new_if_expr(lex->ast, line, cond, then_arm, else_arm);
+    return NEW_NODE(lex, if_expr, start, cond, then_arm, else_arm);
 }
 
 static struct AstExpr *loop_block(struct Lex *lex)
@@ -1058,27 +1109,27 @@ static struct AstExpr *loop_block(struct Lex *lex)
 
 static struct AstExpr *for_expr(struct Lex *lex)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     skip(lex); // 'for' token
     struct AstPat *pat = pattern(lex);
     check_next(lex, TK_IN);
     struct AstExpr *target = basic_expr(lex);
     struct AstExpr *block = loop_block(lex);
-    return pawAst_new_for_expr(lex->ast, line, pat, target, block);
+    return NEW_NODE(lex, for_expr, start, pat, target, block);
 }
 
 static struct AstExpr *while_expr(struct Lex *lex)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     skip(lex); // 'while' token
     struct AstExpr *cond = basic_expr(lex);
     struct AstExpr *block = loop_block(lex);
-    return pawAst_new_while_expr(lex->ast, line, cond, block);
+    return NEW_NODE(lex, while_expr, start, cond, block);
 }
 
 static struct AstExpr *return_expr(struct Lex *lex)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     skip(lex); // 'return' token
 
     if (lex->func_depth == 0)
@@ -1086,28 +1137,28 @@ static struct AstExpr *return_expr(struct Lex *lex)
 
     struct AstExpr *expr = NULL;
     if (!test(lex, '}')
-        && !test(lex, ';')
-        && !test(lex, ',')) {
+            && !test(lex, ';')
+            && !test(lex, ',')) {
         expr = expr0(lex);
     }
-    return pawAst_new_return_expr(lex->ast, line, expr);
+    return NEW_NODE(lex, return_expr, start, expr);
 }
 
 static struct AstExpr *jump_expr(struct Lex *lex, enum JumpKind kind)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     skip(lex); // 'break' or 'continue' token
 
     if (lex->loop_depth == 0)
         SYNTAX_ERROR(lex, "'%s' outside loop body",
                      kind == JUMP_BREAK ? "break" : "continue");
 
-    return pawAst_new_jump_expr(lex->ast, line, kind);
+    return NEW_NODE(lex, jump_expr, start, kind);
 }
 
 static struct AstExpr *match_arm(struct Lex *lex)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     struct AstPat *pat = pattern(lex);
     struct AstExpr *guard = NULL;
     if (test_next(lex, TK_IF)) {
@@ -1115,12 +1166,12 @@ static struct AstExpr *match_arm(struct Lex *lex)
     }
     check_next(lex, TK_FAT_ARROW);
     struct AstExpr *result = expr0(lex);
-    return pawAst_new_match_arm(lex->ast, line, pat, guard, result);
+    return NEW_NODE(lex, match_arm, start, pat, guard, result);
 }
 
 static struct AstExpr *match_expr(struct Lex *lex)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     skip(lex); // 'match' token
     struct AstExpr *target = basic_expr(lex);
     struct AstExprList *arms = AstExprList_new(lex->ast);
@@ -1131,8 +1182,8 @@ static struct AstExpr *match_expr(struct Lex *lex)
         struct AstExpr *arm = match_arm(lex);
         AstExprList_push(lex->ast, arms, arm);
     } while (test_next(lex, ','));
-    delim_next(lex, '}', '{', line);
-    return pawAst_new_match_expr(lex->ast, line, target, arms);
+    delim_next(lex, '}', '{', start);
+    return NEW_NODE(lex, match_expr, start, target, arms);
 }
 
 static struct AstExpr *primary_expr(struct Lex *lex)
@@ -1207,12 +1258,16 @@ static struct AstExpr *suffixed_expr(struct Lex *lex)
     struct AstExpr *e = primary_expr(lex);
     if (e == NULL)
         return NULL;
-    if (AstIsBlock(e) || AstIsIfExpr(e) || AstIsMatchExpr(e) || AstIsWhileExpr(e)) {
+
+    if (AstIsBlock(e)
+            || AstIsIfExpr(e)
+            || AstIsMatchExpr(e)
+            || AstIsWhileExpr(e))
         return e;
-    }
-    if (test(lex, '{')) {
+
+    if (test(lex, '{'))
         e = try_composite_lit(lex, e);
-    }
+
     for (int n = 1;; ++n) {
         enter_nested(lex);
         switch (lex->t.kind) {
@@ -1253,45 +1308,45 @@ static struct AstExpr *simple_expr(struct Lex *lex)
 
 static struct AstExpr *conversion_expr(struct Lex *lex, struct AstExpr *lhs)
 {
-    int const line = lex->line;
-    String *const name = parse_name(lex);
+    struct SourceLoc start = lex->loc;
+    struct AstIdent const ident = parse_ident(lex);
 
     enum BuiltinKind to;
-    if (equals_cstr(lex, name, CSTR_BOOL)) {
+    if (equals_cstr(lex, ident.name, CSTR_BOOL)) {
         to = BUILTIN_BOOL;
-    } else if (equals_cstr(lex, name, CSTR_INT)) {
+    } else if (equals_cstr(lex, ident.name, CSTR_INT)) {
         to = BUILTIN_INT;
-    } else if (equals_cstr(lex, name, CSTR_FLOAT)) {
+    } else if (equals_cstr(lex, ident.name, CSTR_FLOAT)) {
         to = BUILTIN_FLOAT;
     } else {
         pawX_error(lex, "expected basic type");
     }
-    return pawAst_new_conversion_expr(lex->ast, line, lhs, to);
+    return NEW_NODE(lex, conversion_expr, start, lhs, to);
 }
 
 static struct AstExpr *assignment_expr(struct Lex *lex, struct AstExpr *lhs)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     struct AstExpr *rhs = expression(lex, right_prec(INFIX_ASSIGN));
-    return pawAst_new_assign_expr(lex->ast, line, lhs, rhs);
+    return NEW_NODE(lex, assign_expr, start, lhs, rhs);
 }
 
 static struct AstExpr *binop_expr(struct Lex *lex, enum InfixOp op, struct AstExpr *lhs)
 {
     enter_nested(lex);
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     struct AstExpr *rhs = expression(lex, right_prec(op));
     enum BinaryOp const binop = CAST(enum BinaryOp, op); // same order
     leave_nested(lex);
-    return pawAst_new_binop_expr(lex->ast, line, binop, lhs, rhs);
+    return NEW_NODE(lex, binop_expr, start, binop, lhs, rhs);
 }
 
 static struct AstExpr *logical_expr(struct Lex *lex, struct AstExpr *lhs, paw_Bool is_and)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     int const prec = right_prec(is_and ? INFIX_AND : INFIX_OR);
     struct AstExpr *rhs = expression(lex, prec);
-    return pawAst_new_logical_expr(lex->ast, line, lhs, rhs, is_and);
+    return NEW_NODE(lex, logical_expr, start, lhs, rhs, is_and);
 }
 
 static struct AstExpr *infix_expr(struct Lex *lex, struct AstExpr *lhs, unsigned op)
@@ -1347,18 +1402,18 @@ static struct AstExpr *basic_expr(struct Lex *lex)
 
 static struct AstStmt *expr_stmt(struct Lex *lex)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     struct AstExpr *expr = expr0(lex);
-    return pawAst_new_expr_stmt(lex->ast, line, expr);
+    return NEW_NODE(lex, expr_stmt, start, expr);
 }
 
 static struct AstDeclList *type_param(struct Lex *lex)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     if (test_next(lex, '<')) {
         ++lex->expr_depth;
         struct AstDeclList *list = AstDeclList_new(lex->ast);
-        parse_generic_list(lex, list, line);
+        parse_generic_list(lex, list, start);
         --lex->expr_depth;
         if (list->count == 0) {
             pawX_error(lex, "expected at least 1 generic parameter");
@@ -1376,36 +1431,37 @@ static struct AstExpr *function_body(struct Lex *lex)
     return body;
 }
 
-static struct AstDecl *function(struct Lex *lex, int line, String *name, struct Annotations *annos, enum FuncKind kind, paw_Bool is_pub)
+static struct AstDecl *function(struct Lex *lex, struct SourceLoc start, struct AstIdent ident, struct Annotations *annos, enum FuncKind kind, paw_Bool is_pub)
 {
     struct AstDeclList *generics = type_param(lex);
     struct AstDeclList *params = func_parameters(lex);
     struct AstType *result = test_next(lex, TK_ARROW) ? parse_type(lex, PAW_TRUE) : unit_type(lex);
     struct AstExpr *body = !test_next(lex, ';') ? function_body(lex) : NULL;
 
-    return pawAst_new_func_decl(lex->ast, line, kind, name, annos,
-                                generics, params, NULL, result, body, is_pub);
+    return NEW_NODE(lex, func_decl, start, kind, ident, annos,
+            generics, params, NULL, result, body, is_pub);
 }
 
 static struct AstDecl *use_decl(struct Lex *lex)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     skip(lex); // 'use' token
-    String *name = parse_toplevel_name(lex);
+    struct AstIdent ident = parse_toplevel_ident(lex);
     paw_Bool star = PAW_FALSE;
-    String *item = NULL;
-    String *as = NULL;
+    struct AstIdent item = {0};
+    struct AstIdent as = {0};
     if (test_next(lex, TK_COLON2)) {
-        if (test_next(lex, '*'))
+        if (test_next(lex, '*')) {
             star = PAW_TRUE;
-        else
-            item = parse_toplevel_name(lex);
+        } else {
+            item = parse_toplevel_ident(lex);
+        }
     }
     if (test_next(lex, TK_AS)) {
-        as = parse_toplevel_name(lex);
+        as = parse_toplevel_ident(lex);
     }
-    semicolon(lex);
-    return pawAst_new_use_decl(lex->ast, line, name, star, item, as);
+    semicolon(lex, "'use' declaration");
+    return NEW_NODE(lex, use_decl, start, ident, star, item, as);
 }
 
 static void parse_trait_list(struct Lex *lex, struct AstTypeList *traits)
@@ -1413,9 +1469,9 @@ static void parse_trait_list(struct Lex *lex, struct AstTypeList *traits)
     do {
         if (test(lex, '{'))
             break;
-        int const line = lex->line;
-        struct AstPath *path = parse_pathtype(lex, PAW_TRUE);
-        struct AstType *trait = pawAst_new_path_type(lex->ast, line, path);
+        struct SourceLoc start = lex->loc;
+        struct AstPath path = parse_pathtype(lex, PAW_TRUE);
+        struct AstType *trait = NEW_NODE(lex, path_type, start, path);
         AstTypeList_push(lex->ast, traits, trait);
     } while (test_next(lex, '+'));
 }
@@ -1423,7 +1479,7 @@ static void parse_trait_list(struct Lex *lex, struct AstTypeList *traits)
 static struct Annotations *annotations(struct Lex *lex)
 {
     struct Compiler *C = lex->C;
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     if (!test_next(lex, '#'))
         return NULL;
 
@@ -1434,7 +1490,7 @@ static struct Annotations *annotations(struct Lex *lex)
         if (test(lex, ']'))
             break;
         struct Annotation anno = {
-            .name = parse_name(lex),
+            .name = parse_ident(lex).name,
         };
         if (StringMap_insert(C, names, anno.name, NULL))
             NAME_ERROR(C, "duplicate annotation '%s'", anno.name->text);
@@ -1452,7 +1508,7 @@ static struct Annotations *annotations(struct Lex *lex)
         }
         Annotations_push(C, annos, anno);
     } while (test_next(lex, ','));
-    delim_next(lex, ']', '[', line);
+    delim_next(lex, ']', '[', start);
     StringMap_delete(C, names);
 
     return annos;
@@ -1460,36 +1516,36 @@ static struct Annotations *annotations(struct Lex *lex)
 
 static struct AstDecl *func_decl(struct Lex *lex, struct Annotations *annos, paw_Bool is_pub)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     skip(lex); // 'fn' token
-    String *name = parse_toplevel_name(lex);
-    return function(lex, line, name, annos, FUNC_FUNCTION, is_pub);
+    struct AstIdent ident = parse_toplevel_ident(lex);
+    return function(lex, start, ident, annos, FUNC_FUNCTION, is_pub);
 }
 
 static struct AstDecl *parse_method(struct Lex *lex, struct Annotations *annos, paw_Bool is_pub)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     check_next(lex, TK_FN);
     // indicate that 'self' has special meaning
     lex->in_impl = PAW_TRUE;
-    String *name = parse_toplevel_name(lex);
-    struct AstDecl *method = function(lex, line, name, annos, FUNC_METHOD, is_pub);
+    struct AstIdent ident = parse_toplevel_ident(lex);
+    struct AstDecl *method = function(lex, start, ident, annos, FUNC_METHOD, is_pub);
     lex->in_impl = PAW_FALSE;
     return method;
 }
 
 static struct AstDecl *variant_decl(struct Lex *lex, int index)
 {
-    int const line = lex->line;
-    String *name = parse_toplevel_name(lex);
+    struct SourceLoc start = lex->loc;
+    struct AstIdent ident = parse_toplevel_ident(lex);
     struct AstDeclList *fields = NULL;
     if (test_next(lex, '(')) {
-        fields = variant_field_list(lex, line);
+        fields = variant_field_list(lex, start);
     }
-    return pawAst_new_variant_decl(lex->ast, line, name, fields, index);
+    return NEW_NODE(lex, variant_decl, start, ident, fields, index);
 }
 
-static void enum_body(struct Lex *lex, int line, struct AstTypeList *traits, struct AstDeclList *variants, struct AstDeclList *methods)
+static void enum_body(struct Lex *lex, struct SourceLoc start, struct AstTypeList *traits, struct AstDeclList *variants, struct AstDeclList *methods)
 {
     if (test_next(lex, ':')) {
         parse_trait_list(lex, traits);
@@ -1497,15 +1553,14 @@ static void enum_body(struct Lex *lex, int line, struct AstTypeList *traits, str
     check_next(lex, '{');
     while (!end_of_block(lex)) {
         if (test(lex, TK_NAME)) {
-            if (variants->count == LOCAL_MAX) {
+            if (variants->count == LOCAL_MAX)
                 limit_error(lex, "variants in enum body", LOCAL_MAX);
-            }
+
             struct AstDecl *variant = variant_decl(lex, variants->count);
             AstDeclList_push(lex->ast, variants, variant);
-            if (!test_next(lex, ',') && !test(lex, '}')) {
+            if (!test_next(lex, ',') && !test(lex, '}'))
                 SYNTAX_ERROR(lex->C, "',' required to separate enum variants from "
                                      "other items");
-            }
         } else if (methods->count == LOCAL_MAX) {
             limit_error(lex, "methods in enum body", LOCAL_MAX);
         } else {
@@ -1515,7 +1570,7 @@ static void enum_body(struct Lex *lex, int line, struct AstTypeList *traits, str
             AstDeclList_push(lex->ast, methods, method);
         }
     }
-    delim_next(lex, '}', '{', line);
+    delim_next(lex, '}', '{', start);
 
     if (variants->count == 0) {
         pawX_error(lex, "expected at least 1 enum variant");
@@ -1525,33 +1580,33 @@ static void enum_body(struct Lex *lex, int line, struct AstTypeList *traits, str
 static struct AstDecl *enum_decl(struct Lex *lex, paw_Bool is_pub)
 {
     skip(lex); // 'enum' token
-    int const line = lex->line;
-    String *name = parse_toplevel_name(lex);
+    struct SourceLoc start = lex->loc;
+    struct AstIdent ident = parse_toplevel_ident(lex);
     struct AstDeclList *generics = type_param(lex);
     struct AstTypeList *traits = AstTypeList_new(lex->ast);
     struct AstDeclList *variants = AstDeclList_new(lex->ast);
     struct AstDeclList *methods = AstDeclList_new(lex->ast);
-    enum_body(lex, line, traits, variants, methods);
-    return pawAst_new_adt_decl(lex->ast, line, name, traits,
-                               generics, variants, methods, is_pub, PAW_FALSE);
+    enum_body(lex, start, traits, variants, methods);
+    return NEW_NODE(lex, adt_decl, start, ident, traits, generics,
+            variants, methods, is_pub, PAW_FALSE);
 }
 
 static struct AstDecl *struct_field(struct Lex *lex, paw_Bool is_pub)
 {
-    int const line = lex->line;
-    String *name = parse_toplevel_name(lex);
-    struct AstType *tag = expect_type_annotation(lex, "field", name, PAW_TRUE);
-    return pawAst_new_field_decl(lex->ast, line, name, tag, is_pub);
+    struct SourceLoc start = lex->loc;
+    struct AstIdent ident = parse_toplevel_ident(lex);
+    struct AstType *tag = expect_type_annotation(lex, "field", ident, PAW_TRUE);
+    return NEW_NODE(lex, field_decl, start, ident, tag, is_pub);
 }
 
 static void struct_body(struct Lex *lex, struct AstTypeList *traits, struct AstDeclList *fields, struct AstDeclList *methods)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     if (test_next(lex, ':')) {
         parse_trait_list(lex, traits);
     }
     if (!test_next(lex, '{')) {
-        semicolon(lex);
+        semicolon(lex, "body of unit struct");
         return;
     }
 
@@ -1561,9 +1616,9 @@ static void struct_body(struct Lex *lex, struct AstTypeList *traits, struct AstD
         if (test(lex, TK_NAME)) {
             if (annos != NULL)
                 SYNTAX_ERROR(lex, "annotation not allowed here");
-            if (fields->count == LOCAL_MAX) {
+            if (fields->count == LOCAL_MAX)
                 limit_error(lex, "fields in struct body", LOCAL_MAX);
-            }
+
             struct AstDecl *field = struct_field(lex, is_pub);
             AstDeclList_push(lex->ast, fields, field);
             if (!test_next(lex, ',') && !test(lex, '}')) {
@@ -1577,7 +1632,7 @@ static void struct_body(struct Lex *lex, struct AstTypeList *traits, struct AstD
             AstDeclList_push(lex->ast, methods, method);
         }
     }
-    delim_next(lex, '}', '{', line);
+    delim_next(lex, '}', '{', start);
 
     if (fields->count == 0 && methods->count == 0) {
         pawX_error(lex, "expected at least 1 struct field or method between "
@@ -1587,23 +1642,23 @@ static void struct_body(struct Lex *lex, struct AstTypeList *traits, struct AstD
 
 static struct AstDecl *struct_decl(struct Lex *lex, paw_Bool is_pub)
 {
-    int const line = lex->line;
+    struct SourceLoc const start = lex->loc;
     skip(lex); // 'struct' token
-    String *name = parse_toplevel_name(lex);
+    struct AstIdent ident = parse_toplevel_ident(lex);
     struct AstDeclList *generics = type_param(lex);
     struct AstTypeList *traits = AstTypeList_new(lex->ast);
     struct AstDeclList *fields = AstDeclList_new(lex->ast);
     struct AstDeclList *methods = AstDeclList_new(lex->ast);
     struct_body(lex, traits, fields, methods);
-    return pawAst_new_adt_decl(lex->ast, line, name, traits,
-                               generics, fields, methods, is_pub, PAW_TRUE);
+    return NEW_NODE(lex, adt_decl, start, ident, traits, generics,
+            fields, methods, is_pub, PAW_TRUE);
 }
 
 static struct AstDecl *trait_decl(struct Lex *lex, paw_Bool is_pub)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     skip(lex); // 'trait' token
-    String *name = parse_toplevel_name(lex);
+    struct AstIdent ident = parse_toplevel_ident(lex);
     struct AstDeclList *generics = type_param(lex);
 
     check_next(lex, '{');
@@ -1614,40 +1669,40 @@ static struct AstDecl *trait_decl(struct Lex *lex, paw_Bool is_pub)
         struct AstDecl *method = parse_method(lex, NULL, is_pub);
         AstDeclList_push(lex->ast, methods, method);
     }
-    delim_next(lex, '}', '{', line);
-    return pawAst_new_trait_decl(lex->ast, line, name, generics, methods, is_pub);
+    delim_next(lex, '}', '{', start);
+    return NEW_NODE(lex, trait_decl, start, ident, generics, methods, is_pub);
 }
 
 static struct AstDecl *type_decl(struct Lex *lex, paw_Bool is_pub)
 {
-    int const line = lex->line;
+    struct SourceLoc start = lex->loc;
     skip(lex); // 'type' token
 
-    String *name = parse_toplevel_name(lex);
+    struct AstIdent ident = parse_toplevel_ident(lex);
     struct AstDeclList *generics = type_param(lex);
 
     check_next(lex, '=');
 
     struct AstType *rhs = parse_type(lex, PAW_TRUE);
-    if (AstIsFuncType(rhs)) {
+    if (AstIsFuncType(rhs))
         pawX_error(lex, "function type cannot appear in a type declaration");
-    }
-    semicolon(lex);
-    return pawAst_new_type_decl(lex->ast, line, name, generics, rhs, is_pub);
+
+    semicolon(lex, "type declaration");
+    return NEW_NODE(lex, type_decl, start, ident, generics, rhs, is_pub);
 }
 
 static struct AstStmt *decl_stmt(struct Lex *lex)
 {
-    int const line = lex->line;
+    struct SourceLoc const start = lex->loc;
     struct AstDecl *decl;
     if (test(lex, TK_LET)) {
-        decl = let_decl(lex, lex->line);
+        decl = let_decl(lex, start);
     } else if (test(lex, TK_TYPE)) {
         decl = type_decl(lex, PAW_FALSE);
     } else {
         pawX_error(lex, "expected 'let' or 'type' declaration");
     }
-    return pawAst_new_decl_stmt(lex->ast, line, decl);
+    return NEW_NODE(lex, decl_stmt, start, decl);
 }
 
 static struct AstStmt *statement(struct Lex *lex)
@@ -1672,13 +1727,13 @@ static struct AstStmt *statement(struct Lex *lex)
 
 static struct AstDecl *const_decl(struct Lex *lex, struct Annotations *annos, paw_Bool is_pub)
 {
-    const int line = lex->line;
+    struct SourceLoc const start = lex->loc;
     skip(lex); // 'const' token
-    String *name = parse_toplevel_name(lex);
-    struct AstType *tag = expect_type_annotation(lex, "constant", name, PAW_TRUE);
+    struct AstIdent ident = parse_toplevel_ident(lex);
+    struct AstType *tag = expect_type_annotation(lex, "constant", ident, PAW_TRUE);
     struct AstExpr *init = test_next(lex, '=') ? expr0(lex) : NULL;
-    semicolon(lex);
-    return pawAst_new_const_decl(lex->ast, line, name, annos, tag, init, is_pub);
+    semicolon(lex, "constant declaration");
+    return NEW_NODE(lex, const_decl, start, ident, annos, tag, init, is_pub);
 }
 
 static void ensure_not_pub(struct Lex *lex, paw_Bool has_qualifier)

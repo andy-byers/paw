@@ -6,14 +6,24 @@
 #include "compile.h"
 
 #define LEX_ERROR(x) pawX_error(x, "syntax error")
-#define SAVE_AND_NEXT(x) (save(x, *(x)->ptr), ++x->ptr)
+#define SAVE_AND_NEXT(x) save(x, next(x))
 #define IS_EOF(x) (CAST(uint8_t, *(x)->ptr) == TK_END)
 #define IS_NEWLINE(x) (*(x)->ptr == '\r' || *(x)->ptr == '\n')
 
-static void add_location(paw_Env *P, Buffer *print, String const *s, int line)
+static struct SourceSpan span_from(struct Lex *lex, struct SourceLoc start)
+{
+    return (struct SourceSpan){
+        .start = start,
+        .end = lex->loc,
+    };
+}
+
+static void add_location(paw_Env *P, Buffer *print, String const *s, struct SourceLoc loc)
 {
     pawL_add_nstring(P, print, s->text, s->length);
-    pawL_add_fstring(P, print, ":%d: ", line);
+    pawL_add_char(P, print, ':');
+    pawSrc_add_location(P, print, loc);
+    pawL_add_string(P, print, ": ");
 }
 
 _Noreturn void pawX_error(struct Lex *x, char const *fmt, ...)
@@ -21,7 +31,7 @@ _Noreturn void pawX_error(struct Lex *x, char const *fmt, ...)
     Buffer print;
     paw_Env *P = ENV(x);
     pawL_init_buffer(P, &print);
-    add_location(P, &print, x->modname, x->line);
+    add_location(P, &print, x->modname, x->loc);
 
     va_list arg;
     va_start(arg, fmt);
@@ -35,10 +45,19 @@ _Noreturn void pawX_error(struct Lex *x, char const *fmt, ...)
 static void increment_line(struct Lex *x)
 {
     paw_assert(ISNEWLINE(*x->ptr));
-    if (x->line == INT_MAX) {
+    if (x->loc.line == INT_MAX)
         pawX_error(x, "too many lines in module");
-    }
-    ++x->line;
+
+    x->loc.column = 1;
+    ++x->loc.line;
+}
+
+static void increment_column(struct Lex *x)
+{
+    if (x->loc.column == INT_MAX)
+        pawX_error(x, "too many columns in module");
+
+    ++x->loc.column;
 }
 
 static void save(struct Lex *x, char c)
@@ -50,6 +69,11 @@ static void save(struct Lex *x, char c)
 
 static char next(struct Lex *x)
 {
+    if (ISNEWLINE(*x->ptr)) {
+        increment_line(x);
+    } else {
+        increment_column(x);
+    }
     return *x->ptr++;
 }
 
@@ -73,9 +97,13 @@ static paw_Bool test_next2(struct Lex *x, char const *c2)
     return test2(x, c2) ? (next(x), PAW_TRUE) : PAW_FALSE;
 }
 
-static struct Token make_token(TokenKind kind)
+static struct Token make_token(TokenKind kind, struct SourceLoc start, struct SourceLoc end)
 {
     return (struct Token){
+        .span = {
+            .start = start,
+            .end = end,
+        },
         .kind = kind,
     };
 }
@@ -100,24 +128,24 @@ static struct Token make_float(struct Lex *x)
     };
 }
 
-static struct Token make_string(struct Lex *x, TokenKind kind)
+static struct Token make_string(struct Lex *x, struct SourceLoc start, TokenKind kind)
 {
     struct DynamicMem *dm = x->dm;
     struct StringBuffer *b = &dm->scratch;
-    struct Token t = make_token(kind);
+    struct Token t = make_token(kind, start, x->loc);
     String *s = pawP_scan_nstring(x->C, x->strings, b->data, CAST_SIZE(b->count));
     V_SET_OBJECT(&t.value, s);
     b->count = 0;
     return t;
 }
 
-static struct Token consume_name(struct Lex *x)
+static struct Token consume_name(struct Lex *x, struct SourceLoc start)
 {
     SAVE_AND_NEXT(x);
-    while (ISNAME(*x->ptr) || ISDIGIT(*x->ptr)) {
+    while (ISNAME(*x->ptr) || ISDIGIT(*x->ptr))
         SAVE_AND_NEXT(x);
-    }
-    struct Token t = make_string(x, TK_NAME);
+
+    struct Token t = make_string(x, start, TK_NAME);
     String const *s = V_STRING(t.value);
     if (IS_KEYWORD(s)) {
         t.kind = CAST(TokenKind, s->flag);
@@ -195,7 +223,7 @@ static int get_codepoint(struct Lex *x)
            | HEXVAL(c[3]);
 }
 
-static struct Token consume_string(struct Lex *x)
+static struct Token consume_string(struct Lex *x, struct SourceLoc start)
 {
     char const quote = next(x);
 
@@ -282,7 +310,7 @@ static struct Token consume_string(struct Lex *x)
                 LEX_ERROR(x);
         }
     } else if (test_next(x, quote)) {
-        return make_string(x, TK_STRING);
+        return make_string(x, start, TK_STRING);
     } else if (ISNEWLINE(*x->ptr)) {
         // unescaped newlines allowed in string literals
         SAVE_AND_NEXT(x);
@@ -292,7 +320,7 @@ static struct Token consume_string(struct Lex *x)
     goto handle_ascii;
 }
 
-static struct Token consume_int_aux(struct Lex *x)
+static struct Token consume_int_aux(struct Lex *x, struct SourceLoc start)
 {
     paw_Env *P = ENV(x);
     struct DynamicMem *dm = x->dm;
@@ -305,12 +333,13 @@ static struct Token consume_int_aux(struct Lex *x)
         pawX_error(x, "invalid integer '%s'", dm->scratch.data);
     }
     return (struct Token){
+        .span = span_from(x, start),
         .kind = TK_INTEGER,
         .value.i = i,
     };
 }
 
-static struct Token consume_bin_int(struct Lex *x, const char *begin)
+static struct Token consume_bin_int(struct Lex *x, struct SourceLoc start, const char *begin)
 {
     if (!test2(x, "01"))
         pawX_error(x, "expected at least 1 binary digit");
@@ -329,10 +358,10 @@ static struct Token consume_bin_int(struct Lex *x, const char *begin)
     }
 
     save(x, '\0');
-    return consume_int_aux(x);
+    return consume_int_aux(x, start);
 }
 
-static struct Token consume_oct_int(struct Lex *x, const char *begin)
+static struct Token consume_oct_int(struct Lex *x, struct SourceLoc start, const char *begin)
 {
     if (*x->ptr < '0' || *x->ptr > '7')
         pawX_error(x, "expected at least 1 octal digit");
@@ -351,10 +380,10 @@ static struct Token consume_oct_int(struct Lex *x, const char *begin)
     }
 
     save(x, '\0');
-    return consume_int_aux(x);
+    return consume_int_aux(x, start);
 }
 
-static struct Token consume_hex_int(struct Lex *x, const char *begin)
+static struct Token consume_hex_int(struct Lex *x, struct SourceLoc start, const char *begin)
 {
     if (!ISHEX(*x->ptr))
         pawX_error(x, "expected at least 1 hexadecimal digit");
@@ -373,7 +402,7 @@ static struct Token consume_hex_int(struct Lex *x, const char *begin)
     }
 
     save(x, '\0');
-    return consume_int_aux(x);
+    return consume_int_aux(x, start);
 }
 
 static void save_parsed_digits(struct Lex *x, const char *begin)
@@ -385,7 +414,7 @@ static void save_parsed_digits(struct Lex *x, const char *begin)
     save(x, '\0');
 }
 
-static struct Token consume_decimal_int(struct Lex *x, const char *begin)
+static struct Token consume_decimal_int(struct Lex *x, struct SourceLoc start, const char *begin)
 {
     save_parsed_digits(x, begin);
 
@@ -399,12 +428,13 @@ static struct Token consume_decimal_int(struct Lex *x, const char *begin)
     if (rc == PAW_ESYNTAX)
         pawX_error(x, "invalid integer '%s'", dm->scratch.data);
     return (struct Token){
+        .span = span_from(x, start),
         .kind = TK_INTEGER,
         .value.i = i,
     };
 }
 
-static struct Token consume_float(struct Lex *x, const char *begin)
+static struct Token consume_float(struct Lex *x, struct SourceLoc start, const char *begin)
 {
     save_parsed_digits(x, begin);
 
@@ -416,22 +446,24 @@ static struct Token consume_float(struct Lex *x, const char *begin)
     if (rc != PAW_OK)
         pawX_error(x, "invalid number '%s'", dm->scratch.data);
     return (struct Token){
+        .span = span_from(x, start),
         .kind = TK_FLOAT,
         .value.f = f,
     };
 }
 
-static struct Token consume_number(struct Lex *x)
+static struct Token consume_number(struct Lex *x, struct SourceLoc start)
 {
-    const char *begin = x->ptr++;
+    const char *begin = x->ptr;
     paw_assert(ISDIGIT(*begin));
+    next(x);
 
     if (*begin == '0' && test_next2(x, "bB"))
-        return consume_bin_int(x, begin);
+        return consume_bin_int(x, start, begin);
     if (*begin == '0' && test_next2(x, "oO"))
-        return consume_oct_int(x, begin);
+        return consume_oct_int(x, start, begin);
     if (*begin == '0' && test_next2(x, "xX"))
-        return consume_hex_int(x, begin);
+        return consume_hex_int(x, start, begin);
 
     while (ISDIGIT(*x->ptr) || test(x, '_'))
         next(x);
@@ -441,13 +473,13 @@ static struct Token consume_number(struct Lex *x)
         // as well as chained tuple selectors. "x->ptr[1]" works because the source
         // buffer ends with a '\0'.
         if (!ISDIGIT(x->ptr[1]) || x->t.kind == '.')
-            return consume_decimal_int(x, begin);
+            return consume_decimal_int(x, start, begin);
 
         next(x); // skip '.'
         while (ISDIGIT(*x->ptr) || test(x, '_'))
             next(x);
     } else if (!test2(x, "eE")) {
-        return consume_decimal_int(x, begin);
+        return consume_decimal_int(x, start, begin);
     }
 
     if (test_next2(x, "eE")) {
@@ -458,7 +490,7 @@ static struct Token consume_number(struct Lex *x)
 
     while (ISDIGIT(*x->ptr) || test(x, '_'))
         next(x);
-    return consume_float(x, begin);
+    return consume_float(x, start, begin);
 }
 
 static void skip_block_comment(struct Lex *x)
@@ -475,9 +507,8 @@ static void skip_block_comment(struct Lex *x)
 
 static void skip_line_comment(struct Lex *x)
 {
-    while (!IS_EOF(x) && !ISNEWLINE(*x->ptr)) {
+    while (!IS_EOF(x) && !ISNEWLINE(*x->ptr))
         next(x);
-    }
 }
 
 static void skip_whitespace(struct Lex *x)
@@ -493,12 +524,13 @@ static void skip_whitespace(struct Lex *x)
 
 static struct Token advance(struct Lex *x)
 {
-#define T(kind) make_token(CAST(TokenKind, kind))
-
+#define T(kind) make_token(CAST(TokenKind, kind), start, x->loc)
 try_again:
     if (x->ptr == x->end)
-        return T(TK_END);
+        return make_token(TK_END, x->loc, x->loc);
     skip_whitespace(x);
+
+    struct SourceLoc start = x->loc;
 
     // cast to avoid sign extension
     struct Token token = T(CAST(uint8_t, *x->ptr));
@@ -506,7 +538,7 @@ try_again:
     switch (token.kind) {
         case '\'':
         case '"':
-            token = consume_string(x);
+            token = consume_string(x, start);
             break;
         case ')':
         case ']':
@@ -593,15 +625,11 @@ try_again:
                 goto try_again;
             }
             break;
-        case '\r':
-        case '\n':
-            increment_line(x);
-            goto try_again;
         default:
             if (ISDIGIT(*x->ptr)) {
-                token = consume_number(x);
+                token = consume_number(x, start);
             } else if (ISNAME(*x->ptr)) {
-                token = consume_name(x);
+                token = consume_name(x, start);
             } else {
                 next(x);
             }
@@ -641,12 +669,18 @@ static void read_source(struct Lex *x)
     b->data[size] = '\0';
     x->ptr = b->data;
     x->end = b->data + size;
+
+    pawSrc_init_location(&x->loc);
+    x->last_loc = x->loc;
+
+    x->t2.kind = TK_NONE;
 }
 
 TokenKind pawX_next(struct Lex *x)
 {
-    x->last_line = x->line;
+    x->last_loc = x->loc;
     TokenKind const kind = pawX_peek(x);
+    x->t0 = x->t;
     x->t = x->t2;
     x->t2.kind = TK_NONE;
     return kind;
@@ -654,9 +688,8 @@ TokenKind pawX_next(struct Lex *x)
 
 TokenKind pawX_peek(struct Lex *x)
 {
-    if (x->t2.kind == TK_NONE) {
+    if (x->t2.kind == TK_NONE)
         x->t2 = advance(x);
-    }
     return x->t2.kind;
 }
 
@@ -674,9 +707,8 @@ void pawX_set_source(struct Lex *x, paw_Reader input, void *ud)
 
     x->ud = ud;
     x->input = input;
-    x->line = 1;
-    x->t2.kind = TK_NONE;
 
     read_source(x);
+    struct Token t2;
     pawX_next(x); // load first token
 }

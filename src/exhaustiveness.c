@@ -330,7 +330,7 @@ static void move_bindings_to_right(struct Usefulness *U, struct Row *row)
         if (HirIsBindingPat(pcol->pat)) {
             struct HirBindingPat *p = HirGetBindingPat(pcol->pat);
             BindingList_push(U->C, row->body.bindings, (struct Binding){
-                                                           .name = p->name,
+                                                           .name = p->ident.name,
                                                            .var = pcol->var,
                                                            .hid = p->hid,
                                                        });

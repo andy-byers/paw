@@ -100,9 +100,8 @@ static void collect_imports_from(struct Importer *I, struct Ast *ast)
         if (!AstIsUseDecl(item))
             continue;
         struct AstUseDecl *use = AstGetUseDecl(item);
-        if (use->item == NULL && use->as != NULL) {
-            StringMap_insert(I->C, ctx.aliases, use->as, use->name);
-        }
+        if (use->item.name == NULL && use->as.name != NULL)
+            StringMap_insert(I->C, ctx.aliases, use->as.name, use->ident.name);
     }
 
     // import modules
@@ -111,8 +110,8 @@ static void collect_imports_from(struct Importer *I, struct Ast *ast)
         if (!AstIsUseDecl(item))
             continue;
         struct AstUseDecl *use = AstGetUseDecl(item);
-        use->modno = import_module(I, use->name,
-                                   use->item == NULL ? use->as : NULL);
+        use->modno = import_module(I, use->ident.name,
+                                   use->item.name == NULL ? use->as.name : NULL);
     }
 
     leave_context(I);

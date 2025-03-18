@@ -71,11 +71,14 @@ enum MultiChar {
 typedef unsigned TokenKind;
 
 struct Token {
+    struct SourceSpan span;
     TokenKind kind;
     Value value;
 };
 
 struct Lex {
+    int line; // TODO: remove
+
     struct Pool *pool;
     struct Compiler *C;
     paw_Env *P;
@@ -90,14 +93,13 @@ struct Lex {
     char const *end;
 
     struct DynamicMem *dm;
-
-    struct Token t;
-    struct Token t2;
+    struct Token t0, t, t2;
 
     void *ud;
 
-    int line;
-    int last_line;
+    struct SourceLoc loc;
+    struct SourceLoc last_loc;
+
     int func_depth;
     int loop_depth;
     int expr_depth;

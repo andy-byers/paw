@@ -728,3 +728,28 @@ paw_Bool pawP_push_callback(struct Compiler *C, char const *name)
     paw_push_string(P, name);
     return paw_map_get(P, PAW_REGISTRY_INDEX) == 0;
 }
+
+static void add_location(paw_Env *P, Buffer *print, String const *modname, struct SourceLoc loc)
+{
+    pawL_add_nstring(P, print, modname->text, modname->length);
+    pawL_add_char(P, print, ':');
+    pawSrc_add_location(P, print, loc);
+    pawL_add_string(P, print, ": ");
+}
+
+_Noreturn void pawP_error(struct Compiler *C, int kind, String const *modname, struct SourceLoc loc, char const *fmt, ...)
+{
+    Buffer print;
+    paw_Env *P = ENV(C);
+    pawL_init_buffer(P, &print);
+    add_location(P, &print, C->modname, loc);
+
+    va_list arg;
+    va_start(arg, fmt);
+    pawL_add_vfstring(P, &print, fmt, arg);
+    va_end(arg);
+
+    pawL_push_result(P, &print);
+    pawC_throw(P, kind);
+}
+

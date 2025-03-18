@@ -12,7 +12,6 @@
 struct IrTypeFolder {
     struct Compiler *C;
     void *ud;
-    int line;
 
     struct IrType *(*FoldType)(struct IrTypeFolder *F, struct IrType *type);
     struct IrTypeList *(*FoldTypeList)(struct IrTypeFolder *F, struct IrTypeList *list);
@@ -29,12 +28,11 @@ struct IrTypeList *pawIr_fold_type_list(struct IrTypeFolder *F, struct IrTypeLis
 struct HirTypeFolder {
     struct IrTypeFolder F;
     struct HirVisitor V;
-    struct Compiler *C;
+    struct Hir *hir;
     void *ud;
-    int line;
 };
 
-void pawHir_type_folder_init(struct HirTypeFolder *F, struct Compiler *C, void *ud);
+void pawHir_type_folder_init(struct HirTypeFolder *F, struct Hir *hir, void *ud);
 
 // Type folder entrypoints for HIR nodes:
 void pawHir_fold_expr_type(struct HirTypeFolder *F, struct HirExpr *node);

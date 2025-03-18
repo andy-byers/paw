@@ -105,12 +105,19 @@ DEFINE_KIND_PRINTER(type, AstType)
 DEFINE_KIND_PRINTER(decl, AstDecl)
 DEFINE_KIND_PRINTER(stmt, AstStmt)
 
+static void add_span(Printer *P, struct SourceSpan span)
+{
+    pawSrc_add_location(P->P, P->buf, span.start);
+    DUMP_LITERAL(P, "-");
+    pawSrc_add_location(P->P, P->buf, span.end);
+}
+
 static void dump_path(Printer *P, struct AstPath *p)
 {
-    for (int i = 0; i < p->count; ++i) {
-        struct AstSegment seg = AstPath_get(p, i);
-        DUMP_NAME(P, seg.name);
-        dump_type_list(P, seg.types, "types");
+    struct AstSegment *pseg;
+    K_LIST_FOREACH(p->segments, pseg) {
+        DUMP_NAME(P, pseg->ident.name);
+        dump_type_list(P, pseg->types, "types");
     }
 }
 
@@ -121,11 +128,11 @@ static void dump_decl(Printer *P, struct AstDecl *decl)
         return;
     }
     ++P->indent;
-    DUMP_FMT(P, "line: %d\n", decl->hdr.line);
+    add_span(P, decl->hdr.span);
     switch (AST_KINDOF(decl)) {
         case kAstTraitDecl: {
             struct AstTraitDecl *d = AstGetTraitDecl(decl);
-            DUMP_FMT(P, "name: %s\n", d->name->text);
+            DUMP_FMT(P, "name: %s\n", d->ident.name->text);
             DUMP_FMT(P, "is_pub: %d\n", d->is_pub);
             dump_decl_list(P, d->generics, "generics");
             dump_decl_list(P, d->methods, "methods");
@@ -133,18 +140,18 @@ static void dump_decl(Printer *P, struct AstDecl *decl)
         }
         case kAstUseDecl: {
             struct AstUseDecl *d = AstGetUseDecl(decl);
-            DUMP_FMT(P, "name: %s\n", d->name->text);
-            if (d->as != NULL)
-                DUMP_FMT(P, "as: %s\n", d->as->text);
-            if (d->item != NULL)
-                DUMP_FMT(P, "item: %s\n", d->item->text);
+            DUMP_FMT(P, "name: %s\n", d->ident.name->text);
+            if (d->as.name != NULL)
+                DUMP_FMT(P, "as: %s\n", d->as.name->text);
+            if (d->item.name != NULL)
+                DUMP_FMT(P, "item: %s\n", d->item.name->text);
             DUMP_FMT(P, "has_star: %d\n", d->has_star);
             break;
         }
         case kAstFuncDecl: {
             struct AstFuncDecl *d = AstGetFuncDecl(decl);
             DUMP_FMT(P, "receiver: %p\n", CAST(void *, d->receiver));
-            DUMP_FMT(P, "name: %s\n", d->name->text);
+            DUMP_FMT(P, "name: %s\n", d->ident.name->text);
             DUMP_FMT(P, "is_pub: %d\n", d->is_pub);
             dump_decl_list(P, d->generics, "generics");
             dump_decl_list(P, d->params, "params");
@@ -156,7 +163,7 @@ static void dump_decl(Printer *P, struct AstDecl *decl)
         }
         case kAstFieldDecl: {
             struct AstFieldDecl *d = AstGetFieldDecl(decl);
-            DUMP_NAME(P, d->name);
+            DUMP_NAME(P, d->ident.name);
             DUMP_MSG(P, "tag: ");
             dump_type(P, d->tag);
             DUMP_FMT(P, "is_pub: %d\n", d->is_pub);
@@ -174,7 +181,7 @@ static void dump_decl(Printer *P, struct AstDecl *decl)
         }
         case kAstConstDecl: {
             struct AstConstDecl *d = AstGetConstDecl(decl);
-            DUMP_NAME(P, d->name);
+            DUMP_NAME(P, d->ident.name);
             DUMP_MSG(P, "tag: ");
             dump_type(P, d->tag);
             DUMP_MSG(P, "init: ");
@@ -184,13 +191,13 @@ static void dump_decl(Printer *P, struct AstDecl *decl)
         }
         case kAstVariantDecl: {
             struct AstVariantDecl *d = AstGetVariantDecl(decl);
-            DUMP_NAME(P, d->name);
+            DUMP_NAME(P, d->ident.name);
             dump_decl_list(P, d->fields, "fields");
             break;
         }
         case kAstAdtDecl: {
             struct AstAdtDecl *d = AstGetAdtDecl(decl);
-            DUMP_NAME(P, d->name);
+            DUMP_NAME(P, d->ident.name);
             DUMP_FMT(P, "is_struct: %d\n", d->is_struct);
             DUMP_FMT(P, "is_pub: %d\n", d->is_pub);
             dump_type_list(P, d->traits, "traits");
@@ -200,12 +207,12 @@ static void dump_decl(Printer *P, struct AstDecl *decl)
         }
         case kAstGenericDecl: {
             struct AstGenericDecl *d = AstGetGenericDecl(decl);
-            DUMP_NAME(P, d->name);
+            DUMP_NAME(P, d->ident.name);
             break;
         }
         case kAstTypeDecl: {
             struct AstTypeDecl *d = AstGetTypeDecl(decl);
-            DUMP_NAME(P, d->name);
+            DUMP_NAME(P, d->ident.name);
             DUMP_MSG(P, "rhs: ");
             dump_type(P, d->rhs);
             dump_decl_list(P, d->generics, "generics");
@@ -224,7 +231,7 @@ static void dump_stmt(Printer *P, struct AstStmt *stmt)
         return;
     }
     ++P->indent;
-    DUMP_FMT(P, "line: %d\n", stmt->hdr.line);
+    add_span(P, stmt->hdr.span);
     switch (AST_KINDOF(stmt)) {
         case kAstExprStmt: {
             struct AstExprStmt *s = AstGetExprStmt(stmt);
@@ -250,11 +257,11 @@ static void dump_type(Printer *P, struct AstType *type)
         return;
     }
     ++P->indent;
-    DUMP_FMT(P, "line: %d\n", type->hdr.line);
+    add_span(P, type->hdr.span);
     switch (AST_KINDOF(type)) {
         case kAstPathType: {
             struct AstPathType *t = AstGetPathType(type);
-            dump_path(P, t->path);
+            dump_path(P, &t->path);
             break;
         }
         case kAstTupleType: {
@@ -290,7 +297,7 @@ static void dump_expr(Printer *P, struct AstExpr *expr)
         return;
     }
     ++P->indent;
-    DUMP_FMT(P, "line: %d\n", expr->hdr.line);
+    add_span(P, expr->hdr.span);
     switch (AST_KINDOF(expr)) {
         case kAstParenExpr: {
             struct AstParenExpr *e = AstGetParenExpr(expr);
@@ -371,7 +378,7 @@ static void dump_expr(Printer *P, struct AstExpr *expr)
                 case kAstCompositeLit:
                     DUMP_MSG(P, "lit_kind: COMPOSITE\n");
                     DUMP_MSG(P, "target: ");
-                    dump_path(P, e->comp.path);
+                    dump_path(P, &e->comp.path);
                     dump_expr_list(P, e->comp.items, "items");
                     break;
             }
@@ -426,7 +433,7 @@ static void dump_expr(Printer *P, struct AstExpr *expr)
             if (e->is_index) {
                 DUMP_FMT(P, "index: %I\n", e->index);
             } else {
-                DUMP_NAME(P, e->name);
+                DUMP_NAME(P, e->ident.name);
             }
             break;
         }

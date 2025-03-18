@@ -73,14 +73,15 @@ struct IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *
         K_LIST_FOREACH (trait->methods, pmethod) {
             struct HirDecl *result;
             struct HirFuncDecl *method = HirGetFuncDecl(*pmethod);
-            if (pawS_eq(method->name, name))
+            if (pawS_eq(method->ident.name, name)) {
                 result = *pmethod;
-            else
+            } else {
                 continue;
-
-            if (last_method != NULL) {
-                NAME_ERROR(C, "found multiple applicable methods");
             }
+
+            if (last_method != NULL)
+                NAME_ERROR(C, "found multiple applicable methods");
+
             last_method = result;
             last_trait = trait;
         }
@@ -318,7 +319,7 @@ static void print_type(struct Printer *P, IrType *type)
             // TODO: get IR generic def, not HIR decl, which may not exist anymore
             struct IrGeneric *gen = IrGetGeneric(type);
             struct HirDecl *decl = pawHir_get_decl(P->C, gen->did);
-            PRINT_STRING(P, decl->hdr.name);
+            PRINT_STRING(P, hir_decl_ident(decl).name);
             break;
         }
         case kIrInfer: {
@@ -330,7 +331,7 @@ static void print_type(struct Printer *P, IrType *type)
             // TODO: create an IR trait object and use that
             struct IrTraitObj *t = IrGetTraitObj(type);
             struct HirDecl *decl = pawHir_get_decl(P->C, t->did);
-            PRINT_STRING(P, decl->hdr.name);
+            PRINT_STRING(P, hir_decl_ident(decl).name);
             if (t->types != NULL) {
                 PRINT_CHAR(P, '<');
                 print_type_list(P, t->types);

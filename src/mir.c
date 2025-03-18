@@ -1001,7 +1001,7 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
             struct MirGlobal *t = MirGetGlobal(instr);
             struct HirDecl *decl = pawHir_get_decl(P->C, IR_TYPE_DID(mir_reg_data(P->mir, t->output)->type));
             char const *type = pawIr_print_type(P->C, mir_reg_data(P->mir, t->output)->type);
-            DUMP_FMT(P, "_%d = global %s (%s)\n", t->output.value, decl->hdr.name->text, type);
+            DUMP_FMT(P, "_%d = global %s (%s)\n", t->output.value, hir_decl_ident(decl).name->text, type);
             --ENV(P->C)->top.p; // pop 'type'
             break;
         }

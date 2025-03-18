@@ -38,6 +38,7 @@
 #include "map.h"
 #include "mem.h"
 #include "paw.h"
+#include "source.h"
 #include "stats.h"
 #include "trait.h"
 
@@ -49,6 +50,11 @@
 #define SYNTAX_ERROR(X, ...) pawE_error(ENV(X), PAW_ESYNTAX, (X)->line, __VA_ARGS__)
 #define TYPE_ERROR(X, ...) pawE_error(ENV(X), PAW_ETYPE, (X)->line, __VA_ARGS__)
 #define VALUE_ERROR(X, line, ...) pawE_error(ENV(X), PAW_EVALUE, line, __VA_ARGS__)
+
+#define NAME_ERROR_(C_, Modname_, Loc_, ...) pawP_error(C_, PAW_ENAME, Modname_, Loc_, __VA_ARGS__)
+#define SYNTAX_ERROR_(C_, Modname_, Loc_, ...) pawP_error(C_, PAW_ESYNTAX, Modname_, Loc_, __VA_ARGS__)
+#define TYPE_ERROR_(C_, Modname_, Loc_, ...) pawP_error(C_, PAW_ETYPE, Modname_, Loc_, __VA_ARGS__)
+#define VALUE_ERROR_(C_, Modname_, Loc_, ...) pawP_error(C_, PAW_EVALUE, Modname_, Loc_, __VA_ARGS__)
 
 #define GET_NODE_TYPE(C, p) pawIr_get_type(C, (p)->hdr.hid)
 #define SET_NODE_TYPE(C, p, t) pawIr_set_type(C, (p)->hdr.hid, t)
@@ -171,6 +177,8 @@ struct Compiler {
     int def_count;
     int line;
 };
+
+_Noreturn void pawP_error(struct Compiler *C, int kind, String const *modname, struct SourceLoc loc, char const *fmt, ...);
 
 paw_Bool pawP_push_callback(struct Compiler *C, char const *name);
 
@@ -359,7 +367,7 @@ struct TraitOwnerList *pawP_get_trait_owners(struct Compiler *C, struct IrType *
 
 // Generate code for data structures used during compilation
 
-#define P_ID_HASH(Ctx_, Did_) ((void)Ctx_, (Did_).value)
+#define P_ID_HASH(Ctx_, Did_) ((void)Ctx_, (paw_Uint)(Did_).value)
 #define P_ID_EQUALS(Ctx_, A_, B_) ((void)Ctx_, ((A_).value == (B_).value))
 #define P_PTR_HASH(Ctx_, Ptr_) ((void)Ctx_, (paw_Uint)(Ptr_))
 #define P_PTR_EQUALS(Ctx_, A_, B_) ((void)Ctx_, ((A_) == (B_)))

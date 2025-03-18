@@ -335,9 +335,9 @@ static void test_tuple_error(void)
 static void test_struct_error(void)
 {
     test_compiler_status(PAW_ESYNTAX, "struct_unit_with_braces_on_def", "struct A {}", "let a = A;");
-    test_compiler_status(PAW_ESYNTAX, "struct_unit_with_braces_on_init", "struct A;", "let a = A{};");
     test_compiler_status(PAW_ESYNTAX, "struct_unit_without_semicolon", "struct A", "");
     test_compiler_status(PAW_ESYNTAX, "struct_missing_braces", "struct A {pub a: int}", "let a = A;");
+    test_compiler_status(PAW_EVALUE, "struct_unit_with_braces_on_init", "struct A;", "let a = A{};");
     test_compiler_status(PAW_ENAME, "struct_missing_only_field", "struct A {pub a: int}", "let a = A{};");
     test_compiler_status(PAW_ENAME, "struct_missing_field", "struct A {pub a: int, pub b: float}", "let a = A{a: 1};");
     test_compiler_status(PAW_ENAME, "struct_extra_field", "struct A {pub a: int}", "let a = A{a: 1, b: 2};");
@@ -366,8 +366,8 @@ static void test_enum_error(void)
     test_compiler_status(PAW_ENAME, "enum_duplicate_variant", "enum A {X, X}", "");
     test_compiler_status(PAW_ENAME, "enum_nonexistent_variant", "enum A {X}", "let a = A::Y;");
     test_compiler_status(PAW_ETYPE, "enum_missing_only_field", "enum A {X(int)}", "let a = A::X;");
-    test_compiler_status(PAW_ESYNTAX, "enum_missing_field", "enum A {X(int, float)}", "let a = A::X(42);");
-    test_compiler_status(PAW_ESYNTAX, "enum_extra_field", "enum A {X(int)}", "let a = A::X(42, true);");
+    test_compiler_status(PAW_EVALUE, "enum_missing_field", "enum A {X(int, float)}", "let a = A::X(42);");
+    test_compiler_status(PAW_EVALUE, "enum_extra_field", "enum A {X(int)}", "let a = A::X(42, true);");
     test_compiler_status(PAW_ETYPE, "enum_wrong_field_type", "enum A {X(int)}", "let a = A::X(1.0);");
     test_compiler_status(PAW_ETYPE, "enum_requires_pattern_matching", "enum E{X(int)}", "let x = E::X(1); let y = x.0;");
 }
@@ -402,7 +402,8 @@ static void test_map_error(void)
 
 static void test_import_error(void)
 {
-    test_compiler_status(PAW_ENAME, "missing_import", "use import_not_found;", "");
+    test_compiler_status(PAW_ENAME, "unrecognized_import", "use import_not_found;", "");
+    test_compiler_status(PAW_ENAME, "unrecognized_import_item", "use io::NotFound;", "");
     test_compiler_status(PAW_ENAME, "missing_import_item", "use io;", "let t = io::NotFound;");
 }
 

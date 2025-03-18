@@ -309,6 +309,8 @@ enum TraitKind {
     }                                                                                                \
     static inline struct Name_##Node **Name_##_find_node(Context_ *ctx, struct Name_ *map, Key_ key) \
     {                                                                                                \
+        if (map->alloc == 0)                                                                         \
+            return NULL;                                                                             \
         struct Name_##Node **ptr = Name_##_bucketp(ctx, map, key);                                   \
         while (*ptr != NULL) {                                                                       \
             if (Equals_(ctx, key, (*ptr)->key)) {                                                    \
