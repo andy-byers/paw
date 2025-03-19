@@ -4,11 +4,13 @@
 
 #include "lex.h"
 #include "compile.h"
+#include "error.h"
 
-#define LEX_ERROR(x) pawX_error(x, "syntax error")
-#define SAVE_AND_NEXT(x) save(x, next(x))
-#define IS_EOF(x) (CAST(uint8_t, *(x)->ptr) == TK_END)
-#define IS_NEWLINE(x) (*(x)->ptr == '\r' || *(x)->ptr == '\n')
+#define SAVE_AND_NEXT(X_) save(X_, next(X_))
+#define IS_EOF(X_) (CAST(uint8_t, *(X_)->ptr) == TK_END)
+#define IS_NEWLINE(X_) (*(X_)->ptr == '\r' || *(X_)->ptr == '\n')
+
+#define LEX_ERROR(X_, Kind_, ...) pawErr_##Kind_((X_)->C, (X_)->modname, __VA_ARGS__)
 
 static struct SourceSpan span_from(struct Lex *lex, struct SourceLoc start)
 {
@@ -18,35 +20,11 @@ static struct SourceSpan span_from(struct Lex *lex, struct SourceLoc start)
     };
 }
 
-static void add_location(paw_Env *P, Buffer *print, String const *s, struct SourceLoc loc)
-{
-    pawL_add_nstring(P, print, s->text, s->length);
-    pawL_add_char(P, print, ':');
-    pawSrc_add_location(P, print, loc);
-    pawL_add_string(P, print, ": ");
-}
-
-_Noreturn void pawX_error(struct Lex *x, char const *fmt, ...)
-{
-    Buffer print;
-    paw_Env *P = ENV(x);
-    pawL_init_buffer(P, &print);
-    add_location(P, &print, x->modname, x->loc);
-
-    va_list arg;
-    va_start(arg, fmt);
-    pawL_add_vfstring(P, &print, fmt, arg);
-    va_end(arg);
-
-    pawL_push_result(P, &print);
-    pawC_throw(P, PAW_ESYNTAX);
-}
-
 static void increment_line(struct Lex *x)
 {
     paw_assert(ISNEWLINE(*x->ptr));
     if (x->loc.line == INT_MAX)
-        pawX_error(x, "too many lines in module");
+        LEX_ERROR(x, too_many_lines, x->loc, INT_MAX);
 
     x->loc.column = 1;
     ++x->loc.line;
@@ -55,7 +33,7 @@ static void increment_line(struct Lex *x)
 static void increment_column(struct Lex *x)
 {
     if (x->loc.column == INT_MAX)
-        pawX_error(x, "too many columns in module");
+        LEX_ERROR(x, too_many_columns, x->loc, INT_MAX);
 
     ++x->loc.column;
 }
@@ -150,13 +128,13 @@ static struct Token consume_name(struct Lex *x, struct SourceLoc start)
     if (IS_KEYWORD(s)) {
         t.kind = CAST(TokenKind, s->flag);
     } else if (s->length > PAW_NAME_MAX) {
-        pawX_error(x, "name (%I chars) is too long", PAW_CAST_INT(s->length));
+        LEX_ERROR(x, name_too_long, start, s->length, PAW_NAME_MAX);
     }
     return t;
 }
 
 // Tables are from https://arxiv.org/pdf/2010.03090.pdf
-static int consume_utf8(struct Lex *x)
+static void consume_utf8(struct Lex *x)
 {
     // clang-format off
     static const uint8_t kLookup1[256] = {
@@ -190,21 +168,25 @@ static int consume_utf8(struct Lex *x)
     };
     // clang-format on
 
-    uint32_t state = 0;
+    unsigned state = 0;
     do {
-        uint8_t const c = CAST(uint8_t, *x->ptr);
+        unsigned char const c = (unsigned char)*x->ptr;
         state = kLookup1[c] + state * 12;
         state = kLookup2[state];
         SAVE_AND_NEXT(x);
     } while (state % 8 != 0);
-    return state ? -1 : 0;
+
+     // TODO: keep track of codepoint for error message
+    if (state != 0)
+        LEX_ERROR(x, invalid_unicode_codepoint, x->loc, -1);
 }
 
 static int get_codepoint(struct Lex *x)
 {
     if (x->end - x->ptr < 4)
         return -1;
-    const char c[4] = {
+
+    const char c[5] = {
         next(x),
         next(x),
         next(x),
@@ -212,11 +194,11 @@ static int get_codepoint(struct Lex *x)
     };
 
     if (!ISHEX(c[0])
-        || !ISHEX(c[1])
-        || !ISHEX(c[2])
-        || !ISHEX(c[3])) {
-        return -1;
-    }
+            || !ISHEX(c[1])
+            || !ISHEX(c[2])
+            || !ISHEX(c[3]))
+        LEX_ERROR(x, invalid_unicode_escape, x->loc, c);
+
     return HEXVAL(c[0]) << 12
            | HEXVAL(c[1]) << 8
            | HEXVAL(c[2]) << 4
@@ -229,12 +211,12 @@ static struct Token consume_string(struct Lex *x, struct SourceLoc start)
 
     for (;;) {
     handle_ascii:
-        if (ISASCIIEND(*x->ptr)) {
+        if (ISASCIIEND(*x->ptr))
             break;
-        }
         SAVE_AND_NEXT(x);
     }
 
+    // TODO: truncated strings
     if (test_next(x, '\\')) {
         char const c = next(x);
         switch (c) {
@@ -266,28 +248,14 @@ static struct Token consume_string(struct Lex *x, struct SourceLoc start)
                 save(x, '\t');
                 break;
             case 'u': {
-                int codepoint = get_codepoint(x);
-                if (codepoint < 0)
-                    LEX_ERROR(x);
-                if (0xD800 <= codepoint && codepoint <= 0xDFFF) {
-                    // Codepoint is part of a surrogate pair. Expect a high
-                    // surrogate (U+D800–U+DBFF) followed by a low surrogate
-                    // (U+DC00–U+DFFF).
-                    if (codepoint <= 0xDBFF) {
-                        if (!test_next(x, '\\') || !test_next(x, 'u')) {
-                            LEX_ERROR(x);
-                        }
-                        int const codepoint2 = get_codepoint(x);
-                        if (codepoint2 < 0xDC00 || codepoint2 > 0xDFFF) {
-                            LEX_ERROR(x);
-                        }
-                        codepoint = (((codepoint - 0xD800) << 10) | (codepoint2 - 0xDC00)) + 0x10000;
-                    } else {
-                        LEX_ERROR(x);
-                    }
-                }
-                // Translate the codepoint into bytes. Modified from
-                // @Tencent/rapidjson.
+                struct SourceLoc saved = x->loc;
+                unsigned const codepoint = get_codepoint(x);
+                if ((0xD800 <= codepoint && codepoint < 0xE000) || codepoint >= 0x110000)
+                    // codepoint is either in the surrogate range, or it is outside the valid range of
+                    // a unicode codepoint
+                    LEX_ERROR(x, invalid_unicode_codepoint, saved, codepoint);
+
+                // Translate the codepoint into bytes. Modified from @Tencent/rapidjson.
                 if (codepoint <= 0x7F) {
                     save(x, (char)codepoint);
                 } else if (codepoint <= 0x7FF) {
@@ -307,20 +275,20 @@ static struct Token consume_string(struct Lex *x, struct SourceLoc start)
                 break;
             }
             default:
-                LEX_ERROR(x);
+                LEX_ERROR(x, invalid_escape, x->loc, c);
         }
     } else if (test_next(x, quote)) {
         return make_string(x, start, TK_STRING);
     } else if (ISNEWLINE(*x->ptr)) {
         // unescaped newlines allowed in string literals
         SAVE_AND_NEXT(x);
-    } else if (consume_utf8(x)) {
-        LEX_ERROR(x);
+    } else {
+        consume_utf8(x);
     }
     goto handle_ascii;
 }
 
-static struct Token consume_int_aux(struct Lex *x, struct SourceLoc start)
+static struct Token consume_int_aux(struct Lex *x, struct SourceLoc start, char const *base_name)
 {
     paw_Env *P = ENV(x);
     struct DynamicMem *dm = x->dm;
@@ -328,9 +296,9 @@ static struct Token consume_int_aux(struct Lex *x, struct SourceLoc start)
 
     int const rc = pawV_parse_int(P, dm->scratch.data, 0, &i);
     if (rc == PAW_EOVERFLOW) {
-        pawX_error(x, "integer '%s' is out of range for 'int' type", dm->scratch.data);
+        LEX_ERROR(x, integer_out_of_range, start, dm->scratch.data);
     } else if (rc == PAW_ESYNTAX) {
-        pawX_error(x, "invalid integer '%s'", dm->scratch.data);
+        LEX_ERROR(x, invalid_integer, start, base_name, dm->scratch.data);
     }
     return (struct Token){
         .span = span_from(x, start),
@@ -341,68 +309,74 @@ static struct Token consume_int_aux(struct Lex *x, struct SourceLoc start)
 
 static struct Token consume_bin_int(struct Lex *x, struct SourceLoc start, const char *begin)
 {
-    if (!test2(x, "01"))
-        pawX_error(x, "expected at least 1 binary digit");
+    struct DynamicMem *dm = x->dm;
 
     save(x, begin[0]);
     save(x, begin[1]);
+
+    if (!test2(x, "01"))
+        LEX_ERROR(x, expected_integer_digit, x->loc, "binary");
 
     while (ISNAME(*x->ptr) || ISDIGIT(*x->ptr)) {
         if (test_next(x, '_')) {
             // ignore digit separators
         } else if (!test2(x, "01")) {
-            pawX_error(x, "unexpected '%c' in binary integer", *x->ptr);
+            LEX_ERROR(x, unexpected_integer_char, x->loc, *x->ptr, "binary");
         } else {
             SAVE_AND_NEXT(x);
         }
     }
 
     save(x, '\0');
-    return consume_int_aux(x, start);
+    return consume_int_aux(x, start, "binary");
 }
 
 static struct Token consume_oct_int(struct Lex *x, struct SourceLoc start, const char *begin)
 {
-    if (*x->ptr < '0' || *x->ptr > '7')
-        pawX_error(x, "expected at least 1 octal digit");
+    struct DynamicMem *dm = x->dm;
 
     save(x, begin[0]);
     save(x, begin[1]);
+
+    if (*x->ptr < '0' || *x->ptr > '7')
+        LEX_ERROR(x, expected_integer_digit, x->loc, "octal");
 
     while (ISNAME(*x->ptr) || ISDIGIT(*x->ptr)) {
         if (test_next(x, '_')) {
             // ignore digit separators
         } else if (*x->ptr < '0' || *x->ptr > '7') {
-            pawX_error(x, "unexpected '%c' in octal integer", *x->ptr);
+            LEX_ERROR(x, unexpected_integer_char, x->loc, *x->ptr, "octal");
         } else {
             SAVE_AND_NEXT(x);
         }
     }
 
     save(x, '\0');
-    return consume_int_aux(x, start);
+    return consume_int_aux(x, start, "octal");
 }
 
 static struct Token consume_hex_int(struct Lex *x, struct SourceLoc start, const char *begin)
 {
-    if (!ISHEX(*x->ptr))
-        pawX_error(x, "expected at least 1 hexadecimal digit");
+    struct DynamicMem *dm = x->dm;
 
     save(x, begin[0]);
     save(x, begin[1]);
+
+    if (!ISHEX(*x->ptr))
+        LEX_ERROR(x, expected_integer_digit, x->loc, "hexadecimal");
 
     while (ISNAME(*x->ptr) || ISDIGIT(*x->ptr)) {
         if (test_next(x, '_')) {
             // ignore digit separators
         } else if (!ISHEX(*x->ptr)) {
-            pawX_error(x, "unexpected '%c' in hexadecimal integer", *x->ptr);
+            LEX_ERROR(x, unexpected_integer_char, x->loc, *x->ptr, "hexadecimal");
         } else {
             SAVE_AND_NEXT(x);
         }
     }
 
     save(x, '\0');
-    return consume_int_aux(x, start);
+    return consume_int_aux(x, start, "hexadecimal");
 }
 
 static void save_parsed_digits(struct Lex *x, const char *begin)
@@ -424,9 +398,9 @@ static struct Token consume_decimal_int(struct Lex *x, struct SourceLoc start, c
 
     int const rc = pawV_parse_int(P, dm->scratch.data, 0, &i);
     if (rc == PAW_EOVERFLOW)
-        pawX_error(x, "integer '%s' is out of range for 'int' type", dm->scratch.data);
+        LEX_ERROR(x, integer_out_of_range, start, dm->scratch.data);
     if (rc == PAW_ESYNTAX)
-        pawX_error(x, "invalid integer '%s'", dm->scratch.data);
+        LEX_ERROR(x, invalid_integer, start, "decimal", dm->scratch.data);
     return (struct Token){
         .span = span_from(x, start),
         .kind = TK_INTEGER,
@@ -444,7 +418,7 @@ static struct Token consume_float(struct Lex *x, struct SourceLoc start, const c
 
     int const rc = pawV_parse_float(ENV(x), dm->scratch.data, &f);
     if (rc != PAW_OK)
-        pawX_error(x, "invalid number '%s'", dm->scratch.data);
+        LEX_ERROR(x, invalid_float, start, dm->scratch.data);
     return (struct Token){
         .span = span_from(x, start),
         .kind = TK_FLOAT,
@@ -484,25 +458,13 @@ static struct Token consume_number(struct Lex *x, struct SourceLoc start)
 
     if (test_next2(x, "eE")) {
         test_next2(x, "+-");
-        if (!ISDIGIT(*x->ptr))
-            pawX_error(x, "malformed float");
+        if (!ISDIGIT(*x->ptr)) // TODO: hack to prevent '_' before first digit after "e" ["+" | "-"]
+            LEX_ERROR(x, unexpected_symbol, start);
     }
 
     while (ISDIGIT(*x->ptr) || test(x, '_'))
         next(x);
     return consume_float(x, start, begin);
-}
-
-static void skip_block_comment(struct Lex *x)
-{
-    for (;;) {
-        if (test_next(x, '*') && test_next(x, '/')) {
-            break;
-        } else if (IS_EOF(x)) {
-            pawX_error(x, "missing end of block comment");
-        }
-        next(x);
-    }
 }
 
 static void skip_line_comment(struct Lex *x)
@@ -619,9 +581,6 @@ try_again:
             next(x);
             if (test_next(x, '/')) {
                 skip_line_comment(x);
-                goto try_again;
-            } else if (test_next(x, '*')) {
-                skip_block_comment(x);
                 goto try_again;
             }
             break;

@@ -19,7 +19,7 @@ pub fn test_struct_fields() {
 }
 
 pub fn test_struct_syntax() {
-    let i = Integer{value: 123}; {/* this is an empty block */}
+    let i = Integer{value: 123}; {}
     {} {}{}
     let i = i;
     {}

@@ -1,5 +1,6 @@
 #include "auxlib.h"
 #include "call.h"
+#include "error.h"
 #include "lib.h"
 #include "opcode.h"
 #include "os.h"
@@ -26,21 +27,24 @@ static void write_main(char *out, char const *items, char const *text)
 
 static void check_status(paw_Env *P, int have, int want)
 {
-    check(have == want);
     if (have != PAW_OK) {
         fprintf(stderr, "message: %s\n", paw_string(P, -1));
         paw_pop(P, 1);
     }
+    if (have != want) {
+        fprintf(stderr, "expected error code %d but got %d\n", want, have);
+        abort();
+    }
 }
 
-static void test_compiler_status(int expect, char const *name, char const *item, char const *text)
+static void test_compiler_status(enum ErrorKind expect, char const *name, char const *item, char const *text)
 {
     char buffer[4096];
     write_main(buffer, item, text);
 
     paw_Env *P = paw_open(&(struct paw_Options){0});
-    int status = pawL_load_chunk(P, name, buffer);
-    check_status(P, status, expect);
+    enum ErrorKind status = (enum ErrorKind)pawL_load_chunk(P, name, buffer);
+    check_status(P, (int)status, (int)expect);
 
     paw_close(P);
 }
@@ -96,7 +100,7 @@ static char const *get_literal(int kind)
     }
 }
 
-static void check_unop_error(int expect, char const *op, paw_Type k)
+static void check_unop_error(enum ErrorKind expect, char const *op, paw_Type k)
 {
     char name_buf[256] = {0};
     snprintf(name_buf, sizeof(name_buf), "unop_type_error('%s', %s)",
@@ -217,72 +221,71 @@ static void test_type_error(void)
 
 static void test_syntax_error(void)
 {
-    test_compiler_status(PAW_ESYNTAX, "string_missing_second_surrogate", "", "let s = '\\ud801';");
-    test_compiler_status(PAW_ESYNTAX, "string_missing_first_surrogate", "", "let s = '\\udc00';");
-    test_compiler_status(PAW_ESYNTAX, "string_malformed_surrogate_1", "", "let s = '\\ud801\\....';");
-    test_compiler_status(PAW_ESYNTAX, "string_malformed_surrogate_2", "", "let s = '\\ud801\\u....';");
-    test_compiler_status(PAW_ESYNTAX, "string_invalid_surrogate_low", "", "let s = '\\ud801\\udbff';");
-    test_compiler_status(PAW_ESYNTAX, "string_invalid_surrogate_high", "", "let s = '\\ud801\\ue000';");
+    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_missing_second_surrogate", "", "let s = '\\ud801';");
+    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_missing_first_surrogate", "", "let s = '\\udc00';");
+    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_malformed_surrogate_1", "", "let s = '\\ud801\\....';");
+    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_malformed_surrogate_2", "", "let s = '\\ud801\\u....';");
+    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_invalid_surrogate_low", "", "let s = '\\ud801\\udbff';");
+    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_invalid_surrogate_high", "", "let s = '\\ud801\\ue000';");
 
-    test_compiler_status(PAW_ESYNTAX, "misplaced_2dots", "", "let x = ..;");
-    test_compiler_status(PAW_ESYNTAX, "misplaced_3dots", "", "let x = ...;");
-    test_compiler_status(PAW_ESYNTAX, "misplaced_fat_arrow", "", "let x => 1;");
-    test_compiler_status(PAW_ESYNTAX, "missing_end_of_block_comment", "", "/* block comment");
-    test_compiler_status(PAW_ESYNTAX, "overflow_integer", "", "let d = -9223372036854775808;"); // overflows before '-' applied
-    test_compiler_status(PAW_ESYNTAX, "binary_digit_range", "", "let b = 0b001201;");
-    test_compiler_status(PAW_ESYNTAX, "octal_digit_range", "", "let o = 0o385273;");
-    test_compiler_status(PAW_ESYNTAX, "hex_digit_range", "", "let x = 0x5A2CG3;");
-    test_compiler_status(PAW_ESYNTAX, "malformed_binary", "", "let b = 0b00$101;");
+    test_compiler_status(E_EXPECTED_EXPRESSION, "misplaced_2dots", "", "let x = ..;");
+    test_compiler_status(E_EXPECTED_EXPRESSION, "misplaced_3dots", "", "let x = ...;");
+    test_compiler_status(E_EXPECTED_SEMICOLON, "misplaced_fat_arrow", "", "let x => 1;");
+    test_compiler_status(E_INTEGER_OUT_OF_RANGE, "overflow_integer", "", "let d = -9223372036854775808;"); // overflows before '-' applied
+    test_compiler_status(E_UNEXPECTED_INTEGER_CHAR, "binary_digit_range", "", "let b = 0b001201;");
+    test_compiler_status(E_UNEXPECTED_INTEGER_CHAR, "octal_digit_range", "", "let o = 0o385273;");
+    test_compiler_status(E_UNEXPECTED_INTEGER_CHAR, "hex_digit_range", "", "let x = 0x5A2CG3;");
+    test_compiler_status(E_EXPECTED_SEMICOLON, "malformed_binary", "", "let b = 0b00$101;");
     test_compiler_status(PAW_ESYNTAX, "malformed_octal", "", "let o = 0o37=273;");
-    test_compiler_status(PAW_ESYNTAX, "malformed_hex", "", "let x = 0y5A2CF3;");
-    test_compiler_status(PAW_ESYNTAX, "int_digit_sep_before_bin_digits", "", "let x = 0b_01;");
-    test_compiler_status(PAW_ESYNTAX, "int_digit_sep_before_oct_digits", "", "let x = 0o_23;");
-    test_compiler_status(PAW_ESYNTAX, "int_digit_sep_before_hex_digits", "", "let x = 0x_45;");
-    test_compiler_status(PAW_ESYNTAX, "int_digit_sep_before_b", "", "let x = 0_b01;");
-    test_compiler_status(PAW_ESYNTAX, "int_digit_sep_before_o", "", "let x = 0_o23;");
-    test_compiler_status(PAW_ESYNTAX, "int_digit_sep_before_x", "", "let x = 0_x45;");
-    test_compiler_status(PAW_ESYNTAX, "missing_right_paren", "fn f(a: int, b: int, c: int -> int {return (a + b + c);}", "");
-    test_compiler_status(PAW_ESYNTAX, "missing_left_paren", "fn fa: int, b: int, c: int) -> int {return (a + b + c);}", "");
-    test_compiler_status(PAW_ESYNTAX, "missing_right_curly", "fn f(a: int, b: int, c: int) -> int {return (a + b + c);", "");
-    test_compiler_status(PAW_ESYNTAX, "missing_left_curly", "fn f(a: int, b: int, c: int) -> int return (a + b + c);}", "");
-    test_compiler_status(PAW_ESYNTAX, "missing_right_angle", "fn f<A, B, C() {}", "");
-    test_compiler_status(PAW_ESYNTAX, "missing_left_angle", "fn fA, B, C>() {}", "");
-    test_compiler_status(PAW_ESYNTAX, "missing_turbo", "struct A<T>", "let a = A<int>;");
-    test_compiler_status(PAW_ESYNTAX, "partial_turbo", "struct A<T>", "let a = A:<int>;");
-    test_compiler_status(PAW_ESYNTAX, "missing_left_angle_tubofish", "struct A<T>", "let a = A::int>;");
-    test_compiler_status(PAW_ESYNTAX, "missing_right_angle_turbofish", "struct A<T>", "let a = A::<int;");
-    test_compiler_status(PAW_ESYNTAX, "square_bracket_generics", "fn f[A, B, C]() {}", "");
-    test_compiler_status(PAW_ESYNTAX, "nested_fn", "", "fn f() {}");
-    test_compiler_status(PAW_ESYNTAX, "nested_struct", "", "struct S {pub x: int};");
-    test_compiler_status(PAW_ESYNTAX, "nested_enum", "", "enum E {X};");
-    test_compiler_status(PAW_ESYNTAX, "toplevel_var", "let v = 1", ";");
-    test_compiler_status(PAW_ESYNTAX, "bad_float", "", "let f = -1.0-;");
-    test_compiler_status(PAW_ESYNTAX, "bad_float_2", "", "let f = 1-.0-;");
-    test_compiler_status(PAW_ESYNTAX, "bad_float_3", "", "let f = 1e--1;");
-    test_compiler_status(PAW_ESYNTAX, "bad_float_4", "", "let f = 1e++1;");
+    test_compiler_status(E_EXPECTED_SEMICOLON, "malformed_hex", "", "let x = 0y5A2CF3;");
+    test_compiler_status(E_EXPECTED_INTEGER_DIGIT, "int_digit_sep_before_bin_digits", "", "let x = 0b_01;");
+    test_compiler_status(E_EXPECTED_INTEGER_DIGIT, "int_digit_sep_before_oct_digits", "", "let x = 0o_23;");
+    test_compiler_status(E_EXPECTED_INTEGER_DIGIT, "int_digit_sep_before_hex_digits", "", "let x = 0x_45;");
+    test_compiler_status(E_EXPECTED_SEMICOLON, "int_digit_sep_before_b", "", "let x = 0_b01;");
+    test_compiler_status(E_EXPECTED_SEMICOLON, "int_digit_sep_before_o", "", "let x = 0_o23;");
+    test_compiler_status(E_EXPECTED_SEMICOLON, "int_digit_sep_before_x", "", "let x = 0_x45;");
+    test_compiler_status(E_EXPECTED_DELIMITER, "missing_right_paren", "fn f(a: int, b: int, c: int -> int {return (a + b + c);}", "");
+    test_compiler_status(E_EXPECTED_SYMBOL, "missing_left_paren", "fn fa: int, b: int, c: int) -> int {return (a + b + c);}", "");
+    test_compiler_status(E_EXPECTED_EXPRESSION, "missing_right_curly", "fn f(a: int, b: int, c: int) -> int {return (a + b + c);", "");
+    test_compiler_status(E_EXPECTED_SYMBOL, "missing_left_curly", "fn f(a: int, b: int, c: int) -> int return (a + b + c);}", "");
+    test_compiler_status(E_EXPECTED_DELIMITER, "missing_right_angle", "fn f<A, B, C() {}", "");
+    test_compiler_status(E_EXPECTED_SYMBOL, "missing_left_angle", "fn fA, B, C>() {}", "");
+    test_compiler_status(E_EXPECTED_SEMICOLON, "missing_turbo", "struct A<T>", "let a = A<int>;");
+    test_compiler_status(E_EXPECTED_SEMICOLON, "partial_turbo", "struct A<T>", "let a = A:<int>;");
+    test_compiler_status(E_EXPECTED_SEMICOLON, "missing_left_angle_tubofish", "struct A<T>", "let a = A::int>;");
+    test_compiler_status(E_EXPECTED_SEMICOLON, "missing_right_angle_turbofish", "struct A<T>", "let a = A::<int;");
+    test_compiler_status(E_EXPECTED_SYMBOL, "square_bracket_generics", "fn f[A, B, C]() {}", "");
+    test_compiler_status(E_EXPECTED_EXPRESSION, "nested_fn", "", "fn f() {}");
+    test_compiler_status(E_EXPECTED_EXPRESSION, "nested_struct", "", "struct S {pub x: int};");
+    test_compiler_status(E_EXPECTED_EXPRESSION, "nested_enum", "", "enum E {X};");
+    test_compiler_status(E_EXPECTED_TOPLEVEL_ITEM, "toplevel_var", "let v = 1", ";");
+    test_compiler_status(E_EXPECTED_EXPRESSION, "bad_float", "", "let f = -1.0-;");
+    test_compiler_status(E_EXPECTED_EXPRESSION, "bad_float_2", "", "let f = 1-.0-;");
+    test_compiler_status(E_EXPECTED_SYMBOL, "bad_float_3", "", "let f = 1e--1;");
+    test_compiler_status(E_EXPECTED_SYMBOL, "bad_float_4", "", "let f = 1e++1;");
     // NOTE: type error is becuase the follwing is parsed as a tuple selector on a
     //       float (accessing element 0 on "1e-1")
     test_compiler_status(PAW_ETYPE, "bad_float_5", "", "let f = 1e-1.0;");
     test_compiler_status(PAW_ETYPE, "bad_float_6", "", "let f = 1e+1.0;");
-    test_compiler_status(PAW_ESYNTAX, "bad_float_7", "", "let f = 1e-1e1;");
-    test_compiler_status(PAW_ESYNTAX, "bad_float_8", "", "let f = 1e+1e1;");
+    test_compiler_status(E_EXPECTED_SEMICOLON, "bad_float_7", "", "let f = 1e-1e1;");
+    test_compiler_status(E_EXPECTED_SEMICOLON, "bad_float_8", "", "let f = 1e+1e1;");
     test_compiler_status(PAW_ETYPE, "bad_float_9", "", "let f = 1.0.0;");
     // NOTE: name error is because the following is parsed as a field access on an
     //       integer (accessing field "_0" on "1")
     test_compiler_status(PAW_ENAME, "float_digit_sep_after_dot", "", "let f = 1._0;");
-    test_compiler_status(PAW_ESYNTAX, "float_digit_sep_after_e", "", "let f = 1e_0;");
-    test_compiler_status(PAW_ESYNTAX, "float_digit_sep_after_-", "", "let f = 1e-_0;");
-    test_compiler_status(PAW_ESYNTAX, "float_digit_sep_after_+", "", "let f = 1e+_0;");
+    test_compiler_status(E_EXPECTED_SYMBOL, "float_digit_sep_after_e", "", "let f = 1e_0;");
+    test_compiler_status(E_EXPECTED_SYMBOL, "float_digit_sep_after_-", "", "let f = 1e-_0;");
+    test_compiler_status(E_EXPECTED_SYMBOL, "float_digit_sep_after_+", "", "let f = 1e+_0;");
     test_compiler_status(PAW_ETYPE, "float_with_base_prefix", "", "let f = 0x1.0;");
 
-    test_compiler_status(PAW_ESYNTAX, "missing_semicolon_after_stmt", "", "let a = 1");
-    test_compiler_status(PAW_ESYNTAX, "missing_semicolon_between_stmts", "", "let a = 2\nlet b = 3;");
-    test_compiler_status(PAW_ESYNTAX, "semicolon_instead_of_comma", "", "let a = [1, 2; 3, 4];");
-    test_compiler_status(PAW_ESYNTAX, "semicolon_after_comma", "", "let a = [5, 6,; 7, 8];");
-    test_compiler_status(PAW_ESYNTAX, "binop_missing_rhs", "", "let a = 1 +");
-    test_compiler_status(PAW_ESYNTAX, "binop_invalid_rhs", "", "let a = 1 + $;");
-    test_compiler_status(PAW_ESYNTAX, "binop_missing_lhs", "", "let a = + 2");
-    test_compiler_status(PAW_ESYNTAX, "binop_invalid_lhs", "", "let a = & + 2;");
+    test_compiler_status(E_EXPECTED_SEMICOLON, "missing_semicolon_after_stmt", "", "let a = 1");
+    test_compiler_status(E_EXPECTED_SEMICOLON, "missing_semicolon_between_stmts", "", "let a = 2\nlet b = 3;");
+    test_compiler_status(E_EXPECTED_DELIMITER, "semicolon_instead_of_comma", "", "let a = [1, 2; 3, 4];");
+    test_compiler_status(E_EXPECTED_EXPRESSION, "semicolon_after_comma", "", "let a = [5, 6,; 7, 8];");
+    test_compiler_status(E_EXPECTED_EXPRESSION, "binop_missing_rhs", "", "let a = 1 +");
+    test_compiler_status(E_EXPECTED_EXPRESSION, "binop_invalid_rhs", "", "let a = 1 + $;");
+    test_compiler_status(E_EXPECTED_EXPRESSION, "binop_missing_lhs", "", "let a = + 2");
+    test_compiler_status(E_EXPECTED_EXPRESSION, "binop_invalid_lhs", "", "let a = & + 2;");
 
     test_compiler_status(PAW_ETYPE, "primitive_type_is_not_a_value_1", "", "let a = int;");
     test_compiler_status(PAW_ETYPE, "primitive_type_is_not_a_value_2", "", "let a = (1, float,);");
@@ -293,9 +296,9 @@ static void test_syntax_error(void)
     test_compiler_status(PAW_ENAME, "own_name_is_not_a_type", "", "let a: a = 1;");
 
     test_compiler_status(PAW_ENAME, "duplicate_global", "struct A; struct A;", "");
-    test_compiler_status(PAW_ESYNTAX, "return_outside_function", "return;", "");
-    test_compiler_status(PAW_ESYNTAX, "break_outside_loop", "", "break;");
-    test_compiler_status(PAW_ESYNTAX, "continue_outside_loop", "", "continue;");
+    test_compiler_status(E_EXPECTED_TOPLEVEL_ITEM, "return_outside_function", "return;", "");
+    test_compiler_status(E_JUMP_OUTSIDE_LOOP, "break_outside_loop", "", "break;");
+    test_compiler_status(E_JUMP_OUTSIDE_LOOP, "continue_outside_loop", "", "continue;");
 }
 
 static void test_closure_error(void)
@@ -334,8 +337,8 @@ static void test_tuple_error(void)
 
 static void test_struct_error(void)
 {
-    test_compiler_status(PAW_ESYNTAX, "struct_unit_with_braces_on_def", "struct A {}", "let a = A;");
-    test_compiler_status(PAW_ESYNTAX, "struct_unit_without_semicolon", "struct A", "");
+    test_compiler_status(E_EMPTY_STRUCT_BODY, "struct_unit_with_braces_on_def", "struct A {}", "let a = A;");
+    test_compiler_status(E_EXPECTED_SEMICOLON, "struct_unit_without_semicolon", "struct A", "");
     test_compiler_status(PAW_ESYNTAX, "struct_missing_braces", "struct A {pub a: int}", "let a = A;");
     test_compiler_status(PAW_EVALUE, "struct_unit_with_braces_on_init", "struct A;", "let a = A{};");
     test_compiler_status(PAW_ENAME, "struct_missing_only_field", "struct A {pub a: int}", "let a = A{};");
@@ -361,7 +364,7 @@ static void test_struct_error(void)
 
 static void test_enum_error(void)
 {
-    test_compiler_status(PAW_ESYNTAX, "enum_without_variants", "enum A {pub fn f() {}};", "");
+    test_compiler_status(E_EMPTY_ENUMERATION, "enum_without_variants", "enum A {pub fn f() {}};", "");
     test_compiler_status(PAW_ESYNTAX, "enum_missing_variant", "enum A {X}", "let a = A;");
     test_compiler_status(PAW_ENAME, "enum_duplicate_variant", "enum A {X, X}", "");
     test_compiler_status(PAW_ENAME, "enum_nonexistent_variant", "enum A {X}", "let a = A::Y;");
@@ -458,7 +461,7 @@ static void test_gc_conflict(void)
     paw_close(P);
 }
 
-static void test_invalid_case(char const *name, int expect, char const *item, char const *target, char const *pat)
+static void test_invalid_case(char const *name, enum ErrorKind expect, char const *item, char const *target, char const *pat)
 {
     char const fmt[] = "match %s {\n"
                        "    %s => {},\n"
@@ -635,19 +638,19 @@ static void test_trait_error(void)
 
 static void test_underscore(void)
 {
-    test_compiler_status(PAW_ESYNTAX, "underscore_as_generic", "fn f<_>() {}", "");
-    test_compiler_status(PAW_ESYNTAX, "underscore_as_adt_name", "struct _;", "");
-    test_compiler_status(PAW_ESYNTAX, "underscore_as_type_name", "type _ = int", "");
-    test_compiler_status(PAW_ESYNTAX, "underscore_as_return_type", "fn f() -> _ {}", "");
-    test_compiler_status(PAW_ESYNTAX, "underscore_as_function_name", "fn _() {}", "");
-    test_compiler_status(PAW_ESYNTAX, "underscore_as_method_name", "struct S {fn _() {}}", "");
-    test_compiler_status(PAW_ESYNTAX, "underscore_as_parameter_type", "fn f(v: _) {}", "");
-    test_compiler_status(PAW_ESYNTAX, "underscore_as_field_name", "struct S {_: int}", "");
-    test_compiler_status(PAW_ESYNTAX, "underscore_as_field_type", "struct S {value: _}", "");
-    test_compiler_status(PAW_ESYNTAX, "underscore_as_bound", "fn f<T: _>(t: T) {}", "");
-    test_compiler_status(PAW_ESYNTAX, "underscore_in_parameter", "fn f(v: [_]) {}", "");
-    test_compiler_status(PAW_ESYNTAX, "underscore_in_bound", "fn f<T: Trait<_>>(t: T) {}", "");
-    test_compiler_status(PAW_ESYNTAX, "underscore_in_field_type", "struct S {value: [_]}", "");
+    test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_as_generic", "fn f<_>() {}", "");
+    test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_as_adt_name", "struct _;", "");
+    test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_as_type_name", "type _ = int", "");
+    test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_as_return_type", "fn f() -> _ {}", "");
+    test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_as_function_name", "fn _() {}", "");
+    test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_as_method_name", "struct S {fn _() {}}", "");
+    test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_as_parameter_type", "fn f(v: _) {}", "");
+    test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_as_field_name", "struct S {_: int}", "");
+    test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_as_field_type", "struct S {value: _}", "");
+    test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_as_bound", "fn f<T: _>(t: T) {}", "");
+    test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_in_parameter", "fn f(v: [_]) {}", "");
+    test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_in_bound", "fn f<T: Trait<_>>(t: T) {}", "");
+    test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_in_field_type", "struct S {value: [_]}", "");
 
     test_compiler_status(PAW_ETYPE, "underscore_bad_scalar_inference",
         "fn f(b: bool) {let v: _ = if b {1} else {'a'};}", "");
@@ -666,10 +669,10 @@ static void test_global_const(void)
     test_compiler_status(PAW_EVALUE, "const_call", "fn f() {} const C: () = f();", "");
     test_compiler_status(PAW_EVALUE, "const_function", "fn f() {} const C: fn() = f;", "");
 
-    test_compiler_status(PAW_ESYNTAX, "const_return", "const C: () = return;", "");
-    test_compiler_status(PAW_ESYNTAX, "const_break", "const C: () = break;", "");
-    test_compiler_status(PAW_ESYNTAX, "const_continue", "const C: () = break;", "");
-    test_compiler_status(PAW_ESYNTAX, "const_chain", "const C: Option<int> = Option::Some(123)?;", "");
+    test_compiler_status(E_RETURN_OUTSIDE_FUNCTION, "const_return", "const C: () = return;", "");
+    test_compiler_status(E_JUMP_OUTSIDE_LOOP, "const_break", "const C: () = break;", "");
+    test_compiler_status(E_JUMP_OUTSIDE_LOOP, "const_continue", "const C: () = continue;", "");
+    test_compiler_status(E_CHAIN_OUTSIDE_FUNCTION, "const_chain", "const C: Option<int> = Option::Some(123)?;", "");
 
     test_compiler_status(PAW_EVALUE, "const_cycle_1",
             "const C: int = C;", "");
@@ -711,12 +714,12 @@ static void test_destructuring(void)
 
 int main(void)
 {
+    test_syntax_error();
     test_underscore();
     test_annotations();
     test_gc_conflict();
     test_enum_error();
     test_name_error();
-    test_syntax_error();
     test_type_error();
     test_closure_error();
     test_arithmetic_error();

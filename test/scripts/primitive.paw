@@ -2,11 +2,11 @@
 
 pub fn test_operations() {
     let a = 1;
-    /* unused result */ a + 1;
+    a + 1; // unused result
     let b = 2 + 3;
-    /* unused result */ a + b + 2;
+    a + b + 2; // unused result
     let c = a + b * a + b;
-    /* unused result */ a + b + c + 2 + 3;
+    a + b + c + 2 + 3; // unused result
     assert(c == 1 + (2 + 3) * 1 + (2 + 3));
     assert(c == 11);
     assert(b == 5);

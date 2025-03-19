@@ -54,15 +54,16 @@ size_t paw_bytes_used(paw_Env const *P);
 #define PAW_OK 0
 #define PAW_EMEMORY 1
 #define PAW_EVALUE 2
-#define PAW_ETYPE 3
-#define PAW_ENAME 4
-#define PAW_EATTR 5
-#define PAW_EKEY 6
-#define PAW_EINDEX 7
-#define PAW_EOVERFLOW 8
-#define PAW_ESYSTEM 9
-#define PAW_ESYNTAX 10
-#define PAW_ERUNTIME 11
+#define PAW_ENAME 3
+#define PAW_EKEY 4
+#define PAW_EINDEX 5
+#define PAW_ESYSTEM 6
+#define PAW_ERUNTIME 7
+
+// TODO: these will become more specific compiler errors
+#define PAW_ETYPE 8
+#define PAW_ESYNTAX 9
+#define PAW_EOVERFLOW 10
 
 // Load paw source code from the given 'input' source
 // Creates a function object containing the code and pushes it onto the stack.

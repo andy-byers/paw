@@ -177,19 +177,18 @@ DEFINE_LIST(struct Generator, PatchList, struct JumpSource)
 
 static void add_jump_source(struct Generator *G, int from_pc, MirBlock to)
 {
-    PatchList_push(G, G->fs->patch, ((struct JumpSource){
+    PatchList_push(G, G->fs->patch, (struct JumpSource){
                                         .from_pc = from_pc,
                                         .to = to,
-                                    }));
+                                    });
 }
 
 static void patch_jump(struct FuncState *fs, int from, int to)
 {
     Proto *p = fs->proto;
     int const dist = to - (from + 1);
-    if (dist > JUMP_MAX) {
-        ERROR(fs->G, PAW_ESYNTAX, "too many instructions to jump");
-    }
+    if (dist > JUMP_MAX)
+        ERROR(fs->G, PAW_ESYNTAX, "too far to jump");
 
     paw_assert(0 <= from && from < p->length);
     SET_sBx(&p->source[from], dist);
@@ -274,9 +273,9 @@ static int add_constant(struct Generator *G, Value v, enum BuiltinKind code)
     if (pk != NULL)
         return CAST(int, pk->i);
 
-    if (fs->nk == CONSTANT_MAX) {
+    if (fs->nk == CONSTANT_MAX)
         ERROR(G, PAW_ESYNTAX, "too many constants");
-    }
+
     pawM_grow(ENV(G), p->k, fs->nk, p->nk);
     p->k[fs->nk] = v;
 

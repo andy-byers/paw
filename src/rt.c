@@ -76,18 +76,6 @@ static void add_3_parts(paw_Env *P, char const *before, char const *value,
     pawL_push_result(P, &buf);
 }
 
-void pawR_name_error(paw_Env *P, Value name)
-{
-    add_3_parts(P, "name '", V_TEXT(name), "' is not defined");
-    pawC_throw(P, PAW_ENAME);
-}
-
-void pawR_field_error(paw_Env *P, Value name)
-{
-    add_3_parts(P, "field '", V_TEXT(name), "' does not exist");
-    pawC_throw(P, PAW_EATTR);
-}
-
 void pawR_error(paw_Env *P, int error, char const *fmt, ...)
 {
     Buffer buf;

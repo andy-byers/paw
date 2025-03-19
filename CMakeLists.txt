@@ -43,6 +43,7 @@ set(PAW_HEADER_FILES
     ${PAW_SOURCE_DIR}/compile.h
     ${PAW_SOURCE_DIR}/debug.h
     ${PAW_SOURCE_DIR}/env.h
+    ${PAW_SOURCE_DIR}/error.h
     ${PAW_SOURCE_DIR}/gc.h
     ${PAW_SOURCE_DIR}/hir.h
     ${PAW_SOURCE_DIR}/ir_type.h
@@ -83,6 +84,7 @@ set(PAW_SOURCE_FILES
     ${PAW_SOURCE_DIR}/decision.c
     ${PAW_SOURCE_DIR}/dominance.c
     ${PAW_SOURCE_DIR}/env.c
+    ${PAW_SOURCE_DIR}/error.c
     ${PAW_SOURCE_DIR}/exhaustiveness.c
     ${PAW_SOURCE_DIR}/gc.c
     ${PAW_SOURCE_DIR}/hir.c

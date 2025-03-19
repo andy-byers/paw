@@ -18,7 +18,7 @@ void pawX_read_float(paw_Env *P, char const *data);
 enum MultiChar {
     // Control tokens:
     TK_END = 0,
-    TK_NONE = 255,
+    TK_NONE = 256,
 
     // Multi-byte tokens:
     TK_PLUS2,
@@ -64,8 +64,6 @@ enum MultiChar {
     TK_AS,
     TK_TRUE,
     TK_FALSE,
-
-    TK_LIMIT // must be last
 };
 
 typedef unsigned TokenKind;
@@ -77,8 +75,6 @@ struct Token {
 };
 
 struct Lex {
-    int line; // TODO: remove
-
     struct Pool *pool;
     struct Compiler *C;
     paw_Env *P;
@@ -115,7 +111,5 @@ String *pawX_scan_string(struct Lex *lex, char const *s, size_t n);
 void pawX_set_source(struct Lex *lex, paw_Reader input, void *ud);
 TokenKind pawX_next(struct Lex *lex);
 TokenKind pawX_peek(struct Lex *lex);
-
-_Noreturn void pawX_error(struct Lex *lex, char const *fmt, ...);
 
 #endif // PAW_LEX_H

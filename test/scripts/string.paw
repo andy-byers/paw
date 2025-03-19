@@ -2,8 +2,6 @@
 
 pub fn test_valid_utf8() {
     let s = "\u0060\u012a\u12AB";
-    let s = "\uD801\udc37";
-    let s = "\ud83d\ude39\ud83d\udc8d";
     let s = "\"\\\/\b\f\n\r\t\v";
     let s = "\\u0000";
     let s = "\"";
@@ -12,7 +10,6 @@ pub fn test_valid_utf8() {
     let s = "\\n";
     let s = "\u0012";
     let s = "\uFFFF";
-    let s = "\uDBFF\uDFFF";
     let s = "new\u00A0line";
     let s = "􏿿";
     let s = "￿";
@@ -20,7 +17,6 @@ pub fn test_valid_utf8() {
     let s = "\u002c";
     let s = "π";
     let s = "𛿿";
-    let s = "\uD834\uDd1e";
     let s = "\u0821";
     let s = "\u0123";
     let s = "\u0061\u30af\u30EA\u30b9";
@@ -28,8 +24,6 @@ pub fn test_valid_utf8() {
     let s = "\uA66D";
     let s = "\u005C";
     let s = "⍂㈴⍂";
-    let s = "\uDBFF\uDFFE";
-    let s = "\uD83F\uDFFE";
     let s = "\u200B";
     let s = "\u2064";
     let s = "\uFDD0";
