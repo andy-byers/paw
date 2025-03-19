@@ -7,8 +7,6 @@
 
 #include "lex.h"
 
-#define limit_error(x, what, limit) pawX_error(x, "too many %s (limit is %d)", what, limit)
-
 void pawP_init(paw_Env *P);
 
 #endif // PAW_PARSE_H

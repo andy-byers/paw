@@ -8,6 +8,8 @@
 #include "env.h"
 #include "map.h"
 
+#define limit_error(x, what, limit) pawX_error(x, "too many %s (limit is %d)", what, limit)
+
 static void add_location(paw_Env *P, Buffer *print, String const *s, struct SourceLoc loc)
 {
     pawL_add_nstring(P, print, s->text, s->length);
@@ -275,7 +277,7 @@ static paw_Bool test_next(struct Lex *lex, TokenKind kind)
 static void check(struct Lex *lex, TokenKind want)
 {
     if (!test(lex, want))
-        pawX_error(lex, "unexpected symbol");
+        parse_error(lex, lex->t.span.start, "unexpected symbol");
 }
 
 static void check_next(struct Lex *lex, TokenKind want)
@@ -633,8 +635,8 @@ static struct AstDeclList *variant_field_list(struct Lex *lex, struct SourceLoc 
     struct AstDeclList *list = AstDeclList_new(lex->ast);
     parse_variant_field_list(lex, list, start);
     if (list->count == 0)
-        pawX_error(lex, "expected at least 1 variant field between parenthesis "
-                        "(remove parenthesis for unit variant)");
+        parse_error(lex, start, "expected at least 1 variant field between parenthesis "
+                                "(remove parenthesis for unit variant)");
 
     --lex->expr_depth;
     return list;
@@ -709,8 +711,10 @@ static struct AstType *parse_type(struct Lex *lex, paw_Bool is_strict)
     struct SourceLoc start = lex->loc;
     struct AstPath path = parse_pathtype(lex, is_strict);
     if (is_underscore(lex, K_LIST_FIRST(path.segments).ident.name)) {
-        if (path.segments->count > 1)
-            SYNTAX_ERROR(lex, "unexpected '::' after '_'");
+        if (path.segments->count > 1) {
+            struct AstSegment underscore = K_LIST_FIRST(path.segments);
+            parse_error(lex, underscore.ident.span.start, "unexpected '::' after '_'");
+        }
         return NEW_NODE_0(lex, infer_type, start);
     }
     return NEW_NODE(lex, path_type, start, path);
@@ -921,10 +925,10 @@ static paw_Type parse_container_items(struct Lex *lex, struct AstExprList *items
         struct AstExpr *item = expr0(lex);
         if (!test_next(lex, ':')) {
             if (code == BUILTIN_MAP)
-                pawX_error(lex, "expected ':' after map key");
+                parse_error(lex, item->hdr.span.end, "expected ':' after map key");
             code = BUILTIN_LIST;
         } else if (code == BUILTIN_LIST) {
-            pawX_error(lex, "unexpected ':' in list literal");
+            parse_error(lex, lex->loc, "unexpected ':' in list literal");
         } else {
             code = BUILTIN_MAP;
             struct AstExpr *value = expr0(lex);

@@ -300,7 +300,7 @@ paw_Bool pawU_equals(struct Unifier *U, struct IrType *a, struct IrType *b)
     return RUN_ACTION(U, a, b, equate) == 0;
 }
 
-struct IrType *pawU_new_unknown(struct Unifier *U, int line, struct IrTypeList *bounds)
+struct IrType *pawU_new_unknown(struct Unifier *U, struct IrTypeList *bounds)
 {
     UnificationTable *table = U->table;
 
@@ -323,7 +323,7 @@ struct IrTypeList *pawU_new_unknowns(struct Unifier *U, struct IrTypeList *types
         struct IrTypeList *bounds = IrIsGeneric(*ptype)
                                         ? IrGetGeneric(*ptype)->bounds
                                         : NULL;
-        struct IrType *unknown = pawU_new_unknown(U, -1, bounds);
+        struct IrType *unknown = pawU_new_unknown(U, bounds);
         IrTypeList_push(U->C, result, unknown);
     }
     return result;

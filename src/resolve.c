@@ -283,7 +283,7 @@ static struct IrTypeList *collect_decl_types(struct Resolver *R, struct HirDeclL
 
 static struct IrType *new_unknown(struct Resolver *R)
 {
-    return pawU_new_unknown(R->U, -1, NULL);
+    return pawU_new_unknown(R->U, NULL);
 }
 
 static struct IrTypeList *new_unknowns(struct Resolver *R, int count)
@@ -291,7 +291,7 @@ static struct IrTypeList *new_unknowns(struct Resolver *R, int count)
     struct IrTypeList *list = IrTypeList_new(R->C);
     IrTypeList_reserve(R->C, list, count);
 
-    while (list->count < count)
+    while (count-- > 0)
         IrTypeList_push(R->C, list, new_unknown(R));
     return list;
 }
@@ -412,7 +412,7 @@ static struct IrType *resolve_block(struct Resolver *R, struct HirBlock *block)
 static void allocate_locals(struct Resolver *R, struct HirDeclList *decls)
 {
     struct HirDecl *const *pdecl;
-    K_LIST_FOREACH(decls, pdecl) {
+    K_LIST_FOREACH (decls, pdecl) {
         struct HirDecl *decl = *pdecl;
         new_local(R, hir_decl_ident(decl), (struct HirResult){
                 .kind = HIR_RESULT_LOCAL,
@@ -427,7 +427,7 @@ static void allocate_decls(struct Resolver *R, struct HirDeclList *decls)
         return;
 
     struct HirDecl *const *pdecl;
-    K_LIST_FOREACH(decls, pdecl) {
+    K_LIST_FOREACH (decls, pdecl) {
         struct HirDecl *decl = *pdecl;
         new_local(R, hir_decl_ident(decl), (struct HirResult){
                 .kind = HIR_RESULT_DECL,
@@ -448,9 +448,8 @@ static paw_Bool is_unit_type(struct Resolver *R, struct IrType *type)
 
 static void unify_block_result(struct Resolver *R, paw_Bool never, struct IrType *result, struct IrType *expect)
 {
-    if (!never || !is_unit_type(R, result)) {
+    if (!never || !is_unit_type(R, result))
         unify(R, result, expect);
-    }
 }
 
 static void resolve_func_item(struct Resolver *R, struct HirFuncDecl *d)
@@ -513,12 +512,11 @@ struct IrType *pawP_instantiate_field(struct Compiler *C, struct IrType *inst_ty
     struct Substitution subst;
     struct IrAdt *t = IrGetAdt(inst_type);
     struct HirDecl *decl = pawHir_get_decl(C, t->did);
-    if (HirGetAdtDecl(decl)->generics == NULL) {
+    if (HirGetAdtDecl(decl)->generics == NULL)
         return GET_NODE_TYPE(C, field);
-    }
+
     struct IrType *base_type = GET_NODE_TYPE(C, decl);
-    pawP_init_substitution_folder(&F, C, &subst,
-                                  ir_adt_types(base_type), t->types);
+    pawP_init_substitution_folder(&F, C, &subst, ir_adt_types(base_type), t->types);
     return pawIr_fold_type(&F, GET_NODE_TYPE(C, field));
 }
 
@@ -529,8 +527,7 @@ static struct IrTypeList *instantiate_fields(struct Compiler *C, struct IrType *
     struct IrAdt *t = IrGetAdt(self);
     struct HirDecl *decl = pawHir_get_decl(C, t->did);
     struct IrType *type = GET_NODE_TYPE(C, decl);
-    pawP_init_substitution_folder(&F, C, &subst,
-                                  ir_adt_types(type), IrGetAdt(self)->types);
+    pawP_init_substitution_folder(&F, C, &subst, ir_adt_types(type), IrGetAdt(self)->types);
     struct IrTypeList *field_types = pawHir_collect_decl_types(C, fields);
     return pawIr_fold_type_list(&F, field_types);
 }
@@ -592,7 +589,7 @@ static void maybe_fix_unit_struct(struct Resolver *R, struct IrType *type, struc
 {
     paw_assert(IrIsAdt(type));
     struct IrAdtDef const *adt = pawIr_get_adt_def(R->C, IR_TYPE_DID(type));
-    const enum BuiltinKind code = TYPE2CODE(R, type);
+    enum BuiltinKind const code = TYPE2CODE(R, type);
     if (IS_BUILTIN_TYPE(code))
         R_TYPE_ERROR(R, expr->hdr.span.start, "expected operand but found builtin type '%s'", adt->name->text);
     if (!adt->is_struct)
@@ -629,17 +626,14 @@ static struct IrType *resolve_path_expr(struct Resolver *R, struct HirPathExpr *
     return type;
 }
 
-static void check_map_key(struct Resolver *R, struct IrType *key)
+static void check_map_key(struct Resolver *R, struct IrType *key, struct SourceSpan span)
 {
     // requires "Hash + Equals" to be implemented
     enum TraitKind requires[] = {TRAIT_HASH, TRAIT_EQUALS};
     for (int i = 0; i < PAW_COUNTOF(requires); ++i) {
         if (!implements_trait(R, key, requires[i])) {
-            String const *trait_name = requires[i] == TRAIT_HASH
-                            ? CSTR(R, CSTR_HASH)
-                            : CSTR(R, CSTR_EQUALS);
-#warning "fix this"
-            R_TYPE_ERROR(R, (struct SourceLoc){0}, "type '%s' cannot be used as a map key: '%s' trait not implemented",
+            String const *trait_name = CSTR(R, requires[i] == TRAIT_HASH ? CSTR_HASH : CSTR_EQUALS);
+            R_TYPE_ERROR(R, span.start, "type '%s' cannot be used as a map key: '%s' trait not implemented",
                        pawIr_print_type(R->C, key), trait_name->text);
         }
     }
@@ -767,7 +761,7 @@ static struct IrType *resolve_unop_expr(struct Resolver *R, struct HirUnOpExpr *
     };
 
     struct IrType *type = resolve_operand(R, e->target);
-    const enum BuiltinKind code = TYPE2CODE(R, type);
+    enum BuiltinKind const code = TYPE2CODE(R, type);
     if (!IS_BUILTIN_TYPE(code) || !kValidOps[e->op][code]) {
         R_TYPE_ERROR(R, e->span.start, "unsupported operand type for unary operator");
     } else if (is_bool_unop(e->op)) {
@@ -806,7 +800,7 @@ static struct IrType *resolve_binop_expr(struct Resolver *R, struct HirBinOpExpr
     struct IrType *rhs = resolve_operand(R, e->rhs);
     unify(R, lhs, rhs);
 
-    const enum BuiltinKind code = TYPE2CODE(R, lhs);
+    enum BuiltinKind const code = TYPE2CODE(R, lhs);
     paw_assert(code == TYPE2CODE(R, rhs));
     if (!IS_BUILTIN_TYPE(code) || !kValidOps[e->op][code]) {
         R_TYPE_ERROR(R, e->span.start, "unsupported operand types for binary operator");
@@ -821,9 +815,9 @@ static struct IrType *resolve_binop_expr(struct Resolver *R, struct HirBinOpExpr
 
 static struct IrType *resolve_assign_expr(struct Resolver *R, struct HirAssignExpr *e)
 {
-    if (!HirIsPathExpr(e->lhs) && !HirIsIndex(e->lhs) && !HirIsSelector(e->lhs)) {
+    if (!HirIsPathExpr(e->lhs) && !HirIsIndex(e->lhs) && !HirIsSelector(e->lhs))
         R_VALUE_ERROR(R, e->lhs->hdr.span.start, "invalid place for assignment");
-    }
+
     struct IrType *lhs = resolve_operand(R, e->lhs);
     struct IrType *rhs = resolve_operand(R, e->rhs);
     unify(R, lhs, rhs);
@@ -870,9 +864,9 @@ static struct IrType *new_list_t(struct Resolver *R, struct IrType *elem_t)
     return instantiate(R, base, types);
 }
 
-static struct IrType *new_map_t(struct Resolver *R, struct IrType *key_t, struct IrType *value_t)
+static struct IrType *new_map_t(struct Resolver *R, struct IrType *key_t, struct IrType *value_t, struct SourceSpan span)
 {
-    check_map_key(R, key_t);
+    check_map_key(R, key_t, span);
     struct HirDecl *base = get_decl(R, R->C->builtins[BUILTIN_MAP].did);
     struct IrTypeList *types = IrTypeList_new(R->C);
     IrTypeList_push(R->C, types, key_t);
@@ -971,7 +965,7 @@ static struct IrType *resolve_var_decl(struct Resolver *R, struct HirVarDecl *d)
     return rhs;
 }
 
-static paw_Bool const_check_path(struct HirVisitor *V, struct HirPathExpr *e)
+static void const_check_path(struct HirVisitor *V, struct HirPathExpr *e)
 {
     struct Resolver *R = V->ud;
 
@@ -979,51 +973,47 @@ static paw_Bool const_check_path(struct HirVisitor *V, struct HirPathExpr *e)
     enum BuiltinKind kind = TYPE2CODE(R, type);
     if (!IS_BASIC_TYPE(kind))
         R_VALUE_ERROR(R, e->span.start, "compile time constant must be a primitive");
-
-    return PAW_TRUE;
 }
 
-static paw_Bool const_check_unop(struct HirVisitor *V, struct HirUnOpExpr *e)
+static void const_check_unop(struct HirVisitor *V, struct HirUnOpExpr *e)
 {
-    return PAW_TRUE;
 }
 
-static paw_Bool const_check_binop(struct HirVisitor *V, struct HirBinOpExpr *e)
+static void const_check_binop(struct HirVisitor *V, struct HirBinOpExpr *e)
 {
-    return PAW_TRUE;
 }
 
-static paw_Bool const_check_closure(struct HirVisitor *V, struct HirClosureExpr *e)
+static void const_check_closure(struct HirVisitor *V, struct HirClosureExpr *e)
 {
     struct Resolver *R = V->ud;
     R_VALUE_ERROR(R, e->span.start, "closures cannot be constant evaluated");
 }
 
-static paw_Bool const_check_call(struct HirVisitor *V, struct HirCallExpr *e)
+static void const_check_call(struct HirVisitor *V, struct HirCallExpr *e)
 {
     struct Resolver *R = V->ud;
     R_VALUE_ERROR(R, e->span.start, "function calls cannot be constant evaluated");
 }
 
-static paw_Bool const_check_index(struct HirVisitor *V, struct HirIndex *e)
+static void const_check_index(struct HirVisitor *V, struct HirIndex *e)
 {
     struct Resolver *R = V->ud;
     R_VALUE_ERROR(R, e->span.start, "index expressions cannot be constant evaluated");
 }
 
-static paw_Bool const_check_selector(struct HirVisitor *V, struct HirSelector *e)
+static void const_check_selector(struct HirVisitor *V, struct HirSelector *e)
 {
     struct Resolver *R = V->ud;
     R_VALUE_ERROR(R, e->span.start, "selector expressions cannot be constant evaluated");
 }
 
-static paw_Bool const_check_field(struct HirVisitor *V, struct HirFieldExpr *e)
+static void const_check_field(struct HirVisitor *V, struct HirFieldExpr *e)
 {
     struct Resolver *R = V->ud;
     R_VALUE_ERROR(R, e->span.start, "fields cannot be constant evaluated");
 }
 
-static paw_Bool const_check_loop(struct HirVisitor *V, struct HirLoopExpr *e)
+static void const_check_loop(struct HirVisitor *V, struct HirLoopExpr *e)
 {
     struct Resolver *R = V->ud;
     R_VALUE_ERROR(R, e->span.start, "loops cannot be constant evaluated");
@@ -1034,14 +1024,14 @@ static void check_const(struct Resolver *R, struct HirExpr *expr, struct IrType 
 {
     struct HirVisitor V;
     pawHir_visitor_init(&V, R->hir, R);
-    V.VisitUnOpExpr = const_check_unop;
-    V.VisitBinOpExpr = const_check_binop;
-    V.VisitClosureExpr = const_check_closure;
-    V.VisitCallExpr = const_check_call;
-    V.VisitIndex = const_check_index;
-    V.VisitSelector = const_check_selector;
-    V.VisitFieldExpr = const_check_field;
-    V.VisitLoopExpr = const_check_loop;
+    V.PostVisitUnOpExpr = const_check_unop;
+    V.PostVisitBinOpExpr = const_check_binop;
+    V.PostVisitClosureExpr = const_check_closure;
+    V.PostVisitCallExpr = const_check_call;
+    V.PostVisitIndex = const_check_index;
+    V.PostVisitSelector = const_check_selector;
+    V.PostVisitFieldExpr = const_check_field;
+    V.PostVisitLoopExpr = const_check_loop;
     pawHir_visit_expr(&V, expr);
 
     enum BuiltinKind kind = TYPE2CODE(R, type);
@@ -1295,7 +1285,7 @@ static struct IrType *resolve_list_lit(struct Resolver *R, struct HirContainerLi
     return new_list_t(R, elem_t);
 }
 
-static struct IrType *resolve_map_lit(struct Resolver *R, struct HirContainerLit *e)
+static struct IrType *resolve_map_lit(struct Resolver *R, struct HirContainerLit *e, struct SourceSpan span)
 {
     struct IrType *key_t = new_unknown(R);
     struct IrType *value_t = new_unknown(R);
@@ -1312,16 +1302,16 @@ static struct IrType *resolve_map_lit(struct Resolver *R, struct HirContainerLit
         unify(R, value_t, v);
         SET_NODE_TYPE(R->C, *pexpr, v);
     }
-    return new_map_t(R, key_t, value_t);
+    return new_map_t(R, key_t, value_t, span);
 }
 
-static struct IrType *resolve_container_lit(struct Resolver *R, struct HirContainerLit *e)
+static struct IrType *resolve_container_lit(struct Resolver *R, struct HirContainerLit *e, struct SourceSpan span)
 {
     if (e->code == BUILTIN_LIST) {
         return resolve_list_lit(R, e);
     } else {
         paw_assert(e->code == BUILTIN_MAP);
-        return resolve_map_lit(R, e);
+        return resolve_map_lit(R, e, span);
     }
 }
 
@@ -1378,9 +1368,9 @@ static struct IrType *resolve_composite_lit(struct Resolver *R, struct HirCompos
     if (!adt->is_struct) {
         R_TYPE_ERROR(R, adt->ident.span.start, "expected structure but found enumeration '%s'", adt->ident.name->text);
     } else if (adt->fields->count == 0) {
-        R_VALUE_ERROR(R, adt->ident.span.start, "unexpected curly braces on initializer for unit structure '%s'"
-                        "(use name without '{}' to create unit struct)",
-                     adt->ident.name->text);
+        R_VALUE_ERROR(R, adt->ident.span.start,
+                "unexpected curly braces on initializer for unit structure '%s'"
+                "(use name without '{}' to create unit struct)", adt->ident.name->text);
     }
 
     struct IrType *base_type = pawIr_get_type(R->C, adt->hid);
@@ -1422,23 +1412,22 @@ static struct IrType *resolve_composite_lit(struct Resolver *R, struct HirCompos
 
 static struct IrType *resolve_literal_expr(struct Resolver *R, struct HirLiteralExpr *e)
 {
-    if (e->lit_kind == kHirLitBasic) {
-        return resolve_basic_lit(R, &e->basic);
-    } else if (e->lit_kind == kHirLitTuple) {
-        return resolve_tuple_lit(R, &e->tuple);
-    } else if (e->lit_kind == kHirLitContainer) {
-        return resolve_container_lit(R, &e->cont);
-    } else {
-        paw_assert(e->lit_kind == kHirLitComposite);
-        return resolve_composite_lit(R, &e->comp, e->span);
+    switch (e->lit_kind) {
+        case kHirLitBasic:
+            return resolve_basic_lit(R, &e->basic);
+        case kHirLitTuple:
+            return resolve_tuple_lit(R, &e->tuple);
+        case kHirLitContainer:
+            return resolve_container_lit(R, &e->cont, e->span);
+        case kHirLitComposite:
+            return resolve_composite_lit(R, &e->comp, e->span);
     }
 }
 
 static paw_Bool is_never_block(struct HirExpr *expr)
 {
-    if (HirIsBlock(expr)) {
+    if (HirIsBlock(expr))
         return HirGetBlock(expr)->never;
-    }
     return HirIsJumpExpr(expr);
 }
 
@@ -1488,10 +1477,10 @@ static struct IrType *check_index(struct Resolver *R, struct HirIndex *e, struct
         expect = get_type(R, BUILTIN_INT);
         result = e->is_slice ? target : ir_list_elem(target);
     } else if (is_map_t(R, target)) {
-        if (e->is_slice) {
+        if (e->is_slice)
             R_TYPE_ERROR(R, e->span.start, "slice operation not supported on map "
                           "(requires '[T]' or 'str')");
-        }
+
         expect = ir_map_key(target);
         result = ir_map_value(target);
     } else if (TYPE2CODE(R, target) == BUILTIN_STR) {
@@ -1537,8 +1526,18 @@ struct BindingInfo {
     int uses;
 };
 
-DEFINE_MAP(struct Resolver, BindingMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, String *, struct BindingInfo)
-DEFINE_MAP_ITERATOR(BindingMap, String *, struct BindingInfo)
+static paw_Uint ident_hash(struct Resolver *R, struct HirIdent ident)
+{
+    return P_PTR_HASH(R, ident.name);
+}
+
+static paw_Bool ident_equals(struct Resolver *R, struct HirIdent a, struct HirIdent b)
+{
+    return pawS_eq(a.name, b.name);
+}
+
+DEFINE_MAP(struct Resolver, BindingMap, pawP_alloc, ident_hash, ident_equals, struct HirIdent, struct BindingInfo)
+DEFINE_MAP_ITERATOR(BindingMap, struct HirIdent, struct BindingInfo)
 
 static void init_binding_checker(struct BindingChecker *bc, struct Resolver *R, struct HirVisitor *V)
 {
@@ -1574,7 +1573,7 @@ static void locate_binding(struct HirVisitor *V, struct HirBindingPat *p)
     struct BindingChecker *bc = V->ud;
     // all bindings must be specified in the first alternative
     struct IrType *type = pawIr_get_type(V->hir->C, p->hid);
-    BindingMap_insert(bc->R, bc->bound, p->ident.name, (struct BindingInfo){
+    BindingMap_insert(bc->R, bc->bound, p->ident, (struct BindingInfo){
                                                      .type = type,
                                                  });
 }
@@ -1583,7 +1582,7 @@ static void check_binding(struct HirVisitor *V, struct HirBindingPat *p)
 {
     paw_Env *P = ENV(V->hir);
     struct BindingChecker *bc = V->ud;
-    struct BindingInfo *pbi = BindingMap_get(bc->R, bc->bound, p->ident.name);
+    struct BindingInfo *pbi = BindingMap_get(bc->R, bc->bound, p->ident);
     if (pbi == NULL) {
         R_NAME_ERROR(bc->R, p->span.start, "binding '%s' must appear in all alternatives",
                    p->ident.name->text);
@@ -1601,10 +1600,9 @@ static void ensure_all_bindings_created(struct BindingChecker *bc)
         struct BindingInfo bi = *BindingMapIterator_valuep(&iter);
         // each bi->uses should have been incremented exactly once
         if (bi.uses != bc->iter) {
-            String const *key = BindingMapIterator_key(&iter);
-#warning "BindingMap should store identifiers, not strings, use identifier span in error"
-            R_NAME_ERROR(bc->R, (struct SourceLoc){0}, "%s binding '%s' in pattern",
-                       bi.uses < bc->iter ? "missing" : "duplicate", key->text);
+            struct HirIdent const key = BindingMapIterator_key(&iter);
+            R_NAME_ERROR(bc->R, key.span.start, "%s binding '%s' in pattern",
+                       bi.uses < bc->iter ? "missing" : "duplicate", key.name->text);
         }
         BindingMapIterator_next(&iter);
     }
@@ -2020,3 +2018,4 @@ void pawP_resolve(struct Compiler *C)
 
     pawP_pool_free(C, pool);
 }
+

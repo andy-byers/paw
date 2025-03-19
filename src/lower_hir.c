@@ -23,14 +23,6 @@
 #include "ssa.h"
 #include "unify.h"
 
-#warning "remove"
-static struct HirIdent ii(String *name)
-{
-    return (struct HirIdent){
-        .name = name,
-    };
-}
-
 struct FunctionState {
     struct FunctionState *outer;
     struct MirRegisterDataList *registers;
@@ -522,8 +514,7 @@ static struct LocalVar *add_local_literal(struct LowerHir *L, char const *name, 
 {
     struct HirIdent ident = {
         .name = SCAN_STRING(L->C, name),
-        .span = {0},
-#warning "span from decision or w/e"
+        .span = {0}, // TODO: need to propagate source locations
     };
     return add_local(L, ident, r, (HirId){-1});
 }
@@ -602,8 +593,11 @@ static MirBlock enter_function(struct LowerHir *L, struct FunctionState *fs, str
     set_current_bb(L, entry);
     enter_block(L, bs, PAW_FALSE);
 
-    alloc_local(L, ii(SCAN_STRING(L->C, PRIVATE("result"))),
-                IR_FPTR(mir->type)->result, (HirId){-1});
+    struct HirIdent const ident = {
+        .name = SCAN_STRING(L->C, PRIVATE("result")),
+        .span = {0}, // TODO
+    };
+    alloc_local(L, ident, IR_FPTR(mir->type)->result, (HirId){-1});
     return entry;
 }
 
@@ -1486,7 +1480,11 @@ static void declare_match_bindings(struct LowerHir *L, struct BindingList *bindi
         MirRegister const r = get_test_reg(L, b.var);
         into_fresh_reg(L, r);
 
-        add_local(L, ii(b.name), r, b.hid);
+        struct HirIdent const ident = {
+            .name = b.name,
+            .span = {0}, // TODO
+        };
+        add_local(L, ident, r, b.hid);
     }
 }
 
@@ -1606,7 +1604,7 @@ static void allocate_match_vars(struct LowerHir *L, MirRegister discr, struct Ma
         MirRegister const r = new_register(L, pv->type);
         map_var_to_reg(L, *pv, r);
         emit_get_field(L, -1, discr, is_enum + index, r);
-        add_local_literal(L, "(match variable)", r);
+        add_local_literal(L, PRIVATE("variable"), r);
     }
 }
 
@@ -1657,7 +1655,7 @@ static void visit_variant_cases(struct HirVisitor *V, struct Decision *d, MirReg
     MirBlock const join_bb = new_bb(L);
     MirRegister const variant = get_test_reg(L, d->multi.test);
     MirRegister const test = new_literal_reg(L, BUILTIN_INT);
-    add_local_literal(L, "(match discriminant)", test); // keep alive
+    add_local_literal(L, PRIVATE("discriminant"), test); // keep alive
     emit_get_field(L, -1, variant, 0, test);
 
     struct MirSwitchArmList *arms = allocate_switch_arms(L, discr_bb, cases->count);
@@ -1783,7 +1781,7 @@ static MirRegister lower_match_expr(struct HirVisitor *V, struct HirMatchExpr *e
     MirRegister const discr = lower_operand(V, e->target);
     MirRegister const result = register_for_node(L, e->hid);
     map_var_to_reg(L, K_LIST_FIRST(ms.vars), discr);
-    add_local_literal(L, "(match target)", discr);
+    add_local_literal(L, PRIVATE("target"), discr);
     MirRegisterList_push(L->fs->mir, ms.regs, discr);
 
     visit_decision(V, d, result);

@@ -39,8 +39,7 @@ static struct IrType *lower_path_type(struct LowerType *L, struct HirPathType *t
 
 static struct IrType *lower_infer_type(struct LowerType *L, struct HirInferType *t)
 {
-#warning "pawU_new_unknown requires span arg"
-    return pawU_new_unknown(L->C->U, t->span.start.line, NULL);
+    return pawU_new_unknown(L->C->U, NULL);
 }
 
 static struct IrType *lower_type(struct LowerType *L, struct HirType *type)

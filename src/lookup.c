@@ -17,7 +17,6 @@ struct QueryState {
     paw_Env *P;
     int base_modno;
     int index;
-    int line; // TODO: never set
 };
 
 #define Q_NAME_ERROR(Q_, Loc_, ...) pawP_error((Q_)->C, PAW_ENAME, (Q_)->m->name, Loc_, __VA_ARGS__)
@@ -254,7 +253,7 @@ static struct IrTypeList *new_unknowns(struct Compiler *C, struct IrTypeList *ge
     struct IrType **pgeneric;
     K_LIST_FOREACH (generics, pgeneric) {
         struct IrTypeList *bounds = IrGetGeneric(*pgeneric)->bounds;
-        struct IrType *unknown = pawU_new_unknown(C->U, -1, bounds);
+        struct IrType *unknown = pawU_new_unknown(C->U, bounds);
         IrTypeList_push(C, list, unknown);
     }
 
