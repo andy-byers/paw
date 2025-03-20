@@ -423,11 +423,11 @@ static void test_parse_float(paw_Env *P)
 static void test_immediates(void)
 {
     OpCode opcode;
-#define CHECK_BOUND(X, v) (                  \
-    opcode = 0,                              \
-    SET_##X(&opcode, v) /* set immediate */, \
-    SET_OP(&opcode, 0) /* corrupt */,        \
-    (v) == GET_##X(opcode) ? (void)0 : (fprintf(stderr, "'%s' unrepresentable by operand '%s'\n", #v, #X), abort()))
+#define CHECK_BOUND(X, v) (                      \
+        opcode = 0,                              \
+        SET_##X(&opcode, v) /* set immediate */, \
+        SET_OP(&opcode, 0) /* corrupt */,        \
+        (v) == GET_##X(opcode) ? (void)0 : (fprintf(stderr, "'%s' unrepresentable by operand '%s'\n", #v, #X), abort()))
     CHECK_BOUND(sBx, sBx_MAX);
     CHECK_BOUND(sBx, -sBx_MAX);
     CHECK_BOUND(Bx, 0);
@@ -448,6 +448,14 @@ static void test_buffer(paw_Env *P)
     pawL_add_nstring(P, &buf, "def", 2);
     check(buf.size == 5);
     check(memcmp(buf.data, "abcde", 5) == 0);
+    pawL_discard_result(P, &buf);
+
+    pawL_init_buffer(P, &buf);
+    pawL_add_fstring(P, &buf, "%x", 0x0013579bdf);
+    pawL_add_fstring(P, &buf, "%X", 0x2468ACE);
+    pawL_add_fstring(P, &buf, "%X", 0x0);
+    check(buf.size == 16);
+    check(memcmp(buf.data, "13579bdf2468ACE00", 16) == 0);
     pawL_discard_result(P, &buf);
 
     pawL_init_buffer(P, &buf);

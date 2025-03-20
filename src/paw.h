@@ -51,19 +51,19 @@ paw_Alloc paw_get_allocator(paw_Env *P);
 void paw_set_allocator(paw_Env *P, paw_Alloc alloc, void *ud);
 size_t paw_bytes_used(paw_Env const *P);
 
-#define PAW_OK 0
-#define PAW_EMEMORY 1
-#define PAW_EVALUE 2
-#define PAW_ENAME 3
-#define PAW_EKEY 4
-#define PAW_EINDEX 5
-#define PAW_ESYSTEM 6
-#define PAW_ERUNTIME 7
+#define PAW_OK 0U
+#define PAW_EMEMORY 1U
+#define PAW_EVALUE 2U
+#define PAW_ENAME 3U
+#define PAW_EKEY 4U
+#define PAW_EINDEX 5U
+#define PAW_ESYSTEM 6U
+#define PAW_ERUNTIME 7U
 
 // TODO: these will become more specific compiler errors
-#define PAW_ETYPE 8
-#define PAW_ESYNTAX 9
-#define PAW_EOVERFLOW 10
+#define PAW_ETYPE 8U
+#define PAW_ESYNTAX 9U
+#define PAW_EOVERFLOW 10U
 
 // Load paw source code from the given 'input' source
 // Creates a function object containing the code and pushes it onto the stack.

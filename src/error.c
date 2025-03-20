@@ -1,8 +1,6 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
-//
-// TODO: print unicode escapes as hexadecimal
 
 #include "error.h"
 
@@ -70,7 +68,7 @@ _Noreturn void pawErr_invalid_unicode_escape(struct Compiler *C, String const *m
 _Noreturn void pawErr_invalid_unicode_codepoint(struct Compiler *C, String const *modname, struct SourceLoc loc, int codepoint)
 {
     throw(C, E_INVALID_UNICODE_CODEPOINT, modname, loc,
-            format(C, "invalid unicode codepoint '\\u%d'", codepoint),
+            format(C, "invalid unicode codepoint '\\u%X'", codepoint),
             NULL);
 }
 
@@ -326,12 +324,14 @@ _Noreturn void pawErr_expected_comma_separator(struct Compiler *C, String const 
             format(C, "expected ',' to separate %s from other items", what),
             NULL);
 }
+
 _Noreturn void pawErr_nonliteral_annotation_value(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name)
 {
     throw(C, E_NONLITERAL_ANNOTATION_VALUE, modname, loc,
             format(C, "value for '%s' annotation must be a literal", name),
             NULL);
 }
+
 _Noreturn void pawErr_nonprimitive_annotation_value(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name)
 {
     throw(C, E_NONPRIMITIVE_ANNOTATION_VALUE, modname, loc,

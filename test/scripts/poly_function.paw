@@ -1,15 +1,9 @@
 // poly_function.paw
 
-pub fn test_emit_warnings() {
-    print('TODO: need to test "for" loops in a polymorphic function to make sure they are being monomorphized correctly.\n'); 
-}
-
 fn map<A, B>(f: fn(A) -> B, a: [A]) -> [B] {
     let b = [];
-    let i = 0;
-    while i < #a {
-        b.push(f(a[i]));
-        i = i + 1;
+    for v in a {
+        b.push(f(v));
     }
     return b;
 }
