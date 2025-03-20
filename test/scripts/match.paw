@@ -265,3 +265,16 @@ pub fn test_tuple_3() {
     assert(check_match_tuple_3((((4,), 4), 3)) == 3);
     assert(check_match_tuple_3((((1,), 2), 1)) == 4);
 }
+
+pub fn test_closure_inside_match() {
+    let f;
+
+    let x = 1;
+    match x {
+        y => f = || {
+            match y { z => (|| x + y + z)() }
+        },
+    }
+
+    assert(f() == 3);
+}
