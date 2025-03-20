@@ -114,3 +114,20 @@ pub fn test_nested_branch() {
     };
     assert(x == 3);
 }
+
+// Makes sure constant/copy propagation doesn't affect captured variables
+// Such variables might be changed inside the capturing closure, so it would
+// be incorrect to consider them constant.
+pub fn test_captured_reg() {
+    let up = 0;
+    let increment = || {
+        up = up + 1;
+        up
+    };
+    assert(up == 0);
+    let copy = up;
+
+    increment();
+    assert(copy == 0);
+    assert(up == 1);
+}

@@ -202,15 +202,15 @@ pub fn test_int_binding() {
 }
 
 pub fn test_target_is_evaluated_once() {
-//    let value = 0;
-//    let f = || {
-//        value = value + 1;
-//        return value;
-//    };
-//    match f() {
-//        _ => {},
-//    };
-//    assert(value == 1);
+    let value = 0;
+    let f = || {
+        value = value + 1;
+        return value;
+    };
+    match f() {
+        _ => {},
+    };
+    assert(value == 1);
 }
 
 fn check_match_tuple(target: (int, str, float)) -> int {

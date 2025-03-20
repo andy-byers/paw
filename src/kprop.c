@@ -94,7 +94,7 @@ static void dump_lattice(struct KProp *K)
             printf("⊤");
         } else if (pcell->info.kind == CELL_BOTTOM) {
             printf("⊥");
-        } else {
+        } else if (pcell->type != NULL) {
             char const *type = pawIr_print_type(K->C, pcell->type);
             printf("k%d (%s): ", pcell->info.k, type);
             --ENV(K)->top.p;
@@ -124,6 +124,14 @@ static void dump_lattice(struct KProp *K)
 }
 
 #endif // PAW_DEBUG_EXTRA
+
+// Check if a register is captured by a closure
+// A captured register cannot participate in constant or copy propagation. The capturing
+// closure might mutate such a register, even if it appears to have a constant value.
+static paw_Bool is_captured(struct KProp *K, MirRegister r)
+{
+    return mir_reg_data(K->mir, r)->is_captured;
+}
 
 static struct MirAccessList *get_uses(struct KProp *K, MirRegister r)
 {
@@ -553,6 +561,20 @@ static void into_constant(struct KProp *K, struct MirInstruction *instr, struct 
 
 static void visit_expr(struct KProp *K, struct MirInstruction *instr, MirBlock b)
 {
+    // TODO: somewhat of a hack. shouldn't it be possible to just write CELL_BOTTOM to lattice cells
+    //       that correspond to captured registers? doesn't work, but may be due to a different problem
+    MirRegister *const *pload;
+    MirRegisterPtrList *ploads = pawMir_get_loads(K->mir, instr);
+    K_LIST_FOREACH (ploads, pload) {
+        if (!is_captured(K, **pload)) continue;
+        MirRegister const *pstore = pawMir_get_store(K->mir, instr);
+        if (pstore != NULL) {
+            struct Cell *cell = get_cell(K, *pstore);
+            cell->info = BOTTOM_INFO();
+        }
+        return;
+    }
+
     switch (MIR_KINDOF(instr)) {
         case kMirMove: {
             struct MirMove *x = MirGetMove(instr);
@@ -570,6 +592,7 @@ static void visit_expr(struct KProp *K, struct MirInstruction *instr, MirBlock b
         }
         case kMirConstant: {
             struct MirConstant *x = MirGetConstant(instr);
+            struct MirRegisterData *data = mir_reg_data(K->mir, x->output);
             int const k = add_constant(K, x->value, x->b_kind);
             struct Cell *output = get_cell(K, x->output);
             enum CellKind old = output->info.kind;
@@ -954,8 +977,8 @@ static void propagate_copies(struct KProp *K)
             struct MirInstruction *instr = *pinstr;
             if (MirIsMove(instr)) {
                 struct MirMove *move = MirGetMove(instr);
-                struct MirRegisterData *data = mir_reg_data(K->mir, move->output);
-                if (!data->is_captured) {
+                if (!is_captured(K, move->target)
+                        && !is_captured(K, move->output)) {
                     propagate_copy(K, move);
                     continue;
                 }
