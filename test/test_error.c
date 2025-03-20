@@ -712,6 +712,15 @@ static void test_destructuring(void)
     test_compiler_status(PAW_ENAME, "destructure_or", "", "let a | 2 = 123;");
 }
 
+static void test_deferred_init(void)
+{
+    test_compiler_status(PAW_EVALUE, "use_before_init", "", "let a; let b = a; b = 123;");
+    test_compiler_status(PAW_EVALUE, "capture_before_init", "", "let a; let f = || -> int {a};");
+    test_compiler_status(PAW_EVALUE, "missing_init_in_branch", "", "let a; if true {a = 1;} let b = a;");
+    test_compiler_status(PAW_EVALUE, "use_in_branch", "", "let a; if true {a = 1;} else {let b = a;}");
+    test_compiler_status(PAW_EVALUE, "uninit_if_else", "", "let a; if true {a = 1;} else if true {return;} else {} let b = a;");
+}
+
 int main(void)
 {
     test_syntax_error();
@@ -733,4 +742,5 @@ int main(void)
     test_match_error();
     test_trait_error();
     test_destructuring();
+    test_deferred_init();
 }

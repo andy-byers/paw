@@ -70,4 +70,3 @@ pub fn test_or() {
     assert(a == 4);
     assert(b == 5);
 }
-

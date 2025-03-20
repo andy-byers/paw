@@ -163,27 +163,27 @@ static struct IrType *get_type(struct LowerHir *L, paw_Type code)
     return GET_NODE_TYPE(L->C, pawHir_get_decl(L->C, did));
 }
 
-static struct MirBlockDataList *bb_list(struct LowerHir *L)
+static struct MirBlockDataList *bb_list(struct FunctionState *fs)
 {
-    paw_assert(L->fs->mir->blocks != NULL);
-    return L->fs->mir->blocks;
+    paw_assert(fs->mir->blocks != NULL);
+    return fs->mir->blocks;
 }
 
-static struct MirBlockData *get_bb(struct LowerHir *L, MirBlock bb)
+static struct MirBlockData *get_bb(struct FunctionState *fs, MirBlock bb)
 {
-    return MirBlockDataList_get(bb_list(L), bb.value);
+    return MirBlockDataList_get(bb_list(fs), bb.value);
 }
 
-static MirBlock current_bb(struct LowerHir *L)
+static MirBlock current_bb(struct FunctionState *fs)
 {
-    paw_assert(bb_list(L)->count > 0);
-    return L->fs->current;
+    paw_assert(bb_list(fs)->count > 0);
+    return fs->current;
 }
 
-static struct MirBlockData *current_bb_data(struct LowerHir *L)
+static struct MirBlockData *current_bb_data(struct FunctionState *fs)
 {
-    paw_assert(bb_list(L)->count > 0);
-    return MirBlockDataList_get(bb_list(L), current_bb(L).value);
+    paw_assert(bb_list(fs)->count > 0);
+    return MirBlockDataList_get(bb_list(fs), current_bb(fs).value);
 }
 
 static MirRegister new_register(struct LowerHir *L, struct IrType *type)
@@ -203,15 +203,15 @@ static MirRegister new_literal_reg(struct LowerHir *L, paw_Type code)
 
 static void add_edge(struct LowerHir *L, MirBlock from, MirBlock to)
 {
-    struct MirBlockData *source = get_bb(L, from);
-    struct MirBlockData *target = get_bb(L, to);
+    struct MirBlockData *source = get_bb(L->fs, from);
+    struct MirBlockData *target = get_bb(L->fs, to);
     MirBlockList_push(L->fs->mir, source->successors, to);
     MirBlockList_push(L->fs->mir, target->predecessors, from);
 }
 
 static struct MirInstruction *add_instruction(struct FunctionState *fs, struct MirInstruction *instr)
 {
-    struct MirBlockData *block = current_bb_data(fs->L);
+    struct MirBlockData *block = current_bb_data(fs);
     MirInstructionList_push(fs->mir, block->instructions, instr);
     return instr;
 }
@@ -225,7 +225,7 @@ static struct MirInstruction *terminate_goto(struct LowerHir *L, int line, MirBl
 
 static void set_goto_edge(struct LowerHir *L, int line, MirBlock to)
 {
-    add_edge(L, current_bb(L), to);
+    add_edge(L, current_bb(L->fs), to);
     terminate_goto(L, line, to);
 }
 
@@ -236,10 +236,10 @@ static void set_current_bb(struct LowerHir *L, MirBlock b)
 
 static MirBlock new_bb(struct LowerHir *L)
 {
-    int const id = bb_list(L)->count;
     struct FunctionState *fs = L->fs;
+    int const id = bb_list(fs)->count;
     struct MirBlockData *bb = pawMir_new_block(fs->mir);
-    MirBlockDataList_push(fs->mir, bb_list(L), bb);
+    MirBlockDataList_push(fs->mir, bb_list(fs), bb);
     return MIR_BB(id);
 }
 
@@ -280,12 +280,12 @@ static void add_label(struct LowerHir *L, int line, enum JumpKind kind)
     // a captured variable, since the MirClose at the end of the loop body will not be reached.
     if (kind == JUMP_CONTINUE)
         close_until_loop(L->fs);
-    struct MirBlockData *block = current_bb_data(L);
+    struct MirBlockData *block = current_bb_data(L->fs);
     terminate_goto(L, line, MIR_INVALID_BB);
 
     LabelList_push(L, L->labels, (struct Label){
                                      .nvars = L->fs->nlocals,
-                                     .from = current_bb(L),
+                                     .from = current_bb(L->fs),
                                      .kind = kind,
                                  });
 }
@@ -309,7 +309,7 @@ static void remove_label(struct LabelList *ll, int index)
 
 static void set_goto(struct LowerHir *L, MirBlock from, MirBlock to)
 {
-    struct MirBlockData *bb = get_bb(L, from);
+    struct MirBlockData *bb = get_bb(L->fs, from);
     struct MirInstruction *jump = K_LIST_LAST(bb->instructions);
     MirGetGoto(jump)->target = to;
 }
@@ -323,8 +323,8 @@ static paw_Bool adjust_from(struct LowerHir *L, enum JumpKind kind)
         struct Label lb = LabelList_get(ll, i);
         if (lb.kind == kind) {
             needs_close |= lb.needs_close;
-            set_goto(L, lb.from, current_bb(L));
-            add_edge(L, lb.from, current_bb(L));
+            set_goto(L, lb.from, current_bb(L->fs));
+            add_edge(L, lb.from, current_bb(L->fs));
             remove_label(ll, i);
         } else {
             ++i;
@@ -396,7 +396,9 @@ static void mark_upvalue(struct FunctionState *fs, int target, MirRegister r)
 
     struct MirRegisterData *data = mir_reg_data(fs->mir, r);
     if (!data->is_captured) {
-        MirCaptureList_push(fs->mir, fs->captured, (struct MirCaptureInfo){r});
+        struct MirCaptureInfo const ci = {r};
+        MirCaptureList_push(fs->mir, fs->captured, ci);
+        NEW_INSTR(fs, capture, -1, r);
         data->is_captured = PAW_TRUE;
         data->hint = r;
     }
@@ -603,7 +605,7 @@ static MirBlock enter_function(struct LowerHir *L, struct FunctionState *fs, str
 
 static void leave_function(struct LowerHir *L)
 {
-    struct MirBlockData *block = current_bb_data(L);
+    struct MirBlockData *block = current_bb_data(L->fs);
     if (block->instructions->count == 0
             || !MirIsReturn(K_LIST_LAST(block->instructions)))
         terminate_return(L, NULL);
@@ -883,7 +885,7 @@ static MirRegister lower_literal_expr(struct HirVisitor *V, struct HirLiteralExp
 static MirRegister lower_logical_expr(struct HirVisitor *V, struct HirLogicalExpr *e)
 {
     struct LowerHir *L = V->ud;
-    MirBlock const before_bb = current_bb(L);
+    MirBlock const before_bb = current_bb(L->fs);
     MirBlock const test_bb = new_bb(L);
     MirBlock const lhs_bb = new_bb(L);
     MirBlock const rhs_bb = new_bb(L);
@@ -894,8 +896,8 @@ static MirRegister lower_logical_expr(struct HirVisitor *V, struct HirLogicalExp
 
     MirRegister const result = new_literal_reg(L, BUILTIN_BOOL);
     MirRegister const first = lower_operand(V, e->lhs);
-    add_edge(L, current_bb(L), lhs_bb);
-    add_edge(L, current_bb(L), rhs_bb);
+    add_edge(L, current_bb(L->fs), lhs_bb);
+    add_edge(L, current_bb(L->fs), rhs_bb);
 
     struct MirInstruction *r = e->is_and
                                    ? terminate_branch(L, first, rhs_bb, lhs_bb)
@@ -1007,7 +1009,7 @@ static struct MirSwitchArmList *allocate_switch_arms(struct LowerHir *L, MirBloc
 static MirRegister lower_chain_expr(struct HirVisitor *V, struct HirChainExpr *e)
 {
     struct LowerHir *L = V->ud;
-    MirBlock const input_bb = current_bb(L);
+    MirBlock const input_bb = current_bb(L->fs);
     MirBlock const none_bb = new_bb(L);
     MirBlock const after_bb = new_bb(L);
     add_edge(L, input_bb, none_bb);
@@ -1321,7 +1323,7 @@ static MirRegister lower_if_expr(struct HirVisitor *V, struct HirIfExpr *e)
 {
     struct LowerHir *L = V->ud;
     MirRegister const cond = lower_operand(V, e->cond);
-    MirBlock const cond_bb = current_bb(L);
+    MirBlock const cond_bb = current_bb(L->fs);
     MirBlock const then_bb = new_bb(L);
     MirBlock const else_bb = new_bb(L);
     MirBlock const join_bb = new_bb(L);
@@ -1354,7 +1356,7 @@ static MirRegister lower_loop_expr(struct HirVisitor *V, struct HirLoopExpr *e)
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
     MirRegister const result = unit_literal(L);
-    MirBlock const before_bb = current_bb(L);
+    MirBlock const before_bb = current_bb(L->fs);
     MirBlock const header_bb = new_bb(L);
     MirBlock const after_bb = new_bb(L);
     add_edge(L, before_bb, header_bb);
@@ -1366,7 +1368,7 @@ static MirRegister lower_loop_expr(struct HirVisitor *V, struct HirLoopExpr *e)
     set_current_bb(L, header_bb);
     lower_operand(V, e->block);
 
-    MirBlock const loop_bb = current_bb(L);
+    MirBlock const loop_bb = current_bb(L->fs);
     set_goto_edge(L, e->span.start.line, header_bb);
 
     adjust_to(L, JUMP_CONTINUE, header_bb);
@@ -1508,7 +1510,7 @@ static void visit_guard(struct HirVisitor *V, struct Decision *d, MirRegister re
     bindings->count = 0;
 
     MirRegister const cond = lower_operand(V, d->guard.cond);
-    MirBlock const before_bb = current_bb(L);
+    MirBlock const before_bb = current_bb(L->fs);
     MirBlock const then_bb = new_bb(L);
     MirBlock const else_bb = new_bb(L);
     MirBlock const join_bb = new_bb(L);
@@ -1530,7 +1532,7 @@ static void visit_guard(struct HirVisitor *V, struct Decision *d, MirRegister re
 static MirBlock lower_match_body(struct HirVisitor *V, struct MatchBody body, MirRegister result)
 {
     struct LowerHir *L = V->ud;
-    MirBlock const bid = current_bb(L);
+    MirBlock const bid = current_bb(L->fs);
     declare_match_bindings(L, body.bindings);
     MirRegister const r = lower_operand(V, body.result);
     move_to(L, r, result);
@@ -1612,7 +1614,7 @@ static void visit_sparse_cases(struct HirVisitor *V, struct Decision *d, MirRegi
 {
     struct LowerHir *L = V->ud;
     struct CaseList *cases = d->multi.cases;
-    MirBlock const discr_bb = current_bb(L);
+    MirBlock const discr_bb = current_bb(L->fs);
     MirBlock const otherwise_bb = new_bb(L);
     MirBlock const join_bb = new_bb(L);
     add_edge(L, discr_bb, otherwise_bb);
@@ -1651,7 +1653,7 @@ static void visit_variant_cases(struct HirVisitor *V, struct Decision *d, MirReg
     struct LowerHir *L = V->ud;
     struct CaseList *cases = d->multi.cases;
 
-    MirBlock const discr_bb = current_bb(L);
+    MirBlock const discr_bb = current_bb(L->fs);
     MirBlock const join_bb = new_bb(L);
     MirRegister const variant = get_test_reg(L, d->multi.test);
     MirRegister const test = new_literal_reg(L, BUILTIN_INT);

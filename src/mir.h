@@ -22,6 +22,7 @@ struct Mir;
     X(Container)                \
     X(Call)                     \
     X(Cast)                     \
+    X(Capture)                  \
     X(Close)                    \
     X(Closure)                  \
     X(SetElement)               \
@@ -148,6 +149,11 @@ struct MirAggregate {
     MIR_INSTRUCTION_HEADER;
     int nfields;
     MirRegister output;
+};
+
+struct MirCapture {
+    MIR_INSTRUCTION_HEADER;
+    MirRegister target;
 };
 
 struct MirClose {
@@ -431,6 +437,18 @@ inline static struct MirInstruction *pawMir_new_aggregate(struct Mir *mir, int l
         .line = line,
         .nfields = nfields,
         .output = output,
+    };
+    return instr;
+}
+
+inline static struct MirInstruction *pawMir_new_capture(struct Mir *mir, int line, MirRegister target)
+{
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
+    instr->Capture_ = (struct MirCapture){
+        .mid = pawMir_next_id(mir),
+        .kind = kMirCapture,
+        .line = line,
+        .target = target,
     };
     return instr;
 }

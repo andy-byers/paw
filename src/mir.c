@@ -143,6 +143,11 @@ static void AcceptCast(struct MirVisitor *V, struct MirCast *t)
     pawMir_visit_register(V, t->output);
 }
 
+static void AcceptCapture(struct MirVisitor *V, struct MirCapture *t)
+{
+    pawMir_visit_register(V, t->target);
+}
+
 static void AcceptClose(struct MirVisitor *V, struct MirClose *t)
 {
     pawMir_visit_register(V, t->target);
@@ -673,6 +678,11 @@ struct MirRegisterPtrList *pawMir_get_loads(struct Mir *mir, struct MirInstructi
             ADD_INPUT(x->value);
             break;
         }
+        case kMirCapture: {
+            struct MirCapture *x = MirGetCapture(instr);
+            ADD_INPUT(x->target);
+            break;
+        }
         case kMirClose: {
             struct MirClose *x = MirGetClose(instr);
             ADD_INPUT(x->target);
@@ -1075,6 +1085,11 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
                     L_ADD_LITERAL(P->P, P->buf, "(?)");
             }
             pawL_add_fstring(P->P, P->buf, "_%d\n", t->target.value);
+            break;
+        }
+        case kMirCapture: {
+            struct MirCapture *t = MirGetCapture(instr);
+            DUMP_FMT(P, "capture _%d\n", t->target.value);
             break;
         }
         case kMirClose: {

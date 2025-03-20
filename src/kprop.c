@@ -658,6 +658,7 @@ static void visit_expr(struct KProp *K, struct MirInstruction *instr, MirBlock b
             break;
         }
         case kMirFreeLocal:
+        case kMirClosure:
         case kMirClose:
         case kMirSetElement:
         case kMirSetRange:

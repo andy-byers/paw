@@ -284,6 +284,14 @@ static void ensure_init(struct SsaConverter *S, struct MirInstruction *instr)
         if (data->is_uninit)
             VALUE_ERROR(S, -1, "use before initialization");
     }
+
+    // TODO: need to update captured variable to be the latest version
+//    struct MirCaptureInfo const *pinfo;
+//    K_LIST_FOREACH (S->mir->captured, pinfo) {
+//        struct MirRegisterData *data = mir_reg_data(S->mir, pinfo->r);
+//        if (data->is_uninit)
+//            VALUE_ERROR(S, -1, "use before initialization");
+//    }
 }
 
 static void fix_aux_info(struct SsaConverter *S, struct Mir *mir)
