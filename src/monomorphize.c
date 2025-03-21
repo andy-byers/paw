@@ -187,7 +187,8 @@ static void leave_generics_context(struct MonoCollector *M)
 
 static struct Mir *new_mir(struct MonoCollector *M, struct Mir *base, struct IrType *type, struct IrType *self)
 {
-    M->mir = pawMir_new(M->C, base->name, type, self, base->fn_kind, base->is_pub, PAW_FALSE);
+    M->mir = pawMir_new(M->C, base->modname, base->span, base->name, type, self,
+            base->fn_kind, base->is_pub, PAW_FALSE);
     return M->mir;
 }
 

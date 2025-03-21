@@ -8,6 +8,7 @@
 #include "compile.h"
 
 struct MatchVar {
+    struct SourceSpan span;
     struct IrType *type;
     int id;
 };

@@ -20,13 +20,14 @@
 //     Scan Register Allocator.
 
 #include "compile.h"
+#include "error.h"
 #include "ir_type.h"
 #include "map.h"
 #include "mir.h"
 #include "ssa.h"
 #include <stdlib.h>
 
-#define ERROR(R, code, ...) pawE_error(ENV((R)->C), code, -1, __VA_ARGS__)
+#define REGALLOC_ERROR(R_, Kind_, ...) pawErr_##Kind_((R_)->C, (R_)->mir->modname, __VA_ARGS__)
 
 enum AllocationKind {
     ALLOCATE_NEXT,
@@ -260,7 +261,7 @@ static int next_intersection(struct MirLiveInterval *a, struct MirLiveInterval *
 
 static void not_enough_registers(struct RegisterAllocator *R)
 {
-    pawE_error(ENV(R->C), PAW_EOVERFLOW, -1, "not enough registers");
+    REGALLOC_ERROR(R, too_many_variables, R->mir->span.start, NREGISTERS);
 }
 
 static struct RegisterInfo get_result(struct RegisterAllocator *R, MirRegister r)
@@ -413,7 +414,7 @@ static void order_and_insert_copies(struct RegisterAllocator *R, struct MirBlock
     MirInstructionList_pop(block->instructions);
 
     K_LIST_FOREACH (seq, pcopy) {
-        struct MirInstruction *move = pawMir_new_move(R->mir, -1, pcopy->to, pcopy->from);
+        struct MirInstruction *move = pawMir_new_move(R->mir, (struct SourceLoc){-1}, pcopy->to, pcopy->from);
         pawMir_set_location(R->mir, R->locations, move->hdr.mid, pcopy->location);
         MirInstructionList_push(R->mir, block->instructions, move);
     }

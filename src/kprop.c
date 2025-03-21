@@ -541,7 +541,7 @@ static void into_goto(struct KProp *K, struct MirInstruction *instr, MirBlock b)
 {
     instr->Goto_ = (struct MirGoto){
         .kind = kMirGoto,
-        .line = instr->hdr.line,
+        .loc = instr->hdr.loc,
         .mid = instr->hdr.mid,
         .target = b,
     };
@@ -551,7 +551,7 @@ static void into_constant(struct KProp *K, struct MirInstruction *instr, struct 
 {
     instr->Constant_ = (struct MirConstant){
         .kind = kMirConstant,
-        .line = instr->hdr.line,
+        .loc = instr->hdr.loc,
         .b_kind = pawP_type2code(K->C, cell.type),
         .mid = instr->hdr.mid,
         .value = cell.info.v,

@@ -558,8 +558,6 @@ static struct AstExpr *literal_expr(struct Lex *lex)
     if (negative) {
         struct AstLiteralExpr *e = AstGetLiteralExpr(expr);
         if (e->basic.code == BUILTIN_INT) {
-            if (e->basic.value.i == PAW_INT_MIN)
-                PARSE_ERROR(lex, negative_minimum_integer, lex->loc);
             e->basic.value.i = -e->basic.value.i;
         } else if (e->basic.code == BUILTIN_FLOAT) {
             e->basic.value.f = -e->basic.value.f;
@@ -1590,9 +1588,6 @@ static void struct_body(struct Lex *lex, struct AstTypeList *traits, struct AstD
         struct Annotations *annos = annotations(lex);
         paw_Bool const is_pub = test_next(lex, TK_PUB);
         if (test(lex, TK_NAME)) {
-            if (annos != NULL)
-                PARSE_ERROR(lex, unexpected_annotation, field_start);
-
             if (fields->count == INT_MAX)
                 break; // throw error below
 
@@ -1720,13 +1715,6 @@ static void ensure_not_pub(struct Lex *lex, struct SourceLoc loc, paw_Bool has_q
         PARSE_ERROR(lex, unexpected_visibility_qualifier, loc);
 }
 
-static void ensure_not_annotated(struct Lex *lex, struct SourceLoc loc, paw_Bool has_annotation)
-{
-    if (has_annotation)
-        PARSE_ERROR(lex, unexpected_annotation, loc);
-}
-
-// TODO: just ignore annotations on items other than functions for now
 static struct AstDecl *toplevel_item(struct Lex *lex)
 {
     struct Annotations *annos = annotations(lex);
@@ -1740,20 +1728,15 @@ static struct AstDecl *toplevel_item(struct Lex *lex)
         case TK_CONST:
             return const_decl(lex, annos, is_pub);
         case TK_ENUM:
-            ensure_not_annotated(lex, start, annos);
             return enum_decl(lex, is_pub);
         case TK_STRUCT:
-            ensure_not_annotated(lex, start, annos);
             return struct_decl(lex, is_pub);
         case TK_TRAIT:
-            ensure_not_annotated(lex, start, annos);
             return trait_decl(lex, is_pub);
         case TK_TYPE:
-            ensure_not_annotated(lex, start, annos);
             return type_decl(lex, is_pub);
         case TK_USE:
             ensure_not_pub(lex, start, is_pub);
-            ensure_not_annotated(lex, start, annos);
             return use_decl(lex);
     }
 }

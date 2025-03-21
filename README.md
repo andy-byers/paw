@@ -200,3 +200,6 @@ pub fn main() {
 + Methods on primitives are unable to modify "self"
     + Results in "int::incremented(self) -> int" hack in prelude (would be nicer as "int::increment(self)")
     + Need to use a pointer to "self" in this case, but paw has no concept of pointers right now
++ Unable to handle literal `PAW_INT_MIN`
+    + Looks like `-(PAW_INT_MAX + 1)` which overflows before `-` can be applied
+    + Need to parse as `paw_Uint` and then check for overflow later

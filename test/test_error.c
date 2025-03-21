@@ -8,6 +8,7 @@
 #include "rt.h"
 #include "test.h"
 #include <limits.h>
+#include <inttypes.h>
 
 typedef uint64_t TypeSet;
 
@@ -39,7 +40,7 @@ static void check_status(paw_Env *P, int have, int want)
 
 static void test_compiler_status(enum ErrorKind expect, char const *name, char const *item, char const *text)
 {
-    char buffer[4096];
+    static char buffer[100000];
     write_main(buffer, item, text);
 
     paw_Env *P = paw_open(&(struct paw_Options){0});
@@ -51,7 +52,7 @@ static void test_compiler_status(enum ErrorKind expect, char const *name, char c
 
 static void test_runtime_status(int expect, char const *name, char const *item, char const *text)
 {
-    char buffer[4096];
+    static char buffer[100000];
     write_main(buffer, item, text);
 
     paw_Env *P = paw_open(&(struct paw_Options){0});
@@ -76,9 +77,9 @@ static void test_runtime_status(int expect, char const *name, char const *item, 
 
 static void test_name_error(void)
 {
-    test_compiler_status(PAW_ENAME, "use_before_def_local", "", "let x = x;");
-    test_compiler_status(PAW_ENAME, "undef_variable", "", "x = 1;");
-    test_compiler_status(PAW_ENAME, "undef_field", "struct A;", "let a = A.value;");
+    test_compiler_status(E_UNKNOWN_PATH, "use_before_def_local", "", "let x = x;");
+    test_compiler_status(E_UNKNOWN_PATH, "undef_variable", "", "x = 1;");
+    test_compiler_status(E_UNKNOWN_FIELD, "undef_field", "struct A;", "let a = A.value;");
 }
 
 static char const *get_literal(int kind)
@@ -115,7 +116,7 @@ static void check_unop_error(enum ErrorKind expect, char const *op, paw_Type k)
 
 static void check_unop_type_error(char const *op, paw_Type k)
 {
-    check_unop_error(PAW_ETYPE, op, k);
+    check_unop_error(E_INVALID_UNARY_OPERAND, op, k);
 }
 
 static void check_unification_errors(void)
@@ -138,31 +139,35 @@ static void check_unification_errors(void)
     }
 }
 
-static void check_binop_type_error(char const *op, paw_Type k, paw_Type k2)
+static void check_binop_type_error(unsigned error, char const *op, paw_Type t, paw_Type t2)
 {
     char name_buf[256] = {0};
     snprintf(name_buf, sizeof(name_buf), "binop_type_error('%s', %s, %s)",
-        op, get_literal(k), get_literal(k2));
+        op, get_literal(t), get_literal(t2));
 
     char text_buf[256] = {0};
     snprintf(text_buf, sizeof(text_buf), "let x = %s %s %s;",
-        get_literal(k), op, get_literal(k2));
+        get_literal(t), op, get_literal(t2));
 
-    test_compiler_status(PAW_ETYPE, name_buf, "", text_buf);
+    test_compiler_status(error, name_buf, "", text_buf);
+}
+
+static paw_Bool type_in_list(paw_Type t, paw_Type const *types)
+{
+    for (paw_Type type = *types; type >= 0; type = *++types) {
+        if (t == type) return PAW_TRUE;
+    }
+    return PAW_FALSE;
 }
 
 static void check_binop_type_errors(char const *op, paw_Type *types)
 {
-    for (int k = PAW_TUNIT; k <= PAW_TSTR; ++k) {
-        for (int k2 = PAW_TUNIT; k2 <= PAW_TSTR; ++k2) {
-            paw_Type *pt = types;
-            for (int t = *pt; t >= 0; t = *++pt) {
-                if (k == t && k2 == t) {
-                    goto next_round;
-                }
-            }
-            check_binop_type_error(op, k, k2);
-        next_round: /* combination of types is valid, skip check */;
+    for (int t = PAW_TUNIT; t <= PAW_TSTR; ++t) {
+        for (int t2 = PAW_TUNIT; t2 <= PAW_TSTR; ++t2) {
+            if (t != t2 && type_in_list(t, types) && type_in_list(t2, types))
+                check_binop_type_error(PAW_ETYPE, op, t, t2);
+            if (t == t2 && !type_in_list(t, types))
+                check_binop_type_error(E_INVALID_BINARY_OPERAND, op, t, t2);
         }
     }
 }
@@ -201,9 +206,9 @@ static void test_type_error(void)
     check_binop_type_errors("==", MAKE_LIST(PAW_TBOOL, PAW_TINT, PAW_TFLOAT, PAW_TSTR));
     check_binop_type_errors("!=", MAKE_LIST(PAW_TBOOL, PAW_TINT, PAW_TFLOAT, PAW_TSTR));
 
-    test_compiler_status(PAW_ETYPE, "call_unit_variant", "enum E {X}", "let x = E::X();");
+    test_compiler_status(E_UNIT_VARIANT_WITH_PARENTHESIS, "call_unit_variant", "enum E {X}", "let x = E::X();");
     test_compiler_status(PAW_ETYPE, "wrong_constructor_args", "enum E {X(int)}", "let x = E::X(1.0);");
-    test_compiler_status(PAW_ETYPE, "selector_on_function", "fn func() {}", "let a = func.field;");
+    test_compiler_status(E_EXPECTED_ADT, "selector_on_function", "fn func() {}", "let a = func.field;");
     test_compiler_status(PAW_ETYPE, "selector_on_module", "use io;", "let s = io.abc;");
     test_compiler_status(PAW_ETYPE, "extraneous_method_access",
         "struct S {pub fn f() {}}", "S::f::f(); ");
@@ -217,6 +222,26 @@ static void test_type_error(void)
     test_compiler_status(PAW_ETYPE, "non_exhaustive_return",
         "pub fn f(x: bool) -> int {if x {return 123;}}", "");
     test_compiler_status(PAW_ETYPE, "non_unit_guard", "pub fn f(x: bool) {if x {123}}", "");
+    test_compiler_status(E_EXPECTED_BASIC_TYPE, "nonscalar_cast", "", "let x = 123 as str;");
+    test_compiler_status(PAW_ETYPE, "invalid_map_key", "struct S;", "let x = [S: 123];");
+}
+
+static void test_name_too_long(void)
+{
+    char long_name[1000] = "let ";
+    size_t index = 4;
+    while (index < PAW_LENGTHOF(long_name) - 2)
+        long_name[index++] = 'x';
+    long_name[index++] = ';';
+    long_name[index++] = '\0';
+    test_compiler_status(E_NAME_TOO_LONG, "name_too_long", "", long_name);
+}
+
+static void test_negative_minimum_integer(void)
+{
+    char buffer[256];
+    snprintf(buffer, sizeof(buffer), "match 42 {%" PRId64 " => {}}", PAW_INT_MIN);
+    test_compiler_status(E_INTEGER_OUT_OF_RANGE, "negative_minimum_integer", "", buffer);
 }
 
 static void test_syntax_error(void)
@@ -236,7 +261,7 @@ static void test_syntax_error(void)
     test_compiler_status(E_UNEXPECTED_INTEGER_CHAR, "octal_digit_range", "", "let o = 0o385273;");
     test_compiler_status(E_UNEXPECTED_INTEGER_CHAR, "hex_digit_range", "", "let x = 0x5A2CG3;");
     test_compiler_status(E_EXPECTED_SEMICOLON, "malformed_binary", "", "let b = 0b00$101;");
-    test_compiler_status(PAW_ESYNTAX, "malformed_octal", "", "let o = 0o37=273;");
+    test_compiler_status(E_INVALID_ASSIGNMENT_TARGET, "malformed_octal", "", "let o = 0o37=273;");
     test_compiler_status(E_EXPECTED_SEMICOLON, "malformed_hex", "", "let x = 0y5A2CF3;");
     test_compiler_status(E_EXPECTED_INTEGER_DIGIT, "int_digit_sep_before_bin_digits", "", "let x = 0b_01;");
     test_compiler_status(E_EXPECTED_INTEGER_DIGIT, "int_digit_sep_before_oct_digits", "", "let x = 0o_23;");
@@ -263,20 +288,16 @@ static void test_syntax_error(void)
     test_compiler_status(E_EXPECTED_EXPRESSION, "bad_float_2", "", "let f = 1-.0-;");
     test_compiler_status(E_EXPECTED_SYMBOL, "bad_float_3", "", "let f = 1e--1;");
     test_compiler_status(E_EXPECTED_SYMBOL, "bad_float_4", "", "let f = 1e++1;");
-    // NOTE: type error is becuase the follwing is parsed as a tuple selector on a
-    //       float (accessing element 0 on "1e-1")
-    test_compiler_status(PAW_ETYPE, "bad_float_5", "", "let f = 1e-1.0;");
-    test_compiler_status(PAW_ETYPE, "bad_float_6", "", "let f = 1e+1.0;");
+    test_compiler_status(E_EXPECTED_FIELD_SELECTOR, "bad_float_5", "", "let f = 1e-1.0;");
+    test_compiler_status(E_EXPECTED_FIELD_SELECTOR, "bad_float_6", "", "let f = 1e+1.0;");
     test_compiler_status(E_EXPECTED_SEMICOLON, "bad_float_7", "", "let f = 1e-1e1;");
     test_compiler_status(E_EXPECTED_SEMICOLON, "bad_float_8", "", "let f = 1e+1e1;");
-    test_compiler_status(PAW_ETYPE, "bad_float_9", "", "let f = 1.0.0;");
-    // NOTE: name error is because the following is parsed as a field access on an
-    //       integer (accessing field "_0" on "1")
-    test_compiler_status(PAW_ENAME, "float_digit_sep_after_dot", "", "let f = 1._0;");
+    test_compiler_status(E_EXPECTED_FIELD_SELECTOR, "bad_float_9", "", "let f = 1.0.0;");
+    test_compiler_status(E_UNKNOWN_FIELD, "float_digit_sep_after_dot", "", "let f = 1._0;");
     test_compiler_status(E_EXPECTED_SYMBOL, "float_digit_sep_after_e", "", "let f = 1e_0;");
     test_compiler_status(E_EXPECTED_SYMBOL, "float_digit_sep_after_-", "", "let f = 1e-_0;");
     test_compiler_status(E_EXPECTED_SYMBOL, "float_digit_sep_after_+", "", "let f = 1e+_0;");
-    test_compiler_status(PAW_ETYPE, "float_with_base_prefix", "", "let f = 0x1.0;");
+    test_compiler_status(E_EXPECTED_FIELD_SELECTOR, "float_with_base_prefix", "", "let f = 0x1.0;");
 
     test_compiler_status(E_EXPECTED_SEMICOLON, "missing_semicolon_after_stmt", "", "let a = 1");
     test_compiler_status(E_EXPECTED_SEMICOLON, "missing_semicolon_between_stmts", "", "let a = 2\nlet b = 3;");
@@ -287,18 +308,37 @@ static void test_syntax_error(void)
     test_compiler_status(E_EXPECTED_EXPRESSION, "binop_missing_lhs", "", "let a = + 2");
     test_compiler_status(E_EXPECTED_EXPRESSION, "binop_invalid_lhs", "", "let a = & + 2;");
 
-    test_compiler_status(PAW_ETYPE, "primitive_type_is_not_a_value_1", "", "let a = int;");
-    test_compiler_status(PAW_ETYPE, "primitive_type_is_not_a_value_2", "", "let a = (1, float,);");
-    test_compiler_status(PAW_ETYPE, "primitive_type_is_not_a_value_3", "", "let a = ['two', str];");
-    test_compiler_status(PAW_ETYPE, "generic_type_is_not_a_value", "fn f<T>() {let t = T;}", "");
+    test_compiler_status(E_EXPECTED_VALUE, "primitive_type_is_not_a_value_1", "", "let a = int;");
+    test_compiler_status(E_EXPECTED_VALUE, "primitive_type_is_not_a_value_2", "", "let a = (1, float,);");
+    test_compiler_status(E_EXPECTED_VALUE, "primitive_type_is_not_a_value_3", "", "let a = ['two', str];");
+    test_compiler_status(E_EXPECTED_VALUE, "generic_type_is_not_a_value", "fn f<T>() {let t = T;}", "");
     test_compiler_status(PAW_ETYPE, "function_is_not_a_type", "fn test() {}", "let a: test = test;");
     test_compiler_status(PAW_ETYPE, "variable_is_not_a_type", "", "let a = 1; let b: a = a;");
     test_compiler_status(PAW_ENAME, "own_name_is_not_a_type", "", "let a: a = 1;");
 
-    test_compiler_status(PAW_ENAME, "duplicate_global", "struct A; struct A;", "");
+    test_compiler_status(E_DUPLICATE_ITEM, "duplicate_global", "struct A; struct A;", "");
     test_compiler_status(E_EXPECTED_TOPLEVEL_ITEM, "return_outside_function", "return;", "");
     test_compiler_status(E_JUMP_OUTSIDE_LOOP, "break_outside_loop", "", "break;");
     test_compiler_status(E_JUMP_OUTSIDE_LOOP, "continue_outside_loop", "", "continue;");
+
+    test_compiler_status(E_INVALID_ESCAPE, "invalid_escape", "", "let x = '\\x;';");
+    test_compiler_status(E_INVALID_UNICODE_ESCAPE, "invalid_unicode_escape", "", "let x = '\\uD80';");
+    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "invalid_unicode_codepoint", "", "let x = '\xD8\x05';");
+    test_compiler_status(E_INVALID_INTEGER, "invalid_integer", "", "let x = 0123;");
+    test_compiler_status(E_INVALID_FLOAT, "invalid_float", "", "let x = 01.0;");
+    test_name_too_long();
+    test_compiler_status(E_UNEXPECTED_VISIBILITY_QUALIFIER, "unexpected_visibility_qualifier", "pub use io;", "");
+    test_compiler_status(E_EMPTY_TYPE_LIST, "empty_type_list", "pub fn f<>() {}", "");
+    test_negative_minimum_integer();
+    test_compiler_status(E_INVALID_LITERAL_NEGATION, "invalid_literal_negation", "", "match 'abc' {-'abc' => {}}");
+    test_compiler_status(E_INVALID_SELECTOR, "invalid_selector", "", "let x = 'abc'.1e-2;");
+    test_compiler_status(E_EMPTY_VARIANT_FIELD_LIST, "empty_variant_field_list", "enum E {X()}", "");
+    test_compiler_status(E_FUNCTION_TYPE_DECL, "function_type_decl", "type F = fn();", "");
+    test_compiler_status(E_EXPECTED_COLON_AFTER_MAP_KEY, "expected_colon_after_map_key", "", "let x = [1: 2, 3];");
+    test_compiler_status(E_COLON_AFTER_LIST_ELEMENT, "colon_after_list_element", "", "let x = [1, 2: 3];");
+    test_compiler_status(E_COLONS_AFTER_UNDERSCORE, "colons_after_underscore", "", "let x: _::X;");
+    test_compiler_status(E_EXPECTED_COMMA_SEPARATOR, "expected_comma_separator", "struct X {a: int b: int}", "");
+    test_compiler_status(E_NONPRIMITIVE_ANNOTATION_VALUE, "nonprimitive_annotation_value", "#[anno=(1,)] fn f() {}", "");
 }
 
 static void test_closure_error(void)
@@ -330,34 +370,33 @@ static void test_arithmetic_error(void)
 
 static void test_tuple_error(void)
 {
-    test_compiler_status(PAW_ETYPE, "tuple_square_brackets", "", "let x = (1, 2); let y = x[0];");
-    test_compiler_status(PAW_ETYPE, "tuple_named_field", "", "let x = (1, 2); let y = x.first;");
-    test_compiler_status(PAW_ETYPE, "tuple_index_out_of_range", "", "let x = (1, 2); let y = x.2;");
+    test_compiler_status(E_INVALID_INDEX_TARGET, "tuple_square_brackets", "", "let x = (1, 2); let y = x[0];");
+    test_compiler_status(E_EXPECTED_ELEMENT_SELECTOR, "tuple_named_field", "", "let x = (1, 2); let y = x.first;");
+    test_compiler_status(E_ELEMENT_SELECTOR_OUT_OF_RANGE, "tuple_index_out_of_range", "", "let x = (1, 2); let y = x.2;");
 }
 
 static void test_struct_error(void)
 {
     test_compiler_status(E_EMPTY_STRUCT_BODY, "struct_unit_with_braces_on_def", "struct A {}", "let a = A;");
     test_compiler_status(E_EXPECTED_SEMICOLON, "struct_unit_without_semicolon", "struct A", "");
-    test_compiler_status(PAW_ESYNTAX, "struct_missing_braces", "struct A {pub a: int}", "let a = A;");
-    test_compiler_status(PAW_EVALUE, "struct_unit_with_braces_on_init", "struct A;", "let a = A{};");
-    test_compiler_status(PAW_ENAME, "struct_missing_only_field", "struct A {pub a: int}", "let a = A{};");
-    test_compiler_status(PAW_ENAME, "struct_missing_field", "struct A {pub a: int, pub b: float}", "let a = A{a: 1};");
-    test_compiler_status(PAW_ENAME, "struct_extra_field", "struct A {pub a: int}", "let a = A{a: 1, b: 2};");
-    test_compiler_status(PAW_ENAME, "struct_duplicate_field", "struct A {pub a: int}", "let a = A{a: 1, a: 1};");
-    test_compiler_status(PAW_ENAME, "struct_field_conflicts_with_method", "struct A {pub a: int, fn a() {}}", "");
-    test_compiler_status(PAW_ENAME, "struct_wrong_field", "struct A {pub a: int}", "let a = A{b: 2};");
-    test_compiler_status(PAW_ETYPE, "struct_access_by_index", "struct S{pub x: int}", "let x = S{x: 1}; let y = x.0;");
+    test_compiler_status(E_MISSING_FIELDS, "struct_missing_braces", "struct A {pub a: int}", "let a = A;");
+    test_compiler_status(E_UNIT_STRUCT_WITH_BRACES, "struct_unit_with_braces_on_init", "struct A;", "let a = A{};");
+    test_compiler_status(E_MISSING_FIELD, "struct_missing_only_field", "struct A {pub a: int}", "let a = A{};");
+    test_compiler_status(E_MISSING_FIELD, "struct_missing_field", "struct A {pub a: int, pub b: float}", "let a = A{a: 1};");
+    test_compiler_status(E_UNKNOWN_FIELD, "struct_extra_field", "struct A {pub a: int}", "let a = A{a: 1, b: 2};");
+    test_compiler_status(E_DUPLICATE_FIELD, "struct_duplicate_field", "struct A {pub a: int}", "let a = A{a: 1, a: 1};");
+    test_compiler_status(E_DUPLICATE_ITEM, "struct_field_conflicts_with_method", "struct A {pub a: int, fn a() {}}", "");
+    test_compiler_status(E_EXPECTED_FIELD_SELECTOR, "struct_access_by_index", "struct S{pub x: int}", "let x = S{x: 1}; let y = x.0;");
     test_compiler_status(PAW_ETYPE, "struct_not_enough_types", "struct S<A, B, C>;", "let x = S::<int, float>;");
     test_compiler_status(PAW_ETYPE, "struct_too_many_types", "struct S<A, B>;", "let x = S::<int, float, bool>;");
 
-    test_compiler_status(PAW_ENAME, "struct_select_private_field",
+    test_compiler_status(E_ASSOCIATED_ITEM_VISIBILITY, "struct_select_private_field",
         "struct S {pub a: int, b: int, pub fn new() -> S {return S{a: 1, b: 2};}}",
         "let x = S::new(); let a = x.a; let b = x.b;");
-    test_compiler_status(PAW_ENAME, "struct_literal_private_field", "struct S {pub a: int, b: int}", "let x = S{a: 1, b: 2};");
-    test_compiler_status(PAW_ENAME, "struct_call_private_method", "struct S {fn private(self) {}}", "let x = S; x.private();");
+    test_compiler_status(E_ASSOCIATED_ITEM_VISIBILITY, "struct_literal_private_field", "struct S {pub a: int, b: int}", "let x = S{a: 1, b: 2};");
+    test_compiler_status(E_ASSOCIATED_ITEM_VISIBILITY, "struct_call_private_method", "struct S {fn private(self) {}}", "let x = S; x.private();");
 
-    test_compiler_status(PAW_ETYPE, "struct_not_a_method", "struct S {pub fn f(s: Self) {}}", "let x = S; x.f();");
+    test_compiler_status(E_NOT_A_METHOD, "struct_not_a_method", "struct S {pub fn f(s: Self) {}}", "let x = S; x.f();");
     test_compiler_status(PAW_ETYPE, "struct_invalid_self", "struct S {pub fn f(self: int) {}}", "");
     test_compiler_status(PAW_ETYPE, "struct_invalid_self_poly", "struct S<A, B> {fn f(self: S<B, A>) {}}", "");
 }
@@ -365,14 +404,14 @@ static void test_struct_error(void)
 static void test_enum_error(void)
 {
     test_compiler_status(E_EMPTY_ENUMERATION, "enum_without_variants", "enum A {pub fn f() {}};", "");
-    test_compiler_status(PAW_ESYNTAX, "enum_missing_variant", "enum A {X}", "let a = A;");
-    test_compiler_status(PAW_ENAME, "enum_duplicate_variant", "enum A {X, X}", "");
+    test_compiler_status(E_EXPECTED_VALUE, "enum_missing_variant", "enum A {X}", "let a = A;");
+    test_compiler_status(E_DUPLICATE_ITEM, "enum_duplicate_variant", "enum A {X, X}", "");
     test_compiler_status(PAW_ENAME, "enum_nonexistent_variant", "enum A {X}", "let a = A::Y;");
-    test_compiler_status(PAW_ETYPE, "enum_missing_only_field", "enum A {X(int)}", "let a = A::X;");
-    test_compiler_status(PAW_EVALUE, "enum_missing_field", "enum A {X(int, float)}", "let a = A::X(42);");
-    test_compiler_status(PAW_EVALUE, "enum_extra_field", "enum A {X(int)}", "let a = A::X(42, true);");
-    test_compiler_status(PAW_ETYPE, "enum_wrong_field_type", "enum A {X(int)}", "let a = A::X(1.0);");
-    test_compiler_status(PAW_ETYPE, "enum_requires_pattern_matching", "enum E{X(int)}", "let x = E::X(1); let y = x.0;");
+    test_compiler_status(E_MISSING_VARIANT_ARGS, "variant_missing_only_field", "enum A {X(int)}", "let a = A::X;");
+    test_compiler_status(E_INCORRECT_ARITY, "variant_missing_field", "enum A {X(int, float)}", "let a = A::X(42);");
+    test_compiler_status(E_INCORRECT_ARITY, "variant_extra_field", "enum A {X(int)}", "let a = A::X(42, true);");
+    test_compiler_status(PAW_ETYPE, "variant_wrong_field_type", "enum A {X(int)}", "let a = A::X(1.0);");
+    test_compiler_status(E_EXPECTED_FIELD_SELECTOR, "enum_requires_pattern_matching", "enum E{X(int)}", "let x = E::X(1); let y = x.0;");
 }
 
 static void test_list_error(void)
@@ -400,14 +439,14 @@ static void test_map_error(void)
     test_compiler_status(PAW_ETYPE, "map_mixed_nesting", "", "let a = [1: [1: 1], 2: [2: 2], 3: [3: [3: 3]]];");
     test_compiler_status(PAW_ETYPE, "map_unhashable_literal_key", "", "let map = [[1]: 1];");
     test_compiler_status(PAW_ETYPE, "map_unhashable_type_key", "", "let map: [[int]: int] = [:];");
-    test_compiler_status(PAW_ETYPE, "map_slice", "", "let map = [:]; let val = map[0:10];");
+    test_compiler_status(E_INVALID_SLICE_TARGET, "map_slice", "", "let map = [:]; let val = map[0:10];");
 }
 
 static void test_import_error(void)
 {
-    test_compiler_status(PAW_ENAME, "unrecognized_import", "use import_not_found;", "");
-    test_compiler_status(PAW_ENAME, "unrecognized_import_item", "use io::NotFound;", "");
-    test_compiler_status(PAW_ENAME, "missing_import_item", "use io;", "let t = io::NotFound;");
+    test_compiler_status(E_MODULE_NOT_FOUND, "unrecognized_import", "use import_not_found;", "");
+    test_compiler_status(E_UNKNOWN_ITEM, "unrecognized_import_item", "use io::NotFound;", "");
+    test_compiler_status(E_UNKNOWN_PATH, "missing_import_item", "use io;", "let t = io::NotFound;");
 }
 
 static int run_main(paw_Env *P, int nargs)
@@ -435,6 +474,7 @@ static int next_conflicting_int(paw_Env *P)
 static void test_gc_conflict(void)
 {
     char const source[] =
+        // return the address of "T" as an "int"
         "#[extern] pub fn conflicting_int<T>(t: T) -> int;\n"
         "pub fn main() {\n"
         "    let N = 500;\n"
@@ -479,22 +519,22 @@ static void test_variant_match_error(void)
         "    Second(Choice),\n"
         "}\n";
 
-    test_compiler_status(PAW_ETYPE, "match_int_non_exhaustive", enumeration,
+    test_compiler_status(E_NONEXHAUSTIVE_PATTERN_MATCH, "match_int_non_exhaustive", enumeration,
         "match 123 {\n"
         "    123 => {},\n"
         "}\n");
-    test_compiler_status(PAW_ETYPE, "match_variant_non_exhaustive", enumeration,
+    test_compiler_status(E_NONEXHAUSTIVE_PATTERN_MATCH, "match_variant_non_exhaustive", enumeration,
         "match Choice::First {\n"
         "    Choice::First => {},\n"
         "}\n");
 
-    test_compiler_status(PAW_ETYPE, "match_variant_non_exhaustive_2", enumeration,
+    test_compiler_status(E_NONEXHAUSTIVE_PATTERN_MATCH, "match_variant_non_exhaustive_2", enumeration,
         "match Choice::First {\n"
         "    Choice::First => {},\n"
         "    Choice::Second(Choice::First) => {},"
         "}\n");
 
-    test_compiler_status(PAW_ETYPE, "match_variant_non_exhaustive_3", enumeration,
+    test_compiler_status(E_NONEXHAUSTIVE_PATTERN_MATCH, "match_variant_non_exhaustive_3", enumeration,
         "match Choice::First {\n"
         "    Choice::First => {},\n"
         "    Choice::Second(Choice::First) => {},"
@@ -525,17 +565,17 @@ static void test_variant_match_error(void)
         "    Choice::Second(Choice::Second(Choice::Second(_))) => {},"
         "}\n");
 
-    test_invalid_case("duplicate_binding", PAW_ENAME, "",
+    test_invalid_case("duplicate_binding", E_DUPLICATE_BINDING, "",
         "(0, 0)", "(x, x)");
-    test_invalid_case("duplicate_binding_nested", PAW_ENAME, "",
+    test_invalid_case("duplicate_binding_nested", E_DUPLICATE_BINDING, "",
         "(((0,),), 0)", "(((x,),), x)");
-    test_invalid_case("or_binding_missing", PAW_ENAME, "",
+    test_invalid_case("or_binding_missing", E_MISSING_BINDING_IN_ALTERNATIVE, "",
         "(0, 0)", "(x, 2) | (2, 3)");
-    test_invalid_case("or_binding_unrecognized", PAW_ENAME, "",
+    test_invalid_case("or_binding_unrecognized", E_MISSING_BINDING_IN_ALTERNATIVE, "",
         "(0, 0)", "(1, 2) | (x, 3)");
-    test_invalid_case("or_binding_unrecognized_int", PAW_ENAME, "",
+    test_invalid_case("or_binding_unrecognized_int", E_MISSING_BINDING_IN_ALTERNATIVE, "",
         "0", "0 | x");
-    test_invalid_case("or_binding_missing_int", PAW_ENAME, "",
+    test_invalid_case("or_binding_missing_int", E_MISSING_BINDING_IN_ALTERNATIVE, "",
         "0", "x | 0");
     // 'x' has a different type in each alternative
     test_invalid_case("or_binding_type_mismatch", PAW_ETYPE, "",
@@ -550,26 +590,26 @@ static void test_match_error(void)
 static void test_uninit_local(void)
 {
     test_compiler_status(PAW_ETYPE, "uninit_var", "", "let x; x;"); // type of "x" cannot be inferred
-    test_compiler_status(PAW_EVALUE, "uninit_int", "", "let x: int; x;");
-    test_compiler_status(PAW_EVALUE, "uninit_if_without_else", "", "let x; if true {x = 1;} x;");
-    test_compiler_status(PAW_EVALUE, "uninit_ifelse", "", "let x; if true {x = 1;} else {} x;");
-    test_compiler_status(PAW_EVALUE, "uninit_ifelse_chain", "", "let x; if true {x = 1;} else if true {} else {x = 3;} x;");
-    test_compiler_status(PAW_EVALUE, "uninit_ifelse_return", "", "let x; if true {return;} else if true {x = 2;} else {} x;");
-    test_compiler_status(PAW_EVALUE, "uninit_match", "",
+    test_compiler_status(E_USE_BEFORE_INITIALIZATION, "uninit_int", "", "let x: int; x;");
+    test_compiler_status(E_USE_BEFORE_INITIALIZATION, "uninit_if_without_else", "", "let x; if true {x = 1;} x;");
+    test_compiler_status(E_USE_BEFORE_INITIALIZATION, "uninit_ifelse", "", "let x; if true {x = 1;} else {} x;");
+    test_compiler_status(E_USE_BEFORE_INITIALIZATION, "uninit_ifelse_chain", "", "let x; if true {x = 1;} else if true {} else {x = 3;} x;");
+    test_compiler_status(E_USE_BEFORE_INITIALIZATION, "uninit_ifelse_return", "", "let x; if true {return;} else if true {x = 2;} else {} x;");
+    test_compiler_status(E_USE_BEFORE_INITIALIZATION, "uninit_match", "",
         "let x;\n"
         "match 123 {\n"
         "    123 => x = 1,\n"
-        "    _ => {},\n"
+        "    _ => {},\n" // missing assignment to "x"
         "}\n"
         "x;");
-    test_compiler_status(PAW_EVALUE, "uninit_match_nested", "",
+    test_compiler_status(E_USE_BEFORE_INITIALIZATION, "uninit_match_nested", "",
         "let x;\n"
         "match 123 {\n"
         "    1 => x = 1,\n"
         "    2 => x = 2,\n"
         "    3 => {\n"
         "        if true {\n"
-        "            if true { x = 3; }\n"
+        "            if true { x = 3; }\n" // "if" with no "else"
         "        } else {\n"
         "            x = 4;\n"
         "        }\n"
@@ -623,11 +663,7 @@ static void test_trait_error(void)
         "let x = S{v: true}; call_f(x);");
     test_compiler_status(PAW_ETYPE, "trait_type_as_trait",
         "struct Type; struct S: Type;", "");
-    test_compiler_status(PAW_ENAME, "trait_missing_function_bound",
-        "struct S: Trait;", "");
-    test_compiler_status(PAW_ENAME, "trait_missing_function_bound",
-        "fn f<T: Trait>(t: T) {}", "");
-    test_compiler_status(PAW_ENAME, "trait_missing_function_bound",
+    test_compiler_status(E_UNKNOWN_TRAIT, "trait_missing_function_bound",
         "struct S: Trait;", "");
     test_compiler_status(PAW_ENAME, "trait_missing_generic_in_bounds",
         POLY_TRAIT POLY_STRUCT POLY_FUNCTION("X", ), "");
@@ -662,67 +698,71 @@ static void test_global_const(void)
 {
     // TODO: not currently supported, but should be eventually
     // TODO: call will need to be a "const fn" to indicate that it must be evaluated at compile time
-    test_compiler_status(PAW_EVALUE, "const_list", "const C: [int] = [];", "");
-    test_compiler_status(PAW_EVALUE, "const_map", "const C: [int: int] = [:];", "");
-    test_compiler_status(PAW_EVALUE, "const_struct", "struct X; const C: X = X;", "");
-    test_compiler_status(PAW_EVALUE, "const_enum", "enum X {E} const C: X = X::E;", "");
-    test_compiler_status(PAW_EVALUE, "const_call", "fn f() {} const C: () = f();", "");
-    test_compiler_status(PAW_EVALUE, "const_function", "fn f() {} const C: fn() = f;", "");
+    test_compiler_status(E_NONPRIMITIVE_CONSTANT, "const_list", "const C: [int] = [];", "");
+    test_compiler_status(E_NONPRIMITIVE_CONSTANT, "const_map", "const C: [int: int] = [:];", "");
+    test_compiler_status(E_NONPRIMITIVE_CONSTANT, "const_struct", "struct X; const C: X = X;", "");
+    test_compiler_status(E_NONPRIMITIVE_CONSTANT, "const_enum", "enum X {E} const C: X = X::E;", "");
+    test_compiler_status(E_CANNOT_CONSTANT_EVALUATE, "const_call", "fn f() {} const C: () = f();", "");
+    test_compiler_status(E_NONPRIMITIVE_CONSTANT, "const_function", "fn f() {} const C: fn() = f;", "");
 
     test_compiler_status(E_RETURN_OUTSIDE_FUNCTION, "const_return", "const C: () = return;", "");
     test_compiler_status(E_JUMP_OUTSIDE_LOOP, "const_break", "const C: () = break;", "");
     test_compiler_status(E_JUMP_OUTSIDE_LOOP, "const_continue", "const C: () = continue;", "");
     test_compiler_status(E_CHAIN_OUTSIDE_FUNCTION, "const_chain", "const C: Option<int> = Option::Some(123)?;", "");
 
-    test_compiler_status(PAW_EVALUE, "const_cycle_1",
+    test_compiler_status(E_GLOBAL_CONSTANT_CYCLE, "const_cycle_1",
             "const C: int = C;", "");
-    test_compiler_status(PAW_EVALUE, "const_cycle_2",
+    test_compiler_status(E_GLOBAL_CONSTANT_CYCLE, "const_cycle_2",
             "const C1: int = C2 + 1;"
             "const C2: int = 1 + C1;", "");
-    test_compiler_status(PAW_EVALUE, "const_cycle_3",
+    test_compiler_status(E_GLOBAL_CONSTANT_CYCLE, "const_cycle_3",
             "const C1: int = C2 + 1;"
             "const C2: int = 1 + C3;"
             "const C3: int = C1 + 1;", "");
 
-    test_compiler_status(PAW_EVALUE, "const_assignment", "const C: int = 1;", "C = 2;");
+    test_compiler_status(E_MODIFIED_CONSTANT, "const_assignment", "const C: int = 1;", "C = 2;");
 }
 
 static void test_annotations(void)
 {
-    test_compiler_status(PAW_EVALUE, "const_unexpected_initializer", "#[extern] const C: int = 42;", "");
-    test_compiler_status(PAW_EVALUE, "function_unexpected_body", "#[extern] pub fn f() {}", "");
+    test_compiler_status(E_INITIALIZED_EXTERN_CONSTANT, "const_unexpected_initializer", "#[extern] const C: int = 42;", "");
+    test_compiler_status(E_EXTERN_FUNCTION_BODY, "function_unexpected_body", "#[extern] pub fn f() {}", "");
     // NOTE: "not_extern" annotation doesn't do anything
-    test_compiler_status(PAW_EVALUE, "const_expected_initializer", "#[not_extern] const C: int;", "");
-    test_compiler_status(PAW_EVALUE, "function_expected_body", "#[not_extern] pub fn f();", "");
+    test_compiler_status(E_UNINITIALIZED_CONSTANT, "const_expected_initializer", "#[not_extern] const C: int;", "");
+    test_compiler_status(E_MISSING_FUNCTION_BODY, "function_expected_body", "#[not_extern] pub fn f();", "");
 }
 
 static void test_destructuring(void)
 {
     char const *structure = "struct Fields {pub a: int, pub b: int}";
-    test_compiler_status(PAW_ENAME, "destructure_duplicate_binding", "", "let (x, (x,)) = (1, (2,));");
+    test_compiler_status(E_DUPLICATE_BINDING, "destructure_duplicate_binding", "", "let (x, (x,)) = (1, (2,));");
     test_compiler_status(PAW_ETYPE, "destructure_wrong_type", "", "let (a, (b,)) = (1, 2);");
     test_compiler_status(PAW_ETYPE, "destructure_too_many_elems", "", "let (a, b) = (1, 2, 3);");
     test_compiler_status(PAW_ETYPE, "destructure_not_enough_elems", "", "let (a, b, c) = (1, 2);");
-    test_compiler_status(PAW_ETYPE, "destructure_missing_field", structure,
+    test_compiler_status(E_MISSING_FIELD, "destructure_missing_field", structure,
             "let Fields{a} = Fields{a: 1, b: 2};");
-    test_compiler_status(PAW_ETYPE, "destructure_extra_field", structure,
+    test_compiler_status(E_UNKNOWN_FIELD, "destructure_extra_field", structure,
             "let Fields{a, b, c} = Fields{a: 1, b: 2};");
-    test_compiler_status(PAW_ETYPE, "destructure_non_exhaustive", "", "let Option::Some(x) = Option::Some(1);");
-    test_compiler_status(PAW_ENAME, "destructure_wildcard_name", "", "let _ = 123; let x = _;");
-    test_compiler_status(PAW_ENAME, "destructure_or", "", "let a | 2 = 123;");
+    test_compiler_status(E_NONEXHAUSTIVE_PATTERN_MATCH, "destructure_non_exhaustive", "", "let Option::Some(x) = Option::Some(1);");
+    test_compiler_status(E_UNKNOWN_PATH, "destructure_wildcard_name", "", "let _ = 123; let x = _;");
+    test_compiler_status(E_NONEXHAUSTIVE_PATTERN_MATCH, "destructure_or", "", "let (a, 1) | (a, 2) = (123, 456);");
+    test_compiler_status(E_UNINITIALIZED_DESTRUCTURING, "uninitialized_destructuring", "", "let (a,); a = 123;");
 }
 
 static void test_deferred_init(void)
 {
-    test_compiler_status(PAW_EVALUE, "use_before_init", "", "let a; let b = a; b = 123;");
-    test_compiler_status(PAW_EVALUE, "capture_before_init", "", "let a; let f = || -> int {a};");
-    test_compiler_status(PAW_EVALUE, "missing_init_in_branch", "", "let a; if true {a = 1;} let b = a;");
-    test_compiler_status(PAW_EVALUE, "use_in_branch", "", "let a; if true {a = 1;} else {let b = a;}");
-    test_compiler_status(PAW_EVALUE, "uninit_if_else", "", "let a; if true {a = 1;} else if true {return;} else {} let b = a;");
+    test_compiler_status(E_USE_BEFORE_INITIALIZATION, "use_before_init", "", "let a; let b = a; b = 123;");
+    test_compiler_status(E_USE_BEFORE_INITIALIZATION, "capture_before_init", "", "let a; let f = || -> int {a};");
+    test_compiler_status(E_USE_BEFORE_INITIALIZATION, "missing_init_in_branch", "", "let a; if true {a = 1;} let b = a;");
+    test_compiler_status(E_USE_BEFORE_INITIALIZATION, "use_in_branch", "", "let a; if true {a = 1;} else {let b = a;}");
+    test_compiler_status(E_USE_BEFORE_INITIALIZATION, "uninit_if_else", "", "let a; if true {a = 1;} else if true {return;} else {} let b = a;");
 }
 
 int main(void)
 {
+// TODO: breaks!
+// test_compiler_status(E_RESERVED_IDENTIFIER, "reserved_identifier", "", "let int = 123;");
+
     test_syntax_error();
     test_underscore();
     test_annotations();

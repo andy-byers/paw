@@ -3,9 +3,12 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
 #include "ssa.h"
+#include "error.h"
 #include "ir_type.h"
 #include "map.h"
 #include "mir.h"
+
+#define SSA_ERROR(S_, Kind_, ...) pawErr_##Kind_((S_)->C, (S_)->mir->modname, __VA_ARGS__)
 
 struct SsaConverter {
     struct Compiler *C;
@@ -63,7 +66,7 @@ static struct MirPhi *add_phi_node(struct SsaConverter *S, MirBlock b, MirRegist
     }
     struct IrType *type = mir_reg_data(S->mir, r)->type;
     struct MirRegisterList *inputs = MirRegisterList_new(S->mir);
-    struct MirInstruction *phi = pawMir_new_phi(S->mir, -1, inputs, r, r.value);
+    struct MirInstruction *phi = pawMir_new_phi(S->mir, (struct SourceLoc){-1}, inputs, r, r.value);
     MirInstructionList_push(S->mir, bb->joins, phi);
 
     int ninputs = bb->predecessors->count;
@@ -282,16 +285,9 @@ static void ensure_init(struct SsaConverter *S, struct MirInstruction *instr)
     K_LIST_FOREACH (ploads, ppr) {
         struct MirRegisterData *data = mir_reg_data(S->mir, **ppr);
         if (data->is_uninit)
-            VALUE_ERROR(S, -1, "use before initialization");
+            // TODO: local variable name and location
+            SSA_ERROR(S, use_before_initialization, S->mir->span.start, "TODO");
     }
-
-    // TODO: need to update captured variable to be the latest version
-//    struct MirCaptureInfo const *pinfo;
-//    K_LIST_FOREACH (S->mir->captured, pinfo) {
-//        struct MirRegisterData *data = mir_reg_data(S->mir, pinfo->r);
-//        if (data->is_uninit)
-//            VALUE_ERROR(S, -1, "use before initialization");
-//    }
 }
 
 static void fix_aux_info(struct SsaConverter *S, struct Mir *mir)

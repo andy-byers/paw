@@ -12,6 +12,7 @@
 
 #include "compile.h"
 #include "debug.h"
+#include "error.h"
 #include "gc.h"
 #include "hir.h"
 #include "ir_type.h"
@@ -24,10 +25,7 @@
 #define GET_TYPE(X, hid) pawIr_get_type((X)->C, hid)
 #define SET_TYPE(X, hid, t) pawIr_set_type((X)->C, hid, t)
 
-#define X_NAME_ERROR(X_, Loc_, ...) pawP_error((X_)->C, PAW_ENAME, (X_)->m->name, Loc_, __VA_ARGS__)
-#define X_SYNTAX_ERROR(X_, Loc_, ...) pawP_error((X_)->C, PAW_ESYNTAX, (X_)->m->name, Loc_, __VA_ARGS__)
-#define X_TYPE_ERROR(X_, Loc_, ...) pawP_error((X_)->C, PAW_ETYPE, (X_)->m->name, Loc_, __VA_ARGS__)
-#define X_VALUE_ERROR(X_, Loc_, ...) pawP_error((X_)->C, PAW_EVALUE, (X_)->m->name, Loc_, __VA_ARGS__)
+#define COLLECTOR_ERROR(X_, Kind_, ...) pawErr_##Kind_((X_)->C, (X_)->m->name, __VA_ARGS__)
 
 #define WITH_CONTEXT(X, type, code) \
     do {                            \
@@ -70,7 +68,7 @@ static void new_global(struct ItemCollector *X, struct HirIdent ident, struct Hi
     struct HirScope *scope = X->m->globals;
     K_LIST_FOREACH (scope, psymbol) {
         if (pawS_eq(psymbol->ident.name, ident.name))
-            X_NAME_ERROR(X, ident.span.start, "duplicate global '%s'", ident.name->text);
+            COLLECTOR_ERROR(X, duplicate_item, ident.span.start, "global", ident.name->text);
     }
     add_symbol(X, scope, ident, decl);
 }
@@ -114,7 +112,7 @@ static void ensure_unique(struct ItemCollector *X, StringMap *map, struct HirIde
 
     String *const *pname = StringMap_get(X->C, map, name);
     if (pname != NULL)
-        X_NAME_ERROR(X, ident.span.start, "duplicate %s '%s'", what, name->text);
+        COLLECTOR_ERROR(X, duplicate_item, ident.span.start, what, name->text);
 
     StringMap_insert(X->C, map, name, NULL);
 }
@@ -124,7 +122,7 @@ static struct IrType *collect_type(struct ItemCollector *X, struct HirType *type
     struct IrType *result = pawP_lower_type(X->C, X->m, X->symtab, type);
     if (result == NULL) {
         char const *type_name = pawHir_print_type(X->C, type);
-        X_TYPE_ERROR(X, type->hdr.span.start, "unrecognized type '%s'", type_name);
+        COLLECTOR_ERROR(X, unknown_type, type->hdr.span.start, type_name);
     }
     pawIr_validate_type(X->C, result);
     SET_NODE_TYPE(X->C, type, result);
@@ -150,7 +148,7 @@ static struct IrType *collect_trait_path(struct ItemCollector *X, struct HirPath
     struct IrType *trait = pawP_lookup_trait(X->C, X->m, X->symtab, &path);
     if (trait == NULL) {
         char const *trait_name = pawHir_print_path(X->C, &path);
-        X_NAME_ERROR(X, path.span.start, "unknown trait '%s'", trait_name);
+        COLLECTOR_ERROR(X, unknown_trait, path.span.start, trait_name);
     }
     pawIr_validate_type(X->C, trait);
     return trait;
@@ -238,7 +236,7 @@ static void transfer_fn_annotations(struct ItemCollector *X, struct HirFuncDecl 
                 // Found "extern" annotation. Implementation of function will be found in
                 // "paw.symbols" map during code generation.
                 if (d->body != NULL)
-                    X_VALUE_ERROR(X, d->span.start, "unexpected body on extern function '%s'", d->ident.name->text);
+                    COLLECTOR_ERROR(X, extern_function_body, d->span.start, d->ident.name->text);
                 def->is_extern = PAW_TRUE;
             } else {
                 Annotations_push(C, def->annos, *panno);
@@ -250,7 +248,7 @@ static void transfer_fn_annotations(struct ItemCollector *X, struct HirFuncDecl 
     paw_Bool const in_trait = X->ctx != NULL && IrIsTraitObj(X->ctx);
 
     if (d->body == NULL && !in_trait && !def->is_extern)
-        X_VALUE_ERROR(X, d->span.start, "missing body for function '%s'", d->ident.name->text);
+        COLLECTOR_ERROR(X, missing_function_body, d->span.start, d->ident.name->text);
 }
 
 static struct IrVariantDefs *create_struct_variant(struct ItemCollector *X, struct HirIdent ident, struct HirDeclList *decls, DeclId did)
@@ -320,8 +318,8 @@ static void collect_variant_type(struct ItemCollector *X, struct HirVariantDecl 
     struct IrType *type = pawIr_new_signature(X->C, d->did, NULL, params, X->ctx);
     SET_TYPE(X, d->hid, type);
 
-//TODO    struct IrVariantDef *def = pawIr_get_variant_def(X->C, )
-//TODO    DeclId const cons = IR_TYPE_DID(type);
+    struct IrVariantDef *def = pawIr_get_variant_def(X->C, d->did);
+    def->cons = IR_TYPE_DID(type);
 }
 
 static paw_Bool check_assoc_function(struct ItemCollector *X, struct IrType *self, struct HirDeclList *params)
@@ -441,12 +439,10 @@ static void collect_import(struct ItemCollector *X, struct HirImport im)
     struct ModuleInfo *m = ModuleList_get(X->C->modules, im.modno);
     struct HirDecl *item = find_item_in(X, m, im.item);
     if (item == NULL)
-        X_NAME_ERROR(X, im.item.span.start, "unrecognized item '%s::%s'",
-                m->name->text, im.item.name->text);
+        COLLECTOR_ERROR(X, unknown_item, im.item.span.start, m->name->text, im.item.name->text);
 
     if (!pawHir_is_pub_decl(item))
-        X_VALUE_ERROR(X, item->hdr.span.start, "item '%s::%s' cannot be accessed from the current module",
-                m->name->text, im.item.name->text);
+        COLLECTOR_ERROR(X, item_visibility, item->hdr.span.start, m->name->text, im.item.name->text);
 
     struct HirIdent ident = im.as.name != NULL ? im.as : im.item;
     new_global(X, ident, item);

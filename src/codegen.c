@@ -7,6 +7,7 @@
 #include "code.h"
 #include "compile.h"
 #include "debug.h"
+#include "error.h"
 #include "gc.h"
 #include "hir.h"
 #include "ir_type.h"
@@ -19,7 +20,8 @@
 #include "ssa.h"
 #include "type.h"
 
-#define ERROR(G, code, ...) pawE_error(ENV(G), code, -1, __VA_ARGS__)
+#define CODEGEN_ERROR(G_, Kind_, ...) pawErr_##Kind_((G_)->C, (G_)->fs->modname, __VA_ARGS__)
+
 #define GET_TYPE(G, r) MirRegisterDataList_get((G)->fs->mir->registers, (r).value).type
 #define TYPE_CODE(G, type) pawP_type2code((G)->C, type)
 #define TYPEOF(G, r) MirRegisterDataList_get((G)->fs->mir->registers, (r).value).type
@@ -35,7 +37,7 @@ struct FuncState {
     struct Mir *mir;
     MirBlock b;
     Proto *proto; // prototype being built
-    String *name; // name of the function
+    String *modname; // name of the module
     int first_local; // index of function in DynamicMem array
     int nk; // number of constants
     int nproto; // number of nested functions
@@ -188,7 +190,7 @@ static void patch_jump(struct FuncState *fs, int from, int to)
     Proto *p = fs->proto;
     int const dist = to - (from + 1);
     if (dist > JUMP_MAX)
-        ERROR(fs->G, PAW_ESYNTAX, "too far to jump");
+        CODEGEN_ERROR(fs->G, too_far_to_jump, fs->mir->span.start, JUMP_MAX);
 
     paw_assert(0 <= from && from < p->length);
     SET_sBx(&p->source[from], dist);
@@ -215,7 +217,7 @@ static int temporary_reg(struct FuncState *fs, int offset)
 {
     int const temp = fs->proto->max_stack + offset + 1;
     if (temp >= NREGISTERS)
-        ERROR(fs->G, PAW_EOVERFLOW, "not enough registers");
+        CODEGEN_ERROR(fs->G, too_many_variables, fs->mir->span.start, NREGISTERS);
     fs->max_reg = PAW_MAX(fs->max_reg, temp);
     return temp;
 }
@@ -274,7 +276,7 @@ static int add_constant(struct Generator *G, Value v, enum BuiltinKind code)
         return CAST(int, pk->i);
 
     if (fs->nk == CONSTANT_MAX)
-        ERROR(G, PAW_ESYNTAX, "too many constants");
+        CODEGEN_ERROR(G, too_many_constants, fs->mir->span.start, CONSTANT_MAX);
 
     pawM_grow(ENV(G), p->k, fs->nk, p->nk);
     p->k[fs->nk] = v;
@@ -366,7 +368,7 @@ static void enter_function(struct Generator *G, struct FuncState *fs, struct Mir
     G->V->mir = mir;
     *fs = (struct FuncState){
         .kind = mir->fn_kind,
-        .name = mir->name,
+        .modname = proto->modname,
         .proto = proto,
         .outer = G->fs,
         .mir = mir,

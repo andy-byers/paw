@@ -7,6 +7,7 @@
 #include "compile.h"
 #include "debug.h"
 #include "env.h"
+#include "error.h"
 #include "gc.h"
 #include "hir.h"
 #include "map.h"
@@ -246,9 +247,9 @@ static struct HirExpr *LowerBinOpExpr(struct LowerAst *L, struct AstBinOpExpr *e
 static struct HirExpr *LowerAssignExpr(struct LowerAst *L, struct AstAssignExpr *e)
 {
     struct HirExpr *lhs = lower_expr(L, e->lhs);
-    if (!HirIsPathExpr(lhs) && !HirIsIndex(lhs) && !HirIsSelector(lhs)) {
-        SYNTAX_ERROR_(L->C, L->modname, e->span.start, "invalid place for assignment");
-    }
+    if (!HirIsPathExpr(lhs) && !HirIsIndex(lhs) && !HirIsSelector(lhs))
+        pawErr_invalid_assignment_target(L->C, L->modname, e->span.start);
+
     struct HirExpr *rhs = lower_expr(L, e->rhs);
     return pawHir_new_assign_expr(L->hir, e->span, lhs, rhs);
 }

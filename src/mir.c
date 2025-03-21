@@ -6,7 +6,7 @@
 #include "ir_type.h"
 #include "map.h"
 
-struct Mir *pawMir_new(struct Compiler *C, String *name, struct IrType *type, struct IrType *self, enum FuncKind fn_kind, paw_Bool is_pub, paw_Bool is_poly)
+struct Mir *pawMir_new(struct Compiler *C, String *modname, struct SourceSpan span, String *name, struct IrType *type, struct IrType *self, enum FuncKind fn_kind, paw_Bool is_pub, paw_Bool is_poly)
 {
     struct Mir *mir = P_ALLOC(C, NULL, 0, sizeof(*mir));
     *mir = (struct Mir){
@@ -14,7 +14,9 @@ struct Mir *pawMir_new(struct Compiler *C, String *name, struct IrType *type, st
         .is_poly = is_poly,
         .is_pub = is_pub,
         .fn_kind = fn_kind,
+        .modname = modname,
         .name = name,
+        .span = span,
         .type = type,
         .self = self,
         .P = ENV(C),
@@ -465,7 +467,7 @@ static void remove_join(struct Mir *mir, struct MirInstructionList *joins, struc
         if (phi->inputs->count == 1) {
             // a phi node with a single input is really just a move: transfer
             // to the ".instructions" list
-            *pinstr = pawMir_new_move(mir, phi->line,
+            *pinstr = pawMir_new_move(mir, phi->loc,
                                       phi->output, K_LIST_FIRST(phi->inputs));
             MirInstructionList_insert(mir, instrs, 0, *pinstr);
             MirInstructionList_swap_remove(joins, ijoin);

@@ -3,6 +3,7 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
 #include "error.h"
+#include "ir_type.h"
 
 #define THROW_ERROR(Kind_, Builder_) do { \
     Buffer b; \
@@ -96,7 +97,7 @@ _Noreturn void pawErr_integer_out_of_range(struct Compiler *C, String const *mod
 _Noreturn void pawErr_invalid_integer(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *base, char const *text)
 {
     throw(C, E_INVALID_INTEGER, modname, loc,
-            format(C, "invalid %s integer '%s'", text),
+            format(C, "invalid integer '%s'", text),
             NULL);
 }
 
@@ -109,21 +110,21 @@ _Noreturn void pawErr_invalid_float(struct Compiler *C, String const *modname, s
 
 _Noreturn void pawErr_too_many_lines(struct Compiler *C, String const *modname, struct SourceLoc loc, int limit)
 {
-    throw(C, E_INVALID_FLOAT, modname, loc,
+    throw(C, E_TOO_MANY_LINES, modname, loc,
             format(C, "too many lines in source file"),
             format(C, "limit is %d", limit));
 }
 
 _Noreturn void pawErr_too_many_columns(struct Compiler *C, String const *modname, struct SourceLoc loc, int limit)
 {
-    throw(C, E_INVALID_FLOAT, modname, loc,
+    throw(C, E_TOO_MANY_COLUMNS, modname, loc,
             format(C, "too many columns in source file"),
             format(C, "limit is %d", limit));
 }
 
 _Noreturn void pawErr_name_too_long(struct Compiler *C, String const *modname, struct SourceLoc loc, int length, int limit)
 {
-    throw(C, E_INVALID_FLOAT, modname, loc,
+    throw(C, E_NAME_TOO_LONG, modname, loc,
             format(C, "name is too long"),
             format(C, "length is %d but limit is %d", length, limit));
 }
@@ -153,13 +154,6 @@ _Noreturn void pawErr_unexpected_visibility_qualifier(struct Compiler *C, String
 {
     throw(C, E_UNEXPECTED_VISIBILITY_QUALIFIER, modname, loc,
             format(C, "visibility qualifier is not allowed here"),
-            NULL);
-}
-
-_Noreturn void pawErr_unexpected_annotation(struct Compiler *C, String const *modname, struct SourceLoc loc)
-{
-    throw(C, E_UNEXPECTED_ANNOTATION, modname, loc,
-            format(C, "annotation is not allowed here"),
             NULL);
 }
 
@@ -228,11 +222,10 @@ _Noreturn void pawErr_empty_struct_body(struct Compiler *C, String const *modnam
 
 _Noreturn void pawErr_empty_variant_field_list(struct Compiler *C, String const *modname, struct SourceLoc loc)
 {
-    throw(C, E_EMPTY_STRUCT_BODY, modname, loc,
+    throw(C, E_EMPTY_VARIANT_FIELD_LIST, modname, loc,
             format(C, "expected at least 1 variant field between parenthesis"),
             format(C, "remove parenthesis to construct unit variant"));
 }
-
 
 _Noreturn void pawErr_function_type_decl(struct Compiler *C, String const *modname, struct SourceLoc loc)
 {
@@ -337,6 +330,367 @@ _Noreturn void pawErr_nonprimitive_annotation_value(struct Compiler *C, String c
     throw(C, E_NONPRIMITIVE_ANNOTATION_VALUE, modname, loc,
             format(C, "value for '%s' annotation must be a primitive type", name),
             NULL);
+}
+
+_Noreturn void pawErr_module_not_found(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name)
+{
+    throw(C, E_MODULE_NOT_FOUND, modname, loc,
+            format(C, "module '%s' not found", name),
+            NULL);
+}
+
+_Noreturn void pawErr_invalid_assignment_target(struct Compiler *C, String const *modname, struct SourceLoc loc)
+{
+    throw(C, E_INVALID_ASSIGNMENT_TARGET, modname, loc,
+            format(C, "invalid target for assignment"),
+            NULL);
+}
+
+_Noreturn void pawErr_duplicate_item(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *what, char const *name)
+{
+    throw(C, E_DUPLICATE_ITEM, modname, loc,
+            format(C, "duplicate %s '%s'", what, name),
+            NULL);
+}
+
+_Noreturn void pawErr_unknown_type(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *type)
+{
+    throw(C, E_UNKNOWN_TYPE, modname, loc,
+            format(C, "unknown type '%s'", type),
+            NULL);
+}
+
+_Noreturn void pawErr_unknown_trait(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name)
+{
+    throw(C, E_UNKNOWN_TRAIT, modname, loc,
+            format(C, "unknown trait '%s'", name),
+            NULL);
+}
+
+_Noreturn void pawErr_unknown_item(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *mod, char const *item)
+{
+    throw(C, E_UNKNOWN_ITEM, modname, loc,
+            format(C, "unknown item '%s::%s'", mod, item),
+            NULL);
+}
+
+_Noreturn void pawErr_extern_function_body(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name)
+{
+    throw(C, E_EXTERN_FUNCTION_BODY, modname, loc,
+            format(C, "unexpected body on extern function '%s'", name),
+            NULL);
+}
+
+_Noreturn void pawErr_missing_function_body(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name)
+{
+    throw(C, E_MISSING_FUNCTION_BODY, modname, loc,
+            format(C, "missing body for function '%s'", name),
+            NULL);
+}
+
+_Noreturn void pawErr_item_visibility(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *mod, char const *item)
+{
+    throw(C, E_ITEM_VISIBILITY, modname, loc,
+            format(C, "item '%s::%s' cannot be accessed from the current module", mod, item),
+            NULL);
+}
+
+_Noreturn void pawErr_associated_item_visibility(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name, char const *type)
+{
+    throw(C, E_ASSOCIATED_ITEM_VISIBILITY, modname, loc,
+            format(C, "item '%s' cannot be accessed from outside a method on type '%s'", name, type),
+            NULL);
+}
+
+_Noreturn void pawErr_missing_variant_args(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *cons)
+{
+    throw(C, E_MISSING_VARIANT_ARGS, modname, loc,
+            format(C, "missing argument(s) for variant constructor '%s'", cons),
+            NULL);
+}
+
+_Noreturn void pawErr_reserved_identifier(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name)
+{
+    throw(C, E_RESERVED_IDENTIFIER, modname, loc,
+            format(C, "'%s' is a reserved identifier", name),
+            NULL);
+}
+
+_Noreturn void pawErr_unknown_path(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *path)
+{
+    throw(C, E_UNKNOWN_PATH, modname, loc,
+            format(C, "unknown path '%s'", path),
+            NULL);
+}
+
+_Noreturn void pawErr_type_used_as_value(struct Compiler *C, String const *modname, struct SourceLoc loc)
+{
+    throw(C, E_TYPE_USED_AS_VALUE, modname, loc,
+            format(C, ""),
+            NULL);
+}
+
+_Noreturn void pawErr_enum_used_as_value(struct Compiler *C, String const *modname, struct SourceLoc loc)
+{
+    throw(C, E_ENUM_USED_AS_VALUE, modname, loc,
+            format(C, ""),
+            NULL);
+}
+
+_Noreturn void pawErr_missing_fields(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *type)
+{
+    throw(C, E_MISSING_FIELDS, modname, loc,
+            format(C, "missing fields on initializer for struct '%s'", type),
+            NULL);
+}
+
+_Noreturn void pawErr_expected_value(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *type)
+{
+    throw(C, E_EXPECTED_VALUE, modname, loc,
+            format(C, "expected value but found type '%s'", type),
+            NULL);
+}
+
+_Noreturn void pawErr_invalid_chain_operand(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *type)
+{
+    throw(C, E_INVALID_CHAIN_OPERAND, modname, loc,
+            format(C, "invalid operand type '%s' for chain operator", type),
+            NULL);
+}
+
+_Noreturn void pawErr_invalid_unary_operand(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *type, char const *op)
+{
+    throw(C, E_INVALID_UNARY_OPERAND, modname, loc,
+            format(C, "invalid operand type '%s' for unary operator '%s'", type, op),
+            NULL);
+}
+
+_Noreturn void pawErr_invalid_binary_operand(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *type, char const *op)
+{
+    throw(C, E_INVALID_BINARY_OPERAND, modname, loc,
+            format(C, "invalid operand type '%s' for binary operator '%s'", type, op),
+            NULL);
+}
+
+_Noreturn void pawErr_cannot_constant_evaluate(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *what)
+{
+    throw(C, E_CANNOT_CONSTANT_EVALUATE, modname, loc,
+            format(C, "%s cannot be constant evaluated", what),
+            NULL);
+}
+
+_Noreturn void pawErr_nonprimitive_constant(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *type)
+{
+    throw(C, E_NONPRIMITIVE_CONSTANT, modname, loc,
+            format(C, "expected primitive constant but found '%s'", type),
+            NULL);
+}
+
+_Noreturn void pawErr_expected_element_selector(struct Compiler *C, String const *modname, struct SourceLoc loc)
+{
+    throw(C, E_EXPECTED_ELEMENT_SELECTOR, modname, loc,
+            format(C, "expected integer element selector"),
+            NULL);
+}
+
+_Noreturn void pawErr_element_selector_out_of_range(struct Compiler *C, String const *modname, struct SourceLoc loc, int elem, int count)
+{
+    throw(C, E_ELEMENT_SELECTOR_OUT_OF_RANGE, modname, loc,
+            format(C, "element selector %d is out of range for %d-tuple"),
+            NULL);
+}
+
+_Noreturn void pawErr_expected_adt(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *type)
+{
+    throw(C, E_EXPECTED_ADT, modname, loc,
+            format(C, "expected ADT but found '%s'", type),
+            NULL);
+}
+
+_Noreturn void pawErr_expected_field_selector(struct Compiler *C, String const *modname, struct SourceLoc loc)
+{
+    throw(C, E_EXPECTED_FIELD_SELECTOR, modname, loc,
+            format(C, "expected field selector"),
+            NULL);
+}
+
+_Noreturn void pawErr_unknown_method(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *method, char const *type)
+{
+    throw(C, E_UNKNOWN_METHOD, modname, loc,
+            format(C, "unknown method '%s' for type '%s'", method, type),
+            NULL);
+}
+
+_Noreturn void pawErr_not_a_method(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name)
+{
+    throw(C, E_NOT_A_METHOD, modname, loc,
+            format(C, "'%s' is not a method", name),
+            NULL);
+}
+
+_Noreturn void pawErr_not_callable(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *type)
+{
+    throw(C, E_NOT_CALLABLE, modname, loc,
+            format(C, "type '%s' is not callable", type),
+            NULL);
+}
+
+_Noreturn void pawErr_incorrect_arity(struct Compiler *C, String const *modname, struct SourceLoc loc, int want, int have)
+{
+    throw(C, E_INCORRECT_ARITY, modname, loc,
+            format(C, "%s arguments", have < want ? "not enough" : "too many"),
+            format(C, "expected %d but have %d"));
+}
+
+_Noreturn void pawErr_duplicate_field(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name, char const *type)
+{
+    throw(C, E_DUPLICATE_FIELD, modname, loc,
+            format(C, "duplicate field '%s' in '%s'", name, type),
+            NULL);
+}
+
+_Noreturn void pawErr_duplicate_binding(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name)
+{
+    throw(C, E_DUPLICATE_BINDING, modname, loc,
+            format(C, "duplicate binding '%s'", name),
+            NULL);
+}
+
+_Noreturn void pawErr_expected_struct(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *type)
+{
+    throw(C, E_EXPECTED_STRUCT, modname, loc,
+            format(C, "expected struct but found '%s'", type),
+            NULL);
+}
+
+_Noreturn void pawErr_unit_struct_with_braces(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *type)
+{
+    throw(C, E_UNIT_STRUCT_WITH_BRACES, modname, loc,
+            format(C, "unexpected braces on unit struct '%s'", type),
+            format(C, "omit braces to construct unit struct"));
+}
+
+_Noreturn void pawErr_unit_variant_with_parenthesis(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *type)
+{
+    throw(C, E_UNIT_VARIANT_WITH_PARENTHESIS, modname, loc,
+            format(C, "unexpected parenthesis on unit variant '%s'", type),
+            format(C, "omit parenthesis to construct unit variant"));
+}
+
+_Noreturn void pawErr_missing_field(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name, char const *type)
+{
+    throw(C, E_MISSING_FIELD, modname, loc,
+            format(C, "missing initializer for field '%s' on struct '%s'", name, type),
+            NULL);
+}
+
+_Noreturn void pawErr_unknown_field(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name, char const *type)
+{
+    throw(C, E_UNKNOWN_FIELD, modname, loc,
+            format(C, "unknown field '%s' on struct '%s'", name, type),
+            NULL);
+}
+
+_Noreturn void pawErr_invalid_index_target(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *type)
+{
+    throw(C, E_INVALID_INDEX_TARGET, modname, loc,
+            format(C, "invalid target '%s' for index operator", type),
+            NULL);
+}
+
+_Noreturn void pawErr_invalid_slice_target(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *type)
+{
+    throw(C, E_INVALID_SLICE_TARGET, modname, loc,
+            format(C, "invalid target '%s' for slice operator", type),
+            NULL);
+}
+
+_Noreturn void pawErr_missing_binding_in_alternative(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name)
+{
+    throw(C, E_MISSING_BINDING_IN_ALTERNATIVE, modname, loc,
+            format(C, "missing binding '%s' in alternative pattern", name),
+            NULL);
+}
+
+_Noreturn void pawErr_global_constant_cycle(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name)
+{
+    throw(C, E_GLOBAL_CONSTANT_CYCLE, modname, loc,
+            format(C, "cycle detected between global constants"),
+            format(C, "involves constant '%s'", name));
+}
+
+_Noreturn void pawErr_uninitialized_destructuring(struct Compiler *C, String const *modname, struct SourceLoc loc)
+{
+    throw(C, E_UNINITIALIZED_DESTRUCTURING, modname, loc,
+            format(C, "variables using deferred initialization cannot use destructuring"),
+            NULL);
+}
+
+_Noreturn void pawErr_modified_constant(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name)
+{
+    throw(C, E_MODIFIED_CONSTANT, modname, loc,
+            format(C, "attempt to modify constant '%s'", name),
+            NULL);
+}
+
+_Noreturn void pawErr_too_many_upvalues(struct Compiler *C, String const *modname, struct SourceLoc loc, int limit)
+{
+    throw(C, E_TOO_MANY_UPVALUES, modname, loc,
+            format(C, "too many upvalues in function"),
+            format(C, "limit is %d", limit));
+}
+
+_Noreturn void pawErr_initialized_extern_constant(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name)
+{
+    throw(C, E_INITIALIZED_EXTERN_CONSTANT, modname, loc,
+            format(C, "unexpected initializer for 'extern' constant '%s'", name),
+            NULL);
+}
+
+_Noreturn void pawErr_uninitialized_constant(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name)
+{
+    throw(C, E_UNINITIALIZED_CONSTANT, modname, loc,
+            format(C, "missing initializer for constant '%s'", name),
+            NULL);
+}
+
+_Noreturn void pawErr_nonexhaustive_pattern_match(struct Compiler *C, String const *modname, struct SourceLoc loc)
+{
+    throw(C, E_NONEXHAUSTIVE_PATTERN_MATCH, modname, loc,
+            format(C, "nonexhaustive pattern match"),
+            NULL);
+}
+
+
+_Noreturn void pawErr_use_before_initialization(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name)
+{
+    throw(C, E_USE_BEFORE_INITIALIZATION, modname, loc,
+            format(C, "use of variable '%s' before initialization", name),
+            NULL);
+}
+
+
+_Noreturn void pawErr_too_many_variables(struct Compiler *C, String const *modname, struct SourceLoc loc, int limit)
+{
+    throw(C, E_TOO_MANY_VARIABLES, modname, loc,
+            format(C, "too many variables"),
+            format(C, "limit is %d", limit));
+}
+
+
+_Noreturn void pawErr_too_far_to_jump(struct Compiler *C, String const *modname, struct SourceLoc loc, int limit)
+{
+    throw(C, E_TOO_FAR_TO_JUMP, modname, loc,
+            format(C, "too far to jump"),
+            format(C, "limit is %d instructions", limit));
+}
+
+
+_Noreturn void pawErr_too_many_constants(struct Compiler *C, String const *modname, struct SourceLoc loc, int limit)
+{
+    throw(C, E_TOO_MANY_CONSTANTS, modname, loc,
+            format(C, "too many constants"),
+            format(C, "limit is %d", limit));
 }
 
 
