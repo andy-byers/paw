@@ -18,7 +18,6 @@
     X(GenericDecl)       \
     X(AdtDecl)           \
     X(TypeDecl)          \
-    X(VarDecl)           \
     X(ConstDecl)         \
     X(TraitDecl)         \
     X(UseDecl)           \
@@ -56,6 +55,7 @@
     X(MatchExpr)
 
 #define AST_STMT_LIST(X) \
+    X(LetStmt)           \
     X(ExprStmt)          \
     X(DeclStmt)
 
@@ -100,13 +100,6 @@ enum AstDeclKind {
 
 struct AstDeclHeader {
     AST_DECL_HEADER;
-};
-
-struct AstVarDecl {
-    AST_DECL_HEADER;
-    struct AstPat *pat;
-    struct AstType *tag;
-    struct AstExpr *init;
 };
 
 struct AstConstDecl {
@@ -288,19 +281,6 @@ inline static struct AstDecl *pawAst_new_type_decl(struct Ast *ast, struct Sourc
         .generics = generics,
         .rhs = rhs,
         .is_pub = is_pub,
-    };
-    return d;
-}
-
-inline static struct AstDecl *pawAst_new_var_decl(struct Ast *ast, struct SourceSpan span, struct AstPat *pat, struct AstType *tag, struct AstExpr *init)
-{
-    struct AstDecl *d = pawAst_new_decl(ast);
-    d->VarDecl_ = (struct AstVarDecl){
-        .span = span,
-        .kind = kAstVarDecl,
-        .pat = pat,
-        .tag = tag,
-        .init = init,
     };
     return d;
 }
@@ -1231,6 +1211,13 @@ struct AstStmtHeader {
     AST_STMT_HEADER;
 };
 
+struct AstLetStmt {
+    AST_STMT_HEADER;
+    struct AstPat *pat;
+    struct AstType *tag;
+    struct AstExpr *init;
+};
+
 struct AstDeclStmt {
     AST_STMT_HEADER;
     struct AstDecl *decl;
@@ -1271,6 +1258,19 @@ AST_STMT_LIST(DEFINE_ACCESS)
 #undef DEFINE_ACCESS
 
 struct AstStmt *pawAst_new_stmt(struct Ast *ast);
+
+inline static struct AstStmt *pawAst_new_let_stmt(struct Ast *ast, struct SourceSpan span, struct AstPat *pat, struct AstType *tag, struct AstExpr *init)
+{
+    struct AstStmt *s = pawAst_new_stmt(ast);
+    s->LetStmt_ = (struct AstLetStmt){
+        .span = span,
+        .kind = kAstLetStmt,
+        .pat = pat,
+        .tag = tag,
+        .init = init,
+    };
+    return s;
+}
 
 static struct AstStmt *pawAst_new_expr_stmt(struct Ast *ast, struct SourceSpan span, struct AstExpr *expr)
 {

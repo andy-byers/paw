@@ -748,16 +748,6 @@ static struct AstDecl *closure_param_decl(struct Lex *lex)
     return NEW_NODE(lex, field_decl, start, ident, tag, PAW_FALSE);
 }
 
-static struct AstDecl *let_decl(struct Lex *lex, struct SourceLoc start)
-{
-    skip(lex); // 'let' token
-    struct AstPat *pat = pattern(lex);
-    struct AstType *tag = type_annotation(lex, PAW_FALSE);
-    struct AstExpr *init = test_next(lex, '=') ? expr0(lex) : NULL;
-    semicolon(lex, "'let' declaration");
-    return NEW_NODE(lex, var_decl, start, pat, tag, init);
-}
-
 static struct AstBoundList *parse_generic_bounds(struct Lex *lex)
 {
     if (!test_next(lex, ':'))
@@ -1366,6 +1356,17 @@ static struct AstExpr *basic_expr(struct Lex *lex)
     return expr;
 }
 
+static struct AstStmt *let_stmt(struct Lex *lex)
+{
+    struct SourceLoc start = lex->loc;
+    skip(lex); // 'let' token
+    struct AstPat *pat = pattern(lex);
+    struct AstType *tag = type_annotation(lex, PAW_FALSE);
+    struct AstExpr *init = test_next(lex, '=') ? expr0(lex) : NULL;
+    semicolon(lex, "'let' declaration");
+    return NEW_NODE(lex, let_stmt, start, pat, tag, init);
+}
+
 static struct AstStmt *expr_stmt(struct Lex *lex)
 {
     struct SourceLoc start = lex->loc;
@@ -1674,9 +1675,7 @@ static struct AstDecl *type_decl(struct Lex *lex, paw_Bool is_pub)
 static struct AstStmt *decl_stmt(struct Lex *lex)
 {
     struct SourceLoc const start = lex->loc;
-    struct AstDecl *decl = test(lex, TK_LET)
-        ? let_decl(lex, start)
-        : type_decl(lex, PAW_FALSE);
+    struct AstDecl *decl = type_decl(lex, PAW_FALSE);
     return NEW_NODE(lex, decl_stmt, start, decl);
 }
 
@@ -1689,6 +1688,8 @@ static struct AstStmt *statement(struct Lex *lex)
             stmt = NULL;
             break;
         case TK_LET:
+            stmt = let_stmt(lex);
+            break;
         case TK_TYPE:
             stmt = decl_stmt(lex);
             break;

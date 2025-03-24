@@ -13,7 +13,6 @@
     X(GenericDecl)       \
     X(AdtDecl)           \
     X(TypeDecl)          \
-    X(VarDecl)           \
     X(ConstDecl)         \
     X(TraitDecl)         \
     X(VariantDecl)
@@ -47,6 +46,7 @@
     X(InferType)
 
 #define HIR_STMT_LIST(X) \
+    X(LetStmt)           \
     X(ExprStmt)          \
     X(DeclStmt)
 
@@ -281,13 +281,6 @@ struct HirDeclHeader {
     HIR_DECL_HEADER;
 };
 
-struct HirVarDecl {
-    HIR_DECL_HEADER;
-    struct HirPat *pat;
-    struct HirExpr *init;
-    struct HirType *tag;
-};
-
 struct HirConstDecl {
     HIR_DECL_HEADER;
     paw_Bool is_pub : 1;
@@ -393,21 +386,6 @@ HIR_DECL_LIST(DEFINE_ACCESS)
 
 struct HirDecl *pawHir_new_decl(struct Hir *hir);
 DeclId pawHir_register_decl(struct Hir *hir, struct HirDecl *decl);
-
-static struct HirDecl *pawHir_new_var_decl(struct Hir *hir, struct SourceSpan span, struct HirPat *pat, struct HirType *tag, struct HirExpr *init)
-{
-    struct HirDecl *d = pawHir_new_decl(hir);
-    d->VarDecl_ = (struct HirVarDecl){
-        .hid = pawHir_next_id(hir),
-        .span = span,
-        .kind = kHirVarDecl,
-        .pat = pat,
-        .tag = tag,
-        .init = init,
-    };
-    pawHir_register_decl(hir, d);
-    return d;
-}
 
 static struct HirDecl *pawHir_new_const_decl(struct Hir *hir, struct SourceSpan span, struct HirIdent ident, struct Annotations *annos, struct HirType *tag, struct HirExpr *init, paw_Bool is_pub)
 {
@@ -1116,6 +1094,13 @@ struct HirStmtHeader {
     HIR_STMT_HEADER;
 };
 
+struct HirLetStmt {
+    HIR_STMT_HEADER;
+    struct HirPat *pat;
+    struct HirExpr *init;
+    struct HirType *tag;
+};
+
 struct HirDeclStmt {
     HIR_STMT_HEADER;
     struct HirDecl *decl;
@@ -1155,6 +1140,20 @@ HIR_STMT_LIST(DEFINE_ACCESS)
 #undef DEFINE_ACCESS
 
 struct HirStmt *pawHir_new_stmt(struct Hir *hir);
+
+static struct HirStmt *pawHir_new_let_stmt(struct Hir *hir, struct SourceSpan span, struct HirPat *pat, struct HirType *tag, struct HirExpr *init)
+{
+    struct HirStmt *s = pawHir_new_stmt(hir);
+    s->LetStmt_ = (struct HirLetStmt){
+        .hid = pawHir_next_id(hir),
+        .span = span,
+        .kind = kHirLetStmt,
+        .pat = pat,
+        .tag = tag,
+        .init = init,
+    };
+    return s;
+}
 
 static struct HirStmt *pawHir_new_expr_stmt(struct Hir *hir, struct SourceSpan span, struct HirExpr *expr)
 {
@@ -1531,8 +1530,6 @@ static inline struct HirIdent hir_decl_ident(struct HirDecl *decl)
             return HirGetTraitDecl(decl)->ident;
         case kHirVariantDecl:
             return HirGetVariantDecl(decl)->ident;
-        case kHirVarDecl:
-            PAW_UNREACHABLE();
     }
 }
 

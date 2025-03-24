@@ -373,14 +373,6 @@ static struct HirDecl *LowerTraitDecl(struct LowerAst *L, struct AstTraitDecl *d
                                  generics, methods, d->is_pub);
 }
 
-static struct HirDecl *LowerVarDecl(struct LowerAst *L, struct AstVarDecl *d)
-{
-    struct HirPat *pat = lower_pat(L, d->pat);
-    struct HirType *tag = d->tag != NULL ? lower_type(L, d->tag) : NULL;
-    struct HirExpr *init = d->init != NULL ? lower_expr(L, d->init) : NULL;
-    return pawHir_new_var_decl(L->hir, d->span, pat, tag, init);
-}
-
 static struct HirDecl *LowerConstDecl(struct LowerAst *L, struct AstConstDecl *d)
 {
     struct HirIdent ident = lower_ident(L, d->ident);
@@ -538,6 +530,14 @@ static struct HirExpr *LowerIfExpr(struct LowerAst *L, struct AstIfExpr *e)
     return pawHir_new_if_expr(L->hir, e->span, cond, then_arm, else_arm, never);
 }
 
+static struct HirStmt *LowerLetStmt(struct LowerAst *L, struct AstLetStmt *s)
+{
+    struct HirPat *pat = lower_pat(L, s->pat);
+    struct HirType *tag = s->tag != NULL ? lower_type(L, s->tag) : NULL;
+    struct HirExpr *init = s->init != NULL ? lower_expr(L, s->init) : NULL;
+    return pawHir_new_let_stmt(L->hir, s->span, pat, tag, init);
+}
+
 static struct HirStmt *LowerExprStmt(struct LowerAst *L, struct AstExprStmt *s)
 {
     struct HirExpr *expr = lower_expr(L, s->expr);
@@ -629,8 +629,7 @@ static struct HirExpr *LowerForExpr(struct LowerAst *L, struct AstForExpr *e)
         struct HirIdent func_ident = {.span = iter_name.span, .name = SCAN_STRING(L->C, "iterator")};
         struct HirExpr *target = pawHir_new_name_selector(hir, e->span, iterable, func_ident);
         struct HirExpr *iterator = pawHir_new_call_expr(hir, e->span, target, HirExprList_new(hir));
-        struct HirDecl *decl = pawHir_new_var_decl(hir, e->span, binding_pat(L, e->span, iter_name), NULL, iterator);
-        struct HirStmt *stmt = pawHir_new_decl_stmt(hir, e->span, decl);
+        struct HirStmt *stmt = pawHir_new_let_stmt(hir, e->span, binding_pat(L, e->span, iter_name), NULL, iterator);
         HirStmtList_push(hir, outer_stmts, stmt);
     }
 

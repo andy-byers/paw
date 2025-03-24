@@ -791,22 +791,22 @@ static void unpack_bindings(struct HirVisitor *V, struct HirPat *lhs, struct Hir
     }
 }
 
-static paw_Bool visit_var_decl(struct HirVisitor *V, struct HirVarDecl *d)
+static paw_Bool visit_let_stmt(struct HirVisitor *V, struct HirLetStmt *s)
 {
     struct LowerHir *L = V->ud;
-    struct IrType *type = pawIr_get_type(L->C, d->hid);
+    struct IrType *type = pawIr_get_type(L->C, s->hid);
 
     MirRegister r;
-    if (d->init != NULL) {
-        unpack_bindings(V, d->pat, d->init);
-    } else if (HirIsBindingPat(d->pat)) {
-        struct HirIdent ident = HirGetBindingPat(d->pat)->ident;
-        struct LocalVar *var = alloc_local(L->fs, ident, type, d->hid);
+    if (s->init != NULL) {
+        unpack_bindings(V, s->pat, s->init);
+    } else if (HirIsBindingPat(s->pat)) {
+        struct HirIdent ident = HirGetBindingPat(s->pat)->ident;
+        struct LocalVar *var = alloc_local(L->fs, ident, type, s->hid);
         struct MirRegisterData *data = mir_reg_data(L->fs->mir, var->reg);
         data->is_uninit = PAW_TRUE;
         r = var->reg;
     } else {
-        LOWERING_ERROR(L, uninitialized_destructuring, d->span.start);
+        LOWERING_ERROR(L, uninitialized_destructuring, s->span.start);
     }
     return PAW_FALSE;
 }
@@ -1825,7 +1825,7 @@ static void init_visitor(struct LowerHir *L, struct Hir *hir)
 {
     pawHir_visitor_init(&L->V, hir, L);
     L->V.VisitFieldDecl = visit_field_decl;
-    L->V.VisitVarDecl = visit_var_decl;
+    L->V.VisitLetStmt = visit_let_stmt;
     L->V.VisitExprStmt = visit_expr_stmt;
 }
 

@@ -225,6 +225,16 @@ static void AcceptBinOpExpr(struct HirVisitor *V, struct HirBinOpExpr *e)
     AcceptExpr(V, e->rhs);
 }
 
+static void AcceptLetStmt(struct HirVisitor *V, struct HirLetStmt *s)
+{
+    if (s->pat != NULL)
+        AcceptPat(V, s->pat);
+    if (s->tag != NULL)
+        AcceptType(V, s->tag);
+    if (s->init != NULL)
+        AcceptExpr(V, s->init);
+}
+
 static void AcceptExprStmt(struct HirVisitor *V, struct HirExprStmt *s)
 {
     AcceptExpr(V, s->expr);
@@ -276,16 +286,6 @@ static void AcceptTraitDecl(struct HirVisitor *V, struct HirTraitDecl *d)
 {
     accept_decl_list(V, d->generics);
     accept_decl_list(V, d->methods);
-}
-
-static void AcceptVarDecl(struct HirVisitor *V, struct HirVarDecl *d)
-{
-    if (d->pat != NULL)
-        AcceptPat(V, d->pat);
-    if (d->tag != NULL)
-        AcceptType(V, d->tag);
-    if (d->init != NULL)
-        AcceptExpr(V, d->init);
 }
 
 static void AcceptConstDecl(struct HirVisitor *V, struct HirConstDecl *d)
@@ -611,7 +611,6 @@ paw_Bool pawHir_is_pub_decl(struct HirDecl *decl)
             return HirGetTypeDecl(decl)->is_pub;
         case kHirConstDecl:
             return HirGetConstDecl(decl)->is_pub;
-        case kHirVarDecl:
         case kHirFieldDecl:
         case kHirGenericDecl:
         case kHirVariantDecl:
@@ -1064,20 +1063,6 @@ static void dump_decl(struct Printer *P, struct HirDecl *decl)
             }
             break;
         }
-        case kHirVarDecl: {
-            struct HirVarDecl *d = HirGetVarDecl(decl);
-            DUMP_CSTR(P, "let ");
-            dump_pat(P, d->pat);
-            if (d->tag != NULL) {
-                DUMP_CSTR(P, ": ");
-                dump_type(P, d->tag);
-            }
-            if (d->init != NULL) {
-                DUMP_CSTR(P, " = ");
-                dump_expr(P, d->init);
-            }
-            break;
-        }
         case kHirVariantDecl: {
             struct HirVariantDecl *d = HirGetVariantDecl(decl);
             DUMP_STR(P, d->ident.name);
@@ -1132,6 +1117,20 @@ static void dump_stmt(struct Printer *P, struct HirStmt *stmt)
 {
     add_indentation(P);
     switch (HIR_KINDOF(stmt)) {
+        case kHirLetStmt: {
+            struct HirLetStmt *s = HirGetLetStmt(stmt);
+            DUMP_CSTR(P, "let ");
+            dump_pat(P, s->pat);
+            if (s->tag != NULL) {
+                DUMP_CSTR(P, ": ");
+                dump_type(P, s->tag);
+            }
+            if (s->init != NULL) {
+                DUMP_CSTR(P, " = ");
+                dump_expr(P, s->init);
+            }
+            break;
+        }
         case kHirExprStmt: {
             struct HirExprStmt *s = HirGetExprStmt(stmt);
             dump_expr(P, s->expr);

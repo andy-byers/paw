@@ -974,21 +974,22 @@ static void resolve_adt_item(struct Resolver *R, struct HirAdtDecl *d)
     R->self = NULL;
 }
 
-static struct IrType *resolve_var_decl(struct Resolver *R, struct HirVarDecl *d)
+static void ResolveLetStmt(struct Resolver *R, struct HirLetStmt *s)
 {
-    struct IrType *tag = resolve_type(R, d->tag);
-    struct IrType *rhs = d->init != NULL
-                              ? resolve_operand(R, d->init)
+    struct IrType *tag = resolve_type(R, s->tag);
+    struct IrType *rhs = s->init != NULL
+                              ? resolve_operand(R, s->init)
                               : new_unknown(R);
     struct MatchState ms;
     enter_match_ctx(R, &ms, tag);
-    struct IrType *lhs = resolve_pat(R, d->pat);
+    struct IrType *lhs = resolve_pat(R, s->pat);
     unify(R, ms.result, tag);
     leave_match_ctx(R);
 
     unify(R, lhs, tag);
     unify(R, tag, rhs);
-    return rhs;
+
+    pawIr_set_type(R->C, s->hid, rhs);
 }
 
 static void const_check_path(struct HirVisitor *V, struct HirPathExpr *e)
@@ -1811,9 +1812,6 @@ static void resolve_decl(struct Resolver *R, struct HirDecl *decl)
 {
     struct IrType *type;
     switch (HIR_KINDOF(decl)) {
-        case kHirVarDecl:
-            type = resolve_var_decl(R, HirGetVarDecl(decl));
-            break;
         case kHirFieldDecl:
             type = resolve_field_decl(R, HirGetFieldDecl(decl));
             break;
