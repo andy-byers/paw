@@ -1,0 +1,70 @@
+// dump.paw
+//
+// Exercise the compiler IR printing features
+
+trait Trait {}
+trait Trait2 {
+    fn a() {}
+    fn b() {}
+}
+
+enum Enum {
+    Unit,
+    Args(int, float, str),
+}
+
+const CONSTANT: int = 42;
+
+fn generics<A, B>() {}
+
+fn slice_list<T: Trait + Trait2>(list: [T]) -> [T] {
+    list[1:-1]
+}
+
+fn map_literals() {
+    let map = [:];
+    map = [1: 2];
+}
+
+fn select_element(x: (int,)) -> int {
+    x.0
+}
+
+fn loop_continue() {
+    while true {
+        continue;
+    }
+}
+
+fn infer_type() {
+    let infer_inner: [_] = [1, 2, 3];
+}
+
+fn type_alias() {
+    type I = int;
+}
+
+fn match_tuple_or(t: (int,)) {
+    match t {
+        (1 | 2 | 3,) => {},
+        _ => {},
+    }
+}
+
+fn chain_and_guard(x: Option<int>) -> Option<int> {
+    match x? {
+        123 => {},
+        i if i < 0 => {},
+        _ => {},
+    }
+    x
+}
+
+fn takes_function_as_argument(f: fn() -> int) -> int {
+    f()
+}
+
+pub fn main(args: [str]) -> int {
+    takes_function_as_argument(|| -> int {123});
+    0
+}

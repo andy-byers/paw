@@ -120,10 +120,6 @@ static void ensure_unique(struct ItemCollector *X, StringMap *map, struct HirIde
 static struct IrType *collect_type(struct ItemCollector *X, struct HirType *type)
 {
     struct IrType *result = pawP_lower_type(X->C, X->m, X->symtab, type);
-    if (result == NULL) {
-        char const *type_name = pawHir_print_type(X->C, type);
-        COLLECTOR_ERROR(X, unknown_type, type->hdr.span.start, type_name);
-    }
     pawIr_validate_type(X->C, result);
     SET_NODE_TYPE(X->C, type, result);
     return result;

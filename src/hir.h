@@ -1482,7 +1482,6 @@ int pawHir_expand_bodies(struct Hir *hir);
 void pawHir_define(struct ModuleInfo *m, struct HirDeclList *out, int *poffset);
 
 struct HirDecl *pawHir_get_decl(struct Compiler *C, DeclId id);
-struct IrType *pawHir_result_type(struct Compiler *C, struct HirResult res);
 
 static paw_Bool hir_is_type(struct Compiler *C, struct HirResult res)
 {
@@ -1538,10 +1537,6 @@ struct IrTypeList *pawHir_collect_decl_types(struct Compiler *C, struct HirDeclL
 
 enum TraitKind pawHir_kindof_trait(struct Compiler *C, struct HirTraitDecl *d);
 
-// Return true if the expression can be evaluated at compile time, false otherwise
-paw_Bool pawHir_check_const(struct Hir *hir, struct HirExpr *expr);
-
-char const *pawHir_print_type(struct Compiler *C, struct HirType *type);
 char const *pawHir_print_path(struct Compiler *C, struct HirPath *path);
 
 char const *pawHir_dump(struct Hir *hir);

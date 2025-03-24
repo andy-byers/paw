@@ -147,16 +147,16 @@ static void ensure_methods_match(struct Compiler *C, struct IrType *adt, struct 
 {
     struct IrType *a = adt_method;
     struct IrType *b = pawIr_get_type(C, trait_method->hid);
-    if (trait_decl->generics != NULL) {
+    if (trait_decl->generics != NULL)
         b = pawP_instantiate_method(C, HIR_CAST_DECL(trait_decl),
                                     IR_TYPE_SUBTYPES(trait), HIR_CAST_DECL(trait_method));
-    }
+
     // substitute all instances of the trait object type for the type of the implementor
     b = pawIr_substitute_self(C, trait, adt, b);
     b = pawP_generalize(C, b);
     pawU_unify(C->U, a, b);
 
-    enum TraitKind tk = pawHir_kindof_trait(C, trait_decl);
+    enum TraitKind const tk = pawHir_kindof_trait(C, trait_decl);
     if (tk != TRAIT_USER)
         register_builtin_trait_method(C, adt, a, tk);
 }

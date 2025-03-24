@@ -215,13 +215,13 @@ static void test_type_error(void)
     test_compiler_status(PAW_ETYPE, "extraneous_variant_access",
         "enum E {A}", "let e = E::A::A; ");
 
-    test_compiler_status(PAW_ETYPE, "missing_return_type", "pub fn f() {123}", "");
-    test_compiler_status(PAW_ETYPE, "missing_return_value", "pub fn f() -> int {}", "");
+    test_compiler_status(PAW_ETYPE, "missing_return_type", "fn f() {123}", "");
+    test_compiler_status(PAW_ETYPE, "missing_return_value", "fn f() -> int {}", "");
     test_compiler_status(PAW_ETYPE, "non_exhaustive_branch",
-        "pub fn f(x: bool) -> int {if x {} else {123}}", "");
+        "fn f(x: bool) -> int {if x {} else {123}}", "");
     test_compiler_status(PAW_ETYPE, "non_exhaustive_return",
-        "pub fn f(x: bool) -> int {if x {return 123;}}", "");
-    test_compiler_status(PAW_ETYPE, "non_unit_guard", "pub fn f(x: bool) {if x {123}}", "");
+        "fn f(x: bool) -> int {if x {return 123;}}", "");
+    test_compiler_status(PAW_ETYPE, "non_unit_guard", "fn f(x: bool) {if x {123}}", "");
     test_compiler_status(E_EXPECTED_BASIC_TYPE, "nonscalar_cast", "", "let x = 123 as str;");
     test_compiler_status(PAW_ETYPE, "invalid_map_key", "struct S;", "let x = [S: 123];");
 }

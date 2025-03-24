@@ -79,11 +79,6 @@ struct HirDecl *pawHir_get_decl(struct Compiler *C, DeclId did)
     return C->decls->data[did.value];
 }
 
-struct HirSymbol *pawHir_new_symbol(struct Compiler *C)
-{
-    return NEW_NODE(C, struct HirSymbol);
-}
-
 int pawHir_declare_symbol(struct Hir *hir, struct HirScope *scope, struct HirIdent ident, struct HirResult res)
 {
     HirScope_push(hir, scope, (struct HirSymbol){
@@ -91,11 +86,6 @@ int pawHir_declare_symbol(struct Hir *hir, struct HirScope *scope, struct HirIde
                                 .res = res,
                             });
     return scope->count - 1;
-}
-
-struct IrType *pawHir_result_type(struct Compiler *C, struct HirResult res)
-{
-    return pawIr_get_type(C, res.hid);
 }
 
 int pawHir_find_symbol(struct HirScope *scope, struct HirIdent ident)
@@ -243,7 +233,8 @@ static void AcceptExprStmt(struct HirVisitor *V, struct HirExprStmt *s)
 static void AcceptClosureExpr(struct HirVisitor *V, struct HirClosureExpr *e)
 {
     accept_decl_list(V, e->params);
-    AcceptType(V, e->result);
+    if (e->result != NULL)
+        AcceptType(V, e->result);
     AcceptExpr(V, e->expr);
 }
 
@@ -616,103 +607,6 @@ paw_Bool pawHir_is_pub_decl(struct HirDecl *decl)
         case kHirVariantDecl:
             PAW_UNREACHABLE();
     }
-}
-
-#define V_VALUE_ERROR(V_, Loc_, ...) pawP_error((V_)->hir->C, PAW_EVALUE, (V_)->hir->name, Loc_, __VA_ARGS__)
-
-static paw_Bool const_check_literal(struct HirVisitor *V, struct HirLiteralExpr *e)
-{
-    if (e->lit_kind != kHirLitBasic) {
-        V_VALUE_ERROR(V, e->span.start, "constant literal must be primitive type");
-    }
-    return PAW_TRUE;
-}
-
-static paw_Bool const_check_path(struct HirVisitor *V, struct HirPathExpr *e)
-{
-    return PAW_TRUE;
-}
-
-static paw_Bool const_check_chain(struct HirVisitor *V, struct HirChainExpr *e)
-{
-    V_VALUE_ERROR(V, e->span.start, "'?' outside function body");
-}
-
-static paw_Bool const_check_unop(struct HirVisitor *V, struct HirUnOpExpr *e)
-{
-    return PAW_TRUE;
-}
-
-static paw_Bool const_check_binop(struct HirVisitor *V, struct HirBinOpExpr *e)
-{
-    return PAW_TRUE;
-}
-
-static paw_Bool const_check_closure(struct HirVisitor *V, struct HirClosureExpr *e)
-{
-    V_VALUE_ERROR(V, e->span.start, "closures cannot be constant evaluated");
-}
-
-static paw_Bool const_check_call(struct HirVisitor *V, struct HirCallExpr *e)
-{
-    V_VALUE_ERROR(V, e->span.start, "function calls cannot be constant evaluated");
-}
-
-static paw_Bool const_check_index(struct HirVisitor *V, struct HirIndex *e)
-{
-    V_VALUE_ERROR(V, e->span.start, "index expressions cannot be constant evaluated");
-}
-
-static paw_Bool const_check_selector(struct HirVisitor *V, struct HirSelector *e)
-{
-    V_VALUE_ERROR(V, e->span.start, "selector expressions cannot be constant evaluated");
-}
-
-static paw_Bool const_check_field(struct HirVisitor *V, struct HirFieldExpr *e)
-{
-    V_VALUE_ERROR(V, e->span.start, "fields cannot be constant evaluated");
-}
-
-static paw_Bool const_check_loop(struct HirVisitor *V, struct HirLoopExpr *e)
-{
-    V_VALUE_ERROR(V, e->span.start, "loops cannot be constant evaluated");
-}
-
-static paw_Bool const_check_jump(struct HirVisitor *V, struct HirJumpExpr *e)
-{
-    V_VALUE_ERROR(V, e->span.start, "'%s' outside loop body",
-                e->jump_kind == JUMP_BREAK ? "break" : "continue");
-    return PAW_TRUE;
-}
-
-static paw_Bool const_check_return(struct HirVisitor *V, struct HirReturnExpr *e)
-{
-    V_VALUE_ERROR(V, e->span.start, "'return' outside function body");
-    return PAW_TRUE;
-}
-
-paw_Bool pawHir_check_const(struct Hir *hir, struct HirExpr *expr)
-{
-    struct HirVisitor V;
-    paw_Bool is_const = PAW_TRUE;
-    pawHir_visitor_init(&V, hir, &is_const);
-
-    V.VisitLiteralExpr = const_check_literal;
-    V.VisitPathExpr = const_check_path;
-    V.VisitChainExpr = const_check_chain;
-    V.VisitUnOpExpr = const_check_unop;
-    V.VisitBinOpExpr = const_check_binop;
-    V.VisitClosureExpr = const_check_closure;
-    V.VisitCallExpr = const_check_call;
-    V.VisitIndex = const_check_index;
-    V.VisitSelector = const_check_selector;
-    V.VisitFieldExpr = const_check_field;
-    V.VisitLoopExpr = const_check_loop;
-    V.VisitJumpExpr = const_check_jump;
-    V.VisitReturnExpr = const_check_return;
-
-    pawHir_visit_expr(&V, expr);
-    return is_const;
 }
 
 
@@ -1444,22 +1338,6 @@ char const *pawHir_dump(struct Hir *hir)
         dump_decl(&print, *pdecl);
         add_newline(&print);
     }
-    pawL_push_result(P, &buf);
-    return paw_string(P, -1);
-}
-
-char const *pawHir_print_type(struct Compiler *C, struct HirType *type)
-{
-    Buffer buf;
-    paw_Env *P = ENV(C);
-    pawL_init_buffer(P, &buf);
-
-    dump_type(&(struct Printer){
-                   .P = ENV(C),
-                   .buf = &buf,
-               },
-               type);
-
     pawL_push_result(P, &buf);
     return paw_string(P, -1);
 }

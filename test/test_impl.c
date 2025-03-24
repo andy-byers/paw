@@ -5,6 +5,7 @@
 #include "call.h"
 #include "code.h"
 #include "compile.h"
+#include "hir.h"
 #include "map.h"
 #include "paw.h"
 #include "rt.h"
@@ -485,6 +486,30 @@ paw_Uint int_hash(struct Compiler *C, paw_Int i)
     return u << 5 | u >> 5;
 }
 
+static int on_build_hir(paw_Env *P)
+{
+    struct Hir *hir = paw_rawptr(P, 1);
+
+    struct HirVisitor V;
+    pawHir_visitor_init(&V, hir, NULL);
+    pawHir_visit_decl_list(&V, hir->items);
+    return 0;
+}
+
+
+void test_visitors(paw_Env *P)
+{
+    paw_push_string(P, "paw.on_build_hir");
+    paw_new_native(P, on_build_hir, 0);
+    paw_map_set(P, PAW_REGISTRY_INDEX);
+
+    int status = test_open_file(P, "match");
+    check(status == PAW_OK);
+
+    status = test_open_file(P, "dump");
+    check(status == PAW_OK);
+}
+
 DEFINE_MAP(struct Compiler, TestMap, pawP_alloc, int_hash, int_equals, int, int)
 
 void test_compiler_map(struct Compiler *C)
@@ -592,6 +617,7 @@ int main(void)
     DRIVER(test_parse_int);
     DRIVER(test_parse_float);
     DRIVER(test_buffer);
+    DRIVER(test_visitors);
 
     COMPILER_DRIVER(test_compiler_map);
     COMPILER_DRIVER(test_compiler_map_iterator);

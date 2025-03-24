@@ -213,8 +213,8 @@ static struct IrType *generalize_func(struct Compiler *C, struct IrSignature *t)
 // for each inference variable.
 struct IrType *pawP_generalize(struct Compiler *C, struct IrType *type)
 {
-    return IrIsAdt(type) ? generalize_adt(C, IrGetAdt(type)) : IrIsSignature(type) ? generalize_func(C, IrGetSignature(type))
-                                                                                   : type;
+    return IrIsAdt(type) ? generalize_adt(C, IrGetAdt(type)) : IrIsSignature(type) //
+        ? generalize_func(C, IrGetSignature(type)) : type;
 }
 
 static struct IrTypeList *generalize_list(struct Compiler *C, struct IrTypeList *types)
@@ -228,25 +228,6 @@ static struct IrTypeList *generalize_list(struct Compiler *C, struct IrTypeList 
         IrTypeList_push(C, result, r);
     }
     return result;
-}
-
-struct IrType *pawP_generalize_self(struct Compiler *C, struct IrType *self, struct IrTypeList *base_binder, struct IrTypeList **pinst_binder)
-{
-    struct InstanceState I = {
-        .U = C->U,
-        .P = ENV(C),
-        .C = C,
-    };
-
-    struct IrTypeList *unknowns = pawU_new_unknowns(I.U, base_binder);
-    struct HirDecl *base = pawHir_get_decl(C, IR_TYPE_DID(self));
-
-    struct IrTypeFolder F;
-    struct Substitution subst;
-    pawP_init_substitution_folder(&F, C, &subst, base_binder, unknowns);
-
-    *pinst_binder = unknowns;
-    return pawIr_fold_type(&F, self);
 }
 
 static struct IrTypeList *substitute_list(struct IrTypeFolder *F, struct IrTypeList *list)

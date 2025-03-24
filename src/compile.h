@@ -256,7 +256,6 @@ struct Decision *pawP_check_exhaustiveness(struct Hir *hir, struct Pool *pool, s
 void pawP_lower_matches(struct Compiler *C);
 
 struct IrType *pawP_generalize(struct Compiler *C, struct IrType *type);
-struct IrType *pawP_generalize_self(struct Compiler *C, struct IrType *self, struct IrTypeList *base_binder, struct IrTypeList **pinst_binder);
 
 // Instantiate a polymorphic function or type
 // Works by replacing each generic type with the corresponding concrete type from
