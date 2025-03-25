@@ -176,7 +176,6 @@ static struct IrGenericDefs *collect_generic_defs(struct ItemCollector *X, struc
     struct IrGenericDefs *result = IrGenericDefs_new(X->C);
     K_LIST_FOREACH(generics, pdecl) {
         DeclId const did = (*pdecl)->hdr.did;
-//        DeclId const did = pawIr_next_did(X->C, MOD(X));
         struct HirGenericDecl *d = HirGetGenericDecl(*pdecl);
         struct IrType *type = pawIr_new_generic(X->C, did, NULL);
         struct IrGenericDef *r = pawIr_new_generic_def(X->C, did, d->ident.name);
@@ -196,7 +195,6 @@ static struct IrFieldDefs *collect_field_defs(struct ItemCollector *X, struct Hi
         DeclId const did = (*pdecl)->hdr.did;
         struct HirFieldDecl *d = HirGetFieldDecl(*pdecl);
         struct IrType *type = collect_type(X, d->tag);
-//        DeclId const did = pawIr_next_did(X->C, MOD(X));
         struct IrFieldDef *def = pawIr_new_field_def(X->C, did, d->ident.name, d->is_pub);
         IrFieldDefs_push(X->C, result, def);
         set_def_type(X, did, d->hid);
@@ -265,7 +263,6 @@ static struct IrVariantDefs *collect_variant_defs(struct ItemCollector *X, struc
     struct HirDecl **pdecl;
     K_LIST_FOREACH(adt->fields, pdecl) {
         DeclId const did = (*pdecl)->hdr.did;
-//        const DeclId did = pawIr_next_did(X->C, MOD(X));
         struct HirVariantDecl *d = HirGetVariantDecl(*pdecl);
         struct IrFieldDefs *fields = collect_field_defs(X, d->fields);
         struct IrVariantDef *r = pawIr_new_variant_def(X->C, did, NO_DECL, d->index, d->ident.name, fields);
@@ -406,7 +403,6 @@ static DeclId collect_adt(struct ItemCollector *X, struct HirAdtDecl *d, struct 
     enter_block(X, scope);
 
     DeclId const did = d->did;
-//    DeclId const did = pawIr_next_did(X->C, MOD(X));
     IrTypeList *types = collect_generic_types(X, d->generics);
     IrType *type = pawIr_new_adt(X->C, did, types);
     SET_TYPE(X, d->hid, type);
@@ -503,7 +499,6 @@ static void collect_generic_bounds(struct ItemCollector *X, struct HirDeclList *
 static void collect_func_decl(struct ItemCollector *X, struct HirFuncDecl *d)
 {
     DeclId const did = d->did;
-//     const DeclId did = pawIr_next_did(X->C, MOD(X));
     enter_function(X, d);
 
     struct IrTypeList *types = collect_generic_types(X, d->generics);
@@ -549,8 +544,7 @@ static void collect_method_decls(struct ItemCollector *X, struct HirDeclList *me
 
 static void collect_adt_decl(struct ItemCollector *X, struct HirAdtDecl *d)
 {
-    DeclId const did = d->did; // TODO
-
+    DeclId const did = d->did;
     HirScope *scope = *ScopeMap_get(X, X->scopes, d->did);
     enter_block(X, scope);
 
@@ -584,8 +578,7 @@ static void collect_adt_decl(struct ItemCollector *X, struct HirAdtDecl *d)
 
 static void collect_trait_decl(struct ItemCollector *X, struct HirTraitDecl *d)
 {
-    DeclId const did = d->did; // TODO
-
+    DeclId const did = d->did;
     HirScope *scope = *ScopeMap_get(X, X->scopes, did);
     enter_block(X, scope);
 

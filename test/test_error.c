@@ -210,9 +210,9 @@ static void test_type_error(void)
     test_compiler_status(PAW_ETYPE, "wrong_constructor_args", "enum E {X(int)}", "let x = E::X(1.0);");
     test_compiler_status(E_EXPECTED_ADT, "selector_on_function", "fn func() {}", "let a = func.field;");
     test_compiler_status(PAW_ETYPE, "selector_on_module", "use io;", "let s = io.abc;");
-    test_compiler_status(PAW_ETYPE, "extraneous_method_access",
+    test_compiler_status(E_EXTRA_SEGMENT, "extraneous_method_access",
         "struct S {pub fn f() {}}", "S::f::f(); ");
-    test_compiler_status(PAW_ETYPE, "extraneous_variant_access",
+    test_compiler_status(E_EXTRA_SEGMENT, "extraneous_variant_access",
         "enum E {A}", "let e = E::A::A; ");
 
     test_compiler_status(PAW_ETYPE, "missing_return_type", "fn f() {123}", "");
@@ -312,9 +312,9 @@ static void test_syntax_error(void)
     test_compiler_status(E_EXPECTED_VALUE, "primitive_type_is_not_a_value_2", "", "let a = (1, float,);");
     test_compiler_status(E_EXPECTED_VALUE, "primitive_type_is_not_a_value_3", "", "let a = ['two', str];");
     test_compiler_status(E_EXPECTED_VALUE, "generic_type_is_not_a_value", "fn f<T>() {let t = T;}", "");
-    test_compiler_status(PAW_ETYPE, "function_is_not_a_type", "fn test() {}", "let a: test = test;");
-    test_compiler_status(PAW_ETYPE, "variable_is_not_a_type", "", "let a = 1; let b: a = a;");
-    test_compiler_status(PAW_ENAME, "own_name_is_not_a_type", "", "let a: a = 1;");
+    test_compiler_status(E_INCORRECT_ITEM_CLASS, "function_is_not_a_type", "fn test() {}", "let a: test = test;");
+    test_compiler_status(E_INCORRECT_ITEM_CLASS, "variable_is_not_a_type", "", "let a = 1; let b: a = a;");
+    test_compiler_status(E_UNKNOWN_PATH, "own_name_is_not_a_type", "", "let a: a = 1;");
 
     test_compiler_status(E_DUPLICATE_ITEM, "duplicate_global", "struct A; struct A;", "");
     test_compiler_status(E_EXPECTED_TOPLEVEL_ITEM, "return_outside_function", "return;", "");
@@ -406,7 +406,7 @@ static void test_enum_error(void)
     test_compiler_status(E_EMPTY_ENUMERATION, "enum_without_variants", "enum A {pub fn f() {}};", "");
     test_compiler_status(E_EXPECTED_VALUE, "enum_missing_variant", "enum A {X}", "let a = A;");
     test_compiler_status(E_DUPLICATE_ITEM, "enum_duplicate_variant", "enum A {X, X}", "");
-    test_compiler_status(PAW_ENAME, "enum_nonexistent_variant", "enum A {X}", "let a = A::Y;");
+    test_compiler_status(E_UNKNOWN_ASSOCIATED_ITEM, "enum_nonexistent_variant", "enum A {X}", "let a = A::Y;");
     test_compiler_status(E_MISSING_VARIANT_ARGS, "variant_missing_only_field", "enum A {X(int)}", "let a = A::X;");
     test_compiler_status(E_INCORRECT_ARITY, "variant_missing_field", "enum A {X(int, float)}", "let a = A::X(42);");
     test_compiler_status(E_INCORRECT_ARITY, "variant_extra_field", "enum A {X(int)}", "let a = A::X(42, true);");
@@ -626,17 +626,17 @@ static void test_trait_error(void)
     "    fn f(self);\n"   \
     "}\n"
 
-    test_compiler_status(PAW_ENAME, "trait_missing_method",
+    test_compiler_status(E_MISSING_TRAIT_METHOD, "trait_missing_method",
         TRAIT "struct S: Trait {v: int}", "");
     test_compiler_status(PAW_ETYPE, "trait_wrong_type",
         TRAIT "struct S: Trait {pub fn f(self) -> int {123}}", "");
-    test_compiler_status(PAW_ETYPE, "trait_mismatched_visibility",
+    test_compiler_status(E_TRAIT_METHOD_VISIBILITY_MISMATCH, "trait_mismatched_visibility",
         TRAIT "struct S: Trait {fn f(self) {}}", "");
-    test_compiler_status(PAW_ETYPE, "generic_missing_bound",
+    test_compiler_status(E_MISSING_TRAIT_BOUNDS, "generic_missing_bound",
         TRAIT "struct S: Trait {pub fn f(self) {}}\n"
               "pub fn call_f<T>(t: T) {t.f();}",
         "let x = S; call_f(x);");
-    test_compiler_status(PAW_ETYPE, "trait_generic_mismatch",
+    test_compiler_status(E_INCORRECT_TYPE_ARITY, "trait_generic_mismatch",
         TRAIT "struct S<T>: Trait<T> {pub fn f(self) {}}\n", "");
 
 #define POLY_TRAIT           \
@@ -661,13 +661,13 @@ static void test_trait_error(void)
     test_compiler_status(PAW_ETYPE, "trait_generic_mismatch",
         POLY_TRAIT POLY_STRUCT POLY_FUNCTION("int", ),
         "let x = S{v: true}; call_f(x);");
-    test_compiler_status(PAW_ETYPE, "trait_type_as_trait",
+    test_compiler_status(E_EXPECTED_TRAIT, "trait_type_as_trait",
         "struct Type; struct S: Type;", "");
     test_compiler_status(E_UNKNOWN_TRAIT, "trait_missing_function_bound",
         "struct S: Trait;", "");
-    test_compiler_status(PAW_ENAME, "trait_missing_generic_in_bounds",
+    test_compiler_status(E_UNKNOWN_PATH, "trait_missing_generic_in_bounds",
         POLY_TRAIT POLY_STRUCT POLY_FUNCTION("X", ), "");
-    test_compiler_status(PAW_ETYPE, "trait_cannot_infer_generic",
+    test_compiler_status(E_INCORRECT_TYPE_ARITY, "trait_cannot_infer_generic",
         POLY_TRAIT POLY_STRUCT "fn call_f<T: Trait>(t: T) {t.f();}",
         "let x = S{v: 123}; call_f(x);");
 }
@@ -747,6 +747,10 @@ static void test_destructuring(void)
     test_compiler_status(E_UNKNOWN_PATH, "destructure_wildcard_name", "", "let _ = 123; let x = _;");
     test_compiler_status(E_NONEXHAUSTIVE_PATTERN_MATCH, "destructure_or", "", "let (a, 1) | (a, 2) = (123, 456);");
     test_compiler_status(E_UNINITIALIZED_DESTRUCTURING, "uninitialized_destructuring", "", "let (a,); a = 123;");
+    test_compiler_status(E_RESERVED_IDENTIFIER, "reserved_identifier", "", "let int = 123;");
+    // NOTE: List<T> is considered a unit struct by the compiler. This would not result in an error
+    //       if "List" was not treated as a reserved name.
+    test_compiler_status(E_RESERVED_IDENTIFIER, "reserved_identifier_list", "", "let List = [1];");
 }
 
 static void test_deferred_init(void)
@@ -760,9 +764,6 @@ static void test_deferred_init(void)
 
 int main(void)
 {
-// TODO: breaks!
-// test_compiler_status(E_RESERVED_IDENTIFIER, "reserved_identifier", "", "let int = 123;");
-
     test_syntax_error();
     test_underscore();
     test_annotations();

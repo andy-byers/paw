@@ -318,6 +318,13 @@ _Noreturn void pawErr_expected_comma_separator(struct Compiler *C, String const 
             NULL);
 }
 
+_Noreturn void pawErr_duplicate_annotation(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name)
+{
+    throw(C, E_DUPLICATE_ANNOTATION, modname, loc,
+            format(C, "duplicate annotation '%s'", name),
+            NULL);
+}
+
 _Noreturn void pawErr_nonliteral_annotation_value(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name)
 {
     throw(C, E_NONLITERAL_ANNOTATION_VALUE, modname, loc,
@@ -399,6 +406,76 @@ _Noreturn void pawErr_associated_item_visibility(struct Compiler *C, String cons
 {
     throw(C, E_ASSOCIATED_ITEM_VISIBILITY, modname, loc,
             format(C, "item '%s' cannot be accessed from outside a method on type '%s'", name, type),
+            NULL);
+}
+
+_Noreturn void pawErr_missing_trait_bounds(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name)
+{
+    throw(C, E_MISSING_TRAIT_BOUNDS, modname, loc,
+            format(C, "generic type '%s' missing trait bounds", name),
+            NULL);
+}
+
+_Noreturn void pawErr_missing_extern_value(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name)
+{
+    throw(C, E_MISSING_EXTERN_VALUE, modname, loc,
+            format(C, "missing extern value '%s'", name),
+            NULL);
+}
+
+_Noreturn void pawErr_incorrect_type_arity(struct Compiler *C, String const *modname, struct SourceLoc loc, int want, int have)
+{
+    throw(C, E_INCORRECT_TYPE_ARITY, modname, loc,
+            format(C, "%s types", have < want ? "not enough" : "too many"),
+            format(C, "expected %d but have %d", want, have));
+}
+
+_Noreturn void pawErr_unexpected_type_arguments(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *what, char const *name)
+{
+    throw(C, E_UNEXPECTED_TYPE_ARGUMENTS, modname, loc,
+            format(C, "unexpected type arguments on %s '%s'", what, name),
+            NULL);
+}
+
+_Noreturn void pawErr_expected_trait(struct Compiler *C, String const *modname, struct SourceLoc loc)
+{
+    throw(C, E_EXPECTED_TRAIT, modname, loc,
+            format(C, "expected trait"),
+            NULL);
+}
+
+_Noreturn void pawErr_unexpected_trait(struct Compiler *C, String const *modname, struct SourceLoc loc)
+{
+    throw(C, E_UNEXPECTED_TRAIT, modname, loc,
+            format(C, "unexpected trait"),
+            NULL);
+}
+
+_Noreturn void pawErr_incorrect_item_class(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *want, char const *have)
+{
+    throw(C, E_INCORRECT_ITEM_CLASS, modname, loc,
+            format(C, "expected %s but found %s", want, have),
+            NULL);
+}
+
+_Noreturn void pawErr_extra_segment(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name)
+{
+    throw(C, E_EXTRA_SEGMENT, modname, loc,
+            format(C, "extraneous '::%s'", name),
+            NULL);
+}
+
+_Noreturn void pawErr_missing_trait_method(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name)
+{
+    throw(C, E_MISSING_TRAIT_METHOD, modname, loc,
+            format(C, "trait method '%s' not implemented", name),
+            NULL);
+}
+
+_Noreturn void pawErr_trait_method_visibility_mismatch(struct Compiler *C, String const *modname, struct SourceLoc loc, paw_Bool expected_pub, char const *name)
+{
+    throw(C, E_TRAIT_METHOD_VISIBILITY_MISMATCH, modname, loc,
+            format(C, "visibility mismatch (expected %s visibility on method '%s')", expected_pub ? "public" : "private", name),
             NULL);
 }
 
@@ -520,6 +597,14 @@ _Noreturn void pawErr_unknown_method(struct Compiler *C, String const *modname, 
             format(C, "unknown method '%s' for type '%s'", method, type),
             NULL);
 }
+
+_Noreturn void pawErr_unknown_associated_item(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *method, char const *type)
+{
+    throw(C, E_UNKNOWN_ASSOCIATED_ITEM, modname, loc,
+            format(C, "unknown associated item '%s' for type '%s'", method, type),
+            NULL);
+}
+
 
 _Noreturn void pawErr_not_a_method(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name)
 {

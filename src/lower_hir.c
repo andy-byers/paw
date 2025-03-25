@@ -114,11 +114,8 @@ DEFINE_LIST(struct LowerHir, LabelList, struct Label)
 DEFINE_MAP(struct LowerHir, GlobalMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, int)
 DEFINE_MAP(struct LowerHir, VarMap, pawP_alloc, var_hash, var_equals, struct MatchVar, MirRegister)
 
-#include"stdio.h"
 static void postprocess(struct Mir *mir)
 {
-    puts(pawMir_dump(mir));
-
     pawMir_remove_unreachable_blocks(mir);
     pawSsa_construct(mir);
 

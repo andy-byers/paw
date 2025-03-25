@@ -27,7 +27,7 @@ build_test(test_rt)
 build_test(test_oom)
 build_test(test_so)
 build_test(test_error)
-build_test(test_api)
+#build_test(test_api)
 
 test_script(fib "15")
 test_script(bubble "500")

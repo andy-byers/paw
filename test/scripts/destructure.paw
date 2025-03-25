@@ -28,10 +28,10 @@ struct Fields {
 
 pub fn test_struct() {
     let Unit = Unit; // no binding created
-    let Fields{first, second: sec, third: (x, y)} = Fields{
-        first: 123, 
-        second: "abc", 
+    let Fields{second: sec, third: (x, y), first} = Fields{
         third: (42, Unit),
+        second: "abc", 
+        first: 123, 
     };
     assert(first == 123);
     assert(sec == "abc");

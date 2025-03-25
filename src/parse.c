@@ -498,6 +498,33 @@ static paw_Bool is_wildcard_path(struct AstPath path)
     return pawS_length(name) == 1 && name->text[0] == '_';
 }
 
+static enum BuiltinKind get_builtin_kind(struct Lex *lex, struct AstIdent ident)
+{
+    if (equals_cstr(lex, ident.name, CSTR_BOOL)) {
+        return BUILTIN_BOOL;
+    } else if (equals_cstr(lex, ident.name, CSTR_INT)) {
+        return BUILTIN_INT;
+    } else if (equals_cstr(lex, ident.name, CSTR_FLOAT)) {
+        return BUILTIN_FLOAT;
+    } else if (equals_cstr(lex, ident.name, CSTR_STR)) {
+        return BUILTIN_STR;
+    } else if (equals_cstr(lex, ident.name, CSTR_LIST)) {
+        return BUILTIN_LIST;
+    } else if (equals_cstr(lex, ident.name, CSTR_MAP)) {
+        return BUILTIN_MAP;
+    } else {
+        return NBUILTINS;
+    }
+}
+
+static paw_Bool is_reserved_path(struct Lex *lex, struct AstPath path)
+{
+    if (path.segments->count > 1)
+        return PAW_FALSE;
+    struct AstIdent ident = K_LIST_FIRST(path.segments).ident;
+    return get_builtin_kind(lex, ident) != NBUILTINS;
+}
+
 static struct AstPat *compound_pat(struct Lex *lex)
 {
     struct SourceLoc start = lex->loc;
@@ -512,8 +539,12 @@ static struct AstPat *compound_pat(struct Lex *lex)
         return NEW_NODE(lex, struct_pat, start, path, fields);
     } else if (is_wildcard_path(path)) {
         return NEW_NODE_0(lex, wildcard_pat, start);
-    } else {
+    } else if (!is_reserved_path(lex, path)) {
         return NEW_NODE(lex, path_pat, start, path);
+    } else {
+        paw_assert(path.segments->count == 1);
+        struct AstIdent ident = K_LIST_FIRST(path.segments).ident;
+        PARSE_ERROR(lex, reserved_identifier, lex->loc, ident.name->text);
     }
 }
 
@@ -1458,21 +1489,23 @@ static struct Annotations *annotations(struct Lex *lex)
             break;
         struct AstIdent ident = parse_ident(lex);
         struct Annotation anno = {
+            .modname = lex->modname,
             .name = ident.name,
+            .span = ident.span,
         };
         if (StringMap_insert(C, names, anno.name, NULL))
-            NAME_ERROR(C, "duplicate annotation '%s'", anno.name->text);
+            PARSE_ERROR(lex, duplicate_annotation, ident.span.start, anno.name->text);
 
         if (test_next(lex, '=')) {
             anno.has_value = PAW_TRUE;
             struct AstExpr *expr = expr0(lex);
             if (!AstIsLiteralExpr(expr))
-                PARSE_ERROR(lex, nonliteral_annotation_value,
-                        expr->hdr.span.start, ident.name->text);
+                PARSE_ERROR(lex, nonliteral_annotation_value, expr->hdr.span.start, ident.name->text);
+
             struct AstLiteralExpr *e = AstGetLiteralExpr(expr);
             if (e->lit_kind != kAstBasicLit)
-                PARSE_ERROR(lex, nonprimitive_annotation_value,
-                        expr->hdr.span.start, ident.name->text);
+                PARSE_ERROR(lex, nonprimitive_annotation_value, expr->hdr.span.start, ident.name->text);
+
             anno.value = e->basic.value;
             anno.kind = e->basic.code;
         }

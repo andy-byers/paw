@@ -51,6 +51,7 @@ enum ErrorKind {
     E_EXPECTED_SELF_PARAMETER,
     E_UNEXPECTED_UNDERSCORE,
     E_EXPECTED_COMMA_SEPARATOR,
+    E_DUPLICATE_ANNOTATION,
     E_NONLITERAL_ANNOTATION_VALUE,
     E_NONPRIMITIVE_ANNOTATION_VALUE,
 
@@ -69,6 +70,24 @@ enum ErrorKind {
     E_MISSING_FUNCTION_BODY,
     E_ITEM_VISIBILITY,
     E_ASSOCIATED_ITEM_VISIBILITY,
+
+    // IR type errors
+    E_MISSING_TRAIT_BOUNDS,
+
+    // compiler errors
+    E_MISSING_EXTERN_VALUE,
+
+    // lookup errors
+    E_INCORRECT_TYPE_ARITY,
+    E_UNEXPECTED_TYPE_ARGUMENTS,
+    E_EXPECTED_TRAIT,
+    E_UNEXPECTED_TRAIT,
+    E_INCORRECT_ITEM_CLASS,
+    E_EXTRA_SEGMENT,
+
+    // trait errors
+    E_MISSING_TRAIT_METHOD,
+    E_TRAIT_METHOD_VISIBILITY_MISMATCH,
 
     // resolver errors
     E_MISSING_VARIANT_ARGS,
@@ -90,6 +109,7 @@ enum ErrorKind {
     E_MISSING_FIELD,
     E_UNKNOWN_FIELD,
     E_UNKNOWN_METHOD,
+    E_UNKNOWN_ASSOCIATED_ITEM,
     E_NOT_A_METHOD,
     E_NOT_CALLABLE,
     E_INCORRECT_ARITY,
@@ -162,6 +182,7 @@ _Noreturn void pawErr_colons_after_underscore(struct Compiler *C, String const *
 _Noreturn void pawErr_expected_self_parameter(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name);
 _Noreturn void pawErr_unexpected_underscore(struct Compiler *C, String const *modname, struct SourceLoc loc);
 _Noreturn void pawErr_expected_comma_separator(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *what);
+_Noreturn void pawErr_duplicate_annotation(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name);
 _Noreturn void pawErr_nonliteral_annotation_value(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name);
 _Noreturn void pawErr_nonprimitive_annotation_value(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name);
 _Noreturn void pawErr_return_outside_function(struct Compiler *C, String const *modname, struct SourceLoc loc);
@@ -184,6 +205,24 @@ _Noreturn void pawErr_missing_function_body(struct Compiler *C, String const *mo
 _Noreturn void pawErr_item_visibility(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *mod, char const *item);
 _Noreturn void pawErr_associated_item_visibility(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name, char const *type);
 
+// IR type errors
+_Noreturn void pawErr_missing_trait_bounds(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name);
+
+// compiler errors
+_Noreturn void pawErr_missing_extern_value(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name);
+
+// lookup errors
+_Noreturn void pawErr_incorrect_type_arity(struct Compiler *C, String const *modname, struct SourceLoc loc, int want, int have);
+_Noreturn void pawErr_unexpected_type_arguments(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *what, char const *name);
+_Noreturn void pawErr_expected_trait(struct Compiler *C, String const *modname, struct SourceLoc loc);
+_Noreturn void pawErr_unexpected_trait(struct Compiler *C, String const *modname, struct SourceLoc loc);
+_Noreturn void pawErr_incorrect_item_class(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *want, char const *have);
+_Noreturn void pawErr_extra_segment(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name);
+
+// trait errors
+_Noreturn void pawErr_missing_trait_method(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name);
+_Noreturn void pawErr_trait_method_visibility_mismatch(struct Compiler *C, String const *modname, struct SourceLoc loc, paw_Bool expected_pub, char const *name);
+
 // resolver errors
 _Noreturn void pawErr_missing_variant_args(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *cons);
 _Noreturn void pawErr_reserved_identifier(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name);
@@ -202,6 +241,7 @@ _Noreturn void pawErr_expected_adt(struct Compiler *C, String const *modname, st
 _Noreturn void pawErr_expected_field_selector(struct Compiler *C, String const *modname, struct SourceLoc loc);
 _Noreturn void pawErr_unknown_field(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name, char const *type);
 _Noreturn void pawErr_unknown_method(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *method, char const *type);
+_Noreturn void pawErr_unknown_associated_item(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *method, char const *type);
 _Noreturn void pawErr_not_a_method(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *type);
 _Noreturn void pawErr_not_callable(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *type);
 _Noreturn void pawErr_incorrect_arity(struct Compiler *C, String const *modname, struct SourceLoc loc, int want, int have);
@@ -236,20 +276,5 @@ _Noreturn void pawErr_too_many_variables(struct Compiler *C, String const *modna
 // code generation errors
 _Noreturn void pawErr_too_far_to_jump(struct Compiler *C, String const *modname, struct SourceLoc loc, int limit);
 _Noreturn void pawErr_too_many_constants(struct Compiler *C, String const *modname, struct SourceLoc loc, int limit);
-
-// lookup errors
-//Q_TYPE_ERROR(Q, seg->ident.span.start, "%s type arguments (expected %d but found %d)", m < n ? "not enough" : "too many", n, m);
-//Q_VALUE_ERROR(Q, decl->hdr.span.start, "item '%s' cannot be accessed from the current module", hir_decl_ident(decl).name->text);
-//Q_NAME_ERROR(Q, ident.span.start, "field '%s' does not exist on type '%d'", ident.name->text, hir_decl_ident(decl).name->text);
-//Q_NAME_ERROR(Q, seg->ident.span.start, "field '%s' does not exist on type '%s'", seg->ident.name->text, base_repr);
-//Q_NAME_ERROR(Q, seg->ident.span.start, "unexpected type arguments on enumerator '%s'", seg->ident.name->text);
-//Q_NAME_ERROR(Q, next->ident.span.start, "TODO: bad thing happened, figure out message");
-//Q_TYPE_ERROR(Q, seg->ident.span.start, "type arguments applied to value '%s'", seg->ident.name->text);
-//Q_TYPE_ERROR(Q, seg->ident.span.start, "'%s' is a trait", seg->ident.name->text);
-//Q_TYPE_ERROR(Q, path->span.start, "extraneous '::%s'", HirSegments_get(segments, Q->index).ident.name->text);
-//Q_TYPE_ERROR(Q, q.seg->ident.span.start, "expected %s but found %s", kind == LOOKUP_VALUE ? "value" : "type", is_type ? "type" : "value");
-//Q_TYPE_ERROR(Q, path->span.start, "expected trait but found local variable");
-//Q_TYPE_ERROR(Q, decl->hdr.span.start, "expected trait");
-//Q_TYPE_ERROR(Q, path->span.start, "extraneous '::%s'", HirSegments_get(segments, Q->index).ident.name->text);
 
 #endif // PAW_ERROR_H

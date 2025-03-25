@@ -2,11 +2,13 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
+#include "error.h"
 #include "ir_type.h"
 #include "map.h"
 #include "unify.h"
 
 #define NEW_NODE(C, T) (T *)P_ALLOC(C, NULL, 0, sizeof(T))
+#define IR_ERROR(C_, Kind_, Modno_, ...) pawErr_##Kind_(C_, ModuleList_get((C_)->modules, Modno_)->name, __VA_ARGS__)
 
 DeclId pawIr_next_did(struct Compiler *C, int mod)
 {
@@ -58,8 +60,10 @@ struct IrType *pawIr_get_def_type(struct Compiler *C, DeclId did)
 
 struct IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *target, String *name)
 {
-    if (target->bounds == NULL)
-        TYPE_ERROR(C, "generic type missing trait bounds");
+    if (target->bounds == NULL) {
+        struct HirGenericDecl *d = HirGetGenericDecl(pawHir_get_decl(C, target->did));
+        IR_ERROR(C, missing_trait_bounds, d->did.modno, d->span.start, d->ident.name->text);
+    }
 
     struct IrType **pbound;
     K_LIST_FOREACH (target->bounds, pbound) {
@@ -68,27 +72,14 @@ struct IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *
         struct HirTraitDecl *trait = HirGetTraitDecl(trait_decl);
 
         struct HirDecl **pmethod;
-        struct HirDecl *last_method = NULL;
-        struct HirTraitDecl *last_trait = NULL;
         K_LIST_FOREACH (trait->methods, pmethod) {
             struct HirDecl *result;
             struct HirFuncDecl *method = HirGetFuncDecl(*pmethod);
             if (pawS_eq(method->ident.name, name)) {
-                result = *pmethod;
-            } else {
-                continue;
+                struct IrType *type = trait->generics == NULL ? GET_NODE_TYPE(C, *pmethod)
+                    : pawP_instantiate_method(C, trait_decl, bound->types, *pmethod);
+                return pawIr_substitute_self(C, *pbound, IR_CAST_TYPE(target), type);
             }
-
-            if (last_method != NULL)
-                NAME_ERROR(C, "found multiple applicable methods");
-
-            last_method = result;
-            last_trait = trait;
-        }
-        if (last_method != NULL) {
-            struct IrType *type = last_trait->generics == NULL ? GET_NODE_TYPE(C, last_method)
-                                                               : pawP_instantiate_method(C, trait_decl, bound->types, last_method);
-            return pawIr_substitute_self(C, *pbound, IR_CAST_TYPE(target), type);
         }
     }
     return NULL;
@@ -107,26 +98,28 @@ void pawIr_validate_type(struct Compiler *C, struct IrType *type)
     }
 
     {
+        struct HirDeclHeader hdr;
         struct HirDeclList *generics;
         struct IrTypeList *types = NULL;
         if (IrIsTraitObj(type)) {
             struct HirDecl *decl = pawHir_get_decl(C, IR_TYPE_DID(type));
             generics = HirGetTraitDecl(decl)->generics;
             types = IrGetTraitObj(type)->types;
+            hdr = decl->hdr;
         } else if (IrIsSignature(type)) {
             struct HirDecl *decl = pawHir_get_decl(C, IR_TYPE_DID(type));
             generics = HirGetFuncDecl(decl)->generics;
             types = IrGetSignature(type)->types;
+            hdr = decl->hdr;
         } else if (IrIsAdt(type)) {
             struct HirDecl *decl = pawHir_get_decl(C, IR_TYPE_DID(type));
             generics = HirGetAdtDecl(decl)->generics;
             types = IrGetAdt(type)->types;
+            hdr = decl->hdr;
         }
-        if (types != NULL && types->count != generics->count) {
-            TYPE_ERROR(C, "%s type arguments (expected %d but found %d)",
-                       types->count < generics->count ? "not enough" : "too many",
-                       types->count, generics->count);
-        }
+        if (types != NULL && types->count != generics->count)
+            IR_ERROR(C, incorrect_type_arity, hdr.did.modno, hdr.span.start,
+                    generics->count, types->count);
     }
 }
 

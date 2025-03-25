@@ -51,11 +51,6 @@
 #define TYPE_ERROR(X, ...) pawE_error(ENV(X), PAW_ETYPE, (X)->line, __VA_ARGS__)
 #define VALUE_ERROR(X, line, ...) pawE_error(ENV(X), PAW_EVALUE, line, __VA_ARGS__)
 
-#define NAME_ERROR_(C_, Modname_, Loc_, ...) pawP_error(C_, PAW_ENAME, Modname_, Loc_, __VA_ARGS__)
-#define SYNTAX_ERROR_(C_, Modname_, Loc_, ...) pawP_error(C_, PAW_ESYNTAX, Modname_, Loc_, __VA_ARGS__)
-#define TYPE_ERROR_(C_, Modname_, Loc_, ...) pawP_error(C_, PAW_ETYPE, Modname_, Loc_, __VA_ARGS__)
-#define VALUE_ERROR_(C_, Modname_, Loc_, ...) pawP_error(C_, PAW_EVALUE, Modname_, Loc_, __VA_ARGS__)
-
 #define GET_NODE_TYPE(C, p) pawIr_get_type(C, (p)->hdr.hid)
 #define SET_NODE_TYPE(C, p, t) pawIr_set_type(C, (p)->hdr.hid, t)
 
@@ -105,6 +100,7 @@ inline static String *pawP_scan_string(struct Compiler *C, Tuple *map, char cons
     return pawP_scan_nstring(C, map, s, strlen(s));
 }
 
+#define IS_SCALAR_TYPE(code) ((code) < BUILTIN_STR)
 #define IS_BASIC_TYPE(code) ((code) <= BUILTIN_STR)
 #define IS_BUILTIN_TYPE(code) ((code) < NBUILTINS)
 
@@ -177,8 +173,6 @@ struct Compiler {
     int def_count;
     int line;
 };
-
-_Noreturn void pawP_error(struct Compiler *C, int kind, String const *modname, struct SourceLoc loc, char const *fmt, ...);
 
 paw_Bool pawP_push_callback(struct Compiler *C, char const *name);
 
@@ -344,6 +338,8 @@ DEFINE_LIST(struct Compiler, ItemList, struct ItemSlot)
 struct Annotation {
     enum BuiltinKind kind : 7;
     paw_Bool has_value : 1;
+    struct SourceSpan span;
+    String *modname;
     String *name;
     Value value;
 };

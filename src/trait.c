@@ -2,9 +2,12 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
+#include "error.h"
 #include "map.h"
 #include "type_folder.h"
 #include "unify.h"
+
+#define TRAIT_ERROR(C_, Kind_, Modno_, ...) pawErr_##Kind_(C_, ModuleList_get((C_)->modules, Modno_)->name, __VA_ARGS__)
 
 static struct IrTypeList *query_traits(struct Compiler *C, struct IrType *type, paw_Bool create_if_missing)
 {
@@ -165,20 +168,21 @@ DEFINE_MAP(struct Compiler, MethodMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str
 
 static void ensure_trait_implemented(struct Compiler *C, struct HirTraitDecl *trait_decl, MethodMap *methods, struct IrType *adt, struct IrType *trait)
 {
+    struct HirAdtDecl *d = HirGetAdtDecl(pawHir_get_decl(C, IR_TYPE_DID(adt)));
+
     struct HirDecl **pdecl;
     K_LIST_FOREACH (trait_decl->methods, pdecl) {
         struct HirFuncDecl *trait_method = HirGetFuncDecl(*pdecl);
         struct IrType *const *pmethod = MethodMap_get(C, methods, trait_method->ident.name);
-        if (pmethod == NULL) {
-            NAME_ERROR(C, "trait method '%s' not implemented",
-                       trait_method->ident.name->text);
-        }
-        struct HirFuncDecl *adt_method = HirGetFuncDecl(
-            pawHir_get_decl(C, IR_TYPE_DID(*pmethod)));
-        if (adt_method->is_pub != trait_method->is_pub) {
-            TYPE_ERROR(C, "visibility mismatch (expected %s visibility on method '%s')",
-                       trait_method->is_pub ? "public" : "private", adt_method->ident.name->text);
-        }
+        if (pmethod == NULL)
+            TRAIT_ERROR(C, missing_trait_method, trait_method->did.modno, trait_method->span.start,
+                    trait_method->ident.name->text);
+
+        struct HirFuncDecl *adt_method = HirGetFuncDecl(pawHir_get_decl(C, IR_TYPE_DID(*pmethod)));
+        if (adt_method->is_pub != trait_method->is_pub)
+            TRAIT_ERROR(C, trait_method_visibility_mismatch, adt_method->did.modno, adt_method->span.start,
+                    trait_method->is_pub, adt_method->ident.name->text);
+
         ensure_methods_match(C, adt, *pmethod, trait, trait_decl, trait_method);
     }
 }
