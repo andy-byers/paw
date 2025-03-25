@@ -4,18 +4,21 @@
 //
 // lookup.c: Resolve HirPath to a DeclId and IrType.
 
+#include "error.h"
 #include "hir.h"
 #include "ir_type.h"
 #include "type_folder.h"
 #include "unify.h"
 
+#define LOOKUP_ERROR(X_, Kind_, ...) pawErr_##Kind_((X_)->C, (X_)->m->name, __VA_ARGS__)
+
 struct QueryState {
     struct Compiler *C;
     struct ModuleInfo *m;
+    struct ModuleInfo *base;
     struct HirAdtDecl *adt;
     struct HirSymtab *symtab;
     paw_Env *P;
-    int base_modno;
     int index;
 };
 
@@ -71,8 +74,7 @@ static void validate_type_args(struct QueryState *Q, struct HirDecl *decl, struc
     int const m = seg->types == NULL ? 0 : seg->types->count;
     int const n = generics == NULL ? 0 : generics->count;
     if (m != n)
-        Q_TYPE_ERROR(Q, seg->ident.span.start, "%s type arguments (expected %d but found %d)",
-                   m < n ? "not enough" : "too many", n, m);
+        LOOKUP_ERROR(Q, incorrect_type_arity, seg->ident.span.start, m, n);
 }
 
 static struct HirSymbol *resolve_global(struct QueryState *Q, struct HirIdent ident)
@@ -90,9 +92,8 @@ struct QueryBase {
 
 static void ensure_accessible(struct QueryState *Q, struct HirDecl *decl)
 {
-    if (!pawHir_is_pub_decl(decl) && module_number(Q->m) != Q->base_modno)
-        Q_VALUE_ERROR(Q, decl->hdr.span.start,
-                "item '%s' cannot be accessed from the current module",
+    if (!pawHir_is_pub_decl(decl) && module_number(Q->m) != module_number(Q->base))
+        LOOKUP_ERROR(Q, item_visibility, decl->hdr.span.start, Q->m->name->text,
                 hir_decl_ident(decl).name->text);
 }
 
@@ -118,7 +119,7 @@ static struct QueryBase find_global_in(struct QueryState *Q, struct ModuleInfo *
             break;
         if (Q->index >= path->segments->count)
             pawE_error(ENV(Q), PAW_ETYPE, -1, "unexpected module name");
-        if (module_number(Q->m) != Q->base_modno)
+        if (module_number(Q->m) != module_number(Q->base))
             pawE_error(ENV(Q), PAW_ESYNTAX, -1, "transitive imports are not supported");
         Q->m = m;
     } while (Q->index < path->segments->count);
@@ -153,8 +154,8 @@ static struct IrType *expect_field(struct QueryState *Q, struct IrType *adt, str
     struct HirDecl *field = pawP_find_field(Q->C, adt, ident.name);
     if (field == NULL) {
         struct HirDecl *decl = pawHir_get_decl(Q->C, IrGetAdt(adt)->did);
-        Q_NAME_ERROR(Q, ident.span.start, "field '%s' does not exist on type '%d'",
-                ident.name->text, hir_decl_ident(decl).name->text);
+        LOOKUP_ERROR(Q, unknown_field, ident.span.start, ident.name->text,
+                hir_decl_ident(decl).name->text);
     }
     return pawP_instantiate_field(Q->C, adt, field);
 }
@@ -162,12 +163,9 @@ static struct IrType *expect_field(struct QueryState *Q, struct IrType *adt, str
 static struct IrType *find_method(struct QueryState *Q, struct IrType *type, struct HirSegment *seg)
 {
     struct IrType *method = pawP_find_method(Q->C, type, seg->ident.name);
-    if (method == NULL) {
-        struct HirDecl *decl = pawHir_get_decl(Q->C, IR_TYPE_DID(type));
-        char const *base_repr = pawIr_print_type(Q->C, type);
-        Q_NAME_ERROR(Q, seg->ident.span.start, "field '%s' does not exist on type '%s'",
-                   seg->ident.name->text, base_repr);
-    }
+    if (method == NULL)
+        return NULL;
+
     pawIr_set_type(Q->C, seg->hid, method);
     seg->res = result_decl(IR_TYPE_DID(method));
     return method;
@@ -176,7 +174,8 @@ static struct IrType *find_method(struct QueryState *Q, struct IrType *type, str
 static struct IrType *find_enumerator(struct QueryState *Q, struct IrType *type, struct HirSegment *seg)
 {
     if (seg->types != NULL)
-        Q_NAME_ERROR(Q, seg->ident.span.start, "unexpected type arguments on enumerator '%s'", seg->ident.name->text);
+        LOOKUP_ERROR(Q, unexpected_type_arguments, seg->ident.span.start,
+                "enumerator", seg->ident.name->text);
     struct HirDecl *field = pawP_find_field(Q->C, type, seg->ident.name);
     if (field == NULL)
         return NULL;
@@ -192,7 +191,8 @@ static struct IrType *find_assoc_item(struct QueryState *Q, struct IrType *type,
     if (HirIsGenericDecl(prev)) {
         struct IrType *method = pawIr_resolve_trait_method(Q->C, IrGetGeneric(type), next->ident.name);
         if (method == NULL)
-            Q_NAME_ERROR(Q, next->ident.span.start, "TODO: bad thing happened, figure out message");
+            LOOKUP_ERROR(Q, unknown_method, next->ident.span.start, next->ident.name->text,
+                    hir_decl_ident(prev).name->text);
         pawIr_set_type(Q->C, next->hid, method);
         next->res = result_decl(IR_TYPE_DID(method));
         return method;
@@ -201,7 +201,13 @@ static struct IrType *find_assoc_item(struct QueryState *Q, struct IrType *type,
         if (result != NULL)
             return result;
     }
-    return find_method(Q, type, next);
+    struct IrType *result = find_method(Q, type, next);
+    if (result == NULL) {
+        struct HirDecl *decl = pawHir_get_decl(Q->C, IR_TYPE_DID(type));
+        char const *base_repr = pawIr_print_type(Q->C, type);
+        LOOKUP_ERROR(Q, unknown_associated_item, next->ident.span.start, next->ident.name->text, base_repr);
+    }
+    return result;
 }
 
 static struct IrTypeList *maybe_generalize_adt(struct QueryState *Q, struct HirDecl *decl, struct IrTypeList *types)
@@ -227,7 +233,8 @@ static struct QueryBase find_local(struct QueryState *Q, struct HirSymtab *symta
             struct HirSymbol symbol = HirScope_get(scope, index);
             if (symbol.res.kind == HIR_RESULT_LOCAL) {
                 if (seg->types != NULL)
-                    Q_TYPE_ERROR(Q, seg->ident.span.start, "type arguments applied to value '%s'", seg->ident.name->text);
+                    LOOKUP_ERROR(Q, unexpected_type_arguments, seg->ident.span.start,
+                            "value", seg->ident.name->text);
                 type = pawIr_get_type(Q->C, symbol.res.hid);
             } else {
                 struct HirDecl *decl = pawHir_get_decl(Q->C, symbol.res.did);
@@ -303,7 +310,7 @@ static IrType *result_type(struct QueryState *Q, struct HirSegment *seg, IrTypeL
     IrType *inst;
     switch (HIR_KINDOF(decl)) {
         case kHirTraitDecl:
-            Q_TYPE_ERROR(Q, seg->ident.span.start, "'%s' is a trait", seg->ident.name->text);
+            LOOKUP_ERROR(Q, unexpected_trait, seg->ident.span.start);
         case kHirAdtDecl:
             types = maybe_generalize_adt(Q, decl, types);
             // (fallthrough)
@@ -347,12 +354,12 @@ struct IrType *lookup(struct QueryState *Q, struct ModuleInfo *m, struct HirSymt
         ++Q->index;
     }
     if (Q->index < segments->count)
-        Q_TYPE_ERROR(Q, path->span.start, "extraneous '::%s'",
+        LOOKUP_ERROR(Q, extra_segment, path->span.start,
                 HirSegments_get(segments, Q->index).ident.name->text);
 
     paw_Bool const is_type = hir_is_type(Q->C, q.seg->res);
     if (kind != LOOKUP_EITHER && is_type != (kind == LOOKUP_TYPE))
-        Q_TYPE_ERROR(Q, q.seg->ident.span.start, "expected %s but found %s",
+        LOOKUP_ERROR(Q, incorrect_item_class, q.seg->ident.span.start,
                    kind == LOOKUP_VALUE ? "value" : "type",
                    is_type ? "type" : "value");
 
@@ -362,9 +369,9 @@ struct IrType *lookup(struct QueryState *Q, struct ModuleInfo *m, struct HirSymt
 struct IrType *pawP_lookup(struct Compiler *C, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirPath *path, enum LookupKind kind, paw_Bool is_annotation)
 {
     struct QueryState Q = {
-        .base_modno = module_number(m),
         .symtab = symtab,
         .P = ENV(C),
+        .base = m,
         .m = m,
         .C = C,
     };
@@ -381,15 +388,15 @@ struct IrType *lookup_trait(struct QueryState *Q, struct ModuleInfo *root, struc
         return NULL;
 
     struct HirResult const res = q.seg->res;
-    if (res.kind != HIR_RESULT_DECL)
-        Q_TYPE_ERROR(Q, path->span.start, "expected trait but found local variable");
+    paw_assert(res.kind == HIR_RESULT_DECL);
 
     struct HirDecl *decl = pawHir_get_decl(Q->C, res.did);
     if (!HirIsTraitDecl(decl))
-        Q_TYPE_ERROR(Q, decl->hdr.span.start, "expected trait");
+        LOOKUP_ERROR(Q, expected_trait, decl->hdr.span.start);
 
     if (Q->index < segments->count)
-        Q_TYPE_ERROR(Q, path->span.start, "extraneous '::%s'", HirSegments_get(segments, Q->index).ident.name->text);
+        LOOKUP_ERROR(Q, extra_segment, path->span.start,
+                HirSegments_get(segments, Q->index).ident.name->text);
     validate_type_args(Q, decl, q.seg);
 
     if (q.seg->types == NULL)
@@ -402,9 +409,9 @@ struct IrType *lookup_trait(struct QueryState *Q, struct ModuleInfo *root, struc
 struct IrType *pawP_lookup_trait(struct Compiler *C, struct ModuleInfo *m, struct HirSymtab *symtab, struct HirPath *path)
 {
     struct QueryState Q = {
-        .base_modno = module_number(m),
         .symtab = symtab,
         .P = ENV(C),
+        .base = m,
         .m = m,
         .C = C,
     };

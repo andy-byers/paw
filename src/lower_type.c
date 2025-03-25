@@ -2,9 +2,12 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
+#include "error.h"
 #include "hir.h"
 #include "ir_type.h"
 #include "unify.h"
+
+#define LOWERING_ERROR(L_, Kind_, ...) pawErr_##Kind_((L_)->C, (L_)->m->name, __VA_ARGS__)
 
 struct LowerType {
     struct HirSymtab *symtab;
@@ -32,8 +35,7 @@ static struct IrType *lower_path_type(struct LowerType *L, struct HirPathType *t
 {
     struct IrType *result = pawP_lookup(L->C, L->m, L->symtab, &t->path, LOOKUP_TYPE, PAW_TRUE);
     if (result == NULL)
-        NAME_ERROR_(L->C, L->m->name, t->span.start, "invalid path '%s'",
-                pawHir_print_path(L->C, &t->path));
+        LOWERING_ERROR(L, unknown_path, t->span.start, pawHir_print_path(L->C, &t->path));
     return result;
 }
 

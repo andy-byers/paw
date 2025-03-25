@@ -6,6 +6,7 @@
 #include "api.h"
 #include "ast.h"
 #include "debug.h"
+#include "error.h"
 #include "gc.h"
 #include "hir.h"
 #include "ir_type.h"
@@ -14,6 +15,8 @@
 #include "type.h"
 #include "type_folder.h"
 #include "unify.h"
+
+#define COMPILER_ERROR(C_, Kind_, Modname_, ...) pawErr_##Kind_(C_, Modname_, __VA_ARGS__)
 
 // All paw language keywords
 //
@@ -628,8 +631,6 @@ paw_Bool pawP_check_extern(struct Compiler *C, struct Annotations *annos, struct
     struct Annotation *pa;
     K_LIST_FOREACH (annos, pa) {
         if (pawS_eq(pa->name, CSTR(C, CSTR_EXTERN))) {
-            if (pa->has_value)
-                VALUE_ERROR(C, -1 /*TODO*/, "value not supported for 'extern' annotation");
             *panno = *pa;
             return PAW_TRUE;
         }
@@ -646,7 +647,8 @@ Value pawP_get_extern_value(struct Compiler *C, String *name)
 
     Value const *pval = pawMap_get(P, symbols, P2V(name));
     if (pval == NULL)
-        NAME_ERROR(C, "missing value for symbol '%s'", name->text);
+        COMPILER_ERROR(C, missing_extern_value, SCAN_STRING(C, "TODO"), (struct SourceLoc){-1}, name->text);
+
     paw_pop(P, 1); // pop 'symbols'
     return *pval;
 }
@@ -728,28 +730,3 @@ paw_Bool pawP_push_callback(struct Compiler *C, char const *name)
     paw_push_string(P, name);
     return paw_map_get(P, PAW_REGISTRY_INDEX) == 0;
 }
-
-static void add_location(paw_Env *P, Buffer *print, String const *modname, struct SourceLoc loc)
-{
-    pawL_add_nstring(P, print, modname->text, modname->length);
-    pawL_add_char(P, print, ':');
-    pawSrc_add_location(P, print, loc);
-    pawL_add_string(P, print, ": ");
-}
-
-_Noreturn void pawP_error(struct Compiler *C, int kind, String const *modname, struct SourceLoc loc, char const *fmt, ...)
-{
-    Buffer print;
-    paw_Env *P = ENV(C);
-    pawL_init_buffer(P, &print);
-    add_location(P, &print, C->modname, loc);
-
-    va_list arg;
-    va_start(arg, fmt);
-    pawL_add_vfstring(P, &print, fmt, arg);
-    va_end(arg);
-
-    pawL_push_result(P, &print);
-    pawC_throw(P, kind);
-}
-
