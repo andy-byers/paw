@@ -196,11 +196,6 @@ static struct MirBlockData *current_bb_data(struct FunctionState *fs)
 
 static MirRegister new_register(struct FunctionState *fs, struct IrType *type)
 {
-    if (pawS_eq(fs->mir->name, SCAN_STRING(fs->L->C, "test"))){
-puts("hi");
-    }
-
-
     struct MirRegisterDataList *regs = fs->mir->registers;
     MirRegisterDataList_push(fs->mir, regs, (struct MirRegisterData){
                                              .type = type,
