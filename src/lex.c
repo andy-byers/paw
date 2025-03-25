@@ -61,7 +61,7 @@ static void pop_braces(struct Lex *X)
 
 static void push_braces(struct Lex *X)
 {
-    // count the opening '\('
+    // count the opening '\{'
     IntStack_push(X, X->parens, 1);
 }
 
@@ -257,8 +257,15 @@ static int get_codepoint(struct Lex *X)
            | HEXVAL(c[3]);
 }
 
+<<<<<<< HEAD
 static struct Token consume_string_part(struct Lex *X, struct SourceLoc start, char quote)
 {
+=======
+static struct Token consume_string(struct Lex *X, struct SourceLoc start)
+{
+    char const quote = next(X);
+
+>>>>>>> 79ff17c (Add more error functions)
     for (;;) {
     handle_ascii:
         if (ISASCIIEND(*X->ptr))
@@ -266,6 +273,10 @@ static struct Token consume_string_part(struct Lex *X, struct SourceLoc start, c
         SAVE_AND_NEXT(X);
     }
 
+<<<<<<< HEAD
+=======
+    // TODO: truncated strings
+>>>>>>> 79ff17c (Add more error functions)
     if (test_next(X, '\\')) {
         char const c = next(X);
         switch (c) {
@@ -334,6 +345,7 @@ static struct Token consume_string_part(struct Lex *X, struct SourceLoc start, c
                 LEX_ERROR(X, invalid_escape, X->loc, c);
         }
     } else if (test_next(X, quote)) {
+<<<<<<< HEAD
         pop_state(X);
         return make_string(X, start, TK_STRING_TEXT);
     } else if (ISNEWLINE(*X->ptr)) {
@@ -341,6 +353,12 @@ static struct Token consume_string_part(struct Lex *X, struct SourceLoc start, c
         SAVE_AND_NEXT(X);
     } else if (test(X, '\0')) {
         LEX_ERROR(X, unexpected_symbol, X->loc);
+=======
+        return make_string(X, start, TK_STRING);
+    } else if (ISNEWLINE(*X->ptr)) {
+        // unescaped newlines allowed in string literals
+        SAVE_AND_NEXT(X);
+>>>>>>> 79ff17c (Add more error functions)
     } else {
         consume_utf8(X);
     }
@@ -545,6 +563,7 @@ static void skip_whitespace(struct Lex *X)
 
 static struct Token advance(struct Lex *X)
 {
+<<<<<<< HEAD
 #define T(kind) make_token((TokenKind)kind, start, X->loc)
 try_again:
     if (X->ptr == X->end)
@@ -558,19 +577,36 @@ try_again:
 
     // cast to avoid sign extension
     struct Token token = T((uint8_t)*X->ptr);
+=======
+#define T(kind) make_token(CAST(TokenKind, kind), start, X->loc)
+try_again:
+    if (X->ptr == X->end)
+        return make_token(TK_END, X->loc, X->loc);
+    skip_whitespace(X);
+
+    struct SourceLoc start = X->loc;
+
+    // cast to avoid sign extension
+    struct Token token = T(CAST(uint8_t, *X->ptr));
+>>>>>>> 79ff17c (Add more error functions)
     X->dm->scratch.count = 0;
     switch (token.kind) {
         case '\'':
         case '"':
+<<<<<<< HEAD
             push_string_state(X, *X->ptr);
             token = consume_string_part(X, start, next(X));
             break;
         case '{':
             next(X);
             adjust_braces(X, 1);
+=======
+            token = consume_string(X, start);
+>>>>>>> 79ff17c (Add more error functions)
             break;
         case '}':
             next(X);
+<<<<<<< HEAD
             adjust_braces(X, -1);
             if (peek_braces(X) == 0) {
                 // handle string state transition
@@ -578,6 +614,8 @@ try_again:
                 pop_braces(X);
                 return T(TK_STRING_EXPR_CLOSE);
             }
+=======
+>>>>>>> 79ff17c (Add more error functions)
             break;
         case '=':
             next(X);
@@ -739,11 +777,16 @@ void pawX_set_source(struct Lex *X, paw_Reader input, void *ud)
     X->ud = ud;
     X->input = input;
 
+<<<<<<< HEAD
     X->states = CharStack_new(X);
     X->parens = IntStack_new(X);
 
     read_source(X);
     push_normal_state(X);
+=======
+    read_source(X);
+    struct Token t2;
+>>>>>>> 79ff17c (Add more error functions)
     pawX_next(X); // load first token
 }
 

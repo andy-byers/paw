@@ -416,6 +416,7 @@ _Noreturn void pawErr_missing_trait_bounds(struct Compiler *C, String const *mod
             NULL);
 }
 
+<<<<<<< HEAD
 _Noreturn void pawErr_unsatisfied_trait_bounds(struct Compiler *C, String const *modname, struct SourceLoc loc)
 {
     throw(C, E_UNSATISFIED_TRAIT_BOUNDS, modname, loc,
