@@ -184,6 +184,10 @@ inline static IrType *pawIr_new_trait_obj(struct Compiler *C, DeclId did, struct
     return t;
 }
 
+struct IrLayout {
+    int size;
+};
+
 struct IrParam {
     String *name;
     IrType *type;
@@ -324,6 +328,8 @@ DEFINE_MAP(struct Compiler, RttiMap, pawP_alloc, pawIr_type_hash, pawIr_type_equ
 
 void pawIr_validate_type(struct Compiler *C, IrType *type);
 IrType *pawIr_substitute_self(struct Compiler *C, IrType *trait, IrType *adt, IrType *method);
+
+struct IrLayout pawIr_compute_layout(struct Compiler *C, struct IrType *type);
 
 static IrTypeList *ir_signature_types(IrType *type)
 {
