@@ -55,8 +55,6 @@ pub fn main(args: [str]) {
     let a = matgen(n);
     let b = matgen(n);
     let c = matmul(n, a, b);
-    let r = c[n / 2][n / 2];
 
-    print(r.to_string());
-    print('\n');
+    print('\{c[n / 2][n / 2]}\n');
 }

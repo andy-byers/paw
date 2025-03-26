@@ -237,11 +237,13 @@ static void test_name_too_long(void)
     test_compiler_status(E_NAME_TOO_LONG, "name_too_long", "", long_name);
 }
 
-static void test_negative_minimum_integer(void)
+// TODO: currently fails because paw_Int overflows before '-' can be applied. need to handle as special case
+// TODO: once this works, remove this function and add to match.paw or something
+static void test_minimum_integer(void)
 {
     char buffer[256];
     snprintf(buffer, sizeof(buffer), "match 42 {%" PRId64 " => {}}", PAW_INT_MIN);
-    test_compiler_status(E_INTEGER_OUT_OF_RANGE, "negative_minimum_integer", "", buffer);
+    test_compiler_status(E_INTEGER_OUT_OF_RANGE, "minimum_integer", "", buffer);
 }
 
 static void test_syntax_error(void)
@@ -329,8 +331,9 @@ static void test_syntax_error(void)
     test_name_too_long();
     test_compiler_status(E_UNEXPECTED_VISIBILITY_QUALIFIER, "unexpected_visibility_qualifier", "pub use io;", "");
     test_compiler_status(E_EMPTY_TYPE_LIST, "empty_type_list", "pub fn f<>() {}", "");
-    test_negative_minimum_integer();
+    test_minimum_integer();
     test_compiler_status(E_INVALID_LITERAL_NEGATION, "invalid_literal_negation", "", "match 'abc' {-'abc' => {}}");
+    test_compiler_status(E_NONLITERAL_PATTERN, "interpolated_pattern", "", "match 'abc123' {'abc\\{123}' => {}}");
     test_compiler_status(E_INVALID_SELECTOR, "invalid_selector", "", "let x = 'abc'.1e-2;");
     test_compiler_status(E_EMPTY_VARIANT_FIELD_LIST, "empty_variant_field_list", "enum E {X()}", "");
     test_compiler_status(E_FUNCTION_TYPE_DECL, "function_type_decl", "type F = fn();", "");
@@ -339,6 +342,10 @@ static void test_syntax_error(void)
     test_compiler_status(E_COLONS_AFTER_UNDERSCORE, "colons_after_underscore", "", "let x: _::X;");
     test_compiler_status(E_EXPECTED_COMMA_SEPARATOR, "expected_comma_separator", "struct X {a: int b: int}", "");
     test_compiler_status(E_NONPRIMITIVE_ANNOTATION_VALUE, "nonprimitive_annotation_value", "#[anno=(1,)] fn f() {}", "");
+
+    test_compiler_status(E_EXPECTED_SYMBOL, "missing_quote", "", "let s = '");
+    test_compiler_status(E_EXPECTED_SYMBOL, "missing_quote", "", "let s = '\";");
+    test_compiler_status(E_EXPECTED_EXPRESSION, "unpaired_curly_close", "", "let s = };");
 }
 
 static void test_closure_error(void)
@@ -762,6 +769,17 @@ static void test_deferred_init(void)
     test_compiler_status(E_USE_BEFORE_INITIALIZATION, "uninit_if_else", "", "let a; if true {a = 1;} else if true {return;} else {} let b = a;");
 }
 
+static void test_interpolation(void)
+{
+    test_compiler_status(E_EXPECTED_SYMBOL, "missing_close_braces", "", "let s = '\\{{123}';");
+    test_compiler_status(E_EXPECTED_EXPRESSION, "extra_close_braces", "", "let s = '\\{103 +} 20}';");
+    test_compiler_status(E_EXPECTED_SYMBOL, "mismatched_braces", "", "let s = '\\{{{100} + {20 + {3}}}';");
+    test_compiler_status(E_EXPECTED_DELIMITER, "mismatched_braces_nested", "", "let s = '\\{{\"abc\" + \"\\{{{100} + {20 + {3}})\"}}';");
+    test_compiler_status(E_EXPECTED_SYMBOL, "missing_expr_close", "", "let s = 'abc\\{123';");
+    test_compiler_status(E_EXPECTED_SYMBOL, "only_expr_open", "", "let s = '\\{';");
+    test_compiler_status(E_EXPECTED_EXPRESSION, "empty_expr", "", "let s = '\\{}';");
+}
+
 int main(void)
 {
     test_syntax_error();
@@ -784,4 +802,5 @@ int main(void)
     test_trait_error();
     test_destructuring();
     test_deferred_init();
+    test_interpolation();
 }

@@ -70,3 +70,13 @@ pub fn test_or() {
     assert(a == 4);
     assert(b == 5);
 }
+
+pub fn test_swap() {
+    let (a, b) = (1, 2);
+    assert(a == 1);
+    assert(b == 2);
+
+    let (b, a) = (a, b);
+    assert(a == 2);
+    assert(b == 1);
+}

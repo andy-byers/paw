@@ -40,11 +40,10 @@ fn nq_solve(n: int) -> int {
 }
 
 pub fn main(args: [str]) {
-    let n = 5;
-    if #args > 1 {
-        n = args[1].parse_int(10);
-    }
-    let m = nq_solve(n);
-    print(m.to_string());
-    print('\n');
+    let n = if #args > 1 {
+        args[1].parse_int(10)
+    } else {
+        5
+    };
+    print('\{nq_solve(n)}\n');
 }

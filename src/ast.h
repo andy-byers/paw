@@ -34,6 +34,7 @@
     X(ParenExpr)         \
     X(LiteralExpr)       \
     X(LogicalExpr)       \
+    X(StringExpr)        \
     X(PathExpr)          \
     X(ChainExpr)         \
     X(UnOpExpr)          \
@@ -523,6 +524,22 @@ struct AstLiteralExpr {
     };
 };
 
+struct AstStringPart {
+    paw_Bool is_str : 1;
+    union {
+        struct AstExpr *expr;
+        struct {
+            struct SourceSpan span;
+            Value value;
+        } str;
+    };
+};
+
+struct AstStringExpr {
+    AST_EXPR_HEADER;
+    struct AstStringList *parts;
+};
+
 struct AstClosureExpr {
     AST_EXPR_HEADER;
     struct AstDeclList *params;
@@ -803,6 +820,17 @@ inline static struct AstExpr *pawAst_new_binop_expr(struct Ast *ast, struct Sour
         .op = op,
         .lhs = lhs,
         .rhs = rhs,
+    };
+    return e;
+}
+
+inline static struct AstExpr *pawAst_new_string_expr(struct Ast *ast, struct SourceSpan span, struct AstStringList *parts)
+{
+    struct AstExpr *e = pawAst_new_expr(ast);
+    e->StringExpr_ = (struct AstStringExpr){
+        .span = span,
+        .kind = kAstStringExpr,
+        .parts = parts,
     };
     return e;
 }
@@ -1313,6 +1341,7 @@ DEFINE_LIST(struct Ast, AstExprList, struct AstExpr *)
 DEFINE_LIST(struct Ast, AstTypeList, struct AstType *)
 DEFINE_LIST(struct Ast, AstStmtList, struct AstStmt *)
 DEFINE_LIST(struct Ast, AstPatList, struct AstPat *)
+DEFINE_LIST(struct Ast, AstStringList, struct AstStringPart)
 DEFINE_LIST(struct Ast, AstSegments, struct AstSegment)
 DEFINE_LIST(struct Ast, AstBoundList, struct AstGenericBound)
 

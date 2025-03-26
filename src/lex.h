@@ -38,7 +38,9 @@ enum MultiChar {
 
     // Variables and literals:
     TK_NAME,
-    TK_STRING,
+    TK_STRING_TEXT,
+    TK_STRING_EXPR_OPEN,
+    TK_STRING_EXPR_CLOSE,
     TK_INTEGER,
     TK_FLOAT,
 
@@ -88,6 +90,10 @@ struct Lex {
     char const *ptr;
     char const *end;
 
+    // state for handling string interpolation
+    struct CharStack *states;
+    struct IntStack *parens;
+
     struct DynamicMem *dm;
     struct Token t0, t, t2;
 
@@ -106,6 +112,10 @@ struct Lex {
     int param_index;
     paw_Bool in_impl;
 };
+
+#define STATE_NORMAL '\0'
+DEFINE_LIST(struct Lex, CharStack, char)
+DEFINE_LIST(struct Lex, IntStack, int)
 
 String *pawX_scan_string(struct Lex *lex, char const *s, size_t n);
 void pawX_set_source(struct Lex *lex, paw_Reader input, void *ud);
