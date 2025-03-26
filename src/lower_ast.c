@@ -492,6 +492,36 @@ static struct HirExpr *LowerLiteralExpr(struct LowerAst *L, struct AstLiteralExp
     }
 }
 
+// TODO: eventually create a new HIR node and corresponding operation HirConcat/OP_CONCAT and
+//       use that here. Using operator '+' is wasteful due to multiple intermediate allocations.
+static struct HirExpr *LowerStringExpr(struct LowerAst *L, struct AstStringExpr *e)
+{
+    int index;
+    struct HirExpr *result;
+    struct AstStringPart const *ppart;
+    K_LIST_ENUMERATE(e->parts, index, ppart) {
+        struct HirExpr *next;
+        if (ppart->is_str) {
+            next = pawHir_new_basic_lit(L->hir, ppart->str.span, ppart->str.value, BUILTIN_STR);
+        } else {
+            struct HirExpr *expr = lower_expr(L, ppart->expr);
+            struct HirIdent ident = {
+                .span = expr->hdr.span,
+                .name = SCAN_STRING(L->C, "to_string"),
+            };
+            struct HirExpr *method = pawHir_new_name_selector(L->hir, ident.span, expr, ident);
+            struct HirExprList *args = HirExprList_new(L->hir);
+            next = pawHir_new_call_expr(L->hir, ppart->expr->hdr.span, method, args);
+        }
+        if (index > 0) {
+            result = pawHir_new_binop_expr(L->hir, next->hdr.span, result, next, BINARY_ADD);
+        } else {
+            result = next;
+        }
+    }
+    return result;
+}
+
 static struct HirDecl *LowerFuncDecl(struct LowerAst *L, struct AstFuncDecl *d)
 {
     struct HirIdent ident = lower_ident(L, d->ident);

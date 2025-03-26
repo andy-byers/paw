@@ -38,9 +38,56 @@ static void increment_column(struct Lex *X)
     ++X->loc.column;
 }
 
+static void adjust_braces(struct Lex *X, int adjust)
+{
+    if (X->parens->count == 0) return;
+    int const adjusted = K_LIST_LAST(X->parens) + adjust;
+    // NOTE: might have unpaired parenthesis due to a syntax error, hence the use of "PAW_MAX"
+    K_LIST_LAST(X->parens) = PAW_MAX(adjusted, 0);
+}
+
+static int peek_braces(struct Lex *X)
+{
+    if (X->parens->count > 0)
+        return K_LIST_LAST(X->parens);
+    return -1;
+}
+
+static void pop_braces(struct Lex *X)
+{
+    paw_assert(X->parens->count > 0);
+    IntStack_pop(X->parens);
+}
+
+static void push_braces(struct Lex *X)
+{
+    // count the opening '\('
+    IntStack_push(X, X->parens, 1);
+}
+
+static char peek_state(struct Lex *X)
+{
+    paw_assert(X->states->count > 0);
+    return K_LIST_LAST(X->states);
+}
+
+static char pop_state(struct Lex *X)
+{
+    paw_assert(X->states->count > 0);
+    char const state = peek_state(X);
+    CharStack_pop(X->states);
+    return state;
+}
+
 static void push_normal_state(struct Lex *X)
 {
+    CharStack_push(X, X->states, '\0');
+}
 
+static void push_string_state(struct Lex *X, char quote)
+{
+    paw_assert(quote == '\'' || quote == '"');
+    CharStack_push(X, X->states, quote);
 }
 
 static void save(struct Lex *X, char c)
@@ -210,10 +257,8 @@ static int get_codepoint(struct Lex *X)
            | HEXVAL(c[3]);
 }
 
-static struct Token consume_string(struct Lex *X, struct SourceLoc start)
+static struct Token consume_string_part(struct Lex *X, struct SourceLoc start, char quote)
 {
-    char const quote = next(X);
-
     for (;;) {
     handle_ascii:
         if (ISASCIIEND(*X->ptr))
@@ -221,7 +266,6 @@ static struct Token consume_string(struct Lex *X, struct SourceLoc start)
         SAVE_AND_NEXT(X);
     }
 
-    // TODO: truncated strings
     if (test_next(X, '\\')) {
         char const c = next(X);
         switch (c) {
@@ -252,6 +296,13 @@ static struct Token consume_string(struct Lex *X, struct SourceLoc start)
             case 't':
                 save(X, '\t');
                 break;
+            case '{': {
+                // found start of string expression
+                struct Token token = make_string(X, start, TK_STRING_EXPR_OPEN);
+                push_braces(X);
+                push_normal_state(X);
+                return token;
+            }
             case 'u': {
                 struct SourceLoc saved = X->loc;
                 unsigned const codepoint = get_codepoint(X);
@@ -283,10 +334,13 @@ static struct Token consume_string(struct Lex *X, struct SourceLoc start)
                 LEX_ERROR(X, invalid_escape, X->loc, c);
         }
     } else if (test_next(X, quote)) {
-        return make_string(X, start, TK_STRING);
+        pop_state(X);
+        return make_string(X, start, TK_STRING_TEXT);
     } else if (ISNEWLINE(*X->ptr)) {
         // unescaped newlines allowed in string literals
         SAVE_AND_NEXT(X);
+    } else if (test(X, '\0')) {
+        LEX_ERROR(X, unexpected_symbol, X->loc);
     } else {
         consume_utf8(X);
     }
@@ -491,26 +545,39 @@ static void skip_whitespace(struct Lex *X)
 
 static struct Token advance(struct Lex *X)
 {
-#define T(kind) make_token(CAST(TokenKind, kind), start, X->loc)
+#define T(kind) make_token((TokenKind)kind, start, X->loc)
 try_again:
     if (X->ptr == X->end)
         return make_token(TK_END, X->loc, X->loc);
-    skip_whitespace(X);
 
+    if (peek_state(X) != STATE_NORMAL)
+        return consume_string_part(X, X->loc, peek_state(X));
+
+    skip_whitespace(X);
     struct SourceLoc start = X->loc;
 
     // cast to avoid sign extension
-    struct Token token = T(CAST(uint8_t, *X->ptr));
+    struct Token token = T((uint8_t)*X->ptr);
     X->dm->scratch.count = 0;
     switch (token.kind) {
         case '\'':
         case '"':
-            token = consume_string(X, start);
+            push_string_state(X, *X->ptr);
+            token = consume_string_part(X, start, next(X));
             break;
-        case ')':
-        case ']':
+        case '{':
+            next(X);
+            adjust_braces(X, 1);
+            break;
         case '}':
             next(X);
+            adjust_braces(X, -1);
+            if (peek_braces(X) == 0) {
+                // handle string state transition
+                pop_state(X);
+                pop_braces(X);
+                return T(TK_STRING_EXPR_CLOSE);
+            }
             break;
         case '=':
             next(X);
@@ -672,7 +739,11 @@ void pawX_set_source(struct Lex *X, paw_Reader input, void *ud)
     X->ud = ud;
     X->input = input;
 
+    X->states = CharStack_new(X);
+    X->parens = IntStack_new(X);
+
     read_source(X);
-    struct Token t2;
+    push_normal_state(X);
     pawX_next(X); // load first token
 }
+

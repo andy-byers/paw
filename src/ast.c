@@ -384,6 +384,11 @@ static void dump_expr(Printer *P, struct AstExpr *expr)
             }
             break;
         }
+        case kAstStringExpr: {
+            struct AstStringExpr *e = AstGetStringExpr(expr);
+            // TODO
+            break;
+        }
         case kAstUnOpExpr: {
             struct AstUnOpExpr *e = AstGetUnOpExpr(expr);
             DUMP_FMT(P, "op: %d\n", e->op);

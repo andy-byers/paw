@@ -267,6 +267,59 @@ static void semicolon(struct Lex *lex, char const *where)
     }
 }
 
+static void add_string_part(struct Lex *lex, struct AstStringList *parts, struct SourceLoc start, Value str)
+{
+    AstStringList_push(lex->ast, parts, (struct AstStringPart){
+                .is_str = PAW_TRUE,
+                .str.span = span_from(lex, start),
+                .str.value = str,
+            });
+}
+
+static void add_expr_part(struct Lex *lex, struct AstStringList *parts, struct AstExpr *expr)
+{
+    AstStringList_push(lex->ast, parts, (struct AstStringPart){
+                .is_str = PAW_FALSE,
+                .expr = expr,
+            });
+}
+
+static struct AstExpr *string_expr(struct Lex *lex, struct SourceLoc start, Value str)
+{
+    struct AstStringList *parts = AstStringList_new(lex->ast);
+    add_string_part(lex, parts, start, str);
+    return NEW_NODE(lex, string_expr, start, parts);
+}
+
+// Parse an interpolated string
+//
+// For example, the string "abc${123}" results in the following tokens:
+//
+//      index | kind              | payload
+//     -------|-------------------|---------
+//      1     | STRING_EXPR_OPEN  | "abc"
+//      2     | INTEGER           | 123
+//      3     | STRING_EXPR_CLOSE | -
+//      4     | STRING_TEXT       |  ""
+//
+static struct AstExpr *string_interp_expr(struct Lex *lex, struct SourceLoc start)
+{
+    struct AstStringList *parts = AstStringList_new(lex->ast);
+    do {
+        if (test(lex, TK_END))
+            break;
+        Value const str = lex->t.value;
+        skip(lex);
+
+        add_string_part(lex, parts, start, str);
+        add_expr_part(lex, parts, expr0(lex));
+        check_next(lex, TK_STRING_EXPR_CLOSE);
+    } while (test(lex, TK_STRING_EXPR_OPEN));
+    check(lex, TK_STRING_TEXT);
+    add_string_part(lex, parts, start, lex->t.value);
+    return NEW_NODE(lex, string_expr, start, parts);
+}
+
 static struct AstIdent parse_ident(struct Lex *lex)
 {
     check(lex, TK_NAME);
@@ -293,6 +346,7 @@ static struct AstIdent parse_toplevel_ident(struct Lex *lex)
     return ident;
 }
 
+// TODO: accept source loc as arg
 static struct AstExpr *new_basic_lit(struct Lex *lex, Value value, paw_Type code)
 {
     struct SourceLoc start = lex->loc;
@@ -560,6 +614,7 @@ static struct AstPat *tuple_pat(struct Lex *lex)
 // TODO: handle range patterns
 static struct AstExpr *literal_expr(struct Lex *lex)
 {
+    struct SourceLoc const loc = lex->loc;
     paw_Bool const negative = test_next(lex, '-');
 
     struct AstExpr *expr;
@@ -576,17 +631,18 @@ static struct AstExpr *literal_expr(struct Lex *lex)
         case TK_FLOAT:
             expr = new_basic_lit(lex, lex->t.value, BUILTIN_FLOAT);
             break;
-        case TK_STRING: {
-            Value const v = lex->t.value;
-            expr = new_basic_lit(lex, v, BUILTIN_STR);
+        case TK_STRING_TEXT:
+            expr = string_expr(lex, loc, lex->t.value);
             break;
-        }
         default:
             PARSE_ERROR(lex, nonliteral_pattern, lex->loc);
     }
     skip(lex); // literal token
 
     if (negative) {
+        if (AstIsStringExpr(expr))
+            PARSE_ERROR(lex, invalid_literal_negation, lex->loc);
+
         struct AstLiteralExpr *e = AstGetLiteralExpr(expr);
         if (e->basic.code == BUILTIN_INT) {
             e->basic.value.i = -e->basic.value.i;
@@ -1176,8 +1232,11 @@ static struct AstExpr *match_expr(struct Lex *lex)
     return NEW_NODE(lex, match_expr, start, target, arms);
 }
 
+// TODO: accept source loc as argument
 static struct AstExpr *primary_expr(struct Lex *lex)
 {
+    struct SourceLoc const loc = lex->loc;
+
     struct AstExpr *expr;
     switch (lex->t.kind) {
         case '(':
@@ -1208,12 +1267,14 @@ static struct AstExpr *primary_expr(struct Lex *lex)
             expr = new_basic_lit(lex, lex->t.value, BUILTIN_FLOAT);
             skip(lex);
             break;
-        case TK_STRING: {
-            Value const v = lex->t.value;
-            expr = new_basic_lit(lex, v, BUILTIN_STR);
+        case TK_STRING_TEXT:
+            expr = string_expr(lex, loc, lex->t.value);
             skip(lex);
             break;
-        }
+        case TK_STRING_EXPR_OPEN:
+            expr = string_interp_expr(lex, loc);
+            skip(lex);
+            break;
         case TK_IF:
             expr = if_expr(lex);
             break;
@@ -1852,6 +1913,7 @@ static char const kPrelude[] =
     "    #[extern] pub fn starts_with(self, prefix: str) -> bool;\n"
     "    #[extern] pub fn ends_with(self, suffix: str) -> bool;\n"
     "    #[extern] pub fn hash(self) -> int;\n"
+    "    pub fn to_string(self) -> str { self }\n"
     "    pub fn eq(self, rhs: Self) -> bool { self == rhs }\n"
     "    pub fn lt(self, rhs: Self) -> bool { self < rhs }\n"
     "    pub fn le(self, rhs: Self) -> bool { self <= rhs }\n"
