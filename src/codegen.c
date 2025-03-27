@@ -17,8 +17,8 @@
 #include "mem.h"
 #include "mir.h"
 #include "parse.h"
-#include "ssa.h"
-#include "type.h"
+#include "rtti.h"
+
 
 #define CODEGEN_ERROR(G_, Kind_, ...) pawErr_##Kind_((G_)->C, (G_)->fs->modname, __VA_ARGS__)
 
@@ -154,20 +154,20 @@ static void code_A(struct FuncState *fs, Op op, int a)
 
 static struct Def *get_def(struct Generator *G, ItemId iid)
 {
-    return Y_DEF(ENV(G), iid);
+    return RTTI_DEF(ENV(G), iid);
 }
 
-static struct Type *lookup_type(struct Generator *G, struct IrType *type)
+static RttiType *lookup_type(struct Generator *G, struct IrType *type)
 {
-    struct Type **prtti = RttiMap_get(G->C, G->C->rtti, type);
+    RttiType **prtti = RttiMap_get(G->C, G->C->rtti, type);
     return prtti != NULL ? *prtti : NULL;
 }
 
 static ItemId type2def(struct Generator *G, struct IrType *type)
 {
-    struct Type *ty = lookup_type(G, type);
+    RttiType *ty = lookup_type(G, type);
     paw_assert(ty != NULL && "undefined type");
-    return IrIsAdt(type) ? ty->adt.iid : ty->sig.iid;
+    return IrIsAdt(type) ? ty->adt.iid : ty->fdef.iid;
 }
 
 struct JumpSource {
@@ -225,7 +225,7 @@ static int temporary_reg(struct FuncState *fs, int offset)
 static ValueId type2global(struct Generator *G, struct IrType *type)
 {
     ItemId const iid = type2def(G, type);
-    struct Def const *def = Y_DEF(ENV(G), iid);
+    struct Def const *def = RTTI_DEF(ENV(G), iid);
     paw_assert(def->hdr.kind == DEF_FUNC);
     return def->func.vid;
 }
@@ -381,11 +381,11 @@ static void enter_function(struct Generator *G, struct FuncState *fs, struct Mir
     enter_kcache(G, &fs->kcache);
 }
 
-static ValueId resolve_function(struct Generator *G, struct Type *rtti)
+static ValueId resolve_function(struct Generator *G, RttiType *rtti)
 {
     paw_Env *P = ENV(G);
-    paw_assert(rtti->hdr.kind == TYPE_SIGNATURE);
-    struct Def *def = Y_DEF(P, rtti->sig.iid);
+    paw_assert(rtti->hdr.kind == RTTI_TYPE_FN_DEF);
+    struct Def *def = RTTI_DEF(P, rtti->fdef.iid);
     return def->func.vid;
 }
 
@@ -410,7 +410,7 @@ static void code_smi(struct FuncState *fs, MirRegister r, paw_Int i)
 static void set_entrypoint(struct Generator *G, Proto *proto, int g)
 {
     paw_Env *P = ENV(G);
-    Value *pval = Y_PVAL(P, g);
+    Value *pval = RTTI_PVAL(P, g);
     Closure *closure = pawV_new_closure(P, 0);
     V_SET_OBJECT(pval, closure);
     closure->p = proto;
@@ -418,7 +418,7 @@ static void set_entrypoint(struct Generator *G, Proto *proto, int g)
 
 static void code_extern_function(struct Generator *G, String *name, int g)
 {
-    Value *pval = Y_PVAL(ENV(G), g);
+    Value *pval = RTTI_PVAL(ENV(G), g);
     *pval = pawP_get_extern_value(G->C, name);
 }
 
@@ -528,7 +528,7 @@ static void prep_method_call(struct Generator *G, MirRegister callable, MirRegis
     struct FuncState *fs = G->fs;
     struct IrType *type = GET_TYPE(G, callable);
     paw_assert(is_method_call(G, type));
-    struct Type *rtti = lookup_type(G, type);
+    RttiType *rtti = lookup_type(G, type);
     ValueId const vid = resolve_function(G, rtti);
     code_ABx(fs, OP_GETGLOBAL, REG(callable), vid);
 }
@@ -605,8 +605,8 @@ static void register_items(struct Generator *G)
         register_toplevel_function(G, type, iid);
 
         String const *modname = module_prefix(G, IR_TYPE_DID(type).modno);
-        struct Type const *ty = lookup_type(G, type);
-        struct FuncDef *fdef = &get_def(G, ty->sig.iid)->func;
+        RttiType const *ty = lookup_type(G, type);
+        struct FuncDef *fdef = &get_def(G, ty->fdef.iid)->func;
         paw_assert(fdef->kind == DEF_FUNC);
         pitem->name = fdef->mangled_name = func_name(G, modname, type, mir->self);
         pawMap_insert(P, V_TUPLE(P->functions), P2V(pitem->name), I2V(fdef->vid));

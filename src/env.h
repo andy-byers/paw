@@ -89,7 +89,7 @@ typedef struct paw_Env {
     } vals;
 
     struct {
-        struct Type **data;
+        struct RttiType **data;
         int count;
         int alloc;
     } types;

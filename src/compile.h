@@ -327,7 +327,7 @@ void pawP_pool_free(struct Compiler *C, struct Pool *pool);
 enum BuiltinKind pawP_type2code(struct Compiler *C, struct IrType *type);
 
 struct ItemSlot {
-    struct Type *rtti;
+    struct RttiType *rtti;
     struct Mir *mir;
     String *name;
     DeclId did;

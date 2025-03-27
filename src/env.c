@@ -7,7 +7,8 @@
 #include "map.h"
 #include "mem.h"
 #include "rt.h"
-#include "type.h"
+#include "rtti.h"
+
 #include <limits.h>
 
 void pawE_push_cstr(paw_Env *P, unsigned kind)
@@ -37,7 +38,7 @@ _Noreturn void pawE_error(paw_Env *P, int code, int line, char const *fmt, ...)
 
 void pawE_uninit(paw_Env *P)
 {
-    pawY_uninit(P);
+    pawRtti_uninit(P);
 }
 
 CallFrame *pawE_extend_cf(paw_Env *P, StackPtr top)

@@ -12,7 +12,7 @@
 #include "list.h"
 #include "map.h"
 #include "rt.h"
-#include "type.h"
+#include "rtti.h"
 #include "value.h"
 
 // Helpers for the VM:
@@ -721,7 +721,7 @@ top:
             vm_case(GETGLOBAL) :
             {
                 int const bc = GET_Bx(opcode);
-                *ra = *Y_PVAL(P, bc);
+                *ra = *RTTI_PVAL(P, bc);
             }
 
             vm_case(GETFIELD) :

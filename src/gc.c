@@ -8,7 +8,7 @@
 #include "list.h"
 #include "map.h"
 #include "mem.h"
-#include "type.h"
+#include "rtti.h"
 
 #ifdef PAW_TRACE_GC
 #include <stdio.h>

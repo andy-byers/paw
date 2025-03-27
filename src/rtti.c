@@ -2,7 +2,7 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
-#include "type.h"
+#include "rtti.h"
 #include "mem.h"
 
 static void free_def(paw_Env *P, struct Def *def)
@@ -25,17 +25,17 @@ static void free_def(paw_Env *P, struct Def *def)
     pawM_free(P, def);
 }
 
-static void free_type(paw_Env *P, struct Type *type)
+static void free_type(paw_Env *P, struct RttiType *type)
 {
     pawM_free_flex(P, type, type->nsubtypes, sizeof(type->subtypes[0]));
 }
 
-void pawY_uninit(paw_Env *P)
+void pawRtti_uninit(paw_Env *P)
 {
     for (int i = 0; i < P->types.count; ++i)
-        free_type(P, Y_TYPE(P, i));
+        free_type(P, RTTI_TYPE(P, i));
     for (int i = 0; i < P->defs.count; ++i)
-        free_def(P, Y_DEF(P, i));
+        free_def(P, RTTI_DEF(P, i));
     pawM_free_vec(P, P->types.data, P->types.alloc);
     pawM_free_vec(P, P->defs.data, P->defs.alloc);
     pawM_free_vec(P, P->vals.data, P->vals.alloc);
@@ -44,7 +44,7 @@ void pawY_uninit(paw_Env *P)
     memset(&P->vals, 0, sizeof(P->vals));
 }
 
-static struct Type *add_type(paw_Env *P, struct Type *type)
+static struct RttiType *add_type(paw_Env *P, struct RttiType *type)
 {
     type->hdr.code = P->types.count;
     pawM_grow(P, P->types.data, P->types.count, P->types.alloc);
@@ -53,53 +53,53 @@ static struct Type *add_type(paw_Env *P, struct Type *type)
 }
 
 #define NEW_TYPE(P, n) \
-    pawM_new_flex(P, struct Type, n, sizeof(paw_Type))
+    pawM_new_flex(P, struct RttiType, n, sizeof(paw_Type))
 
-struct Type *pawY_new_adt(paw_Env *P, ItemId iid, int ntypes)
+struct RttiType *pawRtti_new_adt(paw_Env *P, ItemId iid, int ntypes)
 {
-    struct Type *type = NEW_TYPE(P, ntypes);
-    *type = (struct Type){
-        .adt.kind = TYPE_ADT,
+    struct RttiType *type = NEW_TYPE(P, ntypes);
+    *type = (struct RttiType){
+        .adt.kind = RTTI_TYPE_ADT,
         .adt.iid = iid,
         .nsubtypes = ntypes,
     };
     return add_type(P, type);
 }
 
-struct Type *pawY_new_trait_obj(paw_Env *P)
+struct RttiType *pawRtti_new_trait(paw_Env *P)
 {
-    struct Type *type = NEW_TYPE(P, 0);
-    *type = (struct Type){
-        .trait.kind = TYPE_TRAIT_OBJ,
+    struct RttiType *type = NEW_TYPE(P, 0);
+    *type = (struct RttiType){
+        .trait.kind = RTTI_TYPE_TRAIT,
         .nsubtypes = 0,
     };
     return add_type(P, type);
 }
 
-struct Type *pawY_new_signature(paw_Env *P, ItemId iid, int nparams)
+struct RttiType *pawRtti_new_signature(paw_Env *P, ItemId iid, int nparams)
 {
-    struct Type *type = NEW_TYPE(P, nparams);
-    *type = (struct Type){
-        .hdr.kind = TYPE_SIGNATURE,
+    struct RttiType *type = NEW_TYPE(P, nparams);
+    *type = (struct RttiType){
+        .hdr.kind = RTTI_TYPE_FN_DEF,
         .nsubtypes = nparams,
     };
     return add_type(P, type);
 }
 
-struct Type *pawY_new_func_ptr(paw_Env *P, int nparams)
+struct RttiType *pawRtti_new_func_ptr(paw_Env *P, int nparams)
 {
-    struct Type *type = NEW_TYPE(P, nparams);
-    *type = (struct Type){
-        .hdr.kind = TYPE_FUNC_PTR,
+    struct RttiType *type = NEW_TYPE(P, nparams);
+    *type = (struct RttiType){
+        .hdr.kind = RTTI_TYPE_FN_PTR,
         .nsubtypes = nparams,
     };
     return add_type(P, type);
 }
 
-struct Type *pawY_new_tuple(paw_Env *P, int nelems)
+struct RttiType *pawRtti_new_tuple(paw_Env *P, int nelems)
 {
-    struct Type *type = NEW_TYPE(P, nelems);
-    type->hdr.kind = TYPE_TUPLE;
+    struct RttiType *type = NEW_TYPE(P, nelems);
+    type->hdr.kind = RTTI_TYPE_TUPLE;
     type->nsubtypes = nelems;
     return add_type(P, type);
 }
@@ -116,7 +116,7 @@ static struct Def *new_def(paw_Env *P, enum DefKind kind)
     return def;
 }
 
-struct Def *pawY_new_adt_def(paw_Env *P, int nfields)
+struct Def *pawRtti_new_adt_def(paw_Env *P, int nfields)
 {
     struct Def *def = new_def(P, DEF_ADT);
     def->adt.fields = pawM_new_vec(P, nfields, ItemId);
@@ -124,12 +124,12 @@ struct Def *pawY_new_adt_def(paw_Env *P, int nfields)
     return def;
 }
 
-struct Def *pawY_new_trait_def(paw_Env *P)
+struct Def *pawRtti_new_trait_def(paw_Env *P)
 {
     return new_def(P, DEF_TRAIT);
 }
 
-struct Def *pawY_new_variant_def(paw_Env *P, int nfields)
+struct Def *pawRtti_new_variant_def(paw_Env *P, int nfields)
 {
     struct Def *def = new_def(P, DEF_VARIANT);
     def->variant.fields = pawM_new_vec(P, nfields, ItemId);
@@ -137,7 +137,7 @@ struct Def *pawY_new_variant_def(paw_Env *P, int nfields)
     return def;
 }
 
-struct Def *pawY_new_func_def(paw_Env *P, int ntypes)
+struct Def *pawRtti_new_func_def(paw_Env *P, int ntypes)
 {
     struct Def *def = new_def(P, DEF_FUNC);
     def->func.types = pawM_new_vec(P, ntypes, paw_Type);
@@ -145,40 +145,38 @@ struct Def *pawY_new_func_def(paw_Env *P, int ntypes)
     return def;
 }
 
-struct Def *pawY_new_field_def(paw_Env *P)
+struct Def *pawRtti_new_field_def(paw_Env *P)
 {
     return new_def(P, DEF_FIELD);
 }
 
-struct Def *pawY_new_var_def(paw_Env *P)
+struct Def *pawRtti_new_var_def(paw_Env *P)
 {
     return new_def(P, DEF_VAR);
 }
 
-static int print_subtypes_(paw_Env *P, Buffer *buf, struct Type *type)
+static int print_subtypes_(paw_Env *P, Buffer *buf, struct RttiType *type)
 {
     for (int i = 0; i < type->nsubtypes; ++i) {
-        pawY_print_type(P, buf, type->subtypes[i]);
-        if (i == type->nsubtypes - 1)
-            break;
-        pawL_add_string(P, buf, ", ");
+        if (i > 0) pawL_add_string(P, buf, ", ");
+        pawRtti_print_type(P, buf, type->subtypes[i]);
     }
     return type->nsubtypes;
 }
-#define PRINT_SUBTYPES(P, buf, type) print_subtypes_(P, buf, CAST(struct Type *, type))
+#define PRINT_SUBTYPES(P, buf, type) print_subtypes_(P, buf, CAST(struct RttiType *, type))
 
-static void print_func_type(paw_Env *P, Buffer *buf, struct FuncPtr *type)
+static void print_func_type(paw_Env *P, Buffer *buf, struct RttiFnPtr *type)
 {
     pawL_add_string(P, buf, "fn(");
     PRINT_SUBTYPES(P, buf, type);
     pawL_add_char(P, buf, ')');
     if (type->result > 0) {
         pawL_add_string(P, buf, " -> ");
-        pawY_print_type(P, buf, type->result);
+        pawRtti_print_type(P, buf, type->result);
     }
 }
 
-static void print_tuple_type(paw_Env *P, Buffer *buf, struct TupleType *type)
+static void print_tuple_type(paw_Env *P, Buffer *buf, struct RttiTuple *type)
 {
     pawL_add_char(P, buf, '(');
     int const n = PRINT_SUBTYPES(P, buf, type);
@@ -187,11 +185,11 @@ static void print_tuple_type(paw_Env *P, Buffer *buf, struct TupleType *type)
     pawL_add_char(P, buf, ')');
 }
 
-static void print_adt(paw_Env *P, Buffer *buf, struct Adt *type)
+static void print_adt(paw_Env *P, Buffer *buf, struct RttiAdt *type)
 {
-    struct Def *def = Y_DEF(P, type->iid);
+    struct Def *def = RTTI_DEF(P, type->iid);
     String const *name = def->hdr.name;
-    struct Type *base = Y_CAST_TYPE(type);
+    struct RttiType *base = RTTI_CAST_TYPE(type);
     pawL_add_nstring(P, buf, name->text, name->length);
     if (base->nsubtypes > 0) {
         pawL_add_char(P, buf, '<');
@@ -200,27 +198,27 @@ static void print_adt(paw_Env *P, Buffer *buf, struct Adt *type)
     }
 }
 
-static void print_trait_obj(paw_Env *P, Buffer *buf, struct TraitObj *type)
+static void print_trait(paw_Env *P, Buffer *buf, struct RttiTrait *type)
 {
     // TODO
     pawL_add_fstring(P, buf, "TODO: type.c:print_trait_obj");
 }
 
-void pawY_print_type(paw_Env *P, Buffer *buf, paw_Type code)
+void pawRtti_print_type(paw_Env *P, Buffer *buf, paw_Type code)
 {
-    struct Type *type = Y_TYPE(P, code);
+    struct RttiType *type = RTTI_TYPE(P, code);
     switch (type->hdr.kind) {
-        case TYPE_SIGNATURE:
-        case TYPE_FUNC_PTR:
+        case RTTI_TYPE_FN_DEF:
+        case RTTI_TYPE_FN_PTR:
             print_func_type(P, buf, &type->fptr);
             break;
-        case TYPE_TUPLE:
+        case RTTI_TYPE_TUPLE:
             print_tuple_type(P, buf, &type->tuple);
             break;
-        case TYPE_ADT:
+        case RTTI_TYPE_ADT:
             print_adt(P, buf, &type->adt);
             break;
-        case TYPE_TRAIT_OBJ:
+        case RTTI_TYPE_TRAIT:
             break;
     }
 }
@@ -231,39 +229,39 @@ static void add_string_with_len(paw_Env *P, Buffer *buf, String const *str)
     pawL_add_nstring(P, buf, str->text, str->length);
 }
 
-void pawY_mangle_start(paw_Env *P, Buffer *buf)
+void pawRtti_mangle_start(paw_Env *P, Buffer *buf)
 {
     L_ADD_LITERAL(P, buf, "_P");
 }
 
-void pawY_mangle_start_generic_args(paw_Env *P, Buffer *buf)
+void pawRtti_mangle_start_generic_args(paw_Env *P, Buffer *buf)
 {
     pawL_add_char(P, buf, 'I');
 }
 
-void pawY_mangle_finish_generic_args(paw_Env *P, Buffer *buf)
+void pawRtti_mangle_finish_generic_args(paw_Env *P, Buffer *buf)
 {
     pawL_add_char(P, buf, 'E');
 }
 
-void pawY_mangle_add_module(paw_Env *P, Buffer *buf, String const *name)
+void pawRtti_mangle_add_module(paw_Env *P, Buffer *buf, String const *name)
 {
     pawL_add_char(P, buf, 'N');
     add_string_with_len(P, buf, name);
 }
 
-void pawY_mangle_add_name(paw_Env *P, Buffer *buf, String const *name)
+void pawRtti_mangle_add_name(paw_Env *P, Buffer *buf, String const *name)
 {
     add_string_with_len(P, buf, name);
 }
 
-void pawY_mangle_add_arg(paw_Env *P, Buffer *buf, paw_Type code)
+void pawRtti_mangle_add_arg(paw_Env *P, Buffer *buf, paw_Type code)
 {
-    struct Type *type = Y_TYPE(P, code);
+    struct RttiType *type = RTTI_TYPE(P, code);
     switch (type->hdr.kind) {
-        case TYPE_TRAIT_OBJ:
+        case RTTI_TYPE_TRAIT:
             PAW_UNREACHABLE();
-        case TYPE_ADT:
+        case RTTI_TYPE_ADT:
             switch (type->adt.code) {
                 case PAW_TUNIT:
                     pawL_add_char(P, buf, '0');
@@ -281,36 +279,36 @@ void pawY_mangle_add_arg(paw_Env *P, Buffer *buf, paw_Type code)
                     pawL_add_char(P, buf, 's');
                     break;
                 default: {
-                    struct Def const *def = Y_DEF(P, type->adt.iid);
+                    struct Def const *def = RTTI_DEF(P, type->adt.iid);
                     add_string_with_len(P, buf, def->hdr.name);
                     if (type->nsubtypes > 0) {
-                        pawY_mangle_start_generic_args(P, buf);
+                        pawRtti_mangle_start_generic_args(P, buf);
                         for (int i = 0; i < type->nsubtypes; ++i) {
-                            pawY_mangle_add_arg(P, buf, type->subtypes[i]);
+                            pawRtti_mangle_add_arg(P, buf, type->subtypes[i]);
                         }
-                        pawY_mangle_finish_generic_args(P, buf);
+                        pawRtti_mangle_finish_generic_args(P, buf);
                     }
                 }
             }
             break;
-        case TYPE_FUNC_PTR:
-        case TYPE_SIGNATURE: {
-            struct FuncPtr const func = type->fptr;
+        case RTTI_TYPE_FN_PTR:
+        case RTTI_TYPE_FN_DEF: {
+            struct RttiFnPtr const func = type->fptr;
             pawL_add_char(P, buf, 'F');
             for (int i = 0; i < type->nsubtypes; ++i) {
-                pawY_mangle_add_arg(P, buf, type->subtypes[i]);
+                pawRtti_mangle_add_arg(P, buf, type->subtypes[i]);
             }
             pawL_add_char(P, buf, 'E');
-            struct Type const *result = Y_TYPE(P, func.result);
-            if (result->hdr.kind != TYPE_ADT || result->adt.code != PAW_TUNIT) {
-                pawY_mangle_add_arg(P, buf, func.result);
+            struct RttiType const *result = RTTI_TYPE(P, func.result);
+            if (result->hdr.kind != RTTI_TYPE_ADT || result->adt.code != PAW_TUNIT) {
+                pawRtti_mangle_add_arg(P, buf, func.result);
             }
             break;
         }
-        case TYPE_TUPLE: {
+        case RTTI_TYPE_TUPLE: {
             pawL_add_char(P, buf, 'T');
             for (int i = 0; i < type->nsubtypes; ++i) {
-                pawY_mangle_add_arg(P, buf, type->subtypes[i]);
+                pawRtti_mangle_add_arg(P, buf, type->subtypes[i]);
             }
             pawL_add_char(P, buf, 'E');
         }
