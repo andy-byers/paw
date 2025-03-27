@@ -11,10 +11,13 @@
 // (1) Wegman, M., & Zadeck, F. K. (1991). Constant Propagation with Conditional
 //     Branches.
 
+#include "error.h"
 #include "ir_type.h"
 #include "map.h"
 #include "mir.h"
 #include <math.h>
+
+#define KPROP_ERROR(K_, Kind_, ...) pawErr_##Kind_((K_)->C, (K_)->mir->modname, __VA_ARGS__)
 
 enum CellKind {
     CELL_TOP,
@@ -244,7 +247,7 @@ static int add_constant(struct KProp *K, Value v, enum BuiltinKind kind)
 
 static struct CellInfo constant_unary_op(struct KProp *K, struct Cell *val, enum UnaryOp op)
 {
-    enum BuiltinKind kind = pawP_type2code(K->C, val->type);
+    enum BuiltinKind const kind = pawP_type2code(K->C, val->type);
     Value const v = val->info.v;
     Value r;
 
@@ -255,14 +258,14 @@ static struct CellInfo constant_unary_op(struct KProp *K, struct Cell *val, enum
     return BOTTOM_INFO();
 }
 
-static struct CellInfo constant_binary_op(struct KProp *K, struct Cell *lhs, struct Cell *rhs, enum BinaryOp op)
+static struct CellInfo constant_binary_op(struct KProp *K, struct SourceLoc loc, struct Cell *lhs, struct Cell *rhs, enum BinaryOp op)
 {
-    enum BuiltinKind kind = pawP_type2code(K->C, lhs->type);
+    enum BuiltinKind const kind = pawP_type2code(K->C, lhs->type);
     Value const x = lhs->info.v;
     Value const y = rhs->info.v;
     Value r;
 
-    if (pawP_fold_binary_op(K->C, op, x, y, &r, kind)) {
+    if (pawP_fold_binary_op(K->C, K->mir->modname, loc, op, x, y, &r, kind)) {
         int const k = add_constant(K, r, kind);
         return CONST_INFO(k, r);
     }
@@ -351,15 +354,15 @@ static struct CellInfo special_mul(struct KProp *K, struct MirBinaryOp *binop, s
     return BOTTOM_INFO();
 }
 
-#define DIVIDE_BY_0(K) VALUE_ERROR(K, -1, "divide by 0");
-#define SHIFT_BY_NEGATIVE(K) VALUE_ERROR(K, -1, "shift by negative integer");
+#define DIVIDE_BY_0(K, loc) KPROP_ERROR(K, constant_divide_by_zero, loc);
+#define SHIFT_BY_NEGATIVE(K, loc) KPROP_ERROR(K, constant_negative_shift_count, loc);
 
 static struct CellInfo special_div(struct KProp *K, struct MirBinaryOp *binop, struct Cell *lhs, struct Cell *rhs, enum BuiltinKind kind)
 {
     Value r;
     if (kind == BUILTIN_INT) {
         if (EQUALS_CONST_INT(rhs, 0)) {
-            DIVIDE_BY_0(K);
+            DIVIDE_BY_0(K, binop->loc);
         } else if (EQUALS_CONST_INT(lhs, 0)) {
             return const_zero(K, BUILTIN_INT);
         } else if (EQUALS_CONST_INT(rhs, 1)) {
@@ -369,7 +372,7 @@ static struct CellInfo special_div(struct KProp *K, struct MirBinaryOp *binop, s
         // NOTE: the result of "0.0 / f" cannot be folded, since it depends on the
         //       sign of "f"
         if (EQUALS_CONST_FLOAT(rhs, 0.0)) {
-            DIVIDE_BY_0(K);
+            DIVIDE_BY_0(K, binop->loc);
         } else if (EQUALS_CONST_FLOAT(rhs, 1.0)) {
             return binop_to_move(binop, binop->lhs);
         }
@@ -381,12 +384,12 @@ static struct CellInfo special_mod(struct KProp *K, struct MirBinaryOp *binop, s
 {
     if (kind == BUILTIN_INT) {
         if (EQUALS_CONST_INT(rhs, 0)) {
-            DIVIDE_BY_0(K);
+            DIVIDE_BY_0(K, binop->loc);
         } else if (EQUALS_CONST_INT(lhs, 0) || EQUALS_CONST_INT(rhs, 1)) {
             return const_zero(K, BUILTIN_INT);
         }
     } else if (kind == BUILTIN_FLOAT && EQUALS_CONST_FLOAT(rhs, 0.0)) {
-        DIVIDE_BY_0(K);
+        DIVIDE_BY_0(K, binop->loc);
     }
     return BOTTOM_INFO();
 }
@@ -411,7 +414,7 @@ static struct CellInfo special_bor_bxor(struct KProp *K, struct MirBinaryOp *bin
 static struct CellInfo special_shift(struct KProp *K, struct MirBinaryOp *binop, struct Cell *lhs, struct Cell *rhs)
 {
     if (rhs->info.kind == CELL_CONSTANT && V_INT(rhs->info.v) < 0) {
-        SHIFT_BY_NEGATIVE(K);
+        SHIFT_BY_NEGATIVE(K, binop->loc);
     } else if (EQUALS_CONST_INT(lhs, 0)) { // 0 shift n == 0
         return const_zero(K, BUILTIN_INT);
     } else if (EQUALS_CONST_INT(rhs, 0)) { // n shift 0 == n
@@ -623,7 +626,7 @@ static void visit_expr(struct KProp *K, struct MirInstruction *instr, MirBlock b
             enum CellKind old = output->info.kind;
             if (lhs->info.kind == CELL_CONSTANT && rhs->info.kind == CELL_CONSTANT) {
                 // handle "const1 op const2"
-                output->info = constant_binary_op(K, lhs, rhs, x->op);
+                output->info = constant_binary_op(K, instr->hdr.loc, lhs, rhs, x->op);
             } else if (lhs->info.kind == CELL_CONSTANT || rhs->info.kind == CELL_CONSTANT) {
                 // handle "reg op const" or "const op reg"
                 output->info = special_binary_op(K, lhs, rhs, x);

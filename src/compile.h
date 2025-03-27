@@ -46,10 +46,6 @@
 #define DLOG(X, ...) PAWD_LOG(ENV(X), __VA_ARGS__)
 #define CSTR(X, i) CACHED_STRING(ENV(X), CAST_SIZE(i))
 #define SCAN_STRING(X, s) pawP_scan_string(X, (X)->strings, s)
-#define NAME_ERROR(X, ...) pawE_error(ENV(X), PAW_ENAME, (X)->line, __VA_ARGS__)
-#define SYNTAX_ERROR(X, ...) pawE_error(ENV(X), PAW_ESYNTAX, (X)->line, __VA_ARGS__)
-#define TYPE_ERROR(X, ...) pawE_error(ENV(X), PAW_ETYPE, (X)->line, __VA_ARGS__)
-#define VALUE_ERROR(X, line, ...) pawE_error(ENV(X), PAW_EVALUE, line, __VA_ARGS__)
 
 #define GET_NODE_TYPE(C, p) pawIr_get_type(C, (p)->hdr.hid)
 #define SET_NODE_TYPE(C, p, t) pawIr_set_type(C, (p)->hdr.hid, t)
@@ -293,7 +289,7 @@ struct Ast *pawP_parse_module(struct Compiler *C, String *modname, paw_Reader in
 void pawP_validate_adt_traits(struct Compiler *C, struct HirAdtDecl *d);
 
 paw_Bool pawP_fold_unary_op(struct Compiler *C, enum UnaryOp op, Value v, Value *pr, enum BuiltinKind kind);
-paw_Bool pawP_fold_binary_op(struct Compiler *C, enum BinaryOp op, Value x, Value y, Value *pr, enum BuiltinKind kind);
+paw_Bool pawP_fold_binary_op(struct Compiler *C, String const *modname, struct SourceLoc loc, enum BinaryOp op, Value x, Value y, Value *pr, enum BuiltinKind kind);
 
 struct MonoResult {
     struct IrTypeList *types;
@@ -327,7 +323,7 @@ void pawP_pool_free(struct Compiler *C, struct Pool *pool);
 enum BuiltinKind pawP_type2code(struct Compiler *C, struct IrType *type);
 
 struct ItemSlot {
-    struct Type *rtti;
+    struct RttiType *rtti;
     struct Mir *mir;
     String *name;
     DeclId did;

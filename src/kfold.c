@@ -6,35 +6,38 @@
 //
 
 #include "compile.h"
+#include "error.h"
 #include "rt.h"
 #include <math.h>
 
-#define DIVIDE_BY_0(C) pawE_error(ENV(C), PAW_EVALUE, -1, "divide by 0");
+#define KFOLD_ERROR(C_, Kind_, Modname_, ...) pawErr_##Kind_(C_, Modname_, __VA_ARGS__)
+#define DIVIDE_BY_0(C_, Modname_, Loc_) KFOLD_ERROR(C_, constant_divide_by_zero, Modname_, Loc_);
+#define SHIFT_BY_NEGATIVE(C_, Modname_, Loc_) KFOLD_ERROR(C_, constant_negative_shift_count, Modname_, Loc_);
 
-static void constant_div(struct Compiler *C, Value *pr, Value x, Value y, enum BuiltinKind kind)
+static void constant_div(struct Compiler *C, String const *modname, struct SourceLoc loc, Value *pr, Value x, Value y, enum BuiltinKind kind)
 {
     if (kind == BUILTIN_FLOAT) {
         if (V_FLOAT(y) == 0.0)
-            DIVIDE_BY_0(C);
+            DIVIDE_BY_0(C, modname, loc);
         FLOAT_BINARY_OP(pr, x, y, /);
     } else {
         paw_assert(kind == BUILTIN_INT);
         if (V_INT(y) == 0)
-            DIVIDE_BY_0(C);
+            DIVIDE_BY_0(C, modname, loc);
         INT_BINARY_OP(pr, x, y, /);
     }
 }
 
-static void constant_mod(struct Compiler *C, Value *pr, Value x, Value y, enum BuiltinKind kind)
+static void constant_mod(struct Compiler *C, String const *modname, struct SourceLoc loc, Value *pr, Value x, Value y, enum BuiltinKind kind)
 {
     if (kind == BUILTIN_FLOAT) {
         if (V_FLOAT(y) == 0.0)
-            DIVIDE_BY_0(C);
+            DIVIDE_BY_0(C, modname, loc);
         V_SET_FLOAT(pr, fmod(V_FLOAT(x), V_FLOAT(y)));
     } else {
         paw_assert(kind == BUILTIN_INT);
         if (V_INT(y) == 0)
-            DIVIDE_BY_0(C);
+            DIVIDE_BY_0(C, modname, loc);
         INT_BINARY_OP(pr, x, y, %);
     }
 }
@@ -83,7 +86,7 @@ paw_Bool pawP_fold_unary_op(struct Compiler *C, enum UnaryOp op, Value v, Value 
     return PAW_TRUE;
 }
 
-paw_Bool pawP_fold_binary_op(struct Compiler *C, enum BinaryOp op, Value x, Value y, Value *pr, enum BuiltinKind kind)
+paw_Bool pawP_fold_binary_op(struct Compiler *C, String const *modname, struct SourceLoc loc, enum BinaryOp op, Value x, Value y, Value *pr, enum BuiltinKind kind)
 {
     switch (op) {
         case BINARY_EQ: {
@@ -175,10 +178,10 @@ paw_Bool pawP_fold_binary_op(struct Compiler *C, enum BinaryOp op, Value x, Valu
             }
             break;
         case BINARY_DIV:
-            constant_div(C, pr, x, y, kind);
+            constant_div(C, modname, loc, pr, x, y, kind);
             break;
         case BINARY_MOD:
-            constant_mod(C, pr, x, y, kind);
+            constant_mod(C, modname, loc, pr, x, y, kind);
             break;
         case BINARY_BXOR:
             paw_assert(kind == BUILTIN_INT);
@@ -196,7 +199,7 @@ paw_Bool pawP_fold_binary_op(struct Compiler *C, enum BinaryOp op, Value x, Valu
             paw_assert(kind == BUILTIN_INT);
             paw_Int n = V_INT(y);
             if (n < 0) {
-                pawE_error(ENV(C), PAW_EVALUE, -1, "negative shift count");
+                SHIFT_BY_NEGATIVE(C, modname, loc);
             } else if (n > 0) {
                 n = PAW_MIN(n, U2I(sizeof(x) * 8 - 1));
                 V_SET_INT(pr, U2I(V_UINT(x) << n));
@@ -209,7 +212,7 @@ paw_Bool pawP_fold_binary_op(struct Compiler *C, enum BinaryOp op, Value x, Valu
             paw_assert(kind == BUILTIN_INT);
             paw_Int n = V_INT(y);
             if (n < 0) {
-                pawE_error(ENV(C), PAW_EVALUE, -1, "negative shift count");
+                SHIFT_BY_NEGATIVE(C, modname, loc);
             } else if (n > 0) {
                 n = PAW_MIN(n, U2I(sizeof(x) * 8 - 1));
                 V_SET_INT(pr, V_INT(x) >> n);

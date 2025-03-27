@@ -324,7 +324,7 @@ paw_Bool pawIr_type_equals(struct Compiler *C, IrType *a, IrType *b);
 #define IR_TYPE_HASH(Ctx_, Type_) pawIr_type_hash((Ctx_)->C, Type_)
 #define IR_TYPE_EQUALS(Ctx_, A_, B_) pawIr_type_equals((Ctx_)->C, A_, B_)
 
-DEFINE_MAP(struct Compiler, RttiMap, pawP_alloc, pawIr_type_hash, pawIr_type_equals, IrType *, struct Type *)
+DEFINE_MAP(struct Compiler, RttiMap, pawP_alloc, pawIr_type_hash, pawIr_type_equals, IrType *, struct RttiType *)
 
 void pawIr_validate_type(struct Compiler *C, IrType *type);
 IrType *pawIr_substitute_self(struct Compiler *C, IrType *trait, IrType *adt, IrType *method);

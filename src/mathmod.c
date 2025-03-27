@@ -86,9 +86,9 @@ static int math_is_negative(paw_Env *P)
 void l_import_math(paw_Env *P)
 {
     static char const s_math[] =
-        "#[extern] pub const PI: float;"
-        "#[extern] pub const NAN: float;"
-        "#[extern] pub const INFINITY: float;"
+        "#[extern] pub const PI: float;\n"
+        "#[extern] pub const NAN: float;\n"
+        "#[extern] pub const INFINITY: float;\n"
         "#[extern] pub fn sin(f: float) -> float;\n"
         "#[extern] pub fn cos(f: float) -> float;\n"
         "#[extern] pub fn tan(f: float) -> float;\n"

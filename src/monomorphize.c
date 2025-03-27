@@ -556,7 +556,7 @@ struct MonoResult pawP_monomorphize(struct Compiler *C, BodyMap *bodies)
     M.monos = DeclMonoMap_new(&M);
     M.adts = DeclMonoMap_new(&M);
 
-    pawU_enter_binder(C->U);
+    pawU_enter_binder(C->U, NULL);
 
     pawMir_type_folder_init(&F, C, NULL, &M);
     F.F.FoldType = collect_type;

@@ -8,7 +8,7 @@
 #include "ir_type.h"
 #include "map.h"
 #include "mem.h"
-#include "type.h"
+#include "rtti.h"
 #include "type_folder.h"
 
 #define NEW_NODE(C, T) P_ALLOC(C, NULL, 0, sizeof(T))

@@ -22,11 +22,6 @@
 #define STRING_LIT(R_, Str_) SCAN_STRING((R_)->C, Str_)
 #define TYPE2CODE(R_, Type_) pawP_type2code((R_)->C, Type_)
 
-#define R_NAME_ERROR(R_, Loc_, ...) pawP_error((R_)->C, PAW_ENAME, (R_)->hir->name, Loc_, __VA_ARGS__)
-#define R_SYNTAX_ERROR(R_, Loc_, ...) pawP_error((R_)->C, PAW_ESYNTAX, (R_)->hir->name, Loc_, __VA_ARGS__)
-#define R_TYPE_ERROR(R_, Loc_, ...) pawP_error((R_)->C, PAW_ETYPE, (R_)->hir->name, Loc_, __VA_ARGS__)
-#define R_VALUE_ERROR(R_, Loc_, ...) pawP_error((R_)->C, PAW_EVALUE, (R_)->hir->name, Loc_, __VA_ARGS__)
-
 #define RESOLVER_ERROR(R_, Kind_, ...) pawErr_##Kind_((R_)->C, (R_)->m->name, __VA_ARGS__)
 
 struct ResultState {
@@ -86,7 +81,7 @@ DEFINE_MAP_ITERATOR(PatFieldMap, struct HirIdent, struct HirPat *)
 static void resolve_stmt(struct Resolver *, struct HirStmt *);
 static void resolve_decl(struct Resolver *, struct HirDecl *);
 static struct IrType *resolve_expr(struct Resolver *, struct HirExpr *);
-static struct IrType *resolve_type(struct Resolver *, struct HirType *);
+static struct IrType *resolve_type(struct Resolver *, struct HirType *, struct SourceSpan span);
 static struct IrType *resolve_pat(struct Resolver *, struct HirPat *);
 
 #define DEFINE_LIST_RESOLVER(name, T)                                                \
@@ -127,8 +122,9 @@ static struct IrTypeList *resolve_type_list(struct Resolver *R, struct HirTypeLi
 
     struct HirType *const *ptype;
     K_LIST_FOREACH (list, ptype) {
-        struct IrType *type = resolve_type(R, *ptype);
-        IrTypeList_push(R->C, result, type);
+        struct HirType *hir_type = *ptype;
+        struct IrType *ir_type = resolve_type(R, hir_type, hir_type->hdr.span);
+        IrTypeList_push(R->C, result, ir_type);
     }
     return result;
 }
@@ -297,24 +293,14 @@ static struct IrTypeList *collect_decl_types(struct Resolver *R, struct HirDeclL
     return new_list;
 }
 
-static struct IrType *new_unknown(struct Resolver *R)
+static struct IrType *new_unknown(struct Resolver *R, struct SourceLoc loc)
 {
-    return pawU_new_unknown(R->U, NULL);
-}
-
-static struct IrTypeList *new_unknowns(struct Resolver *R, int count)
-{
-    struct IrTypeList *list = IrTypeList_new(R->C);
-    IrTypeList_reserve(R->C, list, count);
-
-    while (count-- > 0)
-        IrTypeList_push(R->C, list, new_unknown(R));
-    return list;
+    return pawU_new_unknown(R->U, loc, NULL);
 }
 
 static void enter_inference_ctx(struct Resolver *R)
 {
-    pawU_enter_binder(R->U);
+    pawU_enter_binder(R->U, R->hir->name);
 }
 
 static void leave_inference_ctx(struct Resolver *R)
@@ -322,10 +308,10 @@ static void leave_inference_ctx(struct Resolver *R)
     pawU_leave_binder(R->U);
 }
 
-static void enter_match_ctx(struct Resolver *R, struct MatchState *ms, struct IrType *target)
+static void enter_match_ctx(struct Resolver *R, struct MatchState *ms, struct SourceSpan span, struct IrType *target)
 {
     *ms = (struct MatchState){
-        .result = new_unknown(R),
+        .result = new_unknown(R, span.start),
         .target = target,
         .outer = R->ms,
     };
@@ -452,7 +438,7 @@ static void allocate_decls(struct Resolver *R, struct HirDeclList *decls)
 
 static struct IrType *ResolveFieldDecl(struct Resolver *R, struct HirFieldDecl *d)
 {
-    return resolve_type(R, d->tag);
+    return resolve_type(R, d->tag, d->span);
 }
 
 static paw_Bool is_unit_type(struct Resolver *R, struct IrType *type)
@@ -481,10 +467,8 @@ static void resolve_func_item(struct Resolver *R, struct HirFuncDecl *d)
         };
         R->rs = &rs;
 
-        enter_inference_ctx(R);
         struct IrType *result = resolve_operand(R, d->body);
         unify_block_result(R, HirGetBlock(d->body)->never, result, ret);
-        leave_inference_ctx(R);
 
         R->rs = rs.outer;
     }
@@ -857,7 +841,7 @@ static struct IrType *resolve_match_expr(struct Resolver *R, struct HirMatchExpr
     struct IrType *target = resolve_operand(R, e->target);
 
     struct MatchState ms;
-    enter_match_ctx(R, &ms, target);
+    enter_match_ctx(R, &ms, e->target->hdr.span, target);
     resolve_expr_list(R, e->arms);
     leave_match_ctx(R);
 
@@ -903,7 +887,7 @@ static struct IrType *new_map_t(struct Resolver *R, struct IrType *key_t, struct
 static void resolve_closure_param(struct Resolver *R, struct HirFieldDecl *d)
 {
     struct HirDecl *decl = HIR_CAST_DECL(d);
-    struct IrType *type = resolve_type(R, d->tag);
+    struct IrType *type = resolve_type(R, d->tag, d->span);
     new_local(R, d->ident, (struct HirResult){
                 .kind = HIR_RESULT_LOCAL,
                 .hid = d->hid,
@@ -922,7 +906,7 @@ static struct IrType *resolve_closure_expr(struct Resolver *R, struct HirClosure
         struct HirFieldDecl *d = HirGetFieldDecl(decl);
         resolve_closure_param(R, d);
     }
-    struct IrType *ret = resolve_type(R, e->result);
+    struct IrType *ret = resolve_type(R, e->result, e->span);
 
     struct IrTypeList *params = collect_decl_types(R, e->params);
     rs.prev = ret;
@@ -976,12 +960,12 @@ static void resolve_adt_item(struct Resolver *R, struct HirAdtDecl *d)
 
 static void ResolveLetStmt(struct Resolver *R, struct HirLetStmt *s)
 {
-    struct IrType *tag = resolve_type(R, s->tag);
+    struct IrType *tag = resolve_type(R, s->tag, s->span);
     struct IrType *rhs = s->init != NULL
                               ? resolve_operand(R, s->init)
-                              : new_unknown(R);
+                              : new_unknown(R, s->span.start);
     struct MatchState ms;
-    enter_match_ctx(R, &ms, tag);
+    enter_match_ctx(R, &ms, s->span, tag);
     struct IrType *lhs = resolve_pat(R, s->pat);
     unify(R, ms.result, tag);
     leave_match_ctx(R);
@@ -1084,7 +1068,7 @@ static void resolve_const_item(struct Resolver *R, struct HirConstDecl *d)
 
 static struct IrType *resolve_field_decl(struct Resolver *R, struct HirFieldDecl *d)
 {
-    return resolve_type(R, d->tag);
+    return resolve_type(R, d->tag, d->span);
 }
 
 static void register_generics(struct Resolver *R, struct HirDeclList *generics)
@@ -1105,7 +1089,7 @@ static struct IrType *resolve_type_decl(struct Resolver *R, struct HirTypeDecl *
     enter_scope(R, NULL);
     register_generics(R, d->generics);
     allocate_decls(R, d->generics);
-    struct IrType *type = resolve_type(R, d->rhs);
+    struct IrType *type = resolve_type(R, d->rhs, d->span);
     SET_NODE_TYPE(R->C, d->rhs, type);
     leave_scope(R);
 
@@ -1300,9 +1284,9 @@ static struct IrType *resolve_tuple_lit(struct Resolver *R, struct HirTupleLit *
     return pawIr_new_tuple(R->C, elems);
 }
 
-static struct IrType *resolve_list_lit(struct Resolver *R, struct HirContainerLit *e)
+static struct IrType *resolve_list_lit(struct Resolver *R, struct HirContainerLit *e, struct SourceSpan span)
 {
-    struct IrType *elem_t = new_unknown(R);
+    struct IrType *elem_t = new_unknown(R, span.start);
 
     struct HirExpr *const *pexpr;
     K_LIST_FOREACH (e->items, pexpr) {
@@ -1314,8 +1298,8 @@ static struct IrType *resolve_list_lit(struct Resolver *R, struct HirContainerLi
 
 static struct IrType *resolve_map_lit(struct Resolver *R, struct HirContainerLit *e, struct SourceSpan span)
 {
-    struct IrType *key_t = new_unknown(R);
-    struct IrType *value_t = new_unknown(R);
+    struct IrType *key_t = new_unknown(R, span.start);
+    struct IrType *value_t = new_unknown(R, span.start);
     require_trait(R, key_t, TRAIT_HASH);
     require_trait(R, key_t, TRAIT_EQUALS);
 
@@ -1335,7 +1319,7 @@ static struct IrType *resolve_map_lit(struct Resolver *R, struct HirContainerLit
 static struct IrType *resolve_container_lit(struct Resolver *R, struct HirContainerLit *e, struct SourceSpan span)
 {
     if (e->code == BUILTIN_LIST) {
-        return resolve_list_lit(R, e);
+        return resolve_list_lit(R, e, span);
     } else {
         paw_assert(e->code == BUILTIN_MAP);
         return resolve_map_lit(R, e, span);
@@ -1745,7 +1729,7 @@ static struct IrType *ResolveTuplePat(struct Resolver *R, struct HirTuplePat *p)
 static struct IrType *ResolveBindingPat(struct Resolver *R, struct HirBindingPat *p)
 {
     // binding type is determined using unification
-    struct IrType *type = new_unknown(R);
+    struct IrType *type = new_unknown(R, p->span.start);
 
     // make sure bindings are unique within each pattern (OR patterns are special-cased)
     account_for_binding(R, p->ident);
@@ -1800,7 +1784,7 @@ into_binding:
 
 static struct IrType *ResolveWildcardPat(struct Resolver *R, struct HirWildcardPat *p)
 {
-    return new_unknown(R);
+    return new_unknown(R, p->span.start);
 }
 
 static struct IrType *ResolveLiteralPat(struct Resolver *R, struct HirLiteralPat *p)
@@ -1860,10 +1844,10 @@ static void resolve_stmt(struct Resolver *R, struct HirStmt *stmt)
 //       (type annotations, type arguments, etc.). Call resolve_type() to convert such
 //       an expression into a HIR type.
 
-static struct IrType *resolve_type(struct Resolver *R, struct HirType *type)
+static struct IrType *resolve_type(struct Resolver *R, struct HirType *type, struct SourceSpan span)
 {
     if (type == NULL)
-        return new_unknown(R);
+        return new_unknown(R, span.start);
     struct IrType *r = pawP_lower_type(R->C, R->m, R->symtab, type);
     return normalize(R, r);
 }
@@ -1996,13 +1980,13 @@ static void check_module_types(struct Resolver *R, struct ModuleInfo *m)
 
 static void check_types(struct Resolver *R)
 {
-    enter_inference_ctx(R);
     struct ModuleInfo *const *pm;
     K_LIST_FOREACH (R->C->modules, pm) {
         use_module(R, *pm);
+        enter_inference_ctx(R);
         check_module_types(R, R->m);
+        leave_inference_ctx(R);
     }
-    leave_inference_ctx(R);
 }
 
 void pawP_resolve(struct Compiler *C)

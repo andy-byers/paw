@@ -22,10 +22,6 @@ struct QueryState {
     int index;
 };
 
-#define Q_NAME_ERROR(Q_, Loc_, ...) pawP_error((Q_)->C, PAW_ENAME, (Q_)->m->name, Loc_, __VA_ARGS__)
-#define Q_TYPE_ERROR(Q_, Loc_, ...) pawP_error((Q_)->C, PAW_ETYPE, (Q_)->m->name, Loc_, __VA_ARGS__)
-#define Q_VALUE_ERROR(Q_, Loc_, ...) pawP_error((Q_)->C, PAW_EVALUE, (Q_)->m->name, Loc_, __VA_ARGS__)
-
 static int module_number(struct ModuleInfo *m)
 {
     return m->hir->modno;
@@ -118,9 +114,10 @@ static struct QueryBase find_global_in(struct QueryState *Q, struct ModuleInfo *
         if (m == NULL)
             break;
         if (Q->index >= path->segments->count)
-            pawE_error(ENV(Q), PAW_ETYPE, -1, "unexpected module name");
+            // module name specified without item
+            LOOKUP_ERROR(Q, unexpected_module_name, path->span.start);
         if (module_number(Q->m) != module_number(Q->base))
-            pawE_error(ENV(Q), PAW_ESYNTAX, -1, "transitive imports are not supported");
+            LOOKUP_ERROR(Q, transitive_import, path->span.start);
         Q->m = m;
     } while (Q->index < path->segments->count);
     return (struct QueryBase){0};
@@ -210,6 +207,26 @@ static struct IrType *find_assoc_item(struct QueryState *Q, struct IrType *type,
     return result;
 }
 
+static struct IrTypeList *new_unknowns(struct Compiler *C, struct HirDeclList *decls, struct IrTypeList **pgenerics)
+{
+    struct IrTypeList *unknowns = IrTypeList_new(C);
+    struct IrTypeList *generics = IrTypeList_new(C);
+    IrTypeList_reserve(C, unknowns, generics->count);
+
+    struct HirDecl *const *pdecl;
+    K_LIST_FOREACH (decls, pdecl) {
+        struct HirGenericDecl *d = HirGetGenericDecl(*pdecl);
+        struct IrType *type = pawIr_get_type(C, d->hid);
+        struct IrTypeList *bounds = IrGetGeneric(type)->bounds;
+        struct IrType *unknown = pawU_new_unknown(C->U, d->span.start, bounds);
+        IrTypeList_push(C, unknowns, unknown);
+        IrTypeList_push(C, generics, type);
+    }
+
+    *pgenerics = generics;
+    return unknowns;
+}
+
 static struct IrTypeList *maybe_generalize_adt(struct QueryState *Q, struct HirDecl *decl, struct IrTypeList *types)
 {
     if (types != NULL)
@@ -217,8 +234,8 @@ static struct IrTypeList *maybe_generalize_adt(struct QueryState *Q, struct HirD
     struct HirAdtDecl *d = HirGetAdtDecl(decl);
     if (d->generics == NULL)
         return types;
-    struct IrTypeList *generics = pawHir_collect_decl_types(Q->C, d->generics);
-    struct IrTypeList *unknowns = pawU_new_unknowns(Q->C->U, generics);
+    struct IrTypeList *generics;
+    struct IrTypeList *unknowns = new_unknowns(Q->C, d->generics, &generics);
     return pawP_instantiate_typelist(Q->C, generics, unknowns, generics);
 }
 
@@ -252,21 +269,6 @@ static struct QueryBase find_local(struct QueryState *Q, struct HirSymtab *symta
     return (struct QueryBase){0};
 }
 
-static struct IrTypeList *new_unknowns(struct Compiler *C, struct IrTypeList *generics)
-{
-    struct IrTypeList *list = IrTypeList_new(C);
-    IrTypeList_reserve(C, list, generics->count);
-
-    struct IrType **pgeneric;
-    K_LIST_FOREACH (generics, pgeneric) {
-        struct IrTypeList *bounds = IrGetGeneric(*pgeneric)->bounds;
-        struct IrType *unknown = pawU_new_unknown(C->U, bounds);
-        IrTypeList_push(C, list, unknown);
-    }
-
-    return list;
-}
-
 static struct IrType *resolve_alias(struct QueryState *Q, struct HirSegment *seg, struct HirDecl *decl, struct IrTypeList *knowns)
 {
     paw_assert(HirIsTypeDecl(decl));
@@ -285,8 +287,8 @@ static struct IrType *resolve_alias(struct QueryState *Q, struct HirSegment *seg
     if (d->generics == NULL)
         return rhs;
 
-    struct IrTypeList *generics = pawHir_collect_decl_types(Q->C, d->generics);
-    struct IrTypeList *unknowns = new_unknowns(Q->C, generics);
+    struct IrTypeList *generics;
+    struct IrTypeList *unknowns = new_unknowns(Q->C, d->generics, &generics);
     struct IrTypeList *subst = pawP_instantiate_typelist(Q->C, generics, unknowns, types);
     if (knowns != NULL) {
         struct IrType **pu, **pk;

@@ -15,7 +15,8 @@
 #include "parse.h"
 #include "paw.h"
 #include "rt.h"
-#include "type.h"
+#include "rtti.h"
+
 
 static void *default_alloc(void *ud, void *ptr, size_t old_size, size_t new_size)
 {
@@ -118,18 +119,18 @@ void paw_close(paw_Env *P)
 
 static void mangle_arg(paw_Env *P, Buffer *buf, paw_Type code)
 {
-    struct Type const *type = Y_TYPE(P, code);
-    pawY_mangle_add_arg(P, buf, type->hdr.code);
+    RttiType const *type = RTTI_TYPE(P, code);
+    pawRtti_mangle_add_arg(P, buf, type->hdr.code);
 }
 
 static void mangle_types(paw_Env *P, Buffer *buf, paw_Type *types)
 {
     if (types != NULL) {
-        pawY_mangle_start_generic_args(P, buf);
+        pawRtti_mangle_start_generic_args(P, buf);
         while (*types >= 0) {
             mangle_arg(P, buf, *types++);
         }
-        pawY_mangle_finish_generic_args(P, buf);
+        pawRtti_mangle_finish_generic_args(P, buf);
     }
 }
 
@@ -395,14 +396,14 @@ void paw_get_typename(paw_Env *P, paw_Type code)
 {
     Buffer buf;
     pawL_init_buffer(P, &buf);
-    struct Type *type = Y_TYPE(P, code);
-    pawY_print_type(P, &buf, type->hdr.code);
+    RttiType const *type = RTTI_TYPE(P, code);
+    pawRtti_print_type(P, &buf, type->hdr.code);
     pawL_push_result(P, &buf);
 }
 
 void paw_get_global(paw_Env *P, int gid)
 {
-    *P->top.p = *Y_PVAL(P, gid);
+    *P->top.p = *RTTI_PVAL(P, gid);
     API_INCR_TOP(P, 1);
 }
 

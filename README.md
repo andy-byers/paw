@@ -48,7 +48,7 @@ pub fn main() {
 
     // Call the closure for each integer 1 to 100, exclusive.
     for i in 1..100 {
-        print(fizzbuzz(i) + "\n");
+        print("fizzbuzz(\{i}) = \{fizzbuzz(i)}\n");
     }
 }
 ```
@@ -109,7 +109,7 @@ pub fn main() {
         total = total + value;
     }
 
-    print(total.to_string() + "\n"); // 35
+    print("total = \{total}\n"); // total = 35
 }
 
 ```
@@ -146,7 +146,7 @@ pub fn main() {
     let outer = Outer{value: inner};
     let value = get(outer);
 
-    print(value.to_string() + "\n"); // 123
+    print("value = \{value}\n"); // value = 123
 }
 ```
 

@@ -10,8 +10,6 @@
 #include <limits.h>
 #include <inttypes.h>
 
-typedef uint64_t TypeSet;
-
 static void write_main(char *out, char const *items, char const *text)
 {
 #define ADD_CHUNK(o, p)      \
@@ -134,7 +132,7 @@ static void check_unification_errors(void)
             snprintf(text_buf, sizeof(text_buf), "let x = %s; let y = %s; x = y;",
                 get_literal(k), get_literal(k2));
 
-            test_compiler_status(PAW_ETYPE, name_buf, "", text_buf);
+            test_compiler_status(E_INCOMPATIBLE_TYPES, name_buf, "", text_buf);
         }
     }
 }
@@ -165,7 +163,7 @@ static void check_binop_type_errors(char const *op, paw_Type *types)
     for (int t = PAW_TUNIT; t <= PAW_TSTR; ++t) {
         for (int t2 = PAW_TUNIT; t2 <= PAW_TSTR; ++t2) {
             if (t != t2 && type_in_list(t, types) && type_in_list(t2, types))
-                check_binop_type_error(PAW_ETYPE, op, t, t2);
+                check_binop_type_error(E_INCOMPATIBLE_TYPES, op, t, t2);
             if (t == t2 && !type_in_list(t, types))
                 check_binop_type_error(E_INVALID_BINARY_OPERAND, op, t, t2);
         }
@@ -207,23 +205,23 @@ static void test_type_error(void)
     check_binop_type_errors("!=", MAKE_LIST(PAW_TBOOL, PAW_TINT, PAW_TFLOAT, PAW_TSTR));
 
     test_compiler_status(E_UNIT_VARIANT_WITH_PARENTHESIS, "call_unit_variant", "enum E {X}", "let x = E::X();");
-    test_compiler_status(PAW_ETYPE, "wrong_constructor_args", "enum E {X(int)}", "let x = E::X(1.0);");
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "wrong_constructor_args", "enum E {X(int)}", "let x = E::X(1.0);");
     test_compiler_status(E_EXPECTED_ADT, "selector_on_function", "fn func() {}", "let a = func.field;");
-    test_compiler_status(PAW_ETYPE, "selector_on_module", "use io;", "let s = io.abc;");
+    test_compiler_status(E_UNEXPECTED_MODULE_NAME, "selector_on_module", "use io;", "let s = io.abc;");
     test_compiler_status(E_EXTRA_SEGMENT, "extraneous_method_access",
         "struct S {pub fn f() {}}", "S::f::f(); ");
     test_compiler_status(E_EXTRA_SEGMENT, "extraneous_variant_access",
         "enum E {A}", "let e = E::A::A; ");
 
-    test_compiler_status(PAW_ETYPE, "missing_return_type", "fn f() {123}", "");
-    test_compiler_status(PAW_ETYPE, "missing_return_value", "fn f() -> int {}", "");
-    test_compiler_status(PAW_ETYPE, "non_exhaustive_branch",
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "missing_return_type", "fn f() {123}", "");
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "missing_return_value", "fn f() -> int {}", "");
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "non_exhaustive_branch",
         "fn f(x: bool) -> int {if x {} else {123}}", "");
-    test_compiler_status(PAW_ETYPE, "non_exhaustive_return",
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "non_exhaustive_return",
         "fn f(x: bool) -> int {if x {return 123;}}", "");
-    test_compiler_status(PAW_ETYPE, "non_unit_guard", "fn f(x: bool) {if x {123}}", "");
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "non_unit_guard", "fn f(x: bool) {if x {123}}", "");
     test_compiler_status(E_EXPECTED_BASIC_TYPE, "nonscalar_cast", "", "let x = 123 as str;");
-    test_compiler_status(PAW_ETYPE, "invalid_map_key", "struct S;", "let x = [S: 123];");
+    test_compiler_status(E_UNSATISFIED_TRAIT_BOUNDS, "invalid_map_key", "struct S;", "let x = [S: 123];");
 }
 
 static void test_name_too_long(void)
@@ -352,22 +350,22 @@ static void test_closure_error(void)
 {
     test_compiler_status(PAW_OK, "infer_by_usage", "", "let f = |x| {}; f(1);");
 
-    test_compiler_status(PAW_ETYPE, "call_with_wrong_type_annotation", "", "let f = |x: int| x; f(2.0);");
-    test_compiler_status(PAW_ETYPE, "call_with_wrong_type_inference", "", "let f = |x| x; f(1); f(2.0);");
-    test_compiler_status(PAW_ETYPE, "cannot_infer_unused_param", "", "let f = |x| {};");
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "call_with_wrong_type_annotation", "", "let f = |x: int| x; f(2.0);");
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "call_with_wrong_type_inference", "", "let f = |x| x; f(1); f(2.0);");
+    test_compiler_status(E_CANNOT_INFER, "cannot_infer_unused_param", "", "let f = |x| {};");
 }
 
 static void test_arithmetic_error(void)
 {
-    test_compiler_status(PAW_EVALUE, "constant_division_by_0_int", "", "let x = 1 / 0;");
-    test_compiler_status(PAW_EVALUE, "constant_division_by_0_float", "", "let x = 1.0 / 0.0;");
-    test_compiler_status(PAW_EVALUE, "constant_negative_left_shift", "", "let x = 1 << -2;");
-    test_compiler_status(PAW_EVALUE, "constant_negative_right_shift", "", "let x = 1 >> -2;");
+    test_compiler_status(E_CONSTANT_DIVIDE_BY_ZERO, "constant_division_by_0_int", "", "let x = 1 / 0;");
+    test_compiler_status(E_CONSTANT_DIVIDE_BY_ZERO, "constant_division_by_0_float", "", "let x = 1.0 / 0.0;");
+    test_compiler_status(E_CONSTANT_NEGATIVE_SHIFT_COUNT, "constant_negative_left_shift", "", "let x = 1 << -2;");
+    test_compiler_status(E_CONSTANT_NEGATIVE_SHIFT_COUNT, "constant_negative_right_shift", "", "let x = 1 >> -2;");
 
-    test_compiler_status(PAW_EVALUE, "special_division_by_0_int", "fn f(x: int) -> int {x / 0}", "f(1);");
-    test_compiler_status(PAW_EVALUE, "special_division_by_0_float", "fn f(x: float) -> float {x / 0.0}", "f(1.0);");
-    test_compiler_status(PAW_EVALUE, "special_negative_left_shift", "fn f(x: int) -> int {x << -2}", "f(1);");
-    test_compiler_status(PAW_EVALUE, "special_negative_right_shift", "fn f(x: int) -> int {x >> -2}", "f(1);");
+    test_compiler_status(E_CONSTANT_DIVIDE_BY_ZERO, "special_division_by_0_int", "fn f(x: int) -> int {x / 0}", "f(1);");
+    test_compiler_status(E_CONSTANT_DIVIDE_BY_ZERO, "special_division_by_0_float", "fn f(x: float) -> float {x / 0.0}", "f(1.0);");
+    test_compiler_status(E_CONSTANT_NEGATIVE_SHIFT_COUNT, "special_negative_left_shift", "fn f(x: int) -> int {x << -2}", "f(1);");
+    test_compiler_status(E_CONSTANT_NEGATIVE_SHIFT_COUNT, "special_negative_right_shift", "fn f(x: int) -> int {x >> -2}", "f(1);");
 
     test_runtime_status(PAW_ERUNTIME, "division_by_0_int", "fn f(x: int) -> int {42 / x}", "f(0);");
     test_runtime_status(PAW_ERUNTIME, "division_by_0_float", "fn f(x: float) -> float {4.2 / x}", "f(0.0);");
@@ -394,8 +392,8 @@ static void test_struct_error(void)
     test_compiler_status(E_DUPLICATE_FIELD, "struct_duplicate_field", "struct A {pub a: int}", "let a = A{a: 1, a: 1};");
     test_compiler_status(E_DUPLICATE_ITEM, "struct_field_conflicts_with_method", "struct A {pub a: int, fn a() {}}", "");
     test_compiler_status(E_EXPECTED_FIELD_SELECTOR, "struct_access_by_index", "struct S{pub x: int}", "let x = S{x: 1}; let y = x.0;");
-    test_compiler_status(PAW_ETYPE, "struct_not_enough_types", "struct S<A, B, C>;", "let x = S::<int, float>;");
-    test_compiler_status(PAW_ETYPE, "struct_too_many_types", "struct S<A, B>;", "let x = S::<int, float, bool>;");
+    test_compiler_status(E_INCORRECT_TYPE_ARITY, "struct_not_enough_types", "struct S<A, B, C>;", "let x = S::<int, float>;");
+    test_compiler_status(E_INCORRECT_TYPE_ARITY, "struct_too_many_types", "struct S<A, B>;", "let x = S::<int, float, bool>;");
 
     test_compiler_status(E_ASSOCIATED_ITEM_VISIBILITY, "struct_select_private_field",
         "struct S {pub a: int, b: int, pub fn new() -> S {return S{a: 1, b: 2};}}",
@@ -404,8 +402,8 @@ static void test_struct_error(void)
     test_compiler_status(E_ASSOCIATED_ITEM_VISIBILITY, "struct_call_private_method", "struct S {fn private(self) {}}", "let x = S; x.private();");
 
     test_compiler_status(E_NOT_A_METHOD, "struct_not_a_method", "struct S {pub fn f(s: Self) {}}", "let x = S; x.f();");
-    test_compiler_status(PAW_ETYPE, "struct_invalid_self", "struct S {pub fn f(self: int) {}}", "");
-    test_compiler_status(PAW_ETYPE, "struct_invalid_self_poly", "struct S<A, B> {fn f(self: S<B, A>) {}}", "");
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "struct_invalid_self", "struct S {pub fn f(self: int) {}}", "");
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "struct_invalid_self_poly", "struct S<A, B> {fn f(self: S<B, A>) {}}", "");
 }
 
 static void test_enum_error(void)
@@ -417,35 +415,35 @@ static void test_enum_error(void)
     test_compiler_status(E_MISSING_VARIANT_ARGS, "variant_missing_only_field", "enum A {X(int)}", "let a = A::X;");
     test_compiler_status(E_INCORRECT_ARITY, "variant_missing_field", "enum A {X(int, float)}", "let a = A::X(42);");
     test_compiler_status(E_INCORRECT_ARITY, "variant_extra_field", "enum A {X(int)}", "let a = A::X(42, true);");
-    test_compiler_status(PAW_ETYPE, "variant_wrong_field_type", "enum A {X(int)}", "let a = A::X(1.0);");
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "variant_wrong_field_type", "enum A {X(int)}", "let a = A::X(1.0);");
     test_compiler_status(E_EXPECTED_FIELD_SELECTOR, "enum_requires_pattern_matching", "enum E{X(int)}", "let x = E::X(1); let y = x.0;");
 }
 
 static void test_list_error(void)
 {
-    test_compiler_status(PAW_ETYPE, "list_cyclic_type", "", "let x = []; x = [x];");
-    test_compiler_status(PAW_ETYPE, "list_nested_cyclic_type", "", "let x = []; x = [[x]];");
-    test_compiler_status(PAW_ETYPE, "list_cannot_infer", "", "let a = [];");
-    test_compiler_status(PAW_ETYPE, "list_cannot_infer_binop", "", "let a = [] + [];");
-    test_compiler_status(PAW_ETYPE, "list_use_before_inference", "", "let a = []; let b = #a;");
-    test_compiler_status(PAW_ETYPE, "list_incompatible_types", "", "let a = [1]; a = [2.0];");
-    test_compiler_status(PAW_ETYPE, "list_incompatible_types_2", "", "let a = []; if true {a = [0];} else {a = [true];}");
-    test_compiler_status(PAW_ETYPE, "list_mixed_types", "", "let a = [1, 2, 3, 4, '5'];");
-    test_compiler_status(PAW_ETYPE, "list_mixed_nesting", "", "let a = [[[1]], [[2]], [3]];");
+    test_compiler_status(E_CYCLIC_TYPE, "list_cyclic_type", "", "let x = []; x = [x];");
+    test_compiler_status(E_CYCLIC_TYPE, "list_nested_cyclic_type", "", "let x = []; x = [[x]];");
+    test_compiler_status(E_CANNOT_INFER, "list_cannot_infer", "", "let a = [];");
+    test_compiler_status(E_CANNOT_INFER, "list_cannot_infer_binop", "", "let a = [] + [];");
+    test_compiler_status(E_CANNOT_INFER, "list_use_before_inference", "", "let a = []; let b = #a;");
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "list_incompatible_types", "", "let a = [1]; a = [2.0];");
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "list_incompatible_types_2", "", "let a = []; if true {a = [0];} else {a = [true];}");
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "list_mixed_types", "", "let a = [1, 2, 3, 4, '5'];");
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "list_mixed_nesting", "", "let a = [[[1]], [[2]], [3]];");
 }
 
 static void test_map_error(void)
 {
-    test_compiler_status(PAW_ETYPE, "map_cyclic_type", "", "let x = [:]; x = ['cyclic': x];");
-    test_compiler_status(PAW_ETYPE, "map_nested_cyclic_type", "", "let x = [:]; x = ['cyclic': ['nested': x]];");
-    test_compiler_status(PAW_ETYPE, "map_cannot_infer", "", "let a = [:];");
-    test_compiler_status(PAW_ETYPE, "map_use_before_inference", "", "let a = [:]; let b = #a;");
-    test_compiler_status(PAW_ETYPE, "map_incompatible_types", "", "let a = [1: 2]; a = [3: 4.0];");
-    test_compiler_status(PAW_ETYPE, "map_incompatible_types_2", "", "let a = [:]; if true {a = [0: 0];} else {a = [1: true];}");
-    test_compiler_status(PAW_ETYPE, "map_mixed_types", "", "let a = [1: 2, 3: 4, 5: '6'];");
-    test_compiler_status(PAW_ETYPE, "map_mixed_nesting", "", "let a = [1: [1: 1], 2: [2: 2], 3: [3: [3: 3]]];");
-    test_compiler_status(PAW_ETYPE, "map_unhashable_literal_key", "", "let map = [[1]: 1];");
-    test_compiler_status(PAW_ETYPE, "map_unhashable_type_key", "", "let map: [[int]: int] = [:];");
+    test_compiler_status(E_CYCLIC_TYPE, "map_cyclic_type", "", "let x = [:]; x = ['cyclic': x];");
+    test_compiler_status(E_CYCLIC_TYPE, "map_nested_cyclic_type", "", "let x = [:]; x = ['cyclic': ['nested': x]];");
+    test_compiler_status(E_CANNOT_INFER, "map_cannot_infer", "", "let a = [:];");
+    test_compiler_status(E_CANNOT_INFER, "map_use_before_inference", "", "let a = [:]; let b = #a;");
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "map_incompatible_types", "", "let a = [1: 2]; a = [3: 4.0];");
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "map_incompatible_types_2", "", "let a = [:]; if true {a = [0: 0];} else {a = [1: true];}");
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "map_mixed_types", "", "let a = [1: 2, 3: 4, 5: '6'];");
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "map_mixed_nesting", "", "let a = [1: [1: 1], 2: [2: 2], 3: [3: [3: 3]]];");
+    test_compiler_status(E_UNSATISFIED_TRAIT_BOUNDS, "map_unhashable_literal_key", "", "let map = [[1]: 1];");
+    test_compiler_status(E_UNSATISFIED_TRAIT_BOUNDS, "map_unhashable_type_key", "", "let map: [[int]: int] = [:];");
     test_compiler_status(E_INVALID_SLICE_TARGET, "map_slice", "", "let map = [:]; let val = map[0:10];");
 }
 
@@ -585,7 +583,7 @@ static void test_variant_match_error(void)
     test_invalid_case("or_binding_missing_int", E_MISSING_BINDING_IN_ALTERNATIVE, "",
         "0", "x | 0");
     // 'x' has a different type in each alternative
-    test_invalid_case("or_binding_type_mismatch", PAW_ETYPE, "",
+    test_invalid_case("or_binding_type_mismatch", E_INCOMPATIBLE_TYPES, "",
         "(0, '')", "(x, 'b') | (1, x)");
 }
 
@@ -596,7 +594,7 @@ static void test_match_error(void)
 
 static void test_uninit_local(void)
 {
-    test_compiler_status(PAW_ETYPE, "uninit_var", "", "let x; x;"); // type of "x" cannot be inferred
+    test_compiler_status(E_CANNOT_INFER, "uninit_var", "", "let x; x;"); // type of "x" cannot be inferred
     test_compiler_status(E_USE_BEFORE_INITIALIZATION, "uninit_int", "", "let x: int; x;");
     test_compiler_status(E_USE_BEFORE_INITIALIZATION, "uninit_if_without_else", "", "let x; if true {x = 1;} x;");
     test_compiler_status(E_USE_BEFORE_INITIALIZATION, "uninit_ifelse", "", "let x; if true {x = 1;} else {} x;");
@@ -635,7 +633,7 @@ static void test_trait_error(void)
 
     test_compiler_status(E_MISSING_TRAIT_METHOD, "trait_missing_method",
         TRAIT "struct S: Trait {v: int}", "");
-    test_compiler_status(PAW_ETYPE, "trait_wrong_type",
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "trait_wrong_type",
         TRAIT "struct S: Trait {pub fn f(self) -> int {123}}", "");
     test_compiler_status(E_TRAIT_METHOD_VISIBILITY_MISMATCH, "trait_mismatched_visibility",
         TRAIT "struct S: Trait {fn f(self) {}}", "");
@@ -662,10 +660,10 @@ static void test_trait_error(void)
     "    t.f();\n"                                     \
     "}"
 
-    test_compiler_status(PAW_ETYPE, "trait_not_implemented",
+    test_compiler_status(E_UNSATISFIED_TRAIT_BOUNDS, "trait_not_implemented",
         POLY_TRAIT "struct S;" POLY_FUNCTION("int", ),
         "let x = S; call_f(x);");
-    test_compiler_status(PAW_ETYPE, "trait_generic_mismatch",
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "trait_generic_mismatch",
         POLY_TRAIT POLY_STRUCT POLY_FUNCTION("int", ),
         "let x = S{v: true}; call_f(x);");
     test_compiler_status(E_EXPECTED_TRAIT, "trait_type_as_trait",
@@ -695,9 +693,9 @@ static void test_underscore(void)
     test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_in_bound", "fn f<T: Trait<_>>(t: T) {}", "");
     test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_in_field_type", "struct S {value: [_]}", "");
 
-    test_compiler_status(PAW_ETYPE, "underscore_bad_scalar_inference",
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "underscore_bad_scalar_inference",
         "fn f(b: bool) {let v: _ = if b {1} else {'a'};}", "");
-    test_compiler_status(PAW_ETYPE, "underscore_bad_container_inference",
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "underscore_bad_container_inference",
         "fn f(b: bool) {let v: [_]; if b {v = [1]} else {v = ['a']};}", "");
 }
 
@@ -743,9 +741,9 @@ static void test_destructuring(void)
 {
     char const *structure = "struct Fields {pub a: int, pub b: int}";
     test_compiler_status(E_DUPLICATE_BINDING, "destructure_duplicate_binding", "", "let (x, (x,)) = (1, (2,));");
-    test_compiler_status(PAW_ETYPE, "destructure_wrong_type", "", "let (a, (b,)) = (1, 2);");
-    test_compiler_status(PAW_ETYPE, "destructure_too_many_elems", "", "let (a, b) = (1, 2, 3);");
-    test_compiler_status(PAW_ETYPE, "destructure_not_enough_elems", "", "let (a, b, c) = (1, 2);");
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "destructure_wrong_type", "", "let (a, (b,)) = (1, 2);");
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "destructure_too_many_elems", "", "let (a, b) = (1, 2, 3);");
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "destructure_not_enough_elems", "", "let (a, b, c) = (1, 2);");
     test_compiler_status(E_MISSING_FIELD, "destructure_missing_field", structure,
             "let Fields{a} = Fields{a: 1, b: 2};");
     test_compiler_status(E_UNKNOWN_FIELD, "destructure_extra_field", structure,

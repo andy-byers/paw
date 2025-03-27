@@ -5,7 +5,7 @@
 #include "call.h"
 #include "env.h"
 #include "test.h"
-#include "type.h"
+#include "rtti.h"
 
 static struct {
     int tests;
@@ -49,7 +49,7 @@ static void run_tests(char const *name, struct TestAlloc *a, char const *prefix)
             check(def->hdr.is_pub);
             fprintf(stderr, "    %s\n", name->text);
             paw_push_zero(P, 1);
-            P->top.p[-1] = *Y_PVAL(P, def->func.vid);
+            P->top.p[-1] = *RTTI_PVAL(P, def->func.vid);
             status = paw_call(P, 0);
             if (handle_error(P, status)) {
                 ++s_counters.runtime_errors;

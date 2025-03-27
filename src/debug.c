@@ -9,7 +9,7 @@
 #include "compile.h"
 #include "map.h"
 #include "rt.h"
-#include "type.h"
+
 #include <inttypes.h>
 #include <stdio.h>
 
@@ -321,13 +321,13 @@ void pawD_dump_defs(paw_Env *P)
     pawL_add_fstring(P, &buf, "did\tvid\tname\ttype\n", P->modname->text);
     size_t mxname = 0;
     for (int i = 0; i < P->defs.count; ++i) {
-        struct Def *def = Y_DEF(P, i);
+        struct Def *def = RT_DEF(P, i);
         if (def->hdr.name == NULL)
             continue;
         mxname = PAW_MAX(mxname, def->hdr.name->length);
     }
     for (int i = 0; i < P->defs.count; ++i) {
-        struct Def *def = Y_DEF(P, i);
+        struct Def *def = RT_DEF(P, i);
         char const *name = def->hdr.name != NULL
                                ? def->hdr.name->text
                                : "(null)";
@@ -338,7 +338,7 @@ void pawD_dump_defs(paw_Env *P)
             L_ADD_LITERAL(P, &buf, "-\t");
         }
         pawL_add_fstring(P, &buf, "%s\t", name);
-        pawY_print_type(P, &buf, def->hdr.code);
+        pawRtti_print_type(P, &buf, def->hdr.code);
         pawL_add_char(P, &buf, '\n');
     }
     pawL_add_char(P, &buf, '\0');

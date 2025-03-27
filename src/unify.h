@@ -13,6 +13,7 @@ typedef int (*Unify)(struct Unifier *, struct IrType *, struct IrType *);
 struct Unifier {
     Unify action;
     UnificationTable *table;
+    String const *modname;
     struct Compiler *C;
     int depth;
 };
@@ -34,11 +35,13 @@ static void pawU_unify_lists(struct Unifier *U, struct IrTypeList *a, struct IrT
 }
 
 // Create a new type variable
-struct IrType *pawU_new_unknown(struct Unifier *U, struct IrTypeList *bounds);
+struct IrType *pawU_new_unknown(struct Unifier *U, struct SourceLoc loc, struct IrTypeList *bounds);
+
+// TODO: get rid of this function and create lists of unknowns wherever they are needed and add source locations
 struct IrTypeList *pawU_new_unknowns(struct Unifier *U, struct IrTypeList *types);
 
 // Inference context handling
-void pawU_enter_binder(struct Unifier *U);
+void pawU_enter_binder(struct Unifier *U, String const *modname);
 void pawU_leave_binder(struct Unifier *U);
 
 paw_Bool pawU_list_equals(struct Unifier *U, struct IrTypeList *lhs, struct IrTypeList *rhs);

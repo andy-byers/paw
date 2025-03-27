@@ -71,13 +71,19 @@ enum ErrorKind {
     E_ITEM_VISIBILITY,
     E_ASSOCIATED_ITEM_VISIBILITY,
 
-    // IR type errors
+    // type errors
     E_MISSING_TRAIT_BOUNDS,
+    E_UNSATISFIED_TRAIT_BOUNDS,
+    E_INCOMPATIBLE_TYPES,
+    E_CANNOT_INFER,
+    E_CYCLIC_TYPE,
 
     // compiler errors
     E_MISSING_EXTERN_VALUE,
 
     // lookup errors
+    E_UNEXPECTED_MODULE_NAME,
+    E_TRANSITIVE_IMPORT,
     E_INCORRECT_TYPE_ARITY,
     E_UNEXPECTED_TYPE_ARGUMENTS,
     E_EXPECTED_TRAIT,
@@ -135,6 +141,10 @@ enum ErrorKind {
 
     // SSA construction errors
     E_USE_BEFORE_INITIALIZATION,
+
+    // constant propagation errors
+    E_CONSTANT_DIVIDE_BY_ZERO,
+    E_CONSTANT_NEGATIVE_SHIFT_COUNT,
 
     // register allocation errors
     E_TOO_MANY_VARIABLES,
@@ -205,13 +215,19 @@ _Noreturn void pawErr_missing_function_body(struct Compiler *C, String const *mo
 _Noreturn void pawErr_item_visibility(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *mod, char const *item);
 _Noreturn void pawErr_associated_item_visibility(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name, char const *type);
 
-// IR type errors
+// type errors
 _Noreturn void pawErr_missing_trait_bounds(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name);
+_Noreturn void pawErr_unsatisfied_trait_bounds(struct Compiler *C, String const *modname, struct SourceLoc loc);
+_Noreturn void pawErr_incompatible_types(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *lhs, char const *rhs);
+_Noreturn void pawErr_cannot_infer(struct Compiler *C, String const *modname, struct SourceLoc loc);
+_Noreturn void pawErr_cyclic_type(struct Compiler *C, String const *modname, struct SourceLoc loc);
 
 // compiler errors
 _Noreturn void pawErr_missing_extern_value(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name);
 
 // lookup errors
+_Noreturn void pawErr_unexpected_module_name(struct Compiler *C, String const *modname, struct SourceLoc loc);
+_Noreturn void pawErr_transitive_import(struct Compiler *C, String const *modname, struct SourceLoc loc);
 _Noreturn void pawErr_incorrect_type_arity(struct Compiler *C, String const *modname, struct SourceLoc loc, int want, int have);
 _Noreturn void pawErr_unexpected_type_arguments(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *what, char const *name);
 _Noreturn void pawErr_expected_trait(struct Compiler *C, String const *modname, struct SourceLoc loc);
@@ -269,6 +285,10 @@ _Noreturn void pawErr_nonexhaustive_pattern_match(struct Compiler *C, String con
 
 // SSA construction errors
 _Noreturn void pawErr_use_before_initialization(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name);
+
+// constant propagation errors
+_Noreturn void pawErr_constant_divide_by_zero(struct Compiler *C, String const *modname, struct SourceLoc loc);
+_Noreturn void pawErr_constant_negative_shift_count(struct Compiler *C, String const *modname, struct SourceLoc loc);
 
 // register allocation errors
 _Noreturn void pawErr_too_many_variables(struct Compiler *C, String const *modname, struct SourceLoc loc, int limit);

@@ -353,7 +353,7 @@ static struct HirDecl *declare_self(struct ItemCollector *X, struct SourceSpan s
 
 static struct ModuleInfo *use_module(struct ItemCollector *X, struct ModuleInfo *m)
 {
-    pawU_enter_binder(X->C->U);
+    pawU_enter_binder(X->C->U, m->name);
     X->hir = m->hir;
     X->m = m;
     return m;

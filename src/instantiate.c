@@ -16,16 +16,19 @@
 //     in as the instance type is unified with other types (see unify.c).
 
 #include "compile.h"
+#include "error.h"
 #include "ir_type.h"
 #include "map.h"
 #include "type_folder.h"
 #include "unify.h"
 
+#define INSTANTIATION_ERROR(I_, Kind_, ...) pawErr_##Kind_((I_)->C, ModuleList_get((I_)->C->modules, (I_)->modno)->name, __VA_ARGS__)
+
 struct InstanceState {
     struct Compiler *C;
     struct Unifier *U;
     paw_Env *P;
-    int line;
+    int modno;
 };
 
 static struct IrTypeList *collect_generic_types(struct InstanceState *I, struct HirDeclList *generics)
@@ -75,25 +78,25 @@ static struct IrType *instantiate_func_aux(struct InstanceState *I, struct IrSig
 
 static void check_type_param(struct InstanceState *I, struct IrTypeList *params, struct IrTypeList *args)
 {
-    if (args->count > params->count) {
-        TYPE_ERROR(I, "too many generics");
-    } else if (args->count < params->count) {
-        TYPE_ERROR(I, "not enough generics");
-    }
+    if (params->count != args->count)
+        INSTANTIATION_ERROR(I, incorrect_type_arity, (struct SourceLoc){-1}, params->count, args->count);
 }
 
 static void normalize_type_list(struct InstanceState *I, struct IrTypeList *types)
 {
-    for (int i = 0; i < types->count; ++i) {
-        pawU_normalize(I->U->table, types->data[i]);
-    }
+    struct IrType *const *ptype;
+    K_LIST_FOREACH (types, ptype)
+        pawU_normalize(I->U->table, *ptype);
 }
 
 static struct IrType *instantiate_trait(struct InstanceState *I, struct IrTraitObj *base, struct IrTypeList *types)
 {
     struct IrTypeList *generics = base->types;
-    if (generics == NULL)
-        TYPE_ERROR(I, "trait is not polymorphic");
+    if (generics == NULL) {
+        struct HirDecl *decl = pawHir_get_decl(I->C, base->did);
+        INSTANTIATION_ERROR(I, unexpected_type_arguments, (struct SourceLoc){-1},
+                "trait", hir_decl_ident(decl).name->text);
+    }
     check_type_param(I, generics, types);
     normalize_type_list(I, types);
     return pawIr_new_trait_obj(I->C, base->did, types);
@@ -148,6 +151,7 @@ static struct IrType *instantiate_method(struct InstanceState *I, struct IrType 
 struct IrType *pawP_instantiate_method(struct Compiler *C, struct HirDecl *base, struct IrTypeList *types, struct HirDecl *method)
 {
     struct InstanceState I = {
+        .modno = base->hdr.did.modno,
         .U = C->U,
         .P = ENV(C),
         .C = C,
@@ -172,6 +176,7 @@ struct IrType *pawP_instantiate(struct Compiler *C, struct IrType *base, struct 
         return base;
 
     struct InstanceState I = {
+        .modno = IR_TYPE_DID(base).modno,
         .U = C->U,
         .P = ENV(C),
         .C = C,
@@ -191,6 +196,7 @@ static struct IrType *generalize_adt(struct Compiler *C, struct IrAdt *t)
         return IR_CAST_TYPE(t);
 
     struct InstanceState I = {
+        .modno = t->did.modno,
         .U = C->U,
         .P = ENV(C),
         .C = C,

@@ -416,10 +416,52 @@ _Noreturn void pawErr_missing_trait_bounds(struct Compiler *C, String const *mod
             NULL);
 }
 
+_Noreturn void pawErr_unsatisfied_trait_bounds(struct Compiler *C, String const *modname, struct SourceLoc loc)
+{
+    throw(C, E_UNSATISFIED_TRAIT_BOUNDS, modname, loc,
+            format(C, "trait bounds not satisfied"),
+            NULL);
+}
+
+_Noreturn void pawErr_incompatible_types(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *lhs, char const *rhs)
+{
+    throw(C, E_INCOMPATIBLE_TYPES, modname, loc,
+            format(C, "incompatible types '%s' and '%s'", lhs, rhs),
+            NULL);
+}
+
+_Noreturn void pawErr_cannot_infer(struct Compiler *C, String const *modname, struct SourceLoc loc)
+{
+    throw(C, E_CANNOT_INFER, modname, loc,
+            format(C, "unable to infer type"),
+            NULL);
+}
+
+_Noreturn void pawErr_cyclic_type(struct Compiler *C, String const *modname, struct SourceLoc loc)
+{
+    throw(C, E_CYCLIC_TYPE, modname, loc,
+            format(C, "encountered cyclic type"),
+            NULL);
+}
+
 _Noreturn void pawErr_missing_extern_value(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name)
 {
     throw(C, E_MISSING_EXTERN_VALUE, modname, loc,
             format(C, "missing extern value '%s'", name),
+            NULL);
+}
+
+_Noreturn void pawErr_unexpected_module_name(struct Compiler *C, String const *modname, struct SourceLoc loc)
+{
+    throw(C, E_UNEXPECTED_MODULE_NAME, modname, loc,
+            format(C, "unexpected module name"),
+            NULL);
+}
+
+_Noreturn void pawErr_transitive_import(struct Compiler *C, String const *modname, struct SourceLoc loc)
+{
+    throw(C, E_TRANSITIVE_IMPORT, modname, loc,
+            format(C, "transitive imports are not supported"),
             NULL);
 }
 
@@ -746,7 +788,6 @@ _Noreturn void pawErr_nonexhaustive_pattern_match(struct Compiler *C, String con
             NULL);
 }
 
-
 _Noreturn void pawErr_use_before_initialization(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name)
 {
     throw(C, E_USE_BEFORE_INITIALIZATION, modname, loc,
@@ -754,6 +795,19 @@ _Noreturn void pawErr_use_before_initialization(struct Compiler *C, String const
             NULL);
 }
 
+_Noreturn void pawErr_constant_divide_by_zero(struct Compiler *C, String const *modname, struct SourceLoc loc)
+{
+    throw(C, E_CONSTANT_DIVIDE_BY_ZERO, modname, loc,
+            format(C, "constant division by 0"),
+            NULL);
+}
+
+_Noreturn void pawErr_constant_negative_shift_count(struct Compiler *C, String const *modname, struct SourceLoc loc)
+{
+    throw(C, E_CONSTANT_NEGATIVE_SHIFT_COUNT, modname, loc,
+            format(C, "constant negative shift count"),
+            NULL);
+}
 
 _Noreturn void pawErr_too_many_variables(struct Compiler *C, String const *modname, struct SourceLoc loc, int limit)
 {

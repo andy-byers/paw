@@ -6,14 +6,16 @@
 
 #include "unify.h"
 #include "compile.h"
+#include "error.h"
 #include "env.h"
 #include "hir.h"
 #include "ir_type.h"
 
-#define ERROR(U, line, ...) pawE_error(ENV((U)->C), PAW_ETYPE, line, __VA_ARGS__)
+#define UNIFIER_ERROR(U_, Kind_, ...) pawErr_##Kind_((U_)->C, (U_)->modname, __VA_ARGS__)
 
 typedef struct InferenceVar {
-    K_ALIGNAS_NODE struct InferenceVar *parent;
+    struct InferenceVar *parent;
+    struct SourceLoc loc;
     struct IrType *type;
     int rank;
 } InferenceVar;
@@ -79,7 +81,7 @@ static void check_occurs(struct Unifier *U, InferenceVar *ivar, struct IrType *t
 {
     if (ivar->type == type) {
         paw_assert(IrIsInfer(type));
-        ERROR(U, -1, "encountered cyclic type");
+        UNIFIER_ERROR(U, cyclic_type, ivar->loc);
     }
     if (!IrIsAdt(type))
         return;
@@ -99,7 +101,7 @@ static void unify_var_type(struct Unifier *U, InferenceVar *ivar, struct IrType 
 
     struct IrTypeList *bounds = IrGetInfer(ivar->type)->bounds;
     if (!pawP_satisfies_bounds(U->C, type, bounds)) {
-        TYPE_ERROR(U->C, "trait bounds not satisfied");
+        UNIFIER_ERROR(U, unsatisfied_trait_bounds, ivar->loc);
     }
 
     check_occurs(U, ivar, type);
@@ -114,9 +116,8 @@ static void unify_var_var(struct Unifier *U, InferenceVar *a, InferenceVar *b)
     debug_log(U, "unify_var_var", a->type, b->type);
 
     struct IrTypeList *bounds = IrGetInfer(b->type)->bounds;
-    if (!pawP_satisfies_bounds(U->C, a->type, bounds)) {
-        TYPE_ERROR(U->C, "trait bounds not satisfied");
-    }
+    if (!pawP_satisfies_bounds(U->C, a->type, bounds))
+        UNIFIER_ERROR(U, unsatisfied_trait_bounds, a->loc);
 
     if (a != b)
         link_roots(a, b);
@@ -274,16 +275,11 @@ static int unify(struct Unifier *U, struct IrType *a, struct IrType *b)
 
 void pawU_unify(struct Unifier *U, struct IrType *a, struct IrType *b)
 {
-    int const rc = RUN_ACTION(U, a, b, unify);
-    if (rc == 0)
-        return;
-
-    pawIr_print_type(U->C, a);
-    pawIr_print_type(U->C, b);
-    ERROR(U, -1,
-          "incompatible types '%s' and '%s'",
-          paw_string(ENV(U->C), -2),
-          paw_string(ENV(U->C), -1));
+    if (RUN_ACTION(U, a, b, unify) != 0) {
+        char const *lhs = pawIr_print_type(U->C, a);
+        char const *rhs = pawIr_print_type(U->C, b);
+        UNIFIER_ERROR(U, incompatible_types, (struct SourceLoc){-1}, lhs, rhs);
+    }
 }
 
 static int equate(struct Unifier *U, struct IrType *a, struct IrType *b)
@@ -300,7 +296,7 @@ paw_Bool pawU_equals(struct Unifier *U, struct IrType *a, struct IrType *b)
     return RUN_ACTION(U, a, b, equate) == 0;
 }
 
-struct IrType *pawU_new_unknown(struct Unifier *U, struct IrTypeList *bounds)
+struct IrType *pawU_new_unknown(struct Unifier *U, struct SourceLoc loc, struct IrTypeList *bounds)
 {
     UnificationTable *table = U->table;
 
@@ -323,18 +319,19 @@ struct IrTypeList *pawU_new_unknowns(struct Unifier *U, struct IrTypeList *types
         struct IrTypeList *bounds = IrIsGeneric(*ptype)
                                         ? IrGetGeneric(*ptype)->bounds
                                         : NULL;
-        struct IrType *unknown = pawU_new_unknown(U, bounds);
+        struct IrType *unknown = pawU_new_unknown(U, (struct SourceLoc){-1}, bounds);
         IrTypeList_push(U->C, result, unknown);
     }
     return result;
 }
 
-void pawU_enter_binder(struct Unifier *U)
+void pawU_enter_binder(struct Unifier *U, String const *modname)
 {
     UnificationTable *table = P_ALLOC(U->C, NULL, 0, sizeof(UnificationTable));
     table->ivars = VarList_new(U->C);
     table->depth = U->depth;
     table->outer = U->table;
+    U->modname = modname;
     U->table = table;
     ++U->depth;
 }
@@ -344,9 +341,8 @@ static void check_table(struct Unifier *U, UnificationTable *table)
     for (int i = 0; i < table->ivars->count; ++i) {
         InferenceVar const *var = get_ivar(table, i);
         pawU_normalize(table, var->type);
-        if (IrIsInfer(var->type)) {
-            ERROR(U, -1, "unable to infer type");
-        }
+        if (IrIsInfer(var->type))
+            UNIFIER_ERROR(U, cannot_infer, var->loc);
     }
 }
 
@@ -355,6 +351,8 @@ void pawU_leave_binder(struct Unifier *U)
     check_table(U, U->table);
     U->table = U->table->outer;
     --U->depth;
+
+    U->modname = NULL;
 }
 
 paw_Bool pawU_list_equals(struct Unifier *U, struct IrTypeList *lhs, struct IrTypeList *rhs)
