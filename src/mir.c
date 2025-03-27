@@ -1432,7 +1432,6 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
             PRINT_LITERAL(P, " = global ");
             PRINT_STRING(P, hir_decl_ident(decl).name);
             PRINT_FORMAT(P, " (%s)", type);
-            --ENV(P->C)->top.p; // pop 'type'
             break;
         }
         case kMirConstant: {
@@ -1723,8 +1722,9 @@ char const *pawMir_dump(struct Mir *mir)
                  child);
     }
 
-    pawL_push_result(P, &buf);
-    return paw_string(P, -1);
+    String const *s = pawP_scan_nstring(C, C->strings, buf.data, buf.size);
+    pawL_discard_result(P, &buf);
+    return s->text;
 }
 
 #ifdef PAW_DEBUG_EXTRA

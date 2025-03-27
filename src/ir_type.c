@@ -374,6 +374,7 @@ char const *pawIr_print_type(struct Compiler *C, IrType *type)
                },
                type);
 
-    pawL_push_result(P, &buf);
-    return paw_string(P, -1);
+    String const *s = pawP_scan_nstring(C, C->strings, buf.data, buf.size);
+    pawL_discard_result(P, &buf);
+    return s->text;
 }

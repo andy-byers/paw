@@ -50,7 +50,9 @@ void pawL_init_buffer(paw_Env *P, Buffer *buf)
 
 void pawL_discard_result(paw_Env *P, Buffer *buf)
 {
+    paw_assert(buf->boxloc == P->top.p - P->stack.p - 1);
     PAW_UNUSED(buf);
+
     paw_pop(P, 1); // pop box or placeholder
 }
 

@@ -43,10 +43,11 @@ fn item_check(tree: Option<Tree>) -> int {
 }
 
 pub fn main(args: [str]) {
-    let N = 0;
-    if #args > 1 {
-        N = args[1].parse_int(10);
-    }
+    let N = if #args > 1 {
+        args[1].parse_int(10)
+    } else {
+        0
+    };
     let mindepth = 4;
     let maxdepth = mindepth + 2;
     if maxdepth < N { 

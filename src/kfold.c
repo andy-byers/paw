@@ -15,6 +15,34 @@
 #define DIVIDE_BY_0(C_, Modname_, Loc_) KFOLD_ERROR(C_, constant_divide_by_zero, Modname_, Loc_);
 #define SHIFT_BY_NEGATIVE(C_, Modname_, Loc_) KFOLD_ERROR(C_, constant_negative_shift_count, Modname_, Loc_);
 
+static void constant_div(struct Compiler *C, String const *modname, struct SourceLoc loc, Value *pr, Value x, Value y, enum BuiltinKind kind)
+{
+    if (kind == BUILTIN_FLOAT) {
+        if (V_FLOAT(y) == 0.0)
+            DIVIDE_BY_0(C, modname, loc);
+        FLOAT_BINARY_OP(pr, x, y, /);
+    } else {
+        paw_assert(kind == BUILTIN_INT);
+        if (V_INT(y) == 0)
+            DIVIDE_BY_0(C, modname, loc);
+        INT_BINARY_OP(pr, x, y, /);
+    }
+}
+
+static void constant_mod(struct Compiler *C, String const *modname, struct SourceLoc loc, Value *pr, Value x, Value y, enum BuiltinKind kind)
+{
+    if (kind == BUILTIN_FLOAT) {
+        if (V_FLOAT(y) == 0.0)
+            DIVIDE_BY_0(C, modname, loc);
+        V_SET_FLOAT(pr, fmod(V_FLOAT(x), V_FLOAT(y)));
+    } else {
+        paw_assert(kind == BUILTIN_INT);
+        if (V_INT(y) == 0)
+            DIVIDE_BY_0(C, modname, loc);
+        INT_BINARY_OP(pr, x, y, %);
+    }
+}
+
 static void str_concat(struct Compiler *C, String const *x, String const *y, Value *pr)
 {
     paw_Env *P = ENV(C);

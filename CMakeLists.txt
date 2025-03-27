@@ -67,7 +67,6 @@ set(PAW_HEADER_FILES
     ${PAW_SOURCE_DIR}/trait.h
     ${PAW_SOURCE_DIR}/type_folder.h
     ${PAW_SOURCE_DIR}/unify.h
-    ${PAW_SOURCE_DIR}/test.h
     ${PAW_SOURCE_DIR}/util.h
     ${PAW_SOURCE_DIR}/value.h)
 
@@ -122,7 +121,6 @@ set(PAW_SOURCE_FILES
     ${PAW_SOURCE_DIR}/trait.c
     ${PAW_SOURCE_DIR}/type_folder.c
     ${PAW_SOURCE_DIR}/unify.c
-    ${PAW_SOURCE_DIR}/test.c
     ${PAW_SOURCE_DIR}/unbox.c
     ${PAW_SOURCE_DIR}/util.c
     ${PAW_SOURCE_DIR}/value.c)

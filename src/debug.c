@@ -41,20 +41,6 @@ void pawD_debug_log(paw_Env *P, char const *fmt, ...)
     fflush(stderr);
 }
 
-char const *paw_unop_name(enum UnaryOp unop)
-{
-    switch (unop) {
-        case UNARY_LEN:
-            return "LEN";
-        case UNARY_NEG:
-            return "NEG";
-        case UNARY_NOT:
-            return "NOT";
-        case UNARY_BNOT:
-            return "BNOT";
-    }
-}
-
 char const *paw_unop_symbol(enum UnaryOp unop)
 {
     switch (unop) {
@@ -66,48 +52,6 @@ char const *paw_unop_symbol(enum UnaryOp unop)
             return "!";
         case UNARY_BNOT:
             return "~";
-    }
-}
-
-char const *paw_binop_name(enum BinaryOp binop)
-{
-    switch (binop) {
-        case BINARY_AS:
-            return "AS";
-        case BINARY_ADD:
-            return "ADD";
-        case BINARY_SUB:
-            return "SUB";
-        case BINARY_MUL:
-            return "MUL";
-        case BINARY_DIV:
-            return "DIV";
-        case BINARY_MOD:
-            return "MOD";
-        case BINARY_BXOR:
-            return "BXOR";
-        case BINARY_BAND:
-            return "BAND";
-        case BINARY_BOR:
-            return "BOR";
-        case BINARY_SHL:
-            return "SHL";
-        case BINARY_SHR:
-            return "SHR";
-        case BINARY_EQ:
-            return "EQ";
-        case BINARY_NE:
-            return "NE";
-        case BINARY_LT:
-            return "LT";
-        case BINARY_LE:
-            return "LE";
-        case BINARY_GT:
-            return "GT";
-        case BINARY_GE:
-            return "GE";
-        case BINARY_RANGE:
-            return "RANGE";
     }
 }
 
@@ -150,6 +94,66 @@ char const *paw_binop_symbol(enum BinaryOp binop)
             return ">=";
         case BINARY_RANGE:
             return "..";
+    }
+}
+
+
+// TODO: Most of this should not be in the core: use hooks for debugging
+#if defined(PAW_DEBUG_EXTRA)
+
+char const *paw_unop_name(enum UnaryOp unop)
+{
+    switch (unop) {
+        case UNARY_LEN:
+            return "LEN";
+        case UNARY_NEG:
+            return "NEG";
+        case UNARY_NOT:
+            return "NOT";
+        case UNARY_BNOT:
+            return "BNOT";
+    }
+}
+
+char const *paw_binop_name(enum BinaryOp binop)
+{
+    switch (binop) {
+        case BINARY_AS:
+            return "AS";
+        case BINARY_ADD:
+            return "ADD";
+        case BINARY_SUB:
+            return "SUB";
+        case BINARY_MUL:
+            return "MUL";
+        case BINARY_DIV:
+            return "DIV";
+        case BINARY_MOD:
+            return "MOD";
+        case BINARY_BXOR:
+            return "BXOR";
+        case BINARY_BAND:
+            return "BAND";
+        case BINARY_BOR:
+            return "BOR";
+        case BINARY_SHL:
+            return "SHL";
+        case BINARY_SHR:
+            return "SHR";
+        case BINARY_EQ:
+            return "EQ";
+        case BINARY_NE:
+            return "NE";
+        case BINARY_LT:
+            return "LT";
+        case BINARY_LE:
+            return "LE";
+        case BINARY_GT:
+            return "GT";
+        case BINARY_GE:
+            return "GE";
+        case BINARY_RANGE:
+            return "RANGE";
     }
 }
 
@@ -320,9 +324,6 @@ char const *paw_op_name(Op op)
             return "???";
     }
 }
-
-// TODO: Most of this should not be in the core: use hooks for debugging
-#if defined(PAW_DEBUG_EXTRA)
 
 void paw_dump_opcode(OpCode opcode)
 {

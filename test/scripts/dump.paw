@@ -2,6 +2,54 @@
 //
 // Exercise the compiler IR printing features
 
+pub fn test_unary_op() {
+    let x = "abc";
+    assert(#x == 3);
+    let x = [1: 1, 2: 2];
+    assert(#x == 2);
+    let x = [1, 2, 3, 4];
+    assert(#x == 4);
+    let x = -1.0;
+    assert(x == -1.0);
+    let x = ~1;
+    assert(x == ~1);
+}
+
+pub fn test_binary_op() {
+    assert(1 == 1);
+    assert(1 != 2);
+    assert(1 <= 2);
+    assert(1 >= 1);
+    assert(1 < 2);
+    assert(1 > 1);
+
+    assert(1.0 == 1.0);
+    assert(1.0 != 2.0);
+    assert(1.0 <= 2.0);
+    assert(2.0 >= 1.0);
+    assert(1.0 < 2.0);
+    assert(1.0 > 1.0);
+
+    assert("1" == "1");
+    assert("1" != "2");
+    assert("1" <= "2");
+    assert("2" >= "1");
+    assert("1" < "2");
+    assert("1" > "1");
+
+    let x = 1.5 % 0.55;
+    assert(x != 0.0);
+}
+
+pub fn test_upvalue() {
+    let up = 123;
+    let f = |x| {
+        up = up + x;
+        up
+    };
+    assert(f(123) == 246);
+}
+
 trait Trait {}
 trait Trait2 {
     fn a() {}

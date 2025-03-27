@@ -126,25 +126,6 @@ DEFINE_LIST(struct LowerHir, LabelList, struct Label)
 DEFINE_MAP(struct LowerHir, GlobalMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, int)
 DEFINE_MAP(struct LowerHir, VarMap, pawP_alloc, var_hash, var_equals, struct MatchVar, struct MirPlace)
 
-//// TODO: consider storing list of fields (nested struct Layout) inside each layout
-//static int compute_element_info(struct FunctionState *fs, IrType const *type, int index, struct Layout *playout)
-//{
-//    int offset = 0;
-//    struct IrTuple const *t = IrGetTupleK(type);
-//    for (int i = 0; i < index; ++i) {
-//        IrType *elem = IrTypeList_get(t->elems, i);
-//        offset += compute_layout(fs, elem).size;
-//    }
-//    IrType *elem = IrTypeList_get(t->elems, index);
-//    *playout = compute_layout(fs, elem);
-//    return offset;
-//}
-//
-//static int compute_element_offset(struct FunctionState *fs, IrType const *type, int index)
-//{
-//    return compute_element_info(fs, type, index, &(struct Layout){0});
-//}
-
 static void postprocess(struct Mir *mir)
 {
     pawMir_remove_unreachable_blocks(mir);

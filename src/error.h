@@ -71,27 +71,19 @@ enum ErrorKind {
     E_ITEM_VISIBILITY,
     E_ASSOCIATED_ITEM_VISIBILITY,
 
-<<<<<<< HEAD
     // type errors
     E_MISSING_TRAIT_BOUNDS,
     E_UNSATISFIED_TRAIT_BOUNDS,
     E_INCOMPATIBLE_TYPES,
     E_CANNOT_INFER,
     E_CYCLIC_TYPE,
-=======
-    // IR type errors
-    E_MISSING_TRAIT_BOUNDS,
->>>>>>> 79ff17c (Add more error functions)
 
     // compiler errors
     E_MISSING_EXTERN_VALUE,
 
     // lookup errors
-<<<<<<< HEAD
     E_UNEXPECTED_MODULE_NAME,
     E_TRANSITIVE_IMPORT,
-=======
->>>>>>> 79ff17c (Add more error functions)
     E_INCORRECT_TYPE_ARITY,
     E_UNEXPECTED_TYPE_ARGUMENTS,
     E_EXPECTED_TRAIT,
@@ -227,27 +219,19 @@ _Noreturn void pawErr_missing_function_body(struct Compiler *C, String const *mo
 _Noreturn void pawErr_item_visibility(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *mod, char const *item);
 _Noreturn void pawErr_associated_item_visibility(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name, char const *type);
 
-<<<<<<< HEAD
 // type errors
 _Noreturn void pawErr_missing_trait_bounds(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name);
 _Noreturn void pawErr_unsatisfied_trait_bounds(struct Compiler *C, String const *modname, struct SourceLoc loc);
 _Noreturn void pawErr_incompatible_types(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *lhs, char const *rhs);
 _Noreturn void pawErr_cannot_infer(struct Compiler *C, String const *modname, struct SourceLoc loc);
 _Noreturn void pawErr_cyclic_type(struct Compiler *C, String const *modname, struct SourceLoc loc);
-=======
-// IR type errors
-_Noreturn void pawErr_missing_trait_bounds(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name);
->>>>>>> 79ff17c (Add more error functions)
 
 // compiler errors
 _Noreturn void pawErr_missing_extern_value(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name);
 
 // lookup errors
-<<<<<<< HEAD
 _Noreturn void pawErr_unexpected_module_name(struct Compiler *C, String const *modname, struct SourceLoc loc);
 _Noreturn void pawErr_transitive_import(struct Compiler *C, String const *modname, struct SourceLoc loc);
-=======
->>>>>>> 79ff17c (Add more error functions)
 _Noreturn void pawErr_incorrect_type_arity(struct Compiler *C, String const *modname, struct SourceLoc loc, int want, int have);
 _Noreturn void pawErr_unexpected_type_arguments(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *what, char const *name);
 _Noreturn void pawErr_expected_trait(struct Compiler *C, String const *modname, struct SourceLoc loc);

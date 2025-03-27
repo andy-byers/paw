@@ -114,7 +114,6 @@ static struct QueryBase find_global_in(struct QueryState *Q, struct ModuleInfo *
         if (m == NULL)
             break;
         if (Q->index >= path->segments->count)
-            // module name specified without item
             LOOKUP_ERROR(Q, unexpected_module_name, path->span.start);
         if (module_number(Q->m) != module_number(Q->base))
             LOOKUP_ERROR(Q, transitive_import, path->span.start);

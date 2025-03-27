@@ -18,6 +18,8 @@
 #include <math.h>
 
 #define KPROP_ERROR(K_, Kind_, ...) pawErr_##Kind_((K_)->C, (K_)->mir->modname, __VA_ARGS__)
+#define DIVIDE_BY_0(K, loc) KPROP_ERROR(K, constant_divide_by_zero, loc);
+#define SHIFT_BY_NEGATIVE(K, loc) KPROP_ERROR(K, constant_negative_shift_count, loc);
 
 enum CellKind {
     CELL_TOP,
@@ -308,9 +310,6 @@ static struct CellInfo const_nan(struct KProp *K)
 
 #define IS_NAN(Cell_) ((Cell_)->info.kind == CELL_CONSTANT && isnan(V_FLOAT((Cell_)->info.v)))
 #define IS_INFINITY(Cell_) ((Cell_)->info.kind == CELL_CONSTANT && !isfinite(V_FLOAT((Cell_)->info.v)))
-
-#define DIVIDE_BY_0(K, loc) KPROP_ERROR(K, constant_divide_by_zero, loc);
-#define SHIFT_BY_NEGATIVE(K, loc) KPROP_ERROR(K, constant_negative_shift_count, loc);
 
 // Fold binary operations where one of the operands is a compile-time constant
 static struct CellInfo special_binary_op(struct KProp *K, struct Cell *lhs, struct Cell *rhs, struct MirBinaryOp *binop)
