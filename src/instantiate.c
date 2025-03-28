@@ -323,3 +323,34 @@ void pawP_init_substitution_folder(struct IrTypeFolder *F, struct Compiler *C, s
     F->FoldTuple = substitute_tuple;
     F->FoldTypeList = substitute_list;
 }
+
+static IrTypeList *instantiate_variant_fields(struct Compiler *C, struct IrVariantDef *def, IrTypeList *before, IrTypeList *after)
+{
+    struct IrFieldDef *const *pfield;
+    IrTypeList *fields = IrTypeList_new(C);
+    IrTypeList_reserve(C, fields, def->fields->count);
+    K_LIST_FOREACH (def->fields, pfield) {
+        IrType *field = pawIr_get_def_type(C, (*pfield)->did);
+        IrTypeList_push(C, fields, field);
+    }
+
+    return pawP_instantiate_typelist(C, before, after, fields);
+}
+
+IrTypeList *pawP_instantiate_struct_fields(struct Compiler *C, struct IrAdt *inst)
+{
+    struct IrAdt *base = IrGetAdt(pawIr_get_def_type(C, inst->did));
+    struct IrAdtDef *def = pawIr_get_adt_def(C, inst->did);
+    struct IrVariantDef *variant = K_LIST_FIRST(def->variants);
+
+    return instantiate_variant_fields(C, variant, base->types, inst->types);
+}
+
+IrTypeList *pawP_instantiate_variant_fields(struct Compiler *C, struct IrAdt *inst, int index)
+{
+    struct IrAdt *base = IrGetAdt(pawIr_get_def_type(C, inst->did));
+    struct IrAdtDef *def = pawIr_get_adt_def(C, inst->did);
+    struct IrVariantDef *variant = IrVariantDefs_get(def->variants, index);
+
+    return instantiate_variant_fields(C, variant, base->types, inst->types);
+}

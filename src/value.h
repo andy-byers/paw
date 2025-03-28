@@ -25,7 +25,6 @@
 #define V_FOREIGN(v) (O_FOREIGN(V_OBJECT(v)))
 
 #define V_TEXT(v) (V_STRING(v)->text)
-#define V_DISCR(v) ((int)O_TUPLE(V_OBJECT(v))->elems[0].i)
 
 #define V_SET_0(v) ((v)->u = 0)
 #define V_SET_BOOL(p, b) ((p)->u = (b) ? PAW_TRUE : PAW_FALSE)
@@ -77,7 +76,7 @@ typedef enum ValueKind {
 #define GC_HEADER              \
     struct Object *gc_next;    \
     unsigned char gc_mark : 2; \
-    ValueKind gc_kind : 8
+    ValueKind gc_kind : 6
 typedef struct Object {
     GC_HEADER;
 } Object;
@@ -99,12 +98,18 @@ typedef union StackRel {
 
 #define VOBJECT0 VSTRING
 #define NOBJECTS (int)(NVTYPES - VOBJECT0)
-#define P2V(x) \
-    (Value) { .p = (void *)(x) }
-#define I2V(x) \
-    (Value) { .i = (paw_Int)(x) }
+#define P2V(x) (Value) { .p = (void *)(x) }
+#define I2V(x) (Value) { .i = (paw_Int)(x) }
+#define F2V(x) (Value) { .f = (paw_Float)(x) }
 
 void pawV_index_error(paw_Env *P, paw_Int index, size_t length, char const *what);
+
+inline static Value *pawV_copy(Value *dst, Value const *src, int n)
+{
+    while (n-- > 0)
+        *dst++ = *src++;
+    return dst;
+}
 
 inline static paw_Uint pawV_hash(Value v)
 {

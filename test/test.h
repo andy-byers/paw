@@ -28,6 +28,8 @@
     X(enum)              \
     X(list)              \
     X(map)               \
+    X(layout)            \
+    X(destructure)       \
     X(method)            \
     X(match)             \
     X(match_enum)        \
@@ -39,7 +41,6 @@
     X(trait)             \
     X(alias)             \
     X(constants)         \
-    X(destructure)       \
     X(nan_infinity)      \
     X(global_const)      \
     X(poly_function)     \

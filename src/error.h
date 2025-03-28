@@ -136,6 +136,10 @@ enum ErrorKind {
     E_INITIALIZED_EXTERN_CONSTANT,
     E_UNINITIALIZED_CONSTANT,
 
+    // unboxing errors
+    E_INFINITE_SIZE_OBJECT,
+    E_OBJECT_TOO_LARGE,
+
     // exhaustiveness checking errors
     E_NONEXHAUSTIVE_PATTERN_MATCH,
 
@@ -279,6 +283,10 @@ _Noreturn void pawErr_modified_constant(struct Compiler *C, String const *modnam
 _Noreturn void pawErr_too_many_upvalues(struct Compiler *C, String const *modname, struct SourceLoc loc, int limit);
 _Noreturn void pawErr_initialized_extern_constant(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name);
 _Noreturn void pawErr_uninitialized_constant(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name);
+
+// unboxing errors
+_Noreturn void pawErr_infinite_size_object(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name);
+_Noreturn void pawErr_object_too_large(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name);
 
 // exhaustiveness checking errors
 _Noreturn void pawErr_nonexhaustive_pattern_match(struct Compiler *C, String const *modname, struct SourceLoc loc);

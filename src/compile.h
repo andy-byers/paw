@@ -16,13 +16,14 @@
 //    exhaustiveness | HIR    | HIR      | ensure pattern matching exhaustiveness
 //    lower_hir      | HIR    | MIR      | convert HIR into MIR
 //    monomorphize   | MIR    | MIR      | monomorphize functions
+//    scalarize      | MIR    | MIR      | split wide registers into scalars
 //    codegen        | MIR    | bytecode | generate code
 //
 // Activation frame layout (ranges are half-open):
 //
 //    start   | size | name      | purpose
 //   ---------|------|-----------|-------------------------------------
-//    0       | 1    | result    | storage for return value
+//    0       | 1    | callee    | function object being called
 //    1       | a    | arguments | arguments passed to function
 //    1+a     | u    | upvalues  | upvalues captured in local closures
 //    1+a+u   | w    | workspace | space for locals and temporaries
@@ -75,6 +76,7 @@ struct IrType;
 struct IrTypeList;
 struct IrTypeFolder;
 struct IrSignature;
+struct IrAdt;
 
 struct Mir;
 struct MirIntervalList;
@@ -119,6 +121,13 @@ struct Compiler {
     struct Builtin builtins[NBUILTINS];
     struct BuiltinMap *builtin_lookup;
 
+    int list_length;
+    int list_get;
+    int list_set;
+    int map_length;
+    int map_get;
+    int map_set;
+
     // callbacks for debugging
     Value on_build_ast;
     Value on_build_hir;
@@ -157,6 +166,8 @@ struct Compiler {
     struct VariantDefMap *variant_defs; // DefId => IrVariantDef *
     struct AdtDefMap *adt_defs; // DefId => IrAdtDef *
     struct FnDefMap *fn_defs; // DefId => IrFnDef *
+
+    struct IrLayoutMap *layouts;
 
     // map for quickly determining the methods implementing a given builtin
     // trait for a given type
@@ -216,6 +227,7 @@ struct IrTypeList *pawP_lower_type_list(struct Compiler *C, struct ModuleInfo *m
 
 struct RegisterInfo {
     int value;
+    int size;
 };
 
 DEFINE_LIST(struct Compiler, RegisterTable, struct RegisterInfo)
@@ -239,6 +251,8 @@ struct BodyMap *pawP_lower_hir(struct Compiler *C);
 
 struct IrTypeList *pawP_instantiate_typelist(struct Compiler *C, struct IrTypeList *before, struct IrTypeList *after, struct IrTypeList *target);
 struct IrType *pawP_instantiate_field(struct Compiler *C, struct IrType *self, struct HirDecl *field);
+struct IrTypeList *pawP_instantiate_struct_fields(struct Compiler *C, struct IrAdt *inst);
+struct IrTypeList *pawP_instantiate_variant_fields(struct Compiler *C, struct IrAdt *inst, int index);
 struct HirDecl *pawP_find_field(struct Compiler *C, struct IrType *self, String *name);
 struct IrType *pawP_find_method(struct Compiler *C, struct IrType *self, String *name);
 
@@ -288,14 +302,12 @@ struct Ast *pawP_parse_module(struct Compiler *C, String *modname, paw_Reader in
 
 void pawP_validate_adt_traits(struct Compiler *C, struct HirAdtDecl *d);
 
-paw_Bool pawP_fold_unary_op(struct Compiler *C, enum UnaryOp op, Value v, Value *pr, enum BuiltinKind kind);
-paw_Bool pawP_fold_binary_op(struct Compiler *C, String const *modname, struct SourceLoc loc, enum BinaryOp op, Value x, Value y, Value *pr, enum BuiltinKind kind);
-
 struct MonoResult {
     struct IrTypeList *types;
     struct BodyList *bodies;
 };
 
+void pawP_scalarize_registers(struct Compiler *C, struct Mir *mir);
 struct MonoResult pawP_monomorphize(struct Compiler *C, struct BodyMap *bodies);
 
 void pawP_resolve(struct Compiler *C);

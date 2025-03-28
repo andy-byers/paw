@@ -103,12 +103,12 @@ typedef uint32_t OpCode;
 typedef enum Op { // arguments    description
     //                  -------------------------------------------------------------------------------
     OP_LOADSMI, //        A sBx        R[A] := sBx
-    OP_LOADK, //          A Bx        R[A] := K[Bx]
+    OP_LOADK, //          A Bx         R[A] := K[Bx]
 
     OP_NOOP, //           -            -
     OP_MOVE, //           A B          R[A] := R[B]
     OP_CLOSE, //          A            close(A)
-    OP_RETURN, //         A            return R[0]
+    OP_RETURN, //         -            return R[0]..R[A]
     OP_CLOSURE, //        A Bx         R[A] := closure(P[Bx], R[A]..R[A+n])
     OP_CALL, //           A B          R[A] := R[A](R[A+1]..R[A+B+1])
 
@@ -133,17 +133,17 @@ typedef enum Op { // arguments    description
     OP_ILE, //            A B C        R[A] := R[B] <= R[C]
     OP_IGT, //            A B C        R[A] := R[B] > R[C]
     OP_IGE, //            A B C        R[A] := R[B] >= R[C]
-    OP_NOT, //            A B          R[A] := !R[B]
+    OP_INOT, //           A B          R[A] := !R[B]
     OP_INEG, //           A B          R[A] := -R[B]
     OP_IADD, //           A B C        R[A] := R[B] + R[C]
     OP_ISUB, //           A B C        R[A] := R[B] - R[C]
     OP_IMUL, //           A B C        R[A] := R[B] * R[C]
     OP_IDIV, //           A B C        R[A] := R[B] / R[C]
     OP_IMOD, //           A B C        R[A] := R[B] % R[C]
-    OP_BNOT, //           A B          R[A] := ~R[B]
-    OP_BAND, //           A B C        R[A] := R[B] & R[C]
-    OP_BOR, //            A B C        R[A] := R[B] | R[C]
-    OP_BXOR, //           A B C        R[A] := R[B] ^ R[C]
+    OP_BITNOT, //         A B          R[A] := ~R[B]
+    OP_BITAND, //         A B C        R[A] := R[B] & R[C]
+    OP_BITOR, //          A B C        R[A] := R[B] | R[C]
+    OP_BITXOR, //         A B C        R[A] := R[B] ^ R[C]
     OP_SHL, //            A B C        R[A] := R[B] << R[C]
     OP_SHR, //            A B C        R[A] := R[B] >> R[C]
 
@@ -173,14 +173,20 @@ typedef enum Op { // arguments    description
 
     OP_LLENGTH, //        A B          R[A] := #R[B]
     OP_LCONCAT, //        A B C        R[A] := R[B] + R[C]
+    OP_LGETEP, //         A B C        R[A] := &R[B][R[C]]
     OP_LGET, //           A B C        R[A] := R[B][R[C]]
     OP_LSET, //           A B C        R[A][R[B]] := R[C]
     OP_LGETN, //          A B C        R[A] := R[B][R[C]:R[C+1]]
     OP_LSETN, //          A B C        R[A][R[B]:R[B+1]] := R[C]
 
     OP_MLENGTH, //        A B          R[A] := #R[B]
+    OP_MGETEP, //         A B C        R[A] := &R[B][R[C]]
+    OP_MNEWEP, //         A B C        R[A] := &R[B][R[C]]
     OP_MGET, //           A B C        R[A] := R[B][R[C]]
     OP_MSET, //           A B C        R[A][R[B]] := R[C]
+
+    OP_GETVALUE,//        A B C        R[A] := R[B][C]
+    OP_SETVALUE,//        A B C        R[A][B] := R[C]
 
     OP_GETFIELD, //       A B C        R[A] := R[B][C]
     OP_SETFIELD, //       A B C        R[A][B] := R[C]

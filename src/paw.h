@@ -90,6 +90,11 @@ int paw_call(paw_Env *P, int argc);
 #define PAW_TFLOAT 3
 #define PAW_TSTR 4
 
+#define PAW_OPTION_SOME 0
+#define PAW_OPTION_NONE 1
+#define PAW_RESULT_OK 0
+#define PAW_RESULT_ERR 1
+
 void paw_push_value(paw_Env *P, int index);
 void paw_push_zero(paw_Env *P, int n);
 void paw_push_bool(paw_Env *P, paw_Bool b);
@@ -208,7 +213,7 @@ void paw_set_field(paw_Env *P, int index, int ifield);
 
 void *paw_new_foreign(paw_Env *P, size_t size, int nfields);
 void paw_new_native(paw_Env *P, paw_Function f, int nup);
-void paw_new_list(paw_Env *P, int n);
+void paw_new_list(paw_Env *P, int n, paw_Type e); // TODO: paw_Policy or something
 void paw_new_map(paw_Env *P, int n, paw_Type k);
 
 int paw_abs_index(paw_Env *P, int index);

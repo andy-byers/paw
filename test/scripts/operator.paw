@@ -1,13 +1,5 @@
 // operator.paw
 
-// TODO: string concatenation
-//pub fn test_add_strings() {
-//    let s = '';
-//    s = s + 'abc';
-//    s = s + s;
-//    assert(s == 'abcabc');
-//}
-
 pub fn test_operator_precedence() {
     assert(5 == 1 + 2 * 3 - 4 / 2);
     assert(8 == 1 << 2 * 2 >> 1);
@@ -80,3 +72,11 @@ pub fn test_bitwise_ops() {
     assert(0b0010 == 0b0110 & 0b0011);
     assert(0b0101 == 0b0110 ^ 0b0011);
 }
+
+pub fn test_add_strings() {
+    let s = '';
+    s = s + 'abc';
+    s = s + s;
+    assert(s == 'abcabc');
+}
+

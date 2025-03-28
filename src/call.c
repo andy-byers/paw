@@ -195,9 +195,9 @@ CallFrame *pawC_precall(paw_Env *P, StackPtr base, Object *callable, int argc)
     }
     Proto *p = fn->p;
     if (argc < p->argc) {
-        pawR_error(P, PAW_ERUNTIME, "not enough arguments (expected %d)", p->argc);
+        pawR_error(P, PAW_ERUNTIME, "not enough arguments (expected %d but have %d)", p->argc, argc);
     } else if (argc > p->argc) {
-        pawR_error(P, PAW_ERUNTIME, "too many arguments (expected %d)", p->argc);
+        pawR_error(P, PAW_ERUNTIME, "too many arguments (expected %d but have %d)", p->argc, argc);
     }
 
     ptrdiff_t const offset = SAVE_OFFSET(P, base);

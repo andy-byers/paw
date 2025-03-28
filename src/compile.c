@@ -10,6 +10,7 @@
 #include "gc.h"
 #include "hir.h"
 #include "ir_type.h"
+#include "layout.h"
 #include "lex.h"
 #include "map.h"
 #include "type_folder.h"
@@ -122,7 +123,7 @@ String *pawP_scan_nstring(struct Compiler *C, Tuple *map, char const *s, size_t 
 {
     paw_Env *P = ENV(C);
     Value const *pv = pawC_pushns(P, s, n);
-    pawMap_insert(P, map, *pv, *pv);
+    pawMap_insert(P, map, pv, pv);
     pawC_pop(P);
     CHECK_GC(P);
     return V_STRING(*pv);
@@ -235,6 +236,8 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, char co
     C->variant_defs = VariantDefMap_new(C);
     C->adt_defs = AdtDefMap_new(C);
     C->fn_defs = FnDefMap_new(C);
+
+    C->layouts = IrLayoutMap_new(C);
 
     C->rtti = RttiMap_new(C);
     C->imports = ImportMap_new(C);
@@ -555,6 +558,7 @@ struct BitSet *pawP_bitset_new(struct Compiler *C, int count)
     struct BitSet *set = BitSet_new(C);
     int const n = (count + CHUNKSZ(set) - 1) / CHUNKSZ(set);
     BitSet_reserve(C, set, n);
+    memset(set->data, 0, CAST_SIZE(n) * CHUNKSZ(set));
     set->count = count;
     return set;
 }
@@ -645,7 +649,7 @@ Value pawP_get_extern_value(struct Compiler *C, String *name)
     paw_map_get(P, PAW_REGISTRY_INDEX);
     Tuple *symbols = V_TUPLE(P->top.p[-1]);
 
-    Value const *pval = pawMap_get(P, symbols, P2V(name));
+    Value const *pval = pawMap_get(P, symbols, &P2V(name));
     if (pval == NULL)
         COMPILER_ERROR(C, missing_extern_value, SCAN_STRING(C, "TODO"), (struct SourceLoc){-1}, name->text);
 
@@ -693,7 +697,7 @@ String *pawP_mangle_finish(paw_Env *P, Buffer *buf, struct Compiler *C)
 
     // anchor in compiler string table
     String *str = V_STRING(P->top.p[-1]);
-    pawMap_insert(P, C->strings, P2V(str), P2V(str));
+    pawMap_insert(P, C->strings, &P2V(str), &P2V(str));
     pawC_pop(P);
     return str;
 }

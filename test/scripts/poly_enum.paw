@@ -49,8 +49,11 @@ pub fn test_fields() {
     };
 }
 
-// TODO: see chain expr code in lower_hir.c
-// Chain ('?') expressions:
+pub fn test_add_warning() {
+    print('warning: run the ? tests!');
+}
+
+//// Chain ('?') expressions:
 //fn option(b: bool) -> Option<int> {
 //    if b {
 //        return Option::<int>::Some(42);

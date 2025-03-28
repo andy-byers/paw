@@ -202,8 +202,8 @@ char const *paw_op_name(Op op)
             return "IGT";
         case OP_IGE:
             return "IGE";
-        case OP_NOT:
-            return "NOT";
+        case OP_INOT:
+            return "INOT";
         case OP_INEG:
             return "INEG";
         case OP_IADD:
@@ -216,14 +216,14 @@ char const *paw_op_name(Op op)
             return "IDIV";
         case OP_IMOD:
             return "IMOD";
-        case OP_BNOT:
-            return "BNOT";
-        case OP_BAND:
-            return "BAND";
-        case OP_BOR:
-            return "BOR";
-        case OP_BXOR:
-            return "BXOR";
+        case OP_BITNOT:
+            return "BITNOT";
+        case OP_BITAND:
+            return "BITAND";
+        case OP_BITOR:
+            return "BITOR";
+        case OP_BITXOR:
+            return "BITXOR";
         case OP_SHL:
             return "SHL";
         case OP_SHR:
@@ -276,6 +276,8 @@ char const *paw_op_name(Op op)
             return "LLENGTH";
         case OP_LCONCAT:
             return "LCONCAT";
+        case OP_LGETEP:
+            return "LGETEP";
         case OP_LGET:
             return "LGET";
         case OP_LSET:
@@ -286,10 +288,18 @@ char const *paw_op_name(Op op)
             return "LSETN";
         case OP_MLENGTH:
             return "MLENGTH";
+        case OP_MNEWEP:
+            return "MNEWEP";
+        case OP_MGETEP:
+            return "MGETEP";
         case OP_MGET:
             return "MGET";
         case OP_MSET:
             return "MSET";
+        case OP_GETVALUE:
+            return "GETVALUE";
+        case OP_SETVALUE:
+            return "SETVALUE";
         case OP_GETFIELD:
             return "GETFIELD";
         case OP_SETFIELD:
@@ -314,38 +324,6 @@ char const *paw_op_name(Op op)
 // TODO: Most of this should not be in the core: use hooks for debugging
 #if defined(PAW_DEBUG_EXTRA)
 
-void pawD_dump_defs(paw_Env *P)
-{
-    Buffer buf;
-    pawL_init_buffer(P, &buf);
-    pawL_add_fstring(P, &buf, "did\tvid\tname\ttype\n", P->modname->text);
-    size_t mxname = 0;
-    for (int i = 0; i < P->defs.count; ++i) {
-        struct Def *def = RT_DEF(P, i);
-        if (def->hdr.name == NULL)
-            continue;
-        mxname = PAW_MAX(mxname, def->hdr.name->length);
-    }
-    for (int i = 0; i < P->defs.count; ++i) {
-        struct Def *def = RT_DEF(P, i);
-        char const *name = def->hdr.name != NULL
-                               ? def->hdr.name->text
-                               : "(null)";
-        pawL_add_fstring(P, &buf, "%d\t", i);
-        if (def->hdr.kind == DEF_FUNC) {
-            pawL_add_fstring(P, &buf, "%d\t", def->func.vid);
-        } else {
-            L_ADD_LITERAL(P, &buf, "-\t");
-        }
-        pawL_add_fstring(P, &buf, "%s\t", name);
-        pawRtti_print_type(P, &buf, def->hdr.code);
-        pawL_add_char(P, &buf, '\n');
-    }
-    pawL_add_char(P, &buf, '\0');
-    printf("%s\n", buf.data);
-    pawL_discard_result(P, &buf);
-}
-
 void paw_dump_opcode(OpCode opcode)
 {
     char const *opname = paw_op_name(GET_OP(opcode));
@@ -357,9 +335,9 @@ void paw_dump_opcode(OpCode opcode)
         case OP_NEWLIST:
         case OP_NEWMAP:
         case OP_MOVE:
-        case OP_NOT:
+        case OP_INOT:
         case OP_INEG:
-        case OP_BNOT:
+        case OP_BITNOT:
         case OP_FNEG:
         case OP_SLENGTH:
         case OP_LLENGTH:
@@ -410,9 +388,9 @@ void paw_dump_opcode(OpCode opcode)
         case OP_IMUL:
         case OP_IDIV:
         case OP_IMOD:
-        case OP_BAND:
-        case OP_BOR:
-        case OP_BXOR:
+        case OP_BITAND:
+        case OP_BITOR:
+        case OP_BITXOR:
         case OP_SHL:
         case OP_SHR:
         case OP_FEQ:
@@ -436,14 +414,19 @@ void paw_dump_opcode(OpCode opcode)
         case OP_SGET:
         case OP_SGETN:
         case OP_LCONCAT:
+        case OP_LGETEP:
         case OP_LGET:
         case OP_LSET:
         case OP_LGETN:
         case OP_LSETN:
+        case OP_MNEWEP:
+        case OP_MGETEP:
         case OP_MGET:
         case OP_MSET:
         case OP_GETFIELD:
         case OP_SETFIELD:
+        case OP_GETVALUE:
+        case OP_SETVALUE:
         case OP_TESTK:
             printf("%s %d %d %d\n", opname, GET_A(opcode), GET_B(opcode), GET_C(opcode));
             break;
@@ -476,9 +459,9 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
             case OP_TESTK:
             case OP_SWITCHINT:
             case OP_MOVE:
-            case OP_NOT:
+            case OP_INOT:
             case OP_INEG:
-            case OP_BNOT:
+            case OP_BITNOT:
             case OP_FNEG:
             case OP_SLENGTH:
             case OP_LLENGTH:
@@ -526,9 +509,9 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
             case OP_IMUL:
             case OP_IDIV:
             case OP_IMOD:
-            case OP_BAND:
-            case OP_BOR:
-            case OP_BXOR:
+            case OP_BITAND:
+            case OP_BITOR:
+            case OP_BITXOR:
             case OP_SHL:
             case OP_SHR:
             case OP_FEQ:
@@ -552,18 +535,24 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
             case OP_SGET:
             case OP_SGETN:
             case OP_LCONCAT:
+            case OP_LGETEP:
             case OP_LGET:
             case OP_LSET:
             case OP_LGETN:
             case OP_LSETN:
+            case OP_MNEWEP:
+            case OP_MGETEP:
             case OP_MGET:
             case OP_MSET:
             case OP_GETFIELD:
             case OP_SETFIELD:
+            case OP_GETVALUE:
+            case OP_SETVALUE:
                 pawL_add_fstring(P, print, " %d %d %d\n", GET_A(opcode), GET_B(opcode), GET_C(opcode));
                 break;
             case OP_NOOP:
             case OP_RETURN:
+            default:
                 pawL_add_char(P, print, '\n');
                 break;
         }

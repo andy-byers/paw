@@ -944,6 +944,8 @@ static struct AstExpr *index_expr(struct Lex *lex, struct AstExpr *target)
     paw_Bool is_slice = PAW_FALSE;
     struct AstExpr *second = NULL;
     if (test_next(lex, ':')) {
+        paw_assert(PAW_FALSE); // TODO: use range expr. ("a[b..c]" instead of "a[b:c]")
+
         is_slice = PAW_TRUE;
         if (!test(lex, ']'))
             second = expr0(lex);
@@ -1311,7 +1313,8 @@ static struct AstExpr *suffixed_expr(struct Lex *lex)
     if (AstIsBlock(e)
             || AstIsIfExpr(e)
             || AstIsMatchExpr(e)
-            || AstIsWhileExpr(e))
+            || AstIsWhileExpr(e)
+            || AstIsForExpr(e))
         return e;
 
     if (test(lex, '{'))
@@ -1923,13 +1926,23 @@ static char const kPrelude[] =
     "    list: [T],\n"
     "    index: int,\n"
     "    pub fn new(list: [T]) -> Self {\n"
-    "        Self{list, index: -1}\n"
+    "        Self{list, index: 0}\n"
     "    }\n"
-    "    #[extern] pub fn next(self) -> Option<T>;\n"
+    "    pub fn next(self) -> Option<T> {\n"
+    "        if self.index < #self.list {\n"
+    "            let i = self.index;\n"
+    "            self.index = i + 1;\n"
+    "            Option::Some(self.list[i])\n"
+    "        } else {\n"
+    "            Option::None\n"
+    "        }\n"
+    "    }\n"
     "}\n"
 
     "pub struct List<T>: Iterate<ListIterator<T>, T> {\n"
     "    #[extern] pub fn length(self) -> int;\n"
+    "    #[extern] pub fn get(self, index: int) -> Option<T>;\n"
+    "    #[extern] pub fn set(self, index: int, value: T);\n"
     "    #[extern] pub fn push(self, value: T) -> Self;\n"
     "    #[extern] pub fn insert(self, index: int, value: T) -> Self;\n"
     "    #[extern] pub fn remove(self, index: int) -> T;\n"
@@ -1950,6 +1963,8 @@ static char const kPrelude[] =
 
     "pub struct Map<K: Hash + Equals, V>: Iterate<MapIterator<K, V>, K> {\n"
     "    #[extern] pub fn length(self) -> int;\n"
+    "    #[extern] pub fn get(self, key: K) -> Option<V>;\n"
+    "    #[extern] pub fn set(self, key: K, value: V);\n" // TODO: -> Option<V>;\n"
     "    #[extern] pub fn get_or(self, key: K, default: V) -> V;\n"
     "    #[extern] pub fn erase(self, key: K) -> Self;\n"
     "    pub fn iterator(self) -> MapIterator<K, V> {\n"
@@ -1961,21 +1976,45 @@ static char const kPrelude[] =
     "    Some(T),\n"
     "    None,\n"
 
-    "    #[extern] pub fn is_some(self) -> bool;\n"
-    "    #[extern] pub fn is_none(self) -> bool;\n"
+    "    pub fn is_some(self) -> bool {\n"
+    "        !self.is_none()\n"
+    "    }\n"
+    "    pub fn is_none(self) -> bool {\n"
+    "        match self {\n"
+    "            Option::None => true,\n"
+    "            _ => false,\n"
+    "        }\n"
+    "    }\n"
+    "    pub fn unwrap_or(self, value: T) -> T {\n"
+    "        match self {\n"
+    "            Option::Some(t) => t,\n"
+    "            Option::None => value,\n"
+    "        }\n"
+    "    }\n"
     "    #[extern] pub fn unwrap(self) -> T;\n"
-    "    #[extern] pub fn unwrap_or(self, value: T) -> T;\n"
     "}\n"
 
     "pub enum Result<T, E> {\n"
     "    Ok(T),\n"
     "    Err(E),\n"
 
-    "    #[extern] pub fn is_ok(self) -> bool;\n"
-    "    #[extern] pub fn is_err(self) -> bool;\n"
-    "    #[extern] pub fn unwrap(self) -> T;\n"
+    "    pub fn is_ok(self) -> bool {\n"
+    "        !self.is_err()\n"
+    "    }\n"
+    "    pub fn is_err(self) -> bool {\n"
+    "        match self {\n"
+    "            Result::Err(_) => true,\n"
+    "            _ => false,\n"
+    "        }\n"
+    "    }\n"
+    "    pub fn unwrap_or(self, value: T) -> T {\n"
+    "        match self {\n"
+    "            Result::Ok(t) => t,\n"
+    "            _ => value,\n"
+    "        }\n"
+    "    }\n"
     "    #[extern] pub fn unwrap_err(self) -> E;\n"
-    "    #[extern] pub fn unwrap_or(self, value: T) -> T;\n"
+    "    #[extern] pub fn unwrap(self) -> T;\n"
     "}\n"
 
     "pub struct RangeIterator<T: Compare + Increment>: Advance<T> {\n"

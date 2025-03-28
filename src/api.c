@@ -480,10 +480,10 @@ void paw_new_tuple(paw_Env *P, int n)
     paw_shift(P, n);
 }
 
-void paw_new_list(paw_Env *P, int n)
+void paw_new_list(paw_Env *P, int n, paw_Type e)
 {
     Value *ra = pawC_push0(P);
-    pawR_new_list(P, P->cf, ra, n);
+    pawR_new_list(P, P->cf, ra, n, e);
 
     Value const *pv = at(P, -n - 1);
     for (int i = 0; i < n; ++i) {
@@ -614,7 +614,7 @@ void paw_list_length(paw_Env *P, int index)
 {
     Value *pv = at(P, index);
     Tuple const *list = V_TUPLE(*pv);
-    size_t const len = pawList_length(list);
+    size_t const len = pawList_length(P, list);
     paw_push_int(P, PAW_CAST_INT(len));
 }
 
@@ -656,7 +656,7 @@ paw_Bool paw_list_next(paw_Env *P, int index)
     API_CHECK_PUSH(P, 1);
     Tuple *list = V_TUPLE(*at(P, index));
     paw_Int *piter = &P->top.p[-1].i;
-    if (pawList_iter(list, piter)) {
+    if (pawList_iter(P, list, piter)) {
         P->top.p[0] = *pawList_get(P, list, *piter);
         API_INCR_TOP(P, 1);
         return PAW_TRUE;
@@ -699,8 +699,8 @@ paw_Bool paw_map_next(paw_Env *P, int index)
     Tuple *map = V_TUPLE(*at(P, index));
     paw_Int *piter = &P->top.p[-1].i;
     if (pawMap_iter(map, piter)) {
-        P->top.p[0] = *pawMap_key(map, *piter);
-        P->top.p[1] = *pawMap_value(map, *piter);
+        P->top.p[0] = *pawMap_key(P, map, *piter);
+        P->top.p[1] = *pawMap_value(P, map, *piter);
         API_INCR_TOP(P, 2);
         return PAW_TRUE;
     }

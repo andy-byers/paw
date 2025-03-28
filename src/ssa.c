@@ -9,6 +9,7 @@
 #include "mir.h"
 
 #define SSA_ERROR(S_, Kind_, ...) pawErr_##Kind_((S_)->C, (S_)->mir->modname, __VA_ARGS__)
+#define PLACE(Reg_) ((struct MirPlace){.r = Reg_})
 
 struct SsaConverter {
     struct Compiler *C;
@@ -42,10 +43,9 @@ static void add_captured_reg(struct SsaConverter *S, MirRegister r1, MirRegister
     RegisterMap_insert(S, S->capture, r1, r2);
 }
 
-static MirRegister captured_reg(struct SsaConverter *S, MirRegister r)
+static MirRegister *captured_reg(struct SsaConverter *S, MirRegister r)
 {
-    MirRegister const *pr = RegisterMap_get(S, S->capture, r);
-    return pr != NULL ? *pr : MIR_INVALID_REG;
+    return RegisterMap_get(S, S->capture, r);
 }
 
 static MirRegister last_reg_name(struct SsaConverter *S, MirRegister r)
@@ -53,6 +53,8 @@ static MirRegister last_reg_name(struct SsaConverter *S, MirRegister r)
     // NOTE: if a register is not in "S->rename", then all of its uses/defs are in
     //       unreachable basic blocks
     MirRegister const *pr = RegisterMap_get(S, S->rename, r);
+    // TODO: should never be NULL. currently happens because unreachable blocks are eliminated, which may contain
+    // TODO: local variables. calling this function on each local then causes issues.
     return pr != NULL ? *pr : MIR_INVALID_REG;
 }
 
@@ -61,18 +63,18 @@ static struct MirPhi *add_phi_node(struct SsaConverter *S, MirBlock b, MirRegist
     struct MirBlockData *bb = mir_bb_data(S->mir, b);
     for (int i = 0; i < bb->joins->count; ++i) {
         struct MirPhi *phi = MirGetPhi(MirInstructionList_get(bb->joins, i));
-        if (MIR_REG_EQUALS(phi->output, r))
+        if (MIR_REG_EQUALS(phi->output.r, r))
             return phi; // already exists
     }
     struct IrType *type = mir_reg_data(S->mir, r)->type;
-    struct MirRegisterList *inputs = MirRegisterList_new(S->mir);
-    struct MirInstruction *phi = pawMir_new_phi(S->mir, (struct SourceLoc){-1}, inputs, r, r.value);
+    struct MirPlaceList *inputs = MirPlaceList_new(S->mir);
+    struct MirInstruction *phi = pawMir_new_phi(S->mir, (struct SourceLoc){-1}, inputs, PLACE(r), r.value);
     MirInstructionList_push(S->mir, bb->joins, phi);
 
     int ninputs = bb->predecessors->count;
-    MirRegisterList_reserve(S->mir, inputs, ninputs);
+    MirPlaceList_reserve(S->mir, inputs, ninputs);
     while (ninputs-- > 0)
-        MirRegisterList_push(S->mir, inputs, MIR_INVALID_REG);
+        MirPlaceList_push(S->mir, inputs, PLACE(MIR_INVALID_REG));
 
     return MirGetPhi(phi);
 }
@@ -83,6 +85,7 @@ DEFINE_LIST(struct SsaConverter, IntegerList, int)
 static void rename_input(struct SsaConverter *S, MirRegister *pr)
 {
     struct MirRegisterList *names = NameStackList_get(S->stacks, pr->value);
+    paw_assert(names->count > 0 && "use of undefined register");
     *pr = K_LIST_LAST(names);
 }
 
@@ -108,12 +111,12 @@ static void rename_output(struct SsaConverter *S, MirRegister *pr, paw_Bool is_a
 
     if (old_data->is_captured) {
         struct MirRegisterData *reg = &K_LIST_AT(S->registers, pr->value);
-        MirRegister const capture = captured_reg(S, old);
-        if (!MIR_REG_EXISTS(capture)) {
+        MirRegister const *capture = captured_reg(S, old);
+        if (capture == NULL) {
             add_captured_reg(S, old, *pr);
             reg->hint = *pr;
         } else {
-            reg->hint = capture;
+            reg->hint = *capture;
         }
     }
 }
@@ -121,19 +124,19 @@ static void rename_output(struct SsaConverter *S, MirRegister *pr, paw_Bool is_a
 static void rename_join(struct SsaConverter *S, struct MirInstruction *instr)
 {
     struct MirPhi *x = MirGetPhi(instr);
-    rename_output(S, &x->output, PAW_FALSE);
+    rename_output(S, &x->output.r, PAW_FALSE);
 }
 
 static void rename_instruction(struct SsaConverter *S, struct MirInstruction *instr)
 {
     MirRegister **ppr;
-    struct MirRegisterPtrList *loads = pawMir_get_loads(S->mir, instr);
+    MirRegisterPtrList const *loads = pawMir_get_loads(S->mir, instr);
     K_LIST_FOREACH (loads, ppr)
         rename_input(S, *ppr);
 
-    MirRegister *pstore = pawMir_get_store(S->mir, instr);
-    if (pstore != NULL)
-        rename_output(S, pstore, MirIsAllocLocal(instr));
+    MirRegisterPtrList const *stores = pawMir_get_stores(S->mir, instr);
+    K_LIST_FOREACH (stores, ppr)
+        rename_output(S, *ppr, MirIsAllocLocal(instr));
 }
 
 static paw_Bool list_includes_block(struct MirBlockList const *blocks, MirBlock b)
@@ -238,12 +241,10 @@ static void rename_vars(struct SsaConverter *S, MirBlock x)
     MirBlock *y;
 
     // fix references to the old name
-    K_LIST_FOREACH (block->joins, instr) {
+    K_LIST_FOREACH (block->joins, instr)
         rename_join(S, *instr);
-    }
-    K_LIST_FOREACH (block->instructions, instr) {
+    K_LIST_FOREACH (block->instructions, instr)
         rename_instruction(S, *instr);
-    }
 
     // determine inputs to phi nodes
     K_LIST_FOREACH (block->successors, y) {
@@ -254,8 +255,8 @@ static void rename_vars(struct SsaConverter *S, MirBlock x)
             struct MirRegisterList const *stack = NameStackList_get(S->stacks, phi->var_id);
             if (stack->count > 0) {
                 int const index = mir_which_pred(S->mir, *y, x);
-                MirRegister const input = K_LIST_LAST(stack);
-                MirRegisterList_set(phi->inputs, index, input);
+                struct MirPlace const input = PLACE(K_LIST_LAST(stack));
+                MirPlaceList_set(phi->inputs, index, input);
             }
         }
     }
@@ -296,31 +297,26 @@ static void fix_aux_info(struct SsaConverter *S, struct Mir *mir)
     struct MirBlockData **pdata;
     K_LIST_FOREACH (mir->blocks, pdata) {
         struct MirBlockData *data = *pdata;
-        struct MirInstruction **pinstr;
-        K_LIST_FOREACH (data->joins, pinstr) {
+        struct MirInstruction *const *pinstr;
+        K_LIST_FOREACH (data->joins, pinstr)
             ensure_init(S, *pinstr);
-        }
-        K_LIST_FOREACH (data->instructions, pinstr) {
-            struct MirInstruction *instr = *pinstr;
+        K_LIST_FOREACH (data->instructions, pinstr)
             ensure_init(S, *pinstr);
-        }
     }
 
-    // TODO: Consider not storing ".locals" in the MIR, since each local is spread
-    //       across multiple versions after this pass, and ".locals" is only capable
-    //       of storing a single version. ".locals" is not used anymore IIRC, but
-    //       need to grep to make sure. ".captured" is fine. See comment below for why.
     MirRegister *pr;
     struct MirCaptureInfo *pci;
     // Rename local and captured variable definitions. Note that ".locals" stores the
     // register containing the first version of each local, and captured variables
     // only have a single logical version (additional versions are placed in the same
+
     // register as the first version, since closures expect their captures to remain
     // stationary until they are closed.
     K_LIST_FOREACH (mir->locals, pr)
         *pr = last_reg_name(S, *pr);
-    K_LIST_FOREACH (mir->captured, pci)
-        pci->r = captured_reg(S, pci->r);
+    K_LIST_FOREACH (mir->captured, pci){
+        pci->r = *captured_reg(S, pci->r);
+    }
 }
 
 // TODO

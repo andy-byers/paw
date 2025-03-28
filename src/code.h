@@ -10,6 +10,9 @@
 #define K_ALIGNOF_NODE _Alignof(void *)
 #define K_ALIGNAS_NODE _Alignas(void *)
 
+#define K_CHAIN_EXISTS 0
+#define K_CHAIN_MISSING 1
+
 typedef struct DefId {
     int modno;
     int value;

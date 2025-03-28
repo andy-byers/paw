@@ -24,7 +24,7 @@ void pawR_str_concat(paw_Env *P, CallFrame *cf, int b);
 void pawR_str_get(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc);
 void pawR_str_getn(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc);
 
-Tuple *pawR_new_list(paw_Env *P, CallFrame *cf, Value *ra, int b);
+Tuple *pawR_new_list(paw_Env *P, CallFrame *cf, Value *ra, int b, int c);
 void pawR_list_length(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb);
 void pawR_list_concat(paw_Env *P, CallFrame *cf, int b);
 void pawR_list_get(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc);

@@ -34,7 +34,7 @@ static int file_flush(paw_Env *P)
 static int seek_kind(paw_Env *P, int offset)
 {
     Value const v = P->cf->base.p[offset];
-    switch (V_DISCR(v)) {
+    switch (V_INT(v)) {
         case 0:
             return SEEK_SET;
         case 1:

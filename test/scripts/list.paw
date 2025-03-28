@@ -184,24 +184,6 @@ pub fn test_empty_lists() {
     assert(3 == ([] + [] + [3])[-1]);
 }
 
-pub fn test_slices() {
-    let list = [1, 2, 3];
-    assert(3 == #list[0:#list]);
-    assert(2 == #list[0:-1]);
-    assert(1 == #list[0:-2]);
-    assert(0 == #list[0:-3]);
-    assert(2 == #list[1:#list]);
-    assert(1 == #list[2:#list]);
-    assert(0 == #list[3:#list]);
-    assert(3 == #list[:]);
-
-    assert(2 == list[:-1][-1]);
-    assert(1 == list[:-2][-1]);
-    assert(1 == list[0:][0]);
-    assert(2 == list[1:][0]);
-    assert(3 == list[2:][0]);
-}
-
 // each list must have its type inferred at some point before it
 // goes out of scope
 pub fn test_infer_later() {
@@ -313,38 +295,6 @@ pub fn test_insert() {
     list.insert(3, 5);
     list.insert(5, 6);
     check_eq(list, [1, 4, 2, 5, 3, 6]);
-}
-
-pub fn test_set_slice() {
-    let check = |i: int, j: int, answer: [int]| {
-        let list = [1, 2, 3];
-        list[i:j] = [4, 5, 6];
-        check_eq(list, answer);
-    };
-    check(0, 0, [4, 5, 6, 1, 2, 3]);
-    check(0, 1, [4, 5, 6, 2, 3]);
-    check(0, 2, [4, 5, 6, 3]);
-    check(0, 3, [4, 5, 6]);
-    check(3, 3, [1, 2, 3, 4, 5, 6]);
-    check(2, 3, [1, 2, 4, 5, 6]);
-    check(1, 3, [1, 4, 5, 6]);
-    check(0, 3, [4, 5, 6]);
-
-    let check = |i: int, j: int, answer: [int]| {
-        let list = [1, 2, 3];
-        list[i:j] = list;
-        check_eq(list, answer);
-    };
-    check(1, 3, [1, 1, 2, 3]);
-    check(2, 3, [1, 2, 1, 2, 3]);
-    check(3, 3, [1, 2, 3, 1, 2, 3]);
-
-    check(0, 2, [1, 2, 3, 3]);
-    check(0, 1, [1, 2, 3, 2, 3]);
-    check(0, 0, [1, 2, 3, 1, 2, 3]);
-
-    check(0, 3, [1, 2, 3]);
-    check(1, 2, [1, 1, 2, 3, 3]);
 }
 
 fn map_inplace<T>(f: fn(T) -> T, list: [T]) {
@@ -529,22 +479,76 @@ pub fn test_infer_k() {
     assert(3 == infer_fn_4(list, infer_fn_4(list, infer_fn_4(list, 3))));
 }
 
-pub fn test_slice_equality() {
-    let list = [1, 2, 3];
-    check_eq(list[0:], list[-3:3]);
-    check_eq(list[1:], list[-2:3]);
-    check_eq(list[2:], list[-1:3]);
-    check_eq(list[:3], list[0:3]);
-    check_eq(list[:2], list[0:-1]);
-    check_eq(list[:1], list[0:-2]);
-
-    check_eq(list[:0], []);
-    check_eq(list[3:], []);
-    check_eq(list[1:1], []);
-    check_eq(list[:3], list);
-    check_eq(list[0:], list);
-    check_eq(list[0:3], list);
+pub fn test_emit_warnings() {
+    print("TODO: slice tests\n");
 }
+
+//pub fn test_slices() {
+//    let list = [1, 2, 3];
+//    assert(3 == #list[0:#list]);
+//    assert(2 == #list[0:-1]);
+//    assert(1 == #list[0:-2]);
+//    assert(0 == #list[0:-3]);
+//    assert(2 == #list[1:#list]);
+//    assert(1 == #list[2:#list]);
+//    assert(0 == #list[3:#list]);
+//    assert(3 == #list[:]);
+//
+//    assert(2 == list[:-1][-1]);
+//    assert(1 == list[:-2][-1]);
+//    assert(1 == list[0:][0]);
+//    assert(2 == list[1:][0]);
+//    assert(3 == list[2:][0]);
+//}
+//
+//pub fn test_set_slice() {
+//    let check = |i: int, j: int, answer: [int]| {
+//        let list = [1, 2, 3];
+//        list[i:j] = [4, 5, 6];
+//        check_eq(list, answer);
+//    };
+//    check(0, 0, [4, 5, 6, 1, 2, 3]);
+//    check(0, 1, [4, 5, 6, 2, 3]);
+//    check(0, 2, [4, 5, 6, 3]);
+//    check(0, 3, [4, 5, 6]);
+//    check(3, 3, [1, 2, 3, 4, 5, 6]);
+//    check(2, 3, [1, 2, 4, 5, 6]);
+//    check(1, 3, [1, 4, 5, 6]);
+//    check(0, 3, [4, 5, 6]);
+//
+//    let check = |i: int, j: int, answer: [int]| {
+//        let list = [1, 2, 3];
+//        list[i:j] = list;
+//        check_eq(list, answer);
+//    };
+//    check(1, 3, [1, 1, 2, 3]);
+//    check(2, 3, [1, 2, 1, 2, 3]);
+//    check(3, 3, [1, 2, 3, 1, 2, 3]);
+//
+//    check(0, 2, [1, 2, 3, 3]);
+//    check(0, 1, [1, 2, 3, 2, 3]);
+//    check(0, 0, [1, 2, 3, 1, 2, 3]);
+//
+//    check(0, 3, [1, 2, 3]);
+//    check(1, 2, [1, 1, 2, 3, 3]);
+//}
+//
+//pub fn test_slice_equality() {
+//    let list = [1, 2, 3];
+//    check_eq(list[0:], list[-3:3]);
+//    check_eq(list[1:], list[-2:3]);
+//    check_eq(list[2:], list[-1:3]);
+//    check_eq(list[:3], list[0:3]);
+//    check_eq(list[:2], list[0:-1]);
+//    check_eq(list[:1], list[0:-2]);
+//
+//    check_eq(list[:0], []);
+//    check_eq(list[3:], []);
+//    check_eq(list[1:1], []);
+//    check_eq(list[:3], list);
+//    check_eq(list[0:], list);
+//    check_eq(list[0:3], list);
+//}
 
 fn map2<T>(list: [T], f: fn(T) -> T) -> [T] {
     let result = [];

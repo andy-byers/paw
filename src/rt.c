@@ -44,8 +44,8 @@
 #define VM_REG(r) (&cf->base.p[r])
 
 // Generate code for creating common builtin objects
-#define VM_LIST_INIT(r, n) \
-    pawList_new(P, n, r);
+#define VM_LIST_INIT(z, r, n) \
+    pawList_new(P, z, n, r);
 #define VM_MAP_INIT(p, r, n) \
     pawMap_new(P, p, n, r);
 
@@ -139,12 +139,16 @@ void pawR_close_upvalues(paw_Env *P, StackPtr const top)
 
 void pawR_tuple_get(CallFrame *cf, Value *ra, Value const *rb, int index)
 {
-    *ra = V_TUPLE(*rb)->elems[index];
+    Tuple const *t = V_TUPLE(*rb);
+    paw_assert(0 <= index && index < t->nelems);
+    *ra = t->elems[index];
 }
 
 void pawR_tuple_set(CallFrame *cf, Value *ra, int index, Value const *rb)
 {
-    V_TUPLE(*ra)->elems[index] = *rb;
+    Tuple *t = V_TUPLE(*ra);
+    paw_assert(0 <= index && index < t->nelems);
+    t->elems[index] = *rb;
 }
 
 void pawR_init(paw_Env *P)
@@ -213,7 +217,7 @@ void pawR_str_length(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb)
 
 void pawR_list_length(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb)
 {
-    size_t const length = pawList_length(V_TUPLE(*rb));
+    size_t const length = pawList_length(P, V_TUPLE(*rb));
     V_SET_INT(ra, PAW_CAST_INT(length));
 }
 
@@ -241,6 +245,13 @@ void pawR_str_get(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value c
     V_SET_OBJECT(ra, res);
 }
 
+void pawR_list_getp(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc)
+{
+    Tuple *list = V_TUPLE(*rb);
+    paw_Int const idx = V_INT(*rc);
+    ra->p = pawList_get(P, list, idx);
+}
+
 void pawR_list_get(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc)
 {
     Tuple *list = V_TUPLE(*rb);
@@ -262,19 +273,45 @@ void pawR_map_length(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb)
     V_SET_INT(ra, PAW_CAST_INT(length));
 }
 
+static void emit_ptr(paw_Env *P, ptrdiff_t offset, Value *ptr)
+{
+    RESTORE_POINTER(P, offset)->p = ptr;
+}
+
+int pawR_map_getp(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc)
+{
+    Tuple *map = V_TUPLE(*rb);
+    ptrdiff_t out = SAVE_OFFSET(P, ra);
+    Value *ptr = pawMap_get(P, map, rc);
+    if (ptr == NULL)
+        return -1;
+    emit_ptr(P, out, ptr);
+    return 0;
+}
+
+void pawR_map_newp(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc)
+{
+    Tuple *map = V_TUPLE(*rb);
+    ptrdiff_t out = SAVE_OFFSET(P, ra);
+    Value *ptr = pawMap_create(P, map, rc);
+    emit_ptr(P, out, ptr);
+}
+
 int pawR_map_get(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc)
 {
     Tuple *map = V_TUPLE(*rb);
-    Value const *pval = pawMap_get(P, map, *rc);
+    ptrdiff_t out = SAVE_OFFSET(P, ra);
+    Value const *pval = pawMap_get(P, map, rc);
     if (pval == NULL)
         return -1;
+    ra = RESTORE_POINTER(P, out);
     *ra = *pval;
     return 0;
 }
 
 void pawR_map_set(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc)
 {
-    pawMap_insert(P, V_TUPLE(*ra), *rb, *rc);
+    pawMap_insert(P, V_TUPLE(*ra), rb, rc);
 }
 
 void pawR_str_getn(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc)
@@ -297,7 +334,7 @@ void pawR_list_getn(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value
     Tuple const *t = V_TUPLE(*rb);
     paw_Int const i = V_INT(rc[0]);
     paw_Int const j = V_INT(rc[1]);
-    Tuple *out = VM_LIST_INIT(rout, 0);
+    Tuple *out = VM_LIST_INIT(LIST_ZELEMENT(t), rout, 0);
     pawList_get_range(P, t, i, j, out);
     V_SET_OBJECT(ra, out);
 }
@@ -319,9 +356,9 @@ Tuple *pawR_new_tuple(paw_Env *P, CallFrame *cf, Value *ra, int b)
     return tuple;
 }
 
-Tuple *pawR_new_list(paw_Env *P, CallFrame *cf, Value *ra, int b)
+Tuple *pawR_new_list(paw_Env *P, CallFrame *cf, Value *ra, int b, int c)
 {
-    Tuple *list = VM_LIST_INIT(ra, b);
+    Tuple *list = VM_LIST_INIT(c, ra, b);
     pawList_resize(P, list, CAST_SIZE(b));
     return list;
 }
@@ -425,7 +462,7 @@ top:
             vm_case(IGT) : VM_INT_COMPARISON(>)
             vm_case(IGE) : VM_INT_COMPARISON(>=)
 
-            vm_case(NOT) : VM_INT_UNARY_OP(!)
+            vm_case(INOT) : VM_INT_UNARY_OP(!)
             vm_case(INEG) : VM_INT_UNARY_OP(-)
             vm_case(IADD) : VM_INT_BINARY_OP(+)
             vm_case(ISUB) : VM_INT_BINARY_OP(-)
@@ -457,10 +494,10 @@ top:
                 }
             }
 
-            vm_case(BNOT) : VM_INT_UNARY_OP(~)
-            vm_case(BAND) : VM_INT_BINARY_OP(&)
-            vm_case(BOR) : VM_INT_BINARY_OP(|)
-            vm_case(BXOR) : VM_INT_BINARY_OP(^)
+            vm_case(BITNOT) : VM_INT_UNARY_OP(~)
+            vm_case(BITAND) : VM_INT_BINARY_OP(&)
+            vm_case(BITOR) : VM_INT_BINARY_OP(|)
+            vm_case(BITXOR) : VM_INT_BINARY_OP(^)
 
             vm_case(SHL) :
             {
@@ -576,6 +613,14 @@ top:
                 pawR_str_getn(P, cf, ra, rb, rc);
             }
 
+            vm_case(LGETEP) :
+            {
+                VM_SAVE_PC();
+                Value const *rb = VM_RB(opcode);
+                Value const *rc = VM_RC(opcode);
+                pawR_list_getp(P, cf, ra, rb, rc);
+            }
+
             vm_case(LGET) :
             {
                 VM_SAVE_PC();
@@ -618,6 +663,24 @@ top:
                 pawR_map_length(P, cf, ra, rb);
             }
 
+            vm_case(MGETEP) :
+            {
+                VM_SAVE_PC();
+                Value const *rb = VM_RB(opcode);
+                Value const *rc = VM_RC(opcode);
+                // TODO: This won't work if the key is multiple values in size, need to call map.get() or allocate key registers contiguously
+                if (pawR_map_getp(P, cf, ra, rb, rc))
+                    pawR_error(P, PAW_EKEY, "key does not exist");
+            }
+
+            vm_case(MNEWEP) :
+            {
+                VM_SAVE_PC();
+                Value const *rb = VM_RB(opcode);
+                Value const *rc = VM_RC(opcode);
+                pawR_map_newp(P, cf, ra, rb, rc);
+            }
+
             vm_case(MGET) :
             {
                 VM_SAVE_PC();
@@ -650,7 +713,8 @@ top:
                 VM_SAVE_PC();
                 P->top.p = ra + 1;
                 int const b = GET_B(opcode);
-                pawR_new_list(P, cf, ra, b);
+                int const c = GET_C(opcode);
+                pawR_new_list(P, cf, ra, b, c);
                 CHECK_GC(P);
             }
 
@@ -662,6 +726,21 @@ top:
                 int const c = GET_C(opcode);
                 pawR_new_map(P, cf, ra, b, c);
                 CHECK_GC(P);
+            }
+
+            vm_case(GETVALUE) :
+            {
+                Value const *rb = VM_RB(opcode);
+                int const c = GET_C(opcode);
+                *ra = ((Value const *)rb->p)[c];
+
+            }
+
+            vm_case(SETVALUE) :
+            {
+                int const b = GET_B(opcode);
+                Value const *rc = VM_RC(opcode);
+                ((Value *)ra->p)[b] = *rc;
             }
 
             vm_case(CLOSE) :
@@ -781,7 +860,7 @@ top:
                 VM_SAVE_PC();
 
                 pawR_close_upvalues(P, P->top.p);
-                ++P->top.p;
+                P->top.p = ra;
 
                 P->cf = cf->prev;
                 if (CF_IS_ENTRY(cf)) {

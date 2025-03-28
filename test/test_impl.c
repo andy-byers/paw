@@ -78,7 +78,7 @@ static void map_free(paw_Env *P, Tuple *map)
 static paw_Int map_get(paw_Env *P, Tuple *map, paw_Int k)
 {
     Value const key = {.i = k};
-    Value const *pvalue = pawMap_get(P, map, key);
+    Value const *pvalue = pawMap_get(P, map, &key);
     paw_assert(pvalue != NULL);
     return pvalue->i;
 }
@@ -86,7 +86,7 @@ static paw_Int map_get(paw_Env *P, Tuple *map, paw_Int k)
 static paw_Int const *map_try(paw_Env *P, Tuple *map, paw_Int k)
 {
     Value const key = {.i = k};
-    Value const *pvalue = pawMap_get(P, map, key);
+    Value const *pvalue = pawMap_get(P, map, &key);
     return pvalue ? &pvalue->i : NULL;
 }
 
@@ -94,13 +94,13 @@ static void map_put(paw_Env *P, Tuple *map, paw_Int k, paw_Int v)
 {
     Value const key = {.i = k};
     Value const value = {.i = v};
-    pawMap_insert(P, map, key, value);
+    pawMap_insert(P, map, &key, &value);
 }
 
 static void map_del(paw_Env *P, Tuple *map, paw_Int k)
 {
     Value const key = {.i = k};
-    pawMap_remove(P, map, key);
+    pawMap_remove(P, map, &key);
 }
 
 static void test_map_get_and_put(paw_Env *P)
@@ -190,7 +190,7 @@ static void test_map_ops(paw_Env *P)
     // Erase all nonnegative integers.
     paw_Int itr = PAW_ITER_INIT;
     while (pawMap_iter(m, &itr)) {
-        Value const key = *pawMap_key(m, itr);
+        Value const key = *pawMap_key(P, m, itr);
         if (V_INT(key) >= 0)
             map_del(P, m, key.i);
     }
@@ -338,7 +338,7 @@ static void parse_and_check_int(paw_Env *P, char const *text, paw_Int result)
 
 static void test_parse_int(paw_Env *P)
 {
-    // able to parse PAW_INT_MIN directly, since we consider the '-'
+    // able to parse PAW_INT_MIN directly, since we consider the '-' to be part of the number
     parse_and_check_int(P, "-9223372036854775808", INT64_MIN);
     parse_and_check_int(P, "9223372036854775807", INT64_MAX);
     parse_and_check_int(P, "0b111111111111111111111111111111111111111111111111111111111111111", INT64_MAX);
@@ -482,8 +482,6 @@ paw_Uint int_hash(struct Compiler *C, paw_Int i)
     PAW_UNUSED(C);
     paw_Uint const u = CAST(paw_Uint, i);
     return u;
-
-    return u << 5 | u >> 5;
 }
 
 static int on_build_hir(paw_Env *P)

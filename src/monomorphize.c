@@ -3,6 +3,7 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
 #include "ir_type.h"
+#include "layout.h"
 #include "map.h"
 #include "mir.h"
 #include "type_folder.h"
@@ -87,14 +88,28 @@ struct IrType *finalize_type(struct MonoCollector *M, struct IrType *type)
     return type;
 }
 
-static struct MirRegisterList *copy_register_list(struct MonoCollector *M, struct MirRegisterList *list)
+static MirProjectionList *copy_projections(struct MonoCollector *M, MirProjectionList *list)
 {
-    struct MirRegisterList *result = MirRegisterList_new(M->mir);
-    MirRegisterList_reserve(M->mir, result, list->count);
+    MirProjectionList *result = MirProjectionList_new(M->mir);
+    MirProjectionList_reserve(M->mir, result, list->count);
 
-    MirRegister const *pr;
+    MirProjection *const *pp;
+    K_LIST_FOREACH (list, pp) {
+        MirProjection *p = MirProjection_new(M->mir);
+        *p = **pp;
+        MirProjectionList_push(M->mir, result, p);
+    }
+    return result;
+}
+
+static MirPlaceList *copy_register_list(struct MonoCollector *M, struct MirPlaceList *list)
+{
+    struct MirPlaceList *result = MirPlaceList_new(M->mir);
+    MirPlaceList_reserve(M->mir, result, list->count);
+
+    struct MirPlace const *pr;
     K_LIST_FOREACH (list, pr) {
-        MirRegisterList_push(M->mir, result, *pr);
+        MirPlaceList_push(M->mir, result, *pr);
     }
     return result;
 }
@@ -107,6 +122,12 @@ static void copy_phi(struct MonoCollector *M, struct MirPhi *x, struct MirPhi *r
 static void copy_call(struct MonoCollector *M, struct MirCall *x, struct MirCall *r)
 {
     r->args = copy_register_list(M, x->args);
+    r->outputs = copy_register_list(M, x->outputs);
+}
+
+static void copy_return(struct MonoCollector *M, struct MirReturn *x, struct MirReturn *r)
+{
+    r->values = copy_register_list(M, x->values);
 }
 
 static void copy_switch(struct MonoCollector *M, struct MirSwitch *t, struct MirSwitch *r)
@@ -131,6 +152,9 @@ static struct MirInstruction *copy_instruction(struct MonoCollector *M, struct M
             break;
         case kMirCall:
             copy_call(M, MirGetCall(instr), MirGetCall(r));
+            break;
+        case kMirReturn:
+            copy_return(M, MirGetReturn(instr), MirGetReturn(r));
             break;
         case kMirSwitch:
             copy_switch(M, MirGetSwitch(instr), MirGetSwitch(r));
@@ -189,6 +213,15 @@ static struct Mir *new_mir(struct MonoCollector *M, struct Mir *base, struct IrT
 {
     M->mir = pawMir_new(M->C, base->modname, base->span, base->name, type, self,
             base->fn_kind, base->is_pub, PAW_FALSE);
+
+    // recompute size of parameters using concrete parameter types
+    IrType *const *pparam;
+    struct IrFuncPtr *fptr = IR_FPTR(type);
+    K_LIST_FOREACH (fptr->params, pparam) {
+        struct IrLayout const layout = pawIr_compute_layout(M->C, *pparam);
+        int const size = layout.is_boxed ? 1 : layout.size;
+        M->mir->param_size += size;
+    }
     return M->mir;
 }
 

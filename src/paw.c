@@ -379,7 +379,7 @@ static void setup_stack(paw_Env *P, int argc, char const **argv)
     for (int i = 0; i < argc; ++i) {
         paw_push_string(P, argv[i]);
     }
-    paw_new_list(P, 1 + argc);
+    paw_new_list(P, 1 + argc, PAW_TSTR);
 }
 
 int main(int argc, char const **argv)

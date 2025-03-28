@@ -83,66 +83,42 @@ static int base_range(paw_Env *P)
     return 1;
 }
 
-static void new_option_some(paw_Env *P, Value *pval, Value value)
+static void new_option_some(paw_Env *P, Value *presult, Value const *pvalue, int count)
 {
-    pawR_new_tuple(P, P->cf, pval, 2);
-    V_TUPLE(*pval)->elems[0].i = 0;
-    V_TUPLE(*pval)->elems[1] = value;
+    V_SET_INT(presult, PAW_OPTION_SOME);
+    while (count-- > 0)
+        *++presult = *pvalue++;
+
 }
 
-static void new_option_none(paw_Env *P, Value *pval)
+static void new_option_none(paw_Env *P, Value *presult)
 {
-    pawR_new_tuple(P, P->cf, pval, 1);
-    V_TUPLE(*pval)->elems[0].i = 1;
+    V_SET_INT(presult, PAW_OPTION_NONE);
 }
 
 static int list_insert(paw_Env *P)
 {
     Tuple *list = V_TUPLE(*CF_BASE(1));
     paw_Int const index = paw_int(P, 2);
-    pawList_insert(P, list, index, *CF_BASE(3));
+    pawList_insert(P, list, index, CF_BASE(3));
     paw_pop(P, 2); // return 'self'
-    return 1;
-}
-
-static int enum_is_zero(paw_Env *P)
-{
-    int const k = V_DISCR(*CF_BASE(1));
-    V_SET_BOOL(CF_BASE(1), k == 0);
-    return 1;
-}
-
-static int enum_is_one(paw_Env *P)
-{
-    int const k = V_DISCR(*CF_BASE(1));
-    V_SET_BOOL(CF_BASE(1), k == 1);
     return 1;
 }
 
 static int enum_unwrap(paw_Env *P)
 {
     Value const v = *CF_BASE(1);
-    if (V_DISCR(v) != 0)
+    if (V_INT(*CF_BASE(1)) != 0)
         pawR_error(P, PAW_ERUNTIME, "failed to unwrap");
-    *CF_BASE(1) = V_TUPLE(v)->elems[1];
-    return 1;
-}
-
-static int enum_unwrap_or(paw_Env *P)
-{
-    Value const v = *CF_BASE(1);
-    if (V_DISCR(v) == 0)
-        *CF_BASE(2) = V_TUPLE(v)->elems[1];
-    return 1;
+    return paw_get_count(P) - 2; // callable + discriminant
 }
 
 static int result_unwrap_err(paw_Env *P)
 {
     Value const v = *CF_BASE(1);
-    if (V_DISCR(v) == 0)
+    if (V_INT(*CF_BASE(1)) == 0)
         pawR_error(P, PAW_ERUNTIME, "failed to unwrap error");
-    *CF_BASE(1) = V_TUPLE(v)->elems[1];
-    return 1;
+    return paw_get_count(P) - 2; // callable + discriminant
 }
 
 static int list_length(paw_Env *P)
@@ -154,7 +130,7 @@ static int list_length(paw_Env *P)
 static int list_push(paw_Env *P)
 {
     Tuple *list = V_TUPLE(*CF_BASE(1));
-    pawList_push(P, list, *CF_BASE(2));
+    pawList_push(P, list, CF_BASE(2));
     paw_pop(P, 1); // return 'self'
     return 1;
 }
@@ -162,7 +138,7 @@ static int list_push(paw_Env *P)
 static int list_pop(paw_Env *P)
 {
     Tuple *list = V_TUPLE(*CF_BASE(1));
-    paw_Int const length = pawList_length(list);
+    paw_Int const length = pawList_length(P, list);
     if (length == 0) {
         pawR_error(P, PAW_EVALUE, "pop from empty List");
     }
@@ -180,6 +156,27 @@ static paw_Int clamped_index(paw_Env *P, int loc, paw_Int n)
                               : i;
 }
 
+static int list_get(paw_Env *P)
+{
+    Tuple *list = V_TUPLE(*CF_BASE(1));
+    paw_Int const index = V_INT(*CF_BASE(2));
+    int const z = LIST_ZELEMENT(list);
+    Value const *pvalue = pawList_get(P, list, index);
+    pawV_copy(CF_BASE(0), pvalue, z);
+    return z;
+}
+
+static int list_set(paw_Env *P)
+{
+    Tuple *list = V_TUPLE(*CF_BASE(1));
+    paw_Int const index = V_INT(*CF_BASE(2));
+    Value const *pvalue = CF_BASE(3);
+    int const z = LIST_ZELEMENT(list);
+    Value *pslot = pawList_get(P, list, index);
+    pawV_copy(pslot, pvalue, z);
+    return z;
+}
+
 // TODO: It would be nice to let pop() take an optional parameter indicating the
 //       index at which to erase an element. To me, 'remove' seems like it
 //       should remove the first matching element using something akin to
@@ -188,34 +185,43 @@ static paw_Int clamped_index(paw_Env *P, int loc, paw_Int n)
 static int list_remove(paw_Env *P)
 {
     Tuple *list = V_TUPLE(*CF_BASE(1));
-    if (pawList_length(list) == 0) {
+    if (pawList_length(P, list) == 0) {
         pawR_error(P, PAW_EVALUE, "remove from empty List");
     }
     paw_Int const index = paw_int(P, 2);
-    P->top.p[-1] = *pawList_get(P, list, index);
+    int const z = LIST_ZELEMENT(list);
+    Value const *pvalue = pawList_get(P, list, index);
+    pawV_copy(CF_BASE(0), pvalue, z);
     pawList_pop(P, list, index);
-    return 1;
+    return z;
 }
 
-static int list_iter_next(paw_Env *P)
+static int map_get(paw_Env *P)
 {
-    paw_get_field(P, 1, 0); // 2: list
-    paw_get_field(P, 1, 1); // 3: index
+    Tuple *map = V_TUPLE(*CF_BASE(1));
+    Value const *pkey = CF_BASE(2);
+    int const z = pawMap_value_size(P, map);
+    Value const *pvalue = pawMap_get(P, map, pkey);
 
-    StackPtr ra = CF_BASE(2);
-    StackPtr rb = CF_BASE(3);
-    Tuple *list = V_TUPLE(*ra);
-    paw_Int index = V_INT(*rb);
-    if (pawList_iter(list, &index)) {
-        V_SET_INT(rb, index);
-        paw_set_field(P, 1, 1);
-
-        *P->top.p++ = *pawList_get(P, list, index);
-        new_option_some(P, &P->top.p[-1], P->top.p[-1]);
+    P->top.p = CF_BASE(0);
+    if (pvalue != NULL) {
+        paw_push_int(P, PAW_OPTION_SOME);
+        pawV_copy(CF_BASE(1), pvalue, z);
     } else {
-        new_option_none(P, &P->top.p[-1]);
+        paw_push_int(P, PAW_OPTION_NONE);
     }
-    return 1;
+    P->top.p = CF_BASE(z);
+    return z;
+}
+
+static int map_set(paw_Env *P)
+{
+    Tuple *map = V_TUPLE(*CF_BASE(1));
+    Value const *pkey = CF_BASE(2);
+    Value const *pvalue = CF_BASE(3);
+    Value const *preplaced = pawMap_insert(P, map, pkey, pvalue);
+    (void)preplaced; // TODO: return Option<V>
+    return 0;
 }
 
 static int map_iter_next(paw_Env *P)
@@ -225,18 +231,21 @@ static int map_iter_next(paw_Env *P)
 
     StackPtr ra = CF_BASE(2);
     StackPtr rb = CF_BASE(3);
-    Tuple *list = V_TUPLE(*ra);
+    Tuple *map = V_TUPLE(*ra);
+
+    int const key_size = pawMap_key_size(P, map);
     paw_Int index = V_INT(*rb);
-    if (pawMap_iter(list, &index)) {
+    if (pawMap_iter(map, &index)) {
         V_SET_INT(rb, index);
         paw_set_field(P, 1, 1);
 
-        *P->top.p++ = *pawMap_key(list, index);
-        new_option_some(P, &P->top.p[-1], P->top.p[-1]);
+        Value const *key = pawMap_key(P, map, index);
+        new_option_some(P, CF_BASE(0), key, key_size);
     } else {
-        new_option_none(P, &P->top.p[-1]);
+        new_option_none(P, CF_BASE(0));
     }
-    return 1;
+    P->top.p = CF_BASE(1 + key_size);
+    return 1 + key_size;
 }
 
 static char const *find_substr(char const *str, size_t nstr, char const *sub, size_t nsub)
@@ -255,13 +264,13 @@ static char const *find_substr(char const *str, size_t nstr, char const *sub, si
 
 static int string_find(paw_Env *P)
 {
-    String const *s = V_STRING(*CF_BASE(1));
+    String const *str = V_STRING(*CF_BASE(1));
     String const *find = V_STRING(*CF_BASE(2));
     char const *result = find_substr(
-        s->text, s->length,
+        str->text, str->length,
         find->text, find->length);
     if (result) { // index of substring
-        V_SET_INT(P->top.p - 1, result - s->text);
+        V_SET_INT(P->top.p - 1, result - str->text);
     } else { // not found
         V_SET_INT(P->top.p - 1, -1);
     }
@@ -271,15 +280,15 @@ static int string_find(paw_Env *P)
 static int string_split(paw_Env *P)
 {
     String const *sep = V_STRING(*CF_BASE(2));
-    String *s = V_STRING(*CF_BASE(1));
+    String *str = V_STRING(*CF_BASE(1));
     if (sep->length == 0) {
         pawR_error(P, PAW_EVALUE, "empty separator");
     }
 
     int npart = 0;
     char const *part;
-    size_t nstr = s->length;
-    char const *pstr = s->text;
+    size_t nstr = str->length;
+    char const *pstr = str->text;
     while ((part = find_substr(pstr, nstr, sep->text, sep->length))) {
         if (npart == INT_MAX)
             pawR_error(P, PAW_EOVERFLOW, "too many substrings");
@@ -290,11 +299,11 @@ static int string_split(paw_Env *P)
         nstr -= n;
         ++npart;
     }
-    char const *end = s->text + s->length; // add the rest
+    char const *end = str->text + str->length; // add the rest
     pawC_pushns(P, pstr, CAST_SIZE(end - pstr));
     ++npart;
 
-    paw_new_list(P, npart);
+    paw_new_list(P, npart, 1);
     return 1;
 }
 
@@ -325,22 +334,22 @@ static int string_join(paw_Env *P)
 
 static int string_starts_with(paw_Env *P)
 {
-    String const *s = V_STRING(*CF_BASE(1));
+    String const *str = V_STRING(*CF_BASE(1));
     String const *prefix = V_STRING(*CF_BASE(2));
     size_t const prelen = prefix->length;
-    paw_Bool const b = s->length >= prelen && 0 == memcmp(prefix->text, s->text, prelen);
+    paw_Bool const b = str->length >= prelen && 0 == memcmp(prefix->text, str->text, prelen);
     V_SET_BOOL(P->top.p - 1, b);
     return 1;
 }
 
 static int string_ends_with(paw_Env *P)
 {
-    String const *s = V_STRING(*CF_BASE(1));
+    String const *str = V_STRING(*CF_BASE(1));
     String const *suffix = V_STRING(*CF_BASE(2));
     size_t const suflen = suffix->length;
     paw_Bool b = PAW_FALSE;
-    if (s->length >= suflen) {
-        char const *ptr = s->text + s->length - suflen;
+    if (str->length >= suflen) {
+        char const *ptr = str->text + str->length - suflen;
         b = 0 == memcmp(suffix->text, ptr, suflen);
     }
     V_SET_BOOL(P->top.p - 1, b);
@@ -421,7 +430,7 @@ static int map_length(paw_Env *P)
 static int map_get_or(paw_Env *P)
 {
     Tuple *m = V_TUPLE(*CF_BASE(1));
-    Value const key = *CF_BASE(2);
+    Value const *key = CF_BASE(2);
     Value const *pv = pawMap_get(P, m, key);
     if (pv != NULL)
         P->top.p[-1] = *pv;
@@ -431,7 +440,7 @@ static int map_get_or(paw_Env *P)
 static int map_erase(paw_Env *P)
 {
     Tuple *m = V_TUPLE(*CF_BASE(1));
-    pawMap_remove(P, m, *CF_BASE(2));
+    pawMap_remove(P, m, CF_BASE(2));
     paw_pop(P, 1); // return 'self'
     return 1;
 }
@@ -582,27 +591,24 @@ static void load_builtins(paw_Env *P)
     add_prelude_method(P, "str", "ends_with", string_ends_with);
 
     add_prelude_method(P, "List", "length", list_length);
+    add_prelude_method(P, "List", "get", list_get);
+    add_prelude_method(P, "List", "set", list_set);
     add_prelude_method(P, "List", "push", list_push);
     add_prelude_method(P, "List", "insert", list_insert);
     add_prelude_method(P, "List", "remove", list_remove);
     add_prelude_method(P, "List", "pop", list_pop);
 
     add_prelude_method(P, "Map", "length", map_length);
+    add_prelude_method(P, "Map", "get", map_get);
+    add_prelude_method(P, "Map", "set", map_set);
     add_prelude_method(P, "Map", "get_or", map_get_or);
     add_prelude_method(P, "Map", "erase", map_erase);
 
-    add_prelude_method(P, "Option", "is_some", enum_is_zero);
-    add_prelude_method(P, "Option", "is_none", enum_is_one);
     add_prelude_method(P, "Option", "unwrap", enum_unwrap);
-    add_prelude_method(P, "Option", "unwrap_or", enum_unwrap_or);
 
-    add_prelude_method(P, "Result", "is_ok", enum_is_zero);
-    add_prelude_method(P, "Result", "is_err", enum_is_one);
     add_prelude_method(P, "Result", "unwrap", enum_unwrap);
     add_prelude_method(P, "Result", "unwrap_err", result_unwrap_err);
-    add_prelude_method(P, "Result", "unwrap_or", enum_unwrap_or);
 
-    add_prelude_method(P, "ListIterator", "next", list_iter_next);
     add_prelude_method(P, "MapIterator", "next", map_iter_next);
 }
 
@@ -747,8 +753,15 @@ static int init_searchers(paw_Env *P)
 
 void pawL_init(paw_Env *P)
 {
-    MapPolicy const base_policy = {0};
-    MapPolicy const float_policy = {.fp = PAW_TRUE};
+    MapPolicy const base_policy = {
+        .key_size = 1,
+        .value_size = 1,
+    };
+    MapPolicy const float_policy = {
+        .fp = PAW_TRUE,
+        .key_size = 1,
+        .value_size = 1,
+    };
 
     P->map_policies.alloc = 32;
     P->map_policies.data = pawM_new_vec(P, 32, MapPolicy);
@@ -761,7 +774,7 @@ void pawL_init(paw_Env *P)
 
     // create system registry objects
     pawE_push_cstr(P, CSTR_KSEARCHERS);
-    paw_new_list(P, init_searchers(P));
+    paw_new_list(P, init_searchers(P), 1);
     pawE_push_cstr(P, CSTR_KMODULES);
     paw_new_map(P, 0, PAW_TSTR);
     pawE_push_cstr(P, CSTR_KSYMBOLS);
@@ -776,10 +789,7 @@ void pawL_init(paw_Env *P)
 
 void pawL_uninit(paw_Env *P)
 {
-    pawM_free_vec(P, P->map_policies.data, P->map_policies.alloc);
-
     // clear GC roots
-    P->map_policies = (struct MapPolicyList){0};
     P->registry = (Value){0};
 }
 

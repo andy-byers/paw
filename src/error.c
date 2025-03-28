@@ -615,7 +615,7 @@ _Noreturn void pawErr_expected_element_selector(struct Compiler *C, String const
 _Noreturn void pawErr_element_selector_out_of_range(struct Compiler *C, String const *modname, struct SourceLoc loc, int elem, int count)
 {
     throw(C, E_ELEMENT_SELECTOR_OUT_OF_RANGE, modname, loc,
-            format(C, "element selector %d is out of range for %d-tuple"),
+            format(C, "element selector %d is out of range for %d-tuple", elem, count),
             NULL);
 }
 
@@ -666,7 +666,7 @@ _Noreturn void pawErr_incorrect_arity(struct Compiler *C, String const *modname,
 {
     throw(C, E_INCORRECT_ARITY, modname, loc,
             format(C, "%s arguments", have < want ? "not enough" : "too many"),
-            format(C, "expected %d but have %d"));
+            format(C, "expected %d but have %d", want, have));
 }
 
 _Noreturn void pawErr_duplicate_field(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name, char const *type)
@@ -778,6 +778,20 @@ _Noreturn void pawErr_uninitialized_constant(struct Compiler *C, String const *m
 {
     throw(C, E_UNINITIALIZED_CONSTANT, modname, loc,
             format(C, "missing initializer for constant '%s'", name),
+            NULL);
+}
+
+_Noreturn void pawErr_infinite_size_object(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name)
+{
+    throw(C, E_INFINITE_SIZE_OBJECT, modname, loc,
+            format(C, "object '%s' has infinite size", name),
+            NULL);
+}
+
+_Noreturn void pawErr_object_too_large(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name)
+{
+    throw(C, E_OBJECT_TOO_LARGE, modname, loc,
+            format(C, "object '%s' is too large", name),
             NULL);
 }
 

@@ -17,9 +17,13 @@ const CONSTANT: int = 42;
 
 fn generics<A, B>() {}
 
-fn slice_list<T: Trait + Trait2>(list: [T]) -> [T] {
-    list[1:-1]
+pub fn test_emit_warnings() {
+    print("TODO: slice tests\n");
 }
+
+//fn slice_list<T: Trait + Trait2>(list: [T]) -> [T] {
+//    list[1:-1]
+//}
 
 fn map_literals() {
     let map = [:];

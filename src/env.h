@@ -57,6 +57,7 @@ enum {
 };
 
 typedef struct MapPolicy MapPolicy;
+typedef struct ListPolicy ListPolicy;
 
 typedef struct paw_Env {
     StringTable strings;

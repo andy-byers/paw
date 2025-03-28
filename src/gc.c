@@ -137,12 +137,11 @@ static void traverse_fields(paw_Env *P, Value *pv, int n)
 
 static void traverse_list(paw_Env *P, Tuple *a)
 {
-    // emergency collection while allocating the backing buffer
-    if (a->elems[0].p == NULL)
-        return;
-
+if(a->elems[0].i>1){
+(void)1;
+}
     paw_Int itr = PAW_ITER_INIT;
-    while (pawList_iter(a, &itr)) {
+    while (pawList_iter(P, a, &itr)) {
         mark_value(P, *pawList_get(P, a, itr));
     }
 }
@@ -151,8 +150,8 @@ static void traverse_map(paw_Env *P, Tuple *m)
 {
     paw_Int itr = PAW_ITER_INIT;
     while (pawMap_iter(m, &itr)) {
-        mark_value(P, *pawMap_key(m, itr));
-        mark_value(P, *pawMap_value(m, itr));
+        mark_value(P, *pawMap_key(P, m, itr));
+        mark_value(P, *pawMap_value(P, m, itr));
     }
 }
 
@@ -291,6 +290,13 @@ void pawG_uninit(paw_Env *P)
     P->registry.u = 0;
     P->up_list = NULL;
 
+    // NOTE: ".key_size" and ".value_size" needed for destruction of maps
+    for (int i = 0; i < P->map_policies.count; ++i) {
+        MapPolicy *const p = &P->map_policies.data[i];
+        p->equals = (Value){0};
+        p->hash = (Value){0};
+    }
+
     // collect all non-fixed objects
     pawG_collect(P);
 
@@ -308,6 +314,9 @@ void pawG_uninit(paw_Env *P)
         o = next;
     }
     P->gc_fixed = NULL;
+
+    // free map policies
+    pawM_free_vec(P, P->map_policies.data, P->map_policies.alloc);
 }
 
 void pawG_fix_object(paw_Env *P, Object *o)

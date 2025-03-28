@@ -47,6 +47,7 @@ set(PAW_HEADER_FILES
     ${PAW_SOURCE_DIR}/gc.h
     ${PAW_SOURCE_DIR}/hir.h
     ${PAW_SOURCE_DIR}/ir_type.h
+    ${PAW_SOURCE_DIR}/layout.h
     ${PAW_SOURCE_DIR}/lex.h
     ${PAW_SOURCE_DIR}/lib.h
     ${PAW_SOURCE_DIR}/map.h
@@ -94,6 +95,7 @@ set(PAW_SOURCE_FILES
     ${PAW_SOURCE_DIR}/ir_type.c
     ${PAW_SOURCE_DIR}/kfold.c
     ${PAW_SOURCE_DIR}/kprop.c
+    ${PAW_SOURCE_DIR}/layout.c
     ${PAW_SOURCE_DIR}/lex.c
     ${PAW_SOURCE_DIR}/list.c
     ${PAW_SOURCE_DIR}/lib.c
@@ -121,6 +123,7 @@ set(PAW_SOURCE_FILES
     ${PAW_SOURCE_DIR}/type_folder.c
     ${PAW_SOURCE_DIR}/unify.c
     ${PAW_SOURCE_DIR}/test.c
+    ${PAW_SOURCE_DIR}/unbox.c
     ${PAW_SOURCE_DIR}/util.c
     ${PAW_SOURCE_DIR}/value.c)
 
