@@ -203,3 +203,16 @@ pub fn main() {
 + Unable to handle literal `PAW_INT_MIN`
     + Looks like `-(PAW_INT_MAX + 1)` which overflows before `-` can be applied
     + Need to parse as `paw_Uint` and then check for overflow later
++ Instructions to satisfy some of the runtime constraints are injected during code generation
+    + This makes them invisible to the constant propagation pass, leading to less efficient byte code
+    + For example, function calls require the callable followed by the arguments on top of the stack
+        + The moves to put everything in place are injected during codegen
+        + If they were made explicit in an earlier pass, then the instructions that compute them could be made to write directly into the proper registers, avoiding the moves altogether in many cases
+    + Probably need some sort of register hints to accomplish this
++ Need a lower-level CFG-based IR (LIR) to use for register allocation and codegen
+    + Convert the `scalarize`/`ssa` pass into `lower_mir`, which will output LIR in SSA form
+    + Perform constant propagation on the LIR, monomorphization doesn't need to change
+    + LIR will contain `GETFIELD`, `SETELEMENT`, etc. instructions, which are represented by places in the MIR
+    + Each LIR register will represent a single Paw value (`Value` structure in C), while MIR registers can be multiple values wide
+    + This representation is needed due to the attempt to unbox composite values, it is a bit painful to operate on the MIR
+    + This is somewhat low-priority, since the MIR will work for unboxed values, it's just not quite as nice to work with

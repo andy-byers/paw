@@ -615,7 +615,7 @@ _Noreturn void pawErr_expected_element_selector(struct Compiler *C, String const
 _Noreturn void pawErr_element_selector_out_of_range(struct Compiler *C, String const *modname, struct SourceLoc loc, int elem, int count)
 {
     throw(C, E_ELEMENT_SELECTOR_OUT_OF_RANGE, modname, loc,
-            format(C, "element selector %d is out of range for %d-tuple"),
+            format(C, "element selector %d is out of range for %d-tuple", elem, count),
             NULL);
 }
 
@@ -666,7 +666,7 @@ _Noreturn void pawErr_incorrect_arity(struct Compiler *C, String const *modname,
 {
     throw(C, E_INCORRECT_ARITY, modname, loc,
             format(C, "%s arguments", have < want ? "not enough" : "too many"),
-            format(C, "expected %d but have %d"));
+            format(C, "expected %d but have %d", want, have));
 }
 
 _Noreturn void pawErr_duplicate_field(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name, char const *type)

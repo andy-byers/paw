@@ -139,12 +139,16 @@ void pawR_close_upvalues(paw_Env *P, StackPtr const top)
 
 void pawR_tuple_get(CallFrame *cf, Value *ra, Value const *rb, int index)
 {
-    *ra = V_TUPLE(*rb)->elems[index];
+    Tuple const *t = V_TUPLE(*rb);
+    paw_assert(0 <= index && index < t->nelems);
+    *ra = t->elems[index];
 }
 
 void pawR_tuple_set(CallFrame *cf, Value *ra, int index, Value const *rb)
 {
-    V_TUPLE(*ra)->elems[index] = *rb;
+    Tuple *t = V_TUPLE(*ra);
+    paw_assert(0 <= index && index < t->nelems);
+    t->elems[index] = *rb;
 }
 
 void pawR_init(paw_Env *P)
@@ -395,6 +399,9 @@ top:
     pc = cf->pc;
     fn = cf->fn;
     K = fn->p->k;
+
+#warning "remove"
+paw_dump_source(P, fn->p);
 
     for (;;) {
         OpCode const opcode = *pc++;
@@ -781,7 +788,7 @@ top:
                 VM_SAVE_PC();
 
                 pawR_close_upvalues(P, P->top.p);
-                ++P->top.p;
+                P->top.p = ra;
 
                 P->cf = cf->prev;
                 if (CF_IS_ENTRY(cf)) {

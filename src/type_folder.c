@@ -159,10 +159,10 @@ DEFINE_FOLDERS(stmt, Stmt)
 DEFINE_FOLDERS(pat, Pat)
 #undef DEFINE_FOLDERS
 
-static void FoldRegister(struct MirVisitor *V, MirRegister r)
+static void FoldPlace(struct MirVisitor *V, struct MirPlace r)
 {
     struct IrTypeFolder *F = V->ud;
-    struct MirRegisterData *data = mir_reg_data(V->mir, r);
+    struct MirRegisterData *data = mir_reg_data(V->mir, r.r);
     data->type = pawIr_fold_type(F, data->type);
 }
 
@@ -174,7 +174,7 @@ void pawMir_type_folder_init(struct MirTypeFolder *F, struct Compiler *C, struct
     };
 
     pawMir_visitor_init(&F->V, C, mir, F);
-    F->V.PostVisitRegister = FoldRegister;
+    F->V.PostVisitPlace = FoldPlace;
 
     pawIr_type_folder_init(&F->F, C, F);
 }

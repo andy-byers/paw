@@ -68,6 +68,9 @@ static void script(char const *name)
 
 int main(void)
 {
+    //script("tuple");
+    script("layout");return s_counters.failures;
+
 #define RUN_SCRIPT(name) script(#name);
     TEST_SCRIPTS(RUN_SCRIPT)
 #undef RUN_SCRIPT

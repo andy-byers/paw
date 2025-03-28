@@ -28,6 +28,7 @@
 #include <stdlib.h>
 
 #define REGALLOC_ERROR(R_, Kind_, ...) pawErr_##Kind_((R_)->C, (R_)->mir->modname, __VA_ARGS__)
+#define PLACE(Reg_) ((struct MirPlace){.r = Reg_})
 
 enum AllocationKind {
     ALLOCATE_NEXT,
@@ -414,7 +415,7 @@ static void order_and_insert_copies(struct RegisterAllocator *R, struct MirBlock
     MirInstructionList_pop(block->instructions);
 
     K_LIST_FOREACH (seq, pcopy) {
-        struct MirInstruction *move = pawMir_new_move(R->mir, (struct SourceLoc){-1}, pcopy->to, pcopy->from);
+        struct MirInstruction *move = pawMir_new_move(R->mir, (struct SourceLoc){-1}, PLACE(pcopy->to), PLACE(pcopy->from));
         pawMir_set_location(R->mir, R->locations, move->hdr.mid, pcopy->location);
         MirInstructionList_push(R->mir, block->instructions, move);
     }
@@ -440,13 +441,13 @@ static void resolve_registers(struct RegisterAllocator *R, struct MirBlockList *
             K_LIST_FOREACH (bs->joins, pinstr) {
                 struct MirPhi *phi = MirGetPhi(*pinstr);
                 int const index = mir_which_pred(R->mir, *s, *b);
-                MirRegister const opd = MirRegisterList_get(phi->inputs, index);
+                MirRegister const opd = MirPlaceList_get(phi->inputs, index).r;
 
                 int const location = pawMir_get_location(R->locations, mir_bb_last(bb));
                 CopyList_push(R, resolved, ((struct Copy){
                                                   .location = location + 2,
                                                   //                                .location = mir_bb_last(bb),
-                                                  .to = phi->output,
+                                                  .to = phi->output.r,
                                                   .from = opd,
                                               }));
             }

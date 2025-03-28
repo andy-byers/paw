@@ -10,6 +10,7 @@
 #include "gc.h"
 #include "hir.h"
 #include "ir_type.h"
+#include "layout.h"
 #include "lex.h"
 #include "map.h"
 #include "type_folder.h"
@@ -235,6 +236,8 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, char co
     C->variant_defs = VariantDefMap_new(C);
     C->adt_defs = AdtDefMap_new(C);
     C->fn_defs = FnDefMap_new(C);
+
+    C->layouts = IrLayoutMap_new(C);
 
     C->rtti = RttiMap_new(C);
     C->imports = ImportMap_new(C);

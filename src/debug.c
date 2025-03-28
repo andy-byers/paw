@@ -311,40 +311,11 @@ char const *paw_op_name(Op op)
     }
 }
 
+#warning"remove"
+#define PAW_DEBUG_EXTRA
+
 // TODO: Most of this should not be in the core: use hooks for debugging
 #if defined(PAW_DEBUG_EXTRA)
-
-void pawD_dump_defs(paw_Env *P)
-{
-    Buffer buf;
-    pawL_init_buffer(P, &buf);
-    pawL_add_fstring(P, &buf, "did\tvid\tname\ttype\n", P->modname->text);
-    size_t mxname = 0;
-    for (int i = 0; i < P->defs.count; ++i) {
-        struct Def *def = RT_DEF(P, i);
-        if (def->hdr.name == NULL)
-            continue;
-        mxname = PAW_MAX(mxname, def->hdr.name->length);
-    }
-    for (int i = 0; i < P->defs.count; ++i) {
-        struct Def *def = RT_DEF(P, i);
-        char const *name = def->hdr.name != NULL
-                               ? def->hdr.name->text
-                               : "(null)";
-        pawL_add_fstring(P, &buf, "%d\t", i);
-        if (def->hdr.kind == DEF_FUNC) {
-            pawL_add_fstring(P, &buf, "%d\t", def->func.vid);
-        } else {
-            L_ADD_LITERAL(P, &buf, "-\t");
-        }
-        pawL_add_fstring(P, &buf, "%s\t", name);
-        pawRtti_print_type(P, &buf, def->hdr.code);
-        pawL_add_char(P, &buf, '\n');
-    }
-    pawL_add_char(P, &buf, '\0');
-    printf("%s\n", buf.data);
-    pawL_discard_result(P, &buf);
-}
 
 void paw_dump_opcode(OpCode opcode)
 {
@@ -564,6 +535,7 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
                 break;
             case OP_NOOP:
             case OP_RETURN:
+            default:
                 pawL_add_char(P, print, '\n');
                 break;
         }

@@ -195,6 +195,8 @@ static struct IrFieldDefs *collect_field_defs(struct ItemCollector *X, struct Hi
         DeclId const did = (*pdecl)->hdr.did;
         struct HirFieldDecl *d = HirGetFieldDecl(*pdecl);
         struct IrType *type = collect_type(X, d->tag);
+        SET_TYPE(X, d->hid, type);
+
         struct IrFieldDef *def = pawIr_new_field_def(X->C, did, d->ident.name, d->is_pub);
         IrFieldDefs_push(X->C, result, def);
         set_def_type(X, did, d->hid);

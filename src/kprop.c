@@ -181,13 +181,13 @@ static struct ExecFlag *check_exec(struct KProp *K, MirBlock from, MirBlock to)
 static void visit_phi(struct KProp *K, struct MirPhi *phi, MirBlock to)
 {
     struct MirBlockData *data = mir_bb_data(K->mir, to);
-    struct Cell def = Lattice_get(K->lattice, phi->output.value);
+    struct Cell def = Lattice_get(K->lattice, phi->output.r.value);
 
     MirBlock const *pfrom;
-    MirRegister const *pinput;
+    struct MirPlace const *pinput;
     K_LIST_ZIP (phi->inputs, pinput, data->predecessors, pfrom) {
         struct ExecFlag *pflag = check_exec(K, *pfrom, to);
-        struct Cell *pcell = &K_LIST_AT(K->lattice, phi->output.value);
+        struct Cell *pcell = &K_LIST_AT(K->lattice, phi->output.r.value);
         pcell->info.kind = pflag->exec ? def.info.kind : CELL_TOP;
     }
 }
@@ -272,9 +272,9 @@ static struct CellInfo constant_binary_op(struct KProp *K, struct SourceLoc loc,
     return BOTTOM_INFO();
 }
 
-static struct CellInfo binop_to_move(struct MirBinaryOp *binop, MirRegister from)
+static struct CellInfo binop_to_move(struct MirBinaryOp *binop, struct MirPlace from)
 {
-    MirRegister const to = binop->output;
+    struct MirPlace const to = binop->output;
     struct MirInstruction *instr = MIR_CAST_INSTRUCTION(binop);
     instr->hdr.kind = kMirMove;
     MirGetMove(instr)->target = from;
@@ -558,7 +558,7 @@ static void into_constant(struct KProp *K, struct MirInstruction *instr, struct 
         .b_kind = pawP_type2code(K->C, cell.type),
         .mid = instr->hdr.mid,
         .value = cell.info.v,
-        .output = cell.r,
+        .output.r = cell.r,
     };
 }
 
@@ -566,13 +566,16 @@ static void visit_expr(struct KProp *K, struct MirInstruction *instr, MirBlock b
 {
     // TODO: somewhat of a hack. shouldn't it be possible to just write CELL_BOTTOM to lattice cells
     //       that correspond to captured registers? doesn't work, but may be due to a different problem
-    MirRegister *const *pload;
-    MirRegisterPtrList *ploads = pawMir_get_loads(K->mir, instr);
-    K_LIST_FOREACH (ploads, pload) {
-        if (!is_captured(K, **pload)) continue;
-        MirRegister const *pstore = pawMir_get_store(K->mir, instr);
-        if (pstore != NULL) {
-            struct Cell *cell = get_cell(K, *pstore);
+    MirRegister *const *ppload;
+    MirRegisterPtrList *loads = pawMir_get_loads(K->mir, instr);
+    K_LIST_FOREACH (loads, ppload) {
+        if (!is_captured(K, **ppload))
+            continue;
+
+        MirRegister *const *ppstore;
+        MirRegisterPtrList *stores = pawMir_get_stores(K->mir, instr);
+        K_LIST_FOREACH (stores, ppstore) {
+            struct Cell *cell = get_cell(K, **ppstore);
             cell->info = BOTTOM_INFO();
         }
         return;
@@ -581,8 +584,8 @@ static void visit_expr(struct KProp *K, struct MirInstruction *instr, MirBlock b
     switch (MIR_KINDOF(instr)) {
         case kMirMove: {
             struct MirMove *x = MirGetMove(instr);
-            struct Cell *target = get_cell(K, x->target);
-            struct Cell *output = get_cell(K, x->output);
+            struct Cell *target = get_cell(K, x->target.r);
+            struct Cell *output = get_cell(K, x->output.r);
             enum CellKind old = output->info.kind;
             if (target->info.kind == CELL_CONSTANT) {
                 output->info = target->info;
@@ -595,9 +598,9 @@ static void visit_expr(struct KProp *K, struct MirInstruction *instr, MirBlock b
         }
         case kMirConstant: {
             struct MirConstant *x = MirGetConstant(instr);
-            struct MirRegisterData *data = mir_reg_data(K->mir, x->output);
+            struct MirRegisterData *data = mir_reg_data(K->mir, x->output.r);
             int const k = add_constant(K, x->value, x->b_kind);
-            struct Cell *output = get_cell(K, x->output);
+            struct Cell *output = get_cell(K, x->output.r);
             enum CellKind old = output->info.kind;
             output->info = CONST_INFO(k, x->value);
             if (old != CELL_CONSTANT)
@@ -606,8 +609,8 @@ static void visit_expr(struct KProp *K, struct MirInstruction *instr, MirBlock b
         }
         case kMirUnaryOp: {
             struct MirUnaryOp *x = MirGetUnaryOp(instr);
-            struct Cell *val = get_cell(K, x->val);
-            struct Cell *output = get_cell(K, x->output);
+            struct Cell *val = get_cell(K, x->val.r);
+            struct Cell *output = get_cell(K, x->output.r);
             enum CellKind old = output->info.kind;
             if (val->info.kind == CELL_CONSTANT) {
                 output->info = constant_unary_op(K, val, x->op);
@@ -620,9 +623,9 @@ static void visit_expr(struct KProp *K, struct MirInstruction *instr, MirBlock b
         }
         case kMirBinaryOp: {
             struct MirBinaryOp *x = MirGetBinaryOp(instr);
-            struct Cell *lhs = get_cell(K, x->lhs);
-            struct Cell *rhs = get_cell(K, x->rhs);
-            struct Cell *output = get_cell(K, x->output);
+            struct Cell *lhs = get_cell(K, x->lhs.r);
+            struct Cell *rhs = get_cell(K, x->rhs.r);
+            struct Cell *output = get_cell(K, x->output.r);
             enum CellKind old = output->info.kind;
             if (lhs->info.kind == CELL_CONSTANT && rhs->info.kind == CELL_CONSTANT) {
                 // handle "const1 op const2"
@@ -642,7 +645,7 @@ static void visit_expr(struct KProp *K, struct MirInstruction *instr, MirBlock b
         }
         case kMirBranch: {
             struct MirBranch *x = MirGetBranch(instr);
-            struct Cell *cond = get_cell(K, x->cond);
+            struct Cell *cond = get_cell(K, x->cond.r);
             if (cond->info.kind == CELL_CONSTANT) {
                 MirBlock const s = single_branch_target(K, x, cond, b);
                 FlowWorklist_push(K, K->flow, FLOW_EDGE(b, s));
@@ -652,7 +655,7 @@ static void visit_expr(struct KProp *K, struct MirInstruction *instr, MirBlock b
         }
         case kMirSwitch: {
             struct MirSwitch *x = MirGetSwitch(instr);
-            struct Cell *discr = get_cell(K, x->discr);
+            struct Cell *discr = get_cell(K, x->discr.r);
             if (discr->info.kind == CELL_CONSTANT) {
                 MirBlock const s = single_switch_target(K, x, discr, b);
                 FlowWorklist_push(K, K->flow, FLOW_EDGE(b, s));
@@ -670,11 +673,12 @@ static void visit_expr(struct KProp *K, struct MirInstruction *instr, MirBlock b
         case kMirGoto:
             return; // no output
         default: {
-            MirRegister const *pstore = pawMir_get_store(K->mir, instr);
-            if (pstore != NULL) {
-                struct Cell *output = get_cell(K, *pstore);
+            MirRegister *const *ppstore;
+            MirRegisterPtrList const *stores = pawMir_get_stores(K->mir, instr);
+            K_LIST_FOREACH (stores, ppstore) {
+                struct Cell *output = get_cell(K, **ppstore);
                 output->info = BOTTOM_INFO();
-                add_use_edges(K, *pstore);
+                add_use_edges(K, **ppstore);
             }
         }
     }
@@ -821,6 +825,7 @@ static void remove_operand_uses(struct KProp *K, UseCountMap *counts, struct Mir
 static paw_Bool is_pure(struct MirInstruction *instr)
 {
     switch (MIR_KINDOF(instr)) {
+        case kMirAllocLocal:
         case kMirPhi:
         case kMirMove:
         case kMirConstant:
@@ -860,14 +865,15 @@ static void prune_dead_successors(struct KProp *K, MirBlock from, MirBlock targe
 
 static void transform_instr(struct KProp *K, struct MirInstruction *instr)
 {
-    MirRegister const *pstore = pawMir_get_store(K->mir, instr);
-    if (pstore == NULL)
-        return;
-    struct Cell *cell = get_cell(K, *pstore);
-    if (cell->info.kind == CELL_CONSTANT) {
-        K->altered = !MirIsConstant(instr);
-        // all operands to this instruction are constant
-        into_constant(K, instr, *cell);
+    MirRegister *const *ppstore;
+    MirRegisterPtrList const *stores = pawMir_get_stores(K->mir, instr);
+    K_LIST_FOREACH (stores, ppstore) {
+        struct Cell *cell = get_cell(K, **ppstore);
+        if (cell->info.kind == CELL_CONSTANT) {
+            K->altered = !MirIsConstant(instr);
+            // all operands to this instruction are constant
+            into_constant(K, instr, *cell);
+        }
     }
 }
 
@@ -899,29 +905,37 @@ static void transform_code(struct KProp *K)
 
 static paw_Bool filter_code(struct KProp *K, UseCountMap *counts, struct MirInstructionList *code)
 {
+    int const num_params = IR_FPTR(K->mir->type)->params->count;
+
     int index;
-    int removed = 0;
-    paw_Bool removed_any = PAW_FALSE;
+    int num_removed = 0;
     struct MirInstruction **pinstr;
     K_LIST_ENUMERATE (code, index, pinstr) {
         struct MirInstruction *instr = *pinstr;
         if (is_pure(instr)) {
-            MirRegister const *pstore = pawMir_get_store(K->mir, instr);
-            if (pstore != NULL) {
-                int const *pcount = UseCountMap_get(K, counts, *pstore);
-                if (*pcount == 0) {
-                    remove_operand_uses(K, counts, instr);
-                    ++removed;
-                    continue;
+            // instruction has no side-effects
+            int num_unused = 0;
+            MirRegister *const *ppstore;
+            MirRegisterPtrList const *stores = pawMir_get_stores(K->mir, instr);
+            K_LIST_FOREACH (stores, ppstore) {
+                MirRegister const store = **ppstore;
+                if (store.value > num_params) {
+                    int const *pcount = UseCountMap_get(K, counts, store);
+                    num_unused += *pcount == 0;
                 }
+            }
+            if (num_unused == stores->count) {
+                // all stores are unused, meaning the instruction itself is unused
+                remove_operand_uses(K, counts, instr);
+                ++num_removed;
+                continue;
             }
         }
         struct MirInstruction *keep = MirInstructionList_get(code, index);
-        MirInstructionList_set(code, index - removed, keep);
-        removed_any |= removed > 0;
+        MirInstructionList_set(code, index - num_removed, keep);
     }
-    code->count -= removed;
-    return removed_any;
+    code->count -= num_removed;
+    return num_removed > 0;
 }
 
 static paw_Bool remove_dead_code(struct KProp *K, UseCountMap *counts)
@@ -955,14 +969,14 @@ static void propagate_copy(struct KProp *K, struct MirMove *move)
 {
     struct MirAccess *puse;
     MirRegister *const *ppr;
-    struct MirAccessList *uses = get_uses(K, move->output);
+    struct MirAccessList *uses = get_uses(K, move->output.r);
     K_LIST_FOREACH (uses, puse) {
         struct MirRegisterPtrList *loads = pawMir_get_loads(K->mir, puse->instr);
         K_LIST_FOREACH (loads, ppr) {
-            if (MIR_REG_EQUALS(**ppr, move->output)) {
+            if (MIR_REG_EQUALS(**ppr, move->output.r)) {
                 K->altered = PAW_TRUE;
                 // replace output with operand
-                **ppr = move->target;
+                **ppr = move->target.r;
                 break;
             }
         }
@@ -981,8 +995,8 @@ static void propagate_copies(struct KProp *K)
             struct MirInstruction *instr = *pinstr;
             if (MirIsMove(instr)) {
                 struct MirMove *move = MirGetMove(instr);
-                if (!is_captured(K, move->target)
-                        && !is_captured(K, move->output)) {
+                if (!is_captured(K, move->target.r)
+                        && !is_captured(K, move->output.r)) {
                     propagate_copy(K, move);
                     continue;
                 }
@@ -993,13 +1007,8 @@ static void propagate_copies(struct KProp *K)
     }
 }
 
-paw_Bool pawMir_propagate_constants(struct Mir *mir)
+static paw_Bool propagate(struct Mir *mir)
 {
-    // TODO: "force" flag to force propagation for global constants
-#ifdef PAW_KPROP_OFF
-    return;
-#endif
-
     struct Compiler *C = mir->C;
     struct KProp K = {
         .pool = pawP_pool_new(C, C->aux_stats),
@@ -1030,4 +1039,17 @@ paw_Bool pawMir_propagate_constants(struct Mir *mir)
 
     pawP_pool_free(C, K.pool);
     return K.altered;
+}
+
+void pawMir_propagate_constants(struct Mir *mir)
+{
+    // TODO: "force" flag to force propagation for global constants
+#ifdef PAW_KPROP_OFF
+    return;
+#endif
+
+    paw_Bool altered;
+    do {
+        altered = propagate(mir);
+    } while (altered);
 }
