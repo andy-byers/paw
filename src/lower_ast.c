@@ -244,13 +244,27 @@ static struct HirExpr *LowerBinOpExpr(struct LowerAst *L, struct AstBinOpExpr *e
     return pawHir_new_binop_expr(L->hir, e->span, lhs, rhs, e->op);
 }
 
+static void check_assignment_target(struct LowerAst *L, struct AstExpr *target)
+{
+    if (!AstIsPathExpr(target) && !AstIsIndex(target) && !AstIsSelector(target))
+        pawErr_invalid_assignment_target(L->C, L->modname, target->hdr.span.start);
+}
+
 static struct HirExpr *LowerAssignExpr(struct LowerAst *L, struct AstAssignExpr *e)
 {
+    check_assignment_target(L, e->lhs);
     struct HirExpr *lhs = lower_expr(L, e->lhs);
-    if (!HirIsPathExpr(lhs) && !HirIsIndex(lhs) && !HirIsSelector(lhs))
-        pawErr_invalid_assignment_target(L->C, L->modname, e->span.start);
-
     struct HirExpr *rhs = lower_expr(L, e->rhs);
+    return pawHir_new_assign_expr(L->hir, e->span, lhs, rhs);
+}
+
+static struct HirExpr *LowerOpAssignExpr(struct LowerAst *L, struct AstOpAssignExpr *e)
+{
+    check_assignment_target(L, e->lhs);
+    struct HirExpr *lhs = lower_expr(L, e->lhs); // used as place
+    struct HirExpr *copy = lower_expr(L, e->lhs); // used as value
+    struct HirExpr *rhs = lower_expr(L, e->rhs);
+    rhs = pawHir_new_binop_expr(L->hir, e->span, copy, rhs, e->op);
     return pawHir_new_assign_expr(L->hir, e->span, lhs, rhs);
 }
 
@@ -951,6 +965,7 @@ static struct Hir *lower_ast(struct LowerAst *L, struct Ast *ast)
         paw_push_rawptr(P, hir);
         paw_call(P, 1);
     }
+
     return hir;
 }
 

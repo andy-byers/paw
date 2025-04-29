@@ -731,8 +731,8 @@ static void code_get_element_ptr(struct MirVisitor *V, struct MirGetElementPtr *
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
 
-    Op const op = x->b_kind == BUILTIN_LIST ? OP_LGETEP :
-        x->is_map_setter ? OP_MNEWEP: OP_MGETEP;
+    Op const op = x->b_kind == BUILTIN_LIST ? OP_LGETP :
+        x->is_map_setter ? OP_MNEWEP: OP_MGETP;
     code_ABC(fs, op, REG(x->output.r), REG(x->object.r), REG(x->key.r));
 }
 

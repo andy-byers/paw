@@ -173,14 +173,14 @@ typedef enum Op { // arguments    description
 
     OP_LLENGTH, //        A B          R[A] := #R[B]
     OP_LCONCAT, //        A B C        R[A] := R[B] + R[C]
-    OP_LGETEP, //         A B C        R[A] := &R[B][R[C]]
+    OP_LGETP, //          A B C        R[A] := &R[B][R[C]]
     OP_LGET, //           A B C        R[A] := R[B][R[C]]
     OP_LSET, //           A B C        R[A][R[B]] := R[C]
     OP_LGETN, //          A B C        R[A] := R[B][R[C]:R[C+1]]
     OP_LSETN, //          A B C        R[A][R[B]:R[B+1]] := R[C]
 
     OP_MLENGTH, //        A B          R[A] := #R[B]
-    OP_MGETEP, //         A B C        R[A] := &R[B][R[C]]
+    OP_MGETP, //          A B C        R[A] := &R[B][R[C]]
     OP_MNEWEP, //         A B C        R[A] := &R[B][R[C]]
     OP_MGET, //           A B C        R[A] := R[B][R[C]]
     OP_MSET, //           A B C        R[A][R[B]] := R[C]

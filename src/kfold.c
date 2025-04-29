@@ -14,6 +14,7 @@
 #define KFOLD_ERROR(C_, Kind_, Modname_, ...) pawErr_##Kind_(C_, Modname_, __VA_ARGS__)
 #define DIVIDE_BY_0(C_, Modname_, Loc_) KFOLD_ERROR(C_, constant_divide_by_zero, Modname_, Loc_);
 #define SHIFT_BY_NEGATIVE(C_, Modname_, Loc_) KFOLD_ERROR(C_, constant_negative_shift_count, Modname_, Loc_);
+#define DIVMOD_OVERFLOWS(Left_, Right_) (V_INT(Left_) == PAW_INT_MIN && V_INT(Right_) == -1)
 
 static void constant_div(struct Compiler *C, String const *modname, struct SourceLoc loc, Value *pr, Value x, Value y, enum BuiltinKind kind)
 {
@@ -161,7 +162,11 @@ paw_Bool pawP_fold_binary_op(struct Compiler *C, String const *modname, struct S
         case MIR_BINARY_IDIV:
             if (V_INT(y) == 0)
                 DIVIDE_BY_0(C, modname, loc);
-            INT_BINARY_OP(pr, x, y, /);
+            if (DIVMOD_OVERFLOWS(x, y)) {
+                V_SET_INT(pr, 0);
+            } else {
+                V_SET_INT(pr, V_INT(x) / V_INT(y));
+            }
             break;
         case MIR_BINARY_FDIV:
             if (V_FLOAT(y) == 0.0)
@@ -171,7 +176,11 @@ paw_Bool pawP_fold_binary_op(struct Compiler *C, String const *modname, struct S
         case MIR_BINARY_IMOD:
             if (V_INT(y) == 0)
                 DIVIDE_BY_0(C, modname, loc);
-            INT_BINARY_OP(pr, x, y, %);
+            if (DIVMOD_OVERFLOWS(x, y)) {
+                V_SET_INT(pr, 0);
+            } else {
+                V_SET_INT(pr, V_INT(x) % V_INT(y));
+            }
             break;
         case MIR_BINARY_FMOD:
             if (V_FLOAT(y) == 0.0)

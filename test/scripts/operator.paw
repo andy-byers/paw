@@ -76,7 +76,53 @@ pub fn test_bitwise_ops() {
 pub fn test_add_strings() {
     let s = '';
     s = s + 'abc';
-    s = s + s;
+    s += s;
     assert(s == 'abcabc');
+}
+
+
+pub fn test_operator_assignment() {
+    // prevent constant folding
+    let value = || 10; 
+
+    let v = value();
+    v += 1;
+    assert(v == 11);
+
+    let v = value();
+    v -= 4;
+    assert(v == 6);
+
+    let v = value();
+    v *= 10;
+    assert(v == 100);
+
+    let v = value();
+    v /= -5;
+    assert(v == -2);
+
+    let v = value();
+    v %= 3;
+    assert(v == 1);
+
+    let v = value();
+    v &= 1;
+    assert(v == 0);
+
+    let v = value();
+    v |= 1;
+    assert(v == 11);
+
+    let v = value();
+    v ^= 10;
+    assert(v == 0);
+
+    let v = value();
+    v <<= 1;
+    assert(v == 20);
+
+    let v = value();
+    v >>= 1;
+    assert(v == 5);
 }
 

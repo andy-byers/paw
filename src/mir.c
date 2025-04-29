@@ -1571,6 +1571,7 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
         }
         case kMirUnaryOp: {
             struct MirUnaryOp *t = MirGetUnaryOp(instr);
+            print_place(P, t->output);
             PRINT_FORMAT(P, " = %s ", unop_name(t->op));
             print_place(P, t->val);
             break;

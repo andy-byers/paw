@@ -46,6 +46,7 @@
     X(Selector)          \
     X(FieldExpr)         \
     X(AssignExpr)        \
+    X(OpAssignExpr)      \
     X(Block)             \
     X(IfExpr)            \
     X(ForExpr)           \
@@ -623,6 +624,13 @@ struct AstAssignExpr {
     struct AstExpr *rhs;
 };
 
+struct AstOpAssignExpr {
+    AST_EXPR_HEADER;
+    enum BinaryOp op : 8;
+    struct AstExpr *lhs;
+    struct AstExpr *rhs;
+};
+
 struct AstBlock {
     AST_EXPR_HEADER;
     struct AstStmtList *stmts;
@@ -944,6 +952,19 @@ inline static struct AstExpr *pawAst_new_assign_expr(struct Ast *ast, struct Sou
     e->AssignExpr_ = (struct AstAssignExpr){
         .span = span,
         .kind = kAstAssignExpr,
+        .lhs = lhs,
+        .rhs = rhs,
+    };
+    return e;
+}
+
+inline static struct AstExpr *pawAst_new_op_assign_expr(struct Ast *ast, struct SourceSpan span, struct AstExpr *lhs, struct AstExpr *rhs, enum BinaryOp op)
+{
+    struct AstExpr *e = pawAst_new_expr(ast);
+    e->OpAssignExpr_ = (struct AstOpAssignExpr){
+        .span = span,
+        .kind = kAstOpAssignExpr,
+        .op = op,
         .lhs = lhs,
         .rhs = rhs,
     };

@@ -131,3 +131,45 @@ pub fn test_captured_reg() {
     assert(copy == 0);
     assert(up == 1);
 }
+
+pub fn test_operator_assignment() {
+    let v = 10;
+    v += 1;
+    assert(v == 11);
+
+    let v = 10;
+    v -= 4;
+    assert(v == 6);
+
+    let v = 10;
+    v *= 10;
+    assert(v == 100);
+
+    let v = 10;
+    v /= -5;
+    assert(v == -2);
+
+    let v = 10;
+    v %= 3;
+    assert(v == 1);
+
+    let v = 10;
+    v &= 1;
+    assert(v == 0);
+
+    let v = 10;
+    v |= 1;
+    assert(v == 11);
+
+    let v = 10;
+    v ^= 10;
+    assert(v == 0);
+
+    let v = 10;
+    v <<= 1;
+    assert(v == 20);
+
+    let v = 10;
+    v >>= 1;
+    assert(v == 5);
+}

@@ -613,7 +613,7 @@ top:
                 pawR_str_getn(P, cf, ra, rb, rc);
             }
 
-            vm_case(LGETEP) :
+            vm_case(LGETP) :
             {
                 VM_SAVE_PC();
                 Value const *rb = VM_RB(opcode);
@@ -663,7 +663,7 @@ top:
                 pawR_map_length(P, cf, ra, rb);
             }
 
-            vm_case(MGETEP) :
+            vm_case(MGETP) :
             {
                 VM_SAVE_PC();
                 Value const *rb = VM_RB(opcode);

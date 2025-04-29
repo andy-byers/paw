@@ -35,6 +35,16 @@ enum MultiChar {
     TK_LESS_EQ,
     TK_GREATER_EQ,
     TK_BANG_EQ,
+    TK_PLUS_EQ,
+    TK_MINUS_EQ,
+    TK_STAR_EQ,
+    TK_SLASH_EQ,
+    TK_PERCENT_EQ,
+    TK_CARET_EQ,
+    TK_AMPER_EQ,
+    TK_PIPE_EQ,
+    TK_LESS2_EQ,
+    TK_GREATER2_EQ,
 
     // Variables and literals:
     TK_NAME,

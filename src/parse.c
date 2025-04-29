@@ -105,16 +105,25 @@ enum InfixOp {
     INFIX_MUL, // *
     INFIX_DIV, // /
     INFIX_MOD, // %
-    INFIX_BXOR, // ^
-    INFIX_BAND, // &
-    INFIX_BOR, // |
+    INFIX_BITXOR, // ^
+    INFIX_BITAND, // &
+    INFIX_BITOR, // |
     INFIX_SHL, // <<
     INFIX_SHR, // >>
     INFIX_RANGE, // ..
-
     INFIX_AND, // &&
     INFIX_OR, // ||
     INFIX_ASSIGN, // =
+    INFIX_AADD, // +=
+    INFIX_ASUB, // -=
+    INFIX_AMUL, // *=
+    INFIX_ADIV, // /=
+    INFIX_AMOD, // %=
+    INFIX_ABITXOR, // ^=
+    INFIX_ABITAND, // &=
+    INFIX_ABITOR, // |=
+    INFIX_ASHL, // <<=
+    INFIX_ASHR, // >>=
 
     NINFIX
 };
@@ -134,9 +143,9 @@ static const struct {
     [INFIX_SUB] = {11, 11},
     [INFIX_SHL] = {10, 10},
     [INFIX_SHR] = {10, 10},
-    [INFIX_BAND] = {9, 9},
-    [INFIX_BXOR] = {8, 8},
-    [INFIX_BOR] = {7, 7},
+    [INFIX_BITAND] = {9, 9},
+    [INFIX_BITXOR] = {8, 8},
+    [INFIX_BITOR] = {7, 7},
     [INFIX_LT] = {6, 6},
     [INFIX_LE] = {6, 6},
     [INFIX_GT] = {6, 6},
@@ -147,6 +156,16 @@ static const struct {
     [INFIX_OR] = {3, 3},
     [INFIX_RANGE] = {2, 2},
     [INFIX_ASSIGN] = {1, 1},
+    [INFIX_AADD] = {1, 1},
+    [INFIX_ASUB] = {1, 1},
+    [INFIX_AMUL] = {1, 1},
+    [INFIX_ADIV] = {1, 1},
+    [INFIX_AMOD] = {1, 1},
+    [INFIX_ABITXOR] = {1, 1},
+    [INFIX_ABITAND] = {1, 1},
+    [INFIX_ABITOR] = {1, 1},
+    [INFIX_ASHL] = {1, 1},
+    [INFIX_ASHR] = {1, 1},
 };
 
 static uint8_t const kUnOpPrecedence = 13;
@@ -197,11 +216,11 @@ static enum InfixOp get_infixop(TokenKind kind)
         case '>':
             return INFIX_GT;
         case '^':
-            return INFIX_BXOR;
+            return INFIX_BITXOR;
         case '&':
-            return INFIX_BAND;
+            return INFIX_BITAND;
         case '|':
-            return INFIX_BOR;
+            return INFIX_BITOR;
         case TK_AS:
             return INFIX_AS;
         case TK_EQUALS2:
@@ -222,6 +241,26 @@ static enum InfixOp get_infixop(TokenKind kind)
             return INFIX_GE;
         case TK_DOT2:
             return INFIX_RANGE;
+        case TK_PLUS_EQ:
+            return INFIX_AADD;
+        case TK_MINUS_EQ:
+            return INFIX_ASUB;
+        case TK_STAR_EQ:
+            return INFIX_AMUL;
+        case TK_SLASH_EQ:
+            return INFIX_ADIV;
+        case TK_PERCENT_EQ:
+            return INFIX_AMOD;
+        case TK_CARET_EQ:
+            return INFIX_ABITXOR;
+        case TK_AMPER_EQ:
+            return INFIX_ABITAND;
+        case TK_PIPE_EQ:
+            return INFIX_ABITOR;
+        case TK_LESS2_EQ:
+            return INFIX_ASHL;
+        case TK_GREATER2_EQ:
+            return INFIX_ASHR;
         default:
             return NOT_INFIX;
     }
@@ -1374,6 +1413,42 @@ static struct AstExpr *conversion_expr(struct Lex *lex, struct AstExpr *lhs)
     return NEW_NODE(lex, conversion_expr, start, lhs, to);
 }
 
+static enum BinaryOp into_binary_op(enum InfixOp op)
+{
+    switch (op) {
+        case INFIX_AADD:
+            return BINARY_ADD;
+        case INFIX_ASUB:
+            return BINARY_SUB;
+        case INFIX_AMUL:
+            return BINARY_MUL;
+        case INFIX_ADIV:
+            return BINARY_DIV;
+        case INFIX_AMOD:
+            return BINARY_MOD;
+        case INFIX_ABITXOR:
+            return BINARY_BXOR;
+        case INFIX_ABITAND:
+            return BINARY_BAND;
+        case INFIX_ABITOR:
+            return BINARY_BOR;
+        case INFIX_ASHL:
+            return BINARY_SHL;
+        case INFIX_ASHR:
+            return BINARY_SHR;
+        default:
+            PAW_UNREACHABLE();
+    }
+}
+
+static struct AstExpr *op_assignment_expr(struct Lex *lex, struct AstExpr *lhs, enum InfixOp op)
+{
+    struct SourceLoc start = lex->loc;
+    struct AstExpr *rhs = expression(lex, right_prec(op));
+    enum BinaryOp const binop = into_binary_op(op);
+    return NEW_NODE(lex, op_assign_expr, start, lhs, rhs, binop);
+}
+
 static struct AstExpr *assignment_expr(struct Lex *lex, struct AstExpr *lhs)
 {
     struct SourceLoc start = lex->loc;
@@ -1409,6 +1484,17 @@ static struct AstExpr *infix_expr(struct Lex *lex, struct AstExpr *lhs, unsigned
             return conversion_expr(lex, lhs);
         case INFIX_ASSIGN:
             return assignment_expr(lex, lhs);
+        case INFIX_AADD:
+        case INFIX_ASUB:
+        case INFIX_AMUL:
+        case INFIX_ADIV:
+        case INFIX_AMOD:
+        case INFIX_ABITXOR:
+        case INFIX_ABITAND:
+        case INFIX_ABITOR:
+        case INFIX_ASHL:
+        case INFIX_ASHR:
+            return op_assignment_expr(lex, lhs, op);
         default:
             return binop_expr(lex, op, lhs);
     }

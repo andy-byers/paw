@@ -404,6 +404,15 @@ static void dump_expr(Printer *P, struct AstExpr *expr)
             dump_expr(P, e->rhs);
             break;
         }
+        case kAstOpAssignExpr: {
+            struct AstOpAssignExpr *e = AstGetOpAssignExpr(expr);
+            DUMP_FMT(P, "op: %d\n", e->op);
+            DUMP_MSG(P, "lhs: ");
+            dump_expr(P, e->lhs);
+            DUMP_MSG(P, "rhs: ");
+            dump_expr(P, e->rhs);
+            break;
+        }
         case kAstBinOpExpr: {
             struct AstBinOpExpr *e = AstGetBinOpExpr(expr);
             DUMP_FMT(P, "op: %d\n", e->op);

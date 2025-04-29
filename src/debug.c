@@ -97,7 +97,6 @@ char const *paw_binop_symbol(enum BinaryOp binop)
     }
 }
 
-
 // TODO: Most of this should not be in the core: use hooks for debugging
 #if defined(PAW_DEBUG_EXTRA)
 
@@ -280,8 +279,8 @@ char const *paw_op_name(Op op)
             return "LLENGTH";
         case OP_LCONCAT:
             return "LCONCAT";
-        case OP_LGETEP:
-            return "LGETEP";
+        case OP_LGETP:
+            return "LGETP";
         case OP_LGET:
             return "LGET";
         case OP_LSET:
@@ -294,8 +293,8 @@ char const *paw_op_name(Op op)
             return "MLENGTH";
         case OP_MNEWEP:
             return "MNEWEP";
-        case OP_MGETEP:
-            return "MGETEP";
+        case OP_MGETP:
+            return "MGETP";
         case OP_MGET:
             return "MGET";
         case OP_MSET:
@@ -415,13 +414,13 @@ void paw_dump_opcode(OpCode opcode)
         case OP_SGET:
         case OP_SGETN:
         case OP_LCONCAT:
-        case OP_LGETEP:
+        case OP_LGETP:
         case OP_LGET:
         case OP_LSET:
         case OP_LGETN:
         case OP_LSETN:
         case OP_MNEWEP:
-        case OP_MGETEP:
+        case OP_MGETP:
         case OP_MGET:
         case OP_MSET:
         case OP_GETFIELD:
@@ -536,13 +535,13 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
             case OP_SGET:
             case OP_SGETN:
             case OP_LCONCAT:
-            case OP_LGETEP:
+            case OP_LGETP:
             case OP_LGET:
             case OP_LSET:
             case OP_LGETN:
             case OP_LSETN:
             case OP_MNEWEP:
-            case OP_MGETEP:
+            case OP_MGETP:
             case OP_MGET:
             case OP_MSET:
             case OP_GETFIELD:

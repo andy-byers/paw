@@ -591,18 +591,30 @@ try_again:
             next(X);
             if (test_next(X, '&')) {
                 token = T(TK_AMPER2);
+            } else if (test_next(X, '=')) {
+                token = T(TK_AMPER_EQ);
             }
             break;
         case '|':
             next(X);
             if (test_next(X, '|')) {
                 token = T(TK_PIPE2);
+            } else if (test_next(X, '=')) {
+                token = T(TK_PIPE_EQ);
+            }
+            break;
+        case '^':
+            next(X);
+            if (test_next(X, '=')) {
+                token = T(TK_CARET_EQ);
             }
             break;
         case '-':
             next(X);
             if (test_next(X, '>')) {
                 token = T(TK_ARROW);
+            } else if (test_next(X, '=')) {
+                token = T(TK_MINUS_EQ);
             }
             break;
         case ':':
@@ -620,7 +632,9 @@ try_again:
         case '<':
             next(X);
             if (test_next(X, '<')) {
-                token = T(TK_LESS2);
+                token = test_next(X, '=')
+                    ? T(TK_LESS2_EQ)
+                    : T(TK_LESS2);
             } else if (test_next(X, '=')) {
                 token = T(TK_LESS_EQ);
             }
@@ -628,7 +642,9 @@ try_again:
         case '>':
             next(X);
             if (test_next(X, '>')) {
-                token = T(TK_GREATER2);
+                token = test_next(X, '=')
+                    ? T(TK_GREATER2_EQ)
+                    : T(TK_GREATER2);
             } else if (test_next(X, '=')) {
                 token = T(TK_GREATER_EQ);
             }
@@ -637,6 +653,8 @@ try_again:
             next(X);
             if (test_next(X, '+')) {
                 token = T(TK_PLUS2);
+            } else if (test_next(X, '=')) {
+                token = T(TK_PLUS_EQ);
             }
             break;
         case '.':
@@ -649,11 +667,25 @@ try_again:
                 }
             }
             break;
+        case '*':
+            next(X);
+            if (test_next(X, '=')) {
+                token = T(TK_STAR_EQ);
+            }
+            break;
+        case '%':
+            next(X);
+            if (test_next(X, '=')) {
+                token = T(TK_PERCENT_EQ);
+            }
+            break;
         case '/':
             next(X);
             if (test_next(X, '/')) {
                 skip_line_comment(X);
                 goto try_again;
+            } else if (test_next(X, '=')) {
+                token = T(TK_SLASH_EQ);
             }
             break;
         default:
