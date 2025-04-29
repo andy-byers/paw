@@ -343,16 +343,16 @@ static void debug(struct Compiler *C, struct MirBlockList *idom, struct MirBucke
     printf("]\n");
 }
 
-void pawSsa_construct(struct Mir *mir)
+static void ssa_construct(struct Pool *pool, struct Mir *mir)
 {
     struct Compiler *C = mir->C;
     struct MirBlockList *idom = pawMir_compute_dominance_tree(C, mir);
     struct MirBucketList *df = pawMir_compute_dominance_frontiers(C, mir, idom);
 
     struct SsaConverter S = {
-        .pool = pawP_pool_new(C, C->aux_stats),
         .registers = MirRegisterDataList_new(mir),
         .locals = mir->locals,
+        .pool = pool,
         .idom = idom,
         .mir = mir,
         .df = df,
@@ -375,5 +375,15 @@ void pawSsa_construct(struct Mir *mir)
     mir->registers = S.registers;
     fix_aux_info(&S, mir);
 
-    pawP_pool_free(C, S.pool);
+    struct Mir *const *pchild;
+    K_LIST_FOREACH (mir->children, pchild)
+        pawSsa_construct(*pchild);
+}
+
+void pawSsa_construct(struct Mir *mir)
+{
+    struct Compiler *C = mir->C;
+    struct Pool *pool = pawP_pool_new(C, C->aux_stats);
+    ssa_construct(pool, mir);
+    pawP_pool_free(C, pool);
 }

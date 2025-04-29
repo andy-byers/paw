@@ -29,6 +29,12 @@
 
 #define CF_BASE(i) (P->cf->base.p + i)
 
+static int base_panic(paw_Env *P)
+{
+    // string argument on top of the stack
+    pawC_throw(P, PAW_ERUNTIME);
+}
+
 static int base_assert(paw_Env *P)
 {
     if (!paw_bool(P, 1)) {
@@ -572,6 +578,7 @@ void pawL_push_modules_map(paw_Env *P)
 // Expects the 'paw.builtin' map (from the registry) on top of the stack
 static void load_builtins(paw_Env *P)
 {
+    add_prelude_func(P, "panic", base_panic);
     add_prelude_func(P, "assert", base_assert);
     add_prelude_func(P, "print", base_print);
     add_prelude_func(P, "range", base_range);

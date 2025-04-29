@@ -2107,6 +2107,7 @@ static struct Mir *lower_hir_body(struct LowerHir *L, struct Hir *hir, struct Hi
         paw_push_rawptr(P, result);
         paw_call(P, 1);
     }
+
     return result;
 }
 

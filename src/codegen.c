@@ -1081,7 +1081,7 @@ static int code_testk(struct FuncState *fs, MirRegister test, Value k, struct Ir
 {
     const enum BuiltinKind code = pawP_type2code(fs->G->C, type);
     int const index = add_constant(fs->G, k, code);
-    code_AB(fs, OP_TESTK, REG(test), index);
+    code_ABx(fs, OP_TESTK, REG(test), index);
     return emit_jump(fs);
 }
 

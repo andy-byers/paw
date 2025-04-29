@@ -795,6 +795,11 @@ static void test_interpolation(void)
     test_compiler_status(E_EXPECTED_EXPRESSION, "empty_expr", "", "let s = '\\{}';");
 }
 
+static void test_panic(void)
+{
+    test_runtime_status(PAW_ERUNTIME, "panic", "", "panic('panic message');");
+}
+
 int main(void)
 {
     test_syntax_error();
@@ -818,4 +823,5 @@ int main(void)
     test_destructuring();
     test_deferred_init();
     test_interpolation();
+    test_panic();
 }

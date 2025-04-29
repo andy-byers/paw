@@ -2136,6 +2136,7 @@ static char const kPrelude[] =
     "}\n"
 
     "#[extern] pub fn print(message: str);\n"
+    "#[extern] pub fn panic(message: str);\n"
     "#[extern] pub fn assert(cond: bool);\n";
 
 struct PreludeReader {

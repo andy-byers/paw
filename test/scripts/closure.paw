@@ -335,3 +335,16 @@ pub fn test_capture_separate_lists() {
     assert(#g() == 2);
 }
 
+pub fn test_closure_ssa() {
+    let f = |b: bool| {
+        let a;
+        if b {
+            a = "true";
+        } else {
+            a = "false";
+        }
+        a
+    };
+    assert(f(true) == "true");
+    assert(f(false) == "false");
+}

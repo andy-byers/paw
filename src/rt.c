@@ -751,8 +751,7 @@ top:
             vm_case(TESTK) :
             {
                 Value const *ra = VM_RA(opcode);
-                Value const k = K[GET_B(opcode)];
-                int const c = GET_C(opcode);
+                Value const k = K[GET_Bx(opcode)];
                 if (ra->u != k.u)
                     ++pc;
             }

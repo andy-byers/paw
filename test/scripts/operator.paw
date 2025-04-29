@@ -126,3 +126,12 @@ pub fn test_operator_assignment() {
     assert(v == 5);
 }
 
+pub fn test_operator_assignment_projections() {
+    // prevent constant folding
+    let value = || [(10,)]; 
+
+    let v = value();
+    v[0].0 += 101;
+    assert(v[0].0 == 111);
+}
+

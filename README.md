@@ -161,24 +161,31 @@ pub fn main() {
 }
 ```
 
+## Error handling
+Paw uses sum types (`Result<T, E>`) to express recoverable errors, e.g. "no such file or directory".
+Runtime panics are issued for unrecoverable errors, e.g. "out of memory", an assertion failure, or an out-of-bounds element access.
+Panics cannot be caught inside Paw.
+A panic always stops execution at the location of the panic and causes the VM entrpoint function to return with an error.
+A panic can also be caused by calling the `panic` builtin function.
+
 ## Operators
 
-|Precedence|Operator   |Description                                   |Associativity|
-|:---------|:----------|:---------------------------------------------|:------------|
-|14        |`() [] . ?`|Call, Subscript, Member access, Question mark |Left         |
-|13        |`! - ~ #`  |Not, Negate, Bitwise not, length              |Right        |
-|12        |`as`       |Cast                                          |Left         |
-|11        |`* / %`    |Multiply, Divide, Modulus                     |Left         |
-|10        |`+ -`      |Add, Subtract                                 |Left         |
-|9         |`<< >>`    |Shift left, Shift right                       |Left         |
-|8         |`&`        |Bitwise and                                   |Left         |
-|7         |`^`        |Bitwise xor                                   |Left         |
-|6         |<code>&#124;</code>|Bitwise or                            |Left         |
-|5         |`< <= > >=`|Relational comparisons                        |Left         |
-|4         |`== !=`    |Equality comparisons                          |Left         |
-|3         |`&&`       |And                                           |Left         |
-|2         |<code>&#124;&#124;</code>|Or                              |Left         |
-|1         |`=`        |Assignment                                    |Right        |
+|Precedence|Operator                           |Description                                  |Associativity|
+|:---------|:----------------------------------|:--------------------------------------------|:------------|
+|14        |`() [] . ?`                        |Call, Subscript, Member access, Question mark|Left         |
+|13        |`! - ~ #`                          |Not, Negate, Bitwise not, length             |Right        |
+|12        |`as`                               |Cast                                         |Left         |
+|11        |`* / %`                            |Multiply, Divide, Modulus                    |Left         |
+|10        |`+ -`                              |Add, Subtract                                |Left         |
+|9         |`<< >>`                            |Shift left, Shift right                      |Left         |
+|8         |`&`                                |Bitwise and                                  |Left         |
+|7         |`^`                                |Bitwise xor                                  |Left         |
+|6         |<code>&#124;</code>                |Bitwise or                                   |Left         |
+|5         |`< <= > >=`                        |Relational comparisons                       |Left         |
+|4         |`== !=`                            |Equality comparisons                         |Left         |
+|3         |`&&`                               |And                                          |Left         |
+|2         |<code>&#124;&#124;</code>          |Or                                           |Left         |
+|1         |`= += -= *= /= %= &= |= ^= <<= >>=`|Assignment, operator assignment              |Right        |
 
 ## Roadmap
 + [x] static, strong typing
@@ -192,7 +199,6 @@ pub fn main() {
 + [x] type inference for polymorphic `enum`
 + [x] exhaustive pattern matching (`match` construct)
 + [x] more featureful `use` declarations: `use mod::*`, `use mod::specific_symbol`, `use mod as alias`, etc.
-+ [x] generic constraints/bounds
 + [x] constant folding, constant propagation
 + [x] traits (more like Swift protocols, maybe needs a different name)
 + [x] integrate traits into stdlib (iterators, hash map keys, etc.)
