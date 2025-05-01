@@ -383,8 +383,11 @@ int paw_call(paw_Env *P, int argc)
     StackPtr top = P->top.p;
     StackPtr fn = &top[-argc - 1];
     struct CallState c = {.fn = fn, .argc = argc};
-    int const status = pawC_try(P, eval_aux, &c);
-    return status;
+    if (P->cf == &P->main)
+        // wrap toplevel function calls in a panic context
+        return pawC_try(P, eval_aux, &c);
+    eval_aux(P, &c);
+    return PAW_OK;
 }
 
 int paw_get_count(paw_Env *P)

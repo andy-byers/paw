@@ -770,8 +770,8 @@ void pawL_init(paw_Env *P)
         .value_size = 1,
     };
 
-    P->map_policies.alloc = 32;
-    P->map_policies.data = pawM_new_vec(P, 32, MapPolicy);
+    P->map_policies.alloc = NBUILTIN_POLICIES;
+    P->map_policies.data = pawM_new_vec(P, NBUILTIN_POLICIES, MapPolicy);
     P->map_policies.data[PAW_TUNIT] = base_policy;
     P->map_policies.data[PAW_TBOOL] = base_policy;
     P->map_policies.data[PAW_TINT] = base_policy;
