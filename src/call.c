@@ -130,7 +130,7 @@ static CallFrame *next_call_frame(paw_Env *P, StackPtr top)
     // Env always has a call frame. It may be pointing to P->main.
     paw_assert(P->cf);
     CallFrame *cf = P->cf;
-    CallFrame *callee = NULL;
+    CallFrame *callee;
     if (cf->next) {
         callee = cf->next;
     } else {
@@ -143,19 +143,18 @@ static CallFrame *next_call_frame(paw_Env *P, StackPtr top)
 static void call_return(paw_Env *P, StackPtr base, int nreturn)
 {
     if (nreturn == 1) {
-        base[0] = P->top.p[-1];
+        *base++ = P->top.p[-1];
     } else if (nreturn == 0) {
         // implicit 'return ()'
-        V_SET_0(base);
+        V_SET_0(base++);
         nreturn = 1;
     } else {
         StackPtr pret = P->top.p - nreturn;
-        for (int i = 0; i < nreturn; ++i) {
-            base[i] = *pret++;
-        }
+        while (nreturn-- > 0)
+            *base++ = *pret++;
     }
-    P->top.p = base + nreturn;
     P->cf = P->cf->prev;
+    P->top.p = base;
 }
 
 static void handle_ccall(paw_Env *P, StackPtr base, Native *ccall)

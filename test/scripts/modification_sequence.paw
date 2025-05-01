@@ -1,0 +1,34 @@
+// modification_sequence.paw
+
+pub fn test_assignment() {
+    let v = 1;
+    let t = (v, v = 2, v);
+    assert(t.0 == 1);
+    assert(t.2 == 2);
+}
+    
+pub fn test_call() {
+    let v = 1;
+    let g = || v = 2;
+    let t = (v, g(), v);
+    assert(t.0 == 1);
+    assert(t.2 == 2);
+}
+
+struct Box<T> {
+    pub value: T,
+}
+
+pub fn test_boxed_type() {
+    let v = Box{value: 1};
+    let t = (v, v.value = 2, v);
+    assert(t.0.value == 2);
+    assert(t.2.value == 2);
+}
+
+pub fn test_value_type() {
+    let v = (0, 1);
+    let t = (v, v.1 = 2, v);
+    assert(t.0.1 == 1);
+    assert(t.2.1 == 2);
+}

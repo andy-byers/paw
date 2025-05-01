@@ -134,4 +134,3 @@ pub fn test_operator_assignment_projections() {
     v[0].0 += 101;
     assert(v[0].0 == 111);
 }
-

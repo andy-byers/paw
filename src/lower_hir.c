@@ -742,16 +742,6 @@ static struct MirPlace lower_place(struct HirVisitor *V, struct HirExpr *expr)
     return place;
 }
 
-static void lower_place_list(struct HirVisitor *V, struct HirExprList *exprs, struct MirPlaceList *result)
-{
-    struct HirExpr **pexpr;
-    struct LowerHir *L = V->ud;
-    K_LIST_FOREACH (exprs, pexpr) {
-        struct MirPlace const r = lower_place(V, *pexpr);
-        MirPlaceList_push(L->fs->mir, result, r);
-    }
-}
-
 static paw_Bool visit_field_decl(struct HirVisitor *V, struct HirFieldDecl *d)
 {
     struct LowerHir *L = V->ud;
@@ -1486,6 +1476,21 @@ static struct MirPlace lower_variant_constructor(struct HirVisitor *V, struct Hi
     return object;
 }
 
+static void lower_args(struct HirVisitor *V, struct HirExprList *exprs, struct MirPlaceList *result)
+{
+    struct LowerHir *L = V->ud;
+    struct FunctionState *fs = L->fs;
+
+    struct HirExpr **pexpr;
+    K_LIST_FOREACH (exprs, pexpr) {
+        IrType *type = GET_NODE_TYPE(fs->C, *pexpr);
+        struct MirPlace const copy = new_place(fs, type);
+        struct MirPlace const arg = lower_place(V, *pexpr);
+        move_to(fs, NODE_START(*pexpr), arg, copy);
+        MirPlaceList_push(L->fs->mir, result, copy);
+    }
+}
+
 static struct MirPlace lower_callee_and_args(struct HirVisitor *V, struct HirExpr *callee, struct HirExprList *args_in, MirPlaceList *args_out)
 {
     struct LowerHir *L = V->ud;
@@ -1519,7 +1524,7 @@ static struct MirPlace lower_callee_and_args(struct HirVisitor *V, struct HirExp
         // the method on the type that the generic is replaced with
         mir_reg_data(fs->mir, result.r)->self = recv;
     }
-    lower_place_list(V, args_in, args_out);
+    lower_args(V, args_in, args_out);
     return result;
 }
 
