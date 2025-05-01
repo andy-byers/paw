@@ -790,12 +790,13 @@ static void collect_binding(struct HirVisitor *V, struct HirBindingPat *p)
 
     IrType *type = pawIr_get_type(L->C, p->hid);
     struct HirIdent temp = unpack_temp_name(L, p);
-    struct LocalVar *local = alloc_local(fs, temp, type);
+    struct MirPlace place = new_place(fs, type);
+    struct LocalVar *local = add_local(fs, temp, place);
 
     UnpackingList_push(L, ctx->info, (struct UnpackingInfo){
                 .name = p->ident.name,
                 .temp = temp.name,
-                .r = local->r,
+                .r = place,
                 .p = p,
             });
 }
@@ -907,8 +908,9 @@ static void unpack_bindings(struct HirVisitor *V, struct HirPat *lhs, struct Hir
     K_LIST_FOREACH(ctx.info, pinfo) {
         struct HirBindingPat *p = pinfo->p;
         IrType *type = pawIr_get_type(fs->C, p->hid);
-        struct LocalVar *local = alloc_local(fs, p->ident, type);
-        move_to(fs, p->span.start, pinfo->r, local->r);
+        struct MirPlace place = new_place(fs, type);
+        struct LocalVar *local = add_local(fs, p->ident, place);
+        move_to(fs, p->span.start, pinfo->r, place);
     }
 }
 
@@ -920,6 +922,7 @@ static paw_Bool visit_let_stmt(struct HirVisitor *V, struct HirLetStmt *s)
     if (s->init != NULL) {
         unpack_bindings(V, s->pat, s->init);
     } else if (HirIsBindingPat(s->pat)) {
+        // create an uninitialized virtual register to hold the variable
         struct HirIdent ident = HirGetBindingPat(s->pat)->ident;
         struct LocalVar *var = alloc_local(L->fs, ident, type);
         struct MirRegisterData *data = mir_reg_data(L->fs->mir, var->r.r);
