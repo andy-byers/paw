@@ -291,8 +291,11 @@ static struct IrType *resolve_alias(struct QueryState *Q, struct HirSegment *seg
     struct IrTypeList *subst = pawP_instantiate_typelist(Q->C, generics, unknowns, types);
     if (knowns != NULL) {
         struct IrType **pu, **pk;
-        K_LIST_ZIP (unknowns, pu, knowns, pk)
-            pawU_unify(Q->C->U, *pu, *pk);
+        K_LIST_ZIP (unknowns, pu, knowns, pk) {
+            // unification with an IrInfer never fails due to incompatible types
+            int const rc = pawU_unify(Q->C->U, *pu, *pk);
+            paw_assert(rc == 0); PAW_UNUSED(rc);
+        }
     }
 
     return pawP_instantiate(Q->C, rhs, subst);

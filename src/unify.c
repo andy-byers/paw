@@ -273,13 +273,9 @@ static int unify(struct Unifier *U, struct IrType *a, struct IrType *b)
 
 #define RUN_ACTION(U, a, b, f) ((U)->action = f)(U, a, b)
 
-void pawU_unify(struct Unifier *U, struct IrType *a, struct IrType *b)
+int pawU_unify(struct Unifier *U, struct IrType *a, struct IrType *b)
 {
-    if (RUN_ACTION(U, a, b, unify) != 0) {
-        char const *lhs = pawIr_print_type(U->C, a);
-        char const *rhs = pawIr_print_type(U->C, b);
-        UNIFIER_ERROR(U, incompatible_types, (struct SourceLoc){-1}, lhs, rhs);
-    }
+    return RUN_ACTION(U, a, b, unify);
 }
 
 static int equate(struct Unifier *U, struct IrType *a, struct IrType *b)
@@ -311,7 +307,7 @@ struct IrType *pawU_new_unknown(struct Unifier *U, struct SourceLoc loc, struct 
     return type;
 }
 
-struct IrTypeList *pawU_new_unknowns(struct Unifier *U, struct IrTypeList *types)
+struct IrTypeList *apawU_new_unknowns(struct Unifier *U, struct IrTypeList *types)
 {
     struct IrType **ptype;
     struct IrTypeList *result = IrTypeList_new(U->C);

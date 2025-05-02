@@ -21,6 +21,8 @@
 
 #define STRING_LIT(R_, Str_) SCAN_STRING((R_)->C, Str_)
 #define TYPE2CODE(R_, Type_) pawP_type2code((R_)->C, Type_)
+#define NODE_START(Node_) ((Node_)->hdr.span.start)
+#define NODE_END(Node_) ((Node_)->hdr.span.end)
 
 #define RESOLVER_ERROR(R_, Kind_, ...) pawErr_##Kind_((R_)->C, (R_)->m->name, __VA_ARGS__)
 
@@ -139,9 +141,13 @@ static paw_Bool equals(struct Resolver *R, struct IrType *a, struct IrType *b)
     return pawU_equals(R->U, a, b);
 }
 
-static void unify(struct Resolver *R, struct IrType *a, struct IrType *b)
+static void unify(struct Resolver *R, struct SourceLoc loc, struct IrType *a, struct IrType *b)
 {
-    pawU_unify(R->U, a, b);
+    if (pawU_unify(R->U, a, b) != 0) {
+        char const *lhs = pawIr_print_type(R->C, a);
+        char const *rhs = pawIr_print_type(R->C, b);
+        RESOLVER_ERROR(R, incompatible_types, loc, lhs, rhs);
+    }
     normalize(R, a);
     normalize(R, b);
 }
@@ -446,10 +452,10 @@ static paw_Bool is_unit_type(struct Resolver *R, struct IrType *type)
     return pawP_type2code(R->C, type) == BUILTIN_UNIT;
 }
 
-static void unify_block_result(struct Resolver *R, paw_Bool never, struct IrType *result, struct IrType *expect)
+static void unify_block_result(struct Resolver *R, struct SourceLoc loc, paw_Bool never, struct IrType *result, struct IrType *expect)
 {
     if (!never || !is_unit_type(R, result))
-        unify(R, result, expect);
+        unify(R, loc, result, expect);
 }
 
 static void resolve_func_item(struct Resolver *R, struct HirFuncDecl *d)
@@ -468,7 +474,8 @@ static void resolve_func_item(struct Resolver *R, struct HirFuncDecl *d)
         R->rs = &rs;
 
         struct IrType *result = resolve_operand(R, d->body);
-        unify_block_result(R, HirGetBlock(d->body)->never, result, ret);
+        struct HirBlock *block = HirGetBlock(d->body);
+        unify_block_result(R, block->span.start, block->never, result, ret);
 
         R->rs = rs.outer;
     }
@@ -541,21 +548,21 @@ struct HirDecl *pawP_find_field(struct Compiler *C, struct IrType *self, String 
     return HirDeclList_get(d->fields, index);
 }
 
-static void unify_unit_type(struct Resolver *R, struct IrType *type)
+static void unify_unit_type(struct Resolver *R, struct SourceLoc loc, struct IrType *type)
 {
-    unify(R, type, get_type(R, BUILTIN_UNIT));
+    unify(R, loc, type, get_type(R, BUILTIN_UNIT));
 }
 
 static void expect_bool_expr(struct Resolver *R, struct HirExpr *e)
 {
     struct IrType *type = resolve_operand(R, e);
-    unify(R, type, get_type(R, BUILTIN_BOOL));
+    unify(R, NODE_START(e), type, get_type(R, BUILTIN_BOOL));
 }
 
 static void expect_int_expr(struct Resolver *R, struct HirExpr *e)
 {
     struct IrType *type = resolve_operand(R, e);
-    unify(R, type, get_type(R, BUILTIN_INT));
+    unify(R, NODE_START(e), type, get_type(R, BUILTIN_INT));
 }
 
 static struct IrType *instantiate(struct Resolver *R, struct HirDecl *base, struct IrTypeList *types)
@@ -589,12 +596,12 @@ static void maybe_fix_unit_struct(struct Resolver *R, struct IrType *type, struc
     struct IrAdtDef const *adt = pawIr_get_adt_def(R->C, IR_TYPE_DID(type));
     enum BuiltinKind const code = TYPE2CODE(R, type);
     if (IS_BUILTIN_TYPE(code) || !adt->is_struct)
-        RESOLVER_ERROR(R, expected_value, expr->hdr.span.start, adt->name->text);
+        RESOLVER_ERROR(R, expected_value, NODE_START(expr), adt->name->text);
 
     paw_assert(adt->variants->count == 1);
     struct IrVariantDef *variant = IrVariantDefs_get(adt->variants, 0);
     if (variant->fields->count > 0)
-        RESOLVER_ERROR(R, missing_fields, expr->hdr.span.start, adt->name->text);
+        RESOLVER_ERROR(R, missing_fields, NODE_START(expr), adt->name->text);
 
     struct HirPath path = HirGetPathExpr(expr)->path;
     expr->hdr.kind = kHirLiteralExpr;
@@ -617,7 +624,7 @@ static struct IrType *resolve_path_expr(struct Resolver *R, struct HirPathExpr *
         maybe_fix_unit_struct(R, type, HIR_CAST_EXPR(e));
     } else if (HirIsGenericDecl(result)) {
         String const *name = hir_decl_ident(result).name;
-        RESOLVER_ERROR(R, expected_value, result->hdr.span.start, name->text);
+        RESOLVER_ERROR(R, expected_value, NODE_START(result), name->text);
     }
     return type;
 }
@@ -656,7 +663,7 @@ static struct IrType *resolve_chain_expr(struct Resolver *R, struct HirChainExpr
         RESOLVER_ERROR(R, invalid_chain_operand, e->span.start, repr);
     }
 
-    unify(R, R->rs->prev, type);
+    unify(R, e->span.start, R->rs->prev, type);
     return K_LIST_FIRST(ir_adt_types(type)); // unwrap
 }
 
@@ -707,7 +714,7 @@ static struct IrType *transform_range(struct Resolver *R, struct HirBinOpExpr *e
 {
     struct Hir *hir = R->m->hir;
     struct SourceSpan const span = {
-        .start = e->lhs->hdr.span.start,
+        .start = NODE_START(e->lhs),
         .end = e->rhs->hdr.span.end,
     };
     struct HirIdent const ident = {
@@ -811,7 +818,7 @@ static struct IrType *resolve_binop_expr(struct Resolver *R, struct HirBinOpExpr
 
     struct IrType *lhs = resolve_operand(R, e->lhs);
     struct IrType *rhs = resolve_operand(R, e->rhs);
-    unify(R, lhs, rhs);
+    unify(R, e->span.start, lhs, rhs);
 
     enum BuiltinKind const code = TYPE2CODE(R, lhs);
     paw_assert(code == TYPE2CODE(R, rhs));
@@ -832,7 +839,7 @@ static struct IrType *resolve_assign_expr(struct Resolver *R, struct HirAssignEx
     paw_assert(HirIsPathExpr(e->lhs) || HirIsIndex(e->lhs) || HirIsSelector(e->lhs));
     struct IrType *lhs = resolve_operand(R, e->lhs);
     struct IrType *rhs = resolve_operand(R, e->rhs);
-    unify(R, lhs, rhs);
+    unify(R, e->span.start, lhs, rhs);
     return get_type(R, BUILTIN_UNIT);
 }
 
@@ -847,7 +854,7 @@ static struct IrType *resolve_match_expr(struct Resolver *R, struct HirMatchExpr
 
     struct IrType *result = ms.result;
     if (IrIsInfer(result) && e->never)
-        unify_unit_type(R, result);
+        unify_unit_type(R, e->span.start, result);
 
     return result;
 }
@@ -857,11 +864,11 @@ static struct IrType *resolve_match_arm(struct Resolver *R, struct HirMatchArm *
     enter_scope(R, NULL);
 
     struct IrType *pat = resolve_pat(R, e->pat);
-    unify(R, pat, R->ms->target);
+    unify(R, e->span.start, pat, R->ms->target);
     if (e->guard != NULL)
         expect_bool_expr(R, e->guard);
     struct IrType *result = resolve_operand(R, e->result);
-    unify_block_result(R, e->never, result, R->ms->result);
+    unify_block_result(R, e->span.start, e->never, result, R->ms->result);
 
     leave_scope(R);
     return result;
@@ -913,9 +920,10 @@ static struct IrType *resolve_closure_expr(struct Resolver *R, struct HirClosure
 
     if (HirIsBlock(e->expr)) {
         struct IrType *result = resolve_operand(R, e->expr);
-        unify_block_result(R, HirGetBlock(e->expr)->never, result, ret);
+        struct HirBlock *block = HirGetBlock(e->expr);
+        unify_block_result(R, block->span.start, block->never, result, ret);
     } else {
-        unify(R, ret, resolve_operand(R, e->expr));
+        unify(R, e->span.start, ret, resolve_operand(R, e->expr));
     }
 
     leave_scope(R);
@@ -967,11 +975,11 @@ static void ResolveLetStmt(struct Resolver *R, struct HirLetStmt *s)
     struct MatchState ms;
     enter_match_ctx(R, &ms, s->span, tag);
     struct IrType *lhs = resolve_pat(R, s->pat);
-    unify(R, ms.result, tag);
+    unify(R, s->span.start, ms.result, tag);
     leave_match_ctx(R);
 
-    unify(R, lhs, tag);
-    unify(R, tag, rhs);
+    unify(R, s->span.start, lhs, tag);
+    unify(R, s->span.start, tag, rhs);
 
     pawIr_set_type(R->C, s->hid, rhs);
 }
@@ -1050,7 +1058,7 @@ static void check_const(struct Resolver *R, struct HirExpr *expr, struct IrType 
     enum BuiltinKind kind = TYPE2CODE(R, type);
     if (!IS_BASIC_TYPE(kind)) {
         char const *repr = pawIr_print_type(R->C, type);
-        RESOLVER_ERROR(R, nonprimitive_constant, expr->hdr.span.start, repr);
+        RESOLVER_ERROR(R, nonprimitive_constant, NODE_START(expr), repr);
     }
 }
 
@@ -1060,7 +1068,7 @@ static void resolve_const_item(struct Resolver *R, struct HirConstDecl *d)
     struct IrType *tag = GET_NODE_TYPE(R->C, d->tag);
     if (d->init != NULL) {
         struct IrType *init = resolve_operand(R, d->init);
-        unify(R, init, tag);
+        unify(R, d->span.start, init, tag);
         check_const(R, d->init, tag);
     }
     pawIr_set_type(R->C, d->hid, tag);
@@ -1150,7 +1158,7 @@ static struct IrType *select_field(struct Resolver *R, struct IrType *target, st
     }
     if (!IrIsAdt(target)) {
         char const *repr = pawIr_print_type(R->C, target);
-        RESOLVER_ERROR(R, expected_adt, e->target->hdr.span.start, repr);
+        RESOLVER_ERROR(R, expected_adt, NODE_START(e->target), repr);
     }
     if (e->is_index)
         RESOLVER_ERROR(R, expected_field_selector, e->ident.span.start);
@@ -1197,7 +1205,7 @@ static struct IrType *resolve_call_target(struct Resolver *R, struct HirExpr *ta
     struct HirDecl *func_decl = get_decl(R, IR_TYPE_DID(method));
     struct HirDecl *self_decl = get_decl(R, IR_TYPE_DID(self));
     if (HirGetFuncDecl(func_decl)->is_assoc)
-        RESOLVER_ERROR(R, not_a_method, target->hdr.span.start,
+        RESOLVER_ERROR(R, not_a_method, NODE_START(target),
                    hir_decl_ident(func_decl).name->text);
 
     ensure_accessible_field(R, func_decl, self_decl, method);
@@ -1212,7 +1220,7 @@ static struct IrType *resolve_call_expr(struct Resolver *R, struct HirCallExpr *
     struct IrType *target = resolve_call_target(R, e->target, &param_offset);
     if (!IR_IS_FUNC_TYPE(target)) {
         char const *repr = pawIr_print_type(R->C, target);
-        RESOLVER_ERROR(R, not_callable, e->target->hdr.span.start, repr);
+        RESOLVER_ERROR(R, not_callable, NODE_START(e->target), repr);
     }
     SET_NODE_TYPE(R->C, e->target, target);
 
@@ -1237,14 +1245,14 @@ static struct IrType *resolve_call_expr(struct Resolver *R, struct HirCallExpr *
 
     if (is_unit_variant(R, target)) {
         char const *repr = pawIr_print_type(R->C, type);
-        RESOLVER_ERROR(R, unit_variant_with_parenthesis, e->target->hdr.span.start, repr);
+        RESOLVER_ERROR(R, unit_variant_with_parenthesis, NODE_START(e->target), repr);
     }
 
     int index;
     struct HirExpr *const *parg;
     K_LIST_ENUMERATE (e->args, index, parg) {
         struct IrType *param = IrTypeList_get(params, index + param_offset);
-        unify(R, param, resolve_operand(R, *parg));
+        unify(R, NODE_START(*parg), param, resolve_operand(R, *parg));
     }
 
     return type;
@@ -1291,7 +1299,7 @@ static struct IrType *resolve_list_lit(struct Resolver *R, struct HirContainerLi
     struct HirExpr *const *pexpr;
     K_LIST_FOREACH (e->items, pexpr) {
         struct IrType *v = resolve_operand(R, *pexpr);
-        unify(R, elem_t, v);
+        unify(R, NODE_START(*pexpr), elem_t, v);
     }
     return new_list_t(R, elem_t);
 }
@@ -1309,8 +1317,8 @@ static struct IrType *resolve_map_lit(struct Resolver *R, struct HirContainerLit
         paw_assert(field->fid == -1);
         struct IrType *k = resolve_operand(R, field->key);
         struct IrType *v = resolve_operand(R, field->value);
-        unify(R, key_t, k);
-        unify(R, value_t, v);
+        unify(R, field->span.start, key_t, k);
+        unify(R, field->span.start, value_t, v);
         SET_NODE_TYPE(R->C, *pexpr, v);
     }
     return new_map_t(R, key_t, value_t, span);
@@ -1398,7 +1406,7 @@ static struct IrType *resolve_composite_lit(struct Resolver *R, struct HirCompos
                     field->ident.name->text, adt->ident.name->text);
 
         struct HirExpr *item = HirExprList_get(order, *pindex);
-        unify(R, *ptype, resolve_operand(R, item));
+        unify(R, field->span.start, *ptype, resolve_operand(R, item));
         FieldMap_remove(R, map, field->ident);
         HirGetFieldExpr(item)->fid = index++;
     }
@@ -1442,7 +1450,7 @@ static struct IrType *resolve_if_expr(struct Resolver *R, struct HirIfExpr *e)
     expect_bool_expr(R, e->cond);
     struct IrType *first = resolve_expr(R, e->then_arm);
     if (e->else_arm == NULL) {
-        unify(R, first, get_type(R, BUILTIN_UNIT));
+        unify(R, NODE_START(e->then_arm), first, get_type(R, BUILTIN_UNIT));
         return first;
     }
 
@@ -1456,7 +1464,7 @@ static struct IrType *resolve_if_expr(struct Resolver *R, struct HirIfExpr *e)
             second = first;
         }
     }
-    unify(R, first, second);
+    unify(R, e->span.start, first, second);
     return first;
 }
 
@@ -1470,7 +1478,7 @@ static struct IrType *resolve_loop_expr(struct Resolver *R, struct HirLoopExpr *
 {
     enter_scope(R, NULL);
     struct IrType *type = resolve_expr(R, e->block);
-    unify_unit_type(R, type);
+    unify_unit_type(R, e->span.start, type);
     leave_scope(R);
     return type;
 }
@@ -1497,9 +1505,9 @@ static struct IrType *check_index(struct Resolver *R, struct HirIndex *e, struct
     }
 
     if (e->first != NULL)
-        unify(R, expect, resolve_operand(R, e->first));
+        unify(R, NODE_START(e->first), expect, resolve_operand(R, e->first));
     if (e->second != NULL)
-        unify(R, expect, resolve_operand(R, e->second));
+        unify(R, NODE_START(e->second), expect, resolve_operand(R, e->second));
     return result;
 }
 
@@ -1584,7 +1592,7 @@ static void check_binding(struct HirVisitor *V, struct HirBindingPat *p)
                 p->ident.name->text);
 
     struct IrType *type = pawIr_get_type(V->hir->C, p->hid);
-    unify(bc->R, pbi->type, type);
+    unify(bc->R, p->span.start, pbi->type, type);
     ++pbi->uses;
 }
 
@@ -1626,7 +1634,7 @@ static struct IrType *ResolveOrPat(struct Resolver *R, struct HirOrPat *p)
     V.PostVisitBindingPat = check_binding;
     for (bc.iter = 1; bc.iter < p->pats->count; ++bc.iter) {
         struct HirPat *next = HirPatList_get(p->pats, bc.iter);
-        unify(R, type, resolve_pat(R, next));
+        unify(R, p->span.start, type, resolve_pat(R, next));
 
         pawHir_visit_pat(&V, next);
         ensure_all_bindings_created(&bc);
@@ -1638,15 +1646,6 @@ static struct IrType *ResolveOrPat(struct Resolver *R, struct HirOrPat *p)
 static struct IrType *ResolveFieldPat(struct Resolver *R, struct HirFieldPat *p)
 {
     return resolve_pat(R, p->pat);
-}
-
-static void unify_lists(struct Resolver *R, struct IrTypeList *lhs, struct IrTypeList *rhs)
-{
-    paw_assert(lhs->count == rhs->count);
-    struct IrType *const *pa, *const *pb;
-    K_LIST_ZIP (lhs, pa, rhs, pb) {
-        unify(R, *pa, *pb);
-    }
 }
 
 static struct IrType *ResolveStructPat(struct Resolver *R, struct HirStructPat *p)
@@ -1682,7 +1681,8 @@ static struct IrType *ResolveStructPat(struct Resolver *R, struct HirStructPat *
             RESOLVER_ERROR(R, missing_field, field->ident.span.start,
                     field->ident.name->text, adt->ident.name->text);
         struct HirFieldPat *field_pat = HirGetFieldPat(*ppat);
-        unify(R, pawIr_get_type(R->C, field_pat->hid), *ptype);
+        // TODO: source loc should be inside composite lit, not struct def
+        unify(R, field->span.start, pawIr_get_type(R->C, field_pat->hid), *ptype);
         HirPatList_push(R->hir, sorted, *ppat);
         PatFieldMap_remove(R, map, field->ident);
         field_pat->index = index++;
@@ -1704,14 +1704,18 @@ static struct IrType *ResolveStructPat(struct Resolver *R, struct HirStructPat *
 static struct IrType *ResolveVariantPat(struct Resolver *R, struct HirVariantPat *p)
 {
     struct IrType *type = resolve_path(R, p->path, LOOKUP_VALUE);
-    struct IrTypeList *args = resolve_pat_list(R, p->fields);
     struct IrTypeList *params = IR_FPTR(type)->params;
 
     struct MatchState *ms = R->ms;
-    if (args->count != params->count)
-        RESOLVER_ERROR(R, incorrect_arity, p->span.start, params->count, args->count);
+    if (p->fields->count != params->count)
+        RESOLVER_ERROR(R, incorrect_arity, p->span.start, params->count, p->fields->count);
 
-    unify_lists(R, params, args);
+    struct HirPat *const *ppat;
+    struct IrType *const *pparam;
+    K_LIST_ZIP (params, pparam, p->fields, ppat) {
+        IrType *const arg = resolve_pat(R, *ppat);
+        unify(R, NODE_START(*ppat), *pparam, arg);
+    }
 
     struct HirVariantDecl *d = HirGetVariantDecl(get_decl(R, IR_TYPE_DID(type)));
     p->index = d->index;
@@ -1858,7 +1862,7 @@ static struct IrType *resolve_return_expr(struct Resolver *R, struct HirReturnEx
     struct IrType *have = s->expr != NULL
                               ? resolve_operand(R, s->expr)
                               : get_type(R, BUILTIN_UNIT);
-    unify(R, have, want);
+    unify(R, s->span.start, have, want);
     ++R->rs->count;
 
     return get_type(R, BUILTIN_UNIT);

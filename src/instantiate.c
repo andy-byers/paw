@@ -139,7 +139,9 @@ static struct IrType *instantiate_method(struct InstanceState *I, struct IrType 
 
     struct IrType *const *pa, *const *pb;
     K_LIST_ZIP (subst, pa, types, pb) {
-        pawU_unify(I->U, *pa, *pb);
+        // unification with an IrInfer never fails due to incompatible types
+        int const rc = pawU_unify(I->U, *pa, *pb);
+        paw_assert(rc == 0); PAW_UNUSED(rc);
     }
 
     struct IrType *inst = pawP_instantiate(I->C, obj, subst);

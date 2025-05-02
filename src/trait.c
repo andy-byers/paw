@@ -9,6 +9,15 @@
 
 #define TRAIT_ERROR(C_, Kind_, Modno_, ...) pawErr_##Kind_(C_, ModuleList_get((C_)->modules, Modno_)->name, __VA_ARGS__)
 
+static void unify(struct Compiler *C, int modno, struct SourceLoc loc, IrType *a, IrType *b)
+{
+    if (pawU_unify(C->U, a, b) != 0) {
+        char const *lhs = pawIr_print_type(C, a);
+        char const *rhs = pawIr_print_type(C, b);
+        TRAIT_ERROR(C, incompatible_types, modno, loc, lhs, rhs);
+    }
+}
+
 static struct IrTypeList *query_traits(struct Compiler *C, struct IrType *type, paw_Bool create_if_missing)
 {
     if (IrIsGeneric(type))
@@ -45,7 +54,7 @@ void pawP_add_trait_impl(struct Compiler *C, struct IrType *type, struct IrType 
 static paw_Bool traits_match(struct Compiler *C, struct IrType *a, struct IrType *b)
 {
     if (IR_TYPE_DID(a).value == IR_TYPE_DID(b).value) {
-        pawU_unify(C->U, a, b);
+        unify(C, 1, (struct SourceLoc){-1}, a, b); // TODO: source location
         return PAW_TRUE;
     }
     return PAW_FALSE;
@@ -146,7 +155,7 @@ static void register_builtin_trait_method(struct Compiler *C, struct IrType *adt
     IrTypeList_push(C, *pmethods, method);
 }
 
-static void ensure_methods_match(struct Compiler *C, struct IrType *adt, struct IrType *adt_method, struct IrType *trait, struct HirTraitDecl *trait_decl, struct HirFuncDecl *trait_method)
+static void ensure_methods_match(struct Compiler *C, struct SourceLoc loc, struct IrType *adt, struct IrType *adt_method, struct IrType *trait, struct HirTraitDecl *trait_decl, struct HirFuncDecl *trait_method)
 {
     struct IrType *a = adt_method;
     struct IrType *b = pawIr_get_type(C, trait_method->hid);
@@ -157,7 +166,7 @@ static void ensure_methods_match(struct Compiler *C, struct IrType *adt, struct 
     // substitute all instances of the trait object type for the type of the implementor
     b = pawIr_substitute_self(C, trait, adt, b);
     b = pawP_generalize(C, b);
-    pawU_unify(C->U, a, b);
+    unify(C, IR_TYPE_DID(adt).modno, loc, a, b);
 
     enum TraitKind const tk = pawHir_kindof_trait(C, trait_decl);
     if (tk != TRAIT_USER)
@@ -183,7 +192,7 @@ static void ensure_trait_implemented(struct Compiler *C, struct HirTraitDecl *tr
             TRAIT_ERROR(C, trait_method_visibility_mismatch, adt_method->did.modno, adt_method->span.start,
                     trait_method->is_pub, adt_method->ident.name->text);
 
-        ensure_methods_match(C, adt, *pmethod, trait, trait_decl, trait_method);
+        ensure_methods_match(C, adt_method->span.start, adt, *pmethod, trait, trait_decl, trait_method);
     }
 }
 

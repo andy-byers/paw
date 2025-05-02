@@ -24,15 +24,7 @@ struct IrType *pawU_normalize(UnificationTable *table, struct IrType *a);
 paw_Bool pawU_equals(struct Unifier *U, struct IrType *a, struct IrType *b);
 
 // Impose the constraint that types 'a' and 'b' are equal
-void pawU_unify(struct Unifier *U, struct IrType *a, struct IrType *b);
-
-static void pawU_unify_lists(struct Unifier *U, struct IrTypeList *a, struct IrTypeList *b)
-{
-    struct IrType **pa, **pb;
-    K_LIST_ZIP (a, pa, b, pb) {
-        pawU_unify(U, *pa, *pb);
-    }
-}
+int pawU_unify(struct Unifier *U, struct IrType *a, struct IrType *b);
 
 // Create a new type variable
 struct IrType *pawU_new_unknown(struct Unifier *U, struct SourceLoc loc, struct IrTypeList *bounds);

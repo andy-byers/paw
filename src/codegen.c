@@ -87,10 +87,10 @@ static int size_on_stack(struct IrLayout layout)
 
 static void add_jump_target(struct Generator *G, MirBlock bid)
 {
-    JumpTable_push(G, G->fs->jumps, ((struct JumpTarget){
+    JumpTable_push(G, G->fs->jumps, (struct JumpTarget){
                                         .pc = G->fs->pc,
                                         .bid = bid,
-                                    }));
+                                    });
 }
 
 static void add_line(struct FuncState *fs)

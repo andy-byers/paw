@@ -326,7 +326,11 @@ static paw_Bool check_assoc_function(struct ItemCollector *X, struct IrType *sel
     if (pawS_eq(first->ident.name, CSTR(X, CSTR_SELF))) {
         // parameter is named "self": make sure the type is compatible with "Self" alias
         struct IrType *type = pawIr_get_type(X->C, first->hid);
-        pawU_unify(X->C->U, type, self);
+        if (pawU_unify(X->C->U, type, self) != 0) {
+            char const *lhs = pawIr_print_type(X->C, type);
+            char const *rhs = pawIr_print_type(X->C, self);
+            COLLECTOR_ERROR(X, incompatible_types, first->span.start, lhs, rhs);
+        }
         return PAW_FALSE;
     }
     return PAW_TRUE;
