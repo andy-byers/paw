@@ -24,9 +24,6 @@
 // At runtime, the "GETP" instruction is used to get a pointer to the start
 // of the element. Then, "SETVALUE" is used to set the field Value through
 // the element pointer.
-//
-// TODO: if element is only 1 Value in size, use (GET | SET)ELEMENT instead of GETP + (GET | SET)VALUE
-// TODO: or convert GETP + (GET | SET)VALUE to (GET | SET)ELEMENT later if possible
 
 #include "ir_type.h"
 #include "layout.h"
@@ -431,12 +428,18 @@ static void discharge_indirect_element(struct Unboxer *U, struct MemoryAccess *p
     struct MemoryGroup output = new_registers(U, access_type, field_discr);
 
     struct MirPlace const object = PLACE(pa->group.base);
-    struct MirPlace const pointer = new_pointer_place(U, element_type);
-    NEW_INSTR(U, get_element_ptr, TODO, kind, pointer, object, PLACE(pa->element.index), PAW_FALSE);
+    if (output.count > 1 || field_offset > 0) {
+        struct MirPlace const pointer = new_pointer_place(U, element_type);
+        NEW_INSTR(U, get_element_ptr, TODO, kind, pointer, object,
+                PLACE(pa->element.index), PAW_FALSE);
 
-    for (int i = 0; i < output.count; ++i) {
-        struct MirPlace const result = PLACE(REGISTER_AT(output, i));
-        NEW_INSTR(U, get_field, TODO, field_offset + i, result, pointer);
+        for (int i = 0; i < output.count; ++i) {
+            struct MirPlace const result = PLACE(REGISTER_AT(output, i));
+            NEW_INSTR(U, get_field, TODO, field_offset + i, result, pointer);
+        }
+    } else {
+        struct MirPlace const result = PLACE(REGISTER_AT(output, 0));
+        NEW_INSTR(U, get_element, TODO, kind, result, object, PLACE(pa->element.index));
     }
 
     pa->group = output;
@@ -624,13 +627,18 @@ static void create_indirect_element_setter(struct Unboxer *U, struct MemoryAcces
     IrType *element_type = lhs.element.type;
 
     struct MirPlace const object = PLACE(lhs.group.base);
-    struct MirPlace const pointer = new_pointer_place(U, element_type);
-    NEW_INSTR(U, get_element_ptr, TODO, kind, pointer, object,
-            PLACE(lhs.element.index), kind == BUILTIN_MAP && !lhs.has_field);
+    if (rhs.group.count > 1 || field_offset > 0) {
+        struct MirPlace const pointer = new_pointer_place(U, element_type);
+        NEW_INSTR(U, get_element_ptr, TODO, kind, pointer, object,
+                PLACE(lhs.element.index), kind == BUILTIN_MAP && !lhs.has_field);
 
-    for (int i = 0; i < rhs.group.count; ++i) {
-        struct MirPlace const value = PLACE(REGISTER_AT(rhs.group, i));
-        NEW_INSTR(U, set_field, TODO, field_offset + i, pointer, value);
+        for (int i = 0; i < rhs.group.count; ++i) {
+            struct MirPlace const value = PLACE(REGISTER_AT(rhs.group, i));
+            NEW_INSTR(U, set_field, TODO, field_offset + i, pointer, value);
+        }
+    } else {
+        struct MirPlace const value = PLACE(REGISTER_AT(rhs.group, 0));
+        NEW_INSTR(U, set_element, TODO, kind, object, PLACE(lhs.element.index), value);
     }
 }
 
