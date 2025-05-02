@@ -673,7 +673,7 @@ top:
                     pawR_error(P, PAW_EKEY, "key does not exist");
             }
 
-            vm_case(MNEWEP) :
+            vm_case(MNEWP) :
             {
                 VM_SAVE_PC();
                 Value const *rb = VM_RB(opcode);

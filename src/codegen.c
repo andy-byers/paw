@@ -459,7 +459,6 @@ static void code_proto(struct Generator *G, struct Mir *mir, Proto *proto, int i
 {
     struct FuncState *fs = G->fs;
     struct IrType *type = mir->type;
-//    struct IrFuncPtr *func = IR_FPTR(type);
     proto->argc = mir->param_size;
 
     struct MirBlockList *rpo = pawMir_traverse_rpo(G->C, mir);
@@ -481,7 +480,7 @@ static void code_children(struct Generator *G, Proto *parent, struct Mir *mir)
     parent->nproto = nchildren;
 
     int index;
-    struct Mir **pchild;
+    struct Mir *const *pchild;
     K_LIST_ENUMERATE (mir->children, index, pchild) {
         parent->p[index] = code_paw_function(G, *pchild, index);
     }
@@ -637,6 +636,13 @@ static void move_to_reg(struct FuncState *fs, int from, int to)
         code_AB(fs, OP_MOVE, to, from);
 }
 
+static int move_to_temp(struct FuncState *fs, int from, int temp)
+{
+    int const to = temporary_reg(fs, temp);
+    code_AB(fs, OP_MOVE, to, from);
+    return to;
+}
+
 static void code_move(struct MirVisitor *V, struct MirMove *x)
 {
     struct Generator *G = V->ud;
@@ -732,7 +738,7 @@ static void code_get_element_ptr(struct MirVisitor *V, struct MirGetElementPtr *
     struct FuncState *fs = G->fs;
 
     Op const op = x->b_kind == BUILTIN_LIST ? OP_LGETP :
-        x->is_map_setter ? OP_MNEWEP: OP_MGETP;
+        x->is_map_setter ? OP_MNEWP: OP_MGETP;
     code_ABC(fs, op, REG(x->output.r), REG(x->object.r), REG(x->key.r));
 }
 
@@ -750,10 +756,8 @@ static void code_get_range(struct MirVisitor *V, struct MirGetRange *x)
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
 
-    int const lower = temporary_reg(fs, 0);
-    int const upper = temporary_reg(fs, 1);
-    move_to_reg(fs, REG(x->lower.r), lower);
-    move_to_reg(fs, REG(x->upper.r), upper);
+    int const lower = move_to_temp(fs, REG(x->lower.r), 0);
+    int const upper = move_to_temp(fs, REG(x->upper.r), 1);
     if (x->b_kind == BUILTIN_LIST) {
         // extra temporary register needed at runtime
         temporary_reg(fs, 2);
@@ -768,10 +772,8 @@ static void code_set_range(struct MirVisitor *V, struct MirSetRange *x)
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
 
-    int const lower = temporary_reg(fs, 0);
-    int const upper = temporary_reg(fs, 1);
-    move_to_reg(fs, REG(x->lower.r), lower);
-    move_to_reg(fs, REG(x->upper.r), upper);
+    int const lower = move_to_temp(fs, REG(x->lower.r), 0);
+    int const upper = move_to_temp(fs, REG(x->upper.r), 1);
     code_ABC(fs, OP_LSETN, REG(x->object.r), lower, REG(x->value.r));
 }
 
@@ -847,13 +849,12 @@ static void code_container(struct MirVisitor *V, struct MirContainer *x)
 
 static int enforce_call_constraints(struct FuncState *fs, struct MirCall *x)
 {
-    int const target = temporary_reg(fs, 0);
-    int next = target;
+    int const target = move_to_temp(fs, REG(x->target.r), 0);
 
+    int next;
     struct MirPlace const *pp;
-    move_to_reg(fs, REG(x->target.r), next++);
-    K_LIST_FOREACH (x->args, pp)
-        move_to_reg(fs, REG(pp->r), next++);
+    K_LIST_ENUMERATE (x->args, next, pp)
+        move_to_temp(fs, REG(pp->r), 1 + next);
 
     return target;
 }

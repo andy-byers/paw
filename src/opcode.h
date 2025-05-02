@@ -93,15 +93,15 @@ typedef uint32_t OpCode;
 // Opcode format: Each instruction is packed into a 32-bit unsigned integer (OpCode)
 //
 // legend:
-//   G = global variable
+//   G = global functions
 //   K = constants
-//   L = local variables
+//   R = local variables
 //   Up = upvalues
 //   P = function prototypes
 //
 // ORDER Op
-typedef enum Op { // arguments    description
-    //                  -------------------------------------------------------------------------------
+typedef enum Op { //      arguments    description
+    //                   -------------------------------------------------------------------------------
     OP_LOADSMI, //        A sBx        R[A] := sBx
     OP_LOADK, //          A Bx         R[A] := K[Bx]
 
@@ -116,7 +116,7 @@ typedef enum Op { // arguments    description
     OP_JUMPT, //          A sBx        if (R[A]) pc += sBx
     OP_JUMPF, //          A sBx        if (!R[A]) pc += sBx
 
-    OP_GETGLOBAL, //      A Bx         R[A] := G[K[Bx]]       -
+    OP_GETGLOBAL, //      A Bx         R[A] := G[Bx]
     OP_GETUPVALUE, //     A B          R[A] := Up[B]
     OP_SETUPVALUE, //     A B          Up[A] := R[B]
 
@@ -181,7 +181,7 @@ typedef enum Op { // arguments    description
 
     OP_MLENGTH, //        A B          R[A] := #R[B]
     OP_MGETP, //          A B C        R[A] := &R[B][R[C]]
-    OP_MNEWEP, //         A B C        R[A] := &R[B][R[C]]
+    OP_MNEWP, //          A B C        R[A] := &R[B][R[C]]
     OP_MGET, //           A B C        R[A] := R[B][R[C]]
     OP_MSET, //           A B C        R[A][R[B]] := R[C]
 
