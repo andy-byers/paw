@@ -80,11 +80,6 @@ DEFINE_LIST(struct Generator, JumpTable, struct JumpTarget)
 DEFINE_LIST(struct Generator, PolicyList, struct PolicyInfo)
 DEFINE_MAP(struct Generator, ToplevelMap, pawP_alloc, IR_TYPE_HASH, IR_TYPE_EQUALS, struct IrType *, int)
 
-static int size_on_stack(struct IrLayout layout)
-{
-    return layout.is_boxed ? 1 : layout.size;
-}
-
 static void add_jump_target(struct Generator *G, MirBlock bid)
 {
     JumpTable_push(G, G->fs->jumps, (struct JumpTarget){
@@ -810,8 +805,8 @@ static unsigned determine_map_policy(struct Generator *G, struct IrType *type)
     ItemId const equals = type2def(G, IrTypeList_first(TraitOwnerList_get(*powners, TRAIT_EQUALS)));
     ItemId const hash = type2def(G, IrTypeList_first(TraitOwnerList_get(*powners, TRAIT_HASH)));
     PolicyList_push(G, G->policies, (struct PolicyInfo){
-                                        .key_size = size_on_stack(pawIr_compute_layout(G->C, key)),
-                                        .value_size = size_on_stack(pawIr_compute_layout(G->C, value)),
+                                        .key_size = pawIr_compute_layout(G->C, key).size,
+                                        .value_size = pawIr_compute_layout(G->C, value).size,
                                         .equals = RTTI_DEF(ENV(G), equals)->func.vid,
                                         .hash = RTTI_DEF(ENV(G), hash)->func.vid,
                                     });
@@ -839,7 +834,7 @@ static void code_container(struct MirVisitor *V, struct MirContainer *x)
 
     int const temp = temporary_reg(fs, 0);
     if (x->b_kind == BUILTIN_LIST) {
-        code_ABC(fs, OP_NEWLIST, temp, x->nelems, size_on_stack(element_layout));
+        code_ABC(fs, OP_NEWLIST, temp, x->nelems, element_layout.size);
     } else {
         int const policy = determine_map_policy(G, REG_TYPE(G, x->output.r));
         code_ABC(fs, OP_NEWMAP, temp, x->nelems, policy);

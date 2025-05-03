@@ -212,6 +212,11 @@ static int unify_generic(struct Unifier *U, struct IrGeneric *a, struct IrGeneri
     return a->did.value != b->did.value ? -1 : 0;
 }
 
+static int unify_ptr(struct Unifier *U, struct IrPtr *a, struct IrPtr *b)
+{
+    return U->action(U, a->type, b->type);
+}
+
 static int unify_trait_obj(struct Unifier *U, struct IrTraitObj *a, struct IrTraitObj *b)
 {
     if (a->did.value != b->did.value)
@@ -238,6 +243,8 @@ static int unify_types(struct Unifier *U, struct IrType *a, struct IrType *b)
         return unify_adt(U, IrGetAdt(a), IrGetAdt(b));
     } else if (IrIsGeneric(a)) {
         return unify_generic(U, IrGetGeneric(a), IrGetGeneric(b));
+    } else if (IrIsPtr(a)) {
+        return unify_ptr(U, IrGetPtr(a), IrGetPtr(b));
     } else {
         paw_assert(IrIsTraitObj(a));
         return unify_trait_obj(U, IrGetTraitObj(a), IrGetTraitObj(b));
@@ -307,7 +314,7 @@ struct IrType *pawU_new_unknown(struct Unifier *U, struct SourceLoc loc, struct 
     return type;
 }
 
-struct IrTypeList *apawU_new_unknowns(struct Unifier *U, struct IrTypeList *types)
+struct IrTypeList *pawU_new_unknowns(struct Unifier *U, struct IrTypeList *types)
 {
     struct IrType **ptype;
     struct IrTypeList *result = IrTypeList_new(U->C);

@@ -17,7 +17,8 @@ typedef struct IrType IrType;
     X(Tuple)            \
     X(Infer)            \
     X(Generic)          \
-    X(TraitObj)
+    X(TraitObj)         \
+    X(Ptr)
 
 enum IrTypeKind {
 #define DEFINE_ENUM(X) kIr##X,
@@ -73,6 +74,11 @@ struct IrTraitObj {
     IR_TYPE_HEADER;
     DeclId did;
     struct IrTypeList *types;
+};
+
+struct IrPtr {
+    IR_TYPE_HEADER;
+    struct IrType *type;
 };
 
 static char const *kIrTypeNames[] = {
@@ -185,6 +191,16 @@ inline static IrType *pawIr_new_trait_obj(struct Compiler *C, DeclId did, struct
         .kind = kIrTraitObj,
         .did = did,
         .types = types,
+    };
+    return t;
+}
+
+inline static IrType *pawIr_new_ptr(struct Compiler *C, struct IrType *type)
+{
+    IrType *t = pawIr_new_type(C);
+    t->Ptr_ = (struct IrPtr){
+        .kind = kIrPtr,
+        .type = type,
     };
     return t;
 }

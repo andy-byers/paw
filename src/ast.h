@@ -28,7 +28,8 @@
     X(TupleType)         \
     X(ContainerType)     \
     X(FuncType)          \
-    X(InferType)
+    X(InferType)         \
+    X(PtrType)
 
 #define AST_EXPR_LIST(X) \
     X(ParenExpr)         \
@@ -384,6 +385,11 @@ struct AstInferType {
     AST_TYPE_HEADER;
 };
 
+struct AstPtrType {
+    AST_TYPE_HEADER;
+    struct AstType *type;
+};
+
 struct AstType {
     union {
         struct AstTypeHeader hdr;
@@ -454,6 +460,17 @@ inline static struct AstType *pawAst_new_infer_type(struct Ast *ast, struct Sour
     t->InferType_ = (struct AstInferType){
         .span = span,
         .kind = kAstInferType,
+    };
+    return t;
+}
+
+inline static struct AstType *pawAst_new_ptr_type(struct Ast *ast, struct SourceSpan span, struct AstType *type)
+{
+    struct AstType *t = pawAst_new_type(ast);
+    t->PtrType_ = (struct AstPtrType){
+        .span = span,
+        .kind = kAstPtrType,
+        .type = type,
     };
     return t;
 }

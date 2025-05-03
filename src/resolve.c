@@ -750,6 +750,7 @@ static struct IrType *resolve_unop_expr(struct Resolver *R, struct HirUnOpExpr *
         [UNARY_NEG] = {0, 0, 1, 1, 0, 0, 0},
         [UNARY_NOT] = {0, 1, 0, 0, 0, 0, 0},
         [UNARY_BNOT] = {0, 0, 1, 0, 0, 0, 0},
+        [UNARY_DEREF] = {0, 0, 0, 0, 0, 0, 0},
     };
 
     static char const *UNOP_REPR[] = {
@@ -757,9 +758,13 @@ static struct IrType *resolve_unop_expr(struct Resolver *R, struct HirUnOpExpr *
         [UNARY_NEG] = "-",
         [UNARY_NOT] = "!",
         [UNARY_BNOT] = "~",
+        [UNARY_DEREF] = "*",
     };
 
     struct IrType *type = resolve_operand(R, e->target);
+    if (IrIsPtr(type) && e->op == UNARY_DEREF)
+        return IrGetPtr(type)->type;
+
     enum BuiltinKind const code = TYPE2CODE(R, type);
     if (!IS_BUILTIN_TYPE(code) || !VALID_OPS[e->op][code]) {
         char const *operand = pawIr_print_type(R->C, type);

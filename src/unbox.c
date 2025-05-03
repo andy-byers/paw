@@ -119,24 +119,12 @@ static MirId next_mid(struct FunctionState *fs)
     return (MirId){fs->mir->mir_count++};
 }
 
-static int size_on_stack(struct IrLayout layout)
-{
-    return layout.is_boxed ? 1 : layout.size;
-}
-
 static paw_Bool is_composite(struct Unboxer *U, IrType *type)
 {
     // TODO: just to make sure type has finite size
     pawIr_compute_layout(U->C, type);
 
-    if (IrIsTuple(type))
-        return PAW_TRUE;
-
-    if (!IrIsAdt(type))
-        return PAW_FALSE;
-
-    struct IrAdtDef *def = pawIr_get_adt_def(U->C, IR_TYPE_DID(type));
-    return !def->is_struct;
+    return IrIsTuple(type) || (IrIsAdt(type) && !IS_BASIC_TYPE(pawP_type2code(U->C, type)));
 }
 
 static IrType *builtin_type(struct Unboxer *U, enum BuiltinKind kind)
@@ -272,7 +260,7 @@ static struct MemoryGroup new_registers(struct Unboxer *U, IrType *type, int dis
     };
 }
 
-static struct MirPlace new_pointer_place(struct Unboxer *U, struct IrType *type)
+static struct MirPlace new_rawptr_place(struct Unboxer *U, struct IrType *type)
 {
     struct FunctionState *fs = U->fs;
     MirRegisterDataList_push(fs->mir, fs->registers,
@@ -367,7 +355,7 @@ static int compute_field_offset(struct IrLayout object, int index)
     int offset = 0;
     while (index-- > 0) {
         struct IrLayout const field = IrLayoutList_get(object.fields, index);
-        offset += size_on_stack(field);
+        offset += field.size;
     }
     return offset;
 }
@@ -429,7 +417,7 @@ static void discharge_indirect_element(struct Unboxer *U, struct MemoryAccess *p
 
     struct MirPlace const object = PLACE(pa->group.base);
     if (output.count > 1 || field_offset > 0) {
-        struct MirPlace const pointer = new_pointer_place(U, element_type);
+        struct MirPlace const pointer = new_rawptr_place(U, element_type);
         NEW_INSTR(U, get_element_ptr, TODO, kind, pointer, object,
                 PLACE(pa->element.index), PAW_FALSE);
 
@@ -507,7 +495,7 @@ static void apply_field_access(struct Unboxer *U, struct MemoryAccess *pa, MirPr
     } else {
         // Handle field access on a value type located on the stack.
         int const offset = compute_field_offset(target_layout, field->index);
-        pa->group = split_group(pa->group, offset, size_on_stack(field_layout));
+        pa->group = split_group(pa->group, offset, field_layout.size);
         pa->type = field_type;
     }
 }
@@ -561,16 +549,20 @@ static struct MemoryAccess unbox_place(struct Unboxer *U, struct MirPlace *pplac
     paw_assert(ps != NULL);
 
     for (int i = 0; i < ps->count;) {
-        MirProjection *p = MirProjectionList_get(ps, i++);
-        if (MirIsDeref(p)) {
-            // handle indirect accesses
-            paw_assert(i < ps->count);
-            p = MirProjectionList_get(ps, i++);
-            apply_indirect_access(U, &access, p);
-        } else {
+#define GET MirProjectionList_get
+        MirProjection *p = GET(ps, i++);
+        if (!MirIsDeref(p)) {
             // handle direct field access
             apply_field_access(U, &access, p);
+        } else if (i < ps->count && !MirIsDeref(GET(ps, i))) {
+            // handle indirect accesses
+            apply_indirect_access(U, &access, GET(ps, i++));
+        } else {
+            // handle pointer dereference
+//            apply_deref(U, &access, p);
+paw_assert(0);
         }
+#undef GET
     }
 
     // projections have been transformed into instructions
@@ -628,7 +620,7 @@ static void create_indirect_element_setter(struct Unboxer *U, struct MemoryAcces
 
     struct MirPlace const object = PLACE(lhs.group.base);
     if (rhs.group.count > 1 || field_offset > 0) {
-        struct MirPlace const pointer = new_pointer_place(U, element_type);
+        struct MirPlace const pointer = new_rawptr_place(U, element_type);
         NEW_INSTR(U, get_element_ptr, TODO, kind, pointer, object,
                 PLACE(lhs.element.index), kind == BUILTIN_MAP && !lhs.has_field);
 
@@ -702,16 +694,17 @@ static void unbox_setupvalue(struct Unboxer *U, struct MirSetUpvalue *x)
 
 static void unbox_aggregate(struct Unboxer *U, struct MirAggregate *x)
 {
-    struct Mir *mir = U->fs->mir;
-    struct MirRegisterData *data = mir_reg_data(mir, x->output.r);
-    struct IrLayout layout = pawIr_compute_layout(U->C, data->type);
-    if (layout.is_boxed) {
-        struct MemoryGroup output = get_registers(U, x->output.r, -1);
-        paw_assert(output.count == 1);
-        struct MirPlace const r = PLACE(output.base);
-        NEW_INSTR(U, aggregate, x->loc, x->nfields, r);
-        return;
-    }
+    // TODO
+//    struct Mir *mir = U->fs->mir;
+//    struct MirRegisterData *data = mir_reg_data(mir, x->output.r);
+//    struct IrLayout layout = pawIr_compute_layout(U->C, data->type);
+//    if (layout.is_boxed) {
+//        struct MemoryGroup output = get_registers(U, x->output.r, -1);
+//        paw_assert(output.count == 1);
+//        struct MirPlace const r = PLACE(output.base);
+//        NEW_INSTR(U, aggregate, x->loc, x->nfields, r);
+//        return;
+//    }
 
     struct MemoryGroup output = get_registers(U, x->output.r, -1);
     for (int i = 0; i < output.count; ++i) {

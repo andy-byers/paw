@@ -784,6 +784,12 @@ static struct HirType *LowerPathType(struct LowerAst *L, struct AstPathType *t)
     return pawHir_new_path_type(L->hir, t->span, path);
 }
 
+static struct HirType *LowerPtrType(struct LowerAst *L, struct AstPtrType *t)
+{
+    struct HirType *type = lower_type(L, t->type);
+    return pawHir_new_ptr_type(L->hir, t->span, type);
+}
+
 static struct HirType *LowerContainerType(struct LowerAst *L, struct AstContainerType *t)
 {
     struct HirType *first = lower_type(L, t->first);

@@ -28,7 +28,7 @@ static struct IrLayout compute_typelist_layout(struct Compiler *C, IrTypeList co
     K_LIST_FOREACH (types, ptype) {
         struct IrLayout lo = compute_outer_layout(C, *ptype);
         IrLayoutList_push(C, layout.fields, lo);
-        layout.size += lo.is_boxed ? 1 : lo.size;
+        layout.size += lo.size;
     }
 
     return layout;
@@ -39,7 +39,6 @@ static struct IrLayout compute_struct_layout(struct Compiler *C, struct IrAdt *t
     IrTypeList const *types = pawP_instantiate_struct_fields(C, t);
     struct IrLayout layout = compute_typelist_layout(C, types);
     layout.size = PAW_MAX(layout.size, 1);
-    layout.is_boxed = PAW_TRUE;
     return layout;
 }
 
@@ -59,7 +58,6 @@ static struct IrLayout compute_enum_layout(struct Compiler *C, struct IrAdt *t)
 
     struct IrLayout layout = {
         .fields = IrLayoutList_new(C),
-        .is_boxed = PAW_FALSE,
         .size = -1,
     };
     // insert sentinel with negative ".size" to track recursive types
@@ -95,7 +93,7 @@ static struct IrLayout compute_tuple_layout(struct Compiler *C, struct IrTuple *
     K_LIST_FOREACH (t->elems, pelem) {
         struct IrLayout lo = compute_outer_layout(C, *pelem);
         IrLayoutList_push(C, layout.fields, lo);
-        layout.size += lo.is_boxed ? 1 : lo.size;
+        layout.size += lo.size;
     }
 
     return layout;

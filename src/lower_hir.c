@@ -632,8 +632,7 @@ static MirBlock enter_function(struct LowerHir *L, struct FunctionState *fs, str
     IrType *const *pparam;
     K_LIST_FOREACH (fptr->params, pparam) {
         struct IrLayout const layout = pawIr_compute_layout(fs->C, *pparam);
-        int const size = layout.is_boxed ? 1 : layout.size;
-        mir->param_size += size;
+        mir->param_size += layout.size;
     }
 
     return entry;
@@ -655,25 +654,26 @@ static struct MirPlace lower_operand(struct HirVisitor *V, struct HirExpr *expr)
 
 #define LOWER_BLOCK(L, b) lower_place(&(L)->V, HIR_CAST_EXPR(b))
 
-static paw_Bool is_pointer(struct FunctionState *fs, IrType *type)
+static void deref_pointer(struct FunctionState *fs, struct MirPlace *pplace)
 {
-    struct IrLayout layout = pawIr_compute_layout(fs->C, type);
-    return layout.is_boxed;
+    MirProjection *deref = MirProjection_new_deref(fs->mir);
+    MirProjectionList_push(fs->mir, pplace->projection, deref);
 }
 
-static void auto_deref(struct FunctionState *fs, struct MirPlace *pplace, IrType *target)
+static IrType *auto_deref(struct FunctionState *fs, struct MirPlace *pplace, IrType *target)
 {
-    if (is_pointer(fs, target)) {
-        MirProjection *deref = MirProjection_new_deref(fs->mir);
-        MirProjectionList_push(fs->mir, pplace->projection, deref);
+    while (IrIsPtr(target)) {
+        deref_pointer(fs, pplace);
+        target = IrGetPtr(target)->type;
     }
+    return target;
 }
 
 static struct MirPlace select_field(struct FunctionState *fs, struct MirPlace place, IrType *target, int index, int variant)
 {
     struct MirPlace p = pawMir_copy_place(fs->mir, place);
 
-    auto_deref(fs, &p, target);
+    target = auto_deref(fs, &p, target);
     MirProjection *field = MirProjection_new_field(fs->mir, index, variant);
     MirProjectionList_push(fs->mir, p.projection, field);
     return p;
@@ -683,7 +683,7 @@ static struct MirPlace select_element(struct FunctionState *fs, struct MirPlace 
 {
     struct MirPlace p = pawMir_copy_place(fs->mir, place);
 
-    auto_deref(fs, &p, target);
+    target = auto_deref(fs, &p, target);
     MirProjection *elem = MirProjection_new_index(fs->mir, index);
     MirProjectionList_push(fs->mir, p.projection, elem);
     return p;
@@ -1358,7 +1358,12 @@ static struct MirPlace lower_unop_expr(struct HirVisitor *V, struct HirUnOpExpr 
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
 
-    struct MirPlace const val = lower_place(V, e->target);
+    struct MirPlace value = lower_place(V, e->target);
+    if (e->op == UNARY_DEREF) {
+        deref_pointer(fs, &value);
+        return value;
+    }
+
     struct MirPlace const output = place_for_node(fs, e->hid);
     const enum BuiltinKind code = kind_of_builtin(L, e->target);
     enum MirUnaryOpKind const op = code == BUILTIN_BOOL ? unop2op_bool(e->op) : //
@@ -1367,7 +1372,7 @@ static struct MirPlace lower_unop_expr(struct HirVisitor *V, struct HirUnOpExpr 
         code == BUILTIN_STR ? unop2op_str(e->op) : //
         code == BUILTIN_LIST ? unop2op_list(e->op) : //
         unop2op_map(e->op);
-    NEW_INSTR(fs, unary_op, e->span.start, op, val, output);
+    NEW_INSTR(fs, unary_op, e->span.start, op, value, output);
     return output;
 }
 

@@ -52,12 +52,15 @@ void pawK_pool_init(paw_Env *P, struct Pool *pool, size_t base_size, struct Pool
 void pawK_pool_uninit(paw_Env *P, struct Pool *pool);
 void *pawK_pool_alloc(paw_Env *P, struct Pool *pool, void *ptr, size_t size0, size_t size);
 
+// TODO: should specialize the next 2 enumerations and move to AST and HIR modules (similar to MirUnaryOpKind)
+
 // ORDER UnaryOp
 enum UnaryOp {
     UNARY_LEN,
     UNARY_NEG,
     UNARY_NOT,
     UNARY_BNOT,
+    UNARY_DEREF,
 };
 
 // ORDER BinaryOp

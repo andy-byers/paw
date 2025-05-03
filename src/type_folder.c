@@ -28,6 +28,12 @@ static struct IrType *FoldAdt(struct IrTypeFolder *F, struct IrAdt *t)
     return pawIr_new_adt(F->C, t->did, types);
 }
 
+static struct IrType *FoldPtr(struct IrTypeFolder *F, struct IrPtr *t)
+{
+    IrType *type = FoldType(F, t->type);
+    return pawIr_new_ptr(F->C, type);
+}
+
 static struct IrType *FoldSignature(struct IrTypeFolder *F, struct IrSignature *t)
 {
     struct IrTypeList *types = F->FoldTypeList(F, t->types);
@@ -109,6 +115,7 @@ void pawIr_type_folder_init(struct IrTypeFolder *F, struct Compiler *C, void *ud
         .FoldTypeList = fold_type_list,
 
         .FoldAdt = FoldAdt,
+        .FoldPtr = FoldPtr,
         .FoldSignature = FoldSignature,
         .FoldFuncPtr = FoldFuncPtr,
         .FoldTuple = FoldTuple,

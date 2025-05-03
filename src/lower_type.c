@@ -44,6 +44,12 @@ static struct IrType *lower_infer_type(struct LowerType *L, struct HirInferType 
     return pawU_new_unknown(L->C->U, t->span.start, NULL);
 }
 
+static struct IrType *lower_ptr_type(struct LowerType *L, struct HirPtrType *t)
+{
+    IrType *type = lower_type(L, t->type);
+    return pawIr_new_ptr(L->C, type);
+}
+
 static struct IrType *lower_type(struct LowerType *L, struct HirType *type)
 {
     switch (HIR_KINDOF(type)) {
@@ -55,6 +61,8 @@ static struct IrType *lower_type(struct LowerType *L, struct HirType *type)
             return lower_path_type(L, HirGetPathType(type));
         case kHirInferType:
             return lower_infer_type(L, HirGetInferType(type));
+        case kHirPtrType:
+            return lower_ptr_type(L, HirGetPtrType(type));
     }
 }
 

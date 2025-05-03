@@ -332,6 +332,12 @@ static void print_type(struct Printer *P, IrType *type)
             }
             break;
         }
+        case kIrPtr: {
+            struct IrPtr *t = IrGetPtr(type);
+            PRINT_CHAR(P, '*');
+            print_type(P, t->type);
+            break;
+        }
         default: {
             struct IrAdt *adt = IrGetAdt(type);
             const enum BuiltinKind code = pawP_type2code(P->C, type);

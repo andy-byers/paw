@@ -9,7 +9,6 @@
 
 struct IrLayout {
     struct IrLayoutList *fields;
-    paw_Bool is_boxed;
     int size;
 };
 

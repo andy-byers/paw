@@ -378,6 +378,11 @@ static void AcceptPathType(struct HirVisitor *V, struct HirPathType *t)
     }
 }
 
+static void AcceptPtrType(struct HirVisitor *V, struct HirPtrType *t)
+{
+    AcceptType(V, t->type);
+}
+
 static void AcceptOrPat(struct HirVisitor *V, struct HirOrPat *e)
 {
     accept_pat_list(V, e->pats);
@@ -1052,6 +1057,12 @@ static void dump_type(struct Printer *P, struct HirType *type)
         case kHirPathType: {
             struct HirPathType *t = HirGetPathType(type);
             dump_path(P, &t->path, PAW_TRUE);
+            break;
+        }
+        case kHirPtrType: {
+            struct HirPtrType *t = HirGetPtrType(type);
+            DUMP_CHAR(P, '*');
+            dump_type(P, t->type);
             break;
         }
         case kHirTupleType: {

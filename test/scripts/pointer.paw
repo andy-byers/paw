@@ -1,0 +1,26 @@
+// pointer.paw
+
+struct Struct {
+    pub a: int,
+    pub b: (int, int),
+    pub c: Option<int>,
+
+    pub fn default() -> Self {
+        Self{a: 1, b: (2, 3), c: Option::Some(4)}
+    }
+}
+
+pub fn test_allocation() {
+    let pi: *int = escape(1);
+    let ppi: **int = escape(escape(1));
+    let pppi: ***int = escape(ppi);
+
+    let ps: *Struct = escape(Struct::default());
+    let pps: **Struct = escape(escape(Struct::default()));
+    let ppps: ***Struct = escape(pps);
+
+    match *ps {
+        Struct{a: _, b: _, c: _} => {},
+    }
+}
+

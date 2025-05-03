@@ -87,6 +87,7 @@ enum UnOp {
     UN_NEG, // -
     UN_NOT, // !
     UN_BNOT, // ~
+    UN_DEREF, // *
 
     NUNOPS
 };
@@ -191,6 +192,8 @@ static enum UnOp get_unop(TokenKind kind)
             return UN_NOT;
         case '~':
             return UN_BNOT;
+        case '*':
+            return UN_DEREF;
         default:
             return NOT_UNOP;
     }
@@ -785,6 +788,13 @@ static struct AstType *parse_container_type(struct Lex *lex, paw_Bool is_strict)
     return NEW_NODE(lex, container_type, start, first, second);
 }
 
+static struct AstType *parse_ptr_type(struct Lex *lex, paw_Bool is_strict)
+{
+    struct SourceLoc const start = lex->loc;
+    struct AstType *type = parse_type(lex, is_strict);
+    return NEW_NODE(lex, ptr_type, start, type);
+}
+
 static struct AstType *parse_signature(struct Lex *lex);
 
 static struct AstType *parse_relaxed_type(struct Lex *lex)
@@ -803,6 +813,8 @@ static struct AstType *parse_type(struct Lex *lex, paw_Bool is_strict)
         return parse_paren_type(lex, is_strict);
     } else if (test_next(lex, '[')) {
         return parse_container_type(lex, is_strict);
+    } else if (test_next(lex, '*')) {
+        return parse_ptr_type(lex, is_strict);
     } else if (test_next(lex, TK_FN)) {
         return parse_signature(lex);
     }
@@ -2135,6 +2147,7 @@ static char const kPrelude[] =
     "    }\n"
     "}\n"
 
+    "#[extern] pub fn escape<T>(value: T) -> *T;\n"
     "#[extern] pub fn print(message: str);\n"
     "#[extern] pub fn panic(message: str);\n"
     "#[extern] pub fn assert(cond: bool);\n";

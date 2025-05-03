@@ -43,7 +43,8 @@
     X(FuncPtr)           \
     X(TupleType)         \
     X(PathType)          \
-    X(InferType)
+    X(InferType)         \
+    X(PtrType)
 
 #define HIR_STMT_LIST(X) \
     X(LetStmt)           \
@@ -188,6 +189,11 @@ struct HirInferType {
     HIR_TYPE_HEADER;
 };
 
+struct HirPtrType {
+    HIR_TYPE_HEADER;
+    struct HirType *type;
+};
+
 struct HirType {
     union {
         struct HirTypeHeader hdr;
@@ -225,6 +231,18 @@ static struct HirType *pawHir_new_infer_type(struct Hir *hir, struct SourceSpan 
         .hid = pawHir_next_id(hir),
         .span = span,
         .kind = kHirInferType,
+    };
+    return t;
+}
+
+static struct HirType *pawHir_new_ptr_type(struct Hir *hir, struct SourceSpan span, struct HirType *type)
+{
+    struct HirType *t = pawHir_new_type(hir);
+    t->PtrType_ = (struct HirPtrType){
+        .hid = pawHir_next_id(hir),
+        .span = span,
+        .kind = kHirPtrType,
+        .type = type,
     };
     return t;
 }

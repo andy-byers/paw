@@ -219,8 +219,7 @@ static struct Mir *new_mir(struct MonoCollector *M, struct Mir *base, struct IrT
     struct IrFuncPtr *fptr = IR_FPTR(type);
     K_LIST_FOREACH (fptr->params, pparam) {
         struct IrLayout const layout = pawIr_compute_layout(M->C, *pparam);
-        int const size = layout.is_boxed ? 1 : layout.size;
-        M->mir->param_size += size;
+        M->mir->param_size += layout.size;
     }
     return M->mir;
 }
