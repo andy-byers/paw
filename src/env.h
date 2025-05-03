@@ -115,6 +115,10 @@ typedef struct paw_Env {
         int alloc;
     } map_policies;
 
+    paw_ExecHook hook;
+    int hook_count;
+    int hook_mask;
+
     Object *gc_all;
     Object *gc_gray;
     Object *gc_fixed;

@@ -494,7 +494,6 @@ static int on_build_hir(paw_Env *P)
     return 0;
 }
 
-
 void test_visitors(paw_Env *P)
 {
     paw_push_string(P, "paw.on_build_hir");
@@ -505,6 +504,24 @@ void test_visitors(paw_Env *P)
     check(status == PAW_OK);
 
     status = test_open_file(P, "dump");
+    check(status == PAW_OK);
+}
+
+void test_hook(paw_Env *P)
+{
+    paw_set_hook(P, test_dump_source, PAW_HOOKCALL, 10);
+    int status = test_open_string(P, "pub fn main() {print('Hello, world!\n');}");
+    check(status == PAW_OK);
+
+    struct paw_Item item;
+    paw_mangle_start(P);
+    paw_push_string(P, "main");
+    paw_mangle_add_name(P);
+    status = paw_lookup_item(P, -1, &item);
+    check(status == PAW_OK);
+
+    paw_get_global(P, item.global_id);
+    status = paw_call(P, 0);
     check(status == PAW_OK);
 }
 
@@ -616,6 +633,7 @@ int main(void)
     DRIVER(test_parse_float);
     DRIVER(test_buffer);
     DRIVER(test_visitors);
+    DRIVER(test_hook);
 
     COMPILER_DRIVER(test_compiler_map);
     COMPILER_DRIVER(test_compiler_map_iterator);

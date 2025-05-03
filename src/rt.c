@@ -421,6 +421,29 @@ Tuple *pawR_new_map(paw_Env *P, CallFrame *cf, Value *ra, int b, int c)
 // item 6). Both cases equal 0 in Paw (x / y wraps).
 #define DIVMOD_OVERFLOWS(x, y) ((x) == PAW_INT_MIN && (y) == -1)
 
+static void call_hook(paw_Env *P)
+{
+#define CHECK_FLAG(P_, Kind_) ((P_)->hook_mask & (1 << ((Kind_) - 1)))
+
+    if (P->hook_count <= 0) {
+        P->hook_mask = 0;
+        return;
+    }
+
+    CallFrame *cf = P->cf;
+    paw_Debug const d = {
+        .modname = P->modname->text,
+        .line = pawD_line_number(cf, cf->pc),
+        .cf = cf,
+    };
+    if (CHECK_FLAG(P, PAW_HOOKCALL))
+        P->hook(P, &d);
+
+    --P->hook_count;
+
+#undef CHECK_FLAG
+}
+
 // clang-format off
 void pawR_execute(paw_Env *P, CallFrame *cf)
 {
@@ -432,6 +455,9 @@ top:
     pc = cf->pc;
     fn = cf->fn;
     K = fn->p->k;
+
+    if (P->hook_mask != 0)
+        call_hook(P);
 
     for (;;) {
         OpCode const opcode = *pc++;

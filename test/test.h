@@ -107,4 +107,7 @@ paw_Int test_randint(paw_Int min, paw_Int max);
 // Fill 'str' with 'len' printable chars
 void test_randstr(char *str, int len);
 
+// Hook for dumping the opcodes for the current Paw function
+void test_dump_source(paw_Env *P, paw_Debug const *d);
+
 #endif // PAW_TEST_TEST_H

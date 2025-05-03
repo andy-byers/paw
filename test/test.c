@@ -257,3 +257,426 @@ void test_randstr(char *str, int len)
         str[i] = test_randint(0, sizeof(kChars) - 1);
     }
 }
+
+char const *op_name(Op op)
+{
+    switch (op) {
+        case OP_LOADSMI:
+            return "LOADSMI";
+        case OP_LOADK:
+            return "LOADK";
+        case OP_NOOP:
+            return "NOOP";
+        case OP_MOVE:
+            return "MOVE";
+        case OP_CLOSE:
+            return "CLOSE";
+        case OP_RETURN:
+            return "RETURN";
+        case OP_CLOSURE:
+            return "CLOSURE";
+        case OP_CALL:
+            return "CALL";
+        case OP_JUMP:
+            return "JUMP";
+        case OP_JUMPT:
+            return "JUMPT";
+        case OP_JUMPF:
+            return "JUMPF";
+        case OP_GETGLOBAL:
+            return "GETGLOBAL";
+        case OP_GETUPVALUE:
+            return "GETUPVALUE";
+        case OP_SETUPVALUE:
+            return "SETUPVALUE";
+        case OP_NEWTUPLE:
+            return "NEWTUPLE";
+        case OP_NEWLIST:
+            return "NEWLIST";
+        case OP_NEWMAP:
+            return "NEWMAP";
+        case OP_IEQ:
+            return "IEQ";
+        case OP_INE:
+            return "INE";
+        case OP_ILT:
+            return "ILT";
+        case OP_ILE:
+            return "ILE";
+        case OP_IGT:
+            return "IGT";
+        case OP_IGE:
+            return "IGE";
+        case OP_INOT:
+            return "INOT";
+        case OP_INEG:
+            return "INEG";
+        case OP_IADD:
+            return "IADD";
+        case OP_ISUB:
+            return "ISUB";
+        case OP_IMUL:
+            return "IMUL";
+        case OP_IDIV:
+            return "IDIV";
+        case OP_IMOD:
+            return "IMOD";
+        case OP_BITNOT:
+            return "BITNOT";
+        case OP_BITAND:
+            return "BITAND";
+        case OP_BITOR:
+            return "BITOR";
+        case OP_BITXOR:
+            return "BITXOR";
+        case OP_SHL:
+            return "SHL";
+        case OP_SHR:
+            return "SHR";
+        case OP_FEQ:
+            return "FEQ";
+        case OP_FNE:
+            return "FNE";
+        case OP_FLT:
+            return "FLT";
+        case OP_FLE:
+            return "FLE";
+        case OP_FGT:
+            return "FGT";
+        case OP_FGE:
+            return "FGE";
+        case OP_FNEG:
+            return "FNEG";
+        case OP_FADD:
+            return "FADD";
+        case OP_FSUB:
+            return "FSUB";
+        case OP_FMUL:
+            return "FMUL";
+        case OP_FDIV:
+            return "FDIV";
+        case OP_FMOD:
+            return "FMOD";
+        case OP_SEQ:
+            return "SEQ";
+        case OP_SNE:
+            return "SNE";
+        case OP_SLT:
+            return "SLT";
+        case OP_SLE:
+            return "SLE";
+        case OP_SGT:
+            return "SGT";
+        case OP_SGE:
+            return "SGE";
+        case OP_SLENGTH:
+            return "SLENGTH";
+        case OP_SCONCAT:
+            return "SCONCAT";
+        case OP_SGET:
+            return "SGET";
+        case OP_SGETN:
+            return "SGETN";
+        case OP_LLENGTH:
+            return "LLENGTH";
+        case OP_LCONCAT:
+            return "LCONCAT";
+        case OP_LGETP:
+            return "LGETP";
+        case OP_LGET:
+            return "LGET";
+        case OP_LSET:
+            return "LSET";
+        case OP_LGETN:
+            return "LGETN";
+        case OP_LSETN:
+            return "LSETN";
+        case OP_MLENGTH:
+            return "MLENGTH";
+        case OP_MNEWP:
+            return "MNEWP";
+        case OP_MGETP:
+            return "MGETP";
+        case OP_MGET:
+            return "MGET";
+        case OP_MSET:
+            return "MSET";
+        case OP_GETVALUE:
+            return "GETVALUE";
+        case OP_SETVALUE:
+            return "SETVALUE";
+        case OP_GETFIELD:
+            return "GETFIELD";
+        case OP_SETFIELD:
+            return "SETFIELD";
+        case OP_GETDISCR:
+            return "GETDISCR";
+        case OP_XCASTB:
+            return "XCASTB";
+        case OP_ICASTF:
+            return "ICASTF";
+        case OP_FCASTI:
+            return "FCASTI";
+        case OP_TESTK:
+            return "TESTK";
+        case OP_SWITCHINT:
+            return "SWITCHINT";
+        default:
+            return "???";
+    }
+}
+
+void paw_dump_opcode(OpCode opcode)
+{
+    char const *opname = op_name(GET_OP(opcode));
+    switch (GET_OP(opcode)) {
+        case NOPCODES:
+            PAW_UNREACHABLE();
+        // op A B
+        case OP_NEWTUPLE:
+        case OP_NEWLIST:
+        case OP_NEWMAP:
+        case OP_MOVE:
+        case OP_INOT:
+        case OP_INEG:
+        case OP_BITNOT:
+        case OP_FNEG:
+        case OP_SLENGTH:
+        case OP_LLENGTH:
+        case OP_MLENGTH:
+        case OP_XCASTB:
+        case OP_FCASTI:
+        case OP_ICASTF:
+        case OP_GETDISCR:
+        case OP_CALL:
+        case OP_GETUPVALUE:
+        case OP_SETUPVALUE:
+        case OP_SWITCHINT:
+            printf("%s %d %d\n", opname, GET_A(opcode), GET_B(opcode));
+            break;
+        // op A sBx
+        case OP_LOADSMI:
+        case OP_JUMPT:
+        case OP_JUMPF:
+            printf("%s %d %d\n", opname, GET_A(opcode), GET_sBx(opcode));
+            break;
+        // op A sBx
+        case OP_LOADK:
+        case OP_CLOSURE:
+        case OP_GETGLOBAL:
+            printf("%s %d %d\n", opname, GET_A(opcode), GET_Bx(opcode));
+            break;
+        // op
+        case OP_RETURN:
+            printf("%s\n", opname);
+            break;
+        // op sBx
+        case OP_JUMP:
+            printf("%s %d\n", opname, GET_sBx(opcode));
+            break;
+        // op A
+        case OP_CLOSE:
+            printf("%s %d\n", opname, GET_A(opcode));
+            break;
+        // op A B C
+        case OP_IEQ:
+        case OP_INE:
+        case OP_ILT:
+        case OP_ILE:
+        case OP_IGT:
+        case OP_IGE:
+        case OP_IADD:
+        case OP_ISUB:
+        case OP_IMUL:
+        case OP_IDIV:
+        case OP_IMOD:
+        case OP_BITAND:
+        case OP_BITOR:
+        case OP_BITXOR:
+        case OP_SHL:
+        case OP_SHR:
+        case OP_FEQ:
+        case OP_FNE:
+        case OP_FLT:
+        case OP_FLE:
+        case OP_FGT:
+        case OP_FGE:
+        case OP_FADD:
+        case OP_FSUB:
+        case OP_FMUL:
+        case OP_FDIV:
+        case OP_FMOD:
+        case OP_SEQ:
+        case OP_SNE:
+        case OP_SLT:
+        case OP_SLE:
+        case OP_SGT:
+        case OP_SGE:
+        case OP_SCONCAT:
+        case OP_SGET:
+        case OP_SGETN:
+        case OP_LCONCAT:
+        case OP_LGETP:
+        case OP_LGET:
+        case OP_LSET:
+        case OP_LGETN:
+        case OP_LSETN:
+        case OP_MNEWP:
+        case OP_MGETP:
+        case OP_MGET:
+        case OP_MSET:
+        case OP_GETFIELD:
+        case OP_SETFIELD:
+        case OP_GETVALUE:
+        case OP_SETVALUE:
+        case OP_TESTK:
+            printf("%s %d %d %d\n", opname, GET_A(opcode), GET_B(opcode), GET_C(opcode));
+            break;
+        case OP_NOOP:
+            printf("%s\n", opname);
+    }
+}
+
+void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
+{
+    OpCode const *pc = proto->source;
+    OpCode const *end = pc + proto->length;
+
+    pawL_add_string(P, print, "function '");
+    pawL_add_nstring(P, print, proto->name->text, proto->name->length);
+    pawL_add_fstring(P, print, "' (%I bytes)\n", (paw_Int)proto->length);
+    pawL_add_fstring(P, print, "constant(s) = %d, upvalue(s) = %d, arg(s) = %d\n",
+                     proto->nk, proto->nup, proto->argc);
+    for (int i = 0; pc != end; ++i, ++pc) {
+        OpCode const opcode = *pc;
+        char const *opname = op_name(GET_OP(opcode));
+        pawL_add_fstring(P, print, "%d  %s", i, opname);
+        switch (GET_OP(opcode)) {
+            case NOPCODES:
+                PAW_UNREACHABLE();
+            // op A B
+            case OP_NEWTUPLE:
+            case OP_NEWLIST:
+            case OP_NEWMAP:
+            case OP_TESTK:
+            case OP_SWITCHINT:
+            case OP_MOVE:
+            case OP_INOT:
+            case OP_INEG:
+            case OP_BITNOT:
+            case OP_FNEG:
+            case OP_SLENGTH:
+            case OP_LLENGTH:
+            case OP_MLENGTH:
+            case OP_XCASTB:
+            case OP_FCASTI:
+            case OP_ICASTF:
+            case OP_GETDISCR:
+            case OP_GETUPVALUE:
+            case OP_SETUPVALUE:
+                pawL_add_fstring(P, print, " %d %d\n", GET_A(opcode), GET_B(opcode));
+                break;
+            case OP_CALL:
+                pawL_add_fstring(P, print, " %d %d\n", GET_A(opcode), GET_B(opcode));
+                break;
+            // op A sBx
+            case OP_LOADSMI:
+            case OP_JUMPT:
+            case OP_JUMPF:
+                pawL_add_fstring(P, print, " %d %d\n", GET_A(opcode), GET_sBx(opcode));
+                break;
+            // op A Bx
+            case OP_LOADK:
+            case OP_CLOSURE:
+            case OP_GETGLOBAL:
+                pawL_add_fstring(P, print, " %d %d\n", GET_A(opcode), GET_Bx(opcode));
+                break;
+            // op sBx
+            case OP_JUMP:
+                pawL_add_fstring(P, print, " %d\n", GET_sBx(opcode));
+                break;
+            // op A
+            case OP_CLOSE:
+                pawL_add_fstring(P, print, " %d\t; close(R[%d])\n", GET_A(opcode), GET_A(opcode));
+                break;
+            // op A B C
+            case OP_IEQ:
+            case OP_INE:
+            case OP_ILT:
+            case OP_ILE:
+            case OP_IGT:
+            case OP_IGE:
+            case OP_IADD:
+            case OP_ISUB:
+            case OP_IMUL:
+            case OP_IDIV:
+            case OP_IMOD:
+            case OP_BITAND:
+            case OP_BITOR:
+            case OP_BITXOR:
+            case OP_SHL:
+            case OP_SHR:
+            case OP_FEQ:
+            case OP_FNE:
+            case OP_FLT:
+            case OP_FLE:
+            case OP_FGT:
+            case OP_FGE:
+            case OP_FADD:
+            case OP_FSUB:
+            case OP_FMUL:
+            case OP_FDIV:
+            case OP_FMOD:
+            case OP_SEQ:
+            case OP_SNE:
+            case OP_SLT:
+            case OP_SLE:
+            case OP_SGT:
+            case OP_SGE:
+            case OP_SCONCAT:
+            case OP_SGET:
+            case OP_SGETN:
+            case OP_LCONCAT:
+            case OP_LGETP:
+            case OP_LGET:
+            case OP_LSET:
+            case OP_LGETN:
+            case OP_LSETN:
+            case OP_MNEWP:
+            case OP_MGETP:
+            case OP_MGET:
+            case OP_MSET:
+            case OP_GETFIELD:
+            case OP_SETFIELD:
+            case OP_GETVALUE:
+            case OP_SETVALUE:
+                pawL_add_fstring(P, print, " %d %d %d\n", GET_A(opcode), GET_B(opcode), GET_C(opcode));
+                break;
+            case OP_NOOP:
+            case OP_RETURN:
+            default:
+                pawL_add_char(P, print, '\n');
+                break;
+        }
+    }
+
+    // Dump nested protos.
+    for (int i = 0; i < proto->nproto; ++i) {
+        pawL_add_char(P, print, '\n');
+        dump_aux(P, proto->p[i], print);
+    }
+}
+
+void test_dump_source(paw_Env *P, paw_Debug const *d)
+{
+    CallFrame *cf = d->cf;
+    if (CF_IS_PAW(cf)) {
+        Buffer print;
+        pawL_init_buffer(P, &print);
+        dump_aux(P, cf->fn->p, &print);
+        pawL_add_char(P, &print, '\0');
+        puts(print.data);
+        pawL_discard_result(P, &print);
+    }
+}
+

@@ -31,11 +31,13 @@ typedef _Bool paw_Bool;
 #define PAW_TRUE 1
 
 typedef struct paw_Env paw_Env;
+typedef struct paw_Debug paw_Debug;
 
+typedef int (*paw_Function)(paw_Env *P);
 typedef void *(*paw_Alloc)(void *ud, void *ptr, size_t size0, size_t size);
 typedef void (*paw_MemHook)(void *ud, void *ptr, size_t size0, size_t size);
+typedef void (*paw_ExecHook)(paw_Env *P, paw_Debug const *d);
 typedef char const *(*paw_Reader)(paw_Env *P, void *ud, size_t *size);
-typedef int (*paw_Function)(paw_Env *P);
 
 struct paw_Options {
     paw_Alloc alloc;
@@ -248,5 +250,17 @@ inline static void paw_replace(paw_Env *P, int index)
 
 char const *paw_int_to_string(paw_Env *P, int index, size_t *plen);
 char const *paw_float_to_string(paw_Env *P, int index, size_t *plen);
+
+#define PAW_HOOKCALL 1
+
+void paw_set_hook(paw_Env *P, paw_ExecHook hook, int mask, int count);
+
+struct paw_Debug {
+    char const *modname;
+    int line;
+
+    // private fields
+    struct CallFrame *cf;
+};
 
 #endif // PAW_PAW_H

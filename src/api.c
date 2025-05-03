@@ -709,3 +709,14 @@ paw_Bool paw_map_next(paw_Env *P, int index)
     }
     return PAW_FALSE;
 }
+
+void paw_set_hook(paw_Env *P, paw_ExecHook hook, int mask, int count)
+{
+    if (hook == NULL || mask == 0) {
+        hook = NULL;
+        mask = 0;
+    }
+    P->hook = hook;
+    P->hook_mask = mask;
+    P->hook_count = count;
+}
