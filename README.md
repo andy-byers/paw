@@ -4,6 +4,17 @@
 > See the [roadmap](#roadmap) to get an idea of where things are going.
 > Also see [known issues](#known-issues) for a list of known problems that will eventually be fixed.
 
+> NOTE: This branch is being used to implement escape analysis and pointers.
+> I really wanted value semantics to be the default for objects, hence the recent changes (unbox.c, etc.).
+> This brings with it 2 main difficulties: methods cannot modify the object through `self`, and recursive types are not allowed.
+> Both of these problems can be fixed by introducing pointers to the language.
+> Of course, pointers (to objects in registers) also present some difficulties: mainly, a pointed-to object could go out of scope leaving pointers dangling.
+> This is where escape analysis comes in: when a pointer to something "escapes" the current scope, then that object must be hoisted onto the heap.
+> This must be determined statically: if a pointer might escape at any point, the pointed-to object must be hoisted.
+> The analysis should be very conservative at first, since this will not cause incorrect behavior.
+> To start, I would say that any object that has its address taken should be escaped.
+> Better escape analysis rules can be determined later on.
+
 A cute little scripting language
 
 Paw is a high-level, statically-typed, embeddable scripting language.

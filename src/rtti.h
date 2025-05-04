@@ -26,7 +26,6 @@ struct RttiTypeHeader {
 struct RttiAdt {
     RTTI_TYPE_HEADER;
     ItemId iid;
-    int size;
 };
 
 struct RttiTrait {
@@ -51,7 +50,6 @@ struct RttiFnDef {
 
 struct RttiTuple {
     RTTI_TYPE_HEADER;
-    int size;
 };
 
 typedef struct RttiType {
@@ -71,34 +69,25 @@ typedef struct RttiType {
 enum DefKind {
     DEF_ADT,
     DEF_FUNC,
-    DEF_VAR,
-    DEF_FIELD,
-    DEF_VARIANT,
+    DEF_CONST,
     DEF_TRAIT,
 };
 
-//struct RttiFieldDef {
-//    String *name;
-//    ItemId iid;
-//    paw_Bool is_pub : 1;
-//};
-//
-//struct RttiVariantDef {
-//    struct FieldList *fields;
-//    String *name;
-//    int discr;
-//    ItemId xdid;
-//};
-//
-//struct RttiAdtDef {
-//    struct VariantList *variants;
-//    String *name;
-//    ItemId iid;
-//    paw_Bool is_struct : 1;
-//    paw_Bool is_pub : 1;
-//};
+struct RttiField {
+    String *name;
+    paw_Type code;
+    paw_Bool is_pub : 1;
+};
 
-#define RTTI_DEF_HEADER         \
+struct RttiVariant {
+    ItemId did;
+    unsigned char discr;
+    int num_fields;
+    struct RttiField *fields;
+    String *name;
+};
+
+#define RTTI_DEF_HEADER    \
     String *name;          \
     String *modname;       \
     paw_Type code;         \
@@ -107,13 +96,6 @@ enum DefKind {
     paw_Bool is_pub : 1
 struct DefHeader {
     RTTI_DEF_HEADER;
-};
-
-struct VariantDef {
-    RTTI_DEF_HEADER;
-    uint8_t k;
-    int nfields;
-    ItemId *fields;
 };
 
 struct AdtDef {
@@ -137,11 +119,7 @@ struct FuncDef {
     String *mangled_name;
 };
 
-struct FieldDef {
-    RTTI_DEF_HEADER;
-};
-
-struct VarDef {
+struct ConstDef {
     RTTI_DEF_HEADER;
     ValueId vid;
 };
@@ -150,10 +128,9 @@ struct Def {
     union {
         struct DefHeader hdr;
         struct AdtDef adt;
-        struct VariantDef variant;
         struct FuncDef func;
-        struct VarDef var;
         struct TraitDef trait;
+        struct ConstDef const_;
     };
 };
 
@@ -172,10 +149,10 @@ struct RttiType *pawRtti_new_trait(paw_Env *P);
 struct RttiType *pawRtti_new_ptr(paw_Env *P, paw_Type type);
 struct Def *pawRtti_new_adt_def(paw_Env *P, int nfields);
 struct Def *pawRtti_new_trait_def(paw_Env *P);
-struct Def *pawRtti_new_variant_def(paw_Env *P, int nfields);
 struct Def *pawRtti_new_func_def(paw_Env *P, int ntypes);
-struct Def *pawRtti_new_field_def(paw_Env *P);
-struct Def *pawRtti_new_var_def(paw_Env *P);
+struct Def *pawRtti_new_const_def(paw_Env *P);
+struct RttiVariant *pawRtti_new_variant(paw_Env *P, String *name, struct RttiField *fields, int num_fields);
+struct RttiField *pawRtti_new_field(paw_Env *P, String *name, paw_Type code, paw_Bool is_pub);
 void pawRtti_uninit(paw_Env *P);
 
 void pawRtti_mangle_start(paw_Env *P, Buffer *buf);

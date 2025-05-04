@@ -11,14 +11,10 @@ static void free_def(paw_Env *P, struct Def *def)
         case DEF_ADT:
             pawM_free_vec(P, def->adt.fields, def->adt.nfields);
             break;
-        case DEF_VARIANT:
-            pawM_free_vec(P, def->variant.fields, def->variant.nfields);
-            break;
         case DEF_FUNC:
             pawM_free_vec(P, def->func.types, def->func.ntypes);
             break;
-        case DEF_VAR:
-        case DEF_FIELD:
+        case DEF_CONST:
         case DEF_TRAIT:
             break;
     }
@@ -138,12 +134,26 @@ struct Def *pawRtti_new_trait_def(paw_Env *P)
     return new_def(P, DEF_TRAIT);
 }
 
-struct Def *pawRtti_new_variant_def(paw_Env *P, int nfields)
+struct RttiVariant *pawRtti_new_variant(paw_Env *P, String *name, struct RttiField *fields, int num_fields)
 {
-    struct Def *def = new_def(P, DEF_VARIANT);
-    def->variant.fields = pawM_new_vec(P, nfields, ItemId);
-    def->variant.nfields = nfields;
-    return def;
+    struct RttiVariant *variant = pawM_new(P, struct RttiVariant);
+    *variant = (struct RttiVariant){
+        .num_fields = num_fields,
+        .fields = fields,
+        .name = name,
+    };
+    return variant;
+}
+
+struct RttiField *pawRtti_new_field(paw_Env *P, String *name, paw_Type code, paw_Bool is_pub)
+{
+    struct RttiField *field = pawM_new(P, struct RttiField);
+    *field = (struct RttiField){
+        .is_pub = is_pub,
+        .name = name,
+        .code = code,
+    };
+    return field;
 }
 
 struct Def *pawRtti_new_func_def(paw_Env *P, int ntypes)
@@ -154,14 +164,9 @@ struct Def *pawRtti_new_func_def(paw_Env *P, int ntypes)
     return def;
 }
 
-struct Def *pawRtti_new_field_def(paw_Env *P)
+struct Def *pawRtti_new_const_def(paw_Env *P)
 {
-    return new_def(P, DEF_FIELD);
-}
-
-struct Def *pawRtti_new_var_def(paw_Env *P)
-{
-    return new_def(P, DEF_VAR);
+    return new_def(P, DEF_CONST);
 }
 
 static int print_subtypes_(paw_Env *P, Buffer *buf, struct RttiType *type)
