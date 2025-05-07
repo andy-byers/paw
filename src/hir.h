@@ -43,8 +43,7 @@
     X(FuncPtr)           \
     X(TupleType)         \
     X(PathType)          \
-    X(InferType)         \
-    X(PtrType)
+    X(InferType)
 
 #define HIR_STMT_LIST(X) \
     X(LetStmt)           \
@@ -189,11 +188,6 @@ struct HirInferType {
     HIR_TYPE_HEADER;
 };
 
-struct HirPtrType {
-    HIR_TYPE_HEADER;
-    struct HirType *type;
-};
-
 struct HirType {
     union {
         struct HirTypeHeader hdr;
@@ -231,18 +225,6 @@ static struct HirType *pawHir_new_infer_type(struct Hir *hir, struct SourceSpan 
         .hid = pawHir_next_id(hir),
         .span = span,
         .kind = kHirInferType,
-    };
-    return t;
-}
-
-static struct HirType *pawHir_new_ptr_type(struct Hir *hir, struct SourceSpan span, struct HirType *type)
-{
-    struct HirType *t = pawHir_new_type(hir);
-    t->PtrType_ = (struct HirPtrType){
-        .hid = pawHir_next_id(hir),
-        .span = span,
-        .kind = kHirPtrType,
-        .type = type,
     };
     return t;
 }
@@ -335,6 +317,7 @@ struct HirAdtDecl {
     HIR_DECL_HEADER;
     paw_Bool is_pub : 1;
     paw_Bool is_struct : 1;
+    paw_Bool is_inline : 1;
     struct HirIdent ident;
     struct HirDecl *self;
     struct HirTypeList *traits;
@@ -459,7 +442,7 @@ static struct HirDecl *pawHir_new_func_decl(struct Hir *hir, struct SourceSpan s
     return d;
 }
 
-static struct HirDecl *pawHir_new_adt_decl(struct Hir *hir, struct SourceSpan span, struct HirIdent ident, struct HirDecl *self, struct HirTypeList *traits, struct HirDeclList *generics, struct HirDeclList *fields, struct HirDeclList *methods, paw_Bool is_pub, paw_Bool is_struct)
+static struct HirDecl *pawHir_new_adt_decl(struct Hir *hir, struct SourceSpan span, struct HirIdent ident, struct HirDecl *self, struct HirTypeList *traits, struct HirDeclList *generics, struct HirDeclList *fields, struct HirDeclList *methods, paw_Bool is_pub, paw_Bool is_struct, paw_Bool is_inline)
 {
     struct HirDecl *d = pawHir_new_decl(hir);
     d->AdtDecl_ = (struct HirAdtDecl){
@@ -474,6 +457,7 @@ static struct HirDecl *pawHir_new_adt_decl(struct Hir *hir, struct SourceSpan sp
         .methods = methods,
         .is_pub = is_pub,
         .is_struct = is_struct,
+        .is_inline = is_inline,
     };
     pawHir_register_decl(hir, d);
     return d;

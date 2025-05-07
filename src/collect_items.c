@@ -559,7 +559,8 @@ static void collect_adt_decl(struct ItemCollector *X, struct HirAdtDecl *d)
 
     struct IrGenericDefs *generics = collect_generic_defs(X, d->generics);
     struct IrVariantDefs *variants = collect_variant_defs(X, d, did);
-    struct IrAdtDef *r = pawIr_new_adt_def(X->C, did, d->ident.name, generics, variants, d->is_pub, d->is_struct);
+    struct IrAdtDef *r = pawIr_new_adt_def(X->C, did, d->ident.name, generics, variants,
+            d->is_pub, d->is_struct, d->is_inline);
     AdtDefMap_insert(X->C, X->C->adt_defs, did, r);
     set_def_type(X, did, d->hid);
 

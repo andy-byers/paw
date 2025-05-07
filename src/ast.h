@@ -28,8 +28,7 @@
     X(TupleType)         \
     X(ContainerType)     \
     X(FuncType)          \
-    X(InferType)         \
-    X(PtrType)
+    X(InferType)
 
 #define AST_EXPR_LIST(X) \
     X(ParenExpr)         \
@@ -139,6 +138,7 @@ struct AstAdtDecl {
     AST_DECL_HEADER;
     paw_Bool is_pub : 1;
     paw_Bool is_struct : 1;
+    paw_Bool is_inline : 1;
     struct AstIdent ident;
     struct AstTypeList *traits;
     struct AstDeclList *generics;
@@ -257,7 +257,7 @@ inline static struct AstDecl *pawAst_new_generic_decl(struct Ast *ast, struct So
     return d;
 }
 
-inline static struct AstDecl *pawAst_new_adt_decl(struct Ast *ast, struct SourceSpan span, struct AstIdent ident, struct AstTypeList *traits, struct AstDeclList *generics, struct AstDeclList *fields, struct AstDeclList *methods, paw_Bool is_pub, paw_Bool is_struct)
+inline static struct AstDecl *pawAst_new_adt_decl(struct Ast *ast, struct SourceSpan span, struct AstIdent ident, struct AstTypeList *traits, struct AstDeclList *generics, struct AstDeclList *fields, struct AstDeclList *methods, paw_Bool is_pub, paw_Bool is_struct, paw_Bool is_inline)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->AdtDecl_ = (struct AstAdtDecl){
@@ -268,8 +268,9 @@ inline static struct AstDecl *pawAst_new_adt_decl(struct Ast *ast, struct Source
         .generics = generics,
         .fields = fields,
         .methods = methods,
-        .is_struct = is_struct,
         .is_pub = is_pub,
+        .is_struct = is_struct,
+        .is_inline = is_inline,
     };
     return d;
 }
@@ -385,11 +386,6 @@ struct AstInferType {
     AST_TYPE_HEADER;
 };
 
-struct AstPtrType {
-    AST_TYPE_HEADER;
-    struct AstType *type;
-};
-
 struct AstType {
     union {
         struct AstTypeHeader hdr;
@@ -460,17 +456,6 @@ inline static struct AstType *pawAst_new_infer_type(struct Ast *ast, struct Sour
     t->InferType_ = (struct AstInferType){
         .span = span,
         .kind = kAstInferType,
-    };
-    return t;
-}
-
-inline static struct AstType *pawAst_new_ptr_type(struct Ast *ast, struct SourceSpan span, struct AstType *type)
-{
-    struct AstType *t = pawAst_new_type(ast);
-    t->PtrType_ = (struct AstPtrType){
-        .span = span,
-        .kind = kAstPtrType,
-        .type = type,
     };
     return t;
 }

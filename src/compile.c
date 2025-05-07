@@ -31,6 +31,7 @@ static char const *kKeywords[] = {
     "struct",
     "trait",
     "const",
+    "inline",
     "let",
     "if",
     "else",
@@ -398,11 +399,6 @@ static RttiType *new_type(struct DefGenerator *dg, struct IrType *src, ItemId ii
         case kIrTraitObj: {
             struct IrTraitObj *trait = IrGetTraitObj(src);
             dst = pawRtti_new_trait(P);
-            break;
-        }
-        case kIrPtr: {
-            struct IrPtr *t = IrGetPtr(src);
-            dst = pawRtti_new_ptr(P, MAKE_TYPE(dg, t->type, -1));
             break;
         }
         default: { // kIrTuple

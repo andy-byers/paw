@@ -44,15 +44,6 @@ static int base_assert(paw_Env *P)
     return 0;
 }
 
-static int base_escape(paw_Env *P)
-{
-    // copy the object into a box on the heap
-    int const num_values = paw_get_count(P);
-    Tuple *const t = pawR_new_tuple(P, P->cf, CF_BASE(0), num_values);
-    pawV_copy(t->elems, CF_BASE(1), num_values);
-    return 1;
-}
-
 static int base_print(paw_Env *P)
 {
     char const *string = paw_string(P, 1);
@@ -587,7 +578,6 @@ void pawL_push_modules_map(paw_Env *P)
 // Expects the 'paw.builtin' map (from the registry) on top of the stack
 static void load_builtins(paw_Env *P)
 {
-    add_prelude_func(P, "escape", base_escape);
     add_prelude_func(P, "panic", base_panic);
     add_prelude_func(P, "assert", base_assert);
     add_prelude_func(P, "print", base_print);

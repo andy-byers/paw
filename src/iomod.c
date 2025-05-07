@@ -103,7 +103,7 @@ void l_import_io(paw_Env *P)
         "    #[extern] pub fn write(self, data: str) -> int;\n"
         "}\n"
 
-        "pub enum Seek {\n"
+        "pub inline enum Seek {\n"
         "    Begin,\n"
         "    Current,\n"
         "    End,\n"

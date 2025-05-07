@@ -17,8 +17,7 @@ typedef struct IrType IrType;
     X(Tuple)            \
     X(Infer)            \
     X(Generic)          \
-    X(TraitObj)         \
-    X(Ptr)
+    X(TraitObj)
 
 enum IrTypeKind {
 #define DEFINE_ENUM(X) kIr##X,
@@ -74,11 +73,6 @@ struct IrTraitObj {
     IR_TYPE_HEADER;
     DeclId did;
     struct IrTypeList *types;
-};
-
-struct IrPtr {
-    IR_TYPE_HEADER;
-    struct IrType *type;
 };
 
 static char const *kIrTypeNames[] = {
@@ -195,16 +189,6 @@ inline static IrType *pawIr_new_trait_obj(struct Compiler *C, DeclId did, struct
     return t;
 }
 
-inline static IrType *pawIr_new_ptr(struct Compiler *C, struct IrType *type)
-{
-    IrType *t = pawIr_new_type(C);
-    t->Ptr_ = (struct IrPtr){
-        .kind = kIrPtr,
-        .type = type,
-    };
-    return t;
-}
-
 struct IrParam {
     String *name;
     IrType *type;
@@ -244,6 +228,7 @@ struct IrAdtDef {
     struct IrGenericDefs *generics;
     struct IrVariantDefs *variants;
     DeclId did;
+    paw_Bool is_inline : 1;
     paw_Bool is_struct : 1;
     paw_Bool is_pub : 1;
 };
@@ -295,13 +280,14 @@ inline static struct IrFnDef *pawIr_new_fn_def(struct Compiler *C, DeclId did, S
     return def;
 }
 
-inline static struct IrAdtDef *pawIr_new_adt_def(struct Compiler *C, DeclId did, String *name, struct IrGenericDefs *generics, struct IrVariantDefs *variants, paw_Bool is_pub, paw_Bool is_struct)
+inline static struct IrAdtDef *pawIr_new_adt_def(struct Compiler *C, DeclId did, String *name, struct IrGenericDefs *generics, struct IrVariantDefs *variants, paw_Bool is_pub, paw_Bool is_struct, paw_Bool is_inline)
 {
     struct IrAdtDef *def = P_ALLOC(C, NULL, 0, sizeof(*def));
     *def = (struct IrAdtDef){
         .did = did,
         .generics = generics,
         .variants = variants,
+        .is_inline = is_inline,
         .is_struct = is_struct,
         .is_pub = is_pub,
         .name = name,
@@ -369,6 +355,13 @@ static IrType *ir_map_key(IrType *type)
 static IrType *ir_map_value(IrType *type)
 {
     return IrTypeList_get(IrGetAdt(type)->types, 1);
+}
+
+static paw_Bool ir_is_boxed(struct Compiler *C, IrType *type)
+{
+    if (!IrIsAdt(type)) return PAW_FALSE;
+    struct IrAdtDef *def = pawIr_get_adt_def(C, IR_TYPE_DID(type));
+    return !def->is_inline;
 }
 
 char const *pawIr_print_type(struct Compiler *C, IrType *type);

@@ -375,7 +375,8 @@ static struct HirDecl *LowerAdtDecl(struct LowerAst *L, struct AstAdtDecl *d)
     struct HirDeclList *fields = lower_fields(L, d->fields);
     struct HirDeclList *methods = lower_methods(L, d->methods);
     return pawHir_new_adt_decl(L->hir, d->span, ident, NULL, traits,
-                               generics, fields, methods, d->is_pub, d->is_struct);
+                               generics, fields, methods, d->is_pub,
+                               d->is_struct, d->is_inline);
 }
 
 static struct HirDecl *LowerTraitDecl(struct LowerAst *L, struct AstTraitDecl *d)
@@ -782,12 +783,6 @@ static struct HirType *LowerPathType(struct LowerAst *L, struct AstPathType *t)
 {
     struct HirPath path = lower_path(L, t->path);
     return pawHir_new_path_type(L->hir, t->span, path);
-}
-
-static struct HirType *LowerPtrType(struct LowerAst *L, struct AstPtrType *t)
-{
-    struct HirType *type = lower_type(L, t->type);
-    return pawHir_new_ptr_type(L->hir, t->span, type);
 }
 
 static struct HirType *LowerContainerType(struct LowerAst *L, struct AstContainerType *t)

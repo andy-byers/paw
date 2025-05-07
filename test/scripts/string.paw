@@ -110,7 +110,7 @@ fn concat_with_self(v: str, n: int) -> str {
 }
 
 pub fn test_emit_warnings() {
-    print("warning: slice tests");
+    print("warning: slice tests\n");
 }
 
 //pub fn test_slices() {

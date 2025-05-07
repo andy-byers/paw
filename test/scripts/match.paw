@@ -1,76 +1,72 @@
 // match.paw
 
-pub fn test_emit_warnings() {
-    print("WARNING: recursive enum needs indirection to prevent infinite size\n");
+enum Num {
+    Zero,
+    Succ(Num),
+    Add(Num, Num),
+    Mul(Num, Num),
 }
 
-//enum Num {
-//    Zero,
-//    Succ(Num),
-//    Add(Num, Num),
-//    Mul(Num, Num),
-//}
-//
-//fn check_basic(a: Num) -> int {
-//    match a {
-//        Num::Zero            => {return 1;},
-//        Num::Succ(Num::Zero) => {return 2;},
-//        Num::Succ(x)         => {return 3;},
-//        x                    => {return 4;},
-//    };
-//}
-//
-//pub fn test_basic() {
-//    assert(check_basic(Num::Zero) == 1);
-//    assert(check_basic(Num::Succ(Num::Zero)) == 2);
-//    assert(check_basic(Num::Succ(Num::Succ(Num::Zero))) == 3);
-//    assert(check_basic(Num::Add(Num::Zero, Num::Zero)) == 4);
-//}
-//
-//fn eval_num(num: Num) -> int {
-//    match num {
-//        Num::Zero      => {return 0;},
-//        Num::Succ(x)   => {return eval_num(x) + 1;},
-//        Num::Add(x, y) => {return eval_num(x) + eval_num(y);},
-//        Num::Mul(x, y) => {return eval_num(x) * eval_num(y);},
-//    };
-//}
-//
-//pub fn test_bindings() {
-//    let zero = Num::Zero;
-//    let one = Num::Succ(zero);
-//    let two = Num::Succ(one);
-//
-//    assert(eval_num(zero) == 0);
-//    assert(eval_num(one) == 1);
-//    assert(eval_num(two) == 2);
-//    assert(eval_num(Num::Add(one, two)) == 3);
-//    assert(eval_num(Num::Mul(one, two)) == 2);
-//    assert(eval_num(Num::Mul(Num::Succ(two), two)) == 6);
-//}
-//
-//fn check_jacobs_example(a: Num) -> int {
-//    match a {
-//        Num::Add(Num::Zero, Num::Zero) => {return 1;},
-//        Num::Mul(Num::Zero, x)         => {return 2;},
-//        Num::Add(Num::Succ(x), y)      => {return 3;},
-//        Num::Mul(x, Num::Zero)         => {return 4;},
-//        Num::Mul(Num::Add(x, y), z)    => {return 5;},
-//        Num::Add(x, Num::Zero)         => {return 6;},
-//        x                              => {return 7;},
-//    };
-//}
-//
-//pub fn test_jacobs_example() {
-//    let check = check_jacobs_example;
-//    assert(check(Num::Add(Num::Zero, Num::Zero)) == 1);
-//    assert(check(Num::Mul(Num::Zero, Num::Zero)) == 2);
-//    assert(check(Num::Add(Num::Succ(Num::Zero), Num::Zero)) == 3);
-//    assert(check(Num::Mul(Num::Succ(Num::Zero), Num::Zero)) == 4);
-//    assert(check(Num::Mul(Num::Add(Num::Zero, Num::Zero), Num::Succ(Num::Zero))) == 5);
-//    assert(check(Num::Add(Num::Add(Num::Zero, Num::Zero), Num::Zero)) == 6);
-//    assert(check(Num::Mul(Num::Succ(Num::Zero), Num::Succ(Num::Zero))) == 7);
-//}
+fn check_basic(a: Num) -> int {
+    match a {
+        Num::Zero            => {return 1;},
+        Num::Succ(Num::Zero) => {return 2;},
+        Num::Succ(x)         => {return 3;},
+        x                    => {return 4;},
+    };
+}
+
+pub fn test_basic() {
+    assert(check_basic(Num::Zero) == 1);
+    assert(check_basic(Num::Succ(Num::Zero)) == 2);
+    assert(check_basic(Num::Succ(Num::Succ(Num::Zero))) == 3);
+    assert(check_basic(Num::Add(Num::Zero, Num::Zero)) == 4);
+}
+
+fn eval_num(num: Num) -> int {
+    match num {
+        Num::Zero      => {return 0;},
+        Num::Succ(x)   => {return eval_num(x) + 1;},
+        Num::Add(x, y) => {return eval_num(x) + eval_num(y);},
+        Num::Mul(x, y) => {return eval_num(x) * eval_num(y);},
+    };
+}
+
+pub fn test_bindings() {
+    let zero = Num::Zero;
+    let one = Num::Succ(zero);
+    let two = Num::Succ(one);
+
+    assert(eval_num(zero) == 0);
+    assert(eval_num(one) == 1);
+    assert(eval_num(two) == 2);
+    assert(eval_num(Num::Add(one, two)) == 3);
+    assert(eval_num(Num::Mul(one, two)) == 2);
+    assert(eval_num(Num::Mul(Num::Succ(two), two)) == 6);
+}
+
+fn check_jacobs_example(a: Num) -> int {
+    match a {
+        Num::Add(Num::Zero, Num::Zero) => {return 1;},
+        Num::Mul(Num::Zero, x)         => {return 2;},
+        Num::Add(Num::Succ(x), y)      => {return 3;},
+        Num::Mul(x, Num::Zero)         => {return 4;},
+        Num::Mul(Num::Add(x, y), z)    => {return 5;},
+        Num::Add(x, Num::Zero)         => {return 6;},
+        x                              => {return 7;},
+    };
+}
+
+pub fn test_jacobs_example() {
+    let check = check_jacobs_example;
+    assert(check(Num::Add(Num::Zero, Num::Zero)) == 1);
+    assert(check(Num::Mul(Num::Zero, Num::Zero)) == 2);
+    assert(check(Num::Add(Num::Succ(Num::Zero), Num::Zero)) == 3);
+    assert(check(Num::Mul(Num::Succ(Num::Zero), Num::Zero)) == 4);
+    assert(check(Num::Mul(Num::Add(Num::Zero, Num::Zero), Num::Succ(Num::Zero))) == 5);
+    assert(check(Num::Add(Num::Add(Num::Zero, Num::Zero), Num::Zero)) == 6);
+    assert(check(Num::Mul(Num::Succ(Num::Zero), Num::Succ(Num::Zero))) == 7);
+}
 
 struct Single<T> {
     pub value: T,

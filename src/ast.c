@@ -264,12 +264,6 @@ static void dump_type(Printer *P, struct AstType *type)
             dump_path(P, &t->path);
             break;
         }
-        case kAstPtrType: {
-            struct AstPtrType *t = AstGetPtrType(type);
-            DUMP_MSG(P, "*");
-            dump_type(P, t->type);
-            break;
-        }
         case kAstTupleType: {
             struct AstTupleType *t = AstGetTupleType(type);
             break;

@@ -87,7 +87,6 @@ enum UnOp {
     UN_NEG, // -
     UN_NOT, // !
     UN_BNOT, // ~
-    UN_DEREF, // *
 
     NUNOPS
 };
@@ -192,8 +191,6 @@ static enum UnOp get_unop(TokenKind kind)
             return UN_NOT;
         case '~':
             return UN_BNOT;
-        case '*':
-            return UN_DEREF;
         default:
             return NOT_UNOP;
     }
@@ -788,13 +785,6 @@ static struct AstType *parse_container_type(struct Lex *lex, paw_Bool is_strict)
     return NEW_NODE(lex, container_type, start, first, second);
 }
 
-static struct AstType *parse_ptr_type(struct Lex *lex, paw_Bool is_strict)
-{
-    struct SourceLoc const start = lex->loc;
-    struct AstType *type = parse_type(lex, is_strict);
-    return NEW_NODE(lex, ptr_type, start, type);
-}
-
 static struct AstType *parse_signature(struct Lex *lex);
 
 static struct AstType *parse_relaxed_type(struct Lex *lex)
@@ -813,8 +803,6 @@ static struct AstType *parse_type(struct Lex *lex, paw_Bool is_strict)
         return parse_paren_type(lex, is_strict);
     } else if (test_next(lex, '[')) {
         return parse_container_type(lex, is_strict);
-    } else if (test_next(lex, '*')) {
-        return parse_ptr_type(lex, is_strict);
     } else if (test_next(lex, TK_FN)) {
         return parse_signature(lex);
     }
@@ -1746,7 +1734,7 @@ static void enum_body(struct Lex *lex, struct SourceLoc start, struct AstTypeLis
         PARSE_ERROR(lex, empty_enumeration, start);
 }
 
-static struct AstDecl *enum_decl(struct Lex *lex, paw_Bool is_pub)
+static struct AstDecl *enum_decl(struct Lex *lex, paw_Bool is_pub, paw_Bool is_inline)
 {
     skip(lex); // 'enum' token
     struct SourceLoc start = lex->loc;
@@ -1757,7 +1745,7 @@ static struct AstDecl *enum_decl(struct Lex *lex, paw_Bool is_pub)
     struct AstDeclList *methods = AstDeclList_new(lex->ast);
     enum_body(lex, start, traits, variants, methods);
     return NEW_NODE(lex, adt_decl, start, ident, traits, generics,
-            variants, methods, is_pub, PAW_FALSE);
+            variants, methods, is_pub, PAW_FALSE, is_inline);
 }
 
 static struct AstDecl *struct_field(struct Lex *lex, paw_Bool is_pub)
@@ -1811,7 +1799,7 @@ static void struct_body(struct Lex *lex, struct AstTypeList *traits, struct AstD
         PARSE_ERROR(lex, empty_struct_body, start);
 }
 
-static struct AstDecl *struct_decl(struct Lex *lex, paw_Bool is_pub)
+static struct AstDecl *struct_decl(struct Lex *lex, paw_Bool is_pub, paw_Bool is_inline)
 {
     struct SourceLoc const start = lex->loc;
     skip(lex); // 'struct' token
@@ -1822,7 +1810,7 @@ static struct AstDecl *struct_decl(struct Lex *lex, paw_Bool is_pub)
     struct AstDeclList *methods = AstDeclList_new(lex->ast);
     struct_body(lex, traits, fields, methods);
     return NEW_NODE(lex, adt_decl, start, ident, traits, generics,
-            fields, methods, is_pub, PAW_TRUE);
+            fields, methods, is_pub, PAW_TRUE, is_inline);
 }
 
 static struct AstDecl *trait_decl(struct Lex *lex, paw_Bool is_pub)
@@ -1924,9 +1912,9 @@ static struct AstDecl *toplevel_item(struct Lex *lex)
         case TK_CONST:
             return const_decl(lex, annos, is_pub);
         case TK_ENUM:
-            return enum_decl(lex, is_pub);
+            return enum_decl(lex, is_pub, PAW_FALSE);
         case TK_STRUCT:
-            return struct_decl(lex, is_pub);
+            return struct_decl(lex, is_pub, PAW_FALSE);
         case TK_TRAIT:
             return trait_decl(lex, is_pub);
         case TK_TYPE:
@@ -1934,6 +1922,15 @@ static struct AstDecl *toplevel_item(struct Lex *lex)
         case TK_USE:
             ensure_not_pub(lex, start, is_pub);
             return use_decl(lex);
+        case TK_INLINE:
+            skip(lex); // skip 'inline' token
+            if (test(lex, TK_STRUCT)) {
+                return struct_decl(lex, is_pub, PAW_TRUE);
+            } else if (test(lex, TK_ENUM)) {
+                return enum_decl(lex, is_pub, PAW_TRUE);
+            } else {
+                PARSE_ERROR(lex, unexpected_symbol, start);
+            }
     }
 }
 
@@ -2070,7 +2067,7 @@ static char const kPrelude[] =
     "    }\n"
     "}\n"
 
-    "pub enum Option<T> {\n"
+    "pub inline enum Option<T> {\n"
     "    Some(T),\n"
     "    None,\n"
 
@@ -2092,7 +2089,7 @@ static char const kPrelude[] =
     "    #[extern] pub fn unwrap(self) -> T;\n"
     "}\n"
 
-    "pub enum Result<T, E> {\n"
+    "pub inline enum Result<T, E> {\n"
     "    Ok(T),\n"
     "    Err(E),\n"
 
@@ -2147,7 +2144,6 @@ static char const kPrelude[] =
     "    }\n"
     "}\n"
 
-    "#[extern] pub fn escape<T>(value: T) -> *T;\n"
     "#[extern] pub fn print(message: str);\n"
     "#[extern] pub fn panic(message: str);\n"
     "#[extern] pub fn assert(cond: bool);\n";

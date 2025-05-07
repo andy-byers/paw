@@ -790,6 +790,11 @@ static void code_set_field(struct MirVisitor *V, struct MirSetField *x)
     code_ABC(fs, op, REG(x->object.r), x->index, REG(x->value.r));
 }
 
+static int sizeof_type(struct Generator *G, IrType *type)
+{
+    return ir_is_boxed(G->C, type) ? 1 : pawIr_compute_layout(G->C, type).size;
+}
+
 // Determine the unique policy number for the given type of map
 static unsigned determine_map_policy(struct Generator *G, struct IrType *type)
 {
@@ -805,8 +810,8 @@ static unsigned determine_map_policy(struct Generator *G, struct IrType *type)
     ItemId const equals = type2def(G, IrTypeList_first(TraitOwnerList_get(*powners, TRAIT_EQUALS)));
     ItemId const hash = type2def(G, IrTypeList_first(TraitOwnerList_get(*powners, TRAIT_HASH)));
     PolicyList_push(G, G->policies, (struct PolicyInfo){
-                                        .key_size = pawIr_compute_layout(G->C, key).size,
-                                        .value_size = pawIr_compute_layout(G->C, value).size,
+                                        .key_size = sizeof_type(G, key),
+                                        .value_size = sizeof_type(G, value),
                                         .equals = RTTI_DEF(ENV(G), equals)->func.vid,
                                         .hash = RTTI_DEF(ENV(G), hash)->func.vid,
                                     });

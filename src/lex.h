@@ -63,6 +63,7 @@ enum MultiChar {
     TK_STRUCT,
     TK_TRAIT,
     TK_CONST,
+    TK_INLINE,
     TK_LET,
     TK_IF,
     TK_ELSE,

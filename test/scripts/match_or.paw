@@ -20,98 +20,94 @@ pub fn test_int() {
     assert(check(7) == 4);
 }
 
-pub fn test_emit_warnings() {
-    print("WARNING: recursive enum needs indirection to prevent infinite size\n");
+enum Enum {
+    A,
+    B,
+    C,
+    One(Enum),
+    Two(Enum, Enum),
+    Three(Enum, Enum, Enum),
 }
 
-//enum Enum {
-//    A,
-//    B,
-//    C,
-//    One(Enum),
-//    Two(Enum, Enum),
-//    Three(Enum, Enum, Enum),
-//}
-//
-//pub fn test_enum() {
-//    let check = |target| {
-//        match target {
-//            Enum::A | Enum::B | Enum::C => {return 1;},
-//
-//            Enum::One(Enum::A | Enum::B) => {return 2;},
-//            Enum::One(Enum::C) => {return 3;},
-//
-//            Enum::Two(Enum::A, Enum::A)
-//            | Enum::Two(Enum::A, Enum::B) => {return 4;},
-//
-//            Enum::Two(
-//                Enum::B | Enum::C, 
-//                Enum::B | Enum::C) 
-//            | Enum::Two(
-//                Enum::A | Enum::C, 
-//                Enum::A | Enum::C) => {return 5;},
-//
-//            _ => {return 6;},
-//        };
-//    };
-//
-//    assert(check(Enum::A) == 1);
-//    assert(check(Enum::B) == 1);
-//    assert(check(Enum::C) == 1);
-//
-//    assert(check(Enum::One(Enum::A)) == 2);
-//    assert(check(Enum::One(Enum::B)) == 2);
-//    assert(check(Enum::One(Enum::C)) == 3);
-//
-//    assert(check(Enum::Two(Enum::A, Enum::A)) == 4);
-//    assert(check(Enum::Two(Enum::A, Enum::B)) == 4);
-//
-//    assert(check(Enum::Two(Enum::B, Enum::B)) == 5);
-//    assert(check(Enum::Two(Enum::B, Enum::C)) == 5);
-//    assert(check(Enum::Two(Enum::C, Enum::B)) == 5);
-//    assert(check(Enum::Two(Enum::C, Enum::C)) == 5);
-//    assert(check(Enum::Two(Enum::A, Enum::C)) == 5);
-//    assert(check(Enum::Two(Enum::C, Enum::A)) == 5);
-//
-//    assert(check(Enum::Two(Enum::B, Enum::A)) == 6);
-//}
-//
-//fn eval_enum(target: Enum) -> str {
-//    match target {
-//        Enum::A => {return 'a';},
-//        Enum::B => {return 'b';},
-//        Enum::C => {return 'c';},
-//        Enum::One(x) => {return '1(' + eval_enum(x) + ')';},
-//        Enum::Two(x, y) => {return '2(' + eval_enum(x) + eval_enum(y) + ')';},
-//        Enum::Three(x, y, z) => {return '3(' + eval_enum(x) + eval_enum(y) + eval_enum(z) + ')';},
-//    };
-//}
-//
-//pub fn test_enum_bindings() {
-//    let check = |target| {
-//        match target {
-//            Enum::Two(x, Enum::A)
-//            | Enum::Two(x, Enum::B) 
-//            | Enum::Two(x, Enum::C) => {return eval_enum(x);},
-//
-//            Enum::Three(x, Enum::A, Enum::A) 
-//            | Enum::Three(Enum::B, x, Enum::B) 
-//            | Enum::Three(Enum::C, Enum::C, x) => {return eval_enum(x);},
-//
-//            _ => {return '_';},
-//        };
-//    };
-//
-//    assert(check(Enum::A) == '_');
-//    assert(check(Enum::One(Enum::A)) == '_');
-//
-//    assert(check(Enum::Two(Enum::A, Enum::A)) == 'a');
-//    assert(check(Enum::Two(Enum::B, Enum::C)) == 'b');
-//
-//    assert(check(Enum::Three(Enum::B, Enum::A, Enum::A)) == 'b');
-//    assert(check(Enum::Three(Enum::B, Enum::C, Enum::B)) == 'c');
-//    assert(check(Enum::Three(Enum::C, Enum::C, Enum::A)) == 'a');
-//}
+pub fn test_enum() {
+    let check = |target| {
+        match target {
+            Enum::A | Enum::B | Enum::C => {return 1;},
+
+            Enum::One(Enum::A | Enum::B) => {return 2;},
+            Enum::One(Enum::C) => {return 3;},
+
+            Enum::Two(Enum::A, Enum::A)
+            | Enum::Two(Enum::A, Enum::B) => {return 4;},
+
+            Enum::Two(
+                Enum::B | Enum::C, 
+                Enum::B | Enum::C) 
+            | Enum::Two(
+                Enum::A | Enum::C, 
+                Enum::A | Enum::C) => {return 5;},
+
+            _ => {return 6;},
+        };
+    };
+
+    assert(check(Enum::A) == 1);
+    assert(check(Enum::B) == 1);
+    assert(check(Enum::C) == 1);
+
+    assert(check(Enum::One(Enum::A)) == 2);
+    assert(check(Enum::One(Enum::B)) == 2);
+    assert(check(Enum::One(Enum::C)) == 3);
+
+    assert(check(Enum::Two(Enum::A, Enum::A)) == 4);
+    assert(check(Enum::Two(Enum::A, Enum::B)) == 4);
+
+    assert(check(Enum::Two(Enum::B, Enum::B)) == 5);
+    assert(check(Enum::Two(Enum::B, Enum::C)) == 5);
+    assert(check(Enum::Two(Enum::C, Enum::B)) == 5);
+    assert(check(Enum::Two(Enum::C, Enum::C)) == 5);
+    assert(check(Enum::Two(Enum::A, Enum::C)) == 5);
+    assert(check(Enum::Two(Enum::C, Enum::A)) == 5);
+
+    assert(check(Enum::Two(Enum::B, Enum::A)) == 6);
+}
+
+fn eval_enum(target: Enum) -> str {
+    match target {
+        Enum::A => {return 'a';},
+        Enum::B => {return 'b';},
+        Enum::C => {return 'c';},
+        Enum::One(x) => {return '1(' + eval_enum(x) + ')';},
+        Enum::Two(x, y) => {return '2(' + eval_enum(x) + eval_enum(y) + ')';},
+        Enum::Three(x, y, z) => {return '3(' + eval_enum(x) + eval_enum(y) + eval_enum(z) + ')';},
+    };
+}
+
+pub fn test_enum_bindings() {
+    let check = |target| {
+        match target {
+            Enum::Two(x, Enum::A)
+            | Enum::Two(x, Enum::B) 
+            | Enum::Two(x, Enum::C) => {return eval_enum(x);},
+
+            Enum::Three(x, Enum::A, Enum::A) 
+            | Enum::Three(Enum::B, x, Enum::B) 
+            | Enum::Three(Enum::C, Enum::C, x) => {return eval_enum(x);},
+
+            _ => {return '_';},
+        };
+    };
+
+    assert(check(Enum::A) == '_');
+    assert(check(Enum::One(Enum::A)) == '_');
+
+    assert(check(Enum::Two(Enum::A, Enum::A)) == 'a');
+    assert(check(Enum::Two(Enum::B, Enum::C)) == 'b');
+
+    assert(check(Enum::Three(Enum::B, Enum::A, Enum::A)) == 'b');
+    assert(check(Enum::Three(Enum::B, Enum::C, Enum::B)) == 'c');
+    assert(check(Enum::Three(Enum::C, Enum::C, Enum::A)) == 'a');
+}
 
 pub fn test_tuple_bindings() {
     let check = |target| {

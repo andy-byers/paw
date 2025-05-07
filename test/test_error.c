@@ -410,6 +410,9 @@ static void test_struct_error(void)
     test_compiler_status(E_NOT_A_METHOD, "struct_not_a_method", "struct S {pub fn f(s: Self) {}}", "let x = S; x.f();");
     test_compiler_status(E_INCOMPATIBLE_TYPES, "struct_invalid_self", "struct S {pub fn f(self: int) {}}", "");
     test_compiler_status(E_INCOMPATIBLE_TYPES, "struct_invalid_self_poly", "struct S<A, B> {fn f(self: S<B, A>) {}}", "");
+
+    test_compiler_status(E_INFINITE_SIZE_OBJECT, "struct_infinite_size", "inline struct S{pub x: Option<S>}", "let x = S{x: Option::None};");
+    test_compiler_status(E_INFINITE_SIZE_OBJECT, "struct_infinite_size_2", "inline struct S{pub x: Option<S2>} inline struct S2{pub x: Option<S>}", "let x = S{x: Option::None};");
 }
 
 static void test_enum_error(void)
@@ -424,8 +427,8 @@ static void test_enum_error(void)
     test_compiler_status(E_INCOMPATIBLE_TYPES, "variant_wrong_field_type", "enum A {X(int)}", "let a = A::X(1.0);");
     test_compiler_status(E_EXPECTED_FIELD_SELECTOR, "enum_requires_pattern_matching", "enum E{X(int)}", "let x = E::X(1); let y = x.0;");
 
-    test_compiler_status(E_INFINITE_SIZE_OBJECT, "enum_infinite_size", "enum E{X(Option<E>)}", "let x = E::X(Option::None);");
-    test_compiler_status(E_INFINITE_SIZE_OBJECT, "enum_infinite_size_2", "enum E{X(Option<E2>)} enum E2{X(Option<E>)}", "let x = E::X(Option::None);");
+    test_compiler_status(E_INFINITE_SIZE_OBJECT, "enum_infinite_size", "inline enum E{X(Option<E>)}", "let x = E::X(Option::None);");
+    test_compiler_status(E_INFINITE_SIZE_OBJECT, "enum_infinite_size_2", "inline enum E{X(Option<E2>)} inline enum E2{X(Option<E>)}", "let x = E::X(Option::None);");
 
     // boxing the enum adds the necessary indirection to give the object a finite size
     test_compiler_status(PAW_OK, "enum_finite_size", "struct P<T> {v: T} enum E{X(Option<P<E>>)}", "let x = E::X(Option::None);");

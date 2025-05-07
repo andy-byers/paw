@@ -112,11 +112,12 @@ static struct IrLayout compute_outer_layout(struct Compiler *C, IrType *type)
 {
     if (IrIsTuple(type)) {
         return compute_tuple_layout(C, IrGetTuple(type));
+    } else if (ir_is_boxed(C, type) || !IrIsAdt(type)) {
+        return compute_scalar_layout(C);
     } else if (is_enum(C, type)) {
         return compute_enum_layout(C, IrGetAdt(type));
     } else {
-        // all other types are either boxed or scalar
-        return compute_scalar_layout(C);
+        return compute_struct_layout(C, IrGetAdt(type));
     }
 }
 

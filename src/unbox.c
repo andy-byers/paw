@@ -124,7 +124,13 @@ static paw_Bool is_composite(struct Unboxer *U, IrType *type)
     // TODO: just to make sure type has finite size
     pawIr_compute_layout(U->C, type);
 
-    return IrIsTuple(type) || (IrIsAdt(type) && !IS_BASIC_TYPE(pawP_type2code(U->C, type)));
+    if (IrIsTuple(type))
+        return PAW_TRUE;
+    if (!IrIsAdt(type))
+        return PAW_FALSE;
+
+    struct IrAdtDef *def = pawIr_get_adt_def(U->C, IR_TYPE_DID(type));
+    return def->is_inline;
 }
 
 static IrType *builtin_type(struct Unboxer *U, enum BuiltinKind kind)
@@ -694,17 +700,15 @@ static void unbox_setupvalue(struct Unboxer *U, struct MirSetUpvalue *x)
 
 static void unbox_aggregate(struct Unboxer *U, struct MirAggregate *x)
 {
-    // TODO
-//    struct Mir *mir = U->fs->mir;
-//    struct MirRegisterData *data = mir_reg_data(mir, x->output.r);
-//    struct IrLayout layout = pawIr_compute_layout(U->C, data->type);
-//    if (layout.is_boxed) {
-//        struct MemoryGroup output = get_registers(U, x->output.r, -1);
-//        paw_assert(output.count == 1);
-//        struct MirPlace const r = PLACE(output.base);
-//        NEW_INSTR(U, aggregate, x->loc, x->nfields, r);
-//        return;
-//    }
+    struct Mir *mir = U->fs->mir;
+    struct MirRegisterData *data = mir_reg_data(mir, x->output.r);
+    if (!is_composite(U, data->type)) {
+        struct MemoryGroup output = get_registers(U, x->output.r, -1);
+        paw_assert(output.count == 1);
+        struct MirPlace const r = PLACE(output.base);
+        NEW_INSTR(U, aggregate, x->loc, x->nfields, r);
+        return;
+    }
 
     struct MemoryGroup output = get_registers(U, x->output.r, -1);
     for (int i = 0; i < output.count; ++i) {

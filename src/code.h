@@ -60,7 +60,6 @@ enum UnaryOp {
     UNARY_NEG,
     UNARY_NOT,
     UNARY_BNOT,
-    UNARY_DEREF,
 };
 
 // ORDER BinaryOp
