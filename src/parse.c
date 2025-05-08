@@ -9,6 +9,10 @@
 #include "error.h"
 #include "map.h"
 
+// TODO: consider moving this functionality to "lib.c" or something, really doesn't belong here...
+#include "os.h"
+#include "lib.h"
+
 #define PARSE_ERROR(X_, Kind_, ...) pawErr_##Kind_((X_)->C, (X_)->modname, __VA_ARGS__)
 #define LIMIT_ERROR(x, start, what, limit) PARSE_ERROR(x, too_many_elements, start, what, limit)
 
@@ -1943,233 +1947,6 @@ static struct AstDeclList *toplevel_items(struct Lex *lex, struct AstDeclList *l
     return list;
 }
 
-// TODO: someday, #embed should be used for this... once C23 support is better
-// TODO: defaulted trait methods: Equals::ne, Compare::gt, and Compare::ge
-// TODO: should Equals and Compare be generic?
-static char const kPrelude[] =
-    "pub trait Hash {\n"
-    "    fn hash(self) -> int;\n"
-    "}\n"
-
-    "pub trait Equals {\n"
-    "    fn eq(self, rhs: Self) -> bool;\n"
-    "}\n"
-
-    "pub trait Compare {\n"
-    "    fn lt(self, rhs: Self) -> bool;\n"
-    "    fn le(self, rhs: Self) -> bool;\n"
-    "}\n"
-
-    "pub trait Increment {\n"
-    "    fn incremented(self) -> Self;\n"
-    "}\n"
-
-    "pub trait Iterate<I: Advance<T>, T> {\n"
-    "    fn iterator(self) -> I;\n"
-    "}\n"
-
-    "pub trait Advance<T> {\n"
-    "    fn next(self) -> Option<T>;\n"
-    "}\n"
-
-    "pub struct unit: Hash + Equals {\n"
-    "    pub fn hash(self) -> int { 0 }\n"
-    "    pub fn eq(self, rhs: Self) -> bool { true }\n"
-    "}\n"
-
-    "pub struct bool: Hash + Equals + Compare {\n"
-    "    #[extern] pub fn to_string(self) -> str;\n"
-    "    pub fn hash(self) -> int { self as int }\n"
-    "    pub fn eq(self, rhs: Self) -> bool { self == rhs }\n"
-    "    pub fn lt(self, rhs: Self) -> bool { self as int < rhs as int }\n"
-    "    pub fn le(self, rhs: Self) -> bool { self as int <= rhs as int }\n"
-    "}\n"
-
-    "pub struct int: Hash + Equals + Compare + Increment {\n"
-    "    #[extern] pub fn to_string(self) -> str;\n"
-    "    pub fn hash(self) -> int { self }\n"
-    "    pub fn eq(self, rhs: Self) -> bool { self == rhs }\n"
-    "    pub fn lt(self, rhs: Self) -> bool { self < rhs }\n"
-    "    pub fn le(self, rhs: Self) -> bool { self <= rhs }\n"
-    "    pub fn incremented(self) -> Self { self + 1 }\n"
-    "}\n"
-
-    "pub struct float: Hash + Equals + Compare {\n"
-    "    #[extern] pub fn to_string(self) -> str;\n"
-    "    #[extern] pub fn hash(self) -> int;\n"
-    "    pub fn eq(self, rhs: Self) -> bool { self == rhs }\n"
-    "    pub fn lt(self, rhs: Self) -> bool { self < rhs }\n"
-    "    pub fn le(self, rhs: Self) -> bool { self <= rhs }\n"
-    "}\n"
-
-    "pub struct str: Hash + Equals + Compare {\n"
-    "    #[extern] pub fn parse_int(self, base: int) -> int;\n"
-    "    #[extern] pub fn parse_float(self) -> float;\n"
-    "    #[extern] pub fn split(self, sep: str) -> [str];\n"
-    "    #[extern] pub fn join(self, seq: [str]) -> str;\n"
-    "    #[extern] pub fn find(self, target: str) -> int;\n"
-    "    #[extern] pub fn starts_with(self, prefix: str) -> bool;\n"
-    "    #[extern] pub fn ends_with(self, suffix: str) -> bool;\n"
-    "    #[extern] pub fn hash(self) -> int;\n"
-    "    pub fn to_string(self) -> str { self }\n"
-    "    pub fn eq(self, rhs: Self) -> bool { self == rhs }\n"
-    "    pub fn lt(self, rhs: Self) -> bool { self < rhs }\n"
-    "    pub fn le(self, rhs: Self) -> bool { self <= rhs }\n"
-    "}\n"
-
-    "pub struct ListIterator<T>: Advance<T> {\n"
-    "    list: [T],\n"
-    "    index: int,\n"
-    "    pub fn new(list: [T]) -> Self {\n"
-    "        Self{list, index: 0}\n"
-    "    }\n"
-    "    pub fn next(self) -> Option<T> {\n"
-    "        if self.index < #self.list {\n"
-    "            let i = self.index;\n"
-    "            self.index = i + 1;\n"
-    "            Option::Some(self.list[i])\n"
-    "        } else {\n"
-    "            Option::None\n"
-    "        }\n"
-    "    }\n"
-    "}\n"
-
-    "pub struct List<T>: Iterate<ListIterator<T>, T> {\n"
-    "    #[extern] pub fn length(self) -> int;\n"
-    "    #[extern] pub fn get(self, index: int) -> Option<T>;\n"
-    "    #[extern] pub fn set(self, index: int, value: T);\n"
-    "    #[extern] pub fn push(self, value: T) -> Self;\n"
-    "    #[extern] pub fn insert(self, index: int, value: T) -> Self;\n"
-    "    #[extern] pub fn remove(self, index: int) -> T;\n"
-    "    #[extern] pub fn pop(self) -> T;\n"
-    "    pub fn iterator(self) -> ListIterator<T> {\n"
-    "        ListIterator::new(self)\n"
-    "    }\n"
-    "}\n"
-
-    "pub struct MapIterator<K, V>: Advance<K> {\n"
-    "    map: [K: V],\n"
-    "    index: int,\n"
-    "    pub fn new(map: [K: V]) -> Self {\n"
-    "        Self{map, index: -1}\n"
-    "    }\n"
-    "    #[extern] pub fn next(self) -> Option<K>;\n"
-    "}\n"
-
-    "pub struct Map<K: Hash + Equals, V>: Iterate<MapIterator<K, V>, K> {\n"
-    "    #[extern] pub fn length(self) -> int;\n"
-    "    #[extern] pub fn get(self, key: K) -> Option<V>;\n"
-    "    #[extern] pub fn set(self, key: K, value: V);\n" // TODO: -> Option<V>;\n"
-    "    #[extern] pub fn get_or(self, key: K, default: V) -> V;\n"
-    "    #[extern] pub fn erase(self, key: K) -> Self;\n"
-    "    pub fn iterator(self) -> MapIterator<K, V> {\n"
-    "        MapIterator::new(self)\n"
-    "    }\n"
-    "}\n"
-
-    "pub inline enum Option<T> {\n"
-    "    Some(T),\n"
-    "    None,\n"
-
-    "    pub fn is_some(self) -> bool {\n"
-    "        !self.is_none()\n"
-    "    }\n"
-    "    pub fn is_none(self) -> bool {\n"
-    "        match self {\n"
-    "            Option::None => true,\n"
-    "            _ => false,\n"
-    "        }\n"
-    "    }\n"
-    "    pub fn unwrap_or(self, value: T) -> T {\n"
-    "        match self {\n"
-    "            Option::Some(t) => t,\n"
-    "            Option::None => value,\n"
-    "        }\n"
-    "    }\n"
-    "    #[extern] pub fn unwrap(self) -> T;\n"
-    "}\n"
-
-    "pub inline enum Result<T, E> {\n"
-    "    Ok(T),\n"
-    "    Err(E),\n"
-
-    "    pub fn is_ok(self) -> bool {\n"
-    "        !self.is_err()\n"
-    "    }\n"
-    "    pub fn is_err(self) -> bool {\n"
-    "        match self {\n"
-    "            Result::Err(_) => true,\n"
-    "            _ => false,\n"
-    "        }\n"
-    "    }\n"
-    "    pub fn unwrap_or(self, value: T) -> T {\n"
-    "        match self {\n"
-    "            Result::Ok(t) => t,\n"
-    "            _ => value,\n"
-    "        }\n"
-    "    }\n"
-    "    #[extern] pub fn unwrap_err(self) -> E;\n"
-    "    #[extern] pub fn unwrap(self) -> T;\n"
-    "}\n"
-
-    "pub struct RangeIterator<T: Compare + Increment>: Advance<T> {\n"
-    "    end: T,\n"
-    "    iter: T,\n"
-    "    pub fn new(range: Range<T>) -> Self {\n"
-    "        Self{iter: range.start, end: range.end}\n"
-    "    }\n"
-    "    pub fn next(self) -> Option<T> {\n"
-    "        let iter = self.iter;\n"
-    "        if iter.lt(self.end) {\n"
-    "            self.iter = self.iter.incremented();\n"
-    "            Option::Some(iter)\n"
-    "        } else {\n"
-    "            Option::None\n"
-    "        }\n"
-    "    }\n"
-    "}\n"
-
-    // TODO: "T: Increment" requirement is overly restrictive. Exists so that
-    //       "Range<int>" can be used in "for..in" loops. Should figure out a
-    //       way to do "conditional conformances" (Swift parlance) so that
-    //       "Iterate" can be implemented only for "T"s that are incrementable.
-    "pub struct Range<T: Compare + Increment>: Iterate<RangeIterator<T>, T> {\n"
-    "    pub start: T,\n"
-    "    pub end: T,\n"
-    "    pub fn contains(self, value: T) -> bool {\n"
-    "        self.start.le(value) && value.lt(self.end)\n"
-    "    }\n"
-    "    pub fn iterator(self) -> RangeIterator<T> {\n"
-    "        RangeIterator::new(self)\n"
-    "    }\n"
-    "}\n"
-
-    "#[extern] pub fn print(message: str);\n"
-    "#[extern] pub fn panic(message: str);\n"
-    "#[extern] pub fn assert(cond: bool);\n";
-
-struct PreludeReader {
-    size_t size;
-};
-
-char const *prelude_reader(paw_Env *P, void *ud, size_t *size)
-{
-    PAW_UNUSED(P);
-    struct PreludeReader *pr = ud;
-    *size = pr->size;
-    pr->size = 0;
-    return kPrelude;
-}
-
-static void parse_prelude(struct Lex *lex)
-{
-    struct Ast *ast = lex->ast;
-    struct PreludeReader reader = {PAW_LENGTHOF(kPrelude)};
-    pawX_set_source(lex, prelude_reader, &reader);
-    toplevel_items(lex, ast->items);
-    check(lex, TK_END);
-}
-
 static void skip_hashbang(struct Lex *lex)
 {
     // Special case: don't advance past the '#', since it might be the start of
@@ -2242,13 +2019,40 @@ struct Ast *pawP_parse_module(struct Compiler *C, String *modname, paw_Reader in
     return ast;
 }
 
-struct Ast *pawP_parse_prelude(struct Compiler *C)
-{
-    struct Lex lex;
-    init_lexer(C, C->ast_prelude, &lex);
+struct PreludeReader {
+    struct LoaderState state;
+    char data[512];
+    File *file;
+    paw_Bool err;
+};
 
-    parse_prelude(&lex);
+static char const *prelude_reader(paw_Env *P, void *ud, size_t *psize)
+{
+    struct PreludeReader *reader = ud;
+    size_t const zchunk = sizeof(reader->data);
+    *psize = pawO_read(P, reader->file, reader->data, zchunk);
+    // TODO: don't throw errors in os.c    if (*psize != zchunk) reader->err = ferror(reader->file);
+    return *psize > 0 ? reader->data : NULL;
+}
+
+void pawP_parse_prelude(struct Compiler *C)
+{
+    paw_Env *P = ENV(C);
+    struct PreludeReader reader = {
+        .file = pawO_new_file(P),
+        .state.f = prelude_reader,
+    };
+    if (pawO_open(reader.file, PAW_PRELUDE_PATH, "r") != 0)
+        pawO_error(P);
+
+    struct Lex lex;
+    struct Ast *ast = C->ast_prelude;
+    init_lexer(C, ast, &lex);
+
+    pawX_set_source(&lex, prelude_reader, &reader);
+    toplevel_items(&lex, ast->items);
+    check(&lex, TK_END);
+
     pawP_pool_free(C, lex.pool);
-    ast_callback(C, lex.ast);
-    return lex.ast;
+    ast_callback(C, ast);
 }

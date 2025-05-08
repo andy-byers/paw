@@ -906,8 +906,10 @@ static void dump_decl(struct Printer *P, struct HirDecl *decl)
             DUMP_STR(P, d->ident.name);
             DUMP_CSTR(P, ": ");
             dump_type(P, d->tag);
-            DUMP_CSTR(P, " = ");
-            dump_expr(P, d->init);
+            if (d->init != NULL) {
+                DUMP_CSTR(P, " = ");
+                dump_expr(P, d->init);
+            }
             break;
         }
         case kHirTraitDecl: {

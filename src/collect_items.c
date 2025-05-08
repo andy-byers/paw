@@ -578,7 +578,6 @@ static void collect_adt_decl(struct ItemCollector *X, struct HirAdtDecl *d)
                  collect_field_types(X, d->fields, names);
                  collect_method_decls(X, d->methods, names, PAW_FALSE);
                  StringMap_delete(X->C, names););
-    pawP_validate_adt_traits(X->C, d);
 
     leave_block(X);
 }
@@ -641,6 +640,13 @@ static void collect_other_types(struct ItemCollector *X, struct Hir *hir)
                 break;
             default:
                 PAW_UNREACHABLE();
+        }
+    }
+
+    K_LIST_FOREACH(hir->items, pdecl) {
+        if (HirIsAdtDecl(*pdecl)) {
+            struct HirAdtDecl *d = HirGetAdtDecl(*pdecl);
+            pawP_validate_adt_traits(X->C, d);
         }
     }
 }

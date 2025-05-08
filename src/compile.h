@@ -297,7 +297,7 @@ struct IrType *pawP_lookup_trait(struct Compiler *C, struct ModuleInfo *m, struc
 void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, char const *modname);
 void pawP_teardown(paw_Env *P, struct DynamicMem *dm);
 
-struct Ast *pawP_parse_prelude(struct Compiler *C);
+void pawP_parse_prelude(struct Compiler *C);
 struct Ast *pawP_parse_module(struct Compiler *C, String *modname, paw_Reader input, void *ud);
 
 void pawP_validate_adt_traits(struct Compiler *C, struct HirAdtDecl *d);

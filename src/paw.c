@@ -345,7 +345,7 @@ static paw_Env *load_source(size_t heap_size)
         paw_push_string(P, CHUNKNAME);
         status = pawL_load_chunk(P, CHUNKNAME, s_opt.e);
     } else if (s_pathname != NULL) {
-        paw_push_string(P, s_pathname);
+        paw_push_string(P, s_pathname); // TODO: why??? already providing s_pathname to pawL_load_file...
         status = pawL_load_file(P, s_pathname);
     } else {
         // TODO: interactive mode or read from stdin

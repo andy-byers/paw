@@ -815,6 +815,7 @@ int pawL_load_file(paw_Env *P, char const *pathname)
         int const status = paw_load(P, file_reader, modname, &fr);
         if (!fr.err)
             return status;
+        // TODO: just return status??
     }
     paw_push_string(P, strerror(errno));
     return PAW_ESYSTEM;

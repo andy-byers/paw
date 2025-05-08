@@ -1,0 +1,198 @@
+// prelude.paw
+
+pub trait Hash {
+    fn hash(self) -> int;
+}
+
+pub trait Equals {
+    fn eq(self, rhs: Self) -> bool;
+}
+
+pub trait Compare {
+    fn lt(self, rhs: Self) -> bool;
+    fn le(self, rhs: Self) -> bool;
+}
+
+pub trait Increment {
+    fn incremented(self) -> Self;
+}
+
+pub trait Iterate<I: Advance<T>, T> {
+    fn iterator(self) -> I;
+}
+
+pub trait Advance<T> {
+    fn next(self) -> Option<T>;
+}
+
+pub struct unit: Hash + Equals {
+    pub fn hash(self) -> int { 0 }
+    pub fn eq(self, rhs: Self) -> bool { true }
+}
+
+pub struct bool: Hash + Equals + Compare {
+    #[extern] pub fn to_string(self) -> str;
+    pub fn hash(self) -> int { self as int }
+    pub fn eq(self, rhs: Self) -> bool { self == rhs }
+    pub fn lt(self, rhs: Self) -> bool { self as int < rhs as int }
+    pub fn le(self, rhs: Self) -> bool { self as int <= rhs as int }
+}
+
+pub struct int: Hash + Equals + Compare + Increment {
+    #[extern] pub fn to_string(self) -> str;
+    pub fn hash(self) -> int { self }
+    pub fn eq(self, rhs: Self) -> bool { self == rhs }
+    pub fn lt(self, rhs: Self) -> bool { self < rhs }
+    pub fn le(self, rhs: Self) -> bool { self <= rhs }
+    pub fn incremented(self) -> Self { self + 1 }
+}
+
+pub struct float: Hash + Equals + Compare {
+    #[extern] pub fn to_string(self) -> str;
+    #[extern] pub fn hash(self) -> int;
+    pub fn eq(self, rhs: Self) -> bool { self == rhs }
+    pub fn lt(self, rhs: Self) -> bool { self < rhs }
+    pub fn le(self, rhs: Self) -> bool { self <= rhs }
+}
+
+pub struct str: Hash + Equals + Compare {
+    #[extern] pub fn parse_int(self, base: int) -> int;
+    #[extern] pub fn parse_float(self) -> float;
+    #[extern] pub fn split(self, sep: str) -> [str];
+    #[extern] pub fn join(self, seq: [str]) -> str;
+    #[extern] pub fn find(self, target: str) -> int;
+    #[extern] pub fn starts_with(self, prefix: str) -> bool;
+    #[extern] pub fn ends_with(self, suffix: str) -> bool;
+    #[extern] pub fn hash(self) -> int;
+    pub fn to_string(self) -> str { self }
+    pub fn eq(self, rhs: Self) -> bool { self == rhs }
+    pub fn lt(self, rhs: Self) -> bool { self < rhs }
+    pub fn le(self, rhs: Self) -> bool { self <= rhs }
+}
+
+pub struct ListIterator<T>: Advance<T> {
+    list: [T],
+    index: int,
+    pub fn new(list: [T]) -> Self {
+        Self{list, index: 0}
+    }
+    pub fn next(self) -> Option<T> {
+        if self.index < #self.list {
+            let i = self.index;
+            self.index = i + 1;
+            Option::Some(self.list[i])
+        } else {
+            Option::None
+        }
+    }
+}
+
+pub struct List<T>: Iterate<ListIterator<T>, T> {
+    #[extern] pub fn length(self) -> int;
+    #[extern] pub fn get(self, index: int) -> Option<T>;
+    #[extern] pub fn set(self, index: int, value: T);
+    #[extern] pub fn push(self, value: T) -> Self;
+    #[extern] pub fn insert(self, index: int, value: T) -> Self;
+    #[extern] pub fn remove(self, index: int) -> T;
+    #[extern] pub fn pop(self) -> T;
+    pub fn iterator(self) -> ListIterator<T> {
+        ListIterator::new(self)
+    }
+}
+
+pub struct MapIterator<K, V>: Advance<K> {
+    map: [K: V],
+    index: int,
+    pub fn new(map: [K: V]) -> Self {
+        Self{map, index: -1}
+    }
+    #[extern] pub fn next(self) -> Option<K>;
+}
+
+pub struct Map<K: Hash + Equals, V>: Iterate<MapIterator<K, V>, K> {
+    #[extern] pub fn length(self) -> int;
+    #[extern] pub fn get(self, key: K) -> Option<V>;
+    #[extern] pub fn set(self, key: K, value: V); // TODO: -> Option<V>;
+    #[extern] pub fn get_or(self, key: K, default: V) -> V;
+    #[extern] pub fn erase(self, key: K) -> Self;
+    pub fn iterator(self) -> MapIterator<K, V> {
+        MapIterator::new(self)
+    }
+}
+
+pub inline enum Option<T> {
+    Some(T),
+    None,
+
+    pub fn is_some(self) -> bool {
+        !self.is_none()
+    }
+    pub fn is_none(self) -> bool {
+        match self {
+            Option::None => true,
+            _ => false,
+        }
+    }
+    pub fn unwrap_or(self, value: T) -> T {
+        match self {
+            Option::Some(t) => t,
+            Option::None => value,
+        }
+    }
+    #[extern] pub fn unwrap(self) -> T;
+}
+
+pub inline enum Result<T, E> {
+    Ok(T),
+    Err(E),
+
+    pub fn is_ok(self) -> bool {
+        !self.is_err()
+    }
+    pub fn is_err(self) -> bool {
+        match self {
+            Result::Err(_) => true,
+            _ => false,
+        }
+    }
+    pub fn unwrap_or(self, value: T) -> T {
+        match self {
+            Result::Ok(t) => t,
+            _ => value,
+        }
+    }
+    #[extern] pub fn unwrap_err(self) -> E;
+    #[extern] pub fn unwrap(self) -> T;
+}
+
+pub struct Range<T: Compare + Increment>: Iterate<RangeIterator<T>, T> {
+    pub start: T,
+    pub end: T,
+    pub fn contains(self, value: T) -> bool {
+        self.start.le(value) && value.lt(self.end)
+    }
+    pub fn iterator(self) -> RangeIterator<T> {
+        RangeIterator::new(self)
+    }
+}
+
+pub struct RangeIterator<T: Compare + Increment>: Advance<T> {
+    end: T,
+    iter: T,
+    pub fn new(range: Range<T>) -> Self {
+        Self{iter: range.start, end: range.end}
+    }
+    pub fn next(self) -> Option<T> {
+        let iter = self.iter;
+        if iter.lt(self.end) {
+            self.iter = self.iter.incremented();
+            Option::Some(iter)
+        } else {
+            Option::None
+        }
+    }
+}
+
+#[extern] pub fn print(message: str);
+#[extern] pub fn panic(message: str);
+#[extern] pub fn assert(cond: bool);
