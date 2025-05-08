@@ -4,17 +4,6 @@
 > See the [roadmap](#roadmap) to get an idea of where things are going.
 > Also see [known issues](#known-issues) for a list of known problems that will eventually be fixed.
 
-> NOTE: This branch is being used to implement escape analysis and pointers.
-> I really wanted value semantics to be the default for objects, hence the recent changes (unbox.c, etc.).
-> This brings with it 2 main difficulties: methods cannot modify the object through `self`, and recursive types are not allowed.
-> Both of these problems can be fixed by introducing pointers to the language.
-> Of course, pointers (to objects in registers) also present some difficulties: mainly, a pointed-to object could go out of scope leaving pointers dangling.
-> This is where escape analysis comes in: when a pointer to something "escapes" the current scope, then that object must be hoisted onto the heap.
-> This must be determined statically: if a pointer might escape at any point, the pointed-to object must be hoisted.
-> The analysis should be very conservative at first, since this will not cause incorrect behavior.
-> To start, I would say that any object that has its address taken should be escaped.
-> Better escape analysis rules can be determined later on.
-
 A cute little scripting language
 
 Paw is a high-level, statically-typed, embeddable scripting language.
@@ -29,6 +18,7 @@ It is designed to run on a virtual machine written in C.
 + Exhaustive pattern matching and sum types
 + Traits (interfaces checked at compile time)
 + Generics and generic bounds
++ Unboxed objects using "inline" keyword
 + Container literals (`[T]` and `[K: V]`)
 
 ## Examples
@@ -65,44 +55,35 @@ pub fn main() {
 ```
 
 ### Sum types
+Note that "inline" cannot be used on a recursive type as this would cause resulting objects to have a size of infinity (see [value types](#value-types)).
 ```paw
-// Enumerations are value types in Paw, meaning it is not possible to have a recursive
-// type without indirection. Otherwise, the type will have a size of infinity.
-// NOTE: "Box" is a hack to provide the necessary indirection (structures are reference types right now), but the goal is to have a limited form of (safe) pointers/references in the language itself.
-pub struct Box<T> {
-    pub v: T,
-
-    pub fn new(v: T) -> Self {
-        Self{v}
-    }
-}
-
 pub enum Expr {
     Zero,
-    Succ(Box<Expr>),
-    Add(Box<Expr>, Box<Expr>)
+    Succ(Expr),
+    Add(Expr, Expr)
 }
 
 pub fn eval(e: Expr) -> int {
     // match expressions must be exhaustive
     match e {
         Expr::Zero => 0,
-        Expr::Succ(x) => eval(x.v) + 1,
-        Expr::Add(x, y) => eval(x.v) + eval(y.v),
+        Expr::Succ(x) => eval(x) + 1,
+        Expr::Add(x, y) => eval(x) + eval(y),
     }
 }
 
 pub fn three() -> int {
     let zero = Expr::Zero;
-    let one = Expr::Succ(Box::new(zero));
-    let two = Expr::Add(Box::new(one), Box::new(one));
-    eval(Expr::Add(Box::new(one), Box::new(two)))
+    let one = Expr::Succ(zero);
+    let two = Expr::Add(one, one);
+    eval(Expr::Add(one, two))
 }
 ```
 
 ### Generics
-```paw
+Paw supports parametric polymorphism, a.k.a. generic type parameters.
 
+```paw
 // type aliases can accept type arguments
 type VecList2<T> = [(T, T)];
 
@@ -172,8 +153,28 @@ pub fn main() {
 }
 ```
 
+### Value types
+Structures and enumerations have reference semantics by default.
+The `inline` keyword can be used to give a type value semantics.
+Primitives (`int`, `float`, etc.) and tuples are always value types.
+Inline types can be used to reduce memory consumption in programs containing many small objects.
+They can also be used to implement "newtype" wrappers with no additional runtime overhead.
+```paw
+inline struct Data<T> {
+    pub value: T,
+}
+
+pub fn main() {
+    // "data" consists of exactly 3 integers stored directly in the activation frame
+    let data = Data{value: Data{value: (1, (2, 3))}};
+
+    // all fields are copied: "copy" is independent from "data"
+    let copy = data;
+}
+```
+
 ## Error handling
-Paw uses sum types (`Result<T, E>`) to express recoverable errors, e.g. "no such file or directory".
+Paw uses `Result<T, E>` to express a recoverable error, e.g. "no such file or directory".
 Runtime panics are issued for unrecoverable errors, e.g. "out of memory", an assertion failure, or an out-of-bounds element access.
 Panics cannot be caught inside Paw.
 A panic always stops execution at the location of the panic and causes the VM entrpoint function to return with an error.
@@ -199,21 +200,11 @@ A panic can also be caused by calling the `panic` builtin function.
 |1         |`= += -= *= /= %= &= |= ^= <<= >>=`|Assignment, operator assignment              |Right        |
 
 ## Roadmap
-+ [x] static, strong typing
-+ [x] special syntax for builtin containers (`[T]` and `[K: V]`)
-+ [x] type inference for polymorphic `fn` and `struct`
-+ [x] sum types/discriminated unions (`enum`)
-+ [x] product types (tuple)
-+ [x] custom garbage collector (using Boehm GC for now)
-+ [x] methods
-+ [x] module system and `use` keyword
-+ [x] type inference for polymorphic `enum`
-+ [x] exhaustive pattern matching (`match` construct)
-+ [x] more featureful `use` declarations: `use mod::*`, `use mod::specific_symbol`, `use mod as alias`, etc.
-+ [x] constant folding, constant propagation
-+ [x] traits (more like Swift protocols, maybe needs a different name)
-+ [x] integrate traits into stdlib (iterators, hash map keys, etc.)
-+ [x] `let` bindings/destructuring
++ [ ] allow "inline" receiver to be modified in method call (copy receiver back after return)
++ [ ] fix list/str slice operation (should use `Range`, `RangeTo`, etc.)
++ [ ] use `mut` to indicate mutability and make immutable the default for local variables
++ [ ] decide on and implement either RAII or "defer" for cleaning up resources
++ [ ] overflow checks for `paw_Int` operations during constant folding and inside VM
 + [ ] function inlining
 + [ ] refactor user-provided allocation interface to allow heap expansion
 

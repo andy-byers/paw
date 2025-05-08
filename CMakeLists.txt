@@ -16,6 +16,9 @@ endif()
 option(PAW_BuildFuzzers "Build the fuzz targets" Off)
 option(PAW_BuildTests "Build the tests" ${MAIN_PROJECT})
 
+# TODO: Install stdlib .paw files somewhere and use that path?
+set(PAW_PRELUDE_PATH "${CMAKE_SOURCE_DIR}/src/prelude.paw" CACHE STRING 
+    "Path to prelude module")
 set(PAW_STRESS 0 CACHE STRING 
     "Enable expensive checks (supports up to level 2)")
  
@@ -133,7 +136,8 @@ target_sources(paw
 target_include_directories(paw
     PUBLIC ${PAW_SOURCE_DIR})
 target_compile_definitions(paw
-    PUBLIC PAW_STRESS=${PAW_STRESS})
+    PUBLIC PAW_PRELUDE_PATH="${PAW_PRELUDE_PATH}"
+           PAW_STRESS=${PAW_STRESS})
 
 add_executable(pawc
     ${PAW_SOURCE_DIR}/paw.c)

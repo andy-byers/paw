@@ -176,6 +176,29 @@ pub struct Range<T: Compare + Increment>: Iterate<RangeIterator<T>, T> {
     }
 }
 
+pub struct RangeFrom<T: Compare + Increment>: Iterate<RangeFromIterator<T>, T> {
+    pub start: T,
+    pub fn contains(self, value: T) -> bool {
+        self.start.le(value)
+    }
+    pub fn iterator(self) -> RangeFromIterator<T> {
+        RangeFromIterator::new(self)
+    }
+}
+
+pub struct RangeTo<T: Compare + Increment> {
+    pub end: T,
+    pub fn contains(self, value: T) -> bool {
+        value.lt(self.end)
+    }
+}
+
+pub struct RangeFull<T: Compare + Increment> {
+    pub fn contains(self, value: T) -> bool {
+        true
+    }
+}
+
 pub struct RangeIterator<T: Compare + Increment>: Advance<T> {
     end: T,
     iter: T,
@@ -190,6 +213,18 @@ pub struct RangeIterator<T: Compare + Increment>: Advance<T> {
         } else {
             Option::None
         }
+    }
+}
+
+pub struct RangeFromIterator<T: Compare + Increment>: Advance<T> {
+    iter: T,
+    pub fn new(range: RangeFrom<T>) -> Self {
+        Self{iter: range.start}
+    }
+    pub fn next(self) -> Option<T> {
+        let iter = self.iter;
+        self.iter = self.iter.incremented();
+        Option::Some(iter)
     }
 }
 

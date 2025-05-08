@@ -360,6 +360,7 @@ static struct AstExpr *string_interp_expr(struct Lex *lex, struct SourceLoc star
     } while (test(lex, TK_STRING_EXPR_OPEN));
     check(lex, TK_STRING_TEXT);
     add_string_part(lex, parts, start, lex->t.value);
+    skip(lex); // skip string text
     return NEW_NODE(lex, string_expr, start, parts);
 }
 
@@ -390,15 +391,14 @@ static struct AstIdent parse_toplevel_ident(struct Lex *lex)
 }
 
 // TODO: accept source loc as arg
-static struct AstExpr *new_basic_lit(struct Lex *lex, Value value, paw_Type code)
+static struct AstExpr *new_basic_lit(struct Lex *lex, struct SourceLoc start, Value value, paw_Type code)
 {
-    struct SourceLoc start = lex->loc;
     return NEW_NODE(lex, basic_lit, start, value, code);
 }
 
 static struct AstExpr *unit_lit(struct Lex *lex)
 {
-    return new_basic_lit(lex, I2V(0), BUILTIN_UNIT);
+    return new_basic_lit(lex, lex->loc, I2V(0), BUILTIN_UNIT);
 }
 
 static struct AstType *unit_type(struct Lex *lex)
@@ -407,11 +407,11 @@ static struct AstType *unit_type(struct Lex *lex)
     return NEW_NODE(lex, tuple_type, lex->loc, types);
 }
 
-static struct AstExpr *emit_bool(struct Lex *lex, paw_Bool b)
+static struct AstExpr *emit_bool(struct Lex *lex, struct SourceLoc loc, paw_Bool b)
 {
     Value v;
     V_SET_BOOL(&v, b);
-    return new_basic_lit(lex, v, BUILTIN_BOOL);
+    return new_basic_lit(lex, loc, v, BUILTIN_BOOL);
 }
 
 static struct AstType *parse_type(struct Lex *lex, paw_Bool is_strict);
@@ -663,16 +663,16 @@ static struct AstExpr *literal_expr(struct Lex *lex)
     struct AstExpr *expr;
     switch (lex->t.kind) {
         case TK_TRUE:
-            expr = emit_bool(lex, PAW_TRUE);
+            expr = emit_bool(lex, loc, PAW_TRUE);
             break;
         case TK_FALSE:
-            expr = emit_bool(lex, PAW_FALSE);
+            expr = emit_bool(lex, loc, PAW_FALSE);
             break;
         case TK_INTEGER:
-            expr = new_basic_lit(lex, lex->t.value, BUILTIN_INT);
+            expr = new_basic_lit(lex, loc, lex->t.value, BUILTIN_INT);
             break;
         case TK_FLOAT:
-            expr = new_basic_lit(lex, lex->t.value, BUILTIN_FLOAT);
+            expr = new_basic_lit(lex, loc, lex->t.value, BUILTIN_FLOAT);
             break;
         case TK_STRING_TEXT:
             expr = string_expr(lex, loc, lex->t.value);
@@ -980,21 +980,10 @@ static struct AstExpr *index_expr(struct Lex *lex, struct AstExpr *target)
 {
     struct SourceLoc start = lex->loc;
     skip(lex); // '[' token
-    struct AstExpr *first = NULL;
-    if (!test(lex, ':'))
-        first = expr0(lex);
-
-    paw_Bool is_slice = PAW_FALSE;
-    struct AstExpr *second = NULL;
-    if (test_next(lex, ':')) {
-        paw_assert(PAW_FALSE); // TODO: use range expr. ("a[b..c]" instead of "a[b:c]")
-
-        is_slice = PAW_TRUE;
-        if (!test(lex, ']'))
-            second = expr0(lex);
-    }
+    struct AstExpr *index = expr0(lex);
     delim_next(lex, ']', '[', start);
-    return NEW_NODE(lex, index, start, target, first, second, is_slice);
+    return NEW_NODE(lex, index, start, target, index,
+            NULL, PAW_FALSE); // TODO: remove, use ranges for slices
 }
 
 static paw_Type parse_container_items(struct Lex *lex, struct AstExprList *items)
@@ -1281,70 +1270,51 @@ static struct AstExpr *match_expr(struct Lex *lex)
 static struct AstExpr *primary_expr(struct Lex *lex)
 {
     struct SourceLoc const loc = lex->loc;
+    struct Token t = lex->t;
 
-    struct AstExpr *expr;
     switch (lex->t.kind) {
         case '(':
-            expr = paren_expr(lex);
-            break;
+            return paren_expr(lex);
         case '[':
-            expr = container_lit(lex);
-            break;
+            return container_lit(lex);
         case TK_NAME:
-            expr = path_expr(lex);
-            break;
+            return path_expr(lex);
         case '{':
-            expr = block_expr(lex);
-            break;
+            return block_expr(lex);
         case TK_TRUE:
-            expr = emit_bool(lex, PAW_TRUE);
             skip(lex);
-            break;
+            return emit_bool(lex, loc, PAW_TRUE);
         case TK_FALSE:
-            expr = emit_bool(lex, PAW_FALSE);
             skip(lex);
-            break;
+            return emit_bool(lex, loc, PAW_FALSE);
         case TK_INTEGER:
-            expr = new_basic_lit(lex, lex->t.value, BUILTIN_INT);
             skip(lex);
-            break;
+            return new_basic_lit(lex, loc, t.value, BUILTIN_INT);
         case TK_FLOAT:
-            expr = new_basic_lit(lex, lex->t.value, BUILTIN_FLOAT);
             skip(lex);
-            break;
+            return new_basic_lit(lex, loc, t.value, BUILTIN_FLOAT);
         case TK_STRING_TEXT:
-            expr = string_expr(lex, loc, lex->t.value);
             skip(lex);
-            break;
+            return string_expr(lex, loc, t.value);
         case TK_STRING_EXPR_OPEN:
-            expr = string_interp_expr(lex, loc);
-            skip(lex);
-            break;
+            return string_interp_expr(lex, loc);
         case TK_IF:
-            expr = if_expr(lex);
-            break;
+            return if_expr(lex);
         case TK_FOR:
-            expr = for_expr(lex);
-            break;
+            return for_expr(lex);
         case TK_WHILE:
-            expr = while_expr(lex);
-            break;
+            return while_expr(lex);
         case TK_RETURN:
-            expr = return_expr(lex);
-            break;
+            return return_expr(lex);
         case TK_BREAK:
-            expr = jump_expr(lex, JUMP_BREAK);
-            break;
+            return jump_expr(lex, JUMP_BREAK);
         case TK_CONTINUE:
-            expr = jump_expr(lex, JUMP_CONTINUE);
-            break;
+            return jump_expr(lex, JUMP_CONTINUE);
         case TK_MATCH:
-            expr = match_expr(lex);
-            break;
+            return match_expr(lex);
         default:
-            expr = NULL;
+            return NULL;
     }
-    return expr;
 }
 
 static struct AstExpr *suffixed_expr(struct Lex *lex)

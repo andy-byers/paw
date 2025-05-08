@@ -260,7 +260,8 @@ static char const *find_substr(char const *str, size_t nstr, char const *sub, si
         return str;
     char const *end = str + nstr;
     while ((str = strchr(str, sub[0]))) {
-        if (nsub <= CAST_SIZE(end - str) && memcmp(str, sub, nsub) == 0) {
+        if (nsub <= CAST_SIZE(end - str)
+                && memcmp(str, sub, nsub) == 0) {
             return str;
         }
         str += nsub;
@@ -343,7 +344,8 @@ static int string_starts_with(paw_Env *P)
     String const *str = V_STRING(*CF_BASE(1));
     String const *prefix = V_STRING(*CF_BASE(2));
     size_t const prelen = prefix->length;
-    paw_Bool const b = str->length >= prelen && 0 == memcmp(prefix->text, str->text, prelen);
+    paw_Bool const b = str->length >= prelen
+        && 0 == memcmp(prefix->text, str->text, prelen);
     V_SET_BOOL(P->top.p - 1, b);
     return 1;
 }

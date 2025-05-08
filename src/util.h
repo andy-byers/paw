@@ -41,6 +41,10 @@
 // Get the integer representation of a hex digit
 #define HEXVAL(c) (kHexValueTable[(uint8_t)(c)])
 
+// NOTE: Be weary of integer types that contain padding bits, i.e. standard integer
+//       types excluding (un)signed char. Comparing such types with this function
+//       (or "memcmp" in general) is not portable since the padding bits have
+//       unspecified values (C11 section 6.2.6.2, item 5).
 inline static int paw_raw_cmp(void *x, size_t nx, void *y, size_t ny)
 {
     paw_assert(x != NULL && y != NULL);
