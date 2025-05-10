@@ -13,7 +13,6 @@ enum RttiTypeKind {
     RTTI_TYPE_FN_DEF,
     RTTI_TYPE_TUPLE,
     RTTI_TYPE_TRAIT,
-    RTTI_TYPE_PTR,
 };
 
 #define RTTI_TYPE_HEADER \
@@ -29,10 +28,6 @@ struct RttiAdt {
 };
 
 struct RttiTrait {
-    RTTI_TYPE_HEADER;
-};
-
-struct RttiPtr {
     RTTI_TYPE_HEADER;
 };
 
@@ -60,7 +55,6 @@ typedef struct RttiType {
         struct RttiFnPtr fptr;
         struct RttiTuple tuple;
         struct RttiTrait trait;
-        struct RttiPtr ptr;
     };
     int nsubtypes;
     paw_Type subtypes[];
@@ -146,7 +140,6 @@ struct RttiType *pawRtti_new_signature(paw_Env *P, ItemId iid, int nparams);
 struct RttiType *pawRtti_new_func_ptr(paw_Env *P, int nparams);
 struct RttiType *pawRtti_new_tuple(paw_Env *P, int nelems);
 struct RttiType *pawRtti_new_trait(paw_Env *P);
-struct RttiType *pawRtti_new_ptr(paw_Env *P, paw_Type type);
 struct Def *pawRtti_new_adt_def(paw_Env *P, int nfields);
 struct Def *pawRtti_new_trait_def(paw_Env *P);
 struct Def *pawRtti_new_func_def(paw_Env *P, int ntypes);

@@ -1,65 +1,46 @@
-# Paw language grammer (EBNF)
+(* Paw language grammer (EBNF) *)
 
-## Items
-An item defined in a given module can be accessed from anywhere in the module.
-Items must be placed at the toplevel, and are fixed at compile time.
-```ebnf
+(* Items *)
 Item     = ["pub"] ItemDecl .
 ItemDecl = ConstDecl | FunctionDecl | StructDecl | 
            EnumDecl | TypeDecl | UseDecl | ImplDecl .
-```
 
-### Functions
-```ebnf
+(* Functions *)
 FunctionDecl = "fn" Function .
 Function     = name [Generics] Signature Block .
 FParameters  = {FParam ","} FParam [","] .
 Signature    = "(" [FParameters] ")" ["->" Type] .
 FParam       = name ":" Type .
-```
 
-### Structures
-```ebnf
+(* Structures *)
 StructDecl = "struct" name [Generics] (StructBody | ";") .
 StructBody = "{" {Field ","} Field [","] "}" .
 Field      = ["pub"] name ":" Type .
-```
 
-### Enumerations
-```ebnf
+(* Enumerations *)
 EnumDecl = "enum" name [Generics] (EnumBody | ";") .
 EnumBody = "{" [{Variant ","} Variant] "}" .
 Variant  = name ["(" TypeList ")"] .
-```
 
-### Implementations
-```ebnf
+(* Implementations *)
 ImplDecl = "impl" [Generics] name [Generics] ImplBody .
 ImplBody = ["pub"]  .
-```
 
-## Statements
-```ebnf
+(* Statements *)
 Stmt     = ExprStmt | DeclStmt .
 ExprStmt = Expr .
 DeclStmt = Declaration .
-```
 
-## Pattern matching
-```ebnf
+(* Pattern matching *)
 MatchExpr   = "match" Expr MatchBody .
 MatchBody   = "{" {MatchClause ","} MatchClause "}" .
 MatchClause = Pattern "=>" Expr .
-```
 
-## Paths
-```ebnf
+(* Paths *)
 Path    = {Segment "::"} Segment .
 Segment = name [TypeArgs] .
-```
 
-## Patterns
-```ebnf
+(* Patterns *)
 Pattern    = LiteralPat | TuplePat | StructPat | 
              VariantPat | PathPat | RangePat .
 LiteralPat = StrPat | IntPat | BoolPat .
@@ -70,28 +51,22 @@ TuplePat   = "(" [{Pattern ","} Pattern "," [Pattern]] ")".
 VariantPat = Path "(" PatList ")" .
 StructPat  = Path "{" PatList "}" .
 PathPat    = Path .
-```
 
-## Declarations
-```ebnf
+(* Declarations *)
 Declaration = UseDecl | VarDecl | TypeDecl .
 UseDecl     = "use" name ["::" name] as name
 VarDecl     = "let" name [":" Type] "=" Expr .
 TypeDecl    = "type" name [Generics] "=" Type .
 Generics    = "<" {name ","} name [","] ">" .
-```
 
-## Operators
-```ebnf
+(* Operators *)
 BinOp = "+" | "-" | "*" | "/" |
         "%" | "&" | "^" | "|" |
         "<" | "<=" | ">" | ">=" | 
         "==" | "!=" | "&&" | "||" .
 UnOp  = "-" | "~" | "!" | "#" .
-```
 
-## Types
-```ebnf
+(* Types *)
 Type       = NamedType | TypeLit .
 TypeLit    = FuncType | ListType | MapType | 
              TupleType | NamedType .
@@ -102,10 +77,8 @@ NamedType  = name [TypeArgs] .
 ListType = "[" Type "]" .
 MapType    = "[" Type ":" Type "]" .
 TupleType  = "(" [{Type ","} Type "," [Type]] ")".
-```
 
-## Expressions
-```ebnf
+(* Expressions *)
 Expr        = PrimaryExpr | Expr BinOp Expr | UnOp Expr | Closure |
               Block | IfElse | ForLoop | WhileLoop . 
 PrimaryExpr = Operand | Call | "(" Expr ")" .
@@ -117,28 +90,18 @@ Block       = "{" {Stmt ";"} [Expr] "}" .
 Closure     = "|" [CParameters] "|" (("->" Type Block) | Expr) .
 CParameters = {CParam ","} CParam [","] .
 CParam      = name [":" Type] .
-```
 
-### Control flow
-```ebnf
+(* Control flow *)
 IfElse    = "if" Expr Block [{"else" IfElse} | "else" Block] .
 WhileLoop = "while" Expr Block .
 ForLoop   = "for" name "in" Expr Block .
-```
 
-## Operands
-```ebnf
+(* Operands *)
 Operand  = Path | Index | Selector | Literal .
 Literal  = BasicLit | CompositeLit .
 BasicLit = int_lit | bool_lit | float_lit | string_lit .
-```
 
-### Composite literals
-Note that the unit type is just a 0-tuple (an tuple with 0 elements).
-A 1-tuple must have a trailing `,` to distinguish it from a parenthesized expression.
-Enumerator literals are not listed here: they are created using constructor syntax, which is indistinguishable from calling a function with the same name as the variant.
-A constructor function takes the enumerator's fields as arguments and returns an instance of the enumeration.
-```ebnf
+(* Composite literals *)
 CompositeLit = TupleLit | ListLit | MapLit | StructLit .
 TupleLit     = "(" [{Expr ","} Expr "," [Expr]] ")".
 ListLit      = "[" [ExprList [","]] "]" .
@@ -148,26 +111,20 @@ MapElem      = Expr ":" Expr .
 StructLit    = Path ["{" [StructFields [","]] "}"] .
 StructFields = StructField {"," StructField} [","] .
 StructField  = name ":" Expr .
-```
 
-### Integer literals
-```ebnf
+(* Integer literals *)
 int_lit     = decimal_lit | binary_lit | octal_lit | hex_lit .
 decimal_lit = "0" | ("1" … "9") [decimal_digits] .
 binary_lit  = "0" ("b" | "B") binary_digits .
 octal_lit   = "0" ("o" | "O") octal_digits .
 hex_lit     = "0" ("x" | "X") hex_digits .
-```
 
-### Float literals
-```ebnf
+(* Float literals *)
 float_lit = decimal_digits "." [decimal_digits] [exponent] |
             decimal_digits exponent .
 exponent  = ("e" | "E") ["+" | "-"] decimal_digits .
-```
 
-## Miscellaneous
-```ebnf
+(* Miscellaneous *)
 name           = letter {letter | decimal_digit} .
 letter         = "A" … "Z" | "a" … "z" | "_" .
 decimal_digit  = "0" … "9" .
@@ -178,4 +135,4 @@ decimal_digits = decimal_digit {decimal_digit | "_"} .
 binary_digits  = binary_digit {binary_digit | "_"} .
 octal_digits   = octal_digit {octal_digit | "_"} .
 hex_digits     = hex_digit {hex_digit | "_"} .
-```
+

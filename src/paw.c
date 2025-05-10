@@ -219,7 +219,7 @@ static void handle_error(paw_Env *P, int status)
 static int on_build_ast(paw_Env *P)
 {
     struct Ast *ast = paw_rawptr(P, 1);
-    if (ast->modno > 0)
+    if (ast->modno != PRELUDE_MODNO)
         puts(pawAst_dump(ast));
     return 0;
 }
@@ -227,7 +227,7 @@ static int on_build_ast(paw_Env *P)
 static int on_build_hir(paw_Env *P)
 {
     struct Hir *hir = paw_rawptr(P, 1);
-    if (hir->modno > 0)
+    if (hir->modno != PRELUDE_MODNO)
         puts(pawHir_dump(hir));
     return 0;
 }
@@ -236,7 +236,7 @@ static int on_build_mir(paw_Env *P)
 {
     struct Mir *mir = paw_rawptr(P, 1);
     DeclId const did = IR_TYPE_DID(mir->type);
-    if (did.modno > 0)
+    if (did.modno != PRELUDE_MODNO)
         puts(pawMir_dump(mir));
     return 0;
 }

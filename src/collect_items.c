@@ -282,10 +282,10 @@ static void collect_field_decl(struct ItemCollector *X, struct HirFieldDecl *d)
 
 static void collect_variant_type(struct ItemCollector *, struct HirVariantDecl *);
 
-static void collect_field_types(struct ItemCollector *X, struct HirDeclList *fields, StringMap *names)
+static void collect_field_types(struct ItemCollector *X, struct HirDeclList *fields)
 {
-    if (fields == NULL)
-        return;
+    if (fields == NULL) return;
+    StringMap *names = StringMap_new_from(X->C, X->pool);
     struct HirDecl *const *pdecl;
     K_LIST_FOREACH(fields, pdecl) {
         if (HirIsFieldDecl(*pdecl)) {
@@ -298,11 +298,12 @@ static void collect_field_types(struct ItemCollector *X, struct HirDeclList *fie
             collect_variant_type(X, d);
         }
     }
+    StringMap_delete(X->C, names);
 }
 
 static void collect_variant_type(struct ItemCollector *X, struct HirVariantDecl *d)
 {
-    collect_field_types(X, d->fields, NULL);
+    collect_field_types(X, d->fields);
 
     // An enum variant name can be thought of as a function from the type of the
     // variant's fields to the type of the enumeration. For example, given 'enum
@@ -338,10 +339,10 @@ static paw_Bool check_assoc_function(struct ItemCollector *X, struct IrType *sel
 
 static void maybe_store_builtin(struct ItemCollector *X, String *name, DeclId did)
 {
-    struct Builtin *const *pb = BuiltinMap_get(X->C, X->C->builtin_lookup, name);
-    if (pb != NULL) {
-        paw_assert(X->hir->modno == 0);
-        (*pb)->did = did;
+    if (X->m->modno == PRELUDE_MODNO) {
+        struct Builtin *const *pb = BuiltinMap_get(X->C, X->C->builtin_lookup, name);
+        if (pb != NULL)
+            (*pb)->did = did;
     }
 }
 
@@ -413,6 +414,11 @@ static DeclId collect_adt(struct ItemCollector *X, struct HirAdtDecl *d, struct 
     IrType *type = pawIr_new_adt(X->C, did, types);
     SET_TYPE(X, d->hid, type);
 
+    struct IrAdtDef *r = pawIr_new_adt_def(X->C, did, d->ident.name, NULL, NULL,
+            d->is_pub, d->is_struct, d->is_inline);
+    AdtDefMap_insert(X->C, X->C->adt_defs, did, r);
+    set_def_type(X, did, d->hid);
+
     leave_block(X);
     return did;
 }
@@ -479,12 +485,39 @@ static void collect_nominal_types(struct ItemCollector *X, struct Hir *hir)
     }
 }
 
+static void collect_type_decl(struct ItemCollector *X, struct HirTypeDecl *d)
+{
+    new_global(X, d->ident, HIR_CAST_DECL(d));
+    enter_block(X, NULL);
+
+    collect_generic_types(X, d->generics);
+    struct IrType *type = collect_type(X, d->rhs);
+    SET_TYPE(X, d->hid, type);
+
+    leave_block(X);
+}
+
+static void collect_type_aliases(struct ItemCollector *X, struct Hir *hir)
+{
+    struct HirDecl **pdecl;
+    K_LIST_FOREACH (hir->items, pdecl) {
+        struct HirDecl *decl = *pdecl;
+        if (HirIsTypeDecl(decl))
+            collect_type_decl(X, HirGetTypeDecl(decl));
+    }
+}
+
 static void collection_phase_1(struct ItemCollector *X, struct ModuleList *mods)
 {
     struct ModuleInfo *const *pmi;
     K_LIST_FOREACH (mods, pmi) {
         struct ModuleInfo *m = use_module(X, *pmi);
         collect_nominal_types(X, m->hir);
+        finish_module(X);
+    }
+    K_LIST_FOREACH (mods, pmi) {
+        struct ModuleInfo *m = use_module(X, *pmi);
+        collect_type_aliases(X, m->hir);
         finish_module(X);
     }
 }
@@ -508,9 +541,7 @@ static void collect_func_decl(struct ItemCollector *X, struct HirFuncDecl *d)
     enter_function(X, d);
 
     struct IrTypeList *types = collect_generic_types(X, d->generics);
-    StringMap *names = StringMap_new_from(X->C, X->pool);
-    collect_field_types(X, d->params, names);
-    StringMap_delete(X->C, names);
+    collect_field_types(X, d->params);
 
     struct IrTypeList *params_ = pawHir_collect_decl_types(X->C, d->params);
     struct IrType *result = collect_type(X, d->result);
@@ -536,9 +567,10 @@ static void collect_func_decl(struct ItemCollector *X, struct HirFuncDecl *d)
     }
 }
 
-static void collect_method_decls(struct ItemCollector *X, struct HirDeclList *methods, StringMap *names, paw_Bool force_pub)
+static void collect_method_decls(struct ItemCollector *X, struct HirDeclList *methods, paw_Bool force_pub)
 {
     struct HirDecl **pdecl;
+    StringMap *names = StringMap_new_from(X->C, X->pool);
     K_LIST_FOREACH (methods, pdecl) {
         struct HirFuncDecl *d = HirGetFuncDecl(*pdecl);
         ensure_unique(X, names, d->ident, "method");
@@ -546,6 +578,7 @@ static void collect_method_decls(struct ItemCollector *X, struct HirDeclList *me
             d->is_pub = PAW_TRUE;
         collect_func_decl(X, d);
     }
+    StringMap_delete(X->C, names);
 }
 
 static void collect_adt_decl(struct ItemCollector *X, struct HirAdtDecl *d)
@@ -557,12 +590,9 @@ static void collect_adt_decl(struct ItemCollector *X, struct HirAdtDecl *d)
     struct IrType *type = GET_TYPE(X, d->hid);
     collect_generic_bounds(X, d->generics, type);
 
-    struct IrGenericDefs *generics = collect_generic_defs(X, d->generics);
-    struct IrVariantDefs *variants = collect_variant_defs(X, d, did);
-    struct IrAdtDef *r = pawIr_new_adt_def(X->C, did, d->ident.name, generics, variants,
-            d->is_pub, d->is_struct, d->is_inline);
-    AdtDefMap_insert(X->C, X->C->adt_defs, did, r);
-    set_def_type(X, did, d->hid);
+    struct IrAdtDef *r = pawIr_get_adt_def(X->C, did);
+    r->generics = collect_generic_defs(X, d->generics);
+    r->variants = collect_variant_defs(X, d, did);
 
     struct HirType **ptype;
     K_LIST_FOREACH (d->traits, ptype) {
@@ -573,11 +603,9 @@ static void collect_adt_decl(struct ItemCollector *X, struct HirAdtDecl *d)
     }
 
     WITH_CONTEXT(X, type,
-                 StringMap *names = StringMap_new_from(X->C, X->pool);
                  d->self = declare_self(X, d->span, type);
-                 collect_field_types(X, d->fields, names);
-                 collect_method_decls(X, d->methods, names, PAW_FALSE);
-                 StringMap_delete(X->C, names););
+                 collect_field_types(X, d->fields);
+                 collect_method_decls(X, d->methods, PAW_FALSE););
 
     leave_block(X);
 }
@@ -592,22 +620,8 @@ static void collect_trait_decl(struct ItemCollector *X, struct HirTraitDecl *d)
     collect_generic_bounds(X, d->generics, type);
 
     WITH_CONTEXT(X, type,
-                 StringMap *names = StringMap_new_from(X->C, X->pool);
                  d->self = declare_self(X, d->span, type);
-                 collect_method_decls(X, d->methods, names, d->is_pub);
-                 StringMap_delete(X->C, names););
-
-    leave_block(X);
-}
-
-static void collect_type_decl(struct ItemCollector *X, struct HirTypeDecl *d)
-{
-    new_global(X, d->ident, HIR_CAST_DECL(d));
-    enter_block(X, NULL);
-
-    collect_generic_types(X, d->generics);
-    struct IrType *type = collect_type(X, d->rhs);
-    SET_TYPE(X, d->hid, type);
+                 collect_method_decls(X, d->methods, d->is_pub););
 
     leave_block(X);
 }
@@ -632,17 +646,19 @@ static void collect_other_types(struct ItemCollector *X, struct Hir *hir)
             case kHirFuncDecl:
                 collect_func_decl(X, HirGetFuncDecl(*pdecl));
                 break;
-            case kHirTypeDecl:
-                collect_type_decl(X, HirGetTypeDecl(*pdecl));
-                break;
             case kHirConstDecl:
                 collect_const_decl(X, HirGetConstDecl(*pdecl));
                 break;
             default:
-                PAW_UNREACHABLE();
+                paw_assert(HirIsTypeDecl(*pdecl));
+                break;
         }
     }
+}
 
+static void validate_traits(struct ItemCollector *X, struct Hir *hir)
+{
+    struct HirDecl *const *pdecl;
     K_LIST_FOREACH(hir->items, pdecl) {
         if (HirIsAdtDecl(*pdecl)) {
             struct HirAdtDecl *d = HirGetAdtDecl(*pdecl);
@@ -657,6 +673,12 @@ static void collection_phase_2(struct ItemCollector *X, struct ModuleList *mods)
     K_LIST_FOREACH (mods, pmi) {
         struct ModuleInfo *m = use_module(X, *pmi);
         collect_other_types(X, m->hir);
+        finish_module(X);
+    }
+
+    K_LIST_FOREACH (mods, pmi) {
+        struct ModuleInfo *m = use_module(X, *pmi);
+        validate_traits(X, m->hir);
         finish_module(X);
     }
 }

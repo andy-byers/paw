@@ -1208,7 +1208,7 @@ static struct IrType *resolve_call_target(struct Resolver *R, struct HirExpr *ta
         RESOLVER_ERROR(R, not_a_method, NODE_START(target),
                    hir_decl_ident(func_decl).name->text);
 
-    ensure_accessible_field(R, func_decl, self_decl, method);
+    ensure_accessible_field(R, func_decl, self_decl, self);
     *pparam_offset = 1;
     return method;
 }

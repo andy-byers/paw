@@ -67,8 +67,8 @@ static void validate_type_args(struct QueryState *Q, struct HirDecl *decl, struc
     } else if (HirIsTypeDecl(decl)) {
         generics = HirGetTypeDecl(decl)->generics;
     }
-    int const m = seg->types == NULL ? 0 : seg->types->count;
-    int const n = generics == NULL ? 0 : generics->count;
+    int const m = generics == NULL ? 0 : generics->count;
+    int const n = seg->types == NULL ? 0 : seg->types->count;
     if (m != n)
         LOOKUP_ERROR(Q, incorrect_type_arity, seg->ident.span.start, m, n);
 }
@@ -128,10 +128,10 @@ static struct QueryBase find_global(struct QueryState *Q, struct ModuleInfo *roo
     if (q.seg != NULL)
         return q;
 
-    struct ModuleInfo *prelude = get_module(Q, 0);
-    q = find_global_in(Q, prelude, path);
-    if (q.seg != NULL)
-        return q;
+//    struct ModuleInfo *prelude = get_module(Q, 0);
+//    q = find_global_in(Q, prelude, path);
+//    if (q.seg != NULL)
+//        return q;
 
     struct HirImport *im;
     K_LIST_FOREACH (root->hir->imports, im) {
@@ -324,6 +324,7 @@ static IrType *result_type(struct QueryState *Q, struct HirSegment *seg, IrTypeL
             break;
         case kHirTypeDecl:
             inst = resolve_alias(Q, seg, decl, types);
+            pawIr_set_type(Q->C, seg->hid, inst);
             break;
         case kHirConstDecl:
         case kHirGenericDecl:

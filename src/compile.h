@@ -56,6 +56,9 @@
 #define MAX_MODULES 256
 #define MAX_DECLS 10000
 
+#define TARGET_MODNO 0
+#define PRELUDE_MODNO 1
+
 // TODO: make 1 the first ID, let 0 be uninit. remove this and use {0} initialization
 #define NO_DECL \
     (DeclId) { MAX_MODULES, MAX_DECLS }

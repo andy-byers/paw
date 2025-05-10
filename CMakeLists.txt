@@ -19,6 +19,7 @@ option(PAW_BuildTests "Build the tests" ${MAIN_PROJECT})
 # TODO: Install stdlib .paw files somewhere and use that path?
 set(PAW_PRELUDE_PATH "${CMAKE_SOURCE_DIR}/src/prelude.paw" CACHE STRING 
     "Path to prelude module")
+set(PAW_STDLIB_PREFIX "${CMAKE_SOURCE_DIR}/src/" CACHE STRING "")
 set(PAW_STRESS 0 CACHE STRING 
     "Enable expensive checks (supports up to level 2)")
  
@@ -93,7 +94,7 @@ set(PAW_SOURCE_FILES
     ${PAW_SOURCE_DIR}/hir.c
     ${PAW_SOURCE_DIR}/import.c
     ${PAW_SOURCE_DIR}/instantiate.c
-    ${PAW_SOURCE_DIR}/iomod.c
+    ${PAW_SOURCE_DIR}/io.c
     ${PAW_SOURCE_DIR}/ir_type.c
     ${PAW_SOURCE_DIR}/kfold.c
     ${PAW_SOURCE_DIR}/kprop.c
@@ -107,12 +108,13 @@ set(PAW_SOURCE_FILES
     ${PAW_SOURCE_DIR}/lower_hir.c
     ${PAW_SOURCE_DIR}/lower_type.c
     ${PAW_SOURCE_DIR}/map.c
-    ${PAW_SOURCE_DIR}/mathmod.c
+    ${PAW_SOURCE_DIR}/math.c
     ${PAW_SOURCE_DIR}/mem.c
     ${PAW_SOURCE_DIR}/mir.c
     ${PAW_SOURCE_DIR}/monomorphize.c
     ${PAW_SOURCE_DIR}/os.c
     ${PAW_SOURCE_DIR}/parse.c
+    ${PAW_SOURCE_DIR}/prelude.c
     ${PAW_SOURCE_DIR}/regalloc.c
     ${PAW_SOURCE_DIR}/resolve.c
     ${PAW_SOURCE_DIR}/rt.c
@@ -137,6 +139,7 @@ target_include_directories(paw
     PUBLIC ${PAW_SOURCE_DIR})
 target_compile_definitions(paw
     PUBLIC PAW_PRELUDE_PATH="${PAW_PRELUDE_PATH}"
+           PAW_STDLIB_PREFIX="${PAW_STDLIB_PREFIX}"
            PAW_STRESS=${PAW_STRESS})
 
 add_executable(pawc

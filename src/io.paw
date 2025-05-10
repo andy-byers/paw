@@ -1,0 +1,44 @@
+// io.paw
+
+pub type Result<T> = prelude::Result<T, Error>;
+
+pub struct File {
+    inner: (),
+
+    #[extern] pub fn open(pathname: str, mode: str) -> Result<Self>;
+    #[extern] pub fn seek(self, offset: int, whence: Seek) -> Result<()>;
+    #[extern] pub fn tell(self) -> Result<int>;
+    #[extern] pub fn read(self, size: int) -> Result<str>;
+    #[extern] pub fn write(self, data: str) -> Result<int>;
+    #[extern] pub fn flush(self) -> Result<()>;
+}
+
+pub inline enum Seek {
+    Begin,
+    Current,
+    End,
+}
+
+pub inline enum Error {
+    NotFound,
+    FileTooLarge,
+    PermissionDenied,
+    AlreadyExists,
+    NotOpened,
+    NotSupported,
+    InvalidArgument,
+    Other,
+
+    pub fn to_string(self) -> str {
+        match self {
+            Error::NotFound => "not found",
+            Error::FileTooLarge => "file too large",
+            Error::PermissionDenied => "permission denied",
+            Error::AlreadyExists => "already exists",
+            Error::NotOpened => "not opened",
+            Error::NotSupported => "not supported",
+            Error::InvalidArgument => "invalid argument",
+            Error::Other => "other error",
+        }
+    }
+}

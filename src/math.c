@@ -85,24 +85,10 @@ static int math_is_negative(paw_Env *P)
 
 void l_import_math(paw_Env *P)
 {
-    static char const s_math[] =
-        "#[extern] pub const PI: float;\n"
-        "#[extern] pub const NAN: float;\n"
-        "#[extern] pub const INFINITY: float;\n"
-        "#[extern] pub fn sin(f: float) -> float;\n"
-        "#[extern] pub fn cos(f: float) -> float;\n"
-        "#[extern] pub fn tan(f: float) -> float;\n"
-        "#[extern] pub fn asin(f: float) -> float;\n"
-        "#[extern] pub fn acos(f: float) -> float;\n"
-        "#[extern] pub fn atan(f: float) -> float;\n"
-        "#[extern] pub fn atan2(a: float, b: float) -> float;\n"
-        "#[extern] pub fn is_nan(f: float) -> bool;\n"
-        "#[extern] pub fn is_finite(f: float) -> bool;\n"
-        "#[extern] pub fn is_negative(f: float) -> bool;\n";
-
     pawE_push_cstr(P, CSTR_KSYMBOLS);
     paw_map_get(P, PAW_REGISTRY_INDEX);
 
+    // use math constants from C standard library
     paw_push_float(P, M_PI);
     pawL_add_extern_value(P, "math", "PI");
     paw_push_float(P, NAN);
@@ -120,7 +106,7 @@ void l_import_math(paw_Env *P)
     pawL_add_extern_func(P, "math", "is_nan", math_is_nan);
     pawL_add_extern_func(P, "math", "is_finite", math_is_finite);
     pawL_add_extern_func(P, "math", "is_negative", math_is_negative);
-    paw_pop(P, 1); // paw.builtin
+    paw_pop(P, 1); // paw.symbols
 
-    pawL_chunk_reader(P, s_math, PAW_LENGTHOF(s_math));
+    pawL_file_reader(P, PAWL_STDLIB_PATH(PAWL_MATH_NAME));
 }

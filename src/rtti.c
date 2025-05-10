@@ -100,15 +100,6 @@ struct RttiType *pawRtti_new_tuple(paw_Env *P, int nelems)
     return add_type(P, type);
 }
 
-struct RttiType *pawRtti_new_ptr(paw_Env *P, paw_Type pointee)
-{
-    struct RttiType *type = NEW_TYPE(P, 1);
-    type->hdr.kind = RTTI_TYPE_PTR;
-    type->nsubtypes = 1;
-    type->subtypes[0] = pointee;
-    return add_type(P, type);
-}
-
 static struct Def *new_def(paw_Env *P, enum DefKind kind)
 {
     pawM_grow(P, P->defs.data, P->defs.count, P->defs.alloc);
@@ -325,10 +316,6 @@ void pawRtti_mangle_add_arg(paw_Env *P, Buffer *buf, paw_Type code)
                 pawRtti_mangle_add_arg(P, buf, type->subtypes[i]);
             }
             pawL_add_char(P, buf, 'E');
-        }
-        case RTTI_TYPE_PTR: {
-            pawL_add_char(P, buf, 'P');
-            pawRtti_mangle_add_arg(P, buf, type->subtypes[0]);
         }
     }
 }

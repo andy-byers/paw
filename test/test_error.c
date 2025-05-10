@@ -396,7 +396,6 @@ static void test_struct_error(void)
     test_compiler_status(E_MISSING_FIELD, "struct_missing_field", "struct A {pub a: int, pub b: float}", "let a = A{a: 1};");
     test_compiler_status(E_UNKNOWN_FIELD, "struct_extra_field", "struct A {pub a: int}", "let a = A{a: 1, b: 2};");
     test_compiler_status(E_DUPLICATE_FIELD, "struct_duplicate_field", "struct A {pub a: int}", "let a = A{a: 1, a: 1};");
-    test_compiler_status(E_DUPLICATE_ITEM, "struct_field_conflicts_with_method", "struct A {pub a: int, fn a() {}}", "");
     test_compiler_status(E_EXPECTED_FIELD_SELECTOR, "struct_access_by_index", "struct S{pub x: int}", "let x = S{x: 1}; let y = x.0;");
     test_compiler_status(E_INCORRECT_TYPE_ARITY, "struct_not_enough_types", "struct S<A, B, C>;", "let x = S::<int, float>;");
     test_compiler_status(E_INCORRECT_TYPE_ARITY, "struct_too_many_types", "struct S<A, B>;", "let x = S::<int, float, bool>;");

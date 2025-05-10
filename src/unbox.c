@@ -387,20 +387,17 @@ static void discharge_indirect_field(struct Unboxer *U, struct MemoryAccess *pa)
     pa->field = (struct FieldAccess){0};
 }
 
-static enum BuiltinKind get_container_kind(IrType *type)
+static IrType *get_element_type(struct Unboxer *U, IrType *type)
 {
-    struct IrAdt *adt = IrGetAdt(type);
-    return adt->types->count == 1
-        ? BUILTIN_LIST
-        : BUILTIN_MAP;
-}
+    enum BuiltinKind const kind = pawP_type2code(U->C, type);
 
-static IrType *get_element_type(IrType *type)
-{
-    struct IrAdt *adt = IrGetAdt(type);
-    return adt->types->count == 1
-        ? IrTypeList_get(adt->types, 0) // List<T>
-        : IrTypeList_get(adt->types, 1); // Map<K, V>
+    if (kind == BUILTIN_LIST)
+        return ir_list_elem(type);
+    if (kind == BUILTIN_MAP)
+        return ir_map_value(type);
+
+    paw_assert(kind == BUILTIN_STR);
+    return type;
 }
 
 static IrType *get_access_type(struct MemoryAccess *pa)
@@ -412,7 +409,7 @@ static IrType *get_access_type(struct MemoryAccess *pa)
 
 static void discharge_indirect_element(struct Unboxer *U, struct MemoryAccess *pa)
 {
-    enum BuiltinKind kind = get_container_kind(pa->type);
+    enum BuiltinKind kind = pawP_type2code(U->C, pa->type);
 
     IrType *element_type = pa->element.type;
     IrType *access_type = get_access_type(pa);
@@ -530,7 +527,7 @@ static void apply_indirect_access(struct Unboxer *U, struct MemoryAccess *pa, Mi
         struct MemoryGroup index_group = get_registers(U, index->index, -1);
         paw_assert(index_group.count == 1);
         pa->element.index.value = index_group.base;
-        pa->element.type = get_element_type(pa->type);
+        pa->element.type = get_element_type(U, pa->type);
         pa->has_element = PAW_TRUE;
     }
 }
@@ -557,16 +554,12 @@ static struct MemoryAccess unbox_place(struct Unboxer *U, struct MirPlace *pplac
     for (int i = 0; i < ps->count;) {
 #define GET MirProjectionList_get
         MirProjection *p = GET(ps, i++);
-        if (!MirIsDeref(p)) {
-            // handle direct field access
-            apply_field_access(U, &access, p);
-        } else if (i < ps->count && !MirIsDeref(GET(ps, i))) {
+        if (MirIsDeref(p)) {
             // handle indirect accesses
             apply_indirect_access(U, &access, GET(ps, i++));
         } else {
-            // handle pointer dereference
-//            apply_deref(U, &access, p);
-paw_assert(0);
+            // handle direct field access
+            apply_field_access(U, &access, p);
         }
 #undef GET
     }
@@ -620,7 +613,7 @@ static void create_indirect_field_setter(struct Unboxer *U, struct MemoryAccess 
 
 static void create_indirect_element_setter(struct Unboxer *U, struct MemoryAccess lhs, struct MemoryAccess rhs)
 {
-    enum BuiltinKind kind = get_container_kind(lhs.type);
+    enum BuiltinKind kind = pawP_type2code(U->C, lhs.type);
     int const field_offset = lhs.has_field ? lhs.field.offset : 0;
     IrType *element_type = lhs.element.type;
 

@@ -819,7 +819,7 @@ static struct HirStmtList *create_unpackers(struct Unpacking *ctx)
         SET_NODE_TYPE(L->C, rhs, pawIr_get_type(L->C, pinfo->p->hid));
 
         struct HirExpr *setter = pawHir_new_assign_expr(hir, ctx->span, lhs, rhs);
-        SET_NODE_TYPE(L->C, setter, pawIr_get_type(L->C, (HirId){0}));
+        SET_NODE_TYPE(L->C, setter, get_type(L, PAW_TUNIT));
 
         HirStmtList_push(hir, setters, pawHir_new_expr_stmt(hir, ctx->span, setter));
     }
@@ -2146,7 +2146,7 @@ static void lower_global_constant(struct LowerHir *L, struct HirConstDecl *d)
             LOWERING_ERROR(L, initialized_extern_constant, d->span.start, d->ident.name->text);
 
         struct ModuleInfo *m = ModuleList_get(L->C->modules, d->did.modno);
-        String *modname = d->did.modno <= 1 ? NULL : m->hir->name;
+        String *modname = d->did.modno == TARGET_MODNO ? NULL : m->hir->name;
         String *name = pawP_mangle_name(L->C, modname, d->ident.name, NULL);
         Value const value = pawP_get_extern_value(L->C, name);
         struct IrType *type = pawIr_get_type(L->C, d->hid);

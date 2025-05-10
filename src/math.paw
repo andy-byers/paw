@@ -1,0 +1,17 @@
+// math.paw
+
+#[extern] pub const PI: float;
+#[extern] pub const NAN: float;
+#[extern] pub const INFINITY: float;
+
+#[extern] pub fn sin(f: float) -> float;
+#[extern] pub fn cos(f: float) -> float;
+#[extern] pub fn tan(f: float) -> float;
+#[extern] pub fn asin(f: float) -> float;
+#[extern] pub fn acos(f: float) -> float;
+#[extern] pub fn atan(f: float) -> float;
+#[extern] pub fn atan2(a: float, b: float) -> float;
+
+#[extern] pub fn is_nan(f: float) -> bool;
+#[extern] pub fn is_finite(f: float) -> bool;
+#[extern] pub fn is_negative(f: float) -> bool;

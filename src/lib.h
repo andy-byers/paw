@@ -13,6 +13,13 @@
 
 #include "paw.h"
 
+#define PAWL_PRELUDE_NAME "prelude"
+#define PAWL_MATH_NAME "math"
+#define PAWL_IO_NAME "io"
+
+// Evaluates to a path to the given standard library module's source code
+#define PAWL_STDLIB_PATH(Module_) PAW_STDLIB_PREFIX Module_ ".paw"
+
 struct LoaderState {
     paw_Reader f;
 };
@@ -38,6 +45,7 @@ void pawL_finish_import(paw_Env *P);
 
 void pawL_close_loader(paw_Env *P, void *state);
 void *pawL_chunk_reader(paw_Env *P, char const *text, size_t length);
+void *pawL_file_reader(paw_Env *P, char const *pathname);
 void pawL_add_extern_value(paw_Env *P, char const *modname, char const *name);
 void pawL_add_extern_func(paw_Env *P, char const *modname, char const *name, paw_Function func);
 void pawL_add_extern_method(paw_Env *P, char const *modname, char const *self, char const *name, paw_Function func);

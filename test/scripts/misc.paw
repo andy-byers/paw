@@ -35,19 +35,19 @@ use io::File;
 
 fn file_size(f: File) -> int {
     f.seek(0, io::Seek::End);
-    return f.tell();
+    return f.tell().unwrap();
 }
 
 pub fn test_io() {
     let test = 'test string';
-    let file = File::open('abc.txt', 'w+');
+    let file = File::open('abc.txt', 'w+').unwrap();
     assert(file_size(file) == 0);
-    let n = file.write(test);
+    let n = file.write(test).unwrap();
     assert(n == #test);
 
     file.seek(0, io::Seek::Begin);
-    assert(file.read(#test) == test);
-    assert(file.tell() == n);
+    assert(file.read(#test).unwrap() == test);
+    assert(file.tell().unwrap() == n);
     assert(file_size(file) == n);
 }
 

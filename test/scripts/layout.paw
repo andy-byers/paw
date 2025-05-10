@@ -840,19 +840,18 @@ pub fn test_value_in_map() {
     assert(c[2].1 == 400);
 }
 
-struct Struct {
-    pub x: (int, [int]),
+inline struct Struct {
+    pub x: (int, [Option<Struct>]),
 }
 
 pub fn test_misc() {
-   let s = Struct{x: (1, [2, 3])}; 
+   let s = Struct{x: (1, [Option::None])}; 
     assert(s.x.0 == 1);
-    assert(s.x.1[0] == 2);
-    assert(s.x.1[1] == 3);
+    assert(s.x.1[0].is_none());
 
-    s.x = (|| (2, [3, 4]))();
-    assert(s.x.0 == 2);
-    assert(s.x.1[0] == 3);
-    assert(s.x.1[1] == 4);
+    s.x.1[0] = Option::Some(Struct{x: (2, [Option::None])});
+    assert(s.x.0 == 1);
+    assert(s.x.1[0].unwrap().x.0 == 2);
+    assert(s.x.1[0].unwrap().x.1[0].is_none());
 }
 

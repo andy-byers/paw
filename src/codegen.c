@@ -397,7 +397,7 @@ static ValueId resolve_function(struct Generator *G, RttiType *rtti)
 static String const *module_prefix(struct Generator *G, int modno)
 {
     struct ModuleInfo *m = ModuleList_get(G->C->modules, modno);
-    return m->modno > 1 ? m->name : NULL;
+    return m->modno != TARGET_MODNO ? m->name : NULL;
 }
 
 static paw_Bool is_smi(paw_Int i)

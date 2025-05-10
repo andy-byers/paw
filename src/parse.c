@@ -20,9 +20,9 @@
 #define SELF_VARNAME(Lex_) CACHED_STRING(ENV(Lex_), CSTR_SELF)
 
 #define NEW_NODE_0(Lex_, Kind_, Start_) \
-    pawAst_new_##Kind_((Lex_)->ast, span_from(Lex_, Start_));
+    pawAst_new_##Kind_((Lex_)->ast, span_from(Lex_, Start_))
 #define NEW_NODE(Lex_, Kind_, Start_, ...) \
-    pawAst_new_##Kind_((Lex_)->ast, span_from(Lex_, Start_), __VA_ARGS__);
+    pawAst_new_##Kind_((Lex_)->ast, span_from(Lex_, Start_), __VA_ARGS__)
 
 static struct SourceSpan span_from(struct Lex *lex, struct SourceLoc start)
 {
@@ -1934,6 +1934,24 @@ static void skip_hashbang(struct Lex *lex)
     }
 }
 
+// Effectively add the following text at the top of each Paw file:
+//
+//     use prelude;
+//     use prelude::*;
+//
+static void import_prelude(struct Lex *lex, struct AstDeclList *items)
+{
+    struct SourceLoc loc = lex->loc;
+    struct AstIdent ident = {
+        .name = SCAN_STRING(lex->C, "prelude"),
+        .span = span_from(lex, loc),
+    };
+    struct AstIdent none = {0};
+
+    AstDeclList_push(lex->ast, items, NEW_NODE(lex, use_decl, loc, ident, PAW_FALSE, none, none));
+    AstDeclList_push(lex->ast, items, NEW_NODE(lex, use_decl, loc, ident, PAW_TRUE, none, none));
+}
+
 static struct Ast *parse_module(struct Lex *lex, paw_Reader input, void *ud)
 {
     pawX_set_source(lex, input, ud);
@@ -1941,6 +1959,7 @@ static struct Ast *parse_module(struct Lex *lex, paw_Reader input, void *ud)
 
     struct Ast *ast = lex->ast;
     ast->items = AstDeclList_new(lex->ast);
+    import_prelude(lex, ast->items);
     toplevel_items(lex, ast->items);
     check(lex, TK_END);
     return ast;
@@ -1961,7 +1980,7 @@ static void init_lexer(struct Compiler *C, struct Ast *ast, struct Lex *lex)
 
 static struct Ast *new_ast(struct Compiler *C, String *name)
 {
-    int const modno = ImportMap_length(C->imports) + 1 /* skip prelude */;
+    int const modno = ImportMap_length(C->imports);
     struct Ast *ast = pawAst_new(C, name, modno);
     ImportMap_insert(C, C->imports, name, ast);
     return ast;
@@ -2007,6 +2026,8 @@ static char const *prelude_reader(paw_Env *P, void *ud, size_t *psize)
 
 void pawP_parse_prelude(struct Compiler *C)
 {
+    return;
+
     paw_Env *P = ENV(C);
     struct PreludeReader reader = {
         .file = pawO_new_file(P),

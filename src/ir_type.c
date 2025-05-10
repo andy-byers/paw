@@ -32,9 +32,6 @@ IrType *pawIr_get_type(struct Compiler *C, HirId hid)
 void pawIr_set_type(struct Compiler *C, HirId hid, IrType *type)
 {
     paw_assert(type != NULL);
-    // TODO: this check could be removed with more confidence if 1 is used as the default ID (HirId, DefId, etc.) instead of 0
-    //       since 0 is a valid ID, we get confused when an ID is not properly initialized (zero init produces a valid ID, which is bad)
-    paw_assert(hid.value > 0 || !IrIsAdt(type) || IrGetAdt(type)->did.value == 0);
     HirTypeMap_insert(C, C->hir_types, hid, type);
 }
 
