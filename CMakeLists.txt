@@ -17,11 +17,9 @@ option(PAW_BuildFuzzers "Build the fuzz targets" Off)
 option(PAW_BuildTests "Build the tests" ${MAIN_PROJECT})
 
 # TODO: Install stdlib .paw files somewhere and use that path?
-set(PAW_PRELUDE_PATH "${CMAKE_SOURCE_DIR}/src/prelude.paw" CACHE STRING 
-    "Path to prelude module")
+set(PAW_PRELUDE_PATH "${CMAKE_SOURCE_DIR}/src/prelude.paw" CACHE STRING "Path to prelude module")
 set(PAW_STDLIB_PREFIX "${CMAKE_SOURCE_DIR}/src/" CACHE STRING "")
-set(PAW_STRESS 0 CACHE STRING 
-    "Enable expensive checks (supports up to level 2)")
+set(PAW_STRESS 0 CACHE STRING "Enable expensive checks (supports up to level 2)")
  
 add_library(paw_context INTERFACE)
 if(${CMAKE_C_COMPILER_ID} STREQUAL MSVC)

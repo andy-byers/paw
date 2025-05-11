@@ -855,3 +855,29 @@ pub fn test_misc() {
     assert(s.x.1[0].unwrap().x.1[0].is_none());
 }
 
+pub fn test_return_not_overwritten() {
+    // "i" and "s" interfere in the following closure:
+    //      in: f i s
+    //     out: 1 s i
+    let f = |i: int, s: str| {
+        Option::Some((s, i))
+    };
+
+    let t = f(1, "two");
+    assert(t.unwrap().0 == "two");
+    assert(t.unwrap().1 == 1);
+}
+
+pub fn test_return_not_overwritten_2() {
+    let f = |a: (bool, int), b: Option<str>, c: (float, str, int)| {
+        Option::Some((c.2, c.1, c.0, b?, a.1, a.0))
+    };
+
+    let t = f((true, 2), Option::Some("three"), (4.0, "five", 6));
+    assert(t.unwrap().0 == 6);
+    assert(t.unwrap().1 == "five");
+    assert(t.unwrap().2 == 4.0);
+    assert(t.unwrap().3 == "three");
+    assert(t.unwrap().4 == 2);
+    assert(t.unwrap().5 == true);
+}

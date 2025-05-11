@@ -475,10 +475,10 @@ static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct R
         if (remove_column(U, *prow, branch_var, &col)) {
             // This row had a wildcard or binding in place of 'branch_var', meaning
             // it needs to be considered in all other cases.
-            RowList_push(U, fallback, *prow);
+            RowList_push(U, fallback, copy_row(U, *prow));
             struct RawCase const *prc;
             K_LIST_FOREACH (raw_cases, prc) {
-                RowList_push(U, prc->rows, *prow);
+                RowList_push(U, prc->rows, copy_row(U, *prow));
             }
             continue;
         }
@@ -663,9 +663,11 @@ static struct Decision *compile_rows(struct Usefulness *U, struct RowList *rows)
     struct Row first_row = RowList_first(rows);
     if (first_row.columns->count == 0) {
         remove_first_row(rows);
-        if (first_row.guard == NULL)
-            return new_success(U, first_row.body);
-        return new_guard(U, first_row.guard, first_row.body, compile_rows(U, rows));
+        struct Row const row = copy_row(U, first_row);
+        if (row.guard == NULL)
+            return new_success(U, row.body);
+        struct Decision *rest = compile_rows(U, rows);
+        return new_guard(U, row.guard, row.body, rest);
     }
 
     struct Column branch_col = find_branch_col(U, first_row.columns);

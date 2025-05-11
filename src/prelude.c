@@ -481,6 +481,6 @@ void l_import_prelude(paw_Env *P)
     pawL_add_extern_method(P, "prelude", "MapIterator", "next", map_iter_next);
     paw_pop(P, 1); // paw.symbols
 
-    pawL_file_reader(P, PAW_STDLIB_PREFIX PAWL_PRELUDE_NAME ".paw");
+    pawL_file_reader(P, PAWL_STDLIB_PATH(PAWL_PRELUDE_NAME));
 }
 

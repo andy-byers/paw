@@ -656,14 +656,23 @@ static paw_Bool is_result_t(struct Resolver *R, struct IrType *type)
 static struct IrType *resolve_chain_expr(struct Resolver *R, struct HirChainExpr *e)
 {
     struct IrType *type = resolve_operand(R, e->target);
-    paw_assert(R->rs->prev != NULL);
+    struct IrType *ret = R->rs->prev;
+    paw_assert(ret != NULL);
 
-    if (!is_option_t(R, type) && !is_result_t(R, type)) {
+    if (is_option_t(R, type)) {
+        struct IrType *option = pawP_generalize(R->C, type);
+        unify(R, e->span.start, option, ret);
+    } else if (is_result_t(R, type)) {
+        struct IrType *result = pawP_generalize(R->C, type);
+        struct IrType *error = K_LIST_LAST(ir_adt_types(type));
+        struct IrType *infer = K_LIST_LAST(ir_adt_types(result));
+        unify(R, e->span.start, error, infer);
+        unify(R, e->span.start, result, ret);
+    } else {
         char const *repr = pawIr_print_type(R->C, type);
         RESOLVER_ERROR(R, invalid_chain_operand, e->span.start, repr);
     }
 
-    unify(R, e->span.start, R->rs->prev, type);
     return K_LIST_FIRST(ir_adt_types(type)); // unwrap
 }
 

@@ -34,10 +34,8 @@ static void print_bindings(struct Printer *P, struct BindingList *bindings)
     for (int i = 0; i < bindings->count; ++i) {
         print_indentation(P);
         struct Binding b = BindingList_get(bindings, i);
-        pawIr_print_type(P->C, b.var.type);
         PRINT_FORMAT(P, "Binding(#%d, %s: %s),\n", b.var.id,
-                     b.name->text, paw_string(P->P, -1));
-        paw_pop(P->P, 1);
+                     b.name->text, pawIr_print_type(P->C, b.var.type));
     }
 }
 
@@ -60,9 +58,7 @@ static void print_decision(struct Printer *P, struct Decision *dec);
 
 static void print_var(struct Printer *P, struct MatchVar var)
 {
-    pawIr_print_type(P->C, var.type);
-    PRINT_FORMAT(P, "Var(#%d, %s),\n", var.id, paw_string(P->P, -1));
-    paw_pop(P->P, 1);
+    PRINT_FORMAT(P, "Var(#%d, %s),\n", var.id, pawIr_print_type(P->C, var.type));
 }
 
 static void print_vars(struct Printer *P, struct VariableList *vars)

@@ -585,3 +585,4 @@ struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mi
     pawP_pool_free(C, R.pool);
     return R.result;
 }
+

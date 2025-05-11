@@ -1024,15 +1024,80 @@ static void code_binop(struct MirVisitor *V, struct MirBinaryOp *x)
     code_ABC(fs, op, REG(x->output.r), REG(x->lhs.r), REG(x->rhs.r));
 }
 
+static paw_Uint int_hash(struct Generator *G, int i)
+{
+    PAW_UNUSED(G);
+    return (paw_Uint)i;
+}
+
+static paw_Bool int_equals(struct Generator *G, int a, int b)
+{
+    PAW_UNUSED(G);
+    return a == b;
+}
+
+DEFINE_MAP(struct Generator, ReturnMap, pawP_alloc, int_hash, int_equals, int, int)
+DEFINE_MAP_ITERATOR(ReturnMap, int, int)
+
+// TODO: generate moves then jump to final block (single return). allows for cleanup code to be placed in the last block
+// TODO: surely the following could be done in a more efficient way, this is just a first attempt
+// TODO: since there are usually just a handful of returns, probably better to use a list of MirRegister and update the register table
+//
+// Generate bytecode for a return instruction
+//
+// This routine needs to consider register interference, since it is possible to return more than
+// 1 value. Consider the following situation:
+//
+//     fn f(i: int, s: str) -> Option<(str, int)> { Some((s, i)) }
+//
+// This code uses the following registers. "in" is the register state directly after OP_CALL and
+// "out" is the register state just prior to the OP_RETURN instruction. "1" is the discriminator
+// for "Option::Some" and "s" is the string constant "hello".
+//
+//     in:  f i s ...
+//     out: 1 s i ...
+//
+// Notice that if the return values are moved into place in left-to-right or right-to-left order,
+// then "s" and "i" will interfere. In order to prevent this from happening, inferfering values
+// are moved into temporary registers before being placed into their final locations.
+//
 static paw_Bool code_return(struct MirVisitor *V, struct MirReturn *x)
 {
+    int index;
+    struct MirPlace const *pr;
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
 
-    int index;
-    struct MirPlace const *pr;
+    ReturnMap *rets = ReturnMap_new(G);
     K_LIST_ENUMERATE (x->values, index, pr)
-        move_to_reg(fs, REG(pr->r), index);
+        ReturnMap_insert(G, rets, REG(pr->r), index);
+
+    int num_rets = 0;
+    while (ReturnMap_length(rets) > 0) {
+        ReturnMapIterator iter;
+        // select a random return value and move it to its final location (if it is not already there)
+        ReturnMapIterator_init(rets, &iter);
+        if (ReturnMapIterator_is_valid(&iter)) {
+            int const src = ReturnMapIterator_key(&iter);
+            int const dst = *ReturnMapIterator_valuep(&iter);
+            if (src != dst) {
+                int const *pslot = ReturnMap_get(G, rets, dst);
+                if (pslot != NULL) {
+                    // VM register "to" is occupied by a return value. Move the conflicting value to a
+                    // temporary register and save its location.
+                    int const temp = temporary_reg(fs, num_rets++);
+                    ReturnMap_insert(G, rets, temp, *pslot);
+                    ReturnMap_remove(G, rets, dst);
+                    move_to_reg(fs, dst, temp);
+                    continue;
+                }
+                move_to_reg(fs, src, dst);
+            }
+            ReturnMapIterator_erase(&iter);
+        }
+    }
+
+    ReturnMap_delete(G, rets);
 
     code_A(fs, OP_RETURN, x->values->count);
     return PAW_FALSE;
