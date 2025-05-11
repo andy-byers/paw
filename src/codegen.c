@@ -1089,6 +1089,7 @@ static paw_Bool code_return(struct MirVisitor *V, struct MirReturn *x)
                     int const temp = temporary_reg(fs, num_conflicts++);
                     ConflictMap_remove(G, conflicts, dst);
                     ConflictMap_insert(G, conflicts, temp, *pslot);
+                    move_to_reg(fs, dst, temp);
                 }
                 move_to_reg(fs, src, dst);
             }
