@@ -1093,7 +1093,7 @@ static paw_Bool code_return(struct MirVisitor *V, struct MirReturn *x)
                 }
                 move_to_reg(fs, src, dst);
             }
-            ConflictMap_remove(G, conflicts, src);
+            ConflictMapIterator_erase(&iter);
         }
     }
 
