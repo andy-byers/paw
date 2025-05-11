@@ -20,6 +20,7 @@ function(test_script NAME ARGS)
     add_test(NAME "test_debug_${NAME}"
         COMMAND ${PAW_EXEC} "-cd" "ast,hir,mir,stats" ${SCRIPT})
 endfunction()
+
 build_test(test_rt)
 
 #build_test(test_impl)

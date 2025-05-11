@@ -1,0 +1,31 @@
+version: 2.1
+
+jobs:
+  build:
+    docker:
+      - image: cimg/clang:latest
+    environment:
+      BUILD_DIR: build
+    steps:
+      - checkout
+      - run:
+          name: Configure
+          command: |
+            mkdir -p build
+            cmake -S . -B build \
+              -DCMAKE_C_COMPILER=clang \
+              -DCMAKE_BUILD_TYPE=Debug \
+              -DPAW_STRESS=0
+      - run:
+          name: Build
+          command: cmake --build build --config Debug
+      - run:
+          name: Test
+          command: ctest --verbose --build-config Debug
+          working_directory: build
+
+workflows:
+  version: 2
+  build_and_test:
+    jobs:
+      - build

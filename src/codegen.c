@@ -131,9 +131,9 @@ void code_ABx(struct FuncState *fs, Op op, int a, int bc)
 void code_ABC(struct FuncState *fs, Op op, int a, int b, int c)
 {
     printf("code op = %d, a = %d\n", op, a);
-    paw_assert(0 <= a && a < A_MAX);
-    paw_assert(0 <= b && b < B_MAX);
-    paw_assert(0 <= c && c < C_MAX);
+    paw_assert(0 <= a && a <= A_MAX);
+    paw_assert(0 <= b && b <= B_MAX);
+    paw_assert(0 <= c && c <= C_MAX);
 
     add_line(fs);
     add_opcode(fs, CREATE_ABC(op, a, b, c));
