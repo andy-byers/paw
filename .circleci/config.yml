@@ -12,7 +12,7 @@ jobs:
           name: Install Dependencies
           command: |
             sudo apt update
-            sudo apt install -y clang cmake ninja-build
+            sudo apt install -y clang cmake ninja-build gdb
       - run:
           name: Configure
           command: |
