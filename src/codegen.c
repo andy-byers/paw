@@ -2,6 +2,7 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
+#include<stdio.h>
 #include "api.h"
 #include "auxlib.h"
 #include "code.h"
@@ -129,6 +130,7 @@ void code_ABx(struct FuncState *fs, Op op, int a, int bc)
 
 void code_ABC(struct FuncState *fs, Op op, int a, int b, int c)
 {
+    printf("code op = %d, a = %d\n", op, a);
     paw_assert(0 <= a && a < A_MAX);
     paw_assert(0 <= b && b < B_MAX);
     paw_assert(0 <= c && c < C_MAX);
@@ -1096,7 +1098,7 @@ static paw_Bool code_return(struct MirVisitor *V, struct MirReturn *x)
     }
 
     ConflictMap_delete(G, conflicts);
-
+printf("return %d values\n", x->values->count);
     code_A(fs, OP_RETURN, x->values->count);
     return PAW_FALSE;
 }
