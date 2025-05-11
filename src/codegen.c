@@ -1078,7 +1078,7 @@ static paw_Bool code_return(struct MirVisitor *V, struct MirReturn *x)
     while (ConflictMap_length(conflicts) > 0) {
         ConflictMapIterator iter;
         ConflictMapIterator_init(conflicts, &iter);
-        while (ConflictMapIterator_is_valid(&iter)) {
+        if (ConflictMapIterator_is_valid(&iter)) {
             int const src = ConflictMapIterator_key(&iter);
             int const dst = *ConflictMapIterator_valuep(&iter);
             if (src != dst) {
@@ -1094,7 +1094,6 @@ static paw_Bool code_return(struct MirVisitor *V, struct MirReturn *x)
                 move_to_reg(fs, src, dst);
             }
             ConflictMap_remove(G, conflicts, src);
-            ConflictMapIterator_next(&iter);
         }
     }
 
