@@ -36,6 +36,7 @@
     X(match_poly_enum)       \
     X(match_or)              \
     X(match_guard)           \
+    X(chain)                 \
     X(misc)                  \
     X(import)                \
     X(trait)                 \

@@ -114,7 +114,7 @@ StructField  = name ":" Expr .
 
 (* Integer literals *)
 int_lit     = decimal_lit | binary_lit | octal_lit | hex_lit .
-decimal_lit = "0" | ("1" … "9") [decimal_digits] .
+decimal_lit = "0" | ("1".."9") [decimal_digits] .
 binary_lit  = "0" ("b" | "B") binary_digits .
 octal_lit   = "0" ("o" | "O") octal_digits .
 hex_lit     = "0" ("x" | "X") hex_digits .
@@ -126,11 +126,11 @@ exponent  = ("e" | "E") ["+" | "-"] decimal_digits .
 
 (* Miscellaneous *)
 name           = letter {letter | decimal_digit} .
-letter         = "A" … "Z" | "a" … "z" | "_" .
-decimal_digit  = "0" … "9" .
+letter         = "A".."Z" | "a".."z" | "_" .
+decimal_digit  = "0".."9" .
 binary_digit   = "0" | "1" .
-octal_digit    = "0" … "7" .
-hex_digit      = "0" … "9" | "A" … "F" | "a" … "f" .
+octal_digit    = "0".."7" .
+hex_digit      = "0".."9" | "A".."F" | "a".."f" .
 decimal_digits = decimal_digit {decimal_digit | "_"} .
 binary_digits  = binary_digit {binary_digit | "_"} .
 octal_digits   = octal_digit {octal_digit | "_"} .

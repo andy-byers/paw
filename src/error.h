@@ -275,6 +275,8 @@ _Noreturn void pawErr_unknown_field(struct Compiler *C, String const *modname, s
 _Noreturn void pawErr_invalid_index_target(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *type);
 _Noreturn void pawErr_invalid_slice_target(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *type);
 _Noreturn void pawErr_missing_binding_in_alternative(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *type);
+_Noreturn void pawErr_expected_option_return(struct Compiler *C, String const *modname, struct SourceLoc loc);
+_Noreturn void pawErr_expected_result_return(struct Compiler *C, String const *modname, struct SourceLoc loc);
 
 // HIR lowering errors
 _Noreturn void pawErr_global_constant_cycle(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name);

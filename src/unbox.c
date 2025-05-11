@@ -962,7 +962,7 @@ static void unbox_function(struct Unboxer *U, struct Mir *mir)
 
     U->fs = fs.outer;
 }
-#include"stdio.h"
+
 void pawP_scalarize_registers(struct Compiler *C, struct Mir *mir)
 {
     struct Unboxer U = {

@@ -50,3 +50,18 @@ pub fn test_guard_3() {
     assert(check((2, 2)) == 5);
 }
 
+fn check_special_case_1(i: int) -> int {
+    match i {
+        1 => 1,
+        x if false => x,
+        3 => 3,
+        _ => 4,
+    }
+}
+
+pub fn test_special_case_1() {
+    assert(check_special_case_1(1) == 1);
+    assert(check_special_case_1(2) == 4);
+    assert(check_special_case_1(3) == 3);
+    assert(check_special_case_1(4) == 4);
+}

@@ -51,6 +51,7 @@ struct FunctionState {
     struct LowerHir *L;
     struct Compiler *C;
     struct Mir *mir;
+    IrType *result;
     MirBlock current;
     int nlocals;
     int level;
@@ -369,9 +370,9 @@ static void adjust_to(struct FunctionState *fs, enum JumpKind kind, MirBlock to)
     }
 }
 
-static void move_to(struct FunctionState *fs, struct SourceLoc loc, struct MirPlace target, struct MirPlace output)
+static void move_to(struct FunctionState *fs, struct SourceLoc loc, struct MirPlace from, struct MirPlace to)
 {
-    NEW_INSTR(fs, move, loc, output, target);
+    NEW_INSTR(fs, move, loc, to, from);
 }
 
 static enum BuiltinKind kind_of_builtin(struct LowerHir *L, struct HirExpr *expr)
@@ -604,6 +605,7 @@ static struct MirPlace place_for_node(struct FunctionState *fs, HirId hid)
 static MirBlock enter_function(struct LowerHir *L, struct FunctionState *fs, struct BlockState *bs, struct Mir *mir)
 {
     *fs = (struct FunctionState){
+        .result = IR_FPTR(mir->type)->result,
         .captured = mir->captured,
         .registers = mir->registers,
         .up = MirUpvalueList_new(mir),
@@ -1142,18 +1144,51 @@ static struct MirSwitchArmList *allocate_switch_arms(struct FunctionState *fs, M
     return arms;
 }
 
+static struct MirPlace option_chain_error(struct FunctionState *fs, struct SourceLoc loc, struct MirPlace object, IrType *target)
+{
+    struct MirPlace place = new_place(fs, fs->result);
+    struct IrLayout layout = pawIr_compute_layout(fs->C, fs->result);
+    NEW_INSTR(fs, aggregate, loc, layout.size, place);
+
+    struct MirPlace const k = add_constant(fs, loc, I2V(K_CHAIN_MISSING), BUILTIN_INT);
+    struct MirPlace discr = select_field(fs, place, fs->result, 0, K_CHAIN_MISSING);
+    move_to(fs, loc, k, discr);
+    return place;
+}
+
+static struct MirPlace result_chain_error(struct FunctionState *fs, struct SourceLoc loc, struct MirPlace object, IrType *target)
+{
+    struct MirPlace place = new_place(fs, fs->result);
+    struct IrLayout layout = pawIr_compute_layout(fs->C, fs->result);
+    NEW_INSTR(fs, aggregate, loc, layout.size, place);
+
+    struct MirPlace const k = add_constant(fs, loc, I2V(K_CHAIN_MISSING), BUILTIN_INT);
+    struct MirPlace discr = select_field(fs, place, fs->result, 0, K_CHAIN_MISSING);
+    move_to(fs, loc, k, discr);
+
+    struct MirPlace e = select_field(fs, object, fs->result, 1, K_CHAIN_MISSING);
+    struct MirPlace error = select_field(fs, place, fs->result, 1, K_CHAIN_MISSING);
+    move_to(fs, loc, e, error);
+    return place;
+}
+
 // Transformation:
-//     opt?  =>  match opt {Some(x) => x, _ => return opt}
+//     opt?  =>  match opt {Option::<T>::Some(x) => x, _ => return Option::<T>::None}
+//     opt?  =>  match opt {Result::<T, E>::Ok(x) => x, Err(e) => return Result::<T2, E>::Err(e)}
+//
 static struct MirPlace lower_chain_expr(struct HirVisitor *V, struct HirChainExpr *e)
 {
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
+
+    IrType *target = GET_NODE_TYPE(fs->C, e->target);
+    enum BuiltinKind const kind = pawP_type2code(fs->C, target);
+
     MirBlock const input_bb = current_bb(fs);
     MirBlock const none_bb = new_bb(fs);
     MirBlock const after_bb = new_bb(fs);
     add_edge(fs, input_bb, none_bb);
 
-    IrType *target = GET_NODE_TYPE(fs->C, e->target);
     struct MirPlace const object = lower_place(V, e->target);
     struct MirPlace const discr = new_literal_place(fs, BUILTIN_INT);
     emit_get_field(fs, e->span.start, target, object, 0, K_CHAIN_MISSING, discr);
@@ -1168,7 +1203,10 @@ static struct MirPlace lower_chain_expr(struct HirVisitor *V, struct HirChainExp
     set_goto_edge(fs, e->span.start, after_bb);
 
     set_current_bb(fs, none_bb);
-    terminate_return(fs, e->span.start, object);
+    struct MirPlace const error = kind == BUILTIN_OPTION
+        ? option_chain_error(fs, e->span.start, object, target)
+        : result_chain_error(fs, e->span.start, object, target);
+    terminate_return(fs, e->span.start, error);
 
     set_current_bb(fs, after_bb);
     return value;

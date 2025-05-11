@@ -1024,15 +1024,78 @@ static void code_binop(struct MirVisitor *V, struct MirBinaryOp *x)
     code_ABC(fs, op, REG(x->output.r), REG(x->lhs.r), REG(x->rhs.r));
 }
 
+static paw_Uint int_hash(struct Generator *G, int i)
+{
+    PAW_UNUSED(G);
+    return (paw_Uint)i;
+}
+
+static paw_Bool int_equals(struct Generator *G, int a, int b)
+{
+    PAW_UNUSED(G);
+    return a == b;
+}
+
+DEFINE_MAP(struct Generator, ConflictMap, pawP_alloc, int_hash, int_equals, int, int)
+DEFINE_MAP_ITERATOR(ConflictMap, int, int)
+
+// TODO: generate moves then jump to final block (single return). allows for cleanup code to be placed in the last block
+// TODO: surely the following could be done in a more efficient way, this is just a first attempt
+// TODO: since there are usually just a handful of returns, probably better to use a list of MirRegister and update the register table
+//
+// Generate bytecode for a return instruction
+//
+// This routine needs to consider register interference, since it is possible to return more than
+// 1 value. Consider the following situation:
+//
+//     fn f(i: int, s: str) -> Option<(str, int)> { Some((s, i)) }
+//
+// This code uses the following registers. "in" is the register state directly after OP_CALL and
+// "out" is the register state just prior to the OP_RETURN instruction. "1" is the discriminator
+// for "Option::Some" and "s" is the string constant "hello".
+//
+//     in:  f i s ...
+//     out: 1 s i ...
+//
+// Notice that if the return values are moved into place in left-to-right or right-to-left order,
+// then "s" and "i" will interfere. In order to prevent this from happening, inferfering values
+// are moved into temporary registers before being placed into their final locations.
+//
 static paw_Bool code_return(struct MirVisitor *V, struct MirReturn *x)
 {
+    int index;
+    struct MirPlace const *pr;
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
 
-    int index;
-    struct MirPlace const *pr;
+    ConflictMap *conflicts = ConflictMap_new(G);
     K_LIST_ENUMERATE (x->values, index, pr)
-        move_to_reg(fs, REG(pr->r), index);
+        ConflictMap_insert(G, conflicts, REG(pr->r), index);
+
+    int num_conflicts = 0;
+    while (ConflictMap_length(conflicts) > 0) {
+        ConflictMapIterator iter;
+        ConflictMapIterator_init(conflicts, &iter);
+        while (ConflictMapIterator_is_valid(&iter)) {
+            int const src = ConflictMapIterator_key(&iter);
+            int const dst = *ConflictMapIterator_valuep(&iter);
+            if (src != dst) {
+                int const *pslot = ConflictMap_get(G, conflicts, dst);
+                if (pslot != NULL) {
+                    // VM register "to" is occupied by a return value. Move the conflicting value to a
+                    // temporary register and save its location.
+                    int const temp = temporary_reg(fs, num_conflicts++);
+                    ConflictMap_remove(G, conflicts, dst);
+                    ConflictMap_insert(G, conflicts, temp, *pslot);
+                }
+                move_to_reg(fs, src, dst);
+            }
+            ConflictMap_remove(G, conflicts, src);
+            ConflictMapIterator_next(&iter);
+        }
+    }
+
+    ConflictMap_delete(G, conflicts);
 
     code_A(fs, OP_RETURN, x->values->count);
     return PAW_FALSE;
