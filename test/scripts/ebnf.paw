@@ -1,0 +1,564 @@
+// Copyright (c) 2024, The paw Authors. All rights reserved.
+// This source code is licensed under the MIT License, which can be found in
+// LICENSE.md. See AUTHORS.md for a list of contributor names.
+//
+// ebnf.paw
+
+use io;
+
+const CHUNK_SIZE: int = 1 << 12;
+
+fn read_to_string(path: str) -> io::Result<str> {
+    let file = match io::File::open(path, "r") {
+        io::Result::Err(e) => return io::Result::Err(e),
+        io::Result::Ok(f) => f,
+    };
+
+    let result = "";
+    while true {
+        let chunk = match file.read(CHUNK_SIZE) {
+            io::Result::Err(e) => return io::Result::Err(e),
+            io::Result::Ok("") => break,
+            io::Result::Ok(s) => s,
+        };
+        result += chunk;
+    }
+    io::Result::Ok(result)
+}
+
+type ParseResult<T> = Result<T, ParseError>;
+
+inline struct ParseError {
+    pub kind: ParseErrorKind,
+    pub loc: SourceLoc,
+
+    pub fn to_string(self) -> str {
+        "\{self.loc}: \{self.kind}"
+    }
+}
+
+inline enum ParseErrorKind {
+    ScanError(ScanError),
+    ExpectedToken(TokenKind),
+    UnexpectedToken(Token),
+
+    pub fn to_string(self) -> str {
+        match self {
+            ParseErrorKind::ScanError(e) => "scan error: \{e}",
+            ParseErrorKind::ExpectedToken(k) => "expected token: \{k}",
+            ParseErrorKind::UnexpectedToken(t) => "unexpected token: \{t}",
+        }
+    }
+}
+
+inline struct Production {
+    pub ident: str,
+    pub expr: Expression,
+
+    pub fn to_string(self) -> str {
+        "\{self.ident} = \{self.expr} ."
+    }
+}
+
+inline struct Expression {
+    pub alts: [Alternative],
+
+    pub fn to_string(self) -> str {
+        let result = "";
+        for a in self.alts {
+            if #result > 0 { result += " | "; }
+            result += a.to_string();
+        }
+        result
+    }
+}
+
+inline struct Alternative {
+    pub terms: [Term],
+
+    pub fn to_string(self) -> str {
+        let result = "";
+        for t in self.terms {
+            if #result > 0 { result += " "; }
+            result += t.to_string();
+        }
+        result
+    }
+}
+
+enum Term {
+    Ident(str),
+    Terminal(str),
+    Range(str, str),
+    Group(Expression),
+    Option(Expression),
+    Repetition(Expression),
+
+    pub fn to_string(self) -> str {
+        match self {
+            Term::Ident(data) => data,
+            Term::Terminal(data) => '"\{data}"',
+            Term::Range(lhs, rhs) => "\{lhs}..\{rhs}",
+            Term::Group(expr) => "(\{expr})",
+            Term::Option(expr) =>  "[\{expr}]",
+            Term::Repetition(expr) =>  "{\{expr}}",
+        }
+    }
+}
+
+inline enum ScanError {
+    UnexpectedChar(str),
+    UnterminatedComment,
+    UnterminatedString,
+
+    pub fn to_string(self) -> str {
+        match self {
+            ScanError::UnexpectedChar(c) => "unexpected character: '\{c}'",
+            ScanError::UnterminatedComment => "unterminated comment",
+            ScanError::UnterminatedString => "unterminated string",
+        }
+    }
+}
+
+fn is_space(c: str) -> bool {
+    c == " " || c == "\t" || c == "\f" || c == "\v" || c == "\r" || c == "\n"
+}
+
+fn is_alpha(c: str) -> bool {
+    c == "a" || c == "b" || c == "c" || c == "d" || c == "e" || c == "f" || c == "g" || c == "h" || c == "i" || c == "j" || c == "k" || c == "l" || c == "m" || c == "n" || c == "o" || c == "p" || c == "q" || c == "r" || c == "s" || c == "t" || c == "u" || c == "v" || c == "w" || c == "x" || c == "y" || c == "z" || c == "A" || c == "B" || c == "C" || c == "D" || c == "E" || c == "F" || c == "G" || c == "H" || c == "I" || c == "J" || c == "K" || c == "L" || c == "M" || c == "N" || c == "O" || c == "P" || c == "Q" || c == "R" || c == "S" || c == "T" || c == "U" || c == "V" || c == "W" || c == "X" || c == "Y" || c == "Z"
+}
+
+fn is_alnum(c: str) -> bool {
+    is_alpha(c) || c == "0" || c == "1" || c == "2" || c == "3" || c == "4" || c == "5" || c == "6" || c == "7" || c == "8" || c == "9"
+}
+
+inline struct SourceLoc {
+    pub line: int,
+    pub column: int,
+
+    pub fn to_string(self) -> str {
+        "\{self.line}:\{self.column}"
+    }
+}
+
+struct Scanner {
+    error: Option<ScanError>,
+    token: Option<Token>,
+    location: SourceLoc,
+    source: str,
+    index: int,
+    
+
+    pub fn new(source: str) -> Self {
+        let scanner = Self{
+            location: SourceLoc{line: 0, column: 0},
+            error: Option::None,
+            token: Option::None, 
+            index: 0, 
+            source, 
+        };
+        scanner.skip();
+        scanner
+    }
+
+    pub fn location(self) -> SourceLoc {
+        self.location
+    }
+
+    pub fn is_ok(self) -> bool {
+        self.error.is_none()
+    }
+
+    pub fn error(self) -> ScanError {
+        self.error.unwrap()
+    }
+
+    pub fn token(self) -> Option<Token> {
+        self.token
+    }
+
+    pub fn skip(self) {
+        self.token = self.advance();
+    }
+
+    fn set_error(self, e: ScanError) {
+        assert(self.error.is_none());
+        self.error = Option::Some(e); 
+    }
+
+    fn get_char(self) -> str {
+        assert(self.error.is_none());
+        if self.index < #self.source {
+            self.source[self.index]
+        } else {
+            ""
+        }
+    }
+
+    fn peek_char(self, n: int) -> str {
+        assert(self.error.is_none());
+        if self.index < #self.source - n {
+            self.source[self.index + n]
+        } else {
+            ""
+        }
+    }
+
+    fn skip_char(self) {
+        assert(self.error.is_none());
+        self.location.column += 1;
+        self.index += 1;
+    }
+
+    fn advance(self) -> Option<Token> {
+        self.skip_whitespace_and_comments()?;
+        let kind = match self.get_char() {
+            c if is_alpha(c) || c == "_" => return self.scan_ident(),
+            "." if self.peek_char(1) == "." => TokenKind::DotDot,
+            '"' => return self.scan_string(),
+            "|" => TokenKind::Pipe,
+            "." => TokenKind::Dot,
+            "=" => TokenKind::Equals,
+            "(" => TokenKind::LeftParen,
+            ")" => TokenKind::RightParen,
+            "[" => TokenKind::LeftSquare,
+            "]" => TokenKind::RightSquare,
+            "{" => TokenKind::LeftCurly,
+            "}" => TokenKind::RightCurly,
+            "" => TokenKind::Eof,
+            c => {
+                self.set_error(ScanError::UnexpectedChar(c));
+                return Option::None;
+            },
+        };
+        self.skip_char();
+        Option::Some(Token{kind, data: ""})
+    }
+
+    fn skip_whitespace_and_comments(self) -> Option<()> {
+        if !self.is_ok() {
+            return Option::None;
+        }
+        while true {
+            match self.get_char() {
+                "" => break,
+                "\r" | "\n" => {
+                    self.location.line += 1;
+                    self.location.column = 0;
+                },
+                " " | "\t" | "\f" | "\v" => (), // do nothing
+                "(" if self.get_char() == "*" => self.skip_comment()?,
+                _ => break,
+            }
+        }
+        Option::Some(())
+    }
+
+    fn scan_ident(self) -> Option<Token> {
+        let data = "";
+        while true {
+            let c = self.get_char();
+            if is_alnum(c) || c == "_" {
+                self.skip_char();
+                data += c; 
+            } else {
+                break;
+            }
+        }
+        Option::Some(Token{
+            kind: TokenKind::Ident,
+            data,
+        })
+    }
+
+    fn skip_comment(self) -> Option<()> {
+        while true {
+            match self.get_char() {
+                "" => break,
+                "*" if self.peek_char(1) == ")" => {
+                    self.skip_char(); // "*"
+                    self.skip_char(); // ")"
+                    return Option::Some(());
+                },
+                _ => self.skip_char(),
+            }
+        }
+        self.set_error(ScanError::UnterminatedComment);
+        Option::None
+    }
+
+    fn scan_string(self) -> Option<Token> {
+        self.skip_char(); // '"'
+
+        let data = "";
+        while true {
+            match self.get_char() {
+                '"' => {
+                    self.skip_char();
+                    return Option::Some(Token{
+                        kind: TokenKind::String,
+                        data,
+                    });
+                },
+                "" => break,
+                c => data += c,
+            }
+            self.skip_char();
+        }
+        self.set_error(ScanError::UnterminatedString);
+        Option::None
+    }
+}
+
+inline struct Token {
+    pub kind: TokenKind,
+    pub data: str,
+
+    pub fn to_string(self) -> str {
+        match self.kind {
+            TokenKind::Ident => self.data,
+            TokenKind::String => '"\{self.data}"',
+            TokenKind::LeftParen => "(",
+            TokenKind::RightParen => ")",
+            TokenKind::LeftSquare => "[",
+            TokenKind::RightSquare => "]",
+            TokenKind::LeftCurly => "{",
+            TokenKind::RightCurly => "}",
+            TokenKind::Pipe => "|",
+            TokenKind::Equals => "=",
+            TokenKind::DotDot => "..",
+            TokenKind::Dot => ".",
+            TokenKind::Eof => "",
+        }
+    }
+}
+
+inline enum TokenKind {
+    Ident,
+    String,
+    LeftParen,
+    RightParen,
+    LeftSquare,
+    RightSquare,
+    LeftCurly,
+    RightCurly,
+    Pipe,
+    Equals,
+    DotDot,
+    Dot,
+    Eof,
+
+    pub fn to_string(self) -> str {
+        match self {
+            TokenKind::Ident => "<ident>",
+            TokenKind::String => "<string>",
+            TokenKind::LeftParen => "(",
+            TokenKind::RightParen => ")",
+            TokenKind::LeftSquare => "[",
+            TokenKind::RightSquare => "]",
+            TokenKind::LeftCurly => "{",
+            TokenKind::RightCurly => "}",
+            TokenKind::Pipe => "|",
+            TokenKind::Equals => "=",
+            TokenKind::DotDot => "..",
+            TokenKind::Dot => ".",
+            TokenKind::Eof => "",
+        }
+    }
+
+    pub fn equals(self, k: TokenKind) -> bool {
+        match (self, k) {
+            (TokenKind::Ident, TokenKind::Ident)
+            | (TokenKind::String, TokenKind::String)
+            | (TokenKind::LeftParen, TokenKind::LeftParen)
+            | (TokenKind::RightParen, TokenKind::RightParen)
+            | (TokenKind::LeftSquare, TokenKind::LeftSquare)
+            | (TokenKind::RightSquare,TokenKind::RightSquare)
+            | (TokenKind::LeftCurly,  TokenKind::LeftCurly)
+            | (TokenKind::RightCurly, TokenKind::RightCurly)
+            | (TokenKind::Pipe, TokenKind::Pipe)
+            | (TokenKind::Equals, TokenKind::Equals)
+            | (TokenKind::DotDot, TokenKind::DotDot)
+            | (TokenKind::Dot, TokenKind::Dot)
+            | (TokenKind::Eof, TokenKind::Eof) => true,
+            _ => false,
+        }
+    }
+}
+
+struct Parser {
+    pub fn new() -> Self {
+        Self
+    }
+
+    pub fn parse(self, s: Scanner) -> ParseResult<[Production]> {
+        let result = [];
+        while true {
+            result.push(self.parse_production(s)?);
+        }
+        ParseResult::Ok(result)
+    }
+
+    fn check(self, s: Scanner, k: TokenKind) -> bool {
+        match s.token() {
+            Option::Some(t) => {
+                s.skip();
+                t.kind.equals(k)
+            },
+            _ => false,
+        }
+    }
+
+    fn expect(self, s: Scanner, k: TokenKind) -> ParseResult<Token> {
+        if s.token().is_some() {
+            let t = s.token().unwrap();
+            s.skip();
+            ParseResult::Ok(t)
+        } else if s.is_ok() {
+            Self::expected_token(s, k)
+        } else {
+            Self::scan_error(s)
+        }
+    }
+
+    fn scan_error<T>(s: Scanner) -> ParseResult<T> {
+        ParseResult::Err(ParseError{kind: ParseErrorKind::ScanError(s.error()), loc: s.location()})
+    }
+
+    fn unexpected_token<T>(s: Scanner, t: Token) -> ParseResult<T> {
+        ParseResult::Err(ParseError{kind: ParseErrorKind::UnexpectedToken(t), loc: s.location()})
+    }
+
+    fn expected_token<T>(s: Scanner, k: TokenKind) -> ParseResult<T> {
+        ParseResult::Err(ParseError{kind: ParseErrorKind::ExpectedToken(k), loc: s.location()})
+    }
+
+    fn parse_production(self, s: Scanner) -> ParseResult<Production> {
+        let ident = self.expect(s, TokenKind::Ident)?;
+print("\{s.error()}\n");
+        self.expect(s, TokenKind::Equals)?;
+        let expr = self.parse_expression(s)?;
+        self.expect(s, TokenKind::Dot)?;
+
+        ParseResult::Ok(Production{ident: ident.data, expr})
+    }
+
+    fn parse_expression(self, s: Scanner) -> ParseResult<Expression> {
+        let alts = self.parse_alternatives(s)?;
+        ParseResult::Ok(Expression{alts})
+    }
+
+    fn parse_alternatives(self, s: Scanner) -> ParseResult<[Alternative]> {
+        let result = [];
+        while true {
+            result.push(self.parse_alternative(s)?);
+            if !self.check(s, TokenKind::Pipe) {
+                break;
+            }
+        }
+        ParseResult::Ok(result)
+    }
+
+    fn parse_alternative(self, s: Scanner) -> ParseResult<Alternative> {
+        let terms = self.parse_terms(s)?;
+        ParseResult::Ok(Alternative{terms})
+    }
+
+    fn token(self, s: Scanner) -> ParseResult<Token> {
+        match s.token() {
+            Option::Some(t) => ParseResult::Ok(t),
+            _ => Self::scan_error(s),
+        }
+    }
+
+    fn parse_terms(self, s: Scanner) -> ParseResult<[Term]> {
+        let result = [self.parse_term(s)?];
+        while true {
+            let t = self.token(s)?;
+            match t.kind {
+                TokenKind::Dot 
+                | TokenKind::Pipe
+                | TokenKind::RightParen
+                | TokenKind::RightSquare
+                | TokenKind::RightCurly => break,
+    
+                TokenKind::Eof => {
+                    return Self::expected_token(s, TokenKind::Dot);
+                },
+                k => {
+                    result.push(self.parse_term(s)?);
+                },
+            }
+        }
+        ParseResult::Ok(result)
+    }
+
+    fn parse_term(self, s: Scanner) -> ParseResult<Term> {
+        let t = self.token(s)?;
+        s.skip();
+
+        let term = match t.kind {
+            TokenKind::Ident => Term::Ident(t.data),
+            TokenKind::String => Term::Terminal(t.data),
+            TokenKind::LeftParen => self.parse_grouping(s)?,
+            TokenKind::LeftSquare => self.parse_option(s)?,
+            TokenKind::LeftCurly => self.parse_repetition(s)?,
+            _ => return Self::unexpected_token(s, t),
+        };
+        ParseResult::Ok(term) 
+    }
+
+    fn parse_grouping(self, s: Scanner) -> ParseResult<Term> {
+        let expr = self.parse_expression(s)?;
+        self.expect(s, TokenKind::RightParen)?;
+        ParseResult::Ok(Term::Group(expr))
+    }
+
+    fn parse_option(self, s: Scanner) -> ParseResult<Term> {
+        let expr = self.parse_expression(s)?;
+        self.expect(s, TokenKind::RightSquare)?;
+        ParseResult::Ok(Term::Option(expr))
+    }
+
+    fn parse_repetition(self, s: Scanner) -> ParseResult<Term> {
+        let expr = self.parse_expression(s)?;
+        self.expect(s, TokenKind::RightCurly)?;
+        ParseResult::Ok(Term::Repetition(expr))
+    }
+}
+
+fn error(msg: str) -> int {
+    print("error: \{msg}\n");
+    -1
+}
+
+pub fn main(args: [str]) -> int {
+    let path = if #args < 2 {
+        return error("missing PATH argument");
+    } else {
+        args[1]
+    };
+
+    let source = match read_to_string(path) {
+        io::Result::Err(e) => return error("\{e}"),
+        io::Result::Ok(s) => s,
+    };
+
+    let scanner = Scanner::new(source);
+
+    let parser = Parser::new();
+    let result = match parser.parse(scanner) {
+        ParseResult::Ok(r) => r,
+        ParseResult::Err(e) => {
+            return error("\{e}");
+        },
+    };
+
+    for production in result {
+        print("\{production}\n");
+    }
+
+    0
+}
+
+

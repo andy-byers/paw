@@ -1464,14 +1464,12 @@ static struct IrType *resolve_if_expr(struct Resolver *R, struct HirIfExpr *e)
     }
 
     struct IrType *second = resolve_expr(R, e->else_arm);
-    if (!equals(R, first, second)) {
-        // Forgive type errors when the result type is "()" and there is an
-        // unconditional jump. Control will never reach the end of such a block.
-        if (is_unit_type(R, first) && is_never_block(e->then_arm)) {
-            first = second;
-        } else if (is_unit_type(R, second) && is_never_block(e->else_arm)) {
-            second = first;
-        }
+    // Forgive type errors when the result type is "()" and there is an
+    // unconditional jump. Control will never reach the end of such a block.
+    if (is_unit_type(R, first) && is_never_block(e->then_arm)) {
+        first = second;
+    } else if (is_unit_type(R, second) && is_never_block(e->else_arm)) {
+        second = first;
     }
     unify(R, e->span.start, first, second);
     return first;
