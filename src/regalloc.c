@@ -519,7 +519,7 @@ struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mi
         RegisterTable_push(C, R.result, REGINFO(-1));
     }
 
-    int const nparameters = IR_FPTR(mir->type)->params->count;
+    int const nparameters = mir->param_size;
     int const ncaptured = mir->captured->count;
 
     // TODO: linked list threaded through set elements? build

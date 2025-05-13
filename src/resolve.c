@@ -463,9 +463,10 @@ static void resolve_func_item(struct Resolver *R, struct HirFuncDecl *d)
     enter_function(R, d);
     allocate_decls(R, d->generics);
     allocate_locals(R, d->params);
-    struct IrType *ret = GET_NODE_TYPE(R->C, d->result);
 
     if (d->body != NULL) {
+        struct IrType *ret = GET_NODE_TYPE(R->C, d->result);
+
         struct ResultState rs = {
             // named function has explicit return type
             .outer = R->rs,

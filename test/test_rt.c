@@ -44,7 +44,10 @@ static void run_tests(char const *name, struct TestAlloc *a, char const *prefix)
     for (int i = 0; i < defs.count; ++i) {
         struct Def *def = defs.data[i];
         String const *name = def->hdr.name;
-        if (def->hdr.kind == DEF_FUNC && def->func.self < 0 && name->length >= length && memcmp(name->text, prefix, length) == 0) {
+        if (def->hdr.kind == DEF_FUNC
+                && def->func.self < 0
+                && name->length >= length
+                && memcmp(name->text, prefix, length) == 0) {
             // toplevel functions prefixed with 'test' must be public
             check(def->hdr.is_pub);
             fprintf(stderr, "    %s\n", name->text);

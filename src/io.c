@@ -139,8 +139,9 @@ static int file_read(paw_Env *P)
     paw_Int const count = pawO_read(P, file, buf.data, size);
     if (count >= 0) {
         pawL_buffer_resize(P, &buf, count);
-        paw_push_int(P, PAW_RESULT_OK);
         pawL_push_result(P, &buf);
+        paw_push_int(P, PAW_RESULT_OK);
+        paw_rotate(P, -2, 1);
     } else {
         PUSH_ERROR(P);
     }

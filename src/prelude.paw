@@ -95,6 +95,14 @@ pub struct List<T>: Iterate<ListIterator<T>, T> {
     #[extern] pub fn insert(self, index: int, value: T) -> Self;
     #[extern] pub fn remove(self, index: int) -> T;
     #[extern] pub fn pop(self) -> T;
+
+    pub fn get_or(self, index: int, default: T) -> T {
+        match self.get(index) {
+            Option::Some(value) => value,
+            _ => default,
+        }
+    }
+
     pub fn iterator(self) -> ListIterator<T> {
         ListIterator::new(self)
     }
@@ -115,6 +123,14 @@ pub struct Map<K: Hash + Equals, V>: Iterate<MapIterator<K, V>, K> {
     #[extern] pub fn set(self, key: K, value: V); // TODO: -> Option<V>;
     #[extern] pub fn get_or(self, key: K, default: V) -> V;
     #[extern] pub fn erase(self, key: K) -> Self;
+
+    pub fn contains(self, key: K) -> bool {
+        match self.get(key) {
+            Option::Some(_) => true,
+            Option::None => false,
+        }
+    }
+
     pub fn iterator(self) -> MapIterator<K, V> {
         MapIterator::new(self)
     }

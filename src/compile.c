@@ -124,6 +124,12 @@ enum BuiltinKind pawP_type2code(struct Compiler *C, struct IrType *type)
     return NBUILTINS;
 }
 
+struct IrType *pawP_builtin_type(struct Compiler *C, enum BuiltinKind code)
+{
+    DeclId const did = C->builtins[code].did;
+    return GET_NODE_TYPE(C, pawHir_get_decl(C, did));
+}
+
 String *pawP_scan_nstring(struct Compiler *C, Tuple *map, char const *s, size_t n)
 {
     paw_Env *P = ENV(C);

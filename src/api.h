@@ -21,9 +21,9 @@
     ((P)->top.p += (n), API_CHECK(P, (P)->top.p <= (P)->cf->top.p, "stack overflow"))
 
 #define API_CHECK_PUSH(P, n) \
-    API_CHECK(P, (n) <= ((P)->cf->top.p - (P)->top.p), "stack is too large for push")
+    API_CHECK(P, (n) <= ((P)->cf->top.p - (P)->top.p), "not enough space for push")
 
 #define API_CHECK_POP(P, n) \
-    API_CHECK(P, (n) < (P)->top.p - (P)->cf->base.p, "stack is not large enough for pop")
+    API_CHECK(P, (n) < (P)->top.p - (P)->cf->base.p, "not enough values to pop")
 
 #endif // PAW_API_H

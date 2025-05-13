@@ -67,10 +67,10 @@ pub fn main(args: [str]) {
         let iterations = 1 << (maxdepth - depth + mindepth);
         let check = 0;
         for i in 0..iterations {
-            check = check + item_check(bottom_up_tree(depth));
+            check += item_check(bottom_up_tree(depth));
         }
         print('\{iterations}\t trees of depth \{depth}\tcheck: \{check}\n');
-        depth = depth + 2;
+        depth += 2;
     }
 
     print('long lived tree of depth \{maxdepth}\tcheck: \{item_check(longlivedtree)}\n');

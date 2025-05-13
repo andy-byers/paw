@@ -12,6 +12,9 @@ FParameters  = {FParam ","} FParam [","] .
 Signature    = "(" [FParameters] ")" ["->" Type] .
 FParam       = name ":" Type .
 
+(* Constants *)
+ConstDecl = "const" name ":" Type "=" Expr .
+
 (* Structures *)
 StructDecl = "struct" name [Generics] (StructBody | ";") .
 StructBody = "{" {Field ","} Field [","] "}" .
@@ -43,7 +46,7 @@ Segment = name [TypeArgs] .
 (* Patterns *)
 Pattern    = LiteralPat | TuplePat | StructPat | 
              VariantPat | PathPat | RangePat .
-LiteralPat = StrPat | IntPat | BoolPat .
+LiteralPat = string_lit | int_lit | float_lit | bool_lit .
 RangePat   = Pattern RangeSep Pattern .
 RangeSep   = ".." | "..=" .
 PatList    = {Pattern ","} Pattern [","] .
@@ -54,7 +57,7 @@ PathPat    = Path .
 
 (* Declarations *)
 Declaration = UseDecl | VarDecl | TypeDecl .
-UseDecl     = "use" name ["::" name] as name .
+UseDecl     = "use" name ["::" (name | "*")] ["as" name] .
 VarDecl     = "let" name [":" Type] "=" Expr .
 TypeDecl    = "type" name [Generics] "=" Type .
 Generics    = "<" {name ","} name [","] ">" .
@@ -112,12 +115,19 @@ StructLit    = Path ["{" [StructFields [","]] "}"] .
 StructFields = StructField {"," StructField} [","] .
 StructField  = name ":" Expr .
 
-(* Integer literals *)
+(* Primitive literals *)
 int_lit     = decimal_lit | binary_lit | octal_lit | hex_lit .
+bool_lit    = "true" | "false" .
+string_lit  = quote {unicode_char} quote .
+istring_lit = quote istring_middle quote .
 decimal_lit = "0" | ("1".."9") [decimal_digits] .
 binary_lit  = "0" ("b" | "B") binary_digits .
 octal_lit   = "0" ("o" | "O") octal_digits .
 hex_lit     = "0" ("x" | "X") hex_digits .
+
+(* String interpolation *)
+istring_middle = {unicode_char | istring_expr} .
+istring_expr   = "\\{" Expr "}" .
 
 (* Float literals *)
 float_lit = decimal_digits "." [decimal_digits] [exponent] |
@@ -135,4 +145,7 @@ decimal_digits = decimal_digit {decimal_digit | "_"} .
 binary_digits  = binary_digit {binary_digit | "_"} .
 octal_digits   = octal_digit {octal_digit | "_"} .
 hex_digits     = hex_digit {hex_digit | "_"} .
+unicode_char   = UNICODE_CODEPOINT - "\n" .
+quote          = "'" | "\"" .
+
 

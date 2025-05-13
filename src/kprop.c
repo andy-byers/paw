@@ -862,7 +862,7 @@ static void transform_code(struct KProp *K)
 
 static paw_Bool filter_code(struct KProp *K, UseCountMap *counts, struct MirInstructionList *code)
 {
-    int const num_params = IR_FPTR(K->mir->type)->params->count;
+    int const num_params = K->mir->param_size;
 
     int index;
     int num_removed = 0;

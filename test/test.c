@@ -568,6 +568,8 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
             case OP_SLENGTH:
             case OP_LLENGTH:
             case OP_MLENGTH:
+            case OP_SCONCAT:
+            case OP_LCONCAT:
             case OP_XCASTB:
             case OP_FCASTI:
             case OP_ICASTF:
@@ -633,10 +635,8 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
             case OP_SLE:
             case OP_SGT:
             case OP_SGE:
-            case OP_SCONCAT:
             case OP_SGET:
             case OP_SGETN:
-            case OP_LCONCAT:
             case OP_LGETP:
             case OP_LGET:
             case OP_LSET:
@@ -670,6 +670,7 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
 void test_dump_source(paw_Env *P, paw_Debug const *d)
 {
     CallFrame *cf = d->cf;
+
     if (CF_IS_PAW(cf)) {
         Buffer print;
         pawL_init_buffer(P, &print);

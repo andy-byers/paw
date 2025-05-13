@@ -336,6 +336,7 @@ struct Pool *pawP_pool_new(struct Compiler *C, struct PoolStats st);
 void pawP_pool_free(struct Compiler *C, struct Pool *pool);
 
 enum BuiltinKind pawP_type2code(struct Compiler *C, struct IrType *type);
+struct IrType *pawP_builtin_type(struct Compiler *C, enum BuiltinKind code);
 
 struct ItemSlot {
     struct RttiType *rtti;

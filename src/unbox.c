@@ -159,35 +159,30 @@ static IrTypeList *get_base_field_types(struct Unboxer *U, IrType *parent)
     return types;
 }
 
-// TODO: use this to allocate registers and upvalues
-typedef void (*TraverseField)(struct Unboxer *U, IrType *type);
-static int traverse_scalar_fields(struct Unboxer *U, IrType *type, TraverseField traverse)
+static IrTypeList *instantiate_variant_fields(struct Unboxer *U, IrType *type, int discr)
 {
-    struct FunctionState *fs = U->fs;
-    if (!is_composite(U, type)) {
-        // scalar or boxed type
-        traverse(U, type);
-        return 1;
-    }
-    int count = 0;
-    struct IrType *const *ptype;
-    struct IrTypeList *types = get_base_field_types(U, type);
-    K_LIST_FOREACH (types, ptype)
-        count += traverse_scalar_fields(U, *ptype, traverse);
-    return count;
-}
-
-static IrTypeList *instantiate_variant_fields(struct Unboxer *U, struct IrAdt *parent, int discr)
-{
+    struct IrAdt *parent = IrGetAdt(type);
     IrTypeList *fields = pawP_instantiate_variant_fields(U->C, parent, discr);
 
     IrTypeList *result = IrTypeList_new(U->C);
     IrTypeList_reserve(U->C, result, 1 + fields->count);
     IrTypeList_push(U->C, result, builtin_type(U, BUILTIN_INT));
 
+    int size = 1;
     IrType *const *ptype;
-    K_LIST_FOREACH (fields, ptype)
+    K_LIST_FOREACH (fields, ptype) {
         IrTypeList_push(U->C, result, *ptype);
+        struct IrLayout const layout = pawIr_compute_layout(U->C, type);
+        size += layout.size;
+    }
+
+    if (is_composite(U, type)) {
+        // pad the object so it can contain any variant of this ADT
+        struct IrLayout layout = pawIr_compute_layout(U->C, type);
+        for (; size < layout.size; ++size)
+            IrTypeList_push(U->C, result, pawP_builtin_type(U->C, BUILTIN_UNIT));
+    }
+
     return result;
 }
 
@@ -201,65 +196,74 @@ static IrTypeList *get_variant_field_types(struct Unboxer *U, IrType *parent, in
     if (def->is_struct) {
         return pawP_instantiate_struct_fields(U->C, IrGetAdt(parent));
     } else {
-        return instantiate_variant_fields(U, IrGetAdt(parent), discr);
+        return instantiate_variant_fields(U, parent, discr);
     }
+}
+
+typedef void (*ValueAllocator)(struct FunctionState *fs, IrType *type, void *ctx);
+
+static int allocate_values(struct Unboxer *U, struct IrType *type, int discr, ValueAllocator alloc, void *ctx)
+{
+    if (!is_composite(U, type)) {
+        // scalar or boxed type
+        alloc(U->fs, type, ctx);
+        return 1;
+    }
+
+    struct IrTypeList *types = discr >= 0
+        ? get_variant_field_types(U, type, discr)
+        : get_base_field_types(U, type);
+
+    int count = 0;
+    struct IrType *const *ptype;
+    K_LIST_FOREACH (types, ptype)
+        count += allocate_values(U, *ptype, discr, alloc, ctx);
+    return count;
 }
 
 static struct MemoryGroup get_registers(struct Unboxer *U, MirRegister r, int discr);
 
-static int alloc_scalar_registers(struct Unboxer *U, struct IrType *type, int discr, paw_Bool is_captured, paw_Bool is_uninit)
+struct RegisterState {
+    paw_Bool is_captured;
+    paw_Bool is_uninit;
+};
+
+static void allocate_register(struct FunctionState *fs, IrType *type, void *ctx)
 {
-    struct FunctionState *fs = U->fs;
-    struct IrTypeList *types;
-    if (is_composite(U, type)) {
-        types = discr >= 0
-            ? get_variant_field_types(U, type, discr)
-            : get_base_field_types(U, type);
-    } else {
-        // scalar or boxed type
-        MirRegisterDataList_push(fs->mir, fs->registers,
-                (struct MirRegisterData){
-                    // NOTE: ".hint" is just own register number until after SSA construction
-                    .hint = is_captured ? MIR_REG(fs->registers->count) : MIR_INVALID_REG,
-                    .is_captured = is_captured,
-                    .is_uninit = is_uninit,
-                    .type = type,
-                    .size = 1,
-                });
-        return 1;
-    }
-    int count = 0;
-    struct IrType *const *ptype;
-    K_LIST_FOREACH (types, ptype)
-        count += alloc_scalar_registers(U, *ptype, discr, is_captured, is_uninit);
-    return count;
+    struct RegisterState *rs = ctx;
+    MirRegisterDataList_push(fs->mir, fs->registers, (struct MirRegisterData){
+                // NOTE: ".hint" is just own register number until after SSA construction
+                .hint = rs->is_captured ? MIR_REG(fs->registers->count) : MIR_INVALID_REG,
+                .is_captured = rs->is_captured,
+                .is_uninit = rs->is_uninit,
+                .type = type,
+                .size = 1,
+            });
 }
 
-static int alloc_scalar_upvalues(struct Unboxer *U, struct IrType *type, int up, paw_Bool is_local)
+struct UpvalueState {
+    paw_Bool is_local;
+    int up;
+};
+
+static void allocate_upvalue(struct FunctionState *fs, IrType *type, void *ctx)
 {
-    struct FunctionState *fs = U->fs;
-    struct IrTypeList *types;
-    if (is_composite(U, type)) {
-        types = get_base_field_types(U, type);
-    } else {
-        // scalar or boxed type
-        MirUpvalueList_push(fs->mir, fs->upvalues,
-                (struct MirUpvalueInfo){.index = up, .type = type, .is_local = is_local});
-        return 1;
-    }
-    int count = 0;
-    struct IrType *const *ptype;
-    K_LIST_FOREACH (types, ptype) {
-        count += alloc_scalar_upvalues(U, *ptype, up + count, is_local);
-    }
-    return count;
+    struct UpvalueState *us = ctx;
+    MirUpvalueList_push(fs->mir, fs->upvalues, (struct MirUpvalueInfo){
+                .is_local = us->is_local,
+                .index = us->up++,
+                .type = type,
+            });
 }
 
 // TODO: combine with alloc_scalar_registers
 static struct MemoryGroup new_registers(struct Unboxer *U, IrType *type, int discr)
 {
+    struct IrLayout layout = pawIr_compute_layout(U->C, type);
     int const num_registers = U->fs->registers->count;
-    int const count = alloc_scalar_registers(U, type, discr, PAW_FALSE, PAW_FALSE);
+
+    struct RegisterState rs = {0};
+    int const count = allocate_values(U, type, discr, allocate_register, &rs);
     return (struct MemoryGroup){
         .base = num_registers,
         .count = count,
@@ -287,8 +291,11 @@ static struct MemoryGroup get_registers(struct Unboxer *U, MirRegister r, int di
         return *pgroup;
 
     struct MirRegisterData *data = mir_reg_data(fs->mir, r);
+    struct IrLayout layout = pawIr_compute_layout(U->C, data->type);
     int const num_registers = fs->registers->count;
-    int const count = alloc_scalar_registers(U, data->type, discr, data->is_captured, data->is_uninit);
+
+    struct RegisterState rs = {.is_captured = data->is_captured, .is_uninit = data->is_uninit};
+    int const count = allocate_values(U, data->type, discr, allocate_register, &rs);
     struct MemoryGroup group = {
         .kind = MEMORY_LOCAL,
         .base = num_registers,
@@ -310,8 +317,11 @@ static struct MemoryGroup new_nonlocal_upvalues(struct Unboxer *U, int up, struc
 {
     struct FunctionState *fs = U->fs;
     struct MirUpvalueInfo info = MirUpvalueList_get(fs->mir->upvalues, up);
+    struct IrLayout layout = pawIr_compute_layout(U->C, info.type);
     int const num_upvalues = fs->upvalues->count;
-    int const count = alloc_scalar_upvalues(U, info.type, mg.base, PAW_FALSE);
+
+    struct UpvalueState us = {.up = mg.base};
+    int const count = allocate_values(U, info.type, -1, allocate_upvalue, &us);
     struct MemoryGroup group = {
         .kind = MEMORY_UPVALUE,
         .base = num_upvalues,
@@ -326,7 +336,9 @@ static struct MemoryGroup new_local_upvalues(struct Unboxer *U, int up, struct M
     struct FunctionState *fs = U->fs;
     struct MirUpvalueInfo info = MirUpvalueList_get(fs->mir->upvalues, up);
     int const num_upvalues = fs->upvalues->count;
-    int const count = alloc_scalar_upvalues(U, info.type, local, PAW_TRUE);
+
+    struct UpvalueState us = {.up = local, .is_local = PAW_TRUE};
+    int const count = allocate_values(U, info.type, -1, allocate_upvalue, &us);
     struct MemoryGroup group = {
         .kind = MEMORY_UPVALUE,
         .base = num_upvalues,
@@ -371,9 +383,9 @@ static int compute_field_offset(struct IrLayout object, int index)
 static void discharge_indirect_field(struct Unboxer *U, struct MemoryAccess *pa)
 {
     IrTypeList const *field_types = get_variant_field_types(U, pa->type, pa->field.discr);
-    struct IrLayout target_layout = pawIr_compute_layout(U->C, pa->type);
-    struct IrLayout field_layout = pawIr_compute_layout(U->C, pa->field.type);
-    struct MemoryGroup output = new_registers(U, pa->field.type, pa->field.discr);
+    struct IrLayout const target_layout = pawIr_compute_layout(U->C, pa->type);
+    struct IrLayout const field_layout = pawIr_compute_layout(U->C, pa->field.type);
+    struct MemoryGroup const output = new_registers(U, pa->field.type, pa->field.discr);
 
     struct MirPlace const object = PLACE(pa->group.base);
     for (int i = 0; i < output.count; ++i) {
@@ -921,15 +933,14 @@ static void unbox_function(struct Unboxer *U, struct Mir *mir)
             // upvalue is local to enclosing function
             MirRegister const local = MirRegisterList_get(outer->old_locals, pu->index);
             backing = LocalGroupMap_get(U, outer->local_map, local);
-            int local_id = -1;
-            for (int i = 0; i < outer->mir->locals->count; ++i) {
-                MirRegister const x = MirRegisterList_get(outer->mir->locals, i);
-                if (x.value == backing->base) {
-                    local_id = i;
+
+            int local_id;
+            MirRegister const *plocal;
+            K_LIST_ENUMERATE(outer->mir->locals, local_id, plocal) {
+                if (plocal->value == backing->base)
                     break;
-                }
             }
-            paw_assert(local_id >= 0);
+            paw_assert(local_id < outer->mir->locals->count);
             new_local_upvalues(U, index, *backing, local_id);
         } else {
             // upvalue is also an upvalue in the enclosing function

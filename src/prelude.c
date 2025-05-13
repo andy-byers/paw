@@ -91,6 +91,12 @@ static void new_option_none(paw_Env *P, Value *presult)
     V_SET_INT(presult, PAW_OPTION_NONE);
 }
 
+static void push_values(paw_Env *P, Value const *pvalue, int count)
+{
+    API_INCR_TOP(P, count);
+    pawV_copy(P->top.p - count, pvalue, count);
+}
+
 static int list_insert(paw_Env *P)
 {
     Tuple *list = V_TUPLE(*CF_BASE(1));
@@ -154,11 +160,20 @@ static paw_Int clamped_index(paw_Env *P, int loc, paw_Int n)
 static int list_get(paw_Env *P)
 {
     Tuple *list = V_TUPLE(*CF_BASE(1));
-    paw_Int const index = V_INT(*CF_BASE(2));
+    paw_Int index = V_INT(*CF_BASE(2));
+    paw_Int const length = pawList_length(P, list);
     int const z = LIST_ZELEMENT(list);
-    Value const *pvalue = pawList_get(P, list, index);
-    pawV_copy(CF_BASE(0), pvalue, z);
-    return z;
+
+    index = pawV_abs_index(index, length);
+    if (0 <= index && index < length) {
+        Value const *pvalue = pawList_get(P, list, index);
+        paw_push_int(P, PAW_OPTION_SOME);
+        push_values(P, pvalue, z);
+    } else {
+        paw_push_int(P, PAW_OPTION_NONE);
+        paw_push_zero(P, z);
+    }
+    return 1 + z;
 }
 
 static int list_set(paw_Env *P)
@@ -169,7 +184,7 @@ static int list_set(paw_Env *P)
     int const z = LIST_ZELEMENT(list);
     Value *pslot = pawList_get(P, list, index);
     pawV_copy(pslot, pvalue, z);
-    return z;
+    return 0;
 }
 
 // TODO: It would be nice to let pop() take an optional parameter indicating the
