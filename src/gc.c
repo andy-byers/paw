@@ -135,23 +135,26 @@ static void traverse_fields(paw_Env *P, Value *pv, int n)
     }
 }
 
-static void traverse_list(paw_Env *P, Tuple *a)
+static void traverse_list(paw_Env *P, Tuple *L)
 {
-if(a->elems[0].i>1){
-(void)1;
-}
-    paw_Int itr = PAW_ITER_INIT;
-    while (pawList_iter(P, a, &itr)) {
-        mark_value(P, *pawList_get(P, a, itr));
-    }
+    Value const *pvalue = LIST_BEGIN(L);
+    while (pvalue != LIST_END(L))
+        mark_value(P, *pvalue++);
 }
 
 static void traverse_map(paw_Env *P, Tuple *m)
 {
     paw_Int itr = PAW_ITER_INIT;
     while (pawMap_iter(m, &itr)) {
-        mark_value(P, *pawMap_key(P, m, itr));
-        mark_value(P, *pawMap_value(P, m, itr));
+        int key_size = pawMap_key_size(P, m);
+        Value const *pkey = pawMap_key(P, m, itr);
+        while (key_size-- > 0)
+            mark_value(P, *pkey++);
+
+        int value_size = pawMap_value_size(P, m);
+        Value const *pvalue = pawMap_value(P, m, itr);
+        while (value_size-- > 0)
+            mark_value(P, *pvalue++);
     }
 }
 

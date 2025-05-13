@@ -54,7 +54,7 @@ PathPat    = Path .
 
 (* Declarations *)
 Declaration = UseDecl | VarDecl | TypeDecl .
-UseDecl     = "use" name ["::" name] as name
+UseDecl     = "use" name ["::" name] as name .
 VarDecl     = "let" name [":" Type] "=" Expr .
 TypeDecl    = "type" name [Generics] "=" Type .
 Generics    = "<" {name ","} name [","] ">" .

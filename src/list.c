@@ -25,8 +25,7 @@ Tuple *pawList_new(paw_Env *P, int zelem, paw_Int capacity, Value *out)
     V_SET_OBJECT(out, t);
 
     int const num_values = PAW_MAX(capacity, LIST_MIN_CAPACITY) * zelem;
-    LIST_BEGIN(t) = pawM_new_vec(P, num_values, Value);
-    LIST_END(t) = LIST_BEGIN(t);
+    LIST_BEGIN(t) = LIST_END(t) = pawM_new_vec(P, num_values, Value);
     LIST_BOUND(t) = LIST_BEGIN(t) + num_values;
     return t;
 }

@@ -25,7 +25,7 @@
 #define LIST_END(List_) (*CAST(Value **, &(List_)->elems[2].p))
 #define LIST_BOUND(List_) (*CAST(Value **, &(List_)->elems[3].p))
 
-Tuple *pawList_new(paw_Env *P, int policy, paw_Int capacity, Value *out);
+Tuple *pawList_new(paw_Env *P, int zelem, paw_Int capacity, Value *out);
 void pawList_free(paw_Env *P, Tuple *t);
 void pawList_reserve(paw_Env *P, Tuple *t, size_t length);
 void pawList_resize(paw_Env *P, Tuple *t, size_t length);
