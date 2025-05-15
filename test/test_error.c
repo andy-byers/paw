@@ -252,12 +252,13 @@ static void test_minimum_integer(void)
 
 static void test_syntax_error(void)
 {
-    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_missing_second_surrogate", "", "let s = '\\ud801';");
-    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_missing_first_surrogate", "", "let s = '\\udc00';");
-    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_malformed_surrogate_1", "", "let s = '\\ud801\\....';");
-    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_malformed_surrogate_2", "", "let s = '\\ud801\\u....';");
-    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_invalid_surrogate_low", "", "let s = '\\ud801\\udbff';");
-    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_invalid_surrogate_high", "", "let s = '\\ud801\\ue000';");
+    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_missing_second_surrogate", "", "let s = '\\u{d801}';");
+    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_missing_first_surrogate", "", "let s = '\\u{dc00}';");
+    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_malformed_surrogate_1", "", "let s = '\\u{d801}\\....';");
+    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_malformed_surrogate_2", "", "let s = '\\u{d801}\\u....';");
+    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_invalid_surrogate_low", "", "let s = '\\u{d801}\\u{dbff}';");
+    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_invalid_surrogate_high", "", "let s = '\\u{d801}\\u{e000}';");
+    test_compiler_status(E_UNICODE_ESCAPE_TOO_LONG, "string_unicode_escape_too_long", "", "let s = '\\u{1000001}';");
 
     test_compiler_status(E_EXPECTED_EXPRESSION, "misplaced_2dots", "", "let x = ..;");
     test_compiler_status(E_EXPECTED_EXPRESSION, "misplaced_3dots", "", "let x = ...;");
@@ -328,7 +329,7 @@ static void test_syntax_error(void)
     test_compiler_status(E_JUMP_OUTSIDE_LOOP, "continue_outside_loop", "", "continue;");
 
     test_compiler_status(E_INVALID_ESCAPE, "invalid_escape", "", "let x = '\\x;';");
-    test_compiler_status(E_INVALID_UNICODE_ESCAPE, "invalid_unicode_escape", "", "let x = '\\uD80';");
+    test_compiler_status(E_INVALID_UNICODE_ESCAPE, "invalid_unicode_escape", "", "let x = '\\u{D8O}';");
     test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "invalid_unicode_codepoint", "", "let x = '\xD8\x05';");
     test_compiler_status(E_INVALID_INTEGER, "invalid_integer", "", "let x = 0123;");
     test_compiler_status(E_INVALID_FLOAT, "invalid_float", "", "let x = 01.0;");

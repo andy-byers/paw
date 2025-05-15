@@ -209,6 +209,10 @@ A panic can also be caused by calling the `panic` builtin function.
 + [ ] refactor user-provided allocation interface to allow heap expansion
 
 ## Known problems
++ Paw requires that "int" be at least 32 bits
++ "[K: V]" (map) type is a bit broken right now
+    + Map calls a VM function to hash and equate the keys
+    + Requires that there be nothing important in a higher activation frame slot than the map
 + Generic bounds should not be allowed on type aliases
 + The C API has pretty much 0 type safety
     + It may be necessary to reduce the scope of the C API somewhat

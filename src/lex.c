@@ -233,28 +233,31 @@ static void consume_utf8(struct Lex *X)
         LEX_ERROR(X, invalid_unicode_codepoint, X->loc, -1);
 }
 
-static int get_codepoint(struct Lex *X)
+static unsigned get_codepoint(struct Lex *X, struct SourceLoc loc)
 {
-    if (X->end - X->ptr < 4)
-        return -1;
+    if (!test_next(X, '{') || test_next(X, '}'))
+        LEX_ERROR(X, unexpected_symbol, X->loc);
 
-    const char c[5] = {
-        next(X),
-        next(X),
-        next(X),
-        next(X),
-    };
+    enum {MAX_DIGITS = 6};
+    char digits[MAX_DIGITS + 1] = {0};
+    int n = 0;
 
-    if (!ISHEX(c[0])
-            || !ISHEX(c[1])
-            || !ISHEX(c[2])
-            || !ISHEX(c[3]))
-        LEX_ERROR(X, invalid_unicode_escape, X->loc, c);
+    do {
+        if (n == MAX_DIGITS)
+            LEX_ERROR(X, unicode_escape_too_long, loc);
 
-    return HEXVAL(c[0]) << 12
-           | HEXVAL(c[1]) << 8
-           | HEXVAL(c[2]) << 4
-           | HEXVAL(c[3]);
+        digits[n++] = next(X);
+    } while (!test_next(X, '}'));
+
+    unsigned codepoint = 0;
+    for (int i = 0; i < n; ++i) {
+        if (!ISHEX(digits[i]))
+            LEX_ERROR(X, invalid_unicode_escape, loc, digits);
+
+        codepoint = (codepoint << 4) | HEXVAL(digits[i]);
+    }
+
+    return codepoint;
 }
 
 static struct Token consume_string_part(struct Lex *X, struct SourceLoc start, char quote)
@@ -266,6 +269,7 @@ static struct Token consume_string_part(struct Lex *X, struct SourceLoc start, c
         SAVE_AND_NEXT(X);
     }
 
+    struct SourceLoc loc = X->loc;
     if (test_next(X, '\\')) {
         char const c = next(X);
         switch (c) {
@@ -304,12 +308,11 @@ static struct Token consume_string_part(struct Lex *X, struct SourceLoc start, c
                 return token;
             }
             case 'u': {
-                struct SourceLoc saved = X->loc;
-                unsigned const codepoint = get_codepoint(X);
+                unsigned const codepoint = get_codepoint(X, loc);
                 if ((0xD800 <= codepoint && codepoint < 0xE000) || codepoint >= 0x110000)
                     // codepoint is either in the surrogate range, or it is outside the valid range of
                     // a unicode codepoint
-                    LEX_ERROR(X, invalid_unicode_codepoint, saved, codepoint);
+                    LEX_ERROR(X, invalid_unicode_codepoint, loc, codepoint);
 
                 // Translate the codepoint into bytes. Modified from @Tencent/rapidjson.
                 if (codepoint <= 0x7F) {

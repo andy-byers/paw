@@ -12,6 +12,7 @@ enum ErrorKind {
 
     // lexical errors
     E_INVALID_ESCAPE,
+    E_UNICODE_ESCAPE_TOO_LONG,
     E_INVALID_UNICODE_ESCAPE,
     E_INVALID_UNICODE_CODEPOINT,
     E_EXPECTED_INTEGER_DIGIT,
@@ -160,6 +161,7 @@ enum ErrorKind {
 
 // lexical errors
 _Noreturn void pawErr_invalid_escape(struct Compiler *C, String const *modname, struct SourceLoc loc, char c);
+_Noreturn void pawErr_unicode_escape_too_long(struct Compiler *C, String const *modname, struct SourceLoc loc);
 _Noreturn void pawErr_invalid_unicode_escape(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *codepoint);
 _Noreturn void pawErr_invalid_unicode_codepoint(struct Compiler *C, String const *modname, struct SourceLoc loc, int codepoint);
 _Noreturn void pawErr_expected_integer_digit(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *base);

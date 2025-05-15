@@ -59,10 +59,17 @@ _Noreturn void pawErr_invalid_escape(struct Compiler *C, String const *modname, 
             NULL);
 }
 
+_Noreturn void pawErr_unicode_escape_too_long(struct Compiler *C, String const *modname, struct SourceLoc loc)
+{
+    throw(C, E_UNICODE_ESCAPE_TOO_LONG, modname, loc,
+            format(C, "must contain less than or equal to 6 hex digits"),
+            NULL);
+}
+
 _Noreturn void pawErr_invalid_unicode_escape(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *codepoint)
 {
     throw(C, E_INVALID_UNICODE_ESCAPE, modname, loc,
-            format(C, "invalid unicode escape '\\u%s'", codepoint),
+            format(C, "invalid unicode escape '\\u{%s}'", codepoint),
             NULL);
 }
 

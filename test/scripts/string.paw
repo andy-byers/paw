@@ -1,34 +1,34 @@
 // string.paw
 
 pub fn test_valid_utf8() {
-    let s = "\u0060\u012a\u12AB";
+    let s = "\u{0060}\u{012a}\u{12AB}";
     let s = "\"\\\/\b\f\n\r\t\v";
-    let s = "\\u0000";
+    let s = "\\u{0000}";
     let s = "\"";
     let s = "a/*b*/c/*d//e";
     let s = "\\a";
     let s = "\\n";
-    let s = "\u0012";
-    let s = "\uFFFF";
-    let s = "new\u00A0line";
+    let s = "\u{0012}";
+    let s = "\u{FFFF}";
+    let s = "new\u{00A0}line";
     let s = "􏿿";
     let s = "￿";
-    let s = "\u0000";
-    let s = "\u002c";
+    let s = "\u{000000}";
+    let s = "\u{002c}";
     let s = "π";
     let s = "𛿿";
-    let s = "\u0821";
-    let s = "\u0123";
-    let s = "\u0061\u30af\u30EA\u30b9";
-    let s = "new\u000Aline";
-    let s = "\uA66D";
-    let s = "\u005C";
+    let s = "\u{0821}";
+    let s = "\u{123}";
+    let s = "\u{61}\u{30af}\u{30EA}\u{30b9}";
+    let s = "new\u{A}line";
+    let s = "\u{A66D}";
+    let s = "\u{5C}";
     let s = "⍂㈴⍂";
-    let s = "\u200B";
-    let s = "\u2064";
-    let s = "\uFDD0";
-    let s = "\uFFFE";
-    let s = "\u0022";
+    let s = "\u{200B}";
+    let s = "\u{2064}";
+    let s = "\u{FDD0}";
+    let s = "\u{FFFE}";
+    let s = "\u{22}";
     let s = "€𝄞";
     let s = "🐱";
 }
