@@ -1,0 +1,38 @@
+// modify_capture.paw
+
+fn black_box<T>(t: T) -> T { t }
+
+pub fn test_modify() {
+    let capture = 0;
+    let _ = || capture;
+
+    if black_box(true) {
+        capture = 1;
+    } else {
+        capture = 2;
+    }
+
+    assert(capture == 1);
+}
+
+pub fn test_capture_early() {
+    let capture = 0;
+    let _ = || capture;
+
+    while black_box(capture) < 10 {
+        capture += 1;
+    }
+
+    assert(capture == 10);
+}
+
+pub fn test_capture_late() {
+    let capture = 0;
+
+    while black_box(capture) < 10 {
+        capture += 1;
+    }
+
+    let _ = || capture;
+    assert(capture == 10);
+}

@@ -108,17 +108,6 @@ static void rename_output(struct SsaConverter *S, MirRegister *pr, paw_Bool is_a
 
     MirRegisterList_push(S->mir, names, *pr);
     RegisterMap_insert(S, S->rename, old, MIR_REG(reg_id));
-
-    if (old_data->is_captured) {
-        struct MirRegisterData *reg = &K_LIST_AT(S->registers, pr->value);
-        MirRegister const *capture = captured_reg(S, old);
-        if (capture == NULL) {
-            add_captured_reg(S, old, *pr);
-            reg->hint = *pr;
-        } else {
-            reg->hint = *capture;
-        }
-    }
 }
 
 static void rename_join(struct SsaConverter *S, struct MirInstruction *instr)
@@ -127,8 +116,35 @@ static void rename_join(struct SsaConverter *S, struct MirInstruction *instr)
     rename_output(S, &x->output.r, PAW_FALSE);
 }
 
+static void rename_move(struct SsaConverter *S, struct MirInstruction *instr)
+{
+    struct MirMove *move = MirGetMove(instr);
+    rename_input(S, &move->target.r);
+
+    MirRegister const old = move->output.r;
+    struct MirRegisterData *data = mir_reg_data(S->mir, old);
+    if (data->is_captured) {
+        rename_input(S, &move->output.r);
+
+        instr->SetCapture_ = (struct MirSetCapture){
+            .kind = kMirSetCapture,
+            .loc = move->loc,
+            .mid = move->mid,
+            .target = move->output,
+            .value = move->target,
+        };
+    } else {
+        rename_output(S, &move->output.r, PAW_FALSE);
+    }
+}
+
 static void rename_instruction(struct SsaConverter *S, struct MirInstruction *instr)
 {
+    if (MirIsMove(instr)) {
+        // special case: write to captured variable gets transformed into SetCapture
+        rename_move(S, instr);
+        return;
+    }
     MirRegister **ppr;
     MirRegisterPtrList const *loads = pawMir_get_loads(S->mir, instr);
     K_LIST_FOREACH (loads, ppr)
@@ -314,10 +330,11 @@ static void fix_aux_info(struct SsaConverter *S, struct Mir *mir)
     // stationary until they are closed.
     K_LIST_FOREACH (mir->locals, pr)
         *pr = last_reg_name(S, *pr);
-    K_LIST_FOREACH (mir->captured, pci){
-        pci->r = *captured_reg(S, pci->r);
-    }
+    K_LIST_FOREACH (mir->captured, pci)
+        pci->r = last_reg_name(S, pci->r);
 }
+
+#ifdef PAW_DEBUG_EXTRA
 
 // TODO
 #include <stdio.h>
@@ -342,6 +359,8 @@ static void debug(struct Compiler *C, struct MirBlockList *idom, struct MirBucke
     }
     printf("]\n");
 }
+
+#endif // PAW_DEBUG_EXTRA
 
 static void ssa_construct(struct Pool *pool, struct Mir *mir)
 {

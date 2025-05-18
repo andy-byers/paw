@@ -245,7 +245,7 @@ pub fn check_upvalue_merge_2(n: int) -> (int, int) {
             a = a + b;
             b = b + a;
             n = n - 1;
-        }; // TODO: shouldn't need semicolon here!
+        }; // TODO: shouldn't need semicolon here! ambiguity because of "||" and the fact that "while" is an expression
         || (a, b)
     };
     return f();

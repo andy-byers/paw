@@ -54,6 +54,7 @@
     X(unit_variant)          \
     X(infer_assoc_items)     \
     X(deferred_init)         \
+    X(modify_capture)        \
     X(capture_upvalue)       \
     X(close_loop_variable)   \
     X(modification_sequence) \

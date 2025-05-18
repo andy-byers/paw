@@ -9,11 +9,11 @@ enum Num {
 
 fn check_basic(a: Num) -> int {
     match a {
-        Num::Zero            => {return 1;},
-        Num::Succ(Num::Zero) => {return 2;},
-        Num::Succ(x)         => {return 3;},
-        x                    => {return 4;},
-    };
+        Num::Zero            => 1,
+        Num::Succ(Num::Zero) => 2,
+        Num::Succ(x)         => 3,
+        x                    => 4,
+    }
 }
 
 pub fn test_basic() {
@@ -25,11 +25,11 @@ pub fn test_basic() {
 
 fn eval_num(num: Num) -> int {
     match num {
-        Num::Zero      => {return 0;},
-        Num::Succ(x)   => {return eval_num(x) + 1;},
-        Num::Add(x, y) => {return eval_num(x) + eval_num(y);},
-        Num::Mul(x, y) => {return eval_num(x) * eval_num(y);},
-    };
+        Num::Zero      => 0,
+        Num::Succ(x)   => eval_num(x) + 1,
+        Num::Add(x, y) => eval_num(x) + eval_num(y),
+        Num::Mul(x, y) => eval_num(x) * eval_num(y),
+    }
 }
 
 pub fn test_bindings() {
@@ -47,14 +47,14 @@ pub fn test_bindings() {
 
 fn check_jacobs_example(a: Num) -> int {
     match a {
-        Num::Add(Num::Zero, Num::Zero) => {return 1;},
-        Num::Mul(Num::Zero, x)         => {return 2;},
-        Num::Add(Num::Succ(x), y)      => {return 3;},
-        Num::Mul(x, Num::Zero)         => {return 4;},
-        Num::Mul(Num::Add(x, y), z)    => {return 5;},
-        Num::Add(x, Num::Zero)         => {return 6;},
-        x                              => {return 7;},
-    };
+        Num::Add(Num::Zero, Num::Zero) => 1,
+        Num::Mul(Num::Zero, x)         => 2,
+        Num::Add(Num::Succ(x), y)      => 3,
+        Num::Mul(x, Num::Zero)         => 4,
+        Num::Mul(Num::Add(x, y), z)    => 5,
+        Num::Add(x, Num::Zero)         => 6,
+        x                              => 7,
+    }
 }
 
 pub fn test_jacobs_example() {
@@ -80,12 +80,8 @@ struct Multiple<T> {
 
 fn check_struct_bindings(target: Multiple<int>) -> int {
     match target {
-        Multiple{c: 1, b, a: c} => {
-            return b + c - 1;
-        },
-        Multiple{c: c, b: x, a} => {
-            return a + x + c;
-        },
+        Multiple{c: 1, b, a: c} => b + c - 1,
+        Multiple{c: c, b: x, a} => a + x + c,
     }
 }
 
@@ -167,11 +163,11 @@ pub fn test_single_arm_nested() {
 
 fn match_exact_int(i: int) -> int {
     match i {
-        -1 => {return -10;},
-        0 => {return 0;},
-        1 => {return 10;},
-        _ => {return 100;},
-    };
+        -1 => -10,
+        0 => 0,
+        1 => 10,
+        _ => 100,
+    }
 }
 
 pub fn test_exact_int() {
@@ -184,11 +180,11 @@ pub fn test_exact_int() {
 
 fn match_int_binding(i: int) -> int {
     match i {
-        1 => {return 1;},
-        2 => {return 2;},
-        3 => {return 3;},
-        x => {return x * 2;},
-    };
+        1 => 1,
+        2 => 2,
+        3 => 3,
+        x => x * 2,
+    }
 }
 
 pub fn test_int_binding() {
@@ -209,7 +205,7 @@ pub fn test_target_is_evaluated_once() {
     };
     match f() {
         _ => {},
-    };
+    }
     assert(value == 1);
 }
 
@@ -269,12 +265,20 @@ pub fn test_tuple_3() {
 pub fn test_closure_inside_match() {
     let f;
 
+    match 1 { x => f = || x }
+
+    assert(f() == 1);
+}
+
+pub fn test_nested_closure_inside_match() {
+    let f;
+
     let x = 1;
     match x {
         y => f = || {
-            match y { z => (|| x + y + z)() }
+            match y { z => || x + y + z }
         },
     }
 
-    assert(f() == 3);
+    assert(f()() == 3);
 }

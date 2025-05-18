@@ -142,6 +142,12 @@ static void AcceptUpvalue(struct MirVisitor *V, struct MirUpvalue *t)
     pawMir_visit_place(V, t->output);
 }
 
+static void AcceptSetCapture(struct MirVisitor *V, struct MirSetCapture *t)
+{
+    pawMir_visit_place(V, t->target);
+    pawMir_visit_place(V, t->value);
+}
+
 static void AcceptSetUpvalue(struct MirVisitor *V, struct MirSetUpvalue *t)
 {
     pawMir_visit_place(V, t->value);
@@ -691,6 +697,12 @@ MirPlacePtrList *pawMir_get_loads_v2(struct Mir *mir, struct MirInstruction *ins
             ADD_INPUT(x->rhs);
             break;
         }
+        case kMirSetCapture: {
+            struct MirSetCapture *x = MirGetSetCapture(instr);
+            ADD_INPUT(x->target);
+            ADD_INPUT(x->value);
+            break;
+        }
         case kMirSetUpvalue: {
             struct MirSetUpvalue *x = MirGetSetUpvalue(instr);
             ADD_INPUT(x->value);
@@ -891,6 +903,12 @@ struct MirRegisterPtrList *pawMir_get_loads(struct Mir *mir, struct MirInstructi
         }
         case kMirSetUpvalue: {
             struct MirSetUpvalue *x = MirGetSetUpvalue(instr);
+            ADD_INPUT(x->value);
+            break;
+        }
+        case kMirSetCapture: {
+            struct MirSetCapture *x = MirGetSetCapture(instr);
+            ADD_INPUT(x->target);
             ADD_INPUT(x->value);
             break;
         }
@@ -1100,6 +1118,17 @@ static void indicate_usedefs(struct Mir *mir, struct MirInstruction *instr, UseD
     MirRegisterPtrList const *loads = pawMir_get_loads(mir, instr);
     K_LIST_FOREACH (loads, ppr)
         indicate_usedef(mir, uses, **ppr, where);
+
+    if (MirIsMove(instr)) {
+        struct MirMove *move = MirGetMove(instr);
+        struct MirRegisterData *data = mir_reg_data(mir, move->output.r);
+        if (data->is_captured) {
+            // The output register is captured, meaning the SSA construction pass will transform this move into
+            // a SetCapture instruction. SetCapture accepts 2 input operands.
+            indicate_usedef(mir, uses, move->output.r, where);
+            return;
+        }
+    }
 
     MirRegisterPtrList const *stores = pawMir_get_stores(mir, instr);
     K_LIST_FOREACH (stores, ppr)
@@ -1515,6 +1544,14 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
             struct MirCapture *t = MirGetCapture(instr);
             PRINT_LITERAL(P, "capture ");
             print_place(P, t->target);
+            break;
+        }
+        case kMirSetCapture: {
+            struct MirSetCapture *t = MirGetSetCapture(instr);
+            PRINT_LITERAL(P, " setcapture ");
+            print_place(P, t->target);
+            PRINT_CHAR(P, ' ');
+            print_place(P, t->value);
             break;
         }
         case kMirClose: {

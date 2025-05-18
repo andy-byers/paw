@@ -471,7 +471,7 @@ static paw_Bool resolve_upvalue(struct FunctionState *fs, String *name, struct N
     if (caller == NULL)
         return PAW_FALSE;
     if (resolve_local(caller, name, pinfo)) {
-        mark_upvalue(caller, pinfo->index, pinfo->r); // TODO
+        mark_upvalue(caller, pinfo->index, pinfo->r);
         add_upvalue(fs, pinfo, PAW_TRUE);
         return PAW_TRUE;
     }
@@ -506,18 +506,18 @@ static void close_variables(struct FunctionState *fs, int nvars)
 {
     for (int i = fs->nlocals - 1; i >= nvars; --i) {
         struct LocalVar const local = VarStack_get(fs->stack, fs->level + i);
-        maybe_close(fs, local.r); // TODO
+        maybe_close(fs, local.r);
     }
 }
 
 static void leave_block(struct FunctionState *fs)
 {
     struct BlockState *bs = fs->bs;
-    // TODO: "needs_close" unused now...
     int needs_close = bs->has_upvalue && bs->outer != NULL;
     if (bs->is_loop)
         needs_close |= adjust_from(fs, JUMP_BREAK);
-    close_variables(fs, bs->nvars);
+    if (needs_close)
+        close_variables(fs, bs->nvars);
     if (bs->outer != NULL)
         adjust_labels(fs, bs);
 
@@ -528,33 +528,20 @@ static void leave_block(struct FunctionState *fs)
     fs->bs = bs->outer;
 }
 
-static struct LocalVar *add_local(struct FunctionState *fs, struct HirIdent ident, struct MirPlace r)
-{
-    VarStack_push(fs->L, fs->stack, (struct LocalVar){
-                                   .vid = fs->locals->count,
-                                   .depth = fs->bs->depth,
-                                   .name = ident.name,
-                                   .r = r,
-                               });
-    MirRegisterList_push(fs->mir, fs->locals, r.r);
-    ++fs->nlocals;
-    return &K_LIST_LAST(fs->stack);
-}
-
-static struct LocalVar *add_local_literal(struct FunctionState *fs, char const *name, struct MirPlace p)
-{
-    struct HirIdent ident = {
-        .name = SCAN_STRING(fs->C, name),
-        .span = {0}, // TODO: need to propagate source locations
-    };
-    return add_local(fs, ident, p);
-}
-
 static struct LocalVar *alloc_local(struct FunctionState *fs, struct HirIdent ident, struct IrType *type)
 {
     struct MirPlace const output = new_place(fs, type);
     NEW_INSTR(fs, alloc_local, ident.span.start, ident.name, output);
-    return add_local(fs, ident, output);
+
+    VarStack_push(fs->L, fs->stack, (struct LocalVar){
+                                   .vid = fs->locals->count,
+                                   .depth = fs->bs->depth,
+                                   .name = ident.name,
+                                   .r = output,
+                               });
+    MirRegisterList_push(fs->mir, fs->locals, output.r);
+    ++fs->nlocals;
+    return &K_LIST_LAST(fs->stack);
 }
 
 // NOTE: It is easier to use the name when searching for locals and upvalues, due to the
@@ -789,13 +776,12 @@ static void collect_binding(struct HirVisitor *V, struct HirBindingPat *p)
 
     IrType *type = pawIr_get_type(L->C, p->hid);
     struct HirIdent temp = unpack_temp_name(L, p);
-    struct MirPlace place = new_place(fs, type);
-    struct LocalVar *local = add_local(fs, temp, place);
+    struct LocalVar *local = alloc_local(fs, temp, type);
 
     UnpackingList_push(L, ctx->info, (struct UnpackingInfo){
                 .name = p->ident.name,
                 .temp = temp.name,
-                .r = place,
+                .r = local->r,
                 .p = p,
             });
 }
@@ -907,9 +893,8 @@ static void unpack_bindings(struct HirVisitor *V, struct HirPat *lhs, struct Hir
     K_LIST_FOREACH(ctx.info, pinfo) {
         struct HirBindingPat *p = pinfo->p;
         IrType *type = pawIr_get_type(fs->C, p->hid);
-        struct MirPlace place = new_place(fs, type);
-        struct LocalVar *local = add_local(fs, p->ident, place);
-        move_to(fs, p->span.start, pinfo->r, place);
+        struct LocalVar *local = alloc_local(fs, p->ident, type);
+        move_to(fs, p->span.start, pinfo->r, local->r);
     }
 }
 
@@ -1621,6 +1606,7 @@ static struct MirPlace lower_assign_expr(struct HirVisitor *V, struct HirAssignE
 
     struct MirPlace lhs = lower_place(V, e->lhs);
     struct MirPlace rhs = lower_place(V, e->rhs);
+    struct MirRegisterData *data = mir_reg_data(fs->mir, lhs.r);
     move_to(fs, e->span.start, rhs, lhs);
 
     // setters are expressions that evaluate to "()"
@@ -1782,12 +1768,14 @@ static void declare_match_bindings(struct FunctionState *fs, struct BindingList 
 {
     struct Binding const *pb;
     K_LIST_FOREACH(bindings, pb) {
-        struct MirPlace const r = get_test_reg(fs, pb->var);
+        struct MirPlace const test = get_test_reg(fs, pb->var);
         struct HirIdent const ident = {
-            .name = pb->name,
             .span = pb->var.span,
+            .name = pb->name,
         };
-        add_local(fs, ident, r);
+
+        struct LocalVar *local = alloc_local(fs, ident, pb->var.type);
+        move_to(fs, ident.span.start, test, local->r);
     }
 }
 
@@ -1889,19 +1877,19 @@ static void allocate_match_vars(struct FunctionState *fs, struct MirPlace object
     if (mc.vars->count == 0)
         return;
 
-    IrType *type = mir_reg_data(fs->mir, object.r)->type;
+    IrType *const object_type = mir_reg_data(fs->mir, object.r)->type;
 
     int index;
     struct MatchVar const *pv;
     struct MirPlaceList *places = fs->ms->places;
     K_LIST_ENUMERATE (mc.vars, index, pv) {
-        struct MirPlace const r = new_place(fs, pv->type);
-        map_var_to_reg(fs, *pv, r);
+        String *const name = SCAN_STRING(fs->C, PRIVATE("variable"));
+        struct HirIdent const ident = {.name = name, .span = (struct SourceSpan){0}};
+        struct LocalVar *local = alloc_local(fs, ident, pv->type);
+        map_var_to_reg(fs, *pv, local->r);
 
-        struct MirPlace source = select_field(fs, object, type, is_enum + index, discr);
-        move_to(fs, pv->span.start, source, r);
-
-        add_local_literal(fs, PRIVATE("variable"), r);
+        struct MirPlace source = select_field(fs, object, object_type, is_enum + index, discr);
+        move_to(fs, pv->span.start, source, local->r);
     }
 }
 
@@ -1957,7 +1945,6 @@ static void visit_variant_cases(struct HirVisitor *V, struct Decision *d, struct
     struct MirPlace const variant = get_test_reg(fs, d->multi.test);
     struct MirPlace const test = new_literal_place(fs, BUILTIN_INT);
 
-    add_local_literal(fs, PRIVATE("discriminant"), test); // keep alive
     emit_get_field(fs, loc, d->multi.test.type, variant, 0, 0, test);
 
     struct MirSwitchArmList *arms = allocate_switch_arms(fs, discr_bb, cases->count);
@@ -2085,8 +2072,6 @@ static struct MirPlace lower_match_expr(struct HirVisitor *V, struct HirMatchExp
     struct Decision *d = pawP_check_exhaustiveness(L->hir, L->pool, e, ms.vars);
     paw_assert(ms.vars->count > 0);
 
-    // TODO: "discr" is made into a local so it must not have any projections. consider modifying add_local_literal to
-    // TODO: accept a register instead of a place.
     struct MirPlace const target = lower_place(V, e->target);
     struct MirPlace const discr = place_for_node(fs, e->target->hdr.hid);
     struct MirPlace const result = place_for_node(fs, e->hid);
@@ -2284,3 +2269,4 @@ BodyMap *pawP_lower_hir(struct Compiler *C)
     pawP_pool_free(C, L.pool);
     return result;
 }
+

@@ -547,29 +547,6 @@ struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mi
                 RegisterTable_set(R.result, c.r.value, REGINFO(offset + i));
             }
         }
-
-        // extend live ranges for captured variables
-        // TODO: This is an unfortunate consequence of having an IR in SSA form and also supporting upvalues.
-        // TODO: Variables captured in a closure must stay in the same VM register until they are closed. As a
-        // TODO: workaround, we just allocate all versions of the captured variable to the same VM register.
-        // TODO: I think it would be better to prevent multiple versions from being created in the first place.
-        int rid = offset;
-        struct MirLiveInterval **pit;
-        K_LIST_FOREACH (intervals, pit) {
-            struct MirLiveInterval *it = *pit;
-            struct MirRegisterData *data = mir_reg_data(mir, it->r);
-            if (!data->is_captured)
-                continue;
-            if (it->r.value < offset)
-                continue;
-            if (!MIR_REG_EQUALS(it->r, data->hint)) {
-                struct RegisterInfo result = get_result(&R, data->hint);
-                RegisterTable_set(R.result, it->r.value, result);
-            }
-            pawP_bitset_set_range(it->ranges, 0, npositions);
-            it->last = npositions;
-            it->first = 0;
-        }
     }
 
     // sort live intervals by start point

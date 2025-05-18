@@ -402,14 +402,16 @@ struct MirBlockList *pawMir_compute_live_in(struct Mir *mir, struct MirBlockList
     return result;
 }
 
-static void extend_captured_intervals(struct Liveness *L, struct Mir *mir)
+static void extend_captured_intervals(struct Liveness *L, struct Mir *mir, int npositions)
 {
     struct MirLiveInterval **pit;
     K_LIST_FOREACH (L->intervals, pit) {
         struct MirLiveInterval *it = *pit;
         struct MirRegisterData *data = mir_reg_data(mir, it->r);
         if (data->is_captured) {
-            pawP_bitset_set_range(it->ranges, it->first, it->last);
+            pawP_bitset_set_range(it->ranges, 0, npositions);
+            it->last = npositions;
+            it->first = 0;
         }
     }
 }
@@ -454,7 +456,7 @@ struct MirIntervalList *pawMir_compute_liveness(struct Compiler *C, struct Mir *
 
     // determine live intervals
     compute_liveness(&L, mir, order);
-    extend_captured_intervals(&L, mir);
+    extend_captured_intervals(&L, mir, npositions);
 
     pawP_pool_free(C, L.pool);
     return L.intervals;

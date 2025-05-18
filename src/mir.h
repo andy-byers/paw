@@ -17,6 +17,7 @@ struct Mir;
     X(AllocLocal)               \
     X(FreeLocal)                \
     X(SetUpvalue)               \
+    X(SetCapture)               \
     X(Constant)                 \
     X(Aggregate)                \
     X(Container)                \
@@ -257,6 +258,12 @@ struct MirFreeLocal {
 struct MirSetUpvalue {
     MIR_INSTRUCTION_HEADER;
     int index;
+    struct MirPlace value;
+};
+
+struct MirSetCapture {
+    MIR_INSTRUCTION_HEADER;
+    struct MirPlace target;
     struct MirPlace value;
 };
 
@@ -569,6 +576,19 @@ inline static struct MirInstruction *pawMir_new_free_local(struct Mir *mir, stru
         .kind = kMirFreeLocal,
         .loc = loc,
         .reg = reg,
+    };
+    return instr;
+}
+
+inline static struct MirInstruction *pawMir_new_set_capture(struct Mir *mir, struct SourceLoc loc, struct MirPlace target, struct MirPlace value)
+{
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
+    instr->SetCapture_ = (struct MirSetCapture){
+        .mid = pawMir_next_id(mir),
+        .kind = kMirSetCapture,
+        .loc = loc,
+        .target = target,
+        .value = value,
     };
     return instr;
 }
