@@ -32,7 +32,6 @@
     X(FieldExpr)         \
     X(AssignExpr)        \
     X(Block)             \
-    X(IfExpr)            \
     X(LoopExpr)          \
     X(JumpExpr)          \
     X(ReturnExpr)        \
@@ -664,7 +663,7 @@ struct HirAssignExpr {
 // If "never" is equal to true, then the block contains an unconditional
 // jump, either directly or transitively through 1 or more nested block
 // expressions (not including blocks that only execute conditionally,
-// such as an IfExpr or loop).
+// such as a loop).
 struct HirBlock {
     HIR_EXPR_HEADER;
     paw_Bool never : 1;
@@ -675,17 +674,6 @@ struct HirBlock {
 struct HirReturnExpr {
     HIR_EXPR_HEADER;
     struct HirExpr *expr;
-};
-
-// If "never" is equal to true, then both arms of the IfExpr contain
-// unconditional jumps. This means that regardless of which arm is
-// executed, control will jump before hitting the end of the expression.
-struct HirIfExpr {
-    HIR_EXPR_HEADER;
-    paw_Bool never : 1;
-    struct HirExpr *cond;
-    struct HirExpr *then_arm;
-    struct HirExpr *else_arm;
 };
 
 struct HirJumpExpr {
@@ -709,6 +697,7 @@ struct HirMatchArm {
 struct HirMatchExpr {
     HIR_EXPR_HEADER;
     paw_Bool never : 1;
+    paw_Bool is_exhaustive : 1;
     struct HirExpr *target;
     struct HirExprList *arms;
 };
@@ -987,21 +976,6 @@ static struct HirExpr *pawHir_new_return_expr(struct Hir *hir, struct SourceSpan
     return e;
 }
 
-static struct HirExpr *pawHir_new_if_expr(struct Hir *hir, struct SourceSpan span, struct HirExpr *cond, struct HirExpr *then_arm, struct HirExpr *else_arm, paw_Bool never)
-{
-    struct HirExpr *e = pawHir_new_expr(hir);
-    e->IfExpr_ = (struct HirIfExpr){
-        .hid = pawHir_next_id(hir),
-        .span = span,
-        .kind = kHirIfExpr,
-        .cond = cond,
-        .then_arm = then_arm,
-        .else_arm = else_arm,
-        .never = never,
-    };
-    return e;
-}
-
 static struct HirExpr *pawHir_new_call_expr(struct Hir *hir, struct SourceSpan span, struct HirExpr *target, struct HirExprList *args)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
@@ -1030,13 +1004,14 @@ static struct HirExpr *pawHir_new_match_arm(struct Hir *hir, struct SourceSpan s
     return e;
 }
 
-static struct HirExpr *pawHir_new_match_expr(struct Hir *hir, struct SourceSpan span, struct HirExpr *target, struct HirExprList *arms, paw_Bool never)
+static struct HirExpr *pawHir_new_match_expr(struct Hir *hir, struct SourceSpan span, struct HirExpr *target, struct HirExprList *arms, paw_Bool never, paw_Bool is_exhaustive)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->MatchExpr_ = (struct HirMatchExpr){
         .hid = pawHir_next_id(hir),
         .span = span,
         .kind = kHirMatchExpr,
+        .is_exhaustive = is_exhaustive,
         .never = never,
         .target = target,
         .arms = arms,

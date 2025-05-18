@@ -282,3 +282,5 @@ pub fn test_nested_closure_inside_match() {
 
     assert(f()() == 3);
 }
+
+

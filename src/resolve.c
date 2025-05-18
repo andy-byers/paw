@@ -863,7 +863,7 @@ static struct IrType *resolve_match_expr(struct Resolver *R, struct HirMatchExpr
     leave_match_ctx(R);
 
     struct IrType *result = ms.result;
-    if (IrIsInfer(result) && e->never)
+    if (IrIsInfer(result))
         unify_unit_type(R, e->span.start, result);
 
     return result;
@@ -928,12 +928,12 @@ static struct IrType *resolve_closure_expr(struct Resolver *R, struct HirClosure
     struct IrTypeList *params = collect_decl_types(R, e->params);
     rs.prev = ret;
 
+    struct IrType *result = resolve_operand(R, e->expr);
     if (HirIsBlock(e->expr)) {
-        struct IrType *result = resolve_operand(R, e->expr);
         struct HirBlock *block = HirGetBlock(e->expr);
         unify_block_result(R, block->span.start, block->never, result, ret);
     } else {
-        unify(R, e->span.start, ret, resolve_operand(R, e->expr));
+        unify(R, e->span.start, ret, result);
     }
 
     leave_scope(R);
@@ -1455,27 +1455,6 @@ static paw_Bool is_never_block(struct HirExpr *expr)
     return HirIsJumpExpr(expr);
 }
 
-static struct IrType *resolve_if_expr(struct Resolver *R, struct HirIfExpr *e)
-{
-    expect_bool_expr(R, e->cond);
-    struct IrType *first = resolve_expr(R, e->then_arm);
-    if (e->else_arm == NULL) {
-        unify(R, NODE_START(e->then_arm), first, get_type(R, BUILTIN_UNIT));
-        return first;
-    }
-
-    struct IrType *second = resolve_expr(R, e->else_arm);
-    // Forgive type errors when the result type is "()" and there is an
-    // unconditional jump. Control will never reach the end of such a block.
-    if (is_unit_type(R, first) && is_never_block(e->then_arm)) {
-        first = second;
-    } else if (is_unit_type(R, second) && is_never_block(e->else_arm)) {
-        second = first;
-    }
-    unify(R, e->span.start, first, second);
-    return first;
-}
-
 static void ResolveExprStmt(struct Resolver *R, struct HirExprStmt *s)
 {
     struct IrType *type = resolve_operand(R, s->expr);
@@ -1923,9 +1902,6 @@ static struct IrType *resolve_expr(struct Resolver *R, struct HirExpr *expr)
             break;
         case kHirFieldExpr:
             type = resolve_field_expr(R, HirGetFieldExpr(expr));
-            break;
-        case kHirIfExpr:
-            type = resolve_if_expr(R, HirGetIfExpr(expr));
             break;
         case kHirReturnExpr:
             type = resolve_return_expr(R, HirGetReturnExpr(expr));

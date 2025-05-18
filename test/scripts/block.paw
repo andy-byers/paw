@@ -376,3 +376,13 @@ pub fn test_nested_ifelse() {
     assert(check(false, false, false) == 4);
 }
 
+
+pub fn test_return_before_use() {
+    let y;
+    if true {
+        y = 0;
+    }
+    return;
+
+    assert(y == 42);
+}

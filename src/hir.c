@@ -315,14 +315,6 @@ static void AcceptFuncDecl(struct HirVisitor *V, struct HirFuncDecl *d)
         AcceptExpr(V, d->body);
 }
 
-static void AcceptIfExpr(struct HirVisitor *V, struct HirIfExpr *s)
-{
-    AcceptExpr(V, s->cond);
-    AcceptExpr(V, s->then_arm);
-    if (s->else_arm != NULL)
-        AcceptExpr(V, s->else_arm);
-}
-
 static void AcceptLoopExpr(struct HirVisitor *V, struct HirLoopExpr *s)
 {
     AcceptExpr(V, s->block);
@@ -1030,8 +1022,7 @@ static void dump_stmt(struct Printer *P, struct HirStmt *stmt)
         case kHirExprStmt: {
             struct HirExprStmt *s = HirGetExprStmt(stmt);
             dump_expr(P, s->expr);
-            if (!HirIsIfExpr(s->expr)
-                    && !HirIsLoopExpr(s->expr)
+            if (!HirIsLoopExpr(s->expr)
                     && !HirIsMatchExpr(s->expr)
                     && !HirIsBlock(s->expr)) {
                 DUMP_CHAR(P, ';');
@@ -1278,31 +1269,6 @@ static void dump_expr(struct Printer *P, struct HirExpr *expr)
                 add_indentation(P);
             }
             DUMP_CHAR(P, '}');
-            break;
-        }
-        case kHirIfExpr: {
-            struct HirIfExpr *e = HirGetIfExpr(expr);
-            DUMP_CSTR(P, "if ");
-            dump_expr(P, e->cond);
-            DUMP_CHAR(P, ' ');
-            dump_expr(P, e->then_arm);
-            if (e->else_arm != NULL) {
-                DUMP_CSTR(P, " else ");
-                if (HirIsBlock(e->else_arm)) {
-                    dump_expr(P, e->else_arm);
-                } else {
-                    DUMP_CHAR(P, '{');
-                    add_newline(P);
-                    ++P->indent;
-                    add_indentation(P);
-                    dump_expr(P, e->else_arm);
-                    DUMP_CHAR(P, ';');
-                    add_newline(P);
-                    --P->indent;
-                    add_indentation(P);
-                    DUMP_CHAR(P, '}');
-                }
-            }
             break;
         }
         case kHirLoopExpr: {

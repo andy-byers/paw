@@ -23,6 +23,8 @@ struct Usefulness {
     paw_Env *P;
     int var_id;
     int line;
+
+    paw_Bool check_exhaustiveness;
 };
 
 struct Column {
@@ -651,10 +653,22 @@ static enum BranchMode branch_mode(struct Usefulness *U, struct MatchVar var)
     return BRANCH_STRUCT;
 }
 
+static struct Decision *stop_compilation(struct Usefulness *U)
+{
+    if (U->check_exhaustiveness)
+        USEFULNESS_ERROR(U, nonexhaustive_pattern_match, U->span.start);
+
+    struct HirExpr *result = pawHir_new_basic_lit(U->hir, (struct SourceSpan){0}, I2V(0), BUILTIN_UNIT);
+    return new_success(U, (struct MatchBody){
+                .bindings = BindingList_new(U->C),
+                .result = result,
+            });
+}
+
 static struct Decision *compile_rows(struct Usefulness *U, struct RowList *rows)
 {
     if (rows->count == 0)
-        USEFULNESS_ERROR(U, nonexhaustive_pattern_match, U->span.start);
+        return stop_compilation(U);
 
     expand_or_patterns(U, rows);
     for (int i = 0; i < rows->count; ++i) {
@@ -699,6 +713,7 @@ struct Decision *pawP_check_exhaustiveness(struct Hir *hir, struct Pool *pool, s
     struct Compiler *C = hir->C;
 
     struct Usefulness U = {
+        .check_exhaustiveness = match->is_exhaustive,
         .span = match->span,
         .pool = pool,
         .vars = vars,

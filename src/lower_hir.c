@@ -878,7 +878,7 @@ static void unpack_bindings(struct HirVisitor *V, struct HirPat *lhs, struct Hir
     struct HirExprList *arms = HirExprList_new(hir);
     struct HirExpr *arm = pawHir_new_match_arm(hir, ctx.span, lhs, NULL, block, IGNORE);
     HirExprList_push(hir, arms, arm);
-    struct HirExpr *match = pawHir_new_match_expr(hir, ctx.span, rhs, arms, IGNORE);
+    struct HirExpr *match = pawHir_new_match_expr(hir, ctx.span, rhs, arms, IGNORE, PAW_TRUE);
 
     struct IrType *unit_type = get_type(L, PAW_TUNIT);
     SET_NODE_TYPE(L->C, unit_lit, unit_type);
@@ -1625,39 +1625,6 @@ static struct MirPlace lower_block(struct HirVisitor *V, struct HirBlock *e)
     return result;
 }
 
-static struct MirPlace lower_if_expr(struct HirVisitor *V, struct HirIfExpr *e)
-{
-    struct LowerHir *L = V->ud;
-    struct FunctionState *fs = L->fs;
-    struct MirPlace const cond = lower_place(V, e->cond);
-    MirBlock const cond_bb = current_bb(fs);
-    MirBlock const then_bb = new_bb(fs);
-    MirBlock const else_bb = new_bb(fs);
-    MirBlock const join_bb = new_bb(fs);
-    add_edge(fs, cond_bb, then_bb);
-    add_edge(fs, cond_bb, else_bb);
-
-    struct MirPlace const result = place_for_node(fs, e->hid);
-    terminate_branch(fs, e->span.start, cond, then_bb, else_bb);
-    set_current_bb(fs, then_bb);
-    struct MirPlace const first = lower_place(V, e->then_arm);
-    move_to(fs, NODE_START(e->then_arm), first, result);
-    set_goto_edge(fs, e->span.start, join_bb);
-
-    set_current_bb(fs, else_bb);
-    if (e->else_arm == NULL) {
-        struct MirPlace const second = unit_literal(fs, NODE_START(e->then_arm));
-        move_to(fs, NODE_START(e->then_arm), second, result);
-    } else {
-        struct MirPlace const second = lower_place(V, e->else_arm);
-        move_to(fs, NODE_START(e->else_arm), second, result);
-    }
-    set_goto_edge(fs, e->span.start, join_bb);
-
-    set_current_bb(fs, join_bb);
-    return result;
-}
-
 static struct MirPlace lower_loop_expr(struct HirVisitor *V, struct HirLoopExpr *e)
 {
     struct LowerHir *L = V->ud;
@@ -1732,8 +1699,6 @@ static struct MirPlace lower_operand(struct HirVisitor *V, struct HirExpr *expr)
             return lower_field_expr(V, HirGetFieldExpr(expr));
         case kHirAssignExpr:
             return lower_assign_expr(V, HirGetAssignExpr(expr));
-        case kHirIfExpr:
-            return lower_if_expr(V, HirGetIfExpr(expr));
         case kHirReturnExpr:
             return lower_return_expr(V, HirGetReturnExpr(expr));
         case kHirJumpExpr:
