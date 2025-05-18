@@ -630,7 +630,7 @@ void pawMir_remove_unreachable_blocks(struct Mir *mir)
     pawP_pool_free(C, X.pool);
 }
 
-MirPlacePtrList *pawMir_get_loads_v2(struct Mir *mir, struct MirInstruction *instr)
+MirPlacePtrList *pawMir_get_loads(struct Mir *mir, struct MirInstruction *instr)
 {
 #define ADD_INPUT(x) MirPlacePtrList_push(mir, inputs, &(x))
 #define ADD_INPUTS(xs)      \
@@ -763,7 +763,7 @@ MirPlacePtrList *pawMir_get_loads_v2(struct Mir *mir, struct MirInstruction *ins
 #undef ADD_INPUT
 }
 
-MirPlacePtrList *pawMir_get_stores_v2(struct Mir *mir, struct MirInstruction *instr)
+MirPlacePtrList *pawMir_get_stores(struct Mir *mir, struct MirInstruction *instr)
 {
 #define ADD_OUTPUT(x) MirPlacePtrList_push(mir, outputs, &(x))
 #define ADD_OUTPUTS(xs)      \
@@ -772,210 +772,6 @@ MirPlacePtrList *pawMir_get_stores_v2(struct Mir *mir, struct MirInstruction *in
 
     struct MirPlace *pp;
     struct MirPlacePtrList *outputs = MirPlacePtrList_new(mir);
-
-    switch (MIR_KINDOF(instr)) {
-        case kMirPhi:
-            ADD_OUTPUT(MirGetPhi(instr)->output);
-            break;
-        case kMirMove:
-            ADD_OUTPUT(MirGetMove(instr)->output);
-            break;
-        case kMirUpvalue:
-            ADD_OUTPUT(MirGetUpvalue(instr)->output);
-            break;
-        case kMirGlobal:
-            ADD_OUTPUT(MirGetGlobal(instr)->output);
-            break;
-        case kMirAllocLocal:
-            ADD_OUTPUT(MirGetAllocLocal(instr)->output);
-            break;
-        case kMirConstant:
-            ADD_OUTPUT(MirGetConstant(instr)->output);
-            break;
-        case kMirAggregate:
-            ADD_OUTPUT(MirGetAggregate(instr)->output);
-            break;
-        case kMirContainer:
-            ADD_OUTPUT(MirGetContainer(instr)->output);
-            break;
-        case kMirCall:
-            ADD_OUTPUTS(MirGetCall(instr)->outputs);
-            break;
-        case kMirCast:
-            ADD_OUTPUT(MirGetCast(instr)->output);
-            break;
-        case kMirClosure:
-            ADD_OUTPUT(MirGetClosure(instr)->output);
-            break;
-        case kMirGetElementPtr:
-            ADD_OUTPUT(MirGetGetElementPtr(instr)->output);
-            break;
-        case kMirGetElement:
-            ADD_OUTPUT(MirGetGetElement(instr)->output);
-            break;
-        case kMirGetRange:
-            ADD_OUTPUT(MirGetGetRange(instr)->output);
-            break;
-        case kMirGetField:
-            ADD_OUTPUT(MirGetGetField(instr)->output);
-            break;
-        case kMirUnaryOp:
-            ADD_OUTPUT(MirGetUnaryOp(instr)->output);
-            break;
-        case kMirBinaryOp:
-            ADD_OUTPUT(MirGetBinaryOp(instr)->output);
-            break;
-        default:
-            break;
-    }
-    return outputs;
-
-#undef ADD_OUTPUTS
-#undef ADD_OUTPUT
-}
-
-struct MirRegisterPtrList *pawMir_get_loads(struct Mir *mir, struct MirInstruction *instr)
-{
-#define ADD_INPUT(x) MirRegisterPtrList_push(mir, inputs, &(x).r)
-#define ADD_INPUTS(xs)      \
-    K_LIST_FOREACH (xs, pp) \
-        ADD_INPUT(*pp)
-
-    struct MirPlace *pp;
-    struct MirRegisterPtrList *inputs = MirRegisterPtrList_new(mir);
-
-    switch (MIR_KINDOF(instr)) {
-        case kMirPhi: {
-            struct MirPhi *x = MirGetPhi(instr);
-            ADD_INPUTS(x->inputs);
-            break;
-        }
-        case kMirMove: {
-            struct MirMove *x = MirGetMove(instr);
-            ADD_INPUT(x->target);
-            break;
-        }
-        case kMirCall: {
-            struct MirCall *x = MirGetCall(instr);
-            ADD_INPUT(x->target);
-            ADD_INPUTS(x->args);
-            break;
-        }
-        case kMirCast: {
-            struct MirCast *x = MirGetCast(instr);
-            ADD_INPUT(x->target);
-            break;
-        }
-        case kMirGetElementPtr: {
-            struct MirGetElementPtr *x = MirGetGetElementPtr(instr);
-            ADD_INPUT(x->object);
-            ADD_INPUT(x->key);
-            break;
-        }
-        case kMirGetElement: {
-            struct MirGetElement *x = MirGetGetElement(instr);
-            ADD_INPUT(x->object);
-            ADD_INPUT(x->key);
-            break;
-        }
-        case kMirGetRange: {
-            struct MirGetRange *x = MirGetGetRange(instr);
-            ADD_INPUT(x->object);
-            ADD_INPUT(x->lower);
-            ADD_INPUT(x->upper);
-            break;
-        }
-        case kMirGetField: {
-            struct MirGetField *x = MirGetGetField(instr);
-            ADD_INPUT(x->object);
-            break;
-        }
-        case kMirUnaryOp: {
-            struct MirUnaryOp *x = MirGetUnaryOp(instr);
-            ADD_INPUT(x->val);
-            break;
-        }
-        case kMirBinaryOp: {
-            struct MirBinaryOp *x = MirGetBinaryOp(instr);
-            ADD_INPUT(x->lhs);
-            ADD_INPUT(x->rhs);
-            break;
-        }
-        case kMirSetUpvalue: {
-            struct MirSetUpvalue *x = MirGetSetUpvalue(instr);
-            ADD_INPUT(x->value);
-            break;
-        }
-        case kMirSetCapture: {
-            struct MirSetCapture *x = MirGetSetCapture(instr);
-            ADD_INPUT(x->target);
-            ADD_INPUT(x->value);
-            break;
-        }
-        case kMirSetElement: {
-            struct MirSetElement *x = MirGetSetElement(instr);
-            ADD_INPUT(x->object);
-            ADD_INPUT(x->key);
-            ADD_INPUT(x->value);
-            break;
-        }
-        case kMirSetRange: {
-            struct MirSetRange *x = MirGetSetRange(instr);
-            ADD_INPUT(x->object);
-            ADD_INPUT(x->lower);
-            ADD_INPUT(x->upper);
-            ADD_INPUT(x->value);
-            break;
-        }
-        case kMirSetField: {
-            struct MirSetField *x = MirGetSetField(instr);
-            ADD_INPUT(x->object);
-            ADD_INPUT(x->value);
-            break;
-        }
-        case kMirCapture: {
-            struct MirCapture *x = MirGetCapture(instr);
-            ADD_INPUT(x->target);
-            break;
-        }
-        case kMirClose: {
-            struct MirClose *x = MirGetClose(instr);
-            ADD_INPUT(x->target);
-            break;
-        }
-        case kMirReturn: {
-            struct MirReturn *x = MirGetReturn(instr);
-            ADD_INPUTS(x->values);
-            break;
-        }
-        case kMirBranch: {
-            struct MirBranch *x = MirGetBranch(instr);
-            ADD_INPUT(x->cond);
-            break;
-        }
-        case kMirSwitch: {
-            struct MirSwitch *x = MirGetSwitch(instr);
-            ADD_INPUT(x->discr);
-            break;
-        }
-        default:
-            break;
-    }
-    return inputs;
-
-#undef ADD_INPUTS
-#undef ADD_INPUT
-}
-
-MirRegisterPtrList *pawMir_get_stores(struct Mir *mir, struct MirInstruction *instr)
-{
-#define ADD_OUTPUT(x) MirRegisterPtrList_push(mir, outputs, &(x).r)
-#define ADD_OUTPUTS(xs)      \
-    K_LIST_FOREACH (xs, pp) \
-        ADD_OUTPUT(*pp)
-
-    struct MirPlace *pp;
-    struct MirRegisterPtrList *outputs = MirRegisterPtrList_new(mir);
 
     switch (MIR_KINDOF(instr)) {
         case kMirPhi:
@@ -1049,18 +845,18 @@ static void indicate_access(struct Mir *mir, AccessMap *map, struct MirInstructi
 
 static void account_for_uses(struct Mir *mir, struct MirInstruction *instr, AccessMap *uses, MirBlock where)
 {
-    MirRegister *const *ppr;
-    struct MirRegisterPtrList *loads = pawMir_get_loads(mir, instr);
-    K_LIST_FOREACH (loads, ppr)
-        indicate_access(mir, uses, instr, **ppr, where);
+    struct MirPlace *const *ppp;
+    struct MirPlacePtrList *loads = pawMir_get_loads(mir, instr);
+    K_LIST_FOREACH (loads, ppp)
+        indicate_access(mir, uses, instr, (*ppp)->r, where);
 }
 
 static void account_for_defs(struct Mir *mir, struct MirInstruction *instr, AccessMap *defs, MirBlock where)
 {
-    MirRegister *const *ppr;
-    MirRegisterPtrList const *stores = pawMir_get_stores(mir, instr);
-    K_LIST_FOREACH (stores, ppr)
-        indicate_access(mir, defs, instr, **ppr, where);
+    struct MirPlace *const *ppp;
+    MirPlacePtrList const *stores = pawMir_get_stores(mir, instr);
+    K_LIST_FOREACH (stores, ppp)
+        indicate_access(mir, defs, instr, (*ppp)->r, where);
 }
 
 typedef void (*AccountForAccesses)(struct Mir *, struct MirInstruction *, AccessMap *, MirBlock);
@@ -1114,10 +910,10 @@ static void indicate_usedefs(struct Mir *mir, struct MirInstruction *instr, UseD
 {
     struct Compiler *C = mir->C;
 
-    MirRegister *const *ppr;
-    MirRegisterPtrList const *loads = pawMir_get_loads(mir, instr);
-    K_LIST_FOREACH (loads, ppr)
-        indicate_usedef(mir, uses, **ppr, where);
+    struct MirPlace *const *ppp;
+    struct MirPlacePtrList const *loads = pawMir_get_loads(mir, instr);
+    K_LIST_FOREACH (loads, ppp)
+        indicate_usedef(mir, uses, (*ppp)->r, where);
 
     if (MirIsMove(instr)) {
         struct MirMove *move = MirGetMove(instr);
@@ -1130,9 +926,9 @@ static void indicate_usedefs(struct Mir *mir, struct MirInstruction *instr, UseD
         }
     }
 
-    MirRegisterPtrList const *stores = pawMir_get_stores(mir, instr);
-    K_LIST_FOREACH (stores, ppr)
-        indicate_usedef(mir, defs, **ppr, where);
+    struct MirPlacePtrList const *stores = pawMir_get_stores(mir, instr);
+    K_LIST_FOREACH (stores, ppp)
+        indicate_usedef(mir, defs, (*ppp)->r, where);
 }
 
 void pawMir_collect_per_block_usedefs(struct Mir *mir, UseDefMap *uses, UseDefMap *defs)

@@ -423,7 +423,6 @@ static void mark_upvalue(struct FunctionState *fs, int target, struct MirPlace r
         MirCaptureList_push(fs->mir, fs->captured, ci);
         NEW_INSTR(fs, capture, (struct SourceLoc){-1}, r);
         data->is_captured = PAW_TRUE;
-        data->hint = r.r;
     }
 }
 

@@ -277,13 +277,6 @@ static void try_allocate_free_reg(struct RegisterAllocator *R)
     if (result.value >= 0)
         return;
 
-    struct MirRegisterData const *data = mir_reg_data(R->mir, current->r);
-    if (data->is_captured) {
-        struct RegisterInfo const result = get_result(R, data->hint);
-        RegisterTable_set(R->result, current->r.value, result);
-        return;
-    }
-
     int free_until_pos[NREGISTERS];
     for (int i = 0; i < NREGISTERS; ++i) {
         free_until_pos[i] = R->max_position;

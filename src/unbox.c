@@ -232,8 +232,6 @@ static void allocate_register(struct FunctionState *fs, IrType *type, void *ctx)
 {
     struct RegisterState *rs = ctx;
     MirRegisterDataList_push(fs->mir, fs->registers, (struct MirRegisterData){
-                // NOTE: ".hint" is just own register number until after SSA construction
-                .hint = rs->is_captured ? MIR_REG(fs->registers->count) : MIR_INVALID_REG,
                 .is_captured = rs->is_captured,
                 .is_uninit = rs->is_uninit,
                 .type = type,
@@ -275,7 +273,6 @@ static struct MirPlace new_rawptr_place(struct Unboxer *U, struct IrType *type)
     struct FunctionState *fs = U->fs;
     MirRegisterDataList_push(fs->mir, fs->registers,
             (struct MirRegisterData){
-                .hint = MIR_INVALID_REG,
                 .is_pointer = PAW_TRUE,
                 .type = type,
                 .size = 1,
@@ -828,7 +825,7 @@ static void unbox_other(struct Unboxer *U, struct MirInstruction *instr)
 {
     struct Mir *mir = U->fs->mir;
     struct MirPlace *const *ppp;
-    MirPlacePtrList *loads = pawMir_get_loads_v2(mir, instr);
+    MirPlacePtrList *loads = pawMir_get_loads(mir, instr);
     K_LIST_FOREACH (loads, ppp) {
         struct MemoryAccess a = unbox_place(U, *ppp);
         discharge_access(U, &a);
@@ -836,7 +833,7 @@ static void unbox_other(struct Unboxer *U, struct MirInstruction *instr)
         (*ppp)->r.value = a.group.base;
     }
 
-    MirPlacePtrList *const stores = pawMir_get_stores_v2(mir, instr);
+    MirPlacePtrList *const stores = pawMir_get_stores(mir, instr);
     K_LIST_FOREACH (stores, ppp) {
         struct MemoryAccess a = unbox_place(U, *ppp);
         discharge_access(U, &a);

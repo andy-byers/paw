@@ -145,14 +145,14 @@ static void rename_instruction(struct SsaConverter *S, struct MirInstruction *in
         rename_move(S, instr);
         return;
     }
-    MirRegister **ppr;
-    MirRegisterPtrList const *loads = pawMir_get_loads(S->mir, instr);
-    K_LIST_FOREACH (loads, ppr)
-        rename_input(S, *ppr);
+    struct MirPlace *const *ppp;
+    MirPlacePtrList const *loads = pawMir_get_loads(S->mir, instr);
+    K_LIST_FOREACH (loads, ppp)
+        rename_input(S, &(*ppp)->r);
 
-    MirRegisterPtrList const *stores = pawMir_get_stores(S->mir, instr);
-    K_LIST_FOREACH (stores, ppr)
-        rename_output(S, *ppr, MirIsAllocLocal(instr));
+    MirPlacePtrList const *stores = pawMir_get_stores(S->mir, instr);
+    K_LIST_FOREACH (stores, ppp)
+        rename_output(S, &(*ppp)->r, MirIsAllocLocal(instr));
 }
 
 static paw_Bool list_includes_block(struct MirBlockList const *blocks, MirBlock b)
@@ -296,14 +296,14 @@ static void rename_vars(struct SsaConverter *S, MirBlock x)
 // Ensure that the instruction does not use any variables before they are initialized
 static void ensure_init(struct SsaConverter *S, struct MirInstruction *instr)
 {
-    struct MirRegisterPtrList *ploads = pawMir_get_loads(S->mir, instr);
+    MirPlacePtrList *loads = pawMir_get_loads(S->mir, instr);
 
-    MirRegister *const *ppr;
-    K_LIST_FOREACH (ploads, ppr) {
-        struct MirRegisterData *data = mir_reg_data(S->mir, **ppr);
+    struct MirPlace *const *ppp;
+    K_LIST_FOREACH (loads, ppp) {
+        struct MirRegisterData *data = mir_reg_data(S->mir, (*ppp)->r);
         if (data->is_uninit)
-            // TODO: local variable name and location
-            SSA_ERROR(S, use_before_initialization, S->mir->span.start, "TODO");
+            // TODO: local variable name
+            SSA_ERROR(S, use_before_initialization, instr->hdr.loc, "use before initialization");
     }
 }
 

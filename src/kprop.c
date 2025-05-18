@@ -520,16 +520,16 @@ static void visit_expr(struct KProp *K, struct MirInstruction *instr, MirBlock b
 {
     // TODO: somewhat of a hack. shouldn't it be possible to just write CELL_BOTTOM to lattice cells
     //       that correspond to captured registers? doesn't work, but may be due to a different problem
-    MirRegister *const *ppload;
-    MirRegisterPtrList *loads = pawMir_get_loads(K->mir, instr);
+    struct MirPlace *const *ppload;
+    struct MirPlacePtrList *loads = pawMir_get_loads(K->mir, instr);
     K_LIST_FOREACH (loads, ppload) {
-        if (!is_captured(K, **ppload))
+        if (!is_captured(K, (*ppload)->r))
             continue;
 
-        MirRegister *const *ppstore;
-        MirRegisterPtrList *stores = pawMir_get_stores(K->mir, instr);
+        struct MirPlace *const *ppstore;
+        struct MirPlacePtrList *stores = pawMir_get_stores(K->mir, instr);
         K_LIST_FOREACH (stores, ppstore) {
-            struct Cell *cell = get_cell(K, **ppstore);
+            struct Cell *cell = get_cell(K, (*ppstore)->r);
             cell->info = BOTTOM_INFO();
         }
         return;
@@ -627,12 +627,12 @@ static void visit_expr(struct KProp *K, struct MirInstruction *instr, MirBlock b
         case kMirGoto:
             return; // no output
         default: {
-            MirRegister *const *ppstore;
-            MirRegisterPtrList const *stores = pawMir_get_stores(K->mir, instr);
+            struct MirPlace *const *ppstore;
+            MirPlacePtrList const *stores = pawMir_get_stores(K->mir, instr);
             K_LIST_FOREACH (stores, ppstore) {
-                struct Cell *output = get_cell(K, **ppstore);
+                struct Cell *output = get_cell(K, (*ppstore)->r);
                 output->info = BOTTOM_INFO();
-                add_use_edges(K, **ppstore);
+                add_use_edges(K, (*ppstore)->r);
             }
         }
     }
@@ -735,10 +735,10 @@ static void init_lattice(struct KProp *K)
 
 static void account_for_uses(struct KProp *K, struct MirInstruction *instr, UseCountMap *uses)
 {
-    MirRegister *const *ppr;
-    struct MirRegisterPtrList *loads = pawMir_get_loads(K->mir, instr);
-    K_LIST_FOREACH (loads, ppr) {
-        int *pcount = UseCountMap_get(K, uses, **ppr);
+    struct MirPlace *const *ppp;
+    struct MirPlacePtrList *loads = pawMir_get_loads(K->mir, instr);
+    K_LIST_FOREACH (loads, ppp) {
+        int *pcount = UseCountMap_get(K, uses, (*ppp)->r);
         ++*pcount;
     }
 }
@@ -767,10 +767,10 @@ static void count_uses(struct KProp *K, UseCountMap *uses)
 
 static void remove_operand_uses(struct KProp *K, UseCountMap *counts, struct MirInstruction *instr)
 {
-    MirRegister *const *ppr;
-    struct MirRegisterPtrList *loads = pawMir_get_loads(K->mir, instr);
-    K_LIST_FOREACH (loads, ppr) {
-        int *pcount = UseCountMap_get(K, counts, **ppr);
+    struct MirPlace *const *ppp;
+    struct MirPlacePtrList *loads = pawMir_get_loads(K->mir, instr);
+    K_LIST_FOREACH (loads, ppp) {
+        int *pcount = UseCountMap_get(K, counts, (*ppp)->r);
         paw_assert(*pcount > 0);
         --*pcount;
     }
@@ -822,10 +822,10 @@ static void transform_instr(struct KProp *K, struct MirInstruction *instr)
     if (MirIsConstant(instr) || !is_pure(instr))
         return;
 
-    MirRegisterPtrList const *stores = pawMir_get_stores(K->mir, instr);
+    MirPlacePtrList const *stores = pawMir_get_stores(K->mir, instr);
     paw_assert(stores->count == 1);
 
-    struct Cell *cell = get_cell(K, *K_LIST_FIRST(stores));
+    struct Cell *cell = get_cell(K, K_LIST_FIRST(stores)->r);
     if (cell->info.kind == CELL_CONSTANT) {
         // all operands to this instruction are constant
         into_constant(K, instr, *cell);
@@ -872,12 +872,12 @@ static paw_Bool filter_code(struct KProp *K, UseCountMap *counts, struct MirInst
         if (is_pure(instr)) {
             // instruction has no side-effects
             int num_unused = 0;
-            MirRegister *const *ppstore;
-            MirRegisterPtrList const *stores = pawMir_get_stores(K->mir, instr);
+            struct MirPlace *const *ppstore;
+            MirPlacePtrList const *stores = pawMir_get_stores(K->mir, instr);
             K_LIST_FOREACH (stores, ppstore) {
-                MirRegister const store = **ppstore;
-                if (store.value > num_params) {
-                    int const *pcount = UseCountMap_get(K, counts, store);
+                struct MirPlace const store = **ppstore;
+                if (store.r.value > num_params) {
+                    int const *pcount = UseCountMap_get(K, counts, store.r);
                     num_unused += *pcount == 0;
                 }
             }
@@ -925,15 +925,15 @@ static void clean_up_code(struct KProp *K)
 static void propagate_copy(struct KProp *K, struct MirMove *move)
 {
     struct MirAccess *puse;
-    MirRegister *const *ppr;
     struct MirAccessList *uses = get_uses(K, move->output.r);
     K_LIST_FOREACH (uses, puse) {
-        struct MirRegisterPtrList *loads = pawMir_get_loads(K->mir, puse->instr);
+        struct MirPlace *const *ppr;
+        MirPlacePtrList const *loads = pawMir_get_loads(K->mir, puse->instr);
         K_LIST_FOREACH (loads, ppr) {
-            if (MIR_REG_EQUALS(**ppr, move->output.r)) {
-                K->altered = PAW_TRUE;
+            if (MIR_REG_EQUALS((*ppr)->r, move->output.r)) {
                 // replace output with operand
-                **ppr = move->target.r;
+                (*ppr)->r = move->target.r;
+                K->altered = PAW_TRUE;
                 break;
             }
         }

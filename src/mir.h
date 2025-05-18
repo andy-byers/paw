@@ -904,7 +904,6 @@ struct MirRegisterData {
     paw_Bool is_uninit : 1;
     paw_Bool is_captured : 1;
     paw_Bool is_pointer : 1;
-    MirRegister hint;
     int size;
     struct IrType *type;
     struct IrType *self;
@@ -971,10 +970,8 @@ struct MirPlace pawMir_copy_place(struct Mir *mir, struct MirPlace place);
 struct IrLayout pawMir_get_layout(struct Mir *mir, MirRegister r);
 
 // Get a pointer to each variable read or written by a given instruction
-struct MirRegisterPtrList *pawMir_get_loads(struct Mir *mir, struct MirInstruction *instr);
-struct MirRegisterPtrList *pawMir_get_stores(struct Mir *mir, struct MirInstruction *instr);
-struct MirPlacePtrList *pawMir_get_loads_v2(struct Mir *mir, struct MirInstruction *instr);
-struct MirPlacePtrList *pawMir_get_stores_v2(struct Mir *mir, struct MirInstruction *instr);
+struct MirPlacePtrList *pawMir_get_loads(struct Mir *mir, struct MirInstruction *instr);
+struct MirPlacePtrList *pawMir_get_stores(struct Mir *mir, struct MirInstruction *instr);
 
 inline static MirId pawMir_next_id(struct Mir *mir)
 {

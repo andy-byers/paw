@@ -109,15 +109,14 @@ static void remove_live_reg(struct Liveness *L, struct MirRegisterList *set, Mir
 
 static void step_instruction(struct Liveness *L, struct MirRegisterList *set, struct MirBlockData *block, struct MirInstruction *instr)
 {
-    MirRegister *const *ppstore;
-    MirRegisterPtrList const *stores = pawMir_get_stores(L->mir, instr);
-    K_LIST_FOREACH (stores, ppstore)
-        OUTPUT(L, instr_loc(L, instr), **ppstore);
+    struct MirPlace *const *ppr;
+    MirPlacePtrList const *stores = pawMir_get_stores(L->mir, instr);
+    K_LIST_FOREACH (stores, ppr)
+        OUTPUT(L, instr_loc(L, instr), (*ppr)->r);
 
-    MirRegister *const *ppr;
-     MirRegisterPtrList *ploads = pawMir_get_loads(L->mir, instr);
+    MirPlacePtrList const *ploads = pawMir_get_loads(L->mir, instr);
     K_LIST_FOREACH (ploads, ppr)
-        INPUT(L, instr_loc(L, instr), **ppr);
+        INPUT(L, instr_loc(L, instr), (*ppr)->r);
 }
 
 #undef INPUT
@@ -142,66 +141,6 @@ static void dump_live_intervals(struct Liveness *L, struct MirIntervalList *inte
         printf("]\n");
     }
     printf("}\n");
-}
-
-char const *pawP_print_live_intervals_pretty(struct Compiler *C, struct Mir *mir, struct MirIntervalList *intervals)
-{
-    return "TODO";
-    //    Buffer buf;
-    //    paw_Env *P = ENV(C);
-    //    pawL_init_buffer(P, &buf);
-    //    const int nr = mir->registers->count;
-    //    struct MirBlockList *order = pawMir_traverse_rpo(C, mir);
-    //    struct MirBlockData *last = mir_bb_data(mir, K_LIST_LAST(order));
-    //    const int npositions = bb_last_loc(last) + 2;
-    //
-    // #define PAD_DECIMAL(i) { \
-//        if ((i) < 10) { \
-//            L_ADD_LITERAL(P, &buf, "  "); \
-//        } else if ((i) < 100) { \
-//            L_ADD_LITERAL(P, &buf, " "); \
-//        } \
-//    }
-    //
-    //    L_ADD_LITERAL(P, &buf, " i  ");
-    //    for (int i = 0; i < nr; ++i) {
-    //        if (i > 0) L_ADD_LITERAL(P, &buf, " ");
-    //        const MirRegister r = MIR_REG(i);
-    //        pawL_add_fstring(P, &buf, "_%d", r.value);
-    //        if (i < nr) PAD_DECIMAL(r.value);
-    //    }
-    //    pawL_add_char(P, &buf, '\n');
-    //    for (int i = 0; i < 1 + nr; ++i) {
-    //        L_ADD_LITERAL(P, &buf, "-----");
-    //    }
-    //    pawL_add_char(P, &buf, '\n');
-    //
-    //    int ninstr = 0;
-    //    char *buffer = calloc(npositions, mir->registers->count);
-    //    struct MirLiveInterval **iter;
-    //    K_LIST_FOREACH(intervals, iter) {
-    //        struct MirLiveInterval *it = *iter;
-    //        ninstr = PAW_MAX(it->last, ninstr);
-    //        for (int i = 0; i < pawP_bitset_count(it->ranges); ++i) {
-    //            if (pawP_bitset_get(it->ranges, i)) {
-    //                buffer[i * nr + it->r.value] = '|';
-    //            }
-    //        }
-    //    }
-    //    for (int i = 0; i < ninstr; ++i) {
-    //        pawL_add_fstring(P, &buf, " %d ", i);
-    //        PAD_DECIMAL(i);
-    //        for (int j = 0; j < nr; ++j) {
-    //            if (j > 0) L_ADD_LITERAL(P, &buf, "    ");
-    //            const char c = buffer[i * nr + j];
-    //            if (c != '\0') pawL_add_char(P, &buf, c);
-    //            else pawL_add_char(P, &buf, '.');
-    //        }
-    //        pawL_add_char(P, &buf, '\n');
-    //    }
-    //    pawL_push_result(P, &buf);
-    //    free(buffer);
-    //    return paw_string(P, -1);
 }
 
 #endif // PAW_DEBUG_EXTRA
@@ -313,10 +252,10 @@ static void init_live_intervals(struct Liveness *L, struct MirBlockList *order, 
 
         // add an interval for each variable
         K_LIST_FOREACH (block->instructions, pinstr) {
-            MirRegister *const *ppstore;
-            MirRegisterPtrList const *stores = pawMir_get_stores(L->mir, *pinstr);
+            struct MirPlace *const *ppstore;
+            MirPlacePtrList const *stores = pawMir_get_stores(L->mir, *pinstr);
             K_LIST_FOREACH (stores, ppstore)
-                add_live_interval(L, **ppstore, block->mid, npos, *pinstr);
+                add_live_interval(L, (*ppstore)->r, block->mid, npos, *pinstr);
         }
     }
 }
@@ -331,12 +270,12 @@ static paw_Bool block_set_contains(struct MirBlockList *set, MirBlock b)
     return PAW_FALSE;
 }
 
-inline static int reglist_find(struct MirRegisterPtrList const *regs, MirRegister r)
+inline static int find_place(struct MirPlacePtrList const *place, MirRegister r)
 {
     int index;
-    MirRegister *const *ppr;
-    K_LIST_ENUMERATE (regs, index, ppr) {
-        if (MIR_REG_EQUALS(r, **ppr))
+    struct MirPlace *const *ppp;
+    K_LIST_ENUMERATE (place, index, ppp) {
+        if (MIR_REG_EQUALS(r, (*ppp)->r))
             return index;
     }
     return -1;
@@ -370,13 +309,12 @@ struct MirBlockList *pawMir_compute_live_in(struct Mir *mir, struct MirBlockList
             // constructed). Instructions read their operands before writing their
             // output, so loads must be checked before stores. e.g. "x = x + 1"
             // loads "x" before writing to it.
-            struct MirRegisterPtrList *ploads = pawMir_get_loads(mir, *pinstr);
-            if (reglist_find(ploads, r) >= 0)
+            MirPlacePtrList const *loads = pawMir_get_loads(mir, *pinstr);
+            if (find_place(loads, r) >= 0)
                 goto found_access;
 
-            MirRegister *const *ppstore;
-            MirRegisterPtrList const *stores = pawMir_get_stores(mir, *pinstr);
-            if (reglist_find(stores, r) >= 0) {
+            MirPlacePtrList const *stores = pawMir_get_stores(mir, *pinstr);
+            if (find_place(stores, r) >= 0) {
                 MirBlockList_swap_remove(W, index);
                 goto found_access;
             }
