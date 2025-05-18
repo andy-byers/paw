@@ -221,10 +221,6 @@ static void test_type_error(void)
 
     test_compiler_status(E_INCOMPATIBLE_TYPES, "missing_return_type", "fn f() {123}", "");
     test_compiler_status(E_INCOMPATIBLE_TYPES, "missing_return_value", "fn f() -> int {}", "");
-    test_compiler_status(E_INCOMPATIBLE_TYPES, "non_exhaustive_branch",
-        "fn f(x: bool) -> int {if x {} else {123}}", "");
-    test_compiler_status(E_INCOMPATIBLE_TYPES, "non_exhaustive_return",
-        "fn f(x: bool) -> int {if x {return 123;}}", "");
     test_compiler_status(E_INCOMPATIBLE_TYPES, "non_unit_guard", "fn f(x: bool) {if x {123}}", "");
     test_compiler_status(E_EXPECTED_BASIC_TYPE, "nonscalar_cast", "", "let x = 123 as str;");
     test_compiler_status(E_UNSATISFIED_TRAIT_BOUNDS, "invalid_map_key", "struct S;", "let x = [S: 123];");
@@ -344,7 +340,6 @@ static void test_syntax_error(void)
     test_compiler_status(E_FUNCTION_TYPE_DECL, "function_type_decl", "type F = fn();", "");
     test_compiler_status(E_EXPECTED_COLON_AFTER_MAP_KEY, "expected_colon_after_map_key", "", "let x = [1: 2, 3];");
     test_compiler_status(E_COLON_AFTER_LIST_ELEMENT, "colon_after_list_element", "", "let x = [1, 2: 3];");
-    test_compiler_status(E_COLONS_AFTER_UNDERSCORE, "colons_after_underscore", "", "let x: _::X;");
     test_compiler_status(E_EXPECTED_COMMA_SEPARATOR, "expected_comma_separator", "struct X {a: int b: int}", "");
     test_compiler_status(E_NONPRIMITIVE_ANNOTATION_VALUE, "nonprimitive_annotation_value", "#[anno=(1,)] fn f() {}", "");
 
@@ -536,58 +531,57 @@ static void test_invalid_case(char const *name, enum ErrorKind expect, char cons
 
 static void test_variant_match_error(void)
 {
-    printf("warning: these tests are broken b/c Choice has infinite size. need indirection\n");
-//    char const *enumeration =
-//        "enum Choice {\n"
-//        "    First,\n"
-//        "    Second(Choice),\n"
-//        "}\n";
-//
-//    test_compiler_status(E_NONEXHAUSTIVE_PATTERN_MATCH, "match_int_non_exhaustive", enumeration,
-//        "match 123 {\n"
-//        "    123 => {},\n"
-//        "}\n");
-//    test_compiler_status(E_NONEXHAUSTIVE_PATTERN_MATCH, "match_variant_non_exhaustive", enumeration,
-//        "match Choice::First {\n"
-//        "    Choice::First => {},\n"
-//        "}\n");
-//
-//    test_compiler_status(E_NONEXHAUSTIVE_PATTERN_MATCH, "match_variant_non_exhaustive_2", enumeration,
-//        "match Choice::First {\n"
-//        "    Choice::First => {},\n"
-//        "    Choice::Second(Choice::First) => {},"
-//        "}\n");
-//
-//    test_compiler_status(E_NONEXHAUSTIVE_PATTERN_MATCH, "match_variant_non_exhaustive_3", enumeration,
-//        "match Choice::First {\n"
-//        "    Choice::First => {},\n"
-//        "    Choice::Second(Choice::First) => {},"
-//        "    Choice::Second(Choice::Second(Choice::First)) => {},"
-//        "}\n");
-//
-//    // sanity check: exhaustive versions
-//    test_compiler_status(PAW_OK, "sanity_check_match_wildcard", enumeration,
-//        "match Choice::First {\n"
-//        "    _ => {},\n"
-//        "}\n");
-//    test_compiler_status(PAW_OK, "sanity_check_match_variant_exhaustive", enumeration,
-//        "match Choice::First {\n"
-//        "    Choice::First => {},\n"
-//        "    Choice::Second(_) => {},\n"
-//        "}\n");
-//    test_compiler_status(PAW_OK, "sanity_check_match_variant_exhaustive_2", enumeration,
-//        "match Choice::First {\n"
-//        "    Choice::First => {},\n"
-//        "    Choice::Second(Choice::First) => {},"
-//        "    Choice::Second(Choice::Second(_)) => {},"
-//        "}\n");
-//    test_compiler_status(PAW_OK, "sanity_check_match_variant_exhaustive_3", enumeration,
-//        "match Choice::First {\n"
-//        "    Choice::First => {},\n"
-//        "    Choice::Second(Choice::First) => {},"
-//        "    Choice::Second(Choice::Second(Choice::First)) => {},"
-//        "    Choice::Second(Choice::Second(Choice::Second(_))) => {},"
-//        "}\n");
+    char const *enumeration =
+        "enum Choice {\n"
+        "    First,\n"
+        "    Second(Choice),\n"
+        "}\n";
+
+    test_compiler_status(E_NONEXHAUSTIVE_PATTERN_MATCH, "match_int_non_exhaustive", enumeration,
+        "match 123 {\n"
+        "    123 => {},\n"
+        "}\n");
+    test_compiler_status(E_NONEXHAUSTIVE_PATTERN_MATCH, "match_variant_non_exhaustive", enumeration,
+        "match Choice::First {\n"
+        "    Choice::First => {},\n"
+        "}\n");
+
+    test_compiler_status(E_NONEXHAUSTIVE_PATTERN_MATCH, "match_variant_non_exhaustive_2", enumeration,
+        "match Choice::First {\n"
+        "    Choice::First => {},\n"
+        "    Choice::Second(Choice::First) => {},"
+        "}\n");
+
+    test_compiler_status(E_NONEXHAUSTIVE_PATTERN_MATCH, "match_variant_non_exhaustive_3", enumeration,
+        "match Choice::First {\n"
+        "    Choice::First => {},\n"
+        "    Choice::Second(Choice::First) => {},"
+        "    Choice::Second(Choice::Second(Choice::First)) => {},"
+        "}\n");
+
+    // sanity check: exhaustive versions
+    test_compiler_status(PAW_OK, "sanity_check_match_wildcard", enumeration,
+        "match Choice::First {\n"
+        "    _ => {},\n"
+        "}\n");
+    test_compiler_status(PAW_OK, "sanity_check_match_variant_exhaustive", enumeration,
+        "match Choice::First {\n"
+        "    Choice::First => {},\n"
+        "    Choice::Second(_) => {},\n"
+        "}\n");
+    test_compiler_status(PAW_OK, "sanity_check_match_variant_exhaustive_2", enumeration,
+        "match Choice::First {\n"
+        "    Choice::First => {},\n"
+        "    Choice::Second(Choice::First) => {},"
+        "    Choice::Second(Choice::Second(_)) => {},"
+        "}\n");
+    test_compiler_status(PAW_OK, "sanity_check_match_variant_exhaustive_3", enumeration,
+        "match Choice::First {\n"
+        "    Choice::First => {},\n"
+        "    Choice::Second(Choice::First) => {},"
+        "    Choice::Second(Choice::Second(Choice::First)) => {},"
+        "    Choice::Second(Choice::Second(Choice::Second(_))) => {},"
+        "}\n");
 
     test_invalid_case("duplicate_binding", E_DUPLICATE_BINDING, "",
         "(0, 0)", "(x, x)");
@@ -698,18 +692,18 @@ static void test_trait_error(void)
 
 static void test_underscore(void)
 {
-    test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_as_generic", "fn f<_>() {}", "");
-    test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_as_adt_name", "struct _;", "");
-    test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_as_type_name", "type _ = int", "");
-    test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_as_return_type", "fn f() -> _ {}", "");
-    test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_as_function_name", "fn _() {}", "");
-    test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_as_method_name", "struct S {fn _() {}}", "");
-    test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_as_parameter_type", "fn f(v: _) {}", "");
-    test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_as_field_name", "struct S {_: int}", "");
-    test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_as_field_type", "struct S {value: _}", "");
-    test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_as_bound", "fn f<T: _>(t: T) {}", "");
-    test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_in_parameter", "fn f(v: [_]) {}", "");
+    test_compiler_status(E_EXPECTED_SYMBOL, "underscore_as_generic", "fn f<_>() {}", "");
+    test_compiler_status(E_EXPECTED_SYMBOL, "underscore_as_adt_name", "struct _;", "");
+    test_compiler_status(E_EXPECTED_SYMBOL, "underscore_as_type_name", "type _ = int", "");
+    test_compiler_status(E_EXPECTED_SYMBOL, "underscore_as_function_name", "fn _() {}", "");
+    test_compiler_status(E_EXPECTED_SYMBOL, "underscore_as_method_name", "struct S {fn _() {}}", "");
+    test_compiler_status(E_EXPECTED_SYMBOL, "underscore_as_field_name", "struct S {_: int}", "");
+    test_compiler_status(E_EXPECTED_SYMBOL, "underscore_as_bound", "fn f<T: _>(t: T) {}", "");
     test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_in_bound", "fn f<T: Trait<_>>(t: T) {}", "");
+    test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_as_return_type", "fn f() -> _ {}", "");
+    test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_as_parameter_type", "fn f(v: _) {}", "");
+    test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_as_field_type", "struct S {value: _}", "");
+    test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_in_parameter", "fn f(v: [_]) {}", "");
     test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_in_field_type", "struct S {value: [_]}", "");
 
     test_compiler_status(E_INCOMPATIBLE_TYPES, "underscore_bad_scalar_inference",
@@ -720,8 +714,6 @@ static void test_underscore(void)
 
 static void test_global_const(void)
 {
-    // TODO: not currently supported, but should be eventually
-    // TODO: call will need to be a "const fn" to indicate that it must be evaluated at compile time
     test_compiler_status(E_NONPRIMITIVE_CONSTANT, "const_list", "const C: [int] = [];", "");
     test_compiler_status(E_NONPRIMITIVE_CONSTANT, "const_map", "const C: [int: int] = [:];", "");
     test_compiler_status(E_NONPRIMITIVE_CONSTANT, "const_struct", "struct X; const C: X = X;", "");
@@ -769,7 +761,7 @@ static void test_destructuring(void)
     test_compiler_status(E_UNKNOWN_FIELD, "destructure_extra_field", structure,
             "let Fields{a, b, c} = Fields{a: 1, b: 2};");
     test_compiler_status(E_NONEXHAUSTIVE_PATTERN_MATCH, "destructure_non_exhaustive", "", "let Option::Some(x) = Option::Some(1);");
-    test_compiler_status(E_UNKNOWN_PATH, "destructure_wildcard_name", "", "let _ = 123; let x = _;");
+    test_compiler_status(E_EXPECTED_EXPRESSION, "destructure_wildcard_name", "", "let _ = 123; let x = _;");
     test_compiler_status(E_NONEXHAUSTIVE_PATTERN_MATCH, "destructure_or", "", "let (a, 1) | (a, 2) = (123, 456);");
     test_compiler_status(E_UNINITIALIZED_DESTRUCTURING, "uninitialized_destructuring", "", "let (a,); a = 123;");
     test_compiler_status(E_RESERVED_IDENTIFIER, "reserved_identifier", "", "let int = 123;");
@@ -803,6 +795,52 @@ static void test_panic(void)
     test_runtime_status(PAW_ERUNTIME, "panic", "", "panic('panic message');");
 }
 
+static void test_divergence(void)
+{
+#define FUNC(Text_) "fn f(x: int) -> int {" Text_ "}"
+
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "non_exhaustive_branch",
+        FUNC("if x == 0 {} else {123}"), "");
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "non_exhaustive_return",
+        FUNC("if x == 0 {return 123;}"), "");
+
+    // The loop might break, depending on "x", and there is no return or result expression at the bottom
+    // of the function. If the loop has type "!" then the expression is well-typed. If there is a "break",
+    // then the loop has type "()".
+    test_compiler_status(PAW_OK, "exhaustive_loop",
+        FUNC("loop {if x == 0 {return x;}}"), "");
+    test_compiler_status(PAW_OK, "exhaustive_loop_2",
+        FUNC("loop {if x == 0 {return x;} else {}}"), "");
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "nonexhaustive_loop",
+        FUNC("loop {if x == 0 {break;}}"), "");
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "nonexhaustive_loop_2",
+        FUNC("loop {if x == 0 {} else if x == 1 {} else {break;}}"), "");
+
+    test_compiler_status(PAW_OK, "type_after_return",
+        FUNC("if x == 0 {return 123; x} else {x}"), "");
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "wrong_type_after_return",
+        FUNC("if x == 0 {return 123; \"abc\"} else {x}"), "");
+
+#undef FUNC
+
+    test_runtime_status(PAW_ERUNTIME, "custom_diverging_function",
+        "fn diverge() -> ! {panic(\"diverging\")}", "diverge();");
+    test_runtime_status(PAW_ERUNTIME, "custom_diverging_function_2",
+        "fn diverge() -> ! {if true {panic(\"first divergence\")} else {panic(\"second divergence\")}}", "diverge();");
+
+    // TODO: Need to throw a compiler error when a function is lying about its divergence status
+    //       i.e. it has a return type of "!" but does not unconditionally call a diverging function.
+    //       This should be checked when building the MIR or in a later pass.
+#if 0
+    test_compiler_status(E_EXPECTED_DIVERGENCE, "function_lies_about_divergence",
+        "fn diverge() -> ! {}", "");
+    test_compiler_status(E_EXPECTED_DIVERGENCE, "function_lies_about_divergence_2",
+        "fn diverge() -> ! {if true {panic(\"conditionally diverge\")}}", "");
+    test_compiler_status(E_EXPECTED_DIVERGENCE, "function_lies_about_divergence_3",
+        "fn diverge() -> ! {match 123 {0 => return, _ => panic(\"conditionally diverge\")}}", "");
+#endif // 0
+}
+
 int main(void)
 {
     test_syntax_error();
@@ -827,4 +865,5 @@ int main(void)
     test_deferred_init();
     test_interpolation();
     test_panic();
+    test_divergence();
 }

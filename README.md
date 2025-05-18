@@ -209,10 +209,18 @@ A panic can also be caused by calling the `panic` builtin function.
 + [ ] refactor user-provided allocation interface to allow heap expansion
 
 ## Known problems
++ These need to be converted into issues, along with some TODO comments scattered throughout the codebase...
++ "return" must sometimes be enclosed in parenthesis (or a block), otherwise the parser expects an expression to follow 
+    + Could return NULL when we cannot parse an expression and handle it accordingly instead of throwing an error immediately
+    + also should include a convenience function to throw an error if the expr is NULL that will be used in most places
 + Paw requires that "int" be at least 32 bits
 + "[K: V]" (map) type is a bit broken right now
     + Map calls a VM function to hash and equate the keys
     + Requires that there be nothing important in a higher activation frame slot than the map
++ Need to make sure functions/closures with a return type annotation of "!" diverge unconditionally 
+    + See TODO comment in `test_error.c` `test_divergence` function
+    + Consider returns to be jumps to a special block, possibly after setting the return variable
+    + Unconditionally-diverging functions should not have any writes to this variable
 + Generic bounds should not be allowed on type aliases
 + The C API has pretty much 0 type safety
     + It may be necessary to reduce the scope of the C API somewhat

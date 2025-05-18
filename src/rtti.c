@@ -72,6 +72,16 @@ struct RttiType *pawRtti_new_trait(paw_Env *P)
     return add_type(P, type);
 }
 
+struct RttiType *pawRtti_new_never(paw_Env *P)
+{
+    struct RttiType *type = NEW_TYPE(P, 0);
+    *type = (struct RttiType){
+        .trait.kind = RTTI_TYPE_NEVER,
+        .nsubtypes = 0,
+    };
+    return add_type(P, type);
+}
+
 struct RttiType *pawRtti_new_signature(paw_Env *P, ItemId iid, int nparams)
 {
     struct RttiType *type = NEW_TYPE(P, nparams);
@@ -223,6 +233,9 @@ void pawRtti_print_type(paw_Env *P, Buffer *buf, paw_Type code)
         case RTTI_TYPE_ADT:
             print_adt(P, buf, &type->adt);
             break;
+        case RTTI_TYPE_NEVER:
+            pawL_add_char(P, buf, '!');
+            break;
         case RTTI_TYPE_TRAIT:
             break;
     }
@@ -316,6 +329,10 @@ void pawRtti_mangle_add_arg(paw_Env *P, Buffer *buf, paw_Type code)
                 pawRtti_mangle_add_arg(P, buf, type->subtypes[i]);
             }
             pawL_add_char(P, buf, 'E');
+            break;
         }
+        case RTTI_TYPE_NEVER:
+            pawL_add_char(P, buf, 'X');
+            break;
     }
 }

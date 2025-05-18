@@ -125,7 +125,7 @@ DEFINE_LIST_ACCEPTOR(pat, Pat)
 static void AcceptBlock(struct HirVisitor *V, struct HirBlock *e)
 {
     accept_stmt_list(V, e->stmts);
-    AcceptExpr(V, e->result);
+    if (e->result != NULL) AcceptExpr(V, e->result);
 }
 
 static void AcceptLogicalExpr(struct HirVisitor *V, struct HirLogicalExpr *e)
@@ -354,6 +354,12 @@ static void AcceptFuncPtr(struct HirVisitor *V, struct HirFuncPtr *t)
 static void AcceptTupleType(struct HirVisitor *V, struct HirTupleType *t)
 {
     accept_type_list(V, t->elems);
+}
+
+static void AcceptNeverType(struct HirVisitor *V, struct HirNeverType *t)
+{
+    PAW_UNUSED(V);
+    PAW_UNUSED(t);
 }
 
 static void AcceptInferType(struct HirVisitor *V, struct HirInferType *t)
@@ -1063,6 +1069,9 @@ static void dump_type(struct Printer *P, struct HirType *type)
             }
             break;
         }
+        case kHirNeverType:
+            DUMP_CHAR(P, '!');
+            break;
         case kHirInferType:
             DUMP_CHAR(P, '_');
             break;
@@ -1256,11 +1265,11 @@ static void dump_expr(struct Printer *P, struct HirExpr *expr)
         case kHirBlock: {
             struct HirBlock *e = HirGetBlock(expr);
             DUMP_CHAR(P, '{');
-            if (e->stmts->count > 0 || !is_unit_lit(e->result)) {
+            if (e->stmts->count > 0 || e->result != NULL) {
                 ++P->indent;
                 add_newline(P);
                 dump_stmts(P, e->stmts);
-                if (!is_unit_lit(e->result)) {
+                if (e->result != NULL) {
                     add_indentation(P);
                     dump_expr(P, e->result);
                     add_newline(P);

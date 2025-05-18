@@ -58,6 +58,11 @@ static struct IrType *FoldTraitObj(struct IrTypeFolder *F, struct IrTraitObj *t)
     return pawIr_new_trait_obj(F->C, t->did, types);
 }
 
+static struct IrType *FoldNever(struct IrTypeFolder *F, struct IrNever *t)
+{
+    return pawIr_new_never(F->C);
+}
+
 static void FoldPat(struct HirVisitor *V, struct HirPat *node)
 {
     paw_assert(node != NULL);
@@ -113,6 +118,7 @@ void pawIr_type_folder_init(struct IrTypeFolder *F, struct Compiler *C, void *ud
         .FoldFuncPtr = FoldFuncPtr,
         .FoldTuple = FoldTuple,
         .FoldTraitObj = FoldTraitObj,
+        .FoldNever = FoldNever,
     };
 }
 

@@ -297,13 +297,6 @@ _Noreturn void pawErr_colon_after_list_element(struct Compiler *C, String const 
             NULL);
 }
 
-_Noreturn void pawErr_colons_after_underscore(struct Compiler *C, String const *modname, struct SourceLoc loc)
-{
-    throw(C, E_COLONS_AFTER_UNDERSCORE, modname, loc,
-            format(C, "unexpected '::' after '_'"),
-            NULL);
-}
-
 _Noreturn void pawErr_expected_self_parameter(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name)
 {
     throw(C, E_EXPECTED_SELF_PARAMETER, modname, loc,
@@ -743,6 +736,13 @@ _Noreturn void pawErr_missing_binding_in_alternative(struct Compiler *C, String 
 {
     throw(C, E_MISSING_BINDING_IN_ALTERNATIVE, modname, loc,
             format(C, "missing binding '%s' in alternative pattern", name),
+            NULL);
+}
+
+_Noreturn void pawErr_expected_divergence(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *fn)
+{
+    throw(C, E_EXPECTED_DIVERGENCE, modname, loc,
+            format(C, "expected '%s' to diverge based on return type of '!'", fn),
             NULL);
 }
 

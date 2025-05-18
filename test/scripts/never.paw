@@ -1,0 +1,209 @@
+// never.paw
+
+fn black_box<T>(t: T) -> T { t }
+
+fn ifelse_exhaustive_branches(i: int) -> int {
+    if i == 0 {
+        1
+    } else if i == 1 {
+        return 2;
+    } else if i == 2 {
+        if black_box(true) {
+            return 3;
+        } else {
+            4
+        }
+    } else {
+        {
+            {
+                return 5
+            }
+        }
+    }
+}
+
+fn match_exhaustive_branches(i: int) -> int {
+    match i {
+        0 => 1,
+        1 => return 2,
+        2 => if black_box(true) {return 3} else {4},
+        _ => {{return 5}},
+    }
+}
+
+pub fn test_exhaustive_branches() {
+    assert(ifelse_exhaustive_branches(0) == 1);    
+    assert(ifelse_exhaustive_branches(1) == 2);    
+    assert(ifelse_exhaustive_branches(2) == 3);    
+    assert(ifelse_exhaustive_branches(3) == 5);    
+
+    assert(match_exhaustive_branches(0) == 1);    
+    assert(match_exhaustive_branches(1) == 2);    
+    assert(match_exhaustive_branches(2) == 3);    
+    assert(match_exhaustive_branches(3) == 5);    
+}
+
+pub fn test_guard() {
+    // must have type "()" since the guard block may not run
+    let _: () = if black_box(true) {
+        return
+    };
+}
+
+pub fn test_ifelse() {
+    let _: int = if black_box(true) {
+        456
+    } else {
+        return
+    };
+
+    let _: int = if black_box(true) {
+        return
+    } else {
+        456
+    };
+}
+
+pub fn test_ifelse_chain() {
+    let _: int = if black_box(true) {
+        123
+    } else if black_box(true) {
+        456
+    } else {
+        return
+    };
+
+    let _: int = if black_box(true) {
+        123
+    } else if black_box(true) {
+        return
+    } else {
+        789
+    };
+
+    let _: int = if black_box(true) {
+        return
+    } else if black_box(true) {
+        456
+    } else {
+        789
+    };
+
+
+    let _: int = if black_box(true) {
+        123
+    } else if black_box(true) {
+        return
+    } else {
+        return
+    };
+
+    let _: int = if black_box(true) {
+        return
+    } else if black_box(true) {
+        456
+    } else {
+        return
+    };
+
+    let _: int = if black_box(true) {
+        return
+    } else if black_box(true) {
+        return
+    } else {
+        789
+    };
+
+    let _: int = if black_box(true) {
+        return
+    } else if black_box(true) {
+        return
+    } else {
+        return
+    };
+}
+
+pub fn test_match() {
+    let _: int = match black_box(Option::Some(123)) {
+        Option::Some(x) => x,
+        Option::None => return,
+    };
+
+    let _: int = match black_box(Option::Some(123)) {
+        Option::Some(x) => return,
+        Option::None => 123,
+    };
+
+    let _: int = match black_box(Option::Some(123)) {
+        Option::Some(x) => return,
+        Option::None => return,
+    };
+}
+
+pub fn test_loop() {
+    let _: () = loop {
+        break
+    };
+
+    let _: () = loop {
+        if black_box(true) {
+            break
+        }
+    };
+
+    let _: () = loop {
+        if black_box(true) {
+            return;
+        } else {
+            break
+        }
+    };
+
+    let _: int = loop {
+        if black_box(true) {
+            return;
+        } else {
+            return;
+        }
+    };
+}
+
+pub fn test_other_loops() {
+    let _: () = for i in 0..10 {
+        break;
+    };
+
+    let _: () = for i in 0..10 {
+        return;
+    };
+
+    let _: () = while black_box(false) {
+        break;
+    };
+
+    let _: () = while black_box(false) {
+        return;
+    };
+}
+
+pub fn test_nested_loop() {
+    let _: int = loop {
+        loop {
+            return;
+        }
+    };    
+}
+
+//// TODO: Should these be allowed?
+//pub fn test_diverging_expressions() {
+//    let _: int = !return;
+//    let _: int = #return;
+//    let _: int = 1 + return;
+//    let _: int = (return) + 1;
+//    let _: int = (return) + return;
+//}
+
+fn custom_divergence() -> ! {
+    panic("diverging!");
+}
+

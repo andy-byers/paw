@@ -33,7 +33,7 @@
 #define ISDIGIT(c) (kCharClassTable[(uint8_t)(c)] & 1)
 #define ISHEX(c) (kCharClassTable[(uint8_t)(c)] & 2)
 #define ISSPACE(c) (kCharClassTable[(uint8_t)(c)] & 4)
-#define ISNAME(c) (kCharClassTable[(uint8_t)(c)] & 8)
+#define ISLETTER(c) (kCharClassTable[(uint8_t)(c)] & 8)
 #define ISNONASCII(c) (kCharClassTable[(uint8_t)(c)] & 16)
 #define ISASCIIEND(c) (kCharClassTable[(uint8_t)(c)] & 32)
 #define ISNEWLINE(c) ((c) == '\r' || (c) == '\n')

@@ -35,6 +35,7 @@ static char const *kKeywords[] = {
     "let",
     "if",
     "else",
+    "loop",
     "for",
     "while",
     "match",
@@ -45,6 +46,7 @@ static char const *kKeywords[] = {
     "as",
     "true",
     "false",
+    "_",
 };
 
 static String *basic_type_name(paw_Env *P, char const *name, paw_Type code)
@@ -80,6 +82,7 @@ void pawP_init(paw_Env *P)
     P->string_cache[CSTR_TRUE] = pawS_new_fixed(P, "true");
     P->string_cache[CSTR_FALSE] = pawS_new_fixed(P, "false");
     P->string_cache[CSTR_UNDERSCORE] = pawS_new_fixed(P, "_");
+    P->string_cache[CSTR_EXCLAMATION] = pawS_new_fixed(P, "!");
     P->string_cache[CSTR_SELF] = pawS_new_fixed(P, "self");
     P->string_cache[CSTR_NEW] = pawS_new_fixed(P, "new");
     P->string_cache[CSTR_EXTERN] = pawS_new_fixed(P, "extern");
@@ -409,6 +412,10 @@ static RttiType *new_type(struct DefGenerator *dg, struct IrType *src, ItemId ii
         case kIrTraitObj: {
             struct IrTraitObj *trait = IrGetTraitObj(src);
             dst = pawRtti_new_trait(P);
+            break;
+        }
+        case kIrNever: {
+            dst = pawRtti_new_never(P);
             break;
         }
         default: { // kIrTuple

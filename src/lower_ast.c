@@ -17,16 +17,9 @@
 #include "str.h"
 #include "unify.h"
 
-struct BlockState {
-    struct BlockState *outer;
-    paw_Bool propagate;
-    paw_Bool never;
-};
-
 struct LowerAst {
     String const *modname;
     struct DynamicMem *dm;
-    struct BlockState *bs;
     struct Compiler *C;
     struct Hir *hir;
     paw_Env *P;
@@ -59,33 +52,6 @@ DEFINE_LOWER_LIST(stmt, Stmt)
 DEFINE_LOWER_LIST(type, Type)
 DEFINE_LOWER_LIST(pat, Pat)
 
-// Mark the enclosing block as containing an unconditional jump
-// During the type checking pass, such blocks are allowed to evaluate to "()",
-// even if a sibling block (in an IfExpr or MatchExpr) evaluates to a different
-// type.
-static void indicate_jump(struct LowerAst *L)
-{
-    L->bs->never = PAW_TRUE;
-}
-
-static void enter_block(struct LowerAst *L, struct BlockState *bs, paw_Bool propagate)
-{
-    *bs = (struct BlockState){
-        .propagate = propagate,
-        .outer = L->bs,
-    };
-    L->bs = bs;
-}
-
-static void leave_block(struct LowerAst *L)
-{
-    struct BlockState *bs = L->bs;
-    if (bs->propagate && bs->outer != NULL) {
-        bs->outer->never = bs->never;
-    }
-    L->bs = bs->outer;
-}
-
 static struct HirIdent make_ident(String *name, struct SourceSpan span)
 {
     return (struct HirIdent){
@@ -113,25 +79,17 @@ static struct HirExpr *new_unary_path_expr(struct LowerAst *L, struct HirIdent i
     return pawHir_new_path_expr(L->hir, ident.span, path);
 }
 
-static struct HirExpr *lower_block(struct LowerAst *L, struct AstBlock *e, paw_Bool propagate)
+static struct HirExpr *lower_block(struct LowerAst *L, struct AstBlock *e)
 {
-    struct BlockState bs;
-    enter_block(L, &bs, propagate);
-
     struct HirStmtList *stmts = lower_stmt_list(L, e->stmts);
-    struct HirExpr *result = lower_expr(L, e->result);
-    struct HirExpr *r = pawHir_new_block(L->hir, e->span, stmts, result, bs.never);
-
-    leave_block(L);
-    return r;
+    struct HirExpr *result = e->result != NULL ? lower_expr(L, e->result) : NULL;
+    return pawHir_new_block(L->hir, e->span, stmts, result);
 }
 
 static struct HirExpr *LowerBlock(struct LowerAst *L, struct AstBlock *block)
 {
-    return lower_block(L, block, PAW_TRUE);
+    return lower_block(L, block);
 }
-
-#define LOWER_BLOCK(L, block) lower_block(L, AstGetBlock(block), PAW_FALSE)
 
 static struct HirDeclList *lower_params(struct LowerAst *L, struct AstFuncDecl *d, struct AstDeclList *params)
 {
@@ -171,7 +129,6 @@ static struct HirDeclList *lower_fields(struct LowerAst *L, struct AstDeclList *
 static struct HirExpr *LowerReturnExpr(struct LowerAst *L, struct AstReturnExpr *e)
 {
     struct HirExpr *expr = e->expr != NULL ? lower_expr(L, e->expr) : NULL;
-    indicate_jump(L); // unconditional jump
     return pawHir_new_return_expr(L->hir, e->span, expr);
 }
 
@@ -274,16 +231,7 @@ static struct HirExpr *LowerMatchExpr(struct LowerAst *L, struct AstMatchExpr *e
     struct HirExprList *arms = lower_expr_list(L, e->arms);
     paw_assert(arms->count > 0);
 
-    // propagate "never" flag to enclosing block
-    paw_Bool never = PAW_TRUE;
-    struct HirExpr **pexpr;
-    K_LIST_FOREACH (arms, pexpr) {
-        struct HirMatchArm *arm = HirGetMatchArm(*pexpr);
-        never = arm->never;
-        if (!never) break;
-    }
-    if (never) indicate_jump(L);
-    return pawHir_new_match_expr(L->hir, e->span, target, arms, never, PAW_TRUE);
+    return pawHir_new_match_expr(L->hir, e->span, target, arms, PAW_TRUE);
 }
 
 static struct HirExpr *LowerMatchArm(struct LowerAst *L, struct AstMatchArm *e)
@@ -291,14 +239,8 @@ static struct HirExpr *LowerMatchArm(struct LowerAst *L, struct AstMatchArm *e)
     struct HirPat *pat = lower_pat(L, e->pat);
     struct HirExpr *guard = e->guard != NULL ? lower_expr(L, e->guard) : NULL;
 
-    // wrap in a block to catch return or jump expressions not enclosed
-    // in curly braces
-    struct BlockState bs;
-    enter_block(L, &bs, PAW_FALSE);
     struct HirExpr *result = lower_expr(L, e->result);
-    leave_block(L);
-
-    return pawHir_new_match_arm(L->hir, e->span, pat, guard, result, bs.never);
+    return pawHir_new_match_arm(L->hir, e->span, pat, guard, result);
 }
 
 static struct HirType *new_list_t(struct LowerAst *L, struct HirType *elem_t)
@@ -541,16 +483,9 @@ static struct HirDecl *LowerFuncDecl(struct LowerAst *L, struct AstFuncDecl *d)
     struct HirDeclList *generics = lower_decl_list(L, d->generics);
     struct HirDeclList *params = lower_params(L, d, d->params);
     struct HirType *result = lower_type(L, d->result);
-    struct HirExpr *body = d->body != NULL ? LOWER_BLOCK(L, d->body) : NULL;
+    struct HirExpr *body = d->body != NULL ? lower_expr(L, d->body) : NULL;
     return pawHir_new_func_decl(L->hir, d->span, ident, d->annos, generics,
                                 params, result, body, d->fn_kind, d->is_pub, PAW_FALSE);
-}
-
-static paw_Bool is_never_block(struct HirExpr *expr)
-{
-    if (HirIsMatchExpr(expr))
-        return HirGetMatchExpr(expr)->never;
-    return HirGetBlock(expr)->never;
 }
 
 static struct HirExpr *new_boolean_match(struct LowerAst *L, struct SourceSpan span, struct HirExpr *cond, struct HirExpr *then_block, struct HirExpr *else_block)
@@ -562,11 +497,9 @@ static struct HirExpr *new_boolean_match(struct LowerAst *L, struct SourceSpan s
 
     struct HirExpr *true_expr = pawHir_new_basic_lit(hir, span, I2V(PAW_TRUE), BUILTIN_BOOL);
     struct HirPat *true_pat = pawHir_new_literal_pat(hir, cond->hdr.span, true_expr);
-    struct HirExpr *true_arm = pawHir_new_match_arm(hir, span, true_pat, NULL,
-            then_block, is_never_block(then_block));
+    struct HirExpr *true_arm = pawHir_new_match_arm(hir, span, true_pat, NULL, then_block);
     HirExprList_push(hir, arms, true_arm);
 
-    paw_Bool never = PAW_FALSE;
     if (else_block != NULL) {
         struct HirPath underscore;
         {
@@ -577,27 +510,19 @@ static struct HirExpr *new_boolean_match(struct LowerAst *L, struct SourceSpan s
             pawHir_path_add(hir, &underscore, ident, NULL);
         }
         struct HirPat *false_pat = pawHir_new_path_pat(hir, cond->hdr.span, underscore);
-        struct HirExpr *false_arm = pawHir_new_match_arm(hir, span, false_pat, NULL,
-                else_block, is_never_block(else_block));
+        struct HirExpr *false_arm = pawHir_new_match_arm(hir, span, false_pat, NULL, else_block);
         HirExprList_push(hir, arms, false_arm);
-
-        if (is_never_block(then_block) && is_never_block(else_block)) {
-            // all paths through this IfExpr execute a jump
-            never = PAW_TRUE;
-            indicate_jump(L);
-        }
     }
 
-    return pawHir_new_match_expr(hir, span, cond, arms, never, PAW_FALSE);
+    return pawHir_new_match_expr(hir, span, cond, arms, else_block != NULL);
 }
 
 static struct HirExpr *LowerIfExpr(struct LowerAst *L, struct AstIfExpr *e)
 {
     struct HirExpr *cond = lower_expr(L, e->cond);
-    struct HirExpr *then_block = LOWER_BLOCK(L, e->then_arm);
-    struct HirExpr *else_block = NULL;
-    if (e->else_arm != NULL) else_block = AstIsBlock(e->else_arm)
-        ? LOWER_BLOCK(L, e->else_arm) : lower_expr(L, e->else_arm);
+    struct HirExpr *then_block = lower_expr(L, e->then_arm);
+    struct HirExpr *else_block = e->else_arm != NULL ? lower_expr(L, e->else_arm) : NULL;
+
     return new_boolean_match(L, e->span, cond, then_block, else_block);
 }
 
@@ -620,6 +545,13 @@ static struct HirExpr *unit_lit(struct LowerAst *L, struct SourceSpan span)
     return pawHir_new_basic_lit(L->hir, span, P2V(NULL), BUILTIN_UNIT);
 }
 
+static struct HirExpr *LowerLoopExpr(struct LowerAst *L, struct AstLoopExpr *e)
+{
+    struct HirExpr *result = unit_lit(L, e->span);
+    struct HirExpr *body = lower_expr(L, e->block);
+    return pawHir_new_loop_expr(L->hir, e->span, body);
+}
+
 static struct HirExpr *LowerWhileExpr(struct LowerAst *L, struct AstWhileExpr *e)
 {
     struct HirStmtList *stmts = HirStmtList_new(L->hir);
@@ -632,13 +564,13 @@ static struct HirExpr *LowerWhileExpr(struct LowerAst *L, struct AstWhileExpr *e
         HirStmtList_push(L->hir, else_stmts, pawHir_new_expr_stmt(L->hir, e->span, jump));
 
         struct HirExpr *else_result = pawHir_new_basic_lit(L->hir, e->span, I2V(0), BUILTIN_UNIT);
-        struct HirExpr *else_arm = pawHir_new_block(L->hir, e->span, else_stmts, else_result, PAW_TRUE);
+        struct HirExpr *else_arm = pawHir_new_block(L->hir, e->span, else_stmts, else_result);
         struct HirExpr *check = new_boolean_match(L, e->span, cond, then_arm, else_arm);
         HirStmtList_push(L->hir, stmts, pawHir_new_expr_stmt(L->hir, e->span, check));
     }
 
     struct HirExpr *result = unit_lit(L, e->span);
-    struct HirExpr *body = pawHir_new_block(L->hir, e->span, stmts, result, PAW_FALSE);
+    struct HirExpr *body = pawHir_new_block(L->hir, e->span, stmts, result);
     return pawHir_new_loop_expr(L->hir, e->span, body);
 }
 
@@ -713,7 +645,7 @@ static struct HirExpr *LowerForExpr(struct LowerAst *L, struct AstForExpr *e)
         // create the "Some(i) => {...}" arm
         struct HirPat *pat = new_some_pat(L, lower_pat(L, e->pat), e->span);
         struct HirExpr *arm = pawHir_new_match_arm(hir, e->span, pat,
-                NULL, LOWER_BLOCK(L, e->block), PAW_FALSE);
+                NULL, lower_expr(L, e->block));
         HirExprList_push(hir, arms, arm);
     }
 
@@ -721,15 +653,15 @@ static struct HirExpr *LowerForExpr(struct LowerAst *L, struct AstForExpr *e)
         // create the "None => break" arm
         struct HirPat *pat = new_none_pat(L, e->span);
         struct HirExpr *rhs = pawHir_new_jump_expr(hir, e->span, JUMP_BREAK);
-        struct HirExpr *arm = pawHir_new_match_arm(hir, e->span, pat, NULL, rhs, PAW_TRUE);
+        struct HirExpr *arm = pawHir_new_match_arm(hir, e->span, pat, NULL, rhs);
         HirExprList_push(hir, arms, arm);
     }
 
     struct HirStmtList *inner_stmts = HirStmtList_new(hir);
     struct HirExpr *unit = pawHir_new_basic_lit(hir, e->span, I2V(0), BUILTIN_UNIT);
-    struct HirExpr *body = pawHir_new_block(hir, e->span, inner_stmts, unit, PAW_FALSE);
+    struct HirExpr *body = pawHir_new_block(hir, e->span, inner_stmts, unit);
     struct HirExpr *loop = pawHir_new_loop_expr(hir, e->span, body);
-    struct HirExpr *outer = pawHir_new_block(hir, e->span, outer_stmts, loop, PAW_FALSE);
+    struct HirExpr *outer = pawHir_new_block(hir, e->span, outer_stmts, loop);
 
     struct HirExpr *next;
     {
@@ -742,8 +674,7 @@ static struct HirExpr *LowerForExpr(struct LowerAst *L, struct AstForExpr *e)
 
     {
         // match on the "Option<T>" returned by "_iterator.next()"
-        struct HirExpr *match = pawHir_new_match_expr(hir, e->span, next, arms, //
-                PAW_FALSE /* "None" arm jumps but "Some" arm does not */, PAW_TRUE);
+        struct HirExpr *match = pawHir_new_match_expr(hir, e->span, next, arms, PAW_TRUE);
         HirStmtList_push(hir, inner_stmts, pawHir_new_expr_stmt(hir, e->span, match));
     }
 
@@ -777,7 +708,6 @@ static struct HirExpr *LowerSelector(struct LowerAst *L, struct AstSelector *e)
 
 static struct HirExpr *LowerJumpExpr(struct LowerAst *L, struct AstJumpExpr *e)
 {
-    indicate_jump(L);
     return pawHir_new_jump_expr(L->hir, e->span, e->jump_kind);
 }
 
@@ -849,6 +779,11 @@ static struct HirType *LowerFuncType(struct LowerAst *L, struct AstFuncType *t)
     struct HirTypeList *params = lower_type_list(L, t->params);
     struct HirType *result = lower_type(L, t->result);
     return pawHir_new_func_ptr(L->hir, t->span, params, result);
+}
+
+static struct HirType *LowerNeverType(struct LowerAst *L, struct AstNeverType *t)
+{
+    return pawHir_new_never_type(L->hir, t->span);
 }
 
 static struct HirType *LowerInferType(struct LowerAst *L, struct AstInferType *t)

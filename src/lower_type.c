@@ -44,6 +44,11 @@ static struct IrType *lower_infer_type(struct LowerType *L, struct HirInferType 
     return pawU_new_unknown(L->C->U, t->span.start, NULL);
 }
 
+static struct IrType *lower_never_type(struct LowerType *L, struct HirNeverType *t)
+{
+    return pawIr_new_never(L->C);
+}
+
 static struct IrType *lower_type(struct LowerType *L, struct HirType *type)
 {
     switch (HIR_KINDOF(type)) {
@@ -55,6 +60,8 @@ static struct IrType *lower_type(struct LowerType *L, struct HirType *type)
             return lower_path_type(L, HirGetPathType(type));
         case kHirInferType:
             return lower_infer_type(L, HirGetInferType(type));
+        case kHirNeverType:
+            return lower_never_type(L, HirGetNeverType(type));
     }
 }
 

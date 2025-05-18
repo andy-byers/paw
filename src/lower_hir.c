@@ -874,11 +874,11 @@ static void unpack_bindings(struct HirVisitor *V, struct HirPat *lhs, struct Hir
     paw_Bool const IGNORE = PAW_FALSE;
     struct HirStmtList *setters = create_unpackers(&ctx);
     struct HirExpr *unit_lit = pawHir_new_basic_lit(hir, ctx.span, I2V(0), BUILTIN_UNIT);
-    struct HirExpr *block = pawHir_new_block(hir, ctx.span, setters, unit_lit, IGNORE);
+    struct HirExpr *block = pawHir_new_block(hir, ctx.span, setters, unit_lit);
     struct HirExprList *arms = HirExprList_new(hir);
-    struct HirExpr *arm = pawHir_new_match_arm(hir, ctx.span, lhs, NULL, block, IGNORE);
+    struct HirExpr *arm = pawHir_new_match_arm(hir, ctx.span, lhs, NULL, block);
     HirExprList_push(hir, arms, arm);
-    struct HirExpr *match = pawHir_new_match_expr(hir, ctx.span, rhs, arms, IGNORE, PAW_TRUE);
+    struct HirExpr *match = pawHir_new_match_expr(hir, ctx.span, rhs, arms, PAW_TRUE);
 
     struct IrType *unit_type = get_type(L, PAW_TUNIT);
     SET_NODE_TYPE(L->C, unit_lit, unit_type);
@@ -1413,8 +1413,8 @@ static void lower_function_block(struct LowerHir *L, struct HirExpr *block)
     struct FunctionState *fs = L->fs;
     struct MirPlace const result = lower_place(&L->V, block);
     struct MirRegisterData const *data = mir_reg_data(fs->mir, result.r);
-    if (!HirGetBlock(block)->never)
-        terminate_return(fs, fs->mir->span.end, result);
+//    if (HirGetBlock(block)->finish == FINISH_NORMAL)
+    terminate_return(fs, fs->mir->span.end, result);
 }
 
 static struct MirPlace lower_closure_expr(struct HirVisitor *V, struct HirClosureExpr *e)
@@ -1619,7 +1619,9 @@ static struct MirPlace lower_block(struct HirVisitor *V, struct HirBlock *e)
     struct FunctionState *fs = L->fs;
     enter_block(fs, &bs, e->span, PAW_FALSE);
     pawHir_visit_stmt_list(V, e->stmts);
-    struct MirPlace const result = lower_place(V, e->result);
+    struct MirPlace const result = e->result != NULL
+        ? lower_place(V, e->result)
+        : unit_literal(fs, e->span.start);
 
     leave_block(fs);
     return result;

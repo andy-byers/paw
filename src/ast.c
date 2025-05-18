@@ -276,6 +276,7 @@ static void dump_type(Printer *P, struct AstType *type)
             dump_type(P, t->second);
             break;
         }
+        case kAstNeverType:
         case kAstInferType:
             break;
         case kAstFuncType: {
@@ -454,7 +455,7 @@ static void dump_expr(Printer *P, struct AstExpr *expr)
         case kAstBlock: {
             struct AstBlock *e = AstGetBlock(expr);
             dump_stmt_list(P, e->stmts, "stmts");
-            dump_expr(P, e->result);
+            if (e->result != NULL) dump_expr(P, e->result);
             break;
         }
         case kAstIfExpr: {
@@ -473,6 +474,12 @@ static void dump_expr(Printer *P, struct AstExpr *expr)
 //            dump_pat(P, e->pat);
             DUMP_MSG(P, "target: ");
             dump_expr(P, e->target);
+            DUMP_MSG(P, "block: ");
+            dump_expr(P, e->block);
+            break;
+        }
+        case kAstLoopExpr: {
+            struct AstLoopExpr *e = AstGetLoopExpr(expr);
             DUMP_MSG(P, "block: ");
             dump_expr(P, e->block);
             break;

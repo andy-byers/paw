@@ -160,8 +160,7 @@ static struct Token make_float(struct Lex *X)
 
 static struct Token make_string(struct Lex *X, struct SourceLoc start, TokenKind kind)
 {
-    struct DynamicMem *dm = X->dm;
-    struct StringBuffer *b = &dm->scratch;
+    struct StringBuffer *b = &X->dm->scratch;
     struct Token t = make_token(kind, start, X->loc);
     String *s = pawP_scan_nstring(X->C, X->strings, b->data, CAST_SIZE(b->count));
     V_SET_OBJECT(&t.value, s);
@@ -172,7 +171,8 @@ static struct Token make_string(struct Lex *X, struct SourceLoc start, TokenKind
 static struct Token consume_name(struct Lex *X, struct SourceLoc start)
 {
     SAVE_AND_NEXT(X);
-    while (ISNAME(*X->ptr) || ISDIGIT(*X->ptr))
+
+    while (ISLETTER(*X->ptr) || ISDIGIT(*X->ptr))
         SAVE_AND_NEXT(X);
 
     struct Token t = make_string(X, start, TK_NAME);
@@ -379,7 +379,7 @@ static struct Token consume_bin_int(struct Lex *X, struct SourceLoc start, const
     if (!test2(X, "01"))
         LEX_ERROR(X, expected_integer_digit, X->loc, "binary");
 
-    while (ISNAME(*X->ptr) || ISDIGIT(*X->ptr)) {
+    while (ISLETTER(*X->ptr) || ISDIGIT(*X->ptr)) {
         if (test_next(X, '_')) {
             // ignore digit separators
         } else if (!test2(X, "01")) {
@@ -403,7 +403,7 @@ static struct Token consume_oct_int(struct Lex *X, struct SourceLoc start, const
     if (*X->ptr < '0' || *X->ptr > '7')
         LEX_ERROR(X, expected_integer_digit, X->loc, "octal");
 
-    while (ISNAME(*X->ptr) || ISDIGIT(*X->ptr)) {
+    while (ISLETTER(*X->ptr) || ISDIGIT(*X->ptr)) {
         if (test_next(X, '_')) {
             // ignore digit separators
         } else if (*X->ptr < '0' || *X->ptr > '7') {
@@ -427,7 +427,7 @@ static struct Token consume_hex_int(struct Lex *X, struct SourceLoc start, const
     if (!ISHEX(*X->ptr))
         LEX_ERROR(X, expected_integer_digit, X->loc, "hexadecimal");
 
-    while (ISNAME(*X->ptr) || ISDIGIT(*X->ptr)) {
+    while (ISLETTER(*X->ptr) || ISDIGIT(*X->ptr)) {
         if (test_next(X, '_')) {
             // ignore digit separators
         } else if (!ISHEX(*X->ptr)) {
@@ -694,7 +694,7 @@ try_again:
         default:
             if (ISDIGIT(*X->ptr)) {
                 token = consume_number(X, start);
-            } else if (ISNAME(*X->ptr)) {
+            } else if (ISLETTER(*X->ptr)) {
                 token = consume_name(X, start);
             } else {
                 next(X);

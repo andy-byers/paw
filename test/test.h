@@ -29,6 +29,7 @@
     X(list)                  \
     X(map)                   \
     X(layout)                \
+    X(never)                 \
     X(destructure)           \
     X(method)                \
     X(match)                 \

@@ -15,6 +15,7 @@ typedef struct IrType IrType;
     X(FuncPtr)          \
     X(Signature)        \
     X(Tuple)            \
+    X(Never)            \
     X(Infer)            \
     X(Generic)          \
     X(TraitObj)
@@ -54,6 +55,10 @@ struct IrSignature {
 struct IrTuple {
     IR_TYPE_HEADER;
     struct IrTypeList *elems;
+};
+
+struct IrNever {
+    IR_TYPE_HEADER;
 };
 
 struct IrInfer {
@@ -151,6 +156,15 @@ inline static IrType *pawIr_new_tuple(struct Compiler *C, struct IrTypeList *ele
     t->Tuple_ = (struct IrTuple){
         .kind = kIrTuple,
         .elems = elems,
+    };
+    return t;
+}
+
+inline static IrType *pawIr_new_never(struct Compiler *C)
+{
+    IrType *t = pawIr_new_type(C);
+    t->Never_ = (struct IrNever){
+        .kind = kIrNever,
     };
     return t;
 }

@@ -166,6 +166,7 @@ struct IrType *pawU_normalize(UnificationTable *table, struct IrType *type)
             break;
         case kIrGeneric:
         case kIrTraitObj:
+        case kIrNever:
             break;
     }
     return type;
@@ -226,8 +227,9 @@ static int unify_trait_obj(struct Unifier *U, struct IrTraitObj *a, struct IrTra
 static int unify_types(struct Unifier *U, struct IrType *a, struct IrType *b)
 {
     debug_log(U, "unify_types", a, b);
-
-    if (IR_IS_FUNC_TYPE(a) && IR_IS_FUNC_TYPE(b)) {
+    if (IrIsNever(a) || IrIsNever(b)) {
+        return 0; // "!" is the bottom type
+    } else if (IR_IS_FUNC_TYPE(a) && IR_IS_FUNC_TYPE(b)) {
         // function pointer and definition types are compatible
         return unify_fptr(U, IR_FPTR(a), IR_FPTR(b));
     } else if (HIR_KINDOF(a) != HIR_KINDOF(b)) {
@@ -284,6 +286,10 @@ static int equate(struct Unifier *U, struct IrType *a, struct IrType *b)
 
     a = pawU_normalize(ut, a);
     b = pawU_normalize(ut, b);
+
+    if (IrIsNever(a) && !IrIsNever(b)) return -1;
+    if (!IrIsNever(a) && IrIsNever(b)) return -1;
+
     return unify_types(U, a, b);
 }
 

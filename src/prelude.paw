@@ -245,5 +245,5 @@ pub struct RangeFromIterator<T: Compare + Increment>: Advance<T> {
 }
 
 #[extern] pub fn print(message: str);
-#[extern] pub fn panic(message: str);
 #[extern] pub fn assert(cond: bool);
+#[extern] pub fn panic(message: str) -> !;

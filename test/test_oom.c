@@ -127,9 +127,9 @@ static void test_oom(char const *name_or_chunk, paw_Bool is_chunk)
 static void test_call_frames(void)
 {
     test_oom(
-        "fn poly_recur<T>(_: T, n: int) {\n"
+        "fn poly_recur<T>(t: T, n: int) {\n"
         "    if n > 0 {                  \n"
-        "        poly_recur(_, n - 1);   \n"
+        "        poly_recur(t, n - 1);   \n"
         "    }                           \n"
         "}                               \n"
         "fn recur(n: int) {   \n"

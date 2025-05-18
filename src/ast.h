@@ -28,6 +28,7 @@
     X(TupleType)         \
     X(ContainerType)     \
     X(FuncType)          \
+    X(NeverType)         \
     X(InferType)
 
 #define AST_EXPR_LIST(X) \
@@ -50,6 +51,7 @@
     X(Block)             \
     X(IfExpr)            \
     X(ForExpr)           \
+    X(LoopExpr)          \
     X(WhileExpr)         \
     X(JumpExpr)          \
     X(ReturnExpr)        \
@@ -382,6 +384,10 @@ struct AstFuncType {
     struct AstTypeList *params;
 };
 
+struct AstNeverType {
+    AST_TYPE_HEADER;
+};
+
 struct AstInferType {
     AST_TYPE_HEADER;
 };
@@ -446,6 +452,16 @@ inline static struct AstType *pawAst_new_func_type(struct Ast *ast, struct Sourc
         .kind = kAstFuncType,
         .params = params,
         .result = result,
+    };
+    return t;
+}
+
+inline static struct AstType *pawAst_new_never_type(struct Ast *ast, struct SourceSpan span)
+{
+    struct AstType *t = pawAst_new_type(ast);
+    t->NeverType_ = (struct AstNeverType){
+        .span = span,
+        .kind = kAstNeverType,
     };
     return t;
 }
@@ -649,6 +665,11 @@ struct AstIfExpr {
     struct AstExpr *cond;
     struct AstExpr *then_arm;
     struct AstExpr *else_arm;
+};
+
+struct AstLoopExpr {
+    AST_EXPR_HEADER;
+    struct AstExpr *block;
 };
 
 struct AstWhileExpr {
@@ -1006,6 +1027,17 @@ inline static struct AstExpr *pawAst_new_for_expr(struct Ast *ast, struct Source
         .kind = kAstForExpr,
         .pat = pat,
         .target = target,
+        .block = block,
+    };
+    return e;
+}
+
+inline static struct AstExpr *pawAst_new_loop_expr(struct Ast *ast, struct SourceSpan span, struct AstExpr *block)
+{
+    struct AstExpr *e = pawAst_new_expr(ast);
+    e->LoopExpr_ = (struct AstLoopExpr){
+        .span = span,
+        .kind = kAstLoopExpr,
         .block = block,
     };
     return e;

@@ -42,6 +42,7 @@
     X(FuncPtr)           \
     X(TupleType)         \
     X(PathType)          \
+    X(NeverType)         \
     X(InferType)
 
 #define HIR_STMT_LIST(X) \
@@ -183,6 +184,10 @@ struct HirTupleType {
     struct HirTypeList *elems;
 };
 
+struct HirNeverType {
+    HIR_TYPE_HEADER;
+};
+
 struct HirInferType {
     HIR_TYPE_HEADER;
 };
@@ -216,6 +221,17 @@ HIR_TYPE_LIST(DEFINE_ACCESS)
 #undef DEFINE_ACCESS
 
 struct HirType *pawHir_new_type(struct Hir *hir);
+
+static struct HirType *pawHir_new_never_type(struct Hir *hir, struct SourceSpan span)
+{
+    struct HirType *t = pawHir_new_type(hir);
+    t->NeverType_ = (struct HirNeverType){
+        .hid = pawHir_next_id(hir),
+        .span = span,
+        .kind = kHirNeverType,
+    };
+    return t;
+}
 
 static struct HirType *pawHir_new_infer_type(struct Hir *hir, struct SourceSpan span)
 {
@@ -666,7 +682,6 @@ struct HirAssignExpr {
 // such as a loop).
 struct HirBlock {
     HIR_EXPR_HEADER;
-    paw_Bool never : 1;
     struct HirStmtList *stmts;
     struct HirExpr *result;
 };
@@ -688,7 +703,6 @@ struct HirLoopExpr {
 
 struct HirMatchArm {
     HIR_EXPR_HEADER;
-    paw_Bool never : 1;
     struct HirPat *pat;
     struct HirExpr *guard;
     struct HirExpr *result;
@@ -696,7 +710,6 @@ struct HirMatchArm {
 
 struct HirMatchExpr {
     HIR_EXPR_HEADER;
-    paw_Bool never : 1;
     paw_Bool is_exhaustive : 1;
     struct HirExpr *target;
     struct HirExprList *arms;
@@ -989,14 +1002,13 @@ static struct HirExpr *pawHir_new_call_expr(struct Hir *hir, struct SourceSpan s
     return e;
 }
 
-static struct HirExpr *pawHir_new_match_arm(struct Hir *hir, struct SourceSpan span, struct HirPat *pat, struct HirExpr *guard, struct HirExpr *result, paw_Bool never)
+static struct HirExpr *pawHir_new_match_arm(struct Hir *hir, struct SourceSpan span, struct HirPat *pat, struct HirExpr *guard, struct HirExpr *result)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->MatchArm_ = (struct HirMatchArm){
         .hid = pawHir_next_id(hir),
         .span = span,
         .kind = kHirMatchArm,
-        .never = never,
         .pat = pat,
         .guard = guard,
         .result = result,
@@ -1004,7 +1016,7 @@ static struct HirExpr *pawHir_new_match_arm(struct Hir *hir, struct SourceSpan s
     return e;
 }
 
-static struct HirExpr *pawHir_new_match_expr(struct Hir *hir, struct SourceSpan span, struct HirExpr *target, struct HirExprList *arms, paw_Bool never, paw_Bool is_exhaustive)
+static struct HirExpr *pawHir_new_match_expr(struct Hir *hir, struct SourceSpan span, struct HirExpr *target, struct HirExprList *arms, paw_Bool is_exhaustive)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->MatchExpr_ = (struct HirMatchExpr){
@@ -1012,14 +1024,13 @@ static struct HirExpr *pawHir_new_match_expr(struct Hir *hir, struct SourceSpan 
         .span = span,
         .kind = kHirMatchExpr,
         .is_exhaustive = is_exhaustive,
-        .never = never,
         .target = target,
         .arms = arms,
     };
     return e;
 }
 
-static struct HirExpr *pawHir_new_block(struct Hir *hir, struct SourceSpan span, struct HirStmtList *stmts, struct HirExpr *result, paw_Bool never)
+static struct HirExpr *pawHir_new_block(struct Hir *hir, struct SourceSpan span, struct HirStmtList *stmts, struct HirExpr *result)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->Block_ = (struct HirBlock){
@@ -1028,7 +1039,6 @@ static struct HirExpr *pawHir_new_block(struct Hir *hir, struct SourceSpan span,
         .kind = kHirBlock,
         .stmts = stmts,
         .result = result,
-        .never = never,
     };
     return e;
 }

@@ -26,6 +26,21 @@
 
 #define RESOLVER_ERROR(R_, Kind_, ...) pawErr_##Kind_((R_)->C, (R_)->m->name, __VA_ARGS__)
 
+enum BlockKind {
+    BLOCK_NORMAL,
+    BLOCK_LOOP,
+    BLOCK_MATCH,
+};
+
+struct BlockState {
+    IrType *result;
+    struct BlockState *outer;
+    enum BlockKind kind;
+
+    // only relevant for BLOCK_MATCH type blocks
+    paw_Bool is_exhaustive_match;
+};
+
 struct ResultState {
     struct ResultState *outer;
     struct IrType *prev;
@@ -41,7 +56,6 @@ struct PatState {
 struct MatchState {
     struct MatchState *outer;
     struct IrType *target;
-    struct IrType *result;
     struct PatState *ps;
 };
 
@@ -56,6 +70,7 @@ struct Resolver {
     struct DynamicMem *dm; // dynamic memory
     struct ResultState *rs;
     struct MatchState *ms;
+    struct BlockState *bs;
     struct HirSymtab *symtab;
     struct Substitution subst;
     struct Hir *hir;
@@ -141,15 +156,14 @@ static paw_Bool equals(struct Resolver *R, struct IrType *a, struct IrType *b)
     return pawU_equals(R->U, a, b);
 }
 
-static void unify(struct Resolver *R, struct SourceLoc loc, struct IrType *a, struct IrType *b)
+static IrType *unify(struct Resolver *R, struct SourceLoc loc, struct IrType *a, struct IrType *b)
 {
     if (pawU_unify(R->U, a, b) != 0) {
         char const *lhs = pawIr_print_type(R->C, a);
         char const *rhs = pawIr_print_type(R->C, b);
         RESOLVER_ERROR(R, incompatible_types, loc, lhs, rhs);
     }
-    normalize(R, a);
-    normalize(R, b);
+    return IrIsNever(a) ? b : a;
 }
 
 static paw_Bool is_list_t(struct Resolver *R, struct IrType *type)
@@ -175,6 +189,16 @@ static struct IrType *get_type(struct Resolver *R, enum BuiltinKind code)
 {
     DeclId const did = R->C->builtins[code].did;
     return GET_NODE_TYPE(R->C, get_decl(R, did));
+}
+
+static IrType *unify_unit_type(struct Resolver *R, struct SourceLoc loc, struct IrType *type)
+{
+    return unify(R, loc, type, get_type(R, BUILTIN_UNIT));
+}
+
+static IrType *unify_never_type(struct Resolver *R, struct SourceLoc loc, struct IrType *type)
+{
+    return unify(R, loc, type, pawIr_new_never(R->C));
 }
 
 static paw_Bool is_unit_variant(struct Resolver *R, struct IrType *type)
@@ -268,6 +292,18 @@ static struct IrType *resolve_operand(struct Resolver *R, struct HirExpr *expr)
     return type;
 }
 
+static void expect_bool_expr(struct Resolver *R, struct HirExpr *e)
+{
+    struct IrType *type = resolve_operand(R, e);
+    unify(R, NODE_START(e), type, get_type(R, BUILTIN_BOOL));
+}
+
+static void expect_int_expr(struct Resolver *R, struct HirExpr *e)
+{
+    struct IrType *type = resolve_operand(R, e);
+    unify(R, NODE_START(e), type, get_type(R, BUILTIN_INT));
+}
+
 static struct IrTypeList *resolve_exprs(struct Resolver *R, struct HirExprList *list)
 {
     if (list == NULL)
@@ -314,10 +350,25 @@ static void leave_inference_ctx(struct Resolver *R)
     pawU_leave_binder(R->U);
 }
 
+static void enter_block(struct Resolver *R, struct BlockState *bs, struct SourceSpan span, enum BlockKind kind)
+{
+    *bs = (struct BlockState){
+        .result = new_unknown(R, span.start),
+        .outer = R->bs,
+        .kind = kind,
+    };
+    R->bs = bs;
+}
+
+static void leave_block(struct Resolver *R)
+{
+    struct BlockState *inner = R->bs;
+    R->bs = inner->outer;
+}
+
 static void enter_match_ctx(struct Resolver *R, struct MatchState *ms, struct SourceSpan span, struct IrType *target)
 {
     *ms = (struct MatchState){
-        .result = new_unknown(R, span.start),
         .target = target,
         .outer = R->ms,
     };
@@ -337,7 +388,8 @@ static struct HirScope *enclosing_scope(struct Resolver *R)
 
 static int declare_local(struct Resolver *R, struct HirIdent ident, struct HirResult res)
 {
-    if (IS_KEYWORD(ident.name) || IS_BUILTIN(ident.name))
+    // TODO: move check into parse.c
+    if (IS_BUILTIN(ident.name))
         RESOLVER_ERROR(R, reserved_identifier, ident.span.start, ident.name->text);
     return pawHir_declare_symbol(R->hir, enclosing_scope(R), ident, res);
 }
@@ -367,10 +419,9 @@ static void leave_scope(struct Resolver *R)
     HirSymtab_pop(R->symtab);
 }
 
-static void enter_scope(struct Resolver *R, struct HirScope *scope)
+static void enter_scope(struct Resolver *R)
 {
-    if (scope == NULL)
-        scope = HirScope_new(R->hir);
+    struct HirScope *scope = HirScope_new(R->hir);
     HirSymtab_push(R->hir, R->symtab, scope);
 }
 
@@ -382,7 +433,7 @@ static void leave_function(struct Resolver *R)
 
 static void enter_function(struct Resolver *R, struct HirFuncDecl *func)
 {
-    enter_scope(R, NULL);
+    enter_scope(R);
     new_local(R, func->ident, (struct HirResult){
                 .kind = HIR_RESULT_DECL,
                 .did = func->did
@@ -408,11 +459,21 @@ static void enter_pat(struct Resolver *R, struct PatState *ps, enum HirPatKind k
 
 static struct IrType *resolve_block(struct Resolver *R, struct HirBlock *block)
 {
-    enter_scope(R, NULL);
+    struct BlockState bs;
+    enter_block(R, &bs, block->span, BLOCK_NORMAL);
+    enter_scope(R);
+
     resolve_stmt_list(R, block->stmts);
-    struct IrType *type = resolve_operand(R, block->result);
+    if (block->result != NULL) {
+        struct IrType *result = resolve_operand(R, block->result);
+        bs.result = unify(R, block->span.start, result, bs.result);
+    } else {
+        unify_unit_type(R, block->span.start, bs.result);
+    }
+
     leave_scope(R);
-    return type;
+    leave_block(R);
+    return bs.result;
 }
 
 static void allocate_locals(struct Resolver *R, struct HirDeclList *decls)
@@ -452,12 +513,6 @@ static paw_Bool is_unit_type(struct Resolver *R, struct IrType *type)
     return pawP_type2code(R->C, type) == BUILTIN_UNIT;
 }
 
-static void unify_block_result(struct Resolver *R, struct SourceLoc loc, paw_Bool never, struct IrType *result, struct IrType *expect)
-{
-    if (!never || !is_unit_type(R, result))
-        unify(R, loc, result, expect);
-}
-
 static void resolve_func_item(struct Resolver *R, struct HirFuncDecl *d)
 {
     enter_function(R, d);
@@ -474,10 +529,14 @@ static void resolve_func_item(struct Resolver *R, struct HirFuncDecl *d)
         };
         R->rs = &rs;
 
-        struct IrType *result = resolve_operand(R, d->body);
-        struct HirBlock *block = HirGetBlock(d->body);
-        unify_block_result(R, block->span.start, block->never, result, ret);
+        struct BlockState bs;
+        enter_block(R, &bs, d->span, BLOCK_NORMAL);
 
+        struct IrType *result = resolve_operand(R, d->body);
+        bs.result = unify(R, d->span.start, result, bs.result);
+        unify(R, d->span.start, bs.result, ret);
+
+        leave_block(R);
         R->rs = rs.outer;
     }
     leave_function(R);
@@ -496,7 +555,7 @@ static void resolve_methods(struct Resolver *R, struct HirDeclList *items, struc
 
 static void resolve_adt_methods(struct Resolver *R, struct HirAdtDecl *d)
 {
-    enter_scope(R, NULL);
+    enter_scope(R);
 
     struct HirIdent const self = {
         .name = STRING_LIT(R, "Self"),
@@ -547,23 +606,6 @@ struct HirDecl *pawP_find_field(struct Compiler *C, struct IrType *self, String 
     if (index < 0)
         return NULL;
     return HirDeclList_get(d->fields, index);
-}
-
-static void unify_unit_type(struct Resolver *R, struct SourceLoc loc, struct IrType *type)
-{
-    unify(R, loc, type, get_type(R, BUILTIN_UNIT));
-}
-
-static void expect_bool_expr(struct Resolver *R, struct HirExpr *e)
-{
-    struct IrType *type = resolve_operand(R, e);
-    unify(R, NODE_START(e), type, get_type(R, BUILTIN_BOOL));
-}
-
-static void expect_int_expr(struct Resolver *R, struct HirExpr *e)
-{
-    struct IrType *type = resolve_operand(R, e);
-    unify(R, NODE_START(e), type, get_type(R, BUILTIN_INT));
 }
 
 static struct IrType *instantiate(struct Resolver *R, struct HirDecl *base, struct IrTypeList *types)
@@ -853,35 +895,54 @@ static struct IrType *resolve_assign_expr(struct Resolver *R, struct HirAssignEx
     return get_type(R, BUILTIN_UNIT);
 }
 
+// Intended typing behavior for match expressions (exhaustive unless otherwise mentioned):
+// (1) If the match is not exhaustive (currently, this only occurs with a match created from
+//     an "if" expression without an "else" clause), then the match has type "()". This is
+//     because it is possible that no match arm will be taken at runtime.
+// (2) If all match arms diverge, then the match itself is considered to diverge.
+// (3) A match expression takes the type of the first non-diverging arm. Any other arms that
+//     complete normally must have the same type.
 static struct IrType *resolve_match_expr(struct Resolver *R, struct HirMatchExpr *e)
 {
+    struct BlockState bs;
+    enter_block(R, &bs, e->span, BLOCK_MATCH);
+    bs.is_exhaustive_match = e->is_exhaustive;
+
     struct IrType *target = resolve_operand(R, e->target);
 
     struct MatchState ms;
     enter_match_ctx(R, &ms, e->target->hdr.span, target);
     resolve_expr_list(R, e->arms);
     leave_match_ctx(R);
+    leave_block(R);
 
-    struct IrType *result = ms.result;
-    if (IrIsInfer(result))
-        unify_unit_type(R, e->span.start, result);
+    if (!e->is_exhaustive)
+        bs.result = unify_unit_type(R, e->span.start, bs.result);
 
-    return result;
+    if (IrIsNever(bs.result))
+        // propagate divergence status to enclosing block
+        unify(R, e->span.start, bs.result, R->bs->result);
+
+    return bs.result;
 }
 
 static struct IrType *resolve_match_arm(struct Resolver *R, struct HirMatchArm *e)
 {
-    enter_scope(R, NULL);
+    struct BlockState bs;
+    enter_block(R, &bs, e->span, BLOCK_NORMAL);
+    enter_scope(R);
 
     struct IrType *pat = resolve_pat(R, e->pat);
     unify(R, e->span.start, pat, R->ms->target);
-    if (e->guard != NULL)
-        expect_bool_expr(R, e->guard);
+    if (e->guard != NULL) expect_bool_expr(R, e->guard);
     struct IrType *result = resolve_operand(R, e->result);
-    unify_block_result(R, e->span.start, e->never, result, R->ms->result);
+    result = unify(R, e->span.start, bs.result, result);
 
     leave_scope(R);
-    return result;
+    leave_block(R);
+
+    R->bs->result = unify(R, e->span.start, result, R->bs->result);
+    return R->bs->result;
 }
 
 static struct IrType *new_list_t(struct Resolver *R, struct IrType *elem_t)
@@ -916,28 +977,35 @@ static struct IrType *resolve_closure_expr(struct Resolver *R, struct HirClosure
 {
     struct ResultState rs = {R->rs};
     R->rs = &rs;
-    enter_scope(R, NULL);
+
+    // steal the enclosing block state to prevent propagation out of the closure
+    struct BlockState *outer = R->bs;
+    R->bs = NULL;
+    enter_scope(R);
 
     for (int i = 0; i < e->params->count; ++i) {
         struct HirDecl *decl = e->params->data[i];
         struct HirFieldDecl *d = HirGetFieldDecl(decl);
         resolve_closure_param(R, d);
     }
-    struct IrType *ret = resolve_type(R, e->result, e->span);
+    struct BlockState bs;
+    enter_block(R, &bs, e->span, BLOCK_NORMAL);
 
     struct IrTypeList *params = collect_decl_types(R, e->params);
+    struct IrType *ret = resolve_type(R, e->result, e->span);
     rs.prev = ret;
 
-    struct IrType *result = resolve_operand(R, e->expr);
-    if (HirIsBlock(e->expr)) {
-        struct HirBlock *block = HirGetBlock(e->expr);
-        unify_block_result(R, block->span.start, block->never, result, ret);
-    } else {
-        unify(R, e->span.start, ret, result);
-    }
+    IrType *result = resolve_operand(R, e->expr);
+    bs.result = unify(R, NODE_START(e->expr), bs.result, result);
+    if (!IrIsNever(bs.result))
+        unify(R, NODE_START(e->expr), bs.result, ret);
+
+    leave_block(R);
+    R->bs = outer;
 
     leave_scope(R);
     R->rs = rs.outer;
+
     return pawIr_new_func_ptr(R->C, params, ret);
 }
 
@@ -957,16 +1025,14 @@ struct IrType *pawP_find_method(struct Compiler *C, struct IrType *base, String 
 {
     struct HirDecl *decl = pawHir_get_decl(C, IR_TYPE_DID(base));
     struct HirDecl *method = find_method_aux(C, decl, name);
-    if (method == NULL)
-        return NULL;
-    if (!HIR_IS_POLY_ADT(decl))
-        return GET_NODE_TYPE(C, method);
+    if (method == NULL) return NULL;
+    if (!HIR_IS_POLY_ADT(decl)) return GET_NODE_TYPE(C, method);
     return pawP_instantiate_method(C, decl, IR_TYPE_SUBTYPES(base), method);
 }
 
 static void resolve_adt_item(struct Resolver *R, struct HirAdtDecl *d)
 {
-    enter_scope(R, NULL);
+    enter_scope(R);
 
     allocate_decls(R, d->generics);
     R->self = pawIr_get_type(R->C, d->hid);
@@ -982,11 +1048,14 @@ static void ResolveLetStmt(struct Resolver *R, struct HirLetStmt *s)
     struct IrType *rhs = s->init != NULL
                               ? resolve_operand(R, s->init)
                               : new_unknown(R, s->span.start);
+    struct BlockState bs;
     struct MatchState ms;
+    enter_block(R, &bs, s->span, BLOCK_MATCH);
     enter_match_ctx(R, &ms, s->span, tag);
     struct IrType *lhs = resolve_pat(R, s->pat);
-    unify(R, s->span.start, ms.result, tag);
+    unify(R, s->span.start, bs.result, tag);
     leave_match_ctx(R);
+    leave_block(R);
 
     unify(R, s->span.start, lhs, tag);
     unify(R, s->span.start, tag, rhs);
@@ -1104,7 +1173,7 @@ static void register_generics(struct Resolver *R, struct HirDeclList *generics)
 
 static struct IrType *resolve_type_decl(struct Resolver *R, struct HirTypeDecl *d)
 {
-    enter_scope(R, NULL);
+    enter_scope(R);
     register_generics(R, d->generics);
     allocate_decls(R, d->generics);
     struct IrType *type = resolve_type(R, d->rhs, d->span);
@@ -1448,13 +1517,6 @@ static struct IrType *resolve_literal_expr(struct Resolver *R, struct HirLiteral
     }
 }
 
-static paw_Bool is_never_block(struct HirExpr *expr)
-{
-    if (HirIsBlock(expr))
-        return HirGetBlock(expr)->never;
-    return HirIsJumpExpr(expr);
-}
-
 static void ResolveExprStmt(struct Resolver *R, struct HirExprStmt *s)
 {
     struct IrType *type = resolve_operand(R, s->expr);
@@ -1463,11 +1525,18 @@ static void ResolveExprStmt(struct Resolver *R, struct HirExprStmt *s)
 
 static struct IrType *resolve_loop_expr(struct Resolver *R, struct HirLoopExpr *e)
 {
-    enter_scope(R, NULL);
-    struct IrType *type = resolve_expr(R, e->block);
-    unify_unit_type(R, e->span.start, type);
+    struct BlockState bs;
+    enter_block(R, &bs, e->span, BLOCK_LOOP);
+    enter_scope(R);
+
+    struct IrType *result = resolve_expr(R, e->block);
+    unify_unit_type(R, e->span.start, result);
+
     leave_scope(R);
-    return type;
+    leave_block(R);
+
+    // loops that have no local or nonlocal jumps never complete
+    return unify_never_type(R, e->span.start, bs.result);
 }
 
 static struct IrType *check_index(struct Resolver *R, struct HirIndex *e, struct IrType *target)
@@ -1843,21 +1912,49 @@ static struct IrType *resolve_type(struct Resolver *R, struct HirType *type, str
     return normalize(R, r);
 }
 
-static struct IrType *resolve_return_expr(struct Resolver *R, struct HirReturnExpr *s)
+static void unconditional_return(struct Resolver *R, struct SourceLoc loc)
 {
-    struct IrType *want = R->rs->prev;
-    struct IrType *have = s->expr != NULL
-                              ? resolve_operand(R, s->expr)
-                              : get_type(R, BUILTIN_UNIT);
-    unify(R, s->span.start, have, want);
-    ++R->rs->count;
-
-    return get_type(R, BUILTIN_UNIT);
+    struct BlockState *bs = R->bs;
+    do {
+         if (bs->outer == NULL) break;
+         unify_never_type(R, loc, bs->result);
+         bs = bs->outer;
+    } while (bs->kind != BLOCK_MATCH);
 }
 
-static struct IrType *resolve_jump_expr(struct Resolver *R, struct HirJumpExpr *s)
+static struct IrType *resolve_return_expr(struct Resolver *R, struct HirReturnExpr *e)
 {
-    return get_type(R, BUILTIN_UNIT);
+    unconditional_return(R, e->span.start);
+
+    struct IrType *want = R->rs->prev;
+    struct IrType *have = e->expr != NULL
+                              ? resolve_operand(R, e->expr)
+                              : get_type(R, BUILTIN_UNIT);
+    unify(R, e->span.start, have, want);
+    ++R->rs->count;
+
+    return pawIr_new_never(R->C);
+}
+
+static struct BlockState *unconditional_jump(struct Resolver *R, struct SourceLoc loc)
+{
+    struct BlockState *bs = R->bs;
+    while (bs->outer != NULL && bs->kind == BLOCK_NORMAL) {
+         unify_never_type(R, loc, bs->result);
+         bs = bs->outer;
+    }
+    return bs;
+}
+
+static struct IrType *resolve_jump_expr(struct Resolver *R, struct HirJumpExpr *e)
+{
+    struct BlockState *bs = unconditional_jump(R, e->span.start);
+    if (e->jump_kind == JUMP_BREAK) {
+        // "break" leaves the enclosing loop, causing it to evaluate to "()"
+        while (bs->kind != BLOCK_LOOP) bs = bs->outer;
+        unify_unit_type(R, e->span.start, bs->result);
+    }
+    return pawIr_new_never(R->C);
 }
 
 static struct IrType *resolve_expr(struct Resolver *R, struct HirExpr *expr)
@@ -1958,7 +2055,7 @@ static void check_module_types(struct Resolver *R, struct ModuleInfo *m)
     DLOG(R, "resolving '%s'", hir->name->text);
     use_module(R, m);
 
-    enter_scope(R, NULL);
+    enter_scope(R);
     resolve_items(R, hir->items);
     leave_scope(R);
 

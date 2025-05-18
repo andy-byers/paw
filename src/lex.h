@@ -67,6 +67,7 @@ enum MultiChar {
     TK_LET,
     TK_IF,
     TK_ELSE,
+    TK_LOOP,
     TK_FOR,
     TK_WHILE,
     TK_MATCH,
@@ -77,6 +78,7 @@ enum MultiChar {
     TK_AS,
     TK_TRUE,
     TK_FALSE,
+    TK_UNDERSCORE,
 };
 
 typedef unsigned TokenKind;
@@ -113,7 +115,7 @@ struct Lex {
     struct SourceLoc loc;
     struct SourceLoc last_loc;
 
-    int func_depth;
+    int fn_depth;
     int loop_depth;
     int expr_depth;
     int nest_depth;

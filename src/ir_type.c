@@ -174,6 +174,11 @@ static paw_Uint hash_type(struct IrType *type)
             hash = hash_combine(hash, hash_type_list(t->elems));
             break;
         }
+        case kIrNever: {
+            struct IrNever *t = IrGetNever(type);
+            hash = hash_combine(hash, 0x21); // '!'
+            break;
+        }
         case kIrInfer: {
             struct IrInfer *t = IrGetInfer(type);
             hash = hash_combine(hash, t->depth);
@@ -312,11 +317,12 @@ static void print_type(struct Printer *P, IrType *type)
             PRINT_STRING(P, hir_decl_ident(decl).name);
             break;
         }
-        case kIrInfer: {
-            struct IrInfer *infer = IrGetInfer(type);
+        case kIrInfer:
             PRINT_CHAR(P, '_');
             break;
-        }
+        case kIrNever:
+            PRINT_CHAR(P, '!');
+            break;
         case kIrTraitObj: {
             // TODO: create an IR trait object and use that
             struct IrTraitObj *t = IrGetTraitObj(type);
@@ -329,7 +335,7 @@ static void print_type(struct Printer *P, IrType *type)
             }
             break;
         }
-        default: {
+        case kIrAdt: {
             struct IrAdt *adt = IrGetAdt(type);
             const enum BuiltinKind code = pawP_type2code(P->C, type);
             if (code == BUILTIN_UNIT) {

@@ -33,18 +33,6 @@ pub fn test_function_block_with_return() {
     assert(check_function_block_with_return() == 123);
 }
 
-// TODO: See TODO below about unreachable unit results
-fn check_function_block_with_unit_result() -> int {
-    return 456; 
-
-    // unreachable code
-    () 
-}
-
-pub fn test_function_block_with_unit_result() {
-    assert(check_function_block_with_unit_result() == 456);
-}
-
 fn check_function_block_without_return() -> int {
     789
 }
@@ -62,17 +50,6 @@ pub fn test_closure_block_with_return() {
     };
     
     assert(f() == 123);
-}
-
-pub fn test_closure_block_with_unit_result() {
-    let f = || {
-        return 456;
-        
-        // unreachable code
-        ()
-    };
-    
-    assert(f() == 456);
 }
 
 pub fn test_closure_block_without_return() {
@@ -135,16 +112,9 @@ pub fn test_if_return_propagate() {
     assert(false);
 }
 
-// TODO: It would be better to have some indication of when there is no
-//       block result, rather than filling it in with a literal "()".
-//       Could unify result types only if one exists. The current behavior
-//       looks strange, but is probably okay since control never reaches
-//       the end of the block. This change would cause the following test
-//       to encounter a type error. Removing the "()" result should fix it.
 pub fn test_if_return_explicit_unit() {
     let x = if true { 
         return; 
-        ()
     } else { 
         42 
     };
@@ -156,7 +126,6 @@ pub fn test_guarded_return() {
     // "if" without an "else" must have type "()"
     let x: () = if true { 
         return; 
-        ()
     };
     // unreachable code
     assert(false);
@@ -195,9 +164,6 @@ fn check_if_expr(n: int) -> str {
         'two'
     } else {
         return 'other';
-
-        // unreachable code
-        ()
     };
 }
 
@@ -336,12 +302,9 @@ fn check_never_match_expr(o: Option<int>) -> str {
     match o {
         Option::None => return 'none', 
         Option::Some(x) if x < 0 => return 'some < 0', 
-        Option::Some(x) if x > 0 => {return 'some > 0'; ()}, // "()" unreachable
+        Option::Some(x) if x > 0 => {return 'some > 0';}, // "()" unreachable
         Option::Some(x) => {return 'some == 0'; 'abc'}, // "abc" unreachable
     }
-
-    // unreachable code: type error if "never" flag not propagated
-    ()
 }
 
 pub fn test_never_match_expr() {
@@ -386,3 +349,4 @@ pub fn test_return_before_use() {
 
     assert(y == 42);
 }
+
