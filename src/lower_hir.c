@@ -236,7 +236,7 @@ static struct MirInstruction *add_instruction(struct FunctionState *fs, struct M
     return instr;
 }
 
-#define NEW_INSTR(fs, kind, ...) add_instruction(fs, pawMir_new_##kind((fs)->mir, __VA_ARGS__))
+#define NEW_INSTR(Fs_, Kind_, ...) add_instruction(Fs_, pawMir_new_##Kind_((Fs_)->mir, __VA_ARGS__))
 
 static struct MirInstruction *terminate_goto(struct FunctionState *fs, struct SourceLoc loc, MirBlock target)
 {
@@ -674,16 +674,39 @@ static struct MirPlace select_element(struct FunctionState *fs, struct MirPlace 
     return p;
 }
 
-//static void select_range(struct FunctionState *fs, struct MirPlace *pplace, MirRegister lower, MirRegister upper)
-//{
-//    auto_deref(fs, pplace);
-//    MirProjection *elems = MirProjection_new_range(fs->mir, lower, upper);
-//    MirProjectionList_push(fs->mir, pplace->projection, elems);
-//}
+static struct MirPlace select_range(struct FunctionState *fs, struct MirPlace place, IrType *target, MirRegister lower, MirRegister upper)
+{
+    struct MirPlace p = pawMir_copy_place(fs->mir, place);
+
+    auto_deref(fs, &p, target);
+    MirProjection *elems = MirProjection_new_range(fs->mir, lower, upper);
+    MirProjectionList_push(fs->mir, p.projection, elems);
+    return p;
+}
 
 static void lower_place_aux(struct HirVisitor *V, struct HirExpr *expr, struct MirPlace *pplace);
 static struct MirPlace lower_place(struct HirVisitor *V, struct HirExpr *expr);
 static struct MirPlace lower_path_expr(struct HirVisitor *V, struct HirPathExpr *e);
+
+static struct MirPlace first_slice_index(struct FunctionState *fs, struct HirVisitor *V, struct SourceLoc loc, struct HirExpr *e)
+{
+    if (e != NULL) return lower_place(V, e);
+
+    // default to integer 0
+    return add_constant(fs, loc, I2V(0), BUILTIN_INT);
+}
+
+static struct MirPlace second_slice_index(struct FunctionState *fs, struct HirVisitor *V, struct SourceLoc loc, struct HirExpr *e, struct MirPlace object)
+{
+    if (e != NULL) return lower_place(V, e);
+
+    // default to the length of the container
+    struct MirPlace const output = new_literal_place(fs, BUILTIN_INT);
+    enum BuiltinKind const kind = pawP_type2code(fs->C, mir_reg_data(fs->mir, object.r)->type);
+    enum MirUnaryOpKind op = kind == BUILTIN_STR ? MIR_UNARY_SLENGTH : MIR_UNARY_LLENGTH;
+    NEW_INSTR(fs, unary_op, loc, op, object, output);
+    return output;
+}
 
 // Lower an expression representing a location in memory
 // Note that nested selectors on value types are flattened into a single access relative
@@ -705,13 +728,24 @@ static void lower_place_aux(struct HirVisitor *V, struct HirExpr *expr, struct M
     } else if (HirIsIndex(expr)) {
         struct HirIndex *x = HirGetIndex(expr);
         lower_place_aux(V, x->target, pplace);
-        struct MirPlace const first = lower_place(V, x->first);
-        // NOTE: the target of a move never has any projections
-        struct MirPlace const index = new_place(fs, GET_NODE_TYPE(fs->C, x->first));
-        move_to(fs, NODE_START(x->first), first, index);
 
         IrType *target = GET_NODE_TYPE(fs->C, x->target);
-        *pplace = select_element(fs, *pplace, target, index.r);
+        if (x->is_slice) {
+            struct MirPlace const first = first_slice_index(fs, V, NODE_START(expr), x->first);
+            struct MirPlace const second = second_slice_index(fs, V, NODE_START(expr), x->second, *pplace);
+            struct MirPlace const lower = new_place(fs, get_type(L, BUILTIN_INT));
+            struct MirPlace const upper = new_place(fs, get_type(L, BUILTIN_INT));
+            move_to(fs, NODE_START(expr), first, lower);
+            move_to(fs, NODE_START(expr), second, upper);
+
+            *pplace = select_range(fs, *pplace, target, lower.r, upper.r);
+        } else {
+            struct MirPlace const first = lower_place(V, x->first);
+            struct MirPlace const index = new_place(fs, GET_NODE_TYPE(fs->C, x->first));
+            move_to(fs, NODE_START(x->first), first, index);
+
+            *pplace = select_element(fs, *pplace, target, index.r);
+        }
     } else {
         *pplace = lower_operand(V, expr);
     }
@@ -1464,7 +1498,7 @@ static struct MirPlace lower_conversion_expr(struct HirVisitor *V, struct HirCon
     enum BuiltinKind from = kind_of_builtin(L, e->arg);
     struct MirPlace const output = place_for_node(fs, e->hid);
     struct MirPlace const target = lower_place(V, e->arg);
-    if (from != e->to) {
+    if (from != e->to && (from != BUILTIN_BOOL || e->to != BUILTIN_INT)) {
         NEW_INSTR(fs, cast, e->span.start, target, output, from, e->to);
     } else {
         move_to(fs, e->span.start, target, output);
@@ -1575,27 +1609,6 @@ static struct MirPlace lower_field_expr(struct HirVisitor *V, struct HirFieldExp
     if (e->fid < 0)
         lower_place(V, e->key);
     return lower_place(V, e->value);
-}
-
-static struct MirPlace first_slice_index(struct LowerHir *L, struct HirVisitor *V, struct SourceLoc loc, struct HirExpr *e)
-{
-    if (e != NULL)
-        return lower_place(V, e);
-    // default to integer 0
-    return add_constant(L->fs, loc, I2V(0), BUILTIN_INT);
-}
-
-static struct MirPlace second_slice_index(struct LowerHir *L, struct HirVisitor *V, struct SourceLoc loc, struct HirExpr *e, struct MirPlace object)
-{
-    if (e != NULL)
-        return lower_place(V, e);
-    // default to the length of the container
-    struct MirPlace const output = new_literal_place(L->fs, BUILTIN_INT);
-    enum BuiltinKind const kind = pawP_type2code(L->C, GET_NODE_TYPE(L->C, e));
-    enum MirUnaryOpKind op = kind == BUILTIN_STR ? MIR_UNARY_SLENGTH :
-        kind == BUILTIN_LIST ? MIR_UNARY_LLENGTH : MIR_UNARY_MLENGTH;;
-    NEW_INSTR(L->fs, unary_op, loc, op, object, output);
-    return output;
 }
 
 static struct MirPlace lower_assign_expr(struct HirVisitor *V, struct HirAssignExpr *e)
@@ -2137,10 +2150,13 @@ static void lower_global_constant(struct LowerHir *L, struct HirConstDecl *d)
         struct ModuleInfo *m = ModuleList_get(L->C->modules, d->did.modno);
         String *modname = d->did.modno == TARGET_MODNO ? NULL : m->hir->name;
         String *name = pawP_mangle_name(L->C, modname, d->ident.name, NULL);
-        Value const value = pawP_get_extern_value(L->C, name);
+        Value const *pvalue = pawP_get_extern_value(L->C, name);
+        if (pvalue == NULL)
+            LOWERING_ERROR(L, missing_extern_value, d->span.start, d->ident.name->text);
+
         struct IrType *type = pawIr_get_type(L->C, d->hid);
         enum BuiltinKind const kind = pawP_type2code(L->C, type);
-        register_global_constant(L, d, value, kind);
+        register_global_constant(L, d, *pvalue, kind);
         return;
     }
     if (d->init == NULL)

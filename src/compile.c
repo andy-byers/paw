@@ -76,6 +76,11 @@ void pawP_init(paw_Env *P)
     P->string_cache[CSTR_OPTION] = pawS_new_fixed(P, "Option");
     P->string_cache[CSTR_RESULT] = pawS_new_fixed(P, "Result");
     P->string_cache[CSTR_RANGE] = pawS_new_fixed(P, "Range");
+    P->string_cache[CSTR_RANGE_TO] = pawS_new_fixed(P, "RangeTo");
+    P->string_cache[CSTR_RANGE_FROM] = pawS_new_fixed(P, "RangeFrom");
+    P->string_cache[CSTR_RANGE_FULL] = pawS_new_fixed(P, "RangeFull");
+    P->string_cache[CSTR_RANGE_INCLUSIVE] = pawS_new_fixed(P, "RangeInclusive");
+    P->string_cache[CSTR_RANGE_TO_INCLUSIVE] = pawS_new_fixed(P, "RangeToInclusive");
     P->string_cache[CSTR_HASH] = pawS_new_fixed(P, "Hash");
     P->string_cache[CSTR_EQUALS] = pawS_new_fixed(P, "Equals");
     P->string_cache[CSTR_COMPARE] = pawS_new_fixed(P, "Compare");
@@ -122,6 +127,16 @@ enum BuiltinKind pawP_type2code(struct Compiler *C, struct IrType *type)
             return BUILTIN_COMPARE;
         } else if (base.value == C->builtins[BUILTIN_RANGE].did.value) {
             return BUILTIN_RANGE;
+        } else if (base.value == C->builtins[BUILTIN_RANGE_TO].did.value) {
+            return BUILTIN_RANGE_TO;
+        } else if (base.value == C->builtins[BUILTIN_RANGE_FROM].did.value) {
+            return BUILTIN_RANGE_FROM;
+        } else if (base.value == C->builtins[BUILTIN_RANGE_FULL].did.value) {
+            return BUILTIN_RANGE_FULL;
+        } else if (base.value == C->builtins[BUILTIN_RANGE_INCLUSIVE].did.value) {
+            return BUILTIN_RANGE_INCLUSIVE;
+        } else if (base.value == C->builtins[BUILTIN_RANGE_TO_INCLUSIVE].did.value) {
+            return BUILTIN_RANGE_TO_INCLUSIVE;
         }
     }
     return NBUILTINS;
@@ -141,6 +156,22 @@ String *pawP_scan_nstring(struct Compiler *C, Tuple *map, char const *s, size_t 
     pawC_pop(P);
     CHECK_GC(P);
     return V_STRING(*pv);
+}
+
+String *pawP_format_string(struct Compiler *C, char const *fmt, ...)
+{
+    Buffer buf;
+    paw_Env *P = ENV(C);
+    pawL_init_buffer(P, &buf);
+
+    va_list arg;
+    va_start(arg, fmt);
+    pawL_add_vfstring(P, &buf, fmt, arg);
+    va_end(arg);
+
+    String *s = pawP_scan_nstring(C, C->strings, buf.data, buf.size);
+    pawL_discard_result(P, &buf);
+    return s;
 }
 
 static void define_prelude_adt(struct Compiler *C, unsigned cstr, enum BuiltinKind kind)
@@ -282,6 +313,11 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, char co
     define_prelude_adt(C, CSTR_OPTION, BUILTIN_OPTION);
     define_prelude_adt(C, CSTR_RESULT, BUILTIN_RESULT);
     define_prelude_adt(C, CSTR_RANGE, BUILTIN_RANGE);
+    define_prelude_adt(C, CSTR_RANGE_TO, BUILTIN_RANGE_TO);
+    define_prelude_adt(C, CSTR_RANGE_FROM, BUILTIN_RANGE_FROM);
+    define_prelude_adt(C, CSTR_RANGE_FULL, BUILTIN_RANGE_FULL);
+    define_prelude_adt(C, CSTR_RANGE_INCLUSIVE, BUILTIN_RANGE_INCLUSIVE);
+    define_prelude_adt(C, CSTR_RANGE_TO_INCLUSIVE, BUILTIN_RANGE_TO_INCLUSIVE);
 
     // builtin traits
     define_prelude_adt(C, CSTR_HASH, BUILTIN_HASH);
@@ -660,7 +696,7 @@ paw_Bool pawP_check_extern(struct Compiler *C, struct Annotations *annos, struct
     return PAW_FALSE;
 }
 
-Value pawP_get_extern_value(struct Compiler *C, String *name)
+Value const *pawP_get_extern_value(struct Compiler *C, String const *name)
 {
     paw_Env *P = ENV(C);
     pawE_push_cstr(P, CSTR_KSYMBOLS);
@@ -668,11 +704,9 @@ Value pawP_get_extern_value(struct Compiler *C, String *name)
     Tuple *symbols = V_TUPLE(P->top.p[-1]);
 
     Value const *pval = pawMap_get(P, symbols, &P2V(name));
-    if (pval == NULL)
-        COMPILER_ERROR(C, missing_extern_value, SCAN_STRING(C, "TODO"), (struct SourceLoc){-1}, name->text);
 
     paw_pop(P, 1); // pop 'symbols'
-    return *pval;
+    return pval;
 }
 
 static RttiType *lookup_rtti(struct Compiler *C, struct IrType *type)

@@ -110,6 +110,7 @@ enum InfixOp {
     INFIX_SHL, // <<
     INFIX_SHR, // >>
     INFIX_RANGE, // ..
+    INFIX_RANGEI, // ..=
     INFIX_AND, // &&
     INFIX_OR, // ||
     INFIX_ASSIGN, // =
@@ -154,6 +155,7 @@ static const struct {
     [INFIX_AND] = {4, 4},
     [INFIX_OR] = {3, 3},
     [INFIX_RANGE] = {2, 2},
+    [INFIX_RANGEI] = {2, 2},
     [INFIX_ASSIGN] = {1, 1},
     [INFIX_AADD] = {1, 1},
     [INFIX_ASUB] = {1, 1},
@@ -240,6 +242,8 @@ static enum InfixOp get_infixop(TokenKind kind)
             return INFIX_GE;
         case TK_DOT2:
             return INFIX_RANGE;
+        case TK_DOT2_EQ:
+            return INFIX_RANGEI;
         case TK_PLUS_EQ:
             return INFIX_AADD;
         case TK_MINUS_EQ:
@@ -994,8 +998,7 @@ static struct AstExpr *index_expr(struct Lex *lex, struct AstExpr *target)
     skip(lex); // '[' token
     struct AstExpr *index = expr0(lex);
     delim_next(lex, ']', '[', start);
-    return NEW_NODE(lex, index, start, target, index,
-            NULL, PAW_FALSE); // TODO: remove, use ranges for slices
+    return NEW_NODE(lex, index, start, target, index);
 }
 
 static paw_Type parse_container_items(struct Lex *lex, struct AstExprList *items)
@@ -1379,7 +1382,6 @@ static struct AstExpr *suffixed_expr(struct Lex *lex)
 
 static struct AstExpr *simple_expr(struct Lex *lex)
 {
-    struct AstExpr *expr;
     switch (lex->t.kind) {
         case TK_PIPE2:
             lex->t.kind = '|';
@@ -1387,10 +1389,11 @@ static struct AstExpr *simple_expr(struct Lex *lex)
             // (fallthrough)
         case '|':
             return closure(lex);
+        case TK_DOT2:
+            return NULL;
         default:
             return suffixed_expr(lex);
     }
-    return expr;
 }
 
 static struct AstExpr *conversion_expr(struct Lex *lex, struct AstExpr *lhs)
@@ -1454,6 +1457,33 @@ static struct AstExpr *assignment_expr(struct Lex *lex, struct AstExpr *lhs)
     return NEW_NODE(lex, assign_expr, start, lhs, rhs);
 }
 
+static paw_Bool test_operand(struct Lex *lex)
+{
+    switch (lex->t.kind) {
+        case '(': // parenthesized expression
+        case '[': // container literal
+        case TK_INTEGER:
+        case TK_FLOAT:
+        case TK_STRING_TEXT:
+        case TK_NAME:
+        case '#':
+        case '-':
+        case '!':
+        case '~':
+            return PAW_TRUE;
+        default:
+            return PAW_FALSE;
+    }
+}
+
+static struct AstExpr *range_expr(struct Lex *lex, enum InfixOp op, struct AstExpr *lhs)
+{
+    struct AstExpr *rhs = NULL;
+    struct SourceLoc start = lex->loc;
+    if (test_operand(lex)) rhs = expression(lex, right_prec(op));
+    return NEW_NODE(lex, range_expr, start, op == INFIX_RANGEI, lhs, rhs);
+}
+
 static struct AstExpr *binop_expr(struct Lex *lex, enum InfixOp op, struct AstExpr *lhs)
 {
     struct SourceLoc start = lex->loc;
@@ -1493,6 +1523,9 @@ static struct AstExpr *infix_expr(struct Lex *lex, struct AstExpr *lhs, unsigned
         case INFIX_ASHL:
         case INFIX_ASHR:
             return op_assignment_expr(lex, lhs, op);
+        case INFIX_RANGE:
+        case INFIX_RANGEI:
+            return range_expr(lex, op, lhs);
         default:
             return binop_expr(lex, op, lhs);
     }
@@ -1504,10 +1537,13 @@ static struct AstExpr *subexpr(struct Lex *lex, unsigned prec)
     struct AstExpr *expr = op == NOT_UNOP
                                ? simple_expr(lex)
                                : unop_expr(lex, op);
-    if (expr == NULL)
+    op = get_infixop(lex->t.kind);
+
+    if (expr == NULL
+            && op != INFIX_RANGE
+            && op != INFIX_RANGEI)
         return NULL;
 
-    op = get_infixop(lex->t.kind);
     while (op != NOT_INFIX && prec < left_prec(op)) {
         expr = infix_expr(lex, expr, op);
         op = get_infixop(lex->t.kind);

@@ -807,6 +807,13 @@ top:
                 V_SET_FLOAT(ra, CAST(paw_Float, i));
             }
 
+            vm_case(FCASTB) :
+            {
+                Value const *rb = VM_RB(opcode);
+                paw_Float const f = V_FLOAT(*rb);
+                V_SET_BOOL(ra, (paw_Bool)f);
+            }
+
             vm_case(FCASTI) :
             {
                 Value const *rb = VM_RB(opcode);

@@ -746,6 +746,13 @@ _Noreturn void pawErr_expected_divergence(struct Compiler *C, String const *modn
             NULL);
 }
 
+_Noreturn void pawErr_invalid_inclusive_range(struct Compiler *C, String const *modname, struct SourceLoc loc)
+{
+    throw(C, E_INVALID_INCLUSIVE_RANGE, modname, loc,
+            format(C, "type of range cannot be inclusive"),
+            NULL);
+}
+
 _Noreturn void pawErr_global_constant_cycle(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name)
 {
     throw(C, E_GLOBAL_CONSTANT_CYCLE, modname, loc,

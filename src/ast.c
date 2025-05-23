@@ -423,6 +423,15 @@ static void dump_expr(Printer *P, struct AstExpr *expr)
             dump_expr(P, e->rhs);
             break;
         }
+        case kAstRangeExpr: {
+            struct AstRangeExpr *e = AstGetRangeExpr(expr);
+            DUMP_FMT(P, "is_inclusive: %d\n", e->is_inclusive);
+            DUMP_MSG(P, "lhs: ");
+            dump_expr(P, e->lhs);
+            DUMP_MSG(P, "rhs: ");
+            dump_expr(P, e->rhs);
+            break;
+        }
         case kAstCallExpr: {
             struct AstCallExpr *e = AstGetCallExpr(expr);
             DUMP_MSG(P, "target: ");
@@ -432,13 +441,10 @@ static void dump_expr(Printer *P, struct AstExpr *expr)
         }
         case kAstIndex: {
             struct AstIndex *e = AstGetIndex(expr);
-            DUMP_FMT(P, "is_slice: %d\n", e->is_slice);
             DUMP_MSG(P, "target: ");
             dump_expr(P, e->target);
-            DUMP_MSG(P, "first: ");
-            dump_expr(P, e->first);
-            DUMP_MSG(P, "second: ");
-            dump_expr(P, e->second);
+            DUMP_MSG(P, "index: ");
+            dump_expr(P, e->index);
             break;
         }
         case kAstSelector: {

@@ -194,6 +194,7 @@ typedef enum Op { //      arguments    description
 
     OP_ICASTF, //         A B          R[A] := R[B] as float
     OP_FCASTI, //         A B          R[A] := R[B] as int
+    OP_FCASTB, //         A B          R[A] := R[B] as bool
     OP_XCASTB, //         A B          R[A] := R[B] as bool
 
     NOPCODES

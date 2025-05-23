@@ -181,7 +181,7 @@ pub inline enum Result<T, E> {
     #[extern] pub fn unwrap(self) -> T;
 }
 
-pub struct Range<T: Compare + Increment>: Iterate<RangeIterator<T>, T> {
+pub inline struct Range<T: Compare + Increment>: Iterate<RangeIterator<T>, T> {
     pub start: T,
     pub end: T,
     pub fn contains(self, value: T) -> bool {
@@ -192,7 +192,7 @@ pub struct Range<T: Compare + Increment>: Iterate<RangeIterator<T>, T> {
     }
 }
 
-pub struct RangeFrom<T: Compare + Increment>: Iterate<RangeFromIterator<T>, T> {
+pub inline struct RangeFrom<T: Compare + Increment>: Iterate<RangeFromIterator<T>, T> {
     pub start: T,
     pub fn contains(self, value: T) -> bool {
         self.start.le(value)
@@ -202,16 +202,34 @@ pub struct RangeFrom<T: Compare + Increment>: Iterate<RangeFromIterator<T>, T> {
     }
 }
 
-pub struct RangeTo<T: Compare + Increment> {
+pub inline struct RangeTo<T: Compare> {
     pub end: T,
     pub fn contains(self, value: T) -> bool {
         value.lt(self.end)
     }
 }
 
-pub struct RangeFull<T: Compare + Increment> {
-    pub fn contains(self, value: T) -> bool {
+pub inline struct RangeFull {
+    pub fn contains<T>(self, value: T) -> bool {
         true
+    }
+}
+
+pub inline struct RangeInclusive<T: Compare + Increment>: Iterate<RangeInclusiveIterator<T>, T> {
+    pub start: T,
+    pub end: T,
+    pub fn contains(self, value: T) -> bool {
+        self.start.le(value) && value.le(self.end)
+    }
+    pub fn iterator(self) -> RangeInclusiveIterator<T> {
+        RangeInclusiveIterator::new(self)
+    }
+}
+
+pub inline struct RangeToInclusive<T: Compare> {
+    pub end: T,
+    pub fn contains(self, value: T) -> bool {
+        value.le(self.end)
     }
 }
 
@@ -224,7 +242,7 @@ pub struct RangeIterator<T: Compare + Increment>: Advance<T> {
     pub fn next(self) -> Option<T> {
         let iter = self.iter;
         if iter.lt(self.end) {
-            self.iter = self.iter.incremented();
+            self.iter = iter.incremented();
             Option::Some(iter)
         } else {
             Option::None
@@ -243,6 +261,24 @@ pub struct RangeFromIterator<T: Compare + Increment>: Advance<T> {
         Option::Some(iter)
     }
 }
+
+pub struct RangeInclusiveIterator<T: Compare + Increment>: Advance<T> {
+    end: T,
+    iter: Option<T>,
+    pub fn new(range: RangeInclusive<T>) -> Self {
+        Self{iter: Option::Some(range.start), end: range.end}
+    }
+    pub fn next(self) -> Option<T> {
+        let iter = self.iter?;
+        if iter.lt(self.end) {
+            self.iter = Option::Some(iter.incremented());
+        } else {
+            self.iter = Option::None;
+        }
+        Option::Some(iter)
+    }
+}
+
 
 #[extern] pub fn print(message: str);
 #[extern] pub fn assert(cond: bool);

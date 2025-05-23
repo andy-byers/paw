@@ -24,6 +24,7 @@ enum MultiChar {
     TK_PLUS2,
     TK_DOT2,
     TK_DOT3,
+    TK_DOT2_EQ,
     TK_COLON2,
     TK_LESS2,
     TK_GREATER2,

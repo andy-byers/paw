@@ -101,6 +101,8 @@ inline static String *pawP_scan_string(struct Compiler *C, Tuple *map, char cons
     return pawP_scan_nstring(C, map, s, strlen(s));
 }
 
+String *pawP_format_string(struct Compiler *C, char const *fmt, ...);
+
 #define IS_SCALAR_TYPE(code) ((code) < BUILTIN_STR)
 #define IS_BASIC_TYPE(code) ((code) <= BUILTIN_STR)
 #define IS_BUILTIN_TYPE(code) ((code) < NBUILTINS)
@@ -359,7 +361,7 @@ struct Annotation {
 DEFINE_LIST(struct Compiler, Annotations, struct Annotation)
 
 paw_Bool pawP_check_extern(struct Compiler *C, struct Annotations *annos, struct Annotation *panno);
-Value pawP_get_extern_value(struct Compiler *C, String *name);
+Value const *pawP_get_extern_value(struct Compiler *C, String const *name);
 void pawP_mangle_start(paw_Env *P, Buffer *buf, struct Compiler *G);
 String *pawP_mangle_finish(paw_Env *P, Buffer *buf, struct Compiler *G);
 String *pawP_mangle_name(struct Compiler *G, String const *modname, String const *name, struct IrTypeList *types);

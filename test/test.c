@@ -417,6 +417,8 @@ char const *op_name(Op op)
             return "ICASTF";
         case OP_FCASTI:
             return "FCASTI";
+        case OP_FCASTB:
+            return "FCASTB";
         case OP_TESTK:
             return "TESTK";
         case OP_SWITCHINT:
@@ -446,6 +448,7 @@ void paw_dump_opcode(OpCode opcode)
         case OP_MLENGTH:
         case OP_XCASTB:
         case OP_FCASTI:
+        case OP_FCASTB:
         case OP_ICASTF:
         case OP_GETDISCR:
         case OP_CALL:

@@ -423,8 +423,11 @@ static void set_entrypoint(struct Generator *G, Proto *proto, int g)
 
 static void code_extern_function(struct Generator *G, String *name, int g)
 {
-    Value *pval = RTTI_PVAL(ENV(G), g);
-    *pval = pawP_get_extern_value(G->C, name);
+     Value const *pvalue = pawP_get_extern_value(G->C, name);
+     if (pvalue == NULL)
+         CODEGEN_ERROR(G, missing_extern_value, (struct SourceLoc){-1}, name->text);
+
+    *RTTI_PVAL(ENV(G), g) = *pvalue;
 }
 
 static void allocate_upvalue_info(struct Generator *G, Proto *proto, struct MirUpvalueList *upvalues)
@@ -569,16 +572,15 @@ static void finalize_bodies(struct Compiler *C, BodyList *bodies)
     K_LIST_FOREACH (bodies, pbody) {
         struct Mir *mir = *pbody;
 
-        // skip extern functions
-        if (mir->blocks->count == 0)
-            continue;
+        // only consider Paw functions
+        if (mir->blocks->count > 0) {
+            // perform unboxing before SSA construction so that phi nodes are generated for
+            // newly-created variables
+            pawP_scalarize_registers(C, mir);
+            pawSsa_construct(mir);
 
-        // perform unboxing before SSA construction so that phi nodes are generated for
-        // newly-created variables
-        pawP_scalarize_registers(C, mir);
-        pawSsa_construct(mir);
-
-        pawMir_propagate_constants(mir);
+            pawMir_propagate_constants(mir);
+        }
     }
 }
 
@@ -920,16 +922,13 @@ static void code_cast(struct MirVisitor *V, struct MirCast *x)
     struct FuncState *fs = G->fs;
 
     Op op;
-    if (x->to == BUILTIN_BOOL) {
-        op = OP_XCASTB;
-    } else if (x->from <= BUILTIN_INT && x->to == BUILTIN_FLOAT) {
+    if (x->from == BUILTIN_FLOAT) {
+        op = x->to == BUILTIN_INT ? OP_FCASTI : OP_FCASTB;
+    } else if (x->to == BUILTIN_FLOAT) {
         op = OP_ICASTF; // 'from' can be bool
-    } else if (x->from == BUILTIN_FLOAT && x->to == BUILTIN_INT) {
-        op = OP_FCASTI;
     } else {
-        // TODO: remove casts that don't produce any instructions
-        move_to_reg(fs, REG(x->target.r), REG(x->output.r));
-        return; // NOOP
+        paw_assert(x->to == BUILTIN_BOOL);
+        op = OP_XCASTB;
     }
 
     code_AB(fs, op, REG(x->output.r), REG(x->target.r));

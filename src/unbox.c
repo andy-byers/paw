@@ -33,11 +33,8 @@
 #define TODO ((struct SourceLoc){-1})
 
 #define NEW_INSTR(Ctx_, Kind_, ...) \
-    MirInstructionList_push((Ctx_)->fs->mir, (Ctx_)->instructions, pawMir_new_##Kind_((Ctx_)->fs->mir, __VA_ARGS__));
-
-// TODO: remove
-#define ADD_INSTRUCTION(Ctx_, Instr_) \
-    MirInstructionList_push((Ctx_)->fs->mir, (Ctx_)->instructions, MIR_CAST_INSTRUCTION(Instr_));
+    MirInstructionList_push((Ctx_)->fs->mir, (Ctx_)->instructions, \
+            pawMir_new_##Kind_((Ctx_)->fs->mir, __VA_ARGS__));
 
 #define REGISTER_AT(Group_, Offset_) MIR_REG((Group_).base + Offset_)
 #define UPVALUE_AT(Group_, Offset_) ((Group_).base + Offset_)
@@ -716,7 +713,8 @@ static void unbox_aggregate(struct Unboxer *U, struct MirAggregate *x)
     struct MemoryGroup output = get_registers(U, x->output.r, -1);
     for (int i = 0; i < output.count; ++i) {
         struct MirPlace const r = PLACE(REGISTER_AT(output, i));
-        NEW_INSTR(U, alloc_local, x->loc, SCAN_STRING(U->C, "TODO: remove this field"), r);
+        String *name = pawP_format_string(U->C, PRIVATE("value_%d"), i);
+        NEW_INSTR(U, alloc_local, x->loc, name, r);
     }
 }
 
@@ -793,13 +791,13 @@ static void unbox_unaryop(struct Unboxer *U, struct MirUnaryOp *x)
     x->output = PLACE(output.group.base);
 
     x->mid = next_mid(U->fs);
-    ADD_INSTRUCTION(U, x);
+    NEW_INSTR(U, unary_op, x->loc, x->op, x->val, x->output);
 }
 
 static void unbox_closure(struct Unboxer *U, struct MirClosure *x)
 {
     x->mid = next_mid(U->fs);
-    ADD_INSTRUCTION(U, x);
+    NEW_INSTR(U, closure, x->loc, x->child_id, x->output);
 }
 
 static void unbox_return(struct Unboxer *U, struct MirReturn *x)
@@ -843,7 +841,7 @@ static void unbox_other(struct Unboxer *U, struct MirInstruction *instr)
     }
 
     instr->hdr.mid = next_mid(U->fs);
-    ADD_INSTRUCTION(U, instr);
+    MirInstructionList_push(U->fs->mir, U->instructions, instr);
 }
 
 static void unbox_instruction(struct Unboxer *U, struct MirInstruction *instr)
@@ -980,9 +978,7 @@ void pawP_scalarize_registers(struct Compiler *C, struct Mir *mir)
         .C = C,
     };
 
-    // TODO: ".mir_count" should not be stored in Mir, it should be a temprary stored in construction context ("LowerHir", "Unboxer", etc.)
     mir->mir_count = 0;
-
     unbox_function(&U, mir);
 }
 

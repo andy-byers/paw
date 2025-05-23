@@ -637,7 +637,7 @@ static void maybe_fix_unit_struct(struct Resolver *R, struct IrType *type, struc
     paw_assert(IrIsAdt(type));
     struct IrAdtDef const *adt = pawIr_get_adt_def(R->C, IR_TYPE_DID(type));
     enum BuiltinKind const code = TYPE2CODE(R, type);
-    if (IS_BUILTIN_TYPE(code) || !adt->is_struct)
+    if (IS_BASIC_TYPE(code) || !adt->is_struct)
         RESOLVER_ERROR(R, expected_value, NODE_START(expr), adt->name->text);
 
     paw_assert(adt->variants->count == 1);
@@ -752,47 +752,6 @@ static paw_Bool is_bool_binop(enum BinaryOp op)
     }
 }
 
-static struct HirExpr *new_literal_field(struct Resolver *R, const char *name, struct HirExpr *expr, int fid)
-{
-    struct HirIdent const ident = {
-        .name = STRING_LIT(R, name),
-        .span = expr->hdr.span,
-    };
-    return pawHir_new_named_field_expr(R->m->hir, expr->hdr.span, ident, expr, fid);
-}
-
-static struct IrType *transform_range(struct Resolver *R, struct HirBinOpExpr *e, struct IrType *inner)
-{
-    struct Hir *hir = R->m->hir;
-    struct SourceSpan const span = {
-        .start = NODE_START(e->lhs),
-        .end = e->rhs->hdr.span.end,
-    };
-    struct HirIdent const ident = {
-        .name = CSTR(R, CSTR_RANGE),
-        .span = e->lhs->hdr.span,
-    };
-    struct HirPath path;
-    pawHir_path_init(hir, &path, ident.span);
-    pawHir_path_add(hir, &path, ident, NULL);
-
-    struct HirExprList *items = HirExprList_new(R->hir);
-    HirExprList_push(R->hir, items, new_literal_field(R, "first", e->lhs, 0));
-    HirExprList_push(R->hir, items, new_literal_field(R, "second", e->rhs, 1));
-
-    e->kind = kHirLiteralExpr; // transform to composite literal
-    struct HirLiteralExpr *lit = HirGetLiteralExpr(HIR_CAST_EXPR(e));
-    lit->lit_kind = kHirLitComposite;
-    lit->comp.items = items;
-    lit->comp.path = path;
-
-    struct IrTypeList *types = IrTypeList_new(R->C);
-    IrTypeList_push(R->C, types, inner);
-
-    DeclId const did = R->C->builtins[BUILTIN_RANGE].did;
-    return pawIr_new_adt(R->C, did, types);
-}
-
 static struct IrType *resolve_unop_expr(struct Resolver *R, struct HirUnOpExpr *e)
 {
     static uint8_t const VALID_OPS[][NBUILTINS] = {
@@ -878,8 +837,6 @@ static struct IrType *resolve_binop_expr(struct Resolver *R, struct HirBinOpExpr
         RESOLVER_ERROR(R, invalid_binary_operand, e->span.start, operand, BINOP_REPR[e->op]);
     } else if (is_bool_binop(e->op)) {
         return get_type(R, BUILTIN_BOOL);
-    } else if (e->op == BINARY_RANGE) {
-        return transform_range(R, e, lhs);
     } else {
         return lhs;
     }
@@ -1538,10 +1495,49 @@ static struct IrType *resolve_loop_expr(struct Resolver *R, struct HirLoopExpr *
     return unify_never_type(R, e->span.start, bs.result);
 }
 
+static struct HirExpr *add_one(struct Resolver *R, struct HirExpr *expr)
+{
+    struct Hir *hir = R->m->hir;
+    struct HirExpr *one = pawHir_new_basic_lit(hir, expr->hdr.span, I2V(1), BUILTIN_INT);
+    return pawHir_new_binop_expr(hir, expr->hdr.span, expr, one, BINARY_ADD);
+}
+
 static struct IrType *check_index(struct Resolver *R, struct HirIndex *e, struct IrType *target)
 {
-    struct IrType *result;
-    struct IrType *expect = NULL;
+    IrType *index = resolve_operand(R, e->first);
+    enum BuiltinKind kind = TYPE2CODE(R, index);
+
+    if (kind == BUILTIN_RANGE) {
+        struct HirCompositeLit *lit = &HirGetLiteralExpr(e->first)->comp;
+        e->first = HirGetFieldExpr(K_LIST_FIRST(lit->items))->value;
+        e->second = HirGetFieldExpr(K_LIST_LAST(lit->items))->value;
+        e->is_slice = PAW_TRUE;
+    } else if (kind == BUILTIN_RANGE_TO) {
+        struct HirCompositeLit *lit = &HirGetLiteralExpr(e->first)->comp;
+        e->first = NULL;
+        e->second = HirGetFieldExpr(K_LIST_FIRST(lit->items))->value;
+        e->is_slice = PAW_TRUE;
+    } else if (kind == BUILTIN_RANGE_FROM) {
+        struct HirCompositeLit *lit = &HirGetLiteralExpr(e->first)->comp;
+        e->first = HirGetFieldExpr(K_LIST_FIRST(lit->items))->value;
+        e->second = NULL;
+        e->is_slice = PAW_TRUE;
+    } else if (kind == BUILTIN_RANGE_FULL) {
+        e->first = e->second = NULL;
+        e->is_slice = PAW_TRUE;
+    } else if (kind == BUILTIN_RANGE_INCLUSIVE) {
+        struct HirCompositeLit *lit = &HirGetLiteralExpr(e->first)->comp;
+        e->first = add_one(R, HirGetFieldExpr(K_LIST_FIRST(lit->items))->value);
+        e->second = add_one(R, HirGetFieldExpr(K_LIST_LAST(lit->items))->value);
+        e->is_slice = PAW_TRUE;
+    } else if (kind == BUILTIN_RANGE_TO_INCLUSIVE) {
+        struct HirCompositeLit *lit = &HirGetLiteralExpr(e->first)->comp;
+        e->first = NULL;
+        e->second = add_one(R, HirGetFieldExpr(K_LIST_FIRST(lit->items))->value);
+        e->is_slice = PAW_TRUE;
+    }
+
+    struct IrType *expect, *result;
     if (is_list_t(R, target)) {
         expect = get_type(R, BUILTIN_INT);
         result = e->is_slice ? target : ir_list_elem(target);
@@ -1559,10 +1555,8 @@ static struct IrType *check_index(struct Resolver *R, struct HirIndex *e, struct
         RESOLVER_ERROR(R, invalid_slice_target, e->span.start, repr);
     }
 
-    if (e->first != NULL)
-        unify(R, NODE_START(e->first), expect, resolve_operand(R, e->first));
-    if (e->second != NULL)
-        unify(R, NODE_START(e->second), expect, resolve_operand(R, e->second));
+    if (e->first != NULL) unify(R, NODE_START(e->first), expect, resolve_operand(R, e->first));
+    if (e->second != NULL) unify(R, NODE_START(e->second), expect, resolve_operand(R, e->second));
     return result;
 }
 
@@ -1905,8 +1899,7 @@ static void resolve_stmt(struct Resolver *R, struct HirStmt *stmt)
 
 static struct IrType *resolve_type(struct Resolver *R, struct HirType *type, struct SourceSpan span)
 {
-    if (type == NULL)
-        return new_unknown(R, span.start);
+    if (type == NULL) return new_unknown(R, span.start);
     struct IrType *r = pawP_lower_type(R->C, R->m, R->symtab, type);
     return normalize(R, r);
 }

@@ -17,6 +17,7 @@
     X(primitive)             \
     X(operator)              \
     X(block)                 \
+    X(cast)                  \
     X(loop)                  \
     X(function)              \
     X(closure)               \

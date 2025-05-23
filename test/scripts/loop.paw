@@ -24,6 +24,14 @@ pub fn test_basic_loop_2() {
     assert(test() == 3);
 }
 
+pub fn test_inclusive_loop() {
+    let n = 0;
+    for i in 0..=3 { 
+        n = n + i;
+    }
+    assert(n == 6);
+}
+
 pub fn test_numeric_for_loop() {
     let test = |start: int, end: int| -> int {
         let n = 0;
@@ -66,9 +74,9 @@ pub fn test_numeric_for_loop() {
 }
 
 pub fn test_nested_loops() {
-    for i in 0..8 {
+    for i in 0..=8 {
         for j in 0..i {
-            for k in j..8 {
+            for k in j..=8 {
                 assert(j < i);
                 assert(j <= k);
             }
@@ -99,11 +107,10 @@ pub fn test_capture_loop_var_0() {
 
 pub fn test_capture_loop_var_1() {
     let test = |n| {
-        let f = || -1;
         for i in 0..100 {
             if i == n {
                 let a = [i];
-                f = || -> int {
+                return || -> int {
                     // Capture 'a' as an upvalue.
                     let m = a[0];
                     a[0] = a[0] + 1;
@@ -111,10 +118,9 @@ pub fn test_capture_loop_var_1() {
                     // each time.
                     return i + n + m;
                 };
-                break;
             }
         }
-        return f;
+        return || -1;
     };
     assert(test(-1)() == -1);
 
@@ -489,4 +495,17 @@ pub fn test_bare_loop() {
     
     assert(bare_loop_with_conditional_return_or_break(0) == 1);
     assert(bare_loop_with_conditional_return_or_break(4) == 4);
+}
+
+pub fn test_loop_from() {
+    for i in 10.. {
+        assert(i == 10);
+        break;
+    }
+
+    for i in 10.. {
+        if i > 100 {
+            break;
+        }
+    }
 }

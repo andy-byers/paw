@@ -17,6 +17,8 @@
 #include "str.h"
 #include "unify.h"
 
+#define LOWERING_ERROR(L_, Kind_, ...) pawErr_##Kind_((L_)->C, (L_)->hir->name, __VA_ARGS__)
+
 struct LowerAst {
     String const *modname;
     struct DynamicMem *dm;
@@ -199,6 +201,79 @@ static struct HirExpr *LowerBinOpExpr(struct LowerAst *L, struct AstBinOpExpr *e
     struct HirExpr *lhs = lower_expr(L, e->lhs);
     struct HirExpr *rhs = lower_expr(L, e->rhs);
     return pawHir_new_binop_expr(L->hir, e->span, lhs, rhs, e->op);
+}
+
+static struct HirExpr *new_literal_field(struct LowerAst *L, const char *name, struct HirExpr *expr, int fid)
+{
+    struct HirIdent const ident = {
+        .name = SCAN_STRING(L->C, name),
+        .span = expr->hdr.span,
+    };
+    return pawHir_new_named_field_expr(L->hir, expr->hdr.span, ident, expr, fid);
+}
+
+static struct HirPath new_cstr_path(struct LowerAst *L, struct SourceSpan span, unsigned kind)
+{
+    return new_unary_path(L, (struct HirIdent){
+                .name = CSTR(L, kind),
+                .span = span,
+            });
+}
+
+static struct HirExpr *into_range(struct LowerAst *L, struct AstRangeExpr *e)
+{
+    struct HirPath path = new_cstr_path(L, e->span,
+            e->is_inclusive ? CSTR_RANGE_INCLUSIVE : CSTR_RANGE);
+    struct HirExpr *lhs = lower_expr(L, e->lhs);
+    struct HirExpr *rhs = lower_expr(L, e->rhs);
+    struct HirExprList *items = HirExprList_new(L->hir);
+    HirExprList_push(L->hir, items, new_literal_field(L, "start", lhs, 0));
+    HirExprList_push(L->hir, items, new_literal_field(L, "end", rhs, 1));
+    return pawHir_new_composite_lit(L->hir, e->span, path, items);
+}
+
+static struct HirExpr *into_range_full(struct LowerAst *L, struct AstRangeExpr *e)
+{
+    if (e->is_inclusive)
+        LOWERING_ERROR(L, invalid_inclusive_range, e->span.start);
+
+    struct HirPath path = new_cstr_path(L, e->span, CSTR_RANGE_FULL);
+    return pawHir_new_path_expr(L->hir, e->span, path);
+}
+
+static struct HirExpr *into_range_to(struct LowerAst *L, struct AstRangeExpr *e)
+{
+    struct HirPath path = new_cstr_path(L, e->span,
+            e->is_inclusive ? CSTR_RANGE_TO_INCLUSIVE : CSTR_RANGE_TO);
+    struct HirExpr *rhs = lower_expr(L, e->rhs);
+    struct HirExprList *items = HirExprList_new(L->hir);
+    HirExprList_push(L->hir, items, new_literal_field(L, "to", rhs, 1));
+    return pawHir_new_composite_lit(L->hir, e->span, path, items);
+}
+
+static struct HirExpr *into_range_from(struct LowerAst *L, struct AstRangeExpr *e)
+{
+    if (e->is_inclusive)
+        LOWERING_ERROR(L, invalid_inclusive_range, e->span.start);
+
+    struct HirPath path = new_cstr_path(L, e->span, CSTR_RANGE_FROM);
+    struct HirExpr *lhs = lower_expr(L, e->lhs);
+    struct HirExprList *items = HirExprList_new(L->hir);
+    HirExprList_push(L->hir, items, new_literal_field(L, "start", lhs, 0));
+    return pawHir_new_composite_lit(L->hir, e->span, path, items);
+}
+
+static struct HirExpr *LowerRangeExpr(struct LowerAst *L, struct AstRangeExpr *e)
+{
+    if (e->lhs == NULL && e->rhs == NULL) {
+        return into_range_full(L, e);
+    } else if (e->lhs == NULL) {
+        return into_range_to(L, e);
+    } else if (e->rhs == NULL) {
+        return into_range_from(L, e);
+    } else {
+        return into_range(L, e);
+    }
 }
 
 static void check_assignment_target(struct LowerAst *L, struct AstExpr *target)
@@ -684,17 +759,8 @@ static struct HirExpr *LowerForExpr(struct LowerAst *L, struct AstForExpr *e)
 static struct HirExpr *LowerIndex(struct LowerAst *L, struct AstIndex *e)
 {
     struct HirExpr *target = lower_expr(L, e->target);
-    struct HirExpr *first = NULL;
-    struct HirExpr *second = NULL;
-    if (e->is_slice) {
-        if (e->first != NULL)
-            first = lower_expr(L, e->first);
-        if (e->second != NULL)
-            second = lower_expr(L, e->second);
-    } else {
-        first = lower_expr(L, e->first);
-    }
-    return pawHir_new_index_expr(L->hir, e->span, target, first, second, e->is_slice);
+    struct HirExpr *index = lower_expr(L, e->index);
+    return pawHir_new_index_expr(L->hir, e->span, target, index, NULL, PAW_FALSE);
 }
 
 static struct HirExpr *LowerSelector(struct LowerAst *L, struct AstSelector *e)

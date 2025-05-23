@@ -665,6 +665,8 @@ try_again:
             if (test_next(X, '.')) {
                 if (test_next(X, '.')) {
                     token = T(TK_DOT3);
+                } else if (test_next(X, '=')) {
+                    token = T(TK_DOT2_EQ);
                 } else {
                     token = T(TK_DOT2);
                 }

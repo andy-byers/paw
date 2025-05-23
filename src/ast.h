@@ -40,6 +40,7 @@
     X(ChainExpr)         \
     X(UnOpExpr)          \
     X(BinOpExpr)         \
+    X(RangeExpr)         \
     X(ClosureExpr)       \
     X(ConversionExpr)    \
     X(CallExpr)          \
@@ -582,6 +583,13 @@ struct AstUnOpExpr {
     struct AstExpr *target;
 };
 
+struct AstRangeExpr {
+    AST_EXPR_HEADER;
+    paw_Bool is_inclusive : 1;
+    struct AstExpr *lhs;
+    struct AstExpr *rhs;
+};
+
 struct AstBinOpExpr {
     AST_EXPR_HEADER;
     enum BinaryOp op : 8;
@@ -624,10 +632,8 @@ struct AstSelector {
 
 struct AstIndex {
     AST_EXPR_HEADER;
-    paw_Bool is_slice : 1;
     struct AstExpr *target;
-    struct AstExpr *first;
-    struct AstExpr *second;
+    struct AstExpr *index;
 };
 
 struct AstConversionExpr {
@@ -842,6 +848,19 @@ inline static struct AstExpr *pawAst_new_unop_expr(struct Ast *ast, struct Sourc
     return e;
 }
 
+inline static struct AstExpr *pawAst_new_range_expr(struct Ast *ast, struct SourceSpan span, paw_Bool is_inclusive, struct AstExpr *lhs, struct AstExpr *rhs)
+{
+    struct AstExpr *e = pawAst_new_expr(ast);
+    e->RangeExpr_ = (struct AstRangeExpr){
+        .span = span,
+        .kind = kAstRangeExpr,
+        .is_inclusive = is_inclusive,
+        .lhs = lhs,
+        .rhs = rhs,
+    };
+    return e;
+}
+
 inline static struct AstExpr *pawAst_new_binop_expr(struct Ast *ast, struct SourceSpan span, enum BinaryOp op, struct AstExpr *lhs, struct AstExpr *rhs)
 {
     struct AstExpr *e = pawAst_new_expr(ast);
@@ -903,16 +922,14 @@ inline static struct AstExpr *pawAst_new_call_expr(struct Ast *ast, struct Sourc
     return e;
 }
 
-inline static struct AstExpr *pawAst_new_index(struct Ast *ast, struct SourceSpan span, struct AstExpr *target, struct AstExpr *first, struct AstExpr *second, paw_Bool is_slice)
+inline static struct AstExpr *pawAst_new_index(struct Ast *ast, struct SourceSpan span, struct AstExpr *target, struct AstExpr *index)
 {
     struct AstExpr *e = pawAst_new_expr(ast);
     e->Index_ = (struct AstIndex){
         .span = span,
         .kind = kAstIndex,
         .target = target,
-        .first = first,
-        .second = second,
-        .is_slice = is_slice,
+        .index = index,
     };
     return e;
 }
