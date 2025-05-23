@@ -130,3 +130,27 @@ pub fn test_addressing_stress() {
     assert(m[bk(-2)] == -2);
     assert(m[bk(-3)] == -3);
 }
+
+// TODO: get this to work
+//pub fn test_traverse_map_with_unknown_key() {
+//    let m = [:];
+//    for key in m {
+//        // never runs, but key and value types should be inferred as "str"
+//        assert(key == "string key");
+//        assert(m[key] == "string value");
+//    }
+//}
+
+fn special_case(key: str, callback: fn(str)) {
+    callback(key);
+}
+
+fn check_special_case(key: str) {
+    let map = [:];
+    special_case(key, |k| map[k] = "value");
+    assert(map["key"] == "value");
+}
+
+pub fn test_special_case() {
+    check_special_case("key");
+}

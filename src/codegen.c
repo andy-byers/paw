@@ -725,14 +725,32 @@ static void code_closure(struct MirVisitor *V, struct MirClosure *x)
     move_to_reg(fs, temp, REG(x->output.r));
 }
 
+static void code_map_get(struct FuncState *fs, struct MirPlace output, struct MirPlace object, struct MirPlace key)
+{
+    int const b = move_to_temp(fs, REG(object.r), 0);
+    int const c = move_to_temp(fs, REG(key.r), 1);
+    code_ABC(fs, OP_MGET, REG(output.r), b, c);
+}
+
 static void code_get_element(struct MirVisitor *V, struct MirGetElement *x)
 {
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
 
-    Op const op = x->b_kind == BUILTIN_LIST ? OP_LGET :
-        x->b_kind == BUILTIN_MAP ? OP_MGET : OP_SGET;
-    code_ABC(fs, op, REG(x->output.r), REG(x->object.r), REG(x->key.r));
+    if (x->b_kind == BUILTIN_MAP) {
+        code_map_get(fs, x->output, x->object, x->key);
+    } else {
+        Op const op = x->b_kind == BUILTIN_LIST ? OP_LGET : OP_SGET;
+        code_ABC(fs, op, REG(x->output.r), REG(x->object.r), REG(x->key.r));
+    }
+}
+
+static void code_map_getp(struct FuncState *fs, struct MirPlace output, struct MirPlace object, struct MirPlace key, paw_Bool is_setter)
+{
+    int const b = move_to_temp(fs, REG(object.r), 0);
+    int const c = move_to_temp(fs, REG(key.r), 1);
+    Op const op = is_setter ? OP_MNEWP: OP_MGETP;
+    code_ABC(fs, op, REG(output.r), b, c);
 }
 
 static void code_get_element_ptr(struct MirVisitor *V, struct MirGetElementPtr *x)
@@ -740,9 +758,19 @@ static void code_get_element_ptr(struct MirVisitor *V, struct MirGetElementPtr *
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
 
-    Op const op = x->b_kind == BUILTIN_LIST ? OP_LGETP :
-        x->is_map_setter ? OP_MNEWP: OP_MGETP;
-    code_ABC(fs, op, REG(x->output.r), REG(x->object.r), REG(x->key.r));
+    if (x->b_kind == BUILTIN_MAP) {
+        code_map_getp(fs, x->output, x->object, x->key, x->is_map_setter);
+    } else {
+        code_ABC(fs, OP_LGETP, REG(x->output.r), REG(x->object.r), REG(x->key.r));
+    }
+}
+
+static void code_map_set(struct FuncState *fs, struct MirPlace object, struct MirPlace key, struct MirPlace value)
+{
+    int const a = move_to_temp(fs, REG(object.r), 0);
+    int const b = move_to_temp(fs, REG(key.r), 1);
+    int const c = move_to_temp(fs, REG(value.r), 2);
+    code_ABC(fs, OP_MSET, a, b, c);
 }
 
 static void code_set_element(struct MirVisitor *V, struct MirSetElement *x)
@@ -750,8 +778,11 @@ static void code_set_element(struct MirVisitor *V, struct MirSetElement *x)
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
 
-    Op const op = x->b_kind == BUILTIN_LIST ? OP_LSET : OP_MSET;
-    code_ABC(fs, op, REG(x->object.r), REG(x->key.r), REG(x->value.r));
+    if (x->b_kind == BUILTIN_MAP) {
+        code_map_set(fs, x->object, x->key, x->value);
+    } else {
+        code_ABC(fs, OP_LSET, REG(x->object.r), REG(x->key.r), REG(x->value.r));
+    }
 }
 
 static void code_get_range(struct MirVisitor *V, struct MirGetRange *x)

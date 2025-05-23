@@ -693,7 +693,8 @@ top:
             {
                 VM_SAVE_PC();
                 Value const *rb = VM_RB(opcode);
-                Value const *rc = VM_RC(opcode);
+                Value *rc = VM_RC(opcode);
+                P->top.p = rc + 1;
                 // TODO: This won't work if the key is multiple values in size, need to call map.get() or allocate key registers contiguously
                 if (pawR_map_getp(P, cf, ra, rb, rc))
                     pawR_error(P, PAW_EKEY, "key does not exist");
@@ -703,7 +704,8 @@ top:
             {
                 VM_SAVE_PC();
                 Value const *rb = VM_RB(opcode);
-                Value const *rc = VM_RC(opcode);
+                Value *rc = VM_RC(opcode);
+                P->top.p = rc + 1;
                 pawR_map_newp(P, cf, ra, rb, rc);
             }
 
@@ -711,7 +713,8 @@ top:
             {
                 VM_SAVE_PC();
                 Value const *rb = VM_RB(opcode);
-                Value const *rc = VM_RC(opcode);
+                Value *rc = VM_RC(opcode);
+                P->top.p = rc + 1;
                 if (pawR_map_get(P, cf, ra, rb, rc)) {
                     pawR_error(P, PAW_EKEY, "key does not exist");
                 }
@@ -721,7 +724,8 @@ top:
             {
                 VM_SAVE_PC();
                 Value const *rb = VM_RB(opcode);
-                Value const *rc = VM_RC(opcode);
+                Value *rc = VM_RC(opcode);
+                P->top.p = rc + 1;
                 pawR_map_set(P, cf, ra, rb, rc);
             }
 

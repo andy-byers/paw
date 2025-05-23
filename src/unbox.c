@@ -428,7 +428,7 @@ static void discharge_indirect_element(struct Unboxer *U, struct MemoryAccess *p
     struct MemoryGroup output = new_registers(U, access_type, field_discr);
 
     struct MirPlace const object = PLACE(pa->group.base);
-    if (output.count > 1 || field_offset > 0) {
+    if (element_layout.size > 0) {
         struct MirPlace const pointer = new_rawptr_place(U, element_type);
         NEW_INSTR(U, get_element_ptr, TODO, kind, pointer, object,
                 PLACE(pa->element.index), PAW_FALSE);
@@ -625,9 +625,10 @@ static void create_indirect_element_setter(struct Unboxer *U, struct MemoryAcces
     enum BuiltinKind kind = pawP_type2code(U->C, lhs.type);
     int const field_offset = lhs.has_field ? lhs.field.offset : 0;
     IrType *element_type = lhs.element.type;
+    struct IrLayout element_layout = pawIr_compute_layout(U->C, element_type);
 
     struct MirPlace const object = PLACE(lhs.group.base);
-    if (rhs.group.count > 1 || field_offset > 0) {
+    if (element_layout.size > 1) {
         struct MirPlace const pointer = new_rawptr_place(U, element_type);
         NEW_INSTR(U, get_element_ptr, TODO, kind, pointer, object,
                 PLACE(lhs.element.index), kind == BUILTIN_MAP && !lhs.has_field);

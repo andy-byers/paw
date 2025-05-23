@@ -108,7 +108,7 @@ pub struct List<T>: Iterate<ListIterator<T>, T> {
     }
 }
 
-pub struct MapIterator<K, V>: Advance<K> {
+pub struct MapIterator<K: Hash + Equals, V>: Advance<K> {
     map: [K: V],
     index: int,
     pub fn new(map: [K: V]) -> Self {

@@ -255,7 +255,6 @@ static paw_Bool implements_trait(struct Resolver *R, struct IrType *type, enum T
     return PAW_FALSE;
 }
 
-// TODO: won't work for polymorphic traits
 static void require_trait(struct Resolver *R, struct IrType *type, enum TraitKind kind)
 {
     struct IrInfer *t = IrGetInfer(type);
