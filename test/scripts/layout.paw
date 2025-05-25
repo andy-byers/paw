@@ -621,6 +621,51 @@ pub fn test_list_in_box() {
     assert(cb.y[1] == 2);
 }
 
+pub fn test_range_getter() {
+    let c = [
+        (1, 2, 3),
+        (4, 5, 6),
+        (7, 8, 9),
+    ];
+
+    assert(c[..-1][0].0 == 1);
+    assert(c[..-1][0].1 == 2);
+    assert(c[..-1][0].2 == 3);
+    assert(c[1..-1][0].0 == 4);
+    assert(c[1..-1][0].1 == 5);
+    assert(c[1..-1][0].2 == 6);
+    assert(c[2..][0].0 == 7);
+    assert(c[2..][0].1 == 8);
+    assert(c[2..][0].2 == 9);
+}
+
+pub fn test_range_setter() {
+    let c = [
+        (1, 2),
+        (3, 4),
+        (5, 6),
+        (7, 8),
+        (9, 0),
+    ];
+
+    let check_eq = |a: [(int, int)], b: [(int, int)]| {
+        assert(#a == #b);
+        for i in 0..#a {
+            assert(a[i].0 == b[i].0);
+            assert(a[i].1 == b[i].1);
+        }
+    };
+
+    c[1..4] = [];
+    check_eq(c, [(1, 2), (9, 0)]);
+
+    c[..1] = [(2, 3), (4, 5)];
+    check_eq(c, [(2, 3), (4, 5), (9, 0)]);
+
+    c[-2..] = [(3, 4), (5, 6), (7, 8)];
+    check_eq(c, [(2, 3), (3, 4), (5, 6), (7, 8)]);
+}
+
 enum Enum<T> {
     First,
     Second(T),

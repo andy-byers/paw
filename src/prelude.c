@@ -78,23 +78,22 @@ static int base_range(paw_Env *P)
     return 1;
 }
 
-static void new_option_some(paw_Env *P, Value *presult, Value const *pvalue, int count)
-{
-    V_SET_INT(presult, PAW_OPTION_SOME);
-    while (count-- > 0)
-        *++presult = *pvalue++;
-
-}
-
-static void new_option_none(paw_Env *P, Value *presult)
-{
-    V_SET_INT(presult, PAW_OPTION_NONE);
-}
-
 static void push_values(paw_Env *P, Value const *pvalue, int count)
 {
     API_INCR_TOP(P, count);
     pawV_copy(P->top.p - count, pvalue, count);
+}
+
+static void push_option_some(paw_Env *P, Value const *pvalue, int count)
+{
+    paw_push_int(P, PAW_OPTION_SOME);
+    push_values(P, pvalue, count);
+}
+
+static void push_option_none(paw_Env *P, int count)
+{
+    paw_push_int(P, PAW_OPTION_NONE);
+    paw_push_zero(P, count);
 }
 
 static int list_insert(paw_Env *P)
@@ -153,8 +152,7 @@ static int list_pop(paw_Env *P)
 static paw_Int clamped_index(paw_Env *P, int loc, paw_Int n)
 {
     paw_Int const i = V_INT(*CF_BASE(loc));
-    return i < 0 ? 0 : i >= n ? n - 1
-                              : i;
+    return i < 0 ? 0 : i >= n ? n - 1 : i;
 }
 
 static int list_get(paw_Env *P)
@@ -162,18 +160,16 @@ static int list_get(paw_Env *P)
     Tuple *list = V_TUPLE(*CF_BASE(1));
     paw_Int index = V_INT(*CF_BASE(2));
     paw_Int const length = pawList_length(P, list);
-    int const z = LIST_ZELEMENT(list);
+    int const element_size = LIST_ZELEMENT(list);
 
     index = pawV_abs_index(index, length);
     if (0 <= index && index < length) {
         Value const *pvalue = pawList_get(P, list, index);
-        paw_push_int(P, PAW_OPTION_SOME);
-        push_values(P, pvalue, z);
+        push_option_some(P, pvalue, element_size);
     } else {
-        paw_push_int(P, PAW_OPTION_NONE);
-        paw_push_zero(P, z);
+        push_option_none(P, element_size);
     }
-    return 1 + z;
+    return 1 + element_size;
 }
 
 static int list_set(paw_Env *P)
@@ -181,17 +177,12 @@ static int list_set(paw_Env *P)
     Tuple *list = V_TUPLE(*CF_BASE(1));
     paw_Int const index = V_INT(*CF_BASE(2));
     Value const *pvalue = CF_BASE(3);
-    int const z = LIST_ZELEMENT(list);
+    int const element_size = LIST_ZELEMENT(list);
     Value *pslot = pawList_get(P, list, index);
-    pawV_copy(pslot, pvalue, z);
+    pawV_copy(pslot, pvalue, element_size);
     return 0;
 }
 
-// TODO: It would be nice to let pop() take an optional parameter indicating the
-//       index at which to erase an element. To me, 'remove' seems like it
-//       should remove the first matching element using something akin to
-//       operator==. Attempting this will break, since we have no concept of
-//       equality between user-defined types right now.
 static int list_remove(paw_Env *P)
 {
     Tuple *list = V_TUPLE(*CF_BASE(1));
@@ -199,29 +190,28 @@ static int list_remove(paw_Env *P)
         pawR_error(P, PAW_EVALUE, "remove from empty List");
     }
     paw_Int const index = paw_int(P, 2);
-    int const z = LIST_ZELEMENT(list);
+    int const element_size = LIST_ZELEMENT(list);
     Value const *pvalue = pawList_get(P, list, index);
-    pawV_copy(CF_BASE(0), pvalue, z);
+    push_values(P, pvalue, element_size);
     pawList_pop(P, list, index);
-    return z;
+    return element_size;
 }
 
 static int map_get(paw_Env *P)
 {
     Tuple *map = V_TUPLE(*CF_BASE(1));
     Value const *pkey = CF_BASE(2);
-    int const z = pawMap_value_size(P, map);
+    int const value_size = pawMap_value_size(P, map);
     Value const *pvalue = pawMap_get(P, map, pkey);
 
     P->top.p = CF_BASE(0);
     if (pvalue != NULL) {
-        paw_push_int(P, PAW_OPTION_SOME);
-        pawV_copy(CF_BASE(1), pvalue, z);
+        push_option_some(P, pvalue, value_size);
     } else {
-        paw_push_int(P, PAW_OPTION_NONE);
+        push_option_none(P, value_size);
     }
-    P->top.p = CF_BASE(z);
-    return z;
+    P->top.p = CF_BASE(value_size);
+    return value_size;
 }
 
 static int map_set(paw_Env *P)
@@ -229,9 +219,15 @@ static int map_set(paw_Env *P)
     Tuple *map = V_TUPLE(*CF_BASE(1));
     Value const *pkey = CF_BASE(2);
     Value const *pvalue = CF_BASE(3);
+
+    int const value_size = pawMap_value_size(P, map);
     Value const *preplaced = pawMap_insert(P, map, pkey, pvalue);
-    (void)preplaced; // TODO: return Option<V>
-    return 0;
+    if (preplaced != NULL) {
+        push_option_some(P, pvalue, value_size);
+    } else {
+        push_option_none(P, value_size);
+    }
+    return 1 + value_size;
 }
 
 static int map_iter_next(paw_Env *P)
@@ -250,11 +246,10 @@ static int map_iter_next(paw_Env *P)
         paw_set_field(P, 1, 1);
 
         Value const *key = pawMap_key(P, map, index);
-        new_option_some(P, CF_BASE(0), key, key_size);
+        push_option_some(P, key, key_size);
     } else {
-        new_option_none(P, CF_BASE(0));
+        push_option_none(P, key_size);
     }
-    P->top.p = CF_BASE(1 + key_size);
     return 1 + key_size;
 }
 
@@ -262,6 +257,7 @@ static char const *find_substr(char const *str, size_t nstr, char const *sub, si
 {
     if (nsub == 0)
         return str;
+
     char const *end = str + nstr;
     while ((str = strchr(str, sub[0]))) {
         if (nsub <= CAST_SIZE(end - str)
@@ -281,11 +277,12 @@ static int string_find(paw_Env *P)
         str->text, str->length,
         find->text, find->length);
     if (result) { // index of substring
-        V_SET_INT(P->top.p - 1, result - str->text);
+        paw_push_int(P, PAW_OPTION_SOME);
+        paw_push_int(P, result - str->text);
     } else { // not found
-        V_SET_INT(P->top.p - 1, -1);
+        push_option_none(P, 1);
     }
-    return 1;
+    return 1 + 1;
 }
 
 static int string_split(paw_Env *P)
@@ -350,7 +347,7 @@ static int string_starts_with(paw_Env *P)
     size_t const prelen = prefix->length;
     paw_Bool const b = str->length >= prelen
         && 0 == memcmp(prefix->text, str->text, prelen);
-    V_SET_BOOL(P->top.p - 1, b);
+    paw_push_bool(P, b);
     return 1;
 }
 
@@ -364,7 +361,7 @@ static int string_ends_with(paw_Env *P)
         char const *ptr = str->text + str->length - suflen;
         b = 0 == memcmp(suffix->text, ptr, suflen);
     }
-    V_SET_BOOL(P->top.p - 1, b);
+    paw_push_bool(P, b);
     return 1;
 }
 
@@ -377,8 +374,7 @@ static int bool_to_string(paw_Env *P)
 
 static int int_to_string(paw_Env *P)
 {
-    Value *pv = CF_BASE(1);
-    pawV_to_string(P, pv, PAW_TINT, NULL);
+    paw_int_to_string(P, -1, NULL);
     return 1;
 }
 
@@ -391,8 +387,7 @@ static int float_hash(paw_Env *P)
 
 static int float_to_string(paw_Env *P)
 {
-    Value *pv = CF_BASE(1);
-    pawV_to_string(P, pv, PAW_TFLOAT, NULL);
+    paw_float_to_string(P, -1, NULL);
     return 1;
 }
 
@@ -410,7 +405,7 @@ static int string_parse_float(paw_Env *P)
     int const status = pawV_parse_float(P, str, &f);
     if (status != PAW_OK)
         pawR_error(P, PAW_ESYNTAX, "invalid float '%s'", str);
-    V_SET_FLOAT(CF_BASE(1), f);
+    paw_push_float(P, f);
     return 1;
 }
 
@@ -429,7 +424,7 @@ static int string_parse_int(paw_Env *P)
     } else if (rc == PAW_EOVERFLOW) {
         pawR_error(P, PAW_EOVERFLOW, "integer '%s' is out of range", str);
     }
-    V_SET_INT(&P->top.p[-1], i);
+    paw_push_int(P, i);
     return 1;
 }
 

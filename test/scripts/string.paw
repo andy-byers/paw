@@ -61,7 +61,10 @@ pub fn test_ends_with() {
 
 pub fn test_find() {
     let check = |s: str, sub, n| {
-        assert(n == s.find(sub));
+        match s.find(sub) {
+            Option::Some(i) => assert(i == n),
+            Option::None => assert(n == -1),
+        }
     };
     check('abc', 'a', 0);
     check('abc', 'b', 1);
@@ -109,54 +112,46 @@ fn concat_with_self(v: str, n: int) -> str {
     return v;
 }
 
-pub fn test_emit_warnings() {
-    print("warning: slice tests\n");
+pub fn test_slices() {
+    let s = 'abc';
+    assert(s[..] == 'abc');
+    assert(s[0..#s] == 'abc');
+
+    assert(s[..-1] == 'ab');
+    assert(s[..#s-1] == 'ab');
+    assert(s[..-2] == 'a');
+    assert(s[..#s-2] == 'a');
+    assert(s[..-3] == '');
+    assert(s[..#s-3] == '');
+
+    assert(s[1..] == 'bc');
+    assert(s[-2..] == 'bc');
+    assert(s[2..] == 'c');
+    assert(s[-1..] == 'c');
+    assert(s[3..] == '');
+    assert(s[0..0] == '') ;
 }
 
-//pub fn test_slices() {
-//    let s = 'abc';
-//    assert(s[:] == 'abc');
-//    assert(s[0:#s] == 'abc');
-//
-//    assert(s[:-1] == 'ab');
-//    assert(s[:#s-1] == 'ab');
-//    assert(s[:-2] == 'a');
-//    assert(s[:#s-2] == 'a');
-//    assert(s[:-3] == '');
-//    assert(s[:#s-3] == '');
-//
-//    assert(s[1:] == 'bc');
-//    assert(s[-2:] == 'bc');
-//    assert(s[2:] == 'c');
-//    assert(s[-1:] == 'c');
-//    assert(s[3:] == '');
-//    assert(s[0:0] == '') ;
-//}
-//
-//pub fn test_getn() {
-//    assert('abcdefg'[1:-1][:-2] == 'bcd');
-//
-//    // NOTE: currently, out-of-bounds range indices are clamped
-//    assert(' '[1:-1] == ''); 
-//
-//    let s = concat_with_self('abcdefg', 8);
-//    while #s > 1 {
-//        s = s[1:-1];
-//    }
-//}
+pub fn test_getn() {
+    assert('abcdefg'[1..-1] == 'bcdef'); 
+    assert('abcdefg'[1..-1][..-2] == 'bcd');
 
-pub fn test_whitespace_inside_interpolation_parenthesis() {
+    let s = concat_with_self('abcdefg', 8);
+    while #s > 1 { s = s[1..-1]; }
+}
+
+pub fn test_whitespace_inside_interpolation_braces() {
     assert("\{
         100 
         + 23
     }" == "123");
 }
 
-pub fn test_unescaped_parenthesis() {
+pub fn test_unescaped_braces() {
     assert("{123}" == "{" + "123" + "}");
 }
 
-pub fn test_parenthesis_inside_expr() {
+pub fn test_braces_inside_expr() {
     assert("\{{{100} + {{23}}}}" == "123");
 
     // block is parenthesized

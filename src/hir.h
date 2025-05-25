@@ -659,9 +659,7 @@ struct HirSelector {
 
 struct HirIndex {
     HIR_SUFFIXED_HEADER;
-    paw_Bool is_slice : 1;
-    struct HirExpr *first;
-    struct HirExpr *second;
+    struct HirExpr *index;
 };
 
 struct HirConversionExpr {
@@ -936,7 +934,7 @@ static struct HirExpr *pawHir_new_name_selector(struct Hir *hir, struct SourceSp
     return e;
 }
 
-static struct HirExpr *pawHir_new_index_expr(struct Hir *hir, struct SourceSpan span, struct HirExpr *target, struct HirExpr *first, struct HirExpr *second, paw_Bool is_slice)
+static struct HirExpr *pawHir_new_index_expr(struct Hir *hir, struct SourceSpan span, struct HirExpr *target, struct HirExpr *index, paw_Bool is_slice)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->Index_ = (struct HirIndex){
@@ -944,9 +942,7 @@ static struct HirExpr *pawHir_new_index_expr(struct Hir *hir, struct SourceSpan 
         .span = span,
         .kind = kHirIndex,
         .target = target,
-        .first = first,
-        .second = second,
-        .is_slice = is_slice,
+        .index = index,
     };
     return e;
 }

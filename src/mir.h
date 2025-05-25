@@ -328,6 +328,13 @@ struct MirGetElementPtr {
     struct MirPlace key;
 };
 
+struct MirGetField {
+    MIR_INSTRUCTION_HEADER;
+    int index;
+    struct MirPlace output;
+    struct MirPlace object;
+};
+
 struct MirGetRange {
     MIR_INSTRUCTION_HEADER;
     enum BuiltinKind b_kind : 8;
@@ -344,13 +351,6 @@ struct MirSetRange {
     struct MirPlace lower;
     struct MirPlace upper;
     struct MirPlace value;
-};
-
-struct MirGetField {
-    MIR_INSTRUCTION_HEADER;
-    int index;
-    struct MirPlace output;
-    struct MirPlace object;
 };
 
 struct MirSetField {
@@ -729,7 +729,6 @@ inline static struct MirInstruction *pawMir_new_get_element_ptr(struct Mir *mir,
     };
     return instr;
 }
-
 inline static struct MirInstruction *pawMir_new_get_range(struct Mir *mir, struct SourceLoc loc, enum BuiltinKind b_kind, struct MirPlace output, struct MirPlace object, struct MirPlace lower, struct MirPlace upper)
 {
     struct MirInstruction *instr = pawMir_new_instruction(mir);

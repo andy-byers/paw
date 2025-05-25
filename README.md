@@ -54,6 +54,38 @@ pub fn main() {
 }
 ```
 
+### Containers
+```paw
+pub fn main() {
+    let list = [];
+
+    // add a single element to the end
+    list.push(1); // [1]
+
+    // concatenate with another list
+    list += [2, 3, 4]; // [1, 2, 3, 4]
+
+    // lists (and "str") can be indexed with range objects
+    let suffix = list[-2..]; // [3, 4]
+    let prefix = list[0..3]; // [1, 2, 3]
+
+
+    let map = [:];
+
+    // add a few key-value pairs
+    map['a'] = 1;
+    map['b'] = 2;
+    map['c'] = 3;
+
+    match map.get('a') {
+        Option::Some(v) => print("map['a'] = \{v}\n"),
+        Option::None => panic("not found"),
+    }
+
+    assert(map.get_or('d', 4) == 4);
+}
+```
+
 ### Sum types
 Note that "inline" cannot be used on a recursive type as this would cause resulting objects to have a size of infinity (see [value types](#value-types)).
 ```paw
@@ -201,7 +233,7 @@ A panic can also be caused by calling the `panic` builtin function.
 
 ## Roadmap
 + [ ] allow "inline" receiver to be modified in method call (copy receiver back after return)
-+ [ ] fix list/str slice operation (should use `Range`, `RangeTo`, etc.)
++ [x] fix list/str slice operation (should use `Range`, `RangeTo`, etc.)
 + [ ] use `mut` to indicate mutability and make immutable the default for local variables
 + [ ] decide on and implement either RAII or "defer" for cleaning up resources
 + [ ] overflow checks for `paw_Int` operations during constant folding and inside VM

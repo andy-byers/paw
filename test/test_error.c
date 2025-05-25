@@ -256,7 +256,6 @@ static void test_syntax_error(void)
     test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_invalid_surrogate_high", "", "let s = '\\u{d801}\\u{e000}';");
     test_compiler_status(E_UNICODE_ESCAPE_TOO_LONG, "string_unicode_escape_too_long", "", "let s = '\\u{1000001}';");
 
-    test_compiler_status(E_EXPECTED_EXPRESSION, "misplaced_2dots", "", "let x = ..;");
     test_compiler_status(E_EXPECTED_EXPRESSION, "misplaced_3dots", "", "let x = ...;");
     test_compiler_status(E_EXPECTED_SEMICOLON, "misplaced_fat_arrow", "", "let x => 1;");
     test_compiler_status(E_INTEGER_OUT_OF_RANGE, "overflow_integer", "", "let d = -9223372036854775808;"); // overflows before '-' applied
@@ -455,9 +454,19 @@ static void test_map_error(void)
     test_compiler_status(E_INCOMPATIBLE_TYPES, "map_mixed_nesting", "", "let a = [1: [1: 1], 2: [2: 2], 3: [3: [3: 3]]];");
     test_compiler_status(E_UNSATISFIED_TRAIT_BOUNDS, "map_unhashable_literal_key", "", "let map = [[1]: 1];");
     test_compiler_status(E_UNSATISFIED_TRAIT_BOUNDS, "map_unhashable_type_key", "", "let map: [[int]: int] = [:];");
+}
 
-    // TODO: get this working (either slices or allow range expr to be used, and would need half-open ranges, etc.)
-//    test_compiler_status(E_INVALID_SLICE_TARGET, "map_slice", "", "let map = [:]; let val = map[0:10];");
+static void test_range_error(void)
+{
+    test_runtime_status(PAW_ERUNTIME, "list_start_out_of_bounds", "", "let x = [1, 2, 3]; let _ = x[-4..];");
+    test_runtime_status(PAW_ERUNTIME, "list_end_out_of_bounds", "", "let x = [1, 2, 3]; let _ = x[..4];");
+    test_runtime_status(PAW_ERUNTIME, "list_range_out_of_order", "", "let x = [1, 2, 3]; let _ = x[2..1];");
+
+    test_runtime_status(PAW_ERUNTIME, "str_start_out_of_bounds", "", "let x = \"abc\"; let _ = x[-4..];");
+    test_runtime_status(PAW_ERUNTIME, "str_end_out_of_bounds", "", "let x = \"abc\"; let _ = x[..4];");
+    test_runtime_status(PAW_ERUNTIME, "str_range_out_of_order", "", "let x = \"abc\"; let _ = x[2..1];");
+
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "map_range", "", "let map = [1: 100]; let val = map[0..10];");
 }
 
 static void test_import_error(void)
@@ -856,6 +865,7 @@ int main(void)
     test_struct_error();
     test_list_error();
     test_map_error();
+    test_range_error();
     test_import_error();
     test_uninit_local();
     test_global_const();

@@ -12,19 +12,29 @@
 #define LIST_MIN_CAPACITY 4
 #define LIST_MAX_CAPACITY (PAW_SIZE_MAX / sizeof(Value))
 
-Tuple *pawList_new(paw_Env *P, int zelem, paw_Int capacity, Value *out)
+static size_t abs_index(paw_Env *P, paw_Int index, paw_Int length)
 {
-    if (capacity > LIST_MAX_CAPACITY / zelem)
+    paw_Int const abs = pawV_abs_index(index, length);
+    if (abs < 0 || abs > length)
+        pawE_error(P, PAW_ERUNTIME, -1,
+                   "index %I is out of bounds for list of length %I",
+                   index, PAW_CAST_INT(length));
+    return CAST_SIZE(abs);
+}
+
+Tuple *pawList_new(paw_Env *P, int element_size, paw_Int capacity, Value *out)
+{
+    if (capacity > LIST_MAX_CAPACITY / element_size)
         pawM_error(P);
 
     Tuple *t = pawV_new_tuple(P, 4);
-    LIST_ZELEMENT(t) = zelem;
+    LIST_ZELEMENT(t) = element_size;
     // clear list components so the GC knows not to read them
     LIST_BEGIN(t) = LIST_END(t) = LIST_BOUND(t) = NULL;
     t->kind = TUPLE_LIST;
     V_SET_OBJECT(out, t);
 
-    int const num_values = PAW_MAX(capacity, LIST_MIN_CAPACITY) * zelem;
+    int const num_values = PAW_MAX(capacity, LIST_MIN_CAPACITY) * element_size;
     LIST_BEGIN(t) = LIST_END(t) = pawM_new_vec(P, num_values, Value);
     LIST_BOUND(t) = LIST_BEGIN(t) + num_values;
     return t;
@@ -70,7 +80,7 @@ static void reserve_extra(paw_Env *P, Tuple *t, size_t extra)
     }
 }
 
-static void move_items(int element_size, Value *src, ptrdiff_t start, ptrdiff_t shift, size_t count)
+static void shift_elements(Value *src, ptrdiff_t start, ptrdiff_t shift, size_t count, int element_size)
 {
     size_t const z = (size_t)element_size;
     memmove(src + (start + shift) * z, src + start * z, CAST_SIZE(count) * sizeof(src[0]) * z);
@@ -88,45 +98,46 @@ void pawList_reserve(paw_Env *P, Tuple *t, size_t want)
 void pawList_push(paw_Env *P, Tuple *t, Value const *pvalue)
 {
     reserve_extra(P, t, 1);
-    int const zelem = LIST_ZELEMENT(t);
-    LIST_END(t) = pawV_copy(LIST_END(t), pvalue, zelem);
+    int const z = LIST_ZELEMENT(t);
+    LIST_END(t) = pawV_copy(LIST_END(t), pvalue, z);
 }
 
 void pawList_resize(paw_Env *P, Tuple *t, size_t length)
 {
     pawList_reserve(P, t, length);
     // avoid 'Nullptr with offset' from UBSan
-    int const zelem = LIST_ZELEMENT(t);
-    LIST_END(t) = length ? LIST_BEGIN(t) + length * zelem : LIST_BEGIN(t);
+    int const z = LIST_ZELEMENT(t);
+    LIST_END(t) = length ? LIST_BEGIN(t) + length * z : LIST_BEGIN(t);
 }
 
 void pawList_insert(paw_Env *P, Tuple *t, paw_Int index, Value const *pvalue)
 {
-    int const zelem = LIST_ZELEMENT(t);
+    int const z = LIST_ZELEMENT(t);
 
     // Clamp to the list bounds.
     size_t const len = pawList_length(P, t);
-    paw_Int const abs = pawV_abs_index(index, len);
-    size_t const i = PAW_CLAMP(CAST_SIZE(abs), 0, len);
+    size_t const abs = abs_index(P, index, len);
 
     reserve_extra(P, t, 1);
-    if (i != len)
-        move_items(zelem, LIST_BEGIN(t), abs, 1, len - i);
+    if (abs != len)
+        shift_elements(LIST_BEGIN(t), abs, 1, len - abs, z);
 
-    pawV_copy(LIST_BEGIN(t) + abs, pvalue, zelem);
+    pawV_copy(LIST_BEGIN(t) + abs, pvalue, z);
     ++LIST_END(t);
 }
 
 void pawList_pop(paw_Env *P, Tuple *t, paw_Int index)
 {
-    int const zelem = LIST_ZELEMENT(t);
-
     size_t const len = pawList_length(P, t);
-    paw_Int const fixed = pawV_abs_index(index, len);
-    size_t const abs = pawV_check_abs(P, fixed, len, "list");
-    if (abs != len - 1)
+    size_t const abs = abs_index(P, index, len);
+    if (abs < len - 1) {
         // shift values into place
-        move_items(zelem, LIST_BEGIN(t), abs + 1, -1, len - abs - 1);
+        shift_elements(LIST_BEGIN(t), abs + 1, -1, len - abs - 1, LIST_ZELEMENT(t));
+    } else if (abs == len) {
+        pawE_error(P, PAW_ERUNTIME, -1,
+                   "popped index %I must be less than list length %I",
+                   index, PAW_CAST_INT(len));
+    }
 
     --LIST_END(t);
 }
@@ -136,44 +147,41 @@ void pawList_copy(paw_Env *P, Tuple const *a, Tuple *b)
     paw_Int const na = pawList_length(P, a);
     if (na > 0) {
         pawList_resize(P, b, na);
-        memcpy(LIST_BEGIN(b), LIST_BEGIN(a), na * sizeof(*LIST_BEGIN(a)));
+        size_t const z = LIST_ZELEMENT(a) * sizeof(*LIST_BEGIN(a));
+        memcpy(LIST_BEGIN(b), LIST_BEGIN(a), na * z);
     }
 }
 
-static paw_Int check_slice_bound(paw_Env *P, paw_Int index, paw_Int length, char const *what)
+static void check_slice_bounds(paw_Env *P, size_t *pi, size_t *pj, paw_Int i, paw_Int j, paw_Int n)
 {
-    paw_Int const n = PAW_CAST_INT(length);
-    index = pawV_abs_index(index, length);
-    if (index < 0 || index > n) {
-        pawE_error(P, PAW_ERUNTIME, -1,
-                   "slice %s index %I is out of bounds for list of length %I",
-                   what, index, PAW_CAST_INT(length));
-    }
-    return index;
+    *pi = abs_index(P, i, n);
+    *pj = abs_index(P, j, n);
+    if (*pi > *pj)
+        pawE_error(P, PAW_ERUNTIME, -1, "list slice \"start\" is greater than \"end\"");
 }
 
-void pawList_get_range(paw_Env *P, Tuple const *t, paw_Int i, paw_Int j, Tuple *out)
+void pawList_get_range(paw_Env *P, Tuple const *t, paw_Int lower, paw_Int upper, Tuple *out)
 {
-    paw_Int const n = pawList_length(P, t);
-    i = check_slice_bound(P, i, n, "start");
-    j = check_slice_bound(P, j, n, "end");
-    j = PAW_MAX(i, j);
+    size_t i, j;
+    check_slice_bounds(P, &i, &j, lower, upper, pawList_length(P, t));
+    if (i == j) return;
 
-    size_t const nout = i < j ? j - i : 0;
-    if (nout > 0) {
-        pawList_resize(P, out, nout);
-        // TODO "this is broken"
-        memcpy(LIST_BEGIN(out), LIST_BEGIN(t) + i, nout * sizeof(*LIST_BEGIN(out)));
-    }
+    size_t const n = j - i;
+    pawList_resize(P, out, n);
+    size_t const z = LIST_ZELEMENT(out);
+    size_t const offset = i * z;
+    for (size_t ii = 0; ii < n * z; ++ii)
+        LIST_BEGIN(out)[ii] = LIST_BEGIN(t)[ii + offset];
 }
 
-void pawList_set_range(paw_Env *P, Tuple *a, paw_Int i, paw_Int j, Tuple const *b, Value *rtemp)
+void pawList_set_range(paw_Env *P, Tuple *a, paw_Int lower, paw_Int upper, Tuple const *b, Value *rtemp)
 {
     paw_Int const na = pawList_length(P, a);
     paw_Int const nb = pawList_length(P, b);
-    i = check_slice_bound(P, i, na, "start");
-    j = check_slice_bound(P, j, na, "end");
-    j = PAW_MAX(i, j);
+
+    size_t i, j;
+    check_slice_bounds(P, &i, &j, lower, upper, na);
+    if (i == j && nb == 0) return;
 
     // "0 <= i <= j" and "j <= na" are both true, meaning the left-hand side of the
     // comparison below must be less than or equal to "na"
@@ -181,20 +189,24 @@ void pawList_set_range(paw_Env *P, Tuple *a, paw_Int i, paw_Int j, Tuple const *
         pawM_error(P);
 
     if (a == b) {
-    // TODO na should be nb in the line below? doesn't make a difference since a==b, but looks strange
         // prevent overlapping range memcpy for "list[i:j] = list"
-        Tuple *temp = pawList_new(P, LIST_ZELEMENT(b), na, rtemp);
+        Tuple *temp = pawList_new(P, LIST_ZELEMENT(b), nb, rtemp);
         pawList_copy(P, b, temp);
         b = temp;
     }
 
-    size_t const n = na - j + i + nb;
-    pawList_reserve(P, a, n);
+    size_t const new_length = na - j + i + nb;
+    pawList_resize(P, a, new_length);
 
-    Value *gap = LIST_BEGIN(a) + i;
-    memmove(gap + nb, LIST_BEGIN(a) + j, (na - j) * sizeof(*LIST_BEGIN(a)));
-    memcpy(gap, LIST_BEGIN(b), nb * sizeof(*LIST_BEGIN(a)));
-    pawList_resize(P, a, n);
+    // make the distance between elements "i" and "j" equal to the length of "b"
+    size_t const z = LIST_ZELEMENT(a);
+    memmove(LIST_BEGIN(a) + (i + nb) * z,
+            LIST_BEGIN(a) + j * z,
+            (na - j) * z * sizeof(*LIST_BEGIN(a)));
+
+    size_t const offset = i * z;
+    for (size_t ii = 0; ii < nb * z; ++ii)
+        LIST_BEGIN(a)[ii + offset] = LIST_BEGIN(b)[ii];
 }
 
 void pawList_concat(paw_Env *P, Tuple const *a, Tuple const *b, Value *rout)
@@ -203,20 +215,21 @@ void pawList_concat(paw_Env *P, Tuple const *a, Tuple const *b, Value *rout)
     paw_Int const nb = pawList_raw_length(b);
 
     // both "na" and "nb" are guaranteed to be less than PAW_SIZE_MAX
-    if (na > PAW_SIZE_MAX - nb)
-        pawM_error(P);
+    if (na > PAW_SIZE_MAX - nb) pawM_error(P);
     size_t const nout = CAST_SIZE(na + nb);
 
-    Tuple *out = pawList_new(P, LIST_ZELEMENT(a), nout, rout);
+    size_t const z = LIST_ZELEMENT(a);
+    Tuple *out = pawList_new(P, z, nout, rout);
     if (nout > 0) {
-        memcpy(LIST_END(out), LIST_BEGIN(a), na * sizeof(*LIST_BEGIN(a)));
-        memcpy(LIST_END(out) + na, LIST_BEGIN(b), nb * sizeof(*LIST_BEGIN(b)));
-        LIST_END(out) += nout;
+        memcpy(LIST_END(out), LIST_BEGIN(a), na * z * sizeof(*LIST_BEGIN(a)));
+        memcpy(LIST_END(out) + na, LIST_BEGIN(b), nb * z * sizeof(*LIST_BEGIN(a)));
+        LIST_END(out) += nout * z;
     }
 }
 
 void pawList_free(paw_Env *P, Tuple *t)
 {
     pawM_free_vec(P, LIST_BEGIN(t), list_capacity(t) * LIST_ZELEMENT(t));
-    pawM_free_flex(P, t, t->nelems, sizeof(t->elems[0]));
+    pawM_free_flex(P, t, t->nelems, sizeof(*LIST_BEGIN(t)));
 }
+

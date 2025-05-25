@@ -329,10 +329,7 @@ static void AcceptJumpExpr(struct HirVisitor *V, struct HirJumpExpr *s)
 static void AcceptIndex(struct HirVisitor *V, struct HirIndex *e)
 {
     AcceptExpr(V, e->target);
-    if (e->first != NULL)
-        AcceptExpr(V, e->first);
-    if (e->second != NULL)
-        AcceptExpr(V, e->second);
+    AcceptExpr(V, e->index);
 }
 
 static void AcceptSelector(struct HirVisitor *V, struct HirSelector *e)
@@ -1241,13 +1238,7 @@ static void dump_expr(struct Printer *P, struct HirExpr *expr)
             struct HirIndex *e = HirGetIndex(expr);
             dump_expr(P, e->target);
             DUMP_CHAR(P, '[');
-            if (e->first != NULL)
-                dump_expr(P, e->first);
-            if (e->is_slice) {
-                DUMP_CHAR(P, ':');
-                if (e->second != NULL)
-                    dump_expr(P, e->second);
-            }
+            dump_expr(P, e->index);
             DUMP_CHAR(P, ']');
             break;
         }

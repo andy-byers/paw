@@ -94,6 +94,7 @@ struct MemoryAccess {
 
     paw_Bool has_field : 1;
     paw_Bool has_element : 1;
+    paw_Bool has_range : 1;
 
     struct FieldAccess {
         IrType *type;
@@ -105,6 +106,11 @@ struct MemoryAccess {
         IrType *type;
         MirRegister index;
     } element;
+
+    struct RangeAccess {
+        MirRegister lower;
+        MirRegister upper;
+    } range;
 };
 
 DEFINE_MAP(struct Unboxer, LocalGroupMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirRegister, struct MemoryGroup)
@@ -447,6 +453,20 @@ static void discharge_indirect_element(struct Unboxer *U, struct MemoryAccess *p
     pa->element = (struct ElementAccess){0};
 }
 
+static void discharge_indirect_range(struct Unboxer *U, struct MemoryAccess *pa)
+{
+    enum BuiltinKind kind = pawP_type2code(U->C, pa->type);
+    struct MemoryGroup output = new_registers(U, pa->type, -1);
+
+    struct MirPlace const object = PLACE(pa->group.base);
+    struct MirPlace const result = PLACE(REGISTER_AT(output, 0));
+    NEW_INSTR(U, get_range, TODO, kind, result, object, PLACE(pa->range.lower), PLACE(pa->range.upper));
+
+    pa->group = output;
+    pa->has_range = PAW_FALSE;
+    pa->range = (struct RangeAccess){0};
+}
+
 static void discharge_upvalue(struct Unboxer *U, struct MemoryAccess *pa)
 {
     struct MemoryGroup output = new_registers(U, pa->type, -1);
@@ -464,7 +484,9 @@ static void discharge_access(struct Unboxer *U, struct MemoryAccess *pa)
 {
     if (pa->group.kind == MEMORY_UPVALUE)
         discharge_upvalue(U, pa);
-    if (pa->has_element) {
+    if (pa->has_range) {
+        discharge_indirect_range(U, pa);
+    } else if (pa->has_element) {
         discharge_indirect_element(U, pa);
     } else if (pa->has_field) {
         discharge_indirect_field(U, pa);
@@ -516,10 +538,8 @@ static void apply_indirect_access(struct Unboxer *U, struct MemoryAccess *pa, Mi
 
     if (MirIsField(p)) {
         struct MirField *field = MirGetField(p);
-
         struct IrAdtDef *def = pawIr_get_adt_def(U->C, IR_TYPE_DID(pa->type));
         struct IrLayout target_layout = pawIr_compute_layout(U->C, pa->type);
-        // TODO: separate IrAdtLayout with variant list, w/ structs having only a single variant?
         target_layout = !def->is_struct
             ? IrLayoutList_get(target_layout.fields, field->discr)
             : CHECK_EXP(field->discr == 0, target_layout);
@@ -527,14 +547,21 @@ static void apply_indirect_access(struct Unboxer *U, struct MemoryAccess *pa, Mi
         pa->field.type = IrTypeList_get(field_types, field->index);
         pa->field.offset = compute_field_offset(target_layout, field->index);
         pa->has_field = PAW_TRUE;
-    } else {
+    } else if (MirIsIndex(p)){
         struct MirIndex *index = MirGetIndex(p);
-
         struct MemoryGroup index_group = get_registers(U, index->index, -1);
         paw_assert(index_group.count == 1);
         pa->element.index.value = index_group.base;
         pa->element.type = get_element_type(U, pa->type);
         pa->has_element = PAW_TRUE;
+    } else {
+        struct MirRange *range = MirGetRange(p);
+        struct MemoryGroup lower_group = get_registers(U, range->lower, -1);
+        struct MemoryGroup upper_group = get_registers(U, range->upper, -1);
+        paw_assert(lower_group.count == 1 && upper_group.count == 1);
+        pa->range.lower.value = lower_group.base;
+        pa->range.upper.value = upper_group.base;
+        pa->has_range = PAW_TRUE;
     }
 }
 
@@ -558,16 +585,15 @@ static struct MemoryAccess unbox_place(struct Unboxer *U, struct MirPlace *pplac
     paw_assert(ps != NULL);
 
     for (int i = 0; i < ps->count;) {
-#define GET MirProjectionList_get
-        MirProjection *p = GET(ps, i++);
+        MirProjection *p = MirProjectionList_get(ps, i++);
         if (MirIsDeref(p)) {
             // handle indirect accesses
-            apply_indirect_access(U, &access, GET(ps, i++));
+            p = MirProjectionList_get(ps, i++);
+            apply_indirect_access(U, &access, p);
         } else {
             // handle direct field access
             apply_field_access(U, &access, p);
         }
-#undef GET
     }
 
     // projections have been transformed into instructions
@@ -640,6 +666,14 @@ static void create_indirect_element_setter(struct Unboxer *U, struct MemoryAcces
     }
 }
 
+static void create_indirect_range_setter(struct Unboxer *U, struct MemoryAccess lhs, struct MemoryAccess rhs)
+{
+    enum BuiltinKind kind = pawP_type2code(U->C, lhs.type);
+    struct MirPlace const object = PLACE(lhs.group.base);
+    struct MirPlace const value = PLACE(REGISTER_AT(rhs.group, 0));
+    NEW_INSTR(U, set_range, TODO, kind, object, PLACE(lhs.range.lower), PLACE(lhs.range.upper), value);
+}
+
 static void create_upvalue_setter(struct Unboxer *U, struct MemoryAccess lhs, struct MemoryAccess rhs)
 {
     struct MemoryGroup object = lhs.group;
@@ -658,7 +692,9 @@ static void unbox_move(struct Unboxer *U, struct MirMove *x)
     struct MemoryAccess lhs = unbox_place(U, &x->output);
     discharge_access(U, &rhs); // put into registers
 
-    if (lhs.has_element) {
+    if (lhs.has_range) {
+        create_indirect_range_setter(U, lhs, rhs);
+    } else if (lhs.has_element) {
         create_indirect_element_setter(U, lhs, rhs);
     } else if (lhs.has_field) {
         create_indirect_field_setter(U, lhs, rhs);

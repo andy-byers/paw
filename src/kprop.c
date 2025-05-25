@@ -788,8 +788,6 @@ static paw_Bool is_pure(struct MirInstruction *instr)
         case kMirAggregate:
         case kMirContainer:
         case kMirGetField:
-        case kMirGetElement:
-        case kMirGetRange:
         case kMirUnaryOp:
         case kMirBinaryOp:
             return PAW_TRUE;

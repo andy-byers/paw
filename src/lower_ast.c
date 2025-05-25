@@ -247,7 +247,7 @@ static struct HirExpr *into_range_to(struct LowerAst *L, struct AstRangeExpr *e)
             e->is_inclusive ? CSTR_RANGE_TO_INCLUSIVE : CSTR_RANGE_TO);
     struct HirExpr *rhs = lower_expr(L, e->rhs);
     struct HirExprList *items = HirExprList_new(L->hir);
-    HirExprList_push(L->hir, items, new_literal_field(L, "to", rhs, 1));
+    HirExprList_push(L->hir, items, new_literal_field(L, "end", rhs, 1));
     return pawHir_new_composite_lit(L->hir, e->span, path, items);
 }
 
@@ -760,7 +760,7 @@ static struct HirExpr *LowerIndex(struct LowerAst *L, struct AstIndex *e)
 {
     struct HirExpr *target = lower_expr(L, e->target);
     struct HirExpr *index = lower_expr(L, e->index);
-    return pawHir_new_index_expr(L->hir, e->span, target, index, NULL, PAW_FALSE);
+    return pawHir_new_index_expr(L->hir, e->span, target, index, PAW_FALSE);
 }
 
 static struct HirExpr *LowerSelector(struct LowerAst *L, struct AstSelector *e)

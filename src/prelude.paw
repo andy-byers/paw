@@ -60,7 +60,7 @@ pub struct str: Hash + Equals + Compare {
     #[extern] pub fn parse_float(self) -> float;
     #[extern] pub fn split(self, sep: str) -> [str];
     #[extern] pub fn join(self, seq: [str]) -> str;
-    #[extern] pub fn find(self, target: str) -> int;
+    #[extern] pub fn find(self, target: str) -> Option<int>;
     #[extern] pub fn starts_with(self, prefix: str) -> bool;
     #[extern] pub fn ends_with(self, suffix: str) -> bool;
     #[extern] pub fn hash(self) -> int;

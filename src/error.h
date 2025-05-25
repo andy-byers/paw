@@ -126,7 +126,6 @@ enum ErrorKind {
     E_UNIT_STRUCT_WITH_BRACES,
     E_UNIT_VARIANT_WITH_PARENTHESIS,
     E_INVALID_INDEX_TARGET,
-    E_INVALID_SLICE_TARGET,
     E_MISSING_BINDING_IN_ALTERNATIVE,
     E_INVALID_INCLUSIVE_RANGE,
     E_EXPECTED_DIVERGENCE,
@@ -277,7 +276,6 @@ _Noreturn void pawErr_unit_variant_with_parenthesis(struct Compiler *C, String c
 _Noreturn void pawErr_missing_field(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name, char const *type);
 _Noreturn void pawErr_unknown_field(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name, char const *type);
 _Noreturn void pawErr_invalid_index_target(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *type);
-_Noreturn void pawErr_invalid_slice_target(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *type);
 _Noreturn void pawErr_missing_binding_in_alternative(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *type);
 _Noreturn void pawErr_invalid_inclusive_range(struct Compiler *C, String const *modname, struct SourceLoc loc);
 _Noreturn void pawErr_expected_divergence(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *fn);

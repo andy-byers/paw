@@ -725,13 +725,6 @@ _Noreturn void pawErr_invalid_index_target(struct Compiler *C, String const *mod
             NULL);
 }
 
-_Noreturn void pawErr_invalid_slice_target(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *type)
-{
-    throw(C, E_INVALID_SLICE_TARGET, modname, loc,
-            format(C, "invalid target '%s' for slice operator", type),
-            NULL);
-}
-
 _Noreturn void pawErr_missing_binding_in_alternative(struct Compiler *C, String const *modname, struct SourceLoc loc, char const *name)
 {
     throw(C, E_MISSING_BINDING_IN_ALTERNATIVE, modname, loc,

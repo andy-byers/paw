@@ -323,6 +323,8 @@ void pawR_str_getn(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value 
     size_t const n = pawS_length(str);
     size_t const zi = check_slice_bound(P, i, n, "start", "string");
     size_t const zj = check_slice_bound(P, j, n, "end", "string");
+    if (zi > zj)
+        pawE_error(P, PAW_ERUNTIME, -1, "string slice \"start\" is greater than \"end\"");
 
     size_t const nbytes = zi < zj ? zj - zi : 0;
     String *slice = pawS_new_nstr(P, str->text + zi, nbytes);

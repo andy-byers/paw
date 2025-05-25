@@ -166,20 +166,6 @@ static IrType *unify(struct Resolver *R, struct SourceLoc loc, struct IrType *a,
     return IrIsNever(a) ? b : a;
 }
 
-static paw_Bool is_list_t(struct Resolver *R, struct IrType *type)
-{
-    if (!IrIsAdt(type))
-        return PAW_FALSE;
-    return IR_TYPE_DID(type).value == R->C->builtins[BUILTIN_LIST].did.value;
-}
-
-static paw_Bool is_map_t(struct Resolver *R, struct IrType *type)
-{
-    if (!IrIsAdt(type))
-        return PAW_FALSE;
-    return IR_TYPE_DID(type).value == R->C->builtins[BUILTIN_MAP].did.value;
-}
-
 static struct HirDecl *get_decl(struct Resolver *R, DeclId did)
 {
     return pawHir_get_decl(R->C, did);
@@ -720,9 +706,10 @@ static struct IrType *resolve_chain_expr(struct Resolver *R, struct HirChainExpr
 
 static struct IrType *get_value_type(struct Resolver *R, struct IrType *target)
 {
-    if (is_list_t(R, target))
+    enum BuiltinKind kind = TYPE2CODE(R, target);
+    if (kind == BUILTIN_LIST)
         return ir_list_elem(target);
-    if (is_map_t(R, target))
+    if (kind == BUILTIN_MAP)
         return ir_map_value(target);
     return NULL;
 }
@@ -1196,7 +1183,7 @@ static struct IrType *select_field(struct Resolver *R, struct IrType *target, st
         RESOLVER_ERROR(R, expected_adt, NODE_START(e->target), repr);
     }
     if (e->is_index)
-        RESOLVER_ERROR(R, expected_field_selector, e->ident.span.start);
+        RESOLVER_ERROR(R, expected_field_selector, e->span.start);
 
     struct HirAdtDecl *adt = get_adt(R, target);
     int const index = find_field(adt->fields, e->ident.name);
@@ -1502,62 +1489,63 @@ static struct HirExpr *add_one(struct Resolver *R, struct HirExpr *expr)
     return pawHir_new_binop_expr(hir, expr->hdr.span, expr, one, BINARY_ADD);
 }
 
+static struct IrType *range_index(struct Resolver *R, enum BuiltinKind range_kind)
+{
+    IrType *expect = get_type(R, range_kind);
+    if (range_kind != BUILTIN_RANGE_FULL) {
+        IrTypeList *types = IrTypeList_new(R->C);
+        IrTypeList_push(R->C, types, get_type(R, BUILTIN_INT));
+        return pawP_instantiate(R->C, expect, types);
+    }
+    // RangeFull is not polymorphic
+    return expect;
+}
+
+static struct IrType *check_list_index(struct Resolver *R, struct HirIndex *e, struct IrType *target)
+{
+    IrType *index = resolve_operand(R, e->index);
+    enum BuiltinKind kind = TYPE2CODE(R, index);
+    if (kind == BUILTIN_INT)
+        return ir_list_elem(target);
+
+    // index must have type Range*<int>
+    unify(R, NODE_START(e->index), index, range_index(R, kind));
+    return target;
+}
+
+static struct IrType *check_map_index(struct Resolver *R, struct HirIndex *e, struct IrType *target)
+{
+    IrType *index = resolve_operand(R, e->index);
+    unify(R, NODE_START(e->index), index, ir_map_key(target));
+    return ir_map_value(target);
+}
+
+static struct IrType *check_str_index(struct Resolver *R, struct HirIndex *e, struct IrType *target)
+{
+    IrType *index = resolve_operand(R, e->index);
+    enum BuiltinKind kind = TYPE2CODE(R, index);
+    if (kind == BUILTIN_INT)
+        return get_type(R, BUILTIN_STR);
+
+    // index must have type Range*<int>
+    unify(R, NODE_START(e->index), index, range_index(R, kind));
+    return target;
+}
+
 static struct IrType *check_index(struct Resolver *R, struct HirIndex *e, struct IrType *target)
 {
-    IrType *index = resolve_operand(R, e->first);
-    enum BuiltinKind kind = TYPE2CODE(R, index);
-
-    if (kind == BUILTIN_RANGE) {
-        struct HirCompositeLit *lit = &HirGetLiteralExpr(e->first)->comp;
-        e->first = HirGetFieldExpr(K_LIST_FIRST(lit->items))->value;
-        e->second = HirGetFieldExpr(K_LIST_LAST(lit->items))->value;
-        e->is_slice = PAW_TRUE;
-    } else if (kind == BUILTIN_RANGE_TO) {
-        struct HirCompositeLit *lit = &HirGetLiteralExpr(e->first)->comp;
-        e->first = NULL;
-        e->second = HirGetFieldExpr(K_LIST_FIRST(lit->items))->value;
-        e->is_slice = PAW_TRUE;
-    } else if (kind == BUILTIN_RANGE_FROM) {
-        struct HirCompositeLit *lit = &HirGetLiteralExpr(e->first)->comp;
-        e->first = HirGetFieldExpr(K_LIST_FIRST(lit->items))->value;
-        e->second = NULL;
-        e->is_slice = PAW_TRUE;
-    } else if (kind == BUILTIN_RANGE_FULL) {
-        e->first = e->second = NULL;
-        e->is_slice = PAW_TRUE;
-    } else if (kind == BUILTIN_RANGE_INCLUSIVE) {
-        struct HirCompositeLit *lit = &HirGetLiteralExpr(e->first)->comp;
-        e->first = add_one(R, HirGetFieldExpr(K_LIST_FIRST(lit->items))->value);
-        e->second = add_one(R, HirGetFieldExpr(K_LIST_LAST(lit->items))->value);
-        e->is_slice = PAW_TRUE;
-    } else if (kind == BUILTIN_RANGE_TO_INCLUSIVE) {
-        struct HirCompositeLit *lit = &HirGetLiteralExpr(e->first)->comp;
-        e->first = NULL;
-        e->second = add_one(R, HirGetFieldExpr(K_LIST_FIRST(lit->items))->value);
-        e->is_slice = PAW_TRUE;
+    switch (TYPE2CODE(R, target)) {
+        case BUILTIN_LIST:
+            return check_list_index(R, e, target);
+        case BUILTIN_MAP:
+            return check_map_index(R, e, target);
+        case BUILTIN_STR:
+            return check_str_index(R, e, target);
+        default: {
+            char const *repr = pawIr_print_type(R->C, target);
+            RESOLVER_ERROR(R, invalid_index_target, e->span.start, repr);
+        }
     }
-
-    struct IrType *expect, *result;
-    if (is_list_t(R, target)) {
-        expect = get_type(R, BUILTIN_INT);
-        result = e->is_slice ? target : ir_list_elem(target);
-    } else if (is_map_t(R, target) && !e->is_slice) {
-        expect = ir_map_key(target);
-        result = ir_map_value(target);
-    } else if (TYPE2CODE(R, target) == BUILTIN_STR) {
-        expect = get_type(R, BUILTIN_INT);
-        result = get_type(R, BUILTIN_STR);
-    } else if (!e->is_slice) {
-        char const *repr = pawIr_print_type(R->C, target);
-        RESOLVER_ERROR(R, invalid_index_target, e->span.start, repr);
-    } else {
-        char const *repr = pawIr_print_type(R->C, target);
-        RESOLVER_ERROR(R, invalid_slice_target, e->span.start, repr);
-    }
-
-    if (e->first != NULL) unify(R, NODE_START(e->first), expect, resolve_operand(R, e->first));
-    if (e->second != NULL) unify(R, NODE_START(e->second), expect, resolve_operand(R, e->second));
-    return result;
 }
 
 static struct IrType *resolve_index(struct Resolver *R, struct HirIndex *e)

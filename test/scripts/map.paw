@@ -131,7 +131,7 @@ pub fn test_addressing_stress() {
     assert(m[bk(-3)] == -3);
 }
 
-// TODO: get this to work
+//// TODO: get this to work
 //pub fn test_traverse_map_with_unknown_key() {
 //    let m = [:];
 //    for key in m {
@@ -147,10 +147,11 @@ fn special_case(key: str, callback: fn(str)) {
 
 fn check_special_case(key: str) {
     let map = [:];
-    special_case(key, |k| map[k] = "value");
+    special_case(key, |k: str| map[k] = "value");
     assert(map["key"] == "value");
 }
 
 pub fn test_special_case() {
     check_special_case("key");
 }
+
