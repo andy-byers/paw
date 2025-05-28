@@ -29,12 +29,15 @@ void pawR_list_length(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb);
 void pawR_list_concat(paw_Env *P, CallFrame *cf, int b);
 void pawR_list_get(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc);
 void pawR_list_getn(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc, Value *temp);
+void pawR_list_getp(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc);
 void pawR_list_set(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc);
 void pawR_list_setn(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc, Value *temp);
 
 Tuple *pawR_new_map(paw_Env *P, CallFrame *cf, Value *ra, int b, int c);
 void pawR_map_length(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb);
 int pawR_map_get(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc);
+int pawR_map_getp(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc);
+void pawR_map_newp(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc);
 void pawR_map_set(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc);
 
 void pawR_close_upvalues(paw_Env *P, StackPtr const top);

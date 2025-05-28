@@ -25,8 +25,6 @@ typedef enum MapState {
 #define MAP_MAX_CAPACITY(Policy_) (PAW_SIZE_MAX / MAP_ITEM_SIZE(Policy_))
 #define MAP_ITEM_SIZE(Policy_) (1 + (Policy_).key_size * sizeof(Value) + (Policy_).value_size * sizeof(Value))
 
-#define GET_POLICY(P, m) P->map_policies.data[MAP_POLICY(m)]
-
 int pawMap_key_size(paw_Env *P, Tuple const *t)
 {
     return GET_POLICY(P, t).key_size;

@@ -274,35 +274,23 @@ static int init_searchers(paw_Env *P)
 
 void pawL_init(paw_Env *P)
 {
-    MapPolicy const base_policy = {
+    // create a map policy to use during compilation
+    P->map_policies.data[P->map_policies.count++] = (MapPolicy){
         .key_size = 1,
         .value_size = 1,
+        .type = -1, // untyped
     };
-    MapPolicy const float_policy = {
-        .fp = PAW_TRUE,
-        .key_size = 1,
-        .value_size = 1,
-    };
-
-    P->map_policies.alloc = NBUILTIN_POLICIES;
-    P->map_policies.data = pawM_new_vec(P, NBUILTIN_POLICIES, MapPolicy);
-    P->map_policies.data[PAW_TUNIT] = base_policy;
-    P->map_policies.data[PAW_TBOOL] = base_policy;
-    P->map_policies.data[PAW_TINT] = base_policy;
-    P->map_policies.data[PAW_TFLOAT] = float_policy;
-    P->map_policies.data[PAW_TSTR] = base_policy;
-    P->map_policies.count = NBUILTIN_POLICIES;
 
     // create system registry objects
     pawE_push_cstr(P, CSTR_KSEARCHERS);
     paw_new_list(P, init_searchers(P), 1);
     pawE_push_cstr(P, CSTR_KMODULES);
-    paw_new_map(P, 0, PAW_TSTR);
+    paw_new_map(P, 0, 0);
     pawE_push_cstr(P, CSTR_KSYMBOLS);
-    paw_new_map(P, 0, PAW_TSTR);
+    paw_new_map(P, 0, 0);
 
     // create the registry itself
-    paw_new_map(P, 3, PAW_TSTR);
+    paw_new_map(P, 3, 0);
     P->registry = P->top.p[-1];
     paw_pop(P, 1);
 }

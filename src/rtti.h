@@ -26,6 +26,7 @@ struct RttiTypeHeader {
 struct RttiAdt {
     RTTI_TYPE_HEADER;
     ItemId iid;
+    int size;
 };
 
 struct RttiTrait {
@@ -50,6 +51,7 @@ struct RttiFnDef {
 
 struct RttiTuple {
     RTTI_TYPE_HEADER;
+    int size;
 };
 
 typedef struct RttiType {
@@ -101,6 +103,7 @@ struct DefHeader {
 struct AdtDef {
     RTTI_DEF_HEADER;
     paw_Bool is_struct : 1;
+    paw_Bool is_inline : 1;
     int nfields;
     ItemId *fields;
     String *mangled_name;
@@ -141,10 +144,10 @@ struct Def {
 #define RTTI_TYPE(P, i) CHECK_EXP(0 <= (i) && (i) < (P)->types.count, (P)->types.data[i])
 #define RTTI_PVAL(P, i) CHECK_EXP(0 <= (i) && (i) < (P)->vals.count, &(P)->vals.data[i])
 
-struct RttiType *pawRtti_new_adt(paw_Env *P, ItemId iid, int ntypes);
+struct RttiType *pawRtti_new_adt(paw_Env *P, ItemId iid, int ntypes, int size);
 struct RttiType *pawRtti_new_signature(paw_Env *P, ItemId iid, int nparams);
 struct RttiType *pawRtti_new_func_ptr(paw_Env *P, int nparams);
-struct RttiType *pawRtti_new_tuple(paw_Env *P, int nelems);
+struct RttiType *pawRtti_new_tuple(paw_Env *P, int nelems, int size);
 struct RttiType *pawRtti_new_trait(paw_Env *P);
 struct RttiType *pawRtti_new_never(paw_Env *P);
 struct Def *pawRtti_new_adt_def(paw_Env *P, int nfields);
@@ -161,6 +164,22 @@ void pawRtti_mangle_add_name(paw_Env *P, Buffer *buf, String const *name);
 void pawRtti_mangle_start_generic_args(paw_Env *P, Buffer *buf);
 void pawRtti_mangle_finish_generic_args(paw_Env *P, Buffer *buf);
 void pawRtti_mangle_add_arg(paw_Env *P, Buffer *buf, paw_Type code);
+
+static int rtti_stack_size(paw_Env *P, RttiType const *rtti)
+{
+    if (rtti->hdr.kind == RTTI_TYPE_ADT) {
+        // ADTs can be either inline or boxed
+        struct Def *def = RTTI_DEF(P, rtti->adt.iid);
+        return def->adt.is_inline ? rtti->adt.size : 1;
+    } else if (rtti->hdr.kind == RTTI_TYPE_TUPLE) {
+        // tuples are always inline
+        return rtti->tuple.size;
+    } else {
+        // all other types are either primitives or boxed
+        return 1;
+    }
+}
+
 
 // Append a human-readable representation of the type with the given 'code' to the
 // end of the 'buffer'

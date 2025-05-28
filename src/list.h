@@ -46,11 +46,28 @@ static inline paw_Int pawList_length(paw_Env *P, Tuple const *t)
     return pawList_raw_length(t) / LIST_ZELEMENT(t);
 }
 
+static inline paw_Int pawList_offset(Tuple const *t, paw_Int index)
+{
+    paw_assert(0 <= index && index <= LIST_ELEMENT_LIMIT(t));
+    return index * LIST_ZELEMENT(t);
+}
+
+// Return a pointer to the element at the given "index"
+inline static Value *pawList_at(Tuple const *t, paw_Int index)
+{
+    paw_Int const offset = pawList_offset(t, index);
+    paw_assert(offset < pawList_raw_length(t));
+
+    return &LIST_BEGIN(t)[offset];
+}
+
 inline static Value *pawList_get(paw_Env *P, Tuple *t, paw_Int index)
 {
     size_t const length = CAST_SIZE(pawList_length(P, t));
-    size_t const absolute = pawV_check_abs(P, index, length, "list");
-    return &LIST_BEGIN(t)[absolute * LIST_ZELEMENT(t)];
+    size_t const absolute = pawV_abs_index(index, length);
+    if (absolute < length)
+        return &LIST_BEGIN(t)[absolute * LIST_ZELEMENT(t)];
+    return NULL;
 }
 
 inline static paw_Bool pawList_iter(paw_Env *P, Tuple const *t, paw_Int *itr)

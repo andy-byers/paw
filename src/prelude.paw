@@ -91,9 +91,9 @@ pub struct List<T>: Iterate<ListIterator<T>, T> {
     #[extern] pub fn length(self) -> int;
     #[extern] pub fn get(self, index: int) -> Option<T>;
     #[extern] pub fn set(self, index: int, value: T);
-    #[extern] pub fn push(self, value: T) -> Self;
-    #[extern] pub fn insert(self, index: int, value: T) -> Self;
-    #[extern] pub fn remove(self, index: int) -> T;
+    #[extern] pub fn push(self, value: T);
+    #[extern] pub fn insert(self, index: int, value: T);
+    #[extern] pub fn remove(self, index: int);
     #[extern] pub fn pop(self) -> T;
 
     pub fn get_or(self, index: int, default: T) -> T {
@@ -120,9 +120,9 @@ pub struct MapIterator<K: Hash + Equals, V>: Advance<K> {
 pub struct Map<K: Hash + Equals, V>: Iterate<MapIterator<K, V>, K> {
     #[extern] pub fn length(self) -> int;
     #[extern] pub fn get(self, key: K) -> Option<V>;
-    #[extern] pub fn set(self, key: K, value: V); // TODO: -> Option<V>;
+    #[extern] pub fn set(self, key: K, value: V);
     #[extern] pub fn get_or(self, key: K, default: V) -> V;
-    #[extern] pub fn erase(self, key: K) -> Self;
+    #[extern] pub fn erase(self, key: K);
 
     pub fn contains(self, key: K) -> bool {
         match self.get(key) {

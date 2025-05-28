@@ -173,8 +173,7 @@ static void parse_debug_string(void)
 #define SKIP_SPACES(p) while (ISSPACE(p[0])) ++p
 
     char const *p = s_opt.d;
-    if (p == NULL)
-        return;
+    paw_assert(p != NULL);
 
     do {
         SKIP_SPACES(p);
@@ -379,7 +378,7 @@ static void setup_stack(paw_Env *P, int argc, char const **argv)
     for (int i = 0; i < argc; ++i) {
         paw_push_string(P, argv[i]);
     }
-    paw_new_list(P, 1 + argc, PAW_TSTR);
+    paw_new_list(P, 1 + argc, 1);
 }
 
 int main(int argc, char const **argv)
@@ -390,10 +389,10 @@ int main(int argc, char const **argv)
         return 0;
     }
 
-    parse_debug_string();
+    if (s_opt.d != NULL)
+        parse_debug_string();
 
-    paw_Env *P = load_source(s_opt.H
-                                     ? 1ULL << s_opt.H
+    paw_Env *P = load_source(s_opt.H ? 1ULL << s_opt.H
                                      : 0 /* use default */);
     if (s_opt.c)
         return 0;

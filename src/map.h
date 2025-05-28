@@ -13,6 +13,7 @@ typedef struct MapPolicy {
     Value equals;
     Value hash;
     paw_Bool fp;
+    paw_Type type;
     int key_size;
     int value_size;
 } MapPolicy;
@@ -21,6 +22,8 @@ typedef struct MapPolicy {
 #define MAP_DATA(Map_) ((Map_)->elems[1].p)
 #define MAP_LENGTH(Map_) (V_INT((Map_)->elems[2]))
 #define MAP_CAPACITY(Map_) (V_INT((Map_)->elems[3]))
+
+#define GET_POLICY(P, m) P->map_policies.data[MAP_POLICY(m)]
 
 Tuple *pawMap_new(paw_Env *P, int policy, paw_Int capacity, Value *out);
 void pawMap_free(paw_Env *P, Tuple *m);

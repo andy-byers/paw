@@ -265,12 +265,12 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, char co
                 .bytes_used = pawStats_new(C, "memory.mir.bytes_used"),
             });
 
-    paw_new_map(P, 0, PAW_TSTR);
+    paw_new_map(P, 0, 0);
     C->strings = V_TUPLE(P->top.p[-1]);
 
-    paw_new_map(P, 0, PAW_TSTR);
+    paw_new_map(P, 0, 0);
     P->constants = P->top.p[-1];
-    paw_new_map(P, 0, PAW_TSTR);
+    paw_new_map(P, 0, 0);
     P->functions = P->top.p[-1];
     paw_pop(P, 2);
 
@@ -420,14 +420,15 @@ static void init_type_list(struct DefGenerator *dg, struct IrTypeList *x, paw_Ty
 static RttiType *new_type(struct DefGenerator *dg, struct IrType *src, ItemId iid)
 {
     RttiType *dst = lookup_type(dg, src);
-    if (dst != NULL)
-        return dst;
+    if (dst != NULL) return dst;
+
+    struct IrLayout layout = pawIr_compute_layout(dg->C, src);
 
     paw_Env *P = ENV(dg->C);
     switch (IR_KINDOF(src)) {
         case kIrAdt: {
             struct IrAdt *adt = IrGetAdt(src);
-            dst = pawRtti_new_adt(P, iid, LEN(adt->types));
+            dst = pawRtti_new_adt(P, iid, LEN(adt->types), layout.size);
             init_type_list(dg, adt->types, dst->subtypes, iid);
             break;
         }
@@ -456,7 +457,7 @@ static RttiType *new_type(struct DefGenerator *dg, struct IrType *src, ItemId ii
         }
         default: { // kIrTuple
             struct IrTuple *tuple = IrGetTuple(src);
-            dst = pawRtti_new_tuple(P, tuple->elems->count);
+            dst = pawRtti_new_tuple(P, tuple->elems->count, layout.size);
             init_type_list(dg, tuple->elems, dst->subtypes, -1);
         }
     }
@@ -482,6 +483,7 @@ static struct Def *new_adt_def(struct DefGenerator *dg, struct IrAdtDef *d, stru
     def->adt.code = ty->hdr.code;
     def->adt.name = d->name;
     def->adt.is_struct = d->is_struct;
+    def->adt.is_inline = d->is_inline;
     def->adt.is_pub = d->is_pub;
     return def;
 }

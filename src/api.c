@@ -18,6 +18,32 @@
 #include "rtti.h"
 
 
+#define ENSURE_SIZE1(P, Size_, What_) API_CHECK(P, (Size_) == 1, "expected " What_ " of size 1");
+
+
+static StackPtr from_stackp(paw_Env *P, int offset) { return P->top.p + offset; }
+static StackPtr from_basep(paw_Env *P, int offset) { return P->cf->base.p + offset; }
+static StackPtr lastp(paw_Env *P) { return from_stackp(P, -1); }
+static StackPtr stackp(paw_Env *P) { return from_stackp(P, 0); }
+static StackPtr basep(paw_Env *P) { return from_basep(P, 0); }
+
+static StackPtr at(paw_Env *P, int index)
+{
+    if (index == PAW_REGISTRY_INDEX)
+        return &P->registry;
+
+    index = paw_abs_index(P, index);
+    API_CHECK(P, 0 <= index && index < paw_get_count(P), "index out of range");
+    return from_basep(P, index);
+}
+
+static void push_values(paw_Env *P, Value const *pvalue, int count)
+{
+    API_INCR_TOP(P, count);
+    pawV_copy(P->top.p - count, pvalue, count);
+}
+
+
 static void *default_alloc(void *ud, void *ptr, size_t old_size, size_t new_size)
 {
     PAW_UNUSED(ud);
@@ -36,16 +62,6 @@ static void default_mem_hook(void *ud, void *ptr, size_t size0, size_t size)
     PAW_UNUSED(ptr);
     PAW_UNUSED(size0);
     PAW_UNUSED(size);
-}
-
-static StackPtr at(paw_Env *P, int index)
-{
-    if (index == PAW_REGISTRY_INDEX)
-        return &P->registry;
-
-    int const i = paw_abs_index(P, index);
-    API_CHECK(P, 0 <= i && i < paw_get_count(P), "index out of range");
-    return &P->cf->base.p[i];
 }
 
 size_t paw_bytes_used(paw_Env const *P)
@@ -483,32 +499,57 @@ void paw_new_tuple(paw_Env *P, int n)
     paw_shift(P, n);
 }
 
-void paw_new_list(paw_Env *P, int n, paw_Type e)
+// TODO: lookup size of "e", pass to pawR_new_list
+void paw_new_list(paw_Env *P, int n, int element_size)
 {
-    Value *ra = pawC_push0(P);
-    pawR_new_list(P, P->cf, ra, n, e);
+    Value *object = pawC_push0(P);
+    Tuple *list = pawR_new_list(P, P->cf, object, n, element_size);
 
-    Value const *pv = at(P, -n - 1);
-    for (int i = 0; i < n; ++i) {
-        Value const rb = {.i = i};
-        Value const *rc = pv++;
-        pawR_list_set(P, P->cf, ra, &rb, rc);
-    }
-    paw_shift(P, n);
+    Value *dst = LIST_BEGIN(list);
+    Value const *src = at(P, -n * element_size - 1);
+    while (dst != LIST_END(list))
+        *dst++ = *src++;
+
+    paw_shift(P, n * element_size);
 }
 
-void paw_new_map(paw_Env *P, int n, paw_Type k)
+static void init_basic_map(paw_Env *P, Value *map, int n)
 {
-    Value *ra = pawC_push0(P);
-    pawR_new_map(P, P->cf, ra, n, k);
-
-    Value const *pv = at(P, -2 * n - 1);
-    for (int i = 0; i < n; ++i) {
-        Value const *rb = pv++;
-        Value const *rc = pv++;
-        pawR_map_set(P, P->cf, ra, rb, rc);
+    for (int k = -2 * n; k < 0; k += 2) {
+        Value const *key = at(P, k - 1);
+        Value const *value = key + 1;
+        pawR_map_set(P, P->cf, map, key, value);
     }
     paw_shift(P, 2 * n);
+}
+
+static void init_wide_map(paw_Env *P, Value *map, MapPolicy p, int n)
+{
+    Value *temp = pawC_push0(P);
+    int const z = p.key_size + p.value_size;
+    for (int k = -z * n; k < 0; k += z) {
+        Value const *key = at(P, k - 1 - 1);
+        Value const *value = key + p.key_size;
+        pawR_map_newp(P, P->cf, temp, map, key);
+        pawV_copy(temp->p, value, p.value_size);
+    }
+    paw_pop(P, 1); // pop "temp"
+    paw_shift(P, z * n); // shift "map"
+}
+
+void paw_new_map(paw_Env *P, int n, int policy)
+{
+    // allocate the map and obtain a stable pointer to it
+    Value *object = pawC_push0(P);
+    Tuple *map = pawR_new_map(P, P->cf, object, n, policy);
+    Value *ra = &(Value){.o = CAST_OBJECT(map)};
+
+    MapPolicy const p = GET_POLICY(P, map);
+    if (p.key_size == 1 && p.value_size == 1) {
+        init_basic_map(P, ra, n);
+    } else {
+        init_wide_map(P, ra, p, n);
+    }
 }
 
 void *paw_new_foreign(paw_Env *P, size_t size, int nfields)
@@ -518,9 +559,37 @@ void *paw_new_foreign(paw_Env *P, size_t size, int nfields)
     return ud->data;
 }
 
-int paw_abs_index(paw_Env *P, int index)
+int paw_register_policy(paw_Env *P, paw_Type map_type)
 {
-    return index + (index < 0 ? paw_get_count(P) : 0);
+    API_CHECK(P, 0 <= map_type && map_type < P->types.count, "invalid map type");
+
+    RttiType const *map = P->types.data[map_type];
+    RttiType const *key = P->types.data[map->subtypes[0]];
+    RttiType const *value = P->types.data[map->subtypes[1]];
+    struct MapPolicyList *policies = &P->map_policies;
+    if (policies->count < MAX_POLICIES) {
+        policies->data[policies->count++] = (MapPolicy){
+            .key_size = rtti_stack_size(P, key),
+            .value_size = rtti_stack_size(P, value),
+            .hash = *at(P, -2),
+            .equals = *at(P,-1),
+            .type = map_type,
+        };
+        paw_pop(P, 2);
+        return 0;
+    }
+    return -1;
+}
+
+int paw_find_policy(paw_Env *P, paw_Type map_type)
+{
+    API_CHECK(P, 0 <= map_type && map_type < P->types.count, "invalid map type");
+
+    struct MapPolicyList policies = P->map_policies;
+    for (int i = 0; i < policies.count; ++i) {
+        if (policies.data[i].type == map_type) return i;
+    }
+    return -1;
 }
 
 static void reverse(StackPtr from, StackPtr to)
@@ -559,19 +628,22 @@ void paw_shift(paw_Env *P, int n)
     paw_pop(P, n);
 }
 
-void paw_get_field(paw_Env *P, int index, int ifield)
+void paw_get_field(paw_Env *P, int object, int field)
 {
-    paw_push_value(P, index);
-    StackPtr ra = at(P, -1);
-    pawR_tuple_get(P->cf, ra, ra, ifield);
+    Value const *tuple = at(P, object);
+    Value *output = stackp(P);
+    API_INCR_TOP(P, 1);
+
+    pawR_tuple_get(P->cf, output, tuple, field);
 }
 
-void paw_set_field(paw_Env *P, int index, int ifield)
+void paw_set_field(paw_Env *P, int object, int index)
 {
-    paw_push_value(P, index);
-    StackPtr ra = at(P, -1);
-    StackPtr rb = at(P, -2);
-    pawR_tuple_set(P->cf, ra, ifield, rb);
+    Value *tuple = at(P, object);
+    Value const *value = lastp(P);
+    --P->top.p;
+
+    pawR_tuple_set(P->cf, tuple, index, value);
 }
 
 char const *paw_int_to_string(paw_Env *P, int index, size_t *plen)
@@ -586,11 +658,10 @@ char const *paw_float_to_string(paw_Env *P, int index, size_t *plen)
     return pawV_to_string(P, pv, PAW_TFLOAT, plen);
 }
 
-void paw_str_length(paw_Env *P, int index)
+void paw_str_length(paw_Env *P, int object)
 {
-    Value *pv = at(P, index);
-    String const *str = V_STRING(*pv);
-    size_t const len = pawS_length(str);
+    Value const *str = at(P, object);
+    size_t const len = pawS_length(V_STRING(*str));
     paw_push_int(P, PAW_CAST_INT(len));
 }
 
@@ -599,26 +670,35 @@ void paw_str_concat(paw_Env *P, int count)
     pawR_str_concat(P, P->cf, count);
 }
 
-// void paw_str_getelem(paw_Env *P, int index)
-//{
-//     paw_push_value(P, index);
-//     paw_rotate(P, -2, 1);
-//     pawR_getelem(P, PAW_ADT_STR);
-// }
-//
-// void paw_str_getrange(paw_Env *P, int index)
-//{
-//     paw_push_value(P, index);
-//     paw_rotate(P, -3, 1);
-//     pawR_getrange(P, PAW_ADT_STR);
-// }
-
-void paw_list_length(paw_Env *P, int index)
+void paw_str_get(paw_Env *P, int object)
 {
-    Value *pv = at(P, index);
-    Tuple const *list = V_TUPLE(*pv);
-    size_t const len = pawList_length(P, list);
-    paw_push_int(P, PAW_CAST_INT(len));
+    Value const *str = at(P, object);
+    Value const *index = lastp(P);
+    Value *output = lastp(P);
+
+    pawR_str_get(P, P->cf, output, str, index);
+}
+
+void paw_str_get_range(paw_Env *P, int object)
+{
+    Value const *str = at(P, object);
+    Value const *lower = from_stackp(P, -2);
+    Value *output = from_stackp(P, -2);
+
+    pawR_str_getn(P, P->cf, output, str, lower);
+    paw_pop(P, 1);
+}
+
+int paw_list_element_size(paw_Env *P, int object)
+{
+    Tuple const *list = V_TUPLE(*at(P, object));
+    return LIST_ZELEMENT(list);
+}
+
+void paw_list_length(paw_Env *P, int object)
+{
+    Tuple const *list = V_TUPLE(*at(P, object));
+    paw_push_int(P, pawList_length(P, list));
 }
 
 void paw_list_concat(paw_Env *P, int count)
@@ -626,88 +706,371 @@ void paw_list_concat(paw_Env *P, int count)
     pawR_list_concat(P, P->cf, count);
 }
 
-// void paw_list_getelem(paw_Env *P, int index)
-//{
-//     paw_push_value(P, index);
-//     paw_rotate(P, -2, 1);
-//     pawR_getelem(P, PAW_ADT_LIST);
-// }
-//
-// void paw_list_setelem(paw_Env *P, int index)
-//{
-//     paw_push_value(P, index);
-//     paw_rotate(P, -3, 1);
-//     pawR_list_setelem(P);
-// }
-//
-// void paw_list_getrange(paw_Env *P, int index)
-//{
-//     paw_push_value(P, index);
-//     paw_rotate(P, -3, 1);
-//     pawR_list_getn(P);
-// }
-//
-// void paw_list_setrange(paw_Env *P, int index)
-//{
-//     paw_push_value(P, index);
-//     paw_rotate(P, -4, 1);
-//     pawR_list_setn(P);
-// }
-
-paw_Bool paw_list_next(paw_Env *P, int index)
+int paw_list_get(paw_Env *P, int object)
 {
-    API_CHECK_PUSH(P, 1);
-    Tuple *list = V_TUPLE(*at(P, index));
-    paw_Int *piter = &P->top.p[-1].i;
+    int const element_size = paw_list_element_size(P, object);
+    API_CHECK_PUSH(P, element_size - 1);
+
+    // replace index with element pointer
+    paw_list_getp(P, object);
+
+    // replace pointer with pointee
+    Value const *pointer = (--P->top.p)->p;
+    push_values(P, pointer, element_size);
+    return element_size;
+}
+
+typedef void (*ListGetter)(paw_Env *, CallFrame *, Value *, Value const *, Value const *);
+static void call_list_getter(paw_Env *P, int object, ListGetter getter)
+{
+    Value const *list = at(P, object);
+    Value const *index = lastp(P);
+    Value *output = lastp(P);
+
+    getter(P, P->cf, output, list, index);
+}
+
+void paw_list_get1(paw_Env *P, int object)
+{
+    ENSURE_SIZE1(P, paw_list_element_size(P, object), "list element");
+
+    // output = list[index]
+    call_list_getter(P, object, pawR_list_get);
+}
+
+void paw_list_getp(paw_Env *P, int object)
+{
+    // output = &list[index]
+    call_list_getter(P, object, pawR_list_getp);
+}
+
+int paw_list_iget(paw_Env *P, int object, paw_Int index)
+{
+    paw_push_int(P, index);
+    return paw_list_get(P, object);
+}
+
+void paw_list_iget1(paw_Env *P, int object, paw_Int index)
+{
+    paw_push_int(P, index);
+    paw_list_get1(P, object);
+}
+
+void paw_list_set(paw_Env *P, int object)
+{
+    int const element_size = paw_list_element_size(P, object);
+    Value *output = from_stackp(P, -element_size - 1);
+    Value const *element = from_stackp(P, -element_size);
+    Value const *index = output;
+
+    // list[index] = element
+    Value *list = at(P, object);
+    pawR_list_getp(P, P->cf, output, list, index);
+    pawV_copy(output->p, element, element_size);
+    paw_pop(P, 1 + element_size);
+}
+
+void paw_list_set1(paw_Env *P, int object)
+{
+    ENSURE_SIZE1(P, paw_list_element_size(P, object), "list element");
+
+    Value *list = at(P, object);
+    Value const *index = from_stackp(P, -2);
+    Value const *element = from_stackp(P, -1);
+
+    // list[index] = element
+    pawR_list_set(P, P->cf, list, index, element);
+    paw_pop(P, 2);
+}
+
+void paw_list_iset(paw_Env *P, int object, paw_Int index)
+{
+    int const element_size = paw_list_element_size(P, object);
+
+    paw_push_int(P, index);
+    paw_rotate(P, -element_size - 1, 1);
+    paw_list_set(P, object);
+}
+
+void paw_list_iset1(paw_Env *P, int object, paw_Int index)
+{
+    paw_push_int(P, index);
+    paw_rotate(P, -2, 1);
+    paw_list_set1(P, object);
+}
+
+void paw_list_get_range(paw_Env *P, int object)
+{
+    Value const *list = at(P, object);
+    Value const *lower = from_stackp(P, -2);
+    Value *output = from_stackp(P, -2);
+    Value *temp = lastp(P);
+
+    // output = list[lower..upper]
+    pawR_list_getn(P, P->cf, output, list, lower, temp);
+    paw_pop(P, 1); // pop "temp"
+}
+
+void paw_list_iget_range(paw_Env *P, int object, paw_Int lower, paw_Int upper)
+{
+    paw_push_int(P, lower);
+    paw_push_int(P, upper);
+    paw_list_get_range(P, object);
+}
+
+void paw_list_set_range(paw_Env *P, int object)
+{
+    Value *list = at(P, object);
+    Value const *lower = from_stackp(P, -2);
+    Value const *upper = from_stackp(P, -1);
+    Value *temp = lastp(P);
+
+    // output = list[lower..upper]
+    pawR_list_setn(P, P->cf, list, lower, upper, temp);
+    paw_pop(P, 2); // pop bounds
+}
+
+void paw_list_iset_range(paw_Env *P, int object, paw_Int lower, paw_Int upper)
+{
+    int const element_size = paw_list_element_size(P, object);
+
+    paw_push_int(P, lower);
+    paw_push_int(P, upper);
+    paw_rotate(P, -element_size - 2, 2);
+    paw_list_set_range(P, object);
+}
+
+void paw_list_push(paw_Env *P, int object)
+{
+    int const element_size = paw_list_element_size(P, object);
+
+    Tuple *list = V_TUPLE(*at(P, object));
+    Value const *value = from_stackp(P, -element_size);
+
+    pawList_push(P, list, value);
+}
+
+void paw_list_pop(paw_Env *P, int object)
+{
+    Tuple *list = V_TUPLE(*at(P, object));
+    paw_Int const length = pawList_length(P, list);
+    API_CHECK(P, length > 0, "pop from empty list");
+
+    pawList_pop(P, list, length - 1);
+}
+
+void paw_list_insert(paw_Env *P, int object)
+{
+    int const element_size = paw_list_element_size(P, object);
+
+    Tuple *list = V_TUPLE(*at(P, object));
+    paw_Int const index = paw_int(P, -element_size - 1);
+    Value const *value = at(P, -element_size);
+
+    pawList_insert(P, list, index, value);
+}
+
+void paw_list_iinsert(paw_Env *P, int object, paw_Int index)
+{
+    object = paw_abs_index(P, object);
+    paw_push_int(P, index);
+    paw_list_insert(P, object);
+}
+
+void paw_list_remove(paw_Env *P, int object)
+{
+    int const element_size = paw_list_element_size(P, object);
+
+    Tuple *list = V_TUPLE(*at(P, object));
+    paw_Int const index = paw_int(P, -1);
+
+    pawList_pop(P, list, index);
+    paw_pop(P, 1); // pop "index"
+}
+
+void paw_list_iremove(paw_Env *P, int object, paw_Int index)
+{
+    object = paw_abs_index(P, object);
+    paw_push_int(P, index);
+    paw_list_remove(P, object);
+}
+
+paw_Bool paw_list_next(paw_Env *P, int object)
+{
+    Tuple const *list = V_TUPLE(*at(P, object));
+
+    paw_Int *piter = &V_INT(*lastp(P));
     if (pawList_iter(P, list, piter)) {
-        P->top.p[0] = *pawList_get(P, list, *piter);
-        API_INCR_TOP(P, 1);
+        int const element_size = LIST_ZELEMENT(list);
+        Value const *element = pawList_at(list, *piter);
+
+        // push the payload to the stack
+        push_values(P, element, element_size);
         return PAW_TRUE;
     }
     return PAW_FALSE;
+}
+
+int paw_map_key_size(paw_Env *P, int object)
+{
+    Tuple const *map = V_TUPLE(*at(P, object));
+    return GET_POLICY(P, map).key_size;
+}
+
+int paw_map_value_size(paw_Env *P, int object)
+{
+    Tuple const *map = V_TUPLE(*at(P, object));
+    return GET_POLICY(P, map).value_size;
 }
 
 void paw_map_length(paw_Env *P, int index)
 {
-    Value *pv = at(P, index);
-    Tuple const *map = V_TUPLE(*pv);
-    size_t const len = pawMap_length(map);
-    paw_push_int(P, PAW_CAST_INT(len));
+    Value const *map = at(P, index);
+    size_t const length = pawMap_length(V_TUPLE(*map));
+    paw_push_int(P, PAW_CAST_INT(length));
 }
 
-int paw_map_get(paw_Env *P, int index)
+int paw_map_get(paw_Env *P, int object)
 {
-    Value *ra = at(P, -1); // key/output
-    Value const *rb = at(P, index); // map
-    if (pawR_map_get(P, P->cf, ra, rb, ra)) {
-        paw_pop(P, 1);
+    if (paw_map_getp(P, object))
+        return -1;
+
+    int const value_size = paw_map_value_size(P, object);
+    ENSURE_STACK(P, value_size - 1);
+
+    Value const *pointer = (--P->top.p)->p;
+    push_values(P, pointer, value_size);
+    return value_size;
+}
+
+typedef int (*MapGetter)(paw_Env *, CallFrame *, Value *, Value const *, Value const *);
+static int call_map_getter(paw_Env *P, int object, MapGetter getter)
+{
+    int const key_size = paw_map_key_size(P, object);
+
+    Value *output = from_stackp(P, -key_size);
+    Value const *map = at(P, object);
+    Value const *key = output;
+
+    if (getter(P, P->cf, output, map, key)) {
+        paw_pop(P, key_size);
         return -1;
     }
-    // output register contains value
+
+    // pop the rest of the key
+    paw_pop(P, key_size - 1);
     return 0;
 }
 
-void paw_map_set(paw_Env *P, int index)
+int paw_map_get1(paw_Env *P, int object)
 {
-    Value *ra = at(P, index);
-    Value const *rb = at(P, -2);
-    Value const *rc = at(P, -1);
-    pawR_map_set(P, P->cf, ra, rb, rc);
-    paw_pop(P, 2);
+    ENSURE_SIZE1(P, paw_map_value_size(P, object), "map value");
+
+    return call_map_getter(P, object, pawR_map_get);
 }
 
-paw_Bool paw_map_next(paw_Env *P, int index)
+int paw_map_getp(paw_Env *P, int object)
 {
-    API_CHECK_PUSH(P, 2);
-    Tuple *map = V_TUPLE(*at(P, index));
-    paw_Int *piter = &P->top.p[-1].i;
+    return call_map_getter(P, object, pawR_map_getp);
+}
+
+void paw_map_newp(paw_Env *P, int object)
+{
+    int const key_size = paw_map_key_size(P, object);
+
+    Value *output = from_stackp(P, -key_size);
+    Value const *map = at(P, object);
+    Value const *key = output;
+
+    pawR_map_newp(P, P->cf, output, map, key);
+}
+
+void paw_map_set(paw_Env *P, int object)
+{
+    int const key_size = paw_map_key_size(P, object);
+    int const value_size = paw_map_value_size(P, object);
+    int const item_size = key_size + value_size;
+
+    // swap key and value, then replace key with value pointer
+    paw_rotate(P, -item_size, -key_size);
+    paw_map_newp(P, object);
+
+    Value *pointer = lastp(P);
+    Value const *value = from_stackp(P, -value_size - 1);
+    pawV_copy(pointer->p, value, value_size);
+    paw_pop(P, value_size + 1);
+}
+
+void paw_map_set1(paw_Env *P, int object)
+{
+    int const key_size = paw_map_key_size(P, object);
+    ENSURE_SIZE1(P, paw_map_value_size(P, object), "map value");
+
+    Value *map = at(P, object);
+    Value const *key = from_stackp(P, -key_size - 1);
+    Value const *value = lastp(P);
+
+    pawR_map_set(P, P->cf, map, key, value);
+    paw_pop(P, key_size + 1);
+}
+
+typedef void (*MapAt)(paw_Env *, Tuple *, paw_Int iter, void const *arg);
+static paw_Bool call_map_next(paw_Env *P, int object, MapAt getter, void const *arg)
+{
+    Tuple *map = V_TUPLE(*at(P, object));
+    paw_Int *piter = &V_INT(*lastp(P));
     if (pawMap_iter(map, piter)) {
-        P->top.p[0] = *pawMap_key(P, map, *piter);
-        P->top.p[1] = *pawMap_value(P, map, *piter);
-        API_INCR_TOP(P, 2);
+        // push the payload to the stack
+        getter(P, map, *piter, arg);
         return PAW_TRUE;
     }
+
     return PAW_FALSE;
+}
+
+static void get_map_key(paw_Env *P, Tuple *map, paw_Int iter, void const *arg)
+{
+    int const key_size = ((int const *)arg)[0];
+    Value const *key = pawMap_key(P, map, iter);
+    push_values(P, key, key_size);
+}
+
+static void get_map_value(paw_Env *P, Tuple *map, paw_Int iter, void const *arg)
+{
+    int const value_size = ((int const *)arg)[0];
+    Value const *value = pawMap_value(P, map, iter);
+    push_values(P, value, value_size);
+}
+
+static void get_map_item(paw_Env *P, Tuple *map, paw_Int iter, void const *arg)
+{
+    int const key_size = ((int const *)arg)[0];
+    int const value_size = ((int const *)arg)[1];
+    Value const *key = pawMap_key(P, map, iter);
+    Value const *value = pawMap_value(P, map, iter);
+    push_values(P, key, key_size);
+    push_values(P, value, value_size);
+}
+
+paw_Bool paw_map_next(paw_Env *P, int object)
+{
+    int const item_size[] = {
+        paw_map_key_size(P, object),
+        paw_map_value_size(P, object),
+    };
+    return call_map_next(P, object, get_map_item, item_size);
+}
+
+paw_Bool paw_map_next_key(paw_Env *P, int object)
+{
+    int const key_size = paw_map_key_size(P, object);
+    return call_map_next(P, object, get_map_key, &key_size);
+}
+
+paw_Bool paw_map_next_value(paw_Env *P, int object)
+{
+    int const value_size = paw_map_value_size(P, object);
+    return call_map_next(P, object, get_map_value, &value_size);
 }
 
 void paw_set_hook(paw_Env *P, paw_ExecHook hook, int mask, int count)

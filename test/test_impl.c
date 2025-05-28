@@ -63,9 +63,98 @@ static void test_primitives(void)
 
 #define N 500
 
+static void test_list_get_and_set(paw_Env *P)
+{
+    int const n = 123;
+    for (int i = 0; i < n; ++i)
+        paw_push_int(P, i + 1);
+
+    paw_new_list(P, n, 1);
+
+    // check(list == [1, 2, 3, ..., n])
+    for (int i = 0; i < n; ++i) {
+        paw_push_int(P, i);
+        paw_list_get(P, 0);
+        check(paw_int(P, 1) == i + 1);
+        paw_pop(P, 1);
+    }
+
+    // list = [10, 11, 12, ..., n + 10]
+    for (int i = 0; i < n; ++i) {
+        paw_push_int(P, i);
+        paw_push_int(P, i + 10);
+        paw_list_set(P, 0);
+    }
+
+    // check(list == [10, 11, 12, ..., n + 10])
+    for (int i = 0; i < n; ++i) {
+        paw_list_iget(P, 0, i);
+        check(paw_int(P, 1) == i + 10);
+        paw_pop(P, 1);
+    }
+
+    check(paw_get_count(P) == 1);
+}
+
+static void test_list_get_and_set_wide(paw_Env *P)
+{
+    int const n = 123;
+    for (int i = 0; i < n * 2; ++i)
+        paw_push_int(P, i + 1);
+
+    paw_new_list(P, n, 2);
+
+    // check(list == [(1, 2), (3, 4), ..., (2*n-1, 2*n)])
+    for (int i = 0; i < n; ++i) {
+        paw_push_int(P, i);
+        paw_list_get(P, 0);
+        check(paw_int(P, 1) == 2 * i + 1);
+        check(paw_int(P, 2) == 2 * i + 2);
+        paw_pop(P, 2);
+    }
+
+    // list = [(10, 11), (12, 13), ..., (2*n+10, 2*n+11)]
+    for (int i = 0; i < n; ++i) {
+        paw_push_int(P, i);
+        paw_push_int(P, 2 * i + 10);
+        paw_push_int(P, 2 * i + 11);
+        paw_list_set(P, 0);
+    }
+
+    // check(list == [(10, 11), (12, 13), ..., (2*n+10, 2*n+11)])
+    for (int i = 0; i < n; ++i) {
+        paw_push_int(P, i);
+        paw_list_get(P, 0);
+        check(paw_int(P, 1) == 2 * i + 10);
+        check(paw_int(P, 2) == 2 * i + 11);
+        paw_pop(P, 2);
+    }
+}
+
+static void test_list_iterate(paw_Env *P)
+{
+    int const n = 123;
+    for (int i = 0; i < n * 2; ++i)
+        paw_push_int(P, i + 1);
+
+    paw_new_list(P, n, 2);
+
+    int i = 0;
+    paw_push_int(P, PAW_ITER_INIT);
+    while (paw_list_next(P, -2)) {
+        check(paw_int(P, -2) == 2 * i + 1);
+        check(paw_int(P, -1) == 2 * i + 2);
+        paw_pop(P, 2);
+        ++i;
+    }
+
+    check(paw_int(P, -1) == n);
+    check(i == n);
+}
+
 static Tuple *map_new(paw_Env *P)
 {
-    paw_new_map(P, 0, PAW_TINT);
+    paw_new_map(P, 0, 0);
     return V_TUPLE(P->top.p[-1]);
 }
 
@@ -623,6 +712,8 @@ int main(void)
 
     DRIVER(test_strings);
     DRIVER(test_stack);
+    DRIVER(test_list_get_and_set);
+    DRIVER(test_list_get_and_set_wide);
     DRIVER(test_map_get_and_put);
     DRIVER(test_map_erase);
     DRIVER(test_map_erase_2);

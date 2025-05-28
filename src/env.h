@@ -6,6 +6,7 @@
 #define PAW_ENV_H
 
 #include "opcode.h"
+#include "map.h"
 #include "str.h"
 #include "value.h"
 
@@ -115,10 +116,11 @@ typedef struct paw_Env {
     paw_Alloc alloc;
     void *ud;
 
+#define MAX_POLICIES 1000
+
     struct MapPolicyList {
-        MapPolicy *data;
+        MapPolicy data[MAX_POLICIES];
         int count;
-        int alloc;
     } map_policies;
 
     paw_ExecHook hook;

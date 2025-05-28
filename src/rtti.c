@@ -51,12 +51,13 @@ static struct RttiType *add_type(paw_Env *P, struct RttiType *type)
 #define NEW_TYPE(P, n) \
     pawM_new_flex(P, struct RttiType, n, sizeof(paw_Type))
 
-struct RttiType *pawRtti_new_adt(paw_Env *P, ItemId iid, int ntypes)
+struct RttiType *pawRtti_new_adt(paw_Env *P, ItemId iid, int ntypes, int size)
 {
     struct RttiType *type = NEW_TYPE(P, ntypes);
     *type = (struct RttiType){
         .adt.kind = RTTI_TYPE_ADT,
         .adt.iid = iid,
+        .adt.size = size,
         .nsubtypes = ntypes,
     };
     return add_type(P, type);
@@ -76,7 +77,7 @@ struct RttiType *pawRtti_new_never(paw_Env *P)
 {
     struct RttiType *type = NEW_TYPE(P, 0);
     *type = (struct RttiType){
-        .trait.kind = RTTI_TYPE_NEVER,
+        .never.kind = RTTI_TYPE_NEVER,
         .nsubtypes = 0,
     };
     return add_type(P, type);
@@ -86,7 +87,7 @@ struct RttiType *pawRtti_new_signature(paw_Env *P, ItemId iid, int nparams)
 {
     struct RttiType *type = NEW_TYPE(P, nparams);
     *type = (struct RttiType){
-        .hdr.kind = RTTI_TYPE_FN_DEF,
+        .fdef.kind = RTTI_TYPE_FN_DEF,
         .nsubtypes = nparams,
     };
     return add_type(P, type);
@@ -96,17 +97,20 @@ struct RttiType *pawRtti_new_func_ptr(paw_Env *P, int nparams)
 {
     struct RttiType *type = NEW_TYPE(P, nparams);
     *type = (struct RttiType){
-        .hdr.kind = RTTI_TYPE_FN_PTR,
+        .fptr.kind = RTTI_TYPE_FN_PTR,
         .nsubtypes = nparams,
     };
     return add_type(P, type);
 }
 
-struct RttiType *pawRtti_new_tuple(paw_Env *P, int nelems)
+struct RttiType *pawRtti_new_tuple(paw_Env *P, int nelems, int size)
 {
     struct RttiType *type = NEW_TYPE(P, nelems);
-    type->hdr.kind = RTTI_TYPE_TUPLE;
-    type->nsubtypes = nelems;
+    *type = (struct RttiType){
+        .tuple.kind = RTTI_TYPE_TUPLE,
+        .tuple.size = size,
+        .nsubtypes = nelems,
+    };
     return add_type(P, type);
 }
 

@@ -83,7 +83,9 @@ static void reserve_extra(paw_Env *P, Tuple *t, size_t extra)
 static void shift_elements(Value *src, ptrdiff_t start, ptrdiff_t shift, size_t count, int element_size)
 {
     size_t const z = (size_t)element_size;
-    memmove(src + (start + shift) * z, src + start * z, CAST_SIZE(count) * sizeof(src[0]) * z);
+    memmove(src + (start + shift) * z,
+            src + start * z,
+            CAST_SIZE(count) * sizeof(src[0]) * z);
 }
 
 void pawList_reserve(paw_Env *P, Tuple *t, size_t want)
@@ -98,13 +100,13 @@ void pawList_reserve(paw_Env *P, Tuple *t, size_t want)
 void pawList_push(paw_Env *P, Tuple *t, Value const *pvalue)
 {
     reserve_extra(P, t, 1);
-    int const z = LIST_ZELEMENT(t);
-    LIST_END(t) = pawV_copy(LIST_END(t), pvalue, z);
+    LIST_END(t) = pawV_copy(LIST_END(t), pvalue, LIST_ZELEMENT(t));
 }
 
 void pawList_resize(paw_Env *P, Tuple *t, size_t length)
 {
     pawList_reserve(P, t, length);
+
     // avoid 'Nullptr with offset' from UBSan
     int const z = LIST_ZELEMENT(t);
     LIST_END(t) = length ? LIST_BEGIN(t) + length * z : LIST_BEGIN(t);
@@ -114,7 +116,6 @@ void pawList_insert(paw_Env *P, Tuple *t, paw_Int index, Value const *pvalue)
 {
     int const z = LIST_ZELEMENT(t);
 
-    // Clamp to the list bounds.
     size_t const len = pawList_length(P, t);
     size_t const abs = abs_index(P, index, len);
 

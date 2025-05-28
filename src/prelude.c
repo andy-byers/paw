@@ -96,15 +96,6 @@ static void push_option_none(paw_Env *P, int count)
     paw_push_zero(P, count);
 }
 
-static int list_insert(paw_Env *P)
-{
-    Tuple *list = V_TUPLE(*CF_BASE(1));
-    paw_Int const index = paw_int(P, 2);
-    pawList_insert(P, list, index, CF_BASE(3));
-    paw_pop(P, 2); // return 'self'
-    return 1;
-}
-
 static int enum_unwrap(paw_Env *P)
 {
     Value const v = *CF_BASE(1);
@@ -116,7 +107,7 @@ static int enum_unwrap(paw_Env *P)
 static int result_unwrap_err(paw_Env *P)
 {
     Value const v = *CF_BASE(1);
-    if (V_INT(*CF_BASE(1)) == 0)
+    if (paw_int(P, 1) == 0)
         pawR_error(P, PAW_ERUNTIME, "failed to unwrap error");
     return paw_get_count(P) - 2; // callable + discriminant
 }
@@ -129,30 +120,27 @@ static int list_length(paw_Env *P)
 
 static int list_push(paw_Env *P)
 {
-    Tuple *list = V_TUPLE(*CF_BASE(1));
-    pawList_push(P, list, CF_BASE(2));
-    paw_pop(P, 1); // return 'self'
-    return 1;
+    paw_list_push(P, 1);
+    return 0;
 }
 
 static int list_pop(paw_Env *P)
 {
-    Tuple *list = V_TUPLE(*CF_BASE(1));
-    paw_Int const length = pawList_length(P, list);
-    if (length == 0) {
-        pawR_error(P, PAW_EVALUE, "pop from empty List");
-    }
-    // overwrites the register containing the list, which is fine because
-    // pawList_pop doesn't allocate
-    *CF_BASE(1) = *pawList_get(P, list, length - 1);
-    pawList_pop(P, list, length - 1);
-    return 1;
+    int const z = paw_list_iget(P, 1, -1);
+    paw_list_iremove(P, 1, -1);
+    return z;
 }
 
-static paw_Int clamped_index(paw_Env *P, int loc, paw_Int n)
+static int list_insert(paw_Env *P)
 {
-    paw_Int const i = V_INT(*CF_BASE(loc));
-    return i < 0 ? 0 : i >= n ? n - 1 : i;
+    paw_list_insert(P, 1);
+    return 0;
+}
+
+static int list_remove(paw_Env *P)
+{
+    paw_list_remove(P, 1);
+    return 0;
 }
 
 static int list_get(paw_Env *P)
@@ -174,27 +162,8 @@ static int list_get(paw_Env *P)
 
 static int list_set(paw_Env *P)
 {
-    Tuple *list = V_TUPLE(*CF_BASE(1));
-    paw_Int const index = V_INT(*CF_BASE(2));
-    Value const *pvalue = CF_BASE(3);
-    int const element_size = LIST_ZELEMENT(list);
-    Value *pslot = pawList_get(P, list, index);
-    pawV_copy(pslot, pvalue, element_size);
+    paw_list_set(P, 1);
     return 0;
-}
-
-static int list_remove(paw_Env *P)
-{
-    Tuple *list = V_TUPLE(*CF_BASE(1));
-    if (pawList_length(P, list) == 0) {
-        pawR_error(P, PAW_EVALUE, "remove from empty List");
-    }
-    paw_Int const index = paw_int(P, 2);
-    int const element_size = LIST_ZELEMENT(list);
-    Value const *pvalue = pawList_get(P, list, index);
-    push_values(P, pvalue, element_size);
-    pawList_pop(P, list, index);
-    return element_size;
 }
 
 static int map_get(paw_Env *P)
@@ -232,21 +201,17 @@ static int map_set(paw_Env *P)
 
 static int map_iter_next(paw_Env *P)
 {
-    paw_get_field(P, 1, 0); // 2: map
-    paw_get_field(P, 1, 1); // 3: index
+    paw_get_field(P, 1, 0); // 2: self.map
+    paw_get_field(P, 1, 1); // 3: self.index
 
-    StackPtr ra = CF_BASE(2);
-    StackPtr rb = CF_BASE(3);
-    Tuple *map = V_TUPLE(*ra);
-
-    int const key_size = pawMap_key_size(P, map);
-    paw_Int index = V_INT(*rb);
-    if (pawMap_iter(map, &index)) {
-        V_SET_INT(rb, index);
+    int const key_size = paw_map_key_size(P, 2);
+    if (paw_map_next_key(P, 2)) {
+        // modify "self.index"
+        paw_push_value(P, 3);
         paw_set_field(P, 1, 1);
-
-        Value const *key = pawMap_key(P, map, index);
-        push_option_some(P, key, key_size);
+        // construct "Option::Some(<key>)"
+        paw_push_int(P, PAW_OPTION_SOME);
+        paw_rotate(P, -key_size - 1, 1);
     } else {
         push_option_none(P, key_size);
     }
@@ -380,8 +345,9 @@ static int int_to_string(paw_Env *P)
 
 static int float_hash(paw_Env *P)
 {
-    // reinterpret as integer
-    PAW_UNUSED(P);
+    // reinterpret as integer, but make -0.0 equal to 0.0
+    if (paw_float(P, 1) == 0.0)
+        paw_push_float(P, 0.0);
     return 1;
 }
 

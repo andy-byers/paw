@@ -317,9 +317,6 @@ void pawG_uninit(paw_Env *P)
         o = next;
     }
     P->gc_fixed = NULL;
-
-    // free map policies
-    pawM_free_vec(P, P->map_policies.data, P->map_policies.alloc);
 }
 
 void pawG_fix_object(paw_Env *P, Object *o)

@@ -72,8 +72,7 @@ struct JumpTarget {
 struct PolicyInfo {
     ValueId equals;
     ValueId hash;
-    int key_size;
-    int value_size;
+    paw_Type type;
 };
 
 DEFINE_LIST(struct Generator, JumpTable, struct JumpTarget)
@@ -168,11 +167,16 @@ static RttiType *lookup_type(struct Generator *G, struct IrType *type)
     return prtti != NULL ? *prtti : NULL;
 }
 
-static ItemId type2def(struct Generator *G, struct IrType *type)
+static RttiType *type2rtti(struct Generator *G, struct IrType *type)
 {
-    RttiType *ty = lookup_type(G, type);
-    paw_assert(ty != NULL && "undefined type");
-    return IrIsAdt(type) ? ty->adt.iid : ty->fdef.iid;
+    RttiType *rtti = lookup_type(G, type);
+    paw_assert(rtti != NULL && "undefined type");
+    return rtti;
+}
+
+static ItemId rtti_iid(RttiType const *rtti)
+{
+    return rtti->hdr.kind == RTTI_TYPE_ADT ? rtti->adt.iid : rtti->fdef.iid;
 }
 
 struct JumpSource {
@@ -229,8 +233,8 @@ static int temporary_reg(struct FuncState *fs, int offset)
 
 static ValueId type2global(struct Generator *G, struct IrType *type)
 {
-    ItemId const iid = type2def(G, type);
-    struct Def const *def = RTTI_DEF(ENV(G), iid);
+    RttiType const *rtti = type2rtti(G, type);
+    struct Def const *def = RTTI_DEF(ENV(G), rtti_iid(rtti));
     paw_assert(def->hdr.kind == DEF_FUNC);
     return def->func.vid;
 }
@@ -543,21 +547,27 @@ static void code_items(struct Generator *G)
     }
 }
 
-// Create policies for custom map keys
+// Create policies for maps
 static void init_policies(struct Generator *G)
 {
     paw_Env *P = ENV(G);
     struct MapPolicyList *policies = &P->map_policies;
+    ENSURE_STACK(P, 2); // "hash" and "eq"
 
     struct PolicyInfo *pinfo;
     K_LIST_FOREACH (G->policies, pinfo) {
-        pawM_grow(P, policies->data, policies->count, policies->alloc);
-        policies->data[policies->count++] = (MapPolicy){
-            .equals = P->vals.data[pinfo->equals],
-            .hash = P->vals.data[pinfo->hash],
-            .value_size = pinfo->value_size,
-            .key_size = pinfo->key_size,
-        };
+        *P->top.p++ = P->vals.data[pinfo->hash];
+        *P->top.p++ = P->vals.data[pinfo->equals];
+        paw_register_policy(P, pinfo->type);
+//
+//        pawM_grow(P, policies->data, policies->count, policies->alloc);
+//        policies->data[policies->count++] = (MapPolicy){
+//            .equals = P->vals.data[pinfo->equals],
+//            .hash = P->vals.data[pinfo->hash],
+//            .value_size = pinfo->value_size,
+//            .key_size = pinfo->key_size,
+//            .type = pinfo->type,
+//        };
     }
 }
 
@@ -841,20 +851,15 @@ static unsigned determine_map_policy(struct Generator *G, struct IrType *type)
 {
     // policy type depends on both key and value
     int const *ppolicy = ToplevelMap_get(G, G->policy_cache, type);
-    if (ppolicy != NULL)
-        return *ppolicy;
+    if (ppolicy != NULL) return *ppolicy;
 
-    struct IrType *key = ir_map_key(type);
-    struct IrType *value = ir_map_value(type);
-
-    struct TraitOwnerList *const *powners = TraitOwners_get(G->C, G->C->trait_owners, key);
-    ItemId const equals = type2def(G, IrTypeList_first(TraitOwnerList_get(*powners, TRAIT_EQUALS)));
-    ItemId const hash = type2def(G, IrTypeList_first(TraitOwnerList_get(*powners, TRAIT_HASH)));
+    struct TraitOwnerList *const *powners = TraitOwners_get(G->C, G->C->trait_owners, ir_map_key(type));
+    RttiType const *equals = type2rtti(G, IrTypeList_first(TraitOwnerList_get(*powners, TRAIT_EQUALS)));
+    RttiType const *hash = type2rtti(G, IrTypeList_first(TraitOwnerList_get(*powners, TRAIT_HASH)));
     PolicyList_push(G, G->policies, (struct PolicyInfo){
-                                        .key_size = sizeof_type(G, key),
-                                        .value_size = sizeof_type(G, value),
-                                        .equals = RTTI_DEF(ENV(G), equals)->func.vid,
-                                        .hash = RTTI_DEF(ENV(G), hash)->func.vid,
+                                        .type = type2rtti(G, type)->adt.code,
+                                        .equals = RTTI_DEF(ENV(G), rtti_iid(equals))->func.vid,
+                                        .hash = RTTI_DEF(ENV(G), rtti_iid(hash))->func.vid,
                                     });
 
     int const ipolicy = G->ipolicy++;
