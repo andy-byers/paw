@@ -326,7 +326,6 @@ static void test_syntax_error(void)
     test_compiler_status(E_INVALID_ESCAPE, "invalid_escape", "", "let x = '\\x;';");
     test_compiler_status(E_INVALID_UNICODE_ESCAPE, "invalid_unicode_escape", "", "let x = '\\u{D8O}';");
     test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "invalid_unicode_codepoint", "", "let x = '\xD8\x05';");
-    test_compiler_status(E_INVALID_INTEGER, "invalid_integer", "", "let x = 0123;");
     test_compiler_status(E_INVALID_FLOAT, "invalid_float", "", "let x = 01.0;");
     test_name_too_long();
     test_compiler_status(E_UNEXPECTED_VISIBILITY_QUALIFIER, "unexpected_visibility_qualifier", "pub use io;", "");

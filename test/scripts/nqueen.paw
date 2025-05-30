@@ -41,7 +41,7 @@ fn nq_solve(n: int) -> int {
 
 pub fn main(args: [str]) {
     let n = if #args > 1 {
-        args[1].parse_int(10)
+        args[1].parse_int().unwrap()
     } else {
         5
     };

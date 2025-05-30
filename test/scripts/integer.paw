@@ -1,5 +1,10 @@
 // integer.paw
 
+pub fn test_allows_leading_zero() {
+    assert(00 == 0);
+    assert(0123 == 123);
+}
+
 pub fn test_non_decimal() {
     assert(0b0 == 0);
     assert(0o0 == 0);
@@ -18,24 +23,49 @@ pub fn test_non_decimal() {
     assert(0xe+1 == 0xe + 1);
 }
 
-pub fn test_parse() {
-    let check = |base, s: str, want| {
-        assert(s.parse_int(base) == want);
-    };
+fn check_parse(s: str, o: Option<int>) {
+    check_parse_radix(s, o, 10);
+}
 
-    check(10, '0', 0);
-    check(10, '1', 1);
-    check(10, '10', 10);
-    check(10, '  1', 1);
-    check(10, '1  ', 1);
-    check(10, ' 1 ', 1);
-    check(10, '  -1', -1);
-    check(10, '-1  ', -1);
-    check(10, ' -1 ', -1);
+fn check_parse_radix(s: str, o: Option<int>, base: int) {
+    match (s.parse_int_radix(base), o) {
+        (Option::Some(a), Option::Some(b)) => assert(a == b),
+        (Option::None, Option::None) => {},
+        _ => panic("check failed"),
+    }
+}
+
+pub fn test_parse_valid() {
+    check_parse('0', Option::Some(0));
+    check_parse('1', Option::Some(1));
+    check_parse('10', Option::Some(10));
 
     let i = 1234567890;
-    check(10, i.to_string(), i);
-    check(10, (-i).to_string(), -i);
+    check_parse("\{i}", Option::Some(i));
+    check_parse("\{-i}", Option::Some(-i));
+}
+
+pub fn test_parse_invalid() {
+    // invalid digit
+    check_parse('  1', Option::None);
+    check_parse('1  ', Option::None);
+    check_parse('  -1', Option::None);
+    check_parse('-1  ', Option::None);
+
+    // overflow
+    check_parse('99999999999999999999', Option::None);
+    check_parse('-99999999999999999999', Option::None);
+}
+
+pub fn test_parse_radix_valid() {
+    check_parse_radix("0", Option::Some(0), 2);
+    check_parse_radix("DEF", Option::Some(3567), 16);
+    check_parse_radix("xyz", Option::Some(44027), 36);
+}
+
+pub fn test_parse_radix_invalid() {
+    check_parse_radix("0b0", Option::None, 2); // base prefix not supported
+    check_parse_radix("EFG", Option::None, 16); // digit out of range for base
 }
 
 fn apply<T>(f: fn(T), target: [T]) {
@@ -201,3 +231,4 @@ pub fn test_digit_separators() {
     assert(0xDE_F == 0xDEF);
     assert(0xDEF_ == 0xDEF);
 }
+

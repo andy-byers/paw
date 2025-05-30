@@ -29,18 +29,6 @@
 #define ERASE_TYPE(p) CAST(void *, p)
 #define BUMP_PTR(p, n) ERASE_TYPE(CAST_UPTR(p) + (n))
 
-// Check for inclusion in one of the character classes
-#define ISDIGIT(c) (kCharClassTable[(uint8_t)(c)] & 1)
-#define ISHEX(c) (kCharClassTable[(uint8_t)(c)] & 2)
-#define ISSPACE(c) (kCharClassTable[(uint8_t)(c)] & 4)
-#define ISLETTER(c) (kCharClassTable[(uint8_t)(c)] & 8)
-#define ISNONASCII(c) (kCharClassTable[(uint8_t)(c)] & 16)
-#define ISASCIIEND(c) (kCharClassTable[(uint8_t)(c)] & 32)
-#define ISNEWLINE(c) ((c) == '\r' || (c) == '\n')
-
-// Get the integer representation of a hex digit
-#define HEXVAL(c) (kHexValueTable[(uint8_t)(c)])
-
 // NOTE: Be weary of integer types that contain padding bits, i.e. standard integer
 //       types excluding (un)signed char. Comparing such types with this function
 //       (or "memcmp" in general) is not portable since the padding bits have

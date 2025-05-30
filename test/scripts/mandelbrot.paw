@@ -8,18 +8,17 @@ pub fn main(args: [str]) -> int {
         '+', '*', '#', '%', '@',
     ];
 
-    let values = [];
-    if #args > 1 {
-        values = args[1].split(',');
+    let values = if #args > 1 {
+        args[1].split(',')
     } else {
-        values = ['-2.1', '0.9', '80', '-1.3', '1.3', '24'];
-    }
-    let x0 = values[0].parse_float();
-    let x1 = values[1].parse_float();
-    let nx = values[2].parse_int(10);
-    let y0 = values[3].parse_float();
-    let y1 = values[4].parse_float();
-    let ny = values[5].parse_int(10);
+        ['-2.1', '0.9', '80', '-1.3', '1.3', '24']
+    };
+    let x0 = values[0].parse_float().unwrap();
+    let x1 = values[1].parse_float().unwrap();
+    let nx = values[2].parse_int().unwrap();
+    let y0 = values[3].parse_float().unwrap();
+    let y1 = values[4].parse_float().unwrap();
+    let ny = values[5].parse_int().unwrap();
 
     assert(nx > 0 && ny > 0);
     let dy = (y1 - y0) / (ny - 1) as float;

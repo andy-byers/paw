@@ -22,7 +22,8 @@
 #include "ssa.h"
 
 
-#define CODEGEN_ERROR(G_, Kind_, ...) pawErr_##Kind_((G_)->C, (G_)->fs->modname, __VA_ARGS__)
+// TODO: need module name, this always reports main module, but error may be elsewhere
+#define CODEGEN_ERROR(G_, Kind_, ...) pawErr_##Kind_((G_)->C, (G_)->C->modname, __VA_ARGS__)
 
 #define REG_TYPE(G, r) REG_DATA(G, r).type
 #define IS_POINTER(G, r) REG_DATA(G, r).is_pointer
@@ -40,7 +41,6 @@ struct FuncState {
     struct Mir *mir;
     MirBlock b;
     Proto *proto; // prototype being built
-    String *modname; // name of the module
     int first_local; // index of function in DynamicMem array
     int nk; // number of constants
     int nproto; // number of nested functions
@@ -60,6 +60,7 @@ typedef struct Generator {
     struct PolicyList *policies;
     struct ItemList *items;
     struct Pool *pool;
+    String *modname;
     paw_Env *P;
     int ipolicy;
 } Generator;
@@ -301,7 +302,7 @@ static Proto *push_proto(struct Generator *G, String *name)
     Value *pv = pawC_push0(P);
     Proto *proto = pawV_new_proto(P);
     V_SET_OBJECT(pv, proto);
-    proto->modname = G->C->modname;
+    proto->modname = G->C->modname; // TODO: should be G->modname
     proto->name = name;
     return proto;
 }
@@ -377,7 +378,6 @@ static void enter_function(struct Generator *G, struct FuncState *fs, struct Mir
     G->V->mir = mir;
     *fs = (struct FuncState){
         .kind = mir->fn_kind,
-        .modname = proto->modname,
         .proto = proto,
         .outer = G->fs,
         .mir = mir,

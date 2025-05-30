@@ -397,16 +397,16 @@ static void driver(char const *name, void (*callback)(paw_Env *))
 
 static int parse_int(paw_Env *P, char const *text)
 {
-    paw_Int i;
-    return pawV_parse_int(P, text, 0, &i);
+    paw_Int discard;
+    return pawV_parse_int(P, text, 10, &discard);
 }
 
 static void roundtrip_int(paw_Env *P, paw_Int i);
 
-static void pac_int_aux(paw_Env *P, char const *text, paw_Int result)
+static void expect_int_aux(paw_Env *P, int base, char const *text, paw_Int result)
 {
     paw_Int i;
-    check(PAW_OK == pawV_parse_int(P, text, 0, &i));
+    check(PAW_OK == pawV_parse_int(P, text, base, &i));
     check(i == result);
 }
 
@@ -415,44 +415,46 @@ static void roundtrip_int(paw_Env *P, paw_Int i)
     paw_push_int(P, i);
     paw_int_to_string(P, -1, NULL);
     char const *str = paw_string(P, -1);
-    pac_int_aux(P, ERASE_TYPE(str), i);
+    expect_int_aux(P, 10, ERASE_TYPE(str), i);
     paw_pop(P, 1);
 }
 
-static void parse_and_check_int(paw_Env *P, char const *text, paw_Int result)
+static void expect_int_radix(paw_Env *P, int base, char const *text, paw_Int result)
 {
-    pac_int_aux(P, text, result);
+    expect_int_aux(P, base, text, result);
+    roundtrip_int(P, result);
+}
+
+static void expect_int(paw_Env *P, char const *text, paw_Int result)
+{
+    expect_int_aux(P, 10, text, result);
     roundtrip_int(P, result);
 }
 
 static void test_parse_int(paw_Env *P)
 {
     // able to parse PAW_INT_MIN directly, since we consider the '-' to be part of the number
-    parse_and_check_int(P, "-9223372036854775808", INT64_MIN);
-    parse_and_check_int(P, "9223372036854775807", INT64_MAX);
-    parse_and_check_int(P, "0b111111111111111111111111111111111111111111111111111111111111111", INT64_MAX);
-    parse_and_check_int(P, "-0b1000000000000000000000000000000000000000000000000000000000000000", INT64_MIN);
-    parse_and_check_int(P, "0o777777777777777777777", INT64_MAX);
-    parse_and_check_int(P, "-0o1000000000000000000000", INT64_MIN);
-    parse_and_check_int(P, "0x7FFFFFFFFFFFFFFF", INT64_MAX);
-    parse_and_check_int(P, "-0x8000000000000000", INT64_MIN);
-    parse_and_check_int(P, "  -1", -1); // sign must touch first digit
-    parse_and_check_int(P, " +2  ", 2);
+    expect_int(P, "-9223372036854775808", INT64_MIN);
+    expect_int(P, "9223372036854775807", INT64_MAX);
 
+    expect_int_radix(P, 2, "111111111111111111111111111111111111111111111111111111111111111", INT64_MAX);
+    expect_int_radix(P, 2, "-1000000000000000000000000000000000000000000000000000000000000000", INT64_MIN);
+    expect_int_radix(P, 8, "777777777777777777777", INT64_MAX);
+    expect_int_radix(P, 8, "-1000000000000000000000", INT64_MIN);
+    expect_int_radix(P, 16, "7FFFFFFFFFFFFFFF", INT64_MAX);
+    expect_int_radix(P, 16, "-8000000000000000", INT64_MIN);
+
+    check(PAW_ESYNTAX == parse_int(P, "  -1"));
+    check(PAW_ESYNTAX == parse_int(P, "- 1"));
+    check(PAW_ESYNTAX == parse_int(P, " +2  "));
     check(PAW_ESYNTAX == parse_int(P, "--1"));
     check(PAW_ESYNTAX == parse_int(P, "- 1"));
-    check(PAW_ESYNTAX == parse_int(P, "01"));
     check(PAW_ESYNTAX == parse_int(P, "123 4"));
     check(PAW_ESYNTAX == parse_int(P, "123.4"));
     check(PAW_EOVERFLOW == parse_int(P, "9223372036854775808"));
     check(PAW_EOVERFLOW == parse_int(P, "-9223372036854775809"));
     check(PAW_EOVERFLOW == parse_int(P, "999999999999999999999999999999999999999"));
     check(PAW_EOVERFLOW == parse_int(P, "-999999999999999999999999999999999999999"));
-
-    paw_Int i;
-    check(PAW_EVALUE == pawV_parse_int(P, "0b0", 10 /* wrong base */, &i));
-    check(PAW_EVALUE == pawV_parse_int(P, "0o0", 10 /* wrong base */, &i));
-    check(PAW_EVALUE == pawV_parse_int(P, "0x0", 10 /* wrong base */, &i));
 }
 
 static int parse_float(paw_Env *P, char const *text)
@@ -461,7 +463,7 @@ static int parse_float(paw_Env *P, char const *text)
     return pawV_parse_float(P, text, &f);
 }
 
-static void pac_float_aux(paw_Env *P, char const *text, paw_Float result)
+static void expect_float_aux(paw_Env *P, char const *text, paw_Float result)
 {
     paw_Float f;
     check(PAW_OK == pawV_parse_float(P, text, &f));
@@ -473,13 +475,13 @@ static void roundtrip_float(paw_Env *P, paw_Float f)
     paw_push_float(P, f);
     paw_float_to_string(P, -1, NULL);
     char const *str = paw_string(P, -1);
-    pac_float_aux(P, ERASE_TYPE(str), f);
+    expect_float_aux(P, ERASE_TYPE(str), f);
     paw_pop(P, 1);
 }
 
-static void parse_and_check_float(paw_Env *P, char const *text, paw_Float result)
+static void expect_float(paw_Env *P, char const *text, paw_Float result)
 {
-    pac_float_aux(P, text, result);
+    expect_float_aux(P, text, result);
     roundtrip_float(P, result);
 }
 
@@ -493,17 +495,17 @@ static void test_parse_float(paw_Env *P)
     check(PAW_OK == parse_float(P, "1.e+23"));
 
     // small integers and powers of 2 can be represented exactly
-    parse_and_check_float(P, "0.0", 0.0);
-    parse_and_check_float(P, "1.0", 1.0);
-    parse_and_check_float(P, "-1.0", -1.0);
-    parse_and_check_float(P, "1.0e+2", 100.0);
-    parse_and_check_float(P, "-10000e-2", -100.0);
-    parse_and_check_float(P, "-9223372036854775808.0", (paw_Float)INT64_MIN);
-    parse_and_check_float(P, "9223372036854775808.0", -((paw_Float)INT64_MIN));
-    parse_and_check_float(P, "  -1.0", -1.0); // sign must touch first digit
-    parse_and_check_float(P, " +2.0  ", 2.0);
-    parse_and_check_float(P, "123", 123.0);
+    expect_float(P, "0.0", 0.0);
+    expect_float(P, "1.0", 1.0);
+    expect_float(P, "-1.0", -1.0);
+    expect_float(P, "1.0e+2", 100.0);
+    expect_float(P, "-10000e-2", -100.0);
+    expect_float(P, "-9223372036854775808.0", (paw_Float)INT64_MIN);
+    expect_float(P, "9223372036854775808.0", -((paw_Float)INT64_MIN));
+    expect_float(P, "123", 123.0);
 
+    check(PAW_ESYNTAX == parse_float(P, "  -1.0"));
+    check(PAW_ESYNTAX == parse_float(P, " +2.0  "));
     check(PAW_ESYNTAX == parse_float(P, "--1"));
     check(PAW_ESYNTAX == parse_float(P, "- 1"));
     check(PAW_ESYNTAX == parse_float(P, "01.0"));

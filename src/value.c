@@ -24,20 +24,6 @@ void pawV_index_error(paw_Env *P, paw_Int index, size_t length, char const *what
                index, what, PAW_CAST_INT(length));
 }
 
-static int check_suffix(char const *p, char const *base)
-{
-    while (*p != '\0') {
-        if (!ISSPACE(*p++))
-            return -1;
-    }
-    // If one of the pawV_parse_* functions are called on a string like " ",
-    // then all of the checks will pass, despite " " not being a valid number.
-    // Make sure that doesn't happen.
-    if (p == base)
-        return -1;
-    return 0;
-}
-
 static void int_to_string(paw_Env *P, paw_Int i, Value *out)
 {
     char temp[32];
@@ -241,43 +227,49 @@ static int char2base(char c)
     }
 }
 
-#define is_fp(c) (c == 'e' || c == 'E' || c == '.')
+#define IS_FP(c) (c == 'e' || c == 'E' || c == '.')
 
-#define SKIP_SPACES(p)    \
-    while (ISSPACE(*(p))) \
-        ++(p);
-
-int pawV_parse_uint64(paw_Env *P, char const *text, int base, uint64_t *out)
+static unsigned char_to_digit(char c)
 {
-    int b = 10;
-    SKIP_SPACES(text);
+    static const unsigned char LOOKUP[0x100] = {
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
+        0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x21, 0x22, 0x23, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
+        0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x21, 0x22, 0x23, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    };
+
+    return LOOKUP[(unsigned)c];
+}
+
+int pawV_parse_uint(paw_Env *P, char const *text, int base, paw_Uint *out)
+{
+    paw_Uint const b = (paw_Uint)base;
     char const *p = text;
-    if (p[0] == '0') {
-        if ((b = char2base(p[1])) > 0) {
-            if (base != 0 && b != base) {
-                return PAW_EVALUE;
-            }
-            p += 2; // skip base prefix
-        } else if (p[1] == '\0') {
-            *out = 0;
-            return PAW_OK;
-        } else {
+
+    if (b < 2 || b > 36)
+        return PAW_EVALUE;
+
+    paw_Uint value = 0;
+    for (; *p; ++p) {
+        paw_Uint const v = char_to_digit(*p);
+        if (v >= b) {
             return PAW_ESYNTAX;
-        }
-    }
-    base = b;
-    uint64_t value = 0;
-    for (; ISHEX(*p); ++p) {
-        unsigned const v = HEXVAL(*p);
-        if (v >= CAST(unsigned, base)) {
-            return PAW_ESYNTAX;
-        } else if (value > (UINT64_MAX - v) / base) {
+        } else if (value > (PAW_UINT_MAX - v) / b) {
             return PAW_EOVERFLOW;
         }
-        value = value * base + v;
-    }
-    if (check_suffix(p, text)) {
-        return PAW_ESYNTAX;
+        value = value * b + v;
     }
     *out = value;
     return PAW_OK;
@@ -296,55 +288,43 @@ static paw_Bool parse_negative(char const **ptext)
 int pawV_parse_int(paw_Env *P, char const *text, int base, paw_Int *out)
 {
     char const *original = text;
-    SKIP_SPACES(text);
     paw_Bool const negative = parse_negative(&text);
-    if (!ISHEX(*text))
-        return PAW_ESYNTAX;
 
-    uint64_t u;
-    int const status = pawV_parse_uint64(P, text, base, &u);
-    if (status != PAW_OK)
-        return status;
-    if (u > CAST(uint64_t, PAW_INT_MAX) + negative) {
+    paw_Uint u;
+    int const status = pawV_parse_uint(P, text, base, &u);
+    if (status != PAW_OK) return status;
+
+    if (u > (paw_Uint)PAW_INT_MAX + negative)
         return PAW_EOVERFLOW;
-    }
-    *out = negative
-               ? PAW_CAST_INT(-u)
-               : PAW_CAST_INT(u);
+
+    *out = PAW_CAST_INT(negative ? -u : u);
     return PAW_OK;
 }
 
-#define SKIP_DIGITS(p)      \
-    while (ISDIGIT(*(p))) { \
-        ++(p);              \
-    }
+#define IS_DIGIT(Char_) (char_to_digit((Char_)) < 10)
 
 int pawV_parse_float(paw_Env *P, char const *text, paw_Float *out)
 {
     char const *original = text;
-    SKIP_SPACES(text);
     paw_Bool const negative = parse_negative(&text);
 
     // First, validate the number format.
     char const *p = text;
-    if (p[0] == '0' && p[1] != '\0' && !is_fp(p[1])) {
+    if (p[0] == '0' && p[1] != '\0' && !IS_FP(p[1]))
         return PAW_ESYNTAX;
-    }
-    SKIP_DIGITS(p)
+
+    while (IS_DIGIT(*p)) ++p;
 
     if (*p == '.') {
         ++p;
-        SKIP_DIGITS(p)
+        while (IS_DIGIT(*p)) ++p;
     }
     if (*p == 'e' || *p == 'E') {
         p += 1 + (p[1] == '+' || p[1] == '-');
-        if (!ISDIGIT(*p))
-            return PAW_ESYNTAX;
-        SKIP_DIGITS(p)
+        if (!IS_DIGIT(*p)) return PAW_ESYNTAX;
+        while (IS_DIGIT(*p)) ++p;
     }
-    if (check_suffix(p, text)) {
-        return PAW_ESYNTAX;
-    }
+    if (*p != '\0') return PAW_ESYNTAX;
     paw_Float const f = strtod(text, NULL);
     *out = negative ? -f : f;
     return PAW_OK;

@@ -1987,8 +1987,8 @@ static void skip_hashbang(struct Lex *lex)
         skip(lex); // skip '!' token
         while (!test(lex, TK_END)) {
             char const c = *lex->ptr;
-            skip(lex); // skip line
-            if (ISNEWLINE(c))
+            skip(lex);
+            if (c == '\r' || c == '\n')
                 break;
         }
     }

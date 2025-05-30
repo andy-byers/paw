@@ -50,7 +50,7 @@ fn matmul(n: int, a: [[float]], b: [[float]]) -> [[float]] {
 pub fn main(args: [str]) {
     let n = 100;
     if #args > 1 {
-        n = args[1].parse_int(10);
+        n = args[1].parse_int().unwrap();
     }
     let a = matgen(n);
     let b = matgen(n);

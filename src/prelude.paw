@@ -56,8 +56,9 @@ pub struct float: Hash + Equals + Compare {
 }
 
 pub struct str: Hash + Equals + Compare {
-    #[extern] pub fn parse_int(self, base: int) -> int;
-    #[extern] pub fn parse_float(self) -> float;
+    #[extern] pub fn parse_int(self) -> Option<int>;
+    #[extern] pub fn parse_int_radix(self, base: int) -> Option<int>;
+    #[extern] pub fn parse_float(self) -> Option<float>;
     #[extern] pub fn split(self, sep: str) -> [str];
     #[extern] pub fn join(self, seq: [str]) -> str;
     #[extern] pub fn find(self, target: str) -> Option<int>;

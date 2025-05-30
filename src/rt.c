@@ -245,11 +245,6 @@ void pawR_str_get(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value c
     V_SET_OBJECT(ra, res);
 }
 
-static void list_bounds_check(paw_Env *P, Tuple const *list, paw_Int index)
-{
-
-}
-
 void pawR_list_getp(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc)
 {
     Tuple *list = V_TUPLE(*rb);

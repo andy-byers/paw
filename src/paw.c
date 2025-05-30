@@ -71,6 +71,10 @@ static struct Option {
 };
 // clang-format on
 
+#define IS_SPACE(Char_) ((Char_) == ' ' || (Char_) == '\t' || (Char_) == '\f'  \
+                         || (Char_) == '\v' || (Char_) == '\r' || (Char_) == '\n')
+
+
 static void info(char const *fmt, ...)
 {
     if (!s_opt.q) {
@@ -92,7 +96,7 @@ _Noreturn static void error(int status, char const *fmt, ...)
     exit(status);
 }
 
-#define GETOPT(c, v) (--c, ++v, v[-1])
+#define GETOPT(Argc_, Argv_) (--(Argc_), ++(Argv_), (Argv_)[-1])
 
 // Parse commandline options
 // Adjusts 'argv' to point to the first argument to the paw script, and
@@ -170,7 +174,7 @@ static paw_Bool advance_ignore_case(char const **pp, char const *prefix)
 
 static void parse_debug_string(void)
 {
-#define SKIP_SPACES(p) while (ISSPACE(p[0])) ++p
+#define SKIP_SPACES(Ptr_) while (IS_SPACE(*(Ptr_))) ++(Ptr_)
 
     char const *p = s_opt.d;
     paw_assert(p != NULL);

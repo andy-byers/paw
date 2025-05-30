@@ -8,16 +8,12 @@ fn fib(n: int) -> int {
 }
 
 pub fn main(args: [str]) {
-    let n = 35;
-    if #args > 1 {
-        n = args[1].parse_int(10);
-    }
+    let n = if #args > 1 {
+        args[1].parse_int().unwrap()
+    } else {
+        35
+    };
     let r = fib(n);
 
-    print('fib('); 
-    print(n.to_string());print(') = '); 
-    print(r.to_string());print('\n');
-//    print('fib(' + 
-//        n.to_string() + ') = ' + 
-//        r.to_string() + '\n');
+    print("fib(\{n}) = \{r}\n");
 }

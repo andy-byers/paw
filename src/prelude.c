@@ -199,7 +199,7 @@ static int map_set(paw_Env *P)
     return 1 + value_size;
 }
 
-static int map_iter_next(paw_Env *P)
+static int map_iterator_next(paw_Env *P)
 {
     paw_get_field(P, 1, 0); // 2: self.map
     paw_get_field(P, 1, 1); // 3: self.index
@@ -234,7 +234,7 @@ static char const *find_substr(char const *str, size_t nstr, char const *sub, si
     return NULL;
 }
 
-static int string_find(paw_Env *P)
+static int str_find(paw_Env *P)
 {
     String const *str = V_STRING(*CF_BASE(1));
     String const *find = V_STRING(*CF_BASE(2));
@@ -250,7 +250,7 @@ static int string_find(paw_Env *P)
     return 1 + 1;
 }
 
-static int string_split(paw_Env *P)
+static int str_split(paw_Env *P)
 {
     String const *sep = V_STRING(*CF_BASE(2));
     String *str = V_STRING(*CF_BASE(1));
@@ -280,7 +280,7 @@ static int string_split(paw_Env *P)
     return 1;
 }
 
-static int string_join(paw_Env *P)
+static int str_join(paw_Env *P)
 {
     String *sep = V_STRING(*CF_BASE(1));
 
@@ -305,7 +305,7 @@ static int string_join(paw_Env *P)
     return 1;
 }
 
-static int string_starts_with(paw_Env *P)
+static int str_starts_with(paw_Env *P)
 {
     String const *str = V_STRING(*CF_BASE(1));
     String const *prefix = V_STRING(*CF_BASE(2));
@@ -316,7 +316,7 @@ static int string_starts_with(paw_Env *P)
     return 1;
 }
 
-static int string_ends_with(paw_Env *P)
+static int str_ends_with(paw_Env *P)
 {
     String const *str = V_STRING(*CF_BASE(1));
     String const *suffix = V_STRING(*CF_BASE(2));
@@ -357,41 +357,45 @@ static int float_to_string(paw_Env *P)
     return 1;
 }
 
-static int string_hash(paw_Env *P)
+static int str_hash(paw_Env *P)
 {
     // reinterpret pointer to interned string as integer
     PAW_UNUSED(P);
     return 1;
 }
 
-static int string_parse_float(paw_Env *P)
+static int str_parse_float(paw_Env *P)
 {
-    paw_Float f;
+    Value result;
     char const *str = paw_string(P, 1);
-    int const status = pawV_parse_float(P, str, &f);
-    if (status != PAW_OK)
-        pawR_error(P, PAW_ESYNTAX, "invalid float '%s'", str);
-    paw_push_float(P, f);
-    return 1;
+    int const status = pawV_parse_float(P, str, &V_FLOAT(result));
+    if (status == PAW_OK) {
+        push_option_some(P, &result, 1);
+    } else {
+        push_option_none(P, 1);
+    }
+    return 1 + 1;
 }
 
-static int string_parse_int(paw_Env *P)
+static int str_parse_int_radix(paw_Env *P)
 {
     char const *str = paw_string(P, 1);
     paw_Int const base = paw_int(P, 2);
-    if (base > INT_MAX) {
-        pawR_error(P, PAW_EOVERFLOW, "base '%I' is too large", base);
-    }
 
-    paw_Int i;
-    int const rc = pawV_parse_int(P, str, CAST(int, base), &i);
-    if (rc == PAW_ESYNTAX) {
-        pawR_error(P, PAW_ESYNTAX, "invalid integer '%s'", str);
-    } else if (rc == PAW_EOVERFLOW) {
-        pawR_error(P, PAW_EOVERFLOW, "integer '%s' is out of range", str);
+    Value result;
+    int const status = pawV_parse_int(P, str, CAST(int, base), &V_INT(result));
+    if (status == PAW_OK) {
+        push_option_some(P, &result, 1);
+    } else {
+        push_option_none(P, 1);
     }
-    paw_push_int(P, i);
-    return 1;
+    return 1 + 1;
+}
+
+static int str_parse_int(paw_Env *P)
+{
+    paw_push_int(P, 10);
+    return str_parse_int_radix(P);
 }
 
 static int map_length(paw_Env *P)
@@ -402,12 +406,15 @@ static int map_length(paw_Env *P)
 
 static int map_get_or(paw_Env *P)
 {
+    int const value_size = paw_map_value_size(P, 1);
+
     Tuple *m = V_TUPLE(*CF_BASE(1));
     Value const *key = CF_BASE(2);
-    Value const *pv = pawMap_get(P, m, key);
-    if (pv != NULL)
-        P->top.p[-1] = *pv;
-    return 1;
+    Value const *value = pawMap_get(P, m, key);
+    if (value != NULL)
+        push_values(P, value, value_size);
+
+    return value_size;
 }
 
 static int map_erase(paw_Env *P)
@@ -431,14 +438,15 @@ void l_import_prelude(paw_Env *P)
     pawL_add_extern_method(P, "prelude", "int", "to_string", int_to_string);
     pawL_add_extern_method(P, "prelude", "float", "hash", float_hash);
     pawL_add_extern_method(P, "prelude", "float", "to_string", float_to_string);
-    pawL_add_extern_method(P, "prelude", "str", "hash", string_hash);
-    pawL_add_extern_method(P, "prelude", "str", "parse_int", string_parse_int);
-    pawL_add_extern_method(P, "prelude", "str", "parse_float", string_parse_float);
-    pawL_add_extern_method(P, "prelude", "str", "split", string_split);
-    pawL_add_extern_method(P, "prelude", "str", "join", string_join);
-    pawL_add_extern_method(P, "prelude", "str", "find", string_find);
-    pawL_add_extern_method(P, "prelude", "str", "starts_with", string_starts_with);
-    pawL_add_extern_method(P, "prelude", "str", "ends_with", string_ends_with);
+    pawL_add_extern_method(P, "prelude", "str", "hash", str_hash);
+    pawL_add_extern_method(P, "prelude", "str", "parse_int", str_parse_int);
+    pawL_add_extern_method(P, "prelude", "str", "parse_int_radix", str_parse_int_radix);
+    pawL_add_extern_method(P, "prelude", "str", "parse_float", str_parse_float);
+    pawL_add_extern_method(P, "prelude", "str", "split", str_split);
+    pawL_add_extern_method(P, "prelude", "str", "join", str_join);
+    pawL_add_extern_method(P, "prelude", "str", "find", str_find);
+    pawL_add_extern_method(P, "prelude", "str", "starts_with", str_starts_with);
+    pawL_add_extern_method(P, "prelude", "str", "ends_with", str_ends_with);
     pawL_add_extern_method(P, "prelude", "List", "length", list_length);
     pawL_add_extern_method(P, "prelude", "List", "get", list_get);
     pawL_add_extern_method(P, "prelude", "List", "set", list_set);
@@ -454,7 +462,7 @@ void l_import_prelude(paw_Env *P)
     pawL_add_extern_method(P, "prelude", "Option", "unwrap", enum_unwrap);
     pawL_add_extern_method(P, "prelude", "Result", "unwrap", enum_unwrap);
     pawL_add_extern_method(P, "prelude", "Result", "unwrap_err", result_unwrap_err);
-    pawL_add_extern_method(P, "prelude", "MapIterator", "next", map_iter_next);
+    pawL_add_extern_method(P, "prelude", "MapIterator", "next", map_iterator_next);
     paw_pop(P, 1); // paw.symbols
 
     pawL_file_reader(P, PAWL_STDLIB_PATH(PAWL_PRELUDE_NAME));

@@ -5,7 +5,7 @@
 // paw API:
 //
 // Most API functions operate on values located on the runtime stack. The
-// particular value is specified by an `int index` parameter. When nonnegative,
+// particular value is specified by an integer index parameter. When nonnegative,
 // the index specifies a value relative to the base of the current call frame,
 // with an index of 0 representing the first value. Negative indices count
 // backward from the last value pushed onto the stack, with -1 representing the
@@ -299,8 +299,8 @@ static inline int paw_abs_index(paw_Env *P, int index)
     return index + (index < 0 ? paw_get_count(P) : 0);
 }
 
-char const *paw_int_to_string(paw_Env *P, int index, size_t *plen);
-char const *paw_float_to_string(paw_Env *P, int index, size_t *plen);
+char const *paw_int_to_string(paw_Env *P, int index, size_t *plength);
+char const *paw_float_to_string(paw_Env *P, int index, size_t *plength);
 
 
 #define PAW_HOOKCALL 1

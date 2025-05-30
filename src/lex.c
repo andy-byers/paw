@@ -6,11 +6,66 @@
 #include "compile.h"
 #include "error.h"
 
+#define SCRATCH(X_) ((X_)->dm->scratch)
+#define SOURCE(X_) ((X_)->dm->source)
+
 #define SAVE_AND_NEXT(X_) save(X_, next(X_))
 #define IS_EOF(X_) (CAST(uint8_t, *(X_)->ptr) == TK_END)
 #define IS_NEWLINE(X_) (*(X_)->ptr == '\r' || *(X_)->ptr == '\n')
 
 #define LEX_ERROR(X_, Kind_, ...) pawErr_##Kind_((X_)->C, (X_)->modname, __VA_ARGS__)
+
+// Check for inclusion in one of the character classes
+#define ISDIGIT(Char_) (kCharClassTable[(uint8_t)(Char_)] & 1)
+#define ISHEX(Char_) (kCharClassTable[(uint8_t)(Char_)] & 2)
+#define ISSPACE(Char_) (kCharClassTable[(uint8_t)(Char_)] & 4)
+#define ISLETTER(Char_) (kCharClassTable[(uint8_t)(Char_)] & 8)
+#define ISNONASCII(Char_) (kCharClassTable[(uint8_t)(Char_)] & 16)
+#define ISASCIIEND(Char_) (kCharClassTable[(uint8_t)(Char_)] & 32)
+#define ISNEWLINE(Char_) ((Char_) == '\r' || (Char_) == '\n')
+
+// Get the integer representation of a hex digit
+#define HEXVAL(Char_) (kHexValueTable[(uint8_t)(Char_)])
+
+// clang-format off
+const uint8_t kCharClassTable[256] = {
+     32,  32,  32,  32,  32,  32,  32,  32,  32,  36,  36,  36,  36,  36,  32,  32,
+     32,  32,  32,  32,  32,  32,  32,  32,  32,  32,  32,  32,  32,  32,  32,  32,
+      4,   0,  32,   0,   0,   0,   0,  32,   0,   0,   0,   0,   0,   0,   0,   0,
+      3,   3,   3,   3,   3,   3,   3,   3,   3,   3,   0,   0,   0,   0,   0,   0,
+      0,  10,  10,  10,  10,  10,  10,   8,   8,   8,   8,   8,   8,   8,   8,   8,
+      8,   8,   8,   8,   8,   8,   8,   8,   8,   8,   8,   0,  32,   0,   0,   8,
+      0,  10,  10,  10,  10,  10,  10,   8,   8,   8,   8,   8,   8,   8,   8,   8,
+      8,   8,   8,   8,   8,   8,   8,   8,   8,   8,   8,   0,   0,   0,   0,   0,
+     16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,
+     16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,
+     16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,
+     16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,
+     16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,
+     16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,
+     16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,
+     16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  48,
+};
+
+const uint8_t kHexValueTable[256] = {
+     0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+     0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  0,  0,  0,  0,  0,  0,
+     0, 10, 11, 12, 13, 14, 15,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+     0, 10, 11, 12, 13, 14, 15,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+};
+// clang-format on
 
 static struct SourceSpan span_from(struct Lex *lex, struct SourceLoc start)
 {
@@ -92,9 +147,9 @@ static void push_string_state(struct Lex *X, char quote)
 
 static void save(struct Lex *X, char c)
 {
-    struct DynamicMem *dm = X->dm;
-    pawM_grow(ENV(X), dm->scratch.data, dm->scratch.count, dm->scratch.alloc);
-    dm->scratch.data[dm->scratch.count++] = c;
+    struct StringBuffer *b = &SCRATCH(X);
+    pawM_grow(ENV(X), b->data, b->count, b->alloc);
+    b->data[b->count++] = c;
 }
 
 static char next(struct Lex *X)
@@ -160,7 +215,7 @@ static struct Token make_float(struct Lex *X)
 
 static struct Token make_string(struct Lex *X, struct SourceLoc start, TokenKind kind)
 {
-    struct StringBuffer *b = &X->dm->scratch;
+    struct StringBuffer *b = &SCRATCH(X);
     struct Token t = make_token(kind, start, X->loc);
     String *s = pawP_scan_nstring(X->C, X->strings, b->data, CAST_SIZE(b->count));
     V_SET_OBJECT(&t.value, s);
@@ -350,17 +405,17 @@ static struct Token consume_string_part(struct Lex *X, struct SourceLoc start, c
     goto handle_ascii;
 }
 
-static struct Token consume_int_aux(struct Lex *X, struct SourceLoc start, char const *base_name)
+static struct Token consume_int_aux(struct Lex *X, struct SourceLoc start, int base, char const *base_name)
 {
     paw_Env *P = ENV(X);
-    struct DynamicMem *dm = X->dm;
+    struct StringBuffer *b = &SCRATCH(X);
     paw_Int i;
 
-    int const rc = pawV_parse_int(P, dm->scratch.data, 0, &i);
+    int const rc = pawV_parse_int(P, b->data, base, &i);
     if (rc == PAW_EOVERFLOW) {
-        LEX_ERROR(X, integer_out_of_range, start, dm->scratch.data);
+        LEX_ERROR(X, integer_out_of_range, start, b->data);
     } else if (rc == PAW_ESYNTAX) {
-        LEX_ERROR(X, invalid_integer, start, base_name, dm->scratch.data);
+        LEX_ERROR(X, invalid_integer, start, base_name, b->data);
     }
     return (struct Token){
         .span = span_from(X, start),
@@ -371,11 +426,6 @@ static struct Token consume_int_aux(struct Lex *X, struct SourceLoc start, char 
 
 static struct Token consume_bin_int(struct Lex *X, struct SourceLoc start, const char *begin)
 {
-    struct DynamicMem *dm = X->dm;
-
-    save(X, begin[0]);
-    save(X, begin[1]);
-
     if (!test2(X, "01"))
         LEX_ERROR(X, expected_integer_digit, X->loc, "binary");
 
@@ -390,16 +440,11 @@ static struct Token consume_bin_int(struct Lex *X, struct SourceLoc start, const
     }
 
     save(X, '\0');
-    return consume_int_aux(X, start, "binary");
+    return consume_int_aux(X, start, 2, "binary");
 }
 
 static struct Token consume_oct_int(struct Lex *X, struct SourceLoc start, const char *begin)
 {
-    struct DynamicMem *dm = X->dm;
-
-    save(X, begin[0]);
-    save(X, begin[1]);
-
     if (*X->ptr < '0' || *X->ptr > '7')
         LEX_ERROR(X, expected_integer_digit, X->loc, "octal");
 
@@ -414,16 +459,11 @@ static struct Token consume_oct_int(struct Lex *X, struct SourceLoc start, const
     }
 
     save(X, '\0');
-    return consume_int_aux(X, start, "octal");
+    return consume_int_aux(X, start, 8, "octal");
 }
 
 static struct Token consume_hex_int(struct Lex *X, struct SourceLoc start, const char *begin)
 {
-    struct DynamicMem *dm = X->dm;
-
-    save(X, begin[0]);
-    save(X, begin[1]);
-
     if (!ISHEX(*X->ptr))
         LEX_ERROR(X, expected_integer_digit, X->loc, "hexadecimal");
 
@@ -438,7 +478,7 @@ static struct Token consume_hex_int(struct Lex *X, struct SourceLoc start, const
     }
 
     save(X, '\0');
-    return consume_int_aux(X, start, "hexadecimal");
+    return consume_int_aux(X, start, 16, "hexadecimal");
 }
 
 static void save_parsed_digits(struct Lex *X, const char *begin)
@@ -453,21 +493,7 @@ static void save_parsed_digits(struct Lex *X, const char *begin)
 static struct Token consume_decimal_int(struct Lex *X, struct SourceLoc start, const char *begin)
 {
     save_parsed_digits(X, begin);
-
-    paw_Env *P = ENV(X);
-    struct DynamicMem *dm = X->dm;
-    paw_Int i;
-
-    int const rc = pawV_parse_int(P, dm->scratch.data, 0, &i);
-    if (rc == PAW_EOVERFLOW)
-        LEX_ERROR(X, integer_out_of_range, start, dm->scratch.data);
-    if (rc == PAW_ESYNTAX)
-        LEX_ERROR(X, invalid_integer, start, "decimal", dm->scratch.data);
-    return (struct Token){
-        .span = span_from(X, start),
-        .kind = TK_INTEGER,
-        .value.i = i,
-    };
+    return consume_int_aux(X, start, 10, "decimal");
 }
 
 static struct Token consume_float(struct Lex *X, struct SourceLoc start, const char *begin)
@@ -475,12 +501,12 @@ static struct Token consume_float(struct Lex *X, struct SourceLoc start, const c
     save_parsed_digits(X, begin);
 
     paw_Env *P = ENV(X);
-    struct DynamicMem *dm = X->dm;
+    struct StringBuffer b = SCRATCH(X);
     paw_Float f;
 
-    int const rc = pawV_parse_float(ENV(X), dm->scratch.data, &f);
+    int const rc = pawV_parse_float(ENV(X), b.data, &f);
     if (rc != PAW_OK)
-        LEX_ERROR(X, invalid_float, start, dm->scratch.data);
+        LEX_ERROR(X, invalid_float, start, b.data);
     return (struct Token){
         .span = span_from(X, start),
         .kind = TK_FLOAT,
@@ -560,8 +586,8 @@ try_again:
     struct SourceLoc start = X->loc;
 
     // cast to avoid sign extension
-    struct Token token = T((uint8_t)*X->ptr);
-    X->dm->scratch.count = 0;
+    struct Token token = T((unsigned char)*X->ptr);
+    SCRATCH(X).count = 0;
     switch (token.kind) {
         case '\'':
         case '"':
@@ -710,7 +736,7 @@ try_again:
 static void read_source(struct Lex *X)
 {
     paw_Env *P = ENV(X);
-    struct SourceBuffer *b = &X->dm->source;
+    struct SourceBuffer *b = &SOURCE(X);
     size_t next, size = 0;
 
     for (;;) {
@@ -766,12 +792,12 @@ TokenKind pawX_peek(struct Lex *X)
 void pawX_set_source(struct Lex *X, paw_Reader input, void *ud)
 {
     paw_Env *P = ENV(X);
-    struct DynamicMem *dm = X->dm;
-    if (dm->scratch.alloc < INITIAL_SCRATCH) {
-        pawM_resize(P, dm->scratch.data, dm->scratch.alloc, INITIAL_SCRATCH);
-        dm->scratch.alloc = INITIAL_SCRATCH;
+    struct StringBuffer *b = &SCRATCH(X);
+    if (b->alloc < INITIAL_SCRATCH) {
+        pawM_resize(P, b->data, b->alloc, INITIAL_SCRATCH);
+        b->alloc = INITIAL_SCRATCH;
     }
-    dm->scratch.count = 0;
+    b->count = 0;
 
     X->ud = ud;
     X->input = input;

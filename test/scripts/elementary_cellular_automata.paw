@@ -20,16 +20,16 @@ pub fn main(args: [str]) {
     ];    
 
     let num = if #args >= 2 {
-        args[1].parse_int(10)
+        args[1].parse_int().unwrap()
     } else {
         110
     };
 
     let (rows, cols) = if #args >= 3 {
         let parts = args[2].split(",");
-        let m = parts[0].parse_int(10);
+        let m = parts[0].parse_int().unwrap();
         let n = if #parts == 2 { 
-            parts[1].parse_int(10) 
+            parts[1].parse_int().unwrap() 
         } else { 
             m 
         };
