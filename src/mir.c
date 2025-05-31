@@ -538,7 +538,8 @@ static void rename_and_filter(struct Traversal *X, BlockMap *map, struct MirBloc
     blocks->count -= removed;
 }
 
-// Renumber basic blocks so that "mir_bb_data" continues to work
+// Renumber basic blocks so that "mir_bb_data" continues to work after a call
+// to pawMir_remove_unreachable_blocks
 static void renumber_block_refs(struct Traversal *X, BlockMap *map, struct MirBlockData *data)
 {
     rename_and_filter(X, map, data->predecessors, data);

@@ -786,5 +786,5 @@ paw_Bool pawP_push_callback(struct Compiler *C, char const *name)
 {
     paw_Env *P = ENV(C);
     paw_push_string(P, name);
-    return paw_map_get(P, PAW_REGISTRY_INDEX) == 0;
+    return paw_map_get(P, PAW_REGISTRY_INDEX) >= 0;
 }

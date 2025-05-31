@@ -845,9 +845,10 @@ void paw_list_push(paw_Env *P, int object)
     int const element_size = paw_list_element_size(P, object);
 
     Tuple *list = V_TUPLE(*at(P, object));
-    Value const *value = from_stackp(P, -element_size);
+    Value const *element = from_stackp(P, -element_size);
 
-    pawList_push(P, list, value);
+    pawList_push(P, list, element);
+    paw_pop(P, element_size);
 }
 
 void paw_list_pop(paw_Env *P, int object)

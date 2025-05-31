@@ -980,3 +980,32 @@ pub fn test_special_case_3() {
 
     s.value.method();
 }
+
+enum ZeroOrTwo {
+    Zero,
+    Two(str, str),
+}
+
+pub fn test_enum_special_case_1() {
+    let list = [];
+    list.push(ZeroOrTwo::Zero);
+
+    match list[0] {
+        ZeroOrTwo::Zero => (),
+        _ => (),
+    }
+}
+
+inline enum OneOrTwo {
+    One(str),
+    Two(str, str),
+}
+
+pub fn test_enum_special_case_2() {
+    let list = [OneOrTwo::One("x")];
+
+    match list[0] {
+        OneOrTwo::One(x) => (),
+        _ => (),
+    }
+}

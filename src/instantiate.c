@@ -350,6 +350,7 @@ IrTypeList *pawP_instantiate_struct_fields(struct Compiler *C, struct IrAdt *ins
 
 IrTypeList *pawP_instantiate_variant_fields(struct Compiler *C, struct IrAdt *inst, int index)
 {
+    paw_assert(index >= 0); // expects valid discriminant number
     struct IrAdt *base = IrGetAdt(pawIr_get_def_type(C, inst->did));
     struct IrAdtDef *def = pawIr_get_adt_def(C, inst->did);
     struct IrVariantDef *variant = IrVariantDefs_get(def->variants, index);

@@ -162,17 +162,16 @@ static struct Def *get_def(struct Generator *G, ItemId iid)
     return RTTI_DEF(ENV(G), iid);
 }
 
-static RttiType *lookup_type(struct Generator *G, struct IrType *type)
+static RttiType *get_rtti(struct Generator *G, struct IrType *type)
 {
     RttiType **prtti = RttiMap_get(G->C, G->C->rtti, type);
-    return prtti != NULL ? *prtti : NULL;
+    paw_assert(prtti != NULL && "undefined type");
+    return *prtti;
 }
 
-static RttiType *type2rtti(struct Generator *G, struct IrType *type)
+static int size_on_stack(struct Generator *G, IrType *type)
 {
-    RttiType *rtti = lookup_type(G, type);
-    paw_assert(rtti != NULL && "undefined type");
-    return rtti;
+    return rtti_stack_size(ENV(G), get_rtti(G, type));
 }
 
 static ItemId rtti_iid(RttiType const *rtti)
@@ -234,7 +233,7 @@ static int temporary_reg(struct FuncState *fs, int offset)
 
 static ValueId type2global(struct Generator *G, struct IrType *type)
 {
-    RttiType const *rtti = type2rtti(G, type);
+    RttiType const *rtti = get_rtti(G, type);
     struct Def const *def = RTTI_DEF(ENV(G), rtti_iid(rtti));
     paw_assert(def->hdr.kind == DEF_FUNC);
     return def->func.vid;
@@ -524,7 +523,7 @@ static void prep_method_call(struct Generator *G, MirRegister callable, MirRegis
     struct FuncState *fs = G->fs;
     struct IrType *type = REG_TYPE(G, callable);
     paw_assert(is_method_call(G, type));
-    RttiType *rtti = lookup_type(G, type);
+    RttiType *const rtti = get_rtti(G, type);
     ValueId const vid = resolve_function(G, rtti);
     code_ABx(fs, OP_GETGLOBAL, REG(callable), vid);
 }
@@ -559,15 +558,6 @@ static void init_policies(struct Generator *G)
         *P->top.p++ = P->vals.data[pinfo->hash];
         *P->top.p++ = P->vals.data[pinfo->equals];
         paw_register_policy(P, pinfo->type);
-//
-//        pawM_grow(P, policies->data, policies->count, policies->alloc);
-//        policies->data[policies->count++] = (MapPolicy){
-//            .equals = P->vals.data[pinfo->equals],
-//            .hash = P->vals.data[pinfo->hash],
-//            .value_size = pinfo->value_size,
-//            .key_size = pinfo->key_size,
-//            .type = pinfo->type,
-//        };
     }
 }
 
@@ -629,8 +619,8 @@ static void register_items(struct Generator *G)
         register_toplevel_function(G, type, iid);
 
         String const *modname = module_prefix(G, IR_TYPE_DID(type).modno);
-        RttiType const *ty = lookup_type(G, type);
-        struct FuncDef *fdef = &get_def(G, ty->fdef.iid)->func;
+        RttiType const *rtti = get_rtti(G, type);
+        struct FuncDef *fdef = &get_def(G, rtti->fdef.iid)->func;
         paw_assert(fdef->kind == DEF_FUNC);
         pitem->name = fdef->mangled_name = func_name(G, modname, type, mir->self);
         pawMap_insert(P, V_TUPLE(P->functions), &P2V(pitem->name), &I2V(fdef->vid));
@@ -841,11 +831,6 @@ static void code_set_field(struct MirVisitor *V, struct MirSetField *x)
     code_ABC(fs, op, REG(x->object.r), x->index, REG(x->value.r));
 }
 
-static int sizeof_type(struct Generator *G, IrType *type)
-{
-    return ir_is_boxed(G->C, type) ? 1 : pawIr_compute_layout(G->C, type).size;
-}
-
 // Determine the unique policy number for the given type of map
 static unsigned determine_map_policy(struct Generator *G, struct IrType *type)
 {
@@ -854,10 +839,10 @@ static unsigned determine_map_policy(struct Generator *G, struct IrType *type)
     if (ppolicy != NULL) return *ppolicy;
 
     struct TraitOwnerList *const *powners = TraitOwners_get(G->C, G->C->trait_owners, ir_map_key(type));
-    RttiType const *equals = type2rtti(G, IrTypeList_first(TraitOwnerList_get(*powners, TRAIT_EQUALS)));
-    RttiType const *hash = type2rtti(G, IrTypeList_first(TraitOwnerList_get(*powners, TRAIT_HASH)));
+    RttiType const *equals = get_rtti(G, IrTypeList_first(TraitOwnerList_get(*powners, TRAIT_EQUALS)));
+    RttiType const *hash = get_rtti(G, IrTypeList_first(TraitOwnerList_get(*powners, TRAIT_HASH)));
     PolicyList_push(G, G->policies, (struct PolicyInfo){
-                                        .type = type2rtti(G, type)->adt.code,
+                                        .type = get_rtti(G, type)->adt.code,
                                         .equals = RTTI_DEF(ENV(G), rtti_iid(equals))->func.vid,
                                         .hash = RTTI_DEF(ENV(G), rtti_iid(hash))->func.vid,
                                     });
@@ -869,10 +854,9 @@ static unsigned determine_map_policy(struct Generator *G, struct IrType *type)
 
 static IrType *get_element_type(IrType *type)
 {
-    struct IrAdt *adt = IrGetAdt(type);
-    return adt->types->count == 1
-        ? IrTypeList_get(adt->types, 0) // List<T>
-        : IrTypeList_get(adt->types, 1); // Map<K, V>
+    return IrGetAdt(type)->types->count == 1
+        ? ir_list_elem(type)
+        : ir_map_value(type);
 }
 
 static void code_container(struct MirVisitor *V, struct MirContainer *x)
@@ -881,11 +865,9 @@ static void code_container(struct MirVisitor *V, struct MirContainer *x)
     struct FuncState *fs = G->fs;
 
     IrType *element_type = get_element_type(REG_TYPE(G, x->output.r));
-    struct IrLayout const element_layout = pawIr_compute_layout(G->C, element_type);
-
     int const temp = temporary_reg(fs, 0);
     if (x->b_kind == BUILTIN_LIST) {
-        code_ABC(fs, OP_NEWLIST, temp, x->nelems, element_layout.size);
+        code_ABC(fs, OP_NEWLIST, temp, x->nelems, size_on_stack(G, element_type));
     } else {
         int const policy = determine_map_policy(G, REG_TYPE(G, x->output.r));
         code_ABC(fs, OP_NEWMAP, temp, x->nelems, policy);
