@@ -1277,6 +1277,9 @@ static struct IrType *resolve_call_expr(struct Resolver *R, struct HirCallExpr *
         unify(R, NODE_START(*parg), param, resolve_operand(R, *parg));
     }
 
+    if (IrIsNever(type)) // function never returns
+        unify_never_type(R, e->span.start, R->bs->result);
+
     return type;
 }
 
@@ -1293,8 +1296,7 @@ static struct IrType *resolve_basic_lit(struct Resolver *R, struct HirBasicLit *
 
 static struct IrTypeList *resolve_operand_list(struct Resolver *R, struct HirExprList *list)
 {
-    if (list == NULL)
-        return NULL;
+    if (list == NULL) return NULL;
     struct IrTypeList *new_list = IrTypeList_new(R->C);
     IrTypeList_reserve(R->C, new_list, list->count);
 

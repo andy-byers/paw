@@ -2,7 +2,7 @@
 
 fn black_box<T>(t: T) -> T { t }
 
-fn ifelse_exhaustive_branches(i: int) -> int {
+fn ifelse_exhaustive_branches_return(i: int) -> int {
     if i == 0 {
         1
     } else if i == 1 {
@@ -22,7 +22,7 @@ fn ifelse_exhaustive_branches(i: int) -> int {
     }
 }
 
-fn match_exhaustive_branches(i: int) -> int {
+fn match_exhaustive_branches_return(i: int) -> int {
     match i {
         0 => 1,
         1 => return 2,
@@ -31,16 +31,53 @@ fn match_exhaustive_branches(i: int) -> int {
     }
 }
 
-pub fn test_exhaustive_branches() {
-    assert(ifelse_exhaustive_branches(0) == 1);    
-    assert(ifelse_exhaustive_branches(1) == 2);    
-    assert(ifelse_exhaustive_branches(2) == 3);    
-    assert(ifelse_exhaustive_branches(3) == 5);    
+pub fn test_exhaustive_branches_return() {
+    assert(ifelse_exhaustive_branches_return(0) == 1);    
+    assert(ifelse_exhaustive_branches_return(1) == 2);    
+    assert(ifelse_exhaustive_branches_return(2) == 3);    
+    assert(ifelse_exhaustive_branches_return(3) == 5);    
 
-    assert(match_exhaustive_branches(0) == 1);    
-    assert(match_exhaustive_branches(1) == 2);    
-    assert(match_exhaustive_branches(2) == 3);    
-    assert(match_exhaustive_branches(3) == 5);    
+    assert(match_exhaustive_branches_return(0) == 1);    
+    assert(match_exhaustive_branches_return(1) == 2);    
+    assert(match_exhaustive_branches_return(2) == 3);    
+    assert(match_exhaustive_branches_return(3) == 5);    
+}
+
+fn ifelse_exhaustive_branches_panic(i: int) -> int {
+    if i == 0 {
+        1
+    } else if i == 1 {
+        custom_divergence();
+    } else if i == 2 {
+        if black_box(false) {
+            custom_divergence();
+        } else {
+            4
+        }
+    } else {
+        {
+            {
+                custom_divergence();
+            }
+        }
+    }
+}
+
+fn match_exhaustive_branches_panic(i: int) -> int {
+    match i {
+        0 => 1,
+        1 => custom_divergence(),
+        2 => if black_box(false) {custom_divergence()} else {4},
+        _ => {{custom_divergence()}},
+    }
+}
+
+pub fn test_exhaustive_branches_panic() {
+    assert(ifelse_exhaustive_branches_panic(0) == 1);    
+    assert(ifelse_exhaustive_branches_panic(2) == 4);    
+
+    assert(match_exhaustive_branches_panic(0) == 1);    
+    assert(match_exhaustive_branches_panic(2) == 4);    
 }
 
 pub fn test_guard() {
@@ -194,6 +231,33 @@ pub fn test_nested_loop() {
     };    
 }
 
+//fn check_diverging_branch(b: bool) {
+//    let (a, b) = if b {
+//        ("abc", 456.0)
+//    } else {
+//        custom_divergence()
+//    };
+//    assert(a == "abc");
+//    assert(b == 456.0);
+//}
+//
+//pub fn test_diverging_branch() {
+//    check_diverging_branch(true);
+//}
+//
+//fn check_diverging_arm(b: bool) {
+//    let (a, b) = match b {
+//        true => ("abc", 456.0),
+//        _ => custom_divergence(),
+//    };
+//    assert(a == "abc");
+//    assert(b == 456.0);
+//}
+//
+//pub fn test_diverging_arm() {
+//    check_diverging_arm(true);
+//}
+
 //// TODO: Should these be allowed?
 //pub fn test_diverging_expressions() {
 //    let _: int = !return;
@@ -203,7 +267,12 @@ pub fn test_nested_loop() {
 //    let _: int = (return) + return;
 //}
 
+// return value not necessary since it would be unreachable
+fn function_never_returns() -> int {
+    custom_divergence();
+}
+
 fn custom_divergence() -> ! {
-    panic("diverging!");
+    panic("panic occurred");
 }
 

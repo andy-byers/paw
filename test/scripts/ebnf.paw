@@ -738,9 +738,7 @@ const SUCCESS: int = 0;
 const FAILURE: int = 1;
 
 
-pub fn test() -> int {
-    let args = ["ebnf", "../../test.ebnf"];
-//pub fn main(args: [str]) -> int {
+pub fn main(args: [str]) -> int {
     let ctx = Context::new(args.get_or(0, "ebnf"));
 
     let path = if #args < 2 {

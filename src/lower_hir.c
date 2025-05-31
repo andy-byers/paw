@@ -242,6 +242,11 @@ static struct MirInstruction *add_instruction(struct FunctionState *fs, struct M
 
 #define NEW_INSTR(Fs_, Kind_, ...) add_instruction(Fs_, pawMir_new_##Kind_((Fs_)->mir, __VA_ARGS__))
 
+static struct MirInstruction *terminate_unreachable(struct FunctionState *fs, struct SourceLoc loc)
+{
+    return NEW_INSTR(fs, unreachable, loc);
+}
+
 static struct MirInstruction *terminate_goto(struct FunctionState *fs, struct SourceLoc loc, MirBlock target)
 {
     return NEW_INSTR(fs, goto, loc, target);
@@ -1636,6 +1641,7 @@ static struct MirPlace lower_call_expr(struct HirVisitor *V, struct HirCallExpr 
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
     struct IrType *target_type = GET_NODE_TYPE(L->C, e->target);
+    struct IrType *return_type = IR_FPTR(target_type)->result;
     if (IrIsSignature(target_type)) {
         struct HirDecl *decl = pawHir_get_decl(L->C, IR_TYPE_DID(target_type));
         if (HirIsVariantDecl(decl))
@@ -1647,6 +1653,11 @@ static struct MirPlace lower_call_expr(struct HirVisitor *V, struct HirCallExpr 
     MirPlaceList *results = MirPlaceList_new(fs->mir);
     MirPlaceList_push(fs->mir, results, place_for_node(fs, e->hid));
     NEW_INSTR(fs, call, e->span.start, target, args, results);
+    if (IrIsNever(return_type)) {
+        // this function never returns
+        terminate_unreachable(fs, e->span.start);
+        set_current_bb(fs, new_bb(fs));
+    }
     return K_LIST_FIRST(results);
 }
 

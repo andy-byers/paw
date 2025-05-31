@@ -257,6 +257,12 @@ static void AcceptReturn(struct MirVisitor *V, struct MirReturn *t)
     pawMir_visit_place_list(V, t->values);
 }
 
+static void AcceptUnreachable(struct MirVisitor *V, struct MirUnreachable *t)
+{
+    PAW_UNUSED(V);
+    PAW_UNUSED(t);
+}
+
 static void AcceptGoto(struct MirVisitor *V, struct MirGoto *t)
 {
     PAW_UNUSED(V);
@@ -540,6 +546,7 @@ static void renumber_block_refs(struct Traversal *X, BlockMap *map, struct MirBl
 
     struct MirInstruction *terminator = K_LIST_LAST(data->instructions);
     switch (MIR_KINDOF(terminator)) {
+        case kMirUnreachable:
         case kMirReturn:
             break;
         case kMirBranch: {
@@ -1418,6 +1425,9 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
             print_place(P, t->rhs);
             break;
         }
+        case kMirUnreachable:
+            PRINT_LITERAL(P, "unreachable");
+            break;
         case kMirReturn: {
             struct MirReturn *t = MirGetReturn(instr);
             PRINT_LITERAL(P, "return ");

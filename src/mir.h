@@ -35,6 +35,7 @@ struct Mir;
     X(Closure)                  \
     X(UnaryOp)                  \
     X(BinaryOp)                 \
+    X(Unreachable)              \
     X(Return)                   \
     X(Branch)                   \
     X(Switch)                   \
@@ -467,6 +468,11 @@ struct MirGoto {
     MirBlock target;
 };
 
+struct MirUnreachable {
+    MIR_INSTRUCTION_HEADER;
+    struct MirPlaceList *values;
+};
+
 struct MirReturn {
     MIR_INSTRUCTION_HEADER;
     struct MirPlaceList *values;
@@ -883,6 +889,17 @@ inline static struct MirInstruction *pawMir_new_switch(struct Mir *mir, struct S
         .discr = discr,
         .arms = arms,
         .otherwise = otherwise,
+    };
+    return instr;
+}
+
+inline static struct MirInstruction *pawMir_new_unreachable(struct Mir *mir, struct SourceLoc loc)
+{
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
+    instr->Unreachable_ = (struct MirUnreachable){
+        .mid = pawMir_next_id(mir),
+        .kind = kMirUnreachable,
+        .loc = loc,
     };
     return instr;
 }
