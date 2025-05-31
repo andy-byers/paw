@@ -1982,9 +1982,7 @@ static void skip_hashbang(struct Lex *lex)
     // Special case: don't advance past the '#', since it might be the start of
     // an annotation. If the first char is not '\0', then there is guaranteed to
     // be another char, possibly '\0' itself.
-    if (lex->ptr[0] == '#' && lex->ptr[1] == '!') {
-        skip(lex); // skip '#' token
-        skip(lex); // skip '!' token
+    if (test_next(lex, '#') && test_next(lex, '!')) {
         while (!test(lex, TK_END)) {
             char const c = *lex->ptr;
             skip(lex);

@@ -1070,7 +1070,6 @@ DEFINE_MAP_ITERATOR(ReturnMap, int, int)
 
 // TODO: generate moves then jump to final block (single return). allows for cleanup code to be placed in the last block
 // TODO: surely the following could be done in a more efficient way, this is just a first attempt
-// TODO: since there are usually just a handful of returns, probably better to use a list of MirRegister and update the register table
 //
 // Generate bytecode for a return instruction
 //
