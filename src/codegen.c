@@ -697,11 +697,13 @@ static void code_set_upvalue(struct MirVisitor *V, struct MirSetUpvalue *x)
     code_AB(fs, OP_SETUPVALUE, x->index, REG(x->value.r));
 }
 
+// Generate code to construct a boxed aggregate
 static void code_aggregate(struct MirVisitor *V, struct MirAggregate *x)
 {
     struct Generator *G = V->ud;
     struct FuncState *fs = G->fs;
 
+    // number of values contained inside the box
     struct IrLayout const layout = pawMir_get_layout(fs->mir, x->output.r);
 
     int const temp = temporary_reg(fs, 0);
@@ -897,10 +899,12 @@ static void code_call(struct MirVisitor *V, struct MirCall *x)
 
     // move the return values from the top of the stack to where they are expected to
     // be by the rest of the code
-    int next = target;
+    int index;
     struct MirPlace const *pp;
-    K_LIST_FOREACH (x->outputs, pp)
-        move_to_reg(fs, next++, REG(pp->r));
+    K_LIST_ENUMERATE (x->outputs, index, pp) {
+        int const temp = temporary_reg(fs, index);
+        move_to_reg(fs, temp, REG(pp->r));
+    }
 }
 
 static void code_cast(struct MirVisitor *V, struct MirCast *x)
