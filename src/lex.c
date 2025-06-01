@@ -12,6 +12,7 @@
 #define SAVE_AND_NEXT(X_) save(X_, next(X_))
 #define IS_EOF(X_) (CAST(uint8_t, *(X_)->ptr) == TK_END)
 #define IS_NEWLINE(X_) (*(X_)->ptr == '\r' || *(X_)->ptr == '\n')
+#define IS_LINE_END(X_) (IS_NEWLINE(X_) || IS_EOF(X_))
 
 #define LEX_ERROR(X_, Kind_, ...) pawErr_##Kind_((X_)->C, (X_)->modname, __VA_ARGS__)
 
@@ -130,19 +131,13 @@ static char pop_state(struct Lex *X)
 {
     paw_assert(X->states->count > 0);
     char const state = peek_state(X);
-    CharStack_pop(X->states);
+    StateStack_pop(X->states);
     return state;
 }
 
-static void push_normal_state(struct Lex *X)
+static void push_state(struct Lex *X, enum StringState state)
 {
-    CharStack_push(X, X->states, '\0');
-}
-
-static void push_string_state(struct Lex *X, char quote)
-{
-    paw_assert(quote == '\'' || quote == '"');
-    CharStack_push(X, X->states, quote);
+    StateStack_push(X, X->states, state);
 }
 
 static void save(struct Lex *X, char c)
@@ -193,45 +188,26 @@ static struct Token make_token(TokenKind kind, struct SourceLoc start, struct So
     };
 }
 
-static struct Token make_int(struct Lex *X)
-{
-    paw_Env *P = ENV(X);
-    Value const v = P->top.p[-1];
-    return (struct Token){
-        .kind = TK_INTEGER,
-        .value = v,
-    };
-}
-
-static struct Token make_float(struct Lex *X)
-{
-    paw_Env *P = ENV(X);
-    Value const v = P->top.p[-1];
-    return (struct Token){
-        .kind = TK_FLOAT,
-        .value = v,
-    };
-}
-
 static struct Token make_string(struct Lex *X, struct SourceLoc start, TokenKind kind)
 {
     struct StringBuffer *b = &SCRATCH(X);
-    struct Token t = make_token(kind, start, X->loc);
-    String *s = pawP_scan_nstring(X->C, X->strings, b->data, CAST_SIZE(b->count));
-    V_SET_OBJECT(&t.value, s);
-    b->count = 0;
+    struct Token t = (struct Token){
+        .span = span_from(X, start),
+        .kind = kind,
+    };
+    // create and anchor arbitrary interned string
+    Str *str = pawP_scan_nstr(X->C, X->strings, b->data, CAST_SIZE(b->count));
+    V_SET_OBJECT(&t.value, str);
     return t;
 }
 
 static struct Token consume_name(struct Lex *X, struct SourceLoc start)
 {
-    SAVE_AND_NEXT(X);
-
     while (ISLETTER(*X->ptr) || ISDIGIT(*X->ptr))
         SAVE_AND_NEXT(X);
 
     struct Token t = make_string(X, start, TK_NAME);
-    String const *s = V_STRING(t.value);
+    Str const *s = V_STR(t.value);
     if (IS_KEYWORD(s)) {
         t.kind = CAST(TokenKind, s->flag);
     } else if (s->length > PAW_NAME_MAX) {
@@ -240,64 +216,18 @@ static struct Token consume_name(struct Lex *X, struct SourceLoc start)
     return t;
 }
 
-// Tables are from https://arxiv.org/pdf/2010.03090.pdf
-static void consume_utf8(struct Lex *X)
-{
-    // clang-format off
-    static const uint8_t kLookup1[256] = {
-         8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,
-         8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,
-         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-         9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,
-        10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,
-        11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11,
-        11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11,
-         8,  8,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
-         1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
-         4,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  5,  2,  2,
-         6,  3,  3,  3,  7,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,
-    };
-    static const uint8_t kLookup2[108] = {
-        0, 1, 2, 3, 4, 5, 6, 7, 8, 8, 8, 8,
-        8, 8, 8, 8, 8, 8, 8, 8, 8, 0, 0, 0,
-        8, 8, 8, 8, 8, 8, 8, 8, 8, 1, 1, 1,
-        8, 8, 8, 8, 8, 8, 8, 8, 8, 2, 2, 2,
-        8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 1,
-        8, 8, 8, 8, 8, 8, 8, 8, 8, 1, 1, 8,
-        8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 2, 2,
-        8, 8, 8, 8, 8, 8, 8, 8, 8, 2, 8, 8,
-        8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
-    };
-    // clang-format on
-
-    unsigned state = 0;
-    do {
-        unsigned char const c = (unsigned char)*X->ptr;
-        state = kLookup1[c] + state * 12;
-        state = kLookup2[state];
-        SAVE_AND_NEXT(X);
-    } while (state % 8 != 0);
-
-     // TODO: keep track of codepoint for error message
-    if (state != 0)
-        LEX_ERROR(X, invalid_unicode_codepoint, X->loc, -1);
-}
-
 static unsigned get_codepoint(struct Lex *X, struct SourceLoc loc)
 {
     if (!test_next(X, '{') || test_next(X, '}'))
         LEX_ERROR(X, unexpected_symbol, X->loc);
 
     enum {MAX_DIGITS = 6};
-    char digits[MAX_DIGITS + 1] = {0};
+    char digits[MAX_DIGITS] = {0};
     int n = 0;
 
     do {
+        if (IS_LINE_END(X) || !ISHEX(*X->ptr))
+            LEX_ERROR(X, unterminated_unicode_escape, loc);
         if (n == MAX_DIGITS)
             LEX_ERROR(X, unicode_escape_too_long, loc);
 
@@ -305,18 +235,144 @@ static unsigned get_codepoint(struct Lex *X, struct SourceLoc loc)
     } while (!test_next(X, '}'));
 
     unsigned codepoint = 0;
-    for (int i = 0; i < n; ++i) {
-        if (!ISHEX(digits[i]))
-            LEX_ERROR(X, invalid_unicode_escape, loc, digits);
-
+    for (int i = 0; i < n; ++i)
         codepoint = (codepoint << 4) | HEXVAL(digits[i]);
-    }
 
     return codepoint;
 }
 
-static struct Token consume_string_part(struct Lex *X, struct SourceLoc start, char quote)
+static void hex_escape(struct Lex *X, struct SourceLoc start)
 {
+    enum {MAX_DIGITS = 2};
+    char digits[MAX_DIGITS + 1] = {0};
+    int n = 0;
+
+    do {
+        if (IS_LINE_END(X) || test(X, ';'))
+            LEX_ERROR(X, hex_escape_too_short, start);
+
+        digits[n++] = next(X);
+    } while (n < MAX_DIGITS);
+
+    if (!ISHEX(digits[0]) || !ISHEX(digits[1]))
+        LEX_ERROR(X, invalid_hex_escape, start);
+
+    int const value = (HEXVAL(digits[0]) << 4) | HEXVAL(digits[1]);
+    save(X, (char)value);
+}
+
+static void unicode_escape(struct Lex *X, struct SourceLoc start)
+{
+    unsigned const codepoint = get_codepoint(X, start);
+    if ((0xD800 <= codepoint && codepoint <= 0xDFFF)
+            || (0xFDD0 <= codepoint && codepoint <= 0xFDEF)
+            || (codepoint & 0xFFFE) == 0xFFFE
+            || codepoint > 0x10FFFF)
+        LEX_ERROR(X, invalid_unicode_codepoint, start, codepoint);
+
+    // Translate a UTF-32 codepoint into bytes. Modified from @Tencent/rapidjson.
+    if (codepoint <= 0x7F) {
+        save(X, (char)codepoint);
+    } else if (codepoint <= 0x7FF) {
+        save(X, (char)(0xC0 | ((codepoint >> 6) & 0xFF)));
+        save(X, (char)(0x80 | ((codepoint & 0x3F))));
+    } else if (codepoint <= 0xFFFF) {
+        save(X, (char)(0xE0 | ((codepoint >> 12) & 0xFF)));
+        save(X, (char)(0x80 | ((codepoint >> 6) & 0x3F)));
+        save(X, (char)(0x80 | (codepoint & 0x3F)));
+    } else {
+        assert(codepoint <= 0x10FFFF);
+        save(X, (char)(0xF0 | ((codepoint >> 18) & 0xFF)));
+        save(X, (char)(0x80 | ((codepoint >> 12) & 0x3F)));
+        save(X, (char)(0x80 | ((codepoint >> 6) & 0x3F)));
+        save(X, (char)(0x80 | (codepoint & 0x3F)));
+    }
+}
+
+static void escape_character(struct Lex *X, struct SourceLoc start)
+{
+    char const c = next(X);
+    switch (c) {
+        case '0':
+            save(X, '\0');
+            break;
+        case '"':
+            save(X, '"');
+            break;
+        case '\\':
+            save(X, '\\');
+            break;
+        case '/':
+            save(X, '/');
+            break;
+        case 'b':
+            save(X, '\b');
+            break;
+        case 'v':
+            save(X, '\v');
+            break;
+        case 'f':
+            save(X, '\f');
+            break;
+        case 'n':
+            save(X, '\n');
+            break;
+        case 'r':
+            save(X, '\r');
+            break;
+        case 't':
+            save(X, '\t');
+            break;
+        case 'x':
+            hex_escape(X, start);
+            break;
+        case 'u':
+            unicode_escape(X, start);
+            break;
+        default:
+            LEX_ERROR(X, invalid_escape, X->loc, c);
+    }
+}
+
+static paw_Char single_byte(struct Lex *X, struct SourceLoc start)
+{
+    for (;;) {
+        if (IS_LINE_END(X)) {
+            LEX_ERROR(X, unterminated_char, start);
+        } else if (test_next(X, '\\')) {
+            escape_character(X, start);
+        } else if (test_next(X, '\'')) {
+            break;
+        } else {
+            SAVE_AND_NEXT(X);
+        }
+    }
+
+    struct StringBuffer *b = &SCRATCH(X);
+    if (b->count == 0) {
+        LEX_ERROR(X, empty_char, start);
+    } else if (b->count > 1) {
+        LEX_ERROR(X, char_too_long, start);
+    }
+
+    return (paw_Char)b->data[0];
+}
+
+static struct Token consume_byte(struct Lex *X, struct SourceLoc start)
+{
+    paw_Char const x = single_byte(X, start);
+    return (struct Token){
+        .span = span_from(X, start),
+        .kind = TK_CHAR,
+        // make sure the bytes used by larger scalars get cleared
+        .value.u = x,
+    };
+}
+
+static struct Token consume_string_part(struct Lex *X, struct SourceLoc start_loc)
+{
+    paw_assert(peek_state(X) != STATE_NORMAL);
+
     for (;;) {
     handle_ascii:
         if (ISASCIIEND(*X->ptr))
@@ -324,83 +380,25 @@ static struct Token consume_string_part(struct Lex *X, struct SourceLoc start, c
         SAVE_AND_NEXT(X);
     }
 
-    struct SourceLoc loc = X->loc;
+    struct SourceLoc current_loc = X->loc;
     if (test_next(X, '\\')) {
-        char const c = next(X);
-        switch (c) {
-            case '"':
-                save(X, '"');
-                break;
-            case '\\':
-                save(X, '\\');
-                break;
-            case '/':
-                save(X, '/');
-                break;
-            case 'b':
-                save(X, '\b');
-                break;
-            case 'v':
-                save(X, '\v');
-                break;
-            case 'f':
-                save(X, '\f');
-                break;
-            case 'n':
-                save(X, '\n');
-                break;
-            case 'r':
-                save(X, '\r');
-                break;
-            case 't':
-                save(X, '\t');
-                break;
-            case '{': {
-                // found start of string expression
-                struct Token token = make_string(X, start, TK_STRING_EXPR_OPEN);
-                push_braces(X);
-                push_normal_state(X);
-                return token;
-            }
-            case 'u': {
-                unsigned const codepoint = get_codepoint(X, loc);
-                if ((0xD800 <= codepoint && codepoint < 0xE000) || codepoint >= 0x110000)
-                    // codepoint is either in the surrogate range, or it is outside the valid range of
-                    // a unicode codepoint
-                    LEX_ERROR(X, invalid_unicode_codepoint, loc, codepoint);
-
-                // Translate the codepoint into bytes. Modified from @Tencent/rapidjson.
-                if (codepoint <= 0x7F) {
-                    save(X, (char)codepoint);
-                } else if (codepoint <= 0x7FF) {
-                    save(X, (char)(0xC0 | ((codepoint >> 6) & 0xFF)));
-                    save(X, (char)(0x80 | ((codepoint & 0x3F))));
-                } else if (codepoint <= 0xFFFF) {
-                    save(X, (char)(0xE0 | ((codepoint >> 12) & 0xFF)));
-                    save(X, (char)(0x80 | ((codepoint >> 6) & 0x3F)));
-                    save(X, (char)(0x80 | (codepoint & 0x3F)));
-                } else {
-                    assert(codepoint <= 0x10FFFF);
-                    save(X, (char)(0xF0 | ((codepoint >> 18) & 0xFF)));
-                    save(X, (char)(0x80 | ((codepoint >> 12) & 0x3F)));
-                    save(X, (char)(0x80 | ((codepoint >> 6) & 0x3F)));
-                    save(X, (char)(0x80 | (codepoint & 0x3F)));
-                }
-                break;
-            }
-            default:
-                LEX_ERROR(X, invalid_escape, X->loc, c);
+        if (test_next(X, '{')) {
+            // found start of string expression
+            struct Token token = make_string(X, start_loc, TK_STRING_EXPR_OPEN);
+            push_braces(X);
+            push_state(X, STATE_NORMAL);
+            return token;
         }
-    } else if (test_next(X, quote)) {
+        escape_character(X, current_loc);
+    } else if (test_next(X, '"')) {
         pop_state(X);
-        return make_string(X, start, TK_STRING_TEXT);
+        return make_string(X, start_loc, TK_STRING_TEXT);
     } else if (ISNEWLINE(*X->ptr)) {
-        // unescaped newlines allowed in string literals
-        SAVE_AND_NEXT(X);
-    } else if (test(X, '\0')) {
+        LEX_ERROR(X, unexpected_symbol, X->loc); // TODO: unterminated_string
+    } else if (IS_EOF(X)) {
         LEX_ERROR(X, unexpected_symbol, X->loc);
     } else {
-        consume_utf8(X);
+        SAVE_AND_NEXT(X);
     }
     goto handle_ascii;
 }
@@ -419,7 +417,7 @@ static struct Token consume_int_aux(struct Lex *X, struct SourceLoc start, int b
     }
     return (struct Token){
         .span = span_from(X, start),
-        .kind = TK_INTEGER,
+        .kind = TK_INT,
         .value.i = i,
     };
 }
@@ -580,7 +578,7 @@ try_again:
         return make_token(TK_END, X->loc, X->loc);
 
     if (peek_state(X) != STATE_NORMAL)
-        return consume_string_part(X, X->loc, peek_state(X));
+        return consume_string_part(X, X->loc);
 
     skip_whitespace(X);
     struct SourceLoc start = X->loc;
@@ -590,9 +588,14 @@ try_again:
     SCRATCH(X).count = 0;
     switch (token.kind) {
         case '\'':
+            next(X);
+            token = consume_byte(X, start);
+            break;
         case '"':
-            push_string_state(X, *X->ptr);
-            token = consume_string_part(X, start, next(X));
+            // found arbitrary string
+            next(X);
+            push_state(X, STATE_STRING);
+            token = consume_string_part(X, start);
             break;
         case '{':
             next(X);
@@ -723,6 +726,7 @@ try_again:
             if (ISDIGIT(*X->ptr)) {
                 token = consume_number(X, start);
             } else if (ISLETTER(*X->ptr)) {
+                SAVE_AND_NEXT(X);
                 token = consume_name(X, start);
             } else {
                 next(X);
@@ -802,11 +806,11 @@ void pawX_set_source(struct Lex *X, paw_Reader input, void *ud)
     X->ud = ud;
     X->input = input;
 
-    X->states = CharStack_new(X);
+    X->states = StateStack_new(X);
     X->parens = IntStack_new(X);
 
     read_source(X);
-    push_normal_state(X);
+    push_state(X, STATE_NORMAL);
     pawX_next(X); // load first token
 }
 

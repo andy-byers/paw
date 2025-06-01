@@ -63,7 +63,7 @@ pub fn test_infer_initializer() {
 
     let list = [false];
     let list = [1.0, 2.0];
-    let list = ['three', 'four', 'five'];
+    let list = ["three", "four", "five"];
 }
 
 pub fn test_getters() {
@@ -211,7 +211,7 @@ pub fn test_infer_later() {
     let a = [];
     let b = a;
     b = [1];
-    // type of 'a' inferred from 'b'
+    // type of "a" inferred from "b"
     assert(#a == 0);
 
     let a = [];
@@ -539,34 +539,34 @@ fn map2<T>(list: [T], f: fn(T) -> T) -> [T] {
 
 pub fn test_infer_l() {
     let list = [
-        'abc',
-        'def',
-        'ghi',
+        "abc",
+        "def",
+        "ghi",
     ];
     let list = map2(list, |val: str| val + val);
-    let result = '';
+    let result = "";
     for i in 0..#list {
         result += list[i];
     }
-    assert(result == 'abcabcdefdefghighi');
+    assert(result == "abcabcdefdefghighi");
 
     let list = [
-        ['a', 'b', 'c'],
-        ['d', 'e', 'f'],
-        ['g', 'h', 'i'],
+        ["a", "b", "c"],
+        ["d", "e", "f"],
+        ["g", "h", "i"],
     ];
     let list = map2(list, |row: [str]| -> [str] {
         return map2(row, |val: str| -> str {
             return val + val + val;
         });
     });
-    let result = '';
+    let result = "";
     for i in 0..#list {
         for j in 0..#list[i] {
             result += list[i][j];
         }
     }
-    assert(result == 'aaabbbcccdddeeefffggghhhiii');
+    assert(result == "aaabbbcccdddeeefffggghhhiii");
 }
 
 struct ComplexStruct<T> {
@@ -587,7 +587,7 @@ pub fn test_complex_elem() {
             });
         } else {
             list.push(ComplexStruct{
-                value: ComplexEnum::<int>::WithStr(i, 'str-' + i.to_string()),
+                value: ComplexEnum::<int>::WithStr(i, "str-" + i.to_str()),
             });
         }
     }

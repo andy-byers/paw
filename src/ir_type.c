@@ -55,7 +55,7 @@ struct IrType *pawIr_get_def_type(struct Compiler *C, DeclId did)
     return *DefTypeMap_get(C, C->def_types, did);
 }
 
-struct IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *target, String *name)
+struct IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *target, Str *name)
 {
     if (target->bounds == NULL) {
         struct HirGenericDecl *d = HirGetGenericDecl(pawHir_get_decl(C, target->did));
@@ -377,7 +377,7 @@ char const *pawIr_print_type(struct Compiler *C, IrType *type)
                },
                type);
 
-    String const *s = pawP_scan_nstring(C, C->strings, buf.data, buf.size);
+    Str const *s = pawP_scan_nstr(C, C->strings, buf.data, buf.size);
     pawL_discard_result(P, &buf);
     return s->text;
 }

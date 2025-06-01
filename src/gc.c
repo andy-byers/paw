@@ -86,7 +86,7 @@ static void mark_object(paw_Env *P, Object *o)
             SET_BLACK(u);
             break;
         }
-        case VSTRING:
+        case VSTR:
             SET_BLACK(o);
             break;
         default:
@@ -242,6 +242,7 @@ static void sweep_phase(paw_Env *P)
 {
     for (Object **p = &P->gc_all; *p;) {
         Object *o = *p;
+
         if (IS_WHITE(o)) {
             gc_trace_object("free", o);
             *p = o->gc_next;
@@ -288,20 +289,11 @@ void pawG_init(paw_Env *P)
 void pawG_uninit(paw_Env *P)
 {
     // clear GC roots
-    P->constants.u = 0;
-    P->functions.u = 0;
-    P->registry.u = 0;
+    P->map_policies.count = 0;
+    P->constants.p = NULL;
+    P->functions.p = NULL;
+    P->registry.p = NULL;
     P->up_list = NULL;
-
-    // NOTE: ".key_size" and ".value_size" needed for destruction of maps
-    for (int i = 0; i < P->map_policies.count; ++i) {
-        MapPolicy *const p = &P->map_policies.data[i];
-        p->equals = (Value){0};
-        p->hash = (Value){0};
-    }
-
-    // collect all non-fixed objects
-    pawG_collect(P);
 
     for (CallFrame *cf = P->main.next; cf;) {
         CallFrame *next = cf->next;
@@ -310,6 +302,9 @@ void pawG_uninit(paw_Env *P)
     }
     P->cf = NULL;
     P->ncf = 0;
+
+    // collect all non-fixed objects
+    pawG_collect(P);
 
     for (Object *o = P->gc_fixed; o;) {
         Object *next = o->gc_next;
@@ -343,8 +338,8 @@ void pawG_free_object(paw_Env *P, Object *o)
         case VFOREIGN:
             pawV_free_foreign(P, O_FOREIGN(o));
             break;
-        case VSTRING:
-            pawS_free_str(P, O_STRING(o));
+        case VSTR:
+            pawS_free_str(P, O_STR(o));
             break;
         case VPROTO:
             pawV_free_proto(P, O_PROTO(o));

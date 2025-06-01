@@ -43,12 +43,12 @@ pub fn test_nested_struct() {
         a: false,
         b: Inner{
             a: 1,
-            b: 'two',
+            b: "two",
             c: Empty,
         },
     };
     assert(o.b.a == 1);
-    assert(o.b.b == 'two');
+    assert(o.b.b == "two");
 }
 
 struct NoComma {

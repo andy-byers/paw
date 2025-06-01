@@ -125,7 +125,7 @@ pub fn test_two_generics() {
     assert(false == new_pair(false, true).first);
     assert(1 == new_pair(1, 2).first);
     assert(3.0 == new_pair(2.0, 3.0).second);
-    assert('five' == new_pair('four', 'five').second);
+    assert("five" == new_pair("four", "five").second);
 }
 
 struct NestedSingleton<T> {
@@ -163,10 +163,10 @@ pub fn test_inference_with_fn() {
     check_length(2, Container{values: [[], [2]]});
     check_length(3, Container{values: [[], [[]], [[3]]]});
 
-    check_types(['a', 'b'], Container{values: []});
-    check_types([[], ['c']], Container{values: []});
-    check_types('a', Container{values: ['a']});
-    check_types([], Container{values: [['b']]});
+    check_types(["a", "b"], Container{values: []});
+    check_types([[], ["c"]], Container{values: []});
+    check_types("a", Container{values: ["a"]});
+    check_types([], Container{values: [["b"]]});
 }
 
 struct MultiPairs<A, B, C> {

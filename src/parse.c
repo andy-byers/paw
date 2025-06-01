@@ -16,7 +16,7 @@
 #define PARSE_ERROR(X_, Kind_, ...) pawErr_##Kind_((X_)->C, (X_)->modname, __VA_ARGS__)
 #define LIMIT_ERROR(x, start, what, limit) PARSE_ERROR(x, too_many_elements, start, what, limit)
 
-#define SELF_TYPENAME(Lex_) SCAN_STRING((Lex_)->C, "Self")
+#define SELF_TYPENAME(Lex_) SCAN_STR((Lex_)->C, "Self")
 #define SELF_VARNAME(Lex_) CACHED_STRING(ENV(Lex_), CSTR_SELF)
 
 #define NEW_NODE_0(Lex_, Kind_, Start_) \
@@ -75,7 +75,7 @@ static void leave_expression(struct Lex *lex)
     --lex->nest_depth;
 }
 
-static paw_Bool equals_cstr(struct Lex *lex, String const *ident, unsigned cstr)
+static paw_Bool equals_cstr(struct Lex *lex, Str const *ident, unsigned cstr)
 {
     return pawS_eq(ident, CACHED_STRING(ENV(lex), cstr));
 }
@@ -335,12 +335,12 @@ static struct AstExpr *string_expr(struct Lex *lex, struct SourceLoc start, Valu
 
 // Parse an interpolated string
 //
-// For example, the string "abc${123}" results in the following tokens:
+// For example, the string "abc\{123}" results in the following tokens:
 //
 //      index | kind              | payload
 //     -------|-------------------|---------
 //      1     | STRING_EXPR_OPEN  | "abc"
-//      2     | INTEGER           | 123
+//      2     | INT               | 123
 //      3     | STRING_EXPR_CLOSE | -
 //      4     | STRING_TEXT       |  ""
 //
@@ -367,7 +367,7 @@ static struct AstIdent parse_ident(struct Lex *lex)
 {
     check(lex, TK_NAME);
     struct SourceLoc start = lex->loc;
-    String *name = V_STRING(lex->t.value);
+    Str *name = V_STR(lex->t.value);
     skip(lex);
 
     return (struct AstIdent){
@@ -395,7 +395,6 @@ static void ensure_not_underscore(struct Lex *lex, struct AstIdent ident)
         PARSE_ERROR(lex, unexpected_underscore, ident.span.start);
 }
 
-// TODO: accept source loc as arg
 static struct AstExpr *new_basic_lit(struct Lex *lex, struct SourceLoc start, Value value, paw_Type code)
 {
     return NEW_NODE(lex, basic_lit, start, value, code);
@@ -592,7 +591,7 @@ static paw_Bool is_wildcard_path(struct AstPath path)
     if (segments->count > 1)
         return PAW_FALSE;
     struct AstSegment seg = K_LIST_FIRST(segments);
-    String const *name = seg.ident.name;
+    Str const *name = seg.ident.name;
     return pawS_length(name) == 1 && name->text[0] == '_';
 }
 
@@ -674,7 +673,10 @@ static struct AstExpr *literal_expr(struct Lex *lex)
         case TK_FALSE:
             expr = emit_bool(lex, loc, PAW_FALSE);
             break;
-        case TK_INTEGER:
+        case TK_CHAR:
+            expr = new_basic_lit(lex, loc, lex->t.value, BUILTIN_CHAR);
+            break;
+        case TK_INT:
             expr = new_basic_lit(lex, loc, lex->t.value, BUILTIN_INT);
             break;
         case TK_FLOAT:
@@ -1075,7 +1077,7 @@ static struct AstExpr *selector_expr(struct Lex *lex, struct AstExpr *target)
     if (test(lex, TK_NAME)) {
         struct AstIdent ident = parse_ident(lex);
         return NEW_NODE(lex, name_selector, start, target, ident);
-    } else if (test(lex, TK_INTEGER)) {
+    } else if (test(lex, TK_INT)) {
         int const index = V_INT(lex->t.value);
         skip(lex); // integer token
         return NEW_NODE(lex, index_selector, start, target, index);
@@ -1294,9 +1296,9 @@ static struct AstExpr *match_expr(struct Lex *lex)
 static struct AstExpr *primary_expr(struct Lex *lex)
 {
     struct SourceLoc const loc = lex->loc;
-    struct Token t = lex->t;
+    struct Token const t = lex->t;
 
-    switch (lex->t.kind) {
+    switch (t.kind) {
         case '(':
             return paren_expr(lex);
         case '[':
@@ -1311,7 +1313,10 @@ static struct AstExpr *primary_expr(struct Lex *lex)
         case TK_FALSE:
             skip(lex);
             return emit_bool(lex, loc, PAW_FALSE);
-        case TK_INTEGER:
+        case TK_CHAR:
+            skip(lex);
+            return new_basic_lit(lex, loc, t.value, BUILTIN_CHAR);
+        case TK_INT:
             skip(lex);
             return new_basic_lit(lex, loc, t.value, BUILTIN_INT);
         case TK_FLOAT:
@@ -1404,6 +1409,8 @@ static struct AstExpr *conversion_expr(struct Lex *lex, struct AstExpr *lhs)
     enum BuiltinKind to;
     if (equals_cstr(lex, ident.name, CSTR_BOOL)) {
         to = BUILTIN_BOOL;
+    } else if (equals_cstr(lex, ident.name, CSTR_CHAR)) {
+        to = BUILTIN_CHAR;
     } else if (equals_cstr(lex, ident.name, CSTR_INT)) {
         to = BUILTIN_INT;
     } else if (equals_cstr(lex, ident.name, CSTR_FLOAT)) {
@@ -1462,7 +1469,7 @@ static paw_Bool test_operand(struct Lex *lex)
     switch (lex->t.kind) {
         case '(': // parenthesized expression
         case '[': // container literal
-        case TK_INTEGER:
+        case TK_INT:
         case TK_FLOAT:
         case TK_STRING_TEXT:
         case TK_NAME:
@@ -1617,8 +1624,12 @@ static struct AstDecl *function(struct Lex *lex, struct SourceLoc start, struct 
 {
     struct AstDeclList *generics = type_param(lex);
     struct AstDeclList *params = fn_parameters(lex);
-    struct AstType *result = test_next(lex, TK_ARROW) ? parse_return_type(lex, PAW_TRUE) : unit_type(lex);
-    struct AstExpr *body = !test_next(lex, ';') ? function_body(lex) : NULL;
+    struct AstType *result = test_next(lex, TK_ARROW)
+        ? parse_return_type(lex, PAW_TRUE)
+        : unit_type(lex); // default to "()"
+    struct AstExpr *body = !test_next(lex, ';')
+        ? function_body(lex)
+        : NULL;
 
     return NEW_NODE(lex, func_decl, start, kind, ident, annos,
             generics, params, NULL, result, body, is_pub);
@@ -1734,9 +1745,9 @@ static struct AstDecl *variant_decl(struct Lex *lex, int index)
 
 static void enum_body(struct Lex *lex, struct SourceLoc start, struct AstTypeList *traits, struct AstDeclList *variants, struct AstDeclList *methods)
 {
-    if (test_next(lex, ':')) {
+    if (test_next(lex, ':'))
         parse_trait_list(lex, traits);
-    }
+
     check_next(lex, '{');
     while (!end_of_block(lex)) {
         if (test(lex, TK_NAME)) {
@@ -1793,9 +1804,9 @@ static struct AstDecl *struct_field(struct Lex *lex, paw_Bool is_pub)
 static void struct_body(struct Lex *lex, struct AstTypeList *traits, struct AstDeclList *fields, struct AstDeclList *methods)
 {
     struct SourceLoc start = lex->loc;
-    if (test_next(lex, ':')) {
+    if (test_next(lex, ':'))
         parse_trait_list(lex, traits);
-    }
+
     if (!test_next(lex, '{')) {
         semicolon(lex, "body of unit struct");
         return;
@@ -1977,12 +1988,15 @@ static struct AstDeclList *toplevel_items(struct Lex *lex, struct AstDeclList *l
     return list;
 }
 
+// TODO: make "#!" a token
 static void skip_hashbang(struct Lex *lex)
 {
     // Special case: don't advance past the '#', since it might be the start of
     // an annotation. If the first char is not '\0', then there is guaranteed to
     // be another char, possibly '\0' itself.
-    if (test_next(lex, '#') && test_next(lex, '!')) {
+    if (test(lex, '#') && lex->ptr[0] == '!') {
+        skip(lex); // skip '#'
+        skip(lex); // skip '!'
         while (!test(lex, TK_END)) {
             char const c = *lex->ptr;
             skip(lex);
@@ -2001,7 +2015,7 @@ static void import_prelude(struct Lex *lex, struct AstDeclList *items)
 {
     struct SourceLoc loc = lex->loc;
     struct AstIdent ident = {
-        .name = SCAN_STRING(lex->C, "prelude"),
+        .name = SCAN_STR(lex->C, "prelude"),
         .span = span_from(lex, loc),
     };
     struct AstIdent none = {0};
@@ -2036,7 +2050,7 @@ static void init_lexer(struct Compiler *C, struct Ast *ast, struct Lex *lex)
     };
 }
 
-static struct Ast *new_ast(struct Compiler *C, String *name)
+static struct Ast *new_ast(struct Compiler *C, Str *name)
 {
     int const modno = ImportMap_length(C->imports);
     struct Ast *ast = pawAst_new(C, name, modno);
@@ -2053,7 +2067,7 @@ static void ast_callback(struct Compiler *C, struct Ast *ast)
     }
 }
 
-struct Ast *pawP_parse_module(struct Compiler *C, String *modname, paw_Reader input, void *ud)
+struct Ast *pawP_parse_module(struct Compiler *C, Str *modname, paw_Reader input, void *ud)
 {
     struct Ast *ast = new_ast(C, modname);
 

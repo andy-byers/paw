@@ -29,7 +29,7 @@ pub inline enum Error {
     InvalidArgument,
     Other,
 
-    pub fn to_string(self) -> str {
+    pub fn to_str(self) -> str {
         match self {
             Error::NotFound => "not found",
             Error::FileTooLarge => "file too large",

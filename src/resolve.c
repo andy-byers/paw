@@ -19,7 +19,7 @@
 #include "type_folder.h"
 #include "unify.h"
 
-#define STRING_LIT(R_, Str_) SCAN_STRING((R_)->C, Str_)
+#define STRING_LIT(R_, Str_) SCAN_STR((R_)->C, Str_)
 #define TYPE2CODE(R_, Type_) pawP_type2code((R_)->C, Type_)
 #define NODE_START(Node_) ((Node_)->hdr.span.start)
 #define NODE_END(Node_) ((Node_)->hdr.span.end)
@@ -379,7 +379,7 @@ static int declare_local(struct Resolver *R, struct HirIdent ident, struct HirRe
     return pawHir_declare_symbol(R->hir, enclosing_scope(R), ident, res);
 }
 
-static int find_field(struct HirDeclList *fields, String *name)
+static int find_field(struct HirDeclList *fields, Str *name)
 {
     if (fields == NULL)
         return -1;
@@ -582,7 +582,7 @@ static struct IrTypeList *instantiate_fields(struct Compiler *C, struct IrType *
     return pawIr_fold_type_list(&F, field_types);
 }
 
-struct HirDecl *pawP_find_field(struct Compiler *C, struct IrType *self, String *name)
+struct HirDecl *pawP_find_field(struct Compiler *C, struct IrType *self, Str *name)
 {
     struct IrAdt *t = IrGetAdt(self);
     struct HirDecl *decl = pawHir_get_decl(C, t->did);
@@ -651,7 +651,7 @@ static struct IrType *resolve_path_expr(struct Resolver *R, struct HirPathExpr *
     if (HirIsAdtDecl(result)) {
         maybe_fix_unit_struct(R, type, HIR_CAST_EXPR(e));
     } else if (HirIsGenericDecl(result)) {
-        String const *name = hir_decl_ident(result).name;
+        Str const *name = hir_decl_ident(result).name;
         RESOLVER_ERROR(R, expected_value, NODE_START(result), name->text);
     }
     return type;
@@ -742,11 +742,11 @@ static paw_Bool is_bool_binop(enum BinaryOp op)
 static struct IrType *resolve_unop_expr(struct Resolver *R, struct HirUnOpExpr *e)
 {
     static uint8_t const VALID_OPS[][NBUILTINS] = {
-        //     type = {0, b, i, f, s, l, m}
-        [UNARY_LEN] = {0, 0, 0, 0, 1, 1, 1},
-        [UNARY_NEG] = {0, 0, 1, 1, 0, 0, 0},
-        [UNARY_NOT] = {0, 1, 0, 0, 0, 0, 0},
-        [UNARY_BNOT] = {0, 0, 1, 0, 0, 0, 0},
+        //     type  = {0, b, x, i, f, s, l, m, S}
+        [UNARY_LEN]  = {0, 0, 0, 0, 0, 1, 1, 1, 1},
+        [UNARY_NEG]  = {0, 0, 0, 1, 1, 0, 0, 0, 0},
+        [UNARY_NOT]  = {0, 1, 0, 0, 0, 0, 0, 0, 0},
+        [UNARY_BNOT] = {0, 0, 0, 1, 0, 0, 0, 0, 0},
     };
 
     static char const *UNOP_REPR[] = {
@@ -773,24 +773,24 @@ static struct IrType *resolve_unop_expr(struct Resolver *R, struct HirUnOpExpr *
 static struct IrType *resolve_binop_expr(struct Resolver *R, struct HirBinOpExpr *e)
 {
     static uint8_t const VALID_OPS[][NBUILTINS] = {
-        //     type = {0, b, i, f, s, l, m}
-        [BINARY_EQ] = {0, 1, 1, 1, 1, 0, 0},
-        [BINARY_NE] = {0, 1, 1, 1, 1, 0, 0},
-        [BINARY_LT] = {0, 0, 1, 1, 1, 0, 0},
-        [BINARY_LE] = {0, 0, 1, 1, 1, 0, 0},
-        [BINARY_GT] = {0, 0, 1, 1, 1, 0, 0},
-        [BINARY_GE] = {0, 0, 1, 1, 1, 0, 0},
-        [BINARY_ADD] = {0, 0, 1, 1, 1, 1, 0},
-        [BINARY_SUB] = {0, 0, 1, 1, 0, 0, 0},
-        [BINARY_MUL] = {0, 0, 1, 1, 0, 0, 0},
-        [BINARY_DIV] = {0, 0, 1, 1, 0, 0, 0},
-        [BINARY_MOD] = {0, 0, 1, 1, 0, 0, 0},
-        [BINARY_BXOR] = {0, 0, 1, 0, 0, 0, 0},
-        [BINARY_BAND] = {0, 0, 1, 0, 0, 0, 0},
-        [BINARY_BOR] = {0, 0, 1, 0, 0, 0, 0},
-        [BINARY_SHL] = {0, 0, 1, 0, 0, 0, 0},
-        [BINARY_SHR] = {0, 0, 1, 0, 0, 0, 0},
-        [BINARY_RANGE] = {0, 1, 1, 1, 1, 0, 0},
+        //     type    = {0, b, x, i, f, s, l, m, S}
+        [BINARY_EQ]    = {0, 1, 1, 1, 1, 1, 0, 0, 1},
+        [BINARY_NE]    = {0, 1, 1, 1, 1, 1, 0, 0, 1},
+        [BINARY_LT]    = {0, 0, 1, 1, 1, 1, 0, 0, 1},
+        [BINARY_LE]    = {0, 0, 1, 1, 1, 1, 0, 0, 1},
+        [BINARY_GT]    = {0, 0, 1, 1, 1, 1, 0, 0, 1},
+        [BINARY_GE]    = {0, 0, 1, 1, 1, 1, 0, 0, 1},
+        [BINARY_ADD]   = {0, 0, 0, 1, 1, 1, 1, 0, 0},
+        [BINARY_SUB]   = {0, 0, 0, 1, 1, 0, 0, 0, 0},
+        [BINARY_MUL]   = {0, 0, 0, 1, 1, 0, 0, 0, 0},
+        [BINARY_DIV]   = {0, 0, 0, 1, 1, 0, 0, 0, 0},
+        [BINARY_MOD]   = {0, 0, 0, 1, 1, 0, 0, 0, 0},
+        [BINARY_BXOR]  = {0, 0, 0, 1, 0, 0, 0, 0, 0},
+        [BINARY_BAND]  = {0, 0, 0, 1, 0, 0, 0, 0, 0},
+        [BINARY_BOR]   = {0, 0, 0, 1, 0, 0, 0, 0, 0},
+        [BINARY_SHL]   = {0, 0, 0, 1, 0, 0, 0, 0, 0},
+        [BINARY_SHR]   = {0, 0, 0, 1, 0, 0, 0, 0, 0},
+        [BINARY_RANGE] = {0, 1, 1, 1, 1, 1, 0, 0, 0},
     };
 
     static char const *BINOP_REPR[] = {
@@ -952,7 +952,7 @@ static struct IrType *resolve_closure_expr(struct Resolver *R, struct HirClosure
     return pawIr_new_func_ptr(R->C, params, ret);
 }
 
-static struct HirDecl *find_method_aux(struct Compiler *C, struct HirDecl *base, String *name)
+static struct HirDecl *find_method_aux(struct Compiler *C, struct HirDecl *base, Str *name)
 {
     struct HirDecl **pdecl;
     struct HirAdtDecl *adt = HirGetAdtDecl(base);
@@ -964,7 +964,7 @@ static struct HirDecl *find_method_aux(struct Compiler *C, struct HirDecl *base,
     return NULL;
 }
 
-struct IrType *pawP_find_method(struct Compiler *C, struct IrType *base, String *name)
+struct IrType *pawP_find_method(struct Compiler *C, struct IrType *base, Str *name)
 {
     struct HirDecl *decl = pawHir_get_decl(C, IR_TYPE_DID(base));
     struct HirDecl *method = find_method_aux(C, decl, name);
@@ -1285,7 +1285,20 @@ static struct IrType *resolve_call_expr(struct Resolver *R, struct HirCallExpr *
 
 static struct IrType *resolve_conversion_expr(struct Resolver *R, struct HirConversionExpr *e)
 {
-    resolve_operand(R, e->arg);
+    static int const ALLOWED_CASTS[NBUILTIN_SCALARS][NBUILTIN_SCALARS] = {
+        //          to  = {0, b, x, i, f}
+        [BUILTIN_BOOL]  = {0, 1, 1, 1, 1},
+        [BUILTIN_CHAR]  = {0, 1, 1, 1, 0},
+        [BUILTIN_INT]   = {0, 1, 1, 1, 1},
+        [BUILTIN_FLOAT] = {0, 1, 0, 1, 1},
+    };
+
+    IrType *type = resolve_operand(R, e->arg);
+    enum BuiltinKind const from = TYPE2CODE(R, type);
+
+    if (!ALLOWED_CASTS[from][e->to]) // TODO
+        RESOLVER_ERROR(R, incompatible_types, e->span.start, "", "TODO: should be invalid cast or something");
+
     return get_type(R, e->to);
 }
 
@@ -1365,7 +1378,7 @@ static struct IrType *resolve_field_expr(struct Resolver *R, struct HirFieldExpr
     return resolve_operand(R, e->value);
 }
 
-static struct HirExprList *collect_field_exprs(struct Resolver *R, struct HirExprList *items, FieldMap *map, String const *adt)
+static struct HirExprList *collect_field_exprs(struct Resolver *R, struct HirExprList *items, FieldMap *map, Str const *adt)
 {
     struct HirExprList *order = HirExprList_new(R->hir);
     HirExprList_reserve(R->hir, order, items->count);
@@ -1525,12 +1538,12 @@ static struct IrType *check_map_index(struct Resolver *R, struct HirIndex *e, st
 static struct IrType *check_str_index(struct Resolver *R, struct HirIndex *e, struct IrType *target)
 {
     IrType *index = resolve_operand(R, e->index);
-    enum BuiltinKind kind = TYPE2CODE(R, index);
-    if (kind == BUILTIN_INT)
-        return get_type(R, BUILTIN_STR);
+    enum BuiltinKind index_kind = TYPE2CODE(R, index);
+    if (index_kind == BUILTIN_INT)
+        return get_type(R, BUILTIN_CHAR);
 
     // index must have type Range*<int>
-    unify(R, NODE_START(e->index), index, range_index(R, kind));
+    unify(R, NODE_START(e->index), index, range_index(R, index_kind));
     return target;
 }
 
@@ -1605,7 +1618,7 @@ static void account_for_binding(struct Resolver *R, struct HirIdent ident)
             break;
         ps = ps->outer;
     }
-    String *const *pname = StringMap_get(R->C, ps->bound, ident.name);
+    Str *const *pname = StringMap_get(R->C, ps->bound, ident.name);
     if (pname != NULL)
         RESOLVER_ERROR(R, duplicate_binding, ident.span.start, ident.name->text);
     StringMap_insert(R->C, ps->bound, ident.name, ident.name);

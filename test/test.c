@@ -136,6 +136,21 @@ void test_mem_hook(void *ud, void *ptr, size_t size0, size_t size)
 {
     struct TestAlloc *a = ud;
     if (ptr != NULL) {
+
+if ((uintptr_t)ptr==0x102c93ec8&&size==24){
+printf("found malloc\n");
+}
+if ((uintptr_t)ptr==0x102c93ec8&&size0==24&&size==0){
+printf("found free\n");
+}
+if ((uintptr_t)ptr==0x102c93f28&&size==112){
+printf("found malloc 2\n");
+}
+if ((uintptr_t)ptr==0x102c93f28&&size0==112&&size==0){
+printf("found free 2\n");
+}
+
+
         // trash newly-allocated memory, as well as memory about to be released
         size_t const lower = PAW_MIN(size0, size);
         size_t const upper = PAW_MAX(size0, size);
@@ -224,7 +239,7 @@ void test_recover(paw_Env *P, paw_Bool fatal)
     check(paw_get_count(P) >= 1);
 
     if (fatal) {
-        char const *s = paw_string(P, -1);
+        char const *s = paw_str(P, -1);
         fprintf(stderr, "%s\n", s);
         abort();
     }
@@ -295,6 +310,18 @@ char const *op_name(Op op)
             return "NEWLIST";
         case OP_NEWMAP:
             return "NEWMAP";
+        case OP_XEQ:
+            return "XEQ";
+        case OP_XNE:
+            return "XNE";
+        case OP_XLT:
+            return "XLT";
+        case OP_XLE:
+            return "XLE";
+        case OP_XGT:
+            return "XGT";
+        case OP_XGE:
+            return "XGE";
         case OP_IEQ:
             return "IEQ";
         case OP_INE:
@@ -411,8 +438,18 @@ char const *op_name(Op op)
             return "SETFIELD";
         case OP_GETDISCR:
             return "GETDISCR";
-        case OP_XCASTB:
-            return "XCASTB";
+        case OP_BCASTF:
+            return "BCASTF";
+        case OP_XCASTC:
+            return "XCASTC";
+        case OP_XCASTI:
+            return "XCASTI";
+        case OP_ICASTB:
+            return "ICASTB";
+        case OP_ICASTX:
+            return "ICASTX";
+        case OP_ICASTC:
+            return "ICASTC";
         case OP_ICASTF:
             return "ICASTF";
         case OP_FCASTI:
@@ -423,8 +460,8 @@ char const *op_name(Op op)
             return "TESTK";
         case OP_SWITCHINT:
             return "SWITCHINT";
-        default:
-            return "???";
+        case NOPCODES:
+            PAW_UNREACHABLE();
     }
 }
 
@@ -446,9 +483,14 @@ void paw_dump_opcode(OpCode opcode)
         case OP_SLENGTH:
         case OP_LLENGTH:
         case OP_MLENGTH:
-        case OP_XCASTB:
+        case OP_BCASTF:
+        case OP_XCASTC:
+        case OP_XCASTI:
         case OP_FCASTI:
         case OP_FCASTB:
+        case OP_ICASTB:
+        case OP_ICASTX:
+        case OP_ICASTC:
         case OP_ICASTF:
         case OP_GETDISCR:
         case OP_CALL:
@@ -482,6 +524,12 @@ void paw_dump_opcode(OpCode opcode)
             printf("%s %d\n", opname, GET_A(opcode));
             break;
         // op A B C
+        case OP_XEQ:
+        case OP_XNE:
+        case OP_XLT:
+        case OP_XLE:
+        case OP_XGT:
+        case OP_XGE:
         case OP_IEQ:
         case OP_INE:
         case OP_ILT:
@@ -573,7 +621,6 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
             case OP_MLENGTH:
             case OP_SCONCAT:
             case OP_LCONCAT:
-            case OP_XCASTB:
             case OP_FCASTI:
             case OP_ICASTF:
             case OP_GETDISCR:
@@ -605,6 +652,12 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
                 pawL_add_fstring(P, print, " %d\t; close(R[%d])\n", GET_A(opcode), GET_A(opcode));
                 break;
             // op A B C
+            case OP_XEQ:
+            case OP_XNE:
+            case OP_XLT:
+            case OP_XLE:
+            case OP_XGT:
+            case OP_XGE:
             case OP_IEQ:
             case OP_INE:
             case OP_ILT:

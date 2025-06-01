@@ -19,7 +19,7 @@ static int run_tests(paw_Env *P)
         struct Def *def = defs.data[i];
         if (!def->hdr.is_pub)
             continue;
-        String const *name = def->hdr.name;
+        Str const *name = def->hdr.name;
         if (name->length >= kLength && memcmp(name->text, kPrefix, kLength) == 0) {
             check(def->hdr.kind == DEF_FUNC);
             paw_push_zero(P, 1);
@@ -34,7 +34,7 @@ static void check_status(paw_Env *P, int status)
 {
     if (status != PAW_OK && status != PAW_EMEMORY) {
         check(paw_get_count(P) >= 1);
-        char const *s = paw_string(P, -1);
+        char const *s = paw_str(P, -1);
         fprintf(stderr, "%s\n", s);
         abort();
     }

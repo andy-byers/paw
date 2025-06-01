@@ -1,7 +1,7 @@
 // function.paw
 
 fn f() {
-    // implicit 'return'
+    // implicit "return"
 }
 fn fi(a: int) {
     return;

@@ -13,7 +13,7 @@
 
 #define NEW_NODE(C, T) P_ALLOC(C, NULL, 0, sizeof(T))
 
-struct Hir *pawHir_new(struct Compiler *C, String *name, int modno)
+struct Hir *pawHir_new(struct Compiler *C, Str *name, int modno)
 {
     struct Hir *hir = NEW_NODE(C, struct Hir);
     *hir = (struct Hir){
@@ -1172,7 +1172,7 @@ static void dump_expr(struct Printer *P, struct HirExpr *expr)
                             DUMP_FMT(P, "%f", V_FLOAT(e->basic.value));
                             break;
                         case BUILTIN_STR:
-                            DUMP_FMT(P, "\"%s\"", V_STRING(e->basic.value)->text);
+                            DUMP_FMT(P, "\"%s\"", V_STR(e->basic.value)->text);
                             break;
                         default:
                             PAW_UNREACHABLE();
@@ -1307,7 +1307,7 @@ char const *pawHir_dump(struct Hir *hir)
         add_newline(&print);
     }
     pawL_push_result(P, &buf);
-    return paw_string(P, -1);
+    return paw_str(P, -1);
 }
 
 char const *pawHir_print_path(struct Compiler *C, struct HirPath *path)
@@ -1323,6 +1323,6 @@ char const *pawHir_print_path(struct Compiler *C, struct HirPath *path)
                path, PAW_TRUE);
 
     pawL_push_result(P, &buf);
-    return paw_string(P, -1);
+    return paw_str(P, -1);
 }
 

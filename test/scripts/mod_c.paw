@@ -1,7 +1,7 @@
 // mod_c.paw
 
 // TODO: Use Self::First and Self::Second
-//       Doesn't work currently: type checker says it can't perform "::" access on a local 
+//       Doesn"t work currently: type checker says it can"t perform "::" access on a local 
 //       ("Self"). Should be allowed on a TypeDecl.
 pub fn choose(b: bool) -> str {
     if b { "abc" }

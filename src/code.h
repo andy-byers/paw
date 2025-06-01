@@ -93,6 +93,7 @@ enum JumpKind {
 enum BuiltinKind {
     BUILTIN_UNIT,
     BUILTIN_BOOL,
+    BUILTIN_CHAR,
     BUILTIN_INT,
     BUILTIN_FLOAT,
     BUILTIN_STR,
@@ -112,6 +113,8 @@ enum BuiltinKind {
 
     NBUILTINS,
 };
+
+#define NBUILTIN_SCALARS (BUILTIN_FLOAT + 1)
 
 enum TraitKind {
     TRAIT_HASH, // "Hash" trait
@@ -418,7 +421,7 @@ enum FuncKind {
 struct KCache {
     struct ValueMap *ints;
     struct ValueMap *strs;
-    struct ValueMap *flts;
+    struct ValueMap *floats;
 };
 
 #endif // PAW_CODE_H

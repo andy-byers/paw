@@ -13,7 +13,7 @@ use io;
 
 const CHUNK_SIZE: int = 1 << 12;
 
-fn read_to_string(path: str) -> io::Result<str> {
+fn read_to_str(path: str) -> io::Result<str> {
     let file = io::File::open(path, "r")?;
 
     let result = "";
@@ -30,23 +30,23 @@ fn read_to_string(path: str) -> io::Result<str> {
 // Tokenizer
 //
 
-fn is_space(c: str) -> bool {
-    c == " " || c == "\t" || c == "\f" || c == "\v" || c == "\r" || c == "\n"
+fn is_space(c: char) -> bool {
+    c == ' ' || c == '\t' || c == '\f' || c == '\v' || c == '\r' || c == '\n'
 }
 
-fn is_alpha(c: str) -> bool {
-    c == "a" || c == "b" || c == "c" || c == "d" || c == "e" || c == "f" || c == "g" || c == "h" || c == "i" || c == "j" || c == "k" || c == "l" || c == "m" || c == "n" || c == "o" || c == "p" || c == "q" || c == "r" || c == "s" || c == "t" || c == "u" || c == "v" || c == "w" || c == "x" || c == "y" || c == "z" || c == "A" || c == "B" || c == "C" || c == "D" || c == "E" || c == "F" || c == "G" || c == "H" || c == "I" || c == "J" || c == "K" || c == "L" || c == "M" || c == "N" || c == "O" || c == "P" || c == "Q" || c == "R" || c == "S" || c == "T" || c == "U" || c == "V" || c == "W" || c == "X" || c == "Y" || c == "Z"
+fn is_alpha(c: char) -> bool {
+    c == 'a' || c == 'b' || c == 'c' || c == 'd' || c == 'e' || c == 'f' || c == 'g' || c == 'h' || c == 'i' || c == 'j' || c == 'k' || c == 'l' || c == 'm' || c == 'n' || c == 'o' || c == 'p' || c == 'q' || c == 'r' || c == 's' || c == 't' || c == 'u' || c == 'v' || c == 'w' || c == 'x' || c == 'y' || c == 'z' || c == 'A' || c == 'B' || c == 'C' || c == 'D' || c == 'E' || c == 'F' || c == 'G' || c == 'H' || c == 'I' || c == 'J' || c == 'K' || c == 'L' || c == 'M' || c == 'N' || c == 'O' || c == 'P' || c == 'Q' || c == 'R' || c == 'S' || c == 'T' || c == 'U' || c == 'V' || c == 'W' || c == 'X' || c == 'Y' || c == 'Z'
 }
 
-fn is_alnum(c: str) -> bool {
-    is_alpha(c) || c == "0" || c == "1" || c == "2" || c == "3" || c == "4" || c == "5" || c == "6" || c == "7" || c == "8" || c == "9"
+fn is_alnum(c: char) -> bool {
+    is_alpha(c) || c == '0' || c == '1' || c == '2' || c == '3' || c == '4' || c == '5' || c == '6' || c == '7' || c == '8' || c == '9'
 }
 
 inline struct SourceLoc {
     pub line: int,
     pub column: int,
 
-    pub fn to_string(self) -> str {
+    pub fn to_str(self) -> str {
         "\{self.line}:\{self.column}"
     }
 }
@@ -82,7 +82,7 @@ struct Scanner {
         self.token = self.advance();
     }
 
-    fn get_char(self) -> str {
+    fn get_char(self) -> char {
         if self.index < #self.source {
             let c = self.source[self.index];
             if (c == '\r' || c == '\n') {
@@ -91,15 +91,15 @@ struct Scanner {
             }
             c
         } else {
-            ""
+            '\0'
         }
     }
 
-    fn peek_char(self, n: int) -> str {
+    fn peek_char(self, n: int) -> char {
         if self.index < #self.source - n {
             self.source[self.index + n]
         } else {
-            ""
+            '\0'
         }
     }
 
@@ -114,24 +114,24 @@ struct Scanner {
         let loc = self.location;
         let kind = match self.get_char() {
             '"' => return self.scan_string(),
-            c if is_alpha(c) || c == "_" => return self.scan_ident(),
-            "(" if self.peek_char(1) == "*" => return self.scan_comment(),
-            "." if self.peek_char(1) == "." => {
-                self.skip_char(); // skip "."
+            c if is_alpha(c) || c == '_' => return self.scan_ident(),
+            '(' if self.peek_char(1) == '*' => return self.scan_comment(),
+            '.' if self.peek_char(1) == '.' => {
+                self.skip_char(); // skip '.'
                 TokenKind::DotDot
             },
 
-            "|" => TokenKind::Pipe,
-            "." => TokenKind::Dot,
-            "=" => TokenKind::Equals,
-            "(" => TokenKind::LeftParen,
-            ")" => TokenKind::RightParen,
-            "[" => TokenKind::LeftSquare,
-            "]" => TokenKind::RightSquare,
-            "{" => TokenKind::LeftCurly,
-            "}" => TokenKind::RightCurly,
-            "-" => TokenKind::Hyphen,
-            "" => TokenKind::Eof,
+            '|' => TokenKind::Pipe,
+            '.' => TokenKind::Dot,
+            '=' => TokenKind::Equals,
+            '(' => TokenKind::LeftParen,
+            ')' => TokenKind::RightParen,
+            '[' => TokenKind::LeftSquare,
+            ']' => TokenKind::RightSquare,
+            '{' => TokenKind::LeftCurly,
+            '}' => TokenKind::RightCurly,
+            '-' => TokenKind::Hyphen,
+            '\0' => TokenKind::Eof,
 
             c => TokenKind::Error(TokenErrorKind::UnknownToken),
         };
@@ -142,7 +142,8 @@ struct Scanner {
     fn skip_whitespace(self) {
         loop {
             match self.get_char() {
-                " " | "\r" | "\n" | "\t" | "\f" | "\v" => self.skip_char(),
+                ' ' | '\r' | '\n' | '\t' | '\f' | '\v' 
+                    => self.skip_char(),
                 _ => break,
             }
         }
@@ -157,8 +158,8 @@ struct Scanner {
     }
 
     fn scan_comment(self) -> Token {
-        self.skip_char(); // skip "("
-        self.skip_char(); // skip "*"
+        self.skip_char(); // skip '('
+        self.skip_char(); // skip '*'
 
         let loc = self.location;
         let data = "";
@@ -166,17 +167,17 @@ struct Scanner {
         loop {
             match self.get_char() {
                 // reached EOF: block comment was not terminated
-                "" => return self.new_error(loc, TokenErrorKind::UnterminatedComment, data),
+                '\0' => return self.new_error(loc, TokenErrorKind::UnterminatedComment, data),
 
-                "*" if self.peek_char(1) == ")" => {
-                    self.skip_char(); // skip "*"
-                    self.skip_char(); // skip ")"
+                '*' if self.peek_char(1) == ')' => {
+                    self.skip_char(); // skip '*'
+                    self.skip_char(); // skip ')'
                     return self.new_token(loc, TokenKind::Comment, data);
                 },
 
                 c => {
                     self.skip_char();
-                    data += c;
+                    data += c.to_str(); // TODO: use "++" operator and allow "str + char" and "char + str"
                 },
             }
         }
@@ -188,9 +189,9 @@ struct Scanner {
 
         loop {
             let c = self.get_char();
-            if is_alnum(c) || c == "_" {
+            if is_alnum(c) || c == '_' {
                 self.skip_char();
-                data += c;
+                data += c.to_str();
             } else {
                 return self.new_token(loc, TokenKind::Ident, data);
             }
@@ -198,7 +199,7 @@ struct Scanner {
     }
 
     fn scan_string(self) -> Token {
-        self.skip_char(); // '"'
+        self.skip_char(); // """
 
         let loc = self.location;
         let data = "";
@@ -208,24 +209,24 @@ struct Scanner {
                 '\\' => {
                     self.skip_char(); // skip '\\'
                     match self.get_char() {
-                        '\\' => data += '\\',
-                        '"' => data += '"',
-                        '/' => data += '/',
-                        'b' => data += '\b',
-                        'v' => data += '\v',
-                        'f' => data += '\f',
-                        'n' => data += '\n',
-                        'r' => data += '\r',
-                        't' => data += '\t',
+                        '\\' => data += "\\",
+                        '"' => data += "\"",
+                        '/' => data += "/",
+                        'b' => data += "\b",
+                        'v' => data += "\v",
+                        'f' => data += "\f",
+                        'n' => data += "\n",
+                        'r' => data += "\r",
+                        't' => data += "\t",
                         _ => break,
                     }
                 },
                 '"' => {
-                    self.skip_char(); // skip '"'
+                    self.skip_char(); // skip """
                     return self.new_token(loc, TokenKind::String, data);
                 },
-                "" | '\r' | '\n' => break,
-                c => data += c,
+                '\0' | '\r' | '\n' => break,
+                c => data += c.to_str(),
             }
             self.skip_char();
         }
@@ -239,10 +240,10 @@ inline struct Token {
     pub kind: TokenKind,
     pub data: str,
 
-    pub fn to_string(self) -> str {
+    pub fn to_str(self) -> str {
         match self.kind {
             TokenKind::Ident => self.data,
-            TokenKind::String => '"\{self.data}"',
+            TokenKind::String => "\"\{self.data}\"",
             TokenKind::Comment => "(* \{self.data} *)",
             TokenKind::LeftParen => "(",
             TokenKind::RightParen => ")",
@@ -257,7 +258,7 @@ inline struct Token {
             TokenKind::Dot => ".",
             TokenKind::Eof => "",
 
-            TokenKind::Error(e) => e.to_string(),
+            TokenKind::Error(e) => e.to_str(),
         }
     }
 }
@@ -281,7 +282,7 @@ inline enum TokenKind {
     Eof,
     Error(TokenErrorKind),
 
-    pub fn to_string(self) -> str {
+    pub fn to_str(self) -> str {
         match self {
             TokenKind::Ident => "<ident>",
             TokenKind::String => "<string>",
@@ -298,7 +299,7 @@ inline enum TokenKind {
             TokenKind::DotDot => "..",
             TokenKind::Dot => ".",
             TokenKind::Eof => "",
-            TokenKind::Error(e) => e.to_string(),
+            TokenKind::Error(e) => e.to_str(),
         }
     }
 
@@ -331,7 +332,7 @@ inline enum TokenErrorKind {
     UnterminatedComment,
     InvalidEscapeChar,
 
-    pub fn to_string(self) -> str {
+    pub fn to_str(self) -> str {
         match self {
             TokenErrorKind::UnknownToken => "unknown token",
             TokenErrorKind::UnterminatedString => "unterminated string",
@@ -362,7 +363,7 @@ inline struct ParseError {
     pub kind: ParseErrorKind,
     pub location: SourceLoc,
 
-    pub fn to_string(self) -> str {
+    pub fn to_str(self) -> str {
         "\{self.location}: \{self.kind}"
     }
 }
@@ -374,12 +375,12 @@ inline enum ParseErrorKind {
     ExpectedToken(TokenKind, Token),
     UnexpectedToken(Token),
 
-    pub fn to_string(self) -> str {
+    pub fn to_str(self) -> str {
         match self {
-            ParseErrorKind::UnterminatedString(s) => 'unterminated string "\{s}"',
+            ParseErrorKind::UnterminatedString(s) => "unterminated string \"\{s}\"",
             ParseErrorKind::UnterminatedComment => "unterminated comment",
-            ParseErrorKind::ExpectedToken(k, t) => 'expected token "\{k}" but have "\{t}"',
-            ParseErrorKind::UnexpectedToken(t) => 'unexpected token "\{t}"',
+            ParseErrorKind::ExpectedToken(k, t) => "expected token \"\{k}\" but have \"\{t}\"",
+            ParseErrorKind::UnexpectedToken(t) => "unexpected token \"\{t}\"",
         }
     }
 }
@@ -391,7 +392,7 @@ struct Grammer {
         Self{productions}
     }
 
-    pub fn to_string(self) -> str {
+    pub fn to_str(self) -> str {
         let result = "";
         for p in self.productions {
             result += "\{p}\n";
@@ -404,7 +405,7 @@ inline struct Production {
     pub ident: str,
     pub expr: Expression,
 
-    pub fn to_string(self) -> str {
+    pub fn to_str(self) -> str {
         "\{self.ident} = \{self.expr} ."
     }
 }
@@ -412,11 +413,11 @@ inline struct Production {
 inline struct Expression {
     pub alts: [Alternative],
 
-    pub fn to_string(self) -> str {
+    pub fn to_str(self) -> str {
         let result = "";
         for a in self.alts {
             if #result > 0 { result += " | "; }
-            result += a.to_string();
+            result += a.to_str();
         }
         result
     }
@@ -425,11 +426,11 @@ inline struct Expression {
 inline struct Alternative {
     pub terms: [Term],
 
-    pub fn to_string(self) -> str {
+    pub fn to_str(self) -> str {
         let result = "";
         for t in self.terms {
             if #result > 0 { result += " "; }
-            result += t.to_string();
+            result += t.to_str();
         }
         result
     }
@@ -444,11 +445,11 @@ enum Term {
     Option(Expression),
     Repetition(Expression),
 
-    pub fn to_string(self) -> str {
+    pub fn to_str(self) -> str {
         match self {
             Term::Ident(data) => data,
-            Term::Terminal(data) => '"\{data}"',
-            Term::Range(lhs, rhs) => '"\{lhs}".."\{rhs}"',
+            Term::Terminal(data) => "\"\{data}\"",
+            Term::Range(lhs, rhs) => "\"\{lhs}\"..\"\{rhs}\"",
             Term::Exception(lhs, rhs) =>  "\{lhs} - \{rhs}",
             Term::Group(expr) => "(\{expr})",
             Term::Option(expr) =>  "[\{expr}]",
@@ -664,10 +665,10 @@ fn analyze_definitions(ctx: Context, g: Grammer) -> Result<[str: Expression], st
 
     for Production{ident, expr} in g.productions {
         if result.contains(ident) {
-            return Result::Err('duplicate identifier "\{ident}"');
+            return Result::Err("duplicate identifier \"\{ident}\"");
         }
         if builtins.contains(ident) {
-            return Result::Err('definition of builtin identifier "\{ident}"');
+            return Result::Err("definition of builtin identifier \"\{ident}\"");
         }
         result[ident] = expr;
 
@@ -675,7 +676,7 @@ fn analyze_definitions(ctx: Context, g: Grammer) -> Result<[str: Expression], st
     }
     for ident in idents {
         if !result.contains(ident) && !builtins.contains(ident) {
-            return Result::Err('missing identifier "\{ident}"');
+            return Result::Err("missing identifier \"\{ident}\"");
         }
     }
     Result::Ok(result)
@@ -753,10 +754,10 @@ pub fn main(args: [str]) {
         args[1]
     };
 
-    let source = match read_to_string(path) {
+    let source = match read_to_str(path) {
         io::Result::Ok(s) => s,
         io::Result::Err(e) => {
-            ctx.error('unable to read EBNF file "\{path}" (\{e})');
+            ctx.error("unable to read EBNF file \"\{path}\" (\{e})");
         },
     };
 

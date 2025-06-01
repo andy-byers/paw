@@ -176,7 +176,7 @@ char const *pawP_print_decision(struct Compiler *C, struct Decision *dec)
     print_decision(&printer, dec);
 
     pawL_push_result(P, &buf);
-    return paw_string(P, -1);
+    return paw_str(P, -1);
 }
 
 #endif // PAW_DEBUG_EXTRA

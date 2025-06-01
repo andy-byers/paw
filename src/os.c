@@ -31,7 +31,7 @@ paw_Bool pawO_is_open(File const *file)
 
 void pawO_error(paw_Env *P)
 {
-    paw_push_string(P, strerror(errno));
+    paw_push_str(P, strerror(errno));
     pawC_throw(P, PAW_ESYSTEM);
 }
 

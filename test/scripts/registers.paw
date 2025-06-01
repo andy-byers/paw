@@ -190,9 +190,9 @@ pub fn test_basic_guard() {
 //    check_cmpf(-1.1, 1.2);
 //    check_cmpf(123.1, 124.2);
 //
-//    check_cmps('a', 'b');
-//    check_cmps('ab', 'abc');
-//    check_cmps('abc', 'abd');
+//    check_cmps("a", "b");
+//    check_cmps("ab", "abc");
+//    check_cmps("abc", "abd");
 //}
 //
 //fn poly<Ty>(value: Ty) -> Ty {
@@ -235,7 +235,7 @@ pub fn test_basic_guard() {
 //    let list = [];
 //    let opt = getelem(list);
 ////    assert(opt.is_none());
-//    // propagate type argument to 'list'
+//    // propagate type argument to "list"
 //    let _: Option<int> = opt; 
 //}
 //
@@ -314,9 +314,9 @@ pub fn test_basic_guard() {
 //
 //pub fn test_obj_3245892346920() 
 //{
-//    let o = Object{x: 1.0, y: 'abc', z: true};
+//    let o = Object{x: 1.0, y: "abc", z: true};
 //    assert(o.x == 1.0);
-//    assert(o.y == 'abc');
+//    assert(o.y == "abc");
 //    assert(o.z == true);
 //}
 //
@@ -521,14 +521,14 @@ pub fn test_basic_guard() {
 //        if i == x {
 //            let inner = i;
 //            f = |action: str| {
-//                if action == 'inc' {
+//                if action == "inc" {
 //                    inner = inner + 1;
-//                } else if action == 'dec' {
+//                } else if action == "dec" {
 //                    inner = inner - 1;
 //                }
 //                return inner;
 //            };
-//            break; // close 'inner'
+//            break; // close "inner"
 //        }
 //        i = i + 1;
 //    }
@@ -537,13 +537,13 @@ pub fn test_basic_guard() {
 //
 //pub fn test_break_upvalue_inner() {
 //    let state = check_break_upvalue_inner(10);
-//    assert(state('get') == 10);
-//    assert(state('inc') == 11);
-//    assert(state('inc') == 12);
-//    assert(state('get') == 12);
-//    assert(state('dec') == 11);
-//    assert(state('dec') == 10);
-//    assert(state('get') == 10);
+//    assert(state("get") == 10);
+//    assert(state("inc") == 11);
+//    assert(state("inc") == 12);
+//    assert(state("get") == 12);
+//    assert(state("dec") == 11);
+//    assert(state("dec") == 10);
+//    assert(state("get") == 10);
 //}
 //
 //fn check_break_upvalue_outer(x: int) -> (fn(str) -> int) {
@@ -553,9 +553,9 @@ pub fn test_basic_guard() {
 //    while i < 100 {
 //        if i == x {
 //            f = |action: str| {
-//                if action == 'inc' {
+//                if action == "inc" {
 //                    outer = outer + 1;
-//                } else if action == 'dec' {
+//                } else if action == "dec" {
 //                    outer = outer - 1;
 //                }
 //                return outer;
@@ -564,18 +564,18 @@ pub fn test_basic_guard() {
 //        }
 //        i = i + 1;
 //    }
-//    return f; // close 'outer'
+//    return f; // close "outer"
 //}
 //
 //pub fn test_break_upvalue_outer() {
 //    let state = check_break_upvalue_outer(10);
-//    assert(state('get') == 10);
-//    assert(state('dec') == 9);
-//    assert(state('dec') == 8);
-//    assert(state('get') == 8);
-//    assert(state('inc') == 9);
-//    assert(state('inc') == 10);
-//    assert(state('get') == 10);
+//    assert(state("get") == 10);
+//    assert(state("dec") == 9);
+//    assert(state("dec") == 8);
+//    assert(state("get") == 8);
+//    assert(state("inc") == 9);
+//    assert(state("inc") == 10);
+//    assert(state("get") == 10);
 //}
 //
 //pub fn test_ab() {
@@ -721,21 +721,21 @@ pub fn test_basic_guard() {
 
 //pub fn test_map_operators() {
 //    let map = [:];
-//    map['a'] = 1;
-//    map['b'] = 2;
-//    map['c'] = 3;
-//    assert(map['a'] == 1);
-//    assert(map['b'] == 2);
-//    assert(map['c'] == 3);
+//    map["a"] = 1;
+//    map["b"] = 2;
+//    map["c"] = 3;
+//    assert(map["a"] == 1);
+//    assert(map["b"] == 2);
+//    assert(map["c"] == 3);
 //}
 //
 //pub fn test_map_methods() {
 //    let map = [:];
-//    map.erase('a');
-//    map['a'] = 'b';
-//    assert(map['a'] == 'b');
-//    assert(map.get_or('a', 'c') == 'b');
-//    assert(map.get_or('b', 'c') == 'c');
+//    map.erase("a");
+//    map["a"] = "b";
+//    assert(map["a"] == "b");
+//    assert(map.get_or("a", "c") == "b");
+//    assert(map.get_or("b", "c") == "c");
 //}
 //
 //fn repeat_helper<Ty>(value: Ty, times: int) -> [Ty] {
@@ -776,7 +776,7 @@ pub fn test_basic_guard() {
 ////    assert(call_poly_method(false) == false);
 ////    assert(call_poly_method(1.23) == 1.23);
 ////    assert(call_poly_method(123) == 123);
-////    assert(call_poly_method('abc') == 'abc');
+////    assert(call_poly_method("abc") == "abc");
 ////    assert(call_poly_method(1.23) == 1.23);
 ////}
 //

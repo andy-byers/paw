@@ -49,11 +49,12 @@ enum MultiChar {
 
     // Variables and literals:
     TK_NAME,
+    TK_CHAR,
+    TK_INT,
+    TK_FLOAT,
     TK_STRING_TEXT,
     TK_STRING_EXPR_OPEN,
     TK_STRING_EXPR_CLOSE,
-    TK_INTEGER,
-    TK_FLOAT,
 
     // Keywords (must be in this order):
     TK_PUB,
@@ -84,8 +85,13 @@ enum MultiChar {
 
 typedef unsigned TokenKind;
 
+enum TokenFlag {
+    TF_UNICODE = 1 << 0,
+};
+
 struct Token {
     struct SourceSpan span;
+    unsigned flags;
     TokenKind kind;
     Value value;
 };
@@ -96,7 +102,7 @@ struct Lex {
     paw_Env *P;
 
     Tuple *strings;
-    String *modname;
+    Str *modname;
     Closure *main;
     struct Ast *ast;
 
@@ -105,7 +111,7 @@ struct Lex {
     char const *end;
 
     // state for handling string interpolation
-    struct CharStack *states;
+    struct StateStack *states;
     struct IntStack *parens;
 
     struct DynamicMem *dm;
@@ -127,11 +133,15 @@ struct Lex {
     paw_Bool in_impl;
 };
 
-#define STATE_NORMAL '\0'
-DEFINE_LIST(struct Lex, CharStack, char)
+enum StringState {
+    STATE_NORMAL,
+    STATE_STRING,
+};
+
+DEFINE_LIST(struct Lex, StateStack, enum StringState)
 DEFINE_LIST(struct Lex, IntStack, int)
 
-String *pawX_scan_string(struct Lex *lex, char const *s, size_t n);
+Str *pawX_scan_str(struct Lex *lex, char const *s, size_t n);
 void pawX_set_source(struct Lex *lex, paw_Reader input, void *ud);
 TokenKind pawX_next(struct Lex *lex);
 TokenKind pawX_peek(struct Lex *lex);

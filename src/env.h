@@ -38,11 +38,13 @@ enum {
     CSTR_TRUE,
     CSTR_FALSE,
     CSTR_BOOL,
+    CSTR_CHAR,
     CSTR_INT,
     CSTR_FLOAT,
     CSTR_STR,
     CSTR_LIST,
     CSTR_MAP,
+    CSTR_STRING,
     CSTR_OPTION,
     CSTR_RESULT,
     CSTR_RANGE,
@@ -80,11 +82,11 @@ typedef struct paw_Env {
     StackRel bound;
     StackRel top;
 
-    String *modname;
+    Str *modname;
     Value registry;
 
     // Array of commonly-used strings.
-    String *string_cache[NCSTR];
+    Str *string_cache[NCSTR];
 
     // Contains an error message that is served when the system runs out of
     // memory (a call to the 'alloc' field below returned NULL).
@@ -138,7 +140,7 @@ typedef struct paw_Env {
 void pawE_uninit(paw_Env *P);
 _Noreturn void pawE_error(paw_Env *P, int code, int line, char const *fmt, ...);
 CallFrame *pawE_extend_cf(paw_Env *P, StackPtr top);
-int pawE_locate(paw_Env *P, String const *name, paw_Bool only_pub);
+int pawE_locate(paw_Env *P, Str const *name, paw_Bool only_pub);
 
 #define CACHED_STRING(P, k) CHECK_EXP((k) < NCSTR, (P)->string_cache[k])
 void pawE_push_cstr(paw_Env *P, unsigned kind);

@@ -59,6 +59,12 @@ static void test_primitives(void)
     check(V_INT(v) == PAW_INT_MAX);
     V_SET_INT(&v, PAW_INT_MIN);
     check(V_INT(v) == PAW_INT_MIN);
+
+    // make sure "(Value){0}" clears all bits (first variant must have size
+    // equal to that of "union Value")
+    V_SET_INT(&v, -1);
+    v = (Value){0};
+    check(V_INT(v) == 0);
 }
 
 #define N 500
@@ -353,7 +359,7 @@ static void test_map_extend(paw_Env *P)
 
 static void test_strings(paw_Env *P)
 {
-    paw_push_nstring(P, "fixed\0\1", 7);
+    paw_push_nstr(P, "fixed\0\1", 7);
     void const *fixed = P->top.p[-1].p;
 
     int total_words = 0;
@@ -363,7 +369,7 @@ static void test_strings(paw_Env *P)
     for (size_t wordlen = 1; wordlen < 26; ++wordlen) {
         size_t const nwords = PAW_LENGTHOF(data) - wordlen;
         for (size_t i = 0; i < nwords; ++i) {
-            paw_push_nstring(P, data + i, wordlen);
+            paw_push_nstr(P, data + i, wordlen);
             ++total_words;
         }
         if (total_words > 50) {
@@ -372,7 +378,7 @@ static void test_strings(paw_Env *P)
             paw_pop(P, npop);
         }
     }
-    paw_push_nstring(P, "fixed\0\1", 7);
+    paw_push_nstr(P, "fixed\0\1", 7);
     check(fixed == P->top.p[-1].p);
 }
 
@@ -413,8 +419,8 @@ static void expect_int_aux(paw_Env *P, int base, char const *text, paw_Int resul
 static void roundtrip_int(paw_Env *P, paw_Int i)
 {
     paw_push_int(P, i);
-    paw_int_to_string(P, -1, NULL);
-    char const *str = paw_string(P, -1);
+    paw_int_to_str(P, -1, NULL);
+    char const *str = paw_str(P, -1);
     expect_int_aux(P, 10, ERASE_TYPE(str), i);
     paw_pop(P, 1);
 }
@@ -473,8 +479,8 @@ static void expect_float_aux(paw_Env *P, char const *text, paw_Float result)
 static void roundtrip_float(paw_Env *P, paw_Float f)
 {
     paw_push_float(P, f);
-    paw_float_to_string(P, -1, NULL);
-    char const *str = paw_string(P, -1);
+    paw_float_to_str(P, -1, NULL);
+    char const *str = paw_str(P, -1);
     expect_float_aux(P, ERASE_TYPE(str), f);
     paw_pop(P, 1);
 }
@@ -557,7 +563,7 @@ static void test_buffer(paw_Env *P)
     pawL_buffer_resize(P, &buf, 16);
     pawL_push_result(P, &buf);
 
-    paw_push_string(P, "0123456789101112");
+    paw_push_str(P, "0123456789101112");
     // TODO check(paw_str_rawcmp(P, -1) == 0);
     paw_pop(P, 1);
 }
@@ -587,7 +593,7 @@ static int on_build_hir(paw_Env *P)
 
 void test_visitors(paw_Env *P)
 {
-    paw_push_string(P, "paw.on_build_hir");
+    paw_push_str(P, "paw.on_build_hir");
     paw_new_native(P, on_build_hir, 0);
     paw_map_set(P, PAW_REGISTRY_INDEX);
 
@@ -601,12 +607,12 @@ void test_visitors(paw_Env *P)
 void test_hook(paw_Env *P)
 {
     paw_set_hook(P, test_dump_source, PAW_HOOKCALL, 10);
-    int status = test_open_string(P, "pub fn main() {print('Hello, world!\n');}");
+    int status = test_open_string(P, "pub fn main() {print(\"Hello, world!\\n\");}");
     check(status == PAW_OK);
 
     struct paw_Item item;
     paw_mangle_start(P);
-    paw_push_string(P, "main");
+    paw_push_str(P, "main");
     paw_mangle_add_name(P);
     status = paw_lookup_item(P, -1, &item);
     check(status == PAW_OK);
@@ -716,6 +722,7 @@ int main(void)
     DRIVER(test_stack);
     DRIVER(test_list_get_and_set);
     DRIVER(test_list_get_and_set_wide);
+    DRIVER(test_list_iterate);
     DRIVER(test_map_get_and_put);
     DRIVER(test_map_erase);
     DRIVER(test_map_erase_2);

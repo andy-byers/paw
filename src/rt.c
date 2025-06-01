@@ -153,19 +153,10 @@ void pawR_tuple_set(CallFrame *cf, Value *ra, int index, Value const *rb)
 
 void pawR_init(paw_Env *P)
 {
-    String *errmsg = pawS_new_str(P, "not enough memory");
+    Str *errmsg = pawS_new_str(P, "not enough memory");
     pawG_fix_object(P, CAST_OBJECT(errmsg));
     V_SET_OBJECT(&P->mem_errmsg, errmsg);
 }
-
-#define I2U(i) (CAST(uint64_t, i))
-#define U2I(u) PAW_CAST_INT(u)
-
-// Generate code for int operators
-// Casts to unsigned to avoid UB (signed integer overflow). Requires
-// 2's complement integer representation to work properly.
-#define I_UNOP(a, op) U2I(op I2U(a))
-#define I_BINOP(a, b, op) U2I(I2U(a) op I2U(b))
 
 #define DIVIDE_BY_0(P) pawR_error(P, PAW_ERUNTIME, "divide by 0")
 
@@ -190,16 +181,16 @@ void pawR_str_concat(paw_Env *P, CallFrame *cf, int n)
 
     size_t total_size = 0;
     for (int i = 0; i < n; ++i) {
-        total_size += pawS_length(V_STRING(ra[i]));
+        total_size += pawS_length(V_STR(ra[i]));
     }
 
     // caution: unanchored allocation
-    String *r = pawS_new_uninit(P, total_size);
+    Str *r = pawS_new_uninit(P, total_size);
     char *data = r->text;
 
     paw_assert(data != NULL);
     for (int i = 0; i < n; ++i) {
-        String const *s = V_STRING(ra[i]);
+        Str const *s = V_STR(ra[i]);
         memcpy(data, s->text, s->length);
         data += s->length;
     }
@@ -211,7 +202,7 @@ void pawR_str_concat(paw_Env *P, CallFrame *cf, int n)
 
 void pawR_str_length(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb)
 {
-    size_t const length = pawS_length(V_STRING(*rb));
+    size_t const length = pawS_length(V_STR(*rb));
     V_SET_INT(ra, PAW_CAST_INT(length));
 }
 
@@ -237,12 +228,9 @@ void pawR_list_concat(paw_Env *P, CallFrame *cf, int n)
 
 void pawR_str_get(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc)
 {
-    String const *str = V_STRING(*rb);
-    paw_Int const idx = V_INT(*rc);
-    pawV_check_abs(P, idx, str->length, "str");
-    char const ch = str->text[idx];
-    String *res = pawS_new_nstr(P, &ch, 1);
-    V_SET_OBJECT(ra, res);
+    Str const *str = V_STR(*rb);
+    size_t const index = pawV_check_abs(P, V_INT(*rc), str->length, "str");
+    V_SET_CHAR(ra, (paw_Char)str->text[index]);
 }
 
 void pawR_list_getp(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc)
@@ -316,7 +304,7 @@ void pawR_map_set(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value c
 
 void pawR_str_getn(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc)
 {
-    String const *str = V_STRING(*rb);
+    Str const *str = V_STR(*rb);
     paw_Int const i = V_INT(rc[0]);
     paw_Int const j = V_INT(rc[1]);
 
@@ -327,7 +315,7 @@ void pawR_str_getn(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value 
         pawE_error(P, PAW_ERUNTIME, -1, "string slice \"start\" is greater than \"end\"");
 
     size_t const nbytes = zi < zj ? zj - zi : 0;
-    String *slice = pawS_new_nstr(P, str->text + zi, nbytes);
+    Str *slice = pawS_new_nstr(P, str->text + zi, nbytes);
     V_SET_OBJECT(ra, slice);
 }
 
@@ -370,53 +358,72 @@ Tuple *pawR_new_map(paw_Env *P, CallFrame *cf, Value *ra, int b, int c)
     return VM_MAP_INIT(c, ra, b);
 }
 
-// Macros for generating arithmetic and bitwise operations
+// Macros for generating scalar operations
 
-#define VM_INT_UNARY_OP(op)              \
+#define VM_DIVMOD_OVERFLOWS(Kind_, X_, Y_) (V_##Kind_(X_) == PAW_##Kind_##_MIN \
+                                            && V_##Kind_(Y_) == -1)
+
+#define VM_COMPARISON(Kind_, Op_)              \
+    {                                          \
+        const Value *rb = VM_RB(opcode);       \
+        const Value *rc = VM_RC(opcode);       \
+        Kind_##_COMPARISON(ra, *rb, *rc, Op_); \
+    }
+
+#define VM_UNARY_OP(Kind_, Op_)          \
     {                                    \
         const Value *rb = VM_RB(opcode); \
-        INT_UNARY_OP(ra, *rb, op);       \
+        Kind_##_UNARY_OP(ra, *rb, Op_);  \
     }
 
-#define VM_FLOAT_UNARY_OP(op)            \
-    {                                    \
-        const Value *rb = VM_RB(opcode); \
-        FLOAT_UNARY_OP(ra, *rb, op);     \
+#define VM_BINARY_OP(Kind_, Op_)              \
+    {                                         \
+        const Value *rb = VM_RB(opcode);      \
+        const Value *rc = VM_RC(opcode);      \
+        Kind_##_BINARY_OP(ra, *rb, *rc, Op_); \
     }
 
-#define VM_INT_COMPARISON(op)             \
-    {                                     \
-        const Value *rb = VM_RB(opcode);  \
-        const Value *rc = VM_RC(opcode);  \
-        INT_COMPARISON(ra, *rb, *rc, op); \
+#define VM_INTEGRAL_DIVMOD(Kind_, Op_)                        \
+    {                                                         \
+        Value const x = *VM_RB(opcode);                       \
+        Value const y = *VM_RC(opcode);                       \
+        if (V_##Kind_(y) == 0)                                \
+            DIVIDE_BY_0(P);                                   \
+        if (VM_DIVMOD_OVERFLOWS(Kind_, x, y)) {               \
+            V_SET_##Kind_(ra, PAW_##Kind_##_C(0));            \
+        } else {                                              \
+            V_SET_##Kind_(ra, V_##Kind_(x) Op_ V_##Kind_(y)); \
+        }                                                     \
     }
 
-#define VM_INT_BINARY_OP(op)             \
-    {                                    \
-        const Value *rb = VM_RB(opcode); \
-        const Value *rc = VM_RC(opcode); \
-        INT_BINARY_OP(ra, *rb, *rc, op); \
+// NOTE: Shifting by >= width of 'x' is UB in C. The following macros clamp the shift count
+//       to avoid this situation. If 'x' < 0, then the results of the shift are implementation-
+//       defined (may or may not preserve the sign).
+
+#define VM_INTEGRAL_SHL(Kind_)                                                             \
+    {                                                                                      \
+        Value x = *VM_RB(opcode);                                                          \
+        Value y = *VM_RC(opcode);                                                          \
+        if (V_##Kind_(y) < 0) {                                                            \
+            pawR_error(P, PAW_ERUNTIME, "negative shift count");                           \
+        } else if (V_##Kind_(y) > 0) {                                                     \
+            V_##Kind_(y) = PAW_MIN(V_##Kind_(y), U2##Kind_(sizeof(V_##Kind_(x)) * 8 - 1)); \
+            V_##Kind_(x) = U2##Kind_(Kind_##2U(V_##Kind_(x)) << V_##Kind_(y));             \
+        }                                                                                  \
+        *ra = x;                                                                           \
     }
 
-#define VM_FLOAT_COMPARISON(op)             \
-    {                                       \
-        const Value *rb = VM_RB(opcode);    \
-        const Value *rc = VM_RC(opcode);    \
-        FLOAT_COMPARISON(ra, *rb, *rc, op); \
-    }
-
-#define VM_FLOAT_BINARY_OP(op)             \
-    {                                      \
-        const Value *rb = VM_RB(opcode);   \
-        const Value *rc = VM_RC(opcode);   \
-        FLOAT_BINARY_OP(ra, *rb, *rc, op); \
-    }
-
-#define VM_STR_COMPARISON(op)             \
-    {                                     \
-        const Value *rb = VM_RB(opcode);  \
-        const Value *rc = VM_RC(opcode);  \
-        STR_COMPARISON(ra, *rb, *rc, op); \
+#define VM_INTEGRAL_SHR(Kind_)                                                             \
+    {                                                                                      \
+        Value x = *VM_RB(opcode);                                                          \
+        Value y = *VM_RC(opcode);                                                          \
+        if (V_##Kind_(y) < 0) {                                                            \
+            pawR_error(P, PAW_ERUNTIME, "negative shift count");                           \
+        } else if (V_##Kind_(y) > 0) {                                                     \
+            V_##Kind_(y) = PAW_MIN(V_##Kind_(y), U2##Kind_(sizeof(V_##Kind_(x)) * 8 - 1)); \
+            V_##Kind_(x) >>= V_##Kind_(y);                                                 \
+        }                                                                                  \
+        *ra = x;                                                                           \
     }
 
 // If x / y is undefined, then so too is x % y (see C11 section 6.5.5,
@@ -483,91 +490,46 @@ top:
                 *ra = K[GET_Bx(opcode)];
             }
 
-            vm_case(IEQ) : VM_INT_COMPARISON(==)
-            vm_case(INE) : VM_INT_COMPARISON(!=)
-            vm_case(ILT) : VM_INT_COMPARISON(<)
-            vm_case(ILE) : VM_INT_COMPARISON(<=)
-            vm_case(IGT) : VM_INT_COMPARISON(>)
-            vm_case(IGE) : VM_INT_COMPARISON(>=)
+            vm_case(XEQ) : VM_COMPARISON(CHAR, ==)
+            vm_case(XNE) : VM_COMPARISON(CHAR, !=)
+            vm_case(XLT) : VM_COMPARISON(CHAR, <)
+            vm_case(XLE) : VM_COMPARISON(CHAR, <=)
+            vm_case(XGT) : VM_COMPARISON(CHAR, >)
+            vm_case(XGE) : VM_COMPARISON(CHAR, >=)
 
-            vm_case(INOT) : VM_INT_UNARY_OP(!)
-            vm_case(INEG) : VM_INT_UNARY_OP(-)
-            vm_case(IADD) : VM_INT_BINARY_OP(+)
-            vm_case(ISUB) : VM_INT_BINARY_OP(-)
-            vm_case(IMUL) : VM_INT_BINARY_OP(*)
+            vm_case(IEQ) : VM_COMPARISON(INT, ==)
+            vm_case(INE) : VM_COMPARISON(INT, !=)
+            vm_case(ILT) : VM_COMPARISON(INT, <)
+            vm_case(ILE) : VM_COMPARISON(INT, <=)
+            vm_case(IGT) : VM_COMPARISON(INT, >)
+            vm_case(IGE) : VM_COMPARISON(INT, >=)
 
-            vm_case(IDIV) :
-            {
-                paw_Int const x = V_INT(*VM_RB(opcode));
-                paw_Int const y = V_INT(*VM_RC(opcode));
-                if (y == 0)
-                    DIVIDE_BY_0(P);
-                if (DIVMOD_OVERFLOWS(x, y)) {
-                    V_SET_INT(ra, 0);
-                } else {
-                    V_SET_INT(ra, x / y);
-                }
-            }
+            vm_case(INOT) : VM_UNARY_OP(INT, !)
+            vm_case(INEG) : VM_UNARY_OP(INT, -)
+            vm_case(IADD) : VM_BINARY_OP(INT, +)
+            vm_case(ISUB) : VM_BINARY_OP(INT, -)
+            vm_case(IMUL) : VM_BINARY_OP(INT, *)
 
-            vm_case(IMOD) :
-            {
-                paw_Int const x = V_INT(*VM_RB(opcode));
-                paw_Int const y = V_INT(*VM_RC(opcode));
-                if (y == 0)
-                    DIVIDE_BY_0(P);
-                if (DIVMOD_OVERFLOWS(x, y)) {
-                    V_SET_INT(ra, 0);
-                } else {
-                    V_SET_INT(ra, x % y);
-                }
-            }
+            vm_case(BITNOT) : VM_UNARY_OP(INT, ~)
+            vm_case(BITAND) : VM_BINARY_OP(INT, &)
+            vm_case(BITOR) : VM_BINARY_OP(INT, |)
+            vm_case(BITXOR) : VM_BINARY_OP(INT, ^)
+            vm_case(SHL) : VM_INTEGRAL_SHL(INT)
+            vm_case(SHR) : VM_INTEGRAL_SHR(INT)
+            vm_case(IDIV) : VM_INTEGRAL_DIVMOD(INT, /)
+            vm_case(IMOD) : VM_INTEGRAL_DIVMOD(INT, %)
 
-            vm_case(BITNOT) : VM_INT_UNARY_OP(~)
-            vm_case(BITAND) : VM_INT_BINARY_OP(&)
-            vm_case(BITOR) : VM_INT_BINARY_OP(|)
-            vm_case(BITXOR) : VM_INT_BINARY_OP(^)
+            vm_case(FEQ) : VM_COMPARISON(FLOAT, ==)
+            vm_case(FNE) : VM_COMPARISON(FLOAT, !=)
+            vm_case(FLT) : VM_COMPARISON(FLOAT, <)
+            vm_case(FLE) : VM_COMPARISON(FLOAT, <=)
+            vm_case(FGT) : VM_COMPARISON(FLOAT, >)
+            vm_case(FGE) : VM_COMPARISON(FLOAT, >=)
 
-            vm_case(SHL) :
-            {
-                paw_Int x = V_INT(*VM_RB(opcode));
-                paw_Int y = V_INT(*VM_RC(opcode));
-                if (y < 0) {
-                    pawR_error(P, PAW_ERUNTIME, "negative shift count");
-                } else if (y > 0) {
-                    y = PAW_MIN(y, U2I(sizeof(x) * 8 - 1));
-                    x = U2I(I2U(x) << y);
-                }
-                V_SET_INT(ra, x);
-            }
-
-            vm_case(SHR) :
-            {
-                paw_Int x = V_INT(*VM_RB(opcode));
-                paw_Int y = V_INT(*VM_RC(opcode));
-                if (y < 0) {
-                    pawR_error(P, PAW_ERUNTIME, "negative shift count");
-                } else if (y > 0) {
-                    // Right shift by >= width of 'x' is UB in C. Clamp the
-                    // shift count. If 'x' < 0, then the results of the
-                    // shift are implementation-defined (may or may not
-                    // preserve the sign).
-                    y = PAW_MIN(y, U2I(sizeof(x) * 8 - 1));
-                    x >>= y;
-                }
-                V_SET_INT(ra, x);
-            }
-
-            vm_case(FEQ) : VM_FLOAT_COMPARISON(==)
-            vm_case(FNE) : VM_FLOAT_COMPARISON(!=)
-            vm_case(FLT) : VM_FLOAT_COMPARISON(<)
-            vm_case(FLE) : VM_FLOAT_COMPARISON(<=)
-            vm_case(FGT) : VM_FLOAT_COMPARISON(>)
-            vm_case(FGE) : VM_FLOAT_COMPARISON(>=)
-
-            vm_case(FNEG) : VM_FLOAT_UNARY_OP(-)
-            vm_case(FADD) : VM_FLOAT_BINARY_OP(+)
-            vm_case(FSUB) : VM_FLOAT_BINARY_OP(-)
-            vm_case(FMUL) : VM_FLOAT_BINARY_OP(*)
+            vm_case(FNEG) : VM_UNARY_OP(FLOAT, -)
+            vm_case(FADD) : VM_BINARY_OP(FLOAT, +)
+            vm_case(FSUB) : VM_BINARY_OP(FLOAT, -)
+            vm_case(FMUL) : VM_BINARY_OP(FLOAT, *)
 
             vm_case(FDIV) :
             {
@@ -593,12 +555,12 @@ top:
                 pawR_str_length(P, cf, ra, rb);
             }
 
-            vm_case(SEQ) : VM_STR_COMPARISON(==)
-            vm_case(SNE) : VM_STR_COMPARISON(!=)
-            vm_case(SLT) : VM_STR_COMPARISON(<)
-            vm_case(SLE) : VM_STR_COMPARISON(<=)
-            vm_case(SGT) : VM_STR_COMPARISON(>)
-            vm_case(SGE) : VM_STR_COMPARISON(>=)
+            vm_case(SEQ) : VM_COMPARISON(STR, ==)
+            vm_case(SNE) : VM_COMPARISON(STR, !=)
+            vm_case(SLT) : VM_COMPARISON(STR, <)
+            vm_case(SLE) : VM_COMPARISON(STR, <=)
+            vm_case(SGT) : VM_COMPARISON(STR, >)
+            vm_case(SGE) : VM_COMPARISON(STR, >=)
 
             vm_case(SCONCAT) :
             {
@@ -796,31 +758,53 @@ top:
                     ++pc;
             }
 
-            vm_case(XCASTB) :
+            vm_case(BCASTF) :
             {
                 Value const *rb = VM_RB(opcode);
-                V_SET_BOOL(ra, rb->u != 0);
+                V_SET_FLOAT(ra, V_TRUE(*rb));
+            }
+
+            vm_case(XCASTC) :
+            {
+                Value const *rb = VM_RB(opcode);
+                V_SET_INT(ra, V_CHAR(*rb));
+            }
+
+            vm_case(XCASTI) :
+            {
+                Value const *rb = VM_RB(opcode);
+                V_SET_INT(ra, V_CHAR(*rb));
+            }
+
+            vm_case(ICASTB) :
+            {
+                Value const *rb = VM_RB(opcode);
+                V_SET_BOOL(ra, V_TRUE(*rb));
+            }
+
+            // TODO: check bounds
+            vm_case(ICASTX) :
+            {
+                Value const *rb = VM_RB(opcode);
+                V_SET_CHAR(ra, (paw_Char)V_INT(*rb));
             }
 
             vm_case(ICASTF) :
             {
                 Value const *rb = VM_RB(opcode);
-                paw_Int const i = V_INT(*rb);
-                V_SET_FLOAT(ra, CAST(paw_Float, i));
+                V_SET_FLOAT(ra, (paw_Float)V_INT(*rb));
             }
 
             vm_case(FCASTB) :
             {
                 Value const *rb = VM_RB(opcode);
-                paw_Float const f = V_FLOAT(*rb);
-                V_SET_BOOL(ra, (paw_Bool)f);
+                V_SET_BOOL(ra, (paw_Bool)V_FLOAT(*rb));
             }
 
             vm_case(FCASTI) :
             {
                 Value const *rb = VM_RB(opcode);
-                paw_Float const f = V_FLOAT(*rb);
-                float2int(P, f, ra);
+                float2int(P, V_FLOAT(*rb), ra);
             }
 
             vm_case(GETUPVALUE) :

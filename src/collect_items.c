@@ -106,11 +106,11 @@ static void enter_function(struct ItemCollector *X, struct HirFuncDecl *func)
 
 static void ensure_unique(struct ItemCollector *X, StringMap *map, struct HirIdent ident, char const *what)
 {
-    String *const name = ident.name;
+    Str *const name = ident.name;
     if (name == NULL)
         return;
 
-    String *const *pname = StringMap_get(X->C, map, name);
+    Str *const *pname = StringMap_get(X->C, map, name);
     if (pname != NULL)
         COLLECTOR_ERROR(X, duplicate_item, ident.span.start, what, name->text);
 
@@ -337,7 +337,7 @@ static paw_Bool check_assoc_function(struct ItemCollector *X, struct IrType *sel
     return PAW_TRUE;
 }
 
-static void maybe_store_builtin(struct ItemCollector *X, String *name, DeclId did)
+static void maybe_store_builtin(struct ItemCollector *X, Str *name, DeclId did)
 {
     if (X->m->modno == PRELUDE_MODNO) {
         struct Builtin *const *pb = BuiltinMap_get(X->C, X->C->builtin_lookup, name);
@@ -349,7 +349,7 @@ static void maybe_store_builtin(struct ItemCollector *X, String *name, DeclId di
 static struct HirDecl *declare_self(struct ItemCollector *X, struct SourceSpan span, struct IrType *type)
 {
     struct HirIdent ident = {
-        .name = SCAN_STRING(X->C, "Self"),
+        .name = SCAN_STR(X->C, "Self"),
         .span = span,
     };
     struct HirDecl *self = pawHir_new_type_decl(X->hir, span, ident, NULL, NULL, PAW_FALSE);

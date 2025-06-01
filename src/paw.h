@@ -22,6 +22,8 @@
 #define PAW_REGISTRY_INDEX (-PAW_STACK_MAX - 1000)
 
 typedef int paw_Type;
+typedef unsigned char paw_Char;
+typedef unsigned char paw_Ubyte;
 typedef long long paw_Int;
 typedef unsigned long long paw_Uint;
 typedef double paw_Float;
@@ -85,12 +87,13 @@ int paw_call(paw_Env *P, int argc);
 #define PAW_TKFOREIGN 5
 #define PAW_NTYPEKINDS 6
 
-// ORDER BuiltinKind
+// Basic types
 #define PAW_TUNIT 0
 #define PAW_TBOOL 1
-#define PAW_TINT 2
-#define PAW_TFLOAT 3
-#define PAW_TSTR 4
+#define PAW_TCHAR 2
+#define PAW_TINT 3
+#define PAW_TFLOAT 4
+#define PAW_TSTR 5
 
 #define PAW_OPTION_SOME 0
 #define PAW_OPTION_NONE 1
@@ -100,25 +103,27 @@ int paw_call(paw_Env *P, int argc);
 void paw_push_value(paw_Env *P, int index);
 void paw_push_zero(paw_Env *P, int n);
 void paw_push_bool(paw_Env *P, paw_Bool b);
+void paw_push_char(paw_Env *P, paw_Char x);
 void paw_push_int(paw_Env *P, paw_Int i);
 void paw_push_float(paw_Env *P, paw_Float f);
 void paw_push_rawptr(paw_Env *P, void *ptr);
-char const *paw_push_string(paw_Env *P, char const *s);
-char const *paw_push_nstring(paw_Env *P, char const *s, size_t n);
-char const *paw_push_fstring(paw_Env *P, char const *fmt, ...);
-char const *paw_push_vfstring(paw_Env *P, char const *fmt, va_list arg);
+char const *paw_push_str(paw_Env *P, char const *s);
+char const *paw_push_nstr(paw_Env *P, char const *s, size_t n);
+char const *paw_push_fstr(paw_Env *P, char const *fmt, ...);
+char const *paw_push_vfstr(paw_Env *P, char const *fmt, va_list arg);
 
-#define PAW_PUSH_LITERAL(P, s) paw_push_nstring(P, "" s, sizeof(s) - 1)
+#define PAW_PUSH_LITERAL(P, s) paw_push_nstr(P, "" s, sizeof(s) - 1)
 
 //
 // Getters (stack -> C):
 //
 
 paw_Bool paw_bool(paw_Env *P, int index);
+paw_Char paw_char(paw_Env *P, int index);
 paw_Int paw_int(paw_Env *P, int index);
 paw_Uint paw_uint(paw_Env *P, int index);
 paw_Float paw_float(paw_Env *P, int index);
-char const *paw_string(paw_Env *P, int index);
+char const *paw_str(paw_Env *P, int index);
 paw_Function paw_native(paw_Env *P, int index);
 void *paw_userdata(paw_Env *P, int index);
 void *paw_rawptr(paw_Env *P, int index);
@@ -141,7 +146,7 @@ void paw_get_value(paw_Env *P, int pointer, int index);
 void paw_set_value(paw_Env *P, int pointer, int index);
 
 // Initializer for iterator state variables
-#define PAW_ITER_INIT PAW_CAST_INT(-1)
+#define PAW_ITER_INIT PAW_INT_C(-1)
 
 int paw_list_element_size(paw_Env *P, int object);
 void paw_list_length(paw_Env *P, int object);
@@ -253,8 +258,8 @@ void paw_set_field(paw_Env *P, int index, int ifield);
 
 void *paw_new_foreign(paw_Env *P, size_t size, int nfields);
 void paw_new_native(paw_Env *P, paw_Function f, int nup);
-void paw_new_list(paw_Env *P, int n, paw_Type e);
-void paw_new_map(paw_Env *P, int n, int policy);
+void paw_new_list(paw_Env *P, int length, paw_Type e);
+void paw_new_map(paw_Env *P, int length, int policy);
 
 // Assign a policy for the given type of map
 // Expects 2 functions, "hash" and "eq", on top of the stack in the given order. On success,
@@ -299,8 +304,8 @@ static inline int paw_abs_index(paw_Env *P, int index)
     return index + (index < 0 ? paw_get_count(P) : 0);
 }
 
-char const *paw_int_to_string(paw_Env *P, int index, size_t *plength);
-char const *paw_float_to_string(paw_Env *P, int index, size_t *plength);
+char const *paw_int_to_str(paw_Env *P, int index, size_t *plength);
+char const *paw_float_to_str(paw_Env *P, int index, size_t *plength);
 
 
 #define PAW_HOOKCALL 1

@@ -40,7 +40,7 @@ static struct HirResult result_decl(DeclId did)
     };
 }
 
-static struct ModuleInfo *find_import(struct QueryState *Q, String *name)
+static struct ModuleInfo *find_import(struct QueryState *Q, Str *name)
 {
     struct HirImport *im;
     K_LIST_FOREACH (Q->m->hir->imports, im) {
@@ -48,7 +48,7 @@ static struct ModuleInfo *find_import(struct QueryState *Q, String *name)
             continue; // checked later
         struct ModuleInfo *m = get_module(Q, im->modno);
         // use alias, i.e. "use mod as alias", if it exists
-        String const *target = im->as.name == NULL ? m->hir->name : im->as.name;
+        Str const *target = im->as.name == NULL ? m->hir->name : im->as.name;
         if (pawS_eq(name, target))
             return m;
     }

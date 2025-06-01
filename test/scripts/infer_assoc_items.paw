@@ -22,7 +22,7 @@ pub fn test_option() {
 pub fn test_result() {
     // o: Result<int, str>
     let o = Result::Ok(1); 
-    o = Result::Err('two');
+    o = Result::Err("two");
 
     // o: Result<Result<bool, bool>, Unit>
     let o = Result::Err(Unit);

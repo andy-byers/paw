@@ -64,17 +64,6 @@ pub fn test_return_must_be_last() {
     assert(f() == 42);
 }
 
-// String literals: both types of quotes are okay, and strings can span 
-// multiple lines.
-pub fn test_multiline_string_literals() {
-    assert('abc' == "abc");
-    assert('abc\n def\n ghi\n\n' == 'abc
- def
- ghi
-
-');
-}
-
 pub fn test_short_circuiting() {
     let counts = (0, 0, 0);
     let check2 = |a: int, b: int| {

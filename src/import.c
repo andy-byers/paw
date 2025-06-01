@@ -44,26 +44,26 @@ static int next_modno(struct Importer *I)
     return CAST(int, ImportMap_length(I->imports));
 }
 
-static String *module_name(struct Importer *I, String *name)
+static Str *module_name(struct Importer *I, Str *name)
 {
-    String *const *palias = StringMap_get(I->C, I->ctx->aliases, name);
+    Str *const *palias = StringMap_get(I->C, I->ctx->aliases, name);
     return palias == NULL ? name : *palias;
 }
 
-static struct Ast *get_import(struct Importer *I, String *name)
+static struct Ast *get_import(struct Importer *I, Str *name)
 {
     struct Ast *const *past = ImportMap_get(I->C, I->imports, name);
     return past == NULL ? NULL : *past;
 }
 
-static void add_import(struct Importer *I, String *name, struct Ast *ast)
+static void add_import(struct Importer *I, Str *name, struct Ast *ast)
 {
     ImportMap_insert(I->C, I->imports, name, ast);
 }
 
 static void collect_imports_from(struct Importer *I, struct Ast *ast);
 
-static int import_module(struct Importer *I, struct SourceLoc loc, String *name, String *as)
+static int import_module(struct Importer *I, struct SourceLoc loc, Str *name, Str *as)
 {
     name = module_name(I, name);
     struct Ast *ast = get_import(I, name);

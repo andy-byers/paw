@@ -215,7 +215,7 @@ static void show_help(void)
 static void handle_error(paw_Env *P, int status)
 {
     if (status != PAW_OK) {
-        error(status, "%s\n", paw_string(P, -1));
+        error(status, "%s\n", paw_str(P, -1));
     }
 }
 
@@ -303,7 +303,7 @@ static int stats_reporter(paw_Env *P)
 
     pawL_add_char(P, &b, '\n');
     pawL_push_result(P, &b);
-    puts(paw_string(P, -1));
+    puts(paw_str(P, -1));
 
     paw_pop(P, 1);
     return 0;
@@ -321,22 +321,22 @@ static paw_Env *load_source(size_t heap_size)
 
     // register debug callbacks
     if (s_debug.stats) {
-        paw_push_string(P, "paw.stats_reporter");
+        paw_push_str(P, "paw.stats_reporter");
         paw_new_native(P, stats_reporter, 0);
         paw_map_set(P, PAW_REGISTRY_INDEX);
     }
     if (s_debug.ast) {
-        paw_push_string(P, "paw.on_build_ast");
+        paw_push_str(P, "paw.on_build_ast");
         paw_new_native(P, on_build_ast, 0);
         paw_map_set(P, PAW_REGISTRY_INDEX);
     }
     if (s_debug.hir) {
-        paw_push_string(P, "paw.on_build_hir");
+        paw_push_str(P, "paw.on_build_hir");
         paw_new_native(P, on_build_hir, 0);
         paw_map_set(P, PAW_REGISTRY_INDEX);
     }
     if (s_debug.mir) {
-        paw_push_string(P, "paw.on_build_mir");
+        paw_push_str(P, "paw.on_build_mir");
         paw_new_native(P, on_build_mir, 0);
         paw_map_set(P, PAW_REGISTRY_INDEX);
     }
@@ -345,10 +345,10 @@ static paw_Env *load_source(size_t heap_size)
     // Load the source code, either from a string, or a file. If '-e' is passed,
     // then always use the provided string (ignore path).
     if (s_opt.e != NULL) {
-        paw_push_string(P, CHUNKNAME);
+        paw_push_str(P, CHUNKNAME);
         status = pawL_load_chunk(P, CHUNKNAME, s_opt.e);
     } else if (s_pathname != NULL) {
-        paw_push_string(P, s_pathname); // TODO: why??? already providing s_pathname to pawL_load_file...
+        paw_push_str(P, s_pathname); // TODO: why??? already providing s_pathname to pawL_load_file...
         status = pawL_load_file(P, s_pathname);
     } else {
         // TODO: interactive mode or read from stdin
@@ -361,7 +361,7 @@ static paw_Env *load_source(size_t heap_size)
 static ValueId find_main(paw_Env *P)
 {
     paw_mangle_start(P);
-    paw_push_string(P, "main");
+    paw_push_str(P, "main");
     paw_mangle_add_name(P);
 
     struct paw_Item item;
@@ -378,9 +378,9 @@ static void setup_stack(paw_Env *P, int argc, char const **argv)
     int const gid = find_main(P);
     paw_get_global(P, gid);
 
-    paw_push_string(P, s_pathname);
+    paw_push_str(P, s_pathname);
     for (int i = 0; i < argc; ++i) {
-        paw_push_string(P, argv[i]);
+        paw_push_str(P, argv[i]);
     }
     paw_new_list(P, 1 + argc, 1);
 }

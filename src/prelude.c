@@ -35,7 +35,7 @@ static int base_assert(paw_Env *P)
 
 static int base_print(paw_Env *P)
 {
-    char const *string = paw_string(P, 1);
+    char const *string = paw_str(P, 1);
     size_t const length = paw_str_rawlen(P, 1);
     pawO_write_all(P, pawO_stdout(), string, length);
     pawO_flush(pawO_stdout());
@@ -218,6 +218,14 @@ static int map_iterator_next(paw_Env *P)
     return 1 + key_size;
 }
 
+static int byte_to_str(paw_Env *P)
+{
+    char const c = (char)CF_BASE(1)->c;
+    Str *str = pawS_new_nstr(P, &c, 1);
+    push_values(P, &P2V(str), 1);
+    return 1;
+}
+
 static char const *find_substr(char const *str, size_t nstr, char const *sub, size_t nsub)
 {
     if (nsub == 0)
@@ -236,8 +244,8 @@ static char const *find_substr(char const *str, size_t nstr, char const *sub, si
 
 static int str_find(paw_Env *P)
 {
-    String const *str = V_STRING(*CF_BASE(1));
-    String const *find = V_STRING(*CF_BASE(2));
+    Str const *str = V_STR(*CF_BASE(1));
+    Str const *find = V_STR(*CF_BASE(2));
     char const *result = find_substr(
         str->text, str->length,
         find->text, find->length);
@@ -252,8 +260,8 @@ static int str_find(paw_Env *P)
 
 static int str_split(paw_Env *P)
 {
-    String const *sep = V_STRING(*CF_BASE(2));
-    String *str = V_STRING(*CF_BASE(1));
+    Str const *sep = V_STR(*CF_BASE(2));
+    Str *str = V_STR(*CF_BASE(1));
     if (sep->length == 0) {
         pawR_error(P, PAW_EVALUE, "empty separator");
     }
@@ -282,13 +290,13 @@ static int str_split(paw_Env *P)
 
 static int str_join(paw_Env *P)
 {
-    String *sep = V_STRING(*CF_BASE(1));
+    Str *sep = V_STR(*CF_BASE(1));
 
     Buffer buf;
     pawL_init_buffer(P, &buf);
     paw_push_int(P, PAW_ITER_INIT);
     while (paw_list_next(P, 2)) {
-        char const *chunk = paw_string(P, -1);
+        char const *chunk = paw_str(P, -1);
         paw_Int const chunklen = paw_str_rawlen(P, -1);
         pawL_add_nstring(P, &buf, chunk, chunklen);
         L_ADD_STRING(P, &buf, sep);
@@ -307,8 +315,8 @@ static int str_join(paw_Env *P)
 
 static int str_starts_with(paw_Env *P)
 {
-    String const *str = V_STRING(*CF_BASE(1));
-    String const *prefix = V_STRING(*CF_BASE(2));
+    Str const *str = V_STR(*CF_BASE(1));
+    Str const *prefix = V_STR(*CF_BASE(2));
     size_t const prelen = prefix->length;
     paw_Bool const b = str->length >= prelen
         && 0 == memcmp(prefix->text, str->text, prelen);
@@ -318,8 +326,8 @@ static int str_starts_with(paw_Env *P)
 
 static int str_ends_with(paw_Env *P)
 {
-    String const *str = V_STRING(*CF_BASE(1));
-    String const *suffix = V_STRING(*CF_BASE(2));
+    Str const *str = V_STR(*CF_BASE(1));
+    Str const *suffix = V_STR(*CF_BASE(2));
     size_t const suflen = suffix->length;
     paw_Bool b = PAW_FALSE;
     if (str->length >= suflen) {
@@ -330,16 +338,16 @@ static int str_ends_with(paw_Env *P)
     return 1;
 }
 
-static int bool_to_string(paw_Env *P)
+static int bool_to_str(paw_Env *P)
 {
     Value *pv = CF_BASE(1);
-    pawV_to_string(P, pv, PAW_TBOOL, NULL);
+    pawV_to_str(P, pv, PAW_TBOOL, NULL);
     return 1;
 }
 
-static int int_to_string(paw_Env *P)
+static int int_to_str(paw_Env *P)
 {
-    paw_int_to_string(P, -1, NULL);
+    paw_int_to_str(P, -1, NULL);
     return 1;
 }
 
@@ -351,9 +359,9 @@ static int float_hash(paw_Env *P)
     return 1;
 }
 
-static int float_to_string(paw_Env *P)
+static int float_to_str(paw_Env *P)
 {
-    paw_float_to_string(P, -1, NULL);
+    paw_float_to_str(P, -1, NULL);
     return 1;
 }
 
@@ -367,7 +375,7 @@ static int str_hash(paw_Env *P)
 static int str_parse_float(paw_Env *P)
 {
     Value result;
-    char const *str = paw_string(P, 1);
+    char const *str = paw_str(P, 1);
     int const status = pawV_parse_float(P, str, &V_FLOAT(result));
     if (status == PAW_OK) {
         push_option_some(P, &result, 1);
@@ -379,7 +387,7 @@ static int str_parse_float(paw_Env *P)
 
 static int str_parse_int_radix(paw_Env *P)
 {
-    char const *str = paw_string(P, 1);
+    char const *str = paw_str(P, 1);
     paw_Int const base = paw_int(P, 2);
 
     Value result;
@@ -434,10 +442,11 @@ void l_import_prelude(paw_Env *P)
     pawL_add_extern_func(P, "prelude", "assert", base_assert);
     pawL_add_extern_func(P, "prelude", "print", base_print);
     pawL_add_extern_func(P, "prelude", "range", base_range);
-    pawL_add_extern_method(P, "prelude", "bool", "to_string", bool_to_string);
-    pawL_add_extern_method(P, "prelude", "int", "to_string", int_to_string);
+    pawL_add_extern_method(P, "prelude", "bool", "to_str", bool_to_str);
+    pawL_add_extern_method(P, "prelude", "int", "to_str", int_to_str);
     pawL_add_extern_method(P, "prelude", "float", "hash", float_hash);
-    pawL_add_extern_method(P, "prelude", "float", "to_string", float_to_string);
+    pawL_add_extern_method(P, "prelude", "float", "to_str", float_to_str);
+    pawL_add_extern_method(P, "prelude", "char", "to_str", byte_to_str);
     pawL_add_extern_method(P, "prelude", "str", "hash", str_hash);
     pawL_add_extern_method(P, "prelude", "str", "parse_int", str_parse_int);
     pawL_add_extern_method(P, "prelude", "str", "parse_int_radix", str_parse_int_radix);

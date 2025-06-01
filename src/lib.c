@@ -132,18 +132,18 @@ void pawL_push_modules_map(paw_Env *P)
 
 static paw_Bool lib_getenv(paw_Env *P)
 {
-    char const *env = getenv(paw_string(P, -1));
+    char const *env = getenv(paw_str(P, -1));
     paw_pop(P, 1);
 
     if (env == NULL)
         return PAW_FALSE;
-    paw_push_string(P, env);
+    paw_push_str(P, env);
     return PAW_TRUE;
 }
 
 static paw_Bool matches_modname(paw_Env *P, char const *modname)
 {
-    return strncmp(modname, paw_string(P, -1), paw_str_rawlen(P, -1)) == 0;
+    return strncmp(modname, paw_str(P, -1), paw_str_rawlen(P, -1)) == 0;
 }
 
 static struct FileReader *new_file_reader(paw_Env *P, char const *pathname)
@@ -196,17 +196,17 @@ static int searcher_cwd(paw_Env *P)
         char const *sep = find_last_sep(pathname, pathlen, &modlen);
         if (sep == NULL)
             goto use_current_dir;
-        paw_push_nstring(P, pathname, sep - pathname + 1);
+        paw_push_nstr(P, pathname, sep - pathname + 1);
     } else {
     use_current_dir:;
         char prefix[] = {'.', PAW_FOLDER_SEPS[0], '\0'};
-        paw_push_string(P, prefix);
+        paw_push_str(P, prefix);
     }
     paw_rotate(P, -2, 1);
     PAW_PUSH_LITERAL(P, PAW_MODULE_EXT);
     paw_str_concat(P, 3);
 
-    struct FileReader *fr = new_file_reader(P, paw_string(P, -1));
+    struct FileReader *fr = new_file_reader(P, paw_str(P, -1));
     if (fr == NULL)
         paw_push_zero(P, 1); // indicate failure
 
@@ -219,9 +219,9 @@ static void push_prelude_method(paw_Env *P, char const *self, char const *name)
     paw_map_get(P, PAW_REGISTRY_INDEX);
 
     paw_mangle_start(P);
-    paw_push_string(P, self);
+    paw_push_str(P, self);
     paw_mangle_add_name(P);
-    paw_push_string(P, name);
+    paw_push_str(P, name);
     paw_mangle_add_name(P);
 
     paw_map_get(P, -2);
@@ -241,12 +241,12 @@ static int searcher_env(paw_Env *P)
         paw_push_int(P, PAW_ITER_INIT);
         while (paw_list_next(P, -2)) {
             // path + sep + modname + ext
-            paw_push_nstring(P, PAW_FOLDER_SEPS, 1);
+            paw_push_nstr(P, PAW_FOLDER_SEPS, 1);
             paw_push_value(P, 1); // modname
             PAW_PUSH_LITERAL(P, PAW_MODULE_EXT);
             paw_str_concat(P, 4);
 
-            struct FileReader *fr = new_file_reader(P, paw_string(P, -1));
+            struct FileReader *fr = new_file_reader(P, paw_str(P, -1));
             if (fr != NULL)
                 return 1;
 
@@ -297,8 +297,7 @@ void pawL_init(paw_Env *P)
 
 void pawL_uninit(paw_Env *P)
 {
-    // clear GC roots
-    P->registry = (Value){0};
+    PAW_UNUSED(P);
 }
 
 int pawL_load_file(paw_Env *P, char const *pathname)
@@ -318,7 +317,7 @@ int pawL_load_file(paw_Env *P, char const *pathname)
             return status;
         // TODO: just return status??
     }
-    paw_push_string(P, strerror(errno));
+    paw_push_str(P, strerror(errno));
     return PAW_ESYSTEM;
 }
 
@@ -358,7 +357,7 @@ int pawL_register_func(paw_Env *P, char const *name, paw_Function func, int nup)
     // paw.symbols[mangle(name)] = func
     pawL_push_symbols_map(P);
     paw_mangle_start(P);
-    paw_push_string(P, name);
+    paw_push_str(P, name);
     paw_mangle_add_name(P);
     paw_new_native(P, func, nup);
     paw_map_set(P, -3);
@@ -387,7 +386,7 @@ void *pawL_file_reader(paw_Env *P, char const *pathname)
 //    int const rc = pawO_open(r->file, pathname, "r");
 //    if (rc != 0) {
 //        paw_pop(P, 1); // pop foreign object
-//        paw_push_string(P, strerror(errno));
+//        paw_push_str(P, strerror(errno));
 //        return NULL;
 //    }
 //    return r;
@@ -396,9 +395,9 @@ void *pawL_file_reader(paw_Env *P, char const *pathname)
 void pawL_add_extern_value(paw_Env *P, char const *modname, char const *name)
 {
     paw_mangle_start(P);
-    paw_push_string(P, modname);
+    paw_push_str(P, modname);
     paw_mangle_add_module(P);
-    paw_push_string(P, name);
+    paw_push_str(P, name);
     paw_mangle_add_name(P);
     paw_rotate(P, -2, 1);
     paw_map_set(P, -3);
@@ -407,9 +406,9 @@ void pawL_add_extern_value(paw_Env *P, char const *modname, char const *name)
 void pawL_add_extern_func(paw_Env *P, char const *modname, char const *name, paw_Function func)
 {
     paw_mangle_start(P);
-    paw_push_string(P, modname);
+    paw_push_str(P, modname);
     paw_mangle_add_module(P);
-    paw_push_string(P, name);
+    paw_push_str(P, name);
     paw_mangle_add_name(P);
     pawL_new_func(P, func, 0);
     paw_map_set(P, -3);
@@ -418,11 +417,11 @@ void pawL_add_extern_func(paw_Env *P, char const *modname, char const *name, paw
 void pawL_add_extern_method(paw_Env *P, char const *modname, char const *self, char const *name, paw_Function func)
 {
     paw_mangle_start(P);
-    paw_push_string(P, modname);
+    paw_push_str(P, modname);
     paw_mangle_add_module(P);
-    paw_push_string(P, self);
+    paw_push_str(P, self);
     paw_mangle_add_name(P);
-    paw_push_string(P, name);
+    paw_push_str(P, name);
     paw_mangle_add_name(P);
     pawL_new_func(P, func, 0);
     paw_map_set(P, -3);

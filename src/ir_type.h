@@ -204,23 +204,23 @@ inline static IrType *pawIr_new_trait_obj(struct Compiler *C, DeclId did, struct
 }
 
 struct IrParam {
-    String *name;
+    Str *name;
     IrType *type;
 };
 
 struct IrFieldDef {
-    String *name;
+    Str *name;
     DeclId did;
     paw_Bool is_pub : 1;
 };
 
 struct IrGenericDef {
-    String *name;
+    Str *name;
     DeclId did;
 };
 
 struct IrVariantDef {
-    String *name;
+    Str *name;
     struct IrFieldDefs *fields;
     DeclId did;
     DeclId cons;
@@ -228,7 +228,7 @@ struct IrVariantDef {
 };
 
 struct IrFnDef {
-    String *name;
+    Str *name;
     struct Annotations *annos;
     struct IrGenericDefs *generics;
     struct IrParams *params;
@@ -238,7 +238,7 @@ struct IrFnDef {
 };
 
 struct IrAdtDef {
-    String *name;
+    Str *name;
     struct IrGenericDefs *generics;
     struct IrVariantDefs *variants;
     DeclId did;
@@ -247,7 +247,7 @@ struct IrAdtDef {
     paw_Bool is_pub : 1;
 };
 
-inline static struct IrGenericDef *pawIr_new_generic_def(struct Compiler *C, DeclId did, String *name)
+inline static struct IrGenericDef *pawIr_new_generic_def(struct Compiler *C, DeclId did, Str *name)
 {
     struct IrGenericDef *def = P_ALLOC(C, NULL, 0, sizeof(*def));
     *def = (struct IrGenericDef){
@@ -257,7 +257,7 @@ inline static struct IrGenericDef *pawIr_new_generic_def(struct Compiler *C, Dec
     return def;
 }
 
-inline static struct IrFieldDef *pawIr_new_field_def(struct Compiler *C, DeclId did, String *name, paw_Bool is_pub)
+inline static struct IrFieldDef *pawIr_new_field_def(struct Compiler *C, DeclId did, Str *name, paw_Bool is_pub)
 {
     struct IrFieldDef *def = P_ALLOC(C, NULL, 0, sizeof(*def));
     *def = (struct IrFieldDef){
@@ -268,7 +268,7 @@ inline static struct IrFieldDef *pawIr_new_field_def(struct Compiler *C, DeclId 
     return def;
 }
 
-inline static struct IrVariantDef *pawIr_new_variant_def(struct Compiler *C, DeclId did, DeclId cons, int discr, String *name, struct IrFieldDefs *fields)
+inline static struct IrVariantDef *pawIr_new_variant_def(struct Compiler *C, DeclId did, DeclId cons, int discr, Str *name, struct IrFieldDefs *fields)
 {
     struct IrVariantDef *def = P_ALLOC(C, NULL, 0, sizeof(*def));
     *def = (struct IrVariantDef){
@@ -281,7 +281,7 @@ inline static struct IrVariantDef *pawIr_new_variant_def(struct Compiler *C, Dec
     return def;
 }
 
-inline static struct IrFnDef *pawIr_new_fn_def(struct Compiler *C, DeclId did, String *name, struct IrGenericDefs *generics, struct IrParams *params, paw_Bool is_pub)
+inline static struct IrFnDef *pawIr_new_fn_def(struct Compiler *C, DeclId did, Str *name, struct IrGenericDefs *generics, struct IrParams *params, paw_Bool is_pub)
 {
     struct IrFnDef *def = P_ALLOC(C, NULL, 0, sizeof(*def));
     *def = (struct IrFnDef){
@@ -294,7 +294,7 @@ inline static struct IrFnDef *pawIr_new_fn_def(struct Compiler *C, DeclId did, S
     return def;
 }
 
-inline static struct IrAdtDef *pawIr_new_adt_def(struct Compiler *C, DeclId did, String *name, struct IrGenericDefs *generics, struct IrVariantDefs *variants, paw_Bool is_pub, paw_Bool is_struct, paw_Bool is_inline)
+inline static struct IrAdtDef *pawIr_new_adt_def(struct Compiler *C, DeclId did, Str *name, struct IrGenericDefs *generics, struct IrVariantDefs *variants, paw_Bool is_pub, paw_Bool is_struct, paw_Bool is_inline)
 {
     struct IrAdtDef *def = P_ALLOC(C, NULL, 0, sizeof(*def));
     *def = (struct IrAdtDef){
@@ -325,7 +325,7 @@ DEFINE_LIST(struct Compiler, IrGenericDefs, struct IrGenericDef *)
 DEFINE_LIST(struct Compiler, IrFieldDefs, struct IrFieldDef *)
 DEFINE_LIST(struct Compiler, IrParams, struct IrParam)
 
-struct IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *target, String *name);
+struct IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *target, Str *name);
 
 DeclId pawIr_next_did(struct Compiler *C, int mod);
 

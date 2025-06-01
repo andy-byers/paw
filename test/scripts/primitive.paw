@@ -21,35 +21,35 @@ pub fn test_operations() {
 
 pub fn test_initializer_annotations() {
     let i: int = 123;
-    let s: str = 'abc';
+    let s: str = "abc";
     let b: bool = true;
     let f: float = 1.0;
 
     assert(i == 123);
-    assert(s == 'abc');
+    assert(s == "abc");
     assert(b == true);
     assert(f == 1.0);
 }
 
 pub fn test_initializer_inference() {
     let i = 123;
-    let s = 'abc';
+    let s = "abc";
     let b = true;
     let f = 1.0;
 
     assert(i == 123);
-    assert(s == 'abc');
+    assert(s == "abc");
     assert(b == true);
     assert(f == 1.0);
 }
 
 pub fn test_shadowed_identifiers() {
-    let a = 'abc';
+    let a = "abc";
     {
         let a = true;
-        let a = 'def';
+        let a = "def";
     }
-    assert(a == 'abc');
+    assert(a == "abc");
 }
 
 pub fn test_rebound_identifiers() {
@@ -57,8 +57,8 @@ pub fn test_rebound_identifiers() {
     assert(a == 123);
     let a = 456.0;
     assert(a == 456.0);
-    let a = 'abc';
-    assert(a == 'abc');
+    let a = "abc";
+    assert(a == "abc");
 
     let x = 100;
     let x = x;
@@ -103,9 +103,9 @@ pub fn test_conversions() {
 }
 
 //pub fn test_lots_of_strings() {
-//    let alphabet = 'abcdefghijklmnopqrstuvwxyz';
+//    let alphabet = "abcdefghijklmnopqrstuvwxyz";
 //
-//    // put strings in a list so they don't get collected
+//    // put strings in a list so they don"t get collected
 //    let v = [];
 //    for i = 0, #alphabet {
 //        for j = 0, #alphabet {

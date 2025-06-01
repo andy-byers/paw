@@ -224,7 +224,7 @@ static ValueMap *kcache_map(struct KProp *K, enum BuiltinKind kind)
     if (kind == BUILTIN_INT) {
         return K->kcache.ints;
     } else if (kind == BUILTIN_FLOAT) {
-        return K->kcache.flts;
+        return K->kcache.floats;
     } else {
         paw_assert(kind == BUILTIN_STR);
         return K->kcache.strs;
@@ -234,12 +234,12 @@ static ValueMap *kcache_map(struct KProp *K, enum BuiltinKind kind)
 static int add_constant(struct KProp *K, Value v, enum BuiltinKind kind)
 {
     paw_assert(kind != NBUILTINS);
-    if (kind <= BUILTIN_BOOL)
+    if (kind < BUILTIN_INT)
         kind = BUILTIN_INT;
     ValueMap *map = kcache_map(K, kind);
     Value const *pk = ValueMap_get(K->C, map, v);
     if (pk != NULL)
-        return CAST(int, V_INT(*pk));
+        return (int)V_INT(*pk);
     ValueMap_insert(K->C, map, v, I2V(K->nk));
     return K->nk++;
 }
@@ -293,7 +293,7 @@ static struct CellInfo const_value(struct KProp *K, Value r, enum BuiltinKind ki
 
 static struct CellInfo const_zero(struct KProp *K, enum BuiltinKind kind)
 {
-    return const_value(K, (Value){0}, kind);
+    return const_value(K, I2V(0), kind);
 }
 
 static struct CellInfo const_nan(struct KProp *K)
@@ -304,9 +304,10 @@ static struct CellInfo const_nan(struct KProp *K)
     return CONST_INFO(k, r);
 }
 
+#define EQUALS_CONST_CHAR(Cell_, Char_) ((Cell_)->info.kind == CELL_CONSTANT && V_CHAR((Cell_)->info.v) == (Char_))
 #define EQUALS_CONST_INT(Cell_, Int_) ((Cell_)->info.kind == CELL_CONSTANT && V_INT((Cell_)->info.v) == (Int_))
 #define EQUALS_CONST_FLOAT(Cell_, Float_) ((Cell_)->info.kind == CELL_CONSTANT && V_FLOAT((Cell_)->info.v) == (Float_))
-#define EQUALS_CONST_STR0(Cell_) ((Cell_)->info.kind == CELL_CONSTANT && V_STRING((Cell_)->info.v)->length == 0)
+#define EQUALS_CONST_STR0(Cell_) ((Cell_)->info.kind == CELL_CONSTANT && V_STR((Cell_)->info.v)->length == 0)
 
 #define IS_NAN(Cell_) ((Cell_)->info.kind == CELL_CONSTANT && isnan(V_FLOAT((Cell_)->info.v)))
 #define IS_INFINITY(Cell_) ((Cell_)->info.kind == CELL_CONSTANT && !isfinite(V_FLOAT((Cell_)->info.v)))
@@ -388,20 +389,20 @@ static struct CellInfo special_binary_op(struct KProp *K, struct Cell *lhs, stru
                 DIVIDE_BY_0(K, binop->loc);
             }
             break;
-        case MIR_BINARY_BITAND:
+        case MIR_BINARY_IBITAND:
             if (EQUALS_CONST_INT(lhs, 0) || EQUALS_CONST_INT(rhs, 0))
                 return const_zero(K, BUILTIN_INT);
             break;
-        case MIR_BINARY_BITOR:
-        case MIR_BINARY_BITXOR:
+        case MIR_BINARY_IBITOR:
+        case MIR_BINARY_IBITXOR:
             if (EQUALS_CONST_INT(lhs, 0)) {
                 return binop_to_move(binop, binop->rhs);
             } else if (EQUALS_CONST_INT(rhs, 0)) {
                 return binop_to_move(binop, binop->lhs);
             }
             break;
-        case MIR_BINARY_SHL:
-        case MIR_BINARY_SHR:
+        case MIR_BINARY_ISHL:
+        case MIR_BINARY_ISHR:
             if (rhs->info.kind == CELL_CONSTANT && V_INT(rhs->info.v) < 0) {
                 SHIFT_BY_NEGATIVE(K, binop->loc);
             } else if (EQUALS_CONST_INT(lhs, 0)) { // 0 shift n == 0
@@ -430,7 +431,7 @@ static struct CellInfo self_binary_op(struct KProp *K, struct Cell *lhs, struct 
     switch (binop->op) {
         case MIR_BINARY_ISUB:
         case MIR_BINARY_IMOD:
-        case MIR_BINARY_BITXOR:
+        case MIR_BINARY_IBITXOR:
             return const_zero(K, BUILTIN_INT);
         case MIR_BINARY_FSUB:
         case MIR_BINARY_FMOD:
@@ -439,9 +440,6 @@ static struct CellInfo self_binary_op(struct KProp *K, struct Cell *lhs, struct 
             return const_value(K, I2V(1), BUILTIN_INT);
         case MIR_BINARY_FDIV:
             return const_value(K, F2V(1.0), BUILTIN_FLOAT);
-        case MIR_BINARY_BITAND:
-        case MIR_BINARY_BITOR:
-            return binop_to_move(binop, binop->lhs);
         default:
             return BOTTOM_INFO();
     }
@@ -983,7 +981,7 @@ static paw_Bool propagate(struct Mir *mir)
 
     K.kcache.ints = ValueMap_new_from(C, K.pool);
     K.kcache.strs = ValueMap_new_from(C, K.pool);
-    K.kcache.flts = ValueMap_new_from(C, K.pool);
+    K.kcache.floats = ValueMap_new_from(C, K.pool);
     pawMir_collect_per_instr_uses(mir, K.uses);
 
     init_lattice(&K);

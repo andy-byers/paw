@@ -157,9 +157,9 @@ void paw_mangle_start(paw_Env *P)
 
 #define MANGLE_ADD_NAME(P, prefix)              \
     do {                                        \
-        paw_push_fstring(P, prefix "%I%s",      \
+        paw_push_fstr(P, prefix "%I%s",         \
                          paw_str_rawlen(P, -1), \
-                         paw_string(P, -1));    \
+                         paw_str(P, -1));       \
         paw_shift(P, 1);                        \
         paw_str_concat(P, 2);                   \
     } while (0)
@@ -186,7 +186,7 @@ void paw_mangle_add_args(paw_Env *P, paw_Type *types)
 
 int paw_lookup_item(paw_Env *P, int index, struct paw_Item *pitem)
 {
-    String const *name = V_STRING(*at(P, index));
+    Str const *name = V_STR(*at(P, index));
     ItemId const iid = pawE_locate(P, name, PAW_TRUE);
 
     if (iid < 0)
@@ -229,6 +229,12 @@ void paw_push_float(paw_Env *P, paw_Float f)
     API_INCR_TOP(P, 1);
 }
 
+void paw_push_char(paw_Env *P, paw_Char x)
+{
+    V_SET_CHAR(P->top.p, x);
+    API_INCR_TOP(P, 1);
+}
+
 void paw_push_int(paw_Env *P, paw_Int i)
 {
     V_SET_INT(P->top.p, i);
@@ -251,33 +257,33 @@ void paw_new_native(paw_Env *P, paw_Function fn, int nup)
     P->top.p = base + 1;
 }
 
-char const *paw_push_string(paw_Env *P, char const *s)
+char const *paw_push_str(paw_Env *P, char const *s)
 {
-    return paw_push_nstring(P, s, strlen(s));
+    return paw_push_nstr(P, s, strlen(s));
 }
 
-char const *paw_push_nstring(paw_Env *P, char const *s, size_t n)
+char const *paw_push_nstr(paw_Env *P, char const *s, size_t n)
 {
-    String *str = pawS_new_nstr(P, s, n);
+    Str *str = pawS_new_nstr(P, s, n);
     V_SET_OBJECT(P->top.p, str);
     API_INCR_TOP(P, 1);
     return str->text;
 }
 
-char const *paw_push_vfstring(paw_Env *P, char const *fmt, va_list arg)
+char const *paw_push_vfstr(paw_Env *P, char const *fmt, va_list arg)
 {
     Buffer buf;
     pawL_init_buffer(P, &buf);
     pawL_add_vfstring(P, &buf, fmt, arg);
     pawL_push_result(P, &buf);
-    return paw_string(P, -1);
+    return paw_str(P, -1);
 }
 
-char const *paw_push_fstring(paw_Env *P, char const *fmt, ...)
+char const *paw_push_fstr(paw_Env *P, char const *fmt, ...)
 {
     va_list arg;
     va_start(arg, fmt);
-    char const *s = paw_push_vfstring(P, fmt, arg);
+    char const *s = paw_push_vfstr(P, fmt, arg);
     va_end(arg);
     return s;
 }
@@ -291,6 +297,11 @@ void paw_push_rawptr(paw_Env *P, void *ptr)
 paw_Bool paw_bool(paw_Env *P, int index)
 {
     return V_TRUE(*at(P, index));
+}
+
+paw_Char paw_char(paw_Env *P, int index)
+{
+    return V_CHAR(*at(P, index));
 }
 
 paw_Int paw_int(paw_Env *P, int index)
@@ -308,9 +319,9 @@ paw_Float paw_float(paw_Env *P, int index)
     return V_FLOAT(*at(P, index));
 }
 
-char const *paw_string(paw_Env *P, int index)
+char const *paw_str(paw_Env *P, int index)
 {
-    String const *s = V_STRING(*at(P, index));
+    Str const *s = V_STR(*at(P, index));
     return s->text;
 }
 
@@ -499,7 +510,6 @@ void paw_new_tuple(paw_Env *P, int n)
     paw_shift(P, n);
 }
 
-// TODO: lookup size of "e", pass to pawR_new_list
 void paw_new_list(paw_Env *P, int n, int element_size)
 {
     Value *object = pawC_push0(P);
@@ -646,22 +656,22 @@ void paw_set_field(paw_Env *P, int object, int index)
     pawR_tuple_set(P->cf, tuple, index, value);
 }
 
-char const *paw_int_to_string(paw_Env *P, int index, size_t *plen)
+char const *paw_int_to_str(paw_Env *P, int index, size_t *plen)
 {
     Value *pv = at(P, index);
-    return pawV_to_string(P, pv, PAW_TINT, plen);
+    return pawV_to_str(P, pv, PAW_TINT, plen);
 }
 
-char const *paw_float_to_string(paw_Env *P, int index, size_t *plen)
+char const *paw_float_to_str(paw_Env *P, int index, size_t *plen)
 {
     Value *pv = at(P, index);
-    return pawV_to_string(P, pv, PAW_TFLOAT, plen);
+    return pawV_to_str(P, pv, PAW_TFLOAT, plen);
 }
 
 void paw_str_length(paw_Env *P, int object)
 {
     Value const *str = at(P, object);
-    size_t const len = pawS_length(V_STRING(*str));
+    size_t const len = pawS_length(V_STR(*str));
     paw_push_int(P, PAW_CAST_INT(len));
 }
 

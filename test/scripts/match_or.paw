@@ -74,12 +74,12 @@ pub fn test_enum() {
 
 fn eval_enum(target: Enum) -> str {
     match target {
-        Enum::A => {return 'a';},
-        Enum::B => {return 'b';},
-        Enum::C => {return 'c';},
-        Enum::One(x) => {return '1(' + eval_enum(x) + ')';},
-        Enum::Two(x, y) => {return '2(' + eval_enum(x) + eval_enum(y) + ')';},
-        Enum::Three(x, y, z) => {return '3(' + eval_enum(x) + eval_enum(y) + eval_enum(z) + ')';},
+        Enum::A => {return "a";},
+        Enum::B => {return "b";},
+        Enum::C => {return "c";},
+        Enum::One(x) => {return "1(" + eval_enum(x) + ")";},
+        Enum::Two(x, y) => {return "2(" + eval_enum(x) + eval_enum(y) + ")";},
+        Enum::Three(x, y, z) => {return "3(" + eval_enum(x) + eval_enum(y) + eval_enum(z) + ")";},
     };
 }
 
@@ -94,19 +94,19 @@ pub fn test_enum_bindings() {
             | Enum::Three(Enum::B, x, Enum::B) 
             | Enum::Three(Enum::C, Enum::C, x) => {return eval_enum(x);},
 
-            _ => {return '_';},
+            _ => {return "_";},
         };
     };
 
-    assert(check(Enum::A) == '_');
-    assert(check(Enum::One(Enum::A)) == '_');
+    assert(check(Enum::A) == "_");
+    assert(check(Enum::One(Enum::A)) == "_");
 
-    assert(check(Enum::Two(Enum::A, Enum::A)) == 'a');
-    assert(check(Enum::Two(Enum::B, Enum::C)) == 'b');
+    assert(check(Enum::Two(Enum::A, Enum::A)) == "a");
+    assert(check(Enum::Two(Enum::B, Enum::C)) == "b");
 
-    assert(check(Enum::Three(Enum::B, Enum::A, Enum::A)) == 'b');
-    assert(check(Enum::Three(Enum::B, Enum::C, Enum::B)) == 'c');
-    assert(check(Enum::Three(Enum::C, Enum::C, Enum::A)) == 'a');
+    assert(check(Enum::Three(Enum::B, Enum::A, Enum::A)) == "b");
+    assert(check(Enum::Three(Enum::B, Enum::C, Enum::B)) == "c");
+    assert(check(Enum::Three(Enum::C, Enum::C, Enum::A)) == "a");
 }
 
 pub fn test_tuple_bindings() {

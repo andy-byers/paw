@@ -139,7 +139,7 @@ struct Def *pawRtti_new_trait_def(paw_Env *P)
     return new_def(P, DEF_TRAIT);
 }
 
-struct RttiVariant *pawRtti_new_variant(paw_Env *P, String *name, struct RttiField *fields, int num_fields)
+struct RttiVariant *pawRtti_new_variant(paw_Env *P, Str *name, struct RttiField *fields, int num_fields)
 {
     struct RttiVariant *variant = pawM_new(P, struct RttiVariant);
     *variant = (struct RttiVariant){
@@ -150,7 +150,7 @@ struct RttiVariant *pawRtti_new_variant(paw_Env *P, String *name, struct RttiFie
     return variant;
 }
 
-struct RttiField *pawRtti_new_field(paw_Env *P, String *name, paw_Type code, paw_Bool is_pub)
+struct RttiField *pawRtti_new_field(paw_Env *P, Str *name, paw_Type code, paw_Bool is_pub)
 {
     struct RttiField *field = pawM_new(P, struct RttiField);
     *field = (struct RttiField){
@@ -207,7 +207,7 @@ static void print_tuple_type(paw_Env *P, Buffer *buf, struct RttiTuple *type)
 static void print_adt(paw_Env *P, Buffer *buf, struct RttiAdt *type)
 {
     struct Def *def = RTTI_DEF(P, type->iid);
-    String const *name = def->hdr.name;
+    Str const *name = def->hdr.name;
     struct RttiType *base = RTTI_CAST_TYPE(type);
     pawL_add_nstring(P, buf, name->text, name->length);
     if (base->nsubtypes > 0) {
@@ -245,7 +245,7 @@ void pawRtti_print_type(paw_Env *P, Buffer *buf, paw_Type code)
     }
 }
 
-static void add_string_with_len(paw_Env *P, Buffer *buf, String const *str)
+static void add_string_with_len(paw_Env *P, Buffer *buf, Str const *str)
 {
     pawL_add_int(P, buf, PAW_CAST_INT(str->length));
     pawL_add_nstring(P, buf, str->text, str->length);
@@ -266,13 +266,13 @@ void pawRtti_mangle_finish_generic_args(paw_Env *P, Buffer *buf)
     pawL_add_char(P, buf, 'E');
 }
 
-void pawRtti_mangle_add_module(paw_Env *P, Buffer *buf, String const *name)
+void pawRtti_mangle_add_module(paw_Env *P, Buffer *buf, Str const *name)
 {
     pawL_add_char(P, buf, 'N');
     add_string_with_len(P, buf, name);
 }
 
-void pawRtti_mangle_add_name(paw_Env *P, Buffer *buf, String const *name)
+void pawRtti_mangle_add_name(paw_Env *P, Buffer *buf, Str const *name)
 {
     add_string_with_len(P, buf, name);
 }

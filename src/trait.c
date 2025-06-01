@@ -173,7 +173,7 @@ static void ensure_methods_match(struct Compiler *C, struct SourceLoc loc, struc
         register_builtin_trait_method(C, adt, a, tk);
 }
 
-DEFINE_MAP(struct Compiler, MethodMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, String *, struct IrType *)
+DEFINE_MAP(struct Compiler, MethodMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str *, struct IrType *)
 
 static void ensure_trait_implemented(struct Compiler *C, struct HirTraitDecl *trait_decl, MethodMap *methods, struct IrType *adt, struct IrType *trait)
 {

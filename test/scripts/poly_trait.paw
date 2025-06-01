@@ -111,14 +111,14 @@
 //}
 //
 //pub trait ToString {
-//    fn to_string(self) -> str;
+//    fn to_str(self) -> str;
 //}
 //
 //struct IntWrapper: ToString {
 //    pub value: int,
 //    
-//    pub fn to_string(self) -> str {
-//        self.value.to_string()
+//    pub fn to_str(self) -> str {
+//        self.value.to_str()
 //    }
 //}
 //
@@ -147,7 +147,7 @@
 //
 //fn next_value<I: CustomIterator<IntWrapper>>(iter: I) -> str {
 //    match iter.next() {
-//        Option::Some(v) => "Some(" + v.to_string() + ")",
+//        Option::Some(v) => "Some(" + v.to_str() + ")",
 //        Option::None => "None",
 //    }
 //}
@@ -178,8 +178,8 @@
 //    
 //    pub fn get(self, default_a: A, default_b: B) -> str {
 //        match self {
-//            Self::A(a) => a.to_string() + "/" + default_b.to_string(),
-//            Self::B(b) => default_a.to_string() + "/" + b.to_string(),
+//            Self::A(a) => a.to_str() + "/" + default_b.to_str(),
+//            Self::B(b) => default_a.to_str() + "/" + b.to_str(),
 //        }
 //    }
 //}

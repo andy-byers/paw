@@ -7,7 +7,7 @@ enum WithoutFields<T> {
 
 fn check_match_without_fields_concrete(target: WithoutFields<int>) -> int {
     match target {
-        // generic type inferred by unifying with 'target'
+        // generic type inferred by unifying with "target"
         WithoutFields::First => {return 1;},
         WithoutFields::Second => {return 2;},
     }

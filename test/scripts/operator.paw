@@ -5,7 +5,7 @@ pub fn test_operator_precedence() {
     assert(8 == 1 << 2 * 2 >> 1);
     assert(-3 == 1 | ~2 ^ 3 & 4);
 
-    // '==' and '!=' bind tighter than '&&' and '||'
+    // "==" and "!=" bind tighter than "&&" and "||"
     assert(1 == 1 && 2 == 2) ;
 
     // Bitwise operators bind tighter than comparisons
@@ -55,9 +55,9 @@ pub fn test_comparisons() {
     check_cmpf(-1.1, 1.2);
     check_cmpf(123.1, 124.2);
 
-    check_cmps('a', 'b');
-    check_cmps('ab', 'abc');
-    check_cmps('abc', 'abd');
+    check_cmps("a", "b");
+    check_cmps("ab", "abc");
+    check_cmps("abc", "abd");
 }
 
 pub fn test_conversions() {
@@ -74,10 +74,10 @@ pub fn test_bitwise_ops() {
 }
 
 pub fn test_add_strings() {
-    let s = '';
-    s = s + 'abc';
+    let s = "";
+    s = s + "abc";
     s += s;
-    assert(s == 'abcabc');
+    assert(s == "abcabc");
 }
 
 

@@ -20,14 +20,14 @@
 #define LOWERING_ERROR(L_, Kind_, ...) pawErr_##Kind_((L_)->C, (L_)->hir->name, __VA_ARGS__)
 
 struct LowerAst {
-    String const *modname;
+    Str const *modname;
     struct DynamicMem *dm;
     struct Compiler *C;
     struct Hir *hir;
     paw_Env *P;
 };
 
-DEFINE_MAP_ITERATOR(ImportMap, String *, struct Ast *)
+DEFINE_MAP_ITERATOR(ImportMap, Str *, struct Ast *)
 
 static struct HirStmt *lower_stmt(struct LowerAst *, struct AstStmt *);
 static struct HirExpr *lower_expr(struct LowerAst *, struct AstExpr *);
@@ -54,7 +54,7 @@ DEFINE_LOWER_LIST(stmt, Stmt)
 DEFINE_LOWER_LIST(type, Type)
 DEFINE_LOWER_LIST(pat, Pat)
 
-static struct HirIdent make_ident(String *name, struct SourceSpan span)
+static struct HirIdent make_ident(Str *name, struct SourceSpan span)
 {
     return (struct HirIdent){
         .name = name,
@@ -206,7 +206,7 @@ static struct HirExpr *LowerBinOpExpr(struct LowerAst *L, struct AstBinOpExpr *e
 static struct HirExpr *new_literal_field(struct LowerAst *L, const char *name, struct HirExpr *expr, int fid)
 {
     struct HirIdent const ident = {
-        .name = SCAN_STRING(L->C, name),
+        .name = SCAN_STR(L->C, name),
         .span = expr->hdr.span,
     };
     return pawHir_new_named_field_expr(L->hir, expr->hdr.span, ident, expr, fid);
@@ -537,7 +537,7 @@ static struct HirExpr *LowerStringExpr(struct LowerAst *L, struct AstStringExpr 
             struct HirExpr *expr = lower_expr(L, ppart->expr);
             struct HirIdent ident = {
                 .span = expr->hdr.span,
-                .name = SCAN_STRING(L->C, "to_string"),
+                .name = SCAN_STR(L->C, "to_str"),
             };
             struct HirExpr *method = pawHir_new_name_selector(L->hir, ident.span, expr, ident);
             struct HirExprList *args = HirExprList_new(L->hir);
@@ -579,7 +579,7 @@ static struct HirExpr *new_boolean_match(struct LowerAst *L, struct SourceSpan s
         struct HirPath underscore;
         {
             // create "_" path for "false" case
-            String *const name = CSTR(L->C, CSTR_UNDERSCORE);
+            Str *const name = CSTR(L->C, CSTR_UNDERSCORE);
             pawHir_path_init(hir, &underscore, cond->hdr.span);
             struct HirIdent ident = {.span = cond->hdr.span, .name = name};
             pawHir_path_add(hir, &underscore, ident, NULL);
@@ -654,7 +654,7 @@ static struct HirPat *new_none_pat(struct LowerAst *L, struct SourceSpan span)
     struct HirPath path;
     pawHir_path_init(L->hir, &path, span);
     pawHir_path_add(L->hir, &path, make_ident(CSTR(L->C, CSTR_OPTION), span), NULL);
-    pawHir_path_add(L->hir, &path, make_ident(SCAN_STRING(L->C, "None"), span), NULL);
+    pawHir_path_add(L->hir, &path, make_ident(SCAN_STR(L->C, "None"), span), NULL);
     struct HirPatList *fields = HirPatList_new(L->hir);
     return pawHir_new_variant_pat(L->hir, span, path, fields, 1);
 }
@@ -664,7 +664,7 @@ static struct HirPat *new_some_pat(struct LowerAst *L, struct HirPat *pat, struc
     struct HirPath path;
     pawHir_path_init(L->hir, &path, span);
     pawHir_path_add(L->hir, &path, make_ident(CSTR(L->C, CSTR_OPTION), span), NULL);
-    pawHir_path_add(L->hir, &path, make_ident(SCAN_STRING(L->C, "Some"), span), NULL);
+    pawHir_path_add(L->hir, &path, make_ident(SCAN_STR(L->C, "Some"), span), NULL);
     struct HirPatList *fields = HirPatList_new(L->hir);
     struct HirPat *variant = pawHir_new_variant_pat(L->hir, span, path, fields, 0);
     HirPatList_push(L->hir, fields, pat);
@@ -702,13 +702,13 @@ static struct HirExpr *LowerForExpr(struct LowerAst *L, struct AstForExpr *e)
     struct Hir *hir = L->hir;
     struct HirStmtList *outer_stmts = HirStmtList_new(hir);
     struct HirIdent iter_name = {
-        .name = SCAN_STRING(L->C, PRIVATE("iterator")),
+        .name = SCAN_STR(L->C, PRIVATE("iterator")),
         .span = e->target->hdr.span,
     };
     {
         // evaluate "iterable.iterator()" and store the result in a local variable
         struct HirExpr *iterable = lower_expr(L, e->target);
-        struct HirIdent func_ident = {.span = iter_name.span, .name = SCAN_STRING(L->C, "iterator")};
+        struct HirIdent func_ident = {.span = iter_name.span, .name = SCAN_STR(L->C, "iterator")};
         struct HirExpr *target = pawHir_new_name_selector(hir, e->span, iterable, func_ident);
         struct HirExpr *iterator = pawHir_new_call_expr(hir, e->span, target, HirExprList_new(hir));
         struct HirStmt *stmt = pawHir_new_let_stmt(hir, e->span, binding_pat(L, e->span, iter_name), NULL, iterator);
@@ -742,7 +742,7 @@ static struct HirExpr *LowerForExpr(struct LowerAst *L, struct AstForExpr *e)
     {
         // call "next" on the iterator created earlier (result of evaluating "e->target")
         struct HirExpr *iterator = new_unary_path_expr(L, iter_name);
-        struct HirIdent func_ident = {.span = iter_name.span, .name = SCAN_STRING(L->C, "next")};
+        struct HirIdent func_ident = {.span = iter_name.span, .name = SCAN_STR(L->C, "next")};
         struct HirExpr *target = pawHir_new_name_selector(hir, e->span, iterator, func_ident);
         next = pawHir_new_call_expr(hir, e->span, target, HirExprList_new(hir));
     }
@@ -760,7 +760,7 @@ static struct HirExpr *LowerIndex(struct LowerAst *L, struct AstIndex *e)
 {
     struct HirExpr *target = lower_expr(L, e->target);
     struct HirExpr *index = lower_expr(L, e->index);
-    return pawHir_new_index_expr(L->hir, e->span, target, index, PAW_FALSE);
+    return pawHir_new_index_expr(L->hir, e->span, target, index);
 }
 
 static struct HirExpr *LowerSelector(struct LowerAst *L, struct AstSelector *e)

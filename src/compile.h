@@ -46,7 +46,7 @@
 #define ENV(x) ((x)->P)
 #define DLOG(X, ...) PAWD_LOG(ENV(X), __VA_ARGS__)
 #define CSTR(X, i) CACHED_STRING(ENV(X), CAST_SIZE(i))
-#define SCAN_STRING(X, s) pawP_scan_string(X, (X)->strings, s)
+#define SCAN_STR(X, s) pawP_scan_str(X, (X)->strings, s)
 
 #define GET_NODE_TYPE(C, p) pawIr_get_type(C, (p)->hdr.hid)
 #define SET_NODE_TYPE(C, p, t) pawIr_set_type(C, (p)->hdr.hid, t)
@@ -95,26 +95,26 @@ struct BodyMap;
 void *pawP_alloc(paw_Env *P, struct Pool *pool, void *ptr, size_t size0, size_t size);
 #define P_ALLOC(C, ptr, size0, size) pawP_alloc(ENV(C), (C)->pool, ptr, size0, size)
 
-String *pawP_scan_nstring(struct Compiler *C, Tuple *map, char const *s, size_t n);
-inline static String *pawP_scan_string(struct Compiler *C, Tuple *map, char const *s)
+Str *pawP_scan_nstr(struct Compiler *C, Tuple *map, char const *s, size_t n);
+inline static Str *pawP_scan_str(struct Compiler *C, Tuple *map, char const *s)
 {
-    return pawP_scan_nstring(C, map, s, strlen(s));
+    return pawP_scan_nstr(C, map, s, strlen(s));
 }
 
-String *pawP_format_string(struct Compiler *C, char const *fmt, ...);
+Str *pawP_format_string(struct Compiler *C, char const *fmt, ...);
 
 #define IS_SCALAR_TYPE(code) ((code) < BUILTIN_STR)
 #define IS_BASIC_TYPE(code) ((code) <= BUILTIN_STR)
 #define IS_BUILTIN_TYPE(code) ((code) < NBUILTINS)
 
 struct Builtin {
-    String *name;
+    Str *name;
     DeclId did;
 };
 
 struct GlobalInfo {
     enum BuiltinKind b_kind : 8;
-    String *name;
+    Str *name;
     Value value;
     int modno;
     int index;
@@ -147,7 +147,7 @@ struct Compiler {
     struct Ast *ast_prelude;
     struct Hir *hir_prelude;
     struct Unifier *U;
-    String *modname;
+    Str *modname;
 
     struct Pool *pool;
     struct Pool *ast_pool;
@@ -163,7 +163,7 @@ struct Compiler {
     struct TraitMap *traits; // DeclId => HirDeclList *
 
     // '.imports' maps modules names to ASTs for each module being compiled.
-    struct ImportMap *imports; // String * => Ast
+    struct ImportMap *imports; // Str * => Ast
     struct RttiMap *rtti;
 
     struct HirTypeMap *hir_types; // HirId => IrType *
@@ -197,7 +197,7 @@ struct IrType *pawP_get_self(struct Compiler *C, struct IrSignature *method);
 struct ModuleInfo {
     struct HirScope *globals;
     struct Hir *hir;
-    String *name;
+    Str *name;
     int modno;
 };
 
@@ -258,8 +258,8 @@ struct IrTypeList *pawP_instantiate_typelist(struct Compiler *C, struct IrTypeLi
 struct IrType *pawP_instantiate_field(struct Compiler *C, struct IrType *self, struct HirDecl *field);
 struct IrTypeList *pawP_instantiate_struct_fields(struct Compiler *C, struct IrAdt *inst);
 struct IrTypeList *pawP_instantiate_variant_fields(struct Compiler *C, struct IrAdt *inst, int index);
-struct HirDecl *pawP_find_field(struct Compiler *C, struct IrType *self, String *name);
-struct IrType *pawP_find_method(struct Compiler *C, struct IrType *self, String *name);
+struct HirDecl *pawP_find_field(struct Compiler *C, struct IrType *self, Str *name);
+struct IrType *pawP_find_method(struct Compiler *C, struct IrType *self, Str *name);
 
 struct Decision *pawP_check_exhaustiveness(struct Hir *hir, struct Pool *pool, struct HirMatchExpr *match, struct VariableList *vars);
 void pawP_lower_matches(struct Compiler *C);
@@ -303,7 +303,7 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, char co
 void pawP_teardown(paw_Env *P, struct DynamicMem *dm);
 
 void pawP_parse_prelude(struct Compiler *C);
-struct Ast *pawP_parse_module(struct Compiler *C, String *modname, paw_Reader input, void *ud);
+struct Ast *pawP_parse_module(struct Compiler *C, Str *modname, paw_Reader input, void *ud);
 
 void pawP_validate_adt_traits(struct Compiler *C, struct HirAdtDecl *d);
 
@@ -343,7 +343,7 @@ struct IrType *pawP_builtin_type(struct Compiler *C, enum BuiltinKind code);
 struct ItemSlot {
     struct RttiType *rtti;
     struct Mir *mir;
-    String *name;
+    Str *name;
     DeclId did;
 };
 
@@ -353,22 +353,22 @@ struct Annotation {
     enum BuiltinKind kind : 7;
     paw_Bool has_value : 1;
     struct SourceSpan span;
-    String *modname;
-    String *name;
+    Str *modname;
+    Str *name;
     Value value;
 };
 
 DEFINE_LIST(struct Compiler, Annotations, struct Annotation)
 
 paw_Bool pawP_check_extern(struct Compiler *C, struct Annotations *annos, struct Annotation *panno);
-Value const *pawP_get_extern_value(struct Compiler *C, String const *name);
+Value const *pawP_get_extern_value(struct Compiler *C, Str const *name);
 void pawP_mangle_start(paw_Env *P, Buffer *buf, struct Compiler *G);
-String *pawP_mangle_finish(paw_Env *P, Buffer *buf, struct Compiler *G);
-String *pawP_mangle_name(struct Compiler *G, String const *modname, String const *name, struct IrTypeList *types);
-String *pawP_mangle_attr(struct Compiler *C, String const *modname, String const *base, struct IrTypeList const *base_types, String const *attr, struct IrTypeList const *attr_types);
+Str *pawP_mangle_finish(paw_Env *P, Buffer *buf, struct Compiler *G);
+Str *pawP_mangle_name(struct Compiler *G, Str const *modname, Str const *name, struct IrTypeList *types);
+Str *pawP_mangle_attr(struct Compiler *C, Str const *modname, Str const *base, struct IrTypeList const *base_types, Str const *attr, struct IrTypeList const *attr_types);
 
 struct ExternInfo {
-    String *name;
+    Str *name;
     Value value;
 };
 
@@ -389,11 +389,11 @@ DEFINE_MAP(struct Compiler, VariantDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, D
 DEFINE_MAP(struct Compiler, HirTypeMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, HirId, struct IrType *)
 DEFINE_MAP(struct Compiler, DefTypeMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrType *)
 DEFINE_MAP(struct Compiler, TraitMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrTypeList *)
-DEFINE_MAP(struct Compiler, StringMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, String *, String *)
-DEFINE_MAP(struct Compiler, ImportMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, String *, struct Ast *)
+DEFINE_MAP(struct Compiler, StringMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str *, Str *)
+DEFINE_MAP(struct Compiler, ImportMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str *, struct Ast *)
 DEFINE_MAP(struct Compiler, ValueMap, pawP_alloc, P_VALUE_HASH, P_VALUE_EQUALS, Value, Value)
 DEFINE_MAP(struct Compiler, BodyMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct Mir *)
-DEFINE_MAP(struct Compiler, BuiltinMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, String *, struct Builtin *)
+DEFINE_MAP(struct Compiler, BuiltinMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str *, struct Builtin *)
 DEFINE_MAP_ITERATOR(HirTypeMap, HirId, struct IrType *)
 
 DEFINE_LIST(struct Compiler, GlobalList, struct GlobalInfo)

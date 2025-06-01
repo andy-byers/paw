@@ -43,7 +43,7 @@ DEFINE_MAP(struct MonoCollector, DeclMonoMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS
 DEFINE_MAP(struct MonoCollector, TypeMonoMap, pawP_alloc, IR_TYPE_HASH, IR_TYPE_EQUALS, struct IrType *, struct IrTypeList *)
 DEFINE_MAP_ITERATOR(DeclMonoMap, DeclId, struct IrTypeList *);
 
-static void log_instance(struct MonoCollector *M, char const *kind, String const *name, struct IrType *type)
+static void log_instance(struct MonoCollector *M, char const *kind, Str const *name, struct IrType *type)
 {
 #if defined(PAW_DEBUG_LOG)
     char const *type_string = pawIr_print_type(M->C, type);
@@ -224,7 +224,7 @@ static struct Mir *new_mir(struct MonoCollector *M, struct Mir *base, struct IrT
     return M->mir;
 }
 
-static void copy_trait_owners(struct MonoCollector *M, struct IrType *base, struct IrType *inst, struct IrType *method, String *method_name)
+static void copy_trait_owners(struct MonoCollector *M, struct IrType *base, struct IrType *inst, struct IrType *method, Str *method_name)
 {
     paw_assert(method != NULL);
     struct TraitOwners *trait_owners = M->C->trait_owners;
@@ -418,7 +418,7 @@ static paw_Bool test_fns(struct MonoCollector *M, IrType *a, IrType *b)
     return IR_TYPE_DID(a).value == IR_TYPE_DID(b).value && test_types(M, a, b);
 }
 
-static struct IrType *cannonicalize_method(struct MonoCollector *M, struct IrType *self, struct IrTypeList *monos, String const *name, struct IrType *type)
+static struct IrType *cannonicalize_method(struct MonoCollector *M, struct IrType *self, struct IrTypeList *monos, Str const *name, struct IrType *type)
 {
     struct IrType *const *pmono;
     K_LIST_FOREACH (monos, pmono) {
@@ -464,7 +464,7 @@ static void register_map_methods(struct MonoCollector *M, struct IrType *type)
 
     struct IrTypeList **pequals_list = &K_LIST_AT(owners, TRAIT_EQUALS);
     if (*pequals_list == NULL) {
-        struct IrType *equals = pawP_find_method(M->C, key, SCAN_STRING(M->C, "eq"));
+        struct IrType *equals = pawP_find_method(M->C, key, SCAN_STR(M->C, "eq"));
         register_method(M, IrGetSignature(equals));
         *pequals_list = IrTypeList_new(M->C);
         IrTypeList_push(M->C, *pequals_list, equals);
@@ -473,7 +473,7 @@ static void register_map_methods(struct MonoCollector *M, struct IrType *type)
 
     struct IrTypeList **phash_list = &K_LIST_AT(owners, TRAIT_HASH);
     if (*phash_list == NULL) {
-        struct IrType *hash = pawP_find_method(M->C, key, SCAN_STRING(M->C, "hash"));
+        struct IrType *hash = pawP_find_method(M->C, key, SCAN_STR(M->C, "hash"));
         register_method(M, IrGetSignature(hash));
         *phash_list = IrTypeList_new(M->C);
         IrTypeList_push(M->C, *phash_list, hash);

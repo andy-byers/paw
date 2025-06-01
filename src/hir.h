@@ -75,7 +75,7 @@ struct HirPath {
 };
 
 struct HirIdent {
-    String *name;
+    Str *name;
     struct SourceSpan span;
 };
 
@@ -934,7 +934,7 @@ static struct HirExpr *pawHir_new_name_selector(struct Hir *hir, struct SourceSp
     return e;
 }
 
-static struct HirExpr *pawHir_new_index_expr(struct Hir *hir, struct SourceSpan span, struct HirExpr *target, struct HirExpr *index, paw_Bool is_slice)
+static struct HirExpr *pawHir_new_index_expr(struct Hir *hir, struct SourceSpan span, struct HirExpr *target, struct HirExpr *index)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->Index_ = (struct HirIndex){
@@ -1419,7 +1419,7 @@ struct Hir {
     struct HirDeclList *items;
     struct Compiler *C;
     struct Pool *pool;
-    String *name;
+    Str *name;
     paw_Env *P;
     int modno;
 };
@@ -1458,7 +1458,7 @@ static inline void pawHir_path_init(struct Hir *hir, struct HirPath *ppath, stru
 #define HIR_PATH_RESULT(Path_) (K_LIST_LAST((Path_).segments).res)
 #define HIR_TYPE_DID(Type_) (HirIsPathType(Type_) ? HIR_PATH_RESULT(HirGetPathType(Type_)->path) : HirGetFuncDef(Type_)->did)
 
-struct Hir *pawHir_new(struct Compiler *C, String *name, int modno);
+struct Hir *pawHir_new(struct Compiler *C, Str *name, int modno);
 void pawHir_free(struct Hir *hir);
 
 int pawHir_expand_bodies(struct Hir *hir);

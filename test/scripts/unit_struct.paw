@@ -27,7 +27,7 @@ pub fn test_as_argument() {
 }
 
 pub fn test_call_method() {
-    // looks strange, since 'Unit' is in both a value (nullary type 
+    // looks strange, since "Unit" is in both a value (nullary type 
     // constructor) and a type
     Unit.method();
     Unit::assoc_function();

@@ -3,35 +3,35 @@
 use io;
 
 fn println(msg: str) {
-    print(msg + '\n');
+    print(msg + "\n");
 }
 
 fn show_usage() {
-    println('usage: readme PATHNAME');
-    println('PATHNAME = path to README.md');
+    println("usage: readme PATHNAME");
+    println("PATHNAME = path to README.md");
 }
 
-fn read_file_to_string(pathname: str) -> str {
-    let file = io::File::open(pathname, 'r');
+fn read_file_to_str(pathname: str) -> str {
+    let file = io::File::open(pathname, "r");
 
-    let result = '';
-    let chunk = '';
+    let result = "";
+    let chunk = "";
     do {
         chunk = file.read(1024);
         result = result + chunk;
-    } while chunk != '';
+    } while chunk != "";
 
     return result;
 }
 
 fn isspace(s: str) -> bool {
     assert(#s == 1);
-    return s[0] == ' '
-        || s[0] == '\n'
-        || s[0] == '\r'
-        || s[0] == '\f'
-        || s[0] == '\t'
-        || s[0] == '\v';
+    return s[0] == " "
+        || s[0] == "\n"
+        || s[0] == "\r"
+        || s[0] == "\f"
+        || s[0] == "\t"
+        || s[0] == "\v";
 
 }
 
@@ -54,54 +54,54 @@ fn contains(haystack: str, needle: str) -> bool {
 
 fn split_into_sources(contents: str) -> Option<[str]> {
     let in_source = false;
-    let lines = contents.split('\n');
+    let lines = contents.split("\n");
     let result = [];
-    let source = '';
+    let source = "";
     for i in 0..#lines {
         let line = stripped(lines[i]);
         if in_source {
-            if contains(line, '```') {
-                if line != '```' {
-                    println('expected "```" but found "' + line + '"');
+            if contains(line, "```") {
+                if line != "```" {
+                    println("expected "```" but found "" + line + """);
                     return Option::None;
                 }
                 in_source = false;
                 result.push(source);
-                source = '';
+                source = "";
             } else {
-                source = source + line + '\n';
+                source = source + line + "\n";
             }
-        } else if (contains(line, '```')) {
-            if line != '```paw' {
-                println('expected "```paw" but found "' + line + '"');
+        } else if (contains(line, "```")) {
+            if line != "```paw" {
+                println("expected "```paw" but found "" + line + """);
                 return Option::None;
             }
             in_source = true;
         }
     }
     if in_source {
-        println('unterminated code block');
+        println("unterminated code block");
         return Option::None;
     }
     return Option::Some(result);
 }
 
 fn dump_source_file(filename: str, source: str) {
-    let file = io::File::open(filename, 'w');
+    let file = io::File::open(filename, "w");
     file.write(source);
 }
 
 pub fn main(args: [str]) -> int {
     if #args != 2 {
-        println('expected positional argument "PATHNAME"');
+        println("expected positional argument "PATHNAME"");
         show_usage();
         return -1;
     }
-    let contents = read_file_to_string(args[1]);
+    let contents = read_file_to_str(args[1]);
     match split_into_sources(contents) {
         Option::Some(sources) => {
             for i in 0..#sources {
-                let filename = 'source_' + i.to_string() + '.paw';
+                let filename = "source_" + i.to_str() + ".paw";
                 dump_source_file(filename, sources[i]);
             }
         },

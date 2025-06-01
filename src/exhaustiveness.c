@@ -263,7 +263,7 @@ static struct VariableList *variables_for_types(struct Usefulness *U, struct Sou
 static void print_path(struct Compiler*C,struct HirPath *path)
 {
     pawHir_dump_path(C, path);
-    printf("%s",paw_string(C->P,-1));
+    printf("%s",paw_str(C->P,-1));
     paw_pop(C->P,1);
 }
 
@@ -499,6 +499,10 @@ static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct R
                 break;
             case BUILTIN_BOOL:
                 cons.kind = CONS_BOOL;
+                cons.value = e->basic.value;
+                break;
+            case BUILTIN_CHAR:
+                cons.kind = CONS_CHAR;
                 cons.value = e->basic.value;
                 break;
             case BUILTIN_INT:

@@ -95,14 +95,14 @@ fn chain_option2_aux<Ty2>(v: Ty2) -> Option<Ty2> {
 
 pub fn test_chain_option2() {
     chain_option2_aux(123);
-    chain_option2_aux('abc');
+    chain_option2_aux("abc");
 }
 
 fn result(b: bool) -> Result<int, str> {
     if b {
         return Result::<int, str>::Ok(42);
     } else {
-        return Result::<int, str>::Err('bad');
+        return Result::<int, str>::Err("bad");
     }
 }
 
@@ -171,7 +171,7 @@ pub fn test_result_methods() {
     assert(o.unwrap() == 123);
     assert(o.unwrap_or(456) == 123);
 
-    let o = Result::<int, str>::Err('abc');
+    let o = Result::<int, str>::Err("abc");
     assert(o.is_err());
     assert(o.unwrap_or(456) == 456);
 }

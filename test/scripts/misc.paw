@@ -14,10 +14,10 @@ enum Enum<T> {X(T)}
 pub fn recur_with_objects<T>(n: int, t: T) {
     let list = [123];
     let list = [1, 2, 3];
-    let tuple = ('a', 2, 3.0, t);
-    let map = [1: 'a', 2: 'b', 3: 'c'];
+    let tuple = ("a", 2, 3.0, t);
+    let map = [1: "a", 2: "b", 3: "c"];
     let struct_ = Struct{v: t};
-    let enum_ = Enum::<str>::X('abc');
+    let enum_ = Enum::<str>::X("abc");
     let next_n = || n - 1;
     if n > 0 {
         recur_with_objects(next_n(), t);
@@ -27,7 +27,7 @@ pub fn recur_with_objects<T>(n: int, t: T) {
 pub fn test_gc() {
     recur_with_objects(1, 123);
     recur_with_objects(10, 1.0);
-    recur_with_objects(100, 'abc');
+    recur_with_objects(100, "abc");
 }
 
 use io;
@@ -39,8 +39,8 @@ fn file_size(f: File) -> int {
 }
 
 pub fn test_io() {
-    let test = 'test string';
-    let file = File::open('abc.txt', 'w+').unwrap();
+    let test = "test string";
+    let file = File::open("abc.txt", "w+").unwrap();
     assert(file_size(file) == 0);
     let n = file.write(test).unwrap();
     assert(n == #test);

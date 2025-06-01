@@ -79,7 +79,7 @@ pub fn test_block_expr() {
 
 pub fn test_if_return() {
     let x = if true { 
-        // ';' is omitted here, since "return" has type "()"
+        // ";" is omitted here, since "return" has type "()"
         return 
     } else { 
         42 
@@ -155,24 +155,24 @@ pub fn test_locals() {
 
 fn check_if_expr(n: int) -> str {
     return if n == 0 {
-        'zero'
+        "zero"
     } else if n == 1 {
-        return 'one';
+        return "one";
 
-        'unreachable code'
+        "unreachable code"
     } else if n == 2 {
-        'two'
+        "two"
     } else {
-        return 'other';
+        return "other";
     };
 }
 
 pub fn test_if_expr() {
-    assert(check_if_expr(0) == 'zero');
-    assert(check_if_expr(1) == 'one');
-    assert(check_if_expr(2) == 'two');
-    assert(check_if_expr(3) == 'other');
-    assert(check_if_expr(-1) == 'other');
+    assert(check_if_expr(0) == "zero");
+    assert(check_if_expr(1) == "one");
+    assert(check_if_expr(2) == "two");
+    assert(check_if_expr(3) == "other");
+    assert(check_if_expr(-1) == "other");
 }
 
 fn check_if_expr_binary_op(n: int) -> int {
@@ -247,71 +247,71 @@ pub fn test_match_expr_call() {
 
 pub fn check_if_result(n: int) -> str {
     if n == 0 {
-        return 'zero';
+        return "zero";
     } else if n == 1 {
-        return 'one';
+        return "one";
     } else if n == 2 {
-        return 'two';
+        return "two";
     } else {
-        'other'
+        "other"
     }
 }
 
 pub fn test_if_result() {
-    assert(check_if_result(0) == 'zero');
-    assert(check_if_result(1) == 'one');
-    assert(check_if_result(2) == 'two');
-    assert(check_if_result(3) == 'other');
+    assert(check_if_result(0) == "zero");
+    assert(check_if_result(1) == "one");
+    assert(check_if_result(2) == "two");
+    assert(check_if_result(3) == "other");
 }
 
 pub fn check_if_result_without_else(n: int) -> str {
     if n == 0 {
-        return 'zero';
+        return "zero";
     } else if n == 1 {
-        return 'one';
+        return "one";
     } else if (n == 2) {
-       return 'two';
+       return "two";
     }
-    'other'
+    "other"
 }
 
 pub fn test_if_result_without_else() {
-    assert(check_if_result_without_else(0) == 'zero');
-    assert(check_if_result_without_else(1) == 'one');
-    assert(check_if_result_without_else(2) == 'two');
-    assert(check_if_result_without_else(3) == 'other');
+    assert(check_if_result_without_else(0) == "zero");
+    assert(check_if_result_without_else(1) == "one");
+    assert(check_if_result_without_else(2) == "two");
+    assert(check_if_result_without_else(3) == "other");
 }
 
 fn check_match_expr(o: Option<int>) -> str {
     match o {
-        Option::None => {'none'}, 
-        Option::Some(x) if x < 0 => 'some < 0', 
-        Option::Some(x) if x > 0 => {return 'some > 0';}, 
-        Option::Some(x) => return 'some == 0',
+        Option::None => {"none"}, 
+        Option::Some(x) if x < 0 => "some < 0", 
+        Option::Some(x) if x > 0 => {return "some > 0";}, 
+        Option::Some(x) => return "some == 0",
     }
 }
 
 pub fn test_match_expr() {
-    assert(check_match_expr(Option::None) == 'none');
-    assert(check_match_expr(Option::Some(-10)) == 'some < 0');
-    assert(check_match_expr(Option::Some(100)) == 'some > 0');
-    assert(check_match_expr(Option::Some(0)) == 'some == 0');
+    assert(check_match_expr(Option::None) == "none");
+    assert(check_match_expr(Option::Some(-10)) == "some < 0");
+    assert(check_match_expr(Option::Some(100)) == "some > 0");
+    assert(check_match_expr(Option::Some(0)) == "some == 0");
 }
 
 fn check_never_match_expr(o: Option<int>) -> str {
     match o {
-        Option::None => return 'none', 
-        Option::Some(x) if x < 0 => return 'some < 0', 
-        Option::Some(x) if x > 0 => {return 'some > 0';}, // "()" unreachable
-        Option::Some(x) => {return 'some == 0'; 'abc'}, // "abc" unreachable
+        Option::None => return "none", 
+        Option::Some(x) if x < 0 => return "some < 0", 
+        Option::Some(x) if x > 0 => {return "some > 0";}, // "()" unreachable
+        Option::Some(x) => {return "some == 0"; "abc"}, // "abc" unreachable
     }
 }
 
 pub fn test_never_match_expr() {
-    assert(check_never_match_expr(Option::None) == 'none');
-    assert(check_never_match_expr(Option::Some(-10)) == 'some < 0');
-    assert(check_never_match_expr(Option::Some(100)) == 'some > 0');
-    assert(check_never_match_expr(Option::Some(0)) == 'some == 0');
+    assert(check_never_match_expr(Option::None) == "none");
+    assert(check_never_match_expr(Option::Some(-10)) == "some < 0");
+    assert(check_never_match_expr(Option::Some(100)) == "some > 0");
+    assert(check_never_match_expr(Option::Some(0)) == "some == 0");
 }
 
 fn check_nested_ifelse(b1: bool, b2: bool, b3: bool) -> int {

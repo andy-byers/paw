@@ -31,15 +31,23 @@ pub struct unit: Hash + Equals {
 }
 
 pub struct bool: Hash + Equals + Compare {
-    #[extern] pub fn to_string(self) -> str;
+    #[extern] pub fn to_str(self) -> str;
     pub fn hash(self) -> int { self as int }
     pub fn eq(self, rhs: Self) -> bool { self == rhs }
     pub fn lt(self, rhs: Self) -> bool { self as int < rhs as int }
     pub fn le(self, rhs: Self) -> bool { self as int <= rhs as int }
 }
 
+pub struct char: Hash + Equals + Compare {
+    #[extern] pub fn to_str(self) -> str;
+    pub fn hash(self) -> int { self as int }
+    pub fn eq(self, rhs: Self) -> bool { self == rhs }
+    pub fn lt(self, rhs: Self) -> bool { self < rhs }
+    pub fn le(self, rhs: Self) -> bool { self <= rhs }
+}
+
 pub struct int: Hash + Equals + Compare + Increment {
-    #[extern] pub fn to_string(self) -> str;
+    #[extern] pub fn to_str(self) -> str;
     pub fn hash(self) -> int { self }
     pub fn eq(self, rhs: Self) -> bool { self == rhs }
     pub fn lt(self, rhs: Self) -> bool { self < rhs }
@@ -48,7 +56,7 @@ pub struct int: Hash + Equals + Compare + Increment {
 }
 
 pub struct float: Hash + Equals + Compare {
-    #[extern] pub fn to_string(self) -> str;
+    #[extern] pub fn to_str(self) -> str;
     #[extern] pub fn hash(self) -> int;
     pub fn eq(self, rhs: Self) -> bool { self == rhs }
     pub fn lt(self, rhs: Self) -> bool { self < rhs }
@@ -65,7 +73,7 @@ pub struct str: Hash + Equals + Compare {
     #[extern] pub fn starts_with(self, prefix: str) -> bool;
     #[extern] pub fn ends_with(self, suffix: str) -> bool;
     #[extern] pub fn hash(self) -> int;
-    pub fn to_string(self) -> str { self }
+    pub fn to_str(self) -> str { self }
     pub fn eq(self, rhs: Self) -> bool { self == rhs }
     pub fn lt(self, rhs: Self) -> bool { self < rhs }
     pub fn le(self, rhs: Self) -> bool { self <= rhs }

@@ -7,58 +7,62 @@
 #include "paw.h"
 #include "util.h"
 
-#define V_ISNAN(v) ((v).f != (v).f)
+#define V_ISNAN(Value_) ((Value_).f != (Value_).f)
 
-#define V_FALSE(v) ((v).u == 0)
-#define V_TRUE(v) ((v).u != 0)
-#define V_INT(v) ((v).i)
-#define V_UINT(v) ((v).u)
-#define V_FLOAT(v) ((v).f)
+#define V_FALSE(Value_) ((Value_).u == 0)
+#define V_TRUE(Value_) ((Value_).u != 0)
+#define V_CHAR(Value_) ((Value_).c)
+#define V_UCHAR(Value_) ((Value_).ux)
+#define V_INT(Value_) ((Value_).i)
+#define V_UINT(Value_) ((Value_).u)
+#define V_FLOAT(Value_) ((Value_).f)
 
-#define V_OBJECT(v) ((v).o)
-#define V_NATIVE(v) (O_NATIVE(V_OBJECT(v)))
-#define V_PROTO(v) (O_PROTO(V_OBJECT(v)))
-#define V_CLOSURE(v) (O_CLOSURE(V_OBJECT(v)))
-#define V_UPVALUE(v) (O_UPVALUE(V_OBJECT(v)))
-#define V_STRING(v) (O_STRING(V_OBJECT(v)))
-#define V_TUPLE(v) (O_TUPLE(V_OBJECT(v)))
-#define V_FOREIGN(v) (O_FOREIGN(V_OBJECT(v)))
+#define V_OBJECT(Value_) ((Value_).o)
+#define V_NATIVE(Value_) (O_NATIVE(V_OBJECT(Value_)))
+#define V_PROTO(Value_) (O_PROTO(V_OBJECT(Value_)))
+#define V_CLOSURE(Value_) (O_CLOSURE(V_OBJECT(Value_)))
+#define V_UPVALUE(Value_) (O_UPVALUE(V_OBJECT(Value_)))
+#define V_STR(Value_) (O_STR(V_OBJECT(Value_)))
+#define V_TUPLE(Value_) (O_TUPLE(V_OBJECT(Value_)))
+#define V_FOREIGN(Value_) (O_FOREIGN(V_OBJECT(Value_)))
+#define V_TEXT(Value_) (V_STR(Value_)->text)
 
-#define V_TEXT(v) (V_STRING(v)->text)
+#define V_SET_0(Ptr_) ((Ptr_)->u = 0)
+#define V_SET_BOOL(Ptr_, Bool_) ((Ptr_)->u = (Bool_) ? PAW_TRUE : PAW_FALSE)
+#define V_SET_CHAR(Ptr_, Char_) ((Ptr_)->c = (Char_))
+#define V_SET_INT(Ptr_, Int_) ((Ptr_)->i = (Int_))
+#define V_SET_FLOAT(Ptr_, Float_) ((Ptr_)->f = (Float_))
+#define V_SET_OBJECT(Ptr_, Object_) ((Ptr_)->o = (Object *)(Object_))
 
-#define V_SET_0(v) ((v)->u = 0)
-#define V_SET_BOOL(p, b) ((p)->u = (b) ? PAW_TRUE : PAW_FALSE)
-#define V_SET_INT(p, I) ((p)->i = (I))
-#define V_SET_FLOAT(p, F) ((p)->f = F)
-#define V_SET_OBJECT(p, O) ((p)->o = (Object *)(O))
+#define O_KIND(Object_) ((Object_)->gc_kind)
+#define O_IS_STR(Object_) (O_KIND(Object_) == VSTR)
+#define O_IS_STRING(Object_) (O_KIND(Object_) == VSTRING)
+#define O_IS_NATIVE(Object_) (O_KIND(Object_) == VNATIVE)
+#define O_IS_PROTO(Object_) (O_KIND(Object_) == VPROTO)
+#define O_IS_CLOSURE(Object_) (O_KIND(Object_) == VCLOSURE)
+#define O_IS_UPVALUE(Object_) (O_KIND(Object_) == VUPVALUE)
+#define O_IS_TUPLE(Object_) (O_KIND(Object_) == VTUPLE)
+#define O_IS_FOREIGN(Object_) (O_KIND(Object_) == VFOREIGN)
 
-#define O_KIND(o) ((o)->gc_kind)
-#define O_IS_STRING(o) (O_KIND(o) == VSTRING)
-#define O_IS_NATIVE(o) (O_KIND(o) == VNATIVE)
-#define O_IS_PROTO(o) (O_KIND(o) == VPROTO)
-#define O_IS_CLOSURE(o) (O_KIND(o) == VCLOSURE)
-#define O_IS_UPVALUE(o) (O_KIND(o) == VUPVALUE)
-#define O_IS_TUPLE(o) (O_KIND(o) == VTUPLE)
-#define O_IS_FOREIGN(o) (O_KIND(o) == VFOREIGN)
-
-#define O_STRING(o) CHECK_EXP(O_IS_STRING(o), (String *)(o))
-#define O_NATIVE(o) CHECK_EXP(O_IS_NATIVE(o), (Native *)(o))
-#define O_PROTO(o) CHECK_EXP(O_IS_PROTO(o), (Proto *)(o))
-#define O_CLOSURE(o) CHECK_EXP(O_IS_CLOSURE(o), (Closure *)(o))
-#define O_UPVALUE(o) CHECK_EXP(O_IS_UPVALUE(o), (UpValue *)(o))
-#define O_TUPLE(o) CHECK_EXP(O_IS_TUPLE(o), (Tuple *)(o))
-#define O_FOREIGN(o) CHECK_EXP(O_IS_FOREIGN(o), (Foreign *)(o))
+#define O_STR(Object_) CHECK_EXP(O_IS_STR(Object_), (Str *)(Object_))
+#define O_NATIVE(Object_) CHECK_EXP(O_IS_NATIVE(Object_), (Native *)(Object_))
+#define O_PROTO(Object_) CHECK_EXP(O_IS_PROTO(Object_), (Proto *)(Object_))
+#define O_CLOSURE(Object_) CHECK_EXP(O_IS_CLOSURE(Object_), (Closure *)(Object_))
+#define O_UPVALUE(Object_) CHECK_EXP(O_IS_UPVALUE(Object_), (UpValue *)(Object_))
+#define O_TUPLE(Object_) CHECK_EXP(O_IS_TUPLE(Object_), (Tuple *)(Object_))
+#define O_FOREIGN(Object_) CHECK_EXP(O_IS_FOREIGN(Object_), (Foreign *)(Object_))
 
 #define CAST_OBJECT(x) ((Object *)(void *)(x))
 
 typedef enum ValueKind {
     // scalar types
     VBOOL,
+    VCHAR,
     VINT,
     VFLOAT,
 
     // object types
-    VSTRING,
+    VSTR,
     VTUPLE,
     VFOREIGN,
 
@@ -82,11 +86,12 @@ typedef struct Object {
 } Object;
 
 typedef union Value {
-    paw_Uint u;
+    void *p;
+    paw_Char c;
     paw_Int i;
+    paw_Uint u;
     paw_Float f;
     Object *o;
-    void *p;
 } Value;
 
 typedef Value *StackPtr;
@@ -96,11 +101,12 @@ typedef union StackRel {
     StackPtr p;
 } StackRel;
 
-#define VOBJECT0 VSTRING
+#define VOBJECT0 VSTR
 #define NOBJECTS (int)(NVTYPES - VOBJECT0)
-#define P2V(x) (Value) { .p = (void *)(x) }
-#define I2V(x) (Value) { .i = (paw_Int)(x) }
-#define F2V(x) (Value) { .f = (paw_Float)(x) }
+#define P2V(Ptr_) (Value) { .p = (void *)(Ptr_) }
+#define C2V(Char_) (Value) { .i = (paw_Char)(Char_) }
+#define I2V(Int_) (Value) { .i = (paw_Int)(Int_) }
+#define F2V(Float_) (Value) { .f = (paw_Float)(Float_) }
 
 void pawV_index_error(paw_Env *P, paw_Int index, size_t length, char const *what);
 
@@ -141,24 +147,24 @@ int pawV_parse_int(paw_Env *P, char const *text, int base, paw_Int *out);
 // Returns 0 on success, -1 otherwise.
 int pawV_parse_float(paw_Env *P, char const *text, paw_Float *out);
 
-typedef struct String {
+typedef struct Str {
     GC_HEADER;
     short flag;
     unsigned hash;
-    struct String *next;
+    struct Str *next;
     size_t length;
     char text[];
-} String;
+} Str;
 
-char const *pawV_to_string(paw_Env *P, Value *pv, paw_Type type, size_t *nout);
+char const *pawV_to_str(paw_Env *P, Value *pv, paw_Type type, size_t *nout);
 
 typedef struct Proto {
     GC_HEADER;
     unsigned char is_va;
 
     Object *gc_list;
-    String *name;
-    String *modname;
+    Str *name;
+    Str *modname;
     unsigned *source;
     int length;
 
@@ -234,7 +240,7 @@ void pawV_free_native(paw_Env *P, Native *f);
 
 typedef struct Tuple {
     GC_HEADER;
-    unsigned char kind : 2;
+    unsigned char kind;
     int nelems;
     Object *gc_list;
     Value elems[];

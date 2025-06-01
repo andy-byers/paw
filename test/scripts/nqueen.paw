@@ -45,5 +45,5 @@ pub fn main(args: [str]) {
     } else {
         5
     };
-    print('\{nq_solve(n)}\n');
+    print("\{nq_solve(n)}\n");
 }

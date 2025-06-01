@@ -7,7 +7,7 @@
 #include "layout.h"
 #include "map.h"
 
-struct Mir *pawMir_new(struct Compiler *C, String *modname, struct SourceSpan span, String *name, struct IrType *type, struct IrType *self, enum FuncKind fn_kind, paw_Bool is_pub, paw_Bool is_poly)
+struct Mir *pawMir_new(struct Compiler *C, Str *modname, struct SourceSpan span, Str *name, struct IrType *type, struct IrType *self, enum FuncKind fn_kind, paw_Bool is_pub, paw_Bool is_poly)
 {
     struct Mir *mir = P_ALLOC(C, NULL, 0, sizeof(*mir));
     *mir = (struct Mir){
@@ -1079,16 +1079,28 @@ static char const *unop_name(enum MirUnaryOpKind op)
             return "INEG";
         case MIR_UNARY_FNEG:
             return "FNEG";
-        case MIR_UNARY_INOT:
-            return "INOT";
-        case MIR_UNARY_BITNOT:
-            return "BITNOT";
+        case MIR_UNARY_NOT:
+            return "NOT";
+        case MIR_UNARY_IBITNOT:
+            return "IBITNOT";
     }
 }
 
 static char const *binop_name(enum MirBinaryOpKind op)
 {
     switch (op) {
+        case MIR_BINARY_XEQ:
+            return "XEQ";
+        case MIR_BINARY_XNE:
+            return "XNE";
+        case MIR_BINARY_XLT:
+            return "XLT";
+        case MIR_BINARY_XLE:
+            return "XLE";
+        case MIR_BINARY_XGT:
+            return "XGT";
+        case MIR_BINARY_XGE:
+            return "XGE";
         case MIR_BINARY_IEQ:
             return "IEQ";
         case MIR_BINARY_INE:
@@ -1149,16 +1161,16 @@ static char const *binop_name(enum MirBinaryOpKind op)
             return "FDIV";
         case MIR_BINARY_FMOD:
             return "FMOD";
-        case MIR_BINARY_BITAND:
-            return "BITAND";
-        case MIR_BINARY_BITOR:
-            return "BITOR";
-        case MIR_BINARY_BITXOR:
-            return "BITXOR";
-        case MIR_BINARY_SHL:
-            return "SHL";
-        case MIR_BINARY_SHR:
-            return "SHR";
+        case MIR_BINARY_IBITAND:
+            return "IBITAND";
+        case MIR_BINARY_IBITOR:
+            return "IBITOR";
+        case MIR_BINARY_IBITXOR:
+            return "IBITXOR";
+        case MIR_BINARY_ISHL:
+            return "ISHL";
+        case MIR_BINARY_ISHR:
+            return "ISHR";
     }
 }
 
@@ -1277,6 +1289,9 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
                     break;
                 case BUILTIN_BOOL:
                     PRINT_FORMAT(P, "%s", V_TRUE(t->value) ? "true" : "false");
+                    break;
+                case BUILTIN_CHAR:
+                    PRINT_FORMAT(P, "%d", V_CHAR(t->value));
                     break;
                 case BUILTIN_INT:
                     PRINT_FORMAT(P, "%I", V_INT(t->value));
@@ -1567,7 +1582,7 @@ char const *pawMir_dump(struct Mir *mir)
                  child);
     }
 
-    String const *s = pawP_scan_nstring(C, C->strings, buf.data, buf.size);
+    Str const *s = pawP_scan_nstr(C, C->strings, buf.data, buf.size);
     pawL_discard_result(P, &buf);
     return s->text;
 }
@@ -1632,7 +1647,7 @@ char const *pawMir_dump_graph(struct Compiler *C, struct Mir *mir)
     }
 
     pawL_push_result(P, &buf);
-    return paw_string(P, -1);
+    return paw_str(P, -1);
 }
 
 #endif // PAW_DEBUG_EXTRA

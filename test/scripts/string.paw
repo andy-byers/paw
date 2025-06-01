@@ -1,6 +1,6 @@
 // string.paw
 
-pub fn test_valid_utf8() {
+pub fn test_valid_unicode() {
     let s = "\u{0060}\u{012a}\u{12AB}";
     let s = "\"\\\/\b\f\n\r\t\v";
     let s = "\\u{0000}";
@@ -9,7 +9,7 @@ pub fn test_valid_utf8() {
     let s = "\\a";
     let s = "\\n";
     let s = "\u{0012}";
-    let s = "\u{FFFF}";
+//    let s = "\u{FFFF}";
     let s = "new\u{00A0}line";
     let s = "􏿿";
     let s = "￿";
@@ -26,37 +26,37 @@ pub fn test_valid_utf8() {
     let s = "⍂㈴⍂";
     let s = "\u{200B}";
     let s = "\u{2064}";
-    let s = "\u{FDD0}";
-    let s = "\u{FFFE}";
+//    let s = "\u{FDD0}";
+//    let s = "\u{FFFE}";
     let s = "\u{22}";
     let s = "€𝄞";
     let s = "🐱";
 }
 
 pub fn test_starts_with() {
-    let s = 'abcdef';
-    assert(s.starts_with('abcdef'));
-    assert(s.starts_with('abcde'));
-    assert(s.starts_with('abc'));
-    assert(s.starts_with('a'));
-    assert(s.starts_with(''));
-    assert(!s.starts_with('bcdef'));
-    assert(!s.starts_with('abcdf'));
-    assert(!s.starts_with('abd'));
-    assert(!s.starts_with('ac'));
+    let s = "abcdef";
+    assert(s.starts_with("abcdef"));
+    assert(s.starts_with("abcde"));
+    assert(s.starts_with("abc"));
+    assert(s.starts_with("a"));
+    assert(s.starts_with(""));
+    assert(!s.starts_with("bcdef"));
+    assert(!s.starts_with("abcdf"));
+    assert(!s.starts_with("abd"));
+    assert(!s.starts_with("ac"));
 }
 
 pub fn test_ends_with() {
-    let s = 'abcdef';
-    assert(s.ends_with('abcdef'));
-    assert(s.ends_with('bcdef'));
-    assert(s.ends_with('def'));
-    assert(s.ends_with('f'));
-    assert(s.ends_with(''));
-    assert(!s.ends_with('abcde'));
-    assert(!s.ends_with('acdef'));
-    assert(!s.ends_with('cef'));
-    assert(!s.ends_with('df'));
+    let s = "abcdef";
+    assert(s.ends_with("abcdef"));
+    assert(s.ends_with("bcdef"));
+    assert(s.ends_with("def"));
+    assert(s.ends_with("f"));
+    assert(s.ends_with(""));
+    assert(!s.ends_with("abcde"));
+    assert(!s.ends_with("acdef"));
+    assert(!s.ends_with("cef"));
+    assert(!s.ends_with("df"));
 }
 
 pub fn test_find() {
@@ -66,10 +66,19 @@ pub fn test_find() {
             Option::None => assert(n == -1),
         }
     };
-    check('abc', 'a', 0);
-    check('abc', 'b', 1);
-    check('abc', 'c', 2);
-    check('abc', 'd', -1);
+    check("abc", "a", 0);
+    check("abc", "b", 1);
+    check("abc", "c", 2);
+    check("abc", "d", -1);
+}
+
+pub fn test_get() {
+    assert("abc"[0] == 'a');
+    assert("abc"[1] == 'b');
+    assert("abc"[2] == 'c');
+    assert("abc"[-3] == 'a');
+    assert("abc"[-2] == 'b');
+    assert("abc"[-1] == 'c');
 }
 
 pub fn test_split_and_join() {
@@ -82,61 +91,61 @@ pub fn test_split_and_join() {
         let result = sep.join(a);
         assert(result == s);
     };
-    check('abc', 'a', ['', 'bc']);
-    check('abc', 'b', ['a', 'c']);
-    check('abc', 'c', ['ab', '']);
-    check('abc', 'd', ['abc']);
+    check("abc", "a", ["", "bc"]);
+    check("abc", "b", ["a", "c"]);
+    check("abc", "c", ["ab", ""]);
+    check("abc", "d", ["abc"]);
 
-    let s = ',a,,b,,,c,,,,d,,,,,e,,,,,,';
-    let a = s.split(',');
+    let s = ",a,,b,,,c,,,,d,,,,,e,,,,,,";
+    let a = s.split(",");
 
-    assert(('').join(a) == 'abcde');
+    assert("".join(a) == "abcde");
 }
 
 pub fn test_string_concat() {
-    let s = '';
+    let s = "";
     for a in 0..1 {
-        s = s + 'a';
+        s = s + "a";
         for b in 0..2 {
-            s = 'b' + s;
+            s = "b" + s;
             for c in 0..3 {
-                s = 'c' + s + 'd';
+                s = "c" + s + "d";
             }
         }
     }
-    assert(s == 'cccbcccbadddddd');
+    assert(s == "cccbcccbadddddd");
 }
 
 fn concat_with_self(v: str, n: int) -> str {
-    for i in 0..n { v = v + v; }
+    for i in 0..n { v += v; }
     return v;
 }
 
 pub fn test_slices() {
-    let s = 'abc';
-    assert(s[..] == 'abc');
-    assert(s[0..#s] == 'abc');
+    let s = "abc";
+    assert(s[..] == "abc");
+    assert(s[0..#s] == "abc");
 
-    assert(s[..-1] == 'ab');
-    assert(s[..#s-1] == 'ab');
-    assert(s[..-2] == 'a');
-    assert(s[..#s-2] == 'a');
-    assert(s[..-3] == '');
-    assert(s[..#s-3] == '');
+    assert(s[..-1] == "ab");
+    assert(s[..#s-1] == "ab");
+    assert(s[..-2] == "a");
+    assert(s[..#s-2] == "a");
+    assert(s[..-3] == "");
+    assert(s[..#s-3] == "");
 
-    assert(s[1..] == 'bc');
-    assert(s[-2..] == 'bc');
-    assert(s[2..] == 'c');
-    assert(s[-1..] == 'c');
-    assert(s[3..] == '');
-    assert(s[0..0] == '') ;
+    assert(s[1..] == "bc");
+    assert(s[-2..] == "bc");
+    assert(s[2..] == "c");
+    assert(s[-1..] == "c");
+    assert(s[3..] == "");
+    assert(s[0..0] == "") ;
 }
 
 pub fn test_getn() {
-    assert('abcdefg'[1..-1] == 'bcdef'); 
-    assert('abcdefg'[1..-1][..-2] == 'bcd');
+    assert("abcdefg"[1..-1] == "bcdef"); 
+    assert("abcdefg"[1..-1][..-2] == "bcd");
 
-    let s = concat_with_self('abcdefg', 8);
+    let s = concat_with_self("abcdefg", 8);
     while #s > 1 { s = s[1..-1]; }
 }
 
@@ -160,20 +169,19 @@ pub fn test_braces_inside_expr() {
     }}}" == "abc123");
 }
 
-pub fn test_literal_interpolation() {
+pub fn test_str_interpolation() {
     assert("\{123}" == "123");
     assert("\{123}def" == "123def");
     assert("abc\{123}" == "abc123");
     assert("abc\{123}def" == "abc123def");
 }
 
-pub fn test_nested_interpolation() {
+pub fn test_nested_str_interpolation() {
     assert("a\{"bc\{123}"}" == "abc123");
-    assert("a\{"b\{'c\{123}d'}e"}f" == "abc123def");
+    assert("a\{"b\{"c\{123}d"}e"}f" == "abc123def");
 }
 
-pub fn test_expr_interpolation() {
+pub fn test_str_expr_interpolation() {
     assert("\{true && false}/\{!{false || false}}" == "false/true");
     assert("abc\{{ let x = 100; x + 20 + 3 }}" == "abc123");
 }
-

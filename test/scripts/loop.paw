@@ -59,8 +59,8 @@ pub fn test_numeric_for_loop() {
         let f = || -1;
         for i in 0..100 {
             if i == n {
-                // Capture 'i', the loop variable, when it is equal to 'n'. It should
-                // retain this value in the closure, since 'i' is closed over at the
+                // Capture "i", the loop variable, when it is equal to "n". It should
+                // retain this value in the closure, since "i" is closed over at the
                 // end of the loop iteration.
                 f = || i;
             }
@@ -111,10 +111,10 @@ pub fn test_capture_loop_var_1() {
             if i == n {
                 let a = [i];
                 return || -> int {
-                    // Capture 'a' as an upvalue.
+                    // Capture "a" as an upvalue.
                     let m = a[0];
                     a[0] = a[0] + 1;
-                    // Equivalent to '3 * n' on the first call. Increases by 1
+                    // Equivalent to "3 * n" on the first call. Increases by 1
                     // each time.
                     return i + n + m;
                 };
@@ -143,7 +143,7 @@ fn check_capture_loop_var_2(b: bool) -> int {
             let m = n;
             f = || m + n;
 
-            // Need to emit instructions to close 'm' at the break and continue
+            // Need to emit instructions to close "m" at the break and continue
             // statements.
             if b {
                 break;
@@ -180,12 +180,12 @@ pub fn test_while_loop() {
 }
 
 pub fn test_break_continue_0() {
-    let a = 'A';
-    let b = 'B';
+    let a = "A";
+    let b = "B";
     for i in 0..100 {
-        let b = 'C';
-        let c = 'C';
-        let d = 'D';
+        let b = "C";
+        let c = "C";
+        let d = "D";
         a = c;
         b = d;
         if i == 10 {
@@ -196,19 +196,19 @@ pub fn test_break_continue_0() {
     }
     let a = a;
     let b = b;
-    assert(a == 'C');
-    assert(b == 'B');
+    assert(a == "C");
+    assert(b == "B");
 }
 
 pub fn test_break_continue_1() {
-    let a = 'A';
-    let b = 'B';
+    let a = "A";
+    let b = "B";
     for i in 0..100 {
-        let b = 'C';
-        let c = 'C';
-        let d = 'D';
+        let b = "C";
+        let c = "C";
+        let d = "D";
         a = c;
-        b = d; // 'b' shadowed
+        b = d; // "b" shadowed
         if i == 10 {
             break;
         } else {
@@ -217,8 +217,8 @@ pub fn test_break_continue_1() {
     }
     let a = a;
     let b = b;
-    assert(a == 'C');
-    assert(b == 'B');
+    assert(a == "C");
+    assert(b == "B");
 }
 
 pub fn test_break_continue_2() {
@@ -240,7 +240,7 @@ pub fn test_break_continue_2() {
     }
     assert(n == 1);
 
-    // Capture loop variable 'i' as an upvalue.
+    // Capture loop variable "i" as an upvalue.
     let test = |n| {
         let f = || -1;
         for i in 0..100 {
@@ -251,7 +251,7 @@ pub fn test_break_continue_2() {
                 };
                 break;
             }
-        } // 'i' closed here when i == n, popped otherwise
+        } // "i" closed here when i == n, popped otherwise
         return f;
     };
     assert(test(0)() == 0);
@@ -355,7 +355,7 @@ pub fn test_break_continue_3() {
 pub fn test_shadowed_by_loop_var() {
     let i = -1;
 
-    // 'i' shadowed by loop variable.
+    // "i" shadowed by loop variable.
     for i in 0..8 {}
     assert(i == -1);
 }

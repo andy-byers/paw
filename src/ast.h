@@ -80,7 +80,7 @@ struct AstPath {
 };
 
 struct AstIdent {
-    String *name;
+    Str *name;
     struct SourceSpan span;
 };
 
@@ -1398,7 +1398,7 @@ struct Ast {
     struct AstDeclList *items;
     struct Compiler *C;
     struct Pool *pool;
-    String *name;
+    Str *name;
     paw_Env *P;
     int modno;
 };
@@ -1417,7 +1417,7 @@ DEFINE_LIST(struct Ast, AstStringList, struct AstStringPart)
 DEFINE_LIST(struct Ast, AstSegments, struct AstSegment)
 DEFINE_LIST(struct Ast, AstBoundList, struct AstGenericBound)
 
-struct Ast *pawAst_new(struct Compiler *C, String *name, int modno);
+struct Ast *pawAst_new(struct Compiler *C, Str *name, int modno);
 void pawAst_free(struct Ast *ast);
 
 static inline void pawAst_path_init(struct Ast *ast, struct AstPath *ppath, struct SourceSpan span)

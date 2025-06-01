@@ -13,7 +13,7 @@ typedef int (*Unify)(struct Unifier *, struct IrType *, struct IrType *);
 struct Unifier {
     Unify action;
     UnificationTable *table;
-    String const *modname;
+    Str const *modname;
     struct Compiler *C;
     int depth;
 };
@@ -33,7 +33,7 @@ struct IrType *pawU_new_unknown(struct Unifier *U, struct SourceLoc loc, struct 
 struct IrTypeList *pawU_new_unknowns(struct Unifier *U, struct IrTypeList *types);
 
 // Inference context handling
-void pawU_enter_binder(struct Unifier *U, String const *modname);
+void pawU_enter_binder(struct Unifier *U, Str const *modname);
 void pawU_leave_binder(struct Unifier *U);
 
 paw_Bool pawU_list_equals(struct Unifier *U, struct IrTypeList *lhs, struct IrTypeList *rhs);

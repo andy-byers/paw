@@ -36,9 +36,9 @@ fn check_parse_radix(s: str, o: Option<int>, base: int) {
 }
 
 pub fn test_parse_valid() {
-    check_parse('0', Option::Some(0));
-    check_parse('1', Option::Some(1));
-    check_parse('10', Option::Some(10));
+    check_parse("0", Option::Some(0));
+    check_parse("1", Option::Some(1));
+    check_parse("10", Option::Some(10));
 
     let i = 1234567890;
     check_parse("\{i}", Option::Some(i));
@@ -47,14 +47,14 @@ pub fn test_parse_valid() {
 
 pub fn test_parse_invalid() {
     // invalid digit
-    check_parse('  1', Option::None);
-    check_parse('1  ', Option::None);
-    check_parse('  -1', Option::None);
-    check_parse('-1  ', Option::None);
+    check_parse("  1", Option::None);
+    check_parse("1  ", Option::None);
+    check_parse("  -1", Option::None);
+    check_parse("-1  ", Option::None);
 
     // overflow
-    check_parse('99999999999999999999', Option::None);
-    check_parse('-99999999999999999999', Option::None);
+    check_parse("99999999999999999999", Option::None);
+    check_parse("-99999999999999999999", Option::None);
 }
 
 pub fn test_parse_radix_valid() {
@@ -115,7 +115,7 @@ pub fn test_boundary_values() {
         check(~x, ~~~x);
         check(-x, - - -x);
 
-        // Relationship between '-' and '~':
+        // Relationship between "-" and "~":
         check(~x, -x - 1);
 
         // Identity property:
@@ -177,7 +177,7 @@ pub fn test_boundary_values() {
         let x = a.0;
         let y = a.1;
 
-        // De Morgan's laws
+        // De Morgan"s laws
         check(~(x & y), (~x | ~y));
         check(~(x | y), (~x & ~y));
     };
@@ -186,7 +186,7 @@ pub fn test_boundary_values() {
         let x = a.0;
         let y = a.1;
 
-        // shadow 'check' with a version that operates on booleans
+        // shadow "check" with a version that operates on booleans
         let check = |x: bool, y: bool| {
             assert(x == y);
         };

@@ -42,34 +42,50 @@ void pawR_map_set(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value c
 
 void pawR_close_upvalues(paw_Env *P, StackPtr const top);
 
-#define I2U(i) (CAST(uint64_t, i))
-#define U2I(u) PAW_CAST_INT(u)
+#define CHAR2U(X_) PAW_CAST_UCHAR(X_)
+#define U2CHAR(U_) PAW_CAST_CHAR(U_)
+#define INT2U(I_) PAW_CAST_UINT(I_)
+#define U2INT(U_) PAW_CAST_INT(U_)
 
-// Generate code for int operators
+// Generate code for integer operators
 // Casts to unsigned to avoid UB (signed integer overflow). Requires
 // 2's complement integer representation to work properly.
-#define I_UNOP(a, op) U2I(op I2U(a))
-#define I_BINOP(a, b, op) U2I(I2U(a) op I2U(b))
+#define X_UNOP(X_, Op_) U2CHAR(Op_ CHAR2U(X_))
+#define X_BINOP(A_, B_, Op_) U2CHAR(CHAR2U(A_) Op_ CHAR2U(B_))
+#define I_UNOP(I_, Op_) U2INT(Op_ INT2U(I_))
+#define I_BINOP(A_, B_, Op_) U2INT(INT2U(A_) Op_ INT2U(B_))
 
-#define INT_UNARY_OP(r, val, op) \
-    V_SET_INT(r, I_UNOP(V_INT(val), op))
+#define CHAR_UNARY_OP(Result_, Value_, Op_) \
+    V_SET_CHAR(Result_, X_UNOP(V_CHAR(Value_), Op_))
 
-#define FLOAT_UNARY_OP(r, val, op) \
-    V_SET_FLOAT(r, op V_FLOAT(val))
+#define INT_UNARY_OP(Result_, Value_, Op_) \
+    V_SET_INT(Result_, I_UNOP(V_INT(Value_), Op_))
 
-#define INT_COMPARISON(r, x, y, op) \
-    V_SET_BOOL(r, V_INT(x) op V_INT(y))
+#define FLOAT_UNARY_OP(Result_, Value_, Op_) \
+    V_SET_FLOAT(Result_, Op_ V_FLOAT(Value_))
 
-#define INT_BINARY_OP(r, x, y, op) \
-    V_SET_INT(r, I_BINOP(V_INT(x), V_INT(y), op))
+#define CHAR_COMPARISON(Result_, X_, Y_, Op_) \
+    V_SET_BOOL(Result_, V_CHAR(X_) Op_ V_CHAR(Y_))
 
-#define FLOAT_COMPARISON(r, x, y, op) \
-    V_SET_BOOL(r, V_FLOAT(x) op V_FLOAT(y))
+#define CHAR_COMPARISON(Result_, X_, Y_, Op_) \
+    V_SET_BOOL(Result_, V_CHAR(X_) Op_ V_CHAR(Y_))
 
-#define FLOAT_BINARY_OP(r, x, y, op) \
-    V_SET_FLOAT(r, V_FLOAT(x) op V_FLOAT(y))
+#define INT_COMPARISON(Result_, X_, Y_, Op_) \
+    V_SET_BOOL(Result_, V_INT(X_) Op_ V_INT(Y_))
 
-#define STR_COMPARISON(r, x, y, op) \
-    V_SET_BOOL(r, pawS_cmp(V_STRING(x), V_STRING(y)) op 0)
+#define FLOAT_COMPARISON(Result_, X_, Y_, Op_) \
+    V_SET_BOOL(Result_, V_FLOAT(X_) Op_ V_FLOAT(Y_))
+
+#define STR_COMPARISON(Result_, X_, Y_, Op_) \
+    V_SET_BOOL(Result_, pawS_cmp(V_STR(X_), V_STR(Y_)) Op_ 0)
+
+#define CHAR_BINARY_OP(Result_, X_, Y_, Op_) \
+    V_SET_CHAR(Result_, X_BINOP(V_CHAR(X_), V_CHAR(Y_), Op_))
+
+#define INT_BINARY_OP(Result_, X_, Y_, Op_) \
+    V_SET_INT(Result_, I_BINOP(V_INT(X_), V_INT(Y_), Op_))
+
+#define FLOAT_BINARY_OP(Result_, X_, Y_, Op_) \
+    V_SET_FLOAT(Result_, V_FLOAT(X_) Op_ V_FLOAT(Y_))
 
 #endif // PAW_RT_H

@@ -65,8 +65,8 @@ static int error_kind(void)
 static int file_open(paw_Env *P)
 {
     File *file = pawO_new_file(P);
-    char const *path = paw_string(P, 1);
-    char const *mode = paw_string(P, 2);
+    char const *path = paw_str(P, 1);
+    char const *mode = paw_str(P, 2);
     if (pawO_open(file, path, mode) == 0) {
         // A foreign object containing the File is already on top of the stack. Transform it
         // into a io::Result<File>, i.e. an integer discriminant followed by the payload.
@@ -152,7 +152,7 @@ static int file_read(paw_Env *P)
 static int file_write(paw_Env *P)
 {
     File *file = paw_pointer(P, 1);
-    char const *data = paw_string(P, 2);
+    char const *data = paw_str(P, 2);
     paw_str_length(P, -1);
     paw_Int const size = paw_int(P, -1);
 

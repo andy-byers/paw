@@ -24,33 +24,33 @@ fn check_parse(s: str, o: Option<float>) {
 }
 
 pub fn test_parse_valid() {
-    check_parse('0.0', Option::Some(0.0));
-    check_parse('1.0', Option::Some(1.0));
-    check_parse('10.0', Option::Some(10.0));
-    check_parse('1e10', Option::Some(1e10));
-    check_parse('1E10', Option::Some(1e10));
-    check_parse('1e+10', Option::Some(1e+10));
+    check_parse("0.0", Option::Some(0.0));
+    check_parse("1.0", Option::Some(1.0));
+    check_parse("10.0", Option::Some(10.0));
+    check_parse("1e10", Option::Some(1e10));
+    check_parse("1E10", Option::Some(1e10));
+    check_parse("1e+10", Option::Some(1e+10));
 }
 
 pub fn test_parse_invalid() {
-    check_parse('  1.0', Option::None);
-    check_parse('1.0  ', Option::None);
-    check_parse('  -1.0', Option::None);
-    check_parse('-1.0  ', Option::None);
+    check_parse("  1.0", Option::None);
+    check_parse("1.0  ", Option::None);
+    check_parse("  -1.0", Option::None);
+    check_parse("-1.0  ", Option::None);
 }
 
 pub fn test_parse_integer_as_float() {
-    check_parse('0', Option::Some(0.0));
-    check_parse('1', Option::Some(1.0));
-    check_parse('100', Option::Some(100.0));
+    check_parse("0", Option::Some(0.0));
+    check_parse("1", Option::Some(1.0));
+    check_parse("100", Option::Some(100.0));
 }
 
 pub fn test_parse_missing_leading_zero() {
-    check_parse('.0', Option::Some(0.0));
+    check_parse(".0", Option::Some(0.0));
 }
 
 pub fn test_parse_missing_trailing_zero() {
-    check_parse('0.', Option::Some(0.0));
+    check_parse("0.", Option::Some(0.0));
 }
 
 pub fn test_digit_separators() {

@@ -49,7 +49,7 @@ static void debug_log(struct Unifier *U, char const *what, struct IrType *a, str
     pawIr_print_type(U->C, a);
     pawIr_print_type(U->C, b);
     DLOG(U->C, "(unify) %s: %s = %s",
-         what, paw_string(P, -2), paw_string(P, -1));
+         what, paw_str(P, -2), paw_str(P, -1));
     paw_pop(P, 2);
 #else
     PAW_UNUSED(U);
@@ -327,7 +327,7 @@ struct IrTypeList *pawU_new_unknowns(struct Unifier *U, struct IrTypeList *types
     return result;
 }
 
-void pawU_enter_binder(struct Unifier *U, String const *modname)
+void pawU_enter_binder(struct Unifier *U, Str const *modname)
 {
     UnificationTable *table = P_ALLOC(U->C, NULL, 0, sizeof(UnificationTable));
     table->ivars = VarList_new(U->C);

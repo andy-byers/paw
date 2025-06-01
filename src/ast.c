@@ -11,7 +11,7 @@
 #define FIRST_ARENA_SIZE 4096
 #define LARGE_ARENA_MIN 32
 
-struct Ast *pawAst_new(struct Compiler *C, String *name, int modno)
+struct Ast *pawAst_new(struct Compiler *C, Str *name, int modno)
 {
     paw_Env *P = ENV(C);
     struct Ast *ast = P_ALLOC(C, NULL, 0, sizeof(struct Ast));
@@ -364,7 +364,7 @@ static void dump_expr(Printer *P, struct AstExpr *expr)
                         default:
                             paw_assert(e->basic.code == BUILTIN_STR);
                             DUMP_MSG(P, "type: string\n");
-                            DUMP_FMT(P, "value: %s\n", V_STRING(e->basic.value)->text);
+                            DUMP_FMT(P, "value: %s\n", V_STR(e->basic.value)->text);
                             break;
                     }
                     break;
@@ -523,6 +523,6 @@ char const *pawAst_dump(struct Ast *ast)
         dump_decl(&print, *pdecl);
     }
     pawL_push_result(P, &buf);
-    return paw_string(P, -1);
+    return paw_str(P, -1);
 }
 

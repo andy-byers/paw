@@ -12,7 +12,6 @@
 #include "mem.h"
 #include "os.h"
 #include "rt.h"
-#include "str.h"
 #include "value.h"
 
 #define ERROR(P, kind, ...) pawE_error(P, kind, -1, __VA_ARGS__)
@@ -24,7 +23,7 @@ void pawV_index_error(paw_Env *P, paw_Int index, size_t length, char const *what
                index, what, PAW_CAST_INT(length));
 }
 
-static void int_to_string(paw_Env *P, paw_Int i, Value *out)
+static void int_to_str(paw_Env *P, paw_Int i, Value *out)
 {
     char temp[32];
     paw_Bool const negative = i < 0;
@@ -45,34 +44,34 @@ static void int_to_string(paw_Env *P, paw_Int i, Value *out)
     } else {
         ++ptr;
     }
-    String *str = pawS_new_nstr(P, ptr, CAST_SIZE(end - ptr));
+    Str *str = pawS_new_nstr(P, ptr, CAST_SIZE(end - ptr));
     V_SET_OBJECT(out, str);
 }
 
-static void float_to_string(paw_Env *P, paw_Float f, Value *out)
+static void float_to_str(paw_Env *P, paw_Float f, Value *out)
 {
     char temp[32];
     int const n = snprintf(temp, PAW_COUNTOF(temp), "%.*g", 17, f);
-    String *str = pawS_new_nstr(P, temp, CAST_SIZE(n));
+    Str *str = pawS_new_nstr(P, temp, CAST_SIZE(n));
     V_SET_OBJECT(out, str);
 }
 
-char const *pawV_to_string(paw_Env *P, Value *pv, paw_Type type, size_t *plength)
+char const *pawV_to_str(paw_Env *P, Value *pv, paw_Type type, size_t *plength)
 {
     switch (type) {
         case PAW_TSTR:
             break;
         case PAW_TINT:
-            int_to_string(P, V_INT(*pv), pv);
+            int_to_str(P, V_INT(*pv), pv);
             break;
         case PAW_TFLOAT:
-            float_to_string(P, V_FLOAT(*pv), pv);
+            float_to_str(P, V_FLOAT(*pv), pv);
             break;
         default:
             paw_assert(type == PAW_TBOOL);
             V_SET_OBJECT(pv, CACHED_STRING(P, V_TRUE(*pv) ? CSTR_TRUE : CSTR_FALSE));
     }
-    String const *s = V_STRING(*pv);
+    Str const *s = V_STR(*pv);
     if (plength != NULL)
         *plength = s->length;
     return s->text;

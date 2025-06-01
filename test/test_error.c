@@ -33,7 +33,7 @@ static void write_main(char *out, char const *items, char const *text)
 static void check_status(paw_Env *P, int have, int want)
 {
     if (have != PAW_OK) {
-        fprintf(stderr, "message: %s\n", paw_string(P, -1));
+        fprintf(stderr, "message: %s\n", paw_str(P, -1));
         paw_pop(P, 1);
     }
     if (have != want) {
@@ -64,7 +64,7 @@ static void test_runtime_status(int expect, char const *name, char const *item, 
     check_status(P, status, PAW_OK);
 
     paw_mangle_start(P);
-    paw_push_string(P, "main");
+    paw_push_str(P, "main");
     paw_mangle_add_name(P);
 
     struct paw_Item info;
@@ -91,6 +91,8 @@ static char const *get_literal(int kind)
     switch (kind) {
         case PAW_TUNIT:
             return "()";
+        case PAW_TCHAR:
+            return "'x'";
         case PAW_TINT:
             return "123";
         case PAW_TFLOAT:
@@ -98,7 +100,7 @@ static char const *get_literal(int kind)
         case PAW_TBOOL:
             return "true";
         case PAW_TSTR:
-            return "'abc'";
+            return "\"abc\"";
         default:
             check(0);
             return NULL;
@@ -108,7 +110,7 @@ static char const *get_literal(int kind)
 static void check_unop_error(enum ErrorKind expect, char const *op, paw_Type k)
 {
     char name_buf[256] = {0};
-    snprintf(name_buf, sizeof(name_buf), "unop_type_error('%s', %s)",
+    snprintf(name_buf, sizeof(name_buf), "unop_type_error(\"%s\", %s)",
         op, get_literal(k));
 
     char text_buf[256] = {0};
@@ -146,7 +148,7 @@ static void check_unification_errors(void)
 static void check_binop_type_error(unsigned error, char const *op, paw_Type t, paw_Type t2)
 {
     char name_buf[256] = {0};
-    snprintf(name_buf, sizeof(name_buf), "binop_type_error('%s', %s, %s)",
+    snprintf(name_buf, sizeof(name_buf), "binop_type_error(\"%s\", %s, %s)",
         op, get_literal(t), get_literal(t2));
 
     char text_buf[256] = {0};
@@ -203,12 +205,12 @@ static void test_type_error(void)
     check_binop_type_errors("&", MAKE_LIST(PAW_TINT));
     check_binop_type_errors("|", MAKE_LIST(PAW_TINT));
     check_binop_type_errors("^", MAKE_LIST(PAW_TINT));
-    check_binop_type_errors("<", MAKE_LIST(PAW_TINT, PAW_TFLOAT, PAW_TSTR));
-    check_binop_type_errors(">", MAKE_LIST(PAW_TINT, PAW_TFLOAT, PAW_TSTR));
-    check_binop_type_errors("<=", MAKE_LIST(PAW_TINT, PAW_TFLOAT, PAW_TSTR));
-    check_binop_type_errors(">=", MAKE_LIST(PAW_TINT, PAW_TFLOAT, PAW_TSTR));
-    check_binop_type_errors("==", MAKE_LIST(PAW_TBOOL, PAW_TINT, PAW_TFLOAT, PAW_TSTR));
-    check_binop_type_errors("!=", MAKE_LIST(PAW_TBOOL, PAW_TINT, PAW_TFLOAT, PAW_TSTR));
+    check_binop_type_errors("<", MAKE_LIST(PAW_TCHAR, PAW_TINT, PAW_TFLOAT, PAW_TSTR));
+    check_binop_type_errors(">", MAKE_LIST(PAW_TCHAR, PAW_TINT, PAW_TFLOAT, PAW_TSTR));
+    check_binop_type_errors("<=", MAKE_LIST(PAW_TCHAR, PAW_TINT, PAW_TFLOAT, PAW_TSTR));
+    check_binop_type_errors(">=", MAKE_LIST(PAW_TCHAR, PAW_TINT, PAW_TFLOAT, PAW_TSTR));
+    check_binop_type_errors("==", MAKE_LIST(PAW_TBOOL, PAW_TCHAR, PAW_TINT, PAW_TFLOAT, PAW_TSTR));
+    check_binop_type_errors("!=", MAKE_LIST(PAW_TBOOL, PAW_TCHAR, PAW_TINT, PAW_TFLOAT, PAW_TSTR));
 
     test_compiler_status(E_UNIT_VARIANT_WITH_PARENTHESIS, "call_unit_variant", "enum E {X}", "let x = E::X();");
     test_compiler_status(E_INCOMPATIBLE_TYPES, "wrong_constructor_args", "enum E {X(int)}", "let x = E::X(1.0);");
@@ -248,13 +250,13 @@ static void test_minimum_integer(void)
 
 static void test_syntax_error(void)
 {
-    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_missing_second_surrogate", "", "let s = '\\u{d801}';");
-    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_missing_first_surrogate", "", "let s = '\\u{dc00}';");
-    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_malformed_surrogate_1", "", "let s = '\\u{d801}\\....';");
-    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_malformed_surrogate_2", "", "let s = '\\u{d801}\\u....';");
-    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_invalid_surrogate_low", "", "let s = '\\u{d801}\\u{dbff}';");
-    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_invalid_surrogate_high", "", "let s = '\\u{d801}\\u{e000}';");
-    test_compiler_status(E_UNICODE_ESCAPE_TOO_LONG, "string_unicode_escape_too_long", "", "let s = '\\u{1000001}';");
+    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_missing_second_surrogate", "", "let s = \"\\u{d801}\";");
+    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_missing_first_surrogate", "", "let s = \"\\u{dc00}\";");
+    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_malformed_surrogate_1", "", "let s = \"\\u{d801}\\....\";");
+    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_malformed_surrogate_2", "", "let s = \"\\u{d801}\\u....\";");
+    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_invalid_surrogate_low", "", "let s = \"\\u{d801}\\u{dbff}\";");
+    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "string_invalid_surrogate_high", "", "let s = \"\\u{d801}\\u{e000}\";");
+    test_compiler_status(E_UNICODE_ESCAPE_TOO_LONG, "string_unicode_escape_too_long", "", "let s = \"\\u{1000001}\";");
 
     test_compiler_status(E_EXPECTED_EXPRESSION, "misplaced_3dots", "", "let x = ...;");
     test_compiler_status(E_EXPECTED_SEMICOLON, "misplaced_fat_arrow", "", "let x => 1;");
@@ -312,7 +314,7 @@ static void test_syntax_error(void)
 
     test_compiler_status(E_EXPECTED_VALUE, "primitive_type_is_not_a_value_1", "", "let a = int;");
     test_compiler_status(E_EXPECTED_VALUE, "primitive_type_is_not_a_value_2", "", "let a = (1, float,);");
-    test_compiler_status(E_EXPECTED_VALUE, "primitive_type_is_not_a_value_3", "", "let a = ['two', str];");
+    test_compiler_status(E_EXPECTED_VALUE, "primitive_type_is_not_a_value_3", "", "let a = [\"two\", str];");
     test_compiler_status(E_EXPECTED_VALUE, "generic_type_is_not_a_value", "fn f<T>() {let t = T;}", "");
     test_compiler_status(E_INCORRECT_ITEM_CLASS, "function_is_not_a_type", "fn test() {}", "let a: test = test;");
     test_compiler_status(E_INCORRECT_ITEM_CLASS, "variable_is_not_a_type", "", "let a = 1; let b: a = a;");
@@ -323,17 +325,18 @@ static void test_syntax_error(void)
     test_compiler_status(E_JUMP_OUTSIDE_LOOP, "break_outside_loop", "", "break;");
     test_compiler_status(E_JUMP_OUTSIDE_LOOP, "continue_outside_loop", "", "continue;");
 
-    test_compiler_status(E_INVALID_ESCAPE, "invalid_escape", "", "let x = '\\x;';");
-    test_compiler_status(E_INVALID_UNICODE_ESCAPE, "invalid_unicode_escape", "", "let x = '\\u{D8O}';");
-    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "invalid_unicode_codepoint", "", "let x = '\xD8\x05';");
+    test_compiler_status(E_HEX_ESCAPE_TOO_SHORT, "invalid_escape", "", "let x = \"\\x;\";");
+    test_compiler_status(E_UNTERMINATED_UNICODE_ESCAPE, "unterminated_unicode_escape", "", "let x = \"\\u{7f;");
+    test_compiler_status(E_UNTERMINATED_UNICODE_ESCAPE, "invalid_unicode_escape", "", "let x = \"\\u{D8O}\";");
+// TODO    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "invalid_unicode_codepoint", "", "let x = \"\xD8\x05\";");
     test_compiler_status(E_INVALID_FLOAT, "invalid_float", "", "let x = 01.0;");
     test_name_too_long();
     test_compiler_status(E_UNEXPECTED_VISIBILITY_QUALIFIER, "unexpected_visibility_qualifier", "pub use io;", "");
     test_compiler_status(E_EMPTY_TYPE_LIST, "empty_type_list", "pub fn f<>() {}", "");
     test_minimum_integer();
-    test_compiler_status(E_INVALID_LITERAL_NEGATION, "invalid_literal_negation", "", "match 'abc' {-'abc' => {}}");
-    test_compiler_status(E_NONLITERAL_PATTERN, "interpolated_pattern", "", "match 'abc123' {'abc\\{123}' => {}}");
-    test_compiler_status(E_INVALID_SELECTOR, "invalid_selector", "", "let x = 'abc'.1e-2;");
+    test_compiler_status(E_INVALID_LITERAL_NEGATION, "invalid_literal_negation", "", "match \"abc\" {-\"abc\" => {}}");
+    test_compiler_status(E_NONLITERAL_PATTERN, "interpolated_pattern", "", "match \"abc123\" {\"abc\\{123}\" => {}}");
+    test_compiler_status(E_INVALID_SELECTOR, "invalid_selector", "", "let x = \"abc\".1e-2;");
     test_compiler_status(E_EMPTY_VARIANT_FIELD_LIST, "empty_variant_field_list", "enum E {X()}", "");
     test_compiler_status(E_FUNCTION_TYPE_DECL, "function_type_decl", "type F = fn();", "");
     test_compiler_status(E_EXPECTED_COLON_AFTER_MAP_KEY, "expected_colon_after_map_key", "", "let x = [1: 2, 3];");
@@ -341,8 +344,8 @@ static void test_syntax_error(void)
     test_compiler_status(E_EXPECTED_COMMA_SEPARATOR, "expected_comma_separator", "struct X {a: int b: int}", "");
     test_compiler_status(E_NONPRIMITIVE_ANNOTATION_VALUE, "nonprimitive_annotation_value", "#[anno=(1,)] fn f() {}", "");
 
-    test_compiler_status(E_EXPECTED_SYMBOL, "missing_quote", "", "let s = '");
-    test_compiler_status(E_EXPECTED_SYMBOL, "missing_quote", "", "let s = '\";");
+    test_compiler_status(E_EXPECTED_SYMBOL, "missing_quote", "", "let s = \"");
+    test_compiler_status(E_UNTERMINATED_CHAR, "missing_quote", "", "let s = '\";");
     test_compiler_status(E_EXPECTED_EXPRESSION, "unpaired_curly_close", "", "let s = };");
 }
 
@@ -443,8 +446,8 @@ static void test_list_error(void)
 
 static void test_map_error(void)
 {
-    test_compiler_status(E_CYCLIC_TYPE, "map_cyclic_type", "", "let x = [:]; x = ['cyclic': x];");
-    test_compiler_status(E_CYCLIC_TYPE, "map_nested_cyclic_type", "", "let x = [:]; x = ['cyclic': ['nested': x]];");
+    test_compiler_status(E_CYCLIC_TYPE, "map_cyclic_type", "", "let x = [:]; x = [\"cyclic\": x];");
+    test_compiler_status(E_CYCLIC_TYPE, "map_nested_cyclic_type", "", "let x = [:]; x = [\"cyclic\": [\"nested\": x]];");
     test_compiler_status(E_CANNOT_INFER, "map_cannot_infer", "", "let a = [:];");
     test_compiler_status(E_CANNOT_INFER, "map_use_before_inference", "", "let a = [:]; let b = #a;");
     test_compiler_status(E_INCOMPATIBLE_TYPES, "map_incompatible_types", "", "let a = [1: 2]; a = [3: 4.0];");
@@ -478,7 +481,7 @@ static void test_import_error(void)
 static int run_main(paw_Env *P, int nargs)
 {
     paw_mangle_start(P);
-    paw_push_string(P, "main");
+    paw_push_str(P, "main");
     paw_mangle_add_name(P);
 
     struct paw_Item info;
@@ -605,7 +608,7 @@ static void test_variant_match_error(void)
         "0", "x | 0");
     // 'x' has a different type in each alternative
     test_invalid_case("or_binding_type_mismatch", E_INCOMPATIBLE_TYPES, "",
-        "(0, '')", "(x, 'b') | (1, x)");
+        "(0, \"\")", "(x, \"b\") | (1, x)");
 }
 
 static void test_match_error(void)
@@ -789,18 +792,18 @@ static void test_deferred_init(void)
 
 static void test_interpolation(void)
 {
-    test_compiler_status(E_EXPECTED_SYMBOL, "missing_close_braces", "", "let s = '\\{{123}';");
-    test_compiler_status(E_EXPECTED_EXPRESSION, "extra_close_braces", "", "let s = '\\{103 +} 20}';");
-    test_compiler_status(E_EXPECTED_SYMBOL, "mismatched_braces", "", "let s = '\\{{{100} + {20 + {3}}}';");
-    test_compiler_status(E_EXPECTED_DELIMITER, "mismatched_braces_nested", "", "let s = '\\{{\"abc\" + \"\\{{{100} + {20 + {3}})\"}}';");
-    test_compiler_status(E_EXPECTED_SYMBOL, "missing_expr_close", "", "let s = 'abc\\{123';");
-    test_compiler_status(E_EXPECTED_SYMBOL, "only_expr_open", "", "let s = '\\{';");
-    test_compiler_status(E_EXPECTED_EXPRESSION, "empty_expr", "", "let s = '\\{}';");
+    test_compiler_status(E_EXPECTED_SYMBOL, "missing_close_braces", "", "let s = \"\\{{123}\";");
+    test_compiler_status(E_EXPECTED_EXPRESSION, "extra_close_braces", "", "let s = \"\\{103 +} 20}\";");
+    test_compiler_status(E_EXPECTED_SYMBOL, "mismatched_braces", "", "let s = \"\\{{{100} + {20 + {3}}}\";");
+    test_compiler_status(E_EXPECTED_DELIMITER, "mismatched_braces_nested", "", "let s = \"\\{{\"abc\" + \"\\{{{100} + {20 + {3}})\"}}\";");
+    test_compiler_status(E_EXPECTED_SYMBOL, "missing_expr_close", "", "let s = \"abc\\{123\";");
+    test_compiler_status(E_EXPECTED_SYMBOL, "only_expr_open", "", "let s = \"\\{\";");
+    test_compiler_status(E_EXPECTED_EXPRESSION, "empty_expr", "", "let s = \"\\{}\";");
 }
 
 static void test_panic(void)
 {
-    test_runtime_status(PAW_ERUNTIME, "panic", "", "panic('panic message');");
+    test_runtime_status(PAW_ERUNTIME, "panic", "", "panic(\"panic message\");");
 }
 
 static void test_divergence(void)

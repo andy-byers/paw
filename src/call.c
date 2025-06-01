@@ -115,7 +115,7 @@ void pawC_stack_grow(paw_Env *P, int n)
 Value *pawC_pushns(paw_Env *P, char const *s, size_t n)
 {
     Value *pv = pawC_push0(P);
-    String *str = pawS_new_nstr(P, s, n);
+    Str *str = pawS_new_nstr(P, s, n);
     V_SET_OBJECT(pv, str);
     return pv;
 }

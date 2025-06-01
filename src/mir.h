@@ -248,7 +248,7 @@ struct MirPhi {
 struct MirAllocLocal {
     MIR_INSTRUCTION_HEADER;
     struct MirPlace output;
-    String *name;
+    Str *name;
 };
 
 struct MirFreeLocal {
@@ -366,9 +366,9 @@ enum MirUnaryOpKind {
     MIR_UNARY_LLENGTH,
     MIR_UNARY_MLENGTH,
     MIR_UNARY_INEG,
+    MIR_UNARY_IBITNOT,
     MIR_UNARY_FNEG,
-    MIR_UNARY_INOT,
-    MIR_UNARY_BITNOT,
+    MIR_UNARY_NOT,
 };
 
 struct MirUnaryOp {
@@ -379,6 +379,12 @@ struct MirUnaryOp {
 };
 
 enum MirBinaryOpKind {
+    MIR_BINARY_XEQ,
+    MIR_BINARY_XNE,
+    MIR_BINARY_XLT,
+    MIR_BINARY_XLE,
+    MIR_BINARY_XGT,
+    MIR_BINARY_XGE,
     MIR_BINARY_IEQ,
     MIR_BINARY_INE,
     MIR_BINARY_ILT,
@@ -409,11 +415,11 @@ enum MirBinaryOpKind {
     MIR_BINARY_FMUL,
     MIR_BINARY_FDIV,
     MIR_BINARY_FMOD,
-    MIR_BINARY_BITAND,
-    MIR_BINARY_BITOR,
-    MIR_BINARY_BITXOR,
-    MIR_BINARY_SHL,
-    MIR_BINARY_SHR,
+    MIR_BINARY_IBITAND,
+    MIR_BINARY_IBITOR,
+    MIR_BINARY_IBITXOR,
+    MIR_BINARY_ISHL,
+    MIR_BINARY_ISHR,
 };
 
 struct MirBinaryOp {
@@ -561,7 +567,7 @@ inline static struct MirInstruction *pawMir_new_phi(struct Mir *mir, struct Sour
     return instr;
 }
 
-inline static struct MirInstruction *pawMir_new_alloc_local(struct Mir *mir, struct SourceLoc loc, String *name, struct MirPlace output)
+inline static struct MirInstruction *pawMir_new_alloc_local(struct Mir *mir, struct SourceLoc loc, Str *name, struct MirPlace output)
 {
     struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->AllocLocal_ = (struct MirAllocLocal){
@@ -951,7 +957,7 @@ struct Mir {
     int mir_count;
     int param_size;
     int result_size;
-    String *modname, *name;
+    Str *modname, *name;
     enum FuncKind fn_kind : 8;
     paw_Bool is_poly : 1;
     paw_Bool is_pub : 1;
@@ -975,7 +981,7 @@ DEFINE_LIST(struct Mir, MirRegisterPtrList, MirRegister *)
 DEFINE_LIST(struct Mir, MirBlockDataList, struct MirBlockData *)
 DEFINE_LIST(struct Mir, MirBodyList, struct Mir *)
 
-struct Mir *pawMir_new(struct Compiler *C, String *modname, struct SourceSpan span, String *name, struct IrType *type, struct IrType *self, enum FuncKind fn_kind, paw_Bool is_pub, paw_Bool is_poly);
+struct Mir *pawMir_new(struct Compiler *C, Str *modname, struct SourceSpan span, Str *name, struct IrType *type, struct IrType *self, enum FuncKind fn_kind, paw_Bool is_pub, paw_Bool is_poly);
 void pawMir_free(struct Mir *mir);
 
 struct MirLiveInterval *pawMir_new_interval(struct Compiler *C, MirRegister r, int npositions);
@@ -1142,7 +1148,7 @@ DEFINE_MAP_ITERATOR(UseDefMap, MirRegister, struct MirBlockList *)
 DEFINE_MAP_ITERATOR(BodyMap, DeclId, struct Mir *)
 
 paw_Bool pawP_fold_unary_op(struct Compiler *C, enum MirUnaryOpKind op, Value v, Value *pr);
-paw_Bool pawP_fold_binary_op(struct Compiler *C, String const *modname, struct SourceLoc loc, enum MirBinaryOpKind op, Value x, Value y, Value *pr);
+paw_Bool pawP_fold_binary_op(struct Compiler *C, Str const *modname, struct SourceLoc loc, enum MirBinaryOpKind op, Value x, Value y, Value *pr);
 
 char const *pawP_print_live_intervals_pretty(struct Compiler *C, struct Mir *mir, struct MirIntervalList *intervals);
 

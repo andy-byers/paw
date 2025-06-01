@@ -19,7 +19,7 @@ fn randchar(r: Random, string: str) -> str {
 }
 
 fn randint(r: Random, max: int) -> str {
-    r.next_int(max).to_string()
+    r.next_int(max).to_str()
 }
 
 fn randident(r: Random) -> str {
@@ -32,7 +32,7 @@ fn randident(r: Random) -> str {
 }
 
 fn i2s(i: int) -> str {
-    i.to_string()
+    i.to_str()
 }
 
 struct State {
@@ -40,29 +40,29 @@ struct State {
     pub r: Random,
 
     pub fn writeln(self, s: str) {
-        self.f.write(s + '\n');
+        self.f.write(s + "\n");
     }
 }
 
 fn generate_int_function(x: State, n: int) -> str {
-    let name = 'int_function' + i2s(n);
-    x.writeln('pub fn int_function_' + i2s(n) + '(i: int) -> int {');
-    x.writeln('  i * 2 + ' + randint(x.r, 10000));
-    x.writeln('}');
-    x.writeln('pub fn ' + name + '(i: int) -> int {');
-    x.writeln('  int_function_' + i2s(n) + '(i) + ' + randint(x.r, 10000));
-    x.writeln('}');
+    let name = "int_function" + i2s(n);
+    x.writeln("pub fn int_function_" + i2s(n) + "(i: int) -> int {");
+    x.writeln("  i * 2 + " + randint(x.r, 10000));
+    x.writeln("}");
+    x.writeln("pub fn " + name + "(i: int) -> int {");
+    x.writeln("  int_function_" + i2s(n) + "(i) + " + randint(x.r, 10000));
+    x.writeln("}");
     name
 }
 
 fn generate_generic_function(x: State, n: int) -> str {
-    let name = 'generic_function' + i2s(n);
-    x.writeln('pub fn generic_function_' + i2s(n) + '<A, B>(a: A, b: B) -> (A, B) {');
-    x.writeln('  (a, b)');
-    x.writeln('}');
-    x.writeln('pub fn ' + name + '<A, B>(a: A, b: B) -> (A, B) {');
-    x.writeln('  generic_function_' + i2s(n) + '(a, b)');
-    x.writeln('}');
+    let name = "generic_function" + i2s(n);
+    x.writeln("pub fn generic_function_" + i2s(n) + "<A, B>(a: A, b: B) -> (A, B) {");
+    x.writeln("  (a, b)");
+    x.writeln("}");
+    x.writeln("pub fn " + name + "<A, B>(a: A, b: B) -> (A, B) {");
+    x.writeln("  generic_function_" + i2s(n) + "(a, b)");
+    x.writeln("}");
     name
 }
 
@@ -73,7 +73,7 @@ pub fn main(args: [str]) {
         500
     };
 
-    let f = File::open('generated.paw', 'w');
+    let f = File::open("generated.paw", "w");
     let x = State{f, r: Random{seed: 123456789}};
 
     let int_functions = [];
@@ -85,13 +85,13 @@ pub fn main(args: [str]) {
         generic_functions.push(name);
     }
 
-    x.writeln('pub fn main(args: [str]) -> int {');
+    x.writeln("pub fn main(args: [str]) -> int {");
     for i in 0..n {
         let name = int_functions[i];
-        x.writeln('  ' + name + '(' + i2s(i) + ');');
+        x.writeln("  " + name + "(" + i2s(i) + ");");
         let name = generic_functions[i];
-        x.writeln('  ' + name + '(' + i2s(i) + ', ' + i2s(i) + ');');
+        x.writeln("  " + name + "(" + i2s(i) + ", " + i2s(i) + ");");
     }
-    x.writeln('  0');
-    x.writeln('}');
+    x.writeln("  0");
+    x.writeln("}");
 }

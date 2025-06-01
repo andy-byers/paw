@@ -3,11 +3,11 @@
 use mod_b;
 
 pub fn test_external() {
-    let e = mod_b::external('hello');
-    assert(e.value == 'hello');
+    let e = mod_b::external("hello");
+    assert(e.value == "hello");
 
-    let e = mod_b::External{value: 'world'};
-    assert(e.value == 'world');
+    let e = mod_b::External{value: "world"};
+    assert(e.value == "world");
 
     let e = mod_b::poly_external(42);
     assert(e.value == 42);
@@ -53,9 +53,9 @@ pub fn test_recursive() {
 }
 
 pub fn get_test(k: str) -> fn() {
-    if k == 'external' {
+    if k == "external" {
         return test_external;
-    } else if k == 'recursive' {
+    } else if k == "recursive" {
         return test_recursive;
     } else {
         return || assert(false);

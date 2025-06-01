@@ -8,8 +8,8 @@ fn call_test(k: str) {
 pub fn test_import() {
     assert(mod_a::return_42() == 42);
 
-    call_test('external');
-    call_test('recursive');
+    call_test("external");
+    call_test("recursive");
 }
 
 // imported symbols are available anywhere in this module

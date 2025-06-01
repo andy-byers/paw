@@ -76,7 +76,7 @@ enum DefKind {
 };
 
 struct RttiField {
-    String *name;
+    Str *name;
     paw_Type code;
     paw_Bool is_pub : 1;
 };
@@ -86,12 +86,12 @@ struct RttiVariant {
     unsigned char discr;
     int num_fields;
     struct RttiField *fields;
-    String *name;
+    Str *name;
 };
 
 #define RTTI_DEF_HEADER    \
-    String *name;          \
-    String *modname;       \
+    Str *name;          \
+    Str *modname;       \
     paw_Type code;         \
     ItemId iid;            \
     enum DefKind kind : 7; \
@@ -106,7 +106,7 @@ struct AdtDef {
     paw_Bool is_inline : 1;
     int nfields;
     ItemId *fields;
-    String *mangled_name;
+    Str *mangled_name;
 };
 
 struct TraitDef {
@@ -119,7 +119,7 @@ struct FuncDef {
     paw_Type self;
     int ntypes;
     paw_Type *types;
-    String *mangled_name;
+    Str *mangled_name;
 };
 
 struct ConstDef {
@@ -154,13 +154,13 @@ struct Def *pawRtti_new_adt_def(paw_Env *P, int nfields);
 struct Def *pawRtti_new_trait_def(paw_Env *P);
 struct Def *pawRtti_new_func_def(paw_Env *P, int ntypes);
 struct Def *pawRtti_new_const_def(paw_Env *P);
-struct RttiVariant *pawRtti_new_variant(paw_Env *P, String *name, struct RttiField *fields, int num_fields);
-struct RttiField *pawRtti_new_field(paw_Env *P, String *name, paw_Type code, paw_Bool is_pub);
+struct RttiVariant *pawRtti_new_variant(paw_Env *P, Str *name, struct RttiField *fields, int num_fields);
+struct RttiField *pawRtti_new_field(paw_Env *P, Str *name, paw_Type code, paw_Bool is_pub);
 void pawRtti_uninit(paw_Env *P);
 
 void pawRtti_mangle_start(paw_Env *P, Buffer *buf);
-void pawRtti_mangle_add_module(paw_Env *P, Buffer *buf, String const *name);
-void pawRtti_mangle_add_name(paw_Env *P, Buffer *buf, String const *name);
+void pawRtti_mangle_add_module(paw_Env *P, Buffer *buf, Str const *name);
+void pawRtti_mangle_add_name(paw_Env *P, Buffer *buf, Str const *name);
 void pawRtti_mangle_start_generic_args(paw_Env *P, Buffer *buf);
 void pawRtti_mangle_finish_generic_args(paw_Env *P, Buffer *buf);
 void pawRtti_mangle_add_arg(paw_Env *P, Buffer *buf, paw_Type code);

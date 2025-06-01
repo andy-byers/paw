@@ -58,7 +58,7 @@ void pawL_discard_result(paw_Env *P, Buffer *buf)
 
 void pawL_push_result(paw_Env *P, Buffer *buf)
 {
-    paw_push_nstring(P, buf->data, buf->size);
+    paw_push_nstr(P, buf->data, buf->size);
     paw_replace(P, -2); // replace box/placeholder with string
 }
 
@@ -96,7 +96,7 @@ void pawL_add_int(paw_Env *P, Buffer *buf, paw_Int i)
 {
     size_t len;
     paw_push_int(P, i);
-    char const *str = paw_int_to_string(P, -1, &len);
+    char const *str = paw_int_to_str(P, -1, &len);
     add_nstring(P, buf, str, len);
     paw_pop(P, 1);
 }
@@ -105,7 +105,7 @@ void pawL_add_float(paw_Env *P, Buffer *buf, paw_Float f)
 {
     size_t len;
     paw_push_float(P, f);
-    char const *str = paw_float_to_string(P, -1, &len);
+    char const *str = paw_float_to_str(P, -1, &len);
     add_nstring(P, buf, str, len);
     paw_pop(P, 1);
 }

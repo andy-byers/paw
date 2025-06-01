@@ -18,7 +18,7 @@ static struct {
 static int handle_error(paw_Env *P, int status)
 {
     if (status != PAW_OK) {
-        char const *errmsg = paw_string(P, -1);
+        char const *errmsg = paw_str(P, -1);
         fprintf(stderr, "error: %s\n", errmsg);
         paw_pop(P, 1); // pop error message
         ++s_counters.failures;
@@ -43,7 +43,7 @@ static void run_tests(char const *name, struct TestAlloc *a, char const *prefix)
     struct DefList defs = P->defs;
     for (int i = 0; i < defs.count; ++i) {
         struct Def *def = defs.data[i];
-        String const *name = def->hdr.name;
+        Str const *name = def->hdr.name;
         if (def->hdr.kind == DEF_FUNC
                 && def->func.self < 0
                 && name->length >= length

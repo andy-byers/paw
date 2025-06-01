@@ -27,7 +27,7 @@ int main(void)
     handle_error(P, status, PAW_TRUE);
 
     paw_mangle_start(P);
-    paw_push_string(P, "f");
+    paw_push_str(P, "f");
     paw_mangle_add_name(P);
 
     struct paw_Item item;

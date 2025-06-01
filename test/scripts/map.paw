@@ -2,13 +2,13 @@
 
 pub fn test_getters() {
     let map = [
-        1: 'abc',
-        2: 'def',
-        3: 'ghi',
+        1: "abc",
+        2: "def",
+        3: "ghi",
     ];
-    assert(map[1] == 'abc');
-    assert(map[2] == 'def');
-    assert(map[3] == 'ghi');
+    assert(map[1] == "abc");
+    assert(map[2] == "def");
+    assert(map[3] == "ghi");
 }
 
 pub fn test_empty_maps_with_annotations() {
@@ -57,7 +57,7 @@ pub fn test_inference() {
     let a = [:];
     let b = a;
     b = [1: 1];
-    // type of 'a' inferred from 'b'
+    // type of "a" inferred from "b"
     assert(#a == 0);
 
     let a = [:];

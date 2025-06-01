@@ -140,7 +140,7 @@ static paw_Bool is_composite(struct Unboxer *U, IrType *type)
 
 static IrType *builtin_type(struct Unboxer *U, enum BuiltinKind kind)
 {
-    return pawIr_get_def_type(U->C, U->C->builtins[kind].did);
+    return pawP_builtin_type(U->C, kind);
 }
 
 static IrTypeList *get_base_field_types(struct Unboxer *U, IrType *parent)
@@ -403,13 +403,14 @@ static IrType *get_element_type(struct Unboxer *U, IrType *type)
 {
     enum BuiltinKind const kind = pawP_type2code(U->C, type);
 
-    if (kind == BUILTIN_LIST)
+    if (kind == BUILTIN_LIST) {
         return ir_list_elem(type);
-    if (kind == BUILTIN_MAP)
+    } else if (kind == BUILTIN_MAP) {
         return ir_map_value(type);
-
-    paw_assert(kind == BUILTIN_STR);
-    return type;
+    } else {
+        paw_assert(kind == BUILTIN_STR);
+        return pawP_builtin_type(U->C, BUILTIN_CHAR);
+    }
 }
 
 static IrType *get_access_type(struct MemoryAccess *pa)
@@ -748,7 +749,7 @@ static void unbox_aggregate(struct Unboxer *U, struct MirAggregate *x)
     struct MemoryGroup output = get_registers(U, x->output.r, ENUM_BASE);
     for (int i = 0; i < output.count; ++i) {
         struct MirPlace const r = PLACE(REGISTER_AT(output, i));
-        String *name = pawP_format_string(U->C, PRIVATE("value_%d"), i);
+        Str *name = pawP_format_string(U->C, PRIVATE("value_%d"), i);
         NEW_INSTR(U, alloc_local, x->loc, name, r);
     }
 }

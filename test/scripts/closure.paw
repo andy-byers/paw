@@ -79,16 +79,16 @@ pub fn test_infer_from_annotation() {
     let outer = |a: fn(str) -> (bool, str)| {};
     let inner = |a| (false, a);
     outer(inner);
-    assert(inner('one').0 == false);
-    assert(inner('one').1 == 'one');
+    assert(inner("one").0 == false);
+    assert(inner("one").1 == "one");
 }
 
 pub fn test_infer_param_from_body() {
     let f = |a| {return a + 1;};
-    let f = |a| {return a + 'two';};
+    let f = |a| {return a + "two";};
 
     // one of the two parameters must be annotated: the type of each operand to
-    // binary '+' must be known.
+    // binary "+" must be known.
     let f = |a, b: int| {return a + b;};
     assert(f(1, 2) == 3);
     assert(f(10, 20) == 30);
@@ -104,8 +104,8 @@ pub fn test_infer_param_from_call() {
     assert(f(10) == 10);
 
     let f = |a| {return a;};
-    assert(f('a') == 'a');
-    assert(f('bc') == 'bc');
+    assert(f("a") == "a");
+    assert(f("bc") == "bc");
 }
 
 fn map<A, B>(f: fn(A) -> B, a: [A]) -> [B] {
@@ -126,11 +126,11 @@ pub fn test_generics() {
     let b = map(|a| a, [2, 3]);
     assert(b[-1] == 3);
 
-    // infer type of 'a' and '[]' from '-> int' (requires block due to presence of
+    // infer type of "a" and "[]" from "-> int" (requires block due to presence of
     // arrow, otherwise the syntax looks strange)
     let b = map(|a| -> int {return a;}, []);
     assert(#b == 0);
-    // infer closure return type and '[]' from annotation on 'a'
+    // infer closure return type and "[]" from annotation on "a"
     let b = map(|a: int| a, []);
     assert(#b == 0);
 }
@@ -143,8 +143,8 @@ pub fn test_generic_with_closure() {
     let f = create_get_last([1, 2, 3]);
     assert(f() == 3);
 
-    let f = create_get_last(['a', 'b', 'c']);
-    assert(f() == 'c');
+    let f = create_get_last(["a", "b", "c"]);
+    assert(f() == "c");
 }
 
 fn pipeline<A, B, C>(
@@ -175,8 +175,8 @@ pub fn test_pipeline_2() {
     let c = pipeline_2(1, 2, 3);
     assert(c == 3);
 
-    let c = pipeline_2(1, 2.0, 'three');
-    assert(c == 'three');
+    let c = pipeline_2(1, 2.0, "three");
+    assert(c == "three");
 }
 
 fn compose<A, B>(
@@ -245,7 +245,7 @@ pub fn check_upvalue_merge_2(n: int) -> (int, int) {
             a = a + b;
             b = b + a;
             n = n - 1;
-        }; // TODO: shouldn't need semicolon here! ambiguity because of "||" and the fact that "while" is an expression
+        }; // TODO: shouldn"t need semicolon here! ambiguity because of "||" and the fact that "while" is an expression
         || (a, b)
     };
     return f();

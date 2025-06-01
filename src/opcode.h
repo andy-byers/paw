@@ -127,6 +127,13 @@ typedef enum Op { //      arguments    description
     OP_TESTK, //          A B C        if (R[A] != K[B]) pc++
     OP_SWITCHINT, //      A B          if (R[A] != B) pc++
 
+    OP_XEQ, //            A B C        R[A] := R[B] == R[C]
+    OP_XNE, //            A B C        R[A] := R[B] != R[C]
+    OP_XLT, //            A B C        R[A] := R[B] < R[C]
+    OP_XLE, //            A B C        R[A] := R[B] <= R[C]
+    OP_XGT, //            A B C        R[A] := R[B] > R[C]
+    OP_XGE, //            A B C        R[A] := R[B] >= R[C]
+
     OP_IEQ, //            A B C        R[A] := R[B] == R[C]
     OP_INE, //            A B C        R[A] := R[B] != R[C]
     OP_ILT, //            A B C        R[A] := R[B] < R[C]
@@ -192,10 +199,15 @@ typedef enum Op { //      arguments    description
     OP_SETFIELD, //       A B C        R[A][B] := R[C]
     OP_GETDISCR, //       A B          R[A] := discr(R[B])
 
+    OP_BCASTF, //         A B          R[A] := R[B] as float
+    OP_XCASTC, //         A B          R[A] := R[B] as char
+    OP_XCASTI, //         A B          R[A] := R[B] as int
+    OP_ICASTB, //         A B          R[A] := R[B] as bool
+    OP_ICASTX, //         A B          R[A] := R[B] as char
+    OP_ICASTC, //         A B          R[A] := R[B] as char
     OP_ICASTF, //         A B          R[A] := R[B] as float
-    OP_FCASTI, //         A B          R[A] := R[B] as int
     OP_FCASTB, //         A B          R[A] := R[B] as bool
-    OP_XCASTB, //         A B          R[A] := R[B] as bool
+    OP_FCASTI, //         A B          R[A] := R[B] as int
 
     NOPCODES
 } Op;

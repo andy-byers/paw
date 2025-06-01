@@ -4,14 +4,14 @@
 
 pub fn main(args: [str]) -> int {
     let charmap = [
-        ' ', '.', ':', '-', '=',
-        '+', '*', '#', '%', '@',
+        " ", ".", ":", "-", "=",
+        "+", "*", "#", "%", "@",
     ];
 
     let values = if #args > 1 {
-        args[1].split(',')
+        args[1].split(",")
     } else {
-        ['-2.1', '0.9', '80', '-1.3', '1.3', '24']
+        ["-2.1", "0.9", "80", "-1.3", "1.3", "24"]
     };
     let x0 = values[0].parse_float().unwrap();
     let x1 = values[1].parse_float().unwrap();
@@ -42,7 +42,7 @@ pub fn main(args: [str]) -> int {
             }
             print(charmap[i % 10]);
         }
-        print('\n');
+        print("\n");
     }
     return 0;
 }

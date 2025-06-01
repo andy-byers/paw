@@ -15,12 +15,13 @@ struct MatchVar {
 
 struct Binding {
     struct MatchVar var;
-    String *name;
+    Str *name;
     HirId hid;
 };
 
 enum ConstructorKind {
     CONS_BOOL,
+    CONS_CHAR,
     CONS_INT,
     CONS_FLOAT,
     CONS_STR,

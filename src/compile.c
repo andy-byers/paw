@@ -49,9 +49,9 @@ static char const *kKeywords[] = {
     "_",
 };
 
-static String *basic_type_name(paw_Env *P, char const *name, paw_Type code)
+static Str *basic_type_name(paw_Env *P, char const *name, paw_Type code)
 {
-    String *s = pawS_new_fixed(P, name);
+    Str *s = pawS_new_fixed(P, name);
     s->flag = FLAG2CODE(code); // works either direction
     return s;
 }
@@ -62,16 +62,18 @@ void pawP_init(paw_Env *P)
     // never collected. Also added to the lexer string map.
     for (uint16_t i = 0; i < PAW_COUNTOF(kKeywords); ++i) {
         char const *kw = kKeywords[i];
-        String *str = pawS_new_fixed(P, kw);
+        Str *str = pawS_new_fixed(P, kw);
         str->flag = i + FIRST_KEYWORD;
     }
 
     P->string_cache[CSTR_UNIT] = basic_type_name(P, "unit", BUILTIN_UNIT);
     P->string_cache[CSTR_BOOL] = basic_type_name(P, "bool", BUILTIN_BOOL);
+    P->string_cache[CSTR_CHAR] = basic_type_name(P, "char", BUILTIN_CHAR);
     P->string_cache[CSTR_INT] = basic_type_name(P, "int", BUILTIN_INT);
     P->string_cache[CSTR_FLOAT] = basic_type_name(P, "float", BUILTIN_FLOAT);
     P->string_cache[CSTR_STR] = basic_type_name(P, "str", BUILTIN_STR);
     P->string_cache[CSTR_LIST] = pawS_new_fixed(P, "List");
+    P->string_cache[CSTR_STRING] = pawS_new_fixed(P, "String");
     P->string_cache[CSTR_MAP] = pawS_new_fixed(P, "Map");
     P->string_cache[CSTR_OPTION] = pawS_new_fixed(P, "Option");
     P->string_cache[CSTR_RESULT] = pawS_new_fixed(P, "Result");
@@ -105,6 +107,8 @@ enum BuiltinKind pawP_type2code(struct Compiler *C, struct IrType *type)
             return BUILTIN_UNIT;
         } else if (base.value == C->builtins[BUILTIN_BOOL].did.value) {
             return BUILTIN_BOOL;
+        } else if (base.value == C->builtins[BUILTIN_CHAR].did.value) {
+            return BUILTIN_CHAR;
         } else if (base.value == C->builtins[BUILTIN_INT].did.value) {
             return BUILTIN_INT;
         } else if (base.value == C->builtins[BUILTIN_FLOAT].did.value) {
@@ -148,17 +152,17 @@ struct IrType *pawP_builtin_type(struct Compiler *C, enum BuiltinKind code)
     return GET_NODE_TYPE(C, pawHir_get_decl(C, did));
 }
 
-String *pawP_scan_nstring(struct Compiler *C, Tuple *map, char const *s, size_t n)
+Str *pawP_scan_nstr(struct Compiler *C, Tuple *map, char const *s, size_t n)
 {
     paw_Env *P = ENV(C);
     Value const *pv = pawC_pushns(P, s, n);
     pawMap_insert(P, map, pv, pv);
     pawC_pop(P);
     CHECK_GC(P);
-    return V_STRING(*pv);
+    return V_STR(*pv);
 }
 
-String *pawP_format_string(struct Compiler *C, char const *fmt, ...)
+Str *pawP_format_string(struct Compiler *C, char const *fmt, ...)
 {
     Buffer buf;
     paw_Env *P = ENV(C);
@@ -169,14 +173,14 @@ String *pawP_format_string(struct Compiler *C, char const *fmt, ...)
     pawL_add_vfstring(P, &buf, fmt, arg);
     va_end(arg);
 
-    String *s = pawP_scan_nstring(C, C->strings, buf.data, buf.size);
+    Str *s = pawP_scan_nstr(C, C->strings, buf.data, buf.size);
     pawL_discard_result(P, &buf);
     return s;
 }
 
 static void define_prelude_adt(struct Compiler *C, unsigned cstr, enum BuiltinKind kind)
 {
-    String *s = CACHED_STRING(ENV(C), cstr);
+    Str *s = CACHED_STRING(ENV(C), cstr);
     C->builtins[kind] = (struct Builtin){
         .did = NO_DECL,
         .name = s,
@@ -289,8 +293,8 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, char co
     C->traits = TraitMap_new(C);
     C->trait_owners = TraitOwners_new(C);
 
-    C->modname = P->modname = SCAN_STRING(C, modname);
-    C->ast_prelude = pawAst_new(C, SCAN_STRING(C, "prelude"), 0);
+    C->modname = P->modname = SCAN_STR(C, modname);
+    C->ast_prelude = pawAst_new(C, SCAN_STR(C, "prelude"), 0);
 
     C->modules = ModuleList_new(C);
 
@@ -300,6 +304,7 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, char co
     // builtin primitives
     define_prelude_adt(C, CSTR_UNIT, BUILTIN_UNIT);
     define_prelude_adt(C, CSTR_BOOL, BUILTIN_BOOL);
+    define_prelude_adt(C, CSTR_CHAR, BUILTIN_CHAR);
     define_prelude_adt(C, CSTR_INT, BUILTIN_INT);
     define_prelude_adt(C, CSTR_FLOAT, BUILTIN_FLOAT);
     define_prelude_adt(C, CSTR_STR, BUILTIN_STR);
@@ -464,7 +469,7 @@ static RttiType *new_type(struct DefGenerator *dg, struct IrType *src, ItemId ii
     return dst;
 }
 
-static String *get_modname(struct DefGenerator *dg, DeclId did)
+static Str *get_modname(struct DefGenerator *dg, DeclId did)
 {
     struct ModuleList *modules = dg->C->modules;
     return ModuleList_get(modules, did.modno)->name;
@@ -698,7 +703,7 @@ paw_Bool pawP_check_extern(struct Compiler *C, struct Annotations *annos, struct
     return PAW_FALSE;
 }
 
-Value const *pawP_get_extern_value(struct Compiler *C, String const *name)
+Value const *pawP_get_extern_value(struct Compiler *C, Str const *name)
 {
     paw_Env *P = ENV(C);
     pawE_push_cstr(P, CSTR_KSYMBOLS);
@@ -745,18 +750,18 @@ void pawP_mangle_start(paw_Env *P, Buffer *buf, struct Compiler *C)
     pawRtti_mangle_start(P, buf);
 }
 
-String *pawP_mangle_finish(paw_Env *P, Buffer *buf, struct Compiler *C)
+Str *pawP_mangle_finish(paw_Env *P, Buffer *buf, struct Compiler *C)
 {
     pawL_push_result(P, buf);
 
     // anchor in compiler string table
-    String *str = V_STRING(P->top.p[-1]);
+    Str *str = V_STR(P->top.p[-1]);
     pawMap_insert(P, C->strings, &P2V(str), &P2V(str));
     pawC_pop(P);
     return str;
 }
 
-String *pawP_mangle_name(struct Compiler *C, String const *modname, String const *name, struct IrTypeList *types)
+Str *pawP_mangle_name(struct Compiler *C, Str const *modname, Str const *name, struct IrTypeList *types)
 {
     Buffer buf;
     paw_Env *P = ENV(C);
@@ -768,7 +773,7 @@ String *pawP_mangle_name(struct Compiler *C, String const *modname, String const
     return pawP_mangle_finish(P, &buf, C);
 }
 
-String *pawP_mangle_attr(struct Compiler *C, String const *modname, String const *base, struct IrTypeList const *base_types, String const *attr, struct IrTypeList const *attr_types)
+Str *pawP_mangle_attr(struct Compiler *C, Str const *modname, Str const *base, struct IrTypeList const *base_types, Str const *attr, struct IrTypeList const *attr_types)
 {
     Buffer buf;
     paw_Env *P = ENV(C);
@@ -785,6 +790,6 @@ String *pawP_mangle_attr(struct Compiler *C, String const *modname, String const
 paw_Bool pawP_push_callback(struct Compiler *C, char const *name)
 {
     paw_Env *P = ENV(C);
-    paw_push_string(P, name);
+    paw_push_str(P, name);
     return paw_map_get(P, PAW_REGISTRY_INDEX) >= 0;
 }

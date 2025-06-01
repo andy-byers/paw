@@ -64,7 +64,7 @@ struct ConstantContext {
 
 struct LocalVar {
     struct MirPlace r;
-    String *name;
+    Str *name;
     int depth;
     int vid;
 };
@@ -400,7 +400,7 @@ struct NonGlobal {
     paw_Bool is_upvalue : 1;
 };
 
-static paw_Bool resolve_local(struct FunctionState *fs, String *name, struct NonGlobal *pinfo)
+static paw_Bool resolve_local(struct FunctionState *fs, Str *name, struct NonGlobal *pinfo)
 {
     // condition is "i > 0" to cause the result register to be ignored
     for (int i = fs->nlocals - 1; i > 0; --i) {
@@ -473,7 +473,7 @@ static void add_upvalue(struct FunctionState *fs, struct NonGlobal *info, paw_Bo
     info->r.up = fs->up->count - 1;
 }
 
-static paw_Bool resolve_upvalue(struct FunctionState *fs, String *name, struct NonGlobal *pinfo)
+static paw_Bool resolve_upvalue(struct FunctionState *fs, Str *name, struct NonGlobal *pinfo)
 {
     struct FunctionState *caller = fs->outer;
     if (caller == NULL)
@@ -554,7 +554,7 @@ static struct LocalVar *alloc_local(struct FunctionState *fs, struct HirIdent id
 
 // NOTE: It is easier to use the name when searching for locals and upvalues, due to the
 //       way bindings in OR patterns are implemented.
-static paw_Bool resolve_nonglobal(struct FunctionState *fs, String *name, struct NonGlobal *png)
+static paw_Bool resolve_nonglobal(struct FunctionState *fs, Str *name, struct NonGlobal *png)
 {
     if (!resolve_local(fs, name, png))
         return resolve_upvalue(fs, name, png);
@@ -621,7 +621,7 @@ static MirBlock enter_function(struct LowerHir *L, struct FunctionState *fs, str
     enter_block(fs, bs, mir->span, PAW_FALSE);
 
     struct HirIdent const ident = {
-        .name = SCAN_STRING(L->C, PRIVATE("callable")),
+        .name = SCAN_STR(L->C, PRIVATE("callable")),
         .span = mir->span.start,
     };
     alloc_local(fs, ident, mir->type);
@@ -845,7 +845,7 @@ static struct HirIdent unpack_temp_name(struct LowerHir *L, struct HirBindingPat
 
     pawL_add_fstring(P, &b, PRIVATE("%d"), p->hid.value);
 
-    String *name = SCAN_STRING(L->C, b.data);
+    Str *name = SCAN_STR(L->C, b.data);
     pawL_discard_result(P, &b);
     return (struct HirIdent){
         .span = p->span,
@@ -1286,7 +1286,7 @@ static enum MirUnaryOpKind unop2op_bool(enum UnaryOp unop)
 {
     switch (unop) {
         case UNARY_NOT:
-            return MIR_UNARY_INOT;
+            return MIR_UNARY_NOT;
         default:
             PAW_UNREACHABLE();
     }
@@ -1298,7 +1298,7 @@ static enum MirUnaryOpKind unop2op_int(enum UnaryOp unop)
         case UNARY_NEG:
             return MIR_UNARY_INEG;
         case UNARY_BNOT:
-            return MIR_UNARY_BITNOT;
+            return MIR_UNARY_IBITNOT;
         default:
             PAW_UNREACHABLE();
     }
@@ -1311,6 +1311,26 @@ static enum MirBinaryOpKind binop2op_bool(enum BinaryOp binop)
             return MIR_BINARY_IEQ;
         case BINARY_NE:
             return MIR_BINARY_INE;
+        default:
+            PAW_UNREACHABLE();
+    }
+}
+
+static enum MirBinaryOpKind binop2op_byte(enum BinaryOp binop)
+{
+    switch (binop) {
+        case BINARY_EQ:
+            return MIR_BINARY_XEQ;
+        case BINARY_NE:
+            return MIR_BINARY_XNE;
+        case BINARY_LT:
+            return MIR_BINARY_XLT;
+        case BINARY_LE:
+            return MIR_BINARY_XLE;
+        case BINARY_GT:
+            return MIR_BINARY_XGT;
+        case BINARY_GE:
+            return MIR_BINARY_XGE;
         default:
             PAW_UNREACHABLE();
     }
@@ -1342,15 +1362,15 @@ static enum MirBinaryOpKind binop2op_int(enum BinaryOp binop)
         case BINARY_MOD:
             return MIR_BINARY_IMOD;
         case BINARY_BAND:
-            return MIR_BINARY_BITAND;
+            return MIR_BINARY_IBITAND;
         case BINARY_BOR:
-            return MIR_BINARY_BITOR;
+            return MIR_BINARY_IBITOR;
         case BINARY_BXOR:
-            return MIR_BINARY_BITXOR;
+            return MIR_BINARY_IBITXOR;
         case BINARY_SHL:
-            return MIR_BINARY_SHL;
+            return MIR_BINARY_ISHL;
         case BINARY_SHR:
-            return MIR_BINARY_SHR;
+            return MIR_BINARY_ISHR;
         default:
             PAW_UNREACHABLE();
     }
@@ -1484,11 +1504,14 @@ static struct MirPlace lower_binop_expr(struct HirVisitor *V, struct HirBinOpExp
     struct MirPlace const lhs = lower_place(V, e->lhs);
     struct MirPlace const rhs = lower_place(V, e->rhs);
     struct MirPlace const output = place_for_node(fs, e->hid);
-    const enum BuiltinKind code = kind_of_builtin(L, e->lhs);
-    enum MirBinaryOpKind const op = code == BUILTIN_INT ? binop2op_int(e->op) : //
-        code == BUILTIN_BOOL ? binop2op_bool(e->op) : //
-        code == BUILTIN_FLOAT ? binop2op_float(e->op) : //
-        code == BUILTIN_STR ? binop2op_str(e->op) : //
+    const enum BuiltinKind left = kind_of_builtin(L, e->lhs);
+    const enum BuiltinKind right = kind_of_builtin(L, e->rhs);
+    enum MirBinaryOpKind const op =
+        left == BUILTIN_CHAR ? binop2op_byte(e->op) : //
+        left == BUILTIN_INT ? binop2op_int(e->op) : //
+        left == BUILTIN_BOOL ? binop2op_bool(e->op) : //
+        left == BUILTIN_FLOAT ? binop2op_float(e->op) : //
+        left == BUILTIN_STR ? binop2op_str(e->op) : //
         binop2op_list(e->op);
     NEW_INSTR(fs, binary_op, e->span.start, op, lhs, rhs, output);
     return output;
@@ -1499,7 +1522,6 @@ static void lower_function_block(struct LowerHir *L, struct HirExpr *block)
     struct FunctionState *fs = L->fs;
     struct MirPlace const result = lower_place(&L->V, block);
     struct MirRegisterData const *data = mir_reg_data(fs->mir, result.r);
-//    if (HirGetBlock(block)->finish == FINISH_NORMAL)
     terminate_return(fs, fs->mir->span.end, result);
 }
 
@@ -1509,7 +1531,7 @@ static struct MirPlace lower_closure_expr(struct HirVisitor *V, struct HirClosur
     struct FunctionState *outer = L->fs;
     struct IrType *type = pawIr_get_type(L->C, e->hid);
 
-    String *name = SCAN_STRING(L->C, PRIVATE("closure"));
+    Str *name = SCAN_STR(L->C, PRIVATE("closure"));
     struct Mir *result = pawMir_new(L->C, L->hir->name, e->span, name, type, NULL,
             FUNC_CLOSURE, PAW_FALSE, PAW_FALSE);
 
@@ -1547,10 +1569,18 @@ static struct MirPlace lower_conversion_expr(struct HirVisitor *V, struct HirCon
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
 
+    static int const REQUIRED_CASTS[NBUILTIN_SCALARS][NBUILTIN_SCALARS] = {
+        //          to  = {0, b, x, i, f}
+        [BUILTIN_BOOL]  = {0, 0, 0, 0, 1},
+        [BUILTIN_CHAR]  = {0, 1, 0, 1, 0},
+        [BUILTIN_INT]   = {0, 1, 1, 0, 1},
+        [BUILTIN_FLOAT] = {0, 1, 0, 1, 0},
+    };
+
     enum BuiltinKind from = kind_of_builtin(L, e->arg);
     struct MirPlace const output = place_for_node(fs, e->hid);
     struct MirPlace const target = lower_place(V, e->arg);
-    if (from != e->to && (from != BUILTIN_BOOL || e->to != BUILTIN_INT)) {
+    if (REQUIRED_CASTS[from][e->to]) {
         NEW_INSTR(fs, cast, e->span.start, target, output, from, e->to);
     } else {
         move_to(fs, e->span.start, target, output);
@@ -1972,7 +2002,7 @@ static void allocate_match_vars(struct FunctionState *fs, struct MirPlace object
     struct MatchVar const *pv;
     struct MirPlaceList *places = fs->ms->places;
     K_LIST_ENUMERATE (mc.vars, index, pv) {
-        String *const name = SCAN_STRING(fs->C, PRIVATE("variable"));
+        Str *const name = SCAN_STR(fs->C, PRIVATE("variable"));
         struct HirIdent const ident = {.name = name, .span = (struct SourceSpan){0}};
         struct LocalVar *local = alloc_local(fs, ident, pv->type);
         map_var_to_reg(fs, *pv, local->r);
@@ -2103,6 +2133,7 @@ static void visit_multiway(struct HirVisitor *V, struct Decision *d, struct MirP
         case CONS_WILDCARD:
             break;
         case CONS_BOOL:
+        case CONS_CHAR:
         case CONS_INT:
         case CONS_FLOAT:
         case CONS_STR:
@@ -2258,8 +2289,8 @@ static void lower_global_constant(struct LowerHir *L, struct HirConstDecl *d)
             LOWERING_ERROR(L, initialized_extern_constant, d->span.start, d->ident.name->text);
 
         struct ModuleInfo *m = ModuleList_get(L->C->modules, d->did.modno);
-        String *modname = d->did.modno == TARGET_MODNO ? NULL : m->hir->name;
-        String *name = pawP_mangle_name(L->C, modname, d->ident.name, NULL);
+        Str *modname = d->did.modno == TARGET_MODNO ? NULL : m->hir->name;
+        Str *name = pawP_mangle_name(L->C, modname, d->ident.name, NULL);
         Value const *pvalue = pawP_get_extern_value(L->C, name);
         if (pvalue == NULL)
             LOWERING_ERROR(L, missing_extern_value, d->span.start, d->ident.name->text);
@@ -2277,7 +2308,7 @@ static void lower_global_constant(struct LowerHir *L, struct HirConstDecl *d)
     struct IrTypeList *artificial_params = IrTypeList_new(L->C);
     struct IrType *artificial_result = pawIr_get_type(L->C, (HirId){0});
     struct IrType *artificial_type = pawIr_new_func_ptr(L->C, artificial_params, artificial_result);
-    struct Mir *artificial = pawMir_new(L->C, L->hir->name, d->span, SCAN_STRING(L->C, PRIVATE("toplevel")), artificial_type,
+    struct Mir *artificial = pawMir_new(L->C, L->hir->name, d->span, SCAN_STR(L->C, PRIVATE("toplevel")), artificial_type,
                                         NULL, FUNC_MODULE, PAW_FALSE, PAW_FALSE);
 
     // prevent cycles between global constants

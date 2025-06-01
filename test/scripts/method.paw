@@ -56,7 +56,7 @@ enum Enum {
 
     pub fn debug(self) -> str {
         match self {
-            Self::A(a) => "A(" + a.to_string() + ")",
+            Self::A(a) => "A(" + a.to_str() + ")",
             Self::B(b) => "B(" + b + ")",
         }
     }
@@ -136,14 +136,14 @@ pub fn test_ab() {
 }
 
 pub fn test_primitive_methods() {
-    assert(false.to_string() == "false");
-    assert(true.to_string() == "true");
-    assert(1.to_string() == "1");
-    assert(0b10.to_string() == "2");
-    assert(0o10.to_string() == "8");
-    assert(0x10.to_string() == "16");
-    assert(1.0.to_string() != "");
-    assert(1.0e+1.to_string() != "");
-    assert(1e-1.to_string() != "");
-    assert(','.join(['a', 'b']) == "a,b");
+    assert(false.to_str() == "false");
+    assert(true.to_str() == "true");
+    assert(1.to_str() == "1");
+    assert(0b10.to_str() == "2");
+    assert(0o10.to_str() == "8");
+    assert(0x10.to_str() == "16");
+    assert(1.0.to_str() != "");
+    assert(1.0e+1.to_str() != "");
+    assert(1e-1.to_str() != "");
+    assert(",".join(["a", "b"]) == "a,b");
 }
