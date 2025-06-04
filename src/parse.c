@@ -1470,6 +1470,7 @@ static paw_Bool test_operand(struct Lex *lex)
         case '(': // parenthesized expression
         case '[': // container literal
         case TK_INT:
+        case TK_CHAR:
         case TK_FLOAT:
         case TK_STRING_TEXT:
         case TK_NAME:

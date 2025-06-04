@@ -183,16 +183,17 @@ fn match_char(c: char) -> int {
         '\0' => 1,
         'x' => 2,
         '\xFF' => 3,
-        _ => 4,
+        ' ' => 4,
+        c => c as int,
     }
 }
 
 pub fn test_match_char() {
-    assert(match_char('a') == 4);
+    assert(match_char('a') == 97);
     assert(match_char('\0') == 1);
     assert(match_char('x') == 2);
     assert(match_char('\xFF') == 3);
-    assert(match_char('\xff') == 3);
+    assert(match_char(' ') == 4);
 }
 
 fn match_int_binding(i: int) -> int {

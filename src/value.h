@@ -29,7 +29,7 @@
 
 #define V_SET_0(Ptr_) ((Ptr_)->u = 0)
 #define V_SET_BOOL(Ptr_, Bool_) ((Ptr_)->u = (Bool_) ? PAW_TRUE : PAW_FALSE)
-#define V_SET_CHAR(Ptr_, Char_) ((Ptr_)->c = (Char_))
+#define V_SET_CHAR(Ptr_, Char_) ((Ptr_)->i = (paw_Int)(Char_))
 #define V_SET_INT(Ptr_, Int_) ((Ptr_)->i = (Int_))
 #define V_SET_FLOAT(Ptr_, Float_) ((Ptr_)->f = (Float_))
 #define V_SET_OBJECT(Ptr_, Object_) ((Ptr_)->o = (Object *)(Object_))

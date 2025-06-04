@@ -38,12 +38,13 @@ pub struct bool: Hash + Equals + Compare {
     pub fn le(self, rhs: Self) -> bool { self as int <= rhs as int }
 }
 
-pub struct char: Hash + Equals + Compare {
+pub struct char: Hash + Equals + Compare + Increment {
     #[extern] pub fn to_str(self) -> str;
     pub fn hash(self) -> int { self as int }
     pub fn eq(self, rhs: Self) -> bool { self == rhs }
     pub fn lt(self, rhs: Self) -> bool { self < rhs }
     pub fn le(self, rhs: Self) -> bool { self <= rhs }
+    pub fn incremented(self) -> Self { (self as int + 1) as char }
 }
 
 pub struct int: Hash + Equals + Compare + Increment {

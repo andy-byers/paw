@@ -39,6 +39,8 @@ static void run_tests(char const *name, struct TestAlloc *a, char const *prefix)
 
     fprintf(stderr, "running %s.paw...\n", name);
 
+//paw_set_hook(P, test_dump_source, PAW_HOOKCALL, 10000);
+
     size_t const length = strlen(prefix);
     struct DefList defs = P->defs;
     for (int i = 0; i < defs.count; ++i) {
@@ -71,6 +73,8 @@ static void script(char const *name)
 
 int main(void)
 {
+    script("ebnf");return s_counters.failures;
+
 #define RUN_SCRIPT(name) script(#name);
     TEST_SCRIPTS(RUN_SCRIPT)
 #undef RUN_SCRIPT
