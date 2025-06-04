@@ -394,7 +394,7 @@ static struct Token consume_string_part(struct Lex *X, struct SourceLoc start_lo
         pop_state(X);
         return make_string(X, start_loc, TK_STRING_TEXT);
     } else if (ISNEWLINE(*X->ptr)) {
-        LEX_ERROR(X, unexpected_symbol, X->loc); // TODO: unterminated_string
+        LEX_ERROR(X, unterminated_string, X->loc);
     } else if (IS_EOF(X)) {
         LEX_ERROR(X, unexpected_symbol, X->loc);
     } else {
@@ -544,7 +544,7 @@ static struct Token consume_number(struct Lex *X, struct SourceLoc start)
 
     if (test_next2(X, "eE")) {
         test_next2(X, "+-");
-        if (!ISDIGIT(*X->ptr)) // TODO: hack to prevent '_' before first digit after "e" ["+" | "-"]
+        if (!ISDIGIT(*X->ptr))
             LEX_ERROR(X, unexpected_symbol, start);
     }
 

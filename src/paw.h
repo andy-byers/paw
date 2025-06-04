@@ -136,10 +136,14 @@ void paw_pop(paw_Env *P, int n);
 // Return the number of values in the current stack frame
 int paw_get_count(paw_Env *P);
 
-void paw_str_length(paw_Env *P, int index);
+void paw_str_length(paw_Env *P, int object);
 void paw_str_concat(paw_Env *P, int count);
-void paw_str_get(paw_Env *P, int index);
-void paw_str_getn(paw_Env *P, int index);
+void paw_str_prepend(paw_Env *P, int object);
+void paw_str_prependc(paw_Env *P, int object, paw_Char c);
+void paw_str_append(paw_Env *P, int object);
+void paw_str_appendc(paw_Env *P, int object, paw_Char c);
+void paw_str_get(paw_Env *P, int object);
+void paw_str_getn(paw_Env *P, int object);
 
 void paw_get_value(paw_Env *P, int pointer, int index);
 void paw_set_value(paw_Env *P, int pointer, int index);

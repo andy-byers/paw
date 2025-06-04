@@ -42,6 +42,12 @@ static int base_print(paw_Env *P)
     return 0;
 }
 
+static int base_println(paw_Env *P)
+{
+    paw_str_appendc(P, 1, '\n');
+    return base_print(P);
+}
+
 #define STOP_LOOP(a, b, c) \
     (((c) < 0 && (a) <= (b)) || ((c) > 0 && (a) >= (b)))
 
@@ -441,6 +447,7 @@ void l_import_prelude(paw_Env *P)
     pawL_add_extern_func(P, "prelude", "panic", base_panic);
     pawL_add_extern_func(P, "prelude", "assert", base_assert);
     pawL_add_extern_func(P, "prelude", "print", base_print);
+    pawL_add_extern_func(P, "prelude", "println", base_println);
     pawL_add_extern_func(P, "prelude", "range", base_range);
     pawL_add_extern_method(P, "prelude", "bool", "to_str", bool_to_str);
     pawL_add_extern_method(P, "prelude", "int", "to_str", int_to_str);

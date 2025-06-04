@@ -16,6 +16,7 @@
 #include "paw.h"
 #include "rt.h"
 #include "rtti.h"
+#include "str.h"
 
 
 #define ENSURE_SIZE1(P, Size_, What_) API_CHECK(P, (Size_) == 1, "expected " What_ " of size 1");
@@ -678,6 +679,48 @@ void paw_str_length(paw_Env *P, int object)
 void paw_str_concat(paw_Env *P, int count)
 {
     pawR_str_concat(P, P->cf, count);
+}
+
+void paw_str_prepend(paw_Env *P, int object)
+{
+    Value *slot = at(P, object);
+    paw_Char const c = paw_char(P, -1);
+    Str const *str = V_STR(*slot);
+
+    Str *copy = pawS_new_uninit(P, 1 + str->length);
+    memcpy(copy->text + 1, str->text, str->length);
+    copy->text[0] = (char)c;
+    pawS_register(P, &copy);
+
+    V_SET_OBJECT(slot, copy);
+}
+
+void paw_str_prependc(paw_Env *P, int object, paw_Char c)
+{
+    object = paw_abs_index(P, object);
+    paw_push_char(P, c);
+    paw_str_prepend(P, object);
+}
+
+void paw_str_append(paw_Env *P, int object)
+{
+    Value *slot = at(P, object);
+    paw_Char const c = paw_char(P, -1);
+    Str const *str = V_STR(*slot);
+
+    Str *copy = pawS_new_uninit(P, str->length + 1);
+    memcpy(copy->text, str->text, str->length);
+    copy->text[str->length] = (char)c;
+    pawS_register(P, &copy);
+
+    V_SET_OBJECT(slot, copy);
+}
+
+void paw_str_appendc(paw_Env *P, int object, paw_Char c)
+{
+    object = paw_abs_index(P, object);
+    paw_push_char(P, c);
+    paw_str_append(P, object);
 }
 
 void paw_str_get(paw_Env *P, int object)

@@ -291,5 +291,6 @@ pub struct RangeInclusiveIterator<T: Compare + Increment>: Advance<T> {
 
 
 #[extern] pub fn print(message: str);
+#[extern] pub fn println(message: str);
 #[extern] pub fn assert(cond: bool);
 #[extern] pub fn panic(message: str) -> !;

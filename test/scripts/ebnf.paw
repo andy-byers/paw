@@ -713,7 +713,7 @@ struct Context {
 
     pub fn info(self, msg: str) {
         if self.verbosity.should_print_info() {
-            print("\{msg}\n");
+            println("\{msg}");
         }
     }
 
@@ -727,7 +727,7 @@ struct Context {
 //    pub fn error(self, msg: str) {
 //        if self.verbosity.should_print_error() {
 //            self.help(); // display help message
-//            print("\{self.program_name}: error: \{msg}\n");
+//            println("\{self.program_name}: error: \{msg}");
 //        }
 //    }
 

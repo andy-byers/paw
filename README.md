@@ -26,7 +26,7 @@ It is designed to run on a virtual machine written in C.
 ### Hello world
 ```paw
 pub fn main() {
-    print("Hello, world!\n");
+    println("Hello, world!");
 }
 ```
 
@@ -38,18 +38,18 @@ pub fn main() {
     let fizzbuzz = |n| {
         if n % 15 == 0 { 
             "FizzBuzz" 
-        } else if n % 3 == 0 { 
+        } else if n % 3 == 0 {
             "Fizz"
-        } else if n % 5 == 0 { 
+        } else if n % 5 == 0 {
             "Buzz" 
         } else { 
-            n.to_string() 
+            n.to_str() 
         }
     };
 
     // Call the closure for each integer 1 to 100, exclusive.
     for i in 1..100 {
-        print("fizzbuzz(\{i}) = \{fizzbuzz(i)}\n");
+        println("fizzbuzz(\{i}) = \{fizzbuzz(i)}");
     }
 }
 ```
@@ -57,7 +57,7 @@ pub fn main() {
 ### Containers
 ```paw
 pub fn main() {
-    let list = [];
+    let list = []; // [int]
 
     // add a single element to the end
     list.push(1); // [1]
@@ -70,7 +70,7 @@ pub fn main() {
     let prefix = list[0..3]; // [1, 2, 3]
 
 
-    let map = [:];
+    let map = [:]; // [char: int]
 
     // add a few key-value pairs
     map['a'] = 1;
@@ -78,7 +78,7 @@ pub fn main() {
     map['c'] = 3;
 
     match map.get('a') {
-        Option::Some(v) => print("map['a'] = \{v}\n"),
+        Option::Some(v) => println("map['a'] = \{v}"),
         Option::None => panic("not found"),
     }
 
@@ -144,7 +144,7 @@ pub fn main() {
         total = total + value;
     }
 
-    print("total = \{total}\n"); // total = 35
+    println("total = \{total}"); // total = 35
 }
 
 ```
@@ -181,7 +181,7 @@ pub fn main() {
     let outer = Outer{value: inner};
     let value = get(outer);
 
-    print("value = \{value}\n"); // value = 123
+    println("value = \{value}"); // value = 123
 }
 ```
 
@@ -245,17 +245,12 @@ A panic can also be caused by calling the `panic` builtin function.
 + "return" must sometimes be enclosed in parenthesis (or a block), otherwise the parser expects an expression to follow 
     + Could return NULL when we cannot parse an expression and handle it accordingly instead of throwing an error immediately
     + also should include a convenience function to throw an error if the expr is NULL that will be used in most places
-+ Paw requires that "int" be at least 32 bits
-+ "[K: V]" (map) type is a bit broken right now
-    + Map calls a VM function to hash and equate the keys
-    + Requires that there be nothing important in a higher activation frame slot than the map
++ Paw requires that "int" be at least 32 bits (probably fine in practice)
 + Need to make sure functions/closures with a return type annotation of "!" diverge unconditionally 
     + See TODO comment in `test_error.c` `test_divergence` function
     + Consider returns to be jumps to a special block, possibly after setting the return variable
     + Unconditionally-diverging functions should not have any writes to this variable
 + Generic bounds should not be allowed on type aliases
-+ The C API has pretty much 0 type safety
-    + It may be necessary to reduce the scope of the C API somewhat
 + Pointer tracking (test only) feature is broken on MSVC
     + Might indicate a problem somewhere in the library
     + Need a machine that can run Windows for debugging
