@@ -7,17 +7,11 @@
 
 #include <stdint.h>
 
-#define PAW_CHAR_WIDTH (sizeof(paw_Char) * 8)
-#define PAW_CHAR_MAX INT8_MAX
-#define PAW_CHAR_MIN INT8_MIN
-#define PAW_CAST_CHAR(x) ((paw_Char)(x))
-#define PAW_CHAR_C(x) INT8_C(x)
-
-#define PAW_UCHAR_WIDTH (sizeof(paw_Ubyte) * 8)
-#define PAW_UCHAR_MAX UINT8_MAX
-#define PAW_UCHAR_MIN UINT8_MIN
-#define PAW_CAST_UCHAR(x) ((paw_Ubyte)(x))
-#define PAW_UCHAR_C(x) UINT8_C(x)
+#define PAW_CHAR_WIDTH (sizeof(paw_Byte) * 8)
+#define PAW_CHAR_MAX UINT8_MAX
+#define PAW_CHAR_MIN UINT8_MIN
+#define PAW_CAST_CHAR(x) ((paw_Byte)(x))
+#define PAW_CHAR_C(x) UINT8_C(x)
 
 #define PAW_INT_WIDTH (sizeof(paw_Int) * 8)
 #define PAW_INT_MAX INT64_MAX

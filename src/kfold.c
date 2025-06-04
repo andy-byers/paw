@@ -62,7 +62,7 @@ static void str_concat(struct Compiler *C, Str const *x, Str const *y, Value *pr
 paw_Bool pawP_fold_unary_op(struct Compiler *C, enum MirUnaryOpKind op, Value v, Value *pr)
 {
     switch (op) {
-        case MIR_UNARY_SLENGTH: {
+        case MIR_UNARY_STRLEN: {
             Str const *x = V_STR(v);
             V_SET_INT(pr, x->length);
             break;
@@ -94,7 +94,7 @@ paw_Bool pawP_fold_binary_op(struct Compiler *C, Str const *modname, struct Sour
         case MIR_BINARY_IEQ:
             INT_COMPARISON(pr, x, y, ==);
             break;
-        case MIR_BINARY_SEQ:
+        case MIR_BINARY_STREQ:
             STR_COMPARISON(pr, x, y, ==);
             break;
         case MIR_BINARY_FEQ:
@@ -109,7 +109,7 @@ paw_Bool pawP_fold_binary_op(struct Compiler *C, Str const *modname, struct Sour
         case MIR_BINARY_FNE:
             FLOAT_COMPARISON(pr, x, y, !=);
             break;
-        case MIR_BINARY_SNE:
+        case MIR_BINARY_STRNE:
             STR_COMPARISON(pr, x, y, !=);
             break;
         case MIR_BINARY_XLT:
@@ -121,7 +121,7 @@ paw_Bool pawP_fold_binary_op(struct Compiler *C, Str const *modname, struct Sour
         case MIR_BINARY_FLT:
             FLOAT_COMPARISON(pr, x, y, <);
             break;
-        case MIR_BINARY_SLT:
+        case MIR_BINARY_STRLT:
             STR_COMPARISON(pr, x, y, <);
             break;
         case MIR_BINARY_XLE:
@@ -133,7 +133,7 @@ paw_Bool pawP_fold_binary_op(struct Compiler *C, Str const *modname, struct Sour
         case MIR_BINARY_FLE:
             FLOAT_COMPARISON(pr, x, y, <=);
             break;
-        case MIR_BINARY_SLE:
+        case MIR_BINARY_STRLE:
             STR_COMPARISON(pr, x, y, <=);
             break;
         case MIR_BINARY_XGT:
@@ -145,7 +145,7 @@ paw_Bool pawP_fold_binary_op(struct Compiler *C, Str const *modname, struct Sour
         case MIR_BINARY_FGT:
             FLOAT_COMPARISON(pr, x, y, >);
             break;
-        case MIR_BINARY_SGT:
+        case MIR_BINARY_STRGT:
             STR_COMPARISON(pr, x, y, >);
             break;
         case MIR_BINARY_XGE:
@@ -157,7 +157,7 @@ paw_Bool pawP_fold_binary_op(struct Compiler *C, Str const *modname, struct Sour
         case MIR_BINARY_FGE:
             FLOAT_COMPARISON(pr, x, y, >=);
             break;
-        case MIR_BINARY_SGE:
+        case MIR_BINARY_STRGE:
             STR_COMPARISON(pr, x, y, >=);
             break;
         case MIR_BINARY_IADD:
@@ -239,10 +239,10 @@ paw_Bool pawP_fold_binary_op(struct Compiler *C, Str const *modname, struct Sour
             }
             break;
         }
-        case MIR_BINARY_SCONCAT:
+        case MIR_BINARY_STRCAT:
             str_concat(C, V_STR(x), V_STR(y), pr);
             break;
-        case MIR_BINARY_LCONCAT:
+        case MIR_BINARY_LISTCAT:
             return PAW_FALSE;
     }
     return PAW_TRUE;

@@ -23,7 +23,6 @@
 
 typedef int paw_Type;
 typedef unsigned char paw_Char;
-typedef unsigned char paw_Ubyte;
 typedef long long paw_Int;
 typedef unsigned long long paw_Uint;
 typedef double paw_Float;

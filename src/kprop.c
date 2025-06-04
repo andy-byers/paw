@@ -411,7 +411,7 @@ static struct CellInfo special_binary_op(struct KProp *K, struct Cell *lhs, stru
                 return binop_to_move(binop, binop->lhs);
             }
             break;
-        case MIR_BINARY_SCONCAT:
+        case MIR_BINARY_STRCAT:
             if (EQUALS_CONST_STR0(lhs)) {
                 return binop_to_move(binop, binop->rhs);
             } else if (EQUALS_CONST_STR0(rhs)) {

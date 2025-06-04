@@ -711,7 +711,7 @@ static struct MirPlace second_slice_index(struct FunctionState *fs, struct HirVi
         // default to the length of the container
         struct MirPlace const output = new_literal_place(fs, BUILTIN_INT);
         enum BuiltinKind const kind = pawP_type2code(fs->C, mir_reg_data(fs->mir, object.r)->type);
-        enum MirUnaryOpKind op = kind == BUILTIN_STR ? MIR_UNARY_SLENGTH : MIR_UNARY_LLENGTH;
+        enum MirUnaryOpKind op = kind == BUILTIN_STR ? MIR_UNARY_STRLEN : MIR_UNARY_LISTLEN;
         NEW_INSTR(fs, unary_op, loc, op, object, output);
         return output;
     } else if (offset != 0) {
@@ -1420,7 +1420,7 @@ static enum MirUnaryOpKind unop2op_str(enum UnaryOp unop)
 {
     switch (unop) {
         case UNARY_LEN:
-            return MIR_UNARY_SLENGTH;
+            return MIR_UNARY_STRLEN;
         default:
             PAW_UNREACHABLE();
     }
@@ -1430,19 +1430,19 @@ static enum MirBinaryOpKind binop2op_str(enum BinaryOp binop)
 {
     switch (binop) {
         case BINARY_EQ:
-            return MIR_BINARY_SEQ;
+            return MIR_BINARY_STREQ;
         case BINARY_NE:
-            return MIR_BINARY_SNE;
+            return MIR_BINARY_STRNE;
         case BINARY_LT:
-            return MIR_BINARY_SLT;
+            return MIR_BINARY_STRLT;
         case BINARY_LE:
-            return MIR_BINARY_SLE;
+            return MIR_BINARY_STRLE;
         case BINARY_GT:
-            return MIR_BINARY_SGT;
+            return MIR_BINARY_STRGT;
         case BINARY_GE:
-            return MIR_BINARY_SGE;
+            return MIR_BINARY_STRGE;
         case BINARY_ADD:
-            return MIR_BINARY_SCONCAT;
+            return MIR_BINARY_STRCAT;
         default:
             PAW_UNREACHABLE();
     }
@@ -1452,7 +1452,7 @@ static enum MirUnaryOpKind unop2op_list(enum UnaryOp unop)
 {
     switch (unop) {
         case UNARY_LEN:
-            return MIR_UNARY_LLENGTH;
+            return MIR_UNARY_LISTLEN;
         default:
             PAW_UNREACHABLE();
     }
@@ -1462,7 +1462,7 @@ static enum MirBinaryOpKind binop2op_list(enum BinaryOp binop)
 {
     switch (binop) {
         case BINARY_ADD:
-            return MIR_BINARY_LCONCAT;
+            return MIR_BINARY_LISTCAT;
         default:
             PAW_UNREACHABLE();
     }
@@ -1472,7 +1472,7 @@ static enum MirUnaryOpKind unop2op_map(enum UnaryOp unop)
 {
     switch (unop) {
         case UNARY_LEN:
-            return MIR_UNARY_MLENGTH;
+            return MIR_UNARY_MAPLEN;
         default:
             PAW_UNREACHABLE();
     }

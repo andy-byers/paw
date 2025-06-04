@@ -167,30 +167,30 @@ typedef enum Op { //      arguments    description
     OP_FDIV, //           A B C        R[A] := R[B] / R[C]
     OP_FMOD, //           A B C        R[A] := R[B] % R[C]
 
-    OP_SEQ, //            A B C        R[A] := R[B] == R[C]
-    OP_SNE, //            A B C        R[A] := R[B] != R[C]
-    OP_SLT, //            A B C        R[A] := R[B] < R[C]
-    OP_SLE, //            A B C        R[A] := R[B] <= R[C]
-    OP_SGT, //            A B C        R[A] := R[B] > R[C]
-    OP_SGE, //            A B C        R[A] := R[B] >= R[C]
-    OP_SLENGTH, //        A B          R[A] := #R[B]
-    OP_SCONCAT, //        A B C        R[A] := R[B] + R[C]
-    OP_SGET, //           A B C        R[A] := R[B][R[C]]
-    OP_SGETN, //          A B C        R[A] := R[B][R[C]:R[C+1]]
+    OP_STREQ, //          A B C        R[A] := R[B] == R[C]
+    OP_STRNE, //          A B C        R[A] := R[B] != R[C]
+    OP_STRLT, //          A B C        R[A] := R[B] < R[C]
+    OP_STRLE, //          A B C        R[A] := R[B] <= R[C]
+    OP_STRGT, //          A B C        R[A] := R[B] > R[C]
+    OP_STRGE, //          A B C        R[A] := R[B] >= R[C]
+    OP_STRLEN, //         A B          R[A] := #R[B]
+    OP_STRCAT, //         A B C        R[A] := R[B] + R[C]
+    OP_STRGET, //         A B C        R[A] := R[B][R[C]]
+    OP_STRGETN, //        A B C        R[A] := R[B][R[C]:R[C+1]]
 
-    OP_LLENGTH, //        A B          R[A] := #R[B]
-    OP_LCONCAT, //        A B C        R[A] := R[B] + R[C]
-    OP_LGETP, //          A B C        R[A] := &R[B][R[C]]
-    OP_LGET, //           A B C        R[A] := R[B][R[C]]
-    OP_LSET, //           A B C        R[A][R[B]] := R[C]
-    OP_LGETN, //          A B C        R[A] := R[B][R[C]:R[C+1]]
-    OP_LSETN, //          A B C        R[A][R[B]:R[B+1]] := R[C]
+    OP_LISTLEN, //        A B          R[A] := #R[B]
+    OP_LISTCAT, //        A B C        R[A] := R[B] + R[C]
+    OP_LISTGETP, //       A B C        R[A] := &R[B][R[C]]
+    OP_LISTGET, //        A B C        R[A] := R[B][R[C]]
+    OP_LISTSET, //        A B C        R[A][R[B]] := R[C]
+    OP_LISTGETN, //       A B C        R[A] := R[B][R[C]:R[C+1]]
+    OP_LISTSETN, //       A B C        R[A][R[B]:R[B+1]] := R[C]
 
-    OP_MLENGTH, //        A B          R[A] := #R[B]
-    OP_MGETP, //          A B C        R[A] := &R[B][R[C]]
-    OP_MNEWP, //          A B C        R[A] := &R[B][R[C]]
-    OP_MGET, //           A B C        R[A] := R[B][R[C]]
-    OP_MSET, //           A B C        R[A][R[B]] := R[C]
+    OP_MAPLEN, //         A B          R[A] := #R[B]
+    OP_MAPGETP, //        A B C        R[A] := &R[B][R[C]]
+    OP_MAPNEWP, //        A B C        R[A] := &R[B][R[C]]
+    OP_MAPGET, //         A B C        R[A] := R[B][R[C]]
+    OP_MAPSET, //         A B C        R[A][R[B]] := R[C]
 
     OP_GETVALUE,//        A B C        R[A] := R[B][C]
     OP_SETVALUE,//        A B C        R[A][B] := R[C]
@@ -200,10 +200,8 @@ typedef enum Op { //      arguments    description
     OP_GETDISCR, //       A B          R[A] := discr(R[B])
 
     OP_BCASTF, //         A B          R[A] := R[B] as float
-    OP_XCASTC, //         A B          R[A] := R[B] as char
-    OP_XCASTI, //         A B          R[A] := R[B] as int
+    OP_CCASTI, //         A B          R[A] := R[B] as int
     OP_ICASTB, //         A B          R[A] := R[B] as bool
-    OP_ICASTX, //         A B          R[A] := R[B] as char
     OP_ICASTC, //         A B          R[A] := R[B] as char
     OP_ICASTF, //         A B          R[A] := R[B] as float
     OP_FCASTB, //         A B          R[A] := R[B] as bool

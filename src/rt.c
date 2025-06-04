@@ -549,20 +549,20 @@ top:
                 V_SET_FLOAT(ra, fmod(x, y));
             }
 
-            vm_case(SLENGTH) :
+            vm_case(STRLEN) :
             {
                 Value const *rb = VM_RB(opcode);
                 pawR_str_length(P, cf, ra, rb);
             }
 
-            vm_case(SEQ) : VM_COMPARISON(STR, ==)
-            vm_case(SNE) : VM_COMPARISON(STR, !=)
-            vm_case(SLT) : VM_COMPARISON(STR, <)
-            vm_case(SLE) : VM_COMPARISON(STR, <=)
-            vm_case(SGT) : VM_COMPARISON(STR, >)
-            vm_case(SGE) : VM_COMPARISON(STR, >=)
+            vm_case(STREQ) : VM_COMPARISON(STR, ==)
+            vm_case(STRNE) : VM_COMPARISON(STR, !=)
+            vm_case(STRLT) : VM_COMPARISON(STR, <)
+            vm_case(STRLE) : VM_COMPARISON(STR, <=)
+            vm_case(STRGT) : VM_COMPARISON(STR, >)
+            vm_case(STRGE) : VM_COMPARISON(STR, >=)
 
-            vm_case(SCONCAT) :
+            vm_case(STRCAT) :
             {
                 VM_SAVE_PC();
                 int const b = GET_B(opcode);
@@ -571,13 +571,13 @@ top:
                 CHECK_GC(P);
             }
 
-            vm_case(LLENGTH) :
+            vm_case(LISTLEN) :
             {
                 Value const *rb = VM_RB(opcode);
                 pawR_list_length(P, cf, ra, rb);
             }
 
-            vm_case(LCONCAT) :
+            vm_case(LISTCAT) :
             {
                 VM_SAVE_PC();
                 int const b = GET_B(opcode);
@@ -586,7 +586,7 @@ top:
                 CHECK_GC(P);
             }
 
-            vm_case(SGET) :
+            vm_case(STRGET) :
             {
                 VM_SAVE_PC();
                 Value const *rb = VM_RB(opcode);
@@ -594,7 +594,7 @@ top:
                 pawR_str_get(P, cf, ra, rb, rc);
             }
 
-            vm_case(SGETN) :
+            vm_case(STRGETN) :
             {
                 VM_SAVE_PC();
                 Value const *rb = VM_RB(opcode);
@@ -603,7 +603,7 @@ top:
                 pawR_str_getn(P, cf, ra, rb, rc);
             }
 
-            vm_case(LGETP) :
+            vm_case(LISTGETP) :
             {
                 VM_SAVE_PC();
                 Value const *rb = VM_RB(opcode);
@@ -611,7 +611,7 @@ top:
                 pawR_list_getp(P, cf, ra, rb, rc);
             }
 
-            vm_case(LGET) :
+            vm_case(LISTGET) :
             {
                 VM_SAVE_PC();
                 Value const *rb = VM_RB(opcode);
@@ -619,7 +619,7 @@ top:
                 pawR_list_get(P, cf, ra, rb, rc);
             }
 
-            vm_case(LSET) :
+            vm_case(LISTSET) :
             {
                 VM_SAVE_PC();
                 Value const *rb = VM_RB(opcode);
@@ -627,7 +627,7 @@ top:
                 pawR_list_set(P, cf, ra, rb, rc);
             }
 
-            vm_case(LGETN) :
+            vm_case(LISTGETN) :
             {
                 VM_SAVE_PC();
                 Value const *rb = VM_RB(opcode);
@@ -637,7 +637,7 @@ top:
                 pawR_list_getn(P, cf, ra, rb, rc, temp);
             }
 
-            vm_case(LSETN) :
+            vm_case(LISTSETN) :
             {
                 VM_SAVE_PC();
                 Value const *rb = VM_RB(opcode);
@@ -647,13 +647,13 @@ top:
                 pawR_list_setn(P, cf, ra, rb, rc, temp);
             }
 
-            vm_case(MLENGTH) :
+            vm_case(MAPLEN) :
             {
                 Value const *rb = VM_RB(opcode);
                 pawR_map_length(P, cf, ra, rb);
             }
 
-            vm_case(MGETP) :
+            vm_case(MAPGETP) :
             {
                 VM_SAVE_PC();
                 Value const *rb = VM_RB(opcode);
@@ -664,7 +664,7 @@ top:
                     pawR_error(P, PAW_EKEY, "key does not exist");
             }
 
-            vm_case(MNEWP) :
+            vm_case(MAPNEWP) :
             {
                 VM_SAVE_PC();
                 Value const *rb = VM_RB(opcode);
@@ -673,7 +673,7 @@ top:
                 pawR_map_newp(P, cf, ra, rb, rc);
             }
 
-            vm_case(MGET) :
+            vm_case(MAPGET) :
             {
                 VM_SAVE_PC();
                 Value const *rb = VM_RB(opcode);
@@ -684,7 +684,7 @@ top:
                 }
             }
 
-            vm_case(MSET) :
+            vm_case(MAPSET) :
             {
                 VM_SAVE_PC();
                 Value const *rb = VM_RB(opcode);
@@ -764,13 +764,7 @@ top:
                 V_SET_FLOAT(ra, V_TRUE(*rb));
             }
 
-            vm_case(XCASTC) :
-            {
-                Value const *rb = VM_RB(opcode);
-                V_SET_INT(ra, V_CHAR(*rb));
-            }
-
-            vm_case(XCASTI) :
+            vm_case(CCASTI) :
             {
                 Value const *rb = VM_RB(opcode);
                 V_SET_INT(ra, V_CHAR(*rb));
@@ -783,7 +777,7 @@ top:
             }
 
             // TODO: check bounds
-            vm_case(ICASTX) :
+            vm_case(ICASTC) :
             {
                 Value const *rb = VM_RB(opcode);
                 V_SET_CHAR(ra, (paw_Char)V_INT(*rb));

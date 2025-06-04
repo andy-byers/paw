@@ -1069,12 +1069,12 @@ static void indentation(struct Printer *P)
 static char const *unop_name(enum MirUnaryOpKind op)
 {
     switch (op) {
-        case MIR_UNARY_SLENGTH:
-            return "SLENGTH";
-        case MIR_UNARY_LLENGTH:
-            return "LLENGTH";
-        case MIR_UNARY_MLENGTH:
-            return "MLENGTH";
+        case MIR_UNARY_STRLEN:
+            return "STRLEN";
+        case MIR_UNARY_LISTLEN:
+            return "LISTLEN";
+        case MIR_UNARY_MAPLEN:
+            return "MAPLEN";
         case MIR_UNARY_INEG:
             return "INEG";
         case MIR_UNARY_FNEG:
@@ -1125,22 +1125,22 @@ static char const *binop_name(enum MirBinaryOpKind op)
             return "FGT";
         case MIR_BINARY_FGE:
             return "FGE";
-        case MIR_BINARY_SEQ:
-            return "SEQ";
-        case MIR_BINARY_SNE:
-            return "SNE";
-        case MIR_BINARY_SLT:
-            return "SLT";
-        case MIR_BINARY_SLE:
-            return "SLE";
-        case MIR_BINARY_SGT:
-            return "SGT";
-        case MIR_BINARY_SGE:
-            return "SGE";
-        case MIR_BINARY_SCONCAT:
-            return "SCONCAT";
-        case MIR_BINARY_LCONCAT:
-            return "LCONCAT";
+        case MIR_BINARY_STREQ:
+            return "STREQ";
+        case MIR_BINARY_STRNE:
+            return "STRNE";
+        case MIR_BINARY_STRLT:
+            return "STRLT";
+        case MIR_BINARY_STRLE:
+            return "STRLE";
+        case MIR_BINARY_STRGT:
+            return "STRGT";
+        case MIR_BINARY_STRGE:
+            return "STRGE";
+        case MIR_BINARY_STRCAT:
+            return "STRCAT";
+        case MIR_BINARY_LISTCAT:
+            return "LISTCAT";
         case MIR_BINARY_IADD:
             return "IADD";
         case MIR_BINARY_ISUB:

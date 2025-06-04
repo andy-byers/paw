@@ -384,49 +384,49 @@ char const *op_name(Op op)
             return "FDIV";
         case OP_FMOD:
             return "FMOD";
-        case OP_SEQ:
+        case OP_STREQ:
             return "SEQ";
-        case OP_SNE:
+        case OP_STRNE:
             return "SNE";
-        case OP_SLT:
+        case OP_STRLT:
             return "SLT";
-        case OP_SLE:
+        case OP_STRLE:
             return "SLE";
-        case OP_SGT:
+        case OP_STRGT:
             return "SGT";
-        case OP_SGE:
+        case OP_STRGE:
             return "SGE";
-        case OP_SLENGTH:
-            return "SLENGTH";
-        case OP_SCONCAT:
-            return "SCONCAT";
-        case OP_SGET:
+        case OP_STRLEN:
+            return "SLEN";
+        case OP_STRCAT:
+            return "SCAT";
+        case OP_STRGET:
             return "SGET";
-        case OP_SGETN:
+        case OP_STRGETN:
             return "SGETN";
-        case OP_LLENGTH:
-            return "LLENGTH";
-        case OP_LCONCAT:
-            return "LCONCAT";
-        case OP_LGETP:
+        case OP_LISTLEN:
+            return "LLEN";
+        case OP_LISTCAT:
+            return "LCAT";
+        case OP_LISTGETP:
             return "LGETP";
-        case OP_LGET:
+        case OP_LISTGET:
             return "LGET";
-        case OP_LSET:
+        case OP_LISTSET:
             return "LSET";
-        case OP_LGETN:
+        case OP_LISTGETN:
             return "LGETN";
-        case OP_LSETN:
+        case OP_LISTSETN:
             return "LSETN";
-        case OP_MLENGTH:
-            return "MLENGTH";
-        case OP_MNEWP:
+        case OP_MAPLEN:
+            return "MLEN";
+        case OP_MAPNEWP:
             return "MNEWP";
-        case OP_MGETP:
+        case OP_MAPGETP:
             return "MGETP";
-        case OP_MGET:
+        case OP_MAPGET:
             return "MGET";
-        case OP_MSET:
+        case OP_MAPSET:
             return "MSET";
         case OP_GETVALUE:
             return "GETVALUE";
@@ -440,14 +440,10 @@ char const *op_name(Op op)
             return "GETDISCR";
         case OP_BCASTF:
             return "BCASTF";
-        case OP_XCASTC:
-            return "XCASTC";
-        case OP_XCASTI:
-            return "XCASTI";
+        case OP_CCASTI:
+            return "CCASTI";
         case OP_ICASTB:
             return "ICASTB";
-        case OP_ICASTX:
-            return "ICASTX";
         case OP_ICASTC:
             return "ICASTC";
         case OP_ICASTF:
@@ -480,16 +476,14 @@ void paw_dump_opcode(OpCode opcode)
         case OP_INEG:
         case OP_BITNOT:
         case OP_FNEG:
-        case OP_SLENGTH:
-        case OP_LLENGTH:
-        case OP_MLENGTH:
+        case OP_STRLEN:
+        case OP_LISTLEN:
+        case OP_MAPLEN:
         case OP_BCASTF:
-        case OP_XCASTC:
-        case OP_XCASTI:
+        case OP_CCASTI:
         case OP_FCASTI:
         case OP_FCASTB:
         case OP_ICASTB:
-        case OP_ICASTX:
         case OP_ICASTC:
         case OP_ICASTF:
         case OP_GETDISCR:
@@ -557,25 +551,25 @@ void paw_dump_opcode(OpCode opcode)
         case OP_FMUL:
         case OP_FDIV:
         case OP_FMOD:
-        case OP_SEQ:
-        case OP_SNE:
-        case OP_SLT:
-        case OP_SLE:
-        case OP_SGT:
-        case OP_SGE:
-        case OP_SCONCAT:
-        case OP_SGET:
-        case OP_SGETN:
-        case OP_LCONCAT:
-        case OP_LGETP:
-        case OP_LGET:
-        case OP_LSET:
-        case OP_LGETN:
-        case OP_LSETN:
-        case OP_MNEWP:
-        case OP_MGETP:
-        case OP_MGET:
-        case OP_MSET:
+        case OP_STREQ:
+        case OP_STRNE:
+        case OP_STRLT:
+        case OP_STRLE:
+        case OP_STRGT:
+        case OP_STRGE:
+        case OP_STRCAT:
+        case OP_STRGET:
+        case OP_STRGETN:
+        case OP_LISTCAT:
+        case OP_LISTGETP:
+        case OP_LISTGET:
+        case OP_LISTSET:
+        case OP_LISTGETN:
+        case OP_LISTSETN:
+        case OP_MAPNEWP:
+        case OP_MAPGETP:
+        case OP_MAPGET:
+        case OP_MAPSET:
         case OP_GETFIELD:
         case OP_SETFIELD:
         case OP_GETVALUE:
@@ -616,11 +610,11 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
             case OP_INEG:
             case OP_BITNOT:
             case OP_FNEG:
-            case OP_SLENGTH:
-            case OP_LLENGTH:
-            case OP_MLENGTH:
-            case OP_SCONCAT:
-            case OP_LCONCAT:
+            case OP_STRLEN:
+            case OP_LISTLEN:
+            case OP_MAPLEN:
+            case OP_STRCAT:
+            case OP_LISTCAT:
             case OP_FCASTI:
             case OP_ICASTF:
             case OP_GETDISCR:
@@ -685,23 +679,23 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
             case OP_FMUL:
             case OP_FDIV:
             case OP_FMOD:
-            case OP_SEQ:
-            case OP_SNE:
-            case OP_SLT:
-            case OP_SLE:
-            case OP_SGT:
-            case OP_SGE:
-            case OP_SGET:
-            case OP_SGETN:
-            case OP_LGETP:
-            case OP_LGET:
-            case OP_LSET:
-            case OP_LGETN:
-            case OP_LSETN:
-            case OP_MNEWP:
-            case OP_MGETP:
-            case OP_MGET:
-            case OP_MSET:
+            case OP_STREQ:
+            case OP_STRNE:
+            case OP_STRLT:
+            case OP_STRLE:
+            case OP_STRGT:
+            case OP_STRGE:
+            case OP_STRGET:
+            case OP_STRGETN:
+            case OP_LISTGETP:
+            case OP_LISTGET:
+            case OP_LISTSET:
+            case OP_LISTGETN:
+            case OP_LISTSETN:
+            case OP_MAPNEWP:
+            case OP_MAPGETP:
+            case OP_MAPGET:
+            case OP_MAPSET:
             case OP_GETFIELD:
             case OP_SETFIELD:
             case OP_GETVALUE:

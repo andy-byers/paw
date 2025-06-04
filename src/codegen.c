@@ -725,7 +725,7 @@ static void code_map_get(struct FuncState *fs, struct MirPlace output, struct Mi
 {
     int const b = move_to_temp(fs, REG(object), 0);
     int const c = move_to_temp(fs, REG(key), 1);
-    code_ABC(fs, OP_MGET, REG(output), b, c);
+    code_ABC(fs, OP_MAPGET, REG(output), b, c);
 }
 
 static void code_get_element(struct MirVisitor *V, struct MirGetElement *x)
@@ -734,12 +734,12 @@ static void code_get_element(struct MirVisitor *V, struct MirGetElement *x)
     struct FuncState *fs = G->fs;
 
     if (x->b_kind == BUILTIN_STR) {
-        code_ABC(fs, OP_SGET, REG(x->output), REG(x->object), REG(x->key));
+        code_ABC(fs, OP_STRGET, REG(x->output), REG(x->object), REG(x->key));
     } else if (x->b_kind == BUILTIN_MAP) {
         code_map_get(fs, x->output, x->object, x->key);
     } else {
         paw_assert(x->b_kind == BUILTIN_LIST) ;
-        code_ABC(fs, OP_LGET, REG(x->output), REG(x->object), REG(x->key));
+        code_ABC(fs, OP_LISTGET, REG(x->output), REG(x->object), REG(x->key));
     }
 }
 
@@ -747,7 +747,7 @@ static void code_map_getp(struct FuncState *fs, struct MirPlace output, struct M
 {
     int const b = move_to_temp(fs, REG(object), 0);
     int const c = move_to_temp(fs, REG(key), 1);
-    Op const op = is_setter ? OP_MNEWP: OP_MGETP;
+    Op const op = is_setter ? OP_MAPNEWP: OP_MAPGETP;
     code_ABC(fs, op, REG(output), b, c);
 }
 
@@ -759,7 +759,7 @@ static void code_get_element_ptr(struct MirVisitor *V, struct MirGetElementPtr *
     if (x->b_kind == BUILTIN_MAP) {
         code_map_getp(fs, x->output, x->object, x->key, x->is_map_setter);
     } else {
-        code_ABC(fs, OP_LGETP, REG(x->output), REG(x->object), REG(x->key));
+        code_ABC(fs, OP_LISTGETP, REG(x->output), REG(x->object), REG(x->key));
     }
 }
 
@@ -768,7 +768,7 @@ static void code_map_set(struct FuncState *fs, struct MirPlace object, struct Mi
     int const a = move_to_temp(fs, REG(object), 0);
     int const b = move_to_temp(fs, REG(key), 1);
     int const c = move_to_temp(fs, REG(value), 2);
-    code_ABC(fs, OP_MSET, a, b, c);
+    code_ABC(fs, OP_MAPSET, a, b, c);
 }
 
 static void code_set_element(struct MirVisitor *V, struct MirSetElement *x)
@@ -780,7 +780,7 @@ static void code_set_element(struct MirVisitor *V, struct MirSetElement *x)
         code_map_set(fs, x->object, x->key, x->value);
     } else {
         paw_assert(x->b_kind == BUILTIN_LIST);
-        code_ABC(fs, OP_LSET, REG(x->object), REG(x->key), REG(x->value));
+        code_ABC(fs, OP_LISTSET, REG(x->object), REG(x->key), REG(x->value));
     }
 }
 
@@ -794,10 +794,10 @@ static void code_get_range(struct MirVisitor *V, struct MirGetRange *x)
     if (x->b_kind == BUILTIN_LIST) {
         // extra temporary register needed at runtime
         temporary_reg(fs, 2);
-        code_ABC(fs, OP_LGETN, REG(x->output), REG(x->object), lower);
+        code_ABC(fs, OP_LISTGETN, REG(x->output), REG(x->object), lower);
     } else {
         paw_assert(x->b_kind == BUILTIN_STR);
-        code_ABC(fs, OP_SGETN, REG(x->output), REG(x->object), lower);
+        code_ABC(fs, OP_STRGETN, REG(x->output), REG(x->object), lower);
     }
 }
 
@@ -808,7 +808,7 @@ static void code_set_range(struct MirVisitor *V, struct MirSetRange *x)
 
     int const lower = move_to_temp(fs, REG(x->lower), 0);
     int const upper = move_to_temp(fs, REG(x->upper), 1);
-    code_ABC(fs, OP_LSETN, REG(x->object), lower, REG(x->value));
+    code_ABC(fs, OP_LISTSETN, REG(x->object), lower, REG(x->value));
 }
 
 static void code_get_field(struct MirVisitor *V, struct MirGetField *x)
@@ -909,10 +909,10 @@ static void code_cast(struct MirVisitor *V, struct MirCast *x)
     struct FuncState *fs = G->fs;
 
     static Op const CAST_OPERATORS[NBUILTIN_SCALARS][NBUILTIN_SCALARS] = {
-        //          to  = {0,         b,         x,         i,         f}
+        //          to  = {0,         b,         c,         i,         f}
         [BUILTIN_BOOL]  = {0,         0,         0,         0, OP_BCASTF},
-        [BUILTIN_CHAR]  = {0, OP_ICASTB,         0, OP_XCASTI,         0},
-        [BUILTIN_INT]   = {0, OP_ICASTB, OP_ICASTX,         0, OP_ICASTF},
+        [BUILTIN_CHAR]  = {0, OP_ICASTB,         0, OP_CCASTI,         0},
+        [BUILTIN_INT]   = {0, OP_ICASTB, OP_ICASTC,         0, OP_ICASTF},
         [BUILTIN_FLOAT] = {0, OP_FCASTB,         0, OP_FCASTI,         0},
     };
 
@@ -923,12 +923,12 @@ static void code_cast(struct MirVisitor *V, struct MirCast *x)
 static Op unop2op(enum MirUnaryOpKind unop)
 {
     switch (unop) {
-        case MIR_UNARY_SLENGTH:
-            return OP_SLENGTH;
-        case MIR_UNARY_LLENGTH:
-            return OP_LLENGTH;
-        case MIR_UNARY_MLENGTH:
-            return OP_MLENGTH;
+        case MIR_UNARY_STRLEN:
+            return OP_STRLEN;
+        case MIR_UNARY_LISTLEN:
+            return OP_LISTLEN;
+        case MIR_UNARY_MAPLEN:
+            return OP_MAPLEN;
         case MIR_UNARY_NOT:
             return OP_INOT;
         case MIR_UNARY_FNEG:
@@ -943,10 +943,10 @@ static Op unop2op(enum MirUnaryOpKind unop)
 static Op binop2op(enum MirBinaryOpKind binop)
 {
     switch (binop) {
-        case MIR_BINARY_SCONCAT:
-            return OP_SCONCAT;
-        case MIR_BINARY_LCONCAT:
-            return OP_LCONCAT;
+        case MIR_BINARY_STRCAT:
+            return OP_STRCAT;
+        case MIR_BINARY_LISTCAT:
+            return OP_LISTCAT;
         case MIR_BINARY_XEQ:
             return OP_XEQ;
         case MIR_BINARY_XNE:
@@ -1003,18 +1003,18 @@ static Op binop2op(enum MirBinaryOpKind binop)
             return OP_FDIV;
         case MIR_BINARY_FMOD:
             return OP_FMOD;
-        case MIR_BINARY_SEQ:
-            return OP_SEQ;
-        case MIR_BINARY_SNE:
-            return OP_SNE;
-        case MIR_BINARY_SLT:
-            return OP_SLT;
-        case MIR_BINARY_SLE:
-            return OP_SLE;
-        case MIR_BINARY_SGT:
-            return OP_SGT;
-        case MIR_BINARY_SGE:
-            return OP_SGE;
+        case MIR_BINARY_STREQ:
+            return OP_STREQ;
+        case MIR_BINARY_STRNE:
+            return OP_STRNE;
+        case MIR_BINARY_STRLT:
+            return OP_STRLT;
+        case MIR_BINARY_STRLE:
+            return OP_STRLE;
+        case MIR_BINARY_STRGT:
+            return OP_STRGT;
+        case MIR_BINARY_STRGE:
+            return OP_STRGE;
         case MIR_BINARY_IBITAND:
             return OP_BITAND;
         case MIR_BINARY_IBITOR:
@@ -1045,7 +1045,7 @@ static void code_binop(struct MirVisitor *V, struct MirBinaryOp *x)
     paw_assert(code != NBUILTINS);
 
     Op const op = binop2op(x->op);
-    if (op == OP_SCONCAT || op == OP_LCONCAT) {
+    if (op == OP_STRCAT || op == OP_LISTCAT) {
         int const first = temporary_reg(fs, 0);
         int const second = temporary_reg(fs, 1);
         if (code == BUILTIN_LIST)
