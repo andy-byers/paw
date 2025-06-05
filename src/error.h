@@ -187,7 +187,8 @@ _Noreturn void pawErr_invalid_unicode_escape(struct Compiler *C, Str const *modn
 _Noreturn void pawErr_invalid_unicode_codepoint(struct Compiler *C, Str const *modname, struct SourceLoc loc, unsigned codepoint);
 _Noreturn void pawErr_expected_integer_digit(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *base);
 _Noreturn void pawErr_unexpected_integer_char(struct Compiler *C, Str const *modname, struct SourceLoc loc, char c, char const *base);
-_Noreturn void pawErr_integer_out_of_range(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *text);
+_Noreturn void pawErr_integer_too_big_to_parse(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *text);
+_Noreturn void pawErr_integer_out_of_range(struct Compiler *C, Str const *modname, struct SourceLoc loc, paw_Uint u);
 _Noreturn void pawErr_invalid_integer(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *base, char const *text);
 _Noreturn void pawErr_invalid_float(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *text);
 _Noreturn void pawErr_too_many_lines(struct Compiler *C, Str const *modname, struct SourceLoc loc, int limit);

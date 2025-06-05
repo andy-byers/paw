@@ -301,3 +301,9 @@ pub fn test_nested_closure_inside_match() {
     assert(f()() == 3);
 }
 
+pub fn match_int_min_literal() {
+    match -9223372036854775808 {
+        -9223372036854775808 => (),
+        _ => (),
+    }
+}

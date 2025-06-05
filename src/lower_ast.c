@@ -192,6 +192,17 @@ static struct HirExpr *LowerChainExpr(struct LowerAst *L, struct AstChainExpr *e
 
 static struct HirExpr *LowerUnOpExpr(struct LowerAst *L, struct AstUnOpExpr *e)
 {
+    if (e->op == UNARY_NEG && AstIsLiteralExpr(e->target)) {
+        struct AstLiteralExpr *lit = AstGetLiteralExpr(e->target);
+        if (lit->lit_kind == kAstBasicLit && lit->basic.code == BUILTIN_INT) {
+            paw_Uint const u = V_UINT(lit->basic.value);
+            if (u > (paw_Uint)PAW_INT_MAX + 1)
+                LOWERING_ERROR(L, integer_out_of_range, e->span.start, u);
+
+            paw_Int const i = (paw_Int)-u; // convert to negative paw_Int
+            return pawHir_new_basic_lit(L->hir, e->span, I2V(i), BUILTIN_INT);
+        }
+    }
     struct HirExpr *target = lower_expr(L, e->target);
     return pawHir_new_unop_expr(L->hir, e->span, target, e->op);
 }
@@ -435,6 +446,12 @@ static struct HirExpr *LowerConversionExpr(struct LowerAst *L, struct AstConvers
 
 static struct HirExpr *lower_basic_lit(struct LowerAst *L, struct AstBasicLit *e, struct SourceSpan span)
 {
+    // NOTE: Integer literals are parsed as paw_Uint. Values of type paw_Uint in range [0, PAW_INT_MAX]
+    //       have the same Value representation as paw_Int and no conversion is necessary. Negative
+    //       integer literals are handled in "LowerUnOpExpr".
+    if (e->code == BUILTIN_INT && V_UINT(e->value) > (paw_Uint)PAW_INT_MAX)
+        LOWERING_ERROR(L, integer_out_of_range, span.start, e->value.u);
+
     return pawHir_new_basic_lit(L->hir, span, e->value, e->code);
 }
 
@@ -913,6 +930,16 @@ static struct HirPat *LowerPathPat(struct LowerAst *L, struct AstPathPat *p)
 
 static struct HirPat *LowerLiteralPat(struct LowerAst *L, struct AstLiteralPat *p)
 {
+    if (AstIsLiteralExpr(p->expr)) {
+        // Special case for integers: normal lowering functions assume integers are positive and
+        // have type paw_Uint so they can handle overflow (UnOp(Literal(i), -) is detected and
+        // converted into Literal(-i) after checking for overflow).
+        struct AstLiteralExpr *e = AstGetLiteralExpr(p->expr);
+        if (e->lit_kind == kAstBasicLit && e->basic.code == BUILTIN_INT) {
+            struct HirExpr *expr = pawHir_new_basic_lit(L->hir, p->span, e->basic.value, BUILTIN_INT);
+            return pawHir_new_literal_pat(L->hir, p->span, expr);
+        }
+    }
     struct HirExpr *expr = lower_expr(L, p->expr);
     return pawHir_new_literal_pat(L->hir, p->span, expr);
 }

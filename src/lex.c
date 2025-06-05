@@ -407,18 +407,18 @@ static struct Token consume_int_aux(struct Lex *X, struct SourceLoc start, int b
 {
     paw_Env *P = ENV(X);
     struct StringBuffer *b = &SCRATCH(X);
-    paw_Int i;
+    paw_Uint u;
 
-    int const rc = pawV_parse_int(P, b->data, base, &i);
+    int const rc = pawV_parse_uint(P, b->data, base, &u);
     if (rc == PAW_EOVERFLOW) {
-        LEX_ERROR(X, integer_out_of_range, start, b->data);
+        LEX_ERROR(X, integer_too_big_to_parse, start, b->data);
     } else if (rc == PAW_ESYNTAX) {
         LEX_ERROR(X, invalid_integer, start, base_name, b->data);
     }
     return (struct Token){
         .span = span_from(X, start),
         .kind = TK_INT,
-        .value.i = i,
+        .value.u = u,
     };
 }
 

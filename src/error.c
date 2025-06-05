@@ -5,6 +5,9 @@
 #include "error.h"
 #include "ir_type.h"
 
+#include <stdio.h> // snprintf
+#include <inttypes.h> // PRIu64
+
 #define THROW_ERROR(Kind_, Builder_) do { \
     Buffer b; \
     pawL_init_buffer(ENV(C), &b); \
@@ -151,11 +154,19 @@ _Noreturn void pawErr_unexpected_integer_char(struct Compiler *C, Str const *mod
             NULL);
 }
 
-_Noreturn void pawErr_integer_out_of_range(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *text)
+_Noreturn void pawErr_integer_too_big_to_parse(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *text)
 {
     throw(C, E_INTEGER_OUT_OF_RANGE, modname, loc,
             format(C, "integer '%s' out of range", text),
             NULL);
+}
+
+_Noreturn void pawErr_integer_out_of_range(struct Compiler *C, Str const *modname, struct SourceLoc loc, paw_Uint u)
+{
+    char buffer[64];
+    snprintf(buffer, sizeof(buffer), "%" PRIu64, u);
+
+    pawErr_integer_too_big_to_parse(C, modname, loc, buffer);
 }
 
 _Noreturn void pawErr_invalid_integer(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *base, char const *text)

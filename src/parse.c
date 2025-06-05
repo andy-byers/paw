@@ -665,43 +665,48 @@ static struct AstExpr *literal_expr(struct Lex *lex)
     struct SourceLoc const loc = lex->loc;
     paw_Bool const negative = test_next(lex, '-');
 
-    struct AstExpr *expr;
+    enum BuiltinKind code;
     switch (lex->t.kind) {
         case TK_TRUE:
-            expr = emit_bool(lex, loc, PAW_TRUE);
+            V_SET_BOOL(&lex->t.value, PAW_TRUE);
+            code = BUILTIN_BOOL;
             break;
         case TK_FALSE:
-            expr = emit_bool(lex, loc, PAW_FALSE);
+            V_SET_BOOL(&lex->t.value, PAW_FALSE);
+            code = BUILTIN_BOOL;
             break;
         case TK_CHAR:
-            expr = new_basic_lit(lex, loc, lex->t.value, BUILTIN_CHAR);
+            code = BUILTIN_CHAR;
             break;
         case TK_INT:
-            expr = new_basic_lit(lex, loc, lex->t.value, BUILTIN_INT);
+            code = BUILTIN_INT;
             break;
         case TK_FLOAT:
-            expr = new_basic_lit(lex, loc, lex->t.value, BUILTIN_FLOAT);
+            code = BUILTIN_FLOAT;
             break;
         case TK_STRING_TEXT:
-            expr = string_expr(lex, loc, lex->t.value);
+            code = BUILTIN_STR;
             break;
         default:
             PARSE_ERROR(lex, nonliteral_pattern, lex->loc);
     }
+    Value const value = lex->t.value;
+    struct AstExpr *expr = new_basic_lit(lex, loc, value, code);
+    struct AstLiteralExpr *lit = AstGetLiteralExpr(expr);
     skip(lex); // literal token
 
     if (negative) {
-        if (AstIsStringExpr(expr))
+        if (code == BUILTIN_FLOAT) {
+            V_SET_FLOAT(&lit->basic.value, -V_FLOAT(value));
+        } else if (code != BUILTIN_INT) {
             PARSE_ERROR(lex, invalid_literal_negation, lex->loc);
-
-        struct AstLiteralExpr *e = AstGetLiteralExpr(expr);
-        if (e->basic.code == BUILTIN_INT) {
-            e->basic.value.i = -e->basic.value.i;
-        } else if (e->basic.code == BUILTIN_FLOAT) {
-            e->basic.value.f = -e->basic.value.f;
+        } else if (V_UINT(value) > (paw_Uint)PAW_INT_MAX + 1) {
+            PARSE_ERROR(lex, integer_out_of_range, lex->loc, value.u);
         } else {
-            PARSE_ERROR(lex, invalid_literal_negation, lex->loc);
+            V_SET_INT(&lit->basic.value, -(paw_Int)V_UINT(value));
         }
+    } else if (code == BUILTIN_INT && value.u > (paw_Uint)PAW_INT_MAX) {
+        PARSE_ERROR(lex, integer_out_of_range, lex->loc, value.u);
     }
     return expr;
 }
