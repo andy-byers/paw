@@ -33,6 +33,7 @@ enum ErrorKind {
     E_TOO_MANY_LINES,
     E_TOO_MANY_COLUMNS,
     E_NAME_TOO_LONG,
+    E_NULL_BEFORE_EOF,
 
     // parser errors
     E_EXPECTED_SYMBOL,
@@ -194,6 +195,7 @@ _Noreturn void pawErr_invalid_float(struct Compiler *C, Str const *modname, stru
 _Noreturn void pawErr_too_many_lines(struct Compiler *C, Str const *modname, struct SourceLoc loc, int limit);
 _Noreturn void pawErr_too_many_columns(struct Compiler *C, Str const *modname, struct SourceLoc loc, int limit);
 _Noreturn void pawErr_name_too_long(struct Compiler *C, Str const *modname, struct SourceLoc loc, int length, int limit);
+_Noreturn void pawErr_null_before_eof(struct Compiler *C, Str const *modname, struct SourceLoc loc, int length);
 
 // parser errors
 _Noreturn void pawErr_unexpected_symbol(struct Compiler *C, Str const *modname, struct SourceLoc loc);

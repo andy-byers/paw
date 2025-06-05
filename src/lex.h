@@ -46,6 +46,8 @@ enum MultiChar {
     TK_PIPE_EQ,
     TK_LESS2_EQ,
     TK_GREATER2_EQ,
+    TK_HASH_BRACKET,
+    TK_HASHBANG,
 
     // Variables and literals:
     TK_NAME,

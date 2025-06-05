@@ -1679,12 +1679,11 @@ static struct Annotations *annotations(struct Lex *lex)
 {
     struct Compiler *C = lex->C;
     struct SourceLoc start = lex->loc;
-    if (!test_next(lex, '#'))
+    if (!test_next(lex, TK_HASH_BRACKET))
         return NULL;
 
     StringMap *names = StringMap_new_from(C, lex->pool);
     struct Annotations *annos = Annotations_new(C);
-    check_next(lex, '[');
     do {
         if (test(lex, ']'))
             break;
@@ -2000,9 +1999,7 @@ static void skip_hashbang(struct Lex *lex)
     // Special case: don't advance past the '#', since it might be the start of
     // an annotation. If the first char is not '\0', then there is guaranteed to
     // be another char, possibly '\0' itself.
-    if (test(lex, '#') && lex->ptr[0] == '!') {
-        skip(lex); // skip '#'
-        skip(lex); // skip '!'
+    if (test_next(lex, TK_HASHBANG)) {
         while (!test(lex, TK_END)) {
             char const c = *lex->ptr;
             skip(lex);
@@ -2039,7 +2036,9 @@ static struct Ast *parse_module(struct Lex *lex, paw_Reader input, void *ud)
     ast->items = AstDeclList_new(lex->ast);
     import_prelude(lex, ast->items);
     toplevel_items(lex, ast->items);
-    check(lex, TK_END);
+
+    if (lex->ptr != lex->end)
+        PARSE_ERROR(lex, unexpected_symbol, lex->loc);
     return ast;
 }
 

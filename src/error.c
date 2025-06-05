@@ -204,6 +204,13 @@ _Noreturn void pawErr_name_too_long(struct Compiler *C, Str const *modname, stru
             format(C, "length is %d but limit is %d", length, limit));
 }
 
+_Noreturn void pawErr_null_before_eof(struct Compiler *C, Str const *modname, struct SourceLoc loc, int length)
+{
+    throw(C, E_NULL_BEFORE_EOF, modname, loc,
+            format(C, "encountered '\\0' before end of file"),
+            NULL);
+}
+
 _Noreturn void pawErr_unexpected_symbol(struct Compiler *C, Str const *modname, struct SourceLoc loc)
 {
     throw(C, E_EXPECTED_SYMBOL, modname, loc,

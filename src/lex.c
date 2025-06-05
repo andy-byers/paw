@@ -722,6 +722,14 @@ try_again:
                 token = T(TK_SLASH_EQ);
             }
             break;
+        case '#':
+            next(X);
+            if (test_next(X, '!')) {
+                token = T(TK_HASHBANG);
+            } else if (test_next(X, '[')) {
+                token = T(TK_HASH_BRACKET);
+            }
+            break;
         default:
             if (ISDIGIT(*X->ptr)) {
                 token = consume_number(X, start);
