@@ -76,3 +76,13 @@ pub fn test_recursive_instantiation() {
     second_recursive("four", 5.0, 6);
     second_recursive(|| 42, [f2i], map::<int, bool>);
 }
+
+fn make_closure<T>(t: T) -> (fn() -> T) {
+    || t
+}
+
+pub fn test_generic_upvalue() {
+    assert(make_closure(123)() == 123);
+    assert(make_closure((456, 789))().0 == 456);
+    assert(make_closure((456, 789))().1 == 789);
+}

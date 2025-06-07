@@ -702,6 +702,8 @@ static struct AstExpr *literal_expr(struct Lex *lex)
             PARSE_ERROR(lex, invalid_literal_negation, lex->loc);
         } else if (V_UINT(value) > (paw_Uint)PAW_INT_MAX + 1) {
             PARSE_ERROR(lex, integer_out_of_range, lex->loc, value.u);
+        } else if (V_UINT(value) == (paw_Uint)PAW_INT_MAX + 1) {
+            V_SET_INT(&lit->basic.value, PAW_INT_MIN);
         } else {
             V_SET_INT(&lit->basic.value, -(paw_Int)V_UINT(value));
         }

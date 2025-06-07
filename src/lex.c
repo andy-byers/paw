@@ -149,6 +149,7 @@ static void save(struct Lex *X, char c)
 
 static char next(struct Lex *X)
 {
+    if (IS_EOF(X)) return TK_END;
     if (ISNEWLINE(*X->ptr)) {
         increment_line(X);
     } else {
@@ -574,9 +575,6 @@ static struct Token advance(struct Lex *X)
 {
 #define T(kind) make_token((TokenKind)kind, start, X->loc)
 try_again:
-    if (X->ptr == X->end)
-        return make_token(TK_END, X->loc, X->loc);
-
     if (peek_state(X) != STATE_NORMAL)
         return consume_string_part(X, X->loc);
 

@@ -160,12 +160,29 @@ static void test_list_ops(void)
         PAW_TRUE);
 }
 
+static int check_str_too_big(paw_Env *P)
+{
+    pawS_new_uninit(P, PAW_SIZE_MAX);
+    return 0;
+}
+
+static void test_str(void)
+{
+    struct TestAlloc a = {0};
+    paw_Env *P = test_open(test_mem_hook, &a, 1 << 20);
+    paw_new_native(P, check_str_too_big, 0);
+    check(paw_call(P, 0) == PAW_EMEMORY);
+    test_close(P, &a);
+}
+
 int main(void)
 {
+    test_str();
 #define RUN_SCRIPT(name) test_oom(#name, PAW_FALSE);
     TEST_SCRIPTS(RUN_SCRIPT)
 #undef RUN_SCRIPT
 
+    test_str();
     test_call_frames();
     test_list_ops();
 }

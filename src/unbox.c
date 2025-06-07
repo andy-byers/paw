@@ -126,13 +126,8 @@ static MirId next_mid(struct FunctionState *fs)
 
 static paw_Bool is_composite(struct Unboxer *U, IrType *type)
 {
-    // TODO: just to make sure type has finite size
-    pawIr_compute_layout(U->C, type);
-
-    if (IrIsTuple(type))
-        return PAW_TRUE;
-    if (!IrIsAdt(type))
-        return PAW_FALSE;
+    if (IrIsTuple(type)) return PAW_TRUE;
+    if (!IrIsAdt(type)) return PAW_FALSE;
 
     struct IrAdtDef *def = pawIr_get_adt_def(U->C, IR_TYPE_DID(type));
     return def->is_inline;

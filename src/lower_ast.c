@@ -199,7 +199,7 @@ static struct HirExpr *LowerUnOpExpr(struct LowerAst *L, struct AstUnOpExpr *e)
             if (u > (paw_Uint)PAW_INT_MAX + 1)
                 LOWERING_ERROR(L, integer_out_of_range, e->span.start, u);
 
-            paw_Int const i = (paw_Int)-u; // convert to negative paw_Int
+            paw_Int const i = u < (paw_Uint)PAW_INT_MAX + 1 ? -(paw_Int)u : PAW_INT_MIN;
             return pawHir_new_basic_lit(L->hir, e->span, I2V(i), BUILTIN_INT);
         }
     }

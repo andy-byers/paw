@@ -314,7 +314,9 @@ static void do_monomorphize(struct MonoCollector *M, struct Mir *base, struct Mi
     {
         struct MirUpvalueInfo const *pup;
         K_LIST_FOREACH (base->upvalues, pup) {
-            MirUpvalueList_push(M->mir, inst->upvalues, *pup);
+            struct MirUpvalueInfo up = *pup;
+            up.type = finalize_type(M, up.type);
+            MirUpvalueList_push(M->mir, inst->upvalues, up);
         }
     }
 
