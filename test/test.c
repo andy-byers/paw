@@ -227,10 +227,10 @@ int test_open_file(paw_Env *P, char const *name)
     return rc;
 }
 
-int test_open_string(paw_Env *P, char const *source)
+int test_open_string(paw_Env *P, char const *name, char const *source)
 {
     struct TestReader rd = {.data = source, .ndata = strlen(source)};
-    return paw_load(P, test_reader, "<string>", &rd);
+    return paw_load(P, test_reader, name, &rd);
 }
 
 void test_recover(paw_Env *P, paw_Bool fatal)

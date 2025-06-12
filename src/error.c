@@ -246,6 +246,13 @@ _Noreturn void pawErr_empty_type_list(struct Compiler *C, Str const *modname, st
             NULL);
 }
 
+_Noreturn void pawErr_multiple_applicable_items(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *path)
+{
+    throw(C, E_MULTIPLE_APPLICABLE_ITEMS, modname, loc,
+            format(C, "multiple applicable items for path \"%s\"", path),
+            NULL);
+}
+
 _Noreturn void pawErr_nonliteral_pattern(struct Compiler *C, Str const *modname, struct SourceLoc loc)
 {
     throw(C, E_NONLITERAL_PATTERN, modname, loc,
@@ -414,6 +421,13 @@ _Noreturn void pawErr_nonprimitive_annotation_value(struct Compiler *C, Str cons
             NULL);
 }
 
+_Noreturn void pawErr_invalid_glob(struct Compiler *C, Str const *modname, struct SourceLoc loc)
+{
+    throw(C, E_INVALID_GLOB, modname, loc,
+            format(C, "'*' must be the last path segment and cannot have an \"as\" alias"),
+            NULL);
+}
+
 _Noreturn void pawErr_module_not_found(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *name)
 {
     throw(C, E_MODULE_NOT_FOUND, modname, loc,
@@ -428,10 +442,17 @@ _Noreturn void pawErr_invalid_assignment_target(struct Compiler *C, Str const *m
             NULL);
 }
 
+_Noreturn void pawErr_ambiguous_path(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *path)
+{
+    throw(C, E_AMBIGUOUS_PATH, modname, loc,
+            format(C, "path \"%s\" is ambiguous", path),
+            NULL);
+}
+
 _Noreturn void pawErr_duplicate_item(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *what, char const *name)
 {
     throw(C, E_DUPLICATE_ITEM, modname, loc,
-            format(C, "duplicate %s '%s'", what, name),
+            format(C, "duplicate %s \"%s\"", what, name),
             NULL);
 }
 
@@ -547,6 +568,13 @@ _Noreturn void pawErr_incorrect_type_arity(struct Compiler *C, Str const *modnam
             format(C, "expected %d but have %d", want, have));
 }
 
+_Noreturn void pawErr_expected_type_arguments(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *what, char const *name)
+{
+    throw(C, E_EXPECTED_TYPE_ARGUMENTS, modname, loc,
+            format(C, "expected type arguments on %s '%s'", what, name),
+            NULL);
+}
+
 _Noreturn void pawErr_unexpected_type_arguments(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *what, char const *name)
 {
     throw(C, E_UNEXPECTED_TYPE_ARGUMENTS, modname, loc,
@@ -554,10 +582,10 @@ _Noreturn void pawErr_unexpected_type_arguments(struct Compiler *C, Str const *m
             NULL);
 }
 
-_Noreturn void pawErr_expected_trait(struct Compiler *C, Str const *modname, struct SourceLoc loc)
+_Noreturn void pawErr_expected_trait(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *path)
 {
     throw(C, E_EXPECTED_TRAIT, modname, loc,
-            format(C, "expected trait"),
+            format(C, "expected trait but found type \"%s\"", path),
             NULL);
 }
 

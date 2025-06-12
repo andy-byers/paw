@@ -17,8 +17,7 @@ static int run_tests(paw_Env *P)
         static char const kPrefix[] = "test_";
         static size_t const kLength = PAW_LENGTHOF(kPrefix);
         struct Def *def = defs.data[i];
-        if (!def->hdr.is_pub)
-            continue;
+        if (!def->hdr.is_pub) continue;
         Str const *name = def->hdr.name;
         if (name->length >= kLength && memcmp(name->text, kPrefix, kLength) == 0) {
             check(def->hdr.kind == DEF_FUNC);
@@ -48,7 +47,7 @@ static int run_script_or_chunk(char const *name_or_chunk, size_t heap_size, paw_
         return PAW_EMEMORY;
 
     int status = is_chunk
-                     ? test_open_string(P, name_or_chunk)
+                     ? test_open_string(P, "<chunk>", name_or_chunk)
                      : test_open_file(P, name_or_chunk);
     if (status == PAW_OK)
         status = run_tests(P);

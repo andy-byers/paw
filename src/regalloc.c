@@ -15,6 +15,16 @@
 //       all loop headers. currently, Paw cannot produce this type of loop,
 //       so this isn't as important as the other TODO's
 //
+// Activation frame layout:
+//
+//    name      | purpose
+//   -----------|-------------------------------------
+//    callee    | function object being called
+//    arguments | arguments passed to function
+//    upvalues  | upvalues captured in local closures
+//    workspace | space for locals and temporaries
+//    scratch   | extra per-instruction temporaries
+//
 // References:
 // (1) Wimmer, C., & Moessenboeck, H. (). Optimized Interval Splitting in a Linear
 //     Scan Register Allocator.

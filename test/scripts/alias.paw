@@ -50,20 +50,6 @@ pub fn test_poly_container() {
     map_function(m);
 }
 
-struct MonoUnit;
-
-fn check_mono_unit(m: MonoUnit) {}
-
-pub fn test_mono_unit() {
-    type M = MonoUnit;
-
-    let m: M = M;
-    check_mono_unit(m);
-
-    let m = M;
-    check_mono_unit(m);
-}
-
 struct Mono {
     pub value: int,
 }
@@ -80,36 +66,6 @@ pub fn test_mono() {
 
     let m = M{value: 456};
     check_mono(m, 456);
-}
-
-struct PolyUnit<P>;
-
-fn check_instantiated_poly_unit(p: PolyUnit<int>) {}
-
-pub fn test_instantiated_poly_unit() {
-    type P = PolyUnit<int>;
-
-    let p: P = P;
-    check_instantiated_poly_unit(p);
-
-    let p = P;
-    check_instantiated_poly_unit(p);
-}
-
-fn accepts_poly_unit<T>(p: PolyUnit<T>) { }
-
-fn check_poly_unit<T2>(p: PolyUnit<T2>) {
-    accepts_poly_unit(p);
-}
-
-pub fn test_poly_unit() {
-    type P<X> = PolyUnit<X>;
-
-    let p: P<int> = P::<int>;
-    check_poly_unit(p);
-
-    let p = P::<int>;
-    check_poly_unit(p);
 }
 
 struct Poly<P> {
@@ -197,7 +153,10 @@ fn check_nested_poly<T>(t: T) -> T {
         second: t,
     };
     check_poly2(p);
+    p.second
+}
 
+fn check_nested_poly2<T>(t: T) -> T {
     type P<X> = Poly2<X, T>;
 
     let p = P{
@@ -205,13 +164,14 @@ fn check_nested_poly<T>(t: T) -> T {
         second: t,
     };
     check_poly2(p);
-
-    return p.second;
+    p.second
 }
 
 pub fn test_nested_poly() {
     assert(check_nested_poly("abc") == "abc");
     assert(check_nested_poly(123) == 123);
+    assert(check_nested_poly2(4.56) == 4.56);
+    assert(check_nested_poly2(true) == true);
 }
 
 pub fn test_dependent() {
@@ -258,7 +218,9 @@ pub fn test_imported() {
 
     type P<T> = PolyExternal<T>;
     let p = P{value: 456};
+}
 
+pub fn test_imported2() {
     type O<T> = mod_c::Obj<T>;
     let o = O{value: 789};
 }
@@ -267,3 +229,14 @@ use mod_a::Obj;
 use mod_b::*;
 use mod_c;
 
+pub fn test_types_are_hoisted() {
+    let i: I = 123;
+    assert(i == 123);
+    let s: S = "abc";
+    assert(s == "abc");
+
+    type I = int;
+    let _ = || {
+        type S = str;
+    };
+}

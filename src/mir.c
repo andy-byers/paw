@@ -1271,7 +1271,8 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
         }
         case kMirGlobal: {
             struct MirGlobal *t = MirGetGlobal(instr);
-            struct HirDecl *decl = pawHir_get_decl(P->C, IR_TYPE_DID(mir_reg_data(P->mir, t->output.r)->type));
+            // TODO: HIR not available, probably crashes
+            struct HirDecl *decl = pawHir_get_decl(P->C->hir, IR_TYPE_DID(mir_reg_data(P->mir, t->output.r)->type));
             char const *type = pawIr_print_type(P->C, mir_reg_data(P->mir, t->output.r)->type);
             print_place(P, t->output);
             PRINT_LITERAL(P, " = global ");

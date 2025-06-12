@@ -83,16 +83,13 @@ static void check_occurs(struct Unifier *U, InferenceVar *ivar, struct IrType *t
         paw_assert(IrIsInfer(type));
         UNIFIER_ERROR(U, cyclic_type, ivar->loc);
     }
-    if (!IrIsAdt(type))
-        return;
+    if (!IrIsAdt(type)) return;
     struct IrAdt *adt = IrGetAdt(type);
-    if (adt->types == NULL)
-        return;
+    if (adt->types == NULL) return;
 
     struct IrType *const *ptype;
-    K_LIST_FOREACH (adt->types, ptype) {
+    K_LIST_FOREACH (adt->types, ptype)
         check_occurs(U, ivar, *ptype);
-    }
 }
 
 static void unify_var_type(struct Unifier *U, InferenceVar *ivar, struct IrType *type)
@@ -119,8 +116,7 @@ static void unify_var_var(struct Unifier *U, InferenceVar *a, InferenceVar *b)
     if (!pawP_satisfies_bounds(U->C, a->type, bounds))
         UNIFIER_ERROR(U, unsatisfied_trait_bounds, a->loc);
 
-    if (a != b)
-        link_roots(a, b);
+    if (a != b) link_roots(a, b);
 }
 
 static struct IrType *normalize_unknown(UnificationTable *table, struct IrType *type)
@@ -136,12 +132,12 @@ static struct IrType *normalize_unknown(UnificationTable *table, struct IrType *
     return root->type;
 }
 
-static void normalize_list(UnificationTable *table, struct IrTypeList *list)
+static void normalize_list(UnificationTable *table, struct IrTypeList *types)
 {
-    if (list == NULL)
-        return;
-    for (int i = 0; i < list->count; ++i) {
-        list->data[i] = pawU_normalize(table, list->data[i]);
+    if (types != NULL) {
+        IrType **ptype;
+        K_LIST_FOREACH (types, ptype)
+            *ptype = pawU_normalize(table, *ptype);
     }
 }
 
@@ -174,25 +170,20 @@ struct IrType *pawU_normalize(UnificationTable *table, struct IrType *type)
 
 static int unify_lists(struct Unifier *U, struct IrTypeList *a, struct IrTypeList *b)
 {
-    paw_assert(a && b);
-    if (a->count != b->count)
-        return -1;
-    for (int i = 0; i < a->count; ++i) {
-        if (U->action(U, a->data[i], b->data[i])) {
+    if (a->count != b->count) return -1;
+    IrType *const *pa, *const *pb;
+    K_LIST_ZIP (a, pa, b, pb) {
+        if (U->action(U, *pa, *pb))
             return -1;
-        }
     }
     return 0;
 }
 
 static int unify_adt(struct Unifier *U, struct IrAdt *a, struct IrAdt *b)
 {
-    if (a->did.value != b->did.value)
-        return -1;
-    if (!a->types != !b->types)
-        return -1;
-    if (a->types == NULL)
-        return 0;
+    if (a->did.value != b->did.value) return -1;
+    if (!a->types != !b->types) return -1;
+    if (a->types == NULL) return 0;
     return unify_lists(U, a->types, b->types);
 }
 
@@ -215,12 +206,9 @@ static int unify_generic(struct Unifier *U, struct IrGeneric *a, struct IrGeneri
 
 static int unify_trait_obj(struct Unifier *U, struct IrTraitObj *a, struct IrTraitObj *b)
 {
-    if (a->did.value != b->did.value)
-        return -1;
-    if (!a->types != !b->types)
-        return -1;
-    if (a->types == NULL)
-        return 0;
+    if (a->did.value != b->did.value) return -1;
+    if (!a->types != !b->types) return -1;
+    if (a->types == NULL) return 0;
     return unify_lists(U, a->types, b->types);
 }
 

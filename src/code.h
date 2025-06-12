@@ -13,14 +13,9 @@
 #define K_CHAIN_EXISTS 0
 #define K_CHAIN_MISSING 1
 
-typedef struct DefId {
-    int modno;
-    int value;
-} DefId;
-
-typedef struct HirId {
-    int value;
-} HirId;
+typedef struct NodeId {
+    unsigned value;
+} NodeId;
 
 typedef struct DeclId {
     unsigned modno;
@@ -214,13 +209,23 @@ enum TraitKind {
         list->data = pawK_list_reserve(ENV(ctx), list->pool, list->data, sizeof(list->data[0]), list->count, &list->alloc, count); \
     }
 
+
+//
 // Macros for working with a list
+//
 #define K_LIST_AT(List_, Index_) ((List_)->data[Index_])
 #define K_LIST_FIRST(List_) (K_LIST_AT(List_, 0))
 #define K_LIST_LAST(List_) (K_LIST_AT(List_, (List_)->count - 1))
-#define K_LIST_FOREACH(L, p) for (p = (L)->data; p && p < (L)->data + (L)->count; ++p)
-#define K_LIST_ENUMERATE(L, i, p) for (i = 0, p = (L)->data; i < (L)->count; p = &(L)->data[++i])
-#define K_LIST_ZIP(A, a, B, b) for (a = (A)->data, b = (B)->data; a && b && a < (A)->data + (A)->count && b < (B)->data + (B)->count; ++a, ++b)
+#define K_LIST_FOREACH(List_, Ptr_) \
+    for (int i_ = 0; i_ < (List_)->count && (Ptr_ = (List_)->data + i_ /* always 1 */); ++i_)
+#define K_LIST_ENUMERATE(List_, Iter_, Ptr_) \
+    for (Iter_ = 0; Iter_ < (List_)->count && (Ptr_ = (List_)->data + Iter_ /* always 1 */); ++Iter_)
+#define K_LIST_ZIP(ListA_, PtrA_, ListB_, PtrB_)                     \
+    for (int i_ = 0; i_ < (ListA_)->count && i_ < (ListB_)->count && \
+             (PtrA_ = (ListA_)->data + i_, PtrB_ = (ListB_)->data + i_ /* always 1 */); ++i_)
+#define K_LIST_XFOREACH(List_, Ptr_) \
+    __typeof__((List_)->data) Ptr_;  \
+    for (int i_ = 0; i_ < (List_)->count && (Ptr_ = (List_)->data + i_ /* always 1 */); ++i_)
 
 #define K_MAP_MIN 4
 #define K_MAP_MAX (1 << 28)
@@ -423,5 +428,17 @@ struct KCache {
     struct ValueMap *strs;
     struct ValueMap *floats;
 };
+
+// From https://stackoverflow.com/questions/8513911
+static inline paw_Uint hash_combine(paw_Uint seed, paw_Uint v)
+{
+    // TODO: versions for other sizes of paw_Uint
+    paw_Uint const mul = 0x9DDFEA08EB382D69ULL;
+    paw_Uint a = (v ^ seed) * mul;
+    a ^= (a >> 47);
+    paw_Uint b = (seed ^ a) * mul;
+    b ^= (b >> 47);
+    return b * mul;
+}
 
 #endif // PAW_CODE_H

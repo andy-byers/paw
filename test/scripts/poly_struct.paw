@@ -290,16 +290,19 @@ pub fn test_recursion2() {
 struct TestSelfPoly<A, B> {
     pub fn not_method(s: TestSelfPoly<A, B>) {}
     pub fn not_method2(s: Self) {}
-    pub fn method(self: TestSelfPoly<A, B>) {}
+    pub fn method(self) {}
+    pub fn method2(self: Self) {}
 }
 
 pub fn test_self_poly() {
     let ts = TestSelfPoly::<int, float>;
     ts.method();
+    ts.method2();
 
     TestSelfPoly::not_method(ts);
     TestSelfPoly::not_method2(ts);
 
     TestSelfPoly::method(ts);
+    TestSelfPoly::method2(ts);
 }
 

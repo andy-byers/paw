@@ -23,7 +23,7 @@ int main(void)
         "}                  \n";
     struct TestAlloc a = {0};
     paw_Env *P = test_open(NULL, &a, 1 << 24);
-    int status = test_open_string(P, source);
+    int status = test_open_string(P, "<chunk>", source);
     handle_error(P, status, PAW_TRUE);
 
     paw_mangle_start(P);

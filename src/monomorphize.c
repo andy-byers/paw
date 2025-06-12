@@ -535,12 +535,11 @@ static struct Mir *monomorphize(struct MonoCollector *M, struct IrType *type)
 {
     struct IrSignature *t = IrGetSignature(type);
     struct Mir *base = *BodyMap_get(M->C, M->bodies, t->did); // must exist
-    if (!base->is_poly)
-        return base;
+    if (!base->is_poly) return base;
 
-    return t->self != NULL
-               ? monomorphize_method_aux(M, base, t, t->self)
-               : monomorphize_function_aux(M, base, t, NULL);
+    return t->self == NULL
+               ? monomorphize_function_aux(M, base, t, NULL)
+               : monomorphize_method_aux(M, base, t, t->self);
 }
 
 static struct IrType *collect_other(struct MonoCollector *M, struct IrType *type)

@@ -65,6 +65,11 @@ static void default_mem_hook(void *ud, void *ptr, size_t size0, size_t size)
     PAW_UNUSED(size);
 }
 
+void *paw_context(paw_Env const *P)
+{
+    return P->ud;
+}
+
 size_t paw_bytes_used(paw_Env const *P)
 {
     return P->gc_bytes;

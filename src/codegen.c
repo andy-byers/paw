@@ -399,8 +399,9 @@ static ValueId resolve_function(struct Generator *G, RttiType *rtti)
 
 static Str const *module_prefix(struct Generator *G, int modno)
 {
-    struct ModuleInfo *m = ModuleList_get(G->C->modules, modno);
-    return m->modno != TARGET_MODNO ? m->name : NULL;
+    return modno != TARGET_MODNO
+        ? ModuleNames_get(G->C->modnames, modno)
+        : NULL;
 }
 
 static paw_Bool is_smi(paw_Int i)
@@ -581,10 +582,9 @@ static void register_items(struct Generator *G)
     struct ValList *vals = &P->vals;
     struct GlobalList *globals = C->globals;
 
-    BodyMap *bodies = pawP_lower_hir(C);
-    struct MonoResult mr = pawP_monomorphize(C, bodies);
+    struct MonoResult mr = pawP_monomorphize(C, C->bodies);
     finalize_bodies(C, mr.bodies);
-    BodyMap_delete(C, bodies);
+    BodyMap_delete(C, C->bodies);
 
     G->items = pawP_allocate_defs(C, mr.bodies, mr.types);
 
@@ -1273,7 +1273,7 @@ static void setup_codegen(struct Generator *G)
     V->VisitBlock = code_block;
 }
 
-void pawP_codegen(struct Compiler *C)
+void pawP_generate_code(struct Compiler *C)
 {
     paw_Env *P = ENV(C);
 

@@ -47,7 +47,7 @@ static void print_body(struct Printer *P, struct MatchBody body)
     print_bindings(P, body.bindings);
 
     print_indentation(P);
-    PRINT_FORMAT(P, "Result(hid=%d),\n", body.result->hdr.hid);
+    PRINT_FORMAT(P, "Result(id=%d),\n", body.result->hdr.id);
 
     --P->indent;
     print_indentation(P);

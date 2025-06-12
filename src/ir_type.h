@@ -223,7 +223,8 @@ struct IrVariantDef {
     Str *name;
     struct IrFieldDefs *fields;
     DeclId did;
-    DeclId cons;
+    DeclId cons_did;
+    DeclId base_did;
     int discr;
 };
 
@@ -268,12 +269,13 @@ inline static struct IrFieldDef *pawIr_new_field_def(struct Compiler *C, DeclId 
     return def;
 }
 
-inline static struct IrVariantDef *pawIr_new_variant_def(struct Compiler *C, DeclId did, DeclId cons, int discr, Str *name, struct IrFieldDefs *fields)
+inline static struct IrVariantDef *pawIr_new_variant_def(struct Compiler *C, DeclId did, DeclId cons_did, DeclId base_did, int discr, Str *name, struct IrFieldDefs *fields)
 {
     struct IrVariantDef *def = P_ALLOC(C, NULL, 0, sizeof(*def));
     *def = (struct IrVariantDef){
         .did = did,
-        .cons = cons,
+        .cons_did = cons_did,
+        .base_did = base_did,
         .fields = fields,
         .discr = discr,
         .name = name,
@@ -311,11 +313,11 @@ inline static struct IrAdtDef *pawIr_new_adt_def(struct Compiler *C, DeclId did,
 
 #define IR_KINDOF(node) ((node)->hdr.kind)
 #define IR_CAST_TYPE(p) CAST(IrType *, p)
-#define IR_TYPE_DID(type) (IrIsAdt(type) ? IrGetAdt(type)->did : IrIsSignature(type) ? IrGetSignature(type)->did \
-                                                             : IrIsGeneric(type)     ? IrGetGeneric(type)->did   \
-                                                                                     : IrGetTraitObj(type)->did)
-#define IR_TYPE_SUBTYPES(type) (IrIsAdt(type) ? IrGetAdt(type)->types : IrIsSignature(type) ? IrGetSignature(type)->types \
-                                                                                            : IrGetTraitObj(type)->types)
+#define IR_TYPE_DID(type) (IrIsAdt(type) ? IrGetAdt(type)->did : \
+        IrIsSignature(type) ? IrGetSignature(type)->did : \
+        IrIsGeneric(type) ? IrGetGeneric(type)->did : IrGetTraitObj(type)->did)
+#define IR_TYPE_SUBTYPES(type) (IrIsAdt(type) ? IrGetAdt(type)->types : \
+        IrIsSignature(type) ? IrGetSignature(type)->types : IrGetTraitObj(type)->types)
 #define IR_IS_FUNC_TYPE(p) (IrIsFuncPtr(p) || IrIsSignature(p))
 #define IR_FPTR(p) CHECK_EXP(IR_IS_FUNC_TYPE(p), &(p)->FuncPtr_)
 
@@ -329,8 +331,8 @@ struct IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *
 
 DeclId pawIr_next_did(struct Compiler *C, int mod);
 
-IrType *pawIr_get_type(struct Compiler *C, HirId hid);
-void pawIr_set_type(struct Compiler *C, HirId hid, IrType *type);
+IrType *pawIr_get_type(struct Compiler *C, NodeId id);
+void pawIr_set_type(struct Compiler *C, NodeId id, IrType *type);
 struct IrVariantDef *pawIr_get_variant_def(struct Compiler *C, DeclId did);
 struct IrAdtDef *pawIr_get_adt_def(struct Compiler *C, DeclId did);
 struct IrFnDef *pawIr_get_fn_def(struct Compiler *C, DeclId did);

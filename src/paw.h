@@ -53,6 +53,7 @@ void paw_close(paw_Env *P);
 paw_Alloc paw_get_allocator(paw_Env *P);
 void paw_set_allocator(paw_Env *P, paw_Alloc alloc, void *ud);
 size_t paw_bytes_used(paw_Env const *P);
+void *paw_context(paw_Env const *P);
 
 #define PAW_OK 0U
 #define PAW_EMEMORY 1U
@@ -261,7 +262,7 @@ void paw_set_field(paw_Env *P, int index, int ifield);
 
 void *paw_new_foreign(paw_Env *P, size_t size, int nfields);
 void paw_new_native(paw_Env *P, paw_Function f, int nup);
-void paw_new_list(paw_Env *P, int length, paw_Type e);
+void paw_new_list(paw_Env *P, int length, int element_size);
 void paw_new_map(paw_Env *P, int length, int policy);
 
 // Assign a policy for the given type of map

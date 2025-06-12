@@ -8,7 +8,7 @@
 #include "unify.h"
 
 #define NEW_NODE(C, T) (T *)P_ALLOC(C, NULL, 0, sizeof(T))
-#define IR_ERROR(C_, Kind_, Modno_, ...) pawErr_##Kind_(C_, ModuleList_get((C_)->modules, Modno_)->name, __VA_ARGS__)
+#define IR_ERROR(C_, Kind_, Modno_, ...) pawErr_##Kind_(C_, ModuleNames_get((C_)->modnames, Modno_), __VA_ARGS__)
 
 DeclId pawIr_next_did(struct Compiler *C, int mod)
 {
@@ -23,16 +23,16 @@ IrType *pawIr_new_type(struct Compiler *C)
     return NEW_NODE(C, IrType);
 }
 
-IrType *pawIr_get_type(struct Compiler *C, HirId hid)
+IrType *pawIr_get_type(struct Compiler *C, NodeId id)
 {
-    IrType *const *ptype = HirTypeMap_get(C, C->hir_types, hid);
+    IrType *const *ptype = HirTypeMap_get(C, C->hir_types, id);
     return ptype != NULL ? *ptype : NULL;
 }
 
-void pawIr_set_type(struct Compiler *C, HirId hid, IrType *type)
+void pawIr_set_type(struct Compiler *C, NodeId id, IrType *type)
 {
     paw_assert(type != NULL);
-    HirTypeMap_insert(C, C->hir_types, hid, type);
+    HirTypeMap_insert(C, C->hir_types, id, type);
 }
 
 struct IrFnDef *pawIr_get_fn_def(struct Compiler *C, DeclId did)
@@ -58,14 +58,14 @@ struct IrType *pawIr_get_def_type(struct Compiler *C, DeclId did)
 struct IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *target, Str *name)
 {
     if (target->bounds == NULL) {
-        struct HirGenericDecl *d = HirGetGenericDecl(pawHir_get_decl(C, target->did));
+        struct HirGenericDecl *d = HirGetGenericDecl(pawHir_get_decl(C->hir, target->did));
         IR_ERROR(C, missing_trait_bounds, d->did.modno, d->span.start, d->ident.name->text);
     }
 
     struct IrType **pbound;
     K_LIST_FOREACH (target->bounds, pbound) {
         struct IrTraitObj *bound = IrGetTraitObj(*pbound);
-        struct HirDecl *trait_decl = pawHir_get_decl(C, bound->did);
+        struct HirDecl *trait_decl = pawHir_get_decl(C->hir, bound->did);
         struct HirTraitDecl *trait = HirGetTraitDecl(trait_decl);
 
         struct HirDecl **pmethod;
@@ -99,17 +99,17 @@ void pawIr_validate_type(struct Compiler *C, struct IrType *type)
         struct HirDeclList *generics;
         struct IrTypeList *types = NULL;
         if (IrIsTraitObj(type)) {
-            struct HirDecl *decl = pawHir_get_decl(C, IR_TYPE_DID(type));
+            struct HirDecl *decl = pawHir_get_decl(C->hir, IR_TYPE_DID(type));
             generics = HirGetTraitDecl(decl)->generics;
             types = IrGetTraitObj(type)->types;
             hdr = decl->hdr;
         } else if (IrIsSignature(type)) {
-            struct HirDecl *decl = pawHir_get_decl(C, IR_TYPE_DID(type));
+            struct HirDecl *decl = pawHir_get_decl(C->hir, IR_TYPE_DID(type));
             generics = HirGetFuncDecl(decl)->generics;
             types = IrGetSignature(type)->types;
             hdr = decl->hdr;
         } else if (IrIsAdt(type)) {
-            struct HirDecl *decl = pawHir_get_decl(C, IR_TYPE_DID(type));
+            struct HirDecl *decl = pawHir_get_decl(C->hir, IR_TYPE_DID(type));
             generics = HirGetAdtDecl(decl)->generics;
             types = IrGetAdt(type)->types;
             hdr = decl->hdr;
@@ -118,18 +118,6 @@ void pawIr_validate_type(struct Compiler *C, struct IrType *type)
             IR_ERROR(C, incorrect_type_arity, hdr.did.modno, hdr.span.start,
                     generics->count, types->count);
     }
-}
-
-// From https://stackoverflow.com/questions/8513911
-static paw_Uint hash_combine(paw_Uint seed, paw_Uint v)
-{
-    // TODO: versions for other sizes of paw_Uint
-    paw_Uint const mul = 0x9DDFEA08EB382D69ULL;
-    paw_Uint a = (v ^ seed) * mul;
-    a ^= (a >> 47);
-    paw_Uint b = (seed ^ a) * mul;
-    b ^= (b >> 47);
-    return b * mul;
 }
 
 static paw_Uint hash_type(struct IrType *type);
@@ -313,7 +301,7 @@ static void print_type(struct Printer *P, IrType *type)
         case kIrGeneric: {
             // TODO: get IR generic def, not HIR decl, which may not exist anymore
             struct IrGeneric *gen = IrGetGeneric(type);
-            struct HirDecl *decl = pawHir_get_decl(P->C, gen->did);
+            struct HirDecl *decl = pawHir_get_decl(P->C->hir, gen->did);
             PRINT_STRING(P, hir_decl_ident(decl).name);
             break;
         }
@@ -326,7 +314,7 @@ static void print_type(struct Printer *P, IrType *type)
         case kIrTraitObj: {
             // TODO: create an IR trait object and use that
             struct IrTraitObj *t = IrGetTraitObj(type);
-            struct HirDecl *decl = pawHir_get_decl(P->C, t->did);
+            struct HirDecl *decl = pawHir_get_decl(P->C->hir, t->did);
             PRINT_STRING(P, hir_decl_ident(decl).name);
             if (t->types != NULL) {
                 PRINT_CHAR(P, '<');

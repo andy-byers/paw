@@ -13,8 +13,9 @@
 #include "layout.h"
 #include "lex.h"
 #include "map.h"
-#include "type_folder.h"
+#include "resolve.h"
 #include "rtti.h"
+#include "type_folder.h"
 #include "unify.h"
 
 #define COMPILER_ERROR(C_, Kind_, Modname_, ...) pawErr_##Kind_(C_, Modname_, __VA_ARGS__)
@@ -49,10 +50,10 @@ static char const *kKeywords[] = {
     "_",
 };
 
-static Str *basic_type_name(paw_Env *P, char const *name, paw_Type code)
+static Str *basic_type_name(paw_Env *P, char const *name, enum BuiltinKind kind)
 {
     Str *s = pawS_new_fixed(P, name);
-    s->flag = FLAG2CODE(code); // works either direction
+    s->flag = FLAG2CODE(kind); // works either direction
     return s;
 }
 
@@ -146,10 +147,15 @@ enum BuiltinKind pawP_type2code(struct Compiler *C, struct IrType *type)
     return NBUILTINS;
 }
 
+struct Builtin *pawP_builtin_info(struct Compiler *C, enum BuiltinKind code)
+{
+    return &C->builtins[code];
+}
+
 struct IrType *pawP_builtin_type(struct Compiler *C, enum BuiltinKind code)
 {
-    DeclId const did = C->builtins[code].did;
-    return GET_NODE_TYPE(C, pawHir_get_decl(C, did));
+    DeclId const did = pawP_builtin_info(C, code)->did;
+    return pawIr_get_def_type(C, did);
 }
 
 Str *pawP_scan_nstr(struct Compiler *C, Tuple *map, char const *s, size_t n)
@@ -279,6 +285,7 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, char co
     paw_pop(P, 2);
 
     C->globals = GlobalList_new(C);
+    C->modnames = ModuleNames_new(C);
     C->builtin_lookup = BuiltinMap_new(C);
     C->hir_types = HirTypeMap_new(C);
     C->def_types = DefTypeMap_new(C);
@@ -287,16 +294,14 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, char co
     C->fn_defs = FnDefMap_new(C);
 
     C->layouts = IrLayoutMap_new(C);
+    C->segtab = SegmentTable_new(C);
 
     C->rtti = RttiMap_new(C);
-    C->imports = ImportMap_new(C);
     C->traits = TraitMap_new(C);
     C->trait_owners = TraitOwners_new(C);
 
     C->modname = P->modname = SCAN_STR(C, modname);
-    C->ast_prelude = pawAst_new(C, SCAN_STR(C, "prelude"), 0);
-
-    C->modules = ModuleList_new(C);
+    C->ast = pawAst_new(C);
 
     C->U = P_ALLOC(C, NULL, 0, sizeof(struct Unifier));
     C->U->C = C;
@@ -342,25 +347,6 @@ void pawP_teardown(paw_Env *P, struct DynamicMem *dm)
     pawK_pool_uninit(P, &dm->pool);
     pawM_free_vec(P, dm->source.data, dm->source.size);
     pawM_free_vec(P, dm->scratch.data, dm->scratch.alloc);
-}
-
-struct ModuleInfo *pawP_mi_new(struct Compiler *C, struct Hir *hir)
-{
-    struct ModuleInfo *m = P_ALLOC(C, NULL, 0, sizeof(*m));
-    *m = (struct ModuleInfo){
-        .globals = HirScope_new_from(hir, C->pool),
-        .modno = hir->modno,
-        .name = hir->name,
-        .hir = hir,
-    };
-    return m;
-}
-
-void pawP_mi_delete(struct Compiler *C, struct ModuleInfo *m)
-{
-    HirScope_delete(C->hir_prelude, m->globals);
-    pawHir_free(m->hir);
-    P_ALLOC(C, m, 0, sizeof(*m));
 }
 
 #define LOG(dg, ...) PAWD_LOG(ENV((dg)->C), __VA_ARGS__)
@@ -471,8 +457,7 @@ static RttiType *new_type(struct DefGenerator *dg, struct IrType *src, ItemId ii
 
 static Str *get_modname(struct DefGenerator *dg, DeclId did)
 {
-    struct ModuleList *modules = dg->C->modules;
-    return ModuleList_get(modules, did.modno)->name;
+    return HirModuleList_get(dg->C->hir->modules, did.modno).name;
 }
 
 static struct Def *new_adt_def(struct DefGenerator *dg, struct IrAdtDef *d, struct IrType *type)
@@ -793,3 +778,4 @@ paw_Bool pawP_push_callback(struct Compiler *C, char const *name)
     paw_push_str(P, name);
     return paw_map_get(P, PAW_REGISTRY_INDEX) >= 0;
 }
+

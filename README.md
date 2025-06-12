@@ -214,25 +214,24 @@ A panic can also be caused by calling the `panic` builtin function.
 
 ## Operators
 
-|Precedence|Operator                           |Description                                  |Associativity|
-|:---------|:----------------------------------|:--------------------------------------------|:------------|
-|14        |`() [] . ?`                        |Call, Subscript, Member access, Question mark|Left         |
-|13        |`! - ~ #`                          |Not, Negate, Bitwise not, length             |Right        |
-|12        |`as`                               |Cast                                         |Left         |
-|11        |`* / %`                            |Multiply, Divide, Modulus                    |Left         |
-|10        |`+ -`                              |Add, Subtract                                |Left         |
-|9         |`<< >>`                            |Shift left, Shift right                      |Left         |
-|8         |`&`                                |Bitwise and                                  |Left         |
-|7         |`^`                                |Bitwise xor                                  |Left         |
-|6         |<code>&#124;</code>                |Bitwise or                                   |Left         |
-|5         |`< <= > >=`                        |Relational comparisons                       |Left         |
-|4         |`== !=`                            |Equality comparisons                         |Left         |
-|3         |`&&`                               |And                                          |Left         |
-|2         |<code>&#124;&#124;</code>          |Or                                           |Left         |
-|1         |`= += -= *= /= %= &= |= ^= <<= >>=`|Assignment, operator assignment              |Right        |
+|Precedence|Operator                 |Description                                  |Associativity|
+|:---------|:------------------------|:--------------------------------------------|:------------|
+|14        |`() [] . ?`              |Call, Subscript, Member access, Question mark|Left         |
+|13        |`! - ~ #`                |Not, Negate, Bitwise not, length             |Right        |
+|12        |`as`                     |Cast                                         |Left         |
+|11        |`* / %`                  |Multiply, Divide, Modulus                    |Left         |
+|10        |`+ -`                    |Add, Subtract                                |Left         |
+|9         |`<< >>`                  |Shift left, Shift right                      |Left         |
+|8         |`&`                      |Bitwise and                                  |Left         |
+|7         |`^`                      |Bitwise xor                                  |Left         |
+|6         |<code>&#124;</code>      |Bitwise or                                   |Left         |
+|5         |`< <= > >=`              |Relational comparisons                       |Left         |
+|4         |`== !=`                  |Equality comparisons                         |Left         |
+|3         |`&&`                     |And                                          |Left         |
+|2         |<code>&#124;&#124;</code>|Or                                           |Left         |
+|1         |`= op=`                  |Assignment, operator assignment              |Right        |
 
 ## Roadmap
-+ [ ] allow "inline" receiver to be modified in method call (copy receiver back after return)
 + [x] fix list/str slice operation (should use `Range`, `RangeTo`, etc.)
 + [ ] use `mut` to indicate mutability and make immutable the default for local variables
 + [ ] decide on and implement either RAII or "defer" for cleaning up resources
@@ -254,12 +253,6 @@ A panic can also be caused by calling the `panic` builtin function.
 + Pointer tracking (test only) feature is broken on MSVC
     + Might indicate a problem somewhere in the library
     + Need a machine that can run Windows for debugging
-+ Methods on primitives are unable to modify "self"
-    + Results in "int::incremented(self) -> int" hack in prelude (would be nicer as "int::increment(self)")
-    + Need to use a pointer to "self" in this case, but paw has no concept of pointers right now
-+ Unable to handle literal `PAW_INT_MIN`
-    + Looks like `-(PAW_INT_MAX + 1)` which overflows before `-` can be applied
-    + Need to parse as `paw_Uint` and then check for overflow later
 + Instructions to satisfy some of the runtime constraints are injected during code generation
     + This makes them invisible to the constant propagation pass, leading to less efficient byte code
     + For example, function calls require the callable followed by the arguments on top of the stack

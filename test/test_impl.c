@@ -587,7 +587,10 @@ static int on_build_hir(paw_Env *P)
 
     struct HirVisitor V;
     pawHir_visitor_init(&V, hir, NULL);
-    pawHir_visit_decl_list(&V, hir->items);
+
+    struct HirModule *pm;
+    K_LIST_FOREACH (hir->modules, pm)
+        pawHir_visit_decl_list(&V, pm->items);
     return 0;
 }
 
@@ -607,7 +610,7 @@ void test_visitors(paw_Env *P)
 void test_hook(paw_Env *P)
 {
     paw_set_hook(P, test_dump_source, PAW_HOOKCALL, 10);
-    int status = test_open_string(P, "pub fn main() {print(\"Hello, world!\\n\");}");
+    int status = test_open_string(P, "<chunk>", "pub fn main() {print(\"Hello, world!\\n\");}");
     check(status == PAW_OK);
 
     struct paw_Item item;

@@ -66,6 +66,7 @@ enum ErrorKind {
     E_DUPLICATE_ANNOTATION,
     E_NONLITERAL_ANNOTATION_VALUE,
     E_NONPRIMITIVE_ANNOTATION_VALUE,
+    E_INVALID_GLOB,
 
     // AST lowering errors
     E_INVALID_ASSIGNMENT_TARGET,
@@ -74,6 +75,7 @@ enum ErrorKind {
     E_MODULE_NOT_FOUND,
 
     // collection errors
+    E_AMBIGUOUS_PATH,
     E_DUPLICATE_ITEM,
     E_UNKNOWN_TYPE,
     E_UNKNOWN_TRAIT,
@@ -97,6 +99,7 @@ enum ErrorKind {
     E_UNEXPECTED_MODULE_NAME,
     E_TRANSITIVE_IMPORT,
     E_INCORRECT_TYPE_ARITY,
+    E_EXPECTED_TYPE_ARGUMENTS,
     E_UNEXPECTED_TYPE_ARGUMENTS,
     E_EXPECTED_TRAIT,
     E_UNEXPECTED_TRAIT,
@@ -106,6 +109,9 @@ enum ErrorKind {
     // trait errors
     E_MISSING_TRAIT_METHOD,
     E_TRAIT_METHOD_VISIBILITY_MISMATCH,
+
+    // TODO: new resolver errors
+    E_MULTIPLE_APPLICABLE_ITEMS,
 
     // resolver errors
     E_MISSING_VARIANT_ARGS,
@@ -225,6 +231,7 @@ _Noreturn void pawErr_expected_comma_separator(struct Compiler *C, Str const *mo
 _Noreturn void pawErr_duplicate_annotation(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *name);
 _Noreturn void pawErr_nonliteral_annotation_value(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *name);
 _Noreturn void pawErr_nonprimitive_annotation_value(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *name);
+_Noreturn void pawErr_invalid_glob(struct Compiler *C, Str const *modname, struct SourceLoc loc);
 _Noreturn void pawErr_return_outside_function(struct Compiler *C, Str const *modname, struct SourceLoc loc);
 _Noreturn void pawErr_chain_outside_function(struct Compiler *C, Str const *modname, struct SourceLoc loc);
 _Noreturn void pawErr_jump_outside_loop(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *what);
@@ -236,6 +243,7 @@ _Noreturn void pawErr_module_not_found(struct Compiler *C, Str const *modname, s
 _Noreturn void pawErr_invalid_assignment_target(struct Compiler *C, Str const *modname, struct SourceLoc loc);
 
 // collection errors
+_Noreturn void pawErr_ambiguous_path(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *path);
 _Noreturn void pawErr_duplicate_item(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *what, char const *name);
 _Noreturn void pawErr_unknown_type(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *type);
 _Noreturn void pawErr_unknown_trait(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *name);
@@ -259,8 +267,9 @@ _Noreturn void pawErr_missing_extern_value(struct Compiler *C, Str const *modnam
 _Noreturn void pawErr_unexpected_module_name(struct Compiler *C, Str const *modname, struct SourceLoc loc);
 _Noreturn void pawErr_transitive_import(struct Compiler *C, Str const *modname, struct SourceLoc loc);
 _Noreturn void pawErr_incorrect_type_arity(struct Compiler *C, Str const *modname, struct SourceLoc loc, int want, int have);
+_Noreturn void pawErr_expected_type_arguments(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *what, char const *name);
 _Noreturn void pawErr_unexpected_type_arguments(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *what, char const *name);
-_Noreturn void pawErr_expected_trait(struct Compiler *C, Str const *modname, struct SourceLoc loc);
+_Noreturn void pawErr_expected_trait(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *path);
 _Noreturn void pawErr_unexpected_trait(struct Compiler *C, Str const *modname, struct SourceLoc loc);
 _Noreturn void pawErr_incorrect_item_class(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *want, char const *have);
 _Noreturn void pawErr_extra_segment(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *name);
@@ -268,6 +277,9 @@ _Noreturn void pawErr_extra_segment(struct Compiler *C, Str const *modname, stru
 // trait errors
 _Noreturn void pawErr_missing_trait_method(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *name);
 _Noreturn void pawErr_trait_method_visibility_mismatch(struct Compiler *C, Str const *modname, struct SourceLoc loc, paw_Bool expected_pub, char const *name);
+
+// TODO: new resolver errors
+_Noreturn void pawErr_multiple_applicable_items(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *path);
 
 // resolver errors
 _Noreturn void pawErr_missing_variant_args(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *cons);

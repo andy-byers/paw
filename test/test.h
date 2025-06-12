@@ -77,10 +77,12 @@
 
 #endif // ENABLE_PTR_TRACKER
 
+// TODO: rename to TestEnv
 struct TestAlloc {
     size_t count;
     size_t *sizes;
     void **ptrs;
+    void *ud;
 };
 
 #define READ_MAX 16
@@ -101,7 +103,7 @@ char const *test_pathname(char const *name);
 paw_Env *test_open(paw_MemHook mem_hook, struct TestAlloc *state, size_t heap_size);
 void test_close(paw_Env *P, struct TestAlloc *a);
 int test_open_file(paw_Env *P, char const *pathname);
-int test_open_string(paw_Env *P, char const *source);
+int test_open_string(paw_Env *P, char const *modname, char const *source);
 void test_script(char const *name, struct TestAlloc *a);
 void test_recover(paw_Env *X, paw_Bool fatal);
 

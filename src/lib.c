@@ -194,8 +194,7 @@ static int searcher_cwd(paw_Env *P)
 
         size_t modlen;
         char const *sep = find_last_sep(pathname, pathlen, &modlen);
-        if (sep == NULL)
-            goto use_current_dir;
+        if (sep == NULL) goto use_current_dir;
         paw_push_nstr(P, pathname, sep - pathname + 1);
     } else {
     use_current_dir:;
@@ -207,8 +206,7 @@ static int searcher_cwd(paw_Env *P)
     paw_str_concat(P, 3);
 
     struct FileReader *fr = new_file_reader(P, paw_str(P, -1));
-    if (fr == NULL)
-        paw_push_zero(P, 1); // indicate failure
+    if (fr == NULL) paw_push_zero(P, 1); // indicate failure
 
     return 1;
 }
@@ -247,8 +245,7 @@ static int searcher_env(paw_Env *P)
             paw_str_concat(P, 4);
 
             struct FileReader *fr = new_file_reader(P, paw_str(P, -1));
-            if (fr != NULL)
-                return 1;
+            if (fr != NULL) return 1;
 
             paw_pop(P, 1);
         }

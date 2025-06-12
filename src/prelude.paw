@@ -80,13 +80,13 @@ pub struct str: Hash + Equals + Compare {
     pub fn le(self, rhs: Self) -> bool { self <= rhs }
 }
 
-pub struct ListIterator<T>: Advance<T> {
-    list: [T],
+pub struct ListIterator<Ty>: Advance<Ty> {
+    list: [Ty],
     index: int,
-    pub fn new(list: [T]) -> Self {
+    pub fn new(list: [Ty]) -> Self {
         Self{list, index: 0}
     }
-    pub fn next(self) -> Option<T> {
+    pub fn next(self) -> Option<Ty> {
         if self.index < #self.list {
             let i = self.index;
             self.index = i + 1;

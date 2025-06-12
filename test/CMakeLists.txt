@@ -27,6 +27,7 @@ build_test(test_rt)
 build_test(test_oom)
 build_test(test_so)
 build_test(test_error)
+build_test(test_import)
 #build_test(test_api)
 
 test_script(fib "15")
@@ -36,7 +37,8 @@ test_script(nqueen "8")
 test_script(mandelbrot "-2.1,0.9,80,-1.3,1.3,24")
 test_script(binary_trees "5")
 test_script(elementary_cellular_automata "110")
-#TODO test_script(ebnf "${PROJECT_SOURCE_DIR}/GRAMMER.ebnf")
+test_script(ebnf "${PROJECT_SOURCE_DIR}/GRAMMER.ebnf")
 test_script(dump "")
+
 # TODO: write this test: compile and run README.md examples
 # test_script(readme "${PROJECT_SOURCE_DIR}/README.md")

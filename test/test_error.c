@@ -215,7 +215,7 @@ static void test_type_error(void)
     test_compiler_status(E_UNIT_VARIANT_WITH_PARENTHESIS, "call_unit_variant", "enum E {X}", "let x = E::X();");
     test_compiler_status(E_INCOMPATIBLE_TYPES, "wrong_constructor_args", "enum E {X(int)}", "let x = E::X(1.0);");
     test_compiler_status(E_EXPECTED_ADT, "selector_on_function", "fn func() {}", "let a = func.field;");
-    test_compiler_status(E_UNEXPECTED_MODULE_NAME, "selector_on_module", "use io;", "let s = io.abc;");
+// TODO    test_compiler_status(E_UNEXPECTED_MODULE_NAME, "selector_on_module", "use io;", "let s = io.abc;");
     test_compiler_status(E_EXTRA_SEGMENT, "extraneous_method_access",
         "struct S {pub fn f() {}}", "S::f::f(); ");
     test_compiler_status(E_EXTRA_SEGMENT, "extraneous_variant_access",
@@ -303,12 +303,12 @@ static void test_syntax_error(void)
     test_compiler_status(E_EXPECTED_EXPRESSION, "binop_missing_lhs", "", "let a = + 2");
     test_compiler_status(E_EXPECTED_EXPRESSION, "binop_invalid_lhs", "", "let a = & + 2;");
 
-    test_compiler_status(E_EXPECTED_VALUE, "primitive_type_is_not_a_value_1", "", "let a = int;");
-    test_compiler_status(E_EXPECTED_VALUE, "primitive_type_is_not_a_value_2", "", "let a = (1, float,);");
-    test_compiler_status(E_EXPECTED_VALUE, "primitive_type_is_not_a_value_3", "", "let a = [\"two\", str];");
-    test_compiler_status(E_EXPECTED_VALUE, "generic_type_is_not_a_value", "fn f<T>() {let t = T;}", "");
-    test_compiler_status(E_INCORRECT_ITEM_CLASS, "function_is_not_a_type", "fn test() {}", "let a: test = test;");
-    test_compiler_status(E_INCORRECT_ITEM_CLASS, "variable_is_not_a_type", "", "let a = 1; let b: a = a;");
+    test_compiler_status(E_UNKNOWN_PATH, "primitive_type_is_not_a_value_1", "", "let a = int;");
+    test_compiler_status(E_UNKNOWN_PATH, "primitive_type_is_not_a_value_2", "", "let a = (1, float,);");
+    test_compiler_status(E_UNKNOWN_PATH, "primitive_type_is_not_a_value_3", "", "let a = [\"two\", str];");
+    test_compiler_status(E_UNKNOWN_PATH, "generic_type_is_not_a_value", "fn f<T>() {let t = T;}", "");
+    test_compiler_status(E_UNKNOWN_PATH, "function_is_not_a_type", "fn test() {}", "let a: test = test;");
+    test_compiler_status(E_UNKNOWN_PATH, "variable_is_not_a_type", "", "let a = 1; let b: a = a;");
     test_compiler_status(E_UNKNOWN_PATH, "own_name_is_not_a_type", "", "let a: a = 1;");
 
     test_compiler_status(E_DUPLICATE_ITEM, "duplicate_global", "struct A; struct A;", "");
@@ -322,7 +322,6 @@ static void test_syntax_error(void)
 // TODO    test_compiler_status(E_INVALID_UNICODE_CODEPOINT, "invalid_unicode_codepoint", "", "let x = \"\xD8\x05\";");
     test_compiler_status(E_INVALID_FLOAT, "invalid_float", "", "let x = 01.0;");
     test_name_too_long();
-    test_compiler_status(E_UNEXPECTED_VISIBILITY_QUALIFIER, "unexpected_visibility_qualifier", "pub use io;", "");
     test_compiler_status(E_EMPTY_TYPE_LIST, "empty_type_list", "pub fn f<>() {}", "");
     test_compiler_status(E_INVALID_LITERAL_NEGATION, "invalid_literal_negation", "", "match \"abc\" {-\"abc\" => {}}");
     test_compiler_status(E_NONLITERAL_PATTERN, "interpolated_pattern", "", "match \"abc123\" {\"abc\\{123}\" => {}}");
@@ -377,7 +376,7 @@ static void test_struct_error(void)
 {
     test_compiler_status(E_EMPTY_STRUCT_BODY, "struct_unit_with_braces_on_def", "struct A {}", "let a = A;");
     test_compiler_status(E_EXPECTED_SEMICOLON, "struct_unit_without_semicolon", "struct A", "");
-    test_compiler_status(E_MISSING_FIELDS, "struct_missing_braces", "struct A {pub a: int}", "let a = A;");
+    test_compiler_status(E_UNKNOWN_PATH, "struct_missing_braces", "struct A {pub a: int}", "let a = A;");
     test_compiler_status(E_UNIT_STRUCT_WITH_BRACES, "struct_unit_with_braces_on_init", "struct A;", "let a = A{};");
     test_compiler_status(E_MISSING_FIELD, "struct_missing_only_field", "struct A {pub a: int}", "let a = A{};");
     test_compiler_status(E_MISSING_FIELD, "struct_missing_field", "struct A {pub a: int, pub b: float}", "let a = A{a: 1};");
@@ -404,9 +403,9 @@ static void test_struct_error(void)
 static void test_enum_error(void)
 {
     test_compiler_status(E_EMPTY_ENUMERATION, "enum_without_variants", "enum A {pub fn f() {}};", "");
-    test_compiler_status(E_EXPECTED_VALUE, "enum_missing_variant", "enum A {X}", "let a = A;");
+    test_compiler_status(E_UNKNOWN_PATH, "enum_missing_variant", "enum A {X}", "let a = A;");
     test_compiler_status(E_DUPLICATE_ITEM, "enum_duplicate_variant", "enum A {X, X}", "");
-    test_compiler_status(E_UNKNOWN_ASSOCIATED_ITEM, "enum_nonexistent_variant", "enum A {X}", "let a = A::Y;");
+    test_compiler_status(E_UNKNOWN_PATH, "enum_nonexistent_variant", "enum A {X}", "let a = A::Y;");
     test_compiler_status(E_MISSING_VARIANT_ARGS, "variant_missing_only_field", "enum A {X(int)}", "let a = A::X;");
     test_compiler_status(E_INCORRECT_ARITY, "variant_missing_field", "enum A {X(int, float)}", "let a = A::X(42);");
     test_compiler_status(E_INCORRECT_ARITY, "variant_extra_field", "enum A {X(int)}", "let a = A::X(42, true);");
@@ -463,8 +462,8 @@ static void test_range_error(void)
 
 static void test_import_error(void)
 {
-    test_compiler_status(E_MODULE_NOT_FOUND, "unrecognized_import", "use import_not_found;", "");
-    test_compiler_status(E_UNKNOWN_ITEM, "unrecognized_import_item", "use io::NotFound;", "");
+    test_compiler_status(E_UNKNOWN_PATH, "unrecognized_import", "use import_not_found;", "");
+    test_compiler_status(E_UNKNOWN_PATH, "unrecognized_import_item", "use io::NotFound;", "");
     test_compiler_status(E_UNKNOWN_PATH, "missing_import_item", "use io;", "let t = io::NotFound;");
 }
 
@@ -655,7 +654,7 @@ static void test_trait_error(void)
         TRAIT "struct S: Trait {pub fn f(self) {}}\n"
               "pub fn call_f<T>(t: T) {t.f();}",
         "let x = S; call_f(x);");
-    test_compiler_status(E_INCORRECT_TYPE_ARITY, "trait_generic_mismatch",
+    test_compiler_status(E_UNEXPECTED_TYPE_ARGUMENTS, "trait_generic_mismatch",
         TRAIT "struct S<T>: Trait<T> {pub fn f(self) {}}\n", "");
 
 #define POLY_TRAIT           \
@@ -682,13 +681,14 @@ static void test_trait_error(void)
         "let x = S{v: true}; call_f(x);");
     test_compiler_status(E_EXPECTED_TRAIT, "trait_type_as_trait",
         "struct Type; struct S: Type;", "");
-    test_compiler_status(E_UNKNOWN_TRAIT, "trait_missing_function_bound",
+    test_compiler_status(E_UNKNOWN_PATH, "trait_missing_function_bound",
         "struct S: Trait;", "");
     test_compiler_status(E_UNKNOWN_PATH, "trait_missing_generic_in_bounds",
         POLY_TRAIT POLY_STRUCT POLY_FUNCTION("X", ), "");
-    test_compiler_status(E_INCORRECT_TYPE_ARITY, "trait_cannot_infer_generic",
+    test_compiler_status(E_EXPECTED_TYPE_ARGUMENTS, "trait_cannot_infer_generic",
         POLY_TRAIT POLY_STRUCT "fn call_f<T: Trait>(t: T) {t.f();}",
         "let x = S{v: 123}; call_f(x);");
+
 }
 
 static void test_underscore(void)

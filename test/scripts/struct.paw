@@ -59,7 +59,8 @@ struct NoComma {
 struct TestSelf {
     pub fn not_method(s: TestSelf) {}
     pub fn not_method2(s: Self) {}
-    pub fn method(self: TestSelf) {}
+    pub fn method(self) {}
+    pub fn method2(self: Self) {}
 }
 
 pub fn test_self() {

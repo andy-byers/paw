@@ -9,6 +9,7 @@
 
 #define HIR_DECL_LIST(X) \
     X(FieldDecl)         \
+    X(ParamDecl)         \
     X(FuncDecl)          \
     X(GenericDecl)       \
     X(AdtDecl)           \
@@ -31,6 +32,7 @@
     X(Selector)          \
     X(FieldExpr)         \
     X(AssignExpr)        \
+    X(OpAssignExpr)      \
     X(Block)             \
     X(LoopExpr)          \
     X(JumpExpr)          \
@@ -56,7 +58,6 @@
     X(StructPat)        \
     X(VariantPat)       \
     X(TuplePat)         \
-    X(PathPat)          \
     X(BindingPat)       \
     X(WildcardPat)      \
     X(LiteralPat)
@@ -67,16 +68,30 @@
 #define HIR_CAST_TYPE(x) CAST(struct HirType *, x)
 #define HIR_CAST_PAT(x) CAST(struct HirPat *, x)
 
-struct Hir;
-
-struct HirPath {
-    struct HirSegments *segments;
-    struct SourceSpan span;
-};
+void pawHir_register_node(struct Hir *hir, NodeId id, void *node);
+void pawHir_register_decl(struct Hir *hir, DeclId did, struct HirDecl *decl);
 
 struct HirIdent {
     Str *name;
     struct SourceSpan span;
+};
+
+struct HirSegment {
+    struct HirIdent ident;
+    struct HirTypeList *types;
+    NodeId id, target;
+};
+
+enum HirPathKind {
+    HIR_PATH_ITEM,
+    HIR_PATH_ASSOC,
+    HIR_PATH_LOCAL,
+};
+
+struct HirPath {
+    struct SourceSpan span;
+    struct HirSegments *segments;
+    enum HirPathKind kind;
 };
 
 struct HirImport {
@@ -86,47 +101,7 @@ struct HirImport {
     int modno;
 };
 
-inline static HirId pawHir_next_id(struct Hir *hir);
-
-enum HirResultKind {
-    HIR_RESULT_LOCAL,
-    HIR_RESULT_DECL,
-};
-
-struct HirResult {
-    enum HirResultKind kind;
-    union {
-        DeclId did;
-        HirId hid;
-    };
-};
-
-// Represents an entry in the symbol table
-//
-// During the type checking pass, a struct HirSymbol is created for each declaration that
-// is encountered. When an identifier is referenced, it is looked up in the list
-// of symbol tables representing the enclosing scopes (as well as the global
-// symbol table).
-//
-// The symbol table is used for all symbols, but not every symbol will end up in a register.
-// In particular, symbols with 'is_type' equal to 1 only exist in the compiler.
-struct HirSymbol {
-    paw_Bool is_pub : 1;
-    struct HirResult res;
-    struct HirIdent ident;
-};
-
-int pawHir_find_symbol(struct HirScope *scope, struct  HirIdent ident);
-int pawHir_declare_symbol(struct Hir *hir, struct HirScope *scope, struct HirIdent ident, struct HirResult res);
-
-struct HirSegment {
-    struct HirIdent ident;
-    struct HirTypeList *types;
-    struct HirResult res;
-    HirId hid;
-};
-
-void pawHir_init_segment(struct Hir *hir, struct HirSegment *r, struct HirIdent ident, struct HirTypeList *types);
+void pawHir_init_segment(struct Hir *hir, struct HirSegment *r, NodeId id, struct HirIdent ident, struct HirTypeList *types, NodeId target);
 
 struct HirVariant {
     int discr;
@@ -161,7 +136,7 @@ enum HirTypeKind {
 
 #define HIR_TYPE_HEADER     \
     struct SourceSpan span; \
-    HirId hid;              \
+    NodeId id;              \
     enum HirTypeKind kind : 8
 struct HirTypeHeader {
     HIR_TYPE_HEADER;
@@ -222,62 +197,67 @@ HIR_TYPE_LIST(DEFINE_ACCESS)
 
 struct HirType *pawHir_new_type(struct Hir *hir);
 
-static struct HirType *pawHir_new_never_type(struct Hir *hir, struct SourceSpan span)
+static struct HirType *pawHir_new_never_type(struct Hir *hir, struct SourceSpan span, NodeId id)
 {
     struct HirType *t = pawHir_new_type(hir);
     t->NeverType_ = (struct HirNeverType){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirNeverType,
     };
+    pawHir_register_node(hir, id, t);
     return t;
 }
 
-static struct HirType *pawHir_new_infer_type(struct Hir *hir, struct SourceSpan span)
+static struct HirType *pawHir_new_infer_type(struct Hir *hir, struct SourceSpan span, NodeId id)
 {
     struct HirType *t = pawHir_new_type(hir);
     t->InferType_ = (struct HirInferType){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirInferType,
     };
+    pawHir_register_node(hir, id, t);
     return t;
 }
 
-static struct HirType *pawHir_new_path_type(struct Hir *hir, struct SourceSpan span, struct HirPath path)
+static struct HirType *pawHir_new_path_type(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirPath path)
 {
     struct HirType *t = pawHir_new_type(hir);
     t->PathType_ = (struct HirPathType){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirPathType,
         .path = path,
     };
+    pawHir_register_node(hir, id, t);
     return t;
 }
 
-static struct HirType *pawHir_new_func_ptr(struct Hir *hir, struct SourceSpan span, struct HirTypeList *params, struct HirType *result)
+static struct HirType *pawHir_new_func_ptr(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirTypeList *params, struct HirType *result)
 {
     struct HirType *t = pawHir_new_type(hir);
     t->FuncPtr_ = (struct HirFuncPtr){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirFuncPtr,
         .params = params,
         .result = result,
     };
+    pawHir_register_node(hir, id, t);
     return t;
 }
 
-static struct HirType *pawHir_new_tuple_type(struct Hir *hir, struct SourceSpan span, struct HirTypeList *elems)
+static struct HirType *pawHir_new_tuple_type(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirTypeList *elems)
 {
     struct HirType *t = pawHir_new_type(hir);
     t->TupleType_ = (struct HirTupleType){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirTupleType,
         .elems = elems,
     };
+    pawHir_register_node(hir, id, t);
     return t;
 }
 
@@ -289,7 +269,7 @@ enum HirDeclKind {
 
 #define HIR_DECL_HEADER     \
     struct SourceSpan span; \
-    HirId hid;              \
+    NodeId id;              \
     DeclId did;             \
     enum HirDeclKind kind : 8
 struct HirDeclHeader {
@@ -334,15 +314,15 @@ struct HirAdtDecl {
     paw_Bool is_struct : 1;
     paw_Bool is_inline : 1;
     struct HirIdent ident;
-    struct HirDecl *self;
     struct HirTypeList *traits;
     struct HirDeclList *generics;
-    struct HirDeclList *fields;
+    struct HirDeclList *variants;
     struct HirDeclList *methods;
 };
 
 struct HirVariantDecl {
     HIR_DECL_HEADER;
+    DeclId base_did;
     int index;
     struct HirIdent ident;
     struct HirDeclList *fields;
@@ -363,11 +343,16 @@ struct HirFieldDecl {
     struct HirType *tag;
 };
 
+struct HirParamDecl {
+    HIR_DECL_HEADER;
+    struct HirIdent ident;
+    struct HirType *tag;
+};
+
 struct HirTraitDecl {
     HIR_DECL_HEADER;
     paw_Bool is_pub : 1;
     struct HirIdent ident;
-    struct HirDecl *self;
     struct HirDeclList *generics;
     struct HirDeclList *methods;
 };
@@ -401,13 +386,13 @@ HIR_DECL_LIST(DEFINE_ACCESS)
 #undef DEFINE_ACCESS
 
 struct HirDecl *pawHir_new_decl(struct Hir *hir);
-DeclId pawHir_register_decl(struct Hir *hir, struct HirDecl *decl);
 
-static struct HirDecl *pawHir_new_const_decl(struct Hir *hir, struct SourceSpan span, struct HirIdent ident, struct Annotations *annos, struct HirType *tag, struct HirExpr *init, paw_Bool is_pub)
+static struct HirDecl *pawHir_new_const_decl(struct Hir *hir, struct SourceSpan span, NodeId id, DeclId did, struct HirIdent ident, struct Annotations *annos, struct HirType *tag, struct HirExpr *init, paw_Bool is_pub)
 {
     struct HirDecl *d = pawHir_new_decl(hir);
     d->ConstDecl_ = (struct HirConstDecl){
-        .hid = pawHir_next_id(hir),
+        .id = id,
+        .did = did,
         .span = span,
         .kind = kHirConstDecl,
         .ident = ident,
@@ -416,15 +401,17 @@ static struct HirDecl *pawHir_new_const_decl(struct Hir *hir, struct SourceSpan 
         .init = init,
         .is_pub = is_pub,
     };
-    pawHir_register_decl(hir, d);
+    pawHir_register_node(hir, id, d);
+    pawHir_register_decl(hir, did, d);
     return d;
 }
 
-static struct HirDecl *pawHir_new_type_decl(struct Hir *hir, struct SourceSpan span, struct HirIdent ident, struct HirDeclList *generics, struct HirType *rhs, paw_Bool is_pub)
+static struct HirDecl *pawHir_new_type_decl(struct Hir *hir, struct SourceSpan span, NodeId id, DeclId did, struct HirIdent ident, struct HirDeclList *generics, struct HirType *rhs, paw_Bool is_pub)
 {
     struct HirDecl *d = pawHir_new_decl(hir);
     d->TypeDecl_ = (struct HirTypeDecl){
-        .hid = pawHir_next_id(hir),
+        .id = id,
+        .did = did,
         .span = span,
         .kind = kHirTypeDecl,
         .ident = ident,
@@ -432,15 +419,17 @@ static struct HirDecl *pawHir_new_type_decl(struct Hir *hir, struct SourceSpan s
         .rhs = rhs,
         .is_pub = is_pub,
     };
-    pawHir_register_decl(hir, d);
+    pawHir_register_node(hir, id, d);
+    pawHir_register_decl(hir, did, d);
     return d;
 }
 
-static struct HirDecl *pawHir_new_func_decl(struct Hir *hir, struct SourceSpan span, struct HirIdent ident, struct Annotations *annos, struct HirDeclList *generics, struct HirDeclList *params, struct HirType *result, struct HirExpr *body, enum FuncKind fn_kind, paw_Bool is_pub, paw_Bool is_assoc)
+static struct HirDecl *pawHir_new_func_decl(struct Hir *hir, struct SourceSpan span, NodeId id, DeclId did, struct HirIdent ident, struct Annotations *annos, struct HirDeclList *generics, struct HirDeclList *params, struct HirType *result, struct HirExpr *body, enum FuncKind fn_kind, paw_Bool is_pub, paw_Bool is_assoc)
 {
     struct HirDecl *d = pawHir_new_decl(hir);
     d->FuncDecl_ = (struct HirFuncDecl){
-        .hid = pawHir_next_id(hir),
+        .id = id,
+        .did = did,
         .span = span,
         .kind = kHirFuncDecl,
         .ident = ident,
@@ -453,89 +442,115 @@ static struct HirDecl *pawHir_new_func_decl(struct Hir *hir, struct SourceSpan s
         .is_pub = is_pub,
         .is_assoc = is_assoc,
     };
-    pawHir_register_decl(hir, d);
+    pawHir_register_node(hir, id, d);
+    pawHir_register_decl(hir, did, d);
     return d;
 }
 
-static struct HirDecl *pawHir_new_adt_decl(struct Hir *hir, struct SourceSpan span, struct HirIdent ident, struct HirDecl *self, struct HirTypeList *traits, struct HirDeclList *generics, struct HirDeclList *fields, struct HirDeclList *methods, paw_Bool is_pub, paw_Bool is_struct, paw_Bool is_inline)
+static struct HirDecl *pawHir_new_adt_decl(struct Hir *hir, struct SourceSpan span, NodeId id, DeclId did, struct HirIdent ident, struct HirTypeList *traits, struct HirDeclList *generics, struct HirDeclList *variants, struct HirDeclList *methods, paw_Bool is_pub, paw_Bool is_struct, paw_Bool is_inline)
 {
     struct HirDecl *d = pawHir_new_decl(hir);
     d->AdtDecl_ = (struct HirAdtDecl){
-        .hid = pawHir_next_id(hir),
+        .id = id,
+        .did = did,
         .span = span,
         .kind = kHirAdtDecl,
         .ident = ident,
-        .self = self,
         .traits = traits,
         .generics = generics,
-        .fields = fields,
+        .variants = variants,
         .methods = methods,
         .is_pub = is_pub,
         .is_struct = is_struct,
         .is_inline = is_inline,
     };
-    pawHir_register_decl(hir, d);
+    pawHir_register_node(hir, id, d);
+    pawHir_register_decl(hir, did, d);
     return d;
 }
 
-static struct HirDecl *pawHir_new_variant_decl(struct Hir *hir, struct SourceSpan span, struct HirIdent ident, struct HirDeclList *fields, int index)
+static struct HirDecl *pawHir_new_variant_decl(struct Hir *hir, struct SourceSpan span, NodeId id, DeclId did, struct HirIdent ident, struct HirDeclList *fields, int index, DeclId base_did)
 {
     struct HirDecl *d = pawHir_new_decl(hir);
     d->VariantDecl_ = (struct HirVariantDecl){
-        .hid = pawHir_next_id(hir),
+        .id = id,
+        .did = did,
         .span = span,
         .kind = kHirVariantDecl,
+        .base_did = base_did,
         .ident = ident,
         .fields = fields,
         .index = index,
     };
-    pawHir_register_decl(hir, d);
+    pawHir_register_node(hir, id, d);
+    pawHir_register_decl(hir, did, d);
     return d;
 }
 
-static struct HirDecl *pawHir_new_generic_decl(struct Hir *hir, struct SourceSpan span, struct HirIdent ident, struct HirBoundList *bounds)
+static struct HirDecl *pawHir_new_generic_decl(struct Hir *hir, struct SourceSpan span, NodeId id, DeclId did, struct HirIdent ident, struct HirBoundList *bounds)
 {
     struct HirDecl *d = pawHir_new_decl(hir);
     d->GenericDecl_ = (struct HirGenericDecl){
-        .hid = pawHir_next_id(hir),
+        .id = id,
+        .did = did,
         .span = span,
         .kind = kHirGenericDecl,
         .ident = ident,
         .bounds = bounds,
     };
-    pawHir_register_decl(hir, d);
+    pawHir_register_node(hir, id, d);
+    pawHir_register_decl(hir, did, d);
     return d;
 }
 
-static struct HirDecl *pawHir_new_field_decl(struct Hir *hir, struct SourceSpan span, struct HirIdent ident, struct HirType *tag, paw_Bool is_pub)
+static struct HirDecl *pawHir_new_field_decl(struct Hir *hir, struct SourceSpan span, NodeId id, DeclId did, struct HirIdent ident, struct HirType *tag, paw_Bool is_pub)
 {
     struct HirDecl *d = pawHir_new_decl(hir);
     d->FieldDecl_ = (struct HirFieldDecl){
-        .hid = pawHir_next_id(hir),
+        .id = id,
+        .did = did,
         .span = span,
         .kind = kHirFieldDecl,
         .ident = ident,
         .tag = tag,
         .is_pub = is_pub,
     };
-    pawHir_register_decl(hir, d);
+    pawHir_register_node(hir, id, d);
+    pawHir_register_decl(hir, did, d);
     return d;
 }
 
-static struct HirDecl *pawHir_new_trait_decl(struct Hir *hir, struct SourceSpan span, struct HirIdent ident, struct HirDecl *self, struct HirDeclList *generics, struct HirDeclList *methods, paw_Bool is_pub)
+static struct HirDecl *pawHir_new_param_decl(struct Hir *hir, struct SourceSpan span, NodeId id, DeclId did, struct HirIdent ident, struct HirType *tag)
+{
+    struct HirDecl *d = pawHir_new_decl(hir);
+    d->ParamDecl_ = (struct HirParamDecl){
+        .id = id,
+        .did = did,
+        .span = span,
+        .kind = kHirParamDecl,
+        .ident = ident,
+        .tag = tag,
+    };
+    pawHir_register_node(hir, id, d);
+    pawHir_register_decl(hir, did, d);
+    return d;
+}
+
+static struct HirDecl *pawHir_new_trait_decl(struct Hir *hir, struct SourceSpan span, NodeId id, DeclId did, struct HirIdent ident, struct HirDeclList *generics, struct HirDeclList *methods, paw_Bool is_pub)
 {
     struct HirDecl *d = pawHir_new_decl(hir);
     d->TraitDecl_ = (struct HirTraitDecl){
-        .hid = pawHir_next_id(hir),
+        .id = id,
+        .did = did,
         .span = span,
         .kind = kHirTraitDecl,
         .ident = ident,
-        .self = self,
         .generics = generics,
         .methods = methods,
         .is_pub = is_pub,
     };
-    pawHir_register_decl(hir, d);
+    pawHir_register_node(hir, id, d);
+    pawHir_register_decl(hir, did, d);
     return d;
 }
 
@@ -547,7 +562,7 @@ enum HirExprKind {
 
 #define HIR_EXPR_HEADER     \
     struct SourceSpan span; \
-    HirId hid;              \
+    NodeId id;              \
     enum HirExprKind kind : 8
 struct HirExprHeader {
     HIR_EXPR_HEADER;
@@ -668,6 +683,13 @@ struct HirConversionExpr {
     struct HirExpr *arg;
 };
 
+struct HirOpAssignExpr {
+    HIR_EXPR_HEADER;
+    enum BinaryOp op : 8;
+    struct HirExpr *lhs;
+    struct HirExpr *rhs;
+};
+
 struct HirAssignExpr {
     HIR_EXPR_HEADER;
     struct HirExpr *lhs;
@@ -744,322 +766,361 @@ HIR_EXPR_LIST(DEFINE_ACCESS)
 
 struct HirExpr *pawHir_new_expr(struct Hir *hir);
 
-static struct HirExpr *pawHir_new_path_expr(struct Hir *hir, struct SourceSpan span, struct HirPath path)
+static struct HirExpr *pawHir_new_path_expr(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirPath path)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->PathExpr_ = (struct HirPathExpr){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirPathExpr,
         .path = path,
     };
+    pawHir_register_node(hir, id, e);
     return e;
 }
 
-static struct HirExpr *pawHir_new_basic_lit(struct Hir *hir, struct SourceSpan span, Value value, enum BuiltinKind code)
+static struct HirExpr *pawHir_new_basic_lit(struct Hir *hir, struct SourceSpan span, NodeId id, Value value, enum BuiltinKind code)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->LiteralExpr_ = (struct HirLiteralExpr){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirLiteralExpr,
         .lit_kind = kHirLitBasic,
         .basic.value = value,
         .basic.code = code,
     };
+    pawHir_register_node(hir, id, e);
     return e;
 }
 
-static struct HirExpr *pawHir_new_container_lit(struct Hir *hir, struct SourceSpan span, struct HirExprList *items, enum BuiltinKind code)
+static struct HirExpr *pawHir_new_container_lit(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirExprList *items, enum BuiltinKind code)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->LiteralExpr_ = (struct HirLiteralExpr){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirLiteralExpr,
         .lit_kind = kHirLitContainer,
         .cont.items = items,
         .cont.code = code,
     };
+    pawHir_register_node(hir, id, e);
     return e;
 }
 
-static struct HirExpr *pawHir_new_tuple_lit(struct Hir *hir, struct SourceSpan span, struct HirExprList *elems)
+static struct HirExpr *pawHir_new_tuple_lit(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirExprList *elems)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->LiteralExpr_ = (struct HirLiteralExpr){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirLiteralExpr,
         .lit_kind = kHirLitTuple,
         .tuple.elems = elems,
     };
+    pawHir_register_node(hir, id, e);
     return e;
 }
 
-static struct HirExpr *pawHir_new_composite_lit(struct Hir *hir, struct SourceSpan span, struct HirPath path, struct HirExprList *items)
+static struct HirExpr *pawHir_new_composite_lit(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirPath path, struct HirExprList *items)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->LiteralExpr_ = (struct HirLiteralExpr){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirLiteralExpr,
         .lit_kind = kHirLitComposite,
         .comp.path = path,
         .comp.items = items,
     };
+    pawHir_register_node(hir, id, e);
     return e;
 }
 
-static struct HirExpr *pawHir_new_closure_expr(struct Hir *hir, struct SourceSpan span, struct HirDeclList *params, struct HirType *result, struct HirExpr *expr)
+static struct HirExpr *pawHir_new_closure_expr(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirDeclList *params, struct HirType *result, struct HirExpr *expr)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->ClosureExpr_ = (struct HirClosureExpr){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirClosureExpr,
         .params = params,
         .result = result,
         .expr = expr,
     };
+    pawHir_register_node(hir, id, e);
     return e;
 }
 
-static struct HirExpr *pawHir_new_named_field_expr(struct Hir *hir, struct SourceSpan span, struct HirIdent ident, struct HirExpr *value, int fid)
+static struct HirExpr *pawHir_new_named_field_expr(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirIdent ident, struct HirExpr *value, int fid)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->FieldExpr_ = (struct HirFieldExpr){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirFieldExpr,
         .ident = ident,
         .value = value,
         .fid = fid,
     };
+    pawHir_register_node(hir, id, e);
     return e;
 }
 
-static struct HirExpr *pawHir_new_keyed_field_expr(struct Hir *hir, struct SourceSpan span, struct HirExpr *key, struct HirExpr *value)
+static struct HirExpr *pawHir_new_keyed_field_expr(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirExpr *key, struct HirExpr *value)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->FieldExpr_ = (struct HirFieldExpr){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirFieldExpr,
         .key = key,
         .value = value,
         .fid = -1,
     };
+    pawHir_register_node(hir, id, e);
     return e;
 }
 
-static struct HirExpr *pawHir_new_unop_expr(struct Hir *hir, struct SourceSpan span, struct HirExpr *target, enum UnaryOp op)
+static struct HirExpr *pawHir_new_unop_expr(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirExpr *target, enum UnaryOp op)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->UnOpExpr_ = (struct HirUnOpExpr){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirUnOpExpr,
         .target = target,
         .op = op,
     };
+    pawHir_register_node(hir, id, e);
     return e;
 }
 
-static struct HirExpr *pawHir_new_binop_expr(struct Hir *hir, struct SourceSpan span, struct HirExpr *lhs, struct HirExpr *rhs, enum BinaryOp op)
+static struct HirExpr *pawHir_new_binop_expr(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirExpr *lhs, struct HirExpr *rhs, enum BinaryOp op)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->BinOpExpr_ = (struct HirBinOpExpr){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirBinOpExpr,
         .op = op,
         .lhs = lhs,
         .rhs = rhs,
     };
+    pawHir_register_node(hir, id, e);
     return e;
 }
 
-static struct HirExpr *pawHir_new_logical_expr(struct Hir *hir, struct SourceSpan span, struct HirExpr *lhs, struct HirExpr *rhs, paw_Bool is_and)
+static struct HirExpr *pawHir_new_logical_expr(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirExpr *lhs, struct HirExpr *rhs, paw_Bool is_and)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->LogicalExpr_ = (struct HirLogicalExpr){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirLogicalExpr,
         .is_and = is_and,
         .lhs = lhs,
         .rhs = rhs,
     };
+    pawHir_register_node(hir, id, e);
     return e;
 }
 
-static struct HirExpr *pawHir_new_chain_expr(struct Hir *hir, struct SourceSpan span, struct HirExpr *target)
+static struct HirExpr *pawHir_new_chain_expr(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirExpr *target)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->ChainExpr_ = (struct HirChainExpr){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .target = target,
         .kind = kHirChainExpr,
     };
+    pawHir_register_node(hir, id, e);
     return e;
 }
 
-static struct HirExpr *pawHir_new_index_selector(struct Hir *hir, struct SourceSpan span, struct HirExpr *target, int index)
+static struct HirExpr *pawHir_new_index_selector(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirExpr *target, int index)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->Selector_ = (struct HirSelector){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirSelector,
         .target = target,
         .index = index,
         .is_index = PAW_TRUE,
     };
+    pawHir_register_node(hir, id, e);
     return e;
 }
 
-static struct HirExpr *pawHir_new_name_selector(struct Hir *hir, struct SourceSpan span, struct HirExpr *target, struct HirIdent ident)
+static struct HirExpr *pawHir_new_name_selector(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirExpr *target, struct HirIdent ident)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->Selector_ = (struct HirSelector){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirSelector,
         .target = target,
         .ident = ident,
         .is_index = PAW_FALSE,
     };
+    pawHir_register_node(hir, id, e);
     return e;
 }
 
-static struct HirExpr *pawHir_new_index_expr(struct Hir *hir, struct SourceSpan span, struct HirExpr *target, struct HirExpr *index)
+static struct HirExpr *pawHir_new_index_expr(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirExpr *target, struct HirExpr *index)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->Index_ = (struct HirIndex){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirIndex,
         .target = target,
         .index = index,
     };
+    pawHir_register_node(hir, id, e);
     return e;
 }
 
-static struct HirExpr *pawHir_new_conversion_expr(struct Hir *hir, struct SourceSpan span, struct HirExpr *from, enum BuiltinKind to)
+static struct HirExpr *pawHir_new_conversion_expr(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirExpr *from, enum BuiltinKind to)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->ConversionExpr_ = (struct HirConversionExpr){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirConversionExpr,
         .arg = from,
         .to = to,
     };
+    pawHir_register_node(hir, id, e);
     return e;
 }
 
-static struct HirExpr *pawHir_new_assign_expr(struct Hir *hir, struct SourceSpan span, struct HirExpr *lhs, struct HirExpr *rhs)
+static struct HirExpr *pawHir_new_assign_expr(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirExpr *lhs, struct HirExpr *rhs)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->AssignExpr_ = (struct HirAssignExpr){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirAssignExpr,
         .lhs = lhs,
         .rhs = rhs,
     };
+    pawHir_register_node(hir, id, e);
     return e;
 }
 
-static struct HirExpr *pawHir_new_return_expr(struct Hir *hir, struct SourceSpan span, struct HirExpr *expr)
+static struct HirExpr *pawHir_new_op_assign_expr(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirExpr *lhs, struct HirExpr *rhs, enum BinaryOp op)
+{
+    struct HirExpr *e = pawHir_new_expr(hir);
+    e->OpAssignExpr_ = (struct HirOpAssignExpr){
+        .id = id,
+        .span = span,
+        .kind = kHirOpAssignExpr,
+        .lhs = lhs,
+        .rhs = rhs,
+        .op = op,
+    };
+    pawHir_register_node(hir, id, e);
+    return e;
+}
+
+static struct HirExpr *pawHir_new_return_expr(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirExpr *expr)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->ReturnExpr_ = (struct HirReturnExpr){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirReturnExpr,
         .expr = expr,
     };
+    pawHir_register_node(hir, id, e);
     return e;
 }
 
-static struct HirExpr *pawHir_new_call_expr(struct Hir *hir, struct SourceSpan span, struct HirExpr *target, struct HirExprList *args)
+static struct HirExpr *pawHir_new_call_expr(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirExpr *target, struct HirExprList *args)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->CallExpr_ = (struct HirCallExpr){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirCallExpr,
         .target = target,
         .args = args,
     };
+    pawHir_register_node(hir, id, e);
     return e;
 }
 
-static struct HirExpr *pawHir_new_match_arm(struct Hir *hir, struct SourceSpan span, struct HirPat *pat, struct HirExpr *guard, struct HirExpr *result)
+static struct HirExpr *pawHir_new_match_arm(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirPat *pat, struct HirExpr *guard, struct HirExpr *result)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->MatchArm_ = (struct HirMatchArm){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirMatchArm,
         .pat = pat,
         .guard = guard,
         .result = result,
     };
+    pawHir_register_node(hir, id, e);
     return e;
 }
 
-static struct HirExpr *pawHir_new_match_expr(struct Hir *hir, struct SourceSpan span, struct HirExpr *target, struct HirExprList *arms, paw_Bool is_exhaustive)
+static struct HirExpr *pawHir_new_match_expr(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirExpr *target, struct HirExprList *arms, paw_Bool is_exhaustive)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->MatchExpr_ = (struct HirMatchExpr){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirMatchExpr,
         .is_exhaustive = is_exhaustive,
         .target = target,
         .arms = arms,
     };
+    pawHir_register_node(hir, id, e);
     return e;
 }
 
-static struct HirExpr *pawHir_new_block(struct Hir *hir, struct SourceSpan span, struct HirStmtList *stmts, struct HirExpr *result)
+static struct HirExpr *pawHir_new_block(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirStmtList *stmts, struct HirExpr *result)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->Block_ = (struct HirBlock){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirBlock,
         .stmts = stmts,
         .result = result,
     };
+    pawHir_register_node(hir, id, e);
     return e;
 }
 
-static struct HirExpr *pawHir_new_loop_expr(struct Hir *hir, struct SourceSpan span, struct HirExpr *block)
+static struct HirExpr *pawHir_new_loop_expr(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirExpr *block)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->LoopExpr_ = (struct HirLoopExpr){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirLoopExpr,
         .block = block,
     };
+    pawHir_register_node(hir, id, e);
     return e;
 }
 
-static struct HirExpr *pawHir_new_jump_expr(struct Hir *hir, struct SourceSpan span, enum JumpKind jump_kind)
+static struct HirExpr *pawHir_new_jump_expr(struct Hir *hir, struct SourceSpan span, NodeId id, enum JumpKind jump_kind)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->JumpExpr_ = (struct HirJumpExpr){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirJumpExpr,
         .jump_kind = jump_kind,
     };
+    pawHir_register_node(hir, id, e);
     return e;
 }
 
@@ -1071,7 +1132,7 @@ enum HirStmtKind {
 
 #define HIR_STMT_HEADER     \
     struct SourceSpan span; \
-    HirId hid;              \
+    NodeId id;              \
     enum HirStmtKind kind : 8
 struct HirStmtHeader {
     HIR_STMT_HEADER;
@@ -1124,41 +1185,44 @@ HIR_STMT_LIST(DEFINE_ACCESS)
 
 struct HirStmt *pawHir_new_stmt(struct Hir *hir);
 
-static struct HirStmt *pawHir_new_let_stmt(struct Hir *hir, struct SourceSpan span, struct HirPat *pat, struct HirType *tag, struct HirExpr *init)
+static struct HirStmt *pawHir_new_let_stmt(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirPat *pat, struct HirType *tag, struct HirExpr *init)
 {
     struct HirStmt *s = pawHir_new_stmt(hir);
     s->LetStmt_ = (struct HirLetStmt){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirLetStmt,
         .pat = pat,
         .tag = tag,
         .init = init,
     };
+    pawHir_register_node(hir, id, s);
     return s;
 }
 
-static struct HirStmt *pawHir_new_expr_stmt(struct Hir *hir, struct SourceSpan span, struct HirExpr *expr)
+static struct HirStmt *pawHir_new_expr_stmt(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirExpr *expr)
 {
     struct HirStmt *s = pawHir_new_stmt(hir);
     s->ExprStmt_ = (struct HirExprStmt){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirExprStmt,
         .expr = expr,
     };
+    pawHir_register_node(hir, id, s);
     return s;
 }
 
-static struct HirStmt *pawHir_new_decl_stmt(struct Hir *hir, struct SourceSpan span, struct HirDecl *decl)
+static struct HirStmt *pawHir_new_decl_stmt(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirDecl *decl)
 {
     struct HirStmt *s = pawHir_new_stmt(hir);
     s->DeclStmt_ = (struct HirDeclStmt){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirDeclStmt,
         .decl = decl,
     };
+    pawHir_register_node(hir, id, s);
     return s;
 }
 
@@ -1170,7 +1234,7 @@ enum HirPatKind {
 
 #define HIR_PAT_HEADER      \
     struct SourceSpan span; \
-    HirId hid;              \
+    NodeId id;              \
     enum HirPatKind kind : 8
 
 struct HirPatHeader {
@@ -1206,11 +1270,6 @@ struct HirVariantPat {
 struct HirTuplePat {
     HIR_PAT_HEADER;
     struct HirPatList *elems;
-};
-
-struct HirPathPat {
-    HIR_PAT_HEADER;
-    struct HirPath path;
 };
 
 struct HirBindingPat {
@@ -1257,115 +1316,111 @@ HIR_PAT_LIST(DEFINE_ACCESS)
 
 struct HirPat *pawHir_new_pat(struct Hir *hir);
 
-static struct HirPat *pawHir_new_or_pat(struct Hir *hir, struct SourceSpan span, struct HirPatList *pats)
+static struct HirPat *pawHir_new_or_pat(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirPatList *pats)
 {
     struct HirPat *p = pawHir_new_pat(hir);
     p->OrPat_ = (struct HirOrPat){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirOrPat,
         .pats = pats,
     };
+    pawHir_register_node(hir, id, p);
     return p;
 }
 
-static struct HirPat *pawHir_new_field_pat(struct Hir *hir, struct SourceSpan span, struct HirIdent ident, struct HirPat *pat, int index)
+static struct HirPat *pawHir_new_field_pat(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirIdent ident, struct HirPat *pat, int index)
 {
     struct HirPat *p = pawHir_new_pat(hir);
     p->FieldPat_ = (struct HirFieldPat){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirFieldPat,
         .ident = ident,
         .index = index,
         .pat = pat,
     };
+    pawHir_register_node(hir, id, p);
     return p;
 }
 
-static struct HirPat *pawHir_new_struct_pat(struct Hir *hir, struct SourceSpan span, struct HirPath path, struct HirPatList *fields)
+static struct HirPat *pawHir_new_struct_pat(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirPath path, struct HirPatList *fields)
 {
     struct HirPat *p = pawHir_new_pat(hir);
     p->StructPat_ = (struct HirStructPat){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirStructPat,
         .path = path,
         .fields = fields,
     };
+    pawHir_register_node(hir, id, p);
     return p;
 }
 
-static struct HirPat *pawHir_new_variant_pat(struct Hir *hir, struct SourceSpan span, struct HirPath path, struct HirPatList *fields, int index)
+static struct HirPat *pawHir_new_variant_pat(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirPath path, struct HirPatList *fields, int index)
 {
     struct HirPat *p = pawHir_new_pat(hir);
     p->VariantPat_ = (struct HirVariantPat){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirVariantPat,
         .path = path,
         .fields = fields,
         .index = index,
     };
+    pawHir_register_node(hir, id, p);
     return p;
 }
 
-static struct HirPat *pawHir_new_tuple_pat(struct Hir *hir, struct SourceSpan span, struct HirPatList *elems)
+static struct HirPat *pawHir_new_tuple_pat(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirPatList *elems)
 {
     struct HirPat *p = pawHir_new_pat(hir);
     p->TuplePat_ = (struct HirTuplePat){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirTuplePat,
         .elems = elems,
     };
+    pawHir_register_node(hir, id, p);
     return p;
 }
 
-static struct HirPat *pawHir_new_path_pat(struct Hir *hir, struct SourceSpan span, struct HirPath path)
-{
-    struct HirPat *p = pawHir_new_pat(hir);
-    p->PathPat_ = (struct HirPathPat){
-        .hid = pawHir_next_id(hir),
-        .span = span,
-        .kind = kHirPathPat,
-        .path = path,
-    };
-    return p;
-}
-
-static struct HirPat *pawHir_new_binding_pat(struct Hir *hir, struct SourceSpan span, struct HirIdent ident)
+static struct HirPat *pawHir_new_binding_pat(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirIdent ident)
 {
     struct HirPat *p = pawHir_new_pat(hir);
     p->BindingPat_ = (struct HirBindingPat){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirBindingPat,
         .ident = ident,
     };
+    pawHir_register_node(hir, id, p);
     return p;
 }
 
-static struct HirPat *pawHir_new_wildcard_pat(struct Hir *hir, struct SourceSpan span)
+static struct HirPat *pawHir_new_wildcard_pat(struct Hir *hir, struct SourceSpan span, NodeId id)
 {
     struct HirPat *p = pawHir_new_pat(hir);
     p->WildcardPat_ = (struct HirWildcardPat){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirWildcardPat,
     };
+    pawHir_register_node(hir, id, p);
     return p;
 }
 
-static struct HirPat *pawHir_new_literal_pat(struct Hir *hir, struct SourceSpan span, struct HirExpr *expr)
+static struct HirPat *pawHir_new_literal_pat(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirExpr *expr)
 {
     struct HirPat *p = pawHir_new_pat(hir);
     p->LiteralPat_ = (struct HirLiteralPat){
-        .hid = pawHir_next_id(hir),
+        .id = id,
         .span = span,
         .kind = kHirLiteralPat,
         .expr = expr,
     };
+    pawHir_register_node(hir, id, p);
     return p;
 }
 
@@ -1414,21 +1469,23 @@ void pawHir_visit_type_list(struct HirVisitor *V, struct HirTypeList *list);
 void pawHir_visit_pat_list(struct HirVisitor *V, struct HirPatList *list);
 
 
-struct Hir {
-    struct HirImportList *imports;
-    struct HirDeclList *items;
-    struct Compiler *C;
-    struct Pool *pool;
-    Str *name;
-    paw_Env *P;
+struct HirModule {
     int modno;
+    struct HirDeclList *items;
+    Str *name;
 };
 
-inline static HirId pawHir_next_id(struct Hir *hir)
-{
-    return (HirId){hir->C->hir_count++};
-}
+struct Hir {
+    struct HirModuleList *modules;
+    struct HirNodeMap *nodes;
+    struct HirDeclMap *decls;
+    struct Compiler *C;
+    struct Pool *pool;
+    paw_Env *P;
+    int node_count;
+};
 
+DEFINE_LIST(struct Hir, HirModuleList, struct HirModule)
 DEFINE_LIST(struct Hir, HirDeclList, struct HirDecl *)
 DEFINE_LIST(struct Hir, HirExprList, struct HirExpr *)
 DEFINE_LIST(struct Hir, HirStmtList, struct HirStmt *)
@@ -1438,17 +1495,20 @@ DEFINE_LIST(struct Hir, HirGenericList, struct HirGeneric *)
 DEFINE_LIST(struct Hir, HirFieldList, struct HirField *)
 DEFINE_LIST(struct Hir, HirParamList, struct HirParam *)
 DEFINE_LIST(struct Hir, HirVariantList, struct HirVariant *)
-DEFINE_LIST(struct Hir, HirSymtab, struct HirScope *)
-DEFINE_LIST(struct Hir, HirScope, struct HirSymbol)
 DEFINE_LIST(struct Hir, HirImportList, struct HirImport)
 DEFINE_LIST(struct Hir, HirSegments, struct HirSegment)
 DEFINE_LIST(struct Hir, HirBoundList, struct HirGenericBound)
 
-static inline void pawHir_path_init(struct Hir *hir, struct HirPath *ppath, struct SourceSpan span)
+DEFINE_MAP(struct Hir, HirNodeMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, void *)
+DEFINE_MAP(struct Hir, HirDeclMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct HirDecl *)
+DEFINE_MAP_ITERATOR(HirDeclMap, DeclId, struct HirDecl *)
+
+static inline struct HirPath pawHir_path_create(struct SourceSpan span, struct HirSegments *segments, enum HirPathKind kind)
 {
-    *ppath = (struct HirPath){
-        .segments = HirSegments_new(hir),
+    return (struct HirPath){
+        .segments = segments,
         .span = span,
+        .kind = kind,
     };
 }
 
@@ -1458,25 +1518,11 @@ static inline void pawHir_path_init(struct Hir *hir, struct HirPath *ppath, stru
 #define HIR_PATH_RESULT(Path_) (K_LIST_LAST((Path_).segments).res)
 #define HIR_TYPE_DID(Type_) (HirIsPathType(Type_) ? HIR_PATH_RESULT(HirGetPathType(Type_)->path) : HirGetFuncDef(Type_)->did)
 
-struct Hir *pawHir_new(struct Compiler *C, Str *name, int modno);
+struct Hir *pawHir_new(struct Compiler *C);
 void pawHir_free(struct Hir *hir);
 
-int pawHir_expand_bodies(struct Hir *hir);
-void pawHir_define(struct ModuleInfo *m, struct HirDeclList *out, int *poffset);
-
-struct HirDecl *pawHir_get_decl(struct Compiler *C, DeclId id);
-
-static paw_Bool hir_is_type(struct Compiler *C, struct HirResult res)
-{
-    if (res.kind != HIR_RESULT_DECL)
-        return PAW_FALSE;
-
-    struct HirDecl *decl = pawHir_get_decl(C, res.did);
-    return HirIsAdtDecl(decl) //
-        || HirIsTypeDecl(decl) //
-        || HirIsTraitDecl(decl) //
-        || HirIsGenericDecl(decl);
-}
+void *pawHir_get_node(struct Hir *hir, NodeId id);
+struct HirDecl *pawHir_get_decl(struct Hir *hir, DeclId id);
 
 #define HIR_TYPEOF(x) ((x)->hdr.type)
 #define HIR_KINDOF(x) ((x)->hdr.kind)
@@ -1484,11 +1530,21 @@ static paw_Bool hir_is_type(struct Compiler *C, struct HirResult res)
 // NOTE: HirFuncPtr is a prefix of HirFuncDef
 #define HIR_FPTR(t) CHECK_EXP(HirIsFuncType(t), &(t)->fptr)
 
-static inline struct HirSegment *pawHir_path_add(struct Hir *hir, struct HirPath *path, struct HirIdent ident,
-                                                 struct HirTypeList *args)
+static inline struct HirSegment *pawHir_add_segment(struct Hir *hir, struct HirSegments *segments, NodeId id,
+        struct HirIdent ident, struct HirTypeList *args, NodeId target)
 {
     struct HirSegment seg;
-    pawHir_init_segment(hir, &seg, ident, args);
+    pawHir_init_segment(hir, &seg, id, ident, args, target);
+    HirSegments_push(hir, segments, seg);
+    return &K_LIST_LAST(segments);
+}
+
+//TODO remove
+static inline struct HirSegment *pawHir_path_add(struct Hir *hir, struct HirPath *path, NodeId id, NodeId target,
+        struct HirIdent ident, struct HirTypeList *args)
+{
+    struct HirSegment seg;
+    pawHir_init_segment(hir, &seg, id, ident, args, target);
     HirSegments_push(hir, path->segments, seg);
     return &K_LIST_LAST(path->segments);
 }
@@ -1512,8 +1568,12 @@ static inline struct HirIdent hir_decl_ident(struct HirDecl *decl)
             return HirGetTraitDecl(decl)->ident;
         case kHirVariantDecl:
             return HirGetVariantDecl(decl)->ident;
+        default:
+            PAW_UNREACHABLE();
     }
 }
+
+struct HirExpr *pawHir_copy_expr(struct Hir *hir, struct HirExpr *expr);
 
 paw_Bool pawHir_is_pub_decl(struct HirDecl *decl);
 struct IrTypeList *pawHir_collect_decl_types(struct Compiler *C, struct HirDeclList *list);
@@ -1524,16 +1584,24 @@ char const *pawHir_print_path(struct Compiler *C, struct HirPath *path);
 
 char const *pawHir_dump(struct Hir *hir);
 
-inline static paw_Uint hir_id_hash(struct Compiler *C, HirId hid)
+static inline struct HirVariantDecl *pawHir_struct_variant(struct HirAdtDecl const *d)
 {
-    PAW_UNUSED(C);
-    return (paw_Uint)hid.value;
+    paw_assert(d->is_struct);
+    return HirGetVariantDecl(K_LIST_FIRST(d->variants));
 }
 
-inline static paw_Bool hir_id_equals(struct Compiler *C, HirId a, HirId b)
+static inline HirDeclList *pawHir_struct_fields(struct HirAdtDecl const *d)
 {
-    PAW_UNUSED(C);
-    return a.value == b.value;
+    return pawHir_struct_variant(d)->fields;
+}
+
+static inline paw_Bool pawHir_is_unit_struct(struct HirAdtDecl const *d)
+{
+    if (d->is_struct) {
+        HirDeclList *fields = pawHir_struct_fields(d);
+        return fields->count == 0;
+    }
+    return PAW_FALSE;
 }
 
 #endif // PAW_HIR_H

@@ -60,6 +60,7 @@ set(PAW_HEADER_FILES
     ${PAW_SOURCE_DIR}/os.h
     ${PAW_SOURCE_DIR}/parse.h
     ${PAW_SOURCE_DIR}/prefix.h
+    ${PAW_SOURCE_DIR}/resolve.h
     ${PAW_SOURCE_DIR}/rt.h
     ${PAW_SOURCE_DIR}/rtti.h
     ${PAW_SOURCE_DIR}/source.h
@@ -123,6 +124,7 @@ set(PAW_SOURCE_FILES
     ${PAW_SOURCE_DIR}/str.c
     ${PAW_SOURCE_DIR}/trait.c
     ${PAW_SOURCE_DIR}/type_folder.c
+    ${PAW_SOURCE_DIR}/typeck.c
     ${PAW_SOURCE_DIR}/unify.c
     ${PAW_SOURCE_DIR}/unbox.c
     ${PAW_SOURCE_DIR}/util.c
