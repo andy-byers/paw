@@ -1,44 +1,9 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
-//
-// resolve.c: Name resolution pass
-//
-// All names in the compilation unit (target module plus all imported
-// modules) are resolved during this pass. For each module, name resolution
-// happens in 2 phases.
-//
-// TODO: First imports are resolved, both global and local. As each module
-//       is imported, the name of each toplevel item is recorded.
-//       Next, local names are recorded and all paths are resolved.
-//
-// First, the name of each global item is determined. These names can be
-// accessed from anywhere in the current module, and possibly from other
-// modules if the item is marked as "pub". Toplevel item names are saved
-// for the entire pass in order to resolve references between modules,
-// which can only refer to global items.
-//
-// Next, all "paths" in each module are visited and resolved. Paths inside
-// function bodies can refer to either global or local items. Local items,
-// including local imports, are subject to lexical scoping rules, meaning
-// they can only be accessed after they are defined and before they go out
-// of scope. Scopes are formed by source code blocks (delimited by '{' and
-// '}'). Local variables can be shadowed and redefined.
 
-#include "ast.h"
-#include "code.h"
-#include "debug.h"
-#include "env.h"
 #include "error.h"
-#include "gc.h"
-#include "ast.h"
-#include "ir_type.h"
-#include "map.h"
-#include "parse.h"
 #include "resolve.h"
-#include "str.h"
-#include "type_folder.h"
-#include "unify.h"
 
 #define RESOLVER_ERROR(R_, Kind_, Modname_, ...) pawErr_##Kind_((R_)->C, Modname_, __VA_ARGS__)
 
@@ -272,31 +237,33 @@ static paw_Bool find_value_in_scope(struct Resolver *R, NodeId scope_id, struct 
     return PAW_TRUE;
 }
 
+static struct ResolvedSegment get_path_result(struct Resolver *R, struct AstPath path)
+{
+    struct AstSegment last = K_LIST_LAST(path.segments);
+    return *SegmentTable_get(R->C, R->segtab, last.id);
+}
+
 static paw_Bool lookup(struct Resolver *R, struct AstPath path, enum Namespace ns, struct Symbol *out);
 
 static paw_Bool find_value_in_generic(struct Resolver *R, struct AstGenericDecl *d, struct PathCursor pc, struct Symbol *out)
 {
-    // TODO: probably search for conflicts as well, i.e. search through all bounds and throw error if multiple matches
     struct AstGenericBound const *pbound;
     K_LIST_FOREACH (d->bounds, pbound) {
-        // TODO: already found trait bound
-        struct Symbol trait;
-        if (lookup(R, pbound->path, NAMESPACE_TYPE, &trait)) {
-            if (find_value_in_scope(R, trait.id, pc, out))
-                return PAW_TRUE;
-        }
+        struct ResolvedSegment res = get_path_result(R, pbound->path);
+        if (find_value_in_scope(R, res.id, pc, out))
+            return PAW_TRUE;
     }
     return PAW_FALSE;
 }
 
 static paw_Bool find_value_in_type(struct Resolver *R, struct AstTypeDecl *d, struct PathCursor pc, struct Symbol *out)
 {
-    // TODO: already found aliased type
     struct Symbol base;
     struct AstPathType *rhs = AstGetPathType(d->rhs);
-    if (!lookup(R, rhs->path, NAMESPACE_TYPE, &base))
-        paw_assert(0 && "TODO: probably resolve type aliases first");
-
+    if (!lookup(R, rhs->path, NAMESPACE_TYPE, &base)) {
+        char const *repr = pawAst_print_path(R->ast, rhs->path);
+        RESOLVER_ERROR(R, unknown_path, R->current->name, rhs->span.start, repr);
+    }
     return find_value_in_scope(R, base.id, pc, out);
 }
 
@@ -311,8 +278,11 @@ static paw_Bool find_assoc_item(struct Resolver *R, NodeId type_id, struct PathC
         case kAstAdtDecl:
         case kAstTraitDecl:
             return find_value_in_scope(R, type_id, *pc, out);
-        default:
-            paw_assert(0 && "TODO: decl has no associated items");
+        default: {
+            char const *repr = pawAst_print_path(R->ast, pc->path);
+            RESOLVER_ERROR(R, unknown_path, R->current->name,
+                    pc_segment(*pc)->ident.span.start, repr);
+        }
     }
 }
 

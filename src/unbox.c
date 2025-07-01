@@ -995,8 +995,9 @@ static void unbox_function(struct Unboxer *U, struct Mir *mir)
 
     // unbox closures
     struct Mir *const *pchild;
-    K_LIST_FOREACH (mir->children, pchild)
+    K_LIST_FOREACH (mir->children, pchild){
         unbox_function(U, *pchild);
+    }
 
     U->fs = fs.outer;
 }

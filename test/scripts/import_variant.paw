@@ -1,0 +1,33 @@
+// import_variant.paw
+
+enum Explicit<T> {
+    A(T),
+    B,
+}
+
+use Explicit::A;
+
+pub fn test_explicit_import() {
+    let e = A(123);
+
+    match e {
+        A(t) => assert(t == 123),
+        Explicit::B => panic("expected A(t) but found Explicit::B"),
+    }
+}
+
+enum Glob<T> {
+    Y(T),
+    Z,
+}
+
+use Glob::*;
+
+pub fn test_glob_import() {
+    let g = Y("abc");
+
+    match g {
+        Y(t) => assert(t == "abc"),
+        Z => panic("expected X but found Z"),
+    }
+}

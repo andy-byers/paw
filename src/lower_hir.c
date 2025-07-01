@@ -540,7 +540,7 @@ static void leave_block(struct FunctionState *fs)
     fs->bs = bs->outer;
 }
 
-static struct LocalVar *alloc_local(struct FunctionState *fs, struct HirIdent ident, struct IrType *type)
+static struct LocalVar alloc_local(struct FunctionState *fs, struct HirIdent ident, struct IrType *type)
 {
     struct MirPlace const output = new_place(fs, type);
     NEW_INSTR(fs, alloc_local, ident.span.start, ident.name, output);
@@ -553,7 +553,7 @@ static struct LocalVar *alloc_local(struct FunctionState *fs, struct HirIdent id
                                });
     MirRegisterList_push(fs->mir, fs->locals, output.r);
     ++fs->nlocals;
-    return &K_LIST_LAST(fs->stack);
+    return K_LIST_LAST(fs->stack);
 }
 
 // NOTE: It is easier to use the name when searching for locals and upvalues, due to the
@@ -601,6 +601,7 @@ static struct MirPlace place_for_node(struct FunctionState *fs, NodeId id)
     return new_place(fs, pawIr_get_type(fs->C, id));
 }
 
+// TODO: consider not entering a block in this function, declare parameters inside body block
 static MirBlock enter_function(struct LowerHir *L, struct FunctionState *fs, struct BlockState *bs, struct Mir *mir)
 {
     *fs = (struct FunctionState){
@@ -837,188 +838,21 @@ static paw_Bool visit_field_decl(struct HirVisitor *V, struct HirFieldDecl *d)
     return PAW_FALSE;
 }
 
-struct Unpacking {
-    struct UnpackingList *info;
-    struct LowerHir *L;
-    struct SourceSpan span;
-};
-
-struct UnpackingInfo {
-    struct HirBindingPat *p;
-    struct HirIdent name, temp;
-    struct MirPlace r;
-};
-
-DEFINE_LIST(struct LowerHir, UnpackingList, struct UnpackingInfo)
-
-static struct MirPlace lower_match_expr(struct HirVisitor *V, struct HirMatchExpr *e);
-
-static struct HirIdent unpack_temp_name(struct LowerHir *L, struct HirBindingPat *p)
-{
-    struct Buffer b;
-    paw_Env *P = ENV(L);
-    pawL_init_buffer(P, &b);
-
-    pawL_add_fstring(P, &b, PRIVATE("%d"), p->id.value);
-
-    Str *name = SCAN_STR(L->C, b.data);
-    pawL_discard_result(P, &b);
-    return (struct HirIdent){
-        .span = p->span,
-        .name = name,
-    };
-}
-
-static void collect_binding(struct HirVisitor *V, struct HirBindingPat *p)
-{
-    struct Unpacking *ctx = V->ud;
-    struct LowerHir *L = ctx->L;
-    struct FunctionState *fs = L->fs;
-
-    IrType *type = pawIr_get_type(L->C, p->id);
-    struct HirIdent temp = unpack_temp_name(L, p);
-    struct LocalVar *local = alloc_local(fs, temp, type);
-
-    UnpackingList_push(L, ctx->info, (struct UnpackingInfo){
-                .name = p->ident.name,
-                .temp = temp.name,
-                .r = local->r,
-                .p = p,
-            });
-}
-
-static NodeId TODO_next_id(struct LowerHir *L)
-{
-    return (NodeId){++L->hir->node_count};
-}
-
-static struct HirExpr *new_local_path(struct LowerHir *L, struct HirIdent ident)
-{
-    struct HirSegments *segments = HirSegments_new(L->hir);
-    pawHir_add_segment(L->hir, segments, TODO_next_id(L), ident, NULL, TODO_next_id(L));
-    struct HirPath path = pawHir_path_create(ident.span, segments, HIR_PATH_LOCAL);
-    return pawHir_new_path_expr(L->hir, ident.span, TODO_next_id(L), path);
-}
-
-static struct HirStmtList *create_unpackers(struct Unpacking *ctx)
-{
-    struct LowerHir *L = ctx->L;
-    struct Hir *hir = L->hir;
-
-    struct UnpackingInfo *pinfo;
-    struct HirStmtList *setters = HirStmtList_new(hir);
-    K_LIST_FOREACH(ctx->info, pinfo) {
-        struct HirExpr *lhs = new_local_path(L, pinfo->temp);
-        struct HirExpr *rhs = new_local_path(L, pinfo->name);
-        SET_NODE_TYPE(L->C, rhs, pawIr_get_type(L->C, pinfo->p->id));
-
-        struct HirExpr *setter = pawHir_new_assign_expr(hir, ctx->span, TODO_next_id(L), lhs, rhs);
-        SET_NODE_TYPE(L->C, setter, get_type(L, PAW_TUNIT));
-
-        HirStmtList_push(hir, setters, pawHir_new_expr_stmt(hir, ctx->span, TODO_next_id(L), setter));
-    }
-    return setters;
-}
-
-// Performs the following transformation, the result of which is passed to the pattern
-// matching compiler. As usual, the resulting match expression must be exhaustive. The
-// extra temporary variables ("_a" and "_b") are required due to the fact that variable
-// names are used to find registers containing locals. If "a" and "b" were assigned
-// directly, then shadowing/rebinding variables would not work properly (if "rhs"
-// mentioned "a" or "b", it would find uninitialized variables, rather than versions of
-// "a" or "b" defined in earlier code, not to mention the fact that the bindings inside
-// the match arm would need to be renamed. The code that searches for locals should use
-// HirIds instead of names, however, the code that expands OR patterns would need to
-// be changed to account for the fact that bindings with the same name in different
-// OR clauses refer to the same variable.
-//
-// let (a, Adt{b}) = rhs;
-// ...
-//
-//
-// let _a;
-// let _b;
-// match rhs {
-//     (a, Adt{b}) => {
-//         _a = a;
-//         _b = b;
-//     }
-// }
-// let a = _a;
-// let b = _b;
-// ...
-//
-// TODO: temporaries used so that bindings (a and b) can be non-mutable
-//       the following makes more sense for right now, however
-// let a;
-// let b;
-// match rhs {
-//     (_a, Adt{b: _b}) => {
-//         a = _a;
-//         b = _b;
-//     }
-// }
-// ...
-//
-static void unpack_bindings(struct HirVisitor *V, struct HirPat *lhs, struct HirExpr *rhs)
-{
-    struct LowerHir *L = V->ud;
-    struct FunctionState *fs = L->fs;
-    struct Unpacking ctx = {
-        .info = UnpackingList_new(L),
-        .span = lhs->hdr.span,
-        .L = L,
-    };
-
-    // declare temporaries for each binding that appears in the pattern
-    struct HirVisitor collector;
-    pawHir_visitor_init(&collector, L->hir, &ctx);
-    collector.PostVisitBindingPat = collect_binding;
-    pawHir_visit_pat(&collector, lhs);
-
-    // create the match expression containing an assignment to each binding
-    struct Hir *hir = L->hir;
-    paw_Bool const IGNORE = PAW_FALSE;
-    struct HirStmtList *setters = create_unpackers(&ctx);
-    struct HirExpr *unit_lit = pawHir_new_basic_lit(hir, ctx.span, TODO_next_id(L), I2V(0), BUILTIN_UNIT);
-    struct HirExpr *block = pawHir_new_block(hir, ctx.span, TODO_next_id(L), setters, unit_lit);
-    struct HirExprList *arms = HirExprList_new(hir);
-    struct HirExpr *arm = pawHir_new_match_arm(hir, ctx.span, TODO_next_id(L), lhs, NULL, block);
-    HirExprList_push(hir, arms, arm);
-    struct HirExpr *match = pawHir_new_match_expr(hir, ctx.span, TODO_next_id(L), rhs, arms, PAW_TRUE);
-
-    struct IrType *unit_type = get_type(L, PAW_TUNIT);
-    SET_NODE_TYPE(L->C, unit_lit, unit_type);
-    SET_NODE_TYPE(L->C, block, unit_type);
-    SET_NODE_TYPE(L->C, arm, unit_type);
-    SET_NODE_TYPE(L->C, match, unit_type);
-
-    lower_match_expr(V, HirGetMatchExpr(match));
-
-    struct UnpackingInfo *pinfo;
-    K_LIST_FOREACH(ctx.info, pinfo) {
-        struct HirBindingPat *p = pinfo->p;
-        IrType *type = pawIr_get_type(fs->C, p->id);
-        struct LocalVar *local = alloc_local(fs, p->ident, type);
-        move_to(fs, p->span.start, pinfo->r, local->r);
-    }
-}
-
 static paw_Bool visit_let_stmt(struct HirVisitor *V, struct HirLetStmt *s)
 {
     struct LowerHir *L = V->ud;
     struct IrType *type = pawIr_get_type(L->C, s->id);
+    struct HirBindingPat const *p = HirGetBindingPat(s->pat);
 
     if (s->init != NULL) {
-        unpack_bindings(V, s->pat, s->init);
-    } else if (HirIsBindingPat(s->pat)) {
-        // create an uninitialized virtual register to hold the variable
-        struct HirIdent ident = HirGetBindingPat(s->pat)->ident;
-        struct LocalVar *var = alloc_local(L->fs, ident, type);
-        struct MirRegisterData *data = mir_reg_data(L->fs->mir, var->r.r);
-        data->is_uninit = PAW_TRUE;
+        struct MirPlace const init = lower_place(V, s->init);
+        struct LocalVar const local = alloc_local(L->fs, p->ident, type);
+        move_to(L->fs, p->span.start, init, local.r);
     } else {
-        LOWERING_ERROR(L, uninitialized_destructuring, s->span.start);
+        // create an uninitialized virtual register to hold the variable
+        struct LocalVar const local = alloc_local(L->fs, p->ident, type);
+        struct MirRegisterData *data = mir_reg_data(L->fs->mir, local.r.r);
+        data->is_uninit = PAW_TRUE;
     }
     return PAW_FALSE;
 }
@@ -1825,91 +1659,6 @@ static struct MirPlace lower_return_expr(struct HirVisitor *V, struct HirReturnE
     return unit_literal(fs, e->span.start);
 }
 
-// Lower an expression representing a location in memory
-// Note that nested selectors on value types are flattened into a single access relative
-// to the start of the object (the whole object is stored in a single virtual register).
-static void lower_place_aux(struct HirVisitor *V, struct HirExpr *expr, struct MirPlace *pplace)
-{
-    struct LowerHir *L = V->ud;
-    struct FunctionState *fs = L->fs;
-
-    switch (HIR_KINDOF(expr)) {
-        case kHirSelector: {
-            struct HirSelector *x = HirGetSelector(expr);
-            lower_place_aux(V, x->target, pplace);
-
-            IrType *target = GET_NODE_TYPE(fs->C, x->target);
-            *pplace = select_field(fs, *pplace, target, x->index, 0);
-            break;
-        }
-        case kHirIndex: {
-            struct HirIndex *x = HirGetIndex(expr);
-            lower_place_aux(V, x->target, pplace);
-
-            IrType *target = GET_NODE_TYPE(fs->C, x->target);
-            if (builtin_kind(L, target) == BUILTIN_MAP) {
-                *pplace = lower_mapping_index(V, x, *pplace);
-            } else {
-                *pplace = lower_sequence_index(V, x, *pplace);
-            }
-            break;
-        }
-        case kHirPathExpr:
-            *pplace = lower_path_expr(V, HirGetPathExpr(expr));
-            break;
-        case kHirLiteralExpr:
-            *pplace = lower_literal_expr(V, HirGetLiteralExpr(expr));
-            break;
-        case kHirLogicalExpr:
-            *pplace = lower_logical_expr(V, HirGetLogicalExpr(expr));
-            break;
-        case kHirChainExpr:
-            *pplace = lower_chain_expr(V, HirGetChainExpr(expr));
-            break;
-        case kHirUnOpExpr:
-            *pplace = lower_unop_expr(V, HirGetUnOpExpr(expr));
-            break;
-        case kHirBinOpExpr:
-            *pplace = lower_binop_expr(V, HirGetBinOpExpr(expr));
-            break;
-        case kHirClosureExpr:
-            *pplace = lower_closure_expr(V, HirGetClosureExpr(expr));
-            break;
-        case kHirConversionExpr:
-            *pplace = lower_conversion_expr(V, HirGetConversionExpr(expr));
-            break;
-        case kHirCallExpr:
-            *pplace = lower_call_expr(V, HirGetCallExpr(expr));
-            break;
-        case kHirFieldExpr:
-            *pplace = lower_field_expr(V, HirGetFieldExpr(expr));
-            break;
-        case kHirAssignExpr:
-            *pplace = lower_assign_expr(V, HirGetAssignExpr(expr));
-            break;
-        case kHirOpAssignExpr:
-            *pplace = lower_op_assign_expr(V, HirGetOpAssignExpr(expr));
-            break;
-        case kHirReturnExpr:
-            *pplace = lower_return_expr(V, HirGetReturnExpr(expr));
-            break;
-        case kHirJumpExpr:
-            *pplace = lower_jump_expr(V, HirGetJumpExpr(expr));
-            break;
-        case kHirLoopExpr:
-            *pplace = lower_loop_expr(V, HirGetLoopExpr(expr));
-            break;
-        case kHirMatchExpr:
-            *pplace = lower_match_expr(V, HirGetMatchExpr(expr));
-            break;
-        case kHirBlock:
-            *pplace = lower_block(V, HirGetBlock(expr));
-            break;
-        default:
-            PAW_UNREACHABLE();
-    }
-}
-
 static struct MirPlace lower_place(struct HirVisitor *V, struct HirExpr *expr)
 {
     struct LowerHir *L = V->ud;
@@ -1943,8 +1692,8 @@ static void declare_match_bindings(struct FunctionState *fs, struct BindingList 
             .name = pb->name,
         };
 
-        struct LocalVar *local = alloc_local(fs, ident, pb->var.type);
-        move_to(fs, ident.span.start, test, local->r);
+        struct LocalVar local = alloc_local(fs, ident, pb->var.type);
+        move_to(fs, ident.span.start, test, local.r);
     }
 }
 
@@ -2018,11 +1767,11 @@ static void allocate_match_vars(struct FunctionState *fs, struct MirPlace object
     K_LIST_ENUMERATE (mc.vars, index, pv) {
         Str *const name = SCAN_STR(fs->C, PRIVATE("variable"));
         struct HirIdent const ident = {.name = name, .span = (struct SourceSpan){0}};
-        struct LocalVar *local = alloc_local(fs, ident, pv->type);
-        map_var_to_reg(fs, *pv, local->r);
+        struct LocalVar local = alloc_local(fs, ident, pv->type);
+        map_var_to_reg(fs, *pv, local.r);
 
         struct MirPlace source = select_field(fs, object, object_type, is_enum + index, discr);
-        move_to(fs, pv->span.start, source, local->r);
+        move_to(fs, pv->span.start, source, local.r);
     }
 }
 
@@ -2220,6 +1969,91 @@ static struct MirPlace lower_match_expr(struct HirVisitor *V, struct HirMatchExp
 
     VarMap_delete(L, var_mapping);
     return result;
+}
+
+// Lower an expression representing a location in memory
+// Note that nested selectors on value types are flattened into a single access relative
+// to the start of the object (the whole object is stored in a single virtual register).
+static void lower_place_aux(struct HirVisitor *V, struct HirExpr *expr, struct MirPlace *pplace)
+{
+    struct LowerHir *L = V->ud;
+    struct FunctionState *fs = L->fs;
+
+    switch (HIR_KINDOF(expr)) {
+        case kHirSelector: {
+            struct HirSelector *x = HirGetSelector(expr);
+            lower_place_aux(V, x->target, pplace);
+
+            IrType *target = GET_NODE_TYPE(fs->C, x->target);
+            *pplace = select_field(fs, *pplace, target, x->index, 0);
+            break;
+        }
+        case kHirIndex: {
+            struct HirIndex *x = HirGetIndex(expr);
+            lower_place_aux(V, x->target, pplace);
+
+            IrType *target = GET_NODE_TYPE(fs->C, x->target);
+            if (builtin_kind(L, target) == BUILTIN_MAP) {
+                *pplace = lower_mapping_index(V, x, *pplace);
+            } else {
+                *pplace = lower_sequence_index(V, x, *pplace);
+            }
+            break;
+        }
+        case kHirPathExpr:
+            *pplace = lower_path_expr(V, HirGetPathExpr(expr));
+            break;
+        case kHirLiteralExpr:
+            *pplace = lower_literal_expr(V, HirGetLiteralExpr(expr));
+            break;
+        case kHirLogicalExpr:
+            *pplace = lower_logical_expr(V, HirGetLogicalExpr(expr));
+            break;
+        case kHirChainExpr:
+            *pplace = lower_chain_expr(V, HirGetChainExpr(expr));
+            break;
+        case kHirUnOpExpr:
+            *pplace = lower_unop_expr(V, HirGetUnOpExpr(expr));
+            break;
+        case kHirBinOpExpr:
+            *pplace = lower_binop_expr(V, HirGetBinOpExpr(expr));
+            break;
+        case kHirClosureExpr:
+            *pplace = lower_closure_expr(V, HirGetClosureExpr(expr));
+            break;
+        case kHirConversionExpr:
+            *pplace = lower_conversion_expr(V, HirGetConversionExpr(expr));
+            break;
+        case kHirCallExpr:
+            *pplace = lower_call_expr(V, HirGetCallExpr(expr));
+            break;
+        case kHirFieldExpr:
+            *pplace = lower_field_expr(V, HirGetFieldExpr(expr));
+            break;
+        case kHirAssignExpr:
+            *pplace = lower_assign_expr(V, HirGetAssignExpr(expr));
+            break;
+        case kHirOpAssignExpr:
+            *pplace = lower_op_assign_expr(V, HirGetOpAssignExpr(expr));
+            break;
+        case kHirReturnExpr:
+            *pplace = lower_return_expr(V, HirGetReturnExpr(expr));
+            break;
+        case kHirJumpExpr:
+            *pplace = lower_jump_expr(V, HirGetJumpExpr(expr));
+            break;
+        case kHirLoopExpr:
+            *pplace = lower_loop_expr(V, HirGetLoopExpr(expr));
+            break;
+        case kHirMatchExpr:
+            *pplace = lower_match_expr(V, HirGetMatchExpr(expr));
+            break;
+        case kHirBlock:
+            *pplace = lower_block(V, HirGetBlock(expr));
+            break;
+        default:
+            PAW_UNREACHABLE();
+    }
 }
 
 static void lower_hir_body_aux(struct LowerHir *L, struct HirFuncDecl *func, struct Mir *mir)

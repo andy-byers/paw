@@ -544,10 +544,10 @@ struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mi
         }
 
         // assign registers for captured variables
-        for (int i = 0; i < ncaptured; ++i) {
+        for (int i = 0, j = 0; i < ncaptured; ++i) {
             struct MirCaptureInfo c = MirCaptureList_get(mir->captured, i);
             if (c.r.value >= offset) {
-                RegisterTable_set(R.result, c.r.value, REGINFO(offset + i));
+                RegisterTable_set(R.result, c.r.value, REGINFO(offset + j++));
             }
         }
     }

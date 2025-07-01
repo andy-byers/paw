@@ -24,13 +24,13 @@ struct Resolver {
     int decl_count;
 };
 
-enum ImportKind {
-    IMPORT_EXPLICIT,
-    IMPORT_GLOB,
+enum ImportSymbolKind {
+    ISYMBOL_EXPLICIT,
+    ISYMBOL_GLOB,
 };
 
 struct ImportSymbol {
-    enum ImportKind kind;
+    enum ImportSymbolKind kind;
     NodeId id;
 };
 #define ISYMBOL(Id_, Kind_) ((struct ImportSymbol){.id = Id_, .kind = Kind_})
@@ -39,10 +39,17 @@ struct ImportName {
     struct ImportSymbols *symbols;
 };
 
+enum ImportScopeKind {
+    ISCOPE_MODULE,
+    ISCOPE_TYPE,
+    ISCOPE_FN,
+};
+
 struct ImportScope {
     struct ImportNames *types;
     struct ImportNames *values;
     struct ImportScope *outer;
+    enum ImportScopeKind kind;
     NodeId id;
 };
 
@@ -110,7 +117,5 @@ static struct AstSegment *pc_segment(struct PathCursor pc)
 }
 
 #define NS_NAME(Ns_) ((Ns_) == NAMESPACE_TYPE ? "type" : "value")
-
-//void pawP_resolve_names(struct Compiler *C);
 
 #endif // PAW_RESOLVE_H

@@ -22,14 +22,14 @@ pub fn test_object() {
 
 use mod_a::poly_recursive;
 
-pub fn test_specific_import() {
+pub fn test_explicit_import() {
     let list = [];
     let count = poly_recursive(5, 123, list);
     assert(#list == 5);
     assert(list[-1] == 123);
 }
 
-pub fn test_star_import() {
+pub fn test_glob_import() {
     let c = choose(true);   
     assert(c == "abc");
     let c = choose(false);   

@@ -25,12 +25,14 @@
 
 struct LowerAst {
     struct Compiler *C;
+    struct Pool *pool;
     struct Ast *ast;
     struct Hir *hir;
     paw_Env *P;
 
     DeclId adt_did;
     struct SegmentTable *segtab;
+    struct HirStmtList *stmts;
     struct AstModuleDecl *m;
 };
 
@@ -93,6 +95,11 @@ static struct HirIdent lower_ident(struct LowerAst *L, struct AstIdent ident)
     return make_ident(ident.name, ident.span);
 }
 
+static struct HirExpr *unit_lit(struct LowerAst *L, struct SourceSpan span)
+{
+    return NEW_NODE(L, basic_lit, span, next_node_id(L), P2V(NULL), BUILTIN_UNIT);
+}
+
 static struct HirPath new_unary_path(struct LowerAst *L, struct HirIdent ident, NodeId id, enum HirPathKind kind, NodeId target)
 {
     struct HirSegments *segments = HirSegments_new(L->hir);
@@ -108,7 +115,18 @@ static struct HirExpr *new_unary_path_expr(struct LowerAst *L, struct HirIdent i
 
 static struct HirExpr *lower_block(struct LowerAst *L, struct AstBlock *e)
 {
-    struct HirStmtList *stmts = lower_stmt_list(L, e->stmts);
+    // Keep track of the statement list so that LetStmt nodes that correspond to
+    // bindings unpacking can lower to multiple statements.
+    struct HirStmtList *outer = L->stmts;
+    L->stmts = HirStmtList_new(L->hir);
+    struct AstStmt *const *pstmt;
+    K_LIST_FOREACH (e->stmts, pstmt) {
+        struct HirStmt *stmt = lower_stmt(L, *pstmt);
+        if (stmt != NULL) HirStmtList_push(L->hir, L->stmts, stmt);
+    }
+    struct HirStmtList *stmts = L->stmts;
+    L->stmts = outer;
+
     struct HirExpr *result = e->result != NULL ? lower_expr(L, e->result) : NULL;
     return NEW_NODE(L, block, e->span, e->id, stmts, result);
 }
@@ -648,23 +666,147 @@ static struct HirExpr *LowerIfExpr(struct LowerAst *L, struct AstIfExpr *e)
     return new_boolean_match(L, e->span, cond, then_block, else_block);
 }
 
+
+//
+// Destructuring support
+//
+// Performs the following transformation, the result of which is passed to the pattern
+// matching compiler during HIR lowering. The resulting match expression must be
+// exhaustive, meaning "rhs" must have only a single variant. Note that the "x" defined
+// by the final generated "let" statement must have the same node ID as the original
+// "x" binding.
+//
+// Before:
+// {
+//     let Struct{x} = rhs;
+//     ...
+// }
+//
+// After:
+// {
+//     let mut _x;
+//     match rhs {
+//         Struct{x} => {
+//             _x = x;
+//         }
+//     }
+//     let x = _x;
+//     ...
+// }
+//
+
+struct Unpacking {
+    struct SourceSpan span;
+    struct UnpackingList *info;
+    struct LowerAst *L;
+};
+
+struct UnpackingInfo {
+    struct HirBindingPat *original; // original "x"
+    struct HirBindingPat *temp; // local variable "_x"
+    struct HirBindingPat *match; // "x" binding inside match
+};
+
+DEFINE_LIST(struct LowerAst, UnpackingList, struct UnpackingInfo)
+
+static struct HirPat *new_temp_binding(struct LowerAst *L, struct SourceSpan span, struct HirIdent ident)
+{
+    ident.name = pawP_format_string(L->C, "_%s", ident.name->text);
+    return NEW_NODE(L, binding_pat, span, next_node_id(L), ident);
+}
+
+static void collect_binding(struct HirVisitor *V, struct HirBindingPat *original)
+{
+    struct Unpacking *ctx = V->ud;
+    struct LowerAst *L = ctx->L;
+
+    // "original" pointer already embedded in the matched-on pattern
+    struct HirPat *temp = new_temp_binding(L, original->span, original->ident);
+    struct HirPat *new_original = NEW_NODE(L, binding_pat, original->span, next_node_id(L), original->ident);
+    UnpackingList_push(L, ctx->info, (struct UnpackingInfo){
+                .original = HirGetBindingPat(new_original),
+                .temp = HirGetBindingPat(temp),
+                .match = original,
+            });
+    NodeId const original_id = original->id;
+    original->id = new_original->hdr.id;
+    new_original->hdr.id = original_id;
+
+    HirNodeMap_insert(L->hir, L->hir->nodes, new_original->hdr.id, new_original);
+    HirNodeMap_insert(L->hir, L->hir->nodes, original->id, original);
+
+    struct HirStmt *let = NEW_NODE(L, let_stmt, original->span, next_node_id(L), temp, NULL, NULL);
+    HirStmtList_push(L->hir, L->stmts, let);
+}
+
+static struct HirStmtList *create_unpackers(struct Unpacking *ctx)
+{
+    struct LowerAst *L = ctx->L;
+    struct UnpackingInfo *pinfo;
+    struct HirStmtList *setters = HirStmtList_new(L->hir);
+    K_LIST_FOREACH(ctx->info, pinfo) {
+        // NOTE: "lhs" refers to the temporary LetStmt binding and "rhs" to the match binding
+        struct HirExpr *lhs = new_unary_path_expr(L, pinfo->temp->ident, next_node_id(L), HIR_PATH_LOCAL, pinfo->temp->id);
+        struct HirExpr *rhs = new_unary_path_expr(L, pinfo->match->ident, next_node_id(L), HIR_PATH_LOCAL, pinfo->match->id);
+        struct HirExpr *setter = NEW_NODE(L, assign_expr, ctx->span, next_node_id(L), lhs, rhs);
+        HirStmtList_push(L->hir, setters, NEW_NODE(L, expr_stmt, ctx->span, next_node_id(L), setter));
+    }
+    return setters;
+}
+
+static struct HirStmt *unpack_bindings(struct LowerAst *L, struct HirPat *lhs, struct HirExpr *rhs, NodeId id)
+{
+    struct Unpacking ctx = {
+        .info = UnpackingList_new(L),
+        .span = lhs->hdr.span,
+        .L = L,
+    };
+
+    // declare temporaries for each binding that appears in the pattern
+    struct HirVisitor collector;
+    pawHir_visitor_init(&collector, L->hir, &ctx);
+    collector.PostVisitBindingPat = collect_binding;
+    pawHir_visit_pat(&collector, lhs);
+
+    // create the match expression containing an assignment to each binding
+    struct HirStmtList *setters = create_unpackers(&ctx);
+    struct HirExpr *block = NEW_NODE(L, block, ctx.span, next_node_id(L), setters, unit_lit(L, ctx.span));
+    struct HirExprList *arms = HirExprList_new(L->hir);
+    HirExprList_push(L->hir, arms, NEW_NODE(L, match_arm, ctx.span, next_node_id(L), lhs, NULL, block));
+    struct HirExpr *match = NEW_NODE(L, match_expr, ctx.span, next_node_id(L), rhs, arms, PAW_TRUE);
+    HirStmtList_push(L->hir, L->stmts, NEW_NODE(L, expr_stmt, ctx.span, id, match));
+
+    // assign to fresh bindings from temporaries
+    struct UnpackingInfo *pinfo;
+    K_LIST_FOREACH(ctx.info, pinfo) {
+        struct HirBindingPat const *temp = pinfo->temp;
+        struct HirPat *lhs = HIR_CAST_PAT(pinfo->original);
+        struct HirExpr *rhs = new_unary_path_expr(L, temp->ident, next_node_id(L), HIR_PATH_LOCAL, temp->id);
+        HirStmtList_push(L->hir, L->stmts, NEW_NODE(L, let_stmt, temp->span, next_node_id(L), lhs, NULL, rhs));
+    }
+
+    return NULL;
+}
+
 static struct HirStmt *LowerLetStmt(struct LowerAst *L, struct AstLetStmt *s)
 {
     struct HirPat *pat = lower_pat(L, s->pat);
     struct HirType *tag = s->tag != NULL ? lower_type(L, s->tag) : NULL;
     struct HirExpr *init = s->init != NULL ? lower_expr(L, s->init) : NULL;
-    return NEW_NODE(L, let_stmt, s->span, s->id, pat, tag, init);
+
+    if (HirIsBindingPat(pat)) {
+        return NEW_NODE(L, let_stmt, s->span, s->id, pat, tag, init);
+    } else if (s->init != NULL) {
+        return unpack_bindings(L, pat, init, s->id);
+    } else {
+        LOWERING_ERROR(L, uninitialized_destructuring, s->span.start);
+    }
 }
 
 static struct HirStmt *LowerExprStmt(struct LowerAst *L, struct AstExprStmt *s)
 {
     struct HirExpr *expr = lower_expr(L, s->expr);
     return NEW_NODE(L, expr_stmt, s->span, s->id, expr);
-}
-
-static struct HirExpr *unit_lit(struct LowerAst *L, struct SourceSpan span)
-{
-    return NEW_NODE(L, basic_lit, span, next_node_id(L), P2V(NULL), BUILTIN_UNIT);
 }
 
 static struct HirExpr *LowerLoopExpr(struct LowerAst *L, struct AstLoopExpr *e)
@@ -817,14 +959,8 @@ static struct HirExpr *LowerIndex(struct LowerAst *L, struct AstIndex *e)
     return NEW_NODE(L, index_expr, e->span, e->id, target, index);
 }
 
-#include"stdio.h"
 static struct HirExpr *LowerSelector(struct LowerAst *L, struct AstSelector *e)
 {
-    if (e->target->hdr.kind==kAstPathExpr&&pawS_eq(e->target->PathExpr_.path.segments[0].data[0].ident.name, SCAN_STR(L->C,"self"))){
-        if(e->is_index) {
-   puts("found");
-        }
-    }
     struct HirExpr *target = lower_expr(L, e->target);
     if (e->is_index)
         return NEW_NODE(L, index_selector, e->span, e->id, target, e->index);
@@ -978,10 +1114,11 @@ static struct HirPat *LowerPathPat(struct LowerAst *L, struct AstPathPat *p)
             struct HirDecl *decl = pawHir_get_node(L->hir, segment.target);
             if (HirIsParamDecl(decl)) {
                 return NEW_NODE(L, binding_pat, p->span, p->id, segment.ident);
-            } else {
+            } else if (HirIsAdtDecl(decl)) {
                 HirPatList *empty = HirPatList_new(L->hir);
                 return NEW_NODE(L, struct_pat, p->span, p->id, path, empty);
             }
+            // fallthrough
         }
         case HIR_PATH_ASSOC: {
             NodeId const variant_id = K_LIST_LAST(path.segments).target;
@@ -1091,6 +1228,7 @@ void pawP_lower_ast(struct Compiler *C)
     paw_Env *P = ENV(C);
     struct Ast *ast = C->ast;
     struct LowerAst L = {
+        .pool = pawP_pool_new(C, C->aux_stats),
         .segtab = C->segtab,
         .ast = ast,
         .P = P,

@@ -305,7 +305,7 @@ static IrTypeList *check_exprs(struct TypeChecker *T, struct HirExprList *list)
     IrTypeList *new_list = IrTypeList_new(T->C);
     IrTypeList_reserve(T->C, new_list, list->count);
 
-    struct HirExpr **pexpr;
+    struct HirExpr *const *pexpr;
     K_LIST_FOREACH (list, pexpr) {
         IrType *type = check_operand(T, *pexpr);
         IrTypeList_push(T->C, new_list, type);
@@ -319,7 +319,7 @@ static IrTypeList *collect_decl_types(struct TypeChecker *T, struct HirDeclList 
     IrTypeList *new_list = IrTypeList_new(T->C);
     IrTypeList_reserve(T->C, new_list, list->count);
 
-    struct HirDecl **pdecl;
+    struct HirDecl *const *pdecl;
     K_LIST_FOREACH (list, pdecl) {
         IrType *type = GET_NODE_TYPE(T->C, *pdecl);
         IrTypeList_push(T->C, new_list, type);
@@ -571,6 +571,19 @@ static IrType *lower_value_path(struct TypeChecker *T, struct HirPath path)
                 return lower_adt_segment(T, segment);
             } else if (HirIsParamDecl(item)) {
                 return GET_TYPE(T, segment.target);
+            } else if (HirIsVariantDecl(item)) {
+                struct HirVariantDecl *v = HirGetVariantDecl(item);
+                IrType *base = pawIr_get_def_type(T->C, v->base_did);
+                IrType *assoc = GET_TYPE(T, segment.target);
+                if (IrIsSignature(assoc)) {
+                    base = pawP_generalize(T->C, base);
+                    return pawP_generalize_assoc(T->C, base, assoc);
+                } else {
+                    IrType *target = GET_TYPE(T, segment.target);
+                    IrTypeList *args = lower_types(T, segment.types);
+                    target = pawP_instantiate(T->C, target, args);
+                    return target;
+                }
             } else {
                 IrType *target = GET_TYPE(T, segment.target);
                 IrTypeList *args = lower_types(T, segment.types);
@@ -588,7 +601,6 @@ static IrType *lower_value_path(struct TypeChecker *T, struct HirPath path)
                 if (IrIsGeneric(base)) {
                     assoc = pawIr_resolve_trait_method(T->C, IrGetGeneric(base), last.ident.name);
                     return pawP_generalize(T->C, assoc);
-
                 }
                 assoc = pawP_generalize_assoc(T->C, base, assoc);
                 // TODO: rename pawP_generalize_assoc to pawP_instantiate_assoc and take
@@ -922,7 +934,7 @@ static IrType *check_closure_expr(struct TypeChecker *T, struct HirClosureExpr *
 
 static struct HirDecl *find_method_aux(struct Compiler *C, struct HirDecl *base, Str *name)
 {
-    struct HirDecl **pdecl;
+    struct HirDecl *const *pdecl;
     struct HirAdtDecl *adt = HirGetAdtDecl(base);
     K_LIST_FOREACH (adt->methods, pdecl) {
         struct HirFuncDecl *method = HirGetFuncDecl(*pdecl);
@@ -935,7 +947,7 @@ static struct HirDecl *find_method_aux(struct Compiler *C, struct HirDecl *base,
 IrType *pawP_find_method(struct Compiler *C, IrType *base, Str *name)
 {
     struct HirDecl *decl = pawHir_get_decl(C->hir, IR_TYPE_DID(base));
-    struct HirDecl *method = find_method_aux(C, decl, name);
+    struct HirDecl const *method = find_method_aux(C, decl, name);
     if (method == NULL) return NULL;
 
     IrType *fn = GET_NODE_TYPE(C, method);
@@ -954,8 +966,8 @@ static void CheckLetStmt(struct TypeChecker *T, struct HirLetStmt *s)
 {
     IrType *tag = check_type(T, s->tag, s->span);
     IrType *rhs = s->init != NULL
-                              ? check_operand(T, s->init)
-                              : new_unknown(T, s->span.start);
+        ? check_operand(T, s->init)
+        : new_unknown(T, s->span.start);
     struct BlockState bs;
     struct MatchState ms;
     enter_block(T, &bs, s->span, BLOCK_MATCH);
@@ -983,48 +995,34 @@ static void const_check_path(struct HirVisitor *V, struct HirPathExpr *e)
     }
 }
 
-static void const_check_unop(struct HirVisitor *V, struct HirUnOpExpr *e)
+static void const_check_expr(struct HirVisitor *V, struct HirExpr *expr)
 {
-}
+    char const *name;
+    switch (HIR_KINDOF(expr)) {
+        case kHirClosureExpr:
+            name = "closure";
+            break;
+        case kHirCallExpr:
+            name = "function call";
+            break;
+        case kHirIndex:
+            name = "index expression";
+            break;
+        case kHirSelector:
+            name = "selector expression";
+            break;
+        case kHirFieldExpr:
+            name = "field expression";
+            break;
+        case kHirLoopExpr:
+            name = "loop";
+            break;
+        default:
+            return;
+    }
 
-static void const_check_binop(struct HirVisitor *V, struct HirBinOpExpr *e)
-{
-}
-
-static void const_check_closure(struct HirVisitor *V, struct HirClosureExpr *e)
-{
     struct TypeChecker *T = V->ud;
-    TYPECK_ERROR(T, cannot_constant_evaluate, e->span.start, "closure");
-}
-
-static void const_check_call(struct HirVisitor *V, struct HirCallExpr *e)
-{
-    struct TypeChecker *T = V->ud;
-    TYPECK_ERROR(T, cannot_constant_evaluate, e->span.start, "function call");
-}
-
-static void const_check_index(struct HirVisitor *V, struct HirIndex *e)
-{
-    struct TypeChecker *T = V->ud;
-    TYPECK_ERROR(T, cannot_constant_evaluate, e->span.start, "index expression");
-}
-
-static void const_check_selector(struct HirVisitor *V, struct HirSelector *e)
-{
-    struct TypeChecker *T = V->ud;
-    TYPECK_ERROR(T, cannot_constant_evaluate, e->span.start, "selector expression");
-}
-
-static void const_check_field(struct HirVisitor *V, struct HirFieldExpr *e)
-{
-    struct TypeChecker *T = V->ud;
-    TYPECK_ERROR(T, cannot_constant_evaluate, e->span.start, "field expression");
-}
-
-static void const_check_loop(struct HirVisitor *V, struct HirLoopExpr *e)
-{
-    struct TypeChecker *T = V->ud;
-    TYPECK_ERROR(T, cannot_constant_evaluate, e->span.start, "loop");
+    TYPECK_ERROR(T, cannot_constant_evaluate, expr->hdr.span.start, name);
 }
 
 // Make sure the initializer of a global constant can be computed at compile time
@@ -1032,14 +1030,7 @@ static void check_const(struct TypeChecker *T, struct HirExpr *expr, IrType *typ
 {
     struct HirVisitor V;
     pawHir_visitor_init(&V, T->hir, T);
-    V.PostVisitUnOpExpr = const_check_unop;
-    V.PostVisitBinOpExpr = const_check_binop;
-    V.PostVisitClosureExpr = const_check_closure;
-    V.PostVisitCallExpr = const_check_call;
-    V.PostVisitIndex = const_check_index;
-    V.PostVisitSelector = const_check_selector;
-    V.PostVisitFieldExpr = const_check_field;
-    V.PostVisitLoopExpr = const_check_loop;
+    V.PostVisitExpr = const_check_expr;
     pawHir_visit_expr(&V, expr);
 
     enum BuiltinKind kind = TYPE2CODE(T, type);
@@ -1071,7 +1062,7 @@ static void register_generics(struct TypeChecker *T, struct HirDeclList *generic
     if (generics == NULL)
         return;
 
-    struct HirDecl **pdecl;
+    struct HirDecl *const *pdecl;
     K_LIST_FOREACH (generics, pdecl) {
         struct HirGenericDecl *d = HirGetGenericDecl(*pdecl);
         IrType *type = pawIr_new_generic(T->C, d->did, NULL);
@@ -1126,7 +1117,7 @@ static void ensure_accessible_field(struct TypeChecker *T, struct HirDecl *field
 static IrType *select_field(struct TypeChecker *T, IrType *target, struct HirSelector *e)
 {
     if (IrIsTuple(target)) {
-        // tuples are indexed with "Expr" "." "int_lit"
+        // tuples are indexed with `Expr "." int_lit`
         IrTypeList *types = IrGetTuple(target)->elems;
         if (!e->is_index)
             TYPECK_ERROR(T, expected_element_selector, e->ident.span.start);
@@ -1654,7 +1645,7 @@ static IrType *CheckStructPat(struct TypeChecker *T, struct HirStructPat *p)
     K_LIST_FOREACH (p->fields, pfield) {
         check_pat(T, *pfield);
         struct HirIdent const field_ident = HirGetFieldPat(*pfield)->ident;
-        struct HirPat **ppat = PatFieldMap_get(T, map, field_ident);
+        struct HirPat *const *ppat = PatFieldMap_get(T, map, field_ident);
         if (ppat != NULL)
             TYPECK_ERROR(T, duplicate_field, field_ident.span.start,
                     field_ident.name->text, v->ident.name->text);
@@ -1669,7 +1660,7 @@ static IrType *CheckStructPat(struct TypeChecker *T, struct HirStructPat *p)
     struct HirDecl *const *pdecl;
     K_LIST_ZIP (v->fields, pdecl, adt_fields, ptype) {
         struct HirFieldDecl *field = HirGetFieldDecl(*pdecl);
-        struct HirPat **ppat = PatFieldMap_get(T, map, field->ident);
+        struct HirPat *const *ppat = PatFieldMap_get(T, map, field->ident);
         if (ppat == NULL)
             TYPECK_ERROR(T, missing_field, field->ident.span.start,
                     field->ident.name->text, v->ident.name->text);
@@ -1696,7 +1687,12 @@ static IrType *CheckStructPat(struct TypeChecker *T, struct HirStructPat *p)
 
 static IrType *CheckVariantPat(struct TypeChecker *T, struct HirVariantPat *p)
 {
-    struct IrSignature *fsig = IrGetSignature(lower_value_path(T, p->path));
+    IrType *type = lower_value_path(T, p->path);
+    if (IrIsAdt(type)) {
+        // must be unit structure
+        return type;
+    }
+    struct IrSignature *fsig = IrGetSignature(type);
     IrTypeList *params = fsig->params;
 
     struct MatchState *ms = T->ms;

@@ -39,7 +39,6 @@ enum ErrorKind {
     E_EXPECTED_SYMBOL,
     E_EXPECTED_DELIMITER,
     E_EXPECTED_SEMICOLON,
-    E_UNEXPECTED_VISIBILITY_QUALIFIER,
     E_EMPTY_TYPE_LIST,
     E_NONLITERAL_PATTERN,
     E_NEGATIVE_MINIMUM_INTEGER,
@@ -68,6 +67,24 @@ enum ErrorKind {
     E_NONPRIMITIVE_ANNOTATION_VALUE,
     E_INVALID_GLOB,
 
+    // name/import resolution errors
+    E_ITEM_VISIBILITY,
+    E_ASSOCIATED_ITEM_VISIBILITY,
+    E_INVALID_GLOB_TARGET,
+    E_AMBIGUOUS_PATH,
+    E_DUPLICATE_ITEM,
+    E_UNKNOWN_PATH,
+    E_MULTIPLE_APPLICABLE_ITEMS,
+    E_UNEXPECTED_MODULE_NAME,
+    E_TRANSITIVE_IMPORT,
+    E_INCORRECT_TYPE_ARITY,
+    E_EXPECTED_TYPE_ARGUMENTS,
+    E_UNEXPECTED_TYPE_ARGUMENTS,
+    E_EXPECTED_TRAIT,
+    E_UNEXPECTED_TRAIT,
+    E_INCORRECT_ITEM_CLASS,
+    E_EXTRA_SEGMENT,
+
     // AST lowering errors
     E_INVALID_ASSIGNMENT_TARGET,
 
@@ -75,15 +92,8 @@ enum ErrorKind {
     E_MODULE_NOT_FOUND,
 
     // collection errors
-    E_AMBIGUOUS_PATH,
-    E_DUPLICATE_ITEM,
-    E_UNKNOWN_TYPE,
-    E_UNKNOWN_TRAIT,
-    E_UNKNOWN_ITEM,
     E_EXTERN_FUNCTION_BODY,
     E_MISSING_FUNCTION_BODY,
-    E_ITEM_VISIBILITY,
-    E_ASSOCIATED_ITEM_VISIBILITY,
 
     // type errors
     E_MISSING_TRAIT_BOUNDS,
@@ -95,28 +105,13 @@ enum ErrorKind {
     // compiler errors
     E_MISSING_EXTERN_VALUE,
 
-    // lookup errors
-    E_UNEXPECTED_MODULE_NAME,
-    E_TRANSITIVE_IMPORT,
-    E_INCORRECT_TYPE_ARITY,
-    E_EXPECTED_TYPE_ARGUMENTS,
-    E_UNEXPECTED_TYPE_ARGUMENTS,
-    E_EXPECTED_TRAIT,
-    E_UNEXPECTED_TRAIT,
-    E_INCORRECT_ITEM_CLASS,
-    E_EXTRA_SEGMENT,
-
     // trait errors
     E_MISSING_TRAIT_METHOD,
     E_TRAIT_METHOD_VISIBILITY_MISMATCH,
 
-    // TODO: new resolver errors
-    E_MULTIPLE_APPLICABLE_ITEMS,
-
-    // resolver errors
+    // type checker errors
     E_MISSING_VARIANT_ARGS,
     E_RESERVED_IDENTIFIER,
-    E_UNKNOWN_PATH,
     E_TYPE_USED_AS_VALUE,
     E_ENUM_USED_AS_VALUE,
     E_MISSING_FIELDS,
@@ -207,7 +202,6 @@ _Noreturn void pawErr_null_before_eof(struct Compiler *C, Str const *modname, st
 _Noreturn void pawErr_unexpected_symbol(struct Compiler *C, Str const *modname, struct SourceLoc loc);
 _Noreturn void pawErr_expected_delimiter(struct Compiler *C, Str const *modname, struct SourceLoc loc, char right, char left, struct SourceLoc open);
 _Noreturn void pawErr_expected_semicolon(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *what);
-_Noreturn void pawErr_unexpected_visibility_qualifier(struct Compiler *C, Str const *modname, struct SourceLoc loc);
 _Noreturn void pawErr_empty_type_list(struct Compiler *C, Str const *modname, struct SourceLoc loc);
 _Noreturn void pawErr_nonliteral_pattern(struct Compiler *C, Str const *modname, struct SourceLoc loc);
 _Noreturn void pawErr_negative_minimum_integer(struct Compiler *C, Str const *modname, struct SourceLoc loc);
@@ -245,13 +239,11 @@ _Noreturn void pawErr_invalid_assignment_target(struct Compiler *C, Str const *m
 // collection errors
 _Noreturn void pawErr_ambiguous_path(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *path);
 _Noreturn void pawErr_duplicate_item(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *what, char const *name);
-_Noreturn void pawErr_unknown_type(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *type);
-_Noreturn void pawErr_unknown_trait(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *name);
-_Noreturn void pawErr_unknown_item(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *mod, char const *item);
 _Noreturn void pawErr_extern_function_body(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *name);
 _Noreturn void pawErr_missing_function_body(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *name);
 _Noreturn void pawErr_item_visibility(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *mod, char const *item);
 _Noreturn void pawErr_associated_item_visibility(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *name, char const *type);
+_Noreturn void pawErr_invalid_glob_target(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *path);
 
 // type errors
 _Noreturn void pawErr_missing_trait_bounds(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *name);

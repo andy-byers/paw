@@ -41,6 +41,7 @@
     X(chain)                 \
     X(misc)                  \
     X(import)                \
+    X(import_variant)        \
     X(trait)                 \
     X(alias)                 \
     X(constants)             \

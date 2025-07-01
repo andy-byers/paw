@@ -341,13 +341,13 @@ fn match_singleton_variant_field<T>(e: SingletonEnum<T>) -> T {
 }
 
 pub fn test_singleton_variant_field() {
-    let f = match_singleton_variant_field::<int>;
+    let f = match_singleton_variant_field;
     assert(f(SingletonEnum::First((123,))) == 123);
     assert(f(SingletonEnum::Second(456)) == 456);
 }
 
 pub fn test_nested_singleton_variant_field() {
-    let f = match_singleton_variant_field::<(int,)>;
+    let f = match_singleton_variant_field;
     assert(f(SingletonEnum::First(((123,),))).0 == 123);
     assert(f(SingletonEnum::Second((456,))).0 == 456);
 }
@@ -365,7 +365,7 @@ fn match_multiplet_variant_field<A, B, C>(e: MultipletEnum<A, B, C>) -> (A, B, C
 }
 
 pub fn test_multiplet_variant_field() {
-    let f = match_multiplet_variant_field::<bool, int, str>;
+    let f = match_multiplet_variant_field;
 
     let t = f(MultipletEnum::First((false, 1, "two")));
     assert(t.0 == false);
@@ -436,13 +436,4 @@ pub fn test_single_element_requires_comma() {
 pub fn test_multidigit_selector() {
     let t = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, (10,));
     assert(t.10.0 == 10);
-}
-
-
-
-pub fn test_emit_warning() {
-    print("TODO: in test_singleton_variant_field(), omitting the type arguments on \"match_singleton_variant_field\" causes problems\n");
-    print("TODO: need to generalize and unify with call sites, \"T\" should be replaced with \"int\"\n");
-    print("TODO: this usually happens when resolving the CallExpr, but here the function is not called immediately\n");
-    print("TODO: fails during mono collection due to presence of \"T\"\n");
 }
