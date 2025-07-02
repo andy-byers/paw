@@ -112,8 +112,7 @@ enum ErrorKind {
     // type checker errors
     E_MISSING_VARIANT_ARGS,
     E_RESERVED_IDENTIFIER,
-    E_TYPE_USED_AS_VALUE,
-    E_ENUM_USED_AS_VALUE,
+    E_UNEXPECTED_TYPE,
     E_MISSING_FIELDS,
     E_EXPECTED_VALUE,
     E_INVALID_CHAIN_OPERAND,
@@ -276,6 +275,7 @@ _Noreturn void pawErr_multiple_applicable_items(struct Compiler *C, Str const *m
 // resolver errors
 _Noreturn void pawErr_missing_variant_args(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *cons);
 _Noreturn void pawErr_reserved_identifier(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *name);
+_Noreturn void pawErr_unexpected_type(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *type);
 _Noreturn void pawErr_unknown_path(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *path);
 _Noreturn void pawErr_unknown_field(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *name, char const *type);
 _Noreturn void pawErr_missing_fields(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *type);

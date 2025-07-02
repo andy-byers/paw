@@ -118,15 +118,16 @@ StructField  = name ":" Expr .
 (* Primitive literals *)
 int_lit     = decimal_lit | binary_lit | octal_lit | hex_lit .
 bool_lit    = "true" | "false" .
-string_lit  = quote {unicode_char} quote .
-istring_lit = quote istring_middle quote .
+char_lit    = "'" (character | hex_escape | unicode_escape) "'" .
+string_lit  = "\"" {char_lit} "\"" .
+istring_lit = "\"" istring_middle "\"" .
 decimal_lit = "0" | ("1".."9") [decimal_digits] .
 binary_lit  = "0" ("b" | "B") binary_digits .
 octal_lit   = "0" ("o" | "O") octal_digits .
 hex_lit     = "0" ("x" | "X") hex_digits .
 
 (* String interpolation *)
-istring_middle = {unicode_char | istring_expr} .
+istring_middle = {char_lit | istring_expr} .
 istring_expr   = "\\{" Expr "}" .
 
 (* Float literals *)
@@ -145,7 +146,8 @@ decimal_digits = decimal_digit {decimal_digit | "_"} .
 binary_digits  = binary_digit {binary_digit | "_"} .
 octal_digits   = octal_digit {octal_digit | "_"} .
 hex_digits     = hex_digit {hex_digit | "_"} .
-unicode_char   = UNICODE_CODEPOINT - "\n" .
-quote          = "'" | "\"" .
-
+character      = byte | hex_escape | unicode_escape .
+hex_escape     = "\\x" hex_digit hex_digit .
+unicode_escape = "\\u{" {hex_digit} hex_digit "}" .
+byte           = ("\x00".."\xFF") - "\n" .
 

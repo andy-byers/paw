@@ -30,10 +30,13 @@ enum ImportSymbolKind {
 };
 
 struct ImportSymbol {
+    paw_Bool is_pub;
     enum ImportSymbolKind kind;
+    struct AstIdent ident;
     NodeId id;
 };
-#define ISYMBOL(Id_, Kind_) ((struct ImportSymbol){.id = Id_, .kind = Kind_})
+#define ISYMBOL(Id_, Ident_, Kind_, IsPub_) ((struct ImportSymbol){ \
+        .id = Id_, .ident = Ident_, .kind = Kind_, .is_pub = IsPub_})
 
 struct ImportName {
     struct ImportSymbols *symbols;

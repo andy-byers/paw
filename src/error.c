@@ -617,24 +617,17 @@ _Noreturn void pawErr_reserved_identifier(struct Compiler *C, Str const *modname
             NULL);
 }
 
+_Noreturn void pawErr_unexpected_type(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *type)
+{
+    throw(C, E_UNEXPECTED_TYPE, modname, loc,
+            format(C, "expected value but found type \"%s\"", type),
+            NULL);
+}
+
 _Noreturn void pawErr_unknown_path(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *path)
 {
     throw(C, E_UNKNOWN_PATH, modname, loc,
             format(C, "unknown path \"%s\"", path),
-            NULL);
-}
-
-_Noreturn void pawErr_type_used_as_value(struct Compiler *C, Str const *modname, struct SourceLoc loc)
-{
-    throw(C, E_TYPE_USED_AS_VALUE, modname, loc,
-            format(C, ""),
-            NULL);
-}
-
-_Noreturn void pawErr_enum_used_as_value(struct Compiler *C, Str const *modname, struct SourceLoc loc)
-{
-    throw(C, E_ENUM_USED_AS_VALUE, modname, loc,
-            format(C, ""),
             NULL);
 }
 

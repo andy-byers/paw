@@ -19,7 +19,7 @@ fn read_to_str(path: str) -> io::Result<str> {
     let result = "";
     loop {
         result += match file.read(CHUNK_SIZE)? {
-            "" => return io::Result::Ok(result),
+            "" => return Ok(result),
             s => s,
         };
     }
@@ -34,8 +34,16 @@ fn is_alpha(c: char) -> bool {
     ('a'..='z').contains(c) || ('A'..='Z').contains(c)
 }
 
+fn is_numeric(c: char) -> bool {
+    ('0'..='9').contains(c)
+}
+
 fn is_alnum(c: char) -> bool {
-    is_alpha(c) || ('0'..='9').contains(c)
+    is_alpha(c) || is_numeric(c)
+}
+
+fn is_hex(c: char) -> bool {
+    ('a'..='f').contains(c) || ('A'..='F').contains(c) || is_numeric(c)
 }
 
 inline struct SourceLoc {
@@ -197,13 +205,14 @@ struct Scanner {
     fn scan_string(self) -> Token {
         self.skip_char(); // """
 
-        let loc = self.location;
+        let string_loc = self.location;
         let data = "";
 
         loop {
+            let char_loc = self.location;
             match self.get_char() {
                 '\\' => {
-                    self.skip_char(); // skip '\\'
+                    self.skip_char(); // skip '\'
                     match self.get_char() {
                         '\\' => data += "\\",
                         '"' => data += "\"",
@@ -214,12 +223,28 @@ struct Scanner {
                         'n' => data += "\n",
                         'r' => data += "\r",
                         't' => data += "\t",
-                        _ => break,
+                        'x' => {
+                            self.skip_char();
+                            let upper = self.get_char();
+                            self.skip_char();
+                            let lower = self.get_char();
+                            if is_hex(upper) && is_hex(lower) {
+                                data += upper.to_str();
+                                data += lower.to_str();
+                            } else {
+                                return self.new_error(char_loc, 
+                                    TokenErrorKind::InvalidHexEscape, 
+                                    "\\x\{upper}\{lower}");
+                            }
+                        },
+                        c => return self.new_error(char_loc, 
+                                TokenErrorKind::InvalidEscapeChar, 
+                                "'\{c}'"),
                     }
                 },
                 '"' => {
-                    self.skip_char(); // skip """
-                    return self.new_token(loc, TokenKind::String, data);
+                    self.skip_char(); // skip '"'
+                    return self.new_token(string_loc, TokenKind::String, data);
                 },
                 '\0' | '\r' | '\n' => break,
                 c => data += c.to_str(),
@@ -227,7 +252,7 @@ struct Scanner {
             self.skip_char();
         }
 
-        self.new_error(loc, TokenErrorKind::UnterminatedString, data)
+        self.new_error(self.location, TokenErrorKind::UnterminatedString, data)
     }
 }
 
@@ -327,13 +352,15 @@ inline enum TokenErrorKind {
     UnterminatedString,
     UnterminatedComment,
     InvalidEscapeChar,
+    InvalidHexEscape,
 
     pub fn to_str(self) -> str {
         match self {
             TokenErrorKind::UnknownToken => "unknown token",
             TokenErrorKind::UnterminatedString => "unterminated string",
             TokenErrorKind::UnterminatedComment => "unterminated comment",
-            TokenErrorKind::InvalidEscapeChar => "invalid escape char",
+            TokenErrorKind::InvalidEscapeChar => "invalid escape character",
+            TokenErrorKind::InvalidHexEscape => "invalid hex escape",
         }
     }
 
@@ -342,7 +369,8 @@ inline enum TokenErrorKind {
             (TokenErrorKind::UnknownToken, TokenErrorKind::UnknownToken)
             | (TokenErrorKind::UnterminatedString, TokenErrorKind::UnterminatedString)
             | (TokenErrorKind::UnterminatedComment, TokenErrorKind::UnterminatedComment)
-            | (TokenErrorKind::InvalidEscapeChar, TokenErrorKind::InvalidEscapeChar) => true,
+            | (TokenErrorKind::InvalidEscapeChar, TokenErrorKind::InvalidEscapeChar)
+            | (TokenErrorKind::InvalidHexEscape, TokenErrorKind::InvalidHexEscape) => true,
             _ => false,
         }
     }
@@ -464,7 +492,7 @@ struct Parser {
         while !self.is_finished(s) {
             result.push(self.production(s)?);
         }
-        ParseResult::Ok(Grammer::new(result))
+        Ok(Grammer::new(result))
     }
 
     fn is_finished(self, s: Scanner) -> bool {
@@ -499,7 +527,7 @@ struct Parser {
 
     fn expect(self, s: Scanner, k: TokenKind) -> ParseResult<Token> {
         match self.token(s) {
-            t if t.kind.equals(k) => ParseResult::Ok(t),
+            t if t.kind.equals(k) => Ok(t),
             t => Self::expected_token(s, k, t),
         }
     }
@@ -507,18 +535,18 @@ struct Parser {
     fn expect_next(self, s: Scanner, k: TokenKind) -> ParseResult<Token> {
         let token = self.expect(s, k)?;
         s.skip();
-        ParseResult::Ok(token)
+        Ok(token)
     }
 
     fn unexpected_token<T>(s: Scanner, t: Token) -> ParseResult<T> {
-        ParseResult::Err(ParseError{
+        Err(ParseError{
             kind: ParseErrorKind::UnexpectedToken(t),
             location: s.location(),
         })
     }
 
     fn expected_token<T>(s: Scanner, want: TokenKind, have: Token) -> ParseResult<T> {
-        ParseResult::Err(ParseError{
+        Err(ParseError{
             kind: ParseErrorKind::ExpectedToken(want, have),
             location: s.location(),
         })
@@ -530,12 +558,12 @@ struct Parser {
         let expr = self.expression(s)?;
         self.expect_next(s, TokenKind::Dot)?;
 
-        ParseResult::Ok(Production{ident: ident.data, expr})
+        Ok(Production{ident: ident.data, expr})
     }
 
     fn expression(self, s: Scanner) -> ParseResult<Expression> {
         let alts = self.alternatives(s)?;
-        ParseResult::Ok(Expression{alts})
+        Ok(Expression{alts})
     }
 
     fn alternatives(self, s: Scanner) -> ParseResult<[Alternative]> {
@@ -545,14 +573,14 @@ struct Parser {
             if self.check(s, TokenKind::Pipe) {
                 s.skip(); // skip "|"
             } else {
-                return ParseResult::Ok(result);
+                return Ok(result);
             }
         }
     }
 
     fn alternative(self, s: Scanner) -> ParseResult<Alternative> {
         let terms = self.terms(s)?;
-        ParseResult::Ok(Alternative{terms})
+        Ok(Alternative{terms})
     }
 
     fn terms(self, s: Scanner) -> ParseResult<[Term]> {
@@ -576,7 +604,7 @@ struct Parser {
             assert(false);
             //return Self::expected_term();
         }
-        ParseResult::Ok(result)
+        Ok(result)
     }
 
     fn term(self, s: Scanner) -> ParseResult<Term> {
@@ -594,7 +622,7 @@ struct Parser {
         } else {
             term
         };
-        ParseResult::Ok(term)
+        Ok(term)
     }
 
     fn new_ident(self, s: Scanner, t: Token) -> Term {
@@ -607,37 +635,37 @@ struct Parser {
         if self.check(s, TokenKind::DotDot) {
             s.skip(); // skip ".."
             let t2 = self.expect_next(s, TokenKind::String)?;
-            ParseResult::Ok(Term::Range(t.data, t2.data))
+            Ok(Term::Range(t.data, t2.data))
         } else {
-            ParseResult::Ok(Term::Terminal(t.data))
+            Ok(Term::Terminal(t.data))
         }
     }
 
     fn exception(self, s: Scanner, lhs: Term) -> ParseResult<Term> {
         s.skip(); // skip "-"
         let rhs = self.term(s)?;
-        ParseResult::Ok(Term::Exception(lhs, rhs))
+        Ok(Term::Exception(lhs, rhs))
     }
 
     fn grouping(self, s: Scanner) -> ParseResult<Term> {
         s.skip(); // skip "("
         let expr = self.expression(s)?;
         self.expect_next(s, TokenKind::RightParen)?;
-        ParseResult::Ok(Term::Group(expr))
+        Ok(Term::Group(expr))
     }
 
     fn option(self, s: Scanner) -> ParseResult<Term> {
         s.skip(); // skip "["
         let expr = self.expression(s)?;
         self.expect_next(s, TokenKind::RightSquare)?;
-        ParseResult::Ok(Term::Option(expr))
+        Ok(Term::Option(expr))
     }
 
     fn repetition(self, s: Scanner) -> ParseResult<Term> {
         s.skip(); // skip "{"
         let expr = self.expression(s)?;
         self.expect_next(s, TokenKind::RightCurly)?;
-        ParseResult::Ok(Term::Repetition(expr))
+        Ok(Term::Repetition(expr))
     }
 }
 
@@ -661,10 +689,10 @@ fn analyze_definitions(ctx: Context, g: Grammer) -> Result<[str: Expression], st
 
     for Production{ident, expr} in g.productions {
         if result.contains(ident) {
-            return Result::Err("duplicate identifier \"\{ident}\"");
+            return Err("duplicate identifier \"\{ident}\"");
         }
         if builtins.contains(ident) {
-            return Result::Err("definition of builtin identifier \"\{ident}\"");
+            return Err("definition of builtin identifier \"\{ident}\"");
         }
         result[ident] = expr;
 
@@ -672,10 +700,10 @@ fn analyze_definitions(ctx: Context, g: Grammer) -> Result<[str: Expression], st
     }
     for ident in idents {
         if !result.contains(ident) && !builtins.contains(ident) {
-            return Result::Err("missing identifier \"\{ident}\"");
+            return Err("missing identifier \"\{ident}\"");
         }
     }
-    Result::Ok(result)
+    Ok(result)
 }
 
 inline enum Verbosity {
@@ -706,7 +734,7 @@ struct Context {
     pub fn new(program_name: str) -> Self {
         Self{
             verbosity: Verbosity::Verbose,
-            builtins: ["UNICODE_CODEPOINT": ()],
+            builtins: [:],
             program_name,
         }
     }
@@ -752,8 +780,8 @@ pub fn main(args: [str]) {
     };
 
     let source = match read_to_str(path) {
-        io::Result::Ok(s) => s,
-        io::Result::Err(e) => {
+        Ok(s) => s,
+        Err(e) => {
             ctx.error("unable to read EBNF file \"\{path}\" (\{e})");
         },
     };
@@ -764,16 +792,16 @@ pub fn main(args: [str]) {
     // completes without encountering an error, then the EBNF is syntactically correct.
     let parser = Parser::new();
     let grammer = match parser.parse(scanner) {
-        ParseResult::Ok(g) => g,
-        ParseResult::Err(e) => {
+        Ok(g) => g,
+        Err(e) => {
             ctx.error("\{e}");
         },
     };
 
     // Ensure that all identifiers are defined.
     let mapping = match analyze_definitions(ctx, grammer) {
-        Result::Ok(r) => r,
-        Result::Err(e) => {
+        Ok(r) => r,
+        Err(e) => {
             ctx.error("\{e}");
         },
     };

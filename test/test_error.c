@@ -303,9 +303,9 @@ static void test_syntax_error(void)
     test_compiler_status(E_EXPECTED_EXPRESSION, "binop_missing_lhs", "", "let a = + 2");
     test_compiler_status(E_EXPECTED_EXPRESSION, "binop_invalid_lhs", "", "let a = & + 2;");
 
-    test_compiler_status(E_UNKNOWN_PATH, "primitive_type_is_not_a_value_1", "", "let a = int;");
-    test_compiler_status(E_UNKNOWN_PATH, "primitive_type_is_not_a_value_2", "", "let a = (1, float,);");
-    test_compiler_status(E_UNKNOWN_PATH, "primitive_type_is_not_a_value_3", "", "let a = [\"two\", str];");
+    test_compiler_status(E_UNEXPECTED_TYPE, "primitive_type_is_not_a_value_1", "", "let a = int;");
+    test_compiler_status(E_UNEXPECTED_TYPE, "primitive_type_is_not_a_value_2", "", "let a = (1, float,);");
+    test_compiler_status(E_UNEXPECTED_TYPE, "primitive_type_is_not_a_value_3", "", "let a = [\"two\", str];");
     test_compiler_status(E_UNKNOWN_PATH, "generic_type_is_not_a_value", "fn f<T>() {let t = T;}", "");
     test_compiler_status(E_UNKNOWN_PATH, "function_is_not_a_type", "fn test() {}", "let a: test = test;");
     test_compiler_status(E_UNKNOWN_PATH, "variable_is_not_a_type", "", "let a = 1; let b: a = a;");

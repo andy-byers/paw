@@ -575,6 +575,10 @@ static IrType *lower_value_path(struct TypeChecker *T, struct HirPath path)
                 struct HirVariantDecl *v = HirGetVariantDecl(item);
                 IrType *base = pawIr_get_def_type(T->C, v->base_did);
                 IrType *assoc = GET_TYPE(T, segment.target);
+                if (IS_BASIC_TYPE(pawP_type2code(T->C, base))) {
+                    char const *repr = pawIr_print_type(T->C, base);
+                    TYPECK_ERROR(T, unexpected_type, segment.ident.span.start, repr);
+                }
                 if (IrIsSignature(assoc)) {
                     base = pawP_generalize(T->C, base);
                     return pawP_generalize_assoc(T->C, base, assoc);

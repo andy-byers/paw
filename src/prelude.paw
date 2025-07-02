@@ -168,6 +168,8 @@ pub inline enum Option<T> {
     #[extern] pub fn unwrap(self) -> T;
 }
 
+pub use Option::*;
+
 pub inline enum Result<T, E> {
     Ok(T),
     Err(E),
@@ -190,6 +192,8 @@ pub inline enum Result<T, E> {
     #[extern] pub fn unwrap_err(self) -> E;
     #[extern] pub fn unwrap(self) -> T;
 }
+
+pub use Result::*;
 
 pub inline struct Range<T: Compare + Increment>: Iterate<RangeIterator<T>, T> {
     pub start: T,

@@ -106,7 +106,7 @@ static int compile_and_run_(struct ModuleSet set)
 #define USE(Path_) "use " Path_ ";\n"
 #define FN(Name_, Value_) "fn " Name_ "() -> int {" Value_ "}\n"
 #define STRUCT(Name_, Body_) "struct " Name_ "{ pub field: (), " Body_ "}\n"
-#define STRUCT0(Name_, Body_) "struct " Name_ ";\n"
+#define STRUCT0(Name_) "struct " Name_ ";\n"
 #define ENUM(Name_, Body_) "enum " Name_ "{" Body_ "}\n"
 #define PUB_USE(Path_) "pub " USE(Path_)
 #define PUB_FN(Name_, Value_) "pub " FN(Name_, Value_)
@@ -156,6 +156,22 @@ static void test_import_glob(void)
             PUB_FN("v", "42"));
 
     COMPILE_AND_RUN(PAW_OK, a, b);
+}
+
+static void test_reexport(void)
+{
+    struct ModuleSource a = MODULE_SOURCE("a",
+            PUB_USE("b::*")
+            PUB_MAIN("let b = B;"
+                     "let c = C;"));
+    struct ModuleSource b = MODULE_SOURCE("b",
+            PUB_USE("c::*")
+            PUB_STRUCT0("B"));
+    struct ModuleSource c = MODULE_SOURCE("c",
+            PUB_USE("b::*")
+            PUB_STRUCT0("C"));
+
+    COMPILE_AND_RUN(PAW_OK, a, b, c);
 }
 
 static void test_rename_own_symbol(void)
@@ -260,6 +276,27 @@ static void test_glob_import_has_lower_precedence(void)
     COMPILE_AND_RUN(PAW_OK, a, b, c);
 }
 
+static void test_glob_import_adds_deferred_candidates(void)
+{
+    // import of "b::f" requires multiple passes to resolve, while "b::g" resolves
+    // on the first pass
+    struct ModuleSource a = MODULE_SOURCE("a",
+            PUB_USE("b::*")
+            PUB_MAIN("assert(f() == 42);"
+                     "assert(g() == 123);"));
+    struct ModuleSource b = MODULE_SOURCE("b",
+            PUB_USE("c::*")
+            PUB_USE("c::vvv as vvvv")
+            PUB_USE("c::v as vv")
+            PUB_FN("g", "123"));
+    struct ModuleSource c = MODULE_SOURCE("c",
+            PUB_USE("b::vvvv as f")
+            PUB_USE("b::vv as vvv")
+            PUB_FN("v", "42"));
+
+    COMPILE_AND_RUN(PAW_OK, a, b, c);
+}
+
 int main(void)
 {
     // sanity checks
@@ -267,6 +304,7 @@ int main(void)
     test_import_type();
     test_import_value();
     test_import_glob();
+    test_reexport();
 
     test_rename_own_symbol();
     test_import_type_and_value_with_same_name();
@@ -275,4 +313,5 @@ int main(void)
     test_conflicting_glob_succeeds_if_unreferenced();
     test_conflicting_glob_fails_if_referenced();
     test_glob_import_has_lower_precedence();
+    test_glob_import_adds_deferred_candidates();
 }
