@@ -104,7 +104,6 @@ static void push_option_none(paw_Env *P, int count)
 
 static int enum_unwrap(paw_Env *P)
 {
-    Value const v = *CF_BASE(1);
     if (V_INT(*CF_BASE(1)) != 0)
         pawR_error(P, PAW_ERUNTIME, "failed to unwrap");
     return paw_get_count(P) - 2; // callable + discriminant
@@ -112,7 +111,6 @@ static int enum_unwrap(paw_Env *P)
 
 static int result_unwrap_err(paw_Env *P)
 {
-    Value const v = *CF_BASE(1);
     if (paw_int(P, 1) == 0)
         pawR_error(P, PAW_ERUNTIME, "failed to unwrap error");
     return paw_get_count(P) - 2; // callable + discriminant
