@@ -50,7 +50,7 @@ int pawO_open(File *file, char const *pathname, char const *mode)
     for (int i = 0; i < INTR_TIMEOUT; ++i) {
         FILE *f = fopen(pathname, mode);
         if (f != NULL) {
-fprintf(stderr, "open %p\n", f);
+fprintf(stderr, "open succeeded %s %s\n", pathname, mode);
             file->file = f;
             return 0;
         } else if (errno != EINTR) {
@@ -68,8 +68,6 @@ void pawO_close(File *file)
     for (int i = 0; i < INTR_TIMEOUT; ++i) {
         int const rc = fclose(file->file);
         if (rc == 0 || errno != EINTR) {
-if (rc == 0)
-fprintf(stderr, "close %p\n", file->file);
             file->file = NULL;
             break;
         }
