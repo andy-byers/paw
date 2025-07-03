@@ -54,6 +54,7 @@ fprintf(stderr, "open %p\n", f);
             file->file = f;
             return 0;
         } else if (errno != EINTR) {
+fprintf(stderr, "open failed %s %s\n", pathname, mode);
             break;
         }
     }
