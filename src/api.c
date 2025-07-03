@@ -77,20 +77,13 @@ size_t paw_bytes_used(paw_Env const *P)
 
 static void open_aux(paw_Env *P, void *arg)
 {
-    puts("b");
     PAW_UNUSED(arg);
     pawC_init(P);
-    puts("c");
     pawG_init(P);
-    puts("d");
     pawS_init(P);
-    puts("e");
     pawP_init(P);
-    puts("f");
     pawR_init(P);
-    puts("g");
     pawL_init(P);
-    puts("h");
     CHECK_GC(P);
 }
 
@@ -99,7 +92,6 @@ static void open_aux(paw_Env *P, void *arg)
 
 paw_Env *paw_open(struct paw_Options const *o)
 {
-    puts("a");
     size_t heap_size = OR_DEFAULT(o->heap_size, PAW_HEAP_DEFAULT);
     heap_size &= ~(PAW_ALIGN - 1); // round down
     if (heap_size < HEAP_MIN)
@@ -382,14 +374,11 @@ struct CompileState {
     void *ud;
 };
 
-#include"stdio.h"
 static void compile_aux(paw_Env *P, void *arg)
 {
     struct Compiler C;
     struct CompileState *p = arg;
-    puts("before startup");
     pawP_startup(P, &C, &p->dm, p->name);
-    puts("before compile");
     pawP_compile(&C, p->input, p->ud);
 }
 
