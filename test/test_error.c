@@ -47,7 +47,7 @@ static void test_compiler_status(enum ErrorKind expect, char const *name, char c
     static char buffer[100000];
     write_main(buffer, item, text);
 
-    puts("4");
+    fputs("4", stderr);
     paw_Env *P = paw_open(&(struct paw_Options){0});
     enum ErrorKind status = (enum ErrorKind)pawL_load_chunk(P, name, buffer);
     check_status(P, (int)status, (int)expect);
@@ -148,17 +148,17 @@ static void check_unification_errors(void)
 
 static void check_binop_type_error(unsigned error, char const *op, paw_Type t, paw_Type t2)
 {
-    puts("1");
+    fputs("1", stderr);
     char name_buf[256] = {0};
     snprintf(name_buf, sizeof(name_buf), "binop_type_error(\"%s\", %s, %s)",
         op, get_literal(t), get_literal(t2));
 
-    puts("2");
+    fputs("2", stderr);
     char text_buf[256] = {0};
     snprintf(text_buf, sizeof(text_buf), "let x = %s %s %s;",
         get_literal(t), op, get_literal(t2));
 
-    puts("3");
+    fputs("3", stderr);
     test_compiler_status(error, name_buf, "", text_buf);
 }
 

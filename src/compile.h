@@ -286,19 +286,27 @@ struct MonoResult {
 void pawP_scalarize_registers(struct Compiler *C, struct Mir *mir);
 struct MonoResult pawP_monomorphize(struct Compiler *C, struct BodyMap *bodies);
 
+#include"stdio.h"
 inline static void pawP_compile(struct Compiler *C, paw_Reader input, void *ud)
 {
     void pawP_resolve_names(struct Compiler *C);
     void pawP_check_types(struct Compiler *C);
     void pawP_generate_code(struct Compiler *C);
 
+    fputs("before parse", stderr);
     pawP_parse_module(C, C->modname, input, ud);
 
+    fputs("before resolve", stderr);
     pawP_resolve_names(C);
+    fputs("before lower AST", stderr);
     pawP_lower_ast(C);
+    fputs("before check types", stderr);
     pawP_check_types(C);
+    fputs("before lower HIR", stderr);
     pawP_lower_hir(C);
+    fputs("before codegen", stderr);
     pawP_generate_code(C);
+    fputs("before runtime", stderr);
 }
 
 struct Pool *pawP_pool_new(struct Compiler *C, struct PoolStats st);
