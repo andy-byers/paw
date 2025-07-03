@@ -1360,7 +1360,6 @@ static IrType *check_composite_lit(struct TypeChecker *T, struct HirCompositeLit
     // Use a temporary Map to avoid searching repeatedly through the list of fields.
     FieldMap *map = FieldMap_new(T);
 
-    Value key;
     struct HirAdtDecl *adt = HirGetAdtDecl(decl);
     if (!adt->is_struct)
         TYPECK_ERROR(T, expected_struct, adt->ident.span.start, adt->ident.name->text);

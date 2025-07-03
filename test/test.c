@@ -5,6 +5,7 @@
 #include "test.h"
 #include "call.h"
 #include "env.h"
+#include "lib.h"
 #include "os.h"
 #include "paw.h"
 #include "util.h"
@@ -136,21 +137,6 @@ void test_mem_hook(void *ud, void *ptr, size_t size0, size_t size)
 {
     struct TestAlloc *a = ud;
     if (ptr != NULL) {
-
-if ((uintptr_t)ptr==0x102c93ec8&&size==24){
-printf("found malloc\n");
-}
-if ((uintptr_t)ptr==0x102c93ec8&&size0==24&&size==0){
-printf("found free\n");
-}
-if ((uintptr_t)ptr==0x102c93f28&&size==112){
-printf("found malloc 2\n");
-}
-if ((uintptr_t)ptr==0x102c93f28&&size0==112&&size==0){
-printf("found free 2\n");
-}
-
-
         // trash newly-allocated memory, as well as memory about to be released
         size_t const lower = PAW_MIN(size0, size);
         size_t const upper = PAW_MAX(size0, size);
@@ -165,6 +151,24 @@ printf("found free 2\n");
         modify_size(a, ptr, size);
 }
 
+static int file_searcher(paw_Env *P)
+{
+    char const *pathname = test_pathname(paw_str(P, 1));
+    if (pawL_file_reader(P, pathname) == NULL)
+        paw_push_zero(P, 1);
+    return 1;
+}
+
+static int add_searcher(paw_Env *P)
+{
+    paw_push_str(P, "paw.searchers");
+    paw_map_get(P, PAW_REGISTRY_INDEX);
+    paw_new_native(P, file_searcher, 0);
+    paw_list_push(P, -2);
+    paw_pop(P, 1);
+    return 0;
+}
+
 paw_Env *test_open(paw_MemHook mem_hook, struct TestAlloc *a, size_t heap_size)
 {
 #ifdef ENABLE_PTR_TRACKER
@@ -174,11 +178,16 @@ paw_Env *test_open(paw_MemHook mem_hook, struct TestAlloc *a, size_t heap_size)
 #endif
     a->count = 0;
 
-    return paw_open(&(struct paw_Options){
+    paw_Env *P =  paw_open(&(struct paw_Options){
         .heap_size = heap_size,
         .mem_hook = mem_hook,
         .ud = a,
     });
+
+    // allow modules from test/scripts to be loaded
+    if (P != NULL) add_searcher(P);
+
+    return P;
 }
 
 void test_close(paw_Env *P, struct TestAlloc *a)

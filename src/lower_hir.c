@@ -533,7 +533,6 @@ static void leave_block(struct FunctionState *fs)
     if (bs->outer != NULL)
         adjust_labels(fs, bs);
 
-    struct VarStack old = *fs->stack;
     int const limit = fs->level + bs->nvars;
     fs->nlocals = bs->nvars;
     fs->stack->count = limit;
@@ -1626,9 +1625,7 @@ static struct MirPlace lower_loop_expr(struct HirVisitor *V, struct HirLoopExpr 
     set_current_bb(fs, header_bb);
     lower_place(V, e->block);
 
-    MirBlock const loop_bb = current_bb(fs);
     set_goto_edge(fs, e->span.start, header_bb);
-
     adjust_to(fs, JUMP_CONTINUE, header_bb);
     set_current_bb(fs, after_bb);
 

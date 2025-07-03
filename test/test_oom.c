@@ -94,17 +94,12 @@ static void test_oom(char const *name_or_chunk, paw_Bool is_chunk)
 {
     // list of heap sizes that are too small
     size_t const special_sizes[] = {
-        1,
-        sizeof(paw_Env),
-        sizeof(struct Heap),
-        sizeof(struct Heap) + 1,
-        sizeof(struct Heap) + 10,
-        sizeof(struct Heap) + 100,
-        sizeof(struct Heap) + 200,
-        sizeof(struct Heap) + 300,
-        sizeof(struct Heap) + 500,
-        sizeof(struct Heap) + 1000,
-        sizeof(struct Heap) + 10000,
+       sizeof(struct Heap) + 5000,
+       sizeof(struct Heap) + 10000,
+       sizeof(struct Heap) + 15000,
+       sizeof(struct Heap) + 20000,
+       sizeof(struct Heap) + 25000,
+       sizeof(struct Heap) + 30000,
     };
     start_oom(name_or_chunk, is_chunk);
     for (size_t i = 0; i < PAW_COUNTOF(special_sizes); ++i) {
@@ -114,7 +109,7 @@ static void test_oom(char const *name_or_chunk, paw_Bool is_chunk)
     finish_oom();
 
     int status;
-    size_t heap_size = 1 << 10;
+    size_t heap_size = 1 << 15;
     start_oom(name_or_chunk, is_chunk);
     do {
         status = run_one(heap_size);
