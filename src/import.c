@@ -67,14 +67,16 @@ static struct ImportScope *iscope_new(struct Resolver *R, NodeId id, enum Import
 
 static struct ImportScope *collect_items(struct Resolver *R, struct AstDecl *mod, ImportBindings *bindings);
 
+#include"stdio.h"
 static struct AstDecl *import_module(struct Resolver *R, Str *name, ImportBindings *bindings)
 {
     int const *pmodno = ImportModules_get(R, R->modules, name);
     if (pmodno != NULL) return K_LIST_AT(R->ast->modules, *pmodno);
 
     DLOG(R, "importing module \"%s\"", name->text);
-
+fprintf(stderr, "name = %s\n", name->text);
     paw_Env *P = ENV(R);
+    ENSURE_STACK(P, 1);
     ptrdiff_t const saved = SAVE_OFFSET(P, P->top.p);
     V_SET_OBJECT(P->top.p++, name);
 
