@@ -58,20 +58,19 @@ struct IrType *pawIr_get_def_type(struct Compiler *C, DeclId did)
 struct IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *target, Str *name)
 {
     if (target->bounds == NULL) {
-        struct HirGenericDecl *d = HirGetGenericDecl(pawHir_get_decl(C->hir, target->did));
+        struct HirGenericDecl const *d = HirGetGenericDecl(pawHir_get_decl(C->hir, target->did));
         IR_ERROR(C, missing_trait_bounds, d->did.modno, d->span.start, d->ident.name->text);
     }
 
-    struct IrType **pbound;
+    struct IrType *const *pbound;
     K_LIST_FOREACH (target->bounds, pbound) {
-        struct IrTraitObj *bound = IrGetTraitObj(*pbound);
+        struct IrTraitObj const *bound = IrGetTraitObj(*pbound);
         struct HirDecl *trait_decl = pawHir_get_decl(C->hir, bound->did);
-        struct HirTraitDecl *trait = HirGetTraitDecl(trait_decl);
+        struct HirTraitDecl const *trait = HirGetTraitDecl(trait_decl);
 
-        struct HirDecl **pmethod;
+        struct HirDecl *const *pmethod;
         K_LIST_FOREACH (trait->methods, pmethod) {
-            struct HirDecl *result;
-            struct HirFuncDecl *method = HirGetFuncDecl(*pmethod);
+            struct HirFuncDecl const *method = HirGetFuncDecl(*pmethod);
             if (pawS_eq(method->ident.name, name)) {
                 struct IrType *type = trait->generics == NULL ? GET_NODE_TYPE(C, *pmethod)
                     : pawP_instantiate_method(C, trait_decl, bound->types, *pmethod);
@@ -96,8 +95,8 @@ void pawIr_validate_type(struct Compiler *C, struct IrType *type)
 
     {
         struct HirDeclHeader hdr;
-        struct HirDeclList *generics;
-        struct IrTypeList *types = NULL;
+        struct HirDeclList const *generics;
+        struct IrTypeList const *types = NULL;
         if (IrIsTraitObj(type)) {
             struct HirDecl *decl = pawHir_get_decl(C->hir, IR_TYPE_DID(type));
             generics = HirGetTraitDecl(decl)->generics;
@@ -138,19 +137,19 @@ static paw_Uint hash_type(struct IrType *type)
     paw_Uint hash = type->hdr.kind;
     switch (IR_KINDOF(type)) {
         case kIrAdt: {
-            struct IrAdt *t = IrGetAdt(type);
+            struct IrAdt const *t = IrGetAdt(type);
             hash = hash_combine(hash, t->did.value);
             hash = hash_combine(hash, hash_type_list(t->types));
             break;
         }
         case kIrFuncPtr: {
-            struct IrFuncPtr *t = IrGetFuncPtr(type);
+            struct IrFuncPtr const *t = IrGetFuncPtr(type);
             hash = hash_combine(hash, hash_type_list(t->params));
             hash = hash_combine(hash, hash_type(t->result));
             break;
         }
         case kIrSignature: {
-            struct IrSignature *t = IrGetSignature(type);
+            struct IrSignature const *t = IrGetSignature(type);
             hash = hash_combine(hash, t->did.value);
             hash = hash_combine(hash, hash_type_list(t->types));
             hash = hash_combine(hash, hash_type_list(t->params));
@@ -158,30 +157,30 @@ static paw_Uint hash_type(struct IrType *type)
             break;
         }
         case kIrTuple: {
-            struct IrTuple *t = IrGetTuple(type);
+            struct IrTuple const *t = IrGetTuple(type);
             hash = hash_combine(hash, hash_type_list(t->elems));
             break;
         }
         case kIrNever: {
-            struct IrNever *t = IrGetNever(type);
+            struct IrNever const *t = IrGetNever(type);
             hash = hash_combine(hash, 0x21); // '!'
             break;
         }
         case kIrInfer: {
-            struct IrInfer *t = IrGetInfer(type);
+            struct IrInfer const *t = IrGetInfer(type);
             hash = hash_combine(hash, t->depth);
             hash = hash_combine(hash, t->index);
             hash = hash_combine(hash, hash_type_list(t->bounds));
             break;
         }
         case kIrGeneric: {
-            struct IrGeneric *t = IrGetGeneric(type);
+            struct IrGeneric const *t = IrGetGeneric(type);
             hash = hash_combine(hash, t->did.value);
             hash = hash_combine(hash, hash_type_list(t->bounds));
             break;
         }
         case kIrTraitObj: {
-            struct IrTraitObj *t = IrGetTraitObj(type);
+            struct IrTraitObj const *t = IrGetTraitObj(type);
             hash = hash_combine(hash, t->did.value);
             hash = hash_combine(hash, hash_type_list(t->types));
             break;
@@ -194,8 +193,8 @@ static paw_Bool sig_equals_extra(struct Compiler *C, IrType *a, IrType *b)
 {
     // distinguish between different function signatures that happen to have the
     // same parameters and result
-    struct IrSignature *sa = IrGetSignature(a);
-    struct IrSignature *sb = IrGetSignature(b);
+    struct IrSignature const *sa = IrGetSignature(a);
+    struct IrSignature const *sb = IrGetSignature(b);
     return sa->did.value == sb->did.value;
 }
 
@@ -243,7 +242,7 @@ static void print_bounds(struct Printer *P, struct IrTypeList *bounds)
     if (bounds != NULL) {
         PRINT_LITERAL(P, ": ");
         int index;
-        struct IrType **ptype;
+        struct IrType *const *ptype;
         K_LIST_ENUMERATE (bounds, index, ptype) {
             if (index > 0)
                 PRINT_LITERAL(P, " + ");

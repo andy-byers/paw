@@ -29,7 +29,7 @@ void pawL_init(paw_Env *P);
 void pawL_uninit(paw_Env *P);
 
 // Functions for loading and compiling source code
-int pawL_load_file(paw_Env *P, char const *pathname);
+int pawL_load_file(paw_Env *P, char const *name, char const *pathname);
 int pawL_load_nchunk(paw_Env *P, char const *name, char const *source, size_t length);
 int pawL_load_chunk(paw_Env *P, char const *name, char const *source);
 void pawL_load_symbols(paw_Env *P);

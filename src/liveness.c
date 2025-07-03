@@ -340,20 +340,6 @@ struct MirBlockList *pawMir_compute_live_in(struct Mir *mir, struct MirBlockList
     return result;
 }
 
-static void extend_captured_intervals(struct Liveness *L, struct Mir *mir, int npositions)
-{
-    struct MirLiveInterval **pit;
-    K_LIST_FOREACH (L->intervals, pit) {
-        struct MirLiveInterval *it = *pit;
-        struct MirRegisterData *data = mir_reg_data(mir, it->r);
-        if (data->is_captured) {
-            pawP_bitset_set_range(it->ranges, 0, npositions);
-            it->last = npositions;
-            it->first = 0;
-        }
-    }
-}
-
 struct MirIntervalList *pawMir_compute_liveness(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, struct MirLocationList *locations)
 {
     struct Liveness L = {
@@ -368,7 +354,7 @@ struct MirIntervalList *pawMir_compute_liveness(struct Compiler *C, struct Mir *
     L.mapping = IntervalMap_new(&L);
 
     struct MirBlockData *last = mir_bb_data(mir, K_LIST_LAST(order));
-    int const nparameters = IR_FPTR(mir->type)->params->count;
+    int const nparameters = mir->param_size;
     int const npositions = bb_last_loc(&L, last) + 2;
     int const ncaptured = mir->captured->count;
     int const nregisters = mir->registers->count;
@@ -381,7 +367,12 @@ struct MirIntervalList *pawMir_compute_liveness(struct Compiler *C, struct Mir *
     while (L.live->count < nblocks)
         RegisterSetList_push(&L, L.live, MirRegisterList_new_from(mir, L.pool));
 
-    // arguments and captured variables get dedicated registers
+    // determine live intervals
+    compute_liveness(&L, mir, order);
+
+    // The callee, arguments, and captured variables get dedicated registers. The
+    // callee needs to be live for the duration of the function call so it is not
+    // collected by the GC.
     {
         for (int i = 0; i < 1 + nparameters; ++i)
             add_range(&L, MIR_REG(i), 0, npositions);
@@ -391,10 +382,6 @@ struct MirIntervalList *pawMir_compute_liveness(struct Compiler *C, struct Mir *
             add_range(&L, pci->r, 0, npositions);
         }
     }
-
-    // determine live intervals
-    compute_liveness(&L, mir, order);
-    extend_captured_intervals(&L, mir, npositions);
 
     pawP_pool_free(C, L.pool);
     return L.intervals;

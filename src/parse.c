@@ -1850,7 +1850,6 @@ static void struct_body(struct Lex *lex, struct AstTypeList *traits, struct AstD
     }
 
     while (!end_of_block(lex)) {
-        struct SourceLoc field_start = lex->loc;
         struct Annotations *annos = annotations(lex);
         paw_Bool const is_pub = test_next(lex, TK_PUB);
         if (test(lex, TK_NAME)) {

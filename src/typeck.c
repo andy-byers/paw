@@ -575,7 +575,7 @@ static IrType *lower_value_path(struct TypeChecker *T, struct HirPath path)
                 struct HirVariantDecl *v = HirGetVariantDecl(item);
                 IrType *base = pawIr_get_def_type(T->C, v->base_did);
                 IrType *assoc = GET_TYPE(T, segment.target);
-                if (IS_BASIC_TYPE(pawP_type2code(T->C, base))) {
+                if (IS_BASIC_TYPE(TYPE2CODE(T, base))) {
                     char const *repr = pawIr_print_type(T->C, base);
                     TYPECK_ERROR(T, unexpected_type, segment.ident.span.start, repr);
                 }
@@ -1360,7 +1360,6 @@ static IrType *check_composite_lit(struct TypeChecker *T, struct HirCompositeLit
     // Use a temporary Map to avoid searching repeatedly through the list of fields.
     FieldMap *map = FieldMap_new(T);
 
-    Value key;
     struct HirAdtDecl *adt = HirGetAdtDecl(decl);
     if (!adt->is_struct)
         TYPECK_ERROR(T, expected_struct, adt->ident.span.start, adt->ident.name->text);
@@ -1772,8 +1771,8 @@ static IrType *check_pat(struct TypeChecker *T, struct HirPat *pat)
 #undef DEFINE_CASE
     }
 
-    SET_NODE_TYPE(T->C, pat, type);
     type = normalize(T, type);
+    SET_NODE_TYPE(T->C, pat, type);
 
     leave_pat(T);
     return type;
@@ -1914,6 +1913,7 @@ static IrType *check_expr(struct TypeChecker *T, struct HirExpr *expr)
 
     type = normalize(T, type);
     SET_NODE_TYPE(T->C, expr, type);
+
     return type;
 }
 

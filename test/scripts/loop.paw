@@ -425,9 +425,9 @@ pub struct CustomIterator<T>: Advance<(int, T)> {
         let iter = self.iter;
         if iter < #self.self.elems {
             self.iter = self.iter + 1;
-            Option::Some((iter, self.self.elems[iter]))
+            Some((iter, self.self.elems[iter]))
         } else {
-            Option::None
+            None
         }
     }
 }
@@ -442,8 +442,8 @@ pub struct CustomIterable<T>: Iterate<CustomIterator<T>, (int, T)> {
 pub fn test_custom_iterator() {
     let c = CustomIterable{elems: [1, 2, 3, 4, 5]};
     let index = 0;
-    for x in c {
-        assert(x.0 == x.1 - 1);
+    for (x, y) in c {
+        assert(x == y - 1);
     }
 }
 

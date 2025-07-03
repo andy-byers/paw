@@ -78,8 +78,8 @@ pub fn main() {
     map['c'] = 3;
 
     match map.get('a') {
-        Option::Some(v) => println("map['a'] = \{v}"),
-        Option::None => panic("not found"),
+        Some(v) => println("map['a'] = \{v}"),
+        None => panic("not found"),
     }
 
     assert(map.get_or('d', 4) == 4);
@@ -95,20 +95,23 @@ pub enum Expr {
     Add(Expr, Expr)
 }
 
+// import variants into the global value namespace
+use Expr::*;
+
 pub fn eval(e: Expr) -> int {
     // match expressions must be exhaustive
     match e {
-        Expr::Zero => 0,
-        Expr::Succ(x) => eval(x) + 1,
-        Expr::Add(x, y) => eval(x) + eval(y),
+        Zero => 0,
+        Succ(x) => eval(x) + 1,
+        Add(x, y) => eval(x) + eval(y),
     }
 }
 
 pub fn three() -> int {
-    let zero = Expr::Zero;
-    let one = Expr::Succ(zero);
-    let two = Expr::Add(one, one);
-    eval(Expr::Add(one, two))
+    let zero = Zero;
+    let one = Succ(zero);
+    let two = Add(one, one);
+    eval(Add(one, two))
 }
 ```
 

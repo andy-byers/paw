@@ -107,10 +107,10 @@ static void iset_next(IntervalMapIterator *iter)
     IntervalMapIterator_next(iter);
 }
 
-#define REG(R, it) (RegisterTable_get((R)->result, (it)->r.value).value)
-#define REG_EQUALS(a, b) ((a).value == (b).value)
-#define REGINFO(x) ((struct RegisterInfo){x})
-#define REG_EXISTS(r) (!REG_EQUALS(r, REGINFO(-1)))
+#define REG(R_, It_) (RegisterTable_get((R_)->result, (It_)->r.value).value)
+#define REG_EQUALS(A_, B_) ((A_).value == (B_).value)
+#define REGINFO(Value_) ((struct RegisterInfo){Value_})
+#define REG_EXISTS(Reg_) (!REG_EQUALS(Reg_, REGINFO(-1)))
 
 static paw_Bool is_covered(struct MirLiveInterval *it, int pos)
 {
@@ -501,10 +501,11 @@ static struct MirIntervalList *expand_with_placeholders(struct RegisterAllocator
 struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, struct MirIntervalList *intervals, struct MirLocationList *locations, int *pmax_reg)
 {
     struct MirBlockData *last = MirBlockDataList_last(mir->blocks);
+    int const npositions = pawMir_get_location(locations, mir_bb_last(last)) + 2;
     struct RegisterAllocator R = {
         .pool = pawP_pool_new(C, C->aux_stats),
         .code = MirInstructionList_new(mir),
-        .max_position = pawMir_get_location(locations, mir_bb_last(last)) + 2,
+        .max_position = npositions,
         .locations = locations,
         .intervals = intervals,
         .result = RegisterTable_new(C),
@@ -525,30 +526,17 @@ struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mi
     int const nparameters = mir->param_size;
     int const ncaptured = mir->captured->count;
 
-    // TODO: linked list threaded through set elements? build
-    //       temp array to qsort, eventually implement mergesort
-    //       to avoid temp array. avoids weird placeholder thing and is more flexible
-
     {
-        int const npositions = R.max_position + 1;
-
         // assign registers for result and arguments
         int const offset = 1 + nparameters;
-        for (int i = 0; i < offset; ++i) {
-            struct MirLiveInterval *it = MirIntervalList_get(intervals, i);
-            set_add(&R, R.active, it);
+        for (int i = 0; i < offset; ++i)
             RegisterTable_set(R.result, i, REGINFO(i));
-            pawP_bitset_set_range(it->ranges, 0, npositions);
-            it->last = npositions;
-            it->first = 0;
-        }
 
         // assign registers for captured variables
         for (int i = 0, j = 0; i < ncaptured; ++i) {
             struct MirCaptureInfo c = MirCaptureList_get(mir->captured, i);
-            if (c.r.value >= offset) {
+            if (c.r.value >= offset) // not callee or parameter
                 RegisterTable_set(R.result, c.r.value, REGINFO(offset + j++));
-            }
         }
     }
 

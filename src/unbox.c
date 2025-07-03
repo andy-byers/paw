@@ -281,17 +281,16 @@ static struct MirPlace new_rawptr_place(struct Unboxer *U, struct IrType *type)
 static struct MemoryGroup get_registers(struct Unboxer *U, MirRegister r, int discr)
 {
     struct FunctionState *fs = U->fs;
-    struct MemoryGroup *pgroup = LocalGroupMap_get(U, fs->local_map, r);
+    struct MemoryGroup const *pgroup = LocalGroupMap_get(U, fs->local_map, r);
     if (pgroup != NULL)
         return *pgroup;
 
     struct MirRegisterData *data = mir_reg_data(fs->mir, r);
-    struct IrLayout layout = pawIr_compute_layout(U->C, data->type);
     int const num_registers = fs->registers->count;
 
     struct RegisterState rs = {.is_captured = data->is_captured, .is_uninit = data->is_uninit};
     int const count = allocate_values(U, data->type, discr, allocate_register, &rs);
-    struct MemoryGroup group = {
+    struct MemoryGroup const group = {
         .kind = MEMORY_LOCAL,
         .base = num_registers,
         .count = count,
@@ -303,7 +302,7 @@ static struct MemoryGroup get_registers(struct Unboxer *U, MirRegister r, int di
 static struct MemoryGroup get_upvalues(struct Unboxer *U, int up)
 {
     struct FunctionState *fs = U->fs;
-    struct MemoryGroup *pgroup = UpvalueGroupMap_get(U, fs->upvalue_map, up);
+    struct MemoryGroup const *pgroup = UpvalueGroupMap_get(U, fs->upvalue_map, up);
     paw_assert(pgroup != NULL);
     return *pgroup;
 }
@@ -312,12 +311,11 @@ static struct MemoryGroup new_nonlocal_upvalues(struct Unboxer *U, int up, struc
 {
     struct FunctionState *fs = U->fs;
     struct MirUpvalueInfo info = MirUpvalueList_get(fs->mir->upvalues, up);
-    struct IrLayout layout = pawIr_compute_layout(U->C, info.type);
     int const num_upvalues = fs->upvalues->count;
 
     struct UpvalueState us = {.up = mg.base};
     int const count = allocate_values(U, info.type, ENUM_BASE, allocate_upvalue, &us);
-    struct MemoryGroup group = {
+    struct MemoryGroup const group = {
         .kind = MEMORY_UPVALUE,
         .base = num_upvalues,
         .count = count,
@@ -334,7 +332,7 @@ static struct MemoryGroup new_local_upvalues(struct Unboxer *U, int up, struct M
 
     struct UpvalueState us = {.up = local, .is_local = PAW_TRUE};
     int const count = allocate_values(U, info.type, ENUM_BASE, allocate_upvalue, &us);
-    struct MemoryGroup group = {
+    struct MemoryGroup const group = {
         .kind = MEMORY_UPVALUE,
         .base = num_upvalues,
         .count = count,
@@ -378,8 +376,6 @@ static int compute_field_offset(struct IrLayout object, int index)
 static void discharge_indirect_field(struct Unboxer *U, struct MemoryAccess *pa)
 {
     IrTypeList const *field_types = get_variant_field_types(U, pa->type, pa->field.discr);
-    struct IrLayout const target_layout = pawIr_compute_layout(U->C, pa->type);
-    struct IrLayout const field_layout = pawIr_compute_layout(U->C, pa->field.type);
     struct MemoryGroup const output = new_registers(U, pa->field.type, pa->field.discr);
 
     struct MirPlace const object = PLACE(pa->group.base);
@@ -423,7 +419,7 @@ static void discharge_indirect_element(struct Unboxer *U, struct MemoryAccess *p
     IrType *access_type = get_access_type(pa);
     int const field_discr = pa->has_field ? pa->field.discr : ENUM_BASE;
     int const field_offset = pa->has_field ? pa->field.offset : 0;
-    struct MemoryGroup output = new_registers(U, access_type, field_discr);
+    struct MemoryGroup const output = new_registers(U, access_type, field_discr);
 
     struct MirPlace const object = PLACE(pa->group.base);
     if (output.count > 1 || field_offset > 0) {
@@ -451,7 +447,7 @@ static void discharge_indirect_element(struct Unboxer *U, struct MemoryAccess *p
 static void discharge_indirect_range(struct Unboxer *U, struct MemoryAccess *pa)
 {
     enum BuiltinKind kind = pawP_type2code(U->C, pa->type);
-    struct MemoryGroup output = new_registers(U, pa->type, ENUM_BASE);
+    struct MemoryGroup const output = new_registers(U, pa->type, ENUM_BASE);
 
     struct MirPlace const object = PLACE(pa->group.base);
     struct MirPlace const result = PLACE(REGISTER_AT(output, 0));
@@ -464,7 +460,7 @@ static void discharge_indirect_range(struct Unboxer *U, struct MemoryAccess *pa)
 
 static void discharge_upvalue(struct Unboxer *U, struct MemoryAccess *pa)
 {
-    struct MemoryGroup output = new_registers(U, pa->type, ENUM_BASE);
+    struct MemoryGroup const output = new_registers(U, pa->type, ENUM_BASE);
     for (int i = 0; i < pa->group.count; ++i) {
         struct MirPlace const result = PLACE(REGISTER_AT(output, i));
         NEW_INSTR(U, upvalue, TODO, result, UPVALUE_AT(pa->group, i));
@@ -544,15 +540,15 @@ static void apply_indirect_access(struct Unboxer *U, struct MemoryAccess *pa, Mi
         pa->has_field = PAW_TRUE;
     } else if (MirIsIndex(p)){
         struct MirIndex *index = MirGetIndex(p);
-        struct MemoryGroup index_group = get_registers(U, index->index, ENUM_BASE);
+        struct MemoryGroup const index_group = get_registers(U, index->index, ENUM_BASE);
         paw_assert(index_group.count == 1);
         pa->element.index.value = index_group.base;
         pa->element.type = get_element_type(U, pa->type);
         pa->has_element = PAW_TRUE;
     } else {
         struct MirRange *range = MirGetRange(p);
-        struct MemoryGroup lower_group = get_registers(U, range->lower, ENUM_BASE);
-        struct MemoryGroup upper_group = get_registers(U, range->upper, ENUM_BASE);
+        struct MemoryGroup const lower_group = get_registers(U, range->lower, ENUM_BASE);
+        struct MemoryGroup const upper_group = get_registers(U, range->upper, ENUM_BASE);
         paw_assert(lower_group.count == 1 && upper_group.count == 1);
         pa->range.lower.value = lower_group.base;
         pa->range.upper.value = upper_group.base;
@@ -601,10 +597,9 @@ static struct MemoryAccess unbox_place(struct Unboxer *U, struct MirPlace *pplac
 
 static void create_move(struct Unboxer *U, struct MemoryAccess lhs, struct MemoryAccess rhs)
 {
-    struct MemoryGroup object = lhs.group;
-    struct MemoryGroup value = rhs.group;
+    struct MemoryGroup const object = lhs.group;
+    struct MemoryGroup const value = rhs.group;
 
-    struct IrLayout layout = pawIr_compute_layout(U->C, lhs.type);
     for (int i = 0; i < value.count; ++i) {
         MirRegister const a = REGISTER_AT(value, i);
         MirRegister const b = REGISTER_AT(object, i);
@@ -614,10 +609,9 @@ static void create_move(struct Unboxer *U, struct MemoryAccess lhs, struct Memor
 
 static void create_field_setter(struct Unboxer *U, struct MemoryAccess lhs, struct MemoryAccess rhs)
 {
-    struct MemoryGroup object = lhs.group;
-    struct MemoryGroup value = rhs.group;
+    struct MemoryGroup const object = lhs.group;
+    struct MemoryGroup const value = rhs.group;
 
-    struct IrLayout layout = pawIr_compute_layout(U->C, lhs.type);
     for (int i = 0; i < value.count; ++i) {
         MirRegister const a = REGISTER_AT(value, i);
         MirRegister const b = REGISTER_AT(object, lhs.field.offset + i);
@@ -627,11 +621,10 @@ static void create_field_setter(struct Unboxer *U, struct MemoryAccess lhs, stru
 
 static void create_indirect_field_setter(struct Unboxer *U, struct MemoryAccess lhs, struct MemoryAccess rhs)
 {
-    struct MemoryGroup object = lhs.group;
-    struct MemoryGroup value = rhs.group;
+    struct MemoryGroup const object = lhs.group;
+    struct MemoryGroup const value = rhs.group;
     paw_assert(object.count == 1);
 
-    struct IrLayout layout = pawIr_compute_layout(U->C, lhs.type);
     for (int i = 0; i < value.count; ++i) {
         MirRegister const r = REGISTER_AT(value, i);
         NEW_INSTR(U, set_field, TODO, lhs.field.offset + i, PLACE(object.base), PLACE(r));
@@ -663,7 +656,7 @@ static void create_indirect_element_setter(struct Unboxer *U, struct MemoryAcces
 
 static void create_indirect_range_setter(struct Unboxer *U, struct MemoryAccess lhs, struct MemoryAccess rhs)
 {
-    enum BuiltinKind kind = pawP_type2code(U->C, lhs.type);
+    enum BuiltinKind const kind = pawP_type2code(U->C, lhs.type);
     struct MirPlace const object = PLACE(lhs.group.base);
     struct MirPlace const value = PLACE(REGISTER_AT(rhs.group, 0));
     NEW_INSTR(U, set_range, TODO, kind, object, PLACE(lhs.range.lower), PLACE(lhs.range.upper), value);
@@ -671,10 +664,8 @@ static void create_indirect_range_setter(struct Unboxer *U, struct MemoryAccess 
 
 static void create_upvalue_setter(struct Unboxer *U, struct MemoryAccess lhs, struct MemoryAccess rhs)
 {
-    struct MemoryGroup object = lhs.group;
-    struct MemoryGroup value = rhs.group;
+    struct MemoryGroup const value = rhs.group;
 
-    struct IrLayout layout = pawIr_compute_layout(U->C, lhs.type);
     for (int i = 0; i < value.count; ++i) {
         struct MirPlace const v = PLACE(REGISTER_AT(value, i));
         NEW_INSTR(U, set_upvalue, TODO, lhs.group.base + i, v);
@@ -713,7 +704,7 @@ static void unbox_upvalue(struct Unboxer *U, struct MirUpvalue *x)
 
 static void unbox_alloclocal(struct Unboxer *U, struct MirAllocLocal *x)
 {
-    struct MemoryGroup output = get_registers(U, x->output.r, ENUM_BASE);
+    struct MemoryGroup const output = get_registers(U, x->output.r, ENUM_BASE);
     for (int i = 0; i < output.count; ++i) {
         MirRegister const r = REGISTER_AT(output, i);
         NEW_INSTR(U, alloc_local, x->loc, x->name, PLACE(r));
@@ -722,7 +713,7 @@ static void unbox_alloclocal(struct Unboxer *U, struct MirAllocLocal *x)
 
 static void unbox_setupvalue(struct Unboxer *U, struct MirSetUpvalue *x)
 {
-    struct MemoryGroup value = get_registers(U, x->value.r, ENUM_BASE);
+    struct MemoryGroup const value = get_registers(U, x->value.r, ENUM_BASE);
     for (int i = 0; i < value.count; ++i) {
         MirRegister const r = REGISTER_AT(value, i);
         NEW_INSTR(U, set_upvalue, x->loc, x->index + i, PLACE(r));
@@ -734,14 +725,14 @@ static void unbox_aggregate(struct Unboxer *U, struct MirAggregate *x)
     struct Mir *mir = U->fs->mir;
     struct MirRegisterData *data = mir_reg_data(mir, x->output.r);
     if (!is_composite(U, data->type)) {
-        struct MemoryGroup output = get_registers(U, x->output.r, ENUM_BASE);
+        struct MemoryGroup const output = get_registers(U, x->output.r, ENUM_BASE);
         paw_assert(output.count == 1);
         struct MirPlace const r = PLACE(output.base);
         NEW_INSTR(U, aggregate, x->loc, x->nfields, r);
         return;
     }
 
-    struct MemoryGroup output = get_registers(U, x->output.r, ENUM_BASE);
+    struct MemoryGroup const output = get_registers(U, x->output.r, ENUM_BASE);
     for (int i = 0; i < output.count; ++i) {
         struct MirPlace const r = PLACE(REGISTER_AT(output, i));
         Str *name = pawP_format_string(U->C, PRIVATE("value_%d"), i);
@@ -778,7 +769,7 @@ static void unbox_call(struct Unboxer *U, struct MirCall *x)
     // split composite results into individual field values
     paw_assert(x->outputs->count == 1);
     struct MirPlace const first = K_LIST_FIRST(x->outputs);
-    struct MemoryGroup output = get_registers(U, first.r, ENUM_BASE);
+    struct MemoryGroup const output = get_registers(U, first.r, ENUM_BASE);
     MirPlaceList *outputs = MirPlaceList_new(mir);
     MirPlaceList_reserve(mir, outputs, output.count);
     outputs->count = output.count;
@@ -793,7 +784,7 @@ static void unbox_call(struct Unboxer *U, struct MirCall *x)
 
 static void unbox_capture(struct Unboxer *U, struct MirCapture *x)
 {
-    struct MemoryGroup target = get_registers(U, x->target.r, ENUM_BASE);
+    struct MemoryGroup const target = get_registers(U, x->target.r, ENUM_BASE);
     for (int i = 0; i < target.count; ++i) {
         MirRegister const r = REGISTER_AT(target, i);
         NEW_INSTR(U, capture, x->loc, PLACE(r));
@@ -802,7 +793,7 @@ static void unbox_capture(struct Unboxer *U, struct MirCapture *x)
 
 static void unbox_close(struct Unboxer *U, struct MirClose *x)
 {
-    struct MemoryGroup target = get_registers(U, x->target.r, ENUM_BASE);
+    struct MemoryGroup const target = get_registers(U, x->target.r, ENUM_BASE);
     for (int i = 0; i < target.count; ++i) {
         MirRegister const r = REGISTER_AT(target, i);
         NEW_INSTR(U, close, x->loc, PLACE(r));
@@ -934,7 +925,7 @@ static void unbox_function(struct Unboxer *U, struct Mir *mir)
     MirRegister const *pr;
     MirRegisterList *locals = MirRegisterList_new(mir);
     K_LIST_FOREACH (mir->locals, pr) {
-        struct MemoryGroup group = get_registers(U, *pr, ENUM_BASE);
+        struct MemoryGroup const group = get_registers(U, *pr, ENUM_BASE);
         for (int i = 0; i < group.count; ++i) {
             MirRegisterList_push(mir, locals, REGISTER_AT(group, i));
         }
@@ -943,7 +934,7 @@ static void unbox_function(struct Unboxer *U, struct Mir *mir)
     struct MirCaptureInfo const *pc;
     MirCaptureList *captured = MirCaptureList_new(mir);
     K_LIST_FOREACH (mir->captured, pc) {
-        struct MemoryGroup group = get_registers(U, pc->r, ENUM_BASE);
+        struct MemoryGroup const group = get_registers(U, pc->r, ENUM_BASE);
         for (int i = 0; i < group.count; ++i) {
             MirCaptureList_push(mir, captured, (struct MirCaptureInfo){
                         .r = REGISTER_AT(group, i),
@@ -955,7 +946,7 @@ static void unbox_function(struct Unboxer *U, struct Mir *mir)
     struct MirUpvalueInfo const *pu;
     struct FunctionState *outer = fs.outer;
     K_LIST_ENUMERATE (mir->upvalues, index, pu) {
-        struct MemoryGroup *backing;
+        struct MemoryGroup const *backing;
         if (pu->is_local) {
             // upvalue is local to enclosing function
             MirRegister const local = MirRegisterList_get(outer->old_locals, pu->index);

@@ -94,20 +94,16 @@ paw_Env *paw_open(struct paw_Options const *o)
 {
     size_t heap_size = OR_DEFAULT(o->heap_size, PAW_HEAP_DEFAULT);
     heap_size &= ~(PAW_ALIGN - 1); // round down
-    if (heap_size < HEAP_MIN)
-        return NULL;
+    if (heap_size < HEAP_MIN) return NULL;
 
     void *ud = OR_DEFAULT(o->ud, NULL);
     paw_Alloc alloc = OR_DEFAULT(o->alloc, default_alloc);
     paw_MemHook mem_hook = OR_DEFAULT(o->mem_hook, default_mem_hook);
     void *heap = OR_DEFAULT(o->heap, alloc(ud, NULL, 0, heap_size));
     paw_Bool const owns_heap = o->heap == NULL;
-    if (heap == NULL)
-        return NULL;
-    paw_assert(PAW_IS_ALIGNED(heap));
-    size_t const zh = heap_size;
-    void *ph = heap;
+    if (heap == NULL) return NULL;
 
+    paw_assert(PAW_IS_ALIGNED(heap));
     paw_Env *P = heap;
     *P = (paw_Env){
         .heap_size = heap_size,
@@ -118,8 +114,7 @@ paw_Env *paw_open(struct paw_Options const *o)
     heap_size -= PAW_ROUND_UP(sizeof(*P));
 
     if (pawZ_init(P, heap, heap_size, owns_heap, mem_hook, ud)) {
-        if (owns_heap)
-            alloc(ud, ph, zh, 0);
+        if (owns_heap) alloc(ud, P, heap_size, 0);
         return NULL;
     }
     if (pawC_raw_try(P, open_aux, NULL)) {
@@ -253,11 +248,11 @@ void paw_new_native(paw_Env *P, paw_Function fn, int nup)
     V_SET_OBJECT(P->top.p, o);
     API_INCR_TOP(P, 1);
 
-    StackPtr top = P->top.p;
+    StackPtr const top = P->top.p;
     StackPtr const base = top - nup - 1;
-    for (int i = 0; i < nup; ++i) {
+    for (int i = 0; i < nup; ++i)
         o->up[i] = base[i];
-    }
+
     // replace upvalues with closure object
     base[0] = top[-1];
     P->top.p = base + 1;
@@ -492,8 +487,8 @@ void paw_set_upvalue(paw_Env *P, int ifn, int index)
             break;
         }
         case VCLOSURE: {
-            Closure *f = O_CLOSURE(o);
-            UpValue *u = f->up[upvalue_index(f->nup, index)];
+            Closure const *f = O_CLOSURE(o);
+            UpValue const *u = f->up[upvalue_index(f->nup, index)];
             *u->p.p = P->top.p[-1];
             break;
         }

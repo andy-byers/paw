@@ -79,7 +79,7 @@ pub fn test_block_expr() {
 
 pub fn test_if_return() {
     let x = if true { 
-        // ";" is omitted here, since "return" has type "()"
+        // ";" is omitted here, since "return" has type "!"
         return 
     } else { 
         42 

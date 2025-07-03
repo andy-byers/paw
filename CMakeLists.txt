@@ -27,8 +27,8 @@ if(${CMAKE_C_COMPILER_ID} STREQUAL MSVC)
             INTERFACE /W2)
 else()
     target_compile_options(paw_context
-        INTERFACE -Wall -Wextra -Wpedantic
-                  -Wsign-conversion)
+            INTERFACE -Wall -Wextra -Wpedantic -Wsign-conversion 
+                      -Wno-unused-function)
     target_link_libraries(paw_context
             INTERFACE m)
 endif()

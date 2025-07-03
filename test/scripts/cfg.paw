@@ -321,35 +321,35 @@ pub fn test_and_or() {
 }
 
 fn maybe_times_2(o: Option<int>) -> Option<int> {
-    return Option::Some(o? * 2);
+    return Some(o? * 2);
 }
 
 pub fn test_chain() {
-    assert(maybe_times_2(Option::None).is_none());
-    assert(maybe_times_2(Option::None).is_none());
-    assert(maybe_times_2(Option::Some(-11)).unwrap() == -22);
-    assert(maybe_times_2(Option::Some(111)).unwrap() == 222);
+    assert(maybe_times_2(None).is_none());
+    assert(maybe_times_2(None).is_none());
+    assert(maybe_times_2(Some(-11)).unwrap() == -22);
+    assert(maybe_times_2(Some(111)).unwrap() == 222);
 }
 
 fn and_or_chain_2(aa: bool, bb: bool) -> Option<bool> {
-    let a = Option::Some(aa);
-    let b = Option::Some(bb);
+    let a = Some(aa);
+    let b = Some(bb);
 
     assert((a? && b?) == (aa && bb));
     assert((a? || b?) == (aa || bb));
-    return Option::None;
+    return None;
 }
 
 fn and_or_chain_3(aa: bool, bb: bool, cc: bool) -> Option<bool> {
-    let a = Option::Some(aa);
-    let b = Option::Some(bb);
-    let c = Option::Some(cc);
+    let a = Some(aa);
+    let b = Some(bb);
+    let c = Some(cc);
 
     assert((a? && b? && c?) == (aa && bb && cc));
     assert((a? || b? && c?) == (aa || bb && cc));
     assert((a? && b? || c?) == (aa && bb || cc));
     assert((a? || b? || c?) == (aa || bb || cc));
-    return Option::None;
+    return None;
 }
 
 // Test logical expressions with extra control flow 

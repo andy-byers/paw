@@ -307,6 +307,44 @@ static int stats_reporter(paw_Env *P)
     return 0;
 }
 
+char const *find_last_sep(char const *s, size_t n, size_t *pn)
+{
+    paw_assert(n > 0);
+    char const *s0 = s;
+    s += n;
+    *pn = 0;
+
+    do {
+        --s;
+        ++*pn;
+        char const *q = PAW_FOLDER_SEPS;
+        while (*q != '\0') {
+            if (*q++ == *s)
+                return s;
+        }
+    } while (s != s0);
+    return NULL;
+}
+
+static void path_to_modname(char const *pathname, size_t pathlen, char *modname)
+{
+    size_t modlen;
+    char const *begin = find_last_sep(pathname, pathlen, &modlen);
+    if (begin != NULL) {
+        // skip separator
+        --modlen;
+        ++begin;
+    } else {
+        begin = pathname;
+        modlen = pathlen;
+    }
+    char const *end = strchr(begin, '.');
+    if (end != NULL)
+        modlen = (size_t)(end - begin);
+    memcpy(modname, begin, modlen);
+    modname[modlen] = '\0';
+}
+
 #define CHUNKNAME "(chunk)"
 
 static paw_Env *load_source(size_t heap_size)
@@ -346,8 +384,7 @@ static paw_Env *load_source(size_t heap_size)
         paw_push_str(P, CHUNKNAME);
         status = pawL_load_chunk(P, CHUNKNAME, s_opt.e);
     } else if (s_pathname != NULL) {
-        paw_push_str(P, s_pathname); // TODO: why??? already providing s_pathname to pawL_load_file...
-        status = pawL_load_file(P, s_pathname);
+        status = pawL_load_file(P, "(module)", s_pathname); // TODO: need module name
     } else {
         // TODO: interactive mode or read from stdin
         error(PAW_ERUNTIME, "missing pathname or chunk\n");

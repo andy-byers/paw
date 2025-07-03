@@ -467,7 +467,6 @@ static MirBlock single_switch_target(struct KProp *K, struct MirSwitch *s, struc
     paw_assert(pcell->info.kind == CELL_CONSTANT);
     enum BuiltinKind kind = pawP_type2code(K->C, pcell->type);
     Value const target = pcell->info.v;
-    MirBlock result;
 
     struct MirSwitchArm *parm;
     K_LIST_FOREACH (s->arms, parm) {
