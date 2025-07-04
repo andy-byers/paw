@@ -431,6 +431,9 @@ static void test_list_error(void)
     test_compiler_status(E_INCOMPATIBLE_TYPES, "list_incompatible_types_2", "", "let a = []; if true {a = [0];} else {a = [true];}");
     test_compiler_status(E_INCOMPATIBLE_TYPES, "list_mixed_types", "", "let a = [1, 2, 3, 4, '5'];");
     test_compiler_status(E_INCOMPATIBLE_TYPES, "list_mixed_nesting", "", "let a = [[[1]], [[2]], [3]];");
+    test_runtime_status(PAW_EINDEX, "list_out_of_bounds_get", "fn f(list: [int]) -> int {list[100]}", "f([]);");
+    test_runtime_status(PAW_EINDEX, "list_out_of_bounds_set", "fn f(list: [int]) {list[100] = 100}", "f([]);");
+    test_runtime_status(PAW_EINDEX, "list_pop_while_empty", "fn f(list: [int]) -> int {list.pop()}", "f([]);");
 }
 
 static void test_map_error(void)

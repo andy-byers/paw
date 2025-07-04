@@ -233,26 +233,36 @@ void pawR_str_get(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value c
     V_SET_CHAR(ra, (paw_Char)str->text[index]);
 }
 
+static void list_out_of_bounds(paw_Env *P, Tuple const *list, paw_Int index)
+{
+    pawV_index_error(P, index, pawList_length(P, list), "list");
+}
+
 void pawR_list_getp(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc)
 {
     Tuple *list = V_TUPLE(*rb);
-    paw_Int const idx = V_INT(*rc);
-    ra->p = pawList_get(P, list, idx);
+    paw_Int const index = V_INT(*rc);
+    Value *pv = pawList_get(P, list, index);
+    if (pv == NULL) list_out_of_bounds(P, list, index);
+    ra->p = pv;
 }
 
 void pawR_list_get(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc)
 {
     Tuple *list = V_TUPLE(*rb);
-    paw_Int const idx = V_INT(*rc);
-    *ra = *pawList_get(P, list, idx);
+    paw_Int const index = V_INT(*rc);
+    Value const *pv = pawList_get(P, list, index);
+    if (pv == NULL) list_out_of_bounds(P, list, index);
+    *ra = *pv;
 }
 
 void pawR_list_set(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc)
 {
     Tuple *list = V_TUPLE(*ra);
-    paw_Int const idx = V_INT(*rb);
-    Value *pval = pawList_get(P, list, idx);
-    *pval = *rc;
+    paw_Int const index = V_INT(*rb);
+    Value *pv = pawList_get(P, list, index);
+    if (pv == NULL) list_out_of_bounds(P, list, index);
+    *pv = *rc;
 }
 
 void pawR_map_length(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb)
