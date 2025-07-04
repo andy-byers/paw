@@ -639,6 +639,13 @@ static IrType *check_path_expr(struct TypeChecker *T, struct HirPathExpr *e)
     return type;
 }
 
+static IrType *check_ascription_expr(struct TypeChecker *T, struct HirAscriptionExpr *e)
+{
+    IrType *type = check_expr(T, e->expr);
+    IrType *tag = check_type(T, e->type, e->type->hdr.span);
+    return unify(T, e->span.start, type, tag);
+}
+
 static IrType *check_logical_expr(struct TypeChecker *T, struct HirLogicalExpr *e)
 {
     expect_bool_expr(T, e->lhs);
@@ -739,6 +746,8 @@ static IrType *check_unop_expr(struct TypeChecker *T, struct HirUnOpExpr *e)
     };
 
     IrType *type = check_operand(T, e->target);
+    if (IrIsNever(type)) return type;
+
     enum BuiltinKind const code = TYPE2CODE(T, type);
     if (!IS_BUILTIN_TYPE(code) || !VALID_OPS[e->op][code]) {
         char const *operand = pawIr_print_type(T->C, type);
@@ -797,17 +806,16 @@ static IrType *check_binary_op(struct TypeChecker *T, struct SourceSpan span, en
 
     IrType *lhs = check_operand(T, left);
     IrType *rhs = check_operand(T, right);
-    unify(T, span.start, lhs, rhs);
+    IrType *type = unify(T, span.start, lhs, rhs);
+    enum BuiltinKind const code = TYPE2CODE(T, type);
 
-    enum BuiltinKind const code = TYPE2CODE(T, lhs);
-    paw_assert(code == TYPE2CODE(T, rhs));
     if (!IS_BUILTIN_TYPE(code) || !VALID_OPS[op][code]) {
-        char const *operand = pawIr_print_type(T->C, lhs);
+        char const *operand = pawIr_print_type(T->C, type);
         TYPECK_ERROR(T, invalid_binary_operand, span.start, operand, BINOP_REPR[op]);
     } else if (is_bool_binop(op)) {
         return builtin_type(T, BUILTIN_BOOL);
     } else {
-        return lhs;
+        return type;
     }
 }
 
@@ -860,6 +868,7 @@ static IrType *check_match_expr(struct TypeChecker *T, struct HirMatchExpr *e)
         // propagate divergence status to enclosing block
         unify(T, e->span.start, bs.result, T->bs->result);
 
+    SET_TYPE(T, e->target->hdr.id, ms.target);
     return bs.result;
 }
 
@@ -868,8 +877,9 @@ static IrType *check_match_arm(struct TypeChecker *T, struct HirMatchArm *e)
     struct BlockState bs;
     enter_block(T, &bs, e->span, BLOCK_NORMAL);
 
+    struct MatchState *ms = T->ms;
     IrType *pat = check_pat(T, e->pat);
-    unify(T, e->span.start, pat, T->ms->target);
+    ms->target = unify(T, e->span.start, pat, ms->target);
     if (e->guard != NULL) expect_bool_expr(T, e->guard);
     IrType *result = check_operand(T, e->result);
     result = unify(T, e->span.start, bs.result, result);
@@ -1849,6 +1859,9 @@ static IrType *check_expr(struct TypeChecker *T, struct HirExpr *expr)
 {
     IrType *type;
     switch (HIR_KINDOF(expr)) {
+        case kHirAscriptionExpr:
+            type = check_ascription_expr(T, HirGetAscriptionExpr(expr));
+            break;
         case kHirLiteralExpr:
             type = check_literal_expr(T, HirGetLiteralExpr(expr));
             break;

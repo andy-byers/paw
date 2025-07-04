@@ -19,6 +19,7 @@
     X(VariantDecl)
 
 #define HIR_EXPR_LIST(X) \
+    X(AscriptionExpr)    \
     X(LiteralExpr)       \
     X(LogicalExpr)       \
     X(PathExpr)          \
@@ -568,6 +569,12 @@ struct HirExprHeader {
     HIR_EXPR_HEADER;
 };
 
+struct HirAscriptionExpr {
+    HIR_EXPR_HEADER;
+    struct HirExpr *expr;
+    struct HirType *type;
+};
+
 struct HirPathExpr {
     HIR_EXPR_HEADER;
     struct HirPath path;
@@ -765,6 +772,20 @@ HIR_EXPR_LIST(DEFINE_ACCESS)
 #undef DEFINE_ACCESS
 
 struct HirExpr *pawHir_new_expr(struct Hir *hir);
+
+static struct HirExpr *pawHir_new_ascription_expr(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirExpr *expr, struct HirType *type)
+{
+    struct HirExpr *e = pawHir_new_expr(hir);
+    e->AscriptionExpr_ = (struct HirAscriptionExpr){
+        .id = id,
+        .span = span,
+        .kind = kHirAscriptionExpr,
+        .expr = expr,
+        .type = type,
+    };
+    pawHir_register_node(hir, id, e);
+    return e;
+}
 
 static struct HirExpr *pawHir_new_path_expr(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirPath path)
 {

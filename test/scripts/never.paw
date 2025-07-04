@@ -231,41 +231,32 @@ pub fn test_nested_loop() {
     };    
 }
 
-//fn check_diverging_branch(b: bool) {
-//    let (a, b) = if b {
-//        ("abc", 456.0)
-//    } else {
-//        custom_divergence()
-//    };
-//    assert(a == "abc");
-//    assert(b == 456.0);
-//}
-//
-//pub fn test_diverging_branch() {
-//    check_diverging_branch(true);
-//}
-//
-//fn check_diverging_arm(b: bool) {
-//    let (a, b) = match b {
-//        true => ("abc", 456.0),
-//        _ => custom_divergence(),
-//    };
-//    assert(a == "abc");
-//    assert(b == 456.0);
-//}
-//
-//pub fn test_diverging_arm() {
-//    check_diverging_arm(true);
-//}
+fn check_diverging_branch(b: bool) {
+    let (a, b) = if b {
+        ("abc", 456.0)
+    } else {
+        custom_divergence()
+    };
+    assert(a == "abc");
+    assert(b == 456.0);
+}
 
-//// TODO: Should these be allowed?
-//pub fn test_diverging_expressions() {
-//    let _: int = !return;
-//    let _: int = #return;
-//    let _: int = 1 + return;
-//    let _: int = (return) + 1;
-//    let _: int = (return) + return;
-//}
+pub fn test_diverging_branch() {
+    check_diverging_branch(true);
+}
+
+fn check_diverging_arm(b: bool) {
+    let (a, b) = match b {
+        true => ("abc", 456.0),
+        _ => custom_divergence(),
+    };
+    assert(a == "abc");
+    assert(b == 456.0);
+}
+
+pub fn test_diverging_arm() {
+    check_diverging_arm(true);
+}
 
 // return value not necessary since it would be unreachable
 fn function_never_returns() -> int {
@@ -276,3 +267,22 @@ fn custom_divergence() -> ! {
     panic("panic occurred");
 }
 
+pub fn test_diverging_expressions() {
+    let _: int = !return;
+    let _: int = #return;
+
+    let _: int = 1 + return;
+    let _: int = (return) + 1;
+
+    let _ = (1, return);    
+    let _ = (return, 2);    
+
+    if (return) { } 
+    else if (return) { } 
+    else { }
+
+    match (return) {
+        true => {},
+        _ => {},
+    }
+}

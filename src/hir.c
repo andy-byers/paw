@@ -295,6 +295,12 @@ static void AcceptConversionExpr(struct HirVisitor *V, struct HirConversionExpr 
     AcceptExpr(V, e->arg);
 }
 
+static void AcceptAscriptionExpr(struct HirVisitor *V, struct HirAscriptionExpr *e)
+{
+    AcceptExpr(V, e->expr);
+    AcceptType(V, e->type);
+}
+
 static void AcceptPathExpr(struct HirVisitor *V, struct HirPathExpr *e)
 {
     AcceptPath(V, &e->path);
@@ -1077,6 +1083,13 @@ static void dump_type(struct Printer *P, struct HirType *type)
 static void dump_expr(struct Printer *P, struct HirExpr *expr)
 {
     switch (HIR_KINDOF(expr)) {
+        case kHirAscriptionExpr: {
+            struct HirAscriptionExpr *e = HirGetAscriptionExpr(expr);
+            dump_expr(P, e->expr);
+            DUMP_CSTR(P, ": ");
+            dump_type(P, e->type);
+            break;
+        }
         case kHirLogicalExpr: {
             struct HirLogicalExpr *e = HirGetLogicalExpr(expr);
             dump_expr(P, e->lhs);

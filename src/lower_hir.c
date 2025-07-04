@@ -651,8 +651,6 @@ static void leave_function(struct LowerHir *L)
     L->fs = fs->outer;
 }
 
-static struct MirPlace lower_operand(struct HirVisitor *V, struct HirExpr *expr);
-
 #define LOWER_BLOCK(L, b) lower_place((L)->V, HIR_CAST_EXPR(b))
 
 static void auto_deref(struct FunctionState *fs, struct MirPlace *pplace, IrType *target)
@@ -1020,6 +1018,11 @@ static struct MirPlace lookup_global_constant(struct LowerHir *L, struct HirCons
     return lookup_global_constant(L, d);
 }
 
+static struct MirPlace lower_ascription_expr(struct HirVisitor *V, struct HirAscriptionExpr *e)
+{
+    return lower_place(V, e->expr);
+}
+
 static struct MirPlace lower_path_expr(struct HirVisitor *V, struct HirPathExpr *e)
 {
     struct LowerHir *L = V->ud;
@@ -1341,12 +1344,14 @@ static struct MirPlace lower_unop_expr(struct HirVisitor *V, struct HirUnOpExpr 
 
     struct MirPlace value = lower_place(V, e->target);
     struct MirPlace const output = place_for_node(fs, e->id);
-    const enum BuiltinKind code = kind_of_builtin(L, e->target);
-    enum MirUnaryOpKind const op = code == BUILTIN_BOOL ? unop2op_bool(e->op) : //
-        code == BUILTIN_INT ? unop2op_int(e->op) : //
-        code == BUILTIN_FLOAT ? unop2op_float(e->op) : //
-        code == BUILTIN_STR ? unop2op_str(e->op) : //
-        code == BUILTIN_LIST ? unop2op_list(e->op) : //
+    const enum BuiltinKind kind = kind_of_builtin(L, e->target);
+    if (!IS_BUILTIN_TYPE(kind)) return output; // must be "!"
+
+    enum MirUnaryOpKind const op = kind == BUILTIN_BOOL ? unop2op_bool(e->op) : //
+        kind == BUILTIN_INT ? unop2op_int(e->op) : //
+        kind == BUILTIN_FLOAT ? unop2op_float(e->op) : //
+        kind == BUILTIN_STR ? unop2op_str(e->op) : //
+        kind == BUILTIN_LIST ? unop2op_list(e->op) : //
         unop2op_map(e->op);
     NEW_INSTR(fs, unary_op, e->span.start, op, value, output);
     return output;
@@ -1376,6 +1381,8 @@ static struct MirPlace lower_binop_expr(struct HirVisitor *V, struct HirBinOpExp
     struct MirPlace const rhs = lower_place(V, e->rhs);
     const enum BuiltinKind kind = kind_of_builtin(L, e->lhs);
     struct MirPlace const output = place_for_node(fs, e->id);
+    if (!IS_BUILTIN_TYPE(kind)) return output; // must be "!"
+
     new_binary_op(V, e->span, e->op, kind, lhs, rhs, output);
     return output;
 }
@@ -1997,6 +2004,9 @@ static void lower_place_aux(struct HirVisitor *V, struct HirExpr *expr, struct M
             }
             break;
         }
+        case kHirAscriptionExpr:
+            *pplace = lower_ascription_expr(V, HirGetAscriptionExpr(expr));
+            break;
         case kHirPathExpr:
             *pplace = lower_path_expr(V, HirGetPathExpr(expr));
             break;

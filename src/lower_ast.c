@@ -754,13 +754,16 @@ static struct HirStmtList *create_unpackers(struct Unpacking *ctx)
     return setters;
 }
 
-static struct HirStmt *unpack_bindings(struct LowerAst *L, struct HirPat *lhs, struct HirExpr *rhs, NodeId id)
+static struct HirStmt *unpack_bindings(struct LowerAst *L, struct HirPat *lhs, struct HirExpr *rhs, struct HirType *tag, NodeId id)
 {
     struct Unpacking ctx = {
         .info = UnpackingList_new(L),
         .span = lhs->hdr.span,
         .L = L,
     };
+
+    if (tag != NULL) // wrap in ascription expression to facilitate type checking
+        rhs = NEW_NODE(L, ascription_expr, rhs->hdr.span, next_node_id(L), rhs, tag);
 
     // declare temporaries for each binding that appears in the pattern
     struct HirVisitor collector;
@@ -797,7 +800,7 @@ static struct HirStmt *LowerLetStmt(struct LowerAst *L, struct AstLetStmt *s)
     if (HirIsBindingPat(pat)) {
         return NEW_NODE(L, let_stmt, s->span, s->id, pat, tag, init);
     } else if (s->init != NULL) {
-        return unpack_bindings(L, pat, init, s->id);
+        return unpack_bindings(L, pat, init, tag, s->id);
     } else {
         LOWERING_ERROR(L, uninitialized_destructuring, s->span.start);
     }
