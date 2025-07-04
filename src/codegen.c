@@ -947,18 +947,14 @@ static Op binop2op(enum MirBinaryOpKind binop)
             return OP_STRCAT;
         case MIR_BINARY_LISTCAT:
             return OP_LISTCAT;
-        case MIR_BINARY_XEQ:
-            return OP_XEQ;
-        case MIR_BINARY_XNE:
-            return OP_XNE;
-        case MIR_BINARY_XLT:
-            return OP_XLT;
-        case MIR_BINARY_XLE:
-            return OP_XLE;
-        case MIR_BINARY_XGT:
-            return OP_XGT;
-        case MIR_BINARY_XGE:
-            return OP_XGE;
+        case MIR_BINARY_CEQ:
+            return OP_CEQ;
+        case MIR_BINARY_CNE:
+            return OP_CNE;
+        case MIR_BINARY_CLT:
+            return OP_CLT;
+        case MIR_BINARY_CLE:
+            return OP_CLE;
         case MIR_BINARY_IEQ:
             return OP_IEQ;
         case MIR_BINARY_INE:
@@ -967,10 +963,6 @@ static Op binop2op(enum MirBinaryOpKind binop)
             return OP_ILT;
         case MIR_BINARY_ILE:
             return OP_ILE;
-        case MIR_BINARY_IGT:
-            return OP_IGT;
-        case MIR_BINARY_IGE:
-            return OP_IGE;
         case MIR_BINARY_IADD:
             return OP_IADD;
         case MIR_BINARY_ISUB:
@@ -989,10 +981,6 @@ static Op binop2op(enum MirBinaryOpKind binop)
             return OP_FLT;
         case MIR_BINARY_FLE:
             return OP_FLE;
-        case MIR_BINARY_FGT:
-            return OP_FGT;
-        case MIR_BINARY_FGE:
-            return OP_FGE;
         case MIR_BINARY_FADD:
             return OP_FADD;
         case MIR_BINARY_FSUB:
@@ -1011,10 +999,6 @@ static Op binop2op(enum MirBinaryOpKind binop)
             return OP_STRLT;
         case MIR_BINARY_STRLE:
             return OP_STRLE;
-        case MIR_BINARY_STRGT:
-            return OP_STRGT;
-        case MIR_BINARY_STRGE:
-            return OP_STRGE;
         case MIR_BINARY_IBITAND:
             return OP_BITAND;
         case MIR_BINARY_IBITOR:

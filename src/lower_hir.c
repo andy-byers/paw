@@ -1175,21 +1175,17 @@ static enum MirBinaryOpKind binop2op_bool(enum BinaryOp binop)
     }
 }
 
-static enum MirBinaryOpKind binop2op_byte(enum BinaryOp binop)
+static enum MirBinaryOpKind binop2op_char(enum BinaryOp binop)
 {
     switch (binop) {
         case BINARY_EQ:
-            return MIR_BINARY_XEQ;
+            return MIR_BINARY_CEQ;
         case BINARY_NE:
-            return MIR_BINARY_XNE;
+            return MIR_BINARY_CNE;
         case BINARY_LT:
-            return MIR_BINARY_XLT;
+            return MIR_BINARY_CLT;
         case BINARY_LE:
-            return MIR_BINARY_XLE;
-        case BINARY_GT:
-            return MIR_BINARY_XGT;
-        case BINARY_GE:
-            return MIR_BINARY_XGE;
+            return MIR_BINARY_CLE;
         default:
             PAW_UNREACHABLE();
     }
@@ -1206,10 +1202,6 @@ static enum MirBinaryOpKind binop2op_int(enum BinaryOp binop)
             return MIR_BINARY_ILT;
         case BINARY_LE:
             return MIR_BINARY_ILE;
-        case BINARY_GT:
-            return MIR_BINARY_IGT;
-        case BINARY_GE:
-            return MIR_BINARY_IGE;
         case BINARY_ADD:
             return MIR_BINARY_IADD;
         case BINARY_SUB:
@@ -1256,10 +1248,6 @@ static enum MirBinaryOpKind binop2op_float(enum BinaryOp binop)
             return MIR_BINARY_FLT;
         case BINARY_LE:
             return MIR_BINARY_FLE;
-        case BINARY_GT:
-            return MIR_BINARY_FGT;
-        case BINARY_GE:
-            return MIR_BINARY_FGE;
         case BINARY_ADD:
             return MIR_BINARY_FADD;
         case BINARY_SUB:
@@ -1296,10 +1284,6 @@ static enum MirBinaryOpKind binop2op_str(enum BinaryOp binop)
             return MIR_BINARY_STRLT;
         case BINARY_LE:
             return MIR_BINARY_STRLE;
-        case BINARY_GT:
-            return MIR_BINARY_STRGT;
-        case BINARY_GE:
-            return MIR_BINARY_STRGE;
         case BINARY_ADD:
             return MIR_BINARY_STRCAT;
         default:
@@ -1362,13 +1346,22 @@ static void new_binary_op(struct HirVisitor *V, struct SourceSpan span, enum Bin
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
 
+    if (op == BINARY_GT || op == BINARY_GE) {
+        // only use relational comparisons "LT" and "LE"
+        op = op == BINARY_GT ? BINARY_LT : BINARY_LE;
+        struct MirPlace const temp = lhs;
+        lhs = rhs;
+        rhs = temp;
+    }
+
     enum MirBinaryOpKind const binop =
-        kind == BUILTIN_CHAR ? binop2op_byte(op) : //
+        kind == BUILTIN_CHAR ? binop2op_char(op) : //
         kind == BUILTIN_INT ? binop2op_int(op) : //
         kind == BUILTIN_BOOL ? binop2op_bool(op) : //
         kind == BUILTIN_FLOAT ? binop2op_float(op) : //
         kind == BUILTIN_STR ? binop2op_str(op) : //
         binop2op_list(op);
+
     NEW_INSTR(fs, binary_op, span.start, binop, lhs, rhs, output);
 }
 

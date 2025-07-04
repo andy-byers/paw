@@ -1089,18 +1089,14 @@ static char const *unop_name(enum MirUnaryOpKind op)
 static char const *binop_name(enum MirBinaryOpKind op)
 {
     switch (op) {
-        case MIR_BINARY_XEQ:
-            return "XEQ";
-        case MIR_BINARY_XNE:
-            return "XNE";
-        case MIR_BINARY_XLT:
-            return "XLT";
-        case MIR_BINARY_XLE:
-            return "XLE";
-        case MIR_BINARY_XGT:
-            return "XGT";
-        case MIR_BINARY_XGE:
-            return "XGE";
+        case MIR_BINARY_CEQ:
+            return "CEQ";
+        case MIR_BINARY_CNE:
+            return "CNE";
+        case MIR_BINARY_CLT:
+            return "CLT";
+        case MIR_BINARY_CLE:
+            return "CLE";
         case MIR_BINARY_IEQ:
             return "IEQ";
         case MIR_BINARY_INE:
@@ -1109,10 +1105,6 @@ static char const *binop_name(enum MirBinaryOpKind op)
             return "ILT";
         case MIR_BINARY_ILE:
             return "ILE";
-        case MIR_BINARY_IGT:
-            return "IGT";
-        case MIR_BINARY_IGE:
-            return "IGE";
         case MIR_BINARY_FEQ:
             return "FEQ";
         case MIR_BINARY_FNE:
@@ -1121,10 +1113,6 @@ static char const *binop_name(enum MirBinaryOpKind op)
             return "FLT";
         case MIR_BINARY_FLE:
             return "FLE";
-        case MIR_BINARY_FGT:
-            return "FGT";
-        case MIR_BINARY_FGE:
-            return "FGE";
         case MIR_BINARY_STREQ:
             return "STREQ";
         case MIR_BINARY_STRNE:
@@ -1133,10 +1121,6 @@ static char const *binop_name(enum MirBinaryOpKind op)
             return "STRLT";
         case MIR_BINARY_STRLE:
             return "STRLE";
-        case MIR_BINARY_STRGT:
-            return "STRGT";
-        case MIR_BINARY_STRGE:
-            return "STRGE";
         case MIR_BINARY_STRCAT:
             return "STRCAT";
         case MIR_BINARY_LISTCAT:

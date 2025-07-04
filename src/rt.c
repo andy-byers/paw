@@ -490,19 +490,15 @@ top:
                 *ra = K[GET_Bx(opcode)];
             }
 
-            vm_case(XEQ) : VM_COMPARISON(CHAR, ==)
-            vm_case(XNE) : VM_COMPARISON(CHAR, !=)
-            vm_case(XLT) : VM_COMPARISON(CHAR, <)
-            vm_case(XLE) : VM_COMPARISON(CHAR, <=)
-            vm_case(XGT) : VM_COMPARISON(CHAR, >)
-            vm_case(XGE) : VM_COMPARISON(CHAR, >=)
+            vm_case(CEQ) : VM_COMPARISON(CHAR, ==)
+            vm_case(CNE) : VM_COMPARISON(CHAR, !=)
+            vm_case(CLT) : VM_COMPARISON(CHAR, <)
+            vm_case(CLE) : VM_COMPARISON(CHAR, <=)
 
             vm_case(IEQ) : VM_COMPARISON(INT, ==)
             vm_case(INE) : VM_COMPARISON(INT, !=)
             vm_case(ILT) : VM_COMPARISON(INT, <)
             vm_case(ILE) : VM_COMPARISON(INT, <=)
-            vm_case(IGT) : VM_COMPARISON(INT, >)
-            vm_case(IGE) : VM_COMPARISON(INT, >=)
 
             vm_case(INOT) : VM_UNARY_OP(INT, !)
             vm_case(INEG) : VM_UNARY_OP(INT, -)
@@ -523,8 +519,6 @@ top:
             vm_case(FNE) : VM_COMPARISON(FLOAT, !=)
             vm_case(FLT) : VM_COMPARISON(FLOAT, <)
             vm_case(FLE) : VM_COMPARISON(FLOAT, <=)
-            vm_case(FGT) : VM_COMPARISON(FLOAT, >)
-            vm_case(FGE) : VM_COMPARISON(FLOAT, >=)
 
             vm_case(FNEG) : VM_UNARY_OP(FLOAT, -)
             vm_case(FADD) : VM_BINARY_OP(FLOAT, +)
@@ -559,8 +553,6 @@ top:
             vm_case(STRNE) : VM_COMPARISON(STR, !=)
             vm_case(STRLT) : VM_COMPARISON(STR, <)
             vm_case(STRLE) : VM_COMPARISON(STR, <=)
-            vm_case(STRGT) : VM_COMPARISON(STR, >)
-            vm_case(STRGE) : VM_COMPARISON(STR, >=)
 
             vm_case(STRCAT) :
             {

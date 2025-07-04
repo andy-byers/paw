@@ -98,10 +98,10 @@ static int constructor_index(struct Constructor cons)
 static struct MatchVar new_variable(struct Usefulness *U, struct SourceSpan span, IrType *type)
 {
     VariableList_push(U->C, U->vars, (struct MatchVar){
-                                         .id = U->var_id++,
-                                         .type = type,
-                                         .span = span,
-                                     });
+        .id = U->var_id++,
+        .type = type,
+        .span = span,
+    });
     return VariableList_last(U->vars);
 }
 
@@ -164,15 +164,6 @@ static struct HirPatList *join_lists(struct Usefulness *U, struct HirPatList *lh
     return lhs;
 }
 
-static struct HirPatList *flatten_or(struct Usefulness *U, struct HirPat *pat)
-{
-    if (HirIsOrPat(pat))
-        return HirGetOrPat(pat)->pats;
-    struct HirPatList *pats = HirPatList_new(U->hir);
-    HirPatList_push(U->hir, pats, pat);
-    return pats;
-}
-
 static struct Row remove_first_row(struct RowList *rows)
 {
     return RowList_remove(rows, 0);
@@ -215,21 +206,21 @@ static void expand_or_patterns(struct Usefulness *U, struct RowList *rows)
         found = PAW_FALSE;
 
         while (rows->count > 0) {
-            struct Row row = remove_first_row(rows);
+            struct Row const row = remove_first_row(rows);
             int const icol = find_or_pattern(row);
             if (icol >= 0) {
                 found = PAW_TRUE;
 
-                struct Column col = ColumnList_get(row.columns, icol);
-                struct HirOrPat *or = HirGetOrPat(col.pat);
+                struct Column const col = ColumnList_get(row.columns, icol);
+                struct HirOrPat const *or = HirGetOrPat(col.pat);
 
                 struct HirPat *const *ppat;
                 K_LIST_FOREACH (or->pats, ppat) {
                     struct Row const new_row = copy_row(U, row);
                     ColumnList_set(new_row.columns, icol, (struct Column){
-                                                              .var = col.var,
-                                                              .pat = *ppat,
-                                                          });
+                        .var = col.var,
+                        .pat = *ppat,
+                    });
                     RowList_push(U, new_rows, new_row);
                 }
             } else {
@@ -237,7 +228,7 @@ static void expand_or_patterns(struct Usefulness *U, struct RowList *rows)
             }
         }
 
-        struct RowList temp = *rows;
+        struct RowList const temp = *rows;
         *rows = *new_rows;
         *new_rows = temp;
     }
@@ -251,7 +242,7 @@ static struct VariableList *variables_for_types(struct Usefulness *U, struct Sou
 
     IrType *const *ptype;
     K_LIST_FOREACH (types, ptype) {
-        struct MatchVar var = new_variable(U, span, *ptype);
+        struct MatchVar const var = new_variable(U, span, *ptype);
         VariableList_push(U->C, result, var);
     }
     return result;
@@ -336,12 +327,12 @@ static void move_bindings_to_right(struct Usefulness *U, struct Row *row)
     struct Column const *pcol;
     K_LIST_FOREACH (row->columns, pcol) {
         if (HirIsBindingPat(pcol->pat)) {
-            struct HirBindingPat *p = HirGetBindingPat(pcol->pat);
+            struct HirBindingPat const *p = HirGetBindingPat(pcol->pat);
             BindingList_push(U->C, row->body.bindings, (struct Binding){
-                                                           .name = p->ident.name,
-                                                           .var = pcol->var,
-                                                           .id = p->id,
-                                                       });
+                .name = p->ident.name,
+                .var = pcol->var,
+                .id = p->id,
+            });
         } else if (!HirIsWildcardPat(pcol->pat)) {
             ColumnList_push(U, columns, *pcol);
         }
@@ -396,10 +387,10 @@ static struct CaseList *compile_cases(struct Usefulness *U, struct RawCaseList *
     K_LIST_FOREACH(raw_cases, prc) {
         struct Decision *dec = compile_rows(U, prc->rows);
         CaseList_push(U->C, result, (struct MatchCase){
-                                        .cons = prc->cons,
-                                        .vars = prc->vars,
-                                        .dec = dec,
-                                    });
+            .cons = prc->cons,
+            .vars = prc->vars,
+            .dec = dec,
+        });
     }
     return result;
 }
@@ -449,9 +440,9 @@ static struct CaseList *compile_constructor_cases(struct Usefulness *U, struct R
         struct HirPat *const *pp;
         K_LIST_ZIP (fields, pp, rc->vars, pv) {
             ColumnList_push(U, r.columns, (struct Column){
-                                              .var = *pv,
-                                              .pat = *pp,
-                                          });
+                .var = *pv,
+                .pat = *pp,
+            });
         }
         RowList_push(U, rc->rows, r);
     }
@@ -536,10 +527,10 @@ static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct R
         extend_row_list(U, rows, fallback);
         RowList_push(U, rows, r);
         RawCaseList_push(U, raw_cases, (struct RawCase){
-                                           .vars = VariableList_new_from(U->C, U->pool),
-                                           .cons = cons,
-                                           .rows = rows,
-                                       });
+            .vars = VariableList_new_from(U->C, U->pool),
+            .cons = cons,
+            .rows = rows,
+        });
     }
 
     CaseMap_delete(U, tested);
@@ -584,10 +575,10 @@ struct RawCaseList *cases_for_struct(struct Usefulness *U, struct MatchVar var)
 
     struct RawCaseList *result = RawCaseList_new(U);
     RawCaseList_push(U, result, (struct RawCase){
-                                    .rows = RowList_new(U),
-                                    .vars = subvars,
-                                    .cons = cons,
-                                });
+        .rows = RowList_new(U),
+        .vars = subvars,
+        .cons = cons,
+    });
     return result;
 }
 
@@ -604,10 +595,10 @@ struct RawCaseList *cases_for_tuple(struct Usefulness *U, struct MatchVar var)
     };
 
     RawCaseList_push(U, result, (struct RawCase){
-                                    .rows = RowList_new(U),
-                                    .vars = subvars,
-                                    .cons = cons,
-                                });
+        .rows = RowList_new(U),
+        .vars = subvars,
+        .cons = cons,
+    });
     return result;
 }
 
@@ -634,10 +625,10 @@ struct RawCaseList *cases_for_variant(struct Usefulness *U, struct MatchVar var)
         };
 
         RawCaseList_push(U, result, (struct RawCase){
-                                        .rows = RowList_new(U),
-                                        .vars = subvars,
-                                        .cons = cons,
-                                    });
+            .rows = RowList_new(U),
+            .vars = subvars,
+            .cons = cons,
+        });
     }
     return result;
 }
@@ -742,14 +733,14 @@ struct Decision *pawP_check_exhaustiveness(struct Hir *hir, struct Pool *pool, S
         struct HirMatchArm *arm = HirGetMatchArm(*parm);
         struct ColumnList *cols = ColumnList_new(&U);
         ColumnList_push(&U, cols, (struct Column){
-                                      .var = var,
-                                      .pat = arm->pat,
-                                  });
+            .var = var,
+            .pat = arm->pat,
+        });
         RowList_push(&U, rows, (struct Row){
-                                   .body = new_body(&U, arm->result),
-                                   .guard = arm->guard,
-                                   .columns = cols,
-                               });
+            .body = new_body(&U, arm->result),
+            .guard = arm->guard,
+            .columns = cols,
+        });
     }
 
     return compile_rows(&U, rows);

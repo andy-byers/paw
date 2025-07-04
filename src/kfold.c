@@ -88,7 +88,7 @@ paw_Bool pawP_fold_unary_op(struct Compiler *C, enum MirUnaryOpKind op, Value v,
 paw_Bool pawP_fold_binary_op(struct Compiler *C, Str const *modname, struct SourceLoc loc, enum MirBinaryOpKind op, Value x, Value y, Value *pr)
 {
     switch (op) {
-        case MIR_BINARY_XEQ:
+        case MIR_BINARY_CEQ:
             CHAR_COMPARISON(pr, x, y, ==);
             break;
         case MIR_BINARY_IEQ:
@@ -100,7 +100,7 @@ paw_Bool pawP_fold_binary_op(struct Compiler *C, Str const *modname, struct Sour
         case MIR_BINARY_FEQ:
             FLOAT_COMPARISON(pr, x, y, ==);
             break;
-        case MIR_BINARY_XNE:
+        case MIR_BINARY_CNE:
             CHAR_COMPARISON(pr, x, y, !=);
             break;
         case MIR_BINARY_INE:
@@ -112,7 +112,7 @@ paw_Bool pawP_fold_binary_op(struct Compiler *C, Str const *modname, struct Sour
         case MIR_BINARY_STRNE:
             STR_COMPARISON(pr, x, y, !=);
             break;
-        case MIR_BINARY_XLT:
+        case MIR_BINARY_CLT:
             CHAR_COMPARISON(pr, x, y, <);
             break;
         case MIR_BINARY_ILT:
@@ -124,7 +124,7 @@ paw_Bool pawP_fold_binary_op(struct Compiler *C, Str const *modname, struct Sour
         case MIR_BINARY_STRLT:
             STR_COMPARISON(pr, x, y, <);
             break;
-        case MIR_BINARY_XLE:
+        case MIR_BINARY_CLE:
             CHAR_COMPARISON(pr, x, y, <=);
             break;
         case MIR_BINARY_ILE:
@@ -135,30 +135,6 @@ paw_Bool pawP_fold_binary_op(struct Compiler *C, Str const *modname, struct Sour
             break;
         case MIR_BINARY_STRLE:
             STR_COMPARISON(pr, x, y, <=);
-            break;
-        case MIR_BINARY_XGT:
-            CHAR_COMPARISON(pr, x, y, >);
-            break;
-        case MIR_BINARY_IGT:
-            INT_COMPARISON(pr, x, y, >);
-            break;
-        case MIR_BINARY_FGT:
-            FLOAT_COMPARISON(pr, x, y, >);
-            break;
-        case MIR_BINARY_STRGT:
-            STR_COMPARISON(pr, x, y, >);
-            break;
-        case MIR_BINARY_XGE:
-            CHAR_COMPARISON(pr, x, y, >=);
-            break;
-        case MIR_BINARY_IGE:
-            INT_COMPARISON(pr, x, y, >=);
-            break;
-        case MIR_BINARY_FGE:
-            FLOAT_COMPARISON(pr, x, y, >=);
-            break;
-        case MIR_BINARY_STRGE:
-            STR_COMPARISON(pr, x, y, >=);
             break;
         case MIR_BINARY_IADD:
             INT_BINARY_OP(pr, x, y, +);

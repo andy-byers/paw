@@ -319,18 +319,14 @@ char const *op_name(Op op)
             return "NEWLIST";
         case OP_NEWMAP:
             return "NEWMAP";
-        case OP_XEQ:
-            return "XEQ";
-        case OP_XNE:
-            return "XNE";
-        case OP_XLT:
-            return "XLT";
-        case OP_XLE:
-            return "XLE";
-        case OP_XGT:
-            return "XGT";
-        case OP_XGE:
-            return "XGE";
+        case OP_CEQ:
+            return "CEQ";
+        case OP_CNE:
+            return "CNE";
+        case OP_CLT:
+            return "CLT";
+        case OP_CLE:
+            return "CLE";
         case OP_IEQ:
             return "IEQ";
         case OP_INE:
@@ -339,10 +335,6 @@ char const *op_name(Op op)
             return "ILT";
         case OP_ILE:
             return "ILE";
-        case OP_IGT:
-            return "IGT";
-        case OP_IGE:
-            return "IGE";
         case OP_INOT:
             return "INOT";
         case OP_INEG:
@@ -377,10 +369,6 @@ char const *op_name(Op op)
             return "FLT";
         case OP_FLE:
             return "FLE";
-        case OP_FGT:
-            return "FGT";
-        case OP_FGE:
-            return "FGE";
         case OP_FNEG:
             return "FNEG";
         case OP_FADD:
@@ -401,10 +389,6 @@ char const *op_name(Op op)
             return "SLT";
         case OP_STRLE:
             return "SLE";
-        case OP_STRGT:
-            return "SGT";
-        case OP_STRGE:
-            return "SGE";
         case OP_STRLEN:
             return "SLEN";
         case OP_STRCAT:
@@ -527,18 +511,14 @@ void paw_dump_opcode(OpCode opcode)
             printf("%s %d\n", opname, GET_A(opcode));
             break;
         // op A B C
-        case OP_XEQ:
-        case OP_XNE:
-        case OP_XLT:
-        case OP_XLE:
-        case OP_XGT:
-        case OP_XGE:
+        case OP_CEQ:
+        case OP_CNE:
+        case OP_CLT:
+        case OP_CLE:
         case OP_IEQ:
         case OP_INE:
         case OP_ILT:
         case OP_ILE:
-        case OP_IGT:
-        case OP_IGE:
         case OP_IADD:
         case OP_ISUB:
         case OP_IMUL:
@@ -553,8 +533,6 @@ void paw_dump_opcode(OpCode opcode)
         case OP_FNE:
         case OP_FLT:
         case OP_FLE:
-        case OP_FGT:
-        case OP_FGE:
         case OP_FADD:
         case OP_FSUB:
         case OP_FMUL:
@@ -564,8 +542,6 @@ void paw_dump_opcode(OpCode opcode)
         case OP_STRNE:
         case OP_STRLT:
         case OP_STRLE:
-        case OP_STRGT:
-        case OP_STRGE:
         case OP_STRCAT:
         case OP_STRGET:
         case OP_STRGETN:
@@ -655,18 +631,14 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
                 pawL_add_fstring(P, print, " %d\t; close(R[%d])\n", GET_A(opcode), GET_A(opcode));
                 break;
             // op A B C
-            case OP_XEQ:
-            case OP_XNE:
-            case OP_XLT:
-            case OP_XLE:
-            case OP_XGT:
-            case OP_XGE:
+            case OP_CEQ:
+            case OP_CNE:
+            case OP_CLT:
+            case OP_CLE:
             case OP_IEQ:
             case OP_INE:
             case OP_ILT:
             case OP_ILE:
-            case OP_IGT:
-            case OP_IGE:
             case OP_IADD:
             case OP_ISUB:
             case OP_IMUL:
@@ -681,8 +653,6 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
             case OP_FNE:
             case OP_FLT:
             case OP_FLE:
-            case OP_FGT:
-            case OP_FGE:
             case OP_FADD:
             case OP_FSUB:
             case OP_FMUL:
@@ -692,8 +662,6 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
             case OP_STRNE:
             case OP_STRLT:
             case OP_STRLE:
-            case OP_STRGT:
-            case OP_STRGE:
             case OP_STRGET:
             case OP_STRGETN:
             case OP_LISTGETP:
