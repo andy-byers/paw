@@ -69,6 +69,13 @@ pub fn test_or() {
     let (a, b) | (b, a) = (4, 5);
     assert(a == 4);
     assert(b == 5);
+
+    let (x, (y, z))
+        | (z, (x, y))
+        | (y, (z, x)) = (1, (2, 3));
+    assert(x == 1);
+    assert(y == 2);
+    assert(z == 3);
 }
 
 pub fn test_swap() {

@@ -102,7 +102,6 @@ set(PAW_SOURCE_FILES
     ${PAW_SOURCE_DIR}/list.c
     ${PAW_SOURCE_DIR}/lib.c
     ${PAW_SOURCE_DIR}/liveness.c
-    ${PAW_SOURCE_DIR}/lookup.c
     ${PAW_SOURCE_DIR}/lower_ast.c
     ${PAW_SOURCE_DIR}/lower_hir.c
     ${PAW_SOURCE_DIR}/lower_type.c

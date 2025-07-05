@@ -441,6 +441,16 @@ static paw_Bool resolve_path_type(struct AstVisitor *V, struct AstPathType *t)
     return PAW_FALSE;
 }
 
+static paw_Bool in_first_alternative(struct OrState const *os)
+{
+    while (os != NULL) {
+        if (os->alt_index > 0)
+            return PAW_FALSE;
+        os = os->outer;
+    }
+    return PAW_TRUE;
+}
+
 static paw_Bool resolve_path_pat(struct AstVisitor *V, struct AstPathPat *p)
 {
     struct Resolver *R = V->ud;
@@ -454,14 +464,96 @@ static paw_Bool resolve_path_pat(struct AstVisitor *V, struct AstPathPat *p)
     }
 
     if ((decl == NULL || AstIsFuncDecl(decl)) && is_unary_path(p->path)) {
-        // create a pattern binding
+        // create a binding pattern
         struct AstSegment const segment = K_LIST_LAST(p->path.segments);
-        new_local_value(R, segment.ident, p->id, SYMBOL_VAR);
         set_result(R, segment, p->id, RESOLVED_LOCAL);
+
+        // only declare locals from bindings in the first alternative
+        if (in_first_alternative(R->os))
+            new_local_value(R, segment.ident, p->id, SYMBOL_VAR);
+
+        if (R->os != NULL) {
+            if (R->os->alt_index == 0) {
+                paw_Bool const replaced = BoundNames_insert(R, R->os->names,
+                        segment.ident.name, (struct BoundName){.id = p->id});
+                if (replaced)
+                    RESOLVER_ERROR(R, duplicate_binding, R->current->name,
+                            segment.ident.span.start, segment.ident.name->text);
+            } else {
+                struct BoundName const *name = BoundNames_get(R, R->os->names, segment.ident.name);
+                if (name == NULL)
+                    RESOLVER_ERROR(R, missing_binding_in_alternative, R->current->name,
+                        segment.ident.span.start, segment.ident.name->text);
+                set_result(R, segment, name->id, RESOLVED_LOCAL);
+            }
+        }
     } else if (decl == NULL) {
         unknown_path(R, p->path);
     }
     resolve_type_args(V, p->path);
+    return PAW_FALSE;
+}
+
+static void propagate_bindings(struct Resolver *R, struct OrState const *os)
+{
+    if (os->outer == NULL) return;
+
+    BoundNamesIterator iter;
+    BoundNamesIterator_init(os->names, &iter);
+    while (BoundNamesIterator_is_valid(&iter)) {
+        Str const *key = BoundNamesIterator_key(&iter);
+        struct BoundName const value = *BoundNamesIterator_valuep(&iter);
+        if (BoundNames_insert(R, os->outer->names, key, value)) {
+            RESOLVER_ERROR(R, duplicate_binding, R->current->name,
+                    value.loc, key->text);
+        }
+        BoundNamesIterator_next(&iter);
+    }
+}
+
+static paw_Bool check_binding(struct AstVisitor *V, struct AstPathPat *p)
+{
+    if (!is_unary_path(p->path))
+        return PAW_FALSE;
+
+    struct Resolver *R = V->ud;
+    struct AstSegment const segment = K_LIST_FIRST(p->path.segments);
+    struct BoundName const *pname = BoundNames_get(R, R->os->names, segment.ident.name);
+    if (pname == NULL)
+        RESOLVER_ERROR(R, missing_binding_in_alternative, R->current->name,
+                segment.ident.span.start, segment.ident.name->text);
+
+    set_result(R, segment, pname->id, RESOLVED_LOCAL);
+    return PAW_TRUE;
+}
+
+static paw_Bool resolve_or_pat(struct AstVisitor *V, struct AstOrPat *p)
+{
+    struct Resolver *R = V->ud;
+    struct AstVisitor checker;
+    pawAst_visitor_init(&checker, R->ast, R);
+    checker.VisitPathPat = check_binding;
+
+// let (a | a, b) | (b | b, a) = f();
+
+    struct OrState os = {
+        .names = BoundNames_new(R),
+        .outer = R->os,
+    };
+    R->os = &os;
+
+    struct AstPat *const *ppat;
+    K_LIST_FOREACH (p->pats, ppat) {
+        pawAst_visit_pat(V, *ppat);
+        if (os.alt_index > 0) {
+            pawAst_visit_pat(&checker, *ppat);
+        }
+        ++os.alt_index;
+    }
+
+
+    propagate_bindings(R, &os);
+    R->os = os.outer;
     return PAW_FALSE;
 }
 
@@ -529,6 +621,17 @@ static paw_Bool resolve_generic_decl(struct AstVisitor *V, struct AstGenericDecl
     return PAW_FALSE;
 }
 
+static paw_Bool enter_match_arm(struct AstVisitor *V, struct AstMatchArm *e)
+{
+    enter_scope(V->ud);
+    return PAW_TRUE;
+}
+
+static void leave_match_arm(struct AstVisitor *V, struct AstMatchArm *e)
+{
+    leave_scope(V->ud);
+}
+
 static paw_Bool enter_block_expr(struct AstVisitor *V, struct AstBlock *e)
 {
     enter_scope(V->ud);
@@ -536,6 +639,17 @@ static paw_Bool enter_block_expr(struct AstVisitor *V, struct AstBlock *e)
 }
 
 static void leave_block_expr(struct AstVisitor *V, struct AstBlock *e)
+{
+    leave_scope(V->ud);
+}
+
+static paw_Bool enter_for_expr(struct AstVisitor *V, struct AstForExpr *e)
+{
+    enter_scope(V->ud);
+    return PAW_TRUE;
+}
+
+static void leave_for_expr(struct AstVisitor *V, struct AstForExpr *e)
 {
     leave_scope(V->ud);
 }
@@ -674,11 +788,16 @@ void pawP_resolve_names(struct Compiler *C)
     R.V->VisitPathExpr = resolve_path_expr;
     R.V->VisitPathType = resolve_path_type;
     R.V->VisitPathPat = resolve_path_pat;
+    R.V->VisitOrPat = resolve_or_pat;
     R.V->VisitStructPat = resolve_struct_pat;
     R.V->VisitVariantPat = resolve_variant_pat;
     R.V->VisitLiteralExpr = resolve_literal_expr;
+    R.V->VisitMatchArm = enter_match_arm;
+    R.V->PostVisitMatchArm = leave_match_arm;
     R.V->VisitBlock = enter_block_expr;
     R.V->PostVisitBlock = leave_block_expr;
+    R.V->VisitForExpr = enter_for_expr;
+    R.V->PostVisitForExpr = leave_for_expr;
     R.V->VisitAdtDecl = enter_adt_decl;
     R.V->PostVisitAdtDecl = leave_adt_decl;
     R.V->VisitTraitDecl = enter_trait_decl;

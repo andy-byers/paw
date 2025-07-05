@@ -711,32 +711,34 @@ static struct AstPat *literal_pat(struct Lex *lex)
     return NEW_NODE(lex, literal_pat, start, next_id(lex), expr);
 }
 
-static struct AstPat *or_pat(struct Lex *lex, struct AstPat *lhs)
+static struct AstPat *alternative_pat(struct Lex *lex)
 {
-    struct SourceLoc const start = lex->loc;
-    struct AstPat *rhs = pattern(lex);
-    return NEW_NODE(lex, or_pat, start, next_id(lex), lhs, rhs);
+    switch (lex->t.kind) {
+        case TK_NAME:
+            return compound_pat(lex);
+        case TK_UNDERSCORE:
+            return wildcard_pat(lex);
+        case '(':
+            return tuple_pat(lex);
+        default:
+            return literal_pat(lex);
+    }
 }
 
 static struct AstPat *pattern(struct Lex *lex)
 {
-    struct AstPat *pat;
-    switch (lex->t.kind) {
-        case TK_NAME:
-            pat = compound_pat(lex);
-            break;
-        case TK_UNDERSCORE:
-            pat = wildcard_pat(lex);
-            break;
-        case '(':
-            pat = tuple_pat(lex);
-            break;
-        default:
-            pat = literal_pat(lex);
-    }
-    if (!test_next(lex, '|'))
-        return pat;
-    return or_pat(lex, pat);
+    struct SourceLoc const start = lex->loc;
+    struct AstPat *pat = alternative_pat(lex);
+    if (!test_next(lex, '|')) return pat;
+
+    AstPatList *pats = AstPatList_new(lex->ast);
+    AstPatList_push(lex->ast, pats, pat);
+    do {
+        pat = alternative_pat(lex);
+        AstPatList_push(lex->ast, pats, pat);
+    } while (test_next(lex, '|'));
+
+    return NEW_NODE(lex, or_pat, start, next_id(lex), pats);
 }
 
 static struct AstExpr *basic_expr(struct Lex *lex);
@@ -2128,20 +2130,4 @@ struct AstDecl *pawP_parse_module(struct Compiler *C, Str *modname, paw_Reader i
     struct AstDecl *decl = parse_module(&lex, input, ud);
     pawP_pool_free(C, lex.pool);
     return decl;
-}
-
-struct PreludeReader {
-    struct LoaderState state;
-    char data[512];
-    File *file;
-    paw_Bool err;
-};
-
-static char const *prelude_reader(paw_Env *P, void *ud, size_t *psize)
-{
-    struct PreludeReader *reader = ud;
-    size_t const zchunk = sizeof(reader->data);
-    *psize = pawO_read(P, reader->file, reader->data, zchunk);
-    // TODO: don't throw errors in os.c    if (*psize != zchunk) reader->err = ferror(reader->file);
-    return *psize > 0 ? reader->data : NULL;
 }

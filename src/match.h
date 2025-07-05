@@ -59,7 +59,7 @@ struct MatchBody {
 
 struct MatchCase {
     struct Constructor cons;
-    struct VariableList *vars;
+    struct MatchVars *vars;
     struct Decision *dec;
 };
 
@@ -91,7 +91,7 @@ struct Decision {
     };
 };
 
-DEFINE_LIST(struct Compiler, VariableList, struct MatchVar)
+DEFINE_LIST(struct Compiler, MatchVars, struct MatchVar)
 DEFINE_LIST(struct Compiler, BindingList, struct Binding)
 DEFINE_LIST(struct Compiler, CaseList, struct MatchCase)
 

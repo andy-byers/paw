@@ -100,6 +100,22 @@ void pawP_init(paw_Env *P)
     P->string_cache[CSTR_KSEARCHERS] = pawS_new_fixed(P, "paw.searchers");
 }
 
+void pawP_compile(struct Compiler *C, paw_Reader input, void *ud)
+{
+    void pawP_resolve_names(struct Compiler *C);
+    void pawP_check_types(struct Compiler *C);
+    void pawP_lower_hir(struct Compiler *C);
+    void pawP_generate_code(struct Compiler *C);
+
+    pawP_parse_module(C, C->modname, input, ud);
+
+    pawP_resolve_names(C);
+    pawP_lower_ast(C);
+    pawP_check_types(C);
+    pawP_lower_hir(C);
+    pawP_generate_code(C);
+}
+
 enum BuiltinKind pawP_type2code(struct Compiler *C, struct IrType *type)
 {
     if (IrIsAdt(type)) {

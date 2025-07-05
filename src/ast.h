@@ -1296,8 +1296,7 @@ struct AstPatHeader {
 
 struct AstOrPat {
     AST_PAT_HEADER;
-    struct AstPat *lhs;
-    struct AstPat *rhs;
+    struct AstPatList *pats;
 };
 
 struct AstFieldPat {
@@ -1367,15 +1366,14 @@ AST_PAT_LIST(DEFINE_ACCESS)
 
 struct AstPat *pawAst_new_pat(struct Ast *ast);
 
-inline static struct AstPat *pawAst_new_or_pat(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstPat *lhs, struct AstPat *rhs)
+inline static struct AstPat *pawAst_new_or_pat(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstPatList *pats)
 {
     struct AstPat *p = pawAst_new_pat(ast);
     p->OrPat_ = (struct AstOrPat){
         .id = id,
         .span = span,
         .kind = kAstOrPat,
-        .lhs = lhs,
-        .rhs = rhs,
+        .pats = pats,
     };
     pawAst_set_node(ast, id, p);
     return p;

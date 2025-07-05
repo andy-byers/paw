@@ -16,7 +16,7 @@
 
 struct Usefulness {
     struct SourceSpan span;
-    struct VariableList *vars;
+    struct MatchVars *vars;
     struct Compiler *C;
     struct Pool *pool;
     struct Hir *hir;
@@ -41,7 +41,7 @@ struct Row {
 
 struct RawCase {
     struct Constructor cons;
-    struct VariableList *vars;
+    struct MatchVars *vars;
     struct RowList *rows;
 };
 
@@ -97,12 +97,12 @@ static int constructor_index(struct Constructor cons)
 
 static struct MatchVar new_variable(struct Usefulness *U, struct SourceSpan span, IrType *type)
 {
-    VariableList_push(U->C, U->vars, (struct MatchVar){
+    MatchVars_push(U->C, U->vars, (struct MatchVar){
         .id = U->var_id++,
         .type = type,
         .span = span,
     });
-    return VariableList_last(U->vars);
+    return MatchVars_last(U->vars);
 }
 
 static struct MatchBody new_body(struct Usefulness *U, struct HirExpr *result)
@@ -234,16 +234,16 @@ static void expand_or_patterns(struct Usefulness *U, struct RowList *rows)
     }
 }
 
-static struct VariableList *variables_for_types(struct Usefulness *U, struct SourceSpan span, IrTypeList *types)
+static struct MatchVars *variables_for_types(struct Usefulness *U, struct SourceSpan span, IrTypeList *types)
 {
-    struct VariableList *result = VariableList_new_from(U->C, U->pool);
+    struct MatchVars *result = MatchVars_new_from(U->C, U->pool);
     if (types == NULL)
         return result;
 
     IrType *const *ptype;
     K_LIST_FOREACH (types, ptype) {
         struct MatchVar const var = new_variable(U, span, *ptype);
-        VariableList_push(U->C, result, var);
+        MatchVars_push(U->C, result, var);
     }
     return result;
 }
@@ -355,30 +355,6 @@ static paw_Bool remove_column(struct Usefulness *U, struct Row row, struct Match
 }
 
 static struct Decision *compile_rows(struct Usefulness *U, struct RowList *rows);
-
-static struct ColumnList *unpack_tuple_fields(struct Usefulness *U, struct HirPatList *pats)
-{
-    struct HirPat *const *ppat;
-    struct ColumnList *cols = ColumnList_new(U);
-    K_LIST_FOREACH (pats, ppat) {
-        struct SourceSpan span = (*ppat)->hdr.span;
-        struct MatchVar var = new_variable(U, span, GET_NODE_TYPE(U->C, *ppat));
-        ColumnList_push(U, cols, (struct Column){.var = var, .pat = *ppat});
-    }
-    return cols;
-}
-
-static struct ColumnList *unpack_variant_fields(struct Usefulness *U, struct HirPatList *pats, IrType *type)
-{
-    struct HirPat *const *ppat;
-    struct ColumnList *cols = ColumnList_new(U);
-    K_LIST_FOREACH (pats, ppat) {
-        struct SourceSpan span = (*ppat)->hdr.span;
-        struct MatchVar var = new_variable(U, span, GET_NODE_TYPE(U->C, *ppat));
-        ColumnList_push(U, cols, (struct Column){.var = var, .pat = *ppat});
-    }
-    return cols;
-}
 
 static struct CaseList *compile_cases(struct Usefulness *U, struct RawCaseList *raw_cases)
 {
@@ -527,7 +503,7 @@ static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct R
         extend_row_list(U, rows, fallback);
         RowList_push(U, rows, r);
         RawCaseList_push(U, raw_cases, (struct RawCase){
-            .vars = VariableList_new_from(U->C, U->pool),
+            .vars = MatchVars_new_from(U->C, U->pool),
             .cons = cons,
             .rows = rows,
         });
@@ -567,7 +543,7 @@ struct RawCaseList *cases_for_struct(struct Usefulness *U, struct MatchVar var)
     struct HirDecl *decl = pawHir_get_decl(U->hir, IR_TYPE_DID(var.type));
 
     IrTypeList *fields = collect_field_types(U, decl, var.type);
-    struct VariableList *subvars = variables_for_types(U, var.span, fields);
+    struct MatchVars *subvars = variables_for_types(U, var.span, fields);
     struct Constructor cons = {
         .kind = CONS_STRUCT,
         .struct_.type = var.type,
@@ -588,7 +564,7 @@ struct RawCaseList *cases_for_tuple(struct Usefulness *U, struct MatchVar var)
     IrTypeList *elems = IrIsTuple(var.type)
         ? IrGetTuple(var.type)->elems // tuple
         : IrTypeList_new(U->C); // unit
-    struct VariableList *subvars = variables_for_types(U, var.span, elems);
+    struct MatchVars *subvars = variables_for_types(U, var.span, elems);
     struct Constructor cons = {
         .kind = CONS_TUPLE,
         .tuple.elems = elems,
@@ -616,7 +592,7 @@ struct RawCaseList *cases_for_variant(struct Usefulness *U, struct MatchVar var)
     K_LIST_ENUMERATE (variants, index, pvariant) {
         IrType *type = GET_NODE_TYPE(U->C, *pvariant);
         type = pawP_instantiate_field(U->C, var.type, type);
-        struct VariableList *subvars = variables_for_types(U,
+        struct MatchVars *subvars = variables_for_types(U,
                 var.span, IR_FPTR(type)->params);
         struct Constructor const cons = {
             .kind = CONS_VARIANT,
@@ -709,7 +685,7 @@ static struct Decision *compile_rows(struct Usefulness *U, struct RowList *rows)
     }
 }
 
-struct Decision *pawP_check_exhaustiveness(struct Hir *hir, struct Pool *pool, Str const *modname, struct HirMatchExpr *match, struct VariableList *vars)
+struct Decision *pawP_check_exhaustiveness(struct Hir *hir, struct Pool *pool, Str const *modname, struct HirMatchExpr *match, struct MatchVars *vars)
 {
     struct Compiler *C = hir->C;
 

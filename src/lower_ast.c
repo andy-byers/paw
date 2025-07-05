@@ -728,13 +728,6 @@ static void collect_binding(struct HirVisitor *V, struct HirBindingPat *original
                 .temp = HirGetBindingPat(temp),
                 .match = original,
             });
-    NodeId const original_id = original->id;
-    original->id = new_original->hdr.id;
-    new_original->hdr.id = original_id;
-
-    HirNodeMap_insert(L->hir, L->hir->nodes, new_original->hdr.id, new_original);
-    HirNodeMap_insert(L->hir, L->hir->nodes, original->id, original);
-
     struct HirStmt *let = NEW_NODE(L, let_stmt, original->span, next_node_id(L), temp, NULL, NULL);
     HirStmtList_push(L->hir, L->stmts, let);
 }
@@ -1056,24 +1049,9 @@ static struct HirType *LowerInferType(struct LowerAst *L, struct AstInferType *t
     return NEW_NODE(L, infer_type, t->span, t->id);
 }
 
-static void combine_or_parts(struct LowerAst *L, struct HirPatList *pats, struct HirPat *part)
-{
-    if (!HirIsOrPat(part)) {
-        HirPatList_push(L->hir, pats, part);
-        return;
-    }
-
-    struct HirPat *const *ppat;
-    struct HirOrPat *other = HirGetOrPat(part);
-    K_LIST_FOREACH (other->pats, ppat)
-        HirPatList_push(L->hir, pats, *ppat);
-}
-
 static struct HirPat *LowerOrPat(struct LowerAst *L, struct AstOrPat *p)
 {
-    struct HirPatList *pats = HirPatList_new(L->hir);
-    combine_or_parts(L, pats, lower_pat(L, p->lhs));
-    combine_or_parts(L, pats, lower_pat(L, p->rhs));
+    struct HirPatList *pats = lower_pat_list(L, p->pats);
     return NEW_NODE(L, or_pat, p->span, p->id, pats);
 }
 
@@ -1109,8 +1087,19 @@ static struct HirPat *LowerPathPat(struct LowerAst *L, struct AstPathPat *p)
     struct HirPath const path = lower_path(L, p->path);
     switch (path.kind) {
         case HIR_PATH_LOCAL: {
+            // NOTE: If "p" is part of an OR pattern, then "segment.target" contains the NodeId
+            //       of the binding defined in the first alternative of the OR pattern (equal
+            //       to "p->id" if "p" itself is in the first alternative). This is necessary
+            //       for when bindings are assigned to registers during HIR lowering, since
+            //       the result part of a match arm containing an OR pattern is copied for
+            //       each alternative, and paths in the result part can refer to bindings in
+            //       the first alternative. The NodeID-to-register mapping is updated before
+            //       each copied result part is lowered to support patterns with bindings in
+            //       different positions, like "(1, v) | (v, 2)", etc.
             struct HirSegment const segment = K_LIST_FIRST(path.segments);
-            return NEW_NODE(L, binding_pat, p->span, p->id, segment.ident);
+            struct HirPat *pat = NEW_NODE(L, binding_pat, p->span, p->id, segment.ident);
+            pat->hdr.id = segment.target;
+            return pat;
         }
         case HIR_PATH_ITEM: {
             struct HirSegment const segment = K_LIST_FIRST(path.segments);

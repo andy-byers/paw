@@ -303,7 +303,7 @@ _Noreturn void pawErr_unit_variant_with_parenthesis(struct Compiler *C, Str cons
 _Noreturn void pawErr_missing_field(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *name, char const *type);
 _Noreturn void pawErr_unknown_field(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *name, char const *type);
 _Noreturn void pawErr_invalid_index_target(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *type);
-_Noreturn void pawErr_missing_binding_in_alternative(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *type);
+_Noreturn void pawErr_missing_binding_in_alternative(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *name);
 _Noreturn void pawErr_invalid_inclusive_range(struct Compiler *C, Str const *modname, struct SourceLoc loc);
 _Noreturn void pawErr_expected_divergence(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *fn);
 

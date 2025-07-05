@@ -390,8 +390,7 @@ static void AcceptPathType(struct AstVisitor *V, struct AstPathType *t)
 
 static void AcceptOrPat(struct AstVisitor *V, struct AstOrPat *e)
 {
-    AcceptPat(V, e->lhs);
-    AcceptPat(V, e->rhs);
+    accept_pat_list(V, e->pats);
 }
 
 static void AcceptFieldPat(struct AstVisitor *V, struct AstFieldPat *p)

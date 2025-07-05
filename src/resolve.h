@@ -15,6 +15,8 @@ struct Resolver {
     struct Ast *ast;
     paw_Env *P;
 
+    struct OrState const *os;
+
     struct Symtab *symtab;
     struct ImportScope *parent;
     struct ImportScopes *imports;
@@ -23,6 +25,21 @@ struct Resolver {
     struct SegmentTable *segtab;
     int decl_count;
 };
+
+struct OrState {
+    struct OrState const *outer;
+    struct BoundNames *names;
+    int alt_index;
+};
+
+struct BoundName {
+    struct SourceLoc loc;
+    NodeId id;
+    int count;
+};
+
+DEFINE_MAP(struct Resolver, BoundNames, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str const *, struct BoundName)
+DEFINE_MAP_ITERATOR(BoundNames, Str const *, struct BoundName)
 
 enum ImportSymbolKind {
     ISYMBOL_EXPLICIT,
