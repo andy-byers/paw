@@ -415,6 +415,12 @@ static void AcceptTuplePat(struct AstVisitor *V, struct AstTuplePat *p)
     accept_pat_list(V, p->elems);
 }
 
+static void AcceptIdentPat(struct AstVisitor *V, struct AstIdentPat *p)
+{
+    PAW_UNUSED(V);
+    PAW_UNUSED(p);
+}
+
 static void AcceptPathPat(struct AstVisitor *V, struct AstPathPat *p)
 {
     AcceptPath(V, &p->path);

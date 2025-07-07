@@ -44,10 +44,10 @@ static paw_Bool is_unary_path(struct AstPath path)
     return path.segments->count == 1;
 }
 
-static void set_result(struct Resolver *R, struct AstSegment segment, NodeId result, enum ResolvedKind kind)
+static void set_result(struct Resolver *R, NodeId id, NodeId result, enum ResolvedKind kind)
 {
     struct ResolvedSegment const resolved = {.id = result, .kind = kind};
-    SegmentTable_insert(R->C, R->segtab, segment.id, resolved);
+    SegmentTable_insert(R->C, R->segtab, id, resolved);
 }
 
 _Noreturn static void unknown_path(struct Resolver *R, struct AstPath path)
@@ -141,7 +141,7 @@ static struct ImportScope const *find_containing_module(struct Resolver *R, stru
         struct AstDecl *decl = pawAst_get_node(R->ast, psymbol->id);
         if (AstIsModuleDecl(decl)) {
             struct AstSegment const segment = *pc_segment(*pc);
-            set_result(R, segment, psymbol->id, RESOLVED_MODULE);
+            set_result(R, segment.id, psymbol->id, RESOLVED_MODULE);
             module_id = psymbol->id;
             pc_next(pc);
         } else {
@@ -191,14 +191,14 @@ static paw_Bool find_containing_type(struct Resolver *R, struct PathCursor *pc, 
     struct Symbol symbol;
     if (find_local(R, *pc, NAMESPACE_TYPE, &symbol)) {
         struct AstSegment const segment = *pc_segment(*pc);
-        set_result(R, segment, symbol.id,
+        set_result(R, segment.id, symbol.id,
                 symbol.kind == SYMBOL_DECL ? RESOLVED_DECL : RESOLVED_LOCAL);
     } else {
         *scope_out = find_containing_module(R, pc);
         if (!find_global(R, *scope_out, *pc, NAMESPACE_TYPE, &symbol))
             return PAW_FALSE;
         struct AstSegment const segment = *pc_segment(*pc);
-        set_result(R, segment, symbol.id, RESOLVED_DECL);
+        set_result(R, segment.id, symbol.id, RESOLVED_DECL);
     }
     *symbol_out = symbol;
     return PAW_TRUE;
@@ -217,7 +217,7 @@ static paw_Bool lookup_type(struct Resolver *R, struct PathCursor pc, struct Sym
                 segment.ident.span.start, segment.ident.name->text);
     }
 
-    set_result(R, *pc_segment(pc), symbol.id, RESOLVED_DECL);
+    set_result(R, pc_segment(pc)->id, symbol.id, RESOLVED_DECL);
     *out = symbol;
     return PAW_TRUE;
 }
@@ -292,15 +292,15 @@ static paw_Bool lookup_value(struct Resolver *R, struct PathCursor pc, struct Sy
     if (!pc_is_last(pc)) {
         struct ImportScope const *outer;
         if (find_containing_type(R, &pc, &symbol, &outer)) {
-            set_result(R, *pc_segment(pc), symbol.id, RESOLVED_DECL);
+            set_result(R, pc_segment(pc)->id, symbol.id, RESOLVED_DECL);
             pc_next(&pc); // find associated item in type referenced by "symbol"
             if (!find_assoc_item(R, symbol.id, &pc, &symbol)) return PAW_FALSE;
-            set_result(R, *pc_segment(pc), symbol.id, RESOLVED_ASSOC);
+            set_result(R, pc_segment(pc)->id, symbol.id, RESOLVED_ASSOC);
 
         } else { // must be a value at the toplevel of an imported module
             if (!find_global(R, outer, pc, NAMESPACE_VALUE, &symbol))
                 return PAW_FALSE;
-            set_result(R, *pc_segment(pc), symbol.id, RESOLVED_DECL);
+            set_result(R, pc_segment(pc)->id, symbol.id, RESOLVED_DECL);
         }
 
         if (!pc_is_last(pc)) {
@@ -310,13 +310,13 @@ static paw_Bool lookup_value(struct Resolver *R, struct PathCursor pc, struct Sy
         }
 
     } else if (find_local(R, pc, NAMESPACE_VALUE, &symbol)) {
-        set_result(R, *pc_segment(pc), symbol.id,
+        set_result(R, pc_segment(pc)->id, symbol.id,
                 symbol.kind == SYMBOL_DECL ? RESOLVED_DECL : RESOLVED_LOCAL);
     } else {
         struct ImportScope const *scope = get_scope(R, R->current->id);
         if (!find_global(R, scope, pc, NAMESPACE_VALUE, &symbol))
             return PAW_FALSE;
-        set_result(R, *pc_segment(pc), symbol.id, RESOLVED_DECL);
+        set_result(R, pc_segment(pc)->id, symbol.id, RESOLVED_DECL);
     }
 
     *out = symbol;
@@ -451,45 +451,63 @@ static paw_Bool in_first_alternative(struct OrState const *os)
     return PAW_TRUE;
 }
 
-static paw_Bool resolve_path_pat(struct AstVisitor *V, struct AstPathPat *p)
+static paw_Bool resolve_ident_pat(struct AstVisitor *V, struct AstIdentPat *p)
 {
     struct Resolver *R = V->ud;
 
+    // use a fake path to avoid allocating memory
+    struct AstPath const path = {
+        .segments = &(AstSegments){
+            .data = &(struct AstSegment){
+                .ident = p->ident,
+                .id = p->id,
+            },
+            .count = 1,
+            .alloc = 1,
+        },
+        .span = p->span,
+    };
+
     struct Symbol symbol;
     struct AstDecl *decl = NULL;
-    if (lookup(R, p->path, NAMESPACE_VALUE, &symbol)
+    if (lookup(R, path, NAMESPACE_VALUE, &symbol)
             && symbol.kind == SYMBOL_DECL) {
         decl = pawAst_get_node(R->ast, symbol.id);
         if (AstIsParamDecl(decl)) decl = NULL; // TODO: hack, should be SYMBOL_PARAM or something...
     }
 
-    if ((decl == NULL || AstIsFuncDecl(decl)) && is_unary_path(p->path)) {
+    if (decl == NULL || AstIsFuncDecl(decl)) {
         // create a binding pattern
-        struct AstSegment const segment = K_LIST_LAST(p->path.segments);
-        set_result(R, segment, p->id, RESOLVED_LOCAL);
+        set_result(R, p->id, p->id, RESOLVED_LOCAL);
 
         // only declare locals from bindings in the first alternative
         if (in_first_alternative(R->os))
-            new_local_value(R, segment.ident, p->id, SYMBOL_VAR);
+            new_local_value(R, p->ident, p->id, SYMBOL_VAR);
 
         if (R->os != NULL) {
             if (R->os->alt_index == 0) {
                 paw_Bool const replaced = BoundNames_insert(R, R->os->names,
-                        segment.ident.name, (struct BoundName){.id = p->id});
+                        p->ident.name, (struct BoundName){.id = p->id});
                 if (replaced)
                     RESOLVER_ERROR(R, duplicate_binding, R->current->name,
-                            segment.ident.span.start, segment.ident.name->text);
+                            p->ident.span.start, p->ident.name->text);
             } else {
-                struct BoundName const *name = BoundNames_get(R, R->os->names, segment.ident.name);
+                struct BoundName const *name = BoundNames_get(R, R->os->names, p->ident.name);
                 if (name == NULL)
                     RESOLVER_ERROR(R, missing_binding_in_alternative, R->current->name,
-                        segment.ident.span.start, segment.ident.name->text);
-                set_result(R, segment, name->id, RESOLVED_LOCAL);
+                        p->span.start, p->ident.name->text);
+                set_result(R, p->id, name->id, RESOLVED_LOCAL);
             }
         }
     } else if (decl == NULL) {
-        unknown_path(R, p->path);
+        unknown_path(R, path);
     }
+    return PAW_FALSE;
+}
+
+static paw_Bool resolve_path_pat(struct AstVisitor *V, struct AstPathPat *p)
+{
+    lookup_or_error(V->ud, p->path, NAMESPACE_VALUE);
     resolve_type_args(V, p->path);
     return PAW_FALSE;
 }
@@ -511,19 +529,15 @@ static void propagate_bindings(struct Resolver *R, struct OrState const *os)
     }
 }
 
-static paw_Bool check_binding(struct AstVisitor *V, struct AstPathPat *p)
+static paw_Bool check_binding(struct AstVisitor *V, struct AstIdentPat *p)
 {
-    if (!is_unary_path(p->path))
-        return PAW_FALSE;
-
     struct Resolver *R = V->ud;
-    struct AstSegment const segment = K_LIST_FIRST(p->path.segments);
-    struct BoundName const *pname = BoundNames_get(R, R->os->names, segment.ident.name);
+    struct BoundName const *pname = BoundNames_get(R, R->os->names, p->ident.name);
     if (pname == NULL)
         RESOLVER_ERROR(R, missing_binding_in_alternative, R->current->name,
-                segment.ident.span.start, segment.ident.name->text);
+                p->ident.span.start, p->ident.name->text);
 
-    set_result(R, segment, pname->id, RESOLVED_LOCAL);
+    set_result(R, p->id, pname->id, RESOLVED_LOCAL);
     return PAW_TRUE;
 }
 
@@ -532,9 +546,7 @@ static paw_Bool resolve_or_pat(struct AstVisitor *V, struct AstOrPat *p)
     struct Resolver *R = V->ud;
     struct AstVisitor checker;
     pawAst_visitor_init(&checker, R->ast, R);
-    checker.VisitPathPat = check_binding;
-
-// let (a | a, b) | (b | b, a) = f();
+    checker.VisitIdentPat = check_binding;
 
     struct OrState os = {
         .names = BoundNames_new(R),
@@ -787,6 +799,7 @@ void pawP_resolve_names(struct Compiler *C)
     pawAst_visitor_init(R.V, C->ast, &R);
     R.V->VisitPathExpr = resolve_path_expr;
     R.V->VisitPathType = resolve_path_type;
+    R.V->VisitIdentPat = resolve_ident_pat;
     R.V->VisitPathPat = resolve_path_pat;
     R.V->VisitOrPat = resolve_or_pat;
     R.V->VisitStructPat = resolve_struct_pat;

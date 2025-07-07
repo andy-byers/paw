@@ -73,6 +73,7 @@
     X(StructPat)        \
     X(VariantPat)       \
     X(TuplePat)         \
+    X(IdentPat)         \
     X(PathPat)          \
     X(WildcardPat)      \
     X(LiteralPat)
@@ -1322,6 +1323,11 @@ struct AstTuplePat {
     struct AstPatList *elems; // [AstPat]
 };
 
+struct AstIdentPat {
+    AST_PAT_HEADER;
+    struct AstIdent ident;
+};
+
 struct AstPathPat {
     AST_PAT_HEADER;
     struct AstPath path;
@@ -1429,6 +1435,19 @@ inline static struct AstPat *pawAst_new_tuple_pat(struct Ast *ast, struct Source
         .span = span,
         .kind = kAstTuplePat,
         .elems = elems,
+    };
+    pawAst_set_node(ast, id, p);
+    return p;
+}
+
+inline static struct AstPat *pawAst_new_ident_pat(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstIdent ident)
+{
+    struct AstPat *p = pawAst_new_pat(ast);
+    p->IdentPat_ = (struct AstIdentPat){
+        .id = id,
+        .span = span,
+        .kind = kAstIdentPat,
+        .ident = ident,
     };
     pawAst_set_node(ast, id, p);
     return p;

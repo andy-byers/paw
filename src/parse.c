@@ -550,14 +550,6 @@ static struct AstExpr *path_expr(struct Lex *lex)
     return NEW_NODE(lex, path_expr, start, next_id(lex), path);
 }
 
-static struct AstPat *new_path_pat(struct Lex *lex, struct AstIdent ident)
-{
-    struct AstPath path;
-    pawAst_path_init(lex->ast, &path, ident.span);
-    pawAst_add_segment(lex->ast, path.segments, next_id(lex), ident, NULL);
-    return NEW_NODE(lex, path_pat, ident.span.start, next_id(lex), path);
-}
-
 static struct AstPat *struct_field_pat(struct Lex *lex)
 {
     struct SourceLoc const start = lex->loc;
@@ -567,7 +559,7 @@ static struct AstPat *struct_field_pat(struct Lex *lex)
         pat = pattern(lex);
     } else {
         // binds field to variable of same name
-        pat = new_path_pat(lex, ident);
+        pat = NEW_NODE(lex, ident_pat, ident.span.start, next_id(lex), ident);
     }
     return NEW_NODE(lex, field_pat, start, next_id(lex), ident, pat);
 }
@@ -579,8 +571,7 @@ static paw_Bool is_wildcard_path(struct AstPath path)
 {
     struct AstSegments *segments = path.segments;
     paw_assert(segments->count > 0);
-    if (segments->count > 1)
-        return PAW_FALSE;
+    if (segments->count > 1) return PAW_FALSE;
     struct AstSegment const segment = K_LIST_FIRST(segments);
     Str const *name = segment.ident.name;
     return pawS_length(name) == 1 && name->text[0] == '_';
@@ -605,18 +596,10 @@ static enum BuiltinKind get_builtin_kind(struct Lex *lex, struct AstIdent ident)
     }
 }
 
-static paw_Bool is_reserved_path(struct Lex *lex, struct AstPath path)
-{
-    if (path.segments->count > 1)
-        return PAW_FALSE;
-    struct AstIdent const ident = K_LIST_FIRST(path.segments).ident;
-    return get_builtin_kind(lex, ident) != NBUILTINS;
-}
-
 static struct AstPat *compound_pat(struct Lex *lex)
 {
     struct SourceLoc const start = lex->loc;
-    struct AstPath path = parse_pathexpr(lex);
+    struct AstPath const path = parse_pathexpr(lex);
     if (test_next(lex, '(')) {
         struct AstPatList *fields = AstPatList_new(lex->ast);
         parse_variant_field_pat_list(lex, fields, start);
@@ -625,13 +608,15 @@ static struct AstPat *compound_pat(struct Lex *lex)
         struct AstPatList *fields = AstPatList_new(lex->ast);
         parse_struct_field_pat_list(lex, fields, start);
         return NEW_NODE(lex, struct_pat, start, next_id(lex), path, fields);
-    } else if (!is_reserved_path(lex, path)) {
-        return NEW_NODE(lex, path_pat, start, next_id(lex), path);
-    } else {
-        paw_assert(path.segments->count == 1);
-        struct AstIdent const ident = K_LIST_FIRST(path.segments).ident;
-        PARSE_ERROR(lex, reserved_identifier, lex->loc, ident.name->text);
     }
+    if (path.segments->count == 1) {
+        struct AstSegment const segment = K_LIST_FIRST(path.segments);
+        if (get_builtin_kind(lex, segment.ident) != NBUILTINS)
+            PARSE_ERROR(lex, reserved_identifier, lex->loc, segment.ident.name->text);
+        if (segment.types == NULL)
+            return NEW_NODE(lex, ident_pat, start, next_id(lex), segment.ident);
+    }
+    return NEW_NODE(lex, path_pat, start, next_id(lex), path);
 }
 
 static struct AstPat *wildcard_pat(struct Lex *lex)

@@ -1082,6 +1082,45 @@ static struct HirPat *LowerTuplePat(struct LowerAst *L, struct AstTuplePat *p)
     return NEW_NODE(L, tuple_pat, p->span, p->id, elems);
 }
 
+static struct HirPat *LowerIdentPat(struct LowerAst *L, struct AstIdentPat *p)
+{
+    struct AstSegment *psrc;
+    struct HirIdent const ident = lower_ident(L, p->ident);
+    struct ResolvedSegment const *res = SegmentTable_get(L->C, L->segtab, p->id);
+    paw_assert(res != NULL);
+
+    switch (res->kind) {
+        case RESOLVED_LOCAL: {
+            // NOTE: If "p" is part of an OR pattern, then "segment.target" contains the NodeId
+            //       of the binding defined in the first alternative of the OR pattern (equal
+            //       to "p->id" if "p" itself is in the first alternative). This is necessary
+            //       for when bindings are assigned to registers during HIR lowering, since
+            //       the result part of a match arm containing an OR pattern is copied for
+            //       each alternative, and paths in the result part can refer to bindings in
+            //       the first alternative. The NodeID-to-register mapping is updated before
+            //       each copied result part is lowered to support patterns with bindings in
+            //       different positions, like "(1, v) | (v, 2)", etc.
+            struct HirPat *pat = NEW_NODE(L, binding_pat, p->span, p->id, ident);
+            pat->hdr.id = res->id;
+            return pat;
+        }
+        default: {
+            struct HirDecl *decl = pawHir_get_node(L->hir, res->id);
+            if (HirIsParamDecl(decl))
+                return NEW_NODE(L, binding_pat, p->span, p->id, ident);
+
+            HirSegments *segments = HirSegments_new(L->hir);
+            pawHir_add_segment(L->hir, segments, next_node_id(L), ident, NULL, res->id);
+            struct HirPath const path = pawHir_path_create(ident.span, segments, HIR_PATH_ITEM);
+            if (HirIsAdtDecl(decl))
+                return NEW_NODE(L, struct_pat, p->span, p->id, path, HirPatList_new(L->hir));
+
+            int const discr = AstGetVariantDecl( pawAst_get_node(L->ast, res->id))->index;
+            return NEW_NODE(L, variant_pat, p->span, p->id, path, HirPatList_new(L->hir), discr);
+        }
+    }
+}
+
 static struct HirPat *LowerPathPat(struct LowerAst *L, struct AstPathPat *p)
 {
     struct HirPath const path = lower_path(L, p->path);
@@ -1107,8 +1146,7 @@ static struct HirPat *LowerPathPat(struct LowerAst *L, struct AstPathPat *p)
             if (HirIsParamDecl(decl)) {
                 return NEW_NODE(L, binding_pat, p->span, p->id, segment.ident);
             } else if (HirIsAdtDecl(decl)) {
-                HirPatList *empty = HirPatList_new(L->hir);
-                return NEW_NODE(L, struct_pat, p->span, p->id, path, empty);
+                return NEW_NODE(L, struct_pat, p->span, p->id, path, HirPatList_new(L->hir));
             }
             // fallthrough
         }
