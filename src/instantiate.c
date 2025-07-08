@@ -46,7 +46,7 @@ static IrTypeList *collect_field_types(struct InstanceState *I, struct HirDeclLi
     return pawHir_collect_decl_types(I->C, fields);
 }
 
-static IrType *fn_result(struct InstanceState *I, struct HirFuncDecl *d)
+static IrType *fn_result(struct InstanceState *I, struct HirFnDecl *d)
 {
     IrType const *type = pawIr_get_type(I->C, d->id);
     return IR_FPTR(type)->result;
@@ -124,7 +124,7 @@ static IrType *instantiate_fn(struct InstanceState *I, struct IrSignature *base,
 
 static IrType *instantiate_method_aux(struct InstanceState *I, IrTypeList *generics, IrTypeList *types, IrType *self, struct HirDecl *method)
 {
-    struct HirFuncDecl *fn = HirGetFuncDecl(method);
+    struct HirFnDecl *fn = HirGetFnDecl(method);
     IrTypeList *fn_types = collect_generic_types(I, fn->generics);
     IrTypeList *params = collect_field_types(I, fn->params);
     IrType *result = fn_result(I, fn);
@@ -247,11 +247,11 @@ static IrTypeList *substitute_list(struct IrTypeFolder *F, IrTypeList *list)
     return copy;
 }
 
-static IrType *substitute_fn_ptr(struct IrTypeFolder *F, struct IrFuncPtr *t)
+static IrType *substitute_fn_ptr(struct IrTypeFolder *F, struct IrFnPtr *t)
 {
     IrTypeList *params = pawIr_fold_type_list(F, t->params);
     IrType *result = pawIr_fold_type(F, t->result);
-    return pawIr_new_func_ptr(F->C, params, result);
+    return pawIr_new_fn_ptr(F->C, params, result);
 }
 
 static IrType *substitute_signature(struct IrTypeFolder *F, struct IrSignature *t)
@@ -309,7 +309,7 @@ void pawP_init_substitution_folder(struct IrTypeFolder *F, struct Compiler *C, s
     };
     pawIr_type_folder_init(F, C, subst);
     F->FoldAdt = substitute_adt;
-    F->FoldFuncPtr = substitute_fn_ptr;
+    F->FoldFnPtr = substitute_fn_ptr;
     F->FoldSignature = substitute_signature;
     F->FoldGeneric = substitute_generic;
     F->FoldTuple = substitute_tuple;

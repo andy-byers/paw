@@ -113,7 +113,7 @@ struct TraitDef {
     RTTI_DEF_HEADER;
 };
 
-struct FuncDef {
+struct FnDef {
     RTTI_DEF_HEADER;
     ValueId vid;
     paw_Type self;
@@ -131,7 +131,7 @@ struct Def {
     union {
         struct DefHeader hdr;
         struct AdtDef adt;
-        struct FuncDef func;
+        struct FnDef fn;
         struct TraitDef trait;
         struct ConstDef const_;
     };
@@ -146,13 +146,13 @@ struct Def {
 
 struct RttiType *pawRtti_new_adt(paw_Env *P, ItemId iid, int ntypes, int size);
 struct RttiType *pawRtti_new_signature(paw_Env *P, ItemId iid, int nparams);
-struct RttiType *pawRtti_new_func_ptr(paw_Env *P, int nparams);
+struct RttiType *pawRtti_new_fn_ptr(paw_Env *P, int nparams);
 struct RttiType *pawRtti_new_tuple(paw_Env *P, int nelems, int size);
 struct RttiType *pawRtti_new_trait(paw_Env *P);
 struct RttiType *pawRtti_new_never(paw_Env *P);
 struct Def *pawRtti_new_adt_def(paw_Env *P, int nfields);
 struct Def *pawRtti_new_trait_def(paw_Env *P);
-struct Def *pawRtti_new_func_def(paw_Env *P, int ntypes);
+struct Def *pawRtti_new_fn_def(paw_Env *P, int ntypes);
 struct Def *pawRtti_new_const_def(paw_Env *P);
 struct RttiVariant *pawRtti_new_variant(paw_Env *P, Str *name, struct RttiField *fields, int num_fields);
 struct RttiField *pawRtti_new_field(paw_Env *P, Str *name, paw_Type code, paw_Bool is_pub);

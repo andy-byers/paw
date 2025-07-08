@@ -31,8 +31,8 @@
 #define TYPE_CODE(G, type) pawP_type2code((G)->C, type)
 #define REG(Reg_) RegisterTable_get(fs->regtab, (Reg_).r.value).value
 
-struct FuncState {
-    struct FuncState *outer; // enclosing function
+struct FnState {
+    struct FnState *outer; // enclosing function
     struct RegisterTable *regtab;
     struct Generator *G; // codegen state
     struct PatchList *patch;
@@ -48,12 +48,12 @@ struct FuncState {
     int pc; // number of instructions
     int line;
     int max_reg;
-    enum FuncKind kind; // type of function
+    enum FnKind kind; // type of function
 };
 
 typedef struct Generator {
     struct Compiler *C;
-    struct FuncState *fs;
+    struct FnState *fs;
     struct MirVisitor *V;
     struct ToplevelMap *toplevel;
     struct ToplevelMap *policy_cache;
@@ -78,7 +78,7 @@ struct PolicyInfo {
 
 DEFINE_LIST(struct Generator, JumpTable, struct JumpTarget)
 DEFINE_LIST(struct Generator, PolicyList, struct PolicyInfo)
-DEFINE_MAP(struct Generator, ToplevelMap, pawP_alloc, IR_TYPE_HASH, IR_TYPE_EQUALS, struct IrType *, int)
+DEFINE_MAP(struct Generator, ToplevelMap, pawP_alloc, IR_TYPE_HASH, IR_TYPE_EQUALS, IrType *, int)
 
 static void add_jump_target(struct Generator *G, MirBlock bid)
 {
@@ -88,7 +88,7 @@ static void add_jump_target(struct Generator *G, MirBlock bid)
                                     });
 }
 
-static void add_line(struct FuncState *fs)
+static void add_line(struct FnState *fs)
 {
     Proto *p = fs->proto;
     paw_Env *P = ENV(fs->G);
@@ -99,7 +99,7 @@ static void add_line(struct FuncState *fs)
     };
 }
 
-static void add_opcode(struct FuncState *fs, OpCode code)
+static void add_opcode(struct FnState *fs, OpCode code)
 {
     paw_Env *P = ENV(fs->G);
     Proto *p = fs->proto;
@@ -112,13 +112,13 @@ static void add_opcode(struct FuncState *fs, OpCode code)
     ++fs->pc;
 }
 
-void code_0(struct FuncState *fs, Op op)
+void code_0(struct FnState *fs, Op op)
 {
     add_line(fs);
     add_opcode(fs, op);
 }
 
-void code_ABx(struct FuncState *fs, Op op, int a, int bc)
+void code_ABx(struct FnState *fs, Op op, int a, int bc)
 {
     paw_assert(0 <= a && a <= A_MAX);
     paw_assert(0 <= bc && bc <= Bx_MAX);
@@ -127,7 +127,7 @@ void code_ABx(struct FuncState *fs, Op op, int a, int bc)
     add_opcode(fs, CREATE_ABx(op, a, bc));
 }
 
-void code_ABC(struct FuncState *fs, Op op, int a, int b, int c)
+void code_ABC(struct FnState *fs, Op op, int a, int b, int c)
 {
     paw_assert(0 <= a && a < A_MAX);
     paw_assert(0 <= b && b < B_MAX);
@@ -137,22 +137,22 @@ void code_ABC(struct FuncState *fs, Op op, int a, int b, int c)
     add_opcode(fs, CREATE_ABC(op, a, b, c));
 }
 
-static void code_AsBx(struct FuncState *fs, Op op, int a, int bc)
+static void code_AsBx(struct FnState *fs, Op op, int a, int bc)
 {
     code_ABx(fs, op, a, bc + sBx_MAX);
 }
 
-static void code_sBx(struct FuncState *fs, Op op, int bc)
+static void code_sBx(struct FnState *fs, Op op, int bc)
 {
     code_AsBx(fs, op, 0, bc);
 }
 
-static void code_AB(struct FuncState *fs, Op op, int a, int b)
+static void code_AB(struct FnState *fs, Op op, int a, int b)
 {
     code_ABC(fs, op, a, b, 0);
 }
 
-static void code_A(struct FuncState *fs, Op op, int a)
+static void code_A(struct FnState *fs, Op op, int a)
 {
     code_AB(fs, op, a, 0);
 }
@@ -162,7 +162,7 @@ static struct Def *get_def(struct Generator *G, ItemId iid)
     return RTTI_DEF(ENV(G), iid);
 }
 
-static RttiType *get_rtti(struct Generator *G, struct IrType *type)
+static RttiType *get_rtti(struct Generator *G, IrType *type)
 {
     RttiType **prtti = RttiMap_get(G->C, G->C->rtti, type);
     paw_assert(prtti != NULL && "undefined type");
@@ -194,7 +194,7 @@ static void add_jump_source(struct Generator *G, int from_pc, MirBlock to)
                                     });
 }
 
-static void patch_jump(struct FuncState *fs, int from, int to)
+static void patch_jump(struct FnState *fs, int from, int to)
 {
     Proto *p = fs->proto;
     int const dist = to - (from + 1);
@@ -207,7 +207,7 @@ static void patch_jump(struct FuncState *fs, int from, int to)
 
 static void patch_jumps_to_here(struct Generator *G, MirBlock bid)
 {
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
 
     int index;
     struct JumpSource *pjump;
@@ -222,7 +222,7 @@ static void patch_jumps_to_here(struct Generator *G, MirBlock bid)
 
 // Return the top of the register stack
 // Used as a temporary register for instructions that cause memory allocations.
-static int temporary_reg(struct FuncState *fs, int offset)
+static int temporary_reg(struct FnState *fs, int offset)
 {
     int const temp = fs->proto->max_stack + offset + 1;
     if (temp >= NREGISTERS)
@@ -231,34 +231,34 @@ static int temporary_reg(struct FuncState *fs, int offset)
     return temp;
 }
 
-static ValueId type2global(struct Generator *G, struct IrType *type)
+static ValueId type2global(struct Generator *G, IrType *type)
 {
     RttiType const *rtti = get_rtti(G, type);
     struct Def const *def = RTTI_DEF(ENV(G), rtti_iid(rtti));
     paw_assert(def->hdr.kind == DEF_FUNC);
-    return def->func.vid;
+    return def->fn.vid;
 }
 
-static Str *func_name(struct Generator *G, Str const *modname, struct IrType *type, struct IrType *self)
+static Str *fn_name(struct Generator *G, Str const *modname, IrType *type, IrType *self)
 {
     struct Compiler *C = G->C;
     struct IrSignature *fsig = IrGetSignature(type);
     struct IrFnDef const *fd = pawIr_get_fn_def(C, fsig->did);
-    struct IrTypeList *fd_types = fd->is_extern ? NULL : fsig->types;
+    IrTypeList *fd_types = fd->is_extern ? NULL : fsig->types;
     if (fsig->self == NULL)
         return pawP_mangle_name(C, modname, fd->name, fd_types);
     struct IrAdtDef const *ad = pawIr_get_adt_def(C, IR_TYPE_DID(self));
-    struct IrTypeList const *ad_types = fd->is_extern ? NULL : IR_TYPE_SUBTYPES(self);
+    IrTypeList const *ad_types = fd->is_extern ? NULL : IR_TYPE_SUBTYPES(self);
     return pawP_mangle_attr(C, modname, ad->name, ad_types, fd->name, fd_types);
 }
 
-static Str *adt_name(struct Generator *G, Str const *modname, struct IrType *type)
+static Str *adt_name(struct Generator *G, Str const *modname, IrType *type)
 {
     struct IrAdtDef *d = pawIr_get_adt_def(G->C, IR_TYPE_DID(type));
     return pawP_mangle_name(G->C, modname, d->name, ir_adt_types(type));
 }
 
-static ValueMap *kcache_map(struct FuncState *fs, enum BuiltinKind code)
+static ValueMap *kcache_map(struct FnState *fs, enum BuiltinKind code)
 {
     if (code <= BUILTIN_INT) { // TODO: convert char to int earlier?
         return fs->kcache.ints;
@@ -272,7 +272,7 @@ static ValueMap *kcache_map(struct FuncState *fs, enum BuiltinKind code)
 
 static int add_constant(struct Generator *G, Value v, enum BuiltinKind code)
 {
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
     Proto *p = fs->proto;
     // 'bool' and 'int' have the same runtime representation
     if (code <= BUILTIN_BOOL)
@@ -314,19 +314,19 @@ static void pop_proto(struct Generator *G)
 
 #define JUMP_PLACEHOLDER (-1)
 
-static int emit_cond_jump(struct FuncState *fs, int cond, Op op)
+static int emit_cond_jump(struct FnState *fs, int cond, Op op)
 {
     code_AsBx(fs, op, cond, JUMP_PLACEHOLDER);
     return fs->pc - 1;
 }
 
-static int emit_jump(struct FuncState *fs)
+static int emit_jump(struct FnState *fs)
 {
     code_sBx(fs, OP_JUMP, JUMP_PLACEHOLDER);
     return fs->pc - 1;
 }
 
-static int code_switch_int(struct FuncState *fs, struct MirPlace discr, int k)
+static int code_switch_int(struct FnState *fs, struct MirPlace discr, int k)
 {
     // if discr != k, skip over the jump that moves control to the body
     // of the match case
@@ -351,7 +351,7 @@ static void leave_kcache(struct Generator *G, struct KCache *cache)
 static void leave_function(struct Generator *G)
 {
     paw_Env *P = ENV(G);
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
     Proto *p = fs->proto;
 
     // module itself has no prototype
@@ -372,10 +372,10 @@ static void leave_function(struct Generator *G)
     CHECK_GC(P);
 }
 
-static void enter_function(struct Generator *G, struct FuncState *fs, struct Mir *mir, Proto *proto)
+static void enter_function(struct Generator *G, struct FnState *fs, struct Mir *mir, Proto *proto)
 {
     G->V->mir = mir;
-    *fs = (struct FuncState){
+    *fs = (struct FnState){
         .kind = mir->fn_kind,
         .proto = proto,
         .outer = G->fs,
@@ -394,7 +394,7 @@ static ValueId resolve_function(struct Generator *G, RttiType *rtti)
     paw_Env *P = ENV(G);
     paw_assert(rtti->hdr.kind == RTTI_TYPE_FN_DEF);
     struct Def *def = RTTI_DEF(P, rtti->fdef.iid);
-    return def->func.vid;
+    return def->fn.vid;
 }
 
 static Str const *module_prefix(struct Generator *G, int modno)
@@ -409,7 +409,7 @@ static paw_Bool is_smi(paw_Int i)
     return (i < 0 && i >= -sBx_MAX) || (i >= 0 && i <= sBx_MAX);
 }
 
-static void code_smi(struct FuncState *fs, struct MirPlace p, paw_Int i)
+static void code_smi(struct FnState *fs, struct MirPlace p, paw_Int i)
 {
     paw_assert(is_smi(i));
     code_AsBx(fs, OP_LOADSMI, REG(p), CAST(int, i));
@@ -437,7 +437,7 @@ static void code_extern_function(struct Generator *G, Str *name, int g)
 static void allocate_upvalue_info(struct Generator *G, Proto *proto, struct MirUpvalueList *upvalues)
 {
     paw_Env *P = ENV(G);
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
     proto->u = pawM_new_vec(P, upvalues->count, struct UpValueInfo);
     proto->nup = upvalues->count;
 
@@ -446,7 +446,7 @@ static void allocate_upvalue_info(struct Generator *G, Proto *proto, struct MirU
     K_LIST_ENUMERATE (upvalues, index, pinfo) {
         proto->u[index].is_local = pinfo->is_local;
         if (pinfo->is_local) {
-            struct FuncState *parent = fs->outer;
+            struct FnState *parent = fs->outer;
             MirRegister const r = MirRegisterList_get(parent->mir->locals, pinfo->index);
             struct RegisterInfo ri = RegisterTable_get(parent->regtab, r.value);
             paw_assert(0 <= ri.value && ri.value < NREGISTERS);
@@ -459,8 +459,8 @@ static void allocate_upvalue_info(struct Generator *G, Proto *proto, struct MirU
 
 static void code_proto(struct Generator *G, struct Mir *mir, Proto *proto, int index)
 {
-    struct FuncState *fs = G->fs;
-    struct IrType *type = mir->type;
+    struct FnState *fs = G->fs;
+    IrType *type = mir->type;
     proto->argc = mir->param_size;
 
     struct MirBlockList *rpo = pawMir_traverse_rpo(G->C, mir);
@@ -490,7 +490,7 @@ static void code_children(struct Generator *G, Proto *parent, struct Mir *mir)
 
 static Proto *code_paw_function(struct Generator *G, struct Mir *mir, int index)
 {
-    struct FuncState fs;
+    struct FnState fs;
     Proto *proto = push_proto(G, mir->name);
     enter_function(G, &fs, mir, proto);
 
@@ -507,12 +507,12 @@ static Proto *code_paw_function(struct Generator *G, struct Mir *mir, int index)
     return proto;
 }
 
-static paw_Bool is_instance_call(struct IrType *type)
+static paw_Bool is_instance_call(IrType *type)
 {
     return IrIsSignature(type) && IrGetSignature(type)->types != NULL;
 }
 
-static paw_Bool is_method_call(struct Generator *G, struct IrType *type)
+static paw_Bool is_method_call(struct Generator *G, IrType *type)
 {
     if (!IrIsSignature(type))
         return PAW_FALSE;
@@ -552,7 +552,7 @@ static void init_policies(struct Generator *G)
     }
 }
 
-static void register_toplevel_function(struct Generator *G, struct IrType *type, int iid)
+static void register_toplevel_function(struct Generator *G, IrType *type, int iid)
 {
     ToplevelMap_insert(G, G->toplevel, type, iid);
 }
@@ -605,25 +605,25 @@ static void register_items(struct Generator *G)
     struct ItemSlot *pitem;
     K_LIST_ENUMERATE (G->items, iid, pitem) {
         struct Mir *mir = pitem->mir;
-        struct IrType *type = mir->type;
+        IrType *type = mir->type;
         register_toplevel_function(G, type, iid);
 
         Str const *modname = module_prefix(G, IR_TYPE_DID(type).modno);
         RttiType const *rtti = get_rtti(G, type);
-        struct FuncDef *fdef = &get_def(G, rtti->fdef.iid)->func;
+        struct FnDef *fdef = &get_def(G, rtti->fdef.iid)->fn;
         paw_assert(fdef->kind == DEF_FUNC);
-        pitem->name = fdef->mangled_name = func_name(G, modname, type, mir->self);
+        pitem->name = fdef->mangled_name = fn_name(G, modname, type, mir->self);
         pawMap_insert(P, V_TUPLE(P->functions), &P2V(pitem->name), &I2V(fdef->vid));
     }
 }
 
-static void move_to_reg(struct FuncState *fs, int from, int to)
+static void move_to_reg(struct FnState *fs, int from, int to)
 {
     if (to != from)
         code_AB(fs, OP_MOVE, to, from);
 }
 
-static int move_to_temp(struct FuncState *fs, int from, int temp)
+static int move_to_temp(struct FnState *fs, int from, int temp)
 {
     int const to = temporary_reg(fs, temp);
     code_AB(fs, OP_MOVE, to, from);
@@ -633,7 +633,7 @@ static int move_to_temp(struct FuncState *fs, int from, int temp)
 static void code_move(struct MirVisitor *V, struct MirMove *x)
 {
     struct Generator *G = V->ud;
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
 
     move_to_reg(fs, REG(x->target), REG(x->output));
 }
@@ -641,7 +641,7 @@ static void code_move(struct MirVisitor *V, struct MirMove *x)
 static void code_upvalue(struct MirVisitor *V, struct MirUpvalue *x)
 {
     struct Generator *G = V->ud;
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
 
     code_AB(fs, OP_GETUPVALUE, REG(x->output), x->index);
 }
@@ -649,7 +649,7 @@ static void code_upvalue(struct MirVisitor *V, struct MirUpvalue *x)
 static void code_global(struct MirVisitor *V, struct MirGlobal *x)
 {
     struct Generator *G = V->ud;
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
 
     ValueId const value_id = x->global_id < 0
                                  ? type2global(G, REG_TYPE(G, x->output.r))
@@ -657,10 +657,10 @@ static void code_global(struct MirVisitor *V, struct MirGlobal *x)
     code_ABx(fs, OP_GETGLOBAL, REG(x->output), value_id);
 }
 
-static void code_constant(struct MirVisitor *V, struct MirConstant *x)
+static void code_constant(struct MirVisitor *V, struct MirLoadConstant *x)
 {
     struct Generator *G = V->ud;
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
     if (x->b_kind == BUILTIN_UNIT
             || x->b_kind == BUILTIN_BOOL
             || (x->b_kind == BUILTIN_INT && is_smi(x->value.i))) {
@@ -676,7 +676,7 @@ static void code_constant(struct MirVisitor *V, struct MirConstant *x)
 static void code_set_capture(struct MirVisitor *V, struct MirSetCapture *x)
 {
     struct Generator *G = V->ud;
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
 
     move_to_reg(fs, REG(x->value), REG(x->target));
 }
@@ -684,7 +684,7 @@ static void code_set_capture(struct MirVisitor *V, struct MirSetCapture *x)
 static void code_set_upvalue(struct MirVisitor *V, struct MirSetUpvalue *x)
 {
     struct Generator *G = V->ud;
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
 
     code_AB(fs, OP_SETUPVALUE, x->index, REG(x->value));
 }
@@ -693,7 +693,7 @@ static void code_set_upvalue(struct MirVisitor *V, struct MirSetUpvalue *x)
 static void code_aggregate(struct MirVisitor *V, struct MirAggregate *x)
 {
     struct Generator *G = V->ud;
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
 
     // number of values contained inside the box
     struct IrLayout const layout = pawMir_get_layout(fs->mir, x->output.r);
@@ -706,7 +706,7 @@ static void code_aggregate(struct MirVisitor *V, struct MirAggregate *x)
 static void code_close(struct MirVisitor *V, struct MirClose *x)
 {
     struct Generator *G = V->ud;
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
 
     code_A(fs, OP_CLOSE, REG(x->target));
 }
@@ -714,14 +714,14 @@ static void code_close(struct MirVisitor *V, struct MirClose *x)
 static void code_closure(struct MirVisitor *V, struct MirClosure *x)
 {
     struct Generator *G = V->ud;
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
 
     int const temp = temporary_reg(fs, 0);
     code_ABx(fs, OP_CLOSURE, temp, x->child_id);
     move_to_reg(fs, temp, REG(x->output));
 }
 
-static void code_map_get(struct FuncState *fs, struct MirPlace output, struct MirPlace object, struct MirPlace key)
+static void code_map_get(struct FnState *fs, struct MirPlace output, struct MirPlace object, struct MirPlace key)
 {
     int const b = move_to_temp(fs, REG(object), 0);
     int const c = move_to_temp(fs, REG(key), 1);
@@ -731,7 +731,7 @@ static void code_map_get(struct FuncState *fs, struct MirPlace output, struct Mi
 static void code_get_element(struct MirVisitor *V, struct MirGetElement *x)
 {
     struct Generator *G = V->ud;
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
 
     if (x->b_kind == BUILTIN_STR) {
         code_ABC(fs, OP_STRGET, REG(x->output), REG(x->object), REG(x->key));
@@ -743,7 +743,7 @@ static void code_get_element(struct MirVisitor *V, struct MirGetElement *x)
     }
 }
 
-static void code_map_getp(struct FuncState *fs, struct MirPlace output, struct MirPlace object, struct MirPlace key, paw_Bool is_setter)
+static void code_map_getp(struct FnState *fs, struct MirPlace output, struct MirPlace object, struct MirPlace key, paw_Bool is_setter)
 {
     int const b = move_to_temp(fs, REG(object), 0);
     int const c = move_to_temp(fs, REG(key), 1);
@@ -754,7 +754,7 @@ static void code_map_getp(struct FuncState *fs, struct MirPlace output, struct M
 static void code_get_element_ptr(struct MirVisitor *V, struct MirGetElementPtr *x)
 {
     struct Generator *G = V->ud;
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
 
     if (x->b_kind == BUILTIN_MAP) {
         code_map_getp(fs, x->output, x->object, x->key, x->is_map_setter);
@@ -763,7 +763,7 @@ static void code_get_element_ptr(struct MirVisitor *V, struct MirGetElementPtr *
     }
 }
 
-static void code_map_set(struct FuncState *fs, struct MirPlace object, struct MirPlace key, struct MirPlace value)
+static void code_map_set(struct FnState *fs, struct MirPlace object, struct MirPlace key, struct MirPlace value)
 {
     int const a = move_to_temp(fs, REG(object), 0);
     int const b = move_to_temp(fs, REG(key), 1);
@@ -774,7 +774,7 @@ static void code_map_set(struct FuncState *fs, struct MirPlace object, struct Mi
 static void code_set_element(struct MirVisitor *V, struct MirSetElement *x)
 {
     struct Generator *G = V->ud;
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
 
     if (x->b_kind == BUILTIN_MAP) {
         code_map_set(fs, x->object, x->key, x->value);
@@ -787,7 +787,7 @@ static void code_set_element(struct MirVisitor *V, struct MirSetElement *x)
 static void code_get_range(struct MirVisitor *V, struct MirGetRange *x)
 {
     struct Generator *G = V->ud;
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
 
     int const lower = move_to_temp(fs, REG(x->lower), 0);
     int const upper = move_to_temp(fs, REG(x->upper), 1);
@@ -804,7 +804,7 @@ static void code_get_range(struct MirVisitor *V, struct MirGetRange *x)
 static void code_set_range(struct MirVisitor *V, struct MirSetRange *x)
 {
     struct Generator *G = V->ud;
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
 
     int const lower = move_to_temp(fs, REG(x->lower), 0);
     int const upper = move_to_temp(fs, REG(x->upper), 1);
@@ -814,7 +814,7 @@ static void code_set_range(struct MirVisitor *V, struct MirSetRange *x)
 static void code_get_field(struct MirVisitor *V, struct MirGetField *x)
 {
     struct Generator *G = V->ud;
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
 
     Op const op = IS_POINTER(G, x->object.r) ? OP_GETVALUE : OP_GETFIELD;
     code_ABC(fs, op, REG(x->output), REG(x->object), x->index);
@@ -823,14 +823,14 @@ static void code_get_field(struct MirVisitor *V, struct MirGetField *x)
 static void code_set_field(struct MirVisitor *V, struct MirSetField *x)
 {
     struct Generator *G = V->ud;
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
 
     Op const op = IS_POINTER(G, x->object.r) ? OP_SETVALUE : OP_SETFIELD;
     code_ABC(fs, op, REG(x->object), x->index, REG(x->value));
 }
 
 // Determine the unique policy number for the given type of map
-static unsigned determine_map_policy(struct Generator *G, struct IrType *type)
+static unsigned determine_map_policy(struct Generator *G, IrType *type)
 {
     // policy type depends on both key and value
     int const *ppolicy = ToplevelMap_get(G, G->policy_cache, type);
@@ -841,8 +841,8 @@ static unsigned determine_map_policy(struct Generator *G, struct IrType *type)
     RttiType const *hash = get_rtti(G, IrTypeList_first(TraitOwnerList_get(*powners, TRAIT_HASH)));
     PolicyList_push(G, G->policies, (struct PolicyInfo){
                                         .type = get_rtti(G, type)->adt.code,
-                                        .equals = RTTI_DEF(ENV(G), rtti_iid(equals))->func.vid,
-                                        .hash = RTTI_DEF(ENV(G), rtti_iid(hash))->func.vid,
+                                        .equals = RTTI_DEF(ENV(G), rtti_iid(equals))->fn.vid,
+                                        .hash = RTTI_DEF(ENV(G), rtti_iid(hash))->fn.vid,
                                     });
 
     int const ipolicy = G->ipolicy++;
@@ -860,7 +860,7 @@ static IrType *get_element_type(IrType *type)
 static void code_container(struct MirVisitor *V, struct MirContainer *x)
 {
     struct Generator *G = V->ud;
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
 
     IrType *element_type = get_element_type(REG_TYPE(G, x->output.r));
     int const temp = temporary_reg(fs, 0);
@@ -873,7 +873,7 @@ static void code_container(struct MirVisitor *V, struct MirContainer *x)
     move_to_reg(fs, temp, REG(x->output));
 }
 
-static int enforce_call_constraints(struct FuncState *fs, struct MirCall *x)
+static int enforce_call_constraints(struct FnState *fs, struct MirCall *x)
 {
     int const target = move_to_temp(fs, REG(x->target), 0);
 
@@ -888,7 +888,7 @@ static int enforce_call_constraints(struct FuncState *fs, struct MirCall *x)
 static void code_call(struct MirVisitor *V, struct MirCall *x)
 {
     struct Generator *G = V->ud;
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
 
     int const target = enforce_call_constraints(fs, x);
     code_AB(fs, OP_CALL, target, x->args->count);
@@ -906,7 +906,7 @@ static void code_call(struct MirVisitor *V, struct MirCall *x)
 static void code_cast(struct MirVisitor *V, struct MirCast *x)
 {
     struct Generator *G = V->ud;
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
 
     static Op const CAST_OPERATORS[NBUILTIN_SCALARS][NBUILTIN_SCALARS] = {
         //          to  = {0,         b,         c,         i,         f}
@@ -1015,7 +1015,7 @@ static Op binop2op(enum MirBinaryOpKind binop)
 static void code_unop(struct MirVisitor *V, struct MirUnaryOp *x)
 {
     struct Generator *G = V->ud;
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
 
     code_AB(fs, unop2op(x->op), REG(x->output), REG(x->val));
 }
@@ -1023,7 +1023,7 @@ static void code_unop(struct MirVisitor *V, struct MirUnaryOp *x)
 static void code_binop(struct MirVisitor *V, struct MirBinaryOp *x)
 {
     struct Generator *G = V->ud;
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
 
     const enum BuiltinKind code = TYPE_CODE(G, REG_TYPE(G, x->lhs.r));
     paw_assert(code != NBUILTINS);
@@ -1085,7 +1085,7 @@ static paw_Bool code_return(struct MirVisitor *V, struct MirReturn *x)
     int index;
     struct MirPlace const *pr;
     struct Generator *G = V->ud;
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
 
     ReturnMap *rets = ReturnMap_new(G);
     K_LIST_ENUMERATE (x->values, index, pr)
@@ -1125,9 +1125,9 @@ static paw_Bool code_return(struct MirVisitor *V, struct MirReturn *x)
 static void add_edge(struct Generator *G, int from_pc, MirBlock to)
 {
     struct JumpTarget *pjump;
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
     K_LIST_FOREACH (fs->jumps, pjump) {
-        if (MIR_BB_EQUALS(pjump->bid, to)) {
+        if (MIR_ID_EQUALS(pjump->bid, to)) {
             patch_jump(fs, from_pc, pjump->pc);
             return;
         }
@@ -1138,10 +1138,10 @@ static void add_edge(struct Generator *G, int from_pc, MirBlock to)
 
 static void add_edge_from_here(struct Generator *G, MirBlock to)
 {
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
     // fallthrough if possible
     MirBlock const next = MIR_BB(fs->b.value + 1);
-    if (!MIR_BB_EQUALS(next, to))
+    if (!MIR_ID_EQUALS(next, to))
         add_edge(G, emit_jump(fs), to);
 }
 
@@ -1154,7 +1154,7 @@ static paw_Bool code_goto(struct MirVisitor *V, struct MirGoto *x)
 static paw_Bool code_branch(struct MirVisitor *V, struct MirBranch *x)
 {
     struct Generator *G = V->ud;
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
 
     int const else_jump = emit_cond_jump(fs, REG(x->cond), OP_JUMPF);
     add_edge(G, else_jump, x->else_arm);
@@ -1162,7 +1162,7 @@ static paw_Bool code_branch(struct MirVisitor *V, struct MirBranch *x)
     return PAW_FALSE;
 }
 
-static int code_testk(struct FuncState *fs, struct MirPlace test, Value k, struct IrType *type)
+static int code_testk(struct FnState *fs, struct MirPlace test, Value k, IrType *type)
 {
     const enum BuiltinKind code = pawP_type2code(fs->G->C, type);
     int const index = add_constant(fs->G, k, code);
@@ -1173,7 +1173,7 @@ static int code_testk(struct FuncState *fs, struct MirPlace test, Value k, struc
 static paw_Bool code_sparse_switch(struct MirVisitor *V, struct MirSwitch *x)
 {
     struct Generator *G = V->ud;
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
 
     struct MirSwitchArm *parm;
     struct MirPlace const d = x->discr;
@@ -1181,19 +1181,19 @@ static paw_Bool code_sparse_switch(struct MirVisitor *V, struct MirSwitch *x)
         int const next_jump = code_testk(fs, d, parm->value, REG_TYPE(G, d.r));
         add_edge(G, next_jump, parm->bid);
     }
-    if (MIR_BB_EXISTS(x->otherwise))
+    if (MIR_ID_EXISTS(x->otherwise))
         add_edge_from_here(G, x->otherwise);
     return PAW_FALSE;
 }
 
 static paw_Bool code_switch(struct MirVisitor *V, struct MirSwitch *x)
 {
-    if (MIR_BB_EXISTS(x->otherwise)) {
+    if (MIR_ID_EXISTS(x->otherwise)) {
         return code_sparse_switch(V, x);
     }
 
     struct Generator *G = V->ud;
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
 
     struct MirSwitchArm *parm;
     K_LIST_FOREACH (x->arms, parm) {
@@ -1214,7 +1214,7 @@ static void handle_jump_logic(struct Generator *G, MirBlock b)
 static paw_Bool code_block(struct MirVisitor *V, MirBlock b)
 {
     struct Generator *G = V->ud;
-    struct FuncState *fs = G->fs;
+    struct FnState *fs = G->fs;
     fs->b = b;
 
     struct MirBlockData *block = mir_bb_data(fs->mir, b);
@@ -1231,7 +1231,7 @@ static void setup_codegen(struct Generator *G)
     V->PostVisitMove = code_move;
     V->PostVisitUpvalue = code_upvalue;
     V->PostVisitGlobal = code_global;
-    V->PostVisitConstant = code_constant;
+    V->PostVisitLoadConstant = code_constant;
     V->PostVisitSetCapture = code_set_capture;
     V->PostVisitSetUpvalue = code_set_upvalue;
     V->PostVisitAggregate = code_aggregate;

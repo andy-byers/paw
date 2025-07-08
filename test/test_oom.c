@@ -22,7 +22,7 @@ static int run_tests(paw_Env *P)
         if (name->length >= kLength && memcmp(name->text, kPrefix, kLength) == 0) {
             check(def->hdr.kind == DEF_FUNC);
             paw_push_zero(P, 1);
-            P->top.p[-1] = *RTTI_PVAL(P, def->func.vid);
+            P->top.p[-1] = *RTTI_PVAL(P, def->fn.vid);
             return paw_call(P, 0);
         }
     }

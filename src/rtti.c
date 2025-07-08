@@ -12,7 +12,7 @@ static void free_def(paw_Env *P, struct Def *def)
             pawM_free_vec(P, def->adt.fields, def->adt.nfields);
             break;
         case DEF_FUNC:
-            pawM_free_vec(P, def->func.types, def->func.ntypes);
+            pawM_free_vec(P, def->fn.types, def->fn.ntypes);
             break;
         case DEF_CONST:
         case DEF_TRAIT:
@@ -93,7 +93,7 @@ struct RttiType *pawRtti_new_signature(paw_Env *P, ItemId iid, int nparams)
     return add_type(P, type);
 }
 
-struct RttiType *pawRtti_new_func_ptr(paw_Env *P, int nparams)
+struct RttiType *pawRtti_new_fn_ptr(paw_Env *P, int nparams)
 {
     struct RttiType *type = NEW_TYPE(P, nparams);
     *type = (struct RttiType){
@@ -161,11 +161,11 @@ struct RttiField *pawRtti_new_field(paw_Env *P, Str *name, paw_Type code, paw_Bo
     return field;
 }
 
-struct Def *pawRtti_new_func_def(paw_Env *P, int ntypes)
+struct Def *pawRtti_new_fn_def(paw_Env *P, int ntypes)
 {
     struct Def *def = new_def(P, DEF_FUNC);
-    def->func.types = pawM_new_vec(P, ntypes, paw_Type);
-    def->func.ntypes = ntypes;
+    def->fn.types = pawM_new_vec(P, ntypes, paw_Type);
+    def->fn.ntypes = ntypes;
     return def;
 }
 
@@ -184,7 +184,7 @@ static int print_subtypes_(paw_Env *P, Buffer *buf, struct RttiType *type)
 }
 #define PRINT_SUBTYPES(P, buf, type) print_subtypes_(P, buf, CAST(struct RttiType *, type))
 
-static void print_func_type(paw_Env *P, Buffer *buf, struct RttiFnPtr *type)
+static void print_fn_type(paw_Env *P, Buffer *buf, struct RttiFnPtr *type)
 {
     pawL_add_string(P, buf, "fn(");
     PRINT_SUBTYPES(P, buf, type);
@@ -229,7 +229,7 @@ void pawRtti_print_type(paw_Env *P, Buffer *buf, paw_Type code)
     switch (type->hdr.kind) {
         case RTTI_TYPE_FN_DEF:
         case RTTI_TYPE_FN_PTR:
-            print_func_type(P, buf, &type->fptr);
+            print_fn_type(P, buf, &type->fptr);
             break;
         case RTTI_TYPE_TUPLE:
             print_tuple_type(P, buf, &type->tuple);
@@ -315,15 +315,15 @@ void pawRtti_mangle_add_arg(paw_Env *P, Buffer *buf, paw_Type code)
             break;
         case RTTI_TYPE_FN_PTR:
         case RTTI_TYPE_FN_DEF: {
-            struct RttiFnPtr const func = type->fptr;
+            struct RttiFnPtr const fn = type->fptr;
             pawL_add_char(P, buf, 'F');
             for (int i = 0; i < type->nsubtypes; ++i) {
                 pawRtti_mangle_add_arg(P, buf, type->subtypes[i]);
             }
             pawL_add_char(P, buf, 'E');
-            struct RttiType const *result = RTTI_TYPE(P, func.result);
+            struct RttiType const *result = RTTI_TYPE(P, fn.result);
             if (result->hdr.kind != RTTI_TYPE_ADT || result->adt.code != PAW_TUNIT) {
-                pawRtti_mangle_add_arg(P, buf, func.result);
+                pawRtti_mangle_add_arg(P, buf, fn.result);
             }
             break;
         }

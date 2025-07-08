@@ -3,8 +3,8 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 //
 // This module contains the abstract syntax tree (AST) for Paw. An AST is created
-// for a given module during parsing, and is transformed into a HIR tree during type
-// checking.
+// for a given module during parsing, and is transformed into a HIR tree after
+// name resolution.
 //
 
 #ifndef PAW_AST_H
@@ -17,7 +17,7 @@
     X(ModuleDecl)        \
     X(FieldDecl)         \
     X(ParamDecl)         \
-    X(FuncDecl)          \
+    X(FnDecl)            \
     X(GenericDecl)       \
     X(AdtDecl)           \
     X(TypeDecl)          \
@@ -30,7 +30,7 @@
     X(PathType)          \
     X(TupleType)         \
     X(ContainerType)     \
-    X(FuncType)          \
+    X(FnType)            \
     X(NeverType)         \
     X(InferType)
 
@@ -140,11 +140,11 @@ struct AstTypeDecl {
     struct AstDeclList *generics;
 };
 
-struct AstFuncDecl {
+struct AstFnDecl {
     AST_DECL_HEADER;
     paw_Bool is_pub : 1;
     paw_Bool is_method : 1;
-    enum FuncKind fn_kind : 8;
+    enum FnKind fn_kind : 8;
     struct AstIdent ident;
     struct Annotations *annos;
     struct AstDeclList *generics;
@@ -290,14 +290,14 @@ static struct AstDecl *pawAst_new_param_decl(struct Ast *ast, struct SourceSpan 
     return d;
 }
 
-inline static struct AstDecl *pawAst_new_func_decl(struct Ast *ast, struct SourceSpan span, NodeId id, enum FuncKind fn_kind, struct AstIdent ident, struct Annotations *annos, struct AstDeclList *generics, struct AstDeclList *params, struct AstType *result, struct AstExpr *body, paw_Bool is_pub, paw_Bool is_method)
+inline static struct AstDecl *pawAst_new_fn_decl(struct Ast *ast, struct SourceSpan span, NodeId id, enum FnKind fn_kind, struct AstIdent ident, struct Annotations *annos, struct AstDeclList *generics, struct AstDeclList *params, struct AstType *result, struct AstExpr *body, paw_Bool is_pub, paw_Bool is_method)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
-    d->FuncDecl_ = (struct AstFuncDecl){
+    d->FnDecl_ = (struct AstFnDecl){
         .id = id,
         .did = NO_DECL,
         .span = span,
-        .kind = kAstFuncDecl,
+        .kind = kAstFnDecl,
         .fn_kind = fn_kind,
         .annos = annos,
         .ident = ident,
@@ -465,7 +465,7 @@ struct AstContainerType {
     struct AstType *second;
 };
 
-struct AstFuncType {
+struct AstFnType {
     AST_TYPE_HEADER;
     struct AstType *result;
     struct AstTypeList *params;
@@ -535,13 +535,13 @@ inline static struct AstType *pawAst_new_tuple_type(struct Ast *ast, struct Sour
     return t;
 }
 
-inline static struct AstType *pawAst_new_func_type(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstTypeList *params, struct AstType *result)
+inline static struct AstType *pawAst_new_fn_type(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstTypeList *params, struct AstType *result)
 {
     struct AstType *t = pawAst_new_type(ast);
-    t->FuncType_ = (struct AstFuncType){
+    t->FnType_ = (struct AstFnType){
         .id = id,
         .span = span,
-        .kind = kAstFuncType,
+        .kind = kAstFnType,
         .params = params,
         .result = result,
     };

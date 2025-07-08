@@ -13,17 +13,17 @@ struct IrTypeFolder {
     struct Compiler *C;
     void *ud;
 
-    struct IrType *(*FoldType)(struct IrTypeFolder *F, struct IrType *type);
-    struct IrTypeList *(*FoldTypeList)(struct IrTypeFolder *F, struct IrTypeList *list);
+    IrType *(*FoldType)(struct IrTypeFolder *F, IrType *type);
+    IrTypeList *(*FoldTypeList)(struct IrTypeFolder *F, IrTypeList *list);
 
-#define DEFINE_CALLBACK(X) struct IrType *(*Fold##X)(struct IrTypeFolder * F, struct Ir##X * node);
+#define DEFINE_CALLBACK(X) IrType *(*Fold##X)(struct IrTypeFolder * F, struct Ir##X * node);
     IR_TYPE_LIST(DEFINE_CALLBACK)
 #undef DEFINE_CALLBACK
 };
 
 void pawIr_type_folder_init(struct IrTypeFolder *F, struct Compiler *C, void *ud);
-struct IrType *pawIr_fold_type(struct IrTypeFolder *F, struct IrType *node);
-struct IrTypeList *pawIr_fold_type_list(struct IrTypeFolder *F, struct IrTypeList *list);
+IrType *pawIr_fold_type(struct IrTypeFolder *F, IrType *node);
+IrTypeList *pawIr_fold_type_list(struct IrTypeFolder *F, IrTypeList *list);
 
 struct HirTypeFolder {
     struct IrTypeFolder F;
@@ -56,6 +56,6 @@ void pawMir_type_folder_init(struct MirTypeFolder *F, struct Compiler *C, struct
 // Type folder entrypoint for MIR:
 void pawMir_fold(struct MirTypeFolder *F, struct Mir *mir);
 
-char const *pawIr_print_type(struct Compiler *C, struct IrType *type);
+char const *pawIr_print_type(struct Compiler *C, IrType *type);
 
 #endif // PAW_TYPE_FOLDER_H

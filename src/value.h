@@ -227,11 +227,11 @@ typedef struct Native {
     GC_HEADER;
     short nup;
     Object *gc_list;
-    paw_Function func;
+    paw_Function fn;
     Value up[];
 } Native;
 
-Native *pawV_new_native(paw_Env *P, paw_Function func, int nup);
+Native *pawV_new_native(paw_Env *P, paw_Function fn, int nup);
 void pawV_free_native(paw_Env *P, Native *f);
 
 #define TUPLE_OTHER 0

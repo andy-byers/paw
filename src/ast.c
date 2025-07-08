@@ -309,7 +309,7 @@ static void AcceptPathExpr(struct AstVisitor *V, struct AstPathExpr *e)
     AcceptPath(V, &e->path);
 }
 
-static void AcceptFuncDecl(struct AstVisitor *V, struct AstFuncDecl *d)
+static void AcceptFnDecl(struct AstVisitor *V, struct AstFnDecl *d)
 {
     accept_decl_list(V, d->generics);
     accept_decl_list(V, d->params);
@@ -350,7 +350,7 @@ static void AcceptDeclStmt(struct AstVisitor *V, struct AstDeclStmt *s)
     AcceptDecl(V, s->decl);
 }
 
-static void AcceptFuncType(struct AstVisitor *V, struct AstFuncType *t)
+static void AcceptFnType(struct AstVisitor *V, struct AstFnType *t)
 {
     accept_type_list(V, t->params);
     AcceptType(V, t->result);
@@ -686,8 +686,8 @@ static void dump_decl(Printer *P, struct AstDecl *decl)
             }
             break;
         }
-        case kAstFuncDecl: {
-            struct AstFuncDecl *d = AstGetFuncDecl(decl);
+        case kAstFnDecl: {
+            struct AstFnDecl *d = AstGetFnDecl(decl);
             DUMP_FMT(P, "name: %s\n", d->ident.name->text);
             DUMP_FMT(P, "is_pub: %d\n", d->is_pub);
             DUMP_FMT(P, "is_method: %d\n", d->is_method);
@@ -824,8 +824,8 @@ static void dump_type(Printer *P, struct AstType *type)
         case kAstNeverType:
         case kAstInferType:
             break;
-        case kAstFuncType: {
-            struct AstFuncType *t = AstGetFuncType(type);
+        case kAstFnType: {
+            struct AstFnType *t = AstGetFnType(type);
             dump_type_list(P, t->params, "params");
             DUMP_MSG(P, "result: ");
             dump_type(P, t->result);

@@ -116,7 +116,7 @@ void pawP_compile(struct Compiler *C, paw_Reader input, void *ud)
     pawP_generate_code(C);
 }
 
-enum BuiltinKind pawP_type2code(struct Compiler *C, struct IrType *type)
+enum BuiltinKind pawP_type2code(struct Compiler *C, IrType *type)
 {
     if (IrIsAdt(type)) {
         DeclId const base = IR_TYPE_DID(type);
@@ -168,7 +168,7 @@ struct Builtin *pawP_builtin_info(struct Compiler *C, enum BuiltinKind code)
     return &C->builtins[code];
 }
 
-struct IrType *pawP_builtin_type(struct Compiler *C, enum BuiltinKind code)
+IrType *pawP_builtin_type(struct Compiler *C, enum BuiltinKind code)
 {
     DeclId const did = pawP_builtin_info(C, code)->did;
     return pawIr_get_def_type(C, did);
@@ -369,7 +369,7 @@ void pawP_teardown(paw_Env *P, struct DynamicMem *dm)
 
 struct DefState {
     struct DefState *outer;
-    struct IrType *type;
+    IrType *type;
     struct Def *def;
     int index;
 };
@@ -381,7 +381,7 @@ struct DefGenerator {
     struct Compiler *C;
 };
 
-static void enter_def(struct DefGenerator *dg, struct DefState *ds, struct IrType *type, struct Def *def)
+static void enter_def(struct DefGenerator *dg, struct DefState *ds, IrType *type, struct Def *def)
 {
     *ds = (struct DefState){
         .outer = dg->ds,
@@ -396,7 +396,7 @@ static void leave_def(struct DefGenerator *dg)
     dg->ds = dg->ds->outer;
 }
 
-static RttiType *lookup_type(struct DefGenerator *dg, struct IrType *type)
+static RttiType *lookup_type(struct DefGenerator *dg, IrType *type)
 {
     if (type == NULL)
         return NULL;
@@ -404,16 +404,16 @@ static RttiType *lookup_type(struct DefGenerator *dg, struct IrType *type)
     return ptype != NULL ? *ptype : NULL;
 }
 
-static void map_types(struct DefGenerator *dg, struct IrType *type, RttiType *rtti)
+static void map_types(struct DefGenerator *dg, IrType *type, RttiType *rtti)
 {
     paw_Env *P = ENV(dg->C);
     RttiMap_insert(dg->C, dg->C->rtti, type, rtti);
 }
 
-static RttiType *new_type(struct DefGenerator *, struct IrType *, ItemId);
+static RttiType *new_type(struct DefGenerator *, IrType *, ItemId);
 #define MAKE_TYPE(dg, t, did) new_type(dg, IR_CAST_TYPE(t), did)->hdr.code
 
-static void init_type_list(struct DefGenerator *dg, struct IrTypeList *x, paw_Type *y, ItemId iid)
+static void init_type_list(struct DefGenerator *dg, IrTypeList *x, paw_Type *y, ItemId iid)
 {
     if (x == NULL)
         return;
@@ -424,7 +424,7 @@ static void init_type_list(struct DefGenerator *dg, struct IrTypeList *x, paw_Ty
 
 #define LEN(L) ((L) != NULL ? (L)->count : 0)
 
-static RttiType *new_type(struct DefGenerator *dg, struct IrType *src, ItemId iid)
+static RttiType *new_type(struct DefGenerator *dg, IrType *src, ItemId iid)
 {
     RttiType *dst = lookup_type(dg, src);
     if (dst != NULL) return dst;
@@ -446,9 +446,9 @@ static RttiType *new_type(struct DefGenerator *dg, struct IrType *src, ItemId ii
             dst->fdef.result = MAKE_TYPE(dg, fsig->result, iid);
             break;
         }
-        case kIrFuncPtr: {
-            struct IrFuncPtr *fptr = IrGetFuncPtr(src);
-            dst = pawRtti_new_func_ptr(P, fptr->params->count);
+        case kIrFnPtr: {
+            struct IrFnPtr *fptr = IrGetFnPtr(src);
+            dst = pawRtti_new_fn_ptr(P, fptr->params->count);
             init_type_list(dg, fptr->params, dst->subtypes, -1);
             dst->fptr.result = MAKE_TYPE(dg, fptr->result, -1);
             break;
@@ -476,7 +476,7 @@ static Str *get_modname(struct DefGenerator *dg, DeclId did)
     return HirModuleList_get(dg->C->hir->modules, did.modno).name;
 }
 
-static struct Def *new_adt_def(struct DefGenerator *dg, struct IrAdtDef *d, struct IrType *type)
+static struct Def *new_adt_def(struct DefGenerator *dg, struct IrAdtDef *d, IrType *type)
 {
     paw_Env *P = ENV(dg->C);
     int const n = d->is_struct
@@ -494,28 +494,28 @@ static struct Def *new_adt_def(struct DefGenerator *dg, struct IrAdtDef *d, stru
     return def;
 }
 
-static struct Def *new_fn_def(struct DefGenerator *dg, struct IrFnDef *d, struct IrType *type)
+static struct Def *new_fn_def(struct DefGenerator *dg, struct IrFnDef *d, IrType *type)
 {
     paw_Env *P = ENV(dg->C);
-    struct Def *def = pawRtti_new_func_def(P, LEN(d->params));
+    struct Def *def = pawRtti_new_fn_def(P, LEN(d->params));
     RttiType *ty = new_type(dg, type, def->hdr.iid);
-    def->func.kind = DEF_FUNC;
-    def->func.ntypes = LEN(d->params);
-    def->func.iid = def->hdr.iid;
-    def->func.modname = get_modname(dg, d->did);
-    def->func.code = ty->hdr.code;
-    def->func.name = d->name;
-    def->func.is_pub = d->is_pub;
+    def->fn.kind = DEF_FUNC;
+    def->fn.ntypes = LEN(d->params);
+    def->fn.iid = def->hdr.iid;
+    def->fn.modname = get_modname(dg, d->did);
+    def->fn.code = ty->hdr.code;
+    def->fn.name = d->name;
+    def->fn.is_pub = d->is_pub;
     return def;
 }
 
-static void allocate_other_type(struct DefGenerator *dg, struct IrType *type)
+static void allocate_other_type(struct DefGenerator *dg, IrType *type)
 {
     RttiType *rtti = new_type(dg, type, -1);
     map_types(dg, type, rtti);
 }
 
-static void allocate_adt_def(struct DefGenerator *dg, struct IrType *type)
+static void allocate_adt_def(struct DefGenerator *dg, IrType *type)
 {
     if (!IrIsAdt(type)) {
         allocate_other_type(dg, type);
@@ -524,7 +524,7 @@ static void allocate_adt_def(struct DefGenerator *dg, struct IrType *type)
     struct IrAdt *t = IrGetAdt(type);
     struct IrAdtDef *d = pawIr_get_adt_def(dg->C, t->did);
     struct Def *def = new_adt_def(dg, d, type);
-    RttiType *rtti = RTTI_TYPE(ENV(dg->C), def->func.code);
+    RttiType *rtti = RTTI_TYPE(ENV(dg->C), def->fn.code);
     map_types(dg, type, rtti);
 }
 
@@ -533,7 +533,7 @@ static void define_params(struct DefGenerator *dg, struct IrParams *params)
     // TODO: define fields for RTTI
 }
 
-static void connect_adt_def(struct DefGenerator *dg, struct IrType *mono)
+static void connect_adt_def(struct DefGenerator *dg, IrType *mono)
 {
     // paw_Env *P = ENV(dg->C);
     // struct HirDecl *decl = pawHir_get_decl(dg->C, IR_TYPE_DID(mono));
@@ -547,9 +547,9 @@ static void connect_adt_def(struct DefGenerator *dg, struct IrType *mono)
     // leave_def(dg);
 }
 
-static void allocate_types(struct DefGenerator *dg, struct IrTypeList *types)
+static void allocate_types(struct DefGenerator *dg, IrTypeList *types)
 {
-    struct IrType *const *ptype;
+    IrType *const *ptype;
     K_LIST_FOREACH (types, ptype)
         allocate_adt_def(dg, *ptype);
     K_LIST_FOREACH (types, ptype)
@@ -564,18 +564,18 @@ static struct ItemSlot allocate_item(struct DefGenerator *dg, struct Mir *body)
     struct IrFnDef *d = pawIr_get_fn_def(dg->C, t->did);
     struct Def *def = new_fn_def(dg, d, body->type);
     RttiType *self = lookup_type(dg, body->self);
-    def->func.self = self != NULL ? self->adt.code : -1;
+    def->fn.self = self != NULL ? self->adt.code : -1;
     // ".vid" is the index of the Value slot where this function will live
     // at runtime. Functions are placed after the global constants section.
-    def->func.vid = dg->items->count + dg->C->globals->count;
+    def->fn.vid = dg->items->count + dg->C->globals->count;
 
     struct DefState ds;
     enter_def(dg, &ds, body->type, def);
     define_params(dg, d->params);
     leave_def(dg);
 
-    RttiType *rtti = RTTI_TYPE(P, def->func.code);
-    rtti->fdef.iid = def->func.iid;
+    RttiType *rtti = RTTI_TYPE(P, def->fn.code);
+    rtti->fdef.iid = def->fn.iid;
     return (struct ItemSlot){
         .name = body->name,
         .mir = body,
@@ -601,7 +601,7 @@ static void allocate_items(struct DefGenerator *dg, struct BodyList *bodies)
     }
 }
 
-struct ItemList *pawP_allocate_defs(struct Compiler *C, struct BodyList *bodies, struct IrTypeList *types)
+struct ItemList *pawP_allocate_defs(struct Compiler *C, struct BodyList *bodies, IrTypeList *types)
 {
     struct DefGenerator dg = {
         .items = ItemList_new(C),
@@ -717,13 +717,13 @@ Value const *pawP_get_extern_value(struct Compiler *C, Str const *name)
     return pval;
 }
 
-static RttiType *lookup_rtti(struct Compiler *C, struct IrType *type)
+static RttiType *lookup_rtti(struct Compiler *C, IrType *type)
 {
     RttiType **prtti = RttiMap_get(C, C->rtti, type);
     return prtti != NULL ? *prtti : NULL;
 }
 
-static void mangle_type(struct Compiler *C, Buffer *buf, struct IrType *type)
+static void mangle_type(struct Compiler *C, Buffer *buf, IrType *type)
 {
     RttiType *t = lookup_rtti(C, type);
     paw_assert(t != NULL);
@@ -731,13 +731,13 @@ static void mangle_type(struct Compiler *C, Buffer *buf, struct IrType *type)
     pawRtti_mangle_add_arg(ENV(C), buf, t->hdr.code);
 }
 
-static void mangle_types(struct Compiler *C, Buffer *buf, struct IrTypeList const *types)
+static void mangle_types(struct Compiler *C, Buffer *buf, IrTypeList const *types)
 {
     if (types == NULL)
         return;
     pawRtti_mangle_start_generic_args(ENV(C), buf);
 
-    struct IrType **pt;
+    IrType **pt;
     K_LIST_FOREACH (types, pt)
         mangle_type(C, buf, *pt);
 
@@ -762,7 +762,7 @@ Str *pawP_mangle_finish(paw_Env *P, Buffer *buf, struct Compiler *C)
     return str;
 }
 
-Str *pawP_mangle_name(struct Compiler *C, Str const *modname, Str const *name, struct IrTypeList *types)
+Str *pawP_mangle_name(struct Compiler *C, Str const *modname, Str const *name, IrTypeList *types)
 {
     Buffer buf;
     paw_Env *P = ENV(C);
@@ -774,7 +774,7 @@ Str *pawP_mangle_name(struct Compiler *C, Str const *modname, Str const *name, s
     return pawP_mangle_finish(P, &buf, C);
 }
 
-Str *pawP_mangle_attr(struct Compiler *C, Str const *modname, Str const *base, struct IrTypeList const *base_types, Str const *attr, struct IrTypeList const *attr_types)
+Str *pawP_mangle_attr(struct Compiler *C, Str const *modname, Str const *base, IrTypeList const *base_types, Str const *attr, IrTypeList const *attr_types)
 {
     Buffer buf;
     paw_Env *P = ENV(C);

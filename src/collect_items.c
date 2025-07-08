@@ -152,7 +152,7 @@ static struct IrParams *collect_parameters(struct ItemCollector *X, struct HirDe
     return result;
 }
 
-static void transfer_fn_annotations(struct ItemCollector *X, struct HirFuncDecl *d, struct IrFnDef *def)
+static void transfer_fn_annotations(struct ItemCollector *X, struct HirFnDecl *d, struct IrFnDef *def)
 {
     struct Compiler *C = X->C;
     struct Annotations *annos = d->annos;
@@ -413,7 +413,7 @@ static void unify_with_self(struct ItemCollector *X, struct SourceLoc loc, IrTyp
     }
 }
 
-static void collect_fn_decl(struct ItemCollector *X, struct HirFuncDecl *d)
+static void collect_fn_decl(struct ItemCollector *X, struct HirFnDecl *d)
 {
     IrTypeList *types = collect_generic_types(X, d->generics);
     collect_local_type_aliases(X, d->body);
@@ -449,7 +449,7 @@ static void collect_method_decls(struct ItemCollector *X, struct HirDeclList *me
     struct HirDecl *const *pdecl;
     StringMap *names = StringMap_new_from(X->C, X->pool);
     K_LIST_FOREACH (methods, pdecl) {
-        struct HirFuncDecl *d = HirGetFuncDecl(*pdecl);
+        struct HirFnDecl *d = HirGetFnDecl(*pdecl);
         ensure_unique(X, names, d->ident, "method");
         if (force_pub) d->is_pub = PAW_TRUE;
         collect_fn_decl(X, d);
@@ -506,8 +506,8 @@ static void collect_other_types(struct ItemCollector *X, struct HirModule m)
             case kHirTraitDecl:
                 collect_trait_decl(X, HirGetTraitDecl(*pitem));
                 break;
-            case kHirFuncDecl:
-                collect_fn_decl(X, HirGetFuncDecl(*pitem));
+            case kHirFnDecl:
+                collect_fn_decl(X, HirGetFnDecl(*pitem));
                 break;
             case kHirConstDecl:
                 collect_const_decl(X, HirGetConstDecl(*pitem));

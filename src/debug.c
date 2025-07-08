@@ -92,8 +92,6 @@ char const *paw_binop_symbol(enum BinaryOp binop)
             return ">";
         case BINARY_GE:
             return ">=";
-        case BINARY_RANGE:
-            return "..";
     }
 }
 

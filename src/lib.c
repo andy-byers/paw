@@ -67,10 +67,10 @@ void pawL_close_loader(paw_Env *P, void *state)
     pawO_free_file(P, fr->file);
 }
 
-void pawL_new_func(paw_Env *P, paw_Function func, int nup)
+void pawL_new_fn(paw_Env *P, paw_Function fn, int nup)
 {
     Value *pv = pawC_push0(P);
-    Native *nat = pawV_new_native(P, func, nup);
+    Native *nat = pawV_new_native(P, fn, nup);
     V_SET_OBJECT(pv, nat);
 
     Value const *up = P->top.p - nup - 1;
@@ -197,7 +197,7 @@ static int init_searchers(paw_Env *P)
         searcher_env,
     };
     for (int i = 0; i < PAW_COUNTOF(fs); ++i) {
-        pawL_new_func(P, fs[i], 0);
+        pawL_new_fn(P, fs[i], 0);
     }
     return PAW_COUNTOF(fs);
 }
@@ -278,14 +278,14 @@ void pawL_load_symbols(paw_Env *P)
     paw_pop(P, 3);
 }
 
-int pawL_register_func(paw_Env *P, char const *name, paw_Function func, int nup)
+int pawL_register_fn(paw_Env *P, char const *name, paw_Function fn, int nup)
 {
-    // paw.symbols[mangle(name)] = func
+    // paw.symbols[mangle(name)] = fn
     pawL_push_symbols_map(P);
     paw_mangle_start(P);
     paw_push_str(P, name);
     paw_mangle_add_name(P);
-    paw_new_native(P, func, nup);
+    paw_new_native(P, fn, nup);
     paw_map_set(P, -3);
     return 0;
 }
@@ -317,18 +317,18 @@ void pawL_add_extern_value(paw_Env *P, char const *modname, char const *name)
     paw_map_set(P, -3);
 }
 
-void pawL_add_extern_func(paw_Env *P, char const *modname, char const *name, paw_Function func)
+void pawL_add_extern_fn(paw_Env *P, char const *modname, char const *name, paw_Function fn)
 {
     paw_mangle_start(P);
     paw_push_str(P, modname);
     paw_mangle_add_module(P);
     paw_push_str(P, name);
     paw_mangle_add_name(P);
-    pawL_new_func(P, func, 0);
+    pawL_new_fn(P, fn, 0);
     paw_map_set(P, -3);
 }
 
-void pawL_add_extern_method(paw_Env *P, char const *modname, char const *self, char const *name, paw_Function func)
+void pawL_add_extern_method(paw_Env *P, char const *modname, char const *self, char const *name, paw_Function fn)
 {
     paw_mangle_start(P);
     paw_push_str(P, modname);
@@ -337,7 +337,7 @@ void pawL_add_extern_method(paw_Env *P, char const *modname, char const *self, c
     paw_mangle_add_name(P);
     paw_push_str(P, name);
     paw_mangle_add_name(P);
-    pawL_new_func(P, func, 0);
+    pawL_new_fn(P, fn, 0);
     paw_map_set(P, -3);
 }
 

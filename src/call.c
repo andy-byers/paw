@@ -173,7 +173,7 @@ static void handle_ccall(paw_Env *P, StackPtr base, Native *ccall)
     cf->fn = NULL;
 
     // call the C function
-    int const nret = ccall->func(P);
+    int const nret = ccall->fn(P);
     call_return(P, base, nret);
     pawR_close_upvalues(P, base);
 }

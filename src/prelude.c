@@ -224,7 +224,7 @@ static int map_iterator_next(paw_Env *P)
     return 1 + key_size;
 }
 
-static int byte_to_str(paw_Env *P)
+static int char_to_str(paw_Env *P)
 {
     char const c = (char)CF_BASE(1)->c;
     Str *str = pawS_new_nstr(P, &c, 1);
@@ -444,16 +444,16 @@ void l_import_prelude(paw_Env *P)
     pawE_push_cstr(P, CSTR_KSYMBOLS);
     paw_map_get(P, PAW_REGISTRY_INDEX);
 
-    pawL_add_extern_func(P, "prelude", "panic", base_panic);
-    pawL_add_extern_func(P, "prelude", "assert", base_assert);
-    pawL_add_extern_func(P, "prelude", "print", base_print);
-    pawL_add_extern_func(P, "prelude", "println", base_println);
-    pawL_add_extern_func(P, "prelude", "range", base_range);
+    pawL_add_extern_fn(P, "prelude", "panic", base_panic);
+    pawL_add_extern_fn(P, "prelude", "assert", base_assert);
+    pawL_add_extern_fn(P, "prelude", "print", base_print);
+    pawL_add_extern_fn(P, "prelude", "println", base_println);
+    pawL_add_extern_fn(P, "prelude", "range", base_range);
     pawL_add_extern_method(P, "prelude", "bool", "to_str", bool_to_str);
     pawL_add_extern_method(P, "prelude", "int", "to_str", int_to_str);
     pawL_add_extern_method(P, "prelude", "float", "hash", float_hash);
     pawL_add_extern_method(P, "prelude", "float", "to_str", float_to_str);
-    pawL_add_extern_method(P, "prelude", "char", "to_str", byte_to_str);
+    pawL_add_extern_method(P, "prelude", "char", "to_str", char_to_str);
     pawL_add_extern_method(P, "prelude", "str", "hash", str_hash);
     pawL_add_extern_method(P, "prelude", "str", "parse_int", str_parse_int);
     pawL_add_extern_method(P, "prelude", "str", "parse_int_radix", str_parse_int_radix);

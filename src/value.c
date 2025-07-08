@@ -168,12 +168,12 @@ void pawV_free_closure(paw_Env *P, Closure *f)
     pawM_free_flex(P, f, f->nup, sizeof(f->up[0]));
 }
 
-Native *pawV_new_native(paw_Env *P, paw_Function func, int nup)
+Native *pawV_new_native(paw_Env *P, paw_Function fn, int nup)
 {
     paw_assert(nup <= UINT16_MAX);
     Native *nat = pawM_new_flex(P, Native, nup, sizeof(nat->up[0]));
     pawG_add_object(P, CAST_OBJECT(nat), VNATIVE);
-    nat->func = func;
+    nat->fn = fn;
     nat->nup = nup;
     return nat;
 }

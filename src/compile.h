@@ -57,7 +57,7 @@ struct HirModule;
 struct HirPath;
 struct HirDecl;
 struct HirAdtDecl;
-struct HirFuncDecl;
+struct HirFnDecl;
 struct HirInstanceDecl;
 struct HirMatchExpr;
 struct HirTypeFolder;

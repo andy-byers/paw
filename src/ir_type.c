@@ -37,7 +37,8 @@ void pawIr_set_type(struct Compiler *C, NodeId id, IrType *type)
 
 struct IrFnDef *pawIr_get_fn_def(struct Compiler *C, DeclId did)
 {
-    return *FnDefMap_get(C, C->fn_defs, did);
+    struct IrFnDef *const *pdef = FnDefMap_get(C, C->fn_defs, did);
+    return pdef != NULL ? *pdef : NULL;
 }
 
 struct IrVariantDef *pawIr_get_variant_def(struct Compiler *C, DeclId did)
@@ -50,19 +51,19 @@ struct IrAdtDef *pawIr_get_adt_def(struct Compiler *C, DeclId did)
     return *AdtDefMap_get(C, C->adt_defs, did);
 }
 
-struct IrType *pawIr_get_def_type(struct Compiler *C, DeclId did)
+IrType *pawIr_get_def_type(struct Compiler *C, DeclId did)
 {
     return *DefTypeMap_get(C, C->def_types, did);
 }
 
-struct IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *target, Str *name)
+IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *target, Str *name)
 {
     if (target->bounds == NULL) {
         struct HirGenericDecl const *d = HirGetGenericDecl(pawHir_get_decl(C->hir, target->did));
         IR_ERROR(C, missing_trait_bounds, d->did.modno, d->span.start, d->ident.name->text);
     }
 
-    struct IrType *const *pbound;
+    IrType *const *pbound;
     K_LIST_FOREACH (target->bounds, pbound) {
         struct IrTraitObj const *bound = IrGetTraitObj(*pbound);
         struct HirDecl *trait_decl = pawHir_get_decl(C->hir, bound->did);
@@ -70,9 +71,9 @@ struct IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *
 
         struct HirDecl *const *pmethod;
         K_LIST_FOREACH (trait->methods, pmethod) {
-            struct HirFuncDecl const *method = HirGetFuncDecl(*pmethod);
+            struct HirFnDecl const *method = HirGetFnDecl(*pmethod);
             if (pawS_eq(method->ident.name, name)) {
-                struct IrType *type = trait->generics == NULL ? GET_NODE_TYPE(C, *pmethod)
+                IrType *type = trait->generics == NULL ? GET_NODE_TYPE(C, *pmethod)
                     : pawP_instantiate_method(C, trait_decl, bound->types, *pmethod);
                 return pawIr_substitute_self(C, *pbound, IR_CAST_TYPE(target), type);
             }
@@ -81,12 +82,12 @@ struct IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *
     return NULL;
 }
 
-void pawIr_validate_type(struct Compiler *C, struct IrType *type)
+void pawIr_validate_type(struct Compiler *C, IrType *type)
 {
     if (IrIsGeneric(type)) {
         struct IrGeneric *t = IrGetGeneric(type);
         if (t->bounds != NULL) {
-            struct IrType **pt;
+            IrType **pt;
             K_LIST_FOREACH (t->bounds, pt) {
                 pawIr_validate_type(C, *pt);
             }
@@ -96,7 +97,7 @@ void pawIr_validate_type(struct Compiler *C, struct IrType *type)
     {
         struct HirDeclHeader hdr;
         struct HirDeclList const *generics;
-        struct IrTypeList const *types = NULL;
+        IrTypeList const *types = NULL;
         if (IrIsTraitObj(type)) {
             struct HirDecl *decl = pawHir_get_decl(C->hir, IR_TYPE_DID(type));
             generics = HirGetTraitDecl(decl)->generics;
@@ -104,7 +105,7 @@ void pawIr_validate_type(struct Compiler *C, struct IrType *type)
             hdr = decl->hdr;
         } else if (IrIsSignature(type)) {
             struct HirDecl *decl = pawHir_get_decl(C->hir, IR_TYPE_DID(type));
-            generics = HirGetFuncDecl(decl)->generics;
+            generics = HirGetFnDecl(decl)->generics;
             types = IrGetSignature(type)->types;
             hdr = decl->hdr;
         } else if (IrIsAdt(type)) {
@@ -119,12 +120,12 @@ void pawIr_validate_type(struct Compiler *C, struct IrType *type)
     }
 }
 
-static paw_Uint hash_type(struct IrType *type);
+static paw_Uint hash_type(IrType *type);
 
-static paw_Uint hash_type_list(struct IrTypeList *types)
+static paw_Uint hash_type_list(IrTypeList *types)
 {
     paw_Uint hash = 0;
-    struct IrType **ptype;
+    IrType **ptype;
     if (types != NULL) {
         K_LIST_FOREACH (types, ptype)
             hash = hash_combine(hash, hash_type(*ptype));
@@ -132,7 +133,7 @@ static paw_Uint hash_type_list(struct IrTypeList *types)
     return hash;
 }
 
-static paw_Uint hash_type(struct IrType *type)
+static paw_Uint hash_type(IrType *type)
 {
     paw_Uint hash = type->hdr.kind;
     switch (IR_KINDOF(type)) {
@@ -142,8 +143,8 @@ static paw_Uint hash_type(struct IrType *type)
             hash = hash_combine(hash, hash_type_list(t->types));
             break;
         }
-        case kIrFuncPtr: {
-            struct IrFuncPtr const *t = IrGetFuncPtr(type);
+        case kIrFnPtr: {
+            struct IrFnPtr const *t = IrGetFnPtr(type);
             hash = hash_combine(hash, hash_type_list(t->params));
             hash = hash_combine(hash, hash_type(t->result));
             break;
@@ -228,7 +229,7 @@ struct Printer {
 #define PRINT_CHAR(P, c) pawL_add_char(ENV(P), (P)->buf, c)
 
 static void print_type(struct Printer *, IrType *);
-static void print_type_list(struct Printer *P, struct IrTypeList *list)
+static void print_type_list(struct Printer *P, IrTypeList *list)
 {
     for (int i = 0; i < list->count; ++i) {
         print_type(P, list->data[i]);
@@ -237,12 +238,12 @@ static void print_type_list(struct Printer *P, struct IrTypeList *list)
     }
 }
 
-static void print_bounds(struct Printer *P, struct IrTypeList *bounds)
+static void print_bounds(struct Printer *P, IrTypeList *bounds)
 {
     if (bounds != NULL) {
         PRINT_LITERAL(P, ": ");
         int index;
-        struct IrType *const *ptype;
+        IrType *const *ptype;
         K_LIST_ENUMERATE (bounds, index, ptype) {
             if (index > 0)
                 PRINT_LITERAL(P, " + ");
@@ -286,8 +287,8 @@ static void print_type(struct Printer *P, IrType *type)
             }
             break;
         }
-        case kIrFuncPtr: {
-            struct IrFuncPtr *fptr = IR_FPTR(type);
+        case kIrFnPtr: {
+            struct IrFnPtr *fptr = IR_FPTR(type);
             PRINT_LITERAL(P, "fn(");
             print_type_list(P, fptr->params);
             PRINT_CHAR(P, ')');

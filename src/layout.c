@@ -24,7 +24,7 @@ static struct IrLayout compute_typelist_layout(struct Compiler *C, IrTypeList co
         .fields = IrLayoutList_new(C),
     };
 
-    struct IrType *const *ptype;
+    IrType *const *ptype;
     K_LIST_FOREACH (types, ptype) {
         struct IrLayout lo = compute_outer_layout(C, *ptype);
         IrLayoutList_push(C, layout.fields, lo);
@@ -89,7 +89,7 @@ static struct IrLayout compute_tuple_layout(struct Compiler *C, struct IrTuple *
         .fields = IrLayoutList_new(C),
     };
 
-    struct IrType *const *pelem;
+    IrType *const *pelem;
     K_LIST_FOREACH (t->elems, pelem) {
         struct IrLayout lo = compute_outer_layout(C, *pelem);
         IrLayoutList_push(C, layout.fields, lo);

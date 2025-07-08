@@ -45,14 +45,14 @@ static void run_tests(char const *name, struct TestAlloc *a, char const *prefix)
         struct Def *def = defs.data[i];
         Str const *name = def->hdr.name;
         if (def->hdr.kind == DEF_FUNC
-                && def->func.self < 0
+                && def->fn.self < 0
                 && name->length >= length
                 && memcmp(name->text, prefix, length) == 0) {
             // toplevel functions prefixed with 'test' must be public
             check(def->hdr.is_pub);
             fprintf(stderr, "    %s\n", name->text);
             paw_push_zero(P, 1);
-            P->top.p[-1] = *RTTI_PVAL(P, def->func.vid);
+            P->top.p[-1] = *RTTI_PVAL(P, def->fn.vid);
             status = paw_call(P, 0);
             if (handle_error(P, status)) {
                 ++s_counters.runtime_errors;

@@ -84,7 +84,7 @@ static char const *decl_kind(enum AstDeclKind kind)
             return "field";
         case kAstParamDecl:
             return "parameter";
-        case kAstFuncDecl:
+        case kAstFnDecl:
             return "function";
         case kAstGenericDecl:
             return "generic";
@@ -476,7 +476,7 @@ static paw_Bool resolve_ident_pat(struct AstVisitor *V, struct AstIdentPat *p)
         if (AstIsParamDecl(decl)) decl = NULL; // TODO: hack, should be SYMBOL_PARAM or something...
     }
 
-    if (decl == NULL || AstIsFuncDecl(decl)) {
+    if (decl == NULL || AstIsFnDecl(decl)) {
         // create a binding pattern
         set_result(R, p->id, p->id, RESOLVED_LOCAL);
 
@@ -666,7 +666,7 @@ static void leave_for_expr(struct AstVisitor *V, struct AstForExpr *e)
     leave_scope(V->ud);
 }
 
-static paw_Bool enter_fn_decl(struct AstVisitor *V, struct AstFuncDecl *d)
+static paw_Bool enter_fn_decl(struct AstVisitor *V, struct AstFnDecl *d)
 {
     struct Resolver *R = V->ud;
     d->did = next_did(R);
@@ -677,7 +677,7 @@ static paw_Bool enter_fn_decl(struct AstVisitor *V, struct AstFuncDecl *d)
     return PAW_TRUE;
 }
 
-static void leave_fn_decl(struct AstVisitor *V, struct AstFuncDecl *d)
+static void leave_fn_decl(struct AstVisitor *V, struct AstFnDecl *d)
 {
     leave_scope(V->ud);
 }
@@ -817,8 +817,8 @@ void pawP_resolve_names(struct Compiler *C)
     R.V->PostVisitTraitDecl = leave_trait_decl;
     R.V->VisitTypeDecl = enter_type_decl;
     R.V->PostVisitTypeDecl = leave_type_decl;
-    R.V->VisitFuncDecl = enter_fn_decl;
-    R.V->PostVisitFuncDecl = leave_fn_decl;
+    R.V->VisitFnDecl = enter_fn_decl;
+    R.V->PostVisitFnDecl = leave_fn_decl;
     R.V->VisitModuleDecl = enter_module_decl;
     R.V->PostVisitModuleDecl = leave_module_decl;
     R.V->VisitClosureExpr = enter_closure_expr;

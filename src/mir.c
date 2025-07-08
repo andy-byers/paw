@@ -7,7 +7,7 @@
 #include "layout.h"
 #include "map.h"
 
-struct Mir *pawMir_new(struct Compiler *C, Str *modname, struct SourceSpan span, Str *name, struct IrType *type, struct IrType *self, enum FuncKind fn_kind, paw_Bool is_pub, paw_Bool is_poly)
+struct Mir *pawMir_new(struct Compiler *C, Str *modname, struct SourceSpan span, Str *name, IrType *type, IrType *self, enum FnKind fn_kind, paw_Bool is_pub, paw_Bool is_poly)
 {
     struct Mir *mir = P_ALLOC(C, NULL, 0, sizeof(*mir));
     *mir = (struct Mir){
@@ -54,7 +54,7 @@ struct MirLiveInterval *pawMir_new_interval(struct Compiler *C, MirRegister r, i
     return it;
 }
 
-struct MirRegisterData *pawMir_new_register(struct Compiler *C, int value, struct IrType *type)
+struct MirRegisterData *pawMir_new_register(struct Compiler *C, int value, IrType *type)
 {
     struct MirRegisterData *r = P_ALLOC(C, NULL, 0, sizeof(struct MirRegisterData));
     *r = (struct MirRegisterData){
@@ -122,7 +122,7 @@ static void AcceptGlobal(struct MirVisitor *V, struct MirGlobal *t)
     pawMir_visit_place(V, t->output);
 }
 
-static void AcceptConstant(struct MirVisitor *V, struct MirConstant *t)
+static void AcceptLoadConstant(struct MirVisitor *V, struct MirLoadConstant *t)
 {
     pawMir_visit_place(V, t->output);
 }
@@ -311,7 +311,7 @@ void pawMir_visit_instruction(struct MirVisitor *V, struct MirInstruction *node)
 
 void pawMir_visit_block(struct MirVisitor *V, MirBlock bb)
 {
-    struct MirBlockData *block = mir_bb_data(V->mir, bb);
+    struct MirBlockData const *block = mir_bb_data(V->mir, bb);
     paw_assert(block != NULL);
 
     if (!V->VisitBlock(V, bb))
@@ -391,8 +391,8 @@ struct Traversal {
 };
 
 DEFINE_LIST(struct Traversal, VisitStack, struct Successors)
-DEFINE_MAP(struct Traversal, VisitedMap, pawP_alloc, MIR_ID_HASH, MIR_ID_EQUALS, MirBlock, void *)
-DEFINE_MAP(struct Traversal, BlockMap, pawP_alloc, MIR_ID_HASH, MIR_ID_EQUALS, MirBlock, MirBlock)
+DEFINE_MAP(struct Traversal, VisitedMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirBlock, void *)
+DEFINE_MAP(struct Traversal, BlockMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirBlock, MirBlock)
 
 static paw_Bool check_visited(struct Traversal *X, VisitedMap *visited, MirBlock bb)
 {
@@ -477,13 +477,13 @@ struct MirBlockList *pawMir_traverse_rpo(struct Compiler *C, struct Mir *mir)
 
 static void renumber_ref(struct Traversal *X, BlockMap *map, MirBlock *pfrom)
 {
-    paw_assert(MIR_BB_EXISTS(*pfrom));
+    paw_assert(MIR_ID_EXISTS(*pfrom));
     *pfrom = *BlockMap_get(X, map, *pfrom);
 }
 
 static void renumber_or_clear_ref(struct Traversal *X, BlockMap *map, MirBlock *pfrom)
 {
-    paw_assert(MIR_BB_EXISTS(*pfrom));
+    paw_assert(MIR_ID_EXISTS(*pfrom));
     MirBlock const *pto = BlockMap_get(X, map, *pfrom);
     if (pto != NULL) {
         *pfrom = *pto;
@@ -560,7 +560,7 @@ static void renumber_block_refs(struct Traversal *X, BlockMap *map, struct MirBl
             struct MirSwitch *t = MirGetSwitch(terminator);
             for (int i = 0; i < t->arms->count; ++i)
                 renumber_ref(X, map, &K_LIST_AT(t->arms, i).bid);
-            if (MIR_BB_EXISTS(t->otherwise))
+            if (MIR_ID_EXISTS(t->otherwise))
                 renumber_ref(X, map, &t->otherwise);
             break;
         }
@@ -797,8 +797,8 @@ MirPlacePtrList *pawMir_get_stores(struct Mir *mir, struct MirInstruction *instr
         case kMirAllocLocal:
             ADD_OUTPUT(MirGetAllocLocal(instr)->output);
             break;
-        case kMirConstant:
-            ADD_OUTPUT(MirGetConstant(instr)->output);
+        case kMirLoadConstant:
+            ADD_OUTPUT(MirGetLoadConstant(instr)->output);
             break;
         case kMirAggregate:
             ADD_OUTPUT(MirGetAggregate(instr)->output);
@@ -908,7 +908,7 @@ static void indicate_usedef(struct Mir *mir, UseDefMap *map, MirRegister r, MirB
 
     MirBlock const *pb;
     K_LIST_FOREACH (blocks, pb) {
-        if (MIR_BB_EQUALS(*pb, where))
+        if (MIR_ID_EQUALS(*pb, where))
             return;
     }
     MirBlockList_push(mir, blocks, where);
@@ -1028,7 +1028,7 @@ void pawMir_merge_redundant_blocks(struct Mir *mir)
         K_LIST_FOREACH (to->successors, ps) {
             struct MirBlockData *s = mir_bb_data(mir, *ps);
             K_LIST_FOREACH (s->predecessors, pp) {
-                if (MIR_BB_EQUALS(*pp, bto))
+                if (MIR_ID_EQUALS(*pp, bto))
                     *pp = bfrom;
             }
         }
@@ -1264,8 +1264,8 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
             PRINT_FORMAT(P, " (%s)", type);
             break;
         }
-        case kMirConstant: {
-            struct MirConstant *t = MirGetConstant(instr);
+        case kMirLoadConstant: {
+            struct MirLoadConstant *t = MirGetLoadConstant(instr);
             print_place(P, t->output);
             PRINT_LITERAL(P, " = const ");
             switch (t->b_kind) {
@@ -1457,7 +1457,7 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
                 struct MirSwitchArm arm = MirSwitchArmList_get(t->arms, i);
                 PRINT_FORMAT(P, "%d: bb%d", arm.value, arm.bid.value);
             }
-            if (MIR_BB_EXISTS(t->otherwise)) {
+            if (MIR_ID_EXISTS(t->otherwise)) {
                 if (t->arms->count > 0)
                     PRINT_LITERAL(P, ", ");
                 PRINT_FORMAT(P, "_: bb%d", t->otherwise.value);
@@ -1508,7 +1508,7 @@ static void dump_mir(struct Printer *P, struct Mir *mir)
     ++P->indent;
     for (int i = 0; i < mir->locals->count; ++i) {
         MirRegister const r = MirRegisterList_get(mir->locals, i);
-        if (MIR_REG_EXISTS(r)) {
+        if (MIR_ID_EXISTS(r)) {
             IrType *type = mir_reg_data(mir, r)->type;
             DUMP_FORMAT(P, "%d: _%d: %s\n", i, r.value, pawIr_print_type(P->C, type));
         } else {

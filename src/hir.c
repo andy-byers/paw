@@ -306,7 +306,7 @@ static void AcceptPathExpr(struct HirVisitor *V, struct HirPathExpr *e)
     AcceptPath(V, &e->path);
 }
 
-static void AcceptFuncDecl(struct HirVisitor *V, struct HirFuncDecl *d)
+static void AcceptFnDecl(struct HirVisitor *V, struct HirFnDecl *d)
 {
     accept_decl_list(V, d->generics);
     accept_decl_list(V, d->params);
@@ -342,7 +342,7 @@ static void AcceptDeclStmt(struct HirVisitor *V, struct HirDeclStmt *s)
     AcceptDecl(V, s->decl);
 }
 
-static void AcceptFuncPtr(struct HirVisitor *V, struct HirFuncPtr *t)
+static void AcceptFnPtr(struct HirVisitor *V, struct HirFnPtr *t)
 {
     accept_type_list(V, t->params);
     AcceptType(V, t->result);
@@ -551,11 +551,11 @@ DEFINE_VISITORS(pat, Pat)
 #undef DEFINE_VISITORS
 
 
-struct IrTypeList *pawHir_collect_decl_types(struct Compiler *C, struct HirDeclList *list)
+IrTypeList *pawHir_collect_decl_types(struct Compiler *C, struct HirDeclList *list)
 {
     if (list == NULL)
         return NULL;
-    struct IrTypeList *types = IrTypeList_new(C);
+    IrTypeList *types = IrTypeList_new(C);
     IrTypeList_reserve(C, types, list->count);
 
     struct HirDecl *const *pdecl;
@@ -585,8 +585,8 @@ paw_Bool pawHir_is_pub_decl(struct HirDecl *decl)
         case kHirAdtDecl:
             return HirGetAdtDecl(decl)->is_pub;
             break;
-        case kHirFuncDecl:
-            return HirGetFuncDecl(decl)->is_pub;
+        case kHirFnDecl:
+            return HirGetFnDecl(decl)->is_pub;
             break;
         case kHirTypeDecl:
             return HirGetTypeDecl(decl)->is_pub;
@@ -914,8 +914,8 @@ static void dump_decl(struct Printer *P, struct HirDecl *decl)
             DUMP_CHAR(P, '}');
             break;
         }
-        case kHirFuncDecl: {
-            struct HirFuncDecl *d = HirGetFuncDecl(decl);
+        case kHirFnDecl: {
+            struct HirFnDecl *d = HirGetFnDecl(decl);
             if (d->is_pub) DUMP_CSTR(P, "pub ");
             DUMP_CSTR(P, "fn ");
             DUMP_STR(P, d->ident.name);
@@ -1060,8 +1060,8 @@ static void dump_type(struct Printer *P, struct HirType *type)
             dump_types(P, t->elems);
             break;
         }
-        case kHirFuncPtr: {
-            struct HirFuncPtr *t = HirGetFuncPtr(type);
+        case kHirFnPtr: {
+            struct HirFnPtr *t = HirGetFnPtr(type);
             DUMP_CSTR(P, "fn(");
             dump_types(P, t->params);
             DUMP_CHAR(P, ')');

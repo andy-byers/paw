@@ -12,7 +12,7 @@ typedef struct IrType IrType;
 
 #define IR_TYPE_LIST(X) \
     X(Adt)              \
-    X(FuncPtr)          \
+    X(FnPtr)          \
     X(Signature)        \
     X(Tuple)            \
     X(Never)            \
@@ -41,7 +41,7 @@ struct IrAdt {
     IR_TYPE_HEADER;            \
     struct IrTypeList *params; \
     IrType *result
-struct IrFuncPtr {
+struct IrFnPtr {
     IR_FUNC_HEADER;
 };
 
@@ -126,11 +126,11 @@ inline static IrType *pawIr_new_adt(struct Compiler *C, DeclId did, struct IrTyp
     return t;
 }
 
-inline static IrType *pawIr_new_func_ptr(struct Compiler *C, struct IrTypeList *params, IrType *result)
+inline static IrType *pawIr_new_fn_ptr(struct Compiler *C, struct IrTypeList *params, IrType *result)
 {
     IrType *t = pawIr_new_type(C);
-    t->FuncPtr_ = (struct IrFuncPtr){
-        .kind = kIrFuncPtr,
+    t->FnPtr_ = (struct IrFnPtr){
+        .kind = kIrFnPtr,
         .params = params,
         .result = result,
     };
@@ -318,8 +318,8 @@ inline static struct IrAdtDef *pawIr_new_adt_def(struct Compiler *C, DeclId did,
         IrIsGeneric(type) ? IrGetGeneric(type)->did : IrGetTraitObj(type)->did)
 #define IR_TYPE_SUBTYPES(type) (IrIsAdt(type) ? IrGetAdt(type)->types : \
         IrIsSignature(type) ? IrGetSignature(type)->types : IrGetTraitObj(type)->types)
-#define IR_IS_FUNC_TYPE(p) (IrIsFuncPtr(p) || IrIsSignature(p))
-#define IR_FPTR(p) CHECK_EXP(IR_IS_FUNC_TYPE(p), &(p)->FuncPtr_)
+#define IR_IS_FUNC_TYPE(p) (IrIsFnPtr(p) || IrIsSignature(p))
+#define IR_FPTR(p) CHECK_EXP(IR_IS_FUNC_TYPE(p), &(p)->FnPtr_)
 
 DEFINE_LIST(struct Compiler, IrTypeList, IrType *)
 DEFINE_LIST(struct Compiler, IrVariantDefs, struct IrVariantDef *)

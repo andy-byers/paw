@@ -5,60 +5,60 @@
 #include "type_folder.h"
 #include "ir_type.h"
 
-static struct IrType *FoldType(struct IrTypeFolder *, struct IrType *);
+static IrType *FoldType(struct IrTypeFolder *, IrType *);
 
-static struct IrTypeList *fold_type_list(struct IrTypeFolder *F, struct IrTypeList *list)
+static IrTypeList *fold_type_list(struct IrTypeFolder *F, IrTypeList *list)
 {
     if (list == NULL)
         return NULL;
-    struct IrTypeList *result = IrTypeList_new(F->C);
+    IrTypeList *result = IrTypeList_new(F->C);
     IrTypeList_reserve(F->C, result, list->count);
 
-    struct IrType *const *ptype;
+    IrType *const *ptype;
     K_LIST_FOREACH (list, ptype) {
-        struct IrType *type = FoldType(F, *ptype);
+        IrType *type = FoldType(F, *ptype);
         IrTypeList_push(F->C, result, type);
     }
     return result;
 }
 
-static struct IrType *FoldAdt(struct IrTypeFolder *F, struct IrAdt *t)
+static IrType *FoldAdt(struct IrTypeFolder *F, struct IrAdt *t)
 {
-    struct IrTypeList *types = F->FoldTypeList(F, t->types);
+    IrTypeList *types = F->FoldTypeList(F, t->types);
     return pawIr_new_adt(F->C, t->did, types);
 }
 
-static struct IrType *FoldSignature(struct IrTypeFolder *F, struct IrSignature *t)
+static IrType *FoldSignature(struct IrTypeFolder *F, struct IrSignature *t)
 {
-    struct IrTypeList *types = F->FoldTypeList(F, t->types);
-    struct IrTypeList *params = F->FoldTypeList(F, t->params);
-    struct IrType *result = FoldType(F, t->result);
-    struct IrType *self = FoldType(F, t->self);
-    struct IrType *r = pawIr_new_signature(F->C, t->did, types, params, result);
+    IrTypeList *types = F->FoldTypeList(F, t->types);
+    IrTypeList *params = F->FoldTypeList(F, t->params);
+    IrType *result = FoldType(F, t->result);
+    IrType *self = FoldType(F, t->self);
+    IrType *r = pawIr_new_signature(F->C, t->did, types, params, result);
     IrGetSignature(r)->self = self; // TODO: maybe should store separately
     return r;
 }
 
-static struct IrType *FoldFuncPtr(struct IrTypeFolder *F, struct IrFuncPtr *t)
+static IrType *FoldFnPtr(struct IrTypeFolder *F, struct IrFnPtr *t)
 {
-    struct IrTypeList *params = F->FoldTypeList(F, t->params);
-    struct IrType *result = FoldType(F, t->result);
-    return pawIr_new_func_ptr(F->C, params, result);
+    IrTypeList *params = F->FoldTypeList(F, t->params);
+    IrType *result = FoldType(F, t->result);
+    return pawIr_new_fn_ptr(F->C, params, result);
 }
 
-static struct IrType *FoldTuple(struct IrTypeFolder *F, struct IrTuple *t)
+static IrType *FoldTuple(struct IrTypeFolder *F, struct IrTuple *t)
 {
-    struct IrTypeList *elems = F->FoldTypeList(F, t->elems);
+    IrTypeList *elems = F->FoldTypeList(F, t->elems);
     return pawIr_new_tuple(F->C, elems);
 }
 
-static struct IrType *FoldTraitObj(struct IrTypeFolder *F, struct IrTraitObj *t)
+static IrType *FoldTraitObj(struct IrTypeFolder *F, struct IrTraitObj *t)
 {
-    struct IrTypeList *types = F->FoldTypeList(F, t->types);
+    IrTypeList *types = F->FoldTypeList(F, t->types);
     return pawIr_new_trait_obj(F->C, t->did, types);
 }
 
-static struct IrType *FoldNever(struct IrTypeFolder *F, struct IrNever *t)
+static IrType *FoldNever(struct IrTypeFolder *F, struct IrNever *t)
 {
     return pawIr_new_never(F->C);
 }
@@ -67,7 +67,7 @@ static void FoldPat(struct HirVisitor *V, struct HirPat *node)
 {
     paw_assert(node != NULL);
     struct IrTypeFolder *F = V->ud;
-    struct IrType *type = GET_NODE_TYPE(F->C, node);
+    IrType *type = GET_NODE_TYPE(F->C, node);
     SET_NODE_TYPE(F->C, node, pawIr_fold_type(F, type));
 }
 
@@ -75,7 +75,7 @@ static void FoldExpr(struct HirVisitor *V, struct HirExpr *node)
 {
     paw_assert(node != NULL);
     struct IrTypeFolder *F = V->ud;
-    struct IrType *type = GET_NODE_TYPE(F->C, node);
+    IrType *type = GET_NODE_TYPE(F->C, node);
     SET_NODE_TYPE(F->C, node, pawIr_fold_type(F, type));
 }
 
@@ -83,11 +83,11 @@ static void FoldDecl(struct HirVisitor *V, struct HirDecl *node)
 {
     paw_assert(node != NULL);
     struct IrTypeFolder *F = V->ud;
-    struct IrType *type = GET_NODE_TYPE(F->C, node);
+    IrType *type = GET_NODE_TYPE(F->C, node);
     SET_NODE_TYPE(F->C, node, pawIr_fold_type(F, type));
 }
 
-static struct IrType *FoldType(struct IrTypeFolder *F, struct IrType *node)
+static IrType *FoldType(struct IrTypeFolder *F, IrType *node)
 {
     if (node == NULL)
         return NULL;
@@ -115,19 +115,19 @@ void pawIr_type_folder_init(struct IrTypeFolder *F, struct Compiler *C, void *ud
 
         .FoldAdt = FoldAdt,
         .FoldSignature = FoldSignature,
-        .FoldFuncPtr = FoldFuncPtr,
+        .FoldFnPtr = FoldFnPtr,
         .FoldTuple = FoldTuple,
         .FoldTraitObj = FoldTraitObj,
         .FoldNever = FoldNever,
     };
 }
 
-struct IrType *pawIr_fold_type(struct IrTypeFolder *F, struct IrType *node)
+IrType *pawIr_fold_type(struct IrTypeFolder *F, IrType *node)
 {
     return FoldType(F, node);
 }
 
-struct IrTypeList *pawIr_fold_type_list(struct IrTypeFolder *F, struct IrTypeList *list)
+IrTypeList *pawIr_fold_type_list(struct IrTypeFolder *F, IrTypeList *list)
 {
     return list != NULL ? F->FoldTypeList(F, list) : NULL;
 }

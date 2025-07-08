@@ -10,7 +10,7 @@
 #define HIR_DECL_LIST(X) \
     X(FieldDecl)         \
     X(ParamDecl)         \
-    X(FuncDecl)          \
+    X(FnDecl)            \
     X(GenericDecl)       \
     X(AdtDecl)           \
     X(TypeDecl)          \
@@ -42,7 +42,7 @@
     X(MatchExpr)
 
 #define HIR_TYPE_LIST(X) \
-    X(FuncPtr)           \
+    X(FnPtr)             \
     X(TupleType)         \
     X(PathType)          \
     X(NeverType)         \
@@ -149,7 +149,7 @@ struct HirPathType {
     struct HirPath path;
 };
 
-struct HirFuncPtr {
+struct HirFnPtr {
     HIR_TYPE_HEADER;
     struct HirTypeList *params;
     struct HirType *result;
@@ -235,13 +235,13 @@ static struct HirType *pawHir_new_path_type(struct Hir *hir, struct SourceSpan s
     return t;
 }
 
-static struct HirType *pawHir_new_func_ptr(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirTypeList *params, struct HirType *result)
+static struct HirType *pawHir_new_fn_ptr(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirTypeList *params, struct HirType *result)
 {
     struct HirType *t = pawHir_new_type(hir);
-    t->FuncPtr_ = (struct HirFuncPtr){
+    t->FnPtr_ = (struct HirFnPtr){
         .id = id,
         .span = span,
-        .kind = kHirFuncPtr,
+        .kind = kHirFnPtr,
         .params = params,
         .result = result,
     };
@@ -296,11 +296,11 @@ struct HirTypeDecl {
     struct HirDeclList *generics;
 };
 
-struct HirFuncDecl {
+struct HirFnDecl {
     HIR_DECL_HEADER;
     paw_Bool is_pub : 1;
     paw_Bool is_assoc : 1;
-    enum FuncKind fn_kind : 6;
+    enum FnKind fn_kind : 6;
     struct Annotations *annos;
     struct HirIdent ident;
     struct HirDeclList *generics;
@@ -425,14 +425,14 @@ static struct HirDecl *pawHir_new_type_decl(struct Hir *hir, struct SourceSpan s
     return d;
 }
 
-static struct HirDecl *pawHir_new_func_decl(struct Hir *hir, struct SourceSpan span, NodeId id, DeclId did, struct HirIdent ident, struct Annotations *annos, struct HirDeclList *generics, struct HirDeclList *params, struct HirType *result, struct HirExpr *body, enum FuncKind fn_kind, paw_Bool is_pub, paw_Bool is_assoc)
+static struct HirDecl *pawHir_new_fn_decl(struct Hir *hir, struct SourceSpan span, NodeId id, DeclId did, struct HirIdent ident, struct Annotations *annos, struct HirDeclList *generics, struct HirDeclList *params, struct HirType *result, struct HirExpr *body, enum FnKind fn_kind, paw_Bool is_pub, paw_Bool is_assoc)
 {
     struct HirDecl *d = pawHir_new_decl(hir);
-    d->FuncDecl_ = (struct HirFuncDecl){
+    d->FnDecl_ = (struct HirFnDecl){
         .id = id,
         .did = did,
         .span = span,
-        .kind = kHirFuncDecl,
+        .kind = kHirFnDecl,
         .ident = ident,
         .annos = annos,
         .generics = generics,
@@ -1533,11 +1533,11 @@ static inline struct HirPath pawHir_path_create(struct SourceSpan span, struct H
     };
 }
 
-#define HIR_IS_POLY_FUNC(decl) (HirIsFuncDecl(decl) && HirGetFuncDecl(decl)->generics != NULL)
+#define HIR_IS_POLY_FUNC(decl) (HirIsFnDecl(decl) && HirGetFnDecl(decl)->generics != NULL)
 #define HIR_IS_POLY_ADT(decl) (HirIsAdtDecl(decl) && HirGetAdtDecl(decl)->generics != NULL)
 
 #define HIR_PATH_RESULT(Path_) (K_LIST_LAST((Path_).segments).res)
-#define HIR_TYPE_DID(Type_) (HirIsPathType(Type_) ? HIR_PATH_RESULT(HirGetPathType(Type_)->path) : HirGetFuncDef(Type_)->did)
+#define HIR_TYPE_DID(Type_) (HirIsPathType(Type_) ? HIR_PATH_RESULT(HirGetPathType(Type_)->path) : HirGetFnDef(Type_)->did)
 
 struct Hir *pawHir_new(struct Compiler *C);
 void pawHir_free(struct Hir *hir);
@@ -1548,8 +1548,8 @@ struct HirDecl *pawHir_get_decl(struct Hir *hir, DeclId id);
 #define HIR_TYPEOF(x) ((x)->hdr.type)
 #define HIR_KINDOF(x) ((x)->hdr.kind)
 
-// NOTE: HirFuncPtr is a prefix of HirFuncDef
-#define HIR_FPTR(t) CHECK_EXP(HirIsFuncType(t), &(t)->fptr)
+// NOTE: HirFnPtr is a prefix of HirFnDef
+#define HIR_FPTR(t) CHECK_EXP(HirIsFnType(t), &(t)->fptr)
 
 static inline struct HirSegment *pawHir_add_segment(struct Hir *hir, struct HirSegments *segments, NodeId id,
         struct HirIdent ident, struct HirTypeList *args, NodeId target)
@@ -1575,8 +1575,8 @@ static inline struct HirIdent hir_decl_ident(struct HirDecl *decl)
     switch (HIR_KINDOF(decl)) {
         case kHirFieldDecl:
             return HirGetFieldDecl(decl)->ident;
-        case kHirFuncDecl:
-            return HirGetFuncDecl(decl)->ident;
+        case kHirFnDecl:
+            return HirGetFnDecl(decl)->ident;
         case kHirGenericDecl:
             return HirGetGenericDecl(decl)->ident;
         case kHirAdtDecl:

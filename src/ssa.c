@@ -28,25 +28,13 @@ struct SsaConverter {
     struct NameStackList *stacks;
     struct MirRegisterList *changes;
 
-    struct RegisterMap *capture; // MirRegister => MirRegister
     struct RegisterMap *rename; // MirRegister => MirRegister
     UseDefMap *uses; // MirRegister => [MirBlockList]
     UseDefMap *defs; // MirRegister => [MirBlockList]
     paw_Env *P;
 };
 
-DEFINE_MAP(struct SsaConverter, RegisterMap, pawP_alloc, MIR_ID_HASH, MIR_ID_EQUALS, MirRegister, MirRegister)
-
-static void add_captured_reg(struct SsaConverter *S, MirRegister r1, MirRegister r2)
-{
-    paw_assert(RegisterMap_get(S, S->capture, r1) == NULL);
-    RegisterMap_insert(S, S->capture, r1, r2);
-}
-
-static MirRegister *captured_reg(struct SsaConverter *S, MirRegister r)
-{
-    return RegisterMap_get(S, S->capture, r);
-}
+DEFINE_MAP(struct SsaConverter, RegisterMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirRegister, MirRegister)
 
 static MirRegister last_reg_name(struct SsaConverter *S, MirRegister r)
 {
@@ -63,10 +51,10 @@ static struct MirPhi *add_phi_node(struct SsaConverter *S, MirBlock b, MirRegist
     struct MirBlockData *bb = mir_bb_data(S->mir, b);
     for (int i = 0; i < bb->joins->count; ++i) {
         struct MirPhi *phi = MirGetPhi(MirInstructionList_get(bb->joins, i));
-        if (MIR_REG_EQUALS(phi->output.r, r))
+        if (MIR_ID_EQUALS(phi->output.r, r))
             return phi; // already exists
     }
-    struct IrType *type = mir_reg_data(S->mir, r)->type;
+    IrType *type = mir_reg_data(S->mir, r)->type;
     struct MirPlaceList *inputs = MirPlaceList_new(S->mir);
     struct MirInstruction *phi = pawMir_new_phi(S->mir, (struct SourceLoc){-1}, inputs, PLACE(r), r.value);
     MirInstructionList_push(S->mir, bb->joins, phi);
@@ -159,7 +147,7 @@ static paw_Bool list_includes_block(struct MirBlockList const *blocks, MirBlock 
 {
     MirBlock const *pb;
     K_LIST_FOREACH (blocks, pb) {
-        if (MIR_BB_EQUALS(b, *pb))
+        if (MIR_ID_EQUALS(b, *pb))
             return PAW_TRUE;
     }
     return PAW_FALSE;
@@ -280,7 +268,7 @@ static void rename_vars(struct SsaConverter *S, MirBlock x)
     int b;
     // recur on nodes immediately dominated by the current node
     K_LIST_ENUMERATE (S->idom, b, y) {
-        if (MIR_BB_EQUALS(x, *y))
+        if (MIR_ID_EQUALS(x, *y))
             rename_vars(S, MIR_BB(b));
     }
 
@@ -382,7 +370,6 @@ static void ssa_construct(struct Pool *pool, struct Mir *mir)
     S.changes = MirRegisterList_new_from(mir, S.pool);
     S.defs = UseDefMap_new_from(mir, S.pool);
     S.uses = UseDefMap_new_from(mir, S.pool);
-    S.capture = RegisterMap_new(&S);
     S.rename = RegisterMap_new(&S);
     S.stacks = NameStackList_new(&S);
 

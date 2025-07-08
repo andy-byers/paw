@@ -26,7 +26,7 @@ struct Liveness {
 };
 
 DEFINE_LIST(struct Liveness, RegisterSetList, struct MirRegisterList *)
-DEFINE_MAP(struct Liveness, IntervalMap, pawP_alloc, MIR_ID_HASH, MIR_ID_EQUALS, MirRegister, struct MirLiveInterval *)
+DEFINE_MAP(struct Liveness, IntervalMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirRegister, struct MirLiveInterval *)
 
 static void map_reg_to_interval(struct Liveness *L, MirRegister r, struct MirLiveInterval *it)
 {
@@ -75,7 +75,7 @@ static void add_live_reg(struct Liveness *L, struct MirRegisterList *set, MirReg
 {
     MirRegister *pr;
     K_LIST_FOREACH (set, pr) {
-        if (MIR_REG_EQUALS(r, *pr))
+        if (MIR_ID_EQUALS(r, *pr))
             return;
     }
     MirRegisterList_push(L->mir, set, r);
@@ -85,7 +85,7 @@ static void remove_live_reg(struct Liveness *L, struct MirRegisterList *set, Mir
 {
     for (int i = 0; i < set->count; ++i) {
         MirRegister const r2 = MirRegisterList_get(set, i);
-        if (MIR_REG_EQUALS(r, r2)) {
+        if (MIR_ID_EQUALS(r, r2)) {
             MirRegisterList_set(set, i, K_LIST_LAST(set));
             MirRegisterList_pop(set);
             return;
@@ -264,7 +264,7 @@ static paw_Bool block_set_contains(struct MirBlockList *set, MirBlock b)
 {
     MirBlock const *pb;
     K_LIST_FOREACH (set, pb) {
-        if (MIR_BB_EQUALS(b, *pb))
+        if (MIR_ID_EQUALS(b, *pb))
             return PAW_TRUE;
     }
     return PAW_FALSE;
@@ -275,7 +275,7 @@ inline static int find_place(struct MirPlacePtrList const *place, MirRegister r)
     int index;
     struct MirPlace *const *ppp;
     K_LIST_ENUMERATE (place, index, ppp) {
-        if (MIR_REG_EQUALS(r, (*ppp)->r))
+        if (MIR_ID_EQUALS(r, (*ppp)->r))
             return index;
     }
     return -1;

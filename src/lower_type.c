@@ -19,11 +19,11 @@ struct LowerType {
 static IrType *lower_type(struct LowerType *L, struct HirType *type);
 static IrTypeList *lower_type_list(struct LowerType *L, struct HirTypeList *types);
 
-static IrType *lower_func_ptr(struct LowerType *L, struct HirFuncPtr *t)
+static IrType *lower_fn_ptr(struct LowerType *L, struct HirFnPtr *t)
 {
     IrTypeList *params = lower_type_list(L, t->params);
     IrType *result = lower_type(L, t->result);
-    return pawIr_new_func_ptr(L->C, params, result);
+    return pawIr_new_fn_ptr(L->C, params, result);
 }
 
 static IrType *lower_tuple_type(struct LowerType *L, struct HirTupleType *t)
@@ -34,17 +34,17 @@ static IrType *lower_tuple_type(struct LowerType *L, struct HirTupleType *t)
 
 static IrTypeList *new_unknowns(struct Compiler *C, struct HirDeclList *params, IrTypeList **out)
 {
-    struct IrTypeList *unknowns = IrTypeList_new(C);
-    struct IrTypeList *generics = IrTypeList_new(C);
+    IrTypeList *unknowns = IrTypeList_new(C);
+    IrTypeList *generics = IrTypeList_new(C);
     IrTypeList_reserve(C, generics, params->count);
     IrTypeList_reserve(C, unknowns, params->count);
 
     struct HirDecl *const *pdecl;
     K_LIST_FOREACH (params, pdecl) {
         struct HirGenericDecl *d = HirGetGenericDecl(*pdecl);
-        struct IrType *type = pawIr_get_type(C, d->id);
-        struct IrTypeList *bounds = IrGetGeneric(type)->bounds;
-        struct IrType *unknown = pawU_new_unknown(C->U, d->span.start, bounds);
+        IrType *type = pawIr_get_type(C, d->id);
+        IrTypeList *bounds = IrGetGeneric(type)->bounds;
+        IrType *unknown = pawU_new_unknown(C->U, d->span.start, bounds);
         IrTypeList_push(C, unknowns, unknown);
         IrTypeList_push(C, generics, type);
     }
@@ -53,10 +53,10 @@ static IrTypeList *new_unknowns(struct Compiler *C, struct HirDeclList *params, 
     return unknowns;
 }
 
-IrType *lower_type_alias(struct Compiler *C, struct HirSegment segment, struct HirDecl *decl, struct IrTypeList *knowns)
+IrType *lower_type_alias(struct Compiler *C, struct HirSegment segment, struct HirDecl *decl, IrTypeList *knowns)
 {
     paw_assert(HirIsTypeDecl(decl));
-    struct IrType *type = GET_NODE_TYPE(C, decl);
+    IrType *type = GET_NODE_TYPE(C, decl);
     struct HirTypeDecl *d = HirGetTypeDecl(decl);
 
     // TODO: is this correct? prob. needs to be instantiated, "seg" likely not used later so it seems to work
@@ -64,15 +64,15 @@ IrType *lower_type_alias(struct Compiler *C, struct HirSegment segment, struct H
     decl = pawHir_get_decl(C->hir, IR_TYPE_DID(type));
 
     if (d->rhs == NULL) return type;
-    struct IrType *rhs = GET_NODE_TYPE(C, d->rhs);
-    struct IrTypeList *types = IR_TYPE_SUBTYPES(rhs);
+    IrType *rhs = GET_NODE_TYPE(C, d->rhs);
+    IrTypeList *types = IR_TYPE_SUBTYPES(rhs);
     if (d->generics == NULL) return rhs;
 
-    struct IrTypeList *generics;
-    struct IrTypeList *unknowns = new_unknowns(C, d->generics, &generics);
-    struct IrTypeList *subst = pawP_instantiate_typelist(C, generics, unknowns, types);
+    IrTypeList *generics;
+    IrTypeList *unknowns = new_unknowns(C, d->generics, &generics);
+    IrTypeList *subst = pawP_instantiate_typelist(C, generics, unknowns, types);
     if (knowns != NULL) {
-        struct IrType **pu, **pk;
+        IrType **pu, **pk;
         K_LIST_ZIP (unknowns, pu, knowns, pk) {
             // unification with an IrInfer never fails due to incompatible types
             int const rc = pawU_unify(C->U, *pu, *pk);
@@ -116,8 +116,8 @@ static IrType *lower_type(struct LowerType *L, struct HirType *type)
 {
     IrType *result;
     switch (HIR_KINDOF(type)) {
-        case kHirFuncPtr:
-            result = lower_func_ptr(L, HirGetFuncPtr(type));
+        case kHirFnPtr:
+            result = lower_fn_ptr(L, HirGetFnPtr(type));
             break;
         case kHirTupleType:
             result = lower_tuple_type(L, HirGetTupleType(type));

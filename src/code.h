@@ -10,9 +10,6 @@
 #define K_ALIGNOF_NODE _Alignof(void *)
 #define K_ALIGNAS_NODE _Alignas(void *)
 
-#define K_CHAIN_EXISTS 0
-#define K_CHAIN_MISSING 1
-
 typedef struct NodeId {
     unsigned value;
 } NodeId;
@@ -76,7 +73,6 @@ enum BinaryOp {
     BINARY_BOR,
     BINARY_SHL,
     BINARY_SHR,
-    BINARY_RANGE,
 };
 
 enum JumpKind {
@@ -413,7 +409,7 @@ enum TraitKind {
 void *pawK_list_reserve(paw_Env *P, struct Pool *pool, void *data, size_t zelem, int count, int *palloc, int target);
 void *pawK_list_ensure_one(paw_Env *P, struct Pool *pool, void *data, size_t zelem, int count, int *palloc);
 
-enum FuncKind {
+enum FnKind {
     FUNC_MODULE,
     FUNC_CLOSURE,
     FUNC_FUNCTION,

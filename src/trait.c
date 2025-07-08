@@ -44,9 +44,9 @@ IrTypeList *pawP_query_traits(struct Compiler *C, IrType *type)
     return query_traits(C, type, PAW_FALSE);
 }
 
-void pawP_add_trait_impl(struct Compiler *C, struct IrType *type, struct IrType *trait)
+void pawP_add_trait_impl(struct Compiler *C, IrType *type, IrType *trait)
 {
-    struct IrTypeList *traits = query_traits(C, type, PAW_TRUE);
+    IrTypeList *traits = query_traits(C, type, PAW_TRUE);
     IrTypeList_push(C, traits, trait);
 }
 
@@ -146,7 +146,7 @@ struct TraitOwnerList *pawP_get_trait_owners(struct Compiler *C, IrType *adt)
 
 static void register_builtin_trait_method(struct Compiler *C, IrType *adt, IrType *method, enum TraitKind tk)
 {
-    struct HirFuncDecl *adt_method = HirGetFuncDecl(pawHir_get_decl(C->hir, IR_TYPE_DID(method)));
+    struct HirFnDecl *adt_method = HirGetFnDecl(pawHir_get_decl(C->hir, IR_TYPE_DID(method)));
     if (tk == TRAIT_EQUALS && adt_method->ident.name->text[0] != 'e') {
         return; // special case: only care about "eq" method
     }
@@ -157,7 +157,7 @@ static void register_builtin_trait_method(struct Compiler *C, IrType *adt, IrTyp
     IrTypeList_push(C, *pmethods, method);
 }
 
-static void ensure_methods_match(struct Compiler *C, struct SourceLoc loc, IrType *adt, IrType *adt_method, IrType *trait, struct HirTraitDecl *trait_decl, struct HirFuncDecl const *trait_method)
+static void ensure_methods_match(struct Compiler *C, struct SourceLoc loc, IrType *adt, IrType *adt_method, IrType *trait, struct HirTraitDecl *trait_decl, struct HirFnDecl const *trait_method)
 {
     IrType *a = adt_method;
     IrType *b = pawIr_get_type(C, trait_method->id);
@@ -182,13 +182,13 @@ static void ensure_trait_implemented(struct Compiler *C, struct HirTraitDecl *tr
 
     struct HirDecl *const *pdecl;
     K_LIST_FOREACH (trait_decl->methods, pdecl) {
-        struct HirFuncDecl const *trait_fn = HirGetFuncDecl(*pdecl);
+        struct HirFnDecl const *trait_fn = HirGetFnDecl(*pdecl);
         IrType *const *pmethod = MethodMap_get(C, methods, trait_fn->ident.name);
         if (pmethod == NULL)
             TRAIT_ERROR(C, missing_trait_method, trait_fn->did.modno,
                     trait_fn->span.start, trait_fn->ident.name->text);
 
-        struct HirFuncDecl const *adt_fn = HirGetFuncDecl(
+        struct HirFnDecl const *adt_fn = HirGetFnDecl(
                 pawHir_get_decl(C->hir, IR_TYPE_DID(*pmethod)));
         if (adt_fn->is_pub != trait_fn->is_pub)
             TRAIT_ERROR(C, trait_method_visibility_mismatch, adt_fn->did.modno,
@@ -204,7 +204,7 @@ static void add_defaulted_methods(struct Compiler *C, struct HirTraitDecl *trait
 
     struct HirDecl *const *pdecl;
     K_LIST_FOREACH (trait->methods, pdecl) {
-        struct HirFuncDecl *method = HirGetFuncDecl(*pdecl);
+        struct HirFnDecl *method = HirGetFnDecl(*pdecl);
         if (method->body != NULL) {
             IrType *type = GET_NODE_TYPE(C, *pdecl);
             type = pawIr_substitute_self(C, trait_obj, adt, type);

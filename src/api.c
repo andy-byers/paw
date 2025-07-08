@@ -196,7 +196,7 @@ int paw_lookup_item(paw_Env *P, int index, struct paw_Item *pitem)
         return 0;
     struct Def const *def = P->defs.data[iid];
     *pitem = (struct paw_Item){
-        .global_id = def->hdr.kind == DEF_FUNC ? def->func.vid : //
+        .global_id = def->hdr.kind == DEF_FUNC ? def->fn.vid : //
             def->hdr.kind == DEF_CONST ? def->const_.vid : -1,
         .type = def->hdr.code,
     };
@@ -329,7 +329,7 @@ char const *paw_str(paw_Env *P, int index)
 paw_Function paw_native(paw_Env *P, int index)
 {
     Native const *f = V_NATIVE(*at(P, index));
-    return f->func;
+    return f->fn;
 }
 
 void *paw_userdata(paw_Env *P, int index)
@@ -348,7 +348,7 @@ void *paw_pointer(paw_Env *P, int index)
     // must be an object
     Object *o = V_OBJECT(*at(P, index));
     if (o->gc_kind == VNATIVE) {
-        return ERASE_TYPE(CAST_UPTR(O_NATIVE(o)->func));
+        return ERASE_TYPE(CAST_UPTR(O_NATIVE(o)->fn));
     } else if (o->gc_kind == VFOREIGN) {
         return O_FOREIGN(o)->data;
     } else {

@@ -202,7 +202,7 @@ static IrTypeList *get_variant_field_types(struct Unboxer *U, IrType *parent, in
 
 typedef void (*ValueAllocator)(struct FunctionState *fs, IrType *type, void *ctx);
 
-static int allocate_values(struct Unboxer *U, struct IrType *type, int discr, ValueAllocator alloc, void *ctx)
+static int allocate_values(struct Unboxer *U, IrType *type, int discr, ValueAllocator alloc, void *ctx)
 {
     if (!is_composite(U, type)) {
         // scalar or boxed type
@@ -210,12 +210,12 @@ static int allocate_values(struct Unboxer *U, struct IrType *type, int discr, Va
         return 1;
     }
 
-    struct IrTypeList *types = discr >= 0
+    IrTypeList *types = discr >= 0
         ? get_variant_field_types(U, type, discr)
         : get_base_field_types(U, type);
 
     int count = 0;
-    struct IrType *const *ptype;
+    IrType *const *ptype;
     K_LIST_FOREACH (types, ptype)
         count += allocate_values(U, *ptype, discr, alloc, ctx);
     return count;
@@ -266,7 +266,7 @@ static struct MemoryGroup new_registers(struct Unboxer *U, IrType *type, int dis
     };
 }
 
-static struct MirPlace new_rawptr_place(struct Unboxer *U, struct IrType *type)
+static struct MirPlace new_rawptr_place(struct Unboxer *U, IrType *type)
 {
     struct FunctionState *fs = U->fs;
     MirRegisterDataList_push(fs->mir, fs->registers,

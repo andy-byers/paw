@@ -18,7 +18,7 @@ struct Mir;
     X(FreeLocal)                \
     X(SetUpvalue)               \
     X(SetCapture)               \
-    X(Constant)                 \
+    X(LoadConstant)             \
     X(Aggregate)                \
     X(Container)                \
     X(SetElement)               \
@@ -50,20 +50,19 @@ struct Mir;
 // TODO: MirBlock and MirRegister should start at 1 rather than 0 so that zero initialization can be used
 //       to instantiate lists containing these identifiers.
 
+#define MIR_ID_EQUALS(X_, Y_) ((X_).value == (Y_).value)
+#define MIR_ID_EXISTS(X_) ((X_).value >= 0)
+
 #define MIR_INVALID_BB MIR_BB(-1)
 #define MIR_ROOT_BB MIR_BB(0)
-#define MIR_BB_EQUALS(x, y) ((x).value == (y).value)
-#define MIR_BB_EXISTS(x) (!MIR_BB_EQUALS(x, MIR_INVALID_BB))
-#define MIR_BB(x) ((MirBlock){x})
+#define MIR_BB(X_) ((MirBlock){X_})
 typedef struct MirBlock {
     int value;
 } MirBlock;
 
 #define MIR_INVALID_REG MIR_REG(-1)
 #define MIR_RESULT_REG MIR_REG(0)
-#define MIR_REG_EQUALS(x, y) ((x).value == (y).value)
-#define MIR_REG_EXISTS(x) (!MIR_REG_EQUALS(x, MIR_INVALID_REG))
-#define MIR_REG(x) ((MirRegister){x})
+#define MIR_REG(X_) ((MirRegister){X_})
 typedef struct MirRegister {
     int value;
 } MirRegister;
@@ -268,7 +267,7 @@ struct MirSetCapture {
     struct MirPlace value;
 };
 
-struct MirConstant {
+struct MirLoadConstant {
     MIR_INSTRUCTION_HEADER;
     enum BuiltinKind b_kind : 8;
     Value value;
@@ -610,12 +609,12 @@ inline static struct MirInstruction *pawMir_new_set_upvalue(struct Mir *mir, str
     return instr;
 }
 
-inline static struct MirInstruction *pawMir_new_constant(struct Mir *mir, struct SourceLoc loc, enum BuiltinKind b_kind, Value value, struct MirPlace output)
+inline static struct MirInstruction *pawMir_new_load_constant(struct Mir *mir, struct SourceLoc loc, enum BuiltinKind b_kind, Value value, struct MirPlace output)
 {
     struct MirInstruction *instr = pawMir_new_instruction(mir);
-    instr->Constant_ = (struct MirConstant){
+    instr->LoadConstant_ = (struct MirLoadConstant){
         .mid = pawMir_next_id(mir),
-        .kind = kMirConstant,
+        .kind = kMirLoadConstant,
         .loc = loc,
         .b_kind = b_kind,
         .value = value,
@@ -950,7 +949,7 @@ struct Mir {
     int param_size;
     int result_size;
     Str *modname, *name;
-    enum FuncKind fn_kind : 8;
+    enum FnKind fn_kind : 8;
     paw_Bool is_poly : 1;
     paw_Bool is_pub : 1;
 };
@@ -973,7 +972,7 @@ DEFINE_LIST(struct Mir, MirRegisterPtrList, MirRegister *)
 DEFINE_LIST(struct Mir, MirBlockDataList, struct MirBlockData *)
 DEFINE_LIST(struct Mir, MirBodyList, struct Mir *)
 
-struct Mir *pawMir_new(struct Compiler *C, Str *modname, struct SourceSpan span, Str *name, struct IrType *type, struct IrType *self, enum FuncKind fn_kind, paw_Bool is_pub, paw_Bool is_poly);
+struct Mir *pawMir_new(struct Compiler *C, Str *modname, struct SourceSpan span, Str *name, struct IrType *type, struct IrType *self, enum FnKind fn_kind, paw_Bool is_pub, paw_Bool is_poly);
 void pawMir_free(struct Mir *mir);
 
 struct MirLiveInterval *pawMir_new_interval(struct Compiler *C, MirRegister r, int npositions);
@@ -1022,7 +1021,7 @@ static int mir_which_pred(struct Mir *mir, MirBlock y, MirBlock x)
     MirBlock const *pb;
     struct MirBlockData const *data = mir_bb_data(mir, y);
     K_LIST_ENUMERATE (data->predecessors, index, pb) {
-        if (MIR_BB_EQUALS(x, *pb))
+        if (MIR_ID_EQUALS(x, *pb))
             return index;
     }
 
@@ -1035,7 +1034,7 @@ static int mir_which_succ(struct Mir *mir, MirBlock x, MirBlock y)
     MirBlock const *pb;
     struct MirBlockData const *data = mir_bb_data(mir, x);
     K_LIST_ENUMERATE (data->successors, index, pb) {
-        if (MIR_BB_EQUALS(y, *pb))
+        if (MIR_ID_EQUALS(y, *pb))
             return index;
     }
 
@@ -1131,11 +1130,8 @@ inline static int pawMir_get_location(struct MirLocationList *locations, MirId m
 struct MirBlockList *pawMir_compute_live_in(struct Mir *mir, struct MirBlockList *uses, struct MirBlockList *defs, MirRegister r);
 struct MirIntervalList *pawMir_compute_liveness(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, struct MirLocationList *locations);
 
-#define MIR_ID_HASH(Ctx_, Bb_) ((void)(Ctx_), (unsigned)(Bb_).value)
-#define MIR_ID_EQUALS(Ctx_, A_, B_) ((void)(Ctx_), (A_).value == (B_).value)
-
-DEFINE_MAP(struct Mir, AccessMap, pawP_alloc, MIR_ID_HASH, MIR_ID_EQUALS, MirRegister, struct MirAccessList *)
-DEFINE_MAP(struct Mir, UseDefMap, pawP_alloc, MIR_ID_HASH, MIR_ID_EQUALS, MirRegister, struct MirBlockList *)
+DEFINE_MAP(struct Mir, AccessMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirRegister, struct MirAccessList *)
+DEFINE_MAP(struct Mir, UseDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirRegister, struct MirBlockList *)
 DEFINE_MAP_ITERATOR(UseDefMap, MirRegister, struct MirBlockList *)
 DEFINE_MAP_ITERATOR(BodyMap, DeclId, struct Mir *)
 

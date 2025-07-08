@@ -215,7 +215,7 @@ static void test_type_error(void)
     test_compiler_status(E_UNIT_VARIANT_WITH_PARENTHESIS, "call_unit_variant", "enum E {X}", "let x = E::X();");
     test_compiler_status(E_INCOMPATIBLE_TYPES, "wrong_constructor_args", "enum E {X(int)}", "let x = E::X(1.0);");
     test_compiler_status(E_EXPECTED_ADT, "selector_on_function", "fn func() {}", "let a = func.field;");
-// TODO    test_compiler_status(E_UNEXPECTED_MODULE_NAME, "selector_on_module", "use io;", "let s = io.abc;");
+    test_compiler_status(E_UNKNOWN_PATH, "selector_on_module", "use io;", "let s = io.abc;");
     test_compiler_status(E_EXTRA_SEGMENT, "extraneous_method_access",
         "struct S {pub fn f() {}}", "S::f::f(); ");
     test_compiler_status(E_EXTRA_SEGMENT, "extraneous_variant_access",
@@ -511,7 +511,7 @@ static void test_gc_conflict(void)
         "}\n";
 
     paw_Env *P = paw_open(&(struct paw_Options){0});
-    pawL_register_func(P, "conflicting_int", next_conflicting_int, 0);
+    pawL_register_fn(P, "conflicting_int", next_conflicting_int, 0);
 
     int status = pawL_load_chunk(P, "gc_conflict", source);
     check_status(P, status, PAW_OK);

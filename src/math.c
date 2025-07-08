@@ -96,16 +96,16 @@ void l_import_math(paw_Env *P)
     paw_push_float(P, INFINITY);
     pawL_add_extern_value(P, "math", "INFINITY");
 
-    pawL_add_extern_func(P, "math", "sin", math_sin);
-    pawL_add_extern_func(P, "math", "cos", math_cos);
-    pawL_add_extern_func(P, "math", "tan", math_tan);
-    pawL_add_extern_func(P, "math", "asin", math_asin);
-    pawL_add_extern_func(P, "math", "acos", math_acos);
-    pawL_add_extern_func(P, "math", "atan", math_atan);
-    pawL_add_extern_func(P, "math", "atan2", math_atan2);
-    pawL_add_extern_func(P, "math", "is_nan", math_is_nan);
-    pawL_add_extern_func(P, "math", "is_finite", math_is_finite);
-    pawL_add_extern_func(P, "math", "is_negative", math_is_negative);
+    pawL_add_extern_fn(P, "math", "sin", math_sin);
+    pawL_add_extern_fn(P, "math", "cos", math_cos);
+    pawL_add_extern_fn(P, "math", "tan", math_tan);
+    pawL_add_extern_fn(P, "math", "asin", math_asin);
+    pawL_add_extern_fn(P, "math", "acos", math_acos);
+    pawL_add_extern_fn(P, "math", "atan", math_atan);
+    pawL_add_extern_fn(P, "math", "atan2", math_atan2);
+    pawL_add_extern_fn(P, "math", "is_nan", math_is_nan);
+    pawL_add_extern_fn(P, "math", "is_finite", math_is_finite);
+    pawL_add_extern_fn(P, "math", "is_negative", math_is_negative);
     paw_pop(P, 1); // paw.symbols
 
     pawL_file_reader(P, PAWL_STDLIB_PATH(PAWL_MATH_NAME));

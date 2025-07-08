@@ -163,7 +163,7 @@ static struct HirExpr *LowerReturnExpr(struct LowerAst *L, struct AstReturnExpr 
     return NEW_NODE(L, return_expr, e->span, e->id, expr);
 }
 
-static struct HirDecl *LowerFuncDecl(struct LowerAst *L, struct AstFuncDecl *d);
+static struct HirDecl *LowerFnDecl(struct LowerAst *L, struct AstFnDecl *d);
 
 static struct HirDeclList *lower_methods(struct LowerAst *L, struct AstDeclList *src)
 {
@@ -171,9 +171,9 @@ static struct HirDeclList *lower_methods(struct LowerAst *L, struct AstDeclList 
     struct HirDeclList *dst = HirDeclList_new(L->hir);
     for (int i = 0; i < src->count; ++i) {
         struct AstDecl *decl = AstDeclList_get(src, i);
-        struct AstFuncDecl *d = AstGetFuncDecl(decl);
-        struct HirDecl *result = LowerFuncDecl(L, d);
-        struct HirFuncDecl *r = HirGetFuncDecl(result);
+        struct AstFnDecl *d = AstGetFnDecl(decl);
+        struct HirDecl *result = LowerFnDecl(L, d);
+        struct HirFnDecl *r = HirGetFnDecl(result);
         HirDeclList_push(L->hir, dst, result);
     }
     return dst;
@@ -625,14 +625,14 @@ static struct HirExpr *LowerStringExpr(struct LowerAst *L, struct AstStringExpr 
     return result;
 }
 
-static struct HirDecl *LowerFuncDecl(struct LowerAst *L, struct AstFuncDecl *d)
+static struct HirDecl *LowerFnDecl(struct LowerAst *L, struct AstFnDecl *d)
 {
     struct HirIdent const ident = lower_ident(L, d->ident);
     struct HirDeclList *generics = lower_decl_list(L, d->generics);
     struct HirDeclList *params = lower_decl_list(L, d->params);
     struct HirType *result = lower_type(L, d->result);
     struct HirExpr *body = d->body != NULL ? lower_expr(L, d->body) : NULL;
-    return NEW_NODE(L, func_decl, d->span, d->id, d->did, ident, d->annos, generics,
+    return NEW_NODE(L, fn_decl, d->span, d->id, d->did, ident, d->annos, generics,
             params, result, body, d->fn_kind, d->is_pub, !d->is_method);
 }
 
@@ -1032,11 +1032,11 @@ static struct HirType *LowerTupleType(struct LowerAst *L, struct AstTupleType *t
     return NEW_NODE(L, tuple_type, t->span, t->id, elems);
 }
 
-static struct HirType *LowerFuncType(struct LowerAst *L, struct AstFuncType *t)
+static struct HirType *LowerFnType(struct LowerAst *L, struct AstFnType *t)
 {
     struct HirTypeList *params = lower_type_list(L, t->params);
     struct HirType *result = lower_type(L, t->result);
-    return NEW_NODE(L, func_ptr, t->span, t->id, params, result);
+    return NEW_NODE(L, fn_ptr, t->span, t->id, params, result);
 }
 
 static struct HirType *LowerNeverType(struct LowerAst *L, struct AstNeverType *t)

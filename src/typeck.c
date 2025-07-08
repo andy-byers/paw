@@ -118,7 +118,7 @@ static IrType *lower_type(struct TypeChecker *T, struct HirType *type)
 static IrTypeList *lower_types(struct TypeChecker *T, struct HirTypeList *types)
 {
     if (types == NULL) return NULL;
-    struct IrTypeList *result = IrTypeList_new(T->C);
+    IrTypeList *result = IrTypeList_new(T->C);
 
     struct HirType *const *ptype;
     K_LIST_FOREACH (types, ptype) {
@@ -430,7 +430,7 @@ static paw_Bool is_unit_type(struct TypeChecker *T, IrType *type)
     return pawP_type2code(T->C, type) == BUILTIN_UNIT;
 }
 
-static void check_fn_item(struct TypeChecker *T, struct HirFuncDecl *d)
+static void check_fn_item(struct TypeChecker *T, struct HirFnDecl *d)
 {
     if (d->body == NULL) return;
     IrType *ret = GET_NODE_TYPE(T->C, d->result);
@@ -521,7 +521,7 @@ static IrType *lower_adt_segment(struct TypeChecker *T, struct HirSegment segmen
 {
     struct HirDecl *decl = pawHir_get_node(T->hir, segment.target);
     if (HirIsTypeDecl(decl)) {
-        IrType *lower_type_alias(struct Compiler *, struct HirSegment, struct HirDecl *, struct IrTypeList *);
+        IrType *lower_type_alias(struct Compiler *, struct HirSegment, struct HirDecl *, IrTypeList *);
         IrTypeList *args = segment.types != NULL ? lower_types(T, segment.types) : NULL;
         return lower_type_alias(T->C, segment, decl, args);
     }
@@ -781,7 +781,6 @@ static IrType *check_binary_op(struct TypeChecker *T, struct SourceSpan span, en
         [BINARY_BOR]   = {0, 0, 0, 1, 0, 0, 0, 0},
         [BINARY_SHL]   = {0, 0, 0, 1, 0, 0, 0, 0},
         [BINARY_SHR]   = {0, 0, 0, 1, 0, 0, 0, 0},
-        [BINARY_RANGE] = {0, 1, 1, 1, 1, 1, 0, 0},
     };
 
     static char const *BINOP_REPR[] = {
@@ -801,7 +800,6 @@ static IrType *check_binary_op(struct TypeChecker *T, struct SourceSpan span, en
         [BINARY_BOR] = "|",
         [BINARY_SHL] = "<<",
         [BINARY_SHR] = ">>",
-        [BINARY_RANGE] = "..",
     };
 
     IrType *lhs = check_operand(T, left);
@@ -943,7 +941,7 @@ static IrType *check_closure_expr(struct TypeChecker *T, struct HirClosureExpr *
     T->bs = outer;
     T->rs = rs.outer;
 
-    return pawIr_new_func_ptr(T->C, params, ret);
+    return pawIr_new_fn_ptr(T->C, params, ret);
 }
 
 static struct HirDecl *find_method_aux(struct Compiler *C, struct HirDecl *base, Str *name)
@@ -951,7 +949,7 @@ static struct HirDecl *find_method_aux(struct Compiler *C, struct HirDecl *base,
     struct HirDecl *const *pdecl;
     struct HirAdtDecl *adt = HirGetAdtDecl(base);
     K_LIST_FOREACH (adt->methods, pdecl) {
-        struct HirFuncDecl *method = HirGetFuncDecl(*pdecl);
+        struct HirFnDecl *method = HirGetFnDecl(*pdecl);
         if (pawS_eq(name, method->ident.name))
             return *pdecl;
     }
@@ -1121,7 +1119,7 @@ static void ensure_accessible_field(struct TypeChecker *T, struct HirDecl *field
     struct HirIdent const ident = hir_decl_ident(field);
     paw_Bool const is_pub = HirIsFieldDecl(field)
                                 ? HirGetFieldDecl(field)->is_pub
-                                : HirGetFuncDecl(field)->is_pub;
+                                : HirGetFnDecl(field)->is_pub;
     if (is_pub || is_adt_self(T, type))
         return; // field is public or control is inside own impl block
     TYPECK_ERROR(T, associated_item_visibility, ident.span.start, ident.name->text,
@@ -1189,13 +1187,13 @@ static IrType *check_call_target(struct TypeChecker *T, struct HirExpr *target, 
         TYPECK_ERROR(T, unknown_method, select->ident.span.start,
                 select->ident.name->text, pawIr_print_type(T->C, self));
 
-    struct HirDecl *func_decl = get_decl(T, IR_TYPE_DID(method));
+    struct HirDecl *fn_decl = get_decl(T, IR_TYPE_DID(method));
     struct HirDecl *self_decl = get_decl(T, IR_TYPE_DID(self));
-    if (HirGetFuncDecl(func_decl)->is_assoc)
+    if (HirGetFnDecl(fn_decl)->is_assoc)
         TYPECK_ERROR(T, not_a_method, NODE_START(target),
-                   hir_decl_ident(func_decl).name->text);
+                   hir_decl_ident(fn_decl).name->text);
 
-    ensure_accessible_field(T, func_decl, self_decl, self);
+    ensure_accessible_field(T, fn_decl, self_decl, self);
     *pparam_offset = 1;
     return method;
 }
@@ -1211,7 +1209,7 @@ static IrType *check_call_expr(struct TypeChecker *T, struct HirCallExpr *e)
     }
     SET_NODE_TYPE(T->C, e->target, target);
 
-    struct IrFuncPtr const *fn = IR_FPTR(target);
+    struct IrFnPtr const *fn = IR_FPTR(target);
     int const nparams = fn->params->count - param_offset;
     if (e->args->count != nparams)
         TYPECK_ERROR(T, incorrect_arity, e->span.start, nparams, e->args->count);
@@ -1377,7 +1375,6 @@ static IrType *check_composite_lit(struct TypeChecker *T, struct HirCompositeLit
     HirDeclList *fields = pawHir_struct_fields(adt);
     IrTypeList *field_types = pawHir_collect_decl_types(T->C, fields);
     if (fields->count == 0)
-        // TODO: just make sure number of fields matches that of ADT (composite lit w/ empty braces can be caught during parsing)
         TYPECK_ERROR(T, unit_struct_with_braces, adt->ident.span.start, adt->ident.name->text);
 
     IrType *base_type = pawIr_get_type(T->C, adt->id);
@@ -1932,8 +1929,8 @@ static IrType *check_expr(struct TypeChecker *T, struct HirExpr *expr)
 
 static void check_item(struct TypeChecker *T, struct HirDecl *item)
 {
-    if (HirIsFuncDecl(item)) {
-        check_fn_item(T, HirGetFuncDecl(item));
+    if (HirIsFnDecl(item)) {
+        check_fn_item(T, HirGetFnDecl(item));
     } else if (HirIsAdtDecl(item)) {
         check_adt_item(T, HirGetAdtDecl(item));
     } else if (HirIsConstDecl(item)) {

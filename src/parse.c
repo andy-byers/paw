@@ -430,14 +430,14 @@ static struct AstDecl *variant_field_decl(struct Lex *lex)
     return NEW_NODE(lex, field_decl, start, next_id(lex), empty, tag, PAW_FALSE);
 }
 
-#define DEFINE_LIST_PARSER(Name_, A_, B_, Limit_, What_, Func_, List_)                            \
+#define DEFINE_LIST_PARSER(Name_, A_, B_, Limit_, What_, Fn_, List_)                            \
     static void parse_##Name_##_list(struct Lex *lex, struct List_ *list, struct SourceLoc start) \
     {                                                                                             \
         do {                                                                                      \
             if (test(lex, B_)) break;                                                             \
             if (list->count == (Limit_))                                                          \
                 LIMIT_ERROR(lex, start, What_, (Limit_));                                         \
-            List_##_push((lex)->ast, list, (Func_)(lex));                                         \
+            List_##_push((lex)->ast, list, (Fn_)(lex));                                         \
         } while (test_next(lex, ','));                                                            \
         delim_next(lex, B_, A_, start);                                                           \
     }
@@ -957,7 +957,7 @@ static struct AstType *parse_signature(struct Lex *lex)
     struct AstType *result = test_next(lex, TK_ARROW)
         ? parse_return_type(lex, PAW_TRUE)
         : unit_type(lex);
-    return NEW_NODE(lex, func_type, start, next_id(lex), params, result);
+    return NEW_NODE(lex, fn_type, start, next_id(lex), params, result);
 }
 
 static paw_Bool end_of_block(struct Lex *lex)
@@ -1624,7 +1624,7 @@ static struct AstExpr *function_body(struct Lex *lex)
     return body;
 }
 
-static struct AstDecl *function(struct Lex *lex, struct SourceLoc start, struct AstIdent ident, struct Annotations *annos, enum FuncKind kind, paw_Bool is_pub)
+static struct AstDecl *function(struct Lex *lex, struct SourceLoc start, struct AstIdent ident, struct Annotations *annos, enum FnKind kind, paw_Bool is_pub)
 {
     paw_Bool is_method;
     struct AstDeclList *generics = type_param(lex);
@@ -1636,7 +1636,7 @@ static struct AstDecl *function(struct Lex *lex, struct SourceLoc start, struct 
         ? function_body(lex)
         : NULL;
 
-    return NEW_NODE(lex, func_decl, start, next_id(lex), kind, ident, annos,
+    return NEW_NODE(lex, fn_decl, start, next_id(lex), kind, ident, annos,
             generics, params, result, body, is_pub, is_method);
 }
 
@@ -1921,7 +1921,7 @@ static struct AstDecl *type_decl(struct Lex *lex, paw_Bool is_pub)
     check_next(lex, '=');
 
     struct AstType *rhs = parse_type(lex, PAW_TRUE);
-    if (AstIsFuncType(rhs))
+    if (AstIsFnType(rhs))
         PARSE_ERROR(lex, function_type_decl, start);
 
     semicolon(lex, "type declaration");

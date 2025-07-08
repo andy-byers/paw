@@ -203,6 +203,7 @@ static paw_Bool lookup(struct Resolver *R, struct ImportScope const *current, st
         struct AstDecl *mod = get_module_by_number(R, *pmodno);
         struct AstModuleDecl const *m = AstGetModuleDecl(mod);
         if (!pc_is_valid(pc)) {
+            if (ns == NAMESPACE_VALUE) return PAW_FALSE;
             // found module import, e.g. "use mod;"
             *out = ISYMBOL(m->id, pc_segment(pc)->ident, ISYMBOL_EXPLICIT, b.is_pub);
             return PAW_TRUE;
@@ -272,7 +273,7 @@ static void declare_alias(struct AstVisitor *V, struct AstDecl *decl)
     }
 }
 
-static void collect_fn_decl(struct Resolver *R, struct ImportScope *outer, struct AstFuncDecl *d)
+static void collect_fn_decl(struct Resolver *R, struct ImportScope *outer, struct AstFnDecl *d)
 {
     struct ImportScope *scope = iscope_new(R, d->id, ISCOPE_FN, outer);
     ImportScopes_insert(R, R->imports, d->id, scope);
@@ -296,7 +297,7 @@ static void collect_trait_decl(struct Resolver *R, struct ImportScope *outer, st
     // add methods and associated functions to trait value namespace
     struct AstDecl *const *pdecl;
     K_LIST_FOREACH (d->methods, pdecl) {
-        struct AstFuncDecl *f = AstGetFuncDecl(*pdecl);
+        struct AstFnDecl *f = AstGetFnDecl(*pdecl);
         add_value(R, scope, f->ident, f->id, ISYMBOL_EXPLICIT, f->is_pub);
         collect_fn_decl(R, scope, f);
     }
@@ -325,7 +326,7 @@ static void collect_adt_decl(struct Resolver *R, struct ImportScope *outer, stru
     // add methods and associated functions to ADT value namespace
     struct AstDecl *const *pdecl;
     K_LIST_FOREACH (d->methods, pdecl) {
-        struct AstFuncDecl *f = AstGetFuncDecl(*pdecl);
+        struct AstFnDecl *f = AstGetFnDecl(*pdecl);
         add_value(R, scope, f->ident, f->id, ISYMBOL_EXPLICIT, f->is_pub);
         collect_fn_decl(R, scope, f);
     }
@@ -334,8 +335,8 @@ static void collect_adt_decl(struct Resolver *R, struct ImportScope *outer, stru
 static void collect_item(struct Resolver *R, struct ImportScope *scope, struct AstDecl *decl)
 {
     switch (AST_KINDOF(decl)) {
-        case kAstFuncDecl: {
-            struct AstFuncDecl *d = AstGetFuncDecl(decl);
+        case kAstFnDecl: {
+            struct AstFnDecl *d = AstGetFnDecl(decl);
             add_value(R, scope, d->ident, d->id, ISYMBOL_EXPLICIT, d->is_pub);
             collect_fn_decl(R, scope, d);
             break;
