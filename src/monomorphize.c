@@ -322,6 +322,7 @@ static struct MirRegisterData copy_register(struct MonoCollector *M, struct MirR
 
 static void do_monomorphize(struct MonoCollector *M, struct Mir *base, struct Mir *inst, IrType *self)
 {
+    MirConstantDataList_reserve(M->mir, inst->constants, base->constants->count);
     MirRegisterDataList_reserve(M->mir, inst->registers, base->registers->count);
     MirBlockDataList_reserve(M->mir, inst->blocks, base->blocks->count);
     MirRegisterList_reserve(M->mir, inst->locals, base->locals->count);
@@ -332,7 +333,7 @@ static void do_monomorphize(struct MonoCollector *M, struct Mir *base, struct Mi
     {
         struct MirRegisterData *pfrom;
         K_LIST_FOREACH (base->registers, pfrom) {
-            struct MirRegisterData to = copy_register(M, *pfrom);
+            struct MirRegisterData const to = copy_register(M, *pfrom);
             MirRegisterDataList_push(M->mir, inst->registers, to);
         }
     }
@@ -342,6 +343,13 @@ static void do_monomorphize(struct MonoCollector *M, struct Mir *base, struct Mi
         K_LIST_FOREACH (base->blocks, pfrom) {
             struct MirBlockData *to = copy_basic_block(M, *pfrom);
             MirBlockDataList_push(M->mir, inst->blocks, to);
+        }
+    }
+
+    {
+        struct MirConstantData const *pdata;
+        K_LIST_FOREACH (base->constants, pdata) {
+            MirConstantDataList_push(M->mir, inst->constants, *pdata);
         }
     }
 

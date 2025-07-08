@@ -39,11 +39,12 @@
 
 #define REGALLOC_ERROR(R_, Kind_, ...) pawErr_##Kind_((R_)->C, (R_)->mir->modname, __VA_ARGS__)
 #define PLACE(Reg_) ((struct MirPlace){.r = Reg_})
+#define REG(R_, Id_) (RegisterTable_get((R_)->result, (Id_).value).value)
+#define REG_EQUALS(A_, B_) ((A_).value == (B_).value)
+#define REGINFO(Value_) ((struct RegisterInfo){Value_})
+#define REG_EXISTS(Reg_) (!REG_EQUALS(Reg_, REGINFO(-1)))
 
-enum AllocationKind {
-    ALLOCATE_NEXT,
-    ALLOCATE_ANY,
-};
+#define MAX_CONSTANTS 8
 
 struct RegisterAllocator {
     struct Pool *pool;
@@ -71,6 +72,43 @@ struct RegisterAllocator {
 
 DEFINE_MAP(struct RegisterAllocator, IntervalMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, struct MirLiveInterval *, void *)
 DEFINE_MAP_ITERATOR(IntervalMap, struct MirLiveInterval *, void *)
+
+static void not_enough_registers(struct RegisterAllocator *R)
+{
+    REGALLOC_ERROR(R, too_many_variables, R->mir->span.start, NREGISTERS);
+}
+
+static MirRegister new_register(struct RegisterAllocator *R, IrType *type)
+{
+    if (R->max_reg >= NREGISTERS) not_enough_registers(R);
+    MirRegister const r = MIR_REG(R->mir->registers->count);
+    MirRegisterDataList_push(R->mir, R->mir->registers,
+        (struct MirRegisterData){
+            .type = type,
+            .size = 1,
+        });
+    paw_assert(r.value == R->result->count);
+    RegisterTable_push(R->C, R->result, REGINFO(-1));
+    return r;
+}
+
+static paw_Bool materialize_k(struct RegisterAllocator *R, MirConstant k, struct MirPlace *pplace)
+{
+    struct MirConstantData const *kdata = mir_const_data(R->mir, k);
+    IrType *ktype = pawP_builtin_type(R->C, kdata->kind);
+    MirRegister const r = new_register(R, ktype);
+
+    struct MirLiveInterval *it = pawMir_new_interval(R->C, r, R->max_position + 1);
+    it->first = it->last = R->position;
+    pawP_bitset_set(it->ranges, R->position);
+    MirIntervalMap_insert(R->mir, R->intervals, r, it);
+
+    *pplace = (struct MirPlace){
+        .kind = MIR_PLACE_LOCAL,
+        .r = r,
+    };
+    return PAW_TRUE;
+}
 
 #define SET_ITER(S, iter, it, code)                                      \
     do {                                                                 \
@@ -101,11 +139,6 @@ static void iset_next(IntervalMapIterator *iter)
 {
     IntervalMapIterator_next(iter);
 }
-
-#define REG(R_, It_) (RegisterTable_get((R_)->result, (It_)->r.value).value)
-#define REG_EQUALS(A_, B_) ((A_).value == (B_).value)
-#define REGINFO(Value_) ((struct RegisterInfo){Value_})
-#define REG_EXISTS(Reg_) (!REG_EQUALS(Reg_, REGINFO(-1)))
 
 static paw_Bool is_covered(struct MirLiveInterval *it, int pos)
 {
@@ -232,11 +265,6 @@ static int next_intersection(struct MirLiveInterval *a, struct MirLiveInterval *
     return -1;
 }
 
-static void not_enough_registers(struct RegisterAllocator *R)
-{
-    REGALLOC_ERROR(R, too_many_variables, R->mir->span.start, NREGISTERS);
-}
-
 static struct RegisterInfo get_result(struct RegisterAllocator *R, MirRegister r)
 {
     return RegisterTable_get(R->result, r.value);
@@ -252,9 +280,9 @@ static void try_allocate_free_reg(struct RegisterAllocator *R)
     for (int i = 0; i < NREGISTERS; ++i) {
         free_until_pos[i] = R->max_position + 1;
     }
-    // ignore registers already containing variables
+    // ignore registers containing live variables
     SET_ITER(R->active, iter, it, {
-        free_until_pos[REG(R, it)] = 0;
+        free_until_pos[REG(R, it->r)] = 0;
         iset_next(&iter);
     });
 
@@ -264,8 +292,8 @@ static void try_allocate_free_reg(struct RegisterAllocator *R)
     // variable is expected to be in a register
     SET_ITER(R->inactive, iter, it, {
         int const p = next_intersection(it, current);
-        if (p >= 0) free_until_pos[REG(R, it)] = p;
-        IntervalMapIterator_next(&iter);
+        if (p >= 0) free_until_pos[REG(R, it->r)] = p;
+        iset_next(&iter);
     });
 
     int pos; // "reg" is free until this location
@@ -286,10 +314,10 @@ static struct MirLiveInterval *get_interval(struct RegisterAllocator *R, MirRegi
 static void allocate_register(struct RegisterAllocator *R, MirRegister r)
 {
     struct Mir *mir = R->mir;
-    struct MirLiveInterval **pit;
-    struct MirLiveInterval *it = get_interval(R, r);
-    R->position = it->first;
-    R->current = it;
+    struct MirLiveInterval *it;
+
+    R->current = get_interval(R, r);
+    R->position = R->current->first;
 
     SET_ITER(R->active, iter, it, {
         if (it->last < R->position) {
@@ -320,38 +348,73 @@ static void allocate_register(struct RegisterAllocator *R, MirRegister r)
     set_add(R, R->active, R->current);
 }
 
-static void alloc_phi_regs(struct RegisterAllocator *R, struct MirPhi *phi)
+static void materialize_load(struct RegisterAllocator *R, struct SourceLoc loc, struct MirPlace *pload, MirInstructionList *rewrite)
 {
-    allocate_register(R, phi->output.r);
+    paw_assert(pload->projection == NULL);
+    if (pload->kind == MIR_PLACE_CONSTANT) {
+        MirConstant const k = pload->k;
+        struct MirConstantData const *kdata = mir_const_data(R->mir, k);
+        if (materialize_k(R, k, pload)) {
+            allocate_register(R, pload->r);
+            // add an instruction that materializes the constant in a register
+            struct MirInstruction *loadk = pawMir_new_load_constant(R->mir, loc, k, *pload);
+            MirInstructionList_push(R->mir, rewrite, loadk);
+        }
+        pload->kind = MIR_PLACE_LOCAL;
+    }
 }
 
-static void alloc_other_regs(struct RegisterAllocator *R, struct MirInstruction *instr)
+static void alloc_other_regs(struct RegisterAllocator *R, struct MirInstruction *instr, MirInstructionList *rewrite)
 {
-    struct MirPlace *const *pstore;
-    struct MirPlacePtrList *stores = pawMir_get_stores(R->mir, instr);
-    K_LIST_FOREACH (stores, pstore) {
-        struct MirPlace const place = **pstore;
-        allocate_register(R, place.r);
+    {
+        struct MirPlace *const *ppload;
+        struct MirPlacePtrList *loads = pawMir_get_loads(R->mir, instr);
+        K_LIST_FOREACH (loads, ppload)
+            materialize_load(R, instr->hdr.loc, *ppload, rewrite);
     }
+
+    {
+        struct MirPlace *const *ppstore;
+        struct MirPlacePtrList *stores = pawMir_get_stores(R->mir, instr);
+        K_LIST_FOREACH (stores, ppstore) {
+            struct MirPlace const store = **ppstore;
+            allocate_register(R, store.r);
+        }
+    }
+
+    MirInstructionList_push(R->mir, rewrite, instr);
 }
 
 static void allocate_registers(struct RegisterAllocator *R)
 {
     struct MirBlockData *const *pbb;
     K_LIST_FOREACH (R->mir->blocks, pbb) {
-        struct MirInstruction *const *pinstr;
-        K_LIST_FOREACH ((*pbb)->joins, pinstr) {
-            struct MirPhi const *phi = MirGetPhi(*pinstr);
-            allocate_register(R, phi->output.r);
+        struct MirBlockData *bb = *pbb;
+
+        {
+            struct MirInstruction *const *pjoin;
+            K_LIST_FOREACH (bb->joins, pjoin) {
+                struct MirPhi const *phi = MirGetPhi(*pjoin);
+                allocate_register(R, phi->output.r);
+            }
         }
-        K_LIST_FOREACH ((*pbb)->instructions, pinstr) {
-            alloc_other_regs(R, *pinstr);
+
+        {
+            MirInstructionList *rewrite = MirInstructionList_new(R->mir);
+
+            struct MirInstruction *const *pinstr;
+            K_LIST_FOREACH (bb->instructions, pinstr) {
+                alloc_other_regs(R, *pinstr, rewrite);
+            }
+
+            MirInstructionList_delete(R->mir, bb->instructions);
+            bb->instructions = rewrite;
         }
     }
 }
 
 struct Copy {
-    MirRegister from;
+    struct MirPlace from;
     MirRegister to;
     int location;
 };
@@ -369,15 +432,18 @@ static MirRegister scratch_register(struct RegisterAllocator *R, MirRegister old
 
 static paw_Bool check_copy_conflict(struct RegisterAllocator *R, struct CopyList *copies, struct Copy copy, int skip)
 {
+    paw_assert(copy.from.kind == MIR_PLACE_LOCAL);
     struct RegisterInfo const b = get_result(R, copy.to);
 
     int index;
     struct Copy *pcopy;
     K_LIST_ENUMERATE (copies, index, pcopy) {
-        // NOTE: "skip" prevents NOOP copies ("x -> x") from being classified
-        //       as a conflict
-        struct RegisterInfo const a = get_result(R, pcopy->from);
-        if (index != skip && REG_EQUALS(a, b)) return PAW_TRUE;
+        if (pcopy->from.kind == MIR_PLACE_LOCAL) {
+            // NOTE: "skip" prevents NOOP copies ("x -> x") from being classified
+            //       as a conflict
+            struct RegisterInfo const a = get_result(R, pcopy->from.r);
+            if (index != skip && REG_EQUALS(a, b)) return PAW_TRUE;
+        }
     }
     return PAW_FALSE;
 }
@@ -389,12 +455,22 @@ static void order_and_insert_copies(struct RegisterAllocator *R, struct MirBlock
     struct Copy *pcopy;
     int index;
 
+    // instructions must be added before the terminator
+    struct MirInstruction *terminator = MirInstructionList_last(block->instructions);
+    MirInstructionList_pop(block->instructions);
+
     while (pcopies->count > 0) {
         K_LIST_ENUMERATE (pcopies, index, pcopy) {
-            if (check_copy_conflict(R, pcopies, *pcopy, index)) {
+            if (pcopy->from.kind == MIR_PLACE_CONSTANT) {
+                struct MirInstruction *load = pawMir_new_load_constant(R->mir,
+                        (struct SourceLoc){-1}, pcopy->from.k, PLACE(pcopy->to));
+                pawMir_set_location(R->mir, R->locations, load->hdr.mid, pcopy->location);
+                MirInstructionList_push(R->mir, block->instructions, load);
+                CopyList_swap_remove(pcopies, index);
+            } else if (check_copy_conflict(R, pcopies, *pcopy, index)) {
                 MirRegister const scratch = scratch_register(R, pcopy->to);
                 CopyList_push(R, seq, (struct Copy){pcopy->from, scratch});
-                pcopy->from = scratch;
+                pcopy->from.r = scratch;
                 ++nscratch;
             } else {
                 CopyList_push(R, seq, *pcopy);
@@ -403,19 +479,17 @@ static void order_and_insert_copies(struct RegisterAllocator *R, struct MirBlock
         }
     }
 
-    // copies must be added before the terminator
-    struct MirInstruction *terminator = MirInstructionList_last(block->instructions);
-    MirInstructionList_pop(block->instructions);
-
     K_LIST_FOREACH (seq, pcopy) {
-        struct MirInstruction *move = pawMir_new_move(R->mir, (struct SourceLoc){-1}, PLACE(pcopy->to), PLACE(pcopy->from));
+        struct MirInstruction *move = pawMir_new_move(R->mir, (struct SourceLoc){-1}, PLACE(pcopy->to), PLACE(pcopy->from.r));
         pawMir_set_location(R->mir, R->locations, move->hdr.mid, pcopy->location);
         MirInstructionList_push(R->mir, block->instructions, move);
     }
+
+    // replace the terminator
     MirInstructionList_push(R->mir, block->instructions, terminator);
 
     // temporary registers only used for this batch of moves
-    R->max_reg -= nscratch;
+    R->max_reg -= nscratch; // TODO: probably not a good thing to do...
     pcopies->count = 0;
 }
 
@@ -432,9 +506,9 @@ static void resolve_registers(struct RegisterAllocator *R, struct MirBlockList *
             // into moves at the end of "b"
             struct MirBlockData *bs = mir_bb_data(R->mir, *s);
             K_LIST_FOREACH (bs->joins, pinstr) {
-                struct MirPhi *phi = MirGetPhi(*pinstr);
+                struct MirPhi const *phi = MirGetPhi(*pinstr);
                 int const index = mir_which_pred(R->mir, *s, *b);
-                MirRegister const opd = MirPlaceList_get(phi->inputs, index).r;
+                struct MirPlace const opd = MirPlaceList_get(phi->inputs, index);
 
                 int const location = pawMir_get_location(R->locations, mir_bb_last(bb));
                 CopyList_push(R, resolved, (struct Copy){

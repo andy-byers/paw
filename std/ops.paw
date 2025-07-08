@@ -89,9 +89,9 @@ pub struct RangeIterator<T: Compare + Increment>: Advance<T> {
         let iter = self.iter;
         if iter.lt(self.end) {
             self.iter = iter.incremented();
-            Option::Some(iter)
+            Some(iter)
         } else {
-            Option::None
+            None
         }
     }
 }
@@ -104,7 +104,7 @@ pub struct RangeFromIterator<T: Compare + Increment>: Advance<T> {
     pub fn next(self) -> Option<T> {
         let iter = self.iter;
         self.iter = self.iter.incremented();
-        Option::Some(iter)
+        Some(iter)
     }
 }
 
@@ -112,15 +112,15 @@ pub struct RangeInclusiveIterator<T: Compare + Increment>: Advance<T> {
     end: T,
     iter: Option<T>,
     pub fn new(range: RangeInclusive<T>) -> Self {
-        Self{iter: Option::Some(range.start), end: range.end}
+        Self{iter: Some(range.start), end: range.end}
     }
     pub fn next(self) -> Option<T> {
         let iter = self.iter?;
         if iter.lt(self.end) {
-            self.iter = Option::Some(iter.incremented());
+            self.iter = Some(iter.incremented());
         } else {
-            self.iter = Option::None;
+            self.iter = None;
         }
-        Option::Some(iter)
+        Some(iter)
     }
 }

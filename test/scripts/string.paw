@@ -163,7 +163,6 @@ pub fn test_unescaped_braces() {
 pub fn test_braces_inside_expr() {
     assert("\{{({100}) + ({{23}})}}" == "123");
 
-    // block is parenthesized
     assert("abc\{{{
         {({100}) + 23}
     }}}" == "abc123");

@@ -29,7 +29,7 @@
 #define IS_POINTER(G, r) REG_DATA(G, r).is_pointer
 #define REG_DATA(G, r) MirRegisterDataList_get((G)->fs->mir->registers, (r).value)
 #define TYPE_CODE(G, type) pawP_type2code((G)->C, type)
-#define REG(Reg_) RegisterTable_get(fs->regtab, (Reg_).r.value).value
+#define REG(Reg_) vm_register_for(fs, Reg_)
 
 struct FnState {
     struct FnState *outer; // enclosing function
@@ -37,12 +37,10 @@ struct FnState {
     struct Generator *G; // codegen state
     struct PatchList *patch;
     struct JumpTable *jumps;
-    struct KCache kcache;
     struct Mir *mir;
     MirBlock b;
     Proto *proto; // prototype being built
     int first_local; // index of function in DynamicMem array
-    int nk; // number of constants
     int nproto; // number of nested functions
     int nlines; // number of source lines
     int pc; // number of instructions
@@ -64,6 +62,12 @@ typedef struct Generator {
     paw_Env *P;
     int ipolicy;
 } Generator;
+
+static int vm_register_for(struct FnState *fs, struct MirPlace place)
+{
+    paw_assert(place.kind == MIR_PLACE_LOCAL);
+    return RegisterTable_get(fs->regtab, place.r.value).value;
+}
 
 struct JumpTarget {
     MirBlock bid;
@@ -252,42 +256,6 @@ static Str *adt_name(struct Generator *G, Str const *modname, IrType *type)
     return pawP_mangle_name(G->C, modname, d->name, ir_adt_types(type));
 }
 
-static ValueMap *kcache_map(struct FnState *fs, enum BuiltinKind code)
-{
-    if (code <= BUILTIN_INT) {
-        return fs->kcache.ints;
-    } else if (code == BUILTIN_FLOAT) {
-        return fs->kcache.floats;
-    } else {
-        paw_assert(code == BUILTIN_STR);
-        return fs->kcache.strs;
-    }
-}
-
-static int add_constant(struct Generator *G, Value v, enum BuiltinKind code)
-{
-    struct FnState *fs = G->fs;
-    Proto *p = fs->proto;
-    // 'bool' and 'int' have the same runtime representation
-    if (code <= BUILTIN_BOOL)
-        code = BUILTIN_INT;
-
-    // share constant values within each function
-    ValueMap *kmap = kcache_map(fs, code);
-    Value const *pk = ValueMap_get(G->C, kmap, v);
-    if (pk != NULL)
-        return CAST(int, pk->i);
-
-    if (fs->nk == CONSTANT_MAX)
-        CODEGEN_ERROR(G, too_many_constants, fs->mir->span.start, CONSTANT_MAX);
-
-    pawM_grow(ENV(G), p->k, fs->nk, p->nk);
-    p->k[fs->nk] = v;
-
-    ValueMap_insert(G->C, kmap, v, I2V(fs->nk));
-    return fs->nk++;
-}
-
 static Proto *push_proto(struct Generator *G, Str *name)
 {
     paw_Env *P = ENV(G);
@@ -328,20 +296,6 @@ static int code_switch_int(struct FnState *fs, struct MirPlace discr, int k)
     return emit_jump(fs);
 }
 
-static void enter_kcache(struct Generator *G, struct KCache *cache)
-{
-    cache->ints = ValueMap_new_from(G->C, G->pool);
-    cache->strs = ValueMap_new_from(G->C, G->pool);
-    cache->floats = ValueMap_new_from(G->C, G->pool);
-}
-
-static void leave_kcache(struct Generator *G, struct KCache *cache)
-{
-    ValueMap_delete(G->C, cache->ints);
-    ValueMap_delete(G->C, cache->strs);
-    ValueMap_delete(G->C, cache->floats);
-}
-
 static void leave_function(struct Generator *G)
 {
     paw_Env *P = ENV(G);
@@ -354,10 +308,6 @@ static void leave_function(struct Generator *G)
     p->length = fs->pc;
     pawM_shrink(P, p->lines, p->nlines, fs->nlines);
     p->nlines = fs->nlines;
-    pawM_shrink(P, p->k, p->nk, fs->nk);
-    p->nk = fs->nk;
-
-    leave_kcache(G, &fs->kcache);
 
     G->fs = fs->outer;
     CHECK_GC(P);
@@ -376,8 +326,6 @@ static void enter_function(struct Generator *G, struct FnState *fs, struct Mir *
     fs->patch = PatchList_new(G);
     fs->jumps = JumpTable_new(G),
     G->fs = fs;
-
-    enter_kcache(G, &fs->kcache);
 }
 
 static ValueId resolve_function(struct Generator *G, RttiType *rtti)
@@ -448,6 +396,18 @@ static void allocate_upvalue_info(struct Generator *G, Proto *proto, struct MirU
     }
 }
 
+static void code_constants(struct Generator *G, struct Mir *mir, Proto *proto)
+{
+    proto->k = pawM_new_vec(ENV(G), mir->constants->count, Value);
+    proto->nk = mir->constants->count;
+
+    int index;
+    struct MirConstantData const *pdata;
+    K_LIST_ENUMERATE (mir->constants, index, pdata) {
+        proto->k[index] = pdata->value;
+    }
+}
+
 static void code_proto(struct Generator *G, struct Mir *mir, Proto *proto, int index)
 {
     struct FnState *fs = G->fs;
@@ -468,9 +428,8 @@ static Proto *code_paw_function(struct Generator *G, struct Mir *mir, int index)
 
 static void code_children(struct Generator *G, Proto *parent, struct Mir *mir)
 {
-    int const nchildren = mir->children->count;
-    parent->p = pawM_new_vec(ENV(G), nchildren, Proto *);
-    parent->nproto = nchildren;
+    parent->p = pawM_new_vec(ENV(G), mir->children->count, Proto *);
+    parent->nproto = mir->children->count;
 
     int index;
     struct Mir *const *pchild;
@@ -485,6 +444,7 @@ static Proto *code_paw_function(struct Generator *G, struct Mir *mir, int index)
     Proto *proto = push_proto(G, mir->name);
     enter_function(G, &fs, mir, proto);
 
+    code_constants(G, mir, proto);
     code_proto(G, mir, proto, index);
     code_children(G, proto, mir);
 
@@ -650,15 +610,15 @@ static void code_constant(struct MirVisitor *V, struct MirLoadConstant *x)
 {
     struct Generator *G = V->ud;
     struct FnState *fs = G->fs;
-    if (x->b_kind == BUILTIN_UNIT
-            || x->b_kind == BUILTIN_BOOL
-            || (x->b_kind == BUILTIN_INT && is_smi(x->value.i))) {
-        code_smi(fs, x->output, x->value.i);
-    } else if (x->b_kind == BUILTIN_CHAR) {
-        code_smi(fs, x->output, x->value.c);
+
+    struct MirConstantData const *kdata = mir_const_data(fs->mir, x->k);
+    if (kdata->kind == BUILTIN_UNIT || kdata->kind == BUILTIN_BOOL
+            || (kdata->kind == BUILTIN_INT && is_smi(V_INT(kdata->value)))) {
+        code_smi(fs, x->output, kdata->value.i);
+    } else if (kdata->kind == BUILTIN_CHAR) {
+        code_smi(fs, x->output, kdata->value.c);
     } else {
-        int const bc = add_constant(G, x->value, x->b_kind);
-        code_ABx(fs, OP_LOADK, REG(x->output), bc);
+        code_ABx(fs, OP_LOADK, REG(x->output), x->k.value);
     }
 }
 
@@ -1151,11 +1111,10 @@ static paw_Bool code_branch(struct MirVisitor *V, struct MirBranch *x)
     return PAW_FALSE;
 }
 
-static int code_testk(struct FnState *fs, struct MirPlace test, Value k, IrType *type)
+static int code_testk(struct FnState *fs, struct MirPlace test, MirConstant k, IrType *type)
 {
     const enum BuiltinKind code = pawP_type2code(fs->G->C, type);
-    int const index = add_constant(fs->G, k, code);
-    code_ABx(fs, OP_TESTK, REG(test), index);
+    code_ABx(fs, OP_TESTK, REG(test), k.value);
     return emit_jump(fs);
 }
 
@@ -1167,7 +1126,7 @@ static paw_Bool code_sparse_switch(struct MirVisitor *V, struct MirSwitch *x)
     struct MirSwitchArm *parm;
     struct MirPlace const d = x->discr;
     K_LIST_FOREACH (x->arms, parm) {
-        int const next_jump = code_testk(fs, d, parm->value, REG_TYPE(G, d.r));
+        int const next_jump = code_testk(fs, d, parm->k, REG_TYPE(G, d.r));
         add_edge(G, next_jump, parm->bid);
     }
     if (MIR_ID_EXISTS(x->otherwise))
@@ -1186,7 +1145,8 @@ static paw_Bool code_switch(struct MirVisitor *V, struct MirSwitch *x)
 
     struct MirSwitchArm *parm;
     K_LIST_FOREACH (x->arms, parm) {
-        int const next_jump = code_switch_int(fs, x->discr, CAST(int, V_INT(parm->value)));
+        struct MirConstantData const *kdata = mir_const_data(fs->mir, parm->k);
+        int const next_jump = code_switch_int(fs, x->discr, CAST(int, V_INT(kdata->value)));
         add_edge(G, next_jump, parm->bid);
     }
     return PAW_FALSE;

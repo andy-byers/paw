@@ -368,4 +368,3 @@ pub fn test_and_or_chain_3() {
     and_or_chain_3(true, true, false);
     and_or_chain_3(true, true, true);
 }
-

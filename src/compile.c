@@ -639,8 +639,7 @@ void pawP_bitset_set(struct BitSet *set, int i)
 
 void pawP_bitset_set_range(struct BitSet *bs, int i, int j)
 {
-    while (i < j)
-        pawP_bitset_set(bs, i++);
+    while (i < j) pawP_bitset_set(bs, i++);
 }
 
 int pawP_bitset_count(struct BitSet const *set)
@@ -664,8 +663,7 @@ void pawP_bitset_clear(struct BitSet *set, int i)
 
 void pawP_bitset_clear_range(struct BitSet *bs, int i, int j)
 {
-    while (i < j)
-        pawP_bitset_clear(bs, i++);
+    while (i < j) pawP_bitset_clear(bs, i++);
 }
 
 void pawP_bitset_and(struct BitSet *a, struct BitSet const *b)

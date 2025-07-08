@@ -3,18 +3,18 @@
 pub fn test_option() {
     let positive = |i: int| -> Option<int> {
         if i > 0 { 
-            Option::Some(i) 
+            Some(i) 
         } else { 
-            Option::None 
+            None 
         }
     };
 
     let positive_even = |i: int| -> Option<int> {
         i = positive(i)?;
         if i % 2 == 0 { 
-            Option::Some(i) 
+            Some(i) 
         } else { 
-            Option::None 
+            None 
         }
     };
 
@@ -26,18 +26,18 @@ pub fn test_option() {
 pub fn test_result() {
     let positive = |i: int| -> Result<int, str> {
         if i > 0 { 
-            Result::Ok(i) 
+            Ok(i) 
         } else { 
-            Result::Err("not positive") 
+            Err("not positive") 
         }
     };
 
     let positive_even = |i: int| -> Result<int, str> {
         i = positive(i)?;
         if i % 2 == 0 { 
-            Result::Ok(i) 
+            Ok(i) 
         } else { 
-            Result::Err("not even")
+            Err("not even")
         }
     };
 
@@ -61,9 +61,9 @@ inline struct Padded<T> {
 pub fn test_different_option() {
     let positive = |p: Padded<int>| -> Option<Padded<int>> {
         if p.value > 0 { 
-            Option::Some(p) 
+            Some(p) 
         } else { 
-            Option::None 
+            None 
         }
     };
 
@@ -72,9 +72,9 @@ pub fn test_different_option() {
     let positive_even = |p: Padded<int>| -> Option<int> {
         p = positive(p)?;
         if p.value % 2 == 0 { 
-            Option::Some(p.value) 
+            Some(p.value) 
         } else { 
-            Option::None 
+            None 
         }
     };
 
@@ -86,18 +86,18 @@ pub fn test_different_option() {
 pub fn test_different_result() {
     let positive = |p: Padded<int>| -> Result<Padded<int>, str> {
         if p.value > 0 { 
-            Result::Ok(p) 
+            Ok(p) 
         } else { 
-            Result::Err("not positive") 
+            Err("not positive") 
         }
     };
 
     let positive_even = |p: Padded<int>| -> Result<int, str> {
         p = positive(p)?;
         if p.value % 2 == 0 { 
-            Result::Ok(p.value) 
+            Ok(p.value) 
         } else { 
-            Result::Err("not even")
+            Err("not even")
         }
     };
 

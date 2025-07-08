@@ -114,8 +114,10 @@ static void step_instruction(struct Liveness *L, struct MirRegisterList *set, st
         OUTPUT(L, instr_loc(L, instr), (*ppr)->r);
 
     MirPlacePtrList const *ploads = pawMir_get_loads(L->mir, instr);
-    K_LIST_FOREACH (ploads, ppr)
-        INPUT(L, instr_loc(L, instr), (*ppr)->r);
+    K_LIST_FOREACH (ploads, ppr) {
+        if ((*ppr)->kind == MIR_PLACE_LOCAL)
+            INPUT(L, instr_loc(L, instr), (*ppr)->r);
+    }
 }
 
 #undef INPUT
@@ -125,21 +127,28 @@ static void step_instruction(struct Liveness *L, struct MirRegisterList *set, st
 
 #include <stdio.h>
 
-static void dump_live_intervals(struct Liveness *L, struct MirIntervalList *intervals)
+static void dump_live_intervals(struct Liveness *L, struct MirIntervalMap *intervals, int max_position)
 {
-    struct MirLiveInterval **iter;
-    printf("live_intervals = {\n");
-    K_LIST_FOREACH (intervals, iter) {
-        struct MirLiveInterval *live = *iter;
-        printf("  _%d: ", live->r.value);
-        for (int i = 0; i < live->ranges->count; ++i) {
-            if (i > 0)
-                printf(" ");
-            putchar(pawP_bitset_get(live->ranges, i) ? '*' : ' ');
+    for (int r = 0; r < intervals->count; ++r) {
+        struct MirLiveInterval *const *pit = MirIntervalMap_get(L->mir, intervals, MIR_REG(r));
+        printf("  _%d: ", r);
+        if (pit != NULL) {
+            struct MirLiveInterval const *it = *pit;
+            for (int i = 0; i <= max_position; ++i) {
+                if (i > 0) printf(" ");
+                if (pawP_bitset_get(it->ranges, i)) {
+                    putchar('*');
+                } else {
+                    putchar('.');
+                }
+            }
+        } else {
+            for (int i = 0; i <= max_position; ++i) {
+                printf(". ");
+            }
         }
-        printf("]\n");
+        printf("\n");
     }
-    printf("}\n");
 }
 
 #endif // PAW_DEBUG_EXTRA
@@ -185,7 +194,8 @@ static void compute_liveness(struct Liveness *L, struct Mir *mir, struct MirBloc
             K_LIST_FOREACH (sblock->joins, pinstr) {
                 struct MirPhi *phi = MirGetPhi(*pinstr);
                 int const p = mir_which_pred(L->mir, *ps, b);
-                add_live_reg(L, live, MirPlaceList_get(phi->inputs, p).r);
+                struct MirPlace const input = MirPlaceList_get(phi->inputs, p);
+                if (input.kind == MIR_PLACE_LOCAL) add_live_reg(L, live, input.r);
             }
         }
 
@@ -265,11 +275,11 @@ static paw_Bool block_set_contains(struct MirBlockList *set, MirBlock b)
     return PAW_FALSE;
 }
 
-inline static int find_place(struct MirPlacePtrList const *place, MirRegister r)
+inline static int find_place(struct MirPlacePtrList const *places, MirRegister r)
 {
     int index;
     struct MirPlace *const *ppp;
-    K_LIST_ENUMERATE (place, index, ppp) {
+    K_LIST_ENUMERATE (places, index, ppp) {
         if (MIR_ID_EQUALS(r, (*ppp)->r))
             return index;
     }
@@ -305,16 +315,14 @@ struct MirBlockList *pawMir_compute_live_in(struct Mir *mir, struct MirBlockList
             // output, so loads must be checked before stores. e.g. "x = x + 1"
             // loads "x" before writing to it.
             MirPlacePtrList const *loads = pawMir_get_loads(mir, *pinstr);
-            if (find_place(loads, r) >= 0)
-                goto found_access;
+            if (find_place(loads, r) >= 0) break;
 
             MirPlacePtrList const *stores = pawMir_get_stores(mir, *pinstr);
             if (find_place(stores, r) >= 0) {
                 MirBlockList_swap_remove(W, index);
-                goto found_access;
+                break;
             }
         }
-    found_access:;
     }
 
     while (W->count > 0) {
@@ -348,8 +356,7 @@ struct MirIntervalMap *pawMir_compute_liveness(struct Compiler *C, struct Mir *m
     L.live = RegisterSetList_new(&L);
     L.mapping = MirIntervalMap_new(mir);
 
-    struct MirBlockData *last = mir_bb_data(mir, K_LIST_LAST(order));
-    int const max_position = bb_last_loc(&L, last);
+    int const max_position = bb_last_loc(&L, mir_bb_data(mir, K_LIST_LAST(order)));
     int const nparameters = mir->param_size;
     int const ncaptured = mir->captured->count;
     int const nregisters = mir->registers->count;

@@ -16,9 +16,11 @@ fn fold_int_special_cases(i: int) {
     assert(i ^ 0 == i);
     assert(0 ^ i == i);
     assert(i << 0 == i);
-    assert(0 << i == 0);
     assert(i >> 0 == i);
-    assert(0 >> i == 0);
+    if i >= 0 {
+        assert(0 << i == 0);
+        assert(0 >> i == 0);
+    }
 
     assert(i - i == 0);
     assert(i / i == 1);

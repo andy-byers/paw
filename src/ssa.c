@@ -72,7 +72,7 @@ DEFINE_LIST(struct SsaConverter, IntegerList, int)
 
 static void rename_input(struct SsaConverter *S, MirRegister *pr)
 {
-    struct MirRegisterList *names = NameStackList_get(S->stacks, pr->value);
+    struct MirRegisterList const *names = NameStackList_get(S->stacks, pr->value);
     paw_assert(names->count > 0 && "use of undefined register");
     *pr = K_LIST_LAST(names);
 }
@@ -107,11 +107,13 @@ static void rename_join(struct SsaConverter *S, struct MirInstruction *instr)
 static void rename_move(struct SsaConverter *S, struct MirInstruction *instr)
 {
     struct MirMove *move = MirGetMove(instr);
-    rename_input(S, &move->target.r);
+    if (move->target.kind == MIR_PLACE_LOCAL)
+        rename_input(S, &move->target.r);
 
     MirRegister const old = move->output.r;
     struct MirRegisterData *data = mir_reg_data(S->mir, old);
     if (data->is_captured) {
+        paw_assert(move->output.kind == MIR_PLACE_LOCAL);
         rename_input(S, &move->output.r);
 
         instr->SetCapture_ = (struct MirSetCapture){
@@ -135,12 +137,16 @@ static void rename_instruction(struct SsaConverter *S, struct MirInstruction *in
     }
     struct MirPlace *const *ppp;
     MirPlacePtrList const *loads = pawMir_get_loads(S->mir, instr);
-    K_LIST_FOREACH (loads, ppp)
-        rename_input(S, &(*ppp)->r);
+    K_LIST_FOREACH (loads, ppp) {
+        if ((*ppp)->kind == MIR_PLACE_LOCAL)
+            rename_input(S, &(*ppp)->r);
+    }
 
     MirPlacePtrList const *stores = pawMir_get_stores(S->mir, instr);
-    K_LIST_FOREACH (stores, ppp)
-        rename_output(S, &(*ppp)->r, MirIsAllocLocal(instr));
+    K_LIST_FOREACH (stores, ppp) {
+        if ((*ppp)->kind == MIR_PLACE_LOCAL)
+            rename_output(S, &(*ppp)->r, MirIsAllocLocal(instr));
+    }
 }
 
 static paw_Bool list_includes_block(struct MirBlockList const *blocks, MirBlock b)
@@ -188,8 +194,7 @@ static void place_phi_nodes(struct SsaConverter *S)
         nstacks = PAW_MAX(nstacks, r.value + 1);
         // consider each assignment of the variable
         struct MirBlockList *defs = *UseDefMapIterator_valuep(&iter);
-        if (defs->count < 2)
-            continue; // variable has single version
+        if (defs->count < 2) continue; // variable has single version
 
         MirBlock const *pb;
         K_LIST_FOREACH (defs, pb) {
@@ -288,9 +293,11 @@ static void ensure_init(struct SsaConverter *S, struct MirInstruction *instr)
 
     struct MirPlace *const *ppp;
     K_LIST_FOREACH (loads, ppp) {
-        struct MirRegisterData *data = mir_reg_data(S->mir, (*ppp)->r);
-        if (data->is_uninit)
-            SSA_ERROR(S, use_before_initialization, instr->hdr.loc, "use before initialization");
+        if ((*ppp)->kind == MIR_PLACE_LOCAL) {
+            struct MirRegisterData const *data = mir_reg_data(S->mir, (*ppp)->r);
+            if (data->is_uninit)
+                SSA_ERROR(S, use_before_initialization, instr->hdr.loc, "use before initialization");
+        }
     }
 }
 
@@ -299,7 +306,7 @@ static void fix_aux_info(struct SsaConverter *S, struct Mir *mir)
     // check for use before initialization
     struct MirBlockData **pdata;
     K_LIST_FOREACH (mir->blocks, pdata) {
-        struct MirBlockData *data = *pdata;
+        struct MirBlockData const *data = *pdata;
         struct MirInstruction *const *pinstr;
         K_LIST_FOREACH (data->joins, pinstr)
             ensure_init(S, *pinstr);
