@@ -1,0 +1,126 @@
+// Copyright (c) 2024, The paw Authors. All rights reserved.
+// This source code is licensed under the MIT License, which can be found in
+// LICENSE.md. See AUTHORS.md for a list of contributor names.
+
+pub trait Hash {
+    fn hash(self) -> int;
+}
+
+pub trait Equals {
+    fn eq(self, rhs: Self) -> bool;
+}
+
+pub trait Compare {
+    fn lt(self, rhs: Self) -> bool;
+    fn le(self, rhs: Self) -> bool;
+}
+
+pub trait Increment {
+    fn incremented(self) -> Self;
+}
+
+pub trait Iterate<I: Advance<T>, T> {
+    fn iterator(self) -> I;
+}
+
+pub trait Advance<T> {
+    fn next(self) -> Option<T>;
+}
+
+pub inline struct Range<T: Compare + Increment>: Iterate<RangeIterator<T>, T> {
+    pub start: T,
+    pub end: T,
+    pub fn contains(self, value: T) -> bool {
+        self.start.le(value) && value.lt(self.end)
+    }
+    pub fn iterator(self) -> RangeIterator<T> {
+        RangeIterator::new(self)
+    }
+}
+
+pub inline struct RangeFrom<T: Compare + Increment>: Iterate<RangeFromIterator<T>, T> {
+    pub start: T,
+    pub fn contains(self, value: T) -> bool {
+        self.start.le(value)
+    }
+    pub fn iterator(self) -> RangeFromIterator<T> {
+        RangeFromIterator::new(self)
+    }
+}
+
+pub inline struct RangeTo<T: Compare> {
+    pub end: T,
+    pub fn contains(self, value: T) -> bool {
+        value.lt(self.end)
+    }
+}
+
+pub inline struct RangeFull {
+    pub fn contains<T>(self, value: T) -> bool {
+        true
+    }
+}
+
+pub inline struct RangeInclusive<T: Compare + Increment>: Iterate<RangeInclusiveIterator<T>, T> {
+    pub start: T,
+    pub end: T,
+    pub fn contains(self, value: T) -> bool {
+        self.start.le(value) && value.le(self.end)
+    }
+    pub fn iterator(self) -> RangeInclusiveIterator<T> {
+        RangeInclusiveIterator::new(self)
+    }
+}
+
+pub inline struct RangeToInclusive<T: Compare> {
+    pub end: T,
+    pub fn contains(self, value: T) -> bool {
+        value.le(self.end)
+    }
+}
+
+pub struct RangeIterator<T: Compare + Increment>: Advance<T> {
+    end: T,
+    iter: T,
+    pub fn new(range: Range<T>) -> Self {
+        Self{iter: range.start, end: range.end}
+    }
+    pub fn next(self) -> Option<T> {
+        let iter = self.iter;
+        if iter.lt(self.end) {
+            self.iter = iter.incremented();
+            Option::Some(iter)
+        } else {
+            Option::None
+        }
+    }
+}
+
+pub struct RangeFromIterator<T: Compare + Increment>: Advance<T> {
+    iter: T,
+    pub fn new(range: RangeFrom<T>) -> Self {
+        Self{iter: range.start}
+    }
+    pub fn next(self) -> Option<T> {
+        let iter = self.iter;
+        self.iter = self.iter.incremented();
+        Option::Some(iter)
+    }
+}
+
+pub struct RangeInclusiveIterator<T: Compare + Increment>: Advance<T> {
+    end: T,
+    iter: Option<T>,
+    pub fn new(range: RangeInclusive<T>) -> Self {
+        Self{iter: Option::Some(range.start), end: range.end}
+    }
+    pub fn next(self) -> Option<T> {
+        let iter = self.iter?;
+        if iter.lt(self.end) {
+            self.iter = Option::Some(iter.incremented());
+        } else {
+            self.iter = Option::None;
+        }
+        Option::Some(iter)
+    }
+}

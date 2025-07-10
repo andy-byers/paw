@@ -17,8 +17,8 @@ option(PAW_BuildFuzzers "Build the fuzz targets" Off)
 option(PAW_BuildTests "Build the tests" ${MAIN_PROJECT})
 
 # TODO: Install stdlib .paw files somewhere and use that path?
-set(PAW_PRELUDE_PATH "${CMAKE_SOURCE_DIR}/src/prelude.paw" CACHE STRING "Path to prelude module")
-set(PAW_STDLIB_PREFIX "${CMAKE_SOURCE_DIR}/src/" CACHE STRING "")
+set(PAW_PRELUDE_PATH "${CMAKE_SOURCE_DIR}/std/prelude.paw" CACHE STRING "Path to prelude module")
+set(PAW_STDLIB_PATH "${CMAKE_SOURCE_DIR}/std/" CACHE STRING "Path to standard library source files")
 set(PAW_STRESS 0 CACHE STRING "Enable expensive checks (supports up to level 2)")
  
 add_library(paw_context INTERFACE)
@@ -93,7 +93,6 @@ set(PAW_SOURCE_FILES
     ${PAW_SOURCE_DIR}/hir.c
     ${PAW_SOURCE_DIR}/import.c
     ${PAW_SOURCE_DIR}/instantiate.c
-    ${PAW_SOURCE_DIR}/io.c
     ${PAW_SOURCE_DIR}/ir_type.c
     ${PAW_SOURCE_DIR}/kfold.c
     ${PAW_SOURCE_DIR}/kprop.c
@@ -106,7 +105,6 @@ set(PAW_SOURCE_FILES
     ${PAW_SOURCE_DIR}/lower_hir.c
     ${PAW_SOURCE_DIR}/lower_type.c
     ${PAW_SOURCE_DIR}/map.c
-    ${PAW_SOURCE_DIR}/math.c
     ${PAW_SOURCE_DIR}/mem.c
     ${PAW_SOURCE_DIR}/mir.c
     ${PAW_SOURCE_DIR}/monomorphize.c
@@ -127,7 +125,12 @@ set(PAW_SOURCE_FILES
     ${PAW_SOURCE_DIR}/unify.c
     ${PAW_SOURCE_DIR}/unbox.c
     ${PAW_SOURCE_DIR}/util.c
-    ${PAW_SOURCE_DIR}/value.c)
+    ${PAW_SOURCE_DIR}/value.c
+    ${PAW_STDLIB_PATH}/list.c
+    ${PAW_STDLIB_PATH}/io.c
+    ${PAW_STDLIB_PATH}/map.c
+    ${PAW_STDLIB_PATH}/math.c
+    ${PAW_STDLIB_PATH}/prelude.c)
 
 # TODO: Paw really needs better organization. At least split off a "compiler" directory to hold the numerous compiler source files
 add_library(paw STATIC)
@@ -138,7 +141,7 @@ target_include_directories(paw
     PUBLIC ${PAW_SOURCE_DIR})
 target_compile_definitions(paw
     PUBLIC PAW_PRELUDE_PATH="${PAW_PRELUDE_PATH}"
-           PAW_STDLIB_PREFIX="${PAW_STDLIB_PREFIX}"
+           PAW_STDLIB_PATH="${PAW_STDLIB_PATH}"
            PAW_STRESS=${PAW_STRESS})
 
 add_executable(pawc

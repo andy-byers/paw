@@ -1,0 +1,35 @@
+// Copyright (c) 2024, The paw Authors. All rights reserved.
+// This source code is licensed under the MIT License, which can be found in
+// LICENSE.md. See AUTHORS.md for a list of contributor names.
+
+pub inline enum Option<T> {
+    Some(T),
+    None,
+
+    pub fn is_some(self) -> bool {
+        !self.is_none()
+    }
+
+    pub fn is_none(self) -> bool {
+        match self {
+            None => true,
+            Some(_) => false,
+        }
+    }
+
+    pub fn unwrap_or(self, value: T) -> T {
+        match self {
+            Some(t) => t,
+            None => value,
+        }
+    }
+
+    pub fn unwrap(self) -> T {
+        match self {
+            Some(t) => t,
+            None => panic("failed to unwrap"),
+        }
+    }
+}
+
+pub use Option::*;

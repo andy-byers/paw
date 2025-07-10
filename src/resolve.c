@@ -56,11 +56,20 @@ _Noreturn static void unknown_path(struct Resolver *R, struct AstPath path)
     RESOLVER_ERROR(R, unknown_path, R->current->name, path.span.start, repr);
 }
 
+static paw_Bool is_core_module(struct Resolver *R, struct AstDecl *mod)
+{
+    struct AstModuleDecl const *m = AstGetModuleDecl(mod);
+    return m->modno == PRELUDE_MODNO
+        || pawS_eq(m->name, SCAN_STR(R->C, "ops"))
+        || pawS_eq(m->name, SCAN_STR(R->C, "list"))
+        || pawS_eq(m->name, SCAN_STR(R->C, "map"))
+        || pawS_eq(m->name, SCAN_STR(R->C, "option"))
+        || pawS_eq(m->name, SCAN_STR(R->C, "result"));
+}
+
 static void maybe_store_builtin(struct Resolver *R, NodeId module_id, struct AstIdent ident, NodeId id, DeclId did)
 {
-    struct AstDecl *mod = pawAst_get_node(R->ast, module_id);
-    struct AstModuleDecl *m = AstGetModuleDecl(mod);
-    if (m->modno == PRELUDE_MODNO) {
+    if (is_core_module(R, pawAst_get_node(R->ast, module_id))) {
         struct Builtin *const *pb = BuiltinMap_get(R->C, R->C->builtin_lookup, ident.name);
         if (pb != NULL) {
             (*pb)->did = did;
@@ -118,8 +127,6 @@ static void validate_type_args(struct Resolver *R, enum AstDeclKind kind, struct
         RESOLVER_ERROR(R, incorrect_type_arity, current_modname(R),
                 segment.ident.span.start, generics->count, segment.types->count);
 }
-
-#define EMIT_SYMBOL(Symbol_, Out_) (*(Out_) = (Symbol_), PAW_TRUE)
 
 struct ImportSymbol const *pawP_find_import_symbol(struct Resolver *R, struct ImportScope const *scope, struct PathCursor pc, enum Namespace ns);
 
@@ -455,7 +462,7 @@ static paw_Bool resolve_ident_pat(struct AstVisitor *V, struct AstIdentPat *p)
 {
     struct Resolver *R = V->ud;
 
-    // use a fake path to avoid allocating memory
+    // use a fake path to avoid an allocation
     struct AstPath const path = {
         .segments = &(AstSegments){
             .data = &(struct AstSegment){
@@ -473,10 +480,9 @@ static paw_Bool resolve_ident_pat(struct AstVisitor *V, struct AstIdentPat *p)
     if (lookup(R, path, NAMESPACE_VALUE, &symbol)
             && symbol.kind == SYMBOL_DECL) {
         decl = pawAst_get_node(R->ast, symbol.id);
-        if (AstIsParamDecl(decl)) decl = NULL; // TODO: hack, should be SYMBOL_PARAM or something...
     }
 
-    if (decl == NULL || AstIsFnDecl(decl)) {
+    if (decl == NULL || AstIsParamDecl(decl) || AstIsFnDecl(decl)) {
         // create a binding pattern
         set_result(R, p->id, p->id, RESOLVED_LOCAL);
 
@@ -499,8 +505,6 @@ static paw_Bool resolve_ident_pat(struct AstVisitor *V, struct AstIdentPat *p)
                 set_result(R, p->id, name->id, RESOLVED_LOCAL);
             }
         }
-    } else if (decl == NULL) {
-        unknown_path(R, path);
     }
     return PAW_FALSE;
 }

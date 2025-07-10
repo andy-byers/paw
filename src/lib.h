@@ -14,11 +14,16 @@
 #include "paw.h"
 
 #define PAWL_PRELUDE_NAME "prelude"
+#define PAWL_OPS_NAME "ops"
+#define PAWL_LIST_NAME "list"
+#define PAWL_MAP_NAME "map"
+#define PAWL_OPTION_NAME "option"
+#define PAWL_RESULT_NAME "result"
 #define PAWL_MATH_NAME "math"
 #define PAWL_IO_NAME "io"
 
 // Evaluates to a path to the given standard library module's source code
-#define PAWL_STDLIB_PATH(Module_) PAW_STDLIB_PREFIX Module_ ".paw"
+#define PAWL_STDLIB_PATH(Module_) PAW_STDLIB_PATH PAW_FOLDER_SEPS Module_ ".paw"
 
 struct LoaderState {
     paw_Reader f;

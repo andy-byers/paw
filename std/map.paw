@@ -1,0 +1,32 @@
+// Copyright (c) 2024, The paw Authors. All rights reserved.
+// This source code is licensed under the MIT License, which can be found in
+// LICENSE.md. See AUTHORS.md for a list of contributor names.
+
+pub struct Map<K: Hash + Equals, V>: Iterate<MapIterator<K, V>, K> {
+    #[extern] pub fn length(self) -> int;
+    #[extern] pub fn get(self, key: K) -> Option<V>;
+    #[extern] pub fn set(self, key: K, value: V);
+    #[extern] pub fn get_or(self, key: K, default: V) -> V;
+    #[extern] pub fn erase(self, key: K);
+
+    pub fn contains(self, key: K) -> bool {
+        match self.get(key) {
+            Some(_) => true,
+            None => false,
+        }
+    }
+
+    pub fn iterator(self) -> MapIterator<K, V> {
+        MapIterator::new(self)
+    }
+}
+
+pub struct MapIterator<K: Hash + Equals, V>: Advance<K> {
+    map: [K: V],
+    index: int,
+    pub fn new(map: [K: V]) -> Self {
+        Self{map, index: -1}
+    }
+    #[extern] pub fn next(self) -> Option<K>;
+}
+

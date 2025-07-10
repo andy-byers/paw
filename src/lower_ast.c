@@ -1105,14 +1105,14 @@ static struct HirPat *LowerIdentPat(struct LowerAst *L, struct AstIdentPat *p)
             return pat;
         }
         default: {
-            struct HirDecl *decl = pawHir_get_node(L->hir, res->id);
-            if (HirIsParamDecl(decl))
+            struct AstDecl *decl = pawAst_get_node(L->ast, res->id);
+            if (AstIsParamDecl(decl))
                 return NEW_NODE(L, binding_pat, p->span, p->id, ident);
 
             HirSegments *segments = HirSegments_new(L->hir);
             pawHir_add_segment(L->hir, segments, next_node_id(L), ident, NULL, res->id);
             struct HirPath const path = pawHir_path_create(ident.span, segments, HIR_PATH_ITEM);
-            if (HirIsAdtDecl(decl))
+            if (AstIsAdtDecl(decl))
                 return NEW_NODE(L, struct_pat, p->span, p->id, path, HirPatList_new(L->hir));
 
             int const discr = AstGetVariantDecl( pawAst_get_node(L->ast, res->id))->index;
@@ -1130,9 +1130,9 @@ static struct HirPat *LowerPathPat(struct LowerAst *L, struct AstPathPat *p)
             //       of the binding defined in the first alternative of the OR pattern (equal
             //       to "p->id" if "p" itself is in the first alternative). This is necessary
             //       for when bindings are assigned to registers during HIR lowering, since
-            //       the result part of a match arm containing an OR pattern is copied for
-            //       each alternative, and paths in the result part can refer to bindings in
-            //       the first alternative. The NodeID-to-register mapping is updated before
+            //       the result part of a match arm containing an OR pattern is copied for each
+            //       alternative, and paths in the result part might refer to bindings created
+            //       in the first alternative. The NodeID-to-register mapping is updated before
             //       each copied result part is lowered to support patterns with bindings in
             //       different positions, like "(1, v) | (v, 2)", etc.
             struct HirSegment const segment = K_LIST_FIRST(path.segments);
@@ -1142,10 +1142,10 @@ static struct HirPat *LowerPathPat(struct LowerAst *L, struct AstPathPat *p)
         }
         case HIR_PATH_ITEM: {
             struct HirSegment const segment = K_LIST_FIRST(path.segments);
-            struct HirDecl *decl = pawHir_get_node(L->hir, segment.target);
-            if (HirIsParamDecl(decl)) {
+            struct AstDecl *decl = pawAst_get_node(L->ast, segment.target);
+            if (AstIsParamDecl(decl)) {
                 return NEW_NODE(L, binding_pat, p->span, p->id, segment.ident);
-            } else if (HirIsAdtDecl(decl)) {
+            } else if (AstIsAdtDecl(decl)) {
                 return NEW_NODE(L, struct_pat, p->span, p->id, path, HirPatList_new(L->hir));
             }
             // fallthrough

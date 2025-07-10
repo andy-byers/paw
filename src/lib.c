@@ -131,11 +131,23 @@ static struct FileReader *new_file_reader(paw_Env *P, char const *pathname)
 
 static int searcher_Paw(paw_Env *P)
 {
+    void l_import_prelude(paw_Env *P);
+    void l_import_list(paw_Env *P);
+    void l_import_map(paw_Env *P);
     void l_import_io(paw_Env * P);
     void l_import_math(paw_Env * P);
-    void l_import_prelude(paw_Env *P);
 
-    if (matches_modname(P, PAWL_IO_NAME)) {
+    if (matches_modname(P, PAWL_OPS_NAME)) {
+        pawL_file_reader(P, PAWL_STDLIB_PATH(PAWL_OPS_NAME));
+    } else if (matches_modname(P, PAWL_LIST_NAME)) {
+        l_import_list(P);
+    } else if (matches_modname(P, PAWL_MAP_NAME)) {
+        l_import_map(P);
+    } else if (matches_modname(P, PAWL_OPTION_NAME)) {
+        pawL_file_reader(P, PAWL_STDLIB_PATH(PAWL_OPTION_NAME));
+    } else if (matches_modname(P, PAWL_RESULT_NAME)) {
+        pawL_file_reader(P, PAWL_STDLIB_PATH(PAWL_RESULT_NAME));
+    } else if (matches_modname(P, PAWL_IO_NAME)) {
         l_import_io(P);
     } else if (matches_modname(P, PAWL_MATH_NAME)) {
         l_import_math(P);

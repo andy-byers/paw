@@ -1,0 +1,42 @@
+// Copyright (c) 2024, The paw Authors. All rights reserved.
+// This source code is licensed under the MIT License, which can be found in
+// LICENSE.md. See AUTHORS.md for a list of contributor names.
+
+pub inline enum Result<T, E> {
+    Ok(T),
+    Err(E),
+
+    pub fn is_ok(self) -> bool {
+        !self.is_err()
+    }
+
+    pub fn is_err(self) -> bool {
+        match self {
+            Err(_) => true,
+            Ok(_) => false,
+        }
+    }
+
+    pub fn unwrap_or(self, value: T) -> T {
+        match self {
+            Ok(t) => t,
+            Err(_) => value,
+        }
+    }
+
+    pub fn unwrap_err(self) -> E {
+        match self {
+            Err(e) => e,
+            Ok(_) => panic("failed to unwrap error"),
+        }
+    }
+
+    pub fn unwrap(self) -> T {
+        match self {
+            Ok(t) => t,
+            Err(_) => panic("failed to unwrap"),
+        }
+    }
+}
+
+pub use Result::*;

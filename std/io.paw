@@ -1,6 +1,10 @@
-// io.paw
+// Copyright (c) 2024, The paw Authors. All rights reserved.
+// This source code is licensed under the MIT License, which can be found in
+// LICENSE.md. See AUTHORS.md for a list of contributor names.
 
-pub type Result<T> = prelude::Result<T, Error>;
+use result;
+
+pub type Result<T> = result::Result<T, Error>;
 
 pub struct File {
     inner: (),

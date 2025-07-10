@@ -1,0 +1,42 @@
+// Copyright (c) 2024, The paw Authors. All rights reserved.
+// This source code is licensed under the MIT License, which can be found in
+// LICENSE.md. See AUTHORS.md for a list of contributor names.
+
+pub struct List<T>: Iterate<ListIterator<T>, T> {
+    #[extern] pub fn length(self) -> int;
+    #[extern] pub fn get(self, index: int) -> Option<T>;
+    #[extern] pub fn set(self, index: int, value: T);
+    #[extern] pub fn push(self, value: T);
+    #[extern] pub fn insert(self, index: int, value: T);
+    #[extern] pub fn remove(self, index: int);
+    #[extern] pub fn pop(self) -> T;
+
+    pub fn get_or(self, index: int, default: T) -> T {
+        match self.get(index) {
+            Some(value) => value,
+            _ => default,
+        }
+    }
+
+    pub fn iterator(self) -> ListIterator<T> {
+        ListIterator::new(self)
+    }
+}
+
+pub struct ListIterator<T>: Advance<T> {
+    list: [T],
+    index: int,
+    pub fn new(list: [T]) -> Self {
+        Self{list, index: 0}
+    }
+    pub fn next(self) -> Option<T> {
+        if self.index < #self.list {
+            let i = self.index;
+            self.index = i + 1;
+            Some(self.list[i])
+        } else {
+            None
+        }
+    }
+}
+
