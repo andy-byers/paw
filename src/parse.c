@@ -1234,6 +1234,8 @@ static struct AstExpr *while_expr(struct Lex *lex)
     return NEW_NODE(lex, while_expr, start, next_id(lex), cond, block);
 }
 
+static struct AstExpr *subexpr(struct Lex *lex, unsigned prec);
+
 static struct AstExpr *return_expr(struct Lex *lex)
 {
     struct SourceLoc const start = lex->loc;
@@ -1242,14 +1244,7 @@ static struct AstExpr *return_expr(struct Lex *lex)
     if (lex->fn_depth == 0)
         PARSE_ERROR(lex, return_outside_function, start);
 
-    struct AstExpr *expr = NULL;
-    if (!test(lex, '}')
-            && !test(lex, ']')
-            && !test(lex, ')')
-            && !test(lex, ';')
-            && !test(lex, ',')) {
-        expr = expr0(lex);
-    }
+    struct AstExpr *expr = subexpr(lex, 0);
     return NEW_NODE(lex, return_expr, start, next_id(lex), expr);
 }
 

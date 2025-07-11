@@ -272,7 +272,7 @@ pub fn test_diverging_expressions() {
     let _: int = #return;
 
     let _: int = 1 + return;
-    let _: int = (return) + 1;
+    let _: int = return + 1;
 
     let _ = (1, return);    
     let _ = (return, 2);    
@@ -284,5 +284,12 @@ pub fn test_diverging_expressions() {
     match (return) {
         true => {},
         _ => {},
+    }
+
+    loop {
+        match (return) {
+            'a' => break,
+            _ => if break {break} else {break},
+        }
     }
 }

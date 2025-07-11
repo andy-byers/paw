@@ -244,9 +244,6 @@ A panic can also be caused by calling the `panic` builtin function.
 
 ## Known problems
 + These need to be converted into issues, along with some TODO comments scattered throughout the codebase...
-+ "return" must sometimes be enclosed in parenthesis (or a block), otherwise the parser expects an expression to follow 
-    + Could return NULL when we cannot parse an expression and handle it accordingly instead of throwing an error immediately
-    + also should include a convenience function to throw an error if the expr is NULL that will be used in most places
 + Paw requires that "int" be at least 32 bits (probably fine in practice)
 + Need to make sure functions/closures with a return type annotation of "!" diverge unconditionally 
     + See TODO comment in `test_error.c` `test_divergence` function
