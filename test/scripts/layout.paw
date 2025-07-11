@@ -1009,3 +1009,16 @@ pub fn test_enum_special_case_2() {
         _ => (),
     }
 }
+
+inline struct Empty {
+    pub fn method(self) {}
+}
+
+pub fn test_empty_struct() {
+    let e = Empty;
+    e.method();
+
+    let f = |x| x;
+    e = f(e);
+}
+

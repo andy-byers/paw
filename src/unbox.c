@@ -218,6 +218,12 @@ static int allocate_values(struct Unboxer *U, IrType *type, int discr, ValueAllo
     IrType *const *ptype;
     K_LIST_FOREACH (types, ptype)
         count += allocate_values(U, *ptype, discr, alloc, ctx);
+
+    if (count == 0) {
+        // every value must occupy at least 1 register
+        alloc(U->fs, pawP_builtin_type(U->C, BUILTIN_UNIT), ctx);
+        return 1;
+    }
     return count;
 }
 
