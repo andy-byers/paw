@@ -13,13 +13,11 @@ pub struct unit: Hash + Equals {
     pub fn eq(self, rhs: Self) -> bool { true }
 }
 
-pub struct bool: Hash + Equals + Compare {
+pub struct bool: Hash + Equals {
     #[extern] pub fn to_str(self) -> str;
 
     pub fn hash(self) -> int { self as int }
     pub fn eq(self, rhs: Self) -> bool { self == rhs }
-    pub fn lt(self, rhs: Self) -> bool { self as int < rhs as int }
-    pub fn le(self, rhs: Self) -> bool { self as int <= rhs as int }
 }
 
 pub struct char: Hash + Equals + Compare + Increment {
