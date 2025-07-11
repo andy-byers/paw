@@ -328,6 +328,7 @@ static void test_syntax_error(void)
     test_compiler_status(E_INVALID_SELECTOR, "invalid_selector", "", "let x = \"abc\".1e-2;");
     test_compiler_status(E_EMPTY_VARIANT_FIELD_LIST, "empty_variant_field_list", "enum E {X()}", "");
     test_compiler_status(E_FUNCTION_TYPE_DECL, "function_type_decl", "type F = fn();", "");
+    test_compiler_status(E_TRAIT_BOUNDS_ON_ALIAS_GENERIC, "trait_bounds_on_alias_generic", "struct Struct<X>;", "type T<X: Hash> = Struct<X>;");
     test_compiler_status(E_EXPECTED_COLON_AFTER_MAP_KEY, "expected_colon_after_map_key", "", "let x = [1: 2, 3];");
     test_compiler_status(E_COLON_AFTER_LIST_ELEMENT, "colon_after_list_element", "", "let x = [1, 2: 3];");
     test_compiler_status(E_EXPECTED_COMMA_SEPARATOR, "expected_comma_separator", "struct X {a: int b: int}", "");

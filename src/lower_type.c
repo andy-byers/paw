@@ -8,8 +8,6 @@
 #include "resolve.h"
 #include "unify.h"
 
-#define LOWERING_ERROR(L_, Kind_, ...) pawErr_##Kind_((L_)->C, (L_)->m->name, __VA_ARGS__)
-
 struct LowerType {
     struct HirModule m;
     struct Compiler *C;
@@ -72,7 +70,7 @@ IrType *lower_type_alias(struct Compiler *C, struct HirSegment segment, struct H
     IrTypeList *unknowns = new_unknowns(C, d->generics, &generics);
     IrTypeList *subst = pawP_instantiate_typelist(C, generics, unknowns, types);
     if (knowns != NULL) {
-        IrType **pu, **pk;
+        IrType *const *pu, *const *pk;
         K_LIST_ZIP (unknowns, pu, knowns, pk) {
             // unification with an IrInfer never fails due to incompatible types
             int const rc = pawU_unify(C->U, *pu, *pk);

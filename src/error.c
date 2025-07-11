@@ -487,7 +487,14 @@ _Noreturn void pawErr_invalid_glob_target(struct Compiler *C, Str const *modname
 _Noreturn void pawErr_missing_trait_bounds(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *name)
 {
     throw(C, E_MISSING_TRAIT_BOUNDS, modname, loc,
-            format(C, "generic type \"%s\" missing trait bounds", name),
+            format(C, "type parameter \"%s\" missing trait bounds", name),
+            NULL);
+}
+
+_Noreturn void pawErr_trait_bounds_on_alias_generic(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *name)
+{
+    throw(C, E_TRAIT_BOUNDS_ON_ALIAS_GENERIC, modname, loc,
+            format(C, "trait bounds not allowed on type parameter \"%s\" for type alias", name),
             NULL);
 }
 

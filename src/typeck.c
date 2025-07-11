@@ -1069,22 +1069,19 @@ static IrType *check_field_decl(struct TypeChecker *T, struct HirFieldDecl *d)
     return check_type(T, d->tag, d->span);
 }
 
-static void register_generics(struct TypeChecker *T, struct HirDeclList *generics)
-{
-    if (generics == NULL)
-        return;
-
-    struct HirDecl *const *pdecl;
-    K_LIST_FOREACH (generics, pdecl) {
-        struct HirGenericDecl *d = HirGetGenericDecl(*pdecl);
-        IrType *type = pawIr_new_generic(T->C, d->did, NULL);
-        SET_NODE_TYPE(T->C, *pdecl, type);
-    }
-}
-
 static IrType *check_type_decl(struct TypeChecker *T, struct HirTypeDecl *d)
 {
-    register_generics(T, d->generics);
+    if (d->generics != NULL) {
+        struct HirDecl *const *pdecl;
+        K_LIST_FOREACH (d->generics, pdecl) {
+            struct HirGenericDecl *d = HirGetGenericDecl(*pdecl);
+            if (d->bounds != NULL)
+                TYPECK_ERROR(T, trait_bounds_on_alias_generic,
+                        d->span.start, d->ident.name->text);
+            IrType *type = pawIr_new_generic(T->C, d->did, NULL);
+            SET_NODE_TYPE(T->C, *pdecl, type);
+        }
+    }
     IrType *type = check_type(T, d->rhs, d->span);
     SET_NODE_TYPE(T->C, d->rhs, type);
     return type;

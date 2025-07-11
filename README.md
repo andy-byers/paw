@@ -249,7 +249,6 @@ A panic can also be caused by calling the `panic` builtin function.
     + See TODO comment in `test_error.c` `test_divergence` function
     + Consider returns to be jumps to a special block, possibly after setting the return variable
     + Unconditionally-diverging functions should not have any writes to this variable
-+ Generic bounds should not be allowed on type aliases
 + Pointer tracking (test only) feature is broken on MSVC
     + Might indicate a problem somewhere in the library
     + Need a machine that can run Windows for debugging

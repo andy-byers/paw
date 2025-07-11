@@ -97,6 +97,7 @@ enum ErrorKind {
 
     // type errors
     E_MISSING_TRAIT_BOUNDS,
+    E_TRAIT_BOUNDS_ON_ALIAS_GENERIC,
     E_UNSATISFIED_TRAIT_BOUNDS,
     E_INCOMPATIBLE_TYPES,
     E_CANNOT_INFER,
@@ -246,6 +247,7 @@ _Noreturn void pawErr_invalid_glob_target(struct Compiler *C, Str const *modname
 
 // type errors
 _Noreturn void pawErr_missing_trait_bounds(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *name);
+_Noreturn void pawErr_trait_bounds_on_alias_generic(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *name);
 _Noreturn void pawErr_unsatisfied_trait_bounds(struct Compiler *C, Str const *modname, struct SourceLoc loc);
 _Noreturn void pawErr_incompatible_types(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *lhs, char const *rhs);
 _Noreturn void pawErr_cannot_infer(struct Compiler *C, Str const *modname, struct SourceLoc loc);
