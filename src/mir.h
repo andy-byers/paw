@@ -919,7 +919,6 @@ struct MirRegisterData {
     paw_Bool is_pointer : 1;
     int size;
     struct IrType *type;
-    struct IrType *self;
 };
 
 struct MirBlockData {

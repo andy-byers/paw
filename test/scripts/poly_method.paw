@@ -83,4 +83,3 @@ pub fn test_call_indirect_poly() {
     assert(t.0 == 456);
     assert(t.1 == "def");
 }
-

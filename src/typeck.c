@@ -961,10 +961,7 @@ IrType *pawP_find_method(struct Compiler *C, IrType *base, Str *name)
     struct HirDecl *decl = pawHir_get_decl(C->hir, IR_TYPE_DID(base));
     struct HirDecl const *method = find_method_aux(C, decl, name);
     if (method == NULL) return NULL;
-
-    IrType *fn = GET_NODE_TYPE(C, method);
-    if (!HIR_IS_POLY_ADT(decl)) return pawP_generalize(C, fn);
-    return pawP_generalize_assoc(C, base, fn);
+    return GET_NODE_TYPE(C, method);
 }
 
 static void check_adt_item(struct TypeChecker *T, struct HirAdtDecl *d)
@@ -1177,6 +1174,9 @@ static IrType *check_call_target(struct TypeChecker *T, struct HirExpr *target, 
         method = pawIr_resolve_trait_method(T->C, g, select->ident.name);
     } else if (IrIsAdt(self)) {
         method = pawP_find_method(T->C, self, select->ident.name);
+        method = ir_adt_types(self) != NULL
+            ? pawP_generalize_assoc(T->C, self, method)
+            : pawP_generalize(T->C, method);
     } else {
         return select_field(T, self, select);
     }

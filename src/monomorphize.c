@@ -57,8 +57,7 @@ static IrType *substitute_generic(struct IrTypeFolder *F, struct IrGeneric *t)
     IrType **pa, **pb;
     struct Substitution *subst = F->ud;
     K_LIST_ZIP (subst->generics, pa, subst->types, pb) {
-        if (!IrIsGeneric(*pa))
-            continue;
+        if (!IrIsGeneric(*pa)) continue;
         struct IrGeneric *g = IrGetGeneric(*pa);
         if (g->did.value == t->did.value)
             return *pb;
@@ -256,16 +255,42 @@ IrType *instantiate_method(struct Compiler *C, IrType *method, IrTypeList *gener
     return pawIr_fold_type(&F, method);
 }
 
+IrType *instantiate_method_v2(struct Compiler *C, IrType *method, IrType *self)
+{
+    struct IrAdt *inst = IrGetAdt(self);
+    struct IrAdt *base = IrGetAdt(pawIr_get_def_type(C, inst->did));
+
+    if (base->types == NULL)
+        return method;
+
+    struct IrTypeFolder F;
+    struct Substitution subst = {
+        .generics = base->types,
+        .types = inst->types,
+        .C = C,
+    };
+
+    pawIr_type_folder_init(&F, C, &subst);
+    F.FoldGeneric = substitute_generic;
+    return pawIr_fold_type(&F, method);
+}
+
 static struct MirRegisterData copy_register(struct MonoCollector *M, struct MirRegisterData reg)
 {
     IrType *type = reg.type;
-    if (reg.self != NULL) {
-        // determine the "Self" type and look up the concrete method
-        IrType *self = finalize_type(M, reg.self);
-        struct IrFnDef *def = pawIr_get_fn_def(M->C, IR_TYPE_DID(reg.type));
-        type = pawP_find_method(M->C, self, def->name);
-        type = instantiate_method(M->C, type, IR_TYPE_SUBTYPES(reg.type));
+    if (IrIsSignature(type)) {
+        struct IrSignature *fn = IrGetSignature(type);
+        if (fn->self != NULL) {
+            // determine the "Self" type and look up the concrete method
+            IrType *self = finalize_type(M, fn->self);
+            struct IrFnDef *def = pawIr_get_fn_def(M->C, IR_TYPE_DID(type));
+            type = pawP_find_method(M->C, self, def->name);
+            type = instantiate_method_v2(M->C, type, self);
+            type = instantiate_method(M->C, type, fn->types);
+        }
     }
+
+
     type = finalize_type(M, type);
     struct MirRegisterData result = reg;
     result.type = type;
@@ -467,6 +492,7 @@ static void register_map_methods(struct MonoCollector *M, IrType *type)
     IrTypeList **pequals_list = &K_LIST_AT(owners, TRAIT_EQUALS);
     if (*pequals_list == NULL) {
         IrType *equals = pawP_find_method(M->C, key, SCAN_STR(M->C, "eq"));
+        equals = instantiate_method_v2(M->C, equals, key);
         register_method(M, IrGetSignature(equals));
         *pequals_list = IrTypeList_new(M->C);
         IrTypeList_push(M->C, *pequals_list, equals);
@@ -476,6 +502,7 @@ static void register_map_methods(struct MonoCollector *M, IrType *type)
     IrTypeList **phash_list = &K_LIST_AT(owners, TRAIT_HASH);
     if (*phash_list == NULL) {
         IrType *hash = pawP_find_method(M->C, key, SCAN_STR(M->C, "hash"));
+        hash = instantiate_method_v2(M->C, hash, key);
         register_method(M, IrGetSignature(hash));
         *phash_list = IrTypeList_new(M->C);
         IrTypeList_push(M->C, *phash_list, hash);

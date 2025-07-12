@@ -675,7 +675,7 @@ static struct MirPlace select_range(struct FunctionState *fs, struct MirPlace pl
     return p;
 }
 
-static void lower_place_aux(struct HirVisitor *V, struct HirExpr *expr, struct MirPlace *pplace);
+static void lower_place_into(struct HirVisitor *V, struct HirExpr *expr, struct MirPlace *pplace);
 static struct MirPlace lower_place(struct HirVisitor *V, struct HirExpr *expr);
 static struct MirPlace lower_path_expr(struct HirVisitor *V, struct HirPathExpr *e);
 
@@ -1019,9 +1019,7 @@ static struct MirPlace lower_path_expr(struct HirVisitor *V, struct HirPathExpr 
     } else if (HirIsConstDecl(decl)) {
         return lookup_global_constant(L, HirGetConstDecl(decl));
     }
-    // TODO: comment about why "pid" might be equal to NULL
-    int const *pid = GlobalMap_get(L, L->globals, decl->hdr.did);
-    NEW_INSTR(fs, global, e->span.start, output, pid != NULL ? *pid : -1);
+    NEW_INSTR(fs, global, e->span.start, output, -1);
     return output;
 }
 
@@ -1470,35 +1468,19 @@ static struct MirPlace lower_callee_and_args(struct HirVisitor *V, struct HirExp
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
 
-    IrType *recv = NULL; // receiver or owner of associated fn
-    struct MirPlace result = place_for_node(fs, callee->hdr.id);
-
+    struct MirPlace result;
     if (HirIsSelector(callee) && !HirGetSelector(callee)->is_index) {
-        // method call: place function object before 'self'
+        result = place_for_node(fs, callee->hdr.id);
         struct HirSelector *select = HirGetSelector(callee);
-        struct MirInstruction *instr = NEW_INSTR(fs, global, callee->hdr.span.start, result, -1);
-        struct MirGlobal *global = MirGetGlobal(instr);
+        NEW_INSTR(fs, global, callee->hdr.span.start, result, -1);
 
+        // add context argument for method call
         struct MirPlace const self = lower_place(V, select->target);
         MirPlaceList_push(fs->mir, args_out, self);
-
-        recv = GET_NODE_TYPE(L->C, select->target);
     } else {
         result = lower_place(V, callee);
-        if (HirIsPathExpr(callee)) {
-            struct HirSegments *segs = HirGetPathExpr(callee)->path.segments;
-            if (segs->count > 1) {
-                // "seg" is the owner of the associated function
-                struct HirSegment seg = HirSegments_get(segs, segs->count - 2);
-                recv = pawIr_get_type(L->C, seg.id);
-            }
-        }
     }
-    if (recv != NULL && IrIsGeneric(recv)) {
-        // determine actual receiver during monomorphization: need to look up
-        // the method on the type that the generic is replaced with
-        mir_reg_data(fs->mir, result.r)->self = recv;
-    }
+
     lower_args(V, args_in, args_out);
     return result;
 }
@@ -1634,7 +1616,7 @@ static struct MirPlace lower_place(struct HirVisitor *V, struct HirExpr *expr)
     struct MirPlace place = {
         .projection = MirProjectionList_new(L->fs->mir),
     };
-    lower_place_aux(V, expr, &place);
+    lower_place_into(V, expr, &place);
     return place;
 }
 
@@ -1917,7 +1899,7 @@ static struct MirPlace lower_match_expr(struct HirVisitor *V, struct HirMatchExp
 // Lower an expression representing a location in memory
 // Note that nested selectors on value types are flattened into a single access relative
 // to the start of the object (the whole object is stored in a single virtual register).
-static void lower_place_aux(struct HirVisitor *V, struct HirExpr *expr, struct MirPlace *pplace)
+static void lower_place_into(struct HirVisitor *V, struct HirExpr *expr, struct MirPlace *pplace)
 {
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
@@ -1925,7 +1907,7 @@ static void lower_place_aux(struct HirVisitor *V, struct HirExpr *expr, struct M
     switch (HIR_KINDOF(expr)) {
         case kHirSelector: {
             struct HirSelector *x = HirGetSelector(expr);
-            lower_place_aux(V, x->target, pplace);
+            lower_place_into(V, x->target, pplace);
 
             IrType *target = GET_NODE_TYPE(fs->C, x->target);
             *pplace = select_field(fs, *pplace, target, x->index, 0);
@@ -1933,7 +1915,7 @@ static void lower_place_aux(struct HirVisitor *V, struct HirExpr *expr, struct M
         }
         case kHirIndex: {
             struct HirIndex *x = HirGetIndex(expr);
-            lower_place_aux(V, x->target, pplace);
+            lower_place_into(V, x->target, pplace);
 
             IrType *target = GET_NODE_TYPE(fs->C, x->target);
             if (builtin_kind(L, target) == BUILTIN_MAP) {
