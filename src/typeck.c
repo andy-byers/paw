@@ -380,7 +380,7 @@ static int find_field(struct HirDeclList *fields, Str *name)
     int index;
     struct HirDecl *const *pfield;
     K_LIST_ENUMERATE (fields, index, pfield) {
-        if (pawS_eq(name, hir_decl_ident(*pfield).name))
+        if (pawS_eq(name, HirGetFieldDecl(*pfield)->ident.name))
             return index;
     }
     return -1;
@@ -494,19 +494,6 @@ static IrTypeList *instantiate_fields(struct Compiler *C, IrType *self, struct H
     return pawIr_fold_type_list(&F, field_types);
 }
 
-struct HirDecl *pawP_find_field(struct Compiler *C, IrType *self, Str *name)
-{
-    struct IrAdt *t = IrGetAdt(self);
-    struct HirAdtDecl *d = HirGetAdtDecl(pawHir_get_decl(C->hir, t->did));
-    struct HirDeclList *fields = pawHir_struct_fields(d);
-    paw_assert(d->is_struct);
-
-    int const index = find_field(fields, name);
-    if (index < 0) return NULL;
-
-    return HirDeclList_get(fields, index);
-}
-
 static IrType *instantiate(struct TypeChecker *T, struct HirDecl *base, IrTypeList *types)
 {
     return pawP_instantiate(T->C, GET_NODE_TYPE(T->C, base), types);
@@ -596,27 +583,25 @@ static IrType *lower_value_path(struct TypeChecker *T, struct HirPath path)
             }
         }
         case HIR_PATH_ASSOC: {
+            paw_assert(path.segments->count == 2);
             struct HirSegment const first = K_LIST_FIRST(path.segments);
             struct HirSegment const last = K_LIST_LAST(path.segments);
             IrType *base = lower_adt_segment(T, first);
             IrType *assoc = pawIr_get_type(T->C, last.target);
             pawIr_set_type(T->C, first.id, base);
-            if (IrIsSignature(assoc)) {
-                if (IrIsGeneric(base)) {
-                    assoc = pawIr_resolve_trait_method(T->C, IrGetGeneric(base), last.ident.name);
-                    return pawP_generalize(T->C, assoc);
-                }
-                assoc = pawP_generalize_assoc(T->C, base, assoc);
-                // TODO: rename pawP_generalize_assoc to pawP_instantiate_assoc and take
-                //       list of type args to instantiate with if non-NULL
-                if (last.types != NULL) {
-                    IrTypeList *params = IR_TYPE_SUBTYPES(assoc);
-                    IrTypeList *args = lower_types(T, last.types);
-                    unify_segment_types(T, last, params, args);
-                }
-                return assoc;
+            paw_assert(IrIsSignature(assoc));
+
+            if (IrIsGeneric(base)) {
+                assoc = pawIr_resolve_trait_method(T->C, IrGetGeneric(base), last.ident.name);
+                return pawP_generalize(T->C, assoc);
             }
-            return pawP_instantiate_field(T->C, base, assoc);
+            assoc = pawP_generalize_assoc(T->C, base, assoc);
+            if (last.types != NULL) {
+                IrTypeList *params = IR_TYPE_SUBTYPES(assoc);
+                IrTypeList *args = lower_types(T, last.types);
+                unify_segment_types(T, last, params, args);
+            }
+            return assoc;
         }
     }
 }
@@ -1084,23 +1069,6 @@ static IrType *check_type_decl(struct TypeChecker *T, struct HirTypeDecl *d)
     return type;
 }
 
-static paw_Bool is_polymorphic(struct TypeChecker *T, IrType *type)
-{
-    if (!IrIsSignature(type) && !IrIsAdt(type))
-        return PAW_FALSE;
-    struct HirDecl *base = get_decl(T, IR_TYPE_DID(type));
-    IrType *base_type = GET_NODE_TYPE(T->C, base);
-    if (HIR_IS_POLY_ADT(base)) {
-        return pawU_equals(T->U, base_type, type);
-    } else if (HIR_IS_POLY_FUNC(base)) {
-        // NOTE: type arguments on signatures not checked by pawU_equals
-        return pawU_list_equals(T->U,
-                                ir_signature_types(base_type),
-                                ir_signature_types(type));
-    }
-    return PAW_FALSE;
-}
-
 static paw_Bool is_adt_self(struct TypeChecker *T, IrType *adt)
 {
     return T->self != NULL
@@ -1110,12 +1078,15 @@ static paw_Bool is_adt_self(struct TypeChecker *T, IrType *adt)
 
 static void ensure_accessible_field(struct TypeChecker *T, struct HirDecl *field, struct HirDecl *base, IrType *type)
 {
-    struct HirIdent const ident = hir_decl_ident(field);
     paw_Bool const is_pub = HirIsFieldDecl(field)
-                                ? HirGetFieldDecl(field)->is_pub
-                                : HirGetFnDecl(field)->is_pub;
+        ? HirGetFieldDecl(field)->is_pub
+        : HirGetFnDecl(field)->is_pub;
     if (is_pub || is_adt_self(T, type))
         return; // field is public or control is inside own impl block
+
+    struct HirIdent const ident = HirIsFieldDecl(field)
+        ? HirGetFieldDecl(field)->ident
+        : HirGetFnDecl(field)->ident;
     TYPECK_ERROR(T, associated_item_visibility, ident.span.start, ident.name->text,
             HirGetAdtDecl(base)->ident.name->text);
 }
@@ -1188,7 +1159,7 @@ static IrType *check_call_target(struct TypeChecker *T, struct HirExpr *target, 
     struct HirDecl *self_decl = get_decl(T, IR_TYPE_DID(self));
     if (HirGetFnDecl(fn_decl)->is_assoc)
         TYPECK_ERROR(T, not_a_method, NODE_START(target),
-                   hir_decl_ident(fn_decl).name->text);
+                   HirGetFnDecl(fn_decl)->ident.name->text);
 
     ensure_accessible_field(T, fn_decl, self_decl, self);
     *pparam_offset = 1;

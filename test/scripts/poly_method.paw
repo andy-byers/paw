@@ -18,7 +18,7 @@ pub fn test_call() {
     assert(t.0 == 123);
     assert(t.1 == "abc");
 
-    let t = Adt::assoc_fn("def");
+    let t = Adt::assoc_fn::<str>("def");
     assert(t.0 == 42);
     assert(t.1 == "def");
 }
@@ -60,7 +60,7 @@ pub fn test_call_poly() {
     assert(t.0 == 123);
     assert(t.1 == "abc");
 
-    let t = PolyAdt::assoc_fn(456, "def");
+    let t = PolyAdt::assoc_fn::<str>(456, "def");
     assert(t.0 == 456);
     assert(t.1 == "def");
 }

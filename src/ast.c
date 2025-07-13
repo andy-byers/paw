@@ -27,7 +27,9 @@ struct Ast *pawAst_new(struct Compiler *C)
 
 void pawAst_free(struct Ast *ast)
 {
-    P_ALLOC(ast->C, ast, sizeof(*ast), 0);
+    struct Compiler *C = ast->C;
+    pawP_pool_free(C, C->ast_pool);
+    C->ast_pool = NULL;
 }
 
 #define DEFINE_NODE_CONSTRUCTOR(name, T)                   \
@@ -569,7 +571,6 @@ DEFINE_VISITORS(stmt, Stmt)
 DEFINE_VISITORS(type, Type)
 DEFINE_VISITORS(pat, Pat)
 #undef DEFINE_VISITORS
-
 
 
 typedef struct Printer {

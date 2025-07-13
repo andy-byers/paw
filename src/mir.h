@@ -15,7 +15,6 @@ struct Mir;
     X(Upvalue)                  \
     X(Global)                   \
     X(AllocLocal)               \
-    X(FreeLocal)                \
     X(SetUpvalue)               \
     X(SetCapture)               \
     X(LoadConstant)             \
@@ -234,7 +233,6 @@ struct MirUpvalue {
 struct MirGlobal {
     MIR_INSTRUCTION_HEADER;
     struct MirPlace output;
-    int global_id;
 };
 
 struct MirPhi {
@@ -248,11 +246,6 @@ struct MirAllocLocal {
     MIR_INSTRUCTION_HEADER;
     struct MirPlace output;
     Str *name;
-};
-
-struct MirFreeLocal {
-    MIR_INSTRUCTION_HEADER;
-    struct MirPlace reg;
 };
 
 struct MirSetUpvalue {
@@ -531,7 +524,7 @@ inline static struct MirInstruction *pawMir_new_upvalue(struct Mir *mir, struct 
     return instr;
 }
 
-inline static struct MirInstruction *pawMir_new_global(struct Mir *mir, struct SourceLoc loc, struct MirPlace output, int global_id)
+inline static struct MirInstruction *pawMir_new_global(struct Mir *mir, struct SourceLoc loc, struct MirPlace output)
 {
     struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->Global_ = (struct MirGlobal){
@@ -539,7 +532,6 @@ inline static struct MirInstruction *pawMir_new_global(struct Mir *mir, struct S
         .kind = kMirGlobal,
         .loc = loc,
         .output = output,
-        .global_id = global_id,
     };
     return instr;
 }
@@ -567,18 +559,6 @@ inline static struct MirInstruction *pawMir_new_alloc_local(struct Mir *mir, str
         .loc = loc,
         .output = output,
         .name = name,
-    };
-    return instr;
-}
-
-inline static struct MirInstruction *pawMir_new_free_local(struct Mir *mir, struct SourceLoc loc, struct MirPlace reg)
-{
-    struct MirInstruction *instr = pawMir_new_instruction(mir);
-    instr->FreeLocal_ = (struct MirFreeLocal){
-        .mid = pawMir_next_id(mir),
-        .kind = kMirFreeLocal,
-        .loc = loc,
-        .reg = reg,
     };
     return instr;
 }
@@ -975,7 +955,6 @@ struct Mir *pawMir_new(struct Compiler *C, Str *modname, struct SourceSpan span,
 void pawMir_free(struct Mir *mir);
 
 struct MirLiveInterval *pawMir_new_interval(struct Compiler *C, MirRegister r, int npositions);
-struct MirRegisterData *pawMir_new_register(struct Compiler *C, int value, struct IrType *type);
 struct MirBlockData *pawMir_new_block(struct Mir *mir);
 
 struct MirPlace pawMir_copy_place(struct Mir *mir, struct MirPlace place);

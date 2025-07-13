@@ -222,7 +222,7 @@ void pawP_validate_adt_traits(struct Compiler *C, struct HirAdtDecl *d)
 
     struct HirDecl *const *pdecl;
     K_LIST_FOREACH (d->methods, pdecl) {
-        struct HirIdent const ident = hir_decl_ident(*pdecl);
+        struct HirIdent const ident = HirGetFnDecl(*pdecl)->ident;
         IrType *method = GET_NODE_TYPE(C, *pdecl);
         MethodMap_insert(C, map, ident.name, method);
     }

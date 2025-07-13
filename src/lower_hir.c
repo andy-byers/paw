@@ -8,10 +8,6 @@
 // MIR is a control-flow graph (CFG) of basic blocks, containing instructions
 // in static single assignment (SSA) form.
 //
-// TODO: Use information collected during name resolution instead of "resolve_*"
-//       functions. Figure out OrPat stuff (maybe expand into multiple match arms
-//       during AST lowering or something)
-//
 // TODO: Implementation would be a bit nicer if closures were hoisted out of
 //       their enclosing functions. Closures also need to store the ".child_id" so
 //       they can be placed in their enclosing Proto (so they can be found at
@@ -138,20 +134,17 @@ static void postprocess(struct Mir *mir)
     pawMir_remove_unreachable_blocks(mir);
 }
 
-static void enter_constant_ctx(struct LowerHir *L, struct ConstantContext *cctx, struct SourceSpan span, DeclId did)
+static void enter_constant_ctx(struct LowerHir *L, struct ConstantContext *cctx, struct HirConstDecl *d)
 {
     struct ConstantContext *cursor = L->cctx;
     while (cursor != NULL) {
-        if (did.value == cursor->did.value) {
-            struct HirDecl *decl = pawHir_get_decl(L->hir, did);
-            LOWERING_ERROR(L, global_constant_cycle, span.start,
-                    hir_decl_ident(decl).name->text);
-        }
+        if (d->did.value == cursor->did.value)
+            LOWERING_ERROR(L, global_constant_cycle, d->span.start, d->ident.name->text);
         cursor = cursor->outer;
     }
     *cctx = (struct ConstantContext){
         .outer = L->cctx,
-        .did = did,
+        .did = d->did,
     };
     L->cctx = cctx;
 }
@@ -579,7 +572,6 @@ static struct MirPlace place_for_node(struct FunctionState *fs, NodeId id)
     return new_place(fs, pawIr_get_type(fs->C, id));
 }
 
-// TODO: consider not entering a block in this function, declare parameters inside body block
 static MirBlock enter_function(struct LowerHir *L, struct FunctionState *fs, struct BlockState *bs, struct Mir *mir)
 {
     *fs = (struct FunctionState){
@@ -1019,7 +1011,7 @@ static struct MirPlace lower_path_expr(struct HirVisitor *V, struct HirPathExpr 
     } else if (HirIsConstDecl(decl)) {
         return lookup_global_constant(L, HirGetConstDecl(decl));
     }
-    NEW_INSTR(fs, global, e->span.start, output, -1);
+    NEW_INSTR(fs, global, e->span.start, output);
     return output;
 }
 
@@ -1472,7 +1464,7 @@ static struct MirPlace lower_callee_and_args(struct HirVisitor *V, struct HirExp
     if (HirIsSelector(callee) && !HirGetSelector(callee)->is_index) {
         result = place_for_node(fs, callee->hdr.id);
         struct HirSelector *select = HirGetSelector(callee);
-        NEW_INSTR(fs, global, callee->hdr.span.start, result, -1);
+        NEW_INSTR(fs, global, callee->hdr.span.start, result);
 
         // add context argument for method call
         struct MirPlace const self = lower_place(V, select->target);
@@ -1523,8 +1515,8 @@ static struct MirPlace lower_assign_expr(struct HirVisitor *V, struct HirAssignE
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
 
-    struct MirPlace lhs = lower_place(V, e->lhs);
-    struct MirPlace rhs = lower_place(V, e->rhs);
+    struct MirPlace const lhs = lower_place(V, e->lhs);
+    struct MirPlace const rhs = lower_place(V, e->rhs);
     move_to(fs, e->span.start, rhs, lhs);
 
     // setters are expressions that evaluate to "()"
@@ -1536,9 +1528,9 @@ static struct MirPlace lower_op_assign_expr(struct HirVisitor *V, struct HirOpAs
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
 
-    struct MirPlace lhs = lower_place(V, e->lhs);
-    struct MirPlace rhs = lower_place(V, e->rhs);
-    const enum BuiltinKind kind = kind_of_builtin(L, e->lhs);
+    struct MirPlace const lhs = lower_place(V, e->lhs);
+    struct MirPlace const rhs = lower_place(V, e->rhs);
+    enum BuiltinKind const kind = kind_of_builtin(L, e->lhs);
     struct MirPlace const temp = place_for_node(fs, e->id);
     new_binary_op(V, e->span, e->op, kind, lhs, rhs, temp);
     move_to(fs, e->span.start, temp, lhs);
@@ -2084,7 +2076,7 @@ static void lower_global_constant(struct LowerHir *L, struct HirConstDecl *d)
 
     // prevent cycles between global constants
     struct ConstantContext cctx;
-    enter_constant_ctx(L, &cctx, d->span, d->did);
+    enter_constant_ctx(L, &cctx, d);
 
     struct BlockState bs;
     struct FunctionState fs;

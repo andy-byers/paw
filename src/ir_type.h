@@ -329,8 +329,6 @@ DEFINE_LIST(struct Compiler, IrParams, struct IrParam)
 
 struct IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *target, Str *name);
 
-DeclId pawIr_next_did(struct Compiler *C, int mod);
-
 IrType *pawIr_get_type(struct Compiler *C, NodeId id);
 void pawIr_set_type(struct Compiler *C, NodeId id, IrType *type);
 struct IrVariantDef *pawIr_get_variant_def(struct Compiler *C, DeclId did);

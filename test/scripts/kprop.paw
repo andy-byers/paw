@@ -55,9 +55,22 @@ pub fn test_binary_op() {
     assert(4 / 5 == 0);
     assert(5 % 6 == 5);
 
+    assert(0 / 1 == 0);
+
     assert(1 ^ 2 == 3);
     assert(2 & 3 == 2);
     assert(3 | 4 == 7);
+
+    assert('a' == 'a');
+    assert('a' != 'b');
+    assert('a' < 'b');
+    assert('a' <= 'b');
+
+    assert(0.0 + 0.0 == 0.0);
+    assert(1.0 - 1.0 == 0.0);
+    assert(1.0 * 0.0 == 0.0);
+    assert(1.0 / 0.5 != 0.0);
+    assert(1.1 % 0.8 != 0.0);
 
     assert(1 << 0 == 1);
     assert(1 << 10 == 1024);

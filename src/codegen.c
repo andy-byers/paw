@@ -112,12 +112,6 @@ static void add_opcode(struct FnState *fs, OpCode code)
     ++fs->pc;
 }
 
-void code_0(struct FnState *fs, Op op)
-{
-    add_line(fs);
-    add_opcode(fs, op);
-}
-
 void code_ABx(struct FnState *fs, Op op, int a, int bc)
 {
     paw_assert(0 <= a && a <= A_MAX);
@@ -354,9 +348,6 @@ static void leave_function(struct Generator *G)
     struct FnState *fs = G->fs;
     Proto *p = fs->proto;
 
-    // module itself has no prototype
-    if (fs->kind == FUNC_MODULE)
-        return;
     p->max_stack = fs->max_reg;
 
     pawM_shrink(P, p->source, p->length, fs->pc);
@@ -651,9 +642,7 @@ static void code_global(struct MirVisitor *V, struct MirGlobal *x)
     struct Generator *G = V->ud;
     struct FnState *fs = G->fs;
 
-    ValueId const value_id = x->global_id < 0
-                                 ? type2global(G, REG_TYPE(G, x->output.r))
-                                 : (ValueId){x->global_id};
+    ValueId const value_id = type2global(G, REG_TYPE(G, x->output.r));
     code_ABx(fs, OP_GETGLOBAL, REG(x->output), value_id);
 }
 

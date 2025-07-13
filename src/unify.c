@@ -345,21 +345,6 @@ void pawU_leave_binder(struct Unifier *U)
     U->modname = NULL;
 }
 
-paw_Bool pawU_list_equals(struct Unifier *U, IrTypeList *lhs, IrTypeList *rhs)
-{
-    paw_assert(!lhs == !rhs);
-    paw_assert(lhs == NULL || lhs->count == rhs->count);
-
-    if (lhs == NULL)
-        return PAW_TRUE;
-    IrType *const *pa, *const *pb;
-    K_LIST_ZIP (lhs, pa, rhs, pb) {
-        if (!pawU_equals(U, *pa, *pb))
-            return PAW_FALSE;
-    }
-    return PAW_TRUE;
-}
-
 static paw_Bool are_lists_compat(struct Unifier *U, IrTypeList *lhs, IrTypeList *rhs)
 {
     paw_assert(lhs->count == rhs->count);

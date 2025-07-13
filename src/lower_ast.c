@@ -1275,6 +1275,5 @@ void pawP_lower_ast(struct Compiler *C)
     }
 
     // release AST memory
-    pawP_pool_free(C, C->ast_pool);
-    C->ast_pool = NULL;
+    pawAst_free(ast);
 }

@@ -576,31 +576,6 @@ enum TraitKind pawHir_kindof_trait(struct Compiler *C, struct HirTraitDecl *d)
     }
 }
 
-paw_Bool pawHir_is_pub_decl(struct HirDecl *decl)
-{
-    switch (HIR_KINDOF(decl)) {
-        case kHirTraitDecl:
-            return HirGetTraitDecl(decl)->is_pub;
-            break;
-        case kHirAdtDecl:
-            return HirGetAdtDecl(decl)->is_pub;
-            break;
-        case kHirFnDecl:
-            return HirGetFnDecl(decl)->is_pub;
-            break;
-        case kHirTypeDecl:
-            return HirGetTypeDecl(decl)->is_pub;
-        case kHirConstDecl:
-            return HirGetConstDecl(decl)->is_pub;
-        case kHirFieldDecl:
-            return HirGetFieldDecl(decl)->is_pub;
-        case kHirParamDecl:
-        case kHirGenericDecl:
-        case kHirVariantDecl:
-            PAW_UNREACHABLE();
-    }
-}
-
 
 struct Printer {
     Buffer *buf;

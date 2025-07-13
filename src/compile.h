@@ -235,7 +235,6 @@ struct IrTypeList *pawP_instantiate_typelist(struct Compiler *C, struct IrTypeLi
 struct IrType *pawP_instantiate_field(struct Compiler *C, struct IrType *self, struct IrType *field);
 struct IrTypeList *pawP_instantiate_struct_fields(struct Compiler *C, struct IrAdt *inst);
 struct IrTypeList *pawP_instantiate_variant_fields(struct Compiler *C, struct IrAdt *inst, int index);
-struct HirDecl *pawP_find_field(struct Compiler *C, struct IrType *self, Str *name);
 struct IrType *pawP_find_method(struct Compiler *C, struct IrType *self, Str *name);
 
 struct Decision *pawP_check_exhaustiveness(struct Hir *hir, struct Pool *pool, Str const *modname, struct HirMatchExpr *match, struct MatchVars *vars);

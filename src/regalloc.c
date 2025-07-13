@@ -117,13 +117,14 @@ static paw_Bool is_covered(struct MirLiveInterval *it, int pos)
     return pawP_bitset_get(it->ranges, pos);
 }
 
+#if defined(PAW_DEBUG_EXTRA)
+
 static int decimal_padding(int d)
 {
     paw_assert(0 <= d && d < 256);
     return d < 10 ? 2 : d < 100 ? 1 : 0;
 }
 
-// TODO
 #include <stdio.h>
 
 static void dump_interval(struct MirLiveInterval *it, int start, int indent)
@@ -207,6 +208,8 @@ static void debug_registers(struct RegisterAllocator *R, MirRegister *regs, int 
             fputc('.', stderr);
     }
 }
+
+#endif // defined(PAW_DEBUG_EXTRA)
 
 static void split_current(struct RegisterAllocator *R, int pos)
 {

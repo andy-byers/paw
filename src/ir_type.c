@@ -10,14 +10,6 @@
 #define NEW_NODE(C, T) (T *)P_ALLOC(C, NULL, 0, sizeof(T))
 #define IR_ERROR(C_, Kind_, Modno_, ...) pawErr_##Kind_(C_, ModuleNames_get((C_)->modnames, Modno_), __VA_ARGS__)
 
-DeclId pawIr_next_did(struct Compiler *C, int mod)
-{
-    return (DeclId){
-        .value = C->def_count++,
-        .modno = mod,
-    };
-}
-
 IrType *pawIr_new_type(struct Compiler *C)
 {
     return NEW_NODE(C, IrType);
@@ -302,7 +294,7 @@ static void print_type(struct Printer *P, IrType *type)
             // TODO: get IR generic def, not HIR decl, which may not exist anymore
             struct IrGeneric *gen = IrGetGeneric(type);
             struct HirDecl *decl = pawHir_get_decl(P->C->hir, gen->did);
-            PRINT_STRING(P, hir_decl_ident(decl).name);
+            PRINT_STRING(P, HirGetGenericDecl(decl)->ident.name);
             break;
         }
         case kIrInfer:
@@ -315,7 +307,7 @@ static void print_type(struct Printer *P, IrType *type)
             // TODO: create an IR trait object and use that
             struct IrTraitObj *t = IrGetTraitObj(type);
             struct HirDecl *decl = pawHir_get_decl(P->C->hir, t->did);
-            PRINT_STRING(P, hir_decl_ident(decl).name);
+            PRINT_STRING(P, HirGetTraitDecl(decl)->ident.name);
             if (t->types != NULL) {
                 PRINT_CHAR(P, '<');
                 print_type_list(P, t->types);

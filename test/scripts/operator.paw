@@ -13,6 +13,17 @@ pub fn test_operator_precedence() {
     assert(!((4 & (5 == 4) as int) as bool));
 }
 
+fn check_cmpc(a: char, b: char) {
+    assert(a == a);
+    assert(a != b);
+    assert(a <= a);
+    assert(a <= b);
+    assert(a >= a);
+    assert(b >= a);
+    assert(a < b);
+    assert(b > a);
+}
+
 fn check_cmpi(a: int, b: int) {
     assert(a == a);
     assert(a != b);
@@ -47,6 +58,10 @@ fn check_cmps(a: str, b: str) {
 }
 
 pub fn test_comparisons() {
+    check_cmpc('a', 'b');
+    check_cmpc('\x00', '\x01');
+    check_cmpc('\xFE', '\xFF');
+
     check_cmpi(1, 2);
     check_cmpi(-1, 1);
     check_cmpi(123, 124);
@@ -80,6 +95,10 @@ pub fn test_add_strings() {
     assert(s == "abcabc");
 }
 
+pub fn test_float_ops() {
+    let _ = -0.5;
+    let _ = 1.23 % 0.5;
+}
 
 pub fn test_operator_assignment() {
     // prevent constant folding

@@ -54,15 +54,6 @@ struct MirLiveInterval *pawMir_new_interval(struct Compiler *C, MirRegister r, i
     return it;
 }
 
-struct MirRegisterData *pawMir_new_register(struct Compiler *C, int value, IrType *type)
-{
-    struct MirRegisterData *r = P_ALLOC(C, NULL, 0, sizeof(struct MirRegisterData));
-    *r = (struct MirRegisterData){
-        .type = type,
-    };
-    return r;
-}
-
 MirProjection *MirProjection_new(struct Mir *mir)
 {
     return P_ALLOC(mir->C, NULL, 0, sizeof(MirProjection));
@@ -156,11 +147,6 @@ static void AcceptSetUpvalue(struct MirVisitor *V, struct MirSetUpvalue *t)
 static void AcceptAllocLocal(struct MirVisitor *V, struct MirAllocLocal *t)
 {
     pawMir_visit_place(V, t->output);
-}
-
-static void AcceptFreeLocal(struct MirVisitor *V, struct MirFreeLocal *t)
-{
-    pawMir_visit_place(V, t->reg);
 }
 
 static void AcceptCall(struct MirVisitor *V, struct MirCall *t)
@@ -404,8 +390,7 @@ static paw_Bool check_visited(struct Traversal *X, VisitedMap *visited, MirBlock
 
 static void reverse_blocks(struct MirBlockList *blocks)
 {
-    if (blocks->count <= 0)
-        return;
+    paw_assert(blocks->count > 0);
     MirBlock *a = &K_LIST_FIRST(blocks);
     MirBlock *b = &K_LIST_LAST(blocks);
     for (; a < b; a++, b--) {
@@ -494,9 +479,6 @@ static void renumber_or_clear_ref(struct Traversal *X, BlockMap *map, MirBlock *
 
 static void prune_joins(struct Mir *mir, struct MirInstructionList *joins, struct MirInstructionList *instrs, int index)
 {
-    if (joins == NULL)
-        return;
-
     int ijoin;
     struct MirInstruction **pinstr;
     K_LIST_ENUMERATE (joins, ijoin, pinstr) {
@@ -1226,12 +1208,6 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
             PRINT_FORMAT(P, " [size %d] (\"%s\")", layout.size, pawIr_print_type(P->C, type));
             break;
         }
-        case kMirFreeLocal: {
-            struct MirFreeLocal *t = MirGetFreeLocal(instr);
-            PRINT_LITERAL(P, "free ");
-            print_place(P, t->reg);
-            break;
-        }
         case kMirPhi: {
             struct MirPhi *t = MirGetPhi(instr);
             PRINT_FORMAT(P, "_%d = phi [", t->output.r.value);
@@ -1260,7 +1236,7 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
             char const *type = pawIr_print_type(P->C, mir_reg_data(P->mir, t->output.r)->type);
             print_place(P, t->output);
             PRINT_LITERAL(P, " = global ");
-            PRINT_STRING(P, hir_decl_ident(decl).name);
+            PRINT_STRING(P, HirGetFnDecl(decl)->ident.name);
             PRINT_FORMAT(P, " (%s)", type);
             break;
         }

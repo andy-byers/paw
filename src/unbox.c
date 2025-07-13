@@ -697,32 +697,12 @@ static void unbox_move(struct Unboxer *U, struct MirMove *x)
     }
 }
 
-static void unbox_upvalue(struct Unboxer *U, struct MirUpvalue *x)
-{
-    struct MemoryAccess output = unbox_place(U, &x->output);
-    discharge_access(U, &output);
-
-    for (int i = 0; i < output.group.count; ++i) {
-        MirRegister const r = REGISTER_AT(output.group, i);
-        NEW_INSTR(U, upvalue, x->loc, PLACE(r), x->index + i);
-    }
-}
-
 static void unbox_alloclocal(struct Unboxer *U, struct MirAllocLocal *x)
 {
     struct MemoryGroup const output = get_registers(U, x->output.r, ENUM_BASE);
     for (int i = 0; i < output.count; ++i) {
         MirRegister const r = REGISTER_AT(output, i);
         NEW_INSTR(U, alloc_local, x->loc, x->name, PLACE(r));
-    }
-}
-
-static void unbox_setupvalue(struct Unboxer *U, struct MirSetUpvalue *x)
-{
-    struct MemoryGroup const value = get_registers(U, x->value.r, ENUM_BASE);
-    for (int i = 0; i < value.count; ++i) {
-        MirRegister const r = REGISTER_AT(value, i);
-        NEW_INSTR(U, set_upvalue, x->loc, x->index + i, PLACE(r));
     }
 }
 
@@ -889,12 +869,6 @@ static void unbox_instruction(struct Unboxer *U, struct MirInstruction *instr)
             break;
         case kMirAggregate:
             unbox_aggregate(U, MirGetAggregate(instr));
-            break;
-        case kMirUpvalue:
-            unbox_upvalue(U, MirGetUpvalue(instr));
-            break;
-        case kMirSetUpvalue:
-            unbox_setupvalue(U, MirGetSetUpvalue(instr));
             break;
         case kMirCapture:
             unbox_capture(U, MirGetCapture(instr));

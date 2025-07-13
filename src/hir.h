@@ -1570,33 +1570,8 @@ static inline struct HirSegment *pawHir_path_add(struct Hir *hir, struct HirPath
     return &K_LIST_LAST(path->segments);
 }
 
-static inline struct HirIdent hir_decl_ident(struct HirDecl *decl)
-{
-    switch (HIR_KINDOF(decl)) {
-        case kHirFieldDecl:
-            return HirGetFieldDecl(decl)->ident;
-        case kHirFnDecl:
-            return HirGetFnDecl(decl)->ident;
-        case kHirGenericDecl:
-            return HirGetGenericDecl(decl)->ident;
-        case kHirAdtDecl:
-            return HirGetAdtDecl(decl)->ident;
-        case kHirTypeDecl:
-            return HirGetTypeDecl(decl)->ident;
-        case kHirConstDecl:
-            return HirGetConstDecl(decl)->ident;
-        case kHirTraitDecl:
-            return HirGetTraitDecl(decl)->ident;
-        case kHirVariantDecl:
-            return HirGetVariantDecl(decl)->ident;
-        default:
-            PAW_UNREACHABLE();
-    }
-}
-
 struct HirExpr *pawHir_copy_expr(struct Hir *hir, struct HirExpr *expr);
 
-paw_Bool pawHir_is_pub_decl(struct HirDecl *decl);
 struct IrTypeList *pawHir_collect_decl_types(struct Compiler *C, struct HirDeclList *list);
 
 enum TraitKind pawHir_kindof_trait(struct Compiler *C, struct HirTraitDecl *d);

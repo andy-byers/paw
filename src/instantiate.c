@@ -99,7 +99,7 @@ static IrType *instantiate_trait(struct InstanceState *I, struct IrTraitObj *bas
     if (generics == NULL) {
         struct HirDecl *decl = pawHir_get_decl(I->C->hir, base->did);
         INSTANTIATION_ERROR(I, unexpected_type_arguments, (struct SourceLoc){-1},
-                "trait", hir_decl_ident(decl).name->text);
+                "trait", HirGetTraitDecl(decl)->ident.name->text);
     }
     check_type_param(I, generics, types);
     normalize_type_list(I, types);

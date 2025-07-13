@@ -36,8 +36,6 @@ struct IrTypeList *pawU_new_unknowns(struct Unifier *U, struct IrTypeList *types
 void pawU_enter_binder(struct Unifier *U, Str const *modname);
 void pawU_leave_binder(struct Unifier *U);
 
-paw_Bool pawU_list_equals(struct Unifier *U, struct IrTypeList *lhs, struct IrTypeList *rhs);
-
 // Return true if 'a' is more generic than or equal to 'b', false otherwise
 paw_Bool pawU_is_compat(struct Unifier *U, struct IrType *a, struct IrType *b);
 
