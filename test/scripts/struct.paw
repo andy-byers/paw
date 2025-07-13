@@ -57,8 +57,8 @@ struct NoComma {
 }
 
 struct TestSelf {
-    pub fn not_method(s: TestSelf) {}
-    pub fn not_method2(s: Self) {}
+    pub fn assoc_fn(s: TestSelf) {}
+    pub fn assoc_fn2(s: Self) {}
     pub fn method(self) {}
     pub fn method2(self: Self) {}
 }
@@ -67,10 +67,19 @@ pub fn test_self() {
     let ts = TestSelf;
     ts.method();
 
-    TestSelf::not_method(ts);
-    TestSelf::not_method2(ts);
+    TestSelf::assoc_fn(ts);
+    TestSelf::assoc_fn2(ts);
 
     // call method like an associated function
     TestSelf::method(ts);
+}
+
+struct FnField<T> {
+    pub f: fn(T) -> T,
+}
+
+pub fn test_fn_in_field() {
+    let f = FnField{f: |x| x};
+    assert(f.f(42) == 42);
 }
 

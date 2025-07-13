@@ -12,7 +12,7 @@ typedef struct IrType IrType;
 
 #define IR_TYPE_LIST(X) \
     X(Adt)              \
-    X(FnPtr)          \
+    X(FnPtr)            \
     X(Signature)        \
     X(Tuple)            \
     X(Never)            \

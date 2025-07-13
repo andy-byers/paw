@@ -437,3 +437,9 @@ pub fn test_multidigit_selector() {
     let t = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, (10,));
     assert(t.10.0 == 10);
 }
+
+pub fn test_call_fn_element() {
+    let t = (|| 123,);
+    t.0();
+}
+

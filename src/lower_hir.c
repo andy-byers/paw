@@ -1454,7 +1454,6 @@ static void lower_args(struct HirVisitor *V, struct HirExprList *exprs, struct M
     }
 }
 
-// TODO: what about function object stored in ADT field (not a method)?
 static struct MirPlace lower_callee_and_args(struct HirVisitor *V, struct HirExpr *callee, struct HirExprList *args_in, MirPlaceList *args_out)
 {
     struct LowerHir *L = V->ud;
@@ -1462,6 +1461,7 @@ static struct MirPlace lower_callee_and_args(struct HirVisitor *V, struct HirExp
 
     struct MirPlace result;
     if (HirIsSelector(callee) && !HirGetSelector(callee)->is_index) {
+        // must be a method call since "is_index" is set to 1 for field selectors
         result = place_for_node(fs, callee->hdr.id);
         struct HirSelector *select = HirGetSelector(callee);
         NEW_INSTR(fs, global, callee->hdr.span.start, result);

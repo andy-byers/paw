@@ -1139,21 +1139,26 @@ static IrType *check_call_target(struct TypeChecker *T, struct HirExpr *target, 
     struct HirSelector *select = HirGetSelector(target);
     IrType *self = check_operand(T, select->target);
 
-    IrType *method;
+    IrType *method = NULL;
     if (IrIsGeneric(self)) {
         struct IrGeneric *g = IrGetGeneric(self);
         method = pawIr_resolve_trait_method(T->C, g, select->ident.name);
-    } else if (IrIsAdt(self)) {
-        method = pawP_find_method(T->C, self, select->ident.name);
-        method = ir_adt_types(self) != NULL
-            ? pawP_generalize_assoc(T->C, self, method)
-            : pawP_generalize(T->C, method);
+        if (method == NULL)
+            TYPECK_ERROR(T, unknown_method, select->ident.span.start,
+                    select->ident.name->text, pawIr_print_type(T->C, self));
     } else {
-        return select_field(T, self, select);
+        if (IrIsAdt(self)) {
+            method = pawP_find_method(T->C, self, select->ident.name);
+            if (method != NULL && IrIsSignature(method)
+                    && IrGetSignature(method)->self != NULL) {
+                method = ir_adt_types(self) != NULL
+                    ? pawP_generalize_assoc(T->C, self, method)
+                    : pawP_generalize(T->C, method);
+            }
+        }
+        if (method == NULL)
+            return select_field(T, self, select);
     }
-    if (method == NULL)
-        TYPECK_ERROR(T, unknown_method, select->ident.span.start,
-                select->ident.name->text, pawIr_print_type(T->C, self));
 
     struct HirDecl *fn_decl = get_decl(T, IR_TYPE_DID(method));
     struct HirDecl *self_decl = get_decl(T, IR_TYPE_DID(self));
