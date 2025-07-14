@@ -240,8 +240,8 @@ struct IrType *pawP_find_method(struct Compiler *C, struct IrType *self, Str *na
 struct Decision *pawP_check_exhaustiveness(struct Hir *hir, struct Pool *pool, Str const *modname, struct HirMatchExpr *match, struct MatchVars *vars);
 void pawP_lower_matches(struct Compiler *C);
 
-struct IrType *pawP_generalize(struct Compiler *C, struct IrType *type);
-struct IrType *pawP_generalize_assoc(struct Compiler *C, struct IrType *type, struct IrType *method);
+struct IrType *pawP_generalize(struct Compiler *C, struct SourceLoc loc, struct IrType *type);
+struct IrType *pawP_generalize_assoc(struct Compiler *C, struct SourceLoc loc, struct IrType *type, struct IrType *method);
 
 // Instantiate a polymorphic function or type
 // Works by replacing each generic type with the corresponding concrete type from

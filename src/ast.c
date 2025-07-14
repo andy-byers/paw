@@ -315,9 +315,8 @@ static void AcceptFnDecl(struct AstVisitor *V, struct AstFnDecl *d)
 {
     accept_decl_list(V, d->generics);
     accept_decl_list(V, d->params);
-    AcceptType(V, d->result);
-    if (d->body != NULL)
-        AcceptExpr(V, d->body);
+    if (d->result != NULL) AcceptType(V, d->result);
+    if (d->body != NULL) AcceptExpr(V, d->body);
 }
 
 static void AcceptUseDecl(struct AstVisitor *V, struct AstUseDecl *d)
@@ -355,7 +354,7 @@ static void AcceptDeclStmt(struct AstVisitor *V, struct AstDeclStmt *s)
 static void AcceptFnType(struct AstVisitor *V, struct AstFnType *t)
 {
     accept_type_list(V, t->params);
-    AcceptType(V, t->result);
+    if (t->result != NULL) AcceptType(V, t->result);
 }
 
 static void AcceptTupleType(struct AstVisitor *V, struct AstTupleType *t)

@@ -290,7 +290,6 @@ static void ensure_init(struct SsaConverter *S, struct MirInstruction *instr)
     K_LIST_FOREACH (loads, ppp) {
         struct MirRegisterData *data = mir_reg_data(S->mir, (*ppp)->r);
         if (data->is_uninit)
-            // TODO: local variable name
             SSA_ERROR(S, use_before_initialization, instr->hdr.loc, "use before initialization");
     }
 }
@@ -324,7 +323,6 @@ static void fix_aux_info(struct SsaConverter *S, struct Mir *mir)
 
 #ifdef PAW_DEBUG_EXTRA
 
-// TODO
 #include <stdio.h>
 
 static void debug(struct Compiler *C, struct MirBlockList *idom, struct MirBucketList *df)

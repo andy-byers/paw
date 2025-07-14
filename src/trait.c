@@ -167,7 +167,7 @@ static void ensure_methods_match(struct Compiler *C, struct SourceLoc loc, IrTyp
 
     // substitute all instances of the trait object type for the type of the implementor
     b = pawIr_substitute_self(C, trait, adt, b);
-    b = pawP_generalize(C, b);
+    b = pawP_generalize(C, loc, b);
     unify(C, IR_TYPE_DID(adt).modno, loc, a, b);
 
     enum TraitKind const tk = pawHir_kindof_trait(C, trait_decl);

@@ -231,7 +231,7 @@ int test_open_file(paw_Env *P, char const *name)
     struct TestReader rd = {.file = file};
     rd.data = rd.buf;
 
-    int const rc = paw_load(P, test_reader, pathname, &rd);
+    int const rc = paw_load(P, test_reader, name, &rd);
     fclose(file);
     return rc;
 }

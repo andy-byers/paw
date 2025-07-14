@@ -120,7 +120,8 @@ struct MirBucketList *pawMir_compute_dominance_frontiers(struct Compiler *C, str
     return result;
 }
 
-// TODO
+#ifdef PAW_DEBUG_EXTRA
+
 #include <stdio.h>
 
 static void debug_idom(struct DominanceState *D, struct MirBlockList *result)
@@ -149,3 +150,5 @@ static void debug_df(struct DominanceState *D, struct MirBucketList *result)
     }
     printf("}\n");
 }
+
+#endif // PAW_DEBUG_EXTRA

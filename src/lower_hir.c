@@ -457,7 +457,7 @@ static void enter_block(struct FunctionState *fs, struct BlockState *bs, struct 
 
 static void maybe_close(struct FunctionState *fs, struct MirPlace r)
 {
-    struct MirRegisterData *data = mir_reg_data(fs->mir, r.r);
+    struct MirRegisterData const *data = mir_reg_data(fs->mir, r.r);
     if (data->is_captured)
         NEW_INSTR(fs, close, (struct SourceLoc){-1}, r);
 }

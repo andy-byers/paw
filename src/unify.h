@@ -30,7 +30,7 @@ int pawU_unify(struct Unifier *U, struct IrType *a, struct IrType *b);
 struct IrType *pawU_new_unknown(struct Unifier *U, struct SourceLoc loc, struct IrTypeList *bounds);
 
 // TODO: get rid of this function and create lists of unknowns wherever they are needed and add source locations
-struct IrTypeList *pawU_new_unknowns(struct Unifier *U, struct IrTypeList *types);
+struct IrTypeList *pawU_new_unknowns(struct Unifier *U, struct SourceLoc loc, struct IrTypeList *types);
 
 // Inference context handling
 void pawU_enter_binder(struct Unifier *U, Str const *modname);

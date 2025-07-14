@@ -1,4 +1,4 @@
-// list.paw
+// test_list.paw
 
 pub fn test_push_and_pop() {
     let v = [];

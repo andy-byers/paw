@@ -66,16 +66,6 @@ static void add_location(paw_Env *P, Buffer *buf)
     }
 }
 
-static void add_3_parts(paw_Env *P, char const *before, char const *value,
-                        char const *after)
-{
-    Buffer buf;
-    pawL_init_buffer(P, &buf);
-    add_location(P, &buf);
-    pawL_add_fstring(P, &buf, "%s%s%s", before, value, after);
-    pawL_push_result(P, &buf);
-}
-
 void pawR_error(paw_Env *P, int error, char const *fmt, ...)
 {
     Buffer buf;
@@ -214,8 +204,6 @@ void pawR_list_length(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb)
 
 void pawR_list_concat(paw_Env *P, CallFrame *cf, int n)
 {
-    // TODO: convert to binary operation in the compiler, maybe do the "concatenate n things on top of the stack" later
-
     StackPtr ra = P->top.p - n;
     Tuple const *a = V_TUPLE(ra[0]);
     Tuple const *b = V_TUPLE(ra[1]);
