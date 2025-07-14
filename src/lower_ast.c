@@ -95,6 +95,21 @@ static struct HirIdent lower_ident(struct LowerAst *L, struct AstIdent ident)
     return make_ident(ident.name, ident.span);
 }
 
+static struct HirType *unit_type(struct LowerAst *L, struct SourceSpan span)
+{
+    NodeId const id = next_node_id(L);
+    NodeId const target = builtin_id(L, BUILTIN_UNIT);
+
+    struct HirIdent const ident = {
+        .name = CSTR(L->C, CSTR_UNIT),
+        .span = span,
+    };
+    struct HirSegments *segments = HirSegments_new(L->hir);
+    pawHir_add_segment(L->hir, segments, span, id, ident, NULL, target);
+    struct HirPath const path = pawHir_path_create(span, segments, HIR_PATH_ITEM);
+    return NEW_NODE(L, path_type, span, next_node_id(L), path);
+}
+
 static struct HirExpr *unit_lit(struct LowerAst *L, struct SourceSpan span)
 {
     return NEW_NODE(L, basic_lit, span, next_node_id(L), P2V(NULL), BUILTIN_UNIT);
@@ -103,7 +118,7 @@ static struct HirExpr *unit_lit(struct LowerAst *L, struct SourceSpan span)
 static struct HirPath new_unary_path(struct LowerAst *L, struct HirIdent ident, NodeId id, enum HirPathKind kind, NodeId target)
 {
     struct HirSegments *segments = HirSegments_new(L->hir);
-    pawHir_add_segment(L->hir, segments, id, ident, NULL, target);
+    pawHir_add_segment(L->hir, segments, ident.span, id, ident, NULL, target);
     return pawHir_path_create(ident.span, segments, kind);
 }
 
@@ -191,7 +206,7 @@ static struct HirPath lower_path(struct LowerAst *L, struct AstPath path)
         struct HirIdent const ident = lower_ident(L, psrc->ident);
         struct ResolvedSegment const *res = SegmentTable_get(L->C, L->segtab, psrc->id);
         if (res->kind != RESOLVED_MODULE) // strip off module prefix
-            pawHir_add_segment(L->hir, segments, psrc->id, ident, types, res->id);
+            pawHir_add_segment(L->hir, segments, psrc->span, psrc->id, ident, types, res->id);
         last_kind = res->kind;
     }
 
@@ -343,7 +358,6 @@ static struct HirExpr *LowerRangeExpr(struct LowerAst *L, struct AstRangeExpr *e
     }
 }
 
-// TODO: this is a bit too restrictive
 static void check_assignment_target(struct LowerAst *L, struct AstExpr *target)
 {
     if (!AstIsPathExpr(target) && !AstIsIndex(target) && !AstIsSelector(target))
@@ -384,7 +398,7 @@ static struct HirExpr *LowerMatchArm(struct LowerAst *L, struct AstMatchArm *e)
     return NEW_NODE(L, match_arm, e->span, e->id, pat, guard, result);
 }
 
-static struct HirType *new_list_t(struct LowerAst *L, struct HirType *elem_t)
+static struct HirType *new_list_t(struct LowerAst *L, struct SourceSpan span, struct HirType *elem_t)
 {
     struct HirTypeList *types = HirTypeList_new(L->hir);
     HirTypeList_push(L->hir, types, elem_t);
@@ -397,12 +411,12 @@ static struct HirType *new_list_t(struct LowerAst *L, struct HirType *elem_t)
         .span = elem_t->hdr.span,
     };
     struct HirSegments *segments = HirSegments_new(L->hir);
-    pawHir_add_segment(L->hir, segments, id, ident, types, target);
+    pawHir_add_segment(L->hir, segments, span, id, ident, types, target);
     struct HirPath path = pawHir_path_create(ident.span, segments, HIR_PATH_ITEM);
     return NEW_NODE(L, path_type, ident.span, next_node_id(L), path);
 }
 
-static struct HirType *new_map_t(struct LowerAst *L, struct HirType *key_t, struct HirType *value_t)
+static struct HirType *new_map_t(struct LowerAst *L, struct SourceSpan span, struct HirType *key_t, struct HirType *value_t)
 {
     struct HirTypeList *types = HirTypeList_new(L->hir);
     HirTypeList_push(L->hir, types, key_t);
@@ -416,7 +430,7 @@ static struct HirType *new_map_t(struct LowerAst *L, struct HirType *key_t, stru
         .span = key_t->hdr.span,
     };
     struct HirSegments *segments = HirSegments_new(L->hir);
-    pawHir_add_segment(L->hir, segments, id, ident, types, target);
+    pawHir_add_segment(L->hir, segments, span, id, ident, types, target);
     struct HirPath path = pawHir_path_create(ident.span, segments, HIR_PATH_ITEM);
     return NEW_NODE(L, path_type, ident.span, next_node_id(L), path);
 }
@@ -516,39 +530,10 @@ static struct HirExpr *lower_tuple_lit(struct LowerAst *L, struct AstTupleLit *e
     return NEW_NODE(L, tuple_lit, span, id, elems);
 }
 
-static struct HirExpr *lower_list_lit(struct LowerAst *L, struct AstContainerLit *e, struct SourceSpan span, NodeId id)
-{
-    paw_assert(e->code == BUILTIN_LIST);
-
-    struct AstExpr *const *psrc;
-    struct HirExprList *items = HirExprList_new(L->hir);
-    // TODO: use lower_expr_list for this and "items" in lower_map_lit?
-    K_LIST_FOREACH (e->items, psrc) {
-        struct HirExpr *dst = lower_expr(L, *psrc);
-        HirExprList_push(L->hir, items, dst);
-    }
-    return NEW_NODE(L, container_lit, span, id, items, BUILTIN_LIST);
-}
-
-static struct HirExpr *lower_map_lit(struct LowerAst *L, struct AstContainerLit *e, struct SourceSpan span, NodeId id)
-{
-    paw_assert(e->code == BUILTIN_MAP);
-
-    struct AstExpr *const *psrc;
-    struct HirExprList *items = HirExprList_new(L->hir);
-    K_LIST_FOREACH (e->items, psrc) {
-        struct HirExpr *dst = lower_expr(L, *psrc);
-        paw_assert(HirGetFieldExpr(dst)->fid == -1);
-        HirExprList_push(L->hir, items, dst);
-    }
-    return NEW_NODE(L, container_lit, span, id, items, BUILTIN_MAP);
-}
-
 static struct HirExpr *lower_container_lit(struct LowerAst *L, struct AstContainerLit *e, struct SourceSpan span, NodeId id)
 {
-    if (e->code == BUILTIN_LIST)
-        return lower_list_lit(L, e, span, id);
-    return lower_map_lit(L, e, span, id);
+    struct HirExprList *items = lower_expr_list(L, e->items);
+    return NEW_NODE(L, container_lit, span, id, items, e->code);
 }
 
 static struct HirExpr *LowerFieldExpr(struct LowerAst *L, struct AstFieldExpr *e)
@@ -580,9 +565,6 @@ static struct HirExpr *LowerParenExpr(struct LowerAst *L, struct AstParenExpr *e
 
 static struct HirExpr *LowerLiteralExpr(struct LowerAst *L, struct AstLiteralExpr *e)
 {
-    // literal kinds correspond 1-to-1 between AST and HIR
-    enum HirLitKind lit_kind = CAST(enum HirLitKind, e->lit_kind);
-
     switch (e->lit_kind) {
         case kAstBasicLit:
             return lower_basic_lit(L, &e->basic, e->span, e->id);
@@ -630,7 +612,8 @@ static struct HirDecl *LowerFnDecl(struct LowerAst *L, struct AstFnDecl *d)
     struct HirIdent const ident = lower_ident(L, d->ident);
     struct HirDeclList *generics = lower_decl_list(L, d->generics);
     struct HirDeclList *params = lower_decl_list(L, d->params);
-    struct HirType *result = lower_type(L, d->result);
+    struct HirType *result = d->result != NULL ? lower_type(L, d->result)
+        : unit_type(L, (struct SourceSpan){0}); // TODO: "params" needs a span that includes the parenthesis
     struct HirExpr *body = d->body != NULL ? lower_expr(L, d->body) : NULL;
     return NEW_NODE(L, fn_decl, d->span, d->id, d->did, ident, d->annos, generics,
             params, result, body, d->fn_kind, d->is_pub, !d->is_method);
@@ -849,8 +832,8 @@ static struct HirPat *new_some_pat(struct LowerAst *L, struct HirPat *pat, struc
     NodeId const some_id = variant_id(L, option_id, PAW_OPTION_SOME);
 
     struct HirSegments *segments = HirSegments_new(L->hir);
-    pawHir_add_segment(L->hir, segments, first_id, make_ident(CSTR(L->C, CSTR_OPTION), span), NULL, option_id);
-    pawHir_add_segment(L->hir, segments, second_id, make_ident(SCAN_STR(L->C, "Some"), span), NULL, some_id);
+    pawHir_add_segment(L->hir, segments, span, first_id, make_ident(CSTR(L->C, CSTR_OPTION), span), NULL, option_id);
+    pawHir_add_segment(L->hir, segments, span, second_id, make_ident(SCAN_STR(L->C, "Some"), span), NULL, some_id);
     struct HirPath path = pawHir_path_create(span, segments, HIR_PATH_ASSOC);
     struct HirPatList *fields = HirPatList_new(L->hir);
     struct HirPat *variant = NEW_NODE(L, variant_pat, span, next_node_id(L), path, fields, 0);
@@ -1005,24 +988,9 @@ static struct HirType *LowerPathType(struct LowerAst *L, struct AstPathType *t)
 static struct HirType *LowerContainerType(struct LowerAst *L, struct AstContainerType *t)
 {
     struct HirType *first = lower_type(L, t->first);
-    if (t->second == NULL) return new_list_t(L, first);
+    if (t->second == NULL) return new_list_t(L, t->span, first);
     struct HirType *second = lower_type(L, t->second);
-    return new_map_t(L, first, second);
-}
-
-static struct HirType *unit_type(struct LowerAst *L, struct SourceSpan span)
-{
-    NodeId const id = next_node_id(L);
-    NodeId const target = builtin_id(L, BUILTIN_UNIT);
-
-    struct HirIdent const ident = {
-        .name = CSTR(L->C, CSTR_UNIT),
-        .span = span,
-    };
-    struct HirSegments *segments = HirSegments_new(L->hir);
-    pawHir_add_segment(L->hir, segments, id, ident, NULL, target);
-    struct HirPath const path = pawHir_path_create(span, segments, HIR_PATH_ITEM);
-    return NEW_NODE(L, path_type, span, next_node_id(L), path);
+    return new_map_t(L, t->span, first, second);
 }
 
 static struct HirType *LowerTupleType(struct LowerAst *L, struct AstTupleType *t)
@@ -1035,7 +1003,8 @@ static struct HirType *LowerTupleType(struct LowerAst *L, struct AstTupleType *t
 static struct HirType *LowerFnType(struct LowerAst *L, struct AstFnType *t)
 {
     struct HirTypeList *params = lower_type_list(L, t->params);
-    struct HirType *result = lower_type(L, t->result);
+    struct HirType *result = t->result != NULL ? lower_type(L, t->result)
+        : unit_type(L, (struct SourceSpan){0}); // TODO: see TODO in LowerFnDecl
     return NEW_NODE(L, fn_ptr, t->span, t->id, params, result);
 }
 
@@ -1110,7 +1079,7 @@ static struct HirPat *LowerIdentPat(struct LowerAst *L, struct AstIdentPat *p)
                 return NEW_NODE(L, binding_pat, p->span, p->id, ident);
 
             HirSegments *segments = HirSegments_new(L->hir);
-            pawHir_add_segment(L->hir, segments, next_node_id(L), ident, NULL, res->id);
+            pawHir_add_segment(L->hir, segments, p->span, next_node_id(L), ident, NULL, res->id);
             struct HirPath const path = pawHir_path_create(ident.span, segments, HIR_PATH_ITEM);
             if (AstIsAdtDecl(decl))
                 return NEW_NODE(L, struct_pat, p->span, p->id, path, HirPatList_new(L->hir));

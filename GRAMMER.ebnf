@@ -3,7 +3,7 @@
 (* Items *)
 Item     = ["pub"] ItemDecl .
 ItemDecl = ConstDecl | FunctionDecl | StructDecl | 
-           EnumDecl | TypeDecl | UseDecl | ImplDecl .
+           EnumDecl | TypeDecl | UseDecl .
 
 (* Functions *)
 FunctionDecl = "fn" Function .
@@ -21,38 +21,29 @@ StructBody = "{" {Field ","} Field [","] "}" .
 Field      = ["pub"] name ":" Type .
 
 (* Enumerations *)
-EnumDecl = "enum" name [Generics] (EnumBody | ";") .
-EnumBody = "{" [{Variant ","} Variant] "}" .
+EnumDecl = "enum" name [Generics] EnumBody .
+EnumBody = "{" {Variant ","} Variant [","] "}" .
 Variant  = name ["(" TypeList ")"] .
-
-(* Implementations *)
-ImplDecl = "impl" [Generics] name [Generics] ImplBody .
-ImplBody = ["pub"]  .
 
 (* Statements *)
 Stmt     = ExprStmt | DeclStmt .
-ExprStmt = Expr .
+ExprStmt = Expr ";" | BlockExpr [";"] .
 DeclStmt = Declaration .
 
-(* Pattern matching *)
-MatchExpr   = "match" Expr MatchBody .
-MatchBody   = "{" {MatchClause ","} MatchClause "}" .
-MatchClause = Pattern "=>" Expr .
-
 (* Paths *)
-Path    = {Segment "::"} Segment .
-Segment = name [TypeArgs] .
+Path        = {Segment "::"} Segment .
+Segment     = name ["::" TypeArgs] .
 
 (* Patterns *)
 Pattern    = LiteralPat | TuplePat | StructPat | 
-             VariantPat | PathPat | RangePat .
+             VariantPat | PathPat .
 LiteralPat = string_lit | int_lit | float_lit | bool_lit .
-RangePat   = Pattern RangeSep Pattern .
-RangeSep   = ".." | "..=" .
 PatList    = {Pattern ","} Pattern [","] .
 TuplePat   = "(" [{Pattern ","} Pattern "," [Pattern]] ")".
 VariantPat = Path "(" PatList ")" .
-StructPat  = Path "{" PatList "}" .
+StructPat  = Path "{" PatFields "}" .
+PatFields  = {PatField ","} PatField [","] .
+PatField   = name [":" Pattern] .
 PathPat    = Path .
 
 (* Declarations *)
@@ -63,41 +54,62 @@ TypeDecl    = "type" name [Generics] "=" Type .
 Generics    = "<" {name ","} name [","] ">" .
 
 (* Operators *)
-BinOp = "+" | "-" | "*" | "/" |
-        "%" | "&" | "^" | "|" |
-        "<" | "<=" | ">" | ">=" | 
-        "==" | "!=" | "&&" | "||" .
-UnOp  = "-" | "~" | "!" | "#" .
+UnOp     = "-" | "~" | "!" | "#" .
+BinOp    = "+" | "-" | "*" | "/" |
+           "%" | "&" | "^" | "|" |
+           "<<" | ">>" | "<" | "<=" | 
+           ">" | ">=" | "==" | "!=" | 
+           "&&" | "||" | "+=" | "-=" | 
+           "*=" | "/=" | "%=" | "&=" | 
+           "^=" | "|=" | "<<=" | ">>=" .
 
 (* Types *)
-Type       = NamedType | TypeLit .
-TypeLit    = FuncType | ListType | MapType | 
-             TupleType | NamedType .
-FuncType   = "fn" "(" [TypeList] ")" ["->" Type] .
-TypeList   = {Type ","} Type [","] .
-TypeArgs   = "::" "<" TypeList ">" .
-NamedType  = name [TypeArgs] .
-ListType = "[" Type "]" .
-MapType    = "[" Type ":" Type "]" .
-TupleType  = "(" [{Type ","} Type "," [Type]] ")".
+Type        = GroupedType | FnType | ListType | MapType | 
+              TupleType | PathType .
+GroupedType = "(" Type ")" .
+FnType      = "fn" "(" [TypeList] ")" ["->" Type] .
+TypeList    = {Type ","} Type [","] .
+TypeArgs    = "<" TypeList ">" .
+PathType    = {TypeSegment "::"} TypeSegment .
+TypeSegment = name [TypeArgs] .
+ListType    = "[" Type "]" .
+MapType     = "[" Type ":" Type "]" .
+TupleType   = "(" [{Type ","} Type "," [Type]] ")".
 
 (* Expressions *)
-Expr        = PrimaryExpr | Expr BinOp Expr | UnOp Expr | Closure |
-              Block | IfElse | ForLoop | WhileLoop . 
+Expr        = BasicExpr | BlockExpr .
+BasicExpr   = PrimaryExpr | UnOp Expr | Expr BinOp Expr | 
+              RangeExpr | Closure . 
+BlockExpr   = Block | IfElse | ForLoop | WhileLoop .
 PrimaryExpr = Operand | Call | "(" Expr ")" .
 Call        = PrimaryExpr "(" [ExprList] ")" .
 Index       = PrimaryExpr "[" Expr [":" Expr] "]" .
 Selector    = PrimaryExpr "." name .
 ExprList    = {Expr ","} Expr .
-Block       = "{" {Stmt ";"} [Expr] "}" .
+Block       = "{" Stmts "}" .
+Stmts       = {Stmt} | {Stmt} BasicExpr | BasicExpr .
+RangeExpr   = [Expr] RangeSep [Expr - Block] .
+RangeSep    = ".." | "..=" .
 Closure     = "|" [CParameters] "|" (("->" Type Block) | Expr) .
 CParameters = {CParam ","} CParam [","] .
 CParam      = name [":" Type] .
 
-(* Control flow *)
-IfElse    = "if" Expr Block [{"else" IfElse} | "else" Block] .
-WhileLoop = "while" Expr Block .
-ForLoop   = "for" name "in" Expr Block .
+(* StructLit is forbidden in the target of a block expression to avoid 
+   an ambiguity that cannot be resolved at the parser level. *)
+TargetExpr  = Expr - StructLit .
+
+(* Loops *)
+WhileLoop = "while" TargetExpr Block .
+ForLoop   = "for" name "in" TargetExpr Block .
+Loop      = "loop" Block .
+
+(* If-else construct *)
+IfElse    = "if" TargetExpr Block [{"else" IfElse} | "else" Block] .
+
+(* Pattern matching *)
+MatchExpr   = "match" TargetExpr MatchBody .
+MatchBody   = "{" {MatchClause ","} MatchClause "}" .
+MatchClause = Pattern "=>" Expr .
 
 (* Operands *)
 Operand  = Path | Index | Selector | Literal .

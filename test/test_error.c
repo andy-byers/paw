@@ -787,8 +787,8 @@ static void test_deferred_init(void)
 static void test_interpolation(void)
 {
     test_compiler_status(E_EXPECTED_EXPRESSION, "extra_close_braces", "", "let s = \"\\{103 +} 20}\";");
-    test_compiler_status(E_UNTERMINATED_STRING, "mismatched_braces", "", "let s = \"\\{{{100} + {20 + {3}}}\";");
-    test_compiler_status(E_EXPECTED_DELIMITER, "mismatched_braces_nested", "", "let s = \"\\{{\"abc\" + \"\\{{{100} + {20 + {3}})\"}}\";");
+    test_compiler_status(E_UNTERMINATED_STRING, "mismatched_braces", "", "let s = \"\\{100 + 20 + 3\";");
+    test_compiler_status(E_EXPECTED_SYMBOL, "mismatched_braces_nested", "", "let s = \"\\{\"abc\" + \"\\{100 + 20 + 3\"}\";");
     test_compiler_status(E_UNTERMINATED_STRING, "missing_expr_close", "", "let s = \"abc\\{123\";");
     test_compiler_status(E_UNTERMINATED_STRING, "only_expr_open", "", "let s = \"\\{\";");
     test_compiler_status(E_EXPECTED_EXPRESSION, "empty_expr", "", "let s = \"\\{}\";");

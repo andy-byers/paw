@@ -78,6 +78,7 @@ struct HirIdent {
 };
 
 struct HirSegment {
+    struct SourceSpan span;
     struct HirIdent ident;
     struct HirTypeList *types;
     NodeId id, target;
@@ -1551,12 +1552,16 @@ struct HirDecl *pawHir_get_decl(struct Hir *hir, DeclId id);
 // NOTE: HirFnPtr is a prefix of HirFnDef
 #define HIR_FPTR(t) CHECK_EXP(HirIsFnType(t), &(t)->fptr)
 
-static inline struct HirSegment *pawHir_add_segment(struct Hir *hir, struct HirSegments *segments, NodeId id,
-        struct HirIdent ident, struct HirTypeList *args, NodeId target)
+static inline struct HirSegment *pawHir_add_segment(struct Hir *hir, struct HirSegments *segments,
+        struct SourceSpan span, NodeId id, struct HirIdent ident, struct HirTypeList *args, NodeId target)
 {
-    struct HirSegment seg;
-    pawHir_init_segment(hir, &seg, id, ident, args, target);
-    HirSegments_push(hir, segments, seg);
+    HirSegments_push(hir, segments, (struct HirSegment){
+        .id = id,
+        .span = span,
+        .ident = ident,
+        .target = target,
+        .types = args,
+    });
     return &K_LIST_LAST(segments);
 }
 

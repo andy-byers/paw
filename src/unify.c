@@ -298,10 +298,11 @@ IrType *pawU_new_unknown(struct Unifier *U, struct SourceLoc loc, IrTypeList *bo
     IrType *type = pawIr_new_infer(U->C, table->depth, index, bounds);
     ivar->parent = ivar;
     ivar->type = type;
+    ivar->loc = loc;
     return type;
 }
 
-IrTypeList *pawU_new_unknowns(struct Unifier *U, IrTypeList *types)
+IrTypeList *pawU_new_unknowns(struct Unifier *U, struct SourceLoc loc, IrTypeList *types)
 {
     IrType **ptype;
     IrTypeList *result = IrTypeList_new(U->C);
@@ -309,7 +310,7 @@ IrTypeList *pawU_new_unknowns(struct Unifier *U, IrTypeList *types)
         IrTypeList *bounds = IrIsGeneric(*ptype)
                                         ? IrGetGeneric(*ptype)->bounds
                                         : NULL;
-        IrType *unknown = pawU_new_unknown(U, (struct SourceLoc){-1}, bounds);
+        IrType *unknown = pawU_new_unknown(U, loc, bounds);
         IrTypeList_push(U->C, result, unknown);
     }
     return result;

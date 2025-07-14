@@ -22,9 +22,9 @@
 // TODO: avoid using an upper bound on path length, or at least make sure not to overflow
 //       the automatic buffers used to hold paths in this file
 #if defined(PAW_OS_POSIX)
-#define PAW_PATH_MAX PATH_MAX
+# define PAW_PATH_MAX PATH_MAX
 #else
-#define PAW_PATH_MAX 2048
+# define PAW_PATH_MAX 2048
 #endif
 
 struct FileReader {

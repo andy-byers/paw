@@ -136,9 +136,10 @@ static IrType *instantiate_method_aux(struct InstanceState *I, IrTypeList *gener
 
 static IrType *instantiate_method(struct InstanceState *I, IrType *obj, IrTypeList *types, struct HirDecl *method)
 {
+    paw_assert(types != NULL);
     IrTypeList *generics = IR_TYPE_SUBTYPES(obj);
     paw_assert(types->count == generics->count);
-    IrTypeList *unknowns = pawU_new_unknowns(I->U, generics);
+    IrTypeList *unknowns = pawU_new_unknowns(I->U, (struct SourceLoc){-1}, generics);
 
     IrTypeList *subst = pawP_instantiate_typelist(I->C, generics, unknowns, IR_TYPE_SUBTYPES(obj));
 
@@ -164,16 +165,11 @@ IrType *pawP_instantiate_method(struct Compiler *C, struct HirDecl *base, IrType
         .C = C,
     };
 
-    if (types == NULL) {
-        IrType *type = pawIr_get_type(C, method->hdr.id);
-        return pawP_generalize(C, type);
-    }
-
     IrType *type = pawIr_get_type(C, base->hdr.id);
     return instantiate_method(&I, type, types, method);
 }
 
-IrType *pawP_generalize_assoc(struct Compiler *C, IrType *type, IrType *method)
+IrType *pawP_generalize_assoc(struct Compiler *C, struct SourceLoc loc, IrType *type, IrType *method)
 {
     IrType *base = pawIr_get_def_type(C, IR_TYPE_DID(type));
     IrTypeList *type_params = IR_TYPE_SUBTYPES(base);
@@ -193,16 +189,14 @@ IrType *pawP_generalize_assoc(struct Compiler *C, IrType *type, IrType *method)
         method = pawIr_new_signature(C, f->did, f->types, params, result);
     }
 
-    method = pawP_generalize(C, method);
+    method = pawP_generalize(C, loc, method);
     IrGetSignature(method)->self = type;
     return method;
 }
 
 IrType *pawP_instantiate(struct Compiler *C, IrType *base, IrTypeList *types)
 {
-    if (types == NULL)
-        return pawP_generalize(C, base);
-
+    paw_assert(types != NULL);
     struct InstanceState I = {
         .modno = IR_TYPE_DID(base).modno,
         .P = ENV(C),
@@ -221,12 +215,12 @@ IrType *pawP_instantiate(struct Compiler *C, IrType *base, IrTypeList *types)
 // Replace generic parameters with inference variables (struct IrInfer). The
 // resulting type can be unified with another type in order to fill in a type
 // for each inference variable.
-IrType *pawP_generalize(struct Compiler *C, IrType *type)
+IrType *pawP_generalize(struct Compiler *C, struct SourceLoc loc, IrType *type)
 {
     IrTypeList *generics = GET_SUBTYPES(type);
     if (generics == NULL) return type;
 
-    IrTypeList *unknowns = pawU_new_unknowns(C->U, generics);
+    IrTypeList *unknowns = pawU_new_unknowns(C->U, loc, generics);
     return pawP_instantiate(C, type, unknowns);
 }
 

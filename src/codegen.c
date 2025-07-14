@@ -254,7 +254,7 @@ static Str *adt_name(struct Generator *G, Str const *modname, IrType *type)
 
 static ValueMap *kcache_map(struct FnState *fs, enum BuiltinKind code)
 {
-    if (code <= BUILTIN_INT) { // TODO: convert char to int earlier?
+    if (code <= BUILTIN_INT) {
         return fs->kcache.ints;
     } else if (code == BUILTIN_FLOAT) {
         return fs->kcache.floats;
@@ -655,7 +655,7 @@ static void code_constant(struct MirVisitor *V, struct MirLoadConstant *x)
             || (x->b_kind == BUILTIN_INT && is_smi(x->value.i))) {
         code_smi(fs, x->output, x->value.i);
     } else if (x->b_kind == BUILTIN_CHAR) {
-        code_smi(fs, x->output, x->value.c); // TODO: probably causes sign ext.
+        code_smi(fs, x->output, x->value.c);
     } else {
         int const bc = add_constant(G, x->value, x->b_kind);
         code_ABx(fs, OP_LOADK, REG(x->output), bc);

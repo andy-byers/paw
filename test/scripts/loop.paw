@@ -510,3 +510,14 @@ pub fn test_loop_from() {
     }
 }
 
+pub fn test_range_from_loop_syntax_special_case() {
+    for i in 0..{0; break} { 
+        // not part of loop
+    }
+}
+
+pub fn test_range_loop_syntax_special_case_2() {
+    for i in {0}..if true {1} else {2} - 1 { 
+        panic("should never run");
+    }
+}

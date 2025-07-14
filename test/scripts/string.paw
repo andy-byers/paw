@@ -161,11 +161,11 @@ pub fn test_unescaped_braces() {
 }
 
 pub fn test_braces_inside_expr() {
-    assert("\{{{100} + {{23}}}}" == "123");
+    assert("\{{({100}) + ({{23}})}}" == "123");
 
     // block is parenthesized
     assert("abc\{{{
-        {{100} + 23}
+        {({100}) + 23}
     }}}" == "abc123");
 }
 
@@ -182,6 +182,6 @@ pub fn test_nested_str_interpolation() {
 }
 
 pub fn test_str_expr_interpolation() {
-    assert("\{true && false}/\{!{false || false}}" == "false/true");
+    assert("\{true && false}/\{!({false || false})}" == "false/true");
     assert("abc\{{ let x = 100; x + 20 + 3 }}" == "abc123");
 }

@@ -90,6 +90,7 @@ struct AstIdent {
 
 struct AstSegment {
     NodeId id;
+    struct SourceSpan span;
     struct AstIdent ident;
     struct AstTypeList *types;
 };
@@ -1644,10 +1645,11 @@ static inline void pawAst_path_init(struct Ast *ast, struct AstPath *ppath, stru
     };
 }
 
-inline static struct AstSegment *pawAst_add_segment(struct Ast *ast, struct AstSegments *segments, NodeId id, struct AstIdent ident, struct AstTypeList *args)
+inline static struct AstSegment *pawAst_add_segment(struct Ast *ast, struct AstSegments *segments, struct SourceSpan span, NodeId id, struct AstIdent ident, struct AstTypeList *args)
 {
     AstSegments_push(ast, segments, (struct AstSegment){
                                 .id = id,
+                                .span = span,
                                 .types = args,
                                 .ident = ident,
                             });

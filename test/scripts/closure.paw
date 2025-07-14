@@ -1,15 +1,18 @@
 // closure.paw
 
-// TODO: should be parsed as block followed by closure.
-//       parens should allow parsing as logical OR
-fn check_logical_or_ambiguity(b: bool) -> bool {
-    // parsed as logical OR rather than a block followed by a closure
+fn parsed_as_logical_or(b: bool) -> bool {
+    // parsed as logical OR
+    ({ false }) || b
+}
+
+fn parsed_as_closure(b: bool) -> (fn() -> bool) {
+    // parsed as block followed by closure result
     { false } || b
 }
 
 pub fn test_logical_or_ambiguity() {
-    assert(check_logical_or_ambiguity(true));
-    assert(!check_logical_or_ambiguity(false));
+    assert(parsed_as_logical_or(true));
+    assert(parsed_as_closure(true)());
 }
 
 pub fn test_expr_result() {

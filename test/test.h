@@ -27,8 +27,8 @@
     X(struct)                \
     X(tuple)                 \
     X(enum)                  \
-    X(list)                  \
-    X(map)                   \
+    X(test_list)             \
+    X(test_map)              \
     X(layout)                \
     X(never)                 \
     X(destructure)           \
