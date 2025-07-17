@@ -108,7 +108,8 @@ static MirPlaceList *copy_register_list(struct MonoCollector *M, struct MirPlace
 
     struct MirPlace const *pr;
     K_LIST_FOREACH (list, pr) {
-        MirPlaceList_push(M->mir, result, *pr);
+        struct MirPlace const copy = pawMir_copy_place(M->mir, *pr);
+        MirPlaceList_push(M->mir, result, copy);
     }
     return result;
 }
@@ -140,6 +141,14 @@ static void copy_switch(struct MonoCollector *M, struct MirSwitch *t, struct Mir
     }
 }
 
+static void copy_places(struct MonoCollector *M, struct MirPlacePtrList *src, struct MirPlacePtrList *dst)
+{
+    struct MirPlace *const *pa, *const *pb;
+    K_LIST_ZIP (src, pa, dst, pb) {
+        **pb = pawMir_copy_place(M->mir, **pa);
+    }
+}
+
 static struct MirInstruction *copy_instruction(struct MonoCollector *M, struct MirInstruction *instr)
 {
     struct MirInstruction *r = pawMir_new_instruction(M->mir);
@@ -158,9 +167,18 @@ static struct MirInstruction *copy_instruction(struct MonoCollector *M, struct M
         case kMirSwitch:
             copy_switch(M, MirGetSwitch(instr), MirGetSwitch(r));
             break;
-        default:
+        default: {
+            struct MirPlacePtrList *src_loads = pawMir_get_loads(M->mir, instr);
+            struct MirPlacePtrList *dst_loads = pawMir_get_loads(M->mir, r);
+            copy_places(M, src_loads, dst_loads);
+
+            struct MirPlacePtrList *src_stores = pawMir_get_stores(M->mir, instr);
+            struct MirPlacePtrList *dst_stores = pawMir_get_stores(M->mir, r);
+            copy_places(M, src_stores, dst_stores);
             break;
+        }
     }
+
     return r;
 }
 
