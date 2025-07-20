@@ -18,7 +18,7 @@ struct Liveness {
     struct MirIntervalList *intervals;
     struct MirLocationList *locations;
     struct RegisterSetList *live;
-    struct IntervalMap *mapping;
+    struct MirIntervalMap *mapping;
     struct Compiler *C;
     struct Mir *mir;
     paw_Env *P;
@@ -26,16 +26,15 @@ struct Liveness {
 };
 
 DEFINE_LIST(struct Liveness, RegisterSetList, struct MirRegisterList *)
-DEFINE_MAP(struct Liveness, IntervalMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirRegister, struct MirLiveInterval *)
 
 static void map_reg_to_interval(struct Liveness *L, MirRegister r, struct MirLiveInterval *it)
 {
-    IntervalMap_insert(L, L->mapping, r, it);
+    MirIntervalMap_insert(L->mir, L->mapping, r, it);
 }
 
 static struct MirLiveInterval *interval_for_reg(struct Liveness *L, MirRegister r)
 {
-    struct MirLiveInterval *const *pit = IntervalMap_get(L, L->mapping, r);
+    struct MirLiveInterval *const *pit = MirIntervalMap_get(L->mir, L->mapping, r);
     return pit != NULL ? *pit : NULL;
 }
 
@@ -223,7 +222,7 @@ static void compute_liveness(struct Liveness *L, struct Mir *mir, struct MirBloc
     }
 }
 
-static void add_live_interval(struct Liveness *L, MirRegister r, MirId mid, int npositions, struct MirInstruction *instr)
+static void init_live_interval(struct Liveness *L, MirRegister r, MirId mid, int npositions, struct MirInstruction *instr)
 {
     int const location = pawMir_get_location(L->locations, mid);
     struct MirLiveInterval *it = pawMir_new_interval(L->C, r, npositions);
@@ -232,13 +231,10 @@ static void add_live_interval(struct Liveness *L, MirRegister r, MirId mid, int 
     it->first = location;
     it->last = location + 2;
     pawP_bitset_set_range(it->ranges, it->first, it->last);
-    MirIntervalList_push(L->mir, L->intervals, it);
 }
 
 static void init_live_intervals(struct Liveness *L, struct MirBlockList *order, int npos)
 {
-    MirIntervalList_reserve(L->mir, L->intervals, L->mir->registers->count);
-
     MirBlock *b;
     K_LIST_FOREACH (order, b) {
         struct MirInstruction **pinstr;
@@ -247,7 +243,7 @@ static void init_live_intervals(struct Liveness *L, struct MirBlockList *order, 
         // add an interval for each phi node (all phi nodes define a variable)
         K_LIST_FOREACH (block->joins, pinstr) {
             struct MirPhi *phi = MirGetPhi(*pinstr);
-            add_live_interval(L, phi->output.r, block->mid, npos, *pinstr);
+            init_live_interval(L, phi->output.r, block->mid, npos, *pinstr);
         }
 
         // add an interval for each variable
@@ -255,7 +251,7 @@ static void init_live_intervals(struct Liveness *L, struct MirBlockList *order, 
             struct MirPlace *const *ppstore;
             MirPlacePtrList const *stores = pawMir_get_stores(L->mir, *pinstr);
             K_LIST_FOREACH (stores, ppstore)
-                add_live_interval(L, (*ppstore)->r, block->mid, npos, *pinstr);
+                init_live_interval(L, (*ppstore)->r, block->mid, npos, *pinstr);
         }
     }
 }
@@ -340,7 +336,7 @@ struct MirBlockList *pawMir_compute_live_in(struct Mir *mir, struct MirBlockList
     return result;
 }
 
-struct MirIntervalList *pawMir_compute_liveness(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, struct MirLocationList *locations)
+struct MirIntervalMap *pawMir_compute_liveness(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, struct MirLocationList *locations)
 {
     struct Liveness L = {
         .pool = pawP_pool_new(C, C->aux_stats),
@@ -351,7 +347,7 @@ struct MirIntervalList *pawMir_compute_liveness(struct Compiler *C, struct Mir *
         .C = C,
     };
     L.live = RegisterSetList_new(&L);
-    L.mapping = IntervalMap_new(&L);
+    L.mapping = MirIntervalMap_new(mir);
 
     struct MirBlockData *last = mir_bb_data(mir, K_LIST_LAST(order));
     int const nparameters = mir->param_size;
@@ -374,15 +370,18 @@ struct MirIntervalList *pawMir_compute_liveness(struct Compiler *C, struct Mir *
     // callee needs to be live for the duration of the function call so it is not
     // collected by the GC.
     {
-        for (int i = 0; i < 1 + nparameters; ++i)
-            add_range(&L, MIR_REG(i), 0, npositions);
+        for (int i = 0; i < 1 + nparameters; ++i) {
+            struct MirLiveInterval const *it = interval_for_reg(&L, MIR_REG(i));
+            add_range(&L, MIR_REG(i), it->first, npositions);
+        }
 
         struct MirCaptureInfo *pci;
         K_LIST_FOREACH (mir->captured, pci) {
-            add_range(&L, pci->r, 0, npositions);
+            struct MirLiveInterval const *it = interval_for_reg(&L, pci->r);
+            add_range(&L, pci->r, it->first, npositions);
         }
     }
 
     pawP_pool_free(C, L.pool);
-    return L.intervals;
+    return L.mapping;
 }

@@ -72,7 +72,7 @@ struct IrSignature;
 struct IrAdt;
 
 struct Mir;
-struct MirIntervalList;
+struct MirIntervalMap;
 struct MirLocationList;
 struct MirBodyList;
 struct MirBlockList;
@@ -229,7 +229,7 @@ void pawP_bitset_clear_range(struct BitSet *bs, int i, int j);
 void pawP_bitset_and(struct BitSet *a, struct BitSet const *b);
 void pawP_bitset_or(struct BitSet *a, struct BitSet const *b);
 
-struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, struct MirIntervalList *intervals, struct MirLocationList *locations, int *pmax_reg);
+struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, struct MirIntervalMap *intervals, struct MirLocationList *locations, int *pmax_reg);
 
 struct IrTypeList *pawP_instantiate_typelist(struct Compiler *C, struct IrTypeList *before, struct IrTypeList *after, struct IrTypeList *target);
 struct IrType *pawP_instantiate_field(struct Compiler *C, struct IrType *self, struct IrType *field);

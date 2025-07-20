@@ -1106,8 +1106,9 @@ inline static int pawMir_get_location(struct MirLocationList *locations, MirId m
 }
 
 struct MirBlockList *pawMir_compute_live_in(struct Mir *mir, struct MirBlockList *uses, struct MirBlockList *defs, MirRegister r);
-struct MirIntervalList *pawMir_compute_liveness(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, struct MirLocationList *locations);
+struct MirIntervalMap *pawMir_compute_liveness(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, struct MirLocationList *locations);
 
+DEFINE_MAP(struct Mir, MirIntervalMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirRegister, struct MirLiveInterval *)
 DEFINE_MAP(struct Mir, AccessMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirRegister, struct MirAccessList *)
 DEFINE_MAP(struct Mir, UseDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirRegister, struct MirBlockList *)
 DEFINE_MAP_ITERATOR(UseDefMap, MirRegister, struct MirBlockList *)

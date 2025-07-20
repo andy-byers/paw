@@ -47,28 +47,23 @@ enum AllocationKind {
 
 struct RegisterAllocator {
     struct Pool *pool;
-    struct MirIntervalList *intervals;
     struct MirLocationList *locations;
     struct MirInstructionList *code;
     struct Compiler *C;
     struct Mir *mir;
     paw_Env *P;
 
+    struct MirIntervalMap *intervals;
+
     // result: stores the mapping from virtual to physical registers
     // handled: intervals ending before "position"
-    // unhandled: intervals starting after "position"
     // active: intervals assigned to registers
     // inactive: intervals with a hole at "position"
     struct IntervalMap *handled, *active, *inactive;
-    struct MirIntervalList *unhandled;
     struct MirLiveInterval *current;
     struct RegisterTable *result;
     int max_position;
     int position;
-
-    // ID of the highest-numbered free register, or the top of the register
-    // stack
-    int free_reg;
 
     // largest register ID encountered
     int max_reg;
@@ -180,18 +175,18 @@ static void debug(struct RegisterAllocator *R)
     dump_set(R->active, "active");
     dump_set(R->inactive, "inactive");
 
-    int i;
-    struct MirLiveInterval **iter;
-    printf("unhandled = {\n");
-    K_LIST_ENUMERATE (R->unhandled, i, iter) {
-        struct MirLiveInterval *it = *iter;
-        if (!MIR_ID_EXISTS(it->r))
-            continue;
-        if (it->last < R->position)
-            continue;
-        dump_interval(it, R->position, 4);
-    }
-    printf("}\n");
+//    int i;
+//    struct MirLiveInterval **iter;
+//    printf("unhandled = {\n");
+//    K_LIST_ENUMERATE (R->unhandled, i, iter) {
+//        struct MirLiveInterval *it = *iter;
+//        if (!MIR_ID_EXISTS(it->r))
+//            continue;
+//        if (it->last < R->position)
+//            continue;
+//        dump_interval(it, R->position, 4);
+//    }
+//    printf("}\n");
 
     dump_result(R->result);
 }
@@ -210,41 +205,6 @@ static void debug_registers(struct RegisterAllocator *R, MirRegister *regs, int 
 }
 
 #endif // defined(PAW_DEBUG_EXTRA)
-
-static void split_current(struct RegisterAllocator *R, int pos)
-{
-    paw_assert(pos > 0);
-    struct MirLiveInterval *it = R->current;
-    int const n = it->ranges->count;
-    struct MirLiveInterval *split = pawMir_new_interval(R->C, it->r, n);
-    split->instr = pawMir_new_instruction(R->mir);
-    split->last = it->last;
-
-    pawP_bitset_or(split->ranges, it->ranges);
-    pawP_bitset_clear_range(it->ranges, 0, pos);
-    pawP_bitset_clear_range(split->ranges, pos, n);
-    *split->instr = *it->instr;
-    split->instr->hdr.mid = pawMir_next_id(R->mir);
-
-    for (int i = pos - 1; i >= 0; --i) {
-        if (pawP_bitset_get(it->ranges, i)) {
-            it->last = i;
-            break;
-        }
-    }
-    for (int i = pos; i < n; ++i) {
-        if (pawP_bitset_get(split->ranges, i)) {
-            split->first = i;
-            break;
-        }
-    }
-
-    // preserve the interval ordering by start position (odd positions are skipped
-    // during MIR creation)
-    int const new_pos = pawMir_get_location(R->locations, it->instr->hdr.mid) + 1;
-    pawMir_set_location(R->mir, R->locations, split->instr->hdr.mid, new_pos);
-    MirIntervalList_set(R->unhandled, new_pos, split);
-}
 
 static struct RegisterInfo max_free_reg(struct RegisterAllocator *R, int const *free_until_pos, int *pmax_value)
 {
@@ -305,56 +265,89 @@ static void try_allocate_free_reg(struct RegisterAllocator *R)
     // variable is expected to be in a register
     SET_ITER(R->inactive, iter, it, {
         int const p = next_intersection(it, current);
-        if (p >= 0)
-            free_until_pos[REG(R, it)] = p;
+        if (p >= 0) free_until_pos[REG(R, it)] = p;
         IntervalMapIterator_next(&iter);
     });
 
-    int pos; // "reg" is free until this instruction
+    int pos; // "reg" is free until this location
     struct RegisterInfo const reg = max_free_reg(R, free_until_pos, &pos);
-    if (pos == 0) not_enough_registers(R); // no return
-    R->max_reg = PAW_MAX(R->max_reg, reg.value);
+    if (pos == 0 || is_covered(current, pos)) not_enough_registers(R);
+
     RegisterTable_set(R->result, current->r.value, reg);
-    if (R->position >= pos) split_current(R, pos);
+    R->max_reg = PAW_MAX(R->max_reg, reg.value);
+}
+
+static struct MirLiveInterval *get_interval(struct RegisterAllocator *R, MirRegister r)
+{
+    struct MirLiveInterval *const *pit = MirIntervalMap_get(R->mir, R->intervals, r);
+    paw_assert(pit != NULL && "unrecognized register");
+    return *pit;
+}
+
+static void allocate_register(struct RegisterAllocator *R, MirRegister r)
+{
+    struct Mir *mir = R->mir;
+    struct MirLiveInterval **pit;
+    struct MirLiveInterval *it = get_interval(R, r);
+    R->position = it->first;
+    R->current = it;
+
+    SET_ITER(R->active, iter, it, {
+        if (it->last < R->position) {
+            set_add(R, R->handled, it);
+            iset_erase(&iter);
+        } else if (!is_covered(it, R->position)) {
+            set_add(R, R->inactive, it);
+            iset_erase(&iter);
+        } else {
+            iset_next(&iter);
+        }
+    });
+
+    SET_ITER(R->inactive, iter, it, {
+        if (it->last < R->position) {
+            set_add(R, R->handled, it);
+            iset_erase(&iter);
+        } else if (is_covered(it, R->position)) {
+            set_add(R, R->active, it);
+            iset_erase(&iter);
+        } else {
+            iset_next(&iter);
+        }
+    });
+
+    // allocate a register for the current interval
+    try_allocate_free_reg(R);
+    set_add(R, R->active, R->current);
+}
+
+static void alloc_phi_regs(struct RegisterAllocator *R, struct MirPhi *phi)
+{
+    allocate_register(R, phi->output.r);
+}
+
+static void alloc_other_regs(struct RegisterAllocator *R, struct MirInstruction *instr)
+{
+    struct MirPlace *const *pstore;
+    struct MirPlacePtrList *stores = pawMir_get_stores(R->mir, instr);
+    K_LIST_FOREACH (stores, pstore) {
+        struct MirPlace const place = **pstore;
+        allocate_register(R, place.r);
+    }
 }
 
 static void allocate_registers(struct RegisterAllocator *R)
 {
-    struct Mir *mir = R->mir;
-    struct MirLiveInterval **pit;
-    K_LIST_FOREACH (R->unhandled, pit) {
-        R->current = *pit;
-        R->position = R->current->first;
-        if (!MIR_ID_EXISTS(R->current->r))
-            continue;
-
-        SET_ITER(R->active, iter, it, {
-            if (it->last < R->position) {
-                set_add(R, R->handled, it);
-                iset_erase(&iter);
-            } else if (!is_covered(it, R->position)) {
-                set_add(R, R->inactive, it);
-                iset_erase(&iter);
-            } else {
-                iset_next(&iter);
-            }
-        });
-
-        SET_ITER(R->inactive, iter, it, {
-            if (it->last < R->position) {
-                set_add(R, R->handled, it);
-                iset_erase(&iter);
-            } else if (is_covered(it, R->position)) {
-                set_add(R, R->active, it);
-                iset_erase(&iter);
-            } else {
-                iset_next(&iter);
-            }
-        });
-
-        // allocate a register for the current interval
-        try_allocate_free_reg(R);
-        set_add(R, R->active, R->current);
+    struct MirBlockData *const *pbb;
+    K_LIST_FOREACH (R->mir->blocks, pbb) {
+        struct MirInstruction *const *pinstr;
+        K_LIST_FOREACH ((*pbb)->joins, pinstr) {
+            struct MirPhi const *phi = MirGetPhi(*pinstr);
+            allocate_register(R, phi->output.r);
+        }
+        K_LIST_FOREACH ((*pbb)->instructions, pinstr) {
+            alloc_other_regs(R, *pinstr);
+        }
     }
 }
 
@@ -462,38 +455,7 @@ static void resolve_registers(struct RegisterAllocator *R, struct MirBlockList *
     }
 }
 
-static int compare_first(void const *lhs, void const *rhs)
-{
-    struct MirLiveInterval const *a = *CAST(struct MirLiveInterval const **, lhs);
-    struct MirLiveInterval const *b = *CAST(struct MirLiveInterval const **, rhs);
-    if (a->first < b->first) return -1;
-    if (a->first > b->first) return 1;
-    return 0;
-}
-
-static struct MirIntervalList *expand_with_placeholders(struct RegisterAllocator *R, struct MirIntervalList *intervals, int nskip)
-{
-    int const npositions = intervals->count * 2;
-    struct MirIntervalList *result = MirIntervalList_new_from(R->mir, R->pool);
-    MirIntervalList_reserve(R->mir, result, npositions);
-
-    int i;
-    struct MirLiveInterval **pit;
-    K_LIST_ENUMERATE (intervals, i, pit) {
-        MirIntervalList_push(R->mir, result, *pit);
-
-        // add empty interval to make splitting easier
-        struct MirLiveInterval *empty = pawMir_new_interval(R->C,
-                MIR_INVALID_REG, npositions);
-        MirIntervalList_push(R->mir, result, empty);
-    }
-
-#undef PUSH_PLACEHOLDER
-
-    return result;
-}
-
-struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, struct MirIntervalList *intervals, struct MirLocationList *locations, int *pmax_reg)
+struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, struct MirIntervalMap *intervals, struct MirLocationList *locations, int *pmax_reg)
 {
     struct MirBlockData const *last = MirBlockDataList_last(mir->blocks);
     int const npositions = pawMir_get_location(locations, mir_bb_last(last)) + 2;
@@ -518,28 +480,24 @@ struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mi
         RegisterTable_push(C, R.result, REGINFO(-1));
     }
 
-    int const nparameters = mir->param_size;
-    int const ncaptured = mir->captured->count;
-
     {
         // assign registers for result and arguments
-        int const offset = 1 + nparameters;
-        for (int i = 0; i < offset; ++i)
+        int const offset = 1 + mir->param_size;
+        for (int i = 0; i < offset; ++i) {
             RegisterTable_set(R.result, i, REGINFO(i));
+            set_add(&R, R.active, get_interval(&R, MIR_REG(i)));
+        }
 
         // assign registers for captured variables
-        for (int i = 0, j = 0; i < ncaptured; ++i) {
-            struct MirCaptureInfo const c = MirCaptureList_get(mir->captured, i);
-            if (c.r.value >= offset) // not callee or parameter
-                RegisterTable_set(R.result, c.r.value, REGINFO(offset + j++));
+        int index = 0;
+        struct MirCaptureInfo const *pcapture;
+        K_LIST_FOREACH (mir->captured, pcapture) {
+            if (pcapture->r.value >= offset) { // not callee or argument
+                RegisterTable_set(R.result, pcapture->r.value, REGINFO(offset + index++));
+                set_add(&R, R.inactive, get_interval(&R, pcapture->r));
+            }
         }
     }
-
-    // sort live intervals by start point
-    qsort(intervals->data, CAST_SIZE(intervals->count),
-          sizeof(struct MirLiveInterval *), compare_first);
-    R.unhandled = expand_with_placeholders(&R, intervals,
-          nparameters + ncaptured);
 
     allocate_registers(&R);
     resolve_registers(&R, order);
