@@ -109,7 +109,7 @@ static void iset_next(IntervalMapIterator *iter)
 
 static paw_Bool is_covered(struct MirLiveInterval *it, int pos)
 {
-    return pawP_bitset_get(it->ranges, pos);
+    return pos < it->ranges->count && pawP_bitset_get(it->ranges, pos);
 }
 
 #if defined(PAW_DEBUG_EXTRA)
@@ -246,12 +246,11 @@ static void try_allocate_free_reg(struct RegisterAllocator *R)
 {
     struct MirLiveInterval *current = R->current;
     struct RegisterInfo const result = get_result(R, current->r);
-    if (result.value >= 0)
-        return;
+    if (result.value >= 0) return;
 
     int free_until_pos[NREGISTERS];
     for (int i = 0; i < NREGISTERS; ++i) {
-        free_until_pos[i] = R->max_position;
+        free_until_pos[i] = R->max_position + 1;
     }
     // ignore registers already containing variables
     SET_ITER(R->active, iter, it, {
@@ -457,12 +456,12 @@ static void resolve_registers(struct RegisterAllocator *R, struct MirBlockList *
 
 struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, struct MirIntervalMap *intervals, struct MirLocationList *locations, int *pmax_reg)
 {
-    struct MirBlockData const *last = MirBlockDataList_last(mir->blocks);
-    int const npositions = pawMir_get_location(locations, mir_bb_last(last)) + 2;
+    struct MirBlockData const *last = mir_bb_data(mir, K_LIST_LAST(order));
+    int const max_position = pawMir_get_location(locations, mir_bb_last(last));
     struct RegisterAllocator R = {
         .pool = pawP_pool_new(C, C->aux_stats),
         .code = MirInstructionList_new(mir),
-        .max_position = npositions,
+        .max_position = max_position,
         .locations = locations,
         .intervals = intervals,
         .result = RegisterTable_new(C),

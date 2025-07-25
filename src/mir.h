@@ -976,8 +976,7 @@ inline static MirId mir_bb_first(struct MirBlockData const *block)
 
 inline static MirId mir_bb_last(struct MirBlockData const *block)
 {
-    if (block->instructions->count <= 0)
-        return block->mid;
+    if (block->instructions->count == 0) return block->mid;
     return MirInstructionList_last(block->instructions)->hdr.mid;
 }
 
