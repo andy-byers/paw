@@ -115,4 +115,3 @@ pub fn test_lots_of_strings() {
         }
     }
 }
-

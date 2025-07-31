@@ -421,6 +421,8 @@ char const *op_name(Op op)
             return "MGET";
         case OP_MAPSET:
             return "MSET";
+        case OP_UNPACK:
+            return "UNPACK";
         case OP_GETVALUE:
             return "GETVALUE";
         case OP_SETVALUE:
@@ -557,6 +559,7 @@ void paw_dump_opcode(OpCode opcode)
         case OP_MAPSET:
         case OP_GETFIELD:
         case OP_SETFIELD:
+        case OP_UNPACK:
         case OP_GETVALUE:
         case OP_SETVALUE:
         case OP_TESTK:
@@ -675,6 +678,7 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
             case OP_MAPSET:
             case OP_GETFIELD:
             case OP_SETFIELD:
+            case OP_UNPACK:
             case OP_GETVALUE:
             case OP_SETVALUE:
                 pawL_add_fstring(P, print, " %d %d %d\n", GET_A(opcode), GET_B(opcode), GET_C(opcode));

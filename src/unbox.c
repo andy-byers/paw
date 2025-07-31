@@ -248,6 +248,7 @@ static int allocate_values(struct Unboxer *U, IrType *type, int discr, ValueAllo
 static struct MemoryGroup get_registers(struct Unboxer *U, MirRegister r, int discr);
 
 struct RegisterState {
+    enum MirRegisterInfo info;
     paw_Bool is_captured;
     paw_Bool is_uninit;
 };
@@ -258,6 +259,7 @@ static void allocate_register(struct FunctionState *fs, IrType *type, void *ctx)
     MirRegisterDataList_push(fs->mir, fs->registers, (struct MirRegisterData){
                 .is_captured = rs->is_captured,
                 .is_uninit = rs->is_uninit,
+                .info = rs->info,
                 .type = type,
                 .size = 1,
             });
@@ -311,7 +313,11 @@ static struct MemoryGroup get_registers(struct Unboxer *U, MirRegister r, int di
     struct MirRegisterData *data = mir_reg_data(fs->mir, r);
     int const num_registers = fs->registers->count;
 
-    struct RegisterState rs = {.is_captured = data->is_captured, .is_uninit = data->is_uninit};
+    struct RegisterState rs = {
+        .is_captured = data->is_captured,
+        .is_uninit = data->is_uninit,
+        .info = data->info,
+    };
     int const count = allocate_values(U, data->type, discr, allocate_register, &rs);
     struct MemoryGroup const group = {
         .kind = MEMORY_LOCAL,
@@ -441,6 +447,11 @@ static IrType *get_access_type(struct MemoryAccess *pa)
         pa->type;
 }
 
+static void set_reginfo(struct Unboxer *U, MirRegister r, enum MirRegisterInfo info)
+{
+    K_LIST_AT(U->fs->registers, r.value).info = info;
+}
+
 static void discharge_indirect_element(struct Unboxer *U, struct MemoryAccess *pa, struct MemoryGroup *poutput)
 {
     enum BuiltinKind kind = pawP_type2code(U->C, pa->type);
@@ -455,13 +466,19 @@ static void discharge_indirect_element(struct Unboxer *U, struct MemoryAccess *p
     struct MirPlace const object = place_at(pa->group, 0);
     if (output.count > 1 || field_offset > 0) {
         struct MirPlace const pointer = new_rawptr_place(U, element_type);
+        set_reginfo(U, pointer.r, MIR_REGINFO_ARGUMENT);
         NEW_INSTR(U, get_element_ptr, TODO, kind, pointer, object,
                 pa->element.index, PAW_FALSE);
 
+        MirPlaceList *outputs = MirPlaceList_new(U->fs->mir);
         for (int i = 0; i < output.count; ++i) {
-            struct MirPlace const result = place_at(output, i);
-            NEW_INSTR(U, get_field, TODO, field_offset + i, result, pointer);
+            struct MirPlace const place = place_at(output, i);
+            set_reginfo(U, place.r, MIR_REGINFO_ARGUMENT);
+            MirPlaceList_push(U->fs->mir, outputs, place);
         }
+
+        NEW_INSTR(U, unpack, TODO, field_offset, outputs, pointer);
+
     } else {
         struct MirPlace const result = place_at(output, 0);
         NEW_INSTR(U, get_element, TODO, kind, result, object, pa->element.index);
@@ -642,15 +659,15 @@ static void create_move(struct Unboxer *U, struct MemoryAccess lhs, struct Memor
     }
 }
 
-static void create_field_setter(struct Unboxer *U, struct MemoryAccess lhs, struct MemoryAccess rhs)
+static void create_write(struct Unboxer *U, struct MemoryAccess lhs, struct MemoryAccess rhs)
 {
     struct MemoryGroup const object = lhs.group;
     struct MemoryGroup const value = rhs.group;
 
     for (int i = 0; i < value.count; ++i) {
         struct MirPlace const a = place_at(value, i);
-        struct MirPlace const b = place_at(object, lhs.field.offset + i);
-        NEW_INSTR(U, move, TODO, b, a);
+        struct MirPlace const b = place_at(object, i);
+        NEW_INSTR(U, write, TODO, b, a);
     }
 }
 
@@ -707,11 +724,8 @@ static void create_upvalue_setter(struct Unboxer *U, struct MemoryAccess lhs, st
     }
 }
 
-static void unbox_move(struct Unboxer *U, struct MirMove *x)
+static paw_Bool unbox_projections(struct Unboxer *U, struct MemoryAccess lhs, struct MemoryAccess rhs)
 {
-    struct MemoryAccess rhs = unbox_place(U, &x->target);
-    struct MemoryAccess lhs = unbox_place(U, &x->output);
-
     if (lhs.has_range) {
         discharge_access(U, &rhs, NULL);
         create_indirect_range_setter(U, lhs, rhs);
@@ -729,8 +743,25 @@ static void unbox_move(struct Unboxer *U, struct MirMove *x)
         // discharge straight into LHS register(s)
         discharge_access(U, &rhs, &lhs.group);
     } else {
-        create_move(U, lhs, rhs);
+        return PAW_FALSE;
     }
+    return PAW_TRUE;
+}
+
+static void unbox_move(struct Unboxer *U, struct MirMove *x)
+{
+    struct MemoryAccess rhs = unbox_place(U, &x->target);
+    struct MemoryAccess lhs = unbox_place(U, &x->output);
+    if (!unbox_projections(U, lhs, rhs))
+        create_move(U, lhs, rhs);
+}
+
+static void unbox_write(struct Unboxer *U, struct MirWrite *x)
+{
+    struct MemoryAccess rhs = unbox_place(U, &x->value);
+    struct MemoryAccess lhs = unbox_place(U, &x->target);
+    if (!unbox_projections(U, lhs, rhs))
+        create_write(U, lhs, rhs);
 }
 
 static void unbox_alloclocal(struct Unboxer *U, struct MirAllocLocal *x)
@@ -895,6 +926,9 @@ static void unbox_instruction(struct Unboxer *U, struct MirInstruction *instr)
             break;
         case kMirMove:
             unbox_move(U, MirGetMove(instr));
+            break;
+        case kMirWrite:
+            unbox_write(U, MirGetWrite(instr));
             break;
         case kMirCall:
             unbox_call(U, MirGetCall(instr));

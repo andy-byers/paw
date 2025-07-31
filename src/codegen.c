@@ -589,6 +589,14 @@ static void code_move(struct MirVisitor *V, struct MirMove *x)
     move_to_reg(fs, REG(x->target), REG(x->output));
 }
 
+static void code_write(struct MirVisitor *V, struct MirWrite *x)
+{
+    struct Generator *G = V->ud;
+    struct FnState *fs = G->fs;
+
+    move_to_reg(fs, REG(x->value), REG(x->target));
+}
+
 static void code_upvalue(struct MirVisitor *V, struct MirUpvalue *x)
 {
     struct Generator *G = V->ud;
@@ -668,6 +676,9 @@ static void code_closure(struct MirVisitor *V, struct MirClosure *x)
     int const temp = temporary_reg(fs, 0);
     code_ABx(fs, OP_CLOSURE, temp, x->child_id);
     move_to_reg(fs, temp, REG(x->output));
+
+    // TODO: Should require just the following line
+//    code_ABx(fs, OP_CLOSURE, REG(x->output), x->child_id);
 }
 
 static void code_map_get(struct FnState *fs, struct MirPlace output, struct MirPlace object, struct MirPlace key)
@@ -760,6 +771,14 @@ static void code_set_range(struct MirVisitor *V, struct MirSetRange *x)
     code_ABC(fs, OP_LISTSETN, REG(x->object), lower, REG(x->value));
 }
 
+static void code_unpack(struct MirVisitor *V, struct MirUnpack *x)
+{
+    struct Generator *G = V->ud;
+    struct FnState *fs = G->fs;
+
+    code_ABC(fs, OP_UNPACK, REG(x->object), x->offset, x->outputs->count);
+}
+
 static void code_get_field(struct MirVisitor *V, struct MirGetField *x)
 {
     struct Generator *G = V->ud;
@@ -822,34 +841,12 @@ static void code_container(struct MirVisitor *V, struct MirContainer *x)
     move_to_reg(fs, temp, REG(x->output));
 }
 
-static int enforce_call_constraints(struct FnState *fs, struct MirCall *x)
-{
-    int const target = move_to_temp(fs, REG(x->target), 0);
-
-    int next;
-    struct MirPlace const *pp;
-    K_LIST_ENUMERATE (x->args, next, pp)
-        move_to_temp(fs, REG(*pp), 1 + next);
-
-    return target;
-}
-
 static void code_call(struct MirVisitor *V, struct MirCall *x)
 {
     struct Generator *G = V->ud;
     struct FnState *fs = G->fs;
 
-    int const target = enforce_call_constraints(fs, x);
-    code_AB(fs, OP_CALL, target, x->args->count);
-
-    // move the return values from the top of the stack to where they are expected to
-    // be by the rest of the code
-    int index;
-    struct MirPlace const *pp;
-    K_LIST_ENUMERATE (x->outputs, index, pp) {
-        int const temp = temporary_reg(fs, index);
-        move_to_reg(fs, temp, REG(*pp));
-    }
+    code_AB(fs, OP_CALL, REG(x->target), x->args->count);
 }
 
 static void code_cast(struct MirVisitor *V, struct MirCast *x)
@@ -1178,6 +1175,7 @@ static void setup_codegen(struct Generator *G)
     pawMir_visitor_init(V, G->C, NULL, G);
 
     V->PostVisitMove = code_move;
+    V->PostVisitWrite = code_write;
     V->PostVisitUpvalue = code_upvalue;
     V->PostVisitGlobal = code_global;
     V->PostVisitLoadConstant = code_constant;
@@ -1194,6 +1192,7 @@ static void setup_codegen(struct Generator *G)
     V->PostVisitGetElementPtr = code_get_element_ptr;
     V->PostVisitGetRange = code_get_range;
     V->PostVisitSetRange = code_set_range;
+    V->PostVisitUnpack = code_unpack;
     V->PostVisitGetField = code_get_field;
     V->PostVisitSetField = code_set_field;
     V->PostVisitUnaryOp = code_unop;

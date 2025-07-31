@@ -890,11 +890,11 @@ inline struct Struct {
 }
 
 pub fn test_misc() {
-   let s = Struct{x: (1, [Option::None])}; 
+   let s = Struct{x: (1, [None])}; 
     assert(s.x.0 == 1);
     assert(s.x.1[0].is_none());
 
-    s.x.1[0] = Option::Some(Struct{x: (2, [Option::None])});
+    s.x.1[0] = Some(Struct{x: (2, [None])});
     assert(s.x.0 == 1);
     assert(s.x.1[0].unwrap().x.0 == 2);
     assert(s.x.1[0].unwrap().x.1[0].is_none());
@@ -905,7 +905,7 @@ pub fn test_return_not_overwritten() {
     //      in: f i s
     //     out: 1 s i
     let f = |i: int, s: str| {
-        Option::Some((s, i))
+        Some((s, i))
     };
 
     let t = f(1, "two");
@@ -915,10 +915,10 @@ pub fn test_return_not_overwritten() {
 
 pub fn test_return_not_overwritten_2() {
     let f = |a: (bool, int), b: Option<str>, c: (float, str, int)| {
-        Option::Some((c.2, c.1, c.0, b?, a.1, a.0))
+        Some((c.2, c.1, c.0, b?, a.1, a.0))
     };
 
-    let t = f((true, 2), Option::Some("three"), (4.0, "five", 6));
+    let t = f((true, 2), Some("three"), (4.0, "five", 6));
     assert(t.unwrap().0 == 6);
     assert(t.unwrap().1 == "five");
     assert(t.unwrap().2 == 4.0);

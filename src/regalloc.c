@@ -78,13 +78,14 @@ static void not_enough_registers(struct RegisterAllocator *R)
     REGALLOC_ERROR(R, too_many_variables, R->mir->span.start, NREGISTERS);
 }
 
-static MirRegister new_register(struct RegisterAllocator *R, IrType *type)
+static MirRegister new_register(struct RegisterAllocator *R, IrType *type, enum MirRegisterInfo info)
 {
     if (R->max_reg >= NREGISTERS) not_enough_registers(R);
     MirRegister const r = MIR_REG(R->mir->registers->count);
     MirRegisterDataList_push(R->mir, R->mir->registers,
         (struct MirRegisterData){
             .type = type,
+            .info = info,
             .size = 1,
         });
     paw_assert(r.value == R->result->count);
@@ -92,15 +93,15 @@ static MirRegister new_register(struct RegisterAllocator *R, IrType *type)
     return r;
 }
 
-static paw_Bool materialize_k(struct RegisterAllocator *R, MirConstant k, struct MirPlace *pplace)
+static paw_Bool materialize_k(struct RegisterAllocator *R, MirConstant k, int position, enum MirRegisterInfo info, struct MirPlace *pplace)
 {
     struct MirConstantData const *kdata = mir_const_data(R->mir, k);
     IrType *ktype = pawP_builtin_type(R->C, kdata->kind);
-    MirRegister const r = new_register(R, ktype);
+    MirRegister const r = new_register(R, ktype, info);
 
     struct MirLiveInterval *it = pawMir_new_interval(R->C, r, R->max_position + 1);
-    it->first = it->last = R->position;
-    pawP_bitset_set(it->ranges, R->position);
+    pawP_bitset_set(it->ranges, position);
+    it->first = it->last = position;
     MirIntervalMap_insert(R->mir, R->intervals, r, it);
 
     *pplace = (struct MirPlace){
@@ -239,6 +240,17 @@ static void debug_registers(struct RegisterAllocator *R, MirRegister *regs, int 
 
 #endif // defined(PAW_DEBUG_EXTRA)
 
+static void set_result(struct RegisterAllocator *R, MirRegister r, struct RegisterInfo result)
+{
+    RegisterTable_set(R->result, r.value, result);
+    R->max_reg = PAW_MAX(R->max_reg, result.value);
+}
+
+static struct RegisterInfo get_result(struct RegisterAllocator *R, MirRegister r)
+{
+    return RegisterTable_get(R->result, r.value);
+}
+
 static struct RegisterInfo max_free_reg(struct RegisterAllocator *R, int const *free_until_pos, int *pmax_value)
 {
     int max_index = 0;
@@ -265,9 +277,12 @@ static int next_intersection(struct MirLiveInterval *a, struct MirLiveInterval *
     return -1;
 }
 
-static struct RegisterInfo get_result(struct RegisterAllocator *R, MirRegister r)
+static struct RegisterInfo compute_free_reg(struct RegisterAllocator *R, int const *free_until_pos)
 {
-    return RegisterTable_get(R->result, r.value);
+    int i = NREGISTERS;
+    for (; i > 0 && free_until_pos[i - 1] > 0; --i);
+    if (i == NREGISTERS) not_enough_registers(R);
+    return REGINFO(i);
 }
 
 static void try_allocate_free_reg(struct RegisterAllocator *R)
@@ -296,12 +311,18 @@ static void try_allocate_free_reg(struct RegisterAllocator *R)
         iset_next(&iter);
     });
 
+    struct MirRegisterData const *data = mir_reg_data(R->mir, current->r);
+    if (data->info == MIR_REGINFO_ARGUMENT) {
+        struct RegisterInfo const free_reg = compute_free_reg(R, free_until_pos);
+        set_result(R, current->r, free_reg);
+        return;
+    }
+
     int pos; // "reg" is free until this location
     struct RegisterInfo const reg = max_free_reg(R, free_until_pos, &pos);
     if (pos == 0 || is_covered(current, pos)) not_enough_registers(R);
 
-    RegisterTable_set(R->result, current->r.value, reg);
-    R->max_reg = PAW_MAX(R->max_reg, reg.value);
+    set_result(R, current->r, reg);
 }
 
 static struct MirLiveInterval *get_interval(struct RegisterAllocator *R, MirRegister r)
@@ -348,13 +369,13 @@ static void allocate_register(struct RegisterAllocator *R, MirRegister r)
     set_add(R, R->active, R->current);
 }
 
-static void materialize_load(struct RegisterAllocator *R, struct SourceLoc loc, struct MirPlace *pload, MirInstructionList *rewrite)
+static void materialize_load(struct RegisterAllocator *R, struct SourceLoc loc, int position, struct MirPlace *pload, enum MirRegisterInfo info, MirInstructionList *rewrite)
 {
     paw_assert(pload->projection == NULL);
     if (pload->kind == MIR_PLACE_CONSTANT) {
         MirConstant const k = pload->k;
         struct MirConstantData const *kdata = mir_const_data(R->mir, k);
-        if (materialize_k(R, k, pload)) {
+        if (materialize_k(R, k, position, info, pload)) {
             allocate_register(R, pload->r);
             // add an instruction that materializes the constant in a register
             struct MirInstruction *loadk = pawMir_new_load_constant(R->mir, loc, k, *pload);
@@ -364,13 +385,51 @@ static void materialize_load(struct RegisterAllocator *R, struct SourceLoc loc, 
     }
 }
 
-static void alloc_other_regs(struct RegisterAllocator *R, struct MirInstruction *instr, MirInstructionList *rewrite)
+static struct MirInstruction *new_move(struct RegisterAllocator *R, struct SourceLoc loc, MirRegister from, MirRegister to)
 {
+    return pawMir_new_move(R->mir, loc, PLACE(to), PLACE(from));
+}
+
+static void alloc_unpack(struct RegisterAllocator *R, struct MirUnpack *unpack, MirInstructionList *rewrite)
+{
+    // pointer is replaced by pointed-to value(s)
+    struct RegisterInfo result = get_result(R, unpack->object.r);
+
+    struct MirPlace *presult;
+    K_LIST_FOREACH (unpack->outputs, presult) {
+        set_add(R, R->active, get_interval(R, presult->r));
+        set_result(R, presult->r, result);
+        ++result.value;
+    }
+
+    MirInstructionList_push(R->mir, rewrite, MIR_CAST_INSTRUCTION(unpack));
+}
+
+// Allocate registers for a function call
+static void alloc_call(struct RegisterAllocator *R, struct MirCall *call, MirInstructionList *rewrite)
+{
+    // callee and argument(s) are replaced by return value(s)
+    struct RegisterInfo result = get_result(R, call->target.r);
+
+    struct MirPlace *presult;
+    K_LIST_FOREACH (call->outputs, presult) {
+        set_add(R, R->active, get_interval(R, presult->r));
+        set_result(R, presult->r, result);
+        ++result.value;
+    }
+
+    MirInstructionList_push(R->mir, rewrite, MIR_CAST_INSTRUCTION(call));
+}
+
+static void alloc_other(struct RegisterAllocator *R, struct MirInstruction *instr, MirInstructionList *rewrite)
+{
+    int const position = pawMir_get_location(R->locations, instr->hdr.mid);
+
     {
         struct MirPlace *const *ppload;
         struct MirPlacePtrList *loads = pawMir_get_loads(R->mir, instr);
         K_LIST_FOREACH (loads, ppload)
-            materialize_load(R, instr->hdr.loc, *ppload, rewrite);
+            materialize_load(R, instr->hdr.loc, position - 1, *ppload, MIR_REGINFO_NONE, rewrite);
     }
 
     {
@@ -404,7 +463,16 @@ static void allocate_registers(struct RegisterAllocator *R)
 
             struct MirInstruction *const *pinstr;
             K_LIST_FOREACH (bb->instructions, pinstr) {
-                alloc_other_regs(R, *pinstr, rewrite);
+                switch (MIR_KINDOF(*pinstr)) {
+                    case kMirCall:
+                        alloc_call(R, MirGetCall(*pinstr), rewrite);
+                        break;
+                    case kMirUnpack:
+                        alloc_unpack(R, MirGetUnpack(*pinstr), rewrite);
+                        break;
+                    default:
+                        alloc_other(R, *pinstr, rewrite);
+                }
             }
 
             MirInstructionList_delete(R->mir, bb->instructions);
@@ -489,7 +557,6 @@ static void order_and_insert_copies(struct RegisterAllocator *R, struct MirBlock
     MirInstructionList_push(R->mir, block->instructions, terminator);
 
     // temporary registers only used for this batch of moves
-    R->max_reg -= nscratch; // TODO: probably not a good thing to do...
     pcopies->count = 0;
 }
 
@@ -557,8 +624,8 @@ struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mi
         // assign registers for result and arguments
         int const offset = 1 + mir->param_size;
         for (int i = 0; i < offset; ++i) {
-            RegisterTable_set(R.result, i, REGINFO(i));
             set_add(&R, R.active, get_interval(&R, MIR_REG(i)));
+            set_result(&R, MIR_REG(i), REGINFO(i));
         }
 
         // assign registers for captured variables
@@ -566,8 +633,8 @@ struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mi
         struct MirCaptureInfo const *pcapture;
         K_LIST_FOREACH (mir->captured, pcapture) {
             if (pcapture->r.value >= offset) { // not callee or argument
-                RegisterTable_set(R.result, pcapture->r.value, REGINFO(offset + index++));
                 set_add(&R, R.inactive, get_interval(&R, pcapture->r));
+                set_result(&R, pcapture->r, REGINFO(offset + index++));
             }
         }
     }

@@ -70,11 +70,20 @@ static struct MirPhi *add_phi_node(struct SsaConverter *S, MirBlock b, MirRegist
 DEFINE_LIST(struct SsaConverter, NameStackList, struct MirRegisterList *)
 DEFINE_LIST(struct SsaConverter, IntegerList, int)
 
-static void rename_input(struct SsaConverter *S, MirRegister *pr)
+static void rename_input(struct SsaConverter *S, struct MirPlace *pplace)
 {
-    struct MirRegisterList const *names = NameStackList_get(S->stacks, pr->value);
-    paw_assert(names->count > 0 && "use of undefined register");
-    *pr = K_LIST_LAST(names);
+    struct MirRegisterList const *names = NameStackList_get(S->stacks, pplace->r.value);
+    if (names->count == 0) {
+        // NOTE: This is a hack that fixes a certain problem. It should be removed eventually.
+        //     It should be considered a bug in Paw itself if an uninitialized variable is used
+        //     as a VM instruction operand. This branch hides errors.
+        pplace->kind = MIR_PLACE_CONSTANT;
+        MirConstantDataList_push(S->mir, S->mir->constants,
+            (struct MirConstantData){.kind = BUILTIN_UNIT, .value.u = 0});
+        pplace->k = MIR_CONST(S->mir->constants->count - 1);
+    } else {
+        pplace->r = K_LIST_LAST(names);
+    }
 }
 
 static void rename_output(struct SsaConverter *S, MirRegister *pr, paw_Bool is_alloc)
@@ -108,13 +117,13 @@ static void rename_move(struct SsaConverter *S, struct MirInstruction *instr)
 {
     struct MirMove *move = MirGetMove(instr);
     if (move->target.kind == MIR_PLACE_LOCAL)
-        rename_input(S, &move->target.r);
+        rename_input(S, &move->target);
 
     MirRegister const old = move->output.r;
     struct MirRegisterData *data = mir_reg_data(S->mir, old);
     if (data->is_captured) {
         paw_assert(move->output.kind == MIR_PLACE_LOCAL);
-        rename_input(S, &move->output.r);
+        rename_input(S, &move->output);
 
         instr->SetCapture_ = (struct MirSetCapture){
             .kind = kMirSetCapture,
@@ -139,7 +148,7 @@ static void rename_instruction(struct SsaConverter *S, struct MirInstruction *in
     MirPlacePtrList const *loads = pawMir_get_loads(S->mir, instr);
     K_LIST_FOREACH (loads, ppp) {
         if ((*ppp)->kind == MIR_PLACE_LOCAL)
-            rename_input(S, &(*ppp)->r);
+            rename_input(S, *ppp);
     }
 
     MirPlacePtrList const *stores = pawMir_get_stores(S->mir, instr);

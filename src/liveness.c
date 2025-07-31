@@ -129,9 +129,11 @@ static void step_instruction(struct Liveness *L, struct MirRegisterList *set, st
 
 static void dump_live_intervals(struct Liveness *L, struct MirIntervalMap *intervals, int max_position)
 {
-    for (int r = 0; r < intervals->count; ++r) {
+    for (int r = 0; r < L->mir->registers->count; ++r) {
         struct MirLiveInterval *const *pit = MirIntervalMap_get(L->mir, intervals, MIR_REG(r));
-        printf("  _%d: ", r);
+        char padding[] = "  ";
+        padding[(r < 10) + (r < 100)] = '\0';
+        printf("  %s_%d: ", padding, r);
         if (pit != NULL) {
             struct MirLiveInterval const *it = *pit;
             for (int i = 0; i <= max_position; ++i) {
@@ -381,10 +383,12 @@ struct MirIntervalMap *pawMir_compute_liveness(struct Compiler *C, struct Mir *m
             add_range(&L, MIR_REG(i), it->first, max_position);
         }
 
+        // TODO: Should be able to start live interval for captured variables when
+        //       they are first output, i.e. "it->first", rather than at 0.
         struct MirCaptureInfo *pci;
         K_LIST_FOREACH (mir->captured, pci) {
             struct MirLiveInterval const *it = interval_for_reg(&L, pci->r);
-            add_range(&L, pci->r, it->first, max_position);
+            add_range(&L, pci->r, 0, max_position);
         }
     }
 

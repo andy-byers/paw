@@ -256,7 +256,7 @@ struct Scanner {
     }
 }
 
-inline struct Token {
+struct Token {
     pub location: SourceLoc,
     pub kind: TokenKind,
     pub data: str,
@@ -284,7 +284,7 @@ inline struct Token {
     }
 }
 
-inline enum TokenKind {
+enum TokenKind {
     Ident,
     String,
     Comment,
@@ -425,7 +425,7 @@ struct Grammer {
     }
 }
 
-inline struct Production {
+struct Production {
     pub ident: str,
     pub expr: Expression,
 

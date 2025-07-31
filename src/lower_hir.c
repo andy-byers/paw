@@ -171,6 +171,12 @@ static void leave_match(struct FunctionState *fs)
     fs->ms = fs->ms->outer;
 }
 
+static void set_reginfo(struct FunctionState *fs, struct MirPlace place, enum MirRegisterInfo info)
+{
+    if (place.kind == MIR_PLACE_LOCAL)
+        mir_reg_data(fs->mir, place.r)->info = info;
+}
+
 static enum BuiltinKind builtin_kind(struct LowerHir *L, IrType *type)
 {
     return pawP_type2code(L->C, type);
@@ -398,6 +404,11 @@ static void adjust_to(struct FunctionState *fs, enum JumpKind kind, MirBlock to)
 static void move_to(struct FunctionState *fs, struct SourceLoc loc, struct MirPlace from, struct MirPlace to)
 {
     NEW_INSTR(fs, move, loc, to, from);
+}
+
+static void write_to(struct FunctionState *fs, struct SourceLoc loc, struct MirPlace from, struct MirPlace to)
+{
+    NEW_INSTR(fs, write, loc, to, from);
 }
 
 static enum BuiltinKind kind_of_builtin(struct LowerHir *L, struct HirExpr *expr)
@@ -853,7 +864,7 @@ static struct MirPlace lower_tuple_lit(struct HirVisitor *V, struct HirLiteralEx
     K_LIST_ENUMERATE (e->tuple.elems, index, pexpr) {
         IrType *element_type = IrTypeList_get(elem_types, index);
         struct MirPlace place = select_field(fs, output, tuple_type, index, 0, element_type);
-        move_to(fs, e->span.start, lower_place(V, *pexpr), place);
+        write_to(fs, e->span.start, lower_place(V, *pexpr), place);
     }
     return output;
 }
@@ -873,7 +884,7 @@ static struct MirPlace lower_composite_lit(struct HirVisitor *V, struct HirLiter
         IrType *field_type = GET_NODE_TYPE(fs->C, *pexpr);
         struct HirFieldExpr *field = HirGetFieldExpr(*pexpr);
         struct MirPlace place = select_field(fs, output, object_type, field->fid, 0, field_type);
-        move_to(fs, e->span.start, lower_place(V, field->value), place);
+        write_to(fs, e->span.start, lower_place(V, field->value), place);
     }
 
     return output;
@@ -979,7 +990,7 @@ static struct MirPlace lower_unit_variant(struct HirVisitor *V, struct HirPathEx
 
     struct MirPlace const discr = new_constant(fs, I2V(d->index), BUILTIN_INT);
     struct MirPlace const place = select_field(fs, object, type, 0, 0, discr.type);
-    move_to(fs, e->span.start, discr, place);
+    write_to(fs, e->span.start, discr, place);
     return object;
 }
 
@@ -1057,9 +1068,9 @@ static struct MirPlace option_chain_error(struct FunctionState *fs, struct Sourc
     struct IrLayout layout = pawIr_compute_layout(fs->C, fs->result);
     NEW_INSTR(fs, aggregate, loc, layout.size, place);
 
-    struct MirPlace const k = add_constant(fs, loc, I2V(PAW_OPTION_NONE), BUILTIN_INT);
+    struct MirPlace const k = new_constant(fs, I2V(PAW_OPTION_NONE), BUILTIN_INT);
     struct MirPlace discr = select_field(fs, place, fs->result, 0, PAW_OPTION_NONE, k.type);
-    move_to(fs, loc, k, discr);
+    write_to(fs, loc, k, discr);
     return place;
 }
 
@@ -1069,14 +1080,14 @@ static struct MirPlace result_chain_error(struct FunctionState *fs, struct Sourc
     struct IrLayout layout = pawIr_compute_layout(fs->C, fs->result);
     NEW_INSTR(fs, aggregate, loc, layout.size, place);
 
-    struct MirPlace const k = add_constant(fs, loc, I2V(PAW_RESULT_ERR), BUILTIN_INT);
+    struct MirPlace const k = new_constant(fs, I2V(PAW_RESULT_ERR), BUILTIN_INT);
     struct MirPlace discr = select_field(fs, place, fs->result, 0, PAW_RESULT_ERR, k.type);
-    move_to(fs, loc, k, discr);
+    write_to(fs, loc, k, discr);
 
     IrType *error_type = K_LIST_LAST(IrGetAdt(fs->result)->types);
     struct MirPlace const e = select_field(fs, object, fs->result, 1, PAW_RESULT_ERR, error_type);
     struct MirPlace error = select_field(fs, place, fs->result, 1, PAW_RESULT_ERR, error_type);
-    move_to(fs, loc, e, error);
+    write_to(fs, loc, e, error);
     return place;
 }
 
@@ -1400,6 +1411,7 @@ static struct MirPlace lower_closure_expr(struct HirVisitor *V, struct HirClosur
     postprocess(result);
 
     struct MirPlace const output = new_local(L->fs, type);
+    set_reginfo(L->fs, output, MIR_REGINFO_ARGUMENT);
     struct MirBodyList *children = outer->mir->children;
     NEW_INSTR(outer, closure, e->span.start, children->count, output);
     MirBodyList_push(outer->mir, children, result);
@@ -1443,17 +1455,43 @@ static struct MirPlace lower_variant_constructor(struct HirVisitor *V, struct Hi
     // set the discriminant: an 'int' residing in the first Value slot of the variant
     struct MirPlace const discr = new_constant(fs, I2V(d->index), BUILTIN_INT);
     struct MirPlace const place = select_field(fs, object, type, 0, d->index, discr.type);
-    move_to(fs, e->span.start, discr, place);
+    write_to(fs, e->span.start, discr, place);
 
     int index;
     struct HirExpr **pexpr;
     K_LIST_ENUMERATE (e->args, index, pexpr) {
         struct MirPlace const field = lower_place(V, *pexpr);
         struct MirPlace const place = select_field(fs, object, type, 1 + index, d->index, field.type);
-        move_to(fs, e->span.start, field, place);
+        write_to(fs, e->span.start, field, place);
     }
 
     return object;
+}
+
+static paw_Bool is_local(struct FunctionState *fs, MirRegister r)
+{
+    MirRegister const *pr;
+    K_LIST_FOREACH (fs->locals, pr) {
+        if (MIR_ID_EQUALS(r, *pr)) return PAW_TRUE;
+    }
+    return PAW_FALSE;
+}
+
+static struct MirPlace into_arg(struct FunctionState *fs, struct SourceLoc loc, struct MirPlace place, IrType *type)
+{
+    paw_Bool needs_fresh_place = PAW_TRUE;
+    if (place.kind == MIR_PLACE_LOCAL) {
+        struct MirRegisterData const *data = mir_reg_data(fs->mir, place.r);
+        if (data->info == MIR_REGINFO_ARGUMENT) return place;
+        needs_fresh_place = is_local(fs, place.r);
+    }
+    if (needs_fresh_place) {
+        struct MirPlace const arg = new_local(fs, type);
+        move_to(fs, loc, place, arg);
+        place = arg;
+    }
+    set_reginfo(fs, place, MIR_REGINFO_ARGUMENT);
+    return place;
 }
 
 static void lower_args(struct HirVisitor *V, struct HirExprList *exprs, struct MirPlaceList *result)
@@ -1461,13 +1499,12 @@ static void lower_args(struct HirVisitor *V, struct HirExprList *exprs, struct M
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
 
-    struct HirExpr **pexpr;
+    struct HirExpr *const *pexpr;
     K_LIST_FOREACH (exprs, pexpr) {
         IrType *type = GET_NODE_TYPE(fs->C, *pexpr);
-        struct MirPlace const copy = new_local(fs, type);
-        struct MirPlace const arg = lower_place(V, *pexpr);
-        move_to(fs, NODE_START(*pexpr), arg, copy);
-        MirPlaceList_push(L->fs->mir, result, copy);
+        struct MirPlace const arg = into_arg(fs, NODE_START(*pexpr),
+                lower_place(V, *pexpr), type);
+        MirPlaceList_push(L->fs->mir, result, arg);
     }
 }
 
@@ -1480,15 +1517,19 @@ static struct MirPlace lower_callee_and_args(struct HirVisitor *V, struct HirExp
     if (HirIsSelector(callee) && !HirGetSelector(callee)->is_index) {
         // must be a method call since "is_index" is set to 1 for field selectors
         result = place_for_node(fs, callee->hdr.id);
-        struct HirSelector *select = HirGetSelector(callee);
+        struct HirSelector const *select = HirGetSelector(callee);
         NEW_INSTR(fs, global, callee->hdr.span.start, result);
 
         // add context argument for method call
-        struct MirPlace const self = lower_place(V, select->target);
+        struct MirPlace const self = into_arg(fs, NODE_START(select->target),
+                lower_place(V, select->target), GET_NODE_TYPE(L->C, select->target));
         MirPlaceList_push(fs->mir, args_out, self);
+        set_reginfo(fs, self, MIR_REGINFO_ARGUMENT);
     } else {
-        result = lower_place(V, callee);
+        result = into_arg(fs, NODE_START(callee), lower_place(V, callee),
+                GET_NODE_TYPE(L->C, callee));
     }
+    set_reginfo(fs, result, MIR_REGINFO_ARGUMENT);
 
     lower_args(V, args_in, args_out);
     return result;
@@ -1509,7 +1550,9 @@ static struct MirPlace lower_call_expr(struct HirVisitor *V, struct HirCallExpr 
     MirPlaceList *args = MirPlaceList_new(fs->mir);
     struct MirPlace const target = lower_callee_and_args(V, e->target, e->args, args);
     MirPlaceList *results = MirPlaceList_new(fs->mir);
-    MirPlaceList_push(fs->mir, results, place_for_node(fs, e->id));
+    struct MirPlace const result = place_for_node(fs, e->id);
+    set_reginfo(fs, result, MIR_REGINFO_ARGUMENT);
+    MirPlaceList_push(fs->mir, results, result);
     NEW_INSTR(fs, call, e->span.start, target, args, results);
     if (IrIsNever(return_type)) {
         // this function never returns
@@ -1548,7 +1591,7 @@ static struct MirPlace lower_op_assign_expr(struct HirVisitor *V, struct HirOpAs
     struct MirPlace const lhs = lower_place(V, e->lhs);
     struct MirPlace const rhs = lower_place(V, e->rhs);
     enum BuiltinKind const kind = kind_of_builtin(L, e->lhs);
-    struct MirPlace const temp = place_for_node(fs, e->id);
+    struct MirPlace const temp = new_local(fs, lhs.type);
     new_binary_op(V, e->span, e->op, kind, lhs, rhs, temp);
     move_to(fs, e->span.start, temp, lhs);
 

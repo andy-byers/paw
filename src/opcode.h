@@ -184,6 +184,7 @@ typedef enum Op { //      arguments    description
     OP_MAPGET, //         A B C        R[A] := R[B][R[C]]
     OP_MAPSET, //         A B C        R[A][R[B]] := R[C]
 
+    OP_UNPACK,//          A B C        R[A..A+C] := R[A][B..B+C]
     OP_GETVALUE,//        A B C        R[A] := R[B][C]
     OP_SETVALUE,//        A B C        R[A][B] := R[C]
 

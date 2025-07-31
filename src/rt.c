@@ -712,6 +712,15 @@ top:
                 CHECK_GC(P);
             }
 
+            vm_case(UNPACK) :
+            {
+                Value const *values = ra->p;
+                int const b = GET_B(opcode);
+                int const c = GET_C(opcode);
+                for (int i = 0; i < c; ++i)
+                    ra[i] = values[b + i];
+            }
+
             vm_case(GETVALUE) :
             {
                 Value const *rb = VM_RB(opcode);

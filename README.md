@@ -252,12 +252,6 @@ A panic can also be caused by calling the `panic` builtin function.
 + Pointer tracking (test only) feature is broken on MSVC
     + Might indicate a problem somewhere in the library
     + Need a machine that can run Windows for debugging
-+ Instructions to satisfy some of the runtime constraints are injected during code generation
-    + This makes them invisible to the constant propagation pass, leading to less efficient byte code
-    + For example, function calls require the callable followed by the arguments on top of the stack
-        + The moves to put everything in place are injected during codegen
-        + If they were made explicit in an earlier pass, then the instructions that compute them could be made to write directly into the proper registers, avoiding the moves altogether in many cases
-    + Probably need some sort of register hints to accomplish this
 + Need a lower-level CFG-based IR (LIR) to use for register allocation and codegen
     + Convert the `scalarize`/`ssa` pass into `lower_mir`, which will output LIR in SSA form
     + Perform constant propagation on the LIR, monomorphization doesn't need to change

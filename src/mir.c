@@ -140,6 +140,12 @@ static void AcceptMove(struct MirVisitor *V, struct MirMove *t)
     pawMir_visit_place(V, t->target);
 }
 
+static void AcceptWrite(struct MirVisitor *V, struct MirWrite *t)
+{
+    pawMir_visit_place(V, t->target);
+    pawMir_visit_place(V, t->value);
+}
+
 static void AcceptGlobal(struct MirVisitor *V, struct MirGlobal *t)
 {
     pawMir_visit_place(V, t->output);
@@ -243,6 +249,12 @@ static void AcceptSetRange(struct MirVisitor *V, struct MirSetRange *t)
     pawMir_visit_place(V, t->lower);
     pawMir_visit_place(V, t->upper);
     pawMir_visit_place(V, t->value);
+}
+
+static void AcceptUnpack(struct MirVisitor *V, struct MirUnpack *t)
+{
+    pawMir_visit_place_list(V, t->outputs);
+    pawMir_visit_place(V, t->object);
 }
 
 static void AcceptGetField(struct MirVisitor *V, struct MirGetField *t)
@@ -673,6 +685,12 @@ MirPlacePtrList *pawMir_get_loads(struct Mir *mir, struct MirInstruction *instr)
             ADD_INPUT(x->target);
             break;
         }
+        case kMirWrite: {
+            struct MirWrite *x = MirGetWrite(instr);
+            ADD_INPUT(x->target);
+            ADD_INPUT(x->value);
+            break;
+        }
         case kMirCall: {
             struct MirCall *x = MirGetCall(instr);
             ADD_INPUT(x->target);
@@ -701,6 +719,11 @@ MirPlacePtrList *pawMir_get_loads(struct Mir *mir, struct MirInstruction *instr)
             ADD_INPUT(x->object);
             ADD_INPUT(x->lower);
             ADD_INPUT(x->upper);
+            break;
+        }
+        case kMirUnpack: {
+            struct MirUnpack *x = MirGetUnpack(instr);
+            ADD_INPUT(x->object);
             break;
         }
         case kMirGetField: {
@@ -837,6 +860,9 @@ MirPlacePtrList *pawMir_get_stores(struct Mir *mir, struct MirInstruction *instr
             break;
         case kMirGetRange:
             ADD_OUTPUT(MirGetGetRange(instr)->output);
+            break;
+        case kMirUnpack:
+            ADD_OUTPUTS(MirGetUnpack(instr)->outputs);
             break;
         case kMirGetField:
             ADD_OUTPUT(MirGetGetField(instr)->output);
@@ -1204,6 +1230,8 @@ static void print_place(struct Printer *P, struct MirPlace place)
 {
     if (place.kind == MIR_PLACE_LOCAL) {
         PRINT_FORMAT(P, "_%d", place.r.value);
+        if (mir_reg_data(P->mir, place.r)->info == MIR_REGINFO_ARGUMENT)
+            PRINT_CHAR(P, '^');
     } else if (place.kind == MIR_PLACE_CONSTANT) {
         struct MirConstantData const *k = mir_const_data(P->mir, place.k);
         print_constant(P, k->value, k->kind);
@@ -1283,7 +1311,8 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
         }
         case kMirPhi: {
             struct MirPhi *t = MirGetPhi(instr);
-            PRINT_FORMAT(P, "_%d = phi [", t->output.r.value);
+            print_place(P, t->output);
+            PRINT_FORMAT(P, " = phi [", t->output.r.value);
             print_place_list(P, t->inputs);
             PRINT_LITERAL(P, "]");
             break;
@@ -1293,6 +1322,14 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
             print_place(P, t->output);
             PRINT_LITERAL(P, " = move ");
             print_place(P, t->target);
+            break;
+        }
+        case kMirWrite: {
+            struct MirWrite *t = MirGetWrite(instr);
+            PRINT_LITERAL(P, "write ");
+            print_place(P, t->target);
+            PRINT_CHAR(P, ' ');
+            print_place(P, t->value);
             break;
         }
         case kMirUpvalue: {
@@ -1389,12 +1426,14 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
         }
         case kMirClose: {
             struct MirClose *t = MirGetClose(instr);
-            PRINT_FORMAT(P, "close _%d", t->target.r.value);
+            PRINT_LITERAL(P, "close");
+            print_place(P, t->target);
             break;
         }
         case kMirClosure: {
             struct MirClosure *t = MirGetClosure(instr);
-            PRINT_FORMAT(P, "closure _%d", t->output.r.value);
+            PRINT_LITERAL(P, "closure ");
+            print_place(P, t->output);
             break;
         }
         case kMirGetElement: {
@@ -1420,6 +1459,14 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
         case kMirSetRange: {
             struct MirSetRange *t = MirGetSetRange(instr);
             PRINT_FORMAT(P, "_%d[_%d:_%d] = _%d", t->object.r.value, t->lower.r.value, t->upper.r.value, t->value.r.value);
+            break;
+        }
+        case kMirUnpack: {
+            struct MirUnpack *t = MirGetUnpack(instr);
+            print_place_list(P, t->outputs);
+            PRINT_LITERAL(P, " = unpack ");
+            print_place(P, t->object);
+            PRINT_FORMAT(P, " at %d", t->offset);
             break;
         }
         case kMirGetField: {
@@ -1472,17 +1519,18 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
         }
         case kMirBranch: {
             struct MirBranch *t = MirGetBranch(instr);
-            PRINT_FORMAT(P, "branch _%d", t->cond.r.value);
+            PRINT_LITERAL(P, "branch ");
+            print_place(P, t->cond);
             PRINT_FORMAT(P, " => [0: bb%d, 1: bb%d]", t->else_arm.value, t->then_arm.value);
             break;
         }
         case kMirSwitch: {
             struct MirSwitch *t = MirGetSwitch(instr);
-            PRINT_FORMAT(P, "switch _%d", t->discr.r.value);
-            PRINT_FORMAT(P, " => [");
+            PRINT_LITERAL(P, "switch ");
+            print_place(P, t->discr);
+            PRINT_LITERAL(P, " => [");
             for (int i = 0; i < t->arms->count; ++i) {
-                if (i > 0)
-                    PRINT_LITERAL(P, ", ");
+                if (i > 0) PRINT_LITERAL(P, ", ");
                 struct MirSwitchArm arm = MirSwitchArmList_get(t->arms, i);
                 PRINT_FORMAT(P, "k%d: bb%d", arm.k.value, arm.bid.value);
             }

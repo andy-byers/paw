@@ -29,43 +29,43 @@ fn check_parse(s: str, o: Option<int>) {
 
 fn check_parse_radix(s: str, o: Option<int>, base: int) {
     match (s.parse_int_radix(base), o) {
-        (Option::Some(a), Option::Some(b)) => assert(a == b),
-        (Option::None, Option::None) => {},
+        (Some(a), Some(b)) => assert(a == b),
+        (None, None) => {},
         _ => panic("check failed"),
     }
 }
 
 pub fn test_parse_valid() {
-    check_parse("0", Option::Some(0));
-    check_parse("1", Option::Some(1));
-    check_parse("10", Option::Some(10));
+    check_parse("0", Some(0));
+    check_parse("1", Some(1));
+    check_parse("10", Some(10));
 
     let i = 1234567890;
-    check_parse("\{i}", Option::Some(i));
-    check_parse("\{-i}", Option::Some(-i));
+    check_parse("\{i}", Some(i));
+    check_parse("\{-i}", Some(-i));
 }
 
 pub fn test_parse_invalid() {
     // invalid digit
-    check_parse("  1", Option::None);
-    check_parse("1  ", Option::None);
-    check_parse("  -1", Option::None);
-    check_parse("-1  ", Option::None);
+    check_parse("  1", None);
+    check_parse("1  ", None);
+    check_parse("  -1", None);
+    check_parse("-1  ", None);
 
     // overflow
-    check_parse("99999999999999999999", Option::None);
-    check_parse("-99999999999999999999", Option::None);
+    check_parse("99999999999999999999", None);
+    check_parse("-99999999999999999999", None);
 }
 
 pub fn test_parse_radix_valid() {
-    check_parse_radix("0", Option::Some(0), 2);
-    check_parse_radix("DEF", Option::Some(3567), 16);
-    check_parse_radix("xyz", Option::Some(44027), 36);
+    check_parse_radix("0", Some(0), 2);
+    check_parse_radix("DEF", Some(3567), 16);
+    check_parse_radix("xyz", Some(44027), 36);
 }
 
 pub fn test_parse_radix_invalid() {
-    check_parse_radix("0b0", Option::None, 2); // base prefix not supported
-    check_parse_radix("EFG", Option::None, 16); // digit out of range for base
+    check_parse_radix("0b0", None, 2); // base prefix not supported
+    check_parse_radix("EFG", None, 16); // digit out of range for base
 }
 
 fn apply<T>(f: fn(T), target: [T]) {

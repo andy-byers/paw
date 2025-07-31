@@ -13,6 +13,7 @@ struct Mir;
     X(Noop)                     \
     X(Phi)                      \
     X(Move)                     \
+    X(Write)                    \
     X(Upvalue)                  \
     X(Global)                   \
     X(AllocLocal)               \
@@ -28,6 +29,7 @@ struct Mir;
     X(GetRange)                 \
     X(SetField)                 \
     X(GetField)                 \
+    X(Unpack)                   \
     X(Call)                     \
     X(Cast)                     \
     X(Capture)                  \
@@ -236,6 +238,12 @@ struct MirMove {
     struct MirPlace target;
 };
 
+struct MirWrite {
+    MIR_INSTRUCTION_HEADER;
+    struct MirPlace target;
+    struct MirPlace value;
+};
+
 struct MirUpvalue {
     MIR_INSTRUCTION_HEADER;
     int index;
@@ -330,6 +338,13 @@ struct MirGetElementPtr {
     struct MirPlace output;
     struct MirPlace object;
     struct MirPlace key;
+};
+
+struct MirUnpack {
+    MIR_INSTRUCTION_HEADER;
+    int offset;
+    struct MirPlaceList *outputs;
+    struct MirPlace object;
 };
 
 struct MirGetField {
@@ -518,6 +533,19 @@ inline static struct MirInstruction *pawMir_new_move(struct Mir *mir, struct Sou
         .loc = loc,
         .output = output,
         .target = target,
+    };
+    return instr;
+}
+
+inline static struct MirInstruction *pawMir_new_write(struct Mir *mir, struct SourceLoc loc, struct MirPlace target, struct MirPlace value)
+{
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
+    instr->Write_ = (struct MirWrite){
+        .mid = pawMir_next_id(mir),
+        .kind = kMirWrite,
+        .loc = loc,
+        .target = target,
+        .value = value,
     };
     return instr;
 }
@@ -754,6 +782,20 @@ inline static struct MirInstruction *pawMir_new_set_range(struct Mir *mir, struc
     return instr;
 }
 
+inline static struct MirInstruction *pawMir_new_unpack(struct Mir *mir, struct SourceLoc loc, int offset, struct MirPlaceList *outputs, struct MirPlace object)
+{
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
+    instr->Unpack_ = (struct MirUnpack){
+        .mid = pawMir_next_id(mir),
+        .kind = kMirUnpack,
+        .loc = loc,
+        .offset = offset,
+        .outputs = outputs,
+        .object = object,
+    };
+    return instr;
+}
+
 inline static struct MirInstruction *pawMir_new_get_field(struct Mir *mir, struct SourceLoc loc, int index, struct MirPlace output, struct MirPlace object)
 {
     struct MirInstruction *instr = pawMir_new_instruction(mir);
@@ -908,11 +950,18 @@ struct MirConstantData {
     Value value;
 };
 
+enum MirRegisterInfo {
+    MIR_REGINFO_NONE,
+    MIR_REGINFO_ARGUMENT,
+    MIR_REGINFO_FIXED,
+};
+
 struct MirRegisterData {
     paw_Bool is_uninit : 1;
     paw_Bool is_captured : 1;
     paw_Bool is_pointer : 1;
     int size;
+    enum MirRegisterInfo info;
     struct IrType *type;
 };
 
