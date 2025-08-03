@@ -100,10 +100,10 @@ static void remove_live_reg(struct Liveness *L, struct MirRegisterList *set, Mir
     } while (0)
 
 // Indicate that register "r" is used by instruction "x"
-#define INPUT(L, loc, r)                              \
-    do {                                              \
-        add_range(L, r, bb_first_loc(L, block), loc); \
-        add_live_reg(L, set, r);                      \
+#define INPUT(L, loc, r)                                  \
+    do {                                                  \
+        add_range(L, r, bb_first_loc(L, block), loc - 1); \
+        add_live_reg(L, set, r);                          \
     } while (0)
 
 static void step_instruction(struct Liveness *L, struct MirRegisterList *set, struct MirBlockData *block, struct MirInstruction *instr)
