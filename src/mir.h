@@ -194,12 +194,13 @@ enum MirPlaceKind {
 };
 
 struct MirPlace {
-    struct MirProjectionList *projection;
     enum MirPlaceKind kind;
     union {
         MirRegister r;
         int up;
     };
+    struct MirProjectionList *projection;
+    struct IrType *type;
 };
 
 

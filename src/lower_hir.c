@@ -217,6 +217,7 @@ static struct MirPlace new_place(struct FunctionState *fs, IrType *type)
     return (struct MirPlace){
         .projection = MirProjectionList_new(fs->mir),
         .r = MIR_REG(num_registers),
+        .type = type,
     };
 }
 
@@ -637,9 +638,10 @@ static void auto_deref(struct FunctionState *fs, struct MirPlace *pplace, IrType
     }
 }
 
-static struct MirPlace select_field(struct FunctionState *fs, struct MirPlace place, IrType *target, int index, int variant)
+static struct MirPlace select_field(struct FunctionState *fs, struct MirPlace place, IrType *target, int index, int variant, IrType *result)
 {
     struct MirPlace p = pawMir_copy_place(fs->mir, place);
+    p.type = result;
 
     auto_deref(fs, &p, target);
     MirProjection *field = MirProjection_new_field(fs->mir, index, variant);
@@ -647,9 +649,10 @@ static struct MirPlace select_field(struct FunctionState *fs, struct MirPlace pl
     return p;
 }
 
-static struct MirPlace select_element(struct FunctionState *fs, struct MirPlace place, IrType *target, MirRegister index)
+static struct MirPlace select_element(struct FunctionState *fs, struct MirPlace place, IrType *target, MirRegister index, IrType *result)
 {
     struct MirPlace p = pawMir_copy_place(fs->mir, place);
+    p.type = result;
 
     auto_deref(fs, &p, target);
     MirProjection *elem = MirProjection_new_index(fs->mir, index);
@@ -660,6 +663,7 @@ static struct MirPlace select_element(struct FunctionState *fs, struct MirPlace 
 static struct MirPlace select_range(struct FunctionState *fs, struct MirPlace place, IrType *target, MirRegister lower, MirRegister upper)
 {
     struct MirPlace p = pawMir_copy_place(fs->mir, place);
+    p.type = target;
 
     auto_deref(fs, &p, target);
     MirProjection *elems = MirProjection_new_range(fs->mir, lower, upper);
@@ -763,18 +767,17 @@ static struct MirPlace lower_sequence_index(struct HirVisitor *V, struct HirInde
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
 
-    IrType *target_type = GET_NODE_TYPE(fs->C, e->target);
+    IrType *object_type = GET_NODE_TYPE(fs->C, e->target);
     IrType *index_type = GET_NODE_TYPE(fs->C, e->index);
+    IrType *element_type = pawIr_get_type(fs->C, e->id);
     if (builtin_kind(L, index_type) == BUILTIN_INT) {
         struct MirPlace const index = new_place(fs, index_type);
         move_to(fs, NODE_START(e->index), lower_place(V, e->index), index);
-
-        return select_element(fs, object, target_type, index.r);
+        return select_element(fs, object, object_type, index.r, element_type);
     } else {
         struct MirPlace first, second;
         lower_range_index(V, e->index, object, &first, &second);
-
-        return select_range(fs, object, target_type, first.r, second.r);
+        return select_range(fs, object, object_type, first.r, second.r);
     }
 }
 
@@ -785,10 +788,11 @@ static struct MirPlace lower_mapping_index(struct HirVisitor *V, struct HirIndex
 
     IrType *target_type = GET_NODE_TYPE(fs->C, e->target);
     IrType *index_type = GET_NODE_TYPE(fs->C, e->index);
+    IrType *element_type = pawIr_get_type(fs->C, e->id);
     struct MirPlace const index = new_place(fs, index_type);
     move_to(fs, NODE_START(e->index), lower_place(V, e->index), index);
 
-    return select_element(fs, object, target_type, index.r);
+    return select_element(fs, object, target_type, index.r, element_type);
 }
 
 static paw_Bool visit_param_decl(struct HirVisitor *V, struct HirParamDecl *d)
@@ -831,14 +835,16 @@ static struct MirPlace lower_tuple_lit(struct HirVisitor *V, struct HirLiteralEx
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
 
-    IrType *type = pawIr_get_type(fs->C, e->id);
+    IrType *tuple_type = pawIr_get_type(fs->C, e->id);
     struct MirPlace const output = place_for_node(fs, e->id);
     NEW_INSTR(fs, aggregate, e->span.start, e->tuple.elems->count, output);
 
     int index;
-    struct HirExpr **pexpr;
+    struct HirExpr *const *pexpr;
+    IrTypeList *elem_types = IrGetTuple(tuple_type)->elems;
     K_LIST_ENUMERATE (e->tuple.elems, index, pexpr) {
-        struct MirPlace place = select_field(fs, output, type, index, 0);
+        IrType *element_type = IrTypeList_get(elem_types, index);
+        struct MirPlace place = select_field(fs, output, tuple_type, index, 0, element_type);
         move_to(fs, e->span.start, lower_place(V, *pexpr), place);
     }
     return output;
@@ -849,15 +855,16 @@ static struct MirPlace lower_composite_lit(struct HirVisitor *V, struct HirLiter
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
 
-    IrType *type = pawIr_get_type(fs->C, e->id);
+    IrType *object_type = pawIr_get_type(fs->C, e->id);
     struct MirPlace const output = place_for_node(fs, e->id);
     NEW_INSTR(fs, aggregate, e->span.start, e->comp.items->count, output);
 
     struct HirExpr **pexpr;
     K_LIST_FOREACH (e->comp.items, pexpr) {
         // fields are evaluated in lexical order because of possible side effects
+        IrType *field_type = GET_NODE_TYPE(fs->C, *pexpr);
         struct HirFieldExpr *field = HirGetFieldExpr(*pexpr);
-        struct MirPlace place = select_field(fs, output, type, field->fid, 0);
+        struct MirPlace place = select_field(fs, output, object_type, field->fid, 0, field_type);
         move_to(fs, e->span.start, lower_place(V, field->value), place);
     }
 
@@ -869,13 +876,13 @@ static struct MirPlace lower_container_lit(struct HirVisitor *V, struct HirLiter
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
 
-    IrType *type = pawIr_get_type(fs->C, e->id);
-    enum BuiltinKind b_kind = builtin_kind(L, type);
+    IrType *object_type = pawIr_get_type(fs->C, e->id);
+    enum BuiltinKind b_kind = builtin_kind(L, object_type);
     struct MirPlace const output = place_for_node(fs, e->id);
     NEW_INSTR(fs, container, e->span.start, b_kind, e->cont.items->count, output);
 
     int index;
-    struct HirExpr **pexpr;
+    struct HirExpr *const *pexpr;
     K_LIST_ENUMERATE (e->cont.items, index, pexpr) {
         struct MirPlace key, value;
         if (HirIsFieldExpr(*pexpr)) {
@@ -887,7 +894,8 @@ static struct MirPlace lower_container_lit(struct HirVisitor *V, struct HirLiter
             value = lower_place(V, *pexpr);
         }
 
-        struct MirPlace place = select_element(fs, output, type, key.r);
+        IrType *element_type = GET_NODE_TYPE(fs->C, *pexpr);
+        struct MirPlace place = select_element(fs, output, object_type, key.r, element_type);
         move_to(fs, e->span.start, value, place);
     }
     return output;
@@ -962,7 +970,7 @@ static struct MirPlace lower_unit_variant(struct HirVisitor *V, struct HirPathEx
     NEW_INSTR(fs, aggregate, e->span.start, 1, object);
 
     struct MirPlace const discr = add_constant(fs, d->span.start, I2V(d->index), BUILTIN_INT);
-    struct MirPlace place = select_field(fs, object, type, 0, 0);
+    struct MirPlace place = select_field(fs, object, type, 0, 0, discr.type);
     move_to(fs, e->span.start, discr, place);
     return object;
 }
@@ -1017,7 +1025,7 @@ static struct MirPlace lower_path_expr(struct HirVisitor *V, struct HirPathExpr 
 
 static void emit_get_field(struct FunctionState *fs, struct SourceLoc loc, IrType *type, struct MirPlace object, int index, int discr, struct MirPlace output)
 {
-    struct MirPlace const field = select_field(fs, object, type, index, discr);
+    struct MirPlace const field = select_field(fs, object, type, index, discr, output.type);
     move_to(fs, loc, field, output);
 }
 
@@ -1042,7 +1050,7 @@ static struct MirPlace option_chain_error(struct FunctionState *fs, struct Sourc
     NEW_INSTR(fs, aggregate, loc, layout.size, place);
 
     struct MirPlace const k = add_constant(fs, loc, I2V(PAW_OPTION_NONE), BUILTIN_INT);
-    struct MirPlace discr = select_field(fs, place, fs->result, 0, PAW_OPTION_NONE);
+    struct MirPlace discr = select_field(fs, place, fs->result, 0, PAW_OPTION_NONE, k.type);
     move_to(fs, loc, k, discr);
     return place;
 }
@@ -1053,12 +1061,13 @@ static struct MirPlace result_chain_error(struct FunctionState *fs, struct Sourc
     struct IrLayout layout = pawIr_compute_layout(fs->C, fs->result);
     NEW_INSTR(fs, aggregate, loc, layout.size, place);
 
-    struct MirPlace const k = add_constant(fs, loc, I2V(PAW_OPTION_NONE), BUILTIN_INT);
-    struct MirPlace discr = select_field(fs, place, fs->result, 0, PAW_OPTION_NONE);
+    struct MirPlace const k = add_constant(fs, loc, I2V(PAW_RESULT_ERR), BUILTIN_INT);
+    struct MirPlace discr = select_field(fs, place, fs->result, 0, PAW_RESULT_ERR, k.type);
     move_to(fs, loc, k, discr);
 
-    struct MirPlace e = select_field(fs, object, fs->result, 1, PAW_OPTION_NONE);
-    struct MirPlace error = select_field(fs, place, fs->result, 1, PAW_OPTION_NONE);
+    IrType *error_type = K_LIST_LAST(IrGetAdt(fs->result)->types);
+    struct MirPlace const e = select_field(fs, object, fs->result, 1, PAW_RESULT_ERR, error_type);
+    struct MirPlace error = select_field(fs, place, fs->result, 1, PAW_RESULT_ERR, error_type);
     move_to(fs, loc, e, error);
     return place;
 }
@@ -1425,14 +1434,14 @@ static struct MirPlace lower_variant_constructor(struct HirVisitor *V, struct Hi
 
     // set the discriminant: an 'int' residing in the first Value slot of the variant
     struct MirPlace const discr = add_constant(fs, d->span.start, I2V(d->index), BUILTIN_INT);
-    struct MirPlace place = select_field(fs, object, type, 0, d->index);
+    struct MirPlace place = select_field(fs, object, type, 0, d->index, discr.type);
     move_to(fs, e->span.start, discr, place);
 
     int index;
     struct HirExpr **pexpr;
     K_LIST_ENUMERATE (e->args, index, pexpr) {
         struct MirPlace const field = lower_place(V, *pexpr);
-        struct MirPlace place = select_field(fs, object, type, 1 + index, d->index);
+        struct MirPlace place = select_field(fs, object, type, 1 + index, d->index, field.type);
         move_to(fs, e->span.start, field, place);
     }
 
@@ -1702,6 +1711,7 @@ static void allocate_match_vars(struct FunctionState *fs, struct MirPlace object
     if (mc.vars->count == 0)
         return;
 
+    // TODO: use object.type instead
     IrType *const object_type = mir_reg_data(fs->mir, object.r)->type;
 
     int index;
@@ -1709,11 +1719,11 @@ static void allocate_match_vars(struct FunctionState *fs, struct MirPlace object
     K_LIST_ENUMERATE (mc.vars, index, pv) {
         Str *const name = SCAN_STR(fs->C, PRIVATE("variable"));
         struct HirIdent const ident = {.name = name, .span = pv->span};
-//        struct LocalVar const local = alloc_local(fs, ident, pv->type);
         struct MirPlace const place = new_place(fs, pv->type);
         map_var_to_reg(fs, *pv, place);
 
-        struct MirPlace source = select_field(fs, object, object_type, is_enum + index, discr);
+        struct MirPlace source = select_field(fs, object, object_type,
+                is_enum + index, discr, pv->type);
         move_to(fs, pv->span.start, source, place);
     }
 }
@@ -1898,11 +1908,12 @@ static void lower_place_into(struct HirVisitor *V, struct HirExpr *expr, struct 
 
     switch (HIR_KINDOF(expr)) {
         case kHirSelector: {
-            struct HirSelector *x = HirGetSelector(expr);
+            struct HirSelector const *x = HirGetSelector(expr);
             lower_place_into(V, x->target, pplace);
 
-            IrType *target = GET_NODE_TYPE(fs->C, x->target);
-            *pplace = select_field(fs, *pplace, target, x->index, 0);
+            IrType *target_type = GET_NODE_TYPE(fs->C, x->target);
+            IrType *element_type = pawIr_get_type(fs->C, x->id);
+            *pplace = select_field(fs, *pplace, target_type, x->index, 0, element_type);
             break;
         }
         case kHirIndex: {

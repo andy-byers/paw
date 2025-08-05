@@ -101,6 +101,13 @@ static MirProjectionList *copy_projections(struct MonoCollector *M, MirProjectio
     return result;
 }
 
+static struct MirPlace copy_place(struct MonoCollector *M, struct MirPlace place)
+{
+    place = pawMir_copy_place(M->mir, place);
+    place.type = finalize_type(M, place.type);
+    return place;
+}
+
 static MirPlaceList *copy_register_list(struct MonoCollector *M, struct MirPlaceList *list)
 {
     struct MirPlaceList *result = MirPlaceList_new(M->mir);
@@ -108,7 +115,7 @@ static MirPlaceList *copy_register_list(struct MonoCollector *M, struct MirPlace
 
     struct MirPlace const *pr;
     K_LIST_FOREACH (list, pr) {
-        struct MirPlace const copy = pawMir_copy_place(M->mir, *pr);
+        struct MirPlace const copy = copy_place(M, *pr);
         MirPlaceList_push(M->mir, result, copy);
     }
     return result;
@@ -135,7 +142,7 @@ static void copy_switch(struct MonoCollector *M, struct MirSwitch *t, struct Mir
     r->arms = MirSwitchArmList_new(M->mir);
     MirSwitchArmList_reserve(M->mir, r->arms, t->arms->count);
 
-    struct MirSwitchArm *parm;
+    struct MirSwitchArm const *parm;
     K_LIST_FOREACH (t->arms, parm) {
         MirSwitchArmList_push(M->mir, r->arms, *parm);
     }
@@ -145,7 +152,7 @@ static void copy_places(struct MonoCollector *M, struct MirPlacePtrList *src, st
 {
     struct MirPlace *const *pa, *const *pb;
     K_LIST_ZIP (src, pa, dst, pb) {
-        **pb = pawMir_copy_place(M->mir, **pa);
+        **pb = copy_place(M, **pa);
     }
 }
 
