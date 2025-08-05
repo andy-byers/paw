@@ -379,10 +379,11 @@ static int compute_field_offset(struct IrLayout object, int index)
 
 // Handles the following type(s) of memory accesses:
 //     object.*.field
-static void discharge_indirect_field(struct Unboxer *U, struct MemoryAccess *pa)
+static void discharge_indirect_field(struct Unboxer *U, struct MemoryAccess *pa, struct MemoryGroup *poutput)
 {
     IrTypeList const *field_types = get_variant_field_types(U, pa->type, pa->field.discr);
-    struct MemoryGroup const output = new_registers(U, pa->field.type, pa->field.discr);
+    struct MemoryGroup const output = poutput != NULL ? *poutput
+        : new_registers(U, pa->field.type, pa->field.discr);
 
     struct MirPlace const object = PLACE(pa->group.base);
     for (int i = 0; i < output.count; ++i) {
@@ -417,7 +418,7 @@ static IrType *get_access_type(struct MemoryAccess *pa)
         pa->type;
 }
 
-static void discharge_indirect_element(struct Unboxer *U, struct MemoryAccess *pa)
+static void discharge_indirect_element(struct Unboxer *U, struct MemoryAccess *pa, struct MemoryGroup *poutput)
 {
     enum BuiltinKind kind = pawP_type2code(U->C, pa->type);
 
@@ -425,7 +426,8 @@ static void discharge_indirect_element(struct Unboxer *U, struct MemoryAccess *p
     IrType *access_type = get_access_type(pa);
     int const field_discr = pa->has_field ? pa->field.discr : ENUM_BASE;
     int const field_offset = pa->has_field ? pa->field.offset : 0;
-    struct MemoryGroup const output = new_registers(U, access_type, field_discr);
+    struct MemoryGroup const output = poutput != NULL ? *poutput
+        : new_registers(U, access_type, field_discr);
 
     struct MirPlace const object = PLACE(pa->group.base);
     if (output.count > 1 || field_offset > 0) {
@@ -450,10 +452,11 @@ static void discharge_indirect_element(struct Unboxer *U, struct MemoryAccess *p
     pa->element = (struct ElementAccess){0};
 }
 
-static void discharge_indirect_range(struct Unboxer *U, struct MemoryAccess *pa)
+static void discharge_indirect_range(struct Unboxer *U, struct MemoryAccess *pa, struct MemoryGroup *poutput)
 {
     enum BuiltinKind kind = pawP_type2code(U->C, pa->type);
-    struct MemoryGroup const output = new_registers(U, pa->type, ENUM_BASE);
+    struct MemoryGroup const output = poutput != NULL ? *poutput
+        : new_registers(U, pa->type, ENUM_BASE);
 
     struct MirPlace const object = PLACE(pa->group.base);
     struct MirPlace const result = PLACE(REGISTER_AT(output, 0));
@@ -464,9 +467,10 @@ static void discharge_indirect_range(struct Unboxer *U, struct MemoryAccess *pa)
     pa->range = (struct RangeAccess){0};
 }
 
-static void discharge_upvalue(struct Unboxer *U, struct MemoryAccess *pa)
+static void discharge_upvalue(struct Unboxer *U, struct MemoryAccess *pa, struct MemoryGroup *poutput)
 {
-    struct MemoryGroup const output = new_registers(U, pa->type, ENUM_BASE);
+    struct MemoryGroup const output = poutput != NULL ? *poutput
+        : new_registers(U, pa->type, ENUM_BASE);
     for (int i = 0; i < pa->group.count; ++i) {
         struct MirPlace const result = PLACE(REGISTER_AT(output, i));
         NEW_INSTR(U, upvalue, TODO, result, UPVALUE_AT(pa->group, i));
@@ -477,16 +481,16 @@ static void discharge_upvalue(struct Unboxer *U, struct MemoryAccess *pa)
 // Place the result of a memory access into a register group
 // Used when a nested indirect access is required, since the object being accessed must
 // be in a register.
-static void discharge_access(struct Unboxer *U, struct MemoryAccess *pa)
+static void discharge_access(struct Unboxer *U, struct MemoryAccess *pa, struct MemoryGroup *poutput)
 {
     if (pa->group.kind == MEMORY_UPVALUE)
-        discharge_upvalue(U, pa);
+        discharge_upvalue(U, pa, poutput);
     if (pa->has_range) {
-        discharge_indirect_range(U, pa);
+        discharge_indirect_range(U, pa, poutput);
     } else if (pa->has_element) {
-        discharge_indirect_element(U, pa);
+        discharge_indirect_element(U, pa, poutput);
     } else if (pa->has_field) {
-        discharge_indirect_field(U, pa);
+        discharge_indirect_field(U, pa, poutput);
     }
 }
 
@@ -531,7 +535,7 @@ static void apply_field_access(struct Unboxer *U, struct MemoryAccess *pa, MirPr
 // Apply an indirect projection
 static void apply_indirect_access(struct Unboxer *U, struct MemoryAccess *pa, MirProjection *p)
 {
-    discharge_access(U, pa);
+    discharge_access(U, pa, NULL);
 
     if (MirIsField(p)) {
         struct MirField *field = MirGetField(p);
@@ -682,16 +686,23 @@ static void unbox_move(struct Unboxer *U, struct MirMove *x)
 {
     struct MemoryAccess rhs = unbox_place(U, &x->target);
     struct MemoryAccess lhs = unbox_place(U, &x->output);
-    discharge_access(U, &rhs); // put into registers
 
     if (lhs.has_range) {
+        discharge_access(U, &rhs, NULL);
         create_indirect_range_setter(U, lhs, rhs);
     } else if (lhs.has_element) {
+        discharge_access(U, &rhs, NULL);
         create_indirect_element_setter(U, lhs, rhs);
     } else if (lhs.has_field) {
+        discharge_access(U, &rhs, NULL);
         create_indirect_field_setter(U, lhs, rhs);
     } else if (lhs.group.kind == MEMORY_UPVALUE) {
+        discharge_access(U, &rhs, NULL);
         create_upvalue_setter(U, lhs, rhs);
+    } else if (rhs.has_field || rhs.has_element || rhs.has_range
+            || rhs.group.kind == MEMORY_UPVALUE) {
+        // discharge straight into LHS register(s)
+        discharge_access(U, &rhs, &lhs.group);
     } else {
         create_move(U, lhs, rhs);
     }
@@ -735,7 +746,7 @@ static void unbox_call(struct Unboxer *U, struct MirCall *x)
 {
     struct Mir *mir = U->fs->mir;
     struct MemoryAccess callable = unbox_place(U, &x->target);
-    discharge_access(U, &callable);
+    discharge_access(U, &callable, NULL);
 
     paw_assert(callable.group.count == 1);
     struct MirPlace const target = PLACE(callable.group.base);
@@ -744,7 +755,7 @@ static void unbox_call(struct Unboxer *U, struct MirCall *x)
     MirPlaceList *args = MirPlaceList_new(mir);
     K_LIST_FOREACH (x->args, pr) {
         struct MemoryAccess a = unbox_place(U, pr);
-        discharge_access(U, &a);
+        discharge_access(U, &a, NULL);
 
         for (int i = 0; i < a.group.count; ++i) {
             MirRegister const r = REGISTER_AT(a.group, i);
@@ -789,12 +800,12 @@ static void unbox_close(struct Unboxer *U, struct MirClose *x)
 static void unbox_unaryop(struct Unboxer *U, struct MirUnaryOp *x)
 {
     struct MemoryAccess value = unbox_place(U, &x->val);
-    discharge_access(U, &value);
+    discharge_access(U, &value, NULL);
     paw_assert(value.group.count == 1);
     x->val = PLACE(value.group.base);
 
     struct MemoryAccess output = unbox_place(U, &x->output);
-    discharge_access(U, &output);
+    discharge_access(U, &output, NULL);
     paw_assert(output.group.count == 1);
     x->output = PLACE(output.group.base);
 
@@ -814,7 +825,7 @@ static void unbox_return(struct Unboxer *U, struct MirReturn *x)
     paw_assert(x->values->count == 1);
     struct MirPlace *first = &K_LIST_FIRST(x->values);
     struct MemoryAccess value = unbox_place(U, first);
-    discharge_access(U, &value);
+    discharge_access(U, &value, NULL);
 
     MirPlaceList *values = MirPlaceList_new(mir);
     MirPlaceList_reserve(mir, values, value.group.count);
@@ -835,7 +846,7 @@ static void unbox_other(struct Unboxer *U, struct MirInstruction *instr)
     MirPlacePtrList *loads = pawMir_get_loads(mir, instr);
     K_LIST_FOREACH (loads, ppp) {
         struct MemoryAccess a = unbox_place(U, *ppp);
-        discharge_access(U, &a);
+        discharge_access(U, &a, NULL);
         paw_assert(a.group.count == 1);
         (*ppp)->r.value = a.group.base;
     }
@@ -843,7 +854,7 @@ static void unbox_other(struct Unboxer *U, struct MirInstruction *instr)
     MirPlacePtrList *const stores = pawMir_get_stores(mir, instr);
     K_LIST_FOREACH (stores, ppp) {
         struct MemoryAccess a = unbox_place(U, *ppp);
-        discharge_access(U, &a);
+        discharge_access(U, &a, NULL);
         paw_assert(a.group.count == 1);
         (*ppp)->r.value = a.group.base;
     }
