@@ -138,6 +138,11 @@ void dump_lattice(struct KProp *K)
 
 #endif // PAW_DEBUG_EXTRA
 
+static paw_Bool is_stack_reg(struct KProp *K, MirRegister r)
+{
+    return mir_reg_data(K->mir, r)->info == MIR_REGINFO_ARGUMENT;
+}
+
 // Check if a register is captured by a closure
 // A captured register cannot participate in constant or copy propagation. The capturing
 // closure might mutate such a register, even if it appears to have a constant value.
@@ -498,6 +503,13 @@ static MirBlock single_switch_target(struct KProp *K, struct MirSwitch *s, struc
     PAW_UNREACHABLE();
 }
 
+static void into_load_k(struct MirInstruction *instr, MirConstant k, struct MirPlace output)
+{
+    instr->hdr.kind = kMirLoadConstant;
+    MirGetLoadConstant(instr)->output = output;
+    MirGetLoadConstant(instr)->k = k;
+}
+
 static void into_goto(struct KProp *K, struct MirInstruction *instr, MirBlock b)
 {
     instr->Goto_ = (struct MirGoto){
@@ -677,6 +689,107 @@ static void process_flow_edge(struct KProp *K, struct FlowEdge edge)
     }
 }
 
+static paw_Bool is_pure(struct MirInstruction *instr)
+{
+    switch (MIR_KINDOF(instr)) {
+        case kMirNoop:
+        case kMirPhi:
+        case kMirMove:
+        case kMirAllocLocal:
+        case kMirLoadConstant:
+        case kMirCast:
+        case kMirUpvalue:
+        case kMirAggregate:
+        case kMirContainer:
+        case kMirGetField:
+        case kMirUnaryOp:
+        case kMirBinaryOp:
+            return PAW_TRUE;
+        default:
+            return PAW_FALSE;
+    }
+}
+
+static void transform_instr(struct KProp *K, struct MirInstruction *instr)
+{
+    MirPlacePtrList const *stores = pawMir_get_stores(K->mir, instr);
+    if (is_pure(instr) && !MirIsPhi(instr) && stores->count == 1) {
+        struct MirPlace const store = *K_LIST_FIRST(stores);
+        struct Cell const cell = *get_cell(K, store);
+        if (cell.info.kind == CELL_CONSTANT && is_stack_reg(K, store.r)) {
+            into_load_k(instr, MIR_CONST(cell.info.k), store);
+            return;
+        }
+    }
+
+    MirPlacePtrList const *loads = pawMir_get_loads(K->mir, instr);
+    struct MirPlace *const *ppload;
+    K_LIST_FOREACH (loads, ppload) {
+        struct Cell *cell = get_cell(K, **ppload);
+        if ((*ppload)->kind == MIR_PLACE_LOCAL
+                && cell->info.kind == CELL_CONSTANT
+                && !is_stack_reg(K, (*ppload)->r)) {
+            into_constant(K, *ppload, *cell);
+        }
+    }
+}
+
+static int prune_dead_successors(struct KProp *K, MirBlock from, MirBlock *ptarget)
+{
+    MirBlockList *successors = mir_bb_data(K->mir, from)->successors;
+    int live_count = 0;
+
+    if (successors->count < 2)
+        return PAW_FALSE;
+
+    int index;
+    MirBlock const *pto;
+    K_LIST_ENUMERATE (successors, index, pto) {
+        if (is_exec(K, from, *pto)) {
+            *ptarget = *pto;
+            ++live_count;
+        } else {
+            int const ipred = mir_which_pred(K->mir, *pto, from);
+            struct MirBlockData const *bto = mir_bb_data(K->mir, *pto);
+            MirBlockList_remove(bto->predecessors, ipred);
+        }
+    }
+
+    if (live_count == 1) {
+        MirBlockList_set(successors, 0, *ptarget);
+        successors->count = 1;
+        return PAW_TRUE;
+    }
+    return PAW_FALSE;
+}
+
+static void transform_code(struct KProp *K)
+{
+    int index = 0;
+    struct MirBlockData *const *pblock;
+    struct MirBlockDataList *blocks = K->mir->blocks;
+    K_LIST_ENUMERATE (blocks, index, pblock) {
+        struct MirBlockData const *block = *pblock;
+        MirBlock const from = MIR_BB(index);
+
+        {
+            struct MirInstruction *const *pjoin;
+            K_LIST_FOREACH (block->joins, pjoin)
+                transform_instr(K, *pjoin);
+        }
+
+        {
+            struct MirInstruction *const *pinstr;
+            K_LIST_FOREACH (block->instructions, pinstr)
+                transform_instr(K, *pinstr);
+        }
+
+        MirBlock to; // single live successor
+        if (prune_dead_successors(K, from, &to))
+            into_goto(K, K_LIST_LAST(block->instructions), to);
+    }
+}
+
 static void propagate_constants(struct KProp *K)
 {
     {
@@ -700,6 +813,8 @@ static void propagate_constants(struct KProp *K)
             process_ssa_edge(K, edge);
         }
     }
+
+    transform_code(K);
 }
 
 static void init_lattice(struct KProp *K)
@@ -791,32 +906,6 @@ static void remove_operand_uses(struct KProp *K, UseCountMap *counts, struct Mir
     }
 }
 
-static paw_Bool is_pure(struct MirInstruction *instr)
-{
-    switch (MIR_KINDOF(instr)) {
-        case kMirNoop:
-        case kMirPhi:
-        case kMirMove:
-        case kMirAllocLocal:
-        case kMirLoadConstant:
-        case kMirCast:
-        case kMirUpvalue:
-        case kMirAggregate:
-        case kMirContainer:
-        case kMirGetField:
-        case kMirUnaryOp:
-        case kMirBinaryOp:
-            return PAW_TRUE;
-        default:
-            return PAW_FALSE;
-    }
-}
-
-static paw_Bool is_stack_reg(struct KProp *K, MirRegister r)
-{
-    return mir_reg_data(K->mir, r)->info == MIR_REGINFO_ARGUMENT;
-}
-
 static paw_Bool is_unnecessary(struct KProp *K, struct MirInstruction *instr)
 {
     if (MirIsMove(instr)) {
@@ -824,76 +913,6 @@ static paw_Bool is_unnecessary(struct KProp *K, struct MirInstruction *instr)
         return !is_stack_reg(K, move->output.r);
     }
     return PAW_FALSE;
-}
-
-static void transform_operands(struct KProp *K, struct MirInstruction *instr)
-{
-    MirPlacePtrList const *loads = pawMir_get_loads(K->mir, instr);
-    struct MirPlace *const *ppload;
-    K_LIST_FOREACH (loads, ppload) {
-        struct Cell *cell = get_cell(K, **ppload);
-        if ((*ppload)->kind == MIR_PLACE_LOCAL
-                && cell->info.kind == CELL_CONSTANT
-                && !is_stack_reg(K, (*ppload)->r)) {
-            into_constant(K, *ppload, *cell);
-        }
-    }
-}
-
-static int prune_dead_successors(struct KProp *K, MirBlock from, MirBlock *ptarget)
-{
-    MirBlockList *successors = mir_bb_data(K->mir, from)->successors;
-    int live_count = 0;
-
-    if (successors->count < 2)
-        return PAW_FALSE;
-
-    int index;
-    MirBlock const *pto;
-    K_LIST_ENUMERATE (successors, index, pto) {
-        if (is_exec(K, from, *pto)) {
-            *ptarget = *pto;
-            ++live_count;
-        } else {
-            int const ipred = mir_which_pred(K->mir, *pto, from);
-            struct MirBlockData const *bto = mir_bb_data(K->mir, *pto);
-            MirBlockList_remove(bto->predecessors, ipred);
-        }
-    }
-
-    if (live_count == 1) {
-        MirBlockList_set(successors, 0, *ptarget);
-        successors->count = 1;
-        return PAW_TRUE;
-    }
-    return PAW_FALSE;
-}
-
-static void transform_code(struct KProp *K)
-{
-    int index = 0;
-    struct MirBlockData *const *pblock;
-    struct MirBlockDataList *blocks = K->mir->blocks;
-    K_LIST_ENUMERATE (blocks, index, pblock) {
-        struct MirBlockData const *block = *pblock;
-        MirBlock const from = MIR_BB(index);
-
-        {
-            struct MirInstruction *const *pjoin;
-            K_LIST_FOREACH (block->joins, pjoin)
-                transform_operands(K, *pjoin);
-        }
-
-        {
-            struct MirInstruction *const *pinstr;
-            K_LIST_FOREACH (block->instructions, pinstr)
-                transform_operands(K, *pinstr);
-        }
-
-        MirBlock to; // single live successor
-        if (prune_dead_successors(K, from, &to))
-            into_goto(K, K_LIST_LAST(block->instructions), to);
-    }
 }
 
 static paw_Bool filter_code(struct KProp *K, UseCountMap *counts, struct MirInstructionList *code)
@@ -1028,7 +1047,6 @@ static paw_Bool propagate(struct Mir *mir)
     init_lattice(&K);
     propagate_copies(&K);
     propagate_constants(&K);
-    transform_code(&K);
     clean_up_code(&K);
 
     mir->kcache = K.kcache;
