@@ -463,6 +463,7 @@ void paw_dump_opcode(OpCode opcode)
         case NOPCODES:
             PAW_UNREACHABLE();
         // op A B
+        case OP_RETURN:
         case OP_NEWTUPLE:
         case OP_NEWLIST:
         case OP_NEWMAP:
@@ -499,10 +500,6 @@ void paw_dump_opcode(OpCode opcode)
         case OP_CLOSURE:
         case OP_GETGLOBAL:
             printf("%s %d %d\n", opname, GET_A(opcode), GET_Bx(opcode));
-            break;
-        // op
-        case OP_RETURN:
-            printf("%s\n", opname);
             break;
         // op sBx
         case OP_JUMP:
@@ -588,6 +585,7 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
             case NOPCODES:
                 PAW_UNREACHABLE();
             // op A B
+            case OP_RETURN:
             case OP_NEWTUPLE:
             case OP_NEWLIST:
             case OP_NEWMAP:
@@ -684,7 +682,6 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
                 pawL_add_fstring(P, print, " %d %d %d\n", GET_A(opcode), GET_B(opcode), GET_C(opcode));
                 break;
             case OP_NOOP:
-            case OP_RETURN:
             default:
                 pawL_add_char(P, print, '\n');
                 break;

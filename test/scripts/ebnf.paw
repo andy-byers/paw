@@ -808,4 +808,3 @@ pub fn main(args: [str]) {
 
     ctx.info("OK");
 }
-

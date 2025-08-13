@@ -38,8 +38,12 @@ struct Mir *pawMir_new(struct Compiler *C, Str *modname, struct SourceSpan span,
 
 void pawMir_free(struct Mir *mir)
 {
-    // reclaim some of the memory used by the MIR
+    // reclaim memory used by the MIR
+    ValueMap_delete(mir->C, mir->kcache.ints);
+    ValueMap_delete(mir->C, mir->kcache.floats);
+    ValueMap_delete(mir->C, mir->kcache.strs);
     MirCaptureList_delete(mir, mir->captured);
+    MirConstantDataList_delete(mir, mir->constants);
     MirRegisterDataList_delete(mir, mir->registers);
     MirRegisterList_delete(mir, mir->locals);
     MirBlockDataList_delete(mir, mir->blocks);

@@ -896,7 +896,7 @@ static void count_uses(struct KProp *K, UseCountMap *uses)
 static void remove_operand_uses(struct KProp *K, UseCountMap *counts, struct MirInstruction *instr)
 {
     struct MirPlace *const *ppp;
-    struct MirPlacePtrList *loads = pawMir_get_loads(K->mir, instr);
+    struct MirPlacePtrList const *loads = pawMir_get_loads(K->mir, instr);
     K_LIST_FOREACH (loads, ppp) {
         if ((*ppp)->kind == MIR_PLACE_LOCAL) {
             int *pcount = UseCountMap_get(K, counts, (*ppp)->r);
@@ -904,15 +904,6 @@ static void remove_operand_uses(struct KProp *K, UseCountMap *counts, struct Mir
             --*pcount;
         }
     }
-}
-
-static paw_Bool is_unnecessary(struct KProp *K, struct MirInstruction *instr)
-{
-    if (MirIsMove(instr)) {
-        struct MirMove const *move = MirGetMove(instr);
-        return !is_stack_reg(K, move->output.r);
-    }
-    return PAW_FALSE;
 }
 
 static paw_Bool filter_code(struct KProp *K, UseCountMap *counts, struct MirInstructionList *code)
@@ -977,24 +968,35 @@ static void clean_up_code(struct KProp *K)
     } while (removed_code);
 }
 
-static void propagate_copy(struct KProp *K, struct MirMove *move)
+// Make the given register-to-register move instruction obsolete
+// Accomplished by replacing uses of the destination register with the source register.
+static void propagate_copy(struct KProp *K, struct MirMove const *move)
 {
     struct MirAccess const *puse;
     struct MirAccessList const *uses = get_uses(K, move->output.r);
     K_LIST_FOREACH (uses, puse) {
-        struct MirPlace *const *ppr;
+        struct MirPlace *const *ppload;
         MirPlacePtrList const *loads = pawMir_get_loads(K->mir, puse->instr);
-        K_LIST_FOREACH (loads, ppr) {
-            if (MIR_ID_EQUALS((*ppr)->r, move->output.r)) {
-                // replace output with operand
-                mir_reg_data(K->mir, move->target.r)->info
-                    = mir_reg_data(K->mir, move->output.r)->info;
-                (*ppr)->r = move->target.r;
+        K_LIST_FOREACH (loads, ppload) {
+            if (MIR_ID_EQUALS((*ppload)->r, move->output.r)) {
+                (*ppload)->r = move->target.r;
                 K->altered = PAW_TRUE;
                 break;
             }
         }
     }
+}
+
+static paw_Bool can_propagate(struct KProp *K, struct MirMove const *move)
+{
+    paw_assert(move->target.kind != MIR_PLACE_UPVALUE);
+    paw_assert(move->output.kind == MIR_PLACE_LOCAL);
+    if (move->target.kind == MIR_PLACE_CONSTANT)
+        return PAW_FALSE; // loading a constant
+
+    if (is_captured(K, move->target.r)) return PAW_FALSE;
+    if (is_captured(K, move->output.r)) return PAW_FALSE;
+    return !is_stack_reg(K, move->output.r);
 }
 
 static void propagate_copies(struct KProp *K)
@@ -1007,18 +1009,11 @@ static void propagate_copies(struct KProp *K)
         MirInstructionList_reserve(K->mir, instrs, block->instructions->count);
         K_LIST_FOREACH (block->instructions, pinstr) {
             struct MirInstruction *instr = *pinstr;
-            if (MirIsMove(instr)) {
-                struct MirMove *move = MirGetMove(instr);
-                if (move->target.kind == MIR_PLACE_LOCAL
-                        && move->output.kind == MIR_PLACE_LOCAL
-                        && !is_captured(K, move->target.r)
-                        && !is_captured(K, move->output.r)
-                        && !is_stack_reg(K, move->output.r)) {
-                    propagate_copy(K, move);
-                    continue;
-                }
+            if (MirIsMove(instr) && can_propagate(K, MirGetMove(instr))) {
+                propagate_copy(K, MirGetMove(instr));
+            } else {
+                MirInstructionList_push(K->mir, instrs, instr);
             }
-            MirInstructionList_push(K->mir, instrs, instr);
         }
         block->instructions = instrs;
     }

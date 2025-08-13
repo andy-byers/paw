@@ -108,7 +108,7 @@ typedef enum Op { //      arguments    description
     OP_NOOP, //           -            -
     OP_MOVE, //           A B          R[A] := R[B]
     OP_CLOSE, //          A            close(A)
-    OP_RETURN, //         -            return R[0]..R[A]
+    OP_RETURN, //         A B          return R[A]..R[A+B]
     OP_CLOSURE, //        A Bx         R[A] := closure(P[Bx], R[A]..R[A+n])
     OP_CALL, //           A B          R[A] := R[A](R[A+1]..R[A+B+1])
 

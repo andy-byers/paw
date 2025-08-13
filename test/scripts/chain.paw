@@ -105,3 +105,31 @@ pub fn test_different_result() {
     assert(positive_even(Padded::new(1)).unwrap_err() == "not even");
     assert(positive_even(Padded::new(2)).unwrap() == 2);
 }
+
+fn chain_stack_value(i: int) -> Option<int> {
+    let id = |value| value;
+    let f = |value: int| {
+        if value < 0 { return None }
+        Some(value)
+    };
+
+    // Here, the result of a function call ("f(i)") is passed to the "?" operator and
+    // then immediately passed to another function. Requires a "MOVE" to overwrite
+    // the discriminator after the "?" and before the call to "id". At the MIR level,
+    // this move is a stack-to-stack move. It works because the lifetimes of both the
+    // discriminator (part of the "Option<int>" returned by "f") and the old stack
+    // slot end before the call to "id". 
+    //
+    //    stack      | source location
+    //   ------------|----------------------------------
+    //    .. id f i  | before call to "f" 
+    //    .. id D i  | before "?" ("D" = discriminator)
+    //    .. id i    | before call to "id" 
+    //
+    Some(id(f(i)?))
+}
+
+pub fn test_chain_stack_value() {
+    assert(chain_stack_value(-1).is_none());
+    assert(chain_stack_value(1).unwrap() == 1);
+}

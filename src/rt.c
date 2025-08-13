@@ -871,17 +871,18 @@ top:
 
             vm_case(RETURN) :
             {
-                P->top.p = CF_STACK_RETURN(cf);
                 VM_SAVE_PC();
+                StackPtr base = CF_STACK_RETURN(cf);
+                pawR_close_upvalues(P, base);
 
-                pawR_close_upvalues(P, P->top.p);
-                P->top.p = ra;
+                int const b = GET_B(opcode);
+                for (int i = 0; i < b; ++i)
+                    base[i] = ra[i];
+                P->top.p = base + b;
 
                 P->cf = cf->prev;
-                if (CF_IS_ENTRY(cf)) {
-                    // return from entrypoint function
+                if (CF_IS_ENTRY(cf))
                     return;
-                }
                 cf = P->cf;
                 goto top;
             }

@@ -87,9 +87,9 @@ DEFINE_MAP(struct Generator, ToplevelMap, pawP_alloc, IR_TYPE_HASH, IR_TYPE_EQUA
 static void add_jump_target(struct Generator *G, MirBlock bid)
 {
     JumpTable_push(G, G->fs->jumps, (struct JumpTarget){
-                                        .pc = G->fs->pc,
-                                        .bid = bid,
-                                    });
+        .pc = G->fs->pc,
+        .bid = bid,
+    });
 }
 
 static void add_line(struct FnState *fs)
@@ -187,9 +187,9 @@ DEFINE_LIST(struct Generator, PatchList, struct JumpSource)
 static void add_jump_source(struct Generator *G, int from_pc, MirBlock to)
 {
     PatchList_push(G, G->fs->patch, (struct JumpSource){
-                                        .from_pc = from_pc,
-                                        .to = to,
-                                    });
+        .from_pc = from_pc,
+        .to = to,
+    });
 }
 
 static void patch_jump(struct FnState *fs, int from, int to)
@@ -256,14 +256,13 @@ static Str *adt_name(struct Generator *G, Str const *modname, IrType *type)
     return pawP_mangle_name(G->C, modname, d->name, ir_adt_types(type));
 }
 
-static Proto *push_proto(struct Generator *G, Str *name)
+static Proto *push_proto(struct Generator *G, Str *name, Str *modname)
 {
-    paw_Env *P = ENV(G);
-    ENSURE_STACK(P, 1);
-    Value *pv = pawC_push0(P);
-    Proto *proto = pawV_new_proto(P);
+    ENSURE_STACK(ENV(G), 1);
+    Value *pv = pawC_push0(ENV(G));
+    Proto *proto = pawV_new_proto(ENV(G));
     V_SET_OBJECT(pv, proto);
-    proto->modname = G->C->modname; // TODO: should be G->modname
+    proto->modname = modname;
     proto->name = name;
     return proto;
 }
@@ -441,7 +440,7 @@ static void code_children(struct Generator *G, Proto *parent, struct Mir *mir)
 static Proto *code_paw_function(struct Generator *G, struct Mir *mir, int index)
 {
     struct FnState fs;
-    Proto *proto = push_proto(G, mir->name);
+    Proto *proto = push_proto(G, mir->name, mir->modname);
     enter_function(G, &fs, mir, proto);
 
     code_constants(G, mir, proto);
@@ -655,9 +654,7 @@ static void code_aggregate(struct MirVisitor *V, struct MirAggregate *x)
     // number of values contained inside the box
     struct IrLayout const layout = pawMir_get_layout(fs->mir, x->output.r);
 
-    int const temp = temporary_reg(fs, 0);
-    code_AB(fs, OP_NEWTUPLE, temp, layout.size);
-    move_to_reg(fs, temp, REG(x->output));
+    code_AB(fs, OP_NEWTUPLE, REG(x->output), layout.size);
 }
 
 static void code_close(struct MirVisitor *V, struct MirClose *x)
@@ -673,12 +670,7 @@ static void code_closure(struct MirVisitor *V, struct MirClosure *x)
     struct Generator *G = V->ud;
     struct FnState *fs = G->fs;
 
-    int const temp = temporary_reg(fs, 0);
-    code_ABx(fs, OP_CLOSURE, temp, x->child_id);
-    move_to_reg(fs, temp, REG(x->output));
-
-    // TODO: Should require just the following line
-//    code_ABx(fs, OP_CLOSURE, REG(x->output), x->child_id);
+    code_ABx(fs, OP_CLOSURE, REG(x->output), x->child_id);
 }
 
 static void code_map_get(struct FnState *fs, struct MirPlace output, struct MirPlace object, struct MirPlace key)
@@ -808,10 +800,10 @@ static unsigned determine_map_policy(struct Generator *G, IrType *type)
     RttiType const *equals = get_rtti(G, IrTypeList_first(TraitOwnerList_get(*powners, TRAIT_EQUALS)));
     RttiType const *hash = get_rtti(G, IrTypeList_first(TraitOwnerList_get(*powners, TRAIT_HASH)));
     PolicyList_push(G, G->policies, (struct PolicyInfo){
-                                        .type = get_rtti(G, type)->adt.code,
-                                        .equals = RTTI_DEF(ENV(G), rtti_iid(equals))->fn.vid,
-                                        .hash = RTTI_DEF(ENV(G), rtti_iid(hash))->fn.vid,
-                                    });
+        .type = get_rtti(G, type)->adt.code,
+        .equals = RTTI_DEF(ENV(G), rtti_iid(equals))->fn.vid,
+        .hash = RTTI_DEF(ENV(G), rtti_iid(hash))->fn.vid,
+    });
 
     int const ipolicy = G->ipolicy++;
     ToplevelMap_insert(G, G->policy_cache, type, ipolicy);
@@ -1005,66 +997,13 @@ static paw_Bool int_equals(struct Generator *G, int a, int b)
 DEFINE_MAP(struct Generator, ReturnMap, pawP_alloc, int_hash, int_equals, int, int)
 DEFINE_MAP_ITERATOR(ReturnMap, int, int)
 
-// TODO: generate moves then jump to final block (single return). allows for cleanup code to be placed in the last block
-// TODO: surely the following could be done in a more efficient way, this is just a first attempt
-//
-// Generate bytecode for a return instruction
-//
-// This routine needs to consider register interference, since it is possible to return more than
-// 1 value. Consider the following situation:
-//
-//     fn f(i: int, s: str) -> Option<(str, int)> { Some((s, i)) }
-//
-// This code uses the following registers. "in" is the register state directly after OP_CALL and
-// "out" is the register state just prior to the OP_RETURN instruction. "1" is the discriminator
-// for "Option::Some" and "s" is the string constant "hello".
-//
-//     in:  f i s ...
-//     out: 1 s i ...
-//
-// Notice that if the return values are moved into place in left-to-right or right-to-left order,
-// then "s" and "i" will interfere. In order to prevent this from happening, inferfering values
-// are moved into temporary registers before being placed into their final locations.
-//
 static paw_Bool code_return(struct MirVisitor *V, struct MirReturn *x)
 {
-    int index;
-    struct MirPlace const *pr;
     struct Generator *G = V->ud;
     struct FnState *fs = G->fs;
 
-    ReturnMap *rets = ReturnMap_new(G);
-    K_LIST_ENUMERATE (x->values, index, pr)
-        ReturnMap_insert(G, rets, REG(*pr), index);
-
-    int num_rets = 0;
-    while (ReturnMap_length(rets) > 0) {
-        ReturnMapIterator iter;
-        // select a random return value and move it to its final location (if it is not already there)
-        ReturnMapIterator_init(rets, &iter);
-        if (ReturnMapIterator_is_valid(&iter)) {
-            int const src = ReturnMapIterator_key(&iter);
-            int const dst = *ReturnMapIterator_valuep(&iter);
-            if (src != dst) {
-                int const *pslot = ReturnMap_get(G, rets, dst);
-                if (pslot != NULL) {
-                    // VM register "to" is occupied by a return value. Move the conflicting value to a
-                    // temporary register and save its location.
-                    int const temp = temporary_reg(fs, num_rets++);
-                    ReturnMap_insert(G, rets, temp, *pslot);
-                    ReturnMap_remove(G, rets, dst);
-                    move_to_reg(fs, dst, temp);
-                    continue;
-                }
-                move_to_reg(fs, src, dst);
-            }
-            ReturnMapIterator_erase(&iter);
-        }
-    }
-
-    ReturnMap_delete(G, rets);
-
-    code_A(fs, OP_RETURN, x->values->count);
+    struct MirPlace const base = K_LIST_FIRST(x->values);
+    code_AB(fs, OP_RETURN, REG(base), x->values->count);
     return PAW_FALSE;
 }
 

@@ -79,8 +79,8 @@ TupleType   = "(" [{Type ","} Type "," [Type]] ")".
 (* Expressions *)
 Expr        = BasicExpr | BlockExpr .
 BasicExpr   = PrimaryExpr | UnOp Expr | Expr BinOp Expr | 
-              RangeExpr | Closure . 
-BlockExpr   = Block | IfElse | ForLoop | WhileLoop .
+              RangeExpr | Closure | JumpExpr | ReturnExpr . 
+BlockExpr   = Block | IfElse | ForLoop | WhileLoop | Loop .
 PrimaryExpr = Operand | Call | "(" Expr ")" .
 Call        = PrimaryExpr "(" [ExprList] ")" .
 Index       = PrimaryExpr "[" Expr [":" Expr] "]" .
@@ -93,6 +93,8 @@ RangeSep    = ".." | "..=" .
 Closure     = "|" [CParameters] "|" (("->" Type Block) | Expr) .
 CParameters = {CParam ","} CParam [","] .
 CParam      = name [":" Type] .
+JumpExpr    = "break" | "continue" .
+ReturnExpr  = "return" [Expr] .
 
 (* StructLit is forbidden in the target of a block expression to avoid 
    an ambiguity that cannot be resolved at the parser level. *)
