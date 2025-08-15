@@ -661,11 +661,6 @@ static MirBlock enter_function(struct LowerHir *L, struct FunctionState *fs, str
 static void leave_function(struct LowerHir *L)
 {
     struct FunctionState *fs = L->fs;
-    struct MirBlockData *block = current_bb_data(fs);
-    if (block->instructions->count == 0
-            || !MirIsReturn(K_LIST_LAST(block->instructions))) {
-        terminate_return(fs, fs->mir->span.end, LOCAL(MIR_INVALID_REG));
-    }
     fs->stack->count = fs->level;
     L->fs = fs->outer;
 }
