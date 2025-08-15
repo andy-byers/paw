@@ -822,15 +822,14 @@ static void code_container(struct MirVisitor *V, struct MirContainer *x)
     struct Generator *G = V->ud;
     struct FnState *fs = G->fs;
 
-    IrType *element_type = get_element_type(REG_TYPE(G, x->output.r));
-    int const temp = temporary_reg(fs, 0);
+    IrType *container_type = REG_TYPE(G, x->output.r);
+    IrType *element_type = get_element_type(container_type);
     if (x->b_kind == BUILTIN_LIST) {
-        code_ABC(fs, OP_NEWLIST, temp, x->nelems, size_on_stack(G, element_type));
+        code_ABC(fs, OP_NEWLIST, REG(x->output), x->nelems, size_on_stack(G, element_type));
     } else {
-        int const policy = determine_map_policy(G, REG_TYPE(G, x->output.r));
-        code_ABC(fs, OP_NEWMAP, temp, x->nelems, policy);
+        int const policy = determine_map_policy(G, container_type);
+        code_ABC(fs, OP_NEWMAP, REG(x->output), x->nelems, policy);
     }
-    move_to_reg(fs, temp, REG(x->output));
 }
 
 static void code_call(struct MirVisitor *V, struct MirCall *x)

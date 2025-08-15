@@ -928,6 +928,7 @@ static struct MirPlace lower_container_lit(struct HirVisitor *V, struct HirLiter
     IrType *object_type = pawIr_get_type(fs->C, e->id);
     enum BuiltinKind b_kind = builtin_kind(L, object_type);
     struct MirPlace const output = place_for_node(fs, e->id);
+    set_reginfo(fs, output, MIR_REGINFO_ARGUMENT);
     NEW_INSTR(fs, container, e->span.start, b_kind, e->cont.items->count, output);
 
     int index;

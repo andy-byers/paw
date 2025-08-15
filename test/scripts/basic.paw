@@ -142,11 +142,3 @@ pub fn test_containers() {
     let m = [0: 0, 1: 1, 2: 2][1];
     assert(m == 1);
 }
-
-pub fn test_x() {
-    let list = [Some(1)];
-    match list[0] {
-        Some(x) => println("Some(\{x})"),
-        None => println("None"),
-    }
-}
