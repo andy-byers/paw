@@ -113,8 +113,8 @@ typedef enum Op { //      arguments    description
     OP_CALL, //           A B          R[A] := R[A](R[A+1]..R[A+B+1])
 
     OP_JUMP, //           sBx          pc += sBx
-    OP_JUMPT, //          A sBx        if (R[A]) pc += sBx
     OP_JUMPF, //          A sBx        if (!R[A]) pc += sBx
+    OP_JUMPTBL, //        A            pc += jumptbl[R[A]]
 
     OP_GETGLOBAL, //      A Bx         R[A] := G[Bx]
     OP_GETUPVALUE, //     A B          R[A] := Up[B]
@@ -125,7 +125,7 @@ typedef enum Op { //      arguments    description
     OP_NEWMAP, //         A B          R[A] := [k1:v1...kB:vB]
 
     OP_TESTK, //          A B C        if (R[A] != K[B]) pc++
-    OP_SWITCHINT, //      A B          if (R[A] != B) pc++
+    OP_TESTI, //          A B          if (R[A] != B) pc++
 
     OP_CEQ, //            A B C        R[A] := R[B] == R[C]
     OP_CNE, //            A B C        R[A] := R[B] != R[C]

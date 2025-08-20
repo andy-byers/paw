@@ -29,8 +29,14 @@
 #define NODE_END(Node_) ((Node_)->hdr.span.end)
 #define LOCAL(Reg_) ((struct MirPlace){.r = Reg_})
 
+struct MatchResult {
+    BindingList *bindings;
+    MirBlock b;
+};
+
 struct MatchState {
-    struct VarPlaces *var_mapping;
+    struct VarPlaces *places;
+    struct MatchResults *results;
     struct MatchState *outer;
     struct MatchVars *vars;
 };
@@ -129,6 +135,7 @@ DEFINE_LIST(struct LowerHir, LabelList, struct Label)
 DEFINE_MAP(struct LowerHir, LocalMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, int)
 DEFINE_MAP(struct LowerHir, GlobalMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, int)
 DEFINE_MAP(struct LowerHir, VarPlaces, pawP_alloc, var_hash, var_equals, struct MatchVar, struct MirPlace)
+DEFINE_MAP(struct LowerHir, MatchResults, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, struct MatchResult)
 
 static void postprocess(struct Mir *mir)
 {
@@ -156,10 +163,11 @@ static void leave_constant_ctx(struct LowerHir *L)
     L->cctx = L->cctx->outer;
 }
 
-static void enter_match(struct FunctionState *fs, struct MatchState *ms, VarPlaces *var_mapping)
+static void enter_match(struct FunctionState *fs, struct MatchState *ms)
 {
     *ms = (struct MatchState){
-        .var_mapping = var_mapping,
+        .results = MatchResults_new(fs->L),
+        .places = VarPlaces_new(fs->L),
         .vars = MatchVars_new(fs->C),
         .outer = fs->ms,
     };
@@ -168,6 +176,7 @@ static void enter_match(struct FunctionState *fs, struct MatchState *ms, VarPlac
 
 static void leave_match(struct FunctionState *fs)
 {
+    VarPlaces_delete(fs->L, fs->ms->places);
     fs->ms = fs->ms->outer;
 }
 
@@ -1685,7 +1694,7 @@ static paw_Bool visit_expr_stmt(struct HirVisitor *V, struct HirExprStmt *s)
 
 static struct MirPlace get_test_reg(struct FunctionState *fs, struct MatchVar v)
 {
-    struct MirPlace const *pr = VarPlaces_get(fs->L, fs->ms->var_mapping, v);
+    struct MirPlace const *pr = VarPlaces_get(fs->L, fs->ms->places, v);
     paw_assert(pr != NULL);
     return pawMir_copy_place(fs->mir, *pr);
 }
@@ -1700,17 +1709,16 @@ static void declare_match_bindings(struct FunctionState *fs, struct BindingList 
             .name = pb->name,
         };
 
-        struct LocalVar local = alloc_local(fs, ident, pb->id, pb->var.type);
+        struct LocalVar const local = alloc_local(fs, ident, pb->id, pb->var.type);
         move_to(fs, ident.span.start, test, local.r);
     }
 }
 
-static MirBlock lower_match_body(struct HirVisitor *V, struct MatchBody body, struct MirPlace result);
+static void lower_match_body(struct HirVisitor *V, struct MatchBody body, struct MirPlace result);
 static void visit_decision(struct HirVisitor *V, struct Decision *d, struct MirPlace result);
 
 static void visit_success(struct HirVisitor *V, struct Decision *d, struct MirPlace result)
 {
-    struct LowerHir *L = V->ud;
     lower_match_body(V, d->success.body, result);
 }
 
@@ -1746,20 +1754,52 @@ static void visit_guard(struct HirVisitor *V, struct Decision *d, struct MirPlac
     set_current_bb(fs, join_bb);
 }
 
-static MirBlock lower_match_body(struct HirVisitor *V, struct MatchBody body, struct MirPlace result)
+static paw_Bool bindings_are_compatible(struct BindingList *lhs, struct BindingList *rhs)
+{
+    return lhs->count == 0 && rhs->count == 0; // TODO
+
+    struct Binding const *a, *b;
+    K_LIST_ZIP(lhs, a, rhs, b) {
+        if (a->id.value != b->id.value)
+            return PAW_FALSE;
+    }
+    return PAW_TRUE;
+}
+
+static void lower_match_body(struct HirVisitor *V, struct MatchBody body, struct MirPlace result)
 {
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
-    MirBlock const bid = current_bb(fs);
+    struct MatchState const *ms = fs->ms;
+    struct SourceLoc const loc = NODE_START(body.result);
+
+    struct MatchResult const *presult = MatchResults_get(L, ms->results, body.result->hdr.id);
+    if (presult != NULL && bindings_are_compatible(presult->bindings, body.bindings)) {
+        // The match body has already been lowered, and it declares the same bindings as this one.
+        // Jump to it instead of lowering the expression again.
+        set_goto_edge(fs, loc, presult->b);
+        set_current_bb(fs, new_bb(fs));
+        return;
+    }
+
+    MirBlock const b = new_bb(fs);
+    set_goto_edge(fs, loc, b);
+    set_current_bb(fs, b);
+
     declare_match_bindings(fs, body.bindings);
+
     struct MirPlace const r = lower_place(V, body.result);
     move_to(fs, NODE_START(body.result), r, result);
-    return bid;
+    MatchResults_insert(L, ms->results, body.result->hdr.id,
+        (struct MatchResult){
+            .bindings = body.bindings,
+            .b = b,
+        });
 }
 
 static void map_var_to_reg(struct FunctionState *fs, struct MatchVar var, struct MirPlace r)
 {
-    VarPlaces_insert(fs->L, fs->ms->var_mapping, var, r);
+    VarPlaces_insert(fs->L, fs->ms->places, var, r);
 }
 
 static void allocate_match_vars(struct FunctionState *fs, struct MirPlace object, struct MatchCase mc, paw_Bool is_enum, int discr)
@@ -1954,10 +1994,9 @@ static struct MirPlace lower_match_expr(struct HirVisitor *V, struct HirMatchExp
 {
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
-    VarPlaces *var_mapping = VarPlaces_new(L);
 
     struct MatchState ms;
-    enter_match(fs, &ms, var_mapping);
+    enter_match(fs, &ms);
 
     struct Decision *d = pawP_check_exhaustiveness(L->hir, L->pool, L->pm->name, e, ms.vars);
     paw_assert(ms.vars->count > 0);
@@ -1971,7 +2010,6 @@ static struct MirPlace lower_match_expr(struct HirVisitor *V, struct HirMatchExp
     visit_decision(V, d, result);
 
     leave_match(fs);
-    VarPlaces_delete(L, var_mapping);
     return result;
 }
 
@@ -2089,8 +2127,7 @@ static struct Mir *lower_hir_body(struct LowerHir *L, struct HirFnDecl *fn)
             || (fsig->self != NULL && IR_TYPE_SUBTYPES(fsig->self) != NULL);
     struct Mir *result = pawMir_new(L->C, L->pm->name, fn->span, fn->ident.name, type, fsig->self,
             fn->fn_kind, fn->is_pub, is_polymorphic);
-    if (fn->body == NULL)
-        return result;
+    if (fn->body == NULL) return result;
 
     lower_hir_body_aux(L, fn, result);
     postprocess(result);

@@ -34,47 +34,47 @@ pub fn test_without_fields() {
 
 fn check_match_with_fields_concrete(target: Option<int>) -> int {
     match target {
-        Option::Some(42) => {return 1;},
-        Option::None => {return 2;},
+        Some(42) => {return 1;},
+        None => {return 2;},
         _ => {return 3;}
     }
 }
 
 pub fn test_with_fields_concrete() {
     let check = check_match_with_fields_concrete;
-    assert(check(Option::Some(42)) == 1);
-    assert(check(Option::None) == 2);
-    assert(check(Option::Some(0)) == 3);
+    assert(check(Some(42)) == 1);
+    assert(check(None) == 2);
+    assert(check(Some(0)) == 3);
 }
 
 fn check_match_with_fields<Ty>(target: Option<Ty>) -> Result<Ty, ()> {
     match target {
-        Option::Some(x) => {return Result::Ok(x);},
+        Some(x) => {return Result::Ok(x);},
         _ => {return Result::Err(());},
     }
 }
 
 pub fn test_with_fields() {
     let check = check_match_with_fields::<int>;
-    assert(check(Option::Some(1)).unwrap() == 1);
-    assert(check(Option::Some(2)).unwrap() == 2);
-    assert(check(Option::None).is_err());
+    assert(check(Some(1)).unwrap() == 1);
+    assert(check(Some(2)).unwrap() == 2);
+    assert(check(None).is_err());
 }
 
 fn check_match_nested_fields_poly(target: Option<Option<int>>) -> int {
     match target {
-        Option::None => {return 0;},
-        Option::Some(Option::None) => {return 1;},
-        Option::Some(Option::Some(x)) => {return 2 + x;},
+        None => {return 0;},
+        Some(None) => {return 1;},
+        Some(Some(x)) => {return 2 + x;},
     }
 }
 
 pub fn test_nested_fields_poly() {
     let check = check_match_nested_fields_poly;
-    assert(check(Option::None) == 0);
-    assert(check(Option::Some(Option::None)) == 1);
-    assert(check(Option::Some(Option::Some(0))) == 2);
-    assert(check(Option::Some(Option::Some(1))) == 3);
+    assert(check(None) == 0);
+    assert(check(Some(None)) == 1);
+    assert(check(Some(Some(0))) == 2);
+    assert(check(Some(Some(1))) == 3);
 }
 
 enum Nat {
@@ -95,17 +95,17 @@ pub fn eval(nat: Nat) -> int {
 
 fn describe(target: Option<(int, Nat)>) -> str {
     match target {
-        Option::None => {
+        None => {
             return "a";
         },
-        Option::Some(
+        Some(
             (0, Nat::Zero)
             | (1, Nat::Succ(Nat::Zero))
             | (2, Nat::Succ(Nat::Succ(Nat::Zero)))
         ) => {
             return "b";
         },
-        Option::Some((x, y)) => {
+        Some((x, y)) => {
             if x == eval(y) {
                 return "c";
             }
@@ -119,10 +119,10 @@ pub fn test_describe() {
     let two = Nat::Succ(one);
     let three = Nat::Succ(two);
 
-    assert(describe(Option::None) == "a");
-    assert(describe(Option::Some((1, one))) == "b");
-    assert(describe(Option::Some((1, two))) == "d");
-    assert(describe(Option::Some((2, two))) == "b");
-    assert(describe(Option::Some((3, three))) == "c");
-    assert(describe(Option::Some((0, three))) == "d");
+    assert(describe(None) == "a");
+    assert(describe(Some((1, one))) == "b");
+    assert(describe(Some((1, two))) == "d");
+    assert(describe(Some((2, two))) == "b");
+    assert(describe(Some((3, three))) == "c");
+    assert(describe(Some((0, three))) == "d");
 }

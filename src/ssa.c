@@ -73,17 +73,9 @@ DEFINE_LIST(struct SsaConverter, IntegerList, int)
 static void rename_input(struct SsaConverter *S, struct MirPlace *pplace)
 {
     struct MirRegisterList const *names = NameStackList_get(S->stacks, pplace->r.value);
-    if (names->count == 0) {
-        // NOTE: This is a hack that fixes a certain problem. It should be removed eventually.
-        //     It should be considered a bug in Paw itself if an uninitialized variable is used
-        //     as a VM instruction operand. This branch hides errors.
-        pplace->kind = MIR_PLACE_CONSTANT;
-        MirConstantDataList_push(S->mir, S->mir->constants,
-            (struct MirConstantData){.kind = BUILTIN_UNIT, .value.u = 0});
-        pplace->k = MIR_CONST(S->mir->constants->count - 1);
-    } else {
-        pplace->r = K_LIST_LAST(names);
-    }
+    paw_assert(names != NULL);
+
+    pplace->r = K_LIST_LAST(names);
 }
 
 static void rename_output(struct SsaConverter *S, MirRegister *pr, paw_Bool is_alloc)

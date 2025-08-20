@@ -303,10 +303,10 @@ char const *op_name(Op op)
             return "CALL";
         case OP_JUMP:
             return "JUMP";
-        case OP_JUMPT:
-            return "JUMPT";
         case OP_JUMPF:
             return "JUMPF";
+        case OP_JUMPTBL:
+            return "JUMPTBL";
         case OP_GETGLOBAL:
             return "GETGLOBAL";
         case OP_GETUPVALUE:
@@ -449,8 +449,8 @@ char const *op_name(Op op)
             return "FCASTB";
         case OP_TESTK:
             return "TESTK";
-        case OP_SWITCHINT:
-            return "SWITCHINT";
+        case OP_TESTI:
+            return "TESTI";
         case NOPCODES:
             PAW_UNREACHABLE();
     }
@@ -486,12 +486,11 @@ void paw_dump_opcode(OpCode opcode)
         case OP_CALL:
         case OP_GETUPVALUE:
         case OP_SETUPVALUE:
-        case OP_SWITCHINT:
+        case OP_TESTI:
             printf("%s %d %d\n", opname, GET_A(opcode), GET_B(opcode));
             break;
         // op A sBx
         case OP_LOADSMI:
-        case OP_JUMPT:
         case OP_JUMPF:
             printf("%s %d %d\n", opname, GET_A(opcode), GET_sBx(opcode));
             break;
@@ -507,6 +506,7 @@ void paw_dump_opcode(OpCode opcode)
             break;
         // op A
         case OP_CLOSE:
+        case OP_JUMPTBL:
             printf("%s %d\n", opname, GET_A(opcode));
             break;
         // op A B C
@@ -590,7 +590,7 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
             case OP_NEWLIST:
             case OP_NEWMAP:
             case OP_TESTK:
-            case OP_SWITCHINT:
+            case OP_TESTI:
             case OP_MOVE:
             case OP_INOT:
             case OP_INEG:
@@ -613,7 +613,6 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
                 break;
             // op A sBx
             case OP_LOADSMI:
-            case OP_JUMPT:
             case OP_JUMPF:
                 pawL_add_fstring(P, print, " %d %d\n", GET_A(opcode), GET_sBx(opcode));
                 break;
@@ -681,7 +680,11 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
             case OP_SETVALUE:
                 pawL_add_fstring(P, print, " %d %d %d\n", GET_A(opcode), GET_B(opcode), GET_C(opcode));
                 break;
-            case OP_NOOP:
+            case OP_JUMPTBL:
+                pawL_add_fstring(P, print, " %d %d\n", GET_A(opcode), GET_sBx(opcode));
+                for (int i = 0; i < GET_sBx(opcode); ++i)
+                    pawL_add_fstring(P, print, ".data %d\n", GET_sBx(*pc++));
+                break;
             default:
                 pawL_add_char(P, print, '\n');
                 break;

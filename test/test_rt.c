@@ -194,7 +194,7 @@ static void run_tests(char const *modname, struct TestAlloc *a, char const *pref
                 && def->fn.self < 0 // function is free
                 && name->length >= length // name might start with prefix
                 && memcmp(name->text, prefix, length) == 0 // name starts with prefix
-                && should_run_test(name->text)) { // test is not filtered out
+                && should_run_test(name->text + length)) { // test is not filtered out
             // toplevel functions prefixed with 'test_' must be public
             check(def->hdr.is_pub);
             INFO("--> running %s.%s\n", modname, name->text + length);

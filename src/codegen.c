@@ -33,10 +33,11 @@
 
 struct FnState {
     struct FnState *outer; // enclosing function
-    struct RegisterTable *regtab;
+    struct RegisterTable *regtab; // virtual to VM register mapping
     struct Generator *G; // codegen state
-    struct PatchList *patch;
-    struct JumpTable *jumps;
+    struct PatchList *patch; // list of jumps to patch
+    struct TblPatchList *tbl_patch; // list of table jumps to patch
+    struct JumpTable *jumps; // location of each basic block
     struct Mir *mir;
     MirBlock b;
     Proto *proto; // prototype being built
@@ -108,6 +109,8 @@ static void add_opcode(struct FnState *fs, OpCode code)
     paw_Env *P = ENV(fs->G);
     Proto *p = fs->proto;
 
+    add_line(fs);
+
     // While code is being generated, the 'pc' is used to track the number of
     // instructions, while the 'length' holds the capacity. The 'length' is set to the
     // final 'pc' before execution.
@@ -121,7 +124,6 @@ void code_ABx(struct FnState *fs, Op op, int a, int bc)
     paw_assert(0 <= a && a <= A_MAX);
     paw_assert(0 <= bc && bc <= Bx_MAX);
 
-    add_line(fs);
     add_opcode(fs, CREATE_ABx(op, a, bc));
 }
 
@@ -131,7 +133,6 @@ void code_ABC(struct FnState *fs, Op op, int a, int b, int c)
     paw_assert(0 <= b && b < B_MAX);
     paw_assert(0 <= c && c < C_MAX);
 
-    add_line(fs);
     add_opcode(fs, CREATE_ABC(op, a, b, c));
 }
 
@@ -182,7 +183,14 @@ struct JumpSource {
     int from_pc;
 };
 
+struct TblJumpSource {
+    MirBlock to;
+    int from_pc;
+    int loc;
+};
+
 DEFINE_LIST(struct Generator, PatchList, struct JumpSource)
+DEFINE_LIST(struct Generator, TblPatchList, struct TblJumpSource)
 
 static void add_jump_source(struct Generator *G, int from_pc, MirBlock to)
 {
@@ -192,15 +200,35 @@ static void add_jump_source(struct Generator *G, int from_pc, MirBlock to)
     });
 }
 
+static void add_tbl_jump_source(struct Generator *G, int loc, int from_pc, MirBlock to)
+{
+    TblPatchList_push(G, G->fs->tbl_patch, (struct TblJumpSource){
+        .from_pc = from_pc,
+        .loc = loc,
+        .to = to,
+    });
+}
+
 static void patch_jump(struct FnState *fs, int from, int to)
 {
-    Proto *p = fs->proto;
+    Proto const *p = fs->proto;
     int const dist = to - (from + 1);
     if (dist > JUMP_MAX)
         CODEGEN_ERROR(fs->G, too_far_to_jump, fs->mir->span.start, JUMP_MAX);
 
     paw_assert(0 <= from && from < p->length);
     SET_sBx(&p->source[from], dist);
+}
+
+static void patch_tbl_jump(struct FnState *fs, int loc, int from, int to)
+{
+    Proto const *p = fs->proto;
+    int const dist = to - (from + 1);
+    if (dist > JUMP_MAX)
+        CODEGEN_ERROR(fs->G, too_far_to_jump, fs->mir->span.start, JUMP_MAX);
+
+    paw_assert(0 <= from && from < p->length);
+    SET_sBx(&p->source[loc], dist);
 }
 
 static void patch_jumps_to_here(struct Generator *G, MirBlock bid)
@@ -213,6 +241,15 @@ static void patch_jumps_to_here(struct Generator *G, MirBlock bid)
         if (pjump->to.value == bid.value) {
             patch_jump(fs, pjump->from_pc, fs->pc);
             PatchList_swap_remove(fs->patch, index);
+            --index;
+        }
+    }
+
+    struct TblJumpSource *ptjump;
+    K_LIST_ENUMERATE (fs->tbl_patch, index, ptjump) {
+        if (ptjump->to.value == bid.value) {
+            patch_tbl_jump(fs, ptjump->loc, ptjump->from_pc, fs->pc);
+            TblPatchList_swap_remove(fs->tbl_patch, index);
             --index;
         }
     }
@@ -287,11 +324,17 @@ static int emit_jump(struct FnState *fs)
     return fs->pc - 1;
 }
 
-static int code_switch_int(struct FnState *fs, struct MirPlace discr, int k)
+static int emit_tbl_jump(struct FnState *fs)
+{
+    code_sBx(fs, 0, JUMP_PLACEHOLDER);
+    return fs->pc - 1;
+}
+
+static int code_testi(struct FnState *fs, struct MirPlace discr, int k)
 {
     // if discr != k, skip over the jump that moves control to the body
     // of the match case
-    code_AB(fs, OP_SWITCHINT, REG(discr), k);
+    code_AB(fs, OP_TESTI, REG(discr), k);
     return emit_jump(fs);
 }
 
@@ -323,6 +366,7 @@ static void enter_function(struct Generator *G, struct FnState *fs, struct Mir *
         .G = G,
     };
     fs->patch = PatchList_new(G);
+    fs->tbl_patch = TblPatchList_new(G);
     fs->jumps = JumpTable_new(G),
     G->fs = fs;
 }
@@ -421,6 +465,7 @@ static void code_proto(struct Generator *G, struct Mir *mir, Proto *proto, int i
     pawMir_visit_block_list(G->V, rpo);
 
     paw_assert(fs->patch->count == 0);
+    paw_assert(fs->tbl_patch->count == 0);
 }
 
 static Proto *code_paw_function(struct Generator *G, struct Mir *mir, int index);
@@ -1020,6 +1065,20 @@ static void add_edge(struct Generator *G, int from_pc, MirBlock to)
     add_jump_source(G, from_pc, to);
 }
 
+static void add_tbl_edge(struct Generator *G, int loc, int from_pc, MirBlock to)
+{
+    struct JumpTarget *pjump;
+    struct FnState *fs = G->fs;
+    K_LIST_FOREACH (fs->jumps, pjump) {
+        if (MIR_ID_EQUALS(pjump->bid, to)) {
+            patch_tbl_jump(fs, loc, from_pc, pjump->pc);
+            return;
+        }
+    }
+    // jump to a future instruction
+    add_tbl_jump_source(G, loc, from_pc, to);
+}
+
 static void add_edge_from_here(struct Generator *G, MirBlock to)
 {
     struct FnState *fs = G->fs;
@@ -1053,8 +1112,92 @@ static int code_testk(struct FnState *fs, struct MirPlace test, MirConstant k, I
     return emit_jump(fs);
 }
 
-static paw_Bool code_sparse_switch(struct MirVisitor *V, struct MirSwitch *x)
+#ifndef PAW_SWITCH_WTC
+# define PAW_SWITCH_WTC 1.0
+#endif
+
+#ifndef PAW_SWITCH_WJT
+# define PAW_SWITCH_WJT 1.0
+#endif
+
+#ifndef PAW_SWITCH_KS
+# define PAW_SWITCH_KS 1.0
+#endif
+
+#ifndef PAW_SWITCH_KT
+# define PAW_SWITCH_KT 1.0
+#endif
+
+enum SwitchProtocol {
+    SWITCH_TEST_CHAIN,
+    SWITCH_JUMP_TABLE,
+};
+
+// Switch protocols for constructors:
+//
+//  protocol   | space (opcodes) | time (instructions, worst case)
+// ------------|-----------------|---------------------------------
+//  test chain | 2 * m + 1       | m + 1
+//  jump table | 1 + n           | 1
+//
+// Where n is the number of cases and m is the number of cases that cannot be squashed
+// into the "otherwise" part. Cases can be grouped into the "otherwise" part when they
+// jump to the same basic block.
+//
+// The worst case for number of instructions executed at runtime is used instead of
+// the average number due to simplicity. The average number of instructions executed is
+// equal to the expected value "e" given that 1 case is true out of m cases (p = 1 / m),
+// plus the jump. The formula is "e = sum({i * p(i) | i in 0..m}) = sum({i / m | i in
+// 0..m}) = (m - 1) / 2".
+//
+// Example (n = 7, m = 2): Note that in this example, the size of the generated code is
+//   the same for each protocol. As n increases relative to m, this changes and "test
+//   chain" produces smaller code.
+//
+//   Test chain (exhaustive):
+//   ```asm
+//     TESTK  r1 0  -- if R[1] == 0
+//     JUMP   b1    -- jump to first block
+//     TESTK  r1 4  -- if R[1] == 4
+//     JUMP   b2    -- jump to second block
+//     JUMP   b3    -- jump to third block
+//   ```
+//
+//   Jump table:
+//   ```asm
+//     JUMPTBL  r1  -- pc += jumptbl[R[1]]
+//     .data    b1  -- first block label
+//     .data    b3  -- third block label
+//     .data    b3  -- third block label
+//     .data    b3  -- third block label
+//     .data    b2  -- second block label
+//     .data    b3  -- third block label
+//     .data    b3  -- third block label
+//   ```
+//
+//  cost_tc = Wtc * (ks * (2 * m + 1) + kt * (m + 1))
+//  cost_jt  = Wjt * (ks * (1 + n) + kt)
+//
+static enum SwitchProtocol choose_switch_protocol(struct FnState *fs, int n, int m)
 {
+    double const tc_s = PAW_SWITCH_KS * (2.0 * (double)m + 1.0);
+    double const tc_t = PAW_SWITCH_KT * ((double)m + 1);
+    double const cost_tc = PAW_SWITCH_WTC * (tc_s + tc_t);
+
+    double const jt_s = PAW_SWITCH_KS * (1.0 + (double)n);
+    double const jt_t = PAW_SWITCH_KT;
+    double const cost_jt = PAW_SWITCH_WJT * (jt_s + jt_t);
+
+    return cost_tc < cost_jt
+        ? SWITCH_TEST_CHAIN
+        : SWITCH_JUMP_TABLE;
+}
+
+DEFINE_MAP(struct Generator, BlockCounts, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirBlock, int)
+
+static paw_Bool code_literal_switch(struct MirVisitor *V, struct MirSwitch *x)
+{
+    paw_assert(MIR_ID_EXISTS(x->otherwise));
     struct Generator *G = V->ud;
     struct FnState *fs = G->fs;
 
@@ -1064,26 +1207,88 @@ static paw_Bool code_sparse_switch(struct MirVisitor *V, struct MirSwitch *x)
         int const next_jump = code_testk(fs, d, parm->k, REG_TYPE(G, d.r));
         add_edge(G, next_jump, parm->bid);
     }
-    if (MIR_ID_EXISTS(x->otherwise))
-        add_edge_from_here(G, x->otherwise);
+
+    add_edge_from_here(G, x->otherwise);
     return PAW_FALSE;
+}
+
+static paw_Bool code_sparse_switch(struct MirVisitor *V, struct MirSwitch *x)
+{
+    paw_assert(!MIR_ID_EXISTS(x->otherwise));
+    struct Generator *G = V->ud;
+    struct FnState *fs = G->fs;
+
+    // Determine which basic block appears the most as the target of a case label.
+    // This basic block will become the target of the "otherwise" case.
+    MirBlock target_block = MIR_INVALID_BB;
+    struct MirSwitchArm const *parm;
+    {
+        BlockCounts *counts = BlockCounts_new(G);
+        int target_count = 0;
+
+        K_LIST_FOREACH (x->arms, parm)
+            BlockCounts_insert(G, counts, parm->bid, 0);
+
+        K_LIST_FOREACH (x->arms, parm) {
+            int const count = ++*BlockCounts_get(G, counts, parm->bid);
+            if (count > target_count) {
+                target_block = parm->bid;
+                target_count = count;
+            }
+        }
+
+        paw_assert(MIR_ID_EXISTS(target_block));
+        BlockCounts_delete(G, counts);
+    }
+
+    struct MirPlace const d = x->discr;
+    K_LIST_FOREACH (x->arms, parm) {
+        if (!MIR_ID_EQUALS(parm->bid, target_block)) {
+            struct MirConstantData const *kdata = mir_const_data(fs->mir, parm->k);
+            int const next_jump = code_testi(fs, x->discr, CAST(int, V_INT(kdata->value)));
+            add_edge(G, next_jump, parm->bid);
+        }
+    }
+
+    add_edge_from_here(G, target_block);
+    return PAW_FALSE;
+}
+
+static void code_dense_switch(struct MirVisitor *V, struct MirSwitch *x)
+{
+    paw_assert(!MIR_ID_EXISTS(x->otherwise));
+    struct Generator *G = V->ud;
+    struct FnState *fs = G->fs;
+
+    code_ABx(fs, OP_JUMPTBL, REG(x->discr), x->arms->count);
+    int const jump_pc = fs->pc;
+
+    struct MirSwitchArm *parm;
+    K_LIST_FOREACH (x->arms, parm)
+        add_tbl_edge(G, emit_tbl_jump(fs), jump_pc, parm->bid);
 }
 
 static paw_Bool code_switch(struct MirVisitor *V, struct MirSwitch *x)
 {
-    if (MIR_ID_EXISTS(x->otherwise)) {
-        return code_sparse_switch(V, x);
-    }
-
     struct Generator *G = V->ud;
     struct FnState *fs = G->fs;
 
-    struct MirSwitchArm *parm;
-    K_LIST_FOREACH (x->arms, parm) {
-        struct MirConstantData const *kdata = mir_const_data(fs->mir, parm->k);
-        int const next_jump = code_switch_int(fs, x->discr, CAST(int, V_INT(kdata->value)));
-        add_edge(G, next_jump, parm->bid);
-    }
+    if (MIR_ID_EXISTS(x->otherwise))
+        return code_literal_switch(V, x);
+
+    int const n = x->arms->count;
+    int const m = n;
+
+    code_sparse_switch(V, x);
+//    switch (choose_switch_protocol(fs, n, m)) {
+//        case SWITCH_TEST_CHAIN:
+//            code_sparse_switch(V, x);
+//            break;
+//        case SWITCH_JUMP_TABLE:
+//            code_dense_switch(V, x);
+//            break;
+//    }
+
     return PAW_FALSE;
 }
 

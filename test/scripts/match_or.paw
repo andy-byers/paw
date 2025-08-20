@@ -229,4 +229,3 @@ pub fn test_match_struct_with_multiple_fields() {
     let check = check_match_struct_with_multiple_fields;
     assert(check(Multiple{a: 4, b: 5, c: 6}) == 2);
 }
-

@@ -745,16 +745,14 @@ top:
             {
                 Value const *ra = VM_RA(opcode);
                 Value const k = K[GET_Bx(opcode)];
-                if (ra->u != k.u)
-                    ++pc;
+                if (ra->u != k.u) ++pc;
             }
 
-            vm_case(SWITCHINT) :
+            vm_case(TESTI) :
             {
                 Value const *ra = VM_RA(opcode);
                 paw_Int const b = GET_B(opcode);
-                if (V_INT(*ra) != b)
-                    ++pc;
+                if (V_INT(*ra) != b) ++pc;
             }
 
             vm_case(BCASTF) :
@@ -892,16 +890,16 @@ top:
                 pc += GET_sBx(opcode);
             }
 
-            vm_case(JUMPT) :
-            {
-                if (V_TRUE(*ra))
-                    pc += GET_sBx(opcode);
-            }
-
             vm_case(JUMPF) :
             {
                 if (!V_TRUE(*ra))
                     pc += GET_sBx(opcode);
+            }
+
+            vm_case(JUMPTBL) :
+            {
+                OpCode const data = pc[V_INT(*ra)];
+                pc += GET_sBx(data);
             }
 
             vm_case(NOOP) :

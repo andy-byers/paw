@@ -486,7 +486,6 @@ struct MirGoto {
 
 struct MirUnreachable {
     MIR_INSTRUCTION_HEADER;
-    struct MirPlaceList *values;
 };
 
 struct MirReturn {

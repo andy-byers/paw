@@ -1053,16 +1053,13 @@ void pawMir_merge_redundant_blocks(struct Mir *mir)
     int index;
     struct MirBlockData *const *pbb;
     K_LIST_ENUMERATE (mir->blocks, index, pbb) {
-        if (index < 2)
-            continue; // keep entry block
+        if (index < 2) continue; // keep entry block
         MirBlock const bto = MIR_BB(index);
         struct MirBlockData *to = *pbb;
-        if (to->predecessors->count != 1)
-            continue;
+        if (to->predecessors->count != 1) continue;
         MirBlock const bfrom = K_LIST_FIRST(to->predecessors);
         struct MirBlockData *from = mir_bb_data(mir, bfrom);
-        if (from->successors->count != 1)
-            continue;
+        if (from->successors->count != 1) continue;
         // remove goto and merge instruction lists
         --from->instructions->count;
         paw_assert(to->joins->count == 0);
@@ -1076,8 +1073,7 @@ void pawMir_merge_redundant_blocks(struct Mir *mir)
         K_LIST_FOREACH (to->successors, ps) {
             struct MirBlockData *s = mir_bb_data(mir, *ps);
             K_LIST_FOREACH (s->predecessors, pp) {
-                if (MIR_ID_EQUALS(*pp, bto))
-                    *pp = bfrom;
+                if (MIR_ID_EQUALS(*pp, bto)) *pp = bfrom;
             }
         }
         from->successors = to->successors;
