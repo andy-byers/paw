@@ -386,7 +386,7 @@ static struct HirExpr *LowerMatchExpr(struct LowerAst *L, struct AstMatchExpr *e
     struct HirExprList *arms = lower_expr_list(L, e->arms);
     paw_assert(arms->count > 0);
 
-    return NEW_NODE(L, match_expr, e->span, e->id, target, arms, PAW_TRUE);
+    return NEW_NODE(L, match_expr, e->span, e->id, target, arms);
 }
 
 static struct HirExpr *LowerMatchArm(struct LowerAst *L, struct AstMatchArm *e)
@@ -621,8 +621,6 @@ static struct HirDecl *LowerFnDecl(struct LowerAst *L, struct AstFnDecl *d)
 
 static struct HirExpr *new_boolean_match(struct LowerAst *L, struct SourceSpan span, struct HirExpr *cond, struct HirExpr *then_block, struct HirExpr *else_block)
 {
-    // lower if-else expressions into potentially non-exhaustive pattern matches
-
     struct Hir *hir = L->hir;
     struct HirExprList *arms = HirExprList_new(hir);
 
@@ -631,20 +629,25 @@ static struct HirExpr *new_boolean_match(struct LowerAst *L, struct SourceSpan s
     struct HirExpr *true_arm = NEW_NODE(L, match_arm, span, next_node_id(L), true_pat, NULL, then_block);
     HirExprList_push(hir, arms, true_arm);
 
-    if (else_block != NULL) {
-        struct HirPat *false_pat = NEW_NODE(L, wildcard_pat, cond->hdr.span, next_node_id(L));
-        struct HirExpr *false_arm = NEW_NODE(L, match_arm, span, next_node_id(L), false_pat, NULL, else_block);
-        HirExprList_push(hir, arms, false_arm);
-    }
+    paw_assert(else_block != NULL);
+    struct HirPat *false_pat = NEW_NODE(L, wildcard_pat, cond->hdr.span, next_node_id(L));
+    struct HirExpr *false_arm = NEW_NODE(L, match_arm, span, next_node_id(L), false_pat, NULL, else_block);
+    HirExprList_push(hir, arms, false_arm);
 
-    return NEW_NODE(L, match_expr, span, next_node_id(L), cond, arms, else_block != NULL);
+    return NEW_NODE(L, match_expr, span, next_node_id(L), cond, arms);
 }
 
 static struct HirExpr *LowerIfExpr(struct LowerAst *L, struct AstIfExpr *e)
 {
     struct HirExpr *cond = lower_expr(L, e->cond);
     struct HirExpr *then_block = lower_expr(L, e->then_arm);
-    struct HirExpr *else_block = e->else_arm != NULL ? lower_expr(L, e->else_arm) : NULL;
+    struct HirExpr *else_block;
+    if (e->else_arm != NULL) {
+        else_block = lower_expr(L, e->else_arm);
+    } else {
+        else_block = NEW_NODE(L, block, then_block->hdr.span,
+                next_node_id(L), HirStmtList_new(L->hir), NULL);
+    }
 
     return new_boolean_match(L, e->span, cond, then_block, else_block);
 }
@@ -752,7 +755,7 @@ static struct HirStmt *unpack_bindings(struct LowerAst *L, struct HirPat *lhs, s
     struct HirExpr *block = NEW_NODE(L, block, ctx.span, next_node_id(L), setters, unit_lit(L, ctx.span));
     struct HirExprList *arms = HirExprList_new(L->hir);
     HirExprList_push(L->hir, arms, NEW_NODE(L, match_arm, ctx.span, next_node_id(L), lhs, NULL, block));
-    struct HirExpr *match = NEW_NODE(L, match_expr, ctx.span, next_node_id(L), rhs, arms, PAW_TRUE);
+    struct HirExpr *match = NEW_NODE(L, match_expr, ctx.span, next_node_id(L), rhs, arms);
     HirStmtList_push(L->hir, L->stmts, NEW_NODE(L, expr_stmt, ctx.span, id, match));
 
     // assign to fresh bindings from temporaries
@@ -924,7 +927,7 @@ static struct HirExpr *LowerForExpr(struct LowerAst *L, struct AstForExpr *e)
 
     {
         // match on the "Option<T>" returned by "(iter).next()"
-        struct HirExpr *match = NEW_NODE(L, match_expr, e->span, next_node_id(L), next, arms, PAW_TRUE);
+        struct HirExpr *match = NEW_NODE(L, match_expr, e->span, next_node_id(L), next, arms);
         HirStmtList_push(hir, inner_stmts, NEW_NODE(L, expr_stmt, e->span, next_node_id(L), match));
     }
 

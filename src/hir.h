@@ -738,7 +738,6 @@ struct HirMatchArm {
 
 struct HirMatchExpr {
     HIR_EXPR_HEADER;
-    paw_Bool is_exhaustive : 1;
     struct HirExpr *target;
     struct HirExprList *arms;
 };
@@ -1091,14 +1090,13 @@ static struct HirExpr *pawHir_new_match_arm(struct Hir *hir, struct SourceSpan s
     return e;
 }
 
-static struct HirExpr *pawHir_new_match_expr(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirExpr *target, struct HirExprList *arms, paw_Bool is_exhaustive)
+static struct HirExpr *pawHir_new_match_expr(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirExpr *target, struct HirExprList *arms)
 {
     struct HirExpr *e = pawHir_new_expr(hir);
     e->MatchExpr_ = (struct HirMatchExpr){
         .id = id,
         .span = span,
         .kind = kHirMatchExpr,
-        .is_exhaustive = is_exhaustive,
         .target = target,
         .arms = arms,
     };

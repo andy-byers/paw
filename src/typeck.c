@@ -38,9 +38,6 @@ struct BlockState {
     IrType *result;
     struct BlockState *outer;
     enum BlockKind kind;
-
-    // only relevant for BLOCK_MATCH type blocks
-    paw_Bool is_exhaustive_match;
 };
 
 struct ResultState {
@@ -817,18 +814,14 @@ static IrType *check_op_assign_expr(struct TypeChecker *T, struct HirOpAssignExp
     return builtin_type(T, BUILTIN_UNIT);
 }
 
-// Intended typing behavior for match expressions (exhaustive unless otherwise mentioned):
-// (1) If the match is not exhaustive (currently, this only occurs with a match created from
-//     an "if" expression without an "else" clause), then the match has type "()". This is
-//     because it is possible that no match arm will be taken at runtime.
-// (2) If all match arms diverge, then the match itself is considered to diverge.
-// (3) A match expression takes the type of the first non-diverging arm. Any other arms that
+// Intended typing behavior for match expressions:
+// (1) If all match arms diverge, then the match itself is considered to diverge.
+// (2) A match expression takes the type of the first non-diverging arm. Any other arms that
 //     complete normally must have the same type.
 static IrType *check_match_expr(struct TypeChecker *T, struct HirMatchExpr *e)
 {
     struct BlockState bs;
     enter_block(T, &bs, e->span, BLOCK_MATCH);
-    bs.is_exhaustive_match = e->is_exhaustive;
 
     IrType *target = check_operand(T, e->target);
 
@@ -837,9 +830,6 @@ static IrType *check_match_expr(struct TypeChecker *T, struct HirMatchExpr *e)
     check_expr_list(T, e->arms);
     leave_match_ctx(T);
     leave_block(T);
-
-    if (!e->is_exhaustive)
-        bs.result = unify_unit_type(T, e->span.start, bs.result);
 
     if (IrIsNever(bs.result))
         // propagate divergence status to enclosing block
