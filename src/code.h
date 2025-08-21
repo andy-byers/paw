@@ -217,8 +217,8 @@ enum TraitKind {
 #define K_LIST_ENUMERATE(List_, Iter_, Ptr_) \
     for (Iter_ = 0; Iter_ < (List_)->count && (Ptr_ = (List_)->data + Iter_ /* always 1 */); ++Iter_)
 #define K_LIST_ZIP(ListA_, PtrA_, ListB_, PtrB_)                     \
-    for (int i_ = 0; i_ < (ListA_)->count && i_ < (ListB_)->count && \
-             (PtrA_ = (ListA_)->data + i_, PtrB_ = (ListB_)->data + i_ /* always 1 */); ++i_)
+    for (int i_ = ((PtrA_) = (ListA_)->data, (PtrB_) = (ListB_)->data, 0); \
+            i_ < (ListA_)->count && i_ < (ListB_)->count; ++i_, ++(PtrA_), ++(PtrB_))
 #define K_LIST_XFOREACH(List_, Ptr_) \
     __typeof__((List_)->data) Ptr_;  \
     for (int i_ = 0; i_ < (List_)->count && (Ptr_ = (List_)->data + i_ /* always 1 */); ++i_)

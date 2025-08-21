@@ -458,30 +458,21 @@ struct MirCall {
 struct MirBranch {
     MIR_INSTRUCTION_HEADER;
     struct MirPlace cond;
-    MirBlock then_arm;
-    MirBlock else_arm;
 };
 
 struct MirSwitchArm {
-    MirBlock bid;
     MirConstant k;
 };
 
 struct MirSwitch {
     MIR_INSTRUCTION_HEADER;
+    paw_Bool has_otherwise : 1;
     struct MirPlace discr;
     struct MirSwitchArmList *arms;
-    MirBlock otherwise;
-};
-
-enum MirForKind {
-    MIR_FOR_PREP,
-    MIR_FOR_LOOP,
 };
 
 struct MirGoto {
     MIR_INSTRUCTION_HEADER;
-    MirBlock target;
 };
 
 struct MirUnreachable {
@@ -881,19 +872,18 @@ inline static struct MirInstruction *pawMir_new_call(struct Mir *mir, struct Sou
     return instr;
 }
 
-inline static struct MirInstruction *pawMir_new_goto(struct Mir *mir, struct SourceLoc loc, MirBlock b)
+inline static struct MirInstruction *pawMir_new_goto(struct Mir *mir, struct SourceLoc loc)
 {
     struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->Goto_ = (struct MirGoto){
         .mid = pawMir_next_id(mir),
         .kind = kMirGoto,
         .loc = loc,
-        .target = b,
     };
     return instr;
 }
 
-inline static struct MirInstruction *pawMir_new_branch(struct Mir *mir, struct SourceLoc loc, struct MirPlace cond, MirBlock then_arm, MirBlock else_arm)
+inline static struct MirInstruction *pawMir_new_branch(struct Mir *mir, struct SourceLoc loc, struct MirPlace cond)
 {
     struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->Branch_ = (struct MirBranch){
@@ -901,13 +891,11 @@ inline static struct MirInstruction *pawMir_new_branch(struct Mir *mir, struct S
         .kind = kMirBranch,
         .loc = loc,
         .cond = cond,
-        .then_arm = then_arm,
-        .else_arm = else_arm,
     };
     return instr;
 }
 
-inline static struct MirInstruction *pawMir_new_switch(struct Mir *mir, struct SourceLoc loc, struct MirPlace discr, struct MirSwitchArmList *arms, MirBlock otherwise)
+inline static struct MirInstruction *pawMir_new_switch(struct Mir *mir, struct SourceLoc loc, struct MirPlace discr, struct MirSwitchArmList *arms, paw_Bool has_otherwise)
 {
     struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->Switch_ = (struct MirSwitch){
@@ -916,7 +904,7 @@ inline static struct MirInstruction *pawMir_new_switch(struct Mir *mir, struct S
         .loc = loc,
         .discr = discr,
         .arms = arms,
-        .otherwise = otherwise,
+        .has_otherwise = has_otherwise,
     };
     return instr;
 }

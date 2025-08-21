@@ -219,6 +219,16 @@ static struct MirBlockData *current_bb_data(struct FunctionState *fs)
     return MirBlockDataList_get(bb_list(fs), current_bb(fs).value);
 }
 
+static MirBlock const *get_successors(struct FunctionState *fs)
+{
+    return current_bb_data(fs)->successors->data;
+}
+
+static MirBlock get_last_successor(struct FunctionState *fs)
+{
+    return K_LIST_LAST(current_bb_data(fs)->successors);
+}
+
 static struct MirPlace new_constant(struct FunctionState *fs, Value value, enum BuiltinKind kind)
 {
     MirConstant const k = pawMir_add_constant(fs->mir, fs->mir->kcache, value, kind);
@@ -278,15 +288,15 @@ static struct MirInstruction *terminate_unreachable(struct FunctionState *fs, st
     return NEW_INSTR(fs, unreachable, loc);
 }
 
-static struct MirInstruction *terminate_goto(struct FunctionState *fs, struct SourceLoc loc, MirBlock target)
+static struct MirInstruction *terminate_goto(struct FunctionState *fs, struct SourceLoc loc)
 {
-    return NEW_INSTR(fs, goto, loc, target);
+    return NEW_INSTR(fs, goto, loc);
 }
 
 static void set_goto_edge(struct FunctionState *fs, struct SourceLoc loc, MirBlock to)
 {
     add_edge(fs, current_bb(fs), to);
-    terminate_goto(fs, loc, to);
+    terminate_goto(fs, loc);
 }
 
 static void set_current_bb(struct FunctionState *fs, MirBlock b)
@@ -341,8 +351,7 @@ static void add_label(struct FunctionState *fs, struct SourceLoc loc, enum JumpK
     // a captured variable, since the MirClose at the end of the loop body will not be reached.
     if (kind == JUMP_CONTINUE)
         close_until_loop(fs);
-    struct MirBlockData *block = current_bb_data(fs);
-    terminate_goto(fs, loc, MIR_INVALID_BB);
+    terminate_goto(fs, loc);
 
     LabelList_push(fs->L, fs->labels, (struct Label){
         .nvars = fs->nlocals,
@@ -368,13 +377,6 @@ static void remove_label(struct LabelList *ll, int index)
     LabelList_swap_remove(ll, index);
 }
 
-static void set_goto(struct FunctionState *fs, MirBlock from, MirBlock to)
-{
-    struct MirBlockData *bb = get_bb(fs, from);
-    struct MirInstruction *jump = K_LIST_LAST(bb->instructions);
-    MirGetGoto(jump)->target = to;
-}
-
 static paw_Bool adjust_from(struct FunctionState *fs, enum JumpKind kind)
 {
     int needs_close = 0;
@@ -384,7 +386,6 @@ static paw_Bool adjust_from(struct FunctionState *fs, enum JumpKind kind)
         struct Label lb = LabelList_get(ll, i);
         if (lb.kind == kind) {
             needs_close |= lb.needs_close;
-            set_goto(fs, lb.from, current_bb(fs));
             add_edge(fs, lb.from, current_bb(fs));
             remove_label(ll, i);
         } else {
@@ -401,7 +402,6 @@ static void adjust_to(struct FunctionState *fs, enum JumpKind kind, MirBlock to)
     for (int i = bs->label0; i < ll->count;) {
         struct Label lb = LabelList_get(ll, i);
         if (lb.kind == kind) {
-            set_goto(fs, lb.from, to);
             add_edge(fs, lb.from, to);
             remove_label(ll, i);
         } else {
@@ -613,14 +613,14 @@ struct MirInstruction *terminate_return(struct FunctionState *fs, struct SourceL
     return NEW_INSTR(fs, return, loc, values);
 }
 
-struct MirInstruction *terminate_branch(struct FunctionState *fs, struct SourceLoc loc, struct MirPlace cond, MirBlock then_arm, MirBlock else_arm)
+struct MirInstruction *terminate_branch(struct FunctionState *fs, struct SourceLoc loc, struct MirPlace cond)
 {
-    return NEW_INSTR(fs, branch, loc, cond, then_arm, else_arm);
+    return NEW_INSTR(fs, branch, loc, cond);
 }
 
-struct MirInstruction *terminate_switch(struct FunctionState *fs, struct SourceLoc loc, struct MirPlace discr, struct MirSwitchArmList *arms, MirBlock otherwise)
+struct MirInstruction *terminate_switch(struct FunctionState *fs, struct SourceLoc loc, struct MirPlace discr, struct MirSwitchArmList *arms, paw_Bool has_otherwise)
 {
-    return NEW_INSTR(fs, switch, loc, discr, arms, otherwise);
+    return NEW_INSTR(fs, switch, loc, discr, arms, has_otherwise);
 }
 
 static struct MirPlace place_for_node(struct FunctionState *fs, NodeId id)
@@ -979,17 +979,14 @@ static struct MirPlace lower_logical_expr(struct HirVisitor *V, struct HirLogica
     MirBlock const rhs_bb = new_bb(fs);
     MirBlock const after_bb = new_bb(fs);
     add_edge(fs, before_bb, test_bb);
-    terminate_goto(fs, e->span.start, test_bb);
+    terminate_goto(fs, e->span.start);
     set_current_bb(fs, test_bb);
 
     struct MirPlace const result = new_local_literal(fs, BUILTIN_BOOL);
     struct MirPlace const first = lower_place(V, e->lhs);
-    add_edge(fs, current_bb(fs), lhs_bb);
-    add_edge(fs, current_bb(fs), rhs_bb);
-
-    terminate_branch(fs, e->span.start, first, //
-            e->is_and ? rhs_bb : lhs_bb, //
-            e->is_and ? lhs_bb : rhs_bb);
+    add_edge(fs, current_bb(fs), e->is_and ? lhs_bb : rhs_bb);
+    add_edge(fs, current_bb(fs), e->is_and ? rhs_bb : lhs_bb);
+    terminate_branch(fs, e->span.start, first);
 
     set_current_bb(fs, lhs_bb);
     move_to(fs, NODE_START(e->lhs), first, result);
@@ -1088,13 +1085,11 @@ static struct MirSwitchArmList *allocate_switch_arms(struct FunctionState *fs, M
 {
     struct MirSwitchArmList *arms = MirSwitchArmList_new(fs->mir);
     MirSwitchArmList_reserve(fs->mir, arms, count);
-    for (int i = 0; i < count; ++i) {
-        MirBlock const case_bb = new_bb(fs);
-        add_edge(fs, discr_bb, case_bb);
-        MirSwitchArmList_push(fs->mir, arms, (struct MirSwitchArm){
-            .bid = case_bb,
-        });
-    }
+    arms->count = count;
+
+    for (int i = 0; i < count; ++i)
+        add_edge(fs, discr_bb, new_bb(fs));
+
     return arms;
 }
 
@@ -1149,23 +1144,23 @@ static struct MirPlace lower_chain_expr(struct HirVisitor *V, struct HirChainExp
     MirBlock const input_bb = current_bb(fs);
     MirBlock const none_bb = new_bb(fs);
     MirBlock const after_bb = new_bb(fs);
-    add_edge(fs, input_bb, none_bb);
 
     struct MirPlace const object = lower_place(V, e->target);
     struct MirPlace const discr = new_local_literal(fs, BUILTIN_INT);
     emit_get_field(fs, e->span.start, target, object, 0, MISSING, discr);
 
     struct MirSwitchArmList *arms = allocate_switch_arms(fs, input_bb, 1);
-    terminate_switch(fs, e->span.start, discr, arms, none_bb);
+    terminate_switch(fs, e->span.start, discr, arms, PAW_TRUE);
     struct MirSwitchArm *arm = &K_LIST_FIRST(arms);
     arm->k = new_constant(fs, I2V(EXISTS), BUILTIN_INT).k;
 
-    set_current_bb(fs, arm->bid);
+    set_current_bb(fs, get_last_successor(fs));
     struct MirPlace const value = place_for_node(fs, e->id);
     emit_get_field(fs, e->span.start, target, object, 1, EXISTS, value);
     set_goto_edge(fs, e->span.start, after_bb);
 
     set_current_bb(fs, none_bb);
+    add_edge(fs, input_bb, none_bb);
     struct MirPlace const error = kind == BUILTIN_OPTION
         ? option_chain_error(fs, e->span.start, object, target)
         : result_chain_error(fs, e->span.start, object, target);
@@ -1437,7 +1432,7 @@ static struct MirPlace lower_closure_expr(struct HirVisitor *V, struct HirClosur
     MirBlock const first = new_bb(&fs);
 
     pawHir_visit_decl_list(L->V, e->params);
-    terminate_goto(&fs, e->span.start, first);
+    terminate_goto(&fs, e->span.start);
     add_edge(&fs, entry, first);
     set_current_bb(&fs, first);
 
@@ -1637,7 +1632,7 @@ static struct MirPlace lower_loop_expr(struct HirVisitor *V, struct HirLoopExpr 
     MirBlock const header_bb = new_bb(fs);
     MirBlock const after_bb = new_bb(fs);
     add_edge(fs, before_bb, header_bb);
-    terminate_goto(fs, e->span.start, header_bb);
+    terminate_goto(fs, e->span.start);
 
     struct BlockState bs;
     enter_block(fs, &bs, e->span, PAW_TRUE);
@@ -1734,15 +1729,16 @@ static void visit_guard(struct HirVisitor *V, struct Decision *d, struct MirPlac
     bindings->count = 0;
 
     struct MirPlace const cond = lower_place(V, d->guard.cond);
-    MirBlock const before_bb = current_bb(fs);
     MirBlock const then_bb = new_bb(fs);
     MirBlock const else_bb = new_bb(fs);
     MirBlock const join_bb = new_bb(fs);
-    add_edge(fs, before_bb, then_bb);
+
+    MirBlock const before_bb = current_bb(fs);
     add_edge(fs, before_bb, else_bb);
+    add_edge(fs, before_bb, then_bb);
 
     struct SourceLoc loc = NODE_START(d->guard.cond);
-    struct MirInstruction *branch = terminate_branch(fs, loc, cond, then_bb, else_bb);
+    struct MirInstruction *branch = terminate_branch(fs, loc, cond);
     set_current_bb(fs, then_bb);
     lower_match_body(V, d->guard.body, result);
     set_goto_edge(fs, loc, join_bb);
@@ -1851,17 +1847,18 @@ static void visit_sparse_cases(struct HirVisitor *V, struct Decision *d, struct 
     MirBlock const discr_bb = current_bb(fs);
     MirBlock const otherwise_bb = new_bb(fs);
     MirBlock const join_bb = new_bb(fs);
-    add_edge(fs, discr_bb, otherwise_bb);
 
     struct SourceLoc loc = d->multi.test.span.start;
     struct MirPlace const test = get_test_reg(fs, d->multi.test);
     struct MirSwitchArmList *arms = allocate_switch_arms(fs, discr_bb, cases->count);
-    terminate_switch(fs, loc, test, arms, otherwise_bb);
+    terminate_switch(fs, loc, test, arms, PAW_TRUE);
 
+    int index = 0;
     struct MatchCase const *pmc;
     struct MirSwitchArm *parm;
+    MirBlock const *psucc = get_successors(fs);
     K_LIST_ZIP (cases, pmc, arms, parm) {
-        set_current_bb(fs, parm->bid);
+        set_current_bb(fs, *psucc++);
         enum BuiltinKind const kind = cons_kind(pmc->cons.kind);
         parm->k = new_constant(fs, pmc->cons.value, kind).k;
 
@@ -1872,6 +1869,7 @@ static void visit_sparse_cases(struct HirVisitor *V, struct Decision *d, struct 
     // this implementation requires an "otherwise" case (binding or wildcard) to ensure
     // exhaustivness
     paw_assert(d->multi.rest != NULL);
+    add_edge(fs, discr_bb, otherwise_bb);
     set_current_bb(fs, otherwise_bb);
     visit_decision(V, d->multi.rest, result);
     set_goto_edge(fs, loc, join_bb);
@@ -1894,14 +1892,15 @@ static void visit_variant_cases(struct HirVisitor *V, struct Decision *d, struct
     emit_get_field(fs, loc, d->multi.test.type, variant, 0, 0, test);
 
     struct MirSwitchArmList *arms = allocate_switch_arms(fs, discr_bb, cases->count);
-    terminate_switch(fs, loc, test, arms, MIR_INVALID_BB);
+    terminate_switch(fs, loc, test, arms, PAW_FALSE);
 
-    struct MatchCase const *pmc;
     struct MirSwitchArm *parm;
+    struct MatchCase const *pmc;
+    MirBlock const *psucc = get_successors(fs);
     K_LIST_ZIP (cases, pmc, arms, parm) {
         Value const discr = I2V(pmc->cons.variant.index);
         parm->k = new_constant(fs, discr, BUILTIN_INT).k;
-        set_current_bb(fs, parm->bid);
+        set_current_bb(fs, *psucc++);
 
         allocate_match_vars(fs, variant, *pmc, PAW_TRUE, pmc->cons.variant.index);
         visit_decision(V, pmc->dec, result);
@@ -2110,7 +2109,7 @@ static void lower_hir_body_aux(struct LowerHir *L, struct HirFnDecl *fn, struct 
     MirBlock const first = new_bb(&fs);
 
     pawHir_visit_decl_list(L->V, fn->params);
-    terminate_goto(&fs, fn->span.start, first);
+    terminate_goto(&fs, fn->span.start);
     add_edge(&fs, entry, first);
     set_current_bb(&fs, first);
 
@@ -2206,7 +2205,7 @@ static void lower_global_constant(struct LowerHir *L, struct HirConstDecl *d)
     struct FunctionState fs;
     MirBlock const entry = enter_function(L, &fs, &bs, artificial);
     MirBlock const first = new_bb(&fs);
-    terminate_goto(&fs, d->span.start, first);
+    terminate_goto(&fs, d->span.start);
     add_edge(&fs, entry, first);
     set_current_bb(&fs, first);
 

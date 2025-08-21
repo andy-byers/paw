@@ -941,11 +941,6 @@ static void unbox_instruction(struct Unboxer *U, struct MirInstruction *instr)
         case kMirUnaryOp:
             unbox_unaryop(U, MirGetUnaryOp(instr));
             break;
-        case kMirGoto: {
-            struct MirGoto *x = MirGetGoto(instr);
-            NEW_INSTR(U, goto, x->loc, x->target);
-            break;
-        }
         default:
             unbox_other(U, instr);
     }

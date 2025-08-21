@@ -574,34 +574,6 @@ static void renumber_block_refs(struct Traversal *X, BlockMap *map, struct MirBl
 {
     rename_and_filter(X, map, data->predecessors, data);
     rename_and_filter(X, map, data->successors, NULL);
-
-    struct MirInstruction *terminator = K_LIST_LAST(data->instructions);
-    switch (MIR_KINDOF(terminator)) {
-        case kMirUnreachable:
-        case kMirReturn:
-            break;
-        case kMirBranch: {
-            struct MirBranch *t = MirGetBranch(terminator);
-            renumber_ref(X, map, &t->then_arm);
-            renumber_ref(X, map, &t->else_arm);
-            break;
-        }
-        case kMirSwitch: {
-            struct MirSwitch *t = MirGetSwitch(terminator);
-            for (int i = 0; i < t->arms->count; ++i)
-                renumber_ref(X, map, &K_LIST_AT(t->arms, i).bid);
-            if (MIR_ID_EXISTS(t->otherwise))
-                renumber_ref(X, map, &t->otherwise);
-            break;
-        }
-        case kMirGoto: {
-            struct MirGoto *t = MirGetGoto(terminator);
-            renumber_ref(X, map, &t->target);
-            break;
-        }
-        default:
-            PAW_UNREACHABLE();
-    }
 }
 
 //// TODO
@@ -1087,6 +1059,7 @@ void pawMir_merge_redundant_blocks(struct Mir *mir)
 
 struct Printer {
     struct Compiler *C;
+    struct MirBlockData *bb;
     struct Mir *mir;
     Buffer *buf;
     paw_Env *P;
@@ -1521,7 +1494,8 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
             struct MirBranch *t = MirGetBranch(instr);
             PRINT_LITERAL(P, "branch ");
             print_place(P, t->cond);
-            PRINT_FORMAT(P, " => [0: bb%d, 1: bb%d]", t->else_arm.value, t->then_arm.value);
+            PRINT_FORMAT(P, " => [0: bb%d, 1: bb%d]", MirBlockList_get(P->bb->successors, 0),
+                    MirBlockList_get(P->bb->successors, 1));
             break;
         }
         case kMirSwitch: {
@@ -1532,18 +1506,18 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
             for (int i = 0; i < t->arms->count; ++i) {
                 if (i > 0) PRINT_LITERAL(P, ", ");
                 struct MirSwitchArm arm = MirSwitchArmList_get(t->arms, i);
-                PRINT_FORMAT(P, "k%d: bb%d", arm.k.value, arm.bid.value);
+                PRINT_FORMAT(P, "k%d: bb%d", arm.k.value, MirBlockList_get(P->bb->successors, i).value);
             }
-            if (MIR_ID_EXISTS(t->otherwise)) {
+            if (t->has_otherwise) {
                 if (t->arms->count > 0)
                     PRINT_LITERAL(P, ", ");
-                PRINT_FORMAT(P, "_: bb%d", t->otherwise.value);
+                PRINT_FORMAT(P, "_: bb%d", K_LIST_LAST(P->bb->successors).value);
             }
             PRINT_LITERAL(P, "]");
             break;
         }
         case kMirGoto: {
-            PRINT_FORMAT(P, "goto bb%d", MirGetGoto(instr)->target.value);
+            PRINT_FORMAT(P, "goto bb%d", K_LIST_FIRST(P->bb->successors).value);
             break;
         }
     }
@@ -1556,6 +1530,7 @@ static void dump_block(struct Printer *P, MirBlock bb)
     DUMP_FORMAT(P, "bb%d {\n", bb.value);
     ++P->indent;
 
+    P->bb = block;
     dump_instruction_list(P, block->joins);
     dump_instruction_list(P, block->instructions);
 

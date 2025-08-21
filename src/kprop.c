@@ -478,29 +478,31 @@ static void remove_edge(struct KProp *K, MirBlock from, MirBlock to)
     MirBlockList_swap_remove(bto->predecessors, ipred);
 }
 
-static MirBlock single_branch_target(struct KProp *K, struct MirBranch *b, struct Cell *pcell, MirBlock from)
+static MirBlock single_branch_target(struct KProp *K, struct MirBranch *b, struct Cell *pcell, struct MirBlockData const *bb)
 {
-    paw_assert(pcell->info.kind == CELL_CONSTANT);
-    return V_TRUE(pcell->info.v) ? b->then_arm : b->else_arm;
+    paw_assert(pcell->info.kind == CELL_CONSTANT && bb->successors->count == 2);
+    return MirBlockList_get(bb->successors, V_TRUE(pcell->info.v));
 }
 
-static MirBlock single_switch_target(struct KProp *K, struct MirSwitch *s, struct Cell *pcell, MirBlock from)
+static MirBlock single_switch_target(struct KProp *K, struct MirSwitch *s, struct Cell *pcell, struct MirBlockData const *bb)
 {
     paw_assert(pcell->info.kind == CELL_CONSTANT);
     enum BuiltinKind kind = pawP_type2code(K->C, pcell->type);
     Value const target = pcell->info.v;
 
+    MirBlock const *pb;
     struct MirSwitchArm *parm;
-    K_LIST_FOREACH (s->arms, parm) {
+    K_LIST_ZIP (s->arms, parm, bb->successors, pb) {
         struct MirConstantData const *kdata = mir_const_data(K->mir, parm->k);
-        if ((kind != BUILTIN_FLOAT && V_UINT(kdata->value) == V_UINT(target)) //
-            || (kind == BUILTIN_FLOAT && V_FLOAT(kdata->value) == V_FLOAT(target)))
-            return parm->bid;
+        if ((kind != BUILTIN_FLOAT && V_UINT(kdata->value) == V_UINT(target))
+                || (kind == BUILTIN_FLOAT && V_FLOAT(kdata->value) == V_FLOAT(target)))
+            return *pb;
     }
-    if (MIR_ID_EXISTS(s->otherwise))
-        return s->otherwise;
 
-    PAW_UNREACHABLE();
+    // Matches are exhaustive, so if a matching case was not found above, then there
+    // must exist a catch-all case.
+    paw_assert(s->has_otherwise && s->arms->count == bb->successors->count - 1);
+    return *pb; // pointer left on last element
 }
 
 static void into_load_k(struct MirInstruction *instr, MirConstant k, struct MirPlace output)
@@ -510,13 +512,12 @@ static void into_load_k(struct MirInstruction *instr, MirConstant k, struct MirP
     MirGetLoadConstant(instr)->k = k;
 }
 
-static void into_goto(struct KProp *K, struct MirInstruction *instr, MirBlock b)
+static void into_goto(struct KProp *K, struct MirInstruction *instr)
 {
     instr->Goto_ = (struct MirGoto){
         .kind = kMirGoto,
         .loc = instr->hdr.loc,
         .mid = instr->hdr.mid,
-        .target = b,
     };
 
     K->altered = PAW_TRUE;
@@ -550,6 +551,7 @@ static void visit_expr(struct KProp *K, struct MirInstruction *instr, MirBlock b
             return;
         }
     }
+    struct MirBlockData const *bb = mir_bb_data(K->mir, b);
 
     switch (MIR_KINDOF(instr)) {
         case kMirMove: {
@@ -606,12 +608,12 @@ static void visit_expr(struct KProp *K, struct MirInstruction *instr, MirBlock b
             struct MirBranch *x = MirGetBranch(instr);
             struct Cell *cond = get_cell(K, x->cond);
             if (cond->info.kind == CELL_CONSTANT) {
-                MirBlock const s = single_branch_target(K, x, cond, b);
+                MirBlock const s = single_branch_target(K, x, cond, bb);
                 FlowWorklist_push(K, K->flow, FLOW_EDGE(b, s));
             } else {
                 paw_assert(cond->info.kind == CELL_BOTTOM);
-                FlowWorklist_push(K, K->flow, FLOW_EDGE(b, x->then_arm));
-                FlowWorklist_push(K, K->flow, FLOW_EDGE(b, x->else_arm));
+                FlowWorklist_push(K, K->flow, FLOW_EDGE(b, MirBlockList_get(bb->successors, 0)));
+                FlowWorklist_push(K, K->flow, FLOW_EDGE(b, MirBlockList_get(bb->successors, 1)));
             }
             break;
         }
@@ -619,15 +621,13 @@ static void visit_expr(struct KProp *K, struct MirInstruction *instr, MirBlock b
             struct MirSwitch *x = MirGetSwitch(instr);
             struct Cell *discr = get_cell(K, x->discr);
             if (discr->info.kind == CELL_CONSTANT) {
-                MirBlock const s = single_switch_target(K, x, discr, b);
+                MirBlock const s = single_switch_target(K, x, discr, bb);
                 FlowWorklist_push(K, K->flow, FLOW_EDGE(b, s));
             } else {
                 paw_assert(discr->info.kind == CELL_BOTTOM);
-                struct MirSwitchArm const *parm;
-                K_LIST_FOREACH (x->arms, parm)
-                    FlowWorklist_push(K, K->flow, FLOW_EDGE(b, parm->bid));
-                if (MIR_ID_EXISTS(x->otherwise))
-                    FlowWorklist_push(K, K->flow, FLOW_EDGE(b, x->otherwise));
+                MirBlock const *pb;
+                K_LIST_FOREACH (bb->successors, pb)
+                    FlowWorklist_push(K, K->flow, FLOW_EDGE(b, *pb));
             }
             break;
         }
@@ -786,7 +786,7 @@ static void transform_code(struct KProp *K)
 
         MirBlock to; // single live successor
         if (prune_dead_successors(K, from, &to))
-            into_goto(K, K_LIST_LAST(block->instructions), to);
+            into_goto(K, K_LIST_LAST(block->instructions));
     }
 }
 

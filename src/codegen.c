@@ -85,6 +85,18 @@ DEFINE_LIST(struct Generator, JumpTable, struct JumpTarget)
 DEFINE_LIST(struct Generator, PolicyList, struct PolicyInfo)
 DEFINE_MAP(struct Generator, ToplevelMap, pawP_alloc, IR_TYPE_HASH, IR_TYPE_EQUALS, IrType *, int)
 
+static MirBlock get_successor(struct FnState *fs, int index)
+{
+    struct MirBlockData const *bb = mir_bb_data(fs->mir, fs->b);
+    return MirBlockList_get(bb->successors, index);
+}
+
+static MirBlock get_last_successor(struct FnState *fs)
+{
+    struct MirBlockData const *bb = mir_bb_data(fs->mir, fs->b);
+    return K_LIST_LAST(bb->successors);
+}
+
 static void add_jump_target(struct Generator *G, MirBlock bid)
 {
     JumpTable_push(G, G->fs->jumps, (struct JumpTarget){
@@ -1090,7 +1102,10 @@ static void add_edge_from_here(struct Generator *G, MirBlock to)
 
 static paw_Bool code_goto(struct MirVisitor *V, struct MirGoto *x)
 {
-    add_edge_from_here(V->ud, x->target);
+    struct Generator *G = V->ud;
+    struct FnState *fs = G->fs;
+
+    add_edge_from_here(V->ud, get_last_successor(fs));
     return PAW_FALSE;
 }
 
@@ -1100,8 +1115,8 @@ static paw_Bool code_branch(struct MirVisitor *V, struct MirBranch *x)
     struct FnState *fs = G->fs;
 
     int const else_jump = emit_cond_jump(fs, REG(x->cond), OP_JUMPF);
-    add_edge(G, else_jump, x->else_arm);
-    add_edge_from_here(G, x->then_arm);
+    add_edge(G, else_jump, get_successor(fs, 0));
+    add_edge_from_here(G, get_successor(fs, 1));
     return PAW_FALSE;
 }
 
@@ -1197,43 +1212,46 @@ DEFINE_MAP(struct Generator, BlockCounts, pawP_alloc, P_ID_HASH, P_ID_EQUALS, Mi
 
 static paw_Bool code_literal_switch(struct MirVisitor *V, struct MirSwitch *x)
 {
-    paw_assert(MIR_ID_EXISTS(x->otherwise));
+    paw_assert(x->has_otherwise);
     struct Generator *G = V->ud;
     struct FnState *fs = G->fs;
 
-    struct MirSwitchArm *parm;
     struct MirPlace const d = x->discr;
-    K_LIST_FOREACH (x->arms, parm) {
+
+    int index;
+    struct MirSwitchArm *parm;
+    K_LIST_ENUMERATE (x->arms, index, parm) {
         int const next_jump = code_testk(fs, d, parm->k, REG_TYPE(G, d.r));
-        add_edge(G, next_jump, parm->bid);
+        add_edge(G, next_jump, get_successor(fs, index));
     }
 
-    add_edge_from_here(G, x->otherwise);
+    add_edge_from_here(G, get_last_successor(fs));
     return PAW_FALSE;
 }
 
 static paw_Bool code_sparse_switch(struct MirVisitor *V, struct MirSwitch *x)
 {
-    paw_assert(!MIR_ID_EXISTS(x->otherwise));
+    paw_assert(!x->has_otherwise);
     struct Generator *G = V->ud;
     struct FnState *fs = G->fs;
 
     // Determine which basic block appears the most as the target of a case label.
     // This basic block will become the target of the "otherwise" case.
     MirBlock target_block = MIR_INVALID_BB;
-    struct MirSwitchArm const *parm;
+    struct MirBlockData const *bb = mir_bb_data(fs->mir, fs->b);
     {
         BlockCounts *counts = BlockCounts_new(G);
         int target_count = 0;
+        MirBlock const *pb;
 
-        K_LIST_FOREACH (x->arms, parm)
-            BlockCounts_insert(G, counts, parm->bid, 0);
+        K_LIST_FOREACH (bb->successors, pb)
+            BlockCounts_insert(G, counts, *pb, 0);
 
-        K_LIST_FOREACH (x->arms, parm) {
-            int const count = ++*BlockCounts_get(G, counts, parm->bid);
+        K_LIST_FOREACH (bb->successors, pb) {
+            int const count = ++*BlockCounts_get(G, counts, *pb);
             if (count > target_count) {
-                target_block = parm->bid;
                 target_count = count;
+                target_block = *pb;
             }
         }
 
@@ -1241,12 +1259,14 @@ static paw_Bool code_sparse_switch(struct MirVisitor *V, struct MirSwitch *x)
         BlockCounts_delete(G, counts);
     }
 
+    MirBlock const *pb;
+    struct MirSwitchArm const *parm;
     struct MirPlace const d = x->discr;
-    K_LIST_FOREACH (x->arms, parm) {
-        if (!MIR_ID_EQUALS(parm->bid, target_block)) {
+    K_LIST_ZIP (x->arms, parm, bb->successors, pb) {
+        if (!MIR_ID_EQUALS(*pb, target_block)) {
             struct MirConstantData const *kdata = mir_const_data(fs->mir, parm->k);
             int const next_jump = code_testi(fs, x->discr, CAST(int, V_INT(kdata->value)));
-            add_edge(G, next_jump, parm->bid);
+            add_edge(G, next_jump, *pb);
         }
     }
 
@@ -1256,16 +1276,17 @@ static paw_Bool code_sparse_switch(struct MirVisitor *V, struct MirSwitch *x)
 
 static void code_dense_switch(struct MirVisitor *V, struct MirSwitch *x)
 {
-    paw_assert(!MIR_ID_EXISTS(x->otherwise));
+    paw_assert(!x->has_otherwise);
     struct Generator *G = V->ud;
     struct FnState *fs = G->fs;
 
     code_ABx(fs, OP_JUMPTBL, REG(x->discr), x->arms->count);
     int const jump_pc = fs->pc;
 
-    struct MirSwitchArm *parm;
-    K_LIST_FOREACH (x->arms, parm)
-        add_tbl_edge(G, emit_tbl_jump(fs), jump_pc, parm->bid);
+    MirBlock const *pb;
+    struct MirBlockData const *bb = mir_bb_data(fs->mir, fs->b);
+    K_LIST_FOREACH (bb->successors, pb)
+        add_tbl_edge(G, emit_tbl_jump(fs), jump_pc, *pb);
 }
 
 static paw_Bool code_switch(struct MirVisitor *V, struct MirSwitch *x)
@@ -1273,7 +1294,7 @@ static paw_Bool code_switch(struct MirVisitor *V, struct MirSwitch *x)
     struct Generator *G = V->ud;
     struct FnState *fs = G->fs;
 
-    if (MIR_ID_EXISTS(x->otherwise))
+    if (x->has_otherwise)
         return code_literal_switch(V, x);
 
     int const n = x->arms->count;
@@ -1306,9 +1327,9 @@ static paw_Bool code_block(struct MirVisitor *V, MirBlock b)
     struct FnState *fs = G->fs;
     fs->b = b;
 
-    struct MirBlockData *block = mir_bb_data(fs->mir, b);
+    struct MirBlockData *bb = mir_bb_data(fs->mir, b);
     handle_jump_logic(G, b);
-    pawMir_visit_instruction_list(V, block->instructions);
+    pawMir_visit_instruction_list(V, bb->instructions);
     return PAW_FALSE;
 }
 
