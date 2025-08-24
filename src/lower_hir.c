@@ -984,8 +984,8 @@ static struct MirPlace lower_logical_expr(struct HirVisitor *V, struct HirLogica
 
     struct MirPlace const result = new_local_literal(fs, BUILTIN_BOOL);
     struct MirPlace const first = lower_place(V, e->lhs);
-    add_edge(fs, current_bb(fs), e->is_and ? lhs_bb : rhs_bb);
-    add_edge(fs, current_bb(fs), e->is_and ? rhs_bb : lhs_bb);
+    add_edge(fs, current_bb(fs), e->is_and ? rhs_bb : lhs_bb); // "then" block
+    add_edge(fs, current_bb(fs), e->is_and ? lhs_bb : rhs_bb); // "else" block
     terminate_branch(fs, e->span.start, first);
 
     set_current_bb(fs, lhs_bb);
@@ -1734,8 +1734,8 @@ static void visit_guard(struct HirVisitor *V, struct Decision *d, struct MirPlac
     MirBlock const join_bb = new_bb(fs);
 
     MirBlock const before_bb = current_bb(fs);
-    add_edge(fs, before_bb, else_bb);
     add_edge(fs, before_bb, then_bb);
+    add_edge(fs, before_bb, else_bb);
 
     struct SourceLoc loc = NODE_START(d->guard.cond);
     struct MirInstruction *branch = terminate_branch(fs, loc, cond);

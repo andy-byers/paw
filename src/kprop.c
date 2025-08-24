@@ -481,7 +481,7 @@ static void remove_edge(struct KProp *K, MirBlock from, MirBlock to)
 static MirBlock single_branch_target(struct KProp *K, struct MirBranch *b, struct Cell *pcell, struct MirBlockData const *bb)
 {
     paw_assert(pcell->info.kind == CELL_CONSTANT && bb->successors->count == 2);
-    return MirBlockList_get(bb->successors, V_TRUE(pcell->info.v));
+    return MirBlockList_get(bb->successors, !V_TRUE(pcell->info.v));
 }
 
 static MirBlock single_switch_target(struct KProp *K, struct MirSwitch *s, struct Cell *pcell, struct MirBlockData const *bb)

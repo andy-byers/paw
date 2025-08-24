@@ -1115,8 +1115,8 @@ static paw_Bool code_branch(struct MirVisitor *V, struct MirBranch *x)
     struct FnState *fs = G->fs;
 
     int const else_jump = emit_cond_jump(fs, REG(x->cond), OP_JUMPF);
-    add_edge(G, else_jump, get_successor(fs, 0));
-    add_edge_from_here(G, get_successor(fs, 1));
+    add_edge(G, else_jump, get_successor(fs, 1));
+    add_edge_from_here(G, get_successor(fs, 0));
     return PAW_FALSE;
 }
 

@@ -461,13 +461,12 @@ static struct MirBlockList *copy_blocks(struct Traversal *X, struct MirBlockList
 
 static void visit_postorder(struct Traversal *X, VisitedMap *visited, struct VisitStack *stack, MirBlock bb)
 {
-    if (check_visited(X, visited, bb))
-        return;
-    struct MirBlockData *data = mir_bb_data(X->mir, bb);
-    VisitStack_push(X, stack, ((struct Successors){
-                                  .successors = copy_blocks(X, data->successors),
-                                  .block = bb,
-                              }));
+    if (check_visited(X, visited, bb)) return;
+    struct MirBlockData const *data = mir_bb_data(X->mir, bb);
+    VisitStack_push(X, stack, (struct Successors){
+        .successors = copy_blocks(X, data->successors),
+        .block = bb,
+    });
 }
 
 static void traverse_postorder(struct Traversal *X, VisitedMap *visited, struct VisitStack *stack)

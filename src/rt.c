@@ -892,7 +892,7 @@ top:
 
             vm_case(JUMPF) :
             {
-                if (!V_TRUE(*ra))
+                if (V_FALSE(*ra))
                     pc += GET_sBx(opcode);
             }
 
