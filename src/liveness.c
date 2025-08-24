@@ -155,18 +155,34 @@ static void dump_live_intervals(struct Liveness *L, struct MirIntervalMap *inter
 
 #endif // PAW_DEBUG_EXTRA
 
-// Return a list of all blocks containing back edges to a loop header
-static struct MirBlockList *determine_loop_ends(struct Liveness *L, MirBlock header)
+static paw_Bool contains_block(MirBlockList *blocks, MirBlock b)
+{
+    MirBlock const *pb;
+    K_LIST_FOREACH (blocks, pb) {
+        if (MIR_ID_EQUALS(*pb, b))
+            return PAW_TRUE;
+    }
+    return PAW_FALSE;
+}
+
+static void add_loop_ends(struct Liveness *L, MirBlock header, MirBlockList *loop_ends)
 {
     struct MirBlockData *data = mir_bb_data(L->mir, header);
-    struct MirBlockList *loop_ends = MirBlockList_new_from(L->mir, L->pool);
 
     MirBlock const *pb;
     K_LIST_FOREACH (data->predecessors, pb) {
-        if (pb->value >= header.value) {
+        if (pb->value >= header.value && !contains_block(loop_ends, *pb)) {
             MirBlockList_push(L->mir, loop_ends, *pb);
+            add_loop_ends(L, *pb, loop_ends);
         }
     }
+}
+
+// Return a list of all blocks containing back edges to a loop header
+static MirBlockList *determine_loop_ends(struct Liveness *L, MirBlock header)
+{
+    MirBlockList *loop_ends = MirBlockList_new_from(L->mir, L->pool);
+    add_loop_ends(L, header, loop_ends);
     return loop_ends;
 }
 
@@ -176,14 +192,14 @@ static void compute_liveness(struct Liveness *L, struct Mir *mir, struct MirBloc
         MirBlock const b = MirBlockList_get(order, ib);
         struct MirBlockData *block = mir_bb_data(mir, b);
 
-        MirBlock *ps;
-        MirRegister *pr;
-        struct MirInstruction **pinstr;
+        MirBlock const *ps;
+        MirRegister const *pr;
+        struct MirInstruction *const *pinstr;
 
         // "live" is the union of the sets of live registers from the successors of "b"
         struct MirRegisterList *live = MirRegisterList_new_from(L->mir, L->pool);
         K_LIST_FOREACH (block->successors, ps) {
-            struct MirRegisterList *set = RegisterSetList_get(L->live, ps->value);
+            struct MirRegisterList const *set = RegisterSetList_get(L->live, ps->value);
             K_LIST_FOREACH (set, pr) {
                 add_live_reg(L, live, *pr);
             }
@@ -192,9 +208,9 @@ static void compute_liveness(struct Liveness *L, struct Mir *mir, struct MirBloc
         // account for inputs to phi functions in successor blocks, which are live from
         // where they are defined until the end of this block
         K_LIST_FOREACH (block->successors, ps) {
-            struct MirBlockData *sblock = mir_bb_data(mir, *ps);
+            struct MirBlockData const *sblock = mir_bb_data(mir, *ps);
             K_LIST_FOREACH (sblock->joins, pinstr) {
-                struct MirPhi *phi = MirGetPhi(*pinstr);
+                struct MirPhi const *phi = MirGetPhi(*pinstr);
                 int const p = mir_which_pred(L->mir, *ps, b);
                 struct MirPlace const input = MirPlaceList_get(phi->inputs, p);
                 if (input.kind == MIR_PLACE_LOCAL) add_live_reg(L, live, input.r);
@@ -217,14 +233,14 @@ static void compute_liveness(struct Liveness *L, struct Mir *mir, struct MirBloc
         // account for phi function outputs, which are live from the start of the current
         // block to the location they are last used
         K_LIST_FOREACH (block->joins, pinstr) {
-            struct MirPhi *phi = MirGetPhi(*pinstr);
+            struct MirPhi const *phi = MirGetPhi(*pinstr);
             remove_live_reg(L, live, phi->output.r);
         }
 
         // Special handling for loop headers. Variables live at the loop header must be
         // live until the end of the loop, since they are needed in subsequent iterations.
         MirBlock const *pb;
-        struct MirBlockList *loop_ends = determine_loop_ends(L, b);
+        struct MirBlockList const *loop_ends = determine_loop_ends(L, b);
         K_LIST_FOREACH (loop_ends, pb) {
             struct MirBlockData *end = mir_bb_data(mir, *pb);
             K_LIST_FOREACH (live, pr)

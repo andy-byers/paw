@@ -1018,42 +1018,163 @@ struct MirLocationList *pawMir_compute_locations(struct Mir *mir)
     return locations;
 }
 
-void pawMir_merge_redundant_blocks(struct Mir *mir)
+// Remove all "forwarding blocks" from the MIR
+// A forwarding block is a basic blocks whose only purpose is to forward control to
+// another basic block.
+static MirBlock get_common_block(MirBlockList *blocks)
 {
-    struct Compiler *C = mir->C;
+    MirBlock const first = K_LIST_FIRST(blocks);
+    for (int i = 0; i < blocks->count; ++i) {
+        if (!MIR_ID_EQUALS(first, MirBlockList_get(blocks, i)))
+           return MIR_INVALID_BB;
+    }
+    return first;
+}
 
-    int index;
-    struct MirBlockData *const *pbb;
-    K_LIST_ENUMERATE (mir->blocks, index, pbb) {
-        if (index < 2) continue; // keep entry block
-        MirBlock const bto = MIR_BB(index);
-        struct MirBlockData *to = *pbb;
-        if (to->predecessors->count != 1) continue;
-        MirBlock const bfrom = K_LIST_FIRST(to->predecessors);
-        struct MirBlockData *from = mir_bb_data(mir, bfrom);
-        if (from->successors->count != 1) continue;
-        // remove goto and merge instruction lists
-        --from->instructions->count;
-        paw_assert(to->joins->count == 0);
-        struct MirInstruction *const *pinstr;
-        K_LIST_FOREACH (to->instructions, pinstr) {
-            MirInstructionList_push(mir, from->instructions, *pinstr);
+static void detach_unused_block(struct Mir *mir, struct MirBlockData *bb)
+{
+    paw_assert(bb->joins->count == 0 && bb->instructions->count > 0);
+    K_LIST_FIRST(bb->instructions) = K_LIST_LAST(bb->instructions);
+    K_LIST_FIRST(bb->instructions)->hdr.kind = kMirUnreachable;
+    bb->instructions->count = 1;
+    bb->predecessors->count = 0;
+    bb->successors->count = 0;
+}
+
+static void merge_adjacent_blocks(struct Mir *mir, MirBlock bfrom, struct MirBlockData *from, MirBlock bto, struct MirBlockData *to)
+{
+    struct MirInstruction *unused_term = K_LIST_LAST(from->instructions);
+    MirBlockList *unused_succ = from->successors;
+
+    // remove goto and merge instruction lists
+    --from->instructions->count;
+    paw_assert(to->joins->count == 0);
+    struct MirInstruction *const *pinstr;
+    K_LIST_FOREACH (to->instructions, pinstr)
+        MirInstructionList_push(mir, from->instructions, *pinstr);
+
+    // fix back references of removed block's successors
+    MirBlock *pp;
+    MirBlock const *ps;
+    K_LIST_FOREACH (to->successors, ps) {
+        struct MirBlockData *s = mir_bb_data(mir, *ps);
+        K_LIST_FOREACH (s->predecessors, pp) {
+            if (MIR_ID_EQUALS(*pp, bto)) *pp = bfrom;
         }
-        // fix back references of removed block's successors
-        MirBlock *pp;
-        MirBlock const *ps;
-        K_LIST_FOREACH (to->successors, ps) {
-            struct MirBlockData *s = mir_bb_data(mir, *ps);
-            K_LIST_FOREACH (s->predecessors, pp) {
-                if (MIR_ID_EQUALS(*pp, bto)) *pp = bfrom;
-            }
+    }
+    from->successors = to->successors;
+
+    // detach the unused basic block, keeping it valid and being careful to avoid
+    // modifying components transferred to "from"
+    K_LIST_LAST(to->instructions) = unused_term;
+    to->successors = unused_succ;
+    detach_unused_block(mir, to);
+}
+
+static void thread_jump_through(struct Mir *mir, MirBlock bfrom, struct MirBlockData *from, MirBlock bto, struct MirBlockData *to)
+{
+    int const target = mir_which_pred(mir, bto, bfrom);
+
+    {
+        // modify references to "bfrom" so they point to "bto"
+        MirBlock const *ppred;
+        K_LIST_FOREACH (from->predecessors, ppred) {
+            struct MirBlockData const *predecessor = mir_bb_data(mir, *ppred);
+            int const index = mir_which_succ(mir, *ppred, bfrom);
+            MirBlockList_set(predecessor->successors, index, bto);
         }
-        from->successors = to->successors;
-        to->successors = MirBlockList_new(mir);
-        to->predecessors->count = 0;
     }
 
+    {
+        // rewrite predecessors of successor
+        int index;
+        MirBlock const *ppred, *ppred2;
+        MirBlockList *predecessors = MirBlockList_new(mir);
+        K_LIST_ENUMERATE (to->predecessors, index, ppred) {
+            if (index == target) {
+                K_LIST_FOREACH (from->predecessors, ppred2)
+                    MirBlockList_push(mir, predecessors, *ppred2);
+            } else {
+                MirBlockList_push(mir, predecessors, *ppred);
+            }
+        }
+        to->predecessors = predecessors;
+    }
+
+    detach_unused_block(mir, from);
+    MIR_VALIDATE_GRAPH(mir);
+}
+
+void pawMir_merge_redundant_blocks(struct Mir *mir)
+{
+    paw_Bool changed;
+    do {
+        changed = PAW_FALSE;
+        MirBlockList *order = pawMir_traverse_rpo(mir->C, mir);
+        for (int i = 1; i < order->count; ++i) {
+            MirBlock const p = MirBlockList_get(order, i);
+            struct MirBlockData *pred = mir_bb_data(mir, p);
+            if (pred->predecessors->count == 0) continue; // disconnected
+            struct MirInstruction *term = K_LIST_LAST(pred->instructions);
+            if (MirIsBranch(term) || MirIsSwitch(term)) {
+                // Attempt to convert a branch into a jump. This is possible when all cases
+                // jump to the same basic block.
+                MirBlock const common = get_common_block(pred->successors);
+                if (MIR_ID_EXISTS(common)) { // convert to jump
+                    struct MirBlockData *succ = mir_bb_data(mir, common);
+                    if (succ->joins->count == 0) {
+                        term->hdr.kind = kMirGoto;
+                        K_LIST_FIRST(pred->successors) = common;
+                        pred->successors->count = 1;
+                        changed = PAW_TRUE;
+                        // remove redundant copies of "common"
+                        int count = 0;
+                        MirBlock const *pp;
+                        MirBlockList *predecessors = MirBlockList_new(mir);
+                        K_LIST_FOREACH (succ->predecessors, pp) {
+                            if (!MIR_ID_EQUALS(p, *pp) || count++ == 0)
+                                MirBlockList_push(mir, predecessors, *pp);
+                        }
+                        MirBlockList_delete(mir, succ->predecessors);
+                        succ->predecessors = predecessors;
+                    }
+                }
+            }
+            if (MirIsGoto(term)) {
+                // Attempt to simplify a jump from "p" to "s". Note that the edge "p -> s" may
+                // have been created by the branch-to-jump conversion above.
+                paw_assert(pred->successors->count == 1);
+                MirBlock const s = K_LIST_LAST(pred->successors);
+                struct MirBlockData *succ = mir_bb_data(mir, s);
+                if (succ->predecessors->count == 1) {
+                    // "p" and "s" can be trivially merged
+                    merge_adjacent_blocks(mir, p, pred, s, succ);
+                    changed = PAW_TRUE;
+                } else if (pred->joins->count == 0 && succ->joins->count == 0
+                        && pred->instructions->count == 1) {
+                    // predecessor is empty except for the jump
+                    thread_jump_through(mir, p, pred, s, succ);
+                    changed = PAW_TRUE;
+                } else if (succ->joins->count == 0 && succ->instructions->count == 1
+                        && !MirIsGoto(K_LIST_LAST(succ->instructions))) {
+                    // successor is empty except for a branch or exit
+                    MirBlockList *unused = pred->successors;
+                    // overwrite jump with other terminator
+                    K_LIST_LAST(pred->instructions) = K_LIST_LAST(succ->instructions);
+                    pred->successors = succ->successors;
+                    // successor is unreachable and leads nowhere
+                    K_LIST_LAST(succ->instructions) = term;
+                    term->hdr.kind = kMirUnreachable;
+                    succ->successors = unused;
+                    detach_unused_block(mir, succ);
+                    changed = PAW_TRUE;
+                }
+            }
+        }
+    } while (changed);
+
     pawMir_remove_unreachable_blocks(mir);
+    MIR_VALIDATE_GRAPH(mir);
 }
 
 
@@ -1631,7 +1752,7 @@ static void dump_block_list(struct Printer *P, struct MirBlockList *blocks)
     for (int i = 0; i < blocks->count; ++i) {
         if (i > 0)
             PRINT_LITERAL(P, ", ");
-        PRINT_FORMAT(P, "bb%d", MirBlockList_get(blocks, i).r.value);
+        PRINT_FORMAT(P, "bb%d", MirBlockList_get(blocks, i).value);
     }
 }
 
@@ -1683,8 +1804,42 @@ char const *pawMir_dump_graph(struct Compiler *C, struct Mir *mir)
                    child);
     }
 
-    pawL_push_result(P, &buf);
-    return paw_str(P, -1);
+    Str const *s = pawP_scan_nstr(C, C->strings, buf.data, buf.size);
+    pawL_discard_result(P, &buf);
+    return s->text;
 }
 
 #endif // PAW_DEBUG_EXTRA
+
+void pawMir_validate_graph(struct Mir *mir)
+{
+    int index;
+    struct MirBlockData *const *ppred;
+    K_LIST_ENUMERATE(mir->blocks, index, ppred) {
+        struct MirBlockData const *pred = *ppred;
+        MirBlock const p = MIR_BB(index);
+
+        paw_assert(pred->instructions->count > 0);
+        struct MirInstruction const *term = K_LIST_LAST(pred->instructions);
+        switch (MIR_KINDOF(term)) {
+            case kMirGoto:
+                paw_assert(pred->successors->count == 1);
+                break;
+            case kMirBranch:
+                paw_assert(pred->successors->count == 2);
+                break;
+            case kMirSwitch:
+                paw_assert(pred->successors->count >= 1);
+                break;
+            default:
+                paw_assert(MirIsReturn(term) || MirIsUnreachable(term));
+                paw_assert(pred->successors->count == 0);
+        }
+
+        MirBlock const *ps;
+        K_LIST_FOREACH (pred->successors, ps) {
+            struct MirBlockData const *succ = mir_bb_data(mir, *ps);
+            mir_which_pred(mir, *ps, p); // crashes if not found
+        }
+    }
+}

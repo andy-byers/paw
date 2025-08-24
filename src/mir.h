@@ -1184,7 +1184,13 @@ void pawMir_materialize_constants(struct Mir *mir);
 // Push a human-readable representation of the MIR on to the stack
 // Returns a pointer to the buffer containing null-terminated text.
 char const *pawMir_dump(struct Mir *mir);
-char const *pawMir_dump_info(struct Compiler *C, struct Mir *mir);
 char const *pawMir_dump_graph(struct Compiler *C, struct Mir *mir);
+
+#if NDEBUG
+# define MIR_VALIDATE_GRAPH(Mir_)
+#else
+void pawMir_validate_graph(struct Mir *mir);
+# define MIR_VALIDATE_GRAPH(Mir_) pawMir_validate_graph(Mir_)
+#endif // !NDEBUG
 
 #endif // PAW_MIR_H

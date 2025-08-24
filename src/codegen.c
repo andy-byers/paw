@@ -1301,6 +1301,7 @@ static paw_Bool code_switch(struct MirVisitor *V, struct MirSwitch *x)
     int const m = n;
 
     code_sparse_switch(V, x);
+    // TODO: get jump table to work
 //    switch (choose_switch_protocol(fs, n, m)) {
 //        case SWITCH_TEST_CHAIN:
 //            code_sparse_switch(V, x);
