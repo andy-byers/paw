@@ -491,11 +491,11 @@ static MirBlock single_switch_target(struct KProp *K, struct MirSwitch *s, struc
     Value const target = pcell->info.v;
 
     MirBlock const *pb;
-    struct MirSwitchArm *parm;
+    struct MirSwitchArm const *parm;
     K_LIST_ZIP (s->arms, parm, bb->successors, pb) {
-        struct MirConstantData const *kdata = mir_const_data(K->mir, parm->k);
-        if ((kind != BUILTIN_FLOAT && V_UINT(kdata->value) == V_UINT(target))
-                || (kind == BUILTIN_FLOAT && V_FLOAT(kdata->value) == V_FLOAT(target)))
+        Value const value = mir_const_data(K->mir, parm->k)->value;
+        if ((kind != BUILTIN_FLOAT && V_UINT(value) == V_UINT(target))
+                || (kind == BUILTIN_FLOAT && V_FLOAT(value) == V_FLOAT(target)))
             return *pb;
     }
 

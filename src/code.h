@@ -219,9 +219,8 @@ enum TraitKind {
 #define K_LIST_ZIP(ListA_, PtrA_, ListB_, PtrB_)                     \
     for (int i_ = ((PtrA_) = (ListA_)->data, (PtrB_) = (ListB_)->data, 0); \
             i_ < (ListA_)->count && i_ < (ListB_)->count; ++i_, ++(PtrA_), ++(PtrB_))
-#define K_LIST_XFOREACH(List_, Ptr_) \
-    __typeof__((List_)->data) Ptr_;  \
-    for (int i_ = 0; i_ < (List_)->count && (Ptr_ = (List_)->data + i_ /* always 1 */); ++i_)
+#define K_LIST_BEGIN(List_) ((List_)->data)
+#define K_LIST_END(List_) ((List_)->data + (List_)->count - 1)
 
 #define K_MAP_MIN 4
 #define K_MAP_MAX (1 << 28)

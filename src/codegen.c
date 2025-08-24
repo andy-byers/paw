@@ -85,16 +85,19 @@ DEFINE_LIST(struct Generator, JumpTable, struct JumpTarget)
 DEFINE_LIST(struct Generator, PolicyList, struct PolicyInfo)
 DEFINE_MAP(struct Generator, ToplevelMap, pawP_alloc, IR_TYPE_HASH, IR_TYPE_EQUALS, IrType *, int)
 
+static struct MirBlockData *current_bb(struct FnState *fs)
+{
+    return mir_bb_data(fs->mir, fs->b);
+}
+
 static MirBlock get_successor(struct FnState *fs, int index)
 {
-    struct MirBlockData const *bb = mir_bb_data(fs->mir, fs->b);
-    return MirBlockList_get(bb->successors, index);
+    return MirBlockList_get(current_bb(fs)->successors, index);
 }
 
 static MirBlock get_last_successor(struct FnState *fs)
 {
-    struct MirBlockData const *bb = mir_bb_data(fs->mir, fs->b);
-    return K_LIST_LAST(bb->successors);
+    return K_LIST_LAST(current_bb(fs)->successors);
 }
 
 static void add_jump_target(struct Generator *G, MirBlock bid)
@@ -682,7 +685,7 @@ static void code_constant(struct MirVisitor *V, struct MirLoadConstant *x)
     } else if (kdata->kind == BUILTIN_CHAR) {
         code_smi(fs, x->output, kdata->value.c);
     } else {
-        code_ABx(fs, OP_LOADK, REG(x->output), x->k.value);
+        code_AB(fs, OP_LOADK, REG(x->output), x->k.value);
     }
 }
 
@@ -1100,6 +1103,13 @@ static void add_edge_from_here(struct Generator *G, MirBlock to)
         add_edge(G, emit_jump(fs), to);
 }
 
+static void code_cond_jump(struct FnState *fs, Op op, struct MirPlace cond)
+{
+    int const else_jump = emit_cond_jump(fs, REG(cond), op);
+    add_edge(fs->G, else_jump, get_successor(fs, 1));
+    add_edge_from_here(fs->G, get_successor(fs, 0));
+}
+
 static paw_Bool code_goto(struct MirVisitor *V, struct MirGoto *x)
 {
     struct Generator *G = V->ud;
@@ -1114,16 +1124,14 @@ static paw_Bool code_branch(struct MirVisitor *V, struct MirBranch *x)
     struct Generator *G = V->ud;
     struct FnState *fs = G->fs;
 
-    int const else_jump = emit_cond_jump(fs, REG(x->cond), OP_JUMPF);
-    add_edge(G, else_jump, get_successor(fs, 1));
-    add_edge_from_here(G, get_successor(fs, 0));
+    code_cond_jump(fs, OP_JUMPZ, x->cond);
     return PAW_FALSE;
 }
 
 static int code_testk(struct FnState *fs, struct MirPlace test, MirConstant k, IrType *type)
 {
     const enum BuiltinKind code = pawP_type2code(fs->G->C, type);
-    code_ABx(fs, OP_TESTK, REG(test), k.value);
+    code_AB(fs, OP_TESTK, REG(test), k.value);
     return emit_jump(fs);
 }
 
@@ -1210,9 +1218,8 @@ static enum SwitchProtocol choose_switch_protocol(struct FnState *fs, int n, int
 
 DEFINE_MAP(struct Generator, BlockCounts, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirBlock, int)
 
-static paw_Bool code_literal_switch(struct MirVisitor *V, struct MirSwitch *x)
+static void code_literal_switch(struct MirVisitor *V, struct MirSwitch *x)
 {
-    paw_assert(x->has_otherwise);
     struct Generator *G = V->ud;
     struct FnState *fs = G->fs;
 
@@ -1226,10 +1233,16 @@ static paw_Bool code_literal_switch(struct MirVisitor *V, struct MirSwitch *x)
     }
 
     add_edge_from_here(G, get_last_successor(fs));
-    return PAW_FALSE;
 }
 
-static paw_Bool code_sparse_switch(struct MirVisitor *V, struct MirSwitch *x)
+static paw_Bool is_int_zero(struct FnState *fs, MirConstant k)
+{
+    struct MirConstantData const *kdata = mir_const_data(fs->mir, k);
+    return (kdata->kind == BUILTIN_BOOL || kdata->kind == BUILTIN_INT)
+        && V_INT(kdata->value) == 0;
+}
+
+static void code_sparse_switch(struct MirVisitor *V, struct MirSwitch *x)
 {
     paw_assert(!x->has_otherwise);
     struct Generator *G = V->ud;
@@ -1237,41 +1250,57 @@ static paw_Bool code_sparse_switch(struct MirVisitor *V, struct MirSwitch *x)
 
     // Determine which basic block appears the most as the target of a case label.
     // This basic block will become the target of the "otherwise" case.
-    MirBlock target_block = MIR_INVALID_BB;
+    int common_count = 0;
+    MirConstant other_const;
+    MirBlock other_block, common_block = MIR_INVALID_BB;
     struct MirBlockData const *bb = mir_bb_data(fs->mir, fs->b);
     {
         BlockCounts *counts = BlockCounts_new(G);
-        int target_count = 0;
         MirBlock const *pb;
 
         K_LIST_FOREACH (bb->successors, pb)
             BlockCounts_insert(G, counts, *pb, 0);
 
-        K_LIST_FOREACH (bb->successors, pb) {
+        struct MirSwitchArm const *parm;
+        K_LIST_ZIP (x->arms, parm, bb->successors, pb) {
             int const count = ++*BlockCounts_get(G, counts, *pb);
-            if (count > target_count) {
-                target_count = count;
-                target_block = *pb;
+            if (count > common_count) {
+                common_count = count;
+                common_block = *pb;
+            } else {
+                other_const = parm->k;
+                other_block = *pb;
             }
         }
 
-        paw_assert(MIR_ID_EXISTS(target_block));
+        paw_assert(MIR_ID_EXISTS(common_block));
         BlockCounts_delete(G, counts);
     }
+
+    if (common_count == bb->successors->count - 1
+            && is_int_zero(fs, other_const)
+            && !MIR_ID_EQUALS(common_block, other_block)) {
+        // Out of "n" case labels, "n - 1" of them jump to the same basic block
+        // "common_block". The other label has integer value 0 and points to the
+        // "other_block". Recast the switch as a branch using "JUMPNZ" since it
+        // is more efficient.
+        code_cond_jump(fs, OP_JUMPNZ, x->discr);
+        return;
+    }
+
 
     MirBlock const *pb;
     struct MirSwitchArm const *parm;
     struct MirPlace const d = x->discr;
     K_LIST_ZIP (x->arms, parm, bb->successors, pb) {
-        if (!MIR_ID_EQUALS(*pb, target_block)) {
+        if (!MIR_ID_EQUALS(*pb, common_block)) {
             struct MirConstantData const *kdata = mir_const_data(fs->mir, parm->k);
             int const next_jump = code_testi(fs, x->discr, CAST(int, V_INT(kdata->value)));
             add_edge(G, next_jump, *pb);
         }
     }
 
-    add_edge_from_here(G, target_block);
-    return PAW_FALSE;
+    add_edge_from_here(G, common_block);
 }
 
 static void code_dense_switch(struct MirVisitor *V, struct MirSwitch *x)
@@ -1294,8 +1323,10 @@ static paw_Bool code_switch(struct MirVisitor *V, struct MirSwitch *x)
     struct Generator *G = V->ud;
     struct FnState *fs = G->fs;
 
-    if (x->has_otherwise)
-        return code_literal_switch(V, x);
+    if (x->has_otherwise) {
+        code_literal_switch(V, x);
+        return PAW_FALSE;
+    }
 
     int const n = x->arms->count;
     int const m = n;

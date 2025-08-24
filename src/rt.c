@@ -485,7 +485,7 @@ top:
 
             vm_case(LOADK) :
             {
-                *ra = K[GET_Bx(opcode)];
+                *ra = K[GET_B(opcode)];
             }
 
             vm_case(CEQ) : VM_COMPARISON(CHAR, ==)
@@ -744,7 +744,7 @@ top:
             vm_case(TESTK) :
             {
                 Value const *ra = VM_RA(opcode);
-                Value const k = K[GET_Bx(opcode)];
+                Value const k = K[GET_B(opcode)];
                 if (ra->u != k.u) ++pc;
             }
 
@@ -890,9 +890,15 @@ top:
                 pc += GET_sBx(opcode);
             }
 
-            vm_case(JUMPF) :
+            vm_case(JUMPZ) :
             {
-                if (V_FALSE(*ra))
+                if (V_INT(*ra) == 0)
+                    pc += GET_sBx(opcode);
+            }
+
+            vm_case(JUMPNZ) :
+            {
+                if (V_INT(*ra) != 0)
                     pc += GET_sBx(opcode);
             }
 

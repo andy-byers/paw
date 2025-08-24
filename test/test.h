@@ -61,7 +61,8 @@
     X(capture_upvalue)       \
     X(close_loop_variable)   \
     X(modification_sequence) \
-    X(argument_sequence)
+    X(argument_sequence)     \
+    X(switch_branch)
 
 #define check(x)                                       \
     do {                                               \

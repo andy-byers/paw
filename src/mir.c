@@ -1017,9 +1017,8 @@ struct MirLocationList *pawMir_compute_locations(struct Mir *mir)
     return locations;
 }
 
-// Remove all "forwarding blocks" from the MIR
-// A forwarding block is a basic blocks whose only purpose is to forward control to
-// another basic block.
+DEFINE_MAP(struct Mir, BlockCounts, pawP_alloc, P_ID_HASH, P_ID_EQUALS, MirBlock, int)
+
 static MirBlock get_common_block(MirBlockList *blocks)
 {
     MirBlock const first = K_LIST_FIRST(blocks);
@@ -1119,10 +1118,10 @@ void pawMir_merge_redundant_blocks(struct Mir *mir)
                 // Attempt to convert a branch into a jump. This is possible when all cases
                 // jump to the same basic block.
                 MirBlock const common = get_common_block(pred->successors);
-                if (MIR_ID_EXISTS(common)) { // convert to jump
+                if (MIR_ID_EXISTS(common)) {
                     struct MirBlockData *succ = mir_bb_data(mir, common);
                     if (succ->joins->count == 0) {
-                        term->hdr.kind = kMirGoto;
+                        term->hdr.kind = kMirGoto; // convert to jump
                         K_LIST_FIRST(pred->successors) = common;
                         pred->successors->count = 1;
                         changed = PAW_TRUE;
@@ -1749,8 +1748,7 @@ char const *pawMir_dump(struct Mir *mir)
 static void dump_block_list(struct Printer *P, struct MirBlockList *blocks)
 {
     for (int i = 0; i < blocks->count; ++i) {
-        if (i > 0)
-            PRINT_LITERAL(P, ", ");
+        if (i > 0) PRINT_LITERAL(P, ", ");
         PRINT_FORMAT(P, "bb%d", MirBlockList_get(blocks, i).value);
     }
 }

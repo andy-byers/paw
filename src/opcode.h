@@ -113,7 +113,8 @@ typedef enum Op { //      arguments    description
     OP_CALL, //           A B          R[A] := R[A](R[A+1]..R[A+B+1])
 
     OP_JUMP, //           sBx          pc += sBx
-    OP_JUMPF, //          A sBx        if (!R[A]) pc += sBx
+    OP_JUMPZ, //          A sBx        if (R[A] == 0) pc += sBx
+    OP_JUMPNZ, //         A sBx        if (R[A] != 0) pc += sBx
     OP_JUMPTBL, //        A            pc += jumptbl[R[A]]
 
     OP_GETGLOBAL, //      A Bx         R[A] := G[Bx]

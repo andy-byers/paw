@@ -1094,8 +1094,12 @@ static IrType *select_field(struct TypeChecker *T, IrType *target, struct HirSel
     if (e->is_index)
         TYPECK_ERROR(T, expected_field_selector, e->span.start);
 
-    struct HirAdtDecl *adt = get_adt(T, target);
-    paw_assert(adt->is_struct);
+    struct HirAdtDecl const *adt = get_adt(T, target);
+    if (!adt->is_struct) {
+        char const *repr = pawIr_print_type(T->C, target);
+        TYPECK_ERROR(T, expected_struct, e->span.start, repr);
+    }
+
     HirDeclList *fields = pawHir_struct_fields(adt);
     int const index = find_field(fields, e->ident.name);
     if (index < 0)

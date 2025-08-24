@@ -303,8 +303,10 @@ char const *op_name(Op op)
             return "CALL";
         case OP_JUMP:
             return "JUMP";
-        case OP_JUMPF:
-            return "JUMPF";
+        case OP_JUMPZ:
+            return "JUMPZ";
+        case OP_JUMPNZ:
+            return "JUMPNZ";
         case OP_JUMPTBL:
             return "JUMPTBL";
         case OP_GETGLOBAL:
@@ -463,6 +465,7 @@ void paw_dump_opcode(OpCode opcode)
         case NOPCODES:
             PAW_UNREACHABLE();
         // op A B
+        case OP_LOADK:
         case OP_RETURN:
         case OP_NEWTUPLE:
         case OP_NEWLIST:
@@ -475,6 +478,7 @@ void paw_dump_opcode(OpCode opcode)
         case OP_STRLEN:
         case OP_LISTLEN:
         case OP_MAPLEN:
+        case OP_TESTK:
         case OP_BCASTF:
         case OP_CCASTI:
         case OP_FCASTI:
@@ -491,11 +495,11 @@ void paw_dump_opcode(OpCode opcode)
             break;
         // op A sBx
         case OP_LOADSMI:
-        case OP_JUMPF:
+        case OP_JUMPZ:
+        case OP_JUMPNZ:
             printf("%s %d %d\n", opname, GET_A(opcode), GET_sBx(opcode));
             break;
         // op A sBx
-        case OP_LOADK:
         case OP_CLOSURE:
         case OP_GETGLOBAL:
             printf("%s %d %d\n", opname, GET_A(opcode), GET_Bx(opcode));
@@ -559,7 +563,6 @@ void paw_dump_opcode(OpCode opcode)
         case OP_UNPACK:
         case OP_GETVALUE:
         case OP_SETVALUE:
-        case OP_TESTK:
             printf("%s %d %d %d\n", opname, GET_A(opcode), GET_B(opcode), GET_C(opcode));
             break;
         case OP_NOOP:
@@ -574,7 +577,7 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
 
     pawL_add_string(P, print, "function '");
     pawL_add_nstring(P, print, proto->name->text, proto->name->length);
-    pawL_add_fstring(P, print, "' (%I bytes)\n", (paw_Int)proto->length);
+    pawL_add_fstring(P, print, "' (%I bytes)\n", proto->length * (paw_Int)sizeof(OpCode));
     pawL_add_fstring(P, print, "constant(s) = %d, upvalue(s) = %d, arg(s) = %d\n",
                      proto->nk, proto->nup, proto->argc);
     for (int i = 0; pc != end; ++i, ++pc) {
@@ -585,6 +588,7 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
             case NOPCODES:
                 PAW_UNREACHABLE();
             // op A B
+            case OP_LOADK:
             case OP_RETURN:
             case OP_NEWTUPLE:
             case OP_NEWLIST:
@@ -613,11 +617,11 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
                 break;
             // op A sBx
             case OP_LOADSMI:
-            case OP_JUMPF:
+            case OP_JUMPZ:
+            case OP_JUMPNZ:
                 pawL_add_fstring(P, print, " %d %d\n", GET_A(opcode), GET_sBx(opcode));
                 break;
             // op A Bx
-            case OP_LOADK:
             case OP_CLOSURE:
             case OP_GETGLOBAL:
                 pawL_add_fstring(P, print, " %d %d\n", GET_A(opcode), GET_Bx(opcode));

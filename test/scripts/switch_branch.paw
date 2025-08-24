@@ -1,0 +1,60 @@
+// switch_branch.paw: Test switch-to-branch optimization.
+
+inline enum WithoutData {
+    A,
+    B,
+    C,
+
+    pub fn is_a(self) -> bool {
+        match self {
+            WithoutData::A => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_b(self) -> bool {
+        match self {
+            WithoutData::B => true,
+            _ => false,
+        }
+    }
+}
+
+pub fn test_without_data() {
+    assert(WithoutData::A.is_a());
+    assert(!WithoutData::A.is_b());
+    assert(!WithoutData::B.is_a());
+    assert(WithoutData::B.is_b());
+    assert(!WithoutData::C.is_a());
+    assert(!WithoutData::C.is_b());
+}
+
+inline enum WithData {
+    A(int),
+    B(int),
+    C(int),
+
+    pub fn a_value(self) -> Option<int> {
+        match self {
+            WithData::A(a) => Some(a),
+            _ => None,
+        }
+    }
+
+    pub fn b_value(self) -> Option<int> {
+        match self {
+            WithData::B(b) => Some(b),
+            _ => None,
+        }
+    }
+}
+
+pub fn test_with_data() {
+    assert(WithData::A(1).a_value().unwrap() == 1);
+    assert(WithData::A(2).b_value().is_none());
+    assert(WithData::B(3).a_value().is_none());
+    assert(WithData::B(4).b_value().unwrap() == 4);
+    assert(WithData::C(5).a_value().is_none());
+    assert(WithData::C(6).b_value().is_none());
+}
+

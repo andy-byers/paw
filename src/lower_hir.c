@@ -589,7 +589,7 @@ static paw_Bool is_local(struct FunctionState *fs, MirRegister r)
 static struct MirPlace into_arg(struct FunctionState *fs, struct SourceLoc loc, struct MirPlace place)
 {
     paw_Bool needs_fresh_place = PAW_TRUE;
-    if (place.kind == MIR_PLACE_LOCAL) {
+    if (place.kind == MIR_PLACE_LOCAL && place.projection->count == 0) {
         struct MirRegisterData const *data = mir_reg_data(fs->mir, place.r);
         if (data->info == MIR_REGINFO_ARGUMENT) return place;
         needs_fresh_place = is_local(fs, place.r);
@@ -1845,13 +1845,13 @@ static void visit_sparse_cases(struct HirVisitor *V, struct Decision *d, struct 
     struct FunctionState *fs = L->fs;
     struct CaseList *cases = d->multi.cases;
     MirBlock const discr_bb = current_bb(fs);
-    MirBlock const otherwise_bb = new_bb(fs);
     MirBlock const join_bb = new_bb(fs);
 
     struct SourceLoc loc = d->multi.test.span.start;
     struct MirPlace const test = get_test_reg(fs, d->multi.test);
     struct MirSwitchArmList *arms = allocate_switch_arms(fs, discr_bb, cases->count);
-    terminate_switch(fs, loc, test, arms, PAW_TRUE);
+    paw_Bool const has_otherwise = d->multi.rest != NULL;
+    terminate_switch(fs, loc, test, arms, has_otherwise);
 
     int index = 0;
     struct MatchCase const *pmc;
@@ -1867,12 +1867,14 @@ static void visit_sparse_cases(struct HirVisitor *V, struct Decision *d, struct 
     }
 
     // this implementation requires an "otherwise" case (binding or wildcard) to ensure
-    // exhaustivness
-    paw_assert(d->multi.rest != NULL);
-    add_edge(fs, discr_bb, otherwise_bb);
-    set_current_bb(fs, otherwise_bb);
-    visit_decision(V, d->multi.rest, result);
-    set_goto_edge(fs, loc, join_bb);
+    // exhaustivness (expect for matches on values of type "bool")
+    if (has_otherwise) {
+        MirBlock const otherwise_bb = new_bb(fs);
+        add_edge(fs, discr_bb, otherwise_bb);
+        set_current_bb(fs, otherwise_bb);
+        visit_decision(V, d->multi.rest, result);
+        set_goto_edge(fs, loc, join_bb);
+    }
 
     set_current_bb(fs, join_bb);
 }

@@ -281,10 +281,19 @@ static void allocate_upvalue(struct FunctionState *fs, IrType *type, void *ctx)
 }
 
 // TODO: combine with alloc_scalar_registers
-static struct MemoryGroup new_registers(struct Unboxer *U, IrType *type, int discr)
+static struct MemoryGroup new_registers(struct Unboxer *U, struct MemoryGroup group, IrType *type, int discr)
 {
+    struct FunctionState *fs = U->fs;
     struct RegisterState rs = {0};
-    int const base = U->fs->registers->count;
+    if (group.kind == MEMORY_LOCAL) {
+        struct MirRegisterData const rdata = MirRegisterDataList_get(fs->registers, group.base);
+        rs = (struct RegisterState){
+            .is_captured = rdata.is_captured,
+            .is_uninit = rdata.is_uninit,
+            .info = rdata.info,
+        };
+    }
+    int const base = fs->registers->count;
     int const count = allocate_values(U, type, discr, allocate_register, &rs);
     return (struct MemoryGroup){
         .count = count,
@@ -411,7 +420,7 @@ static int compute_field_offset(struct IrLayout object, int index)
 static void discharge_indirect_field(struct Unboxer *U, struct MemoryAccess *pa)
 {
     IrTypeList const *field_types = get_variant_field_types(U, pa->type, pa->field.discr);
-    struct MemoryGroup const output = new_registers(U, pa->field.type, pa->field.discr);
+    struct MemoryGroup const output = new_registers(U, pa->group, pa->field.type, pa->field.discr);
 
     struct MirPlace const object = place_at(pa->group, 0);
     for (int i = 0; i < output.count; ++i) {
@@ -459,7 +468,7 @@ static void discharge_indirect_element(struct Unboxer *U, struct MemoryAccess *p
     IrType *access_type = get_access_type(pa);
     int const field_discr = pa->has_field ? pa->field.discr : ENUM_BASE;
     int const field_offset = pa->has_field ? pa->field.offset : 0;
-    struct MemoryGroup const output = new_registers(U, access_type, field_discr);
+    struct MemoryGroup const output = new_registers(U, pa->group, access_type, field_discr);
 
     struct MirPlace const object = place_at(pa->group, 0);
     if (output.count > 1 || field_offset > 0) {
@@ -493,7 +502,7 @@ static void discharge_indirect_element(struct Unboxer *U, struct MemoryAccess *p
 static void discharge_indirect_range(struct Unboxer *U, struct MemoryAccess *pa)
 {
     enum BuiltinKind kind = pawP_type2code(U->C, pa->type);
-    struct MemoryGroup const output = new_registers(U, pa->type, ENUM_BASE);
+    struct MemoryGroup const output = new_registers(U, pa->group, pa->type, ENUM_BASE);
 
     struct MirPlace const object = place_at(pa->group, 0);
     struct MirPlace const result = place_at(output, 0);
@@ -506,7 +515,7 @@ static void discharge_indirect_range(struct Unboxer *U, struct MemoryAccess *pa)
 
 static void discharge_upvalue(struct Unboxer *U, struct MemoryAccess *pa)
 {
-    struct MemoryGroup const output = new_registers(U, pa->type, ENUM_BASE);
+    struct MemoryGroup const output = new_registers(U, pa->group, pa->type, ENUM_BASE);
     for (int i = 0; i < pa->group.count; ++i) {
         struct MirPlace const result = place_at(output, i);
         NEW_INSTR(U, upvalue, TODO, result, UPVALUE_AT(pa->group, i));

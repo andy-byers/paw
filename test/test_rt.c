@@ -43,7 +43,7 @@ static int handle_error(paw_Env *P, int status)
 }
 
 struct FilterArgs {
-    enum { MAX_ARGS = 256 };
+#define MAX_ARGS 256
     struct FilterArg {
         char const *modname;
         char const *testname;

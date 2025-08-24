@@ -235,8 +235,7 @@ static void expand_or_patterns(struct Usefulness *U, struct RowList *rows)
 static struct MatchVars *variables_for_types(struct Usefulness *U, struct SourceSpan span, IrTypeList *types)
 {
     struct MatchVars *result = MatchVars_new_from(U->C, U->pool);
-    if (types == NULL)
-        return result;
+    if (types == NULL) return result;
 
     IrType *const *ptype;
     K_LIST_FOREACH (types, ptype) {
@@ -398,14 +397,18 @@ static struct CaseList *compile_constructor_cases(struct Usefulness *U, struct R
 
         // pattern matrix specialization
         int index = 0;
-        struct HirPatList *fields;
+        HirPatList *fields;
         if (HirIsVariantPat(pat)) {
             fields = HirGetVariantPat(pat)->fields;
             index = HirGetVariantPat(pat)->index;
         } else if (HirIsStructPat(pat)) {
             fields = struct_pat_fields(U, HirGetStructPat(pat));
-        } else {
+        } else if (HirIsTuplePat(pat)) {
             fields = HirGetTuplePat(pat)->elems;
+        } else {
+            struct HirExpr *expr = HirGetLiteralPat(pat)->expr;
+            index = V_TRUE(HirGetLiteralExpr(expr)->basic.value);
+            fields = &(HirPatList){0};
         }
 
         struct RawCase *rc = &K_LIST_AT(cases, index);
@@ -627,6 +630,15 @@ static enum BranchMode branch_mode(struct Usefulness *U, struct MatchVar var)
     return BRANCH_STRUCT;
 }
 
+static struct RawCase bool_case(struct Usefulness *U, struct SourceSpan span, paw_Bool b)
+{
+    return (struct RawCase){
+        .cons = (struct Constructor){.kind = CONS_BOOL, .value.i = b},
+        .vars = variables_for_types(U, span, NULL),
+        .rows = RowList_new(U),
+    };
+}
+
 static struct Decision *compile_rows(struct Usefulness *U, struct RowList *rows)
 {
     if (rows->count == 0)
@@ -649,23 +661,31 @@ static struct Decision *compile_rows(struct Usefulness *U, struct RowList *rows)
     struct Column branch_col = find_branch_col(U, first_row.columns);
     switch (branch_mode(U, branch_col.var)) {
         case BRANCH_VARIANT: {
-            struct RawCaseList *raw_cases = cases_for_variant(U, branch_col.var);
-            struct CaseList *cases = compile_constructor_cases(U, rows, branch_col.var, raw_cases);
+            RawCaseList *raw_cases = cases_for_variant(U, branch_col.var);
+            CaseList *cases = compile_constructor_cases(U, rows, branch_col.var, raw_cases);
             return new_multi(U, branch_col.var, cases, NULL);
         }
         case BRANCH_STRUCT: {
-            struct RawCaseList *raw_cases = cases_for_struct(U, branch_col.var);
-            struct CaseList *cases = compile_constructor_cases(U, rows, branch_col.var, raw_cases);
+            RawCaseList *raw_cases = cases_for_struct(U, branch_col.var);
+            CaseList *cases = compile_constructor_cases(U, rows, branch_col.var, raw_cases);
             return new_multi(U, branch_col.var, cases, NULL);
         }
         case BRANCH_TUPLE: {
-            struct RawCaseList *raw_cases = cases_for_tuple(U, branch_col.var);
-            struct CaseList *cases = compile_constructor_cases(U, rows, branch_col.var, raw_cases);
+            RawCaseList *raw_cases = cases_for_tuple(U, branch_col.var);
+            CaseList *cases = compile_constructor_cases(U, rows, branch_col.var, raw_cases);
             return new_multi(U, branch_col.var, cases, NULL);
         }
         case BRANCH_LITERAL: {
-            struct LiteralResult result = compile_literal_cases(U, rows, branch_col.var);
-            return new_multi(U, branch_col.var, result.cases, result.fallback);
+            if (pawP_type2code(U->C, branch_col.var.type) == BUILTIN_BOOL) {
+                RawCaseList *raw_cases = RawCaseList_new(U);
+                RawCaseList_push(U, raw_cases, bool_case(U, branch_col.var.span, PAW_FALSE));
+                RawCaseList_push(U, raw_cases, bool_case(U, branch_col.var.span, PAW_TRUE));
+                CaseList *cases = compile_constructor_cases(U, rows, branch_col.var, raw_cases);
+                return new_multi(U, branch_col.var, cases, NULL);
+            } else {
+                struct LiteralResult result = compile_literal_cases(U, rows, branch_col.var);
+                return new_multi(U, branch_col.var, result.cases, result.fallback);
+            }
         }
     }
 }
