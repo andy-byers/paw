@@ -706,4 +706,3 @@ pub fn test_push_nested() {
         assert(list[i / 2][i % 2][0] == i);
     }
 }
-

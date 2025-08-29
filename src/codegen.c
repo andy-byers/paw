@@ -456,12 +456,13 @@ static void allocate_upvalue_info(struct Generator *G, Proto *proto, struct MirU
 
 static void code_constants(struct Generator *G, struct Mir *mir, Proto *proto)
 {
-    proto->k = pawM_new_vec(ENV(G), mir->constants->count, Value);
-    proto->nk = mir->constants->count;
+    struct MirConstantCache const *kcache = mir->kcache;
+    proto->k = pawM_new_vec(ENV(G), kcache->data->count, Value);
+    proto->nk = kcache->data->count;
 
     int index;
     struct MirConstantData const *pdata;
-    K_LIST_ENUMERATE (mir->constants, index, pdata) {
+    K_LIST_ENUMERATE (kcache->data, index, pdata) {
         proto->k[index] = pdata->value;
     }
 }

@@ -23,11 +23,8 @@ struct Mir *pawMir_new(struct Compiler *C, Str *modname, struct SourceSpan span,
         .P = ENV(C),
         .C = C,
     };
-    mir->kcache.ints = ValueMap_new_from(C, mir->pool);
-    mir->kcache.floats = ValueMap_new_from(C, mir->pool);
-    mir->kcache.strs = ValueMap_new_from(C, mir->pool);
     mir->captured = MirCaptureList_new(mir);
-    mir->constants = MirConstantDataList_new(mir);
+    mir->kcache = pawMir_kcache_new(mir);
     mir->registers = MirRegisterDataList_new(mir);
     mir->locals = MirRegisterList_new(mir);
     mir->blocks = MirBlockDataList_new(mir);
@@ -39,37 +36,63 @@ struct Mir *pawMir_new(struct Compiler *C, Str *modname, struct SourceSpan span,
 void pawMir_free(struct Mir *mir)
 {
     // reclaim memory used by the MIR
-    ValueMap_delete(mir->C, mir->kcache.ints);
-    ValueMap_delete(mir->C, mir->kcache.floats);
-    ValueMap_delete(mir->C, mir->kcache.strs);
     MirCaptureList_delete(mir, mir->captured);
-    MirConstantDataList_delete(mir, mir->constants);
     MirRegisterDataList_delete(mir, mir->registers);
     MirRegisterList_delete(mir, mir->locals);
     MirBlockDataList_delete(mir, mir->blocks);
     MirUpvalueList_delete(mir, mir->upvalues);
     MirBodyList_delete(mir, mir->children);
+    pawMir_kcache_delete(mir, mir->kcache);
     P_ALLOC(mir->C, mir, sizeof(*mir), 0);
 }
 
-MirConstant pawMir_add_constant(struct Mir *mir, struct KCache kcache, Value k, enum BuiltinKind kind)
+struct MirConstantCache *pawMir_kcache_new(struct Mir *mir)
 {
-    ValueMap *map = kind == BUILTIN_FLOAT ? kcache.floats :
-        kind == BUILTIN_STR ? kcache.strs : kcache.ints;
-    Value const *pvalue = ValueMap_get(mir->C, map, k);
+    struct MirConstantCache *kcache = P_ALLOC(mir, NULL, 0, sizeof(struct MirConstantCache));
+    *kcache = (struct MirConstantCache){
+        .data = MirConstantDataList_new(mir),
+        .ints = ValueMap_new_from(mir->C, mir->pool),
+        .floats = ValueMap_new_from(mir->C, mir->pool),
+        .strs = ValueMap_new_from(mir->C, mir->pool),
+    };
 
-    int id;
-    if (pvalue != NULL) {
-        id = (int)V_INT(*pvalue);
-    } else {
-        id = mir->constants->count;
-        ValueMap_insert(mir->C, map, k, I2V(id));
-        MirConstantDataList_push(mir, mir->constants,
-            (struct MirConstantData){
-                .kind = kind,
-                .value = k,
-            });
-    }
+#define LOADK(Value_, Kind_) (MirConstantDataList_push(mir, kcache->data, \
+        (struct MirConstantData){.kind = (Kind_), .value = (Value_)}), \
+        MIR_CONST(kcache->data->count - 1));
+    kcache->unitk = LOADK(P2V(NULL), BUILTIN_UNIT);
+    kcache->boolk[PAW_FALSE] = LOADK(I2V(PAW_FALSE), BUILTIN_BOOL);
+    kcache->boolk[PAW_TRUE] = LOADK(I2V(PAW_TRUE), BUILTIN_BOOL);
+#undef LOADK
+
+    return kcache;
+}
+
+void pawMir_kcache_delete(struct Mir *mir, struct MirConstantCache *kcache)
+{
+    MirConstantDataList_delete(mir, kcache->data);
+    ValueMap_delete(mir->C, kcache->ints);
+    ValueMap_delete(mir->C, kcache->floats);
+    ValueMap_delete(mir->C, kcache->strs);
+
+    P_ALLOC(mir, kcache, sizeof(struct MirConstantCache), 0);
+}
+
+MirConstant pawMir_kcache_add(struct Mir *mir, struct MirConstantCache *kcache, Value k, enum BuiltinKind kind)
+{
+    if (kind == BUILTIN_UNIT) return kcache->unitk;
+    if (kind == BUILTIN_BOOL) return kcache->boolk[V_TRUE(k)];
+    ValueMap *map = kind == BUILTIN_FLOAT ? kcache->floats :
+        kind == BUILTIN_STR ? kcache->strs : kcache->ints;
+    Value const *pvalue = ValueMap_get(mir->C, map, k);
+    if (pvalue != NULL) return MIR_CONST((int)V_INT(*pvalue));
+
+    int const id = kcache->data->count;
+    ValueMap_insert(mir->C, map, k, I2V(id));
+    MirConstantDataList_push(mir, kcache->data,
+        (struct MirConstantData){
+            .kind = kind,
+            .value = k,
+        });
 
     return MIR_CONST(id);
 }

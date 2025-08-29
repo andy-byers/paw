@@ -322,7 +322,6 @@ static struct MirRegisterData copy_register(struct MonoCollector *M, struct MirR
 
 static void do_monomorphize(struct MonoCollector *M, struct Mir *base, struct Mir *inst, IrType *self)
 {
-    MirConstantDataList_reserve(M->mir, inst->constants, base->constants->count);
     MirRegisterDataList_reserve(M->mir, inst->registers, base->registers->count);
     MirBlockDataList_reserve(M->mir, inst->blocks, base->blocks->count);
     MirRegisterList_reserve(M->mir, inst->locals, base->locals->count);
@@ -334,7 +333,7 @@ static void do_monomorphize(struct MonoCollector *M, struct Mir *base, struct Mi
         struct MirRegisterData *pfrom;
         K_LIST_FOREACH (base->registers, pfrom) {
             struct MirRegisterData const to = copy_register(M, *pfrom);
-            MirRegisterDataList_push(M->mir, inst->registers, to);
+            MirRegisterDataList_push(inst, inst->registers, to);
         }
     }
 
@@ -342,28 +341,28 @@ static void do_monomorphize(struct MonoCollector *M, struct Mir *base, struct Mi
         struct MirBlockData *const *pfrom;
         K_LIST_FOREACH (base->blocks, pfrom) {
             struct MirBlockData *to = copy_basic_block(M, *pfrom);
-            MirBlockDataList_push(M->mir, inst->blocks, to);
+            MirBlockDataList_push(inst, inst->blocks, to);
         }
     }
 
     {
         struct MirConstantData const *pdata;
-        K_LIST_FOREACH (base->constants, pdata) {
-            MirConstantDataList_push(M->mir, inst->constants, *pdata);
+        K_LIST_FOREACH (base->kcache->data, pdata) {
+            pawMir_kcache_add(inst, inst->kcache, pdata->value, pdata->kind);
         }
     }
 
     {
         MirRegister const *pr;
         K_LIST_FOREACH (base->locals, pr) {
-            MirRegisterList_push(M->mir, inst->locals, *pr);
+            MirRegisterList_push(inst, inst->locals, *pr);
         }
     }
 
     {
         struct MirCaptureInfo const *pci;
         K_LIST_FOREACH (base->captured, pci) {
-            MirCaptureList_push(M->mir, inst->captured, *pci);
+            MirCaptureList_push(inst, inst->captured, *pci);
         }
     }
 
@@ -372,7 +371,7 @@ static void do_monomorphize(struct MonoCollector *M, struct Mir *base, struct Mi
         K_LIST_FOREACH (base->upvalues, pup) {
             struct MirUpvalueInfo up = *pup;
             up.type = finalize_type(M, up.type);
-            MirUpvalueList_push(M->mir, inst->upvalues, up);
+            MirUpvalueList_push(inst, inst->upvalues, up);
         }
     }
 
@@ -384,7 +383,7 @@ static void do_monomorphize(struct MonoCollector *M, struct Mir *base, struct Mi
             IrType *inst_type = finalize_type(M, base_child->type);
             struct Mir *inst_child = new_mir(M, base_child, inst_type, NULL);
             do_monomorphize(M, base_child, inst_child, NULL);
-            MirBodyList_push(M->mir, inst->children, inst_child);
+            MirBodyList_push(inst, inst->children, inst_child);
         }
     }
 }

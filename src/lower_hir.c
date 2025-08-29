@@ -231,7 +231,7 @@ static MirBlock get_last_successor(struct FunctionState *fs)
 
 static struct MirPlace new_constant(struct FunctionState *fs, Value value, enum BuiltinKind kind)
 {
-    MirConstant const k = pawMir_add_constant(fs->mir, fs->mir->kcache, value, kind);
+    MirConstant const k = pawMir_kcache_add(fs->mir, fs->mir->kcache, value, kind);
 
     return (struct MirPlace){
         .kind = MIR_PLACE_CONSTANT,

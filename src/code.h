@@ -415,15 +415,6 @@ enum FnKind {
     FUNC_METHOD,
 };
 
-// Note that ValueMap for floats considers "-0.0" and "0.0" to be different values, while
-// normal floating point equality comparison considers them to be equal. This shouldn't cause
-// any problems, provided that the runtime generates floating point comparisons correctly.
-struct KCache {
-    struct ValueMap *ints;
-    struct ValueMap *strs;
-    struct ValueMap *floats;
-};
-
 // From https://stackoverflow.com/questions/8513911
 static inline paw_Uint hash_combine(paw_Uint seed, paw_Uint v)
 {

@@ -60,7 +60,7 @@ struct KProp {
     struct FlowWorklist *flow;
     struct SsaWorklist *ssa;
     struct Lattice *lattice;
-    struct KCache kcache;
+    struct MirConstantCache *kcache;
     struct ExecMap *exec;
     AccessMap *uses;
 
@@ -241,33 +241,9 @@ static void visit_phi(struct KProp *K, struct MirPhi *phi, MirBlock to)
         add_use_edges(K, presult->r);
 }
 
-static ValueMap *kcache_map(struct KProp *K, enum BuiltinKind kind)
-{
-    if (kind <= BUILTIN_INT) {
-        return K->kcache.ints;
-    } else if (kind == BUILTIN_FLOAT) {
-        return K->kcache.floats;
-    } else {
-        paw_assert(kind == BUILTIN_STR);
-        return K->kcache.strs;
-    }
-}
-
 static int add_constant(struct KProp *K, Value v, enum BuiltinKind kind)
 {
-    paw_assert(kind != NBUILTINS);
-    ValueMap *map = kcache_map(K, kind);
-    Value const *pk = ValueMap_get(K->C, map, v);
-    if (pk != NULL) return (int)V_INT(*pk);
-
-    int const k = K->mir->constants->count;
-    ValueMap_insert(K->C, map, v, I2V(k));
-    MirConstantDataList_push(K->mir, K->mir->constants,
-        (struct MirConstantData){
-            .kind = kind,
-            .value = v,
-        });
-    return k;
+    return pawMir_kcache_add(K->mir, K->kcache, v, kind).value;
 }
 
 static struct CellInfo constant_unary_op(struct KProp *K, struct Cell *val, struct Cell *output, enum MirUnaryOpKind op)
@@ -819,8 +795,8 @@ static void propagate_constants(struct KProp *K)
 
 static void init_lattice(struct KProp *K)
 {
-    struct Mir const *mir = K->mir;
-    int const cell_count = mir->registers->count + mir->constants->count;
+    struct Mir *mir = K->mir;
+    int const cell_count = mir->registers->count + mir->kcache->data->count;
     Lattice_reserve(K, K->lattice, cell_count);
     K->lattice->count = cell_count;
 
@@ -838,7 +814,7 @@ static void init_lattice(struct KProp *K)
     }
 
     struct MirConstantData *kdata;
-    K_LIST_ENUMERATE (mir->constants, index, kdata) {
+    K_LIST_ENUMERATE (mir->kcache->data, index, kdata) {
         Lattice_set(K->lattice, key++,
             (struct Cell){
                 .type = pawP_builtin_type(K->C, kdata->kind),
@@ -847,9 +823,7 @@ static void init_lattice(struct KProp *K)
                 .info.k = index,
             });
 
-        ValueMap *map = kcache_map(K, kdata->kind);
-        paw_Bool const replaced = ValueMap_insert(K->C, map, kdata->value, I2V(index));
-        paw_assert(!replaced); PAW_UNUSED(replaced);
+        pawMir_kcache_add(mir, K->kcache, kdata->value, kdata->kind);
     }
 
     paw_assert(key == cell_count);
@@ -1034,9 +1008,7 @@ static paw_Bool propagate(struct Mir *mir)
     K.ssa = SsaWorklist_new(&K);
     K.exec = ExecMap_new(&K);
 
-    K.kcache.ints = ValueMap_new_from(C, mir->pool);
-    K.kcache.strs = ValueMap_new_from(C, mir->pool);
-    K.kcache.floats = ValueMap_new_from(C, mir->pool);
+    K.kcache = pawMir_kcache_new(mir);
     pawMir_collect_per_instr_uses(mir, K.uses);
 
     init_lattice(&K);

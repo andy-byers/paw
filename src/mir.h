@@ -960,18 +960,35 @@ struct MirBlockData {
     MirId mid;
 };
 
+// Note that ValueMap for floats considers "-0.0" and "0.0" to be different values, while
+// normal floating point equality comparison considers them to be equal. This shouldn't cause
+// any problems, provided that the runtime generates floating point comparisons correctly.
+struct MirConstantCache {
+    struct MirConstantDataList *data;
+
+    struct ValueMap *ints;
+    struct ValueMap *floats;
+    struct ValueMap *strs;
+
+    MirConstant unitk;
+    MirConstant boolk[2];
+};
+
+struct MirConstantCache *pawMir_kcache_new(struct Mir *mir);
+void pawMir_kcache_delete(struct Mir *mir, struct MirConstantCache *kcache);
+MirConstant pawMir_kcache_add(struct Mir *mir, struct MirConstantCache *kcache, Value value, enum BuiltinKind kind);
+
 // TODO: nested closures should be hoisted out into separate Mir objects, but this is complicated
 //       for a few reasons, namely upvalues, generics, and naming.
 struct Mir {
     struct Pool *pool;
     struct MirRegisterDataList *registers;
-    struct MirConstantDataList *constants;
     struct MirRegisterList *locals;
     struct MirBlockDataList *blocks;
     struct MirUpvalueList *upvalues;
     struct MirCaptureList *captured;
     struct MirBodyList *children;
-    struct KCache kcache;
+    struct MirConstantCache *kcache;
     struct SourceSpan span;
     struct IrType *type;
     struct IrType *self;
@@ -1009,8 +1026,6 @@ DEFINE_LIST(struct Mir, MirBodyList, struct Mir *)
 struct Mir *pawMir_new(struct Compiler *C, Str *modname, struct SourceSpan span, Str *name, struct IrType *type, struct IrType *self, enum FnKind fn_kind, paw_Bool is_pub, paw_Bool is_poly);
 void pawMir_free(struct Mir *mir);
 
-MirConstant pawMir_add_constant(struct Mir *mir, struct KCache kcache, Value k, enum BuiltinKind kind);
-
 struct MirLiveInterval *pawMir_new_interval(struct Compiler *C, MirRegister r, int npositions);
 struct MirBlockData *pawMir_new_block(struct Mir *mir);
 
@@ -1044,8 +1059,8 @@ inline static struct MirBlockData *mir_bb_data(struct Mir *mir, MirBlock bb)
 
 inline static struct MirConstantData *mir_const_data(struct Mir *mir, MirConstant k)
 {
-    paw_assert(0 <= k.value && k.value < mir->constants->count);
-    return &K_LIST_AT(mir->constants, k.value);
+    paw_assert(0 <= k.value && k.value < mir->kcache->data->count);
+    return &K_LIST_AT(mir->kcache->data, k.value);
 }
 
 inline static struct MirRegisterData *mir_reg_data(struct Mir *mir, MirRegister r)
