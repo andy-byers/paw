@@ -1132,7 +1132,7 @@ void pawMir_merge_redundant_blocks(struct Mir *mir)
     do {
         changed = PAW_FALSE;
         MirBlockList *order = pawMir_traverse_rpo(mir->C, mir);
-        for (int i = 1; i < order->count; ++i) {
+        for (int i = order->count - 1; i > 0; --i) {
             MirBlock const p = MirBlockList_get(order, i);
             struct MirBlockData *pred = mir_bb_data(mir, p);
             if (pred->predecessors->count == 0) continue; // disconnected
@@ -1167,14 +1167,14 @@ void pawMir_merge_redundant_blocks(struct Mir *mir)
                 paw_assert(pred->successors->count == 1);
                 MirBlock const s = K_LIST_LAST(pred->successors);
                 struct MirBlockData *succ = mir_bb_data(mir, s);
-                if (succ->predecessors->count == 1) {
-                    // "p" and "s" can be trivially merged
-                    merge_adjacent_blocks(mir, p, pred, s, succ);
-                    changed = PAW_TRUE;
-                } else if (pred->joins->count == 0 && succ->joins->count == 0
+                 if (pred->joins->count == 0 && succ->joins->count == 0
                         && pred->instructions->count == 1) {
                     // predecessor is empty except for the jump
                     thread_jump_through(mir, p, pred, s, succ);
+                    changed = PAW_TRUE;
+                 } else if (succ->predecessors->count == 1) {
+                    // "p" and "s" can be trivially merged
+                    merge_adjacent_blocks(mir, p, pred, s, succ);
                     changed = PAW_TRUE;
                 } else if (succ->joins->count == 0 && succ->instructions->count == 1
                         && !MirIsGoto(K_LIST_LAST(succ->instructions))) {
