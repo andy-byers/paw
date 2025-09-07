@@ -115,7 +115,6 @@ void pawList_resize(paw_Env *P, Tuple *t, size_t length)
 void pawList_insert(paw_Env *P, Tuple *t, paw_Int index, Value const *pvalue)
 {
     int const z = LIST_ZELEMENT(t);
-
     size_t const len = pawList_length(P, t);
     size_t const abs = abs_index(P, index, len);
 
@@ -124,23 +123,23 @@ void pawList_insert(paw_Env *P, Tuple *t, paw_Int index, Value const *pvalue)
         shift_elements(LIST_BEGIN(t), abs, 1, len - abs, z);
 
     pawV_copy(LIST_BEGIN(t) + abs, pvalue, z);
-    ++LIST_END(t);
+    LIST_END(t) += z;
 }
 
 void pawList_pop(paw_Env *P, Tuple *t, paw_Int index)
 {
+    int const z = LIST_ZELEMENT(t);
     size_t const len = pawList_length(P, t);
     size_t const abs = abs_index(P, index, len);
     if (abs < len - 1) {
         // shift values into place
-        shift_elements(LIST_BEGIN(t), abs + 1, -1, len - abs - 1, LIST_ZELEMENT(t));
+        shift_elements(LIST_BEGIN(t), abs + 1, -1, len - abs - 1, z);
     } else if (abs == len) {
         pawE_error(P, PAW_ERUNTIME, -1,
                    "popped index %I must be less than list length %I",
                    index, PAW_CAST_INT(len));
     }
-
-    --LIST_END(t);
+    LIST_END(t) -= z;
 }
 
 void pawList_copy(paw_Env *P, Tuple const *a, Tuple *b)

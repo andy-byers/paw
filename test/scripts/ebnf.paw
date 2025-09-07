@@ -18,7 +18,7 @@ fn read_to_str(path: str) -> io::Result<str> {
 
     let result = "";
     loop {
-        result += match file.read(CHUNK_SIZE)? {
+        result ++= match file.read(CHUNK_SIZE)? {
             "" => return Ok(result),
             s => s,
         };
@@ -181,7 +181,7 @@ struct Scanner {
 
                 c => {
                     self.skip_char();
-                    data += c.to_str(); // TODO: use "++" operator and allow "str + char" and "char + str"
+                    data ++= c.to_str(); // TODO: allow "str ++ char" and "char ++ str"
                 },
             }
         }
@@ -195,7 +195,7 @@ struct Scanner {
             let c = self.get_char();
             if is_alnum(c) || c == '_' {
                 self.skip_char();
-                data += c.to_str();
+                data ++= c.to_str();
             } else {
                 return self.new_token(loc, TokenKind::Ident, data);
             }
@@ -214,23 +214,23 @@ struct Scanner {
                 '\\' => {
                     self.skip_char(); // skip '\'
                     match self.get_char() {
-                        '\\' => data += "\\",
-                        '"' => data += "\"",
-                        '/' => data += "/",
-                        'b' => data += "\b",
-                        'v' => data += "\v",
-                        'f' => data += "\f",
-                        'n' => data += "\n",
-                        'r' => data += "\r",
-                        't' => data += "\t",
+                        '\\' => data ++= "\\",
+                        '"' => data ++= "\"",
+                        '/' => data ++= "/",
+                        'b' => data ++= "\b",
+                        'v' => data ++= "\v",
+                        'f' => data ++= "\f",
+                        'n' => data ++= "\n",
+                        'r' => data ++= "\r",
+                        't' => data ++= "\t",
                         'x' => {
                             self.skip_char();
                             let upper = self.get_char();
                             self.skip_char();
                             let lower = self.get_char();
                             if is_hex(upper) && is_hex(lower) {
-                                data += upper.to_str();
-                                data += lower.to_str();
+                                data ++= upper.to_str();
+                                data ++= lower.to_str();
                             } else {
                                 return self.new_error(char_loc, 
                                     TokenErrorKind::InvalidHexEscape, 
@@ -247,7 +247,7 @@ struct Scanner {
                     return self.new_token(string_loc, TokenKind::String, data);
                 },
                 '\0' | '\r' | '\n' => break,
-                c => data += c.to_str(),
+                c => data ++= c.to_str(),
             }
             self.skip_char();
         }
@@ -419,7 +419,7 @@ struct Grammer {
     pub fn to_str(self) -> str {
         let result = "";
         for p in self.productions {
-            result += "\{p}\n";
+            result ++= "\{p}\n";
         }
         result
     }
@@ -440,8 +440,8 @@ inline struct Expression {
     pub fn to_str(self) -> str {
         let result = "";
         for a in self.alts {
-            if #result > 0 { result += " | "; }
-            result += a.to_str();
+            if #result > 0 { result ++= " | "; }
+            result ++= a.to_str();
         }
         result
     }
@@ -453,8 +453,8 @@ inline struct Alternative {
     pub fn to_str(self) -> str {
         let result = "";
         for t in self.terms {
-            if #result > 0 { result += " "; }
-            result += t.to_str();
+            if #result > 0 { result ++= " "; }
+            result ++= t.to_str();
         }
         result
     }
@@ -761,8 +761,8 @@ struct Context {
 
     pub fn help(self) {
         self.info("paw \{self.program_name} PATH"
-            + "=========================================="
-            + "PATH: Path to file containing EBNF grammer");
+            ++ "=========================================="
+            ++ "PATH: Path to file containing EBNF grammer");
     }
 }
 

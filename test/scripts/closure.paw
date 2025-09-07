@@ -88,10 +88,8 @@ pub fn test_infer_from_annotation() {
 
 pub fn test_infer_param_from_body() {
     let f = |a| {return a + 1;};
-    let f = |a| {return a + "two";};
+    let f = |a| {return a ++ "two";};
 
-    // one of the two parameters must be annotated: the type of each operand to
-    // binary "+" must be known.
     let f = |a, b: int| {return a + b;};
     assert(f(1, 2) == 3);
     assert(f(10, 20) == 30);
@@ -248,7 +246,7 @@ pub fn check_upvalue_merge_2(n: int) -> (int, int) {
             a = a + b;
             b = b + a;
             n = n - 1;
-        }; // TODO: shouldn"t need semicolon here! ambiguity because of "||" and the fact that "while" is an expression
+        }
         || (a, b)
     };
     return f();

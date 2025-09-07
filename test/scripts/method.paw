@@ -56,8 +56,8 @@ enum Enum {
 
     pub fn debug(self) -> str {
         match self {
-            Self::A(a) => "A(" + a.to_str() + ")",
-            Self::B(b) => "B(" + b + ")",
+            Self::A(a) => "A(" ++ a.to_str() ++ ")",
+            Self::B(b) => "B(" ++ b ++ ")",
         }
     }
 }

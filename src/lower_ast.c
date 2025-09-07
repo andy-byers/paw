@@ -280,11 +280,11 @@ static struct HirExpr *LowerBinOpExpr(struct LowerAst *L, struct AstBinOpExpr *e
 
 static struct HirExpr *new_literal_field(struct LowerAst *L, const char *name, struct HirExpr *expr, int fid)
 {
-    struct HirIdent const ident = {
-        .name = SCAN_STR(L->C, name),
-        .span = expr->hdr.span,
-    };
-    return NEW_NODE(L, named_field_expr, expr->hdr.span, next_node_id(L), ident, expr, fid);
+    return NEW_NODE(L, named_field_expr, expr->hdr.span,
+            next_node_id(L), (struct HirIdent){
+                .name = SCAN_STR(L->C, name),
+                .span = expr->hdr.span,
+            }, expr, fid);
 }
 
 static struct HirPath new_builtin_path_(struct LowerAst *L, struct SourceSpan span, enum BuiltinKind builtin_kind, unsigned cstr_kind)
@@ -383,7 +383,7 @@ static struct HirExpr *LowerOpAssignExpr(struct LowerAst *L, struct AstOpAssignE
 static struct HirExpr *LowerMatchExpr(struct LowerAst *L, struct AstMatchExpr *e)
 {
     struct HirExpr *target = lower_expr(L, e->target);
-    struct HirExprList *arms = lower_expr_list(L, e->arms);
+    HirExprList *arms = lower_expr_list(L, e->arms);
     paw_assert(arms->count > 0);
 
     return NEW_NODE(L, match_expr, e->span, e->id, target, arms);
@@ -418,7 +418,7 @@ static struct HirType *new_list_t(struct LowerAst *L, struct SourceSpan span, st
 
 static struct HirType *new_map_t(struct LowerAst *L, struct SourceSpan span, struct HirType *key_t, struct HirType *value_t)
 {
-    struct HirTypeList *types = HirTypeList_new(L->hir);
+    HirTypeList *types = HirTypeList_new(L->hir);
     HirTypeList_push(L->hir, types, key_t);
     HirTypeList_push(L->hir, types, value_t);
 
@@ -429,7 +429,7 @@ static struct HirType *new_map_t(struct LowerAst *L, struct SourceSpan span, str
         .name = CSTR(L, CSTR_MAP),
         .span = key_t->hdr.span,
     };
-    struct HirSegments *segments = HirSegments_new(L->hir);
+    HirSegments *segments = HirSegments_new(L->hir);
     pawHir_add_segment(L->hir, segments, span, id, ident, types, target);
     struct HirPath path = pawHir_path_create(ident.span, segments, HIR_PATH_ITEM);
     return NEW_NODE(L, path_type, ident.span, next_node_id(L), path);
@@ -445,7 +445,7 @@ static struct HirDecl *lower_closure_param(struct LowerAst *L, struct AstParamDe
 static struct HirExpr *LowerClosureExpr(struct LowerAst *L, struct AstClosureExpr *e)
 {
     struct AstDecl *const *pparam;
-    struct HirDeclList *params = HirDeclList_new(L->hir);
+    HirDeclList *params = HirDeclList_new(L->hir);
     K_LIST_FOREACH (e->params, pparam) {
         struct AstParamDecl *src = AstGetParamDecl(*pparam);
         struct HirDecl *dst = lower_closure_param(L, src);
@@ -465,10 +465,10 @@ static struct HirDecl *LowerAdtDecl(struct LowerAst *L, struct AstAdtDecl *d)
 {
     L->adt_did = d->did;
     struct HirIdent const ident = lower_ident(L, d->ident);
-    struct HirTypeList *traits = lower_type_list(L, d->traits);
-    struct HirDeclList *generics = lower_decl_list(L, d->generics);
-    struct HirDeclList *variants = lower_decl_list(L, d->variants);
-    struct HirDeclList *methods = lower_methods(L, d->methods);
+    HirTypeList *traits = lower_type_list(L, d->traits);
+    HirDeclList *generics = lower_decl_list(L, d->generics);
+    HirDeclList *variants = lower_decl_list(L, d->variants);
+    HirDeclList *methods = lower_methods(L, d->methods);
     L->adt_did = NO_DECL;
 
     return NEW_NODE(L, adt_decl, d->span, d->id, d->did, ident, traits, generics, variants,
@@ -478,8 +478,8 @@ static struct HirDecl *LowerAdtDecl(struct LowerAst *L, struct AstAdtDecl *d)
 static struct HirDecl *LowerTraitDecl(struct LowerAst *L, struct AstTraitDecl *d)
 {
     struct HirIdent const ident = lower_ident(L, d->ident);
-    struct HirDeclList *generics = lower_decl_list(L, d->generics);
-    struct HirDeclList *methods = lower_methods(L, d->methods);
+    HirDeclList *generics = lower_decl_list(L, d->generics);
+    HirDeclList *methods = lower_methods(L, d->methods);
     return NEW_NODE(L, trait_decl, d->span, d->id, d->did, ident, generics, methods, d->is_pub);
 }
 
@@ -494,7 +494,7 @@ static struct HirDecl *LowerConstDecl(struct LowerAst *L, struct AstConstDecl *d
 static struct HirDecl *LowerTypeDecl(struct LowerAst *L, struct AstTypeDecl *d)
 {
     struct HirIdent const ident = lower_ident(L, d->ident);
-    struct HirDeclList *generics = lower_decl_list(L, d->generics);
+    HirDeclList *generics = lower_decl_list(L, d->generics);
     struct HirType *rhs = lower_type(L, d->rhs);
     return NEW_NODE(L, type_decl, d->span, d->id, d->did, ident, generics, rhs, d->is_pub);
 }
@@ -503,7 +503,7 @@ static struct HirDecl *LowerTypeDecl(struct LowerAst *L, struct AstTypeDecl *d)
 static struct HirExpr *LowerCallExpr(struct LowerAst *L, struct AstCallExpr *e)
 {
     struct HirExpr *target = lower_expr(L, e->target);
-    struct HirExprList *args = lower_expr_list(L, e->args);
+    HirExprList *args = lower_expr_list(L, e->args);
     return NEW_NODE(L, call_expr, e->span, e->id, target, args);
 }
 
@@ -526,13 +526,13 @@ static struct HirExpr *lower_basic_lit(struct LowerAst *L, struct AstBasicLit *e
 
 static struct HirExpr *lower_tuple_lit(struct LowerAst *L, struct AstTupleLit *e, struct SourceSpan span, NodeId id)
 {
-    struct HirExprList *elems = lower_expr_list(L, e->elems);
+    HirExprList *elems = lower_expr_list(L, e->elems);
     return NEW_NODE(L, tuple_lit, span, id, elems);
 }
 
 static struct HirExpr *lower_container_lit(struct LowerAst *L, struct AstContainerLit *e, struct SourceSpan span, NodeId id)
 {
-    struct HirExprList *items = lower_expr_list(L, e->items);
+    HirExprList *items = lower_expr_list(L, e->items);
     return NEW_NODE(L, container_lit, span, id, items, e->code);
 }
 
@@ -550,11 +550,15 @@ static struct HirExpr *LowerFieldExpr(struct LowerAst *L, struct AstFieldExpr *e
 static struct HirExpr *lower_composite_lit(struct LowerAst *L, struct AstCompositeLit *e, struct SourceSpan span, NodeId id)
 {
     struct HirPath const path = lower_path(L, e->path);
+    HirExprList *items = HirExprList_new(L->hir);
+    HirExprList_reserve(L->hir, items, e->items->count);
 
-    struct AstExpr *const *psrc;
-    struct HirExprList *items = HirExprList_new(L->hir);
-    K_LIST_FOREACH (e->items, psrc)
-        HirExprList_push(L->hir, items, lower_expr(L, *psrc));
+    struct AstExpr *const *pexpr;
+    K_LIST_FOREACH (e->items, pexpr) {
+        struct HirExpr *expr = lower_expr(L, *pexpr);
+        struct HirFieldExpr const *e = HirGetFieldExpr(expr);
+        HirExprList_push(L->hir, items, expr);
+    }
     return NEW_NODE(L, composite_lit, span, id, path, items);
 }
 
@@ -577,8 +581,6 @@ static struct HirExpr *LowerLiteralExpr(struct LowerAst *L, struct AstLiteralExp
     }
 }
 
-// TODO: eventually create a new HIR node and corresponding operation HirConcat/OP_CONCAT and
-//       use that here. Using operator '+' is wasteful due to multiple intermediate allocations.
 static struct HirExpr *LowerStringExpr(struct LowerAst *L, struct AstStringExpr *e)
 {
     struct AstStringPart const first_part = AstStringList_first(e->parts);
@@ -597,12 +599,12 @@ static struct HirExpr *LowerStringExpr(struct LowerAst *L, struct AstStringExpr 
         struct HirExpr *method = NEW_NODE(L, name_selector, ident.span, next_node_id(L), expr, ident);
         struct HirExprList *args = HirExprList_new(L->hir);
         struct HirExpr *next = NEW_NODE(L, call_expr, expr_part.expr->hdr.span, next_node_id(L), method, args);
-        result = NEW_NODE(L, binop_expr, next->hdr.span, next_node_id(L), result, next, BINARY_ADD);
+        result = NEW_NODE(L, binop_expr, next->hdr.span, next_node_id(L), result, next, BINARY_CONCAT);
 
         struct AstStringPart const str_part = AstStringList_get(e->parts, i + 1);
         paw_assert(str_part.is_str);
         next = NEW_NODE(L, basic_lit, str_part.str.span, next_node_id(L), str_part.str.value, BUILTIN_STR);
-        result = NEW_NODE(L, binop_expr, next->hdr.span, next_node_id(L), result, next, BINARY_ADD);
+        result = NEW_NODE(L, binop_expr, next->hdr.span, next_node_id(L), result, next, BINARY_CONCAT);
     }
     return result;
 }

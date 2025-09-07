@@ -682,7 +682,9 @@ try_again:
         case '+':
             next(X);
             if (test_next(X, '+')) {
-                token = T(TK_PLUS2);
+                token = test_next(X, '=')
+                    ? T(TK_PLUS2_EQ)
+                    : T(TK_PLUS2);
             } else if (test_next(X, '=')) {
                 token = T(TK_PLUS_EQ);
             }

@@ -57,8 +57,8 @@ pub fn test_fold_float_special_cases() {
 }
 
 fn fold_str_special_cases(s: str) {
-    assert(s + "" == s);
-    assert("" + s == s);
+    assert(s ++ "" == s);
+    assert("" ++ s == s);
 }
 
 pub fn test_fold_str_special_cases() {

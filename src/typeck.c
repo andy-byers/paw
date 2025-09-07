@@ -740,23 +740,24 @@ static IrType *check_unop_expr(struct TypeChecker *T, struct HirUnOpExpr *e)
 static IrType *check_binary_op(struct TypeChecker *T, struct SourceSpan span, enum BinaryOp op, struct HirExpr *left, struct HirExpr *right)
 {
     static uint8_t const VALID_OPS[][NBUILTINS] = {
-        //     type    = {0, b, x, i, f, s, l, m}
-        [BINARY_EQ]    = {0, 1, 1, 1, 1, 1, 0, 0},
-        [BINARY_NE]    = {0, 1, 1, 1, 1, 1, 0, 0},
-        [BINARY_LT]    = {0, 0, 1, 1, 1, 1, 0, 0},
-        [BINARY_LE]    = {0, 0, 1, 1, 1, 1, 0, 0},
-        [BINARY_GT]    = {0, 0, 1, 1, 1, 1, 0, 0},
-        [BINARY_GE]    = {0, 0, 1, 1, 1, 1, 0, 0},
-        [BINARY_ADD]   = {0, 0, 0, 1, 1, 1, 1, 0},
-        [BINARY_SUB]   = {0, 0, 0, 1, 1, 0, 0, 0},
-        [BINARY_MUL]   = {0, 0, 0, 1, 1, 0, 0, 0},
-        [BINARY_DIV]   = {0, 0, 0, 1, 1, 0, 0, 0},
-        [BINARY_MOD]   = {0, 0, 0, 1, 1, 0, 0, 0},
-        [BINARY_BXOR]  = {0, 0, 0, 1, 0, 0, 0, 0},
-        [BINARY_BAND]  = {0, 0, 0, 1, 0, 0, 0, 0},
-        [BINARY_BOR]   = {0, 0, 0, 1, 0, 0, 0, 0},
-        [BINARY_SHL]   = {0, 0, 0, 1, 0, 0, 0, 0},
-        [BINARY_SHR]   = {0, 0, 0, 1, 0, 0, 0, 0},
+        //     type     = {0, b, x, i, f, s, l, m}
+        [BINARY_EQ]     = {0, 1, 1, 1, 1, 1, 0, 0},
+        [BINARY_NE]     = {0, 1, 1, 1, 1, 1, 0, 0},
+        [BINARY_LT]     = {0, 0, 1, 1, 1, 1, 0, 0},
+        [BINARY_LE]     = {0, 0, 1, 1, 1, 1, 0, 0},
+        [BINARY_GT]     = {0, 0, 1, 1, 1, 1, 0, 0},
+        [BINARY_GE]     = {0, 0, 1, 1, 1, 1, 0, 0},
+        [BINARY_ADD]    = {0, 0, 0, 1, 1, 0, 0, 0},
+        [BINARY_SUB]    = {0, 0, 0, 1, 1, 0, 0, 0},
+        [BINARY_MUL]    = {0, 0, 0, 1, 1, 0, 0, 0},
+        [BINARY_DIV]    = {0, 0, 0, 1, 1, 0, 0, 0},
+        [BINARY_MOD]    = {0, 0, 0, 1, 1, 0, 0, 0},
+        [BINARY_BXOR]   = {0, 0, 0, 1, 0, 0, 0, 0},
+        [BINARY_BAND]   = {0, 0, 0, 1, 0, 0, 0, 0},
+        [BINARY_BOR]    = {0, 0, 0, 1, 0, 0, 0, 0},
+        [BINARY_SHL]    = {0, 0, 0, 1, 0, 0, 0, 0},
+        [BINARY_SHR]    = {0, 0, 0, 1, 0, 0, 0, 0},
+        [BINARY_CONCAT] = {0, 0, 0, 0, 0, 1, 1, 0},
     };
 
     static char const *BINOP_REPR[] = {
@@ -776,6 +777,7 @@ static IrType *check_binary_op(struct TypeChecker *T, struct SourceSpan span, en
         [BINARY_BOR] = "|",
         [BINARY_SHL] = "<<",
         [BINARY_SHR] = ">>",
+        [BINARY_CONCAT] = "++",
     };
 
     IrType *lhs = check_operand(T, left);
@@ -1342,6 +1344,9 @@ static IrType *check_composite_lit(struct TypeChecker *T, struct HirCompositeLit
     field_types = subst_types(T, ir_adt_types(base_type), ir_adt_types(type), field_types);
     struct HirExprList *order = collect_field_exprs(T, e->items, map, adt->ident.name);
 
+    HirExprList *items = HirExprList_new(T->hir);
+    HirExprList_resize(T->hir, items, order->count);
+
     int index = 0;
     IrType *const *ptype;
     struct HirDecl *const *pdecl;
@@ -1355,6 +1360,7 @@ static IrType *check_composite_lit(struct TypeChecker *T, struct HirCompositeLit
 
         struct HirExpr *item = HirExprList_get(order, *pindex);
         unify(T, field->span.start, *ptype, check_operand(T, item));
+        HirExprList_set(items, index, item);
         FieldMap_remove(T, map, field->ident);
         HirGetFieldExpr(item)->fid = index++;
     }
@@ -1366,9 +1372,10 @@ static IrType *check_composite_lit(struct TypeChecker *T, struct HirCompositeLit
                    key.name->text, adt->ident.name->text);
     }
     paw_assert(fields->count == e->items->count);
+    HirExprList_delete(T->hir, order);
     FieldMap_delete(T, map);
 
-    e->items = order;
+    e->items = items;
     return type;
 }
 

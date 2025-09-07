@@ -426,7 +426,7 @@ static void test_list_error(void)
     test_compiler_status(E_CYCLIC_TYPE, "list_cyclic_type", "", "let x = []; x = [x];");
     test_compiler_status(E_CYCLIC_TYPE, "list_nested_cyclic_type", "", "let x = []; x = [[x]];");
     test_compiler_status(E_CANNOT_INFER, "list_cannot_infer", "", "let a = [];");
-    test_compiler_status(E_CANNOT_INFER, "list_cannot_infer_binop", "", "let a = [] + [];");
+    test_compiler_status(E_CANNOT_INFER, "list_cannot_infer_binop", "", "let a = [] ++ [];");
     test_compiler_status(E_CANNOT_INFER, "list_use_before_inference", "", "let a = []; let b = #a;");
     test_compiler_status(E_INCOMPATIBLE_TYPES, "list_incompatible_types", "", "let a = [1]; a = [2.0];");
     test_compiler_status(E_INCOMPATIBLE_TYPES, "list_incompatible_types_2", "", "let a = []; if true {a = [0];} else {a = [true];}");

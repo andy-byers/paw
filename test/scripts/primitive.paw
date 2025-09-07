@@ -109,9 +109,10 @@ pub fn test_lots_of_strings() {
     let v = [];
     for i in 0..#alphabet {
         for j in 0..#alphabet {
-            let s = alphabet[..i] + alphabet[j..]
-                  + alphabet[i..] + alphabet[..j];
-            v.push(s);
+            v.push(alphabet[..i] ++ alphabet[j..]
+                ++ alphabet[i..] ++ alphabet[..j]);
         }
     }
 }
+
+
