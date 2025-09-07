@@ -45,20 +45,6 @@ static void constant_mod(struct Compiler *C, Str const *modname, struct SourceLo
     }
 }
 
-static void str_concat(struct Compiler *C, Str const *x, Str const *y, Value *pr)
-{
-    paw_Env *P = ENV(C);
-
-    Buffer b;
-    pawL_init_buffer(P, &b);
-    pawL_add_nstring(P, &b, x->text, x->length);
-    pawL_add_nstring(P, &b, y->text, y->length);
-    Str *r = pawP_scan_nstr(C, C->strings, b.data, b.size);
-    pawL_discard_result(P, &b);
-
-    V_SET_OBJECT(pr, r);
-}
-
 paw_Bool pawP_fold_unary_op(struct Compiler *C, enum MirUnaryOpKind op, Value v, Value *pr)
 {
     switch (op) {
@@ -215,11 +201,6 @@ paw_Bool pawP_fold_binary_op(struct Compiler *C, Str const *modname, struct Sour
             }
             break;
         }
-        case MIR_BINARY_STRCAT:
-            str_concat(C, V_STR(x), V_STR(y), pr);
-            break;
-        case MIR_BINARY_LISTCAT:
-            return PAW_FALSE;
     }
     return PAW_TRUE;
 }

@@ -178,12 +178,20 @@ typedef enum Op { //      arguments    description
     OP_LISTSET, //        A B C        R[A][R[B]] := R[C]
     OP_LISTGETN, //       A B C        R[A] := R[B][R[C]:R[C+1]]
     OP_LISTSETN, //       A B C        R[A][R[B]:R[B+1]] := R[C]
+    // TODO: rename OP_*(G|S)ETN to OP_*(G|S)ETR and use the former for containers with wide elements
+    // TODO: remove OP_MAPNEWP
+    //
+    // OP_STRGETN         A B C        R[A] := R[A][R[A+1]..R[A+k]][B..B+C]
+    // OP_LISTGETN        A B C        R[A] := R[A][R[A+1]..R[A+k]][B..B+C]
+    // OP_LISTSETN        A B C        R[A][R[A+1]][B..C] = R[A+2]..R[A+2+e]
+    // OP_MAPGETN         A B C        R[A] := R[A][R[A+1]..R[A+k]][B..B+C]
 
     OP_MAPLEN, //         A B          R[A] := #R[B]
     OP_MAPGETP, //        A B C        R[A] := &R[B][R[C]]
     OP_MAPNEWP, //        A B C        R[A] := &R[B][R[C]]
     OP_MAPGET, //         A B C        R[A] := R[B][R[C]]
     OP_MAPSET, //         A B C        R[A][R[B]] := R[C]
+    OP_MAPSETN, //        A B C        R[A][R[B]..] := R[C]..
 
     OP_UNPACK,//          A B C        R[A..A+C] := R[A][B..B+C]
     OP_GETVALUE,//        A B C        R[A] := R[B][C]

@@ -57,7 +57,7 @@ pub fn main(args: [str]) {
     {
         let stretchdepth = maxdepth + 1;
         let stretchtree = bottom_up_tree(stretchdepth);
-        print("stretch tree of depth \{stretchdepth}\tcheck: \{item_check(stretchtree)}\n");
+        println("stretch tree of depth \{stretchdepth}\tcheck: \{item_check(stretchtree)}");
     }
 
     let longlivedtree = bottom_up_tree(maxdepth);
@@ -69,9 +69,9 @@ pub fn main(args: [str]) {
         for i in 0..iterations {
             check += item_check(bottom_up_tree(depth));
         }
-        print("\{iterations}\t trees of depth \{depth}\tcheck: \{check}\n");
+        println("\{iterations}\t trees of depth \{depth}\tcheck: \{check}");
         depth += 2;
     }
 
-    print("long lived tree of depth \{maxdepth}\tcheck: \{item_check(longlivedtree)}\n");
+    println("long lived tree of depth \{maxdepth}\tcheck: \{item_check(longlivedtree)}");
 }

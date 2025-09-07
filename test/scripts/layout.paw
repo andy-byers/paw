@@ -1,5 +1,7 @@
 // layout.paw: Test memory layout of Paw objects
 
+fn black_box<T>(t: T) -> T { t }
+
 struct Pair<X, Y> {
     pub x: X,
     pub y: Y,
@@ -776,7 +778,12 @@ pub fn test_value_in_list_in_upvalue() {
         assert(vc[0].1 == 6);
         assert(vc[1].0 == 7);
         assert(vc[1].1 == 8);
-    })()
+    })();
+
+    assert(vc[0].0 == 5);
+    assert(vc[0].1 == 6);
+    assert(vc[1].0 == 7);
+    assert(vc[1].1 == 8);
 }
 
 pub fn test_nested_upvalues() {
@@ -1021,4 +1028,47 @@ pub fn test_empty_struct() {
     let f = |x| x;
     e = f(e);
 }
+
+// Return value of last function call in block result position must
+// be moved to where the "inner" variable is stored for the outer
+// call to "black_box".
+pub fn test_move_to_outer_stack() {
+    let outer = black_box({
+        let inner = black_box(1);
+        black_box(black_box)(inner + 41)
+    });
+    assert(outer == 42);
+}
+
+// Same as "test_move_to_outer_stack", except the value that needs
+// to be moved to the outer stack has a size of 2 VM registers.
+pub fn test_move_to_outer_stack_2() {
+    let outer = black_box({
+        let inner = black_box(1);
+        let inner2 = black_box(2);
+        black_box(black_box)((inner + 41, inner2 + 121))
+    });
+    assert(outer.0 == 42);
+    assert(outer.1 == 123);
+}
+
+// Same as "test_move_to_outer_stack", except the value that needs
+// to be overwritten is occupied by the first field of a tuple.
+pub fn test_move_to_outer_stack_3() {
+    let outer = black_box({
+        black_box(black_box)((0, 42)).1
+    });
+    assert(outer == 42);
+}
+
+// Same as "test_move_to_outer_stack_3", except the value that needs
+// to be moved has a size of 2 VM registers.
+pub fn test_move_to_outer_stack_4() {
+    let outer = black_box({
+        black_box(black_box)((0, (42, 123))).1
+    });
+    assert(outer.0 == 42);
+    assert(outer.1 == 123);
+}
+
 

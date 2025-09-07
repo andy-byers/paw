@@ -23,6 +23,7 @@ struct Mir;
     X(Aggregate)                \
     X(Container)                \
     X(SetElement)               \
+    X(SetElementV2)             \
     X(GetElement)               \
     X(GetElementPtr)            \
     X(SetRange)                 \
@@ -37,6 +38,7 @@ struct Mir;
     X(Closure)                  \
     X(UnaryOp)                  \
     X(BinaryOp)                 \
+    X(Concat)                   \
     X(Unreachable)              \
     X(Return)                   \
     X(Branch)                   \
@@ -67,11 +69,18 @@ typedef struct MirRegister {
 } MirRegister;
 
 #define MIR_INVALID_CONST MIR_CONST(-1)
-#define MIR_RESULT_CONST MIR_CONST(0)
+#define MIR_BASE_CONST MIR_CONST(0)
 #define MIR_CONST(X_) ((MirConstant){X_})
 typedef struct MirConstant {
     int value;
 } MirConstant;
+
+#define MIR_INVALID_STACK MIR_STACK(-1)
+#define MIR_BASE_STACK MIR_STACK(0)
+#define MIR_STACK(X_) ((MirStack){X_})
+typedef struct MirStack {
+    int value;
+} MirStack;
 
 typedef struct MirId {
     int value;
@@ -131,15 +140,18 @@ struct MirField {
 
 struct MirIndex {
     MIR_PROJECTION_HEADER;
-    struct MirPlace index;
+    MirRegister index;
 };
 
 struct MirRange {
     MIR_PROJECTION_HEADER;
-    struct MirPlace lower;
-    struct MirPlace upper;
+    MirRegister lower;
+    MirRegister upper;
 };
 
+// NOTE: Sub-values (fields, elements, etc.) must be written to using a "Move"
+//       instruction (see "unbox_move" in "unbox.c"). This may change in the
+//       future.
 typedef struct MirProjection {
     union {
         struct MirProjectionHeader hdr;
@@ -191,7 +203,7 @@ static inline MirProjection *MirProjection_new_field(struct Mir *mir, int index,
     return proj;
 }
 
-static inline MirProjection *MirProjection_new_index(struct Mir *mir, struct MirPlace index)
+static inline MirProjection *MirProjection_new_index(struct Mir *mir, MirRegister index)
 {
     MirProjection *proj = MirProjection_new(mir);
     proj->Index_ = (struct MirIndex){
@@ -201,7 +213,7 @@ static inline MirProjection *MirProjection_new_index(struct Mir *mir, struct Mir
     return proj;
 }
 
-static inline MirProjection *MirProjection_new_range(struct Mir *mir, struct MirPlace lower, struct MirPlace upper)
+static inline MirProjection *MirProjection_new_range(struct Mir *mir, MirRegister lower, MirRegister upper)
 {
     MirProjection *proj = MirProjection_new(mir);
     proj->Range_ = (struct MirRange){
@@ -227,6 +239,11 @@ enum MirInstructionKind {
 struct MirInstructionHeader {
     MIR_INSTRUCTION_HEADER;
 };
+
+// TODO: rename to MirStack?
+typedef struct Regstack {
+    int value;
+} Regstack;
 
 struct MirNoop {
     MIR_INSTRUCTION_HEADER;
@@ -289,14 +306,18 @@ struct MirLoadConstant {
 struct MirContainer {
     MIR_INSTRUCTION_HEADER;
     enum BuiltinKind b_kind : 8;
-    int nelems;
+    MirStack stack;
+    int elem_count;
+    struct MirPlaceList *elems;
     struct MirPlace output;
 };
 
 struct MirAggregate {
     MIR_INSTRUCTION_HEADER;
-    int nfields;
-    struct MirPlace output;
+    paw_Bool is_boxed : 1;
+    MirStack stack;
+    struct MirPlaceList *fields;
+    struct MirPlaceList *outputs;
 };
 
 struct MirCapture {
@@ -318,14 +339,26 @@ struct MirClosure {
 struct MirGetElement {
     MIR_INSTRUCTION_HEADER;
     enum BuiltinKind b_kind : 8;
+    MirStack stack;
     struct MirPlace output;
     struct MirPlace object;
     struct MirPlace key;
 };
 
+struct MirSetElementV2 {
+    MIR_INSTRUCTION_HEADER;
+    enum BuiltinKind b_kind : 8;
+    MirStack stack;
+    int offset;
+    struct MirPlace object;
+    struct MirPlaceList *key;
+    struct MirPlaceList *value;
+};
+
 struct MirSetElement {
     MIR_INSTRUCTION_HEADER;
     enum BuiltinKind b_kind : 8;
+    MirStack stack;
     struct MirPlace object;
     struct MirPlace key;
     struct MirPlace value;
@@ -335,6 +368,7 @@ struct MirGetElementPtr {
     MIR_INSTRUCTION_HEADER;
     enum BuiltinKind b_kind : 7;
     paw_Bool is_map_setter : 1;
+    MirStack stack;
     struct MirPlace output;
     struct MirPlace object;
     struct MirPlace key;
@@ -343,6 +377,7 @@ struct MirGetElementPtr {
 struct MirUnpack {
     MIR_INSTRUCTION_HEADER;
     int offset;
+    MirStack stack;
     struct MirPlaceList *outputs;
     struct MirPlace object;
 };
@@ -357,6 +392,7 @@ struct MirGetField {
 struct MirGetRange {
     MIR_INSTRUCTION_HEADER;
     enum BuiltinKind b_kind : 8;
+    MirStack stack;
     struct MirPlace output;
     struct MirPlace object;
     struct MirPlace lower;
@@ -366,6 +402,7 @@ struct MirGetRange {
 struct MirSetRange {
     MIR_INSTRUCTION_HEADER;
     enum BuiltinKind b_kind : 8;
+    MirStack stack;
     struct MirPlace object;
     struct MirPlace lower;
     struct MirPlace upper;
@@ -413,8 +450,6 @@ enum MirBinaryOpKind {
     MIR_BINARY_STRNE,
     MIR_BINARY_STRLT,
     MIR_BINARY_STRLE,
-    MIR_BINARY_STRCAT,
-    MIR_BINARY_LISTCAT,
     MIR_BINARY_IADD,
     MIR_BINARY_ISUB,
     MIR_BINARY_IMUL,
@@ -440,6 +475,13 @@ struct MirBinaryOp {
     struct MirPlace output;
 };
 
+struct MirConcat {
+    MIR_INSTRUCTION_HEADER;
+    MirStack stack;
+    struct MirPlaceList *inputs;
+    struct MirPlace output;
+};
+
 struct MirCast {
     MIR_INSTRUCTION_HEADER;
     struct MirPlace target;
@@ -450,6 +492,7 @@ struct MirCast {
 
 struct MirCall {
     MIR_INSTRUCTION_HEADER;
+    MirStack stack;
     struct MirPlace target;
     struct MirPlaceList *args;
     struct MirPlaceList *outputs;
@@ -481,6 +524,7 @@ struct MirUnreachable {
 
 struct MirReturn {
     MIR_INSTRUCTION_HEADER;
+    MirStack stack;
     struct MirPlaceList *values;
 };
 
@@ -631,7 +675,7 @@ inline static struct MirInstruction *pawMir_new_load_constant(struct Mir *mir, s
     return instr;
 }
 
-inline static struct MirInstruction *pawMir_new_container(struct Mir *mir, struct SourceLoc loc, enum BuiltinKind b_kind, int nelems, struct MirPlace output)
+inline static struct MirInstruction *pawMir_new_container(struct Mir *mir, struct SourceLoc loc, enum BuiltinKind b_kind, int elem_count, struct MirPlaceList *elems, struct MirPlace output)
 {
     struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->Container_ = (struct MirContainer){
@@ -639,21 +683,23 @@ inline static struct MirInstruction *pawMir_new_container(struct Mir *mir, struc
         .kind = kMirContainer,
         .loc = loc,
         .b_kind = b_kind,
-        .nelems = nelems,
+        .elem_count = elem_count,
+        .elems = elems,
         .output = output,
     };
     return instr;
 }
 
-inline static struct MirInstruction *pawMir_new_aggregate(struct Mir *mir, struct SourceLoc loc, int nfields, struct MirPlace output)
+inline static struct MirInstruction *pawMir_new_aggregate(struct Mir *mir, struct SourceLoc loc, struct MirPlaceList *fields, struct MirPlaceList *outputs, paw_Bool is_boxed)
 {
     struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->Aggregate_ = (struct MirAggregate){
         .mid = pawMir_next_id(mir),
         .kind = kMirAggregate,
         .loc = loc,
-        .nfields = nfields,
-        .output = output,
+        .fields = fields,
+        .outputs = outputs,
+        .is_boxed = is_boxed,
     };
     return instr;
 }
@@ -706,6 +752,22 @@ inline static struct MirInstruction *pawMir_new_get_element(struct Mir *mir, str
         .output = output,
         .object = object,
         .key = key,
+    };
+    return instr;
+}
+
+inline static struct MirInstruction *pawMir_new_set_elementv2(struct Mir *mir, struct SourceLoc loc, enum BuiltinKind b_kind, struct MirPlace object, struct MirPlaceList *key, struct MirPlaceList *value, int offset)
+{
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
+    instr->SetElementV2_ = (struct MirSetElementV2){
+        .mid = pawMir_next_id(mir),
+        .kind = kMirSetElementV2,
+        .loc = loc,
+        .offset = offset,
+        .b_kind = b_kind,
+        .object = object,
+        .key = key,
+        .value = value,
     };
     return instr;
 }
@@ -843,6 +905,19 @@ inline static struct MirInstruction *pawMir_new_binary_op(struct Mir *mir, struc
     return instr;
 }
 
+inline static struct MirInstruction *pawMir_new_concat(struct Mir *mir, struct SourceLoc loc, struct MirPlaceList *inputs, struct MirPlace output)
+{
+    struct MirInstruction *instr = pawMir_new_instruction(mir);
+    instr->Concat_ = (struct MirConcat){
+        .mid = pawMir_next_id(mir),
+        .kind = kMirConcat,
+        .loc = loc,
+        .inputs = inputs,
+        .output = output,
+    };
+    return instr;
+}
+
 inline static struct MirInstruction *pawMir_new_cast(struct Mir *mir, struct SourceLoc loc, struct MirPlace target, struct MirPlace output, enum BuiltinKind from, enum BuiltinKind to)
 {
     struct MirInstruction *instr = pawMir_new_instruction(mir);
@@ -937,10 +1012,22 @@ struct MirConstantData {
     Value value;
 };
 
-enum MirRegisterInfo {
-    MIR_REGINFO_NONE,
-    MIR_REGINFO_ARGUMENT,
-    MIR_REGINFO_FIXED,
+enum MirConstraintKind {
+    MIR_CONSTRAINT_NONE,
+    MIR_CONSTRAINT_STACK,
+    MIR_CONSTRAINT_FIXED,
+};
+
+struct MirConstraint {
+    enum MirConstraintKind kind;
+    union {
+        struct {
+            MirStack id;
+            int index;
+        } stack;
+
+        int fixed;
+    };
 };
 
 struct MirRegisterData {
@@ -948,7 +1035,8 @@ struct MirRegisterData {
     paw_Bool is_captured : 1;
     paw_Bool is_pointer : 1;
     int size;
-    enum MirRegisterInfo info;
+
+    struct MirConstraint con;
     struct IrType *type;
 };
 
@@ -1153,6 +1241,8 @@ DEFINE_LIST(struct Compiler, MirAccessList, struct MirAccess)
 struct AccessMap;
 struct UseDefMap;
 
+// NOTE: Creates duplicate "MirAccess" objects when a register is accessed multiple
+//       times by the same instruction.
 void pawMir_collect_per_instr_uses(struct Mir *mir, struct AccessMap *uses);
 void pawMir_collect_per_instr_defs(struct Mir *mir, struct AccessMap *defs);
 
@@ -1195,6 +1285,35 @@ paw_Bool pawP_fold_unary_op(struct Compiler *C, enum MirUnaryOpKind op, Value v,
 paw_Bool pawP_fold_binary_op(struct Compiler *C, Str const *modname, struct SourceLoc loc, enum MirBinaryOpKind op, Value x, Value y, Value *pr);
 
 void pawMir_materialize_constants(struct Mir *mir);
+
+// TODO: Probably should store stack constraint info elsewhere, but this is easier for now
+static inline MirStack *mir_pstack(struct MirInstruction *instr)
+{
+    switch (MIR_KINDOF(instr)) {
+#define EXTRACT(Kind_) case kMir##Kind_: { \
+            struct Mir##Kind_ *x = MirGet##Kind_(instr); \
+            return &x->stack; \
+        }
+
+        EXTRACT(Call)
+        EXTRACT(Container)
+        EXTRACT(Aggregate)
+        EXTRACT(Unpack)
+        EXTRACT(Concat)
+        EXTRACT(Return)
+        EXTRACT(GetElement)
+        EXTRACT(GetElementPtr)
+        EXTRACT(SetElement)
+        EXTRACT(SetElementV2)
+        EXTRACT(GetRange)
+        EXTRACT(SetRange)
+
+        default:
+            PAW_UNREACHABLE();
+
+#undef EXTRACT
+    }
+}
 
 // Push a human-readable representation of the MIR on to the stack
 // Returns a pointer to the buffer containing null-terminated text.

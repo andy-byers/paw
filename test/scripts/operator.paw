@@ -90,8 +90,8 @@ pub fn test_bitwise_ops() {
 
 pub fn test_add_strings() {
     let s = "";
-    s = s + "abc";
-    s += s;
+    s = s ++ "abc";
+    s ++= s;
     assert(s == "abcabc");
 }
 

@@ -126,6 +126,22 @@ static void copy_phi(struct MonoCollector *M, struct MirPhi *x, struct MirPhi *r
     r->inputs = copy_register_list(M, x->inputs);
 }
 
+static void copy_concat(struct MonoCollector *M, struct MirConcat *x, struct MirConcat *r)
+{
+    r->inputs = copy_register_list(M, x->inputs);
+}
+
+static void copy_container(struct MonoCollector *M, struct MirContainer *x, struct MirContainer *r)
+{
+    r->elems = copy_register_list(M, x->elems);
+}
+
+static void copy_aggregate(struct MonoCollector *M, struct MirAggregate *x, struct MirAggregate *r)
+{
+    r->fields = copy_register_list(M, x->fields);
+    r->outputs = copy_register_list(M, x->outputs);
+}
+
 static void copy_call(struct MonoCollector *M, struct MirCall *x, struct MirCall *r)
 {
     r->args = copy_register_list(M, x->args);
@@ -148,6 +164,12 @@ static void copy_switch(struct MonoCollector *M, struct MirSwitch *t, struct Mir
     }
 }
 
+static void copy_setelement(struct MonoCollector *M, struct MirSetElementV2 *x, struct MirSetElementV2 *r)
+{
+    r->key = copy_register_list(M, x->key);
+    r->value = copy_register_list(M, x->value);
+}
+
 static void copy_places(struct MonoCollector *M, struct MirPlacePtrList *src, struct MirPlacePtrList *dst)
 {
     struct MirPlace *const *pa, *const *pb;
@@ -165,6 +187,15 @@ static struct MirInstruction *copy_instruction(struct MonoCollector *M, struct M
         case kMirPhi:
             copy_phi(M, MirGetPhi(instr), MirGetPhi(r));
             break;
+        case kMirConcat:
+            copy_concat(M, MirGetConcat(instr), MirGetConcat(r));
+            break;
+        case kMirContainer:
+            copy_container(M, MirGetContainer(instr), MirGetContainer(r));
+            break;
+        case kMirAggregate:
+            copy_aggregate(M, MirGetAggregate(instr), MirGetAggregate(r));
+            break;
         case kMirCall:
             copy_call(M, MirGetCall(instr), MirGetCall(r));
             break;
@@ -173,6 +204,9 @@ static struct MirInstruction *copy_instruction(struct MonoCollector *M, struct M
             break;
         case kMirSwitch:
             copy_switch(M, MirGetSwitch(instr), MirGetSwitch(r));
+            break;
+        case kMirSetElementV2:
+            copy_setelement(M, MirGetSetElementV2(instr), MirGetSetElementV2(r));
             break;
         default: {
             struct MirPlacePtrList *src_loads = pawMir_get_loads(M->mir, instr);

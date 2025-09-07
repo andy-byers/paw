@@ -1,30 +1,30 @@
 // Translated from https://github.com/attractivechaos/plb2/blob/master/src/lua/matmul.lua
 
 fn matgen(n: int) -> [[float]] {
-	let tmp = 1.0 /
+    let tmp = 1.0 /
               n as float /
               n as float;
-	let a = [];
+    let a = [];
     let i = 0;
     while i < n {
         let b = [];
-		for j in 0..n {
+        for j in 0..n {
             let x = tmp
                   * (i - j) as float
                   * (i + j) as float;
             b.push(x);
-		}
+        }
         a.push(b);
         i = i + 1;
-	}
-	return a;
+    }
+    return a;
 }
 
 fn matmul(n: int, a: [[float]], b: [[float]]) -> [[float]] {
-	let c = [];
+    let c = [];
     let i = 0;
     while i < n {
-		let ci = [];
+        let ci = [];
         let j = 0;
         while j < n {
             ci.push(0.0);
@@ -36,15 +36,15 @@ fn matmul(n: int, a: [[float]], b: [[float]]) -> [[float]] {
             let bk = b[k];
             let j = 0;
             while j < n {
-				ci[j] = ci[j] + aik * bk[j];
+                ci[j] = ci[j] + aik * bk[j];
                 j = j + 1;
-			}
+            }
             k = k + 1;
-		}
+        }
         c.push(ci);
         i = i + 1;
-	}
-	return c;
+    }
+    return c;
 }
 
 pub fn main(args: [str]) {

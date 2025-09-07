@@ -1,0 +1,23 @@
+// stack.paw
+
+fn get() -> ((int, int), (int, int)) {
+    ((1, 2), (3, 4))
+}
+
+fn check12(ab: (int, int)) {
+    assert(ab.0 == 1);
+    assert(ab.1 == 2);
+}
+
+fn check34(ab: (int, int)) {
+    assert(ab.0 == 3);
+    assert(ab.1 == 4);
+}
+
+pub fn test_extra_moves_not_required() {
+    check12(get().0);
+}
+
+pub fn test_extra_moves_required() {
+    check34(get().1);
+}

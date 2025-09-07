@@ -185,11 +185,13 @@ static void AcceptLoadConstant(struct MirVisitor *V, struct MirLoadConstant *t)
 
 static void AcceptAggregate(struct MirVisitor *V, struct MirAggregate *t)
 {
-    pawMir_visit_place(V, t->output);
+    pawMir_visit_place_list(V, t->fields);
+    pawMir_visit_place_list(V, t->outputs);
 }
 
 static void AcceptContainer(struct MirVisitor *V, struct MirContainer *t)
 {
+    pawMir_visit_place_list(V, t->elems);
     pawMir_visit_place(V, t->output);
 }
 
@@ -246,6 +248,13 @@ static void AcceptGetElement(struct MirVisitor *V, struct MirGetElement *t)
     pawMir_visit_place(V, t->output);
     pawMir_visit_place(V, t->object);
     pawMir_visit_place(V, t->key);
+}
+
+static void AcceptSetElementV2(struct MirVisitor *V, struct MirSetElementV2 *t)
+{
+    pawMir_visit_place(V, t->object);
+    pawMir_visit_place_list(V, t->key);
+    pawMir_visit_place_list(V, t->value);
 }
 
 static void AcceptSetElement(struct MirVisitor *V, struct MirSetElement *t)
@@ -306,6 +315,12 @@ static void AcceptBinaryOp(struct MirVisitor *V, struct MirBinaryOp *t)
 {
     pawMir_visit_place(V, t->lhs);
     pawMir_visit_place(V, t->rhs);
+    pawMir_visit_place(V, t->output);
+}
+
+static void AcceptConcat(struct MirVisitor *V, struct MirConcat *t)
+{
+    pawMir_visit_place_list(V, t->inputs);
     pawMir_visit_place(V, t->output);
 }
 
@@ -689,6 +704,11 @@ MirPlacePtrList *pawMir_get_loads(struct Mir *mir, struct MirInstruction *instr)
             ADD_INPUT(x->value);
             break;
         }
+        case kMirAggregate: {
+            struct MirAggregate *x = MirGetAggregate(instr);
+            ADD_INPUTS(x->fields);
+            break;
+        }
         case kMirCall: {
             struct MirCall *x = MirGetCall(instr);
             ADD_INPUT(x->target);
@@ -740,6 +760,16 @@ MirPlacePtrList *pawMir_get_loads(struct Mir *mir, struct MirInstruction *instr)
             ADD_INPUT(x->rhs);
             break;
         }
+        case kMirConcat: {
+            struct MirConcat *x = MirGetConcat(instr);
+            ADD_INPUTS(x->inputs);
+            break;
+        }
+        case kMirContainer: {
+            struct MirContainer *x = MirGetContainer(instr);
+            ADD_INPUTS(x->elems);
+            break;
+        }
         case kMirSetCapture: {
             struct MirSetCapture *x = MirGetSetCapture(instr);
             ADD_INPUT(x->target);
@@ -749,6 +779,13 @@ MirPlacePtrList *pawMir_get_loads(struct Mir *mir, struct MirInstruction *instr)
         case kMirSetUpvalue: {
             struct MirSetUpvalue *x = MirGetSetUpvalue(instr);
             ADD_INPUT(x->value);
+            break;
+        }
+        case kMirSetElementV2: {
+            struct MirSetElementV2 *x = MirGetSetElementV2(instr);
+            ADD_INPUT(x->object);
+            ADD_INPUTS(x->key);
+            ADD_INPUTS(x->value);
             break;
         }
         case kMirSetElement: {
@@ -836,7 +873,7 @@ MirPlacePtrList *pawMir_get_stores(struct Mir *mir, struct MirInstruction *instr
             ADD_OUTPUT(MirGetLoadConstant(instr)->output);
             break;
         case kMirAggregate:
-            ADD_OUTPUT(MirGetAggregate(instr)->output);
+            ADD_OUTPUTS(MirGetAggregate(instr)->outputs);
             break;
         case kMirContainer:
             ADD_OUTPUT(MirGetContainer(instr)->output);
@@ -871,6 +908,9 @@ MirPlacePtrList *pawMir_get_stores(struct Mir *mir, struct MirInstruction *instr
         case kMirBinaryOp:
             ADD_OUTPUT(MirGetBinaryOp(instr)->output);
             break;
+        case kMirConcat:
+            ADD_OUTPUT(MirGetConcat(instr)->output);
+            break;
         default:
             break;
     }
@@ -884,9 +924,9 @@ static void indicate_access(struct Mir *mir, AccessMap *map, struct MirInstructi
 {
     struct MirAccessList *accesses = *AccessMap_get(mir, map, r);
     MirAccessList_push(mir->C, accesses, (struct MirAccess){
-                                        .instr = instr,
-                                        .b = where,
-                                    });
+        .instr = instr,
+        .b = where,
+    });
 }
 
 static void account_for_uses(struct Mir *mir, struct MirInstruction *instr, AccessMap *uses, MirBlock where)
@@ -1280,10 +1320,6 @@ static char const *binop_name(enum MirBinaryOpKind op)
             return "STRLT";
         case MIR_BINARY_STRLE:
             return "STRLE";
-        case MIR_BINARY_STRCAT:
-            return "STRCAT";
-        case MIR_BINARY_LISTCAT:
-            return "LISTCAT";
         case MIR_BINARY_IADD:
             return "IADD";
         case MIR_BINARY_ISUB:
@@ -1343,10 +1379,16 @@ static void print_constant(struct Printer *P, Value value, enum BuiltinKind kind
 
 static void print_place(struct Printer *P, struct MirPlace place)
 {
+    paw_Bool static const PRINT_STACKS = PAW_FALSE;
     if (place.kind == MIR_PLACE_LOCAL) {
-        PRINT_FORMAT(P, "_%d", place.r.value);
-        if (mir_reg_data(P->mir, place.r)->info == MIR_REGINFO_ARGUMENT)
-            PRINT_CHAR(P, '^');
+        struct MirConstraint const con = mir_reg_data(P->mir, place.r)->con;
+        if (PRINT_STACKS) {
+            PRINT_FORMAT(P, "s%d[%d]", con.stack.id.value, con.stack.index);
+        } else {
+            PRINT_FORMAT(P, "_%d", place.r.value);
+            if (con.kind == MIR_CONSTRAINT_STACK)
+                PRINT_CHAR(P, '^');
+        }
     } else if (place.kind == MIR_PLACE_CONSTANT) {
         struct MirConstantData const *k = mir_const_data(P->mir, place.k);
         print_constant(P, k->value, k->kind);
@@ -1370,18 +1412,12 @@ static void print_place(struct Printer *P, struct MirPlace place)
             }
             case kMirIndex: {
                 struct MirIndex *p = MirGetIndex(*pp);
-                PRINT_CHAR(P, '[');
-                print_place(P, p->index);
-                PRINT_CHAR(P, ']');
+                PRINT_FORMAT(P, "[_%d]", p->index.value);
                 break;
             }
             case kMirRange: {
                 struct MirRange *p = MirGetRange(*pp);
-                PRINT_CHAR(P, '[');
-                print_place(P, p->lower);
-                PRINT_LITERAL(P, "..");
-                print_place(P, p->upper);
-                PRINT_CHAR(P, ']');
+                PRINT_FORMAT(P, "[_%d.._%d]", p->lower.value, p->upper.value);
                 break;
             }
         }
@@ -1449,7 +1485,7 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
         }
         case kMirUpvalue: {
             struct MirUpvalue *t = MirGetUpvalue(instr);
-            PRINT_LITERAL(P, " upvalue ");
+            PRINT_LITERAL(P, "upvalue ");
             print_place(P, t->output);
             PRINT_FORMAT(P, " = up%d", t->index);
             break;
@@ -1481,15 +1517,25 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
         }
         case kMirContainer: {
             struct MirContainer *t = MirGetContainer(instr);
-            PRINT_LITERAL(P, "container ");
             print_place(P, t->output);
+            PRINT_LITERAL(P, " = container [");
+            print_place_list(P, t->elems);
+            PRINT_CHAR(P, ']');
             break;
         }
         case kMirAggregate: {
             struct MirAggregate *t = MirGetAggregate(instr);
             PRINT_LITERAL(P, "aggregate ");
-            print_place(P, t->output);
-            PRINT_FORMAT(P, " (%d fields)", t->nfields);
+            if (t->is_boxed) {
+                print_place(P, K_LIST_FIRST(t->outputs));
+            } else {
+                PRINT_CHAR(P, '[');
+                print_place_list(P, t->outputs);
+                PRINT_CHAR(P, ']');
+            }
+            PRINT_LITERAL(P, " = [");
+            print_place_list(P, t->fields);
+            PRINT_CHAR(P, ']');
             break;
         }
         case kMirCall: {
@@ -1533,7 +1579,7 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
         }
         case kMirSetCapture: {
             struct MirSetCapture *t = MirGetSetCapture(instr);
-            PRINT_LITERAL(P, " setcapture ");
+            PRINT_LITERAL(P, "setcapture ");
             print_place(P, t->target);
             PRINT_CHAR(P, ' ');
             print_place(P, t->value);
@@ -1541,7 +1587,7 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
         }
         case kMirClose: {
             struct MirClose *t = MirGetClose(instr);
-            PRINT_LITERAL(P, "close");
+            PRINT_LITERAL(P, "close ");
             print_place(P, t->target);
             break;
         }
@@ -1553,27 +1599,70 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
         }
         case kMirGetElement: {
             struct MirGetElement *t = MirGetGetElement(instr);
-            PRINT_FORMAT(P, "get _%d = _%d[_%d]", t->output.r.value, t->object.r.value, t->key.r.value);
+            PRINT_LITERAL(P, "get ");
+            print_place(P, t->output);
+            PRINT_LITERAL(P, " = ");
+            print_place(P, t->object);
+            PRINT_CHAR(P, '[');
+            print_place(P, t->key);
+            PRINT_CHAR(P, ']');
+            break;
+        }
+        case kMirSetElementV2: {
+            struct MirSetElementV2 *t = MirGetSetElementV2(instr);
+            PRINT_LITERAL(P, "set ");
+            print_place(P, t->object);
+            PRINT_CHAR(P, '[');
+            print_place_list(P, t->key);
+            PRINT_LITERAL(P, "] = [");
+            print_place_list(P, t->value);
+            PRINT_CHAR(P, ']');
             break;
         }
         case kMirSetElement: {
             struct MirSetElement *t = MirGetSetElement(instr);
-            PRINT_FORMAT(P, "set _%d[_%d] = _%d", t->object.r.value, t->key.r.value, t->value.r.value);
+            PRINT_LITERAL(P, "set ");
+            print_place(P, t->object);
+            PRINT_CHAR(P, '[');
+            print_place(P, t->key);
+            PRINT_LITERAL(P, "] = ");
+            print_place(P, t->value);
             break;
         }
         case kMirGetElementPtr: {
             struct MirGetElementPtr *t = MirGetGetElementPtr(instr);
-            PRINT_FORMAT(P, "get _%d = &_%d[_%d]", t->output.r.value, t->object.r.value, t->key.r.value);
+            PRINT_LITERAL(P, "get ");
+            print_place(P, t->output);
+            PRINT_LITERAL(P, " = &");
+            print_place(P, t->object);
+            PRINT_CHAR(P, '[');
+            print_place(P, t->key);
+            PRINT_CHAR(P, ']');
             break;
         }
         case kMirGetRange: {
             struct MirGetRange *t = MirGetGetRange(instr);
-            PRINT_FORMAT(P, "_%d = _%d[_%d:_%d]", t->output.r.value, t->object.r.value, t->lower.r.value, t->upper.r.value);
+            PRINT_LITERAL(P, "get ");
+            print_place(P, t->output);
+            PRINT_LITERAL(P, " = ");
+            print_place(P, t->object);
+            PRINT_CHAR(P, '[');
+            print_place(P, t->lower);
+            PRINT_CHAR(P, ':');
+            print_place(P, t->upper);
+            PRINT_CHAR(P, ']');
             break;
         }
         case kMirSetRange: {
             struct MirSetRange *t = MirGetSetRange(instr);
-            PRINT_FORMAT(P, "_%d[_%d:_%d] = _%d", t->object.r.value, t->lower.r.value, t->upper.r.value, t->value.r.value);
+            PRINT_LITERAL(P, "set ");
+            print_place(P, t->object);
+            PRINT_CHAR(P, '[');
+            print_place(P, t->lower);
+            PRINT_CHAR(P, ':');
+            print_place(P, t->upper);
+            PRINT_LITERAL(P, "] = ");
+            print_place(P, t->value);
             break;
         }
         case kMirUnpack: {
@@ -1606,6 +1695,14 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
             print_place(P, t->output);
             PRINT_FORMAT(P, " = %s ", unop_name(t->op));
             print_place(P, t->val);
+            break;
+        }
+        case kMirConcat: {
+            struct MirConcat *t = MirGetConcat(instr);
+            print_place(P, t->output);
+            PRINT_FORMAT(P, " = concat [");
+            print_place_list(P, t->inputs);
+            PRINT_CHAR(P, ']');
             break;
         }
         case kMirBinaryOp: {
@@ -1717,6 +1814,15 @@ static void dump_mir(struct Printer *P, struct Mir *mir)
     for (int i = 0; i < mir->upvalues->count; ++i) {
         struct MirUpvalueInfo up = MirUpvalueList_get(mir->upvalues, i);
         DUMP_FORMAT(P, "up%d (%s %d): %s\n", i, up.is_local ? "local" : "nonlocal", up.index, pawIr_print_type(P->C, up.type));
+    }
+    --P->indent;
+    DUMP_FORMAT(P, "}\n");
+
+    DUMP_FORMAT(P, "constants {\n");
+    ++P->indent;
+    for (int i = 0; i < mir->kcache->data->count; ++i) {
+        struct MirConstantData const *kdata = mir_const_data(mir, MIR_CONST(i));
+        DUMP_FORMAT(P, "%d: %s\n", i, pawIr_print_type(P->C, pawP_builtin_type(P->C, kdata->kind)));
     }
     --P->indent;
     DUMP_FORMAT(P, "}\n");

@@ -120,11 +120,13 @@ enum InfixOp {
     INFIX_BITOR, // |
     INFIX_SHL, // <<
     INFIX_SHR, // >>
+    INFIX_CONCAT, // ++
     INFIX_RANGE, // ..
     INFIX_RANGEI, // ..=
     INFIX_AND, // &&
     INFIX_OR, // ||
     INFIX_ASSIGN, // =
+    INFIX_ACONCAT, // ++=
     INFIX_AADD, // +=
     INFIX_ASUB, // -=
     INFIX_AMUL, // *=
@@ -150,6 +152,7 @@ static const struct {
     [INFIX_MUL] = {12, 12},
     [INFIX_DIV] = {12, 12},
     [INFIX_MOD] = {12, 12},
+    [INFIX_CONCAT] = {11, 11},
     [INFIX_ADD] = {11, 11},
     [INFIX_SUB] = {11, 11},
     [INFIX_SHL] = {10, 10},
@@ -168,6 +171,7 @@ static const struct {
     [INFIX_RANGE] = {2, 2},
     [INFIX_RANGEI] = {2, 2},
     [INFIX_ASSIGN] = {1, 1},
+    [INFIX_ACONCAT] = {1, 1},
     [INFIX_AADD] = {1, 1},
     [INFIX_ASUB] = {1, 1},
     [INFIX_AMUL] = {1, 1},
@@ -233,6 +237,8 @@ static enum InfixOp get_infixop(TokenKind kind)
             return INFIX_BITAND;
         case '|':
             return INFIX_BITOR;
+        case TK_PLUS2:
+            return INFIX_CONCAT;
         case TK_AS:
             return INFIX_AS;
         case TK_EQUALS2:
@@ -255,6 +261,8 @@ static enum InfixOp get_infixop(TokenKind kind)
             return INFIX_RANGE;
         case TK_DOT2_EQ:
             return INFIX_RANGEI;
+        case TK_PLUS2_EQ:
+            return INFIX_ACONCAT;
         case TK_PLUS_EQ:
             return INFIX_AADD;
         case TK_MINUS_EQ:
@@ -1486,6 +1494,8 @@ static enum BinaryOp into_binary_op(enum InfixOp op)
             return BINARY_SHL;
         case INFIX_ASHR:
             return BINARY_SHR;
+        case INFIX_ACONCAT:
+            return BINARY_CONCAT;
         default:
             PAW_UNREACHABLE();
     }
@@ -1567,6 +1577,7 @@ static struct AstExpr *infix_expr(struct Lex *lex, struct AstExpr *lhs, unsigned
         case INFIX_ABITOR:
         case INFIX_ASHL:
         case INFIX_ASHR:
+        case INFIX_ACONCAT:
             return op_assignment_expr(lex, lhs, op);
         case INFIX_RANGE:
         case INFIX_RANGEI:

@@ -399,12 +399,10 @@ struct MirIntervalMap *pawMir_compute_liveness(struct Compiler *C, struct Mir *m
             add_range(&L, MIR_REG(i), it->first, max_position);
         }
 
-        // TODO: Should be able to start live interval for captured variables when
-        //       they are first output, i.e. "it->first", rather than at 0.
         struct MirCaptureInfo *pci;
         K_LIST_FOREACH (mir->captured, pci) {
             struct MirLiveInterval const *it = interval_for_reg(&L, pci->r);
-            add_range(&L, pci->r, 0, max_position);
+            add_range(&L, pci->r, it->first, max_position);
         }
     }
 

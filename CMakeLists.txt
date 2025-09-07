@@ -61,6 +61,7 @@ set(PAW_HEADER_FILES
     ${PAW_SOURCE_DIR}/parse.h
     ${PAW_SOURCE_DIR}/prefix.h
     ${PAW_SOURCE_DIR}/resolve.h
+    ${PAW_SOURCE_DIR}/regstack.h
     ${PAW_SOURCE_DIR}/rt.h
     ${PAW_SOURCE_DIR}/rtti.h
     ${PAW_SOURCE_DIR}/source.h
@@ -112,6 +113,7 @@ set(PAW_SOURCE_FILES
     ${PAW_SOURCE_DIR}/parse.c
     ${PAW_SOURCE_DIR}/prelude.c
     ${PAW_SOURCE_DIR}/regalloc.c
+    ${PAW_SOURCE_DIR}/regstack.c
     ${PAW_SOURCE_DIR}/resolve.c
     ${PAW_SOURCE_DIR}/rt.c
     ${PAW_SOURCE_DIR}/rtti.c

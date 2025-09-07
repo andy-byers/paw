@@ -77,9 +77,9 @@ fn eval_enum(target: Enum) -> str {
         Enum::A => {return "a";},
         Enum::B => {return "b";},
         Enum::C => {return "c";},
-        Enum::One(x) => {return "1(" + eval_enum(x) + ")";},
-        Enum::Two(x, y) => {return "2(" + eval_enum(x) + eval_enum(y) + ")";},
-        Enum::Three(x, y, z) => {return "3(" + eval_enum(x) + eval_enum(y) + eval_enum(z) + ")";},
+        Enum::One(x) => {return "1(" ++ eval_enum(x) ++ ")";},
+        Enum::Two(x, y) => {return "2(" ++ eval_enum(x) ++ eval_enum(y) ++ ")";},
+        Enum::Three(x, y, z) => {return "3(" ++ eval_enum(x) ++ eval_enum(y) ++ eval_enum(z) ++ ")";},
     };
 }
 
