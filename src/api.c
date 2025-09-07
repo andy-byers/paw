@@ -513,54 +513,17 @@ void paw_new_tuple(paw_Env *P, int n)
 
 void paw_new_list(paw_Env *P, int n, int element_size)
 {
-    Value *object = pawC_push0(P);
-    Tuple *list = pawR_new_list(P, P->cf, object, n, element_size);
-
-    Value *dst = LIST_BEGIN(list);
-    Value const *src = at(P, -n * element_size - 1);
-    while (dst != LIST_END(list))
-        *dst++ = *src++;
-
-    paw_shift(P, n * element_size);
-}
-
-static void init_basic_map(paw_Env *P, Value *map, int n)
-{
-    for (int k = -2 * n; k < 0; k += 2) {
-        Value const *key = at(P, k - 1);
-        Value const *value = key + 1;
-        pawR_map_set(P, P->cf, map, key, value);
-    }
-    paw_shift(P, 2 * n);
-}
-
-static void init_wide_map(paw_Env *P, Value *map, MapPolicy p, int n)
-{
-    Value *temp = pawC_push0(P);
-    int const z = p.key_size + p.value_size;
-    for (int k = -z * n; k < 0; k += z) {
-        Value const *key = at(P, k - 1 - 1);
-        Value const *value = key + p.key_size;
-        pawR_map_newp(P, P->cf, temp, map, key);
-        pawV_copy(temp->p, value, p.value_size);
-    }
-    paw_pop(P, 1); // pop "temp"
-    paw_shift(P, z * n); // shift "map"
+    API_INCR_TOP(P, 1);
+    Value *object = P->top.p - n * element_size - 1;
+    pawR_new_list(P, P->cf, object, n, element_size);
 }
 
 void paw_new_map(paw_Env *P, int n, int policy)
 {
-    // allocate the map and obtain a stable pointer to it
-    Value *object = pawC_push0(P);
-    Tuple *map = pawR_new_map(P, P->cf, object, n, policy);
-    Value *ra = &(Value){.o = CAST_OBJECT(map)};
-
-    MapPolicy const p = GET_POLICY(P, map);
-    if (p.key_size == 1 && p.value_size == 1) {
-        init_basic_map(P, ra, n);
-    } else {
-        init_wide_map(P, ra, p, n);
-    }
+    API_INCR_TOP(P, 1);
+    struct MapPolicy const p = P->map_policies.data[policy];
+    Value *object = P->top.p - n * (p.key_size + p.value_size) - 1;
+    pawR_new_map(P, P->cf, object, n, policy);
 }
 
 void *paw_new_foreign(paw_Env *P, size_t size, int nfields)
@@ -933,8 +896,6 @@ void paw_list_iinsert(paw_Env *P, int object, paw_Int index)
 
 void paw_list_remove(paw_Env *P, int object)
 {
-    int const element_size = paw_list_element_size(P, object);
-
     Tuple *list = V_TUPLE(*at(P, object));
     paw_Int const index = paw_int(P, -1);
 

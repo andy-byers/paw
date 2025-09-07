@@ -73,6 +73,7 @@ enum BinaryOp {
     BINARY_BOR,
     BINARY_SHL,
     BINARY_SHR,
+    BINARY_CONCAT,
 };
 
 enum JumpKind {
@@ -117,6 +118,8 @@ enum TraitKind {
 
 #define K_LIST_MIN (1 << 3)
 #define K_LIST_MAX (1 << 28)
+
+// TODO: Don't need context parameter after creation since pool is stored internally
 
 // Generate a structure type and methods for a list containing nodes of a given
 // type Value_. Value_ can be any type, so long as it is "trivially copiable".
@@ -203,6 +206,11 @@ enum TraitKind {
     static inline void List_##_reserve(Context_ *ctx, List_ *list, int count)                                                      \
     {                                                                                                                              \
         list->data = pawK_list_reserve(ENV(ctx), list->pool, list->data, sizeof(list->data[0]), list->count, &list->alloc, count); \
+    }                                                                                                                              \
+    static inline void List_##_resize(Context_ *ctx, List_ *list, int count)                                                       \
+    {                                                                                                                              \
+        List_##_reserve(ctx, list, count);                                                                                         \
+        list->count = count;                                                                                                       \
     }
 
 
@@ -333,15 +341,17 @@ enum TraitKind {
         }                                                                                            \
         return NULL;                                                                                 \
     }                                                                                                \
-    static inline void Name_##_remove(Context_ *ctx, struct Name_ *map, Key_ key)                    \
+    static inline paw_Bool Name_##_remove(Context_ *ctx, struct Name_ *map, Key_ key)                \
     {                                                                                                \
-        struct Name_##Node **ptr = Name_##_find_node(ctx, map, key);                                 \
+        struct Name_##Node **ptr = Name_##_find_node(ctx, map, key);                           \
         if (ptr != NULL) {                                                                           \
             struct Name_##Node *node = *ptr;                                                         \
             *ptr = node->next;                                                                       \
             Alloc_(ENV(ctx), map->pool, node, sizeof(*node), 0);                                     \
             --map->count;                                                                            \
+            return PAW_TRUE;                                                                         \
         }                                                                                            \
+        return PAW_FALSE;                                                                            \
     }                                                                                                \
     static inline Value_ *Name_##_get(Context_ *ctx, struct Name_ *map, Key_ key)                    \
     {                                                                                                \

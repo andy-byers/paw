@@ -236,6 +236,7 @@ A panic can also be caused by calling the `panic` builtin function.
 
 ## Roadmap
 + [x] fix list/str slice operation (should use `Range`, `RangeTo`, etc.)
++ [ ] clean up the bytecode (eliminate moves using register hints, have operations accept constant immediate operands, etc.)
 + [ ] use `mut` to indicate mutability and make immutable the default for local variables
 + [ ] decide on and implement either RAII or "defer" for cleaning up resources
 + [ ] overflow checks for `paw_Int` operations during constant folding and inside VM
@@ -244,6 +245,10 @@ A panic can also be caused by calling the `panic` builtin function.
 
 ## Known problems
 + These need to be converted into issues, along with some TODO comments scattered throughout the codebase...
++ Explore register hints:
+    + When MIR "aggregate" instruction for an inline type is unboxed into a "move" for each field, make sure to use the same register for source/destination so the "MOVE" can be omitted during codegen
+    + During register allocation, bias choices based on how close they are to the output register of the last instruction to hopefully improve cache locality
+    + Could attempt to allocate inputs/output of "phi" nodes in the same VM register
 + Paw requires that "int" be at least 32 bits (probably fine in practice)
 + Need to make sure functions/closures with a return type annotation of "!" diverge unconditionally 
     + See TODO comment in `test_error.c` `test_divergence` function
@@ -253,7 +258,7 @@ A panic can also be caused by calling the `panic` builtin function.
     + Might indicate a problem somewhere in the library
     + Need a machine that can run Windows for debugging
 + Need a lower-level CFG-based IR (LIR) to use for register allocation and codegen
-    + Convert the `scalarize`/`ssa` pass into `lower_mir`, which will output LIR in SSA form
+    + Convert the `unbox`/`ssa` pass into `lower_mir`, which will output LIR in SSA form
     + Perform constant propagation on the LIR, monomorphization doesn't need to change
     + LIR will contain `GETFIELD`, `SETELEMENT`, etc. instructions, which are represented by places in the MIR
     + Each LIR register will represent a single Paw value (`Value` structure in C), while MIR registers can be multiple values wide

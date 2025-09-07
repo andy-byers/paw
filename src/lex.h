@@ -22,6 +22,7 @@ enum MultiChar {
 
     // Multi-byte tokens:
     TK_PLUS2,
+    TK_PLUS2_EQ,
     TK_DOT2,
     TK_DOT3,
     TK_DOT2_EQ,

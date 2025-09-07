@@ -82,6 +82,9 @@ struct StringMap;
 struct BodyList;
 struct BodyMap;
 
+// from regstack.h
+struct RegstackMap;
+
 void *pawP_alloc(paw_Env *P, struct Pool *pool, void *ptr, size_t size0, size_t size);
 #define P_ALLOC(C, ptr, size0, size) pawP_alloc(ENV(C), (C)->pool, ptr, size0, size)
 
@@ -229,7 +232,7 @@ void pawP_bitset_clear_range(struct BitSet *bs, int i, int j);
 void pawP_bitset_and(struct BitSet *a, struct BitSet const *b);
 void pawP_bitset_or(struct BitSet *a, struct BitSet const *b);
 
-struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, struct MirIntervalMap *intervals, struct MirLocationList *locations, int *pmax_reg);
+struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, struct MirIntervalMap *intervals, struct RegstackMap *regstack, struct MirLocationList *locations, int *pmax_reg);
 
 struct IrTypeList *pawP_instantiate_typelist(struct Compiler *C, struct IrTypeList *before, struct IrTypeList *after, struct IrTypeList *target);
 struct IrType *pawP_instantiate_field(struct Compiler *C, struct IrType *self, struct IrType *field);

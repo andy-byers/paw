@@ -29,6 +29,7 @@
     X(enum)                  \
     X(test_list)             \
     X(test_map)              \
+    X(stack)                 \
     X(layout)                \
     X(never)                 \
     X(destructure)           \

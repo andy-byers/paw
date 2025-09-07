@@ -1,4 +1,4 @@
-// map.paw
+// test_map.paw
 
 pub fn test_getters() {
     let map = [

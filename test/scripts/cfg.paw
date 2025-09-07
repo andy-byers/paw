@@ -1,39 +1,41 @@
 // cfg.paw
 
+fn black_box<T>(t: T) -> T { t }
+
 pub fn test_variables() {
-    let a = 1;
-    let b = 2;
-    let c = 3;
+    let a = black_box(1);
+    let b = black_box(2);
+    let c = black_box(3);
     assert(a + b + c == 6);
 
-    let a = 2;
-    let b = 3;
-    let c = 4;
+    let a = black_box(2);
+    let b = black_box(3);
+    let c = black_box(4);
     assert(b + c == 7);
 
-    let a = 3;
-    let b = 4;
-    let c = 5;
+    let a = black_box(3);
+    let b = black_box(4);
+    let c = black_box(5);
     assert(a + c == 8);
 
-    let a = 4;
-    let b = 5;
-    let c = 6;
+    let a = black_box(4);
+    let b = black_box(5);
+    let c = black_box(6);
     assert(a + b == 9);
 
-    let a = 5;
-    let b = 6;
-    let c = 7;
+    let a = black_box(5);
+    let b = black_box(6);
+    let c = black_box(7);
     assert(c == 7);
 
-    let a = 6;
-    let b = 7;
-    let c = 8;
+    let a = black_box(6);
+    let b = black_box(7);
+    let c = black_box(8);
     assert(a == 6);
 
-    let a = 6;
-    let b = 7;
-    let c = 8;
+    let a = black_box(6);
+    let b = black_box(7);
+    let c = black_box(8);
     assert(b == 7);
 }
 
@@ -340,6 +342,13 @@ fn and_or_chain_2(aa: bool, bb: bool) -> Option<bool> {
     return None;
 }
 
+pub fn test_and_or_chain_2() {
+    and_or_chain_2(false, false);
+    and_or_chain_2(false, true);
+    and_or_chain_2(true, false);
+    and_or_chain_2(true, true);
+}
+
 fn and_or_chain_3(aa: bool, bb: bool, cc: bool) -> Option<bool> {
     let a = Some(aa);
     let b = Some(bb);
@@ -354,11 +363,6 @@ fn and_or_chain_3(aa: bool, bb: bool, cc: bool) -> Option<bool> {
 
 // Test logical expressions with extra control flow 
 pub fn test_and_or_chain_3() {
-    and_or_chain_2(false, false);
-    and_or_chain_2(false, true);
-    and_or_chain_2(true, false);
-    and_or_chain_2(true, true);
-
     and_or_chain_3(false, false, false);
     and_or_chain_3(false, false, true);
     and_or_chain_3(false, true, false);

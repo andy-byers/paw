@@ -43,12 +43,6 @@
 
 #define VM_REG(r) (&cf->base.p[r])
 
-// Generate code for creating common builtin objects
-#define VM_LIST_INIT(z, r, n) \
-    pawList_new(P, z, n, r);
-#define VM_MAP_INIT(p, r, n) \
-    pawMap_new(P, p, n, r);
-
 static void add_location(paw_Env *P, Buffer *buf)
 {
     CallFrame const *cf = P->cf;
@@ -267,10 +261,9 @@ static void emit_ptr(paw_Env *P, ptrdiff_t offset, Value *ptr)
 int pawR_map_getp(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc)
 {
     Tuple *map = V_TUPLE(*rb);
-    ptrdiff_t out = SAVE_OFFSET(P, ra);
+    ptrdiff_t const out = SAVE_OFFSET(P, ra);
     Value *ptr = pawMap_get(P, map, rc);
-    if (ptr == NULL)
-        return -1;
+    if (ptr == NULL) return -1;
     emit_ptr(P, out, ptr);
     return 0;
 }
@@ -278,7 +271,7 @@ int pawR_map_getp(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value c
 void pawR_map_newp(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc)
 {
     Tuple *map = V_TUPLE(*rb);
-    ptrdiff_t out = SAVE_OFFSET(P, ra);
+    ptrdiff_t const out = SAVE_OFFSET(P, ra);
     Value *ptr = pawMap_create(P, map, rc);
     emit_ptr(P, out, ptr);
 }
@@ -286,10 +279,9 @@ void pawR_map_newp(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value 
 int pawR_map_get(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc)
 {
     Tuple *map = V_TUPLE(*rb);
-    ptrdiff_t out = SAVE_OFFSET(P, ra);
+    ptrdiff_t const out = SAVE_OFFSET(P, ra);
     Value const *pval = pawMap_get(P, map, rc);
-    if (pval == NULL)
-        return -1;
+    if (pval == NULL) return -1;
     ra = RESTORE_POINTER(P, out);
     *ra = *pval;
     return 0;
@@ -298,6 +290,16 @@ int pawR_map_get(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value co
 void pawR_map_set(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc)
 {
     pawMap_insert(P, V_TUPLE(*ra), rb, rc);
+}
+
+void pawR_map_setn(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, int const c)
+{
+    Tuple *map = V_TUPLE(*ra);
+    struct MapPolicy const p = GET_POLICY(P, map);
+    Value *ptr = pawMap_create(P, map, rb);
+    Value const *pvalue = rb + p.key_size;
+    for (int i = c; i < p.value_size; ++i)
+        ptr[i] = pvalue[i - c];
 }
 
 void pawR_str_getn(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc)
@@ -322,7 +324,7 @@ void pawR_list_getn(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value
     Tuple const *t = V_TUPLE(*rb);
     paw_Int const i = V_INT(rc[0]);
     paw_Int const j = V_INT(rc[1]);
-    Tuple *out = VM_LIST_INIT(LIST_ZELEMENT(t), rout, 0);
+    Tuple *out = pawList_new(P, LIST_ZELEMENT(t), 0, rout);
     pawList_get_range(P, t, i, j, out);
     V_SET_OBJECT(ra, out);
 }
@@ -346,14 +348,29 @@ Tuple *pawR_new_tuple(paw_Env *P, CallFrame *cf, Value *ra, int b)
 
 Tuple *pawR_new_list(paw_Env *P, CallFrame *cf, Value *ra, int b, int c)
 {
-    Tuple *list = VM_LIST_INIT(c, ra, b);
-    pawList_resize(P, list, CAST_SIZE(b));
+    Tuple *list = pawList_new(P, c, b, ra + b * c);
+    LIST_END(list) += b * c;
+    for (int i = 0; i < b * c; ++i)
+        LIST_BEGIN(list)[i] = ra[i];
+    V_SET_OBJECT(ra, list);
+    P->top.p = ra + 1;
     return list;
 }
 
 Tuple *pawR_new_map(paw_Env *P, CallFrame *cf, Value *ra, int b, int c)
 {
-    return VM_MAP_INIT(c, ra, b);
+    struct MapPolicy const p = P->map_policies.data[c];
+    int const z = p.key_size + p.value_size;
+
+    Tuple *map = pawMap_new(P, c, b, ra + b * z);
+    Value const *pv = ra, *end = ra + b * z;
+    while (pv != end) {
+        pawMap_insert(P, map, pv, pv + p.key_size);
+        pv += z;
+    }
+    V_SET_OBJECT(ra, map);
+    P->top.p = ra + 1;
+    return map;
 }
 
 // Macros for generating scalar operations
@@ -668,7 +685,7 @@ top:
                 VM_SAVE_PC();
                 Value const *rb = VM_RB(opcode);
                 Value *rc = VM_RC(opcode);
-                P->top.p = rc + 1;
+                P->top.p = rc + pawMap_key_size(P, V_TUPLE(*rb));
                 if (pawR_map_get(P, cf, ra, rb, rc)) {
                     pawR_error(P, PAW_EKEY, "key does not exist");
                 }
@@ -679,25 +696,37 @@ top:
                 VM_SAVE_PC();
                 Value const *rb = VM_RB(opcode);
                 Value *rc = VM_RC(opcode);
-                P->top.p = rc + 1;
+                P->top.p = rc + pawMap_value_size(P, V_TUPLE(*ra)); // TODO: do this inside pawR_map_set, where policy is already loaded? would be redundant if called from paw_map_set
                 pawR_map_set(P, cf, ra, rb, rc);
+            }
+
+            vm_case(MAPSETN) :
+            {
+                VM_SAVE_PC();
+                Value const *rb = VM_RB(opcode);
+                int const c = GET_C(opcode);
+                pawR_map_setn(P, cf, ra, rb, c);
             }
 
             vm_case(NEWTUPLE) :
             {
                 VM_SAVE_PC();
-                P->top.p = ra + 1;
                 int const b = GET_B(opcode);
-                pawR_new_tuple(P, cf, ra, b);
+                Value *temp = ra + b;
+                P->top.p = temp + 1;
+                Tuple *tuple = pawR_new_tuple(P, cf, temp, b);
+                for (int i = 0; i < b; ++i)
+                    tuple->elems[i] = ra[i];
+                paw_shift(P, b);
                 CHECK_GC(P);
             }
 
             vm_case(NEWLIST) :
             {
                 VM_SAVE_PC();
-                P->top.p = ra + 1;
                 int const b = GET_B(opcode);
                 int const c = GET_C(opcode);
+                P->top.p = ra + b * c + 1;
                 pawR_new_list(P, cf, ra, b, c);
                 CHECK_GC(P);
             }
@@ -705,9 +734,10 @@ top:
             vm_case(NEWMAP) :
             {
                 VM_SAVE_PC();
-                P->top.p = ra + 1;
                 int const b = GET_B(opcode);
                 int const c = GET_C(opcode);
+                struct MapPolicy const p = P->map_policies.data[c];
+                P->top.p = ra + b * (p.key_size + p.value_size) + 1;
                 pawR_new_map(P, cf, ra, b, c);
                 CHECK_GC(P);
             }

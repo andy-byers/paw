@@ -1,0 +1,35 @@
+version: 2.1
+
+orbs:
+    win: circleci/windows@4.1.1
+
+jobs:
+  build:
+    executor: win/server-2022
+    environment:
+      BUILD_DIR: build
+    steps:
+      - checkout
+      - run:
+          name: Install Dependencies
+          command: |
+            choco install -y cmake --installargs 'ADD_CMAKE_TO_PATH=System'
+            choco install -y mingw
+      - run:
+          name: Configure
+          command: |
+            mkdir -p build
+            cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DPAW_STRESS=2 -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded
+      - run:
+          name: Build
+          command: cmake --build build --config Debug
+      - run:
+          name: Test
+          working_directory: build
+          command: ctest --verbose --build-config Debug
+
+workflows:
+  version: 2
+  build_and_test:
+    jobs:
+      - build

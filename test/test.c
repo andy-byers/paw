@@ -384,45 +384,47 @@ char const *op_name(Op op)
         case OP_FMOD:
             return "FMOD";
         case OP_STREQ:
-            return "SEQ";
+            return "STREQ";
         case OP_STRNE:
-            return "SNE";
+            return "STRNE";
         case OP_STRLT:
-            return "SLT";
+            return "STRLT";
         case OP_STRLE:
-            return "SLE";
+            return "STRLE";
         case OP_STRLEN:
-            return "SLEN";
+            return "STRLEN";
         case OP_STRCAT:
-            return "SCAT";
+            return "STRCAT";
         case OP_STRGET:
-            return "SGET";
+            return "STRGET";
         case OP_STRGETN:
-            return "SGETN";
+            return "STRGETN";
         case OP_LISTLEN:
-            return "LLEN";
+            return "LISTLEN";
         case OP_LISTCAT:
-            return "LCAT";
+            return "LISTCAT";
         case OP_LISTGETP:
-            return "LGETP";
+            return "LISTGETP";
         case OP_LISTGET:
-            return "LGET";
+            return "LISTGET";
         case OP_LISTSET:
-            return "LSET";
+            return "LISTSET";
         case OP_LISTGETN:
-            return "LGETN";
+            return "LISTGETN";
         case OP_LISTSETN:
-            return "LSETN";
+            return "LISTSETN";
         case OP_MAPLEN:
-            return "MLEN";
+            return "MAPLEN";
         case OP_MAPNEWP:
-            return "MNEWP";
+            return "MAPNEWP";
         case OP_MAPGETP:
-            return "MGETP";
+            return "MAPGETP";
         case OP_MAPGET:
-            return "MGET";
+            return "MAPGET";
         case OP_MAPSET:
-            return "MSET";
+            return "MAPSET";
+        case OP_MAPSETN:
+            return "MAPSETN";
         case OP_UNPACK:
             return "UNPACK";
         case OP_GETVALUE:
@@ -469,7 +471,6 @@ void paw_dump_opcode(OpCode opcode)
         case OP_RETURN:
         case OP_NEWTUPLE:
         case OP_NEWLIST:
-        case OP_NEWMAP:
         case OP_MOVE:
         case OP_INOT:
         case OP_INEG:
@@ -514,6 +515,7 @@ void paw_dump_opcode(OpCode opcode)
             printf("%s %d\n", opname, GET_A(opcode));
             break;
         // op A B C
+        case OP_NEWMAP:
         case OP_CEQ:
         case OP_CNE:
         case OP_CLT:
@@ -558,6 +560,7 @@ void paw_dump_opcode(OpCode opcode)
         case OP_MAPGETP:
         case OP_MAPGET:
         case OP_MAPSET:
+        case OP_MAPSETN:
         case OP_GETFIELD:
         case OP_SETFIELD:
         case OP_UNPACK:
@@ -592,7 +595,6 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
             case OP_RETURN:
             case OP_NEWTUPLE:
             case OP_NEWLIST:
-            case OP_NEWMAP:
             case OP_TESTK:
             case OP_TESTI:
             case OP_MOVE:
@@ -635,6 +637,7 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
                 pawL_add_fstring(P, print, " %d\t; close(R[%d])\n", GET_A(opcode), GET_A(opcode));
                 break;
             // op A B C
+            case OP_NEWMAP:
             case OP_CEQ:
             case OP_CNE:
             case OP_CLT:
@@ -677,6 +680,7 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
             case OP_MAPGETP:
             case OP_MAPGET:
             case OP_MAPSET:
+            case OP_MAPSETN:
             case OP_GETFIELD:
             case OP_SETFIELD:
             case OP_UNPACK:
