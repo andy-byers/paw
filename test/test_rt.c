@@ -250,7 +250,7 @@ int main(int argc, char **argv)
     // parse commandline arguments
     parse_arguments(argc, argv);
 
-    script("test_map");return s_counters.failures;
+    script("poly_function");return s_counters.failures;
 
 #define RUN_SCRIPT(name) script(#name);
     // run the test scripts

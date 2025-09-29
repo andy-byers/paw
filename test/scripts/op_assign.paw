@@ -1,0 +1,55 @@
+// op_assign.paw
+
+fn black_box<T>(t: T) -> T { t }
+
+pub fn test_operations() {
+    let i = 0;
+
+    i += 10;
+    assert(i == 10);
+
+    i -= 2;
+    assert(i == 8);
+
+    i *= 5;
+    assert(i == 40);
+
+    i /= 3;
+    assert(i == 13);
+
+    i %= 5;
+    assert(i == 3);
+
+    i <<= 4;
+    assert(i == 48);
+
+    i >>= 1;
+    assert(i == 24);
+}
+
+pub fn test_inline_field() {
+    let t = (1,);
+
+    t.0 += 10;
+    assert(t.0 == 11);
+}
+
+pub fn test_indirect_element() {
+    let t = [1];
+
+    t[0] += 10;
+    assert(t[0] == 11);
+}
+
+pub fn test_indirect_element_2() {
+    let t = [1];
+
+    // index is result of stack operation
+    t[black_box(0)] += 10;
+    assert(t[0] == 11);
+
+    // index is a local variable
+    let i = black_box(0);
+    t[i] += 1;
+    assert(t[0] == 12);
+}

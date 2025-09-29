@@ -16,6 +16,7 @@
     X(kprop)                 \
     X(primitive)             \
     X(operator)              \
+    X(op_assign)             \
     X(block)                 \
     X(cast)                  \
     X(loop)                  \
