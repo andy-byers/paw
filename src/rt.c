@@ -676,7 +676,7 @@ top:
                 VM_SAVE_PC();
                 Value const *rb = VM_RB(opcode);
                 Value *rc = VM_RC(opcode);
-                P->top.p = rc + 1;
+                P->top.p = ra + 1;
                 pawR_map_newp(P, cf, ra, rb, rc);
             }
 

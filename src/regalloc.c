@@ -595,7 +595,6 @@ static void allocate_instruction(struct RegisterAllocator *R, struct MirInstruct
         BASIC_STACK_INSTR(GetElement)
         BASIC_STACK_INSTR(GetElementPtr)
         BASIC_STACK_INSTR(SetElement)
-        BASIC_STACK_INSTR(SetElementV2)
         BASIC_STACK_INSTR(GetRange)
         BASIC_STACK_INSTR(SetRange)
 

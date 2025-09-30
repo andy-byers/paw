@@ -745,17 +745,24 @@ static struct MirPlace select_field(struct FunctionState *fs, struct MirPlace pl
     return p;
 }
 
+static paw_Bool has_index_or_range(struct MirPlace place)
+{
+    struct MirProjection *const *pproj;
+    K_LIST_FOREACH (place.projection, pproj) {
+        if (MIR_KINDOF(*pproj) == kMirIndex
+                || MIR_KINDOF(*pproj) == kMirRange)
+            return PAW_TRUE;
+    }
+    return PAW_FALSE;
+}
+
 static void ensure_single_index_or_range(struct FunctionState *fs, struct MirPlace *pplace)
 {
-    if (pplace->projection->count > 1) {
-        struct MirProjection const *penult = K_LIST_END(pplace->projection)[-1];
-        if (!MirIsDeref(penult)) return;
-    } else if (pplace->kind != MIR_PLACE_UPVALUE) {
-        return;
+    if (pplace->kind == MIR_PLACE_UPVALUE || has_index_or_range(*pplace)) {
+        struct MirPlace const new_place = new_local(fs, pplace->type);
+        move_to(fs, (struct SourceLoc){0}, *pplace, new_place);
+        *pplace = new_place;
     }
-    struct MirPlace const new_place = new_local(fs, pplace->type);
-    move_to(fs, (struct SourceLoc){0}, *pplace, new_place);
-    *pplace = new_place;
 }
 
 static struct MirPlace select_element(struct FunctionState *fs, struct MirPlace place, IrType *target, MirRegister index, IrType *result)
@@ -1649,7 +1656,7 @@ static struct MirPlace lower_assign_expr(struct HirVisitor *V, struct HirAssignE
     struct FunctionState *fs = L->fs;
 
     struct MirPlace const lhs = lower_place(V, e->lhs);
-    struct MirPlace const rhs = HirIsIndex(e->lhs)
+    struct MirPlace const rhs = has_index_or_range(lhs)
         ? lower_to_stack(L, e->rhs)
         : lower_place(V, e->rhs);
     move_to(fs, e->span.start, rhs, lhs);

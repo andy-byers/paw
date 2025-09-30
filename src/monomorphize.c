@@ -164,7 +164,12 @@ static void copy_switch(struct MonoCollector *M, struct MirSwitch *t, struct Mir
     }
 }
 
-static void copy_setelement(struct MonoCollector *M, struct MirSetElementV2 *x, struct MirSetElementV2 *r)
+static void copy_getelement(struct MonoCollector *M, struct MirGetElement *x, struct MirGetElement *r)
+{
+    r->key = copy_register_list(M, x->key);
+}
+
+static void copy_setelement(struct MonoCollector *M, struct MirSetElement *x, struct MirSetElement *r)
 {
     r->key = copy_register_list(M, x->key);
     r->value = copy_register_list(M, x->value);
@@ -205,8 +210,11 @@ static struct MirInstruction *copy_instruction(struct MonoCollector *M, struct M
         case kMirSwitch:
             copy_switch(M, MirGetSwitch(instr), MirGetSwitch(r));
             break;
-        case kMirSetElementV2:
-            copy_setelement(M, MirGetSetElementV2(instr), MirGetSetElementV2(r));
+        case kMirGetElement:
+            copy_getelement(M, MirGetGetElement(instr), MirGetGetElement(r));
+            break;
+        case kMirSetElement:
+            copy_setelement(M, MirGetSetElement(instr), MirGetSetElement(r));
             break;
         default: {
             struct MirPlacePtrList *src_loads = pawMir_get_loads(M->mir, instr);

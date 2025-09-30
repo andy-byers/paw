@@ -23,7 +23,6 @@ struct Mir;
     X(Aggregate)                \
     X(Container)                \
     X(SetElement)               \
-    X(SetElementV2)             \
     X(GetElement)               \
     X(GetElementPtr)            \
     X(SetRange)                 \
@@ -342,10 +341,10 @@ struct MirGetElement {
     MirStack stack;
     struct MirPlace output;
     struct MirPlace object;
-    struct MirPlace key;
+    struct MirPlaceList *key;
 };
 
-struct MirSetElementV2 {
+struct MirSetElement {
     MIR_INSTRUCTION_HEADER;
     enum BuiltinKind b_kind : 8;
     MirStack stack;
@@ -355,15 +354,6 @@ struct MirSetElementV2 {
     struct MirPlaceList *value;
 };
 
-struct MirSetElement {
-    MIR_INSTRUCTION_HEADER;
-    enum BuiltinKind b_kind : 8;
-    MirStack stack;
-    struct MirPlace object;
-    struct MirPlace key;
-    struct MirPlace value;
-};
-
 struct MirGetElementPtr {
     MIR_INSTRUCTION_HEADER;
     enum BuiltinKind b_kind : 7;
@@ -371,7 +361,7 @@ struct MirGetElementPtr {
     MirStack stack;
     struct MirPlace output;
     struct MirPlace object;
-    struct MirPlace key;
+    struct MirPlaceList *key;
 };
 
 struct MirUnpack {
@@ -741,7 +731,7 @@ inline static struct MirInstruction *pawMir_new_closure(struct Mir *mir, struct 
     return instr;
 }
 
-inline static struct MirInstruction *pawMir_new_get_element(struct Mir *mir, struct SourceLoc loc, enum BuiltinKind b_kind, struct MirPlace output, struct MirPlace object, struct MirPlace key)
+inline static struct MirInstruction *pawMir_new_get_element(struct Mir *mir, struct SourceLoc loc, enum BuiltinKind b_kind, struct MirPlace output, struct MirPlace object, struct MirPlaceList *key)
 {
     struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->GetElement_ = (struct MirGetElement){
@@ -756,12 +746,12 @@ inline static struct MirInstruction *pawMir_new_get_element(struct Mir *mir, str
     return instr;
 }
 
-inline static struct MirInstruction *pawMir_new_set_elementv2(struct Mir *mir, struct SourceLoc loc, enum BuiltinKind b_kind, struct MirPlace object, struct MirPlaceList *key, struct MirPlaceList *value, int offset)
+inline static struct MirInstruction *pawMir_new_set_element(struct Mir *mir, struct SourceLoc loc, enum BuiltinKind b_kind, struct MirPlace object, struct MirPlaceList *key, struct MirPlaceList *value, int offset)
 {
     struct MirInstruction *instr = pawMir_new_instruction(mir);
-    instr->SetElementV2_ = (struct MirSetElementV2){
+    instr->SetElement_ = (struct MirSetElement){
         .mid = pawMir_next_id(mir),
-        .kind = kMirSetElementV2,
+        .kind = kMirSetElement,
         .loc = loc,
         .offset = offset,
         .b_kind = b_kind,
@@ -772,22 +762,7 @@ inline static struct MirInstruction *pawMir_new_set_elementv2(struct Mir *mir, s
     return instr;
 }
 
-inline static struct MirInstruction *pawMir_new_set_element(struct Mir *mir, struct SourceLoc loc, enum BuiltinKind b_kind, struct MirPlace object, struct MirPlace key, struct MirPlace value)
-{
-    struct MirInstruction *instr = pawMir_new_instruction(mir);
-    instr->SetElement_ = (struct MirSetElement){
-        .mid = pawMir_next_id(mir),
-        .kind = kMirSetElement,
-        .loc = loc,
-        .b_kind = b_kind,
-        .object = object,
-        .key = key,
-        .value = value,
-    };
-    return instr;
-}
-
-inline static struct MirInstruction *pawMir_new_get_element_ptr(struct Mir *mir, struct SourceLoc loc, enum BuiltinKind b_kind, struct MirPlace output, struct MirPlace object, struct MirPlace key, paw_Bool is_map_setter)
+inline static struct MirInstruction *pawMir_new_get_element_ptr(struct Mir *mir, struct SourceLoc loc, enum BuiltinKind b_kind, struct MirPlace output, struct MirPlace object, struct MirPlaceList *key, paw_Bool is_map_setter)
 {
     struct MirInstruction *instr = pawMir_new_instruction(mir);
     instr->GetElementPtr_ = (struct MirGetElementPtr){
@@ -1304,7 +1279,6 @@ static inline MirStack *mir_pstack(struct MirInstruction *instr)
         EXTRACT(GetElement)
         EXTRACT(GetElementPtr)
         EXTRACT(SetElement)
-        EXTRACT(SetElementV2)
         EXTRACT(GetRange)
         EXTRACT(SetRange)
 

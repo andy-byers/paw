@@ -29,6 +29,7 @@
 #define REG_DATA(G, r) MirRegisterDataList_get((G)->fs->mir->registers, (r).value)
 #define TYPE_CODE(G, type) pawP_type2code((G)->C, type)
 #define REG(Place_) vm_register_for(fs, Place_)
+#define BASE_REG(Places_) REG(K_LIST_FIRST(Places_))
 
 struct FnState {
     struct FnState *outer; // enclosing function
@@ -806,7 +807,7 @@ static void code_get_element(struct MirVisitor *V, struct MirGetElement *x)
 
     Op const op = x->b_kind == BUILTIN_STR ? OP_STRGET :
         x->b_kind == BUILTIN_LIST ? OP_LISTGET : OP_MAPGET;
-    code_ABC(fs, op, REG(x->output), REG(x->object), REG(x->key));
+    code_ABC(fs, op, REG(x->output), REG(x->object), BASE_REG(x->key));
 }
 
 static void code_get_element_ptr(struct MirVisitor *V, struct MirGetElementPtr *x)
@@ -816,21 +817,13 @@ static void code_get_element_ptr(struct MirVisitor *V, struct MirGetElementPtr *
 
     if (x->b_kind == BUILTIN_MAP) {
         Op const op = x->is_map_setter ? OP_MAPNEWP: OP_MAPGETP;
-        code_ABC(fs, op, REG(x->output), REG(x->object), REG(x->key));
+        code_ABC(fs, op, REG(x->output), REG(x->object), BASE_REG(x->key));
     } else {
-        code_ABC(fs, OP_LISTGETP, REG(x->output), REG(x->object), REG(x->key));
+        code_ABC(fs, OP_LISTGETP, REG(x->output), REG(x->object), BASE_REG(x->key));
     }
 }
 
-static void code_map_set(struct FnState *fs, struct MirPlace object, struct MirPlace key, struct MirPlace value)
-{
-    int const a = move_to_temp(fs, REG(object), 0);
-    int const b = move_to_temp(fs, REG(key), 1);
-    int const c = move_to_temp(fs, REG(value), 2);
-    code_ABC(fs, OP_MAPSET, a, b, c);
-}
-
-static void code_set_elementv2(struct MirVisitor *V, struct MirSetElementV2 *x)
+static void code_set_element(struct MirVisitor *V, struct MirSetElement *x)
 {
     struct Generator *G = V->ud;
     struct FnState *fs = G->fs;
@@ -868,17 +861,9 @@ static void code_set_elementv2(struct MirVisitor *V, struct MirSetElementV2 *x)
             struct MirPlace const *pvalue;
             K_LIST_ENUMERATE (x->value, index, pvalue)
                 code_ABC(fs, OP_SETVALUE, pointer, x->offset + index, REG(*pvalue));
+
         }
     }
-}
-
-static void code_set_element(struct MirVisitor *V, struct MirSetElement *x)
-{
-    struct Generator *G = V->ud;
-    struct FnState *fs = G->fs;
-
-    Op const op = x->b_kind == BUILTIN_MAP ? OP_MAPSET : OP_LISTSET;
-    code_ABC(fs, op, REG(x->object), REG(x->key), REG(x->value));
 }
 
 static void code_get_range(struct MirVisitor *V, struct MirGetRange *x)
@@ -1472,7 +1457,6 @@ static void setup_codegen(struct Generator *G)
     V->PostVisitClosure = code_closure;
     V->PostVisitGetElement = code_get_element;
     V->PostVisitSetElement = code_set_element;
-    V->PostVisitSetElementV2 = code_set_elementv2;
     V->PostVisitGetElementPtr = code_get_element_ptr;
     V->PostVisitGetRange = code_get_range;
     V->PostVisitSetRange = code_set_range;

@@ -247,28 +247,21 @@ static void AcceptGetElement(struct MirVisitor *V, struct MirGetElement *t)
 {
     pawMir_visit_place(V, t->output);
     pawMir_visit_place(V, t->object);
-    pawMir_visit_place(V, t->key);
+    pawMir_visit_place_list(V, t->key);
 }
 
-static void AcceptSetElementV2(struct MirVisitor *V, struct MirSetElementV2 *t)
+static void AcceptSetElement(struct MirVisitor *V, struct MirSetElement *t)
 {
     pawMir_visit_place(V, t->object);
     pawMir_visit_place_list(V, t->key);
     pawMir_visit_place_list(V, t->value);
 }
 
-static void AcceptSetElement(struct MirVisitor *V, struct MirSetElement *t)
-{
-    pawMir_visit_place(V, t->object);
-    pawMir_visit_place(V, t->key);
-    pawMir_visit_place(V, t->value);
-}
-
 static void AcceptGetElementPtr(struct MirVisitor *V, struct MirGetElementPtr *t)
 {
     pawMir_visit_place(V, t->output);
     pawMir_visit_place(V, t->object);
-    pawMir_visit_place(V, t->key);
+    pawMir_visit_place_list(V, t->key);
 }
 
 static void AcceptGetRange(struct MirVisitor *V, struct MirGetRange *t)
@@ -723,13 +716,13 @@ MirPlacePtrList *pawMir_get_loads(struct Mir *mir, struct MirInstruction *instr)
         case kMirGetElementPtr: {
             struct MirGetElementPtr *x = MirGetGetElementPtr(instr);
             ADD_INPUT(x->object);
-            ADD_INPUT(x->key);
+            ADD_INPUTS(x->key);
             break;
         }
         case kMirGetElement: {
             struct MirGetElement *x = MirGetGetElement(instr);
             ADD_INPUT(x->object);
-            ADD_INPUT(x->key);
+            ADD_INPUTS(x->key);
             break;
         }
         case kMirGetRange: {
@@ -781,18 +774,11 @@ MirPlacePtrList *pawMir_get_loads(struct Mir *mir, struct MirInstruction *instr)
             ADD_INPUT(x->value);
             break;
         }
-        case kMirSetElementV2: {
-            struct MirSetElementV2 *x = MirGetSetElementV2(instr);
-            ADD_INPUT(x->object);
-            ADD_INPUTS(x->key);
-            ADD_INPUTS(x->value);
-            break;
-        }
         case kMirSetElement: {
             struct MirSetElement *x = MirGetSetElement(instr);
             ADD_INPUT(x->object);
-            ADD_INPUT(x->key);
-            ADD_INPUT(x->value);
+            ADD_INPUTS(x->key);
+            ADD_INPUTS(x->value);
             break;
         }
         case kMirSetRange: {
@@ -1604,12 +1590,12 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
             PRINT_LITERAL(P, " = ");
             print_place(P, t->object);
             PRINT_CHAR(P, '[');
-            print_place(P, t->key);
+            print_place_list(P, t->key);
             PRINT_CHAR(P, ']');
             break;
         }
-        case kMirSetElementV2: {
-            struct MirSetElementV2 *t = MirGetSetElementV2(instr);
+        case kMirSetElement: {
+            struct MirSetElement *t = MirGetSetElement(instr);
             PRINT_LITERAL(P, "set ");
             print_place(P, t->object);
             PRINT_CHAR(P, '[');
@@ -1619,16 +1605,6 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
             PRINT_CHAR(P, ']');
             break;
         }
-        case kMirSetElement: {
-            struct MirSetElement *t = MirGetSetElement(instr);
-            PRINT_LITERAL(P, "set ");
-            print_place(P, t->object);
-            PRINT_CHAR(P, '[');
-            print_place(P, t->key);
-            PRINT_LITERAL(P, "] = ");
-            print_place(P, t->value);
-            break;
-        }
         case kMirGetElementPtr: {
             struct MirGetElementPtr *t = MirGetGetElementPtr(instr);
             PRINT_LITERAL(P, "get ");
@@ -1636,7 +1612,7 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
             PRINT_LITERAL(P, " = &");
             print_place(P, t->object);
             PRINT_CHAR(P, '[');
-            print_place(P, t->key);
+            print_place_list(P, t->key);
             PRINT_CHAR(P, ']');
             break;
         }

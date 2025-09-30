@@ -155,3 +155,43 @@ pub fn test_special_case() {
     check_special_case("key");
 }
 
+inline struct Int2: Hash + Equals {
+    pub x: int,
+    pub y: int,
+
+    pub fn new(x: int, y: int) -> Self {
+        Self{x, y}
+    }
+
+    pub fn hash(self) -> int {
+        self.x.hash() ^ self.y.hash()
+    }
+    
+    pub fn eq(self, rhs: Self) -> bool {
+        self.x == rhs.x && self.y == rhs.y
+    }
+}
+
+pub fn test_wide_key() {
+    let map = [
+        Int2::new(-1, -2): -3,
+    ];
+
+    map[Int2::new(1, 2)] = 12;
+    map[Int2::new(3, 4)] = 34;
+    map[Int2::new(5, 6)] = 56;
+
+    assert(map[Int2::new(1, 2)] == 12);
+    assert(map[Int2::new(3, 4)] == 34);
+    assert(map[Int2::new(5, 6)] == 56);
+
+    map[Int2::new(1, 2)] = 21;
+    map[Int2::new(3, 3)] = 33;
+
+    assert(map[Int2::new(1, 2)] == 21);
+    assert(map[Int2::new(3, 3)] == 33);
+    assert(map[Int2::new(3, 4)] == 34);
+    assert(map[Int2::new(5, 6)] == 56);
+
+    assert(map[Int2::new(-1, -2)] == -3);
+}

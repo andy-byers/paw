@@ -14,13 +14,6 @@
 #define REGSTACK_ERROR(R_, Kind_, ...) pawErr_##Kind_((R_)->C, (R_)->mir->modname, __VA_ARGS__)
 #define INSTR_LOC(Instr_) ((Instr_)->hdr.loc)
 
-struct RewriteNode {
-    struct RewriteNode *prev;
-    struct RewriteNode *next;
-    struct MirInstruction *instr;
-    MirStack stack;
-};
-
 struct RegstackEnforcer {
     struct Pool *pool;
     struct Compiler *C;
@@ -29,13 +22,9 @@ struct RegstackEnforcer {
 
     RegstackMap *regs;
     AccessMap *uses, *defs;
-    struct RewriteNode rewrite;
-    struct InstructionMap *imap;
     MirStack current;
     MirBlock b;
 };
-
-DEFINE_MAP(struct RegstackEnforcer, InstructionMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, struct MirInstruction *, struct RewriteNode)
 
 static void simulate_new_stack(struct RegstackEnforcer *R)
 {
@@ -65,12 +54,6 @@ static void enforce_constraint(struct RegstackEnforcer *R)
     K_LIST_ENUMERATE (R->mir->blocks, index, pbb) {
         struct MirBlockData *bb = *pbb;
         R->b = MIR_BB(index);
-
-        // reset per-basic-block state
-        R->rewrite = (struct RewriteNode){
-            .prev = &R->rewrite,
-            .next = &R->rewrite,
-        };
 
         {
             struct MirInstruction *const *pinstr;
@@ -119,7 +102,6 @@ RegstackMap *pawRegstack_enforce_constraint(struct Mir *mir)
         .C = C,
     };
 
-    R->imap = InstructionMap_new(R);
     pawMir_collect_per_instr_uses(mir, R->uses);
     pawMir_collect_per_instr_defs(mir, R->defs);
 

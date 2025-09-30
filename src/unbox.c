@@ -115,7 +115,7 @@ struct MemoryAccess {
 
     struct ElementAccess {
         IrType *type;
-        struct MirPlace index;
+        MirPlaceList *key;
     } element;
 
     struct RangeAccess {
@@ -499,7 +499,7 @@ static void discharge_indirect_element(struct Unboxer *U, struct MemoryAccess *p
     if (output.count > 1 || field_offset > 0) {
         struct MirPlace const pointer = new_rawptr_place(U, element_type);
         NEW_INSTR(U, get_element_ptr, TODO, kind, pointer, object,
-                pa->element.index, PAW_FALSE);
+                pa->element.key, PAW_FALSE);
 
         MirPlaceList *outputs = MirPlaceList_new(fs->mir);
         for (int i = 0; i < output.count; ++i) {
@@ -511,7 +511,7 @@ static void discharge_indirect_element(struct Unboxer *U, struct MemoryAccess *p
 
     } else {
         NEW_INSTR(U, get_element, TODO, kind, place_at(U, output, 0),
-                object, pa->element.index);
+                object, pa->element.key);
     }
 
     pa->group = output;
@@ -620,8 +620,10 @@ static void apply_indirect_access(struct Unboxer *U, struct MemoryAccess *pa, Mi
     } else if (MirIsIndex(p)){
         struct MirIndex const *index = MirGetIndex(p);
         struct MemoryGroup const index_group = get_registers(U, index->index, ENUM_BASE);
-        paw_assert(index_group.count == 1);
-        pa->element.index = place_at(U, index_group, 0);
+        paw_assert(index_group.count >= 1);
+        pa->element.key = MirPlaceList_new(U->fs->mir);
+        for (int i = 0; i < index_group.count; ++i)
+            MirPlaceList_push(U->fs->mir, pa->element.key, place_at(U, index_group, i));
         pa->element.type = get_element_type(U, pa->type);
         pa->has_element = PAW_TRUE;
     } else {
@@ -709,28 +711,16 @@ static void create_indirect_element_setter(struct Unboxer *U, struct MemoryAcces
 
     struct Mir *mir = U->fs->mir;
     struct MirPlace const object = place_at(U, lhs.group, 0);
-    if (element_layout.size > 1 || field_offset ) {
-        MirPlaceList *key = MirPlaceList_new(mir);
+//    if (element_layout.size > 1 || field_offset > 0) {
         MirPlaceList *value = MirPlaceList_new(mir);
         // TODO: "get_location" won't work for wide keys, need a list of places instead of a single place for lhs.element.index
-        struct MemoryGroup const key_group = {.base = lhs.element.index.r.value, .count = 1, .kind = MEMORY_LOCAL};
-        for (int i = 0; i < key_group.count; ++i) MirPlaceList_push(mir, key, place_at(U, key_group, i));
         for (int i = 0; i < rhs.group.count; ++i) MirPlaceList_push(mir, value, place_at(U, rhs.group, i));
 
-        NEW_INSTR(U, set_elementv2, TODO, kind, object, key, value, field_offset);
-
-//        struct MirPlace const pointer = new_rawptr_place(U, element_type);
-//        NEW_INSTR(U, get_element_ptr, TODO, kind, pointer, object,
-//                lhs.element.index, kind == BUILTIN_MAP && !lhs.has_field);
-//
-//        for (int i = 0; i < rhs.group.count; ++i) {
-//            struct MirPlace const value = place_at(U, rhs.group, i);
-//            NEW_INSTR(U, set_field, TODO, field_offset + i, pointer, value);
-//        }
-    } else {
-        struct MirPlace const value = place_at(U, rhs.group, 0);
-        NEW_INSTR(U, set_element, TODO, kind, object, lhs.element.index, value);
-    }
+        NEW_INSTR(U, set_element, TODO, kind, object, lhs.element.key, value, field_offset);
+//    } else {
+//        struct MirPlace const value = place_at(U, rhs.group, 0);
+//        NEW_INSTR(U, set_element, TODO, kind, object, lhs.element.index, value);
+//    }
 }
 
 static void create_indirect_range_setter(struct Unboxer *U, struct MemoryAccess lhs, struct MemoryAccess rhs)
