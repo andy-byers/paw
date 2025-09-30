@@ -1666,10 +1666,8 @@ static IrType *CheckStructPat(struct TypeChecker *T, struct HirStructPat *p)
 static IrType *CheckVariantPat(struct TypeChecker *T, struct HirVariantPat *p)
 {
     IrType *type = lower_value_path(T, p->path);
-    if (IrIsAdt(type)) {
-        // must be unit structure
-        return type;
-    }
+    if (IrIsAdt(type)) return type; // unit structure
+
     struct IrSignature *fsig = IrGetSignature(type);
     IrTypeList *params = fsig->params;
 

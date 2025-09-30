@@ -112,9 +112,16 @@ static void unify_var_var(struct Unifier *U, InferenceVar *a, InferenceVar *b)
 
     debug_log(U, "unify_var_var", a->type, b->type);
 
-    IrTypeList *bounds = IrGetInfer(b->type)->bounds;
-    if (!pawP_satisfies_bounds(U->C, a->type, bounds))
+    struct IrInfer *const aa = IrGetInfer(a->type);
+    struct IrInfer *const bb = IrGetInfer(b->type);
+    if (aa->bounds == NULL) {
+        // TODO: does this need to be deep copied?
+        aa->bounds = bb->bounds;
+    } else if (bb->bounds == NULL) {
+        bb->bounds = aa->bounds;
+    } else if (!pawP_satisfies_bounds(U->C, a->type, bb->bounds)) {
         UNIFIER_ERROR(U, unsatisfied_trait_bounds, a->loc);
+    }
 
     if (a != b) link_roots(a, b);
 }

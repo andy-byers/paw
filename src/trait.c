@@ -53,7 +53,7 @@ void pawP_add_trait_impl(struct Compiler *C, IrType *type, IrType *trait)
 static paw_Bool traits_match(struct Compiler *C, IrType *a, IrType *b)
 {
     if (IR_TYPE_DID(a).value == IR_TYPE_DID(b).value) {
-        unify(C, 1, (struct SourceLoc){-1}, a, b); // TODO: source location
+        unify(C, 1, (struct SourceLoc){-1}, a, b); // TODO: source location/module number for error messages
         return PAW_TRUE;
     }
     return PAW_FALSE;
@@ -71,7 +71,7 @@ static paw_Bool implements_trait(struct Compiler *C, IrType *type, IrType *trait
             struct HirDecl *base_decl = pawHir_get_decl(C->hir, IR_TYPE_DID(type));
             IrType *base_type = GET_NODE_TYPE(C, base_decl);
             IrTypeList *types = pawP_instantiate_typelist(C, IR_TYPE_SUBTYPES(base_type),
-                                                                 IR_TYPE_SUBTYPES(type), IR_TYPE_SUBTYPES(t));
+                    IR_TYPE_SUBTYPES(type), IR_TYPE_SUBTYPES(t));
             t = pawIr_new_trait_obj(C, IR_TYPE_DID(t), types);
         }
         if (traits_match(C, t, trait))

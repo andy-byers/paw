@@ -706,3 +706,25 @@ pub fn test_push_nested() {
         assert(list[i / 2][i % 2][0] == i);
     }
 }
+
+pub fn test_infer_element() {
+    let list = [];
+
+    let iter = list.iterator();
+    match iter.next() {
+        Some(e) => {
+            assert(e == "string element");
+        },
+        None => (),
+    }
+}
+
+pub fn test_traverse_map_with_unknown_element() {
+    let list = [];
+
+    for element in list {
+        // never runs, but element type should be inferred as "str"
+        assert(element == "string element");
+    }
+}
+

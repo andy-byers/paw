@@ -195,3 +195,27 @@ pub fn test_wide_key() {
 
     assert(map[Int2::new(-1, -2)] == -3);
 }
+
+pub fn test_infer_key() {
+    let map = [:];
+
+    let iter = map.iterator();
+    match iter.next() {
+        Some(k) => {
+            assert(k == "string key");
+            assert(map[k] == "string value");
+        },
+        None => (),
+    }
+}
+
+pub fn test_traverse_map_with_unknown_key() {
+    let map = [:];
+
+    for key in map {
+        // never runs, but key and value types should be inferred as "str"
+        assert(key == "string key");
+        assert(map[key] == "string value");
+    }
+}
+

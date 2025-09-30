@@ -320,7 +320,7 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, char co
     C->ast = pawAst_new(C);
 
     C->U = P_ALLOC(C, NULL, 0, sizeof(struct Unifier));
-    C->U->C = C;
+    *C->U = (struct Unifier){.C = C};
 
     // builtin primitives
     define_prelude_adt(C, CSTR_UNIT, BUILTIN_UNIT);
