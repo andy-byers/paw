@@ -1367,6 +1367,10 @@ static void print_place(struct Printer *P, struct MirPlace place)
 {
     paw_Bool static const PRINT_STACKS = PAW_FALSE;
     if (place.kind == MIR_PLACE_LOCAL) {
+        if (place.r.value < 0) {
+            PRINT_FORMAT(P, "_?");
+            return;
+        }
         struct MirConstraint const con = mir_reg_data(P->mir, place.r)->con;
         if (PRINT_STACKS) {
             PRINT_FORMAT(P, "s%d[%d]", con.stack.id.value, con.stack.index);

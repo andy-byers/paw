@@ -70,7 +70,7 @@ static void add_range(struct Liveness *L, MirRegister opd, int from, int to)
     it->last = PAW_MAX(it->last, to);
 }
 
-static void add_live_reg(struct Liveness *L, struct MirRegisterList *set, MirRegister r)
+static void add_live_reg(struct Liveness *L, MirRegisterList *set, MirRegister r)
 {
     MirRegister *pr;
     K_LIST_FOREACH (set, pr) {
@@ -80,7 +80,7 @@ static void add_live_reg(struct Liveness *L, struct MirRegisterList *set, MirReg
     MirRegisterList_push(L->mir, set, r);
 }
 
-static void remove_live_reg(struct Liveness *L, struct MirRegisterList *set, MirRegister r)
+static void remove_live_reg(struct Liveness *L, MirRegisterList *set, MirRegister r)
 {
     for (int i = 0; i < set->count; ++i) {
         MirRegister const r2 = MirRegisterList_get(set, i);
@@ -298,20 +298,21 @@ inline static int find_place(struct MirPlacePtrList const *places, MirRegister r
     int index;
     struct MirPlace *const *ppp;
     K_LIST_ENUMERATE (places, index, ppp) {
-        if (MIR_ID_EQUALS(r, (*ppp)->r))
+        if ((*ppp)->kind == MIR_PLACE_LOCAL
+                && MIR_ID_EQUALS(r, (*ppp)->r))
             return index;
     }
     return -1;
 }
 
-struct MirBlockList *pawMir_compute_live_in(struct Mir *mir, struct MirBlockList *uses, struct MirBlockList *defs, MirRegister r)
+MirBlockList *pawMir_compute_live_in(struct Mir *mir, MirBlockList *uses, MirBlockList *defs, MirRegister r)
 {
     // algorithm is from LLVM "mem2reg" pass
     struct Compiler *C = mir->C;
 
     MirBlock const *pb;
-    struct MirBlockList *result = MirBlockList_new(mir);
-    struct MirBlockList *W = MirBlockList_new(mir);
+    MirBlockList *result = MirBlockList_new(mir);
+    MirBlockList *W = MirBlockList_new(mir);
     MirBlockList_reserve(mir, W, uses->count);
     K_LIST_FOREACH (uses, pb) {
         MirBlockList_push(mir, W, *pb);
@@ -319,9 +320,8 @@ struct MirBlockList *pawMir_compute_live_in(struct Mir *mir, struct MirBlockList
 
     int index;
     K_LIST_ENUMERATE (W, index, pb) {
-        if (!block_set_contains(defs, *pb))
-            continue;
-        struct MirBlockData *bb = mir_bb_data(mir, *pb);
+        if (!block_set_contains(defs, *pb)) continue;
+        struct MirBlockData const *bb = mir_bb_data(mir, *pb);
 
         struct MirInstruction **pinstr;
         K_LIST_FOREACH (bb->instructions, pinstr) {
