@@ -185,9 +185,6 @@ static void run_tests(char const *modname, struct TestAlloc *a, char const *pref
         return;
     }
 
-#warning
-    paw_set_hook(P, test_dump_source, PAW_HOOKCALL, 1000000);
-
     size_t const length = strlen(prefix);
     struct DefList defs = P->defs;
     for (int i = 0; i < defs.count; ++i) {
@@ -252,8 +249,6 @@ int main(int argc, char **argv)
 {
     // parse commandline arguments
     parse_arguments(argc, argv);
-
-    script("test_map");return s_counters.failures;
 
 #define RUN_SCRIPT(name) script(#name);
     // run the test scripts

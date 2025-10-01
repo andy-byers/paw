@@ -665,7 +665,7 @@ top:
                 VM_SAVE_PC();
                 Value const *rb = VM_RB(opcode);
                 Value *rc = VM_RC(opcode);
-                P->top.p = rc + pawMap_key_size(P, V_TUPLE(*rb)); // TODO: do this inside pawR_map_newp?
+                P->top.p = ra + pawMap_key_size(P, V_TUPLE(*rb)); // TODO: do this inside pawR_map_newp?
                 pawR_map_newp(P, cf, ra, rb, rc);
             }
 

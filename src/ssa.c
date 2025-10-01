@@ -46,13 +46,12 @@ static MirRegister last_reg_name(struct SsaConverter *S, MirRegister r)
     return pr != NULL ? *pr : MIR_INVALID_REG;
 }
 
-static struct MirPhi *add_phi_node(struct SsaConverter *S, MirBlock b, MirRegister r)
+static struct MirPhi *place_trivial_phi_node(struct SsaConverter *S, MirBlock b, MirRegister r)
 {
     struct MirBlockData *bb = mir_bb_data(S->mir, b);
     for (int i = 0; i < bb->joins->count; ++i) {
         struct MirPhi *phi = MirGetPhi(MirInstructionList_get(bb->joins, i));
-        if (MIR_ID_EQUALS(phi->output.r, r))
-            return phi; // already exists
+        if (MIR_ID_EQUALS(phi->output.r, r)) return phi; // already exists
     }
     IrType *type = mir_reg_data(S->mir, r)->type;
     struct MirPlaceList *inputs = MirPlaceList_new(S->mir);
@@ -88,9 +87,9 @@ static void rename_output(struct SsaConverter *S, MirRegister *pr, paw_Bool is_a
     int const reg_id = S->registers->count;
     struct MirRegisterData data = *old_data;
     // If the instruction that generated this register is an AllocLocal, and the
-    // "MirRegisterData::is_uninit" flag is set, then the instruction refers to a local
-    // variable declaration without an initializer. Propagate the flag so that fix_aux_info()
-    // can check for "use before initialization" errors.
+    // "MirRegisterData::is_uninit" flag is set, then the instruction refers to a
+    // local variable declaration without an initializer. Propagate the flag so
+    // that fix_aux_info() can check for "use before initialization" errors.
     data.is_uninit = is_alloc ? data.is_uninit : PAW_FALSE;
     MirRegisterDataList_push(S->mir, S->registers, data);
     *pr = MIR_REG(reg_id);
@@ -225,7 +224,7 @@ static void place_phi_nodes(struct SsaConverter *S)
                 if (!list_includes_block(live_in, *y))
                     continue;
                 // place a trivial phi node "r = phi(NULL, .., NULL)" in basic block "y"
-                struct MirPhi *phi = add_phi_node(S, *y, r);
+                place_trivial_phi_node(S, *y, r);
                 IntegerList_set(has, y->value, iterations);
                 // transitive step/relation to the iterated dominance frontier
                 if (IntegerList_get(work, y->value) < iterations) {

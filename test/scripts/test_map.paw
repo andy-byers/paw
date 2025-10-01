@@ -1,316 +1,159 @@
-//// test_map.paw
-//
-//pub fn test_getters() {
-//    let map = [
-//        1: "abc",
-//        2: "def",
-//        3: "ghi",
-//    ];
-//    assert(map[1] == "abc");
-//    assert(map[2] == "def");
-//    assert(map[3] == "ghi");
-//}
-//
-//pub fn test_empty_maps_with_annotations() {
-//    let map: [bool: int] = [:];
-//    let map: [float: str] = [:];
-//    let map: [str: bool] = [:];
-//}
-//
-//fn call(map: [int: int]) {}
-//fn call2(map: [int: [int: int]]) {}
-//
-//pub fn test_inference() {
-//    let map = [1: [2, 3]]; // [int: [int]]
-//    let map = [1: [2: 3]]; // [int: [int: int]]
-//
-//    let map = [1: [2: 3], 4: [:], 5: [:]];
-//    let map = [1: [:], 2: [3: 4], 5: [:]];
-//    let map = [1: [:], 2: [:], 3: [4: 5]];
-//    let map: [int: [int: int]] = [1: [:], 2: [:], 3: [:]];
-//
-//    let map = [1: [2, 3], 4: [], 5: []];
-//    let map = [1: [], 2: [3, 4], 5: []];
-//    let map = [1: [], 2: [], 3: [4, 5]];
-//    let map: [int: [int]] = [1: [], 2: [], 3: []];
-//
-//    let map: [int: [int]] = [1: [2, 3]];
-//    let map: [int: [int: int]] = [1: [2: 3]];
-//
-//    let map = [:];
-//    map = [0: 0];
-//
-//    let map = [:];
-//    map = [0: 0];
-//    map = [1: 1];
-//
-//    let map = [:];
-//    map = [:];
-//    map = [0: 0];
-//
-//    let a = [:];
-//    call(a);
-//
-//    let a = [0: [:]];
-//    call2(a);
-//
-//    let a = [:];
-//    let b = a;
-//    b = [1: 1];
-//    // type of "a" inferred from "b"
-//    assert(#a == 0);
-//
-//    let a = [:];
-//    let b = a;
-//    b = [1: 1];
-//    assert(#a == 0);
-//    a = [2: 2];
-//    assert(a[2] == 2);
-//
-//    let a = [0: [:]];
-//    let b = a;
-//    assert(#a == 1);
-//    b = [1: [1: 1]];
-//    assert(#a == 1);
-//    assert(#a[0] == 0);
-//    a = [2: [2: 2]];
-//    assert(a[2][2] == 2);
-//
-//    let a = [:];
-//    let b = a;
-//    let c = b;
-//    let d = c;
-//    d = [1: 1];
-//}
-//
-//pub fn test_negative_zero() {
-//    let m = [:];
-//    m[0.0] = "zero";
-//    assert(m[-0.0] == "zero");
-//}
-//
-//struct BadKey: Hash + Equals {
-//    pub value: int,
-//    // cause a collision on each insertion
-//    pub fn hash(self) -> int { 0 }
-//    pub fn eq(self, rhs: Self) -> bool {
-//        self.value == rhs.value
-//    }
-//}
-//
-//pub fn bk(value: int) -> BadKey {
-//    BadKey{value}
-//}
-//
-//pub fn test_addressing_stress() {
-//    let m = [:];
-//    m[bk(-1)] = -1;
-//    m[bk(-2)] = -2;
-//    m[bk(-3)] = -3;
-//
-//    let i = 0;
-//    while i < 500 {
-//        m[bk(i)] = i;
-//        i = i + 1;
-//    }
-//
-//    i = 0;
-//    while i < 500 {
-//        assert(m[bk(i)] == i);
-//        i = i + 1;
-//    }
-//
-//    i = 0;
-//    while i < 500 {
-//        m.erase(bk(i));
-//        i = i + 1;
-//    }
-//
-//    assert(m[bk(-1)] == -1);
-//    assert(m[bk(-2)] == -2);
-//    assert(m[bk(-3)] == -3);
-//}
-//
-////// TODO: get this to work
-////pub fn test_traverse_map_with_unknown_key() {
-////    let m = [:];
-////    for key in m {
-////        // never runs, but key and value types should be inferred as "str"
-////        assert(key == "string key");
-////        assert(m[key] == "string value");
-////    }
-////}
-//
-//fn special_case(key: str, callback: fn(str)) {
-//    callback(key);
-//}
-//
-//fn check_special_case(key: str) {
-//    let map = [:];
-//    special_case(key, |k: str| map[k] = "value");
-//    assert(map["key"] == "value");
-//}
-//
-//pub fn test_special_case() {
-//    check_special_case("key");
-//}
-//
-//inline struct Int2: Hash + Equals {
-//    pub x: int,
-//    pub y: int,
-//
-//    pub fn new(x: int, y: int) -> Self {
-//        Self{x, y}
-//    }
-//
-//    pub fn hash(self) -> int {
-//        self.x.hash() ^ self.y.hash()
-//    }
-//    
-//    pub fn eq(self, rhs: Self) -> bool {
-//        self.x == rhs.x && self.y == rhs.y
-//    }
-//}
-//
-//pub fn test_wide_key() {
-//    let map = [
-//        Int2::new(-1, -2): -3,
-//    ];
-//
-//    map[Int2::new(1, 2)] = 12;
-//    map[Int2::new(3, 4)] = 34;
-//    map[Int2::new(5, 6)] = 56;
-//
-//    assert(map[Int2::new(1, 2)] == 12);
-//    assert(map[Int2::new(3, 4)] == 34);
-//    assert(map[Int2::new(5, 6)] == 56);
-//
-//    map[Int2::new(1, 2)] = 21;
-//    map[Int2::new(3, 3)] = 33;
-//
-//    assert(map[Int2::new(1, 2)] == 21);
-//    assert(map[Int2::new(3, 3)] == 33);
-//    assert(map[Int2::new(3, 4)] == 34);
-//    assert(map[Int2::new(5, 6)] == 56);
-//
-//    assert(map[Int2::new(-1, -2)] == -3);
-//}
-//
-//pub fn test_infer_key() {
-//    let map = [:];
-//
-//    let iter = map.iterator();
-//    match iter.next() {
-//        Some(k) => {
-//            assert(k == "string key");
-//            assert(map[k] == "string value");
-//        },
-//        None => (),
-//    }
-//}
-//
+// test_map.paw
+
+pub fn test_getters() {
+    let map = [
+        1: "abc",
+        2: "def",
+        3: "ghi",
+    ];
+    assert(map[1] == "abc");
+    assert(map[2] == "def");
+    assert(map[3] == "ghi");
+}
+
+pub fn test_empty_maps_with_annotations() {
+    let map: [bool: int] = [:];
+    let map: [float: str] = [:];
+    let map: [str: bool] = [:];
+}
+
+fn call(map: [int: int]) {}
+fn call2(map: [int: [int: int]]) {}
+
+pub fn test_inference() {
+    let map = [1: [2, 3]]; // [int: [int]]
+    let map = [1: [2: 3]]; // [int: [int: int]]
+
+    let map = [1: [2: 3], 4: [:], 5: [:]];
+    let map = [1: [:], 2: [3: 4], 5: [:]];
+    let map = [1: [:], 2: [:], 3: [4: 5]];
+    let map: [int: [int: int]] = [1: [:], 2: [:], 3: [:]];
+
+    let map = [1: [2, 3], 4: [], 5: []];
+    let map = [1: [], 2: [3, 4], 5: []];
+    let map = [1: [], 2: [], 3: [4, 5]];
+    let map: [int: [int]] = [1: [], 2: [], 3: []];
+
+    let map: [int: [int]] = [1: [2, 3]];
+    let map: [int: [int: int]] = [1: [2: 3]];
+
+    let map = [:];
+    map = [0: 0];
+
+    let map = [:];
+    map = [0: 0];
+    map = [1: 1];
+
+    let map = [:];
+    map = [:];
+    map = [0: 0];
+
+    let a = [:];
+    call(a);
+
+    let a = [0: [:]];
+    call2(a);
+
+    let a = [:];
+    let b = a;
+    b = [1: 1];
+    // type of "a" inferred from "b"
+    assert(#a == 0);
+
+    let a = [:];
+    let b = a;
+    b = [1: 1];
+    assert(#a == 0);
+    a = [2: 2];
+    assert(a[2] == 2);
+
+    let a = [0: [:]];
+    let b = a;
+    assert(#a == 1);
+    b = [1: [1: 1]];
+    assert(#a == 1);
+    assert(#a[0] == 0);
+    a = [2: [2: 2]];
+    assert(a[2][2] == 2);
+
+    let a = [:];
+    let b = a;
+    let c = b;
+    let d = c;
+    d = [1: 1];
+}
+
+pub fn test_negative_zero() {
+    let m = [:];
+    m[0.0] = "zero";
+    assert(m[-0.0] == "zero");
+}
+
+struct BadKey: Hash + Equals {
+    pub value: int,
+    // cause a collision on each insertion
+    pub fn hash(self) -> int { 0 }
+    pub fn eq(self, rhs: Self) -> bool {
+        self.value == rhs.value
+    }
+}
+
+pub fn bk(value: int) -> BadKey {
+    BadKey{value}
+}
+
+pub fn test_addressing_stress() {
+    let m = [:];
+    m[bk(-1)] = -1;
+    m[bk(-2)] = -2;
+    m[bk(-3)] = -3;
+
+    let i = 0;
+    while i < 500 {
+        m[bk(i)] = i;
+        i = i + 1;
+    }
+
+    i = 0;
+    while i < 500 {
+        assert(m[bk(i)] == i);
+        i = i + 1;
+    }
+
+    i = 0;
+    while i < 500 {
+        m.erase(bk(i));
+        i = i + 1;
+    }
+
+    assert(m[bk(-1)] == -1);
+    assert(m[bk(-2)] == -2);
+    assert(m[bk(-3)] == -3);
+}
+
+//// TODO: get this to work
 //pub fn test_traverse_map_with_unknown_key() {
-//    let map = [:];
-//
-//    for key in map {
+//    let m = [:];
+//    for key in m {
 //        // never runs, but key and value types should be inferred as "str"
 //        assert(key == "string key");
-//        assert(map[key] == "string value");
+//        assert(m[key] == "string value");
 //    }
 //}
-//
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+fn special_case(key: str, callback: fn(str)) {
+    callback(key);
+}
+
+fn check_special_case(key: str) {
+    let map = [:];
+    special_case(key, |k: str| map[k] = "value");
+    assert(map["key"] == "value");
+}
+
+pub fn test_special_case() {
+    check_special_case("key");
+}
 
 inline struct Int2: Hash + Equals {
     pub x: int,
@@ -329,135 +172,53 @@ inline struct Int2: Hash + Equals {
     }
 }
 
+pub fn test_wide_key() {
+    let map = [
+        Int2::new(-1, -2): -3,
+    ];
+
+    map[Int2::new(1, 2)] = 12;
+    map[Int2::new(3, 4)] = 34;
+    map[Int2::new(5, 6)] = 56;
+
+    assert(map[Int2::new(1, 2)] == 12);
+    assert(map[Int2::new(3, 4)] == 34);
+    assert(map[Int2::new(5, 6)] == 56);
+
+    map[Int2::new(1, 2)] = 21;
+    map[Int2::new(3, 3)] = 33;
+
+    assert(map[Int2::new(1, 2)] == 21);
+    assert(map[Int2::new(3, 3)] == 33);
+    assert(map[Int2::new(3, 4)] == 34);
+    assert(map[Int2::new(5, 6)] == 56);
+
+    assert(map[Int2::new(-1, -2)] == -3);
+}
+
+pub fn test_infer_key() {
+    let map = [:];
+
+    let iter = map.iterator();
+    match iter.next() {
+        Some(k) => {
+            assert(k == "string key");
+            assert(map[k] == "string value");
+        },
+        None => (),
+    }
+}
+
+pub fn test_traverse_map_with_unknown_key() {
+    let map = [:];
+
+    for key in map {
+        // never runs, but key and value types should be inferred as "str"
+        assert(key == "string key");
+        assert(map[key] == "string value");
+    }
+}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-//fn test_xyz(count: int) {
-//    let map = [
-//        WideDirect::from_int(1): (2, 3),
-//    ];
-//
-//let (a, b) = map[WideDirect::from_int(1)];
-//assert(a == 2);
-//assert(b == 3);
-////    assert(map[WideDirect::from_int(1)].eq(WideDirect::from_int(1)));
-//}
 pub fn test_wide_key_value() {
     let map = [
         Int2::new(-1, -2): Int2::new(-3, -4),

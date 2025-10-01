@@ -816,8 +816,11 @@ static void code_get_element_ptr(struct MirVisitor *V, struct MirGetElementPtr *
     struct FnState *fs = G->fs;
 
     if (x->b_kind == BUILTIN_MAP) {
+        // TODO: OP_MAP*P expects "ra" to be above "rb" and "rc" (uses "ra" to set top pointer for custom "hash"/"eq" calls)
+        int const temp = temporary_reg(fs, 0);
         Op const op = x->is_map_setter ? OP_MAPNEWP: OP_MAPGETP;
-        code_ABC(fs, op, REG(x->output), REG(x->object), BASE_REG(x->key));
+        code_ABC(fs, op, temp, REG(x->object), BASE_REG(x->key));
+        move_to_reg(fs, temp, REG(x->output));
     } else {
         code_ABC(fs, OP_LISTGETP, REG(x->output), REG(x->object), BASE_REG(x->key));
     }
@@ -861,7 +864,6 @@ static void code_set_element(struct MirVisitor *V, struct MirSetElement *x)
             struct MirPlace const *pvalue;
             K_LIST_ENUMERATE (x->value, index, pvalue)
                 code_ABC(fs, OP_SETVALUE, pointer, x->offset + index, REG(*pvalue));
-
         }
     }
 }
