@@ -423,8 +423,6 @@ char const *op_name(Op op)
             return "MAPGET";
         case OP_MAPSET:
             return "MAPSET";
-        case OP_MAPSETN:
-            return "MAPSETN";
         case OP_UNPACK:
             return "UNPACK";
         case OP_GETVALUE:
@@ -560,7 +558,6 @@ void paw_dump_opcode(OpCode opcode)
         case OP_MAPGETP:
         case OP_MAPGET:
         case OP_MAPSET:
-        case OP_MAPSETN:
         case OP_GETFIELD:
         case OP_SETFIELD:
         case OP_UNPACK:
@@ -680,7 +677,6 @@ void dump_aux(paw_Env *P, Proto *proto, Buffer *print)
             case OP_MAPGETP:
             case OP_MAPGET:
             case OP_MAPSET:
-            case OP_MAPSETN:
             case OP_GETFIELD:
             case OP_SETFIELD:
             case OP_UNPACK:

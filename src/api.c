@@ -998,6 +998,7 @@ void paw_map_newp(paw_Env *P, int object)
     Value const *key = output;
 
     pawR_map_newp(P, P->cf, output, map, key);
+    paw_pop(P, key_size - 1);
 }
 
 void paw_map_set(paw_Env *P, int object)

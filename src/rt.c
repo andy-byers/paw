@@ -292,16 +292,6 @@ void pawR_map_set(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value c
     pawMap_insert(P, V_TUPLE(*ra), rb, rc);
 }
 
-void pawR_map_setn(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, int const c)
-{
-    Tuple *map = V_TUPLE(*ra);
-    struct MapPolicy const p = GET_POLICY(P, map);
-    Value *ptr = pawMap_create(P, map, rb);
-    Value const *pvalue = rb + p.key_size;
-    for (int i = c; i < p.value_size; ++i)
-        ptr[i] = pvalue[i - c];
-}
-
 void pawR_str_getn(paw_Env *P, CallFrame *cf, Value *ra, Value const *rb, Value const *rc)
 {
     Str const *str = V_STR(*rb);
@@ -665,8 +655,7 @@ top:
                 VM_SAVE_PC();
                 Value const *rb = VM_RB(opcode);
                 Value *rc = VM_RC(opcode);
-                P->top.p = rc + 1;
-                // TODO: This won't work if the key is multiple values in size, need to call map.get() or allocate key registers contiguously
+                P->top.p = rc + pawMap_key_size(P, V_TUPLE(*rb)); // TODO: do this inside pawR_map_getp?
                 if (pawR_map_getp(P, cf, ra, rb, rc))
                     pawR_error(P, PAW_EKEY, "key does not exist");
             }
@@ -676,7 +665,7 @@ top:
                 VM_SAVE_PC();
                 Value const *rb = VM_RB(opcode);
                 Value *rc = VM_RC(opcode);
-                P->top.p = ra + 1;
+                P->top.p = rc + pawMap_key_size(P, V_TUPLE(*rb)); // TODO: do this inside pawR_map_newp?
                 pawR_map_newp(P, cf, ra, rb, rc);
             }
 
@@ -685,7 +674,7 @@ top:
                 VM_SAVE_PC();
                 Value const *rb = VM_RB(opcode);
                 Value *rc = VM_RC(opcode);
-                P->top.p = rc + pawMap_key_size(P, V_TUPLE(*rb));
+                P->top.p = rc + pawMap_key_size(P, V_TUPLE(*rb)); // TODO: do this inside pawR_map_get?
                 if (pawR_map_get(P, cf, ra, rb, rc)) {
                     pawR_error(P, PAW_EKEY, "key does not exist");
                 }
@@ -698,14 +687,6 @@ top:
                 Value *rc = VM_RC(opcode);
                 P->top.p = rc + pawMap_value_size(P, V_TUPLE(*ra)); // TODO: do this inside pawR_map_set, where policy is already loaded? would be redundant if called from paw_map_set
                 pawR_map_set(P, cf, ra, rb, rc);
-            }
-
-            vm_case(MAPSETN) :
-            {
-                VM_SAVE_PC();
-                Value const *rb = VM_RB(opcode);
-                int const c = GET_C(opcode);
-                pawR_map_setn(P, cf, ra, rb, c);
             }
 
             vm_case(NEWTUPLE) :

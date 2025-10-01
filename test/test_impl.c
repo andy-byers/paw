@@ -210,6 +210,87 @@ static void test_map_get_and_put(paw_Env *P)
     map_free(P, m);
 }
 
+static int map_equals_wide(paw_Env *P)
+{
+    paw_Int const ax = paw_int(P, 1);
+    paw_Int const ay = paw_int(P, 2);
+    paw_Int const bx = paw_int(P, 3);
+    paw_Int const by = paw_int(P, 4);
+    paw_push_bool(P, ax == bx && ay == by);
+    return 1;
+}
+
+static int map_hash_wide(paw_Env *P)
+{
+    paw_Int const x = paw_int(P, 1);
+    paw_Int const y = paw_int(P, 2);
+    paw_push_int(P, x ^ y);
+    return 1;
+}
+
+static void test_map_get_and_put_wide(paw_Env *P)
+{
+    paw_new_native(P, map_equals_wide, 0);
+    paw_new_native(P, map_hash_wide, 0);
+    Value const equals = P->top.p[-2];
+    Value const hash = P->top.p[-1];
+
+    int const policy_id = P->map_policies.count++;
+    struct MapPolicy *policy = &P->map_policies.data[policy_id];
+    *policy = (struct MapPolicy){
+        .equals = equals,
+        .hash = hash,
+        .value_size = 2,
+        .key_size = 2,
+    };
+
+    paw_new_map(P, 0, policy_id);
+    int const m = paw_get_count(P) - 1;
+
+    paw_push_int(P, 1);
+    paw_push_int(P, 2);
+    paw_push_int(P, 3);
+    paw_push_int(P, 4);
+    paw_map_set(P, m);
+
+    paw_push_int(P, 2);
+    paw_push_int(P, 3);
+    paw_push_int(P, 4);
+    paw_push_int(P, 5);
+    paw_map_set(P, m);
+
+    paw_push_int(P, 1);
+    paw_push_int(P, 1);
+    check(paw_map_get(P, m) == -1);
+
+    paw_push_int(P, 1);
+    paw_push_int(P, 2);
+    check(paw_map_get(P, m) == 2);
+    check(paw_int(P, -2) == 3);
+    check(paw_int(P, -1) == 4);
+    paw_pop(P, 2);
+
+    paw_push_int(P, 2);
+    paw_push_int(P, 3);
+    check(paw_map_get(P, m) == 2);
+    check(paw_int(P, -2) == 4);
+    check(paw_int(P, -1) == 5);
+    paw_pop(P, 2);
+
+    paw_push_int(P, PAW_ITER_INIT);
+    check(paw_map_next_key(P, m));
+    check(paw_int(P, -2) == paw_int(P, -1) - 1);
+    paw_pop(P, 2);
+    check(paw_map_next_value(P, m));
+    check(paw_int(P, -2) == paw_int(P, -1) - 1);
+    paw_pop(P, 2);
+
+    check(!paw_map_next_key(P, m));
+    paw_pop(P, 1);
+
+    paw_assert(paw_get_count(P) == m + 1);
+}
+
 static void test_map_erase(paw_Env *P)
 {
     Tuple *m = map_new(P);
@@ -727,6 +808,7 @@ int main(void)
     DRIVER(test_list_get_and_set_wide);
     DRIVER(test_list_iterate);
     DRIVER(test_map_get_and_put);
+    DRIVER(test_map_get_and_put_wide);
     DRIVER(test_map_erase);
     DRIVER(test_map_erase_2);
     DRIVER(test_map_ops);
