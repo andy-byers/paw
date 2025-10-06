@@ -8,7 +8,6 @@
 #include "ir_type.h"
 #include "map.h"
 #include "mem.h"
-#include "rtti.h"
 #include "type_folder.h"
 
 #define NEW_NODE(C, T) P_ALLOC(C, NULL, 0, sizeof(T))
@@ -35,7 +34,7 @@ void pawHir_free(struct Hir *hir)
 #define DEFINE_NODE_CONSTRUCTOR(name, T)         \
     struct T *pawHir_new_##name(struct Hir *hir) \
     {                                            \
-        if (hir->C->hir_count == UINT_MAX)       \
+        if (hir->C->hir_count == INT_MAX)       \
             pawM_error(ENV(hir));                \
         return NEW_NODE(hir->C, struct T);       \
     }
@@ -48,6 +47,7 @@ DEFINE_NODE_CONSTRUCTOR(pat, HirPat)
 
 void pawHir_init_segment(struct Hir *hir, struct HirSegment *r, NodeId id, struct HirIdent ident, struct HirTypeList *types, NodeId target)
 {
+    PAW_UNUSED(hir);
     *r = (struct HirSegment){
         .id = id,
         .target = target,
@@ -79,7 +79,10 @@ struct HirDecl *pawHir_get_decl(struct Hir *hir, DeclId did)
 }
 
 
-#define VISITOR_CALL(V, name, x) ((V)->Visit##name != NULL ? (V)->Visit##name(V, x) : 1)
+#define VISITOR_CALL(V, name, x) ((V)->Visit##name != NULL \
+        ? (V)->Visit##name(V, x) : 1)
+#define VISITOR_POSTCALL(V, name, x) ((V)->PostVisit##name != NULL \
+        ? (V)->PostVisit##name(V, x) : (void)0)
 
 static void AcceptType(struct HirVisitor *V, struct HirType *node);
 static void AcceptExpr(struct HirVisitor *V, struct HirExpr *node);
@@ -150,22 +153,25 @@ static void AcceptMatchExpr(struct HirVisitor *V, struct HirMatchExpr *e)
 
 static void AcceptSegment(struct HirVisitor *V, struct HirSegment *seg)
 {
-    if (seg->types != NULL) {
+    if (VISITOR_CALL(V, Segment, seg)
+            && seg->types != NULL) {
         struct HirType *const *ptype;
         K_LIST_FOREACH (seg->types, ptype) {
             AcceptType(V, *ptype);
         }
+        VISITOR_POSTCALL(V, Segment, seg);
     }
-    VISITOR_CALL(V, Segment, seg);
 }
 
 static void AcceptPath(struct HirVisitor *V, struct HirPath *path)
 {
-    struct HirSegment *pseg;
-    K_LIST_FOREACH (path->segments, pseg) {
-        AcceptSegment(V, pseg);
+    if (VISITOR_CALL(V, Path, path)) {
+        struct HirSegment *pseg;
+        K_LIST_FOREACH (path->segments, pseg) {
+            AcceptSegment(V, pseg);
+        }
+        VISITOR_POSTCALL(V, Path, path);
     }
-    VISITOR_CALL(V, Path, path);
 }
 
 static void AcceptLiteralExpr(struct HirVisitor *V, struct HirLiteralExpr *e)
@@ -301,6 +307,11 @@ static void AcceptAscriptionExpr(struct HirVisitor *V, struct HirAscriptionExpr 
     AcceptType(V, e->type);
 }
 
+static void AcceptAddrOfExpr(struct HirVisitor *V, struct HirAddrOfExpr *e)
+{
+    AcceptExpr(V, e->expr);
+}
+
 static void AcceptPathExpr(struct HirVisitor *V, struct HirPathExpr *e)
 {
     AcceptPath(V, &e->path);
@@ -365,6 +376,11 @@ static void AcceptInferType(struct HirVisitor *V, struct HirInferType *t)
     PAW_UNUSED(t);
 }
 
+static void AcceptRefType(struct HirVisitor *V, struct HirRefType *t)
+{
+    AcceptType(V, t->type);
+}
+
 static void AcceptPathType(struct HirVisitor *V, struct HirPathType *t)
 {
     struct HirSegment const *pseg;
@@ -417,8 +433,6 @@ static void AcceptWildcardPat(struct HirVisitor *V, struct HirWildcardPat *p)
     PAW_UNUSED(p);
 }
 
-#define VISITOR_POSTCALL(V, name, x) ((V)->PostVisit##name != NULL \
-        ? (V)->PostVisit##name(V, x) : (void)0)
 #define DEFINE_VISITOR_CASES(X)             \
     case kHir##X: {                         \
         struct Hir##X *x = HirGet##X(node); \
@@ -496,17 +510,82 @@ static void AcceptPat(struct HirVisitor *V, struct HirPat *node)
 #undef VISITOR_POSTCALL
 #undef VISITOR_CALL
 
-static paw_Bool default_visit_expr(struct HirVisitor *V, struct HirExpr *node) { return PAW_TRUE; }
-static paw_Bool default_visit_decl(struct HirVisitor *V, struct HirDecl *node) { return PAW_TRUE; }
-static paw_Bool default_visit_stmt(struct HirVisitor *V, struct HirStmt *node) { return PAW_TRUE; }
-static paw_Bool default_visit_type(struct HirVisitor *V, struct HirType *node) { return PAW_TRUE; }
-static paw_Bool default_visit_pat(struct HirVisitor *V, struct HirPat *node) { return PAW_TRUE; }
+static paw_Bool default_visit_path(struct HirVisitor *V, struct HirPath *node)
+{
+    (PAW_UNUSED(V), PAW_UNUSED(node));
+    return PAW_TRUE;
+}
 
-static void default_post_visit_expr(struct HirVisitor *V, struct HirExpr *node) {}
-static void default_post_visit_decl(struct HirVisitor *V, struct HirDecl *node) {}
-static void default_post_visit_stmt(struct HirVisitor *V, struct HirStmt *node) {}
-static void default_post_visit_type(struct HirVisitor *V, struct HirType *node) {}
-static void default_post_visit_pat(struct HirVisitor *V, struct HirPat *node) {}
+static paw_Bool default_visit_segment(struct HirVisitor *V, struct HirSegment *node)
+{
+    (PAW_UNUSED(V), PAW_UNUSED(node));
+    return PAW_TRUE;
+}
+
+static paw_Bool default_visit_expr(struct HirVisitor *V, struct HirExpr *node)
+{
+    (PAW_UNUSED(V), PAW_UNUSED(node));
+    return PAW_TRUE;
+}
+
+static paw_Bool default_visit_decl(struct HirVisitor *V, struct HirDecl *node)
+{
+    (PAW_UNUSED(V), PAW_UNUSED(node));
+    return PAW_TRUE;
+}
+
+static paw_Bool default_visit_stmt(struct HirVisitor *V, struct HirStmt *node)
+{
+    (PAW_UNUSED(V), PAW_UNUSED(node));
+    return PAW_TRUE;
+}
+
+static paw_Bool default_visit_type(struct HirVisitor *V, struct HirType *node)
+{
+    (PAW_UNUSED(V), PAW_UNUSED(node));
+    return PAW_TRUE;
+}
+
+static paw_Bool default_visit_pat(struct HirVisitor *V, struct HirPat *node)
+{
+    (PAW_UNUSED(V), PAW_UNUSED(node));
+    return PAW_TRUE;
+}
+
+static void default_post_visit_path(struct HirVisitor *V, struct HirPath *node)
+{
+    (PAW_UNUSED(V), PAW_UNUSED(node));
+}
+
+static void default_post_visit_segment(struct HirVisitor *V, struct HirSegment *node)
+{
+    (PAW_UNUSED(V), PAW_UNUSED(node));
+}
+
+static void default_post_visit_expr(struct HirVisitor *V, struct HirExpr *node)
+{
+    (PAW_UNUSED(V), PAW_UNUSED(node));
+}
+
+static void default_post_visit_decl(struct HirVisitor *V, struct HirDecl *node)
+{
+    (PAW_UNUSED(V), PAW_UNUSED(node));
+}
+
+static void default_post_visit_stmt(struct HirVisitor *V, struct HirStmt *node)
+{
+    (PAW_UNUSED(V), PAW_UNUSED(node));
+}
+
+static void default_post_visit_type(struct HirVisitor *V, struct HirType *node)
+{
+    (PAW_UNUSED(V), PAW_UNUSED(node));
+}
+
+static void default_post_visit_pat(struct HirVisitor *V, struct HirPat *node)
+{
+    (PAW_UNUSED(V), PAW_UNUSED(node));
+}
 
 void pawHir_visitor_init(struct HirVisitor *V, struct Hir *hir, void *ud)
 {
@@ -514,12 +593,16 @@ void pawHir_visitor_init(struct HirVisitor *V, struct Hir *hir, void *ud)
         .hir = hir,
         .ud = ud,
 
+        .VisitPath = default_visit_path,
+        .VisitSegment = default_visit_segment,
         .VisitExpr = default_visit_expr,
         .VisitDecl = default_visit_decl,
         .VisitStmt = default_visit_stmt,
         .VisitType = default_visit_type,
         .VisitPat = default_visit_pat,
 
+        .PostVisitPath = default_post_visit_path,
+        .PostVisitSegment = default_post_visit_segment,
         .PostVisitExpr = default_post_visit_expr,
         .PostVisitDecl = default_post_visit_decl,
         .PostVisitStmt = default_post_visit_stmt,
@@ -560,7 +643,9 @@ IrTypeList *pawHir_collect_decl_types(struct Compiler *C, struct HirDeclList *li
 
     struct HirDecl *const *pdecl;
     K_LIST_FOREACH (list, pdecl) {
-        IrTypeList_push(C, types, GET_NODE_TYPE(C, *pdecl));
+        IrType *type = GET_NODE_TYPE(C, *pdecl);
+//        if (IrIsPtr(type)) type = IrGetPtr(type)->pointee;
+        IrTypeList_push(C, types, type);
     }
     return types;
 }
@@ -925,9 +1010,8 @@ static void dump_decl(struct Printer *P, struct HirDecl *decl)
         }
         case kHirParamDecl: {
             struct HirParamDecl *d = HirGetParamDecl(decl);
-            if (d->ident.name != NULL) {
+            if (d->ident.name != NULL)
                 DUMP_STR(P, d->ident.name);
-            }
             if (d->tag != NULL) {
                 DUMP_CSTR(P, ": ");
                 dump_type(P, d->tag);
@@ -1025,6 +1109,12 @@ static void dump_stmt(struct Printer *P, struct HirStmt *stmt)
 static void dump_type(struct Printer *P, struct HirType *type)
 {
     switch (HIR_KINDOF(type)) {
+        case kHirRefType: {
+            struct HirRefType *t = HirGetRefType(type);
+            DUMP_CHAR(P, '&');
+            dump_type(P, t->type);
+            break;
+        }
         case kHirPathType: {
             struct HirPathType *t = HirGetPathType(type);
             dump_path(P, &t->path, PAW_TRUE);
@@ -1063,6 +1153,12 @@ static void dump_expr(struct Printer *P, struct HirExpr *expr)
             dump_expr(P, e->expr);
             DUMP_CSTR(P, ": ");
             dump_type(P, e->type);
+            break;
+        }
+        case kHirAddrOfExpr: {
+            struct HirAddrOfExpr *e = HirGetAddrOfExpr(expr);
+            DUMP_CHAR(P, '&');
+            dump_expr(P, e->expr);
             break;
         }
         case kHirLogicalExpr: {
@@ -1306,8 +1402,8 @@ char const *pawHir_dump(struct Hir *hir)
             add_newline(&print);
         }
     }
-    pawL_push_result(P, &buf);
-    return paw_str(P, -1);
+    Str const *result = pawL_buffer_finish(P, &buf);
+    return result->text;
 }
 
 char const *pawHir_print_path(struct Compiler *C, struct HirPath *path)
@@ -1322,7 +1418,7 @@ char const *pawHir_print_path(struct Compiler *C, struct HirPath *path)
                },
                path, PAW_TRUE);
 
-    pawL_push_result(P, &buf);
-    return paw_str(P, -1);
+    Str const *result = pawL_buffer_finish(P, &buf);
+    return result->text;
 }
 

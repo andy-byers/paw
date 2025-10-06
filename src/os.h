@@ -4,8 +4,9 @@
 #ifndef PAW_IO_H
 #define PAW_IO_H
 
-#include "paw.h"
+#include "core.h"
 
+struct Str;
 typedef struct File File;
 
 File *pawO_stdout(void);
@@ -25,5 +26,7 @@ size_t pawO_read(paw_Env *P, File *file, void *data, size_t size);
 size_t pawO_write(paw_Env *P, File *file, void const *data, size_t size);
 void pawO_read_exact(paw_Env *P, File *file, void *data, size_t size);
 void pawO_write_all(paw_Env *P, File *file, void const *data, size_t size);
+
+char const *pawOs_find_last_sep(char const *s, size_t n, size_t *pn);
 
 #endif // PAW_IO_H

@@ -17,7 +17,7 @@
 // sdbm hash modified from http://www.cse.yorku.ca/~oz/hash.html
 inline static uint32_t pawS_hash(void const *data, size_t size, uint32_t hash)
 {
-    uint8_t const *ptr = data;
+    uint8_t const *ptr = (uint8_t const *)data;
     for (size_t i = 0; i < size; ++i) {
         hash = ptr[i] + (hash << 6) + (hash << 16) - hash;
     }

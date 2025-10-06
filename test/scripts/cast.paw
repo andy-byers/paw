@@ -1,5 +1,6 @@
 // cast.paw
 
+#[test]
 pub fn test_float_to_bool() {
     assert(0.0 as bool == false);
     assert(-0.0 as bool == false);

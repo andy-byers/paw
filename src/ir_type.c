@@ -8,7 +8,7 @@
 #include "unify.h"
 
 #define NEW_NODE(C, T) (T *)P_ALLOC(C, NULL, 0, sizeof(T))
-#define IR_ERROR(C_, Kind_, Modno_, ...) pawErr_##Kind_(C_, ModuleNames_get((C_)->modnames, Modno_), __VA_ARGS__)
+#define IR_ERROR(C_, Kind_, Modno_, ...) pawErr_##Kind_(C_, ModuleInfo_get((C_)->modinfo, Modno_).name, __VA_ARGS__)
 
 IrType *pawIr_new_type(struct Compiler *C)
 {
@@ -52,7 +52,7 @@ IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *target,
 {
     if (target->bounds == NULL) {
         struct HirGenericDecl const *d = HirGetGenericDecl(pawHir_get_decl(C->hir, target->did));
-        IR_ERROR(C, missing_trait_bounds, d->did.modno, d->span.start, d->ident.name->text);
+        IR_ERROR(C, missing_trait_bounds, (int)d->did.modno, d->span.start, d->ident.name->text);
     }
 
     IrType *const *pbound;
@@ -66,7 +66,8 @@ IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *target,
             struct HirFnDecl const *method = HirGetFnDecl(*pmethod);
             if (pawS_eq(method->ident.name, name)) {
                 IrType *type = trait->generics == NULL ? GET_NODE_TYPE(C, *pmethod)
-                    : pawP_instantiate_method(C, trait_decl, bound->types, *pmethod);
+                    : pawP_instantiate_method(C, pawIr_get_def_type(C, trait_decl->hdr.did),
+                            bound->types, pawIr_get_def_type(C, (*pmethod)->hdr.did));
                 return pawIr_substitute_self(C, *pbound, IR_CAST_TYPE(target), type);
             }
         }
@@ -107,7 +108,7 @@ void pawIr_validate_type(struct Compiler *C, IrType *type)
             hdr = decl->hdr;
         }
         if (types != NULL && types->count != generics->count)
-            IR_ERROR(C, incorrect_type_arity, hdr.did.modno, hdr.span.start,
+            IR_ERROR(C, incorrect_type_arity, (int)hdr.did.modno, hdr.span.start,
                     generics->count, types->count);
     }
 }
@@ -129,6 +130,11 @@ static paw_Uint hash_type(IrType *type)
 {
     paw_Uint hash = type->hdr.kind;
     switch (IR_KINDOF(type)) {
+        case kIrPtr: {
+            struct IrPtr const *t = IrGetPtr(type);
+            hash = hash_combine(hash, hash_type(t->pointee));
+            break;
+        }
         case kIrAdt: {
             struct IrAdt const *t = IrGetAdt(type);
             hash = hash_combine(hash, t->did.value);
@@ -147,6 +153,8 @@ static paw_Uint hash_type(IrType *type)
             hash = hash_combine(hash, hash_type_list(t->types));
             hash = hash_combine(hash, hash_type_list(t->params));
             hash = hash_combine(hash, hash_type(t->result));
+            if (t->self != NULL)
+                hash = hash_combine(hash, hash_type(t->self));
             break;
         }
         case kIrTuple: {
@@ -154,15 +162,13 @@ static paw_Uint hash_type(IrType *type)
             hash = hash_combine(hash, hash_type_list(t->elems));
             break;
         }
-        case kIrNever: {
-            struct IrNever const *t = IrGetNever(type);
+        case kIrNever:
             hash = hash_combine(hash, 0x21); // '!'
             break;
-        }
         case kIrInfer: {
             struct IrInfer const *t = IrGetInfer(type);
-            hash = hash_combine(hash, t->depth);
-            hash = hash_combine(hash, t->index);
+            hash = hash_combine(hash, (paw_Uint)t->depth);
+            hash = hash_combine(hash, (paw_Uint)t->index);
             hash = hash_combine(hash, hash_type_list(t->bounds));
             break;
         }
@@ -188,9 +194,13 @@ static paw_Bool sig_equals_extra(struct Compiler *C, IrType *a, IrType *b)
     // same parameters and result
     struct IrSignature const *sa = IrGetSignature(a);
     struct IrSignature const *sb = IrGetSignature(b);
-    return sa->did.value == sb->did.value;
+    return sa->did.value == sb->did.value && !sa->self == !sb->self
+        && (sa->self == NULL || pawIr_type_equals(C, sa->self, sb->self));
 }
 
+// TODO: probably should distinguish between pawIr_type_equals where we care about function names
+//       and pawIr_type_equals where we do not (in the latter case, "fn assert(bool)" is the same
+//       as "fn(bool)", like what happens during type unification)
 paw_Bool pawIr_type_equals(struct Compiler *C, IrType *a, IrType *b)
 {
     if (IR_KINDOF(a) != IR_KINDOF(b))
@@ -247,6 +257,12 @@ static void print_bounds(struct Printer *P, IrTypeList *bounds)
 static void print_type(struct Printer *P, IrType *type)
 {
     switch (IR_KINDOF(type)) {
+        case kIrPtr: {
+            struct IrPtr *ptr = IrGetPtr(type);
+            PRINT_CHAR(P, '&');
+            print_type(P, ptr->pointee);
+            break;
+        }
         case kIrTuple: {
             struct IrTuple *tup = IrGetTuple(type);
             PRINT_CHAR(P, '(');
@@ -357,7 +373,6 @@ char const *pawIr_print_type(struct Compiler *C, IrType *type)
                },
                type);
 
-    Str const *s = pawP_scan_nstr(C, C->strings, buf.data, buf.size);
-    pawL_discard_result(P, &buf);
+    Str const *s = pawL_buffer_finish(P, &buf);
     return s->text;
 }

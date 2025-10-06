@@ -2,6 +2,7 @@
 
 fn black_box<T>(t: T) -> T { t }
 
+#[test]
 pub fn test_modify() {
     let capture = 0;
     let _ = || capture;
@@ -15,6 +16,7 @@ pub fn test_modify() {
     assert(capture == 1);
 }
 
+#[test]
 pub fn test_capture_early() {
     let capture = 0;
     let _ = || capture;
@@ -26,6 +28,7 @@ pub fn test_capture_early() {
     assert(capture == 10);
 }
 
+#[test]
 pub fn test_capture_late() {
     let capture = 0;
 

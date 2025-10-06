@@ -12,6 +12,7 @@ fn f2i(f: float) -> int {
     return f as int;
 }
 
+#[test]
 pub fn test_explicit_instantiation() {
     let source = [0.5, 1.6, 2.7, 3.8, 4.9];
     let target = [0, 1, 2, 3, 4];
@@ -33,6 +34,7 @@ fn implicit<A, B, C>(
     };
 }
 
+#[test]
 pub fn test_implicit_instantiation() {
     // implicit<[str: int], bool, int>(...) -> Three<int, [str: int], bool>
     let three = implicit(
@@ -54,6 +56,7 @@ fn self_recursive<T>(t: T, i: int) {
     }
 }
 
+#[test]
 pub fn test_self_recursion() {
     self_recursive(true, 10);
     self_recursive(2, 11);
@@ -71,6 +74,7 @@ fn second_recursive<X, Y, Z>(x: X, y: Y, z: Z) {
     }
 }
 
+#[test]
 pub fn test_recursive_instantiation() {
     first_recursive(1, 2.0, "three");
     second_recursive("four", 5.0, 6);
@@ -81,6 +85,7 @@ fn make_closure<T>(t: T) -> (fn(T) -> (T, T)) {
     |x| (x, t)
 }
 
+#[test]
 pub fn test_generic_upvalue() {
     assert(make_closure(123)(0).0 == 0);
     assert(make_closure((456, 789))((0, 0)).0.0 == 0);
@@ -90,3 +95,4 @@ pub fn test_generic_upvalue() {
     assert(make_closure((456, 789))((0, 0)).1.0 == 456);
     assert(make_closure((456, 789))((0, 0)).1.1 == 789);
 }
+

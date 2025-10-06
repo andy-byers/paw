@@ -2,6 +2,7 @@
 
 const INTEGER: int = 123;
 
+#[test]
 pub fn test_primitive() {
     assert(INTEGER == 123);
 }

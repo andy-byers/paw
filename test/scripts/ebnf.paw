@@ -682,28 +682,38 @@ fn foreach_ident(expr: Expression, callback: fn(str)) {
     }
 }
 
-fn analyze_definitions(ctx: Context, g: Grammer) -> Result<[str: Expression], str> {
-    let builtins = ctx.builtins;
+enum Analysis {
+    DuplicateIdent(str),
+    ReservedIdent(str),
+    UnrecognizedIdent(str),
+    Ok([str: Expression]),
+}
+
+fn analyze_definitions(g: Grammer, reserved: [str: ()]) -> Analysis {
     let idents = [:];
     let result = [:];
 
     for Production{ident, expr} in g.productions {
         if result.contains(ident) {
-            return Err("duplicate identifier \"\{ident}\"");
+            return Analysis::DuplicateIdent(ident);
         }
-        if builtins.contains(ident) {
-            return Err("definition of builtin identifier \"\{ident}\"");
+        if reserved.contains(ident) {
+            return Analysis::ReservedIdent(ident);
         }
         result[ident] = expr;
 
-        foreach_ident(expr, |ident: str| idents[ident] = ());
+        foreach_ident(expr, |ident: str| {
+            if !reserved.contains(ident) {
+                idents[ident] = ();
+            }
+        });
     }
     for ident in idents {
-        if !result.contains(ident) && !builtins.contains(ident) {
-            return Err("missing identifier \"\{ident}\"");
+        if !result.contains(ident) {
+            return Analysis::UnrecognizedIdent(ident);
         }
     }
-    Ok(result)
+    Analysis::Ok(result)
 }
 
 inline enum Verbosity {
@@ -726,15 +736,13 @@ inline enum Verbosity {
     }
 }
 
-struct Context {
+struct App {
     pub verbosity: Verbosity,
     pub program_name: str,
-    pub builtins: [str: ()],
 
     pub fn new(program_name: str) -> Self {
         Self{
             verbosity: Verbosity::Verbose,
-            builtins: [:],
             program_name,
         }
     }
@@ -750,15 +758,6 @@ struct Context {
         panic("\{parts[-1]}: \{msg}\n");
     }
 
-    // TODO: use this version and return FAILURE from main to indicate failure. need to handle return
-    // TODO: value on stack in paw.c in addition to return value from paw_call
-//    pub fn error(self, msg: str) {
-//        if self.verbosity.should_print_error() {
-//            self.help(); // display help message
-//            println("\{self.program_name}: error: \{msg}");
-//        }
-//    }
-
     pub fn help(self) {
         self.info("paw \{self.program_name} PATH"
             ++ "=========================================="
@@ -766,24 +765,88 @@ struct Context {
     }
 }
 
+
+const TEST_OK: int = 0;
+const TEST_PARSE_ERROR: int = -1;
+const TEST_ANALYSIS_ERROR: int = -2;
+
+fn test_check(source: str) -> int {
+    let builtins = [:];
+    let scanner = Scanner::new(source);
+    let parser = Parser::new();
+    match parser.parse(scanner) {
+        Ok(grammer) => match analyze_definitions(grammer, builtins) {
+            Analysis::Ok(_) => TEST_OK,
+            _ => TEST_ANALYSIS_ERROR,
+        },
+        _ => TEST_PARSE_ERROR,
+    }
+}
+
+fn test_expect(name: str, source: str, result: int) {
+    if test_check(source) != result {
+        panic("failed testcase \"\{name}\"");
+    }
+}
+
+#[test]
+pub fn test_ok() {
+    let test = |name, source| {
+        test_expect(name, source, TEST_OK);
+    };
+
+    test("empty grammer", "");
+    test("one production", "Ident = \"Terminal\" .");
+    test("two productions", "A = \"a\" ." ++ "B = \"b\" .");
+    test("one dependency", "A = B . B = \"x\" .");
+    test("two dependencies", "A = B . B = C . C = \"x\" .");
+}
+
+#[test]
+pub fn test_parse_error() {
+    let test = |name, source| {
+        test_expect(name, source, TEST_PARSE_ERROR);
+    };
+
+    test("stray equals sign", "=");
+    test("stray identifier", "Lhs");
+    test("missing RHS", "Lhs =");
+    test("empty RHS", "Lhs = .");
+    test("missing terminator", "Lhs = \"x\"");
+    test("missing equals sign", "Lhs \"x\"");
+    test("missing terminator between", "A = \"a\" B = \"b\" ."); 
+    test("string missing left quote", "X = x\" .");
+    test("string missing right quote", "X = \"x .");
+}
+
+#[test]
+pub fn test_analysis_error() {
+    let test = |name, source| {
+        test_expect(name, source, TEST_ANALYSIS_ERROR);
+    };
+
+    test("unrecognized identifier", "Lhs = Rhs .");
+    // TODO: circular definitions should be disallowed
+}
+
+
 const SUCCESS: int = 0;
 const FAILURE: int = 1;
 
 
-pub fn main(args: [str]) {
-    let ctx = Context::new(args.get_or(0, "ebnf"));
+pub fn main(args: [str]) -> int {
+    let app = App::new(args.get_or(0, "ebnf"));
+    let builtins: [str: ()] = [:];
 
     let path = if #args < 2 {
-        ctx.error("missing PATH argument");
+        app.error("missing PATH argument");
     } else {
         args[1]
     };
 
     let source = match read_to_str(path) {
+        Err(e) => app.error("unable to read EBNF file \"\{path}\" (\{e})"),
         Ok(s) => s,
-        Err(e) => {
-            ctx.error("unable to read EBNF file \"\{path}\" (\{e})");
-        },
     };
 
     let scanner = Scanner::new(source);
@@ -792,20 +855,22 @@ pub fn main(args: [str]) {
     // completes without encountering an error, then the EBNF is syntactically correct.
     let parser = Parser::new();
     let grammer = match parser.parse(scanner) {
+        Err(e) => app.error("\{e}"),
         Ok(g) => g,
-        Err(e) => {
-            ctx.error("\{e}");
-        },
     };
 
     // Ensure that all identifiers are defined.
-    let mapping = match analyze_definitions(ctx, grammer) {
-        Ok(r) => r,
-        Err(e) => {
-            ctx.error("\{e}");
-        },
+    let mapping = match analyze_definitions(grammer, builtins) {
+        Analysis::DuplicateIdent(ident) =>
+            app.error("duplicate identifier \"\{ident}\""),
+        Analysis::ReservedIdent(ident) =>
+            app.error("definition of builtin identifier \"\{ident}\""),
+        Analysis::UnrecognizedIdent(ident) =>
+            app.error("missing identifier \"\{ident}\""),
+        Analysis::Ok(r) => r,
     };
 
-    ctx.info("OK");
+    app.info("OK");
+    0
 }
 

@@ -8,11 +8,13 @@ fn check_block_expr_binary_op(a: int, b: int, c: int) -> int {
     }) * c
 }
 
+#[test]
 pub fn test_block_expr_binary_op() {
     assert(check_block_expr_binary_op(1, 2, 3) == 1 + (2 + 2 * 3) * 3);
     assert(check_block_expr_binary_op(4, 5, 6) == 4 + (2 + 5 * 3) * 6);
 }
 
+#[test]
 pub fn test_jump_expr_types() {
     let _: () = while true {
         let _: () = break;
@@ -29,6 +31,7 @@ fn check_function_block_with_return() -> int {
     321 
 }
 
+#[test]
 pub fn test_function_block_with_return() {
     assert(check_function_block_with_return() == 123);
 }
@@ -37,10 +40,12 @@ fn check_function_block_without_return() -> int {
     789
 }
 
+#[test]
 pub fn test_function_block_without_return() {
     assert(check_function_block_without_return() == 789);
 }
 
+#[test]
 pub fn test_closure_block_with_return() {
     let f = || {
         return 123;
@@ -52,6 +57,7 @@ pub fn test_closure_block_with_return() {
     assert(f() == 123);
 }
 
+#[test]
 pub fn test_closure_block_without_return() {
     let f = || { 123 };
     
@@ -63,11 +69,13 @@ fn check_early_return(b: bool) -> int {
     456
 }
 
+#[test]
 pub fn test_early_return() {
     assert(check_early_return(true) == 123);
     assert(check_early_return(false) == 456);
 }
 
+#[test]
 pub fn test_block_expr() {
     let v = { 1 };
     assert(v == 1);
@@ -77,6 +85,7 @@ pub fn test_block_expr() {
     assert(v == 3);
 }
 
+#[test]
 pub fn test_if_return() {
     let x = if true { 
         // ";" is omitted here, since "return" has type "!"
@@ -88,6 +97,7 @@ pub fn test_if_return() {
     assert(false);
 }
 
+#[test]
 pub fn test_if_return_chain() {
     let x = if false { 
         1 
@@ -102,6 +112,7 @@ pub fn test_if_return_chain() {
     assert(false);
 }
 
+#[test]
 pub fn test_if_return_propagate() {
     let x = if false { 
         42 
@@ -112,6 +123,7 @@ pub fn test_if_return_propagate() {
     assert(false);
 }
 
+#[test]
 pub fn test_if_return_explicit_unit() {
     let x = if true { 
         return; 
@@ -122,6 +134,7 @@ pub fn test_if_return_explicit_unit() {
     assert(false);
 }
 
+#[test]
 pub fn test_guarded_return() {
     // "if" without an "else" must have type "()"
     let x: () = if true { 
@@ -131,6 +144,7 @@ pub fn test_guarded_return() {
     assert(false);
 }
 
+#[test]
 pub fn test_locals() {
     let a = 0;
     {
@@ -167,6 +181,7 @@ fn check_if_expr(n: int) -> str {
     };
 }
 
+#[test]
 pub fn test_if_expr() {
     assert(check_if_expr(0) == "zero");
     assert(check_if_expr(1) == "one");
@@ -187,6 +202,7 @@ fn check_if_expr_binary_op(n: int) -> int {
     }) + 2
 }
 
+#[test]
 pub fn test_if_expr_binary_op() {
     assert(check_if_expr_binary_op(0) == 4);
     assert(check_if_expr_binary_op(1) == 2);
@@ -206,6 +222,7 @@ fn check_if_expr_call(n: int) -> int {
     })()
 }
 
+#[test]
 pub fn test_if_expr_call() {
     assert(check_if_expr_call(0) == 1);
     assert(check_if_expr_call(1) == 2);
@@ -222,6 +239,7 @@ fn check_match_expr_binary_op(n: int) -> int {
     }) + 2
 }
 
+#[test]
 pub fn test_match_expr_binary_op() {
     assert(check_match_expr_binary_op(0) == 4);
     assert(check_match_expr_binary_op(1) == 5);
@@ -238,6 +256,7 @@ fn check_match_expr_call(n: int) -> int {
     })()
 }
 
+#[test]
 pub fn test_match_expr_call() {
     assert(check_match_expr_call(0) == 1);
     assert(check_match_expr_call(1) == 2);
@@ -257,6 +276,7 @@ pub fn check_if_result(n: int) -> str {
     }
 }
 
+#[test]
 pub fn test_if_result() {
     assert(check_if_result(0) == "zero");
     assert(check_if_result(1) == "one");
@@ -275,6 +295,7 @@ pub fn check_if_result_without_else(n: int) -> str {
     "other"
 }
 
+#[test]
 pub fn test_if_result_without_else() {
     assert(check_if_result_without_else(0) == "zero");
     assert(check_if_result_without_else(1) == "one");
@@ -291,6 +312,7 @@ fn check_match_expr(o: Option<int>) -> str {
     }
 }
 
+#[test]
 pub fn test_match_expr() {
     assert(check_match_expr(Option::None) == "none");
     assert(check_match_expr(Option::Some(-10)) == "some < 0");
@@ -307,6 +329,7 @@ fn check_never_match_expr(o: Option<int>) -> str {
     }
 }
 
+#[test]
 pub fn test_never_match_expr() {
     assert(check_never_match_expr(Option::None) == "none");
     assert(check_never_match_expr(Option::Some(-10)) == "some < 0");
@@ -330,6 +353,7 @@ fn check_nested_ifelse(b1: bool, b2: bool, b3: bool) -> int {
     }
 }
 
+#[test]
 pub fn test_nested_ifelse() {
     let check = check_nested_ifelse;
     assert(check(true, true, false) == 1);
@@ -339,14 +363,20 @@ pub fn test_nested_ifelse() {
     assert(check(false, false, false) == 4);
 }
 
-
-pub fn test_return_before_use() {
-    let y;
-    if true {
-        y = 0;
-    }
-    return;
-
-    assert(y == 42);
+#[TODO]
+pub fn emit_deferred_init_warning() {
+    println("WARNING: need support for deferred init");
 }
+
+// TODO: support deferred init
+//#[test]
+//pub fn test_return_before_use() {
+//    let y;
+//    if true {
+//        y = 0;
+//    }
+//    return;
+//
+//    assert(y == 42);
+//}
 

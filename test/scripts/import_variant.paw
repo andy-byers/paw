@@ -7,6 +7,7 @@ enum Explicit<T> {
 
 use Explicit::A;
 
+#[test]
 pub fn test_explicit_import() {
     let e = A(123);
 
@@ -23,6 +24,7 @@ enum Glob<T> {
 
 use Glob::*;
 
+#[test]
 pub fn test_glob_import() {
     let g = Y("abc");
 

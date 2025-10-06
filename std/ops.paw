@@ -16,7 +16,7 @@ pub trait Compare {
 }
 
 pub trait Increment {
-    fn incremented(self) -> Self;
+    fn increment(&self);
 }
 
 pub trait Iterate<I: Advance<T>, T> {
@@ -24,7 +24,7 @@ pub trait Iterate<I: Advance<T>, T> {
 }
 
 pub trait Advance<T> {
-    fn next(self) -> Option<T>;
+    fn next(&self) -> Option<T>;
 }
 
 pub inline struct Range<T: Compare + Increment>: Iterate<RangeIterator<T>, T> {
@@ -79,16 +79,16 @@ pub inline struct RangeToInclusive<T: Compare> {
     }
 }
 
-pub struct RangeIterator<T: Compare + Increment>: Advance<T> {
+pub inline struct RangeIterator<T: Compare + Increment>: Advance<T> {
     end: T,
     iter: T,
     pub fn new(range: Range<T>) -> Self {
         Self{iter: range.start, end: range.end}
     }
-    pub fn next(self) -> Option<T> {
-        let iter = self.iter;
-        if iter.lt(self.end) {
-            self.iter = iter.incremented();
+    pub fn next(&self) -> Option<T> {
+        if self.iter.lt(self.end) {
+            let iter = self.iter;
+            self.iter.increment();
             Some(iter)
         } else {
             None
@@ -96,28 +96,30 @@ pub struct RangeIterator<T: Compare + Increment>: Advance<T> {
     }
 }
 
-pub struct RangeFromIterator<T: Compare + Increment>: Advance<T> {
+pub inline struct RangeFromIterator<T: Compare + Increment>: Advance<T> {
     iter: T,
     pub fn new(range: RangeFrom<T>) -> Self {
         Self{iter: range.start}
     }
-    pub fn next(self) -> Option<T> {
+    pub fn next(&self) -> Option<T> {
         let iter = self.iter;
-        self.iter = self.iter.incremented();
+        self.iter.increment();
         Some(iter)
     }
 }
 
-pub struct RangeInclusiveIterator<T: Compare + Increment>: Advance<T> {
+pub inline struct RangeInclusiveIterator<T: Compare + Increment>: Advance<T> {
     end: T,
     iter: Option<T>,
     pub fn new(range: RangeInclusive<T>) -> Self {
         Self{iter: Some(range.start), end: range.end}
     }
-    pub fn next(self) -> Option<T> {
+    pub fn next(&self) -> Option<T> {
         let iter = self.iter?;
         if iter.lt(self.end) {
-            self.iter = Some(iter.incremented());
+            let copy = iter;
+            copy.increment();
+            self.iter = Some(copy);
         } else {
             self.iter = None;
         }

@@ -337,7 +337,7 @@ static void move_bindings_to_right(struct Usefulness *U, struct Row *row)
     row->columns = columns;
 }
 
-static paw_Bool remove_column(struct Usefulness *U, struct Row row, struct MatchVar var, struct Column *presult)
+static paw_Bool remove_column(struct Row row, struct MatchVar var, struct Column *presult)
 {
     int index;
     struct Column *pcol;
@@ -384,7 +384,7 @@ static struct CaseList *compile_constructor_cases(struct Usefulness *U, struct R
     struct Row const *prow;
     K_LIST_FOREACH (rows, prow) {
         struct Column col;
-        if (remove_column(U, *prow, branch_var, &col)) {
+        if (remove_column(*prow, branch_var, &col)) {
             struct RawCase *prc;
             K_LIST_FOREACH (cases, prc) {
                 RowList_push(U, prc->rows, copy_row(U, *prow));
@@ -443,7 +443,7 @@ static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct R
     struct Row const *prow;
     K_LIST_FOREACH (rows, prow) {
         struct Column col;
-        if (remove_column(U, *prow, branch_var, &col)) {
+        if (remove_column(*prow, branch_var, &col)) {
             // This row had a wildcard or binding in place of 'branch_var', meaning
             // it needs to be considered in all other cases.
             RowList_push(U, fallback, copy_row(U, *prow));
@@ -520,6 +520,7 @@ static struct LiteralResult compile_literal_cases(struct Usefulness *U, struct R
 // TODO: choose a better branch column
 static struct Column find_branch_col(struct Usefulness *U, struct ColumnList *cols)
 {
+    PAW_UNUSED(U);
     return ColumnList_first(cols);
 }
 

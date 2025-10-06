@@ -3,32 +3,15 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
 #include "debug.h"
-#include "alloc.h"
 #include "auxlib.h"
 #include "call.h"
 #include "compile.h"
 #include "map.h"
-#include "rt.h"
 
 #include <inttypes.h>
 #include <stdio.h>
 
 #define PC_REL(p, pc) CAST(int, (pc) - (p)->source - 1)
-
-int pawD_line_number(CallFrame const *cf, OpCode const *pc)
-{
-    if (!CF_IS_PAW(cf))
-        return -1;
-
-    int i = 0;
-    Proto *p = cf->fn->p;
-    int const r = PC_REL(p, pc);
-    for (; i < p->nlines - 1; ++i) {
-        if (p->lines[i].pc >= r)
-            break;
-    }
-    return p->lines[i].line;
-}
 
 void pawD_debug_log(paw_Env *P, char const *fmt, ...)
 {

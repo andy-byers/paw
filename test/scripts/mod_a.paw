@@ -2,6 +2,7 @@
 
 use mod_b;
 
+#[test]
 pub fn test_external() {
     let e = mod_b::external("hello");
     assert(e.value == "hello");
@@ -42,6 +43,7 @@ fn check_poly_recursive(n: int) -> int {
     return icount;
 }
 
+#[test]
 pub fn test_recursive() {
     assert(recursive(-1) == 0);
     assert(recursive(1) == 1);

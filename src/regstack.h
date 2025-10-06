@@ -8,7 +8,6 @@
 #include "mir.h"
 
 struct RegstackInfo {
-    Regstack id;
     int index;
 };
 

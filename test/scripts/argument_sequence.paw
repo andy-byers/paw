@@ -1,5 +1,6 @@
 // argument_sequence.paw
 
+#[test]
 pub fn test_assignment() {
     let v = 1;
     let f = |a, b, c| (a, b, c);
@@ -8,6 +9,7 @@ pub fn test_assignment() {
     assert(t.2 == 2);
 }
 
+#[test]
 pub fn test_call() {
     let v = 1;
     let g = || v = 2;
@@ -21,6 +23,7 @@ struct Box<T> {
     pub value: T,
 }
 
+#[test]
 pub fn test_boxed_type() {
     let v = Box{value: 1};
     let f = |a, b, c| (a, b, c);
@@ -29,6 +32,7 @@ pub fn test_boxed_type() {
     assert(t.2.value == 2);
 }
 
+#[test]
 pub fn test_value_type() {
     let v = (0, 1);
     let f = |a, b, c| (a, b, c);

@@ -10,7 +10,7 @@ FunctionDecl = "fn" Function .
 Function     = name [Generics] Signature Block .
 FParameters  = {FParam ","} FParam [","] .
 Signature    = "(" [FParameters] ")" ["->" Type] .
-FParam       = name ":" Type .
+FParam       = ["&"] name ":" Type .
 
 (* Constants *)
 ConstDecl = "const" name ":" Type "=" Expr .
@@ -54,14 +54,14 @@ TypeDecl    = "type" name [Generics] "=" Type .
 Generics    = "<" {name ","} name [","] ">" .
 
 (* Operators *)
-UnOp     = "-" | "~" | "!" | "#" .
-BinOp    = "+" | "-" | "*" | "/" |
-           "%" | "&" | "^" | "|" |
-           "<<" | ">>" | "<" | "<=" | 
-           ">" | ">=" | "==" | "!=" | 
-           "&&" | "||" | "+=" | "-=" | 
-           "*=" | "/=" | "%=" | "&=" | 
-           "^=" | "|=" | "<<=" | ">>=" .
+UnOp  = "-" | "~" | "!" | "#" .
+BinOp = "+" | "-" | "*" | "/" |
+        "%" | "&" | "^" | "|" |
+        "<<" | ">>" | "<" | "<=" | 
+        ">" | ">=" | "==" | "!=" | 
+        "&&" | "||" | "+=" | "-=" | 
+        "*=" | "/=" | "%=" | "&=" | 
+        "^=" | "|=" | "<<=" | ">>=" .
 
 (* Types *)
 Type        = GroupedType | FnType | ListType | MapType | 
@@ -96,7 +96,7 @@ CParam      = name [":" Type] .
 JumpExpr    = "break" | "continue" .
 ReturnExpr  = "return" [Expr] .
 
-(* StructLit is forbidden in the target of a block expression to avoid 
+(* StructLit is forbidden as the target of a block expression to avoid 
    an ambiguity that cannot be resolved at the parser level. *)
 TargetExpr  = Expr - StructLit .
 

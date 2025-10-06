@@ -5,22 +5,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "gc.h"
+#include "env.h"
 #include "lib.h"
 #include "list.h"
 #include "map.h"
 #include "mem.h"
 #include "os.h"
-#include "rt.h"
 #include "value.h"
 
 #define ERROR(P, kind, ...) pawE_error(P, kind, -1, __VA_ARGS__)
 
 void pawV_index_error(paw_Env *P, paw_Int index, size_t length, char const *what)
 {
-    pawR_error(P, PAW_EINDEX,
-               "index %I is out of bounds for %s of length %I",
-               index, what, PAW_CAST_INT(length));
+    PAW_UNUSED(P);
+    PAW_UNUSED(index);
+    PAW_UNUSED(length);
+    PAW_UNUSED(what);
+    PAW_UNREACHABLE();
 }
 
 static void int_to_str(paw_Env *P, paw_Int i, Value *out)
@@ -77,140 +78,18 @@ char const *pawV_to_str(paw_Env *P, Value *pv, paw_Type type, size_t *plength)
     return s->text;
 }
 
-Proto *pawV_new_proto(paw_Env *P)
-{
-    Proto *p = pawM_new(P, Proto);
-    pawG_add_object(P, CAST_OBJECT(p), VPROTO);
-    return p;
-}
-
-void pawV_free_proto(paw_Env *P, Proto *f)
-{
-    pawM_free_vec(P, f->source, f->length);
-    pawM_free_vec(P, f->lines, f->nlines);
-    pawM_free_vec(P, f->p, f->nproto);
-    pawM_free_vec(P, f->k, f->nk);
-    pawM_free_vec(P, f->u, f->nup);
-    pawM_free(P, f);
-}
-
-UpValue *pawV_new_upvalue(paw_Env *P)
-{
-    UpValue *u = pawM_new(P, UpValue);
-    pawG_add_object(P, CAST_OBJECT(u), VUPVALUE);
-    return u;
-}
-
-void pawV_free_upvalue(paw_Env *P, UpValue *u)
-{
-    if (upv_is_open(u)) {
-        pawV_unlink_upvalue(u);
-    }
-    pawM_free(P, u);
-}
-
-void pawV_link_upvalue(paw_Env *P, UpValue *u, UpValue *prev, UpValue *next)
-{
-    u->open.next = next;
-    if (next) {
-        u->open.prev = next->open.prev;
-        next->open.prev = u;
-    }
-    if (prev) {
-        prev->open.next = u;
-    } else {
-        P->up_list = u;
-    }
-}
-
-void pawV_unlink_upvalue(UpValue *u)
-{
-    UpValue *prev = u->open.prev;
-    UpValue *next = u->open.next;
-    if (prev != NULL)
-        prev->open.next = next;
-    if (next != NULL)
-        next->open.prev = prev;
-}
-
 Tuple *pawV_new_tuple(paw_Env *P, int nelems)
 {
     Tuple *tuple = pawM_new_flex(P, Tuple, CAST_SIZE(nelems), sizeof(tuple->elems[0]));
-    pawG_add_object(P, CAST_OBJECT(tuple), VTUPLE);
+    tuple->gc_kind = VTUPLE;
     tuple->nelems = nelems;
     return tuple;
 }
 
 void pawV_free_tuple(paw_Env *P, Tuple *t)
 {
-    if (t->kind == TUPLE_LIST) {
-        pawList_free(P, t);
-    } else if (t->kind == TUPLE_MAP) {
-        pawMap_free(P, t);
-    } else {
-        paw_assert(t->kind == TUPLE_OTHER);
-        pawM_free_flex(P, t, t->nelems, sizeof(t->elems[0]));
-    }
-}
-
-Closure *pawV_new_closure(paw_Env *P, int nup)
-{
-    // Tack on enough space to store 'nup' pointers to UpValue.
-    Closure *f = pawM_new_flex(P, Closure, nup, sizeof(f->up[0]));
-    pawG_add_object(P, CAST_OBJECT(f), VCLOSURE);
-    memset(f->up, 0, CAST_SIZE(nup) * sizeof(f->up[0]));
-    f->nup = nup;
-    return f;
-}
-
-void pawV_free_closure(paw_Env *P, Closure *f)
-{
-    pawM_free_flex(P, f, f->nup, sizeof(f->up[0]));
-}
-
-Native *pawV_new_native(paw_Env *P, paw_Function fn, int nup)
-{
-    paw_assert(nup <= UINT16_MAX);
-    Native *nat = pawM_new_flex(P, Native, nup, sizeof(nat->up[0]));
-    pawG_add_object(P, CAST_OBJECT(nat), VNATIVE);
-    nat->fn = fn;
-    nat->nup = nup;
-    return nat;
-}
-
-void pawV_free_native(paw_Env *P, Native *f)
-{
-    pawM_free_flex(P, f, f->nup, sizeof(f->up[0]));
-}
-
-Foreign *pawV_new_foreign(paw_Env *P, size_t size, int nfields, uint8_t flags, Value *out)
-{
-    if (size > PAW_SIZE_MAX)
-        pawM_error(P);
-    Foreign *f = pawM_new_flex(P, Foreign, nfields, sizeof(f->fields[0]));
-    pawG_add_object(P, CAST_OBJECT(f), VFOREIGN);
-    V_SET_OBJECT(out, f); // anchor
-    f->nfields = nfields;
-    f->flags = flags;
-    f->size = size;
-    if (size > 0) {
-        // allocate space to hold 'size' bytes of foreign data
-        f->data = pawM_new_vec(P, size, char);
-    }
-    memset(f->fields, 0, CAST_SIZE(nfields) * sizeof(f->fields[0]));
-    return f;
-}
-
-void pawV_free_foreign(paw_Env *P, Foreign *f)
-{
-    if (f->flags == VBOX_FILE) {
-        File *file = f->data;
-        pawO_close(file);
-    } else if (f->flags == VBOX_LOADER) {
-        pawL_close_loader(P, f->data);
-    }
-    pawM_free_vec(P, f->data, f->size);
-    pawM_free_flex(P, f, CAST_SIZE(f->nfields), sizeof(f->fields[0]));
+    paw_assert(t->kind == TUPLE_OTHER);
+    pawM_free_flex(P, t, t->nelems, sizeof(t->elems[0]));
 }
 
 static int char2base(char c)
@@ -254,6 +133,7 @@ static unsigned char_to_digit(char c)
 
 int pawV_parse_uint(paw_Env *P, char const *text, int base, paw_Uint *out)
 {
+    PAW_UNUSED(P);
     paw_Uint const b = (paw_Uint)base;
     char const *p = text;
 
@@ -286,7 +166,6 @@ static paw_Bool parse_negative(char const **ptext)
 
 int pawV_parse_int(paw_Env *P, char const *text, int base, paw_Int *out)
 {
-    char const *original = text;
     paw_Bool const negative = parse_negative(&text);
 
     paw_Uint u;
@@ -304,7 +183,7 @@ int pawV_parse_int(paw_Env *P, char const *text, int base, paw_Int *out)
 
 int pawV_parse_float(paw_Env *P, char const *text, paw_Float *out)
 {
-    char const *original = text;
+    PAW_UNUSED(P);
     paw_Bool const negative = parse_negative(&text);
 
     // First, validate the number format.

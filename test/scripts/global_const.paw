@@ -4,6 +4,7 @@ pub const INT: int = 42;
 pub const FLOAT: float = 1.23;
 pub const STR: str = "abc";
 
+#[test]
 pub fn test_primitive() {
     assert(INT == 42);
     assert(FLOAT == 1.23);
@@ -13,6 +14,7 @@ pub fn test_primitive() {
 const BNOT: int = ~0;
 const NEG: int = --1;
 
+#[test]
 pub fn test_unary_op() {
    assert(BNOT == ~0); 
    assert(NEG == 1); 
@@ -21,11 +23,13 @@ pub fn test_unary_op() {
 const ADD: int = 1 + 2 + 3;
 const ADD_MUL: int = (((1 + 2) * 3 * (4 + 5 * 6) * 7) + 8) * (9);
 
+#[test]
 pub fn test_binary_op() {
    assert(ADD == 6); 
    assert(ADD_MUL == 19350);
 }
 
+#[test]
 pub fn test_dependency() {
     assert(INT2 == 84);
 }
@@ -41,6 +45,7 @@ const BLOCK: int = {
     }
 };
 
+#[test]
 pub fn test_block() {
    assert(BLOCK == 7);
 }
@@ -71,6 +76,7 @@ const BLOCK_COND: int = {
     }
 };
 
+#[test]
 pub fn test_conditional() {
    assert(CONDITIONAL == "ok");
    assert(BLOCK_COND == 6);
@@ -84,6 +90,7 @@ const LOGICAL: int = if CONDITION && !CONDITION {
     -2
 };
 
+#[test]
 pub fn test_logical() {
     assert(LOGICAL == 42);
 }

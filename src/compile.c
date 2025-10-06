@@ -2,19 +2,19 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
+#include <math.h>
 #include "compile.h"
 #include "api.h"
 #include "ast.h"
 #include "debug.h"
 #include "error.h"
-#include "gc.h"
 #include "hir.h"
 #include "ir_type.h"
-#include "layout.h"
 #include "lex.h"
+#include "lib.h"
 #include "map.h"
+#include "os.h"
 #include "resolve.h"
-#include "rtti.h"
 #include "type_folder.h"
 #include "unify.h"
 
@@ -61,7 +61,7 @@ void pawP_init(paw_Env *P)
 {
     // Add all keywords to the interned strings table. Fix them so they are
     // never collected. Also added to the lexer string map.
-    for (uint16_t i = 0; i < PAW_COUNTOF(kKeywords); ++i) {
+    for (unsigned i = 0; i < PAW_COUNTOF(kKeywords); ++i) {
         char const *kw = kKeywords[i];
         Str *str = pawS_new_fixed(P, kw);
         str->flag = i + FIRST_KEYWORD;
@@ -158,6 +158,10 @@ enum BuiltinKind pawP_type2code(struct Compiler *C, IrType *type)
             return BUILTIN_RANGE_INCLUSIVE;
         } else if (base.value == C->builtins[BUILTIN_RANGE_TO_INCLUSIVE].did.value) {
             return BUILTIN_RANGE_TO_INCLUSIVE;
+        } else if (base.value == C->builtins[BUILTIN_LIST_ITERATOR].did.value) {
+            return BUILTIN_LIST_ITERATOR;
+        } else if (base.value == C->builtins[BUILTIN_MAP_ITERATOR].did.value) {
+            return BUILTIN_MAP_ITERATOR;
         }
     }
     return NBUILTINS;
@@ -174,14 +178,12 @@ IrType *pawP_builtin_type(struct Compiler *C, enum BuiltinKind code)
     return pawIr_get_def_type(C, did);
 }
 
-Str *pawP_scan_nstr(struct Compiler *C, Tuple *map, char const *s, size_t n)
+Str *pawP_scan_nstr(struct Compiler *C, char const *s, size_t n)
 {
     paw_Env *P = ENV(C);
-    Value const *pv = pawC_pushns(P, s, n);
-    pawMap_insert(P, map, pv, pv);
-    pawC_pop(P);
-    CHECK_GC(P);
-    return V_STR(*pv);
+    Str *str = pawS_new_nstr(P, s, n);
+    StringMap_insert(C, C->strings, str, NULL);
+    return str;
 }
 
 Str *pawP_format_string(struct Compiler *C, char const *fmt, ...)
@@ -195,9 +197,7 @@ Str *pawP_format_string(struct Compiler *C, char const *fmt, ...)
     pawL_add_vfstring(P, &buf, fmt, arg);
     va_end(arg);
 
-    Str *s = pawP_scan_nstr(C, C->strings, buf.data, buf.size);
-    pawL_discard_result(P, &buf);
-    return s;
+    return pawL_buffer_finish(P, &buf);
 }
 
 static void define_prelude_adt(struct Compiler *C, unsigned cstr, enum BuiltinKind kind)
@@ -210,9 +210,9 @@ static void define_prelude_adt(struct Compiler *C, unsigned cstr, enum BuiltinKi
     BuiltinMap_insert(C, C->builtin_lookup, s, &C->builtins[kind]);
 }
 
-void *pawP_alloc(paw_Env *P, struct Pool *pool, void *ptr, size_t size0, size_t size)
+void *pawP_alloc(struct Pool *pool, void *ptr, size_t size0, size_t size)
 {
-    return pawK_pool_alloc(P, pool, ptr, size0, size);
+    return pawK_pool_alloc(pool, ptr, size0, size);
 }
 
 static void pool_free(paw_Env *P, struct Pool *pool)
@@ -222,7 +222,7 @@ static void pool_free(paw_Env *P, struct Pool *pool)
     if (pool->prev != NULL)
         pool->prev->next = pool->next;
 
-    pawK_pool_uninit(P, pool);
+    pawK_pool_uninit(pool);
     pawM_free(P, pool);
 }
 
@@ -236,7 +236,7 @@ struct Pool *pawP_pool_new(struct Compiler *C, struct PoolStats st)
     paw_Env *P = ENV(C);
     struct Pool *pool = pawM_new(P, struct Pool);
 
-    struct Pool *head = &C->dm->pool;
+    struct Pool *head = C->P->pool;
     head->prev->next = pool;
     pool->prev = head->prev;
     pool->next = head;
@@ -246,62 +246,51 @@ struct Pool *pawP_pool_new(struct Compiler *C, struct PoolStats st)
     return pool;
 }
 
-#define FIRST_ARENA_SIZE 4096
-
-void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, char const *modname)
+static void set_extern_value(struct Compiler *C, char const *name, Value value)
 {
-    pawRtti_uninit(P);
+    StringMap_insert(C, C->symbols, SCAN_STR(C, name), value.p);
+}
 
-    dm->pool.prev = dm->pool.next = &dm->pool;
-    pawK_pool_init(P, &dm->pool, FIRST_ARENA_SIZE, (struct PoolStats){0});
-
+void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, Str const *modname, Str const *pathname, Str const *dirname)
+{
     *C = (struct Compiler){
-        .pool = &dm->pool,
+        .pool = P->pool,
+        .pathname = pathname,
+        .modname = modname,
+        .dirname = dirname,
         .dm = dm,
         .P = P,
     };
-    C->stats = Statistics_new(C);
 
-    // Create statistics for tracking compiler memory usage. Main pool statistics
-    // must be added after-the-fact, since the main pool itself is used to allocate
-    // the "struct Statistic" objects.
-    C->pool->st = (struct PoolStats){
-                .bytes_alloc = pawStats_new(C, "memory.main.bytes_allocated"),
-                .bytes_used = pawStats_new(C, "memory.main.bytes_used"),
-                .num_alloc = pawStats_new(C, "memory.main.num_allocations"),
-            };
+    C->searchers = *StrMap_get(NULL, P->registry, CACHED_STRING(P, CSTR_KSEARCHERS));
+    C->symbols = *StrMap_get(NULL, P->registry, CACHED_STRING(P, CSTR_KSYMBOLS));
+    C->stats = P->stats;
+
     C->aux_stats = (struct PoolStats){
-                .bytes_alloc = pawStats_new(C, "memory.aux.bytes_allocated"),
-                .bytes_used = pawStats_new(C, "memory.aux.bytes_used"),
-                .num_alloc = pawStats_new(C, "memory.aux.num_allocations"),
+                .bytes_alloc = pawStats_new(P, C->stats, "memory.aux.bytes_allocated"),
+                .bytes_used = pawStats_new(P, C->stats, "memory.aux.bytes_used"),
+                .num_alloc = pawStats_new(P, C->stats, "memory.aux.num_allocations"),
             };
     C->ast_pool = pawP_pool_new(C, (struct PoolStats){
-                .num_alloc = pawStats_new(C, "memory.ast.num_allocations"),
-                .bytes_alloc = pawStats_new(C, "memory.ast.bytes_allocated"),
-                .bytes_used = pawStats_new(C, "memory.ast.bytes_used"),
+                .num_alloc = pawStats_new(P, C->stats, "memory.ast.num_allocations"),
+                .bytes_alloc = pawStats_new(P, C->stats, "memory.ast.bytes_allocated"),
+                .bytes_used = pawStats_new(P, C->stats, "memory.ast.bytes_used"),
             });
     C->hir_pool = pawP_pool_new(C, (struct PoolStats){
-                .num_alloc = pawStats_new(C, "memory.hir.num_allocations"),
-                .bytes_alloc = pawStats_new(C, "memory.hir.bytes_allocated"),
-                .bytes_used = pawStats_new(C, "memory.hir.bytes_used"),
+                .num_alloc = pawStats_new(P, C->stats, "memory.hir.num_allocations"),
+                .bytes_alloc = pawStats_new(P, C->stats, "memory.hir.bytes_allocated"),
+                .bytes_used = pawStats_new(P, C->stats, "memory.hir.bytes_used"),
             });
     C->mir_pool = pawP_pool_new(C, (struct PoolStats){
-                .num_alloc = pawStats_new(C, "memory.mir.num_allocations"),
-                .bytes_alloc = pawStats_new(C, "memory.mir.bytes_allocated"),
-                .bytes_used = pawStats_new(C, "memory.mir.bytes_used"),
+                .num_alloc = pawStats_new(P, C->stats, "memory.mir.num_allocations"),
+                .bytes_alloc = pawStats_new(P, C->stats, "memory.mir.bytes_allocated"),
+                .bytes_used = pawStats_new(P, C->stats, "memory.mir.bytes_used"),
             });
 
-    paw_new_map(P, 0, 0);
-    C->strings = V_TUPLE(P->top.p[-1]);
-
-    paw_new_map(P, 0, 0);
-    P->constants = P->top.p[-1];
-    paw_new_map(P, 0, 0);
-    P->functions = P->top.p[-1];
-    paw_pop(P, 2);
+    C->strings = StringMap_new(C);
 
     C->globals = GlobalList_new(C);
-    C->modnames = ModuleNames_new(C);
+    C->modinfo = ModuleInfo_new(C);
     C->builtin_lookup = BuiltinMap_new(C);
     C->hir_types = HirTypeMap_new(C);
     C->def_types = DefTypeMap_new(C);
@@ -309,14 +298,25 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, char co
     C->adt_defs = AdtDefMap_new(C);
     C->fn_defs = FnDefMap_new(C);
 
-    C->layouts = IrLayoutMap_new(C);
+    C->typesystem.lists = TypeCollection_new(C);
+    C->typesystem.maps = TypeCollection_new(C);
+    C->typesystem.adts = TypeCollection_new(C);
+    C->typesystem.types = TypeCollection_new(C);
+
+    C->typesystem.iterators.list = TypeCollection_new(C);
+    C->typesystem.iterators.map = TypeCollection_new(C);
+
     C->segtab = SegmentTable_new(C);
 
-    C->rtti = RttiMap_new(C);
     C->traits = TraitMap_new(C);
     C->trait_owners = TraitOwners_new(C);
 
-    C->modname = P->modname = SCAN_STR(C, modname);
+    ModuleInfo_push(C, C->modinfo, (struct Module){
+                .pathname = pathname,
+                .dirname = dirname,
+                .name = modname,
+            });
+
     C->ast = pawAst_new(C);
 
     C->U = P_ALLOC(C, NULL, 0, sizeof(struct Unifier));
@@ -349,267 +349,30 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, char co
     define_prelude_adt(C, CSTR_HASH, BUILTIN_HASH);
     define_prelude_adt(C, CSTR_EQUALS, BUILTIN_EQUALS);
     define_prelude_adt(C, CSTR_COMPARE, BUILTIN_COMPARE);
+
+    // builtin iterators
+    define_prelude_adt(C, CSTR_LIST_ITERATOR, BUILTIN_LIST_ITERATOR);
+    define_prelude_adt(C, CSTR_MAP_ITERATOR, BUILTIN_MAP_ITERATOR);
+
+    // external constant values must be known in the frontend
+    set_extern_value(C, "paw_math_PI", F2V(M_PI));
+    set_extern_value(C, "paw_math_NAN", F2V(NAN));
+    set_extern_value(C, "paw_math_INFINITY", F2V(INFINITY));
 }
 
 void pawP_teardown(paw_Env *P, struct DynamicMem *dm)
 {
-    struct Pool *pool = dm->pool.next;
-    while (pool != &dm->pool) {
+    struct Pool *pool = P->pool->next;
+    while (pool != P->pool) {
         struct Pool *next = pool->next;
         pool_free(P, pool);
         pool = next;
     }
 
-    pawK_pool_uninit(P, &dm->pool);
     pawM_free_vec(P, dm->source.data, dm->source.size);
     pawM_free_vec(P, dm->scratch.data, dm->scratch.alloc);
-}
 
-#define LOG(dg, ...) PAWD_LOG(ENV((dg)->C), __VA_ARGS__)
-
-struct DefState {
-    struct DefState *outer;
-    IrType *type;
-    struct Def *def;
-    int index;
-};
-
-struct DefGenerator {
-    struct DefState *ds;
-    struct ModuleInfo *m;
-    struct ItemList *items;
-    struct Compiler *C;
-};
-
-static void enter_def(struct DefGenerator *dg, struct DefState *ds, IrType *type, struct Def *def)
-{
-    *ds = (struct DefState){
-        .outer = dg->ds,
-        .type = type,
-        .def = def,
-    };
-    dg->ds = ds;
-}
-
-static void leave_def(struct DefGenerator *dg)
-{
-    dg->ds = dg->ds->outer;
-}
-
-static RttiType *lookup_type(struct DefGenerator *dg, IrType *type)
-{
-    if (type == NULL)
-        return NULL;
-    RttiType *const *ptype = RttiMap_get(dg->C, dg->C->rtti, type);
-    return ptype != NULL ? *ptype : NULL;
-}
-
-static void map_types(struct DefGenerator *dg, IrType *type, RttiType *rtti)
-{
-    paw_Env *P = ENV(dg->C);
-    RttiMap_insert(dg->C, dg->C->rtti, type, rtti);
-}
-
-static RttiType *new_type(struct DefGenerator *, IrType *, ItemId);
-#define MAKE_TYPE(dg, t, did) new_type(dg, IR_CAST_TYPE(t), did)->hdr.code
-
-static void init_type_list(struct DefGenerator *dg, IrTypeList *x, paw_Type *y, ItemId iid)
-{
-    if (x == NULL)
-        return;
-    for (int i = 0; i < x->count; ++i) {
-        y[i] = MAKE_TYPE(dg, x->data[i], iid);
-    }
-}
-
-#define LEN(L) ((L) != NULL ? (L)->count : 0)
-
-static RttiType *new_type(struct DefGenerator *dg, IrType *src, ItemId iid)
-{
-    RttiType *dst = lookup_type(dg, src);
-    if (dst != NULL) return dst;
-
-    struct IrLayout layout = pawIr_compute_layout(dg->C, src);
-
-    paw_Env *P = ENV(dg->C);
-    switch (IR_KINDOF(src)) {
-        case kIrAdt: {
-            struct IrAdt *adt = IrGetAdt(src);
-            dst = pawRtti_new_adt(P, iid, LEN(adt->types), layout.size);
-            init_type_list(dg, adt->types, dst->subtypes, iid);
-            break;
-        }
-        case kIrSignature: {
-            struct IrSignature *fsig = IrGetSignature(src);
-            dst = pawRtti_new_signature(P, iid, fsig->params->count);
-            init_type_list(dg, fsig->params, dst->subtypes, iid);
-            dst->fdef.result = MAKE_TYPE(dg, fsig->result, iid);
-            break;
-        }
-        case kIrFnPtr: {
-            struct IrFnPtr *fptr = IrGetFnPtr(src);
-            dst = pawRtti_new_fn_ptr(P, fptr->params->count);
-            init_type_list(dg, fptr->params, dst->subtypes, -1);
-            dst->fptr.result = MAKE_TYPE(dg, fptr->result, -1);
-            break;
-        }
-        case kIrTraitObj: {
-            struct IrTraitObj *trait = IrGetTraitObj(src);
-            dst = pawRtti_new_trait(P);
-            break;
-        }
-        case kIrNever: {
-            dst = pawRtti_new_never(P);
-            break;
-        }
-        default: { // kIrTuple
-            struct IrTuple *tuple = IrGetTuple(src);
-            dst = pawRtti_new_tuple(P, tuple->elems->count, layout.size);
-            init_type_list(dg, tuple->elems, dst->subtypes, -1);
-        }
-    }
-    return dst;
-}
-
-static Str *get_modname(struct DefGenerator *dg, DeclId did)
-{
-    return HirModuleList_get(dg->C->hir->modules, did.modno).name;
-}
-
-static struct Def *new_adt_def(struct DefGenerator *dg, struct IrAdtDef *d, IrType *type)
-{
-    paw_Env *P = ENV(dg->C);
-    int const n = d->is_struct
-        ? LEN(K_LIST_FIRST(d->variants)->fields)
-        : LEN(d->variants);
-    struct Def *def = pawRtti_new_adt_def(P, n);
-    RttiType *ty = new_type(dg, type, def->hdr.iid);
-    def->adt.kind = DEF_ADT;
-    def->adt.modname = get_modname(dg, d->did);
-    def->adt.code = ty->hdr.code;
-    def->adt.name = d->name;
-    def->adt.is_struct = d->is_struct;
-    def->adt.is_inline = d->is_inline;
-    def->adt.is_pub = d->is_pub;
-    return def;
-}
-
-static struct Def *new_fn_def(struct DefGenerator *dg, struct IrFnDef *d, IrType *type)
-{
-    paw_Env *P = ENV(dg->C);
-    struct Def *def = pawRtti_new_fn_def(P, LEN(d->params));
-    RttiType *ty = new_type(dg, type, def->hdr.iid);
-    def->fn.kind = DEF_FUNC;
-    def->fn.ntypes = LEN(d->params);
-    def->fn.iid = def->hdr.iid;
-    def->fn.modname = get_modname(dg, d->did);
-    def->fn.code = ty->hdr.code;
-    def->fn.name = d->name;
-    def->fn.is_pub = d->is_pub;
-    return def;
-}
-
-static void allocate_other_type(struct DefGenerator *dg, IrType *type)
-{
-    RttiType *rtti = new_type(dg, type, -1);
-    map_types(dg, type, rtti);
-}
-
-static void allocate_adt_def(struct DefGenerator *dg, IrType *type)
-{
-    if (!IrIsAdt(type)) {
-        allocate_other_type(dg, type);
-        return;
-    }
-    struct IrAdt *t = IrGetAdt(type);
-    struct IrAdtDef *d = pawIr_get_adt_def(dg->C, t->did);
-    struct Def *def = new_adt_def(dg, d, type);
-    RttiType *rtti = RTTI_TYPE(ENV(dg->C), def->fn.code);
-    map_types(dg, type, rtti);
-}
-
-static void define_params(struct DefGenerator *dg, struct IrParams *params)
-{
-    // TODO: define fields for RTTI
-}
-
-static void connect_adt_def(struct DefGenerator *dg, IrType *mono)
-{
-    // paw_Env *P = ENV(dg->C);
-    // struct HirDecl *decl = pawHir_get_decl(dg->C, IR_TYPE_DID(mono));
-    // struct HirAdtDecl *d = HirGetAdtDecl(decl);
-    // RttiType *ty = lookup_type(dg, mono);
-    // struct Def *def = RT_DEF(P, ty->adt.iid);
-
-    // struct DefState ds;
-    // enter_def(dg, &ds, mono, def);
-    // define_decl_list(dg, d->fields);
-    // leave_def(dg);
-}
-
-static void allocate_types(struct DefGenerator *dg, IrTypeList *types)
-{
-    IrType *const *ptype;
-    K_LIST_FOREACH (types, ptype)
-        allocate_adt_def(dg, *ptype);
-    K_LIST_FOREACH (types, ptype)
-        connect_adt_def(dg, *ptype);
-}
-
-static struct ItemSlot allocate_item(struct DefGenerator *dg, struct Mir *body)
-{
-    paw_Env *P = ENV(dg->C);
-    struct IrSignature *t = IrGetSignature(body->type);
-    int const ntypes = t->types != NULL ? t->types->count : 0;
-    struct IrFnDef *d = pawIr_get_fn_def(dg->C, t->did);
-    struct Def *def = new_fn_def(dg, d, body->type);
-    RttiType *self = lookup_type(dg, body->self);
-    def->fn.self = self != NULL ? self->adt.code : -1;
-    // ".vid" is the index of the Value slot where this function will live
-    // at runtime. Functions are placed after the global constants section.
-    def->fn.vid = dg->items->count + dg->C->globals->count;
-
-    struct DefState ds;
-    enter_def(dg, &ds, body->type, def);
-    define_params(dg, d->params);
-    leave_def(dg);
-
-    RttiType *rtti = RTTI_TYPE(P, def->fn.code);
-    rtti->fdef.iid = def->fn.iid;
-    return (struct ItemSlot){
-        .name = body->name,
-        .mir = body,
-        .rtti = rtti,
-        .did = d->did,
-    };
-}
-
-static void allocate_items(struct DefGenerator *dg, struct BodyList *bodies)
-{
-    struct Mir *const *pbody;
-    K_LIST_FOREACH (bodies, pbody) {
-        struct Mir *body = *pbody;
-        if (body->self == NULL || !IrIsTraitObj(body->self)) {
-            struct ItemSlot item = allocate_item(dg, body);
-            ItemList_push(dg->C, dg->items, item);
-            map_types(dg, body->type, item.rtti);
-        }
-    }
-
-    struct GlobalInfo const *pinfo;
-    K_LIST_FOREACH (dg->C->globals, pinfo) {
-    }
-}
-
-struct ItemList *pawP_allocate_defs(struct Compiler *C, struct BodyList *bodies, IrTypeList *types)
-{
-    struct DefGenerator dg = {
-        .items = ItemList_new(C),
-        .C = C,
-    };
-    allocate_types(&dg, types);
-    allocate_items(&dg, bodies);
-    return dg.items;
+    P->modname = P->pathname = NULL;
 }
 
 #define CHUNKSZ(b) sizeof(K_LIST_AT(b, 0))
@@ -688,6 +451,19 @@ void pawP_bitset_or(struct BitSet *a, struct BitSet const *b)
     }
 }
 
+paw_Bool pawP_contains_core_annotation(struct Compiler *C, Annotations const *annotations)
+{
+    if (annotations == NULL)
+        return PAW_FALSE;
+    struct Annotation const *pa;
+    Str const *core = SCAN_STR(C, "extern_std");
+    K_LIST_FOREACH (annotations, pa) {
+        if (pawS_eq(pa->name, core))
+            return PAW_TRUE;
+    }
+    return PAW_FALSE;
+}
+
 paw_Bool pawP_check_extern(struct Compiler *C, struct Annotations *annos, struct Annotation *panno)
 {
     if (annos == NULL)
@@ -702,62 +478,139 @@ paw_Bool pawP_check_extern(struct Compiler *C, struct Annotations *annos, struct
     return PAW_FALSE;
 }
 
-Value const *pawP_get_extern_value(struct Compiler *C, Str const *name)
+paw_Bool pawP_get_extern_value(struct Compiler *C, Str const *name, Value *result)
 {
-    paw_Env *P = ENV(C);
-    pawE_push_cstr(P, CSTR_KSYMBOLS);
-    paw_map_get(P, PAW_REGISTRY_INDEX);
-    Tuple *symbols = V_TUPLE(P->top.p[-1]);
-
-    Value const *pval = pawMap_get(P, symbols, &P2V(name));
-
-    paw_pop(P, 1); // pop 'symbols'
-    return pval;
+    void *const *pvalue = StringMap_get(C, C->symbols, name);
+    if (pvalue == NULL) return PAW_FALSE;
+    result->p = *pvalue;
+    return PAW_TRUE;
 }
 
-static RttiType *lookup_rtti(struct Compiler *C, IrType *type)
+static void add_string_with_len(paw_Env *P, Buffer *buf, Str const *str)
 {
-    RttiType **prtti = RttiMap_get(C, C->rtti, type);
-    return prtti != NULL ? *prtti : NULL;
+    pawL_add_int(P, buf, PAW_CAST_INT(str->length));
+    pawL_add_nstring(P, buf, str->text, str->length);
+}
+
+static void mangle_start(struct Compiler *C, Buffer *buf)
+{
+    L_ADD_LITERAL(ENV(C), buf, "_P");
+}
+
+static void mangle_start_generic_args(struct Compiler *C, Buffer *buf)
+{
+    pawL_add_char(ENV(C), buf, 'I');
+}
+
+static void mangle_finish_generic_args(struct Compiler *C, Buffer *buf)
+{
+    pawL_add_char(ENV(C), buf, 'E');
+}
+
+static void mangle_add_module(struct Compiler *C, Buffer *buf, Str const *name)
+{
+    pawL_add_char(ENV(C), buf, 'N');
+    add_string_with_len(ENV(C), buf, name);
+}
+
+static void mangle_add_name(struct Compiler *C, Buffer *buf, Str const *name)
+{
+    add_string_with_len(ENV(C), buf, name);
+}
+
+static void mangle_add_arg(struct Compiler *C, Buffer *buf, IrType *type)
+{
+    paw_Env *P = ENV(C);
+    switch (type->hdr.kind) {
+        case kIrAdt:
+            switch (pawP_type2code(C, type)) {
+                case BUILTIN_UNIT:
+                    pawL_add_char(P, buf, '0');
+                    break;
+                case BUILTIN_BOOL:
+                    pawL_add_char(P, buf, 'b');
+                    break;
+                case BUILTIN_INT:
+                    pawL_add_char(P, buf, 'i');
+                    break;
+                case BUILTIN_FLOAT:
+                    pawL_add_char(P, buf, 'f');
+                    break;
+                case BUILTIN_STR:
+                    pawL_add_char(P, buf, 's');
+                    break;
+                default: {
+                    struct IrAdt const *adt = IrGetAdt(type);
+                    struct IrAdtDef const *def = pawIr_get_adt_def(C, IR_TYPE_DID(type));
+                    add_string_with_len(P, buf, def->name);
+                    if (adt->types != NULL) {
+                        IrType *const *ptype;
+                        mangle_start_generic_args(C, buf);
+                        K_LIST_FOREACH (adt->types, ptype)
+                            mangle_add_arg(C, buf, *ptype);
+                        mangle_finish_generic_args(C, buf);
+                    }
+                }
+            }
+            break;
+        case kIrFnPtr:
+        case kIrSignature: {
+            IrType *const *pparam;
+            struct IrFnPtr const *fn = IR_FPTR(type);
+            pawL_add_char(P, buf, 'F');
+            K_LIST_FOREACH (fn->params, pparam)
+                mangle_add_arg(C, buf, *pparam);
+            pawL_add_char(P, buf, 'E');
+            if (!IrIsAdt(fn->result) || pawP_type2code(C, fn->result) != PAW_TUNIT)
+                mangle_add_arg(C, buf, fn->result);
+            break;
+        }
+        case kIrTuple: {
+            IrType *const *pelem;
+            struct IrTuple const *tuple = IrGetTuple(type);
+            pawL_add_char(P, buf, 'T');
+            K_LIST_FOREACH (tuple->elems, pelem)
+                mangle_add_arg(C, buf, *pelem);
+            pawL_add_char(P, buf, 'E');
+            break;
+        }
+        case kIrNever:
+            pawL_add_char(P, buf, 'X');
+            break;
+        default:
+            PAW_UNREACHABLE();
+    }
 }
 
 static void mangle_type(struct Compiler *C, Buffer *buf, IrType *type)
 {
-    RttiType *t = lookup_rtti(C, type);
-    paw_assert(t != NULL);
-
-    pawRtti_mangle_add_arg(ENV(C), buf, t->hdr.code);
+    mangle_add_arg(C, buf, type);
 }
 
 static void mangle_types(struct Compiler *C, Buffer *buf, IrTypeList const *types)
 {
     if (types == NULL)
         return;
-    pawRtti_mangle_start_generic_args(ENV(C), buf);
+    mangle_start_generic_args(C, buf);
 
     IrType **pt;
     K_LIST_FOREACH (types, pt)
         mangle_type(C, buf, *pt);
 
-    pawRtti_mangle_finish_generic_args(ENV(C), buf);
+    mangle_finish_generic_args(C, buf);
 }
 
 void pawP_mangle_start(paw_Env *P, Buffer *buf, struct Compiler *C)
 {
-    ENSURE_STACK(P, 1);
     pawL_init_buffer(P, buf);
-    pawRtti_mangle_start(P, buf);
+    mangle_start(C, buf);
 }
 
 Str *pawP_mangle_finish(paw_Env *P, Buffer *buf, struct Compiler *C)
 {
-    pawL_push_result(P, buf);
-
-    // anchor in compiler string table
-    Str *str = V_STR(P->top.p[-1]);
-    pawMap_insert(P, C->strings, &P2V(str), &P2V(str));
-    pawC_pop(P);
-    return str;
+    Str *result = pawL_buffer_finish(P, buf);
+    StringMap_insert(C, C->strings, result, result);
+    return result;
 }
 
 Str *pawP_mangle_name(struct Compiler *C, Str const *modname, Str const *name, IrTypeList *types)
@@ -766,8 +619,8 @@ Str *pawP_mangle_name(struct Compiler *C, Str const *modname, Str const *name, I
     paw_Env *P = ENV(C);
     pawP_mangle_start(P, &buf, C);
     if (modname != NULL)
-        pawRtti_mangle_add_module(P, &buf, modname);
-    pawRtti_mangle_add_name(P, &buf, name);
+        mangle_add_module(C, &buf, modname);
+    mangle_add_name(C, &buf, name);
     mangle_types(C, &buf, types);
     return pawP_mangle_finish(P, &buf, C);
 }
@@ -778,18 +631,18 @@ Str *pawP_mangle_attr(struct Compiler *C, Str const *modname, Str const *base, I
     paw_Env *P = ENV(C);
     pawP_mangle_start(P, &buf, C);
     if (modname != NULL)
-        pawRtti_mangle_add_module(P, &buf, modname);
-    pawRtti_mangle_add_name(P, &buf, base);
+        mangle_add_module(C, &buf, modname);
+    mangle_add_name(C, &buf, base);
     mangle_types(C, &buf, base_types);
-    pawRtti_mangle_add_name(P, &buf, attr);
+    mangle_add_name(C, &buf, attr);
     mangle_types(C, &buf, attr_types);
     return pawP_mangle_finish(P, &buf, C);
 }
 
-paw_Bool pawP_push_callback(struct Compiler *C, char const *name)
+void pawP_callback(struct Compiler *C, char const *name, void *arg)
 {
     paw_Env *P = ENV(C);
-    paw_push_str(P, name);
-    return paw_map_get(P, PAW_REGISTRY_INDEX) >= 0;
+    paw_Function *cb = CallbackMap_get(P, P->callbacks, SCAN_STR(C, name));
+    if (cb != NULL) (*cb)(ENV(C), arg);
 }
 

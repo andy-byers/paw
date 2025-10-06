@@ -5,50 +5,193 @@
 #ifndef PAW_MAP_H
 #define PAW_MAP_H
 
-#include "paw.h"
-#include "util.h"
-#include "value.h"
+#include "core.h"
+#include "pool.h"
 
-typedef struct MapPolicy {
-    Value equals;
-    Value hash;
-    paw_Bool fp;
-    paw_Type type;
-    int key_size;
-    int value_size;
-} MapPolicy;
+#define K_MAP_MIN 4
+#define K_MAP_MAX (1 << 28)
+#define K_MAP_FILL_FACTOR 4
 
-#define MAP_POLICY(Map_) (V_INT((Map_)->elems[0]))
-#define MAP_DATA(Map_) ((Map_)->elems[1].p)
-#define MAP_LENGTH(Map_) (V_INT((Map_)->elems[2]))
-#define MAP_CAPACITY(Map_) (V_INT((Map_)->elems[3]))
+#define DEFINE_MAP(Context_, Name_, Alloc_, Hash_, Equals_, Key_, Value_)                            \
+    struct Name_##Node {                                                                             \
+        struct Name_##Node *next;                                                                    \
+        Key_ key;                                                                                    \
+        Value_ value;                                                                                \
+    };                                                                                               \
+    typedef struct Name_ {                                                                           \
+        struct Name_##Node **data;                                                                   \
+        struct Pool *pool;                                                                           \
+        int count;                                                                                   \
+        int alloc;                                                                                   \
+    } Name_;                                                                                         \
+    _Static_assert(K_MAP_MAX < PAW_SIZE_MAX / sizeof(struct Name_##Node),                            \
+                   "maximum map is too large");                                                      \
+    static inline struct Name_ *Name_##_new_from(Context_ *ctx, struct Pool *pool)                   \
+    {                                                                                                \
+        PAW_UNUSED(ctx);                                                                             \
+        Name_ *map = (Name_ *)Alloc_(pool, NULL, 0, sizeof(struct Name_));                           \
+        map->data = (struct Name_##Node **)Alloc_(pool, NULL, 0, K_MAP_MIN * sizeof(map->data[0]));  \
+        map->alloc = K_MAP_MIN;                                                                      \
+        map->pool = pool;                                                                            \
+        map->count = 0;                                                                              \
+        memset(map->data, 0, K_MAP_MIN * sizeof(map->data[0]));                                      \
+        return map;                                                                                  \
+    }                                                                                                \
+    static inline struct Name_ *Name_##_new(Context_ *ctx)                                           \
+    {                                                                                                \
+        return Name_##_new_from(ctx, ctx->pool);                                                     \
+    }                                                                                                \
+    static inline void Name_##_delete(Context_ *ctx, struct Name_ *map)                              \
+    {                                                                                                \
+        PAW_UNUSED(ctx);                                                                             \
+        for (int i = 0; i < map->alloc; ++i) {                                                       \
+            struct Name_##Node *node = map->data[i];                                                 \
+            while (node != NULL) {                                                                   \
+                struct Name_##Node *next = node->next;                                               \
+                Alloc_(map->pool, node, sizeof(*node), 0);                                 \
+                node = next;                                                                         \
+            }                                                                                        \
+        }                                                                                            \
+        Alloc_(map->pool, map->data, (size_t)map->alloc * sizeof(map->data[0]), 0);        \
+        Alloc_(map->pool, map, sizeof(struct Name_), 0);                                   \
+    }                                                                                                \
+    static inline int Name_##_length(struct Name_ const *map)                                        \
+    {                                                                                                \
+        return map->count;                                                                           \
+    }                                                                                                \
+    static inline struct Name_##Node **Name_##_bucketp(Context_ *ctx, struct Name_ *map, Key_ key)   \
+    {                                                                                                \
+        return &map->data[Hash_(ctx, key) % (paw_Uint)map->alloc];                                   \
+    }                                                                                                \
+    static inline void Name_##_grow(Context_ *ctx, struct Name_ *map)                                \
+    {                                                                                                \
+        struct Name_ old = *map;                                                                     \
+        size_t alloc = K_MAP_MIN;                                                                    \
+        while (alloc <= (size_t)old.alloc)                                                           \
+            alloc *= 2;                                                                              \
+        pawM_check_size(map->pool->P, 0, alloc, sizeof(map->data[0]));                                   \
+        map->data = (struct Name_##Node **)Alloc_(map->pool, NULL, 0, alloc * sizeof(map->data[0])); \
+        map->alloc = alloc;                                                                          \
+        memset(map->data, 0, alloc * sizeof(map->data[0]));                                          \
+        for (int i = 0; i < old.alloc; ++i) {                                                        \
+            while (old.data[i] != NULL) {                                                            \
+                struct Name_##Node *node = old.data[i];                                              \
+                struct Name_##Node **ptr = Name_##_bucketp(ctx, map, node->key);                     \
+                old.data[i] = node->next;                                                            \
+                node->next = *ptr;                                                                   \
+                *ptr = node;                                                                         \
+            }                                                                                        \
+        }                                                                                            \
+        Alloc_(map->pool, old.data, (size_t)old.alloc * sizeof(map->data[0]), 0);          \
+    }                                                                                                \
+    static inline paw_Bool Name_##_insert(Context_ *ctx, struct Name_ *map, Key_ key, Value_ value)  \
+    {                                                                                                \
+        if (map->count > map->alloc / K_MAP_FILL_FACTOR)                                             \
+            Name_##_grow(ctx, map);                                                                  \
+                                                                                                     \
+        struct Name_##Node **bucket = Name_##_bucketp(ctx, map, key);                                \
+        struct Name_##Node **ptr = bucket;                                                           \
+        for (; *ptr != NULL; ptr = &(*ptr)->next) {                                                  \
+            if (Equals_(ctx, key, (*ptr)->key)) {                                                    \
+                (*ptr)->value = value;                                                               \
+                return PAW_TRUE;                                                                     \
+            }                                                                                        \
+        }                                                                                            \
+        struct Name_##Node *node = (struct Name_##Node *)Alloc_(map->pool, NULL, 0, sizeof(**ptr));              \
+        *node = (struct Name_##Node){                                                                \
+            .next = *bucket,                                                                         \
+            .key = key,                                                                              \
+            .value = value,                                                                          \
+        };                                                                                           \
+        *bucket = node;                                                                              \
+        ++map->count;                                                                                \
+        return PAW_FALSE;                                                                            \
+    }                                                                                                \
+    static inline struct Name_##Node **Name_##_find_node(Context_ *ctx, struct Name_ *map, Key_ key) \
+    {                                                                                                \
+        if (map->alloc == 0)                                                                         \
+            return NULL;                                                                             \
+        struct Name_##Node **ptr = Name_##_bucketp(ctx, map, key);                                   \
+        while (*ptr != NULL) {                                                                       \
+            if (Equals_(ctx, key, (*ptr)->key)) {                                                    \
+                return ptr;                                                                          \
+            }                                                                                        \
+            ptr = &(*ptr)->next;                                                                     \
+        }                                                                                            \
+        return NULL;                                                                                 \
+    }                                                                                                \
+    static inline paw_Bool Name_##_remove(Context_ *ctx, struct Name_ *map, Key_ key)                \
+    {                                                                                                \
+        struct Name_##Node **ptr = Name_##_find_node(ctx, map, key);                           \
+        if (ptr != NULL) {                                                                           \
+            struct Name_##Node *node = *ptr;                                                         \
+            *ptr = node->next;                                                                       \
+            Alloc_(map->pool, node, sizeof(*node), 0);                                     \
+            --map->count;                                                                            \
+            return PAW_TRUE;                                                                         \
+        }                                                                                            \
+        return PAW_FALSE;                                                                            \
+    }                                                                                                \
+    static inline Value_ *Name_##_get(Context_ *ctx, struct Name_ *map, Key_ key)                    \
+    {                                                                                                \
+        struct Name_##Node **ptr = Name_##_find_node(ctx, map, key);                                 \
+        return ptr != NULL ? &(*ptr)->value : NULL;                                                  \
+    }
 
-#define GET_POLICY(P_, Map_) (P_)->map_policies.data[MAP_POLICY(Map_)]
-
-Tuple *pawMap_new(paw_Env *P, int policy, paw_Int capacity, Value *out);
-void pawMap_free(paw_Env *P, Tuple *m);
-void pawMap_extend(paw_Env *P, Tuple *a, Tuple const *b);
-void pawMap_reserve(paw_Env *P, Tuple *m, paw_Int n);
-Value *pawMap_create(paw_Env *P, Tuple *m, Value const *pkey);
-Value *pawMap_get(paw_Env *P, Tuple *m, Value const *pkey);
-void pawMap_erase(Tuple *m, paw_Int index);
-void pawMap_remove(paw_Env *P, Tuple *m, Value const *pkey);
-Value *pawMap_insert(paw_Env *P, Tuple *m, Value const *pkey, Value const *pvalue);
-paw_Bool pawMap_contains(paw_Env *P, Tuple *m, Value const *pkey);
-Value *pawMap_key(paw_Env *P, Tuple *m, paw_Int index);
-Value *pawMap_value(paw_Env *P, Tuple *m, paw_Int index);
-int pawMap_key_size(paw_Env *P, Tuple const *t);
-int pawMap_value_size(paw_Env *P, Tuple const *t);
-paw_Bool pawMap_iter(Tuple *m, paw_Int *pi);
-
-inline static paw_Int pawMap_length(Tuple const *m)
-{
-    return MAP_LENGTH(m);
-}
-
-inline static unsigned char *pawMap_state(Tuple *m, paw_Int index)
-{
-    return &CAST(unsigned char *, MAP_DATA(m))[index];
-}
+#define DEFINE_MAP_ITERATOR(Name_, Key_, Value_)                                 \
+    typedef struct Name_##Iterator {                                             \
+        struct Name_##Node **ptr;                                                \
+        Name_ *map;                                                              \
+        int index;                                                               \
+    } Name_##Iterator;                                                           \
+    static inline paw_Bool Name_##Iterator_is_valid(Name_##Iterator const *iter) \
+    {                                                                            \
+        paw_assert(iter->ptr != NULL);                                           \
+        return *iter->ptr != NULL;                                               \
+    }                                                                            \
+    static inline Key_ Name_##Iterator_key(Name_##Iterator *iter)                \
+    {                                                                            \
+        paw_assert(Name_##Iterator_is_valid(iter));                              \
+        return (*iter->ptr)->key;                                                \
+    }                                                                            \
+    static inline Value_ *Name_##Iterator_valuep(Name_##Iterator *iter)          \
+    {                                                                            \
+        paw_assert(Name_##Iterator_is_valid(iter));                              \
+        return &(*iter->ptr)->value;                                             \
+    }                                                                            \
+    static inline void Name_##Iterator_ensure_bucket_(Name_##Iterator *iter)     \
+    {                                                                            \
+        if (*iter->ptr != NULL)                                                  \
+            return;                                                              \
+        while (++iter->index < iter->map->alloc) {                               \
+            if (iter->map->data[iter->index] != NULL) {                          \
+                iter->ptr = &iter->map->data[iter->index];                       \
+                break;                                                           \
+            }                                                                    \
+        }                                                                        \
+    }                                                                            \
+    static inline void Name_##Iterator_next(Name_##Iterator *iter)               \
+    {                                                                            \
+        if (Name_##Iterator_is_valid(iter)) {                                    \
+            iter->ptr = &(*iter->ptr)->next;                                     \
+            Name_##Iterator_ensure_bucket_(iter);                                \
+        }                                                                        \
+    }                                                                            \
+    static inline void Name_##Iterator_init(Name_ *map, Name_##Iterator *iter)   \
+    {                                                                            \
+        paw_assert(map->alloc > 0);                                              \
+        *iter = (Name_##Iterator){.map = map};                                   \
+        for (iter->index = 0; iter->index < map->alloc; ++iter->index) {         \
+            iter->ptr = &map->data[iter->index];                                 \
+            if (*iter->ptr != NULL)                                              \
+                break;                                                           \
+        }                                                                        \
+    }                                                                            \
+    static inline void Name_##Iterator_erase(Name_##Iterator *iter)              \
+    {                                                                            \
+        *iter->ptr = (*iter->ptr)->next;                                         \
+        Name_##Iterator_ensure_bucket_(iter);                                    \
+        --iter->map->count;                                                      \
+    }
 
 #endif // PAW_MAP_H

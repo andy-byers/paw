@@ -1,44 +1,24 @@
 
-set(TEST_DIR "${PROJECT_SOURCE_DIR}/test")
-set(PAW_EXEC "${CMAKE_BINARY_DIR}/paw")
-function(build_test NAME) 
-    set(TESTNAME "${NAME}")
-    add_executable(${TESTNAME} 
-        ${NAME}.c test.c test.h)
-    target_link_libraries(${TESTNAME}
-        PRIVATE paw paw_context)
-    target_compile_definitions(${TESTNAME}
-        PRIVATE TEST_PREFIX="${TEST_DIR}/")
-    add_test(NAME ${TESTNAME}
-        COMMAND ${TESTNAME})
-endfunction()
+set(TEST_DIR "${CMAKE_SOURCE_DIR}/test")
 
-function(test_script NAME ARGS)
-    set(SCRIPT "${TEST_DIR}/scripts/${NAME}.paw")
-    add_test(NAME "test_${NAME}"
-        COMMAND ${PAW_EXEC} ${SCRIPT} ${ARGS})
-    add_test(NAME "test_debug_${NAME}"
-        COMMAND ${PAW_EXEC} "-cd" "ast,hir,mir,stats" ${SCRIPT})
-endfunction()
+set(TEST_SRC "${CMAKE_SOURCE_DIR}/test/test.sh")
+set(TEST_DEST "${CMAKE_BINARY_DIR}/test.sh")
 
-build_test(test_impl)
-build_test(test_alloc)
-build_test(test_rt)
-build_test(test_oom)
-build_test(test_so)
-build_test(test_error)
-build_test(test_import)
-#build_test(test_api)
+add_custom_command(
+    OUTPUT "${TEST_DEST}"
+    COMMAND ${CMAKE_COMMAND} -E copy "${TEST_SRC}" "${TEST_DEST}"
+    DEPENDS "${TEST_SRC}"
+    COMMENT "Copying test.sh to build directory")
 
-test_script(fib "15")
-test_script(bubble "500")
-test_script(matmul "50")
-test_script(nqueen "8")
-test_script(mandelbrot "-2.1,0.9,80,-1.3,1.3,24")
-test_script(binary_trees "5")
-test_script(elementary_cellular_automata "110")
-test_script(ebnf "${PROJECT_SOURCE_DIR}/GRAMMER.ebnf")
-test_script(dump "")
+add_custom_target(generate_test ALL
+    DEPENDS "${TEST_DEST}")
 
-# TODO: write this test: compile and run README.md examples
-# test_script(readme "${PROJECT_SOURCE_DIR}/README.md")
+set(TEST_ARGS "${CMAKE_BINARY_DIR}" "${TEST_DIR}" "${PAW_GC_DIR}")
+
+add_custom_target(paw_test
+    COMMAND "sh" ${TEST_DEST} ${TEST_ARGS}
+    DEPENDS "${TEST_DEST}"
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    COMMENT "Running test.sh"
+)
+

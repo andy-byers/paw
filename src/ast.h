@@ -27,6 +27,7 @@
     X(VariantDecl)
 
 #define AST_TYPE_LIST(X) \
+    X(RefType)           \
     X(PathType)          \
     X(TupleType)         \
     X(ContainerType)     \
@@ -36,6 +37,7 @@
 
 #define AST_EXPR_LIST(X) \
     X(ParenExpr)         \
+    X(AddrOfExpr)        \
     X(LiteralExpr)       \
     X(LogicalExpr)       \
     X(StringExpr)        \
@@ -202,6 +204,7 @@ struct AstFieldDecl {
 
 struct AstParamDecl {
     AST_DECL_HEADER;
+    paw_Bool is_ref: 1;
     struct AstIdent ident;
     struct AstType *tag;
 };
@@ -276,7 +279,7 @@ static struct AstDecl *pawAst_new_field_decl(struct Ast *ast, struct SourceSpan 
     return d;
 }
 
-static struct AstDecl *pawAst_new_param_decl(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstIdent ident, struct AstType *tag)
+static struct AstDecl *pawAst_new_param_decl(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstIdent ident, struct AstType *tag, paw_Bool is_ref)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->ParamDecl_ = (struct AstParamDecl){
@@ -286,6 +289,7 @@ static struct AstDecl *pawAst_new_param_decl(struct Ast *ast, struct SourceSpan 
         .kind = kAstParamDecl,
         .ident = ident,
         .tag = tag,
+        .is_ref = is_ref,
     };
     pawAst_set_node(ast, id, d);
     return d;
@@ -442,12 +446,17 @@ enum AstTypeKind {
 };
 
 #define AST_TYPE_HEADER     \
-    NodeId id;           \
+    NodeId id;              \
     struct SourceSpan span; \
     enum AstTypeKind kind : 8
 
 struct AstTypeHeader {
     AST_TYPE_HEADER;
+};
+
+struct AstRefType {
+    AST_TYPE_HEADER;
+    struct AstType *type;
 };
 
 struct AstPathType {
@@ -509,6 +518,19 @@ AST_TYPE_LIST(DEFINE_ACCESS)
 #undef DEFINE_ACCESS
 
 struct AstType *pawAst_new_type(struct Ast *ast);
+
+inline static struct AstType *pawAst_new_ref_type(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstType *type)
+{
+    struct AstType *t = pawAst_new_type(ast);
+    t->RefType_ = (struct AstRefType){
+        .id = id,
+        .span = span,
+        .kind = kAstRefType,
+        .type = type,
+    };
+    pawAst_set_node(ast, id, t);
+    return t;
+}
 
 inline static struct AstType *pawAst_new_path_type(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstPath path)
 {
@@ -595,7 +617,7 @@ enum AstExprKind {
 };
 
 #define AST_EXPR_HEADER     \
-    NodeId id;           \
+    NodeId id;              \
     struct SourceSpan span; \
     enum AstExprKind kind : 8
 
@@ -606,6 +628,11 @@ struct AstExprHeader {
 struct AstPathExpr {
     AST_EXPR_HEADER;
     struct AstPath path;
+};
+
+struct AstAddrOfExpr {
+    AST_EXPR_HEADER;
+    struct AstExpr *expr;
 };
 
 struct AstParenExpr {
@@ -846,6 +873,19 @@ inline static struct AstExpr *pawAst_new_paren_expr(struct Ast *ast, struct Sour
         .id = id,
         .span = span,
         .kind = kAstParenExpr,
+        .expr = expr,
+    };
+    pawAst_set_node(ast, id, e);
+    return e;
+}
+
+inline static struct AstExpr *pawAst_new_addr_of_expr(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstExpr *expr)
+{
+    struct AstExpr *e = pawAst_new_expr(ast);
+    e->AddrOfExpr_ = (struct AstAddrOfExpr){
+        .id = id,
+        .span = span,
+        .kind = kAstAddrOfExpr,
         .expr = expr,
     };
     pawAst_set_node(ast, id, e);
@@ -1288,7 +1328,7 @@ enum AstPatKind {
 };
 
 #define AST_PAT_HEADER      \
-    NodeId id;           \
+    NodeId id;              \
     struct SourceSpan span; \
     enum AstPatKind kind : 8
 
@@ -1499,7 +1539,7 @@ enum AstStmtKind {
 };
 
 #define AST_STMT_HEADER     \
-    NodeId id;           \
+    NodeId id;              \
     struct SourceSpan span; \
     enum AstStmtKind kind : 8
 
@@ -1663,15 +1703,16 @@ struct AstVisitor {
     struct Ast *ast;
     void *ud;
 
-    void (*VisitPath)(struct AstVisitor *V, struct AstPath *path);
-    void (*VisitSegment)(struct AstVisitor *V, struct AstSegment *seg);
-
+    paw_Bool (*VisitPath)(struct AstVisitor *V, struct AstPath *path);
+    paw_Bool (*VisitSegment)(struct AstVisitor *V, struct AstSegment *seg);
     paw_Bool (*VisitExpr)(struct AstVisitor *V, struct AstExpr *node);
     paw_Bool (*VisitStmt)(struct AstVisitor *V, struct AstStmt *node);
     paw_Bool (*VisitDecl)(struct AstVisitor *V, struct AstDecl *node);
     paw_Bool (*VisitType)(struct AstVisitor *V, struct AstType *node);
     paw_Bool (*VisitPat)(struct AstVisitor *V, struct AstPat *node);
 
+    void (*PostVisitPath)(struct AstVisitor *V, struct AstPath *node);
+    void (*PostVisitSegment)(struct AstVisitor *V, struct AstSegment *node);
     void (*PostVisitExpr)(struct AstVisitor *V, struct AstExpr *node);
     void (*PostVisitStmt)(struct AstVisitor *V, struct AstStmt *node);
     void (*PostVisitDecl)(struct AstVisitor *V, struct AstDecl *node);

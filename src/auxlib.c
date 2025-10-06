@@ -3,9 +3,9 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
 #include "auxlib.h"
+#include "compile.h"
 #include "map.h"
 #include "mem.h"
-#include "rt.h"
 #include "util.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,20 +15,10 @@ static void grow_buffer(paw_Env *P, Buffer *buf)
     if (buf->alloc > SIZE_MAX / 2)
         pawM_error(P);
     size_t const alloc = buf->alloc * 2;
-    StackPtr pbox = RESTORE_POINTER(P, buf->boxloc);
-    if (L_IS_BOXED(buf)) {
-        Foreign *f = V_FOREIGN(*pbox);
-        pawM_resize(P, buf->data, buf->alloc, alloc);
-        f->data = buf->data;
-        f->size = alloc;
-    } else {
-        // Add a new Foreign 'box' to contain the buffer. Prevents a memory leak
-        // if an error is thrown before the buffer is freed.
-        Foreign *f = pawV_new_foreign(P, alloc, 0, 0, pbox);
-        memcpy(f->data, buf->stack, buf->size);
-        buf->data = f->data;
-    }
+    void *data = pawP_alloc(P->pool, NULL, 0, alloc);
+    memcpy(data, buf->data, buf->size);
     buf->alloc = alloc;
+    buf->data = data;
 }
 
 static char *reserve_memory(paw_Env *P, Buffer *buf, size_t n)
@@ -43,23 +33,13 @@ static char *reserve_memory(paw_Env *P, Buffer *buf, size_t n)
 
 void pawL_init_buffer(paw_Env *P, Buffer *buf)
 {
+    PAW_UNUSED(P);
     *buf = (Buffer){.data = buf->stack, .alloc = BUFFER_LIMIT};
-    buf->boxloc = SAVE_OFFSET(P, P->top.p);
-    paw_push_zero(P, 1); // placeholder for box
 }
 
-void pawL_discard_result(paw_Env *P, Buffer *buf)
+Str *pawL_buffer_finish(paw_Env *P, Buffer *buf)
 {
-    paw_assert(buf->boxloc == P->top.p - P->stack.p - 1);
-    PAW_UNUSED(buf);
-
-    paw_pop(P, 1); // pop box or placeholder
-}
-
-void pawL_push_result(paw_Env *P, Buffer *buf)
-{
-    paw_push_nstr(P, buf->data, buf->size);
-    paw_replace(P, -2); // replace box/placeholder with string
+    return pawP_scan_nstr(P->C, buf->data, buf->size);
 }
 
 void pawL_buffer_resize(paw_Env *P, Buffer *buf, size_t n)
@@ -95,19 +75,15 @@ void pawL_add_nstring(paw_Env *P, Buffer *buf, char const *s, size_t n)
 void pawL_add_int(paw_Env *P, Buffer *buf, paw_Int i)
 {
     size_t len;
-    paw_push_int(P, i);
-    char const *str = paw_int_to_str(P, -1, &len);
+    char const *str = pawV_to_str(P, &I2V(i), PAW_TINT, &len);
     add_nstring(P, buf, str, len);
-    paw_pop(P, 1);
 }
 
 void pawL_add_float(paw_Env *P, Buffer *buf, paw_Float f)
 {
     size_t len;
-    paw_push_float(P, f);
-    char const *str = paw_float_to_str(P, -1, &len);
+    char const *str = pawV_to_str(P, &F2V(f), PAW_TFLOAT, &len);
     add_nstring(P, buf, str, len);
-    paw_pop(P, 1);
 }
 
 static void add_pointer(paw_Env *P, Buffer *buf, void *p)
@@ -189,7 +165,7 @@ void pawL_add_vfstring(paw_Env *P, Buffer *buf, char const *fmt, va_list arg)
                 add_pointer(P, buf, va_arg(arg, void *));
                 break;
             default:
-                pawR_error(P, PAW_EVALUE, "invalid format option '%%%c'", *fmt);
+                PAW_UNREACHABLE();
         }
     }
 }

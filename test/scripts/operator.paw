@@ -1,5 +1,6 @@
 // operator.paw
 
+#[test]
 pub fn test_operator_precedence() {
     assert(5 == 1 + 2 * 3 - 4 / 2);
     assert(8 == 1 << 2 * 2 >> 1);
@@ -57,6 +58,7 @@ fn check_cmps(a: str, b: str) {
     assert(b > a);
 }
 
+#[test]
 pub fn test_comparisons() {
     check_cmpc('a', 'b');
     check_cmpc('\x00', '\x01');
@@ -75,6 +77,7 @@ pub fn test_comparisons() {
     check_cmps("abc", "abd");
 }
 
+#[test]
 pub fn test_conversions() {
     assert(1 == true as int);
     assert(1.0 == true as float);
@@ -82,12 +85,14 @@ pub fn test_conversions() {
     assert(1.0 == 1 as float);
 }
 
+#[test]
 pub fn test_bitwise_ops() {
     assert(0b0111 == 0b0110 | 0b0011);
     assert(0b0010 == 0b0110 & 0b0011);
     assert(0b0101 == 0b0110 ^ 0b0011);
 }
 
+#[test]
 pub fn test_add_strings() {
     let s = "";
     s = s ++ "abc";
@@ -95,11 +100,13 @@ pub fn test_add_strings() {
     assert(s == "abcabc");
 }
 
+#[test]
 pub fn test_float_ops() {
     let _ = -0.5;
     let _ = 1.23 % 0.5;
 }
 
+#[test]
 pub fn test_operator_assignment() {
     // prevent constant folding
     let value = || 10; 
@@ -145,6 +152,7 @@ pub fn test_operator_assignment() {
     assert(v == 5);
 }
 
+#[test]
 pub fn test_operator_assignment_projections() {
     // prevent constant folding
     let value = || [(10,)]; 

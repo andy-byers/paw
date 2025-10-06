@@ -10,7 +10,6 @@
 #include "debug.h"
 #include "env.h"
 #include "error.h"
-#include "gc.h"
 #include "hir.h"
 #include "ir_type.h"
 #include "map.h"
@@ -80,6 +79,7 @@ static paw_Uint ident_hash(struct TypeChecker *T, struct HirIdent ident)
 
 static paw_Bool ident_equals(struct TypeChecker *T, struct HirIdent a, struct HirIdent b)
 {
+    PAW_UNUSED(T);
     return pawS_eq(a.name, b.name);
 }
 
@@ -262,7 +262,7 @@ static void require_trait(struct TypeChecker *T, IrType *type, enum TraitKind ki
 static IrType *maybe_unit_variant(struct TypeChecker *T, struct SourceSpan span, IrType *type)
 {
     if (IrIsSignature(type)) {
-        // handle unit enumerators
+        // handle enumerators with no fields
         struct HirDecl *decl = get_decl(T, IrGetSignature(type)->did);
         if (HirIsVariantDecl(decl)) {
             struct HirVariantDecl *d = HirGetVariantDecl(decl);
@@ -276,11 +276,29 @@ static IrType *maybe_unit_variant(struct TypeChecker *T, struct SourceSpan span,
     return type;
 }
 
+static IrTypeList *copy_typelist(struct TypeChecker *T, IrTypeList *types)
+{
+    IrType *const *ptype;
+    IrTypeList *result = IrTypeList_new(T->C);
+    K_LIST_FOREACH (types, ptype)
+        IrTypeList_push(T->C, result, *ptype);
+    return result;
+}
+
 static IrType *check_operand(struct TypeChecker *T, struct HirExpr *expr)
 {
     IrType *type = check_expr(T, expr);
     type = maybe_unit_variant(T, expr->hdr.span, type);
-    SET_NODE_TYPE(T->C, expr, type);
+    SET_NODE_TYPE(T->C, expr, type); // overwrite type
+    if (IrIsSignature(type)) {
+        struct HirDecl *decl = get_decl(T, IrGetSignature(type)->did);
+        if (!HirIsVariantDecl(decl)) {
+            // erase identity of function
+            struct IrSignature const *f = IrGetSignature(type);
+            IrTypeList *params = copy_typelist(T, f->params);
+            return pawIr_new_fn_ptr(T->C, params, f->result);
+        }
+    }
     return type;
 }
 
@@ -310,19 +328,19 @@ static IrTypeList *check_exprs(struct TypeChecker *T, struct HirExprList *list)
     return new_list;
 }
 
-static IrTypeList *collect_decl_types(struct TypeChecker *T, struct HirDeclList *list)
-{
-    if (list == NULL) return NULL;
-    IrTypeList *new_list = IrTypeList_new(T->C);
-    IrTypeList_reserve(T->C, new_list, list->count);
-
-    struct HirDecl *const *pdecl;
-    K_LIST_FOREACH (list, pdecl) {
-        IrType *type = GET_NODE_TYPE(T->C, *pdecl);
-        IrTypeList_push(T->C, new_list, type);
-    }
-    return new_list;
-}
+//TODOstatic IrTypeList *collect_decl_types(struct TypeChecker *T, struct HirDeclList *list)
+//TODO{
+//TODO    if (list == NULL) return NULL;
+//TODO    IrTypeList *new_list = IrTypeList_new(T->C);
+//TODO    IrTypeList_reserve(T->C, new_list, list->count);
+//TODO
+//TODO    struct HirDecl *const *pdecl;
+//TODO    K_LIST_FOREACH (list, pdecl) {
+//TODO        IrType *type = GET_NODE_TYPE(T->C, *pdecl);
+//TODO        IrTypeList_push(T->C, new_list, type);
+//TODO    }
+//TODO    return new_list;
+//TODO}
 
 static IrType *new_unknown(struct TypeChecker *T, struct SourceLoc loc)
 {
@@ -452,7 +470,7 @@ static void check_fn_item(struct TypeChecker *T, struct HirFnDecl *d)
 
 static void check_item(struct TypeChecker *T, struct HirDecl *item);
 
-static void check_methods(struct TypeChecker *T, struct HirDeclList *methods, struct IrAdt *self)
+static void check_methods(struct TypeChecker *T, struct HirDeclList *methods)
 {
     struct HirDecl *const *pmethod;
     K_LIST_FOREACH (methods, pmethod)
@@ -461,7 +479,7 @@ static void check_methods(struct TypeChecker *T, struct HirDeclList *methods, st
 
 static void check_adt_methods(struct TypeChecker *T, struct HirAdtDecl *d)
 {
-    check_methods(T, d->methods, IrGetAdt(T->self));
+    check_methods(T, d->methods);
 }
 
 IrType *pawP_instantiate_field(struct Compiler *C, IrType *inst_type, IrType *field)
@@ -555,7 +573,8 @@ static IrType *lower_value_path(struct TypeChecker *T, struct HirPath path)
             if (HirIsAdtDecl(item)) {
                 return lower_adt_segment(T, segment);
             } else if (HirIsParamDecl(item)) {
-                return GET_TYPE(T, segment.target);
+                IrType *type = GET_TYPE(T, segment.target);
+                return ir_auto_deref(type);
             } else if (HirIsVariantDecl(item)) {
                 struct HirVariantDecl *v = HirGetVariantDecl(item);
                 IrType *base = pawIr_get_def_type(T->C, v->base_did);
@@ -612,7 +631,7 @@ static IrType *check_path_expr(struct TypeChecker *T, struct HirPathExpr *e)
 
     // TODO: not good...
     struct HirDecl *decl = pawHir_get_node(T->hir, K_LIST_LAST(e->path.segments).target);
-    if (HirIsParamDecl(decl)) return type;
+    if (HirIsParamDecl(decl)) return ir_auto_deref(type);
 
     if (IrIsGeneric(type)) {
         struct HirDecl *result = get_decl(T, IR_TYPE_DID(type));
@@ -624,7 +643,7 @@ static IrType *check_path_expr(struct TypeChecker *T, struct HirPathExpr *e)
 
 static IrType *check_ascription_expr(struct TypeChecker *T, struct HirAscriptionExpr *e)
 {
-    IrType *type = check_expr(T, e->expr);
+    IrType *type = check_operand(T, e->expr);
     IrType *tag = check_type(T, e->type, e->type->hdr.span);
     return unify(T, e->span.start, type, tag);
 }
@@ -704,6 +723,14 @@ static paw_Bool is_bool_binop(enum BinaryOp op)
     }
 }
 
+static IrType *check_addr_of_expr(struct TypeChecker *T, struct HirAddrOfExpr *e)
+{
+    PAW_UNUSED(T);
+    PAW_UNUSED(e);
+    __builtin_trap();
+    return NULL;
+}
+
 static IrType *check_unop_expr(struct TypeChecker *T, struct HirUnOpExpr *e)
 {
     static uint8_t const VALID_OPS[][NBUILTINS] = {
@@ -723,6 +750,9 @@ static IrType *check_unop_expr(struct TypeChecker *T, struct HirUnOpExpr *e)
 
     IrType *type = check_operand(T, e->target);
     if (IrIsNever(type)) return type;
+
+    if (e->op == UNARY_DEREF && IrIsPtr(type))
+        return IrGetPtr(type)->pointee;
 
     enum BuiltinKind const code = TYPE2CODE(T, type);
     if (!IS_BUILTIN_TYPE(code) || !VALID_OPS[e->op][code]) {
@@ -802,7 +832,6 @@ static IrType *check_binop_expr(struct TypeChecker *T, struct HirBinOpExpr *e)
 
 static IrType *check_assign_expr(struct TypeChecker *T, struct HirAssignExpr *e)
 {
-    paw_assert(HirIsPathExpr(e->lhs) || HirIsIndex(e->lhs) || HirIsSelector(e->lhs));
     IrType *lhs = check_operand(T, e->lhs);
     IrType *rhs = check_operand(T, e->rhs);
     unify(T, e->span.start, lhs, rhs);
@@ -811,7 +840,6 @@ static IrType *check_assign_expr(struct TypeChecker *T, struct HirAssignExpr *e)
 
 static IrType *check_op_assign_expr(struct TypeChecker *T, struct HirOpAssignExpr *e)
 {
-    paw_assert(HirIsPathExpr(e->lhs) || HirIsIndex(e->lhs) || HirIsSelector(e->lhs));
     check_binary_op(T, e->span, e->op, e->lhs, e->rhs);
     return builtin_type(T, BUILTIN_UNIT);
 }
@@ -883,9 +911,29 @@ static void check_closure_param(struct TypeChecker *T, struct HirParamDecl *d)
     SET_NODE_TYPE(T->C, decl, type);
 }
 
+static IrType *erase_signature_type(struct TypeChecker *T, IrType *type)
+{
+    if (IrIsSignature(type)) {
+        struct IrSignature const *fsig = IrGetSignature(type);
+        return pawIr_new_fn_ptr(T->C, fsig->params, fsig->result);
+    }
+    return type;
+}
+
+static IrTypeList *erase_signature_types(struct TypeChecker *T, IrTypeList *types)
+{
+    IrType **ptype;
+    IrTypeList *result = IrTypeList_new(T->C);
+    K_LIST_FOREACH (types, ptype) {
+        IrType *r = erase_signature_type(T, *ptype);
+        IrTypeList_push(T->C, result, r);
+    }
+    return result;
+}
+
 static IrType *check_closure_expr(struct TypeChecker *T, struct HirClosureExpr *e)
 {
-    struct ResultState rs = {T->rs};
+    struct ResultState rs = {.outer = T->rs};
     T->rs = &rs;
 
     // steal the enclosing block state to prevent propagation out of the closure
@@ -899,8 +947,10 @@ static IrType *check_closure_expr(struct TypeChecker *T, struct HirClosureExpr *
     struct BlockState bs;
     enter_block(T, &bs, e->span, BLOCK_NORMAL);
 
-    IrTypeList *params = collect_decl_types(T, e->params);
+    IrTypeList *params = pawHir_collect_decl_types(T->C, e->params);
     IrType *ret = check_type(T, e->result, e->span);
+    params = erase_signature_types(T, params);
+    ret = erase_signature_type(T, ret);
     rs.prev = ret;
 
     IrType *result = check_operand(T, e->expr);
@@ -917,6 +967,7 @@ static IrType *check_closure_expr(struct TypeChecker *T, struct HirClosureExpr *
 
 static struct HirDecl *find_method_aux(struct Compiler *C, struct HirDecl *base, Str *name)
 {
+    PAW_UNUSED(C);
     struct HirDecl *const *pdecl;
     struct HirAdtDecl *adt = HirGetAdtDecl(base);
     K_LIST_FOREACH (adt->methods, pdecl) {
@@ -1022,7 +1073,6 @@ static void check_const(struct TypeChecker *T, struct HirExpr *expr, IrType *typ
 
 static void check_const_item(struct TypeChecker *T, struct HirConstDecl *d)
 {
-    struct HirDecl *decl = HIR_CAST_DECL(d);
     IrType *tag = GET_NODE_TYPE(T->C, d->tag);
     if (d->init != NULL) {
         IrType *init = check_operand(T, d->init);
@@ -1186,7 +1236,7 @@ static IrType *check_call_expr(struct TypeChecker *T, struct HirCallExpr *e)
     struct HirExpr *const *parg;
     K_LIST_ENUMERATE (e->args, index, parg) {
         IrType *param = IrTypeList_get(fn->params, index + param_offset);
-        unify(T, NODE_START(*parg), param, check_operand(T, *parg));
+        unify(T, NODE_START(*parg), ir_auto_deref(param), check_operand(T, *parg));
     }
 
     if (IrIsNever(fn->result)) // function never returns
@@ -1238,6 +1288,7 @@ static IrType *check_tuple_lit(struct TypeChecker *T, struct HirTupleLit *e)
     IrTypeList *elems = check_operand_list(T, e->elems);
     if (elems->count == 0)
         return builtin_type(T, BUILTIN_UNIT);
+    elems = erase_signature_types(T, elems);
     return pawIr_new_tuple(T->C, elems);
 }
 
@@ -1404,7 +1455,7 @@ static IrType *check_loop_expr(struct TypeChecker *T, struct HirLoopExpr *e)
     struct BlockState bs;
     enter_block(T, &bs, e->span, BLOCK_LOOP);
 
-    IrType *result = check_expr(T, e->block);
+    IrType *result = check_operand(T, e->block);
     unify_unit_type(T, e->span.start, result);
 
     leave_block(T);
@@ -1522,7 +1573,7 @@ static void account_for_binding(struct TypeChecker *T, struct HirIdent ident)
             break;
         ps = ps->outer;
     }
-    Str *const *pname = StringMap_get(T->C, ps->bound, ident.name);
+    void *const *pname = StringMap_get(T->C, ps->bound, ident.name);
     if (pname != NULL)
         TYPECK_ERROR(T, duplicate_binding, ident.span.start, ident.name->text);
     StringMap_insert(T->C, ps->bound, ident.name, ident.name);
@@ -1540,7 +1591,6 @@ static void locate_binding(struct HirVisitor *V, struct HirBindingPat *p)
 
 static void check_binding(struct HirVisitor *V, struct HirBindingPat *p)
 {
-    paw_Env *P = ENV(V->hir);
     struct BindingChecker *bc = V->ud;
     struct BindingInfo *pbi = BindingMap_get(bc->T, bc->bound, p->ident);
     if (pbi == NULL)
@@ -1671,7 +1721,6 @@ static IrType *CheckVariantPat(struct TypeChecker *T, struct HirVariantPat *p)
     struct IrSignature *fsig = IrGetSignature(type);
     IrTypeList *params = fsig->params;
 
-    struct MatchState *ms = T->ms;
     if (p->fields->count != params->count)
         TYPECK_ERROR(T, incorrect_arity, p->span.start, params->count, p->fields->count);
 
@@ -1692,6 +1741,7 @@ static IrType *CheckTuplePat(struct TypeChecker *T, struct HirTuplePat *p)
     IrTypeList *elems = check_pat_list(T, p->elems);
     if (elems->count == 0)
         return builtin_type(T, BUILTIN_UNIT);
+    elems = erase_signature_types(T, elems);
     return pawIr_new_tuple(T->C, elems);
 }
 
@@ -1715,12 +1765,25 @@ static IrType *CheckLiteralPat(struct TypeChecker *T, struct HirLiteralPat *p)
     return check_operand(T, p->expr);
 }
 
+static IrType *check_const_decl(struct TypeChecker *T, struct HirConstDecl *d)
+{
+    IrType *tag = check_type(T, d->tag, d->tag->hdr.span);
+    IrType *init = check_operand(T, d->init);
+    unify(T, d->span.start, init, tag);
+    check_const(T, d->init, tag);
+    pawIr_set_type(T->C, d->id, tag);
+    return tag;
+}
+
 static void check_decl(struct TypeChecker *T, struct HirDecl *decl)
 {
     IrType *type;
     switch (HIR_KINDOF(decl)) {
         case kHirFieldDecl:
             type = check_field_decl(T, HirGetFieldDecl(decl));
+            break;
+        case kHirConstDecl:
+            type = check_const_decl(T, HirGetConstDecl(decl));
             break;
         default: // kHirTypeDecl
             type = check_type_decl(T, HirGetTypeDecl(decl));
@@ -1837,6 +1900,9 @@ static IrType *check_expr(struct TypeChecker *T, struct HirExpr *expr)
         case kHirChainExpr:
             type = check_chain_expr(T, HirGetChainExpr(expr));
             break;
+        case kHirAddrOfExpr:
+            type = check_addr_of_expr(T, HirGetAddrOfExpr(expr));
+            break;
         case kHirUnOpExpr:
             type = check_unop_expr(T, HirGetUnOpExpr(expr));
             break;
@@ -1889,7 +1955,6 @@ static IrType *check_expr(struct TypeChecker *T, struct HirExpr *expr)
 
     type = normalize(T, type);
     SET_NODE_TYPE(T->C, expr, type);
-
     return type;
 }
 

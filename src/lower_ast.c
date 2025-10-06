@@ -8,11 +8,9 @@
 #include "debug.h"
 #include "env.h"
 #include "error.h"
-#include "gc.h"
 #include "hir.h"
 #include "map.h"
 #include "mem.h"
-#include "opcode.h"
 #include "parse.h"
 #include "resolve.h"
 #include "str.h"
@@ -74,12 +72,15 @@ static NodeId variant_id(struct LowerAst *L, NodeId adt, int discr)
 
 static NodeId next_node_id(struct LowerAst *L)
 {
-    return (NodeId){++L->hir->node_count};
+    return (NodeId){(unsigned)++L->hir->node_count};
 }
 
 static DeclId next_decl_id(struct LowerAst *L)
 {
-    return (DeclId){.value = L->hir->decls->count + 1, .modno = L->m->modno};
+    return (DeclId){
+        .value = (unsigned)L->hir->decls->count + 1,
+        .modno = (unsigned)L->m->modno,
+    };
 }
 
 static struct HirIdent make_ident(Str *name, struct SourceSpan span)
@@ -90,7 +91,7 @@ static struct HirIdent make_ident(Str *name, struct SourceSpan span)
     };
 }
 
-static struct HirIdent lower_ident(struct LowerAst *L, struct AstIdent ident)
+static struct HirIdent lower_ident(struct AstIdent ident)
 {
     return make_ident(ident.name, ident.span);
 }
@@ -154,20 +155,23 @@ static struct HirExpr *LowerBlock(struct LowerAst *L, struct AstBlock *block)
 static struct HirDecl *LowerFieldDecl(struct LowerAst *L, struct AstFieldDecl *d)
 {
     struct HirType *tag = lower_type(L, d->tag);
-    struct HirIdent const ident = lower_ident(L, d->ident);
+    struct HirIdent const ident = lower_ident(d->ident);
     return NEW_NODE(L, field_decl, d->span, d->id, d->did, ident, tag, d->is_pub);
 }
 
 static struct HirDecl *LowerParamDecl(struct LowerAst *L, struct AstParamDecl *d)
 {
     struct HirType *tag = lower_type(L, d->tag);
-    struct HirIdent const ident = lower_ident(L, d->ident);
+    struct HirIdent const ident = lower_ident(d->ident);
+    if (d->is_ref)
+        // convert reference parameter into reference type
+        tag = NEW_NODE(L, ref_type, d->tag->hdr.span, next_node_id(L), tag);
     return NEW_NODE(L, param_decl, d->span, d->id, d->did, ident, tag);
 }
 
 static struct HirDecl *LowerVariantDecl(struct LowerAst *L, struct AstVariantDecl *d)
 {
-    struct HirIdent const ident = lower_ident(L, d->ident);
+    struct HirIdent const ident = lower_ident(d->ident);
     struct HirDeclList *fields = lower_decl_list(L, d->fields);
     return NEW_NODE(L, variant_decl, d->span, d->id, d->did, ident, fields, d->index, L->adt_did);
 }
@@ -182,13 +186,11 @@ static struct HirDecl *LowerFnDecl(struct LowerAst *L, struct AstFnDecl *d);
 
 static struct HirDeclList *lower_methods(struct LowerAst *L, struct AstDeclList *src)
 {
-    paw_Env *P = ENV(L);
     struct HirDeclList *dst = HirDeclList_new(L->hir);
     for (int i = 0; i < src->count; ++i) {
         struct AstDecl *decl = AstDeclList_get(src, i);
         struct AstFnDecl *d = AstGetFnDecl(decl);
         struct HirDecl *result = LowerFnDecl(L, d);
-        struct HirFnDecl *r = HirGetFnDecl(result);
         HirDeclList_push(L->hir, dst, result);
     }
     return dst;
@@ -203,7 +205,7 @@ static struct HirPath lower_path(struct LowerAst *L, struct AstPath path)
     enum ResolvedKind last_kind;
     K_LIST_FOREACH (path.segments, psrc) {
         struct HirTypeList *types = lower_type_list(L, psrc->types);
-        struct HirIdent const ident = lower_ident(L, psrc->ident);
+        struct HirIdent const ident = lower_ident(psrc->ident);
         struct ResolvedSegment const *res = SegmentTable_get(L->C, L->segtab, psrc->id);
         if (res->kind != RESOLVED_MODULE) // strip off module prefix
             pawHir_add_segment(L->hir, segments, psrc->span, psrc->id, ident, types, res->id);
@@ -252,6 +254,12 @@ static struct HirExpr *LowerChainExpr(struct LowerAst *L, struct AstChainExpr *e
 {
     struct HirExpr *target = lower_expr(L, e->target);
     return NEW_NODE(L, chain_expr, e->span, e->id, target);
+}
+
+static struct HirExpr *LowerAddrOfExpr(struct LowerAst *L, struct AstAddrOfExpr *e)
+{
+    struct HirExpr *expr = lower_expr(L, e->expr);
+    return NEW_NODE(L, addr_of_expr, e->span, e->id, expr);
 }
 
 static struct HirExpr *LowerUnOpExpr(struct LowerAst *L, struct AstUnOpExpr *e)
@@ -358,15 +366,8 @@ static struct HirExpr *LowerRangeExpr(struct LowerAst *L, struct AstRangeExpr *e
     }
 }
 
-static void check_assignment_target(struct LowerAst *L, struct AstExpr *target)
-{
-    if (!AstIsPathExpr(target) && !AstIsIndex(target) && !AstIsSelector(target))
-        pawErr_invalid_assignment_target(L->C, L->m->name, target->hdr.span.start);
-}
-
 static struct HirExpr *LowerAssignExpr(struct LowerAst *L, struct AstAssignExpr *e)
 {
-    check_assignment_target(L, e->lhs);
     struct HirExpr *lhs = lower_expr(L, e->lhs);
     struct HirExpr *rhs = lower_expr(L, e->rhs);
     return NEW_NODE(L, assign_expr, e->span, e->id, lhs, rhs);
@@ -374,7 +375,6 @@ static struct HirExpr *LowerAssignExpr(struct LowerAst *L, struct AstAssignExpr 
 
 static struct HirExpr *LowerOpAssignExpr(struct LowerAst *L, struct AstOpAssignExpr *e)
 {
-    check_assignment_target(L, e->lhs);
     struct HirExpr *lhs = lower_expr(L, e->lhs);
     struct HirExpr *rhs = lower_expr(L, e->rhs);
     return NEW_NODE(L, op_assign_expr, e->span, e->id, lhs, rhs, e->op);
@@ -437,8 +437,10 @@ static struct HirType *new_map_t(struct LowerAst *L, struct SourceSpan span, str
 
 static struct HirDecl *lower_closure_param(struct LowerAst *L, struct AstParamDecl *d)
 {
-    struct HirType *tag = d->tag != NULL ? lower_type(L, d->tag) : NULL;
-    struct HirIdent const ident = lower_ident(L, d->ident);
+    struct HirType *tag = d->tag != NULL ? lower_type(L, d->tag)
+        : NEW_NODE(L, infer_type, d->span, next_node_id(L));
+    struct HirIdent const ident = lower_ident(d->ident);
+    if (d->is_ref) tag = NEW_NODE(L, ref_type, tag->hdr.span, next_node_id(L), tag);
     return NEW_NODE(L, param_decl, d->span, d->id, d->did, ident, tag);
 }
 
@@ -458,13 +460,16 @@ static struct HirExpr *LowerClosureExpr(struct LowerAst *L, struct AstClosureExp
 
 static struct HirDecl *LowerUseDecl(struct LowerAst *L, struct AstUseDecl *d)
 {
-    return NULL; // no corresponding HIR node
+    // no corresponding HIR node
+    PAW_UNUSED(L);
+    PAW_UNUSED(d);
+    return NULL;
 }
 
 static struct HirDecl *LowerAdtDecl(struct LowerAst *L, struct AstAdtDecl *d)
 {
     L->adt_did = d->did;
-    struct HirIdent const ident = lower_ident(L, d->ident);
+    struct HirIdent const ident = lower_ident(d->ident);
     HirTypeList *traits = lower_type_list(L, d->traits);
     HirDeclList *generics = lower_decl_list(L, d->generics);
     HirDeclList *variants = lower_decl_list(L, d->variants);
@@ -477,7 +482,7 @@ static struct HirDecl *LowerAdtDecl(struct LowerAst *L, struct AstAdtDecl *d)
 
 static struct HirDecl *LowerTraitDecl(struct LowerAst *L, struct AstTraitDecl *d)
 {
-    struct HirIdent const ident = lower_ident(L, d->ident);
+    struct HirIdent const ident = lower_ident(d->ident);
     HirDeclList *generics = lower_decl_list(L, d->generics);
     HirDeclList *methods = lower_methods(L, d->methods);
     return NEW_NODE(L, trait_decl, d->span, d->id, d->did, ident, generics, methods, d->is_pub);
@@ -485,7 +490,7 @@ static struct HirDecl *LowerTraitDecl(struct LowerAst *L, struct AstTraitDecl *d
 
 static struct HirDecl *LowerConstDecl(struct LowerAst *L, struct AstConstDecl *d)
 {
-    struct HirIdent const ident = lower_ident(L, d->ident);
+    struct HirIdent const ident = lower_ident(d->ident);
     struct HirType *tag = lower_type(L, d->tag);
     struct HirExpr *init = d->init != NULL ? lower_expr(L, d->init) : NULL;
     return NEW_NODE(L, const_decl, d->span, d->id, d->did, ident, d->annos, tag, init, d->is_pub);
@@ -493,7 +498,7 @@ static struct HirDecl *LowerConstDecl(struct LowerAst *L, struct AstConstDecl *d
 
 static struct HirDecl *LowerTypeDecl(struct LowerAst *L, struct AstTypeDecl *d)
 {
-    struct HirIdent const ident = lower_ident(L, d->ident);
+    struct HirIdent const ident = lower_ident(d->ident);
     HirDeclList *generics = lower_decl_list(L, d->generics);
     struct HirType *rhs = lower_type(L, d->rhs);
     return NEW_NODE(L, type_decl, d->span, d->id, d->did, ident, generics, rhs, d->is_pub);
@@ -543,7 +548,7 @@ static struct HirExpr *LowerFieldExpr(struct LowerAst *L, struct AstFieldExpr *e
         struct HirExpr *key = lower_expr(L, e->key);
         return NEW_NODE(L, keyed_field_expr, e->span, e->id, key, value);
     }
-    struct HirIdent const ident = lower_ident(L, e->ident);
+    struct HirIdent const ident = lower_ident(e->ident);
     return NEW_NODE(L, named_field_expr, e->span, e->id, ident, value, e->fid);
 }
 
@@ -556,7 +561,6 @@ static struct HirExpr *lower_composite_lit(struct LowerAst *L, struct AstComposi
     struct AstExpr *const *pexpr;
     K_LIST_FOREACH (e->items, pexpr) {
         struct HirExpr *expr = lower_expr(L, *pexpr);
-        struct HirFieldExpr const *e = HirGetFieldExpr(expr);
         HirExprList_push(L->hir, items, expr);
     }
     return NEW_NODE(L, composite_lit, span, id, path, items);
@@ -611,7 +615,7 @@ static struct HirExpr *LowerStringExpr(struct LowerAst *L, struct AstStringExpr 
 
 static struct HirDecl *LowerFnDecl(struct LowerAst *L, struct AstFnDecl *d)
 {
-    struct HirIdent const ident = lower_ident(L, d->ident);
+    struct HirIdent const ident = lower_ident(d->ident);
     struct HirDeclList *generics = lower_decl_list(L, d->generics);
     struct HirDeclList *params = lower_decl_list(L, d->params);
     struct HirType *result = d->result != NULL ? lower_type(L, d->result)
@@ -795,7 +799,6 @@ static struct HirStmt *LowerExprStmt(struct LowerAst *L, struct AstExprStmt *s)
 
 static struct HirExpr *LowerLoopExpr(struct LowerAst *L, struct AstLoopExpr *e)
 {
-    struct HirExpr *result = unit_lit(L, e->span);
     struct HirExpr *body = lower_expr(L, e->block);
     return NEW_NODE(L, loop_expr, e->span, e->id, body);
 }
@@ -948,7 +951,7 @@ static struct HirExpr *LowerSelector(struct LowerAst *L, struct AstSelector *e)
     struct HirExpr *target = lower_expr(L, e->target);
     if (e->is_index)
         return NEW_NODE(L, index_selector, e->span, e->id, target, e->index);
-    struct HirIdent const ident = lower_ident(L, e->ident);
+    struct HirIdent const ident = lower_ident(e->ident);
     return NEW_NODE(L, name_selector, e->span, e->id, target, ident);
 }
 
@@ -979,9 +982,14 @@ static struct HirBoundList *lower_bounds(struct LowerAst *L, struct AstBoundList
 
 static struct HirDecl *LowerGenericDecl(struct LowerAst *L, struct AstGenericDecl *d)
 {
-    struct HirIdent const ident = lower_ident(L, d->ident);
+    struct HirIdent const ident = lower_ident(d->ident);
     struct HirBoundList *bounds = lower_bounds(L, d->bounds);
     return NEW_NODE(L, generic_decl, d->span, d->id, d->did, ident, bounds);
+}
+
+static struct HirType *LowerRefType(struct LowerAst *L, struct AstRefType *t)
+{
+    return NEW_NODE(L, ref_type, t->span, t->id, lower_type(L, t->type));
 }
 
 static struct HirType *LowerPathType(struct LowerAst *L, struct AstPathType *t)
@@ -1031,7 +1039,7 @@ static struct HirPat *LowerOrPat(struct LowerAst *L, struct AstOrPat *p)
 
 static struct HirPat *LowerFieldPat(struct LowerAst *L, struct AstFieldPat *p)
 {
-    struct HirIdent const ident = lower_ident(L, p->ident);
+    struct HirIdent const ident = lower_ident(p->ident);
     struct HirPat *pat = lower_pat(L, p->pat);
     return NEW_NODE(L, field_pat, p->span, p->id, ident, pat, -1);
 }
@@ -1058,8 +1066,7 @@ static struct HirPat *LowerTuplePat(struct LowerAst *L, struct AstTuplePat *p)
 
 static struct HirPat *LowerIdentPat(struct LowerAst *L, struct AstIdentPat *p)
 {
-    struct AstSegment *psrc;
-    struct HirIdent const ident = lower_ident(L, p->ident);
+    struct HirIdent const ident = lower_ident(p->ident);
     struct ResolvedSegment const *res = SegmentTable_get(L->C, L->segtab, p->id);
     paw_assert(res != NULL);
 
@@ -1100,15 +1107,6 @@ static struct HirPat *LowerPathPat(struct LowerAst *L, struct AstPathPat *p)
     struct HirPath const path = lower_path(L, p->path);
     switch (path.kind) {
         case HIR_PATH_LOCAL: {
-            // NOTE: If "p" is part of an OR pattern, then "segment.target" contains the NodeId
-            //       of the binding defined in the first alternative of the OR pattern (equal
-            //       to "p->id" if "p" itself is in the first alternative). This is necessary
-            //       for when bindings are assigned to registers during HIR lowering, since
-            //       the result part of a match arm containing an OR pattern is copied for each
-            //       alternative, and paths in the result part might refer to bindings created
-            //       in the first alternative. The NodeID-to-register mapping is updated before
-            //       each copied result part is lowered to support patterns with bindings in
-            //       different positions, like "(1, v) | (v, 2)", etc.
             struct HirSegment const segment = K_LIST_FIRST(path.segments);
             struct HirPat *pat = NEW_NODE(L, binding_pat, p->span, p->id, segment.ident);
             pat->hdr.id = segment.target;
@@ -1122,7 +1120,7 @@ static struct HirPat *LowerPathPat(struct LowerAst *L, struct AstPathPat *p)
             } else if (AstIsAdtDecl(decl)) {
                 return NEW_NODE(L, struct_pat, p->span, p->id, path, HirPatList_new(L->hir));
             }
-            // fallthrough
+            // (fallthrough)
         }
         case HIR_PATH_ASSOC: {
             NodeId const variant_id = K_LIST_LAST(path.segments).target;
@@ -1243,10 +1241,7 @@ void pawP_lower_ast(struct Compiler *C)
     L.hir->node_count = ast->node_count;
     lower_decl_list(&L, C->ast->modules);
 
-    if (pawP_push_callback(C, "paw.on_build_hir")) {
-        paw_push_rawptr(P, L.hir);
-        paw_call(P, 1);
-    }
+    pawP_callback(C, "paw.on_build_hir", L.hir);
 
     // release AST memory
     pawAst_free(ast);

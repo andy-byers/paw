@@ -6,6 +6,7 @@ enum Enum<T> {
     Z(T, T),
 }
 
+#[test]
 pub fn test_initialization() {
     let ex = Enum::<int>::X;
     let ey = Enum::<int>::Y(1);
@@ -17,12 +18,14 @@ fn noop(e: Enum<int>) -> Enum<int> {
     return e2;
 }
 
+#[test]
 pub fn test_arguments() {
     noop(Enum::<int>::X);
     noop(Enum::<int>::Y(1));
     noop(Enum::<int>::Z(2, 3));
 }
 
+#[test]
 pub fn test_assignment() {
     let ex = Enum::<int>::X;
     let ey = Enum::<int>::Y(1);
@@ -38,6 +41,7 @@ struct Struct<T> {
     pub y: Enum<T>,
 }
 
+#[test]
 pub fn test_fields() {
     let s = Struct::<bool>{
         x: Enum::<int>::X,
@@ -57,6 +61,7 @@ fn option(b: bool) -> Option<int> {
     }
 }
 
+#[test]
 pub fn test_chain_option() {
     let val = -1;
     let test = || -> Option<int> {
@@ -93,6 +98,7 @@ fn chain_option2_aux<Ty2>(v: Ty2) -> Option<Ty2> {
     return Option::<Ty2>::Some(t);
 }
 
+#[test]
 pub fn test_chain_option2() {
     chain_option2_aux(123);
     chain_option2_aux("abc");
@@ -106,6 +112,7 @@ fn result(b: bool) -> Result<int, str> {
     }
 }
 
+#[test]
 pub fn test_chain_result() {
     let val = -1;
     let test = || -> Result<int, str> {
@@ -148,12 +155,14 @@ fn construct_option<Ty3>(t: Ty3, a: bool, b: bool) -> Option<Outer<Ty3>> {
     }
 }
 
+#[test]
 pub fn test_option_construction() {
     construct_option(42, true, true);
     construct_option(42, true, false);
     construct_option(42, false, false);
 }
 
+#[test]
 pub fn test_option_methods() {
     let o = Option::<int>::Some(123);
     assert(o.is_some());
@@ -165,6 +174,7 @@ pub fn test_option_methods() {
     assert(o.unwrap_or(456) == 456);
 }
 
+#[test]
 pub fn test_result_methods() {
     let o = Result::<int, str>::Ok(123);
     assert(o.is_ok());

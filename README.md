@@ -4,14 +4,14 @@
 > See the [roadmap](#roadmap) to get an idea of where things are going.
 > Also see [known issues](#known-issues) for a list of known problems that will eventually be fixed.
 
-A cute little scripting language
+A general-purpose programming language
 
-Paw is a high-level, statically-typed, embeddable scripting language.
-It is designed to run on a virtual machine written in C.
+Paw is a high-level, statically-typed, ahead-of-time compiled, general-purpose programming language.
+Currently, the frontend is written in C and the LLVM interface in C++.
 
 ## Features
-+ No dependencies
 + Static strong typing
++ AOT compiled using LLVM
 + Bidirectional type checking
 + Block expressions
 + Module system
@@ -19,6 +19,7 @@ It is designed to run on a virtual machine written in C.
 + Traits (interfaces checked at compile time)
 + Generics and generic bounds
 + Unboxed objects using "inline" keyword
++ "inout" function parameters
 + Container literals (`[T]` and `[K: V]`)
 
 ## Examples
@@ -64,10 +65,6 @@ pub fn main() {
 
     // concatenate with another list
     list += [2, 3, 4]; // [1, 2, 3, 4]
-
-    // lists (and "str") can be indexed with range objects
-    let suffix = list[-2..]; // [3, 4]
-    let prefix = list[0..3]; // [1, 2, 3]
 
 
     let map = [:]; // [char: int]
@@ -188,6 +185,19 @@ pub fn main() {
 }
 ```
 
+### Inout parameters
+```paw
+pub fn increment(&value: int) {
+    value += 1;
+}
+
+pub fn main() {
+    let value = 0;
+    increment(value);
+    assert(value == 1);
+}
+```
+
 ### Value types
 Structures and enumerations have reference semantics by default.
 The `inline` keyword can be used to give a type value semantics.
@@ -197,10 +207,17 @@ They can also be used to implement "newtype" wrappers with no additional runtime
 ```paw
 inline struct Data<T> {
     pub value: T,
+
+    // Value types can be modified using inout parameters
+    pub fn swap(&self, &rhs: Data<T>) {
+        let temp = self.value;
+        self.value = rhs.value;
+        rhs.value = temp;
+    }
 }
 
 pub fn main() {
-    // "data" consists of exactly 3 integers stored directly in the activation frame
+    // "data" consists of exactly 3 integers stored on the stack or in registers
     let data = Data{value: Data{value: (1, (2, 3))}};
 
     // all fields are copied: "copy" is independent from "data"
@@ -235,32 +252,17 @@ A panic can also be caused by calling the `panic` builtin function.
 |1         |`= op=`                  |Assignment, operator assignment              |Right        |
 
 ## Roadmap
-+ [x] fix list/str slice operation (should use `Range`, `RangeTo`, etc.)
-+ [ ] clean up the bytecode (eliminate moves using register hints, have operations accept constant immediate operands, etc.)
-+ [ ] use `mut` to indicate mutability and make immutable the default for local variables
-+ [ ] decide on and implement either RAII or "defer" for cleaning up resources
-+ [ ] overflow checks for `paw_Int` operations during constant folding and inside VM
-+ [ ] function inlining
-+ [ ] refactor user-provided allocation interface to allow heap expansion
++ [ ] consider using `mut` to indicate mutability and make immutable the default for local variables
++ [ ] consider implementing either RAII or "defer" for cleaning up resources
++ [ ] add overflow checks for `paw_Int` operations during constant folding and codegen
 
 ## Known problems
 + These need to be converted into issues, along with some TODO comments scattered throughout the codebase...
-+ Explore register hints:
-    + When MIR "aggregate" instruction for an inline type is unboxed into a "move" for each field, make sure to use the same register for source/destination so the "MOVE" can be omitted during codegen
-    + During register allocation, bias choices based on how close they are to the output register of the last instruction to hopefully improve cache locality
-    + Could attempt to allocate inputs/output of "phi" nodes in the same VM register
-+ Paw requires that "int" be at least 32 bits (probably fine in practice)
++ Need to keep track of source-to-source mappings that result from IR transformations (e.g. when ForExpr AST node is lowered into a Loop + Match)
++ Don't throw errors in 'lex.c'. Return a token of type `TK_ERROR` and let the parser handle it. Allows for more sensible error messages.
 + Need to make sure functions/closures with a return type annotation of "!" diverge unconditionally 
     + See TODO comment in `test_error.c` `test_divergence` function
-    + Consider returns to be jumps to a special block, possibly after setting the return variable
-    + Unconditionally-diverging functions should not have any writes to this variable
-+ Pointer tracking (test only) feature is broken on MSVC
-    + Might indicate a problem somewhere in the library
-    + Need a machine that can run Windows for debugging
-+ Need a lower-level CFG-based IR (LIR) to use for register allocation and codegen
-    + Convert the `unbox`/`ssa` pass into `lower_mir`, which will output LIR in SSA form
-    + Perform constant propagation on the LIR, monomorphization doesn't need to change
-    + LIR will contain `GETFIELD`, `SETELEMENT`, etc. instructions, which are represented by places in the MIR
-    + Each LIR register will represent a single Paw value (`Value` structure in C), while MIR registers can be multiple values wide
-    + This representation is needed due to the attempt to unbox composite values, it is a bit painful to operate on the MIR
-    + This is somewhat low-priority, since the MIR will work for unboxed values, it's just not quite as nice to work with
++ Need to prevent inout parameters from binding to container elements
+    + If the container is modified, the pointer will point to freed memory
+    + This rule must be applied transitively, e.g. modify(list[0].field) should not be allowed if list[0] is an inline type
++ Remove dependency on clang (as a linker driver) and invoke linker manually

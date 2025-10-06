@@ -151,6 +151,9 @@ static void normalize_list(UnificationTable *table, IrTypeList *types)
 IrType *pawU_normalize(UnificationTable *table, IrType *type)
 {
     switch (IR_KINDOF(type)) {
+        case kIrPtr:
+            IrGetPtr(type)->pointee = pawU_normalize(table, IrGetPtr(type)->pointee);
+            break;
         case kIrSignature:
             normalize_list(table, IrGetSignature(type)->types);
             // fallthrough
@@ -208,6 +211,7 @@ static int unify_fptr(struct Unifier *U, struct IrFnPtr *a, struct IrFnPtr *b)
 
 static int unify_generic(struct Unifier *U, struct IrGeneric *a, struct IrGeneric *b)
 {
+    PAW_UNUSED(U);
     return a->did.value != b->did.value ? -1 : 0;
 }
 
@@ -227,7 +231,7 @@ static int unify_types(struct Unifier *U, IrType *a, IrType *b)
     } else if (IR_IS_FUNC_TYPE(a) && IR_IS_FUNC_TYPE(b)) {
         // function pointer and definition types are compatible
         return unify_fptr(U, IR_FPTR(a), IR_FPTR(b));
-    } else if (HIR_KINDOF(a) != HIR_KINDOF(b)) {
+    } else if (IR_KINDOF(a) != IR_KINDOF(b)) {
         return -1;
     } else if (IrIsTuple(a)) {
         return unify_tuple(U, IrGetTuple(a), IrGetTuple(b));
@@ -235,6 +239,8 @@ static int unify_types(struct Unifier *U, IrType *a, IrType *b)
         return unify_adt(U, IrGetAdt(a), IrGetAdt(b));
     } else if (IrIsGeneric(a)) {
         return unify_generic(U, IrGetGeneric(a), IrGetGeneric(b));
+    } else if (IrIsPtr(a)) {
+        return unify_types(U, IrGetPtr(a)->pointee, IrGetPtr(b)->pointee);
     } else {
         paw_assert(IrIsTraitObj(a));
         return unify_trait_obj(U, IrGetTraitObj(a), IrGetTraitObj(b));

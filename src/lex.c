@@ -16,6 +16,10 @@
 
 #define LEX_ERROR(X_, Kind_, ...) pawErr_##Kind_((X_)->C, (X_)->modname, __VA_ARGS__)
 
+// TODO: remove other versions/rename these versions
+#define LEX_ERROR_(X_, Loc_, ...) pawErr_generic_error(ENV(X_), (X_)->modname, Loc_, __VA_ARGS__)
+#define LIMIT_ERROR(X_, Loc_, What_, Limit_) pawErr_exceeded_limit(ENV(X_), (X_)->modname, Loc_, What_, Limit_)
+
 // Check for inclusion in one of the character classes
 #define ISDIGIT(Char_) (kCharClassTable[(uint8_t)(Char_)] & 1)
 #define ISHEX(Char_) (kCharClassTable[(uint8_t)(Char_)] & 2)
@@ -30,22 +34,22 @@
 
 // clang-format off
 const uint8_t kCharClassTable[256] = {
-     32,  32,  32,  32,  32,  32,  32,  32,  32,  36,  36,  36,  36,  36,  32,  32,
-     32,  32,  32,  32,  32,  32,  32,  32,  32,  32,  32,  32,  32,  32,  32,  32,
-      4,   0,  32,   0,   0,   0,   0,  32,   0,   0,   0,   0,   0,   0,   0,   0,
-      3,   3,   3,   3,   3,   3,   3,   3,   3,   3,   0,   0,   0,   0,   0,   0,
-      0,  10,  10,  10,  10,  10,  10,   8,   8,   8,   8,   8,   8,   8,   8,   8,
-      8,   8,   8,   8,   8,   8,   8,   8,   8,   8,   8,   0,  32,   0,   0,   8,
-      0,  10,  10,  10,  10,  10,  10,   8,   8,   8,   8,   8,   8,   8,   8,   8,
-      8,   8,   8,   8,   8,   8,   8,   8,   8,   8,   8,   0,   0,   0,   0,   0,
-     16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,
-     16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,
-     16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,
-     16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,
-     16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,
-     16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,
-     16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,
-     16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  16,  48,
+     32, 32, 32, 32, 32, 32, 32, 32, 32, 36, 36, 36, 36, 36, 32, 32,
+     32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+      4,  0, 32,  0,  0,  0,  0, 32,  0,  0,  0,  0,  0,  0,  0,  0,
+      3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  0,  0,  0,  0,  0,  0,
+      0, 10, 10, 10, 10, 10, 10,  8,  8,  8,  8,  8,  8,  8,  8,  8,
+      8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  0, 32,  0,  0,  8,
+      0, 10, 10, 10, 10, 10, 10,  8,  8,  8,  8,  8,  8,  8,  8,  8,
+      8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  0,  0,  0,  0,  0,
+     16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
+     16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
+     16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
+     16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
+     16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
+     16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
+     16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
+     16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 48,
 };
 
 const uint8_t kHexValueTable[256] = {
@@ -79,8 +83,9 @@ static struct SourceSpan span_from(struct Lex *lex, struct SourceLoc start)
 static void increment_line(struct Lex *X)
 {
     paw_assert(ISNEWLINE(*X->ptr));
+
     if (X->loc.line == INT_MAX)
-        LEX_ERROR(X, too_many_lines, X->loc, INT_MAX);
+        LIMIT_ERROR(X, X->loc, "lines in source file", INT_MAX);
 
     X->loc.column = 1;
     ++X->loc.line;
@@ -89,7 +94,7 @@ static void increment_line(struct Lex *X)
 static void increment_column(struct Lex *X)
 {
     if (X->loc.column == INT_MAX)
-        LEX_ERROR(X, too_many_columns, X->loc, INT_MAX);
+        LIMIT_ERROR(X, X->loc, "columns in source file", INT_MAX);
 
     ++X->loc.column;
 }
@@ -197,7 +202,7 @@ static struct Token make_string(struct Lex *X, struct SourceLoc start, TokenKind
         .kind = kind,
     };
     // create and anchor arbitrary interned string
-    Str *str = pawP_scan_nstr(X->C, X->strings, b->data, CAST_SIZE(b->count));
+    Str *str = pawP_scan_nstr(X->C, b->data, CAST_SIZE(b->count));
     V_SET_OBJECT(&t.value, str);
     return t;
 }
@@ -212,7 +217,7 @@ static struct Token consume_name(struct Lex *X, struct SourceLoc start)
     if (IS_KEYWORD(s)) {
         t.kind = CAST(TokenKind, s->flag);
     } else if (s->length > PAW_NAME_MAX) {
-        LEX_ERROR(X, name_too_long, start, s->length, PAW_NAME_MAX);
+        LIMIT_ERROR(X, start, "characters in identifier", PAW_NAME_MAX);
     }
     return t;
 }
@@ -249,8 +254,15 @@ static void hex_escape(struct Lex *X, struct SourceLoc start)
     int n = 0;
 
     do {
-        if (IS_LINE_END(X) || test(X, ';'))
-            LEX_ERROR(X, hex_escape_too_short, start);
+        if (IS_LINE_END(X) || test(X, ';')) {
+            paw_Env *P = ENV(X);
+            pawErr_start(P);
+            pawErr_set_source_loc(P, start);
+            pawErr_set_message(P, "hex escape too short");
+            pawErr_set_hint(P, "must be 2 characters in length");
+            pawErr_finish(P);
+            pawC_throw(P, -1);
+        }
 
         digits[n++] = next(X);
     } while (n < MAX_DIGITS);
@@ -366,7 +378,7 @@ static struct Token consume_byte(struct Lex *X, struct SourceLoc start)
         .span = span_from(X, start),
         .kind = TK_CHAR,
         // make sure the bytes used by larger scalars get cleared
-        .value.u = x,
+        .value.u = (paw_Uint)x,
     };
 }
 
@@ -423,7 +435,7 @@ static struct Token consume_int_aux(struct Lex *X, struct SourceLoc start, int b
     };
 }
 
-static struct Token consume_bin_int(struct Lex *X, struct SourceLoc start, const char *begin)
+static struct Token consume_bin_int(struct Lex *X, struct SourceLoc start)
 {
     if (!test2(X, "01"))
         LEX_ERROR(X, expected_integer_digit, X->loc, "binary");
@@ -442,7 +454,7 @@ static struct Token consume_bin_int(struct Lex *X, struct SourceLoc start, const
     return consume_int_aux(X, start, 2, "binary");
 }
 
-static struct Token consume_oct_int(struct Lex *X, struct SourceLoc start, const char *begin)
+static struct Token consume_oct_int(struct Lex *X, struct SourceLoc start)
 {
     if (*X->ptr < '0' || *X->ptr > '7')
         LEX_ERROR(X, expected_integer_digit, X->loc, "octal");
@@ -461,7 +473,7 @@ static struct Token consume_oct_int(struct Lex *X, struct SourceLoc start, const
     return consume_int_aux(X, start, 8, "octal");
 }
 
-static struct Token consume_hex_int(struct Lex *X, struct SourceLoc start, const char *begin)
+static struct Token consume_hex_int(struct Lex *X, struct SourceLoc start)
 {
     if (!ISHEX(*X->ptr))
         LEX_ERROR(X, expected_integer_digit, X->loc, "hexadecimal");
@@ -499,7 +511,6 @@ static struct Token consume_float(struct Lex *X, struct SourceLoc start, const c
 {
     save_parsed_digits(X, begin);
 
-    paw_Env *P = ENV(X);
     struct StringBuffer b = SCRATCH(X);
     paw_Float f;
 
@@ -520,11 +531,11 @@ static struct Token consume_number(struct Lex *X, struct SourceLoc start)
     next(X);
 
     if (*begin == '0' && test_next2(X, "bB"))
-        return consume_bin_int(X, start, begin);
+        return consume_bin_int(X, start);
     if (*begin == '0' && test_next2(X, "oO"))
-        return consume_oct_int(X, start, begin);
+        return consume_oct_int(X, start);
     if (*begin == '0' && test_next2(X, "xX"))
-        return consume_hex_int(X, start, begin);
+        return consume_hex_int(X, start);
 
     while (ISDIGIT(*X->ptr) || test(X, '_'))
         next(X);

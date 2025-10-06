@@ -1,5 +1,6 @@
 // capture_upvalue.paw
 
+#[test]
 pub fn test_basic() {
     let f = || -1;
     {
@@ -20,6 +21,7 @@ pub fn create_flat_capture_closure() -> (fn(Option<int>) -> int) {
     };
 }
 
+#[test]
 pub fn test_flat_capture() {
     let f = create_flat_capture_closure();
     assert(f(None) == 0);
@@ -46,6 +48,7 @@ pub fn create_nested_capture_closure() -> (fn() -> fn(Option<int>, Option<int>) 
     };
 }
 
+#[test]
 pub fn test_nested_capture() {
     let f = create_nested_capture_closure()();
     assert(f(None, None) == 0);
@@ -70,6 +73,7 @@ fn create_closure_with_break() -> (fn(int) -> int) {
     return f.unwrap();
 }
 
+#[test]
 pub fn test_closure_with_break() {
     let f = create_closure_with_break();
     assert(f(0) == 0);
@@ -77,6 +81,7 @@ pub fn test_closure_with_break() {
     assert(f(1) == 11);
 }
 
+#[test]
 pub fn test_modify_upvalue_in_loop_1() {
     while true {
         let a = 0;
@@ -91,6 +96,7 @@ pub fn test_modify_upvalue_in_loop_1() {
     }
 }
 
+#[test]
 pub fn test_modify_upvalue_in_loop_2() {
     let f = || -1;
     while true {
@@ -123,6 +129,7 @@ fn create_closure_in_loop_3(n: int) -> (fn() -> int) {
     f.unwrap()
 }
 
+#[test]
 pub fn test_modify_upvalue_in_loop_3() {
     let create = create_closure_in_loop_3;
     assert(create(0)() == 0);
@@ -132,6 +139,7 @@ pub fn test_modify_upvalue_in_loop_3() {
     assert(f() == 9);
 }
 
+#[test]
 pub fn test_closure_with_nested_break() {
     let f = || -1;
     while true {
@@ -159,6 +167,7 @@ pub fn test_closure_with_nested_break() {
     assert(f() == 18);
 }
 
+#[test]
 pub fn test_capture_list() {
 
     let x = [];
@@ -167,6 +176,7 @@ pub fn test_capture_list() {
     while #x < 10 { x.push(#x); }
 }
 
+#[test]
 pub fn test_capture_composite() {
     let o = Some((1, 2, 3));
     let f = || match o {
@@ -180,6 +190,7 @@ pub fn test_capture_composite() {
 }
 
 
+#[test]
 pub fn test_modify_composite() {
     let t = (1, (2, 3));
     let f = |i: int| {
@@ -211,6 +222,7 @@ pub fn test_modify_composite() {
     assert(t.1.1 == 6);
 }
 
+#[test]
 pub fn test_modify_enum() {
     let o = None;
     let f = |o2| o = o2;
@@ -224,6 +236,14 @@ pub fn test_modify_enum() {
     assert(o.is_none());
 }
 
-
-
+#[test]
+pub fn test_bind_capture_to_inout_parameter() {
+    let upvalue = 1;
+    let f = |&arg: int| {
+        arg += upvalue;
+        arg += upvalue;
+    };
+    f(upvalue);
+    assert(upvalue == 4);
+}
 

@@ -53,7 +53,7 @@ void pawP_add_trait_impl(struct Compiler *C, IrType *type, IrType *trait)
 static paw_Bool traits_match(struct Compiler *C, IrType *a, IrType *b)
 {
     if (IR_TYPE_DID(a).value == IR_TYPE_DID(b).value) {
-        unify(C, 1, (struct SourceLoc){-1}, a, b); // TODO: source location/module number for error messages
+        unify(C, 1, (struct SourceLoc){0}, a, b); // TODO: source location/module number for error messages
         return PAW_TRUE;
     }
     return PAW_FALSE;
@@ -162,13 +162,13 @@ static void ensure_methods_match(struct Compiler *C, struct SourceLoc loc, IrTyp
     IrType *a = adt_method;
     IrType *b = pawIr_get_type(C, trait_method->id);
     if (trait_decl->generics != NULL)
-        b = pawP_instantiate_method(C, HIR_CAST_DECL(trait_decl),
-                IR_TYPE_SUBTYPES(trait), HIR_CAST_DECL(trait_method));
+        b = pawP_instantiate_method(C, pawIr_get_def_type(C, trait_decl->did), // TODO: maybe just use "trait"? is "trait" instantiated?
+                IR_TYPE_SUBTYPES(trait), pawIr_get_def_type(C, trait_method->did)); // TODO: see above
 
     // substitute all instances of the trait object type for the type of the implementor
     b = pawIr_substitute_self(C, trait, adt, b);
     b = pawP_generalize(C, loc, b);
-    unify(C, IR_TYPE_DID(adt).modno, loc, a, b);
+    unify(C, (int)IR_TYPE_DID(adt).modno, loc, a, b);
 
     enum TraitKind const tk = pawHir_kindof_trait(C, trait_decl);
     if (tk != TRAIT_USER) register_builtin_trait_method(C, adt, a, tk);
@@ -178,20 +178,18 @@ DEFINE_MAP(struct Compiler, MethodMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str
 
 static void ensure_trait_implemented(struct Compiler *C, struct HirTraitDecl *trait_decl, MethodMap *methods, IrType *adt, IrType *trait)
 {
-    struct HirAdtDecl *d = HirGetAdtDecl(pawHir_get_decl(C->hir, IR_TYPE_DID(adt)));
-
     struct HirDecl *const *pdecl;
     K_LIST_FOREACH (trait_decl->methods, pdecl) {
         struct HirFnDecl const *trait_fn = HirGetFnDecl(*pdecl);
         IrType *const *pmethod = MethodMap_get(C, methods, trait_fn->ident.name);
         if (pmethod == NULL)
-            TRAIT_ERROR(C, missing_trait_method, trait_fn->did.modno,
+            TRAIT_ERROR(C, missing_trait_method, (int)trait_fn->did.modno,
                     trait_fn->span.start, trait_fn->ident.name->text);
 
         struct HirFnDecl const *adt_fn = HirGetFnDecl(
                 pawHir_get_decl(C->hir, IR_TYPE_DID(*pmethod)));
         if (adt_fn->is_pub != trait_fn->is_pub)
-            TRAIT_ERROR(C, trait_method_visibility_mismatch, adt_fn->did.modno,
+            TRAIT_ERROR(C, trait_method_visibility_mismatch, (int)adt_fn->did.modno,
                     adt_fn->span.start, trait_fn->is_pub, adt_fn->ident.name->text);
 
         ensure_methods_match(C, adt_fn->span.start, adt, *pmethod, trait, trait_decl, trait_fn);

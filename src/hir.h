@@ -1,6 +1,7 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
+
 #ifndef PAW_HIR_H
 #define PAW_HIR_H
 
@@ -20,6 +21,7 @@
 
 #define HIR_EXPR_LIST(X) \
     X(AscriptionExpr)    \
+    X(AddrOfExpr)        \
     X(LiteralExpr)       \
     X(LogicalExpr)       \
     X(PathExpr)          \
@@ -44,6 +46,7 @@
 #define HIR_TYPE_LIST(X) \
     X(FnPtr)             \
     X(TupleType)         \
+    X(RefType)           \
     X(PathType)          \
     X(NeverType)         \
     X(InferType)
@@ -144,6 +147,11 @@ struct HirTypeHeader {
     HIR_TYPE_HEADER;
 };
 
+struct HirRefType {
+    HIR_TYPE_HEADER;
+    struct HirType *type;
+};
+
 // Path to a type
 struct HirPathType {
     HIR_TYPE_HEADER;
@@ -218,6 +226,19 @@ static struct HirType *pawHir_new_infer_type(struct Hir *hir, struct SourceSpan 
         .id = id,
         .span = span,
         .kind = kHirInferType,
+    };
+    pawHir_register_node(hir, id, t);
+    return t;
+}
+
+static struct HirType *pawHir_new_ref_type(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirType *type)
+{
+    struct HirType *t = pawHir_new_type(hir);
+    t->RefType_ = (struct HirRefType){
+        .id = id,
+        .span = span,
+        .kind = kHirRefType,
+        .type = type,
     };
     pawHir_register_node(hir, id, t);
     return t;
@@ -347,6 +368,7 @@ struct HirFieldDecl {
 
 struct HirParamDecl {
     HIR_DECL_HEADER;
+    paw_Bool is_self : 1;
     struct HirIdent ident;
     struct HirType *tag;
 };
@@ -570,6 +592,11 @@ struct HirExprHeader {
     HIR_EXPR_HEADER;
 };
 
+struct HirAddrOfExpr {
+    HIR_EXPR_HEADER;
+    struct HirExpr *expr;
+};
+
 struct HirAscriptionExpr {
     HIR_EXPR_HEADER;
     struct HirExpr *expr;
@@ -782,6 +809,19 @@ static struct HirExpr *pawHir_new_ascription_expr(struct Hir *hir, struct Source
         .kind = kHirAscriptionExpr,
         .expr = expr,
         .type = type,
+    };
+    pawHir_register_node(hir, id, e);
+    return e;
+}
+
+static struct HirExpr *pawHir_new_addr_of_expr(struct Hir *hir, struct SourceSpan span, NodeId id, struct HirExpr *expr)
+{
+    struct HirExpr *e = pawHir_new_expr(hir);
+    e->AddrOfExpr_ = (struct HirAddrOfExpr){
+        .id = id,
+        .span = span,
+        .kind = kHirAddrOfExpr,
+        .expr = expr,
     };
     pawHir_register_node(hir, id, e);
     return e;
@@ -1448,15 +1488,16 @@ struct HirVisitor {
     struct Hir *hir;
     void *ud;
 
-    void (*VisitPath)(struct HirVisitor *V, struct HirPath *path);
-    void (*VisitSegment)(struct HirVisitor *V, struct HirSegment *seg);
-
+    paw_Bool (*VisitPath)(struct HirVisitor *V, struct HirPath *path);
+    paw_Bool (*VisitSegment)(struct HirVisitor *V, struct HirSegment *seg);
     paw_Bool (*VisitExpr)(struct HirVisitor *V, struct HirExpr *node);
     paw_Bool (*VisitStmt)(struct HirVisitor *V, struct HirStmt *node);
     paw_Bool (*VisitDecl)(struct HirVisitor *V, struct HirDecl *node);
     paw_Bool (*VisitType)(struct HirVisitor *V, struct HirType *node);
     paw_Bool (*VisitPat)(struct HirVisitor *V, struct HirPat *node);
 
+    void (*PostVisitPath)(struct HirVisitor *V, struct HirPath *node);
+    void (*PostVisitSegment)(struct HirVisitor *V, struct HirSegment *node);
     void (*PostVisitExpr)(struct HirVisitor *V, struct HirExpr *node);
     void (*PostVisitStmt)(struct HirVisitor *V, struct HirStmt *node);
     void (*PostVisitDecl)(struct HirVisitor *V, struct HirDecl *node);

@@ -2,70 +2,56 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
+#include "compile.h"
 #include "env.h"
 #include "api.h"
 #include "map.h"
 #include "mem.h"
-#include "rt.h"
-#include "rtti.h"
 
 #include <limits.h>
 
-void pawE_push_cstr(paw_Env *P, unsigned kind)
-{
-    API_CHECK_PUSH(P, 1);
-    V_SET_OBJECT(P->top.p, P->string_cache[kind]);
-    API_INCR_TOP(P, 1);
-}
-
 _Noreturn void pawE_error(paw_Env *P, int code, int line, char const *fmt, ...)
 {
-    Buffer print;
-    pawL_init_buffer(P, &print);
-    if (line >= 0) {
-        paw_assert(P->modname != NULL);
-        pawL_add_fstring(P, &print, "%s:%d: ", P->modname->text, line);
+    if (P->current_errmsg == NULL) {
+        Buffer print;
+        pawL_init_buffer(P, &print);
+        if (line >= 0) {
+            paw_assert(P->modname != NULL);
+            pawL_add_fstring(P, &print, "%s:%d: ", P->modname->text, line);
+        }
+
+        va_list arg;
+        va_start(arg, fmt);
+        pawL_add_vfstring(P, &print, fmt, arg);
+        va_end(arg);
+
+        P->current_errmsg = pawL_buffer_finish(P, &print);
     }
-
-    va_list arg;
-    va_start(arg, fmt);
-    pawL_add_vfstring(P, &print, fmt, arg);
-    va_end(arg);
-
-    pawL_push_result(P, &print);
     pawC_throw(P, code);
+}
+
+void pawE_init(paw_Env *P)
+{
+    P->stats = Statistics_new(P);
+    P->callbacks = CallbackMap_new(P);
+
+    // Create statistics for tracking compiler memory usage. Main pool statistics
+    // must be added after-the-fact, since the main pool itself is used to allocate
+    // the "struct Statistic" objects.
+    P->pool->st = (struct PoolStats){
+                .bytes_alloc = pawStats_new(P, P->stats, "memory.main.bytes_allocated"),
+                .bytes_used = pawStats_new(P, P->stats, "memory.main.bytes_used"),
+                .num_alloc = pawStats_new(P, P->stats, "memory.main.num_allocations"),
+            };
 }
 
 void pawE_uninit(paw_Env *P)
 {
-    pawRtti_uninit(P);
 }
 
-CallFrame *pawE_extend_cf(paw_Env *P, StackPtr top)
+void pawE_register_callback(paw_Env *P, char const *name, paw_Function cb)
 {
-    if (P->ncf >= ITEM_MAX) {
-        pawR_error(P, PAW_EOVERFLOW, "too many nested function calls");
-    }
-    CallFrame *cf = pawM_new(P, CallFrame);
-    P->cf->next = cf;
-    cf->prev = P->cf;
-    cf->next = NULL;
-    cf->top.p = top;
-    ++P->ncf;
-    return cf;
+    Str const *key = pawS_new_str(P, name);
+    CallbackMap_insert(P, P->callbacks, key, cb);
 }
 
-int pawE_locate(paw_Env *P, Str const *name, paw_Bool only_pub)
-{
-    paw_assert(name != NULL);
-    struct DefList const defs = P->defs;
-    for (int i = 0; i < defs.count; ++i) {
-        struct Def const *def = P->defs.data[i];
-        Str const *query = def->hdr.kind == DEF_FUNC ? def->fn.mangled_name : def->hdr.kind == DEF_ADT ? def->adt.mangled_name
-                                                                                                            : NULL;
-        if (pawS_eq(name, query) && def->hdr.is_pub >= only_pub) {
-            return i;
-        }
-    }
-    return -1;
-}

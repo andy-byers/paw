@@ -4,31 +4,40 @@
 //
 // compile.h: compiler entrypoint
 //
-// The compiler converts source code into bytecode that can be run on Paw's
-// virtual machine. It performs the following passes:
+// The compiler converts source code into machine code that can be run natively
+// on supported platforms. It performs the following passes:
 //
-//    name           | input  | output   | purpose
-//   ----------------|--------|----------|----------------------------------------------
-//    parse          | source | AST      | lexing and parsing, syntactical analysis
-//    resolve        | AST    | -        | name and import resolution
-//    lower_ast      | AST    | HIR      | convert AST into HIR
-//    typeck         | HIR    | -        | type check function bodies
-//    exhaustiveness | HIR    | -        | ensure pattern matching exhaustiveness
-//    lower_hir      | HIR    | MIR      | convert HIR into MIR
-//    monomorphize   | MIR    | -        | monomorphize polymorphic functions and types
-//    unbox          | MIR    | -        | split inline types into scalars
-//    codegen        | MIR    | bytecode | generate code for Paw's VM
+//    # | name           | input  | output   | purpose
+//   ---|-- -------------|--------|----------|-------------------------------------------------
+//    1 | parse          | source | AST      | lexing and parsing, syntactical analysis
+//    2 | resolve        | AST    | -        | name and import resolution
+//    3 | lower_ast      | AST    | HIR      | convert AST into HIR
+//    4 | typeck         | HIR    | -        | type check function bodies
+//    5 | exhaustiveness | HIR    | -        | ensure pattern matching exhaustiveness
+//    6 | lower_hir      | HIR    | MIR      | convert HIR into MIR
+//    7 | monomorphize   | MIR    | -        | monomorphize polymorphic functions and types
+//    8 | codegen        | MIR    | binary   | generate a native executable/library using LLVM
+//
+//            | 1  2  3  4  5  6  7  8
+//   ---------|------------------------
+//    AST     | X----->  .  .  .  .  .
+//    HIR     | .  .  X-------->  .  .
+//    Paw IR  | .  .  .  X----------->
+//    MIR     | .  .  .  .  .  X----->
+//    LLVM IR | .  .  .  .  .  .  .  X
 //
 
 #ifndef PAW_COMPILE_H
 #define PAW_COMPILE_H
 
+
 #include "code.h"
 #include "debug.h"
 #include "env.h"
+#include "list.h"
 #include "map.h"
 #include "mem.h"
-#include "paw.h"
+#include "core.h"
 #include "source.h"
 #include "stats.h"
 #include "trait.h"
@@ -36,7 +45,7 @@
 #define ENV(x) ((x)->P)
 #define DLOG(X, ...) PAWD_LOG(ENV(X), __VA_ARGS__)
 #define CSTR(X, i) CACHED_STRING(ENV(X), CAST_SIZE(i))
-#define SCAN_STR(X, s) pawP_scan_str(X, (X)->strings, s)
+#define SCAN_STR(X, s) pawP_scan_str(X, s)
 
 #define GET_NODE_TYPE(C, p) pawIr_get_type(C, (p)->hdr.id)
 #define SET_NODE_TYPE(C, p, t) pawIr_set_type(C, (p)->hdr.id, t)
@@ -82,16 +91,13 @@ struct StringMap;
 struct BodyList;
 struct BodyMap;
 
-// from regstack.h
-struct RegstackMap;
+void *pawP_alloc(struct Pool *pool, void *ptr, size_t size0, size_t size);
+#define P_ALLOC(C, ptr, size0, size) pawP_alloc((C)->pool, ptr, size0, size)
 
-void *pawP_alloc(paw_Env *P, struct Pool *pool, void *ptr, size_t size0, size_t size);
-#define P_ALLOC(C, ptr, size0, size) pawP_alloc(ENV(C), (C)->pool, ptr, size0, size)
-
-Str *pawP_scan_nstr(struct Compiler *C, Tuple *map, char const *s, size_t n);
-inline static Str *pawP_scan_str(struct Compiler *C, Tuple *map, char const *s)
+EXTERN_C Str *pawP_scan_nstr(struct Compiler *C, char const *s, size_t n);
+inline static Str *pawP_scan_str(struct Compiler *C, char const *s)
 {
-    return pawP_scan_nstr(C, map, s, strlen(s));
+    return pawP_scan_nstr(C, s, strlen(s));
 }
 
 Str *pawP_format_string(struct Compiler *C, char const *fmt, ...);
@@ -120,13 +126,6 @@ struct Compiler {
     struct Builtin builtins[NBUILTINS];
     struct BuiltinMap *builtin_lookup;
 
-    int list_length;
-    int list_get;
-    int list_set;
-    int map_length;
-    int map_get;
-    int map_set;
-
     // callbacks for debugging
     Value on_build_ast;
     Value on_build_hir;
@@ -135,12 +134,15 @@ struct Compiler {
 
     struct Statistics *stats;
     struct PoolStats aux_stats;
-    struct ModuleNames *modnames;
+    struct ModuleInfo *modinfo;
     struct DynamicMem *dm;
     struct Ast *ast;
     struct Hir *hir;
     struct Unifier *U;
-    Str *modname;
+
+    Str const *dirname;
+    Str const *pathname;
+    Str const *modname;
 
     struct Pool *pool;
     struct Pool *ast_pool;
@@ -150,15 +152,13 @@ struct Compiler {
     struct SegmentTable *segtab;
     struct BodyMap *bodies;
 
-    // '.strings' anchors all strings used during compilation so they are not
-    // collected by the GC.
-    Tuple *strings;
+    struct StringMap *strings;
+    struct StringMap *symbols;
+    struct Searchers *searchers;
 
     // '.traits' maps each ADT to a list of implemented traits. Includes ADTs
     // from all modules being compiled.
     struct TraitMap *traits; // DeclId => HirDeclList *
-
-    struct RttiMap *rtti;
 
     struct HirTypeMap *hir_types; // NodeId => IrType *
     struct DefTypeMap *def_types; // DefId => IrType *
@@ -166,13 +166,38 @@ struct Compiler {
     struct AdtDefMap *adt_defs; // DefId => IrAdtDef *
     struct FnDefMap *fn_defs; // DefId => IrFnDef *
 
-    struct IrLayoutMap *layouts;
-
     // map for quickly determining the methods implementing a given builtin
     // trait for a given type
     struct TraitOwners *trait_owners;
 
     struct GlobalList *globals;
+
+    // TODO: use this in the frontend as well?
+    struct {
+        struct {
+            struct IrType *never_t;
+            struct IrType *unit_t;
+            struct IrType *bool_t;
+            struct IrType *char_t;
+            struct IrType *int_t;
+            struct IrType *float_t;
+            struct IrType *str_t;
+        } primitives;
+
+        struct {
+            struct TypeCollection *list;
+            struct TypeCollection *map;
+        } iterators;
+
+        struct TypeCollection *lists;
+        struct TypeCollection *maps;
+        struct TypeCollection *adts;
+        struct TypeCollection *types;
+    } typesystem;
+
+    // type of the runtime string internalization table ("[str: ()]")
+    struct IrType *strtab_type;
+    struct IrType *main_args_type;
 
     paw_Env *P;
     int decl_count;
@@ -181,13 +206,21 @@ struct Compiler {
     int line;
 };
 
-paw_Bool pawP_push_callback(struct Compiler *C, char const *name);
+void pawP_callback(struct Compiler *C, char const *name, void *arg);
 
 void pawP_set_self(struct Compiler *C, struct IrType *method, struct IrType *self);
 struct IrType *const *pawP_get_self(struct Compiler *C, struct IrType *method);
 
-DEFINE_LIST(struct Compiler, ModuleNames, Str const *)
+struct Module {
+    Str const *pathname;
+    Str const *dirname;
+    Str const *name;
+};
 
+DEFINE_LIST(struct Compiler, ModuleInfo, struct Module)
+DEFINE_LIST(struct Compiler, Searchers, paw_Function)
+
+// TODO: get rid of this struct and put members in Compiler or something
 // Keeps track of dynamic memory used by the compiler
 struct DynamicMem {
     struct Pool pool;
@@ -232,14 +265,6 @@ void pawP_bitset_clear_range(struct BitSet *bs, int i, int j);
 void pawP_bitset_and(struct BitSet *a, struct BitSet const *b);
 void pawP_bitset_or(struct BitSet *a, struct BitSet const *b);
 
-struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, struct MirIntervalMap *intervals, struct RegstackMap *regstack, struct MirLocationList *locations, int *pmax_reg);
-
-struct IrTypeList *pawP_instantiate_typelist(struct Compiler *C, struct IrTypeList *before, struct IrTypeList *after, struct IrTypeList *target);
-struct IrType *pawP_instantiate_field(struct Compiler *C, struct IrType *self, struct IrType *field);
-struct IrTypeList *pawP_instantiate_struct_fields(struct Compiler *C, struct IrAdt *inst);
-struct IrTypeList *pawP_instantiate_variant_fields(struct Compiler *C, struct IrAdt *inst, int index);
-struct IrType *pawP_find_method(struct Compiler *C, struct IrType *self, Str *name);
-
 struct Decision *pawP_check_exhaustiveness(struct Hir *hir, struct Pool *pool, Str const *modname, struct HirMatchExpr *match, struct MatchVars *vars);
 void pawP_lower_matches(struct Compiler *C);
 
@@ -247,14 +272,17 @@ struct IrType *pawP_generalize(struct Compiler *C, struct SourceLoc loc, struct 
 struct IrType *pawP_generalize_assoc(struct Compiler *C, struct SourceLoc loc, struct IrType *type, struct IrType *method);
 
 // Instantiate a polymorphic function or type
-// Works by replacing each generic type with the corresponding concrete type from
-// the given list of 'types'. Returns a HirInstanceDecl if 'decl' is a function,
-// and 'decl' otherwise. We avoid recursively visiting the function body here, since
-// doing so might cause further instantiations due to the presence of recursion.
-// Function instance bodies are expanded in a separate pass.
+// Works by replacing each generic type in the function signature with the
+// corresponding concrete type from the given list of 'types'.
 struct IrType *pawP_instantiate(struct Compiler *C, struct IrType *base, struct IrTypeList *types);
 
-struct IrType *pawP_instantiate_method(struct Compiler *C, struct HirDecl *base, struct IrTypeList *types, struct HirDecl *method);
+struct IrType *pawP_instantiate_method(struct Compiler *C, struct IrType *self, struct IrTypeList *types, struct IrType *method);
+struct IrTypeList *pawP_instantiate_typelist(struct Compiler *C, struct IrTypeList *before, struct IrTypeList *after, struct IrTypeList *target);
+struct IrType *pawP_instantiate_field(struct Compiler *C, struct IrType *self, struct IrType *field);
+EXTERN_C struct IrTypeList *pawP_instantiate_struct_fields(struct Compiler *C, struct IrAdt *inst);
+EXTERN_C struct IrTypeList *pawP_instantiate_variant_fields(struct Compiler *C, struct IrAdt *inst, int index);
+
+EXTERN_C struct IrType *pawP_find_method(struct Compiler *C, struct IrType *self, Str *name);
 
 struct Substitution {
     struct IrTypeList *generics;
@@ -265,14 +293,7 @@ struct Substitution {
 void pawP_init_substitution_folder(struct IrTypeFolder *F, struct Compiler *C, struct Substitution *subst,
                                    struct IrTypeList *generics, struct IrTypeList *types);
 
-void pawP_collect_imports(struct Compiler *C, struct Ast *ast);
-void pawP_import(struct Compiler *C, void *state); // TODO: not used?
-
-struct AstDecl *pawP_import_module(struct Compiler *C, Str *modname);
-
-struct ItemList *pawP_allocate_defs(struct Compiler *C, struct BodyList *bodies, struct IrTypeList *types);
-
-void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, char const *modname);
+void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, Str const *modname, Str const *pathname, Str const *dirname);
 void pawP_teardown(paw_Env *P, struct DynamicMem *dm);
 
 struct AstDecl *pawP_parse_module(struct Compiler *C, Str *modname, paw_Reader input, void *ud);
@@ -284,7 +305,6 @@ struct MonoResult {
     struct BodyList *bodies;
 };
 
-void pawP_scalarize_registers(struct Compiler *C, struct Mir *mir);
 struct MonoResult pawP_monomorphize(struct Compiler *C, struct BodyMap *bodies);
 
 void pawP_compile(struct Compiler *C, paw_Reader input, void *ud);
@@ -292,18 +312,9 @@ void pawP_compile(struct Compiler *C, paw_Reader input, void *ud);
 struct Pool *pawP_pool_new(struct Compiler *C, struct PoolStats st);
 void pawP_pool_free(struct Compiler *C, struct Pool *pool);
 
-enum BuiltinKind pawP_type2code(struct Compiler *C, struct IrType *type);
+EXTERN_C enum BuiltinKind pawP_type2code(struct Compiler *C, struct IrType *type);
+EXTERN_C struct IrType *pawP_builtin_type(struct Compiler *C, enum BuiltinKind code);
 struct Builtin *pawP_builtin_info(struct Compiler *C, enum BuiltinKind code);
-struct IrType *pawP_builtin_type(struct Compiler *C, enum BuiltinKind code);
-
-struct ItemSlot {
-    struct RttiType *rtti;
-    struct Mir *mir;
-    Str *name;
-    DeclId did;
-};
-
-DEFINE_LIST(struct Compiler, ItemList, struct ItemSlot)
 
 struct Annotation {
     enum BuiltinKind kind : 7;
@@ -316,12 +327,13 @@ struct Annotation {
 
 DEFINE_LIST(struct Compiler, Annotations, struct Annotation)
 
-paw_Bool pawP_check_extern(struct Compiler *C, struct Annotations *annos, struct Annotation *panno);
-Value const *pawP_get_extern_value(struct Compiler *C, Str const *name);
+EXTERN_C paw_Bool pawP_contains_core_annotation(struct Compiler *C, Annotations const *annotations);
+EXTERN_C paw_Bool pawP_check_extern(struct Compiler *C, struct Annotations *annos, struct Annotation *panno);
+paw_Bool pawP_get_extern_value(struct Compiler *C, Str const *name, Value *result);
 void pawP_mangle_start(paw_Env *P, Buffer *buf, struct Compiler *G);
 Str *pawP_mangle_finish(paw_Env *P, Buffer *buf, struct Compiler *G);
-Str *pawP_mangle_name(struct Compiler *G, Str const *modname, Str const *name, struct IrTypeList *types);
-Str *pawP_mangle_attr(struct Compiler *C, Str const *modname, Str const *base, struct IrTypeList const *base_types, Str const *attr, struct IrTypeList const *attr_types);
+EXTERN_C Str *pawP_mangle_name(struct Compiler *G, Str const *modname, Str const *name, struct IrTypeList *types);
+EXTERN_C Str *pawP_mangle_attr(struct Compiler *C, Str const *modname, Str const *base, struct IrTypeList const *base_types, Str const *attr, struct IrTypeList const *attr_types);
 
 struct ExternInfo {
     Str *name;
@@ -346,14 +358,20 @@ DEFINE_MAP(struct Compiler, VariantDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, D
 DEFINE_MAP(struct Compiler, HirTypeMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, struct IrType *)
 DEFINE_MAP(struct Compiler, DefTypeMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrType *)
 DEFINE_MAP(struct Compiler, TraitMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrTypeList *)
-DEFINE_MAP(struct Compiler, StringMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str *, Str *)
+DEFINE_MAP(struct Compiler, StringMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str const *, void *)
 DEFINE_MAP(struct Compiler, ValueMap, pawP_alloc, P_VALUE_HASH, P_VALUE_EQUALS, Value, Value)
 DEFINE_MAP(struct Compiler, BodyMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct Mir *)
 DEFINE_MAP(struct Compiler, BuiltinMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str *, struct Builtin *)
+DEFINE_MAP_ITERATOR(StringMap, Str const *, void *)
 DEFINE_MAP_ITERATOR(HirTypeMap, NodeId, struct IrType *)
 
 DEFINE_LIST(struct Compiler, GlobalList, struct GlobalInfo)
-DEFINE_LIST(struct Compiler, Statistics, struct Statistic *)
 DEFINE_LIST(struct Compiler, BodyList, struct Mir *)
+DEFINE_LIST(struct Compiler, LineBuffer, char const *)
+
+// TODO: define these elsewhere, preferably in env.h but need to remove mem.h -> ... -> env.h dep
+DEFINE_LIST(paw_Env, Statistics, struct Statistic *)
+DEFINE_MAP(paw_Env, StrMap, pawK_pool_alloc, P_PTR_HASH, P_PTR_EQUALS, Str const *, void *)
+DEFINE_MAP(paw_Env, CallbackMap, pawK_pool_alloc, P_PTR_HASH, P_PTR_EQUALS, Str const *, paw_Function)
 
 #endif // PAW_COMPILE_H

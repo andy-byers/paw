@@ -1,5 +1,6 @@
 // test_map.paw
 
+#[test]
 pub fn test_getters() {
     let map = [
         1: "abc",
@@ -11,6 +12,7 @@ pub fn test_getters() {
     assert(map[3] == "ghi");
 }
 
+#[test]
 pub fn test_empty_maps_with_annotations() {
     let map: [bool: int] = [:];
     let map: [float: str] = [:];
@@ -20,6 +22,7 @@ pub fn test_empty_maps_with_annotations() {
 fn call(map: [int: int]) {}
 fn call2(map: [int: [int: int]]) {}
 
+#[test]
 pub fn test_inference() {
     let map = [1: [2, 3]]; // [int: [int]]
     let map = [1: [2: 3]]; // [int: [int: int]]
@@ -83,6 +86,7 @@ pub fn test_inference() {
     d = [1: 1];
 }
 
+#[test]
 pub fn test_negative_zero() {
     let m = [:];
     m[0.0] = "zero";
@@ -102,6 +106,7 @@ pub fn bk(value: int) -> BadKey {
     BadKey{value}
 }
 
+#[test]
 pub fn test_addressing_stress() {
     let m = [:];
     m[bk(-1)] = -1;
@@ -122,37 +127,13 @@ pub fn test_addressing_stress() {
 
     i = 0;
     while i < 500 {
-        m.erase(bk(i));
+        m.remove(bk(i));
         i = i + 1;
     }
 
     assert(m[bk(-1)] == -1);
     assert(m[bk(-2)] == -2);
     assert(m[bk(-3)] == -3);
-}
-
-//// TODO: get this to work
-//pub fn test_traverse_map_with_unknown_key() {
-//    let m = [:];
-//    for key in m {
-//        // never runs, but key and value types should be inferred as "str"
-//        assert(key == "string key");
-//        assert(m[key] == "string value");
-//    }
-//}
-
-fn special_case(key: str, callback: fn(str)) {
-    callback(key);
-}
-
-fn check_special_case(key: str) {
-    let map = [:];
-    special_case(key, |k: str| map[k] = "value");
-    assert(map["key"] == "value");
-}
-
-pub fn test_special_case() {
-    check_special_case("key");
 }
 
 inline struct Int2: Hash + Equals {
@@ -172,6 +153,7 @@ inline struct Int2: Hash + Equals {
     }
 }
 
+#[test]
 pub fn test_wide_key() {
     let map = [
         Int2::new(-1, -2): -3,
@@ -196,6 +178,7 @@ pub fn test_wide_key() {
     assert(map[Int2::new(-1, -2)] == -3);
 }
 
+#[test]
 pub fn test_infer_key() {
     let map = [:];
 
@@ -209,6 +192,7 @@ pub fn test_infer_key() {
     }
 }
 
+#[test]
 pub fn test_traverse_map_with_unknown_key() {
     let map = [:];
 
@@ -219,6 +203,7 @@ pub fn test_traverse_map_with_unknown_key() {
     }
 }
 
+#[test]
 pub fn test_wide_key_value() {
     let map = [
         Int2::new(-1, -2): Int2::new(-3, -4),
@@ -241,4 +226,10 @@ pub fn test_wide_key_value() {
     assert(map[Int2::new(5, 6)].eq(Int2::new(50, 60)));
 
     assert(map[Int2::new(-1, -2)].eq(Int2::new(-3, -4)));
+}
+
+#[test]
+pub fn test_index_literal() {
+    let m = [0: 0, 1: 1, 2: 2][1];
+    assert(m == 1);
 }

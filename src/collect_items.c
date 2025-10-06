@@ -13,7 +13,6 @@
 #include "compile.h"
 #include "debug.h"
 #include "error.h"
-#include "gc.h"
 #include "hir.h"
 #include "ir_type.h"
 #include "map.h"
@@ -97,6 +96,12 @@ static IrTypeList *collect_bounds(struct ItemCollector *X, struct HirBoundList *
     return result;
 }
 
+// TODO: use this instead of the one below
+static void set_def_type_v2(struct ItemCollector *X, DeclId did, IrType *type)
+{
+    DefTypeMap_insert(X->C, X->C->def_types, did, type);
+}
+
 static void set_def_type(struct ItemCollector *X, DeclId did, NodeId id)
 {
     IrType *type = pawIr_get_type(X->C, id);
@@ -161,7 +166,8 @@ static void transfer_fn_annotations(struct ItemCollector *X, struct HirFnDecl *d
     if (annos != NULL) {
         struct Annotation *panno;
         K_LIST_FOREACH (annos, panno) {
-            if (pawS_eq(panno->name, CSTR(C, CSTR_EXTERN))) {
+            if (pawS_eq(panno->name, CSTR(C, CSTR_EXTERN))
+                    || pawS_eq(panno->name, SCAN_STR(C, "extern_std"))) {
                 // Found "extern" annotation. Implementation of function will be found in
                 // "paw.symbols" map during code generation.
                 if (d->body != NULL)
@@ -185,7 +191,7 @@ static struct IrVariantDefs *create_struct_variant(struct ItemCollector *X, stru
     paw_assert(decls->count == 1);
     struct HirVariantDecl *v = HirGetVariantDecl(K_LIST_FIRST(decls));
     struct IrFieldDefs *fields = collect_field_defs(X, v->fields);
-    struct IrVariantDef *r = pawIr_new_variant_def(X->C, v->did, NO_DECL, NO_DECL, 0, ident.name, fields);
+    struct IrVariantDef *r = pawIr_new_variant_def(X->C, v->did, NO_DECL, v->base_did, 0, ident.name, fields);
     struct IrVariantDefs *variants = IrVariantDefs_new(X->C);
     VariantDefMap_insert(X->C, X->C->variant_defs, v->did, r);
     IrVariantDefs_push(X->C, variants, r);
@@ -201,7 +207,7 @@ static struct IrVariantDefs *collect_variant_defs(struct ItemCollector *X, struc
     K_LIST_FOREACH (adt->variants, pdecl) {
         struct HirVariantDecl *d = HirGetVariantDecl(*pdecl);
         struct IrFieldDefs *fields = collect_field_defs(X, d->fields);
-        struct IrVariantDef *r = pawIr_new_variant_def(X->C, d->did, NO_DECL, NO_DECL, d->index, d->ident.name, fields);
+        struct IrVariantDef *r = pawIr_new_variant_def(X->C, d->did, NO_DECL, d->base_did, d->index, d->ident.name, fields);
         VariantDefMap_insert(X->C, X->C->variant_defs, d->did, r);
         IrVariantDefs_push(X->C, variants, r);
         set_def_type(X, d->did, d->id);
@@ -211,10 +217,16 @@ static struct IrVariantDefs *collect_variant_defs(struct ItemCollector *X, struc
 
 static void ensure_unique(struct ItemCollector *X, StringMap *map, struct HirIdent ident, char const *what)
 {
-    Str *const *pname = StringMap_get(X->C, map, ident.name);
+    void *const *pname = StringMap_get(X->C, map, ident.name);
     if (pname != NULL)
         COLLECTOR_ERROR(X, duplicate_item, ident.span.start, what, ident.name->text);
     StringMap_insert(X->C, map, ident.name, NULL);
+}
+
+static paw_Bool is_self_param(struct ItemCollector *X, struct HirDecl *decl)
+{
+    struct HirParamDecl *param = HirGetParamDecl(decl);
+    return pawS_eq(param->ident.name, CSTR(X, CSTR_SELF));
 }
 
 static void collect_param_types(struct ItemCollector *X, struct HirDeclList *params)
@@ -225,7 +237,11 @@ static void collect_param_types(struct ItemCollector *X, struct HirDeclList *par
     K_LIST_FOREACH (params, pdecl) {
         struct HirParamDecl *d = HirGetParamDecl(*pdecl);
         ensure_unique(X, names, d->ident, "function parameter");
-        SET_TYPE(X, d->id, collect_type(X, d->tag));
+        IrType *type = collect_type(X, d->tag);
+#warning must write "&self" or "self: &Self" to get a reference so the below code is not needed, but need to change stdlib in some places
+//TODO        if (is_self_param(X, *pdecl) && ir_is_value_type(X->C, type))
+//TODO            type = pawIr_new_ptr(X->C, type);
+        SET_TYPE(X, d->id, type);
     }
     StringMap_delete(X->C, names);
 }
@@ -312,7 +328,7 @@ static void collect_adt_type(struct ItemCollector *X, struct HirAdtDecl *d)
     SET_TYPE(X, d->id, type);
 
     struct IrAdtDef *r = pawIr_new_adt_def(X->C, d->did, d->ident.name,
-            NULL, NULL, d->is_pub, d->is_struct, d->is_inline);
+            NULL, NULL, NULL, d->is_pub, d->is_struct, d->is_inline);
     AdtDefMap_insert(X->C, X->C->adt_defs, d->did, r);
     set_def_type(X, d->did, d->id);
 }
@@ -321,6 +337,7 @@ static void collect_trait_type(struct ItemCollector *X, struct HirTraitDecl *d)
 {
     IrTypeList *generics = collect_generic_types(X, d->generics);
     IrType *type = pawIr_new_trait_obj(X->C, d->did, generics);
+    set_def_type_v2(X, d->did, type);
     SET_TYPE(X, d->id, type);
 }
 
@@ -398,14 +415,11 @@ static void collect_generic_bounds(struct ItemCollector *X, struct HirDeclList *
     }
 }
 
-static paw_Bool is_self_param(struct ItemCollector *X, struct HirDecl *decl)
-{
-    struct HirParamDecl *param = HirGetParamDecl(decl);
-    return pawS_eq(param->ident.name, CSTR(X, CSTR_SELF));
-}
-
 static void unify_with_self(struct ItemCollector *X, struct SourceLoc loc, IrType *self)
 {
+#warning probably should use ir_remove_indirection
+    // value type "self" is passed by reference
+    if (IrIsPtr(self)) self = IrGetPtr(self)->pointee;
     if (pawU_unify(X->C->U, self, X->ctx) != 0) {
         char const *lhs = pawIr_print_type(X->C, self);
         char const *rhs = pawIr_print_type(X->C, X->ctx);
@@ -437,8 +451,10 @@ static void collect_fn_decl(struct ItemCollector *X, struct HirFnDecl *d)
     if (X->ctx != NULL) {
         if (d->params->count > 0) {
             struct HirDecl *first = K_LIST_FIRST(d->params);
-            if (is_self_param(X, first)) // make sure "self: Self" is true
+            if (is_self_param(X, first)) { // make sure "self: Self" is true
                 unify_with_self(X, first->hdr.span.start, K_LIST_FIRST(params));
+                HirGetParamDecl(first)->is_self = PAW_TRUE;
+            }
         }
         IrGetSignature(sig)->self = X->ctx;
     }
@@ -465,6 +481,7 @@ static void collect_adt_decl(struct ItemCollector *X, struct HirAdtDecl *d)
     struct IrAdtDef *r = pawIr_get_adt_def(X->C, d->did);
     r->generics = collect_generic_defs(X, d->generics);
     r->variants = collect_variant_defs(X, d);
+    r->methods = IrTypeList_new(X->C);
 
     struct HirType *const *ptype;
     K_LIST_FOREACH (d->traits, ptype) {
@@ -478,6 +495,13 @@ static void collect_adt_decl(struct ItemCollector *X, struct HirAdtDecl *d)
         collect_variant_types(X, d->variants, d->is_struct);
         collect_method_decls(X, d->methods, PAW_FALSE);
     );
+
+    struct HirDecl *const *pdecl;
+    K_LIST_FOREACH (d->methods, pdecl) {
+        struct HirFnDecl *method = HirGetFnDecl(*pdecl);
+        IrType *type = pawIr_get_def_type(X->C, method->did);
+        IrTypeList_push(X->C, r->methods, type);
+    }
 }
 
 static void collect_trait_decl(struct ItemCollector *X, struct HirTraitDecl *d)
@@ -560,5 +584,16 @@ void pawP_collect_items(struct Compiler *C, struct Pool *pool)
 
     collection_phase_1(&X, C->hir);
     collection_phase_2(&X, C->hir);
+
+    DeclId const strtab_did = pawP_builtin_info(C, BUILTIN_MAP)->did;
+    IrTypeList *strtab_types = IrTypeList_new(C);
+    IrTypeList_push(C, strtab_types, pawP_builtin_type(C, BUILTIN_STR));
+    IrTypeList_push(C, strtab_types, pawP_builtin_type(C, BUILTIN_UNIT));
+    C->strtab_type = pawIr_new_adt(C, strtab_did, strtab_types);
+
+    DeclId const main_args_did = pawP_builtin_info(C, BUILTIN_LIST)->did;
+    IrTypeList *main_args_types = IrTypeList_new(C);
+    IrTypeList_push(C, main_args_types, pawP_builtin_type(C, BUILTIN_STR));
+    C->main_args_type = pawIr_new_adt(C, main_args_did, main_args_types);
 }
 

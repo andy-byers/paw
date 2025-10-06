@@ -5,19 +5,23 @@ struct Unit {
     pub fn assoc_function() {}
 }
 
+#[test]
 pub fn test_init() {
     let u = Unit;
 }
 
+#[test]
 pub fn test_init_annotated() {
     let u: Unit = Unit;
 }
 
+#[test]
 pub fn test_copy() {
     let u = Unit;
     let u2 = u;
 }
 
+#[test]
 pub fn test_as_argument() {
     let u = Unit;
     let f = |x| {};
@@ -26,6 +30,7 @@ pub fn test_as_argument() {
     f(Unit);
 }
 
+#[test]
 pub fn test_call_method() {
     // looks strange, since "Unit" is in both a value (nullary type 
     // constructor) and a type

@@ -8,14 +8,6 @@
 #include <stdio.h> // snprintf
 #include <inttypes.h> // PRIu64
 
-#define THROW_ERROR(Kind_, Builder_) do { \
-    Buffer b; \
-    pawL_init_buffer(ENV(C), &b); \
-    Builder_ \
-    pawL_push_result(ENV(C), &b); \
-    pawC_throw(ENV(C), Kind_); \
-} while (0)
-
 struct ErrorInfo {
     enum ErrorKind kind;
     struct SourceLoc loc;
@@ -35,24 +27,24 @@ static Str const *format(struct Compiler *C, char const *fmt, ...)
     pawL_add_vfstring(P, &b, fmt, arg);
     va_end(arg);
 
-    Str const *str = pawP_scan_nstr(C, C->strings, b.data, b.size);
-    pawL_discard_result(P, &b);
-    return str;
+    return pawL_buffer_finish(P, &b);
 }
 
 _Noreturn static void throw(struct Compiler *C, enum ErrorKind kind, Str const *modname, struct SourceLoc loc, Str const *primary, Str const *detail)
 {
-    Buffer b;
     paw_Env *P = ENV(C);
-    pawL_init_buffer(P, &b);
+    if (P->current_errmsg == NULL) {
+        Buffer b;
+        pawL_init_buffer(P, &b);
 
-    pawL_add_fstring(P, &b, "%s:%d:%d: %s", modname->text,
-            loc.line, loc.column, primary->text);
-    if (detail != NULL)
-        pawL_add_fstring(P, &b, " (%s)", detail->text);
+        pawL_add_fstring(P, &b, "%s:%d:%d: %s", modname->text,
+                loc.line, loc.column, primary->text);
+        if (detail != NULL)
+            pawL_add_fstring(P, &b, " (%s)", detail->text);
 
-    pawL_push_result(P, &b);
-    pawC_throw(P, kind);
+        P->current_errmsg = pawL_buffer_finish(P, &b);
+    }
+    pawC_throw(P, (int)kind);
 }
 
 _Noreturn void pawErr_unsupported(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *feature)
@@ -313,6 +305,13 @@ _Noreturn void pawErr_function_type_decl(struct Compiler *C, Str const *modname,
 {
     throw(C, E_FUNCTION_TYPE_DECL, modname, loc,
             format(C, "function types are not allowed in \"type\" declarations"),
+            NULL);
+}
+
+_Noreturn void pawErr_invalid_annotation_type(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *name)
+{
+    throw(C, E_INVALID_ANNOTATION_TYPE, modname, loc,
+            format(C, "invalid value type for annotation \"%s\"", name),
             NULL);
 }
 
@@ -935,4 +934,109 @@ _Noreturn void pawErr_too_many_constants(struct Compiler *C, Str const *modname,
             format(C, "limit is %d", limit));
 }
 
+_Noreturn void pawErr_captured_inout_arg(struct Compiler *C, Str const *modname, struct SourceLoc loc)
+{
+    throw(C, E_CAPTURED_INOUT_ARG, modname, loc,
+            format(C, "inout argument cannot be captured"),
+            NULL);
+}
+
+
+
+
+
+void pawErr_start(paw_Env *P)
+{
+    P->error = (ErrorHandler){.P = P};
+}
+
+void pawErr_set_module_name(paw_Env *P, Str const *name)
+{
+    P->error.modname = name;
+}
+
+void pawErr_set_source_loc(paw_Env *P, struct SourceLoc loc)
+{
+    P->error.loc = loc;
+}
+
+static Str const *format_(paw_Env *P, char const *fmt, va_list arg)
+{
+    Buffer b;
+    pawL_init_buffer(P, &b);
+    pawL_add_vfstring(P, &b, fmt, arg);
+    return pawL_buffer_finish(P, &b);
+}
+
+void pawErr_set_message(paw_Env *P, char const *fmt, ...)
+{
+    ErrorHandler *e = &P->error;
+
+    va_list arg;
+    va_start(arg, fmt);
+    e->message = format_(e->P, fmt, arg);
+    va_end(arg);
+}
+
+void pawErr_set_hint(paw_Env *P, char const *fmt, ...)
+{
+    ErrorHandler *e = &P->error;
+
+    va_list arg;
+    va_start(arg, fmt);
+    e->hint = format_(e->P, fmt, arg);
+    va_end(arg);
+}
+
+void pawErr_finish(paw_Env *P)
+{
+    ErrorHandler *e = &P->error;
+
+    Buffer b;
+    pawL_init_buffer(P, &b);
+
+    if (e->modname != NULL)
+        pawL_add_fstring(P, &b, "%s", e->modname->text);
+
+    if (e->loc.line > 0) {
+        if (b.size > 0) pawL_add_char(P, &b, ':'); // separator
+        pawL_add_fstring(P, &b, "%d:%d", e->loc.line, e->loc.column);
+    }
+    if (e->message != NULL) {
+        if (b.size > 0) pawL_add_char(P, &b, ' '); // separator
+        pawL_add_fstring(P, &b, "%s", e->message->text);
+    }
+    if (e->hint != NULL) {
+        if (b.size > 0) pawL_add_char(P, &b, ' '); // separator
+        pawL_add_fstring(P, &b, "(%s)", e->hint->text);
+    }
+
+    P->current_errmsg = pawL_buffer_finish(P, &b);
+}
+
+_Noreturn void pawErr_generic_error(paw_Env *P, Str const *modname, struct SourceLoc loc, char const *fmt, ...)
+{
+    pawErr_start(P);
+    pawErr_set_module_name(P, modname);
+    pawErr_set_source_loc(P, loc);
+
+    va_list arg;
+    va_start(arg, fmt);
+    pawErr_set_message(P, fmt, arg);
+    va_end(arg);
+
+    pawErr_finish(P);
+    pawC_throw(P, -1);
+}
+
+_Noreturn void pawErr_exceeded_limit(paw_Env *P, Str const *modname, struct SourceLoc loc, char const *what, paw_Int limit)
+{
+    pawErr_start(P);
+    pawErr_set_module_name(P, modname);
+    pawErr_set_source_loc(P, loc);
+    pawErr_set_message(P, "too many %s", what);
+    pawErr_set_message(P, "expected at most %I", limit);
+    pawErr_finish(P);
+    pawC_throw(P, -1);
+}
 

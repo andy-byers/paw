@@ -20,6 +20,7 @@ inline enum WithoutData {
     }
 }
 
+#[test]
 pub fn test_without_data() {
     assert(WithoutData::A.is_a());
     assert(!WithoutData::A.is_b());
@@ -49,6 +50,7 @@ inline enum WithData {
     }
 }
 
+#[test]
 pub fn test_with_data() {
     assert(WithData::A(1).a_value().unwrap() == 1);
     assert(WithData::A(2).b_value().is_none());

@@ -31,6 +31,7 @@ fn match_exhaustive_branches_return(i: int) -> int {
     }
 }
 
+#[test]
 pub fn test_exhaustive_branches_return() {
     assert(ifelse_exhaustive_branches_return(0) == 1);    
     assert(ifelse_exhaustive_branches_return(1) == 2);    
@@ -72,6 +73,7 @@ fn match_exhaustive_branches_panic(i: int) -> int {
     }
 }
 
+#[test]
 pub fn test_exhaustive_branches_panic() {
     assert(ifelse_exhaustive_branches_panic(0) == 1);    
     assert(ifelse_exhaustive_branches_panic(2) == 4);    
@@ -80,6 +82,7 @@ pub fn test_exhaustive_branches_panic() {
     assert(match_exhaustive_branches_panic(2) == 4);    
 }
 
+#[test]
 pub fn test_guard() {
     // must have type "()" since the guard block may not run
     let _: () = if black_box(true) {
@@ -87,6 +90,7 @@ pub fn test_guard() {
     };
 }
 
+#[test]
 pub fn test_ifelse() {
     let _: int = if black_box(true) {
         456
@@ -101,6 +105,7 @@ pub fn test_ifelse() {
     };
 }
 
+#[test]
 pub fn test_ifelse_chain() {
     let _: int = if black_box(true) {
         123
@@ -160,6 +165,7 @@ pub fn test_ifelse_chain() {
     };
 }
 
+#[test]
 pub fn test_match() {
     let _: int = match black_box(Option::Some(123)) {
         Option::Some(x) => x,
@@ -177,6 +183,7 @@ pub fn test_match() {
     };
 }
 
+#[test]
 pub fn test_loop() {
     let _: () = loop {
         break
@@ -205,6 +212,7 @@ pub fn test_loop() {
     };
 }
 
+#[test]
 pub fn test_other_loops() {
     let _: () = for i in 0..10 {
         break;
@@ -223,6 +231,7 @@ pub fn test_other_loops() {
     };
 }
 
+#[test]
 pub fn test_nested_loop() {
     let _: int = loop {
         loop {
@@ -241,6 +250,7 @@ fn check_diverging_branch(b: bool) {
     assert(b == 456.0);
 }
 
+#[test]
 pub fn test_diverging_branch() {
     check_diverging_branch(true);
 }
@@ -254,6 +264,7 @@ fn check_diverging_arm(b: bool) {
     assert(b == 456.0);
 }
 
+#[test]
 pub fn test_diverging_arm() {
     check_diverging_arm(true);
 }
@@ -267,6 +278,7 @@ fn custom_divergence() -> ! {
     panic("panic occurred");
 }
 
+#[test]
 pub fn test_diverging_expressions() {
     let _: int = !return;
     let _: int = #return;

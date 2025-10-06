@@ -31,12 +31,22 @@ fn bubble(n: int) -> [int] {
     return a;
 }
 
+
+#[test]
+pub fn test() {
+    bubble(1000);
+}
+
+
 pub fn main(args: [str]) -> int {
     let n = if #args > 1 {
         args[1].parse_int().unwrap()
     } else {
         500
     };
+    println("calling bubble(\{n})");
     bubble(n);
+
+    println("finished");
     return 0;
 }

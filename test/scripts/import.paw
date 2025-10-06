@@ -5,6 +5,7 @@ fn call_test(k: str) {
     f();
 }
 
+#[test]
 pub fn test_import() {
     assert(mod_a::return_42() == 42);
 
@@ -15,6 +16,7 @@ pub fn test_import() {
 // imported symbols are available anywhere in this module
 use mod_a;
 
+#[test]
 pub fn test_object() {
     let o = mod_a::Obj::new(true);
     assert(o.get_t());
@@ -22,6 +24,7 @@ pub fn test_object() {
 
 use mod_a::poly_recursive;
 
+#[test]
 pub fn test_explicit_import() {
     let list = [];
     let count = poly_recursive(5, 123, list);
@@ -29,6 +32,7 @@ pub fn test_explicit_import() {
     assert(list[-1] == 123);
 }
 
+#[test]
 pub fn test_glob_import() {
     let c = choose(true);   
     assert(c == "abc");
@@ -41,6 +45,7 @@ use mod_c::*;
 use MATH::sin as SIN;
 use math as MATH;
 
+#[test]
 pub fn test_import_as() {
     MATH::sin(1.09);
     SIN(1.09);

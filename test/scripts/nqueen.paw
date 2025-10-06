@@ -36,8 +36,17 @@ fn nq_solve(n: int) -> int {
 			k = k - 1;
 		}
 	}
-	return m;
+	m
 }
+
+
+#[test]
+pub fn test() {
+    nq_solve(1);
+    nq_solve(2);
+    nq_solve(5);
+}
+
 
 pub fn main(args: [str]) {
     let n = if #args > 1 {

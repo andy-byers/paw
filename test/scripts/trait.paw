@@ -20,6 +20,7 @@ struct Int: InstanceGet + AssociatedGet {
     }
 }
 
+#[test]
 pub fn test_call_method() {
     let i = Int{value: 123};
     assert(i.get() == 123);
@@ -33,12 +34,14 @@ fn call_call_method<Ty: InstanceGet>(t: Ty) -> int {
     call_method(t)
 }
 
+#[test]
 pub fn test_indirect_call_method() {
     let i = Int{value: 42};
     assert(call_method(i) == 42);
     assert(call_call_method(i) == 42);
 }
 
+#[test]
 pub fn test_call_associated_fn() {
     assert(Int::get_default() == 42);
 }
@@ -51,6 +54,7 @@ fn call_call_both_functions<Ty: AssociatedGet + InstanceGet>(t: Ty) -> int {
     call_both_functions::<Ty>(t)
 }
 
+#[test]
 pub fn test_indirect_call_both_functions() {
     let i = Int{value: 123};
     assert(call_both_functions(i) == 123 + 42);
@@ -87,6 +91,7 @@ fn generics_not_in_signature<T: TestDefault>() -> str {
     T::default().get()
 }
 
+#[test]
 pub fn test_generics_not_in_signature() {
     assert(generics_not_in_signature::<TestDefaultStructA>() == "A");
     assert(generics_not_in_signature::<TestDefaultStructB>() == "B");

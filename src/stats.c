@@ -5,10 +5,10 @@
 #include "stats.h"
 #include "compile.h"
 
-struct Statistic *pawStats_new(struct Compiler *C, char const *name)
+struct Statistic *pawStats_new(paw_Env *P, Statistics *stats, char const *name)
 {
-    struct Statistic *stat = P_ALLOC(C, NULL, 0, sizeof(struct Statistic));
+    struct Statistic *stat = pawK_pool_alloc(P->pool, NULL, 0, sizeof(struct Statistic));
     *stat = (struct Statistic){.name = name};
-    Statistics_push(C, C->stats, stat);
+    Statistics_push(P, stats, stat);
     return stat;
 }

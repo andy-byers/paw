@@ -358,6 +358,7 @@ fn generics_not_in_signature<X: TestDefaultConcrete, T: TestDefault<X>>() -> X {
     T::default().get()
 }
 
+#[test]
 pub fn test_generics_not_in_signature() {
     assert(generics_not_in_signature::<TestDefaultStructInnerA, TestDefaultStructA<TestDefaultStructInnerA>>().value == "A");
     assert(generics_not_in_signature::<TestDefaultStructInnerB, TestDefaultStructB<TestDefaultStructInnerB>>().value == "B");

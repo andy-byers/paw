@@ -5,7 +5,9 @@
 #ifndef PAW_ERROR_H
 #define PAW_ERROR_H
 
-#include "compile.h"
+#include "core.h"
+#include "source.h"
+#include "str.h"
 
 enum ErrorKind {
     E_NONE = 0x100,
@@ -50,6 +52,7 @@ enum ErrorKind {
     E_EMPTY_STRUCT_BODY,
     E_EMPTY_VARIANT_FIELD_LIST,
     E_FUNCTION_TYPE_DECL,
+    E_INVALID_ANNOTATION_TYPE,
     E_EXPECTED_TYPE_ANNOTATION,
     E_RETURN_OUTSIDE_FUNCTION,
     E_CHAIN_OUTSIDE_FUNCTION,
@@ -170,7 +173,11 @@ enum ErrorKind {
     // code generation errors
     E_TOO_FAR_TO_JUMP,
     E_TOO_MANY_CONSTANTS,
+
+    E_CAPTURED_INOUT_ARG,
 };
+
+struct Compiler;
 
 // general errors
 _Noreturn void pawErr_unsupported(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *feature);
@@ -213,6 +220,7 @@ _Noreturn void pawErr_empty_enumeration(struct Compiler *C, Str const *modname, 
 _Noreturn void pawErr_empty_struct_body(struct Compiler *C, Str const *modname, struct SourceLoc loc);
 _Noreturn void pawErr_empty_variant_field_list(struct Compiler *C, Str const *modname, struct SourceLoc loc);
 _Noreturn void pawErr_function_type_decl(struct Compiler *C, Str const *modname, struct SourceLoc loc);
+_Noreturn void pawErr_invalid_annotation_type(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *name);
 _Noreturn void pawErr_expected_type_annotation(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *what, char const *name);
 _Noreturn void pawErr_too_many_elements(struct Compiler *C, Str const *modname, struct SourceLoc loc, char const *what, int limit);
 _Noreturn void pawErr_expected_toplevel_item(struct Compiler *C, Str const *modname, struct SourceLoc loc);
@@ -337,5 +345,29 @@ _Noreturn void pawErr_too_many_variables(struct Compiler *C, Str const *modname,
 // code generation errors
 _Noreturn void pawErr_too_far_to_jump(struct Compiler *C, Str const *modname, struct SourceLoc loc, int limit);
 _Noreturn void pawErr_too_many_constants(struct Compiler *C, Str const *modname, struct SourceLoc loc, int limit);
+
+_Noreturn void pawErr_captured_inout_arg(struct Compiler *C, Str const *modname, struct SourceLoc loc);
+
+// TODO: Use this for error messages, or something similar. It's a pain to maintain a function for each specific error.
+
+typedef struct ErrorHandler {
+    paw_Env *P;
+    Str const *modname;
+    Str const *message;
+    Str const *hint;
+    struct SourceLoc loc;
+} ErrorHandler;
+
+void pawErr_start(paw_Env *P);
+void pawErr_set_module_name(paw_Env *P, Str const *name);
+void pawErr_set_source_loc(paw_Env *P, struct SourceLoc loc);
+void pawErr_set_message(paw_Env *P, char const *fmt, ...);
+void pawErr_set_hint(paw_Env *P, char const *fmt, ...);
+void pawErr_finish(paw_Env *P);
+
+_Noreturn void pawErr_generic_error(paw_Env *P, Str const *modname, struct SourceLoc loc, char const *fmt, ...);
+
+// Convenience functions for throwing common errors
+_Noreturn void pawErr_exceeded_limit(paw_Env *P, Str const *modname, struct SourceLoc loc, char const *what, paw_Int limit);
 
 #endif // PAW_ERROR_H

@@ -14,6 +14,7 @@ fn check_match(target: Object<int>) -> int {
     };
 }
 
+#[test]
 pub fn test_match() {
     assert(check_match(Object{value: 0}) == 3);
     assert(check_match(Object{value: 1}) == 1);
@@ -30,6 +31,7 @@ fn check_nested_match(target: Option<Object<int>>) -> int {
     };
 }
 
+#[test]
 pub fn test_nested_match() {
     let check = check_nested_match;
     assert(check(Option::None) == 1);
@@ -58,6 +60,7 @@ fn check_many_fields(target: ManyFields) -> int {
     };
 }
 
+#[test]
 pub fn test_many_fields() {
     let check = check_many_fields;
     assert(check(ManyFields{a: 1, b: 2, c: 3, d: 4, e: 5}) == 1);

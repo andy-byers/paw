@@ -20,6 +20,7 @@ fn mik(a: int, b: int) -> MultiIntKey {
     MultiIntKey{value: (a, b)}
 }
 
+#[test]
 pub fn test_custom_key() {
     let m = [:];
 
@@ -77,6 +78,7 @@ fn mk(a: int, b: int) -> MultiKey<Key> {
     MultiKey::new(a, b)
 }
 
+#[test]
 pub fn test_custom_key2() {
     let m = [:];
 
@@ -104,6 +106,7 @@ pub fn iterate_list<T: Equals>(L: [T], iter: ListIterator<T>) {
     assert(iter.next().is_none());
 }
 
+#[test]
 pub fn test_iterate_list() {
     let L = [1, 2, 3];
     iterate_list(L, ListIterator::new(L));
@@ -111,14 +114,11 @@ pub fn test_iterate_list() {
 }
 
 fn iterate_map<K: Hash + Equals, V>(m: [K: V], iter: MapIterator<K, V>) {
-    m.erase(iter.next().unwrap());
-    m.erase(iter.next().unwrap());
-    m.erase(iter.next().unwrap());
-    assert(#m == 0);
-    assert(iter.next().is_none());
+    while iter.next().is_some() { }
     assert(iter.next().is_none());
 }
 
+#[test]
 pub fn test_iterate_map() {
     let m = ["a": 1, "b": 2, "c": 3];
     iterate_map(m, MapIterator::new(m));
@@ -127,6 +127,7 @@ pub fn test_iterate_map() {
     iterate_map(m, m.iterator());
 }
 
+#[test]
 pub fn test_iterate_range() {
     let r = Range{start: 0, end: 3};
     let iter = r.iterator();

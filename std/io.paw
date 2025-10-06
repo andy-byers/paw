@@ -9,12 +9,12 @@ pub type Result<T> = result::Result<T, Error>;
 pub struct File {
     inner: (),
 
-    #[extern] pub fn open(pathname: str, mode: str) -> Result<Self>;
-    #[extern] pub fn seek(self, offset: int, whence: Seek) -> Result<()>;
-    #[extern] pub fn tell(self) -> Result<int>;
-    #[extern] pub fn read(self, size: int) -> Result<str>;
-    #[extern] pub fn write(self, data: str) -> Result<int>;
-    #[extern] pub fn flush(self) -> Result<()>;
+    #[extern_std] pub fn open(pathname: str, mode: str) -> Result<Self>;
+    #[extern_std] pub fn seek(self, offset: int, whence: Seek) -> Result<()>;
+    #[extern_std] pub fn tell(self) -> Result<int>;
+    #[extern_std] pub fn read(self, size: int) -> Result<str>;
+    #[extern_std] pub fn write(self, data: str) -> Result<int>;
+    #[extern_std] pub fn flush(self) -> Result<()>;
 }
 
 pub inline enum Seek {
@@ -25,7 +25,7 @@ pub inline enum Seek {
 
 pub inline enum Error {
     NotFound,
-    FileTooLarge,
+    TooLarge,
     PermissionDenied,
     AlreadyExists,
     NotOpened,
@@ -36,7 +36,7 @@ pub inline enum Error {
     pub fn to_str(self) -> str {
         match self {
             Error::NotFound => "not found",
-            Error::FileTooLarge => "file too large",
+            Error::TooLarge => "too large",
             Error::PermissionDenied => "permission denied",
             Error::AlreadyExists => "already exists",
             Error::NotOpened => "not opened",

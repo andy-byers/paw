@@ -1,78 +1,134 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
-//
-// list.h: List<T> API
-//
-// List<T> memory layout:
-//
-//      offset | size | name
-//     --------|------|--------
-//       0     | 8    | policy
-//       8     | 8    | begin
-//      16     | 8    | end
-//      24     | 8    | bound
-//
 
 #ifndef PAW_LIST_H
 #define PAW_LIST_H
 
-#include "value.h"
+#include "core.h"
+#include "pool.h"
 
-#define LIST_ZELEMENT(List_) (V_INT((List_)->elems[0]))
-#define LIST_ELEMENT_LIMIT(List_) (PAW_SIZE_MAX / LIST_ZELEMENT(List_))
-#define LIST_BEGIN(List_) (*CAST(Value **, &(List_)->elems[1].p))
-#define LIST_END(List_) (*CAST(Value **, &(List_)->elems[2].p))
-#define LIST_BOUND(List_) (*CAST(Value **, &(List_)->elems[3].p))
+#define K_LIST_MIN (1 << 3)
+#define K_LIST_MAX (1 << 28)
 
-Tuple *pawList_new(paw_Env *P, int zelem, paw_Int capacity, Value *out);
-void pawList_free(paw_Env *P, Tuple *t);
-void pawList_reserve(paw_Env *P, Tuple *t, size_t length);
-void pawList_resize(paw_Env *P, Tuple *t, size_t length);
-void pawList_insert(paw_Env *P, Tuple *t, paw_Int index, Value const *pvalue);
-void pawList_push(paw_Env *P, Tuple *t, Value const *pvalue);
-void pawList_get_range(paw_Env *P, Tuple const *t, paw_Int i, paw_Int j, Tuple *out);
-void pawList_set_range(paw_Env *P, Tuple *a, paw_Int i, paw_Int j, Tuple const *b, Value *rtemp);
-void pawList_concat(paw_Env *P, Tuple const *a, Tuple const *b, Value *rout);
-void pawList_pop(paw_Env *P, Tuple *t, paw_Int index);
+// TODO: Don't need context parameter after creation since pool is stored internally
 
-inline static paw_Int pawList_raw_length(Tuple const *t)
-{
-    return PAW_CAST_INT(LIST_END(t) - LIST_BEGIN(t));
-}
+// Generate a structure type and methods for a list containing nodes of a given
+// type Value_. Value_ can be any type, so long as it is "trivially copiable".
+#define DEFINE_LIST(Context_, List_, Value_)                                                                                       \
+    typedef struct List_ {                                                                                                         \
+        struct Pool *pool;                                                                                                         \
+        Value_ *data;                                                                                                              \
+        int count;                                                                                                                 \
+        int alloc;                                                                                                                 \
+    } List_;                                                                                                                       \
+    _Static_assert(K_LIST_MAX < PAW_SIZE_MAX / sizeof(Value_),                                                                     \
+                   "maximum list is too large");                                                                                   \
+    static inline List_ *List_##_new_from(Context_ *ctx, struct Pool *pool)                                                        \
+    {                                                                                                                              \
+        PAW_UNUSED(ctx);                                                                                                           \
+        List_ *list = (List_ *)pawP_alloc(pool, NULL, 0, sizeof(List_));                                                           \
+        list->pool = pool;                                                                                                         \
+        list->data = NULL;                                                                                                         \
+        list->count = 0;                                                                                                           \
+        list->alloc = 0;                                                                                                           \
+        return list;                                                                                                               \
+    }                                                                                                                              \
+    static inline List_ *List_##_new(Context_ *ctx)                                                                                \
+    {                                                                                                                              \
+        return List_##_new_from(ctx, ctx->pool);                                                                                   \
+    }                                                                                                                              \
+    static inline void List_##_delete(Context_ *ctx, List_ *list)                                                                  \
+    {                                                                                                                              \
+        PAW_UNUSED(ctx);                                                                                                           \
+        pawP_alloc(list->pool, list->data, (size_t)list->alloc * sizeof(list->data[0]), 0);                                        \
+        pawP_alloc(list->pool, list, sizeof(List_), 0);                                                                            \
+    }                                                                                                                              \
+    static inline Value_ List_##_first(List_ const *list)                                                                          \
+    {                                                                                                                              \
+        paw_assert(list->count > 0);                                                                                               \
+        return list->data[0];                                                                                                      \
+    }                                                                                                                              \
+    static inline Value_ List_##_last(List_ const *list)                                                                           \
+    {                                                                                                                              \
+        paw_assert(list->count > 0);                                                                                               \
+        return list->data[list->count - 1];                                                                                        \
+    }                                                                                                                              \
+    static inline Value_ List_##_get(List_ const *list, int index)                                                                 \
+    {                                                                                                                              \
+        paw_assert(0 <= index && index < list->count);                                                                             \
+        return list->data[index];                                                                                                  \
+    }                                                                                                                              \
+    static inline void List_##_set(List_ *list, int index, Value_ value)                                                           \
+    {                                                                                                                              \
+        paw_assert(0 <= index && index < list->count);                                                                             \
+        list->data[index] = value;                                                                                                 \
+    }                                                                                                                              \
+    static inline void List_##_push(Context_ *ctx, List_ *list, Value_ value)                                                      \
+    {                                                                                                                              \
+        PAW_UNUSED(ctx);                                                                                                           \
+        list->data = (Value_ *)pawK_list_ensure_one(list->pool, list->data, sizeof(list->data[0]), list->count, &list->alloc);     \
+        list->data[list->count++] = value;                                                                                         \
+    }                                                                                                                              \
+    static inline void List_##_pop(List_ *list)                                                                                    \
+    {                                                                                                                              \
+        paw_assert(list->count > 0);                                                                                               \
+        --list->count;                                                                                                             \
+    }                                                                                                                              \
+    static inline void List_##_insert(Context_ *ctx, List_ *list, int index, Value_ value)                                         \
+    {                                                                                                                              \
+        PAW_UNUSED(ctx);                                                                                                           \
+        paw_assert(0 <= index && index <= list->count);                                                                            \
+        list->data = (Value_ *)pawK_list_ensure_one(list->pool, list->data, sizeof(list->data[0]), list->count, &list->alloc);     \
+        memmove(list->data + index + 1, list->data + index, (size_t)(list->count - index) * sizeof(list->data[0]));                \
+        list->data[index] = value;                                                                                                 \
+        ++list->count;                                                                                                             \
+    }                                                                                                                              \
+    static inline Value_ List_##_remove(List_ *list, int index)                                                                    \
+    {                                                                                                                              \
+        paw_assert(0 <= index && index < list->count);                                                                             \
+        Value_ value = List_##_get(list, index);                                                                                   \
+        memmove(list->data + index, list->data + index + 1, (size_t)(list->count - index - 1) * sizeof(list->data[0]));            \
+        --list->count;                                                                                                             \
+        return value;                                                                                                              \
+    }                                                                                                                              \
+    static inline Value_ List_##_swap_remove(List_ *list, int index)                                                               \
+    {                                                                                                                              \
+        paw_assert(0 <= index && index < list->count);                                                                             \
+        Value_ value = List_##_get(list, index);                                                                                   \
+        K_LIST_AT(list, index) = List_##_last(list);                                                                               \
+        --list->count;                                                                                                             \
+        return value;                                                                                                              \
+    }                                                                                                                              \
+    static inline void List_##_reserve(Context_ *ctx, List_ *list, int count)                                                      \
+    {                                                                                                                              \
+        PAW_UNUSED(ctx);                                                                                                           \
+        list->data = (Value_ *)pawK_list_reserve(list->pool, list->data, sizeof(list->data[0]), &list->alloc, count);              \
+    }                                                                                                                              \
+    static inline void List_##_resize(Context_ *ctx, List_ *list, int count)                                                       \
+    {                                                                                                                              \
+        List_##_reserve(ctx, list, count);                                                                                         \
+        list->count = count;                                                                                                       \
+    }
 
-static inline paw_Int pawList_length(paw_Env *P, Tuple const *t)
-{
-    return pawList_raw_length(t) / LIST_ZELEMENT(t);
-}
 
-static inline paw_Int pawList_offset(Tuple const *t, paw_Int index)
-{
-    paw_assert(0 <= index && index <= LIST_ELEMENT_LIMIT(t));
-    return index * LIST_ZELEMENT(t);
-}
+//
+// Macros for working with a list
+//
+#define K_LIST_AT(List_, Index_) ((List_)->data[Index_])
+#define K_LIST_FIRST(List_) (K_LIST_AT(List_, 0))
+#define K_LIST_LAST(List_) (K_LIST_AT(List_, (List_)->count - 1))
+#define K_LIST_FOREACH(List_, Ptr_) \
+    for (int i_ = 0; i_ < (List_)->count && (Ptr_ = (List_)->data + i_ /* always 1 */); ++i_)
+#define K_LIST_ENUMERATE(List_, Iter_, Ptr_) \
+    for (Iter_ = 0; Iter_ < (List_)->count && (Ptr_ = (List_)->data + Iter_ /* always 1 */); ++Iter_)
+#define K_LIST_ZIP(ListA_, PtrA_, ListB_, PtrB_)                     \
+    for (int i_ = ((PtrA_) = (ListA_)->data, (PtrB_) = (ListB_)->data, 0); \
+            i_ < (ListA_)->count && i_ < (ListB_)->count; ++i_, ++(PtrA_), ++(PtrB_))
+#define K_LIST_BEGIN(List_) ((List_)->data)
+#define K_LIST_END(List_) ((List_)->data + (List_)->count - 1)
 
-// Return a pointer to the element at the given "index"
-inline static Value *pawList_at(Tuple const *t, paw_Int index)
-{
-    paw_Int const offset = pawList_offset(t, index);
-    paw_assert(offset < pawList_raw_length(t));
-
-    return &LIST_BEGIN(t)[offset];
-}
-
-inline static Value *pawList_get(paw_Env *P, Tuple *t, paw_Int index)
-{
-    size_t const length = CAST_SIZE(pawList_length(P, t));
-    size_t const absolute = pawV_abs_index(index, length);
-    if (absolute < length)
-        return &LIST_BEGIN(t)[absolute * LIST_ZELEMENT(t)];
-    return NULL;
-}
-
-inline static paw_Bool pawList_iter(paw_Env *P, Tuple const *t, paw_Int *itr)
-{
-    return ++*itr < pawList_length(P, t);
-}
+void *pawK_list_reserve(struct Pool *pool, void *data, size_t zelem, int *palloc, int target);
+void *pawK_list_ensure_one(struct Pool *pool, void *data, size_t zelem, int count, int *palloc);
 
 #endif // PAW_LIST_H

@@ -106,7 +106,6 @@ struct Lex {
 
     int modno;
     Str *modname;
-    Tuple *strings;
     struct Ast *ast;
 
     paw_Reader input;

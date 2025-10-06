@@ -7,7 +7,7 @@
 
 #include "code.h"
 #include "env.h"
-#include "paw.h"
+#include "core.h"
 
 #if defined(PAW_DEBUG_LOG)
 #define PAWD_LOG(P, ...) pawD_debug_log(P, __VA_ARGS__)
@@ -15,13 +15,9 @@
 #define PAWD_LOG(P, ...)
 #endif
 
-int pawD_line_number(CallFrame const *cf, OpCode const *pc);
 void pawD_debug_log(paw_Env *P, char const *fmt, ...);
 
-char const *paw_op_name(Op op);
 void pawD_dump_defs(paw_Env *P);
-void paw_dump_opcode(OpCode opcode);
-void paw_dump_source(paw_Env *P, Proto *proto);
 void paw_dump_stack(paw_Env *P);
 void paw_stacktrace(paw_Env *P);
 void paw_dump_value(Value v, paw_Type type);

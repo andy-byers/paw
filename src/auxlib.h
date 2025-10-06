@@ -5,7 +5,7 @@
 #ifndef PAW_AUX_H
 #define PAW_AUX_H
 
-#include "paw.h"
+#include "core.h"
 #include "util.h"
 #include "value.h"
 #include <string.h>
@@ -13,7 +13,6 @@
 #define BUFFER_LIMIT 512
 
 typedef struct Buffer {
-    ptrdiff_t boxloc;
     char *data;
     size_t size;
     size_t alloc;
@@ -24,8 +23,7 @@ typedef struct Buffer {
 #define L_IS_BOXED(buf) ((buf)->data != (buf)->stack)
 
 void pawL_init_buffer(paw_Env *P, Buffer *buf);
-void pawL_discard_result(paw_Env *P, Buffer *buf);
-void pawL_push_result(paw_Env *P, Buffer *buf);
+Str *pawL_buffer_finish(paw_Env *P, Buffer *buf);
 void pawL_buffer_resize(paw_Env *P, Buffer *buf, size_t n);
 
 #define L_ADD_LITERAL(P, buf, s) pawL_add_nstring(P, buf, s "", PAW_LENGTHOF(s))

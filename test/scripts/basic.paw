@@ -11,6 +11,7 @@ pub fn function_syntax
         + b;
 }
 
+#[test]
 pub fn test_syntax() 
 {
     let x: int = 0;
@@ -22,12 +23,14 @@ pub fn test_syntax()
     assert(24 == function_syntax(1, 23));
 }
 
+#[test]
 pub fn test_expr_stmts() {
     let x = 1;
     2;
     x + 3;
 }
 
+#[test]
 pub fn test_arguments() {
     let f = || {};
     f();
@@ -53,6 +56,7 @@ pub fn test_arguments() {
     assert(f(0, 1, 2) == 2);
 }
 
+#[test]
 pub fn test_return_must_be_last() {
     let f = || -> int {
         {
@@ -64,6 +68,7 @@ pub fn test_return_must_be_last() {
     assert(f() == 42);
 }
 
+#[test]
 pub fn test_short_circuiting() {
     let counts = (0, 0, 0);
     let check2 = |a: int, b: int| {
@@ -134,11 +139,4 @@ pub fn test_short_circuiting() {
     check3(1, 1, 1);
     assert(and_or(1, 1, 1));
     check3(1, 1, 0);
-}
-
-pub fn test_containers() {
-    let v = [0, 1, 2][1];
-    assert(v == 1);
-    let m = [0: 0, 1: 1, 2: 2][1];
-    assert(m == 1);
 }

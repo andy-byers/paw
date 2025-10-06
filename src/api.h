@@ -5,7 +5,7 @@
 #ifndef PAW_API_H
 #define PAW_API_H
 
-#include "paw.h"
+#include "core.h"
 #include "util.h"
 
 // Public API checks based off those in Lua

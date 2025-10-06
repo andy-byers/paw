@@ -13,7 +13,8 @@ struct Statistic {
 };
 
 struct Compiler;
+struct Statistics;
 
-struct Statistic *pawStats_new(struct Compiler *C, char const *name);
+struct Statistic *pawStats_new(paw_Env *P, struct Statistics *stats, char const *name);
 
 #endif // PAW_STATS_H

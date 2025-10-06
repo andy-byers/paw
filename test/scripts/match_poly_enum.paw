@@ -13,6 +13,7 @@ fn check_match_without_fields_concrete(target: WithoutFields<int>) -> int {
     }
 }
 
+#[test]
 pub fn test_without_fields_concrete() {
     let check = check_match_without_fields_concrete;
     assert(check(WithoutFields::First) == 1);
@@ -26,6 +27,7 @@ fn check_match_without_fields<Ty>(target: WithoutFields<Ty>) -> int {
     }
 }
 
+#[test]
 pub fn test_without_fields() {
     let check = check_match_without_fields::<int>;
     assert(check(WithoutFields::First) == 1);
@@ -40,6 +42,7 @@ fn check_match_with_fields_concrete(target: Option<int>) -> int {
     }
 }
 
+#[test]
 pub fn test_with_fields_concrete() {
     let check = check_match_with_fields_concrete;
     assert(check(Some(42)) == 1);
@@ -54,6 +57,7 @@ fn check_match_with_fields<Ty>(target: Option<Ty>) -> Result<Ty, ()> {
     }
 }
 
+#[test]
 pub fn test_with_fields() {
     let check = check_match_with_fields::<int>;
     assert(check(Some(1)).unwrap() == 1);
@@ -69,6 +73,7 @@ fn check_match_nested_fields_poly(target: Option<Option<int>>) -> int {
     }
 }
 
+#[test]
 pub fn test_nested_fields_poly() {
     let check = check_match_nested_fields_poly;
     assert(check(None) == 0);
@@ -114,6 +119,7 @@ fn describe(target: Option<(int, Nat)>) -> str {
     }
 }
 
+#[test]
 pub fn test_describe() {
     let one = Nat::Succ(Nat::Zero);
     let two = Nat::Succ(one);

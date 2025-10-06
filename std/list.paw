@@ -3,33 +3,54 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
 pub struct List<T>: Iterate<ListIterator<T>, T> {
-    #[extern] pub fn length(self) -> int;
-    #[extern] pub fn get(self, index: int) -> Option<T>;
-    #[extern] pub fn set(self, index: int, value: T);
-    #[extern] pub fn push(self, value: T);
-    #[extern] pub fn insert(self, index: int, value: T);
-    #[extern] pub fn remove(self, index: int);
-    #[extern] pub fn pop(self) -> T;
+    // Transform negative indices into offsets from the end of the list,
+    // where more negative means farther away from the end.
+    fn absolute_index(self, index: int) -> Option<int> {
+        if index < 0 { 
+            index += #self; 
+        }
+        if 0 <= index && index < #self {
+            Some(index)
+        } else {
+            None
+        }
+    }
+
+    pub fn length(self) -> int {
+        #self
+    }
+
+    pub fn get(self, index: int) -> Option<T> {
+        match self.absolute_index(index) {
+            Some(i) => Some(self[i]),
+            None => None,
+        }
+    }
 
     pub fn get_or(self, index: int, default: T) -> T {
         match self.get(index) {
             Some(value) => value,
-            _ => default,
+            None => default,
         }
     }
+
+    #[extern] pub fn push(self, value: T);
+    #[extern] pub fn pop(self) -> T;
+    #[extern] pub fn insert(self, index: int, value: T);
+    #[extern] pub fn remove(self, index: int) -> T;
 
     pub fn iterator(self) -> ListIterator<T> {
         ListIterator::new(self)
     }
 }
 
-pub struct ListIterator<T>: Advance<T> {
+pub inline struct ListIterator<T>: Advance<T> {
     list: [T],
     index: int,
     pub fn new(list: [T]) -> Self {
         Self{list, index: 0}
     }
-    pub fn next(self) -> Option<T> {
+    pub fn next(&self) -> Option<T> {
         if self.index < #self.list {
             let i = self.index;
             self.index = i + 1;

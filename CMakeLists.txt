@@ -13,10 +13,33 @@ if (CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
     set(MAIN_PROJECT On)
 endif()
 
+set(PAW_LLVM_PATH "" CACHE PATH "Path to LLVM library")
+set(PAW_GC_DIR "" CACHE PATH "Path to BDWGC directory")
+set(PAW_CLANG_PATH "" CACHE PATH "Path to clang binary")
+set(PAW_BINARY_DIR "" CACHE PATH "Location of compilation artifacts")
+
+# TODO: installation support
+# TODO:   PAW_ROOT_DIR=("paw", "paw_stdc.o", <stdlib sources>)
+set(PAW_ROOT_DIR ${CMAKE_ROOT_DIR})
+
+if(PAW_LLVM_PATH)
+    find_package(LLVM REQUIRED CONFIG PATHS ${PAW_LLVM_PATH})
+else()
+    include(FetchContent)
+    FetchContent_Declare(llvm
+        GIT_REPOSITORY https://github.com/llvm/llvm-project
+        GIT_TAG llvmorg-21.1.2)
+    FetchContent_MakeAvailable(llvm)
+endif()
+
+add_definitions(${LLVM_DEFINITIONS})
+llvm_map_components_to_libnames(LLVM_LIBS 
+    core native passes support irreader)
+
+
 option(PAW_BuildFuzzers "Build the fuzz targets" Off)
 option(PAW_BuildTests "Build the tests" ${MAIN_PROJECT})
 
-# TODO: Install stdlib .paw files somewhere and use that path?
 set(PAW_PRELUDE_PATH "${CMAKE_SOURCE_DIR}/std/prelude.paw" CACHE STRING "Path to prelude module")
 set(PAW_STDLIB_PATH "${CMAKE_SOURCE_DIR}/std/" CACHE STRING "Path to standard library source files")
 set(PAW_STRESS 0 CACHE STRING "Enable expensive checks (supports up to level 2)")
@@ -33,10 +56,11 @@ else()
             INTERFACE m)
 endif()
 
+add_subdirectory(src/codegen)
+
 set(PAW_SOURCE_DIR ${PROJECT_SOURCE_DIR}/src)
 
 set(PAW_HEADER_FILES
-    ${PAW_SOURCE_DIR}/alloc.h
     ${PAW_SOURCE_DIR}/api.h
     ${PAW_SOURCE_DIR}/ast.h
     ${PAW_SOURCE_DIR}/auxlib.h
@@ -46,24 +70,19 @@ set(PAW_HEADER_FILES
     ${PAW_SOURCE_DIR}/debug.h
     ${PAW_SOURCE_DIR}/env.h
     ${PAW_SOURCE_DIR}/error.h
-    ${PAW_SOURCE_DIR}/gc.h
     ${PAW_SOURCE_DIR}/hir.h
     ${PAW_SOURCE_DIR}/ir_type.h
-    ${PAW_SOURCE_DIR}/layout.h
     ${PAW_SOURCE_DIR}/lex.h
     ${PAW_SOURCE_DIR}/lib.h
     ${PAW_SOURCE_DIR}/map.h
     ${PAW_SOURCE_DIR}/match.h
     ${PAW_SOURCE_DIR}/mem.h
     ${PAW_SOURCE_DIR}/mir.h
-    ${PAW_SOURCE_DIR}/opcode.h
     ${PAW_SOURCE_DIR}/os.h
     ${PAW_SOURCE_DIR}/parse.h
+    ${PAW_SOURCE_DIR}/pool.h
     ${PAW_SOURCE_DIR}/prefix.h
     ${PAW_SOURCE_DIR}/resolve.h
-    ${PAW_SOURCE_DIR}/regstack.h
-    ${PAW_SOURCE_DIR}/rt.h
-    ${PAW_SOURCE_DIR}/rtti.h
     ${PAW_SOURCE_DIR}/source.h
     ${PAW_SOURCE_DIR}/ssa.h
     ${PAW_SOURCE_DIR}/stats.h
@@ -75,7 +94,6 @@ set(PAW_HEADER_FILES
     ${PAW_SOURCE_DIR}/value.h)
 
 set(PAW_SOURCE_FILES
-    ${PAW_SOURCE_DIR}/alloc.c
     ${PAW_SOURCE_DIR}/api.c
     ${PAW_SOURCE_DIR}/ast.c
     ${PAW_SOURCE_DIR}/auxlib.c
@@ -90,14 +108,12 @@ set(PAW_SOURCE_FILES
     ${PAW_SOURCE_DIR}/env.c
     ${PAW_SOURCE_DIR}/error.c
     ${PAW_SOURCE_DIR}/exhaustiveness.c
-    ${PAW_SOURCE_DIR}/gc.c
     ${PAW_SOURCE_DIR}/hir.c
     ${PAW_SOURCE_DIR}/import.c
     ${PAW_SOURCE_DIR}/instantiate.c
     ${PAW_SOURCE_DIR}/ir_type.c
     ${PAW_SOURCE_DIR}/kfold.c
     ${PAW_SOURCE_DIR}/kprop.c
-    ${PAW_SOURCE_DIR}/layout.c
     ${PAW_SOURCE_DIR}/lex.c
     ${PAW_SOURCE_DIR}/list.c
     ${PAW_SOURCE_DIR}/lib.c
@@ -111,12 +127,8 @@ set(PAW_SOURCE_FILES
     ${PAW_SOURCE_DIR}/monomorphize.c
     ${PAW_SOURCE_DIR}/os.c
     ${PAW_SOURCE_DIR}/parse.c
-    ${PAW_SOURCE_DIR}/prelude.c
-    ${PAW_SOURCE_DIR}/regalloc.c
-    ${PAW_SOURCE_DIR}/regstack.c
+    ${PAW_SOURCE_DIR}/pool.c
     ${PAW_SOURCE_DIR}/resolve.c
-    ${PAW_SOURCE_DIR}/rt.c
-    ${PAW_SOURCE_DIR}/rtti.c
     ${PAW_SOURCE_DIR}/source.c
     ${PAW_SOURCE_DIR}/ssa.c
     ${PAW_SOURCE_DIR}/stats.c
@@ -125,33 +137,30 @@ set(PAW_SOURCE_FILES
     ${PAW_SOURCE_DIR}/type_folder.c
     ${PAW_SOURCE_DIR}/typeck.c
     ${PAW_SOURCE_DIR}/unify.c
-    ${PAW_SOURCE_DIR}/unbox.c
     ${PAW_SOURCE_DIR}/util.c
-    ${PAW_SOURCE_DIR}/value.c
-    ${PAW_STDLIB_PATH}/list.c
-    ${PAW_STDLIB_PATH}/io.c
-    ${PAW_STDLIB_PATH}/map.c
-    ${PAW_STDLIB_PATH}/math.c
-    ${PAW_STDLIB_PATH}/prelude.c)
+    ${PAW_SOURCE_DIR}/value.c)
 
 # TODO: Paw really needs better organization. At least split off a "compiler" directory to hold the numerous compiler source files
 add_library(paw STATIC)
+target_include_directories(paw 
+    PRIVATE ${LLVM_INCLUDE_DIRS})
+target_link_libraries(paw 
+    PRIVATE ${LLVM_LIBS})
 target_sources(paw
     PUBLIC  ${PAW_HEADER_FILES}
     PRIVATE ${PAW_SOURCE_FILES})
 target_include_directories(paw
     PUBLIC ${PAW_SOURCE_DIR})
+# TODO: use PAW_ROOT_DIR to compute location of stdlib files, need to copy into install dir
 target_compile_definitions(paw
     PUBLIC PAW_PRELUDE_PATH="${PAW_PRELUDE_PATH}"
            PAW_STDLIB_PATH="${PAW_STDLIB_PATH}"
+           PAW_CLANG_PATH="${PAW_CLANG_PATH}"
+           PAW_ROOT_DIR="${PAW_ROOT_DIR}"
+           PAW_GC_DIR="${PAW_GC_DIR}"
            PAW_STRESS=${PAW_STRESS})
-
-add_executable(pawc
-    ${PAW_SOURCE_DIR}/paw.c)
-target_link_libraries(pawc
-    PRIVATE paw_context paw)
-set_property(TARGET pawc 
-    PROPERTY OUTPUT_NAME paw)
+target_link_libraries(paw
+    PRIVATE paw_context paw_codegen)
 
 if(PAW_BuildTests)
     # Speed up stack overflow test

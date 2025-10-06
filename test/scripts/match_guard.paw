@@ -8,6 +8,7 @@ fn sign(value: int) -> int {
     }
 }
 
+#[test]
 pub fn test_guard() {
     assert(sign(-100) == -1);
     assert(sign(-1) == -1);
@@ -26,6 +27,7 @@ fn check_guard_2(value: Option<int>) -> int {
     }
 }
 
+#[test]
 pub fn test_guard_2() {
     let check = check_guard_2;
     assert(check(Option::Some(100)) == 1);
@@ -42,6 +44,7 @@ fn check_guard_3(value: (int, int)) -> int {
     }
 }
 
+#[test]
 pub fn test_guard_3() {
     let check = check_guard_3;
     assert(check((0, 0)) == 1);
@@ -59,6 +62,7 @@ fn check_special_case_1(i: int) -> int {
     }
 }
 
+#[test]
 pub fn test_special_case_1() {
     assert(check_special_case_1(1) == 1);
     assert(check_special_case_1(2) == 4);

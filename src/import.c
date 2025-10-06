@@ -71,25 +71,26 @@ static struct AstDecl *import_module(struct Resolver *R, Str *name, ImportBindin
 {
     int const *pmodno = ImportModules_get(R, R->modules, name);
     if (pmodno != NULL) return K_LIST_AT(R->ast->modules, *pmodno);
-
     DLOG(R, "importing module \"%s\"", name->text);
 
     paw_Env *P = ENV(R);
-    ptrdiff_t const saved = SAVE_OFFSET(P, P->top.p);
-    V_SET_OBJECT(P->top.p++, name);
+    struct FileReader fr;
+    if (pawL_start_import(P, name, &fr) == IMPORT_FOUND) {
+        ModuleInfo_push(R->C, R->C->modinfo, (struct Module){
+                    .pathname = fr.pathname,
+                    .dirname = fr.dirname,
+                    .name = name,
+                });
 
-    struct LoaderState *state = pawL_start_import(P);
-    if (state == NULL) return NULL; // not found
+        struct AstDecl *mod = pawP_parse_module(R->C, name, fr.f, &fr);
+        pawL_finish_import(P);
 
-    struct AstDecl *mod = pawP_parse_module(R->C, name, state->f, state);
-    pawL_finish_import(P);
-
-    P->top.p = RESTORE_POINTER(P, saved);
-
-    struct AstModuleDecl *m = AstGetModuleDecl(mod);
-    ImportModules_insert(R, R->modules, name, m->modno);
-    collect_items(R, mod, bindings);
-    return mod;
+        struct AstModuleDecl *m = AstGetModuleDecl(mod);
+        ImportModules_insert(R, R->modules, name, m->modno);
+        collect_items(R, mod, bindings);
+        return mod;
+    }
+    return NULL;
 }
 
 static struct AstDecl *get_module_by_number(struct Resolver *R, int modno)
@@ -140,7 +141,7 @@ struct ImportSymbol const *pawP_find_import_symbol(struct Resolver *R, struct Im
 
 static struct ImportSymbol const *lookup_in_scope(struct Resolver *R, struct ImportScope const *outer, struct PathCursor pc, enum Namespace ns);
 
-static struct ImportSymbol const *lookup_nested_type(struct Resolver *R, NodeId module_id, struct ImportSymbol const *psymbol, struct PathCursor pc)
+static struct ImportSymbol const *lookup_nested_type(struct Resolver *R, struct ImportSymbol const *psymbol, struct PathCursor pc)
 {
     pc_next(&pc);
     if (!pc_is_valid(pc))
@@ -155,7 +156,7 @@ static struct ImportSymbol const *lookup_nested_type(struct Resolver *R, NodeId 
 static struct ImportSymbol const *lookup_type_in_scope(struct Resolver *R, struct ImportScope const *outer, struct PathCursor pc)
 {
     struct ImportSymbol const *result = pawP_find_import_symbol(R, outer, pc, NAMESPACE_TYPE);
-    if (result != NULL) return lookup_nested_type(R, outer->id, result, pc);
+    if (result != NULL) return lookup_nested_type(R, result, pc);
     return result;
 }
 
@@ -466,13 +467,15 @@ static paw_Bool resolve_import_in(struct Resolver *R, struct ImportScope const *
     return changed;
 }
 
-#define FOREACH_INAME(Scope_, Key_, Value_, Action_)                                \
+#define FOREACH_INAME(Scope_, Key_, Value_, Action_)                               \
     {                                                                              \
         ImportNamesIterator names_iter_;                                           \
         ImportNamesIterator_init(Scope_, &names_iter_);                            \
         while (ImportNamesIterator_is_valid(&names_iter_)) {                       \
             Str const *Key_ = ImportNamesIterator_key(&names_iter_);               \
             struct ImportName *Value_ = *ImportNamesIterator_valuep(&names_iter_); \
+            PAW_UNUSED(Key_);                                                      \
+            PAW_UNUSED(Value_);                                                    \
             Action_                                                                \
             ImportNamesIterator_next(&names_iter_);                                \
         }                                                                          \
@@ -577,6 +580,7 @@ static paw_Bool resolve_glob_imports(struct Resolver *R, ImportBindings *binding
         if (resolve_glob_in(R, source, target, pb)) {
             changed = PAW_TRUE;
         } else {
+            // TODO: This causes many more system calls than necessary (to check existence of files)
             Str *name = K_LIST_FIRST(pb->path.segments).ident.name;
             if (get_module_by_name(R, name) == NULL)
                 import_module(R, name, bindings);
@@ -602,9 +606,9 @@ static void validate_bindings(struct Resolver *R, ImportBindings *bindings)
 
 static void resolve_imports(struct Resolver *R, ImportBindings *bindings)
 {
-    while (resolve_module_prefixes(R, bindings)
-            || resolve_explicit_imports(R, bindings)
-            || resolve_glob_imports(R, bindings));
+    while (resolve_explicit_imports(R, bindings)
+            || resolve_glob_imports(R, bindings)
+            || resolve_module_prefixes(R, bindings));
 
     validate_bindings(R, bindings);
 }
@@ -620,8 +624,5 @@ void pawP_resolve_imports(struct Resolver *R)
     collect_items(R, main, bindings);
     resolve_imports(R, bindings);
 
-    if (pawP_push_callback(R->C, "paw.on_build_ast")) {
-        paw_push_rawptr(ENV(R), R->ast);
-        paw_call(ENV(R), 1);
-    }
+    pawP_callback(R->C, "paw.on_build_ast", R->ast);
 }

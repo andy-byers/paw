@@ -11,8 +11,9 @@
 #ifndef PAW_LIB_H
 #define PAW_LIB_H
 
-#include "paw.h"
+#include "core.h"
 
+// TODO: use the enum and list of names instead
 #define PAWL_PRELUDE_NAME "prelude"
 #define PAWL_OPS_NAME "ops"
 #define PAWL_LIST_NAME "list"
@@ -22,37 +23,63 @@
 #define PAWL_MATH_NAME "math"
 #define PAWL_IO_NAME "io"
 
-// Evaluates to a path to the given standard library module's source code
-#define PAWL_STDLIB_PATH(Module_) PAW_STDLIB_PATH PAW_FOLDER_SEPS Module_ ".paw"
+struct Str;
 
-struct LoaderState {
-    paw_Reader f;
+enum pawL_StdModules {
+    PAWL_STD_PRELUDE,
+    PAWL_STD_OPS,
+    PAWL_STD_LIST,
+    PAWL_STD_MAP,
+    PAWL_STD_OPTION,
+    PAWL_STD_RESULT,
+    PAWL_STD_IO,
+    PAWL_STD_MATH,
+
+    PAWL_NUM_STD_MODULES
 };
+
+static char const *pawL_StdNames[PAWL_NUM_STD_MODULES] = {
+    [PAWL_STD_PRELUDE] = "prelude",
+    [PAWL_STD_OPS] = "ops",
+    [PAWL_STD_LIST] = "list",
+    [PAWL_STD_MAP] = "map",
+    [PAWL_STD_OPTION] = "option",
+    [PAWL_STD_RESULT] = "result",
+    [PAWL_STD_IO] = "io",
+    [PAWL_STD_MATH] = "math",
+};
+
+paw_Bool pawL_is_std_name(char const *name);
+
+struct FileReader {
+    char data[512];
+    struct Str const *pathname;
+    struct Str const *dirname;
+    struct File *file;
+    paw_Reader f;
+    paw_Bool err;
+};
+
 
 // Load the base library
 void pawL_init(paw_Env *P);
 void pawL_uninit(paw_Env *P);
 
 // Functions for loading and compiling source code
-int pawL_load_file(paw_Env *P, char const *name, char const *pathname);
-int pawL_load_nchunk(paw_Env *P, char const *name, char const *source, size_t length);
-int pawL_load_chunk(paw_Env *P, char const *name, char const *source);
-void pawL_load_symbols(paw_Env *P);
+int pawL_load_file(paw_Env *P, char const *modname, char const *pathname, char const *cwd);
+int pawL_load_nchunk(paw_Env *P, char const *modname, char const *source, size_t length);
+int pawL_load_chunk(paw_Env *P, char const *modname, char const *source);
 
 void pawL_push_symbols_map(paw_Env *P);
 void pawL_push_modules_map(paw_Env *P);
 
-void pawL_new_fn(paw_Env *P, paw_Function fn, int nup);
 int pawL_register_fn(paw_Env *P, char const *name, paw_Function fn, int nup);
 
-struct LoaderState *pawL_start_import(paw_Env *P);
+#define IMPORT_FOUND 1
+#define IMPORT_NOT_FOUND 0
+int pawL_start_import(paw_Env *P, struct Str const *modname, struct FileReader *result);
 void pawL_finish_import(paw_Env *P);
 
 void pawL_close_loader(paw_Env *P, void *state);
-void *pawL_chunk_reader(paw_Env *P, char const *source, size_t length);
-void *pawL_file_reader(paw_Env *P, char const *pathname);
-void pawL_add_extern_value(paw_Env *P, char const *modname, char const *name);
-void pawL_add_extern_fn(paw_Env *P, char const *modname, char const *name, paw_Function fn);
-void pawL_add_extern_method(paw_Env *P, char const *modname, char const *self, char const *name, paw_Function fn);
 
 #endif // PAW_LIB_H

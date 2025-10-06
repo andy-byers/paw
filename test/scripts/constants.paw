@@ -31,6 +31,7 @@ fn fold_int_special_cases(i: int) {
     assert(i ^ i == 0);
 }
 
+#[test]
 pub fn test_fold_int_special_cases() {
     fold_int_special_cases(123);
     fold_int_special_cases(-456);
@@ -51,6 +52,7 @@ fn fold_float_special_cases(f: float) {
 
 }
 
+#[test]
 pub fn test_fold_float_special_cases() {
     fold_float_special_cases(12.3);
     fold_float_special_cases(-45.6);
@@ -61,6 +63,7 @@ fn fold_str_special_cases(s: str) {
     assert("" ++ s == s);
 }
 
+#[test]
 pub fn test_fold_str_special_cases() {
     fold_str_special_cases("abc");
 }

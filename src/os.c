@@ -5,11 +5,13 @@
 
 #include "api.h"
 #include "call.h"
+#include "env.h"
 #include "mem.h"
 #include "os.h"
 #include "util.h"
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #define INTR_TIMEOUT 100
 
@@ -31,16 +33,13 @@ paw_Bool pawO_is_open(File const *file)
 
 void pawO_error(paw_Env *P)
 {
-    paw_push_str(P, strerror(errno));
+//TODO    paw_push_str(P, strerror(errno));
     pawC_throw(P, PAW_ESYSTEM);
 }
 
 File *pawO_new_file(paw_Env *P)
 {
-    Value *pv = pawC_push0(P);
-    Foreign *f = pawV_new_foreign(P, sizeof(File), 0, VBOX_FILE, pv);
-
-    File *file = f->data;
+    File *file = P->alloc(P, NULL, 0, sizeof *file);
     *file = (File){0};
     return file;
 }
@@ -156,4 +155,23 @@ File *pawO_detach_file(paw_Env *P, File *src)
 void pawO_free_file(paw_Env *P, File *file)
 {
     pawM_free(P, file);
+}
+
+char const *pawOs_find_last_sep(char const *s, size_t n, size_t *pn)
+{
+    paw_assert(n > 0);
+    char const *s0 = s;
+    s += n;
+    *pn = 0;
+
+    do {
+        --s;
+        ++*pn;
+        char const *q = PAW_FOLDER_SEPS;
+        while (*q != '\0') {
+            if (*q++ == *s)
+                return s;
+        }
+    } while (s != s0);
+    return NULL;
 }

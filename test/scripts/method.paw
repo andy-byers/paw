@@ -10,11 +10,18 @@ struct Struct {
     pub fn get(self) -> int {
         self.value
     }
+
+    pub fn assign(&self, rhs: Self) {
+        self = rhs;
+    }
 }
 
-pub fn test_struct_methods() {
+#[test]
+pub fn test_basic_methods() {
     let x = Struct::new(123);
     assert(x.get() == 123);
+    x.assign(Struct::new(456));
+    assert(x.get() == 456);
 }
 
 struct PolyStruct<Ty> {
@@ -29,6 +36,7 @@ struct PolyStruct<Ty> {
     }
 }
 
+#[test]
 pub fn test_poly_struct_methods() {
     let x = PolyStruct::new(1.23);
     assert(x.get() == 1.23);
@@ -38,6 +46,7 @@ fn call_poly_struct_methods<T>(value: T) -> T {
     PolyStruct::new(value).get()
 }
 
+#[test]
 pub fn test_poly_struct_methods_indirect() {
     assert(call_poly_struct_methods("abc") == "abc");
 }
@@ -62,6 +71,7 @@ enum Enum {
     }
 }
 
+#[test]
 pub fn test_enum_methods() {
     let x = Enum::new_a(123);
     assert(x.debug() == "A(123)");
@@ -97,6 +107,7 @@ enum PolyEnum<A, B> {
     }
 }
 
+#[test]
 pub fn test_poly_enum_methods() {
     // type of B inferred from default provided to "get_a" below
     let x = PolyEnum::new_a(1.23);
@@ -114,6 +125,7 @@ fn call_poly_enum_methods<A, B>(a: A, b: B) -> A {
     x.get_a(b).unwrap()
 }
 
+#[test]
 pub fn test_poly_enum_methods_indirect() {
     assert(call_poly_enum_methods(123, "abc") == 123);
 }
@@ -126,6 +138,7 @@ struct TestB<T, T2> {
     pub fn f() -> int { 2 }
 }
 
+#[test]
 pub fn test_ab() {
     let a = TestA::<int, float>::f();
     let b = TestB::<float, int>::f();
@@ -135,6 +148,7 @@ pub fn test_ab() {
     assert(c == d - 1);
 }
 
+#[test]
 pub fn test_primitive_methods() {
     assert(false.to_str() == "false");
     assert(true.to_str() == "true");
@@ -146,4 +160,79 @@ pub fn test_primitive_methods() {
     assert(1.0e+1.to_str() != "");
     assert(1e-1.to_str() != "");
     assert(",".join(["a", "b"]) == "a,b");
+}
+
+#[test]
+pub fn test_scalar_methods() {
+    let c = 'a';
+    let c2 = 'x';
+    c.increment();
+    assert(c == 'b');
+    assert(c2 == 'x');
+}
+
+struct Ref {
+    pub value: int,
+    pub fn get_val(self) -> Self { self }
+    pub fn get_ref(&self) -> Self { self }
+    pub fn inc_val(self) -> Self { let copy = self; self.value += 1; copy }
+    pub fn inc_ref(&self) -> Self { let copy = self; self.value += 1; copy }
+    pub fn set_val(self, rhs: Self) -> Self { let copy = self; self = rhs; copy }
+    pub fn set_ref(&self, rhs: Self) -> Self { let copy = self; self = rhs; copy }
+}
+
+#[test]
+pub fn test_ref_type() {
+    let r = Ref{value: 1};
+    assert(r.get_val().value == 1);
+    assert(r.set_val(Ref{value: 2}).value == 1);
+    assert(r.inc_val().value == 2);
+    assert(r.get_val().value == 2);
+
+    let r = Ref{value: 10};
+    assert(r.get_ref().value == 10);
+    assert(r.set_ref(Ref{value: 11}).value == 10);
+    assert(r.inc_ref().value == 12);
+    assert(r.get_ref().value == 12);
+
+    assert(Ref{value: 100}.get_val().value == 100);
+    assert(Ref{value: 100}.set_val(Ref{value: 101}).value == 100);
+    assert(Ref{value: 100}.inc_val().value == 101);
+
+    assert(Ref{value: 1000}.get_ref().value == 1000);
+    assert(Ref{value: 1000}.set_ref(Ref{value: 1001}).value == 1000);
+    assert(Ref{value: 1000}.inc_ref().value == 1001);
+}
+
+inline struct Val {
+    pub value: int,
+    pub fn get_val(self) -> Self { self }
+    pub fn get_ref(&self) -> Self { self }
+    pub fn inc_val(self) -> Self { let copy = self; self.value += 1; copy }
+    pub fn inc_ref(&self) -> Self { let copy = self; self.value += 1; copy }
+    pub fn set_val(self, rhs: Self) -> Self { let copy = self; self = rhs; copy }
+    pub fn set_ref(&self, rhs: Self) -> Self { let copy = self; self = rhs; copy }
+}
+
+#[test]
+pub fn test_val_type() {
+    let v = Val{value: 1};
+    assert(v.get_val().value == 1);
+    assert(v.set_val(Val{value: 2}).value == 1);
+    assert(v.inc_val().value == 1);
+    assert(v.get_val().value == 1);
+
+    let v = Val{value: 10};
+    assert(v.get_ref().value == 10);
+    assert(v.set_ref(Val{value: 11}).value == 10);
+    assert(v.inc_ref().value == 11);
+    assert(v.get_ref().value == 12);
+
+    assert(Val{value: 100}.get_val().value == 100);
+    assert(Val{value: 100}.set_val(Val{value: 101}).value == 100);
+    assert(Val{value: 100}.inc_val().value == 100);
+
+    assert(Val{value: 1000}.get_ref().value == 1000);
+    assert(Val{value: 1000}.set_ref(Val{value: 1001}).value == 1000);
+    assert(Val{value: 1000}.inc_ref().value == 1000);
 }

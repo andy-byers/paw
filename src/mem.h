@@ -5,13 +5,13 @@
 #define PAW_MEM_H
 
 #include "call.h"
-#include "paw.h"
+#include "core.h"
 
 // Throw an 'out of memory' error
 // The error message is allocated on startup, and there is always an extra
 // stack slot to hold it.
 #define pawM_error(P) \
-    (*(P)->top.p++ = (P)->mem_errmsg, pawC_throw(P, PAW_EMEMORY))
+    pawC_throw(P, PAW_EMEMORY)
 
 #define pawM_new(P, type) pawM_new_vec(P, 1, type)
 #define pawM_free(P, ptr) pawM_free_vec(P, ptr, 1)

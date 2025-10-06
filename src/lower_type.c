@@ -81,6 +81,11 @@ IrType *lower_type_alias(struct Compiler *C, struct HirSegment segment, struct H
     return pawP_instantiate(C, rhs, subst);
 }
 
+static IrType *lower_ref_type(struct LowerType *L, struct HirRefType *t)
+{
+    return pawIr_new_ptr(L->C, lower_type(L, t->type));
+}
+
 static IrType *lower_path_type(struct LowerType *L, struct HirPathType *t)
 {
     paw_assert(t->path.segments->count == 1);
@@ -107,6 +112,7 @@ static IrType *lower_infer_type(struct LowerType *L, struct HirInferType *t)
 
 static IrType *lower_never_type(struct LowerType *L, struct HirNeverType *t)
 {
+    PAW_UNUSED(t);
     return pawIr_new_never(L->C);
 }
 
@@ -119,6 +125,9 @@ static IrType *lower_type(struct LowerType *L, struct HirType *type)
             break;
         case kHirTupleType:
             result = lower_tuple_type(L, HirGetTupleType(type));
+            break;
+        case kHirRefType:
+            result = lower_ref_type(L, HirGetRefType(type));
             break;
         case kHirPathType:
             result = lower_path_type(L, HirGetPathType(type));

@@ -9,8 +9,24 @@
 #include "error.h"
 #include "map.h"
 
+#define MAX_METHODS 10000
+#define MAX_LITERAL_ELEMENTS 10000
+#define MAX_PATH_SEGMENTS 10000
+
+_Static_assert(PAW_MAX_ARGUMENTS < INT_MAX, "");
+_Static_assert(PAW_MAX_VARIANTS < INT_MAX, "");
+_Static_assert(PAW_MAX_FIELDS < INT_MAX, "");
+_Static_assert(PAW_MAX_UPVALUES < INT_MAX, "");
+_Static_assert(MAX_METHODS < INT_MAX, "");
+_Static_assert(MAX_LITERAL_ELEMENTS < INT_MAX, "");
+_Static_assert(MAX_PATH_SEGMENTS < INT_MAX, "");
+
 #define PARSE_ERROR(X_, Kind_, ...) pawErr_##Kind_((X_)->C, (X_)->modname, __VA_ARGS__)
 #define LIMIT_ERROR(x, start, what, limit) PARSE_ERROR(x, too_many_elements, start, what, limit)
+
+// TODO: remove other versions/rename these versions
+#define PARSE_ERROR_(X_, Loc_, ...) pawErr_generic_error(ENV(X_), (X_)->modname, Loc_, __VA_ARGS__)
+#define LIMIT_ERROR_(X_, Loc_, What_, Limit_) pawErr_exceeded_limit(ENV(X_), (X_)->modname, Loc_, What_, Limit_)
 
 #define NEW_NODE(Lex_, Kind_, ...) \
     pawAst_new_##Kind_((Lex_)->ast, __VA_ARGS__)
@@ -33,7 +49,7 @@ static struct SourceSpan span_from(struct Lex *lex, struct SourceLoc start)
 
 static NodeId next_id(struct Lex *lex)
 {
-    return (NodeId){++lex->ast->node_count};
+    return (NodeId){(unsigned)++lex->ast->node_count};
 }
 
 
@@ -43,7 +59,8 @@ static struct AstPat *pattern(struct Lex *);
 
 static void missing_delim(struct Lex *lex, TokenKind want, TokenKind open, struct SourceLoc start)
 {
-    PARSE_ERROR(lex, expected_delimiter, lex->loc, want, open, start);
+    PARSE_ERROR_(lex, lex->loc, "expected '%c' to match '%c' at %d:%d",
+            want, open, start.line, start.column);
 }
 
 static void delim_next(struct Lex *lex, TokenKind want, TokenKind open, struct SourceLoc start)
@@ -62,8 +79,8 @@ static void delim_next(struct Lex *lex, TokenKind want, TokenKind open, struct S
 
 static void enter_expression(struct Lex *lex)
 {
-    int const MAX_NESTING = 1000;
-    if (lex->nest_depth >= MAX_NESTING)
+    int const MAX_NESTING = 100000;
+    if (lex->nest_depth > MAX_NESTING)
         LIMIT_ERROR(lex, lex->loc, "nested expressions", MAX_NESTING);
     ++lex->nest_depth;
 }
@@ -413,7 +430,7 @@ static void ensure_not_underscore(struct Lex *lex, struct AstIdent ident)
         PARSE_ERROR(lex, unexpected_underscore, ident.span.start);
 }
 
-static struct AstExpr *new_basic_lit(struct Lex *lex, struct SourceSpan span, Value value, paw_Type code)
+static struct AstExpr *new_basic_lit(struct Lex *lex, struct SourceSpan span, Value value, enum BuiltinKind code)
 {
     return NEW_NODE(lex, basic_lit, span, next_id(lex), value, code);
 }
@@ -445,18 +462,19 @@ static struct AstDecl *variant_field_decl(struct Lex *lex)
     {                                                                                                         \
         do {                                                                                                  \
             if (test(lex, B_)) break;                                                                         \
-            if (list->count == (Limit_))                                                                      \
-                LIMIT_ERROR(lex, start, What_, (Limit_));                                                     \
+            if (list->count == INT_MAX) break;                                                                \
             List_##_push((lex)->ast, list, (Fn_)(lex));                                                       \
         } while (test_next(lex, ','));                                                                        \
+        if (list->count > (Limit_))                                                                           \
+            LIMIT_ERROR(lex, start, What_, (Limit_));                                                         \
         struct SourceLoc const end = TOKEN_END(lex->t);                                                       \
         delim_next(lex, B_, A_, start);                                                                       \
         return end;                                                                                           \
     }
-DEFINE_LIST_PARSER(arg, '(', ')', LOCAL_MAX, "arguments", expect_expr0, AstExprList)
-DEFINE_LIST_PARSER(variant_field, '(', ')', LOCAL_MAX, "variant fields", variant_field_decl, AstDeclList)
-DEFINE_LIST_PARSER(strict_type, '<', '>', LOCAL_MAX, "type arguments", parse_strict_type, AstTypeList)
-DEFINE_LIST_PARSER(relaxed_type, '<', '>', LOCAL_MAX, "type arguments", parse_relaxed_type, AstTypeList)
+DEFINE_LIST_PARSER(arg, '(', ')', PAW_MAX_ARGUMENTS, "arguments", expect_expr0, AstExprList)
+DEFINE_LIST_PARSER(variant_field, '(', ')', PAW_MAX_FIELDS, "variant fields", variant_field_decl, AstDeclList)
+DEFINE_LIST_PARSER(strict_type, '<', '>', INT_MAX, "type arguments", parse_strict_type, AstTypeList)
+DEFINE_LIST_PARSER(relaxed_type, '<', '>', INT_MAX, "type arguments", parse_relaxed_type, AstTypeList)
 
 static struct AstTypeList *strict_type_list(struct Lex *lex, struct SourceLoc start)
 {
@@ -499,9 +517,7 @@ static struct AstPath parse_pathexpr(struct Lex *lex)
 
     do {
     next_segment:
-        if (s->count == INT_MAX)
-            break; // throw error below
-
+        if (s->count == INT_MAX) break;
         struct AstIdent const ident = parse_ident(lex);
         struct SourceSpan span = ident.span;
         struct AstTypeList *args = NULL;
@@ -517,8 +533,8 @@ static struct AstPath parse_pathexpr(struct Lex *lex)
         pawAst_add_segment(lex->ast, s, span, next_id(lex), ident, args);
     } while (test_next(lex, TK_COLON2));
 
-    if (s->count > LOCAL_MAX)
-        LIMIT_ERROR(lex, start, "path segments", LOCAL_MAX);
+    if (s->count > MAX_PATH_SEGMENTS)
+        LIMIT_ERROR(lex, start, "path segments", MAX_PATH_SEGMENTS);
 
     return (struct AstPath){
         .span = span_from(lex, start),
@@ -532,9 +548,7 @@ static struct AstPath parse_pathtype(struct Lex *lex, paw_Bool is_strict)
     struct SourceLoc const start = lex->t.span.start;
 
     do {
-        if (s->count == INT_MAX)
-            break; // throw error below
-
+        if (s->count == INT_MAX) break;
         struct AstIdent const ident = parse_ident(lex);
         struct SourceSpan span = ident.span;
         struct AstTypeList *args = NULL;
@@ -549,8 +563,8 @@ static struct AstPath parse_pathtype(struct Lex *lex, paw_Bool is_strict)
         pawAst_add_segment(lex->ast, s, span, next_id(lex), ident, args);
     } while (test_next(lex, TK_COLON2));
 
-    if (s->count > LOCAL_MAX)
-        LIMIT_ERROR(lex, start, "path segments", LOCAL_MAX);
+    if (s->count > MAX_PATH_SEGMENTS)
+        LIMIT_ERROR(lex, start, "path segments", MAX_PATH_SEGMENTS);
 
     return (struct AstPath){
         .span = span_from(lex, start),
@@ -579,8 +593,8 @@ static struct AstPat *struct_field_pat(struct Lex *lex)
             next_id(lex), ident, pat);
 }
 
-DEFINE_LIST_PARSER(variant_field_pat, '(', ')', LOCAL_MAX, "variant fields", pattern, AstPatList)
-DEFINE_LIST_PARSER(struct_field_pat, '{', '}', LOCAL_MAX, "struct fields", struct_field_pat, AstPatList)
+DEFINE_LIST_PARSER(variant_field_pat, '(', ')', PAW_MAX_FIELDS, "variant fields", pattern, AstPatList)
+DEFINE_LIST_PARSER(struct_field_pat, '{', '}', PAW_MAX_FIELDS, "struct fields", struct_field_pat, AstPatList)
 
 static paw_Bool is_wildcard_path(struct AstPath path)
 {
@@ -761,14 +775,15 @@ static struct AstType *parse_tuple_type(struct Lex *lex, struct AstType *first, 
     AstTypeList_push(lex->ast, elems, first);
 
     do {
-        if (test(lex, ')'))
-            break;
-        if (elems->count == FIELD_MAX)
-            LIMIT_ERROR(lex, start, "tuple elements", FIELD_MAX);
-
+        if (test(lex, ')')) break;
+        if (elems->count == INT_MAX) break;
         struct AstType *type = parse_type(lex, is_strict);
         AstTypeList_push(lex->ast, elems, type);
     } while (test_next(lex, ','));
+
+    if (elems->count > PAW_MAX_FIELDS)
+        LIMIT_ERROR(lex, start, "tuple elements", PAW_MAX_FIELDS);
+
     struct SourceLoc const end = TOKEN_END(lex->t);
     delim_next(lex, ')', '(', start);
     return NEW_NODE(lex, tuple_type, SPAN(start, end), next_id(lex), elems);
@@ -877,19 +892,21 @@ static struct AstType *self_type(struct Lex *lex, struct SourceSpan span)
 
 static struct AstDecl *fn_param_decl(struct Lex *lex)
 {
+    paw_Bool const is_ref = test_next(lex, '&');
     struct AstIdent const ident = parse_ident_or_underscore(lex);
     struct AstType *tag = expect_type_annotation(lex, "parameter", ident, PAW_TRUE);
     return NEW_NODE(lex, param_decl, SPAN(ident.span.start, NODE_END(tag)),
-            next_id(lex), ident, tag);
+            next_id(lex), ident, tag, is_ref);
 }
 
 static struct AstDecl *closure_param_decl(struct Lex *lex)
 {
+    paw_Bool const is_ref = test_next(lex, '&');
     struct AstIdent const ident = parse_ident_or_underscore(lex);
     struct AstType *tag = type_annotation(lex, PAW_FALSE);
     struct SourceLoc const end = tag != NULL ? NODE_END(tag) : ident.span.end;
     return NEW_NODE(lex, param_decl, SPAN(ident.span.start, end),
-            next_id(lex), ident, tag);
+            next_id(lex), ident, tag, is_ref);
 }
 
 static struct AstBoundList *parse_generic_bounds(struct Lex *lex)
@@ -915,9 +932,9 @@ static struct AstDecl *generic_param(struct Lex *lex)
             next_id(lex), ident, bounds);
 }
 
-DEFINE_LIST_PARSER(sig_param, '(', ')', LOCAL_MAX, "function parameters", parse_strict_type, AstTypeList)
-DEFINE_LIST_PARSER(closure_param, '|', '|', LOCAL_MAX, "closure parameters", closure_param_decl, AstDeclList)
-DEFINE_LIST_PARSER(generic, '<', '>', LOCAL_MAX, "generics", generic_param, AstDeclList)
+DEFINE_LIST_PARSER(sig_param, '(', ')', PAW_MAX_ARGUMENTS, "function parameters", parse_strict_type, AstTypeList)
+DEFINE_LIST_PARSER(closure_param, '|', '|', PAW_MAX_ARGUMENTS, "closure parameters", closure_param_decl, AstDeclList)
+DEFINE_LIST_PARSER(generic, '<', '>', INT_MAX, "generics", generic_param, AstDeclList)
 
 static struct AstExpr *basic_expr(struct Lex *lex, unsigned prec);
 
@@ -951,7 +968,7 @@ static struct AstExpr *sitem_expr(struct Lex *lex)
             next_id(lex), ident, value, fid);
 }
 
-DEFINE_LIST_PARSER(sitem, '{', '}', LOCAL_MAX, "struct items", sitem_expr, AstExprList)
+DEFINE_LIST_PARSER(sitem, '{', '}', PAW_MAX_FIELDS, "struct items", sitem_expr, AstExprList)
 
 static struct AstExpr *unop_expr(struct Lex *lex, enum UnOp op)
 {
@@ -1028,16 +1045,13 @@ static struct AstExpr *index_expr(struct Lex *lex, struct AstExpr *target)
     return NEW_NODE(lex, index, SPAN(start, end), next_id(lex), target, index);
 }
 
-static paw_Type parse_container_items(struct Lex *lex, struct AstExprList *items)
+static enum BuiltinKind parse_container_items(struct Lex *lex, struct AstExprList *items)
 {
     struct SourceLoc const start = TOKEN_START(lex->t);
     enum BuiltinKind code = BUILTIN_UNIT;
     do {
-        if (test(lex, ']'))
-            break;
-        if (items->count == INT_MAX)
-            break; // throw error below
-
+        if (test(lex, ']')) break;
+        if (items->count == INT_MAX) break;
         struct AstExpr *item = expect_expr0(lex);
         if (!test_next(lex, ':')) {
             if (code == BUILTIN_MAP)
@@ -1054,8 +1068,8 @@ static paw_Type parse_container_items(struct Lex *lex, struct AstExprList *items
         AstExprList_push(lex->ast, items, item);
     } while (test_next(lex, ','));
 
-    if (items->count > LOCAL_MAX)
-        LIMIT_ERROR(lex, start, "elements in container literal", LOCAL_MAX);
+    if (items->count == MAX_LITERAL_ELEMENTS)
+        LIMIT_ERROR(lex, start, "elements in container literal", MAX_LITERAL_ELEMENTS);
 
     // loop body is run at least once
     paw_assert(code != BUILTIN_UNIT);
@@ -1150,31 +1164,36 @@ static struct AstDeclList *fn_parameters(struct Lex *lex, paw_Bool *is_method)
     struct AstDeclList *params = AstDeclList_new(lex->ast);
     if (lex->in_impl && !test(lex, ')')) {
         // check for receiver parameter
+        // Note that only a single "&" can appear before "self".
+        struct AstType *tag;
+        paw_Bool is_ref = test_next(lex, '&');
         struct AstIdent const ident = parse_ident_or_underscore(lex);
-        struct AstType *tag = type_annotation(lex, PAW_TRUE);
-        if (tag == NULL && IS_SELF_VAR(lex, ident)) {
-            // "self" means "self: Self"
-            tag = self_type(lex, ident.span);
+        if (IS_SELF_VAR(lex, ident)) {
             *is_method = PAW_TRUE;
-        } else if (tag == NULL) {
-            PARSE_ERROR(lex, expected_type_annotation, ident.span.start,
-                    "function parameter", ident.name->text);
-        } else if (IS_SELF_VAR(lex, ident)) {
-            // "self" must have a type compatible with "Self"
-            *is_method = PAW_TRUE;
+            if (test(lex, ':')) {
+                tag = type_annotation(lex, PAW_TRUE);
+            } else {
+                tag = self_type(lex, ident.span);
+            }
+        } else {
+            tag = type_annotation(lex, PAW_TRUE);
         }
-        struct AstDecl *first = NEW_NODE(lex, param_decl, SPAN(start, NODE_END(tag)),
-                next_id(lex), ident, tag);
+        struct AstDecl *first = NEW_NODE(lex, param_decl,
+                SPAN(start, NODE_END(tag)), next_id(lex),
+                ident, tag, is_ref);
         AstDeclList_push(lex->ast, params, first);
         test_next(lex, ',');
     }
 
     do {
         if (test(lex, ')')) break;
-        if (params->count == LOCAL_MAX)
-            LIMIT_ERROR(lex, start, "function parameters", LOCAL_MAX);
+        if (params->count == INT_MAX) break;
         AstDeclList_push(lex->ast, params, fn_param_decl(lex));
     } while (test_next(lex, ','));
+
+    if (params->count > PAW_MAX_ARGUMENTS)
+        LIMIT_ERROR(lex, start, "function parameters", PAW_MAX_ARGUMENTS);
+
     delim_next(lex, ')', '(', start);
     return params;
 }
@@ -1414,7 +1433,7 @@ static struct AstExpr *suffixed_expr(struct Lex *lex)
     if (test(lex, '{'))
         expr = try_composite_lit(lex, expr);
 
-    for (int n = 1;; ++n) {
+    for (;;) {
         switch (lex->t.kind) {
             case '?':
                 expr = chain_expr(lex, expr);
@@ -1548,7 +1567,7 @@ static struct AstExpr *binop_expr(struct Lex *lex, enum InfixOp op, struct AstEx
 static struct AstExpr *logical_expr(struct Lex *lex, struct AstExpr *lhs, paw_Bool is_and)
 {
     struct SourceLoc const start = NODE_START(lhs);
-    int const prec = right_prec(is_and ? INFIX_AND : INFIX_OR);
+    unsigned const prec = right_prec(is_and ? INFIX_AND : INFIX_OR);
     struct AstExpr *rhs = expect_expr(lex, prec);
     return NEW_NODE(lex, logical_expr, SPAN(start, NODE_END(rhs)),
             next_id(lex), lhs, rhs, is_and);
@@ -1682,7 +1701,7 @@ static struct AstDecl *use_decl(struct Lex *lex, paw_Bool is_pub)
     struct AstSegments *s = AstSegments_new(lex->ast);
     do {
         if (s->count == INT_MAX)
-            break; // throw error below
+            break;
         if (test_next(lex, '*')) {
             kind = AST_USE_GLOB;
             break;
@@ -1692,8 +1711,8 @@ static struct AstDecl *use_decl(struct Lex *lex, paw_Bool is_pub)
         pawAst_add_segment(lex->ast, s, ident.span, next_id(lex), ident, NULL);
     } while (test_next(lex, TK_COLON2));
 
-    if (s->count > LOCAL_MAX)
-        LIMIT_ERROR(lex, start, "path segments", LOCAL_MAX);
+    if (s->count > MAX_PATH_SEGMENTS)
+        LIMIT_ERROR(lex, start, "path segments", MAX_PATH_SEGMENTS);
 
     if (s->count == 0 || test(lex, TK_COLON2)) {
         paw_assert(kind == AST_USE_GLOB);
@@ -1752,15 +1771,26 @@ static struct Annotations *annotations(struct Lex *lex)
         if (test_next(lex, '=')) {
             anno.has_value = PAW_TRUE;
             struct AstExpr *expr = expect_expr0(lex);
-            if (!AstIsLiteralExpr(expr))
+
+            if (AstIsStringExpr(expr)) {
+                struct AstStringExpr *e = AstGetStringExpr(expr);
+                if (e->parts->count != 1)
+                    PARSE_ERROR(lex, nonprimitive_annotation_value, NODE_START(expr), ident.name->text);
+
+                struct AstStringPart const p = K_LIST_FIRST(e->parts);
+                paw_assert(p.is_str);
+                anno.value = p.str.value;
+                anno.kind = BUILTIN_STR;
+            } else if (AstIsLiteralExpr(expr)) {
+                struct AstLiteralExpr *e = AstGetLiteralExpr(expr);
+                if (e->lit_kind != kAstBasicLit)
+                    PARSE_ERROR(lex, nonprimitive_annotation_value, NODE_START(expr), ident.name->text);
+
+                anno.value = e->basic.value;
+                anno.kind = e->basic.code;
+            } else {
                 PARSE_ERROR(lex, nonliteral_annotation_value, NODE_START(expr), ident.name->text);
-
-            struct AstLiteralExpr *e = AstGetLiteralExpr(expr);
-            if (e->lit_kind != kAstBasicLit)
-                PARSE_ERROR(lex, nonprimitive_annotation_value, NODE_START(expr), ident.name->text);
-
-            anno.value = e->basic.value;
-            anno.kind = e->basic.code;
+            }
         }
         Annotations_push(C, annos, anno);
     } while (test_next(lex, ','));
@@ -1834,11 +1864,11 @@ static struct SourceLoc enum_body(struct Lex *lex, struct SourceLoc start, struc
     struct SourceLoc const end = TOKEN_END(lex->t);
     delim_next(lex, '}', '{', start);
 
-    if (variants->count > LOCAL_MAX)
-        LIMIT_ERROR(lex, start, "variants in enumeration", LOCAL_MAX);
+    if (methods->count > MAX_METHODS)
+        LIMIT_ERROR(lex, start, "methods in enumeration", MAX_METHODS);
 
-    if (methods->count > LOCAL_MAX)
-        LIMIT_ERROR(lex, start, "methods in enumeration", LOCAL_MAX);
+    if (variants->count > PAW_MAX_VARIANTS)
+        LIMIT_ERROR(lex, start, "variants in enumeration", PAW_MAX_VARIANTS);
 
     if (variants->count == 0)
         PARSE_ERROR(lex, empty_enumeration, start);
@@ -1902,11 +1932,11 @@ static struct SourceLoc struct_body(struct Lex *lex, struct AstTypeList *traits,
     struct SourceLoc const end = TOKEN_END(lex->t);
     delim_next(lex, '}', '{', start);
 
-    if (fields->count > LOCAL_MAX)
-        LIMIT_ERROR(lex, start, "fields in structure", LOCAL_MAX);
+    if (methods->count > MAX_METHODS)
+        LIMIT_ERROR(lex, start, "methods in structure", MAX_METHODS);
 
-    if (methods->count > LOCAL_MAX)
-        LIMIT_ERROR(lex, start, "methods in structure", LOCAL_MAX);
+    if (fields->count > PAW_MAX_FIELDS)
+        LIMIT_ERROR(lex, start, "fields in structure", PAW_MAX_FIELDS);
 
     if (fields->count == 0 && methods->count == 0)
         PARSE_ERROR(lex, empty_struct_body, start);
@@ -1950,11 +1980,12 @@ static struct AstDecl *trait_decl(struct Lex *lex, paw_Bool is_pub)
         struct AstDecl *method = parse_method(lex, NULL, is_pub);
         AstDeclList_push(lex->ast, methods, method);
     }
+
+    if (methods->count > MAX_METHODS)
+        LIMIT_ERROR(lex, start, "methods in trait", MAX_METHODS);
+
     struct SourceLoc const end = TOKEN_END(lex->t);
     delim_next(lex, '}', '{', start);
-
-    if (methods->count > LOCAL_MAX)
-        LIMIT_ERROR(lex, start, "methods in trait", LOCAL_MAX);
 
     return NEW_NODE(lex, trait_decl, SPAN(start, end), next_id(lex),
             ident, generics, methods, is_pub);
@@ -1988,8 +2019,6 @@ static struct AstExpr *expression(struct Lex *lex, unsigned prec)
 
 static AstStmtList *block_inner(struct Lex *lex, struct AstExpr **presult)
 {
-    struct SourceLoc const start = TOKEN_START(lex->t);
-
     struct AstStmtList *stmts = AstStmtList_new(lex->ast);
     while (!end_of_block(lex)) {
         struct SourceLoc const start = TOKEN_START(lex->t);
@@ -2001,7 +2030,10 @@ static AstStmtList *block_inner(struct Lex *lex, struct AstExpr **presult)
                 skip(lex); // "let" token
                 struct AstPat *pat = pattern(lex);
                 struct AstType *tag = type_annotation(lex, PAW_FALSE);
-                struct AstExpr *init = test_next(lex, '=') ? expect_expr0(lex) : NULL;
+                check_next(lex, '=');
+                struct AstExpr *init = expect_expr0(lex);
+                // TODO: support deferred initialization of locals again, then last 2 lines should be replaced with following line
+                // struct AstExpr *init = test_next(lex, '=') ? expect_expr0(lex) : NULL;
                 struct SourceLoc const end = TOKEN_START(lex->t);
                 semicolon(lex, "\"let\" statement");
                 struct AstStmt *stmt = NEW_NODE(lex, let_stmt, SPAN(start, end),
@@ -2106,21 +2138,6 @@ static void toplevel_items(struct Lex *lex, struct AstDeclList *items)
     }
 }
 
-static void skip_hashbang(struct Lex *lex)
-{
-    // Special case: don't advance past the '#', since it might be the start of
-    // an annotation. If the first char is not '\0', then there is guaranteed to
-    // be another char, possibly '\0' itself.
-    if (test_next(lex, TK_HASHBANG)) {
-        while (!test(lex, TK_END)) {
-            char const c = *lex->ptr;
-            skip(lex);
-            if (c == '\r' || c == '\n')
-                break;
-        }
-    }
-}
-
 // Effectively add the following text at the top of each Paw source file:
 //
 //     use prelude;
@@ -2150,7 +2167,6 @@ static void import_prelude(struct Lex *lex, struct AstDeclList *items)
 static struct AstDecl *parse_module(struct Lex *lex, paw_Reader input, void *ud)
 {
     pawX_set_source(lex, input, ud);
-    skip_hashbang(lex);
 
     struct AstDeclList *items = AstDeclList_new(lex->ast);
     struct SourceLoc const start = TOKEN_START(lex->t);
@@ -2158,9 +2174,7 @@ static struct AstDecl *parse_module(struct Lex *lex, paw_Reader input, void *ud)
     import_prelude(lex, items);
     toplevel_items(lex, items);
 
-    if (lex->ptr != lex->end)
-        PARSE_ERROR(lex, unexpected_symbol, lex->loc);
-
+    paw_assert(lex->ptr == lex->end);
     struct AstDecl *decl = NEW_NODE(lex, module_decl, span_from(lex, start),
             next_id(lex), lex->modname, lex->modno, items);
     AstDeclList_push(lex->ast, lex->ast->modules, decl);
@@ -2171,23 +2185,13 @@ static void init_lexer(struct Compiler *C, Str *modname, struct Lex *lex)
 {
     *lex = (struct Lex){
         .pool = pawP_pool_new(C, C->aux_stats),
-        .modno = C->modnames->count,
+        .modno = C->modinfo->count - 1,
         .modname = modname,
-        .strings = C->strings,
         .ast = C->ast,
         .dm = C->dm,
         .P = C->P,
         .C = C,
     };
-    ModuleNames_push(C, C->modnames, modname);
-}
-
-static void ast_callback(struct Compiler *C, struct Ast *ast)
-{
-    if (pawP_push_callback(C, "paw.on_build_ast")) {
-        paw_push_rawptr(ENV(C), ast);
-        paw_call(ENV(C), 1);
-    }
 }
 
 struct AstDecl *pawP_parse_module(struct Compiler *C, Str *modname, paw_Reader input, void *ud)

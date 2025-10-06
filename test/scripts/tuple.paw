@@ -9,27 +9,32 @@ fn black_box<T>(_: T) {}
 // Flat tuples
 //
 
+#[test]
 pub fn test_new_unit() {
     let t = ();
     black_box(t);
 }
 
+#[test]
 pub fn test_new_singleton() {
     let t = (123,);
     black_box(t);
 }
 
+#[test]
 pub fn test_new_multiplet() {
     let t = ("a", 5.0, -1);
     black_box(t);
 }
 
+#[test]
 pub fn test_assign_unit() {
     let t = ();
     let t: () = t;
     black_box(t);
 }
 
+#[test]
 pub fn test_assign_singleton() {
     let t = (false,);
     black_box(t);
@@ -38,6 +43,7 @@ pub fn test_assign_singleton() {
     black_box(t);
 }
 
+#[test]
 pub fn test_assign_multiplet() {
     let t = ("a", 5.0, -1);
     black_box(t);
@@ -46,11 +52,13 @@ pub fn test_assign_multiplet() {
     black_box(t);
 }
 
+#[test]
 pub fn test_get_singleton_field() {
     let t = (42,);
     assert(t.0 == 42);
 }
 
+#[test]
 pub fn test_get_multiplet_fields() {
     let t = (false, 1, 2.0);
     assert(t.0 == false);
@@ -58,6 +66,7 @@ pub fn test_get_multiplet_fields() {
     assert(t.2 == 2.0);
 }
 
+#[test]
 pub fn test_set_singleton_field() {
     let t = (1.23,);
     assert(t.0 == 1.23);
@@ -66,6 +75,7 @@ pub fn test_set_singleton_field() {
     assert(t.0 == 3.21);
 }
 
+#[test]
 pub fn test_set_multiplet_fields() {
     let t = ("one", 2, 3.0);
     assert(t.0 == "one");
@@ -84,6 +94,7 @@ fn new_singleton(i: int) -> (int,) {
     (i,)
 }
 
+#[test]
 pub fn test_return_singleton() {
     let t = new_singleton(123);
     assert(t.0 == 123);
@@ -93,6 +104,7 @@ fn new_multiplet(i: int, s: str, f: float) -> (int, str, float) {
     (i, s, f)
 }
 
+#[test]
 pub fn test_return_multiplet() {
     let t = new_multiplet(1, "two", 3.0);
     assert(t.0 == 1);
@@ -105,6 +117,7 @@ pub fn test_return_multiplet() {
 // Nested tuples
 //
 
+#[test]
 pub fn test_assign_nested_singleton() {
     let t = ((false,),);
     black_box(t);
@@ -113,6 +126,7 @@ pub fn test_assign_nested_singleton() {
     black_box(t);
 }
 
+#[test]
 pub fn test_assign_nested_multiplet() {
     let t = (("a", (5.0,)), -1);
     black_box(t);
@@ -121,11 +135,13 @@ pub fn test_assign_nested_multiplet() {
     black_box(t);
 }
 
+#[test]
 pub fn test_get_nested_singleton_field() {
     let t = ((42,),);
     assert(t.0.0 == 42);
 }
 
+#[test]
 pub fn test_get_nested_multiplet_fields() {
     let t = (false, ((1,), 2.0));
     assert(t.0 == false);
@@ -133,6 +149,7 @@ pub fn test_get_nested_multiplet_fields() {
     assert(t.1.1 == 2.0);
 }
 
+#[test]
 pub fn test_set_nested_singleton_field() {
     let t = ((1.23,),);
     assert(t.0.0 == 1.23);
@@ -141,6 +158,7 @@ pub fn test_set_nested_singleton_field() {
     assert(t.0.0 == 3.21);
 }
 
+#[test]
 pub fn test_set_nested_multiplet_fields() {
     let t = ("one", ((2,), 3.5));
     assert(t.0 == "one");
@@ -159,6 +177,7 @@ fn new_nested_singleton(i: int) -> ((int,),) {
     ((i,),)
 }
 
+#[test]
 pub fn test_return_nested_singleton() {
     let t = new_nested_singleton(123);
     assert(t.0.0 == 123);
@@ -168,6 +187,7 @@ fn new_nested_multiplet(i: int, s: str, f: float) -> (int, ((str,), float)) {
     (i, ((s,), f))
 }
 
+#[test]
 pub fn test_return_nested_multiplet() {
     let t = new_nested_multiplet(1, "two", 3.0);
     assert(t.0 == 1);
@@ -184,6 +204,7 @@ struct SingletonStruct<T> {
     pub t: (T,),
 }
 
+#[test]
 pub fn test_singleton_struct_field() {
     let s = SingletonStruct{t: ("",)};
     assert(s.t.0 == "");
@@ -195,6 +216,7 @@ pub fn test_singleton_struct_field() {
     assert(s.t.0 == "def");
 }
 
+#[test]
 pub fn test_nested_singleton_struct_field() {
     let s = SingletonStruct{t: ((0,),)};
     black_box(s);
@@ -213,6 +235,7 @@ struct MultipletStruct<A, B, C> {
     pub t: (A, B, C),
 }
 
+#[test]
 pub fn test_multiplet_struct_field() {
     let s = MultipletStruct{t: (false, 0, "")};
     assert(s.t.0 == false);
@@ -233,6 +256,7 @@ pub fn test_multiplet_struct_field() {
     assert(s.t.2 == "def");
 }
 
+#[test]
 pub fn test_nested_multiplet_struct_field() {
     let s = MultipletStruct{t: (false, ((0,), ""), (0.0, 0))};
     assert(s.t.0 == false);
@@ -273,6 +297,7 @@ struct ComplexStruct<A, B, C, D> {
     pub t3: (C, D),
 }
 
+#[test]
 pub fn test_complex_struct_field() {
     let m = ComplexStruct{
         t1: (false, (0,)),
@@ -340,12 +365,14 @@ fn match_singleton_variant_field<T>(e: SingletonEnum<T>) -> T {
     }
 }
 
+#[test]
 pub fn test_singleton_variant_field() {
     let f = match_singleton_variant_field;
     assert(f(SingletonEnum::First((123,))) == 123);
     assert(f(SingletonEnum::Second(456)) == 456);
 }
 
+#[test]
 pub fn test_nested_singleton_variant_field() {
     let f = match_singleton_variant_field;
     assert(f(SingletonEnum::First(((123,),))).0 == 123);
@@ -364,6 +391,7 @@ fn match_multiplet_variant_field<A, B, C>(e: MultipletEnum<A, B, C>) -> (A, B, C
     }
 }
 
+#[test]
 pub fn test_multiplet_variant_field() {
     let f = match_multiplet_variant_field;
 
@@ -385,6 +413,7 @@ fn match_nested_multiplet_variant_field(e: MultipletEnum<(bool,), (int, float), 
     }
 }
 
+#[test]
 pub fn test_nested_multiplet_variant_field() {
     let f = match_nested_multiplet_variant_field;
 
@@ -403,6 +432,7 @@ pub fn test_nested_multiplet_variant_field() {
 
 
 // Make sure tuples are treated as value types
+#[test]
 pub fn test_tuple_is_value_type() {
     let base = (0, false);
     let copy = base;
@@ -420,11 +450,13 @@ pub fn test_tuple_is_value_type() {
 // Tuple syntax tests
 //
 
+#[test]
 pub fn test_empty_tuple_is_unit_type() {
     let t: () = ();
     black_box(t);
 }
 
+#[test]
 pub fn test_single_element_requires_comma() {
     let b: bool = (false);
     black_box(b);
@@ -433,11 +465,13 @@ pub fn test_single_element_requires_comma() {
     black_box(t);
 }
 
+#[test]
 pub fn test_multidigit_selector() {
     let t = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, (10,));
     assert(t.10.0 == 10);
 }
 
+#[test]
 pub fn test_call_fn_element() {
     let t = (|| 123,);
     t.0();

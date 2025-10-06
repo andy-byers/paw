@@ -2,6 +2,7 @@
 //
 // Exercise the compiler IR printing features
 
+#[test]
 pub fn test_unary_op() {
     let x = "abc";
     assert(#x == 3);
@@ -15,6 +16,7 @@ pub fn test_unary_op() {
     assert(x == ~1);
 }
 
+#[test]
 pub fn test_binary_op() {
     assert(1 == 1);
     assert(1 != 2);
@@ -41,6 +43,7 @@ pub fn test_binary_op() {
     assert(x != 0.0);
 }
 
+#[test]
 pub fn test_upvalue() {
     let up = 123;
     let f = |x| {
@@ -65,6 +68,7 @@ const CONSTANT: int = 42;
 
 fn generics<A, B>() {}
 
+#[test]
 pub fn test_emit_warnings() {
     print("TODO: slice tests\n");
 }

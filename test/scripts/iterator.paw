@@ -1,5 +1,6 @@
 // iterator.paw
 
+#[test]
 pub fn test_iterator_for_loop() {
     let i = 1;
     for e in [1, 2, 3] {
@@ -24,11 +25,12 @@ pub fn test_iterator_for_loop() {
     assert(b[1] == 2);
 }
 
+#[test]
 pub fn test_misc() {
     let N = 2;
     {
         let a = [];
-        for i = 0, N {
+        for i in 0..N {
             for j in [0] {
                 a.push(i + j);
             }
@@ -39,7 +41,7 @@ pub fn test_misc() {
     }
     {
         let a = [];
-        for i = 0, N {
+        for i in 0..N {
             let j = 0;
             while j < N {
                 a.push(i + j);
@@ -54,7 +56,7 @@ pub fn test_misc() {
     }
     {
         let a = [];
-        for i = 0, N {
+        for i in 0..N {
             for j in [0] {
                 let k = 0;
                 while k < N {
@@ -71,20 +73,13 @@ pub fn test_misc() {
     }
     {
         let I = [0, 1, 2, 3];
-        for i = 0, 4 {
+        for i in 0..4 {
             assert(i == I[i]);
         }
 
         let n = 0;
         let I = [2, 3];
-        for i = 2, 4 {
-            assert(i == I[n]);
-            n = n + 1;
-        }
-
-        let n = 0;
-        let I = [1, 3];
-        for i = 1, 4, 2 {
+        for i in 2..4 {
             assert(i == I[n]);
             n = n + 1;
         }
@@ -92,7 +87,7 @@ pub fn test_misc() {
 
     {
         let n = 0;
-        for i = 0, 8 {
+        for i in 0..8 {
             n = n + 1;
             break;
         }
@@ -102,7 +97,7 @@ pub fn test_misc() {
     {
         let test = |n| {
             let f = || -1;
-            for _ = 0, 10 {
+            for _ in 0..10 {
                 if n == 0 {
                     let _0 = 0;
                     f = || n + _0;

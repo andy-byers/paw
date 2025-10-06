@@ -2,6 +2,7 @@
 
 struct Unit;
 
+#[test]
 pub fn test_option() {
     let o: Option<int> = Option::Some(123);
 
@@ -19,6 +20,7 @@ pub fn test_option() {
     o = Option::Some(Option::Some(Unit));
 }
 
+#[test]
 pub fn test_result() {
     // o: Result<int, str>
     let o = Result::Ok(1); 
@@ -42,6 +44,7 @@ struct Obj<T> {
     }
 }
 
+#[test]
 pub fn test_user_adt() {
     let o = Obj::new(123);
     assert(o.get() == 123);
@@ -51,6 +54,7 @@ fn infer_using_result() -> Option<Unit> {
     return Option::None;
 }
 
+#[test]
 pub fn test_infer_functions() {
     infer_using_result();
 

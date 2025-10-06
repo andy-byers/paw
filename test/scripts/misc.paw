@@ -2,6 +2,7 @@
 
 use math::PI as M_PI;
 
+#[test]
 pub fn test_constants() {
     assert(3.13 < M_PI && math::PI < 3.15);
 }
@@ -24,6 +25,7 @@ pub fn recur_with_objects<T>(n: int, t: T) {
     }
 }
 
+#[test]
 pub fn test_gc() {
     recur_with_objects(1, 123);
     recur_with_objects(10, 1.0);
@@ -38,6 +40,7 @@ fn file_size(f: File) -> int {
     return f.tell().unwrap();
 }
 
+#[test]
 pub fn test_io() {
     let test = "test string";
     let file = File::open("abc.txt", "w+").unwrap();
@@ -51,6 +54,7 @@ pub fn test_io() {
     assert(file_size(file) == n);
 }
 
+#[test]
 pub fn test_math() {
     math::sin(1.0);
     math::cos(1.0);

@@ -1,9 +1,10 @@
 // Copyright (c) 2024, The paw Authors. All rights reserved.
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
+
 #include "str.h"
 #include "auxlib.h"
-#include "gc.h"
+#include "env.h"
 #include "mem.h"
 
 #define ST_INDEX(st, h) ((h) & (st->capacity - 1))
@@ -14,7 +15,7 @@ static Str *new_string(paw_Env *P, size_t length)
         pawM_error(P);
     }
     Str *str = pawM_new_flex(P, Str, length + 1, sizeof(char));
-    pawG_add_object(P, CAST_OBJECT(str), VSTR);
+    str->gc_kind = VSTR;
     str->text[length] = '\0';
     str->length = length;
     str->next = NULL;
@@ -46,7 +47,6 @@ static void grow_table(paw_Env *P, StringTable *st)
         }
     }
     pawM_free_vec(P, old.strings, old.capacity);
-    CHECK_GC(P);
 }
 
 void pawS_init(paw_Env *P)
@@ -100,10 +100,10 @@ Str *pawS_new_str(paw_Env *P, char const *text)
 Str *pawS_new_fixed(paw_Env *P, char const *text)
 {
     Str *s = pawS_new_str(P, text);
-    Object *o = CAST_OBJECT(s);
-    if (o == P->gc_all) {
-        pawG_fix_object(P, o);
-    }
+//TODO    Object *o = CAST_OBJECT(s);
+//TODO    if (o == P->gc_all) {
+//TODO        pawG_fix_object(P, o);
+//TODO    }
     return s;
 }
 

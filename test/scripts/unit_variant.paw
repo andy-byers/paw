@@ -8,19 +8,23 @@ enum Unit {
 }
 
 
+#[test]
 pub fn test_init() {
     let u = Unit::U;
 }
 
+#[test]
 pub fn test_init_annotated() {
     let u: Unit = Unit::U;
 }
 
+#[test]
 pub fn test_copy() {
     let u = Unit::U;
     let u2 = u;
 }
 
+#[test]
 pub fn test_as_argument() {
     let u = Unit::U;
     let f = |x| {};
@@ -29,6 +33,7 @@ pub fn test_as_argument() {
     f(Unit::U);
 }
 
+#[test]
 pub fn test_call_method() {
     Unit::U.method();
     Unit::assoc_function();

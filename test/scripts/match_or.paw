@@ -1,5 +1,6 @@
 // match_or.paw
 
+#[test]
 pub fn test_int() {
     let check = |target| {
         match target {
@@ -29,6 +30,7 @@ enum Enum {
     Three(Enum, Enum, Enum),
 }
 
+#[test]
 pub fn test_enum() {
     let check = |target| {
         match target {
@@ -83,6 +85,7 @@ fn eval_enum(target: Enum) -> str {
     };
 }
 
+#[test]
 pub fn test_enum_bindings() {
     let check = |target| {
         match target {
@@ -109,6 +112,7 @@ pub fn test_enum_bindings() {
     assert(check(Enum::Three(Enum::C, Enum::C, Enum::A)) == "a");
 }
 
+#[test]
 pub fn test_tuple_bindings() {
     let check = |target| {
         match target {
@@ -133,6 +137,7 @@ pub fn test_tuple_bindings() {
     assert(check((3, (3, 6))) == 6);
 }
 
+#[test]
 pub fn test_int_bindings() {
     let check = |target| {
         match target {
@@ -163,6 +168,7 @@ fn check_match_tuple(target: (((int,), int), int)) -> int {
     };
 }
 
+#[test]
 pub fn test_match_tuple() {
     let check = check_match_tuple;
     assert(check((((1,), 1), 1)) == 1);
@@ -188,6 +194,7 @@ fn check_match_struct_with_one_field(target: Single<int>) -> int {
     };
 }
 
+#[test]
 pub fn test_match_struct_with_one_field() {
     let check = check_match_struct_with_one_field;
     assert(check(Single{value: 0}) == 0);
@@ -225,6 +232,7 @@ fn check_match_struct_with_multiple_fields(target: Multiple<int>) -> int {
     };
 }
 
+#[test]
 pub fn test_match_struct_with_multiple_fields() {
     let check = check_match_struct_with_multiple_fields;
     assert(check(Multiple{a: 4, b: 5, c: 6}) == 2);

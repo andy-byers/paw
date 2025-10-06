@@ -22,7 +22,7 @@
 #include "type_folder.h"
 #include "unify.h"
 
-#define INSTANTIATION_ERROR(I_, Kind_, ...) pawErr_##Kind_((I_)->C, ModuleNames_get((I_)->C->modnames, (I_)->modno), __VA_ARGS__)
+#define INSTANTIATION_ERROR(I_, Kind_, ...) pawErr_##Kind_((I_)->C, ModuleInfo_get((I_)->C->modinfo, (I_)->modno).name, __VA_ARGS__)
 
 #define GET_SUBTYPES(Type_) (IrIsAdt(Type_) ? IrGetAdt(Type_)->types : \
         IrIsSignature(Type_) ? IrGetSignature(Type_)->types : \
@@ -83,7 +83,7 @@ static IrType *instantiate_fn_aux(struct InstanceState *I, struct IrSignature *b
 static void check_type_param(struct InstanceState *I, IrTypeList *params, IrTypeList *args)
 {
     if (params->count != args->count)
-        INSTANTIATION_ERROR(I, incorrect_type_arity, (struct SourceLoc){-1}, params->count, args->count);
+        INSTANTIATION_ERROR(I, incorrect_type_arity, (struct SourceLoc){0}, params->count, args->count);
 }
 
 static void normalize_type_list(struct InstanceState *I, IrTypeList *types)
@@ -98,7 +98,7 @@ static IrType *instantiate_trait(struct InstanceState *I, struct IrTraitObj *bas
     IrTypeList *generics = base->types;
     if (generics == NULL) {
         struct HirDecl *decl = pawHir_get_decl(I->C->hir, base->did);
-        INSTANTIATION_ERROR(I, unexpected_type_arguments, (struct SourceLoc){-1},
+        INSTANTIATION_ERROR(I, unexpected_type_arguments, (struct SourceLoc){0},
                 "trait", HirGetTraitDecl(decl)->ident.name->text);
     }
     check_type_param(I, generics, types);
@@ -122,24 +122,20 @@ static IrType *instantiate_fn(struct InstanceState *I, struct IrSignature *base,
     return instantiate_fn_aux(I, base, types);
 }
 
-static IrType *instantiate_method_aux(struct InstanceState *I, IrTypeList *generics, IrTypeList *types, IrType *self, struct HirDecl *method)
+static IrType *instantiate_method_aux(struct InstanceState *I, IrTypeList *generics, IrTypeList *types, IrType *method)
 {
-    struct HirFnDecl *fn = HirGetFnDecl(method);
-    IrTypeList *fn_types = collect_generic_types(I, fn->generics);
-    IrTypeList *params = collect_field_types(I, fn->params);
-    IrType *result = fn_result(I, fn);
-
-    IrType *inst = pawIr_new_signature(I->C, method->hdr.did, fn_types, params, result);
+    struct IrSignature *fn = IrGetSignature(method);
+    IrType *inst = pawIr_new_signature(I->C, fn->did, fn->types, fn->params, fn->result);
     prep_fn_instance(I, generics, types, IrGetSignature(inst));
     return inst;
 }
 
-static IrType *instantiate_method(struct InstanceState *I, IrType *obj, IrTypeList *types, struct HirDecl *method)
+static IrType *instantiate_method(struct InstanceState *I, IrType *obj, IrTypeList *types, IrType *method)
 {
     paw_assert(types != NULL);
     IrTypeList *generics = IR_TYPE_SUBTYPES(obj);
     paw_assert(types->count == generics->count);
-    IrTypeList *unknowns = pawU_new_unknowns(I->U, (struct SourceLoc){-1}, generics);
+    IrTypeList *unknowns = pawU_new_unknowns(I->U, (struct SourceLoc){0}, generics);
 
     IrTypeList *subst = pawP_instantiate_typelist(I->C, generics, unknowns, IR_TYPE_SUBTYPES(obj));
 
@@ -151,22 +147,21 @@ static IrType *instantiate_method(struct InstanceState *I, IrType *obj, IrTypeLi
     }
 
     IrType *inst = pawP_instantiate(I->C, obj, subst);
-    IrType *r = instantiate_method_aux(I, generics, unknowns, inst, method);
+    IrType *r = instantiate_method_aux(I, generics, unknowns, method);
     IrGetSignature(r)->self = inst;
     return r;
 }
 
-IrType *pawP_instantiate_method(struct Compiler *C, struct HirDecl *base, IrTypeList *types, struct HirDecl *method)
+IrType *pawP_instantiate_method(struct Compiler *C, IrType *base, IrTypeList *types, IrType *method)
 {
     struct InstanceState I = {
-        .modno = base->hdr.did.modno,
+        .modno = (int)IR_TYPE_DID(base).modno,
         .P = ENV(C),
         .U = C->U,
         .C = C,
     };
 
-    IrType *type = pawIr_get_type(C, base->hdr.id);
-    return instantiate_method(&I, type, types, method);
+    return instantiate_method(&I, base, types, method);
 }
 
 IrType *pawP_generalize_assoc(struct Compiler *C, struct SourceLoc loc, IrType *type, IrType *method)
@@ -198,7 +193,7 @@ IrType *pawP_instantiate(struct Compiler *C, IrType *base, IrTypeList *types)
 {
     paw_assert(types != NULL);
     struct InstanceState I = {
-        .modno = IR_TYPE_DID(base).modno,
+        .modno = (int)IR_TYPE_DID(base).modno,
         .P = ENV(C),
         .U = C->U,
         .C = C,

@@ -4,6 +4,7 @@
 //       only types that are assigned DeclIds. Figure out how to get aliases to other
 //       types to work. Unit type works because it is considered an ADT.
 
+#[test]
 pub fn test_primitive() {
     type I = int;
     let i: I = 123;
@@ -14,6 +15,7 @@ pub fn test_primitive() {
     assert(s == "abc");
 }
 
+#[test]
 pub fn test_tuple() {
     type U = ();
     let u: U = ();
@@ -25,6 +27,7 @@ pub fn test_tuple() {
 //    assert(t.1 == "abc");
 }
 
+#[test]
 pub fn test_container() {
     type L = [int];
     let l: L = [1, 2, 3];
@@ -38,6 +41,7 @@ pub fn test_container() {
 fn list_function<T>(list: [T]) {}
 fn map_function<K, V>(map: [K: V]) {}
 
+#[test]
 pub fn test_poly_container() {
     type L<T> = [T];
     let l: L<bool> = [true, false, true];
@@ -58,6 +62,7 @@ fn check_mono(m: Mono, n: int) {
     assert(m.value == n);
 }
 
+#[test]
 pub fn test_mono() {
     type M = Mono;
 
@@ -78,6 +83,7 @@ fn check_poly<T2>(p: Poly<T2>) {
     accepts_poly(p);
 }
 
+#[test]
 pub fn test_poly() {
     type P<X> = Poly<X>;
 
@@ -99,6 +105,7 @@ fn check_poly2<S2, T2>(p: Poly2<S2, T2>) {
     accepts_poly2(p);
 }
 
+#[test]
 pub fn test_poly2() {
     type P<X, Y> = Poly2<X, Y>;
 
@@ -115,6 +122,7 @@ pub fn test_poly2() {
     check_poly2(p);
 }
 
+#[test]
 pub fn test_poly2_partial() {
     type P1<X> = Poly2<X, str>;
 
@@ -167,6 +175,7 @@ fn check_nested_poly2<T>(t: T) -> T {
     p.second
 }
 
+#[test]
 pub fn test_nested_poly() {
     assert(check_nested_poly("abc") == "abc");
     assert(check_nested_poly(123) == 123);
@@ -174,6 +183,7 @@ pub fn test_nested_poly() {
     assert(check_nested_poly2(true) == true);
 }
 
+#[test]
 pub fn test_dependent() {
     type P<X> = Poly<X>;
     type L<Y> = [P<Y>];
@@ -188,6 +198,7 @@ pub fn test_dependent() {
     assert(m[123][1].value == 789);
 }
 
+#[test]
 pub fn test_global() {
     let gi: GI = 123;
     assert(gi == 123);
@@ -211,6 +222,7 @@ type GF = float;
 type GP = Poly<GF>;
 type GP2<X> = Poly2<Poly<X>, X>;
 
+#[test]
 pub fn test_imported() {
     type O<T> = Obj<T>;
     let o = O::new(123);
@@ -220,6 +232,7 @@ pub fn test_imported() {
     let p = P{value: 456};
 }
 
+#[test]
 pub fn test_imported2() {
     type O<T> = mod_c::Obj<T>;
     let o = O{value: 789};
@@ -229,6 +242,7 @@ use mod_a::Obj;
 use mod_b::*;
 use mod_c;
 
+#[test]
 pub fn test_types_are_hoisted() {
     let i: I = 123;
     assert(i == 123);

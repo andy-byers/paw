@@ -7,6 +7,7 @@ fn fi(a: int) {
     return;
 }
 
+#[test]
 pub fn test_empty_return() {
     f();
     fi(1);
@@ -22,12 +23,14 @@ fn fii_i(a: int, b: int) -> int {
     return a + b + 3;
 }
 
+#[test]
 pub fn test_return() {
     assert(f_i() == 1) ;
     assert(fi_i(1) == 3) ;
     assert(fii_i(1, 2) == 6) ;
 }
 
+#[test]
 pub fn test_function_value() {
     let f: fn(int, int) -> int = fii_i;
     f(1, 2);
@@ -36,6 +39,7 @@ pub fn test_function_value() {
     f(3, 4);
 }
 
+#[test]
 pub fn test_global_visibility() {
     assert(42 == global_function(42));
 }
@@ -47,6 +51,7 @@ fn counter(n: int) -> int {
     return 0;
 }
 
+#[test]
 pub fn test_recursion() {
     assert(0 == counter(-1));
     assert(0 == counter(0));
@@ -75,6 +80,7 @@ fn is_odd(n: int) -> bool {
     return is_even(n - 1);
 }
 
+#[test]
 pub fn test_mutual_recursion() {
     assert(is_even(0));
     assert(is_odd(1));
@@ -99,6 +105,7 @@ fn sum_args(a: int, b: int, c: int, d: int, e: int, f: int) -> int {
     return a + b + c + d + e + f;
 }
 
+#[test]
 pub fn test_args() {
     let d = 4;
     let f = 6;

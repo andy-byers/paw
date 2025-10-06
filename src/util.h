@@ -4,7 +4,7 @@
 #ifndef PAW_UTIL_H
 #define PAW_UTIL_H
 
-#include "paw.h"
+#include "core.h"
 #include <assert.h>
 #include <limits.h>
 #include <stdarg.h>
@@ -33,7 +33,7 @@
 //       types excluding (un)signed char. Comparing such types with this function
 //       (or "memcmp" in general) is not portable since the padding bits have
 //       unspecified values (C11 section 6.2.6.2, item 5).
-inline static int paw_raw_cmp(void *x, size_t nx, void *y, size_t ny)
+inline static int paw_raw_cmp(void const *x, size_t nx, void const *y, size_t ny)
 {
     paw_assert(x != NULL && y != NULL);
     size_t const min = PAW_MIN(nx, ny);

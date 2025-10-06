@@ -22,6 +22,12 @@ static IrTypeList *fold_type_list(struct IrTypeFolder *F, IrTypeList *list)
     return result;
 }
 
+static IrType *FoldPtr(struct IrTypeFolder *F, struct IrPtr *t)
+{
+    IrType *pointee = FoldType(F, t->pointee);
+    return pawIr_new_ptr(F->C, pointee);
+}
+
 static IrType *FoldAdt(struct IrTypeFolder *F, struct IrAdt *t)
 {
     IrTypeList *types = F->FoldTypeList(F, t->types);
@@ -60,6 +66,7 @@ static IrType *FoldTraitObj(struct IrTypeFolder *F, struct IrTraitObj *t)
 
 static IrType *FoldNever(struct IrTypeFolder *F, struct IrNever *t)
 {
+    PAW_UNUSED(t);
     return pawIr_new_never(F->C);
 }
 
@@ -113,6 +120,7 @@ void pawIr_type_folder_init(struct IrTypeFolder *F, struct Compiler *C, void *ud
 
         .FoldTypeList = fold_type_list,
 
+        .FoldPtr = FoldPtr,
         .FoldAdt = FoldAdt,
         .FoldSignature = FoldSignature,
         .FoldFnPtr = FoldFnPtr,
@@ -169,7 +177,13 @@ static void FoldPlace(struct MirVisitor *V, struct MirPlace r)
 {
     struct IrTypeFolder *F = V->ud;
     if (r.kind == MIR_PLACE_LOCAL) {
+        struct MirLocalData *data = mir_local_data(V->mir, r.L);
+        data->type = pawIr_fold_type(F, data->type);
+    } else if (r.kind == MIR_PLACE_REGISTER) {
         struct MirRegisterData *data = mir_reg_data(V->mir, r.r);
+        data->type = pawIr_fold_type(F, data->type);
+    } else if (r.kind == MIR_PLACE_UPVALUE) {
+        struct MirUpvalueInfo *data = &K_LIST_AT(V->mir->upvalues, r.up);
         data->type = pawIr_fold_type(F, data->type);
     }
 }

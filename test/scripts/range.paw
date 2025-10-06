@@ -1,5 +1,6 @@
 // range.paw
 
+#[test]
 pub fn test_in_range() {
     assert((1..10).contains(1));
     assert((1..10).contains(9));
@@ -7,6 +8,7 @@ pub fn test_in_range() {
     assert((1..2).contains(1));
 }
 
+#[test]
 pub fn test_not_in_range() {
     assert(!(1..10).contains(0));
     assert(!(1..10).contains(10));
@@ -17,16 +19,19 @@ pub fn test_not_in_range() {
     assert(!(1..2).contains(2));
 }
 
+#[test]
 pub fn test_precedence() {
     assert((1|1..1+1).contains(1));
 }
 
+#[test]
 pub fn test_variables() {
     let a = 1;
     let b = 2;
     assert((a..b).contains(1));
 }
 
+#[test]
 pub fn test_other_types() {
     assert((false..true).contains(false));
     assert(!(true..true).contains(true));

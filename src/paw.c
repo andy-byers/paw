@@ -6,7 +6,7 @@
 
 #include "env.h"
 #include "lib.h"
-#include "paw.h"
+#include "core.h"
 #include "stats.h"
 #include "util.h"
 

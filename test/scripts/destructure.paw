@@ -1,5 +1,6 @@
 // destructure.paw
 
+#[test]
 pub fn test_tuple() {
     let () = ();
     let (a,) = (1,);
@@ -26,6 +27,7 @@ struct Fields {
     pub third: (int, Unit),
 }
 
+#[test]
 pub fn test_struct() {
     let Unit = Unit; // no binding created
     let Fields{second: sec, third: (x, y), first} = Fields{
@@ -38,6 +40,7 @@ pub fn test_struct() {
     assert(x == 42);
 }
 
+#[test]
 pub fn test_for_loop_tuple() {
     let data = [(123, 456)];
 
@@ -47,6 +50,7 @@ pub fn test_for_loop_tuple() {
     } 
 }
 
+#[test]
 pub fn test_for_loop_struct() {
     let data = [Fields{first: 123, second: "abc", third: (456, Unit)}];
 
@@ -58,6 +62,7 @@ pub fn test_for_loop_struct() {
 }
 
 // only the first arm of the OR pattern is reachable
+#[test]
 pub fn test_or() {
     let a | a = 1;
     assert(a == 1);
@@ -78,6 +83,7 @@ pub fn test_or() {
     assert(z == 3);
 }
 
+#[test]
 pub fn test_swap() {
     let (a, b) = (1, 2);
     assert(a == 1);

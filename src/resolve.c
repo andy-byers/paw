@@ -25,7 +25,7 @@ struct Symbol {
 };
 
 DEFINE_LIST(struct Resolver, SymbolList, struct Symbol)
-DEFINE_LIST(struct Resolver, NodeIdList, NodeId);
+DEFINE_LIST(struct Resolver, NodeIdList, NodeId)
 
 DEFINE_LIST(struct Resolver, Scope, struct Symbol)
 DEFINE_LIST(struct Resolver, Symtab, struct Scope *)
@@ -34,8 +34,8 @@ DEFINE_LIST(struct Resolver, Symtab, struct Scope *)
 static DeclId next_did(struct Resolver *R)
 {
     return (DeclId){
-        .value = ++R->decl_count,
-        .modno = R->current->modno,
+        .value = (unsigned)++R->decl_count,
+        .modno = (unsigned)R->current->modno,
     };
 }
 
@@ -639,34 +639,40 @@ static paw_Bool resolve_generic_decl(struct AstVisitor *V, struct AstGenericDecl
 
 static paw_Bool enter_match_arm(struct AstVisitor *V, struct AstMatchArm *e)
 {
+    PAW_UNUSED(e);
     enter_scope(V->ud);
     return PAW_TRUE;
 }
 
 static void leave_match_arm(struct AstVisitor *V, struct AstMatchArm *e)
 {
+    PAW_UNUSED(e);
     leave_scope(V->ud);
 }
 
 static paw_Bool enter_block_expr(struct AstVisitor *V, struct AstBlock *e)
 {
+    PAW_UNUSED(e);
     enter_scope(V->ud);
     return PAW_TRUE;
 }
 
 static void leave_block_expr(struct AstVisitor *V, struct AstBlock *e)
 {
+    PAW_UNUSED(e);
     leave_scope(V->ud);
 }
 
 static paw_Bool enter_for_expr(struct AstVisitor *V, struct AstForExpr *e)
 {
+    PAW_UNUSED(e);
     enter_scope(V->ud);
     return PAW_TRUE;
 }
 
 static void leave_for_expr(struct AstVisitor *V, struct AstForExpr *e)
 {
+    PAW_UNUSED(e);
     leave_scope(V->ud);
 }
 
@@ -683,6 +689,7 @@ static paw_Bool enter_fn_decl(struct AstVisitor *V, struct AstFnDecl *d)
 
 static void leave_fn_decl(struct AstVisitor *V, struct AstFnDecl *d)
 {
+    PAW_UNUSED(d);
     leave_scope(V->ud);
 }
 
@@ -714,6 +721,7 @@ static paw_Bool enter_adt_decl(struct AstVisitor *V, struct AstAdtDecl *d)
 
 static void leave_adt_decl(struct AstVisitor *V, struct AstAdtDecl *d)
 {
+    PAW_UNUSED(d);
     leave_scope(V->ud);
 }
 
@@ -731,6 +739,7 @@ static paw_Bool enter_trait_decl(struct AstVisitor *V, struct AstTraitDecl *d)
 
 static void leave_trait_decl(struct AstVisitor *V, struct AstTraitDecl *d)
 {
+    PAW_UNUSED(d);
     leave_scope(V->ud);
 }
 
@@ -746,6 +755,7 @@ static paw_Bool enter_type_decl(struct AstVisitor *V, struct AstTypeDecl *d)
 
 static void leave_type_decl(struct AstVisitor *V, struct AstTypeDecl *d)
 {
+    PAW_UNUSED(d);
     leave_scope(V->ud);
 }
 
@@ -759,23 +769,28 @@ static paw_Bool enter_module_decl(struct AstVisitor *V, struct AstModuleDecl *d)
 
 static void leave_module_decl(struct AstVisitor *V, struct AstModuleDecl *d)
 {
+    PAW_UNUSED(d);
     struct Resolver *R = V->ud;
     R->current = NULL;
 }
 
 static paw_Bool enter_closure_expr(struct AstVisitor *V, struct AstClosureExpr *e)
 {
+    PAW_UNUSED(e);
     enter_scope(V->ud);
     return PAW_TRUE;
 }
 
 static void leave_closure_expr(struct AstVisitor *V, struct AstClosureExpr *e)
 {
+    PAW_UNUSED(e);
     leave_scope(V->ud);
 }
 
 static paw_Bool ignore_use_decl(struct AstVisitor *V, struct AstUseDecl *d)
 {
+    PAW_UNUSED(V);
+    PAW_UNUSED(d);
     return PAW_FALSE;
 }
 

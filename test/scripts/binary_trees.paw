@@ -42,7 +42,16 @@ fn item_check(tree: Option<Tree>) -> int {
     return item_check_aux(tree.unwrap());
 }
 
-pub fn main(args: [str]) {
+
+#[test]
+pub fn test() {
+    let tree = bottom_up_tree(9);
+    item_check(bottom_up_tree(10));
+    item_check(tree);
+}
+
+
+pub fn main(args: [str]) -> int {
     let N = if #args > 1 {
         args[1].parse_int().unwrap()
     } else {
@@ -74,4 +83,5 @@ pub fn main(args: [str]) {
     }
 
     println("long lived tree of depth \{maxdepth}\tcheck: \{item_check(longlivedtree)}");
+    0
 }

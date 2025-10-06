@@ -2,183 +2,243 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
-#include "prefix.h"
-
-#include "api.h"
-#include "auxlib.h"
-#include "call.h"
-#include "env.h"
-#include "lib.h"
-#include "os.h"
-#include <stdio.h>
+#include "io.h"
+#include "str.h"
 #include <errno.h>
+#include <stdio.h>
 
-#define PUSH_RESULT(P_, Payload_) { \
-        paw_push_int(P_, PAW_RESULT_OK); \
-        *(P_)->top.p++ = (Payload_); \
-    }
+#define IO_ERROR(E_) (paw_io_Error){E_}
 
-#define PUSH_ERROR(P_) { \
-        paw_push_int(P_, PAW_RESULT_ERR); \
-        paw_push_int(P_, error_kind()); \
-    }
+#define IO_RESULT_OK(T_, Value_) paw_Result_##T_##_io_Error_ok(Value_)
+#define IO_RESULT_ERR(T_, Error_) paw_Result_##T_##_io_Error_err(IO_ERROR(Error_))
 
-#define RESULT_SIZE(Payload_) (1 + PAW_MAX(Payload_, 1))
-
-// ORDER ErrorKind
-enum ErrorKind {
-    ERROR_NOT_FOUND,
-    ERROR_PERMISSION_DENIED,
-    ERROR_FILE_TOO_LARGE,
-    ERROR_ALREADY_EXISTS,
-    ERROR_NOT_OPENED,
-    ERROR_NOT_SUPPORTED,
-    ERROR_INVALID_ARGUMENT,
-    ERROR_OTHER,
+struct paw_io_File {
+    FILE *file;
 };
 
-static int error_kind(void)
+
+//
+// OS interface
+//
+
+#define INTR_TIMEOUT 100
+
+#define DEFINE_STREAM_GETTER(Stream_) \
+    static paw_io_File get_##Stream_(void) \
+    { \
+        static struct paw_io_File file; \
+        file.file = Stream_; \
+        return &file; \
+    }
+DEFINE_STREAM_GETTER(stdin)
+DEFINE_STREAM_GETTER(stdout)
+DEFINE_STREAM_GETTER(stderr)
+#undef DEFINE_STREAM_GETTER
+
+paw_Bool file_is_open(paw_io_File file)
+{
+    return file->file != NULL;
+}
+
+static int os_open(paw_Char const *pathname, paw_Char const *mode, FILE **file_ptr)
+{
+    for (int i = 0; i < INTR_TIMEOUT; ++i) {
+        FILE *file = fopen(pathname, mode);
+        if (file != NULL) {
+            *file_ptr = file;
+            return 0;
+        } else if (errno != EINTR) {
+            break;
+        }
+    }
+    return -1;
+}
+
+static void os_close(paw_io_File file)
+{
+    if (file->file == NULL)
+        return;
+    for (int i = 0; i < INTR_TIMEOUT; ++i) {
+        int const rc = fclose(file->file);
+        if (rc == 0 || errno != EINTR) {
+            file->file = NULL;
+            break;
+        }
+    }
+}
+
+int os_seek(paw_io_File file, paw_Int offset, int whence)
+{
+    return fseek(file->file, (long)offset, whence);
+}
+
+static paw_Int os_tell(paw_io_File file)
+{
+    return ftell(file->file);
+}
+
+static int os_flush(paw_io_File file)
+{
+    return fflush(file->file);
+}
+
+#define IO_FERROR(File_) (ferror((File_)->file) && errno != EINTR)
+
+static paw_Int os_read(paw_io_File file, void *data, paw_Int size)
+{
+    size_t remaining = (size_t)size;
+    for (int i = 0; i < INTR_TIMEOUT; ++i) {
+        size_t const n = fread(data, 1, remaining, file->file);
+        data = (paw_Char *)data + n;
+        remaining -= n;
+
+        if (remaining == 0 || feof(file->file)) {
+            break;
+        } else if (IO_FERROR(file)) {
+            return -1;
+        }
+    }
+    return size - (paw_Int)remaining;
+}
+
+static paw_Int os_write(paw_io_File file, void const *data, paw_Int size)
+{
+    size_t remaining = (size_t)size;
+    for (int i = 0; i < INTR_TIMEOUT; ++i) {
+        size_t const n = fwrite(data, 1, remaining, file->file);
+        data = (paw_Char const *)data + n;
+        remaining -= n;
+
+        if (remaining == 0) {
+            break;
+        } else if (IO_FERROR(file)) {
+            return -1;
+        }
+    }
+    return size - (paw_Int)remaining;
+}
+
+static paw_io_ErrorKind check_errno(void)
 {
     switch (errno) {
         case ENOENT:
-            return ERROR_NOT_FOUND;
+            return paw_io_Error_NotFound;
         case EPERM:
         case EACCES:
-            return ERROR_PERMISSION_DENIED;
+            return paw_io_Error_PermissionDenied;
         case ENOSPC:
         case EFBIG:
-            return ERROR_FILE_TOO_LARGE;
+            return paw_io_Error_TooLarge;
         case EEXIST:
-            return ERROR_ALREADY_EXISTS;
+            return paw_io_Error_AlreadyExists;
         case EBADF:
-            return ERROR_NOT_OPENED;
+            return paw_io_Error_NotOpened;
         case ENOSYS:
         case EOPNOTSUPP:
-            return ERROR_NOT_SUPPORTED;
+            return paw_io_Error_NotSupported;
         case EINVAL:
-            return ERROR_INVALID_ARGUMENT;
+            return paw_io_Error_InvalidArgument;
         default:
-            return ERROR_OTHER;
+            return paw_io_Error_Other;
     }
 }
 
-static int file_open(paw_Env *P)
+static paw_io_File malloc_file(void)
 {
-    File *file = pawO_new_file(P);
-    char const *path = paw_str(P, 1);
-    char const *mode = paw_str(P, 2);
-    if (pawO_open(file, path, mode) == 0) {
-        // A foreign object containing the File is already on top of the stack. Transform it
-        // into a io::Result<File>, i.e. an integer discriminant followed by the payload.
-        paw_push_int(P, PAW_RESULT_OK);
-        paw_rotate(P, -2, 1);
-    } else {
-        PUSH_ERROR(P);
-    }
-    return RESULT_SIZE(1);
+    paw_io_File file = PAW_MALLOC(sizeof *file);
+    file->file = NULL;
+    return file;
 }
 
-static int file_flush(paw_Env *P)
+static void free_file(paw_io_File file)
 {
-    File *file = paw_pointer(P, 1);
-    if (pawO_flush(file) == 0) {
-        PUSH_RESULT(P, I2V(0));
-    } else {
-        PUSH_ERROR(P);
-    }
-    return RESULT_SIZE(1);
+    PAW_FREE(file);
 }
 
 static int seek_kind(paw_Int kind)
 {
-    switch (kind) {
-        case 0:
+    switch ((paw_io_SeekKind)kind) {
+        case paw_io_Seek_Begin:
             return SEEK_SET;
-        case 1:
+        case paw_io_Seek_Current:
             return SEEK_CUR;
-        default:
-            paw_assert(kind == 2);
+        case paw_io_Seek_End:
             return SEEK_END;
     }
 }
 
-static int file_seek(paw_Env *P)
+
+// pub fn open(pathname: str, mode: str) -> Result<Self>
+PAW_IO_RESULT(io_File) paw_io_File_open(void *env, paw_Str pathname, paw_Str mode)
 {
-    File *file = paw_pointer(P, 1);
-    paw_Int const offset = paw_int(P, 2);
-    int const seek = seek_kind(paw_int(P, 3));
-    if (pawO_seek(file, offset, seek) == 0) {
-        PUSH_RESULT(P, I2V(0));
+    PAW_UNUSED(env);
+    paw_io_File file = malloc_file();
+    if (os_open(pathname->text, mode->text, &file->file) == 0) {
+        return IO_RESULT_OK(io_File, file);
     } else {
-        PUSH_ERROR(P);
+        free_file(file); // free before collection
+        return IO_RESULT_ERR(io_File, check_errno());
     }
-    return RESULT_SIZE(1);
 }
 
-static int file_tell(paw_Env *P)
+// pub fn seek(self, offset: int, whence: Seek) -> Result<()>
+PAW_IO_RESULT(Unit) paw_io_File_seek(void *env, paw_io_File self, paw_Int offset, paw_io_Seek whence)
 {
-    File *file = paw_pointer(P, 1);
-    long const offset = pawO_tell(file);
+    PAW_UNUSED(env);
+    if (os_seek(self, offset, seek_kind(whence.discr)) == 0) {
+        return IO_RESULT_OK(Unit, PAW_UNIT());
+    } else {
+        return IO_RESULT_ERR(Unit, check_errno());
+    }
+}
+
+// pub fn tell(self) -> Result<int>
+PAW_IO_RESULT(Int) paw_io_File_tell(void *env, paw_io_File self)
+{
+    PAW_UNUSED(env);
+    paw_Int const offset = os_tell(self);
     if (offset >= 0) {
-        PUSH_RESULT(P, I2V(offset));
+        return IO_RESULT_OK(Int, offset);
     } else {
-        PUSH_ERROR(P);
+        return IO_RESULT_ERR(Int, check_errno());
     }
-    return RESULT_SIZE(1);
 }
 
-static int file_read(paw_Env *P)
+// pub fn read(self, size: int) -> Result<str>
+PAW_IO_RESULT(Str) paw_io_File_read(void *env, paw_io_File self, paw_Int size)
 {
-    Buffer buf;
-    pawL_init_buffer(P, &buf);
+    PAW_UNUSED(env);
+    struct StringBuilder sb;
+    sb_init(&sb);
 
-    File *file = paw_pointer(P, 1);
-    paw_Int const size = paw_int(P, 2);
+    sb_reserve(&sb, size);
+    sb.length = os_read(self, sb_buffer(&sb), size);
 
-    pawL_buffer_resize(P, &buf, size);
-    paw_Int const count = pawO_read(P, file, buf.data, size);
+    return sb.length >= 0
+        ? IO_RESULT_OK(Str, sb_create_str(&sb))
+        : IO_RESULT_ERR(Str, check_errno());
+}
+
+// pub fn write(self, data: str) -> Result<int>
+PAW_IO_RESULT(Int) paw_io_File_write(void *env, paw_io_File self, paw_Str data)
+{
+    PAW_UNUSED(env);
+    paw_Int const count = os_write(self, data->text, data->length);
     if (count >= 0) {
-        pawL_buffer_resize(P, &buf, count);
-        pawL_push_result(P, &buf);
-        paw_push_int(P, PAW_RESULT_OK);
-        paw_rotate(P, -2, 1);
+        return IO_RESULT_OK(Int, count);
     } else {
-        PUSH_ERROR(P);
+        return IO_RESULT_ERR(Int, check_errno());
     }
-
-    return RESULT_SIZE(1);
 }
 
-static int file_write(paw_Env *P)
+// pub fn flush(self) -> Result<()>
+PAW_IO_RESULT(Unit) paw_io_File_flush(void *env, paw_io_File self)
 {
-    File *file = paw_pointer(P, 1);
-    char const *data = paw_str(P, 2);
-    paw_str_length(P, -1);
-    paw_Int const size = paw_int(P, -1);
-
-    paw_Int const count = pawO_write(P, file, data, size);
-    if (count >= 0) {
-        PUSH_RESULT(P, I2V(count));
+    PAW_UNUSED(env);
+    if (os_flush(self) == 0) {
+        return IO_RESULT_OK(Unit, PAW_UNIT());
     } else {
-        PUSH_ERROR(P);
+        return IO_RESULT_ERR(Unit, check_errno());
     }
-
-    return RESULT_SIZE(1);
-}
-
-void l_import_io(paw_Env *P)
-{
-    pawE_push_cstr(P, CSTR_KSYMBOLS);
-    paw_map_get(P, PAW_REGISTRY_INDEX);
-
-    pawL_add_extern_method(P, "io", "File", "open", file_open);
-    pawL_add_extern_method(P, "io", "File", "seek", file_seek);
-    pawL_add_extern_method(P, "io", "File", "tell", file_tell);
-    pawL_add_extern_method(P, "io", "File", "read", file_read);
-    pawL_add_extern_method(P, "io", "File", "write", file_write);
-    pawL_add_extern_method(P, "io", "File", "flush", file_flush);
-    paw_pop(P, 1); // paw.symbols
-
-    pawL_file_reader(P, PAWL_STDLIB_PATH(PAWL_IO_NAME));
 }
 

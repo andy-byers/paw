@@ -8,6 +8,7 @@ struct Struct<T> {
     pub v: T
 }
 
+#[test]
 pub fn test_instantiate_in_signature() {
     let s = instantiate_in_signature(Struct{v: true});
     assert(s.v == 42);
@@ -17,6 +18,7 @@ struct Singleton<Value> {
     pub value: Value,
 }
 
+#[test]
 pub fn test_initialization() {
     let singleton: Singleton<int> = Singleton::<int>{value: 1};
     let singleton = Singleton::<int>{value: 1};
@@ -42,6 +44,7 @@ struct Empty<T>;
 fn touch_empty<T>(v: Empty<T>) {}
 fn touch_nested_empty<T>(v: Empty<Empty<T>>) {}
 
+#[test]
 pub fn test_arguments() {
     touch_empty::<bool>(Empty::<bool>);
     let empty = Empty::<str>;
@@ -65,6 +68,7 @@ pub fn test_arguments() {
     touch_nested_empty(Empty::<Empty<Empty<float>>>);
 }
 
+#[test]
 pub fn test_multiple_objects() {
     let av = 1;
     let a = Singleton{value: av};
@@ -104,6 +108,7 @@ struct TypeShadowsName<TypeShadowsName> {
     pub value: TypeShadowsName,
 }
 
+#[test]
 pub fn test_type_shadows_name() {
     let tsn = TypeShadowsName::<int>{value: 123};
     assert(tsn.value == 123);
@@ -121,6 +126,7 @@ fn new_pair<A, B>(a: A, b: B) -> Pair<A, B> {
     };
 }
 
+#[test]
 pub fn test_two_generics() {
     assert(false == new_pair(false, true).first);
     assert(1 == new_pair(1, 2).first);
@@ -136,6 +142,7 @@ struct ExtraNestedSingleton<T> {
     pub value: NestedSingleton<T>,
 }
 
+#[test]
 pub fn test_basic_inference() {
     let a = Singleton{value: 123};
     assert(a.value == 123);
@@ -157,6 +164,7 @@ fn check_length<T>(n: int, c: Container<T>) {
 
 fn check_types<T>(t: T, c: Container<T>) {}
 
+#[test]
 pub fn test_inference_with_fn() {
 
     check_length(1, Container{values: [1]});
@@ -175,6 +183,7 @@ struct MultiPairs<A, B, C> {
     pub c: (C, A),
 }
 
+#[test]
 pub fn test_inference_with_tuple() {
     let t = MultiPairs{
         a: (true, 2),
@@ -191,6 +200,7 @@ struct PairWithVec<T> {
     pub b: [T],
 }
 
+#[test]
 pub fn test_infer_vec_field() {
     let p = PairWithVec{
         a: true,
@@ -200,6 +210,7 @@ pub fn test_infer_vec_field() {
     assert(p.a == p.b[0]);
 }
 
+#[test]
 pub fn test_scope() {
     let a = TopLevelA{
         b: TopLevelB{
@@ -229,6 +240,7 @@ struct PolyRecur2<X, Y> {
     pub value3: Option<PolyRecur2<bool, str>>,
 }
 
+#[test]
 pub fn test_recursion() {
     let pr = PolyRecur2{
         value: Option::<PolyRecur2<int, bool>>::None,
@@ -264,6 +276,7 @@ struct PolyRecur2B<X, Y, Z> {
     pub value3: Option<PolyRecur2A<str, float, X>>,
 }
 
+#[test]
 pub fn test_recursion2() {
     let pr = PolyRecur2A{
         value: Option::<PolyRecur2B<bool, int, float>>::None,
@@ -294,6 +307,7 @@ struct TestSelfPoly<A, B> {
     pub fn method2(self: Self) {}
 }
 
+#[test]
 pub fn test_self_poly() {
     let ts = TestSelfPoly::<int, float>;
     ts.method();

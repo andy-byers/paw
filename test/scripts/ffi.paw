@@ -1,0 +1,126 @@
+// ffi.paw
+
+//
+// Structure return tests
+//
+
+pub inline struct Tiny1 {
+    pub x: char,
+}
+
+pub inline struct Tiny3 {
+    pub x: char,
+    pub y: char,
+    pub z: char,
+}
+
+#[extern = "C"] pub fn get_tiny1(x: char) -> Tiny1;
+#[extern = "C"] pub fn get_tiny3(x: char, y: char, z: char) -> Tiny3;
+
+#[test]
+pub fn test_get_tiny1() {
+    let tiny1 = get_tiny1('x');
+    assert(tiny1.x == 'x');
+}
+
+#[test]
+pub fn test_get_tiny3() {
+    let Tiny3{x, y, z} = get_tiny3('x', 'y', 'z');
+    assert(x == 'x');
+    assert(y == 'y');
+    assert(z == 'z');
+}
+
+pub inline struct Small2 {
+    pub x: char,
+    pub y: int,
+}
+
+pub inline struct Small3 {
+    pub x: bool,
+    pub y: char,
+    pub z: float,
+}
+
+#[extern = "C"] pub fn get_small2(x: char, y: int) -> Small2;
+#[extern = "C"] pub fn get_small3(x: bool, y: char, z: float) -> Small3;
+
+#[test]
+pub fn test_get_small2() {
+    let Small2{x, y} = get_small2('1', 2);
+    assert(x == '1');
+    assert(y == 2);
+}
+
+#[test]
+pub fn test_get_small3() {
+    let Small3{x, y, z} = get_small3(false, '1', 2.0);
+    assert(!x);
+    assert(y == '1');
+    assert(z == 2.0);
+}
+
+pub inline struct Large3 {
+    pub x: float,
+    pub y: float,
+    pub z: bool,
+}
+
+pub inline struct Large5 {
+    pub x: int,
+    pub y: int,
+    pub z: Large3,
+}
+
+#[extern = "C"] pub fn get_large3(x: float, y: float, z: bool) -> Large3;
+#[extern = "C"] pub fn get_large5(x: int, y: int, z: Large3) -> Large5;
+
+#[test]
+pub fn test_get_large3() {
+    let Large3{x, y, z} = get_large3(1.1, 2.2, false);
+    assert(x == 1.1);
+    assert(y == 2.2);
+    assert(!z);
+}
+
+#[test]
+pub fn test_get_large5() {
+    let Large5{x, y, z: Large3{x: zx, y: zy, z: zz}} 
+        = get_large5(1, 2, get_large3(3.3, 4.4, true));
+    assert(x == 1);
+    assert(y == 2);
+    assert(zx == 3.3);
+    assert(zy == 4.4);
+    assert(zz);
+}
+
+pub inline struct HFA2 {
+    pub x: float,
+    pub y: float,
+}
+
+pub inline struct HFA4 {
+    pub x: float,
+    pub y: HFA2,
+    pub z: float,
+}
+
+#[extern = "C"] pub fn get_hfa2(x: float, y: float) -> HFA2;
+#[extern = "C"] pub fn get_hfa4(x: float, y: HFA2, z: float) -> HFA4;
+
+#[test]
+pub fn test_get_hfa2() {
+    let hfa2 = get_hfa2(1.1, 2.2);
+    assert(hfa2.x == 1.1);
+    assert(hfa2.y == 2.2);
+}
+
+#[test]
+pub fn test_get_hfa4() {
+    let HFA4{x, y: HFA2{x: yx, y: yy}, z} 
+        = get_hfa4(1.1, get_hfa2(2.2, 3.3), 4.4);
+    assert(x == 1.1);
+    assert(yx == 2.2);
+    assert(yy == 3.3);
+    assert(z == 4.4);
+}

@@ -9,6 +9,7 @@ enum Unit2 {
     Y,
 }
 
+#[test]
 pub fn test_unit_enum() {
     let e = Unit::X;
     e = Unit::X;
@@ -27,6 +28,7 @@ fn copy_data_enum(e: Data) -> Data {
     return e2;
 }
 
+#[test]
 pub fn test_data_enum() {
     let e = Data::X;
     e = Data::Y(42);

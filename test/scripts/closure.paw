@@ -10,11 +10,13 @@ fn parsed_as_closure(b: bool) -> (fn() -> bool) {
     { false } || b
 }
 
+#[test]
 pub fn test_logical_or_ambiguity() {
     assert(parsed_as_logical_or(true));
     assert(parsed_as_closure(true)());
 }
 
+#[test]
 pub fn test_expr_result() {
     let f = || 1;
     assert(f() == 1);
@@ -36,16 +38,19 @@ pub fn test_expr_result() {
     assert(v[1][1][0] == 2);
 }
 
+#[test]
 pub fn test_empty_block() {
     let f = || -> () {};
     let f = || -> () {return;};
 }
 
+#[test]
 pub fn test_infer_empty_block() {
     let f = || {};
     let f = || {return;};
 }
 
+#[test]
 pub fn test_infer_block_return() {
     let choose = |i| {
         if i == 0 {
@@ -67,6 +72,7 @@ pub fn test_infer_block_return() {
 
 }
 
+#[test]
 pub fn test_infer_from_annotation() {
     // this line would result in an inference error if not for the annotation,
     // since we never call it and the parameters are never used, meaning the type
@@ -86,6 +92,7 @@ pub fn test_infer_from_annotation() {
     assert(inner("one").1 == "one");
 }
 
+#[test]
 pub fn test_infer_param_from_body() {
     let f = |a| {return a + 1;};
     let f = |a| {return a ++ "two";};
@@ -99,6 +106,7 @@ pub fn test_infer_param_from_body() {
     assert(f(2.0, 3.0) == 5.0);
 }
 
+#[test]
 pub fn test_infer_param_from_call() {
     let f = |a| {return a;};
     assert(f(1) == 1);
@@ -121,6 +129,7 @@ fn map<A, B>(f: fn(A) -> B, a: [A]) -> [B] {
     return b;
 }
 
+#[test]
 pub fn test_generics() {
     let b = map(|a| a, [1]);
     assert(b[-1] == 1);
@@ -140,6 +149,7 @@ fn create_get_last<T>(t: [T]) -> fn() -> T {
     return || t[-1];
 }
 
+#[test]
 pub fn test_generic_with_closure() {
     let f = create_get_last([1, 2, 3]);
     assert(f() == 3);
@@ -157,6 +167,7 @@ fn pipeline<A, B, C>(
     return c;
 }
 
+#[test]
 pub fn test_pipeline() {
     let c = pipeline(|a| a, |b| b, 42);
     assert(c == 42);
@@ -172,6 +183,7 @@ fn pipeline_2<A, B, C>(a: A, b: B, c: C) -> C {
     return pipeline(|a| b, |b| c, a);
 }
 
+#[test]
 pub fn test_pipeline_2() {
     let c = pipeline_2(1, 2, 3);
     assert(c == 3);
@@ -186,6 +198,7 @@ fn compose<A, B>(
     return (a, f(a));
 }
 
+#[test]
 pub fn test_compose() {
     let x = compose(|a| 2, 1);
     assert(x.0 == 1);
@@ -195,6 +208,7 @@ pub fn test_compose() {
     assert(x.1 == 2.0);
 }
 
+#[test]
 pub fn test_basic_capture() {
     let make = || {
         let b = 1;
@@ -205,6 +219,7 @@ pub fn test_basic_capture() {
     assert(f(2) == 3);
 }
 
+#[test]
 pub fn test_upvalue_assignment() {
     let f = {
         let upvalue = -1;
@@ -233,6 +248,7 @@ pub fn check_upvalue_merge(b: bool) -> int {
     f()
 }
 
+#[test]
 pub fn test_upvalue_merge() {
     assert(check_upvalue_merge(true) == 1);
     assert(check_upvalue_merge(false) == 2);
@@ -252,6 +268,7 @@ pub fn check_upvalue_merge_2(n: int) -> (int, int) {
     return f();
 }
 
+#[test]
 pub fn test_upvalue_merge_2() {
     assert(check_upvalue_merge_2(0).0 == 0);
     assert(check_upvalue_merge_2(0).1 == 1);
@@ -261,6 +278,7 @@ pub fn test_upvalue_merge_2() {
     assert(check_upvalue_merge_2(2).1 == 5);
 }
 
+#[test]
 pub fn test_capture_multiple() {
     let f = {
         let a = 1;
@@ -274,6 +292,7 @@ pub fn test_capture_multiple() {
     assert(f().2 == 3);
 }
 
+#[test]
 pub fn test_nested_closures() {
     let make_closure = || {
         let c = 5;
@@ -283,6 +302,7 @@ pub fn test_nested_closures() {
     assert(t == 5);
 }
 
+#[test]
 pub fn test_nested_closures_1() {
     let make_closure = |a: int| {
         let b = 2;
@@ -295,6 +315,7 @@ pub fn test_nested_closures_1() {
     assert(t.2 == 3);
 }
 
+#[test]
 pub fn test_nested_closures_2() {
     let make_closure = || {
         let c = 5;
@@ -309,6 +330,7 @@ pub fn test_nested_closures_2() {
     assert(t.2 == 6);
 }
 
+#[test]
 pub fn test_capture_separate_lists() {
     let make_closures = || {
         let make_1 = || {
@@ -336,14 +358,14 @@ pub fn test_capture_separate_lists() {
     assert(#g() == 2);
 }
 
+#[test]
 pub fn test_closure_ssa() {
     let f = |b: bool| {
-        let a;
-        if b {
-            a = "true";
+        let a = if b {
+            "true"
         } else {
-            a = "false";
-        }
+            "false"
+        };
         a
     };
     assert(f(true) == "true");
