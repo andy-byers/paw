@@ -13,6 +13,23 @@ if (CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
     set(MAIN_PROJECT On)
 endif()
 
+set(PAW_LLVM_PATH "" CACHE PATH "Path to LLVM library")
+
+if(PAW_LLVM_PATH)
+    find_package(LLVM REQUIRED CONFIG PATHS ${PAW_LLVM_PATH})
+else()
+    include(FetchContent)
+    FetchContent_Declare(llvm
+        GIT_REPOSITORY https://github.com/llvm/llvm-project
+        GIT_TAG llvmorg-21.1.2)
+    FetchContent_MakeAvailable(llvm)
+endif()
+
+add_definitions(${LLVM_DEFINITIONS})
+llvm_map_components_to_libnames(LLVM_LIBS 
+    core native passes support irreader)
+
+
 option(PAW_BuildFuzzers "Build the fuzz targets" Off)
 option(PAW_BuildTests "Build the tests" ${MAIN_PROJECT})
 
@@ -32,6 +49,8 @@ else()
     target_link_libraries(paw_context
             INTERFACE m)
 endif()
+
+add_subdirectory(src/codegen)
 
 set(PAW_SOURCE_DIR ${PROJECT_SOURCE_DIR}/src)
 
@@ -61,7 +80,6 @@ set(PAW_HEADER_FILES
     ${PAW_SOURCE_DIR}/parse.h
     ${PAW_SOURCE_DIR}/prefix.h
     ${PAW_SOURCE_DIR}/resolve.h
-    ${PAW_SOURCE_DIR}/regstack.h
     ${PAW_SOURCE_DIR}/rt.h
     ${PAW_SOURCE_DIR}/rtti.h
     ${PAW_SOURCE_DIR}/source.h
@@ -112,8 +130,6 @@ set(PAW_SOURCE_FILES
     ${PAW_SOURCE_DIR}/os.c
     ${PAW_SOURCE_DIR}/parse.c
     ${PAW_SOURCE_DIR}/prelude.c
-    ${PAW_SOURCE_DIR}/regalloc.c
-    ${PAW_SOURCE_DIR}/regstack.c
     ${PAW_SOURCE_DIR}/resolve.c
     ${PAW_SOURCE_DIR}/rt.c
     ${PAW_SOURCE_DIR}/rtti.c
@@ -136,6 +152,8 @@ set(PAW_SOURCE_FILES
 
 # TODO: Paw really needs better organization. At least split off a "compiler" directory to hold the numerous compiler source files
 add_library(paw STATIC)
+target_include_directories(paw PRIVATE ${LLVM_INCLUDE_DIRS})
+target_link_libraries(paw PRIVATE ${LLVM_LIBS})
 target_sources(paw
     PUBLIC  ${PAW_HEADER_FILES}
     PRIVATE ${PAW_SOURCE_FILES})
@@ -145,6 +163,8 @@ target_compile_definitions(paw
     PUBLIC PAW_PRELUDE_PATH="${PAW_PRELUDE_PATH}"
            PAW_STDLIB_PATH="${PAW_STDLIB_PATH}"
            PAW_STRESS=${PAW_STRESS})
+target_link_libraries(paw
+    PRIVATE paw_context paw_codegen)
 
 add_executable(pawc
     ${PAW_SOURCE_DIR}/paw.c)

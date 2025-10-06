@@ -191,6 +191,9 @@ static paw_Bool sig_equals_extra(struct Compiler *C, IrType *a, IrType *b)
     return sa->did.value == sb->did.value;
 }
 
+// TODO: probably should distinguish between pawIr_type_equals where we care about function names
+//       and pawIr_type_equals where we do not (in the latter case, "fn assert(bool)" is the same
+//       as "fn(bool)", like what happens during type unification)
 paw_Bool pawIr_type_equals(struct Compiler *C, IrType *a, IrType *b)
 {
     if (IR_KINDOF(a) != IR_KINDOF(b))

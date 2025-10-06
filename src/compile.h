@@ -23,6 +23,7 @@
 #ifndef PAW_COMPILE_H
 #define PAW_COMPILE_H
 
+
 #include "code.h"
 #include "debug.h"
 #include "env.h"
@@ -88,7 +89,7 @@ struct RegstackMap;
 void *pawP_alloc(paw_Env *P, struct Pool *pool, void *ptr, size_t size0, size_t size);
 #define P_ALLOC(C, ptr, size0, size) pawP_alloc(ENV(C), (C)->pool, ptr, size0, size)
 
-Str *pawP_scan_nstr(struct Compiler *C, Tuple *map, char const *s, size_t n);
+EXTERN_C Str *pawP_scan_nstr(struct Compiler *C, Tuple *map, char const *s, size_t n);
 inline static Str *pawP_scan_str(struct Compiler *C, Tuple *map, char const *s)
 {
     return pawP_scan_nstr(C, map, s, strlen(s));
@@ -174,6 +175,9 @@ struct Compiler {
 
     struct GlobalList *globals;
 
+    // type of the runtime string internalization table ("[str: ()]")
+    struct IrType *strtab_type;
+
     paw_Env *P;
     int decl_count;
     int hir_count;
@@ -236,8 +240,8 @@ struct RegisterTable *pawP_allocate_registers(struct Compiler *C, struct Mir *mi
 
 struct IrTypeList *pawP_instantiate_typelist(struct Compiler *C, struct IrTypeList *before, struct IrTypeList *after, struct IrTypeList *target);
 struct IrType *pawP_instantiate_field(struct Compiler *C, struct IrType *self, struct IrType *field);
-struct IrTypeList *pawP_instantiate_struct_fields(struct Compiler *C, struct IrAdt *inst);
-struct IrTypeList *pawP_instantiate_variant_fields(struct Compiler *C, struct IrAdt *inst, int index);
+EXTERN_C struct IrTypeList *pawP_instantiate_struct_fields(struct Compiler *C, struct IrAdt *inst);
+EXTERN_C struct IrTypeList *pawP_instantiate_variant_fields(struct Compiler *C, struct IrAdt *inst, int index);
 struct IrType *pawP_find_method(struct Compiler *C, struct IrType *self, Str *name);
 
 struct Decision *pawP_check_exhaustiveness(struct Hir *hir, struct Pool *pool, Str const *modname, struct HirMatchExpr *match, struct MatchVars *vars);
@@ -292,9 +296,9 @@ void pawP_compile(struct Compiler *C, paw_Reader input, void *ud);
 struct Pool *pawP_pool_new(struct Compiler *C, struct PoolStats st);
 void pawP_pool_free(struct Compiler *C, struct Pool *pool);
 
-enum BuiltinKind pawP_type2code(struct Compiler *C, struct IrType *type);
+EXTERN_C enum BuiltinKind pawP_type2code(struct Compiler *C, struct IrType *type);
+EXTERN_C struct IrType *pawP_builtin_type(struct Compiler *C, enum BuiltinKind code);
 struct Builtin *pawP_builtin_info(struct Compiler *C, enum BuiltinKind code);
-struct IrType *pawP_builtin_type(struct Compiler *C, enum BuiltinKind code);
 
 struct ItemSlot {
     struct RttiType *rtti;
@@ -320,8 +324,8 @@ paw_Bool pawP_check_extern(struct Compiler *C, struct Annotations *annos, struct
 Value const *pawP_get_extern_value(struct Compiler *C, Str const *name);
 void pawP_mangle_start(paw_Env *P, Buffer *buf, struct Compiler *G);
 Str *pawP_mangle_finish(paw_Env *P, Buffer *buf, struct Compiler *G);
-Str *pawP_mangle_name(struct Compiler *G, Str const *modname, Str const *name, struct IrTypeList *types);
-Str *pawP_mangle_attr(struct Compiler *C, Str const *modname, Str const *base, struct IrTypeList const *base_types, Str const *attr, struct IrTypeList const *attr_types);
+EXTERN_C Str *pawP_mangle_name(struct Compiler *G, Str const *modname, Str const *name, struct IrTypeList *types);
+EXTERN_C Str *pawP_mangle_attr(struct Compiler *C, Str const *modname, Str const *base, struct IrTypeList const *base_types, Str const *attr, struct IrTypeList const *attr_types);
 
 struct ExternInfo {
     Str *name;

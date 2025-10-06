@@ -11,7 +11,7 @@ struct Compiler;
 struct IrType;
 struct IrTypeList;
 
-struct IrTypeList *pawP_query_traits(struct Compiler *C, struct IrType *type);
+EXTERN_C struct IrTypeList *pawP_query_traits(struct Compiler *C, struct IrType *type);
 void pawP_add_trait_impl(struct Compiler *C, struct IrType *type, struct IrType *trait);
 paw_Bool pawP_satisfies_bounds(struct Compiler *C, struct IrType *type, struct IrTypeList *bounds);
 

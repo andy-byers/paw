@@ -35,11 +35,11 @@ void pawMap_erase(Tuple *m, paw_Int index);
 void pawMap_remove(paw_Env *P, Tuple *m, Value const *pkey);
 Value *pawMap_insert(paw_Env *P, Tuple *m, Value const *pkey, Value const *pvalue);
 paw_Bool pawMap_contains(paw_Env *P, Tuple *m, Value const *pkey);
-Value *pawMap_key(paw_Env *P, Tuple *m, paw_Int index);
-Value *pawMap_value(paw_Env *P, Tuple *m, paw_Int index);
+EXTERN_C Value *pawMap_key(paw_Env *P, Tuple *m, paw_Int index);
+EXTERN_C Value *pawMap_value(paw_Env *P, Tuple *m, paw_Int index);
 int pawMap_key_size(paw_Env *P, Tuple const *t);
 int pawMap_value_size(paw_Env *P, Tuple const *t);
-paw_Bool pawMap_iter(Tuple *m, paw_Int *pi);
+EXTERN_C paw_Bool pawMap_iter(Tuple *m, paw_Int *pi);
 
 inline static paw_Int pawMap_length(Tuple const *m)
 {

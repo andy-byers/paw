@@ -9,7 +9,7 @@
 #include "mir.h"
 
 #define SSA_ERROR(S_, Kind_, ...) pawErr_##Kind_((S_)->C, (S_)->mir->modname, __VA_ARGS__)
-#define PLACE(Reg_) ((struct MirPlace){.r = Reg_})
+#define PLACE(Reg_, Type_) ((struct MirPlace){.r = Reg_, .type = Type_})
 
 struct SsaConverter {
     struct Compiler *C;
@@ -55,13 +55,14 @@ static struct MirPhi *place_trivial_phi_node(struct SsaConverter *S, MirBlock b,
     }
     IrType *type = mir_reg_data(S->mir, r)->type;
     struct MirPlaceList *inputs = MirPlaceList_new(S->mir);
-    struct MirInstruction *phi = pawMir_new_phi(S->mir, (struct SourceLoc){-1}, inputs, PLACE(r), r.value);
+    struct MirInstruction *phi = pawMir_new_phi(S->mir, (struct SourceLoc){-1},
+            inputs, PLACE(r, type), r.value);
     MirInstructionList_push(S->mir, bb->joins, phi);
 
     int ninputs = bb->predecessors->count;
     MirPlaceList_reserve(S->mir, inputs, ninputs);
     while (ninputs-- > 0)
-        MirPlaceList_push(S->mir, inputs, PLACE(MIR_INVALID_REG));
+        MirPlaceList_push(S->mir, inputs, PLACE(MIR_INVALID_REG, type));
 
     return MirGetPhi(phi);
 }
@@ -264,7 +265,7 @@ static void rename_vars(struct SsaConverter *S, MirBlock x)
             struct MirRegisterList const *stack = NameStackList_get(S->stacks, phi->var_id);
             if (stack->count > 0) {
                 int const index = mir_which_pred(S->mir, *y, x);
-                struct MirPlace const input = PLACE(K_LIST_LAST(stack));
+                struct MirPlace const input = PLACE(K_LIST_LAST(stack), phi->output.type);
                 MirPlaceList_set(phi->inputs, index, input);
             }
         }

@@ -1,0 +1,297 @@
+
+pub fn fib(n: int) -> int {
+    if n < 2 { return n; }
+    fib(n - 2) + fib(n - 1)
+}
+
+pub fn test_int_ops(one: int, two: int, three: int, ten: int) {
+    assert(one + two == 3);
+    assert(ten - two == 8);
+    assert(two * ten == 20);
+    assert(ten / three == 3);
+    assert(ten % three == 1);
+
+    assert(three & one == 1);
+    assert(three | one == 3);
+    assert(three ^ one == 2);
+    assert(ten >> one == 5);
+    assert(ten << one == 20);
+
+    assert(one == one);
+    assert(one != two);
+    assert(one <= one);
+    assert(one < two);
+    assert(one >= one);
+    assert(two > one);
+}
+
+////pub fn get_int(value: int) -> int {
+////    value
+////}
+////
+////pub fn get_int2(value: int) -> (int, int) {
+////    (value, value + 1)
+////}
+////
+
+inline struct InlineFlat1 {
+    pub v: int,
+}
+
+pub fn create_flat1(v: int) -> InlineFlat1 {
+    InlineFlat1{v}
+}
+
+pub fn check_flat1(s: InlineFlat1, v: int) {
+    assert(s.v == v);
+}
+
+inline struct InlineFlatN {
+    pub a: int,
+    pub b: char,
+    pub c: bool,
+}
+
+pub fn create_flatn(a: int, b: char, c: bool) -> InlineFlatN {
+    InlineFlatN{a, b, c}
+}
+
+pub fn check_flatn(s: InlineFlatN, a: int, b: char, c: bool) {
+    assert(s.a == a);
+    assert(s.b == b);
+    assert(s.c == c);
+}
+
+inline struct InlineNested1 {
+    pub v: InlineFlat1,
+}
+
+pub fn create_nested1(v: int) -> InlineNested1 {
+    InlineNested1{v: InlineFlat1{v}}
+}
+
+pub fn check_nested1(s: InlineNested1, v: int) {
+    assert(s.v.v == v);
+}
+
+inline struct InlineNestedN {
+    pub a: InlineFlat1,
+    pub b: InlineNested1,
+    pub c: InlineFlatN,
+}
+
+pub fn create_nestedn(v: int, vv: int, a: int, b: char, c: bool) -> InlineNestedN {
+    InlineNestedN{a: InlineFlat1{v}, b: InlineNested1{v: InlineFlat1{v: vv}}, c: InlineFlatN{a, b, c}}
+}
+
+pub fn check_nestedn(s: InlineNestedN, v: int, vv: int, a: int, b: char, c: bool) {
+    assert(s.a.v == v);
+    assert(s.b.v.v == vv);
+    assert(s.c.a == a);
+    assert(s.c.b == b);
+    assert(s.c.c == c);
+}
+
+pub fn test_flat1() {
+    let s = create_flat1(1);
+    check_flat1(s, 1);
+    s = create_flat1(2);
+    check_flat1(s, 2);
+
+    let sa = create_flat1(1);
+    let sb = sa;
+    sb.v = 2;
+    check_flat1(sa, 1);
+    check_flat1(sb, 2);
+}
+
+pub fn test_flatn() {
+    let s = create_flatn(2, '1', false);
+    check_flatn(s, 2, '1', false);
+    s = create_flatn(3, '2', true);
+    check_flatn(s, 3, '2', true);
+
+    let sa = create_flatn(0, '0', false);
+    let sb = sa;
+    sb.a = 1;
+    sb.c = true;
+    check_flatn(sa, 0, '0', false);
+    check_flatn(sb, 1, '0', true);
+}
+
+pub fn test_nested1() {
+    let s = create_nested1(1);
+    check_nested1(s, 1);
+    s = create_nested1(2);
+    check_nested1(s, 2);
+
+    let sa = create_nested1(1);
+    let sb = sa;
+    sb.v.v = 2;
+    check_nested1(sa, 1);
+    check_nested1(sb, 2);
+}
+
+pub fn test_nestedn() {
+    let s = create_nestedn(1, 1, 1, '1', true);
+    check_nestedn(s, 1, 1, 1, '1', true);
+    s = create_nestedn(1, 2, 3, '4', false);
+    check_nestedn(s, 1, 2, 3, '4', false);
+
+    let sa = create_nestedn(0, 0, 0, '0', false);
+    let sb = sa;
+    sb.b.v.v = 2;
+    sb.c.a = 3;
+    sb.c.c = true;
+    check_nestedn(sa, 0, 0, 0, '0', false);
+    check_nestedn(sb, 0, 2, 3, '0', true);
+}
+
+pub fn test_list() {
+    let list = [
+        1,
+        2,
+        3,
+    ];
+
+    assert(list[0] == 1);
+    assert(list[1] == 2);
+    assert(list[2] == 3);
+
+    let v = list[0];
+    list[0] = list[1];
+    list[1] = list[2];
+    list[2] = v;
+
+    assert(list[0] == 2);
+    assert(list[1] == 3);
+    assert(list[2] == 1);
+}
+
+pub fn test_flat1_list() {
+    let list = [
+        create_flat1(1),
+        create_flat1(2),
+        create_flat1(3),
+    ];
+    check_flat1(list[0], 1);
+    check_flat1(list[1], 2);
+    assert(list[2].v == 3);
+
+    list[1].v = 20;
+    list[2] = InlineFlat1{v: 30};
+
+    check_flat1(list[0], 1);
+    check_flat1(list[1], 20);
+    check_flat1(list[2], 30);
+}
+
+pub fn test_flatn_list() {
+    let list = [
+        create_flatn(1, '1', false),
+        create_flatn(2, '2', false),
+        create_flatn(3, '3', false),
+    ];
+    check_flatn(list[0], 1, '1', false);
+    check_flatn(list[1], 2, '2', false);
+    assert(list[2].a == 3);
+    assert(list[2].b == '3');
+    assert(list[2].c == false);
+
+    list[1].a = 20;
+    list[1].c = true;
+    list[2] = InlineFlatN{a: 30, b: list[2].b, c: true};
+
+    check_flatn(list[0], 1, '1', false);
+    check_flatn(list[1], 20, '2', true);
+    check_flatn(list[2], 30, '3', true);
+}
+
+pub fn test_nested1_list() {
+    let list = [
+        create_nested1(1),
+        create_nested1(2),
+        create_nested1(3),
+    ];
+    check_nested1(list[0], 1);
+    check_nested1(list[1], 2);
+    assert(list[2].v.v == 3);
+
+    list[1].v.v = 20;
+    list[2] = InlineNested1{v: InlineFlat1{v: 30}};
+
+    check_nested1(list[0], 1);
+    check_nested1(list[1], 20);
+    check_nested1(list[2], 30);
+}
+
+pub fn test_nestedn_list() {
+    let list = [
+        create_nestedn(1, 1, 1, '1', false),
+        create_nestedn(2, 2, 2, '2', false),
+        create_nestedn(3, 3, 3, '3', false),
+    ];
+    check_nestedn(list[0], 1, 1, 1, '1', false);
+    check_nestedn(list[1], 2, 2, 2, '2', false);
+    assert(list[2].a.v == 3);
+    assert(list[2].b.v.v == 3);
+    assert(list[2].c.a == 3);
+    assert(list[2].c.b == '3');
+    assert(list[2].c.c == false);
+
+    list[1].b.v.v = 20;
+    list[1].c.b = 'X';
+    list[1].c.c = true;
+    list[2] = create_nestedn(1, 2, 3, '4', true);
+
+    check_nestedn(list[0], 1, 1, 1, '1', false);
+    check_nestedn(list[1], 2, 20, 2, 'X', true);
+    check_nestedn(list[2], 1, 2, 3, '4', true);
+}
+
+pub inline struct Pair<T> {
+    pub first: T,
+    pub second: T,
+}
+
+pub struct BoxedListWrapper { 
+    pub list: [Pair<int>],
+}
+
+pub fn bkpt(_: [int]) {}
+
+pub fn main(args: [str]) -> int {
+    let blw = BoxedListWrapper{
+        list: [
+            Pair{first: 10, second: 20},
+            Pair{first: 30, second: 40},
+        ],
+    };
+
+    assert(blw.list[0].first == 10);
+    assert(blw.list[0].second == 20);
+    assert(blw.list[1].first == 30);
+    assert(blw.list[1].second == 40);
+
+    test_flat1();
+    test_flatn();
+    test_nested1();
+    test_nestedn();
+
+    test_list();
+    test_flat1_list();
+    test_flatn_list();
+    test_nested1_list();
+    test_nestedn_list();
+
+
+    let i = 0;
+    let message = "Hello, world";
+    while i < 10 {
+        message ++= "!";
+        println(message);
+        i += 1;
+    }
+
+    13
+}

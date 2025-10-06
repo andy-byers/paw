@@ -148,8 +148,7 @@ static paw_Bool is_captured(struct KProp *K, MirRegister r)
 
 static paw_Bool is_stack_reg(struct KProp *K, MirRegister r)
 {
-    struct MirConstraint const con = mir_reg_data(K->mir, r)->con;
-    return con.kind == MIR_CONSTRAINT_STACK;
+    return PAW_FALSE;
 }
 
 static struct MirAccessList *get_uses(struct KProp *K, MirRegister r)
@@ -673,7 +672,6 @@ static paw_Bool is_pure(struct MirInstruction *instr)
         case kMirUpvalue:
 //        case kMirAggregate:
 //        case kMirContainer:
-        case kMirGetField:
         case kMirUnaryOp:
         case kMirBinaryOp:
             return PAW_TRUE;
@@ -969,17 +967,6 @@ static paw_Bool can_propagate(struct KProp *K, struct MirMove const *move)
         && !is_stack_reg(K, move->output.r);
 }
 
-static void remove_old_constraints(struct KProp *K, struct MirPhi *phi)
-{
-    struct MirPlace const *pinput;
-    K_LIST_FOREACH (phi->inputs, pinput) {
-        if (pinput->kind == MIR_PLACE_LOCAL) {
-            struct MirRegisterData *prdata = mir_reg_data(K->mir, pinput->r);
-            prdata->con.kind = MIR_CONSTRAINT_NONE;
-        }
-    }
-}
-
 static void propagate_copies(struct KProp *K)
 {
     struct MirBlockData *const *pblock;
@@ -988,8 +975,6 @@ static void propagate_copies(struct KProp *K)
         struct MirBlockData *block = *pblock;
         struct MirInstructionList *instrs = MirInstructionList_new(K->mir);
         MirInstructionList_reserve(K->mir, instrs, block->instructions->count);
-        K_LIST_FOREACH (block->joins, pinstr)
-            remove_old_constraints(K, MirGetPhi(*pinstr));
         K_LIST_FOREACH (block->instructions, pinstr) {
             struct MirInstruction *instr = *pinstr;
             if (MirIsMove(instr) && can_propagate(K, MirGetMove(instr))) {

@@ -185,7 +185,7 @@ static struct IrVariantDefs *create_struct_variant(struct ItemCollector *X, stru
     paw_assert(decls->count == 1);
     struct HirVariantDecl *v = HirGetVariantDecl(K_LIST_FIRST(decls));
     struct IrFieldDefs *fields = collect_field_defs(X, v->fields);
-    struct IrVariantDef *r = pawIr_new_variant_def(X->C, v->did, NO_DECL, NO_DECL, 0, ident.name, fields);
+    struct IrVariantDef *r = pawIr_new_variant_def(X->C, v->did, NO_DECL, v->base_did, 0, ident.name, fields);
     struct IrVariantDefs *variants = IrVariantDefs_new(X->C);
     VariantDefMap_insert(X->C, X->C->variant_defs, v->did, r);
     IrVariantDefs_push(X->C, variants, r);
@@ -201,7 +201,7 @@ static struct IrVariantDefs *collect_variant_defs(struct ItemCollector *X, struc
     K_LIST_FOREACH (adt->variants, pdecl) {
         struct HirVariantDecl *d = HirGetVariantDecl(*pdecl);
         struct IrFieldDefs *fields = collect_field_defs(X, d->fields);
-        struct IrVariantDef *r = pawIr_new_variant_def(X->C, d->did, NO_DECL, NO_DECL, d->index, d->ident.name, fields);
+        struct IrVariantDef *r = pawIr_new_variant_def(X->C, d->did, NO_DECL, d->base_did, d->index, d->ident.name, fields);
         VariantDefMap_insert(X->C, X->C->variant_defs, d->did, r);
         IrVariantDefs_push(X->C, variants, r);
         set_def_type(X, d->did, d->id);
@@ -560,5 +560,11 @@ void pawP_collect_items(struct Compiler *C, struct Pool *pool)
 
     collection_phase_1(&X, C->hir);
     collection_phase_2(&X, C->hir);
+
+    DeclId const strtab_did = pawP_builtin_info(C, BUILTIN_MAP)->did;
+    IrTypeList *strtab_types = IrTypeList_new(C);
+    IrTypeList_push(C, strtab_types, pawP_builtin_type(C, BUILTIN_STR));
+    IrTypeList_push(C, strtab_types, pawP_builtin_type(C, BUILTIN_UNIT));
+    C->strtab_type = pawIr_new_adt(C, strtab_did, strtab_types);
 }
 

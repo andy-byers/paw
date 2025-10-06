@@ -25,6 +25,12 @@ struct FreeBlock {
     char data[];
 };
 
+struct PoolStats {
+    struct Statistic *num_alloc;
+    struct Statistic *bytes_alloc;
+    struct Statistic *bytes_used;
+};
+
 struct Pool {
     struct Pool *prev;
     struct Pool *next;
@@ -33,11 +39,7 @@ struct Pool {
     struct Arena *full;
 
     // memory usage statistics
-    struct PoolStats {
-        struct Statistic *num_alloc;
-        struct Statistic *bytes_alloc;
-        struct Statistic *bytes_used;
-    } st;
+    struct PoolStats st;
 };
 
 void pawK_pool_init(paw_Env *P, struct Pool *pool, size_t base_size, struct PoolStats st);
@@ -134,10 +136,11 @@ enum TraitKind {
                    "maximum list is too large");                                                                                   \
     static inline List_ *List_##_new_from(Context_ *ctx, struct Pool *pool)                                                   \
     {                                                                                                                              \
-        List_ *list = pawP_alloc(ENV(ctx), pool, NULL, 0, sizeof(List_));                                                          \
-        *list = (List_){                                                                                                           \
-            .pool = pool,                                                                                                          \
-        };                                                                                                                         \
+        List_ *list = (List_ *)pawP_alloc(ENV(ctx), pool, NULL, 0, sizeof(List_));                                                          \
+        list->pool = pool; \
+        list->data = NULL; \
+        list->count = 0; \
+        list->alloc = 0; \
         return list;                                                                                                               \
     }                                                                                                                              \
     static inline List_ *List_##_new(Context_ *ctx)                                                                                \
@@ -171,7 +174,7 @@ enum TraitKind {
     }                                                                                                                              \
     static inline void List_##_push(Context_ *ctx, List_ *list, Value_ value)                                                      \
     {                                                                                                                              \
-        list->data = pawK_list_ensure_one(ENV(ctx), list->pool, list->data, sizeof(list->data[0]), list->count, &list->alloc);     \
+        list->data = (Value_ *)pawK_list_ensure_one(ENV(ctx), list->pool, list->data, sizeof(list->data[0]), list->count, &list->alloc);     \
         list->data[list->count++] = value;                                                                                         \
     }                                                                                                                              \
     static inline void List_##_pop(List_ *list)                                                                                    \
@@ -182,7 +185,7 @@ enum TraitKind {
     static inline void List_##_insert(Context_ *ctx, List_ *list, int index, Value_ value)                                         \
     {                                                                                                                              \
         paw_assert(0 <= index && index <= list->count);                                                                            \
-        list->data = pawK_list_ensure_one(ENV(ctx), list->pool, list->data, sizeof(list->data[0]), list->count, &list->alloc);     \
+        list->data = (Value_ *)pawK_list_ensure_one(ENV(ctx), list->pool, list->data, sizeof(list->data[0]), list->count, &list->alloc);     \
         memmove(list->data + index + 1, list->data + index, (size_t)(list->count - index) * sizeof(list->data[0]));                \
         list->data[index] = value;                                                                                                 \
         ++list->count;                                                                                                             \
@@ -205,7 +208,7 @@ enum TraitKind {
     }                                                                                                                              \
     static inline void List_##_reserve(Context_ *ctx, List_ *list, int count)                                                      \
     {                                                                                                                              \
-        list->data = pawK_list_reserve(ENV(ctx), list->pool, list->data, sizeof(list->data[0]), list->count, &list->alloc, count); \
+        list->data = (Value_ *)pawK_list_reserve(ENV(ctx), list->pool, list->data, sizeof(list->data[0]), list->count, &list->alloc, count); \
     }                                                                                                                              \
     static inline void List_##_resize(Context_ *ctx, List_ *list, int count)                                                       \
     {                                                                                                                              \
@@ -250,12 +253,11 @@ enum TraitKind {
                    "maximum map is too large");                                                      \
     static inline struct Name_ *Name_##_new_from(Context_ *ctx, struct Pool *pool)                        \
     {                                                                                                \
-        Name_ *map = Alloc_(ENV(ctx), pool, NULL, 0, sizeof(struct Name_));                          \
-        *map = (Name_){                                                                              \
-            .data = Alloc_(ENV(ctx), pool, NULL, 0, K_MAP_MIN * sizeof(map->data[0])),               \
-            .alloc = K_MAP_MIN,                                                                      \
-            .pool = pool,                                                                            \
-        };                                                                                           \
+        Name_ *map = (Name_ *)Alloc_(ENV(ctx), pool, NULL, 0, sizeof(struct Name_));                          \
+        map->data = (struct Name_##Node **)Alloc_(ENV(ctx), pool, NULL, 0, K_MAP_MIN * sizeof(map->data[0]));               \
+        map->alloc = K_MAP_MIN;                                                                      \
+        map->pool = pool;                                                                            \
+        map->count = 0; \
         memset(map->data, 0, K_MAP_MIN * sizeof(map->data[0]));                                      \
         return map;                                                                                  \
     }                                                                                                \
@@ -291,7 +293,7 @@ enum TraitKind {
         while (alloc <= (size_t)old.alloc)                                                           \
             alloc *= 2;                                                                              \
         pawM_check_size(ENV(ctx), 0, alloc, sizeof(map->data[0]));                                   \
-        map->data = Alloc_(ENV(ctx), map->pool, NULL, 0, alloc * sizeof(map->data[0]));              \
+        map->data = (struct Name_##Node **)Alloc_(ENV(ctx), map->pool, NULL, 0, alloc * sizeof(map->data[0]));              \
         map->alloc = alloc;                                                                          \
         memset(map->data, 0, alloc * sizeof(map->data[0]));                                          \
         for (int i = 0; i < old.alloc; ++i) {                                                        \
@@ -318,7 +320,7 @@ enum TraitKind {
                 return PAW_TRUE;                                                                     \
             }                                                                                        \
         }                                                                                            \
-        struct Name_##Node *node = Alloc_(ENV(ctx), map->pool, NULL, 0, sizeof(**ptr));              \
+        struct Name_##Node *node = (struct Name_##Node *)Alloc_(ENV(ctx), map->pool, NULL, 0, sizeof(**ptr));              \
         *node = (struct Name_##Node){                                                                \
             .next = *bucket,                                                                         \
             .key = key,                                                                              \

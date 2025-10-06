@@ -19,6 +19,12 @@
 #include <stdarg.h>
 #include <stddef.h>
 
+#ifdef __cplusplus
+# define EXTERN_C extern "C"
+#else // __cplusplus
+# define EXTERN_C
+#endif // !__cplusplus
+
 #define PAW_REGISTRY_INDEX (-PAW_STACK_MAX - 1000)
 
 typedef int paw_Type;
@@ -26,7 +32,12 @@ typedef unsigned char paw_Char;
 typedef long long paw_Int;
 typedef unsigned long long paw_Uint;
 typedef double paw_Float;
+
+#ifdef __cplusplus
+typedef bool paw_Bool;
+#else // __cplusplus
 typedef _Bool paw_Bool;
+#endif // !__cplusplus
 
 #define PAW_FALSE 0
 #define PAW_TRUE 1
