@@ -298,33 +298,28 @@ pub fn test_tuple_3() {
     assert(check_match_tuple_3((((1,), 2), 1)) == 4);
 }
 
-//#[test]
-//pub fn test_closure_inside_match() {
-//    let f;
-//
-//    match 1 { x => f = || x }
-//
-//    assert(f() == 1);
-//}
-
 #[test]
-pub fn emit_deferred_init_warning() {
-    println("WARNING: need support for deferred init");
+pub fn test_closure_inside_match() {
+    let f;
+
+    match 1 { x => f = || x }
+
+    assert(f() == 1);
 }
 
-//#[test]
-//pub fn test_nested_closure_inside_match() {
-//    let f;
-//
-//    let x = 1;
-//    match x {
-//        y => f = || {
-//            match y { z => || x + y + z }
-//        },
-//    }
-//
-//    assert(f()() == 3);
-//}
+#[test]
+pub fn test_nested_closure_inside_match() {
+    let f;
+
+    let x = 1;
+    match x {
+        y => f = || {
+            match y { z => || x + y + z }
+        },
+    }
+
+    assert(f()() == 3);
+}
 
 pub fn match_int_min_literal() {
     match -9223372036854775808 {

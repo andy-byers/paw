@@ -61,6 +61,7 @@ add_subdirectory(src/codegen)
 set(PAW_SOURCE_DIR ${PROJECT_SOURCE_DIR}/src)
 
 set(PAW_HEADER_FILES
+    ${PAW_SOURCE_DIR}/analysis.h
     ${PAW_SOURCE_DIR}/api.h
     ${PAW_SOURCE_DIR}/ast.h
     ${PAW_SOURCE_DIR}/auxlib.h
@@ -72,6 +73,7 @@ set(PAW_HEADER_FILES
     ${PAW_SOURCE_DIR}/error.h
     ${PAW_SOURCE_DIR}/hir.h
     ${PAW_SOURCE_DIR}/ir_type.h
+    ${PAW_SOURCE_DIR}/layout.h
     ${PAW_SOURCE_DIR}/lex.h
     ${PAW_SOURCE_DIR}/lib.h
     ${PAW_SOURCE_DIR}/map.h
@@ -94,6 +96,7 @@ set(PAW_HEADER_FILES
     ${PAW_SOURCE_DIR}/value.h)
 
 set(PAW_SOURCE_FILES
+    ${PAW_SOURCE_DIR}/analysis.c
     ${PAW_SOURCE_DIR}/api.c
     ${PAW_SOURCE_DIR}/ast.c
     ${PAW_SOURCE_DIR}/auxlib.c
@@ -114,6 +117,7 @@ set(PAW_SOURCE_FILES
     ${PAW_SOURCE_DIR}/ir_type.c
     ${PAW_SOURCE_DIR}/kfold.c
     ${PAW_SOURCE_DIR}/kprop.c
+    ${PAW_SOURCE_DIR}/layout.c
     ${PAW_SOURCE_DIR}/lex.c
     ${PAW_SOURCE_DIR}/list.c
     ${PAW_SOURCE_DIR}/lib.c

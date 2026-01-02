@@ -3,6 +3,7 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
 #include "ir_type.h"
+#include "layout.h"
 #include "lib.h"
 #include "map.h"
 #include "mir.h"
@@ -575,6 +576,9 @@ static IrType *cannonicalize_adt(struct MonoCollector *M, IrTypeList *monos, IrT
     IrTypeList_push(M->C, M->types, type);
     IrTypeList_push(M->C, monos, type);
     instantiate_std_methods(M, type);
+
+    // catch infinitely-sized inline aggregates
+    pawIr_compute_layout(M->C, type);
     return type;
 }
 

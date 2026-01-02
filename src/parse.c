@@ -2030,10 +2030,7 @@ static AstStmtList *block_inner(struct Lex *lex, struct AstExpr **presult)
                 skip(lex); // "let" token
                 struct AstPat *pat = pattern(lex);
                 struct AstType *tag = type_annotation(lex, PAW_FALSE);
-                check_next(lex, '=');
-                struct AstExpr *init = expect_expr0(lex);
-                // TODO: support deferred initialization of locals again, then last 2 lines should be replaced with following line
-                // struct AstExpr *init = test_next(lex, '=') ? expect_expr0(lex) : NULL;
+                struct AstExpr *init = test_next(lex, '=') ? expect_expr0(lex) : NULL;
                 struct SourceLoc const end = TOKEN_START(lex->t);
                 semicolon(lex, "\"let\" statement");
                 struct AstStmt *stmt = NEW_NODE(lex, let_stmt, SPAN(start, end),

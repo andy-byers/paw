@@ -520,7 +520,7 @@ struct MirBlockList *pawMir_traverse_rpo(struct Compiler *C, struct Mir *mir)
     struct VisitStack *stack = VisitStack_new(&X);
     X.visited = VisitedMap_new(&X);
     paw_assert(mir->blocks->count > 0);
-    visit_postorder(&X, X.visited, stack, MIR_ROOT_BB);
+    visit_postorder(&X, X.visited, stack, MIR_ENTRY_BB);
     traverse_postorder(&X, X.visited, stack);
 
     struct MirBlockList *order = MirBlockList_new(mir);
@@ -1355,6 +1355,8 @@ static void dump_instruction_list(struct Printer *P, struct MirInstructionList *
     }
 }
 
+static void print_constant(struct Printer *P, Value value, enum BuiltinKind kind);
+
 static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
 {
     indentation(P);
@@ -1601,7 +1603,9 @@ static void dump_instruction(struct Printer *P, struct MirInstruction *instr)
             for (int i = 0; i < t->arms->count; ++i) {
                 if (i > 0) PRINT_LITERAL(P, ", ");
                 struct MirSwitchArm arm = MirSwitchArmList_get(t->arms, i);
-                PRINT_FORMAT(P, "k%d: bb%d", arm.k.value, MirBlockList_get(P->bb->successors, i).value);
+                struct MirConstantData const *kdata = mir_const_data(P->mir, arm.k);
+                print_constant(P, kdata->value, kdata->kind);
+                PRINT_FORMAT(P, ": bb%d", MirBlockList_get(P->bb->successors, i).value);
             }
             if (t->has_otherwise) {
                 if (t->arms->count > 0)

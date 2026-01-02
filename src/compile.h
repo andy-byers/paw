@@ -159,6 +159,7 @@ struct Compiler {
     // '.traits' maps each ADT to a list of implemented traits. Includes ADTs
     // from all modules being compiled.
     struct TraitMap *traits; // DeclId => HirDeclList *
+    struct IrLayoutMap *layouts;
 
     struct HirTypeMap *hir_types; // NodeId => IrType *
     struct DefTypeMap *def_types; // DefId => IrType *
@@ -255,15 +256,16 @@ DEFINE_LIST(struct Compiler, RegisterTable, struct RegisterInfo)
 typedef unsigned long long BitChunk;
 DEFINE_LIST(struct Compiler, BitSet, BitChunk)
 
-struct BitSet *pawP_bitset_new(struct Compiler *C, int count);
-int pawP_bitset_count(struct BitSet const *bs);
-paw_Bool pawP_bitset_get(struct BitSet const *bs, int i);
-void pawP_bitset_set(struct BitSet *bs, int i);
-void pawP_bitset_set_range(struct BitSet *bs, int i, int j);
-void pawP_bitset_clear(struct BitSet *bs, int i);
-void pawP_bitset_clear_range(struct BitSet *bs, int i, int j);
-void pawP_bitset_and(struct BitSet *a, struct BitSet const *b);
-void pawP_bitset_or(struct BitSet *a, struct BitSet const *b);
+BitSet *pawP_bitset_new(struct Compiler *C, int count);
+BitSet *pawP_bitset_copy(struct Compiler *C, BitSet const *bs);
+int pawP_bitset_count(BitSet const *bs);
+paw_Bool pawP_bitset_get(BitSet const *bs, int i);
+void pawP_bitset_set(BitSet *bs, int i);
+void pawP_bitset_set_range(BitSet *bs, int i, int j);
+void pawP_bitset_clear(BitSet *bs, int i);
+void pawP_bitset_clear_range(BitSet *bs, int i, int j);
+BitSet *pawP_bitset_and(struct Compiler *C, BitSet const *a, BitSet const *b);
+BitSet *pawP_bitset_or(struct Compiler *C, BitSet const *a, BitSet const *b);
 
 struct Decision *pawP_check_exhaustiveness(struct Hir *hir, struct Pool *pool, Str const *modname, struct HirMatchExpr *match, struct MatchVars *vars);
 void pawP_lower_matches(struct Compiler *C);

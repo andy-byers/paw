@@ -1556,6 +1556,9 @@ private:
 
         auto const data = state_->mir_->local_data->data[x.output.L.value];
         if (data.is_captured && L > fn->get_num_args()) {
+            // NOTE: the return value (L0) cannot be captured and slots for captured
+            //   arguments (L1..LN) are allocated and initialized at the start of the
+            //   function.
             auto &local = state_->locals_.at(L);
             auto *slot = X.create_alloc(*get_type(data.type));
             local = slot;

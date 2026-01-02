@@ -77,7 +77,7 @@ struct MirBlockList *pawMir_compute_dominance_tree(struct Compiler *C, struct Mi
         MirBlockList_push(mir, D.idom, MIR_INVALID_BB);
     }
 
-    compute_dominance(&D, MIR_ROOT_BB);
+    compute_dominance(&D, MIR_ENTRY_BB);
     return D.idom;
 }
 
@@ -101,7 +101,7 @@ struct MirBucketList *pawMir_compute_dominance_frontiers(struct Compiler *C, str
         MirBucketList_push(mir, result, df);
     }
 
-    for (MirBlock b = MIR_ROOT_BB; b.value < N; ++b.value) {
+    for (MirBlock b = MIR_ENTRY_BB; b.value < N; ++b.value) {
         MirBlock const target = MirBlockList_get(idom, b.value);
         struct MirBlockData *data = mir_bb_data(mir, b);
         struct MirBlockList *pred = data->predecessors;

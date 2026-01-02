@@ -1908,7 +1908,7 @@ static void visit_guard(struct HirVisitor *V, struct Decision *d, struct MirPlac
     add_edge(fs, before_bb, then_bb);
     add_edge(fs, before_bb, else_bb);
 
-    struct SourceLoc loc = NODE_START(d->guard.cond);
+    struct SourceLoc const loc = NODE_START(d->guard.cond);
     terminate_branch(fs, loc, cond);
     set_current_bb(fs, then_bb);
     lower_match_body(V, d->guard.body, result);
@@ -1921,33 +1921,12 @@ static void visit_guard(struct HirVisitor *V, struct Decision *d, struct MirPlac
     set_current_bb(fs, join_bb);
 }
 
-static paw_Bool bindings_are_compatible(struct BindingList *lhs, struct BindingList *rhs)
-{
-    return lhs->count == 0 && rhs->count == 0; // TODO
-
-    struct Binding const *a, *b;
-    K_LIST_ZIP(lhs, a, rhs, b) {
-        if (a->id.value != b->id.value)
-            return PAW_FALSE;
-    }
-    return PAW_TRUE;
-}
-
 static void lower_match_body(struct HirVisitor *V, struct MatchBody body, struct MirPlace result)
 {
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
     struct MatchState const *ms = fs->ms;
     struct SourceLoc const loc = NODE_START(body.result);
-
-    struct MatchResult const *presult = MatchResults_get(L, ms->results, body.result->hdr.id);
-    if (presult != NULL && bindings_are_compatible(presult->bindings, body.bindings)) {
-        // The match body has already been lowered, and it declares the same bindings as this one.
-        // Jump to it instead of lowering the expression again.
-        set_goto_edge(fs, loc, presult->b);
-        set_current_bb(fs, new_bb(fs));
-        return;
-    }
 
     MirBlock const b = new_bb(fs);
     set_goto_edge(fs, loc, b);

@@ -3,6 +3,7 @@
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
 #include "ssa.h"
+#include "analysis.h"
 #include "error.h"
 #include "ir_type.h"
 #include "map.h"
@@ -357,15 +358,19 @@ static void ssa_construct(struct Pool *pool, struct Mir *mir)
     NameStackList_reserve(&S, S.stacks, UseDefMap_length(S.defs));
 
     place_phi_nodes(&S);
-    rename_vars(&S, MIR_ROOT_BB);
+    rename_vars(&S, MIR_ENTRY_BB);
 }
 
 void pawSsa_construct(struct Mir *mir)
 {
+    struct Compiler *C = mir->C;
+
     // put basic blocks in reverse postorder
     pawMir_renumber_basic_blocks(mir);
 
-    struct Compiler *C = mir->C;
+    // make sure all locals are initialized before they are used
+    pawA_validate(mir);
+
     struct Pool *pool = pawP_pool_new(C, C->aux_stats);
     ssa_construct(pool, mir);
     pawP_pool_free(C, pool);

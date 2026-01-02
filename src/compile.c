@@ -10,6 +10,7 @@
 #include "error.h"
 #include "hir.h"
 #include "ir_type.h"
+#include "layout.h"
 #include "lex.h"
 #include "lib.h"
 #include "map.h"
@@ -297,6 +298,7 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, Str con
     C->variant_defs = VariantDefMap_new(C);
     C->adt_defs = AdtDefMap_new(C);
     C->fn_defs = FnDefMap_new(C);
+    C->layouts = IrLayoutMap_new(C);
 
     C->typesystem.lists = TypeCollection_new(C);
     C->typesystem.maps = TypeCollection_new(C);
@@ -375,80 +377,90 @@ void pawP_teardown(paw_Env *P, struct DynamicMem *dm)
     P->modname = P->pathname = NULL;
 }
 
-#define CHUNKSZ(b) sizeof(K_LIST_AT(b, 0))
+#define CHUNKSZ (int)sizeof(BitChunk)
 
-struct BitSet *pawP_bitset_new(struct Compiler *C, int count)
+#define BITSET_NUM_CHUNKS(Set_) \
+    (((Set_)->count + CHUNKSZ - 1) / CHUNKSZ)
+#define BITSET_INDICES(Set_, I_, Pos_, Bit_) \
+    paw_assert(0 <= (I_) && (I_) < (Set_)->count); \
+    const int Pos_ = (I_) / CHUNKSZ; \
+    const int Bit_ = (I_) % CHUNKSZ
+
+BitSet *pawP_bitset_new(struct Compiler *C, int count)
 {
     paw_assert(count > 0);
-    struct BitSet *set = BitSet_new(C);
-    int const n = (count + CHUNKSZ(set) - 1) / CHUNKSZ(set);
-    BitSet_reserve(C, set, n);
-    memset(set->data, 0, CAST_SIZE(n) * CHUNKSZ(set));
+    BitSet *set = BitSet_new(C);
+    int const n = (count + CHUNKSZ - 1) / CHUNKSZ;
+    BitSet_resize(C, set, n);
+    memset(set->data, 0, (size_t)n * CHUNKSZ);
+    // store the number of bits, not the number of chunks
     set->count = count;
     return set;
 }
 
-#define BITSET_INDEX(set, i, pos, bit)          \
-    paw_assert(0 <= (i) && (i) < (set)->count); \
-    const int pos = (i) / CHUNKSZ(set);         \
-    const int bit = (i) % CHUNKSZ(set)
-
-void pawP_bitset_set(struct BitSet *set, int i)
+BitSet *pawP_bitset_copy(struct Compiler *C, BitSet const *bs)
 {
-    BITSET_INDEX(set, i, pos, bit);
+    BitSet *r = pawP_bitset_new(C, bs->count);
+    for (int i = 0, n = BITSET_NUM_CHUNKS(bs); i < n; ++i)
+        K_LIST_AT(r, i) = K_LIST_AT(bs, i);
+
+    return r;
+}
+
+void pawP_bitset_set(BitSet *set, int i)
+{
+    BITSET_INDICES(set, i, pos, bit);
     BitChunk *bc = &K_LIST_AT(set, pos);
     *bc = *bc | (1ULL << bit);
 }
 
-void pawP_bitset_set_range(struct BitSet *bs, int i, int j)
+void pawP_bitset_set_range(BitSet *bs, int i, int j)
 {
     while (i < j) pawP_bitset_set(bs, i++);
 }
 
-int pawP_bitset_count(struct BitSet const *set)
+int pawP_bitset_count(BitSet const *set)
 {
     return set->count;
 }
 
-paw_Bool pawP_bitset_get(struct BitSet const *set, int i)
+paw_Bool pawP_bitset_get(BitSet const *set, int i)
 {
-    BITSET_INDEX(set, i, pos, bit);
+    BITSET_INDICES(set, i, pos, bit);
     BitChunk const bc = BitSet_get(set, pos);
     return (bc >> bit) & 1;
 }
 
-void pawP_bitset_clear(struct BitSet *set, int i)
+void pawP_bitset_clear(BitSet *set, int i)
 {
-    BITSET_INDEX(set, i, pos, bit);
+    BITSET_INDICES(set, i, pos, bit);
     BitChunk *bc = &K_LIST_AT(set, pos);
     *bc = *bc & ~(1ULL << bit);
 }
 
-void pawP_bitset_clear_range(struct BitSet *bs, int i, int j)
+void pawP_bitset_clear_range(BitSet *bs, int i, int j)
 {
     while (i < j) pawP_bitset_clear(bs, i++);
 }
 
-void pawP_bitset_and(struct BitSet *a, struct BitSet const *b)
+BitSet *pawP_bitset_and(struct Compiler *C, BitSet const *a, BitSet const *b)
 {
     paw_assert(a->count == b->count);
-    int const n = a->count / CHUNKSZ(a);
+    BitSet *r = pawP_bitset_new(C, a->count);
+    for (int i = 0, n = BITSET_NUM_CHUNKS(a); i < n; ++i)
+        K_LIST_AT(r, i) = BitSet_get(a, i) & BitSet_get(b, i);
 
-    for (int i = 0; i < n; ++i) {
-        BitChunk *bc = &K_LIST_AT(a, i);
-        *bc = *bc & BitSet_get(b, i);
-    }
+    return r;
 }
 
-void pawP_bitset_or(struct BitSet *a, struct BitSet const *b)
+BitSet *pawP_bitset_or(struct Compiler *C, BitSet const *a, BitSet const *b)
 {
     paw_assert(a->count == b->count);
-    int const n = a->count / CHUNKSZ(a);
+    BitSet *r = pawP_bitset_new(C, a->count);
+    for (int i = 0, n = BITSET_NUM_CHUNKS(a); i < n; ++i)
+        K_LIST_AT(r, i) = BitSet_get(a, i) | BitSet_get(b, i);
 
-    for (int i = 0; i < n; ++i) {
-        BitChunk *bc = &K_LIST_AT(a, i);
-        *bc = *bc | BitSet_get(b, i);
-    }
+    return r;
 }
 
 paw_Bool pawP_contains_core_annotation(struct Compiler *C, Annotations const *annotations)

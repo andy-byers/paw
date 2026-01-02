@@ -363,20 +363,14 @@ pub fn test_nested_ifelse() {
     assert(check(false, false, false) == 4);
 }
 
-#[TODO]
-pub fn emit_deferred_init_warning() {
-    println("WARNING: need support for deferred init");
-}
+#[test]
+pub fn test_return_before_use() {
+    let y;
+    if true {
+        y = 0;
+    }
+    return;
 
-// TODO: support deferred init
-//#[test]
-//pub fn test_return_before_use() {
-//    let y;
-//    if true {
-//        y = 0;
-//    }
-//    return;
-//
-//    assert(y == 42);
-//}
+    assert(y == 42);
+}
 

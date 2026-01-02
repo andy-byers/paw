@@ -106,8 +106,8 @@ static int compile_aux(paw_Env *P, void *arg)
     struct CompileState *p = arg;
 
     Str const *modname = pawS_new_str(P, p->modname);
-    Str const *pathname = p->pathname != NULL ? pawS_new_str(P, p->pathname) : NULL;
-    Str const *dirname = p->dirname != NULL ? pawS_new_str(P, p->dirname) : NULL;
+    Str const *pathname = p->pathname != NULL ? pawS_new_str(P, p->pathname) : modname;
+    Str const *dirname = pawS_new_str(P, p->dirname != NULL ? p->dirname : ".");
     pawP_startup(P, P->C, &p->dm, modname, pathname, dirname);
     pawP_compile(P->C, p->input, p->ud);
     return 0;

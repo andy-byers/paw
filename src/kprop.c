@@ -742,7 +742,7 @@ static void propagate_constants(struct KProp *K)
         MirBlock const *pb;
         struct MirBlockData *start = K_LIST_FIRST(K->mir->blocks);
         K_LIST_FOREACH (start->successors, pb) {
-            FlowWorklist_push(K, K->flow, FLOW_EDGE(MIR_ROOT_BB, *pb));
+            FlowWorklist_push(K, K->flow, FLOW_EDGE(MIR_ENTRY_BB, *pb));
         }
     }
 

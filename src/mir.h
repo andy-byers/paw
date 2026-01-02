@@ -50,7 +50,7 @@ struct Mir;
 #define MIR_ID_EXISTS(X_) ((X_).value >= 0)
 
 #define MIR_INVALID_BB MIR_BB(-1)
-#define MIR_ROOT_BB MIR_BB(0)
+#define MIR_ENTRY_BB MIR_BB(0)
 #define MIR_BB(X_) ((MirBlock){X_})
 typedef struct MirBlock {
     int value;
@@ -1042,10 +1042,10 @@ inline static int pawMir_get_location(struct MirLocationList *locations, MirId m
 struct MirBlockList *pawMir_compute_live_in(struct Mir *mir, struct MirBlockList *uses, struct MirBlockList *defs, MirLocal L);
 struct MirIntervalMap *pawMir_compute_liveness(struct Compiler *C, struct Mir *mir, struct MirBlockList *order, struct MirLocationList *locations);
 
-static inline paw_Int mir_place_hash(struct Mir *mir, struct MirPlace place)
+static inline paw_Uint mir_place_hash(struct Mir *mir, struct MirPlace place)
 {
     PAW_UNUSED(mir);
-    return ((paw_Int)place.kind + 1) * place.value;
+    return (place.kind + 1) * (paw_Uint)place.value;
 }
 
 static inline paw_Bool mir_place_equals(struct Mir *mir, struct MirPlace lhs, struct MirPlace rhs)
