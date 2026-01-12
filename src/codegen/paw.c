@@ -2,6 +2,7 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -9,6 +10,7 @@
 #include "ast.h"
 #include "hir.h"
 #include "ir_type.h"
+#include "lex.h"
 #include "lib.h"
 #include "mir.h"
 #include "os.h"
@@ -29,6 +31,8 @@ enum Status {
     OPT_STR(O, level, "optimization level") \
     OPT_STR(o, path, "path to compiler output") \
     OPT_STR(I, include, "list of import paths") \
+    OPT_STRS(L, path, 100, "add to linker search path") \
+    OPT_STRS(l, spec, 100, "specify library to link") \
     OPT_OPT(h, "display this help message") \
     OPT_OPT(c, "compile the program only") \
     OPT_OPT(t, "build module tests") \
@@ -36,17 +40,26 @@ enum Status {
     OPT_OPT(q, "suppress output")
 
 static struct {
-#define OPT_STR(name, a, b) const char *name;
-#define OPT_INT(name, a, b) int name;
-#define OPT_OPT(name, a) paw_Bool name;
+#define OPT_STRS(Name_, A_, Limit_, B_) char const *Name_[Limit_]; int Name_##_count;
+#define OPT_STR(Name_, A_, B_) char const *Name_;
+#define OPT_INT(Name_, A_, B_) paw_Int Name_;
+#define OPT_OPT(Name_, A_) paw_Bool Name_;
     PROGRAM_OPTIONS
 #undef OPT_OPT
 #undef OPT_INT
 #undef OPT_STR
+#undef OPT_STRS
 } s_opt;
 
-static const char *s_program_name;
-static const char *s_pathname;
+static struct {
+    char const *name;
+
+    char const *module_pathname;
+
+    paw_Bool started_compilation;
+
+    paw_Bool quiet;
+} s_program;
 
 static struct {
     paw_Bool ast;
@@ -60,101 +73,175 @@ static struct Option {
     const char *name;
     const char *argname;
     const char **string;
-    int *integer;
+    paw_Int *integer;
     paw_Bool *flag;
     const char *description;
+    int *arg_count_ptr;
+    int arg_limit;
 } s_opt_info[] = {
-#define OPT_STR(name, arg, help) \
-    {#name, #arg, &s_opt.name, NULL, NULL, help},
-#define OPT_INT(name, arg, help) \
-    {#name, #arg, NULL, &s_opt.name, NULL, help},
-#define OPT_OPT(name, help) \
-    {#name, NULL, NULL, NULL, &s_opt.name, help},
+#define OPT_STRS(Name_, Arg_, Limit_, Help_) \
+    {#Name_, #Arg_, s_opt.Name_, NULL, NULL, Help_, &s_opt.Name_##_count, Limit_},
+#define OPT_STR(Name_, Arg_, Help_) \
+    {#Name_, #Arg_, &s_opt.Name_, NULL, NULL, Help_, NULL, -1},
+#define OPT_INT(Name_, Arg_, Help_) \
+    {#Name_, #Arg_, NULL, &s_opt.Name_, NULL, Help_, NULL, -1},
+#define OPT_OPT(Name_, Help_) \
+    {#Name_, NULL, NULL, NULL, &s_opt.Name_, Help_, NULL, -1},
     PROGRAM_OPTIONS
 #undef OPT_OPT
 #undef OPT_INT
 #undef OPT_STR
+#undef OPT_STRS
 };
 // clang-format on
 
+static struct {
+    char const *specs[100];
+    char const *paths[100];
+    int num_specs;
+    int num_paths;
+} s_linker;
+
 #define IS_SPACE(Char_) ((Char_) == ' ' || (Char_) == '\t' || (Char_) == '\f'  \
                          || (Char_) == '\v' || (Char_) == '\r' || (Char_) == '\n')
+
 static void info(char const *fmt, ...)
 {
-    va_list arg;
-    va_start(arg, fmt);
-    vprintf(fmt, arg);
-    va_end(arg);
+    if (!s_opt.q) {
+        va_list arg;
+        va_start(arg, fmt);
+        vprintf(fmt, arg);
+        va_end(arg);
+    }
 }
 
-_Noreturn static void error(int status, char const *fmt, ...)
+static void warning(char const *fmt, ...)
 {
-    va_list arg;
-    va_start(arg, fmt);
-    vfprintf(stderr, fmt, arg);
-    va_end(arg);
-    exit(status);
+    if (!s_opt.q) {
+        va_list arg;
+        va_start(arg, fmt);
+        vfprintf(stderr, fmt, arg);
+        va_end(arg);
+    }
+}
+
+_Noreturn static void error(char const *fmt, ...)
+{
+    if (!s_opt.q) {
+        va_list arg;
+        va_start(arg, fmt);
+        vfprintf(stderr, fmt, arg);
+        va_end(arg);
+    }
+    exit(EXIT_FAILURE);
+}
+
+static void show_help(void)
+{
+    info("usage: %s OPTIONS [FILE] ...\n", s_program.name);
+    info("OPTIONS:\n");
+    for (size_t i = 0; i < PAW_COUNTOF(s_opt_info); ++i) {
+        struct Option opt = s_opt_info[i];
+        if (opt.flag) {
+            info("-%s     : %s\n", opt.name, opt.description);
+        } else {
+            info("-%s %s : %s\n", opt.name, opt.argname, opt.description);
+        }
+    }
+}
+
+static char const *check_option(char const *s, char const *p)
+{
+    for (; *p != '\0'; ++s, ++p) {
+        if (*s == '\0' || *s != *p)
+            return NULL;
+    }
+    return s;
+}
+
+static paw_Int parse_int(char const *s)
+{
+    paw_Int value;
+    int const rc = pawX_parse_int(s, 10, &value);
+    if (rc == PAW_ESYNTAX) {
+        error("invalid integer argument (%s)\n", s);
+    } else if (rc == PAW_EOVERFLOW) {
+        error("integer argument (%s) is too large\n", s);
+    } else {
+        return value;
+    }
 }
 
 // Parse commandline options
-// Adjusts 'argv' to point to the first argument to the paw script, and
-// sets 'argc' to the number of such arguments.
-static void parse_options(int *pargc, char const ***pargv)
+static void parse_options(int argc, char const **argv)
 {
 #define GETOPT(Argc_, Argv_) (--(Argc_), ++(Argv_), (Argv_)[-1])
 
-    int argc = *pargc;
-    char const **argv = *pargv;
-    s_program_name = GETOPT(argc, argv);
-    while (argc) {
-        struct Option *state;
+    {
+        // parse the program name
+        size_t unused;
+        char const *o = GETOPT(argc, argv);
+        char const *rest = pawOs_find_last_sep(o, strlen(o), &unused);
+        s_program.name = rest != NULL ? rest + 1 : o;
+    }
+
+    while (argc > 0) {
         char const *option = GETOPT(argc, argv);
         char const *a = option;
         if (a[0] != '-') {
-            // Found a script pathname (the only non-option argument).
-            s_pathname = option;
-            break;
-        } else if (a[1] == '-' && a[2] == '\0') {
-            // Found '--': the rest of the arguments go to the script.
-            break;
+            // found the module pathname
+            if (s_program.module_pathname != NULL)
+                error("expected a single module pathname "
+                      "(the non-option argument)\n");
+            s_program.module_pathname = option;
+            continue;
         }
-        for (++a; *a; ++a) {
-            char const shr = *a;
-            for (size_t i = 0; i < PAW_COUNTOF(s_opt_info); ++i) {
-                state = &s_opt_info[i];
-                if (shr == state->name[0]) {
-                    if (state->flag != NULL) {
-                        *state->flag = PAW_TRUE;
-                        break; // no argument
-                    }
-                    if (a[1] != '\0') // in '-abc', only 'c' can take an argument
-                        error(PAW_ERUNTIME, "option with argument ('%c') must be last\n", shr);
+        ++a;
+        paw_Bool found = PAW_FALSE;
+        for (size_t i = 0; i < PAW_COUNTOF(s_opt_info); ++i) {
+            struct Option *state = &s_opt_info[i];
+            char const *arg = check_option(a, state->name);
+            if (arg != NULL) {
+                found = PAW_TRUE;
+                if (state->flag != NULL) {
+                    if (*arg != '\0')
+                        error("unexpected argument for option \"%s\"\n", state->name);
+                    *state->flag = PAW_TRUE;
+                    break; // no argument
+                }
 
-                    if (*pargc == 0)
-                        error(PAW_ERUNTIME, "missing argument for option '%s'\n", *(*pargv - 1));
+                // handle argument passed in two ways: "-xarg" or "-x arg"
+                if (*arg == '\0') {
+                    if (argc == 0)
+                        error("missing argument \"%s\" for option \"%s\"\n",
+                                state->argname, state->name);
+                    arg = GETOPT(argc, argv);
+                }
 
-                    char const *arg = GETOPT(argc, argv);
-                    if (state->integer != NULL) {
-                        int value = 0;
-                        for (char const *p = arg; *p; ++p) {
-                            int const v = *p - '0';
-                            if (v < 0 || 9 < v)
-                                error(PAW_ERUNTIME, "invalid integer argument (%s)\n", arg);
-                            if (value > (INT_MAX - v) / 10)
-                                error(PAW_ERUNTIME, "integer argument (%s) is too large\n", arg);
-                            value = value * 10 + v;
+                if (state->integer != NULL) {
+                    *state->integer = parse_int(arg);
+                } else {
+                    paw_assert(state->string != NULL);
+                    if (state->arg_count_ptr != NULL) {
+                        int const n = *state->arg_count_ptr;
+                        if (n < state->arg_limit) {
+                            state->string[n] = arg;
+                            state->arg_count_ptr++;
+                        } else {
+                            error("too many arguments for option \"%s\" "
+                                  "(expected at most %" PRId64 ")\n", state->name);
                         }
-                        *state->integer = value;
                     } else {
                         *state->string = arg;
                     }
-                    break;
                 }
+                break;
             }
         }
+
+        if (!found)
+            error("unrecognized option \"%s\"\n", option);
     }
-    *pargv = argv;
-    *pargc = argc;
 
 #undef GETOPT
 }
@@ -194,7 +281,7 @@ static void parse_debug_string(void)
         } else if (advance_ignore_case(&p, "stats")) {
             s_debug.stats = PAW_TRUE;
         } else {
-            error(PAW_EVALUE, "invalid debug string '%s'\n", s_opt.d);
+            error("invalid debug string '%s'\n", s_opt.d);
         }
         SKIP_SPACES(p);
     } while (*p++ == ',');
@@ -202,19 +289,6 @@ static void parse_debug_string(void)
 #undef SKIP_SPACES
 }
 
-static void show_help(void)
-{
-    info("usage: %s OPTIONS [FILE] ...\n", s_program_name);
-    info("OPTIONS:\n");
-    for (size_t i = 0; i < PAW_COUNTOF(s_opt_info); ++i) {
-        struct Option opt = s_opt_info[i];
-        if (opt.flag) {
-            info("-%s     : %s\n", opt.name, opt.description);
-        } else {
-            info("-%s %s : %s\n", opt.name, opt.argname, opt.description);
-        }
-    }
-}
 static int on_build_ast(paw_Env *P, void *arg)
 {
     puts(pawAst_dump(arg));
@@ -327,7 +401,7 @@ static void decompose_pathname(char const *pathname, size_t pathlen, char *modna
 
 int main(int argc, char const *argv[])
 {
-    parse_options(&argc, &argv);
+    parse_options(argc, argv);
     if (s_opt.h) {
         show_help();
         return 0;
@@ -341,7 +415,7 @@ int main(int argc, char const *argv[])
     if ((level[0] != '0' && level[0] != '1' && level[0] != '2'
                 && level[0] != '3' && level[0] != 's' && level[0] != 'z')
             || level[1] != '\0') // "level[0] != 0" implied
-        error(PAW_EVALUE, "invalid argument to \"-O\" option \"%s\"", level);
+        error("invalid argument to \"-O\" option \"%s\"\n", level);
 
     char *output_filename = NULL;
     char *output_dirname = NULL;
@@ -353,6 +427,10 @@ int main(int argc, char const *argv[])
     }
 
     paw_Env *P = paw_open(&(struct paw_Options){
+                .num_linker_paths = s_linker.num_paths,
+                .num_linker_specs = s_linker.num_specs,
+                .linker_paths = s_linker.paths,
+                .linker_specs = s_linker.specs,
                 .output_filename = output_filename,
                 .output_dirname = output_dirname,
                 .include_paths = s_opt.I,
@@ -364,7 +442,7 @@ int main(int argc, char const *argv[])
                 .opt_suffix = level[0],
             });
     if (P == NULL)
-        error(STATUS_NOT_ENOUGH_MEMORY, "not enough memory\n");
+        error("not enough memory\n");
 
     if (s_debug.stats)
         pawE_register_callback(P, "paw.stats_reporter", stats_reporter);
@@ -380,16 +458,19 @@ int main(int argc, char const *argv[])
     // then always use the provided string (ignore path).
     if (s_opt.e != NULL) {
         status = pawL_load_chunk(P, "(code)", s_opt.e);
-    } else if (s_pathname != NULL) {
+    } else if (s_program.module_pathname != NULL) {
         char modname[PATH_MAX + 1];
         char dirname[PATH_MAX + 1];
-        decompose_pathname(s_pathname, strlen(s_pathname), modname, dirname, PAW_TRUE);
-        status = pawL_load_file(P, modname, s_pathname, dirname);
+        decompose_pathname(s_program.module_pathname,
+                strlen(s_program.module_pathname),
+                modname, dirname, PAW_TRUE);
+        status = pawL_load_file(P, modname,
+                s_program.module_pathname, dirname);
     } else {
-        error(PAW_ERUNTIME, "missing pathname or chunk\n");
+        error("missing pathname or chunk\n");
     }
     if (status != PAW_OK)
-        error(status, "%s\n", P->current_errmsg->text);
+        error("%s\n", P->current_errmsg->text);
 
     paw_close(P);
 }

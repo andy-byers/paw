@@ -6,7 +6,7 @@
 #define PAW_TEST_TEST_H
 
 #include "os.h"
-#include "paw.h"
+#include "core.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -104,7 +104,7 @@ void test_mem_hook(void *ud, void *ptr, size_t size0, size_t size);
 char const *test_reader(paw_Env *X, void *ud, size_t *size);
 char const *test_pathname(char const *name);
 
-paw_Env *test_open(paw_MemHook mem_hook, struct TestAlloc *state, size_t heap_size);
+paw_Env *test_open(struct TestAlloc *state, size_t heap_size);
 void test_close(paw_Env *P, struct TestAlloc *a);
 int test_open_file(paw_Env *P, char const *pathname);
 int test_open_string(paw_Env *P, char const *modname, char const *source);
@@ -116,8 +116,5 @@ paw_Int test_randint(paw_Int min, paw_Int max);
 
 // Fill 'str' with 'len' printable chars
 void test_randstr(char *str, int len);
-
-// Hook for dumping the opcodes for the current Paw function
-void test_dump_source(paw_Env *P, paw_Debug const *d);
 
 #endif // PAW_TEST_TEST_H

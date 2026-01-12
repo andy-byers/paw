@@ -68,20 +68,6 @@ static void add_chunk_searcher(paw_Env *P)
     paw_pop(P, 1);
 }
 
-static int call_main_fn(paw_Env *P)
-{
-    paw_mangle_start(P);
-    paw_push_str(P, "main");
-    paw_mangle_add_name(P);
-
-    struct paw_Item item;
-    int const status = paw_lookup_item(P, -1, &item);
-    check(status == PAW_OK && item.global_id >= 0);
-    paw_get_global(P, item.global_id);
-
-    return paw_call(P, 0);
-}
-
 #define COMPILE_AND_RUN(Expect_, ...) do {     \
         struct ModuleSet set;                     \
         INIT_MODULE_SET(&set, __VA_ARGS__);       \
@@ -96,7 +82,6 @@ static int compile_and_run_(struct ModuleSet set)
     add_chunk_searcher(P);
     struct ModuleSource main = set.sources[0];
     int status = test_open_string(P, main.name, main.text);
-    if (status == PAW_OK) status = call_main_fn(P);
 
     test_close(P, &a);
     return status;

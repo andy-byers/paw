@@ -2,6 +2,8 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
+#include <stdlib.h>
+
 #include "lex.h"
 #include "compile.h"
 #include "error.h"
@@ -418,11 +420,10 @@ static struct Token consume_string_part(struct Lex *X, struct SourceLoc start_lo
 
 static struct Token consume_int_aux(struct Lex *X, struct SourceLoc start, int base, char const *base_name)
 {
-    paw_Env *P = ENV(X);
     struct StringBuffer *b = &SCRATCH(X);
     paw_Uint u;
 
-    int const rc = pawV_parse_uint(P, b->data, base, &u);
+    int const rc = pawX_parse_uint(b->data, base, &u);
     if (rc == PAW_EOVERFLOW) {
         LEX_ERROR(X, integer_too_big_to_parse, start, b->data);
     } else if (rc == PAW_ESYNTAX) {
@@ -514,7 +515,7 @@ static struct Token consume_float(struct Lex *X, struct SourceLoc start, const c
     struct StringBuffer b = SCRATCH(X);
     paw_Float f;
 
-    int const rc = pawV_parse_float(ENV(X), b.data, &f);
+    int const rc = pawX_parse_float(b.data, &f);
     if (rc != PAW_OK)
         LEX_ERROR(X, invalid_float, start, b.data);
     return (struct Token){
@@ -833,3 +834,116 @@ void pawX_set_source(struct Lex *X, paw_Reader input, void *ud)
     pawX_next(X); // load first token
 }
 
+static int char2base(char c)
+{
+    if (c == 'b' || c == 'B') {
+        return 2;
+    } else if (c == 'o' || c == 'O') {
+        return 8;
+    } else if (c == 'x' || c == 'X') {
+        return 16;
+    } else {
+        return -1;
+    }
+}
+
+#define IS_FP(c) (c == 'e' || c == 'E' || c == '.')
+
+static unsigned char_to_digit(char c)
+{
+    static const unsigned char LOOKUP[0x100] = {
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
+        0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x21, 0x22, 0x23, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
+        0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x21, 0x22, 0x23, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    };
+
+    return LOOKUP[(unsigned)c];
+}
+
+int pawX_parse_uint(char const *text, int base, paw_Uint *out)
+{
+    paw_Uint const b = (paw_Uint)base;
+    char const *p = text;
+
+    if (b < 2 || b > 36)
+        return PAW_EVALUE;
+
+    paw_Uint value = 0;
+    for (; *p; ++p) {
+        paw_Uint const v = char_to_digit(*p);
+        if (v >= b) {
+            return PAW_ESYNTAX;
+        } else if (value > (PAW_UINT_MAX - v) / b) {
+            return PAW_EOVERFLOW;
+        }
+        value = value * b + v;
+    }
+    *out = value;
+    return PAW_OK;
+}
+
+static paw_Bool parse_negative(char const **ptext)
+{
+    if (**ptext == '-') {
+        ++*ptext;
+        return PAW_TRUE;
+    }
+    *ptext += **ptext == '+';
+    return PAW_FALSE;
+}
+
+int pawX_parse_int(char const *text, int base, paw_Int *out)
+{
+    paw_Bool const negative = parse_negative(&text);
+
+    paw_Uint u;
+    int const status = pawX_parse_uint(text, base, &u);
+    if (status != PAW_OK) return status;
+
+    if (u > (paw_Uint)PAW_INT_MAX + negative)
+        return PAW_EOVERFLOW;
+
+    *out = PAW_CAST_INT(negative ? -u : u);
+    return PAW_OK;
+}
+
+#define IS_DIGIT(Char_) (char_to_digit((Char_)) < 10)
+
+int pawX_parse_float(char const *text, paw_Float *out)
+{
+    paw_Bool const negative = parse_negative(&text);
+
+    // First, validate the number format.
+    char const *p = text;
+    if (p[0] == '0' && p[1] != '\0' && !IS_FP(p[1]))
+        return PAW_ESYNTAX;
+
+    while (IS_DIGIT(*p)) ++p;
+
+    if (*p == '.') {
+        ++p;
+        while (IS_DIGIT(*p)) ++p;
+    }
+    if (*p == 'e' || *p == 'E') {
+        p += 1 + (p[1] == '+' || p[1] == '-');
+        if (!IS_DIGIT(*p)) return PAW_ESYNTAX;
+        while (IS_DIGIT(*p)) ++p;
+    }
+    if (*p != '\0') return PAW_ESYNTAX;
+    paw_Float const f = strtod(text, NULL);
+    *out = negative ? -f : f;
+    return PAW_OK;
+}

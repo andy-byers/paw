@@ -9,12 +9,34 @@ fn sign(value: int) -> int {
 }
 
 #[test]
-pub fn test_guard() {
+pub fn test_sign() {
     assert(sign(-100) == -1);
     assert(sign(-1) == -1);
     assert(sign(0) == 0);
     assert(sign(1) == 1);
     assert(sign(1000) == 1);
+}
+
+fn check_guard(i: int, b: bool) -> int {
+    match i {
+        1 => 10,
+        x if b => x,
+        3 => 30,
+        y => -y,
+    }
+}
+
+
+#[test]
+fn test_guard() {
+    assert(check_guard(1, false) == 1);
+    assert(check_guard(1, true) == 1);
+    assert(check_guard(2, false) == -2);
+    assert(check_guard(2, true) == 2);
+    assert(check_guard(3, false) == 30);
+    assert(check_guard(3, true) == 3);
+    assert(check_guard(4, false) == -4);
+    assert(check_guard(4, true) == 4);
 }
 
 fn check_guard_2(value: Option<int>) -> int {
@@ -69,3 +91,4 @@ pub fn test_special_case_1() {
     assert(check_special_case_1(3) == 3);
     assert(check_special_case_1(4) == 4);
 }
+

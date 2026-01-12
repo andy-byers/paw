@@ -43,6 +43,10 @@ struct paw_Options {
     char const *output_dirname;
     char const *output_filename;
     char const *include_paths;
+    char const **linker_specs;
+    char const **linker_paths;
+    int num_linker_specs;
+    int num_linker_paths;
     paw_Bool compile_only : 1;
     paw_Bool build_tests : 1;
     paw_Bool enable_asan : 1;

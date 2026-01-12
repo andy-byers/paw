@@ -145,4 +145,15 @@ void pawX_set_source(struct Lex *lex, paw_Reader input, void *ud);
 TokenKind pawX_next(struct Lex *lex);
 TokenKind pawX_peek(struct Lex *lex);
 
+// Convert a null-terminated string into an unsigned integer
+// Returns PAW_ESYNTAX if the integer is malformed, PAW_EOVERFLOW if it is too large to fit
+// in a paw_Uint, and PAW_OK otherwise.
+int pawX_parse_uint(char const *text, int base, paw_Uint *out);
+
+int pawX_parse_int(char const *text, int base, paw_Int *out);
+
+// Convert a null-terminated string into a float
+// Returns 0 on success, -1 otherwise.
+int pawX_parse_float(char const *text, paw_Float *out);
+
 #endif // PAW_LEX_H

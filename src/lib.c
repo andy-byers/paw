@@ -86,6 +86,7 @@ static int open_source_file(paw_Env *P, Str const *dirname, Str const *filename,
     L_ADD_STRING(P, &b, filename);
     Str const *pathname = pawL_buffer_finish(P, &b);
 
+    // TODO: clean up on error, no more GC in compiler!
     File *file = pawO_new_file(P);
     int const rc = pawO_open(file, pathname->text, "r");
     if (rc == -ENOENT) {
@@ -266,7 +267,9 @@ int pawL_start_import(paw_Env *P, Str const *name, struct FileReader *result)
     return IMPORT_NOT_FOUND;
 }
 
-void pawL_finish_import(paw_Env *P)
+void pawL_finish_import(paw_Env *P, struct FileReader *fr)
 {
     PAW_UNUSED(P);
+
+    pawO_close(fr->file);
 }

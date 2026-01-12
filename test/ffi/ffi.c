@@ -15,7 +15,7 @@ struct Tiny3 {
     char z;
 };
 
-struct Tiny1 get_tiny1(void *env, int8_t x)
+struct Tiny1 get_tiny1(void *env, char x)
 {
     (void)env;
     return (struct Tiny1){

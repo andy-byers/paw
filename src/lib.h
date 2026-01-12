@@ -78,7 +78,7 @@ int pawL_register_fn(paw_Env *P, char const *name, paw_Function fn, int nup);
 #define IMPORT_FOUND 1
 #define IMPORT_NOT_FOUND 0
 int pawL_start_import(paw_Env *P, struct Str const *modname, struct FileReader *result);
-void pawL_finish_import(paw_Env *P);
+void pawL_finish_import(paw_Env *P, struct FileReader *fr);
 
 void pawL_close_loader(paw_Env *P, void *state);
 

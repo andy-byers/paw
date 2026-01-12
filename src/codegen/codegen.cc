@@ -9,10 +9,6 @@
 // TODO:     Could also use "fat" pointers containing a tag, maybe a pointer-to-container and index/key, or a pointer-to-
 // TODO:     local variable.
 // TODO: For enum, use strictest alignment among all variants
-// TODO: Paw now has a very limited form of references (only can appear on function parameters, cannot be captured, etc.)
-// TODO:     Need to make sure references do not escape.
-// TODO:     May need to prevent generics from being instantiated with references
-// TODO:     Could still allow "&T" parameter
 
 #include <algorithm>
 #include <cctype>

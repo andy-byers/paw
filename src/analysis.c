@@ -334,6 +334,12 @@ static void visit_block(struct VariableAnalyzer *V, MirBlock b)
                 break;
             }
 
+            case kMirCapture: {
+                struct MirCapture *x = MirGetCapture(instr);
+                maybe_indicate_use(V, x->target);
+                break;
+            }
+
             default:
                 break;
         }

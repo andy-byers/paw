@@ -83,7 +83,7 @@ static struct AstDecl *import_module(struct Resolver *R, Str *name, ImportBindin
                 });
 
         struct AstDecl *mod = pawP_parse_module(R->C, name, fr.f, &fr);
-        pawL_finish_import(P);
+        pawL_finish_import(P, &fr);
 
         struct AstModuleDecl *m = AstGetModuleDecl(mod);
         ImportModules_insert(R, R->modules, name, m->modno);

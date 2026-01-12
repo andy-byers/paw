@@ -111,17 +111,6 @@ inline static size_t pawV_check_abs(paw_Env *P, paw_Int index, size_t length, ch
     return CAST_SIZE(index);
 }
 
-// Convert a null-terminated string into an unsigned integer
-// Returns PAW_ESYNTAX if the integer is malformed, PAW_EOVERFLOW if it is too large to fit
-// in a paw_Uint, and PAW_OK otherwise.
-int pawV_parse_uint(paw_Env *P, char const *text, int base, paw_Uint *out);
-
-int pawV_parse_int(paw_Env *P, char const *text, int base, paw_Int *out);
-
-// Convert a null-terminated string into a float
-// Returns 0 on success, -1 otherwise.
-int pawV_parse_float(paw_Env *P, char const *text, paw_Float *out);
-
 typedef struct Str {
     GC_HEADER;
     short flag;
