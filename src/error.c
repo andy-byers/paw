@@ -1035,7 +1035,7 @@ _Noreturn void pawErr_exceeded_limit(paw_Env *P, Str const *modname, struct Sour
     pawErr_set_module_name(P, modname);
     pawErr_set_source_loc(P, loc);
     pawErr_set_message(P, "too many %s", what);
-    pawErr_set_message(P, "expected at most %I", limit);
+    pawErr_set_hint(P, "expected at most %I", limit);
     pawErr_finish(P);
     pawC_throw(P, -1);
 }

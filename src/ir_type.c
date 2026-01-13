@@ -218,6 +218,7 @@ paw_Uint pawIr_type_hash(struct Compiler *C, IrType *t)
     return hash_type(t);
 }
 
+
 struct Printer {
     struct Compiler *C;
     Buffer *buf;

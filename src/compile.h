@@ -196,6 +196,8 @@ struct Compiler {
         struct TypeCollection *types;
     } typesystem;
 
+    Str const *main_name;
+
     // type of the runtime string internalization table ("[str: ()]")
     struct IrType *strtab_type;
     struct IrType *main_args_type;

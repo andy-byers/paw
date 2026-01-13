@@ -95,13 +95,6 @@ static struct Option {
 };
 // clang-format on
 
-static struct {
-    char const *specs[100];
-    char const *paths[100];
-    int num_specs;
-    int num_paths;
-} s_linker;
-
 #define IS_SPACE(Char_) ((Char_) == ' ' || (Char_) == '\t' || (Char_) == '\f'  \
                          || (Char_) == '\v' || (Char_) == '\r' || (Char_) == '\n')
 
@@ -150,7 +143,7 @@ static void show_help(void)
     }
 }
 
-static char const *check_option(char const *s, char const *p)
+static char const *consume_prefix(char const *s, char const *p)
 {
     for (; *p != '\0'; ++s, ++p) {
         if (*s == '\0' || *s != *p)
@@ -200,7 +193,7 @@ static void parse_options(int argc, char const **argv)
         paw_Bool found = PAW_FALSE;
         for (size_t i = 0; i < PAW_COUNTOF(s_opt_info); ++i) {
             struct Option *state = &s_opt_info[i];
-            char const *arg = check_option(a, state->name);
+            char const *arg = consume_prefix(a, state->name);
             if (arg != NULL) {
                 found = PAW_TRUE;
                 if (state->flag != NULL) {
@@ -226,7 +219,7 @@ static void parse_options(int argc, char const **argv)
                         int const n = *state->arg_count_ptr;
                         if (n < state->arg_limit) {
                             state->string[n] = arg;
-                            state->arg_count_ptr++;
+                            ++*state->arg_count_ptr;
                         } else {
                             error("too many arguments for option \"%s\" "
                                   "(expected at most %" PRId64 ")\n", state->name);
@@ -417,6 +410,7 @@ int main(int argc, char const *argv[])
             || level[1] != '\0') // "level[0] != 0" implied
         error("invalid argument to \"-O\" option \"%s\"\n", level);
 
+    // parse output location
     char *output_filename = NULL;
     char *output_dirname = NULL;
     if (s_opt.o != NULL) {
@@ -426,11 +420,20 @@ int main(int argc, char const *argv[])
                 output_filename, output_dirname, PAW_FALSE);
     }
 
+    // ensure linker specs have form `["static" | "dynamic"] "=" name`
+    for (int i = 0; i < s_opt.l_count; ++i) {
+        char const *s = s_opt.l[i];
+        if (strchr(s, '=') != 0
+                && !consume_prefix(s, "static=")
+                && !consume_prefix(s, "dynamic="))
+            error("invalid linker specification string \"%s\"", s);
+    }
+
     paw_Env *P = paw_open(&(struct paw_Options){
-                .num_linker_paths = s_linker.num_paths,
-                .num_linker_specs = s_linker.num_specs,
-                .linker_paths = s_linker.paths,
-                .linker_specs = s_linker.specs,
+                .num_linker_paths = s_opt.L_count,
+                .num_linker_specs = s_opt.l_count,
+                .linker_paths = s_opt.L,
+                .linker_specs = s_opt.l,
                 .output_filename = output_filename,
                 .output_dirname = output_dirname,
                 .include_paths = s_opt.I,

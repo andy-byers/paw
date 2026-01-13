@@ -15,7 +15,7 @@ static Str *new_string(paw_Env *P, size_t length)
         pawM_error(P);
     }
     Str *str = pawM_new_flex(P, Str, length + 1, sizeof(char));
-    str->gc_kind = VSTR;
+    str->objkind = VSTR;
     str->text[length] = '\0';
     str->length = length;
     str->next = NULL;

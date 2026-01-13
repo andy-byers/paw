@@ -290,6 +290,8 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, Str con
 
     C->strings = StringMap_new(C);
 
+    C->main_name = SCAN_STR(C, "main");
+
     C->globals = GlobalList_new(C);
     C->modinfo = ModuleInfo_new(C);
     C->builtin_lookup = BuiltinMap_new(C);

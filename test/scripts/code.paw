@@ -612,9 +612,6 @@ pub fn test_to_str() {
     assert("\{123}" == "123");
 }
 
-//#[extern]
-//pub fn get_option_char() -> Option<char>;
-
 #[test]
 pub fn test_parse_int() {
     assert("123".parse_int_radix(10).unwrap() == 123);
@@ -674,3 +671,4 @@ pub fn test_nested_inout() {
     outer(n);
     assert(n == 3);
 }
+

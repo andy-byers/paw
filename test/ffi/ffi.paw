@@ -2,69 +2,53 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
-inline struct Tiny1 {
-    x: char,
-}
-
-inline struct Tiny3 {
+inline struct Tiny {
     x: char,
     y: char,
     z: char,
 }
 
-#[extern] pub fn get_tiny1(x: char) -> Tiny1;
-#[extern] pub fn get_tiny3(x: char, y: char, z: char) -> Tiny3;
-
-inline struct Small2 {
+inline struct Small {
     x: char,
     y: int,
 }
 
-inline struct Small3 {
-    x: bool,
-    y: char,
-    z: float,
-}
-
-#[extern] pub fn get_small2(x: char, y: int) -> Small2; 
-#[extern] pub fn get_small3(x: bool, y: char, z: float) -> Small3 ;
-
-inline struct Large3 {
-    x: float,
+inline struct Large {
+    x: int,
     y: float,
     z: bool,
 }
 
-inline struct Large5 {
-    x: int,
-    y: int,
-    z: Large3,
-}
-
-#[extern] pub fn get_large3(x: float, y: float, z: bool) -> Large3; 
-#[extern] pub fn get_large5(x: int, y: int, z: Large3) -> Large5;
-
-inline struct HFA2 {
+inline struct HFA {
     x: float,
     y: float,
 }
 
-inline struct HFA4 {
-    x: float,
-    y: HFA2,
-    z: float,
-}
+#[extern] pub fn get_tiny(x: char, y: char, z: char) -> Tiny;
+#[extern] pub fn get_small(x: char, y: int) -> Small; 
+#[extern] pub fn get_large(x: int, y: float, z: bool) -> Large; 
+#[extern] pub fn get_hfa(x: float, y: float) -> HFA;
 
-#[extern] pub fn get_hfa2(x: float, y: float) -> HFA2;
-#[extern] pub fn get_hfa4(x: float, y: HFA2, z: float) -> HFA4;
+pub fn main(args: [str]) {
+    println("running FFI test...");
 
-pub fn main(args: [str]) -> int {
-    let Tiny1{x} = get_tiny1('a');
-    assert(x == 'a');
-
-    let Tiny3{x, y, z} = get_tiny3('A', 'B', 'C');
+    let Tiny{x, y, z} = get_tiny('A', 'B', 'C');
     assert(x == 'A');
     assert(y == 'B');
     assert(z == 'C');
-    0
+
+    let Small{x, y} = get_small('1', 2);
+    assert(x == '1');
+    assert(y == 2);
+
+    let Large{x, y, z} = get_large(1, 2.0, true);
+    assert(x == 1);
+    assert(y == 2.0);
+    assert(z == true);
+
+    let HFA{x, y} = get_hfa(10.0, 20.0);
+    assert(x == 10.0);
+    assert(y == 20.0);
+
+    println("[PASS]");
 }

@@ -13,16 +13,6 @@
 #include "os.h"
 #include "value.h"
 
-#define ERROR(P, kind, ...) pawE_error(P, kind, -1, __VA_ARGS__)
-
-void pawV_index_error(paw_Env *P, paw_Int index, size_t length, char const *what)
-{
-    PAW_UNUSED(P);
-    PAW_UNUSED(index);
-    PAW_UNUSED(length);
-    PAW_UNUSED(what);
-    PAW_UNREACHABLE();
-}
 
 static void int_to_str(paw_Env *P, paw_Int i, Value *out)
 {
@@ -81,14 +71,13 @@ char const *pawV_to_str(paw_Env *P, Value *pv, paw_Type type, size_t *plength)
 Tuple *pawV_new_tuple(paw_Env *P, int nelems)
 {
     Tuple *tuple = pawM_new_flex(P, Tuple, CAST_SIZE(nelems), sizeof(tuple->elems[0]));
-    tuple->gc_kind = VTUPLE;
+    tuple->objkind = VTUPLE;
     tuple->nelems = nelems;
     return tuple;
 }
 
 void pawV_free_tuple(paw_Env *P, Tuple *t)
 {
-    paw_assert(t->kind == TUPLE_OTHER);
     pawM_free_flex(P, t, t->nelems, sizeof(t->elems[0]));
 }
 

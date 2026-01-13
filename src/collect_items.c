@@ -41,6 +41,11 @@ struct ItemCollector {
     paw_Env *P;
 };
 
+static enum BuiltinKind builtin_kind(struct ItemCollector *X, IrType *type)
+{
+    return pawP_type2code(X->C, type);
+}
+
 static IrType *collect_type(struct ItemCollector *X, struct HirType *type)
 {
     IrType *result = pawP_lower_type(X->C, *X->pm, type);
@@ -417,7 +422,6 @@ static void collect_generic_bounds(struct ItemCollector *X, struct HirDeclList *
 
 static void unify_with_self(struct ItemCollector *X, struct SourceLoc loc, IrType *self)
 {
-#warning probably should use ir_remove_indirection
     // value type "self" is passed by reference
     if (IrIsPtr(self)) self = IrGetPtr(self)->pointee;
     if (pawU_unify(X->C->U, self, X->ctx) != 0) {
@@ -427,17 +431,40 @@ static void unify_with_self(struct ItemCollector *X, struct SourceLoc loc, IrTyp
     }
 }
 
+// Ensure that "main" has a signature that can be called by the
+// generated driver function
+static void validate_main_signature(struct ItemCollector *X, struct SourceLoc loc, IrType *type)
+{
+    struct IrSignature *sig = IrGetSignature(type);
+    if (sig->params->count > 1)
+        pawErr_exceeded_limit(ENV(X), X->pm->name, loc,
+                "parameters for \"main\" function", 1);
+
+    if (sig->params->count == 1) {
+        IrType *args = IrTypeList_first(sig->params);
+        if (builtin_kind(X, args) != BUILTIN_LIST
+                && builtin_kind(X, ir_list_elem(args)) != BUILTIN_INT)
+            pawErr_generic_error(ENV(X), X->pm->name, loc,
+                    "single argument to \"main\" must have type \"[str]\"");
+    }
+
+    if (builtin_kind(X, sig->result) != BUILTIN_UNIT
+            && builtin_kind(X, sig->result) != BUILTIN_INT)
+        pawErr_generic_error(ENV(X), X->pm->name, loc,
+                "return type of \"main\" must have type \"()\" or \"int\"");
+}
+
 static void collect_fn_decl(struct ItemCollector *X, struct HirFnDecl *d)
 {
-    IrTypeList *types = collect_generic_types(X, d->generics);
+    IrTypeList *generics = collect_generic_types(X, d->generics);
     collect_local_type_aliases(X, d->body);
     collect_param_types(X, d->params);
 
     IrTypeList *params = pawHir_collect_decl_types(X->C, d->params);
     IrType *result = collect_type(X, d->result);
-    IrType *sig = pawIr_new_signature(X->C, d->did, types, params, result);
-    collect_generic_bounds(X, d->generics, sig);
-    SET_TYPE(X, d->id, sig);
+    IrType *type = pawIr_new_signature(X->C, d->did, generics, params, result);
+    collect_generic_bounds(X, d->generics, type);
+    SET_TYPE(X, d->id, type);
 
     {
         struct IrGenericDefs *generics = collect_generic_defs(X, d->generics);
@@ -456,8 +483,11 @@ static void collect_fn_decl(struct ItemCollector *X, struct HirFnDecl *d)
                 HirGetParamDecl(first)->is_self = PAW_TRUE;
             }
         }
-        IrGetSignature(sig)->self = X->ctx;
+        IrGetSignature(type)->self = X->ctx;
+    } else if (pawS_eq(d->ident.name, X->C->main_name)) {
+        validate_main_signature(X, d->span.start, type);
     }
+
 }
 
 static void collect_method_decls(struct ItemCollector *X, struct HirDeclList *methods, paw_Bool force_pub)

@@ -62,7 +62,8 @@ public:
 private:
     std::vector<std::string> objects_;
     std::vector<std::string> args_;
-    std::vector<std::string> libs_;
+    std::vector<std::string> staticlibs_;
+    std::vector<std::string> dylibs_;
     paw_Env *P;
 };
 

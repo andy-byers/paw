@@ -700,8 +700,6 @@ static void compile_object(Context &X, llvm::TargetMachine &machine, std::string
 
     pm.run(*m);
     os.flush();
-
-    llvm::outs() << "wrote " << pathname << '\n';
 }
 
 static void generate_test_driver(Context &base, llvm::TargetMachine &machine, std::string modname, std::vector<std::string> const &test_names, CodegenOptions options)
@@ -804,8 +802,12 @@ public:
             fn = get_fn(mir->type);
         }
 
-        if (pawMir_is_main(mir))
-            create_main_fn_wrapper(*fn, builtin_kind(mir->type) != BUILTIN_INT);
+        if (mir->self == nullptr && pawS_eq(mir->name, C->main_name)) {
+            auto const *fptr = IR_FPTR(mir->type);
+            paw_Bool const materialize_args = fptr->params->count > 0;
+            paw_Bool const materialize_return = builtin_kind(fptr->result) != BUILTIN_INT;
+            create_main_fn_wrapper(*fn, materialize_args, materialize_return);
+        }
 
         if (mir->blocks->count == 0)
             return;
@@ -960,7 +962,7 @@ public:
         return str.get_value();
     }
 
-    void create_main_fn_wrapper(llvm::Function *inner, bool materialize_return)
+    void create_main_fn_wrapper(llvm::Function *inner, bool materialize_args, bool materialize_return)
     {
         auto *c = X.get_context();
         auto *C = X.get_compiler();
@@ -980,53 +982,56 @@ public:
         State state(X, &main_fn);
 
         auto *entry = state.get_entry();
-        auto *header = llvm::BasicBlock::Create(*c, "header", main_fn);
-        auto *body = llvm::BasicBlock::Create(*c, "body", main_fn);
-        auto *exit = llvm::BasicBlock::Create(*c, "exit", main_fn);
+        llvm::Value *args = X.create_null_ptr();
+        if (materialize_args) {
+            // Convert the "argc"/"argv" pair into a list of type "[str]"
+            // to pass to "paw_main".
+            auto *header = llvm::BasicBlock::Create(*c, "header", main_fn);
+            auto *body = llvm::BasicBlock::Create(*c, "body", main_fn);
+            auto *exit = llvm::BasicBlock::Create(*c, "exit", main_fn);
 
-        auto *index1 = X.create_int(0);
-        auto *argc32 = main_fn.get_arg(0);
-        auto *argv = main_fn.get_arg(1);
+            auto *index1 = X.create_int(0);
+            auto *argc32 = main_fn.get_arg(0);
+            auto *argv = main_fn.get_arg(1);
 
-        auto *argc1 = B->CreateSExt(argc32, X.get_int_ty());
-        auto *args_irtype = C->main_args_type;
-        List args(state, argc1, cast<ListType>(get_type(args_irtype)),
-                get_list_methods(args_irtype),
-                List::CreationTag());
-        B->CreateBr(header);
+            auto *argc1 = B->CreateSExt(argc32, X.get_int_ty());
+            auto *args_irtype = C->main_args_type;
+            List list(state, argc1, cast<ListType>(get_type(args_irtype)),
+                    get_list_methods(args_irtype),
+                    List::CreationTag());
+            args = list.get_value();
+            B->CreateBr(header);
 
-        B->SetInsertPoint(header);
-        auto *argc = B->CreatePHI(X.get_int_ty(), 2);
-        auto *index = B->CreatePHI(X.get_int_ty(), 2);
-        argc->addIncoming(argc1, entry);
-        index->addIncoming(index1, entry);
+            B->SetInsertPoint(header);
+            auto *argc = B->CreatePHI(X.get_int_ty(), 2);
+            auto *index = B->CreatePHI(X.get_int_ty(), 2);
+            argc->addIncoming(argc1, entry);
+            index->addIncoming(index1, entry);
 
-        auto *condition = B->CreateCmp(llvm::CmpInst::ICMP_SGT,
-                argc, X.create_int(0));
-        B->CreateCondBr(condition, body, exit);
+            auto *condition = B->CreateCmp(llvm::CmpInst::ICMP_SGT,
+                    argc, X.create_int(0));
+            B->CreateCondBr(condition, body, exit);
 
-        B->SetInsertPoint(body);
-        auto *element_ptr = args.get_element_ptr(index);
-        auto *cstr = B->CreateLoad(X.get_ptr_ty(),
-                B->CreateInBoundsGEP(X.get_ptr_ty(), argv, {index}));
-        auto *str = create_cstr_to_str(state, cstr);
-        B->CreateStore(str, element_ptr); // write "str" element of "[str]"
-        auto *index2 = B->CreateAdd(index, X.create_int(1), "index");
-        auto *argc2 = B->CreateSub(argc, X.create_int(1), "argc");
+            B->SetInsertPoint(body);
+            auto *element_ptr = list.get_element_ptr(index);
+            auto *cstr = B->CreateLoad(X.get_ptr_ty(),
+                    B->CreateInBoundsGEP(X.get_ptr_ty(), argv, {index}));
+            auto *str = create_cstr_to_str(state, cstr);
+            B->CreateStore(str, element_ptr); // write "str" element of "[str]"
+            auto *index2 = B->CreateAdd(index, X.create_int(1), "index");
+            auto *argc2 = B->CreateSub(argc, X.create_int(1), "argc");
 
-        B->CreateBr(header);
+            B->CreateBr(header);
 
-        argc->addIncoming(argc2, body);
-        index->addIncoming(index2, body);
+            argc->addIncoming(argc2, body);
+            index->addIncoming(index2, body);
 
-        B->SetInsertPoint(exit);
-
-        auto *ret = B->CreateCall(inner, {X.create_null_ptr(), args.get_value()});
-        if (materialize_return) {
-            state.create_return(X.create_i32(0));
-        } else {
-            state.create_return(B->CreateTrunc(ret, X.get_i32_ty()));
+            B->SetInsertPoint(exit);
         }
+
+        auto *ret = B->CreateCall(inner, {X.create_null_ptr(), args});
+        state.create_return(materialize_return ? X.create_i32(0)
+                : B->CreateTrunc(ret, X.get_i32_ty()));
     }
 
     void compile_module(std::string prefix, std::string filename)
@@ -1295,8 +1300,6 @@ private:
             B->CreateRet(value);
         }
     }
-
-    // TODO: internal methods do not need "env" parameter
 
     void generate_list_methods(IrType *irself)
     {
@@ -2324,11 +2327,41 @@ llvm::Value *PawState::get_upvalue_ptr(unsigned index)
 
 static void link_compilation_artifact(paw_Env *P, std::string prefix)
 {
-    Linker(P)
-        .with_object(prefix + ".o")
-        .finalize(prefix);
+    std::string const root_dir(PAW_ROOT_DIR);
+    std::string const libgc_dir(PAW_GC_DIR);
 
-    llvm::outs() << "built " << prefix << '\n';
+    auto linker = Linker(P)
+        .with_object(prefix + ".o")
+        .with_arg("-L" + libgc_dir + "/lib")
+        .with_staticlib("gc")
+        .with_arg("-L" + root_dir)
+        .with_staticlib("paw_stdc");
+
+    auto const o = P->options;
+    for (int i = 0; i < o.num_linker_paths; ++i) {
+        std::string const path(o.linker_paths[i]);
+        linker.add_arg("-L" + path);
+    }
+    for (int i = 0; i < o.num_linker_specs; ++i) {
+        std::string spec(o.linker_specs[i]);
+
+        bool is_static = true;
+        auto const pos = spec.find('=');
+        if (pos != std::string::npos) {
+            is_static = spec.starts_with("static");
+            spec = spec.substr(pos + 1);
+        }
+
+        if (is_static) {
+            linker.link_staticlib(spec);
+        } else {
+            linker.link_dylib(spec);
+        }
+    }
+
+    // invoke the linker
+    std::move(linker)
+        .finalize(prefix);
 }
 
 } // namespace paw::cg

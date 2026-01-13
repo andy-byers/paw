@@ -12,7 +12,6 @@
 #define V_FALSE(Value_) ((Value_).u == 0)
 #define V_TRUE(Value_) ((Value_).u != 0)
 #define V_CHAR(Value_) ((Value_).c)
-#define V_UCHAR(Value_) ((Value_).ux)
 #define V_INT(Value_) ((Value_).i)
 #define V_UINT(Value_) ((Value_).u)
 #define V_FLOAT(Value_) ((Value_).f)
@@ -29,7 +28,7 @@
 #define V_SET_FLOAT(Ptr_, Float_) ((Ptr_)->f = (Float_))
 #define V_SET_OBJECT(Ptr_, Object_) ((Ptr_)->o = (Object *)(Object_))
 
-#define O_KIND(Object_) ((Object_)->gc_kind)
+#define O_KIND(Object_) ((Object_)->objkind)
 #define O_IS_STR(Object_) (O_KIND(Object_) == VSTR)
 #define O_IS_TUPLE(Object_) (O_KIND(Object_) == VTUPLE)
 
@@ -52,13 +51,12 @@ typedef enum ValueKind {
     NVTYPES
 } ValueKind;
 
-#define GC_HEADER              \
-    struct Object *gc_next;    \
-    unsigned char gc_mark : 2; \
-    ValueKind gc_kind : 6
+
+#define OBJECT_HEADER ValueKind objkind : 8
 typedef struct Object {
-    GC_HEADER;
+    OBJECT_HEADER;
 } Object;
+
 
 typedef union Value {
     void *p;
@@ -69,50 +67,14 @@ typedef union Value {
     Object *o;
 } Value;
 
-typedef Value *StackPtr;
-
-typedef union StackRel {
-    ptrdiff_t d;
-    StackPtr p;
-} StackRel;
-
-#define VOBJECT0 VSTR
-#define NOBJECTS (int)(NVTYPES - VOBJECT0)
 #define P2V(Ptr_) (Value) { .p = (void *)(Ptr_) }
 #define C2V(Char_) (Value) { .i = (paw_Char)(Char_) }
 #define I2V(Int_) (Value) { .i = (paw_Int)(Int_) }
 #define F2V(Float_) (Value) { .f = (paw_Float)(Float_) }
 
-void pawV_index_error(paw_Env *P, paw_Int index, size_t length, char const *what);
-
-inline static Value *pawV_copy(Value *dst, Value const *src, int n)
-{
-    while (n-- > 0)
-        *dst++ = *src++;
-    return dst;
-}
-
-inline static paw_Uint pawV_hash(Value v)
-{
-    return v.u;
-}
-
-static paw_Int pawV_abs_index(paw_Int index, size_t length)
-{
-    return index + (index < 0 ? PAW_CAST_INT(length) : 0);
-}
-
-inline static size_t pawV_check_abs(paw_Env *P, paw_Int index, size_t length, char const *what)
-{
-    index = pawV_abs_index(index, length);
-    if (index < 0 || CAST_SIZE(index) >= length) {
-        pawV_index_error(P, index, length, what);
-    }
-    return CAST_SIZE(index);
-}
 
 typedef struct Str {
-    GC_HEADER;
+    OBJECT_HEADER;
     short flag;
     unsigned hash;
     struct Str *next;
@@ -122,15 +84,10 @@ typedef struct Str {
 
 char const *pawV_to_str(paw_Env *P, Value *pv, paw_Type type, size_t *nout);
 
-#define TUPLE_OTHER 0
-#define TUPLE_LIST 1
-#define TUPLE_MAP 2
 
 typedef struct Tuple {
-    GC_HEADER;
-    unsigned char kind;
+    OBJECT_HEADER;
     int nelems;
-    Object *gc_list;
     Value elems[];
 } Tuple;
 
