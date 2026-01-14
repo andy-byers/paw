@@ -22,20 +22,10 @@ set(PAW_BINARY_DIR "" CACHE PATH "Location of compilation artifacts")
 # TODO:   PAW_ROOT_DIR=("paw", "paw_stdc.o", <stdlib sources>)
 set(PAW_ROOT_DIR ${CMAKE_ROOT_DIR})
 
-if(PAW_LLVM_PATH)
-    find_package(LLVM REQUIRED CONFIG PATHS ${PAW_LLVM_PATH})
-else()
-    include(FetchContent)
-    FetchContent_Declare(llvm
-        GIT_REPOSITORY https://github.com/llvm/llvm-project
-        GIT_TAG llvmorg-21.1.2)
-    FetchContent_MakeAvailable(llvm)
-endif()
-
+find_package(LLVM REQUIRED CONFIG)
 add_definitions(${LLVM_DEFINITIONS})
 llvm_map_components_to_libnames(LLVM_LIBS 
-    core native passes support irreader)
-
+    native passes)
 
 option(PAW_BuildFuzzers "Build the fuzz targets" Off)
 option(PAW_BuildTests "Build the tests" ${MAIN_PROJECT})

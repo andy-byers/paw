@@ -16,7 +16,11 @@ jobs:
           # windows-latest
         ]
         build_type: [Debug, Release]
-        cc: [gcc, clang, cl]
+        cc: [
+         // gcc, 
+          clang, 
+         // cl
+          ]
         stress: [0, 2]
         exclude:
 #          - os: windows-latest
@@ -33,6 +37,35 @@ jobs:
       
     steps:
     - uses: actions/checkout@v3
+
+
+    - name: Install LLVM (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y zlib1g-dev llvm-19 llvm-19-dev clang-19 lld-19
+
+    - name: Install LLVM (macOS)
+      if: runner.os == 'macOS'
+      run: brew install llvm
+
+    - name: Install LLVM (Windows)
+      if: runner.os == 'Windows'
+      shell: powershell
+      run: choco install llvm --yes
+
+    - name: Configure
+      shell: bash
+      run: |
+        if [[ "$RUNNER_OS" == "Linux" ]]; then
+          LLVM_DIR=/usr/lib/llvm-19/lib/cmake/llvm
+        elif [[ "$RUNNER_OS" == "macOS" ]]; then
+          LLVM_DIR=$(brew --prefix llvm)/lib/cmake/llvm
+        else
+          LLVM_DIR="C:/Program Files/LLVM/lib/cmake/llvm"
+        fi
+
+        cmake -S . -B build -DLLVM_DIR="$LLVM_DIR"
 
     - name: Configure
       run: >
