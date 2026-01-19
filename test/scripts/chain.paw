@@ -54,7 +54,9 @@ inline struct Padded<T> {
     pub padding: Padding,
     pub padding2: Padding,
     pub value: T,
+}
 
+impl<T> Padded<T> {
     pub fn new(value: T) -> Self {
         Self{value, padding: Padding, padding2: Padding}
     }

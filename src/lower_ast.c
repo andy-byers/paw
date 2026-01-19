@@ -466,18 +466,26 @@ static struct HirDecl *LowerUseDecl(struct LowerAst *L, struct AstUseDecl *d)
     return NULL;
 }
 
+static struct HirDecl *LowerImplDecl(struct LowerAst *L, struct AstImplDecl *d)
+{
+    struct HirType *type = lower_type(L, d->type);
+    struct HirType *trait = d->trait != NULL ? lower_type(L, d->trait) : NULL;
+    HirDeclList *generics = lower_decl_list(L, d->generics);
+    HirDeclList *methods = lower_methods(L, d->methods);
+
+    return NEW_NODE(L, impl_decl, d->span, d->id, d->did, type, trait, generics, methods);
+}
+
 static struct HirDecl *LowerAdtDecl(struct LowerAst *L, struct AstAdtDecl *d)
 {
-    L->adt_did = d->did;
+    L->adt_did = d->did; // needed for variant creation
     struct HirIdent const ident = lower_ident(d->ident);
-    HirTypeList *traits = lower_type_list(L, d->traits);
     HirDeclList *generics = lower_decl_list(L, d->generics);
     HirDeclList *variants = lower_decl_list(L, d->variants);
-    HirDeclList *methods = lower_methods(L, d->methods);
     L->adt_did = NO_DECL;
 
-    return NEW_NODE(L, adt_decl, d->span, d->id, d->did, ident, traits, generics, variants,
-            methods, d->is_pub, d->is_struct, d->is_inline);
+    return NEW_NODE(L, adt_decl, d->span, d->id, d->did, ident, generics,
+            variants, d->is_pub, d->is_struct, d->is_inline);
 }
 
 static struct HirDecl *LowerTraitDecl(struct LowerAst *L, struct AstTraitDecl *d)

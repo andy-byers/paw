@@ -92,20 +92,20 @@ static void check_occurs(struct Unifier *U, InferenceVar *ivar, IrType *type)
         check_occurs(U, ivar, *ptype);
 }
 
-static void unify_var_type(struct Unifier *U, InferenceVar *ivar, IrType *type)
+static int unify_var_type(struct Unifier *U, InferenceVar *ivar, IrType *type)
 {
     debug_log(U, "unify_var_type", ivar->type, type);
 
     IrTypeList *bounds = IrGetInfer(ivar->type)->bounds;
-    if (!pawP_satisfies_bounds(U->C, type, bounds)) {
-        UNIFIER_ERROR(U, unsatisfied_trait_bounds, ivar->loc);
-    }
+    if (!pawP_satisfies_bounds(U->C, type, bounds))
+        return -1;
 
     check_occurs(U, ivar, type);
     overwrite_type(ivar, type);
+    return 0;
 }
 
-static void unify_var_var(struct Unifier *U, InferenceVar *a, InferenceVar *b)
+static int unify_var_var(struct Unifier *U, InferenceVar *a, InferenceVar *b)
 {
     a = find_root(a);
     b = find_root(b);
@@ -120,10 +120,11 @@ static void unify_var_var(struct Unifier *U, InferenceVar *a, InferenceVar *b)
     } else if (bb->bounds == NULL) {
         bb->bounds = aa->bounds;
     } else if (!pawP_satisfies_bounds(U->C, a->type, bb->bounds)) {
-        UNIFIER_ERROR(U, unsatisfied_trait_bounds, a->loc);
+        return -1;
     }
 
     if (a != b) link_roots(a, b);
+    return 0;
 }
 
 static IrType *normalize_unknown(UnificationTable *table, IrType *type)
@@ -259,13 +260,13 @@ static int unify(struct Unifier *U, IrType *a, IrType *b)
         InferenceVar *va = get_ivar(ut, IrGetInfer(a)->index);
         if (IrIsInfer(b)) {
             InferenceVar *vb = get_ivar(ut, IrGetInfer(b)->index);
-            unify_var_var(U, va, vb);
+            return unify_var_var(U, va, vb);
         } else {
-            unify_var_type(U, va, b);
+            return unify_var_type(U, va, b);
         }
     } else if (IrIsInfer(b)) {
         InferenceVar *vb = get_ivar(ut, IrGetInfer(b)->index);
-        unify_var_type(U, vb, a);
+        return unify_var_type(U, vb, a);
     } else {
         // Both types are known: make sure they are compatible. This is the
         // only time we can encounter an error.
@@ -290,6 +291,7 @@ static int equate(struct Unifier *U, IrType *a, IrType *b)
 
     if (IrIsNever(a) && !IrIsNever(b)) return -1;
     if (!IrIsNever(a) && IrIsNever(b)) return -1;
+    if (IrIsInfer(a) || IrIsInfer(b)) return 0;
 
     return unify_types(U, a, b);
 }
@@ -297,6 +299,16 @@ static int equate(struct Unifier *U, IrType *a, IrType *b)
 paw_Bool pawU_equals(struct Unifier *U, IrType *a, IrType *b)
 {
     return RUN_ACTION(U, a, b, equate) == 0;
+}
+
+int pawU_current_position(struct Unifier *U)
+{
+    return U->table->ivars->count;
+}
+
+void pawU_load_position(struct Unifier *U, int position)
+{
+    U->table->ivars->count = position;
 }
 
 IrType *pawU_new_unknown(struct Unifier *U, struct SourceLoc loc, IrTypeList *bounds)

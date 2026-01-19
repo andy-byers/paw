@@ -1,0 +1,62 @@
+// mono_impl.paw
+
+pub trait Repr {
+    fn repr(&self) -> str;
+}
+
+impl Repr for int {
+    fn repr(&self) -> str {
+        self.to_str()
+    }
+}
+
+impl Repr for str {
+    fn repr(&self) -> str {
+        "\"\{self}\""
+    }
+}
+
+pub trait DebugSelf {
+    fn debug_self(&self);
+}
+
+pub trait DebugArg<R: Repr> {
+    fn debug_arg(&self, r: R);
+}
+
+struct Mono;
+
+impl DebugSelf for Mono {
+    fn debug_self(&self) {
+        println("debug_self(Mono)");
+    }
+}
+
+impl<T: Repr> DebugArg<T> for Mono {
+    fn debug_arg(&self, value: T) {
+        println("debug_arg(Mono, \{value.repr()})");
+    }
+}
+
+pub fn debug_self(m: Mono) {
+    m.debug_self();
+}
+
+pub fn debug_arg<R: Repr>(m: Mono, r: R) {
+    m.debug_arg(r);
+}
+
+#[test]
+pub fn test() {
+    let m = Mono;
+
+    m.debug_self();
+    debug_self(m);
+
+    m.debug_arg(123);
+    debug_arg(m, 456);
+
+    m.debug_arg("abc");
+    debug_arg(m, "def");
+}
+

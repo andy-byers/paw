@@ -97,6 +97,8 @@ static char const *decl_kind(enum AstDeclKind kind)
             return "function";
         case kAstGenericDecl:
             return "generic";
+        case kAstImplDecl:
+            return "impl";
         case kAstAdtDecl:
             return "ADT";
         case kAstTypeDecl:
@@ -254,13 +256,30 @@ static paw_Bool lookup(struct Resolver *R, struct AstPath path, enum Namespace n
 
 static paw_Bool find_value_in_generic(struct Resolver *R, struct AstGenericDecl *d, struct PathCursor pc, struct Symbol *out)
 {
+    if (d->bounds == NULL)
+        pawErr_generic_error(ENV(R), R->current->name,
+                pc_segment(pc)->span.start, "expected bounds on generic");
+
+    paw_Bool found = PAW_FALSE;
     struct AstGenericBound const *pbound;
     K_LIST_FOREACH (d->bounds, pbound) {
         struct ResolvedSegment res = get_path_result(R, pbound->path);
-        if (find_value_in_scope(R, res.id, pc, out))
-            return PAW_TRUE;
+        if (find_value_in_scope(R, res.id, pc, out)) {
+            if (found) // more than 1 bound contains a method with the given name
+                pawErr_generic_error(ENV(R), R->current->name,
+                        pc_segment(pc)->span.start, "multiple applicable methods");
+            found = PAW_TRUE;
+        }
     }
-    return PAW_FALSE;
+    return found;
+}
+
+static void defer_method_lookup(struct AstIdent ident, struct Symbol *out)
+{
+    out->ident = ident;
+    out->id = INVALID_NODE_ID;
+    out->kind = SYMBOL_DECL;
+    out->ns = NAMESPACE_VALUE;
 }
 
 static paw_Bool find_value_in_type(struct Resolver *R, struct AstTypeDecl *d, struct PathCursor pc, struct Symbol *out)
@@ -271,10 +290,20 @@ static paw_Bool find_value_in_type(struct Resolver *R, struct AstTypeDecl *d, st
         char const *repr = pawAst_print_path(R->ast, rhs->path);
         RESOLVER_ERROR(R, unknown_path, R->current->name, rhs->span.start, repr);
     }
-    return find_value_in_scope(R, base.id, pc, out);
+    if (!find_value_in_scope(R, base.id, pc, out))
+        defer_method_lookup(pc_segment(pc)->ident, out);
+    return PAW_TRUE;
 }
 
-static paw_Bool find_assoc_item(struct Resolver *R, NodeId type_id, struct PathCursor *pc, struct Symbol *out)
+static struct Symbol lookup_or_error(struct Resolver *R, struct AstPath path, enum Namespace ns)
+{
+    struct Symbol symbol;
+    if (!lookup(R, path, ns, &symbol))
+        unknown_path(R, path);
+    return symbol;
+}
+
+static paw_Bool lookup_assoc_item(struct Resolver *R, NodeId type_id, struct PathCursor *pc, struct Symbol *out)
 {
     struct AstDecl *type = pawAst_get_node(R->ast, type_id);
     switch (AST_KINDOF(type)) {
@@ -282,9 +311,27 @@ static paw_Bool find_assoc_item(struct Resolver *R, NodeId type_id, struct PathC
             return find_value_in_type(R, AstGetTypeDecl(type), *pc, out);
         case kAstGenericDecl:
             return find_value_in_generic(R, AstGetGenericDecl(type), *pc, out);
-        case kAstAdtDecl:
         case kAstTraitDecl:
+//            defer_method_lookup(pc_segment(*pc)->ident, out);
+//            return PAW_TRUE;
             return find_value_in_scope(R, type_id, *pc, out);
+        case kAstAdtDecl:
+            // defer resolution of associated functions on ADTs until type checking
+            if (!find_value_in_scope(R, type_id, *pc, out))
+                defer_method_lookup(pc_segment(*pc)->ident, out);
+            return PAW_TRUE;
+        case kAstImplDecl: {
+            struct Symbol base;
+            struct AstImplDecl *d = AstGetImplDecl(type);
+            struct AstPathType *rhs = AstGetPathType(d->type);
+            if (!lookup(R, rhs->path, NAMESPACE_TYPE, &base)) {
+                char const *repr = pawAst_print_path(R->ast, rhs->path);
+                RESOLVER_ERROR(R, unknown_path, R->current->name, rhs->span.start, repr);
+            }
+            if (!find_value_in_scope(R, base.id, *pc, out))
+                defer_method_lookup(pc_segment(*pc)->ident, out);
+            return PAW_TRUE;
+        }
         default: {
             char const *repr = pawAst_print_path(R->ast, pc->path);
             RESOLVER_ERROR(R, unknown_path, R->current->name,
@@ -301,7 +348,7 @@ static paw_Bool lookup_value(struct Resolver *R, struct PathCursor pc, struct Sy
         if (find_containing_type(R, &pc, &symbol, &outer)) {
             set_result(R, pc_segment(pc)->id, symbol.id, RESOLVED_DECL);
             pc_next(&pc); // find associated item in type referenced by "symbol"
-            if (!find_assoc_item(R, symbol.id, &pc, &symbol)) return PAW_FALSE;
+            if (!lookup_assoc_item(R, symbol.id, &pc, &symbol)) return PAW_FALSE;
             set_result(R, pc_segment(pc)->id, symbol.id, RESOLVED_ASSOC);
 
         } else { // must be a value at the toplevel of an imported module
@@ -336,14 +383,6 @@ static paw_Bool lookup(struct Resolver *R, struct AstPath path, enum Namespace n
     return ns == NAMESPACE_VALUE
         ? lookup_value(R, pc, out)
         : lookup_type(R, pc, out);
-}
-
-static struct Symbol lookup_or_error(struct Resolver *R, struct AstPath path, enum Namespace ns)
-{
-    struct Symbol symbol;
-    if (!lookup(R, path, ns, &symbol))
-        unknown_path(R, path);
-    return symbol;
 }
 
 static int add_local(struct Resolver *R, struct Scope *scope, struct AstIdent ident, NodeId id, enum Namespace ns, enum SymbolKind kind)
@@ -388,7 +427,7 @@ static int new_local_value(struct Resolver *R, struct AstIdent ident, NodeId id,
 
 static void declare_type_aliases(struct Resolver *R, NodeId parent_id)
 {
-    struct ImportScope const *scope = *ImportScopes_get(R, R->imports, parent_id);
+    struct ImportScope const *scope = get_scope(R, parent_id);
 
     ImportNamesIterator iter;
     ImportNamesIterator_init(scope->types, &iter);
@@ -710,11 +749,7 @@ static paw_Bool enter_adt_decl(struct AstVisitor *V, struct AstAdtDecl *d)
 
     declare_generics(R, d->generics);
     declare_self(R, d->span, d->id, NAMESPACE_TYPE);
-    if (pawAst_is_unit_struct(d)) {
-        // allow unit struct to be constructed by writing "Self"
-        struct AstDecl *v = K_LIST_FIRST(d->variants);
-        declare_self(R, d->span, v->hdr.id, NAMESPACE_VALUE);
-    }
+
     maybe_store_builtin(R, R->current->id, d->ident, d->id, d->did);
     return PAW_TRUE;
 }
@@ -733,11 +768,51 @@ static paw_Bool enter_trait_decl(struct AstVisitor *V, struct AstTraitDecl *d)
 
     declare_generics(R, d->generics);
     declare_self(R, d->span, d->id, NAMESPACE_TYPE);
+
     maybe_store_builtin(R, R->current->id, d->ident, d->id, d->did);
     return PAW_TRUE;
 }
 
 static void leave_trait_decl(struct AstVisitor *V, struct AstTraitDecl *d)
+{
+    PAW_UNUSED(d);
+    leave_scope(V->ud);
+}
+
+static paw_Bool enter_impl_decl(struct AstVisitor *V, struct AstImplDecl *d)
+{
+    struct Resolver *R = V->ud;
+    d->did = next_did(R);
+    enter_scope(R);
+
+    declare_generics(R, d->generics);
+    declare_self(R, d->span, d->id, NAMESPACE_TYPE);
+
+    // locate the context parameter definition
+    struct AstDecl *self;
+    {
+        struct Symbol symbol;
+        struct AstPathType const *path = AstGetPathType(d->type);
+        struct PathCursor pc = pc_create(path->path);
+        if (!lookup_type(R, pc, &symbol))
+            pawErr_generic_error(ENV(R), R->current->name, d->span.start,
+                    "unable to find type of \"Self\"");
+        self = pawAst_get_node(R->ast, symbol.id);
+    }
+
+    if (AstIsAdtDecl(self)) {
+        struct AstAdtDecl *d = AstGetAdtDecl(self);
+        if (pawAst_is_unit_struct(d)) {
+            // allow unit struct to be constructed by writing "Self"
+            struct AstDecl *v = K_LIST_FIRST(d->variants);
+            declare_self(R, d->span, v->hdr.id, NAMESPACE_VALUE);
+        }
+    }
+
+    return PAW_TRUE;
+}
+
+static void leave_impl_decl(struct AstVisitor *V, struct AstImplDecl *d)
 {
     PAW_UNUSED(d);
     leave_scope(V->ud);
@@ -838,6 +913,8 @@ void pawP_resolve_names(struct Compiler *C)
     R.V->PostVisitTypeDecl = leave_type_decl;
     R.V->VisitFnDecl = enter_fn_decl;
     R.V->PostVisitFnDecl = leave_fn_decl;
+    R.V->VisitImplDecl = enter_impl_decl;
+    R.V->PostVisitImplDecl = leave_impl_decl;
     R.V->VisitModuleDecl = enter_module_decl;
     R.V->PostVisitModuleDecl = leave_module_decl;
     R.V->VisitClosureExpr = enter_closure_expr;
@@ -858,5 +935,4 @@ void pawP_resolve_names(struct Compiler *C)
 
     pawP_pool_free(C, R.pool);
 }
-
 

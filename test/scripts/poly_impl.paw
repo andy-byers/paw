@@ -1,0 +1,45 @@
+// poly_impl.paw
+
+pub trait Repr {
+    fn repr(&self) -> str;
+}
+
+impl Repr for int {
+    fn repr(&self) -> str {
+        self.to_str()
+    }
+}
+
+impl Repr for str {
+    fn repr(&self) -> str {
+        "\"\{self}\""
+    }
+}
+
+pub trait Debug<R: Repr> {
+    fn debug(&self);
+}
+
+struct Poly<T> {
+    pub value: T,
+}
+
+impl<T: Repr> Debug<T> for Poly<T> {
+    fn debug(&self) {
+        println("Poly(\{self.value.repr()})");
+    }
+}
+
+pub fn call_debug<R: Repr>(p: Poly<R>) {
+    p.debug();
+}
+
+#[test]
+pub fn test() {
+    let p = Poly{
+        value: "abc",
+    };
+    p.debug();
+    call_debug(p);
+}
+

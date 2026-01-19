@@ -1,0 +1,44 @@
+// builtin_impl.paw
+
+pub trait Repr {
+    fn repr(&self) -> str;
+}
+
+impl Repr for int {
+    fn repr(&self) -> str {
+        self.to_str()
+    }
+}
+
+impl Repr for str {
+    fn repr(&self) -> str {
+        "\"\{self}\""
+    }
+}
+
+pub trait Combine<R: Repr> {
+    fn combine(&self, r: R);
+}
+
+impl Combine<int> for str {
+    fn combine(&self, r: int) {
+        self = self ++ r.to_str();
+    }
+}
+
+//// TODO
+//impl<R: Repr> Combine<R> for int {
+//    fn combine(&self, r: R) {
+//        self = self + #r.repr();
+//    }
+//}
+
+pub fn combine_reprs<R: Repr + Combine<T>, T: Repr>(r: R, t: T) -> str {
+    r.combine(t);
+    r.repr()
+}
+
+#[test]
+pub fn test() {
+    assert(combine_reprs("abcdef", 123456) == "\"abcdef123456\"");
+}

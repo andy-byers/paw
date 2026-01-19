@@ -43,11 +43,17 @@ struct IrAdtDef *pawIr_get_adt_def(struct Compiler *C, DeclId did)
     return *AdtDefMap_get(C, C->adt_defs, did);
 }
 
+struct IrTraitDef *pawIr_get_trait_def(struct Compiler *C, DeclId did)
+{
+    return *TraitDefMap_get(C, C->trait_defs, did);
+}
+
 IrType *pawIr_get_def_type(struct Compiler *C, DeclId did)
 {
     return *DefTypeMap_get(C, C->def_types, did);
 }
 
+// TODO: use pawP_find_method instead of calling this function, which doesn't handle "multiple applicable methods"
 IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *target, Str *name)
 {
     if (target->bounds == NULL) {
@@ -219,11 +225,77 @@ paw_Uint pawIr_type_hash(struct Compiler *C, IrType *t)
 }
 
 
+static IrTypeList *clone_types(struct Compiler *C, IrTypeList *types)
+{
+    if (types == NULL) return NULL;
+    IrTypeList *result = IrTypeList_new(C);
+    IrTypeList_reserve(C, result, types->count);
+
+    IrType *const *p;
+    K_LIST_FOREACH (types, p)
+        IrTypeList_push(C, result, pawIr_clone_type(C, *p));
+
+    return result;
+}
+
+IrType *pawIr_clone_type(struct Compiler *C, IrType *type)
+{
+    switch (IR_KINDOF(type)) {
+        case kIrPtr: {
+            struct IrPtr const *t = IrGetPtr(type);
+            IrType *pointee = pawIr_clone_type(C, t->pointee);
+            return pawIr_new_ptr(C, pointee);
+        }
+        case kIrAdt: {
+            struct IrAdt const *t = IrGetAdt(type);
+            IrTypeList *types = clone_types(C, t->types);
+            return pawIr_new_adt(C, t->did, types);
+        }
+        case kIrFnPtr: {
+            struct IrFnPtr const *t = IrGetFnPtr(type);
+            IrTypeList *params = clone_types(C, t->params);
+            IrType *result = pawIr_clone_type(C, t->result);
+            return pawIr_new_fn_ptr(C, params, result);
+        }
+        case kIrSignature: {
+            struct IrSignature const *t = IrGetSignature(type);
+            IrTypeList *types = clone_types(C, t->types);
+            IrTypeList *params = clone_types(C, t->params);
+            IrType *result = pawIr_clone_type(C, t->result);
+            return pawIr_new_signature(C, t->did, types, params, result);
+        }
+        case kIrTuple: {
+            struct IrTuple const *t = IrGetTuple(type);
+            IrTypeList *elems = clone_types(C, t->elems);
+            return pawIr_new_tuple(C, elems);
+        }
+        case kIrInfer: {
+            struct IrInfer const *t = IrGetInfer(type);
+            IrTypeList *bounds = clone_types(C, t->bounds);
+            return pawU_new_unknown(C->U, (struct SourceLoc){0}, bounds);
+        }
+        case kIrGeneric: {
+            struct IrGeneric const *t = IrGetGeneric(type);
+            IrTypeList *bounds = clone_types(C, t->bounds);
+            return pawIr_new_generic(C, t->did, bounds);
+        }
+        case kIrTraitObj: {
+            struct IrTraitObj const *t = IrGetTraitObj(type);
+            IrTypeList *types = clone_types(C, t->types);
+            return pawIr_new_trait_obj(C, t->did, types);
+        }
+        case kIrNever:
+            return pawIr_new_never(C);
+    }
+}
+
+
 struct Printer {
     struct Compiler *C;
     Buffer *buf;
     paw_Env *P;
     int indent;
+    paw_Bool print_bounds;
 };
 
 #define PRINT_LITERAL(P, lit) L_ADD_LITERAL(ENV(P), (P)->buf, lit)
@@ -255,6 +327,17 @@ static void print_bounds(struct Printer *P, IrTypeList *bounds)
     }
 }
 
+static void print_binder(struct Printer *P, IrTypeList *binder)
+{
+    if (binder != NULL) {
+        PRINT_CHAR(P, '<');
+        P->print_bounds = PAW_TRUE;
+        print_type_list(P, binder);
+        P->print_bounds = PAW_FALSE;
+        PRINT_CHAR(P, '>');
+    }
+}
+
 static void print_type(struct Printer *P, IrType *type)
 {
     switch (IR_KINDOF(type)) {
@@ -282,11 +365,7 @@ static void print_type(struct Printer *P, IrType *type)
                 PRINT_LITERAL(P, "::");
             }
             PRINT_STRING(P, def->name);
-            if (fsig->types != NULL) {
-                PRINT_CHAR(P, '<');
-                print_type_list(P, fsig->types);
-                PRINT_CHAR(P, '>');
-            }
+            print_binder(P, fsig->types);
             PRINT_LITERAL(P, "(");
             print_type_list(P, fsig->params);
             PRINT_CHAR(P, ')');
@@ -312,11 +391,15 @@ static void print_type(struct Printer *P, IrType *type)
             struct IrGeneric *gen = IrGetGeneric(type);
             struct HirDecl *decl = pawHir_get_decl(P->C->hir, gen->did);
             PRINT_STRING(P, HirGetGenericDecl(decl)->ident.name);
+            if (P->print_bounds) print_bounds(P, gen->bounds);
             break;
         }
-        case kIrInfer:
+        case kIrInfer: {
             PRINT_CHAR(P, '_');
+            struct IrInfer const *inf = IrGetInfer(type);
+            if (P->print_bounds) print_bounds(P, inf->bounds);
             break;
+        }
         case kIrNever:
             PRINT_CHAR(P, '!');
             break;
@@ -350,11 +433,7 @@ static void print_type(struct Printer *P, IrType *type)
             } else {
                 struct IrAdtDef *def = pawIr_get_adt_def(P->C, adt->did);
                 PRINT_STRING(P, def->name);
-                if (adt->types != NULL) {
-                    PRINT_CHAR(P, '<');
-                    print_type_list(P, adt->types);
-                    PRINT_CHAR(P, '>');
-                }
+                print_binder(P, adt->types);
             }
             break;
         }
@@ -377,3 +456,4 @@ char const *pawIr_print_type(struct Compiler *C, IrType *type)
     Str const *s = pawL_buffer_finish(P, &buf);
     return s->text;
 }
+

@@ -8,13 +8,31 @@ pub use map::*;
 pub use option::*;
 pub use result::*;
 
-pub struct unit: Hash + Equals {
-    pub fn to_str(self) -> str { "()" }
-    pub fn hash(self) -> int { 0 }
-    pub fn eq(self, rhs: Self) -> bool { true }
+
+pub struct unit; 
+
+impl unit {
+    pub fn to_str(self) -> str { 
+        "()" 
+    }
 }
 
-pub struct bool: Hash + Equals {
+impl Hash for unit {
+    fn hash(self) -> int { 
+        0 
+    }
+}
+
+impl Equals for unit {
+    fn eq(self, rhs: Self) -> bool { 
+        true 
+    }
+}
+
+
+pub struct bool; 
+
+impl bool {
     pub fn to_str(self) -> str {
         if self {
             "true"
@@ -22,45 +40,121 @@ pub struct bool: Hash + Equals {
             "false"
         }
     }
-
-    pub fn hash(self) -> int { self as int }
-    pub fn eq(self, rhs: Self) -> bool { self == rhs }
 }
 
-pub struct char: Hash + Equals + Compare + Increment {
-    #[extern_std] pub fn to_str(self) -> str;
+impl Hash for bool {
+    fn hash(self) -> int { 
+        self as int 
+    }
+}
 
-    pub fn hash(self) -> int { self as int }
-    pub fn eq(self, rhs: Self) -> bool { self == rhs }
-    pub fn lt(self, rhs: Self) -> bool { self < rhs }
-    pub fn le(self, rhs: Self) -> bool { self <= rhs }
-    pub fn increment(&self) { 
-        // TODO: consider allowing integer arithmetic on type "char"
-        // TODO: would look like: "self += 1 as char;"
+impl Equals for bool {
+    fn eq(self, rhs: Self) -> bool { 
+        self == rhs 
+    }
+}
+
+
+pub struct char; 
+
+impl char { 
+    #[extern_std] pub fn to_str(self) -> str;
+}
+
+impl Hash for char { 
+    fn hash(self) -> int { 
+        self as int 
+    }
+}
+
+impl Equals for char { 
+    fn eq(self, rhs: Self) -> bool { 
+        self == rhs 
+    }
+}
+
+impl Compare for char {
+    fn lt(self, rhs: Self) -> bool { 
+        self < rhs 
+    }
+
+    fn le(self, rhs: Self) -> bool { 
+        self <= rhs 
+    }
+}
+
+impl Increment for char {
+    fn increment(&self) { 
         self = (self as int + 1) as char; 
     }
 }
 
-pub struct int: Hash + Equals + Compare + Increment {
-    #[extern_std] pub fn to_str(self) -> str;
 
-    pub fn hash(self) -> int { self }
-    pub fn eq(self, rhs: Self) -> bool { self == rhs }
-    pub fn lt(self, rhs: Self) -> bool { self < rhs }
-    pub fn le(self, rhs: Self) -> bool { self <= rhs }
-    pub fn increment(&self) { self += 1; }
+pub struct int; 
+
+impl int {
+    #[extern_std] pub fn to_str(self) -> str;
 }
 
-pub struct float: Hash + Equals + Compare {
-    #[extern_std] pub fn to_str(self) -> str;
-    #[extern_std] pub fn hash(self) -> int;
-
-    pub fn eq(self, rhs: Self) -> bool { self == rhs }
-    pub fn lt(self, rhs: Self) -> bool { self < rhs }
-    pub fn le(self, rhs: Self) -> bool { self <= rhs }
+impl Hash for int { 
+    fn hash(self) -> int { 
+        self 
+    }
 }
 
-pub struct str: Hash + Equals + Compare {
+impl Equals for int { 
+    fn eq(self, rhs: Self) -> bool { 
+        self == rhs 
+    }
+}
+
+impl Compare for int { 
+    fn lt(self, rhs: Self) -> bool { 
+        self < rhs 
+    }
+
+    fn le(self, rhs: Self) -> bool { 
+        self <= rhs 
+    }
+}
+
+impl Increment for int {
+    fn increment(&self) { 
+        self += 1; 
+    }
+}
+
+
+pub struct float; 
+
+impl float { 
+    #[extern_std] pub fn to_str(self) -> str;
+}
+
+impl Hash for float { 
+    #[extern_std] fn hash(self) -> int;
+}
+
+impl Equals for float { 
+    fn eq(self, rhs: Self) -> bool { 
+        self == rhs 
+    }
+}
+
+impl Compare for float {
+    fn lt(self, rhs: Self) -> bool { 
+        self < rhs 
+    }
+
+    fn le(self, rhs: Self) -> bool { 
+        self <= rhs 
+    }
+}
+
+
+pub struct str; 
+
+impl str { 
     #[extern_std] pub fn parse_int(self) -> Option<int>;
     #[extern_std] pub fn parse_int_radix(self, base: int) -> Option<int>;
     #[extern_std] pub fn parse_float(self) -> Option<float>;
@@ -69,12 +163,30 @@ pub struct str: Hash + Equals + Compare {
     #[extern_std] pub fn find(self, target: str) -> Option<int>;
     #[extern_std] pub fn starts_with(self, prefix: str) -> bool;
     #[extern_std] pub fn ends_with(self, suffix: str) -> bool;
-    #[extern_std] pub fn hash(self) -> int;
 
-    pub fn to_str(self) -> str { self }
-    pub fn eq(self, rhs: Self) -> bool { self == rhs }
-    pub fn lt(self, rhs: Self) -> bool { self < rhs }
-    pub fn le(self, rhs: Self) -> bool { self <= rhs }
+    pub fn to_str(self) -> str { 
+        self 
+    }
+}
+
+impl Hash for str { 
+    #[extern_std] fn hash(self) -> int;
+}
+
+impl Equals for str { 
+    fn eq(self, rhs: Self) -> bool { 
+        self == rhs 
+    }
+}
+
+impl Compare for str {
+    fn lt(self, rhs: Self) -> bool { 
+        self < rhs 
+    }
+
+    fn le(self, rhs: Self) -> bool { 
+        self <= rhs 
+    }
 }
 
 

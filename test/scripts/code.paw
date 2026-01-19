@@ -348,52 +348,11 @@ pub fn limited_fib(n: int) -> Option<int> {
     }
 }
 
-#[test]
-pub fn mandelbrot() {
-    let charmap = [
-        " ", ".", ":", "-", "=",
-        "+", "*", "#", "%", "@",
-    ];
-
-    let x0 = -2.1;
-    let x1 = 0.9;
-    let nx = 80;
-    let y0 = -1.3;
-    let y1 = 1.3;
-    let ny = 24;
-
-    assert(nx > 0 && ny > 0);
-    let dy = (y1 - y0) / (ny - 1) as float;
-    let dx = (x1 - x0) / (nx - 1) as float;
-
-    let i = 0;
-    while i < ny {
-        let j = 0;
-        let y = y0 + i as float * dy;
-        while j < nx {
-            let x = x0 + j as float * dx;
-            let zi = 0.0;
-            let zr = 0.0;
-            let i = 0;
-            while i < 100 {
-                if zi*zi+zr*zr >= 4.0 {
-                    break;
-                }
-                let zz = zr*zr - zi*zi + x;
-                zi = 2.0*zr*zi + y;
-                zr = zz;
-                i = i + 1;
-            }
-            print(charmap[i % 10]);
-            j += 1;
-        }
-        print("\n");
-        i += 1;
-    }
-}
-
 inline struct Abc {
     pub value: int,
+}
+
+impl Abc {
     pub fn alter(&self, value: int) -> Self {
         self.value = value + 1;
         self

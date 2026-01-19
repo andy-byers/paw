@@ -1,0 +1,8 @@
+// impl.paw
+
+pub trait EmptyTrait {}
+struct EmptyType;
+impl EmptyType {}
+impl EmptyTrait for EmptyType {}
+impl<T> EmptyTrait for T {}
+

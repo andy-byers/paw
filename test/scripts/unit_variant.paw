@@ -2,7 +2,9 @@
 
 enum Unit {
     U,
+}
 
+impl Unit {
     pub fn method(self) {}
     pub fn assoc_function() {}
 }

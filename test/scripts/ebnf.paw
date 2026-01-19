@@ -49,7 +49,9 @@ fn is_hex(c: char) -> bool {
 inline struct SourceLoc {
     pub line: int,
     pub column: int,
+}
 
+impl SourceLoc {
     pub fn to_str(self) -> str {
         "\{self.line}:\{self.column}"
     }
@@ -60,8 +62,9 @@ struct Scanner {
     location: SourceLoc,
     source: str,
     index: int,
+}
 
-
+impl Scanner {
     pub fn new(source: str) -> Self {
         let location = SourceLoc{line: 0, column: 0};
         let scanner = Self{
@@ -260,7 +263,9 @@ struct Token {
     pub location: SourceLoc,
     pub kind: TokenKind,
     pub data: str,
+}
 
+impl Token {
     pub fn to_str(self) -> str {
         match self.kind {
             TokenKind::Ident => self.data,
@@ -302,7 +307,9 @@ enum TokenKind {
 
     Eof,
     Error(TokenErrorKind),
+}
 
+impl TokenKind {
     pub fn to_str(self) -> str {
         match self {
             TokenKind::Ident => "<ident>",
@@ -353,7 +360,9 @@ inline enum TokenErrorKind {
     UnterminatedComment,
     InvalidEscapeChar,
     InvalidHexEscape,
+}
 
+impl TokenErrorKind {
     pub fn to_str(self) -> str {
         match self {
             TokenErrorKind::UnknownToken => "unknown token",
@@ -386,7 +395,9 @@ type ParseResult<T> = Result<T, ParseError>;
 inline struct ParseError {
     pub kind: ParseErrorKind,
     pub location: SourceLoc,
+}
 
+impl ParseError {
     pub fn to_str(self) -> str {
         "\{self.location}: \{self.kind}"
     }
@@ -398,7 +409,9 @@ inline enum ParseErrorKind {
 
     ExpectedToken(TokenKind, Token),
     UnexpectedToken(Token),
+}
 
+impl ParseErrorKind {
     pub fn to_str(self) -> str {
         match self {
             ParseErrorKind::UnterminatedString(s) => "unterminated string \"\{s}\"",
@@ -411,7 +424,9 @@ inline enum ParseErrorKind {
 
 struct Grammer {
     pub productions: [Production],
+}
 
+impl Grammer {
     pub fn new(productions: [Production]) -> Self {
         Self{productions}
     }
@@ -428,7 +443,9 @@ struct Grammer {
 struct Production {
     pub ident: str,
     pub expr: Expression,
+}
 
+impl Production {
     pub fn to_str(self) -> str {
         "\{self.ident} = \{self.expr} ."
     }
@@ -436,7 +453,9 @@ struct Production {
 
 inline struct Expression {
     pub alts: [Alternative],
+}
 
+impl Expression {
     pub fn to_str(self) -> str {
         let result = "";
         for a in self.alts {
@@ -449,7 +468,9 @@ inline struct Expression {
 
 inline struct Alternative {
     pub terms: [Term],
+}
 
+impl Alternative {
     pub fn to_str(self) -> str {
         let result = "";
         for t in self.terms {
@@ -468,7 +489,9 @@ enum Term {
     Group(Expression),
     Option(Expression),
     Repetition(Expression),
+}
 
+impl Term {
     pub fn to_str(self) -> str {
         match self {
             Term::Ident(data) => data,
@@ -482,7 +505,9 @@ enum Term {
     }
 }
 
-struct Parser {
+struct Parser;
+
+impl Parser {
     pub fn new() -> Self {
         Self
     }
@@ -719,7 +744,9 @@ fn analyze_definitions(g: Grammer, reserved: [str: ()]) -> Analysis {
 inline enum Verbosity {
     Quiet,
     Verbose,
+}
 
+impl Verbosity {
     // TODO: unused
     pub fn should_print_error(self) -> bool {
         match self {
@@ -739,7 +766,9 @@ inline enum Verbosity {
 struct App {
     pub verbosity: Verbosity,
     pub program_name: str,
+}
 
+impl App {
     pub fn new(program_name: str) -> Self {
         Self{
             verbosity: Verbosity::Verbose,

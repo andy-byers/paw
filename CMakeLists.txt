@@ -63,6 +63,7 @@ set(PAW_HEADER_FILES
     ${PAW_SOURCE_DIR}/error.h
     ${PAW_SOURCE_DIR}/hir.h
     ${PAW_SOURCE_DIR}/ir_type.h
+    ${PAW_SOURCE_DIR}/impl.h
     ${PAW_SOURCE_DIR}/layout.h
     ${PAW_SOURCE_DIR}/lex.h
     ${PAW_SOURCE_DIR}/lib.h
@@ -102,6 +103,7 @@ set(PAW_SOURCE_FILES
     ${PAW_SOURCE_DIR}/error.c
     ${PAW_SOURCE_DIR}/exhaustiveness.c
     ${PAW_SOURCE_DIR}/hir.c
+    ${PAW_SOURCE_DIR}/impl.c
     ${PAW_SOURCE_DIR}/import.c
     ${PAW_SOURCE_DIR}/instantiate.c
     ${PAW_SOURCE_DIR}/ir_type.c

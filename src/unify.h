@@ -39,4 +39,7 @@ void pawU_leave_binder(struct Unifier *U);
 // Return true if 'a' is more generic than or equal to 'b', false otherwise
 paw_Bool pawU_is_compat(struct Unifier *U, struct IrType *a, struct IrType *b);
 
+int pawU_current_position(struct Unifier *U);
+void pawU_load_position(struct Unifier *U, int position);
+
 #endif // PAW_UNIFY_H

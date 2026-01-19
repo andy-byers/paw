@@ -31,6 +31,7 @@ static char const *kKeywords[] = {
     "type",
     "enum",
     "struct",
+    "impl",
     "trait",
     "const",
     "inline",
@@ -298,8 +299,10 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, Str con
     C->hir_types = HirTypeMap_new(C);
     C->def_types = DefTypeMap_new(C);
     C->variant_defs = VariantDefMap_new(C);
+    C->trait_defs = TraitDefMap_new(C);
     C->adt_defs = AdtDefMap_new(C);
     C->fn_defs = FnDefMap_new(C);
+    C->impl_defs = ImplMap_new(C);
     C->layouts = IrLayoutMap_new(C);
 
     C->typesystem.lists = TypeCollection_new(C);
@@ -309,6 +312,10 @@ void pawP_startup(paw_Env *P, struct Compiler *C, struct DynamicMem *dm, Str con
 
     C->typesystem.iterators.list = TypeCollection_new(C);
     C->typesystem.iterators.map = TypeCollection_new(C);
+
+    C->impls.blanket = IrImplList_new(C);
+    C->impls.inherent = IrImplOwners_new(C);
+    C->impls.trait = IrImplOwners_new(C);
 
     C->segtab = SegmentTable_new(C);
 

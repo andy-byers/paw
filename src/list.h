@@ -127,6 +127,8 @@
             i_ < (ListA_)->count && i_ < (ListB_)->count; ++i_, ++(PtrA_), ++(PtrB_))
 #define K_LIST_BEGIN(List_) ((List_)->data)
 #define K_LIST_END(List_) ((List_)->data + (List_)->count - 1)
+#define K_LIST_XFOREACH(List_, Type_, Name_) \
+    for (Type_ *Name_ = K_LIST_BEGIN(List_); Name_ != K_LIST_END(List_); ++(Name_))
 
 void *pawK_list_reserve(struct Pool *pool, void *data, size_t zelem, int *palloc, int target);
 void *pawK_list_ensure_one(struct Pool *pool, void *data, size_t zelem, int count, int *palloc);

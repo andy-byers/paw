@@ -93,11 +93,17 @@ pub fn test_negative_zero() {
     assert(m[-0.0] == "zero");
 }
 
-struct BadKey: Hash + Equals {
+struct BadKey {
     pub value: int,
+}
+
+impl Hash for BadKey {
     // cause a collision on each insertion
-    pub fn hash(self) -> int { 0 }
-    pub fn eq(self, rhs: Self) -> bool {
+    fn hash(self) -> int { 0 }
+}
+
+impl Equals for BadKey {
+    fn eq(self, rhs: Self) -> bool {
         self.value == rhs.value
     }
 }
@@ -136,19 +142,25 @@ pub fn test_addressing_stress() {
     assert(m[bk(-3)] == -3);
 }
 
-inline struct Int2: Hash + Equals {
+inline struct Int2 {
     pub x: int,
     pub y: int,
+}
 
+impl Int2 {
     pub fn new(x: int, y: int) -> Self {
         Self{x, y}
     }
+}
 
-    pub fn hash(self) -> int {
+impl Hash for Int2 {
+    fn hash(self) -> int {
         self.x.hash() ^ self.y.hash()
     }
+}
     
-    pub fn eq(self, rhs: Self) -> bool {
+impl Equals for Int2 {
+    fn eq(self, rhs: Self) -> bool {
         self.x == rhs.x && self.y == rhs.y
     }
 }

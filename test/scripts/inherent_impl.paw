@@ -1,0 +1,130 @@
+// inherent_impl.paw
+
+inline struct Single<T> {
+    value: T,
+}
+
+impl<T> Single<T> {
+    pub fn new(value: T) -> Self {
+        Self{value}
+    }
+
+    pub fn value(self) -> T {
+        self.value
+    }
+}
+
+impl Single<int> {
+    pub fn merge(&self, rhs: Self) {
+        self.value += rhs.value;
+    }
+}
+
+impl Single<str> {
+    pub fn merge(&self, rhs: Self) {
+        self.value ++= rhs.value;
+    }
+}
+
+impl Single<[Single<int>]> {
+    pub fn sum(&self) -> int {
+        let total = 0;
+        for x in self.value() {
+            total += x.value();
+        }
+        total
+    }
+}
+
+#[test]
+pub fn test_methods() {
+    let t = Single::new(1);
+    assert(t.value() == 1);
+    t.merge(Single::new(2));
+    assert(t.value() == 3);
+
+    let t = Single::new("abc");
+    assert(t.value() == "abc");
+    t.merge(Single::new("def"));
+    assert(t.value() == "abcdef");
+
+    let t = Single::new([Single::new(123)]);
+    assert(t.sum() == 123);
+    t.value().push(Single::new(456));
+    assert(t.sum() == 579);
+}
+
+fn call_methods<T>(t: T) -> T {
+    Single::new(t).value()
+}
+
+#[test]
+pub fn test_nested_methods() {
+    assert(call_methods(1) == 1);
+    assert(call_methods("two") == "two");
+}
+
+inline struct Pair<X, Y> {
+    first: X,
+    second: Y,
+}
+
+impl<A, B> Pair<A, B> {
+    pub fn new(first: A, second: B) -> Self {
+        Self{first, second}
+    }
+
+    pub fn first(self) -> A {
+        self.first
+    }
+
+    pub fn second(self) -> B {
+        self.second
+    }
+}
+
+// NOTE: order of type arguments is reversed
+impl<X, Y> Pair<Y, X> {
+    pub fn first2(&self) -> Y {
+        self.first
+    }
+
+    pub fn second2(&self) -> X {
+        self.second
+    }
+}
+
+impl<T> Pair<T, T> {
+    pub fn swap_fields(&self) {
+        let Pair{first, second} = self;
+        self.first = second;
+        self.second = first;
+    }
+}
+
+#[test]
+pub fn test_methods2() {
+    let p = Pair::new(1, "two");
+    assert(p.first() == 1);
+    assert(p.second() == "two");
+    assert(p.first2() == 1);
+    assert(p.second2() == "two");
+
+    let p = Pair::new(1, 2);
+    p.swap_fields();
+    assert(p.first() == 2);
+    assert(p.second() == 1);
+}
+
+fn call_methods2<X, Y>(x: X, y: Y) -> (X, Y) {
+    let p = Pair::new(x, y);
+    (p.first(), p.second())
+}
+
+#[test]
+pub fn test_nested_methods2() {
+    let t = call_methods2(10, "20");
+    assert(t.0 == 10);
+    assert(t.1 == "20");
+}
+

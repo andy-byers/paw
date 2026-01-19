@@ -164,8 +164,10 @@ struct Compiler {
     struct HirTypeMap *hir_types; // NodeId => IrType *
     struct DefTypeMap *def_types; // DefId => IrType *
     struct VariantDefMap *variant_defs; // DefId => IrVariantDef *
+    struct TraitDefMap *trait_defs; // DefId => IrTraitDef *
     struct AdtDefMap *adt_defs; // DefId => IrAdtDef *
     struct FnDefMap *fn_defs; // DefId => IrFnDef *
+    struct ImplMap *impl_defs; // DefId => IrImpl *
 
     // map for quickly determining the methods implementing a given builtin
     // trait for a given type
@@ -195,6 +197,12 @@ struct Compiler {
         struct TypeCollection *adts;
         struct TypeCollection *types;
     } typesystem;
+
+    struct {
+        struct IrImplList *blanket;
+        struct IrImplOwners *inherent;
+        struct IrImplOwners *trait;
+    } impls;
 
     Str const *main_name;
 
@@ -275,6 +283,29 @@ void pawP_lower_matches(struct Compiler *C);
 struct IrType *pawP_generalize(struct Compiler *C, struct SourceLoc loc, struct IrType *type);
 struct IrType *pawP_generalize_assoc(struct Compiler *C, struct SourceLoc loc, struct IrType *type, struct IrType *method);
 
+struct Substitution {
+    struct IrTypeList *generics;
+    struct IrTypeList *types;
+};
+
+// Type representing the result of a type instantiation
+// Contains the instantiated type, as well as the substitution applied to it.
+struct Instantiation {
+    struct Substitution subst;
+    struct IrType *inst;
+};
+
+// Replace each generic type from the binder on "type" with an inference variable
+// Note that "type" is not modified by this operation.
+struct Instantiation pawP_instantiate_v2(struct Compiler *C, struct SourceLoc loc, struct IrType *type);
+
+struct Instantiation pawP_instantiate_assoc(struct Compiler *C, struct SourceLoc loc, struct IrType *type, struct IrType *method);
+
+// Substitute types in "subst.generics" for types in "subst.types" in the context of the given "type"
+// Note that "type" is not modified by this operation.
+struct IrType *pawP_substitute(struct Compiler *C, struct SourceLoc loc, struct IrType *type, struct Substitution subst);
+
+// TODO: remove this one and rename _v2
 // Instantiate a polymorphic function or type
 // Works by replacing each generic type in the function signature with the
 // corresponding concrete type from the given list of 'types'.
@@ -285,14 +316,6 @@ struct IrTypeList *pawP_instantiate_typelist(struct Compiler *C, struct IrTypeLi
 struct IrType *pawP_instantiate_field(struct Compiler *C, struct IrType *self, struct IrType *field);
 EXTERN_C struct IrTypeList *pawP_instantiate_struct_fields(struct Compiler *C, struct IrAdt *inst);
 EXTERN_C struct IrTypeList *pawP_instantiate_variant_fields(struct Compiler *C, struct IrAdt *inst, int index);
-
-EXTERN_C struct IrType *pawP_find_method(struct Compiler *C, struct IrType *self, Str *name);
-
-struct Substitution {
-    struct IrTypeList *generics;
-    struct IrTypeList *types;
-    struct Compiler *C;
-};
 
 void pawP_init_substitution_folder(struct IrTypeFolder *F, struct Compiler *C, struct Substitution *subst,
                                    struct IrTypeList *generics, struct IrTypeList *types);
@@ -358,6 +381,8 @@ struct TraitOwnerList *pawP_get_trait_owners(struct Compiler *C, struct IrType *
 
 DEFINE_MAP(struct Compiler, FnDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrFnDef *)
 DEFINE_MAP(struct Compiler, AdtDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrAdtDef *)
+DEFINE_MAP(struct Compiler, ImplMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrImpl *)
+DEFINE_MAP(struct Compiler, TraitDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrTraitDef *)
 DEFINE_MAP(struct Compiler, VariantDefMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrVariantDef *)
 DEFINE_MAP(struct Compiler, HirTypeMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, NodeId, struct IrType *)
 DEFINE_MAP(struct Compiler, DefTypeMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrType *)
@@ -366,6 +391,7 @@ DEFINE_MAP(struct Compiler, StringMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str
 DEFINE_MAP(struct Compiler, ValueMap, pawP_alloc, P_VALUE_HASH, P_VALUE_EQUALS, Value, Value)
 DEFINE_MAP(struct Compiler, BodyMap, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct Mir *)
 DEFINE_MAP(struct Compiler, BuiltinMap, pawP_alloc, P_PTR_HASH, P_PTR_EQUALS, Str *, struct Builtin *)
+
 DEFINE_MAP_ITERATOR(StringMap, Str const *, void *)
 DEFINE_MAP_ITERATOR(HirTypeMap, NodeId, struct IrType *)
 

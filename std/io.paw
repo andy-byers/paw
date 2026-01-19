@@ -6,9 +6,12 @@ use result;
 
 pub type Result<T> = result::Result<T, Error>;
 
+
 pub struct File {
     inner: (),
+}
 
+impl File {
     #[extern_std] pub fn open(pathname: str, mode: str) -> Result<Self>;
     #[extern_std] pub fn seek(self, offset: int, whence: Seek) -> Result<()>;
     #[extern_std] pub fn tell(self) -> Result<int>;
@@ -17,11 +20,13 @@ pub struct File {
     #[extern_std] pub fn flush(self) -> Result<()>;
 }
 
+
 pub inline enum Seek {
     Begin,
     Current,
     End,
 }
+
 
 pub inline enum Error {
     NotFound,
@@ -32,7 +37,9 @@ pub inline enum Error {
     NotSupported,
     InvalidArgument,
     Other,
+}
 
+impl Error {
     pub fn to_str(self) -> str {
         match self {
             Error::NotFound => "not found",

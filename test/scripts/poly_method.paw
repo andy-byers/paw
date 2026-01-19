@@ -2,7 +2,9 @@
 
 struct Adt {
     pub value: int,
+}
 
+impl Adt {
     pub fn method<T>(self, t: T) -> (int, T) {
         (self.value, t)
     }
@@ -46,7 +48,9 @@ pub fn test_call_indirect() {
 
 struct PolyAdt<S> {
     pub value: S,
+}
 
+impl<S> PolyAdt<S> {
     pub fn method<T>(self, t: T) -> (S, T) {
         (self.value, t)
     }
@@ -87,3 +91,4 @@ pub fn test_call_indirect_poly() {
     assert(t.0 == 456);
     assert(t.1 == "def");
 }
+

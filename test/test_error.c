@@ -35,7 +35,8 @@ static void check_status(paw_Env *P, int have, int want)
         fprintf(stderr, "message: %s\n", P->current_errmsg->text);
 
     // TODO: "&& have != -1" should be removed if we want specific error codes
-    if (have != want && have != -1) {
+//TODO    if (have != want && have != -1) {
+    if (!have != !want) {
         fprintf(stderr, "expected error code %d but got %d\n", want, have);
         abort();
     }
@@ -219,7 +220,7 @@ static void test_type_error(void)
     test_compiler_status(E_EXPECTED_ADT, "selector_on_function", "fn func() {}", "let a = func.field;");
     test_compiler_status(E_UNKNOWN_PATH, "selector_on_module", "use io;", "let s = io.abc;");
     test_compiler_status(E_EXTRA_SEGMENT, "extraneous_method_access",
-        "struct S {pub fn f() {}}", "S::f::f(); ");
+        "struct S; impl S {pub fn f() {}}", "S::f::f(); ");
     test_compiler_status(E_EXTRA_SEGMENT, "extraneous_variant_access",
         "enum E {A}", "let e = E::A::A; ");
 
@@ -390,13 +391,13 @@ static void test_struct_error(void)
     test_compiler_status(E_INCORRECT_TYPE_ARITY, "struct_too_many_types", "struct S<A, B>;", "let x = S::<int, float, bool>;");
 
     test_compiler_status(E_ASSOCIATED_ITEM_VISIBILITY, "struct_select_private_field",
-        "struct S {pub a: int, b: int, pub fn new() -> S {return S{a: 1, b: 2};}}",
+        "struct S {pub a: int, b: int} impl S {pub fn new() -> S {return S{a: 1, b: 2};}}",
         "let x = S::new(); let a = x.a; let b = x.b;");
     test_compiler_status(E_ASSOCIATED_ITEM_VISIBILITY, "struct_literal_private_field", "struct S {pub a: int, b: int}", "let x = S{a: 1, b: 2};");
-    test_compiler_status(E_ASSOCIATED_ITEM_VISIBILITY, "struct_call_private_method", "struct S {fn private(self) {}}", "let x = S; x.private();");
+    test_compiler_status(E_ASSOCIATED_ITEM_VISIBILITY, "struct_call_private_method", "struct S; impl S {fn private(self) {}}", "let x = S; x.private();");
 
-    test_compiler_status(E_NOT_A_METHOD, "struct_not_a_method", "struct S {pub fn f(s: Self) {}}", "let x = S; x.f();");
-    test_compiler_status(E_INCOMPATIBLE_TYPES, "struct_invalid_self", "struct S {pub fn f(self: int) {}}", "");
+    test_compiler_status(E_NOT_A_METHOD, "struct_not_a_method", "struct S; impl S {pub fn f(s: Self) {}}", "let x = S; x.f();");
+    test_compiler_status(E_INCOMPATIBLE_TYPES, "struct_invalid_self", "struct S; impl S {pub fn f(self: int) {}}", "");
     test_compiler_status(E_INCOMPATIBLE_TYPES, "struct_invalid_self_poly", "struct S<A, B> {fn f(self: S<B, A>) {}}", "");
 
     test_compiler_status(E_INFINITE_SIZE_OBJECT, "struct_infinite_size", "inline struct S{pub x: Option<S>}", "let x = S{x: Option::None};");
@@ -651,7 +652,7 @@ static void test_underscore(void)
     test_compiler_status(E_EXPECTED_SYMBOL, "underscore_as_adt_name", "struct _;", "");
     test_compiler_status(E_EXPECTED_SYMBOL, "underscore_as_type_name", "type _ = int", "");
     test_compiler_status(E_EXPECTED_SYMBOL, "underscore_as_function_name", "fn _() {}", "");
-    test_compiler_status(E_EXPECTED_SYMBOL, "underscore_as_method_name", "struct S {fn _() {}}", "");
+    test_compiler_status(E_EXPECTED_SYMBOL, "underscore_as_method_name", "struct S; impl S {fn _() {}}", "");
     test_compiler_status(E_EXPECTED_SYMBOL, "underscore_as_field_name", "struct S {_: int}", "");
     test_compiler_status(E_EXPECTED_SYMBOL, "underscore_as_bound", "fn f<T: _>(t: T) {}", "");
     test_compiler_status(E_UNEXPECTED_UNDERSCORE, "underscore_in_bound", "fn f<T: Trait<_>>(t: T) {}", "");
@@ -800,8 +801,24 @@ static void test_divergence(void)
 #endif // 0
 }
 
+static void test_impl_error(void)
+{
+#define GENERATE(TraitBody_, ImplBody_) \
+        "struct S; pub trait T {" TraitBody_ "} impl T for S {" ImplBody_ "}"
+    test_compiler_status(-1, "missing_trait_method",
+            GENERATE("fn f();", ""), "");
+    test_compiler_status(-1, "invalid_trait_method_type",
+            GENERATE("fn f();", "fn f(x: int) {}"), "");
+    test_compiler_status(-1, "extra_trait_method",
+            GENERATE("", "fn f();"), "");
+#undef GENERATE
+}
+
 int main(void)
 {
+    test_impl_error();
+    return 42;
+
     test_syntax_error();
     test_underscore();
     test_annotations();

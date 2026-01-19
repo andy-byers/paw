@@ -70,7 +70,9 @@ pub fn return_42() -> int {
 
 pub struct Obj<T> {
     t: T,
+}
 
+impl<T> Obj<T> {
     pub fn new(x: T) -> Self {
         return Self{t: x};
     }

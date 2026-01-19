@@ -1222,7 +1222,7 @@ static struct MirPlace result_chain_error(struct FunctionState *fs, struct Sourc
 static struct MirPlace lower_chain_expr(struct HirVisitor *V, struct HirChainExpr *e)
 {
     _Static_assert(PAW_OPTION_SOME == PAW_RESULT_OK && PAW_OPTION_NONE == PAW_RESULT_ERR,
-            "Option and Result discriminants must have the same values for success vs. failure");
+            "Option and Result discriminants must have the same values for success and failure variants");
     int const EXISTS = PAW_OPTION_SOME;
     int const MISSING = PAW_OPTION_NONE;
 
@@ -1497,7 +1497,6 @@ static struct MirPlace lower_as_concat(struct HirVisitor *V, struct HirBinOpExpr
     struct LowerHir *L = V->ud;
     struct FunctionState *fs = L->fs;
 
-    // TODO: rewrite OP_LISTCAT so it can handle more than 2 input operands, then remove this "if" statement
     if (builtin_kind(L, get_type(L, e->id)) == BUILTIN_LIST) {
         struct MirPlace const output = new_register(fs, get_type(L, e->id));
         MirPlaceList *args = MirPlaceList_new(fs->mir);
@@ -1571,7 +1570,8 @@ static struct MirPlace lower_closure_expr(struct HirVisitor *V, struct HirClosur
 
     struct Mir *result = pawMir_new(L->C, L->pm->modno, e->span,
             SCAN_STR(L->C, PRIVATE("closure")), NULL, type, NULL,
-            outer->mir->children->count, FUNC_CLOSURE, PAW_FALSE, PAW_FALSE);
+            outer->mir->children->count, NO_DECL, FUNC_CLOSURE,
+            PAW_FALSE, PAW_FALSE);
 
     {
         struct BlockState bs;
@@ -2249,14 +2249,27 @@ static void validate_fn_annotations(struct LowerHir *L, struct Mir const *mir)
     }
 }
 
+static paw_Bool is_polymorphic_fn(struct LowerHir *L, struct HirFnDecl *fn)
+{
+    if (fn->generics != NULL)
+        return PAW_TRUE;
+
+    if (fn->parent_id.value != NO_DECL.value) {
+        // check for binder on parent impl block
+        struct HirImplDecl *parent = HirGetImplDecl(
+                pawHir_get_decl(L->hir, fn->parent_id));
+        return parent->generics != NULL;
+    }
+
+    return PAW_FALSE;
+}
+
 static struct Mir *lower_hir_body(struct LowerHir *L, struct HirFnDecl *fn)
 {
     IrType *type = pawIr_get_type(L->C, fn->id);
     struct IrSignature *fsig = IrGetSignature(type);
-    paw_Bool const is_polymorphic = fn->generics != NULL
-            || (fsig->self != NULL && IR_TYPE_SUBTYPES(fsig->self) != NULL);
     struct Mir *result = pawMir_new(L->C, L->pm->modno, fn->span, fn->ident.name, fn->annos,
-            type, fsig->self, -1, fn->fn_kind, fn->is_pub, is_polymorphic);
+            type, fsig->self, -1, fn->parent_id, fn->fn_kind, fn->is_pub, is_polymorphic_fn(L, fn));
     if (fn->body == NULL) return result;
 
     validate_fn_annotations(L, result);
@@ -2343,7 +2356,7 @@ static void lower_global_constant(struct LowerHir *L, struct HirConstDecl *d)
     IrType *artificial_result = pawP_builtin_type(L->C, BUILTIN_UNIT);
     IrType *artificial_type = pawIr_new_fn_ptr(L->C, artificial_params, artificial_result);
     struct Mir *artificial = pawMir_new(L->C, L->pm->modno, d->span, SCAN_STR(L->C, PRIVATE("toplevel")),
-            NULL, artificial_type, NULL, -1, FUNC_MODULE, PAW_FALSE, PAW_FALSE);
+            NULL, artificial_type, NULL, -1, NO_DECL, FUNC_MODULE, PAW_FALSE, PAW_FALSE);
 
     // prevent cycles between global constants
     struct ConstantContext cctx;
@@ -2417,7 +2430,7 @@ void pawP_lower_hir(struct Compiler *C)
         if (HirIsFnDecl(decl)) {
             IrType *type = GET_NODE_TYPE(C, decl);
             struct IrSignature *fsig = IrGetSignature(type);
-            if (fsig->self == NULL || IrIsAdt(fsig->self)) {
+            if (fsig->self == NULL || !IrIsTraitObj(fsig->self)) {
                 struct HirFnDecl *d = HirGetFnDecl(decl);
                 L.pm = &K_LIST_AT(L.hir->modules, d->did.modno);
                 struct Mir *r = lower_hir_body(&L, d);

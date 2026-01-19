@@ -2,7 +2,9 @@
 // This source code is licensed under the MIT License, which can be found in
 // LICENSE.md. See AUTHORS.md for a list of contributor names.
 
-pub struct List<T>: Iterate<ListIterator<T>, T> {
+pub struct List<T>;
+
+impl<T> List<T> {
     // Transform negative indices into offsets from the end of the list,
     // where more negative means farther away from the end.
     fn absolute_index(self, index: int) -> Option<int> {
@@ -39,18 +41,28 @@ pub struct List<T>: Iterate<ListIterator<T>, T> {
     #[extern] pub fn insert(self, index: int, value: T);
     #[extern] pub fn remove(self, index: int) -> T;
 
-    pub fn iterator(self) -> ListIterator<T> {
+}
+
+impl<T> Iterate<ListIterator<T>, T> for List<T> {
+    fn iterator(self) -> ListIterator<T> {
         ListIterator::new(self)
     }
 }
 
-pub inline struct ListIterator<T>: Advance<T> {
+
+pub inline struct ListIterator<T> {
     list: [T],
     index: int,
+}
+
+impl<T> ListIterator<T> {
     pub fn new(list: [T]) -> Self {
         Self{list, index: 0}
     }
-    pub fn next(&self) -> Option<T> {
+}
+
+impl<T> Advance<T> for ListIterator<T> {
+    fn next(&self) -> Option<T> {
         if self.index < #self.list {
             let i = self.index;
             self.index = i + 1;
@@ -61,3 +73,18 @@ pub inline struct ListIterator<T>: Advance<T> {
     }
 }
 
+use ops::Equals;
+
+impl<T: Equals> Equals for List<T> {
+    fn eq(self, rhs: Self) -> bool {
+        if #self != #rhs {
+            return false;
+        }
+        for i in 0..#self {
+            if !self[i].eq(rhs[i]) {
+                return false;
+            }
+        }
+        true
+    }
+}

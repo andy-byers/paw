@@ -11,6 +11,7 @@
 #include "env.h"
 #include "error.h"
 #include "hir.h"
+#include "impl.h"
 #include "ir_type.h"
 #include "map.h"
 #include "parse.h"
@@ -160,11 +161,6 @@ static IrType *normalize(struct TypeChecker *T, IrType *type)
     return pawU_normalize(T->U->table, type);
 }
 
-static paw_Bool equals(struct TypeChecker *T, IrType *a, IrType *b)
-{
-    return pawU_equals(T->U, a, b);
-}
-
 static IrType *unify(struct TypeChecker *T, struct SourceLoc loc, IrType *a, IrType *b)
 {
     if (pawU_unify(T->U, a, b) != 0) {
@@ -208,45 +204,6 @@ static struct HirAdtDecl *get_adt(struct TypeChecker *T, IrType *type)
 {
     struct HirDecl *decl = get_decl(T, IR_TYPE_DID(type));
     return HirGetAdtDecl(decl);
-}
-
-static IrTypeList *get_trait_bounds(struct TypeChecker *T, IrType *type)
-{
-    if (IrIsGeneric(type)) {
-        return IrGetGeneric(type)->bounds;
-    } else if (IrIsInfer(type)) {
-        return IrGetInfer(type)->bounds;
-    } else if (IrIsAdt(type)) {
-        struct HirAdtDecl *d = HirGetAdtDecl(
-            pawHir_get_decl(T->hir, IR_TYPE_DID(type)));
-        IrTypeList *bounds = IrTypeList_new(T->C);
-        IrTypeList_reserve(T->C, bounds, d->traits->count);
-
-        struct HirType *const *ptype;
-        K_LIST_FOREACH (d->traits, ptype) {
-            IrTypeList_push(T->C, bounds, GET_NODE_TYPE(T->C, *ptype));
-        }
-        return bounds;
-    } else {
-        return NULL;
-    }
-}
-
-static paw_Bool implements_trait(struct TypeChecker *T, IrType *type, enum TraitKind kind)
-{
-    IrTypeList *bounds = get_trait_bounds(T, type);
-    if (bounds == NULL) return PAW_FALSE;
-
-    IrType *const *pbound;
-    K_LIST_FOREACH (bounds, pbound) {
-        struct HirDecl *decl = get_decl(T, IR_TYPE_DID(*pbound));
-        struct HirTraitDecl *trait = HirGetTraitDecl(decl);
-        if ((kind == TRAIT_HASH && pawS_eq(trait->ident.name, CSTR(T, CSTR_HASH)))
-                || (kind == TRAIT_EQUALS && pawS_eq(trait->ident.name, CSTR(T, CSTR_EQUALS)))) {
-            return PAW_TRUE;
-        }
-    }
-    return PAW_FALSE;
 }
 
 static void require_trait(struct TypeChecker *T, IrType *type, enum TraitKind kind)
@@ -327,20 +284,6 @@ static IrTypeList *check_exprs(struct TypeChecker *T, struct HirExprList *list)
     }
     return new_list;
 }
-
-//TODOstatic IrTypeList *collect_decl_types(struct TypeChecker *T, struct HirDeclList *list)
-//TODO{
-//TODO    if (list == NULL) return NULL;
-//TODO    IrTypeList *new_list = IrTypeList_new(T->C);
-//TODO    IrTypeList_reserve(T->C, new_list, list->count);
-//TODO
-//TODO    struct HirDecl *const *pdecl;
-//TODO    K_LIST_FOREACH (list, pdecl) {
-//TODO        IrType *type = GET_NODE_TYPE(T->C, *pdecl);
-//TODO        IrTypeList_push(T->C, new_list, type);
-//TODO    }
-//TODO    return new_list;
-//TODO}
 
 static IrType *new_unknown(struct TypeChecker *T, struct SourceLoc loc)
 {
@@ -477,11 +420,6 @@ static void check_methods(struct TypeChecker *T, struct HirDeclList *methods)
         check_item(T, *pmethod);
 }
 
-static void check_adt_methods(struct TypeChecker *T, struct HirAdtDecl *d)
-{
-    check_methods(T, d->methods);
-}
-
 IrType *pawP_instantiate_field(struct Compiler *C, IrType *inst_type, IrType *field)
 {
     struct IrAdt *t = IrGetAdt(inst_type);
@@ -559,6 +497,32 @@ static void unify_segment_types(struct TypeChecker *T, struct HirSegment segment
     }
 }
 
+static IrType *lookup_method(struct Compiler *C, IrType *self, Str *name);
+
+static IrType *get_containing_bound(struct Compiler *C, IrType *base, DeclId did)
+{
+    IrTypeList *bounds = IrIsGeneric(base)
+        ? IrGetGeneric(base)->bounds
+        : IrGetInfer(base)->bounds;
+
+    IrType *result /* always set in loop */;
+
+    IrType *const *b, *const *f;
+    K_LIST_FOREACH (bounds, b) {
+        struct IrTraitDef const *def = pawIr_get_trait_def(C, IR_TYPE_DID(*b));
+        K_LIST_FOREACH (def->methods, f) {
+            if (IR_TYPE_DID(*f).value == did.value) {
+                result = *b;
+                break;
+            }
+        }
+    }
+
+    return result;
+}
+
+#warning
+#include"stdio.h"
 static IrType *lower_value_path(struct TypeChecker *T, struct HirPath path)
 {
     switch (path.kind) {
@@ -585,7 +549,7 @@ static IrType *lower_value_path(struct TypeChecker *T, struct HirPath path)
                 }
                 if (IrIsSignature(assoc)) {
                     base = pawP_generalize(T->C, segment.span.start, base);
-                    return pawP_generalize_assoc(T->C, segment.span.start, base, assoc);
+                    return pawP_instantiate_assoc(T->C, segment.span.start, base, assoc).inst;
                 } else {
                     IrType *target = GET_TYPE(T, segment.target);
                     IrTypeList *args = lower_types(T, segment.types);
@@ -604,20 +568,44 @@ static IrType *lower_value_path(struct TypeChecker *T, struct HirPath path)
             struct HirSegment const first = K_LIST_FIRST(path.segments);
             struct HirSegment const last = K_LIST_LAST(path.segments);
             IrType *base = lower_adt_segment(T, first);
-            IrType *assoc = pawIr_get_type(T->C, last.target);
             pawIr_set_type(T->C, first.id, base);
-            paw_assert(IrIsSignature(assoc));
 
-            if (IrIsGeneric(base)) {
-                assoc = pawIr_resolve_trait_method(T->C, IrGetGeneric(base), last.ident.name);
-                return pawP_generalize(T->C, first.span.start, assoc);
+            IrType *assoc;
+            if (last.target.value != INVALID_NODE_ID.value) {
+                // the value was located during name resolution, meaning it must be an enum
+                // variant or a method/associated function called on a type parameter
+                assoc = pawIr_get_type(T->C, last.target);
+                if (IrIsGeneric(base)) {
+                    // "base" is a type parameter, meaning "assoc" must refer to a method
+                    // declared on one of its generic bounds.
+                    struct IrSignature const *fn = IrGetSignature(assoc);
+                    IrType *old = pawP_generalize(T->C, first.span.start, fn->self);
+                    assoc = pawP_instantiate_assoc(T->C, first.span.start, old, assoc).inst;
+                    IrType *bound = get_containing_bound(T->C, base, fn->did);
+                    IrType *self = IrGetSignature(assoc)->self;
+                    bound = unify(T, last.span.start, self, bound);
+                    assoc = pawIr_substitute_self(T->C, bound, base, assoc);
+                } else {
+                    // "base"
+                    assoc = pawP_instantiate_assoc(T->C, first.span.start, base, assoc).inst;
+                }
+            } else {
+                // The value must be a method or associated function called on an ADT. Such
+                // values cannot be found during name resolution (type information is required).
+                assoc = lookup_method(T->C, base, last.ident.name);
+                if (assoc == NULL)
+                    pawErr_generic_error(ENV(T), T->pm->name, last.span.start,
+                            "unknown associated function \"%s\"", last.ident.name->text);
             }
-            assoc = pawP_generalize_assoc(T->C, first.span.start, base, assoc);
             if (last.types != NULL) {
                 IrTypeList *params = IR_TYPE_SUBTYPES(assoc);
                 IrTypeList *args = lower_types(T, last.types);
                 unify_segment_types(T, last, params, args);
             }
+            // fill in rest of possibly unfinished path segment
+            struct HirDecl const *fn = pawHir_get_decl(T->hir, IR_TYPE_DID(assoc));
+            K_LIST_LAST(path.segments).target = fn->hdr.id;
+            pawIr_set_type(T->C, last.id, assoc);
             return assoc;
         }
     }
@@ -625,13 +613,13 @@ static IrType *lower_value_path(struct TypeChecker *T, struct HirPath path)
 
 static IrType *check_path_expr(struct TypeChecker *T, struct HirPathExpr *e)
 {
-    // path might refer to a unit ADT, so we have to use LOOKUP_EITHER
     IrType *type = lower_value_path(T, e->path);
     if (e->path.kind == HIR_PATH_LOCAL) return type;
 
-    // TODO: not good...
-    struct HirDecl *decl = pawHir_get_node(T->hir, K_LIST_LAST(e->path.segments).target);
-    if (HirIsParamDecl(decl)) return ir_auto_deref(type);
+    if (e->path.segments->count == 1) {
+        struct HirDecl *decl = pawHir_get_node(T->hir, K_LIST_LAST(e->path.segments).target);
+        if (HirIsParamDecl(decl)) return ir_auto_deref(type);
+    }
 
     if (IrIsGeneric(type)) {
         struct HirDecl *result = get_decl(T, IR_TYPE_DID(type));
@@ -965,31 +953,21 @@ static IrType *check_closure_expr(struct TypeChecker *T, struct HirClosureExpr *
     return pawIr_new_fn_ptr(T->C, params, ret);
 }
 
-static struct HirDecl *find_method_aux(struct Compiler *C, struct HirDecl *base, Str *name)
+static IrType *lookup_method(struct Compiler *C, IrType *self, Str *name)
 {
-    PAW_UNUSED(C);
-    struct HirDecl *const *pdecl;
-    struct HirAdtDecl *adt = HirGetAdtDecl(base);
-    K_LIST_FOREACH (adt->methods, pdecl) {
-        struct HirFnDecl *method = HirGetFnDecl(*pdecl);
-        if (pawS_eq(name, method->ident.name))
-            return *pdecl;
-    }
-    return NULL;
-}
-
-IrType *pawP_find_method(struct Compiler *C, IrType *base, Str *name)
-{
-    struct HirDecl *decl = pawHir_get_decl(C->hir, IR_TYPE_DID(base));
-    struct HirDecl const *method = find_method_aux(C, decl, name);
+    struct Instantiation *method = pawP_find_method(C, self, name);
     if (method == NULL) return NULL;
-    return GET_NODE_TYPE(C, method);
+    return pawP_generalize(C, (struct SourceLoc){0}, method->inst);
 }
 
-static void check_adt_item(struct TypeChecker *T, struct HirAdtDecl *d)
+static void check_impl_item(struct TypeChecker *T, struct HirImplDecl *d)
 {
     T->self = pawIr_get_type(T->C, d->id);
-    check_adt_methods(T, d);
+
+    struct HirDecl *const *pmethod;
+    K_LIST_FOREACH (d->methods, pmethod)
+        check_item(T, *pmethod);
+
     T->self = NULL;
 }
 
@@ -1188,13 +1166,8 @@ static IrType *check_call_target(struct TypeChecker *T, struct HirExpr *target, 
                     select->ident.name->text, pawIr_print_type(T->C, self));
     } else {
         if (IrIsAdt(self)) {
-            method = pawP_find_method(T->C, self, select->ident.name);
-            if (method != NULL && IrIsSignature(method)
-                    && IrGetSignature(method)->self != NULL) {
-                method = ir_adt_types(self) != NULL
-                    ? pawP_generalize_assoc(T->C, select->span.start, self, method)
-                    : pawP_generalize(T->C, select->span.start, method);
-            }
+            paw_assert(!select->is_index);
+            method = lookup_method(T->C, self, select->ident.name);
         }
         if (method == NULL)
             return select_field(T, self, select);
@@ -1962,8 +1935,8 @@ static void check_item(struct TypeChecker *T, struct HirDecl *item)
 {
     if (HirIsFnDecl(item)) {
         check_fn_item(T, HirGetFnDecl(item));
-    } else if (HirIsAdtDecl(item)) {
-        check_adt_item(T, HirGetAdtDecl(item));
+    } else if (HirIsImplDecl(item)) {
+        check_impl_item(T, HirGetImplDecl(item));
     } else if (HirIsConstDecl(item)) {
         check_const_item(T, HirGetConstDecl(item));
     }

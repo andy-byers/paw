@@ -2,7 +2,9 @@
 
 struct Struct {
     value: int,
+}
 
+impl Struct {
     pub fn new(value: int) -> Self {
         Self{value}
     }
@@ -26,7 +28,9 @@ pub fn test_basic_methods() {
 
 struct PolyStruct<Ty> {
     value: Ty,
+}
 
+impl<Ty> PolyStruct<Ty> {
     pub fn new(value: Ty) -> Self {
         Self{value}
     }
@@ -54,7 +58,9 @@ pub fn test_poly_struct_methods_indirect() {
 enum Enum {
     A(int),
     B(str),
+}
 
+impl Enum {
     pub fn new_a(value: int) -> Self {
         Self::A(value)
     }
@@ -83,7 +89,9 @@ pub fn test_enum_methods() {
 enum PolyEnum<A, B> {
     A(A),
     B(B),
+}
 
+impl<A, B> PolyEnum<A, B> {
     pub fn new_a(value: A) -> Self {
         Self::A(value)
     }
@@ -130,11 +138,15 @@ pub fn test_poly_enum_methods_indirect() {
     assert(call_poly_enum_methods(123, "abc") == 123);
 }
 
-struct TestA<T, T2> {
+struct TestA<T, T2>;
+
+impl<T, T2> TestA<T, T2> {
     pub fn f() -> int { 1 }
 }
 
-struct TestB<T, T2> {
+struct TestB<T, T2>;
+
+impl<T, T2> TestB<T, T2>{
     pub fn f() -> int { 2 }
 }
 
@@ -173,6 +185,9 @@ pub fn test_scalar_methods() {
 
 struct Ref {
     pub value: int,
+}
+
+impl Ref {
     pub fn get_val(self) -> Self { self }
     pub fn get_ref(&self) -> Self { self }
     pub fn inc_val(self) -> Self { let copy = self; self.value += 1; copy }
@@ -206,6 +221,9 @@ pub fn test_ref_type() {
 
 inline struct Val {
     pub value: int,
+}
+
+impl Val {
     pub fn get_val(self) -> Self { self }
     pub fn get_ref(&self) -> Self { self }
     pub fn inc_val(self) -> Self { let copy = self; self.value += 1; copy }

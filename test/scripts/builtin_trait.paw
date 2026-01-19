@@ -5,12 +5,18 @@ fn bad_hash_combine<K: Hash>(a: K, b: K) -> int {
     a.hash() * 123456789 + b.hash()
 }
 
-struct MultiIntKey: Hash + Equals {
+struct MultiIntKey {
     pub value: (int, int),
-    pub fn hash(self) -> int {
+}
+
+impl Hash for MultiIntKey {
+    fn hash(self) -> int {
         bad_hash_combine(self.value.0, self.value.1)
     }
-    pub fn eq(self, rhs: Self) -> bool {
+}
+
+impl Equals for MultiIntKey {
+    fn eq(self, rhs: Self) -> bool {
         self.value.0 == rhs.value.0
             && self.value.1 == rhs.value.1
     }
@@ -40,14 +46,18 @@ pub fn test_custom_key() {
     assert(m[mik(2, 2)] == 22);
 }
 
-struct Key: Hash + Equals {
+struct Key {
     pub value: int,
+}
 
-    pub fn hash(self) -> int {
+impl Hash for Key {
+    fn hash(self) -> int {
         self.value
     }
+}
 
-    pub fn eq(self, rhs: Self) -> bool {
+impl Equals for Key {
+    fn eq(self, rhs: Self) -> bool {
         self.value == rhs.value
     }
 }
@@ -55,18 +65,24 @@ struct Key: Hash + Equals {
 // NOTE: Make sure not to call MultiKey<T>::hash or MultiKey<T>::equals directly.
 //       This causes a special case where both functions must be added manually
 //       during monomorphization.
-struct MultiKey<T: Hash + Equals>: Hash + Equals {
+struct MultiKey<T: Hash + Equals> {
     value: (T, T),
+}
 
+impl<T: Hash + Equals> MultiKey<T> {
     pub fn new(a: T, b: T) -> Self {
         Self{value: (a, b)}
     }
+}
 
-    pub fn hash(self) -> int {
+impl<T: Hash + Equals> Hash for MultiKey<T> {
+    fn hash(self) -> int {
         bad_hash_combine(self.value.0, self.value.1)
     }
+}
 
-    pub fn eq(self, rhs: Self) -> bool {
+impl<T: Hash + Equals> Equals for MultiKey<T> {
+    fn eq(self, rhs: Self) -> bool {
         self.value.0.eq(rhs.value.0)
             && self.value.1.eq(rhs.value.1)
     }

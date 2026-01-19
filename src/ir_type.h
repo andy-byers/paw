@@ -19,6 +19,7 @@ typedef struct IrType IrType;
     X(Never)            \
     X(Infer)            \
     X(Generic)          \
+    X(Projection)       \
     X(TraitObj)
 
 enum IrTypeKind {
@@ -78,6 +79,13 @@ struct IrGeneric {
     IR_TYPE_HEADER;
     DeclId did;
     struct IrTypeList *bounds;
+};
+
+struct IrProjection {
+    IR_TYPE_HEADER;
+    DeclId did;
+    IrType *type;
+    IrType *assoc;
 };
 
 struct IrTraitObj {
@@ -231,6 +239,7 @@ struct IrFieldDef {
 };
 
 struct IrGenericDef {
+    struct IrTypeList *bounds;
     Str *name;
     DeclId did;
 };
@@ -249,6 +258,7 @@ struct IrFnDef {
     struct Annotations *annos;
     struct IrGenericDefs *generics;
     struct IrParams *params;
+    IrType *context;
     DeclId did;
     paw_Bool is_pub : 1;
     paw_Bool is_extern : 1;
@@ -258,19 +268,35 @@ struct IrAdtDef {
     Str *name;
     struct IrGenericDefs *generics;
     struct IrVariantDefs *variants;
-    struct IrTypeList *methods;
     DeclId did;
     paw_Bool is_inline : 1;
     paw_Bool is_struct : 1;
     paw_Bool is_pub : 1;
 };
 
-inline static struct IrGenericDef *pawIr_new_generic_def(struct Compiler *C, DeclId did, Str *name)
+struct IrTraitDef {
+    Str *name;
+    struct IrGenericDefs *generics;
+    struct IrTypeList *methods;
+    DeclId did;
+    paw_Bool is_pub : 1;
+};
+
+struct IrImpl {
+    IrType *trait;
+    IrType *type;
+    struct IrGenericDefs *generics;
+    struct IrTypeList *methods;
+    DeclId did;
+};
+
+inline static struct IrGenericDef *pawIr_new_generic_def(struct Compiler *C, DeclId did, Str *name, struct IrTypeList *bounds)
 {
     struct IrGenericDef *def = (struct IrGenericDef *)P_ALLOC(C, NULL, 0, sizeof(*def));
     *def = (struct IrGenericDef){
         .did = did,
         .name = name,
+        .bounds = bounds,
     };
     return def;
 }
@@ -300,12 +326,13 @@ inline static struct IrVariantDef *pawIr_new_variant_def(struct Compiler *C, Dec
     return def;
 }
 
-inline static struct IrFnDef *pawIr_new_fn_def(struct Compiler *C, DeclId did, Str *name, struct IrGenericDefs *generics, struct IrParams *params, paw_Bool is_pub)
+inline static struct IrFnDef *pawIr_new_fn_def(struct Compiler *C, DeclId did, Str *name, struct IrGenericDefs *generics, struct IrParams *params, IrType *context, paw_Bool is_pub)
 {
     struct IrFnDef *def = (struct IrFnDef *)P_ALLOC(C, NULL, 0, sizeof(*def));
     *def = (struct IrFnDef){
         .did = did,
         .generics = generics,
+        .context = context,
         .params = params,
         .is_pub = is_pub,
         .name = name,
@@ -313,20 +340,45 @@ inline static struct IrFnDef *pawIr_new_fn_def(struct Compiler *C, DeclId did, S
     return def;
 }
 
-inline static struct IrAdtDef *pawIr_new_adt_def(struct Compiler *C, DeclId did, Str *name, struct IrGenericDefs *generics, struct IrVariantDefs *variants, struct IrTypeList *methods, paw_Bool is_pub, paw_Bool is_struct, paw_Bool is_inline)
+inline static struct IrAdtDef *pawIr_new_adt_def(struct Compiler *C, DeclId did, Str *name, struct IrGenericDefs *generics, struct IrVariantDefs *variants, paw_Bool is_pub, paw_Bool is_struct, paw_Bool is_inline)
 {
     struct IrAdtDef *def = (struct IrAdtDef *)P_ALLOC(C, NULL, 0, sizeof(*def));
     *def = (struct IrAdtDef){
         .did = did,
         .generics = generics,
         .variants = variants,
-        .methods = methods,
         .is_inline = is_inline,
         .is_struct = is_struct,
         .is_pub = is_pub,
         .name = name,
     };
     return def;
+}
+
+inline static struct IrTraitDef *pawIr_new_trait_def(struct Compiler *C, DeclId did, Str *name, struct IrGenericDefs *generics, struct IrTypeList *methods, paw_Bool is_pub)
+{
+    struct IrTraitDef *def = (struct IrTraitDef *)P_ALLOC(C, NULL, 0, sizeof(*def));
+    *def = (struct IrTraitDef){
+        .did = did,
+        .generics = generics,
+        .methods = methods,
+        .is_pub = is_pub,
+        .name = name,
+    };
+    return def;
+}
+
+inline static struct IrImpl *pawIr_new_impl(struct Compiler *C, DeclId did, IrType *type, IrType *trait, struct IrGenericDefs *generics, struct IrTypeList *methods)
+{
+    struct IrImpl *impl = (struct IrImpl *)P_ALLOC(C, NULL, 0, sizeof(*impl));
+    *impl = (struct IrImpl){
+        .did = did,
+        .type = type,
+        .trait = trait,
+        .generics = generics,
+        .methods = methods,
+    };
+    return impl;
 }
 
 #define IR_KINDOF(node) ((node)->hdr.kind)
@@ -351,6 +403,7 @@ struct IrType *pawIr_resolve_trait_method(struct Compiler *C, struct IrGeneric *
 EXTERN_C IrType *pawIr_get_type(struct Compiler *C, NodeId id);
 void pawIr_set_type(struct Compiler *C, NodeId id, IrType *type);
 EXTERN_C struct IrVariantDef *pawIr_get_variant_def(struct Compiler *C, DeclId did);
+EXTERN_C struct IrTraitDef *pawIr_get_trait_def(struct Compiler *C, DeclId did);
 EXTERN_C struct IrAdtDef *pawIr_get_adt_def(struct Compiler *C, DeclId did);
 EXTERN_C struct IrFnDef *pawIr_get_fn_def(struct Compiler *C, DeclId did);
 struct IrType *pawIr_get_def_type(struct Compiler *C, DeclId did);
@@ -360,7 +413,9 @@ EXTERN_C paw_Bool pawIr_type_equals(struct Compiler *C, IrType *a, IrType *b);
 #define IR_TYPE_HASH(Ctx_, Type_) pawIr_type_hash((Ctx_)->C, Type_)
 #define IR_TYPE_EQUALS(Ctx_, A_, B_) pawIr_type_equals((Ctx_)->C, A_, B_)
 
-DEFINE_MAP(struct Compiler, RttiMap, pawP_alloc, pawIr_type_hash, pawIr_type_equals, IrType *, struct RttiType *)
+DEFINE_LIST(struct Compiler, IrImplList, struct IrImpl *)
+DEFINE_MAP(struct Compiler, IrImplOwners, pawP_alloc, P_ID_HASH, P_ID_EQUALS, DeclId, struct IrImplList *)
+
 DEFINE_MAP(struct Compiler, TypeCollection, pawP_alloc, pawIr_type_hash, pawIr_type_equals, IrType *, void *)
 DEFINE_MAP_ITERATOR(TypeCollection, IrType *, void *)
 
@@ -445,6 +500,8 @@ static inline paw_Bool ir_is_value_type(struct Compiler *C, IrType *type)
 }
 
 EXTERN_C char const *pawIr_print_type(struct Compiler *C, IrType *type);
+
+IrType *pawIr_clone_type(struct Compiler *C, IrType *type);
 
 DEFINE_LIST(struct Compiler, TraitOwnerList, struct IrTypeList *)
 DEFINE_MAP(struct Compiler, TraitOwners, pawP_alloc, pawIr_type_hash, pawIr_type_equals, IrType *, TraitOwnerList *)

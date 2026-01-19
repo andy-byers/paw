@@ -33,6 +33,10 @@
     X(stack)                 \
     X(layout)                \
     X(never)                 \
+    X(inherent_impl)         \
+    X(trait_impl)            \
+    X(blanket_impl)          \
+    X(recursive_impl)        \
     X(destructure)           \
     X(method)                \
     X(match)                 \

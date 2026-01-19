@@ -1,6 +1,8 @@
 // unit_struct.paw
 
-struct Unit {
+struct Unit;
+
+impl Unit {
     pub fn method(self) {}
     pub fn assoc_function() {}
 }

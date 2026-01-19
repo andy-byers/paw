@@ -1,0 +1,20 @@
+// blanket_impl.paw
+
+pub trait Trait {
+    fn f(self) -> int;
+}
+
+struct Struct;
+
+impl<T> Trait for T {
+    fn f(self) -> int { 
+        42 
+    }
+}
+
+#[test]
+pub fn test_blanket_impl() {
+    assert(Struct.f() == 42);
+    assert(123.f() == 42);
+    assert("abc".f() == 42);
+}

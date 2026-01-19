@@ -1015,7 +1015,9 @@ struct SpecialCase3 {
 inline enum Inner3 {
     First,
     Second(int),
+}
 
+impl Inner3 {
     pub fn method(self) {}
 }
 
@@ -1059,7 +1061,9 @@ pub fn test_enum_special_case_2() {
     }
 }
 
-inline struct Empty {
+inline struct Empty;
+
+impl Empty {
     pub fn method(self) {}
 }
 

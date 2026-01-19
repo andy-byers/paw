@@ -57,6 +57,11 @@ static NodeId next_id(struct Lex *lex)
 static struct AstExpr *expression(struct Lex *, unsigned);
 static struct AstPat *pattern(struct Lex *);
 
+_Noreturn static void visibility_qualifier_not_allowed_here(struct Lex *X, struct SourceLoc loc)
+{
+    PARSE_ERROR_(X, loc, "visibility qualifier not allowed here");
+}
+
 static void missing_delim(struct Lex *lex, TokenKind want, TokenKind open, struct SourceLoc start)
 {
     PARSE_ERROR_(lex, lex->loc, "expected '%c' to match '%c' at %d:%d",
@@ -1738,16 +1743,6 @@ static struct AstDecl *use_decl(struct Lex *lex, paw_Bool is_pub)
             path, as, kind, is_pub);
 }
 
-static void parse_trait_list(struct Lex *lex, struct AstTypeList *traits)
-{
-    do {
-        if (test(lex, '{')) break;
-        struct AstPath path = parse_pathtype(lex, PAW_TRUE);
-        struct AstType *trait = NEW_NODE(lex, path_type, path.span, next_id(lex), path);
-        AstTypeList_push(lex->ast, traits, trait);
-    } while (test_next(lex, '+'));
-}
-
 static struct Annotations *annotations(struct Lex *lex)
 {
     struct Compiler *C = lex->C;
@@ -1837,41 +1832,26 @@ static struct AstDecl *variant_decl(struct Lex *lex, int index)
             next_id(lex), ident, fields, index);
 }
 
-static struct SourceLoc enum_body(struct Lex *lex, struct SourceLoc start, struct AstTypeList *traits, struct AstDeclList *variants, struct AstDeclList *methods)
+static struct SourceLoc enum_body(struct Lex *lex, struct SourceLoc start, struct AstDeclList *variants)
 {
-    if (test_next(lex, ':'))
-        parse_trait_list(lex, traits);
-
     check_next(lex, '{');
     while (!end_of_block(lex)) {
-        if (test(lex, TK_NAME)) {
-            if (variants->count == INT_MAX)
-                break; // throw error below
-
-            struct AstDecl *variant = variant_decl(lex, variants->count);
-            AstDeclList_push(lex->ast, variants, variant);
-            if (!test_next(lex, ',') && !test(lex, '}'))
-                PARSE_ERROR(lex, expected_comma_separator, NODE_END(variant), "enum variant");
-        } else if (methods->count == INT_MAX) {
+        if (variants->count == INT_MAX)
             break; // throw error below
-        } else {
-            struct Annotations *annos = annotations(lex);
-            paw_Bool const is_pub = test_next(lex, TK_PUB);
-            struct AstDecl *method = parse_method(lex, annos, is_pub);
-            AstDeclList_push(lex->ast, methods, method);
-        }
+
+        struct AstDecl *variant = variant_decl(lex, variants->count);
+        AstDeclList_push(lex->ast, variants, variant);
+        if (!test_next(lex, ',') && !test(lex, '}'))
+            PARSE_ERROR(lex, expected_comma_separator, NODE_END(variant), "enum variant");
     }
     struct SourceLoc const end = TOKEN_END(lex->t);
     delim_next(lex, '}', '{', start);
 
-    if (methods->count > MAX_METHODS)
-        LIMIT_ERROR(lex, start, "methods in enumeration", MAX_METHODS);
+    if (variants->count == 0)
+        PARSE_ERROR(lex, empty_enumeration, start);
 
     if (variants->count > PAW_MAX_VARIANTS)
         LIMIT_ERROR(lex, start, "variants in enumeration", PAW_MAX_VARIANTS);
-
-    if (variants->count == 0)
-        PARSE_ERROR(lex, empty_enumeration, start);
 
     return end;
 }
@@ -1881,13 +1861,11 @@ static struct AstDecl *enum_decl(struct Lex *lex, paw_Bool is_pub, paw_Bool is_i
     skip(lex); // "enum" token
     struct AstIdent const ident = parse_ident(lex);
     struct AstDeclList *generics = type_param(lex);
-    struct AstTypeList *traits = AstTypeList_new(lex->ast);
     struct AstDeclList *variants = AstDeclList_new(lex->ast);
-    struct AstDeclList *methods = AstDeclList_new(lex->ast);
-    struct SourceLoc const end = enum_body(lex, ident.span.start, traits, variants, methods);
+    struct SourceLoc const end = enum_body(lex, ident.span.start, variants);
 
-    return NEW_NODE(lex, adt_decl, SPAN(ident.span.start, end), next_id(lex), ident, traits,
-            generics, variants, methods, is_pub, PAW_FALSE, is_inline);
+    return NEW_NODE(lex, adt_decl, SPAN(ident.span.start, end), next_id(lex), ident,
+            generics, variants, is_pub, PAW_FALSE, is_inline);
 }
 
 static struct AstDecl *struct_field(struct Lex *lex, paw_Bool is_pub)
@@ -1898,11 +1876,8 @@ static struct AstDecl *struct_field(struct Lex *lex, paw_Bool is_pub)
             next_id(lex), ident, tag, is_pub);
 }
 
-static struct SourceLoc struct_body(struct Lex *lex, struct AstTypeList *traits, struct AstDeclList *fields, struct AstDeclList *methods)
+static struct SourceLoc struct_body(struct Lex *lex, struct AstDeclList *fields)
 {
-    if (test_next(lex, ':'))
-        parse_trait_list(lex, traits);
-
     struct SourceLoc const start = TOKEN_START(lex->t);
     if (!test_next(lex, '{')) {
         struct SourceLoc const end = TOKEN_END(lex->t);
@@ -1911,34 +1886,22 @@ static struct SourceLoc struct_body(struct Lex *lex, struct AstTypeList *traits,
     }
 
     while (!end_of_block(lex)) {
-        struct Annotations *annos = annotations(lex);
         paw_Bool const is_pub = test_next(lex, TK_PUB);
-        if (test(lex, TK_NAME)) {
-            if (fields->count == INT_MAX)
-                break; // throw error below
-
-            struct AstDecl *field = struct_field(lex, is_pub);
-            AstDeclList_push(lex->ast, fields, field);
-            if (!test_next(lex, ',') && !test(lex, '}'))
-                PARSE_ERROR(lex, expected_comma_separator, NODE_END(field), "struct field");
-
-        } else if (methods->count == INT_MAX) {
+        if (fields->count == INT_MAX)
             break; // throw error below
-        } else {
-            struct AstDecl *method = parse_method(lex, annos, is_pub);
-            AstDeclList_push(lex->ast, methods, method);
-        }
+
+        struct AstDecl *field = struct_field(lex, is_pub);
+        AstDeclList_push(lex->ast, fields, field);
+        if (!test_next(lex, ',') && !test(lex, '}'))
+            PARSE_ERROR(lex, expected_comma_separator, NODE_END(field), "struct field");
     }
     struct SourceLoc const end = TOKEN_END(lex->t);
     delim_next(lex, '}', '{', start);
 
-    if (methods->count > MAX_METHODS)
-        LIMIT_ERROR(lex, start, "methods in structure", MAX_METHODS);
-
     if (fields->count > PAW_MAX_FIELDS)
         LIMIT_ERROR(lex, start, "fields in structure", PAW_MAX_FIELDS);
 
-    if (fields->count == 0 && methods->count == 0)
+    if (fields->count == 0)
         PARSE_ERROR(lex, empty_struct_body, start);
 
     return end;
@@ -1950,10 +1913,8 @@ static struct AstDecl *struct_decl(struct Lex *lex, paw_Bool is_pub, paw_Bool is
     skip(lex); // "struct" token
     struct AstIdent const ident = parse_ident(lex);
     struct AstDeclList *generics = type_param(lex);
-    struct AstTypeList *traits = AstTypeList_new(lex->ast);
     struct AstDeclList *fields = AstDeclList_new(lex->ast);
-    struct AstDeclList *methods = AstDeclList_new(lex->ast);
-    struct SourceLoc const end = struct_body(lex, traits, fields, methods);
+    struct SourceLoc const end = struct_body(lex, fields);
 
     struct AstDeclList *variants = AstDeclList_new(lex->ast);
     struct AstDecl *v = NEW_NODE(lex, variant_decl, SPAN(start, end),
@@ -1961,7 +1922,57 @@ static struct AstDecl *struct_decl(struct Lex *lex, paw_Bool is_pub, paw_Bool is
     AstDeclList_push(lex->ast, variants, v);
 
     return NEW_NODE(lex, adt_decl, SPAN(start, end), next_id(lex), ident,
-            traits, generics, variants, methods, is_pub, PAW_TRUE, is_inline);
+            generics, variants, is_pub, PAW_TRUE, is_inline);
+}
+
+static struct SourceLoc impl_body(struct Lex *lex, struct AstDeclList *methods, paw_Bool is_trait_impl)
+{
+    struct SourceLoc const start = TOKEN_START(lex->t);
+    if (!test_next(lex, '{')) {
+        struct SourceLoc const end = TOKEN_END(lex->t);
+        semicolon(lex, "body of unit struct");
+        return end;
+    }
+
+    while (!end_of_block(lex)) {
+        struct Annotations *annos = annotations(lex);
+        paw_Bool const is_pub = test_next(lex, TK_PUB);
+
+        if (is_trait_impl && is_pub)
+            // visibility of trait method is that of the trait
+            visibility_qualifier_not_allowed_here(lex, lex->t0.span.start);
+
+        if (methods->count == INT_MAX)
+            break; // throw error below
+
+        struct AstDecl *method = parse_method(lex, annos, is_pub);
+        AstDeclList_push(lex->ast, methods, method);
+    }
+    struct SourceLoc const end = TOKEN_END(lex->t);
+    delim_next(lex, '}', '{', start);
+
+    if (methods->count > MAX_METHODS)
+        LIMIT_ERROR(lex, start, "methods in impl block", MAX_METHODS);
+
+    return end;
+}
+
+static struct AstDecl *impl_decl(struct Lex *lex)
+{
+    struct SourceLoc const start = TOKEN_START(lex->t);
+    skip(lex); // "impl" token
+    struct AstDeclList *generics = type_param(lex);
+    struct AstType *type = parse_type(lex, PAW_TRUE);
+    struct AstType *trait = NULL;
+    if (test_next(lex, TK_FOR)) {
+        trait = type; // found trait implementation
+        type = parse_type(lex, PAW_TRUE);
+    }
+    struct AstDeclList *methods = AstDeclList_new(lex->ast);
+    struct SourceLoc const end = impl_body(lex, methods, trait != NULL);
+
+    return NEW_NODE(lex, impl_decl, SPAN(start, end), next_id(lex),
+            type, trait, generics, methods);
 }
 
 static struct AstDecl *trait_decl(struct Lex *lex, paw_Bool is_pub)
@@ -1976,7 +1987,7 @@ static struct AstDecl *trait_decl(struct Lex *lex, paw_Bool is_pub)
     while (!end_of_block(lex)) {
         if (methods->count == INT_MAX)
             break; // throw error below
-
+        // propagate visibility qualifier from trait to methods
         struct AstDecl *method = parse_method(lex, NULL, is_pub);
         AstDeclList_push(lex->ast, methods, method);
     }
@@ -2114,6 +2125,10 @@ static struct AstDecl *toplevel_item(struct Lex *lex)
             return type_decl(lex, is_pub);
         case TK_USE:
             return use_decl(lex, is_pub);
+        case TK_IMPL:
+            if (is_pub)
+                visibility_qualifier_not_allowed_here(lex, lex->t0.span.start);
+            return impl_decl(lex);
         case TK_INLINE:
             skip(lex); // skip "inline" token
             if (test(lex, TK_STRUCT)) {

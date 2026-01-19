@@ -5,7 +5,9 @@
 pub inline enum Option<T> {
     Some(T),
     None,
+}
 
+impl<T> Option<T> {
     pub fn is_some(self) -> bool {
         !self.is_none()
     }

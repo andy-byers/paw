@@ -64,7 +64,7 @@ pub fn main() {
     list.push(1); // [1]
 
     // concatenate with another list
-    list += [2, 3, 4]; // [1, 2, 3, 4]
+    list ++= [2, 3, 4]; // [1, 2, 3, 4]
 
 
     let map = [:]; // [char: int]
@@ -83,8 +83,24 @@ pub fn main() {
 }
 ```
 
+### Data types
+Paw provides 2 mechanisms for creating custom data types: `struct` and `enum`.
+Structures (structs) are nominal composite types created using the `struct` keyword. 
+Enumerations (enums) are sum types (tagged unions) created using the `enum` keyword. 
+Enums are described greater detail in [sum types](#sum-types).
+In both cases, the datatype definition specifies only the data layout of the type.
+Methods and associated functions can be attached using an [`impl` block](#impl-blocks).
+```paw
+struct Statistic {
+    pub name: str, // accessible from anywhere
+    value: float, // only accessible from a method
+}
+```
+
 ### Sum types
-Note that "inline" cannot be used on a recursive type as this would cause resulting objects to have a size of infinity (see [value types](#value-types)).
+Sum types in Paw consist of tagged unions created by an `enum` definition.
+Conceptually, an enum is an object that takes the value of one of its variants depending on the value of the discriminant field.
+In the example below, an instance of `Expr` must contain space for an integer large enough to distinguish 3 variants, as well as space for the largest of the possible variants (`Expr::Add` here).
 ```paw
 pub enum Expr {
     Zero,
@@ -111,6 +127,10 @@ pub fn three() -> int {
     eval(Add(one, two))
 }
 ```
+
+### Implementations
+Methods and associated functions can be defined on a data type using an `impl` block.
+
 
 ### Generics
 Paw supports parametric polymorphism, a.k.a. generic type parameters.
@@ -146,7 +166,6 @@ pub fn main() {
 
     println("total = \{total}"); // total = 35
 }
-
 ```
 
 ### Traits
@@ -156,18 +175,22 @@ pub trait Get<T> {
     fn get(self) -> T;
 }
 
-struct Inner<X>: Get<X> {
+struct Inner<X> {
     pub value: X,
+}
 
-    pub fn get(self) -> X {
+impl<X> Get<X> for Inner<X> {
+    fn get(self) -> X {
         self.value
     }
 }
 
-struct Outer<X: Get<Y>, Y>: Get<Y> {
+struct Outer<X: Get<Y>, Y> {
     pub value: X,
+}
 
-    pub fn get(self) -> Y {
+impl<X: Get<Y>, Y> Get<Y> for Outer<X, Y> {
+    fn get(self) -> Y {
         self.value.get()
     }
 }
@@ -186,6 +209,11 @@ pub fn main() {
 ```
 
 ### Inout parameters
+Function arguments are normally passed by value in Paw.
+This behavior can be changed by using an inout parameter.
+An parameter is specified inout by writing a `&` before its name.
+In the example below, accesses to the `value` variable are made through a reference.
+Note, however, that the reference is never allowed to escape, as this would allow memory to be accessed outside of its lifetime.
 ```paw
 pub fn increment(&value: int) {
     value += 1;
@@ -204,11 +232,14 @@ The `inline` keyword can be used to give a type value semantics.
 Primitives (`int`, `float`, etc.) and tuples are always value types.
 Inline types can be used to reduce memory consumption in programs containing many small objects.
 They can also be used to implement "newtype" wrappers with no additional runtime overhead.
+Note that `inline` cannot be used on a recursive type as this would cause resulting objects to have a size of infinity.
 ```paw
 inline struct Data<T> {
     pub value: T,
+}
 
-    // Value types can be modified using inout parameters
+impl<T> Data<T> {
+    // Value types can be modified using inout parameters.
     pub fn swap(&self, &rhs: Data<T>) {
         let temp = self.value;
         self.value = rhs.value;
@@ -252,12 +283,16 @@ A panic can also be caused by calling the `panic` builtin function.
 |1         |`= op=`                  |Assignment, operator assignment              |Right        |
 
 ## Roadmap
++ [ ] add check to make sure implemented trait methods are compatible with trait declarations
++ [ ] make sure to complain when generic params not mentioned on context of impl block. i.e. `impl<T> Trait<T> for Type {...}` is an error if `Type` has generic parameters.
 + [ ] consider using `mut` to indicate mutability and make immutable the default for local variables
 + [ ] consider implementing either RAII or "defer" for cleaning up resources
 + [ ] add overflow checks for `paw_Int` operations during constant folding and codegen
 
 ## Known problems
 + These need to be converted into issues, along with some TODO comments scattered throughout the codebase...
++ Edge cases exist related to impl blocks and traits
++ Fix concatenation-assignment operator
 + Need to keep track of source-to-source mappings that result from IR transformations (e.g. when ForExpr AST node is lowered into a Loop + Match)
 + Don't throw errors in 'lex.c'. Return a token of type `TK_ERROR` and let the parser handle it. Allows for more sensible error messages.
 + Need to make sure functions/closures with a return type annotation of "!" diverge unconditionally 

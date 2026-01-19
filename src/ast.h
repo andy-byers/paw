@@ -20,6 +20,7 @@
     X(FnDecl)            \
     X(GenericDecl)       \
     X(AdtDecl)           \
+    X(ImplDecl)          \
     X(TypeDecl)          \
     X(ConstDecl)         \
     X(TraitDecl)         \
@@ -156,16 +157,22 @@ struct AstFnDecl {
     struct AstExpr *body;
 };
 
+struct AstImplDecl {
+    AST_DECL_HEADER;
+    struct AstType *trait;
+    struct AstType *type;
+    struct AstDeclList *generics;
+    struct AstDeclList *methods;
+};
+
 struct AstAdtDecl {
     AST_DECL_HEADER;
     paw_Bool is_pub : 1;
     paw_Bool is_struct : 1;
     paw_Bool is_inline : 1;
     struct AstIdent ident;
-    struct AstTypeList *traits;
     struct AstDeclList *generics;
     struct AstDeclList *variants;
-    struct AstDeclList *methods;
 };
 
 enum AstUseKind {
@@ -332,7 +339,24 @@ inline static struct AstDecl *pawAst_new_generic_decl(struct Ast *ast, struct So
     return d;
 }
 
-inline static struct AstDecl *pawAst_new_adt_decl(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstIdent ident, struct AstTypeList *traits, struct AstDeclList *generics, struct AstDeclList *variants, struct AstDeclList *methods, paw_Bool is_pub, paw_Bool is_struct, paw_Bool is_inline)
+inline static struct AstDecl *pawAst_new_impl_decl(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstType *type, struct AstType *trait, struct AstDeclList *generics, struct AstDeclList *methods)
+{
+    struct AstDecl *d = pawAst_new_decl(ast);
+    d->ImplDecl_ = (struct AstImplDecl){
+        .id = id,
+        .did = NO_DECL,
+        .span = span,
+        .kind = kAstImplDecl,
+        .type = type,
+        .trait = trait,
+        .generics = generics,
+        .methods = methods,
+    };
+    pawAst_set_node(ast, id, d);
+    return d;
+}
+
+inline static struct AstDecl *pawAst_new_adt_decl(struct Ast *ast, struct SourceSpan span, NodeId id, struct AstIdent ident, struct AstDeclList *generics, struct AstDeclList *variants, paw_Bool is_pub, paw_Bool is_struct, paw_Bool is_inline)
 {
     struct AstDecl *d = pawAst_new_decl(ast);
     d->AdtDecl_ = (struct AstAdtDecl){
@@ -341,10 +365,8 @@ inline static struct AstDecl *pawAst_new_adt_decl(struct Ast *ast, struct Source
         .span = span,
         .kind = kAstAdtDecl,
         .ident = ident,
-        .traits = traits,
         .generics = generics,
         .variants = variants,
-        .methods = methods,
         .is_pub = is_pub,
         .is_struct = is_struct,
         .is_inline = is_inline,

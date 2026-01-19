@@ -19,6 +19,9 @@ typedef struct DeclId {
     unsigned value;
 } DeclId;
 
+#define INVALID_NODE_ID (struct NodeId){(unsigned)-1}
+#define INVALID_DECL_ID (struct DeclId){(unsigned)-1}
+
 
 // TODO: should specialize the next 2 enumerations and move to AST and HIR modules (similar to MirUnaryOpKind)
 

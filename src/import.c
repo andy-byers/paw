@@ -266,6 +266,7 @@ struct VisitorContext {
 
 static void collect_item(struct Resolver *R, struct ImportScope *scope, struct AstDecl *decl);
 
+// TODO: Store to .PostVisitTypeDecl and remove the conditional
 static void declare_alias(struct AstVisitor *V, struct AstDecl *decl)
 {
     if (AstIsTypeDecl(decl)) {
@@ -274,7 +275,7 @@ static void declare_alias(struct AstVisitor *V, struct AstDecl *decl)
     }
 }
 
-static void collect_fn_decl(struct Resolver *R, struct ImportScope *outer, struct AstFnDecl *d)
+static void collect_fn_decl(struct Resolver *R, struct ImportScope *outer, struct AstFnDecl const *d)
 {
     struct ImportScope *scope = iscope_new(R, d->id, ISCOPE_FN, outer);
     ImportScopes_insert(R, R->imports, d->id, scope);
@@ -304,6 +305,20 @@ static void collect_trait_decl(struct Resolver *R, struct ImportScope *outer, st
     }
 }
 
+static void collect_impl_decl(struct Resolver *R, struct ImportScope *outer, struct AstImplDecl *d)
+{
+    struct ImportScope *scope = iscope_new(R, d->id, ISCOPE_TYPE, outer);
+    ImportScopes_insert(R, R->imports, d->id, scope);
+
+    // add methods and associated functions to impl block value namespace
+    struct AstDecl *const *pdecl;
+    K_LIST_FOREACH (d->methods, pdecl) {
+        struct AstFnDecl *f = AstGetFnDecl(*pdecl);
+        add_value(R, scope, f->ident, f->id, ISYMBOL_EXPLICIT, f->is_pub);
+        collect_fn_decl(R, scope, f);
+    }
+}
+
 static void collect_adt_decl(struct Resolver *R, struct ImportScope *outer, struct AstAdtDecl *d)
 {
     if (pawAst_is_unit_struct(d)) {
@@ -322,14 +337,6 @@ static void collect_adt_decl(struct Resolver *R, struct ImportScope *outer, stru
             struct AstVariantDecl *v = AstGetVariantDecl(*pdecl);
             add_value(R, scope, v->ident, v->id, ISYMBOL_EXPLICIT, PAW_TRUE);
         }
-    }
-
-    // add methods and associated functions to ADT value namespace
-    struct AstDecl *const *pdecl;
-    K_LIST_FOREACH (d->methods, pdecl) {
-        struct AstFnDecl *f = AstGetFnDecl(*pdecl);
-        add_value(R, scope, f->ident, f->id, ISYMBOL_EXPLICIT, f->is_pub);
-        collect_fn_decl(R, scope, f);
     }
 }
 
@@ -356,6 +363,11 @@ static void collect_item(struct Resolver *R, struct ImportScope *scope, struct A
             struct AstTraitDecl *d = AstGetTraitDecl(decl);
             add_type(R, scope, d->ident, d->id, ISYMBOL_EXPLICIT, d->is_pub);
             collect_trait_decl(R, scope, d);
+            break;
+        }
+        case kAstImplDecl: {
+            struct AstImplDecl *d = AstGetImplDecl(decl);
+            collect_impl_decl(R, scope, d);
             break;
         }
         default: { // kAstAdtDecl

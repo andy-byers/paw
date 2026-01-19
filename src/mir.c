@@ -6,7 +6,7 @@
 #include "ir_type.h"
 #include "map.h"
 
-struct Mir *pawMir_new(struct Compiler *C, int modno, struct SourceSpan span, Str *name, Annotations *annotations, IrType *type, IrType *self, int child_id, enum FnKind fn_kind, paw_Bool is_pub, paw_Bool is_poly)
+struct Mir *pawMir_new(struct Compiler *C, int modno, struct SourceSpan span, Str *name, Annotations *annotations, IrType *type, IrType *self, int child_id, DeclId parent_id, enum FnKind fn_kind, paw_Bool is_pub, paw_Bool is_poly)
 {
     struct Mir *mir = P_ALLOC(C, NULL, 0, sizeof(*mir));
     *mir = (struct Mir){
@@ -15,6 +15,7 @@ struct Mir *pawMir_new(struct Compiler *C, int modno, struct SourceSpan span, St
         .is_pub = is_pub,
         .fn_kind = fn_kind,
         .child_id = child_id,
+        .parent_id = parent_id,
         .annotations = annotations,
         .modno = modno,
         .name = name,
@@ -1672,15 +1673,6 @@ static void dump_mir(struct Printer *P, struct Mir *mir)
     }
     --P->indent;
     DUMP_FORMAT(P, "}\n");
-
-//TODO    DUMP_FORMAT(P, "constants {\n");
-//TODO    ++P->indent;
-//TODO    for (int i = 0; i < mir->kcache->data->count; ++i) {
-//TODO        struct MirConstantData const *kdata = mir_const_data(mir, MIR_CONST(i));
-//TODO        DUMP_FORMAT(P, "%d: %s\n", i, pawIr_print_type(P->C, pawP_builtin_type(P->C, kdata->kind)));
-//TODO    }
-//TODO    --P->indent;
-//TODO    DUMP_FORMAT(P, "}\n");
 
     DUMP_FORMAT(P, "captured {\n");
     ++P->indent;

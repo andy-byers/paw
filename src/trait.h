@@ -15,4 +15,7 @@ EXTERN_C struct IrTypeList *pawP_query_traits(struct Compiler *C, struct IrType 
 void pawP_add_trait_impl(struct Compiler *C, struct IrType *type, struct IrType *trait);
 paw_Bool pawP_satisfies_bounds(struct Compiler *C, struct IrType *type, struct IrTypeList *bounds);
 
+// Return 1 if the given trait is implemented by the given type, 0 otherwise
+paw_Bool pawIr_implements_trait(struct Compiler *C, struct IrType *type, struct IrType *trait);
+
 #endif // PAW_TRAIT_H

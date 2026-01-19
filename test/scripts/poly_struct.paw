@@ -300,7 +300,9 @@ pub fn test_recursion2() {
     });
 }
 
-struct TestSelfPoly<A, B> {
+struct TestSelfPoly<A, B>;
+
+impl<A, B> TestSelfPoly<A, B> {
     pub fn not_method(s: TestSelfPoly<A, B>) {}
     pub fn not_method2(s: Self) {}
     pub fn method(self) {}

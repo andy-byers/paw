@@ -91,7 +91,7 @@ static struct MirPlace next_register(struct SsaConverter *S, IrType *type)
         .kind = MIR_PLACE_REGISTER,
         .r = MIR_REG(reg_id),
         .type = type,
-        //TODO .loc = ???,
+        // TODO .loc = ???,
     };
 }
 

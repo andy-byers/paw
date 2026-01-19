@@ -279,12 +279,18 @@ static void AcceptVariantDecl(struct AstVisitor *V, struct AstVariantDecl *d)
     accept_decl_list(V, d->fields);
 }
 
+static void AcceptImplDecl(struct AstVisitor *V, struct AstImplDecl *d)
+{
+    accept_decl_list(V, d->generics);
+    if (d->trait != NULL) AcceptType(V, d->trait);
+    AcceptType(V, d->type);
+    accept_decl_list(V, d->methods);
+}
+
 static void AcceptAdtDecl(struct AstVisitor *V, struct AstAdtDecl *d)
 {
-    accept_type_list(V, d->traits);
     accept_decl_list(V, d->generics);
     accept_decl_list(V, d->variants);
-    accept_decl_list(V, d->methods);
 }
 
 static void AcceptTraitDecl(struct AstVisitor *V, struct AstTraitDecl *d)
@@ -820,12 +826,23 @@ static void dump_decl(Printer *P, struct AstDecl *decl)
             dump_decl_list(P, d->fields, "fields");
             break;
         }
+        case kAstImplDecl: {
+            struct AstImplDecl *d = AstGetImplDecl(decl);
+            if (d->trait != NULL) {
+                DUMP_CSTR(P, "trait: ");
+                dump_type(P, d->trait);
+            }
+            DUMP_CSTR(P, "type: ");
+            dump_type(P, d->type);
+            dump_decl_list(P, d->generics, "generics");
+            dump_decl_list(P, d->methods, "methods");
+            break;
+        }
         case kAstAdtDecl: {
             struct AstAdtDecl *d = AstGetAdtDecl(decl);
             DUMP_NAME(P, d->ident.name);
             DUMP_FMT(P, "is_struct: %d\n", d->is_struct);
             DUMP_FMT(P, "is_pub: %d\n", d->is_pub);
-            dump_type_list(P, d->traits, "traits");
             dump_decl_list(P, d->generics, "generics");
             dump_decl_list(P, d->variants, "variants");
             break;

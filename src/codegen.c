@@ -31,35 +31,12 @@
 #define REG(Place_) vm_register_for(fs, Place_)
 #define BASE_REG(Places_) REG(K_LIST_FIRST(Places_))
 
-struct FnState {
-    struct FnState *outer; // enclosing function
-    struct RegisterTable *regtab; // virtual to VM register mapping
-    struct Generator *G; // codegen state
-    struct PatchList *patch; // list of jumps to patch
-    struct TblPatchList *tbl_patch; // list of table jumps to patch
-    struct JumpTable *jumps; // location of each basic block
-    struct Mir *mir;
-    MirBlock b;
-    int first_local; // index of function in DynamicMem array
-    int nproto; // number of nested functions
-    int nlines; // number of source lines
-    int pc; // number of instructions
-    int line;
-    enum FnKind kind; // type of function
-};
-
-typedef struct Generator {
+struct Generator {
     struct Compiler *C;
-    struct FnState *fs;
-    struct MirVisitor *V;
-    struct ToplevelMap *toplevel;
-    struct ToplevelMap *policy_cache;
-    struct PolicyList *policies;
     struct BodyList *items;
     struct Pool *pool;
-    Str *modname;
     paw_Env *P;
-} Generator;
+};
 
 static Str const *module_prefix(struct Generator *G, int modno)
 {
@@ -171,6 +148,7 @@ static void VisitType(struct Mir *mir, IrType *type)
                         IrTypeList *field_types = pawP_instantiate_struct_fields(mir->C, IrGetAdt(type));
                         TypeCollection_insert(mir->C, mir->C->typesystem.iterators.map, K_LIST_FIRST(field_types), type);
                     }
+
                     TypeCollection_insert(mir->C, mir->C->typesystem.adts, type, NULL);
                     break;
                 }
@@ -268,7 +246,7 @@ static void code_items(struct Generator *G)
 static void register_items(struct Generator *G)
 {
     struct Compiler *C = G->C;
-    struct MonoResult mr = pawP_monomorphize(C, C->bodies);
+    struct MonoResult const mr = pawP_monomorphize(C, C->bodies);
     G->items = mr.bodies;
 }
 
@@ -276,10 +254,8 @@ void pawP_generate_code(struct Compiler *C)
 {
     paw_Env *P = ENV(C);
 
-    struct MirVisitor V;
     struct Generator G = {
         .pool = pawP_pool_new(C, C->aux_stats),
-        .V = &V,
         .P = P,
         .C = C,
     };

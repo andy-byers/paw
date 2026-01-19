@@ -769,3 +769,15 @@ pub fn test_index_literal() {
     let v = [0, 1, 2][1];
     assert(v == 1);
 }
+
+#[test]
+pub fn test_list_equality() {
+    let empty: [int] = [];
+    assert(empty.eq(empty));
+    assert([1].eq([1]));
+    assert([2, 3].eq([2, 3]));
+
+    assert(![].eq([0]));
+    assert(![1].eq([2]));
+    assert(![3, 4].eq([5]));
+}

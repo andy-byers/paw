@@ -1,0 +1,66 @@
+// trait_impl.paw
+
+inline struct Values<T> {
+    pub values: [T],
+}
+
+impl<T: Add> Add for Values<T> {
+    fn add(self, rhs: Self) -> Self {
+        let values = [];
+        for i in 0..#self.values {
+            let x = self.values[i];
+            let y = rhs.values[i];
+            values.push(x.add(y));
+        }
+        Values{values}
+    }
+}
+
+pub trait Add {
+    fn add(self, rhs: Self) -> Self; 
+}
+
+impl Add for int {
+    fn add(self, rhs: Self) -> Self {
+        self + rhs
+    }
+}
+
+impl Add for str {
+    fn add(self, rhs: Self) -> Self {
+        self ++ rhs
+    }
+}
+
+#[test]
+pub fn test_methods() {
+    let x = Values{values: [1, 2]};
+    let y = Values{values: [3, 4]};
+    let z = x.add(y);
+    assert(z.values[0] == 4);
+    assert(z.values[1] == 6);
+
+    let x = Values{values: ["1", "2"]};
+    let y = Values{values: ["3", "4"]};
+    let z = x.add(y);
+    assert(z.values[0] == "13");
+    assert(z.values[1] == "24");
+}
+
+fn call_methods<T: Add>(u: [T], v: [T]) -> Values<T> {
+    let x = Values{values: u};
+    let y = Values{values: v};
+    x.add(y)
+}
+
+#[test]
+pub fn test_nested_methods() {
+    let z = call_methods([10, 20], [30, 40]);
+    assert(z.values[0] == 40);
+    assert(z.values[1] == 60);
+
+    let z = call_methods(["10", "20"], ["30", "40"]);
+    assert(z.values[0] == "1030");
+    assert(z.values[1] == "2040");
+}
+

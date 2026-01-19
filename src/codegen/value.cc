@@ -478,7 +478,7 @@ static llvm::Value *create_empty_map(State &state)
     return X->create_alloc(X->get_map_ty());
 }
 
-Map::Map(State &state, llvm::Value *length_hint, MapType *type, Map::Methods const *methods, Map::CreationTag tag)
+Map::Map(State &state, llvm::Value *length_hint, MapType *type, Map::Methods const *methods, Map::CreationTag)
     : Map(state, create_empty_map(state), type, methods)
 {
     auto *X = state.get_context();
@@ -495,6 +495,7 @@ Map::Map(State &state, llvm::Value *length_hint, MapType *type, Map::Methods con
             X->create_int((paw_Int)max_align.value()));
 
     auto *data = new_buffer(capacity);
+    set_length(X->create_int(0));
     set_capacity(capacity);
     set_data(data);
 }
@@ -801,6 +802,7 @@ void Map::generate_methods(Context &X, MapType *type, Map::Methods &methods)
         auto *old_capacity = map.get_capacity();
         auto *new_capacity = X.create_ckd_imul(old_capacity, X.create_int(2));
         auto *new_data = map.new_buffer(new_capacity);
+        map.set_length(X.create_int(0)); // incremented by "access"
         map.set_capacity(new_capacity);
         map.set_data(new_data);
 

@@ -99,12 +99,7 @@ Str *pawS_new_str(paw_Env *P, char const *text)
 
 Str *pawS_new_fixed(paw_Env *P, char const *text)
 {
-    Str *s = pawS_new_str(P, text);
-//TODO    Object *o = CAST_OBJECT(s);
-//TODO    if (o == P->gc_all) {
-//TODO        pawG_fix_object(P, o);
-//TODO    }
-    return s;
+    return pawS_new_str(P, text);
 }
 
 void pawS_free_str(paw_Env *P, Str *s)

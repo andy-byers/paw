@@ -13,6 +13,7 @@
     X(ParamDecl)         \
     X(FnDecl)            \
     X(GenericDecl)       \
+    X(ImplDecl)          \
     X(AdtDecl)           \
     X(TypeDecl)          \
     X(ConstDecl)         \
@@ -323,6 +324,7 @@ struct HirFnDecl {
     paw_Bool is_pub : 1;
     paw_Bool is_assoc : 1;
     enum FnKind fn_kind : 6;
+    DeclId parent_id; // set later
     struct Annotations *annos;
     struct HirIdent ident;
     struct HirDeclList *generics;
@@ -331,16 +333,22 @@ struct HirFnDecl {
     struct HirExpr *body;
 };
 
+struct HirImplDecl {
+    HIR_DECL_HEADER;
+    struct HirType *trait;
+    struct HirType *type;
+    struct HirDeclList *generics;
+    struct HirDeclList *methods;
+};
+
 struct HirAdtDecl {
     HIR_DECL_HEADER;
     paw_Bool is_pub : 1;
     paw_Bool is_struct : 1;
     paw_Bool is_inline : 1;
     struct HirIdent ident;
-    struct HirTypeList *traits;
     struct HirDeclList *generics;
     struct HirDeclList *variants;
-    struct HirDeclList *methods;
 };
 
 struct HirVariantDecl {
@@ -471,7 +479,25 @@ static struct HirDecl *pawHir_new_fn_decl(struct Hir *hir, struct SourceSpan spa
     return d;
 }
 
-static struct HirDecl *pawHir_new_adt_decl(struct Hir *hir, struct SourceSpan span, NodeId id, DeclId did, struct HirIdent ident, struct HirTypeList *traits, struct HirDeclList *generics, struct HirDeclList *variants, struct HirDeclList *methods, paw_Bool is_pub, paw_Bool is_struct, paw_Bool is_inline)
+inline static struct HirDecl *pawHir_new_impl_decl(struct Hir *hir, struct SourceSpan span, NodeId id, DeclId did, struct HirType *type, struct HirType *trait, struct HirDeclList *generics, struct HirDeclList *methods)
+{
+    struct HirDecl *d = pawHir_new_decl(hir);
+    d->ImplDecl_ = (struct HirImplDecl){
+        .id = id,
+        .did = did,
+        .span = span,
+        .kind = kHirImplDecl,
+        .type = type,
+        .trait = trait,
+        .generics = generics,
+        .methods = methods,
+    };
+    pawHir_register_node(hir, id, d);
+    pawHir_register_decl(hir, did, d);
+    return d;
+}
+
+static struct HirDecl *pawHir_new_adt_decl(struct Hir *hir, struct SourceSpan span, NodeId id, DeclId did, struct HirIdent ident, struct HirDeclList *generics, struct HirDeclList *variants, paw_Bool is_pub, paw_Bool is_struct, paw_Bool is_inline)
 {
     struct HirDecl *d = pawHir_new_decl(hir);
     d->AdtDecl_ = (struct HirAdtDecl){
@@ -480,10 +506,8 @@ static struct HirDecl *pawHir_new_adt_decl(struct Hir *hir, struct SourceSpan sp
         .span = span,
         .kind = kHirAdtDecl,
         .ident = ident,
-        .traits = traits,
         .generics = generics,
         .variants = variants,
-        .methods = methods,
         .is_pub = is_pub,
         .is_struct = is_struct,
         .is_inline = is_inline,
@@ -1602,16 +1626,6 @@ static inline struct HirSegment *pawHir_add_segment(struct Hir *hir, struct HirS
         .types = args,
     });
     return &K_LIST_LAST(segments);
-}
-
-//TODO remove
-static inline struct HirSegment *pawHir_path_add(struct Hir *hir, struct HirPath *path, NodeId id, NodeId target,
-        struct HirIdent ident, struct HirTypeList *args)
-{
-    struct HirSegment seg;
-    pawHir_init_segment(hir, &seg, id, ident, args, target);
-    HirSegments_push(hir, path->segments, seg);
-    return &K_LIST_LAST(path->segments);
 }
 
 struct HirExpr *pawHir_copy_expr(struct Hir *hir, struct HirExpr *expr);

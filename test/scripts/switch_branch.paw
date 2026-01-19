@@ -4,7 +4,9 @@ inline enum WithoutData {
     A,
     B,
     C,
+}
 
+impl WithoutData {
     pub fn is_a(self) -> bool {
         match self {
             WithoutData::A => true,
@@ -34,7 +36,9 @@ inline enum WithData {
     A(int),
     B(int),
     C(int),
+}
 
+impl WithData {
     pub fn a_value(self) -> Option<int> {
         match self {
             WithData::A(a) => Some(a),

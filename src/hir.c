@@ -264,12 +264,18 @@ static void AcceptVariantDecl(struct HirVisitor *V, struct HirVariantDecl *d)
     accept_decl_list(V, d->fields);
 }
 
+static void AcceptImplDecl(struct HirVisitor *V, struct HirImplDecl *d)
+{
+    accept_decl_list(V, d->generics);
+    if (d->trait != NULL) AcceptType(V, d->trait);
+    AcceptType(V, d->type);
+    accept_decl_list(V, d->methods);
+}
+
 static void AcceptAdtDecl(struct HirVisitor *V, struct HirAdtDecl *d)
 {
-    accept_type_list(V, d->traits);
     accept_decl_list(V, d->generics);
     accept_decl_list(V, d->variants);
-    accept_decl_list(V, d->methods);
 }
 
 static void AcceptTraitDecl(struct HirVisitor *V, struct HirTraitDecl *d)
@@ -767,19 +773,6 @@ static void dump_variant_fields(struct Printer *P, struct HirDeclList *fields)
     }
 }
 
-static void dump_traits(struct Printer *P, struct HirTypeList *traits)
-{
-    if (traits->count == 0) return;
-    DUMP_CSTR(P, ": ");
-
-    int index;
-    struct HirType *const *ptype;
-    K_LIST_ENUMERATE (traits, index, ptype) {
-        if (index > 0) DUMP_CSTR(P, " + ");
-        dump_type(P, *ptype);
-    }
-}
-
 static void dump_match_body(struct Printer *P, struct HirExprList *arms)
 {
     DUMP_CSTR(P, " {");
@@ -1028,6 +1021,24 @@ static void dump_decl(struct Printer *P, struct HirDecl *decl)
             }
             break;
         }
+        case kHirImplDecl: {
+            struct HirImplDecl *d = HirGetImplDecl(decl);
+            DUMP_CSTR(P, "impl");
+            dump_generics(P, d->generics);
+            DUMP_CSTR(P, " ");
+            if (d->trait != NULL) {
+                dump_type(P, d->trait);
+                DUMP_CSTR(P, " for ");
+            }
+            dump_type(P, d->type);
+            DUMP_CSTR(P, " {");
+            ++P->indent;
+            add_newline(P);
+            dump_methods(P, d->methods);
+            --P->indent;
+            DUMP_CHAR(P, '}');
+            break;
+        }
         case kHirAdtDecl: {
             struct HirAdtDecl *d = HirGetAdtDecl(decl);
             if (d->is_struct) {
@@ -1037,12 +1048,10 @@ static void dump_decl(struct Printer *P, struct HirDecl *decl)
             }
             DUMP_STR(P, d->ident.name);
             dump_generics(P, d->generics);
-            dump_traits(P, d->traits);
             DUMP_CSTR(P, " {");
             ++P->indent;
             add_newline(P);
             dump_adt_variants(P, d->variants, d->is_struct);
-            dump_methods(P, d->methods);
             --P->indent;
             DUMP_CHAR(P, '}');
             break;
